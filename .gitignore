@@ -76,6 +76,8 @@ backup/
 .env.test.local
 .env.production.local
 .env.*
+# 但允許 .env.example（範例檔案，應該提交）
+!.env.example
 
 # 敏感資訊檔案
 *.key
