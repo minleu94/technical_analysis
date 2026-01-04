@@ -1,0 +1,435 @@
+{
+  "validation_date": "2025-12-30 23:57:17",
+  "total_tests": 29,
+  "passed_tests": 29,
+  "failed_tests": 0,
+  "warning_tests": 2,
+  "results": [
+    {
+      "test_name": "測試案例 1：warmup_days 預設值驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "walk_forward_has_warmup_days": true,
+        "train_test_split_has_warmup_days": true,
+        "default_value": 0
+      }
+    },
+    {
+      "test_name": "測試案例 2：warmup_days 功能驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "warmup_days": 20,
+        "train_report_generated": true,
+        "test_report_generated": true,
+        "note": "warmup_days 參數已正確傳遞，實際日期驗證需考慮數據調整"
+      }
+    },
+    {
+      "test_name": "測試案例 3：warmup_days 邊界條件（過大值）",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "warmup_days": 1000,
+        "exception_raised": true,
+        "exception_type": "ValueError",
+        "exception_message": "warmup_days (1000) 過大，導致可用數據不足"
+      }
+    },
+    {
+      "test_name": "測試案例 4：warmup_days 邊界條件（負數）",
+      "passed": true,
+      "error_message": null,
+      "warning": true,
+      "warning_message": "負數 warmup_days 未拋出異常（可能被接受或使用絕對值）",
+      "details": {}
+    },
+    {
+      "test_name": "測試案例 5：warmup_days 與 Walk-Forward 多個 Fold",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "warmup_days": 20,
+        "total_folds": 4,
+        "all_folds_have_correct_warmup_days": true
+      }
+    },
+    {
+      "test_name": "測試案例 6：warmup_days 與 progress_callback",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "warmup_days": 20,
+        "callback_called_count": 3,
+        "sample_message": "Fold 1: Train 2024-01-21 ~ 2024-02-21, Test 2024-02-22 ~ 2024-03-22"
+      }
+    },
+    {
+      "test_name": "測試案例 7：warmup_days 與 Train-Test Split",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "warmup_days": 20,
+        "train_report_generated": true,
+        "test_report_generated": true,
+        "train_return": 0.0,
+        "test_return": 0.0
+      }
+    },
+    {
+      "test_name": "測試案例 8：warmup_days 向後兼容性（完整驗證）",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "backtest_report_format_consistent": true,
+        "warmup_days_default_behavior_consistent": true
+      }
+    },
+    {
+      "test_name": "測試案例 3：calculate_buy_hold_return 基本功能",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "total_return": 0.365,
+        "annualized_return": 0.36529093908011867,
+        "max_drawdown": 0.0,
+        "sharpe_ratio": 176.12978465794652
+      }
+    },
+    {
+      "test_name": "測試案例 4：calculate_buy_hold_return 欄位名稱兼容",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "chinese_column_result": {
+          "total_return": 0.365,
+          "annualized_return": 0.36529093908011867,
+          "max_drawdown": 0.0,
+          "sharpe_ratio": 176.12978465794652
+        },
+        "english_column_result": {
+          "total_return": 0.365,
+          "annualized_return": 0.36529093908011867,
+          "max_drawdown": 0.0,
+          "sharpe_ratio": 176.12978465794652
+        },
+        "results_match": true
+      }
+    },
+    {
+      "test_name": "測試案例 9：calculate_buy_hold_return 日期索引處理",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "total_return": 0.365,
+        "annualized_return": 0.36529093908011867,
+        "max_drawdown": 0.0,
+        "sharpe_ratio": 176.12978465794652
+      }
+    },
+    {
+      "test_name": "測試案例 10：calculate_buy_hold_return 日期欄位處理",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "total_return": 0.365,
+        "annualized_return": 0.36529093908011867,
+        "max_drawdown": 0.0,
+        "sharpe_ratio": 176.12978465794652
+      }
+    },
+    {
+      "test_name": "測試案例 11：calculate_buy_hold_return 缺值處理（開始日期不存在）",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "missing_start_date_handled": true,
+        "result": {
+          "total_return": 0.36400000000000005,
+          "annualized_return": 0.36429004111161833,
+          "max_drawdown": 0.0,
+          "sharpe_ratio": 176.546259430374
+        }
+      }
+    },
+    {
+      "test_name": "測試案例 12：calculate_buy_hold_return 缺值處理（期間內缺值）",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "total_return": 0.0,
+        "annualized_return": 0.0,
+        "max_drawdown": 0.0,
+        "sharpe_ratio": 34.861317039174594
+      }
+    },
+    {
+      "test_name": "測試案例 13：calculate_buy_hold_return 空數據處理",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "empty_data_handled": true,
+        "result": {
+          "total_return": 0.0,
+          "annualized_return": 0.0,
+          "max_drawdown": 0.0,
+          "sharpe_ratio": 0.0
+        }
+      }
+    },
+    {
+      "test_name": "測試案例 14：calculate_baseline_comparison 計算邏輯驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "case1": {
+          "baseline_type": "buy_hold",
+          "baseline_returns": 0.1,
+          "baseline_sharpe": 0.8,
+          "baseline_max_drawdown": -0.15,
+          "excess_returns": 0.04999999999999999,
+          "relative_sharpe": 0.3999999999999999,
+          "relative_drawdown": 0.04999999999999999,
+          "outperforms": true
+        },
+        "case2": {
+          "baseline_type": "buy_hold",
+          "baseline_returns": 0.1,
+          "baseline_sharpe": 0.8,
+          "baseline_max_drawdown": -0.15,
+          "excess_returns": -0.020000000000000004,
+          "relative_sharpe": -0.20000000000000007,
+          "relative_drawdown": -0.05000000000000002,
+          "outperforms": false
+        },
+        "logic_correct": true
+      }
+    },
+    {
+      "test_name": "測試案例 6：BacktestService Baseline 整合",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "baseline_comparison_exists": true,
+        "baseline_comparison_is_none": true,
+        "note": "Baseline 計算可能因數據不足而失敗，但欄位存在"
+      }
+    },
+    {
+      "test_name": "測試案例 15：BacktestService Baseline 格式驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": true,
+      "warning_message": "Baseline 對比為 None（可能是數據不足）",
+      "details": {
+        "baseline_comparison_exists": true,
+        "baseline_comparison_is_none": true
+      }
+    },
+    {
+      "test_name": "測試案例 16：BacktestService Baseline 性能測試",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "elapsed_time_seconds": 2.6714022159576416,
+        "performance_acceptable": true
+      }
+    },
+    {
+      "test_name": "測試案例 5：calculate_baseline_comparison 基本功能",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "baseline_type": "buy_hold",
+        "baseline_returns": 0.1,
+        "baseline_sharpe": 0.8,
+        "baseline_max_drawdown": -0.15,
+        "excess_returns": 0.04999999999999999,
+        "relative_sharpe": 0.3999999999999999,
+        "relative_drawdown": 0.04999999999999999,
+        "outperforms": true
+      }
+    },
+    {
+      "test_name": "測試案例 7：DTO 欄位存在性驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "field_exists": true,
+        "field_type": "typing.Optional[typing.Dict[str, typing.Any]]",
+        "can_create_with_baseline": true,
+        "to_dict_includes_baseline": true
+      }
+    },
+    {
+      "test_name": "測試案例 17：DTO 序列化驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "serialization_successful": true,
+        "deserialization_successful": true,
+        "json_length": 221
+      }
+    },
+    {
+      "test_name": "測試案例 18：WalkForwardResult warmup_days 欄位驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "field_exists": true,
+        "field_type": "<class 'int'>",
+        "can_create_with_warmup_days": true,
+        "warmup_days_value": 20
+      }
+    },
+    {
+      "test_name": "測試案例 19：Baseline 對比數值範圍檢查",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "all_test_cases_passed": true,
+        "test_cases_count": 3
+      }
+    },
+    {
+      "test_name": "測試案例 20：Baseline 對比 NaN/Infinity 檢查",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "all_values_valid": true,
+        "checked_fields": [
+          "baseline_returns",
+          "baseline_sharpe",
+          "baseline_max_drawdown",
+          "excess_returns",
+          "relative_sharpe",
+          "relative_drawdown"
+        ]
+      }
+    },
+    {
+      "test_name": "測試案例 21：WalkForwardResult 所有欄位驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "all_fields_present": true,
+        "fields": [
+          "train_period",
+          "test_period",
+          "train_metrics",
+          "test_metrics",
+          "degradation",
+          "params",
+          "warmup_days"
+        ]
+      }
+    },
+    {
+      "test_name": "測試案例 22：BacktestReportDTO 所有欄位驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "all_fields_present": true,
+        "fields": [
+          "total_return",
+          "annual_return",
+          "sharpe_ratio",
+          "max_drawdown",
+          "win_rate",
+          "total_trades",
+          "expectancy",
+          "details",
+          "baseline_comparison"
+        ]
+      }
+    },
+    {
+      "test_name": "測試案例 23：PerformanceMetrics 方法存在性驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "calculate_buy_hold_return_exists": true,
+        "calculate_baseline_comparison_exists": true,
+        "buy_hold_params": [
+          "df",
+          "start_date",
+          "end_date"
+        ],
+        "baseline_comparison_params": [
+          "strategy_returns",
+          "strategy_sharpe",
+          "strategy_max_drawdown",
+          "baseline_returns",
+          "baseline_sharpe",
+          "baseline_max_drawdown"
+        ]
+      }
+    },
+    {
+      "test_name": "測試案例 24：完整向後兼容性驗證",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "backtest_report_format_consistent": true,
+        "train_test_split_backward_compatible": true,
+        "walk_forward_backward_compatible": true,
+        "all_original_fields_present": true
+      }
+    }
+  ]
+}

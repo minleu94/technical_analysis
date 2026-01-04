@@ -1,0 +1,133 @@
+# 日誌檔案
+*.log
+logs/
+tech_test.log
+technical_calculation.log
+
+# 系統檔案
+*.exe
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Jupyter Notebook 檢查點
+.ipynb_checkpoints/
+
+# 測試輸出
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# 虛擬環境
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE 檔案
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系統檔案
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 數據檔案（可選，根據需要調整）
+# data/
+# output/
+
+# 臨時檔案
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Demo 目錄（測試用，不提交）
+demo_*/
+demo_*/*/
+
+# 備份檔案
+*.bak
+*.backup
+backup/
+
+# 環境變數檔案
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+# 敏感資訊檔案
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*secret*
+*secret*.py
+*secret*.json
+*secret*.yaml
+*secret*.yml
+*credentials*
+*credentials*.py
+*credentials*.json
+*token*
+*token*.py
+*token*.txt
+*password*
+*password*.py
+*password*.txt
+*api_key*
+*apikey*
+*.token
+*.secret
+
+# 包含硬編碼 token 的檔案（請移除 token 後再提交）
+# 01_stock_data_collector_enhanced.py  # 包含 FinMind token，請移除後再提交
+# tests/test_market_index.py  # 包含 FinMind token，請移除後再提交
+
+# 資料庫檔案
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# 個人配置檔案
+config.local.py
+settings.local.py
+*_local.py
+*_local.json
+*_local.yaml
+*_local.yml
+
+# ChromeDriver 和 Selenium
+chromedriver
+chromedriver.exe
+geckodriver
+geckodriver.exe
+selenium-server-standalone*.jar
+
+# 臨時下載檔案
+downloads/
+temp_downloads/

@@ -1,0 +1,374 @@
+2026-01-02 02:16:04,501 - INFO - ============================================================
+2026-01-02 02:16:04,501 - INFO - 開始執行 Epic 2 MVP-2 功能驗證
+2026-01-02 02:16:04,501 - INFO - ============================================================
+2026-01-02 02:16:04,501 - INFO - ============================================================
+2026-01-02 02:16:04,502 - INFO - 執行測試案例 1：calculate_walkforward_degradation() 基本功能
+2026-01-02 02:16:04,502 - INFO - ✓ 測試通過：退化程度計算正確 (0.4000)
+2026-01-02 02:16:04,502 - INFO - ============================================================
+2026-01-02 02:16:04,502 - INFO - 執行測試案例 2：calculate_walkforward_degradation() 無退化情況
+2026-01-02 02:16:04,503 - INFO - ✓ 測試通過：無退化情況處理正確 (0.0)
+2026-01-02 02:16:04,503 - INFO - ============================================================
+2026-01-02 02:16:04,503 - INFO - 執行測試案例 3：calculate_consistency() 基本功能
+2026-01-02 02:16:04,503 - INFO - ✓ 測試通過：一致性計算正確 (0.0816)
+2026-01-02 02:16:04,503 - INFO - ============================================================
+2026-01-02 02:16:04,503 - INFO - 執行測試案例 4：calculate_consistency() Fold 數量不足
+2026-01-02 02:16:04,503 - INFO - ✓ 測試通過：Fold 數量不足處理正確
+2026-01-02 02:16:04,503 - INFO - ============================================================
+2026-01-02 02:16:04,503 - INFO - 執行測試案例 5：calculate_overfitting_risk() 完整資料
+2026-01-02 02:16:04,503 - INFO - ✓ 測試通過：完整資料風險計算正確（風險等級：high）
+2026-01-02 02:16:04,503 - INFO - ============================================================
+2026-01-02 02:16:04,503 - INFO - 執行測試案例 6：calculate_overfitting_risk() 無資料
+2026-01-02 02:16:04,503 - INFO - ✓ 測試通過：無資料情況處理正確
+2026-01-02 02:16:04,503 - INFO - ============================================================
+2026-01-02 02:16:04,503 - INFO - 執行測試案例 7：BacktestReportDTO overfitting_risk 欄位
+2026-01-02 02:16:04,503 - INFO - ✓ 測試通過：BacktestReportDTO overfitting_risk 欄位正確
+2026-01-02 02:16:04,503 - INFO - ============================================================
+2026-01-02 02:16:04,503 - INFO - 執行測試案例 8：BacktestService 過擬合風險整合
+2026-01-02 02:16:04,503 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:16:04,503 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:16:04,503 - INFO - 配置檔案: prod
+2026-01-02 02:16:04,504 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:16:04,504 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:16:04,504 - INFO - 配置檔案: prod
+2026-01-02 02:16:04,504 - INFO - ✓ 測試通過：BacktestService 過擬合風險整合正確
+2026-01-02 02:16:04,504 - INFO - ============================================================
+2026-01-02 02:16:04,504 - INFO - 執行測試案例 9：BacktestService 過擬合風險計算（實際執行）
+2026-01-02 02:16:04,505 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:16:04,505 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:16:04,505 - INFO - 配置檔案: prod
+2026-01-02 02:16:04,505 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:16:04,505 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:16:04,505 - INFO - 配置檔案: prod
+2026-01-02 02:16:04,505 - ERROR - ✗ 測試失敗: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:16:04,506 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp2.py", line 404, in test_case_9_backtest_service_overfitting_risk_calculation
+    strategy = registry.get_strategy('momentum_burst')
+               ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'StrategyRegistry' object has no attribute 'get_strategy'
+
+2026-01-02 02:16:04,506 - INFO - ============================================================
+2026-01-02 02:16:04,506 - INFO - 執行測試案例 10：BacktestService 過擬合風險計算關閉
+2026-01-02 02:16:04,506 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:16:04,506 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:16:04,506 - INFO - 配置檔案: prod
+2026-01-02 02:16:04,507 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:16:04,507 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:16:04,507 - INFO - 配置檔案: prod
+2026-01-02 02:16:04,507 - ERROR - ✗ 測試失敗: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:16:04,507 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp2.py", line 484, in test_case_10_backtest_service_overfitting_risk_disabled
+    strategy = registry.get_strategy('momentum_burst')
+               ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'StrategyRegistry' object has no attribute 'get_strategy'
+
+2026-01-02 02:16:04,507 - INFO - ============================================================
+2026-01-02 02:16:04,508 - INFO - 執行測試案例 11：向後兼容性測試
+2026-01-02 02:16:04,508 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:16:04,508 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:16:04,508 - INFO - 配置檔案: prod
+2026-01-02 02:16:04,508 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:16:04,508 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:16:04,508 - INFO - 配置檔案: prod
+2026-01-02 02:16:04,508 - ERROR - ✗ 測試失敗: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:16:04,508 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp2.py", line 538, in test_case_11_backward_compatibility
+    strategy = registry.get_strategy('momentum_burst')
+               ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'StrategyRegistry' object has no attribute 'get_strategy'
+
+2026-01-02 02:16:04,508 - INFO - ============================================================
+2026-01-02 02:16:04,509 - INFO - 驗證結果摘要
+2026-01-02 02:16:04,509 - INFO - ============================================================
+2026-01-02 02:16:04,509 - INFO - ✓ 通過: 測試案例 1：calculate_walkforward_degradation() 基本功能
+2026-01-02 02:16:04,509 - INFO - ✓ 通過: 測試案例 2：calculate_walkforward_degradation() 無退化情況
+2026-01-02 02:16:04,509 - INFO - ✓ 通過: 測試案例 3：calculate_consistency() 基本功能
+2026-01-02 02:16:04,509 - INFO - ✓ 通過: 測試案例 4：calculate_consistency() Fold 數量不足
+2026-01-02 02:16:04,509 - INFO - ✓ 通過: 測試案例 5：calculate_overfitting_risk() 完整資料
+2026-01-02 02:16:04,509 - INFO - ✓ 通過: 測試案例 6：calculate_overfitting_risk() 無資料
+2026-01-02 02:16:04,509 - INFO - ✓ 通過: 測試案例 7：BacktestReportDTO overfitting_risk 欄位
+2026-01-02 02:16:04,509 - INFO - ✓ 通過: 測試案例 8：BacktestService 過擬合風險整合
+2026-01-02 02:16:04,509 - INFO - ✗ 失敗: 測試案例 9：BacktestService 過擬合風險計算（實際執行）
+2026-01-02 02:16:04,509 - INFO -   錯誤訊息: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:16:04,509 - INFO - ✗ 失敗: 測試案例 10：BacktestService 過擬合風險計算關閉
+2026-01-02 02:16:04,509 - INFO -   錯誤訊息: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:16:04,509 - INFO - ✗ 失敗: 測試案例 11：向後兼容性測試
+2026-01-02 02:16:04,509 - INFO -   錯誤訊息: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:16:04,509 - INFO - ============================================================
+2026-01-02 02:16:04,509 - INFO - 總計: 8/11 測試案例通過
+2026-01-02 02:16:04,509 - INFO - 失敗: 3 個
+2026-01-02 02:16:04,509 - INFO - 警告: 0 個
+2026-01-02 02:16:04,509 - INFO - ============================================================
+2026-01-02 02:16:04,509 - INFO - JSON 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp2_validation\VALIDATION_REPORT.json
+2026-01-02 02:16:04,510 - INFO - Markdown 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp2_validation\VALIDATION_REPORT.md
+2026-01-02 02:17:24,338 - INFO - ============================================================
+2026-01-02 02:17:24,338 - INFO - 開始執行 Epic 2 MVP-2 功能驗證
+2026-01-02 02:17:24,338 - INFO - ============================================================
+2026-01-02 02:17:24,338 - INFO - ============================================================
+2026-01-02 02:17:24,338 - INFO - 執行測試案例 1：calculate_walkforward_degradation() 基本功能
+2026-01-02 02:17:24,338 - INFO - ✓ 測試通過：退化程度計算正確 (0.4000)
+2026-01-02 02:17:24,338 - INFO - ============================================================
+2026-01-02 02:17:24,338 - INFO - 執行測試案例 2：calculate_walkforward_degradation() 無退化情況
+2026-01-02 02:17:24,338 - INFO - ✓ 測試通過：無退化情況處理正確 (0.0)
+2026-01-02 02:17:24,338 - INFO - ============================================================
+2026-01-02 02:17:24,338 - INFO - 執行測試案例 3：calculate_consistency() 基本功能
+2026-01-02 02:17:24,339 - INFO - ✓ 測試通過：一致性計算正確 (0.0816)
+2026-01-02 02:17:24,339 - INFO - ============================================================
+2026-01-02 02:17:24,339 - INFO - 執行測試案例 4：calculate_consistency() Fold 數量不足
+2026-01-02 02:17:24,339 - INFO - ✓ 測試通過：Fold 數量不足處理正確
+2026-01-02 02:17:24,339 - INFO - ============================================================
+2026-01-02 02:17:24,339 - INFO - 執行測試案例 5：calculate_overfitting_risk() 完整資料
+2026-01-02 02:17:24,339 - INFO - ✓ 測試通過：完整資料風險計算正確（風險等級：high）
+2026-01-02 02:17:24,339 - INFO - ============================================================
+2026-01-02 02:17:24,339 - INFO - 執行測試案例 6：calculate_overfitting_risk() 無資料
+2026-01-02 02:17:24,339 - INFO - ✓ 測試通過：無資料情況處理正確
+2026-01-02 02:17:24,339 - INFO - ============================================================
+2026-01-02 02:17:24,339 - INFO - 執行測試案例 7：BacktestReportDTO overfitting_risk 欄位
+2026-01-02 02:17:24,339 - INFO - ✓ 測試通過：BacktestReportDTO overfitting_risk 欄位正確
+2026-01-02 02:17:24,339 - INFO - ============================================================
+2026-01-02 02:17:24,339 - INFO - 執行測試案例 8：BacktestService 過擬合風險整合
+2026-01-02 02:17:24,339 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:24,339 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:24,339 - INFO - 配置檔案: prod
+2026-01-02 02:17:24,339 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:24,340 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:24,340 - INFO - 配置檔案: prod
+2026-01-02 02:17:24,340 - INFO - ✓ 測試通過：BacktestService 過擬合風險整合正確
+2026-01-02 02:17:24,340 - INFO - ============================================================
+2026-01-02 02:17:24,340 - INFO - 執行測試案例 9：BacktestService 過擬合風險計算（實際執行）
+2026-01-02 02:17:24,340 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:24,340 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:24,340 - INFO - 配置檔案: prod
+2026-01-02 02:17:24,340 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:24,340 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:24,340 - INFO - 配置檔案: prod
+2026-01-02 02:17:24,340 - ERROR - ✗ 測試失敗: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:17:24,341 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp2.py", line 404, in test_case_9_backtest_service_overfitting_risk_calculation
+    strategy = registry.get_strategy('momentum_burst')
+               ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'StrategyRegistry' object has no attribute 'get_strategy'
+
+2026-01-02 02:17:24,341 - INFO - ============================================================
+2026-01-02 02:17:24,341 - INFO - 執行測試案例 10：BacktestService 過擬合風險計算關閉
+2026-01-02 02:17:24,341 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:24,341 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:24,341 - INFO - 配置檔案: prod
+2026-01-02 02:17:24,341 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:24,341 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:24,341 - INFO - 配置檔案: prod
+2026-01-02 02:17:24,342 - ERROR - ✗ 測試失敗: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:17:24,342 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp2.py", line 484, in test_case_10_backtest_service_overfitting_risk_disabled
+    strategy = registry.get_strategy('momentum_burst')
+               ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'StrategyRegistry' object has no attribute 'get_strategy'
+
+2026-01-02 02:17:24,342 - INFO - ============================================================
+2026-01-02 02:17:24,342 - INFO - 執行測試案例 11：向後兼容性測試
+2026-01-02 02:17:24,342 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:24,342 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:24,342 - INFO - 配置檔案: prod
+2026-01-02 02:17:24,342 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:24,342 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:24,342 - INFO - 配置檔案: prod
+2026-01-02 02:17:24,342 - ERROR - ✗ 測試失敗: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:17:24,343 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp2.py", line 538, in test_case_11_backward_compatibility
+    strategy = registry.get_strategy('momentum_burst')
+               ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'StrategyRegistry' object has no attribute 'get_strategy'
+
+2026-01-02 02:17:24,343 - INFO - ============================================================
+2026-01-02 02:17:24,343 - INFO - 驗證結果摘要
+2026-01-02 02:17:24,343 - INFO - ============================================================
+2026-01-02 02:17:24,343 - INFO - ✓ 通過: 測試案例 1：calculate_walkforward_degradation() 基本功能
+2026-01-02 02:17:24,343 - INFO - ✓ 通過: 測試案例 2：calculate_walkforward_degradation() 無退化情況
+2026-01-02 02:17:24,343 - INFO - ✓ 通過: 測試案例 3：calculate_consistency() 基本功能
+2026-01-02 02:17:24,343 - INFO - ✓ 通過: 測試案例 4：calculate_consistency() Fold 數量不足
+2026-01-02 02:17:24,343 - INFO - ✓ 通過: 測試案例 5：calculate_overfitting_risk() 完整資料
+2026-01-02 02:17:24,343 - INFO - ✓ 通過: 測試案例 6：calculate_overfitting_risk() 無資料
+2026-01-02 02:17:24,343 - INFO - ✓ 通過: 測試案例 7：BacktestReportDTO overfitting_risk 欄位
+2026-01-02 02:17:24,343 - INFO - ✓ 通過: 測試案例 8：BacktestService 過擬合風險整合
+2026-01-02 02:17:24,343 - INFO - ✗ 失敗: 測試案例 9：BacktestService 過擬合風險計算（實際執行）
+2026-01-02 02:17:24,343 - INFO -   錯誤訊息: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:17:24,343 - INFO - ✗ 失敗: 測試案例 10：BacktestService 過擬合風險計算關閉
+2026-01-02 02:17:24,343 - INFO -   錯誤訊息: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:17:24,343 - INFO - ✗ 失敗: 測試案例 11：向後兼容性測試
+2026-01-02 02:17:24,343 - INFO -   錯誤訊息: 'StrategyRegistry' object has no attribute 'get_strategy'
+2026-01-02 02:17:24,343 - INFO - ============================================================
+2026-01-02 02:17:24,343 - INFO - 總計: 8/11 測試案例通過
+2026-01-02 02:17:24,343 - INFO - 失敗: 3 個
+2026-01-02 02:17:24,343 - INFO - 警告: 0 個
+2026-01-02 02:17:24,343 - INFO - ============================================================
+2026-01-02 02:17:24,343 - INFO - JSON 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp2_validation\VALIDATION_REPORT.json
+2026-01-02 02:17:24,344 - INFO - Markdown 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp2_validation\VALIDATION_REPORT.md
+2026-01-02 02:17:58,141 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 開始執行 Epic 2 MVP-2 功能驗證
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 執行測試案例 1：calculate_walkforward_degradation() 基本功能
+2026-01-02 02:17:58,142 - INFO - ✓ 測試通過：退化程度計算正確 (0.4000)
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 執行測試案例 2：calculate_walkforward_degradation() 無退化情況
+2026-01-02 02:17:58,142 - INFO - ✓ 測試通過：無退化情況處理正確 (0.0)
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 執行測試案例 3：calculate_consistency() 基本功能
+2026-01-02 02:17:58,142 - INFO - ✓ 測試通過：一致性計算正確 (0.0816)
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 執行測試案例 4：calculate_consistency() Fold 數量不足
+2026-01-02 02:17:58,142 - INFO - ✓ 測試通過：Fold 數量不足處理正確
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 執行測試案例 5：calculate_overfitting_risk() 完整資料
+2026-01-02 02:17:58,142 - INFO - ✓ 測試通過：完整資料風險計算正確（風險等級：high）
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 執行測試案例 6：calculate_overfitting_risk() 無資料
+2026-01-02 02:17:58,142 - INFO - ✓ 測試通過：無資料情況處理正確
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 執行測試案例 7：BacktestReportDTO overfitting_risk 欄位
+2026-01-02 02:17:58,142 - INFO - ✓ 測試通過：BacktestReportDTO overfitting_risk 欄位正確
+2026-01-02 02:17:58,142 - INFO - ============================================================
+2026-01-02 02:17:58,142 - INFO - 執行測試案例 8：BacktestService 過擬合風險整合
+2026-01-02 02:17:58,142 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:58,142 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:58,142 - INFO - 配置檔案: prod
+2026-01-02 02:17:58,143 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:58,143 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:58,143 - INFO - 配置檔案: prod
+2026-01-02 02:17:58,143 - INFO - ✓ 測試通過：BacktestService 過擬合風險整合正確
+2026-01-02 02:17:58,143 - INFO - ============================================================
+2026-01-02 02:17:58,143 - INFO - 執行測試案例 9：BacktestService 過擬合風險計算（實際執行）
+2026-01-02 02:17:58,143 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:58,143 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:58,143 - INFO - 配置檔案: prod
+2026-01-02 02:17:58,144 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:17:58,144 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:17:58,144 - INFO - 配置檔案: prod
+2026-01-02 02:18:00,798 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 02:18:00,798 - INFO - [BacktestService] 文件是否存在: True
+2026-01-02 02:18:00,808 - INFO - [BacktestService] 成功讀取技術指標文件，共 1 筆原始數據
+2026-01-02 02:18:00,809 - INFO - [BacktestService] 日期欄位處理後，共 1 筆有效數據
+2026-01-02 02:18:00,809 - INFO - [BacktestService] 數據日期範圍: 1970-01-01 00:00:00 到 1970-01-01 00:00:00
+2026-01-02 02:18:00,809 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-07-01 00:00:00
+2026-01-02 02:18:00,811 - INFO - [BacktestService] 日期範圍過濾後，共 0 筆數據
+2026-01-02 02:18:00,811 - WARNING - [BacktestService] 日期範圍內沒有技術指標數據（股票 2330，日期範圍 2024-01-01 到 2024-07-01）
+2026-01-02 02:18:00,811 - WARNING - [BacktestService] 警告: 找不到技術指標數據（股票 2330），將只使用價格數據
+2026-01-02 02:18:00,811 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 02:18:00,811 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-07-01 → 實際 2024-01-11~2024-07-01
+2026-01-02 02:18:00,811 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-07-01 → 實際 2024-01-11~2024-07-01
+2026-01-02 02:18:00,829 - WARNING - [BacktestService] Baseline 對比計算失敗: '>' not supported between instances of 'str' and 'int'
+2026-01-02 02:18:03,556 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 02:18:03,558 - INFO - [BacktestService] 文件是否存在: True
+2026-01-02 02:18:03,558 - INFO - [BacktestService] 成功讀取技術指標文件，共 1 筆原始數據
+2026-01-02 02:18:03,559 - INFO - [BacktestService] 日期欄位處理後，共 1 筆有效數據
+2026-01-02 02:18:03,559 - INFO - [BacktestService] 數據日期範圍: 1970-01-01 00:00:00 到 1970-01-01 00:00:00
+2026-01-02 02:18:03,559 - INFO - [BacktestService] 請求的日期範圍: 2024-07-02 00:00:00 到 2024-10-02 00:00:00
+2026-01-02 02:18:03,559 - INFO - [BacktestService] 日期範圍過濾後，共 0 筆數據
+2026-01-02 02:18:03,559 - WARNING - [BacktestService] 日期範圍內沒有技術指標數據（股票 2330，日期範圍 2024-07-02 到 2024-10-02）
+2026-01-02 02:18:03,559 - WARNING - [BacktestService] 警告: 找不到技術指標數據（股票 2330），將只使用價格數據
+2026-01-02 02:18:03,560 - WARNING - [BacktestService] 請求的結束日期 2024-10-02 晚於實際數據，調整為 2024-10-01
+2026-01-02 02:18:03,560 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-07-02~2024-10-02 → 實際 2024-07-02~2024-10-01
+2026-01-02 02:18:03,560 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-07-02~2024-10-02 → 實際 2024-07-02~2024-10-01
+2026-01-02 02:18:03,575 - WARNING - [BacktestService] Baseline 對比計算失敗: '>' not supported between instances of 'str' and 'int'
+2026-01-02 02:18:06,589 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 02:18:06,589 - INFO - [BacktestService] 文件是否存在: True
+2026-01-02 02:18:06,590 - INFO - [BacktestService] 成功讀取技術指標文件，共 1 筆原始數據
+2026-01-02 02:18:06,591 - INFO - [BacktestService] 日期欄位處理後，共 1 筆有效數據
+2026-01-02 02:18:06,591 - INFO - [BacktestService] 數據日期範圍: 1970-01-01 00:00:00 到 1970-01-01 00:00:00
+2026-01-02 02:18:06,592 - INFO - [BacktestService] 請求的日期範圍: 2024-04-01 00:00:00 到 2024-10-01 00:00:00
+2026-01-02 02:18:06,592 - INFO - [BacktestService] 日期範圍過濾後，共 0 筆數據
+2026-01-02 02:18:06,592 - WARNING - [BacktestService] 日期範圍內沒有技術指標數據（股票 2330，日期範圍 2024-04-01 到 2024-10-01）
+2026-01-02 02:18:06,592 - WARNING - [BacktestService] 警告: 找不到技術指標數據（股票 2330），將只使用價格數據
+2026-01-02 02:18:06,593 - INFO - [BacktestService] 成功載入數據（股票 2330，共 125 筆，日期範圍 2024-04-01 到 2024-10-01）
+2026-01-02 02:18:06,613 - WARNING - [BacktestService] Baseline 對比計算失敗: '>' not supported between instances of 'str' and 'int'
+2026-01-02 02:18:09,665 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 02:18:09,666 - INFO - [BacktestService] 文件是否存在: True
+2026-01-02 02:18:09,667 - INFO - [BacktestService] 成功讀取技術指標文件，共 1 筆原始數據
+2026-01-02 02:18:09,667 - INFO - [BacktestService] 日期欄位處理後，共 1 筆有效數據
+2026-01-02 02:18:09,667 - INFO - [BacktestService] 數據日期範圍: 1970-01-01 00:00:00 到 1970-01-01 00:00:00
+2026-01-02 02:18:09,668 - INFO - [BacktestService] 請求的日期範圍: 2024-10-02 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 02:18:09,668 - INFO - [BacktestService] 日期範圍過濾後，共 0 筆數據
+2026-01-02 02:18:09,668 - WARNING - [BacktestService] 日期範圍內沒有技術指標數據（股票 2330，日期範圍 2024-10-02 到 2024-12-31）
+2026-01-02 02:18:09,668 - WARNING - [BacktestService] 警告: 找不到技術指標數據（股票 2330），將只使用價格數據
+2026-01-02 02:18:09,668 - WARNING - [BacktestService] 請求的開始日期 2024-10-02 早於實際數據，調整為 2024-10-04
+2026-01-02 02:18:09,668 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-10-02~2024-12-31 → 實際 2024-10-04~2024-12-31
+2026-01-02 02:18:09,668 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-10-02~2024-12-31 → 實際 2024-10-04~2024-12-31
+2026-01-02 02:18:09,682 - WARNING - [BacktestService] Baseline 對比計算失敗: '>' not supported between instances of 'str' and 'int'
+2026-01-02 02:18:12,709 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 02:18:12,709 - INFO - [BacktestService] 文件是否存在: True
+2026-01-02 02:18:12,710 - INFO - [BacktestService] 成功讀取技術指標文件，共 1 筆原始數據
+2026-01-02 02:18:12,711 - INFO - [BacktestService] 日期欄位處理後，共 1 筆有效數據
+2026-01-02 02:18:12,711 - INFO - [BacktestService] 數據日期範圍: 1970-01-01 00:00:00 到 1970-01-01 00:00:00
+2026-01-02 02:18:12,711 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 02:18:12,712 - INFO - [BacktestService] 日期範圍過濾後，共 0 筆數據
+2026-01-02 02:18:12,712 - WARNING - [BacktestService] 日期範圍內沒有技術指標數據（股票 2330，日期範圍 2024-01-01 到 2024-12-31）
+2026-01-02 02:18:12,712 - WARNING - [BacktestService] 警告: 找不到技術指標數據（股票 2330），將只使用價格數據
+2026-01-02 02:18:12,712 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 02:18:12,712 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 02:18:12,712 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 02:18:12,748 - WARNING - [BacktestService] Baseline 對比計算失敗: '>' not supported between instances of 'str' and 'int'
+2026-01-02 02:18:12,748 - INFO - ✓ 測試通過：過擬合風險計算正確（風險等級：low）
+2026-01-02 02:18:12,748 - INFO - ============================================================
+2026-01-02 02:18:12,748 - INFO - 執行測試案例 10：BacktestService 過擬合風險計算關閉
+2026-01-02 02:18:12,748 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:18:12,748 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:18:12,749 - INFO - 配置檔案: prod
+2026-01-02 02:18:12,749 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:18:12,749 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:18:12,750 - INFO - 配置檔案: prod
+2026-01-02 02:18:15,877 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 02:18:15,878 - INFO - [BacktestService] 文件是否存在: True
+2026-01-02 02:18:15,880 - INFO - [BacktestService] 成功讀取技術指標文件，共 1 筆原始數據
+2026-01-02 02:18:15,880 - INFO - [BacktestService] 日期欄位處理後，共 1 筆有效數據
+2026-01-02 02:18:15,881 - INFO - [BacktestService] 數據日期範圍: 1970-01-01 00:00:00 到 1970-01-01 00:00:00
+2026-01-02 02:18:15,881 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 02:18:15,881 - INFO - [BacktestService] 日期範圍過濾後，共 0 筆數據
+2026-01-02 02:18:15,881 - WARNING - [BacktestService] 日期範圍內沒有技術指標數據（股票 2330，日期範圍 2024-01-01 到 2024-12-31）
+2026-01-02 02:18:15,882 - WARNING - [BacktestService] 警告: 找不到技術指標數據（股票 2330），將只使用價格數據
+2026-01-02 02:18:15,882 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 02:18:15,882 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 02:18:15,882 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 02:18:15,919 - WARNING - [BacktestService] Baseline 對比計算失敗: '>' not supported between instances of 'str' and 'int'
+2026-01-02 02:18:15,919 - INFO - ✓ 測試通過：過擬合風險計算關閉功能正確
+2026-01-02 02:18:15,919 - INFO - ============================================================
+2026-01-02 02:18:15,920 - INFO - 執行測試案例 11：向後兼容性測試
+2026-01-02 02:18:15,920 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 02:18:15,920 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:18:15,920 - INFO - 配置檔案: prod
+2026-01-02 02:18:15,920 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 02:18:15,920 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 02:18:15,921 - INFO - 配置檔案: prod
+2026-01-02 02:18:18,814 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 02:18:18,814 - INFO - [BacktestService] 文件是否存在: True
+2026-01-02 02:18:18,816 - INFO - [BacktestService] 成功讀取技術指標文件，共 1 筆原始數據
+2026-01-02 02:18:18,816 - INFO - [BacktestService] 日期欄位處理後，共 1 筆有效數據
+2026-01-02 02:18:18,816 - INFO - [BacktestService] 數據日期範圍: 1970-01-01 00:00:00 到 1970-01-01 00:00:00
+2026-01-02 02:18:18,816 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 02:18:18,816 - INFO - [BacktestService] 日期範圍過濾後，共 0 筆數據
+2026-01-02 02:18:18,816 - WARNING - [BacktestService] 日期範圍內沒有技術指標數據（股票 2330，日期範圍 2024-01-01 到 2024-12-31）
+2026-01-02 02:18:18,816 - WARNING - [BacktestService] 警告: 找不到技術指標數據（股票 2330），將只使用價格數據
+2026-01-02 02:18:18,816 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 02:18:18,816 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 02:18:18,816 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 02:18:18,833 - WARNING - [BacktestService] Baseline 對比計算失敗: '>' not supported between instances of 'str' and 'int'
+2026-01-02 02:18:18,833 - INFO - ✓ 測試通過：向後兼容性正確
+2026-01-02 02:18:18,833 - INFO - ============================================================
+2026-01-02 02:18:18,833 - INFO - 驗證結果摘要
+2026-01-02 02:18:18,833 - INFO - ============================================================
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 1：calculate_walkforward_degradation() 基本功能
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 2：calculate_walkforward_degradation() 無退化情況
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 3：calculate_consistency() 基本功能
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 4：calculate_consistency() Fold 數量不足
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 5：calculate_overfitting_risk() 完整資料
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 6：calculate_overfitting_risk() 無資料
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 7：BacktestReportDTO overfitting_risk 欄位
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 8：BacktestService 過擬合風險整合
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 9：BacktestService 過擬合風險計算（實際執行）
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 10：BacktestService 過擬合風險計算關閉
+2026-01-02 02:18:18,833 - INFO - ✓ 通過: 測試案例 11：向後兼容性測試
+2026-01-02 02:18:18,833 - INFO - ============================================================
+2026-01-02 02:18:18,833 - INFO - 總計: 11/11 測試案例通過
+2026-01-02 02:18:18,833 - INFO - 失敗: 0 個
+2026-01-02 02:18:18,833 - INFO - 警告: 0 個
+2026-01-02 02:18:18,833 - INFO - ============================================================
+2026-01-02 02:18:18,833 - INFO - JSON 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp2_validation\VALIDATION_REPORT.json
+2026-01-02 02:18:18,833 - INFO - Markdown 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp2_validation\VALIDATION_REPORT.md

@@ -1,0 +1,569 @@
+2026-01-02 03:11:15,026 - INFO - data_module.config - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 03:11:15,026 - INFO - data_module.config - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 03:11:15,026 - INFO - data_module.config - 配置檔案: prod
+2026-01-02 03:11:15,027 - INFO - data_module.config - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 03:11:15,027 - INFO - data_module.config - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 03:11:15,027 - INFO - data_module.config - 配置檔案: prod
+2026-01-02 03:11:15,033 - INFO - decision_module.industry_mapper - 成功載入 companies.csv，共 3691 筆
+2026-01-02 03:11:15,106 - INFO - decision_module.industry_mapper - 成功載入 industry_index.csv，共 171273 筆
+2026-01-02 03:11:15,151 - INFO - __main__ - ================================================================================
+2026-01-02 03:11:15,151 - INFO - __main__ - 開始執行 Phase 3.3b 完整功能驗證與壓力測試
+2026-01-02 03:11:15,151 - INFO - __main__ - ================================================================================
+2026-01-02 03:11:15,151 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:11:15,151 - INFO - __main__ - 測試場景 1：數據與市場觀察 (Update & Market Watch)
+2026-01-02 03:11:15,151 - INFO - __main__ - ================================================================================
+2026-01-02 03:11:15,151 - INFO - __main__ - 執行測試 1.1：數據更新流程（券商分點資料）
+2026-01-02 03:11:15,152 - INFO - __main__ - 測試 1.1 完成: 通過
+2026-01-02 03:11:15,152 - INFO - __main__ - 執行測試 1.2：Regime 判斷（Market Watch）
+2026-01-02 03:11:15,173 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 235, in test_market_regime
+    missing_fields = [f for f in required_fields if f not in regime_result]
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 235, in <listcomp>
+    missing_fields = [f for f in required_fields if f not in regime_result]
+                                                    ^^^^^^^^^^^^^^^^^^^^^^
+TypeError: argument of type 'RegimeResultDTO' is not iterable
+
+2026-01-02 03:11:15,173 - INFO - __main__ - 測試 1.2 完成: 失敗
+2026-01-02 03:11:15,173 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:11:15,173 - INFO - __main__ - 測試場景 2：推薦引擎與 Profile (Recommendation)
+2026-01-02 03:11:15,173 - INFO - __main__ - ================================================================================
+2026-01-02 03:11:15,173 - INFO - __main__ - 執行測試 2.1：Profile 載入（新手/進階模式）
+2026-01-02 03:11:15,174 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 282, in test_profile_loading
+    profiles = self.recommendation_service.get_profiles()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RecommendationService' object has no attribute 'get_profiles'
+
+2026-01-02 03:11:15,174 - INFO - __main__ - 測試 2.1 完成: 失敗
+2026-01-02 03:11:15,174 - INFO - __main__ - 執行測試 2.2：Why/Why Not（推薦理由）
+2026-01-02 03:11:15,174 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 345, in test_why_why_not
+    'strategy_config': self.recommendation_service.get_default_strategy_config()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RecommendationService' object has no attribute 'get_default_strategy_config'
+
+2026-01-02 03:11:15,174 - INFO - __main__ - 測試 2.2 完成: 失敗
+2026-01-02 03:11:15,174 - INFO - __main__ - 執行測試 2.3：聯動（推薦股票加入 Watchlist）
+2026-01-02 03:11:15,174 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 406, in test_watchlist_linkage
+    'strategy_config': self.recommendation_service.get_default_strategy_config()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RecommendationService' object has no attribute 'get_default_strategy_config'
+
+2026-01-02 03:11:15,174 - INFO - __main__ - 測試 2.3 完成: 失敗
+2026-01-02 03:11:15,174 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:11:15,174 - INFO - __main__ - 測試場景 3：研究閉環核心 (Backtest & Research Lab)
+2026-01-02 03:11:15,174 - INFO - __main__ - ================================================================================
+2026-01-02 03:11:15,174 - INFO - __main__ - 執行測試 3.1：一鍵送回測（Recommendation → Backtest）
+2026-01-02 03:11:15,174 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 485, in test_send_to_backtest
+    'strategy_config': self.recommendation_service.get_default_strategy_config()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'RecommendationService' object has no attribute 'get_default_strategy_config'
+
+2026-01-02 03:11:15,174 - INFO - __main__ - 測試 3.1 完成: 失敗
+2026-01-02 03:11:15,174 - INFO - __main__ - 執行測試 3.2：穩健性指標（Walk-forward, Baseline, Overfitting）
+2026-01-02 03:11:15,174 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 569, in test_robustness_metrics
+    backtest_result = self.backtest_service.run_backtest(backtest_config)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: BacktestService.run_backtest() missing 3 required positional arguments: 'start_date', 'end_date', and 'strategy_spec'
+
+2026-01-02 03:11:15,174 - INFO - __main__ - 測試 3.2 完成: 失敗
+2026-01-02 03:11:15,174 - INFO - __main__ - 執行測試 3.3：視覺驗證（K 線圖標記買賣點）
+2026-01-02 03:11:15,174 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 644, in test_visual_verification
+    backtest_result = self.backtest_service.run_backtest(backtest_config)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: BacktestService.run_backtest() missing 3 required positional arguments: 'start_date', 'end_date', and 'strategy_spec'
+
+2026-01-02 03:11:15,174 - INFO - __main__ - 測試 3.3 完成: 失敗
+2026-01-02 03:11:15,174 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:11:15,175 - INFO - __main__ - 測試場景 4：Promote 機制 (The Final Loop)
+2026-01-02 03:11:15,175 - INFO - __main__ - ================================================================================
+2026-01-02 03:11:15,175 - INFO - __main__ - 執行測試 4.1：Promote 機制（回測結果 → 策略版本）
+2026-01-02 03:11:15,175 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 714, in test_promote_mechanism
+    backtest_result = self.backtest_service.run_backtest(backtest_config)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: BacktestService.run_backtest() missing 3 required positional arguments: 'start_date', 'end_date', and 'strategy_spec'
+
+2026-01-02 03:11:15,175 - INFO - __main__ - 測試 4.1 完成: 失敗
+2026-01-02 03:11:15,175 - INFO - __main__ - 執行測試 4.2：Promote 後回到推薦（策略版本選擇）
+2026-01-02 03:11:15,175 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:11:15,175 - INFO - __main__ - 生成驗證報告
+2026-01-02 03:11:15,175 - INFO - __main__ - ================================================================================
+2026-01-02 03:11:15,175 - INFO - __main__ - 驗證報告已生成: C:\Projects\PythonProjects\technical_analysis\output\qa\phase3_3b_validation\VALIDATION_REPORT.md
+2026-01-02 03:11:15,175 - ERROR - __main__ - 驗證過程發生錯誤: 'charmap' codec can't encode characters in position 11-14: character maps to <undefined>
+2026-01-02 03:11:15,176 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 967, in main
+    validator.run_all_tests()
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 151, in run_all_tests
+    self.generate_report()
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 954, in generate_report
+    print("Phase 3.3b 驗證摘要")
+  File "C:\Program Files\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 11-14: character maps to <undefined>
+
+2026-01-02 03:12:24,856 - INFO - data_module.config - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 03:12:24,856 - INFO - data_module.config - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 03:12:24,856 - INFO - data_module.config - 配置檔案: prod
+2026-01-02 03:12:24,857 - INFO - data_module.config - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 03:12:24,857 - INFO - data_module.config - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 03:12:24,857 - INFO - data_module.config - 配置檔案: prod
+2026-01-02 03:12:24,863 - INFO - decision_module.industry_mapper - 成功載入 companies.csv，共 3691 筆
+2026-01-02 03:12:24,931 - INFO - decision_module.industry_mapper - 成功載入 industry_index.csv，共 171273 筆
+2026-01-02 03:12:24,979 - INFO - __main__ - ================================================================================
+2026-01-02 03:12:24,979 - INFO - __main__ - 開始執行 Phase 3.3b 完整功能驗證與壓力測試
+2026-01-02 03:12:24,979 - INFO - __main__ - ================================================================================
+2026-01-02 03:12:24,979 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:12:24,979 - INFO - __main__ - 測試場景 1：數據與市場觀察 (Update & Market Watch)
+2026-01-02 03:12:24,979 - INFO - __main__ - ================================================================================
+2026-01-02 03:12:24,979 - INFO - __main__ - 執行測試 1.1：數據更新流程（券商分點資料）
+2026-01-02 03:12:24,979 - INFO - __main__ - 測試 1.1 完成: 通過
+2026-01-02 03:12:24,979 - INFO - __main__ - 執行測試 1.2：Regime 判斷（Market Watch）
+2026-01-02 03:12:24,997 - INFO - __main__ - 測試 1.2 完成: 通過
+2026-01-02 03:12:24,997 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:12:24,997 - INFO - __main__ - 測試場景 2：推薦引擎與 Profile (Recommendation)
+2026-01-02 03:12:24,997 - INFO - __main__ - ================================================================================
+2026-01-02 03:12:24,997 - INFO - __main__ - 執行測試 2.1：Profile 載入（新手/進階模式）
+2026-01-02 03:12:24,997 - INFO - __main__ - 測試 2.1 完成: 通過
+2026-01-02 03:12:24,997 - INFO - __main__ - 執行測試 2.2：Why/Why Not（推薦理由）
+2026-01-02 03:12:24,997 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:12:24,997 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:12:24,997 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:12:24,997 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:12:31,026 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:12:31,040 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:31,040 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:12:31,090 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-0.07%
+2026-01-02 03:12:31,091 - WARNING - decision_module.strategy_configurator - [篩選診斷 #1] 股票 50 被過濾：總分=39.12, 漲幅%=2.057926829268306 (欄位存在: True), 成交量變化率%=-0.07442834424687961 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:12:31,091 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:31,183 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-26.75%
+2026-01-02 03:12:31,183 - WARNING - decision_module.strategy_configurator - [篩選診斷 #2] 股票 55 被過濾：總分=53.54, 漲幅%=0.0 (欄位存在: True), 成交量變化率%=-26.751610693044224 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:12:31,183 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:31,236 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-93.50%
+2026-01-02 03:12:31,236 - WARNING - decision_module.strategy_configurator - [篩選診斷 #3] 股票 57 被過濾：總分=39.32, 漲幅%=2.380952380952387 (欄位存在: True), 成交量變化率%=-93.49542401508307 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:12:31,237 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:31,296 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.86%
+2026-01-02 03:12:31,297 - WARNING - decision_module.strategy_configurator - [篩選診斷 #4] 股票 1101 被過濾：總分=51.57, 漲幅%=-0.8620689655172384 (欄位存在: True), 成交量變化率%=31.435869261858464 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:12:31,360 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.72%
+2026-01-02 03:12:31,360 - WARNING - decision_module.strategy_configurator - [篩選診斷 #5] 股票 1103 被過濾：總分=50.02, 漲幅%=-0.7168458781361982 (欄位存在: True), 成交量變化率%=30.538236481892646 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:12:31,388 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.50%
+2026-01-02 03:12:32,456 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:12:32,474 - INFO - __main__ - 測試 2.2 完成: 通過
+2026-01-02 03:12:32,474 - INFO - __main__ - 執行測試 2.3：聯動（推薦股票加入 Watchlist）
+2026-01-02 03:12:32,475 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:12:32,475 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:12:32,475 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:12:32,475 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:12:38,803 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:12:38,817 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:38,817 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:12:38,864 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:38,957 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:39,012 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:40,198 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:12:40,234 - INFO - app_module.watchlist_service - 成功添加 2 檔股票到觀察清單
+2026-01-02 03:12:40,234 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 468, in test_watchlist_linkage
+    watchlist = self.watchlist_service.get_watchlist("default")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'WatchlistService' object has no attribute 'get_watchlist'
+
+2026-01-02 03:12:40,234 - INFO - __main__ - 測試 2.3 完成: 失敗
+2026-01-02 03:12:40,234 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:12:40,234 - INFO - __main__ - 測試場景 3：研究閉環核心 (Backtest & Research Lab)
+2026-01-02 03:12:40,235 - INFO - __main__ - ================================================================================
+2026-01-02 03:12:40,235 - INFO - __main__ - 執行測試 3.1：一鍵送回測（Recommendation → Backtest）
+2026-01-02 03:12:40,235 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:12:40,235 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:12:40,235 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:12:40,235 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:12:46,545 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:12:46,556 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:46,556 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:12:46,604 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:46,694 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:46,746 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:12:48,005 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:12:48,022 - INFO - __main__ - 測試 3.1 完成: 通過
+2026-01-02 03:12:48,022 - INFO - __main__ - 執行測試 3.2：穩健性指標（Walk-forward, Baseline, Overfitting）
+2026-01-02 03:12:50,685 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:12:50,686 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:12:50,693 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:12:50,694 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:12:50,694 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:12:50,695 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:12:50,695 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:12:50,696 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:12:50,696 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:12:50,696 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:12:50,736 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 621, in test_robustness_metrics
+    report = backtest_result.report
+             ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'BacktestReportDTO' object has no attribute 'report'
+
+2026-01-02 03:12:50,736 - INFO - __main__ - 測試 3.2 完成: 失敗
+2026-01-02 03:12:50,736 - INFO - __main__ - 執行測試 3.3：視覺驗證（K 線圖標記買賣點）
+2026-01-02 03:12:53,410 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:12:53,410 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:12:53,418 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:12:53,419 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:12:53,419 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:12:53,419 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:12:53,420 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:12:53,421 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:12:53,421 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:12:53,421 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:12:53,462 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:12:53,463 - INFO - __main__ - 測試場景 4：Promote 機制 (The Final Loop)
+2026-01-02 03:12:53,463 - INFO - __main__ - ================================================================================
+2026-01-02 03:12:53,463 - INFO - __main__ - 執行測試 4.1：Promote 機制（回測結果 → 策略版本）
+2026-01-02 03:12:56,143 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:12:56,143 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:12:56,151 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:12:56,151 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:12:56,151 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:12:56,153 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:12:56,153 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:12:56,154 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:12:56,154 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:12:56,154 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:12:56,195 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 781, in test_promote_mechanism
+    run_id = runs[0].run_id
+             ^^^^^^^^^^^^^^
+AttributeError: 'dict' object has no attribute 'run_id'
+
+2026-01-02 03:12:56,195 - INFO - __main__ - 測試 4.1 完成: 失敗
+2026-01-02 03:12:56,195 - INFO - __main__ - 執行測試 4.2：Promote 後回到推薦（策略版本選擇）
+2026-01-02 03:12:56,195 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:12:56,195 - INFO - __main__ - 生成驗證報告
+2026-01-02 03:12:56,195 - INFO - __main__ - ================================================================================
+2026-01-02 03:12:56,195 - ERROR - __main__ - 驗證過程發生錯誤: Object of type bool is not JSON serializable
+2026-01-02 03:12:56,215 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 1031, in main
+    validator.run_all_tests()
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 151, in run_all_tests
+    self.generate_report()
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 955, in generate_report
+    report_lines.append(json.dumps(result.details, indent=2, ensure_ascii=False))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\json\__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\json\encoder.py", line 202, in encode
+    chunks = list(chunks)
+             ^^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\json\encoder.py", line 432, in _iterencode
+    yield from _iterencode_dict(o, _current_indent_level)
+  File "C:\Program Files\Python311\Lib\json\encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+  File "C:\Program Files\Python311\Lib\json\encoder.py", line 406, in _iterencode_dict
+    yield from chunks
+  File "C:\Program Files\Python311\Lib\json\encoder.py", line 439, in _iterencode
+    o = _default(o)
+        ^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\json\encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+TypeError: Object of type bool is not JSON serializable
+
+2026-01-02 03:13:11,061 - INFO - data_module.config - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 03:13:11,061 - INFO - data_module.config - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 03:13:11,061 - INFO - data_module.config - 配置檔案: prod
+2026-01-02 03:13:11,062 - INFO - data_module.config - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 03:13:11,062 - INFO - data_module.config - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 03:13:11,062 - INFO - data_module.config - 配置檔案: prod
+2026-01-02 03:13:11,067 - INFO - decision_module.industry_mapper - 成功載入 companies.csv，共 3691 筆
+2026-01-02 03:13:11,137 - INFO - decision_module.industry_mapper - 成功載入 industry_index.csv，共 171273 筆
+2026-01-02 03:13:11,187 - INFO - __main__ - ================================================================================
+2026-01-02 03:13:11,187 - INFO - __main__ - 開始執行 Phase 3.3b 完整功能驗證與壓力測試
+2026-01-02 03:13:11,187 - INFO - __main__ - ================================================================================
+2026-01-02 03:13:11,187 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:13:11,187 - INFO - __main__ - 測試場景 1：數據與市場觀察 (Update & Market Watch)
+2026-01-02 03:13:11,187 - INFO - __main__ - ================================================================================
+2026-01-02 03:13:11,187 - INFO - __main__ - 執行測試 1.1：數據更新流程（券商分點資料）
+2026-01-02 03:13:11,187 - INFO - __main__ - 測試 1.1 完成: 通過
+2026-01-02 03:13:11,187 - INFO - __main__ - 執行測試 1.2：Regime 判斷（Market Watch）
+2026-01-02 03:13:11,205 - INFO - __main__ - 測試 1.2 完成: 通過
+2026-01-02 03:13:11,205 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:13:11,205 - INFO - __main__ - 測試場景 2：推薦引擎與 Profile (Recommendation)
+2026-01-02 03:13:11,205 - INFO - __main__ - ================================================================================
+2026-01-02 03:13:11,205 - INFO - __main__ - 執行測試 2.1：Profile 載入（新手/進階模式）
+2026-01-02 03:13:11,205 - INFO - __main__ - 測試 2.1 完成: 通過
+2026-01-02 03:13:11,205 - INFO - __main__ - 執行測試 2.2：Why/Why Not（推薦理由）
+2026-01-02 03:13:11,205 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:13:11,205 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:13:11,205 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:13:11,205 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:13:17,138 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:13:17,149 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:17,149 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:13:17,198 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-0.07%
+2026-01-02 03:13:17,198 - WARNING - decision_module.strategy_configurator - [篩選診斷 #1] 股票 50 被過濾：總分=39.12, 漲幅%=2.057926829268306 (欄位存在: True), 成交量變化率%=-0.07442834424687961 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:13:17,198 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:17,290 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-26.75%
+2026-01-02 03:13:17,290 - WARNING - decision_module.strategy_configurator - [篩選診斷 #2] 股票 55 被過濾：總分=53.54, 漲幅%=0.0 (欄位存在: True), 成交量變化率%=-26.751610693044224 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:13:17,290 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:17,342 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-93.50%
+2026-01-02 03:13:17,342 - WARNING - decision_module.strategy_configurator - [篩選診斷 #3] 股票 57 被過濾：總分=39.32, 漲幅%=2.380952380952387 (欄位存在: True), 成交量變化率%=-93.49542401508307 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:13:17,343 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:17,398 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.86%
+2026-01-02 03:13:17,398 - WARNING - decision_module.strategy_configurator - [篩選診斷 #4] 股票 1101 被過濾：總分=51.57, 漲幅%=-0.8620689655172384 (欄位存在: True), 成交量變化率%=31.435869261858464 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:13:17,463 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.72%
+2026-01-02 03:13:17,463 - WARNING - decision_module.strategy_configurator - [篩選診斷 #5] 股票 1103 被過濾：總分=50.02, 漲幅%=-0.7168458781361982 (欄位存在: True), 成交量變化率%=30.538236481892646 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:13:17,474 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.50%
+2026-01-02 03:13:18,524 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:13:18,542 - INFO - __main__ - 測試 2.2 完成: 通過
+2026-01-02 03:13:18,543 - INFO - __main__ - 執行測試 2.3：聯動（推薦股票加入 Watchlist）
+2026-01-02 03:13:18,543 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:13:18,543 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:13:18,543 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:13:18,543 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:13:24,741 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:13:24,752 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:24,752 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:13:24,798 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:24,890 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:24,943 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:26,137 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:13:26,173 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 468, in test_watchlist_linkage
+    watchlist = self.watchlist_service.get_watchlist("default")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'WatchlistService' object has no attribute 'get_watchlist'
+
+2026-01-02 03:13:26,173 - INFO - __main__ - 測試 2.3 完成: 失敗
+2026-01-02 03:13:26,174 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:13:26,174 - INFO - __main__ - 測試場景 3：研究閉環核心 (Backtest & Research Lab)
+2026-01-02 03:13:26,174 - INFO - __main__ - ================================================================================
+2026-01-02 03:13:26,174 - INFO - __main__ - 執行測試 3.1：一鍵送回測（Recommendation → Backtest）
+2026-01-02 03:13:26,174 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:13:26,174 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:13:26,174 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:13:26,174 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:13:32,325 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:13:32,326 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:32,326 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:13:32,383 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:32,473 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:32,527 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:13:33,710 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:13:33,728 - INFO - __main__ - 測試 3.1 完成: 通過
+2026-01-02 03:13:33,728 - INFO - __main__ - 執行測試 3.2：穩健性指標（Walk-forward, Baseline, Overfitting）
+2026-01-02 03:13:36,386 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:13:36,386 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:13:36,393 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:13:36,394 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:13:36,395 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:13:36,395 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:13:36,395 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:13:36,396 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:13:36,396 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:13:36,397 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:13:36,437 - ERROR - __main__ - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_phase3_3b.py", line 621, in test_robustness_metrics
+    report = backtest_result.report
+             ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'BacktestReportDTO' object has no attribute 'report'
+
+2026-01-02 03:13:36,437 - INFO - __main__ - 測試 3.2 完成: 失敗
+2026-01-02 03:13:36,437 - INFO - __main__ - 執行測試 3.3：視覺驗證（K 線圖標記買賣點）
+2026-01-02 03:13:39,092 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:13:39,092 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:13:39,092 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:13:39,092 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:13:39,092 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:13:39,092 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:13:39,092 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:13:39,092 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:13:39,092 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:13:39,092 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:13:39,146 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:13:39,146 - INFO - __main__ - 測試場景 4：Promote 機制 (The Final Loop)
+2026-01-02 03:13:39,146 - INFO - __main__ - ================================================================================
+2026-01-02 03:13:39,146 - INFO - __main__ - 執行測試 4.1：Promote 機制（回測結果 → 策略版本）
+2026-01-02 03:13:41,811 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:13:41,811 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:13:41,819 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:13:41,820 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:13:41,820 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:13:41,820 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:13:41,821 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:13:41,822 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:13:41,822 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:13:41,822 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:13:41,861 - INFO - app_module.promotion_service - [PromotionService] 檢查升級條件: run_id=run_20251226_233018
+2026-01-02 03:13:41,862 - INFO - app_module.promotion_service - [PromotionService] 升級條件檢查完成: passed=False, reasons=4
+2026-01-02 03:13:41,862 - INFO - __main__ - 測試 4.1 完成: 通過
+2026-01-02 03:13:41,862 - INFO - __main__ - 執行測試 4.2：Promote 後回到推薦（策略版本選擇）
+2026-01-02 03:13:41,862 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:13:41,862 - INFO - __main__ - 生成驗證報告
+2026-01-02 03:13:41,862 - INFO - __main__ - ================================================================================
+2026-01-02 03:13:41,862 - INFO - __main__ - 驗證報告已生成: C:\Projects\PythonProjects\technical_analysis\output\qa\phase3_3b_validation\VALIDATION_REPORT.md
+2026-01-02 03:13:41,862 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:13:41,863 - INFO - __main__ - Phase 3.3b 驗證摘要
+2026-01-02 03:13:41,863 - INFO - __main__ - ================================================================================
+2026-01-02 03:13:41,863 - INFO - __main__ - 總測試數: 10
+2026-01-02 03:13:41,863 - INFO - __main__ - 通過: 8 (80.0%)
+2026-01-02 03:13:41,863 - INFO - __main__ - 失敗: 2 (20.0%)
+2026-01-02 03:13:41,863 - INFO - __main__ - 警告: 6 (60.0%)
+2026-01-02 03:13:41,863 - INFO - __main__ - 
+詳細報告: C:\Projects\PythonProjects\technical_analysis\output\qa\phase3_3b_validation\VALIDATION_REPORT.md
+2026-01-02 03:19:05,067 - INFO - data_module.config - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2026-01-02 03:19:05,068 - INFO - data_module.config - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2026-01-02 03:19:05,068 - INFO - data_module.config - 配置檔案: prod
+2026-01-02 03:19:05,068 - INFO - data_module.config - 數據根目錄: D:\Min\Python\Project\FA_Data
+2026-01-02 03:19:05,068 - INFO - data_module.config - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2026-01-02 03:19:05,068 - INFO - data_module.config - 配置檔案: prod
+2026-01-02 03:19:05,074 - INFO - decision_module.industry_mapper - 成功載入 companies.csv，共 3691 筆
+2026-01-02 03:19:05,144 - INFO - decision_module.industry_mapper - 成功載入 industry_index.csv，共 171273 筆
+2026-01-02 03:19:05,190 - INFO - __main__ - ================================================================================
+2026-01-02 03:19:05,190 - INFO - __main__ - 開始執行 Phase 3.3b 完整功能驗證與壓力測試
+2026-01-02 03:19:05,190 - INFO - __main__ - ================================================================================
+2026-01-02 03:19:05,190 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:19:05,190 - INFO - __main__ - 測試場景 1：數據與市場觀察 (Update & Market Watch)
+2026-01-02 03:19:05,190 - INFO - __main__ - ================================================================================
+2026-01-02 03:19:05,190 - INFO - __main__ - 執行測試 1.1：數據更新流程（券商分點資料）
+2026-01-02 03:19:05,190 - INFO - __main__ - 測試 1.1 完成: 通過
+2026-01-02 03:19:05,190 - INFO - __main__ - 執行測試 1.2：Regime 判斷（Market Watch）
+2026-01-02 03:19:05,208 - INFO - __main__ - 測試 1.2 完成: 通過
+2026-01-02 03:19:05,208 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:19:05,208 - INFO - __main__ - 測試場景 2：推薦引擎與 Profile (Recommendation)
+2026-01-02 03:19:05,208 - INFO - __main__ - ================================================================================
+2026-01-02 03:19:05,208 - INFO - __main__ - 執行測試 2.1：Profile 載入（新手/進階模式）
+2026-01-02 03:19:05,208 - INFO - __main__ - 測試 2.1 完成: 通過
+2026-01-02 03:19:05,208 - INFO - __main__ - 執行測試 2.2：Why/Why Not（推薦理由）
+2026-01-02 03:19:05,208 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:19:05,208 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:19:05,208 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:19:05,208 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:19:11,384 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:19:11,396 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:11,396 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:19:11,446 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-0.07%
+2026-01-02 03:19:11,446 - WARNING - decision_module.strategy_configurator - [篩選診斷 #1] 股票 50 被過濾：總分=39.12, 漲幅%=2.057926829268306 (欄位存在: True), 成交量變化率%=-0.07442834424687961 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:19:11,446 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:11,541 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-26.75%
+2026-01-02 03:19:11,541 - WARNING - decision_module.strategy_configurator - [篩選診斷 #2] 股票 55 被過濾：總分=53.54, 漲幅%=0.0 (欄位存在: True), 成交量變化率%=-26.751610693044224 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:19:11,542 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:11,597 - WARNING - decision_module.strategy_configurator - [成交量篩選] 要求 >= 0.00%, 但樣本值=-93.50%
+2026-01-02 03:19:11,597 - WARNING - decision_module.strategy_configurator - [篩選診斷 #3] 股票 57 被過濾：總分=39.32, 漲幅%=2.380952380952387 (欄位存在: True), 成交量變化率%=-93.49542401508307 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:19:11,598 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:11,655 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.86%
+2026-01-02 03:19:11,655 - WARNING - decision_module.strategy_configurator - [篩選診斷 #4] 股票 1101 被過濾：總分=51.57, 漲幅%=-0.8620689655172384 (欄位存在: True), 成交量變化率%=31.435869261858464 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:19:11,716 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.72%
+2026-01-02 03:19:11,717 - WARNING - decision_module.strategy_configurator - [篩選診斷 #5] 股票 1103 被過濾：總分=50.02, 漲幅%=-0.7168458781361982 (欄位存在: True), 成交量變化率%=30.538236481892646 (欄位存在: True), 篩選條件={'volume_ratio_min': 0.0, 'price_change_min': 0.0}
+2026-01-02 03:19:11,744 - WARNING - decision_module.strategy_configurator - [漲幅篩選] 要求 >= 0.0%, 但樣本值=-0.50%
+2026-01-02 03:19:12,836 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:19:12,854 - INFO - __main__ - 測試 2.2 完成: 通過
+2026-01-02 03:19:12,854 - INFO - __main__ - 執行測試 2.3：聯動（推薦股票加入 Watchlist）
+2026-01-02 03:19:12,854 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:19:12,854 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:19:12,854 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:19:12,854 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:19:19,213 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:19:19,224 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:19,224 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:19:19,273 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:19,367 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:19,420 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:20,639 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:19:20,675 - INFO - __main__ - 測試 2.3 完成: 通過
+2026-01-02 03:19:20,676 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:19:20,676 - INFO - __main__ - 測試場景 3：研究閉環核心 (Backtest & Research Lab)
+2026-01-02 03:19:20,676 - INFO - __main__ - ================================================================================
+2026-01-02 03:19:20,676 - INFO - __main__ - 執行測試 3.1：一鍵送回測（Recommendation → Backtest）
+2026-01-02 03:19:20,676 - INFO - app_module.recommendation_service - [RecommendationService] 開始推薦分析: max_stocks=50, top_n=10, 產業篩選=全部, 圖形模式=['W底', '頭肩底', '雙底', '矩形'], 技術指標啟用=True
+2026-01-02 03:19:20,676 - INFO - app_module.recommendation_service - [RecommendationService] 使用備用數據文件（通常較新）: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv
+2026-01-02 03:19:20,676 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:19:20,676 - INFO - app_module.recommendation_service - [RecommendationService] 使用數據文件: D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data.csv, 文件大小: 911.86 MB
+2026-01-02 03:19:27,052 - INFO - app_module.recommendation_service - [RecommendationService] 原始數據日期範圍: 2014-04-07 00:00:00 ~ 2026-01-02 00:00:00, 總筆數=500000
+2026-01-02 03:19:27,063 - INFO - app_module.recommendation_service - [RecommendationService] 數據讀取完成: 總筆數=7733, 股票數=180, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:27,063 - INFO - app_module.recommendation_service - [RecommendationService] 開始處理 50 支股票
+2026-01-02 03:19:27,110 - WARNING - app_module.recommendation_service - [調試] 股票 50 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:27,203 - WARNING - app_module.recommendation_service - [調試] 股票 55 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:27,258 - WARNING - app_module.recommendation_service - [調試] 股票 57 返回空結果: 數據筆數=43, 日期範圍=2025-11-03 00:00:00 ~ 2026-01-02 00:00:00
+2026-01-02 03:19:28,482 - INFO - app_module.recommendation_service - [RecommendationService] 推薦分析完成: 總股票數=50, 已處理=50, 成功=10, 返回推薦數=10
+2026-01-02 03:19:28,500 - INFO - __main__ - 測試 3.1 完成: 通過
+2026-01-02 03:19:28,501 - INFO - __main__ - 執行測試 3.2：穩健性指標（Walk-forward, Baseline, Overfitting）
+2026-01-02 03:19:31,196 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:19:31,196 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:19:31,209 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:19:31,210 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:19:31,210 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:19:31,210 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:19:31,211 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:19:31,212 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:19:31,212 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:19:31,212 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:19:31,252 - INFO - __main__ - 測試 3.2 完成: 通過
+2026-01-02 03:19:31,252 - INFO - __main__ - 執行測試 3.3：視覺驗證（K 線圖標記買賣點）
+2026-01-02 03:19:34,062 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:19:34,062 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:19:34,064 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:19:34,064 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:19:34,064 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:19:34,064 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:19:34,064 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:19:34,073 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:19:34,074 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:19:34,074 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:19:34,115 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:19:34,115 - INFO - __main__ - 測試場景 4：Promote 機制 (The Final Loop)
+2026-01-02 03:19:34,115 - INFO - __main__ - ================================================================================
+2026-01-02 03:19:34,115 - INFO - __main__ - 執行測試 4.1：Promote 機制（回測結果 → 策略版本）
+2026-01-02 03:19:36,924 - INFO - app_module.backtest_service - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2026-01-02 03:19:36,925 - INFO - app_module.backtest_service - [BacktestService] 文件是否存在: True
+2026-01-02 03:19:36,932 - INFO - app_module.backtest_service - [BacktestService] 成功讀取技術指標文件，共 2866 筆原始數據
+2026-01-02 03:19:36,933 - INFO - app_module.backtest_service - [BacktestService] 日期欄位處理後，共 2866 筆有效數據
+2026-01-02 03:19:36,933 - INFO - app_module.backtest_service - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2026-01-02 00:00:00
+2026-01-02 03:19:36,933 - INFO - app_module.backtest_service - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2026-01-02 03:19:36,934 - INFO - app_module.backtest_service - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2026-01-02 03:19:36,935 - WARNING - app_module.backtest_service - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2026-01-02 03:19:36,935 - INFO - app_module.backtest_service - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:19:36,935 - WARNING - app_module.backtest_service - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2026-01-02 03:19:36,976 - INFO - app_module.promotion_service - [PromotionService] 檢查升級條件: run_id=run_20251226_233018
+2026-01-02 03:19:36,977 - INFO - app_module.promotion_service - [PromotionService] 升級條件檢查完成: passed=False, reasons=4
+2026-01-02 03:19:36,977 - INFO - __main__ - 測試 4.1 完成: 通過
+2026-01-02 03:19:36,977 - INFO - __main__ - 執行測試 4.2：Promote 後回到推薦（策略版本選擇）
+2026-01-02 03:19:36,977 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:19:36,977 - INFO - __main__ - 生成驗證報告
+2026-01-02 03:19:36,977 - INFO - __main__ - ================================================================================
+2026-01-02 03:19:36,978 - INFO - __main__ - 驗證報告已生成: C:\Projects\PythonProjects\technical_analysis\output\qa\phase3_3b_validation\VALIDATION_REPORT.md
+2026-01-02 03:19:36,978 - INFO - __main__ - 
+================================================================================
+2026-01-02 03:19:36,978 - INFO - __main__ - Phase 3.3b 驗證摘要
+2026-01-02 03:19:36,978 - INFO - __main__ - ================================================================================
+2026-01-02 03:19:36,978 - INFO - __main__ - 總測試數: 10
+2026-01-02 03:19:36,978 - INFO - __main__ - 通過: 10 (100.0%)
+2026-01-02 03:19:36,978 - INFO - __main__ - 失敗: 0 (0.0%)
+2026-01-02 03:19:36,978 - INFO - __main__ - 警告: 6 (60.0%)
+2026-01-02 03:19:36,978 - INFO - __main__ - 
+詳細報告: C:\Projects\PythonProjects\technical_analysis\output\qa\phase3_3b_validation\VALIDATION_REPORT.md

@@ -1,0 +1,133 @@
+{
+  "validation_date": "2026-01-02 02:18:18",
+  "total_tests": 11,
+  "passed_tests": 11,
+  "failed_tests": 0,
+  "warning_tests": 0,
+  "results": [
+    {
+      "test_name": "測試案例 1：calculate_walkforward_degradation() 基本功能",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "degradation": 0.4,
+        "expected": 0.4
+      }
+    },
+    {
+      "test_name": "測試案例 2：calculate_walkforward_degradation() 無退化情況",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "degradation": 0.0
+      }
+    },
+    {
+      "test_name": "測試案例 3：calculate_consistency() 基本功能",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "consistency": 0.08164965809277258
+      }
+    },
+    {
+      "test_name": "測試案例 4：calculate_consistency() Fold 數量不足",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "consistency": null
+      }
+    },
+    {
+      "test_name": "測試案例 5：calculate_overfitting_risk() 完整資料",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "risk_level": "high",
+        "risk_score": 6.0,
+        "warnings_count": 3,
+        "recommendations_count": 5
+      }
+    },
+    {
+      "test_name": "測試案例 6：calculate_overfitting_risk() 無資料",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "risk_level": "low",
+        "risk_score": 0.0,
+        "missing_data_count": 3
+      }
+    },
+    {
+      "test_name": "測試案例 7：BacktestReportDTO overfitting_risk 欄位",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "field_exists": true,
+        "default_value": "None",
+        "to_dict_works": true
+      }
+    },
+    {
+      "test_name": "測試案例 8：BacktestService 過擬合風險整合",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "enable_overfitting_risk_param_exists": true,
+        "walkforward_results_param_exists": true,
+        "_calculate_overfitting_risk_method_exists": true
+      }
+    },
+    {
+      "test_name": "測試案例 9：BacktestService 過擬合風險計算（實際執行）",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "overfitting_risk_exists": true,
+        "risk_level": "low",
+        "risk_score": 0.0,
+        "wf_folds_count": 2
+      }
+    },
+    {
+      "test_name": "測試案例 10：BacktestService 過擬合風險計算關閉",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "overfitting_risk_is_none": true
+      }
+    },
+    {
+      "test_name": "測試案例 11：向後兼容性測試",
+      "passed": true,
+      "error_message": null,
+      "warning": false,
+      "warning_message": null,
+      "details": {
+        "backtest_report_generated": true,
+        "overfitting_risk": null
+      }
+    }
+  ]
+}

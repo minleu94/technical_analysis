@@ -1,0 +1,1429 @@
+2025-12-30 23:46:54,026 - INFO - ============================================================
+2025-12-30 23:46:54,026 - INFO - 開始執行 Epic 2 MVP-1 功能驗證
+2025-12-30 23:46:54,026 - INFO - ============================================================
+2025-12-30 23:46:54,026 - INFO - ============================================================
+2025-12-30 23:46:54,026 - INFO - 執行測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:46:54,026 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:46:54,026 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:46:54,026 - INFO - 配置檔案: prod
+2025-12-30 23:46:54,026 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:46:54,028 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:46:54,028 - INFO - 配置檔案: prod
+2025-12-30 23:46:54,028 - INFO - ✓ walk_forward() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:46:54,028 - INFO - ✓ train_test_split() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:46:54,028 - INFO - ============================================================
+2025-12-30 23:46:54,028 - INFO - 執行測試案例 2：warmup_days 功能驗證
+2025-12-30 23:46:54,028 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:46:54,028 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:46:54,028 - INFO - 配置檔案: prod
+2025-12-30 23:46:54,028 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:46:54,028 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:46:54,028 - INFO - 配置檔案: prod
+2025-12-30 23:46:54,028 - ERROR - 測試案例 2 失敗: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+2025-12-30 23:46:54,029 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp1.py", line 126, in test_case_2_warmup_days_functionality
+    strategy_spec = StrategyRegistry.get_strategy_spec('momentum_aggressive', 'v1')
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+
+2025-12-30 23:46:54,029 - INFO - ============================================================
+2025-12-30 23:46:54,029 - INFO - 執行測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:46:54,031 - ERROR - 測試案例 3 失敗: Sharpe Ratio 不合理: 176.12978465794652
+2025-12-30 23:46:54,031 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp1.py", line 218, in test_case_3_calculate_buy_hold_return_basic
+    assert -5.0 <= baseline_result['sharpe_ratio'] <= 5.0, f"Sharpe Ratio 不合理: {baseline_result['sharpe_ratio']}"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Sharpe Ratio 不合理: 176.12978465794652
+
+2025-12-30 23:46:54,032 - INFO - ============================================================
+2025-12-30 23:46:54,032 - INFO - 執行測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:46:54,033 - INFO - ✓ 使用 '收盤價' 欄位名稱測試通過
+2025-12-30 23:46:54,033 - INFO - ✓ 使用 'Close' 欄位名稱測試通過
+2025-12-30 23:46:54,035 - INFO - ✓ 兩種欄位名稱的計算結果一致
+2025-12-30 23:46:54,035 - INFO - ============================================================
+2025-12-30 23:46:54,035 - INFO - 執行測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:46:54,035 - INFO - ✓ calculate_baseline_comparison 方法正常運作
+2025-12-30 23:46:54,035 - INFO -   超額報酬率: 0.0500
+2025-12-30 23:46:54,035 - INFO -   相對 Sharpe: 0.4000
+2025-12-30 23:46:54,035 - INFO -   是否優於 Baseline: True
+2025-12-30 23:46:54,035 - INFO - ============================================================
+2025-12-30 23:46:54,035 - INFO - 執行測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:46:54,035 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:46:54,035 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:46:54,035 - INFO - 配置檔案: prod
+2025-12-30 23:46:54,036 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:46:54,036 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:46:54,036 - INFO - 配置檔案: prod
+2025-12-30 23:46:54,036 - ERROR - 測試案例 6 失敗: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+2025-12-30 23:46:54,036 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp1.py", line 363, in test_case_6_backtest_service_baseline_integration
+    strategy_spec = StrategyRegistry.get_strategy_spec('momentum_aggressive', 'v1')
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+
+2025-12-30 23:46:54,036 - INFO - ============================================================
+2025-12-30 23:46:54,036 - INFO - 執行測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:46:54,036 - INFO - ✓ BacktestReportDTO 包含 baseline_comparison 欄位
+2025-12-30 23:46:54,036 - INFO -   欄位類型: typing.Optional[typing.Dict[str, typing.Any]]
+2025-12-30 23:46:54,036 - INFO - ✓ BacktestReportDTO 可正常創建帶有 baseline_comparison 的實例
+2025-12-30 23:46:54,036 - INFO - ✓ to_dict() 方法包含 baseline_comparison
+2025-12-30 23:46:54,036 - INFO - ============================================================
+2025-12-30 23:46:54,036 - INFO - 執行測試案例 8：向後兼容性驗證
+2025-12-30 23:46:54,036 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:46:54,037 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:46:54,037 - INFO - 配置檔案: prod
+2025-12-30 23:46:54,037 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:46:54,037 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:46:54,037 - INFO - 配置檔案: prod
+2025-12-30 23:46:54,037 - ERROR - 測試案例 8 失敗: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+2025-12-30 23:46:54,037 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp1.py", line 482, in test_case_8_backward_compatibility
+    strategy_spec = StrategyRegistry.get_strategy_spec('momentum_aggressive', 'v1')
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+
+2025-12-30 23:46:54,037 - INFO - ============================================================
+2025-12-30 23:46:54,037 - INFO - 驗證結果摘要
+2025-12-30 23:46:54,037 - INFO - ============================================================
+2025-12-30 23:46:54,037 - INFO - ✓ 通過: 測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:46:54,038 - INFO - ✗ 失敗: 測試案例 2：warmup_days 功能驗證
+2025-12-30 23:46:54,038 - INFO -   錯誤訊息: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+2025-12-30 23:46:54,038 - INFO - ✗ 失敗: 測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:46:54,038 - INFO -   錯誤訊息: Sharpe Ratio 不合理: 176.12978465794652
+2025-12-30 23:46:54,038 - INFO - ✓ 通過: 測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:46:54,038 - INFO - ✓ 通過: 測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:46:54,038 - INFO - ✗ 失敗: 測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:46:54,038 - INFO -   錯誤訊息: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+2025-12-30 23:46:54,038 - INFO - ✓ 通過: 測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:46:54,038 - INFO - ✗ 失敗: 測試案例 8：向後兼容性驗證
+2025-12-30 23:46:54,038 - INFO -   錯誤訊息: type object 'StrategyRegistry' has no attribute 'get_strategy_spec'
+2025-12-30 23:46:54,038 - INFO - ============================================================
+2025-12-30 23:46:54,038 - INFO - 總計: 4/8 測試案例通過
+2025-12-30 23:46:54,038 - INFO - ============================================================
+2025-12-30 23:46:54,038 - INFO - 詳細報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp1_validation\VALIDATION_REPORT.json
+2025-12-30 23:47:21,659 - INFO - ============================================================
+2025-12-30 23:47:21,659 - INFO - 開始執行 Epic 2 MVP-1 功能驗證
+2025-12-30 23:47:21,659 - INFO - ============================================================
+2025-12-30 23:47:21,659 - INFO - ============================================================
+2025-12-30 23:47:21,659 - INFO - 執行測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:47:21,660 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:21,660 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:21,660 - INFO - 配置檔案: prod
+2025-12-30 23:47:21,660 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:21,660 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:21,660 - INFO - 配置檔案: prod
+2025-12-30 23:47:21,660 - INFO - ✓ walk_forward() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:47:21,660 - INFO - ✓ train_test_split() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:47:21,660 - INFO - ============================================================
+2025-12-30 23:47:21,660 - INFO - 執行測試案例 2：warmup_days 功能驗證
+2025-12-30 23:47:21,660 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:21,660 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:21,660 - INFO - 配置檔案: prod
+2025-12-30 23:47:21,661 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:21,661 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:21,661 - INFO - 配置檔案: prod
+2025-12-30 23:47:24,422 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:47:24,423 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:47:24,445 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:47:24,447 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:47:24,447 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:47:24,447 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-05-12 00:00:00
+2025-12-30 23:47:24,447 - INFO - [BacktestService] 日期範圍過濾後，共 69 筆數據
+2025-12-30 23:47:24,452 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:47:24,452 - WARNING - [BacktestService] 請求的結束日期 2024-05-12 晚於實際數據，調整為 2024-05-10
+2025-12-30 23:47:24,453 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:47:24,453 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:47:27,148 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:47:27,148 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:47:27,155 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:47:27,156 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:47:27,157 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:47:27,157 - INFO - [BacktestService] 請求的日期範圍: 2024-05-13 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:47:27,157 - INFO - [BacktestService] 日期範圍過濾後，共 34 筆數據
+2025-12-30 23:47:27,158 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:47:27,158 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:47:27,158 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:47:27,159 - INFO - 原始開始日期: 2024-01-01
+2025-12-30 23:47:27,159 - INFO - 預期訓練期開始日期: 2024-01-21
+2025-12-30 23:47:27,159 - INFO - 實際訓練期開始日期: None
+2025-12-30 23:47:27,159 - ERROR - 測試案例 2 失敗: 無法從報告中取得訓練期開始日期
+2025-12-30 23:47:27,159 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp1.py", line 178, in test_case_2_warmup_days_functionality
+    raise ValueError("無法從報告中取得訓練期開始日期")
+ValueError: 無法從報告中取得訓練期開始日期
+
+2025-12-30 23:47:27,159 - INFO - ============================================================
+2025-12-30 23:47:27,159 - INFO - 執行測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:47:27,161 - INFO - ✓ calculate_buy_hold_return 方法正常運作
+2025-12-30 23:47:27,161 - INFO -   總報酬率: 0.3650
+2025-12-30 23:47:27,161 - INFO -   年化報酬率: 0.3653
+2025-12-30 23:47:27,161 - INFO -   最大回撤: 0.0000
+2025-12-30 23:47:27,161 - INFO -   Sharpe Ratio: 176.1298
+2025-12-30 23:47:27,161 - INFO - ============================================================
+2025-12-30 23:47:27,161 - INFO - 執行測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:47:27,163 - INFO - ✓ 使用 '收盤價' 欄位名稱測試通過
+2025-12-30 23:47:27,163 - INFO - ✓ 使用 'Close' 欄位名稱測試通過
+2025-12-30 23:47:27,163 - INFO - ✓ 兩種欄位名稱的計算結果一致
+2025-12-30 23:47:27,163 - INFO - ============================================================
+2025-12-30 23:47:27,163 - INFO - 執行測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:47:27,163 - INFO - ✓ calculate_baseline_comparison 方法正常運作
+2025-12-30 23:47:27,163 - INFO -   超額報酬率: 0.0500
+2025-12-30 23:47:27,163 - INFO -   相對 Sharpe: 0.4000
+2025-12-30 23:47:27,163 - INFO -   是否優於 Baseline: True
+2025-12-30 23:47:27,163 - INFO - ============================================================
+2025-12-30 23:47:27,163 - INFO - 執行測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:47:27,163 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:27,164 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:27,164 - INFO - 配置檔案: prod
+2025-12-30 23:47:27,164 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:27,164 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:27,164 - INFO - 配置檔案: prod
+2025-12-30 23:47:29,837 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:47:29,838 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:47:29,844 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:47:29,846 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:47:29,846 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:47:29,847 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:47:29,847 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:47:29,848 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:47:29,848 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:47:29,849 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:47:29,849 - WARNING - ⚠ Baseline 對比為 None（可能是數據不足或計算失敗）
+2025-12-30 23:47:29,849 - INFO - ============================================================
+2025-12-30 23:47:29,849 - INFO - 執行測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:47:29,849 - INFO - ✓ BacktestReportDTO 包含 baseline_comparison 欄位
+2025-12-30 23:47:29,849 - INFO -   欄位類型: typing.Optional[typing.Dict[str, typing.Any]]
+2025-12-30 23:47:29,849 - INFO - ✓ BacktestReportDTO 可正常創建帶有 baseline_comparison 的實例
+2025-12-30 23:47:29,849 - INFO - ✓ to_dict() 方法包含 baseline_comparison
+2025-12-30 23:47:29,849 - INFO - ============================================================
+2025-12-30 23:47:29,849 - INFO - 執行測試案例 8：向後兼容性驗證
+2025-12-30 23:47:29,849 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:29,849 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:29,849 - INFO - 配置檔案: prod
+2025-12-30 23:47:29,849 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:29,849 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:29,849 - INFO - 配置檔案: prod
+2025-12-30 23:47:32,519 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:47:32,519 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:47:32,526 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:47:32,526 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:47:32,528 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:47:32,528 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:47:32,528 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:47:32,529 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:47:32,530 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:47:32,530 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:47:32,530 - INFO - ✓ 回測報告格式與修改前一致
+2025-12-30 23:47:35,203 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:47:35,204 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:47:35,210 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:47:35,211 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:47:35,211 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:47:35,212 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-05-06 00:00:00
+2025-12-30 23:47:35,212 - INFO - [BacktestService] 日期範圍過濾後，共 72 筆數據
+2025-12-30 23:47:35,213 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:47:35,213 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-05-06 → 實際 2024-01-11~2024-05-06
+2025-12-30 23:47:35,213 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-05-06 → 實際 2024-01-11~2024-05-06
+2025-12-30 23:47:37,894 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:47:37,895 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:47:37,902 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:47:37,903 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:47:37,903 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:47:37,904 - INFO - [BacktestService] 請求的日期範圍: 2024-05-07 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:47:37,904 - INFO - [BacktestService] 日期範圍過濾後，共 38 筆數據
+2025-12-30 23:47:37,905 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:47:37,905 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-07~2024-06-30 → 實際 2024-05-07~2024-06-28
+2025-12-30 23:47:37,905 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-07~2024-06-30 → 實際 2024-05-07~2024-06-28
+2025-12-30 23:47:37,905 - INFO - ✓ train_test_split 不傳入 warmup_days 時正常運作
+2025-12-30 23:47:37,905 - INFO - ✓ walk_forward 方法簽名正確，預設值為 0
+2025-12-30 23:47:37,905 - INFO - ============================================================
+2025-12-30 23:47:37,905 - INFO - 驗證結果摘要
+2025-12-30 23:47:37,906 - INFO - ============================================================
+2025-12-30 23:47:37,906 - INFO - ✓ 通過: 測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:47:37,906 - INFO - ✗ 失敗: 測試案例 2：warmup_days 功能驗證
+2025-12-30 23:47:37,906 - INFO -   錯誤訊息: 無法從報告中取得訓練期開始日期
+2025-12-30 23:47:37,906 - INFO - ✓ 通過: 測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:47:37,906 - INFO - ✓ 通過: 測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:47:37,906 - INFO - ✓ 通過: 測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:47:37,906 - INFO - ✓ 通過: 測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:47:37,906 - INFO - ✓ 通過: 測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:47:37,906 - INFO - ✓ 通過: 測試案例 8：向後兼容性驗證
+2025-12-30 23:47:37,906 - INFO - ============================================================
+2025-12-30 23:47:37,906 - INFO - 總計: 7/8 測試案例通過
+2025-12-30 23:47:37,906 - INFO - ============================================================
+2025-12-30 23:47:37,906 - INFO - 詳細報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp1_validation\VALIDATION_REPORT.json
+2025-12-30 23:47:59,317 - INFO - ============================================================
+2025-12-30 23:47:59,317 - INFO - 開始執行 Epic 2 MVP-1 功能驗證
+2025-12-30 23:47:59,317 - INFO - ============================================================
+2025-12-30 23:47:59,317 - INFO - ============================================================
+2025-12-30 23:47:59,317 - INFO - 執行測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:47:59,317 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:59,317 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:59,317 - INFO - 配置檔案: prod
+2025-12-30 23:47:59,318 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:59,318 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:59,318 - INFO - 配置檔案: prod
+2025-12-30 23:47:59,318 - INFO - ✓ walk_forward() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:47:59,318 - INFO - ✓ train_test_split() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:47:59,318 - INFO - ============================================================
+2025-12-30 23:47:59,318 - INFO - 執行測試案例 2：warmup_days 功能驗證
+2025-12-30 23:47:59,318 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:59,318 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:59,318 - INFO - 配置檔案: prod
+2025-12-30 23:47:59,319 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:47:59,319 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:47:59,319 - INFO - 配置檔案: prod
+2025-12-30 23:48:02,071 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:48:02,071 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:48:02,078 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:48:02,080 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:48:02,080 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:48:02,080 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-05-12 00:00:00
+2025-12-30 23:48:02,080 - INFO - [BacktestService] 日期範圍過濾後，共 69 筆數據
+2025-12-30 23:48:02,082 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:48:02,082 - WARNING - [BacktestService] 請求的結束日期 2024-05-12 晚於實際數據，調整為 2024-05-10
+2025-12-30 23:48:02,082 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:48:02,082 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:48:04,764 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:48:04,764 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:48:04,771 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:48:04,772 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:48:04,772 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:48:04,774 - INFO - [BacktestService] 請求的日期範圍: 2024-05-13 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:48:04,774 - INFO - [BacktestService] 日期範圍過濾後，共 34 筆數據
+2025-12-30 23:48:04,775 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:48:04,775 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:48:04,775 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:48:04,776 - INFO - ✓ train_test_split 使用 warmup_days=20 時正常執行
+2025-12-30 23:48:04,776 - INFO -   訓練集總報酬率: 0.0000
+2025-12-30 23:48:04,776 - INFO -   測試集總報酬率: 0.0000
+2025-12-30 23:48:04,776 - INFO - ============================================================
+2025-12-30 23:48:04,776 - INFO - 執行測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:48:04,777 - INFO - ✓ calculate_buy_hold_return 方法正常運作
+2025-12-30 23:48:04,777 - INFO -   總報酬率: 0.3650
+2025-12-30 23:48:04,777 - INFO -   年化報酬率: 0.3653
+2025-12-30 23:48:04,777 - INFO -   最大回撤: 0.0000
+2025-12-30 23:48:04,777 - INFO -   Sharpe Ratio: 176.1298
+2025-12-30 23:48:04,777 - INFO - ============================================================
+2025-12-30 23:48:04,777 - INFO - 執行測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:48:04,778 - INFO - ✓ 使用 '收盤價' 欄位名稱測試通過
+2025-12-30 23:48:04,779 - INFO - ✓ 使用 'Close' 欄位名稱測試通過
+2025-12-30 23:48:04,779 - INFO - ✓ 兩種欄位名稱的計算結果一致
+2025-12-30 23:48:04,779 - INFO - ============================================================
+2025-12-30 23:48:04,779 - INFO - 執行測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:48:04,779 - INFO - ✓ calculate_baseline_comparison 方法正常運作
+2025-12-30 23:48:04,779 - INFO -   超額報酬率: 0.0500
+2025-12-30 23:48:04,779 - INFO -   相對 Sharpe: 0.4000
+2025-12-30 23:48:04,779 - INFO -   是否優於 Baseline: True
+2025-12-30 23:48:04,779 - INFO - ============================================================
+2025-12-30 23:48:04,779 - INFO - 執行測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:48:04,779 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:48:04,779 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:48:04,779 - INFO - 配置檔案: prod
+2025-12-30 23:48:04,780 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:48:04,780 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:48:04,780 - INFO - 配置檔案: prod
+2025-12-30 23:48:07,457 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:48:07,458 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:48:07,465 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:48:07,466 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:48:07,466 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:48:07,467 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:48:07,467 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:48:07,468 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:48:07,468 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:48:07,468 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:48:07,469 - WARNING - ⚠ Baseline 對比為 None（可能是數據不足或計算失敗）
+2025-12-30 23:48:07,469 - INFO - ============================================================
+2025-12-30 23:48:07,469 - INFO - 執行測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:48:07,469 - INFO - ✓ BacktestReportDTO 包含 baseline_comparison 欄位
+2025-12-30 23:48:07,469 - INFO -   欄位類型: typing.Optional[typing.Dict[str, typing.Any]]
+2025-12-30 23:48:07,469 - INFO - ✓ BacktestReportDTO 可正常創建帶有 baseline_comparison 的實例
+2025-12-30 23:48:07,469 - INFO - ✓ to_dict() 方法包含 baseline_comparison
+2025-12-30 23:48:07,469 - INFO - ============================================================
+2025-12-30 23:48:07,469 - INFO - 執行測試案例 8：向後兼容性驗證
+2025-12-30 23:48:07,469 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:48:07,469 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:48:07,469 - INFO - 配置檔案: prod
+2025-12-30 23:48:07,470 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:48:07,470 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:48:07,470 - INFO - 配置檔案: prod
+2025-12-30 23:48:10,177 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:48:10,177 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:48:10,184 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:48:10,185 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:48:10,185 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:48:10,185 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:48:10,186 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:48:10,187 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:48:10,187 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:48:10,187 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:48:10,187 - INFO - ✓ 回測報告格式與修改前一致
+2025-12-30 23:48:12,867 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:48:12,867 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:48:12,874 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:48:12,875 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:48:12,875 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:48:12,876 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-05-06 00:00:00
+2025-12-30 23:48:12,876 - INFO - [BacktestService] 日期範圍過濾後，共 72 筆數據
+2025-12-30 23:48:12,877 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:48:12,877 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-05-06 → 實際 2024-01-11~2024-05-06
+2025-12-30 23:48:12,877 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-05-06 → 實際 2024-01-11~2024-05-06
+2025-12-30 23:48:15,571 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:48:15,571 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:48:15,578 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:48:15,580 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:48:15,580 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:48:15,580 - INFO - [BacktestService] 請求的日期範圍: 2024-05-07 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:48:15,581 - INFO - [BacktestService] 日期範圍過濾後，共 38 筆數據
+2025-12-30 23:48:15,582 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:48:15,582 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-07~2024-06-30 → 實際 2024-05-07~2024-06-28
+2025-12-30 23:48:15,582 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-07~2024-06-30 → 實際 2024-05-07~2024-06-28
+2025-12-30 23:48:15,582 - INFO - ✓ train_test_split 不傳入 warmup_days 時正常運作
+2025-12-30 23:48:15,582 - INFO - ✓ walk_forward 方法簽名正確，預設值為 0
+2025-12-30 23:48:15,582 - INFO - ============================================================
+2025-12-30 23:48:15,582 - INFO - 驗證結果摘要
+2025-12-30 23:48:15,582 - INFO - ============================================================
+2025-12-30 23:48:15,582 - INFO - ✓ 通過: 測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:48:15,582 - INFO - ✓ 通過: 測試案例 2：warmup_days 功能驗證
+2025-12-30 23:48:15,582 - INFO - ✓ 通過: 測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:48:15,582 - INFO - ✓ 通過: 測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:48:15,582 - INFO - ✓ 通過: 測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:48:15,582 - INFO - ✓ 通過: 測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:48:15,582 - INFO - ✓ 通過: 測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:48:15,582 - INFO - ✓ 通過: 測試案例 8：向後兼容性驗證
+2025-12-30 23:48:15,582 - INFO - ============================================================
+2025-12-30 23:48:15,582 - INFO - 總計: 8/8 測試案例通過
+2025-12-30 23:48:15,582 - INFO - ============================================================
+2025-12-30 23:48:15,583 - INFO - 詳細報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp1_validation\VALIDATION_REPORT.json
+2025-12-30 23:54:00,566 - INFO - ============================================================
+2025-12-30 23:54:00,566 - INFO - 開始執行 Epic 2 MVP-1 功能驗證
+2025-12-30 23:54:00,566 - INFO - ============================================================
+2025-12-30 23:54:00,567 - INFO - ============================================================
+2025-12-30 23:54:00,567 - INFO - 執行測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:54:00,567 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:00,567 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:00,567 - INFO - 配置檔案: prod
+2025-12-30 23:54:00,567 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:00,567 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:00,567 - INFO - 配置檔案: prod
+2025-12-30 23:54:00,567 - INFO - ✓ walk_forward() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:54:00,567 - INFO - ✓ train_test_split() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:54:00,567 - INFO - ============================================================
+2025-12-30 23:54:00,567 - INFO - 執行測試案例 2：warmup_days 功能驗證
+2025-12-30 23:54:00,568 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:00,568 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:00,568 - INFO - 配置檔案: prod
+2025-12-30 23:54:00,568 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:00,568 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:00,568 - INFO - 配置檔案: prod
+2025-12-30 23:54:03,293 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:03,294 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:03,302 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:03,302 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:03,303 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:03,303 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-05-12 00:00:00
+2025-12-30 23:54:03,303 - INFO - [BacktestService] 日期範圍過濾後，共 69 筆數據
+2025-12-30 23:54:03,307 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:54:03,307 - WARNING - [BacktestService] 請求的結束日期 2024-05-12 晚於實際數據，調整為 2024-05-10
+2025-12-30 23:54:03,307 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:54:03,307 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:54:05,985 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:05,985 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:05,992 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:05,993 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:05,993 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:05,994 - INFO - [BacktestService] 請求的日期範圍: 2024-05-13 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:54:05,994 - INFO - [BacktestService] 日期範圍過濾後，共 34 筆數據
+2025-12-30 23:54:05,995 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:54:05,995 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:54:05,995 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:54:05,995 - INFO - ✓ train_test_split 使用 warmup_days=20 時正常執行
+2025-12-30 23:54:05,995 - INFO -   訓練集總報酬率: 0.0000
+2025-12-30 23:54:05,995 - INFO -   測試集總報酬率: 0.0000
+2025-12-30 23:54:05,995 - INFO - ============================================================
+2025-12-30 23:54:05,995 - INFO - 執行測試案例 3：warmup_days 邊界條件（過大值）
+2025-12-30 23:54:05,995 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:05,995 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:05,995 - INFO - 配置檔案: prod
+2025-12-30 23:54:05,996 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:05,996 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:05,996 - INFO - 配置檔案: prod
+2025-12-30 23:54:05,996 - INFO - ✓ 系統正確檢測到 warmup_days 過大: warmup_days (1000) 過大，導致可用數據不足
+2025-12-30 23:54:05,997 - INFO - ============================================================
+2025-12-30 23:54:05,997 - INFO - 執行測試案例 4：warmup_days 邊界條件（負數）
+2025-12-30 23:54:05,997 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:05,997 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:05,997 - INFO - 配置檔案: prod
+2025-12-30 23:54:05,997 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:05,997 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:05,998 - INFO - 配置檔案: prod
+2025-12-30 23:54:08,690 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:08,690 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:08,696 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:08,698 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:08,698 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:08,698 - INFO - [BacktestService] 請求的日期範圍: 2023-12-22 00:00:00 到 2024-05-03 00:00:00
+2025-12-30 23:54:08,699 - INFO - [BacktestService] 日期範圍過濾後，共 77 筆數據
+2025-12-30 23:54:08,700 - INFO - [BacktestService] 成功載入數據（股票 2330，共 77 筆，日期範圍 2023-12-22 到 2024-05-03）
+2025-12-30 23:54:11,383 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:11,383 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:11,390 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:11,391 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:11,391 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:11,391 - INFO - [BacktestService] 請求的日期範圍: 2024-05-04 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:54:11,392 - INFO - [BacktestService] 日期範圍過濾後，共 39 筆數據
+2025-12-30 23:54:11,393 - WARNING - [BacktestService] 請求的開始日期 2024-05-04 早於實際數據，調整為 2024-05-06
+2025-12-30 23:54:11,393 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:54:11,393 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-04~2024-06-30 → 實際 2024-05-06~2024-06-28
+2025-12-30 23:54:11,393 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-04~2024-06-30 → 實際 2024-05-06~2024-06-28
+2025-12-30 23:54:11,393 - WARNING - ⚠ 負數 warmup_days 未拋出異常
+2025-12-30 23:54:11,393 - INFO - ============================================================
+2025-12-30 23:54:11,393 - INFO - 執行測試案例 5：warmup_days 與 Walk-Forward 多個 Fold
+2025-12-30 23:54:11,393 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:11,393 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:11,393 - INFO - 配置檔案: prod
+2025-12-30 23:54:11,394 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:11,394 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:11,394 - INFO - 配置檔案: prod
+2025-12-30 23:54:14,059 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:14,059 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:14,066 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:14,066 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:14,067 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:14,067 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-03-21 00:00:00
+2025-12-30 23:54:14,067 - INFO - [BacktestService] 日期範圍過濾後，共 36 筆數據
+2025-12-30 23:54:14,068 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:54:14,068 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-03-21 → 實際 2024-01-22~2024-03-21
+2025-12-30 23:54:14,069 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-03-21 → 實際 2024-01-22~2024-03-21
+2025-12-30 23:54:16,753 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:16,753 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:16,760 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:16,762 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:16,762 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:16,762 - INFO - [BacktestService] 請求的日期範圍: 2024-03-22 00:00:00 到 2024-04-22 00:00:00
+2025-12-30 23:54:16,762 - INFO - [BacktestService] 日期範圍過濾後，共 20 筆數據
+2025-12-30 23:54:16,763 - INFO - [BacktestService] 成功載入數據（股票 2330，共 20 筆，日期範圍 2024-03-22 到 2024-04-22）
+2025-12-30 23:54:19,439 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:19,440 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:19,446 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:19,447 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:19,447 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:19,447 - INFO - [BacktestService] 請求的日期範圍: 2024-02-21 00:00:00 到 2024-04-21 00:00:00
+2025-12-30 23:54:19,448 - INFO - [BacktestService] 日期範圍過濾後，共 40 筆數據
+2025-12-30 23:54:19,449 - WARNING - [BacktestService] 請求的結束日期 2024-04-21 晚於實際數據，調整為 2024-04-19
+2025-12-30 23:54:19,449 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-02-21~2024-04-21 → 實際 2024-02-21~2024-04-19
+2025-12-30 23:54:19,449 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-02-21~2024-04-21 → 實際 2024-02-21~2024-04-19
+2025-12-30 23:54:22,134 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:22,135 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:22,141 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:22,142 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:22,142 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:22,143 - INFO - [BacktestService] 請求的日期範圍: 2024-04-22 00:00:00 到 2024-05-22 00:00:00
+2025-12-30 23:54:22,143 - INFO - [BacktestService] 日期範圍過濾後，共 22 筆數據
+2025-12-30 23:54:22,144 - INFO - [BacktestService] 成功載入數據（股票 2330，共 22 筆，日期範圍 2024-04-22 到 2024-05-22）
+2025-12-30 23:54:24,820 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:24,821 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:24,825 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:24,830 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:24,830 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:24,830 - INFO - [BacktestService] 請求的日期範圍: 2024-03-21 00:00:00 到 2024-05-21 00:00:00
+2025-12-30 23:54:24,831 - INFO - [BacktestService] 日期範圍過濾後，共 41 筆數據
+2025-12-30 23:54:24,832 - INFO - [BacktestService] 成功載入數據（股票 2330，共 41 筆，日期範圍 2024-03-21 到 2024-05-21）
+2025-12-30 23:54:27,541 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:27,541 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:27,548 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:27,549 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:27,549 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:27,549 - INFO - [BacktestService] 請求的日期範圍: 2024-05-22 00:00:00 到 2024-06-22 00:00:00
+2025-12-30 23:54:27,550 - INFO - [BacktestService] 日期範圍過濾後，共 22 筆數據
+2025-12-30 23:54:27,551 - WARNING - [BacktestService] 請求的結束日期 2024-06-22 晚於實際數據，調整為 2024-06-21
+2025-12-30 23:54:27,551 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-22~2024-06-22 → 實際 2024-05-22~2024-06-21
+2025-12-30 23:54:27,551 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-22~2024-06-22 → 實際 2024-05-22~2024-06-21
+2025-12-30 23:54:30,219 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:30,219 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:30,234 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:30,236 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:30,236 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:30,236 - INFO - [BacktestService] 請求的日期範圍: 2024-04-21 00:00:00 到 2024-06-21 00:00:00
+2025-12-30 23:54:30,236 - INFO - [BacktestService] 日期範圍過濾後，共 43 筆數據
+2025-12-30 23:54:30,237 - WARNING - [BacktestService] 請求的開始日期 2024-04-21 早於實際數據，調整為 2024-04-22
+2025-12-30 23:54:30,237 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-04-21~2024-06-21 → 實際 2024-04-22~2024-06-21
+2025-12-30 23:54:30,238 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-04-21~2024-06-21 → 實際 2024-04-22~2024-06-21
+2025-12-30 23:54:32,919 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:32,920 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:32,926 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:32,927 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:32,927 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:32,927 - INFO - [BacktestService] 請求的日期範圍: 2024-06-22 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:54:32,927 - INFO - [BacktestService] 日期範圍過濾後，共 5 筆數據
+2025-12-30 23:54:32,928 - WARNING - [BacktestService] 請求的開始日期 2024-06-22 早於實際數據，調整為 2024-06-24
+2025-12-30 23:54:32,928 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:54:32,928 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-06-22~2024-06-30 → 實際 2024-06-24~2024-06-28
+2025-12-30 23:54:32,929 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-06-22~2024-06-30 → 實際 2024-06-24~2024-06-28
+2025-12-30 23:54:32,929 - INFO - ✓ 所有 4 個 Fold 的 warmup_days 都為 20
+2025-12-30 23:54:32,929 - INFO - ============================================================
+2025-12-30 23:54:32,929 - INFO - 執行測試案例 6：warmup_days 與 progress_callback
+2025-12-30 23:54:32,929 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:32,929 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:32,931 - INFO - 配置檔案: prod
+2025-12-30 23:54:32,931 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:32,931 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:32,931 - INFO - 配置檔案: prod
+2025-12-30 23:54:35,633 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:35,633 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:35,640 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:35,641 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:35,641 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:35,641 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-02-21 00:00:00
+2025-12-30 23:54:35,642 - INFO - [BacktestService] 日期範圍過濾後，共 16 筆數據
+2025-12-30 23:54:35,643 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:54:35,643 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-02-21 → 實際 2024-01-22~2024-02-21
+2025-12-30 23:54:35,643 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-02-21 → 實際 2024-01-22~2024-02-21
+2025-12-30 23:54:38,371 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:38,372 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:38,378 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:38,379 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:38,379 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:38,379 - INFO - [BacktestService] 請求的日期範圍: 2024-02-22 00:00:00 到 2024-03-22 00:00:00
+2025-12-30 23:54:38,380 - INFO - [BacktestService] 日期範圍過濾後，共 21 筆數據
+2025-12-30 23:54:38,381 - INFO - [BacktestService] 成功載入數據（股票 2330，共 21 筆，日期範圍 2024-02-22 到 2024-03-22）
+2025-12-30 23:54:41,068 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:41,069 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:41,076 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:41,077 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:41,077 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:41,078 - INFO - [BacktestService] 請求的日期範圍: 2024-02-21 00:00:00 到 2024-03-21 00:00:00
+2025-12-30 23:54:41,078 - INFO - [BacktestService] 日期範圍過濾後，共 21 筆數據
+2025-12-30 23:54:41,079 - INFO - [BacktestService] 成功載入數據（股票 2330，共 21 筆，日期範圍 2024-02-21 到 2024-03-21）
+2025-12-30 23:54:43,799 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:43,800 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:43,806 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:43,808 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:43,808 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:43,808 - INFO - [BacktestService] 請求的日期範圍: 2024-03-22 00:00:00 到 2024-04-22 00:00:00
+2025-12-30 23:54:43,808 - INFO - [BacktestService] 日期範圍過濾後，共 20 筆數據
+2025-12-30 23:54:43,808 - INFO - [BacktestService] 成功載入數據（股票 2330，共 20 筆，日期範圍 2024-03-22 到 2024-04-22）
+2025-12-30 23:54:46,483 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:46,484 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:46,490 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:46,491 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:46,491 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:46,492 - INFO - [BacktestService] 請求的日期範圍: 2024-03-21 00:00:00 到 2024-04-21 00:00:00
+2025-12-30 23:54:46,492 - INFO - [BacktestService] 日期範圍過濾後，共 20 筆數據
+2025-12-30 23:54:46,493 - WARNING - [BacktestService] 請求的結束日期 2024-04-21 晚於實際數據，調整為 2024-04-19
+2025-12-30 23:54:46,493 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-03-21~2024-04-21 → 實際 2024-03-21~2024-04-19
+2025-12-30 23:54:46,493 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-03-21~2024-04-21 → 實際 2024-03-21~2024-04-19
+2025-12-30 23:54:49,201 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:49,201 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:49,209 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:49,210 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:49,210 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:49,210 - INFO - [BacktestService] 請求的日期範圍: 2024-04-22 00:00:00 到 2024-04-30 00:00:00
+2025-12-30 23:54:49,210 - INFO - [BacktestService] 日期範圍過濾後，共 7 筆數據
+2025-12-30 23:54:49,211 - INFO - [BacktestService] 成功載入數據（股票 2330，共 7 筆，日期範圍 2024-04-22 到 2024-04-30）
+2025-12-30 23:54:49,212 - INFO - ✓ progress_callback 被調用 3 次
+2025-12-30 23:54:49,212 - INFO -   範例訊息: Fold 1: Train 2024-01-21 ~ 2024-02-21, Test 2024-02-22 ~ 2024-03-22
+2025-12-30 23:54:49,212 - INFO - ============================================================
+2025-12-30 23:54:49,212 - INFO - 執行測試案例 7：warmup_days 與 Train-Test Split
+2025-12-30 23:54:49,212 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:49,212 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:49,212 - INFO - 配置檔案: prod
+2025-12-30 23:54:49,213 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:49,213 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:49,213 - INFO - 配置檔案: prod
+2025-12-30 23:54:51,873 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:51,874 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:51,881 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:51,882 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:51,882 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:51,882 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-05-12 00:00:00
+2025-12-30 23:54:51,883 - INFO - [BacktestService] 日期範圍過濾後，共 69 筆數據
+2025-12-30 23:54:51,884 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:54:51,884 - WARNING - [BacktestService] 請求的結束日期 2024-05-12 晚於實際數據，調整為 2024-05-10
+2025-12-30 23:54:51,884 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:54:51,884 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:54:54,549 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:54,549 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:54,556 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:54,557 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:54,557 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:54,557 - INFO - [BacktestService] 請求的日期範圍: 2024-05-13 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:54:54,557 - INFO - [BacktestService] 日期範圍過濾後，共 34 筆數據
+2025-12-30 23:54:54,558 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:54:54,558 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:54:54,558 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:54:54,559 - INFO - ✓ train_test_split 使用 warmup_days=20 時正常執行
+2025-12-30 23:54:54,559 - INFO -   訓練集總報酬率: 0.0000
+2025-12-30 23:54:54,559 - INFO -   測試集總報酬率: 0.0000
+2025-12-30 23:54:54,559 - INFO - ============================================================
+2025-12-30 23:54:54,559 - INFO - 執行測試案例 8：warmup_days 向後兼容性（完整驗證）
+2025-12-30 23:54:54,559 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:54,559 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:54,559 - INFO - 配置檔案: prod
+2025-12-30 23:54:54,560 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:54,560 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:54,560 - INFO - 配置檔案: prod
+2025-12-30 23:54:57,218 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:57,218 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:57,224 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:57,225 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:57,225 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:57,226 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:54:57,226 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:54:57,227 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:54:57,227 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:54:57,227 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:54:59,917 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:54:59,918 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:54:59,922 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:54:59,922 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:54:59,922 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:54:59,922 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:54:59,922 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:54:59,922 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:54:59,922 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:54:59,922 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:54:59,922 - INFO - ✓ 回測報告格式與修改前一致
+2025-12-30 23:54:59,922 - INFO - ✓ warmup_days=0 與不傳入參數行為一致
+2025-12-30 23:54:59,922 - INFO - ============================================================
+2025-12-30 23:54:59,922 - INFO - 執行測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:54:59,929 - INFO - ✓ calculate_buy_hold_return 方法正常運作
+2025-12-30 23:54:59,929 - INFO -   總報酬率: 0.3650
+2025-12-30 23:54:59,929 - INFO -   年化報酬率: 0.3653
+2025-12-30 23:54:59,929 - INFO -   最大回撤: 0.0000
+2025-12-30 23:54:59,929 - INFO -   Sharpe Ratio: 176.1298
+2025-12-30 23:54:59,929 - INFO - ============================================================
+2025-12-30 23:54:59,929 - INFO - 執行測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:54:59,930 - INFO - ✓ 使用 '收盤價' 欄位名稱測試通過
+2025-12-30 23:54:59,931 - INFO - ✓ 使用 'Close' 欄位名稱測試通過
+2025-12-30 23:54:59,931 - INFO - ✓ 兩種欄位名稱的計算結果一致
+2025-12-30 23:54:59,931 - INFO - ============================================================
+2025-12-30 23:54:59,931 - INFO - 執行測試案例 9：calculate_buy_hold_return 日期索引處理
+2025-12-30 23:54:59,932 - INFO - ✓ 日期索引處理正常
+2025-12-30 23:54:59,932 - INFO -   總報酬率: 0.3650
+2025-12-30 23:54:59,932 - INFO - ============================================================
+2025-12-30 23:54:59,932 - INFO - 執行測試案例 10：calculate_buy_hold_return 日期欄位處理
+2025-12-30 23:54:59,933 - INFO - ✓ 日期欄位處理正常
+2025-12-30 23:54:59,933 - INFO -   總報酬率: 0.3650
+2025-12-30 23:54:59,933 - INFO - ============================================================
+2025-12-30 23:54:59,933 - INFO - 執行測試案例 11：calculate_buy_hold_return 缺值處理（開始日期不存在）
+2025-12-30 23:54:59,935 - INFO - ✓ 系統使用最接近的日期（2024-01-02）
+2025-12-30 23:54:59,935 - INFO - ============================================================
+2025-12-30 23:54:59,935 - INFO - 執行測試案例 12：calculate_buy_hold_return 缺值處理（期間內缺值）
+2025-12-30 23:54:59,937 - INFO - ✓ 期間內缺值處理正常
+2025-12-30 23:54:59,937 - INFO -   總報酬率: 0.0000
+2025-12-30 23:54:59,937 - INFO - ============================================================
+2025-12-30 23:54:59,937 - INFO - 執行測試案例 13：calculate_buy_hold_return 空數據處理
+2025-12-30 23:54:59,937 - INFO - ✓ 空數據處理正常（返回零值結果）
+2025-12-30 23:54:59,937 - INFO - ============================================================
+2025-12-30 23:54:59,937 - INFO - 執行測試案例 14：calculate_baseline_comparison 計算邏輯驗證
+2025-12-30 23:54:59,937 - ERROR - 測試案例 14 失敗: 超額報酬率計算錯誤: 預期 0.05, 實際 0.04999999999999999
+2025-12-30 23:54:59,938 - ERROR - Traceback (most recent call last):
+  File "C:\Projects\PythonProjects\technical_analysis\scripts\qa_validate_epic2_mvp1.py", line 1158, in test_case_14_calculate_baseline_comparison_logic
+    assert comparison1['excess_returns'] == 0.05, \
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 超額報酬率計算錯誤: 預期 0.05, 實際 0.04999999999999999
+
+2025-12-30 23:54:59,938 - INFO - ============================================================
+2025-12-30 23:54:59,938 - INFO - 執行測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:54:59,938 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:59,938 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:59,938 - INFO - 配置檔案: prod
+2025-12-30 23:54:59,939 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:54:59,939 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:54:59,939 - INFO - 配置檔案: prod
+2025-12-30 23:55:02,623 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:55:02,623 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:55:02,629 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:55:02,630 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:55:02,630 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:55:02,630 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:55:02,630 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:55:02,630 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:55:02,630 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:55:02,630 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:55:02,630 - WARNING - ⚠ Baseline 對比為 None（可能是數據不足或計算失敗）
+2025-12-30 23:55:02,630 - INFO - ============================================================
+2025-12-30 23:55:02,630 - INFO - 執行測試案例 15：BacktestService Baseline 格式驗證
+2025-12-30 23:55:02,630 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:55:02,630 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:55:02,630 - INFO - 配置檔案: prod
+2025-12-30 23:55:02,630 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:55:02,630 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:55:02,630 - INFO - 配置檔案: prod
+2025-12-30 23:55:05,287 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:55:05,287 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:55:05,293 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:55:05,294 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:55:05,294 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:55:05,294 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:55:05,295 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:55:05,296 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:55:05,296 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:55:05,296 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:55:05,296 - WARNING - ⚠ Baseline 對比為 None（可能是數據不足）
+2025-12-30 23:55:05,296 - INFO - ============================================================
+2025-12-30 23:55:05,296 - INFO - 執行測試案例 16：BacktestService Baseline 性能測試
+2025-12-30 23:55:05,296 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:55:05,296 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:55:05,297 - INFO - 配置檔案: prod
+2025-12-30 23:55:05,297 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:55:05,297 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:55:05,298 - INFO - 配置檔案: prod
+2025-12-30 23:55:08,026 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:55:08,026 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:55:08,033 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:55:08,034 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:55:08,034 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:55:08,035 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:55:08,035 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:55:08,036 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:55:08,037 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:55:08,037 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:55:08,037 - INFO - ✓ 回測執行時間: 2.74 秒
+2025-12-30 23:55:08,037 - INFO - ✓ 回測性能正常
+2025-12-30 23:55:08,037 - INFO - ============================================================
+2025-12-30 23:55:08,037 - INFO - 執行測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:55:08,037 - INFO - ✓ calculate_baseline_comparison 方法正常運作
+2025-12-30 23:55:08,037 - INFO -   超額報酬率: 0.0500
+2025-12-30 23:55:08,037 - INFO -   相對 Sharpe: 0.4000
+2025-12-30 23:55:08,037 - INFO -   是否優於 Baseline: True
+2025-12-30 23:55:08,037 - INFO - ============================================================
+2025-12-30 23:55:08,037 - INFO - 執行測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:55:08,037 - INFO - ✓ BacktestReportDTO 包含 baseline_comparison 欄位
+2025-12-30 23:55:08,037 - INFO -   欄位類型: typing.Optional[typing.Dict[str, typing.Any]]
+2025-12-30 23:55:08,037 - INFO - ✓ BacktestReportDTO 可正常創建帶有 baseline_comparison 的實例
+2025-12-30 23:55:08,037 - INFO - ✓ to_dict() 方法包含 baseline_comparison
+2025-12-30 23:55:08,037 - INFO - ============================================================
+2025-12-30 23:55:08,037 - INFO - 執行測試案例 17：DTO 序列化驗證
+2025-12-30 23:55:08,037 - INFO - ✓ DTO 序列化驗證通過
+2025-12-30 23:55:08,037 - INFO - ============================================================
+2025-12-30 23:55:08,037 - INFO - 執行測試案例 18：WalkForwardResult warmup_days 欄位驗證
+2025-12-30 23:55:08,038 - INFO -   欄位類型: <class 'int'>
+2025-12-30 23:55:08,038 - INFO - ✓ WalkForwardResult 可正常創建帶有 warmup_days 的實例
+2025-12-30 23:55:08,038 - INFO - ============================================================
+2025-12-30 23:55:08,038 - INFO - 執行測試案例 19：Baseline 對比數值範圍檢查
+2025-12-30 23:55:08,038 - INFO -   ✓ 測試案例 '正常範圍': 超額報酬率 = 0.0500
+2025-12-30 23:55:08,038 - INFO -   ✓ 測試案例 '負報酬率': 超額報酬率 = 0.0500
+2025-12-30 23:55:08,038 - INFO -   ✓ 測試案例 '極高報酬率': 超額報酬率 = 0.5000
+2025-12-30 23:55:08,038 - INFO - ✓ 所有數值範圍檢查通過
+2025-12-30 23:55:08,038 - INFO - ============================================================
+2025-12-30 23:55:08,038 - INFO - 執行測試案例 20：Baseline 對比 NaN/Infinity 檢查
+2025-12-30 23:55:08,038 - INFO -   ✓ baseline_returns: 0.1000
+2025-12-30 23:55:08,038 - INFO -   ✓ baseline_sharpe: 0.8000
+2025-12-30 23:55:08,038 - INFO -   ✓ baseline_max_drawdown: -0.1500
+2025-12-30 23:55:08,038 - INFO -   ✓ excess_returns: 0.0500
+2025-12-30 23:55:08,038 - INFO -   ✓ relative_sharpe: 0.4000
+2025-12-30 23:55:08,038 - INFO -   ✓ relative_drawdown: 0.0500
+2025-12-30 23:55:08,038 - INFO - ✓ 所有數值欄位有效（無 NaN 或 Infinity）
+2025-12-30 23:55:08,038 - INFO - ============================================================
+2025-12-30 23:55:08,038 - INFO - 執行測試案例 21：WalkForwardResult 所有欄位驗證
+2025-12-30 23:55:08,038 - INFO - ✓ WalkForwardResult 包含所有必要欄位
+2025-12-30 23:55:08,038 - INFO -   欄位列表: ['train_period', 'test_period', 'train_metrics', 'test_metrics', 'degradation', 'params', 'warmup_days']
+2025-12-30 23:55:08,038 - INFO - ============================================================
+2025-12-30 23:55:08,038 - INFO - 執行測試案例 22：BacktestReportDTO 所有欄位驗證
+2025-12-30 23:55:08,038 - INFO - ✓ BacktestReportDTO 包含所有必要欄位
+2025-12-30 23:55:08,038 - INFO -   欄位列表: ['total_return', 'annual_return', 'sharpe_ratio', 'max_drawdown', 'win_rate', 'total_trades', 'expectancy', 'details', 'baseline_comparison']
+2025-12-30 23:55:08,038 - INFO - ============================================================
+2025-12-30 23:55:08,038 - INFO - 執行測試案例 23：PerformanceMetrics 方法存在性驗證
+2025-12-30 23:55:08,038 - INFO - ✓ PerformanceAnalyzer 包含所有必要方法
+2025-12-30 23:55:08,038 - INFO -   calculate_buy_hold_return 參數: ['df', 'start_date', 'end_date']
+2025-12-30 23:55:08,038 - INFO -   calculate_baseline_comparison 參數: ['strategy_returns', 'strategy_sharpe', 'strategy_max_drawdown', 'baseline_returns', 'baseline_sharpe', 'baseline_max_drawdown']
+2025-12-30 23:55:08,038 - INFO - ============================================================
+2025-12-30 23:55:08,038 - INFO - 執行測試案例 24：完整向後兼容性驗證
+2025-12-30 23:55:08,038 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:55:08,039 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:55:08,039 - INFO - 配置檔案: prod
+2025-12-30 23:55:08,040 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:55:08,040 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:55:08,040 - INFO - 配置檔案: prod
+2025-12-30 23:55:10,804 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:55:10,804 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:55:10,811 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:55:10,812 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:55:10,812 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:55:10,813 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:55:10,813 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:55:10,814 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:55:10,814 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:55:10,814 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:55:13,540 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:55:13,540 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:55:13,548 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:55:13,549 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:55:13,549 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:55:13,550 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-05-06 00:00:00
+2025-12-30 23:55:13,550 - INFO - [BacktestService] 日期範圍過濾後，共 72 筆數據
+2025-12-30 23:55:13,551 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:55:13,551 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-05-06 → 實際 2024-01-11~2024-05-06
+2025-12-30 23:55:13,551 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-05-06 → 實際 2024-01-11~2024-05-06
+2025-12-30 23:55:16,442 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:55:16,442 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:55:16,454 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:55:16,454 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:55:16,454 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:55:16,456 - INFO - [BacktestService] 請求的日期範圍: 2024-05-07 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:55:16,456 - INFO - [BacktestService] 日期範圍過濾後，共 38 筆數據
+2025-12-30 23:55:16,457 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:55:16,457 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-07~2024-06-30 → 實際 2024-05-07~2024-06-28
+2025-12-30 23:55:16,457 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-07~2024-06-30 → 實際 2024-05-07~2024-06-28
+2025-12-30 23:55:16,458 - INFO - ✓ 所有向後兼容性檢查通過
+2025-12-30 23:55:16,458 - INFO -   - 回測報告格式一致
+2025-12-30 23:55:16,458 - INFO -   - train_test_split 正常運作
+2025-12-30 23:55:16,458 - INFO -   - walk_forward 方法簽名正確
+2025-12-30 23:55:16,458 - INFO - ============================================================
+2025-12-30 23:55:16,458 - INFO - 驗證結果摘要
+2025-12-30 23:55:16,458 - INFO - ============================================================
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 2：warmup_days 功能驗證
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 3：warmup_days 邊界條件（過大值）
+2025-12-30 23:55:16,458 - INFO - ✓ 通過 ⚠: 測試案例 4：warmup_days 邊界條件（負數）
+2025-12-30 23:55:16,458 - INFO -   警告訊息: 負數 warmup_days 未拋出異常（可能被接受或使用絕對值）
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 5：warmup_days 與 Walk-Forward 多個 Fold
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 6：warmup_days 與 progress_callback
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 7：warmup_days 與 Train-Test Split
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 8：warmup_days 向後兼容性（完整驗證）
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 9：calculate_buy_hold_return 日期索引處理
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 10：calculate_buy_hold_return 日期欄位處理
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 11：calculate_buy_hold_return 缺值處理（開始日期不存在）
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 12：calculate_buy_hold_return 缺值處理（期間內缺值）
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 13：calculate_buy_hold_return 空數據處理
+2025-12-30 23:55:16,458 - INFO - ✗ 失敗: 測試案例 14：calculate_baseline_comparison 計算邏輯驗證
+2025-12-30 23:55:16,458 - INFO -   錯誤訊息: 超額報酬率計算錯誤: 預期 0.05, 實際 0.04999999999999999
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:55:16,458 - INFO - ✓ 通過 ⚠: 測試案例 15：BacktestService Baseline 格式驗證
+2025-12-30 23:55:16,458 - INFO -   警告訊息: Baseline 對比為 None（可能是數據不足）
+2025-12-30 23:55:16,458 - INFO - ✓ 通過: 測試案例 16：BacktestService Baseline 性能測試
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 17：DTO 序列化驗證
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 18：WalkForwardResult warmup_days 欄位驗證
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 19：Baseline 對比數值範圍檢查
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 20：Baseline 對比 NaN/Infinity 檢查
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 21：WalkForwardResult 所有欄位驗證
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 22：BacktestReportDTO 所有欄位驗證
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 23：PerformanceMetrics 方法存在性驗證
+2025-12-30 23:55:16,459 - INFO - ✓ 通過: 測試案例 24：完整向後兼容性驗證
+2025-12-30 23:55:16,459 - INFO - ============================================================
+2025-12-30 23:55:16,459 - INFO - 總計: 28/29 測試案例通過
+2025-12-30 23:55:16,459 - INFO - 失敗: 1 個
+2025-12-30 23:55:16,459 - INFO - 警告: 2 個
+2025-12-30 23:55:16,459 - INFO - ============================================================
+2025-12-30 23:55:16,460 - INFO - JSON 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp1_validation\VALIDATION_REPORT.json
+2025-12-30 23:55:16,468 - INFO - Markdown 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp1_validation\VALIDATION_REPORT.md
+2025-12-30 23:56:01,367 - INFO - ============================================================
+2025-12-30 23:56:01,367 - INFO - 開始執行 Epic 2 MVP-1 功能驗證
+2025-12-30 23:56:01,367 - INFO - ============================================================
+2025-12-30 23:56:01,367 - INFO - ============================================================
+2025-12-30 23:56:01,368 - INFO - 執行測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:56:01,368 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:01,368 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:01,368 - INFO - 配置檔案: prod
+2025-12-30 23:56:01,368 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:01,368 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:01,368 - INFO - 配置檔案: prod
+2025-12-30 23:56:01,368 - INFO - ✓ walk_forward() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:56:01,369 - INFO - ✓ train_test_split() 方法已包含 warmup_days 參數，預設值為 0
+2025-12-30 23:56:01,369 - INFO - ============================================================
+2025-12-30 23:56:01,369 - INFO - 執行測試案例 2：warmup_days 功能驗證
+2025-12-30 23:56:01,369 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:01,369 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:01,369 - INFO - 配置檔案: prod
+2025-12-30 23:56:01,369 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:01,369 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:01,369 - INFO - 配置檔案: prod
+2025-12-30 23:56:04,606 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:04,606 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:04,613 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:04,613 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:04,613 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:04,613 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-05-12 00:00:00
+2025-12-30 23:56:04,613 - INFO - [BacktestService] 日期範圍過濾後，共 69 筆數據
+2025-12-30 23:56:04,613 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:56:04,613 - WARNING - [BacktestService] 請求的結束日期 2024-05-12 晚於實際數據，調整為 2024-05-10
+2025-12-30 23:56:04,613 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:56:04,613 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:56:07,299 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:07,299 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:07,306 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:07,307 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:07,307 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:07,308 - INFO - [BacktestService] 請求的日期範圍: 2024-05-13 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:56:07,308 - INFO - [BacktestService] 日期範圍過濾後，共 34 筆數據
+2025-12-30 23:56:07,309 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:56:07,309 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:56:07,309 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:56:07,310 - INFO - ✓ train_test_split 使用 warmup_days=20 時正常執行
+2025-12-30 23:56:07,310 - INFO -   訓練集總報酬率: 0.0000
+2025-12-30 23:56:07,310 - INFO -   測試集總報酬率: 0.0000
+2025-12-30 23:56:07,310 - INFO - ============================================================
+2025-12-30 23:56:07,310 - INFO - 執行測試案例 3：warmup_days 邊界條件（過大值）
+2025-12-30 23:56:07,310 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:07,310 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:07,310 - INFO - 配置檔案: prod
+2025-12-30 23:56:07,310 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:07,310 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:07,310 - INFO - 配置檔案: prod
+2025-12-30 23:56:07,311 - INFO - ✓ 系統正確檢測到 warmup_days 過大: warmup_days (1000) 過大，導致可用數據不足
+2025-12-30 23:56:07,311 - INFO - ============================================================
+2025-12-30 23:56:07,311 - INFO - 執行測試案例 4：warmup_days 邊界條件（負數）
+2025-12-30 23:56:07,311 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:07,311 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:07,311 - INFO - 配置檔案: prod
+2025-12-30 23:56:07,312 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:07,312 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:07,312 - INFO - 配置檔案: prod
+2025-12-30 23:56:09,983 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:09,984 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:09,991 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:09,992 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:09,992 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:09,992 - INFO - [BacktestService] 請求的日期範圍: 2023-12-22 00:00:00 到 2024-05-03 00:00:00
+2025-12-30 23:56:09,992 - INFO - [BacktestService] 日期範圍過濾後，共 77 筆數據
+2025-12-30 23:56:09,994 - INFO - [BacktestService] 成功載入數據（股票 2330，共 77 筆，日期範圍 2023-12-22 到 2024-05-03）
+2025-12-30 23:56:12,677 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:12,677 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:12,684 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:12,685 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:12,685 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:12,685 - INFO - [BacktestService] 請求的日期範圍: 2024-05-04 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:56:12,685 - INFO - [BacktestService] 日期範圍過濾後，共 39 筆數據
+2025-12-30 23:56:12,687 - WARNING - [BacktestService] 請求的開始日期 2024-05-04 早於實際數據，調整為 2024-05-06
+2025-12-30 23:56:12,687 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:56:12,687 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-04~2024-06-30 → 實際 2024-05-06~2024-06-28
+2025-12-30 23:56:12,687 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-04~2024-06-30 → 實際 2024-05-06~2024-06-28
+2025-12-30 23:56:12,687 - WARNING - ⚠ 負數 warmup_days 未拋出異常
+2025-12-30 23:56:12,687 - INFO - ============================================================
+2025-12-30 23:56:12,687 - INFO - 執行測試案例 5：warmup_days 與 Walk-Forward 多個 Fold
+2025-12-30 23:56:12,687 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:12,687 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:12,687 - INFO - 配置檔案: prod
+2025-12-30 23:56:12,689 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:12,689 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:12,689 - INFO - 配置檔案: prod
+2025-12-30 23:56:15,413 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:15,413 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:15,420 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:15,421 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:15,422 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:15,422 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-03-21 00:00:00
+2025-12-30 23:56:15,422 - INFO - [BacktestService] 日期範圍過濾後，共 36 筆數據
+2025-12-30 23:56:15,423 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:56:15,423 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-03-21 → 實際 2024-01-22~2024-03-21
+2025-12-30 23:56:15,423 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-03-21 → 實際 2024-01-22~2024-03-21
+2025-12-30 23:56:18,111 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:18,111 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:18,111 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:18,121 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:18,121 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:18,122 - INFO - [BacktestService] 請求的日期範圍: 2024-03-22 00:00:00 到 2024-04-22 00:00:00
+2025-12-30 23:56:18,122 - INFO - [BacktestService] 日期範圍過濾後，共 20 筆數據
+2025-12-30 23:56:18,123 - INFO - [BacktestService] 成功載入數據（股票 2330，共 20 筆，日期範圍 2024-03-22 到 2024-04-22）
+2025-12-30 23:56:20,801 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:20,801 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:20,808 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:20,809 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:20,809 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:20,810 - INFO - [BacktestService] 請求的日期範圍: 2024-02-21 00:00:00 到 2024-04-21 00:00:00
+2025-12-30 23:56:20,810 - INFO - [BacktestService] 日期範圍過濾後，共 40 筆數據
+2025-12-30 23:56:20,811 - WARNING - [BacktestService] 請求的結束日期 2024-04-21 晚於實際數據，調整為 2024-04-19
+2025-12-30 23:56:20,811 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-02-21~2024-04-21 → 實際 2024-02-21~2024-04-19
+2025-12-30 23:56:20,811 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-02-21~2024-04-21 → 實際 2024-02-21~2024-04-19
+2025-12-30 23:56:23,520 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:23,520 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:23,528 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:23,529 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:23,529 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:23,530 - INFO - [BacktestService] 請求的日期範圍: 2024-04-22 00:00:00 到 2024-05-22 00:00:00
+2025-12-30 23:56:23,530 - INFO - [BacktestService] 日期範圍過濾後，共 22 筆數據
+2025-12-30 23:56:23,531 - INFO - [BacktestService] 成功載入數據（股票 2330，共 22 筆，日期範圍 2024-04-22 到 2024-05-22）
+2025-12-30 23:56:26,199 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:26,199 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:26,206 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:26,207 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:26,207 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:26,207 - INFO - [BacktestService] 請求的日期範圍: 2024-03-21 00:00:00 到 2024-05-21 00:00:00
+2025-12-30 23:56:26,208 - INFO - [BacktestService] 日期範圍過濾後，共 41 筆數據
+2025-12-30 23:56:26,209 - INFO - [BacktestService] 成功載入數據（股票 2330，共 41 筆，日期範圍 2024-03-21 到 2024-05-21）
+2025-12-30 23:56:28,902 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:28,902 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:28,909 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:28,910 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:28,911 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:28,911 - INFO - [BacktestService] 請求的日期範圍: 2024-05-22 00:00:00 到 2024-06-22 00:00:00
+2025-12-30 23:56:28,911 - INFO - [BacktestService] 日期範圍過濾後，共 22 筆數據
+2025-12-30 23:56:28,912 - WARNING - [BacktestService] 請求的結束日期 2024-06-22 晚於實際數據，調整為 2024-06-21
+2025-12-30 23:56:28,912 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-22~2024-06-22 → 實際 2024-05-22~2024-06-21
+2025-12-30 23:56:28,912 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-22~2024-06-22 → 實際 2024-05-22~2024-06-21
+2025-12-30 23:56:31,578 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:31,578 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:31,586 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:31,587 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:31,587 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:31,587 - INFO - [BacktestService] 請求的日期範圍: 2024-04-21 00:00:00 到 2024-06-21 00:00:00
+2025-12-30 23:56:31,587 - INFO - [BacktestService] 日期範圍過濾後，共 43 筆數據
+2025-12-30 23:56:31,588 - WARNING - [BacktestService] 請求的開始日期 2024-04-21 早於實際數據，調整為 2024-04-22
+2025-12-30 23:56:31,588 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-04-21~2024-06-21 → 實際 2024-04-22~2024-06-21
+2025-12-30 23:56:31,588 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-04-21~2024-06-21 → 實際 2024-04-22~2024-06-21
+2025-12-30 23:56:34,248 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:34,248 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:34,254 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:34,255 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:34,256 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:34,256 - INFO - [BacktestService] 請求的日期範圍: 2024-06-22 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:56:34,256 - INFO - [BacktestService] 日期範圍過濾後，共 5 筆數據
+2025-12-30 23:56:34,257 - WARNING - [BacktestService] 請求的開始日期 2024-06-22 早於實際數據，調整為 2024-06-24
+2025-12-30 23:56:34,257 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:56:34,257 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-06-22~2024-06-30 → 實際 2024-06-24~2024-06-28
+2025-12-30 23:56:34,257 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-06-22~2024-06-30 → 實際 2024-06-24~2024-06-28
+2025-12-30 23:56:34,258 - INFO - ✓ 所有 4 個 Fold 的 warmup_days 都為 20
+2025-12-30 23:56:34,258 - INFO - ============================================================
+2025-12-30 23:56:34,258 - INFO - 執行測試案例 6：warmup_days 與 progress_callback
+2025-12-30 23:56:34,258 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:34,258 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:34,258 - INFO - 配置檔案: prod
+2025-12-30 23:56:34,258 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:34,258 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:34,260 - INFO - 配置檔案: prod
+2025-12-30 23:56:36,939 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:36,940 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:36,946 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:36,947 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:36,948 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:36,948 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-02-21 00:00:00
+2025-12-30 23:56:36,948 - INFO - [BacktestService] 日期範圍過濾後，共 16 筆數據
+2025-12-30 23:56:36,949 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:56:36,949 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-02-21 → 實際 2024-01-22~2024-02-21
+2025-12-30 23:56:36,949 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-02-21 → 實際 2024-01-22~2024-02-21
+2025-12-30 23:56:39,615 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:39,615 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:39,624 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:39,625 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:39,625 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:39,625 - INFO - [BacktestService] 請求的日期範圍: 2024-02-22 00:00:00 到 2024-03-22 00:00:00
+2025-12-30 23:56:39,626 - INFO - [BacktestService] 日期範圍過濾後，共 21 筆數據
+2025-12-30 23:56:39,627 - INFO - [BacktestService] 成功載入數據（股票 2330，共 21 筆，日期範圍 2024-02-22 到 2024-03-22）
+2025-12-30 23:56:42,366 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:42,367 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:42,373 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:42,374 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:42,374 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:42,375 - INFO - [BacktestService] 請求的日期範圍: 2024-02-21 00:00:00 到 2024-03-21 00:00:00
+2025-12-30 23:56:42,375 - INFO - [BacktestService] 日期範圍過濾後，共 21 筆數據
+2025-12-30 23:56:42,376 - INFO - [BacktestService] 成功載入數據（股票 2330，共 21 筆，日期範圍 2024-02-21 到 2024-03-21）
+2025-12-30 23:56:45,092 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:45,092 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:45,100 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:45,101 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:45,101 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:45,101 - INFO - [BacktestService] 請求的日期範圍: 2024-03-22 00:00:00 到 2024-04-22 00:00:00
+2025-12-30 23:56:45,102 - INFO - [BacktestService] 日期範圍過濾後，共 20 筆數據
+2025-12-30 23:56:45,103 - INFO - [BacktestService] 成功載入數據（股票 2330，共 20 筆，日期範圍 2024-03-22 到 2024-04-22）
+2025-12-30 23:56:47,782 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:47,782 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:47,789 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:47,790 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:47,790 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:47,790 - INFO - [BacktestService] 請求的日期範圍: 2024-03-21 00:00:00 到 2024-04-21 00:00:00
+2025-12-30 23:56:47,791 - INFO - [BacktestService] 日期範圍過濾後，共 20 筆數據
+2025-12-30 23:56:47,792 - WARNING - [BacktestService] 請求的結束日期 2024-04-21 晚於實際數據，調整為 2024-04-19
+2025-12-30 23:56:47,792 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-03-21~2024-04-21 → 實際 2024-03-21~2024-04-19
+2025-12-30 23:56:47,792 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-03-21~2024-04-21 → 實際 2024-03-21~2024-04-19
+2025-12-30 23:56:50,459 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:50,459 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:50,467 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:50,469 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:50,469 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:50,469 - INFO - [BacktestService] 請求的日期範圍: 2024-04-22 00:00:00 到 2024-04-30 00:00:00
+2025-12-30 23:56:50,469 - INFO - [BacktestService] 日期範圍過濾後，共 7 筆數據
+2025-12-30 23:56:50,470 - INFO - [BacktestService] 成功載入數據（股票 2330，共 7 筆，日期範圍 2024-04-22 到 2024-04-30）
+2025-12-30 23:56:50,471 - INFO - ✓ progress_callback 被調用 3 次
+2025-12-30 23:56:50,471 - INFO -   範例訊息: Fold 1: Train 2024-01-21 ~ 2024-02-21, Test 2024-02-22 ~ 2024-03-22
+2025-12-30 23:56:50,471 - INFO - ============================================================
+2025-12-30 23:56:50,471 - INFO - 執行測試案例 7：warmup_days 與 Train-Test Split
+2025-12-30 23:56:50,471 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:50,471 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:50,471 - INFO - 配置檔案: prod
+2025-12-30 23:56:50,472 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:50,472 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:50,472 - INFO - 配置檔案: prod
+2025-12-30 23:56:53,136 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:53,137 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:53,144 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:53,145 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:53,145 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:53,145 - INFO - [BacktestService] 請求的日期範圍: 2024-01-21 00:00:00 到 2024-05-12 00:00:00
+2025-12-30 23:56:53,145 - INFO - [BacktestService] 日期範圍過濾後，共 69 筆數據
+2025-12-30 23:56:53,146 - WARNING - [BacktestService] 請求的開始日期 2024-01-21 早於實際數據，調整為 2024-01-22
+2025-12-30 23:56:53,146 - WARNING - [BacktestService] 請求的結束日期 2024-05-12 晚於實際數據，調整為 2024-05-10
+2025-12-30 23:56:53,146 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:56:53,147 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-21~2024-05-12 → 實際 2024-01-22~2024-05-10
+2025-12-30 23:56:55,812 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:55,812 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:55,819 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:55,820 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:55,820 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:55,820 - INFO - [BacktestService] 請求的日期範圍: 2024-05-13 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:56:55,820 - INFO - [BacktestService] 日期範圍過濾後，共 34 筆數據
+2025-12-30 23:56:55,821 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:56:55,821 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:56:55,821 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-13~2024-06-30 → 實際 2024-05-13~2024-06-28
+2025-12-30 23:56:55,822 - INFO - ✓ train_test_split 使用 warmup_days=20 時正常執行
+2025-12-30 23:56:55,822 - INFO -   訓練集總報酬率: 0.0000
+2025-12-30 23:56:55,822 - INFO -   測試集總報酬率: 0.0000
+2025-12-30 23:56:55,822 - INFO - ============================================================
+2025-12-30 23:56:55,822 - INFO - 執行測試案例 8：warmup_days 向後兼容性（完整驗證）
+2025-12-30 23:56:55,822 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:55,822 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:55,822 - INFO - 配置檔案: prod
+2025-12-30 23:56:55,823 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:56:55,823 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:56:55,823 - INFO - 配置檔案: prod
+2025-12-30 23:56:58,501 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:56:58,501 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:56:58,509 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:56:58,510 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:56:58,510 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:56:58,511 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:56:58,511 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:56:58,512 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:56:58,512 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:56:58,512 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:01,224 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:57:01,224 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:57:01,231 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:57:01,232 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:57:01,232 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:57:01,232 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:57:01,232 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:57:01,233 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:57:01,233 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:01,233 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:01,234 - INFO - ✓ 回測報告格式與修改前一致
+2025-12-30 23:57:01,234 - INFO - ✓ warmup_days=0 與不傳入參數行為一致
+2025-12-30 23:57:01,234 - INFO - ============================================================
+2025-12-30 23:57:01,234 - INFO - 執行測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:57:01,235 - INFO - ✓ calculate_buy_hold_return 方法正常運作
+2025-12-30 23:57:01,235 - INFO -   總報酬率: 0.3650
+2025-12-30 23:57:01,235 - INFO -   年化報酬率: 0.3653
+2025-12-30 23:57:01,235 - INFO -   最大回撤: 0.0000
+2025-12-30 23:57:01,235 - INFO -   Sharpe Ratio: 176.1298
+2025-12-30 23:57:01,235 - INFO - ============================================================
+2025-12-30 23:57:01,235 - INFO - 執行測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:57:01,236 - INFO - ✓ 使用 '收盤價' 欄位名稱測試通過
+2025-12-30 23:57:01,236 - INFO - ✓ 使用 'Close' 欄位名稱測試通過
+2025-12-30 23:57:01,236 - INFO - ✓ 兩種欄位名稱的計算結果一致
+2025-12-30 23:57:01,236 - INFO - ============================================================
+2025-12-30 23:57:01,237 - INFO - 執行測試案例 9：calculate_buy_hold_return 日期索引處理
+2025-12-30 23:57:01,237 - INFO - ✓ 日期索引處理正常
+2025-12-30 23:57:01,237 - INFO -   總報酬率: 0.3650
+2025-12-30 23:57:01,237 - INFO - ============================================================
+2025-12-30 23:57:01,237 - INFO - 執行測試案例 10：calculate_buy_hold_return 日期欄位處理
+2025-12-30 23:57:01,238 - INFO - ✓ 日期欄位處理正常
+2025-12-30 23:57:01,238 - INFO -   總報酬率: 0.3650
+2025-12-30 23:57:01,238 - INFO - ============================================================
+2025-12-30 23:57:01,240 - INFO - 執行測試案例 11：calculate_buy_hold_return 缺值處理（開始日期不存在）
+2025-12-30 23:57:01,241 - INFO - ✓ 系統使用最接近的日期（2024-01-02）
+2025-12-30 23:57:01,241 - INFO - ============================================================
+2025-12-30 23:57:01,241 - INFO - 執行測試案例 12：calculate_buy_hold_return 缺值處理（期間內缺值）
+2025-12-30 23:57:01,242 - INFO - ✓ 期間內缺值處理正常
+2025-12-30 23:57:01,242 - INFO -   總報酬率: 0.0000
+2025-12-30 23:57:01,242 - INFO - ============================================================
+2025-12-30 23:57:01,242 - INFO - 執行測試案例 13：calculate_buy_hold_return 空數據處理
+2025-12-30 23:57:01,242 - INFO - ✓ 空數據處理正常（返回零值結果）
+2025-12-30 23:57:01,243 - INFO - ============================================================
+2025-12-30 23:57:01,243 - INFO - 執行測試案例 14：calculate_baseline_comparison 計算邏輯驗證
+2025-12-30 23:57:01,243 - INFO - ✓ 計算邏輯驗證通過
+2025-12-30 23:57:01,243 - INFO -   案例 1 超額報酬率: 0.0500, 優於: True
+2025-12-30 23:57:01,243 - INFO -   案例 2 超額報酬率: -0.0200, 優於: False
+2025-12-30 23:57:01,243 - INFO - ============================================================
+2025-12-30 23:57:01,243 - INFO - 執行測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:57:01,243 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:57:01,243 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:57:01,243 - INFO - 配置檔案: prod
+2025-12-30 23:57:01,244 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:57:01,244 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:57:01,244 - INFO - 配置檔案: prod
+2025-12-30 23:57:03,911 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:57:03,911 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:57:03,920 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:57:03,921 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:57:03,921 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:57:03,922 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:57:03,922 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:57:03,923 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:57:03,923 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:03,923 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:03,923 - WARNING - ⚠ Baseline 對比為 None（可能是數據不足或計算失敗）
+2025-12-30 23:57:03,923 - INFO - ============================================================
+2025-12-30 23:57:03,923 - INFO - 執行測試案例 15：BacktestService Baseline 格式驗證
+2025-12-30 23:57:03,923 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:57:03,924 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:57:03,924 - INFO - 配置檔案: prod
+2025-12-30 23:57:03,924 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:57:03,925 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:57:03,925 - INFO - 配置檔案: prod
+2025-12-30 23:57:06,593 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:57:06,593 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:57:06,600 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:57:06,601 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:57:06,601 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:57:06,601 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:57:06,601 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:57:06,602 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:57:06,603 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:06,603 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:06,603 - WARNING - ⚠ Baseline 對比為 None（可能是數據不足）
+2025-12-30 23:57:06,603 - INFO - ============================================================
+2025-12-30 23:57:06,603 - INFO - 執行測試案例 16：BacktestService Baseline 性能測試
+2025-12-30 23:57:06,603 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:57:06,603 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:57:06,603 - INFO - 配置檔案: prod
+2025-12-30 23:57:06,604 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:57:06,604 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:57:06,604 - INFO - 配置檔案: prod
+2025-12-30 23:57:09,265 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:57:09,265 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:57:09,271 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:57:09,272 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:57:09,273 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:57:09,273 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:57:09,273 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:57:09,274 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:57:09,274 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:09,274 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:09,275 - INFO - ✓ 回測執行時間: 2.67 秒
+2025-12-30 23:57:09,275 - INFO - ✓ 回測性能正常
+2025-12-30 23:57:09,275 - INFO - ============================================================
+2025-12-30 23:57:09,275 - INFO - 執行測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:57:09,275 - INFO - ✓ calculate_baseline_comparison 方法正常運作
+2025-12-30 23:57:09,275 - INFO -   超額報酬率: 0.0500
+2025-12-30 23:57:09,275 - INFO -   相對 Sharpe: 0.4000
+2025-12-30 23:57:09,275 - INFO -   是否優於 Baseline: True
+2025-12-30 23:57:09,275 - INFO - ============================================================
+2025-12-30 23:57:09,275 - INFO - 執行測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:57:09,275 - INFO - ✓ BacktestReportDTO 包含 baseline_comparison 欄位
+2025-12-30 23:57:09,275 - INFO -   欄位類型: typing.Optional[typing.Dict[str, typing.Any]]
+2025-12-30 23:57:09,275 - INFO - ✓ BacktestReportDTO 可正常創建帶有 baseline_comparison 的實例
+2025-12-30 23:57:09,275 - INFO - ✓ to_dict() 方法包含 baseline_comparison
+2025-12-30 23:57:09,275 - INFO - ============================================================
+2025-12-30 23:57:09,275 - INFO - 執行測試案例 17：DTO 序列化驗證
+2025-12-30 23:57:09,275 - INFO - ✓ DTO 序列化驗證通過
+2025-12-30 23:57:09,275 - INFO - ============================================================
+2025-12-30 23:57:09,275 - INFO - 執行測試案例 18：WalkForwardResult warmup_days 欄位驗證
+2025-12-30 23:57:09,275 - INFO -   欄位類型: <class 'int'>
+2025-12-30 23:57:09,275 - INFO - ✓ WalkForwardResult 可正常創建帶有 warmup_days 的實例
+2025-12-30 23:57:09,275 - INFO - ============================================================
+2025-12-30 23:57:09,275 - INFO - 執行測試案例 19：Baseline 對比數值範圍檢查
+2025-12-30 23:57:09,275 - INFO -   ✓ 測試案例 '正常範圍': 超額報酬率 = 0.0500
+2025-12-30 23:57:09,275 - INFO -   ✓ 測試案例 '負報酬率': 超額報酬率 = 0.0500
+2025-12-30 23:57:09,275 - INFO -   ✓ 測試案例 '極高報酬率': 超額報酬率 = 0.5000
+2025-12-30 23:57:09,275 - INFO - ✓ 所有數值範圍檢查通過
+2025-12-30 23:57:09,275 - INFO - ============================================================
+2025-12-30 23:57:09,275 - INFO - 執行測試案例 20：Baseline 對比 NaN/Infinity 檢查
+2025-12-30 23:57:09,275 - INFO -   ✓ baseline_returns: 0.1000
+2025-12-30 23:57:09,275 - INFO -   ✓ baseline_sharpe: 0.8000
+2025-12-30 23:57:09,275 - INFO -   ✓ baseline_max_drawdown: -0.1500
+2025-12-30 23:57:09,275 - INFO -   ✓ excess_returns: 0.0500
+2025-12-30 23:57:09,275 - INFO -   ✓ relative_sharpe: 0.4000
+2025-12-30 23:57:09,275 - INFO -   ✓ relative_drawdown: 0.0500
+2025-12-30 23:57:09,275 - INFO - ✓ 所有數值欄位有效（無 NaN 或 Infinity）
+2025-12-30 23:57:09,275 - INFO - ============================================================
+2025-12-30 23:57:09,275 - INFO - 執行測試案例 21：WalkForwardResult 所有欄位驗證
+2025-12-30 23:57:09,275 - INFO - ✓ WalkForwardResult 包含所有必要欄位
+2025-12-30 23:57:09,276 - INFO -   欄位列表: ['train_period', 'test_period', 'train_metrics', 'test_metrics', 'degradation', 'params', 'warmup_days']
+2025-12-30 23:57:09,276 - INFO - ============================================================
+2025-12-30 23:57:09,276 - INFO - 執行測試案例 22：BacktestReportDTO 所有欄位驗證
+2025-12-30 23:57:09,276 - INFO - ✓ BacktestReportDTO 包含所有必要欄位
+2025-12-30 23:57:09,276 - INFO -   欄位列表: ['total_return', 'annual_return', 'sharpe_ratio', 'max_drawdown', 'win_rate', 'total_trades', 'expectancy', 'details', 'baseline_comparison']
+2025-12-30 23:57:09,276 - INFO - ============================================================
+2025-12-30 23:57:09,276 - INFO - 執行測試案例 23：PerformanceMetrics 方法存在性驗證
+2025-12-30 23:57:09,276 - INFO - ✓ PerformanceAnalyzer 包含所有必要方法
+2025-12-30 23:57:09,276 - INFO -   calculate_buy_hold_return 參數: ['df', 'start_date', 'end_date']
+2025-12-30 23:57:09,276 - INFO -   calculate_baseline_comparison 參數: ['strategy_returns', 'strategy_sharpe', 'strategy_max_drawdown', 'baseline_returns', 'baseline_sharpe', 'baseline_max_drawdown']
+2025-12-30 23:57:09,276 - INFO - ============================================================
+2025-12-30 23:57:09,276 - INFO - 執行測試案例 24：完整向後兼容性驗證
+2025-12-30 23:57:09,276 - INFO - 數據目錄設置為: D:\Min\Python\Project\FA_Data
+2025-12-30 23:57:09,276 - INFO - 輸出目錄設置為: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:57:09,276 - INFO - 配置檔案: prod
+2025-12-30 23:57:09,277 - INFO - 數據根目錄: D:\Min\Python\Project\FA_Data
+2025-12-30 23:57:09,277 - INFO - 輸出根目錄: D:\Min\Python\Project\FA_Data\output
+2025-12-30 23:57:09,277 - INFO - 配置檔案: prod
+2025-12-30 23:57:11,942 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:57:11,942 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:57:11,949 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:57:11,950 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:57:11,950 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:57:11,951 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-12-31 00:00:00
+2025-12-30 23:57:11,951 - INFO - [BacktestService] 日期範圍過濾後，共 235 筆數據
+2025-12-30 23:57:11,952 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:57:11,952 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:11,952 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-12-31 → 實際 2024-01-11~2024-12-31
+2025-12-30 23:57:14,598 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:57:14,598 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:57:14,605 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:57:14,606 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:57:14,606 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:57:14,606 - INFO - [BacktestService] 請求的日期範圍: 2024-01-01 00:00:00 到 2024-05-06 00:00:00
+2025-12-30 23:57:14,607 - INFO - [BacktestService] 日期範圍過濾後，共 72 筆數據
+2025-12-30 23:57:14,608 - WARNING - [BacktestService] 請求的開始日期 2024-01-01 早於實際數據，調整為 2024-01-11
+2025-12-30 23:57:14,608 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-01-01~2024-05-06 → 實際 2024-01-11~2024-05-06
+2025-12-30 23:57:14,608 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-01-01~2024-05-06 → 實際 2024-01-11~2024-05-06
+2025-12-30 23:57:17,280 - INFO - [BacktestService] 嘗試載入技術指標文件: D:\Min\Python\Project\FA_Data\technical_analysis\2330_indicators.csv
+2025-12-30 23:57:17,280 - INFO - [BacktestService] 文件是否存在: True
+2025-12-30 23:57:17,289 - INFO - [BacktestService] 成功讀取技術指標文件，共 2858 筆原始數據
+2025-12-30 23:57:17,290 - INFO - [BacktestService] 日期欄位處理後，共 2858 筆有效數據
+2025-12-30 23:57:17,291 - INFO - [BacktestService] 數據日期範圍: 2014-04-07 00:00:00 到 2025-12-19 00:00:00
+2025-12-30 23:57:17,291 - INFO - [BacktestService] 請求的日期範圍: 2024-05-07 00:00:00 到 2024-06-30 00:00:00
+2025-12-30 23:57:17,291 - INFO - [BacktestService] 日期範圍過濾後，共 38 筆數據
+2025-12-30 23:57:17,292 - WARNING - [BacktestService] 請求的結束日期 2024-06-30 晚於實際數據，調整為 2024-06-28
+2025-12-30 23:57:17,293 - INFO - [BacktestService] ⚠️ 日期範圍已自動調整: 請求 2024-05-07~2024-06-30 → 實際 2024-05-07~2024-06-28
+2025-12-30 23:57:17,293 - WARNING - [BacktestService] 日期範圍已自動調整: 請求 2024-05-07~2024-06-30 → 實際 2024-05-07~2024-06-28
+2025-12-30 23:57:17,293 - INFO - ✓ 所有向後兼容性檢查通過
+2025-12-30 23:57:17,293 - INFO -   - 回測報告格式一致
+2025-12-30 23:57:17,293 - INFO -   - train_test_split 正常運作
+2025-12-30 23:57:17,293 - INFO -   - walk_forward 方法簽名正確
+2025-12-30 23:57:17,293 - INFO - ============================================================
+2025-12-30 23:57:17,293 - INFO - 驗證結果摘要
+2025-12-30 23:57:17,293 - INFO - ============================================================
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 1：warmup_days 預設值驗證
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 2：warmup_days 功能驗證
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 3：warmup_days 邊界條件（過大值）
+2025-12-30 23:57:17,293 - INFO - ✓ 通過 ⚠: 測試案例 4：warmup_days 邊界條件（負數）
+2025-12-30 23:57:17,293 - INFO -   警告訊息: 負數 warmup_days 未拋出異常（可能被接受或使用絕對值）
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 5：warmup_days 與 Walk-Forward 多個 Fold
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 6：warmup_days 與 progress_callback
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 7：warmup_days 與 Train-Test Split
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 8：warmup_days 向後兼容性（完整驗證）
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 3：calculate_buy_hold_return 基本功能
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 4：calculate_buy_hold_return 欄位名稱兼容
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 9：calculate_buy_hold_return 日期索引處理
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 10：calculate_buy_hold_return 日期欄位處理
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 11：calculate_buy_hold_return 缺值處理（開始日期不存在）
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 12：calculate_buy_hold_return 缺值處理（期間內缺值）
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 13：calculate_buy_hold_return 空數據處理
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 14：calculate_baseline_comparison 計算邏輯驗證
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 6：BacktestService Baseline 整合
+2025-12-30 23:57:17,293 - INFO - ✓ 通過 ⚠: 測試案例 15：BacktestService Baseline 格式驗證
+2025-12-30 23:57:17,293 - INFO -   警告訊息: Baseline 對比為 None（可能是數據不足）
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 16：BacktestService Baseline 性能測試
+2025-12-30 23:57:17,293 - INFO - ✓ 通過: 測試案例 5：calculate_baseline_comparison 基本功能
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 7：DTO 欄位存在性驗證
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 17：DTO 序列化驗證
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 18：WalkForwardResult warmup_days 欄位驗證
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 19：Baseline 對比數值範圍檢查
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 20：Baseline 對比 NaN/Infinity 檢查
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 21：WalkForwardResult 所有欄位驗證
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 22：BacktestReportDTO 所有欄位驗證
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 23：PerformanceMetrics 方法存在性驗證
+2025-12-30 23:57:17,294 - INFO - ✓ 通過: 測試案例 24：完整向後兼容性驗證
+2025-12-30 23:57:17,294 - INFO - ============================================================
+2025-12-30 23:57:17,294 - INFO - 總計: 29/29 測試案例通過
+2025-12-30 23:57:17,294 - INFO - 失敗: 0 個
+2025-12-30 23:57:17,294 - INFO - 警告: 2 個
+2025-12-30 23:57:17,294 - INFO - ============================================================
+2025-12-30 23:57:17,295 - INFO - JSON 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp1_validation\VALIDATION_REPORT.json
+2025-12-30 23:57:17,304 - INFO - Markdown 報告已保存至: C:\Projects\PythonProjects\technical_analysis\output\qa\epic2_mvp1_validation\VALIDATION_REPORT.md
