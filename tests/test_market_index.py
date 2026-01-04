@@ -5,6 +5,14 @@ from finmind.data import Data
 from datetime import datetime, timedelta
 import logging
 
+# 載入環境變數（從 .env 檔案）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # 載入 .env 檔案中的環境變數
+except ImportError:
+    # 如果沒有安裝 python-dotenv，只從系統環境變數讀取
+    pass
+
 # 設定 FinMind API token（從環境變數讀取）
 import os
 FINMIND_TOKEN = os.environ.get('FINMIND_TOKEN', '')  # 請在 .env 檔案中設定 FINMIND_TOKEN
