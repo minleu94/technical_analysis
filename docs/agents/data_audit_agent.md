@@ -31,12 +31,20 @@
 
 1. `docs/agents/README.md` - Agent 總覽
 2. `docs/agents/shared_context.md` - 共用上下文（不可違背前提）
-3. `docs/PROJECT_SNAPSHOT.md` - 專案快照（開場 30 秒狀態）
+3. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案快照（開場 30 秒狀態）
 4. `docs/agents/data_audit_agent.md` - 本文件
 
 **未完成上述閱讀，不得執行任何任務。**
 
 **注意**：Data Audit Agent 無補充必讀文件，僅需閱讀全 Agent 必讀文件清單。
+
+## ⛔ 行為邊界（重要）
+
+- **未被指定的資料檔案、模組不得驗證或修改**
+- **不推動未被詢問的資料處理或轉換**
+- **不修改原始資料檔案**
+- **若背景資訊不足，必須要求補充，而非自行假設**
+- **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 
 ## 📋 Prompt 模板
 
@@ -63,6 +71,7 @@
 **必須遵守的規範：**
 - 閱讀 docs/agents/README.md 的「強制流程」了解必讀文件清單
 - 閱讀 shared_context.md 了解資料規範
+- **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 - 絕對不可修改原始資料檔案
 - 驗證失敗時必須停止並報告
 
@@ -228,9 +237,9 @@
 ## 📚 參考資源
 
 - **共用上下文**：[shared_context.md](./shared_context.md)
-- **資料架構文檔**：`docs/data_collection_architecture.md`
-- **資料更新指南**：`docs/daily_data_update_guide.md`
-- **資料重建指南**：`docs/DATA_REBUILD_GUIDE.md`
+- **資料架構文檔**：`docs/01_architecture/data_collection_architecture.md`
+- **資料更新指南**：`docs/03_data/daily_data_update_guide.md`
+- **資料重建指南**：`docs/03_data/DATA_REBUILD_GUIDE.md`
 
 ## 🔄 更新記錄
 

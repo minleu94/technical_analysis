@@ -242,7 +242,7 @@ python scripts/merge_daily_data.py
 5. **[PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)** - 專案盤點報告（完整的專案結構盤點）
 6. **[docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md)** - 完整文檔索引（⭐ 推薦先看）
 7. **[docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md)** - 開發演進地圖（⭐ 最重要）
-8. **[docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)** - 當前開發狀態
+8. **[docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md)** - 專案快照（開場 30 秒必讀）
 9. **[docs/system_architecture.md](docs/system_architecture.md)** - 系統架構詳細說明
 10. **[readme.txt](readme.txt)** - 完整的系統功能說明、模組架構和使用方法
 

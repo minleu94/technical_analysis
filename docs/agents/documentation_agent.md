@@ -21,13 +21,13 @@
 **全 Agent 必讀（固定順序）：**
 1. `docs/agents/README.md` - Agent 總覽
 2. `docs/agents/shared_context.md` - 共用上下文（不可違背前提）
-3. `docs/PROJECT_SNAPSHOT.md` - 專案快照（當前狀態）
+3. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案快照（當前狀態）
 4. `docs/agents/documentation_agent.md` - 本文件
 
 **Documentation Agent 補充必讀：**
-5. `docs/DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（判斷 coverage 的規則文件）⭐ **必須讀取**
-6. `docs/DOCUMENTATION_INDEX.md` - 文檔索引（了解文檔結構）
-7. `docs/DEVELOPMENT_ROADMAP.md` - 開發路線圖（先讀「📍 Living Section 定義」，再看 Living Section 段落）
+5. `docs/00_core/DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（判斷 coverage 的規則文件）⭐ **必須讀取**
+6. `docs/00_core/DOCUMENTATION_INDEX.md` - 文檔索引（了解文檔結構）
+7. `docs/00_core/DEVELOPMENT_ROADMAP.md` - 開發路線圖（先讀「📍 Living Section 定義」，再看 Living Section 段落）
 8. 本次變更涉及的檔案（由使用者提供，或由 Agent 提出需求）
 
 **未完成上述閱讀，不得執行任何任務。**
@@ -36,17 +36,17 @@
 
 以下文件是專案的關鍵入口，任何變更都可能影響它們，必須優先檢查：
 
-- **`docs/PROJECT_SNAPSHOT.md`** - 專案快照（開場 30 秒狀態）
-- **`docs/DOCUMENTATION_INDEX.md`** - 文檔索引（文檔結構的 Single Source of Truth）
-- **`docs/DEVELOPMENT_ROADMAP.md`** - 開發路線圖（Phase 狀態的 Single Source of Truth）
+- **`docs/00_core/PROJECT_SNAPSHOT.md`** - 專案快照（開場 30 秒狀態）
+- **`docs/00_core/DOCUMENTATION_INDEX.md`** - 文檔索引（文檔結構的 Single Source of Truth）
+- **`docs/00_core/DEVELOPMENT_ROADMAP.md`** - 開發路線圖（Phase 狀態的 Single Source of Truth）
 - **`PROJECT_NAVIGATION.md`** - 專案導航（架構導航的 Single Source of Truth）
 
 ### 容易被忽略但必須更新的文件
 
 以下文件在變更時容易被忽略，但根據 `DOC_COVERAGE_MAP.md` 的規則，必須檢查：
 
-- **`docs/PROJECT_SNAPSHOT.md`** - 當變更影響使用流程、Phase 狀態、優先事項時
-- **`docs/DOCUMENTATION_INDEX.md`** - 當新增/刪除文檔時
+- **`docs/00_core/PROJECT_SNAPSHOT.md`** - 當變更影響使用流程、Phase 狀態、優先事項時
+- **`docs/00_core/DOCUMENTATION_INDEX.md`** - 當新增/刪除文檔時
 - **`PROJECT_NAVIGATION.md`** - 當架構或功能導航變更時
 - **`README.md`** - 當為重大變更時（雖然優先級較低，但容易被忽略）
 
@@ -66,6 +66,7 @@
 - ❌ 自行假設缺失資訊
 - ❌ 在 Coverage Pass 階段直接寫文件內容
 - ❌ 修改未在 Coverage 清單中的文件
+- ❌ 使用簡體中文（必須使用繁體中文）
 
 ## 🔄 強制兩階段工作流程
 
@@ -108,7 +109,7 @@
 **全 Agent 必讀：**
 1. docs/agents/README.md
 2. docs/agents/shared_context.md
-3. docs/PROJECT_SNAPSHOT.md
+3. docs/00_core/PROJECT_SNAPSHOT.md
 4. docs/agents/documentation_agent.md
 
 **Documentation Agent 補充必讀：**
@@ -122,6 +123,7 @@
 - 任何重要變更都必須對應到所有必要文件
 - **你必須能夠在沒有人類提示的情況下，找出「必須更新但容易被忽略的文件」**
 - **你不得自行假設或越權改動系統行為**
+- **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 
 **當前任務：**
 [在此描述具體的文檔更新需求，或代碼變更內容]
@@ -136,6 +138,9 @@
 7. 列出需要補充的資訊（如有）
 
 **不得在此階段產出文件修改內容。**
+
+**語言要求：**
+- **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 ```
 
 ### Coverage Pass Prompt
@@ -225,9 +230,9 @@
 作為文檔覆蓋完整性 Agent，請檢查以下文件的一致性：
 
 **檢查範圍：**
-- docs/PROJECT_SNAPSHOT.md
-- docs/DOCUMENTATION_INDEX.md
-- docs/DEVELOPMENT_ROADMAP.md（Living Section，定義見該文件的「📍 Living Section 定義」段落）
+- docs/00_core/PROJECT_SNAPSHOT.md
+- docs/00_core/DOCUMENTATION_INDEX.md
+- docs/00_core/DEVELOPMENT_ROADMAP.md（Living Section，定義見該文件的「📍 Living Section 定義」段落）
 
 **檢查項目（使用 docs/DOC_COVERAGE_MAP.md 的「一致性檢查清單」）：**
 1. Phase 狀態是否一致（Snapshot 的「當前狀態」與 Roadmap Living Section 的「現況」一致）
@@ -326,9 +331,9 @@
 ## 📚 參考資源
 
 - **共用上下文**：[shared_context.md](./shared_context.md)
-- **專案快照**：`docs/PROJECT_SNAPSHOT.md`
-- **文檔索引**：`docs/DOCUMENTATION_INDEX.md`
-- **開發路線圖**：`docs/DEVELOPMENT_ROADMAP.md`
+- **專案快照**：`docs/00_core/PROJECT_SNAPSHOT.md`
+- **文檔索引**：`docs/00_core/DOCUMENTATION_INDEX.md`
+- **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **專案導航**：`PROJECT_NAVIGATION.md`
 
 ## 🔄 更新記錄

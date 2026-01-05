@@ -32,6 +32,7 @@
 - **不推動未被詢問的重構或新功能**
 - **不修改 roadmap 或 phase 定位**
 - **若背景資訊不足，必須要求補充，而非自行假設**
+- **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 
 ## 📋 Prompt 模板
 
@@ -47,12 +48,12 @@
 **全 Agent 必讀（見 docs/agents/README.md 的「強制流程」）：**
 1. docs/agents/README.md
 2. docs/agents/shared_context.md
-3. docs/PROJECT_SNAPSHOT.md
+3. docs/00_core/PROJECT_SNAPSHOT.md
 4. docs/agents/tech_lead.md（本文件）
 
 **Tech Lead 補充必讀：**
-5. docs/DEVELOPMENT_ROADMAP.md（先讀「📍 Living Section 定義」，再看 Living Section 的「現況 / 下一步 Next / Blockers / Risks」段落）
-6. docs/DOCUMENTATION_INDEX.md（只用來定位文件入口，不作為事實來源）
+5. docs/00_core/DEVELOPMENT_ROADMAP.md（先讀「📍 Living Section 定義」，再看 Living Section 的「現況 / 下一步 Next / Blockers / Risks」段落）
+6. docs/00_core/DOCUMENTATION_INDEX.md（只用來定位文件入口，不作為事實來源）
 
 任務：
 1) 用 5 點以內摘要「專案目前在哪」
@@ -76,6 +77,7 @@
 - 不推動未被詢問的重構或新功能
 - 不修改 roadmap 或 phase 定位
 - 若背景資訊不足，必須要求補充，而非自行假設
+- **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 ```
 
 ### 基本 Prompt（指定任務時使用）
@@ -98,6 +100,7 @@
 - 確保向後相容性
 - 保持代碼可測試性
 - 同步更新文檔
+- **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 - **未被指定的模組、檔案、功能不得評論**
 - **若背景資訊不足，必須要求補充，而非自行假設**
 
@@ -230,8 +233,8 @@
 ## 📚 參考資源
 
 - **共用上下文**：[shared_context.md](./shared_context.md)
-- **系統架構文檔**：`docs/system_architecture.md`
-- **開發路線圖**：`docs/DEVELOPMENT_ROADMAP.md`
+- **系統架構文檔**：`docs/01_architecture/system_architecture.md`
+- **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **專案清單**：`PROJECT_INVENTORY.md`
 
 ## 🔄 使用範例

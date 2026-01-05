@@ -47,7 +47,7 @@
 
 1. `docs/agents/README.md` - Agent 總覽（本文件）
 2. `docs/agents/shared_context.md` - 共用上下文（不可違背前提）
-3. `docs/PROJECT_SNAPSHOT.md` - 專案快照（開場 30 秒狀態）
+3. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案快照（開場 30 秒狀態）
 4. 自身對應的 Agent 文件（如：`tech_lead.md`、`execution_agent.md`）
 
 **未完成上述閱讀，不得執行任何任務。**
@@ -61,9 +61,9 @@
 - `docs/DOCUMENTATION_INDEX.md` - 文檔索引（只用來定位文件入口，不作為事實來源）
 
 #### Documentation Agent 補充必讀
-- `docs/DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（判斷 coverage 的規則文件）⭐ **必須讀取**
-- `docs/DOCUMENTATION_INDEX.md` - 文檔索引（了解文檔結構）
-- `docs/DEVELOPMENT_ROADMAP.md` - 開發路線圖（先讀「📍 Living Section 定義」，再看 Living Section 段落）
+- `docs/00_core/DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（判斷 coverage 的規則文件）⭐ **必須讀取**
+- `docs/00_core/DOCUMENTATION_INDEX.md` - 文檔索引（了解文檔結構）
+- `docs/00_core/DEVELOPMENT_ROADMAP.md` - 開發路線圖（先讀「📍 Living Section 定義」，再看 Living Section 段落）
 - 本次變更涉及的檔案（由使用者提供，或由 Agent 提出需求）
 
 #### 其他 Agent
@@ -102,6 +102,7 @@
 ```
 ## 📤 Agent 輸出原則（重要）
 
+- **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 - 所有 Agent 回覆必須結構化（條列或段落）
 - 不使用模糊詞彙（例如：也許、可能、應該）
 - 未被請求的行為視為違規

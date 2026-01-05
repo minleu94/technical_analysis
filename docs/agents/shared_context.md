@@ -24,6 +24,12 @@
 - API 變更必須更新對應的使用文檔
 - 新增功能必須更新相關文檔（README、使用指南等）
 
+### 5. 語言規範（強制要求）
+- **所有 Agent 必須使用繁體中文**
+- **所有文檔、對話、回答、註解都必須使用繁體中文**
+- **禁止使用簡體中文**
+- **程式碼註解也必須使用繁體中文**
+
 ## 📁 專案結構規範
 
 ### 核心模組（不可隨意修改）
@@ -145,7 +151,7 @@ docs/                # 專案文檔
    - 文檔索引結構變更
 
 **更新範圍：**
-- 根據 `docs/DOC_COVERAGE_MAP.md` 的「變更類型 → 必須更新的文件對照表」識別
+- 根據 `docs/00_core/DOC_COVERAGE_MAP.md` 的「變更類型 → 必須更新的文件對照表」識別
 - 所有標示為 Must 優先級的文件必須更新
 - 必須執行 Snapshot / Index / Roadmap 一致性檢查
 
@@ -229,8 +235,8 @@ docs/                # 專案文檔
 
 - **專案文檔**：`docs/` 目錄
 - **策略文檔**：`docs/strategies/`
-- **開發路線圖**：`docs/DEVELOPMENT_ROADMAP.md`
-- **系統架構**：`docs/system_architecture.md`
+- **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
+- **系統架構**：`docs/01_architecture/system_architecture.md`
 
 ## 🔄 更新記錄
 
