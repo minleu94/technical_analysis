@@ -84,7 +84,7 @@
     - ⏸️ Epic 1：Promote 機制（待開始）
   - 目標：形成「推薦 → 回測 → 優化 → Promote → 再推薦」閉環
 
-**詳細演進地圖**：請參考 [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md)
+**詳細演進地圖**：請參考 [docs/00_core/DEVELOPMENT_ROADMAP.md](docs/00_core/DEVELOPMENT_ROADMAP.md)
 
 **詳細系統說明請參考 [readme.txt](readme.txt)，其中包含完整的系統功能說明、模組架構和使用方法。**
 
@@ -121,12 +121,16 @@ technical_analysis/
 │   └── [其他測試檔案...]             # 詳細請見 tests/ 目錄
 │
 ├── 📁 文檔 (docs/)
-│   ├── system_architecture.md        # 系統架構說明
-│   ├── data_collection_architecture.md # 數據收集架構
-│   ├── technical_analysis_optimizations.md # 技術分析優化
-│   ├── scripts_readme.md             # 腳本使用說明
-│   ├── note.txt                      # 開發進度記錄
-│   └── readme_test.txt               # 測試說明文檔
+│   ├── 00_core/                      # 核心文檔（必讀）
+│   │   ├── DEVELOPMENT_ROADMAP.md    # 開發路線圖
+│   │   ├── PROJECT_SNAPSHOT.md       # 專案快照
+│   │   ├── DOCUMENTATION_INDEX.md    # 文檔索引
+│   │   └── note.txt                  # 開發進度記錄
+│   ├── 01_architecture/              # 架構文檔
+│   ├── 02_features/                  # 功能文檔
+│   ├── 03_data/                      # 數據相關文檔
+│   ├── 07_guides/                    # 指南文檔
+│   └── [其他目錄...]                 # 詳細請見 docs/README.md
 │
 ├── 📁 數據存儲 (data/)
 │   ├── meta_data/                    # 元數據
@@ -182,7 +186,7 @@ python scripts/update_daily_stock_data.py --date 2025-08-29
 python scripts/merge_daily_data.py
 ```
 
-**詳細說明**：請參考 [HOW_TO_UPDATE_DAILY_DATA.md](HOW_TO_UPDATE_DAILY_DATA.md)
+**詳細說明**：請參考 [docs/03_data/HOW_TO_UPDATE_DAILY_DATA.md](docs/03_data/HOW_TO_UPDATE_DAILY_DATA.md)
 
 #### 全面數據更新
 
@@ -233,33 +237,33 @@ python scripts/merge_daily_data.py
 ## 文檔導航
 
 ### 📖 快速開始
-1. **[docs/QUICK_START.md](docs/QUICK_START.md)** - 快速開始指南
-2. **[docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md)** - 常用命令快速參考
-3. **[docs/INSTALL_GUIDE.md](docs/INSTALL_GUIDE.md)** - 安裝指南
+1. **[docs/07_guides/QUICK_START.md](docs/07_guides/QUICK_START.md)** - 快速開始指南
+2. **[docs/07_guides/QUICK_REFERENCE.md](docs/07_guides/QUICK_REFERENCE.md)** - 常用命令快速參考
+3. **[docs/07_guides/INSTALL_GUIDE.md](docs/07_guides/INSTALL_GUIDE.md)** - 安裝指南
 
 ### 📖 核心文檔
 4. **[PROJECT_NAVIGATION.md](PROJECT_NAVIGATION.md)** - 專案導航文件（⭐ 快速查找必讀）
 5. **[PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)** - 專案盤點報告（完整的專案結構盤點）
-6. **[docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md)** - 完整文檔索引（⭐ 推薦先看）
-7. **[docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md)** - 開發演進地圖（⭐ 最重要）
+6. **[docs/00_core/DOCUMENTATION_INDEX.md](docs/00_core/DOCUMENTATION_INDEX.md)** - 完整文檔索引（⭐ 推薦先看）
+7. **[docs/00_core/DEVELOPMENT_ROADMAP.md](docs/00_core/DEVELOPMENT_ROADMAP.md)** - 開發演進地圖（⭐ 最重要）
 8. **[docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md)** - 專案快照（開場 30 秒必讀）
-9. **[docs/system_architecture.md](docs/system_architecture.md)** - 系統架構詳細說明
+9. **[docs/01_architecture/system_architecture.md](docs/01_architecture/system_architecture.md)** - 系統架構詳細說明
 10. **[readme.txt](readme.txt)** - 完整的系統功能說明、模組架構和使用方法
 
 ### 🎯 UI 功能與使用指南
-9. **[docs/UI_FEATURES_DOCUMENTATION.md](docs/UI_FEATURES_DOCUMENTATION.md)** - UI 功能完整文檔（⭐ 推薦）
+9. **[docs/02_features/UI_FEATURES_DOCUMENTATION.md](docs/02_features/UI_FEATURES_DOCUMENTATION.md)** - UI 功能完整文檔（⭐ 推薦）
    - 每個 Tab 的詳細功能說明
    - 技術指標參數設定
    - 圖形模式參數設定
    - 策略回測完整功能
-10. **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** - 使用者指南（⭐ 推薦）
+10. **[docs/02_features/USER_GUIDE.md](docs/02_features/USER_GUIDE.md)** - 使用者指南（⭐ 推薦）
     - 推薦分析 - 產業篩選使用說明
     - 策略回測 - 參數最佳化完整教程
     - 策略回測 - Walk-forward 驗證詳細說明
     - 常見問題解答
 
 ### 🏗️ 架構改進計劃
-11. **[docs/PARAMETER_DESIGN_IMPROVEMENTS.md](docs/PARAMETER_DESIGN_IMPROVEMENTS.md)** - 參數設計改進計劃（⭐ 重要）
+11. **[docs/08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md](docs/08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md)** - 參數設計改進計劃（⭐ 重要）
     - 參數單位一致性問題分析
     - 強勢/弱勢分數公式改進
     - 圖形模式參數 ATR-based 改進
@@ -268,44 +272,44 @@ python scripts/merge_daily_data.py
     - 實施優先級與時間表
 
 ### 🔧 使用指南
-11. **[docs/HOW_TO_UPDATE_DAILY_DATA.md](docs/HOW_TO_UPDATE_DAILY_DATA.md)** - 每日數據更新指南
-12. **[docs/daily_data_update_guide.md](docs/daily_data_update_guide.md)** - 數據更新詳細指南
-13. **[docs/scripts_readme.md](docs/scripts_readme.md)** - 腳本使用說明
-14. **[docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md)** - 執行指南
+11. **[docs/03_data/HOW_TO_UPDATE_DAILY_DATA.md](docs/03_data/HOW_TO_UPDATE_DAILY_DATA.md)** - 每日數據更新指南
+12. **[docs/03_data/daily_data_update_guide.md](docs/03_data/daily_data_update_guide.md)** - 數據更新詳細指南
+13. **[docs/07_guides/scripts_readme.md](docs/07_guides/scripts_readme.md)** - 腳本使用說明
+14. **[docs/07_guides/EXECUTION_GUIDE.md](docs/07_guides/EXECUTION_GUIDE.md)** - 執行指南
 
 ### 🏗️ 架構文檔
-15. **[docs/data_collection_architecture.md](docs/data_collection_architecture.md)** - 數據收集架構
-16. **[docs/DATA_FETCHING_LOGIC.md](docs/DATA_FETCHING_LOGIC.md)** - 數據獲取邏輯
-17. **[docs/technical_analysis_optimizations.md](docs/technical_analysis_optimizations.md)** - 技術分析優化
+15. **[docs/01_architecture/data_collection_architecture.md](docs/01_architecture/data_collection_architecture.md)** - 數據收集架構
+16. **[docs/03_data/DATA_FETCHING_LOGIC.md](docs/03_data/DATA_FETCHING_LOGIC.md)** - 數據獲取邏輯
+17. **[docs/08_technical/technical_analysis_optimizations.md](docs/08_technical/technical_analysis_optimizations.md)** - 技術分析優化
 
 ### 📊 數據文檔
-18. **[docs/INDUSTRY_INDEX_UPDATE_SUMMARY.md](docs/INDUSTRY_INDEX_UPDATE_SUMMARY.md)** - 產業指數更新說明
-19. **[docs/MERGE_AND_MARKET_INDEX_SUMMARY.md](docs/MERGE_AND_MARKET_INDEX_SUMMARY.md)** - 市場指數更新說明
+18. **[docs/03_data/INDUSTRY_INDEX_UPDATE_SUMMARY.md](docs/03_data/INDUSTRY_INDEX_UPDATE_SUMMARY.md)** - 產業指數更新說明
+19. **[docs/03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md](docs/03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md)** - 市場指數更新說明
 
 ### 🧪 測試文檔
-20. **[docs/readme_test.txt](docs/readme_test.txt)** - 完整測試指南
-21. **[docs/tests_readme.md](docs/tests_readme.md)** - tests/ 目錄結構說明
+20. **[docs/09_archive/readme_test.txt](docs/09_archive/readme_test.txt)** - 完整測試指南（歷史文檔）
+21. **[docs/07_guides/tests_readme.md](docs/07_guides/tests_readme.md)** - tests/ 目錄結構說明
 
 ### 📚 開發文檔
-22. **[docs/PHASE2_STRATEGY_LIBRARY.md](docs/PHASE2_STRATEGY_LIBRARY.md)** - Phase 2 策略資料庫設計
-23. **[docs/note.txt](docs/note.txt)** - 開發進度記錄
+22. **[docs/05_phases/PHASE2_STRATEGY_LIBRARY.md](docs/05_phases/PHASE2_STRATEGY_LIBRARY.md)** - Phase 2 策略資料庫設計
+23. **[docs/00_core/note.txt](docs/00_core/note.txt)** - 開發進度記錄
 24. **[01_stock_data_collector.md](01_stock_data_collector.md)** - 數據收集器開發說明
 25. **[02_technical_calculator.md](02_technical_calculator.md)** - 技術計算器開發說明
 
 ### 📊 回測文檔
 26. **[策略回測功能清單.md](策略回測功能清單.md)** - 策略回測實驗室完整功能清單（⭐ 推薦）
 27. **[策略回測常見問題解答.md](策略回測常見問題解答.md)** - 回測功能常見問題與解答
-28. **[docs/BACKTEST_LAB_COMPLETE.md](docs/BACKTEST_LAB_COMPLETE.md)** - 策略回測實驗室完整功能總結
+28. **[docs/02_features/BACKTEST_LAB_COMPLETE.md](docs/02_features/BACKTEST_LAB_COMPLETE.md)** - 策略回測實驗室完整功能總結
 
 ## 目錄詳細說明
 
 ### 📁 scripts/ - 工具腳本目錄
-包含所有實用的工具腳本，用於數據更新、修復和計算。詳細說明請見 [docs/scripts_readme.md](docs/scripts_readme.md)。
+包含所有實用的工具腳本，用於數據更新、修復和計算。詳細說明請見 [docs/07_guides/scripts_readme.md](docs/07_guides/scripts_readme.md)。
 
 ### 📁 tests/ - 測試檔案目錄
 包含所有測試檔案，用於驗證系統功能。
-- **目錄結構說明**：請見 [docs/tests_readme.md](docs/tests_readme.md)
-- **完整測試指南**：請見 [docs/readme_test.txt](docs/readme_test.txt)（包含環境設置、執行方法、報告生成等）
+- **目錄結構說明**：請見 [docs/07_guides/tests_readme.md](docs/07_guides/tests_readme.md)
+- **完整測試指南**：請見 [docs/09_archive/readme_test.txt](docs/09_archive/readme_test.txt)（歷史文檔，包含環境設置、執行方法、報告生成等）
 
 ### 📁 docs/ - 文檔目錄
 包含所有系統文檔，包括架構說明、開發記錄等。
@@ -506,6 +510,3 @@ python ui_qt/main.py
   - 添加增量更新功能
   - 改進數據驗證邏輯
   - 優化錯誤處理和日誌記錄
-
-## 授權
-本項目採用 MIT 授權協議 
