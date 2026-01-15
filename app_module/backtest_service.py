@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 from app_module.strategy_spec import StrategySpec, StrategyExecutor
 from app_module.strategy_registry import StrategyRegistry
 from app_module.daily_signal import DailySignalFrame
-from app_module.dtos import BacktestReportDTO
+from app_module.dtos import BacktestReportDTO, ValidationStatus
+from app_module.sop_validator import SOPValidator
 from backtest_module.broker_simulator import BrokerSimulator, BrokerConfig
 from backtest_module.performance_metrics import PerformanceAnalyzer
 
@@ -34,6 +35,7 @@ class BacktestService:
             config: TWStockConfig 實例
         """
         self.config = config
+        self.sop_validator = SOPValidator()  # Phase 3.5 SOP 驗證器
     
     def run_backtest(
         self,
@@ -65,7 +67,9 @@ class BacktestService:
         actual_start_date: Optional[str] = None,
         actual_end_date: Optional[str] = None,
         walkforward_results: Optional[List['WalkForwardResult']] = None,
-        enable_overfitting_risk: bool = True
+        enable_overfitting_risk: bool = True,
+        changed_layers: Optional[List[str]] = None,
+        walkforward_executed: bool = False
     ) -> BacktestReportDTO:
         """
         執行回測
@@ -87,6 +91,8 @@ class BacktestService:
             enable_limit_up_down: 啟用漲跌停限制
             enable_volume_constraint: 啟用成交量約束
             max_participation_rate: 最大參與率（0.05 = 5%）
+            changed_layers: 本次研究中被修改的層級（Phase 3.5 SOP 護欄）
+            walkforward_executed: 是否已執行 Walk-Forward 驗證（Phase 3.5 SOP 護欄）
         
         Returns:
             BacktestReportDTO: 回測報告
@@ -217,7 +223,17 @@ class BacktestService:
                 logger.warning(f"[BacktestService] 過擬合風險計算失敗: {e}")
                 # 過擬合風險計算失敗不影響回測報告，僅記錄警告
         
-        # 7. 構建 BacktestReportDTO
+        # 7. Phase 3.5 SOP 驗證
+        validation_result = self.sop_validator.validate_backtest_result(
+            total_trades=metrics.total_trades,
+            start_date=actual_start_date,
+            end_date=actual_end_date,
+            walkforward_results=walkforward_results,
+            changed_layers=changed_layers,
+            walkforward_executed=walkforward_executed
+        )
+        
+        # 8. 構建 BacktestReportDTO
         return BacktestReportDTO(
             total_return=metrics.total_return,
             annual_return=metrics.annual_return,
@@ -228,6 +244,11 @@ class BacktestService:
             expectancy=metrics.expectancy,
             baseline_comparison=baseline_comparison,
             overfitting_risk=overfitting_risk,
+            # Phase 3.5 SOP 護欄欄位
+            changed_layers=changed_layers if changed_layers else [],
+            validation_status=validation_result['validation_status'],
+            sample_insufficient_flags=validation_result['sample_insufficient_flags'],
+            validation_messages=validation_result['validation_messages'],
             details={
                 'stock_code': stock_code,
                 'start_date': actual_start_date,  # ✅ 使用實際日期
@@ -245,7 +266,8 @@ class BacktestService:
                 'largest_win': metrics.largest_win,
                 'largest_loss': metrics.largest_loss,
                 'equity_curve': equity_curve,
-                'trade_list': trade_list
+                'trade_list': trade_list,
+                'can_promote': validation_result['can_promote']  # 記錄是否可以 Promote
             }
         )
     
@@ -572,9 +594,15 @@ class BacktestService:
             expectancy=0.0,
             baseline_comparison=None,
             overfitting_risk=None,
+            # Phase 3.5 SOP 護欄欄位（錯誤情況直接標記為 FAIL）
+            changed_layers=[],
+            validation_status=ValidationStatus.FAIL,
+            sample_insufficient_flags={'error': True},
+            validation_messages=[f"❌ 錯誤：{error_message}"],
             details={
                 'error': error_message,
                 'equity_curve': pd.DataFrame(),
-                'trade_list': pd.DataFrame()
+                'trade_list': pd.DataFrame(),
+                'can_promote': False
             }
         )

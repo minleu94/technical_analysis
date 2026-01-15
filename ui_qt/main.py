@@ -22,6 +22,7 @@ from app_module.update_service import UpdateService
 from app_module.backtest_service import BacktestService
 from app_module.batch_backtest_service import BatchBacktestService
 from app_module.watchlist_service import WatchlistService
+from app_module.universe_service import UniverseService
 # 導入策略模組以觸發註冊
 import app_module.strategies
 from ui_qt.views.strong_stocks_view import StrongStocksView
@@ -75,6 +76,14 @@ class MainWindow(QMainWindow):
                 # 創建一個空的服務實例，避免後續錯誤
                 self.watchlist_service = None
                 print(f"警告：觀察清單服務初始化失敗，將使用空服務: {e}")
+            
+            # 選股清單服務初始化（用於推薦結果自動創建選股清單）
+            try:
+                self.universe_service = UniverseService(self.config)
+            except Exception as e:
+                logger.error(f"初始化選股清單服務失敗: {e}")
+                self.universe_service = None
+                print(f"警告：選股清單服務初始化失敗: {e}")
             
             # 設置 UI
             self._setup_ui()
@@ -199,6 +208,7 @@ class MainWindow(QMainWindow):
                 regime_service=self.regime_service,
                 watchlist_service=self.watchlist_service,
                 config=self.config,
+                universe_service=self.universe_service,
                 parent=self
             )
             # 連接一鍵送回測信號（Phase 3.3）
@@ -218,8 +228,16 @@ class MainWindow(QMainWindow):
                         config=self.config,
                         parent=self
                     )
-                    tabs.addTab(watchlist, "觀察清單")
+                    watchlist_tab_index = tabs.addTab(watchlist, "觀察清單")
                     print("[MainWindow] 觀察清單視圖創建成功")
+                    
+                    # 當切換到觀察清單 Tab 時，自動刷新數據確保同步
+                    def on_tab_changed_to_watchlist(index):
+                        if index == watchlist_tab_index:
+                            if hasattr(watchlist, 'refresh_all'):
+                                watchlist.refresh_all()
+                    
+                    tabs.currentChanged.connect(on_tab_changed_to_watchlist)
                 except Exception as e:
                     print(f"[MainWindow] 警告：無法創建觀察清單標籤: {e}")
                     import traceback

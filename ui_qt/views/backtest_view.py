@@ -1185,12 +1185,26 @@ class BacktestView(QWidget):
                 if not self.current_run_params:
                     print("[BacktestView] 警告: current_run_params 為空，無法保存結果")
         
-        # 啟用 Promote 按鈕（需要已保存的回測結果）
+        # ========== Phase 3.5 SOP 護欄：啟用 Promote 按鈕 ==========
         if hasattr(self, 'promote_btn'):
-            if self.promotion_service and hasattr(self, 'current_run_id') and self.current_run_id:
+            # 檢查是否可以 Promote（需要已保存的回測結果 + 驗證狀態不是 FAIL）
+            can_promote_basic = (
+                self.promotion_service and 
+                hasattr(self, 'current_run_id') and 
+                self.current_run_id
+            )
+            
+            # Phase 3.5 SOP 護欄：檢查 validation_status
+            from app_module.dtos import ValidationStatus
+            can_promote_sop = (report.validation_status != ValidationStatus.FAIL)
+            
+            if can_promote_basic and can_promote_sop:
                 self.promote_btn.setEnabled(True)
             else:
                 self.promote_btn.setEnabled(False)
+                # 如果因為 SOP 護欄無法 Promote，顯示提示
+                if can_promote_basic and not can_promote_sop:
+                    print(f"[BacktestView] ⚠️ SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
     
     def _on_backtest_error(self, error_msg: str):
         """回測錯誤"""
@@ -1201,7 +1215,7 @@ class BacktestView(QWidget):
         QMessageBox.critical(self, "回測錯誤", f"執行回測時發生錯誤：\n\n{error_msg}")
     
     def _format_summary(self, report: BacktestReportDTO) -> str:
-        """格式化績效摘要"""
+        """格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）"""
         details = report.details
         
         # ✅ 顯示實際使用的日期範圍
@@ -1219,6 +1233,69 @@ class BacktestView(QWidget):
         if details.get('date_adjusted'):
             summary_lines.append(f"⚠️ 注意: 請求範圍 {requested_start}~{requested_end} 已調整為實際數據範圍")
         
+        # ========== Phase 3.5 SOP 護欄：Primary 指標置頂 ==========
+        summary_lines.append("")
+        summary_lines.append("╔════════════════════════════════════════╗")
+        summary_lines.append("║  Phase 3.5 SOP 驗證（必須優先查看）     ║")
+        summary_lines.append("╚════════════════════════════════════════╝")
+        
+        # 驗證狀態
+        from app_module.dtos import ValidationStatus
+        status_emoji = {
+            ValidationStatus.PASS: "✅",
+            ValidationStatus.WARNING: "⚠️",
+            ValidationStatus.FAIL: "❌"
+        }
+        status_text = status_emoji.get(report.validation_status, "❓")
+        summary_lines.append(f"驗證狀態: {status_text} {report.validation_status.value}")
+        
+        # 驗證訊息
+        if report.validation_messages:
+            summary_lines.append("")
+            for msg in report.validation_messages:
+                summary_lines.append(msg)
+        
+        summary_lines.append("")
+        summary_lines.append("--- Primary 指標（行為健康） ---")
+        summary_lines.append(f"總交易次數: {report.total_trades}")
+        
+        # 計算平均持有天數（如果有交易明細）
+        if 'trade_list' in details and isinstance(details['trade_list'], pd.DataFrame):
+            trade_list = details['trade_list']
+            if len(trade_list) > 0 and '持有天數' in trade_list.columns:
+                avg_holding_days = trade_list['持有天數'].mean()
+                summary_lines.append(f"平均持有天數: {avg_holding_days:.1f} 天")
+        
+        # Baseline 對比
+        if report.baseline_comparison:
+            summary_lines.append("")
+            summary_lines.append("--- Baseline 對比 ---")
+            is_better = report.baseline_comparison.get('is_better', False)
+            better_text = "✅ 優於 Buy & Hold" if is_better else "❌ 不如 Buy & Hold"
+            summary_lines.append(f"策略表現: {better_text}")
+            
+            if 'excess_return' in report.baseline_comparison:
+                excess = report.baseline_comparison['excess_return']
+                summary_lines.append(f"超額報酬率: {excess * 100:+.2f}%")
+        
+        # 過擬合風險
+        if report.overfitting_risk:
+            summary_lines.append("")
+            summary_lines.append("--- 穩健性（過擬合風險） ---")
+            risk_level = report.overfitting_risk.get('risk_level', 'unknown')
+            risk_emoji = {'low': '✅', 'medium': '⚠️', 'high': '❌'}.get(risk_level, '❓')
+            summary_lines.append(f"過擬合風險等級: {risk_emoji} {risk_level.upper()}")
+            
+            if 'degradation' in report.overfitting_risk:
+                deg = report.overfitting_risk['degradation']
+                if deg is not None:
+                    summary_lines.append(f"退化程度: {deg * 100:.1f}%")
+        
+        summary_lines.append("")
+        summary_lines.append("╔════════════════════════════════════════╗")
+        summary_lines.append("║  Secondary 指標（輔助參考）            ║")
+        summary_lines.append("╚════════════════════════════════════════╝")
+        
         summary_lines.extend([
             "",
             f"總報酬率: {report.total_return * 100:.2f}%",
@@ -1226,7 +1303,6 @@ class BacktestView(QWidget):
             f"夏普比率: {report.sharpe_ratio:.2f}",
             f"最大回撤: {report.max_drawdown * 100:.2f}%",
             f"勝率: {report.win_rate * 100:.2f}%",
-            f"總交易次數: {report.total_trades}",
             f"期望值: {report.expectancy * 100:.2f}%",
             "",
             "=== 詳細統計 ===",
@@ -2167,9 +2243,16 @@ class BacktestView(QWidget):
                 index = self.chart_run_combo.findData(run_id)
                 if index >= 0:
                     self.chart_run_combo.setCurrentIndex(index)
-                # 啟用 Promote 按鈕
+                # ========== Phase 3.5 SOP 護欄：啟用 Promote 按鈕（需檢查驗證狀態） ==========
                 if hasattr(self, 'promote_btn'):
-                    self.promote_btn.setEnabled(True)
+                    # 只有在驗證狀態不是 FAIL 時才啟用
+                    from app_module.dtos import ValidationStatus
+                    if self.current_report.validation_status != ValidationStatus.FAIL:
+                        self.promote_btn.setEnabled(True)
+                        print(f"[BacktestView] Promote 按鈕已啟用（驗證狀態：{self.current_report.validation_status.value}）")
+                    else:
+                        self.promote_btn.setEnabled(False)
+                        print(f"[BacktestView] ⚠️ SOP 護欄：驗證狀態為 FAIL，Promote 按鈕保持禁用")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"保存失敗: {str(e)}")
     
@@ -2178,6 +2261,18 @@ class BacktestView(QWidget):
         if not self.promotion_service or not hasattr(self, 'current_run_id') or not self.current_run_id:
             QMessageBox.warning(self, "錯誤", "沒有可升級的回測結果")
             return
+        
+        # ========== Phase 3.5 SOP 護欄：檢查驗證狀態 ==========
+        if self.current_report:
+            from app_module.dtos import ValidationStatus
+            if self.current_report.validation_status == ValidationStatus.FAIL:
+                fail_messages = "\n".join(self.current_report.validation_messages)
+                QMessageBox.critical(
+                    self,
+                    "無法 Promote",
+                    f"❌ 驗證狀態為 FAIL，無法升級為策略版本\n\n{fail_messages}\n\n請先解決樣本不足問題。"
+                )
+                return
         
         run_id = self.current_run_id
         

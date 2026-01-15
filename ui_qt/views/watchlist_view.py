@@ -190,6 +190,16 @@ class WatchlistView(QWidget):
             universe_layout.setSpacing(6)
             universe_layout.setContentsMargins(10, 12, 10, 10)
             
+            # 選股清單列表標題和刷新按鈕
+            list_header_layout = QHBoxLayout()
+            list_header_layout.addWidget(QLabel("選股清單列表:"))
+            list_header_layout.addStretch()
+            self.refresh_universe_btn = QPushButton("刷新")
+            self.refresh_universe_btn.setMaximumWidth(60)
+            self.refresh_universe_btn.clicked.connect(self._refresh_universe_list)
+            list_header_layout.addWidget(self.refresh_universe_btn)
+            universe_layout.addLayout(list_header_layout)
+            
             # 選股清單列表
             self.universe_list = QListWidget()
             self._refresh_universe_list()
@@ -527,8 +537,24 @@ class WatchlistView(QWidget):
                 item = QListWidgetItem(display_text)
                 item.setData(Qt.UserRole, watchlist_id)
                 self.universe_list.addItem(item)
+            
+            # 顯示刷新成功提示（可選，避免過於頻繁）
+            if hasattr(self, '_last_refresh_time'):
+                from datetime import datetime
+                now = datetime.now()
+                if (now - self._last_refresh_time).total_seconds() > 1:  # 至少間隔1秒才顯示
+                    pass  # 可以添加狀態提示
+            else:
+                from datetime import datetime
+                self._last_refresh_time = datetime.now()
         except Exception as e:
             QMessageBox.warning(self, "錯誤", f"載入選股清單列表失敗：\n{str(e)}")
+    
+    def refresh_all(self):
+        """刷新所有數據（觀察清單和選股清單）"""
+        """當切換到觀察清單 Tab 時調用，確保數據同步"""
+        self._load_watchlist()
+        self._refresh_universe_list()
     
     def _save_watchlist_to_universe(self):
         """將當前觀察清單保存為選股清單"""
@@ -577,6 +603,55 @@ class WatchlistView(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"保存失敗：\n{str(e)}")
     
+    def _query_stock_names(self, stock_codes: List[str]) -> Dict[str, str]:
+        """
+        查詢股票名稱
+        
+        Args:
+            stock_codes: 股票代號列表
+        
+        Returns:
+            股票代號到名稱的映射字典
+        """
+        stock_name_map = {}
+        
+        if not self.config:
+            return stock_name_map
+        
+        try:
+            # 從 stock_data_file 讀取數據
+            stock_data_file = self.config.stock_data_file
+            if not stock_data_file or not stock_data_file.exists():
+                return stock_name_map
+            
+            # 讀取數據（只讀取需要的欄位以提高效率）
+            df = pd.read_csv(
+                stock_data_file,
+                dtype={'證券代號': str},
+                usecols=['證券代號', '證券名稱'],
+                low_memory=False
+            )
+            
+            # 確保證券代號是字符串格式
+            df['證券代號'] = df['證券代號'].astype(str).str.strip()
+            
+            # 過濾出需要的股票代號
+            stock_codes_str = [str(code).strip() for code in stock_codes]
+            df_filtered = df[df['證券代號'].isin(stock_codes_str)]
+            
+            # 建立映射（取最新的記錄，如果有多筆）
+            for _, row in df_filtered.iterrows():
+                code = str(row['證券代號']).strip()
+                name = str(row['證券名稱']).strip() if pd.notna(row['證券名稱']) else code
+                if code and name:
+                    stock_name_map[code] = name
+            
+        except Exception as e:
+            print(f"[WatchlistView] 查詢股票名稱失敗: {e}")
+            # 如果查詢失敗，返回空字典，使用股票代號作為名稱
+        
+        return stock_name_map
+    
     def _load_universe_to_watchlist(self):
         """從選股清單載入到觀察清單"""
         if not self.universe_service:
@@ -610,12 +685,16 @@ class WatchlistView(QWidget):
         if reply != QMessageBox.Yes:
             return
         
-        # 轉換為觀察清單格式
+        # 轉換為觀察清單格式，並查詢股票名稱
         stocks = []
+        stock_name_map = self._query_stock_names(watchlist.codes)
+        
         for code in watchlist.codes:
+            code_str = str(code).strip()
+            stock_name = stock_name_map.get(code_str, code_str)
             stocks.append({
-                'stock_code': str(code),
-                'stock_name': str(code),  # 名稱會在加入時自動查詢
+                'stock_code': code_str,
+                'stock_name': stock_name,
                 'notes': f'來自選股清單：{watchlist.name}'
             })
         

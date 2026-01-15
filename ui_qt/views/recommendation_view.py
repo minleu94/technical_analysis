@@ -21,6 +21,7 @@ from app_module.recommendation_service import RecommendationService
 from app_module.regime_service import RegimeService
 from app_module.watchlist_service import WatchlistService
 from app_module.recommendation_repository import RecommendationRepository
+from app_module.universe_service import UniverseService
 from app_module.dtos import RecommendationDTO, RecommendationResultDTO
 from data_module.config import TWStockConfig
 from ui_qt.widgets.info_button import InfoButton
@@ -39,6 +40,7 @@ class RecommendationView(QWidget):
         regime_service: RegimeService,
         watchlist_service: WatchlistService = None,
         config: Optional[TWStockConfig] = None,
+        universe_service: Optional[UniverseService] = None,
         parent=None
     ):
         """初始化推薦視圖
@@ -48,6 +50,7 @@ class RecommendationView(QWidget):
             regime_service: 市場狀態服務實例
             watchlist_service: 觀察清單服務實例（可選）
             config: TWStockConfig 實例（用於創建 Repository）
+            universe_service: 選股清單服務實例（可選，用於自動創建選股清單）
             parent: 父窗口
         """
         super().__init__(parent)
@@ -58,8 +61,14 @@ class RecommendationView(QWidget):
         # 初始化 Repository（如果提供了 config）
         if config:
             self.recommendation_repository = RecommendationRepository(config)
+            # 如果沒有傳入 universe_service，則創建一個
+            if universe_service is None:
+                self.universe_service = UniverseService(config)
+            else:
+                self.universe_service = universe_service
         else:
             self.recommendation_repository = None
+            self.universe_service = universe_service
         
         # 數據模型
         self.recommendations_model: Optional[PandasTableModel] = None
@@ -1943,13 +1952,47 @@ class RecommendationView(QWidget):
             if regime_snapshot:
                 result.config['regime_snapshot'] = regime_snapshot
             
-            # 保存
+            # 保存推薦結果
             result_id = self.recommendation_repository.save_result(result)
+            
+            # 自動創建選股清單（如果 universe_service 可用）
+            watchlist_id = None
+            if self.universe_service and self.current_recommendations:
+                try:
+                    # 提取股票代號列表
+                    stock_codes = [rec.stock_code for rec in self.current_recommendations]
+                    
+                    # 創建選股清單名稱（使用推薦結果名稱）
+                    watchlist_name = f"{result_name.strip()}"
+                    
+                    # 創建選股清單描述
+                    description = f"來自推薦結果: {result_id}\n"
+                    if self.current_profile:
+                        description += f"Profile: {self.current_profile}\n"
+                    if self.current_regime:
+                        description += f"Regime: {self.current_regime}\n"
+                    description += f"股票數量: {len(stock_codes)}"
+                    
+                    # 保存選股清單
+                    watchlist_id = self.universe_service.save_watchlist(
+                        name=watchlist_name,
+                        codes=stock_codes,
+                        source="recommendation",
+                        description=description
+                    )
+                except Exception as e:
+                    # 如果創建選股清單失敗，只記錄錯誤但不影響推薦結果的保存
+                    print(f"[RecommendationView] 創建選股清單失敗: {e}")
+            
+            # 顯示成功訊息
+            success_msg = f"推薦結果已保存！\n結果ID: {result_id}\n股票數量: {len(self.current_recommendations)}"
+            if watchlist_id:
+                success_msg += f"\n\n已自動創建選股清單：{watchlist_name}\n可在「策略回測」Tab 的選股清單中查看"
             
             QMessageBox.information(
                 self,
                 "成功",
-                f"推薦結果已保存！\n結果ID: {result_id}\n股票數量: {len(self.current_recommendations)}"
+                success_msg
             )
         except Exception as e:
             import traceback

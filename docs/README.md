@@ -43,7 +43,12 @@ docs/
 ├── 05_phases/            # Phase 相關文檔
 │   ├── PHASE2_*.md
 │   ├── PHASE3_*.md
-│   └── EPIC2_*.md
+│   ├── EPIC2_*.md
+│   └── phase3_5_research/  # Phase 3.5 研究 SOP
+│       ├── RESEARCH_ITERATION_PLAYBOOK.md
+│       ├── METRIC_INTERPRETATION_PRIORITY.md
+│       ├── BENCHMARK_PRESENTATION.md
+│       └── PHASE4_ENTRY_CRITERIA.md
 │
 ├── 06_qa/                # QA 相關文檔
 │   └── QA_*.md

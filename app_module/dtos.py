@@ -3,9 +3,17 @@
 定義服務層的輸入輸出結構
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
+from enum import Enum
 import pandas as pd
+
+
+class ValidationStatus(Enum):
+    """驗證狀態（Phase 3.5 SOP 護欄）"""
+    PASS = "PASS"  # 符合 SOP，無問題
+    WARNING = "WARNING"  # 有警告但不阻擋
+    FAIL = "FAIL"  # 不符合 SOP，禁止 Promote
 
 
 @dataclass
@@ -113,6 +121,12 @@ class BacktestReportDTO:
     baseline_comparison: Optional[Dict[str, Any]] = None  # Baseline 對比結果
     overfitting_risk: Optional[Dict[str, Any]] = None  # 過擬合風險評估結果
     
+    # ========== Phase 3.5 SOP 護欄欄位 ==========
+    changed_layers: List[str] = field(default_factory=list)  # 記錄本次研究中被修改的層級
+    validation_status: ValidationStatus = ValidationStatus.PASS  # 驗證狀態
+    sample_insufficient_flags: Dict[str, bool] = field(default_factory=dict)  # 樣本不足標記
+    validation_messages: List[str] = field(default_factory=list)  # 驗證訊息（用於 UI 顯示）
+    
     def to_dict(self) -> dict:
         """轉換為字典"""
         result = {
@@ -129,5 +143,12 @@ class BacktestReportDTO:
             result['Baseline對比'] = self.baseline_comparison
         if self.overfitting_risk:
             result['過擬合風險'] = self.overfitting_risk
+        
+        # Phase 3.5 SOP 護欄欄位
+        result['changed_layers'] = self.changed_layers
+        result['validation_status'] = self.validation_status.value
+        result['sample_insufficient_flags'] = self.sample_insufficient_flags
+        result['validation_messages'] = self.validation_messages
+        
         return result
 

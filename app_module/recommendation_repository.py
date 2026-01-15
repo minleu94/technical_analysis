@@ -9,8 +9,45 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass, asdict
+import numpy as np
 
 from app_module.dtos import RecommendationResultDTO, RecommendationDTO
+
+
+def _make_json_serializable(obj: Any) -> Any:
+    """
+    將對象轉換為 JSON 可序列化的格式
+    
+    處理：
+    - numpy bool -> Python bool
+    - numpy int -> Python int
+    - numpy float -> Python float
+    - numpy array -> list
+    - 其他不可序列化的類型
+    """
+    # 處理 numpy 類型
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    # 處理基本類型（已經可序列化）
+    elif isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    # 處理容器類型（遞歸處理）
+    elif isinstance(obj, dict):
+        return {key: _make_json_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_make_json_serializable(item) for item in obj]
+    else:
+        # 嘗試轉換為字符串
+        try:
+            return str(obj)
+        except:
+            return None
 
 
 @dataclass
@@ -104,6 +141,8 @@ class RecommendationRepository:
         # 儲存完整數據到 JSON 文件
         data_file = self.runs_dir / f"{result.result_id}.json"
         data = result.to_dict()
+        # 清理數據，確保所有類型都是 JSON 可序列化的
+        data = _make_json_serializable(data)
         data_file.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding='utf-8'
@@ -113,6 +152,8 @@ class RecommendationRepository:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
+        # 清理 config，確保 JSON 可序列化
+        config_cleaned = _make_json_serializable(result.config)
         cursor.execute("""
             INSERT OR REPLACE INTO runs 
             (result_id, result_name, regime, stock_count, config, notes, created_at, data_path)
@@ -122,7 +163,7 @@ class RecommendationRepository:
             result.result_name,
             result.regime,
             len(result.recommendations),
-            json.dumps(result.config, ensure_ascii=False),
+            json.dumps(config_cleaned, ensure_ascii=False),
             result.notes,
             result.created_at,
             str(data_file)
