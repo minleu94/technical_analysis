@@ -12,6 +12,7 @@
 
 - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 ✅（核心已完成並驗證）
 - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3b ✅（研究閉環已完成，含 Promote / Walk-forward / Baseline / Overfitting risk / 視覺驗證）
+- AI Runtime Subsystem MVP ✅（Governance-aware 狀態機監控站已完成）
 
 ## 現在的工作模式（你每天要用的流程）
 
@@ -37,6 +38,7 @@
 - `app_module/recommendation_service.py`
 - Strategy registry / preset / promotion 相關服務
 - UI ↔ service contract（DTO）
+- `runtime/` 核心子系統與 FSM 狀態機
 
 ## 指定權威文件（需要細節再看）
 

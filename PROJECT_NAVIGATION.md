@@ -60,6 +60,21 @@
 
 ---
 
+### AI Runtime Subsystem (`runtime/`)
+
+**這一層負責什麼**：
+- Governance-aware AI 執行環境與狀態管理
+- FSM Lifecycle (IDLE -> THINKING -> VALIDATING -> APPROVED/ERROR/HALTED)
+- DTO-first contracts 與 Append-only Audit Log
+- 作為 AI-Native OS 的核心運作層，與 UI/Orchestration 解耦
+
+**為什麼重要**：
+- 保證 AI Agent 運作時的 Explainability 與 Governance
+- 隔離 LLM Frameworks 與系統核心業務邏輯的污染
+- 讓所有狀態流轉變得 Observable
+
+---
+
 ## 3️⃣ 專案主要入口
 
 ### ✅ 主要啟動方式（推薦）
@@ -188,6 +203,27 @@ python ui_app/main.py
 - `app_module/watchlist_service.py`：觀察清單的完整邏輯都在這裡（沒有 Domain 層依賴）
 
 **如果我要改觀察清單邏輯**：直接看 `app_module/watchlist_service.py`。
+
+---
+
+### 📌 AI Runtime Observatory (狀態機監控站)
+
+**從哪個 UI 進**：`ui_qt/views/runtime_view.py`（Runtime Observatory Tab）
+
+**對應的 Service**：
+- `app_module/runtime_services/runtime_controller.py`
+- `app_module/runtime_services/snapshot_service.py`
+- `app_module/runtime_services/health_service.py`
+- `app_module/runtime_services/event_bus.py`
+
+**真正動邏輯的地方**：
+- `runtime/store/local_file_store.py`：所有事件與狀態的實際 I/O 儲存。
+- `ui_qt/bridges/runtime_event_bridge.py`：唯一的 Qt Signal 轉譯點。
+
+**如果我要改 Runtime 邏輯**：
+- 改 DTO 或 FSM 狀態 → `app_module/dtos/runtime_dtos.py`
+- 改指標計算 → `app_module/runtime_services/health_service.py`
+- 改架構規範 → 查閱 `docs/architecture/runtime_observatory_rules.md`
 
 ---
 

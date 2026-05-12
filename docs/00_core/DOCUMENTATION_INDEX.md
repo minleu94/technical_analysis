@@ -59,6 +59,12 @@
 - 數據更新流程
 - 數據存儲結構
 
+### 8. [Runtime Observatory 規範](../architecture/runtime_observatory_rules.md)
+**AI-Native OS Runtime 的架構治理與規範**
+- Forbidden Dependency Rules
+- DTO Boundary Validation
+- Governance Checklist
+
 ---
 
 ## 📚 功能文檔

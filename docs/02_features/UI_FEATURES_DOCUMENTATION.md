@@ -746,6 +746,27 @@ Regime 權重切換（不再使用倍率）：
 
 ---
 
+### Tab 6：Runtime Observatory (狀態機監控站)
+
+**功能定位：**
+- 作為 AI Runtime Subsystem 的 Observable Layer
+- 監控 AI Agent 的 FSM 狀態流轉 (IDLE -> THINKING -> VALIDATING -> APPROVED/ERROR/HALTED)
+- 顯示 Governance Health 與 Append-only Event Stream
+
+**UI 布局：**
+- **左側 (State Overview)**：
+  - FSM State Machine (Task Objective, Status)
+  - Runtime Context Environment (Active Files)
+- **右側 (Governance & Stream)**：
+  - Governance Health (Overall System State, Rejection Rate Trend, Last Critical Violation)
+  - Append-only Event Stream (Real-time Event Logs)
+
+**技術特點：**
+- Pure Render 邊界：View 層不包含任何業務邏輯，僅接受 `app_module` 透過 `QtRuntimeBridge` 發出的 DTO
+- QTimer 輪詢：MVP 階段使用每秒輪詢模擬資料串流
+
+---
+
 ## 📈 技術指標詳細參數
 
 ### 動量指標

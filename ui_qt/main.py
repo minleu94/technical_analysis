@@ -35,6 +35,13 @@ from ui_qt.views.update_view import UpdateView
 from ui_qt.views.backtest_view import BacktestView
 from ui_qt.views.watchlist_view import WatchlistView
 
+# Runtime Observatory Imports
+from app_module.runtime_services.runtime_controller import RuntimeController
+from ui_qt.bridges.runtime_event_bridge import QtRuntimeBridge
+from ui_qt.views.runtime_view import RuntimeView
+from PySide6.QtCore import QTimer
+import os
+
 
 class MainWindow(QMainWindow):
     """主窗口"""
@@ -251,6 +258,31 @@ class MainWindow(QMainWindow):
             # 保存 tabs 和 backtest 引用（用於一鍵送回測）
             self.tabs = tabs
             self.backtest_view = backtest
+            
+            # --- Runtime Observatory MVP Integration ---
+            try:
+                print("[MainWindow] 初始化 Runtime Observatory...")
+                project_root_str = str(project_root)
+                self.runtime_controller = RuntimeController(os.path.join(project_root_str, "runtime"))
+                self.runtime_bridge = QtRuntimeBridge(self.runtime_controller.event_bus, self)
+                
+                self.runtime_view = RuntimeView(parent=self)
+                
+                # Connect bridge signals to view slots
+                self.runtime_bridge.state_updated.connect(self.runtime_view.on_state_updated)
+                self.runtime_bridge.health_updated.connect(self.runtime_view.on_health_updated)
+                self.runtime_bridge.event_received.connect(self.runtime_view.on_event_received)
+                
+                tabs.addTab(self.runtime_view, "Runtime Observatory")
+                
+                # Setup polling timer
+                self.runtime_timer = QTimer(self)
+                self.runtime_timer.timeout.connect(self.runtime_controller.poll_updates)
+                self.runtime_timer.start(1000) # Poll every 1 second
+                print("[MainWindow] Runtime Observatory 整合完成")
+            except Exception as re:
+                print(f"[MainWindow] 警告: Runtime Observatory 初始化失敗: {re}")
+            # --------------------------------------------
             
             # 狀態欄
             self.statusBar().showMessage("就緒")

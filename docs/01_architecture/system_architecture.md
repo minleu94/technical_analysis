@@ -57,9 +57,17 @@ technical_analysis/
 │   └── performance_analyzer.py # 績效分析器
 ├── recommendation_module/# 推薦模組（優化中）
 │   └── recommendation_engine.py # 推薦引擎
+├── runtime/              # AI Runtime 子系統（✅ MVP 已完成）
+│   ├── interfaces/       # 抽象介面 (store_interface.py)
+│   ├── store/            # 實作儲存 (local_file_store.py)
+│   ├── validation/       # Schema 驗證邏輯
+│   ├── registry/         # Agent Registries
+│   ├── events/           # Event Stream Logs
+│   └── state/            # 狀態模板
 ├── app_module/         # 應用服務層（✅ 已完成）
 │   ├── __init__.py              # 模組導出
-│   ├── dtos.py                  # 數據傳輸對象（RecommendationDTO, RegimeResultDTO, BacktestReportDTO）
+│   ├── dtos/                    # DTOs (包含 runtime_dtos.py)
+│   ├── runtime_services/        # AI Runtime 控制與服務 (EventBus, Snapshot, Health, Controller)
 │   ├── recommendation_service.py # 推薦服務（✅ 已完成）
 │   ├── screening_service.py     # 強勢股/產業篩選服務（✅ 已完成）
 │   ├── regime_service.py        # 市場狀態檢測服務（✅ 已完成）
@@ -88,6 +96,7 @@ technical_analysis/
 │   │   ├── market_regime_view.py # 大盤指數視圖
 │   │   ├── strong_industries_view.py # 強勢產業視圖
 │   │   ├── recommendation_view.py # 推薦分析視圖
+│   │   ├── runtime_view.py      # AI Runtime Observatory 視圖
 │   │   └── backtest_view.py    # 策略回測視圖（✅ 已完成）
 │   │       - 單一策略回測
 │   │       - 參數最佳化（Grid Search）

@@ -554,6 +554,10 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 * ✅ **Phase 1、Phase 2、Phase 2.5 核心部分**：已完成且驗證通過
 * ✅ **系統可運行、UI 穩定、回測/最佳化效能已大幅改善**
 * ✅ **Phase 3.1、3.2、3.3a 核心功能**：已完成（推薦可用化、Profiles 正式化、研究閉環核心功能）
+* ✅ **AI Runtime Subsystem MVP**：已完成（Phase A Architecture & Phase B UI Integration）
+  * ✅ 實作 Runtime Observatory (State Machine Observatory)
+  * ✅ 建立純 Python EventBus 與 DTO Contracts
+  * ✅ 嚴格的 Governance boundaries 與 FSM 生命週期 (IDLE -> DISPATCHED -> THINKING -> VALIDATING -> APPROVED/ERROR/HALTED)
 * ✅ **券商分點資料更新功能**：已完成（2025-12-27，修復 2025-12-29）
   * ✅ 所有 6 個分點成功下載測試通過（每個分點 100 筆記錄，總記錄數 600 筆）
   * ✅ URL 參數和日期範圍修復完成（`c=B`，日期範圍：`e=前一天&f=當天`）
@@ -575,7 +579,18 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ---
 
-### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成）
+### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP）
+
+* ✅ **AI Runtime Subsystem MVP** ✅ 已完成
+  * ✅ Phase A: Architecture Skeleton & Contracts
+    * 建立 `IRuntimeStore` 與 `LocalFileStore`
+    * 實作純 Python 解耦的 `EventBus`
+    * 實作 `RuntimeSnapshotService` 與具備趨勢分析的 `RuntimeHealthService`
+    * 確立架構治理規範與 Forbidden Dependencies
+  * ✅ Phase B: RuntimeView UI Implementation
+    * 建立 Pure Render 的 `RuntimeView`
+    * 透過 `QtRuntimeBridge` 將 EventBus 與 PyQt Signals 解耦
+    * 利用 `QTimer` 與 `RuntimeController` 模擬資料串流，完成狀態機的 Observatory
 
 * ✅ **Phase 2.5：參數設計優化** ✅ 已完成並驗證通過
   * ✅ 優先級 1：強勢/弱勢分數標準化、Pattern ATR-based、Scoring Contract 統一
