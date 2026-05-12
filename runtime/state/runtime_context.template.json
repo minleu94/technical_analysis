@@ -1,0 +1,11 @@
+{
+  "_comment": "全域或短期的執行環境狀態，供 Agent 決策參考。避免載入不必要的檔案。",
+  "active_files": [],
+  "recent_errors": [],
+  "working_branch": "main",
+  "last_action_by": "system",
+  "architecture_constraints": [
+    "No heavy frameworks",
+    "JSON-first IO"
+  ]
+}

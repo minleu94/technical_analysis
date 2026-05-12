@@ -1,0 +1,12 @@
+{
+  "agent_id": "tech_lead",
+  "timestamp": "2026-05-12T16:00:00Z",
+  "intent_resolution": "approved",
+  "human_readable_summary": "這個輸出缺少了 rollback_plan，違反 governance 規定。",
+  "structured_payload": {
+    "action": "delegate_task"
+  },
+  "governance_check": {
+    "audit_trail": "紀錄於日誌中。"
+  }
+}

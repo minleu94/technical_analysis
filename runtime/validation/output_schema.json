@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent Output Envelope",
+  "description": "Standard output format for all agents in the runtime.",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "timestamp",
+    "intent_resolution",
+    "human_readable_summary",
+    "structured_payload",
+    "governance_check"
+  ],
+  "properties": {
+    "agent_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "intent_resolution": {
+      "type": "string",
+      "enum": [
+        "approved",
+        "rejected",
+        "needs_info",
+        "completed",
+        "failed"
+      ]
+    },
+    "human_readable_summary": {
+      "type": "string"
+    },
+    "structured_payload": {
+      "type": "object"
+    },
+    "governance_check": {
+      "type": "object",
+      "required": [
+        "rollback_plan",
+        "audit_trail"
+      ],
+      "properties": {
+        "rollback_plan": {
+          "type": "string"
+        },
+        "audit_trail": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "_comment": "Agent Registry: 定義所有可用的 Agents、權限與介面。系統 Router 會依據此表進行調度與防護。",
+  "agents": {
+    "tech_lead": {
+      "role": "Architecture Governance & Decision Making",
+      "allowed_actions": ["approve_architecture", "delegate_task", "request_audit"],
+      "forbidden_actions": ["direct_code_commit", "bypass_security_check"],
+      "required_inputs": ["runtime_context.json", "current_task.json"],
+      "output_format": "output_schema.json",
+      "validation_required": ["strict_schema", "rollback_plan_exists"]
+    },
+    "execution_agent": {
+      "role": "Code Implementation & Testing",
+      "allowed_actions": ["write_code", "run_tests"],
+      "forbidden_actions": ["change_architecture_rules", "modify_governance_docs"],
+      "required_inputs": ["current_task.json"],
+      "output_format": "output_schema.json",
+      "validation_required": ["strict_schema"]
+    }
+  }
+}

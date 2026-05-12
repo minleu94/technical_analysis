@@ -1,0 +1,12 @@
+{
+  "_comment": "目前執行中的單一任務狀態，避免 Agent 產生 context overload",
+  "task_id": "TASK-0000",
+  "status": "pending",
+  "assignee": "tech_lead",
+  "objective": "描述本次任務的具體目標",
+  "context_pointers": [
+    "docs/architecture/example.md"
+  ],
+  "parent_workflow": "none",
+  "created_at": "2026-05-12T00:00:00Z"
+}
