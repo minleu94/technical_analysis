@@ -1234,41 +1234,39 @@ class BrokerBranchUpdateService:
                 merged_file = meta_dir / 'merged.csv'
                 
                 # 優先檢查合併後的檔案（merged.csv）
+                merged_dates = set()
                 if merged_file.exists():
                     try:
                         df = pd.read_csv(merged_file, encoding='utf-8-sig')
                         if 'date' in df.columns:
-                            dates = set(df['date'].unique())
-                            all_dates.update(dates)
+                            merged_dates = set(df['date'].unique())
+                            all_dates.update(merged_dates)
                             total_records += len(df)
-                            self.logger.debug(f"從合併檔案讀取: {branch_key}, 日期數: {len(dates)}, 記錄數: {len(df)}")
+                            self.logger.debug(f"從合併檔案讀取: {branch_key}, 日期數: {len(merged_dates)}, 記錄數: {len(df)}")
                     except Exception as e:
                         self.logger.warning(f"讀取合併檔案失敗: {branch_key}, {str(e)}")
-                        # 如果合併檔案讀取失敗，降級到檢查 daily 目錄
-                        daily_dir = branch_dir / 'daily'
-                        daily_files = list(daily_dir.glob('*.csv'))
-                        for daily_file in daily_files:
-                            try:
-                                df = pd.read_csv(daily_file, encoding='utf-8-sig')
-                                if 'date' in df.columns:
-                                    dates = set(df['date'].unique())
-                                    all_dates.update(dates)
-                                    total_records += len(df)
-                            except:
-                                continue
-                else:
-                    # 如果沒有合併檔案，檢查 daily 目錄
-                    daily_dir = branch_dir / 'daily'
+                
+                # 同時檢查 daily 目錄中尚未合併的檔案
+                daily_dir = branch_dir / 'daily'
+                if daily_dir.exists():
                     daily_files = list(daily_dir.glob('*.csv'))
                     for daily_file in daily_files:
-                        try:
-                            df = pd.read_csv(daily_file, encoding='utf-8-sig')
-                            if 'date' in df.columns:
-                                dates = set(df['date'].unique())
-                                all_dates.update(dates)
-                                total_records += len(df)
-                        except:
+                        date_str = daily_file.stem
+                        # 如果這個日期已經在合併檔案中，就跳過
+                        if date_str in merged_dates:
                             continue
+                            
+                        import re
+                        if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+                            all_dates.add(date_str)
+                            try:
+                                # 快速計算行數 (減去表頭) 作為記錄數
+                                with open(daily_file, 'r', encoding='utf-8-sig') as f:
+                                    lines = sum(1 for _ in f) - 1
+                                if lines > 0:
+                                    total_records += lines
+                            except Exception:
+                                pass
             
             if all_dates:
                 sorted_dates = sorted(all_dates)
