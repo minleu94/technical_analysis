@@ -19,7 +19,9 @@ docs/
 │   ├── system_architecture.md
 │   ├── system_flow_end_to_end.md
 │   ├── data_collection_architecture.md
-│   └── REFACTORING_MIGRATION_PLAN.md
+│   ├── REFACTORING_MIGRATION_PLAN.md
+│   ├── multi_agent_workflow.md       # AI 協作規範
+│   └── runtime_observatory_rules.md  # Runtime Observatory 規範
 │
 ├── 02_features/          # 功能文檔
 │   ├── UI_FEATURES_DOCUMENTATION.md

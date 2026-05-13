@@ -59,12 +59,17 @@
 - 數據更新流程
 - 數據存儲結構
 
-### 8. [Runtime Observatory 規範](../architecture/runtime_observatory_rules.md)
+### 8. [Runtime Observatory 規範](../01_architecture/runtime_observatory_rules.md)
 **AI-Native OS Runtime 的架構治理與規範**
 - Forbidden Dependency Rules
 - DTO Boundary Validation
 - Governance Checklist
 
+### 9. [Multi-Agent Collaboration Workflow Protocol](../01_architecture/multi_agent_workflow.md)
+**專案多 Agent 協作與合併規範**
+- Branch Roles & Merge Protocol
+- Conflict Resolution
+- Development Principles
 ---
 
 ## 📚 功能文檔
