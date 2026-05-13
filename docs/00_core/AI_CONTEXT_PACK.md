@@ -83,16 +83,17 @@
 * **Dependent Agents (依賴 Agent)**：Execution Agent（用於擴展 UI 或除錯）。
 * **Typical Use Case (典型情境)**：每日盤後產生推薦清單並驗證策略勝率。
 
-### B. 多 Agent 協作工作流 (Multi-Agent Development Workflow)
-* **Purpose (目的)**：協調平行開發的 AI Agent，減少邊界模糊。
-* **Path (路徑)**：`main` (穩定版) ➔ `ag/*` (UI、快速迭代) / `codex/*` (架構治理、基礎設施) ➔ `integration/*` (整合分支) ➔ `main`。
-* **Branch Ownership Semantics (分支擁有權語意)**：嚴格劃分以下所有權以減少重疊：
-  - `codex/*`：專注於架構安全 (architecture-safe) 與資料傳輸 (DTO-safe) 的底層實作。
-  - `ag/*`：專注於高頻迭代、視覺化與純前端實作。
-  - `integration/*`：**暫時性收斂分支 (Temporary convergence branch)**，絕非永久擁有權分支。僅用於多 Agent 協作驗證，待人類審查後再合併至 `main`。
-  - `research/*` / `experiment/*`：探索性研究與技術驗證，不直接合併生產代碼。
-* **Overlap Workflows (重疊風險)**：兩邊 Agent 可能同時更新核心索引（如 `DOCUMENTATION_INDEX.md`）。
-* **Conflict Resolution (衝突解決)**：絕對不要直接覆寫對方的實作。必須提出 Compatibility adapter 或合作合併索引檔。
+### B. 多 Agent 協作工作流 (Simplified Main-Centric Workflow)
+* **Purpose (目的)**：降低多分支維護成本，恢復單一工作區的穩定開發體驗。
+* **Path (路徑)**：`main` (Primary active branch)。所有 Agent 直接在 `main` 上進行協作與迭代。
+* **Agent Roles (角色分工作業)**：
+  - **Antigravity (AG)**：做為主要的 IDE/Workspace 環境，負責監控專案狀態與高頻 UI/功能實作。
+  - **Codex**：繼續擔任架構審查者 (architecture reviewer)、具備治理意識的實作者 (governance-aware implementer) 與受控重構助手，但其變更應直接收斂回 `main`。
+* **Branch Creation Rules (分支建立規範)**：
+  - 暫停使用長效型 (long-lived) 的 `codex/*`、`ag/*` 或 `integration/*` 分支作為持續開發分支。
+  - **僅在以下情況允許建立暫時性分支**：高風險實驗 (risky experiments)、大型重構 (large refactors)、破壞性遷移 (destructive migrations)。
+  - 建立任何分支前必須明確論述：(1) 為何需要隔離 (2) 降低了什麼風險 (3) 預期合併策略 (4) 預期分支生命週期。
+* **Conflict Resolution (衝突解決)**：保持頻繁提交與同步。絕對不要直接覆寫對方的實作。
 
 ### C. 券商分點資料工作流 (Broker Branch Data Workflow) - ⚠️ Risky
 * **Purpose (目的)**：透過 Selenium 爬取每日對手券商籌碼。
@@ -146,21 +147,16 @@
 ### Codex
 * **Best For (適合)**：`architecture planning`（架構規劃）、`governance validation`（治理驗證）、`architecture-sensitive implementation`（架構敏感實作）、`migration-safe implementation`（安全轉移實作）、`domain-layer foundation work`（領域層基礎建設）。
 * **Focus (重點)**：保持 DTO 安全、維護重放/可審計性 (replay/auditability foundation)、進行受控的領域層與架構安全 MVP 開發。
-* **Branch Prefix**：`codex/*`
+* **Branch Prefix**：預設直接在 `main` 開發。若需隔離（如破壞性重構）才建立 `codex/*` 暫時分支。
 
 ### Antigravity (AG)
 * **Best For (適合)**：`rapid implementation`（快速實作）、`UI-heavy work`（重度 UI 開發）、`iteration-heavy features`（高頻迭代功能）、`visualization`（資料視覺化）、`workflow polishing`（工作流拋光）、`integration-heavy tasks`（重度整合任務）。
-* **Focus (重點)**：專注於快速迭代、渲染層 (PyQt6) 效能最佳化、精準的 Bug 修復與前端服務整合。
-* **Branch Prefix**：`ag/*`
-
-### Integration Workflow (多 Agent 整合)
-* **Best For (適合)**：跨領域功能的共用測試與驗證（例如包含架構與 UI 的 MVP 實作）。
-* **Focus (重點)**：作為 `codex` 與 `ag` 產出的**暫時性收斂分支**，不可被單一 Agent 永久擁有。
-* **Branch Prefix**：`integration/*`
+* **Focus (重點)**：作為主要的工作區與 IDE 環境。專注於快速迭代、渲染層 (PyQt6) 效能最佳化、精準的 Bug 修復與前端服務整合。
+* **Branch Prefix**：預設直接在 `main` 開發。若需隔離才建立 `ag/*` 暫時分支。
 
 ### ChatGPT / Gemini (Conversational/Exploratory)
 * **Best For (適合)**：`exploratory research`（探索性研究）、分析複雜的 Pandas 資料邏輯、視覺化繪圖腳本、腦力激盪風險參數。
-* **Branch Prefix**：`research/*`, `experiment/*`
+* **Branch Prefix**：僅在實驗需要時建立 `research/*` 或 `experiment/*` 暫時分支。
 
 ### Human Only (僅限人類)
 * **Best For (適合)**：PR 合併至 `main` 的最終決策、架構所有權的定奪、實際交易與資金分配決策。
@@ -184,7 +180,7 @@
 ## 8. Risk Report (風險雷達與報告)
 
 * **AI Coordination Risk (AI 協作風險)**：`codex` 與 `ag` 兩個 Agent 容易在修改共同索引（如 `DOCUMENTATION_INDEX.md`）時發生 Merge Conflict。必須嚴格遵循不覆寫對方實作的衝突解決規範。
-* **Branch Ambiguity Risk (分支邊界模糊風險)**：如果任務同時包含「架構變更」與「大量 UI 更新」，可能導致分支命名與擁有權混淆（例如 phase4-trade-led-mvp）。解決方案 (Handoff Workflow)：將基礎 DTO 與核心邏輯拆分至 `codex/*` 確保架構與遷移安全；UI 綁定與迭代交由 `ag/*` 處理。對於大型功能，應設立 `integration/<feature-name>` 分支作為雙方的暫時性共用驗證目標，避免單一 Agent 分支承載過多混合邏輯。
+* **Branch Management Overhead (分支管理成本風險)**：過多的分支與複雜的 Handoff 工作流會導致開發節奏拖慢與狀態混淆。解決方案：嚴格遵循 Main-Centric 工作流，減少不必要的分支切換。現有 feature 分支在驗證後應盡快合併至 `main`、封存或刪除。
 * **Governance Risk (架構治理風險)**：隱性耦合 (Hidden coupling)。例如偷偷在共用 DTO 內增加非標準欄位，或是繞過 `EventBus` 直接在 UI 呼叫底層 API。
 * **Unclear Ownership (邊界模糊風險)**：將過多資料處理邏輯放在 `ui_qt` 裡面，而非在 Domain 處理完畢後透過 DTO 傳遞。UI 必須純粹是個 Observatory。
 * **Workflow Confusion (工作流混亂)**：目前存在多個 `qa_validate_*.py` 腳本，AI 在開發後可能會忘記執行對應模組的 QA 腳本導致 Regression。
