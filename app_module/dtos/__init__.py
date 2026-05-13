@@ -8,6 +8,13 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 import pandas as pd
 
+from app_module.dtos.portfolio_dtos import (
+    JournalEntryDTO,
+    PortfolioDTO,
+    PositionDTO,
+    TradeDTO,
+)
+
 
 class ValidationStatus(Enum):
     """驗證狀態（Phase 3.5 SOP 護欄）"""

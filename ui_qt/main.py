@@ -23,6 +23,7 @@ from app_module.backtest_service import BacktestService
 from app_module.batch_backtest_service import BatchBacktestService
 from app_module.watchlist_service import WatchlistService
 from app_module.universe_service import UniverseService
+from app_module.research_session import ResearchSessionStore
 # 導入策略模組以觸發註冊
 import app_module.strategies
 from ui_qt.views.strong_stocks_view import StrongStocksView
@@ -34,6 +35,7 @@ from ui_qt.views.recommendation_view import RecommendationView
 from ui_qt.views.update_view import UpdateView
 from ui_qt.views.backtest_view import BacktestView
 from ui_qt.views.watchlist_view import WatchlistView
+from ui_qt.widgets.session_context_strip import SessionContextStrip
 from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
 from app_module.broker_flow_service import BrokerFlowService
 
@@ -77,6 +79,7 @@ class MainWindow(QMainWindow):
             self.update_service = UpdateService(self.config)
             self.backtest_service = BacktestService(self.config)
             self.broker_flow_service = BrokerFlowService(self.config)
+            self.research_session_store = ResearchSessionStore()
             
             # 觀察清單服務初始化（可能失敗，需要特別處理）
             try:
@@ -301,6 +304,8 @@ class MainWindow(QMainWindow):
             
             # 狀態欄
             self.statusBar().showMessage("就緒")
+            self.session_context_strip = SessionContextStrip(self.research_session_store, self)
+            self.statusBar().addPermanentWidget(self.session_context_strip, 1)
         except Exception as e:
             print(f"[MainWindow] 錯誤：設置 UI 失敗")
             print(f"[MainWindow] 錯誤類型: {type(e).__name__}")

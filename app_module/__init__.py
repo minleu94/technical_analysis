@@ -8,6 +8,8 @@ from app_module.screening_service import ScreeningService
 from app_module.regime_service import RegimeService
 from app_module.update_service import UpdateService
 from app_module.backtest_service import BacktestService
+from app_module.portfolio_service import PortfolioService
+from app_module.journal_service import JournalService
 from app_module.dtos import (
     RecommendationDTO,
     RecommendationResultDTO,
@@ -21,6 +23,8 @@ __all__ = [
     'RegimeService',
     'UpdateService',
     'BacktestService',
+    'PortfolioService',
+    'JournalService',
     'RecommendationDTO',
     'RecommendationResultDTO',
     'RegimeResultDTO',
