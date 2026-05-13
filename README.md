@@ -15,7 +15,7 @@
 - 統一打分模型（技術/量能/結構）
 - 推薦理由生成（Why，不是 Buy/Sell）
 - **應用服務層（app_module/）** ✅ 已完成
-- **Qt UI（ui_qt/）** ✅ 已完成（數據更新、市場觀察、推薦分析、策略回測）
+- **Qt UI（ui_qt/）** ✅ 已完成（包含數據更新、市場觀察、籌碼分析終端、推薦分析、策略回測、運行監控）
 
 **Phase 2：策略資料庫 ✅ 已完成**
 
@@ -97,7 +97,8 @@ technical_analysis/
 │   ├── analysis_module/       # 分析模組
 │   ├── backtest_module/       # 回測模組
 │   ├── recommendation_module/ # 推薦模組
-│   └── app_module/            # 應用服務層（UI 與業務邏輯解耦）
+│   ├── app_module/            # 應用服務層（UI 與業務邏輯解耦）
+│   └── runtime/               # Governance-aware AI Runtime 運行層
 │
 ├── 📁 UI 應用
 │   ├── ui_app/                # Tkinter UI（原有）
@@ -176,8 +177,8 @@ pip install -r requirements.txt
 #### 每日股票數據更新（推薦 ⭐）
 
 ```bash
-# 批量更新從指定日期之後到今天的所有交易日（推薦）
-python scripts/batch_update_daily_data.py --start-date 2025-08-28
+# 批量更新從指定日期之後到今天的所有交易日（推薦，可加上 --skip-backup 提升效能）
+python scripts/batch_update_daily_data.py --start-date 2025-08-28 --skip-backup
 
 # 更新單日數據
 python scripts/update_daily_stock_data.py --date 2025-08-29
@@ -382,7 +383,7 @@ python ui_app/main.py
 python ui_qt/main.py
 ```
 - 現代化的 PySide6 界面
-- 標籤頁設計：數據更新、市場觀察、推薦分析、**策略回測**、**觀察清單**
+- 標籤頁設計：數據更新、市場觀察、**籌碼分析 (Smart Money Terminal)**、推薦分析、**策略回測**、**觀察清單**、**運行監控 (Runtime Observatory)**
 - 市場觀察分為五個子標籤：大盤指數、強勢個股、弱勢個股、強勢產業、弱勢產業（大盤指數在最前面，方便先查看整體市場狀況）
 - **觀察清單功能**：
   - 跨 Tab 共用候選池（Market Watch、Recommendation、Backtest）
@@ -408,6 +409,13 @@ python ui_qt/main.py
   - 圖表視覺化（4 種圖表：權益曲線、回撤曲線、報酬分佈、持有天數）
   - 詳細功能請參考：[策略回測功能清單.md](策略回測功能清單.md)
 - 推薦理由顯示更清晰
+- **籌碼分析 (Smart Money Terminal)** ✅：
+  - 高密度、低延遲的專業級籌碼流向觀察終端
+  - 支援 Row Intensity Shading (強度著色) 與 Inline Signal Badges
+  - 輕量級趨勢線 (Sparklines) 渲染
+- **AI 運行監控 (Runtime Observatory)** ✅：
+  - Governance-aware AI Runtime 的完全可觀測性
+  - 狀態機生命週期監控與不可變審計日誌展示
 
 ## 版本歷史
 

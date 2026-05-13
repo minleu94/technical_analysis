@@ -767,6 +767,37 @@ Regime 權重切換（不再使用倍率）：
 
 ---
 
+### Tab 7：籌碼分析 (Smart Money Terminal)
+
+**功能定位：**
+- 高密度、低延遲的專業級籌碼流向觀察終端
+- 將複雜的券商分點流向數據轉化為可操作的交易信號
+- 提供雙視角頁籤 (Stock Overview / Branch Tracker) 進行交叉驗證
+
+**雙頁籤視角 (Dual Perspectives)：**
+- **Tab 1: Stock Overview (股票視角)**：
+  - 掃描市場上所有股票的主力資金流向。
+  - 支援 Drill-down：點擊單一股票可於下方查看參與買賣的具體券商分點明細。
+- **Tab 2: Branch Tracker (分點視角)**：
+  - 獨立追蹤單一主力分點的近期買賣操作。
+  - 透過 `TRACKED BRANCH` 下拉選單切換分點。
+  - 具備與股票視角完全相同的高質感 Terminal 渲染（動態計算 Intensity, Sparkline 與 Badges）。
+
+**UI 特性：**
+- **Chart Options (趨勢圖樣式)**：支援在上方控制列即時切換 Sparkline 樣式：
+  - `BAR`：柱狀圖（預設，呈現直觀的正負反轉）
+  - `LINE`：標準折線圖
+  - `AREA`：漸層面積圖
+- **Row Intensity Shading (強度著色)**：表格列會根據籌碼流向的信號強度自動著色，直觀辨識強弱。
+- **Inline Signal Badges (內聯信號徽章)**：在單元格內直接渲染籌碼狀態的徽章，節省空間且提升可讀性。
+- **Lightweight Sparklines (輕量級趨勢線)**：在表格內嵌微型趨勢線，讓近期的籌碼流動趨勢一目了然。
+
+**架構特點：**
+- 畫面純靠 Qt Native Delegate (`terminal_delegate.py`) 渲染，支援動態多圖表繪製，效能極高。
+- 業務邏輯與信號判斷完全由 `flow_signal_engine.py` 與 `broker_flow_service.py` 提供，符合系統解耦原則。
+
+---
+
 ## 📈 技術指標詳細參數
 
 ### 動量指標

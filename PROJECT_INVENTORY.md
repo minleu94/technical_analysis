@@ -65,7 +65,15 @@ technical_analysis/
 │       │   └── stable_conservative_executor.py
 │       ├── backtest_repository.py      # 回測結果儲存
 │       ├── recommendation_repository.py # 推薦結果儲存
+│       ├── broker_flow_service.py      # 籌碼流向服務 (Smart Money)
 │       └── dtos.py                     # 數據傳輸對象
+│
+├── 📁 AI 運行層（Runtime Subsystem）
+│   └── runtime/                  # ✅ 核心 - Governance-aware AI Runtime
+│       ├── store/                # 狀態與事件儲存 (Local File Store)
+│       ├── events/               # EventBus 與事件定義
+│       ├── state/                # FSM 狀態機管理
+│       └── registry/             # 代理與技能註冊表
 │
 ├── 📁 UI 應用（User Interfaces）
 │   ├── ui_qt/                    # ✅ 核心 - PySide6 Qt UI（推薦使用）
@@ -79,7 +87,13 @@ technical_analysis/
 │   │   │   ├── weak_industries_view.py
 │   │   │   ├── recommendation_view.py
 │   │   │   ├── backtest_view.py
-│   │   │   └── watchlist_view.py
+│   │   │   ├── watchlist_view.py
+│   │   │   ├── runtime_view.py       # Runtime Observatory UI
+│   │   │   └── smart_money/          # Smart Money Terminal
+│   │   │       ├── smart_money_flow_view.py
+│   │   │       ├── summary_strip.py
+│   │   │       ├── terminal_delegate.py
+│   │   │       └── terminal_table_model.py
 │   │   ├── models/              # 數據模型
 │   │   │   └── pandas_table_model.py
 │   │   ├── workers/             # 背景任務
@@ -197,6 +211,7 @@ technical_analysis/
 - **backtest_module/** - 回測核心，策略測試、績效分析、券商模擬
 - **app_module/** - 應用服務層核心，UI 與業務邏輯解耦的關鍵層
 - **recommendation_module/** - 推薦模組（舊版，可能被 app_module 取代）
+- **runtime/** - Governance-aware AI Runtime 運行層，負責系統的可觀測性與狀態管理
 
 #### ✅ UI 核心
 - **ui_qt/** - PySide6 Qt UI（推薦使用，現代化界面）
@@ -233,9 +248,11 @@ technical_analysis/
    - **主要功能**：
      - 數據更新 Tab
      - 市場觀察 Tab（大盤指數、強勢/弱勢個股、強勢/弱勢產業）
+     - 籌碼分析 Tab（Smart Money Terminal）
      - 推薦分析 Tab
      - 策略回測 Tab（完整回測實驗室）
      - 觀察清單 Tab
+     - 運行監控 Tab（Runtime Observatory）
    - **架構**：使用 app_module 服務層，UI 與業務邏輯解耦
 
 2. **ui_app/main.py** - **舊版入口（仍在使用）**
@@ -441,15 +458,49 @@ ui_qt/main.py (MainWindow)
 - `scripts/merge_daily_data.py` - 合併每日數據
 - `scripts/batch_update_market_and_industry_index.py` - 批量更新市場/產業指數
 
-**狀態**：✅ **完整** - Phase 1 已完成
+**狀態**：✅ **完整** - Phase 1 已完成，並引入 skip_backup 提升批次更新效能
 
 **功能**：
 - 數據狀態檢查
-- 每日股票數據更新（支持查找範圍設置）
+- 每日股票數據更新（支持查找範圍設置，具備 skip_backup 最佳化）
 - 大盤指數更新
 - 產業指數更新
 - 合併每日數據（增量合併）
 - 強制重新合併（完全重建）
+
+### 3.6 籌碼分析（Smart Money Terminal）
+
+**功能目的**：高密度、低延遲的專業級籌碼流向觀察終端
+
+**對應檔案**：
+- `app_module/broker_flow_service.py` - 籌碼流向服務
+- `decision_module/flow_signal_engine.py` - 籌碼信號引擎
+- `ui_qt/views/smart_money/smart_money_flow_view.py` - 籌碼終端視圖
+- `ui_qt/views/smart_money/terminal_table_model.py` - 高效能表格模型
+- `ui_qt/views/smart_money/terminal_delegate.py` - 自定義繪圖委派
+
+**狀態**：✅ **完整** - 具備專業 Terminal 風格渲染
+
+**功能**：
+- Row Intensity Shading (強度著色)
+- Inline Signal Badges (內聯信號徽章)
+- Lightweight Sparklines (輕量級趨勢線)
+- 響應式、高效能的資料渲染 (完全交給 Qt native 渲染)
+
+### 3.7 AI 運行監控（Runtime Observatory）
+
+**功能目的**：提供 Governance-aware AI Runtime 的完全可觀測性
+
+**對應檔案**：
+- `runtime/` 模組中的 Store, EventBus, State 機制
+- `ui_qt/views/runtime_view.py` - 監控站視圖
+
+**狀態**：✅ **完整** - Explainability-first 架構落實
+
+**功能**：
+- 狀態機生命週期監控 (IDLE, THINKING, VALIDATING, APPROVED/ERROR/HALTED)
+- DTO-first 的不可變審計日誌展示 (Append-only)
+- 確保所有 AI 決策流程的可視化和可追溯性
 
 ### 3.6 技術指標計算（Technical Indicators）
 
@@ -469,7 +520,7 @@ ui_qt/main.py (MainWindow)
 - 批量計算所有股票
 - 增量更新支持
 
-### 3.7 圖形模式識別（Pattern Analysis）
+### 3.9 圖形模式識別（Pattern Analysis）
 
 **功能目的**：識別圖形模式（W底、頭肩底、雙底等）
 
@@ -485,7 +536,7 @@ ui_qt/main.py (MainWindow)
 - ATR-based 參數設計
 - 模式評分
 
-### 3.8 機器學習分析（ML Analysis）
+### 3.10 機器學習分析（ML Analysis）
 
 **功能目的**：機器學習分析（未來擴展）
 
@@ -494,7 +545,7 @@ ui_qt/main.py (MainWindow)
 
 **狀態**：⚠️ **半成品** - 存在但可能未完全整合
 
-### 3.9 信號分析（Signal Analysis）
+### 3.11 信號分析（Signal Analysis）
 
 **功能目的**：信號組合與分析
 

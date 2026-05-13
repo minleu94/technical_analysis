@@ -564,6 +564,10 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
   * ✅ Registry 前導零問題修復完成
   * ✅ Selenium 穩定性增強完成
   * 📚 測試文檔：`docs/BROKER_BRANCH_TESTING_AND_TROUBLESHOOTING.md` ⭐ **測試必讀**
+* ✅ **籌碼分析終端 (Smart Money Terminal) MVP**：已完成
+  * ✅ 實作高密度、低延遲的專業級觀察終端
+  * ✅ 完成 Row Intensity Shading、Inline Signal Badges 與輕量級趨勢線 (Sparklines) 渲染
+  * ✅ 實作純 Domain 的 `flow_signal_engine.py` 與前端的完全解耦
 * ✅ **Phase 3.3b Epic 2 MVP-2：過擬合風險提示**：已完成（2026-01-02）
   * ✅ 單元測試：20/20 通過（100% 通過率）
   * ✅ 驗證腳本：11/11 通過（100% 通過率）
@@ -579,7 +583,12 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ---
 
-### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP）
+### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal）
+
+* ✅ **籌碼分析終端 (Smart Money Terminal) MVP** ✅ 已完成
+  * ✅ 建立 `smart_money_flow_view.py`
+  * ✅ 實作 Qt Delegate (`terminal_delegate.py`) 達成資料與呈現的高效分離
+  * ✅ 實作 Row Intensity 與 Signal Badges
 
 * ✅ **AI Runtime Subsystem MVP** ✅ 已完成
   * ✅ Phase A: Architecture Skeleton & Contracts

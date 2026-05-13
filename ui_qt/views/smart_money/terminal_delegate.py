@@ -5,13 +5,14 @@ Terminal Delegate
 """
 
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle
-from PySide6.QtCore import Qt, QRect, QPointF
+from PySide6.QtCore import Qt, QRect, QRectF, QPointF
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPainterPath
 from ui_qt.views.smart_money.terminal_table_model import ROLE_INTENSITY, ROLE_SPARKLINE, ROLE_BADGES, ROLE_SCORE
 
 class TerminalScannerDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.chart_type = 'bar'  # 'line', 'bar', 'area'
         
         # 色彩常數 (Terminal 風格)
         self.color_bg_buy_strong = QColor("#1a3322")  # 淡暗綠
@@ -167,13 +168,13 @@ class TerminalScannerDelegate(QStyledItemDelegate):
         
         # 計算點位
         points = []
-        x_step = draw_rect.width() / (len(data) - 1)
+        x_step = draw_rect.width() / max(1, len(data) - 1)
         for i, val in enumerate(data):
             x = draw_rect.left() + i * x_step
             # 將數值映射到高度 (數值越大，Y越小)
             normalized = (val - min_val) / val_range
             y = draw_rect.bottom() - (normalized * draw_rect.height())
-            points.append(QPointF(x, y))
+            points.append((x, y, val))
             
         # 決定顏色 (看最後一天的趨勢)
         pen_color = self.color_sparkline_base
@@ -182,15 +183,59 @@ class TerminalScannerDelegate(QStyledItemDelegate):
         elif data[-1] < 0:
             pen_color = self.color_sparkline_neg
             
-        pen = QPen(pen_color, 2)
-        pen.setJoinStyle(Qt.RoundJoin)
-        pen.setCapStyle(Qt.RoundCap)
-        painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
-        
-        # 使用 QPainterPath 繪製連續線條
-        path = QPainterPath(points[0])
-        for p in points[1:]:
-            path.lineTo(p)
+        if self.chart_type == 'bar':
+            # Bar Chart (Histogram)
+            painter.setPen(Qt.NoPen)
             
-        painter.drawPath(path)
+            # 若資料點太少，讓 bar 寬一點，最多不超過 x_step * 0.8
+            bar_width = max(2, x_step * 0.8)
+            
+            for x, y, val in points:
+                color = self.color_sparkline_pos if val > 0 else self.color_sparkline_neg if val < 0 else self.color_sparkline_base
+                painter.setBrush(QBrush(color))
+                
+                # 計算 bar 的矩形 (從零軸出發)
+                if val >= 0:
+                    bar_rect = QRectF(x - bar_width/2, y, bar_width, y_zero - y)
+                else:
+                    bar_rect = QRectF(x - bar_width/2, y_zero, bar_width, y - y_zero)
+                
+                # 若數值太小，保證至少 1px 高度
+                if bar_rect.height() < 1:
+                    bar_rect.setHeight(1)
+                    if val >= 0:
+                        bar_rect.moveTop(y_zero - 1)
+                
+                painter.drawRect(bar_rect)
+                
+        else:
+            # Line or Area Chart
+            pen = QPen(pen_color, 2)
+            pen.setJoinStyle(Qt.RoundJoin)
+            pen.setCapStyle(Qt.RoundCap)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            
+            path = QPainterPath(QPointF(points[0][0], points[0][1]))
+            for p in points[1:]:
+                path.lineTo(QPointF(p[0], p[1]))
+                
+            if self.chart_type == 'area':
+                # 先畫實線邊框
+                painter.drawPath(path)
+                
+                # 建立封閉的面積路徑
+                area_path = QPainterPath(path)
+                area_path.lineTo(QPointF(points[-1][0], y_zero))
+                area_path.lineTo(QPointF(points[0][0], y_zero))
+                area_path.closeSubpath()
+                
+                # 填色 (半透明)
+                fill_color = QColor(pen_color)
+                fill_color.setAlpha(60)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QBrush(fill_color))
+                painter.drawPath(area_path)
+            else:
+                # 一般 Line Chart
+                painter.drawPath(path)

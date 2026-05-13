@@ -15,7 +15,7 @@ from ui_qt.widgets.info_button import InfoButton
 from app_module.broker_flow_service import BrokerFlowService
 from app_module.watchlist_service import WatchlistService
 from ui_qt.views.smart_money.summary_strip import SummaryStrip
-from ui_qt.views.smart_money.terminal_table_model import TerminalTableModel
+from ui_qt.views.smart_money.terminal_table_model import TerminalTableModel, BranchTrackerTableModel
 from ui_qt.views.smart_money.terminal_delegate import TerminalScannerDelegate
 from ui_qt.models.pandas_table_model import PandasTableModel # 給 Detail Table 用
 
@@ -67,6 +67,14 @@ class SmartMoneyFlowView(QWidget):
         self.period_combo.setStyleSheet("background-color: #1e293b; color: white; border: 1px solid #334155;")
         control_layout.addWidget(self.period_combo)
         
+        control_layout.addWidget(QLabel(" CHART:", styleSheet="color: #94a3b8; font-family: Courier;"))
+        self.chart_combo = QComboBox()
+        self.chart_combo.addItems(["BAR", "LINE", "AREA"])
+        self.chart_combo.setCurrentIndex(0)
+        self.chart_combo.currentIndexChanged.connect(self._on_chart_changed)
+        self.chart_combo.setStyleSheet("background-color: #1e293b; color: white; border: 1px solid #334155;")
+        control_layout.addWidget(self.chart_combo)
+        
         self.refresh_btn = QPushButton("SCAN")
         self.refresh_btn.setStyleSheet("background-color: #3b82f6; color: white; font-weight: bold; padding: 4px 15px;")
         self.refresh_btn.clicked.connect(self._refresh_data)
@@ -80,7 +88,20 @@ class SmartMoneyFlowView(QWidget):
             
         main_layout.addWidget(control_widget)
         
-        # --- Body: Splitter (Master-Detail) ---
+        # --- Body: Tabs ---
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #334155; background-color: black; }
+            QTabBar::tab { background: #0f172a; color: #94a3b8; padding: 8px 20px; font-weight: bold; }
+            QTabBar::tab:selected { background: #1e293b; color: white; border-bottom: 2px solid #3b82f6; }
+        """)
+        main_layout.addWidget(self.tab_widget)
+        
+        # === Tab 1: Stock Overview ===
+        tab1 = QWidget()
+        tab1_layout = QVBoxLayout(tab1)
+        tab1_layout.setContentsMargins(0, 0, 0, 0)
+        
         self.splitter = QSplitter(Qt.Vertical)
         
         # Master: Terminal Scanner Table
@@ -137,7 +158,43 @@ class SmartMoneyFlowView(QWidget):
         
         # 設定比例
         self.splitter.setSizes([700, 300])
-        main_layout.addWidget(self.splitter)
+        tab1_layout.addWidget(self.splitter)
+        self.tab_widget.addTab(tab1, "STOCK OVERVIEW")
+        
+        # === Tab 2: Branch Tracker ===
+        tab2 = QWidget()
+        tab2_layout = QVBoxLayout(tab2)
+        tab2_layout.setContentsMargins(0, 0, 0, 0)
+        
+        b_control_widget = QWidget()
+        b_control_layout = QHBoxLayout(b_control_widget)
+        b_control_layout.setContentsMargins(15, 10, 15, 10)
+        b_control_layout.addWidget(QLabel("TRACKED BRANCH:", styleSheet="color: #94a3b8; font-family: Courier;"))
+        
+        self.branch_combo = QComboBox()
+        self.branch_combo.setStyleSheet("background-color: #1e293b; color: white; border: 1px solid #334155;")
+        self.branch_combo.setMinimumWidth(250)
+        self.branch_combo.currentIndexChanged.connect(self._on_branch_changed)
+        b_control_layout.addWidget(self.branch_combo)
+        b_control_layout.addStretch()
+        tab2_layout.addWidget(b_control_widget)
+        
+        self.branch_table = QTableView()
+        self.branch_table.setSelectionBehavior(QTableView.SelectRows)
+        self.branch_table.setSortingEnabled(True)
+        self.branch_table.horizontalHeader().setStretchLastSection(True)
+        self.branch_table.verticalHeader().setVisible(False)
+        self.branch_table.setShowGrid(False)
+        self.branch_table.setStyleSheet(self.scanner_table.styleSheet())
+        self.branch_table.verticalHeader().setDefaultSectionSize(46)
+        
+        self.branch_delegate = TerminalScannerDelegate(self.branch_table)
+        self.branch_table.setItemDelegate(self.branch_delegate)
+        tab2_layout.addWidget(self.branch_table)
+        
+        self.tab_widget.addTab(tab2, "BRANCH TRACKER")
+        
+        self._on_chart_changed()
         
     def _get_current_period_val(self) -> str:
         idx = self.period_combo.currentIndex()
@@ -147,6 +204,13 @@ class SmartMoneyFlowView(QWidget):
         
     def _on_period_changed(self):
         self._refresh_data()
+        
+    def _on_chart_changed(self):
+        chart_type = self.chart_combo.currentText().lower()
+        self.delegate.chart_type = chart_type
+        self.branch_delegate.chart_type = chart_type
+        self.scanner_table.viewport().update()
+        self.branch_table.viewport().update()
         
     def _refresh_data(self):
         try:
@@ -179,6 +243,25 @@ class SmartMoneyFlowView(QWidget):
             # 清空 Detail
             self.detail_label.setText("BRANCH DRILL-DOWN: --")
             self.detail_table.setModel(PandasTableModel(pd.DataFrame(columns=['分點名稱', '買進', '賣出', '淨量'])))
+            
+            # 4. 更新 Branch Tracker 分點選單
+            branches = self.flow_service.get_tracked_branches()
+            current_branch = self.branch_combo.currentData()
+            
+            self.branch_combo.blockSignals(True)
+            self.branch_combo.clear()
+            idx_to_select = 0
+            for i, b in enumerate(branches):
+                self.branch_combo.addItem(b['display_name'], b['system_key'])
+                if b['system_key'] == current_branch:
+                    idx_to_select = i
+            if branches:
+                self.branch_combo.setCurrentIndex(idx_to_select)
+            self.branch_combo.blockSignals(False)
+            
+            # 更新 Branch 表格
+            self._on_branch_changed()
+            
             
         except Exception as e:
             import traceback
@@ -213,6 +296,28 @@ class SmartMoneyFlowView(QWidget):
         df_detail = pd.DataFrame(data) if data else pd.DataFrame(columns=['分點名稱', '買進張數', '賣出張數', '淨買賣超'])
         self.detail_table.setModel(PandasTableModel(df_detail))
         self.detail_table.resizeColumnsToContents()
+
+    def _on_branch_changed(self):
+        branch_key = self.branch_combo.currentData()
+        if not branch_key:
+            return
+            
+        period = self._get_current_period_val()
+        all_flows = self.flow_service.get_branch_flow_details(period=period)
+        
+        # 過濾特定分點
+        branch_flows = [f for f in all_flows if f.branch_system_key == branch_key]
+        
+        self.branch_model = BranchTrackerTableModel(branch_flows)
+        self.branch_table.setModel(self.branch_model)
+        
+        # 調整欄寬
+        self.branch_table.setColumnWidth(0, 100) # 淨量分數
+        self.branch_table.setColumnWidth(1, 150) # 股票
+        self.branch_table.setColumnWidth(2, 80)  # 買進
+        self.branch_table.setColumnWidth(3, 80)  # 賣出
+        self.branch_table.setColumnWidth(4, 200) # Badges
+        self.branch_table.setColumnWidth(5, 150) # Sparkline
 
     def _add_to_watchlist(self):
         if not self.watchlist_service:

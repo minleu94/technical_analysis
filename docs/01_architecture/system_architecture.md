@@ -64,6 +64,14 @@ technical_analysis/
 │   ├── registry/         # Agent Registries
 │   ├── events/           # Event Stream Logs
 │   └── state/            # 狀態模板
+├── decision_module/      # 決策邏輯模組（Domain Layer）
+│   ├── strategy_configurator.py # 策略配置器
+│   ├── reason_engine.py      # 推薦理由引擎
+│   ├── scoring_engine.py    # 打分引擎
+│   ├── stock_screener.py    # 股票篩選器
+│   ├── market_regime_detector.py # 市場狀態檢測
+│   ├── industry_mapper.py   # 產業映射
+│   └── flow_signal_engine.py # 籌碼信號引擎 (Smart Money)
 ├── app_module/         # 應用服務層（✅ 已完成）
 │   ├── __init__.py              # 模組導出
 │   ├── dtos/                    # DTOs (包含 runtime_dtos.py)
@@ -75,6 +83,7 @@ technical_analysis/
 │   ├── backtest_service.py      # 回測服務（✅ 已完成）
 │   ├── optimizer_service.py     # 參數最佳化服務（✅ 已完成）
 │   ├── broker_branch_update_service.py # 券商分點資料更新服務（✅ 已完成）
+│   ├── broker_flow_service.py   # 籌碼流向服務（✅ 已完成）
 │   └── README.md                # 架構說明文檔
 ├── ui_app/              # Tkinter UI 應用程式模組（✅ 已完成）
 │   ├── main.py                  # 主應用程式（深色主題，三列布局）
@@ -97,6 +106,11 @@ technical_analysis/
 │   │   ├── strong_industries_view.py # 強勢產業視圖
 │   │   ├── recommendation_view.py # 推薦分析視圖
 │   │   ├── runtime_view.py      # AI Runtime Observatory 視圖
+│   │   ├── smart_money/         # 籌碼分析終端 (Smart Money Terminal)
+│   │   │   ├── smart_money_flow_view.py
+│   │   │   ├── terminal_delegate.py
+│   │   │   ├── terminal_table_model.py
+│   │   │   └── summary_strip.py
 │   │   └── backtest_view.py    # 策略回測視圖（✅ 已完成）
 │   │       - 單一策略回測
 │   │       - 參數最佳化（Grid Search）

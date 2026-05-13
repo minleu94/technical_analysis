@@ -83,7 +83,7 @@
 python ui_qt/main.py
 ```
 
-**這是什麼**：PySide6 Qt 圖形界面，包含所有功能 Tab（數據更新、市場觀察、推薦分析、策略回測、觀察清單）
+**這是什麼**：PySide6 Qt 圖形界面，包含所有功能 Tab（數據更新、市場觀察、籌碼分析、推薦分析、策略回測、觀察清單、運行監控）
 
 ---
 
@@ -140,6 +140,23 @@ python ui_app/main.py
 - `decision_module/industry_mapper.py`：產業映射與產業指數處理
 
 **如果我要改市場觀察邏輯**：先看 `app_module/screening_service.py` 或 `app_module/regime_service.py`，再看 `decision_module/` 對應的檔案。
+
+---
+
+### 📌 Smart Money Terminal (籌碼分析)
+
+**從哪個 UI 進**：`ui_qt/views/smart_money/smart_money_flow_view.py`（籌碼分析 Tab）
+
+**對應的 Service**：`app_module/broker_flow_service.py`
+- 負責：提供籌碼流向資料編排與查詢
+
+**真正動邏輯的地方**：
+- `decision_module/flow_signal_engine.py`：籌碼信號判斷邏輯（過濾、強度計算）
+- `ui_qt/views/smart_money/terminal_delegate.py`：負責 UI 渲染細節（Row Intensity、Sparklines、Badges），不包含業務邏輯
+
+**如果我要改籌碼邏輯**：
+- 改信號或演算法判斷 → `decision_module/flow_signal_engine.py`
+- 改畫面長相（顏色、趨勢線渲染） → `ui_qt/views/smart_money/terminal_delegate.py`
 
 ---
 
