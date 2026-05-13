@@ -1,0 +1,47 @@
+"""
+Broker Flow Data Transfer Objects (DTOs)
+定義券商分點原始資料與基礎聚合資料的標準結構
+"""
+
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+@dataclass
+class BrokerFlowEvent:
+    """單筆分點進出紀錄 (原子數據)"""
+    date: str
+    branch_system_key: str
+    branch_display_name: str
+    stock_code: str
+    stock_name: str
+    buy_qty: int
+    sell_qty: int
+    net_qty: int
+
+@dataclass
+class StockFlowAggregation:
+    """以「股票」為主體的聚合結果 (Overview Mode 使用)"""
+    stock_code: str
+    stock_name: str
+    total_buy_qty: int = 0
+    total_sell_qty: int = 0
+    total_net_qty: int = 0
+    # 參與買超的分點名稱清單
+    buying_branches: List[str] = field(default_factory=list)
+    # 參與賣超的分點名稱清單
+    selling_branches: List[str] = field(default_factory=list)
+    # 此股票所有相關的原始事件
+    events: List[BrokerFlowEvent] = field(default_factory=list)
+
+@dataclass
+class BranchFlowAggregation:
+    """以「分點」為主體的聚合結果 (Branch Tracker Mode 使用)"""
+    branch_system_key: str
+    branch_display_name: str
+    stock_code: str
+    stock_name: str
+    total_buy_qty: int = 0
+    total_sell_qty: int = 0
+    total_net_qty: int = 0
+    # 該分點操作此股票的歷史事件
+    events: List[BrokerFlowEvent] = field(default_factory=list)

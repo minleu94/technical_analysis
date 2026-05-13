@@ -34,6 +34,8 @@ from ui_qt.views.recommendation_view import RecommendationView
 from ui_qt.views.update_view import UpdateView
 from ui_qt.views.backtest_view import BacktestView
 from ui_qt.views.watchlist_view import WatchlistView
+from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
+from app_module.broker_flow_service import BrokerFlowService
 
 # Runtime Observatory Imports
 from app_module.runtime_services.runtime_controller import RuntimeController
@@ -74,6 +76,7 @@ class MainWindow(QMainWindow):
             self.recommendation_service = RecommendationService(self.config, industry_mapper=shared_industry_mapper)
             self.update_service = UpdateService(self.config)
             self.backtest_service = BacktestService(self.config)
+            self.broker_flow_service = BrokerFlowService(self.config)
             
             # 觀察清單服務初始化（可能失敗，需要特別處理）
             try:
@@ -167,6 +170,16 @@ class MainWindow(QMainWindow):
             )
             market_tabs.addTab(weak_industries, "弱勢產業")
             print("[MainWindow] 弱勢產業視圖創建成功")
+            
+            # 主力流向標籤 (Smart Money Flow)
+            print("[MainWindow] 創建主力流向視圖...")
+            smart_money_flow = SmartMoneyFlowView(
+                broker_flow_service=self.broker_flow_service,
+                watchlist_service=self.watchlist_service,
+                parent=self
+            )
+            market_tabs.addTab(smart_money_flow, "主力流向")
+            print("[MainWindow] 主力流向視圖創建成功")
         
             # 監聽市場觀察 tab 切換事件
             def on_market_tab_changed(index):
@@ -181,6 +194,8 @@ class MainWindow(QMainWindow):
                     strong_industries.load_data_if_needed()
                 elif index == 4:  # 弱勢產業
                     weak_industries.load_data_if_needed()
+                elif index == 5:  # 主力流向
+                    smart_money_flow.load_data_if_needed()
             
             market_tabs.currentChanged.connect(on_market_tab_changed)
             
