@@ -974,7 +974,8 @@ class UpdateService:
         end_date: str,
         branch_system_keys: Optional[List[str]] = None,
         delay_seconds: float = 4.0,
-        force_all: bool = False
+        force_all: bool = False,
+        progress_callback=None
     ) -> Dict[str, Any]:
         """更新券商分點資料
         
@@ -984,6 +985,7 @@ class UpdateService:
             branch_system_keys: 要更新的分點列表（None=全部）
             delay_seconds: 請求間隔（秒）
             force_all: 是否強制重新抓取
+            progress_callback: 進度回調函數
             
         Returns:
             dict: 更新結果
@@ -1006,7 +1008,8 @@ class UpdateService:
                 end_date=end_date,
                 branch_system_keys=branch_system_keys,
                 delay_seconds=delay_seconds,
-                force_all=force_all
+                force_all=force_all,
+                progress_callback=progress_callback
             )
             
             logger.info(f"[UpdateService] 券商分點資料更新完成: success={result.get('success', False)}")

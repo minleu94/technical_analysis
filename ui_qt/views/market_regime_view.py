@@ -398,10 +398,11 @@ class MarketRegimeView(QWidget):
             conf_level = "低"
         
         # 信心度顯示：緊貼市場狀態，作為修飾語存在
-        # 格式：(信心度 82% 高) - 視覺上服從市場狀態名稱
+        # 格式：(資料日期：2026-05-12 | 信心度 82% 高) - 視覺上服從市場狀態名稱
+        date_str = regime_result.details.get('date', '未知日期')
         confidence_text = (
             f"<span style='color: {conf_color};'>"
-            f"（信心度 {confidence_pct:.0f}% {conf_level}）</span>"
+            f"（資料日期：{date_str} | 信心度 {confidence_pct:.0f}% {conf_level}）</span>"
         )
         self.layer1_confidence.setText(confidence_text)
         

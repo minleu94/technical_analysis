@@ -97,29 +97,27 @@ class DataLoader:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         
-        # 清除現有的處理器
-        for handler in self.logger.handlers[:]:
-            self.logger.removeHandler(handler)
-        
-        # 創建文件處理器
-        file_handler = logging.FileHandler(
-            self.config.log_dir / "data_loader.log",
-            encoding='utf-8'
-        )
-        file_handler.setLevel(logging.INFO)
-        
-        # 創建控制台處理器
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        
-        # 設置格式
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        file_handler.setFormatter(formatter)
-        console_handler.setFormatter(formatter)
-        
-        # 添加處理器
-        self.logger.addHandler(file_handler)
-        self.logger.addHandler(console_handler)
+        # 避免重複添加處理器，導致 I/O on closed file
+        if not self.logger.handlers:
+            # 創建文件處理器
+            file_handler = logging.FileHandler(
+                self.config.log_dir / "data_loader.log",
+                encoding='utf-8'
+            )
+            file_handler.setLevel(logging.INFO)
+            
+            # 創建控制台處理器
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            
+            # 設置格式
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+            
+            # 添加處理器
+            self.logger.addHandler(file_handler)
+            self.logger.addHandler(console_handler)
     
     def load_daily_price(self, date: str) -> Optional[pd.DataFrame]:
         """加載指定日期的價格數據"""
@@ -672,12 +670,12 @@ class DataLoader:
                 self.logger.info("已恢復備份文件")
             return None
 
-    def update_industry_index(self, date: str) -> bool:
+    def update_industry_index(self, date: str, skip_backup: bool = False) -> bool:
         """更新產業指數資料
         
         Args:
             date: 日期字串，格式為 YYYY-MM-DD
-            
+            skip_backup: 是否跳過備份（批量更新時設為 True）
         Returns:
             bool: 更新是否成功
         """
@@ -810,7 +808,8 @@ class DataLoader:
                             result_df = pd.concat([result_df, missing_data], ignore_index=True)
                     
                     # 創建備份
-                    self.config.create_backup(self.config.industry_index_file)
+                    if not skip_backup:
+                        self.config.create_backup(self.config.industry_index_file)
                     
                     # 從現有數據中刪除當天的數據（只刪除新數據中存在的指數）
                     indices_to_update = set(result_df['指數名稱'].unique())
@@ -839,11 +838,12 @@ class DataLoader:
             self.logger.error(f"更新產業指數數據時發生未處理的錯誤: {str(e)}")
             return False
 
-    def update_market_index(self, date: str) -> bool:
+    def update_market_index(self, date: str, skip_backup: bool = False) -> bool:
         """更新特定日期的市場指數數據
         
         Args:
             date: 日期字符串（YYYY-MM-DD格式）
+            skip_backup: 是否跳過備份（批量更新時設為 True）
             
         Returns:
             是否成功更新
@@ -913,7 +913,8 @@ class DataLoader:
                     existing_df = pd.read_csv(self.config.market_index_file, encoding='utf-8-sig')
                     
                     # 創建備份
-                    self.config.create_backup(self.config.market_index_file)
+                    if not skip_backup:
+                        self.config.create_backup(self.config.market_index_file)
                     
                     # 合併數據
                     existing_df['日期'] = pd.to_datetime(existing_df['日期'], format='mixed').dt.strftime('%Y-%m-%d')

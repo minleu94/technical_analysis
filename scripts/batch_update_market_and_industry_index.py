@@ -111,6 +111,44 @@ def get_latest_date(file_path: Path) -> str:
     
     return None
 
+def get_existing_dates(file_path: Path) -> set:
+    """獲取文件中已存在的標準化日期集合"""
+    if not file_path.exists():
+        return set()
+    
+    try:
+        df = pd.read_csv(file_path, encoding='utf-8-sig', on_bad_lines='skip', engine='python')
+        if '日期' in df.columns and len(df) > 0:
+            # 過濾掉無效日期（NaN）
+            df = df[df['日期'].notna()]
+            if len(df) == 0:
+                return set()
+            
+            # 統一日期格式為 YYYY-MM-DD
+            def normalize_date(date_str):
+                if pd.isna(date_str) or str(date_str) == 'nan':
+                    return None
+                try:
+                    date_str = str(date_str).strip()
+                    if '/' in date_str:
+                        parts = date_str.split('/')
+                        if len(parts) == 3:
+                            month, day, year = parts
+                            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                    elif '-' in date_str and len(date_str) == 10:
+                        return date_str
+                    return None
+                except:
+                    return None
+            
+            df['日期_標準化'] = df['日期'].apply(normalize_date)
+            valid_dates = set(df[df['日期_標準化'].notna()]['日期_標準化'].unique())
+            return valid_dates
+    except Exception as e:
+        logging.warning(f"讀取 {file_path} 獲取已存在日期時發生錯誤: {str(e)}")
+    
+    return set()
+
 def batch_update_market_index(start_date: str, end_date: str = None, 
                               delay_min: float = 4.0, delay_max: float = 4.0,
                               config=None):
@@ -135,12 +173,11 @@ def batch_update_market_index(start_date: str, end_date: str = None,
         logger.warning("沒有找到需要更新的交易日")
         return
     
-    # 檢查現有數據的最新日期
-    latest_date = get_latest_date(config.market_index_file)
-    if latest_date:
-        logger.info(f"現有 market_index.csv 最新日期: {latest_date}")
-        # 只更新最新日期之後的數據
-        trading_days = [d for d in trading_days if d > latest_date]
+    # 獲取已存在的日期集合，避免重複下載，並支持歷史數據回補
+    existing_dates = get_existing_dates(config.market_index_file)
+    if existing_dates:
+        logger.info(f"現有 market_index.csv 中已存在 {len(existing_dates)} 天的數據")
+        trading_days = [d for d in trading_days if d not in existing_dates]
     
     if not trading_days:
         logger.info("所有數據已是最新，無需更新")
@@ -151,6 +188,11 @@ def batch_update_market_index(start_date: str, end_date: str = None,
     logger.info(f"延遲時間: {delay_min}-{delay_max} 秒/次")
     logger.info("=" * 60)
     
+    # 開始前備份一次
+    if config.market_index_file.exists():
+        logger.info(f"開始批量更新前，創建 {config.market_index_file.name} 備份...")
+        config.create_backup(config.market_index_file)
+    
     success_count = 0
     fail_count = 0
     failed_dates = []
@@ -159,8 +201,8 @@ def batch_update_market_index(start_date: str, end_date: str = None,
         logger.info(f"\n[{i}/{len(trading_days)}] 正在更新 {date} 的大盤指數數據...")
         
         try:
-            # 使用主模組的 update_market_index 方法
-            success = loader.update_market_index(date)
+            # 使用主模組的 update_market_index 方法，並跳過逐日備份
+            success = loader.update_market_index(date, skip_backup=True)
             
             if success:
                 logger.info(f"  ✓ {date} 更新成功")
@@ -195,6 +237,11 @@ def batch_update_market_index(start_date: str, end_date: str = None,
     if failed_dates:
         logger.warning(f"失敗的日期: {', '.join(failed_dates)}")
         logger.warning("可以稍後重新嘗試更新這些日期")
+        
+    # 結束後備份一次
+    if success_count > 0 and config.market_index_file.exists():
+        logger.info(f"更新結束後，創建 {config.market_index_file.name} 備份...")
+        config.create_backup(config.market_index_file)
     
     logger.info("=" * 60)
 
@@ -222,54 +269,11 @@ def batch_update_industry_index(start_date: str, end_date: str = None,
         logger.warning("沒有找到需要更新的交易日")
         return
     
-    # 檢查現有數據的最新日期
-    # 對於產業指數，需要檢查所有指數中最舊的日期，確保所有指數都更新
-    latest_date = get_latest_date(config.industry_index_file)
-    if latest_date:
-        logger.info(f"現有 industry_index.csv 整體最新日期: {latest_date}")
-        # 檢查是否有某些指數的日期較舊
-        try:
-            existing_df = pd.read_csv(config.industry_index_file, encoding='utf-8-sig')
-            if '指數名稱' in existing_df.columns and '日期' in existing_df.columns:
-                # 統一日期格式為 YYYY-MM-DD
-                def normalize_date(date_str):
-                    if pd.isna(date_str) or str(date_str) == 'nan':
-                        return None
-                    try:
-                        date_str = str(date_str).strip()
-                        if '/' in date_str:
-                            parts = date_str.split('/')
-                            if len(parts) == 3:
-                                month, day, year = parts
-                                return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-                        elif '-' in date_str and len(date_str) == 10:
-                            return date_str
-                        return None
-                    except:
-                        return None
-                
-                existing_df['日期_標準化'] = existing_df['日期'].apply(normalize_date)
-                existing_df = existing_df[existing_df['日期_標準化'].notna()]
-                
-                if len(existing_df) > 0:
-                    min_latest_date = existing_df.groupby('指數名稱')['日期_標準化'].max().min()
-                    logger.info(f"各指數中最舊的日期: {min_latest_date}")
-                    # 從最舊的日期之後開始更新，確保所有指數都更新
-                    if min_latest_date and min_latest_date < latest_date:
-                        logger.info(f"發現某些指數的日期較舊，將從 {min_latest_date} 之後開始更新")
-                        trading_days = [d for d in trading_days if d > min_latest_date]
-                    else:
-                        # 只更新最新日期之後的數據
-                        trading_days = [d for d in trading_days if d > latest_date]
-            else:
-                # 如果沒有指數名稱欄位，使用整體最新日期
-                trading_days = [d for d in trading_days if d > latest_date]
-        except Exception as e:
-            logger.warning(f"檢查指數日期時發生錯誤: {str(e)}，將使用整體最新日期")
-            trading_days = [d for d in trading_days if d > latest_date]
-    else:
-        # 如果沒有現有數據，從 start_date 開始更新
-        pass
+    # 獲取已存在的日期集合，避免重複下載，並支持歷史數據回補
+    existing_dates = get_existing_dates(config.industry_index_file)
+    if existing_dates:
+        logger.info(f"現有 industry_index.csv 中已存在 {len(existing_dates)} 天的數據")
+        trading_days = [d for d in trading_days if d not in existing_dates]
     
     if not trading_days:
         logger.info("所有數據已是最新，無需更新")
@@ -280,6 +284,11 @@ def batch_update_industry_index(start_date: str, end_date: str = None,
     logger.info(f"延遲時間: {delay_min}-{delay_max} 秒/次")
     logger.info("=" * 60)
     
+    # 開始前備份一次
+    if config.industry_index_file.exists():
+        logger.info(f"開始批量更新前，創建 {config.industry_index_file.name} 備份...")
+        config.create_backup(config.industry_index_file)
+    
     success_count = 0
     fail_count = 0
     failed_dates = []
@@ -288,8 +297,8 @@ def batch_update_industry_index(start_date: str, end_date: str = None,
         logger.info(f"\n[{i}/{len(trading_days)}] 正在更新 {date} 的產業指數數據...")
         
         try:
-            # 使用主模組的 update_industry_index 方法
-            success = loader.update_industry_index(date)
+            # 使用主模組的 update_industry_index 方法，並跳過逐日備份
+            success = loader.update_industry_index(date, skip_backup=True)
             
             if success:
                 logger.info(f"  ✓ {date} 更新成功")
@@ -324,6 +333,11 @@ def batch_update_industry_index(start_date: str, end_date: str = None,
     if failed_dates:
         logger.warning(f"失敗的日期: {', '.join(failed_dates)}")
         logger.warning("可以稍後重新嘗試更新這些日期")
+        
+    # 結束後備份一次
+    if success_count > 0 and config.industry_index_file.exists():
+        logger.info(f"更新結束後，創建 {config.industry_index_file.name} 備份...")
+        config.create_backup(config.industry_index_file)
     
     logger.info("=" * 60)
 

@@ -430,6 +430,11 @@ class MarketRegimeDetector:
                 latest_rsi, trend_distance, volume, date
             )
             
+            # 將最新資料日期加入到 details 中
+            if 'details' not in regime_result:
+                regime_result['details'] = {}
+            regime_result['details']['date'] = date
+            
             return regime_result
             
         except Exception as e:

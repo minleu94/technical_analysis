@@ -404,7 +404,7 @@ class UpdateView(QWidget):
             self.worker.wait(3000)  # 等待最多 3 秒
         
         # 創建 Worker 任務
-        def update_task():
+        def update_task(progress_callback=None):
             import logging
             logger = logging.getLogger(__name__)
             try:
@@ -416,7 +416,11 @@ class UpdateView(QWidget):
                 elif update_type == 'industry':
                     result = self.update_service.update_industry(start_date, end_date)
                 elif update_type == 'broker_branch':
-                    result = self.update_service.update_broker_branch(start_date, end_date)
+                    result = self.update_service.update_broker_branch(
+                        start_date=start_date, 
+                        end_date=end_date,
+                        progress_callback=progress_callback
+                    )
                 else:
                     raise ValueError(f"未知的更新類型：{update_type}")
                 logger.info(f"[UpdateView] 更新任務完成: success={result.get('success', False)}")
@@ -428,10 +432,21 @@ class UpdateView(QWidget):
                 # ✅ 不要 raise，讓 Worker 的異常處理機制處理
                 raise
         
-        self.worker = TaskWorker(update_task)
+        self.worker = ProgressTaskWorker(update_task)
+        self.worker.progress.connect(self._on_update_progress)
         self.worker.finished.connect(self._on_update_finished)
         self.worker.error.connect(self._on_update_error)
         self.worker.start()
+    
+    def _on_update_progress(self, message: str, percentage: int):
+        """更新進度回調"""
+        if self.progress_bar.maximum() == 0:
+            self.progress_bar.setRange(0, 100)
+        self.progress_label.setText(message)
+        self.progress_bar.setValue(percentage)
+        # 只在有實際進度變更時才記錄，避免日誌過多
+        if percentage % 10 == 0 or percentage == 100:
+            self._log(f"[進度 {percentage}%] {message}")
     
     def _on_update_finished(self, result: Dict[str, Any]):
         """更新完成"""
