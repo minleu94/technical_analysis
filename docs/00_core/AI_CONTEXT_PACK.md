@@ -84,10 +84,15 @@
 * **Typical Use Case (典型情境)**：每日盤後產生推薦清單並驗證策略勝率。
 
 ### B. 多 Agent 協作工作流 (Multi-Agent Development Workflow)
-* **Purpose (目的)**：協調平行開發的 AI Agent。
-* **Path (路徑)**：`main` (穩定版) ➔ `ag/*` (UI/功能實作分支) 或 `codex/*` (架構/治理設計分支)。
+* **Purpose (目的)**：協調平行開發的 AI Agent，減少邊界模糊。
+* **Path (路徑)**：`main` (穩定版) ➔ `ag/*` (UI、快速迭代) / `codex/*` (架構治理、基礎設施) ➔ `integration/*` (整合分支) ➔ `main`。
+* **Branch Ownership Semantics (分支擁有權語意)**：嚴格劃分以下所有權以減少重疊：
+  - `codex/*`：專注於架構安全 (architecture-safe) 與資料傳輸 (DTO-safe) 的底層實作。
+  - `ag/*`：專注於高頻迭代、視覺化與純前端實作。
+  - `integration/*`：**暫時性收斂分支 (Temporary convergence branch)**，絕非永久擁有權分支。僅用於多 Agent 協作驗證，待人類審查後再合併至 `main`。
+  - `research/*` / `experiment/*`：探索性研究與技術驗證，不直接合併生產代碼。
 * **Overlap Workflows (重疊風險)**：兩邊 Agent 可能同時更新核心索引（如 `DOCUMENTATION_INDEX.md`）。
-* **Conflict Resolution (衝突解決)**：絕對不要直接覆寫對方的實作。必須提出 Compatibility adapter 或合作合併索引檔（例如：保留 codex 的 governance 列表，同時保留 ag 的 workflow 列表）。
+* **Conflict Resolution (衝突解決)**：絕對不要直接覆寫對方的實作。必須提出 Compatibility adapter 或合作合併索引檔。
 
 ### C. 券商分點資料工作流 (Broker Branch Data Workflow) - ⚠️ Risky
 * **Purpose (目的)**：透過 Selenium 爬取每日對手券商籌碼。
@@ -139,16 +144,23 @@
 請根據任務性質，交由最適合的 AI 執行：
 
 ### Codex
-* **Best For (適合)**：`architecture planning`（架構規劃）、`governance validation`（治理驗證）、平台級重構設計、大型設計模式審查。
+* **Best For (適合)**：`architecture planning`（架構規劃）、`governance validation`（治理驗證）、`architecture-sensitive implementation`（架構敏感實作）、`migration-safe implementation`（安全轉移實作）、`domain-layer foundation work`（領域層基礎建設）。
+* **Focus (重點)**：保持 DTO 安全、維護重放/可審計性 (replay/auditability foundation)、進行受控的領域層與架構安全 MVP 開發。
 * **Branch Prefix**：`codex/*`
 
 ### Antigravity (AG)
-* **Best For (適合)**：`rapid prototyping`（快速原型開發）、`UI polishing`（UI 拋光與 PyQt6 優化）、`batch implementation`（批次實作）、精準的 Bug 修復與 Service 整合。
+* **Best For (適合)**：`rapid implementation`（快速實作）、`UI-heavy work`（重度 UI 開發）、`iteration-heavy features`（高頻迭代功能）、`visualization`（資料視覺化）、`workflow polishing`（工作流拋光）、`integration-heavy tasks`（重度整合任務）。
+* **Focus (重點)**：專注於快速迭代、渲染層 (PyQt6) 效能最佳化、精準的 Bug 修復與前端服務整合。
 * **Branch Prefix**：`ag/*`
+
+### Integration Workflow (多 Agent 整合)
+* **Best For (適合)**：跨領域功能的共用測試與驗證（例如包含架構與 UI 的 MVP 實作）。
+* **Focus (重點)**：作為 `codex` 與 `ag` 產出的**暫時性收斂分支**，不可被單一 Agent 永久擁有。
+* **Branch Prefix**：`integration/*`
 
 ### ChatGPT / Gemini (Conversational/Exploratory)
 * **Best For (適合)**：`exploratory research`（探索性研究）、分析複雜的 Pandas 資料邏輯、視覺化繪圖腳本、腦力激盪風險參數。
-* **Branch Prefix**：`research/*`
+* **Branch Prefix**：`research/*`, `experiment/*`
 
 ### Human Only (僅限人類)
 * **Best For (適合)**：PR 合併至 `main` 的最終決策、架構所有權的定奪、實際交易與資金分配決策。
@@ -172,6 +184,7 @@
 ## 8. Risk Report (風險雷達與報告)
 
 * **AI Coordination Risk (AI 協作風險)**：`codex` 與 `ag` 兩個 Agent 容易在修改共同索引（如 `DOCUMENTATION_INDEX.md`）時發生 Merge Conflict。必須嚴格遵循不覆寫對方實作的衝突解決規範。
+* **Branch Ambiguity Risk (分支邊界模糊風險)**：如果任務同時包含「架構變更」與「大量 UI 更新」，可能導致分支命名與擁有權混淆（例如 phase4-trade-led-mvp）。解決方案 (Handoff Workflow)：將基礎 DTO 與核心邏輯拆分至 `codex/*` 確保架構與遷移安全；UI 綁定與迭代交由 `ag/*` 處理。對於大型功能，應設立 `integration/<feature-name>` 分支作為雙方的暫時性共用驗證目標，避免單一 Agent 分支承載過多混合邏輯。
 * **Governance Risk (架構治理風險)**：隱性耦合 (Hidden coupling)。例如偷偷在共用 DTO 內增加非標準欄位，或是繞過 `EventBus` 直接在 UI 呼叫底層 API。
 * **Unclear Ownership (邊界模糊風險)**：將過多資料處理邏輯放在 `ui_qt` 裡面，而非在 Domain 處理完畢後透過 DTO 傳遞。UI 必須純粹是個 Observatory。
 * **Workflow Confusion (工作流混亂)**：目前存在多個 `qa_validate_*.py` 腳本，AI 在開發後可能會忘記執行對應模組的 QA 腳本導致 Regression。
