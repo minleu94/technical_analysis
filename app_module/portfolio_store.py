@@ -1,0 +1,49 @@
+"""Append-only JSONL storage for the Phase 4.1 Portfolio MVP."""
+
+import json
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
+
+
+class PortfolioJsonlStore:
+    """Small storage adapter kept behind app_module services."""
+
+    def __init__(self, output_root: Path):
+        self.portfolio_dir = Path(output_root) / "portfolio"
+        self.portfolio_dir.mkdir(parents=True, exist_ok=True)
+        self.trades_file = self.portfolio_dir / "trades.jsonl"
+        self.journal_file = self.portfolio_dir / "journal_entries.jsonl"
+
+    def append_trade(self, trade: Dict[str, Any]) -> None:
+        self._append_jsonl(self.trades_file, trade)
+
+    def load_trades(self) -> List[Dict[str, Any]]:
+        return list(self._read_jsonl(self.trades_file))
+
+    def append_journal_entry(self, entry: Dict[str, Any]) -> None:
+        self._append_jsonl(self.journal_file, entry)
+
+    def load_journal_entries(self) -> List[Dict[str, Any]]:
+        return list(self._read_jsonl(self.journal_file))
+
+    def _append_jsonl(self, path: Path, item: Dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True))
+            handle.write("\n")
+
+    def _read_jsonl(self, path: Path) -> Iterable[Dict[str, Any]]:
+        if not path.exists():
+            return []
+
+        records = []
+        with open(path, "r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    records.append(json.loads(stripped))
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"Invalid JSONL at {path}:{line_number}") from exc
+        return records
