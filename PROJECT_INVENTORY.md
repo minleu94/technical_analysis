@@ -52,6 +52,13 @@
 python ui_qt/main.py
 ```
 
+回測圖表渲染：
+
+- `ui_qt/widgets/chart_payloads.py`：Backtest 圖表資料 payload layer。
+- `ui_qt/widgets/fast_chart_widget.py`：QtWebEngine + HTML5 Canvas fast renderer。
+- `ui_qt/widgets/chart_widget.py`：Matplotlib fallback widgets。
+- 架構說明：`docs/08_technical/UI_QT_CHART_RENDERING.md`。
+
 ---
 
 ## 4. 文件系統

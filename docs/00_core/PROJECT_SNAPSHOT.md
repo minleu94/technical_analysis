@@ -14,6 +14,7 @@
 - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3b ✅（研究閉環已完成，含 Promote / Walk-forward / Baseline / Overfitting risk / 視覺驗證）
 - AI Runtime Subsystem MVP ✅（Governance-aware 狀態機監控站已完成）
 - Smart Money Terminal MVP ✅（高密度、低延遲的專業級籌碼分析終端已完成）
+- UI Qt Backtest chart renderer ✅（QtWebEngine + HTML5 Canvas fast renderer 已完成，Matplotlib fallback 保留）
 - Phase 4.1 Portfolio MVP 🚧（service/domain/test 骨架已開始；`ui_qt` Portfolio Tab 與 Phase 3 → Portfolio 整合尚未完成）
 
 ## 現在的工作模式（你每天要用的流程）
@@ -41,6 +42,7 @@
 - Strategy registry / preset / promotion 相關服務
 - UI ↔ service contract（DTO）
 - `runtime/` 核心子系統與 FSM 狀態機
+- `ui_qt/widgets/fast_chart_widget.py` / `ui_qt/widgets/chart_payloads.py`（回測圖表 renderer 與資料 payload contract）
 
 ## 指定權威文件（需要細節再看）
 

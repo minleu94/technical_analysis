@@ -39,6 +39,7 @@
 - Phase 3.1、3.2、3.3a、3.3b：已完成，包含推薦可用化、Profiles、研究閉環、Promote、Walk-forward、Baseline、過擬合風險與 K 線視覺驗證。
 - AI Runtime Subsystem MVP：已完成。
 - Smart Money Terminal MVP：已完成。
+- UI Qt Backtest chart rendering：已完成 QtWebEngine + HTML5 Canvas fast renderer，回測圖表保留 Matplotlib fallback。
 - Phase 4.1 Portfolio：服務層 / domain / 測試骨架已開始，`ui_qt` 使用者可見 Portfolio Tab 尚未完成。
 - Phase 5：尚未開始，僅有部分回測/最佳化效能改善。
 
@@ -60,6 +61,7 @@
 1. [BACKTEST_LAB_FEATURES.md](02_features/BACKTEST_LAB_FEATURES.md)
 2. [BACKTEST_LAB_CHECKLIST.md](02_features/BACKTEST_LAB_CHECKLIST.md)
 3. [BACKTEST_LAB_FAQ.md](02_features/BACKTEST_LAB_FAQ.md)
+4. [UI_QT_CHART_RENDERING.md](08_technical/UI_QT_CHART_RENDERING.md)
 
 ### 要使用系統
 

@@ -32,9 +32,11 @@ from app_module.chart_data_service import ChartDataService
 from app_module.promotion_service import PromotionService
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.walkforward_service import WalkForwardService
-from ui_qt.widgets.chart_widget import (
-    EquityCurveWidget, DrawdownCurveWidget,
-    TradeReturnHistogramWidget, HoldingDaysHistogramWidget
+from ui_qt.widgets.fast_chart_widget import (
+    create_drawdown_curve_widget,
+    create_equity_curve_widget,
+    create_holding_days_histogram_widget,
+    create_trade_return_histogram_widget,
 )
 
 
@@ -743,22 +745,22 @@ class BacktestView(QWidget):
             chart_tabs = QTabWidget()
             
             # 圖表 1: 權益曲線
-            equity_chart = EquityCurveWidget()
+            equity_chart = create_equity_curve_widget()
             chart_tabs.addTab(equity_chart, "權益曲線")
             self.equity_chart = equity_chart
             
             # 圖表 2: 回撤曲線
-            drawdown_chart = DrawdownCurveWidget()
+            drawdown_chart = create_drawdown_curve_widget()
             chart_tabs.addTab(drawdown_chart, "回撤曲線")
             self.drawdown_chart = drawdown_chart
             
             # 圖表 3: 交易報酬分佈
-            return_hist = TradeReturnHistogramWidget()
+            return_hist = create_trade_return_histogram_widget()
             chart_tabs.addTab(return_hist, "報酬分佈")
             self.return_hist = return_hist
             
             # 圖表 4: 持有天數分佈
-            holding_hist = HoldingDaysHistogramWidget()
+            holding_hist = create_holding_days_histogram_widget()
             chart_tabs.addTab(holding_hist, "持有天數")
             self.holding_hist = holding_hist
             
@@ -3782,4 +3784,3 @@ class BacktestView(QWidget):
                 if widget.tabText(i) == "結果":
                     widget.setCurrentIndex(i)
                     break
-

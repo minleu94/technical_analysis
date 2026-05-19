@@ -252,10 +252,11 @@ ui_qt/
 - **雙擊載入**：雙擊排行榜行自動載入該股票的詳細結果
 
 **10. 圖表視覺化**
-- 權益曲線（Equity Curve）
-- 回撤曲線（Drawdown Curve）
-- 單筆交易報酬分佈（Trade Return Histogram）
-- 持有天數分佈（Holding Period Histogram）
+- 權益曲線（Equity Curve）：QtWebEngine + HTML5 Canvas fast renderer，支援 normalized benchmark、買賣點 marker、hover crosshair
+- 回撤曲線（Drawdown Curve）：Canvas area chart，顯示 zero baseline、最大回撤點與 peak-to-trough 區間
+- 單筆交易報酬分佈（Trade Return Histogram）：zero-centered histogram，紅色虧損、綠色獲利，顯示每個 bin 的交易數
+- 持有天數分佈（Holding Period Histogram）：以 `1-5d`、`6-20d`、`21-60d`、`61d+` 區間顯示持有週期
+- QtWebEngine 可用時使用 fast widgets；不可用時 fallback 到 Matplotlib widgets
 - 支援繁體中文顯示
 - 可切換不同回測結果查看
 
@@ -341,7 +342,7 @@ python ui_qt/main.py
 - **結果保存**：自動保存回測結果
 - **歷史管理**：列表顯示、比較、刪除
 - **雙擊載入**：批次結果雙擊載入詳細結果
-- **圖表視覺化**：權益曲線、回撤曲線、報酬分佈、持有天數
+- **圖表視覺化**：權益曲線、回撤曲線、報酬分佈、持有天數，使用 fast Canvas renderer 並保留 Matplotlib fallback
 - **結果展示**：摘要、明細表格、圖表
 - 使用 `TaskWorker` 執行回測任務（背景執行）
 
@@ -427,4 +428,3 @@ python ui_qt/main.py
 - PySide6 >= 6.0.0
 - pandas
 - app_module（服務層）
-

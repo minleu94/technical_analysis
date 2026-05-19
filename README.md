@@ -14,6 +14,7 @@
 - Phase 3.1 / 3.2 / 3.3a / 3.3b：已完成，包含推薦可用化、Profiles、研究閉環、Walk-forward、Baseline、過擬合風險與 K 線視覺驗證。
 - AI Runtime Subsystem MVP：已完成。
 - Smart Money Terminal MVP：已完成。
+- UI Qt Backtest chart rendering：已完成 QtWebEngine + HTML5 Canvas fast renderer，回測圖表保留 Matplotlib fallback。
 - Phase 4.1 Portfolio MVP：domain / service / test skeleton 已開始，`ui_qt` Portfolio Tab 與跨模組串接尚未完成。
 
 最新進度以 [docs/00_core/DEVELOPMENT_ROADMAP.md](docs/00_core/DEVELOPMENT_ROADMAP.md) 為準。
@@ -48,6 +49,7 @@ python ui_qt/main.py
 - [docs/02_features/UI_FEATURES_DOCUMENTATION.md](docs/02_features/UI_FEATURES_DOCUMENTATION.md) - Qt UI 功能說明。
 - [docs/02_features/USER_GUIDE.md](docs/02_features/USER_GUIDE.md) - 使用者操作指南。
 - [docs/03_data/HOW_TO_UPDATE_DAILY_DATA.md](docs/03_data/HOW_TO_UPDATE_DAILY_DATA.md) - 每日資料更新快速指南。
+- [docs/08_technical/UI_QT_CHART_RENDERING.md](docs/08_technical/UI_QT_CHART_RENDERING.md) - Qt 回測圖表 fast Canvas renderer 與 fallback 架構。
 
 ## 核心結構
 

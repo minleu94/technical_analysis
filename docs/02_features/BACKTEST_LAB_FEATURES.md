@@ -218,12 +218,17 @@
 
 ---
 
-## 待實作功能（優先級 7-8）
+## 已實作功能（視覺化與圖表）
 
-### ⬆️ 7. 回測視覺化
-- Equity curve（權益曲線）
-- Drawdown curve（回撤曲線）
-- Signal/Trade markers（K 線上標記買賣點）
+### ✅ 7. 回測視覺化
+- Equity curve（權益曲線）：使用 QtWebEngine + HTML5 Canvas fast renderer，支援策略權益、normalized benchmark、買賣點 marker、hover crosshair。
+- Drawdown curve（回撤曲線）：使用 Canvas area chart，顯示 zero baseline、最大回撤點與 peak-to-trough 區間。
+- Trade return distribution（報酬分佈）：使用 zero-centered histogram，紅色代表虧損、綠色代表獲利，並顯示每個 bin 的交易數。
+- Holding period distribution（持有天數）：使用實務區間桶 `1-5d`、`6-20d`、`21-60d`、`61d+`，避免細碎天數柱狀圖難以閱讀。
+- Rendering fallback：QtWebEngine 不可用時，factory 會退回既有 Matplotlib widgets。
+- 技術說明：`docs/08_technical/UI_QT_CHART_RENDERING.md`
+
+## 待實作功能（優先級 8）
 
 ### ⬆️ 8. 回測引擎升級
 - 持倉 sizing 模式（全倉/固定金額/風險百分比）

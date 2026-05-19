@@ -473,7 +473,7 @@
 ### Phase 5.1：效能
 
 * [ ] **大表格分頁**
-* [ ] **圖表渲染優化**（PyQtGraph 或等效）
+* [x] **圖表渲染優化**（QtWebEngine + HTML5 Canvas fast renderer，Matplotlib fallback）
 * [ ] **批次回測並行化**（可取消、可進度）
 
 ---
@@ -553,6 +553,7 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 * ✅ **Phase 1、Phase 2、Phase 2.5 核心部分**：已完成且驗證通過
 * ✅ **系統可運行、UI 穩定、回測/最佳化效能已大幅改善**
+* ✅ **UI Qt Backtest 圖表渲染優化**：已完成 QtWebEngine + HTML5 Canvas fast renderer，權益曲線、回撤曲線、報酬分佈、持有天數圖表均保留 Matplotlib fallback。
 * ✅ **Phase 3.1、3.2、3.3a 核心功能**：已完成（推薦可用化、Profiles 正式化、研究閉環核心功能）
 * ✅ **AI Runtime Subsystem MVP**：已完成（Phase A Architecture & Phase B UI Integration）
   * ✅ 實作 Runtime Observatory (State Machine Observatory)
@@ -590,6 +591,13 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 ---
 
 ### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal）
+
+* ✅ **UI Qt Backtest 圖表渲染優化** ✅ 已完成
+  * ✅ 新增 `ui_qt/widgets/chart_payloads.py`，集中處理圖表資料正規化、benchmark normalization、drawdown metadata、報酬分佈 bins、持有天數 buckets。
+  * ✅ 新增 `ui_qt/widgets/fast_chart_widget.py`，使用 QtWebEngine + HTML5 Canvas 顯示回測圖表。
+  * ✅ `BacktestView` 改用 factory 建立圖表；QtWebEngine 不可用時 fallback 到既有 Matplotlib widgets。
+  * ✅ 報酬分佈改為 zero-centered histogram；持有天數改為 `1-5d`、`6-20d`、`21-60d`、`61d+` 區間桶。
+  * 📚 技術文檔：`docs/08_technical/UI_QT_CHART_RENDERING.md`
 
 * ✅ **籌碼分析終端 (Smart Money Terminal) MVP** ✅ 已完成
   * ✅ 建立 `smart_money_flow_view.py`

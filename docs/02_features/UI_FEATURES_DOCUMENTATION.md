@@ -651,10 +651,11 @@ Regime 權重切換（不再使用倍率）：
 - **注意**：需要提供 Walk-Forward 結果才能計算過擬合風險
 
 **圖表：**
-- 權益曲線
-- 回撤曲線
-- 報酬分佈
-- 持有天數
+- 權益曲線：QtWebEngine + HTML5 Canvas fast renderer，顯示策略權益、normalized benchmark、買賣點 marker、hover crosshair。
+- 回撤曲線：Canvas area chart，顯示 zero baseline、最大回撤點、peak-to-trough 區間。
+- 報酬分佈：Canvas histogram，以 0% 為中心，左側紅色虧損、右側綠色獲利，顯示 bin 交易數與 Loss/Win legend。
+- 持有天數：Canvas bucket chart，使用 `1-5d`、`6-20d`、`21-60d`、`61d+` 區間，避免日級柱狀圖過度碎片化。
+- 圖表渲染會在 QtWebEngine 可用時使用 fast widgets；不可用時 fallback 到 Matplotlib widgets。
 - **K 線圖標記買賣點**（Phase 3.3b 新增）
   - 使用 mplfinance 繪製 K 線圖
   - 綠色向上箭頭標記買入點

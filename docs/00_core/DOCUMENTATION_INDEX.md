@@ -125,6 +125,7 @@
 |---|---|
 | [PARAMETER_DESIGN_IMPROVEMENTS.md](../08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md) | Phase 2.5 參數設計改進。 |
 | [technical_analysis_optimizations.md](../08_technical/technical_analysis_optimizations.md) | 技術分析模組優化記錄。 |
+| [UI_QT_CHART_RENDERING.md](../08_technical/UI_QT_CHART_RENDERING.md) | Qt Backtest 圖表 fast Canvas renderer、payload layer 與 Matplotlib fallback 架構。 |
 | [path_isolation_update.md](../08_technical/path_isolation_update.md) | 路徑隔離與測試環境分離記錄。 |
 | [RUN_WITHOUT_VENV.md](../08_technical/RUN_WITHOUT_VENV.md) | 不使用 venv 的執行說明。 |
 
@@ -155,7 +156,7 @@
 
 ## 目前開發狀態
 
-- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP。
+- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer。
 - 進行中 / 下一步：Phase 4.1 Portfolio MVP 的 UI 與 Phase 3 → Portfolio 整合。
 - 待開始：Phase 5 效能與研究報告輸出。
 

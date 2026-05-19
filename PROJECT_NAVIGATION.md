@@ -202,6 +202,13 @@ python ui_app/main.py
 - 改策略執行 → `app_module/strategies/` 對應的執行器
 - 改 Walk-Forward → `app_module/walkforward_service.py`
 
+**如果我要改回測圖表 / 視覺化**：
+- 改圖表資料轉換 → `ui_qt/widgets/chart_payloads.py`
+- 改 fast Canvas 渲染 → `ui_qt/widgets/fast_chart_widget.py`
+- 改 Backtest Tab 圖表掛載 → `ui_qt/views/backtest_view.py`
+- 查架構說明 → `docs/08_technical/UI_QT_CHART_RENDERING.md`
+- 注意：fast widgets 透過 factory 建立；QtWebEngine 不可用時會 fallback 到 `ui_qt/widgets/chart_widget.py` 的 Matplotlib widgets。
+
 **特殊功能**：
 - **Walk-Forward 暖機期**：`app_module/walkforward_service.py` 的 `warmup_days` 參數
 - **Baseline 對比**：`backtest_module/performance_metrics.py` 的 `calculate_baseline_comparison()`

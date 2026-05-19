@@ -13,6 +13,9 @@
 - **`technical_analysis_optimizations.md`**
   - 技術分析優化文檔
 
+- **`UI_QT_CHART_RENDERING.md`**
+  - Qt Backtest 圖表 fast Canvas renderer、payload layer 與 Matplotlib fallback 架構
+
 - **`path_isolation_update.md`**
   - 路徑隔離更新文檔
 
