@@ -17,6 +17,12 @@
 - **`BACKTEST_LAB_FEATURES.md`**
   - 策略回測標籤的完整功能說明
 
+- **`BACKTEST_LAB_CHECKLIST.md`**
+  - 策略回測頁面功能清單與開發進度
+
+- **`BACKTEST_LAB_FAQ.md`**
+  - 策略回測常見問題與使用細節
+
 - **`SCORE_EXPLANATION.md`**
   - 評分系統說明
   - buy_score 與 sell_score 的詳細說明

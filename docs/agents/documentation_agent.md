@@ -114,8 +114,8 @@
 
 **Documentation Agent 補充必讀：**
 5. docs/DOC_COVERAGE_MAP.md ⭐ **必須讀取，用於判斷 coverage**
-6. docs/DOCUMENTATION_INDEX.md
-7. docs/DEVELOPMENT_ROADMAP.md（先讀「📍 Living Section 定義」，再看 Living Section 段落）
+6. docs/00_core/DOCUMENTATION_INDEX.md
+7. docs/00_core/DEVELOPMENT_ROADMAP.md（先讀「📍 Living Section 定義」，再看 Living Section 段落）
 
 **你的角色定位：**
 - 你不是功能設計者，也不是工程師

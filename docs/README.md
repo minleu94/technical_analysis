@@ -55,6 +55,12 @@
 3. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
 4. [system_architecture.md](01_architecture/system_architecture.md)
 
+### 要查策略回測
+
+1. [BACKTEST_LAB_FEATURES.md](02_features/BACKTEST_LAB_FEATURES.md)
+2. [BACKTEST_LAB_CHECKLIST.md](02_features/BACKTEST_LAB_CHECKLIST.md)
+3. [BACKTEST_LAB_FAQ.md](02_features/BACKTEST_LAB_FAQ.md)
+
 ### 要使用系統
 
 1. [QUICK_START.md](07_guides/QUICK_START.md)

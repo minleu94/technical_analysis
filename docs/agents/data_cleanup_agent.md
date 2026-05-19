@@ -332,7 +332,7 @@ requirements.txt
 ## 📚 參考資源
 
 - **共用上下文**：[shared_context.md](./shared_context.md)
-- **清理計劃**：`CLEANUP_PLAN.md`
+- **文件結構規則**：`docs/00_core/DOCUMENTATION_STRUCTURE.md`
 - **專案清單**：`PROJECT_INVENTORY.md`
 - **專案導航**：`PROJECT_NAVIGATION.md`
 

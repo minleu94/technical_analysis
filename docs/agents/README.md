@@ -57,8 +57,8 @@
 以下文件僅特定 Agent 需要閱讀，其他 Agent 不需要：
 
 #### Tech Lead Agent 補充必讀
-- `docs/DEVELOPMENT_ROADMAP.md` - 開發路線圖（先讀「📍 Living Section 定義」，再看 Living Section 的「現況 / 下一步 Next / Blockers / Risks」段落）
-- `docs/DOCUMENTATION_INDEX.md` - 文檔索引（只用來定位文件入口，不作為事實來源）
+- `docs/00_core/DEVELOPMENT_ROADMAP.md` - 開發路線圖（先讀「📍 Living Section 定義」，再看 Living Section 的「現況 / 下一步 Next / Blockers / Risks」段落）
+- `docs/00_core/DOCUMENTATION_INDEX.md` - 文檔索引（只用來定位文件入口，不作為事實來源）
 
 #### Documentation Agent 補充必讀
 - `docs/00_core/DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（判斷 coverage 的規則文件）⭐ **必須讀取**

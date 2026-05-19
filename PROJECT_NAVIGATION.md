@@ -1,7 +1,7 @@
 # 專案導航文件
 
-**版本**：v1.0.0  
-**最後更新**：2025-12-30  
+**版本**：v1.1.0  
+**最後更新**：2026-05-19  
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -209,6 +209,25 @@ python ui_app/main.py
 
 ---
 
+### 📌 Portfolio（持倉管理）
+
+**目前狀態**：Phase 4.1 MVP 已開始，domain / service / test skeleton 已建立；`ui_qt` Portfolio Tab 尚未完成。
+
+**對應的 Service**：
+- `app_module/portfolio_service.py`：Portfolio use case 編排
+- `app_module/position_service.py`：持倉狀態服務
+- `app_module/journal_service.py`：交易/決策紀錄服務
+
+**真正動邏輯的地方**：
+- `portfolio_module/`：Portfolio MVP domain layer
+
+**如果我要改持倉管理邏輯**：
+- 改 domain 規則 → `portfolio_module/`
+- 改服務編排 → `app_module/portfolio_service.py`
+- 改 UI → 尚待建立 `ui_qt` Portfolio view
+
+---
+
 ### 📌 Watchlist（觀察清單）
 
 **從哪個 UI 進**：`ui_qt/views/watchlist_view.py`（觀察清單 Tab）
@@ -316,9 +335,9 @@ python ui_app/main.py
 
 ## 📚 相關文檔
 
-- **開發演進地圖**：`docs/DEVELOPMENT_ROADMAP.md`（了解系統演進計劃）
+- **開發演進地圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`（了解系統演進計劃）
 - **專案盤點報告**：`PROJECT_INVENTORY.md`（完整的專案結構盤點，與本文檔同層）
-- **文檔索引**：`docs/DOCUMENTATION_INDEX.md`（所有文檔的索引）
+- **文檔索引**：`docs/00_core/DOCUMENTATION_INDEX.md`（所有文檔的索引）
 
 ---
 

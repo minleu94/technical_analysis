@@ -264,7 +264,7 @@ ui_qt/
 - 交易明細表格（買賣點、報酬率、持有天數）
 - 支援排序與篩選
 
-**詳細功能請參考**：`策略回測功能清單.md`
+**詳細功能請參考**：`../docs/02_features/BACKTEST_LAB_CHECKLIST.md`
 
 ## 運行方式
 
@@ -427,5 +427,4 @@ python ui_qt/main.py
 - PySide6 >= 6.0.0
 - pandas
 - app_module（服務層）
-
 

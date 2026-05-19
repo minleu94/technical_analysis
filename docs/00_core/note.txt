@@ -47,9 +47,9 @@
    - 完整的錯誤處理
 
 3. **文檔更新** ✅
-   - 更新 `策略回測功能清單.md`（新增刪除功能說明和 v1.1 更新日誌）
-   - 更新 `策略回測常見問題解答.md`（新增回測歷史管理章節）
-   - 更新 `../02_features/BACKTEST_LAB_COMPLETE.md`（新增刪除功能說明）
+   - 更新 `../02_features/BACKTEST_LAB_CHECKLIST.md`（新增刪除功能說明和 v1.1 更新日誌）
+   - 更新 `../02_features/BACKTEST_LAB_FAQ.md`（新增回測歷史管理章節）
+   - `../02_features/BACKTEST_LAB_COMPLETE.md` 已於 2026-05-19 文件整理時移除，內容由 Backtest Lab 文件取代
    - 更新 `ui_qt/README.md`（新增策略回測視圖說明）
 
 **特點**：
@@ -417,7 +417,7 @@
 
 ### 1. 專案結構整理
 - 完成了專案檔案的全面整理和重組
-  - 移動測試檔案到 tests/ 目錄：test_technical_calc.py, test_finmind_integration.py, test_market_index.py
+  - 移動測試檔案到 tests/ 目錄：test_technical_calc.py, test_market_index.py
   - 重命名腳本檔案：simple_indicator_calc.py → simple_technical_calc.py
   - 刪除重複檔案：scripts/config.py（與 data_module/config.py 重複）
   - 清理系統檔案：vs_BuildTools.exe, *.log 檔案

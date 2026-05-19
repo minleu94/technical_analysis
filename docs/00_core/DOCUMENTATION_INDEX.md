@@ -40,6 +40,8 @@
 | [UI_FEATURES_DOCUMENTATION.md](../02_features/UI_FEATURES_DOCUMENTATION.md) | Qt UI 功能完整說明，包含 Phase 3.3b、Runtime、Smart Money。 |
 | [USER_GUIDE.md](../02_features/USER_GUIDE.md) | 使用者操作教學。 |
 | [BACKTEST_LAB_FEATURES.md](../02_features/BACKTEST_LAB_FEATURES.md) | 策略回測實驗室功能說明。 |
+| [BACKTEST_LAB_CHECKLIST.md](../02_features/BACKTEST_LAB_CHECKLIST.md) | 策略回測頁面功能清單與進度。 |
+| [BACKTEST_LAB_FAQ.md](../02_features/BACKTEST_LAB_FAQ.md) | 策略回測常見問題與使用細節。 |
 | [SCORE_EXPLANATION.md](../02_features/SCORE_EXPLANATION.md) | 評分系統與 buy/sell score 說明。 |
 | [STRATEGY_DESIGN_SPECIFICATION.md](../02_features/STRATEGY_DESIGN_SPECIFICATION.md) | Baseline Score Threshold 策略設計規格。 |
 

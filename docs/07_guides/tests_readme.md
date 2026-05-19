@@ -68,7 +68,6 @@ tests/
 │
 ├── 📁 獨立測試檔案
 │   ├── test_technical_calc.py         # 技術計算測試（從 scripts/ 移動）
-│   ├── test_finmind_integration.py    # FinMind 整合測試（從根目錄移動）
 │   └── test_market_index.py           # 市場指數測試（從根目錄移動）
 │
 ├── 📁 端到端測試
@@ -282,13 +281,6 @@ tests/
   - 計算器功能
   - 指標準確性
   - 性能測試
-
-#### `test_finmind_integration.py`
-- **功能**：測試 FinMind API 整合（從根目錄移動）
-- **測試內容**：
-  - API 連接
-  - 數據獲取
-  - 錯誤處理
 
 #### `test_market_index.py`
 - **功能**：測試市場指數功能（從根目錄移動）
