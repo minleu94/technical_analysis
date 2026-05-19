@@ -3,18 +3,18 @@
 ## 概述
 本文檔專門說明 `tests/` 目錄的檔案結構和組織方式。本目錄包含系統的所有測試檔案，用於驗證系統功能的正確性和穩定性。測試檔案採用 pytest 框架，提供完整的單元測試、集成測試和性能測試覆蓋。
 
-**📖 完整的測試指南、環境設置、執行方法等詳細說明請參考 [docs/readme_test.txt](docs/readme_test.txt)**
+**📖 目前測試入口以本文檔為主；舊版完整測試指南已移至 [../09_archive/readme_test.txt](../09_archive/readme_test.txt)。**
 
 ## 文檔分工說明
 
-- **`docs/readme_test.txt`**：完整的測試指南，包含環境設置、執行方法、報告生成、持續集成等
-- **`docs/tests_readme.md`**：本文檔，專門說明 tests/ 目錄的檔案結構和組織方式
+- **`docs/07_guides/tests_readme.md`**：目前測試目錄結構與執行入口
+- **`docs/09_archive/readme_test.txt`**：舊版完整測試指南，僅作歷史參考
 
 ## 相關文檔
-- **[測試完整指南](readme_test.txt)** - 測試環境設置、執行方法、報告生成等完整說明 ⭐
-- [系統架構文檔](system_architecture.md) - 系統架構和模組說明
+- **[舊版測試完整指南](../09_archive/readme_test.txt)** - 歷史測試指南，僅作參考
+- [系統架構文檔](../01_architecture/system_architecture.md) - 系統架構和模組說明
 - [腳本使用說明](scripts_readme.md) - 腳本使用說明
-- [開發進度記錄](note.txt) - 當前開發進度和更新說明
+- [專案快照](../00_core/PROJECT_SNAPSHOT.md) - 當前開發進度總覽
 
 ## 測試檔案結構
 

@@ -35,9 +35,6 @@
 - **`MERGE_AND_MARKET_INDEX_SUMMARY.md`**
   - 市場指數更新說明
 
-- **`README_UPDATE.md`**
-  - 數據更新相關說明
-
 ## 🔗 相關目錄
 
 - `../01_architecture/data_collection_architecture.md` - 數據收集架構

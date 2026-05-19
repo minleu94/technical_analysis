@@ -17,9 +17,6 @@
 - **`BACKTEST_LAB_FEATURES.md`**
   - 策略回測標籤的完整功能說明
 
-- **`BACKTEST_LAB_COMPLETE.md`**
-  - 回測完成狀態
-
 - **`SCORE_EXPLANATION.md`**
   - 評分系統說明
   - buy_score 與 sell_score 的詳細說明

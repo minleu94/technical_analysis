@@ -167,11 +167,11 @@
 
 **說明**：這些項目屬於後續改進，不影響 Phase 2.5 核心目標，建議移至 Phase 3 或後續階段。
 
-#### 優先級 4：長期 ⚠️ 未完成（0/2，移至 Phase 3）
-* [ ] Walk-forward 暖機期參數
-* [ ] 完整測試與驗證（優先級 1 和 2 已驗證通過）
+#### 優先級 4：長期 ⚠️ 部分完成（1/2，後續持續驗證）
+* [x] Walk-forward 暖機期參數（已於 Phase 3.3b MVP-1 完成）
+* [ ] 完整測試與驗證（優先級 1 和 2 已驗證通過，後續仍需對策略穩定性持續驗證）
 
-**說明**：Walk-forward 服務已實現，但暖機期參數未實現。優先級 1 和 2 已通過驗證（18/18 功能通過）。
+**說明**：Walk-forward warmup_days 已於 Phase 3.3b 完成並納入 UI / service；完整穩定性驗證屬於持續研究流程，不再阻塞 Phase 2.5 核心完成。
 
 ### Phase 2.5 Exit Criteria
 
@@ -185,8 +185,8 @@
 * ⚠️ Grid Search 結果在 walk-forward 驗證中穩定（Walk-forward 已實現，穩定性驗證未完成）
 * ✅ 參數設計文檔完整
 
-**詳細改進計劃**：請參考 [docs/PARAMETER_DESIGN_IMPROVEMENTS.md](docs/PARAMETER_DESIGN_IMPROVEMENTS.md)  
-**完成狀態檢查報告**：請參考 [docs/PHASE2_5_COMPLETION_STATUS.md](docs/PHASE2_5_COMPLETION_STATUS.md)
+**詳細改進計劃**：請參考 [PARAMETER_DESIGN_IMPROVEMENTS.md](../08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md)  
+**完成狀態檢查報告**：請參考 [PHASE2_5_COMPLETION_STATUS.md](../05_phases/PHASE2_5_COMPLETION_STATUS.md)
 
 ---
 
@@ -418,7 +418,7 @@
 
 ## Phase 4：持倉管理與交易日誌（Portfolio & Journal）⏸️ 依賴 Phase 3.3b
 
-**前置條件**：需先完成 Phase 3.3b（Promote 功能、K 線標記買賣點），確保研究閉環完整後再進入持倉管理階段。
+**前置條件**：Phase 3.3b（Promote 功能、K 線標記買賣點）已完成。Phase 4.1 目前已建立 service/domain/test 骨架，尚未完成 `ui_qt` Portfolio Tab 與 Phase 3 → Portfolio 的使用者可見整合。
 
 **目標**：你開始每天回答「這筆還對嗎」
 
@@ -580,6 +580,12 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     - ✅ 驗證通過率：100% (10/10)
     - ✅ 修復失效功能：WatchlistService、BacktestReportDTO 引用
     - ✅ 驗證報告：`output/qa/phase3_3b_validation/VALIDATION_REPORT.md`
+* 🚧 **Phase 4.1 Portfolio MVP**：已啟動骨架（service/domain/test），UI 尚未完成
+  * ✅ `portfolio_module/` domain logic：append-only trades → positions projection
+  * ✅ `PortfolioService` / `JournalService`：交易紀錄、持倉投影、Journal entry
+  * ✅ `tests/test_portfolio_mvp.py`：Portfolio MVP 核心測試通過
+  * ⏳ `ui_qt/views/portfolio_view.py`：尚未建立
+  * ⏳ Recommendation / Backtest → Portfolio 建立持倉：尚未整合
 
 ---
 
@@ -605,9 +611,9 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
   * ✅ 優先級 1：強勢/弱勢分數標準化、Pattern ATR-based、Scoring Contract 統一
   * ✅ 優先級 2：回測參數改進、停損停利 ATR 模式、部位管理
   * ✅ **功能驗證**：18/18 功能通過（100% 通過率）
-    * 驗證報告：[output/qa/phase2_5_validation/VALIDATION_REPORT.md](../output/qa/phase2_5_validation/VALIDATION_REPORT.md)
+    * 驗證報告：[output/qa/phase2_5_validation/VALIDATION_REPORT.md](../../output/qa/phase2_5_validation/VALIDATION_REPORT.md)
     * 驗證腳本：`scripts/qa_validate_phase2_5.py`
-  * 詳細計劃：[docs/PARAMETER_DESIGN_IMPROVEMENTS.md](docs/PARAMETER_DESIGN_IMPROVEMENTS.md)
+  * 詳細計劃：[docs/08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md](../08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md)
 
 * ✅ **Phase 2 完整功能**：所有子任務已完成
   * ✅ Phase2-A：跨 Tab 共用 Watchlist
@@ -746,7 +752,7 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * `scripts/check_branch_files.py`：檢查下載的檔案
     * `scripts/verify_branch_data.py`：驗證資料格式
 
-### 下一步 Next（Phase 4 準備）
+### 下一步 Next（Phase 4.1 Portfolio UI）
 
 * ✅ **Phase 3.3b：研究閉環完整化** ✅ **已完成**（2026-01-02）
   * ✅ Epic 1 Promote 功能：已完成
@@ -840,9 +846,15 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * ✅ 修復總結：`output/qa/phase3_3b_validation/修復總結報告.md`
     * ✅ BacktestView：新增 Promote 按鈕和 UI
 
-* **Phase 4：持倉管理與交易日誌**（⏸️ 依賴 Phase 3.3b）
-  * ⏸️ Phase 4.1：最小可用持倉（Portfolio MVP）
-  * ⏸️ Phase 4.2：券商買賣超/籌碼面 v1（可選但建議）
+* **Phase 4：持倉管理與交易日誌**（🚧 已啟動，UI 未完成）
+  * 🚧 Phase 4.1：最小可用持倉（Portfolio MVP）
+    * ✅ service/domain/test 骨架已建立
+    * ⏳ 新增 `PortfolioView`
+    * ⏳ 新增 Portfolio 頂層 Tab
+    * ⏳ 串接 Recommendation / Backtest / Strategy Version 來源追溯
+    * ⏳ 條件監控（Regime / Score / Price 對照）顯示
+  * ✅ Phase 4.2 前置：券商分點資料與 Smart Money Terminal MVP 已完成
+  * ⏳ Phase 4.2 完整：持倉層的籌碼風險提示與下鑽整合尚未完成
 
 ### Blockers / Risks
 

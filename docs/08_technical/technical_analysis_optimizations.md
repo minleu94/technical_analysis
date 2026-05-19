@@ -1,11 +1,11 @@
 # 技術分析模組優化文檔
 
 ## 相關文檔
-- [系統架構文檔](system_architecture.md) - 系統架構和模組說明
-- [數據收集架構文檔](data_collection_architecture.md) - 數據收集和處理說明
-- [腳本目錄說明](scripts_readme.md) - 腳本使用說明
-- [開發進度記錄](note.txt) - 當前開發進度和更新說明
-- [測試說明文檔](readme_test.txt) - 測試相關說明
+- [系統架構文檔](../01_architecture/system_architecture.md) - 系統架構和模組說明
+- [數據收集架構文檔](../01_architecture/data_collection_architecture.md) - 數據收集和處理說明
+- [腳本目錄說明](../07_guides/scripts_readme.md) - 腳本使用說明
+- [專案快照](../00_core/PROJECT_SNAPSHOT.md) - 當前開發進度總覽
+- [測試目錄說明](../07_guides/tests_readme.md) - 測試相關說明
 
 ## 概述
 本文檔描述台股技術分析系統中技術分析模組的優化內容，包括代碼結構、性能優化、功能擴展等方面的改進。這些優化旨在提高系統的可靠性、效率和可維護性。

@@ -1,425 +1,166 @@
 # 文檔索引
 
-> **重要**：以 `DEVELOPMENT_ROADMAP.md` 的 Living Section 為準；若索引內進度文字過期，視為待更新。  
-> **Living Section 定義**：見 `DEVELOPMENT_ROADMAP.md` 的「📍 Living Section 定義」段落。
-
-## 📖 核心文檔（必讀）
-
-### 1. [專案導航文件](../PROJECT_NAVIGATION.md) ⭐ **快速查找必讀**
-**專案開發者的日常導航手冊**
-- 專案一句話定位
-- 三層架構導航（UI / Service / Domain）
-- 功能導航（我要做 X，要去哪裡看？）
-- 高風險核心檔案清單
-- **5-10 分鐘快速了解專案結構**
-
-### 2. [專案盤點報告](../PROJECT_INVENTORY.md)
-**完整的專案結構盤點**
-- 專案結構總覽
-- 核心進入點
-- 主要功能模組盤點
-- 可疑或高風險區域
-- 專案狀態總結
-
-### 3. [開發演進地圖](DEVELOPMENT_ROADMAP.md) ⭐ **最重要**
-**系統的完整演進計劃，從 Phase 1 到 Phase 4**
-- 系統定位和最終藍圖
-- 4 個階段的詳細說明
-- 當前位置和下一步行動
-- **建議先讀這份文檔**
-
-### 4. [專案快照](PROJECT_SNAPSHOT.md) ⭐ **開場必讀**
-**專案當前狀態的快速概覽（30秒內讀完）**
-- 系統定位（一句話）
-- 當前狀態（以 DEVELOPMENT_ROADMAP.md 的 Living Section 為準）
-- 現在的工作模式（每天要用的流程）
-- 本週優先事項
-- 高風險區
-- **詳細狀態請參考**：[開發演進地圖](DEVELOPMENT_ROADMAP.md) 的 Living Section
-
-### 5. [開發進度記錄](note.txt)
-**詳細的開發日誌**
-- 每次更新的詳細記錄
-- 功能實作細節
-- 問題和解決方案
-
-### 5.1 [AI 專案上下文包](AI_CONTEXT_PACK.md) ⭐ **外部 AI 必讀**
-**為外部 AI（ChatGPT / Codex 等）準備的高密度系統分析**
-- 專案快照與架構
-- 既有 Agent 列表與職責
-- 工作流與協作規範
-- AI 任務路由建議與風險雷達
+> **最後整理**：2026-05-19  
+> **判讀規則**：Phase 狀態以 `DEVELOPMENT_ROADMAP.md` 的 Living Section 為準；本索引用於導航，不取代 roadmap。
 
 ---
 
-## 🏗️ 架構文檔
+## 0. 核心入口
 
-### 6. [系統架構文檔](../01_architecture/system_architecture.md)
-**系統的技術架構說明**
-- 模組結構
-- 數據流程
-- 技術細節
-
-### 7. [數據收集架構](../01_architecture/data_collection_architecture.md)
-**數據收集系統的架構**
-- API 端點
-- 數據更新流程
-- 數據存儲結構
-
-### 8. [Runtime Observatory 規範](../01_architecture/runtime_observatory_rules.md)
-**AI-Native OS Runtime 的架構治理與規範**
-- Forbidden Dependency Rules
-- DTO Boundary Validation
-- Governance Checklist
-
-### 9. [Multi-Agent Collaboration Workflow Protocol](../01_architecture/multi_agent_workflow.md)
-**專案多 Agent 協作與合併規範**
-- Branch Roles & Merge Protocol
-- Conflict Resolution
-- Development Principles
----
-
-## 📚 功能文檔
-
-### 6. [Phase 2 策略資料庫設計](../05_phases/PHASE2_STRATEGY_LIBRARY.md)
-**Phase 2 的詳細設計文檔**
-- 預設策略庫設計
-- 策略說明格式
-- 單一策略回測設計
-- 實作計劃
-
-### 6.1. [Phase 2 架構設計](../05_phases/PHASE2_ARCHITECTURE.md)
-**Phase 2 的架構設計文檔**
-- 策略可插拔規格（StrategySpec + StrategyExecutor）
-- 策略執行器介面設計
-- 策略註冊機制
-- 策略版本管理
-
-### 6.2. [策略設計規格書](../02_features/STRATEGY_DESIGN_SPECIFICATION.md)
-**Baseline Score Threshold Strategy 的完整設計規格**
-- 研究假設
-- 參數/信號定義（TotalScore、PatternScore、IndicatorScore、VolumeScore）
-- 策略邏輯（進場/出場條件、確認機制、冷卻期）
-- 回測參數設計
-- 風險管理機制
-
-### 7. [數據更新指南](../03_data/daily_data_update_guide.md)
-**如何更新每日數據**
-- 批量更新
-- 單日更新
-- 數據合併
-- 故障排除
-
-### 7.1. [如何更新每日數據](../03_data/HOW_TO_UPDATE_DAILY_DATA.md)
-**每日數據更新的快速指南**
-- 推薦方法（UI 應用程式）
-- 批量更新腳本
-- 單日更新腳本
-- 常見問題
-
-### 8. [腳本使用說明](../07_guides/scripts_readme.md)
-**scripts/ 目錄下的腳本說明**
-- 腳本分類
-- 執行順序建議
-- 使用範例
-
-### 8.1. [Phase 2.5 驗證腳本](../scripts/qa_validate_phase2_5.py)
-**Phase 2.5 功能驗證腳本**
-- 驗證範圍：Market Watch、Recommendation、Watchlist、Backtest、Strategy 系統
-- 執行方式：`python scripts/qa_validate_phase2_5.py`
-- 驗證報告：`output/qa/phase2_5_validation/VALIDATION_REPORT.md`
-- 執行日誌：`output/qa/phase2_5_validation/RUN_LOG.txt`
-
-### 8.2. [推薦分析 Tab 驗證腳本](../scripts/qa_validate_recommendation_tab.py)
-**推薦分析功能驗證腳本**
-- 驗證範圍：Recommendation Analysis Tab 的 Service 層、UI ↔ Service Contract、篩選邏輯
-- 執行方式：`python scripts/qa_validate_recommendation_tab.py`
-- 驗證報告：`output/qa/recommendation_tab/VALIDATION_REPORT.md`
-- 執行日誌：`output/qa/recommendation_tab/RUN_LOG.txt`
-
-### 8.3. [數據更新 Tab 驗證腳本](../scripts/qa_validate_update_tab.py)
-**數據更新功能驗證腳本**
-- 驗證範圍：Data Update Tab 的 Service 層、UI ↔ Service Contract、數據狀態檢查邏輯
-- 執行方式：`python scripts/qa_validate_update_tab.py`
-- 驗證報告：`output/qa/update_tab/VALIDATION_REPORT.md`
-- 執行日誌：`output/qa/update_tab/RUN_LOG.txt`
-
-### 8.4. [Epic 2 MVP-1 驗證腳本](../scripts/qa_validate_epic2_mvp1.py)
-**Epic 2 MVP-1 功能驗證腳本（Warmup Days + Baseline 對比）**
-- 驗證範圍：Walk-Forward 暖機期、Baseline 對比功能
-- 執行方式：`python scripts/qa_validate_epic2_mvp1.py`
-- 驗證報告：`output/qa/epic2_mvp1_validation/VALIDATION_REPORT.md`
-- 驗證狀態：29/29 測試案例通過（100% 通過率）
-- 最後更新：2025-12-30
-
-### 8.5. [Epic 2 MVP-2 驗證腳本](../scripts/qa_validate_epic2_mvp2.py)
-**Epic 2 MVP-2 功能驗證腳本（過擬合風險提示）**
-- 驗證範圍：過擬合風險指標計算、風險等級判斷、風險警告生成
-- 執行方式：`python scripts/qa_validate_epic2_mvp2.py`
-- 驗證報告：`output/qa/epic2_mvp2_validation/VALIDATION_REPORT.md`
-- 驗證狀態：11/11 測試案例通過（100% 通過率）
-- 單元測試：20/20 通過（100% 通過率）
-- 最後更新：2026-01-02
-
-### 9. UI 應用程式
-**UI 相關文檔**
-- **Tkinter UI**：`../ui_app/README.md` - 原有 Tkinter 界面說明
-- **Qt UI**：`../ui_qt/README.md` - 新增 PySide6 界面說明（推薦使用）
-- **應用服務層**：`../app_module/README.md` - UI 與業務邏輯解耦架構
-
-### 9.1. [UI 功能文檔](../02_features/UI_FEATURES_DOCUMENTATION.md)
-**完整的 UI 功能說明和參數文檔**
-- 所有 Tab 的功能說明（含 Phase 3.3b 研究閉環功能）
-- 技術指標詳細參數
-- 圖形模式詳細參數（含 Phase 2.5 ATR-based 參數）
-- 回測參數完整說明（含 Phase 2.5 新參數、Phase 3.3b Walk-forward 暖機期、Baseline 對比、過擬合風險提示）
-- Promote 機制說明（Phase 3.3b 新增）
-- K 線圖標記買賣點功能（Phase 3.3b 新增）
-
-### 9.2. [使用者指南](../02_features/USER_GUIDE.md)
-**複雜功能的使用教程**
-- 推薦分析產業篩選
-- 策略參數最佳化
-- Walk-forward 驗證
-- Phase 2.5 新參數使用指南（執行價格、停損停利模式、部位管理）
-- 推薦分析 Tab UI 使用指南（策略傾向引導、系統角色說明、推薦理由解讀）
-
-### 9.3. [策略回測實驗室功能說明](../02_features/BACKTEST_LAB_FEATURES.md)
-**策略回測標籤的完整功能說明**
-- 策略預設（Strategy Preset）
-- 參數最佳化（Optimization）
-- Walk-Forward 驗證
-- 批量回測（Batch Backtest）
-- 回測報告功能
-
-### 9.4. [評分系統說明](../02_features/SCORE_EXPLANATION.md)
-**buy_score 與 sell_score 的詳細說明**
-- TotalScore 計算方式
-- 子分數詳細計算（PatternScore、IndicatorScore、VolumeScore）
-- 閾值參數說明
-- 使用範例
+| 文件 | 用途 |
+|---|---|
+| [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | 系統定位、Phase 狀態、Living Section、Next、Risks。最高權威。 |
+| [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要。 |
+| [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 本文件，文檔導航。 |
+| [DOCUMENTATION_STRUCTURE.md](DOCUMENTATION_STRUCTURE.md) | `docs/` 資料夾歸屬、生命週期、刪除/歸檔規則。 |
+| [DOC_COVERAGE_MAP.md](DOC_COVERAGE_MAP.md) | 變更類型對應需要同步更新的文件。 |
+| [AI_CONTEXT_PACK.md](AI_CONTEXT_PACK.md) | 給外部 AI / Agent 的高密度專案上下文。 |
+| [PROJECT_NAVIGATION.md](../../PROJECT_NAVIGATION.md) | repo 根目錄的日常開發導航。 |
+| [PROJECT_INVENTORY.md](../../PROJECT_INVENTORY.md) | repo 根目錄的完整專案盤點。 |
 
 ---
 
-## 🔧 技術文檔
+## 1. 架構文件
 
-### 10. [數據獲取邏輯](../03_data/DATA_FETCHING_LOGIC.md)
-**數據獲取的詳細邏輯**
-- API 端點和參數
-- 數據提取方法
-- 錯誤處理
-
-### 10.1. [數據流程邏輯](../03_data/DATA_FLOW_LOGIC.md)
-**推薦分析數據流程邏輯說明**
-- 產業篩選階段
-- 股票數據讀取階段
-- 技術指標計算階段
-- 推薦分析階段
-- 數據來源與處理流程
-
-### 10.2. [數據重建指南](../03_data/DATA_REBUILD_GUIDE.md)
-**當 daily_price 數據完整時，如何重建其他數據**
-- 數據流程說明
-- 重建步驟（合併每日數據、計算技術指標）
-- 驗證方法
-- 常見問題
-
-### 11. [如何更新每日數據](../03_data/HOW_TO_UPDATE_DAILY_DATA.md)
-**每日數據更新的快速指南**
-- 推薦方法
-- 使用範例
-- 常見問題
+| 文件 | 用途 |
+|---|---|
+| [system_architecture.md](../01_architecture/system_architecture.md) | 系統模組與分層架構。 |
+| [system_flow_end_to_end.md](../01_architecture/system_flow_end_to_end.md) | 端到端流程。 |
+| [data_collection_architecture.md](../01_architecture/data_collection_architecture.md) | 資料收集架構。 |
+| [runtime_observatory_rules.md](../01_architecture/runtime_observatory_rules.md) | Runtime Observatory 架構治理規範。 |
+| [multi_agent_workflow.md](../01_architecture/multi_agent_workflow.md) | 多 Agent 協作與合併規範。 |
+| [REFACTORING_MIGRATION_PLAN.md](../01_architecture/REFACTORING_MIGRATION_PLAN.md) | 歷史/長期 refactor 遷移計畫。 |
 
 ---
 
-## 📊 數據文檔
+## 2. 功能與使用者文件
 
-### 12. [產業指數更新說明](../03_data/INDUSTRY_INDEX_UPDATE_SUMMARY.md)
-**產業指數數據的更新說明**
-- 更新位置
-- API 資訊
-- 數據處理邏輯
-
-### 13. [市場指數更新說明](../03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md)
-**市場指數數據的更新說明**
-- 更新方法
-- 數據格式
-- 使用方式
-
-### 13.1. [券商分點資料模組設計](../04_broker_branch/BROKER_BRANCH_DATA_MODULE_DESIGN_V2.md)
-**券商分點資料更新模組的設計規格（修正版 v2.0）**
-- 設計修正摘要（追蹤對象、欄位命名、目錄結構、Merge 規則）
-- CSV 欄位定義
-- 目錄結構設計
-- 核心方法接口規格
-- 整合到 UpdateService 和 UI
-
-### 13.2. [券商分點資料實作總結](../04_broker_branch/BROKER_BRANCH_IMPLEMENTATION_SUMMARY.md)
-**券商分點資料更新功能的實作總結**
-- 變更清單
-- 本地測試方式
-- 驗收標準檢查
-- 資料結構驗證
-- 修復記錄（2025-12-29）
-
-### 13.3. [券商分點資料測試與故障排除指南](../04_broker_branch/BROKER_BRANCH_TESTING_AND_TROUBLESHOOTING.md) ⭐ **測試必讀**
-**完整的測試方法和故障排除指南**
-- 快速測試方法（單一分點、所有分點、多天測試）
-- 常見問題與解決方案（URL 參數、編碼、前導零、ChromeDriver 崩潰等）
-- 測試腳本說明
-- URL 格式說明
-- 資料存儲結構
-- Registry 檔案說明
-- 已知限制與注意事項
-- 驗證清單
-- 測試記錄（2025-12-29）
+| 文件 | 用途 |
+|---|---|
+| [UI_FEATURES_DOCUMENTATION.md](../02_features/UI_FEATURES_DOCUMENTATION.md) | Qt UI 功能完整說明，包含 Phase 3.3b、Runtime、Smart Money。 |
+| [USER_GUIDE.md](../02_features/USER_GUIDE.md) | 使用者操作教學。 |
+| [BACKTEST_LAB_FEATURES.md](../02_features/BACKTEST_LAB_FEATURES.md) | 策略回測實驗室功能說明。 |
+| [SCORE_EXPLANATION.md](../02_features/SCORE_EXPLANATION.md) | 評分系統與 buy/sell score 說明。 |
+| [STRATEGY_DESIGN_SPECIFICATION.md](../02_features/STRATEGY_DESIGN_SPECIFICATION.md) | Baseline Score Threshold 策略設計規格。 |
 
 ---
 
-## 🚀 快速參考
+## 3. 資料文件
 
-### 14. [快速參考](../07_guides/QUICK_REFERENCE.md)
-**常用命令和操作的快速參考**
-- 文檔導航（遇到問題時、需要使用時、開發時）
-- 快速開始（UI 應用程式、更新數據、合併數據）
-- 常見問題快速解決（HTTP 307、API 錯誤、數據為空）
-- **與 DOCUMENTATION_INDEX 的區別**：QUICK_REFERENCE 更注重「快速」和「常用」，INDEX 更注重「完整」和「導航」
-
-### 15. [快速開始](../07_guides/QUICK_START.md)
-**系統的快速開始指南**
-
-### 16. [安裝指南](../07_guides/INSTALL_GUIDE.md)
-**系統安裝和環境設置指南**
+| 文件 | 用途 |
+|---|---|
+| [HOW_TO_UPDATE_DAILY_DATA.md](../03_data/HOW_TO_UPDATE_DAILY_DATA.md) | 每日資料更新快速指南。 |
+| [daily_data_update_guide.md](../03_data/daily_data_update_guide.md) | 每日資料更新詳細指南。 |
+| [DATA_FETCHING_LOGIC.md](../03_data/DATA_FETCHING_LOGIC.md) | 資料抓取邏輯。 |
+| [DATA_FLOW_LOGIC.md](../03_data/DATA_FLOW_LOGIC.md) | 推薦分析資料流程。 |
+| [DATA_REBUILD_GUIDE.md](../03_data/DATA_REBUILD_GUIDE.md) | 從 daily price 重建衍生資料。 |
+| [TROUBLESHOOTING_DAILY_UPDATE.md](../03_data/TROUBLESHOOTING_DAILY_UPDATE.md) | 每日資料更新故障排除。 |
+| [INDUSTRY_INDEX_UPDATE_SUMMARY.md](../03_data/INDUSTRY_INDEX_UPDATE_SUMMARY.md) | 產業指數更新說明。 |
+| [MERGE_AND_MARKET_INDEX_SUMMARY.md](../03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md) | 市場指數與合併說明。 |
 
 ---
 
-## 📝 開發文檔
+## 4. 券商分點 / Smart Money
 
-### 16.1. [Phase 3.3b 實施規劃](../05_phases/PHASE_3_3B_IMPLEMENTATION_PLAN.md)
-**Phase 3.3b 三個 Implementation Epic 的架構層級實施規劃**
-- Epic 實施順序建議
-- 各 Epic 的架構影響分析
-- MVP 版本建議
-- 風險隔離策略
-- **進度更新**：
-  - ✅ Epic 2 MVP-1（Warmup Days + Baseline 對比）已完成
-  - ✅ Epic 2 MVP-2（過擬合風險提示）已完成（2026-01-02）
-  - ⏸️ Epic 3（視覺驗證）待開始
-  - ⏸️ Epic 1（Promote 機制）待開始
-
-### 16.2. [Epic 2 MVP-2 架構設計](../05_phases/EPIC2_MVP2_ARCHITECTURE_DESIGN.md)
-**Epic 2 MVP-2（過擬合風險提示）的架構設計文檔**
-- 風險指標定義（參數敏感性、退化程度、一致性）
-- 資料結構設計（overfitting_risk 欄位結構）
-- 整合點分析（需要修改的模組與方法）
-- 依賴關係分析
-- 風險評估與緩解措施
-- 驗證策略
-- **狀態**：✅ 已完成（2026-01-02，所有階段完成）
-
-### 16.3. [Epic 2 MVP-2 實作檢查清單](../05_phases/EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md)
-**Epic 2 MVP-2（過擬合風險提示）的詳細實作檢查清單**
-- 階段 1：核心計算方法實作（✅ 已完成）
-- 階段 2：DTO 與服務整合（✅ 已完成）
-- 階段 3：測試與驗證（✅ 已完成）
-- 每個步驟的驗收標準與測試案例
-- **狀態**：✅ 已完成（2026-01-02，所有階段完成）
-- **驗證狀態**：單元測試 20/20 通過，驗證腳本 11/11 通過（100% 通過率）
-
-### 17. [每日股票更新故障排除指南](../03_data/TROUBLESHOOTING_DAILY_UPDATE.md) ⭐ **故障排除必讀**
-**每日股票更新卡住時的完整故障排除指南**
-- 快速檢查清單（日誌、數據狀態、進程、網路、權限）
-- 常見問題與解決方案（卡住、編碼錯誤、HTTP 307、文件損壞、Worker 線程）
-- 進階故障排除（驗證腳本、手動測試、配置檢查）
-- 診斷資訊收集指南
-- 快速修復檢查表
-
-### 17.1. [推薦分析 Tab QA 問題](../06_qa/QA_RECOMMENDATION_TAB_ISSUES.md)
-**推薦分析 Tab 的 QA 驗證發現的問題**
-- 邏輯錯誤、Contract 違規、數據品質問題
-- 修復建議和已應用修復
-
-### 17.2. [數據更新 Tab QA 問題](../06_qa/QA_UPDATE_TAB_ISSUES.md)
-**數據更新 Tab 的 QA 驗證發現的問題**
-- Service 層測試結果
-- UI ↔ Service Contract 驗證
-- 數據狀態檢查邏輯驗證
-
-### 18. [系統流程（端到端）](../01_architecture/system_flow_end_to_end.md)
-**系統端到端流程說明**
-
-### 19. [Phase 2.5 完成狀態](../05_phases/PHASE2_5_COMPLETION_STATUS.md)
-**Phase 2.5 完成狀態檢查報告**
-- 優先級 1-4 功能完成狀態
-- 實現位置與方式
-- 驗證結果
-- 最後更新：2025-12-20
-
-### 20. [測試文檔說明](../07_guides/tests_readme.md)
-**tests/ 目錄的檔案結構和組織方式**
-- 測試檔案結構
-- 測試分類說明
-- 相關文檔連結
-- **完整測試指南**：`../09_archive/readme_test.txt`（歷史文檔）
+| 文件 | 用途 |
+|---|---|
+| [BROKER_BRANCH_DATA_MODULE_DESIGN_V2.md](../04_broker_branch/BROKER_BRANCH_DATA_MODULE_DESIGN_V2.md) | 券商分點資料模組設計。 |
+| [BROKER_BRANCH_IMPLEMENTATION_SUMMARY.md](../04_broker_branch/BROKER_BRANCH_IMPLEMENTATION_SUMMARY.md) | 券商分點實作總結。 |
+| [BROKER_BRANCH_TESTING_AND_TROUBLESHOOTING.md](../04_broker_branch/BROKER_BRANCH_TESTING_AND_TROUBLESHOOTING.md) | 分點資料測試與故障排除。 |
+| [BROKER_BRANCH_ERROR_DETECTION_IMPROVEMENT.md](../04_broker_branch/BROKER_BRANCH_ERROR_DETECTION_IMPROVEMENT.md) | 錯誤檢測改進記錄。 |
+| [BROKER_BRANCH_PARSING_IMPROVEMENT.md](../04_broker_branch/BROKER_BRANCH_PARSING_IMPROVEMENT.md) | 對手券商/股票名稱解析改進記錄。 |
 
 ---
 
-## 🎯 閱讀順序建議
+## 5. Phase 設計與研究 SOP
 
-### 第一次接觸系統
-1. [專案快照](PROJECT_SNAPSHOT.md) ⭐ - 快速了解當前狀態（30秒）
-2. [開發演進地圖](DEVELOPMENT_ROADMAP.md) - 了解系統定位和演進計劃
-3. [系統架構文檔](../01_architecture/system_architecture.md) - 了解技術架構
-
-### 開始使用系統
-1. [快速開始](../07_guides/QUICK_START.md) - 快速上手
-2. [數據更新指南](../03_data/daily_data_update_guide.md) - 更新數據
-3. [腳本使用說明](../07_guides/scripts_readme.md) - 使用腳本
-
-### 開發新功能
-1. [開發演進地圖](DEVELOPMENT_ROADMAP.md) - 確認功能屬於哪個 Phase
-2. [Phase 2 策略資料庫設計](../05_phases/PHASE2_STRATEGY_LIBRARY.md) - 如果是 Phase 2 功能
-3. [開發進度記錄](note.txt) - 了解歷史開發過程
-
----
-
-## 📌 重要提醒
-
-### ✅ 現在該做（Phase 2.5 完成 → Phase 3 準備）
-- ✅ 應用服務層（app_module/）- 已完成
-- ✅ Qt UI（ui_qt/）- 已完成
-- ✅ 預設策略庫設計 - 已完成
-- ✅ 策略說明文檔 - 已完成
-- ✅ 單一策略回測 - 已完成
-- ✅ 參數設計優化（Phase 2.5）- 已完成並驗證通過（18/18 功能通過）
-- ✅ 推薦分析 Tab UI 可理解性優化 - 已完成（Phase 3 準備工作）
-  - ✅ 說明資料集中管理、策略傾向引導、系統角色說明、推薦結果可反推
-- ✅ Epic 2 MVP-1（Warmup Days + Baseline 對比）- 已完成（2025-12-30）
-- ✅ Epic 2 MVP-2（過擬合風險提示）- 已完成（2026-01-02）
-- 🚧 推薦產品化（Phase 3）
-- 🚧 策略驗證（Phase 3）
-
-### ❌ 現在不要急
-- ML（機器學習）
-- 即時交易
-- 太多參數
-- 預測未來報酬
-- 多策略組合（Phase 3）
-- 持倉管理（Phase 4）
+| 文件 | 用途 |
+|---|---|
+| [PHASE2_ARCHITECTURE.md](../05_phases/PHASE2_ARCHITECTURE.md) | Phase 2 策略架構設計。 |
+| [PHASE2_STRATEGY_LIBRARY.md](../05_phases/PHASE2_STRATEGY_LIBRARY.md) | Phase 2 策略資料庫設計。 |
+| [PHASE2_5_COMPLETION_STATUS.md](../05_phases/PHASE2_5_COMPLETION_STATUS.md) | Phase 2.5 完成狀態與剩餘優化。 |
+| [PHASE3_3B_RESEARCH_DESIGN.md](../05_phases/PHASE3_3B_RESEARCH_DESIGN.md) | Phase 3.3b 研究設計規格。 |
+| [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../05_phases/PHASE_3_3B_IMPLEMENTATION_PLAN.md) | Phase 3.3b 實施規劃，現作歷史與追溯用途。 |
+| [EPIC2_MVP2_ARCHITECTURE_DESIGN.md](../05_phases/EPIC2_MVP2_ARCHITECTURE_DESIGN.md) | 過擬合風險提示架構設計。 |
+| [EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md](../05_phases/EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md) | 過擬合風險提示實作檢查清單。 |
+| [PHASE4_PORTFOLIO_DESIGN.md](../05_phases/PHASE4_PORTFOLIO_DESIGN.md) | Phase 4 Portfolio MVP 設計。 |
+| [PHASE4_STARTUP_SUMMARY.md](../05_phases/PHASE4_STARTUP_SUMMARY.md) | Phase 4 骨架啟動總結。 |
+| [phase3_5_research/README.md](../05_phases/phase3_5_research/README.md) | Phase 3.5 研究 SOP 入口。 |
+| [phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md](../05_phases/phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md) | 研究循環 playbook。 |
+| [phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md](../05_phases/phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md) | 指標判讀優先順序。 |
+| [phase3_5_research/BENCHMARK_PRESENTATION.md](../05_phases/phase3_5_research/BENCHMARK_PRESENTATION.md) | Benchmark 顯示與解讀規範。 |
+| [phase3_5_research/PHASE4_ENTRY_CRITERIA.md](../05_phases/phase3_5_research/PHASE4_ENTRY_CRITERIA.md) | Phase 4 進入條件。 |
 
 ---
 
-## 🔄 文檔更新原則
+## 6. QA 與審核
 
-1. **每次重大功能更新**：更新 [開發進度記錄](note.txt)
-2. **每次 Phase 轉換**：更新 [開發演進地圖](DEVELOPMENT_ROADMAP.md) 的 Living Section 和 [專案快照](PROJECT_SNAPSHOT.md)
-3. **每次架構變更**：更新 [系統架構文檔](../01_architecture/system_architecture.md)
-4. **每次新增功能**：更新對應的功能文檔
+| 文件 | 用途 |
+|---|---|
+| [QA_RECOMMENDATION_TAB_ISSUES.md](../06_qa/QA_RECOMMENDATION_TAB_ISSUES.md) | 推薦分析 Tab QA 問題。 |
+| [QA_RECOMMENDATION_TAB_SUMMARY.md](../06_qa/QA_RECOMMENDATION_TAB_SUMMARY.md) | 推薦分析 Tab QA 總結。 |
+| [QA_UPDATE_TAB_ISSUES.md](../06_qa/QA_UPDATE_TAB_ISSUES.md) | 數據更新 Tab QA 問題。 |
+| [QA_UPDATE_TAB_SUMMARY.md](../06_qa/QA_UPDATE_TAB_SUMMARY.md) | 數據更新 Tab QA 總結。 |
+| [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
 
 ---
 
-## 📞 相關連結
+## 7. 操作指南
 
-- [主 README](../README.md) - 專案主頁
-- [UI 應用程式說明](../ui_app/README.md) - UI 應用程式詳細說明
+| 文件 | 用途 |
+|---|---|
+| [QUICK_START.md](../07_guides/QUICK_START.md) | 快速開始。 |
+| [QUICK_REFERENCE.md](../07_guides/QUICK_REFERENCE.md) | 常用命令與快速查找。 |
+| [INSTALL_GUIDE.md](../07_guides/INSTALL_GUIDE.md) | 安裝與環境設置。 |
+| [scripts_readme.md](../07_guides/scripts_readme.md) | `scripts/` 目錄腳本說明。 |
+| [tests_readme.md](../07_guides/tests_readme.md) | `tests/` 目錄測試說明。 |
 
+---
+
+## 8. 技術文件
+
+| 文件 | 用途 |
+|---|---|
+| [PARAMETER_DESIGN_IMPROVEMENTS.md](../08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md) | Phase 2.5 參數設計改進。 |
+| [technical_analysis_optimizations.md](../08_technical/technical_analysis_optimizations.md) | 技術分析模組優化記錄。 |
+| [path_isolation_update.md](../08_technical/path_isolation_update.md) | 路徑隔離與測試環境分離記錄。 |
+| [RUN_WITHOUT_VENV.md](../08_technical/RUN_WITHOUT_VENV.md) | 不使用 venv 的執行說明。 |
+
+---
+
+## 9. Agent 與策略文件
+
+| 文件 | 用途 |
+|---|---|
+| [agents/README.md](../agents/README.md) | Agent 文件入口。 |
+| [agents/shared_context.md](../agents/shared_context.md) | Agent 共用上下文。 |
+| [agents/tech_lead.md](../agents/tech_lead.md) | Tech Lead Agent。 |
+| [agents/execution_agent.md](../agents/execution_agent.md) | Execution Agent。 |
+| [agents/documentation_agent.md](../agents/documentation_agent.md) | Documentation Agent。 |
+| [agents/data_audit_agent.md](../agents/data_audit_agent.md) | Data Audit Agent。 |
+| [agents/data_cleanup_agent.md](../agents/data_cleanup_agent.md) | Data Cleanup Agent。 |
+| [agents/CURSOR_SKILLS_DEFINITIONS.md](../agents/CURSOR_SKILLS_DEFINITIONS.md) | Cursor skills 定義。 |
+| [strategies/momentum_aggressive_v1.md](../strategies/momentum_aggressive_v1.md) | 暴衝策略說明。 |
+| [strategies/stable_conservative_v1.md](../strategies/stable_conservative_v1.md) | 穩健策略說明。 |
+
+---
+
+## 10. Archive
+
+[09_archive/](../09_archive/README.md) 只放歷史文件、已執行提案、舊調查與不再作為日常依據的內容。Active 文件不應依賴 archive 來判斷目前狀態。
+
+---
+
+## 目前開發狀態
+
+- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP。
+- 進行中 / 下一步：Phase 4.1 Portfolio MVP 的 UI 與 Phase 3 → Portfolio 整合。
+- 待開始：Phase 5 效能與研究報告輸出。
+
+---
+
+## 維護提醒
+
+- 新增或刪除任何 Markdown 後，更新本索引。
+- Phase 狀態文字若與 roadmap Living Section 衝突，以 roadmap 為準並修正本索引。
+- 不確定文件是否該刪除時，先移入 `09_archive/` 或在 `DOCUMENTATION_STRUCTURE.md` 記錄決策。

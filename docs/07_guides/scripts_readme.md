@@ -6,9 +6,9 @@
 ## 相關文檔
 - [系統架構文檔](../01_architecture/system_architecture.md) - 系統架構和模組說明
 - [數據收集架構文檔](../01_architecture/data_collection_architecture.md) - 數據收集和處理說明
-- [技術分析優化文檔](technical_analysis_optimizations.md) - 技術分析模塊優化說明
-- [開發進度記錄](note.txt) - 當前開發進度和更新說明
-- [測試說明文檔](readme_test.txt) - 測試相關說明
+- [技術分析優化文檔](../08_technical/technical_analysis_optimizations.md) - 技術分析模塊優化說明
+- [專案快照](../00_core/PROJECT_SNAPSHOT.md) - 當前開發進度總覽
+- [測試目錄說明](tests_readme.md) - 測試相關說明
 
 ## 數據存儲路徑
 
@@ -263,8 +263,8 @@ set TWSTOCK_DATA_DIR=your/custom/path
 - **數據獲取邏輯說明**：請參考 [DATA_FETCHING_LOGIC.md](../03_data/DATA_FETCHING_LOGIC.md)
 - 詳細的系統架構和數據流程可參考 `../01_architecture/system_architecture.md`
 - 數據收集和處理的詳細說明可參考 `../01_architecture/data_collection_architecture.md`
-- 測試相關的說明可參考 `readme_test.txt`
-- 技術分析模組的優化說明可參考 `technical_analysis_optimizations.md`
+- 測試相關的說明可參考 `tests_readme.md`
+- 技術分析模組的優化說明可參考 `../08_technical/technical_analysis_optimizations.md`
 
 ## 版本更新記錄
 

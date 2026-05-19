@@ -2,14 +2,14 @@
 
 ## 相關文檔
 - [系統架構文檔](system_architecture.md) - 系統架構和模組說明
-- [技術分析優化文檔](technical_analysis_optimizations.md) - 技術分析模塊優化說明
-- [腳本目錄說明](scripts_readme.md) - 腳本使用說明
-- [開發進度記錄](note.txt) - 當前開發進度和更新說明
-- [測試說明文檔](readme_test.txt) - 測試相關說明
-- **[每日數據更新指南](daily_data_update_guide.md)** ⭐ - 每日股票數據更新完整指南（**推薦閱讀**）
-- **[數據獲取邏輯說明](../DATA_FETCHING_LOGIC.md)** - 股票數據獲取邏輯詳細說明（**重要：包含使用方式和錯誤排查指南**）
-- **[HOW_TO_UPDATE_DAILY_DATA.md](../HOW_TO_UPDATE_DAILY_DATA.md)** - 快速更新指南
-- [故障排除指南](../docs/TROUBLESHOOTING_DAILY_UPDATE.md) - 每日股票更新故障排除指南
+- [技術分析優化文檔](../08_technical/technical_analysis_optimizations.md) - 技術分析模塊優化說明
+- [腳本目錄說明](../07_guides/scripts_readme.md) - 腳本使用說明
+- [專案快照](../00_core/PROJECT_SNAPSHOT.md) - 當前開發狀態總覽
+- [測試目錄說明](../07_guides/tests_readme.md) - 測試相關說明
+- **[每日數據更新指南](../03_data/daily_data_update_guide.md)** ⭐ - 每日股票數據更新完整指南（**推薦閱讀**）
+- **[數據獲取邏輯說明](../03_data/DATA_FETCHING_LOGIC.md)** - 股票數據獲取邏輯詳細說明（**重要：包含使用方式和錯誤排查指南**）
+- **[HOW_TO_UPDATE_DAILY_DATA.md](../03_data/HOW_TO_UPDATE_DAILY_DATA.md)** - 快速更新指南
+- [故障排除指南](../03_data/TROUBLESHOOTING_DAILY_UPDATE.md) - 每日股票更新故障排除指南
 
 ## 概述
 本文檔描述台股技術分析系統的數據收集架構，包括數據來源、更新流程、配置說明和錯誤處理機制。數據收集是系統的基礎，確保了分析和回測功能的可靠性。系統目前已實現完整的數據收集、處理和備份功能，並支持增量更新、自動修復和數據質量監控。
@@ -52,8 +52,8 @@
   - **批量更新（推薦）**: `python scripts/batch_update_daily_data.py --start-date YYYY-MM-DD`
   - **單日更新**: `python scripts/update_daily_stock_data.py --date YYYY-MM-DD`
 - **重要說明**: 
-  - 詳細的數據獲取邏輯、使用方式和錯誤排查請參考 [DATA_FETCHING_LOGIC.md](../DATA_FETCHING_LOGIC.md)
-  - 每日數據更新完整指南請參考 [HOW_TO_UPDATE_DAILY_DATA.md](../HOW_TO_UPDATE_DAILY_DATA.md) ⭐
+  - 詳細的數據獲取邏輯、使用方式和錯誤排查請參考 [DATA_FETCHING_LOGIC.md](../03_data/DATA_FETCHING_LOGIC.md)
+  - 每日數據更新完整指南請參考 [HOW_TO_UPDATE_DAILY_DATA.md](../03_data/HOW_TO_UPDATE_DAILY_DATA.md) ⭐
 
 ### 4. 技術指標數據
 - **數據來源**: 系統計算生成
@@ -188,7 +188,7 @@ python scripts/update_daily_stock_data.py --date 2025-08-29
 python scripts/merge_daily_data.py
 ```
 
-**詳細說明**：請參考 [HOW_TO_UPDATE_DAILY_DATA.md](../HOW_TO_UPDATE_DAILY_DATA.md)
+**詳細說明**：請參考 [HOW_TO_UPDATE_DAILY_DATA.md](../03_data/HOW_TO_UPDATE_DAILY_DATA.md)
 
 #### 完整數據更新流程
 1. 檢查需要更新的日期範圍

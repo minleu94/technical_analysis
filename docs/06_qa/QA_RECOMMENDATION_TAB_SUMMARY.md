@@ -22,14 +22,14 @@
   - UI 與 Service Contract 不一致
 
 ### 3. Logging Patch
-- **文件**: `QA_RECOMMENDATION_TAB_LOGGING_PATCH.md`（同目錄）
+- **狀態**: 已併入本總結，原一次性 patch 文件已移除
 - **已應用**:
   - `RecommendationService.run_recommendation()`: 添加輸入參數、數據讀取、處理結果日誌
   - `StrategyConfigurator.generate_recommendations()`: 添加輸入、技術指標、分數計算日誌
   - `StrategyConfigurator.screen_stocks()`: 添加篩選過程詳細日誌
 
 ### 4. 修補建議
-- **文件**: `QA_RECOMMENDATION_TAB_FIX_SUGGESTION.md`（同目錄）
+- **狀態**: 已併入本總結，原一次性建議文件已移除
 - **已修復**:
   - ✅ `volume_ratio_min` 單位不一致（已添加自動轉換）
   - ✅ 欄位檢查錯誤（已修復 `index` vs `columns`）

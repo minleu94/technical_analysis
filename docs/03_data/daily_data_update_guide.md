@@ -155,8 +155,8 @@ python scripts/update_daily_stock_data.py --date 2025-08-29 --merge
 
 ## 相關文檔
 
-- **[HOW_TO_UPDATE_DAILY_DATA.md](../HOW_TO_UPDATE_DAILY_DATA.md)** - 完整更新指南
-- **[DATA_FETCHING_LOGIC.md](../DATA_FETCHING_LOGIC.md)** - 數據獲取邏輯詳細說明
+- **[HOW_TO_UPDATE_DAILY_DATA.md](HOW_TO_UPDATE_DAILY_DATA.md)** - 完整更新指南
+- **[DATA_FETCHING_LOGIC.md](DATA_FETCHING_LOGIC.md)** - 數據獲取邏輯詳細說明
 - **[../07_guides/scripts_readme.md](../07_guides/scripts_readme.md)** - 腳本使用說明
 - **[../01_architecture/data_collection_architecture.md](../01_architecture/data_collection_architecture.md)** - 數據收集架構說明
 

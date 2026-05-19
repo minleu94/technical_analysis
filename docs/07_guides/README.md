@@ -17,9 +17,6 @@
 - **`INSTALL_GUIDE.md`**
   - 系統安裝和環境設置指南
 
-- **`EXECUTION_GUIDE.md`**
-  - 執行指南
-
 - **`scripts_readme.md`**
   - scripts/ 目錄下的腳本說明
   - 腳本分類、執行順序建議、使用範例

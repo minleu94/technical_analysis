@@ -1,97 +1,79 @@
 # Docs 文檔目錄
 
-> **文檔已重新組織**（2026-01-03）
-> 
-> 所有文檔已按功能分類到不同目錄，請使用 [文檔索引](00_core/DOCUMENTATION_INDEX.md) 查找所需文檔。
+> **最後整理**：2026-05-19  
+> **權威順序**：先看 `00_core/DEVELOPMENT_ROADMAP.md` 的 Living Section，再看 `00_core/PROJECT_SNAPSHOT.md` 和 `00_core/DOCUMENTATION_INDEX.md`。
 
-## 📁 目錄結構
+本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
 
-```
-docs/
-├── 00_core/              # 核心文檔（必讀）
-│   ├── DEVELOPMENT_ROADMAP.md        # 開發路線圖（最高權威）
-│   ├── PROJECT_SNAPSHOT.md           # 專案快照（開場 30 秒）
-│   ├── DOCUMENTATION_INDEX.md        # 文檔索引
-│   ├── DOC_COVERAGE_MAP.md           # 文檔覆蓋矩陣
-│   └── note.txt                      # 開發進度記錄
-│
-├── 01_architecture/      # 架構文檔
-│   ├── system_architecture.md
-│   ├── system_flow_end_to_end.md
-│   ├── data_collection_architecture.md
-│   ├── REFACTORING_MIGRATION_PLAN.md
-│   ├── multi_agent_workflow.md       # AI 協作規範
-│   └── runtime_observatory_rules.md  # Runtime Observatory 規範
-│
-├── 02_features/          # 功能文檔
-│   ├── UI_FEATURES_DOCUMENTATION.md
-│   ├── USER_GUIDE.md
-│   ├── BACKTEST_LAB_FEATURES.md
-│   ├── BACKTEST_LAB_COMPLETE.md
-│   ├── SCORE_EXPLANATION.md
-│   └── STRATEGY_DESIGN_SPECIFICATION.md
-│
-├── 03_data/              # 數據相關文檔
-│   ├── HOW_TO_UPDATE_DAILY_DATA.md
-│   ├── daily_data_update_guide.md
-│   ├── DATA_FETCHING_LOGIC.md
-│   ├── DATA_FLOW_LOGIC.md
-│   ├── DATA_REBUILD_GUIDE.md
-│   └── TROUBLESHOOTING_DAILY_UPDATE.md
-│
-├── 04_broker_branch/     # 券商分點相關文檔
-│   └── BROKER_BRANCH_*.md
-│
-├── 05_phases/            # Phase 相關文檔
-│   ├── PHASE2_*.md
-│   ├── PHASE3_*.md
-│   ├── EPIC2_*.md
-│   └── phase3_5_research/  # Phase 3.5 研究 SOP
-│       ├── RESEARCH_ITERATION_PLAYBOOK.md
-│       ├── METRIC_INTERPRETATION_PRIORITY.md
-│       ├── BENCHMARK_PRESENTATION.md
-│       └── PHASE4_ENTRY_CRITERIA.md
-│
-├── 06_qa/                # QA 相關文檔
-│   └── QA_*.md
-│
-├── 07_guides/            # 指南文檔
-│   ├── QUICK_START.md
-│   ├── QUICK_REFERENCE.md
-│   ├── INSTALL_GUIDE.md
-│   └── scripts_readme.md
-│
-├── 08_technical/         # 技術文檔
-│   └── PARAMETER_DESIGN_IMPROVEMENTS.md
-│
-├── 09_archive/           # 歸檔文檔（歷史記錄/總結）
-│   └── DOCUMENTATION_*.md
-│
-├── agents/               # Agent 文檔
-│   └── *.md
-│
-└── strategies/           # 策略文檔
-    └── *.md
-```
+1. [開發演進地圖](00_core/DEVELOPMENT_ROADMAP.md) - Phase 狀態與下一步的 Single Source of Truth
+2. [專案快照](00_core/PROJECT_SNAPSHOT.md) - 30 秒讀完的目前狀態
+3. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
+4. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
+5. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
 
-## 🚀 快速導航
+---
 
-### 第一次接觸系統
-1. [專案快照](00_core/PROJECT_SNAPSHOT.md) ⭐ - 快速了解當前狀態（30秒）
-2. [開發演進地圖](00_core/DEVELOPMENT_ROADMAP.md) - 了解系統定位和演進計劃
-3. [系統架構文檔](01_architecture/system_architecture.md) - 了解技術架構
+## 目錄歸屬
 
-### 開始使用系統
-1. [快速開始](07_guides/QUICK_START.md) - 快速上手
-2. [數據更新指南](03_data/daily_data_update_guide.md) - 更新數據
-3. [腳本使用說明](07_guides/scripts_readme.md) - 使用腳本
+| 目錄 | 用途 | 狀態 |
+|---|---|---|
+| `00_core/` | 權威入口、roadmap、snapshot、索引、coverage 規則 | 必讀 |
+| `01_architecture/` | 系統架構、資料流、Runtime 規範、多 Agent 工作流 | 長期維護 |
+| `02_features/` | UI、使用者指南、回測、評分、策略規格 | 使用者與功能說明 |
+| `03_data/` | 每日資料、資料流、重建與故障排除 | 資料更新操作 |
+| `04_broker_branch/` | 券商分點資料與 Smart Money 前置資料 | 籌碼資料專區 |
+| `05_phases/` | Phase 設計、Phase 3.5 SOP、Phase 4 Portfolio 設計 | 階段規劃 |
+| `06_qa/` | QA 問題、總結、驗證與審核報告 | 驗證紀錄 |
+| `07_guides/` | 快速開始、安裝、命令、腳本與測試說明 | 操作手冊 |
+| `08_technical/` | 技術優化、參數設計、路徑/環境說明 | 技術備忘 |
+| `09_archive/` | 已過期但仍有歷史價值的文件 | 不作日常依據 |
+| `agents/` | Agent 職責、協作規範、上下文 | Agent 工作文件 |
+| `governance/` | 預留給流程治理、決策紀錄或政策文件 | 目前無 Markdown 文件 |
+| `strategies/` | 策略說明文件 | StrategyRegistry / 使用者理解 |
 
-### 查找文檔
-- [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 完整的文檔索引和導航
+---
 
-## 📝 重要提醒
+## 目前狀態摘要
 
-- **核心文檔**：所有核心文檔都在 `00_core/` 目錄
-- **文檔索引**：使用 `00_core/DOCUMENTATION_INDEX.md` 查找所需文檔
-- **專案快照**：每次開新對話先看 `00_core/PROJECT_SNAPSHOT.md`（30秒內讀完）
+- Phase 1、Phase 2、Phase 2.5 核心：已完成。
+- Phase 3.1、3.2、3.3a、3.3b：已完成，包含推薦可用化、Profiles、研究閉環、Promote、Walk-forward、Baseline、過擬合風險與 K 線視覺驗證。
+- AI Runtime Subsystem MVP：已完成。
+- Smart Money Terminal MVP：已完成。
+- Phase 4.1 Portfolio：服務層 / domain / 測試骨架已開始，`ui_qt` 使用者可見 Portfolio Tab 尚未完成。
+- Phase 5：尚未開始，僅有部分回測/最佳化效能改善。
 
+詳細狀態永遠以 [DEVELOPMENT_ROADMAP.md](00_core/DEVELOPMENT_ROADMAP.md) 的 Living Section 為準。
+
+---
+
+## 快速閱讀路徑
+
+### 第一次接觸
+
+1. [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md)
+2. [DEVELOPMENT_ROADMAP.md](00_core/DEVELOPMENT_ROADMAP.md)
+3. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
+4. [system_architecture.md](01_architecture/system_architecture.md)
+
+### 要使用系統
+
+1. [QUICK_START.md](07_guides/QUICK_START.md)
+2. [USER_GUIDE.md](02_features/USER_GUIDE.md)
+3. [UI_FEATURES_DOCUMENTATION.md](02_features/UI_FEATURES_DOCUMENTATION.md)
+4. [HOW_TO_UPDATE_DAILY_DATA.md](03_data/HOW_TO_UPDATE_DAILY_DATA.md)
+
+### 要開發或整理文件
+
+1. [DOC_COVERAGE_MAP.md](00_core/DOC_COVERAGE_MAP.md)
+2. [DOCUMENTATION_STRUCTURE.md](00_core/DOCUMENTATION_STRUCTURE.md)
+3. [PROJECT_NAVIGATION.md](../PROJECT_NAVIGATION.md)
+4. [PROJECT_INVENTORY.md](../PROJECT_INVENTORY.md)
+
+---
+
+## 維護原則
+
+- 不確定狀態時，以 roadmap Living Section 為準。
+- 新增、刪除或搬移文件後，必須更新 `00_core/DOCUMENTATION_INDEX.md`。
+- 會影響使用者操作的變更，必須同步 `02_features/USER_GUIDE.md` 或 `02_features/UI_FEATURES_DOCUMENTATION.md`。
+- 過期但仍有歷史價值的文件放入 `09_archive/`；沒有引用、沒有歷史價值、且內容已被新文件取代的文件可以刪除。

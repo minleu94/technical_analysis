@@ -19,11 +19,15 @@
    - 文檔結構與導航的 Single Source of Truth
    - 若索引內進度文字與 Roadmap 衝突，以 Roadmap 為準
 
-4. **`PROJECT_NAVIGATION.md`** - 架構導航權威
+4. **`docs/00_core/DOCUMENTATION_STRUCTURE.md`** - 結構與生命週期權威
+   - `docs/` 資料夾歸屬、Active / Historical / Delete 判斷
+   - 刪除或歸檔 Markdown 前必須參考
+
+5. **`PROJECT_NAVIGATION.md`** - 架構導航權威
    - 三層架構（UI / Service / Domain）的導航說明
    - 功能導航（我要做 X，要去哪裡看？）
 
-5. **其他專項文檔** - 功能特定權威
+6. **其他專項文檔** - 功能特定權威
    - `docs/02_features/UI_FEATURES_DOCUMENTATION.md` - UI 功能說明
    - `docs/02_features/USER_GUIDE.md` - 使用者指南
    - `docs/01_architecture/system_architecture.md` - 系統架構
@@ -193,6 +197,7 @@
 
 **必須更新（Must）：**
 - `docs/00_core/DOCUMENTATION_INDEX.md` - 文檔索引（必須反映最新結構）
+- `docs/00_core/DOCUMENTATION_STRUCTURE.md` - 若資料夾歸屬、刪除/歸檔規則、文件生命週期有變更
 
 **應該更新（Should）：**
 - `docs/00_core/PROJECT_SNAPSHOT.md` - 「指定權威文件」段落（如權威文件變更）
@@ -216,11 +221,15 @@
    - 若發現不一致，必須修正（以 Roadmap 的 Living Section 為準）
    - **Living Section 定義**：見 `docs/00_core/DEVELOPMENT_ROADMAP.md` 的「📍 Living Section 定義」段落
 
-3. **相關使用指南已更新**
+3. **文件結構已更新**
+   - 新增/刪除/搬移 Markdown 後，`DOCUMENTATION_INDEX.md` 必須同步
+   - 若文件分類或刪除規則改變，`DOCUMENTATION_STRUCTURE.md` 必須同步
+
+4. **相關使用指南已更新**
    - 若變更影響使用者操作流程，`docs/02_features/USER_GUIDE.md` 必須更新
    - 若變更影響 UI 功能，`docs/02_features/UI_FEATURES_DOCUMENTATION.md` 必須更新
 
-4. **變更日誌已記錄**
+5. **變更日誌已記錄**
    - 根據 `docs/agents/shared_context.md` 的「更新記錄 / 變更日誌規範」記錄變更
    - 若存在變更日誌文件（如 `docs/UPDATE_LOG_*.md`），需記錄變更
 
@@ -284,7 +293,12 @@
    - 當文檔結構變更時 → 必須更新索引
    - 當進度描述過期時 → 必須更新（以 Roadmap 為準）
 
-3. **`docs/00_core/DEVELOPMENT_ROADMAP.md`**
+3. **`docs/00_core/DOCUMENTATION_STRUCTURE.md`**
+   - 當新增/刪除資料夾時 → 必須更新資料夾歸屬
+   - 當刪除 Active Markdown 時 → 必須確認符合 Delete 條件
+   - 當文件被改為 Historical 時 → 必須確認是否應移入 `09_archive/`
+
+4. **`docs/00_core/DEVELOPMENT_ROADMAP.md`**
    - 當 Phase 狀態變更時 → 必須更新 Living Section 的「現況」段落
    - 當優先事項變更時 → 必須更新 Living Section 的「下一步 Next」段落
    - 當風險變更時 → 必須更新 Living Section 的「Blockers / Risks」段落
@@ -292,11 +306,11 @@
 
 ### 特定變更類型必須檢查
 
-4. **`PROJECT_NAVIGATION.md`**
+5. **`PROJECT_NAVIGATION.md`**
    - 當架構變更時 → 必須更新「三層架構導航」
    - 當功能變更時 → 必須更新「功能導航」
 
-5. **`README.md`**
+6. **`README.md`**
    - 當為重大功能變更時 → 應該更新（雖然優先級較低，但容易被忽略）
 
 ## 使用說明（給 Documentation Agent）
@@ -323,5 +337,5 @@
 
 ---
 
-**最後更新**：2026-01-03
+**最後更新**：2026-05-19
 

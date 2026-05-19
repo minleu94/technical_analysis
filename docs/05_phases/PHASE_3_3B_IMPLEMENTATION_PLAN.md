@@ -1,8 +1,10 @@
 # Phase 3.3b 架構層級實施規劃
 
 **版本**：v1.2.0  
-**狀態**：Implementation In Progress  
-**最後更新**：2025-12-30
+**狀態**：Historical Plan / Completed in roadmap  
+**最後更新**：2026-05-19
+
+> 本文件保留 Phase 3.3b 的架構規劃脈絡。最新完成狀態以 [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md) 為準；Phase 3.3b 已完成，後續主線已進入 Phase 4.1 Portfolio MVP。
 
 **進度更新**：
 - ✅ Epic 2 MVP-1（Warmup Days + Baseline 對比）已完成（2025-12-30）

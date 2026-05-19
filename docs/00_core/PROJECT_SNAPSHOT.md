@@ -14,6 +14,7 @@
 - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3b ✅（研究閉環已完成，含 Promote / Walk-forward / Baseline / Overfitting risk / 視覺驗證）
 - AI Runtime Subsystem MVP ✅（Governance-aware 狀態機監控站已完成）
 - Smart Money Terminal MVP ✅（高密度、低延遲的專業級籌碼分析終端已完成）
+- Phase 4.1 Portfolio MVP 🚧（service/domain/test 骨架已開始；`ui_qt` Portfolio Tab 與 Phase 3 → Portfolio 整合尚未完成）
 
 ## 現在的工作模式（你每天要用的流程）
 
@@ -29,9 +30,9 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. 以「實際使用」找出 UX/理解斷點（不是加功能）
-2. 把日常流程與關鍵指標說明補齊（文件一致）
-3. 對回測對標呈現方式做最後定稿（benchmark/normalize/hover）
+1. 補齊 Phase 4.1 Portfolio UI（Positions / Trades / Journal）
+2. 串接 Phase 3 → Portfolio 的來源追溯（Recommendation / Backtest / Strategy Version）
+3. 保持 Roadmap / Snapshot / Documentation Index / UI docs 一致
 
 ## 高風險區（改動需謹慎）
 
@@ -45,6 +46,7 @@
 
 - `DEVELOPMENT_ROADMAP.md` - 完整開發路線圖（Single Source of Truth）
 - `DOCUMENTATION_INDEX.md` - 文檔索引
+- `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則
 - `DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（Documentation Agent 判斷 coverage 的規則）
 - `PROJECT_NAVIGATION.md` / `PROJECT_INVENTORY.md` - 專案導航與盤點
 

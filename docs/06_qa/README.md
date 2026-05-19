@@ -9,14 +9,13 @@
 ### 推薦分析 Tab QA
 - `QA_RECOMMENDATION_TAB_ISSUES.md` - QA 問題
 - `QA_RECOMMENDATION_TAB_SUMMARY.md` - QA 總結
-- `QA_RECOMMENDATION_TAB_FIXES_APPLIED.md` - 已應用修復
-- `QA_RECOMMENDATION_TAB_DEBUG_LOG.md` - 調試日誌
-- `QA_RECOMMENDATION_TAB_FIX_SUGGESTION.md` - 修復建議
-- `QA_RECOMMENDATION_TAB_LOGGING_PATCH.md` - 日誌補丁
 
 ### 數據更新 Tab QA
 - `QA_UPDATE_TAB_ISSUES.md` - QA 問題
 - `QA_UPDATE_TAB_SUMMARY.md` - QA 總結
+
+### UI Qt Roadmap Audit
+- `UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md` - UI Qt 對照 development roadmap 的完成度稽核報告
 
 ## 🔗 相關目錄
 

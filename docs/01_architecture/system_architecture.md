@@ -6,7 +6,7 @@
 
 本系統是一個完整的台股技術分析平台，提供數據收集、處理、分析和回測功能。系統採用模組化設計，確保各個組件之間的獨立性和可維護性。
 
-### 當前狀態：Phase 2.5 完成 ✅ → Phase 3 準備
+### 當前狀態：Phase 3.3b 完成 ✅ → Phase 4.1 Portfolio UI
 
 **Phase 1：市場觀察儀 ✅ 已完成**
 - 強勢股/產業識別 + 推薦理由
@@ -29,7 +29,17 @@
 - 回測參數改進（execution_price、ATR 停損停利、部位管理）
 - **功能驗證**：18/18 功能通過（100% 通過率）
 
-**詳細演進地圖**：請參考 [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md)
+**Phase 3：AI Runtime / Smart Money / Research Layer ✅ 已完成**
+- Runtime Store / Event / Snapshot / Controller 架構已建立
+- Smart Money Terminal MVP 已完成
+- Recommendation、Backtest、Strategy Research 的 UI Qt 服務層已落地
+- Walk-forward warmup 與資料保護策略已補齊
+
+**Phase 4.1：Portfolio MVP 🚧 已開始**
+- `portfolio_module/` domain layer、`PortfolioService`、`JournalService` 與 MVP 測試已建立
+- `ui_qt` Portfolio Tab、持倉追蹤畫面與 Recommendation/Backtest → Portfolio 串接尚未完成
+
+**詳細演進地圖**：請參考 [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md)
 
 ## 系統架構
 ```

@@ -267,8 +267,8 @@ warmup_bars = max(60, 3*max_indicator_period)
 ### 使用方式
 
 詳細使用說明請參考：
-- [UI 功能文檔](UI_FEATURES_DOCUMENTATION.md) - 回測參數部分
-- [使用者指南](USER_GUIDE.md) - Phase 2.5 新參數使用指南
+- [UI 功能文檔](../02_features/UI_FEATURES_DOCUMENTATION.md) - 回測參數部分
+- [使用者指南](../02_features/USER_GUIDE.md) - Phase 2.5 新參數使用指南
 
 ---
 

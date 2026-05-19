@@ -957,8 +957,8 @@ threshold = 0.05-0.08
 - ✅ QA 驗證通過（17/17 測試通過）
 
 詳細修復記錄請參考：
-- [推薦分析 Tab QA 報告](../output/qa/recommendation_tab/VALIDATION_REPORT.md)
-- [數據更新 Tab QA 報告](../output/qa/update_tab/VALIDATION_REPORT.md)
+- [推薦分析 Tab QA 報告](../../output/qa/recommendation_tab/VALIDATION_REPORT.md)
+- [數據更新 Tab QA 報告](../../output/qa/update_tab/VALIDATION_REPORT.md)
 
 ## 📚 相關文檔
 
