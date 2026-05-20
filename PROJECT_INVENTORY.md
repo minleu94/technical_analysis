@@ -1,6 +1,6 @@
 # 專案盤點報告
 
-> **最後整理**：2026-05-19  
+> **最後整理**：2026-05-20
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 
 ---
@@ -12,6 +12,7 @@
 | `README.md` | 專案最短入口、啟動方式、目前主線 | Active |
 | `PROJECT_NAVIGATION.md` | 開發者導航，回答「我要改 X 要去哪裡」 | Active |
 | `PROJECT_INVENTORY.md` | 本文件，專案結構盤點摘要 | Active |
+| `AGENTS.md` | Codex 自動讀取的 repo 指令入口，導向 `docs/agents/` 完整 Agent 架構 | Active |
 | `requirements.txt` | Python 依賴 | Active |
 
 已移出或刪除：
@@ -51,6 +52,12 @@
 ```bash
 python ui_qt/main.py
 ```
+
+目前 `ui_qt` 近期狀態：
+
+- `ui_qt/views/update_view.py` 已重整為數據更新工作台，包含左側資料來源導覽與「安全更新所有數據」入口。
+- `ui_qt/views/runtime_view.py` 與 `runtime/` 已完成 Runtime Observatory MVP。
+- Portfolio 使用者可見 Tab 尚未完成，仍屬 Phase 4.1 下一步。
 
 回測圖表渲染：
 

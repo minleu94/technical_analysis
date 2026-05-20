@@ -27,7 +27,11 @@
    - 三層架構（UI / Service / Domain）的導航說明
    - 功能導航（我要做 X，要去哪裡看？）
 
-6. **其他專項文檔** - 功能特定權威
+6. **`AGENTS.md` / `docs/agents/`** - Codex 與 Agent 指引權威
+   - `AGENTS.md` 是 Codex 自動讀取的 repo 指令入口
+   - `docs/agents/` 保存完整 Agent 職責、Prompt 與共用上下文
+
+7. **其他專項文檔** - 功能特定權威
    - `docs/02_features/UI_FEATURES_DOCUMENTATION.md` - UI 功能說明
    - `docs/02_features/USER_GUIDE.md` - 使用者指南
    - `docs/01_architecture/system_architecture.md` - 系統架構
@@ -115,6 +119,7 @@
 - Agent Prompt 模板變更
 
 **必須更新（Must）：**
+- `AGENTS.md` - 若 Codex 自動讀取入口或強制必讀順序變更
 - `docs/agents/README.md` - Agent 總覽（如新增 Agent 或職責變更）
 - `docs/00_core/DOCUMENTATION_INDEX.md` - 文檔索引（如新增 Agent 文檔）
 

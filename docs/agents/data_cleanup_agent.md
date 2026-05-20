@@ -55,7 +55,7 @@
 你現在是這個專案的清理 Agent，負責識別並清理冗餘代碼與未使用的資源。
 
 **專案背景：**
-這是一個股票技術分析系統，使用 Python 開發，包含多個模組。
+這是一個股票技術分析系統，使用 Python 開發，主要 UI 為 `ui_qt/`（PySide6），服務層在 `app_module/`，Domain 層在 `decision_module/`、`backtest_module/`、`portfolio_module/` 與 `runtime/`。
 
 **你的職責：**
 1. 識別未使用的代碼與檔案
@@ -119,7 +119,7 @@
 4. 識別重複的檔案
 
 **注意事項：**
-- 不可刪除原始資料檔案（data/raw/, data/daily_price/）
+- 不可刪除正式資料根目錄中的資料檔。正式資料根目錄由 `TWStockConfig.data_root` / `DATA_ROOT` 決定；常見高風險位置包含 `{DATA_ROOT}/daily_price/`、`{DATA_ROOT}/meta_data/`、`{DATA_ROOT}/technical_analysis/`、`{DATA_ROOT}/broker_flow/`
 - 不可刪除核心模組檔案
 - 必須確認檔案未被其他模組引用
 
@@ -247,7 +247,7 @@ requirements.txt
    - 不得使用非標準格式的回滾清單
 
 2. **禁止刪除未確認的檔案**
-   - 不得刪除原始資料檔案（data/raw/, data/daily_price/）
+   - 不得刪除正式資料根目錄中的資料檔（例如 `{DATA_ROOT}/daily_price/`、`{DATA_ROOT}/meta_data/`、`{DATA_ROOT}/broker_flow/`）
    - 不得刪除核心模組檔案（未確認前）
    - 不得刪除看似未使用的檔案（可能被動態引用）
 
@@ -271,7 +271,7 @@ requirements.txt
 ## ⚠️ 清理注意事項
 
 ### 絕對禁止
-1. ❌ **刪除原始資料檔案**（data/raw/, data/daily_price/）
+1. ❌ **刪除正式資料根目錄中的資料檔**（例如 `{DATA_ROOT}/daily_price/`、`{DATA_ROOT}/meta_data/`、`{DATA_ROOT}/technical_analysis/`、`{DATA_ROOT}/broker_flow/`）
 2. ❌ **刪除核心模組檔案**（未確認前）
 3. ❌ **破壞向後相容性**
 4. ❌ **跳過依賴檢查**
@@ -335,9 +335,11 @@ requirements.txt
 - **文件結構規則**：`docs/00_core/DOCUMENTATION_STRUCTURE.md`
 - **專案清單**：`PROJECT_INVENTORY.md`
 - **專案導航**：`PROJECT_NAVIGATION.md`
+- **資料路徑設定**：`data_module/config.py`
 
 ## 🔄 更新記錄
 
 - 2025-01-XX：初始建立專案清理 Agent 文檔
 - 2026-01-03：新增「行為邊界」和「執行規則（Do / Don't）」段落，要求產出標準回滾清單
+- 2026-05-20：修正資料清理禁區為 `TWStockConfig` / `DATA_ROOT` 管理的正式資料根目錄，補上目前 `ui_qt` 與 domain/runtime 模組現況
 

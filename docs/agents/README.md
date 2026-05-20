@@ -39,6 +39,14 @@
   - 專案規範與約定
   - 不可違背的規則
 
+## 目前專案現況速記
+
+- 主要 UI 是 `ui_qt/`，入口為 `python ui_qt/main.py`，使用 PySide6。
+- 目前可見 UI 功能包含：數據更新工作台、市場觀察（大盤/強弱股/強弱產業/主力流向）、策略回測、推薦分析、觀察清單與 Runtime Observatory。
+- 資料位置由 `data_module/config.py` 的 `TWStockConfig` 管理；正式資料根目錄預設為 `D:/Min/Python/Project/FA_Data`，可由 `DATA_ROOT` 覆蓋。
+- repo 內沒有固定的正式 `data/` 目錄時，不代表資料不存在；Agent 必須先查設定，不可憑相對路徑推斷。
+- Codex 自動入口是 repo 根目錄 `AGENTS.md`；本目錄保存完整 Agent 職責與 Prompt 模板。
+
 ## ⛔ 強制流程（所有 Agent 必須遵守）
 
 ### 全 Agent 必讀文件清單（固定順序）
@@ -146,4 +154,5 @@ Codex 不會自動把 `docs/agents/*.md` 當成 repo 指令載入。Codex 的自
 - 2026-01-03：初始建立 Agent 文檔結構
 - 2026-01-03：統一所有 Agent 的必讀文件清單，明確定義全 Agent 必讀與特定 Agent 補充必讀
 - 2026-05-20：新增根目錄 `AGENTS.md` 作為 Codex 自動識別入口，保留 `docs/agents/` 作為完整 Agent 架構來源
+- 2026-05-20：補充目前 `ui_qt`、資料根目錄與 Codex 載入現況，避免 Agent 使用舊版路徑假設
 

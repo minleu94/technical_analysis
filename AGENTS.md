@@ -27,6 +27,8 @@
 
 - 使用繁體中文回覆與更新文檔。
 - 不得刪除或破壞原始資料檔。
+- 資料位置以 `data_module/config.py` 的 `TWStockConfig` 為準；正式資料根目錄預設 `D:/Min/Python/Project/FA_Data`，可由 `DATA_ROOT` 覆蓋。
+- 目前主要 UI 是 `ui_qt/`（PySide6），入口為 `ui_qt/main.py`。
 - 修改功能時同步更新相關文檔。
 - 優先遵循既有架構與測試方式。
 - 不要覆寫使用者或其他 agent 的未提交變更。

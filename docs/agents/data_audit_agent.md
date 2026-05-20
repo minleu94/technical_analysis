@@ -57,10 +57,14 @@
 這是一個股票技術分析系統，使用 CSV 檔案儲存股票資料。
 
 **資料結構：**
-- 原始資料：data/raw/
-- 每日價格：data/daily_price/
-- 處理後資料：data/processed/
-- 技術指標：data/technical_analysis/
+- 資料根目錄：由 `data_module/config.py` 的 `TWStockConfig.data_root` 決定，預設 `D:/Min/Python/Project/FA_Data`，可由 `DATA_ROOT` 覆蓋
+- 每日價格：`{DATA_ROOT}/daily_price/YYYYMMDD.csv`
+- 整合資料：`{DATA_ROOT}/meta_data/stock_data_whole.csv`
+- 大盤指數：`{DATA_ROOT}/meta_data/market_index.csv`
+- 產業指數：`{DATA_ROOT}/meta_data/industry_index.csv`
+- 技術指標：`{DATA_ROOT}/technical_analysis/{stock_id}_indicators.csv`
+- 券商分點：`{DATA_ROOT}/broker_flow/`
+- 分點註冊表：`{DATA_ROOT}/meta_data/broker_branch_registry.csv`
 
 **你的職責：**
 1. 驗證資料完整性（檔案存在、欄位完整、缺失值）
@@ -196,7 +200,7 @@
 ### 場景 1：驗證每日價格資料
 
 ```
-請驗證 data/daily_price/ 目錄下的每日價格資料：
+請驗證每日價格資料。先從 `TWStockConfig.daily_price_dir` 確認實際路徑，通常是 `{DATA_ROOT}/daily_price/`：
 
 1. 檢查所有預期的股票代碼是否都有資料
 2. 驗證日期範圍是否連續（排除假日）
@@ -210,8 +214,8 @@
 ```
 請比對原始資料與處理後資料的一致性：
 
-原始資料：data/raw/stock_data.csv
-處理後資料：data/processed/stock_data_processed.csv
+來源資料：`{DATA_ROOT}/daily_price/*.csv`
+整合資料：`{DATA_ROOT}/meta_data/stock_data_whole.csv`
 
 比對項目：
 1. 資料筆數是否一致（允許處理過程中的過濾）
@@ -224,7 +228,7 @@
 ```
 請驗證技術指標資料的正確性：
 
-指標資料：data/technical_analysis/
+指標資料：`{DATA_ROOT}/technical_analysis/`
 參考計算：使用標準技術指標公式
 
 驗證項目：
@@ -240,8 +244,11 @@
 - **資料架構文檔**：`docs/01_architecture/data_collection_architecture.md`
 - **資料更新指南**：`docs/03_data/daily_data_update_guide.md`
 - **資料重建指南**：`docs/03_data/DATA_REBUILD_GUIDE.md`
+- **設定來源**：`data_module/config.py`
+- **更新服務**：`app_module/update_service.py`
 
 ## 🔄 更新記錄
 
 - 2025-01-XX：初始建立資料驗證 Agent 文檔
+- 2026-05-20：修正資料位置說明，改以 `TWStockConfig` / `DATA_ROOT` 為準，補上券商分點與目前 `ui_qt` 使用的資料檔
 

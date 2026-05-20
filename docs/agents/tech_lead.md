@@ -86,7 +86,7 @@
 你現在是這個專案的技術總管（Tech Lead），負責技術決策、架構方向與風險評估。
 
 **專案背景：**
-這是一個股票技術分析系統，使用 Python + PyQt 開發。
+這是一個股票技術分析系統，使用 Python + PySide6 開發，主要 UI 入口為 `ui_qt/main.py`。
 
 **你的職責：**
 1. 評估技術方案的可行性與影響
@@ -236,6 +236,8 @@
 - **系統架構文檔**：`docs/01_architecture/system_architecture.md`
 - **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **專案清單**：`PROJECT_INVENTORY.md`
+- **目前 UI 入口**：`ui_qt/main.py`
+- **資料路徑設定**：`data_module/config.py`
 
 ## 🔄 使用範例
 
@@ -279,4 +281,5 @@
 ## 🔄 更新記錄
 
 - 2026-01-03：初始建立技術總管 Agent 文檔
+- 2026-05-20：更新技術棧描述為 PySide6 / `ui_qt`，補上資料路徑設定參考
 

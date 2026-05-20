@@ -113,7 +113,7 @@
 4. docs/agents/documentation_agent.md
 
 **Documentation Agent 補充必讀：**
-5. docs/DOC_COVERAGE_MAP.md ⭐ **必須讀取，用於判斷 coverage**
+5. docs/00_core/DOC_COVERAGE_MAP.md ⭐ **必須讀取，用於判斷 coverage**
 6. docs/00_core/DOCUMENTATION_INDEX.md
 7. docs/00_core/DEVELOPMENT_ROADMAP.md（先讀「📍 Living Section 定義」，再看 Living Section 段落）
 
@@ -129,7 +129,7 @@
 [在此描述具體的文檔更新需求，或代碼變更內容]
 
 **請執行 Coverage Pass：**
-1. **根據 `docs/DOC_COVERAGE_MAP.md` 的「變更類型 → 必須更新的文件對照表」識別所有需要更新的文件**
+1. **根據 `docs/00_core/DOC_COVERAGE_MAP.md` 的「變更類型 → 必須更新的文件對照表」識別所有需要更新的文件**
 2. **特別檢查「容易被忽略但必須更新的文件」**（Snapshot、Index、Navigation、README）
 3. 列出需要更新的文件清單（表格格式）
 4. 標示優先級（Must / Should / Nice-to-have）
@@ -234,7 +234,7 @@
 - docs/00_core/DOCUMENTATION_INDEX.md
 - docs/00_core/DEVELOPMENT_ROADMAP.md（Living Section，定義見該文件的「📍 Living Section 定義」段落）
 
-**檢查項目（使用 docs/DOC_COVERAGE_MAP.md 的「一致性檢查清單」）：**
+**檢查項目（使用 docs/00_core/DOC_COVERAGE_MAP.md 的「一致性檢查清單」）：**
 1. Phase 狀態是否一致（Snapshot 的「當前狀態」與 Roadmap Living Section 的「現況」一致）
 2. 工作模式描述是否一致（Snapshot 的「現在的工作模式」與 Roadmap Living Section 一致）
 3. 優先事項是否一致（Snapshot 的「本週優先事項」與 Roadmap Living Section 的「下一步 Next」一致）
@@ -335,7 +335,9 @@
 - **文檔索引**：`docs/00_core/DOCUMENTATION_INDEX.md`
 - **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **專案導航**：`PROJECT_NAVIGATION.md`
+- **文檔覆蓋矩陣**：`docs/00_core/DOC_COVERAGE_MAP.md`
 
 ## 🔄 更新記錄
 
 - 2026-01-03：重構為文檔覆蓋完整性 Agent，加入兩階段工作流程
+- 2026-05-20：修正 DOC_COVERAGE_MAP 路徑為 `docs/00_core/DOC_COVERAGE_MAP.md`
