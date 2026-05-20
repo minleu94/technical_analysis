@@ -143,6 +143,7 @@
 | [agents/data_audit_agent.md](../agents/data_audit_agent.md) | Data Audit Agent。 |
 | [agents/data_cleanup_agent.md](../agents/data_cleanup_agent.md) | Data Cleanup Agent。 |
 | [agents/CURSOR_SKILLS_DEFINITIONS.md](../agents/CURSOR_SKILLS_DEFINITIONS.md) | Cursor skills 定義。 |
+| [../../AGENTS.md](../../AGENTS.md) | Codex 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/` 完整 Agent 架構。 |
 | [strategies/momentum_aggressive_v1.md](../strategies/momentum_aggressive_v1.md) | 暴衝策略說明。 |
 | [strategies/stable_conservative_v1.md](../strategies/stable_conservative_v1.md) | 穩健策略說明。 |
 

@@ -31,6 +31,8 @@
 | `governance/` | 預留給流程治理、決策紀錄或政策文件 | 目前無 Markdown 文件 |
 | `strategies/` | 策略說明文件 | StrategyRegistry / 使用者理解 |
 
+> Codex 自動讀取入口位於 repo 根目錄 `AGENTS.md`。`docs/agents/` 保留完整 Agent 架構與 Prompt 文件。
+
 ---
 
 ## 目前狀態摘要

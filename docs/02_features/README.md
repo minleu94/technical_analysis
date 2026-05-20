@@ -8,11 +8,11 @@
 
 - **`UI_FEATURES_DOCUMENTATION.md`**
   - 完整的 UI 功能說明和參數文檔
-  - 所有 Tab 的功能說明
+  - 所有 Tab 的功能說明，包含數據更新工作台與安全更新所有數據流程
 
 - **`USER_GUIDE.md`**
   - 複雜功能的使用教程
-  - 推薦分析、策略參數最佳化、Walk-forward 驗證等
+  - 數據更新工作台、推薦分析、策略參數最佳化、Walk-forward 驗證等
 
 - **`BACKTEST_LAB_FEATURES.md`**
   - 策略回測標籤的完整功能說明

@@ -28,7 +28,7 @@
 
 ## 2. Agent Inventory (Agent 盤點)
 
-專案使用特定的 AI 角色（定義於 `docs/agents/` 與 Cursor Skills 中）。
+專案使用特定的 AI 角色（定義於 repo 根目錄 `AGENTS.md`、`docs/agents/` 與 Cursor Skills 中）。Codex 的自動讀取入口是 `AGENTS.md`；`docs/agents/` 保留完整 Agent 架構與 Prompt 文件。
 
 ### Tech Lead Agent (`tech_lead.md`)
 * **Purpose (目的)**：負責技術決策、架構方向與風險評估。
@@ -131,6 +131,7 @@
 
 ### Important Technical Docs (重要技術文檔)
 * **`docs/00_core/DOCUMENTATION_INDEX.md`**：查找所有功能說明文件的主索引。
+* **`AGENTS.md`**：Codex 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/` 的完整 Agent 架構。
 * **`docs/agents/shared_context.md`**：所有 AI 運作不可違背的前提（如強制使用繁體中文）。
 
 ### Outdated / Deprecated Docs (過時與冗餘文檔)
