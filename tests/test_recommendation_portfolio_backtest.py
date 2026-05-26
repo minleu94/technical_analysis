@@ -178,3 +178,37 @@ def test_portfolio_backtest_records_period_holdings_and_contributions():
     assert contribution.loc[contribution["股票代號"] == "2330", "總損益"].iloc[0] == 50000.0
     assert contribution.loc[contribution["股票代號"] == "2317", "總損益"].iloc[0] == -50000.0
     assert result.summary["total_return"] == 0.0
+
+
+def test_result_dto_supports_backtest_tab_readability_layers():
+    result = RecommendationPortfolioBacktestResultDTO(
+        summary={"total_return": 0.02, "max_drawdown": -0.01, "total_trades": 1},
+        equity_curve=pd.DataFrame([{"date": "2026-01-02", "equity": 1000000.0}]),
+        trades=pd.DataFrame([{"date": "2026-01-02", "stock_code": "2330", "side": "buy"}]),
+        snapshots=[],
+        period_holdings=[
+            PeriodHoldingDTO(
+                rebalance_date="2026-01-02",
+                stock_code="2330",
+                stock_name="台積電",
+                rank=1,
+                total_score=80.0,
+                factor_scores={},
+                allocation_amount=1000000.0,
+                allocation_weight=1.0,
+                entry_date="2026-01-02",
+                entry_price=100.0,
+                planned_exit_date="2026-01-06",
+                actual_exit_date="2026-01-06",
+                actual_exit_price=102.0,
+                exit_reason="holding_period",
+                holding_days=4,
+                return_pct=0.02,
+            )
+        ],
+        stock_contribution=[],
+        selection_diagnostics=["missing_future_factor:broker_flow"],
+    )
+
+    assert "股票代號" in result.period_holdings_dataframe().columns
+    assert "missing_future_factor:broker_flow" in result.selection_diagnostics

@@ -902,6 +902,40 @@ class BacktestView(QWidget):
             batch_result_layout.addWidget(batch_stats_group, stretch=1)
             
             result_tabs.addTab(batch_result_tab, "批次結果")
+
+        recommendation_portfolio_tab = QWidget()
+        recommendation_portfolio_layout = QVBoxLayout(recommendation_portfolio_tab)
+        recommendation_portfolio_layout.setSpacing(8)
+        recommendation_portfolio_layout.setContentsMargins(5, 5, 5, 5)
+
+        self.portfolio_summary_text = QTextEdit()
+        self.portfolio_summary_text.setReadOnly(True)
+        self.portfolio_summary_text.setMaximumHeight(120)
+        self.portfolio_summary_text.setFont(QFont("Consolas", 9))
+        recommendation_portfolio_layout.addWidget(self.portfolio_summary_text)
+
+        self.portfolio_period_table = QTableView()
+        self.portfolio_stock_table = QTableView()
+        self.portfolio_trades_table = QTableView()
+        for table in [
+            self.portfolio_period_table,
+            self.portfolio_stock_table,
+            self.portfolio_trades_table,
+        ]:
+            table.setAlternatingRowColors(True)
+            table.setSelectionBehavior(QTableView.SelectRows)
+            table.setSortingEnabled(True)
+            table.horizontalHeader().setStretchLastSection(True)
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+            table.setFont(QFont("Consolas", 9))
+
+        recommendation_portfolio_layout.addWidget(QLabel("期間明細"))
+        recommendation_portfolio_layout.addWidget(self.portfolio_period_table, stretch=3)
+        recommendation_portfolio_layout.addWidget(QLabel("個股貢獻"))
+        recommendation_portfolio_layout.addWidget(self.portfolio_stock_table, stretch=2)
+        recommendation_portfolio_layout.addWidget(QLabel("交易紀錄"))
+        recommendation_portfolio_layout.addWidget(self.portfolio_trades_table, stretch=2)
+        result_tabs.addTab(recommendation_portfolio_tab, "推薦組合")
         
         # 調整 Tab 順序（如果有最佳化Tab）
         if self.optimizer_service:
@@ -1207,6 +1241,35 @@ class BacktestView(QWidget):
                 # 如果因為 SOP 護欄無法 Promote，顯示提示
                 if can_promote_basic and not can_promote_sop:
                     print(f"[BacktestView] ⚠️ SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
+
+    def _show_recommendation_portfolio_result(self, result):
+        """顯示推薦組合回測結果。"""
+        self.current_recommendation_portfolio_result = result
+        if hasattr(self, "portfolio_period_table"):
+            self.portfolio_period_model = PandasTableModel(result.period_holdings_dataframe())
+            self.portfolio_period_table.setModel(self.portfolio_period_model)
+            self.portfolio_period_table.resizeColumnsToContents()
+        if hasattr(self, "portfolio_stock_table"):
+            self.portfolio_stock_model = PandasTableModel(result.stock_contribution_dataframe())
+            self.portfolio_stock_table.setModel(self.portfolio_stock_model)
+            self.portfolio_stock_table.resizeColumnsToContents()
+        if hasattr(self, "portfolio_trades_table"):
+            self.portfolio_trades_model = PandasTableModel(result.trades)
+            self.portfolio_trades_table.setModel(self.portfolio_trades_model)
+            self.portfolio_trades_table.resizeColumnsToContents()
+        if hasattr(self, "portfolio_summary_text"):
+            summary = result.summary
+            self.portfolio_summary_text.setPlainText(
+                "\n".join(
+                    [
+                        f"總報酬率: {summary.get('total_return', 0.0) * 100:.2f}%",
+                        f"最大回撤: {summary.get('max_drawdown', 0.0) * 100:.2f}%",
+                        f"交易檔數: {summary.get('total_trades', 0)}",
+                        f"平均持有天數: {summary.get('avg_holding_days', 0.0):.1f}",
+                        f"資金使用: {summary.get('capital_used', 0.0):,.0f}",
+                    ]
+                )
+            )
     
     def _on_backtest_error(self, error_msg: str):
         """回測錯誤"""
