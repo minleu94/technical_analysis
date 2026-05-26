@@ -66,6 +66,7 @@ def test_recommendation_portfolio_result_exposes_readable_tables():
     assert holding.pnl() == 50000.0
     assert result.period_holdings_dataframe().iloc[0]["股票代號"] == "2330"
     assert result.period_holdings_dataframe().iloc[0]["損益"] == 50000.0
+    assert result.stock_contribution_dataframe().iloc[0]["股票代號"] == "2330"
     assert result.stock_contribution_dataframe().iloc[0]["總損益"] == 50000.0
 
 
