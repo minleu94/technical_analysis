@@ -315,6 +315,8 @@ class MarketRegimeView(QWidget):
             self._update_layer1(regime_result)
             self._update_layer2(regime_result)
             self._update_layer3(regime_result)
+            self.layer3_group.setChecked(True)
+            self._update_layer3_visibility()
             
             # 顯示策略建議（使用 HTML 格式以支持標題高亮，深色主題）
             strategy_config = self.regime_service.get_strategy_config(regime_result.regime)
