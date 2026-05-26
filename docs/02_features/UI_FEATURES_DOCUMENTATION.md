@@ -17,6 +17,10 @@
   - ✅ Promote 機制（回測結果 → 策略版本）
   - ✅ K 線圖標記買賣點（視覺驗證）
 
+### Recommendation → Backtest
+
+推薦頁保留既有「目前名單送批次單股回測」流程，並新增「Profile/Config 送推薦組合回測」流程。後者會傳遞完整推薦設定，由回測頁在歷史期間重播推薦邏輯。
+
 **Phase 2.5 參數設計優化 ✅**
 - ✅ 強勢/弱勢分數標準化（z-score 標準化）
 - ✅ Pattern threshold/prominence ATR-based
