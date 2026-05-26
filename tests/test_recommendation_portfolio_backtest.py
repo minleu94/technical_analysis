@@ -6,6 +6,9 @@ from app_module.recommendation_portfolio_dtos import (
     RecommendationSnapshotDTO,
     StockContributionDTO,
 )
+from app_module.recommendation_portfolio_backtest_service import (
+    RecommendationPortfolioBacktestService,
+)
 from app_module.recommendation_replay_service import RecommendationReplayService
 
 
@@ -124,3 +127,54 @@ def test_replay_snapshot_filters_future_rows_before_recommending():
     assert calls["max_date"] == "2026-01-02"
     assert snapshot.as_of_date == "2026-01-02"
     assert snapshot.recommendations[0]["stock_code"] == "2330"
+
+
+def test_portfolio_backtest_records_period_holdings_and_contributions():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-02", "證券代號": "2317", "證券名稱": "鴻海", "收盤價": 50},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+            {"日期": "2026-01-06", "證券代號": "2317", "證券名稱": "鴻海", "收盤價": 45},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 90.0},
+            },
+            {
+                "stock_code": "2317",
+                "stock_name": "鴻海",
+                "total_score": 80.0,
+                "factor_scores": {"technical": 80.0},
+            },
+        ][:top_n]
+
+    service = RecommendationPortfolioBacktestService(provider=provider)
+    result = service.run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=2,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    holdings = result.period_holdings_dataframe()
+    contribution = result.stock_contribution_dataframe()
+
+    assert list(holdings["股票代號"]) == ["2330", "2317"]
+    assert holdings["配置金額"].sum() == 1000000.0
+    assert contribution.loc[contribution["股票代號"] == "2330", "總損益"].iloc[0] == 50000.0
+    assert contribution.loc[contribution["股票代號"] == "2317", "總損益"].iloc[0] == -50000.0
+    assert result.summary["total_return"] == 0.0
