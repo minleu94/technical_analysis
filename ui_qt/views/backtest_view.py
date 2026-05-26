@@ -2167,6 +2167,10 @@ class BacktestView(QWidget):
             config: 回測配置（包含 stock_list, profile_id, strategy_config, regime 等）
         """
         try:
+            if config.get("mode") == "recommendation_portfolio":
+                self._load_recommendation_portfolio_config(config)
+                return
+
             stock_list = config.get('stock_list', [])
             if not stock_list:
                 QMessageBox.warning(self, "錯誤", "股票清單為空")
@@ -2221,6 +2225,17 @@ class BacktestView(QWidget):
                 "錯誤",
                 f"載入推薦結果失敗：\n{str(e)}\n\n{traceback.format_exc()}"
             )
+
+    def _load_recommendation_portfolio_config(self, config):
+        self.current_recommendation_portfolio_config = config
+        QMessageBox.information(
+            self,
+            "已載入推薦組合回測",
+            f"Profile: {config.get('profile_name') or config.get('profile_id')}\n"
+            f"Top N: {config.get('top_n')}\n"
+            f"資金分配: {config.get('allocation_method')}\n\n"
+            "請在推薦組合回測區確認期間與資金後執行。",
+        )
     
     def _get_stock_codes(self) -> List[str]:
         """獲取要回測的股票代號列表"""

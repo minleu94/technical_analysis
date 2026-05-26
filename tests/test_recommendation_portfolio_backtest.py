@@ -10,6 +10,7 @@ from app_module.recommendation_portfolio_backtest_service import (
     RecommendationPortfolioBacktestService,
 )
 from app_module.recommendation_replay_service import RecommendationReplayService
+from ui_qt.views.recommendation_view import build_recommendation_portfolio_backtest_config
 
 
 def test_recommendation_portfolio_result_exposes_readable_tables():
@@ -212,3 +213,19 @@ def test_result_dto_supports_backtest_tab_readability_layers():
 
     assert "股票代號" in result.period_holdings_dataframe().columns
     assert "missing_future_factor:broker_flow" in result.selection_diagnostics
+
+
+def test_recommendation_portfolio_payload_preserves_profile_config():
+    config = build_recommendation_portfolio_backtest_config(
+        profile_id="momentum",
+        profile_name="暴衝策略",
+        strategy_config={"filters": {"price_change_min": 2}},
+        regime="Trend",
+        top_n=5,
+        holding_days=5,
+        allocation_method="score_weight",
+    )
+
+    assert config["mode"] == "recommendation_portfolio"
+    assert config["strategy_config"]["filters"]["price_change_min"] == 2
+    assert config["allocation_method"] == "score_weight"

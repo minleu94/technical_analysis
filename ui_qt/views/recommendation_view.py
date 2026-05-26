@@ -27,6 +27,27 @@ from data_module.config import TWStockConfig
 from ui_qt.widgets.info_button import InfoButton
 
 
+def build_recommendation_portfolio_backtest_config(
+    profile_id,
+    profile_name,
+    strategy_config,
+    regime,
+    top_n=10,
+    holding_days=None,
+    allocation_method="equal_weight",
+):
+    return {
+        "mode": "recommendation_portfolio",
+        "profile_id": profile_id,
+        "profile_name": profile_name,
+        "strategy_config": strategy_config,
+        "regime": regime,
+        "top_n": top_n,
+        "holding_days": holding_days,
+        "allocation_method": allocation_method,
+    }
+
+
 class RecommendationView(QWidget):
     """推薦分析視圖"""
     
@@ -1118,6 +1139,13 @@ class RecommendationView(QWidget):
         self.send_to_backtest_btn.setVisible(False)  # 初始隱藏
         self.send_to_backtest_btn.clicked.connect(self._send_to_backtest)
         title_layout.addWidget(self.send_to_backtest_btn)
+
+        self.send_profile_to_portfolio_backtest_btn = QPushButton("送推薦組合回測")
+        self.send_profile_to_portfolio_backtest_btn.setVisible(False)
+        self.send_profile_to_portfolio_backtest_btn.clicked.connect(
+            self._send_profile_to_portfolio_backtest
+        )
+        title_layout.addWidget(self.send_profile_to_portfolio_backtest_btn)
         
         layout.addLayout(title_layout)
         
@@ -1745,6 +1773,7 @@ class RecommendationView(QWidget):
             self.save_result_btn.setVisible(True)
         # 一鍵送回測按鈕（只要有推薦結果就顯示）
         self.send_to_backtest_btn.setVisible(True)
+        self.send_profile_to_portfolio_backtest_btn.setVisible(True)
     
     def _on_recommendation_error(self, error_msg: str):
         """推薦分析出錯"""
@@ -1838,6 +1867,34 @@ class RecommendationView(QWidget):
             "已送出",
             f"已將 {len(selected_stocks)} 檔股票送出到策略回測\n\n"
             f"請切換到「策略回測」標籤查看。"
+        )
+
+    def _send_profile_to_portfolio_backtest(self):
+        """送出完整推薦 Profile/Config，讓回測頁重播歷史推薦邏輯。"""
+        if not self.current_config:
+            QMessageBox.warning(self, "錯誤", "沒有可送回測的推薦設定")
+            return
+
+        profile_name = "進階模式"
+        if self.current_profile and self.current_profile in self.profiles:
+            profile_name = self.profiles[self.current_profile].get("name", "")
+
+        config = build_recommendation_portfolio_backtest_config(
+            profile_id=self.current_profile,
+            profile_name=profile_name,
+            strategy_config=self.current_config,
+            regime=self.current_regime,
+            top_n=10,
+            holding_days=None,
+            allocation_method="equal_weight",
+        )
+        self.sendToBacktestRequested.emit(config)
+
+        QMessageBox.information(
+            self,
+            "已送出",
+            "已將推薦 Profile/Config 送出到推薦組合回測\n\n"
+            "請切換到「策略回測」標籤確認期間與資金後執行。"
         )
     
     def _add_selected_to_watchlist(self):
