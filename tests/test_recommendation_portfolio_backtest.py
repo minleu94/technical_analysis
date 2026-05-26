@@ -6,6 +6,7 @@ from app_module.recommendation_portfolio_dtos import (
     RecommendationSnapshotDTO,
     StockContributionDTO,
 )
+from app_module.recommendation_replay_service import RecommendationReplayService
 
 
 def test_recommendation_portfolio_result_exposes_readable_tables():
@@ -85,3 +86,41 @@ def test_recommendation_portfolio_empty_tables_keep_readable_columns():
     assert "損益" in result.period_holdings_dataframe().columns
     assert "股票代號" in result.stock_contribution_dataframe().columns
     assert "總損益" in result.stock_contribution_dataframe().columns
+
+
+def test_replay_snapshot_filters_future_rows_before_recommending():
+    calls = {}
+
+    def provider(as_of_data, config, top_n):
+        calls["max_date"] = as_of_data["日期"].max().strftime("%Y-%m-%d")
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 88.0,
+                "factor_scores": {"technical": 88.0},
+                "selection_reason": "score_rank",
+            }
+        ]
+
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "收盤價": 100},
+            {"日期": "2026-01-03", "證券代號": "2330", "收盤價": 200},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    service = RecommendationReplayService(provider=provider)
+    snapshot = service.run_snapshot(
+        as_of_date="2026-01-02",
+        profile_id="momentum",
+        config={"regime": "Trend"},
+        history=history,
+        universe=["2330"],
+        top_n=5,
+    )
+
+    assert calls["max_date"] == "2026-01-02"
+    assert snapshot.as_of_date == "2026-01-02"
+    assert snapshot.recommendations[0]["stock_code"] == "2330"
