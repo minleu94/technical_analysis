@@ -59,6 +59,24 @@ class RecommendationPortfolioBacktestResultDTO:
     selection_diagnostics: List[str] = field(default_factory=list)
 
     def period_holdings_dataframe(self) -> pd.DataFrame:
+        columns = [
+            "再平衡日",
+            "股票代號",
+            "股票名稱",
+            "排名",
+            "總分",
+            "配置金額",
+            "配置權重",
+            "進場日",
+            "進場價",
+            "預計出場日",
+            "實際出場日",
+            "實際出場價",
+            "出場原因",
+            "持有天數",
+            "報酬率",
+            "損益",
+        ]
         rows = []
         for holding in self.period_holdings:
             rows.append(
@@ -81,9 +99,18 @@ class RecommendationPortfolioBacktestResultDTO:
                     "損益": holding.pnl(),
                 }
             )
-        return pd.DataFrame(rows)
+        return pd.DataFrame(rows, columns=columns)
 
     def stock_contribution_dataframe(self) -> pd.DataFrame:
+        columns = [
+            "股票代號",
+            "股票名稱",
+            "被選次數",
+            "總損益",
+            "平均報酬率",
+            "勝率",
+            "最大單筆虧損",
+        ]
         rows = []
         for item in self.stock_contribution:
             rows.append(
@@ -97,4 +124,4 @@ class RecommendationPortfolioBacktestResultDTO:
                     "最大單筆虧損": item.worst_return_pct,
                 }
             )
-        return pd.DataFrame(rows)
+        return pd.DataFrame(rows, columns=columns)

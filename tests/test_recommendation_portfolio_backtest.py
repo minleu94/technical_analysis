@@ -63,5 +63,24 @@ def test_recommendation_portfolio_result_exposes_readable_tables():
     )
 
     assert result.summary["total_return"] == 0.05
+    assert holding.pnl() == 50000.0
     assert result.period_holdings_dataframe().iloc[0]["股票代號"] == "2330"
+    assert result.period_holdings_dataframe().iloc[0]["損益"] == 50000.0
     assert result.stock_contribution_dataframe().iloc[0]["總損益"] == 50000.0
+
+
+def test_recommendation_portfolio_empty_tables_keep_readable_columns():
+    result = RecommendationPortfolioBacktestResultDTO(
+        summary={},
+        equity_curve=pd.DataFrame(),
+        trades=pd.DataFrame(),
+        snapshots=[],
+        period_holdings=[],
+        stock_contribution=[],
+        selection_diagnostics=[],
+    )
+
+    assert "股票代號" in result.period_holdings_dataframe().columns
+    assert "損益" in result.period_holdings_dataframe().columns
+    assert "股票代號" in result.stock_contribution_dataframe().columns
+    assert "總損益" in result.stock_contribution_dataframe().columns
