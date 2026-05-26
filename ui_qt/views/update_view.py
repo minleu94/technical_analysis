@@ -32,6 +32,7 @@ class UpdateView(QWidget):
         """
         super().__init__(parent)
         self.update_service = update_service
+        self._loaded_detail_sources = set()
         
         # Worker
         self.worker: TaskWorker = None
@@ -62,12 +63,13 @@ class UpdateView(QWidget):
             self.nav_list.addItem(label)
 
         self.content_stack = QStackedWidget()
-        for _, label in self._nav_items:
+        for key, label in self._nav_items:
             page = QWidget()
             page_layout = QVBoxLayout(page)
             page_label = QLabel(label)
-            page_label.setAlignment(Qt.AlignCenter)
             page_layout.addWidget(page_label)
+            if key != "all":
+                self._add_source_tab_content(page_layout, key)
             self.content_stack.addWidget(page)
 
         self.safe_update_all_btn = QPushButton("安全更新所有數據")
@@ -137,6 +139,15 @@ class UpdateView(QWidget):
         broker_branch_layout.addWidget(self.broker_branch_status_text)
         broker_branch_group.setLayout(broker_branch_layout)
         status_layout.addWidget(broker_branch_group, stretch=1)
+
+        technical_group = QGroupBox("技術指標數據")
+        technical_layout = QVBoxLayout()
+        self.technical_status_text = QTextEdit()
+        self.technical_status_text.setReadOnly(True)
+        self.technical_status_text.setMaximumHeight(120)
+        technical_layout.addWidget(self.technical_status_text)
+        technical_group.setLayout(technical_layout)
+        status_layout.addWidget(technical_group, stretch=1)
         
         status_group.setLayout(status_layout)
         main_layout.addWidget(status_group)
@@ -146,6 +157,7 @@ class UpdateView(QWidget):
         self.market_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.industry_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.broker_branch_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
+        self.technical_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         
         # 更新配置面板
         config_group = QGroupBox("更新配置")
@@ -321,6 +333,44 @@ class UpdateView(QWidget):
         log_group.setLayout(log_layout)
         main_layout.addWidget(log_group, stretch=2)  # 添加stretch讓日誌區域也能隨視窗縮放
 
+    def _add_source_tab_content(self, layout: QVBoxLayout, key: str):
+        """為各資料來源頁放入日常操作入口"""
+        descriptions = {
+            "daily": "檢查 raw daily_price 與 meta_data/stock_data_whole.csv 的整合狀態。",
+            "market": "檢查並更新 meta_data/market_index.csv。",
+            "industry": "檢查並更新 meta_data/industry_index.csv。",
+            "broker_branch": "檢查券商分點 registry、merged.csv 與尚未合併的 daily 檔。",
+            "technical": "檢查 technical_analysis 與 all_stocks_data.csv 的指標狀態。",
+        }
+        layout.addWidget(QLabel(descriptions.get(key, "檢查此資料來源的更新狀態。")))
+
+        button_layout = QHBoxLayout()
+        check_btn = QPushButton("檢查狀態")
+        check_btn.clicked.connect(lambda _checked=False, source=key: self._check_source_detail(source, force=True))
+        button_layout.addWidget(check_btn)
+
+        if key in {"daily", "market", "industry", "broker_branch"}:
+            update_btn = QPushButton("更新此資料源")
+            update_btn.clicked.connect(self._execute_update)
+            button_layout.addWidget(update_btn)
+
+        if key == "daily":
+            merge_btn = QPushButton("合併每日資料")
+            merge_btn.clicked.connect(self._execute_merge)
+            button_layout.addWidget(merge_btn)
+        elif key == "broker_branch":
+            merge_broker_btn = QPushButton("合併券商分點")
+            merge_broker_btn.clicked.connect(self._execute_merge_broker_branch)
+            button_layout.addWidget(merge_broker_btn)
+        elif key == "technical":
+            calc_btn = QPushButton("智慧增量計算")
+            calc_btn.clicked.connect(self._execute_calculate_technical_indicators)
+            button_layout.addWidget(calc_btn)
+
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        layout.addStretch()
+
     def _on_nav_changed(self, row: int):
         """切換工作台頁面並同步單項更新類型"""
         if row < 0:
@@ -335,6 +385,8 @@ class UpdateView(QWidget):
             self.industry_radio.setChecked(True)
         elif key == "broker_branch":
             self.broker_branch_radio.setChecked(True)
+        if key != "all" and key not in self._loaded_detail_sources:
+            self._check_source_detail(key)
 
     def _check_data_status(self):
         """檢查數據狀態"""
@@ -349,7 +401,7 @@ class UpdateView(QWidget):
             
             # 在背景執行
             def check_task():
-                return self.update_service.check_data_status()
+                return self._get_overview_status()
             
             self.worker = TaskWorker(check_task)
             self.worker.finished.connect(self._on_status_checked)
@@ -360,6 +412,50 @@ class UpdateView(QWidget):
             QMessageBox.critical(self, "錯誤", f"檢查數據狀態失敗：\n{str(e)}")
             self.check_status_btn.setEnabled(True)
             self.check_status_btn.setText("檢查數據狀態")
+
+    def _get_overview_status(self) -> Dict[str, Any]:
+        """取得全部資料頁使用的輕量狀態"""
+        if hasattr(self.update_service, "check_data_overview"):
+            return self.update_service.check_data_overview()
+        return self.update_service.check_data_status()
+
+    def _get_source_detail(self, source: str) -> Dict[str, Any]:
+        """取得單一資料來源詳細狀態並包成 UI 可套用的狀態 dict"""
+        source_map = {
+            "daily": "daily_data",
+            "market": "market_index",
+            "industry": "industry_index",
+            "broker_branch": "broker_branch",
+            "technical": "technical_indicators",
+        }
+        status_key = source_map.get(source, source)
+        if hasattr(self.update_service, "check_source_detail"):
+            return {status_key: self.update_service.check_source_detail(source)}
+        return {status_key: self.update_service.check_data_status().get(status_key, {})}
+
+    def _check_source_detail(self, source: str, force: bool = False):
+        """背景載入單一資料來源的詳細狀態"""
+        if not force and source in self._loaded_detail_sources:
+            return
+        if self.worker and self.worker.isRunning():
+            self.worker.cancel()
+            self.worker.wait(3000)
+
+        def check_task():
+            return {"source": source, "status": self._get_source_detail(source)}
+
+        self.worker = TaskWorker(check_task)
+        self.worker.finished.connect(self._on_source_detail_checked)
+        self.worker.error.connect(self._on_status_error)
+        self.worker.start()
+
+    def _on_source_detail_checked(self, payload: Dict[str, Any]):
+        """單一資料來源詳細狀態載入完成"""
+        source = payload.get("source")
+        status = payload.get("status", {})
+        if source:
+            self._loaded_detail_sources.add(source)
+        self._on_status_checked(status)
     
     def _on_status_checked(self, status: Dict[str, Any]):
         """數據狀態檢查完成"""
@@ -367,10 +463,11 @@ class UpdateView(QWidget):
         self.check_status_btn.setText("檢查數據狀態")
         
         # 分別更新四個區塊
-        daily_text = ""
-        market_text = ""
-        industry_text = ""
-        broker_branch_text = ""
+        daily_text = self.daily_status_text.toPlainText()
+        market_text = self.market_status_text.toPlainText()
+        industry_text = self.industry_status_text.toPlainText()
+        broker_branch_text = self.broker_branch_status_text.toPlainText()
+        technical_text = self.technical_status_text.toPlainText()
         
         for key, value in status.items():
             latest_date = value.get('latest_date', '未知')
@@ -387,6 +484,11 @@ class UpdateView(QWidget):
                 industry_text = status_display
             elif key == 'broker_branch':
                 broker_branch_text = status_display
+            elif key == 'technical_indicators':
+                file_count = value.get('file_count')
+                if file_count is not None:
+                    status_display += f"\n指標檔數：{file_count:,}"
+                technical_text = status_display
         
         # 如果沒有數據，顯示提示
         if not daily_text:
@@ -397,11 +499,14 @@ class UpdateView(QWidget):
             industry_text = "尚未檢查"
         if not broker_branch_text:
             broker_branch_text = "尚未檢查"
+        if not technical_text:
+            technical_text = "尚未檢查"
         
         self.daily_status_text.setPlainText(daily_text)
         self.market_status_text.setPlainText(market_text)
         self.industry_status_text.setPlainText(industry_text)
         self.broker_branch_status_text.setPlainText(broker_branch_text)
+        self.technical_status_text.setPlainText(technical_text)
         self._log(f"數據狀態檢查完成")
     
     def _on_status_error(self, error_msg: str):
@@ -437,7 +542,7 @@ class UpdateView(QWidget):
             return result
 
         steps = [
-            ("檢查資料狀態", 0, lambda: self.update_service.check_data_status()),
+            ("檢查資料狀態", 0, lambda: self._get_overview_status()),
             ("每日股價更新", 12, lambda: self.update_service.update_daily(start_date, end_date)),
             ("大盤指數更新", 24, lambda: self.update_service.update_market(start_date, end_date)),
             ("產業指數更新", 36, lambda: self.update_service.update_industry(start_date, end_date)),
@@ -452,9 +557,10 @@ class UpdateView(QWidget):
                     force_all=False,
                     start_date=None,
                     progress_callback=progress_callback,
+                    incremental_lookback_days=250,
                 ),
             ),
-            ("刷新資料狀態", 100, lambda: self.update_service.check_data_status()),
+            ("刷新資料狀態", 100, lambda: self._get_overview_status()),
         ]
 
         for name, progress, action in steps:

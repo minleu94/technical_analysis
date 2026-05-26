@@ -3,7 +3,7 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QListWidget, QPushButton, QStackedWidget
+from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget
 
 from ui_qt.views.update_view import UpdateView
 
@@ -19,12 +19,21 @@ class FakeUpdateService:
 
     def check_data_status(self):
         self.calls.append(("check_data_status",))
+        return self.check_data_overview()
+
+    def check_data_overview(self):
+        self.calls.append(("check_data_overview",))
         return {
             "daily_data": {"latest_date": "2026-05-19", "total_records": 100, "status": "ok"},
             "market_index": {"latest_date": "2026-05-19", "total_records": 10, "status": "ok"},
             "industry_index": {"latest_date": "2026-05-19", "total_records": 20, "status": "ok"},
             "broker_branch": {"latest_date": "2026-05-19", "total_records": 30, "status": "ok"},
+            "technical_indicators": {"latest_date": "2026-05-19", "total_records": 40, "status": "ok"},
         }
+
+    def check_source_detail(self, source):
+        self.calls.append(("check_source_detail", source))
+        return {"latest_date": "2026-05-19", "total_records": 1, "status": "ok"}
 
     def update_daily(self, start_date, end_date):
         self.calls.append(("update_daily", start_date, end_date))
@@ -56,8 +65,15 @@ class FakeUpdateService:
         force_all=False,
         start_date=None,
         progress_callback=None,
+        incremental_lookback_days=250,
     ):
-        self.calls.append(("calculate_technical_indicators", target_stock, force_all, start_date))
+        self.calls.append((
+            "calculate_technical_indicators",
+            target_stock,
+            force_all,
+            start_date,
+            incremental_lookback_days,
+        ))
         if progress_callback:
             progress_callback("technical indicators ok", 100)
         return {"success": True, "message": "technical ok"}
@@ -109,7 +125,7 @@ def test_safe_update_all_runs_conservative_sequence():
 
     assert result["success"] is True
     assert [call[0] for call in view.update_service.calls] == [
-        "check_data_status",
+        "check_data_overview",
         "update_daily",
         "update_market",
         "update_industry",
@@ -117,16 +133,47 @@ def test_safe_update_all_runs_conservative_sequence():
         "merge_daily_data",
         "merge_broker_branch_data",
         "calculate_technical_indicators",
-        "check_data_status",
+        "check_data_overview",
     ]
     assert view.update_service.calls[-2] == (
         "calculate_technical_indicators",
         None,
         False,
         None,
+        250,
     )
     assert progress[0][1] == 0
     assert progress[-1][1] == 100
+
+
+def test_overview_check_uses_lightweight_service_contract():
+    view = make_view()
+
+    status = view._get_overview_status()
+
+    assert status["daily_data"]["latest_date"] == "2026-05-19"
+    assert view.update_service.calls == [("check_data_overview",)]
+
+
+def test_source_detail_check_uses_detail_service_contract():
+    view = make_view()
+
+    detail = view._get_source_detail("broker_branch")
+
+    assert detail == {"broker_branch": {"latest_date": "2026-05-19", "total_records": 1, "status": "ok"}}
+    assert view.update_service.calls == [("check_source_detail", "broker_branch")]
+
+
+def test_source_tabs_have_operational_content():
+    view = make_view()
+
+    for row in range(1, view.content_stack.count()):
+        page = view.content_stack.widget(row)
+        labels = page.findChildren(QLabel)
+        buttons = page.findChildren(QPushButton)
+
+        assert len(labels) >= 2
+        assert buttons
 
 
 class FailingMarketService(FakeUpdateService):
@@ -144,7 +191,7 @@ def test_safe_update_all_stops_after_failed_core_step():
     assert result["success"] is False
     assert result["failed_step"] == "大盤指數更新"
     assert [call[0] for call in view.update_service.calls] == [
-        "check_data_status",
+        "check_data_overview",
         "update_daily",
         "update_market",
     ]
