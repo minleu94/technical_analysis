@@ -12,6 +12,8 @@
 2. 建立推薦組合回測：用初始資金買入每期推薦組合，而不是逐檔獨立回測。
 3. 支援推薦層參數優化：比較不同 top_n、權重、篩選條件、持有天數與資金分配方式。
 4. 保留未來因子擴充空間：券商分點、營收、基本面、籌碼等資料應可作為新因子加入，不重寫回測核心。
+5. 回測結果必須能追溯每一期買入、持有、出場的股票清單，用於判斷策略好壞來自哪些標的與哪些推薦條件。
+6. Backtest tab 必須提升可讀性，讓使用者能先看懂組合層摘要，再下鑽到期間、股票、交易與推薦理由。
 
 ## 非目標
 
@@ -35,6 +37,35 @@
 - `selection_reason`
 
 快照必須可追溯，避免之後無法解釋為什麼某天買入某檔股票。
+
+### Portfolio Audit Trail
+
+推薦組合回測必須保留完整股票追溯資料。每一期至少包含：
+
+- `rebalance_date`
+- `selected_stock_codes`
+- `selected_stock_names`
+- `rank`
+- `total_score`
+- `factor_scores`
+- `allocation_amount`
+- `allocation_weight`
+- `entry_date`
+- `entry_price`
+- `planned_exit_date`
+- `actual_exit_date`
+- `actual_exit_price`
+- `exit_reason`
+- `holding_days`
+- `return_pct`
+
+結果頁不能只顯示總報酬與勝率。使用者必須能回答：
+
+- 哪些股票被這套推薦策略反覆選中。
+- 哪些股票貢獻主要報酬。
+- 哪些股票造成主要回撤。
+- 哪些 rebalance date 推薦品質最差。
+- 分數高的股票是否真的比低分股票表現好。
 
 ### Factor Slot
 
@@ -91,6 +122,7 @@ run_snapshot(as_of_date, profile_id, config, universe, top_n) -> RecommendationS
 - 執行歷史推薦重播。
 - 管理現金、持倉、出場。
 - 產生組合 equity curve、trade list、snapshot list。
+- 產生 `period_holdings` 與 `stock_contribution`，讓 UI 可顯示每期選股明細與個股貢獻。
 
 預期介面：
 
@@ -107,6 +139,16 @@ run_portfolio_backtest(
     holding_days,
 ) -> RecommendationPortfolioBacktestResultDTO
 ```
+
+`RecommendationPortfolioBacktestResultDTO` 至少包含：
+
+- `summary`
+- `equity_curve`
+- `trades`
+- `snapshots`
+- `period_holdings`
+- `stock_contribution`
+- `selection_diagnostics`
 
 第一版支援的 `allocation_method`：
 
@@ -154,10 +196,25 @@ score = total_return - abs(max_drawdown) * drawdown_penalty - invalid_sample_pen
 - 資金分配方式
 - 是否執行參數優化
 
+Backtest tab 的推薦組合結果要分成五個閱讀層次：
+
+1. **總覽**：總報酬、最大回撤、勝率、交易次數、平均持有天數、資金使用率。
+2. **期間明細**：每個 rebalance date 選了哪些股票、配置多少資金、後來報酬如何。
+3. **個股貢獻**：依股票彙總總損益、平均報酬、被選次數、勝率、最大單筆虧損。
+4. **交易紀錄**：每一筆買入與賣出，含進出場日期、價格、股數、費用與出場原因。
+5. **推薦診斷**：推薦數量不足、資料不足、分數分布異常、因子缺失等警示。
+
 Recommendation tab 的「一鍵送回測」後續應改成兩個選項：
 
 - 送出目前名單做批次單股回測
 - 送出目前 Profile/Config 做推薦組合回測
+
+Recommendation tab 更新重點：
+
+- 顯示目前 Profile/Config 是否可做推薦組合回測。
+- 一鍵送回測時傳遞完整 Profile/Config，而不是只傳遞當下股票清單。
+- 顯示「這次推薦若進入組合回測，將使用 Top N、持有天數、資金分配方式」的摘要。
+- 保留現有送出股票清單流程，避免破壞既有批次單股回測使用方式。
 
 第一版可以先實作服務與測試，再接 UI。
 
@@ -171,6 +228,8 @@ Recommendation tab 的「一鍵送回測」後續應改成兩個選項：
 4. 多期推薦會產生可用 equity curve。
 5. 優化結果依目標函數排序。
 6. 缺少未來因子資料時流程不中斷。
+7. 回測結果能列出每期選入股票與每檔股票的組合貢獻。
+8. UI 結果資料模型能支援總覽、期間明細、個股貢獻、交易紀錄與推薦診斷五個視圖。
 
 ## 後續擴充
 
