@@ -112,10 +112,17 @@ python ui_app/main.py
 **對應的 Service**：`app_module/update_service.py`
 - 負責：數據狀態檢查、更新流程編排
 
+**目前 UI 形態**：
+- `UpdateView` 已整理為維運工作台式布局：左側導覽、上方狀態摘要、右側資料來源頁、底部共享日誌與進度
+- 日常維護建議使用「安全更新所有數據」，保守依序執行狀態檢查、每日股價、大盤指數、產業指數、券商分點、每日合併與技術指標計算
+- 單一來源維護仍可從左側導覽切換到每日股價、大盤指數、產業指數、券商分點、技術指標或進階維護
+
 **真正動邏輯的地方**：
 - `scripts/batch_update_daily_data.py`：批量更新每日股票數據
 - `scripts/merge_daily_data.py`：合併數據到 meta_data
 - `scripts/batch_update_market_and_industry_index.py`：更新市場/產業指數
+- `scripts/calculate_technical_indicators.py`：計算技術指標
+- `app_module/broker_branch_update_service.py`：券商分點資料抓取、標準化與合併
 
 **如果我要改數據更新邏輯**：先看 `app_module/update_service.py`，再看對應的腳本檔案。
 
@@ -213,6 +220,19 @@ python ui_app/main.py
 - **Walk-Forward 暖機期**：`app_module/walkforward_service.py` 的 `warmup_days` 參數
 - **Baseline 對比**：`backtest_module/performance_metrics.py` 的 `calculate_baseline_comparison()`
 - **過擬合風險提示**：`backtest_module/performance_metrics.py` 的 `calculate_overfitting_risk()`
+
+---
+
+### 📌 Agent / Codex 指引
+
+**Codex 自動讀取入口**：`AGENTS.md`
+
+**完整 Agent 架構**：`docs/agents/`
+
+**使用規則**：
+- Codex 會讀取 repo 根目錄 `AGENTS.md`。
+- `docs/agents/` 保存完整 Agent 職責、Prompt 與共用上下文，但不會單靠檔名自動成為 Codex 指令入口。
+- 資料路徑請以 `data_module/config.py` 的 `TWStockConfig` 與 `DATA_ROOT` 為準，不要假設 repo 內一定存在正式 `data/` 目錄。
 
 ---
 

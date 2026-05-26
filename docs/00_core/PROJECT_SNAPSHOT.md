@@ -15,11 +15,13 @@
 - AI Runtime Subsystem MVP ✅（Governance-aware 狀態機監控站已完成）
 - Smart Money Terminal MVP ✅（高密度、低延遲的專業級籌碼分析終端已完成）
 - UI Qt Backtest chart renderer ✅（QtWebEngine + HTML5 Canvas fast renderer 已完成，Matplotlib fallback 保留）
+- 數據更新工作台 ✅（`UpdateView` 已整理為左側導覽維運工作台，新增「安全更新所有數據」日常維護入口）
+- Codex / Agent 指引 ✅（repo 根目錄 `AGENTS.md` 已建立，`docs/agents/` 已對齊目前 `ui_qt`、資料根目錄與文檔路徑）
 - Phase 4.1 Portfolio MVP 🚧（service/domain/test 骨架已開始；`ui_qt` Portfolio Tab 與 Phase 3 → Portfolio 整合尚未完成）
 
 ## 現在的工作模式（你每天要用的流程）
 
-1. Update 更新資料
+1. Update 使用「安全更新所有數據」或左側資料來源頁更新資料
 2. Market Watch 看 Regime + 強弱
 3. Recommendation 用 Profile 出名單 + 看 Why/WhyNot → 丟 Watchlist
 4. Backtest 從 Watchlist / 一鍵送回測 → 產出報告 / Promote（如需要）
@@ -33,7 +35,7 @@
 
 1. 補齊 Phase 4.1 Portfolio UI（Positions / Trades / Journal）
 2. 串接 Phase 3 → Portfolio 的來源追溯（Recommendation / Backtest / Strategy Version）
-3. 保持 Roadmap / Snapshot / Documentation Index / UI docs 一致
+3. 保持 Roadmap / Snapshot / Documentation Index / UI docs / Agent docs 一致
 
 ## 高風險區（改動需謹慎）
 
@@ -43,6 +45,7 @@
 - UI ↔ service contract（DTO）
 - `runtime/` 核心子系統與 FSM 狀態機
 - `ui_qt/widgets/fast_chart_widget.py` / `ui_qt/widgets/chart_payloads.py`（回測圖表 renderer 與資料 payload contract）
+- `ui_qt/views/update_view.py` / `app_module/update_service.py`（數據更新工作台與安全更新流程）
 
 ## 指定權威文件（需要細節再看）
 

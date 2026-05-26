@@ -5,7 +5,7 @@
 ## 🎯 核心原則
 
 ### 1. 資料完整性優先
-- **絕對不可刪除或修改原始資料檔案**（`data/raw/`, `data/daily_price/` 等）
+- **絕對不可刪除或修改正式資料根目錄內的原始/每日資料檔案**。正式資料根目錄由 `data_module/config.py` 的 `TWStockConfig.data_root` 決定，預設為 `D:/Min/Python/Project/FA_Data`，也可由 `DATA_ROOT` 覆蓋。
 - 所有資料處理必須是**非破壞性**的
 - 資料驗證失敗時，必須**停止執行**並報告問題
 
@@ -39,16 +39,31 @@ app_module/          # 應用層模組
 backtest_module/     # 回測模組
 data_module/         # 資料處理模組
 decision_module/     # 決策引擎模組
+portfolio_module/    # Portfolio domain layer
+runtime/             # Governance-aware AI Runtime
+ui_qt/               # PySide6 Qt UI（目前主要 UI）
 ```
 
-### 資料目錄結構
+### 資料目錄結構（目前實際規則）
+
+資料不以 repo 內 `data/` 作為唯一來源。所有 Agent 必須先查看 `TWStockConfig` 或執行環境變數，再判定資料位置：
+
+- `DATA_ROOT`：正式資料根目錄，預設 `D:/Min/Python/Project/FA_Data`
+- `OUTPUT_ROOT`：輸出根目錄，預設 `D:/Min/Python/Project/FA_Data/output`
+- `PROFILE=test` 時，`data_root` 與 `output_root` 會自動加上 `_test`
+
 ```
-data/
-├── raw/              # 原始資料（不可修改）
-├── daily_price/     # 每日價格資料（不可修改）
-├── processed/       # 處理後的資料
-├── technical_analysis/  # 技術指標資料
-└── meta_data/       # 元資料
+{DATA_ROOT}/
+├── daily_price/          # 每日價格資料（YYYYMMDD.csv）
+├── meta_data/            # 元資料與整合檔
+│   ├── market_index.csv
+│   ├── industry_index.csv
+│   ├── stock_data_whole.csv
+│   ├── all_stocks_data.csv
+│   └── broker_branch_registry.csv
+├── technical_analysis/   # 技術指標資料
+├── broker_flow/          # 券商分點資料
+└── logs/                 # 更新與設定日誌
 ```
 
 ### 文檔目錄
@@ -63,7 +78,7 @@ docs/                # 專案文檔
 
 ### 核心技術
 - **Python 3.x**
-- **PyQt5/PyQt6**（UI 框架）
+- **PySide6**（目前主要 UI：`ui_qt/`）
 - **pandas**（資料處理）
 - **numpy**（數值計算）
 
@@ -242,4 +257,5 @@ docs/                # 專案文檔
 
 - 2026-01-03：初始建立共用上下文規範
 - 2026-01-03：新增「文件更新責任與規範」段落（定義更新責任、必須/可以不更新情況、更新記錄格式）
+- 2026-05-20：更新資料根目錄、`ui_qt`/PySide6、Portfolio 與 Runtime 現況，避免 Agent 誤判 repo 內 `data/` 為正式資料位置
 

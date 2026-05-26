@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-05-19  
+> **最後整理**：2026-05-20
 > **判讀規則**：Phase 狀態以 `DEVELOPMENT_ROADMAP.md` 的 Living Section 為準；本索引用於導航，不取代 roadmap。
 
 ---
@@ -17,6 +17,7 @@
 | [AI_CONTEXT_PACK.md](AI_CONTEXT_PACK.md) | 給外部 AI / Agent 的高密度專案上下文。 |
 | [PROJECT_NAVIGATION.md](../../PROJECT_NAVIGATION.md) | repo 根目錄的日常開發導航。 |
 | [PROJECT_INVENTORY.md](../../PROJECT_INVENTORY.md) | repo 根目錄的完整專案盤點。 |
+| [../../AGENTS.md](../../AGENTS.md) | Codex 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/` 完整 Agent 架構。 |
 
 ---
 

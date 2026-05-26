@@ -1,6 +1,6 @@
 # Docs 文檔目錄
 
-> **最後整理**：2026-05-19  
+> **最後整理**：2026-05-20
 > **權威順序**：先看 `00_core/DEVELOPMENT_ROADMAP.md` 的 Living Section，再看 `00_core/PROJECT_SNAPSHOT.md` 和 `00_core/DOCUMENTATION_INDEX.md`。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
@@ -31,6 +31,8 @@
 | `governance/` | 預留給流程治理、決策紀錄或政策文件 | 目前無 Markdown 文件 |
 | `strategies/` | 策略說明文件 | StrategyRegistry / 使用者理解 |
 
+> Codex 自動讀取入口位於 repo 根目錄 `AGENTS.md`。`docs/agents/` 保留完整 Agent 架構與 Prompt 文件。
+
 ---
 
 ## 目前狀態摘要
@@ -40,6 +42,8 @@
 - AI Runtime Subsystem MVP：已完成。
 - Smart Money Terminal MVP：已完成。
 - UI Qt Backtest chart rendering：已完成 QtWebEngine + HTML5 Canvas fast renderer，回測圖表保留 Matplotlib fallback。
+- 數據更新工作台：已完成左側導覽維運工作台與「安全更新所有數據」入口。
+- Codex / Agent 指引：根目錄 `AGENTS.md` 已建立，`docs/agents/` 已同步目前 `ui_qt`、資料根目錄與 coverage 路徑規則。
 - Phase 4.1 Portfolio：服務層 / domain / 測試骨架已開始，`ui_qt` 使用者可見 Portfolio Tab 尚未完成。
 - Phase 5：尚未開始，僅有部分回測/最佳化效能改善。
 

@@ -15,9 +15,9 @@
 * **Major Modules (主要模組)**：資料收集器、市場觀察儀、推薦引擎、策略回測實驗室、籌碼分析終端 (Smart Money Terminal MVP)、Runtime 子系統。
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。擁有固定的頂層 Tab（Update、Market Watch、Recommendation、Backtest）。大量使用 `pandas_table_model` 呈現高密度數據網格。
 * **Current Priorities (目前優先事項)**：
-  1. 找出 UX 與理解上的斷點（強化 Why/WhyNot 解釋）。
-  2. 補齊日常流程與關鍵指標的文件（維持一致性）。
-  3. 回測對標呈現方式定稿（Walk-forward / 過擬合風險提示）。
+  1. 補齊 Phase 4.1 Portfolio UI（Positions / Trades / Journal）。
+  2. 串接 Phase 3 → Portfolio 的來源追溯（Recommendation / Backtest / Strategy Version）。
+  3. 維持 Roadmap / Snapshot / Documentation Index / UI docs / Agent docs 一致。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
   1. 券商分點資料爬蟲容易因特殊股票代碼（如 ETF）解析失敗。
@@ -28,7 +28,7 @@
 
 ## 2. Agent Inventory (Agent 盤點)
 
-專案使用特定的 AI 角色（定義於 `docs/agents/` 與 Cursor Skills 中）。
+專案使用特定的 AI 角色（定義於 repo 根目錄 `AGENTS.md`、`docs/agents/` 與 Cursor Skills 中）。Codex 的自動讀取入口是 `AGENTS.md`；`docs/agents/` 保留完整 Agent 架構與 Prompt 文件。
 
 ### Tech Lead Agent (`tech_lead.md`)
 * **Purpose (目的)**：負責技術決策、架構方向與風險評估。
@@ -79,7 +79,7 @@
 
 ### A. 日常人類研究工作流 (Daily Human Research Workflow)
 * **Purpose (目的)**：日常選股與投資研究。
-* **Path (路徑)**：更新數據 (Update Data) ➔ 市場觀察看 Regime (Market Watch) ➔ 推薦分析選 Profile (Recommendation) ➔ 加入候選池 (Watchlist) ➔ 策略回測驗證 (Backtest) ➔ 升級保存策略 (Promote)。
+* **Path (路徑)**：數據更新工作台執行安全更新 (Update Workbench) ➔ 市場觀察看 Regime (Market Watch) ➔ 推薦分析選 Profile (Recommendation) ➔ 加入候選池 (Watchlist) ➔ 策略回測驗證 (Backtest) ➔ 升級保存策略 (Promote)。
 * **Dependent Agents (依賴 Agent)**：Execution Agent（用於擴展 UI 或除錯）。
 * **Typical Use Case (典型情境)**：每日盤後產生推薦清單並驗證策略勝率。
 
@@ -131,6 +131,7 @@
 
 ### Important Technical Docs (重要技術文檔)
 * **`docs/00_core/DOCUMENTATION_INDEX.md`**：查找所有功能說明文件的主索引。
+* **`AGENTS.md`**：Codex 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/` 的完整 Agent 架構。
 * **`docs/agents/shared_context.md`**：所有 AI 運作不可違背的前提（如強制使用繁體中文）。
 
 ### Outdated / Deprecated Docs (過時與冗餘文檔)
@@ -151,7 +152,7 @@
 
 ### Antigravity (AG)
 * **Best For (適合)**：`rapid implementation`（快速實作）、`UI-heavy work`（重度 UI 開發）、`iteration-heavy features`（高頻迭代功能）、`visualization`（資料視覺化）、`workflow polishing`（工作流拋光）、`integration-heavy tasks`（重度整合任務）。
-* **Focus (重點)**：作為主要的工作區與 IDE 環境。專注於快速迭代、渲染層 (PyQt6) 效能最佳化、精準的 Bug 修復與前端服務整合。
+* **Focus (重點)**：作為主要的工作區與 IDE 環境。專注於快速迭代、渲染層 (PySide6) 效能最佳化、精準的 Bug 修復與前端服務整合。
 * **Branch Prefix**：預設直接在 `main` 開發。若需隔離才建立 `ag/*` 暫時分支。
 
 ### ChatGPT / Gemini (Conversational/Exploratory)

@@ -22,6 +22,7 @@ class UpdateService:
         self.config = config
         self.project_root = Path(__file__).parent.parent
         self.scripts_dir = self.project_root / 'scripts'
+        self.status_manifest_file = self.config.meta_data_dir / 'data_status_manifest.json'
     
     def update_daily(
         self, 
@@ -571,6 +572,16 @@ class UpdateService:
                 'status': 'unknown'
             }
         }
+
+        try:
+            result['daily_data'] = self._status_from_csv_file(self.config.stock_data_file, '日期')
+            result['market_index'] = self._status_from_csv_file(self.config.market_index_file, '日期')
+            result['industry_index'] = self._status_from_csv_file(self.config.industry_index_file, '日期')
+            result['broker_branch'] = self.check_broker_branch_data_status()
+            result['technical_indicators'] = self._check_technical_indicator_status()
+            return result
+        except Exception as fast_error:
+            logger.warning(f"[UpdateService] 快速狀態檢查失敗，改用舊路徑: {fast_error}")
         
         # 檢查每日股票數據（stock_data_whole.csv）
         stock_file = self.config.stock_data_file
@@ -731,8 +742,351 @@ class UpdateService:
                             result['industry_index']['status'] = 'ok'
             except Exception as e:
                 result['industry_index']['status'] = f'error: {str(e)}'
+
+        result['broker_branch'] = self.check_broker_branch_data_status()
+        result['technical_indicators'] = self._check_technical_indicator_status()
         
         return result
+
+    def check_data_overview(self) -> Dict[str, Any]:
+        """取得全部資料頁使用的輕量狀態摘要，不執行深度檢查或自動修復"""
+        manifest = self._read_data_status_manifest()
+        sources = manifest.get('sources', {})
+
+        overview = {
+            'daily_data': self._overview_csv_status('daily_data', self.config.stock_data_file, '日期', sources),
+            'market_index': self._overview_csv_status('market_index', self.config.market_index_file, '日期', sources),
+            'industry_index': self._overview_csv_status('industry_index', self.config.industry_index_file, '日期', sources),
+            'broker_branch': self._overview_broker_branch_status(sources),
+            'technical_indicators': self._overview_technical_status(sources),
+        }
+        return overview
+
+    def check_source_detail(self, source: str) -> Dict[str, Any]:
+        """取得單一資料來源的詳細狀態，供切入 subtab 或手動檢查使用"""
+        source_map = {
+            'daily': 'daily_data',
+            'daily_data': 'daily_data',
+            'market': 'market_index',
+            'market_index': 'market_index',
+            'industry': 'industry_index',
+            'industry_index': 'industry_index',
+            'broker_branch': 'broker_branch',
+            'technical': 'technical_indicators',
+            'technical_indicators': 'technical_indicators',
+        }
+        normalized = source_map.get(source)
+        if normalized is None:
+            return {'latest_date': None, 'total_records': 0, 'status': f'unknown source: {source}'}
+
+        if normalized == 'daily_data':
+            detail = self._status_from_csv_file(self.config.stock_data_file, '日期')
+        elif normalized == 'market_index':
+            detail = self._status_from_csv_file(self.config.market_index_file, '日期')
+        elif normalized == 'industry_index':
+            detail = self._status_from_csv_file(self.config.industry_index_file, '日期')
+        elif normalized == 'broker_branch':
+            detail = self.check_broker_branch_data_status()
+        else:
+            detail = self._check_technical_indicator_status()
+
+        self._update_data_status_manifest(normalized, detail)
+        return detail
+
+    def _read_data_status_manifest(self) -> Dict[str, Any]:
+        """讀取資料狀態 manifest，格式錯誤時回傳空 manifest"""
+        import json
+
+        if not self.status_manifest_file.exists():
+            return {'sources': {}}
+        try:
+            with open(self.status_manifest_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return {'sources': {}}
+            data.setdefault('sources', {})
+            return data
+        except Exception:
+            return {'sources': {}}
+
+    def _write_data_status_manifest(self, manifest: Dict[str, Any]) -> None:
+        """寫入資料狀態 manifest"""
+        import json
+
+        self.status_manifest_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.status_manifest_file, 'w', encoding='utf-8') as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    def _update_data_status_manifest(self, source: str, status: Dict[str, Any]) -> None:
+        """更新單一資料來源的 manifest 摘要"""
+        from datetime import datetime
+
+        manifest = self._read_data_status_manifest()
+        manifest.setdefault('sources', {})
+        manifest['sources'][source] = {
+            **status,
+            'checked_at': datetime.now().isoformat(timespec='seconds'),
+        }
+        manifest['updated_at'] = datetime.now().isoformat(timespec='seconds')
+        self._write_data_status_manifest(manifest)
+
+    def _overview_csv_status(
+        self,
+        source: str,
+        path: Path,
+        date_column: str,
+        manifest_sources: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """取得單一 CSV 的輕量 overview，避免完整掃描大檔"""
+        from datetime import datetime
+
+        cached = manifest_sources.get(source, {})
+        status = {
+            'latest_date': cached.get('latest_date'),
+            'total_records': cached.get('total_records', 0),
+            'status': cached.get('status', 'unknown'),
+            'file_size_mb': 0.0,
+            'modified_at': None,
+            'checked_at': cached.get('checked_at'),
+            'is_overview': True,
+        }
+        if not path.exists():
+            status['status'] = 'missing'
+            return status
+
+        stat = path.stat()
+        status['file_size_mb'] = round(stat.st_size / 1024 / 1024, 2)
+        status['modified_at'] = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds')
+
+        summary = self._tail_csv_date_summary(path, date_column)
+        if summary.get('latest_date'):
+            status['latest_date'] = summary['latest_date']
+        if status['status'] in {'unknown', 'missing'}:
+            status['status'] = 'summary'
+        return status
+
+    def _overview_broker_branch_status(self, manifest_sources: Dict[str, Any]) -> Dict[str, Any]:
+        """取得券商分點輕量 overview，不載入 BrokerBranchUpdateService"""
+        import pandas as pd
+
+        cached = manifest_sources.get('broker_branch', {})
+        status = {
+            'latest_date': cached.get('latest_date'),
+            'total_records': cached.get('total_records', 0),
+            'broker_count': cached.get('broker_count', 0),
+            'status': cached.get('status', 'unknown'),
+            'checked_at': cached.get('checked_at'),
+            'is_overview': True,
+        }
+
+        registry_file = self.config.broker_branch_registry_file
+        if not registry_file.exists():
+            status['status'] = 'missing'
+            return status
+
+        try:
+            registry = pd.read_csv(registry_file, encoding='utf-8-sig')
+            if 'is_active' in registry.columns:
+                registry = registry[registry['is_active'] == True]
+            status['broker_count'] = len(registry)
+        except Exception:
+            status['status'] = 'registry_error'
+            return status
+
+        latest_dates = []
+        for branch_dir in self.config.broker_flow_dir.glob('*'):
+            merged_file = branch_dir / 'meta' / 'merged.csv'
+            if not merged_file.exists():
+                continue
+            summary = self._tail_csv_date_summary(merged_file, 'date')
+            if summary.get('latest_date'):
+                latest_dates.append(summary['latest_date'])
+
+        if latest_dates:
+            status['latest_date'] = max(latest_dates)
+            status['status'] = 'summary'
+        elif status['status'] == 'unknown':
+            status['status'] = 'empty'
+        return status
+
+    def _overview_technical_status(self, manifest_sources: Dict[str, Any]) -> Dict[str, Any]:
+        """取得技術指標輕量 overview"""
+        cached = manifest_sources.get('technical_indicators', {})
+        status = {
+            'latest_date': cached.get('latest_date'),
+            'total_records': cached.get('total_records', 0),
+            'file_count': 0,
+            'status': cached.get('status', 'unknown'),
+            'checked_at': cached.get('checked_at'),
+            'is_overview': True,
+        }
+        tech_dir = self.config.technical_dir
+        status['file_count'] = len(list(tech_dir.glob('*_indicators.csv'))) if tech_dir.exists() else 0
+        if self.config.all_stocks_data_file.exists():
+            summary = self._tail_csv_date_summary(self.config.all_stocks_data_file, '日期')
+            if summary.get('latest_date'):
+                status['latest_date'] = summary['latest_date']
+            if status['status'] in {'unknown', 'missing'}:
+                status['status'] = 'summary'
+        elif status['file_count']:
+            status['status'] = 'summary'
+        else:
+            status['status'] = 'missing'
+        return status
+
+    def _tail_csv_date_summary(self, path: Path, date_column: str, tail_rows: int = 300) -> Dict[str, Any]:
+        """只讀取 CSV 尾端少量日期欄位，供 overview 使用"""
+        from collections import deque
+        import csv
+        import pandas as pd
+
+        summary = {'latest_date': None}
+        if not path.exists():
+            return summary
+
+        tail = deque(maxlen=tail_rows)
+        try:
+            with open(path, 'r', encoding='utf-8-sig', newline='') as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                if not header or date_column not in header:
+                    return summary
+                date_idx = header.index(date_column)
+                for row in reader:
+                    if len(row) > date_idx and row[date_idx]:
+                        tail.append(row[date_idx])
+            dates = [date for date in tail if date and date != 'nan']
+            if dates:
+                parsed = pd.to_datetime(dates, errors='coerce')
+                parsed = parsed[pd.notna(parsed)]
+                if len(parsed) > 0:
+                    summary['latest_date'] = parsed.max().strftime('%Y-%m-%d')
+                else:
+                    summary['latest_date'] = max(dates)
+            return summary
+        except Exception:
+            return summary
+
+    def _check_technical_indicator_status(self) -> Dict[str, Any]:
+        """快速檢查技術指標彙整檔與個股指標檔狀態"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        status = {
+            'latest_date': None,
+            'total_records': 0,
+            'file_count': 0,
+            'date_range': {'start_date': None, 'end_date': None},
+            'status': 'unknown'
+        }
+
+        try:
+            tech_dir = self.config.technical_dir
+            tech_files = list(tech_dir.glob('*_indicators.csv')) if tech_dir.exists() else []
+            status['file_count'] = len(tech_files)
+
+            all_file = self.config.all_stocks_data_file
+            dates = []
+            if all_file.exists():
+                summary = self._summarize_csv_file(all_file, '日期')
+                status['total_records'] = summary['total_records']
+                if summary['latest_date']:
+                    dates.append(summary['latest_date'])
+                if summary['start_date']:
+                    status['date_range']['start_date'] = summary['start_date']
+
+            if not dates and tech_files:
+                for file in tech_files[:20]:
+                    summary = self._summarize_csv_file(file, '日期')
+                    if summary['latest_date']:
+                        dates.append(summary['latest_date'])
+
+            valid_dates = [d for d in dates if d and d != 'nan']
+            if valid_dates:
+                import pandas as pd
+
+                parsed = pd.to_datetime(valid_dates, errors='coerce')
+                parsed = parsed[pd.notna(parsed)]
+                if len(parsed) > 0:
+                    start_date = status['date_range']['start_date'] or parsed.min().strftime('%Y-%m-%d')
+                    end_date = parsed.max().strftime('%Y-%m-%d')
+                    status['latest_date'] = end_date
+                    status['date_range'] = {'start_date': start_date, 'end_date': end_date}
+                    status['status'] = 'ok'
+                else:
+                    status['latest_date'] = max(valid_dates)
+                    status['status'] = 'ok'
+            elif tech_files or all_file.exists():
+                status['status'] = 'empty'
+            else:
+                status['status'] = 'missing'
+
+            return status
+        except Exception as e:
+            logger.warning(f"[UpdateService] 檢查技術指標狀態失敗: {e}")
+            status['status'] = f'error: {str(e)}'
+            return status
+
+    def _status_from_csv_file(self, path: Path, date_column: str) -> Dict[str, Any]:
+        """以快速摘要產生一般 CSV 資料狀態"""
+        summary = self._summarize_csv_file(path, date_column)
+        status = {
+            'latest_date': summary['latest_date'],
+            'total_records': summary['total_records'],
+            'status': 'unknown'
+        }
+        if not path.exists():
+            status['status'] = 'missing'
+        elif summary['total_records'] == 0:
+            status['status'] = 'empty'
+        else:
+            status['status'] = 'ok'
+        return status
+
+    def _summarize_csv_file(self, path: Path, date_column: str, tail_rows: int = 5000) -> Dict[str, Any]:
+        """以低記憶體方式取得 CSV 行數與尾端日期摘要"""
+        from collections import deque
+        import csv
+        import pandas as pd
+
+        summary = {
+            'total_records': 0,
+            'start_date': None,
+            'latest_date': None,
+        }
+        if not path.exists():
+            return summary
+
+        tail = deque(maxlen=tail_rows)
+        try:
+            with open(path, 'r', encoding='utf-8-sig', newline='') as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                if not header or date_column not in header:
+                    return summary
+                date_idx = header.index(date_column)
+                for row in reader:
+                    summary['total_records'] += 1
+                    if len(row) > date_idx and row[date_idx]:
+                        if summary['start_date'] is None:
+                            summary['start_date'] = row[date_idx]
+                        tail.append(row[date_idx])
+
+            dates = [date for date in tail if date and date != 'nan']
+            if dates:
+                parsed = pd.to_datetime(dates, errors='coerce')
+                parsed = parsed[pd.notna(parsed)]
+                if len(parsed) > 0:
+                    summary['latest_date'] = parsed.max().strftime('%Y-%m-%d')
+                    if summary['start_date']:
+                        start = pd.to_datetime(summary['start_date'], errors='coerce')
+                        if pd.notna(start):
+                            summary['start_date'] = start.strftime('%Y-%m-%d')
+                else:
+                    summary['latest_date'] = max(dates)
+            return summary
+        except Exception:
+            return summary
     
     def merge_daily_data(self, force_all: bool = False) -> Dict[str, Any]:
         """合併每日股票數據
@@ -1123,6 +1477,33 @@ class UpdateService:
                 'date_range': {'start_date': None, 'end_date': None},
                 'status': 'error'
             }
+
+    def _get_indicator_latest_date(self, indicator_file: Path) -> Optional[str]:
+        """取得單一技術指標檔的最新日期"""
+        if not indicator_file.exists():
+            return None
+
+        try:
+            import pandas as pd
+
+            df_dates = pd.read_csv(
+                indicator_file,
+                encoding='utf-8-sig',
+                usecols=['日期'],
+                on_bad_lines='skip',
+                engine='python'
+            )
+            if df_dates.empty:
+                return None
+
+            parsed = pd.to_datetime(df_dates['日期'], errors='coerce')
+            parsed = parsed[pd.notna(parsed)]
+            if len(parsed) == 0:
+                return None
+
+            return parsed.max().strftime('%Y-%m-%d')
+        except Exception:
+            return None
     
     def calculate_technical_indicators(
         self,
@@ -1130,7 +1511,8 @@ class UpdateService:
         force_all: bool = False,
         start_date: Optional[str] = None,
         progress_callback=None,
-        ignore_existing_files: bool = False
+        ignore_existing_files: bool = False,
+        incremental_lookback_days: int = 250
     ) -> Dict[str, Any]:
         """計算技術指標
         
@@ -1140,6 +1522,7 @@ class UpdateService:
             start_date: 指定開始更新的日期，如為None則自動檢測
             progress_callback: 進度回調函數 (message: str, progress: int) -> None
             ignore_existing_files: 是否忽略現有指標文件，直接覆蓋（用於修復有問題的文件）
+            incremental_lookback_days: 增量更新時往前回補的交易日數，避免技術指標缺少歷史序列
             
         Returns:
             dict: {
@@ -1208,42 +1591,16 @@ class UpdateService:
                     }
                 stock_data = stock_data[stock_data['證券代號'] == target_stock]
             
-            # 檢測起始日期（如果不是強制全部）
-            if not force_all and start_date is None:
-                # 檢測最新的技術指標日期
-                tech_files = list(self.config.technical_dir.glob('*_indicators.csv'))
-                detected_start_date = None
-                
-                if tech_files:
-                    # 從前5個文件中抽樣查找最新日期
-                    sample_files = tech_files[:5]
-                    dates = []
-                    
-                    for file in sample_files:
-                        try:
-                            df_sample = pd.read_csv(file)
-                            if '日期' in df_sample.columns and not df_sample['日期'].empty:
-                                date_col = df_sample['日期']
-                                if not pd.api.types.is_string_dtype(date_col):
-                                    date_col = date_col.astype(str)
-                                dates.append(date_col.max())
-                        except Exception:
-                            continue
-                    
-                    if dates:
-                        detected_start_date = max(dates)
-                        logger.info(f"檢測到最新指標日期: {detected_start_date}")
-                
-                if detected_start_date:
-                    start_date = detected_start_date
-                    logger.info(f"將從此日期後開始更新: {start_date}")
-                    if progress_callback:
-                        progress_callback(f"檢測到最新指標日期: {start_date}", 15)
-                else:
-                    start_date = None
-                    logger.info("未檢測到現有指標文件，將進行全量更新")
-                    if progress_callback:
-                        progress_callback("未檢測到現有指標文件，將進行全量更新", 15)
+            auto_incremental = not force_all and start_date is None
+            if auto_incremental:
+                logger.info(
+                    f"使用智慧增量技術指標計算，回看 {incremental_lookback_days} 個交易日"
+                )
+                if progress_callback:
+                    progress_callback(
+                        f"使用智慧增量模式，回看 {incremental_lookback_days} 個交易日",
+                        15
+                    )
             elif force_all:
                 start_date = None
                 logger.info("強制更新所有數據")
@@ -1294,7 +1651,39 @@ class UpdateService:
                     max_date = max(max_date, group_max_date)
                 
                 # 檢查是否需要更新（基於日期）
-                if start_date and '日期' in group_df.columns and not force_all:
+                if auto_incremental and '日期' in group_df.columns:
+                    indicator_file = self.config.technical_dir / f'{stock_id}_indicators.csv'
+                    existing_latest_date = self._get_indicator_latest_date(indicator_file)
+                    if existing_latest_date:
+                        date_col = group_df['日期']
+                        if not pd.api.types.is_string_dtype(date_col):
+                            date_col = date_col.astype(str)
+                        normalized_dates = pd.to_datetime(date_col, errors='coerce')
+                        latest_ts = pd.to_datetime(existing_latest_date, errors='coerce')
+                        if pd.notna(latest_ts):
+                            has_new_data = (normalized_dates > latest_ts).any()
+                            if not has_new_data:
+                                logger.debug(f"股票 {stock_id} 沒有新數據需要更新")
+                                continue
+
+                            sorted_dates = (
+                                pd.Series(normalized_dates.dropna().unique())
+                                .sort_values()
+                                .reset_index(drop=True)
+                            )
+                            previous_dates = sorted_dates[sorted_dates <= latest_ts]
+                            if len(previous_dates) > 0:
+                                warmup_index = max(len(previous_dates) - incremental_lookback_days, 0)
+                                warmup_start = previous_dates.iloc[warmup_index]
+                            else:
+                                warmup_start = sorted_dates.iloc[0]
+                            group_df = group_df[normalized_dates >= warmup_start]
+                            logger.debug(
+                                f"股票 {stock_id} 智慧增量從 {warmup_start.strftime('%Y-%m-%d')} 重新計算"
+                            )
+                    else:
+                        logger.debug(f"股票 {stock_id} 無既有指標檔，使用完整股價序列計算")
+                elif start_date and '日期' in group_df.columns and not force_all:
                     date_col = group_df['日期']
                     if not pd.api.types.is_string_dtype(date_col):
                         date_col = date_col.astype(str)

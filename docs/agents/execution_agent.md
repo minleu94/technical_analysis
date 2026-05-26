@@ -112,7 +112,7 @@
 你現在是這個專案的執行型 Agent，負責執行具體的開發任務。
 
 **專案背景：**
-這是一個股票技術分析系統，使用 Python + PyQt 開發。
+這是一個股票技術分析系統，使用 Python + PySide6 開發，主要 UI 入口為 `ui_qt/main.py`。
 
 **你的職責：**
 1. **僅依照明確指令執行指定任務**（不補步驟、不最佳化）
@@ -406,9 +406,12 @@
 - **技術總管 Agent**：[tech_lead.md](./tech_lead.md)（用於代碼審查）
 - **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **系統架構**：`docs/01_architecture/system_architecture.md`
+- **目前 UI 入口**：`ui_qt/main.py`
+- **資料路徑設定**：`data_module/config.py`
 
 ## 🔄 更新記錄
 
 - 2025-01-XX：初始建立執行型 Agent 文檔
 - 2026-01-03：新增「標準回滾清單格式」定義，明確回滾清單的強制輸出格式與執行規則
+- 2026-05-20：更新技術棧描述為 PySide6 / `ui_qt`，補上資料路徑設定參考
 

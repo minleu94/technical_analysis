@@ -587,10 +587,25 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
   * ✅ `tests/test_portfolio_mvp.py`：Portfolio MVP 核心測試通過
   * ⏳ `ui_qt/views/portfolio_view.py`：尚未建立
   * ⏳ Recommendation / Backtest → Portfolio 建立持倉：尚未整合
+* ✅ **數據更新工作台重整**：已完成（2026-05-20）
+  * ✅ `ui_qt/views/update_view.py` 改為左側導覽工作台，保留每日股價、大盤、產業、券商分點、技術指標與進階維護功能
+  * ✅ 新增「安全更新所有數據」日常維護入口，依序執行狀態檢查、資料更新、合併與技術指標計算；任一步驟失敗即停止並回報失敗步驟
+  * ✅ 新增 `tests/test_ui_qt_update_view_workbench.py`，覆蓋導覽、按鈕、成功序列與失敗中止
+  * ✅ 更新 `docs/02_features/UI_FEATURES_DOCUMENTATION.md`、`docs/02_features/USER_GUIDE.md`、`docs/07_guides/QUICK_START.md`
+* ✅ **Codex / Agent 指引對齊**：已完成（2026-05-20）
+  * ✅ 新增 repo 根目錄 `AGENTS.md`，作為 Codex 自動讀取入口
+  * ✅ `docs/agents/` 已更新目前 `ui_qt`、PySide6、`TWStockConfig` / `DATA_ROOT` 與 `DOC_COVERAGE_MAP` 路徑事實
 
 ---
 
 ### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal）
+
+* ✅ **數據更新工作台重整與 Agent 指引更新** ✅ 已完成（2026-05-20）
+  * ✅ `UpdateView` 由單頁控制面板整理為維運工作台式布局：左側導覽、上方狀態摘要、右側資料來源頁、底部共享日誌與進度
+  * ✅ 新增「安全更新所有數據」流程，提供日常保守更新入口
+  * ✅ 新增 Codex 根目錄 `AGENTS.md`，並修正 `docs/agents/` 中資料路徑、PySide6 / `ui_qt` 與 coverage 文件路徑
+  * ✅ 驗證：`tests/test_ui_qt_update_view_workbench.py` 4/4 通過；更新頁 QA 17/17 通過
+  * ⚠️ 全量 `pytest tests` 仍受既有 collection/import 問題阻擋，與本次工作台重整無直接關聯
 
 * ✅ **UI Qt Backtest 圖表渲染優化** ✅ 已完成
   * ✅ 新增 `ui_qt/widgets/chart_payloads.py`，集中處理圖表資料正規化、benchmark normalization、drawdown metadata、報酬分佈 bins、持有天數 buckets。
@@ -612,7 +627,7 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * 確立架構治理規範與 Forbidden Dependencies
   * ✅ Phase B: RuntimeView UI Implementation
     * 建立 Pure Render 的 `RuntimeView`
-    * 透過 `QtRuntimeBridge` 將 EventBus 與 PyQt Signals 解耦
+    * 透過 `QtRuntimeBridge` 將 EventBus 與 Qt Signals 解耦
     * 利用 `QTimer` 與 `RuntimeController` 模擬資料串流，完成狀態機的 Observatory
 
 * ✅ **Phase 2.5：參數設計優化** ✅ 已完成並驗證通過
@@ -761,6 +776,10 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * `scripts/verify_branch_data.py`：驗證資料格式
 
 ### 下一步 Next（Phase 4.1 Portfolio UI）
+
+* **文件與進度整理**（2026-05-20）
+  * ✅ 數據更新工作台與 Agent 指引已同步至主要入口文件
+  * ⏳ 下一步仍以 Phase 4.1 Portfolio UI 為主要產品功能主線
 
 * ✅ **Phase 3.3b：研究閉環完整化** ✅ **已完成**（2026-01-02）
   * ✅ Epic 1 Promote 功能：已完成
