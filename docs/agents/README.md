@@ -43,6 +43,8 @@
 
 - 主要 UI 是 `ui_qt/`，入口為 `python ui_qt/main.py`，使用 PySide6。
 - 目前可見 UI 功能包含：數據更新工作台、市場觀察（大盤/強弱股/強弱產業/主力流向）、策略回測、推薦分析、觀察清單與 Runtime Observatory。
+- 推薦組合回測 MVP 已完成：推薦 Tab 可把 Profile/Config 送到回測 Tab，由回測頁在歷史日期重播推薦邏輯，評估整組推薦組合而不是只回測當下股票清單。
+- 處理推薦 replay / backtest 日期時，必須留意台股資料 `日期` 欄可能是數字型 `YYYYMMDD`，請使用共用解析工具避免誤判成 1970 epoch。
 - 資料位置由 `data_module/config.py` 的 `TWStockConfig` 管理；正式資料根目錄預設為 `D:/Min/Python/Project/FA_Data`，可由 `DATA_ROOT` 覆蓋。
 - repo 內沒有固定的正式 `data/` 目錄時，不代表資料不存在；Agent 必須先查設定，不可憑相對路徑推斷。
 - Codex 自動入口是 repo 根目錄 `AGENTS.md`；本目錄保存完整 Agent 職責與 Prompt 模板。

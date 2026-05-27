@@ -1,7 +1,7 @@
 # 專案導航文件
 
-**版本**：v1.1.0  
-**最後更新**：2026-05-19  
+**版本**：v1.2.0
+**最後更新**：2026-05-27
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -173,6 +173,7 @@ python ui_app/main.py
 
 **對應的 Service**：`app_module/recommendation_service.py`
 - 負責：策略配置編排、推薦結果生成、結果保存
+- 推薦 Tab 也能把目前 Profile/Config 送到 Backtest Tab 的「推薦組合回測」，由回測頁在歷史日期重播推薦邏輯。
 
 **真正動邏輯的地方**：
 - `decision_module/strategy_configurator.py`：策略配置（技術指標、圖形模式設定）
@@ -193,6 +194,10 @@ python ui_app/main.py
 **對應的 Service**：
 - `app_module/backtest_service.py`：單次回測
 - `app_module/batch_backtest_service.py`：批次回測
+- `app_module/recommendation_replay_service.py`：歷史日期重播推薦邏輯
+- `app_module/recommendation_portfolio_backtest_service.py`：推薦組合資金配置、持有期與績效彙整
+- `app_module/recommendation_dataframe_provider.py`：推薦 replay 用資料提供與候選集 prefilter
+- `app_module/recommendation_portfolio_dates.py`：台股資料日期解析工具，避免數字型 `YYYYMMDD` 誤判
 - `app_module/walkforward_service.py`：Walk-forward 驗證
 - `app_module/optimizer_service.py`：參數最佳化
 
@@ -205,6 +210,7 @@ python ui_app/main.py
 
 **如果我要改回測邏輯**：
 - 改回測流程 → `app_module/backtest_service.py`
+- 改推薦組合歷史重播 → `app_module/recommendation_replay_service.py` / `app_module/recommendation_portfolio_backtest_service.py`
 - 改績效計算 → `backtest_module/performance_metrics.py`
 - 改策略執行 → `app_module/strategies/` 對應的執行器
 - 改 Walk-Forward → `app_module/walkforward_service.py`

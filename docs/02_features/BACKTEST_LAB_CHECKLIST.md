@@ -459,6 +459,7 @@
 ### 進階功能
 - ✅ 策略預設：100%
 - ✅ 選股清單：100%
+- ✅ 推薦組合回測 MVP：100%（待補 Sortino / Sharpe / Monte Carlo 等穩健分析）
 - ✅ 參數最佳化：90%（缺進度回調）
 - ✅ Walk-forward 驗證：100%
 
@@ -506,6 +507,9 @@
 - `WalkForwardService`：Walk-forward 驗證
 - `ChartDataService`：圖表數據提供
 - `BatchBacktestService`：批次回測協調
+- `RecommendationReplayService`：歷史推薦重播
+- `RecommendationPortfolioBacktestService`：推薦組合回測與績效彙整
+- `RecommendationDataFrameProvider`：推薦 replay 資料提供與候選 prefilter
 
 ### 資料層
 - SQLite：回測元數據

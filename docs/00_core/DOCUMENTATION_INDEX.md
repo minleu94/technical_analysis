@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-05-20
+> **最後整理**：2026-05-27
 > **判讀規則**：Phase 狀態以 `DEVELOPMENT_ROADMAP.md` 的 Living Section 為準；本索引用於導航，不取代 roadmap。
 
 ---
@@ -157,8 +157,8 @@
 
 ## 目前開發狀態
 
-- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer。
-- 進行中 / 下一步：Phase 4.1 Portfolio MVP 的 UI 與 Phase 3 → Portfolio 整合。
+- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer、Recommendation Portfolio Backtest MVP。
+- 進行中 / 下一步：推薦組合回測穩健分析（Sortino、Sharpe、Monte Carlo）與 Phase 4.1 Portfolio MVP 的 UI / Phase 3 → Portfolio 整合。
 - 待開始：Phase 5 效能與研究報告輸出。
 
 ---

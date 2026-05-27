@@ -1,7 +1,7 @@
 # 台股技術分析系統
 
-> **最後整理**：2026-05-20
-> **目前主線**：Phase 4.1 Portfolio MVP  
+> **最後整理**：2026-05-27
+> **目前主線**：Recommendation Portfolio Backtest MVP + Phase 4.1 Portfolio MVP
 > **主要入口**：`ui_qt/main.py`
 
 這是一個台股投資決策系統，核心目標是把資料更新、市場觀察、推薦分析、策略回測、籌碼分析與持倉管理串成可驗證、可回溯、可演化的研究流程。
@@ -15,6 +15,7 @@
 - AI Runtime Subsystem MVP：已完成。
 - Smart Money Terminal MVP：已完成。
 - UI Qt Backtest chart rendering：已完成 QtWebEngine + HTML5 Canvas fast renderer，回測圖表保留 Matplotlib fallback。
+- Recommendation Portfolio Backtest MVP：已完成，可從推薦 Tab 將 Profile/Config 送到回測 Tab，在歷史日期重播推薦邏輯，產出整組推薦組合績效、期間持股、個股貢獻與交易紀錄。
 - 數據更新工作台：已完成左側導覽工作台重整，新增「安全更新所有數據」日常維護入口。
 - Codex / Agent 指引：已新增根目錄 `AGENTS.md`，`docs/agents/` 已對齊目前 `ui_qt` 與資料路徑規則。
 - Phase 4.1 Portfolio MVP：domain / service / test skeleton 已開始，`ui_qt` Portfolio Tab 與跨模組串接尚未完成。

@@ -15,6 +15,7 @@
 - AI Runtime Subsystem MVP ✅（Governance-aware 狀態機監控站已完成）
 - Smart Money Terminal MVP ✅（高密度、低延遲的專業級籌碼分析終端已完成）
 - UI Qt Backtest chart renderer ✅（QtWebEngine + HTML5 Canvas fast renderer 已完成，Matplotlib fallback 保留）
+- Recommendation Portfolio Backtest MVP ✅（推薦 Profile/Config 可在歷史日期重播，回測整組推薦組合績效與個股貢獻）
 - 數據更新工作台 ✅（`UpdateView` 已整理為左側導覽維運工作台，新增「安全更新所有數據」日常維護入口）
 - Codex / Agent 指引 ✅（repo 根目錄 `AGENTS.md` 已建立，`docs/agents/` 已對齊目前 `ui_qt`、資料根目錄與文檔路徑）
 - Phase 4.1 Portfolio MVP 🚧（service/domain/test 骨架已開始；`ui_qt` Portfolio Tab 與 Phase 3 → Portfolio 整合尚未完成）
@@ -23,8 +24,8 @@
 
 1. Update 使用「安全更新所有數據」或左側資料來源頁更新資料
 2. Market Watch 看 Regime + 強弱
-3. Recommendation 用 Profile 出名單 + 看 Why/WhyNot → 丟 Watchlist
-4. Backtest 從 Watchlist / 一鍵送回測 → 產出報告 / Promote（如需要）
+3. Recommendation 用 Profile 出名單 + 看 Why/WhyNot → 丟 Watchlist，或送「推薦組合回測」
+4. Backtest 可跑 Watchlist/現有名單批次回測，也可用歷史重播推薦邏輯評估整組推薦組合
 
 ## Tech Lead 的預設任務（開場要先做什麼）
 
@@ -33,14 +34,15 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. 補齊 Phase 4.1 Portfolio UI（Positions / Trades / Journal）
-2. 串接 Phase 3 → Portfolio 的來源追溯（Recommendation / Backtest / Strategy Version）
+1. 補強推薦組合回測的穩健分析指標（Sortino、Sharpe、Monte Carlo）與結果可讀性
+2. 評估將回測最佳 Profile/Config 回灌推薦頁，形成可優化的推薦系統
 3. 保持 Roadmap / Snapshot / Documentation Index / UI docs / Agent docs 一致
 
 ## 高風險區（改動需謹慎）
 
 - `app_module/backtest_service.py` / `backtest_module/*`
 - `app_module/recommendation_service.py`
+- `app_module/recommendation_replay_service.py` / `app_module/recommendation_portfolio_backtest_service.py`
 - Strategy registry / preset / promotion 相關服務
 - UI ↔ service contract（DTO）
 - `runtime/` 核心子系統與 FSM 狀態機

@@ -554,6 +554,12 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 * ✅ **Phase 1、Phase 2、Phase 2.5 核心部分**：已完成且驗證通過
 * ✅ **系統可運行、UI 穩定、回測/最佳化效能已大幅改善**
 * ✅ **UI Qt Backtest 圖表渲染優化**：已完成 QtWebEngine + HTML5 Canvas fast renderer，權益曲線、回撤曲線、報酬分佈、持有天數圖表均保留 Matplotlib fallback。
+* ✅ **Recommendation Portfolio Backtest MVP**：已完成（2026-05-27）
+  * ✅ 推薦 Tab 可將 Profile/Config 送到回測 Tab，由回測頁在歷史日期重播推薦邏輯，而不是只回測當下名單
+  * ✅ 支援每次推薦檔數、每期候選上限、持有天數、每週/單次重播、等權/分數加權資金配置
+  * ✅ 結果頁顯示整組組合總報酬、最大回撤、交易檔數、平均持有天數、資金使用，並列出期間持股、個股貢獻與交易紀錄
+  * ✅ 修復數字型 `YYYYMMDD` 日期被 `pd.to_datetime` 誤判成 1970 epoch 的問題，正式資料 6 個月 / Top10 / 候選 50 / 每週重播 smoke 通過
+  * ⏳ 下一步：加入 Sortino、Sharpe、Monte Carlo 與更完整的穩健性/資金曲線呈現
 * ✅ **Phase 3.1、3.2、3.3a 核心功能**：已完成（推薦可用化、Profiles 正式化、研究閉環核心功能）
 * ✅ **AI Runtime Subsystem MVP**：已完成（Phase A Architecture & Phase B UI Integration）
   * ✅ 實作 Runtime Observatory (State Machine Observatory)
@@ -599,6 +605,12 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 ---
 
 ### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal）
+
+* ✅ **推薦組合回測 MVP** ✅ 已完成（2026-05-27）
+  * ✅ 新增 Recommendation replay / portfolio backtest / portfolio optimizer service，保留未來接券商表現、營收數據、更多因子與穩健分析的擴充空間
+  * ✅ BacktestView 新增「推薦組合回測」控制區與「推薦組合」結果頁，讓使用者看得出回測期間選了哪些股票、各自貢獻與實際交易紀錄
+  * ✅ Pattern polyfit underconstrained 案例改為安全跳過，降低 `DLASCLS` / `RankWarning` 噪音；正式 replay 加入硬篩選 prefilter 與候選上限避免全市場掃描過慢
+  * ✅ 驗證：`tests/test_recommendation_portfolio_backtest.py`、`tests/test_recommendation_portfolio_optimizer.py`、`tests/test_pattern_analysis/test_flag_pattern_robustness.py` 通過；6 個月正式資料 smoke 有產生結果
 
 * ✅ **數據更新工作台重整與 Agent 指引更新** ✅ 已完成（2026-05-20）
   * ✅ `UpdateView` 由單頁控制面板整理為維運工作台式布局：左側導覽、上方狀態摘要、右側資料來源頁、底部共享日誌與進度

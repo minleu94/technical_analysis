@@ -87,6 +87,15 @@ docs/                # 專案文檔
 - **Parquet**：高效能資料儲存（可選）
 - **JSON**：配置與元資料
 
+## 🔁 推薦組合回測共同規範
+
+- 推薦組合回測不是「拿當下推薦名單去批次回測」，而是用 Recommendation Profile/Config 在歷史日期重播推薦邏輯，再依持有天數與資金配置形成整組 portfolio result。
+- 相關服務入口：`app_module/recommendation_replay_service.py`、`app_module/recommendation_portfolio_backtest_service.py`、`app_module/recommendation_dataframe_provider.py`、`app_module/recommendation_portfolio_dates.py`。
+- 台股資料的 `日期` 欄可能是數字型 `YYYYMMDD`。處理 replay / backtest 日期時必須使用 `parse_stock_dates()` 或同等明確格式解析，不可直接用裸 `pd.to_datetime(series)`，否則會被解讀成 epoch nanoseconds 而落到 1970 年。
+- 歷史 replay 需要保留 `candidate_limit` / prefilter 機制；不要在沒有上限的情況下對全市場每期都跑完整 pattern analysis。
+- Pattern regression 點位不足或 x 值退化時應安全跳過，不應讓 `np.polyfit` 的 underconstrained case 汙染 UI log 或中斷推薦 replay。
+- 後續擴充券商表現、營收數據、Sortino / Sharpe / Monte Carlo 等穩健分析時，應新增 factor/metric layer，避免把新因子硬塞進 UI 或現有單一 scoring 函式。
+
 ## ⚠️ 禁止事項
 
 ### 絕對禁止
