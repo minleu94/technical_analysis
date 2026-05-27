@@ -9,6 +9,7 @@ from app_module.recommendation_portfolio_dtos import (
     StockContributionDTO,
 )
 from app_module.recommendation_portfolio_dates import parse_stock_dates
+from app_module.recommendation_portfolio_metrics import calculate_robustness_metrics
 from app_module.recommendation_replay_service import RecommendationReplayService
 
 
@@ -28,6 +29,8 @@ class RecommendationPortfolioBacktestService:
         top_n: int,
         allocation_method: str,
         holding_days: int,
+        stop_loss_pct: float | None = None,
+        take_profit_pct: float | None = None,
     ) -> RecommendationPortfolioBacktestResultDTO:
         if rebalance_frequency not in {"once", "weekly"}:
             raise ValueError("目前推薦組合回測支援 once 或 weekly rebalance")
@@ -69,6 +72,8 @@ class RecommendationPortfolioBacktestService:
                     planned_exit_ts=planned_exit_ts,
                     allocation_amount=capital_per_period * weights[rank - 1],
                     allocation_weight=weights[rank - 1],
+                    stop_loss_pct=stop_loss_pct,
+                    take_profit_pct=take_profit_pct,
                 )
                 if holding is None:
                     continue
@@ -100,21 +105,29 @@ class RecommendationPortfolioBacktestService:
             )
 
         final_equity = initial_capital + sum(holding.pnl() for holding in period_holdings)
-        equity_curve = self._build_equity_curve(initial_capital, period_holdings, start_ts, end_ts)
+        equity_curve = self._build_equity_curve(initial_capital, period_holdings, start_ts, end_ts, data)
         stock_contribution = self._build_stock_contribution(period_holdings)
+        summary = {
+            "total_return": (final_equity / initial_capital) - 1 if initial_capital > 0 else 0.0,
+            "max_drawdown": self._calculate_max_drawdown(equity_curve["equity"]),
+            "total_trades": len(period_holdings),
+            "avg_holding_days": (
+                sum(holding.holding_days for holding in period_holdings) / len(period_holdings)
+                if period_holdings
+                else 0.0
+            ),
+            "capital_used": sum(holding.allocation_amount for holding in period_holdings),
+        }
+        summary.update(self._build_exit_diagnostics(period_holdings, stock_contribution))
+        summary.update(
+            calculate_robustness_metrics(
+                equity_curve=equity_curve,
+                trade_returns=[holding.return_pct for holding in period_holdings],
+            )
+        )
 
         return RecommendationPortfolioBacktestResultDTO(
-            summary={
-                "total_return": (final_equity / initial_capital) - 1 if initial_capital > 0 else 0.0,
-                "max_drawdown": self._calculate_max_drawdown(equity_curve["equity"]),
-                "total_trades": len(period_holdings),
-                "avg_holding_days": (
-                    sum(holding.holding_days for holding in period_holdings) / len(period_holdings)
-                    if period_holdings
-                    else 0.0
-                ),
-                "capital_used": sum(holding.allocation_amount for holding in period_holdings),
-            },
+            summary=summary,
             equity_curve=equity_curve,
             trades=pd.DataFrame(trade_rows),
             snapshots=snapshots,
@@ -161,6 +174,8 @@ class RecommendationPortfolioBacktestService:
         planned_exit_ts: pd.Timestamp,
         allocation_amount: float,
         allocation_weight: float,
+        stop_loss_pct: float | None,
+        take_profit_pct: float | None,
     ) -> PeriodHoldingDTO | None:
         code = str(rec["stock_code"])
         stock_rows = data[
@@ -172,8 +187,13 @@ class RecommendationPortfolioBacktestService:
             return None
 
         entry_row = stock_rows.iloc[0]
-        exit_row = stock_rows.iloc[-1]
         entry_price = float(entry_row["收盤價"])
+        exit_row, exit_reason = self._select_exit_row(
+            stock_rows=stock_rows,
+            entry_price=entry_price,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+        )
         exit_price = float(exit_row["收盤價"])
         return_pct = round((exit_price / entry_price) - 1, 10) if entry_price else 0.0
         actual_exit_ts = pd.to_datetime(exit_row["日期"])
@@ -191,10 +211,30 @@ class RecommendationPortfolioBacktestService:
             planned_exit_date=planned_exit_ts.strftime("%Y-%m-%d"),
             actual_exit_date=actual_exit_ts.strftime("%Y-%m-%d"),
             actual_exit_price=exit_price,
-            exit_reason="holding_period",
+            exit_reason=exit_reason,
             holding_days=(actual_exit_ts - pd.to_datetime(entry_row["日期"])).days,
             return_pct=return_pct,
         )
+
+    def _select_exit_row(
+        self,
+        stock_rows: pd.DataFrame,
+        entry_price: float,
+        stop_loss_pct: float | None,
+        take_profit_pct: float | None,
+    ) -> tuple[pd.Series, str]:
+        if entry_price <= 0:
+            return stock_rows.iloc[-1], "holding_period"
+
+        for _, row in stock_rows.iloc[1:].iterrows():
+            price = float(row["收盤價"])
+            return_pct = (price / entry_price) - 1
+            if stop_loss_pct is not None and return_pct <= -abs(stop_loss_pct):
+                return row, "stop_loss"
+            if take_profit_pct is not None and return_pct >= abs(take_profit_pct):
+                return row, "take_profit"
+
+        return stock_rows.iloc[-1], "holding_period"
 
     def _build_trade_rows(self, holding: PeriodHoldingDTO) -> List[Dict[str, Any]]:
         return [
@@ -222,15 +262,55 @@ class RecommendationPortfolioBacktestService:
         holdings: List[PeriodHoldingDTO],
         start_ts: pd.Timestamp,
         end_ts: pd.Timestamp,
+        data: pd.DataFrame,
     ) -> pd.DataFrame:
-        rows = [{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}]
-        running_equity = initial_capital
-        for holding in sorted(holdings, key=lambda item: item.actual_exit_date):
-            running_equity += holding.pnl()
-            rows.append({"date": holding.actual_exit_date, "equity": running_equity})
-        if rows[-1]["date"] != end_ts.strftime("%Y-%m-%d"):
-            rows.append({"date": end_ts.strftime("%Y-%m-%d"), "equity": running_equity})
+        trading_dates = (
+            data[(data["日期"] >= start_ts) & (data["日期"] <= end_ts)]["日期"]
+            .drop_duplicates()
+            .sort_values()
+            .tolist()
+        )
+        if not trading_dates:
+            trading_dates = [start_ts, end_ts]
+
+        rows = []
+        for value in trading_dates:
+            ts = pd.to_datetime(value)
+            equity = initial_capital
+            for holding in holdings:
+                equity += self._holding_pnl_at_date(holding, data, ts)
+            rows.append({"date": ts.strftime("%Y-%m-%d"), "equity": round(float(equity), 6)})
+
+        if rows and rows[0]["date"] != start_ts.strftime("%Y-%m-%d"):
+            rows.insert(0, {"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital})
+        if rows and rows[-1]["date"] != end_ts.strftime("%Y-%m-%d"):
+            final_equity = initial_capital + sum(holding.pnl() for holding in holdings)
+            rows.append({"date": end_ts.strftime("%Y-%m-%d"), "equity": round(float(final_equity), 6)})
         return pd.DataFrame(rows)
+
+    def _holding_pnl_at_date(
+        self,
+        holding: PeriodHoldingDTO,
+        data: pd.DataFrame,
+        ts: pd.Timestamp,
+    ) -> float:
+        entry_ts = pd.to_datetime(holding.entry_date)
+        exit_ts = pd.to_datetime(holding.actual_exit_date)
+        if ts < entry_ts:
+            return 0.0
+        if ts >= exit_ts:
+            return holding.pnl()
+
+        stock_rows = data[
+            (data["證券代號"].astype(str) == holding.stock_code)
+            & (data["日期"] >= entry_ts)
+            & (data["日期"] <= ts)
+        ].sort_values("日期")
+        if stock_rows.empty or not holding.entry_price:
+            return 0.0
+
+        current_price = float(stock_rows.iloc[-1]["收盤價"])
+        return holding.allocation_amount * ((current_price / holding.entry_price) - 1)
 
     def _calculate_weights(self, recommendations: List[Dict[str, Any]], allocation_method: str) -> List[float]:
         if allocation_method == "score_weight":
@@ -261,6 +341,24 @@ class RecommendationPortfolioBacktestService:
                 )
             )
         return sorted(results, key=lambda item: item.total_pnl, reverse=True)
+
+    def _build_exit_diagnostics(
+        self,
+        holdings: List[PeriodHoldingDTO],
+        stock_contribution: List[StockContributionDTO],
+    ) -> Dict[str, Any]:
+        total = len(holdings)
+        loss_count = len([holding for holding in holdings if holding.return_pct < 0])
+        worst_stock = min(stock_contribution, key=lambda item: item.total_pnl) if stock_contribution else None
+        return {
+            "stop_loss_exits": len([holding for holding in holdings if holding.exit_reason == "stop_loss"]),
+            "take_profit_exits": len([holding for holding in holdings if holding.exit_reason == "take_profit"]),
+            "holding_period_exits": len([holding for holding in holdings if holding.exit_reason == "holding_period"]),
+            "loss_trade_ratio": loss_count / total if total else 0.0,
+            "worst_stock_code": worst_stock.stock_code if worst_stock else "",
+            "worst_stock_name": worst_stock.stock_name if worst_stock else "",
+            "worst_stock_pnl": worst_stock.total_pnl if worst_stock else 0.0,
+        }
 
     def _calculate_max_drawdown(self, equity: pd.Series) -> float:
         if equity.empty:

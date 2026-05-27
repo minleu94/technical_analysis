@@ -378,3 +378,15 @@
 - 與推薦分析模組整合
 - 匯出報告（PDF/Excel）
 
+ 
+## 2026-05-27 推薦組合穩健性指標
+
+推薦組合回測總覽已納入 Sharpe Ratio、Sortino Ratio 與 Monte Carlo P05/P50/P95 模擬報酬，用於組合層穩健性判讀。
+
+## 2026-05-27 推薦組合 Portfolio Value 圖表
+
+推薦組合回測的 equity curve 已改為每日 mark-to-market：每個交易日以持倉股票當日或最近可用收盤價重估未實現損益，並加回已實現損益，形成 portfolio value。Backtest 的「推薦組合」結果頁新增 Portfolio Value 與 Drawdown 圖表；Portfolio Value 會嘗試透過既有 `ChartDataService` 載入大盤基準線，方便比較推薦 Profile/Config 相對大盤是否有效。
+
+## 2026-05-27 推薦組合停損停利與失敗診斷
+
+推薦組合回測已接入 Backtest 頁既有的停損 (%) / 停利 (%) 設定。每檔推薦持倉會逐交易日檢查是否先觸發 stop_loss 或 take_profit；若都未觸發，才以 holding_period 出場。結果總覽同步顯示停損、停利、持有到期次數、虧損交易占比與最拖累股票，作為第一版策略失敗診斷。

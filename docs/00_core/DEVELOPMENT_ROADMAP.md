@@ -916,3 +916,21 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 ---
 
 **這份文件是唯一的開發事實來源（Single Source of Truth），並且永遠都用繁體中文回答或做註解。**
+ 
+## 2026-05-27 推薦組合穩健性更新
+
+- Recommendation Portfolio Backtest 已補入第一版穩健性指標：Sharpe Ratio、Sortino Ratio 與 Monte Carlo P05/P50/P95 模擬報酬。
+- 指標以獨立 metric layer 接入推薦組合回測 summary，避免把後續券商分點、營收、基本面或籌碼因子硬塞進 UI 或現有 scoring 函式。
+- 後續可延伸 rolling Sharpe / rolling Sortino、VaR / CVaR 與更完整 factor/metric layer。
+
+## 2026-05-27 推薦組合 Portfolio Value 圖表更新
+
+- Recommendation Portfolio Backtest equity curve 已從「出場日 realized PnL 階梯線」改為每日 mark-to-market portfolio value。
+- Backtest「推薦組合」結果頁新增 Portfolio Value 與 Drawdown 圖表，Portfolio Value 會嘗試疊加大盤基準線。
+- 目前推薦組合路徑仍以持有天數出場為主，停損/停利、失敗診斷與策略版本學習閉環仍是下一段工作。
+
+## 2026-05-27 推薦組合出場與診斷更新
+
+- Recommendation Portfolio Backtest 已接入停損 (%) / 停利 (%) 提前出場，持倉會逐交易日檢查 stop_loss / take_profit，未觸發時才以 holding_period 出場。
+- 推薦組合結果總覽新增出場原因統計、虧損交易占比與最拖累股票，提供第一版策略失敗診斷。
+- 尚未完成：推薦組合結果保存為策略版本、依診斷推薦參數調整、以及更完整的 factor/failure attribution。

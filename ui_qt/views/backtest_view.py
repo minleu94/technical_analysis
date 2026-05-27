@@ -43,6 +43,37 @@ from ui_qt.widgets.fast_chart_widget import (
 )
 
 
+def build_recommendation_portfolio_equity_series(equity_curve: pd.DataFrame) -> pd.Series:
+    """Convert recommendation portfolio equity rows into chart-ready series."""
+    if equity_curve is None or equity_curve.empty or "date" not in equity_curve.columns or "equity" not in equity_curve.columns:
+        return pd.Series(dtype=float)
+
+    series = pd.Series(
+        pd.to_numeric(equity_curve["equity"], errors="coerce").values,
+        index=pd.to_datetime(equity_curve["date"], errors="coerce"),
+        dtype=float,
+    )
+    series = series[series.index.notna()].dropna()
+    return series.sort_index()
+
+
+def build_recommendation_portfolio_drawdown(equity_series: pd.Series) -> tuple[pd.Series, dict]:
+    """Build drawdown series and max-drawdown marker metadata."""
+    if equity_series is None or equity_series.empty:
+        return pd.Series(dtype=float), {}
+
+    cummax = equity_series.cummax()
+    drawdown_series = (equity_series - cummax) / cummax
+    max_dd_date = drawdown_series.idxmin()
+    peak_date = equity_series.loc[:max_dd_date].idxmax() if max_dd_date is not None else None
+    return drawdown_series, {
+        "max_drawdown": float(drawdown_series.loc[max_dd_date]) if max_dd_date is not None else 0.0,
+        "max_drawdown_date": max_dd_date,
+        "peak_date": peak_date,
+        "peak_value": float(equity_series.loc[peak_date]) if peak_date is not None else None,
+    }
+
+
 class BacktestView(QWidget):
     """回測視圖"""
     
@@ -963,6 +994,13 @@ class BacktestView(QWidget):
         self.portfolio_summary_text.setFont(QFont("Consolas", 9))
         recommendation_portfolio_layout.addWidget(self.portfolio_summary_text)
 
+        self.portfolio_chart_tabs = QTabWidget()
+        self.portfolio_equity_chart = create_equity_curve_widget()
+        self.portfolio_drawdown_chart = create_drawdown_curve_widget()
+        self.portfolio_chart_tabs.addTab(self.portfolio_equity_chart, "Portfolio Value")
+        self.portfolio_chart_tabs.addTab(self.portfolio_drawdown_chart, "Drawdown")
+        recommendation_portfolio_layout.addWidget(self.portfolio_chart_tabs, stretch=3)
+
         self.portfolio_period_table = QTableView()
         self.portfolio_stock_table = QTableView()
         self.portfolio_trades_table = QTableView()
@@ -1316,10 +1354,59 @@ class BacktestView(QWidget):
                         f"交易檔數: {summary.get('total_trades', 0)}",
                         f"平均持有天數: {summary.get('avg_holding_days', 0.0):.1f}",
                         f"資金使用: {summary.get('capital_used', 0.0):,.0f}",
+                        f"出場統計: 停損 {summary.get('stop_loss_exits', 0)} / "
+                        f"停利 {summary.get('take_profit_exits', 0)} / "
+                        f"持有到期 {summary.get('holding_period_exits', 0)}",
+                        f"虧損交易占比: {summary.get('loss_trade_ratio', 0.0) * 100:.1f}%",
+                        f"最拖累股票: {summary.get('worst_stock_code', '')} "
+                        f"{summary.get('worst_stock_name', '')} "
+                        f"({summary.get('worst_stock_pnl', 0.0):,.0f})",
                     ]
                 )
             )
     
+        if hasattr(self, "portfolio_summary_text"):
+            summary = result.summary
+            self.portfolio_summary_text.append(
+                "\n".join(
+                    [
+                        f"Sharpe Ratio: {summary.get('sharpe_ratio', 0.0):.2f}",
+                        f"Sortino Ratio: {summary.get('sortino_ratio', 0.0):.2f}",
+                        f"Monte Carlo P05/P50/P95: "
+                        f"{summary.get('monte_carlo_p05_return', 0.0) * 100:.2f}% / "
+                        f"{summary.get('monte_carlo_p50_return', 0.0) * 100:.2f}% / "
+                        f"{summary.get('monte_carlo_p95_return', 0.0) * 100:.2f}%",
+                    ]
+                )
+            )
+
+        self._plot_recommendation_portfolio_charts(result)
+
+    def _plot_recommendation_portfolio_charts(self, result):
+        """Plot recommendation portfolio value and drawdown charts."""
+        if not hasattr(self, "portfolio_equity_chart"):
+            return
+
+        equity_series = build_recommendation_portfolio_equity_series(result.equity_curve)
+        if equity_series.empty:
+            return
+
+        benchmark_series = None
+        if self.chart_data_service:
+            try:
+                benchmark_series = self.chart_data_service.get_benchmark_series(
+                    equity_series.index.min().strftime("%Y-%m-%d"),
+                    equity_series.index.max().strftime("%Y-%m-%d"),
+                )
+            except Exception as exc:
+                print(f"[BacktestView] Recommendation benchmark load failed: {exc}")
+
+        self.portfolio_equity_chart.plot(equity_series, benchmark_series, None, result.trades)
+
+        if hasattr(self, "portfolio_drawdown_chart"):
+            drawdown_series, max_dd_info = build_recommendation_portfolio_drawdown(equity_series)
+            self.portfolio_drawdown_chart.plot(drawdown_series, max_dd_info)
+
     def _on_backtest_error(self, error_msg: str):
         """回測錯誤"""
         self.execute_btn.setEnabled(True)
@@ -1357,6 +1444,8 @@ class BacktestView(QWidget):
             recommendation_config = dict(config.get("strategy_config", {}))
             recommendation_config.setdefault("_portfolio_lookback_days", 80)
             recommendation_config["_portfolio_max_stocks"] = self.recommendation_portfolio_max_stocks.value()
+            stop_loss_pct = self.stop_loss_input.value() / 100.0 if self.stop_loss_input.value() > 0 else None
+            take_profit_pct = self.take_profit_input.value() / 100.0 if self.take_profit_input.value() > 0 else None
             return service.run_portfolio_backtest(
                 start_date=start_date,
                 end_date=end_date,
@@ -1368,6 +1457,8 @@ class BacktestView(QWidget):
                 top_n=self.recommendation_portfolio_top_n.value(),
                 allocation_method=self._recommendation_portfolio_allocation_value(),
                 holding_days=self.recommendation_portfolio_holding_days.value(),
+                stop_loss_pct=stop_loss_pct,
+                take_profit_pct=take_profit_pct,
             )
 
         self.worker = TaskWorker(backtest_task)

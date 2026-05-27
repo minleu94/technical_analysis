@@ -540,3 +540,9 @@
 ### v1.0 (2025-12-16)
 - ✅ 初始版本：完整的策略回測功能
 
+ 
+## 2026-05-27 推薦組合穩健性更新
+
+- ✅ 推薦組合回測總覽已補上 Sharpe Ratio、Sortino Ratio 與 Monte Carlo P05/P50/P95 模擬報酬。
+- ✅ 推薦組合 equity curve 已改為每日 mark-to-market portfolio value，結果頁新增 Portfolio Value 與 Drawdown 圖表，Portfolio Value 會嘗試疊加大盤基準線。
+- ✅ 推薦組合回測已支援停損 (%) / 停利 (%) 提前出場，結果總覽新增出場原因統計、虧損交易占比與最拖累股票。

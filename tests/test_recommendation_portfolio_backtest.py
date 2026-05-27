@@ -7,6 +7,7 @@ from app_module.recommendation_portfolio_dtos import (
     StockContributionDTO,
 )
 from app_module.recommendation_portfolio_dates import parse_stock_dates
+from app_module.recommendation_portfolio_metrics import calculate_robustness_metrics
 from app_module.recommendation_portfolio_backtest_service import (
     RecommendationPortfolioBacktestService,
 )
@@ -187,6 +188,215 @@ def test_portfolio_backtest_records_period_holdings_and_contributions():
     assert contribution.loc[contribution["股票代號"] == "2330", "總損益"].iloc[0] == 50000.0
     assert contribution.loc[contribution["股票代號"] == "2317", "總損益"].iloc[0] == -50000.0
     assert result.summary["total_return"] == 0.0
+
+
+def test_portfolio_backtest_marks_equity_to_market_each_trading_day():
+    date_col = "\u65e5\u671f"
+    code_col = "\u8b49\u5238\u4ee3\u865f"
+    name_col = "\u8b49\u5238\u540d\u7a31"
+    close_col = "\u6536\u76e4\u50f9"
+    history = pd.DataFrame(
+        [
+            {"date": "2026-01-02", "code": "2330", "name": "TSMC", "close": 100},
+            {"date": "2026-01-03", "code": "2330", "name": "TSMC", "close": 105},
+            {"date": "2026-01-06", "code": "2330", "name": "TSMC", "close": 110},
+        ]
+    )
+    history.columns = [date_col, code_col, name_col, close_col]
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "TSMC",
+                "total_score": 90.0,
+                "factor_scores": {},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    equity_by_date = result.equity_curve.set_index("date")["equity"].to_dict()
+
+    assert equity_by_date == {
+        "2026-01-02": 1000000.0,
+        "2026-01-03": 1050000.0,
+        "2026-01-06": 1100000.0,
+    }
+
+
+def test_portfolio_backtest_exits_early_on_stop_loss_and_summarizes_diagnostics():
+    date_col = "\u65e5\u671f"
+    code_col = "\u8b49\u5238\u4ee3\u865f"
+    name_col = "\u8b49\u5238\u540d\u7a31"
+    close_col = "\u6536\u76e4\u50f9"
+    history = pd.DataFrame(
+        [
+            {"date": "2026-01-02", "code": "2330", "name": "TSMC", "close": 100},
+            {"date": "2026-01-03", "code": "2330", "name": "TSMC", "close": 94},
+            {"date": "2026-01-06", "code": "2330", "name": "TSMC", "close": 110},
+        ]
+    )
+    history.columns = [date_col, code_col, name_col, close_col]
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "TSMC",
+                "total_score": 90.0,
+                "factor_scores": {},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+        stop_loss_pct=0.05,
+        take_profit_pct=None,
+    )
+
+    holding = result.period_holdings[0]
+
+    assert holding.actual_exit_date == "2026-01-03"
+    assert holding.actual_exit_price == 94.0
+    assert holding.exit_reason == "stop_loss"
+    assert holding.return_pct == -0.06
+    assert result.summary["stop_loss_exits"] == 1
+    assert result.summary["take_profit_exits"] == 0
+    assert result.summary["holding_period_exits"] == 0
+    assert result.summary["loss_trade_ratio"] == 1.0
+    assert result.summary["worst_stock_code"] == "2330"
+
+
+def test_portfolio_backtest_exits_early_on_take_profit():
+    date_col = "\u65e5\u671f"
+    code_col = "\u8b49\u5238\u4ee3\u865f"
+    name_col = "\u8b49\u5238\u540d\u7a31"
+    close_col = "\u6536\u76e4\u50f9"
+    history = pd.DataFrame(
+        [
+            {"date": "2026-01-02", "code": "2330", "name": "TSMC", "close": 100},
+            {"date": "2026-01-03", "code": "2330", "name": "TSMC", "close": 108},
+            {"date": "2026-01-06", "code": "2330", "name": "TSMC", "close": 95},
+        ]
+    )
+    history.columns = [date_col, code_col, name_col, close_col]
+
+    def provider(as_of_data, config, top_n):
+        return [{"stock_code": "2330", "stock_name": "TSMC", "total_score": 90.0, "factor_scores": {}}]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+        stop_loss_pct=None,
+        take_profit_pct=0.05,
+    )
+
+    holding = result.period_holdings[0]
+
+    assert holding.actual_exit_date == "2026-01-03"
+    assert holding.exit_reason == "take_profit"
+    assert holding.return_pct == 0.08
+    assert result.summary["take_profit_exits"] == 1
+
+
+def test_recommendation_portfolio_robustness_metrics_are_deterministic():
+    equity_curve = pd.DataFrame(
+        [
+            {"date": "2026-01-02", "equity": 1000000.0},
+            {"date": "2026-01-03", "equity": 1010000.0},
+            {"date": "2026-01-04", "equity": 1000000.0},
+            {"date": "2026-01-05", "equity": 1020000.0},
+        ]
+    )
+    trade_returns = [0.10, -0.05, 0.02]
+
+    metrics = calculate_robustness_metrics(
+        equity_curve=equity_curve,
+        trade_returns=trade_returns,
+        monte_carlo_runs=25,
+        random_seed=7,
+    )
+
+    assert set(
+        [
+            "sharpe_ratio",
+            "sortino_ratio",
+            "monte_carlo_p05_return",
+            "monte_carlo_p50_return",
+            "monte_carlo_p95_return",
+        ]
+    ).issubset(metrics)
+    assert metrics["sharpe_ratio"] > 0
+    assert metrics["sortino_ratio"] > metrics["sharpe_ratio"]
+    assert abs(metrics["monte_carlo_p05_return"] - metrics["monte_carlo_p95_return"]) < 1e-12
+
+
+def test_portfolio_backtest_summary_includes_robustness_metrics():
+    date_col = "\u65e5\u671f"
+    code_col = "\u8b49\u5238\u4ee3\u865f"
+    name_col = "\u8b49\u5238\u540d\u7a31"
+    close_col = "\u6536\u76e4\u50f9"
+    history = pd.DataFrame(
+        [
+            {"æ—¥æœŸ": "2026-01-02", "è­‰åˆ¸ä»£è™Ÿ": "2330", "è­‰åˆ¸åç¨±": "å°ç©é›»", "æ”¶ç›¤åƒ¹": 100},
+            {"æ—¥æœŸ": "2026-01-06", "è­‰åˆ¸ä»£è™Ÿ": "2330", "è­‰åˆ¸åç¨±": "å°ç©é›»", "æ”¶ç›¤åƒ¹": 110},
+            {"æ—¥æœŸ": "2026-01-02", "è­‰åˆ¸ä»£è™Ÿ": "2317", "è­‰åˆ¸åç¨±": "é´»æµ·", "æ”¶ç›¤åƒ¹": 50},
+            {"æ—¥æœŸ": "2026-01-06", "è­‰åˆ¸ä»£è™Ÿ": "2317", "è­‰åˆ¸åç¨±": "é´»æµ·", "æ”¶ç›¤åƒ¹": 45},
+        ]
+    )
+    history.columns = [date_col, code_col, name_col, close_col]
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {"stock_code": "2330", "stock_name": "å°ç©é›»", "total_score": 90.0, "factor_scores": {}},
+            {"stock_code": "2317", "stock_name": "é´»æµ·", "total_score": 80.0, "factor_scores": {}},
+        ][:top_n]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=2,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    assert "sharpe_ratio" in result.summary
+    assert "sortino_ratio" in result.summary
+    assert "monte_carlo_p50_return" in result.summary
 
 
 def test_portfolio_backtest_can_replay_weekly_recommendations():
