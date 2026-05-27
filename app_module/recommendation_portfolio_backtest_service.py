@@ -28,106 +28,78 @@ class RecommendationPortfolioBacktestService:
         allocation_method: str,
         holding_days: int,
     ) -> RecommendationPortfolioBacktestResultDTO:
-        if rebalance_frequency != "once":
-            raise ValueError("目前推薦組合回測先支援 once rebalance")
+        if rebalance_frequency not in {"once", "weekly"}:
+            raise ValueError("目前推薦組合回測支援 once 或 weekly rebalance")
 
         data = history.copy()
         data["日期"] = pd.to_datetime(data["日期"], errors="coerce")
         data = data[data["日期"].notna()].sort_values("日期")
         start_ts = pd.to_datetime(start_date)
         end_ts = pd.to_datetime(end_date)
-        planned_exit_ts = min(start_ts + pd.Timedelta(days=holding_days), end_ts)
+        rebalance_dates = self._get_rebalance_dates(data, start_ts, end_ts, rebalance_frequency)
 
-        snapshot = self.replay_service.run_snapshot(
-            as_of_date=start_ts.strftime("%Y-%m-%d"),
-            profile_id=profile_id,
-            config=recommendation_config,
-            history=data,
-            universe=None,
-            top_n=top_n,
-        )
+        snapshots = []
+        period_holdings = []
+        trade_rows = []
+        capital_per_period = initial_capital
 
-        recommendations = snapshot.recommendations
-        if not recommendations:
+        for rebalance_ts in rebalance_dates:
+            planned_exit_ts = min(rebalance_ts + pd.Timedelta(days=holding_days), end_ts)
+            snapshot = self.replay_service.run_snapshot(
+                as_of_date=rebalance_ts.strftime("%Y-%m-%d"),
+                profile_id=profile_id,
+                config=recommendation_config,
+                history=data,
+                universe=None,
+                top_n=top_n,
+            )
+            snapshots.append(snapshot)
+            recommendations = snapshot.recommendations
+            if not recommendations:
+                continue
+
+            weights = self._calculate_weights(recommendations, allocation_method)
+            for rank, rec in enumerate(recommendations, 1):
+                holding = self._build_period_holding(
+                    data=data,
+                    rec=rec,
+                    rank=rank,
+                    rebalance_ts=rebalance_ts,
+                    planned_exit_ts=planned_exit_ts,
+                    allocation_amount=capital_per_period * weights[rank - 1],
+                    allocation_weight=weights[rank - 1],
+                )
+                if holding is None:
+                    continue
+                period_holdings.append(holding)
+                trade_rows.extend(self._build_trade_rows(holding))
+
+        if not snapshots:
+            snapshots.append(
+                self.replay_service.run_snapshot(
+                    as_of_date=start_ts.strftime("%Y-%m-%d"),
+                    profile_id=profile_id,
+                    config=recommendation_config,
+                    history=data,
+                    universe=None,
+                    top_n=top_n,
+                )
+            )
+
+        if not period_holdings:
             equity_curve = pd.DataFrame([{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}])
             return RecommendationPortfolioBacktestResultDTO(
                 summary={"total_return": 0.0, "max_drawdown": 0.0, "total_trades": 0},
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
-                snapshots=[snapshot],
+                snapshots=snapshots,
                 period_holdings=[],
                 stock_contribution=[],
                 selection_diagnostics=["no_recommendations"],
             )
 
-        weights = self._calculate_weights(recommendations, allocation_method)
-        period_holdings = []
-        trade_rows = []
-
-        for rank, rec in enumerate(recommendations, 1):
-            code = str(rec["stock_code"])
-            stock_rows = data[
-                (data["證券代號"].astype(str) == code)
-                & (data["日期"] >= start_ts)
-                & (data["日期"] <= planned_exit_ts)
-            ]
-            if stock_rows.empty:
-                continue
-
-            entry_row = stock_rows.iloc[0]
-            exit_row = stock_rows.iloc[-1]
-            entry_price = float(entry_row["收盤價"])
-            exit_price = float(exit_row["收盤價"])
-            allocation_amount = initial_capital * weights[rank - 1]
-            return_pct = round((exit_price / entry_price) - 1, 10) if entry_price else 0.0
-            actual_exit_ts = pd.to_datetime(exit_row["日期"])
-            holding = PeriodHoldingDTO(
-                rebalance_date=start_ts.strftime("%Y-%m-%d"),
-                stock_code=code,
-                stock_name=str(rec.get("stock_name") or entry_row.get("證券名稱", "")),
-                rank=rank,
-                total_score=float(rec.get("total_score", 0.0)),
-                factor_scores=dict(rec.get("factor_scores", {})),
-                allocation_amount=allocation_amount,
-                allocation_weight=weights[rank - 1],
-                entry_date=pd.to_datetime(entry_row["日期"]).strftime("%Y-%m-%d"),
-                entry_price=entry_price,
-                planned_exit_date=planned_exit_ts.strftime("%Y-%m-%d"),
-                actual_exit_date=actual_exit_ts.strftime("%Y-%m-%d"),
-                actual_exit_price=exit_price,
-                exit_reason="holding_period",
-                holding_days=(actual_exit_ts - pd.to_datetime(entry_row["日期"])).days,
-                return_pct=return_pct,
-            )
-            period_holdings.append(holding)
-            trade_rows.extend(
-                [
-                    {
-                        "date": holding.entry_date,
-                        "stock_code": holding.stock_code,
-                        "stock_name": holding.stock_name,
-                        "side": "buy",
-                        "price": holding.entry_price,
-                        "amount": holding.allocation_amount,
-                    },
-                    {
-                        "date": holding.actual_exit_date,
-                        "stock_code": holding.stock_code,
-                        "stock_name": holding.stock_name,
-                        "side": "sell",
-                        "price": holding.actual_exit_price,
-                        "amount": holding.allocation_amount + holding.pnl(),
-                    },
-                ]
-            )
-
         final_equity = initial_capital + sum(holding.pnl() for holding in period_holdings)
-        equity_curve = pd.DataFrame(
-            [
-                {"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital},
-                {"date": planned_exit_ts.strftime("%Y-%m-%d"), "equity": final_equity},
-            ]
-        )
+        equity_curve = self._build_equity_curve(initial_capital, period_holdings, start_ts, end_ts)
         stock_contribution = self._build_stock_contribution(period_holdings)
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -144,11 +116,120 @@ class RecommendationPortfolioBacktestService:
             },
             equity_curve=equity_curve,
             trades=pd.DataFrame(trade_rows),
-            snapshots=[snapshot],
+            snapshots=snapshots,
             period_holdings=period_holdings,
             stock_contribution=stock_contribution,
-            selection_diagnostics=snapshot.diagnostics,
+            selection_diagnostics=[item for snapshot in snapshots for item in snapshot.diagnostics],
         )
+
+    def _get_rebalance_dates(
+        self,
+        data: pd.DataFrame,
+        start_ts: pd.Timestamp,
+        end_ts: pd.Timestamp,
+        rebalance_frequency: str,
+    ) -> List[pd.Timestamp]:
+        trading_dates = (
+            data[(data["日期"] >= start_ts) & (data["日期"] <= end_ts)]["日期"]
+            .drop_duplicates()
+            .sort_values()
+            .tolist()
+        )
+        if not trading_dates:
+            return [start_ts]
+        if rebalance_frequency == "once":
+            return [pd.to_datetime(trading_dates[0])]
+
+        rebalance_dates = []
+        seen_weeks = set()
+        for value in trading_dates:
+            ts = pd.to_datetime(value)
+            week_key = (ts.isocalendar().year, ts.isocalendar().week)
+            if week_key in seen_weeks:
+                continue
+            seen_weeks.add(week_key)
+            rebalance_dates.append(ts)
+        return rebalance_dates
+
+    def _build_period_holding(
+        self,
+        data: pd.DataFrame,
+        rec: Dict[str, Any],
+        rank: int,
+        rebalance_ts: pd.Timestamp,
+        planned_exit_ts: pd.Timestamp,
+        allocation_amount: float,
+        allocation_weight: float,
+    ) -> PeriodHoldingDTO | None:
+        code = str(rec["stock_code"])
+        stock_rows = data[
+            (data["證券代號"].astype(str) == code)
+            & (data["日期"] >= rebalance_ts)
+            & (data["日期"] <= planned_exit_ts)
+        ]
+        if stock_rows.empty:
+            return None
+
+        entry_row = stock_rows.iloc[0]
+        exit_row = stock_rows.iloc[-1]
+        entry_price = float(entry_row["收盤價"])
+        exit_price = float(exit_row["收盤價"])
+        return_pct = round((exit_price / entry_price) - 1, 10) if entry_price else 0.0
+        actual_exit_ts = pd.to_datetime(exit_row["日期"])
+        return PeriodHoldingDTO(
+            rebalance_date=rebalance_ts.strftime("%Y-%m-%d"),
+            stock_code=code,
+            stock_name=str(rec.get("stock_name") or entry_row.get("證券名稱", "")),
+            rank=rank,
+            total_score=float(rec.get("total_score", 0.0)),
+            factor_scores=dict(rec.get("factor_scores", {})),
+            allocation_amount=allocation_amount,
+            allocation_weight=allocation_weight,
+            entry_date=pd.to_datetime(entry_row["日期"]).strftime("%Y-%m-%d"),
+            entry_price=entry_price,
+            planned_exit_date=planned_exit_ts.strftime("%Y-%m-%d"),
+            actual_exit_date=actual_exit_ts.strftime("%Y-%m-%d"),
+            actual_exit_price=exit_price,
+            exit_reason="holding_period",
+            holding_days=(actual_exit_ts - pd.to_datetime(entry_row["日期"])).days,
+            return_pct=return_pct,
+        )
+
+    def _build_trade_rows(self, holding: PeriodHoldingDTO) -> List[Dict[str, Any]]:
+        return [
+            {
+                "date": holding.entry_date,
+                "stock_code": holding.stock_code,
+                "stock_name": holding.stock_name,
+                "side": "buy",
+                "price": holding.entry_price,
+                "amount": holding.allocation_amount,
+            },
+            {
+                "date": holding.actual_exit_date,
+                "stock_code": holding.stock_code,
+                "stock_name": holding.stock_name,
+                "side": "sell",
+                "price": holding.actual_exit_price,
+                "amount": holding.allocation_amount + holding.pnl(),
+            },
+        ]
+
+    def _build_equity_curve(
+        self,
+        initial_capital: float,
+        holdings: List[PeriodHoldingDTO],
+        start_ts: pd.Timestamp,
+        end_ts: pd.Timestamp,
+    ) -> pd.DataFrame:
+        rows = [{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}]
+        running_equity = initial_capital
+        for holding in sorted(holdings, key=lambda item: item.actual_exit_date):
+            running_equity += holding.pnl()
+            rows.append({"date": holding.actual_exit_date, "equity": running_equity})
+        if rows[-1]["date"] != end_ts.strftime("%Y-%m-%d"):
+            rows.append({"date": end_ts.strftime("%Y-%m-%d"), "equity": running_equity})
+        return pd.DataFrame(rows)
 
     def _calculate_weights(self, recommendations: List[Dict[str, Any]], allocation_method: str) -> List[float]:
         if allocation_method == "score_weight":

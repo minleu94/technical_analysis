@@ -181,6 +181,48 @@ def test_portfolio_backtest_records_period_holdings_and_contributions():
     assert result.summary["total_return"] == 0.0
 
 
+def test_portfolio_backtest_can_replay_weekly_recommendations():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+            {"日期": "2026-01-09", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 120},
+            {"日期": "2026-01-13", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 126},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+    called_dates = []
+
+    def provider(as_of_data, config, top_n):
+        called_dates.append(as_of_data["日期"].max().strftime("%Y-%m-%d"))
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 90.0},
+            }
+        ]
+
+    service = RecommendationPortfolioBacktestService(provider=provider)
+    result = service.run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-13",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="weekly",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    assert called_dates == ["2026-01-02", "2026-01-06", "2026-01-13"]
+    assert len(result.snapshots) == 3
+    assert len(result.period_holdings) == 3
+
+
 def test_result_dto_supports_backtest_tab_readability_layers():
     result = RecommendationPortfolioBacktestResultDTO(
         summary={"total_return": 0.02, "max_drawdown": -0.01, "total_trades": 1},

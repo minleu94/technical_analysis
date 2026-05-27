@@ -32,6 +32,8 @@ from app_module.chart_data_service import ChartDataService
 from app_module.promotion_service import PromotionService
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.walkforward_service import WalkForwardService
+from app_module.recommendation_dataframe_provider import RecommendationDataFrameProvider
+from app_module.recommendation_portfolio_backtest_service import RecommendationPortfolioBacktestService
 from ui_qt.widgets.fast_chart_widget import (
     create_drawdown_curve_widget,
     create_equity_curve_widget,
@@ -631,6 +633,46 @@ class BacktestView(QWidget):
             
             wf_group.setLayout(wf_layout)
             config_layout.addWidget(wf_group)
+
+        self.recommendation_portfolio_group = QGroupBox("推薦組合回測")
+        self.recommendation_portfolio_group.setCheckable(True)
+        self.recommendation_portfolio_group.setChecked(False)
+        recommendation_portfolio_layout = QVBoxLayout()
+
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(QLabel("Profile:"))
+        self.recommendation_portfolio_profile_label = QLabel("尚未從推薦頁載入")
+        profile_row.addWidget(self.recommendation_portfolio_profile_label)
+        profile_row.addStretch()
+        recommendation_portfolio_layout.addLayout(profile_row)
+
+        recommendation_portfolio_form = QFormLayout()
+        self.recommendation_portfolio_top_n = QSpinBox()
+        self.recommendation_portfolio_top_n.setRange(1, 50)
+        self.recommendation_portfolio_top_n.setValue(5)
+        recommendation_portfolio_form.addRow("每次推薦檔數:", self.recommendation_portfolio_top_n)
+
+        self.recommendation_portfolio_holding_days = QSpinBox()
+        self.recommendation_portfolio_holding_days.setRange(1, 60)
+        self.recommendation_portfolio_holding_days.setValue(5)
+        recommendation_portfolio_form.addRow("持有天數:", self.recommendation_portfolio_holding_days)
+
+        self.recommendation_portfolio_rebalance = QComboBox()
+        self.recommendation_portfolio_rebalance.addItems(["每週重播", "只跑一次"])
+        recommendation_portfolio_form.addRow("重播頻率:", self.recommendation_portfolio_rebalance)
+
+        self.recommendation_portfolio_allocation = QComboBox()
+        self.recommendation_portfolio_allocation.addItems(["等權配置", "分數加權"])
+        recommendation_portfolio_form.addRow("資金配置:", self.recommendation_portfolio_allocation)
+        recommendation_portfolio_layout.addLayout(recommendation_portfolio_form)
+
+        self.execute_recommendation_portfolio_btn = QPushButton("執行推薦組合回測")
+        self.execute_recommendation_portfolio_btn.setStyleSheet("background-color: #607D8B; color: white; font-weight: bold;")
+        self.execute_recommendation_portfolio_btn.clicked.connect(self._execute_recommendation_portfolio_backtest)
+        recommendation_portfolio_layout.addWidget(self.execute_recommendation_portfolio_btn)
+
+        self.recommendation_portfolio_group.setLayout(recommendation_portfolio_layout)
+        config_layout.addWidget(self.recommendation_portfolio_group)
         
         # 執行按鈕
         execute_row = QHBoxLayout()
@@ -1278,6 +1320,96 @@ class BacktestView(QWidget):
         self.progress_label.setVisible(False)
         
         QMessageBox.critical(self, "回測錯誤", f"執行回測時發生錯誤：\n\n{error_msg}")
+
+    def _execute_recommendation_portfolio_backtest(self):
+        """執行推薦組合回測。"""
+        config = getattr(self, "current_recommendation_portfolio_config", None)
+        if not config:
+            QMessageBox.warning(self, "錯誤", "請先從推薦頁按「送推薦組合回測」載入設定")
+            return
+
+        start_date = self.start_date.date().toString("yyyy-MM-dd")
+        end_date = self.end_date.date().toString("yyyy-MM-dd")
+        if QDate.fromString(start_date, "yyyy-MM-dd") > QDate.fromString(end_date, "yyyy-MM-dd"):
+            QMessageBox.warning(self, "錯誤", "開始日期不能晚於結束日期")
+            return
+        if not self.config:
+            QMessageBox.warning(self, "錯誤", "資料設定尚未初始化，無法載入歷史資料")
+            return
+
+        self.execute_recommendation_portfolio_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)
+        self.progress_label.setText("推薦組合回測執行中...")
+        self.progress_label.setVisible(True)
+
+        def backtest_task():
+            history = self._load_recommendation_portfolio_history()
+            provider = RecommendationDataFrameProvider()
+            service = RecommendationPortfolioBacktestService(provider=provider)
+            return service.run_portfolio_backtest(
+                start_date=start_date,
+                end_date=end_date,
+                profile_id=config.get("profile_id") or "advanced",
+                recommendation_config=config.get("strategy_config", {}),
+                history=history,
+                initial_capital=self.capital_input.value(),
+                rebalance_frequency=self._recommendation_portfolio_rebalance_value(),
+                top_n=self.recommendation_portfolio_top_n.value(),
+                allocation_method=self._recommendation_portfolio_allocation_value(),
+                holding_days=self.recommendation_portfolio_holding_days.value(),
+            )
+
+        self.worker = TaskWorker(backtest_task)
+        self.worker.finished.connect(self._on_recommendation_portfolio_finished)
+        self.worker.error.connect(self._on_recommendation_portfolio_error)
+        self.worker.start()
+
+    def _load_recommendation_portfolio_history(self) -> pd.DataFrame:
+        stock_data_file = None
+        if self.config.all_stocks_data_file.exists():
+            stock_data_file = self.config.all_stocks_data_file
+        elif self.config.stock_data_file.exists():
+            stock_data_file = self.config.stock_data_file
+        if stock_data_file is None:
+            raise FileNotFoundError("找不到 all_stocks_data.csv 或 stock_data_whole.csv")
+
+        history = pd.read_csv(stock_data_file, encoding="utf-8-sig", low_memory=False)
+        if "日期" not in history.columns:
+            raise ValueError("歷史資料缺少 日期 欄位")
+        if "證券代號" not in history.columns and "股票代號" in history.columns:
+            history["證券代號"] = history["股票代號"]
+        if "證券名稱" not in history.columns and "股票名稱" in history.columns:
+            history["證券名稱"] = history["股票名稱"]
+        if "收盤價" not in history.columns:
+            for candidate in ["Close", "close"]:
+                if candidate in history.columns:
+                    history["收盤價"] = history[candidate]
+                    break
+        required = ["日期", "證券代號", "收盤價"]
+        missing = [column for column in required if column not in history.columns]
+        if missing:
+            raise ValueError(f"歷史資料缺少欄位: {', '.join(missing)}")
+        return history
+
+    def _recommendation_portfolio_rebalance_value(self) -> str:
+        return "weekly" if self.recommendation_portfolio_rebalance.currentText() == "每週重播" else "once"
+
+    def _recommendation_portfolio_allocation_value(self) -> str:
+        return "score_weight" if self.recommendation_portfolio_allocation.currentText() == "分數加權" else "equal_weight"
+
+    def _on_recommendation_portfolio_finished(self, result):
+        self.execute_recommendation_portfolio_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        self._show_recommendation_portfolio_result(result)
+        QMessageBox.information(self, "完成", "推薦組合回測完成，請查看右側「推薦組合」結果頁。")
+
+    def _on_recommendation_portfolio_error(self, error_msg: str):
+        self.execute_recommendation_portfolio_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        QMessageBox.critical(self, "推薦組合回測錯誤", f"執行推薦組合回測時發生錯誤：\n\n{error_msg}")
     
     def _format_summary(self, report: BacktestReportDTO) -> str:
         """格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）"""
@@ -2228,6 +2360,21 @@ class BacktestView(QWidget):
 
     def _load_recommendation_portfolio_config(self, config):
         self.current_recommendation_portfolio_config = config
+        if hasattr(self, "recommendation_portfolio_group"):
+            self.recommendation_portfolio_group.setChecked(True)
+        if hasattr(self, "recommendation_portfolio_profile_label"):
+            self.recommendation_portfolio_profile_label.setText(
+                str(config.get("profile_name") or config.get("profile_id") or "進階模式")
+            )
+        if hasattr(self, "recommendation_portfolio_top_n"):
+            self.recommendation_portfolio_top_n.setValue(int(config.get("top_n") or 5))
+        if hasattr(self, "recommendation_portfolio_holding_days"):
+            self.recommendation_portfolio_holding_days.setValue(int(config.get("holding_days") or 5))
+        if hasattr(self, "recommendation_portfolio_allocation"):
+            allocation_text = "分數加權" if config.get("allocation_method") == "score_weight" else "等權配置"
+            index = self.recommendation_portfolio_allocation.findText(allocation_text)
+            if index >= 0:
+                self.recommendation_portfolio_allocation.setCurrentIndex(index)
         QMessageBox.information(
             self,
             "已載入推薦組合回測",
