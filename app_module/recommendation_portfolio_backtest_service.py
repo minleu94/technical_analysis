@@ -9,7 +9,7 @@ from app_module.recommendation_portfolio_dtos import (
     StockContributionDTO,
 )
 from app_module.recommendation_portfolio_dates import parse_stock_dates
-from app_module.recommendation_portfolio_metrics import calculate_robustness_metrics
+from app_module.recommendation_portfolio_metrics import calculate_robustness_metrics, generate_improvement_hints
 from app_module.recommendation_replay_service import RecommendationReplayService
 
 
@@ -126,6 +126,8 @@ class RecommendationPortfolioBacktestService:
             )
         )
 
+        improvement_hints = generate_improvement_hints(summary)
+
         return RecommendationPortfolioBacktestResultDTO(
             summary=summary,
             equity_curve=equity_curve,
@@ -134,6 +136,7 @@ class RecommendationPortfolioBacktestService:
             period_holdings=period_holdings,
             stock_contribution=stock_contribution,
             selection_diagnostics=[item for snapshot in snapshots for item in snapshot.diagnostics],
+            improvement_hints=improvement_hints,
         )
 
     def _get_rebalance_dates(

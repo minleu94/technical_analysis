@@ -28,6 +28,7 @@ from app_module.dtos import BacktestReportDTO
 from app_module.preset_service import PresetService
 from app_module.universe_service import UniverseService
 from app_module.backtest_repository import BacktestRunRepository
+from app_module.recommendation_portfolio_run_repository import RecommendationPortfolioRunRepository
 from app_module.chart_data_service import ChartDataService
 from app_module.promotion_service import PromotionService
 from app_module.strategy_version_service import StrategyVersionService
@@ -105,6 +106,7 @@ class BacktestView(QWidget):
             self.preset_service = PresetService(config)
             self.universe_service = UniverseService(config)
             self.run_repository = BacktestRunRepository(config)
+            self.portfolio_run_repository = RecommendationPortfolioRunRepository(config)
             self.chart_data_service = ChartDataService(self.run_repository)
             # 如果沒有傳入 batch_backtest_service，則創建一個
             if not self.batch_backtest_service:
@@ -125,6 +127,7 @@ class BacktestView(QWidget):
             self.preset_service = None
             self.universe_service = None
             self.run_repository = None
+            self.portfolio_run_repository = None
             self.chart_data_service = None
             self.strategy_version_service = None
             self.walkforward_service = None
@@ -141,6 +144,8 @@ class BacktestView(QWidget):
         self._init_parameter_descriptions()
         
         self._setup_ui()
+        if self.portfolio_run_repository and hasattr(self, "portfolio_history_combo"):
+            self._refresh_portfolio_history_combo()
     
     def _setup_ui(self):
         """設置 UI"""
@@ -709,6 +714,27 @@ class BacktestView(QWidget):
         self.execute_recommendation_portfolio_btn.clicked.connect(self._execute_recommendation_portfolio_backtest)
         recommendation_portfolio_layout.addWidget(self.execute_recommendation_portfolio_btn)
 
+        # 推薦組合回測保存與歷史管理
+        if self.portfolio_run_repository:
+            portfolio_btn_row = QHBoxLayout()
+            self.save_portfolio_result_btn = QPushButton("保存推薦回測")
+            self.save_portfolio_result_btn.setEnabled(False)
+            self.save_portfolio_result_btn.clicked.connect(self._save_recommendation_portfolio_result)
+            portfolio_btn_row.addWidget(self.save_portfolio_result_btn)
+            
+            self.delete_portfolio_result_btn = QPushButton("刪除推薦回測")
+            self.delete_portfolio_result_btn.setEnabled(False)
+            self.delete_portfolio_result_btn.clicked.connect(self._delete_recommendation_portfolio_result)
+            portfolio_btn_row.addWidget(self.delete_portfolio_result_btn)
+            recommendation_portfolio_layout.addLayout(portfolio_btn_row)
+            
+            portfolio_history_row = QHBoxLayout()
+            portfolio_history_row.addWidget(QLabel("歷史記錄:"))
+            self.portfolio_history_combo = QComboBox()
+            self.portfolio_history_combo.currentIndexChanged.connect(self._on_portfolio_history_changed)
+            portfolio_history_row.addWidget(self.portfolio_history_combo)
+            recommendation_portfolio_layout.addLayout(portfolio_history_row)
+
         self.recommendation_portfolio_group.setLayout(recommendation_portfolio_layout)
         config_layout.addWidget(self.recommendation_portfolio_group)
         
@@ -990,7 +1016,7 @@ class BacktestView(QWidget):
 
         self.portfolio_summary_text = QTextEdit()
         self.portfolio_summary_text.setReadOnly(True)
-        self.portfolio_summary_text.setMaximumHeight(120)
+        self.portfolio_summary_text.setMaximumHeight(200)
         self.portfolio_summary_text.setFont(QFont("Consolas", 9))
         recommendation_portfolio_layout.addWidget(self.portfolio_summary_text)
 
@@ -1380,6 +1406,11 @@ class BacktestView(QWidget):
                 )
             )
 
+        if hasattr(self, "portfolio_summary_text") and getattr(result, "improvement_hints", None):
+            self.portfolio_summary_text.append("\n=== 💡 策略改善建議 ===")
+            for hint in result.improvement_hints:
+                self.portfolio_summary_text.append(hint)
+
         self._plot_recommendation_portfolio_charts(result)
 
     def _plot_recommendation_portfolio_charts(self, result):
@@ -1506,6 +1537,13 @@ class BacktestView(QWidget):
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
         self._show_recommendation_portfolio_result(result)
+        
+        if hasattr(self, "save_portfolio_result_btn"):
+            self.save_portfolio_result_btn.setEnabled(True)
+        if hasattr(self, "delete_portfolio_result_btn"):
+            self.delete_portfolio_result_btn.setEnabled(False)
+        self.current_portfolio_run_id = None
+        
         QMessageBox.information(self, "完成", "推薦組合回測完成，請查看右側「推薦組合」結果頁。")
 
     def _on_recommendation_portfolio_error(self, error_msg: str):
@@ -1514,7 +1552,180 @@ class BacktestView(QWidget):
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
         QMessageBox.critical(self, "推薦組合回測錯誤", f"執行推薦組合回測時發生錯誤：\n\n{error_msg}")
-    
+
+    def _refresh_portfolio_history_combo(self):
+        """重新整理推薦組合歷史下拉選單"""
+        if not self.portfolio_run_repository:
+            return
+            
+        # 暫時阻斷訊號以防觸發 currentIndexChanged 造成重複載入
+        self.portfolio_history_combo.blockSignals(True)
+        self.portfolio_history_combo.clear()
+        self.portfolio_history_combo.addItem("-- 選擇歷史推薦回測 --", None)
+        
+        runs = self.portfolio_run_repository.list_runs()
+        for run in runs:
+            run_id = run.get('run_id')
+            run_name = run.get('run_name')
+            total_return = run.get('total_return', 0.0)
+            created_at = run.get('created_at', '')
+            
+            try:
+                dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                date_str = dt.strftime('%m-%d %H:%M')
+            except:
+                date_str = created_at[:16] if len(created_at) > 16 else created_at
+                
+            display_text = f"{run_name} ({total_return*100:+.1f}%) | {date_str}"
+            self.portfolio_history_combo.addItem(display_text, run_id)
+            
+        self.portfolio_history_combo.blockSignals(False)
+
+    def _save_recommendation_portfolio_result(self):
+        """保存當前的推薦組合回測結果"""
+        result = getattr(self, "current_recommendation_portfolio_result", None)
+        config = getattr(self, "current_recommendation_portfolio_config", None)
+        if not result or not config or not self.portfolio_run_repository:
+            QMessageBox.warning(self, "錯誤", "沒有可保存的推薦回測結果")
+            return
+            
+        profile_id = config.get("profile_id") or "advanced"
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        default_name = f"Port_{profile_id}_{timestamp}"
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("保存推薦回測結果")
+        dialog_layout = QVBoxLayout(dialog)
+        
+        dialog_layout.addWidget(QLabel("執行名稱:"))
+        name_input = QLineEdit(default_name)
+        dialog_layout.addWidget(name_input)
+        
+        dialog_layout.addWidget(QLabel("備註（可選）:"))
+        notes_input = QTextEditDialog()
+        notes_input.setMaximumHeight(100)
+        dialog_layout.addWidget(notes_input)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        dialog_layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.Accepted:
+            run_name = name_input.text().strip() or default_name
+            notes = notes_input.toPlainText().strip()
+            
+            start_date = self.start_date.date().toString("yyyy-MM-dd")
+            end_date = self.end_date.date().toString("yyyy-MM-dd")
+            
+            try:
+                run_id = self.portfolio_run_repository.save_run(
+                    run_name=run_name,
+                    profile_id=profile_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    initial_capital=self.capital_input.value(),
+                    rebalance_frequency=self._recommendation_portfolio_rebalance_value(),
+                    top_n=self.recommendation_portfolio_top_n.value(),
+                    allocation_method=self._recommendation_portfolio_allocation_value(),
+                    holding_days=self.recommendation_portfolio_holding_days.value(),
+                    stop_loss_pct=self.stop_loss_input.value() / 100.0 if self.stop_loss_input.value() > 0 else None,
+                    take_profit_pct=self.take_profit_input.value() / 100.0 if self.take_profit_input.value() > 0 else None,
+                    result=result,
+                    notes=notes
+                )
+                QMessageBox.information(self, "成功", f"推薦組合回測結果已保存: {run_name}")
+                self.current_portfolio_run_id = run_id
+                
+                # 重新載入下拉選單
+                self._refresh_portfolio_history_combo()
+                
+                # 選中剛保存的結果
+                index = self.portfolio_history_combo.findData(run_id)
+                if index >= 0:
+                    self.portfolio_history_combo.blockSignals(True)
+                    self.portfolio_history_combo.setCurrentIndex(index)
+                    self.portfolio_history_combo.blockSignals(False)
+                    
+                # 啟用刪除按鈕
+                self.delete_portfolio_result_btn.setEnabled(True)
+            except Exception as e:
+                QMessageBox.critical(self, "錯誤", f"保存失敗: {str(e)}")
+
+    def _delete_recommendation_portfolio_result(self):
+        """刪除選中的歷史推薦回測紀錄"""
+        run_id = getattr(self, "current_portfolio_run_id", None)
+        if not run_id or not self.portfolio_run_repository:
+            QMessageBox.warning(self, "錯誤", "沒有選中可刪除的歷史紀錄")
+            return
+            
+        reply = QMessageBox.question(
+            self, 
+            "確認刪除", 
+            "確定要永久刪除此筆推薦組合回測紀錄嗎？這項操作無法復原。",
+            QMessageBox.Yes | QMessageBox.No, 
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                success = self.portfolio_run_repository.delete_run(run_id)
+                if success:
+                    QMessageBox.information(self, "成功", "該筆推薦回測紀錄已刪除。")
+                    self.current_portfolio_run_id = None
+                    self.current_recommendation_portfolio_result = None
+                    
+                    # 重新載入下拉選單
+                    self._refresh_portfolio_history_combo()
+                    
+                    # 清除 UI 上的結果顯示
+                    self.portfolio_summary_text.clear()
+                    self.portfolio_period_table.setModel(None)
+                    self.portfolio_stock_table.setModel(None)
+                    self.portfolio_trades_table.setModel(None)
+                    
+                    # 禁用保存/刪除按鈕
+                    self.save_portfolio_result_btn.setEnabled(False)
+                    self.delete_portfolio_result_btn.setEnabled(False)
+                else:
+                    QMessageBox.warning(self, "錯誤", "刪除失敗，紀錄可能已被手動移除。")
+            except Exception as e:
+                QMessageBox.critical(self, "錯誤", f"刪除失敗: {str(e)}")
+
+    def _on_portfolio_history_changed(self, index):
+        """當選取不同的歷史推薦回測時"""
+        if index < 0 or not self.portfolio_run_repository:
+            return
+            
+        run_id = self.portfolio_history_combo.itemData(index)
+        if not run_id:
+            # 選擇了引導項目 "-- 選擇歷史推薦回測 --"
+            self.delete_portfolio_result_btn.setEnabled(False)
+            return
+            
+        try:
+            loaded_data = self.portfolio_run_repository.load_run(run_id)
+            if not loaded_data:
+                QMessageBox.warning(self, "錯誤", "無法載入該筆推薦回測。")
+                return
+                
+            self.current_portfolio_run_id = run_id
+            result_dto = loaded_data["result_dto"]
+            
+            # 渲染歷史結果
+            self._show_recommendation_portfolio_result(result_dto)
+            
+            # 追加顯示 Metadata / 備註
+            notes = loaded_data.get("notes", "")
+            if notes and hasattr(self, "portfolio_summary_text"):
+                self.portfolio_summary_text.append(f"\n📝 歷史備註：\n{notes}")
+                
+            # 載入歷史回測後，禁用保存（因為已經存過了），啟用刪除
+            self.save_portfolio_result_btn.setEnabled(False)
+            self.delete_portfolio_result_btn.setEnabled(True)
+        except Exception as e:
+            QMessageBox.critical(self, "錯誤", f"載入歷史回測失敗: {str(e)}")
+
     def _format_summary(self, report: BacktestReportDTO) -> str:
         """格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）"""
         details = report.details

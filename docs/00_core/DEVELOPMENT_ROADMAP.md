@@ -934,3 +934,10 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 - Recommendation Portfolio Backtest 已接入停損 (%) / 停利 (%) 提前出場，持倉會逐交易日檢查 stop_loss / take_profit，未觸發時才以 holding_period 出場。
 - 推薦組合結果總覽新增出場原因統計、虧損交易占比與最拖累股票，提供第一版策略失敗診斷。
 - 尚未完成：推薦組合結果保存為策略版本、依診斷推薦參數調整、以及更完整的 factor/failure attribution。
+
+## 2026-05-27 推薦組合 Research Run 更新
+
+- 新增 `RecommendationPortfolioRunRepository`，以 SQLite metadata + JSON detail 保存推薦組合 research run。
+- Backtest「推薦組合回測」區塊新增保存、刪除與歷史記錄下拉選單，可重新載入完整 DTO 並重畫圖表/表格。
+- 新增 deterministic improvement hints，依停損比例、持有到期虧損、最差個股、交易次數與整體虧損產生第一版策略改善建議。
+- 尚未完成：將推薦組合 research run promote 成策略版本、跨 run 比較視圖、以及更完整的 benchmark-relative attribution。

@@ -57,6 +57,52 @@ class RecommendationPortfolioBacktestResultDTO:
     period_holdings: List[PeriodHoldingDTO]
     stock_contribution: List[StockContributionDTO]
     selection_diagnostics: List[str] = field(default_factory=list)
+    improvement_hints: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        from dataclasses import asdict
+        return {
+            "summary": self.summary,
+            "equity_curve": self.equity_curve.to_dict(orient="records") if not self.equity_curve.empty else [],
+            "trades": self.trades.to_dict(orient="records") if not self.trades.empty else [],
+            "snapshots": [asdict(s) for s in self.snapshots],
+            "period_holdings": [asdict(h) for h in self.period_holdings],
+            "stock_contribution": [asdict(c) for c in self.stock_contribution],
+            "selection_diagnostics": self.selection_diagnostics,
+            "improvement_hints": self.improvement_hints,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "RecommendationPortfolioBacktestResultDTO":
+        summary = data.get("summary", {})
+        equity_curve = pd.DataFrame(data.get("equity_curve", []))
+        trades = pd.DataFrame(data.get("trades", []))
+        
+        snapshots = []
+        for s in data.get("snapshots", []):
+            snapshots.append(RecommendationSnapshotDTO(**s))
+            
+        period_holdings = []
+        for h in data.get("period_holdings", []):
+            period_holdings.append(PeriodHoldingDTO(**h))
+            
+        stock_contribution = []
+        for c in data.get("stock_contribution", []):
+            stock_contribution.append(StockContributionDTO(**c))
+            
+        selection_diagnostics = data.get("selection_diagnostics", [])
+        improvement_hints = data.get("improvement_hints", [])
+        
+        return cls(
+            summary=summary,
+            equity_curve=equity_curve,
+            trades=trades,
+            snapshots=snapshots,
+            period_holdings=period_holdings,
+            stock_contribution=stock_contribution,
+            selection_diagnostics=selection_diagnostics,
+            improvement_hints=improvement_hints,
+        )
 
     def period_holdings_dataframe(self) -> pd.DataFrame:
         columns = [

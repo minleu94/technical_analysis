@@ -390,3 +390,7 @@
 ## 2026-05-27 推薦組合停損停利與失敗診斷
 
 推薦組合回測已接入 Backtest 頁既有的停損 (%) / 停利 (%) 設定。每檔推薦持倉會逐交易日檢查是否先觸發 stop_loss 或 take_profit；若都未觸發，才以 holding_period 出場。結果總覽同步顯示停損、停利、持有到期次數、虧損交易占比與最拖累股票，作為第一版策略失敗診斷。
+
+## 2026-05-27 推薦組合 Research Run 保存
+
+推薦組合回測新增獨立保存機制 `RecommendationPortfolioRunRepository`，使用 SQLite metadata 搭配 JSON 詳情檔案保存 profile/config、回測參數、summary、equity curve、期間持倉、個股貢獻與改善建議。此資料模型與單股回測 run 分離，避免混淆單股策略回測與推薦組合研究紀錄。

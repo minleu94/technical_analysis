@@ -83,3 +83,62 @@ def _calculate_monte_carlo_returns(
         "monte_carlo_p50_return": float(percentiles[1]),
         "monte_carlo_p95_return": float(percentiles[2]),
     }
+
+
+def generate_improvement_hints(summary: Dict[str, Any]) -> List[str]:
+    """根據回測總覽指標與診斷數據，產生具體的 rule-based 改善建議。"""
+    hints = []
+    
+    total_trades = summary.get("total_trades", 0)
+    if total_trades == 0:
+        return ["💡 提示：回測期間沒有任何推薦交易。建議檢查推薦 Profile 篩選條件是否過於嚴格，或歷史資料庫中該段期間是否有完整的個股資料。"]
+
+    # 1. 停損太頻繁
+    stop_loss_exits = summary.get("stop_loss_exits", 0)
+    if total_trades > 0 and stop_loss_exits > 0:
+        stop_loss_ratio = stop_loss_exits / total_trades
+        if stop_loss_ratio > 0.3:
+            hints.append(
+                f"💡 停損出場次數過高（佔比 {stop_loss_ratio * 100:.1f}%）。"
+                "這顯示停損百分比（stop_loss_pct）設得太窄，或推薦的股票在進場後波動較大。建議適度放寬停損空間，或檢查推薦 Profile/Config 是否在市場回撤期仍過於積極進場。"
+            )
+
+    # 2. 持有到期績效差
+    holding_period_exits = summary.get("holding_period_exits", 0)
+    total_return = summary.get("total_return", 0.0)
+    if total_trades > 0 and holding_period_exits > 0 and total_return < 0:
+        holding_ratio = holding_period_exits / total_trades
+        if holding_ratio > 0.5:
+            hints.append(
+                f"💡 大部分持倉均持有至期滿出場（佔比 {holding_ratio * 100:.1f}%），但整體為虧損。"
+                "這代表預設的持有天數（holding_days）可能過長，無法在推薦股票衝高時及時鎖利，或者推薦的股票缺乏持續的動能。建議縮短持有天數，或適度加入停利機制（take_profit_pct）。"
+            )
+
+    # 3. 單一股票曝險過高
+    worst_stock_pnl = summary.get("worst_stock_pnl", 0.0)
+    worst_stock_code = summary.get("worst_stock_code", "")
+    worst_stock_name = summary.get("worst_stock_name", "")
+    capital_used = summary.get("capital_used", 1000000.0) or 1000000.0
+    
+    if worst_stock_pnl < 0 and (abs(worst_stock_pnl) / capital_used) > 0.05:
+        stock_display = f"{worst_stock_code} {worst_stock_name}" if worst_stock_name else worst_stock_code
+        hints.append(
+            f"💡 單一最差個股（{stock_display}）的虧損金額達 {abs(worst_stock_pnl):,.0f}，佔整體資金比例較高。"
+            "這顯示個股曝險過大，或缺乏有效的停損控制。建議調降單檔個股的配置權重（可調整增加 top_n），或引入/收緊停損機制（stop_loss_pct）以限制單筆極端損失。"
+        )
+
+    # 4. 交易次數過少
+    if total_trades < 3:
+        hints.append(
+            f"💡 回測期間交易次數過少（僅 {total_trades} 次）。"
+            "這通常是因為 rebalance_frequency (重播頻率) 限制過嚴，或 prefilter 的候選上限太窄，導致多數日期因條件不符而未產生推薦。建議放寬 prefilter 限制或調整 rebalance_frequency。"
+        )
+
+    # 5. 未能擊敗大盤/表現欠佳
+    if total_return < 0:
+        hints.append(
+            "💡 整體報酬率為負值，未能達到穩定獲利目標。"
+            "建議重新檢視推薦 Profile 的篩選指標（例如調整 technical 或 pattern 因子權重），或在 Regime Service 顯示空頭（Bearish）時降低交易比重。"
+        )
+
+    return hints
