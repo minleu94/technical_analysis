@@ -7,6 +7,7 @@ import pandas as pd
 from decision_module.industry_mapper import IndustryMapper
 from decision_module.reason_engine import ReasonEngine
 from decision_module.strategy_configurator import StrategyConfigurator
+from app_module.recommendation_portfolio_dates import parse_stock_dates
 
 
 class RecommendationDataFrameProvider:
@@ -116,7 +117,7 @@ class RecommendationDataFrameProvider:
         data = df.copy()
         if "日期" not in data.columns:
             raise ValueError("history 必須包含 日期 欄位")
-        data["日期"] = pd.to_datetime(data["日期"], errors="coerce")
+        data["日期"] = parse_stock_dates(data["日期"])
         data = data[data["日期"].notna()]
 
         if "證券代號" not in data.columns and "股票代號" in data.columns:

@@ -34,6 +34,7 @@ from app_module.strategy_version_service import StrategyVersionService
 from app_module.walkforward_service import WalkForwardService
 from app_module.recommendation_dataframe_provider import RecommendationDataFrameProvider
 from app_module.recommendation_portfolio_backtest_service import RecommendationPortfolioBacktestService
+from app_module.recommendation_portfolio_dates import parse_stock_dates
 from ui_qt.widgets.fast_chart_widget import (
     create_drawdown_curve_widget,
     create_equity_curve_widget,
@@ -1399,6 +1400,7 @@ class BacktestView(QWidget):
         missing = [column for column in required if column not in history.columns]
         if missing:
             raise ValueError(f"歷史資料缺少欄位: {', '.join(missing)}")
+        history["日期"] = parse_stock_dates(history["日期"])
         return history
 
     def _recommendation_portfolio_rebalance_value(self) -> str:

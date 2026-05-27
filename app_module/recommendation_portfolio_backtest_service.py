@@ -8,6 +8,7 @@ from app_module.recommendation_portfolio_dtos import (
     RecommendationPortfolioBacktestResultDTO,
     StockContributionDTO,
 )
+from app_module.recommendation_portfolio_dates import parse_stock_dates
 from app_module.recommendation_replay_service import RecommendationReplayService
 
 
@@ -32,7 +33,7 @@ class RecommendationPortfolioBacktestService:
             raise ValueError("目前推薦組合回測支援 once 或 weekly rebalance")
 
         data = history.copy()
-        data["日期"] = pd.to_datetime(data["日期"], errors="coerce")
+        data["日期"] = parse_stock_dates(data["日期"])
         data = data[data["日期"].notna()].sort_values("日期")
         start_ts = pd.to_datetime(start_date)
         end_ts = pd.to_datetime(end_date)

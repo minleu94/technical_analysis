@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 import pandas as pd
 
 from app_module.recommendation_portfolio_dtos import RecommendationSnapshotDTO
+from app_module.recommendation_portfolio_dates import parse_stock_dates
 
 
 RecommendationProvider = Callable[[pd.DataFrame, Dict[str, Any], int], List[Dict[str, Any]]]
@@ -26,7 +27,7 @@ class RecommendationReplayService:
 
         as_of_ts = pd.to_datetime(as_of_date)
         data = history.copy()
-        data["日期"] = pd.to_datetime(data["日期"], errors="coerce")
+        data["日期"] = parse_stock_dates(data["日期"])
         data = data[data["日期"].notna()]
         data = data[data["日期"] <= as_of_ts]
 

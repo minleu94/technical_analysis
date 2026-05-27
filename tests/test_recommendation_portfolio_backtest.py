@@ -6,6 +6,7 @@ from app_module.recommendation_portfolio_dtos import (
     RecommendationSnapshotDTO,
     StockContributionDTO,
 )
+from app_module.recommendation_portfolio_dates import parse_stock_dates
 from app_module.recommendation_portfolio_backtest_service import (
     RecommendationPortfolioBacktestService,
 )
@@ -128,6 +129,13 @@ def test_replay_snapshot_filters_future_rows_before_recommending():
     assert calls["max_date"] == "2026-01-02"
     assert snapshot.as_of_date == "2026-01-02"
     assert snapshot.recommendations[0]["stock_code"] == "2330"
+
+
+def test_parse_stock_dates_handles_numeric_yyyymmdd_values():
+    parsed = parse_stock_dates(pd.Series([20260102, 20260103]))
+
+    assert parsed.iloc[0].strftime("%Y-%m-%d") == "2026-01-02"
+    assert parsed.iloc[1].strftime("%Y-%m-%d") == "2026-01-03"
 
 
 def test_portfolio_backtest_records_period_holdings_and_contributions():
