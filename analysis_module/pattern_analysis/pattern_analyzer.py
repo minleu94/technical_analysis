@@ -1,10 +1,38 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import warnings
 from scipy.signal import find_peaks, argrelextrema
 from scipy.spatial.distance import euclidean
 from fastdtw import fastdtw
 from scipy.optimize import curve_fit
+
+
+def _safe_polyfit(x, y, deg):
+    x_values = np.asarray(list(x), dtype=float)
+    y_values = np.asarray(list(y), dtype=float)
+    if len(x_values) <= deg or len(y_values) <= deg:
+        raise ValueError("not enough points for polynomial fit")
+    if len(x_values) != len(y_values):
+        raise ValueError("x and y length mismatch")
+    if not np.isfinite(x_values).all() or not np.isfinite(y_values).all():
+        raise ValueError("non-finite values for polynomial fit")
+    if len(np.unique(x_values)) <= deg:
+        raise ValueError("not enough unique x values for polynomial fit")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", np.exceptions.RankWarning)
+        return np.polyfit(x_values, y_values, deg)
+
+
+def _safe_r_squared(actual, fitted):
+    actual_values = np.asarray(actual, dtype=float)
+    fitted_values = np.asarray(fitted, dtype=float)
+    denominator = np.sum((actual_values - np.mean(actual_values)) ** 2)
+    if denominator == 0 or not np.isfinite(denominator):
+        return 0.0
+    value = 1 - np.sum((actual_values - fitted_values) ** 2) / denominator
+    return float(value) if np.isfinite(value) else 0.0
+
 
 class PatternAnalyzer:
     """價格圖形模式分析類"""
@@ -621,14 +649,14 @@ class PatternAnalyzer:
                 # 使用線性回歸擬合上下趨勢線
                 try:
                     # 上趨勢線（連接峰值）
-                    upper_slope, upper_intercept = np.polyfit(peak_indices, peak_prices, 1)
+                    upper_slope, upper_intercept = _safe_polyfit(peak_indices, peak_prices, 1)
                     upper_line = upper_slope * np.array(peak_indices) + upper_intercept
-                    upper_r_squared = 1 - np.sum((peak_prices - upper_line) ** 2) / np.sum((peak_prices - np.mean(peak_prices)) ** 2)
+                    upper_r_squared = _safe_r_squared(peak_prices, upper_line)
                     
                     # 下趨勢線（連接谷值）
-                    lower_slope, lower_intercept = np.polyfit(trough_indices, trough_prices, 1)
+                    lower_slope, lower_intercept = _safe_polyfit(trough_indices, trough_prices, 1)
                     lower_line = lower_slope * np.array(trough_indices) + lower_intercept
-                    lower_r_squared = 1 - np.sum((trough_prices - lower_line) ** 2) / np.sum((trough_prices - np.mean(trough_prices)) ** 2)
+                    lower_r_squared = _safe_r_squared(trough_prices, lower_line)
                 except:
                     # 如果擬合失敗，則跳過
                     continue
@@ -707,11 +735,15 @@ class PatternAnalyzer:
                     pre_window = min(20, actual_start_idx)
                     if pre_window > 0:
                         pre_prices = prices[actual_start_idx-pre_window:actual_start_idx]
-                        pre_slope = np.polyfit(range(len(pre_prices)), pre_prices, 1)[0]
-                        if pre_slope > 0:
-                            direction = 'bullish'  # 之前是上升趨勢，可能繼續上升
+                        try:
+                            pre_slope = _safe_polyfit(range(len(pre_prices)), pre_prices, 1)[0]
+                        except ValueError:
+                            direction = 'unknown'
                         else:
-                            direction = 'bearish'  # 之前是下降趨勢，可能繼續下降
+                            if pre_slope > 0:
+                                direction = 'bullish'  # 之前是上升趨勢，可能繼續上升
+                            else:
+                                direction = 'bearish'  # 之前是下降趨勢，可能繼續下降
                     else:
                         direction = 'unknown'  # 無法判斷之前的趨勢
                 else:
@@ -724,9 +756,12 @@ class PatternAnalyzer:
                     # 獲取窗口內的成交量
                     volumes = df.iloc[actual_start_idx:actual_end_idx+1][volume_col].values
                     
-                    if len(volumes) > 0:
+                    if len(volumes) > 1:
                         # 檢查成交量是否隨時間遞減（三角形形成過程中成交量通常遞減）
-                        volume_slope = np.polyfit(range(len(volumes)), volumes, 1)[0]
+                        try:
+                            volume_slope = _safe_polyfit(range(len(volumes)), volumes, 1)[0]
+                        except ValueError:
+                            volume_slope = 0
                         
                         if volume_slope < 0:
                             volume_pattern = 'decreasing'  # 成交量遞減，符合三角形成交量特徵
@@ -821,7 +856,10 @@ class PatternAnalyzer:
             
             # 計算前期趨勢
             pre_window_prices = prices[i-20:i]
-            trend_coef = np.polyfit(range(20), pre_window_prices, 1)
+            try:
+                trend_coef = _safe_polyfit(range(20), pre_window_prices, 1)
+            except ValueError:
+                continue
             trend = trend_coef[0]
             
             # 檢查趨勢是否足夠顯著
@@ -832,7 +870,10 @@ class PatternAnalyzer:
             window_prices = prices[i:window_end]
             
             # 計算窗口內價格的趨勢線
-            window_coef = np.polyfit(range(len(window_prices)), window_prices, 1)
+            try:
+                window_coef = _safe_polyfit(range(len(window_prices)), window_prices, 1)
+            except ValueError:
+                continue
             window_slope = window_coef[0]
             
             # 確保窗口內趨勢線的斜率與前期趨勢相反
@@ -855,14 +896,14 @@ class PatternAnalyzer:
                     peak_y = prices[window_peaks]
                     if len(np.unique(peak_x)) < 2 or not np.isfinite(peak_y).all():
                         continue
-                    peak_slope, peak_intercept = np.polyfit(peak_x, peak_y, 1)
+                    peak_slope, peak_intercept = _safe_polyfit(peak_x, peak_y, 1)
                     
                     # 計算谷的趨勢線
                     trough_x = np.array([t - i for t in window_troughs])
                     trough_y = prices[window_troughs]
                     if len(np.unique(trough_x)) < 2 or not np.isfinite(trough_y).all():
                         continue
-                    trough_slope, trough_intercept = np.polyfit(trough_x, trough_y, 1)
+                    trough_slope, trough_intercept = _safe_polyfit(trough_x, trough_y, 1)
                     
                     # 檢查兩條趨勢線是否近似平行
                     # 使用斜率的相對差異來判斷
@@ -1142,12 +1183,12 @@ class PatternAnalyzer:
                             # 前半部分成交量的趨勢
                             left_volumes = volumes[:mid_idx]
                             left_indices = np.arange(len(left_volumes))
-                            left_slope = np.polyfit(left_indices, left_volumes, 1)[0]
+                            left_slope = _safe_polyfit(left_indices, left_volumes, 1)[0]
                             
                             # 後半部分成交量的趨勢
                             right_volumes = volumes[mid_idx:]
                             right_indices = np.arange(len(right_volumes))
-                            right_slope = np.polyfit(right_indices, right_volumes, 1)[0]
+                            right_slope = _safe_polyfit(right_indices, right_volumes, 1)[0]
                             
                             if left_slope > 0 and right_slope < 0:
                                 volume_pattern = 'rising_left_falling_right'  # 理想的圓頂成交量特徵
@@ -1319,7 +1360,7 @@ class PatternAnalyzer:
                             # 後半部分成交量的趨勢
                             right_volumes = volumes[mid_idx:]
                             right_indices = np.arange(len(right_volumes))
-                            right_slope = np.polyfit(right_indices, right_volumes, 1)[0]
+                            right_slope = _safe_polyfit(right_indices, right_volumes, 1)[0]
                             
                             if right_slope > 0:
                                 volume_pattern = 'rising_right'  # 右側成交量上升，符合圓底成交量特徵
@@ -1565,14 +1606,14 @@ class PatternAnalyzer:
                 # 使用線性回歸擬合上下趨勢線
                 try:
                     # 上趨勢線
-                    upper_slope, upper_intercept = np.polyfit(peak_indices, peak_prices, 1)
+                    upper_slope, upper_intercept = _safe_polyfit(peak_indices, peak_prices, 1)
                     upper_line = upper_slope * np.array(peak_indices) + upper_intercept
-                    upper_r_squared = 1 - np.sum((peak_prices - upper_line) ** 2) / np.sum((peak_prices - np.mean(peak_prices)) ** 2)
+                    upper_r_squared = _safe_r_squared(peak_prices, upper_line)
                     
                     # 下趨勢線
-                    lower_slope, lower_intercept = np.polyfit(trough_indices, trough_prices, 1)
+                    lower_slope, lower_intercept = _safe_polyfit(trough_indices, trough_prices, 1)
                     lower_line = lower_slope * np.array(trough_indices) + lower_intercept
-                    lower_r_squared = 1 - np.sum((trough_prices - lower_line) ** 2) / np.sum((trough_prices - np.mean(trough_prices)) ** 2)
+                    lower_r_squared = _safe_r_squared(trough_prices, lower_line)
                 except:
                     # 如果擬合失敗，則跳過
                     continue

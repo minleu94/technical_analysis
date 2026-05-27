@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from analysis_module.pattern_analysis import PatternAnalyzer
+from analysis_module.pattern_analysis.pattern_analyzer import _safe_polyfit
 
 
 def test_identify_flag_skips_underconstrained_peak_trough_regressions(monkeypatch):
@@ -26,3 +27,13 @@ def test_identify_flag_skips_underconstrained_peak_trough_regressions(monkeypatc
 
     assert result == []
     assert not any(isinstance(item.message, np.exceptions.RankWarning) for item in caught)
+
+
+def test_safe_polyfit_rejects_non_finite_values_before_lapack():
+    with np.testing.assert_raises(ValueError):
+        _safe_polyfit([0, 1, 2], [1.0, np.nan, 3.0], 1)
+
+
+def test_safe_polyfit_rejects_duplicate_x_values_before_lapack():
+    with np.testing.assert_raises(ValueError):
+        _safe_polyfit([1, 1, 1], [1.0, 2.0, 3.0], 1)

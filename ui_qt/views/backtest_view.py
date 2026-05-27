@@ -652,6 +652,12 @@ class BacktestView(QWidget):
         self.recommendation_portfolio_top_n.setValue(5)
         recommendation_portfolio_form.addRow("每次推薦檔數:", self.recommendation_portfolio_top_n)
 
+        self.recommendation_portfolio_max_stocks = QSpinBox()
+        self.recommendation_portfolio_max_stocks.setRange(10, 500)
+        self.recommendation_portfolio_max_stocks.setValue(50)
+        self.recommendation_portfolio_max_stocks.setSingleStep(10)
+        recommendation_portfolio_form.addRow("每期候選上限:", self.recommendation_portfolio_max_stocks)
+
         self.recommendation_portfolio_holding_days = QSpinBox()
         self.recommendation_portfolio_holding_days.setRange(1, 60)
         self.recommendation_portfolio_holding_days.setValue(5)
@@ -1347,11 +1353,14 @@ class BacktestView(QWidget):
             history = self._load_recommendation_portfolio_history()
             provider = RecommendationDataFrameProvider()
             service = RecommendationPortfolioBacktestService(provider=provider)
+            recommendation_config = dict(config.get("strategy_config", {}))
+            recommendation_config.setdefault("_portfolio_lookback_days", 80)
+            recommendation_config["_portfolio_max_stocks"] = self.recommendation_portfolio_max_stocks.value()
             return service.run_portfolio_backtest(
                 start_date=start_date,
                 end_date=end_date,
                 profile_id=config.get("profile_id") or "advanced",
-                recommendation_config=config.get("strategy_config", {}),
+                recommendation_config=recommendation_config,
                 history=history,
                 initial_capital=self.capital_input.value(),
                 rebalance_frequency=self._recommendation_portfolio_rebalance_value(),
@@ -1400,6 +1409,7 @@ class BacktestView(QWidget):
 
     def _on_recommendation_portfolio_finished(self, result):
         self.execute_recommendation_portfolio_btn.setEnabled(True)
+        self.progress_bar.setRange(0, 100)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
         self._show_recommendation_portfolio_result(result)
@@ -1407,6 +1417,7 @@ class BacktestView(QWidget):
 
     def _on_recommendation_portfolio_error(self, error_msg: str):
         self.execute_recommendation_portfolio_btn.setEnabled(True)
+        self.progress_bar.setRange(0, 100)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
         QMessageBox.critical(self, "推薦組合回測錯誤", f"執行推薦組合回測時發生錯誤：\n\n{error_msg}")

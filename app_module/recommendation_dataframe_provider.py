@@ -23,11 +23,19 @@ class RecommendationDataFrameProvider:
             return []
 
         stock_col = "證券代號"
+        lookback_days = int(config.get("_portfolio_lookback_days", 80))
+        max_stocks = int(config.get("_portfolio_max_stocks", 200))
+        latest_date = data["日期"].max()
+        if pd.notna(latest_date) and lookback_days > 0:
+            data = data[data["日期"] >= latest_date - pd.Timedelta(days=lookback_days)]
+        stock_codes = data[stock_col].dropna().astype(str).unique()[:max_stocks]
         recommendations = []
-        for stock_code in data[stock_col].dropna().astype(str).unique():
+        for stock_code in stock_codes:
             stock_df = data[data[stock_col].astype(str) == stock_code].copy()
             stock_df = stock_df.sort_values("日期").reset_index(drop=True)
             if len(stock_df) < 20:
+                continue
+            if not self._passes_fast_filters(stock_df, config):
                 continue
 
             try:
@@ -69,6 +77,40 @@ class RecommendationDataFrameProvider:
 
         recommendations.sort(key=lambda item: item["total_score"], reverse=True)
         return recommendations[:top_n]
+
+    def _passes_fast_filters(self, stock_df: pd.DataFrame, config: Dict[str, Any]) -> bool:
+        filters = config.get("filters", {})
+        if not filters:
+            return True
+
+        close_col = self._first_existing_column(stock_df.columns, ["收盤價", "Close", "close"])
+        if close_col and len(stock_df) >= 2:
+            prev_price = pd.to_numeric(stock_df.iloc[-2].get(close_col, 0), errors="coerce")
+            curr_price = pd.to_numeric(stock_df.iloc[-1].get(close_col, 0), errors="coerce")
+            price_change = ((curr_price - prev_price) / prev_price * 100) if prev_price and not pd.isna(prev_price) else 0
+            price_min = filters.get("price_change_min")
+            price_max = filters.get("price_change_max")
+            if price_min is not None and price_change < float(price_min):
+                return False
+            if price_max is not None and price_change > float(price_max):
+                return False
+
+        volume_col = self._first_existing_column(stock_df.columns, ["成交股數", "成交量", "Volume", "volume"])
+        volume_min = filters.get("volume_ratio_min")
+        if volume_col and volume_min is not None and len(stock_df) >= 21:
+            latest_volume = pd.to_numeric(stock_df[volume_col].iloc[-1], errors="coerce")
+            volume_ma20 = pd.to_numeric(stock_df[volume_col].iloc[-21:-1], errors="coerce").mean()
+            volume_change = ((latest_volume / volume_ma20) - 1) * 100 if volume_ma20 and not pd.isna(volume_ma20) else 0
+            threshold = self._normalize_volume_threshold(float(volume_min))
+            if volume_change < threshold:
+                return False
+
+        return True
+
+    def _normalize_volume_threshold(self, volume_ratio_min: float) -> float:
+        if -50 <= volume_ratio_min <= 10:
+            return (volume_ratio_min - 1) * 100
+        return volume_ratio_min
 
     def _normalize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         data = df.copy()
