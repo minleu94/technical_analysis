@@ -848,16 +848,20 @@ class PatternAnalyzer:
                 continue
             
             # 如果有足夠的峰和谷，則計算趨勢線
-            if len(window_peaks) >= 1 and len(window_troughs) >= 1:
+            if len(window_peaks) >= 2 and len(window_troughs) >= 2:
                 try:
                     # 計算峰的趨勢線
                     peak_x = np.array([p - i for p in window_peaks])
                     peak_y = prices[window_peaks]
+                    if len(np.unique(peak_x)) < 2 or not np.isfinite(peak_y).all():
+                        continue
                     peak_slope, peak_intercept = np.polyfit(peak_x, peak_y, 1)
                     
                     # 計算谷的趨勢線
                     trough_x = np.array([t - i for t in window_troughs])
                     trough_y = prices[window_troughs]
+                    if len(np.unique(trough_x)) < 2 or not np.isfinite(trough_y).all():
+                        continue
                     trough_slope, trough_intercept = np.polyfit(trough_x, trough_y, 1)
                     
                     # 檢查兩條趨勢線是否近似平行

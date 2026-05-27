@@ -1,5 +1,7 @@
 from typing import Any, Dict, List, Optional
+import warnings
 
+import numpy as np
 import pandas as pd
 
 from decision_module.industry_mapper import IndustryMapper
@@ -29,7 +31,9 @@ class RecommendationDataFrameProvider:
                 continue
 
             try:
-                result_df = self.strategy_configurator.generate_recommendations(stock_df, config)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", np.exceptions.RankWarning)
+                    result_df = self.strategy_configurator.generate_recommendations(stock_df, config)
                 if result_df.empty:
                     continue
 
