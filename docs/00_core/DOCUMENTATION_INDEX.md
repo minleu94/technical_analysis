@@ -18,6 +18,7 @@
 | [PROJECT_NAVIGATION.md](../../PROJECT_NAVIGATION.md) | repo 根目錄的日常開發導航。 |
 | [PROJECT_INVENTORY.md](../../PROJECT_INVENTORY.md) | repo 根目錄的完整專案盤點。 |
 | [../../AGENTS.md](../../AGENTS.md) | Codex 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/` 完整 Agent 架構。 |
+| [../../GEMINI.md](../../GEMINI.md) | Antigravity 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/antigravity/` 與 `.agent/rules/`。 |
 
 ---
 
@@ -144,6 +145,13 @@
 | [agents/documentation_agent.md](../agents/documentation_agent.md) | Documentation Agent。 |
 | [agents/data_audit_agent.md](../agents/data_audit_agent.md) | Data Audit Agent。 |
 | [agents/data_cleanup_agent.md](../agents/data_cleanup_agent.md) | Data Cleanup Agent。 |
+| [agents/antigravity/README.md](../agents/antigravity/README.md) | Antigravity Agent 入口與角色分流。 |
+| [agents/antigravity/tech_lead_agent.md](../agents/antigravity/tech_lead_agent.md) | Antigravity Tech Lead Agent。 |
+| [agents/antigravity/execution_agent.md](../agents/antigravity/execution_agent.md) | Antigravity Execution Agent。 |
+| [agents/antigravity/documentation_agent.md](../agents/antigravity/documentation_agent.md) | Antigravity Documentation Agent。 |
+| [agents/antigravity/data_audit_agent.md](../agents/antigravity/data_audit_agent.md) | Antigravity Data Audit Agent。 |
+| [agents/antigravity/data_cleanup_agent.md](../agents/antigravity/data_cleanup_agent.md) | Antigravity Data Cleanup Agent。 |
+| [agents/antigravity/handoff_template.md](../agents/antigravity/handoff_template.md) | Antigravity 任務交接模板。 |
 | [agents/CURSOR_SKILLS_DEFINITIONS.md](../agents/CURSOR_SKILLS_DEFINITIONS.md) | Cursor skills 定義。 |
 | [strategies/momentum_aggressive_v1.md](../strategies/momentum_aggressive_v1.md) | 暴衝策略說明。 |
 | [strategies/stable_conservative_v1.md](../strategies/stable_conservative_v1.md) | 穩健策略說明。 |

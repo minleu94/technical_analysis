@@ -229,14 +229,19 @@ python ui_app/main.py
 
 ---
 
-### 📌 Agent / Codex 指引
+### 📌 Agent / Codex / Antigravity 指引
 
 **Codex 自動讀取入口**：`AGENTS.md`
+
+**Antigravity 自動讀取入口**：`GEMINI.md`
+
+**Antigravity 輔助規則**：`.agent/rules/`
 
 **完整 Agent 架構**：`docs/agents/`
 
 **使用規則**：
 - Codex 會讀取 repo 根目錄 `AGENTS.md`。
+- Antigravity 會讀取 repo 根目錄 `GEMINI.md`，並可搭配 `.agent/rules/` 的任務規則。
 - `docs/agents/` 保存完整 Agent 職責、Prompt 與共用上下文，但不會單靠檔名自動成為 Codex 指令入口。
 - 資料路徑請以 `data_module/config.py` 的 `TWStockConfig` 與 `DATA_ROOT` 為準，不要假設 repo 內一定存在正式 `data/` 目錄。
 

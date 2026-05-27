@@ -17,7 +17,7 @@
 - UI Qt Backtest chart renderer ✅（QtWebEngine + HTML5 Canvas fast renderer 已完成，Matplotlib fallback 保留）
 - Recommendation Portfolio Backtest MVP ✅（推薦 Profile/Config 可在歷史日期重播，回測整組推薦組合績效與個股貢獻）
 - 數據更新工作台 ✅（`UpdateView` 已整理為左側導覽維運工作台，新增「安全更新所有數據」日常維護入口）
-- Codex / Agent 指引 ✅（repo 根目錄 `AGENTS.md` 已建立，`docs/agents/` 已對齊目前 `ui_qt`、資料根目錄與文檔路徑）
+- Codex / Antigravity / Agent 指引 ✅（repo 根目錄 `AGENTS.md` 與 `GEMINI.md` 已建立，`docs/agents/` 與 `.agent/rules/` 已對齊目前 `ui_qt`、資料根目錄與文檔路徑）
 - Phase 4.1 Portfolio MVP 🚧（service/domain/test 骨架已開始；`ui_qt` Portfolio Tab 與 Phase 3 → Portfolio 整合尚未完成）
 
 ## 現在的工作模式（你每天要用的流程）
