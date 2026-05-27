@@ -24,6 +24,12 @@
 - API 變更必須更新對應的使用文檔
 - 新增功能必須更新相關文檔（README、使用指南等）
 
+### 4.1 Git 暫存與排除規範
+- Stage 或 commit 前必須先查看 `docs/agents/git_exclusions.md`。
+- `.superpowers/`、`docs/.tmp.driveupload/` 與一般快取/測試輸出不得提交。
+- `output/qa/update_tab/RUN_LOG.txt` 與 `output/qa/update_tab/VALIDATION_REPORT.md` 目前是 tracked 易變輸出；除非任務明確要求更新 QA 報告，否則不要 stage。
+- 不得為了讓 working tree 乾淨而 revert、刪除或覆寫其他 agent / 使用者留下的未提交變更。
+
 ### 5. 語言規範（強制要求）
 - **所有 Agent 必須使用繁體中文**
 - **所有文檔、對話、回答、註解都必須使用繁體中文**

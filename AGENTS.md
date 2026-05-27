@@ -8,8 +8,9 @@
 
 1. `docs/agents/README.md` - Agent 總覽與強制流程
 2. `docs/agents/shared_context.md` - 全 Agent 共用規範
-3. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案目前狀態
-4. 與任務對應的 Agent 文件：
+3. `docs/agents/git_exclusions.md` - Git 排除與不應提交清單
+4. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案目前狀態
+5. 與任務對應的 Agent 文件：
    - 架構判斷、技術決策：`docs/agents/tech_lead.md`
    - 資料完整性、資料對比：`docs/agents/data_audit_agent.md`
    - 清理、移除、整理：`docs/agents/data_cleanup_agent.md`
@@ -30,6 +31,7 @@
 - 資料位置以 `data_module/config.py` 的 `TWStockConfig` 為準；正式資料根目錄預設 `D:/Min/Python/Project/FA_Data`，可由 `DATA_ROOT` 覆蓋。
 - 目前主要 UI 是 `ui_qt/`（PySide6），入口為 `ui_qt/main.py`。
 - 修改功能時同步更新相關文檔。
+- Stage / commit 前先看 `docs/agents/git_exclusions.md`，不要把本機暫存、工具輸出或非本任務 QA output 順手提交。
 - 優先遵循既有架構與測試方式。
 - 不要覆寫使用者或其他 agent 的未提交變更。
 - 執行高風險操作、資料重建、分支清理前，先明確確認。

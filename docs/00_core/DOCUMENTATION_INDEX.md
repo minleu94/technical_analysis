@@ -138,6 +138,7 @@
 |---|---|
 | [agents/README.md](../agents/README.md) | Agent 文件入口。 |
 | [agents/shared_context.md](../agents/shared_context.md) | Agent 共用上下文。 |
+| [agents/git_exclusions.md](../agents/git_exclusions.md) | Git 排除與不應提交清單。 |
 | [agents/tech_lead.md](../agents/tech_lead.md) | Tech Lead Agent。 |
 | [agents/execution_agent.md](../agents/execution_agent.md) | Execution Agent。 |
 | [agents/documentation_agent.md](../agents/documentation_agent.md) | Documentation Agent。 |

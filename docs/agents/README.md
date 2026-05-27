@@ -38,6 +38,8 @@
   - 所有 Agent 必須遵守的前提條件
   - 專案規範與約定
   - 不可違背的規則
+- **[Git 排除與不應提交清單](./git_exclusions.md)** (`git_exclusions.md`)
+  - 說明哪些本機輸出、暫存目錄與 tracked QA output 不應被順手 stage
 
 ## 目前專案現況速記
 
@@ -57,8 +59,9 @@
 
 1. `docs/agents/README.md` - Agent 總覽（本文件）
 2. `docs/agents/shared_context.md` - 共用上下文（不可違背前提）
-3. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案快照（開場 30 秒狀態）
-4. 自身對應的 Agent 文件（如：`tech_lead.md`、`execution_agent.md`）
+3. `docs/agents/git_exclusions.md` - Git 排除與不應提交清單
+4. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案快照（開場 30 秒狀態）
+5. 自身對應的 Agent 文件（如：`tech_lead.md`、`execution_agent.md`）
 
 **未完成上述閱讀，不得執行任何任務。**
 

@@ -26,6 +26,8 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+.superpowers/
+docs/.tmp.driveupload/
 
 # 虛擬環境
 venv/
