@@ -83,11 +83,17 @@ class RecommendationPortfolioRunRepository:
                 sharpe_ratio REAL,
                 sortino_ratio REAL,
                 total_trades INTEGER,
+                promoted_version_id TEXT,
                 notes TEXT,
                 created_at TEXT,
                 data_path TEXT  -- JSON 檔案路徑
             )
         """)
+
+        cursor.execute("PRAGMA table_info(runs)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "promoted_version_id" not in columns:
+            cursor.execute("ALTER TABLE runs ADD COLUMN promoted_version_id TEXT")
         
         # 建立索引
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_created_at ON runs(created_at)")
@@ -162,6 +168,7 @@ class RecommendationPortfolioRunRepository:
             "run_name": run_name,
             "notes": notes,
             "created_at": created_at,
+            "promoted_version_id": None,
             "config": config_data,
             "result": result.to_dict()
         }
@@ -190,14 +197,14 @@ class RecommendationPortfolioRunRepository:
                 initial_capital, rebalance_frequency, top_n, allocation_method,
                 holding_days, stop_loss_pct, take_profit_pct,
                 total_return, max_drawdown, sharpe_ratio, sortino_ratio, total_trades,
-                notes, created_at, data_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                promoted_version_id, notes, created_at, data_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             run_id, run_name, profile_id, start_date, end_date,
             initial_capital, rebalance_frequency, top_n, allocation_method,
             holding_days, stop_loss_pct, take_profit_pct,
             total_return, max_drawdown, sharpe_ratio, sortino_ratio, total_trades,
-            notes, created_at, str(data_file)
+            None, notes, created_at, str(data_file)
         ))
         
         conn.commit()
@@ -218,7 +225,7 @@ class RecommendationPortfolioRunRepository:
         cursor.execute("""
             SELECT run_id, run_name, profile_id, start_date, end_date,
                    total_return, max_drawdown, sharpe_ratio, sortino_ratio, total_trades,
-                   created_at, notes
+                   promoted_version_id, created_at, notes
             FROM runs
             ORDER BY created_at DESC
         """)
@@ -236,8 +243,9 @@ class RecommendationPortfolioRunRepository:
                 'sharpe_ratio': row[7],
                 'sortino_ratio': row[8],
                 'total_trades': row[9],
-                'created_at': row[10],
-                'notes': row[11] or ''
+                'promoted_version_id': row[10],
+                'created_at': row[11],
+                'notes': row[12] or ''
             })
             
         conn.close()
@@ -276,11 +284,43 @@ class RecommendationPortfolioRunRepository:
             
             full_data["result_dto"] = dto
             full_data["data_path"] = str(data_file)
+            full_data.setdefault("promoted_version_id", None)
             return full_data
         except Exception as e:
             print(f"[RecommendationPortfolioRunRepository] 載入失敗 {run_id}: {e}")
             return None
             
+    def mark_as_promoted(self, run_id: str, version_id: str) -> bool:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE runs SET promoted_version_id = ? WHERE run_id = ?",
+            (version_id, run_id),
+        )
+        updated = cursor.rowcount > 0
+        cursor.execute("SELECT data_path FROM runs WHERE run_id = ?", (run_id,))
+        row = cursor.fetchone()
+        conn.commit()
+        conn.close()
+
+        if not updated:
+            return False
+
+        if row:
+            data_file = Path(row[0])
+            if data_file.exists():
+                try:
+                    full_data = json.loads(data_file.read_text(encoding='utf-8'))
+                    full_data["promoted_version_id"] = version_id
+                    data_file.write_text(
+                        json.dumps(_make_json_serializable(full_data), ensure_ascii=False, indent=2),
+                        encoding='utf-8',
+                    )
+                except Exception:
+                    pass
+
+        return True
+
     def delete_run(self, run_id: str) -> bool:
         """
         刪除推薦組合回測紀錄與對應 JSON。

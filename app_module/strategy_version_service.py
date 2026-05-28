@@ -43,7 +43,9 @@ class StrategyVersion:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'StrategyVersion':
         """從字典創建"""
-        return cls(**data)
+        version_data = dict(data)
+        version_data.pop('version', None)
+        return cls(**version_data)
 
 
 class StrategyVersionService:

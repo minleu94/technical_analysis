@@ -107,6 +107,7 @@ def test_repository_save_load_list_delete(repo_fixture):
     assert runs[0]["run_id"] == run_id
     assert runs[0]["run_name"] == "測試回測紀錄"
     assert runs[0]["total_return"] == 0.05
+    assert runs[0]["promoted_version_id"] is None
     assert runs[0]["notes"] == "這是一筆測試備註"
     
     # 3. 測試 load_run
@@ -126,6 +127,12 @@ def test_repository_save_load_list_delete(repo_fixture):
     assert dto.improvement_hints == ["💡 建議放寬停損。"]
     assert not dto.equity_curve.empty
     assert dto.equity_curve.iloc[1]["equity"] == 105000.0
+
+    assert repo.mark_as_promoted(run_id, "version_20260528_001") is True
+    promoted_runs = repo.list_runs()
+    assert promoted_runs[0]["promoted_version_id"] == "version_20260528_001"
+    promoted_loaded = repo.load_run(run_id)
+    assert promoted_loaded["promoted_version_id"] == "version_20260528_001"
     
     # 4. 測試 delete_run
     deleted = repo.delete_run(run_id)

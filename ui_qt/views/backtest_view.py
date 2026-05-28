@@ -29,6 +29,7 @@ from app_module.preset_service import PresetService
 from app_module.universe_service import UniverseService
 from app_module.backtest_repository import BacktestRunRepository
 from app_module.recommendation_portfolio_run_repository import RecommendationPortfolioRunRepository
+from app_module.recommendation_portfolio_promotion_service import RecommendationPortfolioPromotionService
 from app_module.chart_data_service import ChartDataService
 from app_module.promotion_service import PromotionService
 from app_module.strategy_version_service import StrategyVersionService
@@ -123,6 +124,10 @@ class BacktestView(QWidget):
                 strategy_version_service=self.strategy_version_service,
                 preset_service=self.preset_service
             )
+            self.portfolio_promotion_service = RecommendationPortfolioPromotionService(
+                run_repository=self.portfolio_run_repository,
+                strategy_version_service=self.strategy_version_service,
+            )
         else:
             self.preset_service = None
             self.universe_service = None
@@ -132,6 +137,7 @@ class BacktestView(QWidget):
             self.strategy_version_service = None
             self.walkforward_service = None
             self.promotion_service = None
+            self.portfolio_promotion_service = None
         
         # Worker
         self.worker: Optional[TaskWorker] = None
@@ -726,6 +732,11 @@ class BacktestView(QWidget):
             self.delete_portfolio_result_btn.setEnabled(False)
             self.delete_portfolio_result_btn.clicked.connect(self._delete_recommendation_portfolio_result)
             portfolio_btn_row.addWidget(self.delete_portfolio_result_btn)
+
+            self.promote_portfolio_result_btn = QPushButton("升級策略版本")
+            self.promote_portfolio_result_btn.setEnabled(False)
+            self.promote_portfolio_result_btn.clicked.connect(self._promote_recommendation_portfolio_result)
+            portfolio_btn_row.addWidget(self.promote_portfolio_result_btn)
             recommendation_portfolio_layout.addLayout(portfolio_btn_row)
             
             portfolio_history_row = QHBoxLayout()
@@ -1542,6 +1553,8 @@ class BacktestView(QWidget):
             self.save_portfolio_result_btn.setEnabled(True)
         if hasattr(self, "delete_portfolio_result_btn"):
             self.delete_portfolio_result_btn.setEnabled(False)
+        if hasattr(self, "promote_portfolio_result_btn"):
+            self.promote_portfolio_result_btn.setEnabled(False)
         self.current_portfolio_run_id = None
         
         QMessageBox.information(self, "完成", "推薦組合回測完成，請查看右側「推薦組合」結果頁。")
@@ -1577,6 +1590,8 @@ class BacktestView(QWidget):
                 date_str = created_at[:16] if len(created_at) > 16 else created_at
                 
             display_text = f"{run_name} ({total_return*100:+.1f}%) | {date_str}"
+            if run.get("promoted_version_id"):
+                display_text = f"{display_text} | 已升級"
             self.portfolio_history_combo.addItem(display_text, run_id)
             
         self.portfolio_history_combo.blockSignals(False)
@@ -1649,6 +1664,7 @@ class BacktestView(QWidget):
                     
                 # 啟用刪除按鈕
                 self.delete_portfolio_result_btn.setEnabled(True)
+                self.promote_portfolio_result_btn.setEnabled(True)
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"保存失敗: {str(e)}")
 
@@ -1687,6 +1703,7 @@ class BacktestView(QWidget):
                     # 禁用保存/刪除按鈕
                     self.save_portfolio_result_btn.setEnabled(False)
                     self.delete_portfolio_result_btn.setEnabled(False)
+                    self.promote_portfolio_result_btn.setEnabled(False)
                 else:
                     QMessageBox.warning(self, "錯誤", "刪除失敗，紀錄可能已被手動移除。")
             except Exception as e:
@@ -1701,6 +1718,7 @@ class BacktestView(QWidget):
         if not run_id:
             # 選擇了引導項目 "-- 選擇歷史推薦回測 --"
             self.delete_portfolio_result_btn.setEnabled(False)
+            self.promote_portfolio_result_btn.setEnabled(False)
             return
             
         try:
@@ -1723,8 +1741,40 @@ class BacktestView(QWidget):
             # 載入歷史回測後，禁用保存（因為已經存過了），啟用刪除
             self.save_portfolio_result_btn.setEnabled(False)
             self.delete_portfolio_result_btn.setEnabled(True)
+            self.promote_portfolio_result_btn.setEnabled(not bool(loaded_data.get("promoted_version_id")))
         except Exception as e:
             QMessageBox.critical(self, "錯誤", f"載入歷史回測失敗: {str(e)}")
+
+    def _promote_recommendation_portfolio_result(self):
+        """將已保存的推薦組合回測升級成策略版本。"""
+        run_id = getattr(self, "current_portfolio_run_id", None)
+        if not run_id or not self.portfolio_promotion_service:
+            QMessageBox.warning(self, "錯誤", "請先保存或載入一筆推薦組合回測紀錄。")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "確認升級",
+            "確定要將此推薦組合回測升級為策略版本嗎？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        version_id = self.portfolio_promotion_service.promote_to_strategy_version(run_id)
+        if not version_id:
+            QMessageBox.warning(self, "無法升級", "此推薦組合回測未達最低升級條件，或紀錄已不存在。")
+            return
+
+        QMessageBox.information(self, "升級完成", f"已升級為策略版本：{version_id}")
+        self.promote_portfolio_result_btn.setEnabled(False)
+        self._refresh_portfolio_history_combo()
+        index = self.portfolio_history_combo.findData(run_id)
+        if index >= 0:
+            self.portfolio_history_combo.blockSignals(True)
+            self.portfolio_history_combo.setCurrentIndex(index)
+            self.portfolio_history_combo.blockSignals(False)
 
     def _format_summary(self, report: BacktestReportDTO) -> str:
         """格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）"""

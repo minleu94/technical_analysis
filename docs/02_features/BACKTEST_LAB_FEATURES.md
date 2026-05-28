@@ -394,3 +394,7 @@
 ## 2026-05-27 推薦組合 Research Run 保存
 
 推薦組合回測新增獨立保存機制 `RecommendationPortfolioRunRepository`，使用 SQLite metadata 搭配 JSON 詳情檔案保存 profile/config、回測參數、summary、equity curve、期間持倉、個股貢獻與改善建議。此資料模型與單股回測 run 分離，避免混淆單股策略回測與推薦組合研究紀錄。
+
+## 2026-05-28 推薦組合 Research Run Promote
+
+已保存的推薦組合 research run 可透過 Backtest「推薦組合回測」區塊升級為策略版本。升級流程會讀取保存的 portfolio config、第一期推薦設定、回測 summary、Regime 與改善建議，建立 `recommendation_portfolio:<profile_id>` 策略版本，並在原 run metadata / JSON detail 回寫 `promoted_version_id`，保留「推薦組合回測 → 策略版本」的來源追溯。
