@@ -30,6 +30,8 @@
 - 不得刪除或破壞原始資料檔。
 - 資料位置以 `data_module/config.py` 的 `TWStockConfig` 為準；正式資料根目錄預設 `D:/Min/Python/Project/FA_Data`，可由 `DATA_ROOT` 覆蓋。
 - 目前主要 UI 是 `ui_qt/`（PySide6），入口為 `ui_qt/main.py`。
+- 股票/量化防禦條款：策略、回測、資金、倉位、風控與績效等核心計算嚴禁新增裸 `float` 計算；必須使用 `Decimal`、整數基點/股數/分為單位，或在明確隔離的資料分析/視覺化邊界內處理。
+- 實作任何策略、回測、推薦或績效邏輯前，必須先做未來函數（Look-ahead bias）自查，確認訊號、特徵、篩選、標準化、停損停利與 benchmark 都只使用決策當下可取得的資料。
 - 修改功能時同步更新相關文檔。
 - Stage / commit 前先看 `docs/agents/git_exclusions.md`，不要把本機暫存、工具輸出或非本任務 QA output 順手提交。
 - 優先遵循既有架構與測試方式。
@@ -38,6 +40,7 @@
 
 ## 驗證建議
 
-- UI 更新頁相關變更：先跑 `.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts=`
-- 更新頁 QA：跑 `.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py`
+- UI 修改後強制作業：先跑 `.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts=`
+- UI 修改後強制作業：再跑 `.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py`
+- UI 修改後強制作業：執行型態檢查 `.\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime`
 - 語法檢查：跑 `.\.venv\Scripts\python.exe -m py_compile <changed-python-files>`

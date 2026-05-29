@@ -29,9 +29,12 @@
 - 不得覆寫使用者、Codex 或其他 Agent 的未提交變更。
 - 不得順手 stage QA output、本機暫存或非本任務檔案。
 - 不得把新 factor / metric 硬塞進 UI；推薦組合回測擴充應走 factor / metric layer。
+- 策略、回測、推薦、資金、倉位、風控與績效等核心計算不得新增裸 `float` 計算。
+- 實作策略、回測、推薦、績效或 benchmark 邏輯前，必須完成未來函數（Look-ahead bias）自查。
 
 ## 常用驗證
 
 - UI 更新頁：`.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts=`
-- 更新頁 QA：`.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py`
+- UI 修改後強制更新頁 QA：`.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py`
+- UI 修改後強制型態檢查：`.\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime`
 - Python 語法：`.\.venv\Scripts\python.exe -m py_compile <changed-python-files>`

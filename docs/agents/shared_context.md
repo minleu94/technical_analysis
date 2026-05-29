@@ -30,6 +30,13 @@
 - `output/qa/update_tab/RUN_LOG.txt` 與 `output/qa/update_tab/VALIDATION_REPORT.md` 目前是 tracked 易變輸出；除非任務明確要求更新 QA 報告，否則不要 stage。
 - 不得為了讓 working tree 乾淨而 revert、刪除或覆寫其他 agent / 使用者留下的未提交變更。
 
+### 4.2 股票/量化防禦條款（高優先級）
+- 策略、回測、推薦、資金、倉位、風控、交易成本、滑價、績效與風險指標等核心計算，嚴禁新增裸 `float` 計算。
+- 金融核心數值必須使用 `Decimal`、整數單位（分、股、基點、萬分點）或明確定義的量化格式；若第三方套件、pandas/numpy 或圖表需要浮點數，必須隔離在資料分析、轉換或展示邊界，不能反向污染策略決策層。
+- 實作或修改任何策略、回測、推薦、篩選、績效或 benchmark 邏輯前，必須先完成未來函數（Look-ahead bias）自查。
+- Look-ahead 自查至少確認：訊號日期、特徵窗口、標準化樣本、排序/篩選 universe、停損停利判斷、benchmark 對齊、交易價格與持倉更新，都只使用決策當下可取得的資料。
+- 無法證明無未來資料滲漏時，必須停止實作並標示「需要確認」。
+
 ### 5. 語言規範（強制要求）
 - **所有 Agent 必須使用繁體中文**
 - **所有文檔、對話、回答、註解都必須使用繁體中文**
@@ -126,6 +133,12 @@ docs/                # 專案文檔
 4. **執行測試** → 確保所有測試通過
 5. **更新文檔** → 同步更新相關文檔
 6. **代碼審查** → 使用 tech_lead Agent 進行審查
+
+### UI 修改後強制驗證
+1. 執行 `.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts=`
+2. 執行 `.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py`
+3. 執行型態檢查：`.\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime`
+4. 對本次修改的 Python 檔執行 `.\.venv\Scripts\python.exe -m py_compile <changed-python-files>`
 
 ### 資料處理流程
 1. **驗證輸入資料** → 使用 data_audit_agent
@@ -273,4 +286,5 @@ docs/                # 專案文檔
 - 2026-01-03：初始建立共用上下文規範
 - 2026-01-03：新增「文件更新責任與規範」段落（定義更新責任、必須/可以不更新情況、更新記錄格式）
 - 2026-05-20：更新資料根目錄、`ui_qt`/PySide6、Portfolio 與 Runtime 現況，避免 Agent 誤判 repo 內 `data/` 為正式資料位置
+- 2026-05-29：新增股票/量化防禦條款，並將 UI 修改後 QA script 與型態檢查列為強制驗證流程
 
