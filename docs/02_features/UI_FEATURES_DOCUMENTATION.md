@@ -77,12 +77,15 @@
 - ✅ 技術指標日常計算改為智慧增量：每檔股票依既有指標最新日期往前回看 250 個交易日後重算，避免 RSI、MACD、MA、KD 等指標因缺少歷史序列而與全量重算不一致
 - ✅ 狀態摘要以可被系統消費的彙整檔為主：每日股價看 `meta_data/stock_data_whole.csv`，大盤/產業看 `meta_data` 指數檔，券商分點看各分點 `meta/merged.csv`，技術指標看 `all_stocks_data.csv` 與個股指標檔
 - ✅ 狀態檢查拆成兩層：全部資料頁使用輕量 Overview，不觸發券商分點深度檢查或 registry 修復；切到單一資料來源子頁或按「檢查狀態」時才載入 Detail
+- ✅ 券商分點狀態檢查維持唯讀：`check_broker_branch_data_status()` 只讀 registry 與 merged/daily 檔，不自動修復或寫回 registry；registry 修復只允許在實際更新/合併流程中發生
 - ✅ 新增 `meta_data/data_status_manifest.json` 作為最近詳細檢查結果快取，Overview 可優先顯示快取摘要並搭配檔案尾端日期、大小與修改時間快速判斷
 - ✅ 查找範圍預設改為 10 天（更符合日常使用）
 - ✅ 說明文字字體更大（13px）、留白更少，提升可讀性
 - ✅ 所有區域支持視窗縮放，自動調整大小
 
 **技術改進（最新修復）：**
+- ✅ 大盤指數 TWSE API 失敗時可使用 yfinance 備援，但只接受目標日或目標日前最近交易日；若只取得目標日之後資料，會拒絕寫入以避免未來資料污染
+- ✅ 技術指標批次處理移除硬編碼正式資料路徑，必須由呼叫端明確傳入 `stock_data_path`、`output_dir` 與 `merged_output_path`，日常 UI 路徑一律透過 `TWStockConfig`
 - ✅ Worker 線程管理改進（取消舊 Worker、等待完成、正確清理）
 - ✅ 異常處理改進（所有異常都被正確捕獲和記錄）
 - ✅ I/O 錯誤修復（`print()` → `logging`，避免標準輸出已關閉時崩潰）

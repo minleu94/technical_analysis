@@ -115,6 +115,74 @@ def test_check_data_overview_uses_read_only_lightweight_broker_summary(tmp_path)
     assert overview["broker_branch"]["status"] in {"summary", "missing", "empty"}
 
 
+def test_check_data_status_does_not_repair_or_write_broker_registry(tmp_path):
+    config = _config(tmp_path)
+    pd.DataFrame({
+        "日期": ["2026-05-19"],
+        "證券代號": ["2330"],
+    }).to_csv(config.stock_data_file, index=False, encoding="utf-8-sig")
+    pd.DataFrame({"日期": ["2026-05-19"], "收盤價": [100]}).to_csv(
+        config.market_index_file,
+        index=False,
+        encoding="utf-8-sig",
+    )
+    pd.DataFrame({"日期": ["2026-05-19"], "指數": [200]}).to_csv(
+        config.industry_index_file,
+        index=False,
+        encoding="utf-8-sig",
+    )
+    branch_dir = config.broker_flow_dir / "8450_845B"
+    (branch_dir / "meta").mkdir(parents=True)
+    pd.DataFrame({
+        "date": ["2026-05-19"],
+        "trade_type": ["buy"],
+        "counterparty_broker_code": ["8450"],
+    }).to_csv(branch_dir / "meta" / "merged.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame({
+        "branch_system_key": ["8450_845B"],
+        "branch_broker_code": ["8450"],
+        "branch_code": ["845B"],
+        "branch_display_name": ["測試分點"],
+        "url_param_a": ["8450"],
+        "url_param_b": ["38450042"],
+        "is_active": [True],
+    }).to_csv(config.broker_branch_registry_file, index=False, encoding="utf-8-sig")
+    before = config.broker_branch_registry_file.read_bytes()
+
+    status = UpdateService(config).check_data_status()
+
+    assert status["broker_branch"]["broker_count"] == 1
+    assert config.broker_branch_registry_file.read_bytes() == before
+
+
+def test_broker_branch_status_check_loads_registry_read_only(tmp_path):
+    from app_module.broker_branch_update_service import BrokerBranchUpdateService
+
+    config = _config(tmp_path)
+    branch_dir = config.broker_flow_dir / "8450_845B"
+    (branch_dir / "meta").mkdir(parents=True)
+    pd.DataFrame({
+        "date": ["2026-05-19"],
+        "trade_type": ["buy"],
+        "counterparty_broker_code": ["8450"],
+    }).to_csv(branch_dir / "meta" / "merged.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame({
+        "branch_system_key": ["8450_845B"],
+        "branch_broker_code": ["8450"],
+        "branch_code": ["845B"],
+        "branch_display_name": ["測試分點"],
+        "url_param_a": ["8450"],
+        "url_param_b": ["38450042"],
+        "is_active": [True],
+    }).to_csv(config.broker_branch_registry_file, index=False, encoding="utf-8-sig")
+    before = config.broker_branch_registry_file.read_bytes()
+
+    status = BrokerBranchUpdateService(config).check_broker_branch_data_status()
+
+    assert status["broker_count"] == 1
+    assert config.broker_branch_registry_file.read_bytes() == before
+
+
 def test_check_source_detail_runs_deep_check_and_updates_manifest(tmp_path):
     config = _config(tmp_path)
     branch_dir = config.broker_flow_dir / "9200_1234"
@@ -199,3 +267,80 @@ def test_smart_incremental_technical_calculation_replays_warmup_window(tmp_path,
     assert result["success"] is True
     assert "2026-01-02" in seen_dates
     assert "2026-01-05" in seen_dates
+
+
+def test_process_stock_data_batch_requires_explicit_paths(tmp_path):
+    from analysis_module.technical_analysis.technical_indicators import (
+        TechnicalIndicatorCalculator,
+    )
+
+    calculator = TechnicalIndicatorCalculator()
+
+    assert calculator.process_stock_data_batch(stock_data_path=None) is False
+
+
+def test_process_stock_data_batch_writes_only_to_explicit_paths(tmp_path):
+    from analysis_module.technical_analysis.technical_indicators import (
+        TechnicalIndicatorCalculator,
+    )
+
+    stock_file = tmp_path / "stock_data_whole.csv"
+    output_dir = tmp_path / "technical_analysis"
+    merged_file = tmp_path / "meta_data" / "all_stocks_data.csv"
+    backup_dir = tmp_path / "meta_data" / "backup"
+    dates = pd.date_range("2026-01-01", periods=35, freq="D").strftime("%Y-%m-%d")
+    pd.DataFrame({
+        "日期": dates,
+        "證券代號": ["2330"] * len(dates),
+        "收盤價": range(100, 100 + len(dates)),
+        "開盤價": range(100, 100 + len(dates)),
+        "最高價": range(101, 101 + len(dates)),
+        "最低價": range(99, 99 + len(dates)),
+        "成交股數": [1000] * len(dates),
+    }).to_csv(stock_file, index=False, encoding="utf-8-sig")
+
+    calculator = TechnicalIndicatorCalculator()
+    result = calculator.process_stock_data_batch(
+        stock_data_path=stock_file,
+        output_dir=output_dir,
+        merged_output_path=merged_file,
+        backup_dir=backup_dir,
+    )
+
+    assert result is True
+    assert (output_dir / "2330_indicators.csv").exists()
+    assert merged_file.exists()
+    assert list(backup_dir.glob("all_stocks_data_*.csv"))
+
+
+def test_market_index_yfinance_fallback_never_uses_future_date(tmp_path, monkeypatch):
+    from data_module.config import TWStockConfig
+    from data_module.data_loader import DataLoader
+    import yfinance
+
+    config = TWStockConfig(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        profile="unit",
+    )
+    loader = DataLoader(config)
+    monkeypatch.setattr(loader, "_make_request", lambda url, params: None)
+
+    def fake_download(*args, **kwargs):
+        return pd.DataFrame(
+            {
+                "Open": [100.0],
+                "High": [101.0],
+                "Low": [99.0],
+                "Close": [100.5],
+                "Volume": [1000],
+            },
+            index=pd.to_datetime(["2026-05-29"]),
+        ).rename_axis("Date")
+
+    monkeypatch.setattr(yfinance, "download", fake_download)
+
+    result = loader.update_market_index("2026-05-28")
+
+    assert result is False
+    assert not config.market_index_file.exists()

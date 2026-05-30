@@ -906,8 +906,17 @@ class DataLoader:
                     
                     target_row = yf_df[yf_df['Date_Str'] == date]
                     if target_row.empty:
-                        self.logger.warning(f"yfinance 數據中未找到日期為 {date} 的記錄，將使用 yfinance 最接近的最後一筆")
-                        target_row = yf_df.tail(1)
+                        historical_rows = yf_df[yf_df['Date_Str'] <= date]
+                        if historical_rows.empty:
+                            self.logger.error(
+                                f"yfinance 備援沒有 {date} 或更早的可用資料，拒絕使用未來日期資料"
+                            )
+                            return False
+                        self.logger.warning(
+                            f"yfinance 數據中未找到日期為 {date} 的記錄，"
+                            "將使用目標日前最近一筆交易日資料"
+                        )
+                        target_row = historical_rows.tail(1)
                     
                     def get_col_val(df_row, name):
                         if name in df_row.columns:
@@ -928,6 +937,9 @@ class DataLoader:
                     high_p = get_col_val(target_row, 'High')
                     low_p = get_col_val(target_row, 'Low')
                     vol = get_col_val(target_row, 'Volume')
+                    if close_p <= 0:
+                        self.logger.error("yfinance 備援資料收盤價無效，拒絕寫入")
+                        return False
                     
                     actual_date = target_row['Date_Str'].values[0]
                     
@@ -1074,4 +1086,4 @@ class DataLoader:
             year = int(parts[0]) + 1911
             return f"{year}/{parts[1]}/{parts[2]}"
         except Exception:
-            return date_str 
+            return date_str

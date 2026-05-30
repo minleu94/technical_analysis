@@ -211,12 +211,17 @@ class BrokerBranchUpdateService:
         
         return None
     
-    def _load_branch_registry(self, active_only: bool = True) -> List[Dict[str, Any]]:
+    def _load_branch_registry(
+        self,
+        active_only: bool = True,
+        repair_registry: bool = False,
+    ) -> List[Dict[str, Any]]:
         """
         從 registry 載入追蹤分點清單（含自動修復 mojibake）
         
         Args:
             active_only: 是否只載入啟用的分點
+            repair_registry: 是否允許自動修復並寫回 registry；狀態檢查必須保持唯讀
             
         Returns:
             分點資訊列表
@@ -248,14 +253,20 @@ class BrokerBranchUpdateService:
                     branch_key = row.get('branch_system_key', '')
                     # 檢查是否需要補前導零
                     if branch_key == '9A00_9A9P' and url_param_b == '39004100390050':
-                        df.at[idx, 'url_param_b'] = '0039004100390050'
-                        self.logger.warning(f"修復 {branch_key} 的 url_param_b: 39004100390050 -> 0039004100390050")
+                        if repair_registry:
+                            df.at[idx, 'url_param_b'] = '0039004100390050'
+                            self.logger.warning(f"修復 {branch_key} 的 url_param_b: 39004100390050 -> 0039004100390050")
+                        else:
+                            self.logger.warning(f"檢測到 {branch_key} 的 url_param_b 可修復，但本次為唯讀載入")
                     elif branch_key == '8450_845B' and len(url_param_b) < 16:
                         # 檢查康和永和的 url_param_b
                         expected = '0038003400350042'
                         if url_param_b != expected:
-                            df.at[idx, 'url_param_b'] = expected
-                            self.logger.warning(f"修復 {branch_key} 的 url_param_b: {url_param_b} -> {expected}")
+                            if repair_registry:
+                                df.at[idx, 'url_param_b'] = expected
+                                self.logger.warning(f"修復 {branch_key} 的 url_param_b: {url_param_b} -> {expected}")
+                            else:
+                                self.logger.warning(f"檢測到 {branch_key} 的 url_param_b 可修復，但本次為唯讀載入")
             
             # 檢查並修復 mojibake
             needs_fix = False
@@ -265,18 +276,23 @@ class BrokerBranchUpdateService:
                     if display_name and self._detect_mojibake(display_name):
                         fixed = self._fix_mojibake(display_name)
                         if fixed:
-                            self.logger.warning(
-                                f"檢測到 mojibake 並修復: {display_name} -> {fixed}"
-                            )
-                            df.at[idx, 'branch_display_name'] = fixed
-                            needs_fix = True
+                            if repair_registry:
+                                df.at[idx, 'branch_display_name'] = fixed
+                                needs_fix = True
+                                self.logger.warning(
+                                    f"檢測到 mojibake 並修復: {display_name} -> {fixed}"
+                                )
+                            else:
+                                self.logger.warning(
+                                    f"檢測到 mojibake 可修復但本次為唯讀載入: {display_name} -> {fixed}"
+                                )
                         else:
                             self.logger.warning(
                                 f"無法修復 mojibake: {display_name}"
                             )
             
             # 如果有修復，寫回檔案
-            if needs_fix or any(df['url_param_b'].astype(str).str.len() < 16):
+            if repair_registry and (needs_fix or any(df['url_param_b'].astype(str).str.len() < 16)):
                 self.logger.info("自動修復後寫回 registry 檔案")
                 # 備份原檔案
                 try:
@@ -430,7 +446,7 @@ class BrokerBranchUpdateService:
         """
         try:
             # 載入分點 registry
-            all_branches = self._load_branch_registry(active_only=True)
+            all_branches = self._load_branch_registry(active_only=True, repair_registry=True)
             
             if not all_branches:
                 return {
@@ -976,7 +992,7 @@ class BrokerBranchUpdateService:
         """
         try:
             # 載入分點 registry
-            all_branches = self._load_branch_registry(active_only=True)
+            all_branches = self._load_branch_registry(active_only=True, repair_registry=True)
             
             if not all_branches:
                 return {
@@ -1206,7 +1222,7 @@ class BrokerBranchUpdateService:
         """
         try:
             # 載入分點 registry
-            all_branches = self._load_branch_registry(active_only=True)
+            all_branches = self._load_branch_registry(active_only=True, repair_registry=False)
             
             if not all_branches:
                 return {

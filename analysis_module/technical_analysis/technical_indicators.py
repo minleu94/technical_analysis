@@ -623,11 +623,20 @@ class TechnicalIndicatorCalculator:
             self.logger.error(traceback.format_exc())
             return None
     
-    def process_stock_data_batch(self, stock_data_path="D:/Min/Python/Project/FA_Data/meta_data/stock_data_whole.csv"):
+    def process_stock_data_batch(
+        self,
+        stock_data_path=None,
+        output_dir=None,
+        merged_output_path=None,
+        backup_dir=None,
+    ):
         """批次處理股票資料
         
         Args:
-            stock_data_path: 股票數據檔案路徑
+            stock_data_path: 股票數據檔案路徑，必須由呼叫端明確提供
+            output_dir: 單股技術指標輸出目錄，必須由呼叫端明確提供
+            merged_output_path: 全市場整合技術指標輸出檔，必須由呼叫端明確提供
+            backup_dir: merged_output_path 的備份目錄；未提供時使用 merged_output_path.parent / "backup"
             
         Returns:
             bool: 處理成功返回True，否則返回False
@@ -636,6 +645,18 @@ class TechnicalIndicatorCalculator:
             import shutil
             from datetime import datetime
             from tqdm import tqdm
+
+            if stock_data_path is None or output_dir is None or merged_output_path is None:
+                self.logger.error(
+                    "process_stock_data_batch 必須明確指定 stock_data_path、output_dir、merged_output_path，"
+                    "避免誤寫正式資料根目錄"
+                )
+                return False
+
+            stock_data_path = Path(stock_data_path)
+            output_dir = Path(output_dir)
+            merged_output_path = Path(merged_output_path)
+            backup_dir = Path(backup_dir) if backup_dir is not None else merged_output_path.parent / "backup"
             
             # 1. 讀取資料
             self.logger.info(f"開始批次處理股票技術指標，讀取數據從: {stock_data_path}")
@@ -661,7 +682,7 @@ class TechnicalIndicatorCalculator:
                     result = self.calculate_and_store_indicators(
                         group_df, 
                         stock_id, 
-                        output_dir="D:/Min/Python/Project/FA_Data/technical_analysis"
+                        output_dir=output_dir
                     )
                     if isinstance(result, pd.DataFrame):
                         all_data.append(result)
@@ -669,14 +690,13 @@ class TechnicalIndicatorCalculator:
             # 4. 合併並儲存結果
             if all_data:
                 final_df = pd.concat(all_data, ignore_index=True)
-                # 使用與02完全一致的路徑
-                save_path = Path("D:/Min/Python/Project/FA_Data/meta_data/all_stocks_data.csv")
+                save_path = merged_output_path
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 final_df.to_csv(save_path, index=False, encoding='utf-8-sig')
                 
                 # 建立備份
                 today = datetime.now().strftime('%Y%m%d')
-                backup_path = Path("D:/Min/Python/Project/FA_Data/meta_data/backup") / f"all_stocks_data_{today}.csv"
+                backup_path = backup_dir / f"all_stocks_data_{today}.csv"
                 os.makedirs(os.path.dirname(backup_path), exist_ok=True)
                 shutil.copy2(save_path, backup_path)
                 self.logger.info(f"已保存合併數據到 {save_path} 並備份到 {backup_path}")
@@ -699,26 +719,32 @@ class TechnicalIndicatorCalculator:
         try:
             self.logger.info("開始批次處理股票技術指標...")
             
-            # 1. 驗證目錄結構
-            base_path = Path("D:/Min/Python/Project/FA_Data")
+            from data_module.config import TWStockConfig
+
+            config = TWStockConfig()
+            base_path = config.data_root
             required_dirs = [
-                "meta_data",
-                "technical_analysis",
-                "meta_data/backup"
+                config.meta_data_dir,
+                config.technical_dir,
+                config.meta_data_dir / "backup",
             ]
             
             for dir_path in required_dirs:
-                full_path = os.path.join(base_path, dir_path)
-                if not os.path.exists(full_path):
-                    os.makedirs(full_path)
-                    self.logger.info(f"Created directory: {full_path}")
+                if not dir_path.exists():
+                    dir_path.mkdir(parents=True)
+                    self.logger.info(f"Created directory: {dir_path}")
             
             # 2. 開始批次處理
-            if self.process_stock_data_batch():
+            if self.process_stock_data_batch(
+                stock_data_path=config.stock_data_file,
+                output_dir=config.technical_dir,
+                merged_output_path=config.all_stocks_data_file,
+                backup_dir=config.meta_data_dir / "backup",
+            ):
                 self.logger.info("批次處理完成")
                 
                 # 3. 檢查結果
-                results_path = base_path / "meta_data" / "all_stocks_data.csv"
+                results_path = config.all_stocks_data_file
                 if results_path.exists():
                     df = pd.read_csv(results_path)
                     self.logger.info(f"總處理筆數: {len(df):,}")
@@ -743,10 +769,13 @@ if __name__ == "__main__":
         # 顯示範例結果
         try:
             example_stock = "2330"
-            df = pd.read_csv(f"D:/Min/Python/Project/FA_Data/technical_analysis/{example_stock}_indicators.csv")
+            from data_module.config import TWStockConfig
+
+            config = TWStockConfig()
+            df = pd.read_csv(config.technical_dir / f"{example_stock}_indicators.csv")
             print(f"\n{example_stock} 技術指標計算結果範例:")
             print(df.tail())
         except Exception as e:
             calculator.logger.error(f"顯示範例結果時發生錯誤: {e}")
     else:
-        calculator.logger.error("程序執行失敗") 
+        calculator.logger.error("程序執行失敗")
