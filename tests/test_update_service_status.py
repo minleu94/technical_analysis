@@ -18,6 +18,9 @@ def _config(tmp_path):
         data_dir=data_root,
         meta_data_dir=meta_dir,
         technical_dir=technical_dir,
+        log_dir=data_root / "logs",
+        db_file=data_root / "sqlite" / "twstock.db",
+        use_sqlite=False,
         broker_flow_dir=broker_flow_dir,
         stock_data_file=meta_dir / "stock_data_whole.csv",
         market_index_file=meta_dir / "market_index.csv",
@@ -27,6 +30,14 @@ def _config(tmp_path):
         min_data_days=1,
         create_backup=lambda path: None,
     )
+
+
+def _sqlite_config(tmp_path):
+    config = _config(tmp_path)
+    config.log_dir.mkdir(parents=True, exist_ok=True)
+    config.db_file.parent.mkdir(parents=True, exist_ok=True)
+    config.use_sqlite = True
+    return config
 
 
 def test_check_data_status_includes_broker_branch_and_technical_summary(tmp_path):
@@ -113,6 +124,50 @@ def test_check_data_overview_uses_read_only_lightweight_broker_summary(tmp_path)
     assert overview["daily_data"]["latest_date"] == "2026-05-19"
     assert overview["broker_branch"]["broker_count"] == 1
     assert overview["broker_branch"]["status"] in {"summary", "missing", "empty"}
+
+
+def test_check_data_overview_uses_sqlite_when_enabled(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe("daily_prices", pd.DataFrame({
+        "日期": ["20260529"],
+        "證券代號": ["2330"],
+        "收盤價": [100.0],
+    }), if_exists="append")
+
+    class NoCsvOverviewService(UpdateService):
+        def _overview_csv_status(self, *args, **kwargs):
+            raise AssertionError("SQLite overview must not fall back to CSV when SQLite has data")
+
+    overview = NoCsvOverviewService(config).check_data_overview()
+
+    assert overview["daily_data"]["latest_date"] == "2026-05-29"
+    assert overview["daily_data"]["total_records"] == 1
+    assert overview["daily_data"]["is_overview"] is True
+
+
+def test_check_source_detail_uses_sqlite_when_enabled(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe("technical_indicators", pd.DataFrame({
+        "日期": ["20260529"],
+        "證券代號": ["2330"],
+        "RSI": [55.0],
+    }), if_exists="append")
+
+    class NoCsvDetailService(UpdateService):
+        def _check_technical_indicator_status(self):
+            raise AssertionError("SQLite detail must not fall back to CSV when SQLite has data")
+
+    detail = NoCsvDetailService(config).check_source_detail("technical")
+
+    assert detail["latest_date"] == "2026-05-29"
+    assert detail["total_records"] == 1
+    assert detail["file_count"] == 1
 
 
 def test_check_data_status_does_not_repair_or_write_broker_registry(tmp_path):

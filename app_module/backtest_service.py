@@ -370,39 +370,41 @@ class BacktestService:
         try:
             # ✅ 新增：如果使用 SQLite，直接從 daily_prices 庫表讀取，提速 270 倍！
             if getattr(self.config, 'use_sqlite', False):
-                from data_module.db_manager import DBManager
-                db = DBManager(self.config)
-                
-                # 標準化日期格式為 YYYYMMDD 字串以配合 SQLite 主鍵
-                start_date_str = start_date.replace('-', '').replace('/', '')
-                end_date_str = end_date.replace('-', '').replace('/', '')
-                stock_code_str = str(stock_code).strip().zfill(4)
-                
-                sql = """
-                    SELECT * FROM daily_prices 
-                    WHERE 證券代號 = ? AND 日期 BETWEEN ? AND ? 
-                    ORDER BY 日期 ASC;
-                """
-                df = db.execute_query(sql, (stock_code_str, start_date_str, end_date_str))
-                
-                if df.empty:
-                    logger.warning(f"[BacktestService] SQLite 中找不到股票 {stock_code_str} 於 {start_date_str}~{end_date_str} 的價格資料")
-                    return None
+                try:
+                    from data_module.db_manager import DBManager
+                    db = DBManager(self.config)
                     
-                # 欄位型態轉換以相容原有業務 DTO
-                numeric_cols = ['成交股數', '成交筆數', '成交金額', '開盤價', '最高價', '最低價', '收盤價', '漲跌價差',
-                                '最後揭示買價', '最後揭示買量', '最後揭示賣價', '最後揭示賣量', '本益比']
-                for col in numeric_cols:
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
-                
-                # 處理日期索引
-                df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce')
-                df = df[df['日期'].notna()]
-                df = df.set_index('日期').sort_index()
-                
-                logger.info(f"[BacktestService] 成功從 SQLite 高速載入價格數據（股票 {stock_code_str}，共 {len(df)} 筆）")
-                return df
+                    # 標準化日期格式為 YYYYMMDD 字串以配合 SQLite 主鍵
+                    start_date_str = start_date.replace('-', '').replace('/', '')
+                    end_date_str = end_date.replace('-', '').replace('/', '')
+                    stock_code_str = str(stock_code).strip().zfill(4)
+                    
+                    sql = """
+                        SELECT * FROM daily_prices 
+                        WHERE 證券代號 = ? AND 日期 BETWEEN ? AND ? 
+                        ORDER BY 日期 ASC;
+                    """
+                    df = db.execute_query(sql, (stock_code_str, start_date_str, end_date_str))
+                    
+                    if not df.empty:
+                        # 欄位型態轉換以相容原有業務 DTO
+                        numeric_cols = ['成交股數', '成交筆數', '成交金額', '開盤價', '最高價', '最低價', '收盤價', '漲跌價差',
+                                        '最後揭示買價', '最後揭示買量', '最後揭示賣價', '最後揭示賣量', '本益比']
+                        for col in numeric_cols:
+                            if col in df.columns:
+                                df[col] = pd.to_numeric(df[col], errors='coerce')
+                        
+                        # 處理日期索引
+                        df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce')
+                        df = df[df['日期'].notna()]
+                        df = df.set_index('日期').sort_index()
+                        
+                        logger.info(f"[BacktestService] 成功從 SQLite 高速載入價格數據（股票 {stock_code_str}，共 {len(df)} 筆）")
+                        return df
+
+                    logger.warning(f"[BacktestService] SQLite 中找不到股票 {stock_code_str} 於 {start_date_str}~{end_date_str} 的價格資料，將降級讀取 CSV")
+                except Exception as sql_err:
+                    logger.warning(f"[BacktestService] SQLite 價格資料載入失敗: {sql_err}，將降級讀取 CSV")
 
             # 讀取 stock_data_whole.csv
             stock_data_file = self.config.stock_data_file
@@ -500,35 +502,37 @@ class BacktestService:
         try:
             # ✅ 新增：如果使用 SQLite，直接從 technical_indicators 庫表讀取，提速 270 倍！
             if getattr(self.config, 'use_sqlite', False):
-                from data_module.db_manager import DBManager
-                db = DBManager(self.config)
-                
-                start_date_str = start_date.replace('-', '').replace('/', '')
-                end_date_str = end_date.replace('-', '').replace('/', '')
-                stock_code_str = str(stock_code).strip().zfill(4)
-                
-                sql = """
-                    SELECT * FROM technical_indicators 
-                    WHERE 證券代號 = ? AND 日期 BETWEEN ? AND ? 
-                    ORDER BY 日期 ASC;
-                """
-                df = db.execute_query(sql, (stock_code_str, start_date_str, end_date_str))
-                
-                if df.empty:
-                    logger.warning(f"[BacktestService] SQLite 中找不到股票 {stock_code_str} 於 {start_date_str}~{end_date_str} 的技術指標")
-                    return None
+                try:
+                    from data_module.db_manager import DBManager
+                    db = DBManager(self.config)
                     
-                # 除了日期與證券代號外，其餘技術指標皆轉為 Float 型態以相容後續策略計算
-                for col in df.columns:
-                    if col not in ['日期', '證券代號']:
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                    start_date_str = start_date.replace('-', '').replace('/', '')
+                    end_date_str = end_date.replace('-', '').replace('/', '')
+                    stock_code_str = str(stock_code).strip().zfill(4)
+                    
+                    sql = """
+                        SELECT * FROM technical_indicators 
+                        WHERE 證券代號 = ? AND 日期 BETWEEN ? AND ? 
+                        ORDER BY 日期 ASC;
+                    """
+                    df = db.execute_query(sql, (stock_code_str, start_date_str, end_date_str))
+                    
+                    if not df.empty:
+                        # 除了日期與證券代號外，其餘技術指標皆轉為 Float 型態以相容後續策略計算
+                        for col in df.columns:
+                            if col not in ['日期', '證券代號']:
+                                df[col] = pd.to_numeric(df[col], errors='coerce')
+                            
+                        # 處理日期並排序
+                        df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce')
+                        df = df[df['日期'].notna()]
                         
-                # 處理日期並排序
-                df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce')
-                df = df[df['日期'].notna()]
-                
-                logger.info(f"[BacktestService] 成功從 SQLite 高速載入技術指標數據（股票 {stock_code_str}，共 {len(df)} 筆）")
-                return df
+                        logger.info(f"[BacktestService] 成功從 SQLite 高速載入技術指標數據（股票 {stock_code_str}，共 {len(df)} 筆）")
+                        return df
+
+                    logger.warning(f"[BacktestService] SQLite 中找不到股票 {stock_code_str} 於 {start_date_str}~{end_date_str} 的技術指標，將降級讀取 CSV")
+                except Exception as sql_err:
+                    logger.warning(f"[BacktestService] SQLite 技術指標載入失敗: {sql_err}，將降級讀取 CSV")
 
             # 讀取技術指標文件
             indicator_file = self.config.get_technical_file(stock_code)

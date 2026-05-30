@@ -903,51 +903,6 @@ class UpdateService:
         self._update_data_status_manifest(normalized, detail)
         return detail
 
-    def check_data_overview(self) -> Dict[str, Any]:
-        """取得全部資料頁使用的輕量狀態摘要，不執行深度檢查或自動修復"""
-        manifest = self._read_data_status_manifest()
-        sources = manifest.get('sources', {})
-
-        overview = {
-            'daily_data': self._overview_csv_status('daily_data', self.config.stock_data_file, '日期', sources),
-            'market_index': self._overview_csv_status('market_index', self.config.market_index_file, '日期', sources),
-            'industry_index': self._overview_csv_status('industry_index', self.config.industry_index_file, '日期', sources),
-            'broker_branch': self._overview_broker_branch_status(sources),
-            'technical_indicators': self._overview_technical_status(sources),
-        }
-        return overview
-
-    def check_source_detail(self, source: str) -> Dict[str, Any]:
-        """取得單一資料來源的詳細狀態，供切入 subtab 或手動檢查使用"""
-        source_map = {
-            'daily': 'daily_data',
-            'daily_data': 'daily_data',
-            'market': 'market_index',
-            'market_index': 'market_index',
-            'industry': 'industry_index',
-            'industry_index': 'industry_index',
-            'broker_branch': 'broker_branch',
-            'technical': 'technical_indicators',
-            'technical_indicators': 'technical_indicators',
-        }
-        normalized = source_map.get(source)
-        if normalized is None:
-            return {'latest_date': None, 'total_records': 0, 'status': f'unknown source: {source}'}
-
-        if normalized == 'daily_data':
-            detail = self._status_from_csv_file(self.config.stock_data_file, '日期')
-        elif normalized == 'market_index':
-            detail = self._status_from_csv_file(self.config.market_index_file, '日期')
-        elif normalized == 'industry_index':
-            detail = self._status_from_csv_file(self.config.industry_index_file, '日期')
-        elif normalized == 'broker_branch':
-            detail = self.check_broker_branch_data_status()
-        else:
-            detail = self._check_technical_indicator_status()
-
-        self._update_data_status_manifest(normalized, detail)
-        return detail
-
     def _read_data_status_manifest(self) -> Dict[str, Any]:
         """讀取資料狀態 manifest，格式錯誤時回傳空 manifest"""
         import json

@@ -125,12 +125,15 @@ class DataLoader:
         """加載指定日期的價格數據"""
         try:
             if getattr(self.config, 'use_sqlite', False):
-                date_str = self._convert_date_format(date)
-                df = self.db.execute_query("SELECT * FROM daily_prices WHERE 日期 = ?;", (date_str,))
-                if not df.empty:
-                    self.logger.info(f"成功從 SQLite 加載日期 {date} 的價格數據")
-                    return df
-                return None
+                try:
+                    date_str = self._convert_date_format(date)
+                    df = self.db.execute_query("SELECT * FROM daily_prices WHERE 日期 = ?;", (date_str,))
+                    if not df.empty:
+                        self.logger.info(f"成功從 SQLite 加載日期 {date} 的價格數據")
+                        return df
+                    self.logger.warning(f"SQLite 中找不到日期 {date} 的價格數據，將降級讀取 CSV")
+                except Exception as sql_err:
+                    self.logger.warning(f"從 SQLite 加載日期 {date} 的價格數據失敗: {sql_err}，將降級讀取 CSV")
                 
             file_path = self.config.get_daily_price_file(date)
             if not file_path.exists():
@@ -164,14 +167,17 @@ class DataLoader:
         """加載市場指數數據"""
         try:
             if getattr(self.config, 'use_sqlite', False):
-                df = self.db.execute_query("SELECT * FROM market_indices ORDER BY 日期 ASC;")
-                if not df.empty:
-                    # 將日期格式轉回 YYYY-MM-DD 保持與原 CSV 一致
-                    df['日期'] = pd.to_datetime(df['日期'], format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
-                    last_date = pd.to_datetime(df['日期'].max())
-                    self.logger.info(f"成功從 SQLite 加載市場指數數據，最後更新日期: {last_date.strftime('%Y-%m-%d')}")
-                    return df
-                return None
+                try:
+                    df = self.db.execute_query("SELECT * FROM market_indices ORDER BY 日期 ASC;")
+                    if not df.empty:
+                        # 將日期格式轉回 YYYY-MM-DD 保持與原 CSV 一致
+                        df['日期'] = pd.to_datetime(df['日期'], format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
+                        last_date = pd.to_datetime(df['日期'].max())
+                        self.logger.info(f"成功從 SQLite 加載市場指數數據，最後更新日期: {last_date.strftime('%Y-%m-%d')}")
+                        return df
+                    self.logger.warning("SQLite 市場指數數據為空，將降級讀取 CSV")
+                except Exception as sql_err:
+                    self.logger.warning(f"從 SQLite 加載市場指數數據失敗: {sql_err}，將降級讀取 CSV")
 
             if not self.config.market_index_file.exists():
                 self.logger.warning("找不到市場指數數據文件")
@@ -193,13 +199,16 @@ class DataLoader:
         """加載產業指數數據"""
         try:
             if getattr(self.config, 'use_sqlite', False):
-                df = self.db.execute_query("SELECT * FROM industry_indices ORDER BY 日期 ASC;")
-                if not df.empty:
-                    df['日期'] = pd.to_datetime(df['日期'], format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
-                    last_date = pd.to_datetime(df['日期'].max())
-                    self.logger.info(f"成功從 SQLite 加載產業指數數據，最後更新日期: {last_date.strftime('%Y-%m-%d')}")
-                    return df
-                return None
+                try:
+                    df = self.db.execute_query("SELECT * FROM industry_indices ORDER BY 日期 ASC;")
+                    if not df.empty:
+                        df['日期'] = pd.to_datetime(df['日期'], format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
+                        last_date = pd.to_datetime(df['日期'].max())
+                        self.logger.info(f"成功從 SQLite 加載產業指數數據，最後更新日期: {last_date.strftime('%Y-%m-%d')}")
+                        return df
+                    self.logger.warning("SQLite 產業指數數據為空，將降級讀取 CSV")
+                except Exception as sql_err:
+                    self.logger.warning(f"從 SQLite 加載產業指數數據失敗: {sql_err}，將降級讀取 CSV")
 
             if not self.config.industry_index_file.exists():
                 self.logger.warning("找不到產業指數數據文件")
@@ -221,11 +230,14 @@ class DataLoader:
         """加載整合性股票數據"""
         try:
             if getattr(self.config, 'use_sqlite', False):
-                df = self.db.execute_query("SELECT * FROM daily_prices ORDER BY 日期 ASC, 證券代號 ASC;")
-                if not df.empty:
-                    self.logger.info("成功從 SQLite 加載整合性股票數據")
-                    return df
-                return None
+                try:
+                    df = self.db.execute_query("SELECT * FROM daily_prices ORDER BY 日期 ASC, 證券代號 ASC;")
+                    if not df.empty:
+                        self.logger.info("成功從 SQLite 加載整合性股票數據")
+                        return df
+                    self.logger.warning("SQLite 整合性股票數據為空，將降級讀取 CSV")
+                except Exception as sql_err:
+                    self.logger.warning(f"從 SQLite 加載整合性股票數據失敗: {sql_err}，將降級讀取 CSV")
 
             if not self.config.all_stocks_data_file.exists():
                 self.logger.warning("找不到整合性股票數據文件")

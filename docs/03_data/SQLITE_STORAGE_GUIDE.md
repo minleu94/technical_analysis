@@ -28,7 +28,8 @@ graph TD
 ### ⚡ 1.2 SQLite 極速快取層 (Performance Layer)
 * **角色**：查詢與回測加速引擎。
 * **存放路徑**：`D:\Min\Python\Project\FA_Data\sqlite\twstock.db`。
-* **特色**：當 UI 打開或回測啟動時，系統 **100% 透過 SQLite 複合索引進行加載**。大盤、個股價格、分點與衍生技術指標不再經歷緩慢的 CSV 遍歷，實現 25 毫秒內（322 倍速）的極致加載。
+* **特色**：當 UI 打開或回測啟動時，系統會優先透過 SQLite 複合索引進行加載。大盤、個股價格、分點與衍生技術指標不再經歷緩慢的 CSV 遍歷，實現 25 毫秒內（322 倍速）的極致加載。
+* **相容防線**：若 SQLite 尚未建立、資料表為空或單一查詢失敗，DataLoader 與 BacktestService 會降級讀取既有 CSV，避免新環境或部分遷移狀態破壞既有工作流。
 
 ---
 
@@ -42,7 +43,7 @@ graph TD
 [6] SQLite 指標批量寫入 <── [5] 重算衍生指標 (1分51秒) <── [4] 增量寫入 SQLite
 ```
 
-1. **極速狀態檢查**：直接對 SQLite 執行 `COUNT(*)` 聚合，幾毫秒內在 UI 呈報現有數據起始與結束日期。
+1. **極速狀態檢查**：優先對 SQLite 執行 `COUNT(*)` 聚合，幾毫秒內在 UI 呈報現有數據起始與結束日期；SQLite 查詢不可用時才降級為 CSV 狀態檢查。
 2. **爬取最新 CSV 資料**：爬蟲去抓取最新日期的個股 CSV、大盤、產業及分點檔案。
 3. **安全合併每日 CSV**：將最新的單日 CSV 資料，追加合併入 `stock_data_whole.csv`。
 4. **增量寫入 SQLite**：自動偵測 `stock_data_whole.csv` 中最新多出的日期，快速將其增量寫入 SQLite 的 `daily_prices` 表中。
@@ -88,10 +89,9 @@ graph TD
 在 `TWStockConfig` 類別中，有兩個關鍵參數決定了系統是否走 SQLite 機制：
 ```python
 # 數據庫開關與存放位置
-self.use_sqlite = True  # 是否開啟 SQLite 高速讀取
-self.sqlite_db_name = "twstock.db"  # 資料庫名稱
-# 資料庫存放絕對路徑：D:\Min\Python\Project\FA_Data\sqlite\twstock.db
-self.sqlite_db_path = os.path.join(self.data_root, "sqlite", self.sqlite_db_name)
+self.use_sqlite = True  # 是否優先使用 SQLite 高速讀取
+self.sqlite_dir = self.data_dir / "sqlite"
+self.db_file = self.sqlite_dir / "twstock.db"
 ```
 
 ### 📂 4.2 核心管理模組 (`data_module/db_manager.py`)
@@ -101,6 +101,7 @@ self.sqlite_db_path = os.path.join(self.data_root, "sqlite", self.sqlite_db_name
 ### 📥 4.3 資料載入相容層 (`data_module/data_loader.py`)
 * 內部自動判斷 `config.use_sqlite` 是否啟用。
 * 啟用時，大盤價格載入與個股載入會自動繞開大 CSV 的硬碟掃描，直接對 SQLite 發送高效率複合索引查詢，並回傳格式與原本 100% 相同的 Pandas DataFrame，**業務代碼與回測引擎完全零侵入、零改動**。
+* 若 SQLite 沒有資料或查詢失敗，會保留原本 CSV 載入路徑作為相容降級，不會因為快取尚未完成遷移而中斷。
 
 ---
 
