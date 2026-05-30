@@ -480,7 +480,6 @@ class UpdateService:
                 
                 # 解析結果（函數可能沒有返回值）
                 if result is None:
-                    # 函數沒有返回值，假設成功
                     return {
                         'success': True,
                         'message': '產業指數更新完成',
@@ -495,7 +494,6 @@ class UpdateService:
                         'failed_dates': result.get('failed_dates', [])
                     }
                 else:
-                    # 如果返回的不是 dict，假設成功
                     return {
                         'success': True,
                         'message': '產業指數更新完成',
@@ -523,38 +521,135 @@ class UpdateService:
                 'updated_dates': [],
                 'failed_dates': []
             }
-    
-    def check_data_status(self) -> Dict[str, Any]:
-        """檢查數據狀態
-        
-        Returns:
-            dict: {
-                'daily_data': {
-                    'latest_date': str,
-                    'total_records': int,
-                    'status': str
-                },
-                'market_index': {
-                    'latest_date': str,
-                    'total_records': int,
-                    'status': str
-                },
-                'industry_index': {
-                    'latest_date': str,
-                    'total_records': int,
-                    'status': str
+
+    def _status_from_sqlite(self, table_name: str) -> Dict[str, Any]:
+        """從 SQLite 資料庫極速獲取指定資料表的狀態"""
+        try:
+            from data_module.db_manager import DBManager
+            db = DBManager(self.config)
+            df = db.execute_query(f"SELECT COUNT(*) as count, MAX(日期) as max_date FROM {table_name};")
+            if not df.empty:
+                cnt = int(df.iloc[0]['count'])
+                max_d = df.iloc[0]['max_date']
+                
+                max_date_str = None
+                if max_d:
+                    max_d_str = str(max_d)
+                    if len(max_d_str) == 8:
+                        max_date_str = f"{max_d_str[:4]}-{max_d_str[4:6]}-{max_d_str[6:]}"
+                    else:
+                        max_date_str = max_d_str
+                
+                return {
+                    'latest_date': max_date_str,
+                    'total_records': cnt,
+                    'status': 'ok' if cnt > 0 else 'empty'
                 }
-            }
-        """
+            return {'latest_date': None, 'total_records': 0, 'status': 'empty'}
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite 獲取表 {table_name} 狀態失敗: {e}")
+            return {'latest_date': None, 'total_records': 0, 'status': f'error: {e}'}
+
+    def _broker_status_from_sqlite(self) -> Dict[str, Any]:
+        """從 SQLite 資料庫極速獲取券商分點的狀態"""
+        try:
+            from data_module.db_manager import DBManager
+            db = DBManager(self.config)
+            df = db.execute_query("""
+                SELECT 
+                    COUNT(*) as count, 
+                    MAX(日期) as max_date, 
+                    COUNT(DISTINCT 分點名稱) as broker_count,
+                    MIN(日期) as min_date
+                FROM broker_flows;
+            """)
+            if not df.empty:
+                cnt = int(df.iloc[0]['count'])
+                max_d = df.iloc[0]['max_date']
+                min_d = df.iloc[0]['min_date']
+                broker_cnt = int(df.iloc[0]['broker_count'])
+                
+                def fmt_d(d):
+                    if not d: return None
+                    d_str = str(d)
+                    return f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}" if len(d_str) == 8 else d_str
+
+                return {
+                    'latest_date': fmt_d(max_d),
+                    'total_records': cnt,
+                    'broker_count': broker_cnt,
+                    'date_count': 0,  # 相容格式
+                    'date_range': {'start_date': fmt_d(min_d), 'end_date': fmt_d(max_d)},
+                    'status': 'ok' if cnt > 0 else 'empty'
+                }
+            return {'latest_date': None, 'total_records': 0, 'broker_count': 0, 'status': 'empty'}
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite 獲取券商分點狀態失敗: {e}")
+            return {'latest_date': None, 'total_records': 0, 'broker_count': 0, 'status': f'error: {e}'}
+
+    def _technical_status_from_sqlite(self) -> Dict[str, Any]:
+        """從 SQLite 資料庫極速獲取技術指標的狀態"""
+        try:
+            from data_module.db_manager import DBManager
+            db = DBManager(self.config)
+            df = db.execute_query("""
+                SELECT 
+                    COUNT(*) as count, 
+                    MAX(日期) as max_date, 
+                    COUNT(DISTINCT 證券代號) as stock_count,
+                    MIN(日期) as min_date
+                FROM technical_indicators;
+            """)
+            if not df.empty:
+                cnt = int(df.iloc[0]['count'])
+                max_d = df.iloc[0]['max_date']
+                min_d = df.iloc[0]['min_date']
+                stock_cnt = int(df.iloc[0]['stock_count'])
+                
+                def fmt_d(d):
+                    if not d: return None
+                    d_str = str(d)
+                    return f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}" if len(d_str) == 8 else d_str
+
+                return {
+                    'latest_date': fmt_d(max_d),
+                    'total_records': cnt,
+                    'file_count': stock_cnt,
+                    'date_range': {'start_date': fmt_d(min_d), 'end_date': fmt_d(max_d)},
+                    'status': 'ok' if cnt > 0 else 'empty'
+                }
+            return {'latest_date': None, 'total_records': 0, 'file_count': 0, 'status': 'empty'}
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite 獲取技術指標狀態失敗: {e}")
+            return {'latest_date': None, 'total_records': 0, 'file_count': 0, 'status': f'error: {e}'}
+
+    def check_data_status(self) -> Dict[str, Any]:
+        """檢查數據狀態"""
         import pandas as pd
         from datetime import datetime
         import logging
         
         logger = logging.getLogger(__name__)
-        
-        # ✅ 記錄輸入
         logger.info("[UpdateService] 開始檢查數據狀態")
         
+        # 🌟 如果啟用 SQLite，直接從資料庫極速統計！
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                result = {
+                    'daily_data': self._status_from_sqlite('daily_prices'),
+                    'market_index': self._status_from_sqlite('market_indices'),
+                    'industry_index': self._status_from_sqlite('industry_indices'),
+                    'broker_branch': self._broker_status_from_sqlite(),
+                    'technical_indicators': self._technical_status_from_sqlite()
+                }
+                logger.info("[UpdateService] 成功從 SQLite 資料庫極速獲取數據狀態！")
+                return result
+            except Exception as sql_err:
+                logger.warning(f"[UpdateService] 從 SQLite 檢查數據狀態失敗: {sql_err}，將降級為 CSV 檢查...")
+
         result = {
             'daily_data': {
                 'latest_date': None,
@@ -588,26 +683,17 @@ class UpdateService:
         logger.debug(f"[UpdateService] 檢查每日股票數據文件: {stock_file}")
         if stock_file.exists():
             try:
-                # ✅ 記錄文件存在
                 logger.debug(f"[UpdateService] 文件存在，開始讀取")
-                
-                # 計算總記錄數（高效方式：只計算行數，不讀取內容）
                 with open(stock_file, 'r', encoding='utf-8-sig') as f:
                     total_records = sum(1 for _ in f) - 1  # 減去標題行
                 result['daily_data']['total_records'] = total_records
-                
-                # ✅ 記錄記錄數
                 logger.debug(f"[UpdateService] 每日股票數據總記錄數: {total_records:,}")
                 
-                # 讀取日期欄位來獲取最新日期
-                # 對於大文件，只讀取日期欄位會快很多
                 try:
-                    # 先檢查是否有日期欄位
                     header_df = pd.read_csv(stock_file, encoding='utf-8-sig', nrows=0)
                     if '日期' not in header_df.columns:
-                        result['daily_data']['status'] = 'ok'  # 文件存在但沒有日期欄位
+                        result['daily_data']['status'] = 'ok'
                     else:
-                        # 只讀取日期欄位（這樣會快很多，即使文件很大）
                         df_dates = pd.read_csv(
                             stock_file,
                             encoding='utf-8-sig',
@@ -617,10 +703,8 @@ class UpdateService:
                         )
                         df_tail = df_dates
                 except Exception as e:
-                    # 如果只讀日期欄位失敗，嘗試讀取最後10000行
                     try:
                         if total_records > 10000:
-                            # 跳過前面的行，只讀最後10000行
                             skip_rows = list(range(1, total_records - 10000 + 1))
                             df_tail = pd.read_csv(
                                 stock_file,
@@ -630,7 +714,6 @@ class UpdateService:
                                 skiprows=skip_rows
                             )
                         else:
-                            # 文件不大，直接讀取全部
                             df_tail = pd.read_csv(
                                 stock_file,
                                 encoding='utf-8-sig',
@@ -641,19 +724,14 @@ class UpdateService:
                         df_tail = pd.DataFrame()
                 
                 if '日期' in df_tail.columns and len(df_tail) > 0:
-                    # 處理日期欄位
                     df_tail['日期'] = df_tail['日期'].astype(str)
                     valid_dates = df_tail[df_tail['日期'].notna() & (df_tail['日期'] != 'nan') & (df_tail['日期'] != '')]['日期']
                     if len(valid_dates) > 0:
-                        # 日期格式可能是 YYYYMMDD，需要轉換
                         latest_date_str = valid_dates.max()
                         try:
-                            # 嘗試解析日期
                             if len(latest_date_str) == 8 and latest_date_str.isdigit():
-                                # YYYYMMDD 格式
                                 latest_date = datetime.strptime(latest_date_str, '%Y%m%d').strftime('%Y-%m-%d')
                             else:
-                                # 嘗試其他格式
                                 latest_date = pd.to_datetime(latest_date_str, errors='coerce')
                                 if pd.notna(latest_date):
                                     latest_date = latest_date.strftime('%Y-%m-%d')
@@ -665,9 +743,9 @@ class UpdateService:
                             result['daily_data']['latest_date'] = latest_date_str
                             result['daily_data']['status'] = 'ok'
                     else:
-                        result['daily_data']['status'] = 'ok'  # 文件存在但沒有有效日期
+                        result['daily_data']['status'] = 'ok'
                 else:
-                    result['daily_data']['status'] = 'ok'  # 文件存在但沒有日期欄位
+                    result['daily_data']['status'] = 'ok'
             except Exception as e:
                 result['daily_data']['status'] = f'error: {str(e)}'
         
@@ -716,15 +794,12 @@ class UpdateService:
                     df['日期'] = df['日期'].astype(str)
                     valid_dates = df[df['日期'].notna() & (df['日期'] != 'nan') & (df['日期'] != '')]['日期']
                     if len(valid_dates) > 0:
-                        # 處理日期格式（可能是 YYYYMMDD 或其他格式）
                         parsed_dates = []
                         for date_str in valid_dates:
                             try:
-                                # 嘗試 YYYYMMDD 格式
                                 if len(date_str) == 8 and date_str.isdigit():
                                     parsed_date = datetime.strptime(date_str, '%Y%m%d')
                                 else:
-                                    # 嘗試其他格式
                                     parsed_date = pd.to_datetime(date_str, errors='coerce')
                                 if pd.notna(parsed_date):
                                     parsed_dates.append(parsed_date)
@@ -736,7 +811,6 @@ class UpdateService:
                             result['industry_index']['latest_date'] = latest_date.strftime('%Y-%m-%d')
                             result['industry_index']['status'] = 'ok'
                         else:
-                            # 如果解析失敗，使用字符串比較（降級方案）
                             latest_date_str = valid_dates.max()
                             result['industry_index']['latest_date'] = latest_date_str
                             result['industry_index']['status'] = 'ok'
@@ -747,6 +821,87 @@ class UpdateService:
         result['technical_indicators'] = self._check_technical_indicator_status()
         
         return result
+
+    def check_data_overview(self) -> Dict[str, Any]:
+        """取得全部資料頁使用的輕量狀態摘要，不執行深度檢查或自動修復"""
+        # 🌟 如果啟用 SQLite，直接從資料庫極速統計！
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                overview = {
+                    'daily_data': self._status_from_sqlite('daily_prices'),
+                    'market_index': self._status_from_sqlite('market_indices'),
+                    'industry_index': self._status_from_sqlite('industry_indices'),
+                    'broker_branch': self._broker_status_from_sqlite(),
+                    'technical_indicators': self._technical_status_from_sqlite()
+                }
+                for k, v in overview.items():
+                    v['is_overview'] = True
+                return overview
+            except Exception as sql_err:
+                import logging
+                logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite check_data_overview 失敗: {sql_err}")
+
+        manifest = self._read_data_status_manifest()
+        sources = manifest.get('sources', {})
+
+        overview = {
+            'daily_data': self._overview_csv_status('daily_data', self.config.stock_data_file, '日期', sources),
+            'market_index': self._overview_csv_status('market_index', self.config.market_index_file, '日期', sources),
+            'industry_index': self._overview_csv_status('industry_index', self.config.industry_index_file, '日期', sources),
+            'broker_branch': self._overview_broker_branch_status(sources),
+            'technical_indicators': self._overview_technical_status(sources),
+        }
+        return overview
+
+    def check_source_detail(self, source: str) -> Dict[str, Any]:
+        """取得單一資料來源的詳細狀態，供切入 subtab 或手動檢查使用"""
+        source_map = {
+            'daily': 'daily_data',
+            'daily_data': 'daily_data',
+            'market': 'market_index',
+            'market_index': 'market_index',
+            'industry': 'industry_index',
+            'industry_index': 'industry_index',
+            'broker_branch': 'broker_branch',
+            'technical': 'technical_indicators',
+            'technical_indicators': 'technical_indicators',
+        }
+        normalized = source_map.get(source)
+        if normalized is None:
+            return {'latest_date': None, 'total_records': 0, 'status': f'unknown source: {source}'}
+
+        # 🌟 如果啟用 SQLite，直接從資料庫極速統計！
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                if normalized == 'daily_data':
+                    detail = self._status_from_sqlite('daily_prices')
+                elif normalized == 'market_index':
+                    detail = self._status_from_sqlite('market_indices')
+                elif normalized == 'industry_index':
+                    detail = self._status_from_sqlite('industry_indices')
+                elif normalized == 'broker_branch':
+                    detail = self._broker_status_from_sqlite()
+                else:
+                    detail = self._technical_status_from_sqlite()
+                self._update_data_status_manifest(normalized, detail)
+                return detail
+            except Exception as sql_err:
+                import logging
+                logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite check_source_detail 失敗: {sql_err}")
+
+        if normalized == 'daily_data':
+            detail = self._status_from_csv_file(self.config.stock_data_file, '日期')
+        elif normalized == 'market_index':
+            detail = self._status_from_csv_file(self.config.market_index_file, '日期')
+        elif normalized == 'industry_index':
+            detail = self._status_from_csv_file(self.config.industry_index_file, '日期')
+        elif normalized == 'broker_branch':
+            detail = self.check_broker_branch_data_status()
+        else:
+            detail = self._check_technical_indicator_status()
+
+        self._update_data_status_manifest(normalized, detail)
+        return detail
 
     def check_data_overview(self) -> Dict[str, Any]:
         """取得全部資料頁使用的輕量狀態摘要，不執行深度檢查或自動修復"""
@@ -1786,6 +1941,42 @@ class UpdateService:
                 final_df.to_csv(save_path, index=False, encoding='utf-8-sig')
                 file_size_mb = save_path.stat().st_size / 1024 / 1024
                 logger.info(f"已保存整合指標到: {save_path}（檔案大小: {file_size_mb:.2f} MB）")
+                
+                # 🌟 如果啟用 SQLite，同步將指標寫入 SQLite technical_indicators 表中
+                if getattr(self.config, 'use_sqlite', False):
+                    logger.info("檢測到啟用 SQLite，開始同步寫入資料庫 technical_indicators 表...")
+                    if progress_callback:
+                        progress_callback("正在將指標寫入 SQLite 資料庫...", 95)
+                    try:
+                        from data_module.db_manager import DBManager
+                        db = DBManager(self.config)
+                        
+                        df_db = final_df.copy()
+                        # 統一日期與代號格式
+                        df_db['日期'] = df_db['日期'].apply(lambda x: str(x).replace('-', '').replace('/', ''))
+                        df_db['證券代號'] = df_db['證券代號'].astype(str).str.zfill(4)
+                        
+                        # 剔除價格與重複欄位以防止重複儲存
+                        cols_to_drop = [c for c in ['證券名稱', '開盤價', '最高價', '最低價', '收盤價', '成交股數', '成交量'] if c in df_db.columns]
+                        if cols_to_drop:
+                            df_db = df_db.drop(columns=cols_to_drop)
+                            
+                        # 確保非主鍵欄位型態為數值型
+                        for col in df_db.columns:
+                            if col not in ['日期', '證券代號']:
+                                df_db[col] = pd.to_numeric(df_db[col], errors='coerce')
+                                
+                        # 清空現有 table 進行全新全量寫入
+                        with db.connect() as conn:
+                            conn.execute("DELETE FROM technical_indicators;")
+                        
+                        success = db.write_dataframe('technical_indicators', df_db, if_exists='append')
+                        if success:
+                            logger.info("技術指標成功批次寫入 SQLite 資料庫！")
+                        else:
+                            logger.error("技術指標寫入 SQLite 失敗！")
+                    except Exception as sql_err:
+                        logger.error(f"技術指標同步寫入 SQLite 時發生錯誤: {sql_err}")
                 
                 if progress_callback:
                     progress_callback("技術指標計算完成", 100)

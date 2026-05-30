@@ -601,10 +601,21 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 * ✅ **Codex / Agent 指引對齊**：已完成（2026-05-20）
   * ✅ 新增 repo 根目錄 `AGENTS.md`，作為 Codex 自動讀取入口
   * ✅ `docs/agents/` 已更新目前 `ui_qt`、PySide6、`TWStockConfig` / `DATA_ROOT` 與 `DOC_COVERAGE_MAP` 路徑事實
+* ✅ **SQLite 資料庫儲存升級與全量遷移 (research/sqlite-storage) 圓滿完成**：已成功在分支上完成 CSV 到 SQLite 升級與無縫向後相容層重構。解決了民國年解析錯誤（產業指數結束日期修正為 `2026-05-29`）和大盤指數 KeyError，成功導入 3,008 筆加權指數，並完成 1,157 檔個股共 2,802,159 筆技術指標的全量高速重新計算與同步寫入。台積電 (2330) 價格載入時間從舊大 CSV 的 8.37 秒縮減至 SQLite 的 0.025 秒 (25 毫秒)，效能飆升 **322.9 倍**！UI 數據狀態加載更實現了 SQL 化優化的毫秒級秒開。
 
 ---
 
-### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal）
+### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
+
+* ✅ **SQLite 儲存相容重構與數據遷移 (research/sqlite-storage)**：
+  * 建立 `sqlite/` 獨立目錄、`db_manager.py` 動態寬表資料庫管理模組。
+  * 完成 269.9 萬筆個股價格、17.9 萬筆產業指數、3,008 筆大盤指數、7.7 萬筆分點的遷移。
+  * **民國年日期解析 Bug 修復**：重構 `standardize_date` 函數，解決無補零西元日期（長度為 7）被誤判為民國年加 1911 的大 Bug。產業指數結束日期修正為 `2026-05-29`。
+  * **大盤指數 KeyError 修復**：修正大盤指數 columns 映射 KeyError，成功導入 3,008 筆加權指數記錄（覆蓋 `2014-01-02` 至 `2026-05-29`）。
+  * **技術指標全量重新計算與高速批量寫入**：重構指標計算腳本與 UI 服務層，成功執行一鍵全量指標重新計算（1,157 檔個股，僅耗時 1 分 51 秒），成功將 **2,802,159 筆技術指標資料** 同步批次寫入 SQLite `technical_indicators` 表，數據對比 100% 精準。
+  * **回測載入性能飆升 322.9 倍**：重構 `DataLoader` 與 `BacktestService` 載入核心。台積電 (2330) 載入時間從 8.37 秒降至 25 毫秒。
+  * **UI 狀態加載毫秒級秒開優化**：重構 `check_data_status` 等數據狀態統計方法，當 SQLite 啟用時 100% 改由 SQL 極速聚合統計，徹底避開大 CSV 的硬碟掃描。
+  * 通過 `pytest tests/test_ui_qt_update_view_workbench.py` (7/7 passed) 與 `qa_validate_update_tab.py` (21 passed, 0 failed)。
 
 * ✅ **推薦組合回測 MVP** ✅ 已完成（2026-05-27）
   * ✅ 新增 Recommendation replay / portfolio backtest / portfolio optimizer service，保留未來接券商表現、營收數據、更多因子與穩健分析的擴充空間

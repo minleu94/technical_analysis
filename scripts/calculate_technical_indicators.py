@@ -437,6 +437,44 @@ def process_stock_data_batch(config: TWStockConfig, calculator: TechnicalIndicat
             logger.info(f"已保存整合指標到: {save_path}")
             print(f"已保存整合指標到: {save_path}")
             
+            # 6. 如果啟用 SQLite，同步將指標寫入 SQLite technical_indicators 表中
+            if getattr(config, 'use_sqlite', False):
+                logger.info("檢測到啟用 SQLite，開始同步寫入資料庫 technical_indicators 表...")
+                print("同步寫入資料庫 technical_indicators 表...")
+                try:
+                    from data_module.db_manager import DBManager
+                    db = DBManager(config)
+                    
+                    df_db = final_df.copy()
+                    # 統一日期與代號格式
+                    df_db['日期'] = df_db['日期'].apply(lambda x: str(x).replace('-', '').replace('/', ''))
+                    df_db['證券代號'] = df_db['證券代號'].astype(str).str.zfill(4)
+                    
+                    # 剔除價格與重複欄位以防止重複儲存
+                    cols_to_drop = [c for c in ['證券名稱', '開盤價', '最高價', '最低價', '收盤價', '成交股數', '成交量'] if c in df_db.columns]
+                    if cols_to_drop:
+                        df_db = df_db.drop(columns=cols_to_drop)
+                        
+                    # 確保非主鍵欄位型態為數值型
+                    for col in df_db.columns:
+                        if col not in ['日期', '證券代號']:
+                            df_db[col] = pd.to_numeric(df_db[col], errors='coerce')
+                            
+                    # 清空現有 table 進行全新全量寫入
+                    with db.connect() as conn:
+                        conn.execute("DELETE FROM technical_indicators;")
+                    
+                    success = db.write_dataframe('technical_indicators', df_db, if_exists='append')
+                    if success:
+                        logger.info("技術指標成功批次寫入 SQLite 資料庫！")
+                        print("技術指標成功批次寫入 SQLite 資料庫！")
+                    else:
+                        logger.error("技術指標寫入 SQLite 失敗！")
+                        print("錯誤: 技術指標寫入 SQLite 失敗！")
+                except Exception as sql_err:
+                    logger.error(f"技術指標同步寫入 SQLite 時發生錯誤: {sql_err}")
+                    print(f"錯誤: 同步寫入 SQLite 失敗: {sql_err}")
+            
             # 記錄統計信息
             logger.info(f"總處理筆數: {len(final_df):,}")
             logger.info(f"處理的股票數量: {final_df['證券代號'].nunique():,}")

@@ -30,6 +30,9 @@ class TWStockConfig:
     meta_data_dir: Path = None
     technical_dir: Path = None
     log_dir: Path = None  # 新增日誌目錄
+    sqlite_dir: Path = None  # SQLite 資料庫目錄
+    db_file: Path = None  # SQLite 資料庫檔案路徑
+    use_sqlite: bool = True  # 是否使用 SQLite 儲存
     
     # 關鍵檔案路徑
     market_index_file: Path = None
@@ -60,6 +63,8 @@ class TWStockConfig:
         self.meta_data_dir = self.data_dir / 'meta_data'
         self.technical_dir = self.data_dir / 'technical_analysis'
         self.log_dir = self.data_dir / 'logs'
+        self.sqlite_dir = self.data_dir / 'sqlite'
+        self.db_file = self.sqlite_dir / 'twstock.db'
         
         # 設定關鍵檔案路徑
         self.market_index_file = self.meta_data_dir / 'market_index.csv'
@@ -135,7 +140,8 @@ class TWStockConfig:
             self.meta_data_dir,
             self.technical_dir,
             self.backup_dir,
-            self.log_dir  # 新增日誌目錄
+            self.log_dir,  # 新增日誌目錄
+            self.sqlite_dir  # SQLite 資料庫目錄
         ]
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)

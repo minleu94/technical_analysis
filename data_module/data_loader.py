@@ -12,6 +12,7 @@ import random
 import yfinance as yf
 
 from .config import TWStockConfig
+from .db_manager import DBManager
 
 class MarketDateRange:
     """市場數據日期範圍控制"""
@@ -91,6 +92,7 @@ class DataLoader:
     def __init__(self, config: TWStockConfig):
         self.config = config
         self._setup_logging()
+        self.db = DBManager(self.config)
         
     def _setup_logging(self):
         """設置日誌"""
@@ -122,6 +124,14 @@ class DataLoader:
     def load_daily_price(self, date: str) -> Optional[pd.DataFrame]:
         """加載指定日期的價格數據"""
         try:
+            if getattr(self.config, 'use_sqlite', False):
+                date_str = self._convert_date_format(date)
+                df = self.db.execute_query("SELECT * FROM daily_prices WHERE 日期 = ?;", (date_str,))
+                if not df.empty:
+                    self.logger.info(f"成功從 SQLite 加載日期 {date} 的價格數據")
+                    return df
+                return None
+                
             file_path = self.config.get_daily_price_file(date)
             if not file_path.exists():
                 self.logger.warning(f"找不到日期 {date} 的價格數據文件")
@@ -153,6 +163,16 @@ class DataLoader:
     def load_market_index(self) -> Optional[pd.DataFrame]:
         """加載市場指數數據"""
         try:
+            if getattr(self.config, 'use_sqlite', False):
+                df = self.db.execute_query("SELECT * FROM market_indices ORDER BY 日期 ASC;")
+                if not df.empty:
+                    # 將日期格式轉回 YYYY-MM-DD 保持與原 CSV 一致
+                    df['日期'] = pd.to_datetime(df['日期'], format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
+                    last_date = pd.to_datetime(df['日期'].max())
+                    self.logger.info(f"成功從 SQLite 加載市場指數數據，最後更新日期: {last_date.strftime('%Y-%m-%d')}")
+                    return df
+                return None
+
             if not self.config.market_index_file.exists():
                 self.logger.warning("找不到市場指數數據文件")
                 return None
@@ -172,6 +192,15 @@ class DataLoader:
     def load_industry_index(self) -> Optional[pd.DataFrame]:
         """加載產業指數數據"""
         try:
+            if getattr(self.config, 'use_sqlite', False):
+                df = self.db.execute_query("SELECT * FROM industry_indices ORDER BY 日期 ASC;")
+                if not df.empty:
+                    df['日期'] = pd.to_datetime(df['日期'], format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
+                    last_date = pd.to_datetime(df['日期'].max())
+                    self.logger.info(f"成功從 SQLite 加載產業指數數據，最後更新日期: {last_date.strftime('%Y-%m-%d')}")
+                    return df
+                return None
+
             if not self.config.industry_index_file.exists():
                 self.logger.warning("找不到產業指數數據文件")
                 return None
@@ -191,6 +220,13 @@ class DataLoader:
     def load_all_stocks_data(self) -> Optional[pd.DataFrame]:
         """加載整合性股票數據"""
         try:
+            if getattr(self.config, 'use_sqlite', False):
+                df = self.db.execute_query("SELECT * FROM daily_prices ORDER BY 日期 ASC, 證券代號 ASC;")
+                if not df.empty:
+                    self.logger.info("成功從 SQLite 加載整合性股票數據")
+                    return df
+                return None
+
             if not self.config.all_stocks_data_file.exists():
                 self.logger.warning("找不到整合性股票數據文件")
                 return None
@@ -206,6 +242,14 @@ class DataLoader:
     def save_market_index(self, df: pd.DataFrame):
         """保存市場指數數據"""
         try:
+            if getattr(self.config, 'use_sqlite', False):
+                df_write = df.copy()
+                df_write['日期'] = df_write['日期'].apply(lambda x: str(x).replace('-', '').replace('/', ''))
+                # 使用 replace 直接覆寫 SQLite table 以保持與原本 to_csv(if_exists='replace') 行為一致
+                self.db.write_dataframe('market_indices', df_write, if_exists='replace')
+                self.logger.info(f"成功保存市場指數數據到 SQLite，共 {len(df)} 筆記錄")
+                return
+
             # 創建備份
             if self.config.market_index_file.exists():
                 backup_file = self.config.backup_dir / f'market_index_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
@@ -214,12 +258,12 @@ class DataLoader:
             
             # 保存新數據
             df.to_csv(self.config.market_index_file, index=False, encoding='utf-8-sig')
-            self.logger.info(f"成功保存市場指數數據，共 {len(df)} 筆記錄")
+            self.logger.info(f"成功保存市場指數數據到 CSV，共 {len(df)} 筆記錄")
             
         except Exception as e:
             self.logger.error(f"保存市場指數數據時發生錯誤: {str(e)}")
             # 如果有備份，嘗試恢復
-            if 'backup_file' in locals() and backup_file.exists():
+            if 'backup_file' in locals() and backup_file.exists() and not getattr(self.config, 'use_sqlite', False):
                 self.config.restore_backup(backup_file, self.config.market_index_file)
                 self.logger.info("已恢復備份文件")
     
@@ -230,6 +274,15 @@ class DataLoader:
                 self.logger.warning("沒有數據需要保存")
                 return
                 
+            if getattr(self.config, 'use_sqlite', False):
+                df_write = data.copy()
+                if date:
+                    df_write['日期'] = date
+                df_write['日期'] = df_write['日期'].apply(lambda x: str(x).replace('-', '').replace('/', ''))
+                self.db.write_dataframe('industry_indices', df_write, if_exists='replace')
+                self.logger.info("成功保存產業指數數據到 SQLite")
+                return
+
             # 如果指定了日期，添加日期列
             if date:
                 data['日期'] = date
@@ -248,12 +301,19 @@ class DataLoader:
     def save_all_stocks_data(self, df: pd.DataFrame):
         """保存整合性股票數據"""
         try:
+            if getattr(self.config, 'use_sqlite', False):
+                df_write = df.copy()
+                df_write['日期'] = df_write['日期'].apply(lambda x: str(x).replace('-', '').replace('/', ''))
+                self.db.write_dataframe('daily_prices', df_write, if_exists='replace')
+                self.logger.info("成功保存整合性股票數據到 SQLite")
+                return
+
             # 創建備份
             self.config.create_backup(self.config.all_stocks_data_file)
             
             # 保存新數據
             df.to_csv(self.config.all_stocks_data_file, index=False)
-            self.logger.info("成功保存整合性股票數據")
+            self.logger.info("成功保存整合性股票數據到 CSV")
             
         except Exception as e:
             self.logger.error(f"保存整合性股票數據時發生錯誤: {str(e)}")
