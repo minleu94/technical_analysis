@@ -58,9 +58,15 @@ def merge_daily_data(force_all: bool = False, config=None):
                 existing_df = pd.read_csv(output_file, encoding='utf-8-sig', low_memory=False)
                 # ✅ 修復：確保日期格式正確（YYYYMMDD 字符串）
                 max_date = existing_df['日期'].max()
-                if isinstance(max_date, (int, float)):
+                import numpy as np
+                if hasattr(max_date, 'item'):
+                    max_date_val = max_date.item()
+                else:
+                    max_date_val = max_date
+                
+                if isinstance(max_date_val, (int, float, np.integer, np.floating)):
                     # 如果是數字，轉換為 YYYYMMDD 字符串
-                    last_date = str(int(max_date))
+                    last_date = str(int(max_date_val))
                     # 確保是8位數
                     if len(last_date) == 8:
                         pass  # 已經是正確格式
