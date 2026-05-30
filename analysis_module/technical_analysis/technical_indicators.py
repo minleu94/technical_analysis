@@ -30,6 +30,45 @@ class TechnicalIndicatorCalculator:
         # 反向映射，將英文列名映射到中文列名
         self.reverse_mapping = {v: k for k, v in self.column_mapping.items()}
     
+    def _safe_convert_date(self, series):
+        """安全地將日期序列轉換為 YYYY-MM-DD 格式的字串，防範 int64/float64 被誤判為 UNIX 奈秒 1970-01-01"""
+        from datetime import datetime
+        # 複製 Series 避免 inplace 警告
+        s = series.copy()
+        
+        # 確保是字串類型，且移除所有浮點數 .0 的後綴
+        s = s.astype(str).str.replace(r'\.0$', '', regex=True)
+        
+        # 解析函數
+        def parse_single_date(val):
+            if not val or val == 'nan' or val == 'NaT' or val == 'None':
+                return None
+            val = val.strip()
+            # 如果是 8 位純數字 (如 20260526)
+            if len(val) == 8 and val.isdigit():
+                try:
+                    return datetime.strptime(val, '%Y%m%d').strftime('%Y-%m-%d')
+                except:
+                    pass
+            # 如果是 10 位帶分隔符的 (如 2026-05-26 或是 2026/05/26)
+            normalized = val.replace('/', '-')
+            if len(normalized) >= 10:
+                try:
+                    # 嘗試取前 10 碼 YYYY-MM-DD
+                    return datetime.strptime(normalized[:10], '%Y-%m-%d').strftime('%Y-%m-%d')
+                except:
+                    pass
+            # 降級方案：使用 pandas 彈性解析
+            try:
+                parsed = pd.to_datetime(val, errors='coerce')
+                if pd.notna(parsed):
+                    return parsed.strftime('%Y-%m-%d')
+            except:
+                pass
+            return None
+
+        return s.apply(parse_single_date)
+    
     def _setup_logging(self):
         """設置日誌記錄"""
         logger = logging.getLogger(__name__)
@@ -113,7 +152,7 @@ class TechnicalIndicatorCalculator:
             
             # 處理日期欄位
             if '日期' in df.columns:
-                df['日期'] = pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d')
+                df['日期'] = self._safe_convert_date(df['日期'])
                 
             # 處理特殊字符
             df = df.replace('--', np.nan)
@@ -527,7 +566,7 @@ class TechnicalIndicatorCalculator:
                             existing_df = None  # 標記為無效，使用新數據
                         else:
                             # 檢查日期欄位是否有有效數據
-                            date_col = pd.to_datetime(existing_df['日期'], errors='coerce')
+                            date_col = pd.to_datetime(self._safe_convert_date(existing_df['日期']), errors='coerce')
                             valid_dates = date_col.notna().sum()
                             if valid_dates == 0:
                                 self.logger.warning(f"現有指標文件的日期欄位無效，將使用新數據覆蓋")
@@ -538,8 +577,8 @@ class TechnicalIndicatorCalculator:
                             # 確保日期欄位存在且格式一致
                             if '日期' in existing_df.columns and '日期' in result_df.columns:
                                 # 轉換日期為字符串格式以便比較
-                                existing_df['日期'] = pd.to_datetime(existing_df['日期'], errors='coerce').dt.strftime('%Y-%m-%d')
-                                result_df['日期'] = pd.to_datetime(result_df['日期'], errors='coerce').dt.strftime('%Y-%m-%d')
+                                existing_df['日期'] = self._safe_convert_date(existing_df['日期'])
+                                result_df['日期'] = self._safe_convert_date(result_df['日期'])
                                 
                                 # ✅ 數據驗證：檢查合併前的數據完整性
                                 # 檢查是否有必要的欄位
@@ -556,7 +595,7 @@ class TechnicalIndicatorCalculator:
                                     merged_df = merged_df.drop_duplicates(subset=['日期'], keep='last')
                                     
                                     # 按日期排序
-                                    merged_df['日期'] = pd.to_datetime(merged_df['日期'], errors='coerce')
+                                    merged_df['日期'] = pd.to_datetime(self._safe_convert_date(merged_df['日期']), errors='coerce')
                                     merged_df = merged_df.sort_values('日期')
                                     merged_df['日期'] = merged_df['日期'].dt.strftime('%Y-%m-%d')
                                     
@@ -570,7 +609,6 @@ class TechnicalIndicatorCalculator:
                             
                     except Exception as e:
                         self.logger.warning(f"讀取現有指標文件時發生錯誤，將覆蓋文件: {e}")
-                        import traceback
                         self.logger.debug(f"詳細錯誤信息: {traceback.format_exc()}")
                         # 如果讀取失敗，繼續使用新數據
                 
@@ -620,7 +658,11 @@ class TechnicalIndicatorCalculator:
                     if len(group_df) < 30:
                         continue
                         
-                    result = self.calculate_and_store_indicators(group_df, stock_id)
+                    result = self.calculate_and_store_indicators(
+                        group_df, 
+                        stock_id, 
+                        output_dir="D:/Min/Python/Project/FA_Data/technical_analysis"
+                    )
                     if isinstance(result, pd.DataFrame):
                         all_data.append(result)
             

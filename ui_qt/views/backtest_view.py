@@ -9,7 +9,8 @@ from PySide6.QtWidgets import (
     QTextEdit, QHeaderView, QLineEdit, QDoubleSpinBox,
     QDateEdit, QComboBox, QMessageBox, QSplitter, QFormLayout, QSpinBox,
     QTabWidget, QCheckBox, QListWidget, QListWidgetItem, QDialog,
-    QDialogButtonBox, QTextEdit as QTextEditDialog, QScrollArea
+    QDialogButtonBox, QTextEdit as QTextEditDialog, QScrollArea,
+    QMenu
 )
 from PySide6.QtCore import Qt, Signal, QDate, QTimer
 from PySide6.QtGui import QFont
@@ -836,6 +837,11 @@ class BacktestView(QWidget):
         self.trades_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         font = QFont("Consolas", 9)
         self.trades_table.setFont(font)
+        
+        # 啟用右鍵選單
+        self.trades_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.trades_table.customContextMenuRequested.connect(self._show_trades_table_context_menu)
+        
         trades_layout.addWidget(self.trades_table)
         
         trades_group.setLayout(trades_layout)
@@ -4368,9 +4374,133 @@ class BacktestView(QWidget):
             if index >= 0:
                 self.chart_run_combo.setCurrentIndex(index)
         
-        # 切換到結果 Tab（顯示摘要和明細）
         for widget in self.findChildren(QTabWidget):
             for i in range(widget.count()):
                 if widget.tabText(i) == "結果":
                     widget.setCurrentIndex(i)
                     break
+                    
+    def _show_trades_table_context_menu(self, pos):
+        """顯示交易明細表格的右鍵選單"""
+        if not hasattr(self, 'trades_model') or not self.trades_model:
+            return
+            
+        index = self.trades_table.currentIndex()
+        if not index.isValid():
+            return
+            
+        df = self.trades_model.getDataFrame()
+        row = index.row()
+        
+        # 欄位提取
+        stock_code = ""
+        for col in ['stock_code', '證券代號', '代號', '股號']:
+            if col in df.columns:
+                stock_code = str(df.iloc[row].get(col, ''))
+                break
+        if not stock_code and hasattr(self, 'stock_code_input'):
+            stock_code = self.stock_code_input.text().strip()
+            
+        stock_name = ""
+        for col in ['stock_name', '證券名稱', '名稱', '股名']:
+            if col in df.columns:
+                stock_name = str(df.iloc[row].get(col, ''))
+                break
+        if not stock_name:
+            stock_name = stock_code
+            
+        side = "buy"
+        for col in ['side', '買賣', '交易別']:
+            if col in df.columns:
+                val = str(df.iloc[row].get(col, '')).lower()
+                if 'sell' in val or '賣' in val:
+                    side = "sell"
+                break
+                
+        price = 0.0
+        for col in ['price', '價格', '單價', '成交價']:
+            if col in df.columns:
+                try:
+                    price = float(df.iloc[row].get(col, 0.0))
+                    break
+                except:
+                    pass
+                    
+        qty = 1000.0
+        for col in ['quantity', 'qty', '數量', '交易股數']:
+            if col in df.columns:
+                try:
+                    qty = float(df.iloc[row].get(col, 1000.0))
+                    break
+                except:
+                    pass
+                    
+        trade_date = datetime.now().strftime("%Y-%m-%d")
+        for col in ['date', '日期', '交易日期']:
+            if col in df.columns:
+                val = str(df.iloc[row].get(col, ''))
+                if len(val) >= 10:
+                    trade_date = val[:10]
+                break
+                
+        menu = QMenu(self)
+        action_add_portfolio = menu.addAction("🎯 記錄此交易到持倉 (Record to Portfolio)...")
+        
+        action = menu.exec(self.cursor().pos())
+        
+        if action == action_add_portfolio:
+            main_window = self.window()
+            if hasattr(main_window, 'portfolio_service'):
+                from ui_qt.views.portfolio_view import AddTradeDialog
+                dialog = AddTradeDialog(None, self)
+                dialog.code_input.setText(stock_code)
+                dialog.name_input.setText(stock_name)
+                dialog.price_input.setValue(price)
+                dialog.qty_input.setValue(qty)
+                
+                try:
+                    qdate = QDate.fromString(trade_date, "yyyy-MM-dd")
+                    if qdate.isValid():
+                        dialog.date_input.setDate(qdate)
+                except:
+                    pass
+                    
+                if side == "sell":
+                    dialog.side_combo.setCurrentIndex(1)
+                else:
+                    dialog.side_combo.setCurrentIndex(0)
+                    
+                selected_strategy_id = self.strategy_combo.currentData()
+                if selected_strategy_id:
+                    for idx in range(dialog.strategy_combo.count()):
+                        if dialog.strategy_combo.itemData(idx) == selected_strategy_id:
+                            dialog.strategy_combo.setCurrentIndex(idx)
+                            break
+                            
+                if dialog.exec() == QDialog.Accepted:
+                    data = dialog.get_trade_data()
+                    try:
+                        main_window.portfolio_service.record_trade(
+                            stock_code=data["stock_code"],
+                            stock_name=data["stock_name"],
+                            side=data["side"],
+                            quantity=data["quantity"],
+                            price=data["price"],
+                            trade_date=data["trade_date"],
+                            fees=data["fees"],
+                            taxes=data["taxes"],
+                            source_type="backtest",
+                            source_id=selected_strategy_id or "manual",
+                            notes=data["notes"]
+                        )
+                        QMessageBox.information(self, "成功", f"交易已成功記入持倉！")
+                        if hasattr(main_window, 'tabs'):
+                            for idx in range(main_window.tabs.count()):
+                                widget = main_window.tabs.widget(idx)
+                                if hasattr(widget, 'refresh_all') and widget.__class__.__name__ == 'PortfolioView':
+                                    widget.refresh_all()
+                    except Exception as e:
+                        QMessageBox.critical(self, "記錄交易失敗", f"無法記入交易，領域規則校驗失敗：\n{e}")
+            else:
+                QMessageBox.warning(self, "錯誤", "持倉服務未能在主窗口初始化")
+

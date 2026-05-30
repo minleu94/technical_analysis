@@ -869,70 +869,139 @@ class DataLoader:
             }
             
             response = self._make_request(url, params)
+            
+            # 初始化標記，若 API 失敗則使用 yfinance 備援
+            use_yfinance_fallback = False
+            
             if response is None:
-                self.logger.error(f"無法獲取 {date} 的市場指數數據")
-                return False
-                
-            # 解析JSON響應
-            try:
-                data = response.json()
-            except Exception as e:
-                self.logger.error(f"解析JSON響應時發生錯誤: {str(e)}")
-                return False
-                
-            # 檢查響應狀態
-            if data.get("stat") != "OK" or "data" not in data or not data["data"]:
-                self.logger.warning(f"API返回無效數據: {data.get('stat', '未知狀態')}")
-                return False
-                
-            # 處理數據
-            try:
-                # 創建DataFrame
-                df = pd.DataFrame(data["data"], columns=data["fields"])
-                
-                # 轉換數值欄位
-                numeric_columns = ['成交股數', '成交金額', '成交筆數', '發行量加權股價指數', '漲跌點數']
-                for col in numeric_columns:
-                    df[col] = pd.to_numeric(df[col].str.replace(',', ''), errors='coerce')
-                
-                # 轉換日期格式（從民國年到西元年）
-                df['日期'] = df['日期'].apply(self._convert_roc_date)
-                
-                # 重新組織數據格式
-                result_df = pd.DataFrame({
-                    '日期': pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d'),
-                    '收盤價': df['發行量加權股價指數'],
-                    '開盤價': df['發行量加權股價指數'],  # API只提供收盤價
-                    '最高價': df['發行量加權股價指數'],  # API只提供收盤價
-                    '最低價': df['發行量加權股價指數'],  # API只提供收盤價
-                    '成交量': df['成交股數']
-                })
-                
-                # 檢查現有數據
-                if self.config.market_index_file.exists():
-                    existing_df = pd.read_csv(self.config.market_index_file, encoding='utf-8-sig')
+                self.logger.warning(f"無法從 TWSE API 獲取 {date} 的市場指數數據，準備使用 yfinance 備援...")
+                use_yfinance_fallback = True
+            else:
+                try:
+                    data = response.json()
+                    if data.get("stat") != "OK" or "data" not in data or not data["data"]:
+                        self.logger.warning(f"TWSE API 返回無效數據: {data.get('stat')}, 準備使用 yfinance 備援...")
+                        use_yfinance_fallback = True
+                except Exception as e:
+                    self.logger.warning(f"解析 TWSE API JSON 響應失敗: {e}, 準備使用 yfinance 備援...")
+                    use_yfinance_fallback = True
+            
+            result_df = None
+            
+            if use_yfinance_fallback:
+                try:
+                    self.logger.info(f"正在從 yfinance 下載大盤指數 (^TWII) 作為備援，日期: {date}")
+                    start_dt = (date_obj - timedelta(days=2)).strftime('%Y-%m-%d')
+                    end_dt = (date_obj + timedelta(days=2)).strftime('%Y-%m-%d')
                     
-                    # 創建備份
-                    if not skip_backup:
-                        self.config.create_backup(self.config.market_index_file)
+                    import yfinance as yf
+                    yf_df = yf.download("^TWII", start=start_dt, end=end_dt, progress=False)
                     
-                    # 合併數據
-                    existing_df['日期'] = pd.to_datetime(existing_df['日期'], format='mixed').dt.strftime('%Y-%m-%d')
-                    result_df = pd.concat([existing_df, result_df], ignore_index=True)
+                    if yf_df.empty:
+                        self.logger.error("yfinance 下載返回空數據，無法完成更新")
+                        return False
+                        
+                    yf_df = yf_df.reset_index()
+                    yf_df['Date_Str'] = yf_df['Date'].dt.strftime('%Y-%m-%d')
                     
-                    # 刪除重複的日期，保留最新的數據
-                    result_df = result_df.drop_duplicates(subset=['日期'], keep='last')
+                    target_row = yf_df[yf_df['Date_Str'] == date]
+                    if target_row.empty:
+                        self.logger.warning(f"yfinance 數據中未找到日期為 {date} 的記錄，將使用 yfinance 最接近的最後一筆")
+                        target_row = yf_df.tail(1)
                     
-                    # 按日期排序
-                    result_df = result_df.sort_values('日期')
-                
-                # 保存數據
-                result_df.to_csv(self.config.market_index_file, index=False, encoding='utf-8-sig')
-                self.logger.info(f"成功更新市場指數數據，共 {len(result_df)} 筆記錄")
-                return True
-                
-            except Exception as e:
-                self.logger.error(f"處理市場指數數據時發生錯誤: {str(e)}")
+                    def get_col_val(df_row, name):
+                        if name in df_row.columns:
+                            val = df_row[name].values[0]
+                            if hasattr(val, 'item'):
+                                return float(val.item())
+                            return float(val)
+                        for col in df_row.columns:
+                            if isinstance(col, tuple) and name in col:
+                                val = df_row[col].values[0]
+                                if hasattr(val, 'item'):
+                                    return float(val.item())
+                                return float(val)
+                        return 0.0
+
+                    close_p = get_col_val(target_row, 'Close')
+                    open_p = get_col_val(target_row, 'Open')
+                    high_p = get_col_val(target_row, 'High')
+                    low_p = get_col_val(target_row, 'Low')
+                    vol = get_col_val(target_row, 'Volume')
+                    
+                    actual_date = target_row['Date_Str'].values[0]
+                    
+                    result_df = pd.DataFrame({
+                        '日期': [actual_date],
+                        '收盤價': [close_p],
+                        '開盤價': [open_p if open_p > 0 else close_p],
+                        '最高價': [high_p if high_p > 0 else close_p],
+                        '最低價': [low_p if low_p > 0 else close_p],
+                        '成交量': [vol]
+                    })
+                    
+                    self.logger.info(f"yfinance 備援獲取大盤數據成功: 日期={actual_date}, 收盤={close_p}, 成交量={vol}")
+                    
+                except Exception as yf_err:
+                    self.logger.error(f"從 yfinance 下載大盤備援數據時發生致命錯誤: {yf_err}")
+                    return False
+            else:
+                # 處理從 TWSE 獲取的正常數據
+                try:
+                    # 創建DataFrame
+                    df = pd.DataFrame(data["data"], columns=data["fields"])
+                    
+                    # 轉換數值欄位
+                    numeric_columns = ['成交股數', '成交金額', '成交筆數', '發行量加權股價指數', '漲跌點數']
+                    for col in numeric_columns:
+                        df[col] = pd.to_numeric(df[col].str.replace(',', ''), errors='coerce')
+                    
+                    # 轉換日期格式（從民國年到西元年）
+                    df['日期'] = df['日期'].apply(self._convert_roc_date)
+                    
+                    # 重新組織數據格式
+                    result_df = pd.DataFrame({
+                        '日期': pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d'),
+                        '收盤價': df['發行量加權股價指數'],
+                        '開盤價': df['發行量加權股價指數'],  # API只提供收盤價
+                        '最高價': df['發行量加權股價指數'],  # API只提供收盤價
+                        '最低價': df['發行量加權股價指數'],  # API只提供收盤價
+                        '成交量': df['成交股數']
+                    })
+                except Exception as e:
+                    self.logger.error(f"處理 TWSE 市場指數數據時發生錯誤: {str(e)}")
+                    return False
+
+            # 保存與合併邏輯 (兩者共享)
+            if result_df is not None:
+                try:
+                    # 檢查現有數據
+                    if self.config.market_index_file.exists():
+                        existing_df = pd.read_csv(self.config.market_index_file, encoding='utf-8-sig')
+                        
+                        # 創建備份
+                        if not skip_backup:
+                            self.config.create_backup(self.config.market_index_file)
+                        
+                        # 合併數據
+                        existing_df['日期'] = pd.to_datetime(existing_df['日期'], format='mixed').dt.strftime('%Y-%m-%d')
+                        result_df = pd.concat([existing_df, result_df], ignore_index=True)
+                        
+                        # 刪除重複的日期，保留最新的數據
+                        result_df = result_df.drop_duplicates(subset=['日期'], keep='last')
+                        
+                        # 按日期排序
+                        result_df = result_df.sort_values('日期')
+                    
+                    # 保存數據
+                    result_df.to_csv(self.config.market_index_file, index=False, encoding='utf-8-sig')
+                    self.logger.info(f"成功更新市場指數數據，共 {len(result_df)} 筆記錄")
+                    return True
+                except Exception as e:
+                    self.logger.error(f"儲存市場指數數據時發生錯誤: {str(e)}")
+                    return False
+            else:
+                self.logger.error("大盤數據更新失敗，無有效數據生成")
                 return False
                 
         except Exception as e:
@@ -940,19 +1009,35 @@ class DataLoader:
             return False
 
     def _make_request(self, url: str, params: Dict = None, retries: int = None) -> Optional[requests.Response]:
-        """發送HTTP請求並處理重試邏輯"""
+        """發送HTTP請求並處理重試邏輯（使用 Session 與高模擬防爬蟲 Headers）"""
         retries = retries or self.config.max_retries
         for attempt in range(retries):
             try:
+                session = requests.Session()
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Referer': 'https://www.twse.com.tw/',
+                    'Connection': 'keep-alive'
                 }
-                response = requests.get(
+                
+                # 先訪問主頁獲取 cookie（模擬真實瀏覽器）
+                try:
+                    session.get("https://www.twse.com.tw/", headers=headers, timeout=self.config.request_timeout)
+                except Exception as e:
+                    self.logger.debug(f"訪問首頁獲取 cookie 失敗: {str(e)}")
+                
+                # 隨機延遲 1.5 - 2.5 秒，防範被拉黑
+                time.sleep(random.uniform(1.5, 2.5))
+                
+                response = session.get(
                     url, 
                     params=params, 
                     headers=headers,
                     timeout=self.config.request_timeout
                 )
+                
                 if response.status_code == 200:
                     return response
                 elif response.status_code == 429:  # Too Many Requests
@@ -960,6 +1045,9 @@ class DataLoader:
                     continue
                 else:
                     self.logger.warning(f"請求失敗 (HTTP {response.status_code}): {url}")
+                    if attempt < retries - 1:
+                        time.sleep(self.config.retry_delay)
+                        continue
                     return None
             except requests.RequestException as e:
                 if attempt < retries - 1:

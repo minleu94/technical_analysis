@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QTableView, QGroupBox, QProgressBar,
     QTextEdit, QHeaderView, QCheckBox, QSpinBox, QDoubleSpinBox,
-    QComboBox, QMessageBox, QSplitter, QScrollArea
+    QComboBox, QMessageBox, QSplitter, QScrollArea,
+    QMenu, QDialog
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -1160,6 +1161,11 @@ class RecommendationView(QWidget):
         # 設置選擇模式為單行選擇
         self.results_table.setSelectionBehavior(QTableView.SelectRows)
         self.results_table.setSelectionMode(QTableView.SingleSelection)
+        
+        # 啟用右鍵選單
+        self.results_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.results_table.customContextMenuRequested.connect(self._show_results_table_context_menu)
+        
         result_splitter.addWidget(self.results_table)
         
         # 詳細信息（推薦理由）
@@ -2524,6 +2530,82 @@ class RecommendationView(QWidget):
         html_text += "</div>"
         
         return html_text
+        
+    def _show_results_table_context_menu(self, pos):
+        """顯示推薦結果表格的右鍵選單"""
+        if not self.recommendations_model:
+            return
+            
+        index = self.results_table.currentIndex()
+        if not index.isValid():
+            return
+            
+        df = self.recommendations_model.getDataFrame()
+        row = index.row()
+        stock_code = str(df.iloc[row].get('證券代號', ''))
+        stock_name = str(df.iloc[row].get('證券名稱', ''))
+        
+        price = 0.0
+        for col in ['價格', '收盤價', '成交價']:
+            if col in df.columns:
+                try:
+                    price = float(df.iloc[row].get(col, 0.0))
+                    break
+                except:
+                    pass
+        
+        menu = QMenu(self)
+        action_add_portfolio = menu.addAction("🎯 送至持倉記錄交易 (Record as Trade)...")
+        action_add_watchlist = menu.addAction("⭐ 加入觀察清單")
+        
+        action = menu.exec(self.cursor().pos())
+        
+        if action == action_add_portfolio:
+            main_window = self.window()
+            if hasattr(main_window, 'portfolio_service'):
+                from ui_qt.views.portfolio_view import AddTradeDialog
+                dialog = AddTradeDialog(self.recommendation_service, self)
+                dialog.code_input.setText(stock_code)
+                dialog.name_input.setText(stock_name)
+                dialog.price_input.setValue(price)
+                
+                # 策略關聯預設為當前 profile
+                if self.current_profile:
+                    for idx in range(dialog.strategy_combo.count()):
+                        if dialog.strategy_combo.itemData(idx) == self.current_profile:
+                            dialog.strategy_combo.setCurrentIndex(idx)
+                            break
+                            
+                if dialog.exec() == QDialog.Accepted:
+                    data = dialog.get_trade_data()
+                    try:
+                        main_window.portfolio_service.record_trade(
+                            stock_code=data["stock_code"],
+                            stock_name=data["stock_name"],
+                            side=data["side"],
+                            quantity=data["quantity"],
+                            price=data["price"],
+                            trade_date=data["trade_date"],
+                            fees=data["fees"],
+                            taxes=data["taxes"],
+                            source_type="recommendation",
+                            source_id=self.current_profile or "manual",
+                            notes=data["notes"]
+                        )
+                        QMessageBox.information(self, "成功", f"已成功記入持倉！")
+                        # 觸發持倉管理頁面刷新
+                        if hasattr(main_window, 'tabs'):
+                            for idx in range(main_window.tabs.count()):
+                                widget = main_window.tabs.widget(idx)
+                                if hasattr(widget, 'refresh_all') and widget.__class__.__name__ == 'PortfolioView':
+                                    widget.refresh_all()
+                    except Exception as e:
+                        QMessageBox.critical(self, "記錄交易失敗", f"無法記入交易，領域規則校驗失敗：\n{e}")
+            else:
+                QMessageBox.warning(self, "錯誤", "持倉服務未能在主窗口初始化")
+                
+        elif action == action_add_watchlist:
+            self._add_selected_to_watchlist()
     
     def closeEvent(self, event):
         """關閉事件"""

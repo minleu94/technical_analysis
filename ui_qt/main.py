@@ -81,6 +81,12 @@ class MainWindow(QMainWindow):
             self.broker_flow_service = BrokerFlowService(self.config)
             self.research_session_store = ResearchSessionStore()
             
+            # 初始化持倉與日記服務
+            from app_module.portfolio_service import PortfolioService
+            from app_module.journal_service import JournalService
+            self.portfolio_service = PortfolioService(self.config)
+            self.journal_service = JournalService(self.config)
+            
             # 觀察清單服務初始化（可能失敗，需要特別處理）
             try:
                 self.watchlist_service = WatchlistService(self.config)
@@ -269,6 +275,31 @@ class MainWindow(QMainWindow):
                     print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             else:
                 print("[MainWindow] 觀察清單服務不可用，跳過觀察清單標籤")
+            
+            # 持倉管理標籤 (Portfolio MVP)
+            try:
+                print("[MainWindow] 創建持倉管理視圖...")
+                from ui_qt.views.portfolio_view import PortfolioView
+                portfolio_view = PortfolioView(
+                    portfolio_service=self.portfolio_service,
+                    journal_service=self.journal_service,
+                    recommendation_service=self.recommendation_service,
+                    parent=self
+                )
+                portfolio_tab_index = tabs.addTab(portfolio_view, "持倉管理")
+                print("[MainWindow] 持倉管理視圖創建成功")
+                
+                # 當切換到持倉管理 Tab 時，自動刷新
+                def on_tab_changed_to_portfolio(index):
+                    if index == portfolio_tab_index:
+                        if hasattr(portfolio_view, 'refresh_all'):
+                            portfolio_view.refresh_all()
+                
+                tabs.currentChanged.connect(on_tab_changed_to_portfolio)
+            except Exception as pe:
+                print(f"[MainWindow] 警告：無法創建持倉管理標籤: {pe}")
+                import traceback
+                print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             
             self.setCentralWidget(tabs)
             print("[MainWindow] UI 設置完成")

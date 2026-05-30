@@ -135,3 +135,6 @@ selenium-server-standalone*.jar
 # 臨時下載檔案
 downloads/
 temp_downloads/
+
+# QA Outputs
+output/

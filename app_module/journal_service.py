@@ -69,3 +69,18 @@ class JournalService:
         if linked_id:
             entries = [entry for entry in entries if entry.linked_id == linked_id]
         return sorted(entries, key=lambda entry: entry.created_at, reverse=True)
+
+    def delete_journal_entry(self, journal_id: str) -> bool:
+        """刪除單筆日記紀錄，並重寫儲存"""
+        entries = self.store.load_journal_entries()
+        new_entries = [e for e in entries if e.get('journal_id') != journal_id]
+        if len(new_entries) == len(entries):
+            return False
+        self.store.overwrite_journal_entries(new_entries)
+        logger.info("[JournalService] deleted journal entry %s", journal_id)
+        return True
+
+    def clear_all_journals(self) -> None:
+        """清空所有交易日記筆記"""
+        self.store.overwrite_journal_entries([])
+        logger.info("[JournalService] cleared all journal entries")

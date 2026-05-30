@@ -26,6 +26,22 @@ class PortfolioJsonlStore:
     def load_journal_entries(self) -> List[Dict[str, Any]]:
         return list(self._read_jsonl(self.journal_file))
 
+    def overwrite_trades(self, trades: List[Dict[str, Any]]) -> None:
+        """重寫所有交易紀錄"""
+        self.trades_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.trades_file, "w", encoding="utf-8") as handle:
+            for item in trades:
+                handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True))
+                handle.write("\n")
+
+    def overwrite_journal_entries(self, entries: List[Dict[str, Any]]) -> None:
+        """重寫所有日記紀錄"""
+        self.journal_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.journal_file, "w", encoding="utf-8") as handle:
+            for item in entries:
+                handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True))
+                handle.write("\n")
+
     def _append_jsonl(self, path: Path, item: Dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as handle:

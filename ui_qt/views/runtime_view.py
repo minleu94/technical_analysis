@@ -3,6 +3,8 @@ from PySide6.QtWidgets import (
     QTextEdit, QLabel, QListWidget, QGroupBox
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+from ui_qt.widgets.info_button import InfoButton
 from app_module.dtos.runtime_dtos import RuntimeStateSnapshotDTO, RuntimeHealthSnapshotDTO, RuntimeEventDTO
 
 class RuntimeView(QWidget):
@@ -16,6 +18,20 @@ class RuntimeView(QWidget):
         
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
+        
+        # 標題列（標題 + InfoButton）
+        title_layout = QHBoxLayout()
+        title = QLabel("運行監控站 (Runtime Observatory)")
+        title_font = QFont()
+        title_font.setPointSize(14)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title_layout.addWidget(title)
+        title_layout.addStretch()
+        info_btn = InfoButton("runtime_observatory", self)
+        title_layout.addWidget(info_btn)
+        main_layout.addLayout(title_layout)
+        
         splitter = QSplitter(Qt.Horizontal)
         
         # ---------------------------------------------------------

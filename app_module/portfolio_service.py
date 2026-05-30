@@ -120,6 +120,29 @@ class PortfolioService:
             "note": "Deferred in Phase 4.1 MVP",
         }
 
+    def delete_trade(self, trade_id: str) -> bool:
+        """刪除單筆交易紀錄，並重新驗證與重寫儲存"""
+        trades = self.store.load_trades()
+        new_trades = [t for t in trades if t.get('trade_id') != trade_id]
+        if len(new_trades) == len(trades):
+            return False
+            
+        # 領域安全性校驗：重新計算持倉，防止出現超賣或非法狀態
+        try:
+            domain_trades = [Trade.from_mapping(item) for item in new_trades]
+            rebuild_positions(domain_trades)
+        except Exception as e:
+            raise PortfolioValidationError(f"刪除此交易將導致持倉數據不合法: {str(e)}")
+            
+        self.store.overwrite_trades(new_trades)
+        logger.info("[PortfolioService] deleted trade %s and successfully rebuilt positions", trade_id)
+        return True
+
+    def clear_all_data(self) -> None:
+        """重設/清空所有交易紀錄"""
+        self.store.overwrite_trades([])
+        logger.info("[PortfolioService] cleared all trades data")
+
     def _load_domain_trades(self, portfolio_id: Optional[str] = None) -> List[Trade]:
         trades = [Trade.from_mapping(item) for item in self.store.load_trades()]
         if portfolio_id is not None:
