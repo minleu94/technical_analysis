@@ -23,6 +23,251 @@ class UpdateService:
         self.project_root = Path(__file__).parent.parent
         self.scripts_dir = self.project_root / 'scripts'
         self.status_manifest_file = self.config.meta_data_dir / 'data_status_manifest.json'
+
+    def sync_source_to_sqlite(
+        self,
+        source: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """將既有 CSV 更新結果同步到 SQLite，保留日常 CSV 輸出行為。"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        if not getattr(self.config, 'use_sqlite', False):
+            return {
+                'success': True,
+                'message': 'SQLite 未啟用，略過同步',
+                'source': source,
+                'synced_records': 0,
+                'skipped': True,
+            }
+
+        try:
+            normalized = {
+                'daily': 'daily_data',
+                'daily_data': 'daily_data',
+                'daily_price_files': 'daily_price_files',
+                'market': 'market_index',
+                'market_index': 'market_index',
+                'industry': 'industry_index',
+                'industry_index': 'industry_index',
+                'broker': 'broker_branch',
+                'broker_branch': 'broker_branch',
+            }.get(source)
+            if normalized is None:
+                return {
+                    'success': False,
+                    'message': f'未知 SQLite 同步來源: {source}',
+                    'source': source,
+                    'synced_records': 0,
+                }
+
+            if normalized == 'daily_price_files':
+                df = self._load_daily_price_files_for_sqlite(start_date, end_date)
+                table_name = 'daily_prices'
+                replace_table = False
+                delete_date_keys = True
+            elif normalized == 'daily_data':
+                df = self._load_csv_for_sqlite(self.config.stock_data_file, require_date=True)
+                table_name = 'daily_prices'
+                replace_table = False
+                delete_date_keys = True
+            elif normalized == 'market_index':
+                df = self._load_csv_for_sqlite(self.config.market_index_file, require_date=True)
+                table_name = 'market_indices'
+                replace_table = True
+                delete_date_keys = False
+            elif normalized == 'industry_index':
+                df = self._load_csv_for_sqlite(self.config.industry_index_file, require_date=True)
+                table_name = 'industry_indices'
+                replace_table = True
+                delete_date_keys = False
+            else:
+                df = self._load_broker_branch_csv_for_sqlite()
+                table_name = 'broker_flows'
+                replace_table = True
+                delete_date_keys = False
+
+            if df.empty:
+                return {
+                    'success': True,
+                    'message': f'{source} 沒有可同步的 CSV 資料',
+                    'source': source,
+                    'synced_records': 0,
+                }
+
+            from data_module.db_manager import DBManager
+
+            db = DBManager(self.config)
+            if replace_table:
+                success = self._replace_sqlite_table(db, table_name, df)
+            elif delete_date_keys:
+                success = self._replace_sqlite_dates(db, table_name, df)
+            else:
+                success = db.write_dataframe(table_name, df, if_exists='append')
+
+            if not success:
+                return {
+                    'success': False,
+                    'message': f'{source} 同步 SQLite 失敗',
+                    'source': source,
+                    'synced_records': 0,
+                }
+
+            logger.info("[UpdateService] %s 已同步 SQLite table %s，共 %s 筆", source, table_name, len(df))
+            return {
+                'success': True,
+                'message': f'{source} 已同步 SQLite',
+                'source': source,
+                'table': table_name,
+                'synced_records': int(len(df)),
+            }
+        except Exception as e:
+            logger.exception("[UpdateService] 同步 SQLite 失敗: source=%s", source)
+            return {
+                'success': False,
+                'message': f'{source} 同步 SQLite 時發生錯誤: {e}',
+                'source': source,
+                'synced_records': 0,
+            }
+
+    def _load_csv_for_sqlite(self, path: Path, require_date: bool = False) -> Any:
+        import pandas as pd  # type: ignore[import-untyped]
+
+        if not path.exists():
+            return pd.DataFrame()
+        df = pd.read_csv(path, encoding='utf-8-sig')
+        if df.empty:
+            return df
+        if require_date and '日期' not in df.columns:
+            return pd.DataFrame()
+        return self._normalize_sqlite_dates(df)
+
+    def _load_daily_price_files_for_sqlite(
+        self,
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ) -> Any:
+        import pandas as pd  # type: ignore[import-untyped]
+
+        daily_dir = getattr(self.config, 'daily_price_dir', None)
+        if daily_dir is None or not Path(daily_dir).exists():
+            return pd.DataFrame()
+
+        start_key = self._date_key(start_date) if start_date else None
+        end_key = self._date_key(end_date) if end_date else None
+        frames = []
+        for path in sorted(Path(daily_dir).glob('*.csv')):
+            date_key = path.stem
+            if start_key and date_key < start_key:
+                continue
+            if end_key and date_key > end_key:
+                continue
+            df = pd.read_csv(path, encoding='utf-8-sig')
+            if df.empty:
+                continue
+            if '日期' not in df.columns:
+                df.insert(0, '日期', date_key)
+            frames.append(df)
+
+        if not frames:
+            return pd.DataFrame()
+        return self._normalize_sqlite_dates(pd.concat(frames, ignore_index=True))
+
+    def _load_broker_branch_csv_for_sqlite(self) -> Any:
+        import pandas as pd  # type: ignore[import-untyped]
+
+        broker_dir = getattr(self.config, 'broker_flow_dir', None)
+        if broker_dir is None or not Path(broker_dir).exists():
+            return pd.DataFrame()
+
+        frames = []
+        for path in sorted(Path(broker_dir).glob('*/meta/merged.csv')):
+            df = pd.read_csv(path, encoding='utf-8-sig')
+            if df.empty:
+                continue
+            branch_name = path.parents[1].name
+            rename_map = {
+                'date': '日期',
+                'stock_id': '證券代號',
+                'stock_code': '證券代號',
+                'stock_name': '證券名稱',
+                'branch_name': '分點名稱',
+                'buy_shares': '買進股數',
+                'sell_shares': '賣出股數',
+                'net_buy_shares': '買賣超股數',
+            }
+            df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+            if '分點名稱' not in df.columns:
+                df['分點名稱'] = branch_name
+            frames.append(df)
+
+        if not frames:
+            return pd.DataFrame()
+        df_all = pd.concat(frames, ignore_index=True)
+        keep_cols = ['日期', '分點名稱', '證券代號', '證券名稱', '買進股數', '賣出股數', '買賣超股數']
+        for col in keep_cols:
+            if col not in df_all.columns:
+                df_all[col] = None
+        df_all = df_all[keep_cols]
+        return self._normalize_sqlite_dates(df_all)
+
+    def _normalize_sqlite_dates(self, df: Any) -> Any:
+        if '日期' not in df.columns:
+            return df
+        normalized = df.copy()
+        normalized['日期'] = normalized['日期'].map(lambda value: self._date_key(value))
+        return normalized
+
+    def _date_key(self, value: Any) -> str:
+        import pandas as pd  # type: ignore[import-untyped]
+
+        if value is None:
+            return ''
+        text = str(value).strip()
+        if not text or text.lower() == 'nan':
+            return ''
+        text = text.replace('/', '-')
+        if text.endswith('.0') and text[:-2].isdigit():
+            text = text[:-2]
+        compact = text.replace('-', '')
+        if len(compact) == 8 and compact.isdigit():
+            return compact
+        parsed = pd.to_datetime(text, errors='coerce')
+        if pd.isna(parsed):
+            return compact
+        return parsed.strftime('%Y%m%d')
+
+    def _replace_sqlite_dates(self, db: Any, table_name: str, df: Any) -> bool:
+        if df.empty:
+            return True
+        dates = sorted({str(v) for v in df['日期'].dropna().tolist() if str(v)})
+        if not dates:
+            return False
+
+        try:
+            db.ensure_columns(table_name, list(df.columns))
+            placeholders = ','.join('?' for _ in dates)
+            with db.connect() as conn:
+                conn.execute(f'DELETE FROM {table_name} WHERE 日期 IN ({placeholders});', dates)
+                df.to_sql(table_name, conn, if_exists='append', index=False)
+            return True
+        except Exception:
+            return False
+
+    def _replace_sqlite_table(self, db: Any, table_name: str, df: Any) -> bool:
+        if df.empty:
+            return True
+
+        try:
+            db.ensure_columns(table_name, list(df.columns))
+            with db.connect() as conn:
+                conn.execute(f'DELETE FROM {table_name};')
+                df.to_sql(table_name, conn, if_exists='append', index=False)
+            return True
+        except Exception:
+            return False
     
     def update_daily(
         self, 

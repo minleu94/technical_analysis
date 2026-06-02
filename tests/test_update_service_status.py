@@ -10,12 +10,15 @@ def _config(tmp_path):
     meta_dir = data_root / "meta_data"
     technical_dir = data_root / "technical_analysis"
     broker_flow_dir = data_root / "broker_flow"
+    daily_price_dir = data_root / "daily_price"
     meta_dir.mkdir(parents=True)
     technical_dir.mkdir(parents=True)
     broker_flow_dir.mkdir(parents=True)
+    daily_price_dir.mkdir(parents=True)
 
     return SimpleNamespace(
         data_dir=data_root,
+        daily_price_dir=daily_price_dir,
         meta_data_dir=meta_dir,
         technical_dir=technical_dir,
         log_dir=data_root / "logs",
@@ -168,6 +171,80 @@ def test_check_source_detail_uses_sqlite_when_enabled(tmp_path):
     assert detail["latest_date"] == "2026-05-29"
     assert detail["total_records"] == 1
     assert detail["file_count"] == 1
+
+
+def test_sync_daily_price_files_to_sqlite_upserts_only_csv_dates(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe("daily_prices", pd.DataFrame({
+        "日期": ["20260528", "20260529"],
+        "證券代號": ["2330", "2330"],
+        "收盤價": [900.0, 901.0],
+    }), if_exists="append")
+    pd.DataFrame({
+        "日期": ["2026-05-29"],
+        "證券代號": ["2330"],
+        "證券名稱": ["台積電"],
+        "收盤價": [999.0],
+    }).to_csv(config.daily_price_dir / "20260529.csv", index=False, encoding="utf-8-sig")
+
+    result = UpdateService(config).sync_source_to_sqlite("daily_price_files")
+
+    assert result["success"] is True
+    synced = db.execute_query("SELECT 日期, 證券代號, 收盤價 FROM daily_prices ORDER BY 日期;")
+    assert synced.to_dict(orient="records") == [
+        {"日期": "20260528", "證券代號": "2330", "收盤價": 900.0},
+        {"日期": "20260529", "證券代號": "2330", "收盤價": 999.0},
+    ]
+
+
+def test_sync_market_and_industry_csv_to_sqlite_replaces_tables(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe("market_indices", pd.DataFrame({
+        "日期": ["20260528"],
+        "指數名稱": ["加權指數"],
+        "收盤指數": [21000.0],
+    }), if_exists="append")
+    pd.DataFrame({
+        "日期": ["2026-05-29"],
+        "指數名稱": ["加權指數"],
+        "收盤指數": [21100.0],
+    }).to_csv(config.market_index_file, index=False, encoding="utf-8-sig")
+    pd.DataFrame({
+        "日期": ["2026-05-29"],
+        "指數名稱": ["半導體"],
+        "收盤指數": [500.0],
+    }).to_csv(config.industry_index_file, index=False, encoding="utf-8-sig")
+
+    service = UpdateService(config)
+    market_result = service.sync_source_to_sqlite("market_index")
+    industry_result = service.sync_source_to_sqlite("industry_index")
+
+    assert market_result["success"] is True
+    assert industry_result["success"] is True
+    market = db.execute_query("SELECT 日期, 指數名稱, 收盤指數 FROM market_indices;")
+    industry = db.execute_query("SELECT 日期, 指數名稱, 收盤指數 FROM industry_indices;")
+    assert market.to_dict(orient="records") == [
+        {"日期": "20260529", "指數名稱": "加權指數", "收盤指數": 21100.0}
+    ]
+    assert industry.to_dict(orient="records") == [
+        {"日期": "20260529", "指數名稱": "半導體", "收盤指數": 500.0}
+    ]
+    with db.connect() as conn:
+        market_pk_cols = [
+            row["name"]
+            for row in sorted(
+                conn.execute("PRAGMA table_info(market_indices);").fetchall(),
+                key=lambda row: row["pk"],
+            )
+            if row["pk"]
+        ]
+    assert market_pk_cols == ["指數名稱", "日期"]
 
 
 def test_check_data_status_does_not_repair_or_write_broker_registry(tmp_path):

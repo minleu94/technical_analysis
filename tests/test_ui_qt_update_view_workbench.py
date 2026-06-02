@@ -78,6 +78,10 @@ class FakeUpdateService:
             progress_callback("technical indicators ok", 100)
         return {"success": True, "message": "technical ok"}
 
+    def sync_source_to_sqlite(self, source, start_date=None, end_date=None):
+        self.calls.append(("sync_source_to_sqlite", source, start_date, end_date))
+        return {"success": True, "message": f"{source} sync ok"}
+
 
 def app():
     instance = QApplication.instance()
@@ -127,14 +131,25 @@ def test_safe_update_all_runs_conservative_sequence():
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
+        "sync_source_to_sqlite",
         "update_market",
+        "sync_source_to_sqlite",
         "update_industry",
+        "sync_source_to_sqlite",
         "update_broker_branch",
         "merge_daily_data",
+        "sync_source_to_sqlite",
         "merge_broker_branch_data",
+        "sync_source_to_sqlite",
         "calculate_technical_indicators",
         "check_data_overview",
     ]
+    daily_call = next(call for call in view.update_service.calls if call[0] == "update_daily")
+    assert ("sync_source_to_sqlite", "daily_price_files", daily_call[1], daily_call[2]) in view.update_service.calls
+    assert ("sync_source_to_sqlite", "market_index", None, None) in view.update_service.calls
+    assert ("sync_source_to_sqlite", "industry_index", None, None) in view.update_service.calls
+    assert ("sync_source_to_sqlite", "daily_data", None, None) in view.update_service.calls
+    assert ("sync_source_to_sqlite", "broker_branch", None, None) in view.update_service.calls
     assert view.update_service.calls[-2] == (
         "calculate_technical_indicators",
         None,
@@ -193,5 +208,6 @@ def test_safe_update_all_stops_after_failed_core_step():
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
+        "sync_source_to_sqlite",
         "update_market",
     ]

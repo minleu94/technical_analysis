@@ -124,6 +124,7 @@ settings.local.py
 *_local.json
 *_local.yaml
 *_local.yml
+scripts/sqlite_explorer_local.py
 
 # ChromeDriver 和 Selenium
 chromedriver

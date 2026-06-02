@@ -544,11 +544,16 @@ class UpdateView(QWidget):
         steps = [
             ("檢查資料狀態", 0, lambda: self._get_overview_status()),
             ("每日股價更新", 12, lambda: self.update_service.update_daily(start_date, end_date)),
+            ("同步每日股價至 SQLite", 18, lambda: self.update_service.sync_source_to_sqlite("daily_price_files", start_date, end_date)),
             ("大盤指數更新", 24, lambda: self.update_service.update_market(start_date, end_date)),
+            ("同步大盤指數至 SQLite", 30, lambda: self.update_service.sync_source_to_sqlite("market_index")),
             ("產業指數更新", 36, lambda: self.update_service.update_industry(start_date, end_date)),
+            ("同步產業指數至 SQLite", 42, lambda: self.update_service.sync_source_to_sqlite("industry_index")),
             ("券商分點更新", 48, lambda: self.update_service.update_broker_branch(start_date, end_date)),
             ("合併每日資料", 62, lambda: self.update_service.merge_daily_data(force_all=False)),
+            ("同步合併每日資料至 SQLite", 68, lambda: self.update_service.sync_source_to_sqlite("daily_data")),
             ("合併券商分點", 74, lambda: self.update_service.merge_broker_branch_data()),
+            ("同步券商分點至 SQLite", 80, lambda: self.update_service.sync_source_to_sqlite("broker_branch")),
             (
                 "增量計算技術指標",
                 88,

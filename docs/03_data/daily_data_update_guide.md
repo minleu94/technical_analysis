@@ -101,6 +101,18 @@ python scripts/merge_daily_data.py
 
 ## 完整更新流程
 
+### UI 安全更新（推薦）
+
+日常維護建議優先使用 Qt UI 的「數據更新」Tab →「安全更新所有數據」。此流程會保留既有 CSV 輸出，同時在成功步驟後補做 SQLite 同步：
+
+1. 更新 `daily_price/YYYYMMDD.csv` 後，同步到 `daily_prices`。
+2. 更新 `market_index.csv` / `industry_index.csv` 後，同步到 `market_indices` / `industry_indices`。
+3. 合併 `stock_data_whole.csv` 後，再以合併結果同步 `daily_prices`。
+4. 合併券商分點 `merged.csv` 後，同步到 `broker_flows`。
+5. 技術指標計算完成後，同步到 `technical_indicators`。
+
+同步方向固定為 CSV → SQLite，不會用 SQLite 反向覆蓋 CSV。若其中任一同步步驟失敗，安全更新會停止並顯示失敗步驟，避免 UI 狀態與資料庫內容繼續分岔。
+
 ### 標準流程（推薦）
 
 ```bash

@@ -1,6 +1,6 @@
 # SQLite 儲存與雙軌相容架構指南 (SQLite Storage & Dual-Track Guide)
 
-> **版本**：v1.0 (2026-05-30)  
+> **版本**：v1.1 (2026-06-02)  
 > **系統定位**：說明本系統如何利用「CSV 冷備份」與「SQLite 高效快取」雙軌架構，在保證 100% 數據安全性的同時，實現 322 倍的效能飛躍。
 
 ---
@@ -38,18 +38,23 @@ graph TD
 當您在 UI 中點擊 **「安全更新所有數據」** 時，系統底層會自動編排並依序完成以下流程，無需手動干預：
 
 ```
-[1] 狀態檢查 (毫秒秒開) ──> [2] 爬取新 CSV 數據 ──> [3] 合併 YYYYMMDD CSV
-                                                                 │
-[6] SQLite 指標批量寫入 <── [5] 重算衍生指標 (1分51秒) <── [4] 增量寫入 SQLite
+[1] 狀態檢查 (毫秒秒開) ──> [2] 爬取新 CSV 數據 ──> [3] CSV 後同步 SQLite
+                                      │                          │
+[7] SQLite 指標批量寫入 <── [6] 重算衍生指標 <── [5] 合併 CSV 後再同步 SQLite
 ```
 
 1. **極速狀態檢查**：優先對 SQLite 執行 `COUNT(*)` 聚合，幾毫秒內在 UI 呈報現有數據起始與結束日期；SQLite 查詢不可用時才降級為 CSV 狀態檢查。
 2. **爬取最新 CSV 資料**：爬蟲去抓取最新日期的個股 CSV、大盤、產業及分點檔案。
-3. **安全合併每日 CSV**：將最新的單日 CSV 資料，追加合併入 `stock_data_whole.csv`。
-4. **增量寫入 SQLite**：自動偵測 `stock_data_whole.csv` 中最新多出的日期，快速將其增量寫入 SQLite 的 `daily_prices` 表中。
-5. **衍生技術指標重新計算**：
+3. **CSV 後同步 SQLite（Phase 1）**：每日股價單日 CSV 成功產生後，會先同步到 `daily_prices`；大盤與產業 CSV 成功更新後，會同步到 `market_indices` 與 `industry_indices`。
+4. **安全合併每日 CSV**：將最新的單日 CSV 資料，追加合併入 `stock_data_whole.csv`。
+5. **合併後再同步 SQLite**：`stock_data_whole.csv` 成功合併後，會以 CSV 內出現的日期範圍更新 `daily_prices`；券商分點 `merged.csv` 成功合併後，會同步到 `broker_flows`。同步是 CSV → SQLite 單向，不會用 SQLite 反向覆蓋 CSV。
+6. **衍生技術指標重新計算**：
    * 運行 `calculate_technical_indicators.py`，僅花費約 1 分多鐘全量重算 1,157 檔股票的衍生指標（如 KD、MACD、MA、RSI）。
    * 指標計算完成後，**直接以批量寫入 (bulk insert)** 的方式同步更新 SQLite 的 `technical_indicators` 表中。
+
+### 2.1 Phase 1 同步邊界
+
+目前安全更新採「補同步，不改使用習慣」：CSV 仍是日常更新與人工檢查可見的落地格式，SQLite 則在每個成功步驟後跟進同步，讓 UI 狀態、回測與後續 DB-first 查詢可取得最新資料。這個階段不移除 CSV，也不把 CSV 匯出改成手動；若 SQLite 同步失敗，安全更新會在該同步步驟停止並回報失敗來源。
 
 ---
 
