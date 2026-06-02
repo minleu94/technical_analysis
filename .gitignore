@@ -1,6 +1,7 @@
 # 日誌檔案
 *.log
 logs/
+log/
 tech_test.log
 technical_calculation.log
 
