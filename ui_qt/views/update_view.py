@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QGroupBox, QProgressBar,
     QTextEdit, QRadioButton, QButtonGroup,
     QDateEdit, QMessageBox, QFormLayout, QSpinBox, QLineEdit,
-    QListWidget, QStackedWidget
+    QListWidget, QStackedWidget, QFrame
 )
 from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont
@@ -18,6 +18,120 @@ from datetime import datetime, timedelta
 from ui_qt.workers.task_worker import TaskWorker, ProgressTaskWorker
 from app_module.update_service import UpdateService
 from ui_qt.widgets.info_button import InfoButton
+
+
+class StatusCard(QGroupBox):
+    """自訂美化數據狀態卡片，與 QTextEdit 介面相容"""
+    def __init__(self, title: str, icon_str: str = "📊", parent=None):
+        super().__init__("", parent)
+        self.title = title
+        self.icon_str = icon_str
+        self._raw_text = ""
+        
+        # 設置現代卡片樣式
+        self.setStyleSheet("""
+            QGroupBox {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                margin-top: 0px;
+                padding: 0px;
+            }
+            QGroupBox:hover {
+                border: 1px solid #3b82f6;
+                background-color: #f8fafc;
+            }
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(6)
+        
+        # 頂部：圖示 + 標題 + 狀態燈
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(6)
+        
+        self.title_label = QLabel(f"<span style='font-size:12px; font-weight:bold; color:#1e293b;'>{icon_str} {title}</span>")
+        self.indicator_label = QLabel("<span style='font-size:13px; color:#94a3b8;'>⚪</span>")
+        
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch()
+        header_layout.addWidget(self.indicator_label)
+        layout.addLayout(header_layout)
+        
+        # 中間最新日期
+        self.date_label = QLabel("<span style='color:#64748b;'>最新日期：</span><b style='color:#334155;'>--</b>")
+        self.date_label.setStyleSheet("font-size: 11px;")
+        layout.addWidget(self.date_label)
+        
+        # 總筆數
+        self.records_label = QLabel("<span style='color:#64748b;'>總記錄數：</span><b style='color:#334155;'>--</b>")
+        self.records_label.setStyleSheet("font-size: 11px;")
+        layout.addWidget(self.records_label)
+        
+        # 額外資訊（例如技術指標數量）
+        self.extra_label = QLabel("")
+        self.extra_label.setStyleSheet("color:#64748b; font-size: 11px;")
+        self.extra_label.setVisible(False)
+        layout.addWidget(self.extra_label)
+        
+    def setPlainText(self, text: str):
+        """相容 QTextEdit.setPlainText，用於解析並更新卡片 UI"""
+        self._raw_text = text
+        
+        latest_date = "未知"
+        total_records = "--"
+        status_str = "unknown"
+        extra_info = ""
+        
+        lines = text.split('\n')
+        for line in lines:
+            if "最新日期" in line:
+                latest_date = line.split("：")[-1].strip()
+            elif "總記錄數" in line:
+                total_records = line.split("：")[-1].strip()
+            elif "狀態" in line:
+                status_str = line.split("：")[-1].strip()
+            elif "指標檔數" in line:
+                extra_info = line.strip()
+                
+        self.date_label.setText(f"<span style='color:#64748b;'>最新日期：</span><b style='color:#0f172a;'>{latest_date}</b>")
+        self.records_label.setText(f"<span style='color:#64748b;'>總記錄數：</span><b style='color:#0f172a;'>{total_records}</b>")
+        
+        if extra_info:
+            self.extra_label.setText(f"<span style='color:#64748b;'>{extra_info}</span>")
+            self.extra_label.setVisible(True)
+        else:
+            self.extra_label.setVisible(False)
+            
+        # 燈號判定
+        if "點擊" in text or "尚未檢查" in text:
+            self.indicator_label.setText("<span style='font-size:13px; color:#94a3b8;'>⚪</span>") # 未檢查
+        elif "錯誤" in text or "失敗" in text or "異常" in text:
+            self.indicator_label.setText("<span style='font-size:13px; color:#ef4444;'>🔴</span>") # 異常
+        elif "success" in status_str or "正常" in status_str or "最新" in text:
+            self.indicator_label.setText("<span style='font-size:13px; color:#22c55e;'>🟢</span>") # 正常/最新
+        else:
+            self.indicator_label.setText("<span style='font-size:13px; color:#eab308;'>🟡</span>") # 待更新
+            
+    def toPlainText(self) -> str:
+        """相容 QTextEdit.toPlainText"""
+        return self._raw_text
+
+    def setReadOnly(self, ro: bool):
+        """相容 QTextEdit.setReadOnly"""
+        pass
+        
+    def setMaximumHeight(self, h: int):
+        """相容 QTextEdit.setMaximumHeight"""
+        pass
+        
+    def clear(self):
+        """清除卡片"""
+        self.date_label.setText("最新日期：--")
+        self.records_label.setText("總記錄數：--")
+        self.extra_label.setVisible(False)
+        self.indicator_label.setText("⚪")
 
 
 class UpdateView(QWidget):
@@ -42,15 +156,69 @@ class UpdateView(QWidget):
     
     def _setup_ui(self):
         """設置 UI"""
+        # 最外層主布局
         main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(15)
+        main_layout.setSpacing(12)
         main_layout.setContentsMargins(15, 15, 15, 15)
 
-        # Workbench navigation shell. The existing controls stay below for now,
-        # while the stack gives the page a source-oriented operations model.
+        # 1. 隱藏的 Radio Buttons（保留底層代碼的屬性相容性，使之不受改動影響）
+        self.hidden_widget = QWidget()
+        hidden_layout = QVBoxLayout(self.hidden_widget)
+        self.update_type_group = QButtonGroup(self)
+        self.daily_radio = QRadioButton("每日股票數據")
+        self.market_radio = QRadioButton("大盤指數數據")
+        self.industry_radio = QRadioButton("產業指數數據")
+        self.broker_branch_radio = QRadioButton("券商分點資料")
+        self.update_type_group.addButton(self.daily_radio, 0)
+        self.update_type_group.addButton(self.market_radio, 1)
+        self.update_type_group.addButton(self.industry_radio, 2)
+        self.update_type_group.addButton(self.broker_branch_radio, 3)
+        self.daily_radio.setChecked(True)
+        hidden_layout.addWidget(self.daily_radio)
+        hidden_layout.addWidget(self.market_radio)
+        hidden_layout.addWidget(self.industry_radio)
+        hidden_layout.addWidget(self.broker_branch_radio)
+        self.hidden_widget.setVisible(False)
+        main_layout.addWidget(self.hidden_widget)
+
+        # 2. 隱藏的全域日期變數（使底層一鍵更新/單項更新抓取 UI 輸入的邏輯直接生效）
+        self.end_date = QDateEdit()
+        self.end_date.setDate(QDate.currentDate())
+        self.lookback_days = QSpinBox()
+        self.lookback_days.setRange(1, 365)
+        self.lookback_days.setValue(10)
+
+        # 3. 左右分欄的導覽區域
         workbench_layout = QHBoxLayout()
+        workbench_layout.setSpacing(15)
+
+        # 左側導覽列
         self.nav_list = QListWidget()
-        self.nav_list.setFixedWidth(150)
+        self.nav_list.setFixedWidth(160)
+        self.nav_list.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                background-color: #f8fafc;
+                padding: 5px;
+            }
+            QListWidget::item {
+                height: 38px;
+                border-radius: 6px;
+                padding-left: 10px;
+                margin-bottom: 2px;
+                color: #334155;
+            }
+            QListWidget::item:hover {
+                background-color: #cbd5e1;
+            }
+            QListWidget::item:selected {
+                background-color: #3b82f6;
+                color: white;
+                font-weight: bold;
+            }
+        """)
+
         self._nav_items = [
             ("all", "全部資料"),
             ("daily", "每日股價"),
@@ -63,8 +231,114 @@ class UpdateView(QWidget):
         for _, label in self._nav_items:
             self.nav_list.addItem(label)
 
+        # 右側堆疊視窗
         self.content_stack = QStackedWidget()
-        for key, label in self._nav_items:
+        
+        # 建立看板（全部資料）頁面
+        all_page = QWidget()
+        all_layout = QVBoxLayout(all_page)
+        all_layout.setSpacing(15)
+        all_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 頂部標題列
+        title_layout = QHBoxLayout()
+        title = QLabel("數據更新看板")
+        title_font = QFont()
+        title_font.setPointSize(14)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #1e293b;")
+        title_layout.addWidget(title)
+        title_layout.addStretch()
+        info_btn = InfoButton("update", self)
+        title_layout.addWidget(info_btn)
+        all_layout.addLayout(title_layout)
+
+        # 看板說明
+        desc_label = QLabel("此處提供整個系統的資料狀態概覽。您可以點選下方一鍵安全更新來同步最新資料，或點選左側進行個別資料維護。")
+        desc_label.setStyleSheet("color: #64748b; font-size: 12px;")
+        desc_label.setWordWrap(True)
+        all_layout.addWidget(desc_label)
+
+        # 數據狀態卡片網格（精美 StatusCard 呈現，取代原先 status_group 內 5 個 TextEdit）
+        # 我們將它們宣告為 class member，使底層 _on_status_checked 能直接使用
+        self.daily_status_text = StatusCard("每日股票數據", "📊", self)
+        self.market_status_text = StatusCard("大盤指數數據", "🧭", self)
+        self.industry_status_text = StatusCard("產業指數數據", "🏢", self)
+        self.broker_branch_status_text = StatusCard("券商分點數據", "🤝", self)
+        self.technical_status_text = StatusCard("技術指標數據", "📈", self)
+
+        # 卡片佈局
+        cards_layout = QHBoxLayout()
+        cards_layout.setSpacing(10)
+        cards_layout.addWidget(self.daily_status_text)
+        cards_layout.addWidget(self.market_status_text)
+        cards_layout.addWidget(self.industry_status_text)
+        cards_layout.addWidget(self.broker_branch_status_text)
+        cards_layout.addWidget(self.technical_status_text)
+        all_layout.addLayout(cards_layout)
+
+        # 一鍵安全更新與輔助按鈕
+        actions_layout = QHBoxLayout()
+        self.safe_update_all_btn = QPushButton("安全更新所有數據")
+        self.safe_update_all_btn.setMinimumHeight(45)
+        self.safe_update_all_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3b82f6, stop:1 #2563eb);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px 24px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #60a5fa, stop:1 #3b82f6);
+            }
+            QPushButton:pressed {
+                background: #1d4ed8;
+            }
+            QPushButton:disabled {
+                background-color: #cbd5e1;
+                color: #94a3b8;
+            }
+        """)
+        self.safe_update_all_btn.clicked.connect(self._execute_safe_update_all)
+
+        self.check_status_btn = QPushButton("🔍 檢查數據狀態")
+        self.check_status_btn.setMinimumHeight(45)
+        self.check_status_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f1f5f9;
+                color: #334155;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 10px 20px;
+            }
+            QPushButton:hover {
+                background-color: #e2e8f0;
+            }
+            QPushButton:pressed {
+                background-color: #cbd5e1;
+            }
+            QPushButton:disabled {
+                background-color: #f8fafc;
+                color: #cbd5e1;
+            }
+        """)
+        self.check_status_btn.clicked.connect(self._check_data_status)
+
+        actions_layout.addWidget(self.safe_update_all_btn, stretch=2)
+        actions_layout.addWidget(self.check_status_btn, stretch=1)
+        all_layout.addLayout(actions_layout)
+        all_layout.addStretch()
+        
+        self.content_stack.addWidget(all_page)
+
+        # 建立其他分頁
+        for key, label in self._nav_items[1:]:
             if key == "db_inspector":
                 config = getattr(self.update_service, "config", None)
                 if config is None:
@@ -83,315 +357,443 @@ class UpdateView(QWidget):
 
             page = QWidget()
             page_layout = QVBoxLayout(page)
-            page_label = QLabel(label)
-            page_layout.addWidget(page_label)
-            if key != "all":
-                self._add_source_tab_content(page_layout, key)
+            page_layout.setContentsMargins(0, 0, 0, 0)
+            page_layout.setSpacing(15)
+            
+            # 分頁標題
+            sub_title_layout = QHBoxLayout()
+            sub_title = QLabel(label)
+            sub_title_font = QFont()
+            sub_title_font.setPointSize(13)
+            sub_title_font.setBold(True)
+            sub_title.setFont(sub_title_font)
+            sub_title.setStyleSheet("color: #1e293b;")
+            sub_title_layout.addWidget(sub_title)
+            sub_title_layout.addStretch()
+            page_layout.addLayout(sub_title_layout)
+
+            self._add_source_tab_content(page_layout, key)
             self.content_stack.addWidget(page)
 
-        self.safe_update_all_btn = QPushButton("安全更新所有數據")
-        self.safe_update_all_btn.setMinimumHeight(40)
-        self.safe_update_all_btn.clicked.connect(self._execute_safe_update_all)
-        self.content_stack.widget(0).layout().addWidget(self.safe_update_all_btn)
         self.nav_list.currentRowChanged.connect(self._on_nav_changed)
+        
         workbench_layout.addWidget(self.nav_list)
         workbench_layout.addWidget(self.content_stack, stretch=1)
         main_layout.addLayout(workbench_layout)
-        self.nav_list.setCurrentRow(0)
-        main_layout = self.content_stack.widget(0).layout()
         
-        # 標題列（標題 + InfoButton）
-        title_layout = QHBoxLayout()
-        title = QLabel("數據更新")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        title_layout.addWidget(title)
-        title_layout.addStretch()
-        info_btn = InfoButton("update", self)
-        title_layout.addWidget(info_btn)
-        main_layout.addLayout(title_layout)
+        # 4. 底部全域共享的進度條與日誌 console
+        main_layout.addWidget(QLabel("")) # 微小間隔
         
-        # 數據狀態面板
-        status_group = QGroupBox("數據狀態")
-        status_layout = QHBoxLayout()  # 改為水平布局，四個區塊並排顯示
+        # 進度文字與進度條
+        self.progress_label = QLabel("")
+        self.progress_label.setStyleSheet("color: #475569; font-size: 12px;")
+        self.progress_label.setVisible(False)
+        main_layout.addWidget(self.progress_label)
         
-        # 每日股票數據區塊
-        daily_group = QGroupBox("每日股票數據")
-        daily_layout = QVBoxLayout()
-        self.daily_status_text = QTextEdit()
-        self.daily_status_text.setReadOnly(True)
-        self.daily_status_text.setMaximumHeight(120)  # 固定高度，不需要滾動
-        daily_layout.addWidget(self.daily_status_text)
-        daily_group.setLayout(daily_layout)
-        status_layout.addWidget(daily_group, stretch=1)
-        
-        # 大盤指數數據區塊
-        market_group = QGroupBox("大盤指數數據")
-        market_layout = QVBoxLayout()
-        self.market_status_text = QTextEdit()
-        self.market_status_text.setReadOnly(True)
-        self.market_status_text.setMaximumHeight(120)
-        market_layout.addWidget(self.market_status_text)
-        market_group.setLayout(market_layout)
-        status_layout.addWidget(market_group, stretch=1)
-        
-        # 產業指數數據區塊
-        industry_group = QGroupBox("產業指數數據")
-        industry_layout = QVBoxLayout()
-        self.industry_status_text = QTextEdit()
-        self.industry_status_text.setReadOnly(True)
-        self.industry_status_text.setMaximumHeight(120)
-        industry_layout.addWidget(self.industry_status_text)
-        industry_group.setLayout(industry_layout)
-        status_layout.addWidget(industry_group, stretch=1)
-        
-        # 券商分點數據區塊
-        broker_branch_group = QGroupBox("券商分點數據")
-        broker_branch_layout = QVBoxLayout()
-        self.broker_branch_status_text = QTextEdit()
-        self.broker_branch_status_text.setReadOnly(True)
-        self.broker_branch_status_text.setMaximumHeight(120)
-        broker_branch_layout.addWidget(self.broker_branch_status_text)
-        broker_branch_group.setLayout(broker_branch_layout)
-        status_layout.addWidget(broker_branch_group, stretch=1)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                text-align: center;
+                background-color: #f1f5f9;
+                height: 18px;
+            }
+            QProgressBar::chunk {
+                background-color: #3b82f6;
+                border-radius: 5px;
+            }
+        """)
+        main_layout.addWidget(self.progress_bar)
 
-        technical_group = QGroupBox("技術指標數據")
-        technical_layout = QVBoxLayout()
-        self.technical_status_text = QTextEdit()
-        self.technical_status_text.setReadOnly(True)
-        self.technical_status_text.setMaximumHeight(120)
-        technical_layout.addWidget(self.technical_status_text)
-        technical_group.setLayout(technical_layout)
-        status_layout.addWidget(technical_group, stretch=1)
+        # 日誌 Console
+        log_group = QGroupBox("日誌主控台")
+        log_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                margin-top: 15px;
+                font-weight: bold;
+                color: #475569;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        log_layout = QVBoxLayout(log_group)
+        log_layout.setContentsMargins(10, 15, 10, 10)
         
-        status_group.setLayout(status_layout)
-        main_layout.addWidget(status_group)
-        
-        # 初始化四個區塊的顯示
+        # 日誌輔助工具列 (如清除日誌)
+        log_toolbar = QHBoxLayout()
+        log_toolbar.addStretch()
+        clear_log_btn = QPushButton("🧹 清除日誌")
+        clear_log_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #64748b;
+                border: none;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                color: #ef4444;
+            }
+        """)
+        clear_log_btn.clicked.connect(lambda: self.log_text.clear())
+        log_toolbar.addWidget(clear_log_btn)
+        log_layout.addLayout(log_toolbar)
+
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #0f172a;
+                color: #cbd5e1;
+                font-family: 'Consolas', 'Fira Code', 'Courier New', monospace;
+                font-size: 11px;
+                border: 1px solid #1e293b;
+                border-radius: 6px;
+            }
+        """)
+        log_layout.addWidget(self.log_text)
+        log_group.setMaximumHeight(180)  # 固定主控台高度
+        main_layout.addWidget(log_group)
+
+        # 初始化四個區塊的顯示 (卡片)
         self.daily_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.market_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.industry_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.broker_branch_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.technical_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
-        
-        # 更新配置面板
-        config_group = QGroupBox("更新配置")
-        config_layout = QVBoxLayout()
-        config_layout.setSpacing(8)  # 減少配置面板的間距
-        
-        # 更新類型選擇
-        type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("更新類型:"))
-        self.update_type_group = QButtonGroup(self)
-        
-        self.daily_radio = QRadioButton("每日股票數據")
-        self.daily_radio.setChecked(True)
-        self.update_type_group.addButton(self.daily_radio, 0)
-        type_layout.addWidget(self.daily_radio)
-        
-        self.market_radio = QRadioButton("大盤指數數據")
-        self.update_type_group.addButton(self.market_radio, 1)
-        type_layout.addWidget(self.market_radio)
-        
-        self.industry_radio = QRadioButton("產業指數數據")
-        self.update_type_group.addButton(self.industry_radio, 2)
-        type_layout.addWidget(self.industry_radio)
-        
-        self.broker_branch_radio = QRadioButton("券商分點資料")
-        self.update_type_group.addButton(self.broker_branch_radio, 3)
-        type_layout.addWidget(self.broker_branch_radio)
-        
-        type_layout.addStretch()
-        config_layout.addLayout(type_layout)
-        
-        # 查找缺失日期範圍（用於檢查哪些日期需要下載）
-        date_layout = QFormLayout()
-        date_layout.setSpacing(5)  # 減少表單布局的間距
-        
-        # 查找範圍說明
-        date_info = QLabel("查找缺失日期範圍（用於檢查需要下載的日期）")
-        date_info.setStyleSheet("color: #888; font-size: 13px; padding: 0px;")
-        date_layout.addRow("", date_info)
-        
-        # 結束日期（默認為今天）
-        self.end_date = QDateEdit()
-        self.end_date.setDate(QDate.currentDate())
-        self.end_date.setCalendarPopup(True)
-        self.end_date.setDisplayFormat("yyyy-MM-dd")
-        date_layout.addRow("結束日期:", self.end_date)
-        
-        # 查找範圍（天數）
-        self.lookback_days = QSpinBox()
-        self.lookback_days.setMinimum(1)
-        self.lookback_days.setMaximum(365)
-        self.lookback_days.setValue(10)  # 預設改為10天
-        self.lookback_days.setSuffix(" 天")
-        lookback_layout = QHBoxLayout()
-        lookback_layout.addWidget(QLabel("查找範圍:"))
-        lookback_layout.addWidget(QLabel("最近"))
-        lookback_layout.addWidget(self.lookback_days)
-        lookback_layout.addStretch()
-        date_layout.addRow("", lookback_layout)
-        
-        # 說明文字
-        note_label = QLabel("說明：系統會在指定範圍內查找缺失的日期並下載。合併時會合併 daily_price/ 目錄中的所有數據（不受範圍限制）。")
-        note_label.setStyleSheet("color: #666; font-size: 13px; padding: 0px; margin: 0px;")
-        note_label.setWordWrap(True)
-        date_layout.addRow("", note_label)
-        
-        config_layout.addLayout(date_layout)
-        config_group.setLayout(config_layout)
-        main_layout.addWidget(config_group)
-        
-        # 操作按鈕
-        button_layout = QHBoxLayout()
-        
-        self.update_btn = QPushButton("開始更新")
-        self.update_btn.setMinimumHeight(40)
-        self.update_btn.clicked.connect(self._execute_update)
-        button_layout.addWidget(self.update_btn)
-        
-        self.merge_btn = QPushButton("合併每日數據")
-        self.merge_btn.setMinimumHeight(40)
-        self.merge_btn.clicked.connect(self._execute_merge)
-        button_layout.addWidget(self.merge_btn)
-        
-        self.force_merge_btn = QPushButton("強制重新合併")
-        self.force_merge_btn.setMinimumHeight(40)
-        self.force_merge_btn.setStyleSheet("QPushButton { background-color: #ff6b6b; }")
-        self.force_merge_btn.clicked.connect(self._execute_force_merge)
-        button_layout.addWidget(self.force_merge_btn)
-        
-        self.merge_broker_branch_btn = QPushButton("合併券商分點資料")
-        self.merge_broker_branch_btn.setMinimumHeight(40)
-        self.merge_broker_branch_btn.clicked.connect(self._execute_merge_broker_branch)
-        button_layout.addWidget(self.merge_broker_branch_btn)
-        
-        self.check_status_btn = QPushButton("檢查數據狀態")
-        self.check_status_btn.setMinimumHeight(40)
-        self.check_status_btn.clicked.connect(self._check_data_status)
-        button_layout.addWidget(self.check_status_btn)
-        
-        button_layout.addStretch()
-        main_layout.addLayout(button_layout)
-        
-        # 技術指標計算配置面板
-        tech_indicator_group = QGroupBox("技術指標計算")
-        tech_layout = QVBoxLayout()
-        tech_layout.setSpacing(8)
-        
-        # 計算模式選擇
-        tech_mode_layout = QHBoxLayout()
-        tech_mode_layout.addWidget(QLabel("計算模式:"))
-        self.tech_mode_group = QButtonGroup(self)
-        
-        self.tech_incremental_radio = QRadioButton("增量更新（只計算新數據）")
-        self.tech_incremental_radio.setChecked(True)
-        self.tech_mode_group.addButton(self.tech_incremental_radio, 0)
-        tech_mode_layout.addWidget(self.tech_incremental_radio)
-        
-        self.tech_force_all_radio = QRadioButton("強制全量更新（重新計算所有數據）")
-        self.tech_mode_group.addButton(self.tech_force_all_radio, 1)
-        tech_mode_layout.addWidget(self.tech_force_all_radio)
-        
-        tech_mode_layout.addStretch()
-        tech_layout.addLayout(tech_mode_layout)
-        
-        # 股票選擇（可選）
-        stock_layout = QFormLayout()
-        stock_layout.setSpacing(5)
-        
-        self.tech_stock_input = QLineEdit()
-        self.tech_stock_input.setPlaceholderText("留空則處理所有股票，例如：2330")
-        stock_layout.addRow("股票代號（可選）:", self.tech_stock_input)
-        
-        tech_layout.addLayout(stock_layout)
-        
-        # 說明文字
-        tech_note = QLabel("說明：增量更新會自動檢測最新指標日期，只計算新數據。強制全量更新會重新計算所有股票的技術指標。")
-        tech_note.setStyleSheet("color: #666; font-size: 13px; padding: 0px; margin: 0px;")
-        tech_note.setWordWrap(True)
-        tech_layout.addWidget(tech_note)
-        
-        tech_indicator_group.setLayout(tech_layout)
-        main_layout.addWidget(tech_indicator_group)
-        
-        # 技術指標計算按鈕
-        tech_button_layout = QHBoxLayout()
-        
-        self.calculate_tech_btn = QPushButton("計算技術指標")
-        self.calculate_tech_btn.setMinimumHeight(40)
-        self.calculate_tech_btn.clicked.connect(self._execute_calculate_technical_indicators)
-        tech_button_layout.addWidget(self.calculate_tech_btn)
-        
-        tech_button_layout.addStretch()
-        main_layout.addLayout(tech_button_layout)
-        
-        # 進度條
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
-        main_layout.addWidget(self.progress_bar)
-        
-        # 進度文本
-        self.progress_label = QLabel("")
-        self.progress_label.setVisible(False)
-        main_layout.addWidget(self.progress_label)
-        
-        # 日誌輸出
-        log_group = QGroupBox("更新日誌")
-        log_layout = QVBoxLayout()
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        log_layout.addWidget(self.log_text)
-        log_group.setLayout(log_layout)
-        main_layout.addWidget(log_group, stretch=2)  # 添加stretch讓日誌區域也能隨視窗縮放
+
+        self.nav_list.setCurrentRow(0)
 
     def _add_source_tab_content(self, layout: QVBoxLayout, key: str):
-        """為各資料來源頁放入日常操作入口"""
+        """為個別資料源維護分頁建立專屬操作與手動配置界面"""
         descriptions = {
-            "daily": "檢查 raw daily_price 與 meta_data/stock_data_whole.csv 的整合狀態。",
-            "market": "檢查並更新 meta_data/market_index.csv。",
-            "industry": "檢查並更新 meta_data/industry_index.csv。",
-            "broker_branch": "檢查券商分點 registry、merged.csv 與尚未合併的 daily 檔。",
-            "technical": "檢查 technical_analysis 與 all_stocks_data.csv 的指標狀態。",
+            "daily": "檢查與維護每日股價原始資料與 SQLite 對應數據。此處支援增量合併與 Danger Zone 強制重新合併。",
+            "market": "檢查與更新加權指數大盤數據。此處會將大盤資料同步儲存至資料庫的 market_indices 表。",
+            "industry": "檢查與更新產業指數數據，可將各產業分類的歷史指數同步至 industry_indices 表。",
+            "broker_branch": "維護 MoneyDJ 的 6 大追蹤分點之買賣超資料，並可執行券商分點合併至 SQLite broker_flows 表。",
+            "technical": "增量或全量重新計算個股的技術指標（KD, MACD, RSI 等），並高速批量儲存至資料庫中。",
         }
-        layout.addWidget(QLabel(descriptions.get(key, "檢查此資料來源的更新狀態。")))
+        
+        desc_label = QLabel(descriptions.get(key, "檢查此資料來源的更新狀態。"))
+        desc_label.setStyleSheet("color: #64748b; font-size: 12px;")
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
 
-        button_layout = QHBoxLayout()
-        check_btn = QPushButton("檢查狀態")
+        # 針對需要日期設定的分頁（daily, market, industry, broker_branch）
+        if key in {"daily", "market", "industry", "broker_branch"}:
+            date_group = QGroupBox("手動下載日期範圍")
+            date_group.setStyleSheet("""
+                QGroupBox {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    color: #475569;
+                    font-weight: bold;
+                }
+            """)
+            date_layout = QFormLayout(date_group)
+            date_layout.setSpacing(8)
+            
+            end_date_edit = QDateEdit()
+            end_date_edit.setDate(QDate.currentDate())
+            end_date_edit.setCalendarPopup(True)
+            end_date_edit.setDisplayFormat("yyyy-MM-dd")
+            
+            lookback_spin = QSpinBox()
+            lookback_spin.setRange(1, 365)
+            lookback_spin.setValue(10)
+            lookback_spin.setSuffix(" 天")
+            
+            date_layout.addRow("結束日期:", end_date_edit)
+            date_layout.addRow("最近範圍:", lookback_spin)
+            layout.addWidget(date_group)
+            
+            setattr(self, f"{key}_end_date", end_date_edit)
+            setattr(self, f"{key}_lookback", lookback_spin)
+            
+            end_date_edit.dateChanged.connect(lambda _d, k=key: self._sync_dates(k))
+            lookback_spin.valueChanged.connect(lambda _v, k=key: self._sync_dates(k))
+            
+            if key == "daily":
+                self.end_date = end_date_edit
+                self.lookback_days = lookback_spin
+
+        # 針對技術指標計算分頁
+        if key == "technical":
+            tech_group = QGroupBox("技術指標計算配置")
+            tech_group.setStyleSheet("""
+                QGroupBox {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    color: #475569;
+                    font-weight: bold;
+                }
+            """)
+            tech_layout = QVBoxLayout(tech_group)
+            tech_layout.setSpacing(8)
+            
+            mode_layout = QHBoxLayout()
+            mode_layout.addWidget(QLabel("計算模式:"))
+            
+            self.tech_incremental_radio = QRadioButton("增量更新（只計算新數據）")
+            self.tech_incremental_radio.setChecked(True)
+            mode_layout.addWidget(self.tech_incremental_radio)
+            
+            self.tech_force_all_radio = QRadioButton("強制全量更新（重新計算所有數據）")
+            mode_layout.addWidget(self.tech_force_all_radio)
+            mode_layout.addStretch()
+            tech_layout.addLayout(mode_layout)
+            
+            stock_form = QFormLayout()
+            self.tech_stock_input = QLineEdit()
+            self.tech_stock_input.setPlaceholderText("留空則處理所有股票，例如：2330")
+            stock_form.addRow("股票代號（可選）:", self.tech_stock_input)
+            tech_layout.addLayout(stock_form)
+            
+            layout.addWidget(tech_group)
+
+        # 操作按鈕面板
+        op_group = QGroupBox("數據操作")
+        op_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 10px;
+                color: #475569;
+                font-weight: bold;
+            }
+        """)
+        button_layout = QHBoxLayout(op_group)
+        button_layout.setSpacing(10)
+
+        check_btn = QPushButton("🔍 檢查此資料源狀態")
+        check_btn.setMinimumHeight(35)
+        check_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #475569;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #f1f5f9;
+            }
+        """)
         check_btn.clicked.connect(lambda _checked=False, source=key: self._check_source_detail(source, force=True))
         button_layout.addWidget(check_btn)
 
         if key in {"daily", "market", "industry", "broker_branch"}:
-            update_btn = QPushButton("更新此資料源")
-            update_btn.clicked.connect(self._execute_update)
+            update_btn = QPushButton("📥 手動下載此資料源")
+            update_btn.setMinimumHeight(35)
+            update_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #3b82f6;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    padding: 6px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #2563eb;
+                }
+            """)
+            update_btn.clicked.connect(lambda _checked=False, k=key: self._dispatch_update(k))
             button_layout.addWidget(update_btn)
 
         if key == "daily":
-            merge_btn = QPushButton("合併每日資料")
-            merge_btn.clicked.connect(self._execute_merge)
-            button_layout.addWidget(merge_btn)
+            self.merge_btn = QPushButton("⚙️ 合併每日股價")
+            self.merge_btn.setMinimumHeight(35)
+            self.merge_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    padding: 6px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #059669;
+                }
+            """)
+            self.merge_btn.clicked.connect(self._execute_merge)
+            button_layout.addWidget(self.merge_btn)
         elif key == "broker_branch":
-            merge_broker_btn = QPushButton("合併券商分點")
-            merge_broker_btn.clicked.connect(self._execute_merge_broker_branch)
-            button_layout.addWidget(merge_broker_btn)
+            self.merge_broker_branch_btn = QPushButton("⚙️ 合併券商分點")
+            self.merge_broker_branch_btn.setMinimumHeight(35)
+            self.merge_broker_branch_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    padding: 6px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #059669;
+                }
+            """)
+            self.merge_broker_branch_btn.clicked.connect(self._execute_merge_broker_branch)
+            button_layout.addWidget(self.merge_broker_branch_btn)
         elif key == "technical":
-            calc_btn = QPushButton("智慧增量計算")
-            calc_btn.clicked.connect(self._execute_calculate_technical_indicators)
-            button_layout.addWidget(calc_btn)
+            self.calculate_tech_btn = QPushButton("🚀 計算技術指標")
+            self.calculate_tech_btn.setMinimumHeight(35)
+            self.calculate_tech_btn.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #10b981, stop:1 #059669);
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    padding: 6px 16px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #34d399, stop:1 #10b981);
+                }
+            """)
+            self.calculate_tech_btn.clicked.connect(self._execute_calculate_technical_indicators)
+            button_layout.addWidget(self.calculate_tech_btn)
 
-        # 各資料來源 subtab 新增「匯出 CSV」按鈕
-        export_btn = QPushButton("匯出 CSV")
+        export_btn = QPushButton("📤 匯出 CSV 備案")
+        export_btn.setMinimumHeight(35)
+        export_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #475569;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #f1f5f9;
+                border-color: #94a3b8;
+            }
+        """)
         export_btn.clicked.connect(lambda _checked=False, source=key: self._execute_export_csv(source))
         button_layout.addWidget(export_btn)
-
         button_layout.addStretch()
-        layout.addLayout(button_layout)
+        layout.addWidget(op_group)
+
+        if key == "daily":
+            danger_group = QGroupBox("⚠️ 高風險操作區 (Danger Zone)")
+            danger_group.setStyleSheet("""
+                QGroupBox {
+                    border: 1px solid #ef4444;
+                    border-radius: 8px;
+                    margin-top: 15px;
+                    padding-top: 10px;
+                    font-weight: bold;
+                    color: #ef4444;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 3px 0 3px;
+                }
+            """)
+            danger_layout = QVBoxLayout(danger_group)
+            danger_layout.setSpacing(6)
+            
+            danger_desc = QLabel("注意：強制重新合併將完全忽略現有合併結果，並重新讀取 daily_price/ 底下的所有 CSV 檔案寫入資料庫。\n此操作耗時較長，通常僅在資料庫損毀或修復資料時使用。")
+            danger_desc.setStyleSheet("color: #64748b; font-size: 11px;")
+            danger_desc.setWordWrap(True)
+            
+            self.force_merge_btn = QPushButton("⚠️ 強制重新合併所有每日股價")
+            self.force_merge_btn.setMinimumHeight(35)
+            self.force_merge_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #ef4444;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    padding: 6px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #dc2626;
+                }
+                QPushButton:pressed {
+                    background-color: #991b1b;
+                }
+            """)
+            self.force_merge_btn.clicked.connect(self._execute_force_merge)
+            
+            danger_layout.addWidget(danger_desc)
+            danger_layout.addWidget(self.force_merge_btn)
+            layout.addWidget(danger_group)
+
         layout.addStretch()
+
+    def _sync_dates(self, source_name: str):
+        """同步不同分頁的日期範圍元件"""
+        try:
+            end_date_widget = getattr(self, f"{source_name}_end_date", None)
+            lookback_widget = getattr(self, f"{source_name}_lookback", None)
+            
+            if not end_date_widget or not lookback_widget:
+                return
+                
+            target_date = end_date_widget.date()
+            target_days = lookback_widget.value()
+            
+            # 同步全域變數 (供底層業務代碼使用)
+            self.end_date.setDate(target_date)
+            self.lookback_days.setValue(target_days)
+            
+            # 同步其他分頁的元件
+            for name in ["daily", "market", "industry", "broker_branch"]:
+                if name == source_name:
+                    continue
+                
+                other_date = getattr(self, f"{name}_end_date", None)
+                other_days = getattr(self, f"{name}_lookback", None)
+                
+                if other_date:
+                    other_date.blockSignals(True)
+                    other_date.setDate(target_date)
+                    other_date.blockSignals(False)
+                    
+                if other_days:
+                    other_days.blockSignals(True)
+                    other_days.setValue(target_days)
+                    other_days.blockSignals(False)
+        except Exception:
+            pass
+
+    def _dispatch_update(self, key: str):
+        """代理各分頁的開始下載更新，並設定對應的 Radio 按鈕與日期"""
+        radio_map = {
+            "daily": self.daily_radio,
+            "market": self.market_radio,
+            "industry": self.industry_radio,
+            "broker_branch": self.broker_branch_radio
+        }
+        radio_btn = radio_map.get(key)
+        if radio_btn:
+            radio_btn.setChecked(True)
+            
+        end_date_widget = getattr(self, f"{key}_end_date", None)
+        lookback_widget = getattr(self, f"{key}_lookback", None)
+        if end_date_widget and lookback_widget:
+            self.end_date.setDate(end_date_widget.date())
+            self.lookback_days.setValue(lookback_widget.value())
+            
+        self._execute_update()
 
     def _on_nav_changed(self, row: int):
         """切換工作台頁面並同步單項更新類型"""
@@ -399,6 +801,7 @@ class UpdateView(QWidget):
             return
         self.content_stack.setCurrentIndex(row)
         key = self._nav_items[row][0]
+        
         if key == "daily":
             self.daily_radio.setChecked(True)
         elif key == "market":
@@ -408,7 +811,6 @@ class UpdateView(QWidget):
         elif key == "broker_branch":
             self.broker_branch_radio.setChecked(True)
         elif key == "db_inspector":
-            # 獲取 db_inspector widget 並刷新資料表下拉選單
             inspector_widget = self.content_stack.widget(row)
             if hasattr(inspector_widget, "refresh_tables"):
                 inspector_widget.refresh_tables()

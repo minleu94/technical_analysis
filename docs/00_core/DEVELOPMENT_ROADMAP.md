@@ -595,10 +595,12 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
   * ✅ `tests/test_portfolio_mvp.py`：Portfolio MVP 核心測試通過
   * ⏳ `ui_qt/views/portfolio_view.py`：尚未建立
   * ⏳ Recommendation / Backtest → Portfolio 建立持倉：尚未整合
-* ✅ **數據更新工作台重整**：已完成（2026-05-20）
-  * ✅ `ui_qt/views/update_view.py` 改為左側導覽工作台，保留每日股價、大盤、產業、券商分點、技術指標與進階維護功能
-  * ✅ 新增「安全更新所有數據」日常維護入口，依序執行狀態檢查、資料更新、合併與技術指標計算；任一步驟失敗即停止並回報失敗步驟
-  * ✅ 新增 `tests/test_ui_qt_update_view_workbench.py`，覆蓋導覽、按鈕、成功序列與失敗中止
+* ✅ **數據更新工作台重整與視覺/架構優化**：已完成（2026-06-03）
+  * ✅ 將全部資料主分頁升級為「數據大看板 (Dashboard)」，以 StatusCard (圓角、軟陰影、🟢/🟡/🔴/⚪ 四色狀態指示燈) 展示數據概覽，與原 QTextEdit 接口相容度 100%。
+  * ✅ 實現手動操作與進階配置（日期範圍、下載、增量合併、技術指標計算配置）「解耦歸位」至個別資料源維護分頁，並在每日股價分頁以 Danger Zone 封裝強制合併按鈕。
+  * ✅ 將 QProgressBar、進度 Label、Terminal 控制台日誌（Consolas 等寬 11px 字型、深色背景、清除按鈕）移至最外層佈局的最下方，實現分頁切換時日誌與進度的全域共享。
+  * ✅ 實作日期範圍聯動同步（blockSignals 避免訊號遞迴）與 `_dispatch_update()` 自適應代理更新 RadioButtons，對原 Service 業務邏輯相容度 100%。
+  * ✅ 新增與維護 `tests/test_ui_qt_update_view_workbench.py` (9/9 passed) 與 `scripts/qa_validate_update_tab.py` (21 passed, 0 failed)。
   * ✅ 更新 `docs/02_features/UI_FEATURES_DOCUMENTATION.md`、`docs/02_features/USER_GUIDE.md`、`docs/07_guides/QUICK_START.md`
 * ✅ **Codex / Agent 指引對齊**：已完成（2026-05-20）
   * ✅ 新增 repo 根目錄 `AGENTS.md`，作為 Codex 自動讀取入口
@@ -607,7 +609,14 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ---
 
-### 本週 Done（Phase 3 CSV 手動匯出與更新流程優化 + 主力流向視覺重構與 Bug 修復 + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
+### 本週 Done（Phase 3 CSV 手動匯出與更新流程優化 + 主力流向視覺重構與 Bug 修復 + 數據更新工作台重構與視覺/架構優化 + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
+
+* ✅ **數據更新工作台 (UpdateView) 視覺重構與架構優化** (2026-06-03)：
+  * **主看板與 StatusCard**：升級為極簡看板 Dashboard，移去所有手動控制與雜亂按鈕，改以精美 `StatusCard`（繼承自 `QGroupBox`、相容於 `QTextEdit`）與四色指示燈（🟢/🟡/🔴/⚪）展示數據概覽。
+  * **進階手動操作歸位**：將下載日期、天數設定、手動下載/合併、指標計算配置分拆歸位至個別專屬分頁（每日股價、大盤、產業、券商分點、技術指標），並在每日股價分頁以紅框 Danger Zone 包裹強制重新合併按鈕。
+  * **日誌控制台與進度共享**：進度條與 Terminal 日誌框移至全域佈局最下方，實作切換分頁時進度與日誌的全域共享。日誌框採用深色背景、Consolas 11px 等寬字型與「🧹 清除日誌」工具按鈕。
+  * **日期聯動與委派**：透過 `blockSignals` 與 `_sync_dates()` 實作全分頁日期聯動同步；手動更新按鈕經 `_dispatch_update()` 自適應設定隱藏的對應 RadioButton 狀態，實現對原 Service 業務代碼的 100% 相容。
+  * **自動與 QA 測試 100% 綠燈**：通過 mypy 無新增錯誤，`tests/test_ui_qt_update_view_workbench.py` (9 passed) 與 `scripts/qa_validate_update_tab.py` (21 passed, 0 failed) 順利通過。
 
 * ✅ **主力流向 (Smart Money Flow) 視覺重構與排版優化** (2026-06-03)：
   * **UI 左右分欄**：重構為左右分欄布局（左側主表 65%，右側詳情 35%），並新增選中股雷達摘要卡片與 `explainable_reasons` 原因解析。
@@ -981,4 +990,13 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 - **玻璃擬態卡片中文化**：調整頂部小卡片標題（市場趨勢、熱度、多空個股數、異常警示）並調大字體。
 - **Sparkline 與 ToolTip 優化**：使用 `QLinearGradient` 渲染漸層 Sparklines，固定抽取最近 5 筆交易記錄，並實作跨 Cell 的 ToolTip 懸浮提示。
 - **Bug 修復與排序**：修復 Header 點擊排序無反應問題；修復偏空個股數為 0 與熱度 100% 的 Bug。
+
+## 2026-06-03 數據更新工作台 (UpdateView) 視覺重構與架構優化成果
+
+- **主看板與 StatusCard**：將「全部資料」頁面重構為極簡數據看板，移除了所有手動配置與雜亂按鈕。設計了 StatusCard 元件（圓角、Hover 漸變與陰影效果），整合四色狀態指示燈（🟢/🟡/🔴/⚪）顯示最新日期與筆數，與原 `QTextEdit` 介面相容度 100%。
+- **進階與手動操作配置歸位**：解耦原有界面，將下載日期範圍、手動下載與合併按鈕搬移至個別專屬分頁（每日股價、大盤、產業、券商分點、技術指標）。每日股價分頁中，以紅色警示邊框封裝了 **Danger Zone (高風險區)** 存放強制重新合併按鈕。
+- **全域底部日誌 Console 與進度條共享**：將 QProgressBar、進度 Label 以及 Terminal 日誌輸出框移至最外層佈局的最下方，實作分頁切換時日誌與進度的全域共享。Console 採用深色背景、Consolas 等寬 11px 字型與微型清除按鈕。
+- **日期聯動同步與委派更新**：在 `UpdateView` 中實作了日期聯動邏輯，任何分頁修改日期皆會透過 blockSignals 同步更新其他分頁元件。手動更新按鈕透過 `_dispatch_update()` 自適應設定隱藏的對應 RadioButton 狀態，實現 UI 與原 Service 業務代碼的無縫相容。
+- **自動與 QA 測試 100% 綠燈**：通過 mypy 無新增錯誤，`tests/test_ui_qt_update_view_workbench.py` (9 passed) 與 `scripts/qa_validate_update_tab.py` (21 passed, 0 failed) 順利通過。
+
 
