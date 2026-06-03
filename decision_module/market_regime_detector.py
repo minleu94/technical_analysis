@@ -291,16 +291,42 @@ class MarketRegimeDetector:
         """
         # 讀取大盤數據
         market_file = self.config.market_index_file
-        if not market_file.exists():
-            return {
-                'regime': 'Trend',  # 預設
-                'confidence': 0.5,
-                'details': {'error': '找不到大盤數據文件'}
-            }
+        df = None
         
-        try:
-            df = pd.read_csv(market_file, encoding='utf-8-sig')
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                sql_df = db.execute_query("SELECT * FROM market_indices ORDER BY 日期 ASC;")
+                if not sql_df.empty:
+                    df = sql_df
+                    # 將日期格式從 YYYYMMDD 轉回 YYYY-MM-DD 保持與原 CSV 一致
+                    df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
+                    # 重命名收盤指數為收盤價以相容後續欄位取值
+                    if '收盤指數' in df.columns:
+                        df = df.rename(columns={'收盤指數': '收盤價'})
+                    logger.info("成功從 SQLite 載入大盤指數數據進行狀態檢測")
+            except Exception as sql_err:
+                logger.warning(f"從 SQLite 載入大盤指數數據失敗: {sql_err}，將降級讀取 CSV")
+                
+        if df is None:
+            if not market_file.exists():
+                return {
+                    'regime': 'Trend',  # 預設
+                    'confidence': 0.5,
+                    'details': {'error': '找不到大盤數據文件'}
+                }
+            try:
+                df = pd.read_csv(market_file, encoding='utf-8-sig')
+            except Exception as e:
+                logger.error(f"讀取文件失敗: {market_file}, 錯誤: {e}")
+                return {
+                    'regime': 'Trend',
+                    'confidence': 0.5,
+                    'details': {'error': str(e)}
+                }
             
+        try:
             # 處理日期欄位
             date_col = None
             for col in ['Date', '日期', 'date']:

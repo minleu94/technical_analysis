@@ -234,10 +234,28 @@ class UpdateService:
         compact = text.replace('-', '')
         if len(compact) == 8 and compact.isdigit():
             return compact
-        parsed = pd.to_datetime(text, errors='coerce')
-        if pd.isna(parsed):
+
+        # 快速解析常見格式，避免 pd.to_datetime 造成的嚴重效能開銷
+        try:
+            parts = text.split('-')
+            if len(parts) == 3:
+                y, m, d = parts
+                if len(y) == 4 and y.isdigit() and m.isdigit() and d.isdigit():
+                    return f"{int(y):04d}{int(m):02d}{int(d):02d}"
+                # 民國年解析：如果 y 長度小於 4 且大於 0
+                if 0 < len(y) < 4 and y.isdigit() and m.isdigit() and d.isdigit():
+                    year = int(y) + 1911
+                    return f"{year:04d}{int(m):02d}{int(d):02d}"
+        except Exception:
+            pass
+
+        try:
+            parsed = pd.to_datetime(text, errors='coerce')
+            if pd.isna(parsed):
+                return compact
+            return parsed.strftime('%Y%m%d')
+        except Exception:
             return compact
-        return parsed.strftime('%Y%m%d')
 
     def _replace_sqlite_dates(self, db: Any, table_name: str, df: Any) -> bool:
         if df.empty:
@@ -1920,11 +1938,30 @@ class UpdateService:
             
             # 讀取股票數據
             import pandas as pd
-            stock_data = pd.read_csv(
-                self.config.stock_data_file,
-                dtype={'證券代號': str},
-                low_memory=False
-            )
+            if getattr(self.config, 'use_sqlite', False):
+                try:
+                    from data_module.db_manager import DBManager
+                    db = DBManager(self.config)
+                    logger.info("優先從 SQLite 載入價格數據進行技術指標計算...")
+                    stock_data = db.execute_query("SELECT * FROM daily_prices ORDER BY 日期 ASC, 證券代號 ASC;")
+                    if not stock_data.empty:
+                        # 確保日期與代號為字串型態，與後續邏輯一致
+                        stock_data['日期'] = stock_data['日期'].astype(str)
+                        stock_data['證券代號'] = stock_data['證券代號'].astype(str).str.strip()
+                        # 將欄位型態轉換以相容原有業務邏輯
+                        numeric_cols = ['成交股數', '成交筆數', '成交金額', '開盤價', '最高價', '最低價', '收盤價', '漲跌價差',
+                                        '最後揭示買價', '最後揭示買量', '最後揭示賣價', '最後揭示賣量', '本益比']
+                        for col in numeric_cols:
+                            if col in stock_data.columns:
+                                stock_data[col] = pd.to_numeric(stock_data[col], errors='coerce')
+                    else:
+                        logger.warning("SQLite daily_prices 表為空，降級讀取 CSV...")
+                        stock_data = pd.read_csv(self.config.stock_data_file, dtype={'證券代號': str}, low_memory=False)
+                except Exception as sql_err:
+                    logger.warning(f"從 SQLite 載入價格數據失敗: {sql_err}，降級讀取 CSV...")
+                    stock_data = pd.read_csv(self.config.stock_data_file, dtype={'證券代號': str}, low_memory=False)
+            else:
+                stock_data = pd.read_csv(self.config.stock_data_file, dtype={'證券代號': str}, low_memory=False)
             
             # 只保留正常股票（一般為4位數）
             stock_data = stock_data[stock_data['證券代號'].str.match(r'^\d{4}$')]

@@ -46,7 +46,31 @@ class IndustryMapper:
             print(f"找不到 companies.csv: {companies_file}")
     
     def _load_industry_index(self):
-        """載入 industry_index.csv"""
+        """載入 industry_index 數據"""
+        # 優先嘗試從 SQLite 資料庫載入
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                sql_df = db.execute_query("SELECT * FROM industry_indices ORDER BY 日期 ASC;")
+                if not sql_df.empty:
+                    self.industry_index_df = sql_df
+                    # 轉換日期格式 (SQLite 儲存為 YYYYMMDD 整數或字串，需要轉換為與原本 CSV 載入相同的 Timestamp 對象)
+                    self.industry_index_df['日期'] = pd.to_datetime(
+                        self.industry_index_df['日期'].astype(str),
+                        format='%Y%m%d',
+                        errors='coerce'
+                    )
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"成功從 SQLite 載入 industry_indices，共 {len(self.industry_index_df)} 筆")
+                    return
+            except Exception as sql_err:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"從 SQLite 載入 industry_indices 失敗: {sql_err}，將降級讀取 CSV")
+
+        # Fallback 到 CSV 讀取
         industry_file = self.config.industry_index_file
         if not industry_file.exists():
             # 嘗試其他路徑

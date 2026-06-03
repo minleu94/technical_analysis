@@ -615,8 +615,29 @@ class WatchlistView(QWidget):
         """
         stock_name_map = {}
         
-        if not self.config:
+        if not self.config or not stock_codes:
             return stock_name_map
+            
+        stock_codes_str = [str(code).strip() for code in stock_codes]
+        
+        # 優先從 SQLite 資料庫載入
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                # 使用 SQL 查詢
+                placeholders = ','.join(['?'] * len(stock_codes_str))
+                sql = f"SELECT DISTINCT 證券代號, 證券名稱 FROM daily_prices WHERE 證券代號 IN ({placeholders});"
+                sql_df = db.execute_query(sql, params=tuple(stock_codes_str))
+                if not sql_df.empty:
+                    for _, row in sql_df.iterrows():
+                        code = str(row['證券代號']).strip()
+                        name = str(row['證券名稱']).strip() if pd.notna(row['證券名稱']) else code
+                        if code and name:
+                            stock_name_map[code] = name
+                    return stock_name_map
+            except Exception as sql_err:
+                print(f"[WatchlistView] 從 SQLite 查詢股票名稱失敗: {sql_err}，將降級讀取 CSV")
         
         try:
             # 從 stock_data_file 讀取數據
@@ -636,7 +657,6 @@ class WatchlistView(QWidget):
             df['證券代號'] = df['證券代號'].astype(str).str.strip()
             
             # 過濾出需要的股票代號
-            stock_codes_str = [str(code).strip() for code in stock_codes]
             df_filtered = df[df['證券代號'].isin(stock_codes_str)]
             
             # 建立映射（取最新的記錄，如果有多筆）

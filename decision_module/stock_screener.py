@@ -51,48 +51,108 @@ class StockScreener:
                 - DataFrame: 強勢股列表，包含評分和排名
                 - universe_count: Universe 股票數量（有效數據的股票數）
         """
-        # 掃描 technical_analysis 目錄下的所有 *_indicators.csv 文件
-        technical_dir = self.config.technical_dir
-        if not technical_dir.exists():
-            logger.warning(f"錯誤：技術指標目錄不存在: {technical_dir}")
-            return pd.DataFrame()
-        
-        # 查找所有指標文件
-        indicator_files = list(technical_dir.glob("*_indicators.csv"))
-        
-        if len(indicator_files) == 0:
-            logger.warning(f"錯誤：在 {technical_dir} 中找不到任何指標文件")
-            return pd.DataFrame()
-        
-        # 計算日期範圍
         today = datetime.now()
         if period == 'day':
-            # 本日：與前一個交易日比較，需要至少2筆數據
-            # 增加日期範圍到30天，確保能找到足夠的歷史數據（考慮週末和假日）
             days_back = 30
         else:  # week
-            # 近5個交易日：與5個交易日之前比較
-            # 增加日期範圍到60天，確保能找到足夠的歷史數據（考慮週末和假日）
             days_back = 60
-        
         start_date = today - timedelta(days=days_back)
         
-        # 調試信息
-        logger.info(f"[StockScreener] period={period}, days_back={days_back}, start_date={start_date.strftime('%Y-%m-%d')}")
-        logger.info(f"[StockScreener] 找到 {len(indicator_files)} 個指標文件")
+        # 優先嘗試從 SQLite 資料庫載入
+        grouped_list = []
+        db_success = False
+        
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                max_date_df = db.execute_query("SELECT MAX(日期) as max_date FROM daily_prices;")
+                if not max_date_df.empty and max_date_df['max_date'].iloc[0]:
+                    max_date_str = str(max_date_df['max_date'].iloc[0])
+                    latest_date = datetime.strptime(max_date_str, '%Y%m%d')
+                    
+                    if period == 'day':
+                        days_back_db = 45
+                    else:
+                        days_back_db = 90
+                    
+                    start_date_db = latest_date - timedelta(days=days_back_db)
+                    start_date_str = start_date_db.strftime('%Y%m%d')
+                    
+                    # 更新 start_date 給後續 python 過濾使用
+                    start_date = start_date_db
+                    
+                    # 執行 JOIN 查詢，因為 technical_indicators 不一定有全部股票，使用 LEFT JOIN
+                    sql = """
+                        SELECT p.*, t.*
+                        FROM daily_prices p
+                        LEFT JOIN technical_indicators t ON p.證券代號 = t.證券代號 AND p.日期 = t.日期
+                        WHERE p.日期 >= ?
+                        ORDER BY p.日期 ASC;
+                    """
+                    sql_df = db.execute_query(sql, params=(start_date_str,))
+                    if not sql_df.empty:
+                        # 去除因 * 導致的重複欄位（如 日期, 證券代號）
+                        sql_df = sql_df.loc[:, ~sql_df.columns.duplicated()]
+                        
+                        # 轉換日期格式
+                        sql_df['日期'] = pd.to_datetime(sql_df['日期'].astype(str), format='%Y%m%d', errors='coerce')
+                        sql_df = sql_df[sql_df['日期'].notna()]
+                        
+                        sql_df['證券代號'] = sql_df['證券代號'].astype(str).str.strip()
+                        
+                        # 轉換型態
+                        numeric_cols = ['收盤價', '開盤價', '最高價', '最低價', '成交股數', '成交金額']
+                        for col in numeric_cols:
+                            if col in sql_df.columns:
+                                sql_df[col] = pd.to_numeric(sql_df[col], errors='coerce')
+                        
+                        # 按證券代號分組
+                        for stock_code, g_df in sql_df.groupby('證券代號'):
+                            if len(stock_code) == 4 and stock_code.isdigit():
+                                grouped_list.append((stock_code, g_df.sort_values('日期')))
+                                
+                        db_success = True
+                        logger.info(f"成功從 SQLite 載入 {len(grouped_list)} 支股票數據進行強勢股篩選")
+            except Exception as db_err:
+                logger.warning(f"從 SQLite 載入篩選數據失敗: {db_err}，將降級為 CSV 掃描")
+                
+        data_source = []
+        indicator_files = []
+        if db_success:
+            data_source = grouped_list
+        else:
+            # 掃描 technical_analysis 目錄下的所有 *_indicators.csv 文件
+            technical_dir = self.config.technical_dir
+            if not technical_dir.exists():
+                logger.warning(f"錯誤：技術指標目錄不存在: {technical_dir}")
+                return pd.DataFrame()
+            
+            # 查找所有指標文件
+            indicator_files = list(technical_dir.glob("*_indicators.csv"))
+            if len(indicator_files) == 0:
+                logger.warning(f"錯誤：在 {technical_dir} 中找不到任何指標文件")
+                return pd.DataFrame()
+                
+            for indicator_file in indicator_files:
+                stock_code = indicator_file.stem.replace('_indicators', '')
+                data_source.append((stock_code, indicator_file))
+                
+            logger.info(f"[StockScreener] period={period}, days_back={days_back}, start_date={start_date.strftime('%Y-%m-%d')}")
+            logger.info(f"[StockScreener] 找到 {len(indicator_files)} 個指標文件")
         
         all_stocks_data = []
         skipped_count = 0
         processed_count = 0
         
-        # 讀取每個股票的指標文件
-        for indicator_file in indicator_files:
+        # 讀取每個股票的指標數據
+        for stock_code, data_item in data_source:
             try:
-                # 從文件名提取股票代號（例如：0050_indicators.csv -> 0050）
-                stock_code = indicator_file.stem.replace('_indicators', '')
-                
                 # 讀取數據
-                df = pd.read_csv(indicator_file, encoding='utf-8-sig')
+                if isinstance(data_item, pd.DataFrame):
+                    df = data_item.copy()
+                else:
+                    df = pd.read_csv(data_item, encoding='utf-8-sig')
                 
                 # 轉換日期格式（支持多種格式）
                 if '日期' in df.columns:
@@ -226,9 +286,6 @@ class StockScreener:
                     if volume_ma > 0:
                         volume_ratio = latest_volume / volume_ma
                         # 使用 log1p 壓縮量變（避免極端值）
-                        # 當 volume_ratio >= 1 時，volume_ratio - 1 >= 0，log1p 正常
-                        # 當 volume_ratio < 1 時，volume_ratio - 1 < 0，但 log1p 可以處理（結果為負）
-                        # 避免除以零：確保 volume_ratio - 1 不會導致問題
                         try:
                             with np.errstate(divide='ignore', invalid='ignore'):
                                 volume_change = np.log1p(max(0, volume_ratio - 1)) * 100
@@ -246,9 +303,6 @@ class StockScreener:
                         continue
                 
                 # 計算標準化分數（使用 z-score 標準化）
-                # 先收集所有股票的價格變化和量變，然後標準化
-                # 這裡先使用簡單的壓縮版本，後續會改進為真正的 z-score
-                # 使用 log1p 壓縮量變，避免極端值影響
                 vol_factor = np.log1p(max(0, volume_ratio - 1))
                 
                 # 標準化評分（改進版：使用壓縮後的量變）
@@ -303,15 +357,17 @@ class StockScreener:
                     logger.debug(f"[StockScreener] 成功處理 {stock_code}: 漲幅={price_change:.2f}%, 評分={score:.2f}")
                 
             except Exception as e:
-                # 記錄錯誤以便除錯，然後跳過無法讀取的文件
-                logger.debug(f"[StockScreener] 跳過 {indicator_file.name}: {e}")
+                # 記錄錯誤以便除錯，然後跳過
+                item_name = data_item if isinstance(data_item, pd.DataFrame) else (data_item.name if hasattr(data_item, 'name') else str(data_item))
+                logger.debug(f"[StockScreener] 跳過 {item_name}: {e}")
                 continue
         
-        logger.info(f"[StockScreener] 處理完成: 成功={processed_count}, 跳過={skipped_count}, 總文件數={len(indicator_files)}")
+        total_source_count = len(grouped_list) if db_success else len(indicator_files)
+        logger.info(f"[StockScreener] 處理完成: 成功={processed_count}, 跳過={skipped_count}, 總股票/文件數={total_source_count}")
         
         if len(all_stocks_data) == 0:
             logger.warning(f"[StockScreener] 警告: 沒有找到任何強勢股數據")
-            return pd.DataFrame()
+            return pd.DataFrame(), 0
         
         # 轉換為DataFrame
         result_df = pd.DataFrame(all_stocks_data)
@@ -337,26 +393,19 @@ class StockScreener:
             
             # 重新計算標準化分數
             result_df['評分'] = price_z * 0.6 + vol_z * 0.4
-        # 如果只有一檔股票，使用原始分數（已在上面計算）
         
         # 保存所有股票的總數（用於計算 Percentile）
         total_stocks = len(result_df)
         
         # 將評分轉換為 Percentile（基於所有股票的分布）
-        # 計算百分位數（0-100，越高越好）
         if total_stocks > 1:
-            # 保存原始評分用於排序
             score_values = result_df['評分'].copy()
-            
-            # 計算每個評分在所有股票中的百分位數
             sorted_scores = score_values.sort_values(ascending=False).values
             percentile_labels = []
             for score in score_values:
-                # 計算有多少股票的評分 >= 當前評分
                 better_or_equal = (sorted_scores >= score).sum()
                 percentile = (total_stocks - better_or_equal + 1) / total_stocks * 100
                 
-                # 轉換為友好的格式（固定邊界條件，使用 <= 避免跳動）
                 if percentile <= 1.0:
                     percentile_labels.append("Top 1%")
                 elif percentile <= 3.0:
@@ -390,8 +439,6 @@ class StockScreener:
         # 重新排列欄位順序
         result_df = result_df[['排名', '證券代號', '證券名稱', '收盤價', '漲幅%', '成交量變化率%', '評分', '推薦理由']]
         
-        # 返回 DataFrame 和 Universe 數量
-        # total_stocks 是計算 Percentile 時的 Universe 數量（有效數據的股票數）
         return result_df, total_stocks
     
     def get_weak_stocks(self, period='day', top_n=20, min_volume=None):
@@ -405,41 +452,113 @@ class StockScreener:
             min_volume: 最小成交量（可選）
             
         Returns:
-            DataFrame: 弱勢股列表，包含評分和排名
+            tuple: (DataFrame, universe_count)
+                - DataFrame: 弱勢股列表，包含評分和排名
+                - universe_count: Universe 股票數量（有效數據的股票數）
         """
-        # 使用 get_strong_stocks 的邏輯，但反向排序
-        # 先獲取所有股票數據（不限制數量）
-        all_stocks_data = []
-        technical_dir = self.config.technical_dir
-        if not technical_dir.exists():
-            logger.warning(f"錯誤：技術指標目錄不存在: {technical_dir}")
-            return pd.DataFrame()
-        
-        indicator_files = list(technical_dir.glob("*_indicators.csv"))
-        if len(indicator_files) == 0:
-            logger.warning(f"錯誤：在 {technical_dir} 中找不到任何指標文件")
-            return pd.DataFrame()
-        
-        # 計算日期範圍（與 get_strong_stocks 相同）
         today = datetime.now()
         if period == 'day':
-            # 本日：與前一個交易日比較，需要至少2筆數據
-            # 增加日期範圍到30天，確保能找到足夠的歷史數據（考慮週末和假日）
             days_back = 30
-        else:
+        else:  # week
             days_back = 60
         start_date = today - timedelta(days=days_back)
         
+        # 優先嘗試從 SQLite 資料庫載入
+        grouped_list = []
+        db_success = False
+        
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                max_date_df = db.execute_query("SELECT MAX(日期) as max_date FROM daily_prices;")
+                if not max_date_df.empty and max_date_df['max_date'].iloc[0]:
+                    max_date_str = str(max_date_df['max_date'].iloc[0])
+                    latest_date = datetime.strptime(max_date_str, '%Y%m%d')
+                    
+                    if period == 'day':
+                        days_back_db = 45
+                    else:
+                        days_back_db = 90
+                    
+                    start_date_db = latest_date - timedelta(days=days_back_db)
+                    start_date_str = start_date_db.strftime('%Y%m%d')
+                    
+                    # 更新 start_date 給後續 python 過濾使用
+                    start_date = start_date_db
+                    
+                    # 執行 JOIN 查詢
+                    sql = """
+                        SELECT p.*, t.*
+                        FROM daily_prices p
+                        LEFT JOIN technical_indicators t ON p.證券代號 = t.證券代號 AND p.日期 = t.日期
+                        WHERE p.日期 >= ?
+                        ORDER BY p.日期 ASC;
+                    """
+                    sql_df = db.execute_query(sql, params=(start_date_str,))
+                    if not sql_df.empty:
+                        sql_df = sql_df.loc[:, ~sql_df.columns.duplicated()]
+                        
+                        # 轉換日期格式
+                        sql_df['日期'] = pd.to_datetime(sql_df['日期'].astype(str), format='%Y%m%d', errors='coerce')
+                        sql_df = sql_df[sql_df['日期'].notna()]
+                        
+                        sql_df['證券代號'] = sql_df['證券代號'].astype(str).str.strip()
+                        
+                        # 轉換型態
+                        numeric_cols = ['收盤價', '開盤價', '最高價', '最低價', '成交股數', '成交金額']
+                        for col in numeric_cols:
+                            if col in sql_df.columns:
+                                sql_df[col] = pd.to_numeric(sql_df[col], errors='coerce')
+                        
+                        # 按證券代號分組
+                        for stock_code, g_df in sql_df.groupby('證券代號'):
+                            if len(stock_code) == 4 and stock_code.isdigit():
+                                grouped_list.append((stock_code, g_df.sort_values('日期')))
+                                
+                        db_success = True
+                        logger.info(f"成功從 SQLite 載入 {len(grouped_list)} 支股票數據進行弱勢股篩選")
+            except Exception as db_err:
+                logger.warning(f"從 SQLite 載入篩選數據失敗: {db_err}，將降級為 CSV 掃描")
+                
+        data_source = []
+        indicator_files = []
+        if db_success:
+            data_source = grouped_list
+        else:
+            # 掃描 technical_analysis 目錄下的所有 *_indicators.csv 文件
+            technical_dir = self.config.technical_dir
+            if not technical_dir.exists():
+                logger.warning(f"錯誤：技術指標目錄不存在: {technical_dir}")
+                return pd.DataFrame()
+            
+            # 查找所有指標文件
+            indicator_files = list(technical_dir.glob("*_indicators.csv"))
+            if len(indicator_files) == 0:
+                logger.warning(f"錯誤：在 {technical_dir} 中找不到任何指標文件")
+                return pd.DataFrame()
+                
+            for indicator_file in indicator_files:
+                stock_code = indicator_file.stem.replace('_indicators', '')
+                data_source.append((stock_code, indicator_file))
+                
+            logger.info(f"[StockScreener] period={period}, days_back={days_back}, start_date={start_date.strftime('%Y-%m-%d')}")
+            logger.info(f"[StockScreener] 找到 {len(indicator_files)} 個指標文件")
+        
+        all_stocks_data = []
         skipped_count = 0
         processed_count = 0
         
-        # 讀取每個股票的指標文件（與 get_strong_stocks 相同的邏輯）
-        for indicator_file in indicator_files:
+        # 讀取每個股票的指標數據
+        for stock_code, data_item in data_source:
             try:
-                stock_code = indicator_file.stem.replace('_indicators', '')
-                df = pd.read_csv(indicator_file, encoding='utf-8-sig')
+                # 讀取數據
+                if isinstance(data_item, pd.DataFrame):
+                    df = data_item.copy()
+                else:
+                    df = pd.read_csv(data_item, encoding='utf-8-sig')
                 
-                # 日期解析（與 get_strong_stocks 相同）
+                # 轉換日期格式
                 if '日期' in df.columns:
                     if df['日期'].dtype == 'object':
                         sample_date = str(df['日期'].iloc[0]).strip() if len(df) > 0 else ''
@@ -469,7 +588,7 @@ class StockScreener:
                 else:
                     continue
                 
-                # 獲取最新和比較日期的數據（與 get_strong_stocks 相同）
+                # 獲取最新和比較日期的數據
                 latest_row = df.iloc[-1]
                 
                 if period == 'day':
@@ -511,12 +630,11 @@ class StockScreener:
                 # 計算漲幅百分比（負數表示下跌）
                 price_change = (latest_price - compare_price) / compare_price * 100
                 
-                # 計算成交量變化率（使用 volume_lookback 日均量）
+                # 計算成交量變化率
                 volume_change = 0
                 volume_ratio = 1.0
                 if '成交股數' in df.columns:
                     latest_volume = latest_row.get('成交股數', 0)
-                    # 使用前 volume_lookback 日均量（不含最新日）
                     lookback_window = min(self.volume_lookback + 1, len(df))
                     if lookback_window >= 2:
                         volume_ma = df['成交股數'].iloc[-lookback_window:-1].mean()
@@ -525,10 +643,6 @@ class StockScreener:
                     
                     if volume_ma > 0:
                         volume_ratio = latest_volume / volume_ma
-                        # 使用 log1p 壓縮量變（避免極端值）
-                        # 當 volume_ratio >= 1 時，volume_ratio - 1 >= 0，log1p 正常
-                        # 當 volume_ratio < 1 時，volume_ratio - 1 < 0，但 log1p 可以處理（結果為負）
-                        # 避免除以零：確保 volume_ratio - 1 不會導致問題
                         try:
                             with np.errstate(divide='ignore', invalid='ignore'):
                                 volume_change = np.log1p(max(0, volume_ratio - 1)) * 100
@@ -538,14 +652,14 @@ class StockScreener:
                         volume_change = 0
                         volume_ratio = 1.0
                 
-                # 成交金額篩選（如果設定）
+                # 成交金額篩選
                 if self.min_liquidity is not None:
                     turnover = latest_row.get('成交金額', 0)
                     if turnover < self.min_liquidity:
                         skipped_count += 1
                         continue
                 
-                # 計算標準化評分（使用 log1p 壓縮後的量變）
+                # 計算標準化評分
                 vol_factor = np.log1p(max(0, volume_ratio - 1))
                 score = price_change * 0.6 + vol_factor * 100 * 0.4
                 
@@ -577,7 +691,7 @@ class StockScreener:
                     else:
                         volume_ratio = 1.0
                 
-                # 生成弱勢股理由（與強勢股相反）
+                # 生成弱勢股理由
                 reasons = self._generate_weak_stock_reasons(
                     df, latest_row, price_change, volume_ratio, period, stock_code
                 )
@@ -594,23 +708,27 @@ class StockScreener:
                 processed_count += 1
                 
             except Exception as e:
+                # 記錄錯誤以便除錯，然後跳過
+                item_name = data_item if isinstance(data_item, pd.DataFrame) else (data_item.name if hasattr(data_item, 'name') else str(data_item))
+                logger.debug(f"[StockScreener] 跳過 {item_name}: {e}")
                 continue
         
+        total_source_count = len(grouped_list) if db_success else len(indicator_files)
+        logger.info(f"[StockScreener] 處理完成: 成功={processed_count}, 跳過={skipped_count}, 總股票/文件數={total_source_count}")
+        
         if len(all_stocks_data) == 0:
-            return pd.DataFrame()
+            return pd.DataFrame(), 0
         
         # 轉換為DataFrame
         result_df = pd.DataFrame(all_stocks_data)
         
-        # 標準化評分（使用 z-score 標準化，與強勢股相同）
+        # 標準化評分
         if len(result_df) > 1:
-            # 計算 z-score
             price_mean = result_df['漲幅%'].mean()
             price_std = result_df['漲幅%'].std()
             vol_mean = result_df['成交量變化率%'].mean()
             vol_std = result_df['成交量變化率%'].std()
             
-            # 避免除零
             if price_std > 0:
                 price_z = (result_df['漲幅%'] - price_mean) / price_std
             else:
@@ -621,27 +739,20 @@ class StockScreener:
             else:
                 vol_z = pd.Series(0, index=result_df.index)
             
-            # 重新計算標準化分數
             result_df['評分'] = price_z * 0.6 + vol_z * 0.4
         
         # 保存所有股票的總數（用於計算 Percentile）
         total_stocks = len(result_df)
         
-        # 將評分轉換為 Percentile（基於所有股票的分布，從底部算起）
-        # 計算百分位數（0-100，越低越弱）
+        # 將評分轉換為 Percentile（從底部算起，越低越弱）
         if total_stocks > 1:
-            # 保存原始評分用於排序
             score_values = result_df['評分'].copy()
-            
-            # 計算每個評分在所有股票中的百分位數（從底部算起）
             sorted_scores = score_values.sort_values(ascending=True).values
             percentile_labels = []
             for score in score_values:
-                # 計算有多少股票的評分 <= 當前評分
                 worse_or_equal = (sorted_scores <= score).sum()
                 percentile = worse_or_equal / total_stocks * 100
                 
-                # 轉換為友好的格式（固定邊界條件，使用 <= 避免跳動）
                 if percentile <= 1.0:
                     percentile_labels.append("Bottom 1%")
                 elif percentile <= 3.0:
@@ -662,11 +773,11 @@ class StockScreener:
         else:
             result_df['評分'] = ""
         
-        # 按原始評分值升序排序（最弱的在前）
+        # 按原始評分值升序排序
         if total_stocks > 1:
             result_df = result_df.iloc[score_values.sort_values(ascending=True).index].copy()
         
-        # 只保留前 top_n 名（最弱的）
+        # 只保留前 top_n 名
         result_df = result_df.head(top_n).copy()
         
         # 添加排名
@@ -675,8 +786,6 @@ class StockScreener:
         # 重新排列欄位順序
         result_df = result_df[['排名', '證券代號', '證券名稱', '收盤價', '漲幅%', '成交量變化率%', '評分', '推薦理由']]
         
-        # 返回 DataFrame 和 Universe 數量
-        # total_stocks 是計算 Percentile 時的 Universe 數量（有效數據的股票數）
         return result_df, total_stocks
     
     def _generate_strong_stock_reasons(self, df, latest_row, price_change, volume_ratio, period, stock_code):
@@ -1041,42 +1150,56 @@ class StockScreener:
         Returns:
             DataFrame: 強勢產業列表
         """
-        industry_file = self.config.industry_index_file
-        
-        # 如果不存在，嘗試其他可能的路徑
-        if not industry_file.exists():
-            # 嘗試 technical_analysis 目錄
-            alt_path = self.config.technical_dir / 'industry_index.csv'
-            if alt_path.exists():
-                industry_file = alt_path
-            else:
-                # 嘗試 meta_data 目錄
-                alt_path2 = self.config.meta_data_dir / 'industry_index.csv'
-                if alt_path2.exists():
-                    industry_file = alt_path2
+        df = None
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                sql_df = db.execute_query("SELECT * FROM industry_indices ORDER BY 日期 ASC;")
+                if not sql_df.empty:
+                    df = sql_df
+                    df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
+                    logger.info("成功從 SQLite 載入產業指數數據進行強勢產業篩選")
+            except Exception as sql_err:
+                logger.warning(f"從 SQLite 載入產業指數數據失敗: {sql_err}，將降級讀取 CSV")
+                
+        if df is None:
+            industry_file = self.config.industry_index_file
+            
+            # 如果不存在，嘗試其他可能的路徑
+            if not industry_file.exists():
+                # 嘗試 technical_analysis 目錄
+                alt_path = self.config.technical_dir / 'industry_index.csv'
+                if alt_path.exists():
+                    industry_file = alt_path
                 else:
-                    # 調試：記錄所有嘗試的路徑
-                    logger.warning(f"錯誤：找不到 industry_index.csv")
-                    logger.warning(f"嘗試的路徑：")
-                    logger.warning(f"  1. {self.config.industry_index_file}")
-                    logger.warning(f"  2. {alt_path}")
-                    logger.warning(f"  3. {alt_path2}")
-                    return pd.DataFrame()
-        
-        try:
-            df = pd.read_csv(industry_file, encoding='utf-8-sig')
-        except Exception as e:
-            logger.error(f"讀取文件失敗: {industry_file}")
-            logger.error(f"錯誤: {str(e)}")
-            return pd.DataFrame()
+                    # 嘗試 meta_data 目錄
+                    alt_path2 = self.config.meta_data_dir / 'industry_index.csv'
+                    if alt_path2.exists():
+                        industry_file = alt_path2
+                    else:
+                        # 調試：記錄所有嘗試的路徑
+                        logger.warning(f"錯誤：找不到 industry_index.csv")
+                        logger.warning(f"嘗試的路徑：")
+                        logger.warning(f"  1. {self.config.industry_index_file}")
+                        logger.warning(f"  2. {alt_path}")
+                        logger.warning(f"  3. {alt_path2}")
+                        return pd.DataFrame()
+            
+            try:
+                df = pd.read_csv(industry_file, encoding='utf-8-sig')
+            except Exception as e:
+                logger.error(f"讀取文件失敗: {industry_file}")
+                logger.error(f"錯誤: {str(e)}")
+                return pd.DataFrame()
         
         if len(df) == 0:
-            logger.warning(f"產業指數文件為空: {industry_file}")
+            logger.warning(f"產業指數數據為空")
             return pd.DataFrame()
         
         # 處理日期欄位（支持多種格式）
         if '日期' not in df.columns:
-            logger.error(f"錯誤：產業指數文件缺少「日期」欄位")
+            logger.error(f"錯誤：產業指數數據缺少「日期」欄位")
             return pd.DataFrame()
         
         # 先轉換為字符串，然後嘗試解析
@@ -1085,7 +1208,7 @@ class StockScreener:
         df = df[df['日期'].notna() & (df['日期'] != 'nan') & (df['日期'] != '')]
         
         if len(df) == 0:
-            logger.error(f"錯誤：產業指數文件中沒有有效的日期數據")
+            logger.error(f"錯誤：產業指數數據中沒有有效的日期數據")
             return pd.DataFrame()
         
         # 嘗試解析日期（支持 YYYYMMDD 和標準格式）
@@ -1104,7 +1227,7 @@ class StockScreener:
         df = df[df['日期'].notna()]
         
         if len(df) == 0:
-            logger.error(f"錯誤：無法解析產業指數文件中的日期")
+            logger.error(f"錯誤：無法解析產業指數數據中的日期")
             return pd.DataFrame()
         
         # 計算日期範圍（使用更寬鬆的範圍，確保能匹配到數據）
@@ -1122,7 +1245,7 @@ class StockScreener:
         if len(df_filtered) == 0:
             logger.warning(f"警告：在最近30/60天內沒有找到產業指數數據")
             if len(df) > 0:
-                logger.warning(f"文件中的日期範圍：{df['日期'].min()} 到 {df['日期'].max()}")
+                logger.warning(f"數據中的日期範圍：{df['日期'].min()} 到 {df['日期'].max()}")
                 logger.warning(f"當前日期：{today.strftime('%Y-%m-%d')}")
                 logger.warning(f"使用全部數據（降級方案）")
                 # 如果沒有最近數據，使用全部數據（降級方案）
@@ -1182,24 +1305,37 @@ class StockScreener:
         Returns:
             DataFrame: 弱勢產業列表
         """
-        # 使用 get_strong_industries 的邏輯，但反向排序
-        industry_file = self.config.industry_index_file
-        
-        if not industry_file.exists():
-            alt_path = self.config.technical_dir / 'industry_index.csv'
-            if alt_path.exists():
-                industry_file = alt_path
-            else:
-                alt_path2 = self.config.meta_data_dir / 'industry_index.csv'
-                if alt_path2.exists():
-                    industry_file = alt_path2
+        df = None
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                sql_df = db.execute_query("SELECT * FROM industry_indices ORDER BY 日期 ASC;")
+                if not sql_df.empty:
+                    df = sql_df
+                    df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
+                    logger.info("成功從 SQLite 載入產業指數數據進行弱勢產業篩選")
+            except Exception as sql_err:
+                logger.warning(f"從 SQLite 載入產業指數數據失敗: {sql_err}，將降級讀取 CSV")
+                
+        if df is None:
+            industry_file = self.config.industry_index_file
+            
+            if not industry_file.exists():
+                alt_path = self.config.technical_dir / 'industry_index.csv'
+                if alt_path.exists():
+                    industry_file = alt_path
                 else:
-                    return pd.DataFrame()
-        
-        try:
-            df = pd.read_csv(industry_file, encoding='utf-8-sig')
-        except Exception as e:
-            return pd.DataFrame()
+                    alt_path2 = self.config.meta_data_dir / 'industry_index.csv'
+                    if alt_path2.exists():
+                        industry_file = alt_path2
+                    else:
+                        return pd.DataFrame()
+            
+            try:
+                df = pd.read_csv(industry_file, encoding='utf-8-sig')
+            except Exception as e:
+                return pd.DataFrame()
         
         if len(df) == 0:
             return pd.DataFrame()

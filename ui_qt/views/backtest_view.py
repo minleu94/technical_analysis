@@ -1515,30 +1515,53 @@ class BacktestView(QWidget):
         self.worker.start()
 
     def _load_recommendation_portfolio_history(self) -> pd.DataFrame:
-        stock_data_file = None
-        if self.config.all_stocks_data_file.exists():
-            stock_data_file = self.config.all_stocks_data_file
-        elif self.config.stock_data_file.exists():
-            stock_data_file = self.config.stock_data_file
-        if stock_data_file is None:
-            raise FileNotFoundError("找不到 all_stocks_data.csv 或 stock_data_whole.csv")
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        history = None
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                # 只需要日期、證券代號、證券名稱、收盤價，避免載入其他不需要的指標以加速效能
+                sql = "SELECT 日期, 證券代號, 證券名稱, 收盤價 FROM daily_prices;"
+                sql_df = db.execute_query(sql)
+                if not sql_df.empty:
+                    history = sql_df
+                    # 日期格式化為 YYYY-MM-DD，讓 parse_stock_dates 解析更穩定
+                    history['日期'] = pd.to_datetime(history['日期'].astype(str), format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
+                    history['證券代號'] = history['證券代號'].astype(str).str.strip()
+                    history['收盤價'] = pd.to_numeric(history['收盤價'], errors='coerce')
+                    logger.info("成功從 SQLite 載入回測歷史資料")
+            except Exception as sql_err:
+                logger.warning(f"從 SQLite 載入回測歷史資料失敗: {sql_err}，將降級讀取 CSV")
 
-        history = pd.read_csv(stock_data_file, encoding="utf-8-sig", low_memory=False)
-        if "日期" not in history.columns:
-            raise ValueError("歷史資料缺少 日期 欄位")
-        if "證券代號" not in history.columns and "股票代號" in history.columns:
-            history["證券代號"] = history["股票代號"]
-        if "證券名稱" not in history.columns and "股票名稱" in history.columns:
-            history["證券名稱"] = history["股票名稱"]
-        if "收盤價" not in history.columns:
-            for candidate in ["Close", "close"]:
-                if candidate in history.columns:
-                    history["收盤價"] = history[candidate]
-                    break
-        required = ["日期", "證券代號", "收盤價"]
-        missing = [column for column in required if column not in history.columns]
-        if missing:
-            raise ValueError(f"歷史資料缺少欄位: {', '.join(missing)}")
+        if history is None:
+            stock_data_file = None
+            if self.config.all_stocks_data_file.exists():
+                stock_data_file = self.config.all_stocks_data_file
+            elif self.config.stock_data_file.exists():
+                stock_data_file = self.config.stock_data_file
+            if stock_data_file is None:
+                raise FileNotFoundError("找不到 all_stocks_data.csv 或 stock_data_whole.csv")
+    
+            history = pd.read_csv(stock_data_file, encoding="utf-8-sig", low_memory=False)
+            if "日期" not in history.columns:
+                raise ValueError("歷史資料缺少 日期 欄位")
+            if "證券代號" not in history.columns and "股票代號" in history.columns:
+                history["證券代號"] = history["股票代號"]
+            if "證券名稱" not in history.columns and "股票名稱" in history.columns:
+                history["證券名稱"] = history["股票名稱"]
+            if "收盤價" not in history.columns:
+                for candidate in ["Close", "close"]:
+                    if candidate in history.columns:
+                        history["收盤價"] = history[candidate]
+                        break
+            required = ["日期", "證券代號", "收盤價"]
+            missing = [column for column in required if column not in history.columns]
+            if missing:
+                raise ValueError(f"歷史資料缺少欄位: {', '.join(missing)}")
+                
         history["日期"] = parse_stock_dates(history["日期"])
         return history
 

@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-05-27
+> **最後整理**：2026-06-03
 > **判讀規則**：Phase 狀態以 `DEVELOPMENT_ROADMAP.md` 的 Living Section 為準；本索引用於導航，不取代 roadmap。
 
 ---
@@ -83,6 +83,7 @@
 |---|---|
 | [PHASE2_ARCHITECTURE.md](../05_phases/PHASE2_ARCHITECTURE.md) | Phase 2 策略架構設計。 |
 | [PHASE2_STRATEGY_LIBRARY.md](../05_phases/PHASE2_STRATEGY_LIBRARY.md) | Phase 2 策略資料庫設計。 |
+| [PHASE_2A_DATA_SOURCES_AUDIT.md](../05_phases/PHASE_2A_DATA_SOURCES_AUDIT.md) | Phase 2A 數據讀取來源盤點與改造規劃。 |
 | [PHASE2_5_COMPLETION_STATUS.md](../05_phases/PHASE2_5_COMPLETION_STATUS.md) | Phase 2.5 完成狀態與剩餘優化。 |
 | [PHASE3_3B_RESEARCH_DESIGN.md](../05_phases/PHASE3_3B_RESEARCH_DESIGN.md) | Phase 3.3b 研究設計規格。 |
 | [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../05_phases/PHASE_3_3B_IMPLEMENTATION_PLAN.md) | Phase 3.3b 實施規劃，現作歷史與追溯用途。 |
@@ -167,7 +168,7 @@
 
 ## 目前開發狀態
 
-- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer、Recommendation Portfolio Backtest MVP、**SQLite 資料庫儲存升級與全量遷移（含大盤與民國年 Bug 修復、280 萬筆技術指標全量高速重算與 SQL 化秒開優化）**。
+- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer、Recommendation Portfolio Backtest MVP、SQLite 資料庫儲存升級與全量遷移（含大盤與民國年 Bug 修復、280 萬筆技術指標全量高速重算與 SQL 化秒開優化）、**Phase 2A 數據讀取來源盤點與 Phase 2B SQLite DB-first 讀取改造**。
 - 進行中 / 下一步：推薦組合回測穩健分析（Sortino、Sharpe、Monte Carlo）與 Phase 4.1 Portfolio MVP 的 UI / Phase 3 → Portfolio 整合。
 - 待開始：Phase 5 效能與研究報告輸出。
 
@@ -178,3 +179,9 @@
 - 新增或刪除任何 Markdown 後，更新本索引。
 - Phase 狀態文字若與 roadmap Living Section 衝突，以 roadmap 為準並修正本索引。
 - 不確定文件是否該刪除時，先移入 `09_archive/` 或在 `DOCUMENTATION_STRUCTURE.md` 記錄決策。
+
+---
+
+## 🔄 更新記錄
+
+- 2026-06-03：新增 Phase 2A 數據讀取來源盤點報告 (PHASE_2A_DATA_SOURCES_AUDIT.md) 連結至文檔索引，並標記 Phase 2A/2B 已完成。
