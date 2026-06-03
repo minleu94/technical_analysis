@@ -650,6 +650,7 @@ class UpdateView(QWidget):
 
         if key in {"daily", "market", "industry", "broker_branch"}:
             update_btn = QPushButton("📥 手動下載此資料源")
+            setattr(self, f"{key}_update_btn", update_btn)
             update_btn.setMinimumHeight(35)
             update_btn.setToolTip(
                 f"【手動下載此資料源】\n"
@@ -1191,6 +1192,8 @@ class UpdateView(QWidget):
         elif self.broker_branch_radio.isChecked():
             update_type = 'broker_branch'
         
+        self._active_update_type = update_type
+        
         # 獲取查找範圍
         end_date = self.end_date.date().toString("yyyy-MM-dd")
         lookback_days = self.lookback_days.value()
@@ -1202,8 +1205,10 @@ class UpdateView(QWidget):
         start_date = start_date_obj.strftime("%Y-%m-%d")
         
         # 禁用按鈕
-        self.update_btn.setEnabled(False)
-        self.update_btn.setText("更新中...")
+        current_update_btn = getattr(self, f"{update_type}_update_btn", None)
+        if current_update_btn:
+            current_update_btn.setEnabled(False)
+            current_update_btn.setText("更新中...")
         
         # 顯示進度條
         self.progress_bar.setVisible(True)
@@ -1270,8 +1275,11 @@ class UpdateView(QWidget):
     def _on_update_finished(self, result: Dict[str, Any]):
         """更新完成"""
         # 恢復按鈕
-        self.update_btn.setEnabled(True)
-        self.update_btn.setText("開始更新")
+        active_type = getattr(self, "_active_update_type", "daily")
+        current_update_btn = getattr(self, f"{active_type}_update_btn", None)
+        if current_update_btn:
+            current_update_btn.setEnabled(True)
+            current_update_btn.setText("📥 手動下載此資料源")
         
         # 隱藏進度條
         self.progress_bar.setVisible(False)
@@ -1301,8 +1309,11 @@ class UpdateView(QWidget):
     def _on_update_error(self, error_msg: str):
         """更新出錯"""
         # 恢復按鈕
-        self.update_btn.setEnabled(True)
-        self.update_btn.setText("開始更新")
+        active_type = getattr(self, "_active_update_type", "daily")
+        current_update_btn = getattr(self, f"{active_type}_update_btn", None)
+        if current_update_btn:
+            current_update_btn.setEnabled(True)
+            current_update_btn.setText("📥 手動下載此資料源")
         
         # 隱藏進度條
         self.progress_bar.setVisible(False)
