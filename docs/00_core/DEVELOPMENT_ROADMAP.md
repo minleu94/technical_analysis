@@ -607,7 +607,8 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
 
-* ✅ **SQLite DB-first 讀取改造 (Phase 2A & 2B) 成果** (2026-06-03)：
+* ✅ **SQLite DB-first 讀取改造與視覺化 Table 檢視 (Phase 2A, 2B & 2C) 成果** (2026-06-03)：
+  * **SQLite 視覺查詢資料表 (Phase 2C)**：新增了 `SqliteInspectorService` 與 `SqliteInspectorWidget`，並在 `UpdateView` 的左側導覽中整合「SQLite 資料檢視」分頁。支援 Preview 表格、PRAGMA table_info Schema 檢視與自訂 SELECT SQL 執行，並提供 Limit 限額與唯讀指令安全過濾。
   * 重構了強勢股篩選 ([stock_screener.py](file:///c:/Projects/PythonProjects/technical_analysis/decision_module/stock_screener.py))、市場狀態偵測 ([market_regime_detector.py](file:///c:/Projects/PythonProjects/technical_analysis/decision_module/market_regime_detector.py))、產業映射器 ([industry_mapper.py](file:///c:/Projects/PythonProjects/technical_analysis/decision_module/industry_mapper.py)) 及推薦服務 ([recommendation_service.py](file:///c:/Projects/PythonProjects/technical_analysis/app_module/recommendation_service.py)) 的 SQLite 優先讀取改造，全數實現 SQLite 優先與 CSV 備用降級，徹底消除遍歷磁碟小 CSV 的 I/O 毒瘤。
   * **一鍵安全更新效能 Hotfix**：修復並優化了 `_date_key` 日期格式解析，避免逐行呼叫 `pd.to_datetime`。產業指數日期 map 轉換耗時由 13.19 秒降至 **0.136 秒** (提速 100 倍)，286 萬筆每日股價同步寫入 SQLite 僅需 **59.35 秒**。
   * 驗證：單元測試 `test_ui_qt_update_view_workbench.py` (7 passed) 與更新頁 QA `qa_validate_update_tab.py` (通過 21，失敗 0) 100% 通過。

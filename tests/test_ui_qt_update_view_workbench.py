@@ -107,8 +107,9 @@ def test_update_view_uses_workbench_navigation():
         "產業指數",
         "券商分點",
         "技術指標",
+        "SQLite 資料檢視",
     ]
-    assert view.content_stack.count() == 6
+    assert view.content_stack.count() == 7
     assert view.nav_list.currentRow() == 0
 
 
@@ -182,7 +183,8 @@ def test_source_detail_check_uses_detail_service_contract():
 def test_source_tabs_have_operational_content():
     view = make_view()
 
-    for row in range(1, view.content_stack.count()):
+    # 排除最後一個 db_inspector 頁面，因為它的 layout 與 widgets 結構不同
+    for row in range(1, view.content_stack.count() - 1):
         page = view.content_stack.widget(row)
         labels = page.findChildren(QLabel)
         buttons = page.findChildren(QPushButton)

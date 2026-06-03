@@ -11,6 +11,7 @@
 > **注意**：Living Section 定義見 `DEVELOPMENT_ROADMAP.md` 的「📍 Living Section 定義」段落。
 
 - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 ✅（核心已完成並驗證）
+- Phase 2A, 2B & 2C SQLite DB-first 讀取改造與視覺化 Table 檢視 ✅（盤點主讀 CSV 處改為 SQLite 優先，並提供防禦性 SELECT 唯讀 SQL 視覺化檢視面板）
 - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3b ✅（研究閉環已完成，含 Promote / Walk-forward / Baseline / Overfitting risk / 視覺驗證）
 - AI Runtime Subsystem MVP ✅（Governance-aware 狀態機監控站已完成）
 - Smart Money Terminal MVP ✅（高密度、低延遲的專業級籌碼分析終端已完成）
@@ -82,7 +83,8 @@
 
 - **安全更新補上 CSV → SQLite 同步鏈**：日常「安全更新所有數據」仍保留既有 CSV 下載、合併與人工檢查習慣，但會在每日股價、大盤、產業、合併每日資料與合併券商分點成功後，同步寫入 `daily_prices`、`market_indices`、`industry_indices` 與 `broker_flows`，降低 UI 狀態 DB-first 與更新流程 CSV-first 之間的分岔風險。
 
-## 2026-06-03 SQLite DB-first 讀取改造 (Phase 2A & 2B) 成果
+## 2026-06-03 SQLite DB-first 讀取改造與視覺化 Table 檢視 (Phase 2A, 2B & 2C) 成果
 
+- **SQLite 視覺查詢資料表 (Phase 2C) 實作完成**：實作了 `SqliteInspectorService` 與 `SqliteInspectorWidget` 並將其整合至數據更新工作台中。支援資料表 Preview、欄位定義 (Schema) 檢視、自訂唯讀 SQL 執行展示、錯誤輸出、以及非同步載入防止 UI 假死，並配備嚴格的安全防禦機制（僅允許唯讀的 SELECT 查詢且強制進行 Limit 限制，防範 SQL Injection 與大數據崩潰）。
 - **數據讀取 SQLite 優先 (DB-first) 圓滿完成**：重構了強勢股篩選 (StockScreener)、市場狀態偵測 (MarketRegimeDetector)、產業映射器 (IndustryMapper) 及推薦服務 (RecommendationService)，數據載入 100% 實現 SQLite 優先與 CSV 備用降級，徹底消除遍歷讀取磁碟小 CSV 的 I/O 毒瘤。
 - **一鍵安全更新效能 Hotfix 完美修復**：優化了 `_date_key` 日期格式解析函數，避免在百萬行資料中因逐行呼叫 `pd.to_datetime` 造成的嚴重的 CPU 與 I/O 開銷。產業指數日期轉換由 13.19 秒縮短至 **0.136 秒** (提速 100 倍)，286 萬筆每日股價同步寫入 SQLite 僅需 **59.35 秒**。所有單元測試與 QA 驗證全部通過。

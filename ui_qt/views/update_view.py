@@ -58,12 +58,25 @@ class UpdateView(QWidget):
             ("industry", "產業指數"),
             ("broker_branch", "券商分點"),
             ("technical", "技術指標"),
+            ("db_inspector", "SQLite 資料檢視"),
         ]
         for _, label in self._nav_items:
             self.nav_list.addItem(label)
 
         self.content_stack = QStackedWidget()
         for key, label in self._nav_items:
+            if key == "db_inspector":
+                from app_module.sqlite_inspector_service import SqliteInspectorService
+                from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+                config = getattr(self.update_service, "config", None)
+                if config is None:
+                    from data_module.config import TWStockConfig
+                    config = TWStockConfig()
+                service = SqliteInspectorService(config)
+                page = SqliteInspectorWidget(service, self)
+                self.content_stack.addWidget(page)
+                continue
+
             page = QWidget()
             page_layout = QVBoxLayout(page)
             page_label = QLabel(label)
@@ -385,6 +398,13 @@ class UpdateView(QWidget):
             self.industry_radio.setChecked(True)
         elif key == "broker_branch":
             self.broker_branch_radio.setChecked(True)
+        elif key == "db_inspector":
+            # 獲取 db_inspector widget 並刷新資料表下拉選單
+            inspector_widget = self.content_stack.widget(row)
+            if hasattr(inspector_widget, "refresh_tables"):
+                inspector_widget.refresh_tables()
+            return
+
         if key != "all" and key not in self._loaded_detail_sources:
             self._check_source_detail(key)
 

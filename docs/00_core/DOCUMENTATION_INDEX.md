@@ -168,7 +168,7 @@
 
 ## 目前開發狀態
 
-- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer、Recommendation Portfolio Backtest MVP、SQLite 資料庫儲存升級與全量遷移（含大盤與民國年 Bug 修復、280 萬筆技術指標全量高速重算與 SQL 化秒開優化）、**Phase 2A 數據讀取來源盤點與 Phase 2B SQLite DB-first 讀取改造**。
+- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer、Recommendation Portfolio Backtest MVP、SQLite 資料庫儲存升級與全量遷移（含大盤與民國年 Bug 修復、280 萬筆技術指標全量高速重算與 SQL 化秒開優化）、**Phase 2A 數據讀取來源盤點與 Phase 2B SQLite DB-first 讀取改造**、**Phase 2C SQLite 視覺查詢 Table（SqliteInspectorWidget / SqliteInspectorService 整合）**。
 - 進行中 / 下一步：推薦組合回測穩健分析（Sortino、Sharpe、Monte Carlo）與 Phase 4.1 Portfolio MVP 的 UI / Phase 3 → Portfolio 整合。
 - 待開始：Phase 5 效能與研究報告輸出。
 
@@ -184,4 +184,5 @@
 
 ## 🔄 更新記錄
 
+- 2026-06-03：完成 Phase 2C 實作，新增 SQLite 資料庫視覺化檢視面板 (SqliteInspectorWidget) 與防禦性唯讀查詢服務 (SqliteInspectorService) 整合至數據更新工作台。
 - 2026-06-03：新增 Phase 2A 數據讀取來源盤點報告 (PHASE_2A_DATA_SOURCES_AUDIT.md) 連結至文檔索引，並標記 Phase 2A/2B 已完成。
