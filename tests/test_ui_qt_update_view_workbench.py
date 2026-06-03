@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -13,9 +14,21 @@ class _TestableUpdateView(UpdateView):
         return None
 
 
+class FakeConfig:
+    def __init__(self):
+        self.use_sqlite = False
+        self.data_root = Path(".")
+        self.log_dir = Path(".")
+        self.db_file = Path("test.db")
+
 class FakeUpdateService:
     def __init__(self):
         self.calls = []
+        self.config = FakeConfig()
+        
+    def export_table_to_csv(self, table_name, target_path, start_date=None, end_date=None):
+        self.calls.append(("export_table_to_csv", table_name, target_path, start_date, end_date))
+        return {"success": True, "message": "export ok"}
 
     def check_data_status(self):
         self.calls.append(("check_data_status",))
@@ -247,3 +260,30 @@ def test_update_view_with_config_instantiates_inspector_widget(tmp_path):
     last_widget = view.content_stack.widget(6)
     assert isinstance(last_widget, SqliteInspectorWidget)
 
+def test_safe_update_all_runs_conservative_sequence_sqlite():
+    view = make_view()
+    view.update_service.config.use_sqlite = True
+    progress = []
+
+    result = view._run_safe_update_all(
+        progress_callback=lambda message, pct: progress.append((message, pct))
+    )
+
+    assert result["success"] is True
+    assert [call[0] for call in view.update_service.calls] == [
+        "check_data_overview",
+        "update_daily",
+        "sync_source_to_sqlite",
+        "update_market",
+        "sync_source_to_sqlite",
+        "update_industry",
+        "sync_source_to_sqlite",
+        "update_broker_branch",
+        "sync_source_to_sqlite",  # broker_branch_files 同步
+        "calculate_technical_indicators",
+        "check_data_overview",
+    ]
+    # 驗證同步的來源為 broker_branch_files
+    assert ("sync_source_to_sqlite", "broker_branch_files", "2026-05-23", "2026-06-02") in view.update_service.calls or any(
+        call[0] == "sync_source_to_sqlite" and call[1] == "broker_branch_files" for call in view.update_service.calls
+    )

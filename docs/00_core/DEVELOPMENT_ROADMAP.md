@@ -551,7 +551,7 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ### 現況（Baseline）
 
-* ✅ **Phase 1、Phase 2、Phase 2.5 核心部分**：已完成且驗證通過
+* ✅ **Phase 1、Phase 2、Phase 2.5、Phase 3**：已完成且驗證通過（核心研究閉環與 CSV 手動匯出已完成）
 * ✅ **系統可運行、UI 穩定、回測/最佳化效能已大幅改善**
 * ✅ **UI Qt Backtest 圖表渲染優化**：已完成 QtWebEngine + HTML5 Canvas fast renderer，權益曲線、回撤曲線、報酬分佈、持有天數圖表均保留 Matplotlib fallback。
 * ✅ **Recommendation Portfolio Backtest MVP**：已完成（2026-05-27）
@@ -605,7 +605,15 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ---
 
-### 本週 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
+### 本週 Done（Phase 3 CSV 手動匯出與更新流程優化 + Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
+
+* ✅ **Phase 3：CSV 手動匯出與更新流程優化** (2026-06-03)：
+  * **停止日常更新大型 CSV 重寫**：當啟用 SQLite 時，日常安全更新流程直接將新下載的單日 CSV 同步寫入 SQLite 表（價格與分點），跳過 `stock_data_whole.csv` 與主力分點大合併 CSV 的合併重寫，解除日常磁碟 I/O 重擔。
+  * **技術指標增量同步優化**：增量更新時略過保存 `all_stocks_data.csv`，寫入 SQLite `technical_indicators` 表時，改為只針對有更新的 `(證券代號, 日期)` 組合進行舊記錄刪除後追加寫入，不再清空並重新寫入 280 萬筆資料。
+  * **各 subtab 加入「匯出 CSV」**：在數據更新工作台的每日股價、大盤、產業、分點與指標 subtab 中新增「匯出 CSV」按鈕，支援非同步匯出指定範圍或全量 SQLite 記錄至 CSV 備案，檔名與日期格式（`YYYY-MM-DD`）符合人工檢查需求，且使用 UTF-8 with BOM 避免 Excel 亂碼。
+  * **測試與驗證**：單元測試與 QA 驗證腳本 100% 綠燈通過，mypy 零新增錯誤。
+
+### 歷史 Done（Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
 
 * ✅ **SQLite DB-first 讀取改造與視覺化 Table 檢視 (Phase 2A, 2B & 2C) 成果** (2026-06-03)：
   * **SQLite 視覺查詢資料表 (Phase 2C)**：新增了 `SqliteInspectorService` 與 `SqliteInspectorWidget`，並在 `UpdateView` 的左側導覽中整合「SQLite 資料檢視」分頁。支援 Preview 表格、PRAGMA table_info Schema 檢視與自訂 SELECT SQL 執行，並提供 Limit 限額與唯讀指令安全過濾。

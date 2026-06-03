@@ -86,7 +86,7 @@
 | [PHASE_2A_DATA_SOURCES_AUDIT.md](../05_phases/PHASE_2A_DATA_SOURCES_AUDIT.md) | Phase 2A 數據讀取來源盤點與改造規劃。 |
 | [PHASE2_5_COMPLETION_STATUS.md](../05_phases/PHASE2_5_COMPLETION_STATUS.md) | Phase 2.5 完成狀態與剩餘優化。 |
 | [PHASE3_3B_RESEARCH_DESIGN.md](../05_phases/PHASE3_3B_RESEARCH_DESIGN.md) | Phase 3.3b 研究設計規格。 |
-| [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../05_phases/PHASE_3_3B_IMPLEMENTATION_PLAN.md) | Phase 3.3b 實施規劃，現作歷史與追溯用途。 |
+| [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md) | [已歸檔] Phase 3.3b 實施規劃，現作歷史與追溯用途。 |
 | [EPIC2_MVP2_ARCHITECTURE_DESIGN.md](../05_phases/EPIC2_MVP2_ARCHITECTURE_DESIGN.md) | 過擬合風險提示架構設計。 |
 | [EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md](../05_phases/EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md) | 過擬合風險提示實作檢查清單。 |
 | [PHASE4_PORTFOLIO_DESIGN.md](../05_phases/PHASE4_PORTFOLIO_DESIGN.md) | Phase 4 Portfolio MVP 設計。 |

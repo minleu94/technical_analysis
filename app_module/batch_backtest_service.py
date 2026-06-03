@@ -194,7 +194,7 @@ class BatchBacktestService:
                 # 保存 run（只要有交易就保存，即使結果不好也保存，方便後續分析）
                 # 條件：有交易 或 有 report（即使失敗也保存，方便查看錯誤原因）
                 should_save = (report.total_trades > 0 or report is not None) and save_runs and self.run_repository
-                if should_save:
+                if should_save and self.run_repository is not None:
                     try:
                         run_id = self.run_repository.save_run(
                             run_name=f"{batch_name}_{stock_code}",

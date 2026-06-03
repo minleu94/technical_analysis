@@ -1,31 +1,19 @@
-# Phase 3.3b 架構層級實施規劃
+# Phase 3.3b 架構層級實施規劃（已歸檔／已完成）
 
-**版本**：v1.2.0  
-**狀態**：Historical Plan / Completed in roadmap  
-**最後更新**：2026-05-19
+**版本**：v1.3.0  
+**狀態**：Historical Plan (COMPLETED & ARCHIVED)  
+**最後更新**：2026-06-03
 
-> 本文件保留 Phase 3.3b 的架構規劃脈絡。最新完成狀態以 [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md) 為準；Phase 3.3b 已完成，後續主線已進入 Phase 4.1 Portfolio MVP。
+> [!NOTE]
+> **本文件已歸檔**。本文件保留了 Phase 3.3b 的歷史實施規劃脈絡。
+> 該階段所定義的所有三個 Epic 均已於 2026-01-02 100% 實作完成，並通過完整綠燈驗證。最新完成狀態請參閱 [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md) 的 Living Section。
 
-**進度更新**：
-- ✅ Epic 2 MVP-1（Warmup Days + Baseline 對比）已完成（2025-12-30）
-  - 驗證狀態：29/29 測試案例通過（100% 通過率）
-  - 驗證報告：`output/qa/epic2_mvp1_validation/VALIDATION_REPORT.md`
-  - 驗證腳本：`scripts/qa_validate_epic2_mvp1.py`
-- 🚧 Epic 2 MVP-2（過擬合風險提示）實作中（2025-12-30）
-  - 架構設計文檔：`EPIC2_MVP2_ARCHITECTURE_DESIGN.md`（同目錄）
-  - 實作檢查清單：`EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md`（同目錄）
-  - 實作進度：
-    - ✅ 階段 1：核心計算方法實作（已完成）
-      - `calculate_walkforward_degradation()` 方法
-      - `calculate_consistency()` 方法
-      - `calculate_overfitting_risk()` 整合方法
-    - ✅ 階段 2：DTO 與服務整合（已完成）
-      - `BacktestReportDTO` 新增 `overfitting_risk` 欄位
-      - `BacktestService.run_backtest()` 整合過擬合風險計算
-    - ⏸️ 階段 3：測試與驗證（待實作）
-  - 狀態：實作中 → 待測試驗證
-- ⏸️ Epic 3（視覺驗證）待開始
-- ⏸️ Epic 1（Promote 機制）待開始
+## 歷史進度存檔
+- ✅ **Epic 1：Promote 機制**：已於 2026-01-02 實作完成，回測結果可升級為 Presets/Versions。
+- ✅ **Epic 2：回測穩健性驗證**：已於 2026-01-02 實作完成，包含 Walk-Forward 暖機期、Baseline 對比、過擬合風險提示。
+  - 驗證報告：`output/qa/epic2_mvp2_validation/VALIDATION_REPORT.md`
+- ✅ **Epic 3：視覺驗證**：已於 2026-01-02 實作完成，支援 K 線圖買賣點標記與理由標籤。
+  - 驗證報告：`output/qa/phase3_3b_validation/VALIDATION_REPORT.md`
 
 ---
 

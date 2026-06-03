@@ -18,8 +18,8 @@
 - **`PHASE3_3B_RESEARCH_DESIGN.md`**
   - Phase 3.3b 研究設計規格
 
-- **`PHASE_3_3B_IMPLEMENTATION_PLAN.md`**
-  - Phase 3.3b 架構層級實施規劃（歷史規劃，已由 roadmap 標記為完成）
+- **[PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md)** (已歸檔)
+  - Phase 3.3b 架構層級實施規劃（歷史規劃，已移至歸檔目錄並由 roadmap 標記為完成）
 
 - **`EPIC2_MVP2_ARCHITECTURE_DESIGN.md`**
   - Epic 2 MVP-2 架構設計

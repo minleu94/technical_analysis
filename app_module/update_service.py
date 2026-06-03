@@ -54,6 +54,7 @@ class UpdateService:
                 'industry_index': 'industry_index',
                 'broker': 'broker_branch',
                 'broker_branch': 'broker_branch',
+                'broker_branch_files': 'broker_branch_files',
             }.get(source)
             if normalized is None:
                 return {
@@ -83,6 +84,11 @@ class UpdateService:
                 table_name = 'industry_indices'
                 replace_table = True
                 delete_date_keys = False
+            elif normalized == 'broker_branch_files':
+                df = self._load_broker_branch_files_for_sqlite(start_date, end_date)
+                table_name = 'broker_flows'
+                replace_table = False
+                delete_date_keys = True
             else:
                 df = self._load_broker_branch_csv_for_sqlite()
                 table_name = 'broker_flows'
@@ -202,6 +208,71 @@ class UpdateService:
             if '分點名稱' not in df.columns:
                 df['分點名稱'] = branch_name
             frames.append(df)
+
+        if not frames:
+            return pd.DataFrame()
+        df_all = pd.concat(frames, ignore_index=True)
+        keep_cols = ['日期', '分點名稱', '證券代號', '證券名稱', '買進股數', '賣出股數', '買賣超股數']
+        for col in keep_cols:
+            if col not in df_all.columns:
+                df_all[col] = None
+        df_all = df_all[keep_cols]
+        return self._normalize_sqlite_dates(df_all)
+
+    def _load_broker_branch_files_for_sqlite(
+        self,
+        start_date: Optional[str],
+        end_date: Optional[str]
+    ) -> Any:
+        import pandas as pd  # type: ignore[import-untyped]
+
+        broker_dir = getattr(self.config, 'broker_flow_dir', None)
+        if broker_dir is None or not Path(broker_dir).exists():
+            return pd.DataFrame()
+
+        start_key = self._date_key(start_date) if start_date else None
+        end_key = self._date_key(end_date) if end_date else None
+        frames = []
+
+        # 遍歷所有券商分點的目錄
+        for branch_dir in sorted(Path(broker_dir).glob('*')):
+            if not branch_dir.is_dir() or branch_dir.name in {'meta', 'logs'}:
+                continue
+            daily_dir = branch_dir / 'daily'
+            if not daily_dir.exists():
+                continue
+
+            # 遍歷該分點的每日 CSV 檔
+            for path in sorted(daily_dir.glob('*.csv')):
+                date_key = self._date_key(path.stem)
+                if start_key and date_key < start_key:
+                    continue
+                if end_key and date_key > end_key:
+                    continue
+
+                try:
+                    df = pd.read_csv(path, encoding='utf-8-sig')
+                    if df.empty:
+                         continue
+                    branch_name = branch_dir.name
+                    rename_map = {
+                        'date': '日期',
+                        'stock_id': '證券代號',
+                        'stock_code': '證券代號',
+                        'stock_name': '證券名稱',
+                        'branch_name': '分點名稱',
+                        'buy_shares': '買進股數',
+                        'sell_shares': '賣出股數',
+                        'net_buy_shares': '買賣超股數',
+                    }
+                    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+                    if '分點名稱' not in df.columns:
+                        df['分點名稱'] = branch_name
+                    if '日期' not in df.columns:
+                        df['日期'] = date_key
+                    frames.append(df)
+                except Exception:
+                    continue
 
         if not frames:
             return pd.DataFrame()
@@ -1070,8 +1141,8 @@ class UpdateService:
                                 continue
                         
                         if parsed_dates:
-                            latest_date = max(parsed_dates)
-                            result['industry_index']['latest_date'] = latest_date.strftime('%Y-%m-%d')
+                            latest_industry_date = max(parsed_dates)
+                            result['industry_index']['latest_date'] = latest_industry_date.strftime('%Y-%m-%d')
                             result['industry_index']['status'] = 'ok'
                         else:
                             latest_date_str = valid_dates.max()
@@ -1313,17 +1384,17 @@ class UpdateService:
         import csv
         import pandas as pd
 
-        summary = {'latest_date': None}
+        latest_date = None
         if not path.exists():
-            return summary
+            return {'latest_date': None}
 
-        tail = deque(maxlen=tail_rows)
+        tail: deque[str] = deque(maxlen=tail_rows)
         try:
             with open(path, 'r', encoding='utf-8-sig', newline='') as f:
                 reader = csv.reader(f)
                 header = next(reader, None)
                 if not header or date_column not in header:
-                    return summary
+                    return {'latest_date': None}
                 date_idx = header.index(date_column)
                 for row in reader:
                     if len(row) > date_idx and row[date_idx]:
@@ -1333,19 +1404,19 @@ class UpdateService:
                 parsed = pd.to_datetime(dates, errors='coerce')
                 parsed = parsed[pd.notna(parsed)]
                 if len(parsed) > 0:
-                    summary['latest_date'] = parsed.max().strftime('%Y-%m-%d')
+                    latest_date = parsed.max().strftime('%Y-%m-%d')
                 else:
-                    summary['latest_date'] = max(dates)
-            return summary
+                    latest_date = max(dates)
+            return {'latest_date': latest_date}
         except Exception:
-            return summary
+            return {'latest_date': None}
 
     def _check_technical_indicator_status(self) -> Dict[str, Any]:
         """快速檢查技術指標彙整檔與個股指標檔狀態"""
         import logging
 
         logger = logging.getLogger(__name__)
-        status = {
+        status: Dict[str, Any] = {
             'latest_date': None,
             'total_records': 0,
             'file_count': 0,
@@ -1430,19 +1501,26 @@ class UpdateService:
         if not path.exists():
             return summary
 
-        tail = deque(maxlen=tail_rows)
+        tail: deque[str] = deque(maxlen=tail_rows)
+        total_records = 0
+        start_date = None
+        latest_date = None
         try:
             with open(path, 'r', encoding='utf-8-sig', newline='') as f:
                 reader = csv.reader(f)
                 header = next(reader, None)
                 if not header or date_column not in header:
-                    return summary
+                    return {
+                        'total_records': 0,
+                        'start_date': None,
+                        'latest_date': None,
+                    }
                 date_idx = header.index(date_column)
                 for row in reader:
-                    summary['total_records'] += 1
+                    total_records += 1
                     if len(row) > date_idx and row[date_idx]:
-                        if summary['start_date'] is None:
-                            summary['start_date'] = row[date_idx]
+                        if start_date is None:
+                            start_date = row[date_idx]
                         tail.append(row[date_idx])
 
             dates = [date for date in tail if date and date != 'nan']
@@ -1450,14 +1528,18 @@ class UpdateService:
                 parsed = pd.to_datetime(dates, errors='coerce')
                 parsed = parsed[pd.notna(parsed)]
                 if len(parsed) > 0:
-                    summary['latest_date'] = parsed.max().strftime('%Y-%m-%d')
-                    if summary['start_date']:
-                        start = pd.to_datetime(summary['start_date'], errors='coerce')
+                    latest_date = parsed.max().strftime('%Y-%m-%d')
+                    if start_date:
+                        start = pd.to_datetime(start_date, errors='coerce')
                         if pd.notna(start):
-                            summary['start_date'] = start.strftime('%Y-%m-%d')
+                            start_date = start.strftime('%Y-%m-%d')
                 else:
-                    summary['latest_date'] = max(dates)
-            return summary
+                    latest_date = max(dates)
+            return {
+                'total_records': total_records,
+                'start_date': start_date,
+                'latest_date': latest_date,
+            }
         except Exception:
             return summary
     
@@ -2006,7 +2088,7 @@ class UpdateService:
             if progress_callback:
                 progress_callback(f"開始處理 {total_stocks} 支股票的技術指標...", 20)
             
-            results = {
+            results: Dict[str, Any] = {
                 'total_stocks': total_stocks,
                 'success_count': 0,
                 'fail_count': 0,
@@ -2168,16 +2250,20 @@ class UpdateService:
                         logger.info(f"去重後總筆數: {len(final_df):,}")
                 
                 save_path = self.config.all_stocks_data_file
+                skip_csv_save = getattr(self.config, 'use_sqlite', False) and auto_incremental
                 
-                # 創建備份
-                if save_path.exists():
-                    logger.info(f"備份現有的整合指標文件: {save_path}")
-                    self.config.create_backup(save_path)
-                
-                # 保存
-                final_df.to_csv(save_path, index=False, encoding='utf-8-sig')
-                file_size_mb = save_path.stat().st_size / 1024 / 1024
-                logger.info(f"已保存整合指標到: {save_path}（檔案大小: {file_size_mb:.2f} MB）")
+                if not skip_csv_save:
+                    # 創建備份
+                    if save_path.exists():
+                        logger.info(f"備份現有的整合指標文件: {save_path}")
+                        self.config.create_backup(save_path)
+                    
+                    # 保存
+                    final_df.to_csv(save_path, index=False, encoding='utf-8-sig')
+                    file_size_mb = save_path.stat().st_size / 1024 / 1024
+                    logger.info(f"已保存整合指標到: {save_path}（檔案大小: {file_size_mb:.2f} MB）")
+                else:
+                    logger.info("智慧增量模式且啟用 SQLite，跳過大型 all_stocks_data.csv 合併重寫，直接使用增量寫入 SQLite。")
                 
                 # 🌟 如果啟用 SQLite，同步將指標寫入 SQLite technical_indicators 表中
                 if getattr(self.config, 'use_sqlite', False):
@@ -2198,16 +2284,26 @@ class UpdateService:
                         if cols_to_drop:
                             df_db = df_db.drop(columns=cols_to_drop)
                             
-                        # 確保非主鍵欄位型態為數值型
+                        # 確保 non-PK 欄位為數值型
                         for col in df_db.columns:
                             if col not in ['日期', '證券代號']:
                                 df_db[col] = pd.to_numeric(df_db[col], errors='coerce')
                                 
-                        # 清空現有 table 進行全新全量寫入
-                        with db.connect() as conn:
-                            conn.execute("DELETE FROM technical_indicators;")
-                        
-                        success = db.write_dataframe('technical_indicators', df_db, if_exists='append')
+                        # 判斷是否為增量更新
+                        if auto_incremental:
+                            logger.info("智慧增量模式下，僅刪除並更新變更的技術指標記錄...")
+                            with db.connect() as conn:
+                                conn.executemany(
+                                    "DELETE FROM technical_indicators WHERE 證券代號 = ? AND 日期 = ?;",
+                                    df_db[['證券代號', '日期']].values.tolist()
+                                )
+                            success = db.write_dataframe('technical_indicators', df_db, if_exists='append')
+                        else:
+                            # 全量模式下，清空現有 table 進行全新全量寫入
+                            logger.info("全量模式下，清空 technical_indicators 表後全新寫入...")
+                            with db.connect() as conn:
+                                conn.execute("DELETE FROM technical_indicators;")
+                            success = db.write_dataframe('technical_indicators', df_db, if_exists='append')
                         if success:
                             logger.info("技術指標成功批次寫入 SQLite 資料庫！")
                         else:
@@ -2251,3 +2347,79 @@ class UpdateService:
                 'end_date': ''
             }
 
+    def export_table_to_csv(
+        self,
+        table_name: str,
+        target_path: Path,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """從 SQLite 匯出指定表和日期範圍的資料至 CSV
+        
+        Args:
+            table_name: SQLite 表名
+            target_path: 匯出的 CSV 檔案路徑
+            start_date: 開始日期（YYYYMMDD 或 YYYY-MM-DD）
+            end_date: 結束日期（YYYYMMDD 或 YYYY-MM-DD）
+        """
+        import pandas as pd
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            from data_module.db_manager import DBManager
+            db = DBManager(self.config)
+            
+            # 構建 SQL 語句
+            query = f"SELECT * FROM {table_name}"
+            conditions = []
+            params = []
+            
+            if start_date:
+                s_date = self._date_key(start_date)
+                if s_date:
+                    conditions.append("日期 >= ?")
+                    params.append(s_date)
+            if end_date:
+                e_date = self._date_key(end_date)
+                if e_date:
+                    conditions.append("日期 <= ?")
+                    params.append(e_date)
+                    
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            query += " ORDER BY 日期 ASC;"
+            
+            logger.info(f"[UpdateService] 開始從 SQLite 匯出 {table_name} 到 {target_path}，查詢: {query}，參數: {params}")
+            
+            # 執行查詢
+            df = db.execute_query(query, tuple(params))
+            if df.empty:
+                return {
+                    'success': False,
+                    'message': '沒有符合條件的資料可供匯出'
+                }
+            
+            # 還原日期格式為 YYYY-MM-DD 以便於人工檢查
+            if '日期' in df.columns:
+                df['日期'] = df['日期'].apply(lambda x: f"{str(x)[:4]}-{str(x)[4:6]}-{str(x)[6:]}" if len(str(x)) == 8 else str(x))
+                
+            # 寫入 CSV 檔案
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            df.to_csv(target_path, index=False, encoding='utf-8-sig')
+            logger.info(f"[UpdateService] 成功匯出 {len(df)} 筆資料至 {target_path}")
+            
+            return {
+                'success': True,
+                'message': f'成功匯出 {len(df):,} 筆資料至 {target_path.name}',
+                'total_records': len(df),
+                'file_path': str(target_path)
+            }
+            
+        except Exception as e:
+            logger.exception(f"[UpdateService] 匯出 {table_name} 失敗")
+            return {
+                'success': False,
+                'message': f'匯出失敗：{str(e)}'
+            }

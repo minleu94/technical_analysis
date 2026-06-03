@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 
 from ui_qt.workers.task_worker import TaskWorker, ProgressTaskWorker
@@ -32,10 +32,10 @@ class UpdateView(QWidget):
         """
         super().__init__(parent)
         self.update_service = update_service
-        self._loaded_detail_sources = set()
+        self._loaded_detail_sources: set[str] = set()
         
         # Worker
-        self.worker: TaskWorker = None
+        self.worker: Optional[TaskWorker] = None
         
         self._setup_ui()
         self._check_data_status()
@@ -384,6 +384,11 @@ class UpdateView(QWidget):
             calc_btn.clicked.connect(self._execute_calculate_technical_indicators)
             button_layout.addWidget(calc_btn)
 
+        # 各資料來源 subtab 新增「匯出 CSV」按鈕
+        export_btn = QPushButton("匯出 CSV")
+        export_btn.clicked.connect(lambda _checked=False, source=key: self._execute_export_csv(source))
+        button_layout.addWidget(export_btn)
+
         button_layout.addStretch()
         layout.addLayout(button_layout)
         layout.addStretch()
@@ -565,6 +570,8 @@ class UpdateView(QWidget):
             completed.append({"step": name, "result": result})
             return result
 
+        use_sqlite = getattr(self.update_service.config, "use_sqlite", False)
+        
         steps = [
             ("檢查資料狀態", 0, lambda: self._get_overview_status()),
             ("每日股價更新", 12, lambda: self.update_service.update_daily(start_date, end_date)),
@@ -574,10 +581,22 @@ class UpdateView(QWidget):
             ("產業指數更新", 36, lambda: self.update_service.update_industry(start_date, end_date)),
             ("同步產業指數至 SQLite", 42, lambda: self.update_service.sync_source_to_sqlite("industry_index")),
             ("券商分點更新", 48, lambda: self.update_service.update_broker_branch(start_date, end_date)),
-            ("合併每日資料", 62, lambda: self.update_service.merge_daily_data(force_all=False)),
-            ("同步合併每日資料至 SQLite", 68, lambda: self.update_service.sync_source_to_sqlite("daily_data")),
-            ("合併券商分點", 74, lambda: self.update_service.merge_broker_branch_data()),
-            ("同步券商分點至 SQLite", 80, lambda: self.update_service.sync_source_to_sqlite("broker_branch")),
+        ]
+        
+        if use_sqlite:
+            # 啟用 SQLite 時，跳過重寫大型 CSV 合併，改由單日檔案直接同步到 SQLite
+            steps.extend([
+                ("同步券商分點至 SQLite (直接檔案同步)", 65, lambda: self.update_service.sync_source_to_sqlite("broker_branch_files", start_date, end_date)),
+            ])
+        else:
+            steps.extend([
+                ("合併每日資料", 55, lambda: self.update_service.merge_daily_data(force_all=False)),
+                ("同步合併每日資料至 SQLite", 62, lambda: self.update_service.sync_source_to_sqlite("daily_data")),
+                ("合併券商分點", 69, lambda: self.update_service.merge_broker_branch_data()),
+                ("同步券商分點至 SQLite", 76, lambda: self.update_service.sync_source_to_sqlite("broker_branch")),
+            ])
+            
+        steps.extend([
             (
                 "增量計算技術指標",
                 88,
@@ -590,7 +609,7 @@ class UpdateView(QWidget):
                 ),
             ),
             ("刷新資料狀態", 100, lambda: self._get_overview_status()),
-        ]
+        ])
 
         for name, progress, action in steps:
             result = run_step(name, progress, action)
@@ -1254,6 +1273,113 @@ class UpdateView(QWidget):
             f"技術指標計算失敗：\n\n{error_display}\n\n請查看日誌獲取詳細信息。"
         )
     
+    def _execute_export_csv(self, source: str):
+        """執行 CSV 匯出邏輯（支援範圍選擇與非同步處理）"""
+        table_mapping = {
+            "daily": "daily_prices",
+            "market": "market_indices",
+            "industry": "industry_indices",
+            "broker_branch": "broker_flows",
+            "technical": "technical_indicators",
+        }
+        
+        table_name = table_mapping.get(source)
+        if not table_name:
+            QMessageBox.warning(self, "警告", f"未知的匯出來源：{source}")
+            return
+            
+        # 1. 取得 UI 設定日期範圍並彈出選擇對話框
+        start_date, end_date = self._get_selected_date_range()
+        
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("匯出 CSV 範圍選擇")
+        msg_box.setText("請選擇要匯出的資料日期範圍：")
+        msg_box.setInformativeText(
+            f"目前的 UI 設定範圍：{start_date} 至 {end_date}\n\n"
+            f"點選「最近範圍」將只匯出此區間資料。\n"
+            f"點選「全部歷史」將匯出該資料表內的所有歷史資料。"
+        )
+        
+        btn_range = msg_box.addButton("最近範圍", QMessageBox.ButtonRole.YesRole)
+        btn_all = msg_box.addButton("全部歷史", QMessageBox.ButtonRole.NoRole)
+        btn_cancel = msg_box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+        
+        msg_box.exec()
+        
+        if msg_box.clickedButton() == btn_cancel:
+            return
+        elif msg_box.clickedButton() == btn_range:
+            s_date, e_date = start_date, end_date
+        else:
+            s_date, e_date = None, None
+            
+        # 2. 選擇檔案儲存路徑
+        import os
+        from pathlib import Path
+        
+        export_date = datetime.now().strftime("%Y%m%d")
+        default_filename = f"{table_name}_export_{export_date}.csv"
+        
+        # 預設儲存於 config 的 data_root 或是 專案根目錄/exports
+        default_dir = getattr(self.update_service.config, "data_root", Path.cwd())
+        default_path = Path(default_dir) / default_filename
+        
+        from PySide6.QtWidgets import QFileDialog
+        file_path_str, _ = QFileDialog.getSaveFileName(
+            self,
+            "選擇儲存的 CSV 檔案",
+            str(default_path),
+            "CSV 檔案 (*.csv)"
+        )
+        
+        if not file_path_str:
+            return
+            
+        target_path = Path(file_path_str)
+        
+        # 3. 啟動背景 Worker 執行匯出
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0) # 跑馬燈模式
+        self.progress_label.setVisible(True)
+        self.progress_label.setText(f"正在匯出 {table_name} 資料至 CSV...")
+        self._log(f"開始匯出 {table_name} 資料至 {target_path}")
+        
+        if self.worker and self.worker.isRunning():
+            self.worker.cancel()
+            self.worker.wait(3000)
+            
+        def export_task():
+            return self.update_service.export_table_to_csv(
+                table_name=table_name,
+                target_path=target_path,
+                start_date=s_date,
+                end_date=e_date
+            )
+            
+        self.worker = TaskWorker(export_task)
+        
+        def on_export_finished(result: Dict[str, Any]):
+            self.progress_bar.setVisible(False)
+            self.progress_label.setVisible(False)
+            if result.get("success", False):
+                msg = result.get("message", "匯出成功")
+                self._log(f"匯出成功：{msg}")
+                QMessageBox.information(self, "匯出完成", msg)
+            else:
+                msg = result.get("message", "匯出失敗")
+                self._log(f"匯出失敗：{msg}")
+                QMessageBox.warning(self, "匯出失敗", msg)
+                
+        def on_export_error(error_msg: str):
+            self.progress_bar.setVisible(False)
+            self.progress_label.setVisible(False)
+            self._log(f"匯出出錯：{error_msg}")
+            QMessageBox.critical(self, "匯出失敗", f"匯出過程發生錯誤：\n{error_msg}")
+            
+        self.worker.finished.connect(on_export_finished)
+        self.worker.error.connect(on_export_error)
+        self.worker.start()
+
     def closeEvent(self, event):
         """關閉事件"""
         # ✅ 取消正在運行的 Worker 並等待完成

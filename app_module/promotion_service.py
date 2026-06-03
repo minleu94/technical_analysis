@@ -202,7 +202,7 @@ class PromotionService:
         
         # 5. 推斷適用 Regime（從回測期間的市場狀態）
         # 簡化實現：暫時使用空列表，後續可以從 RegimeService 獲取
-        regime = []
+        regime: List[str] = []
         
         # 6. 生成策略版本
         version_id = self.strategy_version_service.create_version(
