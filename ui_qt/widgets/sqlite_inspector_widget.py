@@ -1,6 +1,6 @@
 """
 SQLite 資料庫視覺化檢視 Widget (SQLite Inspector Widget)
-提供資料表選擇、資料預覽、欄位 Schema 展示、以及自訂 SQL 查詢執行與展示。
+提供資料表選擇、受控條件篩選、資料預覽、欄位 Schema 展示與表狀態摘要。
 """
 
 import logging
@@ -8,8 +8,8 @@ from typing import Dict, Any, List, Optional
 import pandas as pd
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox,
-    QPushButton, QTabWidget, QTableView, QTextEdit, QMessageBox, QGroupBox,
-    QHeaderView
+    QPushButton, QTabWidget, QTableView, QMessageBox, QGroupBox,
+    QHeaderView, QLineEdit
 )
 from PySide6.QtCore import Qt
 from ui_qt.models.pandas_table_model import PandasTableModel
@@ -18,7 +18,7 @@ from app_module.sqlite_inspector_service import SqliteInspectorService
 
 
 class SqliteInspectorWidget(QWidget):
-    """SQLite 資料表視覺化檢視與查詢面板"""
+    """SQLite 資料表視覺化檢視與受控篩選面板"""
 
     def __init__(self, inspector_service: SqliteInspectorService, parent=None):
         """初始化檢視面板
@@ -37,7 +37,6 @@ class SqliteInspectorWidget(QWidget):
         # 表格 Model
         self.preview_model: Optional[PandasTableModel] = None
         self.schema_model: Optional[PandasTableModel] = None
-        self.query_model: Optional[PandasTableModel] = None
         
         self._init_ui()
 
@@ -47,34 +46,75 @@ class SqliteInspectorWidget(QWidget):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
 
-        # 1. 頂部控制面板
-        control_group = QGroupBox("資料庫與資料表選擇")
-        control_layout = QHBoxLayout()
-        control_layout.setSpacing(15)
+        # 1. 頂部控制與篩選面板
+        control_group = QGroupBox("資料庫資料表選擇與受控篩選")
+        control_main_layout = QVBoxLayout()
+        control_main_layout.setSpacing(8)
 
-        # 下拉選單：資料表
-        control_layout.addWidget(QLabel("資料表:"))
+        # 第一行：表與筆數限制、載入按鈕
+        row1_layout = QHBoxLayout()
+        row1_layout.addWidget(QLabel("資料表:"))
         self.table_selector = QComboBox()
-        self.table_selector.setMinimumWidth(250)
+        self.table_selector.setMinimumWidth(200)
         self.table_selector.currentTextChanged.connect(self._on_table_changed)
-        control_layout.addWidget(self.table_selector)
+        row1_layout.addWidget(self.table_selector)
 
-        # SpinBox：Limit 限制
-        control_layout.addWidget(QLabel("預覽筆數:"))
+        row1_layout.addWidget(QLabel("預覽筆數:"))
         self.limit_spin = QSpinBox()
         self.limit_spin.setRange(10, 5000)
         self.limit_spin.setValue(100)
         self.limit_spin.setSingleStep(50)
-        control_layout.addWidget(self.limit_spin)
+        row1_layout.addWidget(self.limit_spin)
 
-        # 按鈕：載入 Preview & Schema
         self.load_btn = QPushButton("載入數據與結構")
-        self.load_btn.setMinimumHeight(35)
+        self.load_btn.setMinimumHeight(30)
         self.load_btn.clicked.connect(self._load_current_table_data)
-        control_layout.addWidget(self.load_btn)
+        row1_layout.addWidget(self.load_btn)
+        row1_layout.addStretch()
+        control_main_layout.addLayout(row1_layout)
 
-        control_layout.addStretch()
-        control_group.setLayout(control_layout)
+        # 第二行：篩選條件 (股票代號、股票名稱、分點、日期篩選等)
+        row2_layout = QHBoxLayout()
+        
+        row2_layout.addWidget(QLabel("股票代號:"))
+        self.stock_code_input = QLineEdit()
+        self.stock_code_input.setPlaceholderText("2330 (選填)")
+        self.stock_code_input.setMaximumWidth(100)
+        row2_layout.addWidget(self.stock_code_input)
+
+        row2_layout.addWidget(QLabel("股票名稱:"))
+        self.stock_name_input = QLineEdit()
+        self.stock_name_input.setPlaceholderText("台積電 (選填)")
+        self.stock_name_input.setMaximumWidth(120)
+        row2_layout.addWidget(self.stock_name_input)
+
+        row2_layout.addWidget(QLabel("券商分點:"))
+        self.broker_branch_input = QLineEdit()
+        self.broker_branch_input.setPlaceholderText("分點名稱 (選填)")
+        self.broker_branch_input.setMaximumWidth(140)
+        row2_layout.addWidget(self.broker_branch_input)
+
+        row2_layout.addWidget(QLabel("單一日期:"))
+        self.date_input = QLineEdit()
+        self.date_input.setPlaceholderText("2026-05-29")
+        self.date_input.setMaximumWidth(100)
+        row2_layout.addWidget(self.date_input)
+
+        row2_layout.addWidget(QLabel("區間:"))
+        self.start_date_input = QLineEdit()
+        self.start_date_input.setPlaceholderText("開始日期")
+        self.start_date_input.setMaximumWidth(90)
+        row2_layout.addWidget(self.start_date_input)
+        row2_layout.addWidget(QLabel("~"))
+        self.end_date_input = QLineEdit()
+        self.end_date_input.setPlaceholderText("結束日期")
+        self.end_date_input.setMaximumWidth(90)
+        row2_layout.addWidget(self.end_date_input)
+
+        row2_layout.addStretch()
+        control_main_layout.addLayout(row2_layout)
+
+        control_group.setLayout(control_main_layout)
         main_layout.addWidget(control_group)
 
         # 2. 表狀態摘要 Label
@@ -101,53 +141,6 @@ class SqliteInspectorWidget(QWidget):
         schema_layout.addWidget(self.schema_table)
         self.tabs.addTab(self.schema_tab, "🧭 欄位結構 (Schema)")
 
-        # Tab 3: 自訂 SQL 唯讀查詢
-        self.query_tab = QWidget()
-        query_layout = QVBoxLayout(self.query_tab)
-        
-        # SQL Editor 控制區
-        sql_input_group = QGroupBox("自訂 SQL 唯讀查詢編輯器")
-        sql_input_layout = QVBoxLayout()
-        
-        self.sql_editor = QTextEdit()
-        self.sql_editor.setPlaceholderText("請輸入唯讀 SELECT 查詢，例如：\nSELECT * FROM daily_prices WHERE 證券代號 = '2330' ORDER BY 日期 DESC LIMIT 50;")
-        self.sql_editor.setMinimumHeight(100)
-        self.sql_editor.setMaximumHeight(150)
-        sql_input_layout.addWidget(self.sql_editor)
-        
-        sql_btn_layout = QHBoxLayout()
-        self.run_sql_btn = QPushButton("執行 SQL 查詢")
-        self.run_sql_btn.setMinimumHeight(35)
-        self.run_sql_btn.clicked.connect(self._execute_custom_sql)
-        sql_btn_layout.addWidget(self.run_sql_btn)
-        
-        self.clear_sql_btn = QPushButton("清空編輯器")
-        self.clear_sql_btn.clicked.connect(self.sql_editor.clear)
-        sql_btn_layout.addWidget(self.clear_sql_btn)
-        sql_btn_layout.addStretch()
-        
-        sql_input_layout.addLayout(sql_btn_layout)
-        sql_input_group.setLayout(sql_input_layout)
-        query_layout.addWidget(sql_input_group)
-        
-        # SQL 結果展示區
-        sql_result_group = QGroupBox("查詢結果")
-        sql_result_layout = QVBoxLayout()
-        self.query_table = QTableView()
-        self.query_table.setAlternatingRowColors(True)
-        sql_result_layout.addWidget(self.query_table)
-        
-        # SQL 錯誤顯示 Label
-        self.error_label = QLabel("")
-        self.error_label.setStyleSheet("color: red; font-family: Consolas; font-size: 13px;")
-        self.error_label.setWordWrap(True)
-        sql_result_layout.addWidget(self.error_label)
-        
-        sql_result_group.setLayout(sql_result_layout)
-        query_layout.addWidget(sql_result_group, stretch=1)
-        
-        self.tabs.addTab(self.query_tab, "⚡ 自訂 SQL 查詢")
-
         main_layout.addWidget(self.tabs, stretch=1)
         self.setLayout(main_layout)
 
@@ -157,7 +150,6 @@ class SqliteInspectorWidget(QWidget):
             self.summary_label.setText("資料庫狀態：SQLite 未啟用")
             self.table_selector.clear()
             self.load_btn.setEnabled(False)
-            self.run_sql_btn.setEnabled(False)
             return
 
         tables = self.inspector_service.get_tables()
@@ -165,7 +157,6 @@ class SqliteInspectorWidget(QWidget):
         if tables:
             self.table_selector.addItems(tables)
             self.load_btn.setEnabled(True)
-            self.run_sql_btn.setEnabled(True)
             self.summary_label.setText(f"資料庫狀態：連線成功，共偵測到 {len(tables)} 個資料表")
         else:
             self.summary_label.setText("資料庫狀態：連線成功，但未找到任何資料表")
@@ -190,13 +181,30 @@ class SqliteInspectorWidget(QWidget):
         limit = self.limit_spin.value()
         table_name = self.current_table
 
+        # 獲取篩選值
+        stock_code = self.stock_code_input.text().strip()
+        stock_name = self.stock_name_input.text().strip()
+        broker_branch = self.broker_branch_input.text().strip()
+        date_str = self.date_input.text().strip()
+        start_date = self.start_date_input.text().strip()
+        end_date = self.end_date_input.text().strip()
+
         def fetch_task():
             # 1. 取得表 metadata
             info = self.inspector_service.get_table_info(table_name)
             # 2. 取得 Schema df
             schema_df = self.inspector_service.get_table_schema(table_name)
-            # 3. 取得 Preview df (使用 execute_query 保障 Limit)
-            preview_df = self.inspector_service.execute_query(f"SELECT * FROM {table_name}", limit=limit)
+            # 3. 取得受控 Preview df
+            preview_df = self.inspector_service.query_table_data(
+                table_name=table_name,
+                stock_code=stock_code if stock_code else None,
+                stock_name=stock_name if stock_name else None,
+                date_str=date_str if date_str else None,
+                start_date=start_date if start_date else None,
+                end_date=end_date if end_date else None,
+                broker_branch=broker_branch if broker_branch else None,
+                limit=limit
+            )
             return {
                 'info': info,
                 'schema': schema_df,
@@ -241,59 +249,10 @@ class SqliteInspectorWidget(QWidget):
         QMessageBox.critical(self, "錯誤", f"讀取 SQLite 表資料失敗：\n{error_msg}")
         self.summary_label.setText("資料庫狀態：資料表載入失敗")
 
-    def _execute_custom_sql(self):
-        """執行自訂 SQL 查詢"""
-        sql_text = self.sql_editor.toPlainText().strip()
-        if not sql_text:
-            QMessageBox.warning(self, "警告", "請先輸入 SQL 語法！")
-            return
-
-        self._set_query_loading_state(True)
-        self.error_label.clear()
-
-        # 取消之前的 Worker
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait()
-
-        limit = self.limit_spin.value()
-
-        def query_task():
-            # 調用 inspector 執行安全唯讀查詢
-            return self.inspector_service.execute_query(sql_text, limit=limit)
-
-        self.worker = TaskWorker(query_task)
-        self.worker.finished.connect(self._on_query_success)
-        self.worker.error.connect(self._on_query_error)
-        self.worker.start()
-
-    def _on_query_success(self, df: pd.DataFrame):
-        """自訂 SQL 執行成功"""
-        self._set_query_loading_state(False)
-        
-        self.query_model = PandasTableModel(df)
-        self.query_table.setModel(self.query_model)
-        self._adjust_table_header(self.query_table)
-        
-        # 提示訊息
-        self.error_label.setStyleSheet("color: green; font-weight: bold;")
-        self.error_label.setText(f"查詢執行成功，共獲取 {len(df)} 筆資料。")
-
-    def _on_query_error(self, error_msg: str):
-        """自訂 SQL 執行出錯"""
-        self._set_query_loading_state(False)
-        
-        # 清空舊結果
-        self.query_table.setModel(None)
-        
-        # 顯示詳細 Traceback 與錯誤字串
-        self.error_label.setStyleSheet("color: red; font-family: Consolas; font-size: 13px;")
-        self.error_label.setText(f"SQL 執行失敗，錯誤訊息如下：\n{error_msg}")
-
     def _adjust_table_header(self, table_view: QTableView):
         """自適應調整 TableView 欄寬"""
         header = table_view.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         # 先根據內容自適應，再還原為 Interactive 方便使用者拉伸
         table_view.resizeColumnsToContents()
         # 防禦性設定最大欄寬，防止超大欄位拉得太長
@@ -309,11 +268,3 @@ class SqliteInspectorWidget(QWidget):
             self.load_btn.setText("載入中...")
         else:
             self.load_btn.setText("載入數據與結構")
-
-    def _set_query_loading_state(self, is_loading: bool):
-        """設定查詢按鈕 disable"""
-        self.run_sql_btn.setEnabled(not is_loading)
-        if is_loading:
-            self.run_sql_btn.setText("查詢執行中...")
-        else:
-            self.run_sql_btn.setText("執行 SQL 查詢")

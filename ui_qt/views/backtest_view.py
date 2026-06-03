@@ -1486,7 +1486,7 @@ class BacktestView(QWidget):
         self.progress_label.setVisible(True)
 
         def backtest_task():
-            history = self._load_recommendation_portfolio_history()
+            history = self._load_recommendation_portfolio_history(start_date, end_date)
             provider = RecommendationDataFrameProvider()
             service = RecommendationPortfolioBacktestService(provider=provider)
             recommendation_config = dict(config.get("strategy_config", {}))
@@ -1514,7 +1514,7 @@ class BacktestView(QWidget):
         self.worker.error.connect(self._on_recommendation_portfolio_error)
         self.worker.start()
 
-    def _load_recommendation_portfolio_history(self) -> pd.DataFrame:
+    def _load_recommendation_portfolio_history(self, start_date=None, end_date=None):
         import logging
         logger = logging.getLogger(__name__)
         
@@ -1523,16 +1523,47 @@ class BacktestView(QWidget):
             try:
                 from data_module.db_manager import DBManager
                 db = DBManager(self.config)
-                # 只需要日期、證券代號、證券名稱、收盤價，避免載入其他不需要的指標以加速效能
-                sql = "SELECT 日期, 證券代號, 證券名稱, 收盤價 FROM daily_prices;"
-                sql_df = db.execute_query(sql)
+                
+                # 預設查詢 SQL 與參數
+                sql = "SELECT 日期, 證券代號, 證券名稱, 收盤價 FROM daily_prices"
+                params = []
+                where_clauses = []
+                
+                if start_date:
+                    from datetime import datetime, timedelta
+                    try:
+                        # start_date 格式為 YYYY-MM-DD
+                        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                        # 往前推 365 天作為技術指標計算之 warmup 暖機期
+                        warmup_dt = start_dt - timedelta(days=365)
+                        warmup_start_str = warmup_dt.strftime("%Y%m%d")
+                        where_clauses.append("日期 >= ?")
+                        params.append(warmup_start_str)
+                    except Exception as e:
+                        logger.warning(f"[BacktestView] 解析 start_date 失敗: {e}")
+                
+                if end_date:
+                    from datetime import datetime
+                    try:
+                        end_str = datetime.strptime(end_date, "%Y-%m-%d").strftime("%Y%m%d")
+                        where_clauses.append("日期 <= ?")
+                        params.append(end_str)
+                    except Exception as e:
+                        logger.warning(f"[BacktestView] 解析 end_date 失敗: {e}")
+                
+                if where_clauses:
+                    sql += " WHERE " + " AND ".join(where_clauses)
+                
+                sql += ";"
+                
+                sql_df = db.execute_query(sql, tuple(params))
                 if not sql_df.empty:
                     history = sql_df
                     # 日期格式化為 YYYY-MM-DD，讓 parse_stock_dates 解析更穩定
                     history['日期'] = pd.to_datetime(history['日期'].astype(str), format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
                     history['證券代號'] = history['證券代號'].astype(str).str.strip()
                     history['收盤價'] = pd.to_numeric(history['收盤價'], errors='coerce')
-                    logger.info("成功從 SQLite 載入回測歷史資料")
+                    logger.info(f"成功從 SQLite 載入回測歷史資料，共 {len(history)} 筆 (含暖機期)")
             except Exception as sql_err:
                 logger.warning(f"從 SQLite 載入回測歷史資料失敗: {sql_err}，將降級讀取 CSV")
 

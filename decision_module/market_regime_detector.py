@@ -302,9 +302,11 @@ class MarketRegimeDetector:
                     df = sql_df
                     # 將日期格式從 YYYYMMDD 轉回 YYYY-MM-DD 保持與原 CSV 一致
                     df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
-                    # 重命名收盤指數為收盤價以相容後續欄位取值
-                    if '收盤指數' in df.columns:
+                    # 只有在原本無 '收盤價' 且有 '收盤指數' 時，才重命名以相容後續取值
+                    if '收盤價' not in df.columns and '收盤指數' in df.columns:
                         df = df.rename(columns={'收盤指數': '收盤價'})
+                    # 防禦性去除重複欄位
+                    df = df.loc[:, ~df.columns.duplicated()]
                     logger.info("成功從 SQLite 載入大盤指數數據進行狀態檢測")
             except Exception as sql_err:
                 logger.warning(f"從 SQLite 載入大盤指數數據失敗: {sql_err}，將降級讀取 CSV")

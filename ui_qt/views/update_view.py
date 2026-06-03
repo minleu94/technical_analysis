@@ -66,12 +66,16 @@ class UpdateView(QWidget):
         self.content_stack = QStackedWidget()
         for key, label in self._nav_items:
             if key == "db_inspector":
-                from app_module.sqlite_inspector_service import SqliteInspectorService
-                from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
                 config = getattr(self.update_service, "config", None)
                 if config is None:
-                    from data_module.config import TWStockConfig
-                    config = TWStockConfig()
+                    page = QWidget()
+                    page_layout = QVBoxLayout(page)
+                    page_layout.addWidget(QLabel("SQLite 未啟用或測試環境中無 Config"))
+                    self.content_stack.addWidget(page)
+                    continue
+                
+                from app_module.sqlite_inspector_service import SqliteInspectorService
+                from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
                 service = SqliteInspectorService(config)
                 page = SqliteInspectorWidget(service, self)
                 self.content_stack.addWidget(page)

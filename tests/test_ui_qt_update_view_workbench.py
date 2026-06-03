@@ -213,3 +213,37 @@ def test_safe_update_all_stops_after_failed_core_step():
         "sync_source_to_sqlite",
         "update_market",
     ]
+
+
+def test_update_view_with_config_instantiates_inspector_widget(tmp_path):
+    from data_module.config import TWStockConfig
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+    
+    # 建立臨時路徑
+    data_root = tmp_path / "data"
+    output_root = tmp_path / "output"
+    data_root.mkdir()
+    output_root.mkdir()
+    
+    # 建立隔離的 config
+    config = TWStockConfig(
+        data_root=data_root,
+        output_root=output_root,
+        profile="test"
+    )
+    config.use_sqlite = True
+    
+    # 注入到 FakeUpdateService
+    service = FakeUpdateService()
+    service.config = config
+    
+    # 實例化 view
+    app()
+    view = _TestableUpdateView(service)
+    
+    # 驗證 sqlite_inspector_widget 是否被成功建立
+    assert view.nav_list.count() == 7
+    # 最後一頁應該是 SqliteInspectorWidget 的實例
+    last_widget = view.content_stack.widget(6)
+    assert isinstance(last_widget, SqliteInspectorWidget)
+

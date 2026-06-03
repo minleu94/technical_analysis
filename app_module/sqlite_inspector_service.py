@@ -1,6 +1,6 @@
 """
 SQLite 資料庫檢視服務 (SQLite Inspector Service)
-提供 SQLite 資料表的 metadata 查詢、結構描述、以及唯讀的自訂 SQL 查詢功能。
+提供 SQLite 資料表的 metadata 查詢、結構描述、以及受控的篩選查詢功能。
 """
 
 import re
@@ -12,6 +12,9 @@ from data_module.db_manager import DBManager
 
 class SqliteInspectorService:
     """SQLite 資料表檢視與查詢服務"""
+
+    # 白名單限制的五大核心表
+    ALLOWED_TABLES = {'daily_prices', 'technical_indicators', 'market_indices', 'industry_indices', 'broker_flows'}
 
     def __init__(self, config):
         """初始化檢視服務
@@ -28,7 +31,7 @@ class SqliteInspectorService:
         return getattr(self.config, 'use_sqlite', False)
 
     def get_tables(self) -> List[str]:
-        """獲取資料庫中所有的使用者資料表列表 (排除系統內建表)
+        """獲取資料庫中所有的使用者資料表列表 (過濾並僅限白名單中且實際存在的表)
         
         Returns:
             List[str]: 資料表名稱列表
@@ -40,7 +43,8 @@ class SqliteInspectorService:
             sql = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
             df = self.db_manager.execute_query(sql)
             if not df.empty:
-                return df['name'].tolist()
+                existing = df['name'].tolist()
+                return [t for t in existing if t in self.ALLOWED_TABLES]
             return []
         except Exception as e:
             self.logger.error(f"[SqliteInspectorService] 獲取資料表列表失敗: {e}")
@@ -57,6 +61,9 @@ class SqliteInspectorService:
         """
         if not self.is_enabled():
             return pd.DataFrame()
+
+        if table_name not in self.ALLOWED_TABLES:
+            raise ValueError(f"拒絕訪問非白名單資料表: {table_name}")
 
         # 防禦：防止 SQL Injection 在 PRAGMA 中，限制 table_name 必須為合法的標識符
         if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
@@ -121,6 +128,10 @@ class SqliteInspectorService:
             result['message'] = 'SQLite 未啟用'
             return result
 
+        if table_name not in self.ALLOWED_TABLES:
+            result['message'] = f'拒絕訪問非白名單資料表: {table_name}'
+            raise ValueError(f"拒絕訪問非白名單資料表: {table_name}")
+
         if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
             result['message'] = f'不合法的資料表名稱: {table_name}'
             return result
@@ -155,48 +166,114 @@ class SqliteInspectorService:
             result['message'] = error_msg
             return result
 
-    def execute_query(self, sql_query: str, params: tuple = (), limit: int = 100) -> pd.DataFrame:
-        """執行唯讀的 SQL SELECT 查詢並返回結果
+    def query_table_data(
+        self,
+        table_name: str,
+        stock_code: Optional[str] = None,
+        stock_name: Optional[str] = None,
+        date_str: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        broker_branch: Optional[str] = None,
+        limit: int = 100
+    ) -> pd.DataFrame:
+        """受控的表格資料查詢
         
         Args:
-            sql_query: SQL 查詢字串
-            params: 參數 tuple
-            limit: 限制筆數，避免記憶體溢出
+            table_name: 資料表名稱 (必須在 ALLOWED_TABLES 白名單中)
+            stock_code: 證券代號 (選填)
+            stock_name: 證券名稱 (選填)
+            date_str: 日期字串，格式為 YYYY-MM-DD 或 YYYYMMDD (選填)
+            start_date: 開始日期字串 (選填)
+            end_date: 結束日期字串 (選填)
+            broker_branch: 分點名稱 (選填)
+            limit: 限制筆數
             
         Returns:
             pd.DataFrame: 查詢結果
         """
         if not self.is_enabled():
-            raise RuntimeError("SQLite 未啟用，無法執行查詢")
+            raise RuntimeError("SQLite 未啟用")
 
-        clean_sql = sql_query.strip().strip(';').strip()
-        if not clean_sql:
+        if table_name not in self.ALLOWED_TABLES:
+            raise ValueError(f"拒絕訪問非白名單資料表: {table_name}")
+
+        # limit clamp 限制，確保在 10 ~ 5000 之間，防範大資料量 OOM
+        limit = max(10, min(limit, 5000))
+
+        # 1. 取得 Table schema 以驗證欄位白名單，並安全拼裝 SELECT 欄位
+        schema_df = self.get_table_schema(table_name)
+        if schema_df.empty:
             return pd.DataFrame()
 
-        # 1. 安全防禦：僅能執行 SELECT 查詢，防止任何 INSERT/UPDATE/DELETE/DROP/CREATE
-        # 使用正則比對，必須以 SELECT 關鍵字開頭 (不分大小寫)
-        if not re.match(r'^\s*SELECT\b', clean_sql, re.IGNORECASE):
-            raise ValueError("安全性限制：僅允許執行唯讀的 SELECT 查詢！")
+        # get_table_schema 傳回的 DF 中，欄位名稱欄重命名成了 '欄位名稱'
+        valid_columns = schema_df['欄位名稱'].tolist()
+        if not valid_columns:
+            return pd.DataFrame()
 
-        # 進一步防禦：防止 SQL 中夾帶分號執行多重 command，或是含有破壞性字眼（如修改 schema 的 DDL/DML）
-        restricted_keywords = [
-            r'\bINSERT\b', r'\bUPDATE\b', r'\bDELETE\b', r'\bDROP\b', 
-            r'\bCREATE\b', r'\bALTER\b', r'\bREPLACE\b', r'\bTRUNCATE\b'
-        ]
-        for pattern in restricted_keywords:
-            if re.search(pattern, clean_sql, re.IGNORECASE):
-                raise ValueError("安全性限制：查詢語法中包含不被允許的寫入或修改關鍵字！")
+        # 安全地將欄位名稱用引號括起來，以防止 SQL Injection
+        escaped_cols = ", ".join([f'"{col}"' for col in valid_columns])
 
-        # 2. 限額防禦：若 SQL 沒有 LIMIT 語句，自動在尾端加上 LIMIT 限制以保護記憶體
-        if not re.search(r'\bLIMIT\b\s+\d+', clean_sql, re.IGNORECASE):
-            # 去除尾端的分號與空白
-            clean_sql = f"{clean_sql} LIMIT {limit}"
+        # 2. 建構 SQL 語句
+        sql = f'SELECT {escaped_cols} FROM "{table_name}"'
+        where_clauses = []
+        params: List[Any] = []
 
-        # 3. 執行查詢
+        def parse_date(d):
+            if not d:
+                return None
+            s = str(d).replace('-', '').replace('/', '').strip()
+            if len(s) == 8 and s.isdigit():
+                return s
+            return None
+
+        # 篩選：證券代號
+        if '證券代號' in valid_columns and stock_code:
+            where_clauses.append('"證券代號" = ?')
+            params.append(str(stock_code).strip())
+
+        # 篩選：證券名稱 (支援模糊查詢)
+        if '證券名稱' in valid_columns and stock_name:
+            where_clauses.append('"證券名稱" LIKE ?')
+            params.append(f"%{str(stock_name).strip()}%")
+
+        # 篩選：日期
+        if '日期' in valid_columns:
+            # 單一日期優先
+            d_val = parse_date(date_str)
+            if d_val:
+                where_clauses.append('"日期" = ?')
+                params.append(d_val)
+            else:
+                s_val = parse_date(start_date)
+                e_val = parse_date(end_date)
+                if s_val:
+                    where_clauses.append('"日期" >= ?')
+                    params.append(s_val)
+                if e_val:
+                    where_clauses.append('"日期" <= ?')
+                    params.append(e_val)
+
+        # 篩選：分點名稱 (支援模糊查詢)
+        if '分點名稱' in valid_columns and broker_branch:
+            where_clauses.append('"分點名稱" LIKE ?')
+            params.append(f"%{str(broker_branch).strip()}%")
+
+        if where_clauses:
+            sql += " WHERE " + " AND ".join(where_clauses)
+
+        # 自動排序：如果表有日期欄位，優先按日期降序排列
+        if '日期' in valid_columns:
+            sql += ' ORDER BY "日期" DESC'
+
+        # 限制筆數
+        sql += " LIMIT ?"
+        params.append(limit)
+
         try:
-            return self.db_manager.execute_query(clean_sql, params)
+            return self.db_manager.execute_query(sql, tuple(params))
         except Exception as e:
-            self.logger.error(f"[SqliteInspectorService] SQL 執行出錯: {sql_query}, 錯誤: {e}")
+            self.logger.error(f"[SqliteInspectorService] 執行受控查詢失敗: {e}")
             raise e
 
     def _format_date(self, val: Any) -> Optional[str]:
