@@ -571,10 +571,12 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
   * ✅ Registry 前導零問題修復完成
   * ✅ Selenium 穩定性增強完成
   * 📚 測試文檔：`docs/BROKER_BRANCH_TESTING_AND_TROUBLESHOOTING.md` ⭐ **測試必讀**
-* ✅ **籌碼分析終端 (Smart Money Terminal) MVP**：已完成
-  * ✅ 實作高密度、低延遲的專業級觀察終端
-  * ✅ 完成 Row Intensity Shading、Inline Signal Badges 與輕量級趨勢線 (Sparklines) 渲染
-  * ✅ 實作純 Domain 的 `flow_signal_engine.py` 與前端的完全解耦
+* ✅ **籌碼分析終端 (Smart Money Terminal) 優化與視覺重構**：已完成 (2026-06-03)
+  * ✅ 重構為左右分欄布局（左側主表 65%，右側詳情 35%），並新增選中股雷達摘要卡片與 `explainable_reasons` 原因解析。
+  * ✅ 頂部玻璃擬態卡片（市場趨勢、熱度、多空個股數、異常警示）完全中文化並放大字型。
+  * ✅ 為 Sparkline 實作 `QLinearGradient` 漸層填色，固定顯示最近 5 筆交易明細，並實作跨 Cell 的 ToolTip 懸浮提示。
+  * ✅ 實作 TableModel 排序功能，修復多空家數統計偏差（偏空股為0）與熱度恆定 100% 的 Bug。
+  * ✅ 實作純 Domain 的 `flow_signal_engine.py` 與前端的完全解耦。
 * ✅ **Phase 3.3b Epic 2 MVP-2：過擬合風險提示**：已完成（2026-01-02）
   * ✅ 單元測試：20/20 通過（100% 通過率）
   * ✅ 驗證腳本：11/11 通過（100% 通過率）
@@ -605,7 +607,13 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ---
 
-### 本週 Done（Phase 3 CSV 手動匯出與更新流程優化 + Phase 2.5 完成 + 全功能驗證通過 + UI 穩定性修復 + 回測功能優化 + Broker Branch Data Update + 修復與測試文檔 + Epic 2 MVP-2 完成 + AI Runtime MVP + Smart Money Terminal + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
+### 本週 Done（Phase 3 CSV 手動匯出與更新流程優化 + 主力流向視覺重構與 Bug 修復 + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
+
+* ✅ **主力流向 (Smart Money Flow) 視覺重構與排版優化** (2026-06-03)：
+  * **UI 左右分欄**：重構為左右分欄布局（左側主表 65%，右側詳情 35%），並新增選中股雷達摘要卡片與 `explainable_reasons` 原因解析。
+  * **小卡片中文化與放大**：頂部玻璃擬態卡片（市場趨勢、熱度、多空個股數、異常警示）完全繁體中文化，調大字體以優化視覺層次。
+  * **Sparklines 漸層與 ToolTip 觸發**：採用 `QLinearGradient` 渲染漸層 Sparklines，固定顯示最新 5 筆交易明細，並實作跨 Cell 的 ToolTip 懸浮提示。
+  * **Bug 修復與排序**：在 `TerminalTableModel` 與 `BranchTrackerTableModel` 中實作 `sort()` 方法解決點擊 Header 排序無反應問題；修復多空家數統計偏差（偏空股為0）與熱度恆定 100% 的 Bug。
 
 * ✅ **Phase 3：CSV 手動匯出與更新流程優化** (2026-06-03)：
   * **停止日常更新大型 CSV 重寫**：當啟用 SQLite 時，日常安全更新流程直接將新下載的單日 CSV 同步寫入 SQLite 表（價格與分點），跳過 `stock_data_whole.csv` 與主力分點大合併 CSV 的合併重寫，解除日常磁碟 I/O 重擔。
@@ -966,3 +974,11 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 - Backtest「推薦組合回測」區塊新增保存、刪除與歷史記錄下拉選單，可重新載入完整 DTO 並重畫圖表/表格。
 - 新增 deterministic improvement hints，依停損比例、持有到期虧損、最差個股、交易次數與整體虧損產生第一版策略改善建議。
 - 已完成：推薦組合 research run 可 promote 成策略版本，並回寫 `promoted_version_id` 以保留來源追溯；尚未完成跨 run 比較視圖與更完整的 benchmark-relative attribution。
+
+## 2026-06-03 主力流向 (Smart Money Flow) 視覺重構與排版優化成果
+
+- **UI 分欄與雷達卡片**：重構為左右分欄佈局（65% 主表，35% 詳情），並加入選中股雷達摘要卡片與 `explainable_reasons` 解析。
+- **玻璃擬態卡片中文化**：調整頂部小卡片標題（市場趨勢、熱度、多空個股數、異常警示）並調大字體。
+- **Sparkline 與 ToolTip 優化**：使用 `QLinearGradient` 渲染漸層 Sparklines，固定抽取最近 5 筆交易記錄，並實作跨 Cell 的 ToolTip 懸浮提示。
+- **Bug 修復與排序**：修復 Header 點擊排序無反應問題；修復偏空個股數為 0 與熱度 100% 的 Bug。
+
