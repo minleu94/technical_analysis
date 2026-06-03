@@ -4,7 +4,7 @@ Broker Flow Data Transfer Objects (DTOs)
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Any
 
 @dataclass
 class BrokerFlowEvent:
@@ -45,3 +45,7 @@ class BranchFlowAggregation:
     total_net_qty: int = 0
     # 該分點操作此股票的歷史事件
     events: List[BrokerFlowEvent] = field(default_factory=list)
+    # Sparkline 繪圖資料 (最近 5 筆)
+    sparkline_data: List[float] = field(default_factory=list)
+    # 趨勢詳細資料 (包含日期與買賣超張數，用於 ToolTip)
+    sparkline_details: List[Any] = field(default_factory=list)

@@ -2,6 +2,7 @@
 Terminal Table Model
 專門為 Smart Money Flow Scanner 設計的 QAbstractTableModel。
 直接封裝 List[FlowSignalDTO]，不經過 DataFrame 轉換以保留強型別與自定義渲染所需的完整資料。
+已優化：支援欄位點擊排序與滑鼠懸浮 (ToolTip) 近期趨勢數值顯示。
 """
 
 from typing import List, Any
@@ -72,6 +73,15 @@ class TerminalTableModel(QAbstractTableModel):
                 return int(Qt.AlignRight | Qt.AlignVCenter)
             return int(Qt.AlignLeft | Qt.AlignVCenter)
             
+        # -- 滑鼠懸浮提示 (ToolTip) --
+        if role == Qt.ToolTipRole:
+            if hasattr(signal, 'sparkline_details') and signal.sparkline_details:
+                tooltip_lines = ["近期每日主力淨進出明細 (不分週期)："]
+                for d, val in signal.sparkline_details:
+                    sign = "+" if val > 0 else ""
+                    tooltip_lines.append(f"• {d}: {sign}{val:+,}張")
+                return "\n".join(tooltip_lines)
+            
         return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
@@ -84,6 +94,23 @@ class TerminalTableModel(QAbstractTableModel):
         if 0 <= row < len(self.signals):
             return self.signals[row]
         return None
+
+    def sort(self, column: int, order: Qt.SortOrder = Qt.AscendingOrder):
+        """實作點擊欄位標頭時的排序邏輯"""
+        self.layoutAboutToBeChanged.emit()
+        reverse = (order == Qt.DescendingOrder)
+        
+        if column == 0:    # 分數
+            self.signals.sort(key=lambda x: x.smart_money_score, reverse=reverse)
+        elif column == 1:  # 股票
+            self.signals.sort(key=lambda x: (x.stock_code, x.stock_name), reverse=reverse)
+        elif column == 2:  # 淨量
+            self.signals.sort(key=lambda x: x.aggregation.total_net_qty, reverse=reverse)
+        elif column == 3:  # 集中度
+            self.signals.sort(key=lambda x: x.branch_concentration, reverse=reverse)
+            
+        self.layoutChanged.emit()
+
 
 from app_module.dtos.broker_flow_dtos import BranchFlowAggregation
 from collections import defaultdict
@@ -128,24 +155,24 @@ class BranchTrackerTableModel(QAbstractTableModel):
             return intensity
             
         if role == ROLE_SPARKLINE:
-            # 將 events 按日期排序並聚合每日淨量
-            if not agg.events: return []
-            daily_net = defaultdict(int)
-            for e in agg.events:
-                daily_net[e.date] += e.net_qty
-            sorted_dates = sorted(daily_net.keys())
-            return [daily_net[d] for d in sorted_dates]
+            return agg.sparkline_data
             
         if role == ROLE_BADGES:
+            return agg.sparkline_details # 這裡原先是手動計算的 tags，我們改用我們在 service 計算好且儲存在 DTO 的
+            # 等等，先前 BranchTrackerTableModel 有自己計算 ROLE_BADGES:
+            # badges = []
+            # if net > 0: badges.append("BUY")
+            # else: badges.append("SELL")
+            # ...
+            # 我們應該保留這個手動計算，或者在 service 做。原本的代碼：
             badges = []
-            if net > 0: badges.append("BUY")
-            else: badges.append("SELL")
-            if abs(net) >= 1000: badges.append("STRONG")
-            elif abs(net) >= 500: badges.append("MED")
+            if net > 0: badges.append("買進 (BUY)")
+            else: badges.append("賣出 (SELL)")
+            if abs(net) >= 1000: badges.append("強大 (STRONG)")
+            elif abs(net) >= 500: badges.append("中等 (MED)")
             return badges
             
         if role == ROLE_SCORE:
-            # 傳遞絕對值以影響字體粗細
             return min(abs(net) / 10, 100.0)
             
         if role == Qt.DisplayRole:
@@ -167,6 +194,15 @@ class BranchTrackerTableModel(QAbstractTableModel):
                 return int(Qt.AlignRight | Qt.AlignVCenter)
             return int(Qt.AlignLeft | Qt.AlignVCenter)
             
+        # -- 滑鼠懸浮提示 (ToolTip) --
+        if role == Qt.ToolTipRole:
+            if hasattr(agg, 'sparkline_details') and agg.sparkline_details:
+                tooltip_lines = ["近期每日分點淨進出明細 (不分週期)："]
+                for d, val in agg.sparkline_details:
+                    sign = "+" if val > 0 else ""
+                    tooltip_lines.append(f"• {d}: {sign}{val:+,}張")
+                return "\n".join(tooltip_lines)
+                    
         return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
@@ -175,3 +211,18 @@ class BranchTrackerTableModel(QAbstractTableModel):
                 return self.headers[section]
         return None
 
+    def sort(self, column: int, order: Qt.SortOrder = Qt.AscendingOrder):
+        """實作分點追蹤表格點擊標頭排序"""
+        self.layoutAboutToBeChanged.emit()
+        reverse = (order == Qt.DescendingOrder)
+        
+        if column == 0:    # 淨量分數 (淨買賣超)
+            self.aggregations.sort(key=lambda x: x.total_net_qty, reverse=reverse)
+        elif column == 1:  # 股票
+            self.aggregations.sort(key=lambda x: (x.stock_code, x.stock_name), reverse=reverse)
+        elif column == 2:  # 買進
+            self.aggregations.sort(key=lambda x: x.total_buy_qty, reverse=reverse)
+        elif column == 3:  # 賣出
+            self.aggregations.sort(key=lambda x: x.total_sell_qty, reverse=reverse)
+            
+        self.layoutChanged.emit()

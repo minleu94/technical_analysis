@@ -145,6 +145,18 @@ class BrokerFlowService:
         aggregations = list(agg_map.values())
         signals = self.signal_engine.generate_signals(aggregations)
         
+        # 計算不論過濾週期、所有歷史事件的每日淨量作為近期 5 筆交易紀錄
+        stock_all_daily_net: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        for e in events:
+            stock_all_daily_net[e.stock_code][e.date] += e.net_qty
+            
+        for s in signals:
+            daily_map = stock_all_daily_net[s.stock_code]
+            sorted_dates = sorted(daily_map.keys())
+            last_5_dates = sorted_dates[-5:]
+            s.sparkline_data = [float(daily_map[d]) for d in last_5_dates]
+            s.sparkline_details = [(d, daily_map[d]) for d in last_5_dates]
+        
         # 過濾掉分數太低的，或是總淨量為負的
         filtered_signals = [s for s in signals if s.smart_money_score > 0 and s.aggregation.total_net_qty > 0]
         return filtered_signals
@@ -183,6 +195,18 @@ class BrokerFlowService:
             agg.total_net_qty += e.net_qty
             agg.events.append(e)
             
+        # 計算不論過濾週期、所有歷史事件的每日淨量作為近期 5 筆交易紀錄
+        branch_stock_all_daily_net: Dict[tuple, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        for e in events:
+            branch_stock_all_daily_net[(e.branch_system_key, e.stock_code)][e.date] += e.net_qty
+            
+        for key, agg in agg_map.items():
+            daily_map = branch_stock_all_daily_net[key]
+            sorted_dates = sorted(daily_map.keys())
+            last_5_dates = sorted_dates[-5:]
+            agg.sparkline_data = [float(daily_map[d]) for d in last_5_dates]
+            agg.sparkline_details = [(d, daily_map[d]) for d in last_5_dates]
+            
         return list(agg_map.values())
         
     def get_stock_detail_by_branches(self, stock_code: str, period: str = 'week') -> List[BranchFlowAggregation]:
@@ -205,32 +229,50 @@ class BrokerFlowService:
 
     def get_market_flow_summary(self, signals: List[FlowSignalDTO] = None, period: str = 'week') -> SmartMoneySummaryDTO:
         """
-        根據信號計算整體市場的主力流向摘要
+        根據信號計算整體市場的主力流向摘要 (統計全部多空個股與熱度)
         """
-        if signals is None:
-            signals = self.get_stock_flow_signals(period=period)
+        # 重新獲取全部信號 (不進行淨量大於零之過濾)，以獲得正確的多空總家數與市場熱度
+        events = self._load_data()
+        filtered_events = self._filter_events_by_period(events, period)
+        
+        agg_map: Dict[str, StockFlowAggregation] = {}
+        for e in filtered_events:
+            if e.stock_code not in agg_map:
+                agg_map[e.stock_code] = StockFlowAggregation(
+                    stock_code=e.stock_code,
+                    stock_name=e.stock_name
+                )
+            agg = agg_map[e.stock_code]
+            agg.total_buy_qty += e.buy_qty
+            agg.total_sell_qty += e.sell_qty
+            agg.total_net_qty += e.net_qty
+            agg.events.append(e)
+            
+        aggregations = list(agg_map.values())
+        all_signals = self.signal_engine.generate_signals(aggregations)
             
         summary = SmartMoneySummaryDTO()
         
-        # 統計多空股票數量
-        for s in signals:
-            if s.aggregation.total_net_qty > 0:
+        # 統計多空個股數量與異常警示數
+        for s in all_signals:
+            net_qty = s.aggregation.total_net_qty
+            if net_qty > 0:
                 summary.bullish_stock_count += 1
-                if s.smart_money_score >= 50:
+                # 偏多異常警示：主力分數高 (>= 80) 且大額淨買進 (>= 500張) ➔ 指標型重倉佈局
+                if s.smart_money_score >= 80 and net_qty >= 500:
                     summary.abnormal_signal_count += 1
-            elif s.aggregation.total_net_qty < 0:
+            elif net_qty < 0:
                 summary.bearish_stock_count += 1
-                if s.aggregation.total_net_qty <= -500:
+                # 偏空異常警示：大額淨賣出 (<= -500張) ➔ 指標型出貨倒貨
+                if net_qty <= -500:
                     summary.abnormal_signal_count += 1
                     
-        # 計算市場熱度 (粗略算法)
+        # 計算市場熱度 (偏多個股佔多空個股比例)
         total_stocks = summary.bullish_stock_count + summary.bearish_stock_count
         if total_stocks > 0:
             bull_ratio = summary.bullish_stock_count / total_stocks
             summary.market_heat_score = bull_ratio * 100.0
             
-        # 這裡的 market_regime, strong_industries 等可由外部 (例如 RegimeService) 提供或覆寫
-        # 我們目前提供預設骨架，UI 呈現時若有需要可進一步擴充
         if summary.market_heat_score > 60:
             summary.market_regime = "Bullish Flow"
         elif summary.market_heat_score < 40:

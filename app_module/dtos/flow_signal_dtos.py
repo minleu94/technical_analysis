@@ -4,7 +4,7 @@ Flow Signal Data Transfer Objects (DTOs)
 """
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Any
 from app_module.dtos.broker_flow_dtos import StockFlowAggregation
 
 @dataclass
@@ -38,6 +38,8 @@ class FlowSignalDTO:
     
     # 趨勢線資料 (例如過去 5 天的淨買賣超序列，用於繪製 Inline Sparkline)
     sparkline_data: List[float] = field(default_factory=list)
+    # 趨勢詳細資料 (包含日期與買賣超張數，用於 ToolTip)
+    sparkline_details: List[Any] = field(default_factory=list)
     
     # 視覺強度等級 (-3 到 3)。大於 0 為淡綠，小於 0 為淡紅。數字越大顏色越深。用於 Row Intensity。
     intensity_level: int = 0
