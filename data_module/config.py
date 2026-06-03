@@ -1,6 +1,6 @@
 from pathlib import Path
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 import shutil
 import os
@@ -45,6 +45,7 @@ class TWStockConfig:
     # 數據參數
     default_start_date: str = "2014-01-01"
     backup_keep_days: int = 7
+    backup_keep_dates: int = 5
     min_data_days: int = 30
     
     # API請求配置
@@ -179,16 +180,54 @@ class TWStockConfig:
         
         return self.daily_price_dir / f'{date_str}.csv'
     
+    def _backup_prefix_from_name(self, backup_file: Path, fallback_prefix: str) -> str:
+        """從備份檔名推導清理前綴，讓顯式備份檔名也能共用清理規則。"""
+        match = re.match(r"^(?P<prefix>.+)_\d{8}(?:_\d{6})?$", backup_file.stem)
+        if match:
+            return match.group("prefix")
+        return fallback_prefix
+
+    def _backup_sort_key(self, backup_file: Path) -> tuple[str, str]:
+        """解析備份檔名中的日期與時間；無法解析時回傳空值以避免誤刪。"""
+        match = re.match(r"^.+_(?P<date>\d{8})(?:_(?P<time>\d{6}))?$", backup_file.stem)
+        if not match:
+            return ("", "")
+        return (match.group("date"), match.group("time") or "")
+
     def _cleanup_old_backups(self, file_prefix: str):
-        """清理超過保留天數的備份文件"""
-        cutoff_time = datetime.now() - timedelta(days=self.backup_keep_days)
+        """清理備份檔：同一來源同一天只留最新一份，且最多保留五個日期版本。"""
+        backups_by_date: dict[str, list[Path]] = {}
         for backup_file in self.backup_dir.glob(f"{file_prefix}_*"):
             try:
-                file_time = datetime.fromtimestamp(backup_file.stat().st_mtime)
-                if file_time < cutoff_time:
-                    backup_file.unlink()
+                date_key, _ = self._backup_sort_key(backup_file)
+                if not date_key:
+                    continue
+                backups_by_date.setdefault(date_key, []).append(backup_file)
             except Exception:
                 continue
+
+        for date_key, backup_files in backups_by_date.items():
+            sorted_files = sorted(
+                backup_files,
+                key=lambda path: (self._backup_sort_key(path), path.stat().st_mtime),
+                reverse=True,
+            )
+            for backup_file in sorted_files[1:]:
+                try:
+                    backup_file.unlink()
+                except Exception:
+                    continue
+
+        keep_dates = sorted(backups_by_date.keys(), reverse=True)[: self.backup_keep_dates]
+        for date_key, backup_files in backups_by_date.items():
+            if date_key in keep_dates:
+                continue
+            for backup_file in backup_files:
+                try:
+                    if backup_file.exists():
+                        backup_file.unlink()
+                except Exception:
+                    continue
     
     def _setup_logging(self):
         """設置日誌"""
@@ -233,7 +272,9 @@ class TWStockConfig:
             self.logger.info(f"已創建備份文件: {backup_file}")
             
             # 清理舊備份
-            self._cleanup_old_backups(source_file.stem)
+            cleanup_prefix = self._backup_prefix_from_name(backup_file, source_file.stem)
+            self._cleanup_old_backups(cleanup_prefix)
+            return backup_file
             
         except Exception as e:
             self.logger.error(f"創建備份時發生錯誤: {str(e)}")
@@ -277,4 +318,4 @@ class TWStockConfig:
         if parsed_args.profile:
             config_kwargs['profile'] = parsed_args.profile
             
-        return cls(**config_kwargs), parsed_args 
+        return cls(**config_kwargs), parsed_args

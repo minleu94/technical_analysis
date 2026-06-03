@@ -170,6 +170,43 @@ class TestDataPathIsolation:
         # 驗證備份內容正確
         backup_df = pd.read_csv(backup_path)
         pd.testing.assert_frame_equal(df, backup_df)
+
+    def test_backup_cleanup_keeps_latest_five_dates(self, tmp_path, monkeypatch):
+        """備份清理只保留同一來源最新五個日期版本。"""
+        monkeypatch.setenv("DATA_ROOT", str(tmp_path / "data"))
+        monkeypatch.setenv("OUTPUT_ROOT", str(tmp_path / "output"))
+
+        config = TWStockConfig()
+        source_file = config.meta_data_dir / "all_stocks_data.csv"
+        source_file.write_text("date,value\n2026-01-01,1\n", encoding="utf-8")
+
+        backup_names = [
+            "all_stocks_data_20260101_090000.csv",
+            "all_stocks_data_20260102_090000.csv",
+            "all_stocks_data_20260103_090000.csv",
+            "all_stocks_data_20260104_090000.csv",
+            "all_stocks_data_20260105_090000.csv",
+            "all_stocks_data_20260106_090000.csv",
+            "all_stocks_data_20260106_120000.csv",
+            "all_stocks_data_20260107_090000.csv",
+        ]
+        for name in backup_names:
+            backup_file = config.backup_dir / name
+            backup_file.write_text(name, encoding="utf-8")
+
+        config.create_backup(
+            source_file,
+            config.backup_dir / "all_stocks_data_20260108_090000.csv",
+        )
+
+        remaining = sorted(path.name for path in config.backup_dir.glob("all_stocks_data_*.csv"))
+        assert remaining == [
+            "all_stocks_data_20260104_090000.csv",
+            "all_stocks_data_20260105_090000.csv",
+            "all_stocks_data_20260106_120000.csv",
+            "all_stocks_data_20260107_090000.csv",
+            "all_stocks_data_20260108_090000.csv",
+        ]
     
     def test_config_logging(self, tmp_path, monkeypatch, caplog):
         """測試配置日誌記錄"""
