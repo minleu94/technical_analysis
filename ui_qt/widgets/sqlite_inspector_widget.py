@@ -56,6 +56,11 @@ class SqliteInspectorWidget(QWidget):
         row1_layout.addWidget(QLabel("資料表:"))
         self.table_selector = QComboBox()
         self.table_selector.setMinimumWidth(200)
+        self.table_selector.setToolTip(
+            "【資料表】\n"
+            "選擇要檢視的 SQLite 資料表。載入後可在「數據預覽」分頁瀏覽資料，在「欄位結構」分頁檢視欄位型態。\n"
+            "例如每日股價表 (daily_prices)、大盤指數表 (market_indices)、技術指標表 (technical_indicators) 等。"
+        )
         self.table_selector.currentTextChanged.connect(self._on_table_changed)
         row1_layout.addWidget(self.table_selector)
 
@@ -64,10 +69,18 @@ class SqliteInspectorWidget(QWidget):
         self.limit_spin.setRange(10, 5000)
         self.limit_spin.setValue(100)
         self.limit_spin.setSingleStep(50)
+        self.limit_spin.setToolTip(
+            "【預覽筆數】\n"
+            "設定查詢時最大載入與預覽筆數，預設 100 筆。過大的筆數可能會導致介面暫時卡頓。"
+        )
         row1_layout.addWidget(self.limit_spin)
 
         self.load_btn = QPushButton("載入數據與結構")
         self.load_btn.setMinimumHeight(30)
+        self.load_btn.setToolTip(
+            "【載入數據與結構】\n"
+            "點擊後向資料庫發出查詢，並載入與上方篩選條件相符的資料及該表的欄位 Schema 結構。"
+        )
         self.load_btn.clicked.connect(self._load_current_table_data)
         row1_layout.addWidget(self.load_btn)
         row1_layout.addStretch()
@@ -80,35 +93,59 @@ class SqliteInspectorWidget(QWidget):
         self.stock_code_input = QLineEdit()
         self.stock_code_input.setPlaceholderText("2330 (選填)")
         self.stock_code_input.setMaximumWidth(100)
+        self.stock_code_input.setToolTip(
+            "【股票代號】\n"
+            "輸入 4 碼股票代號（例如 2330），用以篩選該個股的資料（對應表需含有 stock_id 或相關代號欄位）。"
+        )
         row2_layout.addWidget(self.stock_code_input)
 
         row2_layout.addWidget(QLabel("股票名稱:"))
         self.stock_name_input = QLineEdit()
         self.stock_name_input.setPlaceholderText("台積電 (選填)")
         self.stock_name_input.setMaximumWidth(120)
+        self.stock_name_input.setToolTip(
+            "【股票名稱】\n"
+            "輸入股票中文名稱或關鍵字（例如 台積電），用以模糊篩選該個股資料。"
+        )
         row2_layout.addWidget(self.stock_name_input)
 
         row2_layout.addWidget(QLabel("券商分點:"))
         self.broker_branch_input = QLineEdit()
         self.broker_branch_input.setPlaceholderText("分點名稱 (選填)")
         self.broker_branch_input.setMaximumWidth(140)
+        self.broker_branch_input.setToolTip(
+            "【券商分點】\n"
+            "輸入分點名稱關鍵字（例如 凱基台北），用以篩選分點買賣超資料（僅適用於 broker_flows 表）。"
+        )
         row2_layout.addWidget(self.broker_branch_input)
 
         row2_layout.addWidget(QLabel("單一日期:"))
         self.date_input = QLineEdit()
         self.date_input.setPlaceholderText("2026-05-29")
         self.date_input.setMaximumWidth(100)
+        self.date_input.setToolTip(
+            "【單一日期】\n"
+            "輸入特定交易日（格式為 YYYY-MM-DD，如 2026-05-29）來精確過濾當日數據。"
+        )
         row2_layout.addWidget(self.date_input)
 
         row2_layout.addWidget(QLabel("區間:"))
         self.start_date_input = QLineEdit()
         self.start_date_input.setPlaceholderText("開始日期")
         self.start_date_input.setMaximumWidth(90)
+        self.start_date_input.setToolTip(
+            "【開始日期】\n"
+            "輸入日期區間的起始日（格式為 YYYY-MM-DD，如 2026-05-01），用以做範圍查詢（需與結束日期搭配）。"
+        )
         row2_layout.addWidget(self.start_date_input)
         row2_layout.addWidget(QLabel("~"))
         self.end_date_input = QLineEdit()
         self.end_date_input.setPlaceholderText("結束日期")
         self.end_date_input.setMaximumWidth(90)
+        self.end_date_input.setToolTip(
+            "【結束日期】\n"
+            "輸入日期區間的截止日（格式為 YYYY-MM-DD，如 2026-05-29），用以做範圍查詢（需與開始日期搭配）。"
+        )
         row2_layout.addWidget(self.end_date_input)
 
         row2_layout.addStretch()

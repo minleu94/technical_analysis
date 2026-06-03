@@ -293,6 +293,12 @@ class UpdateView(QWidget):
         actions_layout = QHBoxLayout()
         self.safe_update_all_btn = QPushButton("安全更新所有數據")
         self.safe_update_all_btn.setMinimumHeight(45)
+        self.safe_update_all_btn.setToolTip(
+            "【安全更新所有數據】\n"
+            "日常維護最推薦！一鍵自動執行資料狀態檢查、下載缺失資料、\n"
+            "增量同步寫入 SQLite 資料庫、智慧增量重算技術指標並自動刷新大看板。\n"
+            "出錯時會自動中止並回報失敗步驟，是最安全的日常更新方式。"
+        )
         self.safe_update_all_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3b82f6, stop:1 #2563eb);
@@ -318,6 +324,12 @@ class UpdateView(QWidget):
 
         self.check_status_btn = QPushButton("🔍 檢查數據狀態")
         self.check_status_btn.setMinimumHeight(45)
+        self.check_status_btn.setToolTip(
+            "【🔍 檢查數據狀態】\n"
+            "查詢並重新偵測 SQLite 資料庫與本地 Raw 原始檔案的最新交易日與總記錄數，\n"
+            "並更新上方 5 張狀態卡片的狀態燈號（🟢最新/🟡待更新/🔴異常/⚪未檢查）。\n"
+            "檢查結果會同步呈現在頂部卡片與下方日誌主控台中。"
+        )
         self.check_status_btn.setStyleSheet("""
             QPushButton {
                 background-color: #f1f5f9;
@@ -518,11 +530,21 @@ class UpdateView(QWidget):
             end_date_edit.setDate(QDate.currentDate())
             end_date_edit.setCalendarPopup(True)
             end_date_edit.setDisplayFormat("yyyy-MM-dd")
+            end_date_edit.setToolTip(
+                "【結束日期】\n"
+                "設定下載或更新資料的截止日期。\n"
+                "當您在任何一個分頁修改此日期，其他分頁的結束日期將同步聯動更新。"
+            )
             
             lookback_spin = QSpinBox()
             lookback_spin.setRange(1, 365)
             lookback_spin.setValue(10)
             lookback_spin.setSuffix(" 天")
+            lookback_spin.setToolTip(
+                "【最近範圍】\n"
+                "設定從「結束日期」往前推算的查找天數。\n"
+                "例如設定 10 天，代表下載或檢查結束日期前 10 天內的所有交易日資料。"
+            )
             
             date_layout.addRow("結束日期:", end_date_edit)
             date_layout.addRow("最近範圍:", lookback_spin)
@@ -559,9 +581,19 @@ class UpdateView(QWidget):
             
             self.tech_incremental_radio = QRadioButton("增量更新（只計算新數據）")
             self.tech_incremental_radio.setChecked(True)
+            self.tech_incremental_radio.setToolTip(
+                "【增量更新模式】\n"
+                "僅針對資料庫中最新交易日或尚未計算過指標的新股價數據進行計算。\n"
+                "計算速度極快，是日常更新的首選模式。"
+            )
             mode_layout.addWidget(self.tech_incremental_radio)
             
             self.tech_force_all_radio = QRadioButton("強制全量更新（重新計算所有數據）")
+            self.tech_force_all_radio.setToolTip(
+                "【強制全量更新模式】\n"
+                "忽略已計算好的歷史指標，重新對資料庫內的所有股票歷史數據計算技術指標。\n"
+                "運算時間較長，通常僅在修改了技術指標算法邏輯時使用。"
+            )
             mode_layout.addWidget(self.tech_force_all_radio)
             mode_layout.addStretch()
             tech_layout.addLayout(mode_layout)
@@ -569,6 +601,11 @@ class UpdateView(QWidget):
             stock_form = QFormLayout()
             self.tech_stock_input = QLineEdit()
             self.tech_stock_input.setPlaceholderText("留空則處理所有股票，例如：2330")
+            self.tech_stock_input.setToolTip(
+                "【股票代號（選填）】\n"
+                "如果只想重算特定一檔股票的技術指標，請在此輸入股票代號（如 2330）。\n"
+                "若保持留空，則會對資料庫中所有的股票進行計算。"
+            )
             stock_form.addRow("股票代號（可選）:", self.tech_stock_input)
             tech_layout.addLayout(stock_form)
             
@@ -591,6 +628,11 @@ class UpdateView(QWidget):
 
         check_btn = QPushButton("🔍 檢查此資料源狀態")
         check_btn.setMinimumHeight(35)
+        check_btn.setToolTip(
+            "【檢查此資料源狀態】\n"
+            "單獨檢查此項資料來源在本地原始檔案目錄以及 SQLite 資料庫中的最新狀態（最新日期、總記錄數），\n"
+            "並更新頂部的對應數據卡片與下方日誌主控台。"
+        )
         check_btn.setStyleSheet("""
             QPushButton {
                 background-color: #f8fafc;
@@ -609,6 +651,12 @@ class UpdateView(QWidget):
         if key in {"daily", "market", "industry", "broker_branch"}:
             update_btn = QPushButton("📥 手動下載此資料源")
             update_btn.setMinimumHeight(35)
+            update_btn.setToolTip(
+                f"【手動下載此資料源】\n"
+                f"依據上方設定的日期範圍，手動向 API/網頁端發出下載請求，將原始 CSV 檔案下載至本地 raw/ 目錄。\n"
+                f"注意：手動下載僅會儲存本地 CSV 原始檔，必須再點擊「合併」按鈕或執行「安全更新所有數據」，\n"
+                f"資料才會真正寫入 SQLite 資料庫以供策略推薦和回測使用。"
+            )
             update_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #3b82f6;
@@ -628,6 +676,12 @@ class UpdateView(QWidget):
         if key == "daily":
             self.merge_btn = QPushButton("⚙️ 合併每日股價")
             self.merge_btn.setMinimumHeight(35)
+            self.merge_btn.setToolTip(
+                "【⚙️ 合併每日股價】\n"
+                "將本地 raw/daily_price/ 目錄下下載好的單日股價原始 CSV 檔案，\n"
+                "增量同步寫入至 SQLite 資料庫的 daily_prices 表中，\n"
+                "以便大盤檢測、策略推薦與回測引擎能夠讀取到最新數據。"
+            )
             self.merge_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #10b981;
@@ -646,6 +700,11 @@ class UpdateView(QWidget):
         elif key == "broker_branch":
             self.merge_broker_branch_btn = QPushButton("⚙️ 合併券商分點")
             self.merge_broker_branch_btn.setMinimumHeight(35)
+            self.merge_broker_branch_btn.setToolTip(
+                "【⚙️ 合併券商分點】\n"
+                "將本地 raw/ 內 6 大追蹤分點的買賣超 CSV 數據進行增量合併，\n"
+                "並同步寫入至 SQLite 資料庫的 broker_flows 表中，供主力流向分析使用。"
+            )
             self.merge_broker_branch_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #10b981;
@@ -664,6 +723,12 @@ class UpdateView(QWidget):
         elif key == "technical":
             self.calculate_tech_btn = QPushButton("🚀 計算技術指標")
             self.calculate_tech_btn.setMinimumHeight(35)
+            self.calculate_tech_btn.setToolTip(
+                "【🚀 計算技術指標】\n"
+                "依據上方的指標配置，計算個股的 KD, MACD, RSI, ADX 與均線等技術指標，\n"
+                "並將計算結果高速儲存至 SQLite 資料庫中。推薦與回測引擎非常依賴此指標，\n"
+                "因此手動合併完股價後，務必要點擊此處計算技術指標，系統功能才能正常運作。"
+            )
             self.calculate_tech_btn.setStyleSheet("""
                 QPushButton {
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #10b981, stop:1 #059669);
@@ -682,6 +747,12 @@ class UpdateView(QWidget):
 
         export_btn = QPushButton("📤 匯出 CSV 備案")
         export_btn.setMinimumHeight(35)
+        export_btn.setToolTip(
+            "【📤 匯出 CSV 備案】\n"
+            "將 SQLite 資料庫中此資料來源所屬的資料表，匯出為 Excel 可直接開啟的\n"
+            "UTF-8 with BOM 編碼的 CSV 檔案。您可以選擇匯出「最近範圍」或「全部歷史」。\n"
+            "這屬於離線備份與人工調研的輔助備案功能，日常更新不需要使用。"
+        )
         export_btn.setStyleSheet("""
             QPushButton {
                 background-color: #ffffff;
@@ -726,6 +797,12 @@ class UpdateView(QWidget):
             
             self.force_merge_btn = QPushButton("⚠️ 強制重新合併所有每日股價")
             self.force_merge_btn.setMinimumHeight(35)
+            self.force_merge_btn.setToolTip(
+                "【⚠️ 強制重新合併所有每日股價】\n"
+                "⚠️ 高風險操作！忽略資料庫中已有的合併狀態，全量掃描並重新將\n"
+                "raw/daily_price/ 底下的所有歷史股價 CSV 檔案重新寫入資料庫的 daily_prices 表。\n"
+                "可能需要非常長的時間，通常僅在資料庫損毀或需要完全修復重整數據時使用。"
+            )
             self.force_merge_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #ef4444;
