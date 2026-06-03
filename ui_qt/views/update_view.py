@@ -20,26 +20,36 @@ from app_module.update_service import UpdateService
 from ui_qt.widgets.info_button import InfoButton
 
 
-class StatusCard(QGroupBox):
-    """自訂美化數據狀態卡片，與 QTextEdit 介面相容"""
+
+
+
+class StatusCard(QFrame):
+    """自訂美化數據狀態卡片，與 QTextEdit 介面相容 (Sci-Fi 暗色風格)"""
     def __init__(self, title: str, icon_str: str = "📊", parent=None):
-        super().__init__("", parent)
+        super().__init__(parent)
         self.title = title
         self.icon_str = icon_str
         self._raw_text = ""
         
-        # 設置現代卡片樣式
+        self.setObjectName("CardFrame")
+        # 設置現代暗色玻璃擬態樣式
         self.setStyleSheet("""
-            QGroupBox {
-                background-color: #ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                margin-top: 0px;
-                padding: 0px;
+            QFrame#CardFrame {
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(30, 41, 59, 0.65), 
+                    stop:1 rgba(15, 23, 42, 0.8)
+                );
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 10px;
             }
-            QGroupBox:hover {
-                border: 1px solid #3b82f6;
-                background-color: #f8fafc;
+            QFrame#CardFrame:hover {
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(51, 65, 85, 0.75), 
+                    stop:1 rgba(30, 41, 59, 0.85)
+                );
+                border: 1px solid rgba(255, 255, 255, 0.18);
             }
         """)
         
@@ -51,7 +61,7 @@ class StatusCard(QGroupBox):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(6)
         
-        self.title_label = QLabel(f"<span style='font-size:12px; font-weight:bold; color:#1e293b;'>{icon_str} {title}</span>")
+        self.title_label = QLabel(f"<span style='font-size:12px; font-weight:bold; color:#cbd5e1;'>{icon_str} {title}</span>")
         self.indicator_label = QLabel("<span style='font-size:13px; color:#94a3b8;'>⚪</span>")
         
         header_layout.addWidget(self.title_label)
@@ -60,18 +70,18 @@ class StatusCard(QGroupBox):
         layout.addLayout(header_layout)
         
         # 中間最新日期
-        self.date_label = QLabel("<span style='color:#64748b;'>最新日期：</span><b style='color:#334155;'>--</b>")
+        self.date_label = QLabel("<span style='color:#94a3b8;'>最新日期：</span><b style='color:#f8fafc;'>--</b>")
         self.date_label.setStyleSheet("font-size: 11px;")
         layout.addWidget(self.date_label)
         
         # 總筆數
-        self.records_label = QLabel("<span style='color:#64748b;'>總記錄數：</span><b style='color:#334155;'>--</b>")
+        self.records_label = QLabel("<span style='color:#94a3b8;'>總記錄數：</span><b style='color:#f8fafc;'>--</b>")
         self.records_label.setStyleSheet("font-size: 11px;")
         layout.addWidget(self.records_label)
         
         # 額外資訊（例如技術指標數量）
         self.extra_label = QLabel("")
-        self.extra_label.setStyleSheet("color:#64748b; font-size: 11px;")
+        self.extra_label.setStyleSheet("color:#94a3b8; font-size: 11px;")
         self.extra_label.setVisible(False)
         layout.addWidget(self.extra_label)
         
@@ -95,11 +105,11 @@ class StatusCard(QGroupBox):
             elif "指標檔數" in line:
                 extra_info = line.strip()
                 
-        self.date_label.setText(f"<span style='color:#64748b;'>最新日期：</span><b style='color:#0f172a;'>{latest_date}</b>")
-        self.records_label.setText(f"<span style='color:#64748b;'>總記錄數：</span><b style='color:#0f172a;'>{total_records}</b>")
+        self.date_label.setText(f"<span style='color:#94a3b8;'>最新日期：</span><b style='color:#f8fafc;'>{latest_date}</b>")
+        self.records_label.setText(f"<span style='color:#94a3b8;'>總記錄數：</span><b style='color:#f8fafc;'>{total_records}</b>")
         
         if extra_info:
-            self.extra_label.setText(f"<span style='color:#64748b;'>{extra_info}</span>")
+            self.extra_label.setText(f"<span style='color:#94a3b8;'>{extra_info}</span>")
             self.extra_label.setVisible(True)
         else:
             self.extra_label.setVisible(False)
@@ -197,9 +207,9 @@ class UpdateView(QWidget):
         self.nav_list.setFixedWidth(160)
         self.nav_list.setStyleSheet("""
             QListWidget {
-                border: 1px solid #e2e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.08);
                 border-radius: 8px;
-                background-color: #f8fafc;
+                background-color: rgba(15, 23, 42, 0.5);
                 padding: 5px;
             }
             QListWidget::item {
@@ -207,10 +217,11 @@ class UpdateView(QWidget):
                 border-radius: 6px;
                 padding-left: 10px;
                 margin-bottom: 2px;
-                color: #334155;
+                color: #cbd5e1;
             }
             QListWidget::item:hover {
-                background-color: #cbd5e1;
+                background-color: rgba(51, 65, 85, 0.5);
+                color: #ffffff;
             }
             QListWidget::item:selected {
                 background-color: #3b82f6;
@@ -247,7 +258,7 @@ class UpdateView(QWidget):
         title_font.setPointSize(14)
         title_font.setBold(True)
         title.setFont(title_font)
-        title.setStyleSheet("color: #1e293b;")
+        title.setStyleSheet("color: #f8fafc;")
         title_layout.addWidget(title)
         title_layout.addStretch()
         info_btn = InfoButton("update", self)
@@ -256,7 +267,7 @@ class UpdateView(QWidget):
 
         # 看板說明
         desc_label = QLabel("此處提供整個系統的資料狀態概覽。您可以點選下方一鍵安全更新來同步最新資料，或點選左側進行個別資料維護。")
-        desc_label.setStyleSheet("color: #64748b; font-size: 12px;")
+        desc_label.setStyleSheet("color: #94a3b8; font-size: 12px;")
         desc_label.setWordWrap(True)
         all_layout.addWidget(desc_label)
 
