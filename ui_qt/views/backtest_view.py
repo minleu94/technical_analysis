@@ -47,6 +47,40 @@ from ui_qt.widgets.fast_chart_widget import (
 )
 
 
+RESEARCH_LAB_MODES = [
+    {
+        "id": "single_stock",
+        "label": "單股回測",
+        "description": "測一檔股票套用指定策略後的交易表現。",
+        "primary_input": "股票代號",
+    },
+    {
+        "id": "batch_stock",
+        "label": "批次股票回測",
+        "description": "一次測一批候選股票，找出策略在不同標的上的表現差異。",
+        "primary_input": "候選池 / 選股清單",
+    },
+    {
+        "id": "fixed_basket",
+        "label": "固定組合回測",
+        "description": "測固定一籃股票在指定期間內的組合表現。",
+        "primary_input": "固定股票清單",
+    },
+    {
+        "id": "recommendation_replay",
+        "label": "推薦系統回放",
+        "description": "把推薦結果送進 Research Lab，檢查推薦邏輯在歷史資料中的表現。",
+        "primary_input": "推薦結果",
+    },
+    {
+        "id": "strategy_research",
+        "label": "策略研究",
+        "description": "比較策略模板、參數版本與優化結果，作為升級策略版本的依據。",
+        "primary_input": "策略模板 / 參數",
+    },
+]
+
+
 def build_recommendation_portfolio_equity_series(equity_curve: pd.DataFrame) -> pd.Series:
     """Convert recommendation portfolio equity rows into chart-ready series."""
     if equity_curve is None or equity_curve.empty or "date" not in equity_curve.columns or "equity" not in equity_curve.columns:
@@ -154,6 +188,13 @@ class BacktestView(QWidget):
         self._setup_ui()
         if self.portfolio_run_repository and hasattr(self, "portfolio_history_combo"):
             self._refresh_portfolio_history_combo()
+
+    def _on_research_lab_mode_changed(self, index: int):
+        """更新 Research Lab 模式提示。"""
+        if index < 0 or index >= len(RESEARCH_LAB_MODES):
+            return
+        if hasattr(self, "research_lab_mode_hint"):
+            self.research_lab_mode_hint.setText(RESEARCH_LAB_MODES[index]["description"])
     
     def _setup_ui(self):
         """設置 UI"""
@@ -220,6 +261,20 @@ class BacktestView(QWidget):
             preset_layout.addLayout(preset_btn_row)
             preset_group.setLayout(preset_layout)
             config_layout.addWidget(preset_group)
+
+        mode_group = QGroupBox("Research Lab 模式")
+        mode_layout = QVBoxLayout()
+        self.research_lab_mode_combo = QComboBox()
+        for mode in RESEARCH_LAB_MODES:
+            self.research_lab_mode_combo.addItem(mode["label"], mode["id"])
+        self.research_lab_mode_hint = QLabel(RESEARCH_LAB_MODES[0]["description"])
+        self.research_lab_mode_hint.setWordWrap(True)
+        self.research_lab_mode_hint.setStyleSheet("color: #666;")
+        mode_layout.addWidget(self.research_lab_mode_combo)
+        mode_layout.addWidget(self.research_lab_mode_hint)
+        mode_group.setLayout(mode_layout)
+        config_layout.addWidget(mode_group)
+        self.research_lab_mode_combo.currentIndexChanged.connect(self._on_research_lab_mode_changed)
         
         # ========== 回測配置 ==========
         config_group = QGroupBox("回測配置")
