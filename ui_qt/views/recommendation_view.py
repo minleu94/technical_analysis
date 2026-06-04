@@ -1129,20 +1129,20 @@ class RecommendationView(QWidget):
         if self.recommendation_repository:
             title_layout.addWidget(self.save_result_btn)
         
-        # 加入觀察清單按鈕
-        self.add_to_watchlist_btn = QPushButton("加入觀察清單")
+        # 加入候選池按鈕
+        self.add_to_watchlist_btn = QPushButton("加入候選池")
         self.add_to_watchlist_btn.setVisible(False)  # 初始隱藏
         self.add_to_watchlist_btn.clicked.connect(self._add_selected_to_watchlist)
         if self.watchlist_service:
             title_layout.addWidget(self.add_to_watchlist_btn)
         
-        # 一鍵送回測按鈕（Phase 3.3）
-        self.send_to_backtest_btn = QPushButton("一鍵送回測")
+        # 送 Research Lab 批次回測按鈕（Phase 3.3）
+        self.send_to_backtest_btn = QPushButton("送 Research Lab 批次回測")
         self.send_to_backtest_btn.setVisible(False)  # 初始隱藏
         self.send_to_backtest_btn.clicked.connect(self._send_to_backtest)
         title_layout.addWidget(self.send_to_backtest_btn)
 
-        self.send_profile_to_portfolio_backtest_btn = QPushButton("送推薦組合回測")
+        self.send_profile_to_portfolio_backtest_btn = QPushButton("送 Research Lab 推薦回放")
         self.send_profile_to_portfolio_backtest_btn.setVisible(False)
         self.send_profile_to_portfolio_backtest_btn.clicked.connect(
             self._send_profile_to_portfolio_backtest
@@ -1806,7 +1806,7 @@ class RecommendationView(QWidget):
         )
     
     def _send_to_backtest(self):
-        """一鍵送回測（Profile → Backtest）（Phase 3.3）"""
+        """送 Research Lab 批次回測（Profile → Backtest）（Phase 3.3）"""
         if not self.current_recommendations or not self.current_config:
             QMessageBox.warning(self, "錯誤", "沒有可送回測的推薦結果")
             return
@@ -1873,8 +1873,8 @@ class RecommendationView(QWidget):
         QMessageBox.information(
             self,
             "已送出",
-            f"已將 {len(selected_stocks)} 檔股票送出到策略回測\n\n"
-            f"請切換到「策略回測」標籤查看。"
+            f"已將 {len(selected_stocks)} 檔股票送出到 Research Lab 批次回測\n\n"
+            f"請切換到「策略回測 / Research Lab」標籤查看。"
         )
 
     def _send_profile_to_portfolio_backtest(self):
@@ -1901,18 +1901,18 @@ class RecommendationView(QWidget):
         QMessageBox.information(
             self,
             "已送出",
-            "已將推薦 Profile/Config 送出到推薦組合回測\n\n"
-            "請切換到「策略回測」標籤確認期間與資金後執行。"
+            "已將推薦 Profile/Config 送出到 Research Lab 推薦回放\n\n"
+            "請切換到「策略回測 / Research Lab」標籤確認期間與資金後執行。"
         )
     
     def _add_selected_to_watchlist(self):
-        """將選中的股票加入觀察清單"""
+        """將選中的股票加入候選池"""
         if not self.watchlist_service or not self.recommendations_model:
             return
         
         selection = self.results_table.selectionModel().selectedRows()
         if not selection:
-            QMessageBox.warning(self, "提示", "請先選擇要加入觀察清單的股票")
+            QMessageBox.warning(self, "提示", "請先選擇要加入候選池的股票")
             return
         
         # 取得選中的股票
@@ -1945,11 +1945,11 @@ class RecommendationView(QWidget):
                 
                 added_count = self.watchlist_service.add_stocks(stocks, source='recommendation')
                 if added_count > 0:
-                    QMessageBox.information(self, "成功", f"已將 {added_count} 檔股票加入觀察清單\n{notes}")
+                    QMessageBox.information(self, "成功", f"已將 {added_count} 檔股票加入候選池\n{notes}")
                 else:
-                    QMessageBox.warning(self, "提示", "選中的股票已在觀察清單中")
+                    QMessageBox.warning(self, "提示", "選中的股票已在候選池中")
             except Exception as e:
-                QMessageBox.critical(self, "錯誤", f"加入觀察清單失敗：\n{str(e)}")
+                QMessageBox.critical(self, "錯誤", f"加入候選池失敗：\n{str(e)}")
     
     def _build_current_result_snapshot(self) -> RecommendationResultDTO:
         """建立未保存推薦結果快照，僅供 Portfolio 來源追溯使用。"""
@@ -2597,7 +2597,7 @@ class RecommendationView(QWidget):
 
         menu = QMenu(self)
         action_add_portfolio = menu.addAction("記錄到持倉管理（保留推薦來源）...")
-        action_add_watchlist = menu.addAction("加入候選池 / 觀察清單")
+        action_add_watchlist = menu.addAction("加入候選池")
 
         action = menu.exec(self.cursor().pos())
 
