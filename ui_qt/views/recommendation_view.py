@@ -24,6 +24,7 @@ from app_module.watchlist_service import WatchlistService
 from app_module.recommendation_repository import RecommendationRepository
 from app_module.universe_service import UniverseService
 from app_module.dtos import RecommendationDTO, RecommendationResultDTO
+from app_module.portfolio_source_adapter import build_recommendation_trade_source
 from data_module.config import TWStockConfig
 from ui_qt.widgets.info_button import InfoButton
 
@@ -1949,6 +1950,29 @@ class RecommendationView(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"加入觀察清單失敗：\n{str(e)}")
     
+    def _build_current_result_snapshot(self) -> RecommendationResultDTO:
+        """建立未保存推薦結果快照，僅供 Portfolio 來源追溯使用。"""
+
+        config_with_meta = dict(self.current_config or {})
+        if self.current_profile:
+            profile = self.profiles.get(self.current_profile, {})
+            config_with_meta.setdefault("profile_id", self.current_profile)
+            config_with_meta.setdefault("profile_name", profile.get("name", ""))
+            config_with_meta.setdefault("profile_version", profile.get("version", "1.0.0"))
+        if self.current_regime:
+            config_with_meta.setdefault("regime", self.current_regime)
+            config_with_meta.setdefault("regime_snapshot", {"regime": self.current_regime})
+
+        return RecommendationResultDTO(
+            result_id=getattr(self, "current_result_id", "") or "unsaved_recommendation_result",
+            result_name=getattr(self, "current_result_name", "") or "未保存推薦結果",
+            config=config_with_meta,
+            recommendations=list(self.current_recommendations or []),
+            regime=self.current_regime,
+            created_at=getattr(self, "current_result_created_at", "") or datetime.now().isoformat(),
+            notes="Portfolio 來源追溯快照",
+        )
+
     def _save_recommendation_result(self):
         """保存推薦結果"""
         if not self.recommendation_repository:
@@ -2555,14 +2579,29 @@ class RecommendationView(QWidget):
                     pass
         
         menu = QMenu(self)
-        action_add_portfolio = menu.addAction("🎯 送至持倉記錄交易 (Record as Trade)...")
-        action_add_watchlist = menu.addAction("⭐ 加入觀察清單")
+        action_add_portfolio = menu.addAction("記錄到持倉管理（保留推薦來源）...")
+        action_add_watchlist = menu.addAction("加入候選池 / 觀察清單")
         
         action = menu.exec(self.cursor().pos())
         
         if action == action_add_portfolio:
             main_window = self.window()
             if hasattr(main_window, 'portfolio_service'):
+                selected_recommendation = None
+                for rec in self.current_recommendations or []:
+                    if str(rec.stock_code) == stock_code:
+                        selected_recommendation = rec
+                        break
+
+                if not selected_recommendation:
+                    QMessageBox.warning(self, "錯誤", "找不到選中股票的推薦來源，無法保留推薦追溯資訊")
+                    return
+
+                source = build_recommendation_trade_source(
+                    self._build_current_result_snapshot(),
+                    selected_recommendation,
+                )
+
                 from ui_qt.views.portfolio_view import AddTradeDialog
                 dialog = AddTradeDialog(self.recommendation_service, self)
                 dialog.code_input.setText(stock_code)
@@ -2588,8 +2627,10 @@ class RecommendationView(QWidget):
                             trade_date=data["trade_date"],
                             fees=data["fees"],
                             taxes=data["taxes"],
-                            source_type="recommendation",
-                            source_id=self.current_profile or "manual",
+                            source_type=source.source_type,
+                            source_id=source.source_id,
+                            source_snapshot_hash=source.source_snapshot_hash,
+                            source_summary=source.source_summary,
                             notes=data["notes"]
                         )
                         QMessageBox.information(self, "成功", f"已成功記入持倉！")
