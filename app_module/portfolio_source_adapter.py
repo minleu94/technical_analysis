@@ -74,7 +74,7 @@ def build_recommendation_trade_source(
         source_type="recommendation_result",
         source_id=result.result_id,
         source_snapshot_hash=stable_snapshot_hash(summary),
-        source_summary=summary,
+        source_summary=dict(summary),
     )
 
 
@@ -104,19 +104,12 @@ def build_backtest_trade_source(
         "side": str(_row_value(trade_row, "買賣", "side")),
         "trade_date": str(_row_value(trade_row, "交易日期", "日期", "date", "trade_date")),
         "price": _row_value(trade_row, "價格", "單價", "成交價", "price"),
-        "quantity": _row_value(
-            trade_row,
-            "數量",
-            "交易股數",
-            "股數",
-            "quantity",
-            "amount",
-            default="",
-        ),
+        "quantity": _row_value(trade_row, "數量", "交易股數", "股數", "quantity", default=""),
+        "amount": _row_value(trade_row, "投入金額", "金額", "amount", default=""),
     }
     return PortfolioTradeSource(
         source_type="backtest_run",
         source_id=run_id,
         source_snapshot_hash=stable_snapshot_hash(summary),
-        source_summary=summary,
+        source_summary=dict(summary),
     )

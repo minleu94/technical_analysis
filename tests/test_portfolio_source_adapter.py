@@ -87,14 +87,14 @@ def test_build_backtest_trade_source_contains_run_and_strategy_context():
     assert source.source_summary["stock_code"] == "2330"
 
 
-def test_build_backtest_trade_source_maps_amount_to_quantity_when_quantity_missing():
+def test_build_backtest_trade_source_keeps_amount_separate_from_quantity():
     row = {
         "股票代號": "2330",
         "股票名稱": "台積電",
         "買賣": "買入",
         "交易日期": "2026-06-04",
         "價格": 888.0,
-        "amount": 1000,
+        "amount": 100000,
     }
     source = build_backtest_trade_source(
         run_id="run_002",
@@ -104,7 +104,8 @@ def test_build_backtest_trade_source_maps_amount_to_quantity_when_quantity_missi
         trade_row=row,
     )
 
-    assert source.source_summary["quantity"] == 1000
+    assert source.source_summary["quantity"] == ""
+    assert source.source_summary["amount"] == 100000
 
 
 def test_build_backtest_trade_source_supports_realistic_ui_row_aliases():
