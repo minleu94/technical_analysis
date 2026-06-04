@@ -38,6 +38,7 @@ from app_module.walkforward_service import WalkForwardService
 from app_module.recommendation_dataframe_provider import RecommendationDataFrameProvider
 from app_module.recommendation_portfolio_backtest_service import RecommendationPortfolioBacktestService
 from app_module.recommendation_portfolio_dates import parse_stock_dates
+from app_module.portfolio_source_adapter import build_backtest_trade_source
 from ui_qt.widgets.fast_chart_widget import (
     create_drawdown_curve_widget,
     create_equity_curve_widget,
@@ -4445,6 +4446,7 @@ class BacktestView(QWidget):
             
         df = self.trades_model.getDataFrame()
         row = index.row()
+        row_data = df.iloc[row].to_dict()
         
         # 欄位提取
         stock_code = ""
@@ -4498,7 +4500,7 @@ class BacktestView(QWidget):
                 break
                 
         menu = QMenu(self)
-        action_add_portfolio = menu.addAction("🎯 記錄此交易到持倉 (Record to Portfolio)...")
+        action_add_portfolio = menu.addAction("記錄到持倉管理（保留回測來源）...")
         
         action = menu.exec(self.cursor().pos())
         
@@ -4533,6 +4535,27 @@ class BacktestView(QWidget):
                             
                 if dialog.exec() == QDialog.Accepted:
                     data = dialog.get_trade_data()
+                    if stock_code and str(data["stock_code"]) != str(stock_code):
+                        QMessageBox.warning(self, "錯誤", "交易股票代號已被修改，無法保留原回測來源追溯資訊")
+                        return
+
+                    run_id = getattr(self, "current_run_id", "") or "unsaved_backtest_run"
+                    run_name = ""
+                    strategy_id = ""
+                    if getattr(self, "current_run_params", None):
+                        run_stock = self.current_run_params.get("stock_code", "")
+                        strategy_id = str(self.current_run_params.get("strategy_id", ""))
+                        run_name = f"{run_stock} {strategy_id}".strip()
+                    validation_status = ""
+                    if getattr(self, "current_report", None) and getattr(self.current_report, "validation_status", None):
+                        validation_status = str(self.current_report.validation_status.value)
+                    source = build_backtest_trade_source(
+                        run_id=run_id,
+                        run_name=run_name,
+                        strategy_id=strategy_id or str(selected_strategy_id or ""),
+                        validation_status=validation_status,
+                        trade_row=row_data,
+                    )
                     try:
                         main_window.portfolio_service.record_trade(
                             stock_code=data["stock_code"],
@@ -4543,8 +4566,10 @@ class BacktestView(QWidget):
                             trade_date=data["trade_date"],
                             fees=data["fees"],
                             taxes=data["taxes"],
-                            source_type="backtest",
-                            source_id=selected_strategy_id or "manual",
+                            source_type=source.source_type,
+                            source_id=source.source_id,
+                            source_snapshot_hash=source.source_snapshot_hash,
+                            source_summary=source.source_summary,
                             notes=data["notes"]
                         )
                         QMessageBox.information(self, "成功", f"交易已成功記入持倉！")
