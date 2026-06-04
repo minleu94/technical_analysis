@@ -57,7 +57,7 @@ def test_build_recommendation_trade_source_contains_traceable_context():
     assert source.source_summary["pattern_score"] == 75.0
     assert source.source_summary["volume_score"] == 92.0
     assert source.source_summary["recommendation_reasons"] == "量能放大；趨勢偏多"
-    assert source.source_summary["reasons"] == "量能放大；趨勢偏多"
+    assert source.source_summary["reasons"] == ["量能放大", "趨勢偏多"]
     assert source.source_summary["industry"] == "半導體"
     assert source.source_summary["regime_match"] is True
 
@@ -138,3 +138,4 @@ def test_stable_snapshot_hash_is_deterministic_for_same_payload_and_changes_with
 
     assert same_left == same_right
     assert same_left != different
+    assert len(stable_snapshot_hash({"a": 1})) == 64

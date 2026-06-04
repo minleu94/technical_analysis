@@ -30,7 +30,16 @@ def stable_snapshot_hash(payload: Mapping[str, Any]) -> str:
         separators=(",", ":"),
         default=str,
     ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()[:16]
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _split_reasons(raw: Any) -> list[str]:
+    text = str(raw or "").strip()
+    if not text:
+        return []
+    for separator in ["；", ";", "、", "\n"]:
+        text = text.replace(separator, "|")
+    return [part.strip() for part in text.split("|") if part.strip()]
 
 
 def build_recommendation_trade_source(
@@ -57,7 +66,7 @@ def build_recommendation_trade_source(
         "pattern_score": recommendation.pattern_score,
         "volume_score": recommendation.volume_score,
         "recommendation_reasons": recommendation.recommendation_reasons,
-        "reasons": recommendation.recommendation_reasons,
+        "reasons": _split_reasons(recommendation.recommendation_reasons),
         "industry": recommendation.industry,
         "regime_match": recommendation.regime_match,
     }
