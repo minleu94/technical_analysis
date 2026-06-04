@@ -57,6 +57,7 @@ def build_recommendation_trade_source(
         "pattern_score": recommendation.pattern_score,
         "volume_score": recommendation.volume_score,
         "recommendation_reasons": recommendation.recommendation_reasons,
+        "reasons": recommendation.recommendation_reasons,
         "industry": recommendation.industry,
         "regime_match": recommendation.regime_match,
     }
@@ -94,7 +95,7 @@ def build_backtest_trade_source(
         "side": str(_row_value(trade_row, "買賣", "side")),
         "trade_date": str(_row_value(trade_row, "交易日期", "date", "trade_date")),
         "price": _row_value(trade_row, "價格", "price"),
-        "quantity": _row_value(trade_row, "數量", "quantity", default=""),
+        "quantity": _row_value(trade_row, "數量", "quantity", "amount", default=""),
     }
     return PortfolioTradeSource(
         source_type="backtest_run",

@@ -2,6 +2,7 @@ from app_module.dtos import RecommendationDTO, RecommendationResultDTO
 from app_module.portfolio_source_adapter import (
     build_backtest_trade_source,
     build_recommendation_trade_source,
+    stable_snapshot_hash,
 )
 
 
@@ -56,6 +57,7 @@ def test_build_recommendation_trade_source_contains_traceable_context():
     assert source.source_summary["pattern_score"] == 75.0
     assert source.source_summary["volume_score"] == 92.0
     assert source.source_summary["recommendation_reasons"] == "量能放大；趨勢偏多"
+    assert source.source_summary["reasons"] == "量能放大；趨勢偏多"
     assert source.source_summary["industry"] == "半導體"
     assert source.source_summary["regime_match"] is True
 
@@ -83,3 +85,32 @@ def test_build_backtest_trade_source_contains_run_and_strategy_context():
     assert source.source_summary["strategy_id"] == "momentum_aggressive_v1"
     assert source.source_summary["validation_status"] == "PASS"
     assert source.source_summary["stock_code"] == "2330"
+
+
+def test_build_backtest_trade_source_maps_amount_to_quantity_when_quantity_missing():
+    row = {
+        "股票代號": "2330",
+        "股票名稱": "台積電",
+        "買賣": "買入",
+        "交易日期": "2026-06-04",
+        "價格": 888.0,
+        "amount": 1000,
+    }
+    source = build_backtest_trade_source(
+        run_id="run_002",
+        run_name="2330 momentum smoke",
+        strategy_id="momentum_aggressive_v1",
+        validation_status="PASS",
+        trade_row=row,
+    )
+
+    assert source.source_summary["quantity"] == 1000
+
+
+def test_stable_snapshot_hash_is_deterministic_for_same_payload_and_changes_with_payload():
+    same_left = stable_snapshot_hash({"a": 1, "b": [2]})
+    same_right = stable_snapshot_hash({"b": [2], "a": 1})
+    different = stable_snapshot_hash({"a": 2, "b": [2]})
+
+    assert same_left == same_right
+    assert same_left != different
