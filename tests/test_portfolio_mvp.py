@@ -129,6 +129,7 @@ def test_journal_service_appends_and_filters_entries(tmp_path):
 
 def test_portfolio_service_preserves_source_summary_on_trade_and_position(tmp_path):
     service = PortfolioService(make_config(tmp_path))
+    source_summary = {"profile_id": "aggressive_short", "total_score": 82.5}
 
     service.record_trade(
         stock_code="2330",
@@ -140,9 +141,10 @@ def test_portfolio_service_preserves_source_summary_on_trade_and_position(tmp_pa
         source_type="recommendation_result",
         source_id="rec_001",
         source_snapshot_hash="hash001",
-        source_summary={"profile_id": "aggressive_short", "total_score": 82.5},
+        source_summary=source_summary,
         trade_id="trade_001",
     )
+    source_summary["profile_id"] = "mutated_after_record"
 
     trades = service.list_trades()
     assert trades[0].source_summary["profile_id"] == "aggressive_short"
@@ -152,3 +154,28 @@ def test_portfolio_service_preserves_source_summary_on_trade_and_position(tmp_pa
     assert positions[0].source_id == "rec_001"
     assert positions[0].source_snapshot_hash == "hash001"
     assert positions[0].source_summary["total_score"] == 82.5
+
+
+def test_portfolio_service_loads_legacy_trade_without_source_summary(tmp_path):
+    service = PortfolioService(make_config(tmp_path))
+    trades_file = Path(tmp_path / "output" / "portfolio" / "trades.jsonl")
+    trades_file.parent.mkdir(parents=True, exist_ok=True)
+    trades_file.write_text(
+        (
+            '{"created_at":"2026-01-02T09:00:00","currency":"TWD",'
+            '"fees":0.0,"notes":"","portfolio_id":"default","price":100.0,'
+            '"quantity":10.0,"schema_version":"4.1","side":"buy",'
+            '"source_id":"rec_legacy","source_snapshot_hash":"",'
+            '"source_type":"recommendation","stock_code":"2330",'
+            '"stock_name":"TSMC","taxes":0.0,"trade_date":"2026-01-02",'
+            '"trade_id":"trade_legacy"}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    trades = service.list_trades()
+    assert trades[0].source_summary == {}
+
+    positions = service.list_positions()
+    assert positions[0].source_summary == {}
+    assert positions[0].source_id == "rec_legacy"
