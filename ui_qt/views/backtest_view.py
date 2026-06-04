@@ -4524,7 +4524,7 @@ class BacktestView(QWidget):
         else:
             self.trades_table.setModel(None)
         
-        # 更新圖表並切換到結果 Tab
+        # 更新圖表並切換到實驗摘要 Tab
         if hasattr(self, 'chart_run_combo') and self.chart_data_service:
             # 選中該 run
             index = self.chart_run_combo.findData(run_id)
@@ -4533,7 +4533,7 @@ class BacktestView(QWidget):
         
         for widget in self.findChildren(QTabWidget):
             for i in range(widget.count()):
-                if widget.tabText(i) == "結果":
+                if widget.tabText(i) == "實驗摘要":
                     widget.setCurrentIndex(i)
                     break
                     
