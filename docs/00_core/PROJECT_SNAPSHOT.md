@@ -17,16 +17,17 @@
 - Smart Money Terminal MVP ✅（高密度、低延遲的專業級籌碼分析終端已完成）
 - UI Qt Backtest chart renderer ✅（QtWebEngine + HTML5 Canvas fast renderer 已完成，Matplotlib fallback 保留）
 - Recommendation Portfolio Backtest MVP ✅（推薦 Profile/Config 可在歷史日期重播，回測整組推薦組合績效與個股貢獻）
+- Research Lab 工作流重整 🚧（回測頁已加入多模式實驗室語意；Watchlist 在研究流程中改定位為候選池；Recommendation / Backtest 記錄到 Portfolio 時會保留來源 metadata）
 - 數據更新工作台 ✅（`UpdateView` 已整理為左側導覽維運工作台，新增「安全更新所有數據」日常維護入口）
 - Codex / Antigravity / Agent 指引 ✅（repo 根目錄 `AGENTS.md` 與 `GEMINI.md` 已建立，`docs/agents/` 與 `.agent/rules/` 已對齊目前 `ui_qt`、資料根目錄與文檔路徑）
-- Phase 4.1 Portfolio MVP 🚧（service/domain/test 骨架已開始；`ui_qt` Portfolio Tab 與 Phase 3 → Portfolio 整合尚未完成）
+- Phase 4.1 Portfolio MVP 🚧（service/domain/test 與 `ui_qt` Portfolio Tab 已開始；Phase 3 → Portfolio handoff 會保存 recommendation / backtest source metadata）
 
 ## 現在的工作模式（你每天要用的流程）
 
 1. Update 使用「安全更新所有數據」或左側資料來源頁更新資料
 2. Market Watch 看 Regime + 強弱
-3. Recommendation 用 Profile 出名單 + 看 Why/WhyNot → 丟 Watchlist，或送「推薦組合回測」
-4. Backtest 可跑 Watchlist/現有名單批次回測，也可用歷史重播推薦邏輯評估整組推薦組合
+3. Recommendation 用 Profile 出名單 + 看 Why/WhyNot → 加入候選池，或送 Research Lab 批次回測 / 推薦回放
+4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；必要時把明確交易記錄到 Portfolio 並保留來源追溯
 
 ## Tech Lead 的預設任務（開場要先做什麼）
 
@@ -113,5 +114,11 @@
 - **全域底部日誌 Console 與進度條共享**：將 QProgressBar、進度 Label 以及 Terminal 日誌輸出框移至最外層佈局的最下方，實作分頁切換時日誌與進度的全域共享。Console 採用深色背景、Consolas 等寬 11px 字型與微型清除按鈕。
 - **日期聯動同步與委派更新**：在 `UpdateView` 中實作了日期聯動邏輯，任何分頁修改日期皆會透過 blockSignals 同步更新其他分頁元件。手動更新按鈕透過 `_dispatch_update()` 自適應設定隱藏的對應 RadioButton 狀態，實現 UI 與原 Service 業務代碼的無縫相容。
 - **自動與 QA 測試 100% 綠燈**：通過 mypy 無新增錯誤，`tests/test_ui_qt_update_view_workbench.py` (9 passed) 與 `scripts/qa_validate_update_tab.py` (21 passed, 0 failed) 順利通過。
+
+## 2026-06-04 Research Lab 工作流重整
+
+- Research Lab 第一階段開始將回測頁定位為多模式研究實驗室，區分單股回測、批次股票回測、固定組合回測、推薦系統回放與策略研究。
+- 觀察清單在研究流程中重新定位為候選池 / 實驗 Universe，用於回答「我要測哪一批」。
+- Recommendation / Backtest 記錄到 Portfolio 時將保留來源 metadata，讓交易紀錄可追溯到推薦結果或回測 run。
 
 

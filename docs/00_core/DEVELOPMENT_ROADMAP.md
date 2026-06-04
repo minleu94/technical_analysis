@@ -560,6 +560,10 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
   * ✅ 結果頁顯示整組組合總報酬、最大回撤、交易檔數、平均持有天數、資金使用，並列出期間持股、個股貢獻與交易紀錄
   * ✅ 修復數字型 `YYYYMMDD` 日期被 `pd.to_datetime` 誤判成 1970 epoch 的問題，正式資料 6 個月 / Top10 / 候選 50 / 每週重播 smoke 通過
   * ⏳ 下一步：加入 Sortino、Sharpe、Monte Carlo 與更完整的穩健性/資金曲線呈現
+* 🚧 **Research Lab 工作流重整**：已啟動（2026-06-04）
+  * ✅ Backtest / Research Lab 第一階段整理為多模式實驗室：單股回測、批次股票回測、固定組合回測、推薦系統回放與策略研究。
+  * ✅ Watchlist / 觀察清單在研究流程中明確定位為候選池，承接推薦、強弱勢、主力流向與手動挑選來源。
+  * ✅ Recommendation / Backtest 記錄到 Portfolio 時會保存 `source_type`、`source_id`、`source_snapshot_hash` 與 `source_summary`，讓 append-only trade 可追溯到推薦結果或回測 run。
 * ✅ **Phase 3.1、3.2、3.3a 核心功能**：已完成（推薦可用化、Profiles 正式化、研究閉環核心功能）
 * ✅ **AI Runtime Subsystem MVP**：已完成（Phase A Architecture & Phase B UI Integration）
   * ✅ 實作 Runtime Observatory (State Machine Observatory)
@@ -589,12 +593,12 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     - ✅ 驗證通過率：100% (10/10)
     - ✅ 修復失效功能：WatchlistService、BacktestReportDTO 引用
     - ✅ 驗證報告：`output/qa/phase3_3b_validation/VALIDATION_REPORT.md`
-* 🚧 **Phase 4.1 Portfolio MVP**：已啟動骨架（service/domain/test），UI 尚未完成
+* 🚧 **Phase 4.1 Portfolio MVP**：已啟動骨架與最小 UI / handoff
   * ✅ `portfolio_module/` domain logic：append-only trades → positions projection
   * ✅ `PortfolioService` / `JournalService`：交易紀錄、持倉投影、Journal entry
   * ✅ `tests/test_portfolio_mvp.py`：Portfolio MVP 核心測試通過
-  * ⏳ `ui_qt/views/portfolio_view.py`：尚未建立
-  * ⏳ Recommendation / Backtest → Portfolio 建立持倉：尚未整合
+  * ✅ `ui_qt/views/portfolio_view.py`：已建立最小 Portfolio Tab / trade entry path
+  * ✅ Recommendation / Backtest → Portfolio 建立持倉：已整合來源 metadata；後續仍需完整條件監控與策略版本追蹤視圖
 * ✅ **數據更新工作台重整與視覺/架構優化**：已完成（2026-06-03）
   * ✅ 將全部資料主分頁升級為「數據大看板 (Dashboard)」，以 StatusCard (圓角、軟陰影、🟢/🟡/🔴/⚪ 四色狀態指示燈) 展示數據概覽，與原 QTextEdit 接口相容度 100%。
   * ✅ 實現手動操作與進階配置（日期範圍、下載、增量合併、技術指標計算配置）「解耦歸位」至個別資料源維護分頁，並在每日股價分頁以 Danger Zone 封裝強制合併按鈕。
@@ -830,6 +834,11 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * `scripts/verify_branch_data.py`：驗證資料格式
 
 ### 下一步 Next（Phase 4.1 Portfolio UI）
+
+* **Research Lab 工作流重整啟動**（2026-06-04）
+  * ✅ Backtest / Research Lab 第一階段開始整理為多模式實驗室：策略研究、單股回測、批次股票回測、固定組合回測與推薦系統回放。
+  * ✅ Watchlist / 觀察清單在研究流程中明確定位為候選池，後續會承接推薦、強弱勢、主力流向與手動挑選來源。
+  * ✅ Phase 3 → Portfolio handoff 會以 append-only trade 為唯一主路徑，並保存 recommendation / backtest source metadata。
 
 * **文件與進度整理**（2026-05-20）
   * ✅ 數據更新工作台與 Agent 指引已同步至主要入口文件
