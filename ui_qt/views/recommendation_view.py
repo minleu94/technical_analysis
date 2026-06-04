@@ -1673,6 +1673,7 @@ class RecommendationView(QWidget):
         # 保存當前配置和 Regime（用於後續保存）
         self.current_config = config
         self.current_regime = config.get('regime')
+        self.current_recommendation_source_created_at = ""
         
         # 保存當前 Profile（如果在新手模式下）
         if self.is_beginner_mode:
