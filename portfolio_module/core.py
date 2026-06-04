@@ -29,6 +29,7 @@ class Trade:
     source_type: str = ""
     source_id: str = ""
     source_snapshot_hash: str = ""
+    source_summary: Dict[str, Any] = field(default_factory=dict)
     created_at: str = ""
     schema_version: str = "4.1"
 
@@ -50,6 +51,7 @@ class Trade:
             source_type=str(data.get("source_type", "")),
             source_id=str(data.get("source_id", "")),
             source_snapshot_hash=str(data.get("source_snapshot_hash", "")),
+            source_summary=dict(data.get("source_summary", {}) or {}),
             created_at=str(data.get("created_at", "")),
             schema_version=str(data.get("schema_version", "4.1")),
         )
@@ -71,6 +73,7 @@ class Trade:
             "source_type": self.source_type,
             "source_id": self.source_id,
             "source_snapshot_hash": self.source_snapshot_hash,
+            "source_summary": dict(self.source_summary),
             "created_at": self.created_at,
             "schema_version": self.schema_version,
         }
@@ -89,6 +92,7 @@ class Position:
     source_type: str = ""
     source_id: str = ""
     source_snapshot_hash: str = ""
+    source_summary: Dict[str, Any] = field(default_factory=dict)
     trade_ids: List[str] = field(default_factory=list)
 
     @property
@@ -119,6 +123,7 @@ class Position:
             "source_type": self.source_type,
             "source_id": self.source_id,
             "source_snapshot_hash": self.source_snapshot_hash,
+            "source_summary": dict(self.source_summary),
             "trade_ids": list(self.trade_ids),
         }
 
@@ -167,6 +172,7 @@ def rebuild_positions(trades: Iterable[Trade]) -> List[Position]:
                     source_type=trade.source_type,
                     source_id=trade.source_id,
                     source_snapshot_hash=trade.source_snapshot_hash,
+                    source_summary=dict(trade.source_summary or {}),
                     trade_ids=[trade.trade_id],
                 )
             else:

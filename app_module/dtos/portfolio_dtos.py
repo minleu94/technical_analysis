@@ -21,6 +21,7 @@ class TradeDTO:
     source_type: str = ""
     source_id: str = ""
     source_snapshot_hash: str = ""
+    source_summary: Dict[str, Any] = field(default_factory=dict)
     created_at: str = ""
     schema_version: str = "4.1"
 
@@ -45,6 +46,7 @@ class TradeDTO:
             source_type=str(data.get("source_type", "")),
             source_id=str(data.get("source_id", "")),
             source_snapshot_hash=str(data.get("source_snapshot_hash", "")),
+            source_summary=dict(data.get("source_summary", {}) or {}),
             created_at=str(data.get("created_at", "")),
             schema_version=str(data.get("schema_version", "4.1")),
         )
@@ -66,6 +68,7 @@ class PositionDTO:
     source_type: str = ""
     source_id: str = ""
     source_snapshot_hash: str = ""
+    source_summary: Dict[str, Any] = field(default_factory=dict)
     trade_ids: List[str] = field(default_factory=list)
     schema_version: str = "4.1"
 
@@ -89,6 +92,7 @@ class PositionDTO:
             source_type=str(data.get("source_type", "")),
             source_id=str(data.get("source_id", "")),
             source_snapshot_hash=str(data.get("source_snapshot_hash", "")),
+            source_summary=dict(data.get("source_summary", {}) or {}),
             trade_ids=list(data.get("trade_ids", [])),
             schema_version=str(data.get("schema_version", "4.1")),
         )

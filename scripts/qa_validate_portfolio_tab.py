@@ -48,7 +48,9 @@ def run_service_tests(temp_dir: Path):
         trade_date="2026-01-02",
         notes="First buy TSMC",
         source_type="recommendation",
-        source_id="rec_001"
+        source_id="rec_001",
+        source_snapshot_hash="hash_rec_001",
+        source_summary={"profile_id": "aggressive_short", "total_score": 82.5},
     )
     assert trade1.stock_code == "2330"
     assert trade1.side == "buy"
@@ -75,6 +77,10 @@ def run_service_tests(temp_dir: Path):
     assert pos.quantity == 2000.0
     assert pos.average_cost == 610.0, f"Expected cost 610.0, got {pos.average_cost}"
     assert pos.invested_amount == 1220000.0
+    assert pos.source_type == "recommendation"
+    assert pos.source_id == "rec_001"
+    assert pos.source_snapshot_hash == "hash_rec_001"
+    assert pos.source_summary["profile_id"] == "aggressive_short"
     
     # 3. Record sell trade
     logger.info("Recording partial sell trade for TSMC...")

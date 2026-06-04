@@ -125,3 +125,30 @@ def test_journal_service_appends_and_filters_entries(tmp_path):
     assert len(entries) == 1
     assert entries[0].journal_id == "journal_001"
     assert entries[0].linked_id == "trade_001"
+
+
+def test_portfolio_service_preserves_source_summary_on_trade_and_position(tmp_path):
+    service = PortfolioService(make_config(tmp_path))
+
+    service.record_trade(
+        stock_code="2330",
+        stock_name="TSMC",
+        side="buy",
+        quantity=10,
+        price=100,
+        trade_date="2026-01-02",
+        source_type="recommendation_result",
+        source_id="rec_001",
+        source_snapshot_hash="hash001",
+        source_summary={"profile_id": "aggressive_short", "total_score": 82.5},
+        trade_id="trade_001",
+    )
+
+    trades = service.list_trades()
+    assert trades[0].source_summary["profile_id"] == "aggressive_short"
+
+    positions = service.list_positions()
+    assert positions[0].source_type == "recommendation_result"
+    assert positions[0].source_id == "rec_001"
+    assert positions[0].source_snapshot_hash == "hash001"
+    assert positions[0].source_summary["total_score"] == 82.5

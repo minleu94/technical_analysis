@@ -40,6 +40,7 @@ class PortfolioService:
         source_type: str = "",
         source_id: str = "",
         source_snapshot_hash: str = "",
+        source_summary: Optional[Dict[str, Any]] = None,
         trade_id: Optional[str] = None,
     ) -> TradeDTO:
         """Append a manual trade record after domain validation."""
@@ -60,6 +61,7 @@ class PortfolioService:
             source_type=source_type,
             source_id=source_id,
             source_snapshot_hash=source_snapshot_hash,
+            source_summary=dict(source_summary or {}),
             created_at=created_at,
         )
 
