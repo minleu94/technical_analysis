@@ -251,7 +251,7 @@ class BacktestView(QWidget):
         
         # ========== 策略預設區塊 ==========
         if self.preset_service:
-            preset_group = QGroupBox("策略預設")
+            preset_group = QGroupBox("策略來源 / 預設")
             preset_layout = QVBoxLayout()
             
             preset_row = QHBoxLayout()
@@ -281,8 +281,8 @@ class BacktestView(QWidget):
             preset_group.setLayout(preset_layout)
             config_layout.addWidget(preset_group)
         
-        # ========== 回測配置 ==========
-        config_group = QGroupBox("回測配置")
+        # ========== 輸入來源 ==========
+        config_group = QGroupBox("輸入來源")
         config_form = QFormLayout()
         
         # 股票代號（升級為支援單一/清單模式）
@@ -328,6 +328,13 @@ class BacktestView(QWidget):
         self.end_date.setCalendarPopup(True)
         self.end_date.setDisplayFormat("yyyy-MM-dd")
         config_form.addRow("結束日期:", self.end_date)
+
+        config_group.setLayout(config_form)
+        config_layout.addWidget(config_group)
+
+        # ========== 策略與風控：資金成本 / 執行 ==========
+        risk_group = QGroupBox("策略與風控：資金成本 / 執行")
+        risk_form = QFormLayout()
         
         # 初始資金
         self.capital_input = QDoubleSpinBox()
@@ -339,7 +346,7 @@ class BacktestView(QWidget):
         if 'capital' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['capital']['tooltip_lines'])
             self.capital_input.setToolTip(tooltip_text)
-        config_form.addRow("初始資金:", self.capital_input)
+        risk_form.addRow("初始資金:", self.capital_input)
         
         # 手續費（基點）
         self.fee_bps_input = QDoubleSpinBox()
@@ -351,7 +358,7 @@ class BacktestView(QWidget):
         if 'fee_bps' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['fee_bps']['tooltip_lines'])
             self.fee_bps_input.setToolTip(tooltip_text)
-        config_form.addRow("手續費:", self.fee_bps_input)
+        risk_form.addRow("手續費:", self.fee_bps_input)
         
         # 滑價（基點）
         self.slippage_bps_input = QDoubleSpinBox()
@@ -363,7 +370,7 @@ class BacktestView(QWidget):
         if 'slippage_bps' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['slippage_bps']['tooltip_lines'])
             self.slippage_bps_input.setToolTip(tooltip_text)
-        config_form.addRow("滑價:", self.slippage_bps_input)
+        risk_form.addRow("滑價:", self.slippage_bps_input)
         
         # 執行價格選擇
         self.execution_price_combo = QComboBox()
@@ -373,7 +380,7 @@ class BacktestView(QWidget):
         if 'execution_price' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['execution_price']['tooltip_lines'])
             self.execution_price_combo.setToolTip(tooltip_text)
-        config_form.addRow("執行價格:", self.execution_price_combo)
+        risk_form.addRow("執行價格:", self.execution_price_combo)
         
         # 停損停利模式選擇
         self.stop_profit_mode_combo = QComboBox()
@@ -384,7 +391,7 @@ class BacktestView(QWidget):
         if 'stop_profit_mode' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['stop_profit_mode']['tooltip_lines'])
             self.stop_profit_mode_combo.setToolTip(tooltip_text)
-        config_form.addRow("停損停利模式:", self.stop_profit_mode_combo)
+        risk_form.addRow("停損停利模式:", self.stop_profit_mode_combo)
         
         # 停損（%）
         self.stop_loss_input = QDoubleSpinBox()
@@ -397,7 +404,7 @@ class BacktestView(QWidget):
         if 'stop_loss_pct' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['stop_loss_pct']['tooltip_lines'])
             self.stop_loss_input.setToolTip(tooltip_text)
-        config_form.addRow("停損 (%):", self.stop_loss_input)
+        risk_form.addRow("停損 (%):", self.stop_loss_input)
         
         # 停利（%）
         self.take_profit_input = QDoubleSpinBox()
@@ -410,7 +417,7 @@ class BacktestView(QWidget):
         if 'take_profit_pct' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['take_profit_pct']['tooltip_lines'])
             self.take_profit_input.setToolTip(tooltip_text)
-        config_form.addRow("停利 (%):", self.take_profit_input)
+        risk_form.addRow("停利 (%):", self.take_profit_input)
         
         # 停損（ATR 倍數）
         self.stop_loss_atr_input = QDoubleSpinBox()
@@ -424,7 +431,7 @@ class BacktestView(QWidget):
         if 'stop_loss_atr' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['stop_loss_atr']['tooltip_lines'])
             self.stop_loss_atr_input.setToolTip(tooltip_text)
-        config_form.addRow("停損 (ATR):", self.stop_loss_atr_input)
+        risk_form.addRow("停損 (ATR):", self.stop_loss_atr_input)
         
         # 停利（ATR 倍數）
         self.take_profit_atr_input = QDoubleSpinBox()
@@ -438,13 +445,13 @@ class BacktestView(QWidget):
         if 'take_profit_atr' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['take_profit_atr']['tooltip_lines'])
             self.take_profit_atr_input.setToolTip(tooltip_text)
-        config_form.addRow("停利 (ATR):", self.take_profit_atr_input)
+        risk_form.addRow("停利 (ATR):", self.take_profit_atr_input)
         
-        config_group.setLayout(config_form)
-        config_layout.addWidget(config_group)
+        risk_group.setLayout(risk_form)
+        config_layout.addWidget(risk_group)
         
         # ========== 部位 Sizing 配置 ==========
-        sizing_group = QGroupBox("部位 Sizing")
+        sizing_group = QGroupBox("策略與風控：部位 Sizing")
         sizing_form = QFormLayout()
         
         # Sizing 模式
@@ -487,7 +494,7 @@ class BacktestView(QWidget):
         config_layout.addWidget(sizing_group)
         
         # ========== 部位管理配置 ==========
-        position_mgmt_group = QGroupBox("部位管理")
+        position_mgmt_group = QGroupBox("策略與風控：部位管理")
         position_mgmt_form = QFormLayout()
         
         # 最大持有部位數
@@ -545,7 +552,7 @@ class BacktestView(QWidget):
         config_layout.addWidget(position_mgmt_group)
         
         # ========== 市場限制配置 ==========
-        market_constraints_group = QGroupBox("市場限制")
+        market_constraints_group = QGroupBox("策略與風控：市場限制")
         market_constraints_form = QFormLayout()
         
         # 漲跌停限制
@@ -582,7 +589,7 @@ class BacktestView(QWidget):
         config_layout.addWidget(market_constraints_group)
         
         # 策略配置
-        strategy_group = QGroupBox("策略配置")
+        strategy_group = QGroupBox("策略與風控：策略配置")
         strategy_layout = QVBoxLayout()
         
         # 策略選擇下拉選單
@@ -623,7 +630,7 @@ class BacktestView(QWidget):
             self.walkforward_service = None
         
         if self.optimizer_service:
-            self.optimization_group = QGroupBox("參數最佳化")
+            self.optimization_group = QGroupBox("進階驗證：參數最佳化")
             self.optimization_group.setCheckable(True)
             self.optimization_group.setChecked(False)
             # 連接勾選狀態變更事件，控制參數顯示位置
@@ -669,7 +676,7 @@ class BacktestView(QWidget):
         
         # ========== Walk-forward 驗證區塊 ==========
         if self.walkforward_service:
-            wf_group = QGroupBox("Walk-forward 驗證")
+            wf_group = QGroupBox("進階驗證：Walk-forward 驗證")
             wf_group.setCheckable(True)
             wf_group.setChecked(False)
             wf_layout = QVBoxLayout()
@@ -739,7 +746,7 @@ class BacktestView(QWidget):
             wf_group.setLayout(wf_layout)
             config_layout.addWidget(wf_group)
 
-        self.recommendation_portfolio_group = QGroupBox("推薦組合回測")
+        self.recommendation_portfolio_group = QGroupBox("推薦回放設定")
         self.recommendation_portfolio_group.setCheckable(True)
         self.recommendation_portfolio_group.setChecked(False)
         recommendation_portfolio_layout = QVBoxLayout()
