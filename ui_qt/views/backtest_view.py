@@ -784,7 +784,7 @@ class BacktestView(QWidget):
         recommendation_portfolio_form.addRow("資金配置:", self.recommendation_portfolio_allocation)
         recommendation_portfolio_layout.addLayout(recommendation_portfolio_form)
 
-        self.execute_recommendation_portfolio_btn = QPushButton("執行推薦組合回測")
+        self.execute_recommendation_portfolio_btn = QPushButton("執行推薦回放")
         self.execute_recommendation_portfolio_btn.setStyleSheet("background-color: #607D8B; color: white; font-weight: bold;")
         self.execute_recommendation_portfolio_btn.clicked.connect(self._execute_recommendation_portfolio_backtest)
         recommendation_portfolio_layout.addWidget(self.execute_recommendation_portfolio_btn)
@@ -792,12 +792,12 @@ class BacktestView(QWidget):
         # 推薦組合回測保存與歷史管理
         if self.portfolio_run_repository:
             portfolio_btn_row = QHBoxLayout()
-            self.save_portfolio_result_btn = QPushButton("保存推薦回測")
+            self.save_portfolio_result_btn = QPushButton("保存推薦回放")
             self.save_portfolio_result_btn.setEnabled(False)
             self.save_portfolio_result_btn.clicked.connect(self._save_recommendation_portfolio_result)
             portfolio_btn_row.addWidget(self.save_portfolio_result_btn)
             
-            self.delete_portfolio_result_btn = QPushButton("刪除推薦回測")
+            self.delete_portfolio_result_btn = QPushButton("刪除推薦回放")
             self.delete_portfolio_result_btn.setEnabled(False)
             self.delete_portfolio_result_btn.clicked.connect(self._delete_recommendation_portfolio_result)
             portfolio_btn_row.addWidget(self.delete_portfolio_result_btn)
@@ -820,7 +820,7 @@ class BacktestView(QWidget):
         
         # 執行按鈕
         execute_row = QHBoxLayout()
-        self.execute_btn = QPushButton("執行回測")
+        self.execute_btn = QPushButton("執行實驗")
         self.execute_btn.setMinimumHeight(40)
         self.execute_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         self.execute_btn.clicked.connect(self._execute_backtest)
@@ -843,8 +843,6 @@ class BacktestView(QWidget):
             self.promote_btn.clicked.connect(self._promote_backtest_result)
             execute_row.addWidget(self.promote_btn)
         
-        config_layout.addLayout(execute_row)
-        
         # 進度條和進度文字
         progress_widget = QWidget()
         progress_layout = QVBoxLayout(progress_widget)
@@ -859,8 +857,13 @@ class BacktestView(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         progress_layout.addWidget(self.progress_bar)
-        
-        config_layout.addWidget(progress_widget)
+
+        execution_group = QGroupBox("執行與下一步")
+        execution_layout = QVBoxLayout()
+        execution_layout.addLayout(execute_row)
+        execution_layout.addWidget(progress_widget)
+        execution_group.setLayout(execution_layout)
+        config_layout.addWidget(execution_group)
         
         config_layout.addStretch()
         
@@ -879,7 +882,7 @@ class BacktestView(QWidget):
         result_layout.setContentsMargins(5, 5, 5, 5)
         
         # 績效摘要
-        summary_group = QGroupBox("績效摘要")
+        summary_group = QGroupBox("實驗摘要")
         summary_layout = QVBoxLayout()
         
         self.summary_text = QTextEdit()
@@ -915,7 +918,7 @@ class BacktestView(QWidget):
         trades_group.setLayout(trades_layout)
         result_layout.addWidget(trades_group, stretch=35)  # 交易明細佔 35% 空間（6.5:3.5）
         
-        result_tabs.addTab(result_tab, "結果")
+        result_tabs.addTab(result_tab, "實驗摘要")
         
         # Tab 2: 圖表（如果有 chart service）
         if self.chart_data_service:
@@ -989,7 +992,7 @@ class BacktestView(QWidget):
             optimization_result_group.setLayout(optimization_result_layout_inner)
             optimization_result_layout.addWidget(optimization_result_group)
             
-            result_tabs.addTab(optimization_result_tab, "最佳化")
+            result_tabs.addTab(optimization_result_tab, "最佳化 / 驗證")
         
         # Tab 4: 比較（如果有 repository）
         if self.run_repository:
@@ -1040,7 +1043,7 @@ class BacktestView(QWidget):
             compare_result_group.setLayout(compare_result_layout)
             compare_layout.addWidget(compare_result_group)
             
-            result_tabs.addTab(compare_tab, "比較")
+            result_tabs.addTab(compare_tab, "歷史與比較")
             
             # 初始化歷史列表
             self._refresh_history()
@@ -1133,7 +1136,7 @@ class BacktestView(QWidget):
         recommendation_portfolio_layout.addWidget(self.portfolio_stock_table, stretch=2)
         recommendation_portfolio_layout.addWidget(QLabel("交易紀錄"))
         recommendation_portfolio_layout.addWidget(self.portfolio_trades_table, stretch=2)
-        result_tabs.addTab(recommendation_portfolio_tab, "推薦組合")
+        result_tabs.addTab(recommendation_portfolio_tab, "推薦回放")
         
         # 調整 Tab 順序（如果有最佳化Tab）
         if self.optimizer_service:
