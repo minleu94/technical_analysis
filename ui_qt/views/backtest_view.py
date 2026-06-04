@@ -189,12 +189,17 @@ class BacktestView(QWidget):
         if self.portfolio_run_repository and hasattr(self, "portfolio_history_combo"):
             self._refresh_portfolio_history_combo()
 
+    def _research_lab_mode_hint_text(self, index: int) -> str:
+        """建立 Research Lab 模式提示文字。"""
+        if index < 0 or index >= len(RESEARCH_LAB_MODES):
+            return ""
+        mode = RESEARCH_LAB_MODES[index]
+        return f"{mode['description']}｜主要輸入：{mode['primary_input']}"
+
     def _on_research_lab_mode_changed(self, index: int):
         """更新 Research Lab 模式提示。"""
-        if index < 0 or index >= len(RESEARCH_LAB_MODES):
-            return
         if hasattr(self, "research_lab_mode_hint"):
-            self.research_lab_mode_hint.setText(RESEARCH_LAB_MODES[index]["description"])
+            self.research_lab_mode_hint.setText(self._research_lab_mode_hint_text(index))
     
     def _setup_ui(self):
         """設置 UI"""
@@ -229,6 +234,20 @@ class BacktestView(QWidget):
         config_layout = QVBoxLayout(config_widget)
         config_layout.setSpacing(10)
         config_layout.setContentsMargins(10, 10, 10, 10)
+
+        mode_group = QGroupBox("實驗模式")
+        mode_layout = QVBoxLayout()
+        self.research_lab_mode_combo = QComboBox()
+        for mode in RESEARCH_LAB_MODES:
+            self.research_lab_mode_combo.addItem(mode["label"], mode["id"])
+        self.research_lab_mode_hint = QLabel(self._research_lab_mode_hint_text(0))
+        self.research_lab_mode_hint.setWordWrap(True)
+        self.research_lab_mode_hint.setStyleSheet("color: #666;")
+        mode_layout.addWidget(self.research_lab_mode_combo)
+        mode_layout.addWidget(self.research_lab_mode_hint)
+        mode_group.setLayout(mode_layout)
+        config_layout.addWidget(mode_group)
+        self.research_lab_mode_combo.currentIndexChanged.connect(self._on_research_lab_mode_changed)
         
         # ========== 策略預設區塊 ==========
         if self.preset_service:
@@ -261,20 +280,6 @@ class BacktestView(QWidget):
             preset_layout.addLayout(preset_btn_row)
             preset_group.setLayout(preset_layout)
             config_layout.addWidget(preset_group)
-
-        mode_group = QGroupBox("Research Lab 模式")
-        mode_layout = QVBoxLayout()
-        self.research_lab_mode_combo = QComboBox()
-        for mode in RESEARCH_LAB_MODES:
-            self.research_lab_mode_combo.addItem(mode["label"], mode["id"])
-        self.research_lab_mode_hint = QLabel(RESEARCH_LAB_MODES[0]["description"])
-        self.research_lab_mode_hint.setWordWrap(True)
-        self.research_lab_mode_hint.setStyleSheet("color: #666;")
-        mode_layout.addWidget(self.research_lab_mode_combo)
-        mode_layout.addWidget(self.research_lab_mode_hint)
-        mode_group.setLayout(mode_layout)
-        config_layout.addWidget(mode_group)
-        self.research_lab_mode_combo.currentIndexChanged.connect(self._on_research_lab_mode_changed)
         
         # ========== 回測配置 ==========
         config_group = QGroupBox("回測配置")
