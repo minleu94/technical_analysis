@@ -1969,9 +1969,25 @@ class RecommendationView(QWidget):
             config=config_with_meta,
             recommendations=list(self.current_recommendations or []),
             regime=self.current_regime,
-            created_at=getattr(self, "current_result_created_at", "") or datetime.now().isoformat(),
+            created_at=self._current_recommendation_source_created_at(),
             notes="Portfolio 來源追溯快照",
         )
+
+    def _current_recommendation_source_created_at(self) -> str:
+        created_at = getattr(self, "current_result_created_at", "")
+        if created_at:
+            return created_at
+        created_at = getattr(self, "current_recommendation_source_created_at", "")
+        if not created_at:
+            created_at = datetime.now().isoformat()
+            self.current_recommendation_source_created_at = created_at
+        return created_at
+
+    def _find_unique_current_recommendation(self, stock_code: str) -> Optional[RecommendationDTO]:
+        matches = [rec for rec in (self.current_recommendations or []) if str(rec.stock_code) == str(stock_code)]
+        if len(matches) == 1:
+            return matches[0]
+        return None
 
     def _save_recommendation_result(self):
         """保存推薦結果"""
@@ -2559,16 +2575,16 @@ class RecommendationView(QWidget):
         """顯示推薦結果表格的右鍵選單"""
         if not self.recommendations_model:
             return
-            
+
         index = self.results_table.currentIndex()
         if not index.isValid():
             return
-            
+
         df = self.recommendations_model.getDataFrame()
         row = index.row()
         stock_code = str(df.iloc[row].get('證券代號', ''))
         stock_name = str(df.iloc[row].get('證券名稱', ''))
-        
+
         price = 0.0
         for col in ['價格', '收盤價', '成交價']:
             if col in df.columns:
@@ -2577,46 +2593,44 @@ class RecommendationView(QWidget):
                     break
                 except:
                     pass
-        
+
         menu = QMenu(self)
         action_add_portfolio = menu.addAction("記錄到持倉管理（保留推薦來源）...")
         action_add_watchlist = menu.addAction("加入候選池 / 觀察清單")
-        
+
         action = menu.exec(self.cursor().pos())
-        
+
         if action == action_add_portfolio:
             main_window = self.window()
             if hasattr(main_window, 'portfolio_service'):
-                selected_recommendation = None
-                for rec in self.current_recommendations or []:
-                    if str(rec.stock_code) == stock_code:
-                        selected_recommendation = rec
-                        break
-
+                selected_recommendation = self._find_unique_current_recommendation(stock_code)
                 if not selected_recommendation:
-                    QMessageBox.warning(self, "錯誤", "找不到選中股票的推薦來源，無法保留推薦追溯資訊")
+                    QMessageBox.warning(self, "錯誤", "找不到唯一的選中股票推薦來源，無法保留推薦追溯資訊")
                     return
-
-                source = build_recommendation_trade_source(
-                    self._build_current_result_snapshot(),
-                    selected_recommendation,
-                )
 
                 from ui_qt.views.portfolio_view import AddTradeDialog
                 dialog = AddTradeDialog(self.recommendation_service, self)
                 dialog.code_input.setText(stock_code)
                 dialog.name_input.setText(stock_name)
                 dialog.price_input.setValue(price)
-                
+
                 # 策略關聯預設為當前 profile
                 if self.current_profile:
                     for idx in range(dialog.strategy_combo.count()):
                         if dialog.strategy_combo.itemData(idx) == self.current_profile:
                             dialog.strategy_combo.setCurrentIndex(idx)
                             break
-                            
+
                 if dialog.exec() == QDialog.Accepted:
                     data = dialog.get_trade_data()
+                    if str(data["stock_code"]) != str(selected_recommendation.stock_code):
+                        QMessageBox.warning(self, "錯誤", "交易股票代號已被修改，無法保留原推薦來源追溯資訊")
+                        return
+
+                    source = build_recommendation_trade_source(
+                        self._build_current_result_snapshot(),
+                        selected_recommendation,
+                    )
                     try:
                         main_window.portfolio_service.record_trade(
                             stock_code=data["stock_code"],
@@ -2644,7 +2658,7 @@ class RecommendationView(QWidget):
                         QMessageBox.critical(self, "記錄交易失敗", f"無法記入交易，領域規則校驗失敗：\n{e}")
             else:
                 QMessageBox.warning(self, "錯誤", "持倉服務未能在主窗口初始化")
-                
+
         elif action == action_add_watchlist:
             self._add_selected_to_watchlist()
     
