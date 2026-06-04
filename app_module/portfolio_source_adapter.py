@@ -102,8 +102,8 @@ def build_backtest_trade_source(
         "stock_code": str(_row_value(trade_row, "股票代號", "證券代號", "stock_code")),
         "stock_name": str(_row_value(trade_row, "股票名稱", "證券名稱", "stock_name")),
         "side": str(_row_value(trade_row, "買賣", "side")),
-        "trade_date": str(_row_value(trade_row, "交易日期", "日期", "date", "trade_date")),
-        "price": _row_value(trade_row, "價格", "單價", "成交價", "price"),
+        "trade_date": str(_row_value(trade_row, "交易日期", "日期", "進場日期", "date", "trade_date")),
+        "price": _row_value(trade_row, "價格", "單價", "成交價", "進場價格", "price"),
         "quantity": _row_value(trade_row, "數量", "交易股數", "股數", "quantity", default=""),
         "amount": _row_value(trade_row, "投入金額", "金額", "amount", default=""),
     }

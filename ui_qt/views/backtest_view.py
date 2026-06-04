@@ -3038,6 +3038,22 @@ class BacktestView(QWidget):
         if not run_data:
             QMessageBox.warning(self, "錯誤", "載入失敗")
             return
+
+        self.current_run_id = run_id
+        self.current_run_params = {
+            "stock_code": run_data.get("stock_code", ""),
+            "start_date": run_data.get("start_date", ""),
+            "end_date": run_data.get("end_date", ""),
+            "strategy_id": run_data.get("strategy_id", ""),
+            "strategy_params": run_data.get("strategy_params", {}),
+            "capital": run_data.get("capital", 1000000),
+            "fee_bps": run_data.get("fee_bps", 14.25),
+            "slippage_bps": run_data.get("slippage_bps", 5.0),
+            "stop_loss_pct": run_data.get("stop_loss_pct"),
+            "take_profit_pct": run_data.get("take_profit_pct"),
+            "run_name": run_data.get("run_name", ""),
+        }
+        self.current_report = None
         
         # 顯示摘要
         summary_lines = [
@@ -4391,6 +4407,22 @@ class BacktestView(QWidget):
         if not run_data:
             QMessageBox.warning(self, "錯誤", "載入失敗")
             return
+
+        self.current_run_id = run_id
+        self.current_run_params = {
+            "stock_code": run_data.get("stock_code", ""),
+            "start_date": run_data.get("start_date", ""),
+            "end_date": run_data.get("end_date", ""),
+            "strategy_id": run_data.get("strategy_id", ""),
+            "strategy_params": run_data.get("strategy_params", {}),
+            "capital": run_data.get("capital", 1000000),
+            "fee_bps": run_data.get("fee_bps", 14.25),
+            "slippage_bps": run_data.get("slippage_bps", 5.0),
+            "stop_loss_pct": run_data.get("stop_loss_pct"),
+            "take_profit_pct": run_data.get("take_profit_pct"),
+            "run_name": run_data.get("run_name", ""),
+        }
+        self.current_report = None
         
         # 顯示摘要
         summary_lines = [
@@ -4454,6 +4486,8 @@ class BacktestView(QWidget):
             if col in df.columns:
                 stock_code = str(df.iloc[row].get(col, ''))
                 break
+        if not stock_code and getattr(self, "current_run_params", None):
+            stock_code = str(self.current_run_params.get("stock_code", "")).strip()
         if not stock_code and hasattr(self, 'stock_code_input'):
             stock_code = self.stock_code_input.text().strip()
             
@@ -4474,7 +4508,7 @@ class BacktestView(QWidget):
                 break
                 
         price = 0.0
-        for col in ['price', '價格', '單價', '成交價']:
+        for col in ['price', '價格', '單價', '成交價', '進場價格']:
             if col in df.columns:
                 try:
                     price = float(df.iloc[row].get(col, 0.0))
@@ -4483,7 +4517,7 @@ class BacktestView(QWidget):
                     pass
                     
         qty = 1000.0
-        for col in ['quantity', 'qty', '數量', '交易股數']:
+        for col in ['quantity', 'qty', '數量', '交易股數', '股數']:
             if col in df.columns:
                 try:
                     qty = float(df.iloc[row].get(col, 1000.0))
@@ -4492,12 +4526,23 @@ class BacktestView(QWidget):
                     pass
                     
         trade_date = datetime.now().strftime("%Y-%m-%d")
-        for col in ['date', '日期', '交易日期']:
+        for col in ['date', '日期', '交易日期', '進場日期']:
             if col in df.columns:
                 val = str(df.iloc[row].get(col, ''))
                 if len(val) >= 10:
                     trade_date = val[:10]
                 break
+
+        for key, value in [
+            ("證券代號", stock_code),
+            ("證券名稱", stock_name),
+            ("買賣", "賣出" if side == "sell" else "買入"),
+            ("交易日期", trade_date),
+            ("價格", price),
+            ("交易股數", qty),
+        ]:
+            if value not in ("", None) and (key not in row_data or row_data.get(key) in ("", None)):
+                row_data[key] = value
                 
         menu = QMenu(self)
         action_add_portfolio = menu.addAction("記錄到持倉管理（保留回測來源）...")
@@ -4545,7 +4590,9 @@ class BacktestView(QWidget):
                     if getattr(self, "current_run_params", None):
                         run_stock = self.current_run_params.get("stock_code", "")
                         strategy_id = str(self.current_run_params.get("strategy_id", ""))
-                        run_name = f"{run_stock} {strategy_id}".strip()
+                        run_name = str(self.current_run_params.get("run_name", "")).strip()
+                        if not run_name:
+                            run_name = f"{run_stock} {strategy_id}".strip()
                     validation_status = ""
                     if getattr(self, "current_report", None) and getattr(self.current_report, "validation_status", None):
                         validation_status = str(self.current_report.validation_status.value)
