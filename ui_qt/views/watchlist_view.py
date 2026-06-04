@@ -93,7 +93,7 @@ class WatchlistView(QWidget):
         
         # 標題列（標題 + InfoButton）
         title_layout = QHBoxLayout()
-        title = QLabel("觀察清單")
+        title = QLabel("候選池")
         title_font = QFont()
         title_font.setPointSize(14)
         title_font.setBold(True)
@@ -115,7 +115,7 @@ class WatchlistView(QWidget):
         work_area_layout.setContentsMargins(0, 0, 0, 0)
         
         # 工作區標題（小標題）
-        work_title = QLabel("觀察清單")
+        work_title = QLabel("觀察候選池")
         work_title_font = QFont()
         work_title_font.setPointSize(11)
         work_title_font.setBold(True)
@@ -151,8 +151,8 @@ class WatchlistView(QWidget):
         # 使用水平 Splitter 分割左右兩側
         management_splitter = QSplitter(Qt.Horizontal)
         
-        # 左側：觀察清單操作區
-        watchlist_ops_group = QGroupBox("觀察清單操作")
+        # 左側：候選池操作區
+        watchlist_ops_group = QGroupBox("候選池操作")
         watchlist_ops_layout = QVBoxLayout(watchlist_ops_group)
         watchlist_ops_layout.setSpacing(8)
         watchlist_ops_layout.setContentsMargins(10, 12, 10, 10)
@@ -170,14 +170,20 @@ class WatchlistView(QWidget):
         self.remove_btn.clicked.connect(self._remove_selected)
         watchlist_ops_layout.addWidget(self.remove_btn)
         
-        self.clear_btn = QPushButton("清空清單")
+        self.clear_btn = QPushButton("清空候選池")
         self.clear_btn.clicked.connect(self._clear_watchlist)
         watchlist_ops_layout.addWidget(self.clear_btn)
         
         watchlist_ops_layout.addStretch()
         
+        self.send_to_research_lab_btn = QPushButton("送 Research Lab 批次回測")
+        self.send_to_research_lab_btn.setEnabled(False)
+        self.send_to_research_lab_btn.setToolTip("此入口將在 Research Lab 批次回測整合時啟用。")
+        watchlist_ops_layout.addWidget(self.send_to_research_lab_btn)
+
         # 保存為選股清單按鈕
         self.save_to_universe_btn = QPushButton("保存為選股清單")
+        self.save_to_universe_btn.setToolTip("將目前候選池作為批次股票回測的輸入。")
         self.save_to_universe_btn.clicked.connect(self._save_watchlist_to_universe)
         watchlist_ops_layout.addWidget(self.save_to_universe_btn)
         
@@ -206,7 +212,7 @@ class WatchlistView(QWidget):
             universe_layout.addWidget(self.universe_list, stretch=1)
             
             # 載入到觀察清單按鈕
-            self.load_to_watchlist_btn = QPushButton("載入到觀察清單")
+            self.load_to_watchlist_btn = QPushButton("載入到候選池")
             self.load_to_watchlist_btn.clicked.connect(self._load_universe_to_watchlist)
             universe_layout.addWidget(self.load_to_watchlist_btn)
             
@@ -253,9 +259,9 @@ class WatchlistView(QWidget):
             
             if not stocks:
                 # 顯示空表格
-                print("[WatchlistView._load_watchlist] 觀察清單為空，顯示空表格")
+                print("[WatchlistView._load_watchlist] 候選池為空，顯示空表格")
                 df = pd.DataFrame(columns=['證券代號', '證券名稱', '加入時間', '來源', '備註'])
-                df.loc[0] = ['-', '-', '-', '-', '觀察清單為空']
+                df.loc[0] = ['-', '-', '-', '-', '候選池為空']
             else:
                 # 轉換為 DataFrame
                 print("[WatchlistView._load_watchlist] 轉換為 DataFrame...")
@@ -340,7 +346,7 @@ class WatchlistView(QWidget):
     def _show_add_dialog(self):
         """顯示新增股票對話框"""
         dialog = QDialog(self)
-        dialog.setWindowTitle("新增股票到觀察清單")
+        dialog.setWindowTitle("新增股票到候選池")
         dialog.setMinimumWidth(400)
         
         layout = QVBoxLayout(dialog)
@@ -399,11 +405,11 @@ class WatchlistView(QWidget):
                 )
                 
                 if added_count > 0:
-                    QMessageBox.information(self, "成功", f"已新增 {added_count} 檔股票到觀察清單")
+                    QMessageBox.information(self, "成功", f"已新增 {added_count} 檔股票到候選池")
                     self._load_watchlist()
                     self.watchlistUpdated.emit()
                 else:
-                    QMessageBox.warning(self, "提示", "該股票已在觀察清單中")
+                    QMessageBox.warning(self, "提示", "該股票已在候選池中")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"新增股票失敗：\n{str(e)}")
     
@@ -447,7 +453,7 @@ class WatchlistView(QWidget):
         """清空觀察清單"""
         reply = QMessageBox.question(
             self, "確認", 
-            "確定要清空整個觀察清單嗎？此操作無法復原。",
+            "確定要清空整個候選池嗎？此操作無法復原。",
             QMessageBox.Yes | QMessageBox.No
         )
         
@@ -459,7 +465,7 @@ class WatchlistView(QWidget):
             stock_codes = self.watchlist_service.get_stock_codes()
             if stock_codes:
                 self.watchlist_service.remove_stocks(stock_codes)
-                QMessageBox.information(self, "成功", "已清空觀察清單")
+                QMessageBox.information(self, "成功", "已清空候選池")
                 self._load_watchlist()
                 self.watchlistUpdated.emit()
         except Exception as e:
@@ -511,7 +517,7 @@ class WatchlistView(QWidget):
                     self.watchlistUpdated.emit()
                     return added_count
             except Exception as e:
-                QMessageBox.critical(self, "錯誤", f"新增股票到觀察清單失敗：\n{str(e)}")
+                QMessageBox.critical(self, "錯誤", f"新增股票到候選池失敗：\n{str(e)}")
         
         return 0
     
@@ -565,7 +571,7 @@ class WatchlistView(QWidget):
         # 獲取當前觀察清單的股票代號
         stock_codes = self.watchlist_service.get_stock_codes()
         if not stock_codes:
-            QMessageBox.warning(self, "提示", "觀察清單為空，無法保存")
+            QMessageBox.warning(self, "提示", "候選池為空，無法保存")
             return
         
         # 輸入清單名稱
@@ -576,7 +582,7 @@ class WatchlistView(QWidget):
         
         layout.addWidget(QLabel("清單名稱:"))
         name_input = QLineEdit()
-        name_input.setPlaceholderText("例如：我的觀察清單")
+        name_input.setPlaceholderText("例如：我的候選池")
         layout.addWidget(name_input)
         
         layout.addWidget(QLabel(f"將保存 {len(stock_codes)} 檔股票到選股清單"))
@@ -673,7 +679,7 @@ class WatchlistView(QWidget):
         return stock_name_map
     
     def _load_universe_to_watchlist(self):
-        """從選股清單載入到觀察清單"""
+        """從選股清單載入到候選池"""
         if not self.universe_service:
             QMessageBox.warning(self, "錯誤", "選股清單服務未初始化")
             return
@@ -697,7 +703,7 @@ class WatchlistView(QWidget):
         # 確認對話框
         reply = QMessageBox.question(
             self, "確認",
-            f"確定要將「{watchlist.name}」({len(watchlist.codes)}檔) 加入到觀察清單嗎？\n"
+            f"確定要將「{watchlist.name}」({len(watchlist.codes)}檔) 加入到候選池嗎？\n"
             f"（已存在的股票不會重複加入）",
             QMessageBox.Yes | QMessageBox.No
         )
@@ -721,11 +727,11 @@ class WatchlistView(QWidget):
         try:
             added_count = self.watchlist_service.add_stocks(stocks, source='universe')
             if added_count > 0:
-                QMessageBox.information(self, "成功", f"已加入 {added_count} 檔股票到觀察清單")
+                QMessageBox.information(self, "成功", f"已加入 {added_count} 檔股票到候選池")
                 self._load_watchlist()
                 self.watchlistUpdated.emit()
             else:
-                QMessageBox.information(self, "提示", "所有股票都已存在於觀察清單中")
+                QMessageBox.information(self, "提示", "所有股票都已存在於候選池中")
         except Exception as e:
             QMessageBox.critical(self, "錯誤", f"載入失敗：\n{str(e)}")
     
