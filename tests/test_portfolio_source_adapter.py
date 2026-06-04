@@ -107,6 +107,30 @@ def test_build_backtest_trade_source_maps_amount_to_quantity_when_quantity_missi
     assert source.source_summary["quantity"] == 1000
 
 
+def test_build_backtest_trade_source_supports_realistic_ui_row_aliases():
+    row = {
+        "證券代號": "2330",
+        "證券名稱": "台積電",
+        "買賣": "買入",
+        "日期": "2026-06-04",
+        "單價": 888.0,
+        "交易股數": 1000,
+    }
+    source = build_backtest_trade_source(
+        run_id="run_003",
+        run_name="2330 momentum smoke",
+        strategy_id="momentum_aggressive_v1",
+        validation_status="PASS",
+        trade_row=row,
+    )
+
+    assert source.source_summary["stock_code"] == "2330"
+    assert source.source_summary["stock_name"] == "台積電"
+    assert source.source_summary["trade_date"] == "2026-06-04"
+    assert source.source_summary["price"] == 888.0
+    assert source.source_summary["quantity"] == 1000
+
+
 def test_stable_snapshot_hash_is_deterministic_for_same_payload_and_changes_with_payload():
     same_left = stable_snapshot_hash({"a": 1, "b": [2]})
     same_right = stable_snapshot_hash({"b": [2], "a": 1})
