@@ -65,6 +65,18 @@ class BrokerSimulator:
             config: 券商配置
         """
         self.config = config
+
+    def _get_column_name(self, df: pd.DataFrame, logical_name: str) -> Optional[str]:
+        """依常見中英文欄位名稱取得價格欄位。"""
+        candidates = {
+            'High': ['最高價', 'High', 'high', '最高'],
+            'Low': ['最低價', 'Low', 'low', '最低'],
+            'Close': ['收盤價', 'Close', 'close', '收盤'],
+        }.get(logical_name, [logical_name])
+        for column in candidates:
+            if column in df.columns:
+                return column
+        return None
     
     def run(
         self,
@@ -359,6 +371,8 @@ class BrokerSimulator:
             
             # 出場：一定要 append trade
             elif signal == -1 and in_position:
+                if entry_price is None:
+                    continue
                 trade = self._execute_sell(
                     date=execution_date,
                     price=execution_price,

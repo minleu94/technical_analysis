@@ -20,9 +20,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 try:
-    from webdriver_manager.chrome import ChromeDriverManager
+    from webdriver_manager.chrome import ChromeDriverManager as _ChromeDriverManager
 except ImportError:
-    ChromeDriverManager = None
+    _ChromeDriverManager = None  # type: ignore[assignment,misc]
+
+ChromeDriverManager: Any = _ChromeDriverManager
 
 
 class BrokerBranchUpdateService:
@@ -795,6 +797,7 @@ class BrokerBranchUpdateService:
                                     counterparty_code, counterparty_name_parsed = self._parse_counterparty_broker_name(counterparty_name)
                                     
                                     # 轉換數值（優先 int，失敗才 float）
+                                    buy_qty: float
                                     try:
                                         buy_qty = int(buy_qty_str) if buy_qty_str else 0
                                     except ValueError:
@@ -805,6 +808,7 @@ class BrokerBranchUpdateService:
                                             buy_qty = 0
                                             self.logger.warning(f"buy_qty 轉換失敗: {buy_qty_str}")
                                     
+                                    sell_qty: float
                                     try:
                                         sell_qty = int(sell_qty_str) if sell_qty_str else 0
                                     except ValueError:
@@ -815,6 +819,7 @@ class BrokerBranchUpdateService:
                                             sell_qty = 0
                                             self.logger.warning(f"sell_qty 轉換失敗: {sell_qty_str}")
                                     
+                                    net_qty: float
                                     try:
                                         net_qty = int(net_qty_str) if net_qty_str else 0
                                     except ValueError:

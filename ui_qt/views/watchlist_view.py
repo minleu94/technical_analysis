@@ -13,6 +13,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QAction
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional
 
 from ui_qt.models.pandas_table_model import PandasTableModel
@@ -35,21 +38,21 @@ class WatchlistView(QWidget):
             config: TWStockConfig 實例（用於初始化 UniverseService）
             parent: 父窗口
         """
-        print("[WatchlistView] 開始初始化...")
+        logger.info("[WatchlistView] 開始初始化...")
         super().__init__(parent)
-        print("[WatchlistView] 父類初始化完成")
+        logger.info("[WatchlistView] 父類初始化完成")
         
         self.watchlist_service = watchlist_service
         self.config = config
-        print("[WatchlistView] watchlist_service 設置完成")
+        logger.info("[WatchlistView] watchlist_service 設置完成")
         
         # 初始化選股清單服務（用於回測）
         if config:
             try:
                 self.universe_service = UniverseService(config)
-                print("[WatchlistView] universe_service 初始化成功")
+                logger.info("[WatchlistView] universe_service 初始化成功")
             except Exception as e:
-                print(f"[WatchlistView] 警告：universe_service 初始化失敗: {e}")
+                logger.warning(f"[WatchlistView] 警告：universe_service 初始化失敗: {e}")
                 self.universe_service = None
         else:
             self.universe_service = None
@@ -57,21 +60,21 @@ class WatchlistView(QWidget):
         # 數據模型
         self.stocks_model: Optional[PandasTableModel] = None
         
-        print("[WatchlistView] 開始設置 UI...")
+        logger.info("[WatchlistView] 開始設置 UI...")
         self._setup_ui()
-        print("[WatchlistView] UI 設置完成")
+        logger.info("[WatchlistView] UI 設置完成")
         
         # 延遲載入觀察清單，避免初始化時出錯導致整個程式崩潰
-        print("[WatchlistView] 開始載入觀察清單...")
+        logger.info("[WatchlistView] 開始載入觀察清單...")
         try:
             self._load_watchlist()
-            print("[WatchlistView] 觀察清單載入成功")
+            logger.info("[WatchlistView] 觀察清單載入成功")
         except Exception as e:
             import traceback
-            print(f"[WatchlistView] 錯誤：初始化時載入觀察清單失敗")
-            print(f"[WatchlistView] 錯誤類型: {type(e).__name__}")
-            print(f"[WatchlistView] 錯誤訊息: {str(e)}")
-            print(f"[WatchlistView] 詳細堆疊追蹤:\n{traceback.format_exc()}")
+            logger.error(f"[WatchlistView] 錯誤：初始化時載入觀察清單失敗")
+            logger.error(f"[WatchlistView] 錯誤類型: {type(e).__name__}")
+            logger.error(f"[WatchlistView] 錯誤訊息: {str(e)}")
+            logger.error(f"[WatchlistView] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             # 顯示空表格，不阻止程式啟動
             try:
                 df = pd.DataFrame(columns=['證券代號', '證券名稱', '加入時間', '來源', '備註'])
@@ -79,11 +82,11 @@ class WatchlistView(QWidget):
                 self.stocks_model = PandasTableModel(df)
                 self.stocks_table.setModel(self.stocks_model)
                 self.stats_label.setText("共 0 檔股票（載入失敗）")
-                print("[WatchlistView] 已顯示錯誤提示")
+                logger.error("[WatchlistView] 已顯示錯誤提示")
             except Exception as e2:
-                print(f"[WatchlistView] 顯示錯誤提示時也失敗: {e2}")
+                logger.error(f"[WatchlistView] 顯示錯誤提示時也失敗: {e2}")
         
-        print("[WatchlistView] 初始化完成")
+        logger.info("[WatchlistView] 初始化完成")
     
     def _setup_ui(self):
         """設置 UI"""
@@ -251,20 +254,20 @@ class WatchlistView(QWidget):
     
     def _load_watchlist(self):
         """載入觀察清單"""
-        print("[WatchlistView._load_watchlist] 開始載入...")
+        logger.info("[WatchlistView._load_watchlist] 開始載入...")
         try:
-            print("[WatchlistView._load_watchlist] 調用 watchlist_service.get_stocks()...")
+            logger.info("[WatchlistView._load_watchlist] 調用 watchlist_service.get_stocks()...")
             stocks = self.watchlist_service.get_stocks()
-            print(f"[WatchlistView._load_watchlist] 獲取到 {len(stocks) if stocks else 0} 檔股票")
+            logger.info(f"[WatchlistView._load_watchlist] 獲取到 {len(stocks) if stocks else 0} 檔股票")
             
             if not stocks:
                 # 顯示空表格
-                print("[WatchlistView._load_watchlist] 候選池為空，顯示空表格")
+                logger.info("[WatchlistView._load_watchlist] 候選池為空，顯示空表格")
                 df = pd.DataFrame(columns=['證券代號', '證券名稱', '加入時間', '來源', '備註'])
                 df.loc[0] = ['-', '-', '-', '-', '候選池為空']
             else:
                 # 轉換為 DataFrame
-                print("[WatchlistView._load_watchlist] 轉換為 DataFrame...")
+                logger.info("[WatchlistView._load_watchlist] 轉換為 DataFrame...")
                 df = pd.DataFrame(stocks)
                 df = df.rename(columns={
                     'stock_code': '證券代號',
@@ -276,12 +279,12 @@ class WatchlistView(QWidget):
                 # 格式化時間
                 if '加入時間' in df.columns:
                     df['加入時間'] = pd.to_datetime(df['加入時間'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
-                print("[WatchlistView._load_watchlist] DataFrame 轉換完成")
+                logger.info("[WatchlistView._load_watchlist] DataFrame 轉換完成")
             
             # 更新模型
-            print("[WatchlistView._load_watchlist] 創建 PandasTableModel...")
-            print(f"[WatchlistView._load_watchlist] DataFrame 形狀: {df.shape}")
-            print(f"[WatchlistView._load_watchlist] DataFrame 欄位: {list(df.columns)}")
+            logger.info("[WatchlistView._load_watchlist] 創建 PandasTableModel...")
+            logger.info(f"[WatchlistView._load_watchlist] DataFrame 形狀: {df.shape}")
+            logger.info(f"[WatchlistView._load_watchlist] DataFrame 欄位: {list(df.columns)}")
             
             try:
                 self.stocks_model = PandasTableModel(df)
@@ -289,48 +292,48 @@ class WatchlistView(QWidget):
                 if 'tags' in df.columns:
                     visible_cols = [col for col in df.columns if col != 'tags']
                     self.stocks_model.setVisibleColumns(visible_cols)
-                print("[WatchlistView._load_watchlist] PandasTableModel 創建成功")
+                logger.info("[WatchlistView._load_watchlist] PandasTableModel 創建成功")
             except Exception as e:
-                print(f"[WatchlistView._load_watchlist] 創建 PandasTableModel 失敗: {e}")
+                logger.error(f"[WatchlistView._load_watchlist] 創建 PandasTableModel 失敗: {e}")
                 import traceback
-                print(traceback.format_exc())
+                logger.error(traceback.format_exc())
                 raise
             
-            print("[WatchlistView._load_watchlist] 設置表格模型...")
+            logger.info("[WatchlistView._load_watchlist] 設置表格模型...")
             try:
                 self.stocks_table.setModel(self.stocks_model)
-                print("[WatchlistView._load_watchlist] 表格模型設置成功")
+                logger.info("[WatchlistView._load_watchlist] 表格模型設置成功")
             except Exception as e:
-                print(f"[WatchlistView._load_watchlist] 設置表格模型失敗: {e}")
+                logger.error(f"[WatchlistView._load_watchlist] 設置表格模型失敗: {e}")
                 import traceback
-                print(traceback.format_exc())
+                logger.error(traceback.format_exc())
                 raise
             
             # 調整列寬
-            print("[WatchlistView._load_watchlist] 調整列寬...")
+            logger.info("[WatchlistView._load_watchlist] 調整列寬...")
             try:
                 self.stocks_table.resizeColumnsToContents()
-                print("[WatchlistView._load_watchlist] 列寬調整完成")
+                logger.info("[WatchlistView._load_watchlist] 列寬調整完成")
             except Exception as e:
-                print(f"[WatchlistView._load_watchlist] 調整列寬失敗: {e}")
+                logger.error(f"[WatchlistView._load_watchlist] 調整列寬失敗: {e}")
                 # 不拋出異常，繼續執行
             
             # 更新統計
             self.stats_label.setText(f"共 {len(stocks)} 檔股票")
-            print("[WatchlistView._load_watchlist] 載入完成")
+            logger.info("[WatchlistView._load_watchlist] 載入完成")
             
         except Exception as e:
             import traceback
-            print(f"[WatchlistView._load_watchlist] 錯誤：載入觀察清單失敗")
-            print(f"[WatchlistView._load_watchlist] 錯誤類型: {type(e).__name__}")
-            print(f"[WatchlistView._load_watchlist] 錯誤訊息: {str(e)}")
-            print(f"[WatchlistView._load_watchlist] 詳細堆疊追蹤:\n{traceback.format_exc()}")
+            logger.error(f"[WatchlistView._load_watchlist] 錯誤：載入觀察清單失敗")
+            logger.error(f"[WatchlistView._load_watchlist] 錯誤類型: {type(e).__name__}")
+            logger.error(f"[WatchlistView._load_watchlist] 錯誤訊息: {str(e)}")
+            logger.error(f"[WatchlistView._load_watchlist] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             
             error_msg = f"載入觀察清單失敗：\n{str(e)}\n\n{traceback.format_exc()}"
             try:
                 QMessageBox.critical(self, "錯誤", error_msg)
             except:
-                print("[WatchlistView._load_watchlist] 無法顯示錯誤對話框")
+                logger.error("[WatchlistView._load_watchlist] 無法顯示錯誤對話框")
             
             # 顯示空表格，避免界面崩潰
             try:
@@ -339,9 +342,9 @@ class WatchlistView(QWidget):
                 self.stocks_model = PandasTableModel(df)
                 self.stocks_table.setModel(self.stocks_model)
                 self.stats_label.setText("共 0 檔股票（載入失敗）")
-                print("[WatchlistView._load_watchlist] 已顯示錯誤提示")
+                logger.error("[WatchlistView._load_watchlist] 已顯示錯誤提示")
             except Exception as e2:
-                print(f"[WatchlistView._load_watchlist] 顯示錯誤提示時也失敗: {e2}")
+                logger.error(f"[WatchlistView._load_watchlist] 顯示錯誤提示時也失敗: {e2}")
     
     def _show_add_dialog(self):
         """顯示新增股票對話框"""
@@ -643,7 +646,7 @@ class WatchlistView(QWidget):
                             stock_name_map[code] = name
                     return stock_name_map
             except Exception as sql_err:
-                print(f"[WatchlistView] 從 SQLite 查詢股票名稱失敗: {sql_err}，將降級讀取 CSV")
+                logger.error(f"[WatchlistView] 從 SQLite 查詢股票名稱失敗: {sql_err}，將降級讀取 CSV")
         
         try:
             # 從 stock_data_file 讀取數據
@@ -673,7 +676,7 @@ class WatchlistView(QWidget):
                     stock_name_map[code] = name
             
         except Exception as e:
-            print(f"[WatchlistView] 查詢股票名稱失敗: {e}")
+            logger.error(f"[WatchlistView] 查詢股票名稱失敗: {e}")
             # 如果查詢失敗，返回空字典，使用股票代號作為名稱
         
         return stock_name_map

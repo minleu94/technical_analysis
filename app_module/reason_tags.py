@@ -3,7 +3,7 @@
 將推薦理由轉換為可回測的標籤，用於統計分析
 """
 
-from typing import List, Dict, Set
+from typing import Any, List, Dict, Optional, Set
 import pandas as pd
 
 
@@ -86,7 +86,7 @@ class ReasonTagGenerator:
         return sorted(list(set(tags)))
     
     @classmethod
-    def _normalize_tag(cls, tag: str) -> str:
+    def _normalize_tag(cls, tag: str) -> Optional[str]:
         """
         標準化標籤名稱（將中文轉換為英文標籤）
         
@@ -175,7 +175,7 @@ class ReasonTagGenerator:
         Returns:
             標籤統計字典 {tag: {'count': int, 'win_rate': float, 'avg_return': float, ...}}
         """
-        tag_stats = {}
+        tag_stats: Dict[str, Dict[str, Any]] = {}
         
         for trade in trades:
             tags_str = trade.get(tag_field, '')
@@ -186,8 +186,8 @@ class ReasonTagGenerator:
             tags = [t.strip() for t in tags_str.split(',') if t.strip()]
             
             # 獲取交易結果
-            is_win = trade.get('profit', 0) > 0
-            return_pct = trade.get('return_pct', 0)
+            is_win = float(trade.get('profit', 0) or 0) > 0
+            return_pct = float(trade.get('return_pct', 0) or 0)
             
             # 統計每個標籤
             for tag in tags:

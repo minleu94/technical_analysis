@@ -82,7 +82,7 @@ class MainWindow(QMainWindow):
             self.research_session_store = ResearchSessionStore()
             
             # 初始化持倉與日記服務
-            from app_module.portfolio_service import PortfolioService
+            from app_module.portfolio_service import PortfolioService 
             from app_module.journal_service import JournalService
             self.portfolio_service = PortfolioService(self.config)
             self.journal_service = JournalService(self.config)

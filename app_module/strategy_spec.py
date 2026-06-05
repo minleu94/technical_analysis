@@ -87,6 +87,9 @@ class StrategyMeta:
 @runtime_checkable
 class StrategyExecutor(Protocol):
     """策略執行器介面（Protocol）"""
+
+    def __init__(self, spec: StrategySpec) -> None:
+        ...
     
     def generate_signals(
         self, 

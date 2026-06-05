@@ -681,7 +681,7 @@ class ScoringEngine:
         Returns:
             List[Dict]: 每個理由包含 {tag, evidence, score_contrib}
         """
-        reasons_list = []
+        reasons_list: List[Dict] = []
         
         # 這裡需要根據實際的分數計算來生成理由
         # TODO: 實現詳細的理由生成邏輯

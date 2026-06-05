@@ -24,7 +24,7 @@ class ReasonEngine:
         Returns:
             List[Dict]: 理由列表，每個理由包含 {tag, evidence, score_contrib}
         """
-        reasons = []
+        reasons: List[Dict] = []
         
         # 0. 市場狀態理由（優先顯示）
         regime = config.get('regime')
@@ -35,7 +35,7 @@ class ReasonEngine:
                 'Breakout': '突破準備'
             }
             regime_name = regime_name_map.get(regime, regime)
-            regime_confidence = config.get('regime_confidence', 0.5)
+            regime_confidence = float(config.get('regime_confidence', 0.5) or 0.5)
             
             regime_match = row.get('RegimeMatch', True)
             if regime_match:
@@ -64,13 +64,13 @@ class ReasonEngine:
         reasons.extend(self._generate_score_contrib_reasons(row))
         
         # 按貢獻分數排序
-        reasons.sort(key=lambda x: abs(x.get('score_contrib', 0)), reverse=True)
+        reasons.sort(key=lambda x: abs(float(x.get('score_contrib', 0) or 0)), reverse=True)
         
         return reasons
     
     def _generate_indicator_reasons(self, row: pd.Series, config: Dict) -> List[Dict]:
         """生成技術指標理由"""
-        reasons = []
+        reasons: List[Dict] = []
         tech_config = config.get('technical', {})
         
         # RSI 理由
@@ -247,7 +247,7 @@ class ReasonEngine:
     
     def _generate_pattern_reasons(self, row: pd.Series, config: Dict) -> List[Dict]:
         """生成圖形模式理由"""
-        reasons = []
+        reasons: List[Dict] = []
         pattern_types = config.get('patterns', {}).get('selected', [])
         
         # TODO: 整合 PatternAnalyzer 獲取實際的模式信息
@@ -257,7 +257,7 @@ class ReasonEngine:
     
     def _generate_volume_reasons(self, row: pd.Series, config: Dict) -> List[Dict]:
         """生成成交量理由"""
-        reasons = []
+        reasons: List[Dict] = []
         volume_conditions = config.get('signals', {}).get('volume_conditions', [])
         
         if len(volume_conditions) == 0:

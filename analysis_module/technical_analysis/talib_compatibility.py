@@ -6,6 +6,7 @@ TA-Lib 兼容性模組
 import pandas as pd
 import numpy as np
 import ta
+from typing import Any
 
 # 創建一個兼容性類來模擬 talib 的 API
 class TalibCompatibility:
@@ -110,8 +111,9 @@ class MockTalib:
 
 # 嘗試導入真正的 talib，如果失敗則使用模擬版本
 try:
-    import talib
+    import talib as _real_talib
     print("成功導入真正的 talib")
+    talib: Any = _real_talib
 except ImportError:
     print("無法導入 talib，使用兼容性模組")
     talib = MockTalib()

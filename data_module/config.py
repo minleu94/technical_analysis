@@ -22,25 +22,25 @@ class TWStockConfig:
     profile: str = field(default_factory=lambda: os.environ.get('PROFILE', 'prod'))
     
     # 保持向後兼容的base_dir屬性
-    base_dir: Path = None
+    base_dir: Path = field(init=False)
     
     # 數據目錄
-    data_dir: Path = None
-    daily_price_dir: Path = None 
-    meta_data_dir: Path = None
-    technical_dir: Path = None
-    log_dir: Path = None  # 新增日誌目錄
-    sqlite_dir: Path = None  # SQLite 資料庫目錄
-    db_file: Path = None  # SQLite 資料庫檔案路徑
+    data_dir: Path = field(init=False)
+    daily_price_dir: Path = field(init=False)
+    meta_data_dir: Path = field(init=False)
+    technical_dir: Path = field(init=False)
+    log_dir: Path = field(init=False)  # 新增日誌目錄
+    sqlite_dir: Path = field(init=False)  # SQLite 資料庫目錄
+    db_file: Path = field(init=False)  # SQLite 資料庫檔案路徑
     use_sqlite: bool = True  # 是否使用 SQLite 儲存
     
     # 關鍵檔案路徑
-    market_index_file: Path = None
-    industry_index_file: Path = None
-    stock_data_file: Path = None
-    all_stocks_data_file: Path = None  # 新增整合性數據文件
-    broker_flow_dir: Path = None  # 券商分點資料目錄
-    broker_branch_registry_file: Path = None  # 分點 registry 檔案
+    market_index_file: Path = field(init=False)
+    industry_index_file: Path = field(init=False)
+    stock_data_file: Path = field(init=False)
+    all_stocks_data_file: Path = field(init=False)  # 新增整合性數據文件
+    broker_flow_dir: Path = field(init=False)  # 券商分點資料目錄
+    broker_branch_registry_file: Path = field(init=False)  # 分點 registry 檔案
     
     # 數據參數
     default_start_date: str = "2014-01-01"

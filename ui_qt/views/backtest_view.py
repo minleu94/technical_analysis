@@ -18,6 +18,9 @@ import pandas as pd
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.widgets.info_button import InfoButton
@@ -197,9 +200,74 @@ class BacktestView(QWidget):
         return f"{mode['description']}｜主要輸入：{mode['primary_input']}"
 
     def _on_research_lab_mode_changed(self, index: int):
-        """更新 Research Lab 模式提示。"""
+        """更新 Research Lab 模式提示並調整 UI 狀態。"""
         if hasattr(self, "research_lab_mode_hint"):
             self.research_lab_mode_hint.setText(self._research_lab_mode_hint_text(index))
+        if index >= 0 and index < len(RESEARCH_LAB_MODES):
+            mode = RESEARCH_LAB_MODES[index]
+            self._update_ui_state_by_mode(mode["id"])
+
+    def _update_ui_state_by_mode(self, mode_id: str):
+        """根據 Research Lab 模式調整左側配置面板的顯示狀態。"""
+        is_single = (mode_id == "single_stock")
+        is_batch = (mode_id == "batch_stock")
+        is_fixed = (mode_id == "fixed_basket")
+        is_replay = (mode_id == "recommendation_replay")
+        is_research = (mode_id == "strategy_research")
+
+        # 1. 策略預設群組
+        if hasattr(self, "strategy_preset_group") and self.strategy_preset_group:
+            self.strategy_preset_group.setVisible(is_single or is_batch or is_fixed or is_research)
+
+        # 2. 輸入來源群組
+        if hasattr(self, "input_source_group") and self.input_source_group:
+            self.input_source_group.setVisible(not is_replay)
+            # 自動切換單一/清單下拉選單
+            if is_single and hasattr(self, "stock_mode_combo"):
+                self.stock_mode_combo.blockSignals(True)
+                self.stock_mode_combo.setCurrentText("單一股票")
+                self.stock_mode_combo.blockSignals(False)
+                # 手動觸發以確保正確顯隱
+                self._on_stock_mode_changed("單一股票")
+            elif (is_batch or is_fixed) and hasattr(self, "stock_mode_combo"):
+                self.stock_mode_combo.blockSignals(True)
+                self.stock_mode_combo.setCurrentText("選股清單")
+                self.stock_mode_combo.blockSignals(False)
+                self._on_stock_mode_changed("選股清單")
+
+        # 3. 策略與風控群組
+        if hasattr(self, "risk_cost_group") and self.risk_cost_group:
+            self.risk_cost_group.setVisible(not is_replay)
+        if hasattr(self, "sizing_group") and self.sizing_group:
+            self.sizing_group.setVisible(not is_replay)
+        if hasattr(self, "position_mgmt_group") and self.position_mgmt_group:
+            self.position_mgmt_group.setVisible(not is_replay)
+        if hasattr(self, "market_constraints_group") and self.market_constraints_group:
+            self.market_constraints_group.setVisible(not is_replay)
+        if hasattr(self, "strategy_config_group") and self.strategy_config_group:
+            self.strategy_config_group.setVisible(not is_replay)
+
+        # 4. 推薦回放群組
+        if hasattr(self, "recommendation_portfolio_group") and self.recommendation_portfolio_group:
+            self.recommendation_portfolio_group.setVisible(is_replay)
+            if is_replay:
+                self.recommendation_portfolio_group.setChecked(True)
+
+        # 5. 進階參數最佳化群組
+        if hasattr(self, "optimization_group") and self.optimization_group:
+            self.optimization_group.setVisible(is_single or is_research)
+            if is_research:
+                self.optimization_group.setChecked(True)
+            else:
+                self.optimization_group.setChecked(False)
+
+        # 6. 進階 Walk-forward 驗證群組
+        if hasattr(self, "wf_group") and self.wf_group:
+            self.wf_group.setVisible(is_single or is_research)
+            if is_research:
+                self.wf_group.setChecked(True)
+            else:
+                self.wf_group.setChecked(False)
     
     def _setup_ui(self):
         """設置 UI"""
@@ -251,7 +319,7 @@ class BacktestView(QWidget):
         
         # ========== 策略預設區塊 ==========
         if self.preset_service:
-            preset_group = QGroupBox("策略來源 / 預設")
+            self.strategy_preset_group = QGroupBox("策略來源 / 預設")
             preset_layout = QVBoxLayout()
             
             preset_row = QHBoxLayout()
@@ -278,11 +346,11 @@ class BacktestView(QWidget):
             
             preset_layout.addLayout(preset_row)
             preset_layout.addLayout(preset_btn_row)
-            preset_group.setLayout(preset_layout)
-            config_layout.addWidget(preset_group)
+            self.strategy_preset_group.setLayout(preset_layout)
+            config_layout.addWidget(self.strategy_preset_group)
         
         # ========== 輸入來源 ==========
-        config_group = QGroupBox("輸入來源")
+        self.input_source_group = QGroupBox("輸入來源")
         config_form = QFormLayout()
         
         # 股票代號（升級為支援單一/清單模式）
@@ -329,11 +397,11 @@ class BacktestView(QWidget):
         self.end_date.setDisplayFormat("yyyy-MM-dd")
         config_form.addRow("結束日期:", self.end_date)
 
-        config_group.setLayout(config_form)
-        config_layout.addWidget(config_group)
+        self.input_source_group.setLayout(config_form)
+        config_layout.addWidget(self.input_source_group)
 
         # ========== 策略與風控：資金成本 / 執行 ==========
-        risk_group = QGroupBox("策略與風控：資金成本 / 執行")
+        self.risk_cost_group = QGroupBox("策略與風控：資金成本 / 執行")
         risk_form = QFormLayout()
         
         # 初始資金
@@ -447,11 +515,11 @@ class BacktestView(QWidget):
             self.take_profit_atr_input.setToolTip(tooltip_text)
         risk_form.addRow("停利 (ATR):", self.take_profit_atr_input)
         
-        risk_group.setLayout(risk_form)
-        config_layout.addWidget(risk_group)
+        self.risk_cost_group.setLayout(risk_form)
+        config_layout.addWidget(self.risk_cost_group)
         
         # ========== 部位 Sizing 配置 ==========
-        sizing_group = QGroupBox("策略與風控：部位 Sizing")
+        self.sizing_group = QGroupBox("策略與風控：部位 Sizing")
         sizing_form = QFormLayout()
         
         # Sizing 模式
@@ -490,11 +558,11 @@ class BacktestView(QWidget):
             self.risk_pct_input.setToolTip(tooltip_text)
         sizing_form.addRow("風險百分比:", self.risk_pct_input)
         
-        sizing_group.setLayout(sizing_form)
-        config_layout.addWidget(sizing_group)
+        self.sizing_group.setLayout(sizing_form)
+        config_layout.addWidget(self.sizing_group)
         
         # ========== 部位管理配置 ==========
-        position_mgmt_group = QGroupBox("策略與風控：部位管理")
+        self.position_mgmt_group = QGroupBox("策略與風控：部位管理")
         position_mgmt_form = QFormLayout()
         
         # 最大持有部位數
@@ -548,11 +616,11 @@ class BacktestView(QWidget):
             self.reentry_cooldown_input.setToolTip(tooltip_text)
         position_mgmt_form.addRow("重新進場冷卻天數:", self.reentry_cooldown_input)
         
-        position_mgmt_group.setLayout(position_mgmt_form)
-        config_layout.addWidget(position_mgmt_group)
+        self.position_mgmt_group.setLayout(position_mgmt_form)
+        config_layout.addWidget(self.position_mgmt_group)
         
         # ========== 市場限制配置 ==========
-        market_constraints_group = QGroupBox("策略與風控：市場限制")
+        self.market_constraints_group = QGroupBox("策略與風控：市場限制")
         market_constraints_form = QFormLayout()
         
         # 漲跌停限制
@@ -585,11 +653,11 @@ class BacktestView(QWidget):
             self.max_participation_input.setToolTip(tooltip_text)
         market_constraints_form.addRow("最大參與率:", self.max_participation_input)
         
-        market_constraints_group.setLayout(market_constraints_form)
-        config_layout.addWidget(market_constraints_group)
+        self.market_constraints_group.setLayout(market_constraints_form)
+        config_layout.addWidget(self.market_constraints_group)
         
         # 策略配置
-        strategy_group = QGroupBox("策略與風控：策略配置")
+        self.strategy_config_group = QGroupBox("策略與風控：策略配置")
         strategy_layout = QVBoxLayout()
         
         # 策略選擇下拉選單
@@ -613,8 +681,8 @@ class BacktestView(QWidget):
         self.strategy_combo.currentTextChanged.connect(self._on_strategy_changed)
         self._on_strategy_changed()  # 初始化
         
-        strategy_group.setLayout(strategy_layout)
-        config_layout.addWidget(strategy_group)
+        self.strategy_config_group.setLayout(strategy_layout)
+        config_layout.addWidget(self.strategy_config_group)
         
         # ========== 參數最佳化區塊 ==========
         if self.backtest_service:
@@ -676,9 +744,9 @@ class BacktestView(QWidget):
         
         # ========== Walk-forward 驗證區塊 ==========
         if self.walkforward_service:
-            wf_group = QGroupBox("進階驗證：Walk-forward 驗證")
-            wf_group.setCheckable(True)
-            wf_group.setChecked(False)
+            self.wf_group = QGroupBox("進階驗證：Walk-forward 驗證")
+            self.wf_group.setCheckable(True)
+            self.wf_group.setChecked(False)
             wf_layout = QVBoxLayout()
             
             # 驗證模式選擇
@@ -743,8 +811,8 @@ class BacktestView(QWidget):
             self.wf_execute_btn.clicked.connect(self._execute_walkforward)
             wf_layout.addWidget(self.wf_execute_btn)
             
-            wf_group.setLayout(wf_layout)
-            config_layout.addWidget(wf_group)
+            self.wf_group.setLayout(wf_layout)
+            config_layout.addWidget(self.wf_group)
 
         self.recommendation_portfolio_group = QGroupBox("推薦回放設定")
         self.recommendation_portfolio_group.setCheckable(True)
@@ -1156,6 +1224,9 @@ class BacktestView(QWidget):
         # 不設置固定大小，讓它隨窗口大小自動調整
         
         main_layout.addWidget(splitter)
+        
+        # 初始根據選中的實驗模式更新 UI 狀態
+        self._update_ui_state_by_mode(self.research_lab_mode_combo.currentData() or "single_stock")
     
     def _execute_backtest(self):
         """執行回測（支援單檔和批次模式）"""
@@ -1390,6 +1461,13 @@ class BacktestView(QWidget):
         
         # 顯示績效摘要
         summary = self._format_summary(report)
+        if report.total_trades == 0:
+            summary += (
+                "\n\n=== 交易明細提示 ===\n"
+                "單股回測交易次數為 0，無法記錄交易到 Portfolio。\n"
+                "這通常代表策略門檻在本次期間沒有形成完整買進/賣出交易，"
+                "可調整策略參數、日期區間或改用批次/推薦回放模式再驗證。"
+            )
         self.summary_text.setPlainText(summary)
         
         # 顯示交易明細
@@ -1411,16 +1489,16 @@ class BacktestView(QWidget):
         if hasattr(self, 'save_result_btn'):
             if self.run_repository and self.current_report and self.current_run_params:
                 self.save_result_btn.setEnabled(True)
-                print(f"[BacktestView] 保存按鈕已啟用 (run_repository={self.run_repository is not None}, report={self.current_report is not None}, params={self.current_run_params is not None})")
+                logger.info("[BacktestView] 保存按鈕已啟用 (run_repository={self.run_repository is not None}, report={self.current_report is not None}, params={self.current_run_params is not None})")
             else:
                 # 如果沒有 repository，禁用按鈕並顯示提示
                 self.save_result_btn.setEnabled(False)
                 if not self.run_repository:
-                    print("[BacktestView] 警告: run_repository 未初始化，無法保存結果")
+                    logger.warning("[BacktestView] 警告: run_repository 未初始化，無法保存結果")
                 if not self.current_report:
-                    print("[BacktestView] 警告: current_report 為空，無法保存結果")
+                    logger.warning("[BacktestView] 警告: current_report 為空，無法保存結果")
                 if not self.current_run_params:
-                    print("[BacktestView] 警告: current_run_params 為空，無法保存結果")
+                    logger.warning("[BacktestView] 警告: current_run_params 為空，無法保存結果")
         
         # ========== Phase 3.5 SOP 護欄：啟用 Promote 按鈕 ==========
         if hasattr(self, 'promote_btn'):
@@ -1441,7 +1519,7 @@ class BacktestView(QWidget):
                 self.promote_btn.setEnabled(False)
                 # 如果因為 SOP 護欄無法 Promote，顯示提示
                 if can_promote_basic and not can_promote_sop:
-                    print(f"[BacktestView] ⚠️ SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
+                    logger.warning("[BacktestView] ⚠️ SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
 
     def _show_recommendation_portfolio_result(self, result):
         """顯示推薦組合回測結果。"""
@@ -1518,7 +1596,7 @@ class BacktestView(QWidget):
                     equity_series.index.max().strftime("%Y-%m-%d"),
                 )
             except Exception as exc:
-                print(f"[BacktestView] Recommendation benchmark load failed: {exc}")
+                logger.info("[BacktestView] Recommendation benchmark load failed: {exc}")
 
         self.portfolio_equity_chart.plot(equity_series, benchmark_series, None, result.trades)
 
@@ -2279,7 +2357,7 @@ class BacktestView(QWidget):
             import app_module.strategies
             
             strategies = StrategyRegistry.list_strategies()
-            print(f"[BacktestView] 已註冊的策略: {list(strategies.keys())}")
+            logger.info(f"[BacktestView] 已註冊的策略: {list(strategies.keys())}")
             
             if not strategies:
                 # 如果沒有策略，顯示提示
@@ -2294,11 +2372,11 @@ class BacktestView(QWidget):
                     # 如果是 StrategyMeta 對象，使用屬性訪問
                     name = getattr(info, 'name', strategy_id)
                 self.strategy_combo.addItem(name, strategy_id)
-                print(f"[BacktestView] 添加策略: {name} ({strategy_id})")
+                logger.info(f"[BacktestView] 添加策略: {name} ({strategy_id})")
         except Exception as e:
             import traceback
-            print(f"[BacktestView] 載入策略列表失敗: {e}")
-            print(traceback.format_exc())
+            logger.error(f"[BacktestView] 載入策略列表失敗: {e}")
+            logger.error(traceback.format_exc())
             self.strategy_combo.addItem("載入策略失敗", None)
     
     def _on_strategy_changed(self):
@@ -2360,8 +2438,8 @@ class BacktestView(QWidget):
             self._update_params_form(params)
         except Exception as e:
             import traceback
-            print(f"[BacktestView] 更新策略資訊失敗: {e}")
-            print(traceback.format_exc())
+            logger.info("[BacktestView] 更新策略資訊失敗: {e}")
+            logger.error(traceback.format_exc())
             self.strategy_desc.setText(f"載入策略資訊失敗: {str(e)}")
             self._update_params_form({})
     
@@ -2432,6 +2510,11 @@ class BacktestView(QWidget):
                 params[param_name] = widget.value()
             elif isinstance(widget, QDoubleSpinBox):
                 params[param_name] = widget.value()
+        if getattr(self, 'optimization_group', None) is not None and self.optimization_group.isChecked():
+            for param_name, widgets in getattr(self, 'optimization_param_widgets', {}).items():
+                fixed_widget = widgets.get('fixed') if isinstance(widgets, dict) else None
+                if isinstance(fixed_widget, (QSpinBox, QDoubleSpinBox)):
+                    params[param_name] = fixed_widget.value()
         return params
     
     # ========== 策略預設相關方法 ==========
@@ -2439,7 +2522,7 @@ class BacktestView(QWidget):
     def _populate_preset_combo(self):
         """填充預設下拉選單"""
         if not self.preset_service:
-            print("[BacktestView] PresetService 未初始化，無法載入預設")
+            logger.info("[BacktestView] PresetService 未初始化，無法載入預設")
             return
         
         self.preset_combo.clear()
@@ -2447,7 +2530,7 @@ class BacktestView(QWidget):
         
         try:
             presets = self.preset_service.list_presets()
-            print(f"[BacktestView] 找到 {len(presets)} 個預設")
+            logger.info("[BacktestView] 找到 {len(presets)} 個預設")
             
             if not presets:
                 # 如果沒有預設，顯示提示
@@ -2458,11 +2541,11 @@ class BacktestView(QWidget):
                     preset_id = preset.get('preset_id', '')
                     if name and preset_id:
                         self.preset_combo.addItem(name, preset_id)
-                        print(f"[BacktestView] 添加預設: {name} ({preset_id})")
+                        logger.info("[BacktestView] 添加預設: {name} ({preset_id})")
         except Exception as e:
             import traceback
-            print(f"[BacktestView] 載入預設列表失敗: {e}")
-            print(traceback.format_exc())
+            logger.info("[BacktestView] 載入預設列表失敗: {e}")
+            logger.error(traceback.format_exc())
             self.preset_combo.addItem("（載入失敗）", None)
     
     def _save_preset(self):
@@ -2805,6 +2888,11 @@ class BacktestView(QWidget):
                 return
             
             # 切換到選股清單模式
+            # 切換到批次股票回測模式
+            index = self.research_lab_mode_combo.findData("batch_stock")
+            if index >= 0:
+                self.research_lab_mode_combo.setCurrentIndex(index)
+            
             self.stock_mode_combo.setCurrentText("選股清單")
             
             # 創建臨時選股清單（如果 universe_service 可用）
@@ -2856,6 +2944,11 @@ class BacktestView(QWidget):
 
     def _load_recommendation_portfolio_config(self, config):
         self.current_recommendation_portfolio_config = config
+        # 切換到推薦系統回放模式
+        if hasattr(self, "research_lab_mode_combo"):
+            index = self.research_lab_mode_combo.findData("recommendation_replay")
+            if index >= 0:
+                self.research_lab_mode_combo.setCurrentIndex(index)
         if hasattr(self, "recommendation_portfolio_group"):
             self.recommendation_portfolio_group.setChecked(True)
         if hasattr(self, "recommendation_portfolio_profile_label"):
@@ -2972,10 +3065,10 @@ class BacktestView(QWidget):
                     from app_module.dtos import ValidationStatus
                     if self.current_report.validation_status != ValidationStatus.FAIL:
                         self.promote_btn.setEnabled(True)
-                        print(f"[BacktestView] Promote 按鈕已啟用（驗證狀態：{self.current_report.validation_status.value}）")
+                        logger.info("[BacktestView] Promote 按鈕已啟用（驗證狀態：{self.current_report.validation_status.value}）")
                     else:
                         self.promote_btn.setEnabled(False)
-                        print(f"[BacktestView] ⚠️ SOP 護欄：驗證狀態為 FAIL，Promote 按鈕保持禁用")
+                        logger.warning("[BacktestView] ⚠️ SOP 護欄：驗證狀態為 FAIL，Promote 按鈕保持禁用")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"保存失敗: {str(e)}")
     
@@ -3209,7 +3302,7 @@ class BacktestView(QWidget):
             except Exception as e:
                 failed_count += 1
                 failed_names.append(run_name)
-                print(f"[BacktestView] 刪除回測結果失敗 {run_id}: {e}")
+                logger.info("[BacktestView] 刪除回測結果失敗 {run_id}: {e}")
         
         # 顯示結果
         if failed_count == 0:
@@ -3425,37 +3518,37 @@ class BacktestView(QWidget):
             
             # 調試：確保參數被正確讀取
             if params:
-                print(f"[BacktestView] 參數最佳化：成功讀取到 {len(params)} 個參數: {list(params.keys())}")
+                logger.info("[BacktestView] 參數最佳化：成功讀取到 {len(params)} 個參數: {list(params.keys())}")
             
             # 調試：打印參數信息（僅在開發時使用）
             if not params:
-                print(f"[BacktestView] 警告：策略 {strategy_id} 沒有找到參數定義")
-                print(f"[BacktestView] info 類型: {type(info)}")
+                logger.warning("[BacktestView] 警告：策略 {strategy_id} 沒有找到參數定義")
+                logger.info("[BacktestView] info 類型: {type(info)}")
                 if isinstance(info, dict):
-                    print(f"[BacktestView] info keys: {list(info.keys())}")
-                    print(f"[BacktestView] info['params']: {info.get('params', 'NOT FOUND')}")
-                    print(f"[BacktestView] info['default_params']: {info.get('default_params', 'NOT FOUND')}")
+                    logger.info("[BacktestView] info keys: {list(info.keys())}")
+                    logger.info("[BacktestView] info['params']: {info.get('params', 'NOT FOUND')}")
+                    logger.info("[BacktestView] info['default_params']: {info.get('default_params', 'NOT FOUND')}")
                 # 嘗試直接從執行器獲取
                 executor_cls = StrategyRegistry._registry.get(strategy_id)
                 if executor_cls:
-                    print(f"[BacktestView] 嘗試直接從執行器獲取...")
+                    logger.info("[BacktestView] 嘗試直接從執行器獲取...")
                     if hasattr(executor_cls, 'get_meta'):
                         meta = executor_cls.get_meta()
-                        print(f"[BacktestView] get_meta() 返回類型: {type(meta)}")
+                        logger.info("[BacktestView] get_meta() 返回類型: {type(meta)}")
                         if isinstance(meta, dict):
-                            print(f"[BacktestView] meta keys: {list(meta.keys())}")
-                            print(f"[BacktestView] meta['params']: {meta.get('params', 'NOT FOUND')}")
+                            logger.info("[BacktestView] meta keys: {list(meta.keys())}")
+                            logger.info("[BacktestView] meta['params']: {meta.get('params', 'NOT FOUND')}")
                         elif hasattr(meta, 'default_params'):
-                            print(f"[BacktestView] meta.default_params: {meta.default_params}")
+                            logger.info("[BacktestView] meta.default_params: {meta.default_params}")
             
             # 調試：確保參數被正確讀取
             if params:
-                print(f"[BacktestView] 成功讀取到 {len(params)} 個參數: {list(params.keys())}")
+                logger.info("[BacktestView] 成功讀取到 {len(params)} 個參數: {list(params.keys())}")
             
             # 為每個參數創建範圍設定控件
-            print(f"[BacktestView] 開始創建參數控件，共 {len(params)} 個參數")
+            logger.info("[BacktestView] 開始創建參數控件，共 {len(params)} 個參數")
             for param_name, param_info in params.items():
-                print(f"[BacktestView] 處理參數: {param_name}, 類型: {type(param_info)}, 值: {param_info}")
+                logger.info("[BacktestView] 處理參數: {param_name}, 類型: {type(param_info)}, 值: {param_info}")
                 # 處理兩種格式：
                 # 1. 字典格式：{'type': 'float', 'default': 60, 'description': '買入閾值'}
                 # 2. 簡單值格式：70（需要推斷類型）
@@ -3590,16 +3683,16 @@ class BacktestView(QWidget):
             
             # 如果沒有參數，顯示提示
             if not self.optimization_param_widgets:
-                print(f"[BacktestView] 警告：參數讀取成功但控件未創建，params: {params}")
+                logger.warning("[BacktestView] 警告：參數讀取成功但控件未創建，params: {params}")
                 hint_label = QLabel("此策略沒有可最佳化的參數")
                 hint_label.setStyleSheet("color: #888; font-style: italic;")
                 self.optimization_params_layout.addRow(hint_label)
             else:
-                print(f"[BacktestView] 成功創建 {len(self.optimization_param_widgets)} 個參數控件")
+                logger.info("[BacktestView] 成功創建 {len(self.optimization_param_widgets)} 個參數控件")
         except Exception as e:
             import traceback
-            print(f"[BacktestView] 更新最佳化參數表單失敗: {e}")
-            print(traceback.format_exc())
+            logger.info("[BacktestView] 更新最佳化參數表單失敗: {e}")
+            logger.error(traceback.format_exc())
     
     def _execute_optimization(self):
         """執行參數掃描"""
@@ -4140,7 +4233,7 @@ class BacktestView(QWidget):
                 
                 self.drawdown_chart.plot(drawdown_series, max_dd_info)
             except Exception as e:
-                print(f"[BacktestView] 繪製回撤曲線失敗: {e}")
+                logger.info("[BacktestView] 繪製回撤曲線失敗: {e}")
                 import traceback
                 traceback.print_exc()
         
@@ -4170,7 +4263,7 @@ class BacktestView(QWidget):
                         }
                         self.return_hist.plot(returns, stats)
             except Exception as e:
-                print(f"[BacktestView] 繪製報酬分佈失敗: {e}")
+                logger.info("[BacktestView] 繪製報酬分佈失敗: {e}")
                 import traceback
                 traceback.print_exc()
         
@@ -4193,7 +4286,7 @@ class BacktestView(QWidget):
                     if len(holding_days) > 0:
                         self.holding_hist.plot(holding_days)
             except Exception as e:
-                print(f"[BacktestView] 繪製持有天數分佈失敗: {e}")
+                logger.info("[BacktestView] 繪製持有天數分佈失敗: {e}")
                 import traceback
                 traceback.print_exc()
     
@@ -4272,8 +4365,8 @@ class BacktestView(QWidget):
         # 定義進度回調函數（在主線程中更新 UI）
         def progress_callback(current: int, total_count: int, stock_code: str, message: str):
             """進度回調：更新進度條和文字"""
-            # 使用 QTimer.singleShot 確保在主線程執行
-            QTimer.singleShot(0, lambda: self._update_batch_progress(current, total_count, stock_code, message))
+            # 使用 QTimer.singleShot 並指定 self (receiver) 確保在主線程執行
+            QTimer.singleShot(0, self, lambda: self._update_batch_progress(current, total_count, stock_code, message))
         
         # 創建 Worker
         def batch_backtest_task():

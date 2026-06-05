@@ -16,10 +16,10 @@ class StrategyPreset:
     name: str
     strategy_id: str
     params: Dict[str, Any]
-    meta: Dict[str, Any] = None
-    created_at: str = None
-    updated_at: str = None
-    tags: List[str] = None
+    meta: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    tags: Optional[List[str]] = None
     
     def __post_init__(self):
         """初始化後處理"""

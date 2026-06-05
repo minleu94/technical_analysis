@@ -348,7 +348,7 @@ class BacktestService:
             logger.error(f"[BacktestService] 載入數據失敗（股票 {stock_code}）: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            return None
+            return None, start_date, end_date
     
     def _load_price_data(
         self,

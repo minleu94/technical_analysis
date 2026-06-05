@@ -3,6 +3,7 @@
 支援多檔股票批次回測，生成排行榜和整體統計
 """
 
+import logging
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional
@@ -13,6 +14,9 @@ from app_module.backtest_service import BacktestService
 from app_module.backtest_repository import BacktestRunRepository
 from app_module.strategy_spec import StrategySpec
 from app_module.dtos import BacktestReportDTO
+
+logger = logging.getLogger(__name__)
+
 
 
 @dataclass
@@ -212,11 +216,11 @@ class BatchBacktestService:
                             notes=f"批次回測：{batch_name}" + (f" ({error_reason})" if error_reason else "")
                         )
                         result.run_id = run_id
-                        print(f"[BatchBacktestService] 已保存 {stock_code} 的回測結果 (run_id: {run_id})")
+                        logger.info(f"[BatchBacktestService] 已保存 {stock_code} 的回測結果 (run_id: {run_id})")
                     except Exception as e:
                         import traceback
-                        print(f"[BatchBacktestService] 保存 {stock_code} 失敗: {e}")
-                        traceback.print_exc()
+                        logger.error(f"[BatchBacktestService] 保存 {stock_code} 失敗: {e}")
+                        logger.error(traceback.format_exc())
                 
                 stock_results.append(result)
                 

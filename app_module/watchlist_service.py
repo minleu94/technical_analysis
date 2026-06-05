@@ -5,7 +5,7 @@
 
 import json
 from pathlib import Path
-from typing import List, Dict, Optional, Set
+from typing import Any, List, Dict, Optional, Set
 from datetime import datetime
 from dataclasses import dataclass, asdict
 
@@ -18,7 +18,7 @@ class WatchlistItem:
     added_at: str
     source: str  # 'market_watch', 'recommendation', 'manual'
     notes: str = ""
-    tags: List[str] = None
+    tags: Optional[List[str]] = None
     
     def __post_init__(self):
         """初始化後處理"""
@@ -236,7 +236,7 @@ class WatchlistService:
                     backup_file.unlink()
                 
                 logger.debug(f"成功保存觀察清單: {watchlist_file}")
-            except json.JSONEncodeError as e:
+            except TypeError as e:
                 logger.error(f"JSON 編碼錯誤: {e}")
                 if temp_file.exists():
                     temp_file.unlink()
@@ -252,7 +252,7 @@ class WatchlistService:
             logger.error(traceback.format_exc())
             raise
     
-    def get_default_watchlist(self) -> Watchlist:
+    def get_default_watchlist(self) -> Optional[Watchlist]:
         """取得預設觀察清單"""
         return self._load_watchlist("default")
     
@@ -270,7 +270,7 @@ class WatchlistService:
     
     def add_stocks(
         self,
-        stocks: List[Dict[str, str]],
+        stocks: List[Dict[str, Any]],
         source: str = "manual",
         watchlist_id: str = "default"
     ) -> int:
@@ -332,13 +332,15 @@ class WatchlistService:
                         continue
                     
                     # 新增項目
+                    raw_tags = stock.get('tags', [])
+                    tags = raw_tags if isinstance(raw_tags, list) else []
                     item = WatchlistItem(
                         stock_code=stock_code,
                         stock_name=stock_name,
                         added_at=datetime.now().isoformat(),
                         source=source,
                         notes=str(stock.get('notes', '')).strip(),
-                        tags=stock.get('tags', []) if isinstance(stock.get('tags'), list) else []
+                        tags=[str(tag) for tag in tags]
                     )
                     watchlist.items.append(item)
                     existing_codes.add(stock_code)
@@ -451,7 +453,7 @@ class WatchlistService:
         
         return [item.stock_code for item in watchlist.items]
     
-    def get_stocks(self, watchlist_id: str = "default") -> List[Dict[str, str]]:
+    def get_stocks(self, watchlist_id: str = "default") -> List[Dict[str, Any]]:
         """
         取得觀察清單中的股票列表（包含詳細資訊）
         
@@ -477,7 +479,7 @@ class WatchlistService:
             for item in watchlist.items
         ]
     
-    def list_watchlists(self) -> List[Dict[str, str]]:
+    def list_watchlists(self) -> List[Dict[str, Any]]:
         """
         列出所有觀察清單
         

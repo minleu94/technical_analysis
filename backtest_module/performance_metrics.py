@@ -547,11 +547,11 @@ class PerformanceAnalyzer:
         if len(sharpe_ratios) < 2:
             return None
         
-        std_dev = np.std(sharpe_ratios)
+        std_dev = float(np.std(sharpe_ratios))
         
         # 標準差可能很大，需要正規化到 0.0 - 1.0 範圍
         # 使用絕對值並限制範圍
-        normalized_std = min(abs(std_dev), 1.0)
+        normalized_std = float(min(abs(std_dev), 1.0))
         
         return normalized_std
     

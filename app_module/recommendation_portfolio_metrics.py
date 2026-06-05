@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Dict
+from typing import Any, Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
@@ -87,7 +87,7 @@ def _calculate_monte_carlo_returns(
 
 def generate_improvement_hints(summary: Dict[str, Any]) -> List[str]:
     """根據回測總覽指標與診斷數據，產生具體的 rule-based 改善建議。"""
-    hints = []
+    hints: List[str] = []
     
     total_trades = summary.get("total_trades", 0)
     if total_trades == 0:

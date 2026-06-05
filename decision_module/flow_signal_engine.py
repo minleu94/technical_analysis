@@ -79,7 +79,7 @@ class FlowSignalEngine:
         # 計算買超最大的分點佔總買超的比例
         concentration = 0.0
         if agg.total_net_qty > 0 and agg.events:
-            branch_net_buy = defaultdict(int)
+            branch_net_buy: defaultdict[str, int] = defaultdict(int)
             for event in agg.events:
                 if event.net_qty > 0:
                     branch_net_buy[event.branch_display_name] += event.net_qty
@@ -113,7 +113,7 @@ class FlowSignalEngine:
             confidence = 0.1
             
         # 5. 計算 Sparkline 資料 (依日期排序的每日淨買賣超序列)
-        daily_net = defaultdict(int)
+        daily_net: defaultdict[str, int] = defaultdict(int)
         for event in agg.events:
             daily_net[event.date] += event.net_qty
         

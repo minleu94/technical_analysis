@@ -81,6 +81,7 @@ class TWMarketDataProcessor:
                     self.logger.error(f"請求失敗: {str(e)}")
                     return None
                 time.sleep(self.config.retry_delay)
+        return None
     
     def _get_headers(self) -> Dict[str, str]:
         """獲取請求頭"""
@@ -381,7 +382,7 @@ class TWMarketDataProcessor:
             self.logger.error(f"檢查數據一致性時發生錯誤: {str(e)}")
             return False
     
-    def generate_report(self) -> str:
+    def generate_report(self) -> bool:
         """生成數據更新報告"""
         try:
             # 讀取各個數據文件

@@ -188,12 +188,12 @@ class PatternParameterOptimizer:
     def _get_pattern_config(self, pattern_type: str, category: str) -> Dict:
         """獲取指定模式的配置信息"""
         if category == 'basic':
-            return self.basic_patterns_config.get(pattern_type)
+            return self.basic_patterns_config.get(pattern_type, {})
         elif category == 'compound':
-            return self.compound_patterns_config.get(pattern_type)
+            return self.compound_patterns_config.get(pattern_type, {})
         elif category == 'trend':
-            return self.trend_patterns_config.get(pattern_type)
-        return None
+            return self.trend_patterns_config.get(pattern_type, {})
+        return {}
 
     def _generate_param_combinations(self, param_config: Dict) -> List[Dict]:
         """生成參數組合"""

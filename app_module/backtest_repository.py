@@ -39,8 +39,8 @@ class BacktestRun:
     profit_factor: float
     # 額外資訊
     notes: str = ""
-    tags: List[str] = None
-    created_at: str = None
+    tags: Optional[List[str]] = None
+    created_at: Optional[str] = None
     equity_curve_path: Optional[str] = None
     trade_list_path: Optional[str] = None
     promoted_version_id: Optional[str] = None  # 已升級的策略版本 ID
@@ -263,7 +263,7 @@ class BacktestRunRepository:
         cursor = conn.cursor()
         
         query = "SELECT * FROM runs WHERE 1=1"
-        params = []
+        params: List[Any] = []
         
         if strategy_id:
             query += " AND strategy_id = ?"
@@ -453,4 +453,3 @@ class BacktestRunRepository:
         else:
             print(f"[BacktestRepository] 警告: 找不到回測結果: run_id={run_id}")
             return False
-

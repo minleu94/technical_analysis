@@ -17,9 +17,9 @@ class Watchlist:
     name: str
     codes: List[str]  # 股票代號列表
     source: str = "manual"  # 來源：manual, screening, industry, etc.
-    filters: Dict = None  # 篩選條件（可選）
-    created_at: str = None
-    updated_at: str = None
+    filters: Optional[Dict[str, Any]] = None  # 篩選條件（可選）
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     description: str = ""
     
     def __post_init__(self):

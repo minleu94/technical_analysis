@@ -532,12 +532,13 @@ class RecommendationService:
         preset = preset_service.load_preset(preset_id)
         if preset is None:
             return None
+        preset_meta = preset.meta or {}
         
         # 構建策略配置字典
         config = {
             'strategy_id': preset.strategy_id,
             'params': preset.params,
-            **preset.meta.get('config', {})
+            **preset_meta.get('config', {})
         }
         
         return config
@@ -589,12 +590,13 @@ class RecommendationService:
         preset = preset_service.load_preset(preset_id)
         if preset is None:
             return None
+        preset_meta = preset.meta or {}
         
         return StrategySpec(
             strategy_id=preset.strategy_id,
-            strategy_version=preset.meta.get('strategy_version', '1.0.0'),
+            strategy_version=preset_meta.get('strategy_version', '1.0.0'),
             default_params=preset.params,
-            config=preset.meta.get('config', {})
+            config=preset_meta.get('config', {})
         )
     
     def load_strategy_spec_from_version(

@@ -81,7 +81,7 @@ class RecommendationResultDTO:
     config: Dict[str, Any]  # 策略配置（完整配置）
     recommendations: List[RecommendationDTO]  # 推薦股票列表
     regime: Optional[str] = None  # 市場狀態
-    created_at: str = None  # 創建時間
+    created_at: Optional[str] = None  # 創建時間
     notes: str = ""  # 備註
     
     def to_dict(self) -> dict:

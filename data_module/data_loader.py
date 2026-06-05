@@ -500,7 +500,7 @@ class DataLoader:
                 self.logger.info("已恢復備份文件")
             return None
 
-    def _convert_date_format(self, date_str: str, to_api: bool = False) -> str:
+    def _convert_date_format(self, date_str: str, to_api: bool = False) -> Optional[str]:
         """轉換日期格式
         
         支持的格式：
@@ -542,7 +542,7 @@ class DataLoader:
             self.logger.error(f"日期格式轉換錯誤: {str(e)}")
             return None
 
-    def _convert_to_datetime(self, date_str: str) -> datetime:
+    def _convert_to_datetime(self, date_str: str) -> Optional[datetime]:
         """將日期字符串轉換為datetime對象"""
         try:
             # 如果是 YYYYMMDD 格式
