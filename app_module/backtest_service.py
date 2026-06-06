@@ -233,6 +233,24 @@ class BacktestService:
             walkforward_executed=walkforward_executed
         )
         
+        # 計算策略分數診斷
+        strategy_params = strategy_spec.config.get('params', {})
+        buy_score = strategy_params.get('buy_score', strategy_spec.default_params.get('buy_score', 60.0))
+        sell_score = strategy_params.get('sell_score', strategy_spec.default_params.get('sell_score', 40.0))
+        
+        score_series = signal_frame.get('score', pd.Series(50.0, index=signal_frame.index))
+        
+        score_diagnostics = {
+            'max_score': float(score_series.max()) if not score_series.empty else 50.0,
+            'min_score': float(score_series.min()) if not score_series.empty else 50.0,
+            'avg_score': float(score_series.mean()) if not score_series.empty else 50.0,
+            'buy_hit_days': int((score_series >= buy_score).sum()),
+            'sell_hit_days': int((score_series <= sell_score).sum()),
+            'total_days': int(len(score_series)),
+            'buy_score': float(buy_score),
+            'sell_score': float(sell_score)
+        }
+        
         # 8. 構建 BacktestReportDTO
         return BacktestReportDTO(
             total_return=metrics.total_return,
@@ -267,7 +285,8 @@ class BacktestService:
                 'largest_loss': metrics.largest_loss,
                 'equity_curve': equity_curve,
                 'trade_list': trade_list,
-                'can_promote': validation_result['can_promote']  # 記錄是否可以 Promote
+                'can_promote': validation_result['can_promote'],  # 記錄是否可以 Promote
+                'score_diagnostics': score_diagnostics
             }
         )
     

@@ -747,6 +747,7 @@ class BacktestView(QWidget):
             self.wf_group = QGroupBox("進階驗證：Walk-forward 驗證")
             self.wf_group.setCheckable(True)
             self.wf_group.setChecked(False)
+            self.wf_group.toggled.connect(self._on_wf_group_toggled)
             wf_layout = QVBoxLayout()
             
             # 驗證模式選擇
@@ -1230,6 +1231,14 @@ class BacktestView(QWidget):
     
     def _execute_backtest(self):
         """執行回測（支援單檔和批次模式）"""
+        # 委派參數最佳化與 Walk-forward 驗證
+        if hasattr(self, 'optimization_group') and self.optimization_group.isChecked():
+            self._execute_optimization()
+            return
+        if hasattr(self, 'wf_group') and self.wf_group.isChecked():
+            self._execute_walkforward()
+            return
+            
         # 獲取股票代號列表
         stock_codes = self._get_stock_codes()
         if not stock_codes:
@@ -1461,13 +1470,59 @@ class BacktestView(QWidget):
         
         # 顯示績效摘要
         summary = self._format_summary(report)
+        
+        # 診斷指引與建議
+        guides = []
+        
+        # 1. 無交易
         if report.total_trades == 0:
-            summary += (
-                "\n\n=== 交易明細提示 ===\n"
-                "單股回測交易次數為 0，無法記錄交易到 Portfolio。\n"
-                "這通常代表策略門檻在本次期間沒有形成完整買進/賣出交易，"
-                "可調整策略參數、日期區間或改用批次/推薦回放模式再驗證。"
+            score_diag = report.details.get('score_diagnostics', {})
+            max_score = score_diag.get('max_score', 0.0)
+            buy_score = score_diag.get('buy_score', 60.0)
+            
+            no_trade_msg = (
+                "\n💡 === 診斷建議：無任何交易 ===\n"
+                "原因：單股回測交易次數為 0，無法記錄交易到 Portfolio。\n"
             )
+            if max_score < buy_score:
+                no_trade_msg += f"具體原因：本標的最高分未達買進門檻 (最高分 {max_score:.1f} < 買進門檻 {buy_score:.1f})，因此未觸發買入信號。\n"
+            else:
+                no_trade_msg += f"具體原因：雖然最高分 ({max_score:.1f}) 有達到門檻 ({buy_score:.1f})，但因連續確認天數不足或處於交易冷卻期 (Cooldown)，或在回測結束前尚未形成完整進出場交易對。\n"
+            no_trade_msg += (
+                "建議操作：\n"
+                "  1. 降低「buy_score」買入門檻，讓指標能順利觸發進場。\n"
+                "  2. 縮短「buy_confirm_days」連續確認天數。\n"
+                "  3. 擴大回測日期範圍，以涵蓋更多市場週期與價格波動。"
+            )
+            guides.append(no_trade_msg)
+            
+        # 2. SOP FAIL / 交易量不足 (1-9次交易)
+        elif 0 < report.total_trades < 10:
+            insufficient_msg = (
+                f"\n💡 === 診斷建議：SOP 驗證不通過 (樣本數不足) ===\n"
+                f"原因：目前交易次數為 {report.total_trades} 次，低於 SOP 最低要求的 10 次交易樣本。\n"
+                f"提示：\n"
+                f"  - 您仍可透過右鍵點擊下方交易明細，將個別交易「記錄到持倉管理」中。\n"
+                f"  - 但因為交易樣本不足，此版本無法進行正式版晉升 (Promote 按鈕已禁用)。\n"
+                f"建議操作：\n"
+                f"  1. 擴大回測時間範圍 (例如拉長至 2~3 年以上) 以增加交易次數。\n"
+                f"  2. 適度放寬進場門檻以獲得更多交易樣本。"
+            )
+            guides.append(insufficient_msg)
+            
+        # 3. Walk-forward 未執行 (當前報告非 WF 且未提供 WF 結果)
+        if not report.details.get('walkforward_results'):
+            wf_not_run_msg = (
+                "\n💡 === 診斷建議：Walk-forward 驗證未執行 ===\n"
+                "提示：此策略版本目前尚未通過 Walk-forward 滾動驗證，可能存在過擬合風險。\n"
+                "建議操作：\n"
+                "  - 勾選右側「進階驗證：Walk-forward 驗證」並執行，以確認策略在測試集(Out-of-Sample)的真實表現與魯棒性。"
+            )
+            guides.append(wf_not_run_msg)
+            
+        if guides:
+            summary += "\n" + "\n".join(guides)
+            
         self.summary_text.setPlainText(summary)
         
         # 顯示交易明細
@@ -2004,6 +2059,17 @@ class BacktestView(QWidget):
         if details.get('date_adjusted'):
             summary_lines.append(f"⚠️ 注意: 請求範圍 {requested_start}~{requested_end} 已調整為實際數據範圍")
         
+        # 策略分數診斷
+        score_diag = details.get('score_diagnostics')
+        if score_diag:
+            summary_lines.append("")
+            summary_lines.append("--- 策略分數診斷 (Scoring Diagnostics) ---")
+            summary_lines.append(f"最高得分: {score_diag['max_score']:.1f} | 最低得分: {score_diag['min_score']:.1f} | 平均得分: {score_diag['avg_score']:.1f}")
+            buy_pct = (score_diag['buy_hit_days'] / score_diag['total_days'] * 100.0) if score_diag['total_days'] > 0 else 0.0
+            sell_pct = (score_diag['sell_hit_days'] / score_diag['total_days'] * 100.0) if score_diag['total_days'] > 0 else 0.0
+            summary_lines.append(f"買進門檻 ({score_diag['buy_score']:.1f}) 命中天數: {score_diag['buy_hit_days']} 天 / {score_diag['total_days']} 天 ({buy_pct:.1f}%)")
+            summary_lines.append(f"賣出門檻 ({score_diag['sell_score']:.1f}) 命中天數: {score_diag['sell_hit_days']} 天 / {score_diag['total_days']} 天 ({sell_pct:.1f}%)")
+        
         # ========== Phase 3.5 SOP 護欄：Primary 指標置頂 ==========
         summary_lines.append("")
         summary_lines.append("╔════════════════════════════════════════╗")
@@ -2347,7 +2413,8 @@ class BacktestView(QWidget):
                 'weights': {'pattern': 0.30, 'technical': 0.50, 'volume': 0.20}
             },
             'filters': {},
-            'regime': None
+            'regime': None,
+            'use_deviation_weighted': True
         }
     
     def _populate_strategy_combo(self):
@@ -3430,10 +3497,30 @@ class BacktestView(QWidget):
             self.fixed_amount_input.setVisible(False)
             self.risk_pct_input.setVisible(False)
     
+    def _update_execute_button_text(self):
+        """根據進階選項更新執行按鈕文字"""
+        if not hasattr(self, 'execute_btn') or not self.execute_btn:
+            return
+            
+        opt_checked = hasattr(self, 'optimization_group') and self.optimization_group.isChecked()
+        wf_checked = hasattr(self, 'wf_group') and self.wf_group.isChecked()
+        
+        if opt_checked:
+            self.execute_btn.setText("執行參數最佳化")
+        elif wf_checked:
+            self.execute_btn.setText("執行 Walk-forward 驗證")
+        else:
+            self.execute_btn.setText("執行實驗")
+            
+    def _on_wf_group_toggled(self, checked: bool):
+        """Walk-forward 驗證區塊勾選狀態變更"""
+        self._update_execute_button_text()
+        
     # ========== 參數最佳化相關方法 ==========
     
     def _on_optimization_toggled(self, checked: bool):
         """參數最佳化區塊勾選狀態變更"""
+        self._update_execute_button_text()
         # 根據勾選狀態切換參數顯示位置
         if checked:
             # 勾選時：隱藏策略配置區塊的參數，顯示參數最佳化區塊的參數
@@ -4707,12 +4794,33 @@ class BacktestView(QWidget):
             if value not in ("", None) and (key not in row_data or row_data.get(key) in ("", None)):
                 row_data[key] = value
                 
+        # 檢查是否為強制平倉
+        is_forced_liquidation = False
+        for val in row_data.values():
+            if isinstance(val, str) and "強制平倉" in val:
+                is_forced_liquidation = True
+                break
+                
         menu = QMenu(self)
         action_add_portfolio = menu.addAction("記錄到持倉管理（保留回測來源）...")
+        if is_forced_liquidation:
+            action_add_portfolio.setToolTip("注意：此交易為強制平倉結算交易")
+            action_add_portfolio.setStatusTip("注意：此交易為強制平倉結算交易")
         
         action = menu.exec(self.cursor().pos())
         
         if action == action_add_portfolio:
+            if is_forced_liquidation:
+                reply = QMessageBox.question(
+                    self,
+                    "確認記錄強制平倉交易",
+                    "此筆交易包含「強制平倉」（回測期末結算或風控平倉）。確定要記錄此交易到持倉中嗎？",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if reply != QMessageBox.Yes:
+                    return
+                    
             main_window = self.window()
             if hasattr(main_window, 'portfolio_service'):
                 from ui_qt.views.portfolio_view import AddTradeDialog
@@ -4728,6 +4836,11 @@ class BacktestView(QWidget):
                         dialog.date_input.setDate(qdate)
                 except:
                     pass
+                    
+                if is_forced_liquidation:
+                    dialog.notes_input.setPlainText("來自回測 (強制平倉)")
+                else:
+                    dialog.notes_input.setPlainText("來自回測")
                     
                 if side == "sell":
                     dialog.side_combo.setCurrentIndex(1)
@@ -4766,6 +4879,10 @@ class BacktestView(QWidget):
                         validation_status=validation_status,
                         trade_row=row_data,
                     )
+                    source_summary = dict(source.source_summary or {})
+                    if is_forced_liquidation:
+                        source_summary["exit_reason"] = "強制平倉"
+                        
                     try:
                         main_window.portfolio_service.record_trade(
                             stock_code=data["stock_code"],
@@ -4779,7 +4896,7 @@ class BacktestView(QWidget):
                             source_type=source.source_type,
                             source_id=source.source_id,
                             source_snapshot_hash=source.source_snapshot_hash,
-                            source_summary=source.source_summary,
+                            source_summary=source_summary,
                             notes=data["notes"]
                         )
                         QMessageBox.information(self, "成功", f"交易已成功記入持倉！")

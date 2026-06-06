@@ -564,6 +564,7 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
   * ✅ Backtest / Research Lab 第一階段整理為多模式實驗室：單股回測、批次股票回測、固定組合回測、推薦系統回放與策略研究。
   * ✅ Watchlist / 觀察清單在研究流程中明確定位為候選池，承接推薦、強弱勢、主力流向與手動挑選來源。
   * ✅ Recommendation / Backtest 記錄到 Portfolio 時會保存 `source_type`、`source_id`、`source_snapshot_hash` 與 `source_summary`，讓 append-only trade 可追溯到推薦結果或回測 run。
+  * ✅ 策略回測實驗室說明文檔（[BACKTEST_LAB_FEATURES.md](file:///c:/Projects/PythonProjects/technical_analysis/docs/02_features/BACKTEST_LAB_FEATURES.md)）與 UI Info 說明對話框同步更新（補充 1000 股撮合、SOP 驗證、未來函數防禦與強制平倉 Portfolio 記錄追溯標記，2026-06-06）。
 * ✅ **Phase 3.1、3.2、3.3a 核心功能**：已完成（推薦可用化、Profiles 正式化、研究閉環核心功能）
 * ✅ **AI Runtime Subsystem MVP**：已完成（Phase A Architecture & Phase B UI Integration）
   * ✅ 實作 Runtime Observatory (State Machine Observatory)
@@ -613,7 +614,12 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ---
 
-### 本週 Done（Phase 3 CSV 手動匯出與更新流程優化 + 主力流向視覺重構與 Bug 修復 + 數據更新工作台重構與視覺/架構優化 + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化）
+### 本週 Done（Phase 3 CSV 手動匯出與更新流程優化 + 主力流向視覺重構與 Bug 修復 + 數據更新工作台重構與視覺/架構優化 + SQLite 儲存升級研究、遷移、指標全重算與 UI 秒開優化 + Research Lab 說明文檔與 UI Info 同步優化）
+
+* ✅ **Research Lab 工作流重整與說明文檔同步** (2026-06-06)：
+  * **UI Info 說明對話框優化**：優化了 `tab_info_config.py`，移除 `how_to_use` 清單項目的手動數字標題，防禦 `InfoDialog` 在 list 格式化時出現數字雙重重疊現象。
+  * **回測實驗室說明文檔同步**：在 `BACKTEST_LAB_FEATURES.md` 補齊台股整股（1000 股）撮合與 0 股拒絕交易、SOP 驗證門檻限制（總交易 >= 10 時 Promote 啟用）、圖形模式無未來函數防禦（滾動切片、突破確認日 confirm_idx、安全延遲）、強制平倉記錄至 Portfolio 追溯標記等說明，與實體代碼邏輯 100% 同步。
+
 
 * ✅ **數據更新工作台 (UpdateView) 視覺重構與架構優化** (2026-06-03)：
   * **主看板與 StatusCard**：升級為極簡看板 Dashboard，移去所有手動控制與雜亂按鈕，改以精美 `StatusCard`（繼承自 `QGroupBox`、相容於 `QTextEdit`）與四色指示燈（🟢/🟡/🔴/⚪）展示數據概覽。

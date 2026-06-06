@@ -239,13 +239,27 @@ class ScoringEngine:
             if bb_score is not None:
                 scores.append(bb_score)
         
-        # 平均所有啟用的指標分數
+        # 根據配置決定是否使用偏離度加權平均（Deviation-Weighted Average），預設為 False 以相容既有策略
+        use_deviation_weighted = config.get('use_deviation_weighted', False) or config.get('signals', {}).get('use_deviation_weighted', False)
+        
         if len(scores) == 0:
             return pd.Series(50.0, index=df.index)  # 預設中性分數
         
-        # 加權平均（可以根據重要性調整權重）
         indicator_scores = pd.concat(scores, axis=1)
-        return indicator_scores.mean(axis=1)
+        
+        if use_deviation_weighted:
+            deviations = indicator_scores - 50.0
+            weights = deviations.abs() ** 1.5
+            
+            weighted_dev_sum = (weights * deviations).sum(axis=1)
+            weights_sum = weights.sum(axis=1)
+            
+            final_dev = np.where(weights_sum > 0, weighted_dev_sum / weights_sum, 0.0)
+            final_score = 50.0 + final_dev
+            return pd.Series(final_score, index=df.index).clip(0, 100)
+        else:
+            # 算術平均（傳統行為）
+            return indicator_scores.mean(axis=1)
     
     def _calculate_rsi_score(self, df: pd.DataFrame, regime: str = None) -> Optional[pd.Series]:
         """計算 RSI 分數（0-100），根據 Regime 調整邏輯
@@ -593,7 +607,7 @@ class ScoringEngine:
     def calculate_pattern_score(self, df: pd.DataFrame, config: Dict) -> pd.Series:
         """計算圖形模式分數（0-100）
         
-        PatternScore = Σ (BaseScore(pattern) * confidence * decay(age)) / N
+        PatternScore = 50.0 + Σ (BaseScore(pattern) - 50.0) * decay(age)
         """
         pattern_types = config.get('patterns', {}).get('selected', [])
         
@@ -608,11 +622,100 @@ class ScoringEngine:
             '頭肩頂': 20, '雙頂': 20, '圓頂': 25, '楔形': 50
         }
         
-        # 這裡需要調用 PatternAnalyzer 來識別模式
-        # 暫時返回預設分數，實際需要整合 PatternAnalyzer
-        # TODO: 整合 PatternAnalyzer 獲取 pattern 信息
+        # 懶加載以避免循環導入
+        from analysis_module.pattern_analysis.pattern_analyzer import PatternAnalyzer
+        analyzer = PatternAnalyzer()
         
-        return pd.Series(50.0, index=df.index)
+        n_bars = len(df)
+        deviations = np.zeros(n_bars, dtype=float)
+        
+        # 獲取價格序列以尋找確認點，避免未來函數 (Look-ahead bias)
+        close_col = None
+        for col in ['收盤價', 'Close', 'close']:
+            if col in df.columns:
+                close_col = col
+                break
+        
+        # 滾動歷史識別：在每一個時間點 t，我們只使用截止到 t 的資料子集，徹底杜絕圖形識別本身使用未來資料
+        for t in range(n_bars):
+            sub_df = df.iloc[:t+1]
+            sub_prices = sub_df[close_col].values if close_col is not None else None
+            if sub_prices is None:
+                continue
+                
+            for pattern_type in pattern_types:
+                base_score = base_scores.get(pattern_type, 50)
+                dev_contrib = float(base_score) - 50.0
+                if dev_contrib == 0.0:
+                    continue
+                    
+                try:
+                    positions = analyzer.identify_pattern(sub_df, pattern_type)
+                except Exception:
+                    positions = []
+                    
+                for pos in positions:
+                    end_idx = None
+                    if isinstance(pos, dict):
+                        end_idx = pos.get('end_idx')
+                    elif isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                        end_idx = pos[1]
+                        
+                    if end_idx is not None and 0 <= end_idx <= t:
+                        confirm_idx = None
+                        is_breakout_pattern = False
+                        # 根據截至 t 的價格序列尋找突破確認點，避免 look-ahead bias
+                        if isinstance(pos, dict):
+                            p_name = pos.get('pattern')
+                            if p_name in ['W底', '雙底', '頭肩底', '雙頂', '頭肩頂']:
+                                is_breakout_pattern = True
+                                
+                            if p_name in ['W底', '雙底']:
+                                peak_idx = pos.get('peak_idx')
+                                if peak_idx is not None and peak_idx < len(sub_prices):
+                                    ref_val = sub_prices[peak_idx]
+                                    for idx in range(end_idx, t + 1):
+                                        if sub_prices[idx] > ref_val:
+                                            confirm_idx = idx
+                                            break
+                            elif p_name == '頭肩底':
+                                neck_idx = pos.get('neckline_right_idx')
+                                if neck_idx is not None and neck_idx < len(sub_prices):
+                                    ref_val = sub_prices[neck_idx]
+                                    for idx in range(end_idx, t + 1):
+                                        if sub_prices[idx] > ref_val:
+                                            confirm_idx = idx
+                                            break
+                            elif p_name == '雙頂':
+                                trough_idx = pos.get('trough_idx')
+                                if trough_idx is not None and trough_idx < len(sub_prices):
+                                    ref_val = sub_prices[trough_idx]
+                                    for idx in range(end_idx, t + 1):
+                                        if sub_prices[idx] < ref_val:
+                                            confirm_idx = idx
+                                            break
+                            elif p_name == '頭肩頂':
+                                neck_idx = pos.get('neckline_right_idx')
+                                if neck_idx is not None and neck_idx < len(sub_prices):
+                                    ref_val = sub_prices[neck_idx]
+                                    for idx in range(end_idx, t + 1):
+                                        if sub_prices[idx] < ref_val:
+                                            confirm_idx = idx
+                                            break
+                        
+                        # 若無法透過突破確認且非突破型特定圖形，預設使用安全延遲 end_idx + 2 避免在谷底/山頂直接引入未來資料
+                        if confirm_idx is None and not is_breakout_pattern:
+                            confirm_idx = end_idx + 2
+                        
+                        # 如果確認點剛好是當前時間點 t，說明該圖形在今天確認成立
+                        if confirm_idx == t:
+                            for k in range(20):
+                                future_t = t + k
+                                if future_t < n_bars:
+                                    factor = 1.0 - (k / 20.0)
+                                    deviations[future_t] += dev_contrib * factor
+                                
+        return pd.Series(50.0 + deviations, index=df.index).clip(0, 100)
     
     def calculate_volume_score(self, df: pd.DataFrame, config: Dict) -> pd.Series:
         """計算成交量分數（0-100）
