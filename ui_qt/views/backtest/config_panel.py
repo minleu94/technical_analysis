@@ -422,7 +422,7 @@ class BacktestConfigPanel(QWidget):
             self.strategy_combo.currentTextChanged.connect(self.parent_view._update_optimization_params_form)
             
             # 使用 QTimer 延遲更新，確保 UI 初始化完成後再繪製
-            QTimer.singleShot(100, self.parent_view._update_optimization_params_form)
+            QTimer.singleShot(100, lambda: self.parent_view._update_optimization_params_form())
             
             self.optimize_btn = QPushButton("執行參數掃描")
             self.optimize_btn.setStyleSheet("background-color: #2196F3; color: white;")
