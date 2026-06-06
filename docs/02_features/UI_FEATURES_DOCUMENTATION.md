@@ -489,6 +489,9 @@ Regime 權重切換（不再使用倍率）：
 
 ### Tab 4：策略回測 / Research Lab (BacktestView)
 
+> [!NOTE]
+> **漸進式重構狀態 (2026-06-06)**：已完成漸進式重構的第一至第三階段 (Phase 1 - Phase 3)。已成功將常數、說明 Tooltip 抽離至 `ui_qt/views/backtest/` 子套件，並將右側結果面板重構為 `BacktestResultPanel`（位於 [result_panel.py](file:///c:/Projects/PythonProjects/technical_analysis/ui_qt/views/backtest/result_panel.py)）、左側配置面板重構為 `BacktestConfigPanel`（位於 [config_panel.py](file:///c:/Projects/PythonProjects/technical_analysis/ui_qt/views/backtest/config_panel.py)）。主類別 `BacktestView` 採用安全的 QWidget 內建屬性排除路由機制進行動態委派，維持與單元測試及 QA 驗證 100% 相容。
+
 **功能：**
 - Research Lab 模式分類：單股回測、批次股票回測、固定組合回測、推薦系統回放、策略研究
 - 單檔回測：對單一股票執行回測

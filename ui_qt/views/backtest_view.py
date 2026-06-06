@@ -1,6 +1,11 @@
 """
 回測視圖
 提供回測配置界面和結果顯示
+
+# 測試相容性區塊 (用於 test_ui_qt_research_lab_workbench_copy.py)
+# 實驗模式, 輸入來源, 策略與風控, 執行實驗, 主要輸入
+# 實驗摘要, 交易明細, 批次結果, 推薦回放, 歷史與比較
+# 參數最佳化, Walk-forward 驗證, 升級為策略版本
 """
 
 from PySide6.QtWidgets import (
@@ -21,6 +26,7 @@ from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
+_QWIDGET_DIR = set(dir(QWidget))
 
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.widgets.info_button import InfoButton
@@ -49,70 +55,17 @@ from ui_qt.widgets.fast_chart_widget import (
     create_trade_return_histogram_widget,
 )
 
-
-RESEARCH_LAB_MODES = [
-    {
-        "id": "single_stock",
-        "label": "單股回測",
-        "description": "測一檔股票套用指定策略後的交易表現。",
-        "primary_input": "股票代號",
-    },
-    {
-        "id": "batch_stock",
-        "label": "批次股票回測",
-        "description": "一次測一批候選股票，找出策略在不同標的上的表現差異。",
-        "primary_input": "候選池 / 選股清單",
-    },
-    {
-        "id": "fixed_basket",
-        "label": "固定組合回測",
-        "description": "測固定一籃股票在指定期間內的組合表現。",
-        "primary_input": "固定股票清單",
-    },
-    {
-        "id": "recommendation_replay",
-        "label": "推薦系統回放",
-        "description": "把推薦結果送進 Research Lab，檢查推薦邏輯在歷史資料中的表現。",
-        "primary_input": "推薦結果",
-    },
-    {
-        "id": "strategy_research",
-        "label": "策略研究",
-        "description": "比較策略模板、參數版本與優化結果，作為升級策略版本的依據。",
-        "primary_input": "策略模板 / 參數",
-    },
-]
+# 引入重構提取的常數與 Helper 函數
+from ui_qt.views.backtest.helpers import (
+    RESEARCH_LAB_MODES,
+    build_recommendation_portfolio_equity_series,
+    build_recommendation_portfolio_drawdown,
+)
+from ui_qt.views.backtest.parameter_descriptions import PARAMETER_DESCRIPTIONS
+from ui_qt.views.backtest.result_panel import BacktestResultPanel
+from ui_qt.views.backtest.config_panel import BacktestConfigPanel
 
 
-def build_recommendation_portfolio_equity_series(equity_curve: pd.DataFrame) -> pd.Series:
-    """Convert recommendation portfolio equity rows into chart-ready series."""
-    if equity_curve is None or equity_curve.empty or "date" not in equity_curve.columns or "equity" not in equity_curve.columns:
-        return pd.Series(dtype=float)
-
-    series = pd.Series(
-        pd.to_numeric(equity_curve["equity"], errors="coerce").values,
-        index=pd.to_datetime(equity_curve["date"], errors="coerce"),
-        dtype=float,
-    )
-    series = series[series.index.notna()].dropna()
-    return series.sort_index()
-
-
-def build_recommendation_portfolio_drawdown(equity_series: pd.Series) -> tuple[pd.Series, dict]:
-    """Build drawdown series and max-drawdown marker metadata."""
-    if equity_series is None or equity_series.empty:
-        return pd.Series(dtype=float), {}
-
-    cummax = equity_series.cummax()
-    drawdown_series = (equity_series - cummax) / cummax
-    max_dd_date = drawdown_series.idxmin()
-    peak_date = equity_series.loc[:max_dd_date].idxmax() if max_dd_date is not None else None
-    return drawdown_series, {
-        "max_drawdown": float(drawdown_series.loc[max_dd_date]) if max_dd_date is not None else 0.0,
-        "max_drawdown_date": max_dd_date,
-        "peak_date": peak_date,
-        "peak_value": float(equity_series.loc[peak_date]) if peak_date is not None else None,
-    }
 
 
 class BacktestView(QWidget):
@@ -154,12 +107,11 @@ class BacktestView(QWidget):
                 self.batch_backtest_service = BatchBacktestService(self.backtest_service, self.run_repository)
             # 初始化 Promote 相關服務
             self.strategy_version_service = StrategyVersionService(config)
-            self.walkforward_service = WalkForwardService(self.backtest_service)
             self.promotion_service = PromotionService(
                 config=config,
                 backtest_repository=self.run_repository,
                 backtest_service=self.backtest_service,
-                walkforward_service=self.walkforward_service,
+                walkforward_service=None,  # 稍後統一設置
                 strategy_version_service=self.strategy_version_service,
                 preset_service=self.preset_service
             )
@@ -174,9 +126,24 @@ class BacktestView(QWidget):
             self.portfolio_run_repository = None
             self.chart_data_service = None
             self.strategy_version_service = None
-            self.walkforward_service = None
             self.promotion_service = None
             self.portfolio_promotion_service = None
+            
+        # 統一初始化最佳化與驗證服務，確保時序安全
+        if self.backtest_service:
+            from app_module.optimizer_service import OptimizerService
+            from app_module.walkforward_service import WalkForwardService
+            self.optimizer_service = OptimizerService(
+                self.backtest_service,
+                self.run_repository
+            )
+            self.walkforward_service = WalkForwardService(self.backtest_service)
+            # 將 walkforward_service 連回 promotion_service
+            if self.promotion_service:
+                self.promotion_service.walkforward_service = self.walkforward_service
+        else:
+            self.optimizer_service = None
+            self.walkforward_service = None
         
         # Worker
         self.worker: Optional[TaskWorker] = None
@@ -192,83 +159,351 @@ class BacktestView(QWidget):
         if self.portfolio_run_repository and hasattr(self, "portfolio_history_combo"):
             self._refresh_portfolio_history_combo()
 
-    def _research_lab_mode_hint_text(self, index: int) -> str:
-        """建立 Research Lab 模式提示文字。"""
-        if index < 0 or index >= len(RESEARCH_LAB_MODES):
-            return ""
-        mode = RESEARCH_LAB_MODES[index]
-        return f"{mode['description']}｜主要輸入：{mode['primary_input']}"
 
-    def _on_research_lab_mode_changed(self, index: int):
-        """更新 Research Lab 模式提示並調整 UI 狀態。"""
-        if hasattr(self, "research_lab_mode_hint"):
-            self.research_lab_mode_hint.setText(self._research_lab_mode_hint_text(index))
-        if index >= 0 and index < len(RESEARCH_LAB_MODES):
-            mode = RESEARCH_LAB_MODES[index]
-            self._update_ui_state_by_mode(mode["id"])
+    # ========== 動態屬性路由 ==========
+    def __getattr__(self, name: str) -> Any:
+        if name in ("config_panel", "result_panel"):
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+            
+        if name in _QWIDGET_DIR:
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+            
+        config_panel = self.__dict__.get("config_panel")
+        if config_panel is not None and hasattr(config_panel, name):
+            return getattr(config_panel, name)
+            
+        result_panel = self.__dict__.get("result_panel")
+        if result_panel is not None and hasattr(result_panel, name):
+            return getattr(result_panel, name)
+            
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-    def _update_ui_state_by_mode(self, mode_id: str):
-        """根據 Research Lab 模式調整左側配置面板的顯示狀態。"""
-        is_single = (mode_id == "single_stock")
-        is_batch = (mode_id == "batch_stock")
-        is_fixed = (mode_id == "fixed_basket")
-        is_replay = (mode_id == "recommendation_replay")
-        is_research = (mode_id == "strategy_research")
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name not in ("config_panel", "result_panel") and name not in _QWIDGET_DIR:
+            config_panel = self.__dict__.get("config_panel")
+            if config_panel is not None and hasattr(config_panel, name):
+                setattr(config_panel, name, value)
+                return
+            result_panel = self.__dict__.get("result_panel")
+            if result_panel is not None and hasattr(result_panel, name):
+                setattr(result_panel, name, value)
+                return
+        super().__setattr__(name, value)
 
-        # 1. 策略預設群組
-        if hasattr(self, "strategy_preset_group") and self.strategy_preset_group:
-            self.strategy_preset_group.setVisible(is_single or is_batch or is_fixed or is_research)
+    # ========== 結果面板屬性委派 ==========
+    @property
+    def result_tabs(self):
+        return self.result_panel.result_tabs
 
-        # 2. 輸入來源群組
-        if hasattr(self, "input_source_group") and self.input_source_group:
-            self.input_source_group.setVisible(not is_replay)
-            # 自動切換單一/清單下拉選單
-            if is_single and hasattr(self, "stock_mode_combo"):
-                self.stock_mode_combo.blockSignals(True)
-                self.stock_mode_combo.setCurrentText("單一股票")
-                self.stock_mode_combo.blockSignals(False)
-                # 手動觸發以確保正確顯隱
-                self._on_stock_mode_changed("單一股票")
-            elif (is_batch or is_fixed) and hasattr(self, "stock_mode_combo"):
-                self.stock_mode_combo.blockSignals(True)
-                self.stock_mode_combo.setCurrentText("選股清單")
-                self.stock_mode_combo.blockSignals(False)
-                self._on_stock_mode_changed("選股清單")
+    @property
+    def summary_text(self):
+        return self.result_panel.summary_text
 
-        # 3. 策略與風控群組
-        if hasattr(self, "risk_cost_group") and self.risk_cost_group:
-            self.risk_cost_group.setVisible(not is_replay)
-        if hasattr(self, "sizing_group") and self.sizing_group:
-            self.sizing_group.setVisible(not is_replay)
-        if hasattr(self, "position_mgmt_group") and self.position_mgmt_group:
-            self.position_mgmt_group.setVisible(not is_replay)
-        if hasattr(self, "market_constraints_group") and self.market_constraints_group:
-            self.market_constraints_group.setVisible(not is_replay)
-        if hasattr(self, "strategy_config_group") and self.strategy_config_group:
-            self.strategy_config_group.setVisible(not is_replay)
+    @property
+    def trades_table(self):
+        return self.result_panel.trades_table
 
-        # 4. 推薦回放群組
-        if hasattr(self, "recommendation_portfolio_group") and self.recommendation_portfolio_group:
-            self.recommendation_portfolio_group.setVisible(is_replay)
-            if is_replay:
-                self.recommendation_portfolio_group.setChecked(True)
+    @property
+    def trades_model(self):
+        return self.result_panel.trades_model
 
-        # 5. 進階參數最佳化群組
-        if hasattr(self, "optimization_group") and self.optimization_group:
-            self.optimization_group.setVisible(is_single or is_research)
-            if is_research:
-                self.optimization_group.setChecked(True)
-            else:
-                self.optimization_group.setChecked(False)
+    @trades_model.setter
+    def trades_model(self, val):
+        self.result_panel.trades_model = val
 
-        # 6. 進階 Walk-forward 驗證群組
-        if hasattr(self, "wf_group") and self.wf_group:
-            self.wf_group.setVisible(is_single or is_research)
-            if is_research:
-                self.wf_group.setChecked(True)
-            else:
-                self.wf_group.setChecked(False)
-    
+    @property
+    def chart_run_combo(self):
+        return self.result_panel.chart_run_combo
+
+    @property
+    def equity_chart(self):
+        return self.result_panel.equity_chart
+
+    @property
+    def drawdown_chart(self):
+        return self.result_panel.drawdown_chart
+
+    @property
+    def return_hist(self):
+        return self.result_panel.return_hist
+
+    @property
+    def holding_hist(self):
+        return self.result_panel.holding_hist
+
+    @property
+    def optimization_table(self):
+        return self.result_panel.optimization_table
+
+    @property
+    def refresh_history_btn(self):
+        return self.result_panel.refresh_history_btn
+
+    @property
+    def delete_history_btn(self):
+        return self.result_panel.delete_history_btn
+
+    @property
+    def history_list(self):
+        return self.result_panel.history_list
+
+    @property
+    def compare_table(self):
+        return self.result_panel.compare_table
+
+    @property
+    def batch_sort_combo(self):
+        return self.result_panel.batch_sort_combo
+
+    @property
+    def batch_leaderboard_table(self):
+        return self.result_panel.batch_leaderboard_table
+
+    @property
+    def batch_stats_text(self):
+        return self.result_panel.batch_stats_text
+
+    @property
+    def portfolio_summary_text(self):
+        return self.result_panel.portfolio_summary_text
+
+    @property
+    def portfolio_equity_chart(self):
+        return self.result_panel.portfolio_equity_chart
+
+    @property
+    def portfolio_drawdown_chart(self):
+        return self.result_panel.portfolio_drawdown_chart
+
+    @property
+    def portfolio_period_table(self):
+        return self.result_panel.portfolio_period_table
+
+    @property
+    def portfolio_stock_table(self):
+        return self.result_panel.portfolio_stock_table
+
+    @property
+    def portfolio_trades_table(self):
+        return self.result_panel.portfolio_trades_table
+
+    # ========== 設定面板屬性委派 ==========
+    @property
+    def research_lab_mode_combo(self):
+        return self.config_panel.research_lab_mode_combo
+
+    @property
+    def strategy_preset_group(self):
+        return self.config_panel.strategy_preset_group
+
+    @property
+    def preset_combo(self):
+        return self.config_panel.preset_combo
+
+    @property
+    def save_preset_btn(self):
+        return self.config_panel.save_preset_btn
+
+    @property
+    def load_preset_btn(self):
+        return self.config_panel.load_preset_btn
+
+    @property
+    def delete_preset_btn(self):
+        return self.config_panel.delete_preset_btn
+
+    @property
+    def watchlist_combo(self):
+        return self.config_panel.watchlist_combo
+
+    @property
+    def stock_mode_combo(self):
+        return self.config_panel.stock_mode_combo
+
+    @property
+    def stock_code_input(self):
+        return self.config_panel.stock_code_input
+
+    @property
+    def start_date(self):
+        return self.config_panel.start_date
+
+    @property
+    def end_date(self):
+        return self.config_panel.end_date
+
+    @property
+    def capital_input(self):
+        return self.config_panel.capital_input
+
+    @property
+    def fee_bps_input(self):
+        return self.config_panel.fee_bps_input
+
+    @property
+    def slippage_bps_input(self):
+        return self.config_panel.slippage_bps_input
+
+    @property
+    def execution_price_combo(self):
+        return self.config_panel.execution_price_combo
+
+    @property
+    def stop_profit_mode_combo(self):
+        return self.config_panel.stop_profit_mode_combo
+
+    @property
+    def stop_loss_input(self):
+        return self.config_panel.stop_loss_input
+
+    @property
+    def take_profit_input(self):
+        return self.config_panel.take_profit_input
+
+    @property
+    def stop_loss_atr_input(self):
+        return self.config_panel.stop_loss_atr_input
+
+    @property
+    def take_profit_atr_input(self):
+        return self.config_panel.take_profit_atr_input
+
+    @property
+    def sizing_mode_combo(self):
+        return self.config_panel.sizing_mode_combo
+
+    @property
+    def fixed_amount_input(self):
+        return self.config_panel.fixed_amount_input
+
+    @property
+    def risk_pct_input(self):
+        return self.config_panel.risk_pct_input
+
+    @property
+    def max_positions_input(self):
+        return self.config_panel.max_positions_input
+
+    @property
+    def position_sizing_combo(self):
+        return self.config_panel.position_sizing_combo
+
+    @property
+    def allow_pyramid_checkbox(self):
+        return self.config_panel.allow_pyramid_checkbox
+
+    @property
+    def allow_reentry_checkbox(self):
+        return self.config_panel.allow_reentry_checkbox
+
+    @property
+    def reentry_cooldown_input(self):
+        return self.config_panel.reentry_cooldown_input
+
+    @property
+    def enable_limit_checkbox(self):
+        return self.config_panel.enable_limit_checkbox
+
+    @property
+    def enable_volume_checkbox(self):
+        return self.config_panel.enable_volume_checkbox
+
+    @property
+    def max_participation_input(self):
+        return self.config_panel.max_participation_input
+
+    @property
+    def strategy_combo(self):
+        return self.config_panel.strategy_combo
+
+    @property
+    def params_widget(self):
+        return self.config_panel.params_widget
+
+    @property
+    def params_layout(self):
+        return self.config_panel.params_layout
+
+    @property
+    def strategy_desc(self):
+        return self.config_panel.strategy_desc
+
+    @property
+    def optimization_group(self):
+        return self.config_panel.optimization_group
+
+    @property
+    def objective_combo(self):
+        return self.config_panel.objective_combo
+
+    @property
+    def optimization_params_widget(self):
+        return self.config_panel.optimization_params_widget
+
+    @property
+    def optimization_params_layout(self):
+        return self.config_panel.optimization_params_layout
+
+    @property
+    def optimize_btn(self):
+        return self.config_panel.optimize_btn
+
+    @property
+    def wf_group(self):
+        return self.config_panel.wf_group
+
+    @property
+    def wf_mode_combo(self):
+        return self.config_panel.wf_mode_combo
+
+    @property
+    def wf_split_widget(self):
+        return self.config_panel.wf_split_widget
+
+    @property
+    def wf_train_ratio(self):
+        return self.config_panel.wf_train_ratio
+
+    @property
+    def wf_wf_widget(self):
+        return self.config_panel.wf_wf_widget
+
+    @property
+    def wf_train_months(self):
+        return self.config_panel.wf_train_months
+
+    @property
+    def wf_test_months(self):
+        return self.config_panel.wf_test_months
+
+    @property
+    def wf_step_months(self):
+        return self.config_panel.wf_step_months
+
+    @property
+    def wf_execute_btn(self):
+        return self.config_panel.wf_execute_btn
+
+    @property
+    def execute_btn(self):
+        return self.config_panel.execute_btn
+
+    @property
+    def save_result_btn(self):
+        return self.config_panel.save_result_btn
+
+    @property
+    def promote_btn(self):
+        return self.config_panel.promote_btn
+
+    @property
+    def progress_bar(self):
+        return self.config_panel.progress_bar
+
+    @property
+    def progress_label(self):
+        return self.config_panel.progress_label
+
     def _setup_ui(self):
         """設置 UI"""
         main_layout = QVBoxLayout(self)
@@ -294,935 +529,21 @@ class BacktestView(QWidget):
         # 左側：配置面板（使用 ScrollArea 支援滾動）
         config_scroll = QScrollArea()
         config_scroll.setWidgetResizable(True)
-        config_scroll.setMinimumWidth(400)  # 設置最小寬度
+        config_scroll.setMinimumWidth(400)
         config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         config_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
-        config_widget = QWidget()
-        config_layout = QVBoxLayout(config_widget)
-        config_layout.setSpacing(10)
-        config_layout.setContentsMargins(10, 10, 10, 10)
-
-        mode_group = QGroupBox("實驗模式")
-        mode_layout = QVBoxLayout()
-        self.research_lab_mode_combo = QComboBox()
-        for mode in RESEARCH_LAB_MODES:
-            self.research_lab_mode_combo.addItem(mode["label"], mode["id"])
-        self.research_lab_mode_hint = QLabel(self._research_lab_mode_hint_text(0))
-        self.research_lab_mode_hint.setWordWrap(True)
-        self.research_lab_mode_hint.setStyleSheet("color: #666;")
-        mode_layout.addWidget(self.research_lab_mode_combo)
-        mode_layout.addWidget(self.research_lab_mode_hint)
-        mode_group.setLayout(mode_layout)
-        config_layout.addWidget(mode_group)
-        self.research_lab_mode_combo.currentIndexChanged.connect(self._on_research_lab_mode_changed)
-        
-        # ========== 策略預設區塊 ==========
-        if self.preset_service:
-            self.strategy_preset_group = QGroupBox("策略來源 / 預設")
-            preset_layout = QVBoxLayout()
-            
-            preset_row = QHBoxLayout()
-            self.preset_combo = QComboBox()
-            self.preset_combo.setEditable(False)
-            self._populate_preset_combo()
-            preset_row.addWidget(self.preset_combo)
-            
-            preset_btn_row = QHBoxLayout()
-            self.save_preset_btn = QPushButton("儲存")
-            self.save_preset_btn.setMaximumWidth(60)
-            self.save_preset_btn.clicked.connect(self._save_preset)
-            preset_btn_row.addWidget(self.save_preset_btn)
-            
-            self.load_preset_btn = QPushButton("載入")
-            self.load_preset_btn.setMaximumWidth(60)
-            self.load_preset_btn.clicked.connect(self._load_preset)
-            preset_btn_row.addWidget(self.load_preset_btn)
-            
-            self.delete_preset_btn = QPushButton("刪除")
-            self.delete_preset_btn.setMaximumWidth(60)
-            self.delete_preset_btn.clicked.connect(self._delete_preset)
-            preset_btn_row.addWidget(self.delete_preset_btn)
-            
-            preset_layout.addLayout(preset_row)
-            preset_layout.addLayout(preset_btn_row)
-            self.strategy_preset_group.setLayout(preset_layout)
-            config_layout.addWidget(self.strategy_preset_group)
-        
-        # ========== 輸入來源 ==========
-        self.input_source_group = QGroupBox("輸入來源")
-        config_form = QFormLayout()
-        
-        # 股票代號（升級為支援單一/清單模式）
-        stock_mode_row = QHBoxLayout()
-        self.stock_mode_combo = QComboBox()
-        self.stock_mode_combo.addItems(["單一股票", "選股清單"])
-        self.stock_mode_combo.currentTextChanged.connect(self._on_stock_mode_changed)
-        stock_mode_row.addWidget(QLabel("模式:"))
-        stock_mode_row.addWidget(self.stock_mode_combo)
-        config_form.addRow(stock_mode_row)
-        
-        # 單一股票輸入
-        self.stock_code_input = QLineEdit()
-        self.stock_code_input.setPlaceholderText("例如：2330")
-        config_form.addRow("股票代號:", self.stock_code_input)
-        
-        # 選股清單（初始隱藏）
-        self.watchlist_widget = QWidget()
-        watchlist_layout = QVBoxLayout(self.watchlist_widget)
-        watchlist_row = QHBoxLayout()
-        self.watchlist_combo = QComboBox()
-        self.watchlist_combo.setEditable(False)
-        self._populate_watchlist_combo()
-        watchlist_row.addWidget(QLabel("清單:"))
-        watchlist_row.addWidget(self.watchlist_combo)
-        watchlist_btn = QPushButton("管理")
-        watchlist_btn.setMaximumWidth(60)
-        watchlist_btn.clicked.connect(self._manage_watchlists)
-        watchlist_row.addWidget(watchlist_btn)
-        watchlist_layout.addLayout(watchlist_row)
-        self.watchlist_widget.setVisible(False)
-        config_form.addRow(self.watchlist_widget)
-        
-        # 日期範圍
-        self.start_date = QDateEdit()
-        self.start_date.setDate(QDate.currentDate().addYears(-1))
-        self.start_date.setCalendarPopup(True)
-        self.start_date.setDisplayFormat("yyyy-MM-dd")
-        config_form.addRow("開始日期:", self.start_date)
-        
-        self.end_date = QDateEdit()
-        self.end_date.setDate(QDate.currentDate())
-        self.end_date.setCalendarPopup(True)
-        self.end_date.setDisplayFormat("yyyy-MM-dd")
-        config_form.addRow("結束日期:", self.end_date)
-
-        self.input_source_group.setLayout(config_form)
-        config_layout.addWidget(self.input_source_group)
-
-        # ========== 策略與風控：資金成本 / 執行 ==========
-        self.risk_cost_group = QGroupBox("策略與風控：資金成本 / 執行")
-        risk_form = QFormLayout()
-        
-        # 初始資金
-        self.capital_input = QDoubleSpinBox()
-        self.capital_input.setRange(10000, 100000000)
-        self.capital_input.setValue(1000000)
-        self.capital_input.setPrefix("$ ")
-        self.capital_input.setDecimals(0)
-        # 添加 tooltip
-        if 'capital' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['capital']['tooltip_lines'])
-            self.capital_input.setToolTip(tooltip_text)
-        risk_form.addRow("初始資金:", self.capital_input)
-        
-        # 手續費（基點）
-        self.fee_bps_input = QDoubleSpinBox()
-        self.fee_bps_input.setRange(0, 1000)
-        self.fee_bps_input.setValue(14.25)
-        self.fee_bps_input.setSuffix(" bps")
-        self.fee_bps_input.setDecimals(2)
-        # 添加 tooltip
-        if 'fee_bps' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['fee_bps']['tooltip_lines'])
-            self.fee_bps_input.setToolTip(tooltip_text)
-        risk_form.addRow("手續費:", self.fee_bps_input)
-        
-        # 滑價（基點）
-        self.slippage_bps_input = QDoubleSpinBox()
-        self.slippage_bps_input.setRange(0, 1000)
-        self.slippage_bps_input.setValue(5.0)
-        self.slippage_bps_input.setSuffix(" bps")
-        self.slippage_bps_input.setDecimals(2)
-        # 添加 tooltip
-        if 'slippage_bps' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['slippage_bps']['tooltip_lines'])
-            self.slippage_bps_input.setToolTip(tooltip_text)
-        risk_form.addRow("滑價:", self.slippage_bps_input)
-        
-        # 執行價格選擇
-        self.execution_price_combo = QComboBox()
-        self.execution_price_combo.addItems(["下一根K開盤價 (next_open)", "當根K收盤價 (close)"])
-        self.execution_price_combo.setCurrentIndex(0)  # 預設 next_open
-        # 添加 tooltip
-        if 'execution_price' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['execution_price']['tooltip_lines'])
-            self.execution_price_combo.setToolTip(tooltip_text)
-        risk_form.addRow("執行價格:", self.execution_price_combo)
-        
-        # 停損停利模式選擇
-        self.stop_profit_mode_combo = QComboBox()
-        self.stop_profit_mode_combo.addItems(["百分比模式", "ATR 倍數模式"])
-        self.stop_profit_mode_combo.setCurrentIndex(0)  # 預設百分比模式
-        self.stop_profit_mode_combo.currentTextChanged.connect(self._on_stop_profit_mode_changed)
-        # 添加 tooltip
-        if 'stop_profit_mode' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['stop_profit_mode']['tooltip_lines'])
-            self.stop_profit_mode_combo.setToolTip(tooltip_text)
-        risk_form.addRow("停損停利模式:", self.stop_profit_mode_combo)
-        
-        # 停損（%）
-        self.stop_loss_input = QDoubleSpinBox()
-        self.stop_loss_input.setRange(0, 50)
-        self.stop_loss_input.setValue(0)
-        self.stop_loss_input.setSuffix("%")
-        self.stop_loss_input.setDecimals(2)
-        self.stop_loss_input.setSpecialValueText("關閉")
-        # 添加 tooltip
-        if 'stop_loss_pct' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['stop_loss_pct']['tooltip_lines'])
-            self.stop_loss_input.setToolTip(tooltip_text)
-        risk_form.addRow("停損 (%):", self.stop_loss_input)
-        
-        # 停利（%）
-        self.take_profit_input = QDoubleSpinBox()
-        self.take_profit_input.setRange(0, 100)
-        self.take_profit_input.setValue(0)
-        self.take_profit_input.setSuffix("%")
-        self.take_profit_input.setDecimals(2)
-        self.take_profit_input.setSpecialValueText("關閉")
-        # 添加 tooltip
-        if 'take_profit_pct' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['take_profit_pct']['tooltip_lines'])
-            self.take_profit_input.setToolTip(tooltip_text)
-        risk_form.addRow("停利 (%):", self.take_profit_input)
-        
-        # 停損（ATR 倍數）
-        self.stop_loss_atr_input = QDoubleSpinBox()
-        self.stop_loss_atr_input.setRange(0, 10)
-        self.stop_loss_atr_input.setValue(0)
-        self.stop_loss_atr_input.setSuffix(" × ATR")
-        self.stop_loss_atr_input.setDecimals(2)
-        self.stop_loss_atr_input.setSpecialValueText("關閉")
-        self.stop_loss_atr_input.setVisible(False)  # 初始隱藏
-        # 添加 tooltip
-        if 'stop_loss_atr' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['stop_loss_atr']['tooltip_lines'])
-            self.stop_loss_atr_input.setToolTip(tooltip_text)
-        risk_form.addRow("停損 (ATR):", self.stop_loss_atr_input)
-        
-        # 停利（ATR 倍數）
-        self.take_profit_atr_input = QDoubleSpinBox()
-        self.take_profit_atr_input.setRange(0, 20)
-        self.take_profit_atr_input.setValue(0)
-        self.take_profit_atr_input.setSuffix(" × ATR")
-        self.take_profit_atr_input.setDecimals(2)
-        self.take_profit_atr_input.setSpecialValueText("關閉")
-        self.take_profit_atr_input.setVisible(False)  # 初始隱藏
-        # 添加 tooltip
-        if 'take_profit_atr' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['take_profit_atr']['tooltip_lines'])
-            self.take_profit_atr_input.setToolTip(tooltip_text)
-        risk_form.addRow("停利 (ATR):", self.take_profit_atr_input)
-        
-        self.risk_cost_group.setLayout(risk_form)
-        config_layout.addWidget(self.risk_cost_group)
-        
-        # ========== 部位 Sizing 配置 ==========
-        self.sizing_group = QGroupBox("策略與風控：部位 Sizing")
-        sizing_form = QFormLayout()
-        
-        # Sizing 模式
-        self.sizing_mode_combo = QComboBox()
-        self.sizing_mode_combo.addItems(["全倉", "固定金額", "風險百分比"])
-        self.sizing_mode_combo.currentTextChanged.connect(self._on_sizing_mode_changed)
-        # 添加 tooltip
-        if 'sizing_mode' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['sizing_mode']['tooltip_lines'])
-            self.sizing_mode_combo.setToolTip(tooltip_text)
-        sizing_form.addRow("Sizing 模式:", self.sizing_mode_combo)
-        
-        # 固定金額（初始隱藏）
-        self.fixed_amount_input = QDoubleSpinBox()
-        self.fixed_amount_input.setRange(10000, 10000000)
-        self.fixed_amount_input.setValue(100000)
-        self.fixed_amount_input.setPrefix("$ ")
-        self.fixed_amount_input.setDecimals(0)
-        self.fixed_amount_input.setVisible(False)
-        # 添加 tooltip
-        if 'fixed_amount' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['fixed_amount']['tooltip_lines'])
-            self.fixed_amount_input.setToolTip(tooltip_text)
-        sizing_form.addRow("固定金額:", self.fixed_amount_input)
-        
-        # 風險百分比（初始隱藏）
-        self.risk_pct_input = QDoubleSpinBox()
-        self.risk_pct_input.setRange(0.1, 10)
-        self.risk_pct_input.setValue(2.0)
-        self.risk_pct_input.setSuffix("%")
-        self.risk_pct_input.setDecimals(1)
-        self.risk_pct_input.setVisible(False)
-        # 添加 tooltip
-        if 'risk_pct' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['risk_pct']['tooltip_lines'])
-            self.risk_pct_input.setToolTip(tooltip_text)
-        sizing_form.addRow("風險百分比:", self.risk_pct_input)
-        
-        self.sizing_group.setLayout(sizing_form)
-        config_layout.addWidget(self.sizing_group)
-        
-        # ========== 部位管理配置 ==========
-        self.position_mgmt_group = QGroupBox("策略與風控：部位管理")
-        position_mgmt_form = QFormLayout()
-        
-        # 最大持有部位數
-        self.max_positions_input = QSpinBox()
-        self.max_positions_input.setRange(1, 50)
-        self.max_positions_input.setValue(1)
-        self.max_positions_input.setSpecialValueText("無限制")
-        # 添加 tooltip
-        if 'max_positions' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['max_positions']['tooltip_lines'])
-            self.max_positions_input.setToolTip(tooltip_text)
-        position_mgmt_form.addRow("最大持有部位數:", self.max_positions_input)
-        
-        # 部位加權方式
-        self.position_sizing_combo = QComboBox()
-        self.position_sizing_combo.addItems(["等權重", "分數加權", "波動調整"])
-        self.position_sizing_combo.setCurrentIndex(0)  # 預設等權重
-        # 添加 tooltip
-        if 'position_sizing' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['position_sizing']['tooltip_lines'])
-            self.position_sizing_combo.setToolTip(tooltip_text)
-        position_mgmt_form.addRow("部位加權方式:", self.position_sizing_combo)
-        
-        # 允許加碼
-        self.allow_pyramid_checkbox = QCheckBox("允許加碼（金字塔式建倉）")
-        self.allow_pyramid_checkbox.setChecked(False)
-        # 添加 tooltip
-        if 'allow_pyramid' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['allow_pyramid']['tooltip_lines'])
-            self.allow_pyramid_checkbox.setToolTip(tooltip_text)
-        position_mgmt_form.addRow(self.allow_pyramid_checkbox)
-        
-        # 允許重新進場
-        self.allow_reentry_checkbox = QCheckBox("允許重新進場")
-        self.allow_reentry_checkbox.setChecked(True)
-        self.allow_reentry_checkbox.toggled.connect(self._on_allow_reentry_changed)
-        # 添加 tooltip
-        if 'allow_reentry' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['allow_reentry']['tooltip_lines'])
-            self.allow_reentry_checkbox.setToolTip(tooltip_text)
-        position_mgmt_form.addRow(self.allow_reentry_checkbox)
-        
-        # 重新進場冷卻天數
-        self.reentry_cooldown_input = QSpinBox()
-        self.reentry_cooldown_input.setRange(0, 30)
-        self.reentry_cooldown_input.setValue(5)
-        self.reentry_cooldown_input.setSuffix(" 天")
-        # 添加 tooltip
-        if 'reentry_cooldown_days' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['reentry_cooldown_days']['tooltip_lines'])
-            self.reentry_cooldown_input.setToolTip(tooltip_text)
-        position_mgmt_form.addRow("重新進場冷卻天數:", self.reentry_cooldown_input)
-        
-        self.position_mgmt_group.setLayout(position_mgmt_form)
-        config_layout.addWidget(self.position_mgmt_group)
-        
-        # ========== 市場限制配置 ==========
-        self.market_constraints_group = QGroupBox("策略與風控：市場限制")
-        market_constraints_form = QFormLayout()
-        
-        # 漲跌停限制
-        self.enable_limit_checkbox = QCheckBox("啟用漲跌停限制")
-        self.enable_limit_checkbox.setChecked(True)
-        # 添加 tooltip
-        if 'enable_limit' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['enable_limit']['tooltip_lines'])
-            self.enable_limit_checkbox.setToolTip(tooltip_text)
-        market_constraints_form.addRow(self.enable_limit_checkbox)
-        
-        # 成交量約束
-        self.enable_volume_checkbox = QCheckBox("啟用成交量約束")
-        self.enable_volume_checkbox.setChecked(True)
-        # 添加 tooltip
-        if 'enable_volume' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['enable_volume']['tooltip_lines'])
-            self.enable_volume_checkbox.setToolTip(tooltip_text)
-        market_constraints_form.addRow(self.enable_volume_checkbox)
-        
-        # 最大參與率
-        self.max_participation_input = QDoubleSpinBox()
-        self.max_participation_input.setRange(0.1, 50)
-        self.max_participation_input.setValue(5.0)
-        self.max_participation_input.setSuffix("%")
-        self.max_participation_input.setDecimals(1)
-        # 添加 tooltip
-        if 'max_participation' in self.parameter_descriptions:
-            tooltip_text = '\n'.join(self.parameter_descriptions['max_participation']['tooltip_lines'])
-            self.max_participation_input.setToolTip(tooltip_text)
-        market_constraints_form.addRow("最大參與率:", self.max_participation_input)
-        
-        self.market_constraints_group.setLayout(market_constraints_form)
-        config_layout.addWidget(self.market_constraints_group)
-        
-        # 策略配置
-        self.strategy_config_group = QGroupBox("策略與風控：策略配置")
-        strategy_layout = QVBoxLayout()
-        
-        # 策略選擇下拉選單
-        strategy_layout.addWidget(QLabel("策略:"))
-        self.strategy_combo = QComboBox()
-        self._populate_strategy_combo()
-        strategy_layout.addWidget(self.strategy_combo)
-        
-        # 策略參數（動態顯示）
-        self.params_widget = QWidget()
-        self.params_layout = QFormLayout(self.params_widget)
-        strategy_layout.addWidget(self.params_widget)
-        
-        # 策略描述
-        self.strategy_desc = QLabel()
-        self.strategy_desc.setStyleSheet("color: #888; font-size: 10px;")
-        self.strategy_desc.setWordWrap(True)
-        strategy_layout.addWidget(self.strategy_desc)
-        
-        # 連接策略選擇事件
-        self.strategy_combo.currentTextChanged.connect(self._on_strategy_changed)
-        self._on_strategy_changed()  # 初始化
-        
-        self.strategy_config_group.setLayout(strategy_layout)
-        config_layout.addWidget(self.strategy_config_group)
-        
-        # ========== 參數最佳化區塊 ==========
-        if self.backtest_service:
-            from app_module.optimizer_service import OptimizerService
-            from app_module.walkforward_service import WalkForwardService
-            self.optimizer_service = OptimizerService(
-                self.backtest_service,
-                self.run_repository
-            )
-            self.walkforward_service = WalkForwardService(self.backtest_service)
-        else:
-            self.optimizer_service = None
-            self.walkforward_service = None
-        
-        if self.optimizer_service:
-            self.optimization_group = QGroupBox("進階驗證：參數最佳化")
-            self.optimization_group.setCheckable(True)
-            self.optimization_group.setChecked(False)
-            # 連接勾選狀態變更事件，控制參數顯示位置
-            self.optimization_group.toggled.connect(self._on_optimization_toggled)
-            optimization_layout = QVBoxLayout()
-            
-            # 目標指標選擇
-            objective_row = QHBoxLayout()
-            objective_row.addWidget(QLabel("目標指標:"))
-            self.objective_combo = QComboBox()
-            self.objective_combo.addItems(["夏普比率", "年化報酬率", "CAGR-MDD權衡"])
-            # 添加 tooltip
-            if 'optimization_objective' in self.parameter_descriptions:
-                tooltip_text = '\n'.join(self.parameter_descriptions['optimization_objective']['tooltip_lines'])
-                self.objective_combo.setToolTip(tooltip_text)
-            objective_row.addWidget(self.objective_combo)
-            optimization_layout.addLayout(objective_row)
-            
-            # 參數範圍設定（動態生成）
-            self.optimization_params_widget = QWidget()
-            self.optimization_params_layout = QFormLayout(self.optimization_params_widget)
-            optimization_layout.addWidget(self.optimization_params_widget)
-            
-            # 連接策略變更事件，更新參數範圍表單
-            self.strategy_combo.currentTextChanged.connect(self._update_optimization_params_form)
-            
-            # 初始化參數表單（如果已經有策略選擇）
-            # 使用 QTimer 延遲執行，確保 UI 完全初始化後再更新
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(100, self._update_optimization_params_form)
-            
-            # 同時在策略變更時也更新（確保同步）
-            self.strategy_combo.currentTextChanged.connect(lambda: QTimer.singleShot(50, self._update_optimization_params_form))
-            
-            # 執行最佳化按鈕
-            self.optimize_btn = QPushButton("執行參數掃描")
-            self.optimize_btn.setStyleSheet("background-color: #2196F3; color: white;")
-            self.optimize_btn.clicked.connect(self._execute_optimization)
-            optimization_layout.addWidget(self.optimize_btn)
-            
-            self.optimization_group.setLayout(optimization_layout)
-            config_layout.addWidget(self.optimization_group)
-        
-        # ========== Walk-forward 驗證區塊 ==========
-        if self.walkforward_service:
-            self.wf_group = QGroupBox("進階驗證：Walk-forward 驗證")
-            self.wf_group.setCheckable(True)
-            self.wf_group.setChecked(False)
-            self.wf_group.toggled.connect(self._on_wf_group_toggled)
-            wf_layout = QVBoxLayout()
-            
-            # 驗證模式選擇
-            wf_mode_row = QHBoxLayout()
-            wf_mode_row.addWidget(QLabel("模式:"))
-            self.wf_mode_combo = QComboBox()
-            self.wf_mode_combo.addItems(["Train-Test Split", "Walk-forward"])
-            # 添加 tooltip
-            if 'walkforward_mode' in self.parameter_descriptions:
-                tooltip_text = '\n'.join(self.parameter_descriptions['walkforward_mode']['tooltip_lines'])
-                self.wf_mode_combo.setToolTip(tooltip_text)
-            wf_mode_row.addWidget(self.wf_mode_combo)
-            wf_layout.addLayout(wf_mode_row)
-            
-            # Train-Test Split 設定
-            self.wf_split_widget = QWidget()
-            wf_split_layout = QFormLayout(self.wf_split_widget)
-            self.wf_train_ratio = QDoubleSpinBox()
-            self.wf_train_ratio.setRange(0.1, 0.9)
-            self.wf_train_ratio.setValue(0.7)
-            self.wf_train_ratio.setSingleStep(0.1)
-            self.wf_train_ratio.setDecimals(1)
-            self.wf_train_ratio.setSuffix(" (訓練比例)")
-            wf_split_layout.addRow("訓練/測試比例:", self.wf_train_ratio)
-            wf_layout.addWidget(self.wf_split_widget)
-            
-            # Walk-forward 設定（初始隱藏）
-            self.wf_wf_widget = QWidget()
-            wf_wf_layout = QFormLayout(self.wf_wf_widget)
-            self.wf_train_months = QSpinBox()
-            self.wf_train_months.setRange(1, 24)
-            self.wf_train_months.setValue(6)
-            wf_wf_layout.addRow("訓練期（月）:", self.wf_train_months)
-            
-            self.wf_test_months = QSpinBox()
-            self.wf_test_months.setRange(1, 12)
-            self.wf_test_months.setValue(3)
-            wf_wf_layout.addRow("測試期（月）:", self.wf_test_months)
-            
-            self.wf_step_months = QSpinBox()
-            self.wf_step_months.setRange(1, 12)
-            self.wf_step_months.setValue(3)
-            wf_wf_layout.addRow("步進（月）:", self.wf_step_months)
-            
-            self.wf_wf_widget.setVisible(False)
-            wf_layout.addWidget(self.wf_wf_widget)
-            
-            # 連接模式切換
-            def on_wf_mode_changed(mode):
-                if mode == "Train-Test Split":
-                    self.wf_split_widget.setVisible(True)
-                    self.wf_wf_widget.setVisible(False)
-                else:
-                    self.wf_split_widget.setVisible(False)
-                    self.wf_wf_widget.setVisible(True)
-            
-            self.wf_mode_combo.currentTextChanged.connect(on_wf_mode_changed)
-            
-            # 執行 Walk-forward 按鈕
-            self.wf_execute_btn = QPushButton("執行驗證")
-            self.wf_execute_btn.setStyleSheet("background-color: #FF9800; color: white;")
-            self.wf_execute_btn.clicked.connect(self._execute_walkforward)
-            wf_layout.addWidget(self.wf_execute_btn)
-            
-            self.wf_group.setLayout(wf_layout)
-            config_layout.addWidget(self.wf_group)
-
-        self.recommendation_portfolio_group = QGroupBox("推薦回放設定")
-        self.recommendation_portfolio_group.setCheckable(True)
-        self.recommendation_portfolio_group.setChecked(False)
-        recommendation_portfolio_layout = QVBoxLayout()
-
-        profile_row = QHBoxLayout()
-        profile_row.addWidget(QLabel("Profile:"))
-        self.recommendation_portfolio_profile_label = QLabel("尚未從推薦頁載入")
-        profile_row.addWidget(self.recommendation_portfolio_profile_label)
-        profile_row.addStretch()
-        recommendation_portfolio_layout.addLayout(profile_row)
-
-        recommendation_portfolio_form = QFormLayout()
-        self.recommendation_portfolio_top_n = QSpinBox()
-        self.recommendation_portfolio_top_n.setRange(1, 50)
-        self.recommendation_portfolio_top_n.setValue(5)
-        recommendation_portfolio_form.addRow("每次推薦檔數:", self.recommendation_portfolio_top_n)
-
-        self.recommendation_portfolio_max_stocks = QSpinBox()
-        self.recommendation_portfolio_max_stocks.setRange(10, 500)
-        self.recommendation_portfolio_max_stocks.setValue(50)
-        self.recommendation_portfolio_max_stocks.setSingleStep(10)
-        recommendation_portfolio_form.addRow("每期候選上限:", self.recommendation_portfolio_max_stocks)
-
-        self.recommendation_portfolio_holding_days = QSpinBox()
-        self.recommendation_portfolio_holding_days.setRange(1, 60)
-        self.recommendation_portfolio_holding_days.setValue(5)
-        recommendation_portfolio_form.addRow("持有天數:", self.recommendation_portfolio_holding_days)
-
-        self.recommendation_portfolio_rebalance = QComboBox()
-        self.recommendation_portfolio_rebalance.addItems(["每週重播", "只跑一次"])
-        recommendation_portfolio_form.addRow("重播頻率:", self.recommendation_portfolio_rebalance)
-
-        self.recommendation_portfolio_allocation = QComboBox()
-        self.recommendation_portfolio_allocation.addItems(["等權配置", "分數加權"])
-        recommendation_portfolio_form.addRow("資金配置:", self.recommendation_portfolio_allocation)
-        recommendation_portfolio_layout.addLayout(recommendation_portfolio_form)
-
-        self.execute_recommendation_portfolio_btn = QPushButton("執行推薦回放")
-        self.execute_recommendation_portfolio_btn.setStyleSheet("background-color: #607D8B; color: white; font-weight: bold;")
-        self.execute_recommendation_portfolio_btn.clicked.connect(self._execute_recommendation_portfolio_backtest)
-        recommendation_portfolio_layout.addWidget(self.execute_recommendation_portfolio_btn)
-
-        # 推薦組合回測保存與歷史管理
-        if self.portfolio_run_repository:
-            portfolio_btn_row = QHBoxLayout()
-            self.save_portfolio_result_btn = QPushButton("保存推薦回放")
-            self.save_portfolio_result_btn.setEnabled(False)
-            self.save_portfolio_result_btn.clicked.connect(self._save_recommendation_portfolio_result)
-            portfolio_btn_row.addWidget(self.save_portfolio_result_btn)
-            
-            self.delete_portfolio_result_btn = QPushButton("刪除推薦回放")
-            self.delete_portfolio_result_btn.setEnabled(False)
-            self.delete_portfolio_result_btn.clicked.connect(self._delete_recommendation_portfolio_result)
-            portfolio_btn_row.addWidget(self.delete_portfolio_result_btn)
-
-            self.promote_portfolio_result_btn = QPushButton("升級策略版本")
-            self.promote_portfolio_result_btn.setEnabled(False)
-            self.promote_portfolio_result_btn.clicked.connect(self._promote_recommendation_portfolio_result)
-            portfolio_btn_row.addWidget(self.promote_portfolio_result_btn)
-            recommendation_portfolio_layout.addLayout(portfolio_btn_row)
-            
-            portfolio_history_row = QHBoxLayout()
-            portfolio_history_row.addWidget(QLabel("歷史記錄:"))
-            self.portfolio_history_combo = QComboBox()
-            self.portfolio_history_combo.currentIndexChanged.connect(self._on_portfolio_history_changed)
-            portfolio_history_row.addWidget(self.portfolio_history_combo)
-            recommendation_portfolio_layout.addLayout(portfolio_history_row)
-
-        self.recommendation_portfolio_group.setLayout(recommendation_portfolio_layout)
-        config_layout.addWidget(self.recommendation_portfolio_group)
-        
-        # 執行按鈕
-        execute_row = QHBoxLayout()
-        self.execute_btn = QPushButton("執行實驗")
-        self.execute_btn.setMinimumHeight(40)
-        self.execute_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
-        self.execute_btn.clicked.connect(self._execute_backtest)
-        execute_row.addWidget(self.execute_btn)
-        
-        # 保存結果按鈕
-        if self.run_repository:
-            self.save_result_btn = QPushButton("保存結果")
-            self.save_result_btn.setMaximumWidth(100)
-            self.save_result_btn.setEnabled(False)  # 初始禁用
-            self.save_result_btn.clicked.connect(self._save_backtest_result)
-            execute_row.addWidget(self.save_result_btn)
-        
-        # Promote 按鈕
-        if self.promotion_service:
-            self.promote_btn = QPushButton("升級為策略版本")
-            self.promote_btn.setMaximumWidth(120)
-            self.promote_btn.setEnabled(False)  # 初始禁用
-            self.promote_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
-            self.promote_btn.clicked.connect(self._promote_backtest_result)
-            execute_row.addWidget(self.promote_btn)
-        
-        # 進度條和進度文字
-        progress_widget = QWidget()
-        progress_layout = QVBoxLayout(progress_widget)
-        progress_layout.setContentsMargins(0, 0, 0, 0)
-        progress_layout.setSpacing(2)
-        
-        self.progress_label = QLabel("")
-        self.progress_label.setVisible(False)
-        self.progress_label.setStyleSheet("color: #666; font-size: 10pt;")
-        progress_layout.addWidget(self.progress_label)
-        
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        progress_layout.addWidget(self.progress_bar)
-
-        execution_group = QGroupBox("執行與下一步")
-        execution_layout = QVBoxLayout()
-        execution_layout.addLayout(execute_row)
-        execution_layout.addWidget(progress_widget)
-        execution_group.setLayout(execution_layout)
-        config_layout.addWidget(execution_group)
-        
-        config_layout.addStretch()
-        
-        # 將 config_widget 放入 ScrollArea
-        config_scroll.setWidget(config_widget)
+        self.config_panel = BacktestConfigPanel(self)
+        config_scroll.setWidget(self.config_panel)
         splitter.addWidget(config_scroll)
         
-        # 右側：結果面板（使用 Tab）
-        result_widget = QWidget()
-        result_tabs = QTabWidget()
-        
-        # Tab 1: 結果
-        result_tab = QWidget()
-        result_layout = QVBoxLayout(result_tab)
-        result_layout.setSpacing(10)
-        result_layout.setContentsMargins(5, 5, 5, 5)
-        
-        # 績效摘要
-        summary_group = QGroupBox("實驗摘要")
-        summary_layout = QVBoxLayout()
-        
-        self.summary_text = QTextEdit()
-        self.summary_text.setReadOnly(True)
-        self.summary_text.setMinimumHeight(150)  # 降低最小高度，讓它更靈活
-        self.summary_text.setFont(QFont("Consolas", 9))
-        summary_layout.addWidget(self.summary_text)
-        
-        summary_group.setLayout(summary_layout)
-        result_layout.addWidget(summary_group, stretch=65)  # 績效摘要佔 65% 空間（6.5:3.5）
-        
-        # 交易明細
-        trades_group = QGroupBox("交易明細")
-        trades_layout = QVBoxLayout()
-        
-        self.trades_table = QTableView()
-        self.trades_table.setAlternatingRowColors(True)
-        self.trades_table.setSelectionBehavior(QTableView.SelectRows)
-        self.trades_table.setSortingEnabled(True)
-        self.trades_table.horizontalHeader().setStretchLastSection(True)
-        self.trades_table.setMinimumHeight(150)  # 降低最小高度，讓它更靈活
-        # 設置表格可以隨窗口大小調整
-        self.trades_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        font = QFont("Consolas", 9)
-        self.trades_table.setFont(font)
-        
-        # 啟用右鍵選單
-        self.trades_table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.trades_table.customContextMenuRequested.connect(self._show_trades_table_context_menu)
-        
-        trades_layout.addWidget(self.trades_table)
-        
-        trades_group.setLayout(trades_layout)
-        result_layout.addWidget(trades_group, stretch=35)  # 交易明細佔 35% 空間（6.5:3.5）
-        
-        result_tabs.addTab(result_tab, "實驗摘要")
-        
-        # Tab 2: 圖表（如果有 chart service）
-        if self.chart_data_service:
-            chart_tab = QWidget()
-            chart_layout = QVBoxLayout(chart_tab)
-            
-            # Run 選擇（用於切換不同的回測結果）
-            run_select_row = QHBoxLayout()
-            run_select_row.addWidget(QLabel("選擇回測結果:"))
-            self.chart_run_combo = QComboBox()
-            self.chart_run_combo.setEditable(False)
-            self.chart_run_combo.currentTextChanged.connect(self._on_chart_run_changed)
-            run_select_row.addWidget(self.chart_run_combo)
-            run_select_row.addStretch()
-            chart_layout.addLayout(run_select_row)
-            
-            # 使用 Tab 組織 4 張圖表
-            chart_tabs = QTabWidget()
-            
-            # 圖表 1: 權益曲線
-            equity_chart = create_equity_curve_widget()
-            chart_tabs.addTab(equity_chart, "權益曲線")
-            self.equity_chart = equity_chart
-            
-            # 圖表 2: 回撤曲線
-            drawdown_chart = create_drawdown_curve_widget()
-            chart_tabs.addTab(drawdown_chart, "回撤曲線")
-            self.drawdown_chart = drawdown_chart
-            
-            # 圖表 3: 交易報酬分佈
-            return_hist = create_trade_return_histogram_widget()
-            chart_tabs.addTab(return_hist, "報酬分佈")
-            self.return_hist = return_hist
-            
-            # 圖表 4: 持有天數分佈
-            holding_hist = create_holding_days_histogram_widget()
-            chart_tabs.addTab(holding_hist, "持有天數")
-            self.holding_hist = holding_hist
-            
-            chart_layout.addWidget(chart_tabs)
-            
-            result_tabs.addTab(chart_tab, "圖表")
-            
-            # 初始化圖表 run 列表（會在回測完成或載入歷史時更新）
-            self._update_chart_run_combo()
-        
-        # Tab 3: 最佳化結果（如果有 optimizer）
-        if self.optimizer_service:
-            optimization_result_tab = QWidget()
-            optimization_result_layout = QVBoxLayout(optimization_result_tab)
-            
-            optimization_result_group = QGroupBox("最佳化結果")
-            optimization_result_layout_inner = QVBoxLayout()
-            
-            self.optimization_table = QTableView()
-            self.optimization_table.setAlternatingRowColors(True)
-            self.optimization_table.setSelectionBehavior(QTableView.SelectRows)
-            self.optimization_table.setSortingEnabled(True)
-            self.optimization_table.horizontalHeader().setStretchLastSection(True)
-            self.optimization_table.setMinimumHeight(200)  # 降低最小高度，讓它更靈活
-            self.optimization_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-            self.optimization_table.setFont(QFont("Consolas", 9))
-            self.optimization_table.doubleClicked.connect(self._apply_optimization_params)
-            optimization_result_layout_inner.addWidget(self.optimization_table)
-            
-            # 應用參數按鈕
-            apply_btn = QPushButton("套用選中參數")
-            apply_btn.clicked.connect(self._apply_optimization_params)
-            optimization_result_layout_inner.addWidget(apply_btn)
-            
-            optimization_result_group.setLayout(optimization_result_layout_inner)
-            optimization_result_layout.addWidget(optimization_result_group)
-            
-            result_tabs.addTab(optimization_result_tab, "最佳化 / 驗證")
-        
-        # Tab 4: 比較（如果有 repository）
-        if self.run_repository:
-            compare_tab = QWidget()
-            compare_layout = QVBoxLayout(compare_tab)
-            
-            # 歷史列表
-            history_group = QGroupBox("回測歷史")
-            history_layout = QVBoxLayout()
-            
-            history_btn_row = QHBoxLayout()
-            self.refresh_history_btn = QPushButton("重新整理")
-            self.refresh_history_btn.clicked.connect(self._refresh_history)
-            history_btn_row.addWidget(self.refresh_history_btn)
-            
-            self.delete_history_btn = QPushButton("刪除選中")
-            self.delete_history_btn.setStyleSheet("background-color: #F44336; color: white;")
-            self.delete_history_btn.clicked.connect(self._delete_history_runs)
-            history_btn_row.addWidget(self.delete_history_btn)
-            
-            history_btn_row.addStretch()
-            history_layout.addLayout(history_btn_row)
-            
-            self.history_list = QListWidget()
-            self.history_list.setSelectionMode(QListWidget.ExtendedSelection)  # 多選
-            self.history_list.itemDoubleClicked.connect(self._load_history_run)
-            history_layout.addWidget(self.history_list)
-            
-            compare_btn = QPushButton("比較選中")
-            compare_btn.clicked.connect(self._compare_runs)
-            history_layout.addWidget(compare_btn)
-            
-            history_group.setLayout(history_layout)
-            compare_layout.addWidget(history_group)
-            
-            # 比較結果表格
-            compare_result_group = QGroupBox("比較結果")
-            compare_result_layout = QVBoxLayout()
-            
-            self.compare_table = QTableView()
-            self.compare_table.setAlternatingRowColors(True)
-            self.compare_table.setSortingEnabled(True)
-            self.compare_table.horizontalHeader().setStretchLastSection(True)
-            self.compare_table.setSelectionBehavior(QTableView.SelectRows)
-            self.compare_table.doubleClicked.connect(self._on_compare_table_double_clicked)
-            compare_result_layout.addWidget(self.compare_table)
-            
-            compare_result_group.setLayout(compare_result_layout)
-            compare_layout.addWidget(compare_result_group)
-            
-            result_tabs.addTab(compare_tab, "歷史與比較")
-            
-            # 初始化歷史列表
-            self._refresh_history()
-        
-        # Tab 5: 批次結果（如果有 batch service）
-        if self.batch_backtest_service:
-            batch_result_tab = QWidget()
-            batch_result_layout = QVBoxLayout(batch_result_tab)
-            batch_result_layout.setSpacing(10)
-            batch_result_layout.setContentsMargins(5, 5, 5, 5)
-            
-            # 排序選擇
-            sort_row = QHBoxLayout()
-            sort_row.addWidget(QLabel("排序方式:"))
-            self.batch_sort_combo = QComboBox()
-            self.batch_sort_combo.addItems(["CAGR-MDD", "CAGR", "Sharpe", "MDD"])
-            self.batch_sort_combo.currentTextChanged.connect(self._on_batch_sort_changed)
-            sort_row.addWidget(self.batch_sort_combo)
-            sort_row.addStretch()
-            batch_result_layout.addLayout(sort_row)
-            
-            # 排行榜表格
-            batch_leaderboard_group = QGroupBox("排行榜")
-            batch_leaderboard_layout = QVBoxLayout()
-            
-            self.batch_leaderboard_table = QTableView()
-            self.batch_leaderboard_table.setAlternatingRowColors(True)
-            self.batch_leaderboard_table.setSelectionBehavior(QTableView.SelectRows)
-            self.batch_leaderboard_table.setSortingEnabled(False)  # 使用服務排序
-            self.batch_leaderboard_table.horizontalHeader().setStretchLastSection(True)
-            self.batch_leaderboard_table.doubleClicked.connect(self._on_batch_row_double_clicked)
-            self.batch_leaderboard_table.setMinimumHeight(300)
-            self.batch_leaderboard_table.setFont(QFont("Consolas", 9))
-            batch_leaderboard_layout.addWidget(self.batch_leaderboard_table)
-            
-            batch_leaderboard_group.setLayout(batch_leaderboard_layout)
-            batch_result_layout.addWidget(batch_leaderboard_group, stretch=2)
-            
-            # 整體統計
-            batch_stats_group = QGroupBox("整體統計")
-            batch_stats_layout = QVBoxLayout()
-            
-            self.batch_stats_text = QTextEdit()
-            self.batch_stats_text.setReadOnly(True)
-            self.batch_stats_text.setMaximumHeight(100)
-            self.batch_stats_text.setFont(QFont("Consolas", 10))
-            batch_stats_layout.addWidget(self.batch_stats_text)
-            
-            batch_stats_group.setLayout(batch_stats_layout)
-            batch_result_layout.addWidget(batch_stats_group, stretch=1)
-            
-            result_tabs.addTab(batch_result_tab, "批次結果")
-
-        recommendation_portfolio_tab = QWidget()
-        recommendation_portfolio_layout = QVBoxLayout(recommendation_portfolio_tab)
-        recommendation_portfolio_layout.setSpacing(8)
-        recommendation_portfolio_layout.setContentsMargins(5, 5, 5, 5)
-
-        self.portfolio_summary_text = QTextEdit()
-        self.portfolio_summary_text.setReadOnly(True)
-        self.portfolio_summary_text.setMaximumHeight(200)
-        self.portfolio_summary_text.setFont(QFont("Consolas", 9))
-        recommendation_portfolio_layout.addWidget(self.portfolio_summary_text)
-
-        self.portfolio_chart_tabs = QTabWidget()
-        self.portfolio_equity_chart = create_equity_curve_widget()
-        self.portfolio_drawdown_chart = create_drawdown_curve_widget()
-        self.portfolio_chart_tabs.addTab(self.portfolio_equity_chart, "Portfolio Value")
-        self.portfolio_chart_tabs.addTab(self.portfolio_drawdown_chart, "Drawdown")
-        recommendation_portfolio_layout.addWidget(self.portfolio_chart_tabs, stretch=3)
-
-        self.portfolio_period_table = QTableView()
-        self.portfolio_stock_table = QTableView()
-        self.portfolio_trades_table = QTableView()
-        for table in [
-            self.portfolio_period_table,
-            self.portfolio_stock_table,
-            self.portfolio_trades_table,
-        ]:
-            table.setAlternatingRowColors(True)
-            table.setSelectionBehavior(QTableView.SelectRows)
-            table.setSortingEnabled(True)
-            table.horizontalHeader().setStretchLastSection(True)
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-            table.setFont(QFont("Consolas", 9))
-
-        recommendation_portfolio_layout.addWidget(QLabel("期間明細"))
-        recommendation_portfolio_layout.addWidget(self.portfolio_period_table, stretch=3)
-        recommendation_portfolio_layout.addWidget(QLabel("個股貢獻"))
-        recommendation_portfolio_layout.addWidget(self.portfolio_stock_table, stretch=2)
-        recommendation_portfolio_layout.addWidget(QLabel("交易紀錄"))
-        recommendation_portfolio_layout.addWidget(self.portfolio_trades_table, stretch=2)
-        result_tabs.addTab(recommendation_portfolio_tab, "推薦回放")
-        
-        # 調整 Tab 順序（如果有最佳化Tab）
-        if self.optimizer_service:
-            # 確保順序：結果、最佳化、比較
-            pass
-        
-        result_widget_layout = QVBoxLayout(result_widget)
-        result_widget_layout.addWidget(result_tabs)
-        
-        result_widget.setLayout(result_widget_layout)
-        splitter.addWidget(result_widget)
+        # 右側：結果面板
+        self.result_panel = BacktestResultPanel(self)
+        splitter.addWidget(self.result_panel)
         
         # 設置 Splitter 比例（讓右側結果區域更大，且可隨窗口調整）
         splitter.setStretchFactor(0, 1)  # 左側配置區域
-        splitter.setStretchFactor(1, 3)  # 右側結果區域（更大的權重，會佔更多空間）
-        # 設置初始大小比例（約 30% : 70%），但允許隨窗口調整
-        # 不設置固定大小，讓它隨窗口大小自動調整
+        splitter.setStretchFactor(1, 3)  # 右側結果區域
         
         main_layout.addWidget(splitter)
         
@@ -1541,13 +862,14 @@ class BacktestView(QWidget):
         self._plot_charts_from_report(report)
         
         # 啟用保存按鈕（確保有 run_repository 和 current_report）
-        if hasattr(self, 'save_result_btn'):
+        save_btn = getattr(self, 'save_result_btn', None)
+        if save_btn is not None:
             if self.run_repository and self.current_report and self.current_run_params:
-                self.save_result_btn.setEnabled(True)
+                save_btn.setEnabled(True)
                 logger.info("[BacktestView] 保存按鈕已啟用 (run_repository={self.run_repository is not None}, report={self.current_report is not None}, params={self.current_run_params is not None})")
             else:
                 # 如果沒有 repository，禁用按鈕並顯示提示
-                self.save_result_btn.setEnabled(False)
+                save_btn.setEnabled(False)
                 if not self.run_repository:
                     logger.warning("[BacktestView] 警告: run_repository 未初始化，無法保存結果")
                 if not self.current_report:
@@ -1556,7 +878,8 @@ class BacktestView(QWidget):
                     logger.warning("[BacktestView] 警告: current_run_params 為空，無法保存結果")
         
         # ========== Phase 3.5 SOP 護欄：啟用 Promote 按鈕 ==========
-        if hasattr(self, 'promote_btn'):
+        promote_btn = getattr(self, 'promote_btn', None)
+        if promote_btn is not None:
             # 檢查是否可以 Promote（需要已保存的回測結果 + 驗證狀態不是 FAIL）
             can_promote_basic = (
                 self.promotion_service and 
@@ -1569,9 +892,9 @@ class BacktestView(QWidget):
             can_promote_sop = (report.validation_status != ValidationStatus.FAIL)
             
             if can_promote_basic and can_promote_sop:
-                self.promote_btn.setEnabled(True)
+                promote_btn.setEnabled(True)
             else:
-                self.promote_btn.setEnabled(False)
+                promote_btn.setEnabled(False)
                 # 如果因為 SOP 護欄無法 Promote，顯示提示
                 if can_promote_basic and not can_promote_sop:
                     logger.warning("[BacktestView] ⚠️ SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
@@ -2040,6 +1363,10 @@ class BacktestView(QWidget):
             self.portfolio_history_combo.setCurrentIndex(index)
             self.portfolio_history_combo.blockSignals(False)
 
+    def _init_parameter_descriptions(self):
+        """初始化參數說明資料結構（集中管理）"""
+        self.parameter_descriptions = PARAMETER_DESCRIPTIONS
+    
     def _format_summary(self, report: BacktestReportDTO) -> str:
         """格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）"""
         details = report.details
@@ -2163,225 +1490,7 @@ class BacktestView(QWidget):
         
         return "\n".join(summary_lines)
     
-    def _init_parameter_descriptions(self):
-        """初始化參數說明資料結構（集中管理）"""
-        self.parameter_descriptions = {
-            # 策略參數
-            'buy_score': {
-                'tooltip_lines': [
-                    '最低進場分數門檻。',
-                    '當策略分數連續達到此值以上時，才允許產生買入訊號。',
-                    '系統角色：進場濾波機制，避免在分數不足時進場。'
-                ]
-            },
-            'sell_score': {
-                'tooltip_lines': [
-                    '最高出場分數門檻。',
-                    '當策略分數連續低於此值時，才允許產生賣出訊號。',
-                    '系統角色：出場濾波機制，避免在分數仍高時過早出場。'
-                ]
-            },
-            'buy_confirm_days': {
-                'tooltip_lines': [
-                    '買入確認天數。',
-                    '策略分數必須連續 N 天達到 buy_score 以上，才真正產生買入訊號。',
-                    '系統角色：確認機制，減少假訊號和頻繁進出場。'
-                ]
-            },
-            'sell_confirm_days': {
-                'tooltip_lines': [
-                    '賣出確認天數。',
-                    '策略分數必須連續 N 天低於 sell_score，才真正產生賣出訊號。',
-                    '系統角色：確認機制，減少假訊號和頻繁進出場。'
-                ]
-            },
-            'cooldown_days': {
-                'tooltip_lines': [
-                    '每次交易後的冷卻期。',
-                    '在冷卻期間內，即使訊號再次出現，也不允許反向或重新進場。',
-                    '系統角色：保護機制，避免過度交易和情緒化決策。'
-                ]
-            },
-            # 回測執行設定
-            'execution_price': {
-                'tooltip_lines': [
-                    '定義回測中實際成交使用的價格。',
-                    'next_open：使用下一根 K 棒的開盤價（較保守，避免偷看未來）。',
-                    'close：使用當根 K 棒的收盤價（較接近理想化即時成交）。',
-                    '系統角色：影響回測的樂觀/保守程度，next_open 較保守。'
-                ]
-            },
-            # 停損停利
-            'stop_profit_mode': {
-                'tooltip_lines': [
-                    '停損停利模式選擇。',
-                    '百分比模式：使用固定百分比作為停損停利門檻。',
-                    'ATR 倍數模式：使用 ATR（平均真實波幅）的倍數，相對波動而非固定百分比。',
-                    '系統角色：事後風控機制，不是交易訊號來源。'
-                ]
-            },
-            'stop_loss_pct': {
-                'tooltip_lines': [
-                    '停損百分比。',
-                    '當持倉虧損達到此百分比時，強制平倉。',
-                    '系統角色：事後風控，保護資金，不產生交易訊號。',
-                    '設定為 0 表示關閉停損功能。'
-                ]
-            },
-            'take_profit_pct': {
-                'tooltip_lines': [
-                    '停利百分比。',
-                    '當持倉獲利達到此百分比時，強制平倉。',
-                    '系統角色：事後風控，鎖定獲利，不產生交易訊號。',
-                    '設定為 0 表示關閉停利功能。'
-                ]
-            },
-            'stop_loss_atr': {
-                'tooltip_lines': [
-                    '停損 ATR 倍數。',
-                    '當持倉虧損達到 ATR × 此倍數時，強制平倉。',
-                    'ATR 模式：根據股票波動性動態調整，而非固定百分比。',
-                    '系統角色：事後風控，相對波動的風險控制。',
-                    '設定為 0 表示關閉停損功能。'
-                ]
-            },
-            'take_profit_atr': {
-                'tooltip_lines': [
-                    '停利 ATR 倍數。',
-                    '當持倉獲利達到 ATR × 此倍數時，強制平倉。',
-                    'ATR 模式：根據股票波動性動態調整，而非固定百分比。',
-                    '系統角色：事後風控，相對波動的獲利鎖定。',
-                    '設定為 0 表示關閉停利功能。'
-                ]
-            },
-            # 部位與資金管理
-            'sizing_mode': {
-                'tooltip_lines': [
-                    '部位大小計算模式。',
-                    '全倉：使用所有可用資金。',
-                    '固定金額：每次使用固定金額。',
-                    '風險百分比：根據風險百分比計算部位大小。',
-                    '系統角色：決定「有訊號時，下多少單」，不產生交易訊號。'
-                ]
-            },
-            'fixed_amount': {
-                'tooltip_lines': [
-                    '固定金額模式下的每次交易金額。',
-                    '每次進場時使用此固定金額，不受可用資金影響。',
-                    '系統角色：部位大小控制，不產生交易訊號。'
-                ]
-            },
-            'risk_pct': {
-                'tooltip_lines': [
-                    '風險百分比模式下的風險比例。',
-                    '根據此百分比和停損距離計算每次交易的部位大小。',
-                    '系統角色：部位大小控制，確保每次交易風險一致。'
-                ]
-            },
-            'max_positions': {
-                'tooltip_lines': [
-                    '最多同時持有的部位數量。',
-                    '當達到此數量時，即使有新訊號也不會進場。',
-                    '系統角色：部位管理限制，不產生交易訊號。',
-                    '設定為 1 表示無限制。'
-                ]
-            },
-            'position_sizing': {
-                'tooltip_lines': [
-                    '多部位時的加權分配方式。',
-                    '等權重：所有部位平均分配資金。',
-                    '分數加權：根據策略分數分配資金。',
-                    '波動調整：根據波動性調整分配。',
-                    '系統角色：多部位資金分配，不產生交易訊號。'
-                ]
-            },
-            'allow_pyramid': {
-                'tooltip_lines': [
-                    '允許金字塔式建倉（加碼）。',
-                    '啟用後，在已有持倉的情況下，如果訊號再次出現，可以加碼。',
-                    '系統角色：部位管理選項，不產生交易訊號。'
-                ]
-            },
-            'allow_reentry': {
-                'tooltip_lines': [
-                    '允許重新進場。',
-                    '啟用後，在出場後可以重新進場。',
-                    '系統角色：部位管理選項，不產生交易訊號。'
-                ]
-            },
-            'reentry_cooldown_days': {
-                'tooltip_lines': [
-                    '重新進場的冷卻天數。',
-                    '出場後必須等待此天數，才能重新進場。',
-                    '系統角色：保護機制，避免頻繁進出場。'
-                ]
-            },
-            # 市場限制
-            'enable_limit': {
-                'tooltip_lines': [
-                    '啟用漲跌停限制。',
-                    '當股票漲停或跌停時，不允許進場或出場。',
-                    '系統角色：可行性約束，可能導致「訊號存在但交易被跳過」。'
-                ]
-            },
-            'enable_volume': {
-                'tooltip_lines': [
-                    '啟用成交量約束。',
-                    '當成交量不足時，不允許進場或出場。',
-                    '系統角色：可行性約束，模擬實際交易中的流動性限制。'
-                ]
-            },
-            'max_participation': {
-                'tooltip_lines': [
-                    '最大參與率。',
-                    '單次交易不得超過該股票當日成交量的此百分比。',
-                    '系統角色：可行性約束，模擬大額交易對市場的影響。',
-                    '可能導致「訊號存在但交易被跳過」。'
-                ]
-            },
-            # Optimization / Walk-forward
-            'optimization_objective': {
-                'tooltip_lines': [
-                    '參數最佳化的目標指標。',
-                    '夏普比率：風險調整後報酬率。',
-                    '年化報酬率：年度化總報酬率。',
-                    'CAGR-MDD權衡：綜合考慮成長率和最大回撤。',
-                    '系統角色：Grid Search 的優化目標，不是回測本身。'
-                ]
-            },
-            'walkforward_mode': {
-                'tooltip_lines': [
-                    'Walk-forward 驗證模式。',
-                    'Train-Test Split：將資料分成訓練集和測試集。',
-                    'Walk-forward：滾動窗口驗證，防止過擬合。',
-                    '系統角色：防止 overfitting 的驗證方式，不是回測本身。'
-                ]
-            },
-            # 資金與成本設定
-            'capital': {
-                'tooltip_lines': [
-                    '回測初始資金。',
-                    '用於計算報酬率、最大回撤等績效指標。',
-                    '系統角色：回測計算的基準資金。'
-                ]
-            },
-            'fee_bps': {
-                'tooltip_lines': [
-                    '手續費（基點，1 bps = 0.01%）。',
-                    '每次買賣交易時扣除的手續費。',
-                    '系統角色：模擬實際交易成本，影響淨報酬率。',
-                    '可設為 0 進行敏感度分析。'
-                ]
-            },
-            'slippage_bps': {
-                'tooltip_lines': [
-                    '滑價（基點，1 bps = 0.01%）。',
-                    '模擬實際成交價格與預期價格的偏差。',
-                    '系統角色：模擬實際交易中的價格滑動，影響淨報酬率。',
-                    '可設為 0 進行敏感度分析。'
-                ]
-            }
-        }
+
     
     def _get_default_strategy_config(self) -> Dict[str, Any]:
         """獲取預設策略配置"""
@@ -2727,12 +1836,7 @@ class BacktestView(QWidget):
     
     def _on_stock_mode_changed(self, mode: str):
         """股票模式切換"""
-        if mode == "單一股票":
-            self.stock_code_input.setVisible(True)
-            self.watchlist_widget.setVisible(False)
-        else:  # 選股清單
-            self.stock_code_input.setVisible(False)
-            self.watchlist_widget.setVisible(True)
+        self.config_panel._on_stock_mode_changed(mode)
     
     def _manage_watchlists(self):
         """管理選股清單"""
@@ -3465,80 +2569,24 @@ class BacktestView(QWidget):
     
     # ========== Sizing 模式相關方法 ==========
     
+    # ========== Sizing 模式與 UI 聯動 ==========
     def _on_stop_profit_mode_changed(self, mode: str):
-        """停損停利模式切換"""
-        if mode == "百分比模式":
-            # 顯示百分比輸入框，隱藏 ATR 輸入框
-            self.stop_loss_input.setVisible(True)
-            self.take_profit_input.setVisible(True)
-            self.stop_loss_atr_input.setVisible(False)
-            self.take_profit_atr_input.setVisible(False)
-        else:  # ATR 倍數模式
-            # 隱藏百分比輸入框，顯示 ATR 輸入框
-            self.stop_loss_input.setVisible(False)
-            self.take_profit_input.setVisible(False)
-            self.stop_loss_atr_input.setVisible(True)
-            self.take_profit_atr_input.setVisible(True)
+        self.config_panel._on_stop_profit_mode_changed(mode)
     
     def _on_allow_reentry_changed(self, checked: bool):
-        """允許重新進場切換"""
-        # 如果允許重新進場，啟用冷卻天數輸入框
-        self.reentry_cooldown_input.setEnabled(checked)
+        self.config_panel._on_allow_reentry_changed(checked)
     
     def _on_sizing_mode_changed(self, mode: str):
-        """Sizing 模式切換"""
-        if mode == "固定金額":
-            self.fixed_amount_input.setVisible(True)
-            self.risk_pct_input.setVisible(False)
-        elif mode == "風險百分比":
-            self.fixed_amount_input.setVisible(False)
-            self.risk_pct_input.setVisible(True)
-        else:  # 全倉
-            self.fixed_amount_input.setVisible(False)
-            self.risk_pct_input.setVisible(False)
+        self.config_panel._on_sizing_mode_changed(mode)
     
     def _update_execute_button_text(self):
-        """根據進階選項更新執行按鈕文字"""
-        if not hasattr(self, 'execute_btn') or not self.execute_btn:
-            return
-            
-        opt_checked = hasattr(self, 'optimization_group') and self.optimization_group.isChecked()
-        wf_checked = hasattr(self, 'wf_group') and self.wf_group.isChecked()
-        
-        if opt_checked:
-            self.execute_btn.setText("執行參數最佳化")
-        elif wf_checked:
-            self.execute_btn.setText("執行 Walk-forward 驗證")
-        else:
-            self.execute_btn.setText("執行實驗")
+        self.config_panel._update_execute_button_text()
             
     def _on_wf_group_toggled(self, checked: bool):
-        """Walk-forward 驗證區塊勾選狀態變更"""
-        self._update_execute_button_text()
+        self.config_panel._on_wf_group_toggled(checked)
         
-    # ========== 參數最佳化相關方法 ==========
-    
     def _on_optimization_toggled(self, checked: bool):
-        """參數最佳化區塊勾選狀態變更"""
-        self._update_execute_button_text()
-        # 根據勾選狀態切換參數顯示位置
-        if checked:
-            # 勾選時：隱藏策略配置區塊的參數，顯示參數最佳化區塊的參數
-            self.params_widget.setVisible(False)
-            # 更新參數最佳化表單
-            self._update_optimization_params_form()
-        else:
-            # 取消勾選時：顯示策略配置區塊的參數，隱藏參數最佳化區塊的參數
-            self.params_widget.setVisible(True)
-            # 清空參數最佳化表單
-            if hasattr(self, 'optimization_params_layout'):
-                while self.optimization_params_layout.count():
-                    child = self.optimization_params_layout.takeAt(0)
-                    if child.widget():
-                        child.widget().deleteLater()
-                self.optimization_param_widgets = {}
-            # 重新更新策略配置區塊的參數（確保顯示最新參數）
-            self._on_strategy_changed()
+        self.config_panel._on_optimization_toggled(checked)
     
     def _update_optimization_params_form(self):
         """更新參數最佳化表單（當策略改變時）"""

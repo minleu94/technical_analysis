@@ -190,4 +190,8 @@
 - 2026-06-03：新增 Phase 2A 數據讀取來源盤點報告 (PHASE_2A_DATA_SOURCES_AUDIT.md) 連結至文檔索引，並標記 Phase 2A/2B 已完成。
 - 2026-06-04：新增 Research Lab 工作流重整 spec / plan 連結，標記候選池語意與 Phase 3 → Portfolio 來源追溯為進行中主線。
 - 2026-06-06：完成策略回測驗證實驗室說明文檔（[BACKTEST_LAB_FEATURES.md](../02_features/BACKTEST_LAB_FEATURES.md)）之撮合限制、SOP 驗證、未來函數防禦與強制平倉 Portfolio 記錄機制同步更新，並優化 tab info 說明對話框文字。
+- 2026-06-06：啟動策略回測視圖（`backtest_view.py`）之漸進式重構，完成 Phase 1 拆分：抽離常數、說明 Tooltip 與純計算輔助函數至 `ui_qt/views/backtest/` 目錄下。
+- 2026-06-06：完成策略回測視圖（`backtest_view.py`）之漸進式重構 Phase 2 至 Phase 4：抽離右側結果面板 `BacktestResultPanel` 與左側配置面板 `BacktestConfigPanel`，採用 QWidget native 屬性安全排除的動態委派路由，並補全所有關鍵 Widget 的顯式 `@property` 宣告以取得最佳的 mypy 與 IDE autocomplete 支援，保持與現有單元測試及 QA 契約 100% 相容。
+
+
 
