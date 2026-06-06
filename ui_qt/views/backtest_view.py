@@ -181,6 +181,18 @@ class BacktestView(QWidget):
         if name in _QWIDGET_DIR:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
             
+        if name.startswith("_"):
+            # 僅允許面板類別中自定義的私有方法進行委派，避免 Qt 內部私有屬性引發遞迴錯誤
+            config_panel = self.__dict__.get("config_panel")
+            result_panel = self.__dict__.get("result_panel")
+            is_custom = False
+            if config_panel is not None and name in config_panel.__class__.__dict__:
+                is_custom = True
+            elif result_panel is not None and name in result_panel.__class__.__dict__:
+                is_custom = True
+            if not is_custom:
+                raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+            
         config_panel = self.__dict__.get("config_panel")
         if config_panel is not None and hasattr(config_panel, name):
             return getattr(config_panel, name)
@@ -192,15 +204,31 @@ class BacktestView(QWidget):
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name not in ("config_panel", "result_panel") and name not in _QWIDGET_DIR:
+        if name in ("config_panel", "result_panel") or name in _QWIDGET_DIR:
+            super().__setattr__(name, value)
+            return
+            
+        if name.startswith("_"):
             config_panel = self.__dict__.get("config_panel")
-            if config_panel is not None and hasattr(config_panel, name):
-                setattr(config_panel, name, value)
-                return
             result_panel = self.__dict__.get("result_panel")
-            if result_panel is not None and hasattr(result_panel, name):
-                setattr(result_panel, name, value)
+            is_custom = False
+            if config_panel is not None and name in config_panel.__class__.__dict__:
+                is_custom = True
+            elif result_panel is not None and name in result_panel.__class__.__dict__:
+                is_custom = True
+            if not is_custom:
+                super().__setattr__(name, value)
                 return
+            
+        config_panel = self.__dict__.get("config_panel")
+        if config_panel is not None and hasattr(config_panel, name):
+            setattr(config_panel, name, value)
+            return
+        result_panel = self.__dict__.get("result_panel")
+        if result_panel is not None and hasattr(result_panel, name):
+            setattr(result_panel, name, value)
+            return
+            
         super().__setattr__(name, value)
 
     # ========== 結果面板屬性委派 ==========

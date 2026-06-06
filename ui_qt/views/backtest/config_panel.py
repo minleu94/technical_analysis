@@ -66,17 +66,17 @@ class BacktestConfigPanel(QWidget):
             preset_btn_row = QHBoxLayout()
             self.save_preset_btn = QPushButton("儲存")
             self.save_preset_btn.setMaximumWidth(60)
-            self.save_preset_btn.clicked.connect(self.parent_view._save_preset)
+            self.save_preset_btn.clicked.connect(lambda: self.parent_view._save_preset())
             preset_btn_row.addWidget(self.save_preset_btn)
             
             self.load_preset_btn = QPushButton("載入")
             self.load_preset_btn.setMaximumWidth(60)
-            self.load_preset_btn.clicked.connect(self.parent_view._load_preset)
+            self.load_preset_btn.clicked.connect(lambda: self.parent_view._load_preset())
             preset_btn_row.addWidget(self.load_preset_btn)
             
             self.delete_preset_btn = QPushButton("刪除")
             self.delete_preset_btn.setMaximumWidth(60)
-            self.delete_preset_btn.clicked.connect(self.parent_view._delete_preset)
+            self.delete_preset_btn.clicked.connect(lambda: self.parent_view._delete_preset())
             preset_btn_row.addWidget(self.delete_preset_btn)
             
             preset_layout.addLayout(preset_row)
@@ -121,7 +121,7 @@ class BacktestConfigPanel(QWidget):
         watchlist_row.addWidget(self.watchlist_combo)
         watchlist_btn = QPushButton("管理")
         watchlist_btn.setMaximumWidth(60)
-        watchlist_btn.clicked.connect(self.parent_view._manage_watchlists)
+        watchlist_btn.clicked.connect(lambda: self.parent_view._manage_watchlists())
         watchlist_row.addWidget(watchlist_btn)
         watchlist_layout.addLayout(watchlist_row)
         self.watchlist_widget.setVisible(False)
@@ -388,7 +388,7 @@ class BacktestConfigPanel(QWidget):
         self.strategy_desc.setWordWrap(True)
         strategy_layout.addWidget(self.strategy_desc)
         
-        self.strategy_combo.currentTextChanged.connect(self.parent_view._on_strategy_changed)
+        self.strategy_combo.currentTextChanged.connect(lambda: self.parent_view._on_strategy_changed())
         
         self.strategy_config_group.setLayout(strategy_layout)
         config_layout.addWidget(self.strategy_config_group)
@@ -419,14 +419,14 @@ class BacktestConfigPanel(QWidget):
             self.optimization_params_layout = QFormLayout(self.optimization_params_widget)
             optimization_layout.addWidget(self.optimization_params_widget)
             
-            self.strategy_combo.currentTextChanged.connect(self.parent_view._update_optimization_params_form)
+            self.strategy_combo.currentTextChanged.connect(lambda: self.parent_view._update_optimization_params_form())
             
             # 使用 QTimer 延遲更新，確保 UI 初始化完成後再繪製
             QTimer.singleShot(100, lambda: self.parent_view._update_optimization_params_form())
             
             self.optimize_btn = QPushButton("執行參數掃描")
             self.optimize_btn.setStyleSheet("background-color: #2196F3; color: white;")
-            self.optimize_btn.clicked.connect(self.parent_view._execute_optimization)
+            self.optimize_btn.clicked.connect(lambda: self.parent_view._execute_optimization())
             optimization_layout.addWidget(self.optimize_btn)
             
             self.optimization_group.setLayout(optimization_layout)
@@ -499,7 +499,7 @@ class BacktestConfigPanel(QWidget):
             
             self.wf_execute_btn = QPushButton("執行驗證")
             self.wf_execute_btn.setStyleSheet("background-color: #FF9800; color: white;")
-            self.wf_execute_btn.clicked.connect(self.parent_view._execute_walkforward)
+            self.wf_execute_btn.clicked.connect(lambda: self.parent_view._execute_walkforward())
             wf_layout.addWidget(self.wf_execute_btn)
             
             self.wf_group.setLayout(wf_layout)
@@ -556,7 +556,7 @@ class BacktestConfigPanel(QWidget):
 
         self.execute_recommendation_portfolio_btn = QPushButton("執行推薦回放")
         self.execute_recommendation_portfolio_btn.setStyleSheet("background-color: #607D8B; color: white; font-weight: bold;")
-        self.execute_recommendation_portfolio_btn.clicked.connect(self.parent_view._execute_recommendation_portfolio_backtest)
+        self.execute_recommendation_portfolio_btn.clicked.connect(lambda: self.parent_view._execute_recommendation_portfolio_backtest())
         recommendation_portfolio_layout.addWidget(self.execute_recommendation_portfolio_btn)
 
         # 推薦組合回測保存與歷史管理
@@ -564,24 +564,24 @@ class BacktestConfigPanel(QWidget):
             portfolio_btn_row = QHBoxLayout()
             self.save_portfolio_result_btn = QPushButton("保存推薦回放")
             self.save_portfolio_result_btn.setEnabled(False)
-            self.save_portfolio_result_btn.clicked.connect(self.parent_view._save_recommendation_portfolio_result)
+            self.save_portfolio_result_btn.clicked.connect(lambda: self.parent_view._save_recommendation_portfolio_result())
             portfolio_btn_row.addWidget(self.save_portfolio_result_btn)
             
             self.delete_portfolio_result_btn = QPushButton("刪除推薦回放")
             self.delete_portfolio_result_btn.setEnabled(False)
-            self.delete_portfolio_result_btn.clicked.connect(self.parent_view._delete_recommendation_portfolio_result)
+            self.delete_portfolio_result_btn.clicked.connect(lambda: self.parent_view._delete_recommendation_portfolio_result())
             portfolio_btn_row.addWidget(self.delete_portfolio_result_btn)
 
             self.promote_portfolio_result_btn = QPushButton("升級策略版本")
             self.promote_portfolio_result_btn.setEnabled(False)
-            self.promote_portfolio_result_btn.clicked.connect(self.parent_view._promote_recommendation_portfolio_result)
+            self.promote_portfolio_result_btn.clicked.connect(lambda: self.parent_view._promote_recommendation_portfolio_result())
             portfolio_btn_row.addWidget(self.promote_portfolio_result_btn)
             recommendation_portfolio_layout.addLayout(portfolio_btn_row)
             
             portfolio_history_row = QHBoxLayout()
             portfolio_history_row.addWidget(QLabel("歷史記錄:"))
             self.portfolio_history_combo = QComboBox()
-            self.portfolio_history_combo.currentIndexChanged.connect(self.parent_view._on_portfolio_history_changed)
+            self.portfolio_history_combo.currentIndexChanged.connect(lambda idx: self.parent_view._on_portfolio_history_changed(idx))
             portfolio_history_row.addWidget(self.portfolio_history_combo)
             recommendation_portfolio_layout.addLayout(portfolio_history_row)
         else:
@@ -598,7 +598,7 @@ class BacktestConfigPanel(QWidget):
         self.execute_btn = QPushButton("執行實驗")
         self.execute_btn.setMinimumHeight(40)
         self.execute_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
-        self.execute_btn.clicked.connect(self.parent_view._execute_backtest)
+        self.execute_btn.clicked.connect(lambda: self.parent_view._execute_backtest())
         execute_row.addWidget(self.execute_btn)
         
         # 保存結果按鈕
@@ -606,7 +606,7 @@ class BacktestConfigPanel(QWidget):
             self.save_result_btn = QPushButton("保存結果")
             self.save_result_btn.setMaximumWidth(100)
             self.save_result_btn.setEnabled(False)
-            self.save_result_btn.clicked.connect(self.parent_view._save_backtest_result)
+            self.save_result_btn.clicked.connect(lambda: self.parent_view._save_backtest_result())
             execute_row.addWidget(self.save_result_btn)
         else:
             self.save_result_btn = None
@@ -617,7 +617,7 @@ class BacktestConfigPanel(QWidget):
             self.promote_btn.setMaximumWidth(120)
             self.promote_btn.setEnabled(False)
             self.promote_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
-            self.promote_btn.clicked.connect(self.parent_view._promote_backtest_result)
+            self.promote_btn.clicked.connect(lambda: self.parent_view._promote_backtest_result())
             execute_row.addWidget(self.promote_btn)
         else:
             self.promote_btn = None
