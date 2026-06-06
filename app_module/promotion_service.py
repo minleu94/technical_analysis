@@ -33,9 +33,9 @@ class PromotionService:
         config,
         backtest_repository: BacktestRunRepository,
         backtest_service: BacktestService,
-        walkforward_service: WalkForwardService,
         strategy_version_service: StrategyVersionService,
-        preset_service: PresetService
+        preset_service: PresetService,
+        walkforward_service: Optional[WalkForwardService] = None,
     ):
         """
         初始化 Promote 服務

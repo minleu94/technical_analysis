@@ -1,7 +1,5 @@
 import pandas as pd
 import yfinance as yf
-import finmind
-from finmind.data import Data
 from datetime import datetime, timedelta
 import logging
 
@@ -48,6 +46,8 @@ def get_market_index_yfinance():
 def get_market_index_finmind():
     """使用 FinMind 抓取大盤指數數據"""
     try:
+        import finmind
+        from finmind.data import Data
         finmind.login(FINMIND_TOKEN)
         finmind_data = Data()
         df = finmind_data.taiwan_stock_index_daily(

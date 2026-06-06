@@ -44,6 +44,7 @@ from app_module.chart_data_service import ChartDataService
 from app_module.promotion_service import PromotionService
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.walkforward_service import WalkForwardService
+from app_module.optimizer_service import OptimizerService
 from app_module.recommendation_dataframe_provider import RecommendationDataFrameProvider
 from app_module.recommendation_portfolio_backtest_service import RecommendationPortfolioBacktestService
 from app_module.recommendation_portfolio_dates import parse_stock_dates
@@ -70,6 +71,18 @@ from ui_qt.views.backtest.config_panel import BacktestConfigPanel
 
 class BacktestView(QWidget):
     """回測視圖"""
+    
+    preset_service: Optional[PresetService]
+    universe_service: Optional[UniverseService]
+    run_repository: Optional[BacktestRunRepository]
+    portfolio_run_repository: Optional[RecommendationPortfolioRunRepository]
+    chart_data_service: Optional[ChartDataService]
+    strategy_version_service: Optional[StrategyVersionService]
+    promotion_service: Optional[PromotionService]
+    portfolio_promotion_service: Optional[RecommendationPortfolioPromotionService]
+    optimizer_service: Optional[OptimizerService]
+    walkforward_service: Optional[WalkForwardService]
+    worker: Optional[Any]
     
     def __init__(
         self,
@@ -524,14 +537,14 @@ class BacktestView(QWidget):
         main_layout.addLayout(title_layout)
         
         # 使用 Splitter 分割配置和結果
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         
         # 左側：配置面板（使用 ScrollArea 支援滾動）
         config_scroll = QScrollArea()
         config_scroll.setWidgetResizable(True)
         config_scroll.setMinimumWidth(400)
-        config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        config_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        config_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
         self.config_panel = BacktestConfigPanel(self)
         config_scroll.setWidget(self.config_panel)
@@ -1049,6 +1062,8 @@ class BacktestView(QWidget):
         if getattr(self.config, 'use_sqlite', False):
             try:
                 from data_module.db_manager import DBManager
+                if not self.config:
+                    return
                 db = DBManager(self.config)
                 
                 # 預設查詢 SQL 與參數
@@ -1095,6 +1110,8 @@ class BacktestView(QWidget):
                 logger.warning(f"從 SQLite 載入回測歷史資料失敗: {sql_err}，將降級讀取 CSV")
 
         if history is None:
+            if not self.config:
+                raise ValueError("配置未初始化，無法載入歷史資料")
             stock_data_file = None
             if self.config.all_stocks_data_file.exists():
                 stock_data_file = self.config.all_stocks_data_file
@@ -1208,12 +1225,12 @@ class BacktestView(QWidget):
         notes_input.setMaximumHeight(100)
         dialog_layout.addWidget(notes_input)
         
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         dialog_layout.addWidget(buttons)
         
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             run_name = name_input.text().strip() or default_name
             notes = notes_input.toPlainText().strip()
             
@@ -1266,11 +1283,11 @@ class BacktestView(QWidget):
             self, 
             "確認刪除", 
             "確定要永久刪除此筆推薦組合回測紀錄嗎？這項操作無法復原。",
-            QMessageBox.Yes | QMessageBox.No, 
-            QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
+            QMessageBox.StandardButton.No
         )
         
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             try:
                 success = self.portfolio_run_repository.delete_run(run_id)
                 if success:
@@ -1343,10 +1360,10 @@ class BacktestView(QWidget):
             self,
             "確認升級",
             "確定要將此推薦組合回測升級為策略版本嗎？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
-        if reply != QMessageBox.Yes:
+        if reply != QMessageBox.StandardButton.Yes:
             return
 
         version_id = self.portfolio_promotion_service.promote_to_strategy_version(run_id)
@@ -1611,7 +1628,7 @@ class BacktestView(QWidget):
             else:
                 # 沒有勾選時：更新策略配置表單，顯示策略配置區塊的參數
                 self.params_widget.setVisible(True)
-            self._update_params_form(params)
+            self._update_params_form(params or {})
         except Exception as e:
             import traceback
             logger.info("[BacktestView] 更新策略資訊失敗: {e}")
@@ -1637,7 +1654,7 @@ class BacktestView(QWidget):
             if isinstance(param_info, dict):
                 param_type = param_info.get('type', 'float')
                 default_value = param_info.get('default', 0)
-                description = param_info.get('description', param_name)
+                description = param_info.get('description', param_name) or param_name
             else:
                 # 簡單值格式，推斷類型
                 default_value = param_info
@@ -1797,10 +1814,10 @@ class BacktestView(QWidget):
         
         reply = QMessageBox.question(
             self, "確認刪除", "確定要刪除此預設嗎？",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             if self.preset_service.delete_preset(preset_id):
                 QMessageBox.information(self, "成功", "預設已刪除")
                 self._populate_preset_combo()
@@ -1902,7 +1919,7 @@ class BacktestView(QWidget):
             watchlist_id = watchlist.get('watchlist_id', '')
             display_text = f"{name} ({count}檔)"
             item = QListWidgetItem(display_text)
-            item.setData(Qt.UserRole, watchlist_id)
+            item.setData(Qt.ItemDataRole.UserRole, watchlist_id)
             self.watchlist_manage_list.addItem(item)
     
     def _create_watchlist(self, parent_dialog):
@@ -1920,12 +1937,12 @@ class BacktestView(QWidget):
         codes_input.setMinimumHeight(200)
         dialog_layout.addWidget(codes_input)
         
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         dialog_layout.addWidget(buttons)
         
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             name = name_input.text().strip()
             if not name:
                 QMessageBox.warning(parent_dialog, "錯誤", "請輸入清單名稱")
@@ -1962,7 +1979,7 @@ class BacktestView(QWidget):
             QMessageBox.warning(parent_dialog, "錯誤", "請選擇要編輯的清單")
             return
         
-        watchlist_id = selected_items[0].data(Qt.UserRole)
+        watchlist_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
         watchlist = self.universe_service.load_watchlist(watchlist_id)
         if not watchlist:
             QMessageBox.warning(parent_dialog, "錯誤", "載入清單失敗")
@@ -1981,12 +1998,12 @@ class BacktestView(QWidget):
         codes_input.setMinimumHeight(200)
         dialog_layout.addWidget(codes_input)
         
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         dialog_layout.addWidget(buttons)
         
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             name = name_input.text().strip()
             if not name:
                 QMessageBox.warning(parent_dialog, "錯誤", "請輸入清單名稱")
@@ -2024,15 +2041,15 @@ class BacktestView(QWidget):
             QMessageBox.warning(parent_dialog, "錯誤", "請選擇要刪除的清單")
             return
         
-        watchlist_id = selected_items[0].data(Qt.UserRole)
+        watchlist_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
         item_text = selected_items[0].text()
         
         reply = QMessageBox.question(
             parent_dialog, "確認刪除", f"確定要刪除清單「{item_text}」嗎？",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.StandardButton.Yes:
             try:
                 if self.universe_service.delete_watchlist(watchlist_id):
                     QMessageBox.information(parent_dialog, "成功", "清單已刪除")
@@ -2173,7 +2190,7 @@ class BacktestView(QWidget):
     
     def _save_backtest_result(self):
         """保存回測結果"""
-        if not self.run_repository or not self.current_report:
+        if not self.run_repository or not self.current_report or not self.current_run_params:
             QMessageBox.warning(self, "錯誤", "沒有可保存的結果")
             return
         
@@ -2197,12 +2214,12 @@ class BacktestView(QWidget):
         notes_input.setMaximumHeight(100)
         dialog_layout.addWidget(notes_input)
         
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         dialog_layout.addWidget(buttons)
         
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             run_name = name_input.text().strip() or default_name
             notes = notes_input.toPlainText().strip()
             
@@ -2285,7 +2302,7 @@ class BacktestView(QWidget):
         
         if not criteria.passed:
             # 如果未通過，只顯示確定按鈕
-            buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
             buttons.accepted.connect(dialog.accept)
             dialog_layout.addWidget(buttons)
             dialog.exec()
@@ -2302,12 +2319,12 @@ class BacktestView(QWidget):
         notes_input.setMaximumHeight(100)
         dialog_layout.addWidget(notes_input)
         
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         dialog_layout.addWidget(buttons)
         
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             version_name = name_input.text().strip() or None
             notes = notes_input.toPlainText().strip() or None
             
@@ -2356,7 +2373,7 @@ class BacktestView(QWidget):
             
             display_text = f"{run_name} | {stock_code} | {strategy_id} | {date_str}"
             item = QListWidgetItem(display_text)
-            item.setData(Qt.UserRole, run.get('run_id'))
+            item.setData(Qt.ItemDataRole.UserRole, run.get('run_id'))
             self.history_list.addItem(item)
     
     def _load_history_run(self, item: QListWidgetItem):
@@ -2364,7 +2381,7 @@ class BacktestView(QWidget):
         if not self.run_repository:
             return
         
-        run_id = item.data(Qt.UserRole)
+        run_id = item.data(Qt.ItemDataRole.UserRole)
         if not run_id:
             return
         
@@ -2436,18 +2453,18 @@ class BacktestView(QWidget):
             reply = QMessageBox.question(
                 self, "確認刪除", 
                 f"確定要刪除此回測結果嗎？\n\n{item_text}",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
             )
         else:
             reply = QMessageBox.question(
                 self, "確認刪除", 
                 f"確定要刪除選中的 {len(selected_items)} 個回測結果嗎？",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
             )
         
-        if reply != QMessageBox.Yes:
+        if reply != QMessageBox.StandardButton.Yes:
             return
         
         # 執行刪除
@@ -2456,7 +2473,7 @@ class BacktestView(QWidget):
         failed_names = []
         
         for item in selected_items:
-            run_id = item.data(Qt.UserRole)
+            run_id = item.data(Qt.ItemDataRole.UserRole)
             if not run_id:
                 continue
             
@@ -2508,7 +2525,7 @@ class BacktestView(QWidget):
         
         runs_data = []
         for item in selected_items:
-            run_id = item.data(Qt.UserRole)
+            run_id = item.data(Qt.ItemDataRole.UserRole)
             run = self.run_repository.load_run(run_id)
             if run:
                 runs_data.append(run)
@@ -2522,26 +2539,26 @@ class BacktestView(QWidget):
         self.compare_runs_data = []  # 保存原始 run 數據，用於雙擊時獲取 run_id
         
         for item in selected_items:
-            run_id = item.data(Qt.UserRole)
+            run_id = item.data(Qt.ItemDataRole.UserRole)
             run = self.run_repository.load_run(run_id)
             if run:
                 self.compare_runs_data.append({
                     'run_id': run_id,
                     'run': run
                 })
-            compare_data.append({
-                '執行名稱': run.run_name,
-                '股票代號': run.stock_code,
-                '策略': run.strategy_id,
-                '總報酬率%': run.total_return * 100,
-                '年化報酬率%': run.annual_return * 100,
-                '夏普比率': run.sharpe_ratio,
-                '最大回撤%': run.max_drawdown * 100,
-                '勝率%': run.win_rate * 100,
-                '交易次數': run.total_trades,
-                '期望值%': run.expectancy * 100,
-                '獲利因子': run.profit_factor,
-            })
+                compare_data.append({
+                    '執行名稱': run.run_name,
+                    '股票代號': run.stock_code,
+                    '策略': run.strategy_id,
+                    '總報酬率%': run.total_return * 100,
+                    '年化報酬率%': run.annual_return * 100,
+                    '夏普比率': run.sharpe_ratio,
+                    '最大回撤%': run.max_drawdown * 100,
+                    '勝率%': run.win_rate * 100,
+                    '交易次數': run.total_trades,
+                    '期望值%': run.expectancy * 100,
+                    '獲利因子': run.profit_factor,
+                })
         
         compare_df = pd.DataFrame(compare_data)
         self.compare_model = PandasTableModel(compare_df)
@@ -2690,7 +2707,7 @@ class BacktestView(QWidget):
                 if isinstance(param_info, dict):
                     param_type = param_info.get('type', 'float')
                     default_value = param_info.get('default', 0)
-                    description = param_info.get('description', param_name)
+                    description = param_info.get('description', param_name) or param_name
                 else:
                     # 簡單值格式，推斷類型
                     default_value = param_info
@@ -3094,7 +3111,7 @@ class BacktestView(QWidget):
         strategy_spec = StrategySpec(
             strategy_id=selected_strategy_id,
             strategy_version="1.0",
-            name=strategy_info.get('name', selected_strategy_id),
+            name=strategy_info.get('name', selected_strategy_id) or selected_strategy_id,
             description=strategy_info.get('description', ''),
             regime=[],
             risk_level="medium",
@@ -3495,6 +3512,14 @@ class BacktestView(QWidget):
         max_participation: float
     ):
         """執行批次回測"""
+        if not self.batch_backtest_service:
+            from app_module.batch_backtest_service import BatchBacktestService
+            if self.backtest_service and self.run_repository:
+                self.batch_backtest_service = BatchBacktestService(self.backtest_service, self.run_repository)
+            else:
+                QMessageBox.critical(self, "錯誤", "批次回測服務未初始化")
+                return
+                
         total = len(stock_codes)
         
         # 定義進度回調函數（在主線程中更新 UI）
@@ -3599,6 +3624,8 @@ class BacktestView(QWidget):
     def _update_batch_leaderboard(self, batch_result):
         """更新排行榜表格"""
         if not hasattr(self, 'batch_leaderboard_table'):
+            return
+        if not self.batch_backtest_service:
             return
         
         # 獲取排序方式
@@ -3863,10 +3890,10 @@ class BacktestView(QWidget):
                     self,
                     "確認記錄強制平倉交易",
                     "此筆交易包含「強制平倉」（回測期末結算或風控平倉）。確定要記錄此交易到持倉中嗎？",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
                 )
-                if reply != QMessageBox.Yes:
+                if reply != QMessageBox.StandardButton.Yes:
                     return
                     
             main_window = self.window()
@@ -3902,7 +3929,7 @@ class BacktestView(QWidget):
                             dialog.strategy_combo.setCurrentIndex(idx)
                             break
                             
-                if dialog.exec() == QDialog.Accepted:
+                if dialog.exec() == QDialog.DialogCode.Accepted:
                     data = dialog.get_trade_data()
                     if stock_code and str(data["stock_code"]) != str(stock_code):
                         QMessageBox.warning(self, "錯誤", "交易股票代號已被修改，無法保留原回測來源追溯資訊")
