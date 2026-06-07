@@ -62,7 +62,7 @@ from ui_qt.views.backtest.helpers import (
     build_recommendation_portfolio_equity_series,
     build_recommendation_portfolio_drawdown,
 )
-from ui_qt.views.backtest.parameter_descriptions import PARAMETER_DESCRIPTIONS
+from ui_qt.views.backtest.parameter_descriptions import PARAMETER_DESCRIPTIONS, PARAMETER_DISPLAY_NAMES
 from ui_qt.views.backtest.result_panel import BacktestResultPanel
 from ui_qt.views.backtest.config_panel import BacktestConfigPanel
 
@@ -1411,6 +1411,7 @@ class BacktestView(QWidget):
     def _init_parameter_descriptions(self):
         """初始化參數說明資料結構（集中管理）"""
         self.parameter_descriptions = PARAMETER_DESCRIPTIONS
+        self.parameter_display_names = PARAMETER_DISPLAY_NAMES
     
     def _format_summary(self, report: BacktestReportDTO) -> str:
         """格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）"""
@@ -1698,6 +1699,11 @@ class BacktestView(QWidget):
                         default_value = 0
                 # 生成描述（使用參數名稱）
                 description = param_name.replace('_', ' ').title()
+            
+            # 優先使用對照表中的繁體中文名稱
+            display_names = getattr(self, 'parameter_display_names', {})
+            if param_name in display_names:
+                description = display_names[param_name]
             
             # 創建輸入控件
             if param_type == 'int':
@@ -2751,6 +2757,11 @@ class BacktestView(QWidget):
                             default_value = 0
                     # 生成描述（使用參數名稱）
                     description = param_name.replace('_', ' ').title()
+                
+                # 優先使用對照表中的繁體中文名稱
+                display_names = getattr(self, 'parameter_display_names', {})
+                if param_name in display_names:
+                    description = display_names[param_name]
                 
                 # 創建範圍設定行（無論是字典格式還是簡單值格式都需要）
                 range_row = QHBoxLayout()

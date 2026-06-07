@@ -39,6 +39,27 @@ PARAMETER_DESCRIPTIONS = {
             '系統角色：保護機制，避免過度交易和情緒化決策。'
         ]
     },
+    'buy_threshold': {
+        'tooltip_lines': [
+            '最低進場門檻。',
+            '當策略分數或指標達到此值以上時，才允許產生買入訊號。',
+            '系統角色：進場門檻設定。'
+        ]
+    },
+    'sell_threshold': {
+        'tooltip_lines': [
+            '最高出場門檻。',
+            '當策略分數或指標低於此值時，才允許產生賣出訊號。',
+            '系統角色：出場門檻設定。'
+        ]
+    },
+    'confirm_days': {
+        'tooltip_lines': [
+            '確認天數。',
+            '策略分數或指標必須連續 N 天達到閾值，才真正產生訊號。',
+            '系統角色：確認機制，減少假訊號和頻繁進出場。'
+        ]
+    },
     # 回測執行設定
     'execution_price': {
         'tooltip_lines': [
@@ -218,4 +239,58 @@ PARAMETER_DESCRIPTIONS = {
             '可設為 0 進行敏感度分析。'
         ]
     }
+}
+
+PARAMETER_DISPLAY_NAMES = {
+    # 策略參數
+    'buy_threshold': '買入閾值',
+    'sell_threshold': '賣出閾值',
+    'confirm_days': '買入確認天數',
+    'buy_score': '買入分數門檻',
+    'sell_score': '賣出分數門檻',
+    'buy_confirm_days': '買入確認天數',
+    'sell_confirm_days': '賣出確認天數',
+    'cooldown_days': '交易冷卻天數',
+    
+    # 指標/其他策略參數
+    'ma_period': 'MA週期',
+    'rsi_period': 'RSI週期',
+    'macd_fast': 'MACD快線週期',
+    'macd_slow': 'MACD慢線週期',
+    'macd_signal': 'MACD訊號線週期',
+    'kd_period': 'KD週期',
+    'bollinger_period': '布林通道週期',
+    'bollinger_dev': '布林通道標準差',
+    
+    # 資金與回測執行設定
+    'capital': '初始資金',
+    'fee_bps': '手續費 (bps)',
+    'slippage_bps': '滑價 (bps)',
+    'execution_price': '成交價格模式',
+    
+    # 停損停利
+    'stop_profit_mode': '停損停利模式',
+    'stop_loss_pct': '百分比停損 (%)',
+    'take_profit_pct': '百分比停利 (%)',
+    'stop_loss_atr': 'ATR停損倍數',
+    'take_profit_atr': 'ATR停利倍數',
+    
+    # 部位管理
+    'sizing_mode': '部位計算模式',
+    'fixed_amount': '固定交易金額',
+    'risk_pct': '風險百分比 (%)',
+    'max_positions': '最大持倉數量',
+    'position_sizing': '資金分配方式',
+    'allow_pyramid': '允許加碼 (金字塔)',
+    'allow_reentry': '允許重新進場',
+    'reentry_cooldown_days': '重新進場冷卻天數',
+    
+    # 市場限制
+    'enable_limit': '啟用漲跌停限制',
+    'enable_volume': '啟用成交量限制',
+    'max_participation': '最大參與率 (%)',
+    
+    # 最佳化相關
+    'optimization_objective': '最佳化目標',
+    'walkforward_mode': '驗證模式'
 }
