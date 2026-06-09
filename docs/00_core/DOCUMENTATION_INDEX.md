@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-06-06
+> **最後整理**：2026-06-09
 > **判讀規則**：Phase 狀態以 `DEVELOPMENT_ROADMAP.md` 的 Living Section 為準；本索引用於導航，不取代 roadmap。
 
 ---
@@ -12,6 +12,7 @@
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | 系統定位、Phase 狀態、Living Section、Next、Risks。最高權威。 |
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 本文件，文檔導航。 |
+| [NEXT_ACTION_PLAN.md](NEXT_ACTION_PLAN.md) | 下一輪 Roadmap Rebaseline、技術治理與 Agent 交接行動計畫。 |
 | [DOCUMENTATION_STRUCTURE.md](DOCUMENTATION_STRUCTURE.md) | `docs/` 資料夾歸屬、生命週期、刪除/歸檔規則。 |
 | [DOC_COVERAGE_MAP.md](DOC_COVERAGE_MAP.md) | 變更類型對應需要同步更新的文件。 |
 | [AI_CONTEXT_PACK.md](AI_CONTEXT_PACK.md) | 給外部 AI / Agent 的高密度專案上下文。 |
@@ -173,8 +174,8 @@
 ## 目前開發狀態
 
 - 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer、Recommendation Portfolio Backtest MVP、SQLite 資料庫儲存升級與全量遷移（含大盤與民國年 Bug 修復、280 萬筆技術指標全量高速重算與 SQL 化秒開優化）、**Phase 2A 數據讀取來源盤點與 Phase 2B SQLite DB-first 讀取改造**、**Phase 2C SQLite 視覺查詢 Table（SqliteInspectorWidget / SqliteInspectorService 整合）**。
-- 進行中 / 下一步：Research Lab 工作流重整、推薦組合回測穩健分析（Sortino、Sharpe、Monte Carlo）與 Phase 4.1 Portfolio MVP 的完整條件監控 / 策略版本追蹤視圖。
-- 待開始：Phase 5 效能與研究報告輸出。
+- 進行中 / 下一步：Roadmap Rebaseline、回測時間軸契約治理、金融核心數值治理，以及 Phase 4.1 Portfolio 的策略版本追蹤視圖、Price 對照與持倉層風險提示。
+- 待開始：Phase 5 中尚未完成的大表格分頁、批次回測並行化與 Excel / PDF 研究報告輸出。
 
 ---
 
@@ -194,6 +195,7 @@
 - 2026-06-06：完成策略回測驗證實驗室說明文檔（[BACKTEST_LAB_FEATURES.md](../02_features/BACKTEST_LAB_FEATURES.md)）之撮合限制、SOP 驗證、未來函數防禦與強制平倉 Portfolio 記錄機制同步更新，並優化 tab info 說明對話框文字。
 - 2026-06-06：啟動策略回測視圖（`backtest_view.py`）之漸進式重構，完成 Phase 1 拆分：抽離常數、說明 Tooltip 與純計算輔助函數至 `ui_qt/views/backtest/` 目錄下。
 - 2026-06-06：完成策略回測視圖（`backtest_view.py`）之漸進式重構 Phase 2 至 Phase 4：抽離右側結果面板 `BacktestResultPanel` 與左側配置面板 `BacktestConfigPanel`，採用 QWidget native 屬性安全排除的動態委派路由，並補全所有關鍵 Widget 的顯式 `@property` 宣告以取得最佳的 mypy 與 IDE autocomplete 支援，保持與現有單元測試及 QA 契約 100% 相容。
+- 2026-06-09：新增 [NEXT_ACTION_PLAN.md](NEXT_ACTION_PLAN.md)，整理 Tech Lead 審查後的下一輪 Roadmap Rebaseline、回測時間軸治理、金融核心數值治理與 Agent 交接順序。
 
 
 
