@@ -1,7 +1,7 @@
 # 專案導航文件
 
-**版本**：v1.2.0
-**最後更新**：2026-05-27
+**版本**：v1.3.0
+**最後更新**：2026-06-09
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -83,7 +83,7 @@
 python ui_qt/main.py
 ```
 
-**這是什麼**：PySide6 Qt 圖形界面，包含所有功能 Tab（數據更新、市場觀察、籌碼分析、推薦分析、策略回測、觀察清單、運行監控）
+**這是什麼**：PySide6 Qt 圖形界面，包含 7 個頂層 Tab：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、策略回測（即 Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory
 
 ---
 
@@ -187,7 +187,9 @@ python ui_app/main.py
 
 ---
 
-### 📌 Backtest（策略回測）
+### 📌 Backtest / Research Lab（策略回測 / 研究實驗室）
+
+> 「策略回測」是頂層 Tab 名稱，「Research Lab」是其產品語意，支援單股回測、批次股票回測、固定組合回測、推薦系統回放與策略研究。
 
 **從哪個 UI 進**：`ui_qt/views/backtest_view.py`（策略回測 Tab）
 
@@ -249,11 +251,13 @@ python ui_app/main.py
 
 ### 📌 Portfolio（持倉管理）
 
-**目前狀態**：Phase 4.1 MVP 已開始，domain / service / test skeleton 已建立；`ui_qt` Portfolio Tab 尚未完成。
+**目前狀態**：Phase 4.1 MVP 已建立：Portfolio Tab、domain/service/test、Recommendation/Backtest 來源追溯 metadata、`PortfolioConditionMonitor` 條件監控 MVP 已完成。策略版本追蹤、Price 對照、持倉層風險提示待深化。
+
+**從哪個 UI 進**：`ui_qt/views/portfolio_view.py`（持倉管理 Tab）
 
 **對應的 Service**：
 - `app_module/portfolio_service.py`：Portfolio use case 編排
-- `app_module/position_service.py`：持倉狀態服務
+- `app_module/portfolio_condition_monitor.py`：條件監控（來源快照 vs 目前快照 Regime/TotalScore 對照）
 - `app_module/journal_service.py`：交易/決策紀錄服務
 
 **真正動邏輯的地方**：
@@ -262,7 +266,8 @@ python ui_app/main.py
 **如果我要改持倉管理邏輯**：
 - 改 domain 規則 → `portfolio_module/`
 - 改服務編排 → `app_module/portfolio_service.py`
-- 改 UI → 尚待建立 `ui_qt` Portfolio view
+- 改條件監控 → `app_module/portfolio_condition_monitor.py`
+- 改 UI → `ui_qt/views/portfolio_view.py`
 
 ---
 

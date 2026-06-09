@@ -23,18 +23,15 @@
 
 ## UI / Tab 架構（Information Architecture）
 
-### Phase 1 ～ Phase 3（固定 4 個 Tab）
+目前系統具備 **7 個頂層 Tab**：
 
-1. **數據更新（Update）**
-2. **市場觀察（Market Watch）**
-3. **推薦分析（Recommendation）**
-4. **策略回測（Research Lab / Backtest）**
-
-> 原則：Phase 1～3 **不新增頂層 Tab**，所有功能擴張僅使用 sub-tab、區塊或 side panel。
-
-### Phase 4 起（新增第 5 個 Tab）
-
-5. **持倉 / Portfolio（Positions & Journal）**
+1. **數據更新 (Update)**：資料來源日常維護工作台，支援安全更新、SQLite 同步與檢視。
+2. **市場觀察 (Market Watch)**：包含大盤指數、強勢個股、弱勢個股、強勢產業、弱勢產業，以及 **主力流向 (Smart Money Flow)** 子 Tab（原籌碼分析終端）。
+3. **策略回測 (Backtest)**：產品語意為 **Research Lab**，提供單股回測、選股清單批次回測、固定組合回測、推薦系統回放、策略研究與優化/驗證。
+4. **推薦分析 (Recommendation)**：執行策略打分模型與 Regime 適配分析，產出推薦名單。
+5. **觀察清單 (Watchlist)**：跨 Tab 共用的候選池 (Candidate Pool)。
+6. **持倉管理 (Portfolio)**：提供交易庫存部位追蹤、條件監控 (PortfolioConditionMonitor) 與交易覆盤日記 (Journal) 管理。
+7. **運行監控 (Runtime Observatory)**：AI Runtime 子系統的 Observable Layer，監控狀態機狀態流轉。
 
 ---
 
@@ -416,9 +413,9 @@
 
 ---
 
-## Phase 4：持倉管理與交易日誌（Portfolio & Journal）⏸️ 依賴 Phase 3.3b
+## Phase 4：持倉管理與交易日誌（Portfolio & Journal）🚧 Phase 4.1 MVP 已建立
 
-**前置條件**：Phase 3.3b（Promote 功能、K 線標記買賣點）已完成。Phase 4.1 目前已建立 service/domain/test 骨架、`ui_qt` Portfolio Tab、Recommendation / Backtest → Portfolio 來源追溯與條件監控 MVP；後續主線是深化策略版本追蹤、Price 對照與持倉層風險提示。
+**前置條件**：Phase 3.3b（Promote 功能、K 線標記買賣點）已完成。Phase 4.1 已建立 service/domain/test 骨架、`ui_qt` Portfolio Tab、Recommendation / Backtest → Portfolio 來源追溯與 `PortfolioConditionMonitor` 條件監控 MVP；後續深化主線是策略版本追蹤視圖、Price 對照與持倉層風險提示。
 
 **目標**：你開始每天回答「這筆還對嗎」
 
@@ -441,9 +438,15 @@
 
 * [x] **交易紀錄**（保留 recommendation / backtest source metadata；策略版本追蹤視圖待深化）
 
-* [x] **條件監控（Monitor）**：MVP 已用來源快照與目前快照對照 Regime / TotalScore；Price 對照待深化
+* [x] **條件監控（Monitor）**：MVP 已用 `PortfolioConditionMonitor` 對照來源快照與目前快照的 Regime / TotalScore，UI 顯示來源脈絡、進場分數、目前分數與監控原因；Price 對照待深化
 
 * [x] **非強制提示**（提醒/警示，不做自動操作）
+
+#### Phase 4.1 仍待深化
+
+* [ ] **策略版本追蹤視圖**：讓持倉可回溯到策略版本歷史
+* [ ] **Price 對照**：進場價 vs 目前價 vs 停損停利區間視覺化
+* [ ] **持倉層風險提示**：結合 Regime 變化、Score 退化與 Price 偏離的複合提醒
 
 #### Phase 4.1 驗收標準
 
@@ -466,7 +469,7 @@
 
 ---
 
-## Phase 5：效能與研究輸出（Scale & Reporting）✅ 大規模仍流暢、能產出成果
+## Phase 5：效能與研究輸出（Scale & Reporting）🚧 部分已完成
 
 ---
 
@@ -551,67 +554,52 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 ### 現況（Baseline）
 
-* ✅ **Phase 1、Phase 2、Phase 2.5、Phase 3**：已完成且驗證通過（核心研究閉環與 CSV 手動匯出已完成）
-* ✅ **系統可運行、UI 穩定、回測/最佳化效能已大幅改善**
-* ✅ **UI Qt Backtest 圖表渲染優化**：已完成 QtWebEngine + HTML5 Canvas fast renderer，權益曲線、回撤曲線、報酬分佈、持有天數圖表均保留 Matplotlib fallback。
-* ✅ **Recommendation Portfolio Backtest MVP**：已完成（2026-05-27）
-  * ✅ 推薦 Tab 可將 Profile/Config 送到回測 Tab，由回測頁在歷史日期重播推薦邏輯，而不是只回測當下名單
-  * ✅ 支援每次推薦檔數、每期候選上限、持有天數、每週/單次重播、等權/分數加權資金配置
-  * ✅ 結果頁顯示整組組合總報酬、最大回撤、交易檔數、平均持有天數、資金使用，並列出期間持股、個股貢獻與交易紀錄
-  * ✅ 修復數字型 `YYYYMMDD` 日期被 `pd.to_datetime` 誤判成 1970 epoch 的問題，正式資料 6 個月 / Top10 / 候選 50 / 每週重播 smoke 通過
-  * ⏳ 下一步：加入 Sortino、Sharpe、Monte Carlo 與更完整的穩健性/資金曲線呈現
-* 🚧 **Research Lab 工作流重整**：已啟動（2026-06-04）
-  * ✅ Backtest / Research Lab 第一階段整理為多模式實驗室：單股回測、批次股票回測、固定組合回測、推薦系統回放與策略研究。
-  * ✅ Watchlist / 觀察清單在研究流程中明確定位為候選池，承接推薦、強弱勢、主力流向與手動挑選來源。
-  * ✅ Recommendation / Backtest 記錄到 Portfolio 時會保存 `source_type`、`source_id`、`source_snapshot_hash` 與 `source_summary`，讓 append-only trade 可追溯到推薦結果或回測 run。
-  * ✅ 策略回測實驗室說明文檔（[BACKTEST_LAB_FEATURES.md](file:///c:/Projects/PythonProjects/technical_analysis/docs/02_features/BACKTEST_LAB_FEATURES.md)）與 UI Info 說明對話框同步更新（補充 1000 股撮合、SOP 驗證、未來函數防禦與強制平倉 Portfolio 記錄追溯標記，2026-06-06）。
-* ✅ **Phase 3.1、3.2、3.3a 核心功能**：已完成（推薦可用化、Profiles 正式化、研究閉環核心功能）
-* ✅ **AI Runtime Subsystem MVP**：已完成（Phase A Architecture & Phase B UI Integration）
-  * ✅ 實作 Runtime Observatory (State Machine Observatory)
-  * ✅ 建立純 Python EventBus 與 DTO Contracts
-  * ✅ 嚴格的 Governance boundaries 與 FSM 生命週期 (IDLE -> DISPATCHED -> THINKING -> VALIDATING -> APPROVED/ERROR/HALTED)
-* ✅ **券商分點資料更新功能**：已完成（2025-12-27，修復 2025-12-29）
-  * ✅ 所有 6 個分點成功下載測試通過（每個分點 100 筆記錄，總記錄數 600 筆）
-  * ✅ URL 參數和日期範圍修復完成（`c=B`，日期範圍：`e=前一天&f=當天`）
-  * ✅ Registry 前導零問題修復完成
-  * ✅ Selenium 穩定性增強完成
-  * 📚 測試文檔：`docs/BROKER_BRANCH_TESTING_AND_TROUBLESHOOTING.md` ⭐ **測試必讀**
-* ✅ **籌碼分析終端 (Smart Money Terminal) 優化與視覺重構**：已完成 (2026-06-03)
-  * ✅ 重構為左右分欄布局（左側主表 65%，右側詳情 35%），並新增選中股雷達摘要卡片與 `explainable_reasons` 原因解析。
-  * ✅ 頂部玻璃擬態卡片（市場趨勢、熱度、多空個股數、異常警示）完全中文化並放大字型。
-  * ✅ 為 Sparkline 實作 `QLinearGradient` 漸層填色，固定顯示最近 5 筆交易明細，並實作跨 Cell 的 ToolTip 懸浮提示。
-  * ✅ 實作 TableModel 排序功能，修復多空家數統計偏差（偏空股為0）與熱度恆定 100% 的 Bug。
-  * ✅ 實作純 Domain 的 `flow_signal_engine.py` 與前端的完全解耦。
-* ✅ **Phase 3.3b Epic 2 MVP-2：過擬合風險提示**：已完成（2026-01-02）
-  * ✅ 單元測試：20/20 通過（100% 通過率）
-  * ✅ 驗證腳本：11/11 通過（100% 通過率）
-  * ✅ 驗證報告：`output/qa/epic2_mvp2_validation/VALIDATION_REPORT.md`
-* ✅ **Phase 3.3b：研究閉環完整化**：已完成（2026-01-02）
-  * ✅ Epic 1 Promote 功能：已完成
-  * ✅ Epic 2 回測穩健性驗證：已完成（MVP-1 + MVP-2）
-  * ✅ Epic 3 視覺驗證：已完成
-  * ✅ **完整功能驗證與修復**：已完成（2026-01-02）
-    - ✅ 驗證通過率：100% (10/10)
-    - ✅ 修復失效功能：WatchlistService、BacktestReportDTO 引用
-    - ✅ 驗證報告：`output/qa/phase3_3b_validation/VALIDATION_REPORT.md`
-* 🚧 **Phase 4.1 Portfolio MVP**：已啟動骨架與最小 UI / handoff
-  * ✅ `portfolio_module/` domain logic：append-only trades → positions projection
-  * ✅ `PortfolioService` / `JournalService`：交易紀錄、持倉投影、Journal entry
-  * ✅ `tests/test_portfolio_mvp.py`：Portfolio MVP 核心測試通過
-  * ✅ `ui_qt/views/portfolio_view.py`：已建立最小 Portfolio Tab / trade entry path
-  * ✅ Recommendation / Backtest → Portfolio 建立持倉：已整合來源 metadata；後續仍需完整條件監控與策略版本追蹤視圖
-  * ✅ `PortfolioConditionMonitor`：已加入 append-only position 主路徑的條件監控 MVP，使用來源快照與目前快照對照 Regime / TotalScore，UI 顯示來源脈絡、進場分數、目前分數與監控原因（2026-06-09）
-* ✅ **數據更新工作台重整與視覺/架構優化**：已完成（2026-06-03）
-  * ✅ 將全部資料主分頁升級為「數據大看板 (Dashboard)」，以 StatusCard (圓角、軟陰影、🟢/🟡/🔴/⚪ 四色狀態指示燈) 展示數據概覽，與原 QTextEdit 接口相容度 100%。
-  * ✅ 實現手動操作與進階配置（日期範圍、下載、增量合併、技術指標計算配置）「解耦歸位」至個別資料源維護分頁，並在每日股價分頁以 Danger Zone 封裝強制合併按鈕。
-  * ✅ 將 QProgressBar、進度 Label、Terminal 控制台日誌（Consolas 等寬 11px 字型、深色背景、清除按鈕）移至最外層佈局的最下方，實現分頁切換時日誌與進度的全域共享。
-  * ✅ 實作日期範圍聯動同步（blockSignals 避免訊號遞迴）與 `_dispatch_update()` 自適應代理更新 RadioButtons，對原 Service 業務邏輯相容度 100%。
-  * ✅ 新增與維護 `tests/test_ui_qt_update_view_workbench.py` (9/9 passed) 與 `scripts/qa_validate_update_tab.py` (21 passed, 0 failed)。
-  * ✅ 更新 `docs/02_features/UI_FEATURES_DOCUMENTATION.md`、`docs/02_features/USER_GUIDE.md`、`docs/07_guides/QUICK_START.md`
-* ✅ **Codex / Agent 指引對齊**：已完成（2026-05-20）
-  * ✅ 新增 repo 根目錄 `AGENTS.md`，作為 Codex 自動讀取入口
-  * ✅ `docs/agents/` 已更新目前 `ui_qt`、PySide6、`TWStockConfig` / `DATA_ROOT` 與 `DOC_COVERAGE_MAP` 路徑事實
-* ✅ **SQLite 資料庫儲存升級與全量遷移 (research/sqlite-storage) 圓滿完成**：已成功在分支上完成 CSV 到 SQLite 升級與無縫向後相容層重構。解決了民國年解析錯誤（產業指數結束日期修正為 `2026-05-29`）和大盤指數 KeyError，成功導入 3,008 筆加權指數，並完成 1,157 檔個股共 2,802,159 筆技術指標的全量高速重新計算與同步寫入。台積電 (2330) 價格載入時間從舊大 CSV 的 8.37 秒縮減至 SQLite 的 0.025 秒 (25 毫秒)，效能飆升 **322.9 倍**！UI 數據狀態加載更實現了 SQL 化優化的毫秒級秒開。
+專案已超出早期線性 Phase 規劃，實際產品主線已形成三個閉環：
+
+**閉環 1：資料與市場狀態閉環** ✅ 基礎已建立
+
+Update → SQLite 狀態 → Market Watch / Smart Money（市場觀察子 Tab）→ 候選池。
+
+* Phase 1（市場觀察儀）✅、Phase 2（策略資料庫）✅、Phase 2.5（參數標準化）核心 ✅
+* Phase 2A/2B/2C（SQLite DB-first 讀取改造與視覺化 Table 檢視）✅
+* Phase 3（CSV 手動匯出與更新流程優化）✅
+* 數據更新工作台（Dashboard + 維運工作台布局 + 安全更新所有數據）✅
+* SQLite 儲存升級與全量遷移（322 倍回測載入加速 + SQL 化秒開）✅
+* Smart Money Terminal MVP（左右分欄 + 玻璃擬態卡片 + Sparklines + 排序修復）✅
+* 券商分點資料更新與解析修復 ✅
+
+**閉環 2：研究驗證閉環** ✅ 基礎已建立
+
+Recommendation Profile → Research Lab（策略回測頁的產品語意）/ Backtest / Replay / Walk-forward → Promote。
+
+* Phase 3.1（推薦可用化）✅ / Phase 3.2（Profiles 正式化）✅ / Phase 3.3a（研究閉環核心）✅ / Phase 3.3b（研究閉環完整化 + Promote + 過擬合風險 + K 線視覺驗證）✅
+* Research Lab 工作流重整：Backtest 頁已整理為多模式實驗室（單股、批次、固定組合、推薦回放）✅
+* Recommendation Portfolio Backtest MVP（歷史日期重播推薦 + Sharpe / Sortino / Monte Carlo + 停損停利 + 診斷 + Research Run 保存/Promote）✅
+* UI Qt Backtest chart fast renderer（QtWebEngine + HTML5 Canvas，Matplotlib fallback）✅
+* AI Runtime Subsystem MVP（Governance-aware 狀態機監控站）✅
+* Codex / Antigravity / Agent 指引對齊 ✅
+
+**閉環 3：持倉檢查閉環** 🚧 MVP 已建立，深化進行中
+
+Recommendation / Backtest → Portfolio → Condition Monitor → Journal → 回到研究。
+
+* Phase 4.1 Portfolio MVP 🚧：
+  * ✅ `portfolio_module/` domain logic（append-only trades → positions projection）
+  * ✅ `PortfolioService` / `JournalService`（交易紀錄、持倉投影、Journal entry）
+  * ✅ `ui_qt/views/portfolio_view.py`（Portfolio Tab + trade entry path）
+  * ✅ Recommendation / Backtest → Portfolio 來源追溯 metadata
+  * ✅ `PortfolioConditionMonitor`（來源快照 vs 目前快照 Regime/TotalScore 對照 MVP，2026-06-09）
+  * ⏳ 策略版本追蹤視圖、Price 對照、持倉層風險提示仍待深化
+
+**效能與研究輸出（Phase 5）** 🚧 部分已完成
+
+* ✅ 圖表渲染優化（QtWebEngine + HTML5 Canvas fast renderer，Matplotlib fallback）
+* ⏳ 大表格分頁、批次回測並行化、Excel / PDF 研究報告輸出仍在後續
+
+**Backlog**
+
+* Phase 4.2 券商下鑽到持倉：等 Phase 4.1 深化完成後再評估
+* Phase 2.5 優先級 3 未完成項（指標參數改進、buy_score/sell_score 分位數）：歸類至研究驗證閉環 / Strategy & Scoring Governance，在回測時間軸契約與金融核心數值治理完成後處理
 
 ---
 
@@ -840,7 +828,28 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * `scripts/check_branch_files.py`：檢查下載的檔案
     * `scripts/verify_branch_data.py`：驗證資料格式
 
-### 下一步 Next（Phase 4.1 Portfolio 深化）
+### 下一步 Next（技術治理優先 → Portfolio 深化）
+
+1. ✅ **Roadmap Rebaseline**（2026-06-09，本次執行）
+   * 將 Roadmap Living Section 從舊線性 Phase 敘事改為三個產品閉環 + Backlog
+   * 同步 Snapshot / Index / Navigation / Inventory / AI Context Pack
+
+2. ⏳ **回測時間軸契約治理**
+   * 定義「訊號日、資料可得日、成交日、成交價、停損停利、equity curve 記錄日」統一契約
+   * 優先檢查：`recommendation_portfolio_backtest_service.py`、`recommendation_replay_service.py`、`broker_simulator.py`、`performance_metrics.py`
+   * 先加 no-look-ahead 測試，不急著大改實作
+
+3. ⏳ **金融核心數值治理**
+   * 停止在金融核心新增裸 `float`，規劃既有裸 `float` 遷移
+   * 優先範圍：`broker_simulator.py`、`performance_metrics.py`、`recommendation_portfolio_backtest_service.py`、`portfolio_module/core.py`、`portfolio_service.py`
+   * 先建立 helper / policy / tests，再逐步遷移高風險核心
+
+4. ⏳ **Phase 4.1 Portfolio 深化**
+   * 策略版本追蹤視圖
+   * Price 對照（進場價 vs 目前價 vs 停損停利區間）
+   * 持倉層風險提示
+
+**歷史 Next 記錄**（以下為已完成項，保留作為追溯）
 
 * **Research Lab 工作流重整啟動**（2026-06-04）
   * ✅ Backtest / Research Lab 第一階段開始整理為多模式實驗室：策略研究、單股回測、批次股票回測、固定組合回測與推薦系統回放。
@@ -849,7 +858,6 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 * **文件與進度整理**（2026-05-20）
   * ✅ 數據更新工作台與 Agent 指引已同步至主要入口文件
-  * ⏳ 下一步仍以 Phase 4.1 Portfolio 的策略版本追蹤、Price 對照與持倉層風險提示為主要產品功能主線
 
 * ✅ **Phase 3.3b：研究閉環完整化** ✅ **已完成**（2026-01-02）
   * ✅ Epic 1 Promote 功能：已完成
@@ -864,103 +872,30 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * ✅ 修復總結：`output/qa/phase3_3b_validation/修復總結報告.md`
 
 * **券商分點資料品質問題排查** ✅ **已完成**（2026-01-02）
-  * ✅ **問題**：部分券商或股票代號無法正確解析
-    * 觀察到的問題：
-      * ETF 名稱無法解析（例如：`元大台灣50`、`元大高股息`、`富邦科技`）
-      * 特殊格式代號無法解析（例如：`6643M31`、`7722LINEPAY`）
-    * 影響：`counterparty_broker_code` 被標記為 `UNKNOWN`，可能影響後續分析
-    * 測試日期：2025-12-29（10 天測試）
-    * 測試結果：成功下載 7000 筆記錄，但有多筆 `UNKNOWN` 對手券商
-  * ✅ **解決方案**：
-    * [x] 檢查 MoneyDJ 頁面原始資料格式
-    * [x] 分析無法解析的名稱模式（ETF、特殊格式）
-    * [x] 改進 `_parse_counterparty_broker_name` 解析邏輯
-      * ✅ 支援標準券商格式（`1234元大證券`）
-      * ✅ 支援 ETF 名稱（`元大台灣50` → `code='ETF'`）
-      * ✅ 支援特殊格式（`6643M31` → `code='6643'`）
-      * ✅ 支援純中文股票名稱（`台積電` → `code='STOCK'`）
-      * ✅ 支援純數字股票代號（`2330` → `code='2330'`）
-    * [x] 驗證修復後資料完整性（18/18 測試通過，100% 通過率）
-  * 📚 **相關文檔**：
-    * 改進說明：`docs/BROKER_BRANCH_PARSING_IMPROVEMENT.md` ⭐ **新增**
-    * 測試與故障排除指南：`docs/BROKER_BRANCH_TESTING_AND_TROUBLESHOOTING.md`
-    * 實作總結：`docs/BROKER_BRANCH_IMPLEMENTATION_SUMMARY.md`
-  * 🧪 **測試腳本**：
-    * `scripts/test_counterparty_parsing.py`：解析邏輯測試（18/18 通過）
-    * `scripts/analyze_unknown_counterparties.py`：分析現有資料中的 UNKNOWN 模式
+  * ✅ 改進 `_parse_counterparty_broker_name` 解析邏輯，驗證修復後資料完整性（18/18 測試通過）
 
 * ✅ **Phase 3.3b Epic 2 MVP-2：過擬合風險提示** ✅ 已完成（2026-01-02）
-  * ✅ **階段 3：測試與驗證**：已完成
-    * ✅ 單元測試：20/20 通過（100% 通過率）
-      * 測試文件：`tests/test_backtest/test_overfitting_risk.py`
-      * 測試範圍：`calculate_walkforward_degradation()`、`calculate_consistency()`、`calculate_overfitting_risk()`、風險等級判斷
-    * ✅ 驗證腳本：11/11 通過（100% 通過率）
-      * 驗證腳本：`scripts/qa_validate_epic2_mvp2.py`
-      * 驗證範圍：核心計算方法、DTO 整合、服務整合、向後兼容性
-    * ✅ 驗證報告：`output/qa/epic2_mvp2_validation/VALIDATION_REPORT.md`
-  * ✅ **修復記錄**：
-    * ✅ 修復驗證腳本中的 `StrategyRegistry.get_strategy()` 方法調用錯誤
-    * ✅ 改進策略獲取邏輯，支援動態查找可用策略
-  * 📚 **相關文檔**：
-    * 架構設計：`docs/EPIC2_MVP2_ARCHITECTURE_DESIGN.md`
-    * 實作檢查清單：`docs/EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md`
-    * 驗證報告：`output/qa/epic2_mvp2_validation/VALIDATION_REPORT.md`
 
-* **Phase 3.1：推薦可用化** ✅ 已完成
-  * ✅ 推薦分析 Tab UI 可理解性優化
-  * ✅ 新手 / 進階模式切換
-  * ✅ Why Not（反向解釋）v1
-  * ✅ Recommendation 結果可保存
-  * ✅ Profiles v1（暴衝/穩健/長期）
-
-* **Phase 3.2：Profiles 正式化** ✅ 已完成
-  * ✅ Profiles v1（暴衝 / 穩健 / 長期）
-  * ✅ Regime → Profile 建議
-  * ✅ Profile meta 可追溯
-
-* **Phase 3.3a：研究閉環核心功能**（✅ 已完成）
-* **Phase 3.3b：研究閉環完整化** ✅ 已完成（2026-01-02）
-  * ✅ Explain 面板 v1（分數拆解、風險點提示）
-  * ✅ 一鍵送回測（Profile → Backtest）
-  * ✅ **Epic 2 MVP-2：過擬合風險提示**（已完成，2026-01-02）
-    * ✅ 單元測試：20/20 通過
-    * ✅ 驗證腳本：11/11 通過
-  * ✅ **Epic 3 MVP-1：K 線標記買賣點**（已完成）
-    * ✅ 基本 K 線圖顯示（使用 mplfinance）
-    * ✅ 買賣點標記（綠色向上箭頭、紅色向下箭頭）
-  * ✅ **Epic 1 MVP-1：保存為 Preset 功能**（已完成）
-  * ✅ **Epic 1：Promote 機制完整版**（已完成，2026-01-02）
-    * ✅ PromotionService：管理回測結果升級流程
-    * ✅ StrategyVersionService：管理策略版本生命週期
-    * ✅ BacktestRepository：新增 promoted_version_id 欄位
-    * ✅ PresetService：支援從回測結果保存
-    * ✅ RecommendationService：支援從 Preset 或 Version 載入
-  * ✅ **完整功能驗證與修復**（已完成，2026-01-02）
-    * ✅ 驗證通過率：100% (10/10)
-    * ✅ 修復失效功能：WatchlistService.get_watchlist()、BacktestReportDTO 引用錯誤
-    * ✅ 功能確認：過擬合風險計算、推薦理由生成均正常運作
-    * ✅ 驗證報告：`output/qa/phase3_3b_validation/VALIDATION_REPORT.md`
-    * ✅ 修復總結：`output/qa/phase3_3b_validation/修復總結報告.md`
-    * ✅ BacktestView：新增 Promote 按鈕和 UI
+* **Phase 3.1 / 3.2 / 3.3a / 3.3b**：全部 ✅ 已完成（見上方歷史 Phase 段落）
 
 * **Phase 4：持倉管理與交易日誌**（🚧 已啟動，最小 UI / handoff / 條件監控 MVP 已建立）
   * 🚧 Phase 4.1：最小可用持倉（Portfolio MVP）
     * ✅ service/domain/test 骨架已建立
-    * ✅ 新增 `PortfolioView`
-    * ✅ 新增 Portfolio 頂層 Tab
+    * ✅ 新增 `PortfolioView` 與 Portfolio 頂層 Tab
     * ✅ 串接 Recommendation / Backtest 來源追溯 metadata
-    * 🚧 條件監控（Regime / Score 對照）MVP 已顯示；Price 對照與策略版本追蹤視圖仍待深化
+    * ✅ `PortfolioConditionMonitor` 條件監控 MVP（2026-06-09）
+    * ⏳ 策略版本追蹤視圖、Price 對照、持倉層風險提示仍待深化
   * ✅ Phase 4.2 前置：券商分點資料與 Smart Money Terminal MVP 已完成
-  * ⏳ Phase 4.2 完整：持倉層的籌碼風險提示與下鑽整合尚未完成
+  * ⏳ Phase 4.2 完整：持倉層的籌碼風險提示與下鑽整合 — Backlog，等 Phase 4.1 深化完成後評估
 
 ### Blockers / Risks
 
+* ⚠️ **回測時間軸未定義**：推薦組合回測的訊號日、成交日、equity curve 記錄日尚無統一契約，擴大推薦組合回測前必須先定義。
+* ⚠️ **金融核心裸 float**：`broker_simulator.py`、`performance_metrics.py`、`portfolio_module/core.py` 等核心計算仍使用裸 `float`，存在精度風險。
+* ⚠️ **文檔與實際狀態不一致**：Roadmap / Snapshot / AI Context Pack 多處描述與目前真實完成狀態不同步，可能導致 Agent 誤判方向（本次 Rebaseline 正在修正）。
 * ~~**參數設計問題**~~：✅ 已解決（Phase 2.5 完成）
 * ~~**過擬合風險**~~：✅ 已解決（ATR-based 標準化完成）
 * ~~**系統穩定性**~~：✅ 已解決（所有功能驗證通過，UI 穩定性問題已修復）
-  * Phase 2.5 驗證：18/18 功能通過
-  * 推薦分析 Tab 驗證：所有測試通過
-  * 數據更新 Tab 驗證：17/17 測試通過
 
 ---
 

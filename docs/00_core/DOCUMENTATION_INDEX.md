@@ -173,9 +173,9 @@
 
 ## 目前開發狀態
 
-- 已完成：Phase 1、Phase 2、Phase 2.5 核心、Phase 3.1、Phase 3.2、Phase 3.3a、Phase 3.3b、Runtime Observatory MVP、Smart Money Terminal MVP、UI Qt Backtest chart fast renderer、Recommendation Portfolio Backtest MVP、SQLite 資料庫儲存升級與全量遷移（含大盤與民國年 Bug 修復、280 萬筆技術指標全量高速重算與 SQL 化秒開優化）、**Phase 2A 數據讀取來源盤點與 Phase 2B SQLite DB-first 讀取改造**、**Phase 2C SQLite 視覺查詢 Table（SqliteInspectorWidget / SqliteInspectorService 整合）**。
-- 進行中 / 下一步：Roadmap Rebaseline、回測時間軸契約治理、金融核心數值治理，以及 Phase 4.1 Portfolio 的策略版本追蹤視圖、Price 對照與持倉層風險提示。
-- 待開始：Phase 5 中尚未完成的大表格分頁、批次回測並行化與 Excel / PDF 研究報告輸出。
+- **已完成（三個產品閉環之基礎建置與部分深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/一鍵安全數據更新工作台/技術指標 280 萬筆全量重算）、研究驗證閉環（Research Lab 多模式實驗室/單股回測/最佳化/Walk-forward/推薦組合回測 MVP 與穩健性指標/Fast Renderer 圖表/Promote 晉升與 SOP 驗證）、持倉檢查閉環 MVP（domain/service/test/Portfolio Tab/條件監控/手動與回測來源追溯及強制平倉標記/覆盤日記）。
+- **進行中 / 當前治理**：Roadmap Rebaseline、回測時間軸契約治理、金融核心數值治理（Decimal 重構隔離），以及持倉檢查閉環的深化（策略版本追蹤視圖、Price 對照、持倉層風險提示）。
+- **待開始 (Backlog)**：Phase 5 中大表格分頁、批次回測並行化、Excel/PDF 報告輸出，以及 Phase 4.2 券商下鑽至持倉。
 
 ---
 
@@ -196,6 +196,8 @@
 - 2026-06-06：啟動策略回測視圖（`backtest_view.py`）之漸進式重構，完成 Phase 1 拆分：抽離常數、說明 Tooltip 與純計算輔助函數至 `ui_qt/views/backtest/` 目錄下。
 - 2026-06-06：完成策略回測視圖（`backtest_view.py`）之漸進式重構 Phase 2 至 Phase 4：抽離右側結果面板 `BacktestResultPanel` 與左側配置面板 `BacktestConfigPanel`，採用 QWidget native 屬性安全排除的動態委派路由，並補全所有關鍵 Widget 的顯式 `@property` 宣告以取得最佳的 mypy 與 IDE autocomplete 支援，保持與現有單元測試及 QA 契約 100% 相容。
 - 2026-06-09：新增 [NEXT_ACTION_PLAN.md](NEXT_ACTION_PLAN.md)，整理 Tech Lead 審查後的下一輪 Roadmap Rebaseline、回測時間軸治理、金融核心數值治理與 Agent 交接順序。
+- 2026-06-09：執行 Roadmap Rebaseline，將 Living Section 改為三個產品閉環敘事，同步更新 Snapshot / AI Context Pack / Navigation / Inventory。
+- 2026-06-09：更新 system_architecture.md、UI_FEATURES_DOCUMENTATION.md、BACKTEST_LAB_FEATURES.md 與 BACKTEST_LAB_CHECKLIST.md，統一產品閉環、Tab 結構、Sortino/Sharpe/Monte Carlo 指標以及參數最佳化進度與雙擊套用功能的描述，消除歷史 Phase 矛盾。
 
 
 

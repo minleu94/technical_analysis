@@ -1,6 +1,6 @@
 # 專案盤點報告
 
-> **最後整理**：2026-05-20
+> **最後整理**：2026-06-09
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 
 ---
@@ -55,9 +55,11 @@ python ui_qt/main.py
 
 目前 `ui_qt` 近期狀態：
 
+- 7 個頂層 Tab：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、策略回測（Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。
 - `ui_qt/views/update_view.py` 已重整為數據更新工作台，包含左側資料來源導覽與「安全更新所有數據」入口。
 - `ui_qt/views/runtime_view.py` 與 `runtime/` 已完成 Runtime Observatory MVP。
-- Portfolio 使用者可見 Tab 尚未完成，仍屬 Phase 4.1 下一步。
+- `ui_qt/views/portfolio_view.py`：Portfolio Tab 已建立，含 `PortfolioConditionMonitor` 條件監控 MVP。策略版本追蹤、Price 對照、持倉層風險提示待深化。
+- 策略回測頁已整理為 Research Lab 多模式實驗室語意。
 
 回測圖表渲染：
 
@@ -97,9 +99,10 @@ python ui_qt/main.py
 
 ## 5. 目前開發主線
 
-- Phase 3.3b 已完成。
-- Phase 4.1 Portfolio MVP 已開始。
-- Portfolio domain / service / test skeleton 已存在。
-- 待完成：`ui_qt` Portfolio Tab、Recommendation/Backtest → Portfolio 來源追蹤、持倉條件監控。
+專案已形成三個產品閉環：資料與市場狀態 ✅、研究驗證 ✅、持倉檢查 🚧。
+
+- Phase 1-3.3b 全部完成。Phase 4.1 Portfolio MVP 已建立（Portfolio Tab + 來源追溯 + 條件監控 MVP）。
+- 當前優先：Roadmap Rebaseline → 回測時間軸契約治理 → 金融核心數值治理。
+- 待深化：策略版本追蹤視圖、Price 對照、持倉層風險提示。
 
 詳細狀態以 `docs/00_core/DEVELOPMENT_ROADMAP.md` 的 Living Section 為準。

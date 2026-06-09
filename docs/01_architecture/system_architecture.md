@@ -6,38 +6,23 @@
 
 本系統是一個完整的台股技術分析平台，提供數據收集、處理、分析和回測功能。系統採用模組化設計，確保各個組件之間的獨立性和可維護性。
 
-### 當前狀態：Phase 3.3b 完成 ✅ → Phase 4.1 Portfolio UI
+### 當前狀態：Rebaseline 完成，進入技術治理與持倉深化階段
 
-**Phase 1：市場觀察儀 ✅ 已完成**
-- 強勢股/產業識別 + 推薦理由
-- 市場 Regime 判斷（Trend/Reversion/Breakout）
-- 統一打分模型（0-100分制）
-- Regime 自動策略切換
-- 產業映射系統
+專案已超出早期線性 Phase 規劃，實際產品主線已形成三個閉環：
 
-**Phase 2：策略資料庫 ✅ 已完成**
-- 策略配置界面（已完成）
-- 預設策略庫（已完成）
-- 策略說明文檔（已完成）
-- 單一策略回測（已完成）
-- 批次回測、參數最佳化、Walk-forward（已完成）
-
-**Phase 2.5：參數設計優化 ✅ 已完成並驗證通過**
-- 強勢/弱勢分數標準化（z-score、log 壓縮）
-- Pattern ATR-based 參數（threshold_atr_mult、prominence_atr_mult）
-- Scoring Contract 統一（0-100 分制、Regime 權重切換）
-- 回測參數改進（execution_price、ATR 停損停利、部位管理）
-- **功能驗證**：18/18 功能通過（100% 通過率）
-
-**Phase 3：AI Runtime / Smart Money / Research Layer ✅ 已完成**
-- Runtime Store / Event / Snapshot / Controller 架構已建立
-- Smart Money Terminal MVP 已完成
-- Recommendation、Backtest、Strategy Research 的 UI Qt 服務層已落地
-- Walk-forward warmup 與資料保護策略已補齊
-
-**Phase 4.1：Portfolio MVP 🚧 已開始**
-- `portfolio_module/` domain layer、`PortfolioService`、`JournalService` 與 MVP 測試已建立
-- `ui_qt` Portfolio Tab、持倉追蹤畫面與 Recommendation/Backtest → Portfolio 串接尚未完成
+- **閉環 1：資料與市場狀態閉環** ✅ 基礎已建立
+  - Update → SQLite 狀態 → Market Watch / Smart Money（市場觀察子 Tab）→ 候選池
+  - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 核心 ✅ / Phase 2A/2B/2C SQLite DB-first ✅ / Phase 3 CSV 手動匯出 ✅
+  - 數據更新工作台 ✅ / SQLite 儲存升級 ✅ / Smart Money Terminal MVP ✅
+- **閉環 2：研究驗證閉環** ✅ 基礎已建立
+  - Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Promote
+  - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3a ✅ / Phase 3.3b ✅
+  - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest MVP ✅ / Backtest chart fast renderer ✅
+  - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅
+- **閉環 3：持倉檢查閉環** 🚧 MVP 已建立，深化進行中
+  - Recommendation / Backtest → Portfolio → Condition Monitor → Journal → 回到研究
+  - Phase 4.1 Portfolio MVP 🚧：domain/service/test、Portfolio Tab、來源追溯 metadata、ConditionMonitor MVP ✅
+  - 策略版本追蹤視圖、Price 對照、持倉層風險提示仍待深化
 
 **詳細演進地圖**：請參考 [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md)
 
@@ -811,25 +796,23 @@ set TWSTOCK_DATA_DIR=your/custom/path
   * 乾運行模式
   * 端到端測試隔離驗證
 
-### 2. 開發中功能
-- 數據處理
-  * 技術指標計算
-  * 數據整合和優化
-  * 數據質量檢查
-- 分析功能
-  * 移動平均線分析
-  * RSI 指標計算
-  * 布林通道分析
-  * 市場趨勢分析
+### 2. 進行中與技術治理功能
+- **回測時間軸契約與 no-look-ahead 測試**
+  - 規範訊號日、成交日與 equity curve 記錄日的基準時間軸
+  - 增加 Look-ahead bias 自查與防禦性測試
+- **金融核心數值治理**
+  - 清理與隔離核心模組中的裸 `float` 計算
+  - 統一以 `Decimal` 或最小基底單位進行計費與淨值模擬
+- **持倉檢查閉環深化**
+  - 策略版本追蹤與進場分數對照
+  - 持倉層風險提示（如單股部位過高、Regime 偏離、總分數下滑等）
 
-### 3. 計劃中功能
-- 回測系統
-  * 策略回測
-  * 績效評估
-  * 風險分析
-- 推薦系統
-  * 基於技術指標的交易信號
-  * 客製化推薦策略
+### 3. 計劃中與 Backlog 功能
+- **效能優化與報告輸出 (Phase 5)**
+  - 大表格分頁、批次並行回測優化
+  - Excel / PDF 格式的研究報告輸出
+- **持倉穿透下鑽 (Phase 4.2 Backlog)**
+  - 實現從券商成交明細下鑽至個股歷史持倉記錄與 Journal 日誌
 
 ## 測試說明
 

@@ -239,255 +239,38 @@
 - 顯示弱勢產業列表（按漲幅%升序，最弱的在前）
 - 時間範圍選擇：本日 / 本周
 
-**顯示欄位：**（與強勢產業相同）
+#### 2.6 主力流向 / 籌碼分析終端 (SmartMoneyFlowView)
 
-**參數：**（與強勢產業相同）
+**功能定位：**
+- 高密度、低延遲的專業級籌碼流向觀察終端
+- 將複雜的券商分點流向數據轉化為可操作的交易信號
+- 提供雙視角頁籤 (Stock Overview / Branch Tracker) 進行交叉驗證
 
----
+**雙頁籤視角 (Dual Perspectives)：**
+- **Tab 1: Stock Overview (股票視角)**：
+  - 掃描市場上所有股票的主力資金流向。
+  - 支援 Drill-down：點擊單一股票可於下方查看參與買賣的具體券商分點明細。
+- **Tab 2: Branch Tracker (分點視角)**：
+  - 獨立追蹤單一主力分點的近期買賣操作。
+  - 透過 `TRACKED BRANCH` 下拉選單切換分點。
+  - 具備與股票視角完全相同的高質感 Terminal 渲染（動態計算 Intensity, Sparkline 與 Badges）。
 
-### Tab 3：推薦分析 (RecommendationView)
+**UI 特性：**
+- **Chart Options (趨勢圖樣式)**：支援在上方控制列即時切換 Sparkline 樣式：
+  - `BAR`：柱狀圖（預設，呈現直觀的正負反轉）
+  - `LINE`：標準折線圖
+  - `AREA`：漸層面積圖
+- **Row Intensity Shading (強度著色)**：表格列會根據籌碼流向的信號強度自動著色，直觀辨識強弱。
+- **Inline Signal Badges (內聯信號徽章)**：在單元格內直接渲染籌碼狀態的徽章，節省空間且提升可讀性。
+- **Lightweight Sparklines (輕量級趨勢線)**：在表格內嵌微型趨勢線，讓近期的籌碼流動趨勢一目了然。
 
-**功能：**
-- 配置策略參數
-- 執行推薦分析
-- 顯示推薦結果
-- 保存推薦結果
-- 加入候選池
-- **送 Research Lab 批次回測**（Phase 3.3b 新增）：將目前推薦結果直接送到 Research Lab，自動載入股票清單和策略配置
-- **送 Research Lab 推薦回放**：將目前 Profile/Config 送到 Research Lab，在歷史期間重播推薦邏輯並評估整組推薦組合
-- **記錄到持倉管理**：從推薦結果右鍵建立 Portfolio 交易時，保留推薦來源 metadata 與 snapshot hash
-
-#### 3.1 策略配置面板
-
-**布局：**
-- 左右分割比例：策略配置 20%，推薦結果 80%
-- 所有區域支持視窗縮放
-
-**技術指標配置（7個，全部在 UI 中可用）：**
-
-##### 動量指標 (Momentum)
-- **RSI（相對強弱指標）**
-  - 參數：`period = 14`
-  - 計算方式：使用 talib.RSI
-  - 分數範圍：0-100
-
-- **MACD（移動平均收斂發散）**
-  - 參數：
-    - `fastperiod = 12`
-    - `slowperiod = 26`
-    - `signalperiod = 9`
-  - 計算方式：使用 talib.MACD
-  - 輸出：MACD、Signal、Histogram
-
-- **KD（隨機指標）**
-  - 參數：
-    - `fastk_period = 5`
-    - `slowk_period = 3`
-    - `slowd_period = 3`
-  - 計算方式：使用 talib.STOCH
-  - 分數範圍：0-100
-
-##### 趨勢指標 (Trend)
-- **ADX（平均趨向指標）**
-  - 參數：`period = 14`
-  - 計算方式：使用 talib.ADX
-  - 分數範圍：0-100
-
-- **MA（移動平均線）**
-  - 參數：`windows = [5, 10, 20, 60]`
-  - 計算方式：SMA（簡單移動平均）
-  - 輸出：MA5、MA10、MA20、MA60
-
-##### 波動率指標 (Volatility)
-- **ATR（平均真實波幅）**
-  - 參數：`period = 14`
-  - 計算方式：使用 talib.ATR
-
-- **Bollinger Bands（布林通道）**
-  - 參數：
-    - `timeperiod = 20`
-    - `nbdevup = 2`
-    - `nbdevdn = 2`
-  - 計算方式：使用 talib.BBANDS
-  - 輸出：上軌、中軌、下軌
-
-#### 3.2 圖形模式配置
-
-**可選圖形模式（12個，全部在 UI 中可用）：**
-
-**看漲形態：**
-
-##### W底（Phase 2.5 改進：ATR-based 參數）
-- **描述**：兩個相近的低點，中間有一個高點，形成 W 形狀
-- **看漲/看跌**：看漲（bullish = True）
-- **參數：**
-  - `min_points = 5`（至少需要 5 個點）
-  - `max_points = 15`（最多考慮 15 個點）
-  - `window = 10-30`（可調整）
-  - `threshold = 0.03-0.1`（百分比模式，已棄用）
-  - `threshold_atr_mult`（ATR 倍數模式，推薦使用，例如 0.5 = 0.5倍ATR）
-  - `prominence = 0.3-1.0`（百分比模式，已棄用）
-  - `prominence_atr_mult`（ATR 倍數模式，推薦使用，例如 1.0 = 1倍ATR）
-
-##### 頭肩底
-- **描述**：三個低點，中間的低點（頭）低於兩側的低點（肩）
-- **看漲/看跌**：看漲（bullish = True）
-- **參數：**
-  - `min_points = 7`
-  - `max_points = 20`
-  - `window = 20-40`
-  - `threshold = 0.05-0.15`
-  - `height_ratio = 0.5-1.0`
-
-##### 雙底
-- **描述**：兩個相近的低點，形成 W 形狀
-- **看漲/看跌**：看漲（bullish = True）
-- **參數：**
-  - `min_points = 5`
-  - `max_points = 15`
-  - `window = 10-30`
-  - `threshold = 0.03-0.1`
-
-##### V形反轉
-- **描述**：價格快速下跌後立即快速上漲，形成V形
-- **看漲/看跌**：看漲（bullish = True）
-- **參數：**
-  - `min_points = 3`
-  - `max_points = 10`
-
-##### 圓底
-- **描述**：價格緩慢下跌後緩慢上漲，形成圓弧形底部
-- **看漲/看跌**：看漲（bullish = True）
-- **參數：**
-  - `min_points = 7`
-  - `max_points = 30`
-
-**中性/可變形態：**
-
-##### 矩形
-- **描述**：價格在兩條平行的水平線之間波動
-- **看漲/看跌**：取決於突破方向
-- **參數：**
-  - `min_points = 5`
-  - `max_points = 30`
-  - `window = 20-30`
-  - `threshold = 0.05-0.08`
-
-##### 三角形
-- **描述**：價格波動範圍逐漸縮小，形成三角形
-- **看漲/看跌**：可能是看漲或看跌，取決於三角形的類型
-- **參數：**
-  - `min_points = 5`
-  - `max_points = 30`
-
-##### 旗形
-- **描述**：短期價格趨勢與主要趨勢相反，形成旗形
-- **看漲/看跌**：可能是看漲或看跌，取決於旗形的類型
-- **參數：**
-  - `min_points = 5`
-  - `max_points = 20`
-
-##### 楔形
-- **描述**：價格在兩條收斂的趨勢線之間波動，形成楔形
-- **看漲/看跌**：可能是看漲或看跌，取決於楔形的類型
-- **參數：**
-  - `min_points = 5`
-  - `max_points = 30`
-
-**看跌形態（通常用於反向篩選）：**
-
-##### 頭肩頂
-- **描述**：三個高點，中間的高點（頭）高於兩側的高點（肩）
-- **看漲/看跌**：看跌（bullish = False）
-- **參數：**
-  - `min_points = 7`
-  - `max_points = 20`
-
-##### 雙頂
-- **描述**：兩個相近的高點，形成M形狀
-- **看漲/看跌**：看跌（bullish = False）
-- **參數：**
-  - `min_points = 5`
-  - `max_points = 15`
-
-##### 圓頂
-- **描述**：價格緩慢上漲後緩慢下跌，形成圓弧形頂部
-- **看漲/看跌**：看跌（bullish = False）
-- **參數：**
-  - `min_points = 7`
-  - `max_points = 30`
-
-#### 3.3 篩選條件
-
-- **最小漲幅%**：預設 0.0
-- **最小成交量比率**：預設 1.0
-- **產業篩選**：可選擇特定產業或「全部」
-
-#### 3.4 推薦結果
-
-**布局：**
-- 上下分割比例：推薦結果表格 70%，推薦理由詳情 30%
-- 支持拖動分割器調整比例
-
-**顯示欄位：**
-- 證券代號
-- 證券名稱
-- 收盤價
-- 漲幅%
-- 總分
-- 指標分
-- 圖形分
-- 成交量分
-- 推薦理由
-- 產業
-- Regime匹配
-
-**推薦理由詳情功能：**
-- **單擊或雙擊**表格中的任意股票行
-- 下方的「推薦理由詳情」區域會自動顯示該股票的詳細推薦理由
-- 推薦理由包含：技術指標分數、圖形模式識別、成交量條件、市場狀態匹配等
-
-**分數計算（Phase 2.5 改進）：**
-```
-每個子分數統一為 0~100：
-- IndicatorScore: 0~100
-- PatternScore: 0~100
-- VolumeScore: 0~100
-
-總分 = 指標分 × 權重 + 圖形分 × 權重 + 成交量分 × 權重
-
-Regime 權重切換（不再使用倍率）：
-- Trend: w_indicator=0.6, w_pattern=0.2, w_volume=0.2
-- Reversion: w_indicator=0.5, w_pattern=0.3, w_volume=0.2
-- Breakout: w_indicator=0.4, w_pattern=0.4, w_volume=0.2
-```
-
-#### 3.5 Research Lab 下一步（Phase 3.3b / 2026-06-04 更新）
-
-**功能：**
-- 將推薦結果直接送到 Research Lab / Backtest Tab
-- 自動載入股票清單、策略參數與 ATR 風控設定
-- 根據 Profile 風險等級自動設置執行價格（暴衝用 next_open，穩健用 close）
-- 可選擇批次回測目前名單，或送完整 Profile/Config 做推薦回放
-- 右鍵記錄到 Portfolio 時會保存推薦來源追溯資訊
-
-**使用方法：**
-1. 執行推薦分析後，在推薦結果表格中選擇要回測的股票
-2. 點擊「送 Research Lab 批次回測」或「送 Research Lab 推薦回放」
-3. 系統會自動切換到「策略回測 / Research Lab」Tab
-4. 回測配置會自動載入：
-   - 股票清單：選中的推薦股票
-   - 策略參數：當前使用的 Profile 配置
-   - 執行價格：根據 Profile 風險等級自動設置
-   - ATR 風控：根據 Profile 自動設置
-
-**注意事項：**
-- 送 Research Lab 會保留推薦時的 Profile 配置和 Regime 快照
-- 可以在回測 Tab 中進一步調整參數後執行回測
+**架構特點：**
+- 畫面純靠 Qt Native Delegate (`terminal_delegate.py`) 渲染，支援動態多圖表繪製，效能極高。
+- 業務邏輯與信號判斷完全由 `flow_signal_engine.py` 與 `broker_flow_service.py` 提供，符合系統解耦原則。
 
 ---
 
-### Tab 4：策略回測 / Research Lab (BacktestView)
+### Tab 3：策略回測 / Research Lab (BacktestView)
 
 > [!NOTE]
 > **漸進式重構狀態 (2026-06-06)**：已完成漸進式重構的第一至第三階段 (Phase 1 - Phase 3)。已成功將常數、說明 Tooltip 抽離至 `ui_qt/views/backtest/` 子套件，並將右側結果面板重構為 `BacktestResultPanel`（位於 [result_panel.py](file:///c:/Projects/PythonProjects/technical_analysis/ui_qt/views/backtest/result_panel.py)）、左側配置面板重構為 `BacktestConfigPanel`（位於 [config_panel.py](file:///c:/Projects/PythonProjects/technical_analysis/ui_qt/views/backtest/config_panel.py)）。主類別 `BacktestView` 採用安全的 QWidget 內建屬性排除路由機制進行動態委派，維持與單元測試及 QA 驗證 100% 相容。
@@ -771,6 +554,248 @@ BacktestView 實現了「模式驅動的動態 UI 狀態」，左側配置面板
 
 ---
 
+### Tab 4：推薦分析 (RecommendationView)
+
+**功能：**
+- 配置策略參數
+- 執行推薦分析
+- 顯示推薦結果
+- 保存推薦結果
+- 加入候選池
+- **送 Research Lab 批次回測**（Phase 3.3b 新增）：將目前推薦結果直接送到 Research Lab，自動載入股票清單和策略配置
+- **送 Research Lab 推薦回放**：將目前 Profile/Config 送到 Research Lab，在歷史期間重播推薦邏輯並評估整組推薦組合
+- **記錄到持倉管理**：從推薦結果右鍵建立 Portfolio 交易時，保留推薦來源 metadata 與 snapshot hash
+
+#### 3.1 策略配置面板
+
+**布局：**
+- 左右分割比例：策略配置 20%，推薦結果 80%
+- 所有區域支持視窗縮放
+
+**技術指標配置（7個，全部在 UI 中可用）：**
+
+##### 動量指標 (Momentum)
+- **RSI（相對強弱指標）**
+  - 參數：`period = 14`
+  - 計算方式：使用 talib.RSI
+  - 分數範圍：0-100
+
+- **MACD（移動平均收斂發散）**
+  - 參數：
+    - `fastperiod = 12`
+    - `slowperiod = 26`
+    - `signalperiod = 9`
+  - 計算方式：使用 talib.MACD
+  - 輸出：MACD、Signal、Histogram
+
+- **KD（隨機指標）**
+  - 參數：
+    - `fastk_period = 5`
+    - `slowk_period = 3`
+    - `slowd_period = 3`
+  - 計算方式：使用 talib.STOCH
+  - 分數範圍：0-100
+
+##### 趨勢指標 (Trend)
+- **ADX（平均趨向指標）**
+  - 參數：`period = 14`
+  - 計算方式：使用 talib.ADX
+  - 分數範圍：0-100
+
+- **MA（移動平均線）**
+  - 參數：`windows = [5, 10, 20, 60]`
+  - 計算方式：SMA（簡單移動平均）
+  - 輸出：MA5、MA10、MA20、MA60
+
+##### 波動率指標 (Volatility)
+- **ATR（平均真實波幅）**
+  - 參數：`period = 14`
+  - 計算方式：使用 talib.ATR
+
+- **Bollinger Bands（布林通道）**
+  - 參數：
+    - `timeperiod = 20`
+    - `nbdevup = 2`
+    - `nbdevdn = 2`
+  - 計算方式：使用 talib.BBANDS
+  - 輸出：上軌、中軌、下軌
+
+#### 3.2 圖形模式配置
+
+**可選圖形模式（12個，全部在 UI 中可用）：**
+
+**看漲形態：**
+
+##### W底（Phase 2.5 改進：ATR-based 參數）
+- **描述**：兩個相近的低點，中間有一個高點，形成 W 形狀
+- **看漲/看跌**：看漲（bullish = True）
+- **參數：**
+  - `min_points = 5`（至少需要 5 個點）
+  - `max_points = 15`（最多考慮 15 個點）
+  - `window = 10-30`（可調整）
+  - `threshold = 0.03-0.1`（百分比模式，已棄用）
+  - `threshold_atr_mult`（ATR 倍數模式，推薦使用，例如 0.5 = 0.5倍ATR）
+  - `prominence = 0.3-1.0`（百分比模式，已棄用）
+  - `prominence_atr_mult`（ATR 倍數模式，推薦使用，例如 1.0 = 1倍ATR）
+
+##### 頭肩底
+- **描述**：三個低點，中間的低點（頭）低於兩側的低點（肩）
+- **看漲/看跌**：看漲（bullish = True）
+- **參數：**
+  - `min_points = 7`
+  - `max_points = 20`
+  - `window = 20-40`
+  - `threshold = 0.05-0.15`
+  - `height_ratio = 0.5-1.0`
+
+##### 雙底
+- **描述**：兩個相近的低點，形成 W 形狀
+- **看漲/看跌**：看漲（bullish = True）
+- **參數：**
+  - `min_points = 5`
+  - `max_points = 15`
+  - `window = 10-30`
+  - `threshold = 0.03-0.1`
+
+##### V形反轉
+- **描述**：價格快速下跌後立即快速上漲，形成V形
+- **看漲/看跌**：看漲（bullish = True）
+- **參數：**
+  - `min_points = 3`
+  - `max_points = 10`
+
+##### 圓底
+- **描述**：價格緩慢下跌後緩慢上漲，形成圓弧形底部
+- **看漲/看跌**：看漲（bullish = True）
+- **參數：**
+  - `min_points = 7`
+  - `max_points = 30`
+
+**中性/可變形態：**
+
+##### 矩形
+- **描述**：價格在兩條平行的水平線之間波動
+- **看漲/看跌**：取決於突破方向
+- **參數：**
+  - `min_points = 5`
+  - `max_points = 30`
+  - `window = 20-30`
+  - `threshold = 0.05-0.08`
+
+##### 三角形
+- **描述**：價格波動範圍逐漸縮小，形成三角形
+- **看漲/看跌**：可能是看漲或看跌，取決於三角形的類型
+- **參數：**
+  - `min_points = 5`
+  - `max_points = 30`
+
+##### 旗形
+- **描述**：短期價格趨勢與主要趨勢相反，形成旗形
+- **看漲/看跌**：可能是看漲或看跌，取決於旗形的類型
+- **參數：**
+  - `min_points = 5`
+  - `max_points = 20`
+
+##### 楔形
+- **描述**：價格在兩條收斂的趨勢線之間波動，形成楔形
+- **看漲/看跌**：可能是看漲或看跌，取決於楔形的類型
+- **參數：**
+  - `min_points = 5`
+  - `max_points = 30`
+
+**看跌形態（通常用於反向篩選）：**
+
+##### 頭肩頂
+- **描述**：三個高點，中間的高點（頭）高於兩側的高點（肩）
+- **看漲/看跌**：看跌（bullish = False）
+- **參數：**
+  - `min_points = 7`
+  - `max_points = 20`
+
+##### 雙頂
+- **描述**：兩個相近的高點，形成M形狀
+- **看漲/看跌**：看跌（bullish = False）
+- **參數：**
+  - `min_points = 5`
+  - `max_points = 15`
+
+##### 圓頂
+- **描述**：價格緩慢上漲後緩慢下跌，形成圓弧形頂部
+- **看漲/看跌**：看跌（bullish = False）
+- **參數：**
+  - `min_points = 7`
+  - `max_points = 30`
+
+#### 3.3 篩選條件
+
+- **最小漲幅%**：預設 0.0
+- **最小成交量比率**：預設 1.0
+- **產業篩選**：可選擇特定產業或「全部」
+
+#### 3.4 推薦結果
+
+**布局：**
+- 上下分割比例：推薦結果表格 70%，推薦理由詳情 30%
+- 支持拖動分割器調整比例
+
+**顯示欄位：**
+- 證券代號
+- 證券名稱
+- 收盤價
+- 漲幅%
+- 總分
+- 指標分
+- 圖形分
+- 成交量分
+- 推薦理由
+- 產業
+- Regime匹配
+
+**推薦理由詳情功能：**
+- **單擊或雙擊**表格中的任意股票行
+- 下方的「推薦理由詳情」區域會自動顯示該股票的詳細推薦理由
+- 推薦理由包含：技術指標分數、圖形模式識別、成交量條件、市場狀態匹配等
+
+**分數計算（Phase 2.5 改進）：**
+```
+每個子分數統一為 0~100：
+- IndicatorScore: 0~100
+- PatternScore: 0~100
+- VolumeScore: 0~100
+
+總分 = 指標分 × 權重 + 圖形分 × 權重 + 成交量分 × 權重
+
+Regime 權重切換（不再使用倍率）：
+- Trend: w_indicator=0.6, w_pattern=0.2, w_volume=0.2
+- Reversion: w_indicator=0.5, w_pattern=0.3, w_volume=0.2
+- Breakout: w_indicator=0.4, w_pattern=0.4, w_volume=0.2
+```
+
+#### 3.5 Research Lab 下一步（Phase 3.3b / 2026-06-04 更新）
+
+**功能：**
+- 將推薦結果直接送到 Research Lab / Backtest Tab
+- 自動載入股票清單、策略參數與 ATR 風控設定
+- 根據 Profile 風險等級自動設置執行價格（暴衝用 next_open，穩健用 close）
+- 可選擇批次回測目前名單，或送完整 Profile/Config 做推薦回放
+- 右鍵記錄到 Portfolio 時會保存推薦來源追溯資訊
+
+**使用方法：**
+1. 執行推薦分析後，在推薦結果表格中選擇要回測的股票
+2. 點擊「送 Research Lab 批次回測」或「送 Research Lab 推薦回放」
+3. 系統會自動切換到「策略回測 / Research Lab」Tab
+4. 回測配置會自動載入：
+   - 股票清單：選中的推薦股票
+   - 策略參數：當前使用的 Profile 配置
+   - 執行價格：根據 Profile 風險等級自動設置
+   - ATR 風控：根據 Profile 自動設置
+
+**注意事項：**
+- 送 Research Lab 會保留推薦時的 Profile 配置和 Regime 快照
+- 可以在回測 Tab 中進一步調整參數後執行回測
+
+---
+
 ### Tab 5：候選池 / 觀察清單管理器 (WatchlistView)
 
 **功能定位：**
@@ -826,12 +851,46 @@ BacktestView 實現了「模式驅動的動態 UI 狀態」，左側配置面板
 
 ---
 
-### Tab 6：Runtime Observatory (狀態機監控站)
+### Tab 6：持倉管理 (PortfolioView)
 
 **功能定位：**
-- 作為 AI Runtime Subsystem 的 Observable Layer
-- 監控 AI Agent 的 FSM 狀態流轉 (IDLE -> THINKING -> VALIDATING -> APPROVED/ERROR/HALTED)
-- 顯示 Governance Health 與 Append-only Event Stream
+- 提供交易庫存部位追蹤、條件監控 (PortfolioConditionMonitor) 與交易覆盤日記 (Journal) 管理。
+- 透過 recommendation_module 的打分引擎與市場 regime 進行實時比對，檢測持倉是否處於偏離狀態。
+
+**UI 布局與功能區塊：**
+- **頂部狀態看板 (Summary Dashboard)**：
+  - 玻璃擬態 HSL 漸層卡片，呈現資產估計淨值 (NAV)、總投入資金、已實現損益 (P&L，以紅綠區分) 與活躍持倉部位檔數。
+- **左側主要工作區 (Positions Table)**：
+  - 呈現當前活躍的持倉部位，包含代號、名稱、股數、成本、投入金額、已實現損益。
+  - **狀態監控**：顯示 `PortfolioConditionMonitor` 評估的狀態標記（例如：`正常` 或 `Regime偏離` / `分數偏離` 等警告標記）。
+  - **進場分數 vs 目前分數**：直接對照建倉時的分數與當下最新打分，便於決策。
+  - **監控原因**：標明 Regime 或分數偏離的具體技術依據（如 "目前Regime [Trend] 與進場 [Reversion] 衝突；目前分數 55.00 低於進場 75.00"）。
+  - **右鍵選單**：支援「為此部位寫日記」、「只查看此股交易歷史」與「顯示全部交易歷史」的交互聯動。
+  - **操作按鈕**：
+    - `手動記錄交易`：彈出對話框手動登記買入/賣出，支援自動查詢股名與關聯策略脈絡。
+    - `新增日記`：彈出對話框寫入交易心得或覆盤筆記。
+    - `整理刷新`：一鍵手動刷新。
+    - `🗑️ 清空全體數據`：經兩層安全防禦確認後，一鍵清空所有交易歷史與覆盤日記。
+- **右側明細分頁 (TabWidget)**：
+  - **分頁 1：交易歷史 (Trade History)**：
+    - 顯示該股（或全部）的買賣歷史紀錄，包含日期、股數、單價、費用、稅金與策略來源。
+    - 支援右鍵「❌ 刪除此交易紀錄」，系統會自動重新計算庫存部位與平均成本。
+  - **分頁 2：覆盤日誌 (Journal)**：
+    - 顯示相關的覆盤日記筆記，按時間倒序排列。
+    - 支援右鍵「❌ 刪除此篇日記筆記」。
+
+**來源追溯整合 (Tab Handoffs)：**
+- 當用戶在「推薦分析」頁或「策略回測」明細中，右鍵選擇記錄至持倉管理時，系統會自動在交易紀錄中保存來源 metadata。
+- 來源資訊包含：`result_id`、`snapshot_hash`、進場時的 `Regime`、`TotalScore`、`Strategy Version`，用以支撐持倉狀態監控的基準對照。
+
+---
+
+### Tab 7：Runtime Observatory (狀態機監控站)
+
+**功能定位：**
+- 作為 AI Runtime Subsystem 的 Observable Layer。
+- 監控 AI Agent 的 FSM 狀態流轉 (IDLE -> THINKING -> VALIDATING -> APPROVED/ERROR/HALTED)。
+- 顯示 Governance Health 與 Append-only Event Stream。
 
 **UI 布局：**
 - **左側 (State Overview)**：
@@ -842,39 +901,8 @@ BacktestView 實現了「模式驅動的動態 UI 狀態」，左側配置面板
   - Append-only Event Stream (Real-time Event Logs)
 
 **技術特點：**
-- Pure Render 邊界：View 層不包含任何業務邏輯，僅接受 `app_module` 透過 `QtRuntimeBridge` 發出的 DTO
-- QTimer 輪詢：MVP 階段使用每秒輪詢模擬資料串流
-
----
-
-### Tab 7：籌碼分析 (Smart Money Terminal)
-
-**功能定位：**
-- 高密度、低延遲的專業級籌碼流向觀察終端
-- 將複雜的券商分點流向數據轉化為可操作的交易信號
-- 提供雙視角頁籤 (Stock Overview / Branch Tracker) 進行交叉驗證
-
-**雙頁籤視角 (Dual Perspectives)：**
-- **Tab 1: Stock Overview (股票視角)**：
-  - 掃描市場上所有股票的主力資金流向。
-  - 支援 Drill-down：點擊單一股票可於下方查看參與買賣的具體券商分點明細。
-- **Tab 2: Branch Tracker (分點視角)**：
-  - 獨立追蹤單一主力分點的近期買賣操作。
-  - 透過 `TRACKED BRANCH` 下拉選單切換分點。
-  - 具備與股票視角完全相同的高質感 Terminal 渲染（動態計算 Intensity, Sparkline 與 Badges）。
-
-**UI 特性：**
-- **Chart Options (趨勢圖樣式)**：支援在上方控制列即時切換 Sparkline 樣式：
-  - `BAR`：柱狀圖（預設，呈現直觀的正負反轉）
-  - `LINE`：標準折線圖
-  - `AREA`：漸層面積圖
-- **Row Intensity Shading (強度著色)**：表格列會根據籌碼流向的信號強度自動著色，直觀辨識強弱。
-- **Inline Signal Badges (內聯信號徽章)**：在單元格內直接渲染籌碼狀態的徽章，節省空間且提升可讀性。
-- **Lightweight Sparklines (輕量級趨勢線)**：在表格內嵌微型趨勢線，讓近期的籌碼流動趨勢一目了然。
-
-**架構特點：**
-- 畫面純靠 Qt Native Delegate (`terminal_delegate.py`) 渲染，支援動態多圖表繪製，效能極高。
-- 業務邏輯與信號判斷完全由 `flow_signal_engine.py` 與 `broker_flow_service.py` 提供，符合系統解耦原則。
+- Pure Render 邊界：View 層不包含任何業務邏輯，僅接受 `app_module` 透過 `QtRuntimeBridge` 發出的 DTO。
+- QTimer 輪詢：MVP 階段使用每秒輪詢模擬資料串流。
 
 ---
 

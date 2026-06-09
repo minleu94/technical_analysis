@@ -7,17 +7,17 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具，而是一個「可驗證、可回溯、可演化」的投資決策系統。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：Phase 3.3b（研究閉環已完成）與 AI Runtime MVP 已完成。即將邁入 Phase 4（持倉與日誌管理）。
+* **Current Phase (目前階段)**：Phase 3.3b 已完成，Portfolio MVP 已建立（Phase 4.1），目前進入 Roadmap Rebaseline 與技術治理階段。產品主線已從舊線性 Phase 敘事轉為三個產品閉環（資料與市場狀態、研究驗證、持倉檢查）。
 * **Core Architecture (核心架構)**：三層式解耦架構。
   1. `ui_qt/`（純粹的觀察者 Observatory / 渲染層）
   2. `app_module/`（應用服務層與協調器 Orchestrator）
   3. Domain 模組（`backtest_module/`、`analysis_module/`、`runtime/`）
 * **Major Modules (主要模組)**：資料收集器、市場觀察儀、推薦引擎、策略回測實驗室、籌碼分析終端 (Smart Money Terminal MVP)、Runtime 子系統。
-* **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。擁有固定的頂層 Tab（Update、Market Watch、Recommendation、Backtest）。大量使用 `pandas_table_model` 呈現高密度數據網格。
+* **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 7 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。大量使用 `pandas_table_model` 呈現高密度數據網格。
 * **Current Priorities (目前優先事項)**：
-  1. 補齊 Phase 4.1 Portfolio UI（Positions / Trades / Journal）。
-  2. 串接 Phase 3 → Portfolio 的來源追溯（Recommendation / Backtest / Strategy Version）。
-  3. 維持 Roadmap / Snapshot / Documentation Index / UI docs / Agent docs 一致。
+  1. Roadmap Rebaseline 與文件重整（對齊三個產品閉環敘事）。
+  2. 回測時間軸契約與 no-look-ahead 測試定義。
+  3. 金融核心數值治理啟動（停止在核心新增裸 float）。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
   1. 券商分點資料爬蟲容易因特殊股票代碼（如 ETF）解析失敗。
@@ -168,22 +168,25 @@
 
 ## 7. Current Active Roadmap (目前活躍開發路線)
 
-* **Active Phase (目前階段)**：Phase 3.3b（研究閉環）已完成。
+* **Active Phase (目前階段)**：Roadmap Rebaseline 與技術治理。產品主線已轉為三個產品閉環 + Backlog 敘事。
 * **In Progress (進行中)**：
-  * Smart Money Terminal（籌碼終端視覺化與高密度渲染）。
-  * AI Runtime Subsystem 的 UI 深度整合。
-* **Planned (計畫中)**：Phase 4（持倉與日誌管理 Portfolio & Journal）。Phase 5（效能擴展與報告輸出）。
-* **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化)。
+  * Roadmap Rebaseline 與文件重整。
+  * 回測時間軸契約治理（no-look-ahead 測試優先）。
+  * 金融核心數值治理（停止在核心新增裸 float）。
+* **Planned (計畫中)**：Phase 4.1 Portfolio 深化（策略版本追蹤、Price 對照、持倉層風險提示）。Phase 5 中尚未完成的大表格分頁、批次並行與報告輸出。
+* **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Smart Money Terminal MVP, AI Runtime MVP。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
-* **Experimental (實驗中)**：`codex/review-ai-platform-architecture` (平台治理架構審查)。
+* **Backlog**：Phase 4.2 券商下鑽到持倉（等 Phase 4.1 深化完成後評估）；Phase 2.5 優先級 3 未完成項歸入研究驗證閉環 / Strategy & Scoring Governance。
 
 ---
 
 ## 8. Risk Report (風險雷達與報告)
 
+* **Backtest Timeline Undefined (回測時間軸未定義風險)**：推薦組合回測的訊號日、成交日、equity curve 記錄日尚無統一契約，擴大推薦組合回測前必須先定義。
+* **Financial Core Bare Float (金融核心裸 float 風險)**：`broker_simulator.py`、`performance_metrics.py`、`portfolio_module/core.py` 等核心計算仍使用裸 `float`，存在精度風險。
 * **AI Coordination Risk (AI 協作風險)**：`codex` 與 `ag` 兩個 Agent 容易在修改共同索引（如 `DOCUMENTATION_INDEX.md`）時發生 Merge Conflict。必須嚴格遵循不覆寫對方實作的衝突解決規範。
 * **Branch Management Overhead (分支管理成本風險)**：過多的分支與複雜的 Handoff 工作流會導致開發節奏拖慢與狀態混淆。解決方案：嚴格遵循 Main-Centric 工作流，減少不必要的分支切換。現有 feature 分支在驗證後應盡快合併至 `main`、封存或刪除。
 * **Governance Risk (架構治理風險)**：隱性耦合 (Hidden coupling)。例如偷偷在共用 DTO 內增加非標準欄位，或是繞過 `EventBus` 直接在 UI 呼叫底層 API。
 * **Unclear Ownership (邊界模糊風險)**：將過多資料處理邏輯放在 `ui_qt` 裡面，而非在 Domain 處理完畢後透過 DTO 傳遞。UI 必須純粹是個 Observatory。
 * **Workflow Confusion (工作流混亂)**：目前存在多個 `qa_validate_*.py` 腳本，AI 在開發後可能會忘記執行對應模組的 QA 腳本導致 Regression。
-* **Doc Inconsistency (文檔不一致風險)**：Agent 在修改程式碼後，常常忘記呼叫 Documentation Agent 同步更新 `PROJECT_SNAPSHOT.md` 與 `DEVELOPMENT_ROADMAP.md` 的 Living Section。
+* **Doc Inconsistency (文檔不一致風險)**：Agent 在修改程式碼後，常常忘記呼叫 Documentation Agent 同步更新 `PROJECT_SNAPSHOT.md` 與 `DEVELOPMENT_ROADMAP.md` 的 Living Section（本次 Rebaseline 正在修正）。
