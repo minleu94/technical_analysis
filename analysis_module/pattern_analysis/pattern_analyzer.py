@@ -6,32 +6,81 @@ from scipy.signal import find_peaks, argrelextrema
 from scipy.spatial.distance import euclidean
 from fastdtw import fastdtw
 from scipy.optimize import curve_fit
+from typing import Any, Optional
+
+# 模組級多項式擬合與 R方 快取
+_polyfit_cache: dict[tuple[tuple[float, ...], tuple[float, ...], int], Any] = {}
+_r_squared_cache: dict[tuple[tuple[float, ...], tuple[float, ...]], float] = {}
+
+def _clear_polyfit_cache():
+    """清空多項式擬合與 R方 快取，防止記憶體洩漏"""
+    _polyfit_cache.clear()
+    _r_squared_cache.clear()
+
+def _safe_linear_fit(x, y):
+    """高效的一階線性擬合 (最小平方法代數公式)"""
+    x_mean = np.mean(x)
+    y_mean = np.mean(y)
+    num = np.sum((x - x_mean) * (y - y_mean))
+    den = np.sum((x - x_mean) ** 2)
+    if den == 0:
+        raise ValueError("division by zero in linear fit")
+    slope = num / den
+    intercept = y_mean - slope * x_mean
+    return slope, intercept
 
 
 def _safe_polyfit(x, y, deg):
     x_values = np.asarray(list(x), dtype=float)
     y_values = np.asarray(list(y), dtype=float)
+    
+    # 🚀 效能優化：使用 tuple 進行擬合快取，避免 rolling 內重複計算相同區間的迴歸
+    key = (tuple(x_values), tuple(y_values), deg)
+    if key in _polyfit_cache:
+        return _polyfit_cache[key]
+        
     if len(x_values) <= deg or len(y_values) <= deg:
         raise ValueError("not enough points for polynomial fit")
     if len(x_values) != len(y_values):
         raise ValueError("x and y length mismatch")
     if not np.isfinite(x_values).all() or not np.isfinite(y_values).all():
         raise ValueError("non-finite values for polynomial fit")
+        
+    if deg == 1:
+        try:
+            res = _safe_linear_fit(x_values, y_values)
+            _polyfit_cache[key] = res
+            return res
+        except ValueError:
+            pass
+
     if len(np.unique(x_values)) <= deg:
         raise ValueError("not enough unique x values for polynomial fit")
     with warnings.catch_warnings():
         warnings.simplefilter("error", np.exceptions.RankWarning)
-        return np.polyfit(x_values, y_values, deg)
+        res = np.polyfit(x_values, y_values, deg)
+        _polyfit_cache[key] = res
+        return res
 
 
 def _safe_r_squared(actual, fitted):
     actual_values = np.asarray(actual, dtype=float)
     fitted_values = np.asarray(fitted, dtype=float)
+    
+    # 🚀 效能優化：使用 tuple 進行 R方 快取
+    key = (tuple(actual_values), tuple(fitted_values))
+    if key in _r_squared_cache:
+        return _r_squared_cache[key]
+        
     denominator = np.sum((actual_values - np.mean(actual_values)) ** 2)
     if denominator == 0 or not np.isfinite(denominator):
-        return 0.0
-    value = 1 - np.sum((actual_values - fitted_values) ** 2) / denominator
-    return float(value) if np.isfinite(value) else 0.0
+        res = 0.0
+    else:
+        value = 1 - np.sum((actual_values - fitted_values) ** 2) / denominator
+        res = float(value) if np.isfinite(value) else 0.0
+        
+    _r_squared_cache[key] = res
+    return res
 
 
 class PatternAnalyzer:
@@ -39,6 +88,8 @@ class PatternAnalyzer:
     
     def __init__(self):
         """初始化圖形模式分析器"""
+        self._peaks_troughs_cache = {}
+        _clear_polyfit_cache()
         # 定義列名映射，將中文列名映射到英文列名
         self.column_mapping = {
             # 中文列名 -> 英文列名
@@ -182,23 +233,29 @@ class PatternAnalyzer:
             if 'ATR' in df.columns:
                 atr_value = df['ATR'].mean()  # 使用平均 ATR
             else:
-                # 簡單計算 ATR（使用 True Range）
+                # 向量化計算 ATR 提高性能
                 high_col = self._get_column_name(df, 'High')
                 low_col = self._get_column_name(df, 'Low')
                 if high_col and low_col:
-                    tr_list = []
-                    for i in range(len(df)):
-                        if i == 0:
-                            tr = df.iloc[i][high_col] - df.iloc[i][low_col]
-                        else:
-                            prev_close = df.iloc[i-1][price_col]
-                            tr = max(
-                                df.iloc[i][high_col] - df.iloc[i][low_col],
-                                abs(df.iloc[i][high_col] - prev_close),
-                                abs(df.iloc[i][low_col] - prev_close)
-                            )
-                        tr_list.append(tr)
-                    atr_value = np.mean(tr_list) if tr_list else None
+                    high = df[high_col].values
+                    low = df[low_col].values
+                    prices_val = df[price_col].values
+                    if np.isnan(high).any():
+                        high = pd.Series(high).ffill().bfill().values
+                    if np.isnan(low).any():
+                        low = pd.Series(low).ffill().bfill().values
+                    if np.isnan(prices_val).any():
+                        prices_val = pd.Series(prices_val).ffill().bfill().values
+                        
+                    tr = np.zeros_like(prices_val)
+                    if len(prices_val) > 0:
+                        tr[0] = high[0] - low[0]
+                    if len(prices_val) > 1:
+                        tr[1:] = np.maximum(
+                            np.maximum(high[1:] - low[1:], np.abs(high[1:] - prices_val[:-1])),
+                            np.abs(low[1:] - prices_val[:-1])
+                        )
+                    atr_value = np.mean(tr)
                 else:
                     atr_value = None
             
@@ -212,6 +269,11 @@ class PatternAnalyzer:
             # 使用百分比模式（向後兼容）
             price_range = np.max(prices) - np.min(prices)
             relative_prominence = prominence * (price_range / 100)
+            
+        # 🚀 快速快取檢查，以避免重複的 peaks/troughs 計算
+        cache_key = (tuple(prices), window, float(relative_prominence))
+        if cache_key in self._peaks_troughs_cache:
+            return self._peaks_troughs_cache[cache_key]
         
         # 找出峰和谷，使用更高的prominence值來減少檢測到的峰和谷數量
         peaks, _ = find_peaks(prices, prominence=relative_prominence)
@@ -227,8 +289,9 @@ class PatternAnalyzer:
         # 按索引排序
         peaks_troughs.sort(key=lambda x: x['idx'])
         
+        self._peaks_troughs_cache[cache_key] = peaks_troughs
         return peaks_troughs
-    
+        
     def identify_w_bottom(self, df, price_col=None, window=20, threshold=0.05, prominence=0.8, 
                           threshold_atr_mult=None, prominence_atr_mult=None):
         """識別W底形態
@@ -573,7 +636,7 @@ class PatternAnalyzer:
         
         return double_bottoms
     
-    def identify_triangle(self, df, price_col=None, volume_col=None, window=20, threshold=0.1, min_points=5, min_r_squared=0.6, min_height_ratio=0.02, max_height_converge=0.7):
+    def identify_triangle(self, df, price_col=None, volume_col=None, window=20, threshold=0.1, min_points=5, min_r_squared=0.6, min_height_ratio=0.02, max_height_converge=0.7, limit_idx: Optional[int] = None):
         """識別三角形形態
         
         三角形形態有三種類型：對稱三角形、上升三角形和下降三角形。
@@ -588,6 +651,7 @@ class PatternAnalyzer:
             min_r_squared: 趨勢線擬合的最小R方值，用於確保趨勢線的可靠性
             min_height_ratio: 三角形高度與價格範圍的最小比例，用於確保三角形足夠明顯
             max_height_converge: 三角形高度收斂的最大比例，用於確保三角形足夠明顯
+            limit_idx: 可選剪枝參數，小於此索引結束的形態將被直接過濾
             
         Returns:
             list: 識別出的三角形形態的信息列表
@@ -617,6 +681,11 @@ class PatternAnalyzer:
         for start_idx in range(len(peaks_troughs) - min_points + 1):
             # 嘗試不同的窗口大小，但不要過大以避免過度擬合
             for end_idx in range(start_idx + min_points - 1, min(start_idx + 30, len(peaks_troughs))):
+                actual_end_idx = peaks_troughs[end_idx]['idx']
+                # 🚀 關鍵優化：如果指定了 limit_idx，且結束點小於 limit_idx，則直接過濾
+                if limit_idx is not None and actual_end_idx < limit_idx:
+                    continue
+                
                 # 獲取窗口內的所有峰和谷
                 window_points = peaks_troughs[start_idx:end_idx+1]
                 
@@ -634,9 +703,9 @@ class PatternAnalyzer:
                 
                 # 獲取峰值和谷值的索引和價格
                 peak_indices = [p['idx'] for p in peaks]
-                peak_prices = [df.iloc[idx][price_col] for idx in peak_indices]
+                peak_prices = [prices[idx] for idx in peak_indices]
                 trough_indices = [p['idx'] for p in troughs]
-                trough_prices = [df.iloc[idx][price_col] for idx in trough_indices]
+                trough_prices = [prices[idx] for idx in trough_indices]
                 
                 # 實際窗口的起始和結束索引
                 actual_start_idx = window_points[0]['idx']
@@ -678,7 +747,7 @@ class PatternAnalyzer:
                 if intersection_x < actual_start_idx or intersection_x > actual_end_idx + triangle_length:
                     continue
                 
-                # 計算三角形起點和終點的高度（上下趨勢線之間的距離）
+                # 計算三角形起點 and 終點的高度（上下趨勢線之間的距離）
                 start_height = abs((upper_slope * actual_start_idx + upper_intercept) - (lower_slope * actual_start_idx + lower_intercept))
                 end_height = abs((upper_slope * actual_end_idx + upper_intercept) - (lower_slope * actual_end_idx + lower_intercept))
                 
@@ -809,7 +878,7 @@ class PatternAnalyzer:
             i += 1
         
         return triangles
-    
+        
     def identify_flag(self, df, price_col=None, window=30, threshold=0.1, prominence=0.5, min_trend_strength=0.01):
         """識別旗形形態
         
@@ -1408,10 +1477,11 @@ class PatternAnalyzer:
         
         return rounding_bottoms
     
-    def identify_rectangle(self, df, price_col=None, window=30, threshold=0.05, min_touches=4):
+    def identify_rectangle(self, df, price_col=None, window=30, threshold=0.05, min_touches=4, limit_idx: Optional[int] = None):
         """識別矩形形態
         
         矩形是一種價格在兩條平行的水平線之間波動的形態，形成矩形。
+        價格在上限和下限之間來回反彈，通常在突破後會延續原來的趨勢。
         這種形態通常表示市場處於整理階段，等待突破。
         
         Args:
@@ -1420,6 +1490,7 @@ class PatternAnalyzer:
             window: 窗口大小，用於尋找局部極值
             threshold: 閾值，用於判斷價格變化是否顯著
             min_touches: 最小接觸次數，價格至少需要接觸上下邊界的總次數
+            limit_idx: 可選剪枝參數，小於此索引結束的形態將被直接過濾
             
         Returns:
             list: 識別出的矩形形態的位置列表
@@ -1432,6 +1503,9 @@ class PatternAnalyzer:
         # 找出所有的峰和谷
         peaks_troughs = self.find_peaks_and_troughs(df, price_col, window=window)
         
+        # 獲取價格數據
+        prices = df[price_col].values
+        
         # 初始化結果列表
         rectangles = []
         
@@ -1439,6 +1513,13 @@ class PatternAnalyzer:
         for start_idx in range(len(peaks_troughs) - min_touches + 1):
             # 嘗試不同的窗口大小
             for end_idx in range(start_idx + min_touches - 1, min(start_idx + 20, len(peaks_troughs))):
+                actual_end_idx = peaks_troughs[end_idx]['idx']
+                # 🚀 關鍵優化：如果指定了 limit_idx，且結束點小於 limit_idx，則直接過濾
+                if limit_idx is not None and actual_end_idx < limit_idx:
+                    continue
+
+                actual_start_idx = peaks_troughs[start_idx]['idx']
+
                 # 獲取窗口內的所有峰和谷
                 window_points = peaks_troughs[start_idx:end_idx+1]
                 
@@ -1455,12 +1536,12 @@ class PatternAnalyzer:
                     continue
                 
                 # 計算峰值的平均值和標準差
-                peak_values = [df.iloc[p['idx']][price_col] for p in peaks]
+                peak_values = [prices[p['idx']] for p in peaks]
                 peak_mean = np.mean(peak_values)
                 peak_std = np.std(peak_values)
                 
                 # 計算谷值的平均值和標準差
-                trough_values = [df.iloc[p['idx']][price_col] for p in troughs]
+                trough_values = [prices[p['idx']] for p in troughs]
                 trough_mean = np.mean(trough_values)
                 trough_std = np.std(trough_values)
                 
@@ -1468,17 +1549,17 @@ class PatternAnalyzer:
                 if peak_std / peak_mean > threshold or trough_std / trough_mean > threshold:
                     continue
                 
-                # 計算矩形的高度
+                # 計算矩形高度
                 height = peak_mean - trough_mean
                 
-                # 如果高度太小，則不是矩形
+                # 確保高度足夠，否則可能是水平震盪
                 if height / peak_mean < threshold:
                     continue
                 
                 # 檢查是否有足夠的接觸點
                 touches = 0
                 for p in window_points:
-                    price = df.iloc[p['idx']][price_col]
+                    price = prices[p['idx']]
                     # 如果價格接近上邊界或下邊界，則計為一次接觸
                     if abs(price - peak_mean) < threshold * peak_mean or abs(price - trough_mean) < threshold * trough_mean:
                         touches += 1
@@ -1487,16 +1568,12 @@ class PatternAnalyzer:
                 if touches < min_touches:
                     continue
                 
-                # 確定矩形的實際起始和結束索引
-                actual_start_idx = window_points[0]['idx']
-                actual_end_idx = window_points[-1]['idx']
-                
                 # 確定矩形的類型（看漲或看跌）
                 # 如果最後一個點是向上突破，則是看漲矩形
                 # 如果最後一個點是向下突破，則是看跌矩形
-                last_idx = min(actual_end_idx + window, len(df) - 1)
+                last_idx = min(actual_end_idx + window, len(prices) - 1)
                 if last_idx > actual_end_idx:
-                    last_price = df.iloc[last_idx][price_col]
+                    last_price = prices[last_idx]
                     if last_price > peak_mean + threshold * peak_mean:
                         direction = 'bullish'
                         pattern_type = '看漲矩形'
@@ -1541,8 +1618,8 @@ class PatternAnalyzer:
             i += 1
         
         return rectangles
-    
-    def identify_wedge(self, df, price_col=None, window=30, threshold=0.1, min_touches=4, min_r_squared=0.6, min_slope=0.005, min_height_ratio=0.03):
+        
+    def identify_wedge(self, df, price_col=None, window=30, threshold=0.1, min_touches=4, min_r_squared=0.6, min_slope=0.005, min_height_ratio=0.03, limit_idx: Optional[int] = None):
         """識別楔形形態
         
         楔形是一種價格在兩條收斂的趨勢線之間波動的形態，形成楔形。
@@ -1557,6 +1634,7 @@ class PatternAnalyzer:
             min_r_squared: 趨勢線擬合的最小R方值，用於確保趨勢線的可靠性
             min_slope: 趨勢線斜率的最小絕對值，用於確保趨勢線不是水平的
             min_height_ratio: 楔形高度與價格範圍的最小比例，用於確保楔形足夠明顯
+            limit_idx: 可選剪枝參數，小於此索引結束的形態將被直接過濾
             
         Returns:
             list: 識別出的楔形形態的位置列表
@@ -1582,6 +1660,11 @@ class PatternAnalyzer:
         for start_idx in range(len(peaks_troughs) - min_touches + 1):
             # 嘗試不同的窗口大小
             for end_idx in range(start_idx + min_touches - 1, min(start_idx + 20, len(peaks_troughs))):
+                actual_end_idx = peaks_troughs[end_idx]['idx']
+                # 🚀 關鍵優化：如果指定了 limit_idx，且結束點小於 limit_idx，則直接過濾
+                if limit_idx is not None and actual_end_idx < limit_idx:
+                    continue
+
                 # 獲取窗口內的所有峰和谷
                 window_points = peaks_troughs[start_idx:end_idx+1]
                 
@@ -1599,9 +1682,9 @@ class PatternAnalyzer:
                 
                 # 獲取峰值和谷值的索引和價格
                 peak_indices = [p['idx'] for p in peaks]
-                peak_prices = [df.iloc[idx][price_col] for idx in peak_indices]
+                peak_prices = [prices[idx] for idx in peak_indices]
                 trough_indices = [p['idx'] for p in troughs]
-                trough_prices = [df.iloc[idx][price_col] for idx in trough_indices]
+                trough_prices = [prices[idx] for idx in trough_indices]
                 
                 # 使用線性回歸擬合上下趨勢線
                 try:
@@ -1622,16 +1705,16 @@ class PatternAnalyzer:
                 if upper_r_squared < min_r_squared or lower_r_squared < min_r_squared:
                     continue
                 
-                # 檢查趨勢線斜率是否顯著
+                # 檢查趨勢線斜率是否達到最低要求
                 if abs(upper_slope) < min_slope or abs(lower_slope) < min_slope:
                     continue
                 
                 # 檢查趨勢線是否收斂
                 if abs(upper_slope - lower_slope) < 0.0001:
-                    # 如果趨勢線平行，則不是楔形
+                    # 趨勢線平行，不是楔形
                     continue
                 
-                # 計算收斂點的x坐標
+                # 計算趨勢線交點的 x 坐標
                 try:
                     convergence_x = (lower_intercept - upper_intercept) / (upper_slope - lower_slope)
                 except:
@@ -1641,18 +1724,18 @@ class PatternAnalyzer:
                 actual_start_idx = window_points[0]['idx']
                 actual_end_idx = window_points[-1]['idx']
                 
-                # 檢查收斂點是否在合理範圍內
-                # 楔形的收斂點通常在形態結束後不遠處
+                # 檢查交點是否在合理範圍內
+                # 楔形的交點通常在形態結束後不遠處
                 wedge_length = actual_end_idx - actual_start_idx
                 if convergence_x < actual_start_idx or convergence_x > actual_end_idx + wedge_length * 2:
                     continue
                 
-                # 計算楔形起點的高度（上下趨勢線之間的距離）
+                # 計算楔形起點和終點的高度（上下趨勢線之間的距離）
                 start_height = abs((upper_slope * actual_start_idx + upper_intercept) - (lower_slope * actual_start_idx + lower_intercept))
                 end_height = abs((upper_slope * actual_end_idx + upper_intercept) - (lower_slope * actual_end_idx + lower_intercept))
                 
-                # 檢查楔形是否足夠收斂（起點高度應顯著大於終點高度）
-                if start_height < end_height or end_height / start_height > 0.7:  # 至少要收斂30%
+                # 檢查楔形是否收斂（終點高度應小於起點高度且收斂至少30%）
+                if start_height < end_height or end_height / start_height > 0.7:
                     continue
                 
                 # 檢查楔形高度是否足夠明顯
@@ -1751,7 +1834,7 @@ class PatternAnalyzer:
             i += 1
         
         return wedges
-    
+        
     def identify_pattern(self, df, pattern_type, price_col=None, **kwargs):
         """識別指定類型的圖形模式
         
@@ -1764,6 +1847,8 @@ class PatternAnalyzer:
         Returns:
             list: 識別出的圖形模式的位置列表
         """
+        # 🚀 彈出 limit_idx，避免傳遞給不支持此參數的形態方法而報 TypeError 錯誤
+        limit_idx = kwargs.pop('limit_idx', None)
         if pattern_type == 'W底':
             return self.identify_w_bottom(df, price_col, **kwargs)
         elif pattern_type == '頭肩頂':
@@ -1786,7 +1871,7 @@ class PatternAnalyzer:
         elif pattern_type == '雙底':
             return self.identify_double_bottom(df, price_col, **kwargs)
         elif pattern_type == '三角形':
-            return self.identify_triangle(df, price_col, **kwargs)
+            return self.identify_triangle(df, price_col, limit_idx=limit_idx, **kwargs)
         elif pattern_type == '旗形':
             return self.identify_flag(df, price_col, **kwargs)
         elif pattern_type == 'V形反轉':
@@ -1796,9 +1881,9 @@ class PatternAnalyzer:
         elif pattern_type == '圓底':
             return self.identify_rounding_bottom(df, price_col, **kwargs)
         elif pattern_type == '矩形':
-            return self.identify_rectangle(df, price_col, **kwargs)
+            return self.identify_rectangle(df, price_col, limit_idx=limit_idx, **kwargs)
         elif pattern_type == '楔形':
-            return self.identify_wedge(df, price_col, **kwargs)
+            return self.identify_wedge(df, price_col, limit_idx=limit_idx, **kwargs)
         else:
             raise ValueError(f"不支持的圖形模式類型: {pattern_type}")
     

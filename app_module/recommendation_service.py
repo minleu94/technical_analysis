@@ -261,6 +261,9 @@ class RecommendationService:
             # 沒有產業篩選，直接限制數量
             stocks = all_stocks[:max_stocks]
         
+        # 🚀 效能優化：過濾 df 僅保留需要處理的股票，避免在包含所有個股的巨量 DataFrame 上進行高頻 boolean indexing
+        df = df[df[stock_col].isin(stocks)].copy()
+        
         # ✅ 記錄處理開始
         logger.info(
             f"[RecommendationService] 開始處理 {len(stocks)} 支股票"

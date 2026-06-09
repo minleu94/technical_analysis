@@ -97,6 +97,11 @@ class BacktestConfigPanel(QWidget):
         self.input_source_group = QGroupBox("輸入來源")
         config_form = QFormLayout()
         
+        # 建立股票選擇容器
+        self.stock_selection_container = QWidget()
+        stock_selection_layout = QFormLayout(self.stock_selection_container)
+        stock_selection_layout.setContentsMargins(0, 0, 0, 0)
+        
         # 股票代號（支援單一/清單模式）
         stock_mode_row = QHBoxLayout()
         self.stock_mode_combo = QComboBox()
@@ -104,12 +109,12 @@ class BacktestConfigPanel(QWidget):
         self.stock_mode_combo.currentTextChanged.connect(self._on_stock_mode_changed)
         stock_mode_row.addWidget(QLabel("模式:"))
         stock_mode_row.addWidget(self.stock_mode_combo)
-        config_form.addRow(stock_mode_row)
+        stock_selection_layout.addRow(stock_mode_row)
         
         # 單一股票輸入
         self.stock_code_input = QLineEdit()
         self.stock_code_input.setPlaceholderText("例如：2330")
-        config_form.addRow("股票代號:", self.stock_code_input)
+        stock_selection_layout.addRow("股票代號:", self.stock_code_input)
         
         # 選股清單（初始隱藏）
         self.watchlist_widget = QWidget()
@@ -125,7 +130,9 @@ class BacktestConfigPanel(QWidget):
         watchlist_row.addWidget(watchlist_btn)
         watchlist_layout.addLayout(watchlist_row)
         self.watchlist_widget.setVisible(False)
-        config_form.addRow(self.watchlist_widget)
+        stock_selection_layout.addRow(self.watchlist_widget)
+        
+        config_form.addRow(self.stock_selection_container)
         
         # 填滿 watchlist (由 parent_view 方法執行)
         self.parent_view._populate_watchlist_combo()
@@ -676,7 +683,8 @@ class BacktestConfigPanel(QWidget):
 
         # 2. 輸入來源群組
         if self.input_source_group:
-            self.input_source_group.setVisible(not is_replay)
+            self.input_source_group.setVisible(True)
+            self.stock_selection_container.setVisible(not is_replay)
             # 自動切換單一/清單下拉選單
             if is_single:
                 self.stock_mode_combo.blockSignals(True)

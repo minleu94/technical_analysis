@@ -614,6 +614,53 @@ class ScoringEngine:
         if len(pattern_types) == 0:
             return pd.Series(50.0, index=df.index)  # 預設中性
         
+        # 獲取價格序列以尋找確認點，避免未來函數 (Look-ahead bias)
+        close_col = None
+        for col in ['收盤價', 'Close', 'close']:
+            if col in df.columns:
+                close_col = col
+                break
+                
+        # 一次性向量化計算累積 ATR 平均值，並作為隱藏欄位存入 DataFrame
+        if '_atr_cum_mean' not in df.columns and close_col:
+            high_col = None
+            for col in ['最高價', 'High', 'high']:
+                if col in df.columns:
+                    high_col = col
+                    break
+            low_col = None
+            for col in ['最低價', 'Low', 'low']:
+                if col in df.columns:
+                    low_col = col
+                    break
+                    
+            if high_col and low_col:
+                prices = pd.to_numeric(df[close_col], errors='coerce').values
+                highs = pd.to_numeric(df[high_col], errors='coerce').values
+                lows = pd.to_numeric(df[low_col], errors='coerce').values
+                
+                # 防禦性填充 NaN
+                if np.isnan(prices).any():
+                    prices = pd.Series(prices).ffill().bfill().values
+                if np.isnan(highs).any():
+                    highs = pd.Series(highs).ffill().bfill().values
+                if np.isnan(lows).any():
+                    lows = pd.Series(lows).ffill().bfill().values
+                
+                tr = np.zeros_like(prices)
+                if len(prices) > 0:
+                    tr[0] = highs[0] - lows[0]
+                if len(prices) > 1:
+                    pc = prices[:-1]
+                    d1 = highs[1:] - lows[1:]
+                    d2 = np.abs(highs[1:] - pc)
+                    d3 = np.abs(lows[1:] - pc)
+                    tr[1:] = np.maximum(np.maximum(d1, d2), d3)
+                
+                cum_atr = np.cumsum(tr) / np.arange(1, len(tr) + 1)
+                df = df.copy()
+                df['_atr_cum_mean'] = cum_atr
+
         # 基礎分數映射
         base_scores = {
             'W底': 85, '頭肩底': 80, '雙底': 80,
@@ -629,13 +676,6 @@ class ScoringEngine:
         n_bars = len(df)
         deviations = np.zeros(n_bars, dtype=float)
         
-        # 獲取價格序列以尋找確認點，避免未來函數 (Look-ahead bias)
-        close_col = None
-        for col in ['收盤價', 'Close', 'close']:
-            if col in df.columns:
-                close_col = col
-                break
-        
         # 滾動歷史識別：在每一個時間點 t，我們只使用截止到 t 的資料子集，徹底杜絕圖形識別本身使用未來資料
         for t in range(n_bars):
             sub_df = df.iloc[:t+1]
@@ -649,8 +689,18 @@ class ScoringEngine:
                 if dev_contrib == 0.0:
                     continue
                     
+                # 🚀 效能優化：若當前子數據集長度小於該形態的最少點數，直接跳過形態識別與 SciPy 呼叫
+                min_pts = analyzer.patterns.get(pattern_type, {}).get('min_points', 5)
+                if len(sub_df) < min_pts:
+                    continue
+                    
+                kwargs = {}
+                if pattern_type in ['三角形', '矩形', '楔形']:
+                    # 🚀 效能優化：針對非突破型形態，在當前時間點 t 累積分數只取決於 confirm_idx == end_idx + 2 == t，即 end_idx == t - 2。
+                    # 設定 limit_idx = max(0, t - 22) 作為保守剪枝，過濾 20 天前的舊形態。
+                    kwargs['limit_idx'] = max(0, t - 22)
                 try:
-                    positions = analyzer.identify_pattern(sub_df, pattern_type)
+                    positions = analyzer.identify_pattern(sub_df, pattern_type, **kwargs)
                 except Exception:
                     positions = []
                     
