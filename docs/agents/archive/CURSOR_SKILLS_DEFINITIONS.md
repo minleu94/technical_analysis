@@ -1,6 +1,9 @@
 # Cursor Skills 定義文檔
 
-> **用途**：將此文檔中的 Skill 定義複製貼上到 Cursor Skills 中即可使用
+> **Deprecated / Archive**：此文件是舊 Cursor Skills 歷史定義，僅保留作為遷移參考。
+> Codex 與 Antigravity 的共享協作入口請使用 `docs/agents/skills_registry.md`，角色權威請使用 `docs/agents/*.md`。
+
+> **歷史用途**：此文件原本用於將 Skill 定義複製貼上到 Cursor Skills；目前不再作為 Codex / Antigravity 的活躍工作入口。
 
 ---
 
@@ -444,6 +447,8 @@
 
 ## 🚀 快速建立指南
 
+> Archive note：以下段落是舊 Cursor 工作流的歷史說明，僅供追溯，不應用於目前 Codex / Antigravity 雙 AI 協作。
+
 ### 方法 1：手動建立（推薦）
 
 1. 在 Cursor 中打開 Settings → Cursor Settings → Skills
@@ -470,12 +475,14 @@ Skill 清單：
 - DOC - Coverage Impact Scan
 - DOC - Snapshot/Index/Roadmap Sync
 
-每個 Skill 的完整 Prompt 都在 docs/agents/CURSOR_SKILLS_DEFINITIONS.md 中。
+每個 Skill 的完整 Prompt 歷史來源為 `docs/agents/archive/CURSOR_SKILLS_DEFINITIONS.md`。
 ```
 
 ---
 
 ## ⭐ 最推薦先建立的 3 個 Skills
+
+> Archive note：以下推薦僅反映舊 Cursor Skills 時期的優先順序；目前請以 `docs/agents/skills_registry.md` 與 `docs/agents/*.md` 為準。
 
 根據你的痛點（注意力掉、忘記要檢查什麼），建議優先建立：
 

@@ -10,7 +10,8 @@
 2. `docs/agents/shared_context.md` - 全 Agent 共用規範
 3. `docs/agents/git_exclusions.md` - Git 排除與不應提交清單
 4. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案目前狀態
-5. 與任務對應的 Agent 文件：
+5. `docs/agents/skills_registry.md` - Codex / Antigravity 共用的角色選擇與協作入口
+6. 與任務對應的 Agent 文件：
    - 架構判斷、技術決策：`docs/agents/tech_lead.md`
    - 資料完整性、資料對比：`docs/agents/data_audit_agent.md`
    - 清理、移除、整理：`docs/agents/data_cleanup_agent.md`
@@ -22,6 +23,7 @@
 - Codex 會自動讀取作用範圍內的 `AGENTS.md`。
 - 本檔位於 repo 根目錄，作用範圍是整個 repository。
 - `docs/agents/*.md` 是專案 Agent 知識庫，不是 Codex 會自動載入的檔名；本檔負責把 Codex 指向那些文件。
+- `docs/agents/skills_registry.md` 是 Codex 與 Antigravity 共用的協作入口，只負責角色選擇、流程導引與 shared context，不重新定義 Agent。
 - 若未來某個子目錄需要更細規則，可在該子目錄新增自己的 `AGENTS.md`，其規則只作用於該子目錄樹。
 
 ## 工作規範

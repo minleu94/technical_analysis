@@ -28,7 +28,7 @@
 
 ## 2. Agent Inventory (Agent 盤點)
 
-專案使用特定的 AI 角色（定義於 repo 根目錄 `AGENTS.md`、`docs/agents/` 與 Cursor Skills 中）。Codex 的自動讀取入口是 `AGENTS.md`；`docs/agents/` 保留完整 Agent 架構與 Prompt 文件。
+專案使用特定的 AI 角色（定義於 repo 根目錄 `AGENTS.md`、`GEMINI.md` 與 `docs/agents/` 中）。Codex 的自動讀取入口是 `AGENTS.md`；Antigravity 的自動讀取入口是 `GEMINI.md`；`docs/agents/*.md` 是唯一角色與規則權威。`docs/agents/skills_registry.md` 僅負責 Codex / Antigravity 共用的角色選擇、流程導引與 shared context 入口，不重新定義 Agent。
 
 ### Tech Lead Agent (`tech_lead.md`)
 * **Purpose (目的)**：負責技術決策、架構方向與風險評估。
@@ -138,6 +138,7 @@
 * 舊版 `ui_app/README.md` (Tkinter) 相較於新的 `ui_qt` 堆疊已屬舊版遺產。
 * Roadmap 中歷史 Phase 的 Exit criteria 屬於歷史紀錄；理解當前狀態請只看「Living Section」。
 * （已清理：重複的 `docs/architecture/` 與空的 `docs/governance/` 資料夾已被移除，統一收斂至 `01_architecture/`）。
+* `docs/agents/archive/CURSOR_SKILLS_DEFINITIONS.md` 是舊 Cursor Skills 歷史定義，僅保留作為遷移參考；Codex / Antigravity 日常協作請使用 `docs/agents/skills_registry.md` 與 `docs/agents/*.md`。
 
 ---
 

@@ -149,6 +149,8 @@
 | [agents/documentation_agent.md](../agents/documentation_agent.md) | Documentation Agent。 |
 | [agents/data_audit_agent.md](../agents/data_audit_agent.md) | Data Audit Agent。 |
 | [agents/data_cleanup_agent.md](../agents/data_cleanup_agent.md) | Data Cleanup Agent。 |
+| [agents/skills_registry.md](../agents/skills_registry.md) | Codex / Antigravity 共用的角色選擇、流程導引與 shared context 入口。 |
+| [agents/skills/team.md](../agents/skills/team.md) | Codex / Antigravity 任務分流與交接流程。 |
 | [agents/antigravity/README.md](../agents/antigravity/README.md) | Antigravity Agent 入口與角色分流。 |
 | [agents/antigravity/tech_lead_agent.md](../agents/antigravity/tech_lead_agent.md) | Antigravity Tech Lead Agent。 |
 | [agents/antigravity/execution_agent.md](../agents/antigravity/execution_agent.md) | Antigravity Execution Agent。 |
@@ -156,7 +158,7 @@
 | [agents/antigravity/data_audit_agent.md](../agents/antigravity/data_audit_agent.md) | Antigravity Data Audit Agent。 |
 | [agents/antigravity/data_cleanup_agent.md](../agents/antigravity/data_cleanup_agent.md) | Antigravity Data Cleanup Agent。 |
 | [agents/antigravity/handoff_template.md](../agents/antigravity/handoff_template.md) | Antigravity 任務交接模板。 |
-| [agents/CURSOR_SKILLS_DEFINITIONS.md](../agents/CURSOR_SKILLS_DEFINITIONS.md) | Cursor skills 定義。 |
+| [agents/archive/CURSOR_SKILLS_DEFINITIONS.md](../agents/archive/CURSOR_SKILLS_DEFINITIONS.md) | 舊 Cursor skills 定義封存，僅保留作為遷移參考。 |
 | [strategies/momentum_aggressive_v1.md](../strategies/momentum_aggressive_v1.md) | 暴衝策略說明。 |
 | [strategies/stable_conservative_v1.md](../strategies/stable_conservative_v1.md) | 穩健策略說明。 |
 

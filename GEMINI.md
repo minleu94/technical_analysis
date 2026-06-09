@@ -15,13 +15,14 @@
 3. `docs/agents/git_exclusions.md` - Git 排除與不應提交清單
 4. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案目前狀態
 5. `docs/00_core/DEVELOPMENT_ROADMAP.md` - 只需先看「Living Section 定義」與 Living Section 的現況 / Next / Risks
-6. `docs/agents/antigravity/README.md` - Antigravity 角色選擇與工作方式
-7. 與任務對應的角色文件：
-   - 技術判斷 / 架構建議：`docs/agents/antigravity/tech_lead_agent.md`
-   - 受控實作 / Bug 修復：`docs/agents/antigravity/execution_agent.md`
-   - 文檔同步 / Coverage：`docs/agents/antigravity/documentation_agent.md`
-   - 資料驗證 / 對比：`docs/agents/antigravity/data_audit_agent.md`
-   - 清理 / 移除 / 整理：`docs/agents/antigravity/data_cleanup_agent.md`
+6. `docs/agents/skills_registry.md` - Codex / Antigravity 共用的角色選擇與協作入口
+7. `docs/agents/antigravity/README.md` - Antigravity 適配摘要與工作方式
+8. 與任務對應的權威角色文件：
+   - 技術判斷 / 架構建議：`docs/agents/tech_lead.md`
+   - 受控實作 / Bug 修復：`docs/agents/execution_agent.md`
+   - 文檔同步 / Coverage：`docs/agents/documentation_agent.md`
+   - 資料驗證 / 對比：`docs/agents/data_audit_agent.md`
+   - 清理 / 移除 / 整理：`docs/agents/data_cleanup_agent.md`
 
 ## 工作規範
 
@@ -35,14 +36,14 @@
 
 ## Antigravity 輔助規則
 
-`.agent/rules/` 內的檔案是給 Antigravity 快速載入的工作規則：
+`.agent/rules/` 內的檔案是給 Antigravity 快速載入的工作規則摘要：
 
 - `.agent/rules/00_project_entry.md`：專案入口與權威文件順序
 - `.agent/rules/10_development_execution.md`：實作任務規則
 - `.agent/rules/20_documentation_sync.md`：文檔同步規則
 - `.agent/rules/30_git_safety.md`：Git 與多 Agent 安全規則
 
-若這些規則與 `docs/agents/` 或 `docs/00_core/` 衝突，以 `docs/00_core/DEVELOPMENT_ROADMAP.md`、`docs/agents/shared_context.md`、`docs/agents/git_exclusions.md` 為準。
+若這些規則與 `docs/agents/` 或 `docs/00_core/` 衝突，以 `docs/agents/` 權威 Agent 文件、`docs/00_core/DEVELOPMENT_ROADMAP.md`、`docs/agents/shared_context.md`、`docs/agents/git_exclusions.md` 為準。
 
 ## 驗證建議
 

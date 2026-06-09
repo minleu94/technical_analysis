@@ -40,6 +40,9 @@
   - 不可違背的規則
 - **[Git 排除與不應提交清單](./git_exclusions.md)** (`git_exclusions.md`)
   - 說明哪些本機輸出、暫存目錄與 tracked QA output 不應被順手 stage
+- **[Shared AI Skills Registry](./skills_registry.md)** (`skills_registry.md`)
+  - Codex 與 Antigravity 共用的角色選擇、流程導引與 shared context 入口
+  - 僅指向既有 Agent 權威文件，不重新定義角色規則
 - **[Antigravity Agent 入口](./antigravity/README.md)** (`antigravity/README.md`)
   - 給 Antigravity 使用的角色分流與必讀規則
   - 與 repo 根目錄 `GEMINI.md`、`.agent/rules/` 搭配使用
@@ -64,7 +67,8 @@
 2. `docs/agents/shared_context.md` - 共用上下文（不可違背前提）
 3. `docs/agents/git_exclusions.md` - Git 排除與不應提交清單
 4. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案快照（開場 30 秒狀態）
-5. 自身對應的 Agent 文件（如：`tech_lead.md`、`execution_agent.md`）
+5. `docs/agents/skills_registry.md` - Codex / Antigravity 共用的角色選擇與協作入口
+6. 自身對應的 Agent 文件（如：`tech_lead.md`、`execution_agent.md`）
 
 **未完成上述閱讀，不得執行任何任務。**
 
@@ -154,18 +158,21 @@ Codex 不會自動把 `docs/agents/*.md` 當成 repo 指令載入。Codex 的自
 
 Antigravity 的 repo 根目錄入口是 `GEMINI.md`，輔助規則放在 `.agent/rules/`。完整角色文件放在 `docs/agents/antigravity/`，並指回本目錄既有的權威 Agent 文件。
 
+`docs/agents/antigravity/` 與 `.agent/rules/` 只作為 Antigravity 適配摘要；若與本目錄權威 Agent 文件衝突，以 `docs/agents/*.md`、`shared_context.md` 與 `git_exclusions.md` 為準。
+
 使用方式：
 
 1. 在 Antigravity 開新任務時，確認工作目錄位於 repo 根目錄。
 2. 先讀 `GEMINI.md`。
-3. 再依任務類型讀 `docs/agents/antigravity/README.md` 與對應角色文件。
-4. 若 Antigravity 與 Codex 指令描述不同，以 `docs/agents/shared_context.md`、`docs/agents/git_exclusions.md` 與 `docs/00_core/DEVELOPMENT_ROADMAP.md` 為準。
+3. 再讀 `docs/agents/skills_registry.md` 判斷應啟用哪一個權威 Agent。
+4. 依任務類型讀本目錄中的對應 Agent 文件；`docs/agents/antigravity/README.md` 僅作為 Antigravity 適配摘要。
+5. 若 Antigravity 與 Codex 指令描述不同，以 `docs/agents/*.md`、`docs/agents/shared_context.md`、`docs/agents/git_exclusions.md` 與 `docs/00_core/DEVELOPMENT_ROADMAP.md` 為準。
 
 使用方式：
 
 1. 開新 Codex 任務時，確認工作目錄位於 repo 根目錄或其子目錄。
 2. Codex 會讀取根目錄 `AGENTS.md`。
-3. 根據任務類型，再讀取本目錄中的對應 Agent 文件。
+3. 根據任務類型，先讀 `docs/agents/skills_registry.md`，再讀取本目錄中的對應 Agent 文件。
 4. 若子目錄未來需要專屬規範，可在該子目錄新增自己的 `AGENTS.md`。
 
 ## 🔄 更新記錄
@@ -175,4 +182,5 @@ Antigravity 的 repo 根目錄入口是 `GEMINI.md`，輔助規則放在 `.agent
 - 2026-05-20：新增根目錄 `AGENTS.md` 作為 Codex 自動識別入口，保留 `docs/agents/` 作為完整 Agent 架構來源
 - 2026-05-20：補充目前 `ui_qt`、資料根目錄與 Codex 載入現況，避免 Agent 使用舊版路徑假設
 - 2026-05-27：新增 Antigravity 入口說明，對齊 `GEMINI.md`、`.agent/rules/` 與 `docs/agents/antigravity/`
+- 2026-06-09：新增 `skills_registry.md` 作為 Codex / Antigravity 共用協作入口，明確 `docs/agents/*.md` 為唯一角色權威，Antigravity 文件降級為適配摘要
 
