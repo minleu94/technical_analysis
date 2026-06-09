@@ -418,7 +418,7 @@
 
 ## Phase 4：持倉管理與交易日誌（Portfolio & Journal）⏸️ 依賴 Phase 3.3b
 
-**前置條件**：Phase 3.3b（Promote 功能、K 線標記買賣點）已完成。Phase 4.1 目前已建立 service/domain/test 骨架，尚未完成 `ui_qt` Portfolio Tab 與 Phase 3 → Portfolio 的使用者可見整合。
+**前置條件**：Phase 3.3b（Promote 功能、K 線標記買賣點）已完成。Phase 4.1 目前已建立 service/domain/test 骨架、`ui_qt` Portfolio Tab、Recommendation / Backtest → Portfolio 來源追溯與條件監控 MVP；後續主線是深化策略版本追蹤、Price 對照與持倉層風險提示。
 
 **目標**：你開始每天回答「這筆還對嗎」
 
@@ -437,13 +437,13 @@
 
 #### 必做功能
 
-* [ ] **新增 Portfolio Tab**（最小版本）
+* [x] **新增 Portfolio Tab**（最小版本）
 
-* [ ] **交易紀錄**（必綁 strategy_version + regime_snapshot）
+* [x] **交易紀錄**（保留 recommendation / backtest source metadata；策略版本追蹤視圖待深化）
 
-* [ ] **條件監控（Monitor）**：用「推薦引擎的判斷結果」去檢查是否還成立
+* [x] **條件監控（Monitor）**：MVP 已用來源快照與目前快照對照 Regime / TotalScore；Price 對照待深化
 
-* [ ] **非強制提示**（提醒/警示，不做自動操作）
+* [x] **非強制提示**（提醒/警示，不做自動操作）
 
 #### Phase 4.1 驗收標準
 
@@ -840,7 +840,7 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * `scripts/check_branch_files.py`：檢查下載的檔案
     * `scripts/verify_branch_data.py`：驗證資料格式
 
-### 下一步 Next（Phase 4.1 Portfolio UI）
+### 下一步 Next（Phase 4.1 Portfolio 深化）
 
 * **Research Lab 工作流重整啟動**（2026-06-04）
   * ✅ Backtest / Research Lab 第一階段開始整理為多模式實驗室：策略研究、單股回測、批次股票回測、固定組合回測與推薦系統回放。
@@ -849,7 +849,7 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
 
 * **文件與進度整理**（2026-05-20）
   * ✅ 數據更新工作台與 Agent 指引已同步至主要入口文件
-  * ⏳ 下一步仍以 Phase 4.1 Portfolio UI 為主要產品功能主線
+  * ⏳ 下一步仍以 Phase 4.1 Portfolio 的策略版本追蹤、Price 對照與持倉層風險提示為主要產品功能主線
 
 * ✅ **Phase 3.3b：研究閉環完整化** ✅ **已完成**（2026-01-02）
   * ✅ Epic 1 Promote 功能：已完成
