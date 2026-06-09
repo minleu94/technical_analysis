@@ -23,6 +23,10 @@ from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.portfolio_service import PortfolioService
 from app_module.journal_service import JournalService
 from app_module.recommendation_service import RecommendationService
+from app_module.portfolio_condition_monitor import (
+    PortfolioConditionMonitor,
+    PortfolioCurrentSnapshot,
+)
 from portfolio_module import PortfolioValidationError
 from ui_qt.widgets.info_button import InfoButton
 
@@ -261,12 +265,14 @@ class PortfolioView(QWidget):
         portfolio_service: PortfolioService,
         journal_service: JournalService,
         recommendation_service: Optional[RecommendationService] = None,
+        condition_monitor: Optional[PortfolioConditionMonitor] = None,
         parent=None
     ):
         super().__init__(parent)
         self.portfolio_service = portfolio_service
         self.journal_service = journal_service
         self.recommendation_service = recommendation_service
+        self.condition_monitor = condition_monitor or PortfolioConditionMonitor()
         
         self.positions_model: Optional[PandasTableModel] = None
         self.trades_model: Optional[PandasTableModel] = None
@@ -459,33 +465,16 @@ class PortfolioView(QWidget):
             positions = self.portfolio_service.list_positions()
             
             if not positions:
-                df = pd.DataFrame(columns=["證券代號", "證券名稱", "持有股數", "平均成本", "投入金額", "已實現損益", "狀態監控"])
+                df = pd.DataFrame(columns=[
+                    "證券代號", "證券名稱", "持有股數", "平均成本", "投入金額",
+                    "已實現損益", "來源脈絡", "進場分數", "目前分數", "狀態監控", "監控原因"
+                ])
             else:
                 data = []
                 for p in positions:
-                    # 執行 Condition Monitor 警告匹配
-                    monitor_status = "✅ 良好"
-                    tooltip_msg = "技術面表現良好，符合策略脈絡"
-                    
-                    # 嘗試非同步或背景調用推薦分析（如果服務可用且有最新推薦緩存）
-                    if self.recommendation_service and self.recommendation_service.config:
-                        try:
-                            # 對於該個股，我們嘗試拉取最近一天的推薦打分（此處拉取快照）
-                            code = p.stock_code
-                            # 進行簡化條件監控：例如呼叫內部篩選或打分引擎
-                            # 為了不卡頓 UI，如果該股最近沒有被緩存，我們可以安全跳過
-                            if code not in self.rec_cache:
-                                # 背景加載
-                                self._update_recommendation_cache_for_stock(code)
-                                
-                            rec_info = self.rec_cache.get(code)
-                            if rec_info:
-                                score = rec_info.get("score", 100)
-                                if score < 60:
-                                    monitor_status = "⚠️ 警示"
-                                    tooltip_msg = f"評分過低 ({score}分)！Regime 不合或技術指標走弱。Why Not: {rec_info.get('why_not', '無')}"
-                        except Exception as me:
-                            logger.debug("Condition monitor check failed for %s: %s", p.stock_code, me)
+                    snapshot = self._current_snapshot_for_position(p.stock_code)
+                    monitor_result = self.condition_monitor.evaluate(p, snapshot)
+                    monitor_reason = "；".join(monitor_result.reasons)
                             
                     data.append({
                         "證券代號": p.stock_code,
@@ -494,8 +483,12 @@ class PortfolioView(QWidget):
                         "平均成本": p.average_cost,
                         "投入金額": p.invested_amount,
                         "已實現損益": p.realized_pnl,
-                        "狀態監控": monitor_status,
-                        "_tooltip": tooltip_msg  # 用於自定義表格行為
+                        "來源脈絡": monitor_result.source_label,
+                        "進場分數": monitor_result.entry_total_score,
+                        "目前分數": monitor_result.current_total_score,
+                        "狀態監控": monitor_result.label,
+                        "監控原因": monitor_reason,
+                        "_tooltip": monitor_reason,
                     })
                 df = pd.DataFrame(data)
                 
@@ -514,6 +507,24 @@ class PortfolioView(QWidget):
             logger.error("Failed to load positions table: %s", e)
             import traceback
             traceback.print_exc()
+
+    def _current_snapshot_for_position(self, stock_code: str) -> Optional[PortfolioCurrentSnapshot]:
+        """取得單一持倉的目前評分快照；取不到時交由 monitor 標示待更新。"""
+        if not self.recommendation_service:
+            return None
+        try:
+            if stock_code not in self.rec_cache:
+                self._update_recommendation_cache_for_stock(stock_code)
+            rec_info = self.rec_cache.get(stock_code)
+            if not rec_info:
+                return None
+            return PortfolioCurrentSnapshot(
+                current_regime=str(rec_info.get("regime", "")),
+                current_total_score=rec_info.get("score"),
+            )
+        except Exception as exc:
+            logger.debug("Current snapshot lookup failed for %s: %s", stock_code, exc)
+            return None
 
     def _update_recommendation_cache_for_stock(self, stock_code: str):
         """背景快速獲取特定個股的推薦狀態，用以更新 Condition Monitor"""
@@ -534,6 +545,7 @@ class PortfolioView(QWidget):
                         score = float(stock_row.iloc[0].get('綜合分數', 80.0))
                         self.rec_cache[stock_code] = {
                             "score": score,
+                            "regime": "",
                             "why_not": "多空分數失衡" if score < 60 else ""
                         }
         except Exception as e:

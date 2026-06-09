@@ -20,7 +20,7 @@
 - Research Lab 工作流重整 🚧（回測頁已加入多模式實驗室語意；Watchlist 在研究流程中改定位為候選池；Recommendation / Backtest 記錄到 Portfolio 時會保留來源 metadata；說明文檔與 UI Info 已同步更新，2026-06-06）
 - 數據更新工作台 ✅（`UpdateView` 已整理為左側導覽維運工作台，新增「安全更新所有數據」日常維護入口）
 - Codex / Antigravity / Agent 指引 ✅（repo 根目錄 `AGENTS.md` 與 `GEMINI.md` 已建立，`docs/agents/` 與 `.agent/rules/` 已對齊目前 `ui_qt`、資料根目錄與文檔路徑）
-- Phase 4.1 Portfolio MVP 🚧（service/domain/test 與 `ui_qt` Portfolio Tab 已開始；Phase 3 → Portfolio handoff 會保存 recommendation / backtest source metadata）
+- Phase 4.1 Portfolio MVP 🚧（service/domain/test 與 `ui_qt` Portfolio Tab 已建立；Phase 3 → Portfolio handoff 會保存 recommendation / backtest source metadata；append-only 主路徑已加入 `PortfolioConditionMonitor` 條件監控 MVP，顯示來源脈絡、進場分數、目前分數與監控原因）
 
 ## 現在的工作模式（你每天要用的流程）
 

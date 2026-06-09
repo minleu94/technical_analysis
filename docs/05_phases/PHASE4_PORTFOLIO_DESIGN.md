@@ -226,7 +226,18 @@ class PortfolioDTO:
 
 ## 四、資料儲存結構
 
-### Position 儲存
+### 目前主路徑：Append-only Trades
+
+2026-06-09 起，Phase 4.1 的實作主路徑以 `PortfolioService` 與 `portfolio_module` domain 為準：
+
+- 儲存位置：`{output_root}/portfolio/trades.jsonl`
+- 儲存格式：append-only JSONL trade records
+- Position 不是獨立主資料，而是由 trades 透過 `rebuild_positions()` 即時計算出的 projection
+- Recommendation / Backtest 來源追溯保存在 trade 的 `source_type`、`source_id`、`source_snapshot_hash` 與 `source_summary`
+
+舊版 `app_module/position_service.py` 與 `app_module/position_dtos.py` 屬於早期骨架，仍保留作歷史相容與後續清理評估，但目前 `ui_qt` Portfolio 主畫面不以它們作為主資料來源。
+
+### 歷史骨架：Position JSON 儲存
 
 **儲存位置**：`{output_root}/portfolio/positions/`
 
@@ -291,6 +302,8 @@ class PortfolioDTO:
 
 **檔案位置**：`app_module/position_service.py`
 
+**目前狀態**：歷史骨架，非 Portfolio UI 主路徑。
+
 **職責**：
 - 管理 Position 的 CRUD 操作
 - 更新 Position 的當前狀態（價格、TotalScore、Regime）
@@ -349,9 +362,9 @@ class PositionService:
 **檔案位置**：`app_module/portfolio_service.py`
 
 **職責**：
-- 管理 Portfolio 總覽
-- 計算持倉分布
-- 計算整體未實現損益
+- 作為 Phase 4.1 主路徑，管理 append-only trades
+- 從 trades 衍生 positions projection
+- 管理 Portfolio 總覽與交易來源追溯
 - 與 Benchmark 對比
 
 **主要方法**（骨架）：
@@ -375,6 +388,18 @@ class PortfolioService:
         """取得與 Benchmark 的對比"""
         pass
 ```
+
+### PortfolioConditionMonitor
+
+**檔案位置**：`app_module/portfolio_condition_monitor.py`
+
+**職責**：
+- 讀取 derived `PositionDTO` 的 `source_summary`
+- 對照目前 Regime / TotalScore 快照
+- 產生 `valid` / `warning` / `invalid` 狀態、顯示標籤與監控原因
+- 不寫入儲存層、不執行交易、不調整持倉
+
+目前 MVP 已接入 `ui_qt/views/portfolio_view.py`，表格顯示「來源脈絡、進場分數、目前分數、狀態監控、監控原因」。
 
 ---
 

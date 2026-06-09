@@ -600,6 +600,7 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
   * ✅ `tests/test_portfolio_mvp.py`：Portfolio MVP 核心測試通過
   * ✅ `ui_qt/views/portfolio_view.py`：已建立最小 Portfolio Tab / trade entry path
   * ✅ Recommendation / Backtest → Portfolio 建立持倉：已整合來源 metadata；後續仍需完整條件監控與策略版本追蹤視圖
+  * ✅ `PortfolioConditionMonitor`：已加入 append-only position 主路徑的條件監控 MVP，使用來源快照與目前快照對照 Regime / TotalScore，UI 顯示來源脈絡、進場分數、目前分數與監控原因（2026-06-09）
 * ✅ **數據更新工作台重整與視覺/架構優化**：已完成（2026-06-03）
   * ✅ 將全部資料主分頁升級為「數據大看板 (Dashboard)」，以 StatusCard (圓角、軟陰影、🟢/🟡/🔴/⚪ 四色狀態指示燈) 展示數據概覽，與原 QTextEdit 接口相容度 100%。
   * ✅ 實現手動操作與進階配置（日期範圍、下載、增量合併、技術指標計算配置）「解耦歸位」至個別資料源維護分頁，並在每日股價分頁以 Danger Zone 封裝強制合併按鈕。
@@ -942,13 +943,13 @@ Living Section 包含以下段落（從「## 當前狀態（Living Section）」
     * ✅ 修復總結：`output/qa/phase3_3b_validation/修復總結報告.md`
     * ✅ BacktestView：新增 Promote 按鈕和 UI
 
-* **Phase 4：持倉管理與交易日誌**（🚧 已啟動，UI 未完成）
+* **Phase 4：持倉管理與交易日誌**（🚧 已啟動，最小 UI / handoff / 條件監控 MVP 已建立）
   * 🚧 Phase 4.1：最小可用持倉（Portfolio MVP）
     * ✅ service/domain/test 骨架已建立
-    * ⏳ 新增 `PortfolioView`
-    * ⏳ 新增 Portfolio 頂層 Tab
-    * ⏳ 串接 Recommendation / Backtest / Strategy Version 來源追溯
-    * ⏳ 條件監控（Regime / Score / Price 對照）顯示
+    * ✅ 新增 `PortfolioView`
+    * ✅ 新增 Portfolio 頂層 Tab
+    * ✅ 串接 Recommendation / Backtest 來源追溯 metadata
+    * 🚧 條件監控（Regime / Score 對照）MVP 已顯示；Price 對照與策略版本追蹤視圖仍待深化
   * ✅ Phase 4.2 前置：券商分點資料與 Smart Money Terminal MVP 已完成
   * ⏳ Phase 4.2 完整：持倉層的籌碼風險提示與下鑽整合尚未完成
 

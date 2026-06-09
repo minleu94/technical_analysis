@@ -5,7 +5,7 @@
 Phase 4 的最小可用骨架已建立，提供 **Read-only / Decision-support** 的 Position/Portfolio Layer，用於觀察、理解與管理既有策略/股票的部位狀態。
 
 **啟動日期**：2026-01-07  
-**狀態**：骨架已建立，待實作 UI 層
+**狀態**：最小 UI / handoff / 條件監控 MVP 已建立，待深化策略版本追蹤與 Price 對照
 
 ---
 
@@ -21,9 +21,16 @@ Phase 4 的最小可用骨架已建立，提供 **Read-only / Decision-support**
 
 ### 2. 資料結構（DTO）
 
-**`app_module/position_dtos.py`**
+**目前主路徑：`app_module/dtos/portfolio_dtos.py`**
+- `TradeDTO`：append-only 交易紀錄
+- `PositionDTO`：由 trades 衍生出的持倉投影
+- `PortfolioDTO`：投資組合總覽
+- `JournalEntryDTO`：覆盤日誌
+
+**歷史骨架：`app_module/position_dtos.py`**
 - `PositionDTO`：單一持倉的資料結構
 - `PortfolioDTO`：投資組合總覽的資料結構
+- 目前不是 `ui_qt` Portfolio 主畫面的主資料來源，後續可另開清理任務評估歸檔或整併。
 
 **關鍵欄位**：
 - 進場來源追溯（entry_source_type, entry_source_id）
@@ -33,7 +40,7 @@ Phase 4 的最小可用骨架已建立，提供 **Read-only / Decision-support**
 
 ### 3. 服務層骨架
 
-**`app_module/position_service.py`**
+**歷史骨架：`app_module/position_service.py`**
 - `PositionService`：管理 Position 的 CRUD 操作
 - 主要方法：
   - `create_position()`：建立新持倉
@@ -44,21 +51,33 @@ Phase 4 的最小可用骨架已建立，提供 **Read-only / Decision-support**
   - `close_position()`：平倉
 
 **`app_module/portfolio_service.py`**
-- `PortfolioService`：管理 Portfolio 總覽
+- `PortfolioService`：目前 Phase 4.1 主路徑，管理 append-only trades，並衍生 positions projection 與 Portfolio 總覽
 - 主要方法：
+  - `record_trade()`：記錄 append-only trade
+  - `list_positions()`：由交易紀錄衍生目前持倉
   - `get_portfolio()`：取得投資組合總覽
   - `update_portfolio()`：更新投資組合資訊
   - `get_benchmark_comparison()`：取得 Benchmark 對比（待實作）
+
+**`app_module/portfolio_condition_monitor.py`**
+- `PortfolioConditionMonitor`：以來源快照與目前快照對照 Regime / TotalScore，產生條件監控狀態與顯示原因
+- 已接入 `ui_qt/views/portfolio_view.py`
 
 ---
 
 ## 資料儲存結構
 
-### Position 儲存
+### 目前主路徑：Trade 儲存
+
+**位置**：`{output_root}/portfolio/trades.jsonl`
+
+**格式**：append-only JSONL；Position 由 trade rebuild，不以獨立 JSON position 作為主資料。
+
+### 歷史骨架：Position 儲存
 
 **位置**：`{output_root}/portfolio/positions/{position_id}.json`
 
-**格式**：JSON 檔案（每個 Position 一個檔案）
+**格式**：JSON 檔案（每個 Position 一個檔案），目前非主路徑。
 
 ### Portfolio 儲存
 
@@ -114,17 +133,17 @@ Phase 4 的最小可用骨架已建立，提供 **Read-only / Decision-support**
 
 ### 階段 2：條件監控實作（2-3 天）
 
-1. 實作 `check_condition`（檢查條件變化）
-2. 整合 `RegimeService` 獲取當前 Regime
-3. 整合 `RecommendationService` 獲取當前 TotalScore
-4. 實作條件狀態判斷邏輯
+1. ✅ 實作 `PortfolioConditionMonitor`（檢查條件變化）
+2. 🚧 整合目前 Regime 快照
+3. ✅ 透過 Recommendation scoring 快照取得目前 TotalScore（可用時）
+4. ✅ 實作條件狀態判斷邏輯（valid / warning / invalid）
 
 ### 階段 3：UI 骨架（2-3 天）
 
-1. 建立 `PortfolioView` 基本結構
-2. 實作持倉列表顯示
-3. 實作持倉詳細資訊顯示
-4. 添加「此為資訊呈現，不作為交易建議」標示
+1. ✅ 建立 `PortfolioView` 基本結構
+2. ✅ 實作持倉列表顯示
+3. 🚧 實作持倉詳細資訊顯示
+4. ⏳ 添加「此為資訊呈現，不作為交易建議」標示
 
 ### 階段 4：與 Phase 3 整合（1-2 天）
 
@@ -189,6 +208,6 @@ Phase 4 的最小可用骨架已建立，提供 **Read-only / Decision-support**
 ---
 
 **文檔版本**：v1.0  
-**最後更新**：2026-01-07  
-**狀態**：骨架已建立，待實作 UI 層
+**最後更新**：2026-06-09  
+**狀態**：最小 UI / handoff / 條件監控 MVP 已建立，待深化策略版本追蹤與 Price 對照
 
