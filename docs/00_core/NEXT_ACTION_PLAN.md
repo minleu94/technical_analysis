@@ -76,6 +76,8 @@
 
 目標：先定義「訊號日、資料可得日、成交日、成交價、停損停利、equity curve 記錄日」的統一契約。
 
+狀態（2026-06-10）：初版已完成。`BrokerSimulator next_open` 帳務錯位已修正；`close` 模式與推薦組合回測同日收盤成交假設已加入 warning / metadata；已新增 timeline contract 測試。
+
 優先檢查：
 
 - `app_module/recommendation_portfolio_backtest_service.py`
@@ -96,6 +98,8 @@
 ### P0：金融核心數值治理
 
 目標：停止在金融核心新增裸 `float`，並規劃既有裸 `float` 遷移。
+
+狀態（2026-06-10）：Phase 1 已啟動。已新增 `app_module/financial_units.py`，並將 `BrokerSimulator` 買賣手續費、滑價、證交稅與整股股數計算切到 Decimal / 整數股數 / 基點 helper；DTO / UI 邊界仍維持 float 以保留相容性。
 
 優先範圍：
 

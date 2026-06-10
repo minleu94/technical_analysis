@@ -8,6 +8,14 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
+from app_module.financial_units import (
+    apply_bps_to_price,
+    calculate_fee,
+    calculate_slippage_cost,
+    round_down_to_lot,
+    to_decimal,
+)
+
 
 @dataclass
 class BrokerConfig:
@@ -546,68 +554,68 @@ class BrokerSimulator:
         if capital <= 0 or price <= 0:
             return None
         
-        # 計算滑價
-        slippage_pct = self.config.slippage_bps / 10000
-        execution_price = price * (1 + slippage_pct)
+        price_dec = to_decimal(price)
+        capital_dec = to_decimal(capital)
+        execution_price_dec = apply_bps_to_price(price_dec, self.config.slippage_bps, side="buy")
         
         # 根據 sizing 模式計算目標股數
         if self.config.sizing_mode == "fixed_amount" and self.config.fixed_amount is not None:
             # 固定金額
-            target_value = self.config.fixed_amount
-            shares = int(target_value / execution_price / 1000) * 1000
+            target_value = to_decimal(self.config.fixed_amount)
+            shares = round_down_to_lot(int(target_value / execution_price_dec))
         elif self.config.sizing_mode == "risk_based" and self.config.risk_pct is not None:
             # 風險百分比 sizing（需要 ATR 或固定停損距離）
             # 簡化：使用固定停損距離（例如 2%）
-            stop_distance_pct = self.config.risk_pct
-            risk_per_share = execution_price * stop_distance_pct
+            stop_distance_pct = to_decimal(self.config.risk_pct)
+            risk_per_share = execution_price_dec * stop_distance_pct
             if risk_per_share > 0:
-                total_risk = capital * self.config.risk_pct
-                shares = int((total_risk / risk_per_share) / 1000) * 1000
+                total_risk = capital_dec * stop_distance_pct
+                shares = round_down_to_lot(int(total_risk / risk_per_share))
             else:
                 shares = 0
         else:
             # 全倉（預設）
-            shares = int(capital / execution_price / 1000) * 1000
+            shares = round_down_to_lot(int(capital_dec / execution_price_dec))
         
         # 成交量約束（如果啟用）
         if self.config.enable_volume_constraint and volume is not None and volume > 0:
-            max_shares = int(volume * self.config.max_participation_rate)
+            max_shares = int(to_decimal(volume) * to_decimal(self.config.max_participation_rate))
             shares = min(shares, max_shares)
             # 調整為1000股單位
-            shares = int(shares / 1000) * 1000
+            shares = round_down_to_lot(shares)
         
         if shares <= 0:
             return None
         
         # 計算交易金額
-        value = shares * execution_price
+        value_dec = to_decimal(shares) * execution_price_dec
         
         # 計算手續費（台股手續費率 0.1425%，最低20元）
-        fee = max(value * self.config.fee_bps / 10000, 20.0)
+        fee_dec = calculate_fee(value_dec, self.config.fee_bps)
         
         # 計算滑價成本
-        slippage_cost = shares * price * slippage_pct
+        slippage_cost_dec = calculate_slippage_cost(shares, price_dec, self.config.slippage_bps)
         
         # 總成本
-        total_cost = value + fee + slippage_cost
+        total_cost = value_dec + fee_dec + slippage_cost_dec
         
-        if total_cost > capital:
+        if total_cost > capital_dec:
             # 資金不足，調整股數
-            shares = int((capital - fee) / execution_price / 1000) * 1000
+            shares = round_down_to_lot(int((capital_dec - fee_dec) / execution_price_dec))
             if shares <= 0:
                 return None
-            value = shares * execution_price
-            fee = max(value * self.config.fee_bps / 10000, 20.0)
-            slippage_cost = shares * price * slippage_pct
+            value_dec = to_decimal(shares) * execution_price_dec
+            fee_dec = calculate_fee(value_dec, self.config.fee_bps)
+            slippage_cost_dec = calculate_slippage_cost(shares, price_dec, self.config.slippage_bps)
         
         return Trade(
             date=date,
             type='buy',
-            price=execution_price,
+            price=float(execution_price_dec),
             shares=shares,
-            value=value,
-            fee=fee,
-            slippage=slippage_cost,
+            value=float(value_dec),
+            fee=float(fee_dec),
+            slippage=float(slippage_cost_dec),
             reason_tags=reason_tags,
             signal=signal
         )
@@ -638,30 +646,29 @@ class BrokerSimulator:
         if shares <= 0 or price <= 0:
             return None
         
-        # 計算滑價
-        slippage_pct = self.config.slippage_bps / 10000
-        execution_price = price * (1 - slippage_pct)
+        price_dec = to_decimal(price)
+        execution_price_dec = apply_bps_to_price(price_dec, self.config.slippage_bps, side="sell")
         
         # 計算交易金額
-        value = shares * execution_price
+        value_dec = to_decimal(shares) * execution_price_dec
         
         # 計算手續費（台股手續費率 0.1425%，最低20元）
-        fee = max(value * self.config.fee_bps / 10000, 20.0)
+        fee_dec = calculate_fee(value_dec, self.config.fee_bps)
         
         # 計算證券交易稅（台股賣出時 0.3%）
-        tax = value * 0.003
+        tax_dec = calculate_fee(value_dec, 30, minimum_fee=to_decimal("0.00"))
         
         # 計算滑價成本
-        slippage_cost = shares * price * slippage_pct
+        slippage_cost_dec = calculate_slippage_cost(shares, price_dec, self.config.slippage_bps)
         
         return Trade(
             date=date,
             type='sell',
-            price=execution_price,
+            price=float(execution_price_dec),
             shares=shares,
-            value=value,
-            fee=fee + tax,  # 手續費 + 證交稅
-            slippage=slippage_cost,
+            value=float(value_dec),
+            fee=float(fee_dec + tax_dec),  # 手續費 + 證交稅
+            slippage=float(slippage_cost_dec),
             reason_tags=reason_tags,
             signal=signal
         )

@@ -45,9 +45,9 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Roadmap Rebaseline 與文件重整（對齊三個產品閉環敘事）
-2. 回測時間軸契約與 no-look-ahead 測試定義
-3. 金融核心數值治理啟動
+1. 金融核心數值治理 Phase 2：擴大 Decimal / 整數單位邊界至績效、推薦組合回測與 Portfolio domain
+2. Portfolio Phase 4.1 深化：策略版本追蹤視圖、Price 對照、持倉層風險提示
+3. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔
 
 ## 高風險區（改動需謹慎）
 
@@ -83,6 +83,12 @@
 - Blockers / Risks 新增回測時間軸未定義、金融核心裸 float、文檔不一致三項。
 - 高風險區新增 `portfolio_module/core.py` 與 `app_module/portfolio_condition_monitor.py`。
 - 指定權威文件新增 `NEXT_ACTION_PLAN.md`。
+
+## 2026-06-10 技術治理進展
+
+- 回測時間軸契約治理已建立初版防線：`BrokerSimulator` 的 `next_open` 帳務錯位已修正，T 日訊號不再提前反映 T+1 成交；`close` 模式與推薦組合回測同日收盤成交假設已加入 warning / metadata。
+- 金融核心數值治理 Phase 1 已啟動：新增 `app_module/financial_units.py`，以 `Decimal`、整數股數與基點處理交易成本與整股邊界；`BrokerSimulator` 買賣手續費、滑價與證交稅已改用該 helper。
+- 裸 `float` 風險尚未解除，下一步仍需遷移 `performance_metrics.py`、`recommendation_portfolio_backtest_service.py`、`portfolio_module/core.py` 與 `portfolio_service.py`。
 
 ## 2026-05-27 補充狀態
 
