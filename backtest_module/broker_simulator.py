@@ -157,13 +157,13 @@ class BrokerSimulator:
         cash = initial_capital
         in_position = False  # 是否持倉（唯一狀態標記）
         qty = 0  # 持股數
-        entry_price = None  # 進場價格
+        entry_price: Optional[float] = None  # 進場價格
         entry_date = None  # 進場日期
         last_exit_date = None  # 最後出場日期（用於 reentry cooldown）
         
         trades: List[Trade] = []
         equity_records = []
-        pending_trades = []  # 待執行的下一交易日委託單
+        pending_trades: List[Dict] = []  # 待執行的下一交易日委託單
         
         # 獲取信號欄位
         if 'signal' not in signal_frame.columns:
@@ -625,7 +625,7 @@ class BrokerSimulator:
         date: pd.Timestamp,
         price: float,
         shares: int,
-        entry_price: float,
+        entry_price: Optional[float],
         reason_tags: str,
         signal: int
     ) -> Optional[Trade]:
