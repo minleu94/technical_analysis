@@ -32,6 +32,17 @@ class RecommendationPortfolioBacktestService:
         stop_loss_pct: float | None = None,
         take_profit_pct: float | None = None,
     ) -> RecommendationPortfolioBacktestResultDTO:
+        """
+        執行推薦組合回測。
+
+        注意：目前本服務進場點（PeriodHoldingDTO.entry_price）採用 rebalance_ts（訊號日）當天的收盤價。
+        此模式隱含「同日收盤訊號同日收盤成交」之理想化研究假設，在實盤操作中可能存在時間差而無法以該價格買入。
+        """
+        import warnings
+        warnings.warn(
+            "推薦組合回測目前採用「同日收盤訊號同日收盤成交」之理想化研究假設，實盤中可能因時間差無法以收盤價買入。",
+            UserWarning
+        )
         if rebalance_frequency not in {"once", "weekly"}:
             raise ValueError("目前推薦組合回測支援 once 或 weekly rebalance")
 
@@ -95,7 +106,7 @@ class RecommendationPortfolioBacktestService:
         if not period_holdings:
             equity_curve = pd.DataFrame([{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}])
             return RecommendationPortfolioBacktestResultDTO(
-                summary={"total_return": 0.0, "max_drawdown": 0.0, "total_trades": 0},
+                summary={"total_return": 0.0, "max_drawdown": 0.0, "total_trades": 0, "execution_assumption": "idealized_same_day_close"},
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
                 snapshots=snapshots,
@@ -117,6 +128,7 @@ class RecommendationPortfolioBacktestService:
                 else 0.0
             ),
             "capital_used": sum(holding.allocation_amount for holding in period_holdings),
+            "execution_assumption": "idealized_same_day_close",
         }
         summary.update(self._build_exit_diagnostics(period_holdings, stock_contribution))
         summary.update(

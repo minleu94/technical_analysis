@@ -97,6 +97,13 @@ class BrokerSimulator:
             - trades: 交易列表
             - equity_curve: 權益曲線 DataFrame (date, equity, cash, position_value)
         """
+        if self.config.execution_price == "close":
+            import warnings
+            warnings.warn(
+                "execution_price='close' 模式隱含「同日收盤訊號同日收盤成交」之理想化假設，在實盤中可能無法複製。",
+                UserWarning
+            )
+
         # 確保日期索引
         if not isinstance(signal_frame.index, pd.DatetimeIndex):
             if '日期' in signal_frame.columns:
@@ -148,6 +155,7 @@ class BrokerSimulator:
         
         trades: List[Trade] = []
         equity_records = []
+        pending_trades = []  # 待執行的下一交易日委託單
         
         # 獲取信號欄位
         if 'signal' not in signal_frame.columns:
@@ -158,6 +166,47 @@ class BrokerSimulator:
         
         # 逐日處理
         for i, (date, row) in enumerate(signal_frame.iterrows()):
+            # A. 優先處理昨天的待交易單 (next_open)
+            current_pending = [t for t in pending_trades]
+            pending_trades = []
+            for pt in current_pending:
+                if pt['type'] == 'buy':
+                    volume_val = row.get(volume_col) if volume_col else None
+                    prev_close_val = signal_frame.iloc[i - 1][price_col] if i > 0 else pt['prev_close']
+                    trade = self._execute_buy(
+                        date=pt['date'],
+                        price=pt['price'],
+                        capital=cash,
+                        reason_tags=pt['reason_tags'],
+                        signal=pt['signal'],
+                        volume=volume_val,
+                        prev_close=prev_close_val
+                    )
+                    if trade:
+                        trades.append(trade)
+                        cash -= (trade.value + trade.fee + trade.slippage)
+                        qty = trade.shares
+                        entry_price = pt['price']
+                        entry_date = pt['date']
+                        in_position = True
+                elif pt['type'] == 'sell' and in_position:
+                    trade = self._execute_sell(
+                        date=pt['date'],
+                        price=pt['price'],
+                        shares=qty,
+                        entry_price=entry_price,
+                        reason_tags=pt['reason_tags'],
+                        signal=pt['signal']
+                    )
+                    if trade:
+                        trades.append(trade)
+                        cash += (trade.value - trade.fee - trade.slippage)
+                        qty = 0
+                        entry_price = None
+                        entry_date = None
+                        last_exit_date = pt['date']
+                        in_position = False
+
             current_price = row[price_col]
             signal = row['signal']
             
@@ -329,22 +378,32 @@ class BrokerSimulator:
                     if volume_col and i < len(signal_frame) - 1:
                         volume = signal_frame.iloc[i + 1].get(volume_col)
                     
-                    trade = self._execute_buy(
-                        date=execution_date,
-                        price=execution_price,
-                        capital=cash,
-                        reason_tags=reason_tags,
-                        signal=signal,
-                        volume=volume,
-                        prev_close=prev_close
-                    )
-                    if trade:
-                        trades.append(trade)
-                        cash -= (trade.value + trade.fee + trade.slippage)
-                        qty = trade.shares
-                        entry_price = execution_price
-                        entry_date = execution_date
-                        in_position = True
+                    if self.config.execution_price == "next_open" and i < len(signal_frame) - 1:
+                        pending_trades.append({
+                            'type': 'buy',
+                            'date': execution_date,
+                            'price': execution_price,
+                            'reason_tags': reason_tags,
+                            'signal': signal,
+                            'prev_close': prev_close
+                        })
+                    else:
+                        trade = self._execute_buy(
+                            date=execution_date,
+                            price=execution_price,
+                            capital=cash,
+                            reason_tags=reason_tags,
+                            signal=signal,
+                            volume=volume,
+                            prev_close=prev_close
+                        )
+                        if trade:
+                            trades.append(trade)
+                            cash -= (trade.value + trade.fee + trade.slippage)
+                            qty = trade.shares
+                            entry_price = execution_price
+                            entry_date = execution_date
+                            in_position = True
                 elif self.config.allow_pyramid:
                     # 允許加碼
                     # 獲取成交量（用於約束）
@@ -352,43 +411,62 @@ class BrokerSimulator:
                     if volume_col and i < len(signal_frame) - 1:
                         volume = signal_frame.iloc[i + 1].get(volume_col)
                     
-                    trade = self._execute_buy(
-                        date=execution_date,
-                        price=execution_price,
-                        capital=cash,
-                        reason_tags=reason_tags,
-                        signal=signal,
-                        volume=volume,
-                        prev_close=prev_close
-                    )
-                    if trade:
-                        trades.append(trade)
-                        cash -= (trade.value + trade.fee + trade.slippage)
-                        qty += trade.shares  # 累加股數
-                        entry_price = execution_price  # 更新進場價（可選：加權平均）
-                        entry_date = execution_date
-                        in_position = True
-            
+                    if self.config.execution_price == "next_open" and i < len(signal_frame) - 1:
+                        pending_trades.append({
+                            'type': 'buy',
+                            'date': execution_date,
+                            'price': execution_price,
+                            'reason_tags': reason_tags,
+                            'signal': signal,
+                            'prev_close': prev_close
+                        })
+                    else:
+                        trade = self._execute_buy(
+                            date=execution_date,
+                            price=execution_price,
+                            capital=cash,
+                            reason_tags=reason_tags,
+                            signal=signal,
+                            volume=volume,
+                            prev_close=prev_close
+                        )
+                        if trade:
+                            trades.append(trade)
+                            cash -= (trade.value + trade.fee + trade.slippage)
+                            qty += trade.shares  # 累加股數
+                            entry_price = execution_price  # 更新進場價（可選：加權平均）
+                            entry_date = execution_date
+                            in_position = True
+
             # 出場：一定要 append trade
             elif signal == -1 and in_position:
                 if entry_price is None:
                     continue
-                trade = self._execute_sell(
-                    date=execution_date,
-                    price=execution_price,
-                    shares=qty,
-                    entry_price=entry_price,
-                    reason_tags=reason_tags,
-                    signal=signal
-                )
-                if trade:
-                    trades.append(trade)
-                    cash += (trade.value - trade.fee - trade.slippage)
-                    qty = 0
-                    entry_price = None
-                    entry_date = None
-                    last_exit_date = execution_date  # 記錄出場日期
-                    in_position = False
+                if self.config.execution_price == "next_open" and i < len(signal_frame) - 1:
+                    pending_trades.append({
+                        'type': 'sell',
+                        'date': execution_date,
+                        'price': execution_price,
+                        'reason_tags': reason_tags,
+                        'signal': signal
+                    })
+                else:
+                    trade = self._execute_sell(
+                        date=execution_date,
+                        price=execution_price,
+                        shares=qty,
+                        entry_price=entry_price,
+                        reason_tags=reason_tags,
+                        signal=signal
+                    )
+                    if trade:
+                        trades.append(trade)
+                        cash += (trade.value - trade.fee - trade.slippage)
+                        qty = 0
+                        entry_price = None
+                        entry_date = None
+                        last_exit_date = execution_date  # 記錄出場日期
+                        in_position = False
             
             # 記錄權益（只能用這個公式）
             position_value = qty * current_price if in_position else 0.0
