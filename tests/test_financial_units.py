@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app_module.financial_units import (
+from financial_module.units import (
     apply_bps_to_price,
     bps_to_rate,
     calculate_fee,

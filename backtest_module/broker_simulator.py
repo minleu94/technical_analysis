@@ -8,7 +8,7 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-from app_module.financial_units import (
+from financial_module.units import (
     apply_bps_to_price,
     calculate_fee,
     calculate_slippage_cost,

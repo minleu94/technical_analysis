@@ -7,6 +7,8 @@ Trades are the canonical audit records; positions are derived projections.
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
+from financial_module.units import quantize_money, to_decimal
+
 
 class PortfolioValidationError(ValueError):
     """Raised when a portfolio trade cannot be accepted by the MVP domain."""
@@ -105,7 +107,8 @@ class Position:
 
     @property
     def invested_amount(self) -> float:
-        return self.quantity * self.average_cost
+        amount = to_decimal(self.quantity) * to_decimal(self.average_cost)
+        return float(quantize_money(amount))
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -139,6 +142,9 @@ def validate_trade(trade: Trade) -> None:
         raise PortfolioValidationError("side must be 'buy' or 'sell'")
     if trade.quantity <= 0:
         raise PortfolioValidationError("quantity must be greater than zero")
+    quantity_dec = to_decimal(trade.quantity)
+    if quantity_dec != quantity_dec.to_integral_value():
+        raise PortfolioValidationError("quantity must be whole shares")
     if trade.price <= 0:
         raise PortfolioValidationError("price must be greater than zero")
     if not trade.trade_date:
@@ -160,13 +166,15 @@ def rebuild_positions(trades: Iterable[Trade]) -> List[Position]:
         existing: Optional[Position] = positions.get(key)
 
         if trade.side == "buy":
+            trade_quantity = to_decimal(trade.quantity)
+            trade_price = quantize_money(to_decimal(trade.price))
             if existing is None or existing.quantity <= 0:
                 positions[key] = Position(
                     portfolio_id=trade.portfolio_id,
                     stock_code=trade.stock_code,
                     stock_name=trade.stock_name,
-                    quantity=trade.quantity,
-                    average_cost=trade.price,
+                    quantity=float(trade_quantity),
+                    average_cost=float(trade_price),
                     opened_at=trade.trade_date,
                     last_trade_date=trade.trade_date,
                     source_type=trade.source_type,
@@ -176,11 +184,12 @@ def rebuild_positions(trades: Iterable[Trade]) -> List[Position]:
                     trade_ids=[trade.trade_id],
                 )
             else:
-                total_cost = existing.quantity * existing.average_cost
-                added_cost = trade.quantity * trade.price
-                new_quantity = existing.quantity + trade.quantity
-                existing.quantity = new_quantity
-                existing.average_cost = (total_cost + added_cost) / new_quantity
+                existing_quantity = to_decimal(existing.quantity)
+                total_cost = existing_quantity * to_decimal(existing.average_cost)
+                added_cost = trade_quantity * trade_price
+                new_quantity = existing_quantity + trade_quantity
+                existing.quantity = float(new_quantity)
+                existing.average_cost = float(quantize_money((total_cost + added_cost) / new_quantity))
                 existing.stock_name = trade.stock_name or existing.stock_name
                 existing.last_trade_date = trade.trade_date
                 existing.trade_ids.append(trade.trade_id)
@@ -195,8 +204,10 @@ def rebuild_positions(trades: Iterable[Trade]) -> List[Position]:
                 f"sell quantity exceeds open position for {trade.stock_code}"
             )
 
-        existing.realized_pnl += (trade.price - existing.average_cost) * trade.quantity
-        existing.quantity -= trade.quantity
+        trade_quantity = to_decimal(trade.quantity)
+        realized = (quantize_money(to_decimal(trade.price)) - to_decimal(existing.average_cost)) * trade_quantity
+        existing.realized_pnl = float(quantize_money(to_decimal(existing.realized_pnl) + realized))
+        existing.quantity = float(to_decimal(existing.quantity) - trade_quantity)
         existing.last_trade_date = trade.trade_date
         existing.trade_ids.append(trade.trade_id)
 

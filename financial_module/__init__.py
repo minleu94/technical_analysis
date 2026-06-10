@@ -1,4 +1,4 @@
-"""金融核心數值工具的 app_module 相容入口。"""
+"""金融核心數值工具。"""
 
 from financial_module.units import (
     apply_bps_to_price,

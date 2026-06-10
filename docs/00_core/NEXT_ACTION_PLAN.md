@@ -99,7 +99,7 @@
 
 目標：停止在金融核心新增裸 `float`，並規劃既有裸 `float` 遷移。
 
-狀態（2026-06-10）：Phase 1 已啟動。已新增 `app_module/financial_units.py`，並將 `BrokerSimulator` 買賣手續費、滑價、證交稅與整股股數計算切到 Decimal / 整數股數 / 基點 helper；DTO / UI 邊界仍維持 float 以保留相容性。
+狀態（2026-06-10）：Phase 1 已啟動。已新增 `financial_module/units.py`，並將 `BrokerSimulator` 買賣手續費、滑價、證交稅與整股股數計算切到 Decimal / 整數股數 / 基點 helper；`portfolio_module/core.py` 的平均成本、已實現損益與投入金額也已切到 Decimal 邊界；`app_module/financial_units.py` 僅保留相容 re-export，DTO / UI 邊界仍維持 float 以保留相容性。
 
 優先範圍：
 

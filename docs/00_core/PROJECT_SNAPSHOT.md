@@ -87,8 +87,9 @@
 ## 2026-06-10 技術治理進展
 
 - 回測時間軸契約治理已建立初版防線：`BrokerSimulator` 的 `next_open` 帳務錯位已修正，T 日訊號不再提前反映 T+1 成交；`close` 模式與推薦組合回測同日收盤成交假設已加入 warning / metadata。
-- 金融核心數值治理 Phase 1 已啟動：新增 `app_module/financial_units.py`，以 `Decimal`、整數股數與基點處理交易成本與整股邊界；`BrokerSimulator` 買賣手續費、滑價與證交稅已改用該 helper。
-- 裸 `float` 風險尚未解除，下一步仍需遷移 `performance_metrics.py`、`recommendation_portfolio_backtest_service.py`、`portfolio_module/core.py` 與 `portfolio_service.py`。
+- 金融核心數值治理 Phase 1 已啟動：新增 `financial_module/units.py`，以 `Decimal`、整數股數與基點處理交易成本與整股邊界；`BrokerSimulator` 買賣手續費、滑價與證交稅已改用該 helper，`app_module/financial_units.py` 僅保留相容 re-export。
+- Portfolio domain 數值治理已補強：`portfolio_module/core.py` 的平均成本、已實現損益與投入金額已改用 Decimal 邊界計算，並拒絕非整數股數。
+- 裸 `float` 風險尚未解除，下一步仍需遷移 `performance_metrics.py`、`recommendation_portfolio_backtest_service.py` 與 `portfolio_service.py`。
 
 ## 2026-05-27 補充狀態
 
