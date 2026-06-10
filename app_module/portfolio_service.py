@@ -8,6 +8,7 @@ from uuid import uuid4
 from app_module.dtos.portfolio_dtos import PortfolioDTO, PositionDTO, TradeDTO
 from app_module.portfolio_store import PortfolioJsonlStore
 from data_module.config import TWStockConfig
+from financial_module.units import quantize_money, to_decimal
 from portfolio_module import PortfolioValidationError, Trade, rebuild_positions, validate_trade
 
 logger = logging.getLogger(__name__)
@@ -104,8 +105,8 @@ class PortfolioService:
             total_positions=len(positions),
             active_positions=sum(1 for position in positions if position.is_holding),
             positions=positions,
-            total_invested_amount=sum(position.invested_amount for position in positions),
-            total_realized_pnl=sum(position.realized_pnl for position in positions),
+            total_invested_amount=self._sum_money(position.invested_amount for position in positions),
+            total_realized_pnl=self._sum_money(position.realized_pnl for position in positions),
             updated_at=datetime.now().isoformat(),
         )
 
@@ -150,6 +151,10 @@ class PortfolioService:
         if portfolio_id is not None:
             trades = [trade for trade in trades if trade.portfolio_id == portfolio_id]
         return trades
+
+    def _sum_money(self, values) -> float:
+        total = sum((to_decimal(value) for value in values), to_decimal("0"))
+        return float(quantize_money(total))
 
     def _position_to_dto(self, position) -> PositionDTO:
         data = position.to_dict()

@@ -3,6 +3,8 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+from financial_module.units import quantize_money, to_decimal
+
 
 @dataclass
 class RecommendationSnapshotDTO:
@@ -34,7 +36,7 @@ class PeriodHoldingDTO:
     return_pct: float
 
     def pnl(self) -> float:
-        return self.allocation_amount * self.return_pct
+        return float(quantize_money(to_decimal(self.allocation_amount) * to_decimal(self.return_pct)))
 
 
 @dataclass

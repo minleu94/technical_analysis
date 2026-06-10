@@ -8,6 +8,7 @@ import numpy as np
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from backtest_module.broker_simulator import Trade
+from financial_module.units import quantize_money, to_decimal
 
 
 @dataclass
@@ -38,6 +39,35 @@ class PerformanceAnalyzer:
             risk_free_rate: 無風險利率（年化）
         """
         self.risk_free_rate = risk_free_rate
+
+    def _trade_profit(self, buy_trade: Trade, sell_trade: Trade) -> float:
+        profit = (
+            to_decimal(sell_trade.value)
+            - to_decimal(buy_trade.value)
+            - to_decimal(buy_trade.fee)
+            - to_decimal(sell_trade.fee)
+            - to_decimal(buy_trade.slippage)
+            - to_decimal(sell_trade.slippage)
+        )
+        return float(quantize_money(profit))
+
+    def _trade_return_pct(self, profit: float, invested_value: float) -> float:
+        invested_dec = to_decimal(invested_value)
+        if invested_dec <= 0:
+            return 0.0
+        return float(to_decimal(profit) / invested_dec)
+
+    def _sum_money(self, values: List[float]) -> float:
+        if not values:
+            return 0.0
+        total = sum((to_decimal(value) for value in values), to_decimal("0"))
+        return float(quantize_money(total))
+
+    def _mean_money(self, values: List[float]) -> float:
+        if not values:
+            return 0.0
+        total = sum((to_decimal(value) for value in values), to_decimal("0"))
+        return float(quantize_money(total / len(values)))
     
     def summarize(
         self,
@@ -178,8 +208,8 @@ class PerformanceAnalyzer:
                 buy_trade = trade
             elif trade.type == 'sell' and buy_trade is not None:
                 # 計算報酬
-                profit = trade.value - buy_trade.value - buy_trade.fee - trade.fee - buy_trade.slippage - trade.slippage
-                return_pct = profit / buy_trade.value if buy_trade.value > 0 else 0.0
+                profit = self._trade_profit(buy_trade, trade)
+                return_pct = self._trade_return_pct(profit, buy_trade.value)
                 
                 trade_pairs.append({
                     'entry_date': buy_trade.date,
@@ -216,12 +246,12 @@ class PerformanceAnalyzer:
         win_rate = len(wins) / len(trade_pairs) if len(trade_pairs) > 0 else 0.0
         expectancy = np.mean(returns) if len(returns) > 0 else 0.0
         
-        total_profit = sum(wins) if wins else 0.0
-        total_loss = abs(sum(losses)) if losses else 0.0
+        total_profit = self._sum_money(wins)
+        total_loss = abs(self._sum_money(losses))
         profit_factor = total_profit / total_loss if total_loss > 0 else (total_profit if total_profit > 0 else 0.0)
         
-        avg_win = np.mean(wins) if wins else 0.0
-        avg_loss = np.mean(losses) if losses else 0.0
+        avg_win = self._mean_money(wins)
+        avg_loss = self._mean_money(losses)
         largest_win = max(wins) if wins else 0.0
         largest_loss = min(losses) if losses else 0.0
         
@@ -255,8 +285,8 @@ class PerformanceAnalyzer:
             if trade.type == 'buy':
                 buy_trade = trade
             elif trade.type == 'sell' and buy_trade is not None:
-                profit = trade.value - buy_trade.value - buy_trade.fee - trade.fee - buy_trade.slippage - trade.slippage
-                return_pct = profit / buy_trade.value if buy_trade.value > 0 else 0.0
+                profit = self._trade_profit(buy_trade, trade)
+                return_pct = self._trade_return_pct(profit, buy_trade.value)
                 
                 trade_pairs.append({
                     '進場日期': buy_trade.date,

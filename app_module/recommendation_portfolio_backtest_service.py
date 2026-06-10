@@ -11,6 +11,7 @@ from app_module.recommendation_portfolio_dtos import (
 from app_module.recommendation_portfolio_dates import parse_stock_dates
 from app_module.recommendation_portfolio_metrics import calculate_robustness_metrics, generate_improvement_hints
 from app_module.recommendation_replay_service import RecommendationReplayService
+from financial_module.units import quantize_money, to_decimal
 
 
 class RecommendationPortfolioBacktestService:
@@ -325,7 +326,8 @@ class RecommendationPortfolioBacktestService:
             return 0.0
 
         current_price = float(stock_rows.iloc[-1]["收盤價"])
-        return holding.allocation_amount * ((current_price / holding.entry_price) - 1)
+        return_pct = (to_decimal(current_price) / to_decimal(holding.entry_price)) - to_decimal("1")
+        return float(quantize_money(to_decimal(holding.allocation_amount) * return_pct))
 
     def _calculate_weights(self, recommendations: List[Dict[str, Any]], allocation_method: str) -> List[float]:
         if allocation_method == "score_weight":

@@ -99,15 +99,15 @@
 
 目標：停止在金融核心新增裸 `float`，並規劃既有裸 `float` 遷移。
 
-狀態（2026-06-10）：Phase 1 已啟動。已新增 `financial_module/units.py`，並將 `BrokerSimulator` 買賣手續費、滑價、證交稅與整股股數計算切到 Decimal / 整數股數 / 基點 helper；`portfolio_module/core.py` 的平均成本、已實現損益與投入金額也已切到 Decimal 邊界；`app_module/financial_units.py` 僅保留相容 re-export，DTO / UI 邊界仍維持 float 以保留相容性。
+狀態（2026-06-10）：核心金額邊界已階段性完成。已新增 `financial_module/units.py`，並將 `BrokerSimulator` 買賣手續費、滑價、證交稅與整股股數計算切到 Decimal / 整數股數 / 基點 helper；`portfolio_module/core.py` 的平均成本、已實現損益與投入金額已切到 Decimal 邊界；`backtest_module/performance_metrics.py` 的交易損益統計、`app_module/recommendation_portfolio_backtest_service.py` / DTO 的推薦組合 PnL 與 mark-to-market PnL、`app_module/portfolio_service.py` 的 Portfolio summary 加總也已導入 Decimal 金額邊界；`app_module/financial_units.py` 僅保留相容 re-export，DTO / UI 邊界仍維持 float 以保留相容性。
 
 優先範圍：
 
 - `backtest_module/broker_simulator.py`
-- `backtest_module/performance_metrics.py`
-- `app_module/recommendation_portfolio_backtest_service.py`
+- `backtest_module/performance_metrics.py`（核心交易損益已遷移，Sharpe / annualized return 屬 analytics 邊界）
+- `app_module/recommendation_portfolio_backtest_service.py`（推薦組合 PnL / mark-to-market PnL 已遷移，同日收盤成交假設仍以 warning / metadata 揭露）
 - `portfolio_module/core.py`
-- `app_module/portfolio_service.py`
+- `app_module/portfolio_service.py`（Portfolio summary 金額加總已遷移）
 
 原則：
 

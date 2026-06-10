@@ -1,6 +1,16 @@
 import pytest
 
+from app_module.portfolio_service import PortfolioService
+from data_module.config import TWStockConfig
 from portfolio_module import PortfolioValidationError, Trade, rebuild_positions
+
+
+def make_config(tmp_path):
+    return TWStockConfig(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        profile="unit",
+    )
 
 
 def test_rebuild_positions_quantizes_average_cost_to_cents():
@@ -77,3 +87,15 @@ def test_rebuild_positions_rejects_fractional_share_quantity():
                 )
             ]
         )
+
+
+def test_portfolio_service_summary_quantizes_realized_pnl_sum(tmp_path):
+    service = PortfolioService(make_config(tmp_path))
+    service.record_trade("2330", "TSMC", "buy", 2, 10.10, "2026-06-01", trade_id="a-buy")
+    service.record_trade("2330", "TSMC", "sell", 1, 10.20, "2026-06-02", trade_id="a-sell")
+    service.record_trade("2317", "Hon Hai", "buy", 2, 20.10, "2026-06-01", trade_id="b-buy")
+    service.record_trade("2317", "Hon Hai", "sell", 1, 20.30, "2026-06-02", trade_id="b-sell")
+
+    portfolio = service.get_portfolio()
+
+    assert portfolio.total_realized_pnl == 0.30
