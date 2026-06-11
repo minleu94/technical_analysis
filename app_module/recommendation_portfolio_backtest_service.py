@@ -203,14 +203,14 @@ class RecommendationPortfolioBacktestService:
             return None
 
         entry_row = stock_rows.iloc[0]
-        entry_price = float(entry_row["收盤價"])
+        entry_price = float(entry_row["收盤價"])  # numeric-boundary: analytics
         exit_row, exit_reason = self._select_exit_row(
             stock_rows=stock_rows,
             entry_price=entry_price,
             stop_loss_pct=stop_loss_pct,
             take_profit_pct=take_profit_pct,
         )
-        exit_price = float(exit_row["收盤價"])
+        exit_price = float(exit_row["收盤價"])  # numeric-boundary: analytics
         return_pct = round((exit_price / entry_price) - 1, 10) if entry_price else 0.0
         actual_exit_ts = pd.to_datetime(exit_row["日期"])
         return PeriodHoldingDTO(
@@ -218,7 +218,7 @@ class RecommendationPortfolioBacktestService:
             stock_code=code,
             stock_name=str(rec.get("stock_name") or entry_row.get("證券名稱", "")),
             rank=rank,
-            total_score=float(rec.get("total_score", 0.0)),
+            total_score=float(rec.get("total_score", 0.0)),  # numeric-boundary: dto
             factor_scores=dict(rec.get("factor_scores", {})),
             allocation_amount=allocation_amount,
             allocation_weight=allocation_weight,
@@ -243,7 +243,7 @@ class RecommendationPortfolioBacktestService:
             return stock_rows.iloc[-1], "holding_period"
 
         for _, row in stock_rows.iloc[1:].iterrows():
-            price = float(row["收盤價"])
+            price = float(row["收盤價"])  # numeric-boundary: analytics
             return_pct = (price / entry_price) - 1
             if stop_loss_pct is not None and return_pct <= -abs(stop_loss_pct):
                 return row, "stop_loss"
@@ -295,13 +295,13 @@ class RecommendationPortfolioBacktestService:
             equity = initial_capital
             for holding in holdings:
                 equity += self._holding_pnl_at_date(holding, data, ts)
-            rows.append({"date": ts.strftime("%Y-%m-%d"), "equity": round(float(equity), 6)})
+            rows.append({"date": ts.strftime("%Y-%m-%d"), "equity": round(float(equity), 6)})  # numeric-boundary: dto
 
         if rows and rows[0]["date"] != start_ts.strftime("%Y-%m-%d"):
             rows.insert(0, {"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital})
         if rows and rows[-1]["date"] != end_ts.strftime("%Y-%m-%d"):
             final_equity = initial_capital + sum(holding.pnl() for holding in holdings)
-            rows.append({"date": end_ts.strftime("%Y-%m-%d"), "equity": round(float(final_equity), 6)})
+            rows.append({"date": end_ts.strftime("%Y-%m-%d"), "equity": round(float(final_equity), 6)})  # numeric-boundary: dto
         return pd.DataFrame(rows)
 
     def _holding_pnl_at_date(
@@ -325,13 +325,13 @@ class RecommendationPortfolioBacktestService:
         if stock_rows.empty or not holding.entry_price:
             return 0.0
 
-        current_price = float(stock_rows.iloc[-1]["收盤價"])
+        current_price = float(stock_rows.iloc[-1]["收盤價"])  # numeric-boundary: analytics
         return_pct = (to_decimal(current_price) / to_decimal(holding.entry_price)) - to_decimal("1")
-        return float(quantize_money(to_decimal(holding.allocation_amount) * return_pct))
+        return float(quantize_money(to_decimal(holding.allocation_amount) * return_pct))  # numeric-boundary: dto
 
     def _calculate_weights(self, recommendations: List[Dict[str, Any]], allocation_method: str) -> List[float]:
         if allocation_method == "score_weight":
-            scores = [max(float(item.get("total_score", 0.0)), 0.0) for item in recommendations]
+            scores = [max(float(item.get("total_score", 0.0)), 0.0) for item in recommendations]  # numeric-boundary: analytics
             total = sum(scores)
             if total > 0:
                 return [score / total for score in scores]
@@ -382,4 +382,4 @@ class RecommendationPortfolioBacktestService:
             return 0.0
         running_max = equity.cummax()
         drawdown = (equity - running_max) / running_max
-        return float(drawdown.min())
+        return float(drawdown.min())  # numeric-boundary: analytics

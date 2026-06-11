@@ -611,11 +611,11 @@ class BrokerSimulator:
         return Trade(
             date=date,
             type='buy',
-            price=float(execution_price_dec),
+            price=float(execution_price_dec),  # numeric-boundary: dto
             shares=shares,
-            value=float(value_dec),
-            fee=float(fee_dec),
-            slippage=float(slippage_cost_dec),
+            value=float(value_dec),  # numeric-boundary: dto
+            fee=float(fee_dec),  # numeric-boundary: dto
+            slippage=float(slippage_cost_dec),  # numeric-boundary: dto
             reason_tags=reason_tags,
             signal=signal
         )
@@ -664,11 +664,12 @@ class BrokerSimulator:
         return Trade(
             date=date,
             type='sell',
-            price=float(execution_price_dec),
+            price=float(execution_price_dec),  # numeric-boundary: dto
             shares=shares,
-            value=float(value_dec),
-            fee=float(fee_dec + tax_dec),  # 手續費 + 證交稅
-            slippage=float(slippage_cost_dec),
+            value=float(value_dec),  # numeric-boundary: dto
+            # 賣出費用包含手續費與證交稅。
+            fee=float(fee_dec + tax_dec),  # numeric-boundary: dto
+            slippage=float(slippage_cost_dec),  # numeric-boundary: dto
             reason_tags=reason_tags,
             signal=signal
         )

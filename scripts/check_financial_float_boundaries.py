@@ -63,8 +63,8 @@ def _is_float_value(node: ast.AST) -> bool:
     )
 
 
-def _managed_calls(tree: ast.AST) -> list[tuple[ast.AST, str, str]]:
-    matches: list[tuple[ast.AST, str, str]] = []
+def _managed_calls(tree: ast.AST) -> list[tuple[ast.expr, str, str]]:
+    matches: list[tuple[ast.expr, str, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue

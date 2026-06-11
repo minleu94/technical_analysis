@@ -43,11 +43,11 @@ class Trade:
             stock_code=str(data.get("stock_code", "")),
             stock_name=str(data.get("stock_name", "")),
             side=str(data.get("side", "")).lower(),
-            quantity=float(data.get("quantity", 0.0)),
-            price=float(data.get("price", 0.0)),
+            quantity=float(data.get("quantity", 0.0)),  # numeric-boundary: dto
+            price=float(data.get("price", 0.0)),  # numeric-boundary: dto
             trade_date=str(data.get("trade_date", "")),
-            fees=float(data.get("fees", 0.0)),
-            taxes=float(data.get("taxes", 0.0)),
+            fees=float(data.get("fees", 0.0)),  # numeric-boundary: dto
+            taxes=float(data.get("taxes", 0.0)),  # numeric-boundary: dto
             currency=str(data.get("currency", "TWD")),
             notes=str(data.get("notes", "")),
             source_type=str(data.get("source_type", "")),
@@ -108,7 +108,7 @@ class Position:
     @property
     def invested_amount(self) -> float:
         amount = to_decimal(self.quantity) * to_decimal(self.average_cost)
-        return float(quantize_money(amount))
+        return float(quantize_money(amount))  # numeric-boundary: dto
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -173,8 +173,8 @@ def rebuild_positions(trades: Iterable[Trade]) -> List[Position]:
                     portfolio_id=trade.portfolio_id,
                     stock_code=trade.stock_code,
                     stock_name=trade.stock_name,
-                    quantity=float(trade_quantity),
-                    average_cost=float(trade_price),
+                    quantity=float(trade_quantity),  # numeric-boundary: dto
+                    average_cost=float(trade_price),  # numeric-boundary: dto
                     opened_at=trade.trade_date,
                     last_trade_date=trade.trade_date,
                     source_type=trade.source_type,
@@ -188,8 +188,8 @@ def rebuild_positions(trades: Iterable[Trade]) -> List[Position]:
                 total_cost = existing_quantity * to_decimal(existing.average_cost)
                 added_cost = trade_quantity * trade_price
                 new_quantity = existing_quantity + trade_quantity
-                existing.quantity = float(new_quantity)
-                existing.average_cost = float(quantize_money((total_cost + added_cost) / new_quantity))
+                existing.quantity = float(new_quantity)  # numeric-boundary: dto
+                existing.average_cost = float(quantize_money((total_cost + added_cost) / new_quantity))  # numeric-boundary: dto
                 existing.stock_name = trade.stock_name or existing.stock_name
                 existing.last_trade_date = trade.trade_date
                 existing.trade_ids.append(trade.trade_id)
@@ -206,8 +206,8 @@ def rebuild_positions(trades: Iterable[Trade]) -> List[Position]:
 
         trade_quantity = to_decimal(trade.quantity)
         realized = (quantize_money(to_decimal(trade.price)) - to_decimal(existing.average_cost)) * trade_quantity
-        existing.realized_pnl = float(quantize_money(to_decimal(existing.realized_pnl) + realized))
-        existing.quantity = float(to_decimal(existing.quantity) - trade_quantity)
+        existing.realized_pnl = float(quantize_money(to_decimal(existing.realized_pnl) + realized))  # numeric-boundary: dto
+        existing.quantity = float(to_decimal(existing.quantity) - trade_quantity)  # numeric-boundary: dto
         existing.last_trade_date = trade.trade_date
         existing.trade_ids.append(trade.trade_id)
 

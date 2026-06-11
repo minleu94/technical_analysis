@@ -8,6 +8,7 @@ from scripts.check_financial_float_boundaries import (
     ALLOWED_CATEGORIES,
     BoundaryCheckError,
     FINANCIAL_FLOAT_BOUNDARY_FILES,
+    REPO_ROOT,
     Violation,
     scan_paths,
     scan_source,
@@ -271,6 +272,19 @@ def test_scan_paths_wraps_utf8_decode_failure(tmp_path) -> None:
 
     with pytest.raises(BoundaryCheckError, match="無法讀取"):
         scan_paths(tmp_path, ("module.py",))
+
+
+def test_financial_core_allowlist_has_no_unmarked_float_boundaries() -> None:
+    violations = scan_paths(REPO_ROOT, FINANCIAL_FLOAT_BOUNDARY_FILES)
+    details = "\n".join(
+        (
+            f"{item.path}:{item.line}:{item.column} "
+            f"{item.rule} {item.expression}"
+        )
+        for item in violations
+    )
+
+    assert violations == [], f"金融核心仍有未標記 float 邊界：\n{details}"
 
 
 def test_main_returns_zero_when_scan_is_clean(monkeypatch, capsys) -> None:

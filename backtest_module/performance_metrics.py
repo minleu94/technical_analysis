@@ -49,25 +49,25 @@ class PerformanceAnalyzer:
             - to_decimal(buy_trade.slippage)
             - to_decimal(sell_trade.slippage)
         )
-        return float(quantize_money(profit))
+        return float(quantize_money(profit))  # numeric-boundary: dto
 
     def _trade_return_pct(self, profit: float, invested_value: float) -> float:
         invested_dec = to_decimal(invested_value)
         if invested_dec <= 0:
             return 0.0
-        return float(to_decimal(profit) / invested_dec)
+        return float(to_decimal(profit) / invested_dec)  # numeric-boundary: analytics
 
     def _sum_money(self, values: List[float]) -> float:
         if not values:
             return 0.0
         total = sum((to_decimal(value) for value in values), to_decimal("0"))
-        return float(quantize_money(total))
+        return float(quantize_money(total))  # numeric-boundary: dto
 
     def _mean_money(self, values: List[float]) -> float:
         if not values:
             return 0.0
         total = sum((to_decimal(value) for value in values), to_decimal("0"))
-        return float(quantize_money(total / len(values)))
+        return float(quantize_money(total / len(values)))  # numeric-boundary: dto
     
     def summarize(
         self,
@@ -88,10 +88,10 @@ class PerformanceAnalyzer:
         """
         # 計算總報酬率（確保是數值類型）
         try:
-            final_equity = float(equity_curve['equity'].iloc[-1])
-            initial_capital_float = float(initial_capital)
+            final_equity = float(equity_curve['equity'].iloc[-1])  # numeric-boundary: analytics
+            initial_capital_float = float(initial_capital)  # numeric-boundary: analytics
             total_return = (final_equity - initial_capital_float) / initial_capital_float if initial_capital_float > 0 else 0.0
-            total_return = float(total_return) if not pd.isna(total_return) else 0.0
+            total_return = float(total_return) if not pd.isna(total_return) else 0.0  # numeric-boundary: analytics
         except (ValueError, TypeError, IndexError):
             total_return = 0.0
         
@@ -101,7 +101,7 @@ class PerformanceAnalyzer:
             years = days / 365.25
             if years > 0:
                 annual_return = (final_equity / initial_capital_float) ** (1 / years) - 1
-                annual_return = float(annual_return) if not pd.isna(annual_return) else 0.0
+                annual_return = float(annual_return) if not pd.isna(annual_return) else 0.0  # numeric-boundary: analytics
             else:
                 annual_return = 0.0
         except (ValueError, TypeError, IndexError, ZeroDivisionError):
@@ -111,14 +111,14 @@ class PerformanceAnalyzer:
         try:
             returns = pd.to_numeric(equity_curve['equity'], errors='coerce').pct_change().dropna()
         except Exception:
-            returns = pd.Series(dtype=float)
+            returns = pd.Series(dtype=float)  # numeric-boundary: analytics
         
         # 計算夏普比率
         try:
             if len(returns) > 0 and returns.std() > 0:
                 excess_returns = returns - (self.risk_free_rate / 252)  # 日無風險利率
                 sharpe_ratio = np.sqrt(252) * excess_returns.mean() / returns.std()
-                sharpe_ratio = float(sharpe_ratio) if not pd.isna(sharpe_ratio) else 0.0
+                sharpe_ratio = float(sharpe_ratio) if not pd.isna(sharpe_ratio) else 0.0  # numeric-boundary: analytics
             else:
                 sharpe_ratio = 0.0
         except Exception:
@@ -129,7 +129,7 @@ class PerformanceAnalyzer:
             equity_series = pd.to_numeric(equity_curve['equity'], errors='coerce').dropna()
             if len(equity_series) > 0:
                 max_drawdown = self._calculate_max_drawdown(equity_series)
-                max_drawdown = float(max_drawdown) if not pd.isna(max_drawdown) else 0.0
+                max_drawdown = float(max_drawdown) if not pd.isna(max_drawdown) else 0.0  # numeric-boundary: analytics
             else:
                 max_drawdown = 0.0
         except Exception:
@@ -140,10 +140,10 @@ class PerformanceAnalyzer:
         
         # ✅ 確保所有返回值都是數值類型
         return PerformanceMetrics(
-            total_return=float(total_return),
-            annual_return=float(annual_return),
-            sharpe_ratio=float(sharpe_ratio),
-            max_drawdown=float(max_drawdown),
+            total_return=float(total_return),  # numeric-boundary: dto
+            annual_return=float(annual_return),  # numeric-boundary: dto
+            sharpe_ratio=float(sharpe_ratio),  # numeric-boundary: dto
+            max_drawdown=float(max_drawdown),  # numeric-boundary: dto
             win_rate=trade_stats['win_rate'],
             total_trades=trade_stats['total_trades'],
             expectancy=trade_stats['expectancy'],
@@ -357,8 +357,8 @@ class PerformanceAnalyzer:
         
         # ✅ 確保價格是數值類型
         try:
-            start_price = float(start_price)
-            end_price = float(end_price)
+            start_price = float(start_price)  # numeric-boundary: analytics
+            end_price = float(end_price)  # numeric-boundary: analytics
         except (ValueError, TypeError) as e:
             # 如果轉換失敗，返回默認值
             return {
@@ -372,13 +372,13 @@ class PerformanceAnalyzer:
         total_return = (end_price - start_price) / start_price if start_price > 0 else 0.0
         
         # ✅ 確保 total_return 是數值類型
-        total_return = float(total_return) if not pd.isna(total_return) else 0.0
+        total_return = float(total_return) if not pd.isna(total_return) else 0.0  # numeric-boundary: analytics
         
         # 計算年化報酬率
         days = (end_dt - start_dt).days
         years = days / 365.25 if days > 0 else 1.0
         annualized_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0.0
-        annualized_return = float(annualized_return) if not pd.isna(annualized_return) else 0.0
+        annualized_return = float(annualized_return) if not pd.isna(annualized_return) else 0.0  # numeric-boundary: analytics
         
         # 計算最大回撤
         equity_series = df_filtered[close_col]
@@ -390,7 +390,7 @@ class PerformanceAnalyzer:
                 max_drawdown = 0.0
             else:
                 max_drawdown = self._calculate_max_drawdown(equity_series)
-                max_drawdown = float(max_drawdown) if not pd.isna(max_drawdown) else 0.0
+                max_drawdown = float(max_drawdown) if not pd.isna(max_drawdown) else 0.0  # numeric-boundary: analytics
         except Exception:
             max_drawdown = 0.0
         
@@ -401,7 +401,7 @@ class PerformanceAnalyzer:
             if len(returns) > 0 and returns.std() > 0:
                 excess_returns = returns - (self.risk_free_rate / 252)
                 sharpe_ratio = np.sqrt(252) * excess_returns.mean() / returns.std()
-                sharpe_ratio = float(sharpe_ratio) if not pd.isna(sharpe_ratio) else 0.0
+                sharpe_ratio = float(sharpe_ratio) if not pd.isna(sharpe_ratio) else 0.0  # numeric-boundary: analytics
             else:
                 sharpe_ratio = 0.0
         except Exception:
@@ -409,10 +409,10 @@ class PerformanceAnalyzer:
         
         # ✅ 確保所有返回值都是數值類型
         return {
-            'total_return': float(total_return),
-            'annualized_return': float(annualized_return),
-            'max_drawdown': float(max_drawdown),
-            'sharpe_ratio': float(sharpe_ratio)
+            'total_return': float(total_return),  # numeric-boundary: dto
+            'annualized_return': float(annualized_return),  # numeric-boundary: dto
+            'max_drawdown': float(max_drawdown),  # numeric-boundary: dto
+            'sharpe_ratio': float(sharpe_ratio)  # numeric-boundary: dto
         }
     
     def calculate_baseline_comparison(
@@ -441,12 +441,12 @@ class PerformanceAnalyzer:
         # ✅ 確保所有參數都是數值類型（更嚴格的轉換）
         try:
             # 先轉換為字符串再轉換為 float，處理可能的混合類型
-            strategy_returns = float(str(strategy_returns).replace(',', '')) if strategy_returns is not None else 0.0
-            strategy_sharpe = float(str(strategy_sharpe).replace(',', '')) if strategy_sharpe is not None else 0.0
-            strategy_max_drawdown = float(str(strategy_max_drawdown).replace(',', '')) if strategy_max_drawdown is not None else 0.0
-            baseline_returns = float(str(baseline_returns).replace(',', '')) if baseline_returns is not None else 0.0
-            baseline_sharpe = float(str(baseline_sharpe).replace(',', '')) if baseline_sharpe is not None else 0.0
-            baseline_max_drawdown = float(str(baseline_max_drawdown).replace(',', '')) if baseline_max_drawdown is not None else 0.0
+            strategy_returns = float(str(strategy_returns).replace(',', '')) if strategy_returns is not None else 0.0  # numeric-boundary: analytics
+            strategy_sharpe = float(str(strategy_sharpe).replace(',', '')) if strategy_sharpe is not None else 0.0  # numeric-boundary: analytics
+            strategy_max_drawdown = float(str(strategy_max_drawdown).replace(',', '')) if strategy_max_drawdown is not None else 0.0  # numeric-boundary: analytics
+            baseline_returns = float(str(baseline_returns).replace(',', '')) if baseline_returns is not None else 0.0  # numeric-boundary: analytics
+            baseline_sharpe = float(str(baseline_sharpe).replace(',', '')) if baseline_sharpe is not None else 0.0  # numeric-boundary: analytics
+            baseline_max_drawdown = float(str(baseline_max_drawdown).replace(',', '')) if baseline_max_drawdown is not None else 0.0  # numeric-boundary: analytics
             
             # 檢查是否為 NaN 或 Inf
             if pd.isna(strategy_returns) or np.isinf(strategy_returns):
@@ -474,16 +474,16 @@ class PerformanceAnalyzer:
             baseline_max_drawdown = 0.0
         
         # 計算超額報酬率
-        excess_returns = float(strategy_returns) - float(baseline_returns)
+        excess_returns = float(strategy_returns) - float(baseline_returns)  # numeric-boundary: analytics
         
         # 計算相對 Sharpe
-        relative_sharpe = float(strategy_sharpe) - float(baseline_sharpe)
+        relative_sharpe = float(strategy_sharpe) - float(baseline_sharpe)  # numeric-boundary: analytics
         
         # 計算相對回撤（策略回撤 - Baseline 回撤，負數表示策略回撤更小）
-        relative_drawdown = float(strategy_max_drawdown) - float(baseline_max_drawdown)
+        relative_drawdown = float(strategy_max_drawdown) - float(baseline_max_drawdown)  # numeric-boundary: analytics
         
         # 判斷是否優於 Baseline（策略報酬率 > Baseline 報酬率）
-        outperforms = float(strategy_returns) > float(baseline_returns)
+        outperforms = float(strategy_returns) > float(baseline_returns)  # numeric-boundary: analytics
         
         return {
             'baseline_type': 'buy_hold',
@@ -577,11 +577,11 @@ class PerformanceAnalyzer:
         if len(sharpe_ratios) < 2:
             return None
         
-        std_dev = float(np.std(sharpe_ratios))
+        std_dev = float(np.std(sharpe_ratios))  # numeric-boundary: analytics
         
         # 標準差可能很大，需要正規化到 0.0 - 1.0 範圍
         # 使用絕對值並限制範圍
-        normalized_std = float(min(abs(std_dev), 1.0))
+        normalized_std = float(min(abs(std_dev), 1.0))  # numeric-boundary: analytics
         
         return normalized_std
     

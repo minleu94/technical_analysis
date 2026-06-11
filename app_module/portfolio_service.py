@@ -52,11 +52,11 @@ class PortfolioService:
             stock_code=stock_code,
             stock_name=stock_name,
             side=side.lower(),
-            quantity=float(quantity),
-            price=float(price),
+            quantity=float(quantity),  # numeric-boundary: dto
+            price=float(price),  # numeric-boundary: dto
             trade_date=trade_date,
-            fees=float(fees),
-            taxes=float(taxes),
+            fees=float(fees),  # numeric-boundary: dto
+            taxes=float(taxes),  # numeric-boundary: dto
             currency=currency,
             notes=notes,
             source_type=source_type,
@@ -154,7 +154,7 @@ class PortfolioService:
 
     def _sum_money(self, values) -> float:
         total = sum((to_decimal(value) for value in values), to_decimal("0"))
-        return float(quantize_money(total))
+        return float(quantize_money(total))  # numeric-boundary: dto
 
     def _position_to_dto(self, position) -> PositionDTO:
         data = position.to_dict()
