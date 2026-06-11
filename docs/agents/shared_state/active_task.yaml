@@ -1,6 +1,6 @@
 task_id: financial-float-boundary-governance
 task_name: 金融 float 邊界自動治理
-status: design_review
+status: planning
 owner: Codex
 risk_level: high
 scope_in:
@@ -24,5 +24,5 @@ verification:
   py_compile: not_run
 documents:
   design: docs/superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md
-  plan: null
-next_action: 使用者審閱並核准書面設計規格
+  plan: docs/superpowers/plans/2026-06-11-financial-float-boundary-governance.md
+next_action: 使用者選擇實作執行方式
