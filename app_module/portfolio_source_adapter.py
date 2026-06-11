@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, Optional
 
 from app_module.dtos import RecommendationDTO, RecommendationResultDTO
 
@@ -91,6 +91,7 @@ def build_backtest_trade_source(
     strategy_id: str,
     validation_status: str,
     trade_row: Mapping[str, Any],
+    promoted_version_id: Optional[str] = None,
 ) -> PortfolioTradeSource:
     """Create trace metadata for a trade recorded from a Backtest trade row."""
 
@@ -99,6 +100,7 @@ def build_backtest_trade_source(
         "run_name": run_name,
         "strategy_id": strategy_id,
         "validation_status": validation_status,
+        "promoted_version_id": promoted_version_id,
         "stock_code": str(_row_value(trade_row, "股票代號", "證券代號", "stock_code")),
         "stock_name": str(_row_value(trade_row, "股票名稱", "證券名稱", "stock_name")),
         "side": str(_row_value(trade_row, "買賣", "side")),

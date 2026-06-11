@@ -26,7 +26,7 @@
 - **閉環 3：持倉檢查閉環** ✅ 基礎與深化已完成
   - Recommendation / Backtest → Portfolio → Condition Monitor → Journal → 回到研究
   - Phase 4.1 Portfolio MVP 與深化 ✅：domain/service/test、Portfolio Tab、來源追溯 metadata、ConditionMonitor 複合警告與停損停利已實作
-  - 策略版本與推薦來源追蹤視圖、目前價格對比、未實現損益計算已深化完成
+  - 策略版本與推薦來源追蹤視圖、目前價格對比、未實現損益計算已深化完成，且已修正 float 邊界合規漏洞與三層防禦策略版本串接 (2026-06-11)
 
 - **效能與研究輸出（Phase 5）** 🚧 部分已完成
   - 圖表渲染優化 ✅ / 大表格分頁、批次回測並行化、報告輸出仍在後續
@@ -91,6 +91,8 @@
 - **價格對照與未實現損益顯示**：在庫存持倉列表中，新增展示「目前價格」、「未實現損益」與「未實現損益%」。最新收盤價支持 SQLite 直查與 CSV 降級載入，損益計算嚴格遵循 `Decimal` 金額邊界治理。
 - **持倉層複合風險提示**：重構 `PortfolioConditionMonitor.evaluate`，結合 Regime 變化、Score 退化與最新價格相對於進場平均成本的偏離度。新增支援固定百分比的 **停損（stop_loss_pct）** 與 **停利（take_profit_pct）** 監控判定。當觸發停損/停利時會自動標示為 `假設失效 (invalid)`，並提供詳細的文字與配色複合警告。
 - **型態檢查與 QA 驗證全部綠燈**：Pytest 新增單元測試 `tests/test_portfolio_deepening.py` 完整覆蓋最新價格計算與 SL/TP 警告機制；mypy 零型態錯誤、py_compile 全部成功，UI 與數據庫同步測試 `qa_validate_update_tab.py` 21 項全部 passed！
+- **金融數值邊界治理修補與白名單擴展**：補齊 `portfolio_service.py` 與 `portfolio_condition_monitor.py` 缺失的 `# numeric-boundary: dto`，並將 monitor 納入白名單，徹底通過靜態邊界合規門禁（Repository Gate）。
+- **策略版本與回測深度串接**：實作了三層防禦查找機制（`source_summary` ➔ `BacktestRunRepository` ➔ `StrategyVersionService`），解決從 Backtest 匯入持倉時 UI 無法直接關聯策略版本資訊的 Gap，並為未升級的回測 run 持倉提供專屬 UI Fallback 展示。
 
 ## 2026-06-11 技術治理進展
 

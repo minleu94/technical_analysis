@@ -28,6 +28,7 @@ def test_financial_float_boundary_files_are_exact() -> None:
         "backtest_module/performance_metrics.py",
         "portfolio_module/core.py",
         "app_module/portfolio_service.py",
+        "app_module/portfolio_condition_monitor.py",
         "app_module/recommendation_portfolio_backtest_service.py",
         "app_module/recommendation_portfolio_dtos.py",
     )

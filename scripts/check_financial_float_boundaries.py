@@ -19,6 +19,7 @@ FINANCIAL_FLOAT_BOUNDARY_FILES = (
     "backtest_module/performance_metrics.py",
     "portfolio_module/core.py",
     "app_module/portfolio_service.py",
+    "app_module/portfolio_condition_monitor.py",
     "app_module/recommendation_portfolio_backtest_service.py",
     "app_module/recommendation_portfolio_dtos.py",
 )

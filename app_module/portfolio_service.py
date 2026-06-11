@@ -169,7 +169,7 @@ class PortfolioService:
                     (stock_code,)
                 )
                 if not df.empty:
-                    return float(df.iloc[0]['收盤價'])
+                    return float(df.iloc[0]['收盤價'])  # numeric-boundary: dto
             except Exception as e:
                 logger.warning("從 SQLite 獲取 %s 最新收盤價失敗: %s", stock_code, e)
         
@@ -184,7 +184,7 @@ class PortfolioService:
                         df['證券代號'] = df['證券代號'].astype(str).str.zfill(4)
                         stock_row = df[df['證券代號'] == stock_code.zfill(4)]
                         if not stock_row.empty and '收盤價' in stock_row.columns:
-                            return float(stock_row.iloc[0]['收盤價'])
+                            return float(stock_row.iloc[0]['收盤價'])  # numeric-boundary: dto
         except Exception as e:
             logger.warning("從 CSV 獲取 %s 最新收盤價失敗: %s", stock_code, e)
         return None

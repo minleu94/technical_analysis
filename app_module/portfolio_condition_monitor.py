@@ -140,36 +140,36 @@ class PortfolioConditionMonitor:
                 take_profit_val = take_profit_val / Decimal("100")
             take_profit_val = abs(take_profit_val)
 
-        details["stop_loss_pct"] = float(stop_loss_val) if stop_loss_val is not None else None
-        details["take_profit_pct"] = float(take_profit_val) if take_profit_val is not None else None
-        details["current_price"] = float(price_dec) if price_dec is not None else None
-        details["average_cost"] = float(cost_dec) if cost_dec is not None else None
+        details["stop_loss_pct"] = float(stop_loss_val) if stop_loss_val is not None else None  # numeric-boundary: dto
+        details["take_profit_pct"] = float(take_profit_val) if take_profit_val is not None else None  # numeric-boundary: dto
+        details["current_price"] = float(price_dec) if price_dec is not None else None  # numeric-boundary: dto
+        details["average_cost"] = float(cost_dec) if cost_dec is not None else None  # numeric-boundary: dto
         details["stop_loss_triggered"] = False
         details["take_profit_triggered"] = False
         
         if price_dec is not None and cost_dec is not None and cost_dec > 0:
             return_pct_val = (price_dec - cost_dec) / cost_dec
-            details["return_pct"] = float(return_pct_val)
+            details["return_pct"] = float(return_pct_val)  # numeric-boundary: dto
             
             if stop_loss_val is not None:
                 if return_pct_val <= -stop_loss_val:
                     stop_loss_triggered = True
                     details["stop_loss_triggered"] = True
                     reasons.append(
-                        f"已觸發停損點 (目前報酬 {float(return_pct_val * 100):.2f}% <= 停損點 -{float(stop_loss_val * 100):.1f}%)"
+                        f"已觸發停損點 (目前報酬 {float(return_pct_val * 100):.2f}% <= 停損點 -{float(stop_loss_val * 100):.1f}%)"  # numeric-boundary: dto
                     )
             if take_profit_val is not None:
                 if return_pct_val >= take_profit_val:
                     take_profit_triggered = True
                     details["take_profit_triggered"] = True
                     reasons.append(
-                        f"已觸發停利點 (目前報酬 {float(return_pct_val * 100):.2f}% >= 停利點 {float(take_profit_val * 100):.1f}%)"
+                        f"已觸發停利點 (目前報酬 {float(return_pct_val * 100):.2f}% >= 停利點 {float(take_profit_val * 100):.1f}%)"  # numeric-boundary: dto
                     )
                     
             if not stop_loss_triggered and stop_loss_val is not None:
-                reasons.append(f"未觸發停損點 (-{float(stop_loss_val * 100):.1f}%)")
+                reasons.append(f"未觸發停損點 (-{float(stop_loss_val * 100):.1f}%)")  # numeric-boundary: dto
             if not take_profit_triggered and take_profit_val is not None:
-                reasons.append(f"未觸發停利點 ({float(take_profit_val * 100):.1f}%)")
+                reasons.append(f"未觸發停利點 ({float(take_profit_val * 100):.1f}%)")  # numeric-boundary: dto
 
         # 如果無任何可用資訊進行判讀
         has_regime_or_score = (entry_regime and current_regime) or (entry_score is not None and current_score is not None)
