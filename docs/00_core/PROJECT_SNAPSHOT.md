@@ -45,12 +45,13 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. 金融核心數值治理 Phase 2 收尾：制度化 analytics / visualization float 邊界檢查
-2. Portfolio Phase 4.1 深化：策略版本追蹤視圖、Price 對照、持倉層風險提示
+1. Portfolio Phase 4.1 深化：策略版本追蹤視圖、Price 對照、持倉層風險提示
+2. 補強測試覆蓋：針對 Portfolio 深化功能與金融核心邊界補齊單元測試
 3. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔
 
 ## 高風險區（改動需謹慎）
 
+- 金融核心數值計算與邊界（如交易成本、手續費、PnL、持倉 average_cost）：改動需極度謹慎，且必須通過 `scripts/check_financial_float_boundaries.py` 及 pytest repository gate 的自動防回歸掃描。
 - `app_module/backtest_service.py` / `backtest_module/*`
 - `app_module/recommendation_service.py`
 - `app_module/recommendation_replay_service.py` / `app_module/recommendation_portfolio_backtest_service.py`
@@ -84,12 +85,11 @@
 - 高風險區新增 `portfolio_module/core.py` 與 `app_module/portfolio_condition_monitor.py`。
 - 指定權威文件新增 `NEXT_ACTION_PLAN.md`。
 
-## 2026-06-10 技術治理進展
+## 2026-06-11 技術治理進展
 
+- 金融 float 邊界與防回歸掃描治理已完成：建立固定金融核心白名單（6 個核心檔案），利用 AST 靜態解析掃描未標記的 `float` 邊界，實行 `dto` / `analytics` / `visualization` 註解分類管制（`# numeric-boundary: <category>`），並加入 pytest repository gate 以防回歸。
 - 回測時間軸契約治理已建立初版防線：`BrokerSimulator` 的 `next_open` 帳務錯位已修正，T 日訊號不再提前反映 T+1 成交；`close` 模式與推薦組合回測同日收盤成交假設已加入 warning / metadata。
-- 金融核心數值治理核心金額邊界已階段性完成：新增 `financial_module/units.py`，以 `Decimal`、整數股數與基點處理交易成本、整股邊界與金額量化；`app_module/financial_units.py` 僅保留相容 re-export。
-- `BrokerSimulator` 買賣手續費、滑價與證交稅、`portfolio_module/core.py` 的平均成本/已實現損益/投入金額、`backtest_module/performance_metrics.py` 的交易損益統計、`app_module/recommendation_portfolio_backtest_service.py` / DTO 的推薦組合 PnL 與 mark-to-market PnL、`app_module/portfolio_service.py` 的 Portfolio summary 加總已改用 Decimal 金額邊界。
-- 裸 `float` 風險已從核心金額計算降級為邊界治理問題：Sharpe / Sortino / Monte Carlo / pandas 圖表等 analytics / visualization 層可使用 float，但不得回流交易成本、倉位、股數、PnL 與資金計算。
+- 金融核心數值治理核心金額邊界已完成：以 `Decimal`、整數股數與基點處理交易成本、整股邊界與金額量化。`BrokerSimulator`、`portfolio_module/core.py`、`backtest_module/performance_metrics.py`、`app_module/recommendation_portfolio_backtest_service.py` / DTO、`app_module/portfolio_service.py` 的核心金額與持倉平均成本等皆已改用 Decimal 計算，已徹底排除裸 `float` 帶來的精準度風險。
 
 ## 2026-05-27 補充狀態
 

@@ -1,7 +1,7 @@
 task_id: financial-float-boundary-governance
 task_name: 金融 float 邊界自動治理
-status: planning
-owner: Codex
+status: done
+owner: Codex / Antigravity
 risk_level: high
 scope_in:
   - 金融核心白名單的 AST float 邊界掃描
@@ -17,12 +17,12 @@ safety:
   sqlite_write: false
   formal_data_root: false
   look_ahead_check: pass
-  numeric_boundary_check: pending
+  numeric_boundary_check: pass
 verification:
-  pytest: not_run
-  mypy: not_run
-  py_compile: not_run
+  pytest: pass
+  mypy: pass
+  py_compile: pass
 documents:
   design: docs/superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md
   plan: docs/superpowers/plans/2026-06-11-financial-float-boundary-governance.md
-next_action: 使用者選擇實作執行方式
+next_action: 進入 Portfolio Phase 4.1 深化設計

@@ -1,6 +1,6 @@
 # 金融 Float 邊界治理實作計畫
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 建立 AST 型金融 `float` 邊界掃描器、逐行分類標記與 pytest repository gate，阻擋金融核心白名單重新出現未審查的浮點邊界。
 
@@ -53,7 +53,7 @@
 - Create: `tests/test_financial_float_boundary_checker.py`
 - Create: `scripts/check_financial_float_boundaries.py`
 
-- [ ] **Step 1: 建立未標記 `float()` 的失敗測試**
+- [x] **Step 1: 建立未標記 `float()` 的失敗測試**
 
 ```python
 from scripts.check_financial_float_boundaries import scan_source
@@ -67,7 +67,7 @@ def test_unmarked_float_call_is_reported() -> None:
     ]
 ```
 
-- [ ] **Step 2: 執行測試並確認因掃描器不存在而失敗**
+- [x] **Step 2: 執行測試並確認因掃描器不存在而失敗**
 
 Run:
 
@@ -77,7 +77,7 @@ Run:
 
 Expected: FAIL during import because `scripts.check_financial_float_boundaries` does not exist.
 
-- [ ] **Step 3: 實作最小 `Violation` 與 `scan_source()`**
+- [x] **Step 3: 實作最小 `Violation` 與 `scan_source()`**
 
 Create `scripts/check_financial_float_boundaries.py` with:
 
@@ -122,7 +122,7 @@ def scan_source(source: str, *, path: str = "<memory>") -> list[Violation]:
     return sorted(violations, key=lambda item: (item.line, item.column, item.rule))
 ```
 
-- [ ] **Step 4: 執行單一測試並確認通過**
+- [x] **Step 4: 執行單一測試並確認通過**
 
 Run:
 
@@ -132,7 +132,7 @@ Run:
 
 Expected: `1 passed`.
 
-- [ ] **Step 5: 追加合法標記、非法標記、astype、dtype 與誤報測試**
+- [x] **Step 5: 追加合法標記、非法標記、astype、dtype 與誤報測試**
 
 Append to `tests/test_financial_float_boundary_checker.py`:
 
@@ -190,7 +190,7 @@ def test_syntax_error_raises_boundary_check_error() -> None:
         scan_source("value = float(\n", path="broken.py")
 ```
 
-- [ ] **Step 6: 執行新增測試並確認正確失敗**
+- [x] **Step 6: 執行新增測試並確認正確失敗**
 
 Run:
 
@@ -200,7 +200,7 @@ Run:
 
 Expected: first test passes; new tests fail because marker、`astype`、`dtype` and `BoundaryCheckError` are not implemented.
 
-- [ ] **Step 7: 完成 AST/tokenize source scanner**
+- [x] **Step 7: 完成 AST/tokenize source scanner**
 
 Replace the scanner body with these components:
 
@@ -316,7 +316,7 @@ def scan_source(source: str, *, path: str = "<memory>") -> list[Violation]:
 4. Invalid marker lines do not additionally emit `NFB001`/`NFB002`/`NFB003`。
 5. Results sort by `(line, column, rule)`。
 
-- [ ] **Step 8: 執行 source-level 測試並確認全綠**
+- [x] **Step 8: 執行 source-level 測試並確認全綠**
 
 Run:
 
@@ -326,7 +326,7 @@ Run:
 
 Expected: all source-level tests pass.
 
-- [ ] **Step 9: 提交 source scanner**
+- [x] **Step 9: 提交 source scanner**
 
 ```powershell
 git status --short
@@ -340,7 +340,7 @@ git commit -m "test: define financial float boundary scanner"
 - Modify: `scripts/check_financial_float_boundaries.py`
 - Modify: `tests/test_financial_float_boundary_checker.py`
 
-- [ ] **Step 1: 先寫路徑掃描與缺檔失敗測試**
+- [x] **Step 1: 先寫路徑掃描與缺檔失敗測試**
 
 Append:
 
@@ -366,7 +366,7 @@ def test_scan_paths_fails_when_allowlisted_file_is_missing(tmp_path: Path) -> No
         scan_paths(tmp_path, ("missing.py",))
 ```
 
-- [ ] **Step 2: 執行兩個測試並確認因 `scan_paths` 不存在而失敗**
+- [x] **Step 2: 執行兩個測試並確認因 `scan_paths` 不存在而失敗**
 
 Run:
 
@@ -376,7 +376,7 @@ Run:
 
 Expected: collection/import fails for missing `scan_paths`.
 
-- [ ] **Step 3: 實作固定白名單與 `scan_paths()`**
+- [x] **Step 3: 實作固定白名單與 `scan_paths()`**
 
 Add:
 
@@ -412,7 +412,7 @@ def scan_paths(root: Path, paths: Sequence[str]) -> list[Violation]:
     )
 ```
 
-- [ ] **Step 4: 執行路徑測試並確認通過**
+- [x] **Step 4: 執行路徑測試並確認通過**
 
 Run:
 
@@ -422,7 +422,7 @@ Run:
 
 Expected: all current tests pass.
 
-- [ ] **Step 5: 實作 CLI**
+- [x] **Step 5: 實作 CLI**
 
 Add:
 
@@ -449,7 +449,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 6: 執行 CLI 並確認它因現存未標記邊界回傳失敗**
+- [x] **Step 6: 執行 CLI 並確認它因現存未標記邊界回傳失敗**
 
 Run:
 
@@ -459,7 +459,7 @@ Run:
 
 Expected: exit code `1`，輸出六個白名單檔案的 `NFB001` / `NFB003` violations。這是預期 RED 狀態。
 
-- [ ] **Step 7: 提交 CLI 與白名單**
+- [x] **Step 7: 提交 CLI 與白名單**
 
 ```powershell
 git status --short
@@ -478,7 +478,7 @@ git commit -m "feat: add financial float boundary checker cli"
 - Modify: `app_module/recommendation_portfolio_backtest_service.py`
 - Modify: `app_module/recommendation_portfolio_dtos.py`
 
-- [ ] **Step 1: 先寫 repository gate**
+- [x] **Step 1: 先寫 repository gate**
 
 Append:
 
@@ -498,7 +498,7 @@ def test_financial_core_allowlist_has_no_unmarked_float_boundaries() -> None:
     )
 ```
 
-- [ ] **Step 2: 執行 repository gate 並確認因現存未標記邊界失敗**
+- [x] **Step 2: 執行 repository gate 並確認因現存未標記邊界失敗**
 
 Run:
 
@@ -508,7 +508,7 @@ Run:
 
 Expected: FAIL with current white-list violations.
 
-- [ ] **Step 3: 標記 `broker_simulator.py` 的 Trade DTO 邊界**
+- [x] **Step 3: 標記 `broker_simulator.py` 的 Trade DTO 邊界**
 
 在 `_execute_buy()` 與 `_execute_sell()` 的 `Trade(...)` 建構值同一行加入：
 
@@ -525,7 +525,7 @@ slippage=float(slippage_cost_dec),  # numeric-boundary: dto
 fee=float(fee_dec + tax_dec),  # numeric-boundary: dto
 ```
 
-- [ ] **Step 4: 標記 Portfolio domain/service DTO 邊界**
+- [x] **Step 4: 標記 Portfolio domain/service DTO 邊界**
 
 在 `portfolio_module/core.py`：
 
@@ -545,7 +545,7 @@ return float(quantize_money(amount))  # numeric-boundary: dto
 - `TradeDTO(...)` 的 quantity、price、fees、taxes → `dto`
 - `_sum_money()` 回傳 → `dto`
 
-- [ ] **Step 5: 標記績效分析邊界**
+- [x] **Step 5: 標記績效分析邊界**
 
 在 `backtest_module/performance_metrics.py`：
 
@@ -577,7 +577,7 @@ total_return=float(total_return),  # numeric-boundary: dto
 | `calculate_baseline_comparison()` 的六個輸入正規化與四個比較運算 | `analytics` |
 | `calculate_consistency()` 的 `std_dev` 與 `normalized_std` | `analytics` |
 
-- [ ] **Step 6: 標記推薦組合 backtest 與 DTO 邊界**
+- [x] **Step 6: 標記推薦組合 backtest 與 DTO 邊界**
 
 在 `app_module/recommendation_portfolio_backtest_service.py`：
 
@@ -613,7 +613,7 @@ return float(  # numeric-boundary: dto
 | `_holding_pnl_at_date()` 金額量化後回傳 | `dto` |
 | `_calculate_max_drawdown()` 回傳 | `analytics` |
 
-- [ ] **Step 7: 執行 repository gate 並確認通過**
+- [x] **Step 7: 執行 repository gate 並確認通過**
 
 Run:
 
@@ -624,7 +624,7 @@ Run:
 
 Expected: pytest 全部通過，CLI exit code `0` 且無 violation。
 
-- [ ] **Step 8: 執行既有金融治理回歸測試**
+- [x] **Step 8: 執行既有金融治理回歸測試**
 
 Run:
 
@@ -634,7 +634,7 @@ Run:
 
 Expected: all pass.
 
-- [ ] **Step 9: 提交 repository gate 與標記**
+- [x] **Step 9: 提交 repository gate 與標記**
 
 ```powershell
 git status --short
@@ -651,7 +651,7 @@ git commit -m "test: enforce financial float boundary annotations"
 - Modify: `docs/00_core/DOCUMENTATION_INDEX.md`
 - Modify: `docs/agents/shared_state/active_task.yaml`
 
-- [ ] **Step 1: 更新 Roadmap**
+- [x] **Step 1: 更新 Roadmap**
 
 在 Living Section「金融核心數值治理」將原本：
 
@@ -666,7 +666,7 @@ git commit -m "test: enforce financial float boundary annotations"
 - 只接受 `dto` / `analytics` / `visualization` 逐行標記。
 - pytest repository gate 已建立。
 
-- [ ] **Step 2: 同步 Snapshot 與 Next Action Plan**
+- [x] **Step 2: 同步 Snapshot 與 Next Action Plan**
 
 `PROJECT_SNAPSHOT.md`：
 
@@ -679,7 +679,7 @@ git commit -m "test: enforce financial float boundary annotations"
 - P0 金融核心數值治理標記為完成。
 - 尚未完成項目導向 Portfolio 策略版本追蹤、Price 對照與持倉風險提示。
 
-- [ ] **Step 3: 更新索引與 shared state**
+- [x] **Step 3: 更新索引與 shared state**
 
 在 `DOCUMENTATION_INDEX.md` 加入：
 
@@ -698,7 +698,7 @@ verification:
 next_action: 執行完整型態與語法驗證
 ```
 
-- [ ] **Step 4: 執行語法檢查**
+- [x] **Step 4: 執行語法檢查**
 
 Run:
 
@@ -708,7 +708,7 @@ Run:
 
 Expected: exit code `0`.
 
-- [ ] **Step 5: 執行型態檢查**
+- [x] **Step 5: 執行型態檢查**
 
 Run:
 
@@ -718,7 +718,7 @@ Run:
 
 Expected: 不新增錯誤；若 repo 既有 baseline error，記錄完整輸出並確認本次檔案無新增錯誤。
 
-- [ ] **Step 6: 執行最終測試矩陣**
+- [x] **Step 6: 執行最終測試矩陣**
 
 Run:
 
@@ -729,7 +729,7 @@ Run:
 
 Expected: 全部通過，CLI exit code `0`。
 
-- [ ] **Step 7: 更新 shared state 為完成驗證**
+- [x] **Step 7: 更新 shared state 為完成驗證**
 
 ```yaml
 status: done
@@ -742,7 +742,7 @@ next_action: 進入 Portfolio Phase 4.1 深化設計
 
 若 mypy 只有既有 baseline error，`mypy` 記為 `baseline_only`，並在 YAML 加入 `verification_notes`。
 
-- [ ] **Step 8: 檢查文件一致性與 Git 範圍**
+- [x] **Step 8: 檢查文件一致性與 Git 範圍**
 
 Run:
 
@@ -756,7 +756,7 @@ Expected:
 - Roadmap、Snapshot、Next Action Plan 對 float 治理狀態一致。
 - 無 QA output、本機資料庫、暫存檔或非本任務檔案被 stage。
 
-- [ ] **Step 9: 提交文件收尾**
+- [x] **Step 9: 提交文件收尾**
 
 ```powershell
 git add docs/00_core/DEVELOPMENT_ROADMAP.md docs/00_core/PROJECT_SNAPSHOT.md docs/00_core/NEXT_ACTION_PLAN.md docs/00_core/DOCUMENTATION_INDEX.md docs/agents/shared_state/active_task.yaml

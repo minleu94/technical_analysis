@@ -95,11 +95,15 @@
 - `execution_price="close"` 必須禁止、警示，或明確標成研究假設。
 - benchmark 對齊不可使用決策日之後資料。
 
-### P0：金融核心數值治理
+### P0：金融核心數值治理 ✅ 已完成
 
 目標：停止在金融核心新增裸 `float`，並規劃既有裸 `float` 遷移。
 
-狀態（2026-06-10）：核心金額邊界已階段性完成。已新增 `financial_module/units.py`，並將 `BrokerSimulator` 買賣手續費、滑價、證交稅與整股股數計算切到 Decimal / 整數股數 / 基點 helper；`portfolio_module/core.py` 的平均成本、已實現損益與投入金額已切到 Decimal 邊界；`backtest_module/performance_metrics.py` 的交易損益統計、`app_module/recommendation_portfolio_backtest_service.py` / DTO 的推薦組合 PnL 與 mark-to-market PnL、`app_module/portfolio_service.py` 的 Portfolio summary 加總也已導入 Decimal 金額邊界；`app_module/financial_units.py` 僅保留相容 re-export，DTO / UI 邊界仍維持 float 以保留相容性。
+狀態（2026-06-11）：核心金額與 float 邊界治理已全部完成。
+- 已新增 `financial_module/units.py` 並將手續費、滑價、稅率等轉為 Decimal/整數/基點處理。
+- 已實施金融核心白名單（6 個核心檔案）的 `float()`、`.astype(float)`、`dtype=float` 防回歸靜態掃描器（`check_financial_float_boundaries.py`）。
+- 成功為所有白名單檔案的 float 轉換加入 `dto` / `analytics` / `visualization` 的 `# numeric-boundary:` 行尾註解。
+- 建立 pytest repository gate（`test_financial_core_allowlist_has_no_unmarked_float_boundaries`）自動阻擋任何未標記的 float 邊界。
 
 優先範圍：
 
