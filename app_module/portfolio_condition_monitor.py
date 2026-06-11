@@ -19,6 +19,7 @@ class PortfolioCurrentSnapshot:
 
     current_regime: str = ""
     current_total_score: Optional[Any] = None
+    current_price: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,66 @@ class PortfolioConditionMonitor:
                     f"未超過 {self._format_points(self.score_warning_points)} 分門檻"
                 )
 
-        if not reasons:
+        # 價格與停損停利對照
+        # 優先使用 snapshot.current_price，其次是 position.current_price
+        current_price = snapshot.current_price if snapshot.current_price is not None else position.current_price
+        price_dec = self._to_decimal(current_price)
+        cost_dec = self._to_decimal(position.average_cost)
+        
+        stop_loss_val = self._to_decimal(source_summary.get("stop_loss_pct"))
+        take_profit_val = self._to_decimal(source_summary.get("take_profit_pct"))
+        
+        stop_loss_triggered = False
+        take_profit_triggered = False
+        return_pct_val = None
+        
+        # 標準化停損停利門檻 (大於 1 則除以 100)
+        if stop_loss_val is not None:
+            if abs(stop_loss_val) > Decimal("1"):
+                stop_loss_val = stop_loss_val / Decimal("100")
+            stop_loss_val = abs(stop_loss_val)
+            
+        if take_profit_val is not None:
+            if abs(take_profit_val) > Decimal("1"):
+                take_profit_val = take_profit_val / Decimal("100")
+            take_profit_val = abs(take_profit_val)
+
+        details["stop_loss_pct"] = float(stop_loss_val) if stop_loss_val is not None else None
+        details["take_profit_pct"] = float(take_profit_val) if take_profit_val is not None else None
+        details["current_price"] = float(price_dec) if price_dec is not None else None
+        details["average_cost"] = float(cost_dec) if cost_dec is not None else None
+        details["stop_loss_triggered"] = False
+        details["take_profit_triggered"] = False
+        
+        if price_dec is not None and cost_dec is not None and cost_dec > 0:
+            return_pct_val = (price_dec - cost_dec) / cost_dec
+            details["return_pct"] = float(return_pct_val)
+            
+            if stop_loss_val is not None:
+                if return_pct_val <= -stop_loss_val:
+                    stop_loss_triggered = True
+                    details["stop_loss_triggered"] = True
+                    reasons.append(
+                        f"已觸發停損點 (目前報酬 {float(return_pct_val * 100):.2f}% <= 停損點 -{float(stop_loss_val * 100):.1f}%)"
+                    )
+            if take_profit_val is not None:
+                if return_pct_val >= take_profit_val:
+                    take_profit_triggered = True
+                    details["take_profit_triggered"] = True
+                    reasons.append(
+                        f"已觸發停利點 (目前報酬 {float(return_pct_val * 100):.2f}% >= 停利點 {float(take_profit_val * 100):.1f}%)"
+                    )
+                    
+            if not stop_loss_triggered and stop_loss_val is not None:
+                reasons.append(f"未觸發停損點 (-{float(stop_loss_val * 100):.1f}%)")
+            if not take_profit_triggered and take_profit_val is not None:
+                reasons.append(f"未觸發停利點 ({float(take_profit_val * 100):.1f}%)")
+
+        # 如果無任何可用資訊進行判讀
+        has_regime_or_score = (entry_regime and current_regime) or (entry_score is not None and current_score is not None)
+        has_price_evaluation = (price_dec is not None and cost_dec is not None and cost_dec > 0)
+        
+        if not has_regime_or_score and not has_price_evaluation:
             return PortfolioConditionResult(
                 stock_code=position.stock_code,
                 status="warning",
@@ -125,14 +185,23 @@ class PortfolioConditionMonitor:
                 current_regime=current_regime,
                 entry_total_score=self._format_decimal(entry_score),
                 current_total_score=self._format_decimal(current_score),
-                reasons=["尚無目前 Regime 或評分快照，請更新後再判讀"],
+                reasons=["尚無目前 Regime、評分快照或最新價格，請更新後再判讀"],
                 details=details,
             )
 
-        if details["regime_changed"] and details["score_degraded"]:
+        is_invalid = (
+            (details.get("regime_changed", False) and details.get("score_degraded", False)) or
+            stop_loss_triggered or
+            take_profit_triggered
+        )
+        is_warning = (
+            (details.get("regime_changed", False) or details.get("score_degraded", False)) and not is_invalid
+        )
+
+        if is_invalid:
             status = "invalid"
             label = "假設失效"
-        elif details["regime_changed"] or details["score_degraded"]:
+        elif is_warning:
             status = "warning"
             label = "需要留意"
         else:

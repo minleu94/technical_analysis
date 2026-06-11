@@ -70,6 +70,9 @@ class PositionDTO:
     source_snapshot_hash: str = ""
     source_summary: Dict[str, Any] = field(default_factory=dict)
     trade_ids: List[str] = field(default_factory=list)
+    current_price: Optional[float] = None
+    unrealized_pnl: Optional[float] = None
+    unrealized_pnl_pct: Optional[float] = None
     schema_version: str = "4.1"
 
     def to_dict(self) -> Dict[str, Any]:
@@ -94,6 +97,9 @@ class PositionDTO:
             source_snapshot_hash=str(data.get("source_snapshot_hash", "")),
             source_summary=dict(data.get("source_summary", {}) or {}),
             trade_ids=list(data.get("trade_ids", [])),
+            current_price=data.get("current_price"),
+            unrealized_pnl=data.get("unrealized_pnl"),
+            unrealized_pnl_pct=data.get("unrealized_pnl_pct"),
             schema_version=str(data.get("schema_version", "4.1")),
         )
 

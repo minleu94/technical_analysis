@@ -2,8 +2,10 @@
 
 import logging
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+import pandas as pd
 
 from app_module.dtos.portfolio_dtos import PortfolioDTO, PositionDTO, TradeDTO
 from app_module.portfolio_store import PortfolioJsonlStore
@@ -156,6 +158,62 @@ class PortfolioService:
         total = sum((to_decimal(value) for value in values), to_decimal("0"))
         return float(quantize_money(total))  # numeric-boundary: dto
 
+    def get_current_price(self, stock_code: str) -> Optional[float]:
+        """獲取指定個股的最新收盤價。"""
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                df = db.execute_query(
+                    "SELECT 收盤價 FROM daily_prices WHERE 證券代號 = ? ORDER BY 日期 DESC LIMIT 1;",
+                    (stock_code,)
+                )
+                if not df.empty:
+                    return float(df.iloc[0]['收盤價'])
+            except Exception as e:
+                logger.warning("從 SQLite 獲取 %s 最新收盤價失敗: %s", stock_code, e)
+        
+        # 降級讀取 CSV
+        try:
+            daily_price_dir = self.config.daily_price_dir
+            if daily_price_dir.exists():
+                csv_files = sorted(list(daily_price_dir.glob("*.csv")), reverse=True)
+                for file in csv_files[:3]:  # 檢查最近3天以防假日無交易
+                    df = pd.read_csv(file)
+                    if '證券代號' in df.columns:
+                        df['證券代號'] = df['證券代號'].astype(str).str.zfill(4)
+                        stock_row = df[df['證券代號'] == stock_code.zfill(4)]
+                        if not stock_row.empty and '收盤價' in stock_row.columns:
+                            return float(stock_row.iloc[0]['收盤價'])
+        except Exception as e:
+            logger.warning("從 CSV 獲取 %s 最新收盤價失敗: %s", stock_code, e)
+        return None
+
     def _position_to_dto(self, position) -> PositionDTO:
         data = position.to_dict()
-        return PositionDTO.from_dict({**data, "schema_version": "4.1"})
+        current_price = self.get_current_price(position.stock_code)
+        unrealized_pnl = None
+        unrealized_pnl_pct = None
+        
+        if current_price is not None:
+            qty_dec = to_decimal(position.quantity)
+            cost_dec = to_decimal(position.average_cost)
+            price_dec = to_decimal(current_price)
+            
+            pnl_dec = quantize_money((price_dec - cost_dec) * qty_dec)
+            unrealized_pnl = float(pnl_dec)  # numeric-boundary: dto
+            
+            invested_dec = cost_dec * qty_dec
+            if invested_dec > 0:
+                pct_dec = (pnl_dec / invested_dec).quantize(Decimal("0.0001"))
+                unrealized_pnl_pct = float(pct_dec)  # numeric-boundary: dto
+            else:
+                unrealized_pnl_pct = 0.0  # numeric-boundary: dto
+                
+        return PositionDTO.from_dict({
+            **data,
+            "current_price": current_price,
+            "unrealized_pnl": unrealized_pnl,
+            "unrealized_pnl_pct": unrealized_pnl_pct,
+            "schema_version": "4.1"
+        })

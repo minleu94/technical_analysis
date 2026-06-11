@@ -29,6 +29,7 @@ from app_module.portfolio_condition_monitor import (
 )
 from portfolio_module import PortfolioValidationError
 from ui_qt.widgets.info_button import InfoButton
+from app_module.strategy_version_service import StrategyVersionService
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +274,7 @@ class PortfolioView(QWidget):
         self.journal_service = journal_service
         self.recommendation_service = recommendation_service
         self.condition_monitor = condition_monitor or PortfolioConditionMonitor()
+        self.strategy_version_service = StrategyVersionService(self.portfolio_service.config)
         
         self.positions_model: Optional[PandasTableModel] = None
         self.trades_model: Optional[PandasTableModel] = None
@@ -419,6 +421,53 @@ class PortfolioView(QWidget):
         
         right_widget.addTab(journal_tab, "覆盤日誌")
         
+        # Right Tab 3: 策略與價格監控 (Strategy & Price Monitor)
+        monitor_tab = QWidget()
+        monitor_layout = QVBoxLayout(monitor_tab)
+        monitor_layout.setContentsMargins(10, 10, 10, 10)
+        monitor_layout.setSpacing(10)
+        
+        # 價格對比區 (Entry vs Current vs SL/TP)
+        price_group = QGroupBox("價格與停損停利對照")
+        price_form = QFormLayout(price_group)
+        price_form.setSpacing(8)
+        
+        self.lbl_mon_entry_price = QLabel("-")
+        self.lbl_mon_current_price = QLabel("-")
+        self.lbl_mon_pnl_pct = QLabel("-")
+        self.lbl_mon_stop_loss = QLabel("-")
+        self.lbl_mon_take_profit = QLabel("-")
+        self.lbl_mon_status = QLabel("-")
+        
+        price_form.addRow("進場平均成本:", self.lbl_mon_entry_price)
+        price_form.addRow("最新價格:", self.lbl_mon_current_price)
+        price_form.addRow("未實現損益%:", self.lbl_mon_pnl_pct)
+        price_form.addRow("停損門檻 (Stop Loss):", self.lbl_mon_stop_loss)
+        price_form.addRow("停利門檻 (Take Profit):", self.lbl_mon_take_profit)
+        price_form.addRow("監控判定狀態:", self.lbl_mon_status)
+        
+        monitor_layout.addWidget(price_group)
+        
+        # 策略版本詳情區
+        strategy_group = QGroupBox("關聯策略與回測版本")
+        strategy_form = QFormLayout(strategy_group)
+        strategy_form.setSpacing(8)
+        
+        self.lbl_strat_id = QLabel("-")
+        self.lbl_strat_version = QLabel("-")
+        self.lbl_strat_params = QLabel("-")
+        self.lbl_strat_perf = QLabel("-")
+        
+        strategy_form.addRow("策略 ID / 來源:", self.lbl_strat_id)
+        strategy_form.addRow("推薦/版本細節:", self.lbl_strat_version)
+        strategy_form.addRow("參數設定:", self.lbl_strat_params)
+        strategy_form.addRow("回測/歷史績效:", self.lbl_strat_perf)
+        
+        monitor_layout.addWidget(strategy_group)
+        monitor_layout.addStretch()
+        
+        right_widget.addTab(monitor_tab, "策略與價格監控")
+        
         main_splitter.addWidget(right_widget)
         
         # 設定左右分割比例（60% : 40%）
@@ -432,6 +481,7 @@ class PortfolioView(QWidget):
         self._load_positions_table()
         self._load_trades_history()
         self._load_journal_entries()
+        self._update_monitoring_tab()
         
     def _load_portfolio_summary(self):
         """讀取持倉摘要，並更新頂部卡片"""
@@ -466,8 +516,9 @@ class PortfolioView(QWidget):
             
             if not positions:
                 df = pd.DataFrame(columns=[
-                    "證券代號", "證券名稱", "持有股數", "平均成本", "投入金額",
-                    "已實現損益", "來源脈絡", "進場分數", "目前分數", "狀態監控", "監控原因"
+                    "證券代號", "證券名稱", "持有股數", "平均成本", "目前價格",
+                    "投入金額", "未實現損益", "未實現損益%", "已實現損益",
+                    "來源脈絡", "進場分數", "目前分數", "狀態監控", "監控原因"
                 ])
             else:
                 data = []
@@ -475,13 +526,20 @@ class PortfolioView(QWidget):
                     snapshot = self._current_snapshot_for_position(p.stock_code)
                     monitor_result = self.condition_monitor.evaluate(p, snapshot)
                     monitor_reason = "；".join(monitor_result.reasons)
+                    
+                    pnl_pct_str = "-"
+                    if p.unrealized_pnl_pct is not None:
+                        pnl_pct_str = f"{p.unrealized_pnl_pct * 100:+.2f}%"
                             
                     data.append({
                         "證券代號": p.stock_code,
                         "證券名稱": p.stock_name,
                         "持有股數": p.quantity,
                         "平均成本": p.average_cost,
+                        "目前價格": p.current_price if p.current_price is not None else "-",
                         "投入金額": p.invested_amount,
+                        "未實現損益": p.unrealized_pnl if p.unrealized_pnl is not None else "-",
+                        "未實現損益%": pnl_pct_str,
                         "已實現損益": p.realized_pnl,
                         "來源脈絡": monitor_result.source_label,
                         "進場分數": monitor_result.entry_total_score,
@@ -510,21 +568,24 @@ class PortfolioView(QWidget):
 
     def _current_snapshot_for_position(self, stock_code: str) -> Optional[PortfolioCurrentSnapshot]:
         """取得單一持倉的目前評分快照；取不到時交由 monitor 標示待更新。"""
+        current_price = self.portfolio_service.get_current_price(stock_code)
+        
         if not self.recommendation_service:
-            return None
+            return PortfolioCurrentSnapshot(current_price=current_price)
         try:
             if stock_code not in self.rec_cache:
                 self._update_recommendation_cache_for_stock(stock_code)
             rec_info = self.rec_cache.get(stock_code)
             if not rec_info:
-                return None
+                return PortfolioCurrentSnapshot(current_price=current_price)
             return PortfolioCurrentSnapshot(
                 current_regime=str(rec_info.get("regime", "")),
                 current_total_score=rec_info.get("score"),
+                current_price=current_price,
             )
         except Exception as exc:
             logger.debug("Current snapshot lookup failed for %s: %s", stock_code, exc)
-            return None
+            return PortfolioCurrentSnapshot(current_price=current_price)
 
     def _update_recommendation_cache_for_stock(self, stock_code: str):
         """背景快速獲取特定個股的推薦狀態，用以更新 Condition Monitor"""
@@ -633,6 +694,7 @@ class PortfolioView(QWidget):
             logger.info("Selected position stock: %s", self.selected_stock_code)
             self._load_trades_history()
             self._load_journal_entries()
+            self._update_monitoring_tab()
             
     def _show_position_context_menu(self, pos):
         """右鍵選單操作"""
@@ -805,3 +867,139 @@ class PortfolioView(QWidget):
                 self.portfolioUpdated.emit()
             except Exception as e:
                 QMessageBox.critical(self, "清空失敗", f"發生錯誤：\n{e}")
+
+    def _update_monitoring_tab(self):
+        """連動並更新「策略與價格監控」分頁"""
+        position_dto = None
+        if self.selected_stock_code:
+            try:
+                for p in self.portfolio_service.list_positions():
+                    if p.stock_code == self.selected_stock_code:
+                        position_dto = p
+                        break
+            except Exception as e:
+                logger.error("Error retrieving position for monitoring: %s", e)
+                
+        if not position_dto:
+            # 清空 labels
+            self.lbl_mon_entry_price.setText("-")
+            self.lbl_mon_current_price.setText("-")
+            self.lbl_mon_pnl_pct.setText("-")
+            self.lbl_mon_pnl_pct.setStyleSheet("color: white;")
+            self.lbl_mon_stop_loss.setText("-")
+            self.lbl_mon_stop_loss.setStyleSheet("color: white;")
+            self.lbl_mon_take_profit.setText("-")
+            self.lbl_mon_take_profit.setStyleSheet("color: white;")
+            self.lbl_mon_status.setText("-")
+            self.lbl_mon_status.setStyleSheet("color: white;")
+            
+            self.lbl_strat_id.setText("-")
+            self.lbl_strat_version.setText("-")
+            self.lbl_strat_params.setText("-")
+            self.lbl_strat_perf.setText("-")
+            return
+            
+        try:
+            snapshot = self._current_snapshot_for_position(position_dto.stock_code)
+            monitor_result = self.condition_monitor.evaluate(position_dto, snapshot)
+            details = monitor_result.details
+            
+            # 價格對照
+            self.lbl_mon_entry_price.setText(f"TWD {position_dto.average_cost:,.2f}")
+            if position_dto.current_price is not None:
+                self.lbl_mon_current_price.setText(f"TWD {position_dto.current_price:,.2f}")
+            else:
+                self.lbl_mon_current_price.setText("-")
+                
+            if position_dto.unrealized_pnl_pct is not None:
+                pnl_pct = position_dto.unrealized_pnl_pct * 100
+                self.lbl_mon_pnl_pct.setText(f"{pnl_pct:+.2f}%")
+                if pnl_pct > 0:
+                    self.lbl_mon_pnl_pct.setStyleSheet("color: #48bb78; font-weight: bold;")
+                elif pnl_pct < 0:
+                    self.lbl_mon_pnl_pct.setStyleSheet("color: #f56565; font-weight: bold;")
+                else:
+                    self.lbl_mon_pnl_pct.setStyleSheet("color: white;")
+            else:
+                self.lbl_mon_pnl_pct.setText("-")
+                self.lbl_mon_pnl_pct.setStyleSheet("color: white;")
+                
+            # 停損
+            stop_loss_pct = details.get("stop_loss_pct")
+            if stop_loss_pct is not None:
+                sl_price = position_dto.average_cost * (1.0 - abs(stop_loss_pct))
+                self.lbl_mon_stop_loss.setText(f"TWD {sl_price:,.2f} (-{stop_loss_pct * 100:.1f}%)")
+                if details.get("stop_loss_triggered"):
+                    self.lbl_mon_stop_loss.setStyleSheet("color: #f56565; font-weight: bold;")
+                else:
+                    self.lbl_mon_stop_loss.setStyleSheet("color: white;")
+            else:
+                self.lbl_mon_stop_loss.setText("- (未設定)")
+                self.lbl_mon_stop_loss.setStyleSheet("color: white;")
+                
+            # 停利
+            take_profit_pct = details.get("take_profit_pct")
+            if take_profit_pct is not None:
+                tp_price = position_dto.average_cost * (1.0 + abs(take_profit_pct))
+                self.lbl_mon_take_profit.setText(f"TWD {tp_price:,.2f} (+{take_profit_pct * 100:.1f}%)")
+                if details.get("take_profit_triggered"):
+                    self.lbl_mon_take_profit.setStyleSheet("color: #48bb78; font-weight: bold;")
+                else:
+                    self.lbl_mon_take_profit.setStyleSheet("color: white;")
+            else:
+                self.lbl_mon_take_profit.setText("- (未設定)")
+                self.lbl_mon_take_profit.setStyleSheet("color: white;")
+                
+            # 監控判定
+            self.lbl_mon_status.setText(monitor_result.label)
+            if monitor_result.status == "invalid":
+                self.lbl_mon_status.setStyleSheet("background-color: #742a2a; color: #fff5f5; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+            elif monitor_result.status == "warning":
+                self.lbl_mon_status.setStyleSheet("background-color: #7b341e; color: #fffff0; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+            elif monitor_result.status == "valid":
+                self.lbl_mon_status.setStyleSheet("background-color: #22543d; color: #f0fff4; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+            else:
+                self.lbl_mon_status.setStyleSheet("color: white;")
+                
+            # 策略版本詳情
+            self.lbl_strat_id.setText("-")
+            self.lbl_strat_version.setText("-")
+            self.lbl_strat_params.setText("-")
+            self.lbl_strat_perf.setText("-")
+            
+            source_type = position_dto.source_type
+            source_id = position_dto.source_id
+            
+            if source_type == "strategy_version" or (source_type == "backtest_run" and str(source_id).startswith("version_")):
+                version_obj = self.strategy_version_service.get_version(source_id)
+                if version_obj:
+                    self.lbl_strat_id.setText(f"{version_obj.strategy_id} (ID: {source_id})")
+                    self.lbl_strat_version.setText(f"版本: {version_obj.strategy_version} / 升級時間: {version_obj.promoted_at[:16].replace('T', ' ')}")
+                    
+                    param_lines = [f"{k}: {v}" for k, v in version_obj.params.items()]
+                    self.lbl_strat_params.setText(", ".join(param_lines) if param_lines else "預設參數")
+                    
+                    perf = version_obj.backtest_summary
+                    total_ret = perf.get('total_return', 0.0)
+                    mdd = perf.get('max_drawdown', 0.0)
+                    
+                    ret_val = float(total_ret) * 100
+                    mdd_val = float(mdd) * 100
+                    perf_text = f"總報酬: {ret_val:+.1f}%, Sharpe: {float(perf.get('sharpe_ratio', 0.0)):.2f}, MaxDD: {mdd_val:.1f}%"
+                    self.lbl_strat_perf.setText(perf_text)
+                else:
+                    self.lbl_strat_id.setText(f"策略版本來源 (ID: {source_id})")
+                    self.lbl_strat_version.setText("未找到對應的策略版本資料")
+            elif source_type == "recommendation_result":
+                profile_id = position_dto.source_summary.get("profile_id", "")
+                self.lbl_strat_id.setText(f"推薦引擎: {profile_id}")
+                self.lbl_strat_version.setText(f"推薦批次 ID: {source_id}")
+                self.lbl_strat_params.setText(f"進場分數: {position_dto.source_summary.get('total_score', '-')}")
+                self.lbl_strat_perf.setText(f"適用市場體制 (Regime): {position_dto.source_summary.get('regime', '未指定')}")
+            else:
+                self.lbl_strat_id.setText("手動建立 / 其他來源")
+                self.lbl_strat_version.setText(f"來源類型: {source_type or '未知'}")
+                if source_id:
+                    self.lbl_strat_version.setText(self.lbl_strat_version.text() + f" (ID: {source_id})")
+        except Exception as e:
+            logger.error("Failed to update monitoring tab UI: %s", e)
