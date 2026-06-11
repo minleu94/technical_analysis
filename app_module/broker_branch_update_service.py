@@ -212,6 +212,32 @@ class BrokerBranchUpdateService:
             pass
         
         return None
+
+    def _decode_unicode_hex(self, hex_str: str) -> str:
+        """
+        將 16 進位 Unicode hex 字串轉換成一般字串。
+        例如 '0039004100390069' -> '9A9i'
+        
+        若長度小於 16 (如 14 或 15 碼) 且皆為十六進位，會自動補足前置零至 16 碼再進行解密。
+        """
+        if not hex_str or not isinstance(hex_str, str):
+            return hex_str
+        
+        # 預防性補前導零
+        val = hex_str.strip()
+        if 12 <= len(val) < 16 and all(c in '0123456789abcdefABCDEF' for c in val):
+            val = val.zfill(16)
+            
+        if len(val) == 16 and all(c in '0123456789abcdefABCDEF' for c in val):
+            try:
+                chars = []
+                for i in range(0, len(val), 4):
+                    code = int(val[i:i+4], 16)
+                    chars.append(chr(code))
+                return "".join(chars)
+            except Exception as e:
+                self.logger.debug(f"解密 Unicode hex 失敗: {hex_str}, error: {str(e)}")
+        return hex_str
     
     def _load_branch_registry(
         self,
@@ -219,7 +245,7 @@ class BrokerBranchUpdateService:
         repair_registry: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        從 registry 載入追蹤分點清單（含自動修復 mojibake）
+        從 registry 載入追蹤分點清單（含自動修復 mojibake、長碼解密與總公司判定）
         
         Args:
             active_only: 是否只載入啟用的分點
@@ -246,29 +272,20 @@ class BrokerBranchUpdateService:
             }
             df = pd.read_csv(registry_file, encoding='utf-8-sig', dtype=dtype_dict)
             
-            # 確保 url_param_b 是字串格式（修復可能的數字轉換問題）
+            # 確保 url_param_b 是字串格式，並處理長碼解密
             if 'url_param_b' in df.columns:
                 df['url_param_b'] = df['url_param_b'].astype(str)
-                # 如果值被轉換為數字（例如 39004100390050），嘗試修復為正確格式
                 for idx, row in df.iterrows():
                     url_param_b = str(row.get('url_param_b', ''))
-                    branch_key = row.get('branch_system_key', '')
-                    # 檢查是否需要補前導零
-                    if branch_key == '9A00_9A9P' and url_param_b == '39004100390050':
-                        if repair_registry:
-                            df.at[idx, 'url_param_b'] = '0039004100390050'
-                            self.logger.warning(f"修復 {branch_key} 的 url_param_b: 39004100390050 -> 0039004100390050")
-                        else:
-                            self.logger.warning(f"檢測到 {branch_key} 的 url_param_b 可修復，但本次為唯讀載入")
-                    elif branch_key == '8450_845B' and len(url_param_b) < 16:
-                        # 檢查康和永和的 url_param_b
-                        expected = '0038003400350042'
-                        if url_param_b != expected:
-                            if repair_registry:
-                                df.at[idx, 'url_param_b'] = expected
-                                self.logger.warning(f"修復 {branch_key} 的 url_param_b: {url_param_b} -> {expected}")
-                            else:
-                                self.logger.warning(f"檢測到 {branch_key} 的 url_param_b 可修復，但本次為唯讀載入")
+                    # 預防性補足可能丟失的前導零
+                    if 12 <= len(url_param_b) < 16 and all(c in '0123456789abcdefABCDEF' for c in url_param_b):
+                        url_param_b = url_param_b.zfill(16)
+                        df.at[idx, 'url_param_b'] = url_param_b
+                    
+                    # 對長碼 Unicode hex 進行解密，並將短碼更新至 branch_code 欄位
+                    decoded_code = self._decode_unicode_hex(url_param_b)
+                    if decoded_code != url_param_b:
+                        df.at[idx, 'branch_code'] = decoded_code
             
             # 檢查並修復 mojibake
             needs_fix = False
@@ -290,11 +307,11 @@ class BrokerBranchUpdateService:
                                 )
                         else:
                             self.logger.warning(
-                                f"無法修復 mojibake: {display_name}"
+                                    f"無法修復 mojibake: {display_name}"
                             )
             
             # 如果有修復，寫回檔案
-            if repair_registry and (needs_fix or any(df['url_param_b'].astype(str).str.len() < 16)):
+            if repair_registry and needs_fix:
                 self.logger.info("自動修復後寫回 registry 檔案")
                 # 備份原檔案
                 try:
@@ -308,10 +325,25 @@ class BrokerBranchUpdateService:
                 df = df[df.get('is_active', True) == True]
             
             branches = df.to_dict('records')
-            # 確保所有 url_param_b 都是字串
+            # 確保所有 url_param_b 都是字串，並注入 is_headquarters 判定與解密 branch_code
             for branch in branches:
                 if 'url_param_b' in branch:
                     branch['url_param_b'] = str(branch['url_param_b'])
+                
+                # 計算是否為總公司
+                broker_code = str(branch.get('branch_broker_code', ''))
+                branch_code = str(branch.get('branch_code', ''))
+                display_name = str(branch.get('branch_display_name', ''))
+                
+                is_head = False
+                if broker_code == branch_code:
+                    is_head = True
+                elif '-' not in display_name and '分公司' not in display_name and '分行' not in display_name:
+                    headquarters_keywords = ["證券", "環球", "瑞銀", "麥格理", "野村", "匯豐", "高盛", "摩根士丹利", "摩根大通", "土銀", "大和國泰", "美林", "康和", "凱基"]
+                    if any(k in display_name for k in headquarters_keywords):
+                        is_head = True
+                
+                branch['is_headquarters'] = is_head
             
             self.logger.info(f"載入 {len(branches)} 個追蹤分點")
             return branches
@@ -536,11 +568,37 @@ class BrokerBranchUpdateService:
                                 int((completed_tasks / total_tasks) * 100)
                             )
                         
-                        # 檢查檔案是否已存在
+                        # 檢查檔案是否已存在 (CSV)
                         daily_file = daily_dir / f"{date_str}.csv"
                         if daily_file.exists() and not force_all:
                             skipped_dates.append(date_str)
-                            self.logger.debug(f"跳過已存在檔案: {branch_key}/{date_str}")
+                            self.logger.debug(f"跳過已存在檔案(CSV): {branch_key}/{date_str}")
+                            continue
+
+                        # 檢查 SQLite 資料庫中是否已存在該日期與分點名稱的資料 (僅在 force_all=False 時)
+                        use_sqlite = getattr(self.config, "use_sqlite", False)
+                        db_file = getattr(self.config, "db_file", None)
+                        if use_sqlite and db_file and db_file.exists() and not force_all:
+                            try:
+                                import sqlite3
+                                # 日期格式轉換: "2026-06-01" -> "20260601"
+                                sqlite_date = date_str.replace("-", "")
+                                
+                                # 連線 SQLite 檢查
+                                with sqlite3.connect(str(db_file)) as conn:
+                                    cursor = conn.cursor()
+                                    # 檢查是否有該分點在該日期的任何交易紀錄
+                                    cursor.execute(
+                                        "SELECT 1 FROM broker_flows WHERE 日期 = ? AND 分點名稱 = ? LIMIT 1",
+                                        (sqlite_date, branch_key)
+                                    )
+                                    row = cursor.fetchone()
+                                    if row:
+                                        skipped_dates.append(date_str)
+                                        self.logger.debug(f"跳過已存在 SQLite 記錄: {branch_key}/{date_str}")
+                                        continue
+                            except Exception as sqlite_err:
+                                self.logger.warning(f"檢查 SQLite 記錄失敗: {str(sqlite_err)}")
                             continue
                         
                         # 重試機制
@@ -919,9 +977,15 @@ class BrokerBranchUpdateService:
                                     f"記錄數: {len(all_data)}"
                                 )
                             else:
-                                self.logger.warning(f"日期 {date_str} 沒有交易數據: {branch_key}")
-                                failed_dates.append(date_str)
-                                branch_success = False
+                                self.logger.info(f"日期 {date_str} 沒有交易數據: {branch_key}，建立空標記檔案")
+                                # 建立只含 Header 的空 CSV，避免未來重複下載
+                                df = pd.DataFrame(columns=[
+                                    'date', 'trade_type', 'branch_system_key', 'branch_broker_code',
+                                    'branch_code', 'branch_display_name', 'counterparty_broker_code',
+                                    'counterparty_broker_name', 'buy_qty', 'sell_qty', 'net_qty'
+                                ])
+                                df.to_csv(daily_file, index=False, encoding='utf-8-sig')
+                                updated_dates.append(date_str)
                             
                             # 延遲
                             time.sleep(delay_seconds)
@@ -933,9 +997,9 @@ class BrokerBranchUpdateService:
                             time.sleep(delay_seconds)
                     
                     # 記錄分點處理結果
-                    if branch_success and branch_records > 0:
+                    if branch_success:
                         updated_branches.append(branch_key)
-                    elif not branch_success:
+                    else:
                         failed_branches.append(branch_key)
             
             # 清理 driver

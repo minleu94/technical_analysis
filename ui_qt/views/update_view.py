@@ -289,15 +289,46 @@ class UpdateView(QWidget):
         cards_layout.addWidget(self.technical_status_text)
         all_layout.addLayout(cards_layout)
 
-        # 一鍵安全更新與輔助按鈕
+        # 一鍵更新與輔助按鈕
         actions_layout = QHBoxLayout()
-        self.safe_update_all_btn = QPushButton("安全更新所有數據")
+        
+        self.quick_update_all_btn = QPushButton("⚡ 快速更新 (僅 SQLite)")
+        self.quick_update_all_btn.setMinimumHeight(45)
+        self.quick_update_all_btn.setToolTip(
+            "【⚡ 快速更新 (僅 SQLite)】\n"
+            "速度優先！僅下載最新範圍資料並直接同步寫入 SQLite 資料庫，\n"
+            "不重新合併或重寫本地大 CSV 原始檔案。更新時間大幅縮減！"
+        )
+        self.quick_update_all_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #8b5cf6, stop:1 #6d28d9);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px 20px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a78bfa, stop:1 #7c3aed);
+            }
+            QPushButton:pressed {
+                background: #5b21b6;
+            }
+            QPushButton:disabled {
+                background-color: #cbd5e1;
+                color: #94a3b8;
+            }
+        """)
+        self.quick_update_all_btn.clicked.connect(self._execute_quick_update_all)
+
+        self.safe_update_all_btn = QPushButton("🛡️ 安全更新 (完整 CSV + SQLite)")
         self.safe_update_all_btn.setMinimumHeight(45)
         self.safe_update_all_btn.setToolTip(
-            "【安全更新所有數據】\n"
-            "日常維護最推薦！一鍵自動執行資料狀態檢查、下載缺失資料、\n"
-            "增量同步寫入 SQLite 資料庫、智慧增量重算技術指標並自動刷新大看板。\n"
-            "出錯時會自動中止並回報失敗步驟，是最安全的日常更新方式。"
+            "【🛡️ 安全更新 (完整 CSV + SQLite)】\n"
+            "備份完整性優先！下載最新範圍資料後，執行本地完整 CSV 整合表合併重寫\n"
+            "（包括合併每日股價大表與分點合併檔），最後再同步寫入 SQLite 庫。\n"
+            "此流程耗時較長，但能保證 CSV 歷史資料庫的完整備份。"
         )
         self.safe_update_all_btn.setStyleSheet("""
             QPushButton {
@@ -307,7 +338,7 @@ class UpdateView(QWidget):
                 border-radius: 8px;
                 font-size: 14px;
                 font-weight: bold;
-                padding: 10px 24px;
+                padding: 10px 20px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #60a5fa, stop:1 #3b82f6);
@@ -353,6 +384,7 @@ class UpdateView(QWidget):
         """)
         self.check_status_btn.clicked.connect(self._check_data_status)
 
+        actions_layout.addWidget(self.quick_update_all_btn, stretch=2)
         actions_layout.addWidget(self.safe_update_all_btn, stretch=2)
         actions_layout.addWidget(self.check_status_btn, stretch=1)
         all_layout.addLayout(actions_layout)
@@ -1044,8 +1076,8 @@ class UpdateView(QWidget):
         start_date_obj = end_date_obj - timedelta(days=lookback_days)
         return start_date_obj.strftime("%Y-%m-%d"), end_date
 
-    def _run_safe_update_all(self, progress_callback=None) -> Dict[str, Any]:
-        """執行保守的一鍵安全更新流程，供 UI worker 與測試共用"""
+    def _run_update_all(self, mode="quick", progress_callback=None) -> Dict[str, Any]:
+        """一鍵更新所有數據流程（支援快速與安全分流）"""
         start_date, end_date = self._get_selected_date_range()
         completed = []
 
@@ -1062,6 +1094,18 @@ class UpdateView(QWidget):
             return result
 
         use_sqlite = getattr(self.update_service.config, "use_sqlite", False)
+        is_quick_mode = (mode == "quick" and use_sqlite)
+        
+        # 在快速更新模式下，限制券商分點僅更新最近 2 天，避免大量全新分點補歷史資料造成的嚴重卡頓
+        if is_quick_mode:
+            from datetime import datetime, timedelta
+            try:
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+                quick_start_date = (end_dt - timedelta(days=2)).strftime("%Y-%m-%d")
+            except Exception:
+                quick_start_date = start_date
+        else:
+            quick_start_date = start_date
         
         steps = [
             ("檢查資料狀態", 0, lambda: self._get_overview_status()),
@@ -1071,15 +1115,18 @@ class UpdateView(QWidget):
             ("同步大盤指數至 SQLite", 30, lambda: self.update_service.sync_source_to_sqlite("market_index")),
             ("產業指數更新", 36, lambda: self.update_service.update_industry(start_date, end_date)),
             ("同步產業指數至 SQLite", 42, lambda: self.update_service.sync_source_to_sqlite("industry_index")),
-            ("券商分點更新", 48, lambda: self.update_service.update_broker_branch(start_date, end_date)),
+            ("券商分點更新", 48, lambda: self.update_service.update_broker_branch(quick_start_date, end_date)),
         ]
         
-        if use_sqlite:
-            # 啟用 SQLite 時，跳過重寫大型 CSV 合併，改由單日檔案直接同步到 SQLite
+        is_quick_mode = (mode == "quick" and use_sqlite)
+        
+        if is_quick_mode:
+            # ⚡ 快速更新 (僅 SQLite)：跳過合併 CSV，直接同步單日檔案至 SQLite
             steps.extend([
-                ("同步券商分點至 SQLite (直接檔案同步)", 65, lambda: self.update_service.sync_source_to_sqlite("broker_branch_files", start_date, end_date)),
+                ("同步券商分點至 SQLite (直接檔案同步)", 65, lambda: self.update_service.sync_source_to_sqlite("broker_branch_files", quick_start_date, end_date)),
             ])
         else:
+            # 🛡️ 安全更新：執行完整 CSV 合併整合與 SQLite 同步
             steps.extend([
                 ("合併每日資料", 55, lambda: self.update_service.merge_daily_data(force_all=False)),
                 ("同步合併每日資料至 SQLite", 62, lambda: self.update_service.sync_source_to_sqlite("daily_data")),
@@ -1113,71 +1160,107 @@ class UpdateView(QWidget):
                     "step_result": result,
                 }
 
-        report("安全更新所有數據完成", 100)
+        final_msg = "快速更新所有數據完成" if is_quick_mode else "安全更新所有數據完成"
+        report(final_msg, 100)
         return {
             "success": True,
-            "message": "安全更新所有數據完成",
+            "message": final_msg,
             "completed_steps": completed,
         }
 
+    def _run_safe_update_all(self, progress_callback=None) -> Dict[str, Any]:
+        """執行保守的一鍵安全更新流程，供 UI worker 與測試共用，保持向後相容"""
+        use_sqlite = getattr(self.update_service.config, "use_sqlite", False)
+        mode = "quick" if use_sqlite else "safe"
+        return self._run_update_all(mode=mode, progress_callback=progress_callback)
+
+    def _execute_quick_update_all(self):
+        """以背景工作執行快速更新所有數據"""
+        self._execute_update_all(mode="quick")
+
     def _execute_safe_update_all(self):
         """以背景工作執行安全更新所有數據"""
+        self._execute_update_all(mode="safe")
+
+    def _execute_update_all(self, mode="quick"):
+        """以背景工作執行更新所有數據"""
+        self._current_update_mode = mode
+        
+        self.quick_update_all_btn.setEnabled(False)
         self.safe_update_all_btn.setEnabled(False)
-        self.safe_update_all_btn.setText("安全更新中...")
+        
+        mode_name = "快速更新" if mode == "quick" else "安全更新"
+        btn_text = "快速更新中..." if mode == "quick" else "安全更新中..."
+        
+        if mode == "quick":
+            self.quick_update_all_btn.setText(btn_text)
+        else:
+            self.safe_update_all_btn.setText(btn_text)
+            
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
-        self.progress_label.setText("準備安全更新所有數據...")
+        self.progress_label.setText(f"準備{mode_name}所有數據...")
         self.log_text.clear()
-        self._log("開始安全更新所有數據")
+        self._log(f"開始{mode_name}所有數據")
 
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(3000)
 
-        self.worker = ProgressTaskWorker(self._run_safe_update_all)
-        self.worker.progress.connect(self._on_safe_update_all_progress)
-        self.worker.finished.connect(self._on_safe_update_all_finished)
-        self.worker.error.connect(self._on_safe_update_all_error)
+        self.worker = ProgressTaskWorker(self._run_update_all, mode=mode)
+        self.worker.progress.connect(self._on_update_all_progress)
+        self.worker.finished.connect(self._on_update_all_finished)
+        self.worker.error.connect(self._on_update_all_error)
         self.worker.start()
 
-    def _on_safe_update_all_progress(self, message: str, progress: int):
-        """更新安全更新流程進度"""
+    def _on_update_all_progress(self, message: str, progress: int):
+        """更新更新流程進度"""
+        mode_name = "快速更新" if getattr(self, "_current_update_mode", "quick") == "quick" else "安全更新"
         self.progress_label.setText(message)
         self.progress_bar.setValue(progress)
-        self._log(f"[安全更新 {progress}%] {message}")
+        self._log(f"[{mode_name} {progress}%] {message}")
 
-    def _on_safe_update_all_finished(self, result: Dict[str, Any]):
-        """安全更新流程完成"""
+    def _on_update_all_finished(self, result: Dict[str, Any]):
+        """更新流程完成"""
+        self.quick_update_all_btn.setEnabled(True)
         self.safe_update_all_btn.setEnabled(True)
-        self.safe_update_all_btn.setText("安全更新所有數據")
+        self.quick_update_all_btn.setText("⚡ 快速更新 (僅 SQLite)")
+        self.safe_update_all_btn.setText("🛡️ 安全更新 (完整 CSV + SQLite)")
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
 
+        mode_name = "快速更新" if getattr(self, "_current_update_mode", "quick") == "quick" else "安全更新"
+
         if result.get("success", False):
-            message = result.get("message", "安全更新所有數據完成")
+            message = result.get("message", f"{mode_name}完成")
             self._log(message)
-            QMessageBox.information(self, "安全更新完成", message)
+            QMessageBox.information(self, f"{mode_name}完成", message)
             self._check_data_status()
             return
 
         failed_step = result.get("failed_step", "未知步驟")
-        message = result.get("message", "安全更新失敗")
-        self._log(f"安全更新失敗：{failed_step} - {message}")
-        QMessageBox.warning(self, "安全更新未完成", f"{failed_step} 失敗：\n{message}")
+        message = result.get("message", f"{mode_name}失敗")
+        self._log(f"{mode_name}失敗：{failed_step} - {message}")
+        QMessageBox.warning(self, f"{mode_name}未完成", f"{failed_step} 失敗：\n{message}")
 
-    def _on_safe_update_all_error(self, error_msg: str):
-        """安全更新流程出錯"""
+    def _on_update_all_error(self, error_msg: str):
+        """更新流程出錯"""
+        self.quick_update_all_btn.setEnabled(True)
         self.safe_update_all_btn.setEnabled(True)
-        self.safe_update_all_btn.setText("安全更新所有數據")
+        self.quick_update_all_btn.setText("⚡ 快速更新 (僅 SQLite)")
+        self.safe_update_all_btn.setText("🛡️ 安全更新 (完整 CSV + SQLite)")
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        self._log(f"安全更新錯誤：{error_msg}")
+        
+        mode_name = "快速更新" if getattr(self, "_current_update_mode", "quick") == "quick" else "安全更新"
+        self._log(f"{mode_name}錯誤：{error_msg}")
+        
         error_display = error_msg
         if len(error_display) > 500:
             error_display = error_display[:500] + "\n\n（錯誤訊息過長，已截斷，請查看日誌獲取完整訊息）"
-        QMessageBox.critical(self, "安全更新失敗", error_display)
+        QMessageBox.critical(self, f"{mode_name}失敗", error_display)
 
     def _execute_update(self):
         """執行數據更新"""

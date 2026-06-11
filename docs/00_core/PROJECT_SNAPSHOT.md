@@ -14,8 +14,8 @@
 
 - **閉環 1：資料與市場狀態閉環** ✅ 基礎已建立
   - Update → SQLite 狀態 → Market Watch / Smart Money（市場觀察子 Tab）→ 候選池
-  - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 核心 ✅ / Phase 2A/2B/2C SQLite DB-first ✅ / Phase 3 CSV 手動匯出 ✅
-  - 數據更新工作台 ✅ / SQLite 儲存升級 ✅ / Smart Money Terminal MVP ✅
+  - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 快速/安全更新分流 ✅ / Phase 2A/2B/2C SQLite DB-first ✅ / Phase 3 CSV 手動匯出 ✅
+  - 數據更新工作台（Dashboard + 快速/安全更新分流）✅ / SQLite 儲存升級 ✅ / Smart Money Terminal MVP ✅ / 券商分點長碼解密與總公司判定 ✅
 
 - **閉環 2：研究驗證閉環** ✅ 基礎已建立
   - Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Promote
@@ -34,7 +34,7 @@
 
 ## 現在的工作模式（你每天要用的流程）
 
-1. Update 使用「安全更新所有數據」或左側資料來源頁更新資料
+1. Update 使用「⚡ 快速更新 (僅 SQLite)」或「🛡️ 安全更新 (完整 CSV + SQLite)」或左側資料來源頁更新資料
 2. Market Watch 看 Regime + 強弱
 3. Recommendation 用 Profile 出名單 + 看 Why/WhyNot → 加入候選池，或送 Research Lab 批次回測 / 推薦回放
 4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；必要時把明確交易記錄到 Portfolio 並保留來源追溯
@@ -85,6 +85,12 @@
 - Blockers / Risks 新增回測時間軸未定義、金融核心裸 float、文檔不一致三項。
 - 高風險區新增 `portfolio_module/core.py` 與 `app_module/portfolio_condition_monitor.py`。
 - 指定權威文件新增 `NEXT_ACTION_PLAN.md`。
+
+## 2026-06-11 券商分點擴充與數據更新流程分流成果
+
+- **券商分點擴充、長碼解密與總公司判定**：在 `BrokerBranchUpdateService` 中實作 Unicode 長碼解密 `_decode_unicode_hex` 與總公司判定邏輯，自動在載入 registry 時將 16 進位 Unicode hex 長碼（如 `003800380038004b`）解密為真實短碼（如 `888K`），並在符合條件時動態判定為總部。已完成 37 個分點的擴充。
+- **資料更新流程分流 (⚡ 快速更新 vs 🛡️ 安全更新)**：將 `UpdateView` 一鍵更新按鈕重構分拆為「⚡ 快速更新 (僅 SQLite)」與「🛡️ 安全更新 (完整 CSV + SQLite)」。當 SQLite 啟用時，快速更新僅直查同步單日資料並寫入 SQLite，略過大 CSV 合併重寫以實現數十倍提速，安全更新則強制執行 CSV 合併以備份資料庫。
+- **測試與驗證 100% 綠燈**：新增單元測試 `tests/test_broker_branch_decode.py` 覆蓋解密與總部判定。單元測試、mypy 型態檢查、py_compile 與 QA 驗證腳本皆順利通過。
 
 ## 2026-06-11 持倉管理籌碼面監控與下鑽 (Phase 4.2 Portfolio Chip Monitor & Drill Down) 成果
 

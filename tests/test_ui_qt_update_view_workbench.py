@@ -129,8 +129,10 @@ def test_update_view_uses_workbench_navigation():
 def test_all_data_view_has_safe_update_primary_button():
     view = make_view()
 
+    assert isinstance(view.quick_update_all_btn, QPushButton)
+    assert view.quick_update_all_btn.text() == "⚡ 快速更新 (僅 SQLite)"
     assert isinstance(view.safe_update_all_btn, QPushButton)
-    assert view.safe_update_all_btn.text() == "安全更新所有數據"
+    assert view.safe_update_all_btn.text() == "🛡️ 安全更新 (完整 CSV + SQLite)"
 
 
 def test_safe_update_all_runs_conservative_sequence():
