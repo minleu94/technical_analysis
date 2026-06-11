@@ -11,13 +11,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# 設置 UTF-8 編碼以支持中文輸出（Windows）
-if sys.platform == 'win32':
-    try:
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-    except:
-        pass  # 如果已經設置過，忽略錯誤
+
 
 # 添加專案根目錄到路徑
 project_root = Path(__file__).resolve().parent.parent
@@ -137,5 +131,13 @@ def test_all_branches_one_day():
                 logger.warning(f"清理 driver 時發生錯誤: {str(e)}")
 
 if __name__ == "__main__":
+    import io
+    # 設置 UTF-8 編碼以支持中文輸出（Windows）
+    if sys.platform == 'win32':
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+        except:
+            pass  # 如果已經設置過，忽略錯誤
     test_all_branches_one_day()
 

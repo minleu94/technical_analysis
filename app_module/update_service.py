@@ -196,13 +196,23 @@ class UpdateService:
             branch_name = path.parents[1].name
             rename_map = {
                 'date': '日期',
+                'counterparty_broker_code': '證券代號',
                 'stock_id': '證券代號',
                 'stock_code': '證券代號',
+                'counterparty_broker_name': '證券名稱',
                 'stock_name': '證券名稱',
+                'branch_display_name': '分點名稱',
                 'branch_name': '分點名稱',
-                'buy_shares': '買進股數',
-                'sell_shares': '賣出股數',
-                'net_buy_shares': '買賣超股數',
+                'buy_lots': '買進張數',
+                'sell_lots': '賣出張數',
+                'net_lots': '買賣超張數',
+                'buy_amount_k_twd': '買進金額千元',
+                'sell_amount_k_twd': '賣出金額千元',
+                'net_amount_k_twd': '買賣超金額千元',
+                # 2026-06-11 前的 MoneyDJ c=B 資料使用 generic qty 名稱。
+                'buy_qty': '買進金額千元',
+                'sell_qty': '賣出金額千元',
+                'net_qty': '買賣超金額千元',
             }
             df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
             if '分點名稱' not in df.columns:
@@ -212,11 +222,30 @@ class UpdateService:
         if not frames:
             return pd.DataFrame()
         df_all = pd.concat(frames, ignore_index=True)
-        keep_cols = ['日期', '分點名稱', '證券代號', '證券名稱', '買進股數', '賣出股數', '買賣超股數']
+        lot_cols = ['買進張數', '賣出張數', '買賣超張數']
+        amount_cols = ['買進金額千元', '賣出金額千元', '買賣超金額千元']
+        source_cols = ['日期', '分點名稱', '證券代號', '證券名稱', *lot_cols, *amount_cols]
+        for col in source_cols:
+            if col not in df_all.columns:
+                df_all[col] = 0 if col in lot_cols or col in amount_cols else None
+        df_all = df_all[source_cols]
+
+        for col in lot_cols + amount_cols:
+            df_all[col] = pd.to_numeric(df_all[col], errors='coerce').fillna(0).astype(int)
+        df_all['買進股數'] = df_all['買進張數'] * 1000
+        df_all['賣出股數'] = df_all['賣出張數'] * 1000
+        df_all['買賣超股數'] = df_all['買賣超張數'] * 1000
+
+        keep_cols = [
+            '日期', '分點名稱', '證券代號', '證券名稱',
+            '買進股數', '賣出股數', '買賣超股數',
+            *amount_cols,
+        ]
         for col in keep_cols:
             if col not in df_all.columns:
                 df_all[col] = None
         df_all = df_all[keep_cols]
+
         return self._normalize_sqlite_dates(df_all)
 
     def _load_broker_branch_files_for_sqlite(
@@ -257,13 +286,22 @@ class UpdateService:
                     branch_name = branch_dir.name
                     rename_map = {
                         'date': '日期',
+                        'counterparty_broker_code': '證券代號',
                         'stock_id': '證券代號',
                         'stock_code': '證券代號',
+                        'counterparty_broker_name': '證券名稱',
                         'stock_name': '證券名稱',
+                        'branch_display_name': '分點名稱',
                         'branch_name': '分點名稱',
-                        'buy_shares': '買進股數',
-                        'sell_shares': '賣出股數',
-                        'net_buy_shares': '買賣超股數',
+                        'buy_lots': '買進張數',
+                        'sell_lots': '賣出張數',
+                        'net_lots': '買賣超張數',
+                        'buy_amount_k_twd': '買進金額千元',
+                        'sell_amount_k_twd': '賣出金額千元',
+                        'net_amount_k_twd': '買賣超金額千元',
+                        'buy_qty': '買進金額千元',
+                        'sell_qty': '賣出金額千元',
+                        'net_qty': '買賣超金額千元',
                     }
                     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
                     if '分點名稱' not in df.columns:
@@ -277,11 +315,30 @@ class UpdateService:
         if not frames:
             return pd.DataFrame()
         df_all = pd.concat(frames, ignore_index=True)
-        keep_cols = ['日期', '分點名稱', '證券代號', '證券名稱', '買進股數', '賣出股數', '買賣超股數']
+        lot_cols = ['買進張數', '賣出張數', '買賣超張數']
+        amount_cols = ['買進金額千元', '賣出金額千元', '買賣超金額千元']
+        source_cols = ['日期', '分點名稱', '證券代號', '證券名稱', *lot_cols, *amount_cols]
+        for col in source_cols:
+            if col not in df_all.columns:
+                df_all[col] = 0 if col in lot_cols or col in amount_cols else None
+        df_all = df_all[source_cols]
+
+        for col in lot_cols + amount_cols:
+            df_all[col] = pd.to_numeric(df_all[col], errors='coerce').fillna(0).astype(int)
+        df_all['買進股數'] = df_all['買進張數'] * 1000
+        df_all['賣出股數'] = df_all['賣出張數'] * 1000
+        df_all['買賣超股數'] = df_all['買賣超張數'] * 1000
+
+        keep_cols = [
+            '日期', '分點名稱', '證券代號', '證券名稱',
+            '買進股數', '賣出股數', '買賣超股數',
+            *amount_cols,
+        ]
         for col in keep_cols:
             if col not in df_all.columns:
                 df_all[col] = None
         df_all = df_all[keep_cols]
+
         return self._normalize_sqlite_dates(df_all)
 
     def _normalize_sqlite_dates(self, df: Any) -> Any:

@@ -18,6 +18,10 @@ def app():
 
 
 class FakePortfolioService:
+    def __init__(self):
+        from data_module.config import TWStockConfig
+        self.config = TWStockConfig()
+
     def get_portfolio(self):
         return PortfolioDTO(
             portfolio_id="default",
@@ -52,6 +56,10 @@ class FakePortfolioService:
 
     def list_trades(self):
         return []
+
+    def get_current_price(self, stock_code):
+        from decimal import Decimal
+        return Decimal("950.0")
 
 
 class FakeJournalService:

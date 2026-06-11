@@ -17,6 +17,9 @@ class BrokerFlowEvent:
     buy_qty: int
     sell_qty: int
     net_qty: int
+    buy_amount_k_twd: int = 0
+    sell_amount_k_twd: int = 0
+    net_amount_k_twd: int = 0
 
 @dataclass
 class StockFlowAggregation:

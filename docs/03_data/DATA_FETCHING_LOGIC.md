@@ -374,3 +374,10 @@ if file_path.exists():
    - 然後使用 `merge_daily_data.py` 合併到 `meta_data` 目錄
    - 這兩個步驟是分開的，可以獨立執行
 
+## MoneyDJ 券商分點 E/B 指標
+
+- `c=E`：張數，寫入 `*_lots`。
+- `c=B`：金額，單位仟元，寫入 `*_amount_k_twd`。
+- 更新服務同日抓取兩個頁面，使用表頭辨認資料表，不依賴固定 table index。
+- `GenLink2stk(...)` JavaScript 股票列也會解析，避免遺漏資料。
+

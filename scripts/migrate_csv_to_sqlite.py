@@ -312,9 +312,16 @@ def migrate_broker_flows(config: TWStockConfig, db: DBManager, logger: logging.L
                 'date': '日期',
                 'counterparty_broker_code': '證券代號',
                 'counterparty_broker_name': '證券名稱',
-                'buy_qty': '買進股數',
-                'sell_qty': '賣出股數',
-                'net_qty': '買賣超股數'
+                'buy_lots': '買進張數',
+                'sell_lots': '賣出張數',
+                'net_lots': '買賣超張數',
+                'buy_amount_k_twd': '買進金額千元',
+                'sell_amount_k_twd': '賣出金額千元',
+                'net_amount_k_twd': '買賣超金額千元',
+                # 舊版 c=B CSV 的 generic qty 欄位實際是仟元。
+                'buy_qty': '買進金額千元',
+                'sell_qty': '賣出金額千元',
+                'net_qty': '買賣超金額千元',
             }
             df = df.rename(columns=rename_mapping)
             
@@ -323,22 +330,33 @@ def migrate_broker_flows(config: TWStockConfig, db: DBManager, logger: logging.L
             df['分點名稱'] = branch_key
             df['證券代號'] = df['證券代號'].astype(str).str.zfill(4)
             
-            # 對齊其他中文映射
-            if '買進張數' in df.columns and '買進股數' not in df.columns:
-                df['買進股數'] = df['買進張數'] * 1000
-            if '賣出張數' in df.columns and '賣出股數' not in df.columns:
-                df['賣出股數'] = df['賣出張數'] * 1000
-            if '買賣超張數' in df.columns and '買賣超股數' not in df.columns:
-                df['買賣超股數'] = df['買賣超張數'] * 1000
+            for lot_col in ['買進張數', '賣出張數', '買賣超張數']:
+                if lot_col not in df.columns:
+                    df[lot_col] = 0
+                df[lot_col] = pd.to_numeric(
+                    df[lot_col],
+                    errors='coerce',
+                ).fillna(0).astype(int)
+
+            df['買進股數'] = df['買進張數'] * 1000
+            df['賣出股數'] = df['賣出張數'] * 1000
+            df['買賣超股數'] = df['買賣超張數'] * 1000
                 
             # 轉換數值型
-            numeric_cols = ['買進股數', '賣出股數', '買賣超股數']
+            numeric_cols = [
+                '買進股數', '賣出股數', '買賣超股數',
+                '買進金額千元', '賣出金額千元', '買賣超金額千元',
+            ]
             for col in numeric_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
             
             # 保留所需的欄位寫入
-            cols_to_keep = ['日期', '分點名稱', '證券代號', '證券名稱', '買進股數', '賣出股數', '買賣超股數']
+            cols_to_keep = [
+                '日期', '分點名稱', '證券代號', '證券名稱',
+                '買進股數', '賣出股數', '買賣超股數',
+                '買進金額千元', '賣出金額千元', '買賣超金額千元',
+            ]
             df_to_write = df[[c for c in cols_to_keep if c in df.columns]]
             
             # 移除重複資料以滿足 SQLite 複合主鍵的 UNIQUE 限制

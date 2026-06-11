@@ -29,6 +29,15 @@ ChromeDriverManager: Any = _ChromeDriverManager
 
 class BrokerBranchUpdateService:
     """券商分點資料更新服務"""
+
+    DUAL_METRIC_COLUMNS = {
+        "buy_lots",
+        "sell_lots",
+        "net_lots",
+        "buy_amount_k_twd",
+        "sell_amount_k_twd",
+        "net_amount_k_twd",
+    }
     
     def __init__(self, config):
         """
@@ -352,7 +361,13 @@ class BrokerBranchUpdateService:
             self.logger.error(f"載入 registry 時發生錯誤: {str(e)}")
             return []
     
-    def _build_branch_url(self, branch_info: Dict[str, Any], start_date: str, end_date: str) -> str:
+    def _build_branch_url(
+        self,
+        branch_info: Dict[str, Any],
+        start_date: str,
+        end_date: str,
+        metric: str = "lots",
+    ) -> str:
         """
         構建分點資料 URL
         
@@ -372,17 +387,195 @@ class BrokerBranchUpdateService:
             self.logger.error(f"url_param_b 為空: {branch_info.get('branch_system_key', 'UNKNOWN')}")
             raise ValueError(f"url_param_b 為空: {branch_info.get('branch_system_key', 'UNKNOWN')}")
         
-        # 使用 c=B 參數（參考 Crawler.ipynb）
+        metric_codes = {
+            "lots": "E",
+            "amount": "B",
+        }
+        if metric not in metric_codes:
+            raise ValueError(f"不支援的 MoneyDJ 指標: {metric}")
+
+        metric_code = metric_codes[metric]
         # 日期範圍：e=開始日期，f=結束日期
         url = (
             f"https://5850web.moneydj.com/z/zg/zgb/zgb0.djhtm"
-            f"?a={url_param_a}&b={url_param_b}&c=B&e={start_date}&f={end_date}"
+            f"?a={url_param_a}&b={url_param_b}&c={metric_code}&e={start_date}&f={end_date}"
         )
         
         # 記錄 URL 以便調試
         self.logger.debug(f"構建 URL: {url}")
         
         return url
+
+    def _merge_metric_records(
+        self,
+        lot_records: List[Dict[str, Any]],
+        amount_records: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """依日期、方向與股票代碼合併張數及仟元資料。"""
+        identity_fields = (
+            "date",
+            "trade_type",
+            "branch_system_key",
+            "counterparty_broker_code",
+        )
+        merged: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
+
+        for record in lot_records + amount_records:
+            key = (
+                str(record.get(identity_fields[0], "")),
+                str(record.get(identity_fields[1], "")),
+                str(record.get(identity_fields[2], "")),
+                str(record.get(identity_fields[3], "")),
+            )
+            if key not in merged:
+                merged[key] = {}
+            merged[key].update(record)
+
+        return list(merged.values())
+
+    def _csv_has_dual_metrics(self, csv_path: Path) -> bool:
+        """判斷既有 CSV 是否已具備 E/B 雙指標欄位。"""
+        try:
+            columns = set(pd.read_csv(csv_path, nrows=0, encoding="utf-8-sig").columns)
+        except Exception:
+            return False
+        return self.DUAL_METRIC_COLUMNS.issubset(columns)
+
+    def _parse_metric_tables(
+        self,
+        tables: List[Any],
+        branch_info: Dict[str, Any],
+        date_str: str,
+        metric: str,
+    ) -> List[Dict[str, Any]]:
+        """從 MoneyDJ 頁面辨識買超、賣超表格並轉成明確單位欄位。"""
+        header_keyword = {
+            "lots": "買進張數",
+            "amount": "買進金額",
+        }.get(metric)
+        value_fields = {
+            "lots": ("buy_lots", "sell_lots", "net_lots"),
+            "amount": ("buy_amount_k_twd", "sell_amount_k_twd", "net_amount_k_twd"),
+        }.get(metric)
+        if header_keyword is None or value_fields is None:
+            raise ValueError(f"不支援的 MoneyDJ 指標: {metric}")
+
+        def direct_rows(table: Any) -> List[Any]:
+            rows = table.find_all("tr", recursive=False)
+            if rows:
+                return rows
+            tbody = table.find("tbody", recursive=False)
+            return tbody.find_all("tr", recursive=False) if tbody is not None else []
+
+        data_tables = [
+            table
+            for table in tables
+            if header_keyword in table.get_text(" ", strip=True)
+            and len(direct_rows(table)) >= 2
+        ]
+        records: List[Dict[str, Any]] = []
+        for table in data_tables:
+            table_text = table.get_text(" ", strip=True)
+            trade_type = "賣超" if table_text.startswith("賣超") else "買超"
+            for row in direct_rows(table):
+                cols = row.find_all("td")
+                if len(cols) != 4:
+                    continue
+
+                values: List[int] = []
+                for col in cols[1:4]:
+                    raw_value = col.get_text(strip=True).replace(",", "")
+                    try:
+                        values.append(int(raw_value) if raw_value else 0)
+                    except ValueError:
+                        values = []
+                        break
+                if len(values) != 3:
+                    continue
+
+                counterparty_text = cols[0].get_text(strip=True)
+                if not counterparty_text:
+                    script_text = " ".join(
+                        script.get_text(" ", strip=True)
+                        for script in cols[0].find_all("script")
+                    )
+                    script_match = re.search(
+                        r"GenLink2stk\('(?:AS)?([^']+)','([^']+)'\)",
+                        script_text,
+                    )
+                    if script_match:
+                        counterparty_text = (
+                            f"{script_match.group(1)}{script_match.group(2)}"
+                        )
+                counterparty_code, counterparty_name = self._parse_counterparty_broker_name(
+                    counterparty_text
+                )
+                if counterparty_code == "UNKNOWN":
+                    continue
+
+                record = {
+                    "date": date_str,
+                    "trade_type": trade_type,
+                    "branch_system_key": branch_info["branch_system_key"],
+                    "branch_broker_code": branch_info["branch_broker_code"],
+                    "branch_code": branch_info["branch_code"],
+                    "branch_display_name": branch_info["branch_display_name"],
+                    "counterparty_broker_code": counterparty_code,
+                    "counterparty_broker_name": counterparty_name,
+                }
+                record.update(dict(zip(value_fields, values)))
+                records.append(record)
+
+        return records
+
+    def _fetch_metric_records(
+        self,
+        driver: Any,
+        branch_info: Dict[str, Any],
+        date_str: str,
+        metric: str,
+        retries: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """抓取單一 MoneyDJ 指標頁；供同日 E/B 雙頁下載使用。"""
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        prev_date = (date_obj - timedelta(days=1)).strftime("%Y-%m-%d")
+        url = self._build_branch_url(branch_info, prev_date, date_str, metric=metric)
+        last_error: Optional[Exception] = None
+
+        for attempt in range(retries):
+            try:
+                driver.get(url)
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "table"))
+                )
+                soup = BeautifulSoup(driver.page_source, "html.parser")
+                records = self._parse_metric_tables(
+                    soup.find_all("table"),
+                    branch_info,
+                    date_str,
+                    metric,
+                )
+                if records:
+                    return records
+                raise ValueError(f"MoneyDJ {metric} 頁面未解析到交易資料")
+            except Exception as exc:
+                last_error = exc
+                self.logger.warning(
+                    "抓取 %s/%s 指標 %s 失敗 (%s/%s): %s",
+                    branch_info.get("branch_system_key"),
+                    date_str,
+                    metric,
+                    attempt + 1,
+                    retries,
+                    exc,
+                )
+                if attempt + 1 < retries:
+                    time.sleep(2)
+
+        raise RuntimeError(
+            f"MoneyDJ {metric} 指標抓取失敗: "
+            f"{branch_info.get('branch_system_key')}/{date_str}"
+        ) from last_error
     
     def _parse_counterparty_broker_name(self, text: str) -> Tuple[str, str]:
         """
@@ -570,7 +763,11 @@ class BrokerBranchUpdateService:
                         
                         # 檢查檔案是否已存在 (CSV)
                         daily_file = daily_dir / f"{date_str}.csv"
-                        if daily_file.exists() and not force_all:
+                        if (
+                            daily_file.exists()
+                            and not force_all
+                            and self._csv_has_dual_metrics(daily_file)
+                        ):
                             skipped_dates.append(date_str)
                             self.logger.debug(f"跳過已存在檔案(CSV): {branch_key}/{date_str}")
                             continue
@@ -588,18 +785,36 @@ class BrokerBranchUpdateService:
                                 with sqlite3.connect(str(db_file)) as conn:
                                     cursor = conn.cursor()
                                     # 檢查是否有該分點在該日期的任何交易紀錄
-                                    cursor.execute(
-                                        "SELECT 1 FROM broker_flows WHERE 日期 = ? AND 分點名稱 = ? LIMIT 1",
-                                        (sqlite_date, branch_key)
-                                    )
-                                    row = cursor.fetchone()
-                                    if row:
+                                    table_columns = {
+                                        row[1]
+                                        for row in cursor.execute(
+                                            "PRAGMA table_info(broker_flows)"
+                                        ).fetchall()
+                                    }
+                                    has_dual_schema = {
+                                        "買進股數",
+                                        "買進金額千元",
+                                    }.issubset(table_columns)
+                                    row = None
+                                    if has_dual_schema:
+                                        cursor.execute(
+                                            """
+                                            SELECT 1
+                                            FROM broker_flows
+                                            WHERE 日期 = ? AND 分點名稱 = ?
+                                              AND 買進股數 IS NOT NULL
+                                              AND 買進金額千元 IS NOT NULL
+                                            LIMIT 1
+                                            """,
+                                            (sqlite_date, branch_key),
+                                        )
+                                        row = cursor.fetchone()
+                                    if row is not None:
                                         skipped_dates.append(date_str)
                                         self.logger.debug(f"跳過已存在 SQLite 記錄: {branch_key}/{date_str}")
                                         continue
                             except Exception as sqlite_err:
                                 self.logger.warning(f"檢查 SQLite 記錄失敗: {str(sqlite_err)}")
-                            continue
                         
                         # 重試機制
                         max_retries = 3
@@ -838,130 +1053,22 @@ class BrokerBranchUpdateService:
                             continue
                         
                         try:
-                            # 處理買超資料（表格索引 13）
-                            buy_table = tables[13]
-                            buy_rows = buy_table.find_all('tr')[2:]
-                            buy_data = []
-                            
-                            for row in buy_rows:
-                                cols = row.find_all('td')
-                                if len(cols) == 4:
-                                    counterparty_name = cols[0].get_text(strip=True)
-                                    buy_qty_str = cols[1].get_text(strip=True).replace(',', '')
-                                    sell_qty_str = cols[2].get_text(strip=True).replace(',', '')
-                                    net_qty_str = cols[3].get_text(strip=True).replace(',', '')
-                                    
-                                    # 解析對手券商
-                                    counterparty_code, counterparty_name_parsed = self._parse_counterparty_broker_name(counterparty_name)
-                                    
-                                    # 轉換數值（優先 int，失敗才 float）
-                                    buy_qty: float
-                                    try:
-                                        buy_qty = int(buy_qty_str) if buy_qty_str else 0
-                                    except ValueError:
-                                        try:
-                                            buy_qty = float(buy_qty_str) if buy_qty_str else 0.0
-                                            self.logger.warning(f"buy_qty 轉換為 float: {buy_qty_str}")
-                                        except:
-                                            buy_qty = 0
-                                            self.logger.warning(f"buy_qty 轉換失敗: {buy_qty_str}")
-                                    
-                                    sell_qty: float
-                                    try:
-                                        sell_qty = int(sell_qty_str) if sell_qty_str else 0
-                                    except ValueError:
-                                        try:
-                                            sell_qty = float(sell_qty_str) if sell_qty_str else 0.0
-                                            self.logger.warning(f"sell_qty 轉換為 float: {sell_qty_str}")
-                                        except:
-                                            sell_qty = 0
-                                            self.logger.warning(f"sell_qty 轉換失敗: {sell_qty_str}")
-                                    
-                                    net_qty: float
-                                    try:
-                                        net_qty = int(net_qty_str) if net_qty_str else 0
-                                    except ValueError:
-                                        try:
-                                            net_qty = float(net_qty_str) if net_qty_str else 0.0
-                                            self.logger.warning(f"net_qty 轉換為 float: {net_qty_str}")
-                                        except:
-                                            net_qty = 0
-                                            self.logger.warning(f"net_qty 轉換失敗: {net_qty_str}")
-                                    
-                                    buy_data.append({
-                                        'date': date_str,
-                                        'trade_type': '買超',
-                                        'branch_system_key': branch_key,
-                                        'branch_broker_code': branch_info['branch_broker_code'],
-                                        'branch_code': branch_info['branch_code'],
-                                        'branch_display_name': branch_name,
-                                        'counterparty_broker_code': counterparty_code,
-                                        'counterparty_broker_name': counterparty_name_parsed,
-                                        'buy_qty': buy_qty,
-                                        'sell_qty': sell_qty,
-                                        'net_qty': net_qty
-                                    })
-                            
-                            # 處理賣超資料（表格索引 14）
-                            sell_table = tables[14]
-                            sell_rows = sell_table.find_all('tr')[2:]
-                            sell_data = []
-                            
-                            for row in sell_rows:
-                                cols = row.find_all('td')
-                                if len(cols) == 4:
-                                    counterparty_name = cols[0].get_text(strip=True)
-                                    buy_qty_str = cols[1].get_text(strip=True).replace(',', '')
-                                    sell_qty_str = cols[2].get_text(strip=True).replace(',', '')
-                                    net_qty_str = cols[3].get_text(strip=True).replace(',', '')
-                                    
-                                    # 解析對手券商
-                                    counterparty_code, counterparty_name_parsed = self._parse_counterparty_broker_name(counterparty_name)
-                                    
-                                    # 轉換數值
-                                    try:
-                                        buy_qty = int(buy_qty_str) if buy_qty_str else 0
-                                    except ValueError:
-                                        try:
-                                            buy_qty = float(buy_qty_str) if buy_qty_str else 0.0
-                                            self.logger.warning(f"buy_qty 轉換為 float: {buy_qty_str}")
-                                        except:
-                                            buy_qty = 0
-                                    
-                                    try:
-                                        sell_qty = int(sell_qty_str) if sell_qty_str else 0
-                                    except ValueError:
-                                        try:
-                                            sell_qty = float(sell_qty_str) if sell_qty_str else 0.0
-                                            self.logger.warning(f"sell_qty 轉換為 float: {sell_qty_str}")
-                                        except:
-                                            sell_qty = 0
-                                    
-                                    try:
-                                        net_qty = int(net_qty_str) if net_qty_str else 0
-                                    except ValueError:
-                                        try:
-                                            net_qty = float(net_qty_str) if net_qty_str else 0.0
-                                            self.logger.warning(f"net_qty 轉換為 float: {net_qty_str}")
-                                        except:
-                                            net_qty = 0
-                                    
-                                    sell_data.append({
-                                        'date': date_str,
-                                        'trade_type': '賣超',
-                                        'branch_system_key': branch_key,
-                                        'branch_broker_code': branch_info['branch_broker_code'],
-                                        'branch_code': branch_info['branch_code'],
-                                        'branch_display_name': branch_name,
-                                        'counterparty_broker_code': counterparty_code,
-                                        'counterparty_broker_name': counterparty_name_parsed,
-                                        'buy_qty': buy_qty,
-                                        'sell_qty': sell_qty,
-                                        'net_qty': net_qty
-                                    })
-                            
-                            # 合併買超和賣超資料
-                            all_data = buy_data + sell_data
+                            lot_data = self._parse_metric_tables(
+                                tables,
+                                branch_info,
+                                date_str,
+                                "lots",
+                            )
+                            amount_data = self._fetch_metric_records(
+                                driver,
+                                branch_info,
+                                date_str,
+                                "amount",
+                            )
+                            all_data = self._merge_metric_records(lot_data, amount_data)
+
+                            if not lot_data or not amount_data:
+                                raise ValueError("MoneyDJ E/B 雙指標資料不完整")
                             
                             if all_data:
                                 # 保存到 CSV
@@ -982,7 +1089,9 @@ class BrokerBranchUpdateService:
                                 df = pd.DataFrame(columns=[
                                     'date', 'trade_type', 'branch_system_key', 'branch_broker_code',
                                     'branch_code', 'branch_display_name', 'counterparty_broker_code',
-                                    'counterparty_broker_name', 'buy_qty', 'sell_qty', 'net_qty'
+                                    'counterparty_broker_name',
+                                    'buy_lots', 'sell_lots', 'net_lots',
+                                    'buy_amount_k_twd', 'sell_amount_k_twd', 'net_amount_k_twd'
                                 ])
                                 df.to_csv(daily_file, index=False, encoding='utf-8-sig')
                                 updated_dates.append(date_str)
@@ -1126,7 +1235,10 @@ class BrokerBranchUpdateService:
                 if merged_file.exists() and not force_all:
                     try:
                         existing_df = pd.read_csv(merged_file, encoding='utf-8-sig')
-                        if 'date' in existing_df.columns:
+                        if (
+                            'date' in existing_df.columns
+                            and self.DUAL_METRIC_COLUMNS.issubset(existing_df.columns)
+                        ):
                             existing_dates = set(existing_df['date'].unique())
                         self.logger.info(f"讀取現有合併檔案: {branch_key}, 已有 {len(existing_dates)} 個日期")
                     except Exception as e:
@@ -1157,7 +1269,8 @@ class BrokerBranchUpdateService:
                             'date', 'trade_type', 'branch_system_key',
                             'branch_broker_code', 'branch_code', 'branch_display_name',
                             'counterparty_broker_code', 'counterparty_broker_name',
-                            'buy_qty', 'sell_qty', 'net_qty'
+                            'buy_lots', 'sell_lots', 'net_lots',
+                            'buy_amount_k_twd', 'sell_amount_k_twd', 'net_amount_k_twd'
                         ]
                         
                         missing_cols = [col for col in required_cols if col not in df.columns]

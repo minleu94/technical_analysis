@@ -386,3 +386,13 @@ python ui_app/main.py
 
 **文件結束**
 
+## 券商分點雙指標資料流
+
+- 抓取與合併：`app_module/broker_branch_update_service.py`
+- CSV 到 SQLite：`app_module/update_service.py`
+- SQLite schema：`data_module/db_manager.py`
+- Smart Money 張數讀取：`app_module/broker_flow_service.py`
+- Portfolio Phase 4.2：`app_module/portfolio_chip_service.py`
+
+資料契約：`c=E` 寫入張數，`c=B` 寫入仟元金額；legacy `buy_qty` 不得當張數。
+

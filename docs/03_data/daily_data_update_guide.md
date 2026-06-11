@@ -195,3 +195,9 @@ python scripts/update_daily_stock_data.py --date 2025-08-29 --merge
 - 從 HTML 標籤中提取漲跌符號
 - 使用 `utf-8-sig` 編碼（支援 Excel 打開）
 
+## 券商分點更新注意事項
+
+- 新版日檔必須同時包含 `*_lots` 與 `*_amount_k_twd` 六個欄位。
+- 僅有舊 `buy_qty/sell_qty/net_qty` 的檔案是 `c=B` 仟元資料，更新流程會視為待補抓。
+- Phase 4.2 只使用 `c=E` 張數；金額欄位不參與既有張數門檻。
+

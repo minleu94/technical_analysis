@@ -479,3 +479,10 @@ manager.evaluate_models()
 - 支持更多數據格式
 - 實現自動化測試
 - 添加數據可視化功能 
+
+## 2026-06-11 券商分點雙指標資料契約
+
+- MoneyDJ `c=E` 為張數，`c=B` 為成交金額，金額單位是仟元；兩者不可用固定倍率互換。
+- 更新服務針對同一分點與日期同時抓取 E/B，並以股票代碼及買賣超方向合併。
+- CSV 保存 `buy_lots`、`sell_lots`、`net_lots` 與 `buy_amount_k_twd`、`sell_amount_k_twd`、`net_amount_k_twd`。
+- 2026-06-11 前的 `buy_qty/sell_qty/net_qty` 來源是 `c=B`，屬 legacy 仟元資料，不得作為張數分析。

@@ -65,14 +65,15 @@ def get_market_index_finmind():
         logger.error(f"從 FinMind 獲取數據失敗: {str(e)}")
         return None
 
-# 先試 yfinance，失敗就換 finmind
-df = get_market_index_yfinance()
-if df is None:
-    logger.info("yfinance 失敗，嘗試使用 FinMind...")
-    df = get_market_index_finmind()
+if __name__ == "__main__":
+    # 先試 yfinance，失敗就換 finmind
+    df = get_market_index_yfinance()
+    if df is None:
+        logger.info("yfinance 失敗，嘗試使用 FinMind...")
+        df = get_market_index_finmind()
 
-if df is not None:
-    print("成功獲取大盤指數數據：")
-    print(df.head())
-else:
-    print("無法從任何資料源獲取大盤指數數據") 
+    if df is not None:
+        print("成功獲取大盤指數數據：")
+        print(df.head())
+    else:
+        print("無法從任何資料源獲取大盤指數數據")

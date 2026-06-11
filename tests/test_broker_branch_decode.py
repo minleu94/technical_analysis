@@ -3,6 +3,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 from app_module.broker_branch_update_service import BrokerBranchUpdateService
+from bs4 import BeautifulSoup
 
 class DummyConfig:
     def __init__(self, tmp_path):
@@ -32,6 +33,120 @@ def test_decode_unicode_hex(tmp_path):
     # 測試空值
     assert service._decode_unicode_hex("") == ""
     assert service._decode_unicode_hex(None) is None
+
+
+def test_build_branch_url_uses_explicit_moneydj_metric(tmp_path):
+    service = BrokerBranchUpdateService(DummyConfig(tmp_path))
+    branch = {"branch_system_key": "8450_845B", "url_param_a": "8450", "url_param_b": "0038003400350042"}
+
+    lots_url = service._build_branch_url(branch, "2026-06-10", "2026-06-11", metric="lots")
+    amount_url = service._build_branch_url(branch, "2026-06-10", "2026-06-11", metric="amount")
+
+    assert "c=E" in lots_url
+    assert "c=B" in amount_url
+
+
+def test_merge_metric_records_keeps_lots_and_amount_separate(tmp_path):
+    service = BrokerBranchUpdateService(DummyConfig(tmp_path))
+    common = {
+        "date": "2026-06-11",
+        "trade_type": "買超",
+        "branch_system_key": "8450_845B",
+        "branch_broker_code": "8450",
+        "branch_code": "845B",
+        "branch_display_name": "康和-永和",
+        "counterparty_broker_code": "00631L",
+        "counterparty_broker_name": "元大台灣50正2",
+    }
+
+    merged = service._merge_metric_records(
+        [{**common, "buy_lots": 160, "sell_lots": 20, "net_lots": 140}],
+        [{**common, "buy_amount_k_twd": 5291, "sell_amount_k_twd": 653, "net_amount_k_twd": 4638}],
+    )
+
+    assert merged == [{
+        **common,
+        "buy_lots": 160,
+        "sell_lots": 20,
+        "net_lots": 140,
+        "buy_amount_k_twd": 5291,
+        "sell_amount_k_twd": 653,
+        "net_amount_k_twd": 4638,
+    }]
+
+
+@pytest.mark.parametrize(
+    ("metric", "header", "expected"),
+    [
+        ("lots", "買進張數", {"buy_lots": 160, "sell_lots": 20, "net_lots": 140}),
+        (
+            "amount",
+            "買進金額",
+            {"buy_amount_k_twd": 5291, "sell_amount_k_twd": 653, "net_amount_k_twd": 4638},
+        ),
+    ],
+)
+def test_parse_metric_tables_uses_headers_instead_of_fixed_indexes(tmp_path, metric, header, expected):
+    service = BrokerBranchUpdateService(DummyConfig(tmp_path))
+    html = f"""
+    <html><body>
+      <table><tr><td>layout</td></tr></table>
+      <table>
+        <tr><th>股票</th><th>{header}</th><th>賣出</th><th>差額</th></tr>
+        <tr><td>00631L元大台灣50正2</td><td>{expected[next(iter(expected))]:,}</td><td>{list(expected.values())[1]:,}</td><td>{list(expected.values())[2]:,}</td></tr>
+      </table>
+    </body></html>
+    """
+    branch = {
+        "branch_system_key": "8450_845B",
+        "branch_broker_code": "8450",
+        "branch_code": "845B",
+        "branch_display_name": "康和-永和",
+    }
+
+    records = service._parse_metric_tables(
+        BeautifulSoup(html, "html.parser").find_all("table"),
+        branch,
+        "2026-06-11",
+        metric,
+    )
+
+    assert len(records) == 1
+    for key, value in expected.items():
+        assert records[0][key] == value
+
+
+def test_parse_metric_tables_reads_genlink2stk_script_rows(tmp_path):
+    service = BrokerBranchUpdateService(DummyConfig(tmp_path))
+    html = """
+    <table>
+      <tbody>
+        <tr><td colspan="4">買超</td></tr>
+        <tr><td>券商名稱</td><td>買進張數</td><td>賣出張數</td><td>差額</td></tr>
+        <tr>
+          <td><script>GenLink2stk('AS3296','勝德');</script></td>
+          <td>163</td><td>0</td><td>163</td>
+        </tr>
+      </tbody>
+    </table>
+    """
+    branch = {
+        "branch_system_key": "8450_845B",
+        "branch_broker_code": "8450",
+        "branch_code": "845B",
+        "branch_display_name": "康和-永和",
+    }
+
+    records = service._parse_metric_tables(
+        BeautifulSoup(html, "html.parser").find_all("table"),
+        branch,
+        "2026-06-11",
+        "lots",
+    )
+
+    assert records[0]["counterparty_broker_code"] == "3296"
+    assert records[0]["counterparty_broker_name"] == "勝德"
+    assert records[0]["net_lots"] == 163
 
 def test_headquarters_detection_and_decoding(tmp_path):
     config = DummyConfig(tmp_path)

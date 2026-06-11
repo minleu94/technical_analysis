@@ -315,6 +315,57 @@ def test_broker_branch_status_check_loads_registry_read_only(tmp_path):
     assert config.broker_branch_registry_file.read_bytes() == before
 
 
+def test_broker_branch_sqlite_loader_keeps_lots_and_amount_units_separate(tmp_path):
+    config = _config(tmp_path)
+    branch_dir = config.broker_flow_dir / "8450_845B"
+    (branch_dir / "meta").mkdir(parents=True)
+    pd.DataFrame([{
+        "date": "2026-06-11",
+        "trade_type": "買超",
+        "branch_system_key": "8450_845B",
+        "branch_display_name": "康和-永和",
+        "counterparty_broker_code": "00631L",
+        "counterparty_broker_name": "元大台灣50正2",
+        "buy_lots": 160,
+        "sell_lots": 20,
+        "net_lots": 140,
+        "buy_amount_k_twd": 5291,
+        "sell_amount_k_twd": 653,
+        "net_amount_k_twd": 4638,
+    }]).to_csv(branch_dir / "meta" / "merged.csv", index=False, encoding="utf-8-sig")
+
+    loaded = UpdateService(config)._load_broker_branch_csv_for_sqlite()
+
+    assert loaded.loc[0, "買進股數"] == 160000
+    assert loaded.loc[0, "賣出股數"] == 20000
+    assert loaded.loc[0, "買賣超股數"] == 140000
+    assert loaded.loc[0, "買進金額千元"] == 5291
+    assert loaded.loc[0, "賣出金額千元"] == 653
+    assert loaded.loc[0, "買賣超金額千元"] == 4638
+
+
+def test_broker_branch_sqlite_loader_rejects_legacy_b_only_values_as_lots(tmp_path):
+    config = _config(tmp_path)
+    branch_dir = config.broker_flow_dir / "8450_845B"
+    (branch_dir / "meta").mkdir(parents=True)
+    pd.DataFrame([{
+        "date": "2026-06-11",
+        "branch_system_key": "8450_845B",
+        "counterparty_broker_code": "00631L",
+        "counterparty_broker_name": "元大台灣50正2",
+        "buy_qty": 5291,
+        "sell_qty": 653,
+        "net_qty": 4638,
+    }]).to_csv(branch_dir / "meta" / "merged.csv", index=False, encoding="utf-8-sig")
+
+    loaded = UpdateService(config)._load_broker_branch_csv_for_sqlite()
+
+    assert loaded.loc[0, "買進股數"] == 0
+    assert loaded.loc[0, "買賣超股數"] == 0
+    assert loaded.loc[0, "買進金額千元"] == 5291
+    assert loaded.loc[0, "買賣超金額千元"] == 4638
+
+
 def test_check_source_detail_runs_deep_check_and_updates_manifest(tmp_path):
     config = _config(tmp_path)
     branch_dir = config.broker_flow_dir / "9200_1234"

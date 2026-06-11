@@ -141,6 +141,9 @@ class DBManager:
                     買進股數 INTEGER,
                     賣出股數 INTEGER,
                     買賣超股數 INTEGER,
+                    買進金額千元 INTEGER,
+                    賣出金額千元 INTEGER,
+                    買賣超金額千元 INTEGER,
                     PRIMARY KEY (分點名稱, 證券代號, 日期)
                 );
             """)
@@ -175,7 +178,12 @@ class DBManager:
                 col_type = "REAL"
                 if col in ['日期', '證券代號', '證券名稱', '漲跌']:
                     col_type = "TEXT"
-                elif col in ['成交股數', '成交筆數', '成交金額', '最後揭示買量', '最後揭示賣量', '買進股數', '賣出股數', '買賣超股數']:
+                elif col in [
+                    '成交股數', '成交筆數', '成交金額',
+                    '最後揭示買量', '最後揭示賣量',
+                    '買進股數', '賣出股數', '買賣超股數',
+                    '買進金額千元', '賣出金額千元', '買賣超金額千元',
+                ]:
                     col_type = "INTEGER"
                 
                 query = f'ALTER TABLE {table_name} ADD COLUMN "{col}" {col_type};'

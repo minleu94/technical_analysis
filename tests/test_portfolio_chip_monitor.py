@@ -109,7 +109,10 @@ class TestPortfolioChipService(unittest.TestCase):
                 stock_name='台積電',
                 buy_qty=100,  # 100張 = 100,000股
                 sell_qty=20,   # 20張 = 20,000股
-                net_qty=80     # 80張 = 80,000股
+                net_qty=80,    # 80張 = 80,000股
+                buy_amount_k_twd=5000,
+                sell_amount_k_twd=1000,
+                net_amount_k_twd=4000,
             )
         ]
         
@@ -120,6 +123,15 @@ class TestPortfolioChipService(unittest.TestCase):
         self.assertEqual(summary['accumulated_sell'], 20000)
         self.assertEqual(summary['accumulated_net'], 80000)
         self.assertEqual(summary['concentration'], 80000 / 120000)
+
+    def test_legacy_amount_event_is_not_treated_as_lots(self):
+        self.config.use_sqlite = False
+        self.broker_flow_service._load_data.return_value = []
+
+        summary = self.service.get_stock_chip_summary("2330", 5)
+
+        self.assertEqual(summary['accumulated_net'], 0)
+        self.assertEqual(summary['risk_level'], 'neutral')
 
 
 if __name__ == '__main__':

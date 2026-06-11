@@ -12,17 +12,17 @@ from app_module.dtos.flow_signal_dtos import FlowSignalDTO
 
 class FlowSignalEngine:
     """Smart Money Flow 信號引擎"""
-    
+
     def __init__(self):
         pass
-        
+
     def generate_signals(self, aggregations: List[StockFlowAggregation]) -> List[FlowSignalDTO]:
         """
         將股票的聚合流向資料轉換為交易信號
-        
+
         Args:
             aggregations: 股票的流向聚合資料
-            
+
         Returns:
             信號列表，依據 smart_money_score 降冪排序
         """
@@ -61,40 +61,84 @@ class FlowSignalEngine:
             score += min(30.0, buy_branch_count * 5.0)
             tags.append("主力一致買超")
             reasons.append(f"共有 {buy_branch_count} 家追蹤主力同步買進")
-            
-        # 3. 連續吸籌 (Continuous Accumulation)
-        # 計算買超天數
-        buy_dates = set()
+        elif sell_branch_count >= 2 and agg.total_net_qty < 0:
+            tags.append("主力一致賣超")
+            reasons.append(f"共有 {sell_branch_count} 家追蹤主力同步賣出")
+
+        # 3. 連續吸籌 / 出貨 (Continuous Accumulation / Distribution)
+        # 按日期加總每日的淨量
+        daily_net_map: defaultdict[str, int] = defaultdict(int)
         for event in agg.events:
-            if event.net_qty > 0:
-                buy_dates.add(event.date)
-                
-        continuous_days = len(buy_dates)
+            daily_net_map[event.date] += event.net_qty
+
+        sorted_dates = sorted(daily_net_map.keys(), reverse=True) # 由新到舊
+
+        continuous_days = 0
+        continuous_sell_days = 0
+
+        if sorted_dates:
+            latest_date = sorted_dates[0]
+            latest_net = daily_net_map[latest_date]
+
+            if latest_net > 0:
+                # 計算連續買超天數
+                for d in sorted_dates:
+                    if daily_net_map[d] > 0:
+                        continuous_days += 1
+                    else:
+                        break
+            elif latest_net < 0:
+                # 計算連續賣超天數
+                for d in sorted_dates:
+                    if daily_net_map[d] < 0:
+                        continuous_sell_days += 1
+                    else:
+                        break
+
         if continuous_days >= 2 and agg.total_net_qty > 0:
             score += min(20.0, continuous_days * 5.0)
             tags.append("連續吸籌")
-            reasons.append(f"主力在過去期間內有 {continuous_days} 天呈現淨買超")
-            
+            reasons.append(f"主力在過去期間內連續 {continuous_days} 天呈現淨買超")
+        elif continuous_sell_days >= 2 and agg.total_net_qty < 0:
+            tags.append("連續出貨")
+            reasons.append(f"主力在過去期間內連續 {continuous_sell_days} 天呈現淨賣超")
+
         # 4. 籌碼集中度 (Branch Concentration)
-        # 計算買超最大的分點佔總買超的比例
+        # 計算買超/賣超最大的分點佔總買超/賣超的比例
         concentration = 0.0
         if agg.total_net_qty > 0 and agg.events:
             branch_net_buy: defaultdict[str, int] = defaultdict(int)
             for event in agg.events:
                 if event.net_qty > 0:
                     branch_net_buy[event.branch_display_name] += event.net_qty
-            
+
             if branch_net_buy:
                 max_branch_buy = max(branch_net_buy.values())
                 total_positive_buy = sum(branch_net_buy.values())
                 if total_positive_buy > 0:
                     concentration = max_branch_buy / total_positive_buy
-                    
+
                     if concentration >= 0.7:
                         score += 10.0
                         tags.append("高度集中")
                         top_branch = max(branch_net_buy.items(), key=lambda x: x[1])[0]
                         reasons.append(f"籌碼高度集中於特定主力 ({top_branch} 佔 {concentration:.0%})")
+        elif agg.total_net_qty < 0 and agg.events:
+            branch_net_sell: defaultdict[str, int] = defaultdict(int)
+            for event in agg.events:
+                if event.net_qty < 0:
+                    branch_net_sell[event.branch_display_name] += abs(event.net_qty)
+
+            if branch_net_sell:
+                max_branch_sell = max(branch_net_sell.values())
+                total_negative_sell = sum(branch_net_sell.values())
+                if total_negative_sell > 0:
+                    concentration = max_branch_sell / total_negative_sell
+
+                    if concentration >= 0.7:
+                        tags.append("高度集中")
+                        top_branch = max(branch_net_sell.items(), key=lambda x: x[1])[0]
+                        reasons.append(f"籌碼高度集中於特定賣方主力 ({top_branch} 佔 {concentration:.0%})")
         
         # 限制最高 100 分
         final_score = min(100.0, score)

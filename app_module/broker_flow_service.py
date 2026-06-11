@@ -6,7 +6,7 @@ Broker Flow Orchestration Service
 import logging
 import pandas as pd
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -25,6 +25,12 @@ class BrokerFlowService:
         # 記憶體快取
         self._cached_events: List[BrokerFlowEvent] = []
         self._last_load_time = None
+
+    @staticmethod
+    def _int_value(value: Any) -> int:
+        if value is None or pd.isna(value):
+            return 0
+        return int(value)
         
     def _load_data(self, force_reload: bool = False) -> List[BrokerFlowEvent]:
         """從檔案系統載入所有追蹤分點的原始事件資料"""
@@ -52,6 +58,13 @@ class BrokerFlowService:
             try:
                 # 讀取合併的 CSV
                 df = pd.read_csv(merged_file)
+                lot_columns = {'buy_lots', 'sell_lots', 'net_lots'}
+                if not lot_columns.issubset(df.columns):
+                    self.logger.warning(
+                        "略過缺少明確張數欄位的 legacy 券商資料: %s",
+                        merged_file,
+                    )
+                    continue
                 # 轉換為 BrokerFlowEvent 列表
                 for _, row in df.iterrows():
                     # 嘗試各種可能的對手券商/股票代號欄位名稱
@@ -67,9 +80,12 @@ class BrokerFlowService:
                         branch_display_name=str(row.get('branch_display_name', branch_dir.name)),
                         stock_code=stock_code,
                         stock_name=stock_name,
-                        buy_qty=int(float(row.get('buy_qty', 0))),
-                        sell_qty=int(float(row.get('sell_qty', 0))),
-                        net_qty=int(float(row.get('net_qty', 0)))
+                        buy_qty=self._int_value(row.get('buy_lots', 0)),
+                        sell_qty=self._int_value(row.get('sell_lots', 0)),
+                        net_qty=self._int_value(row.get('net_lots', 0)),
+                        buy_amount_k_twd=self._int_value(row.get('buy_amount_k_twd', 0)),
+                        sell_amount_k_twd=self._int_value(row.get('sell_amount_k_twd', 0)),
+                        net_amount_k_twd=self._int_value(row.get('net_amount_k_twd', 0)),
                     )
                     events.append(event)
                     
@@ -157,8 +173,11 @@ class BrokerFlowService:
             s.sparkline_data = [float(daily_map[d]) for d in last_5_dates]
             s.sparkline_details = [(d, daily_map[d]) for d in last_5_dates]
         
-        # 過濾掉分數太低的，或是總淨量為負的
-        filtered_signals = [s for s in signals if s.smart_money_score > 0 and s.aggregation.total_net_qty > 0]
+        # 過濾掉沒有訊號的個股。偏多股票要求主力分數大於零；偏空股票要求強度等級小於零 (淨量小於零)
+        filtered_signals = [
+            s for s in signals
+            if (s.smart_money_score > 0 and s.aggregation.total_net_qty > 0) or (s.intensity_level < 0)
+        ]
         return filtered_signals
 
     def get_branch_flow_details(self, period: str = 'week', force_reload: bool = False) -> List[BranchFlowAggregation]:
@@ -281,4 +300,3 @@ class BrokerFlowService:
             summary.market_regime = "Neutral"
             
         return summary
-

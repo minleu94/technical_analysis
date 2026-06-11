@@ -811,8 +811,8 @@ set TWSTOCK_DATA_DIR=your/custom/path
 - **效能優化與報告輸出 (Phase 5)**
   - 大表格分頁、批次並行回測優化
   - Excel / PDF 格式的研究報告輸出
-- **持倉穿透下鑽 (Phase 4.2 Backlog)**
-  - 實現從券商成交明細下鑽至個股歷史持倉記錄與 Journal 日誌
+- **持倉穿透下鑽 (Phase 4.2 Completed)**
+  - 實現從券商成交明細下鑽至個股歷史持倉記錄與 Journal 日誌，包含籌碼監控 Tab、大額變動多空評級及自動定位高亮連動。
 
 ## 測試說明
 
@@ -926,6 +926,19 @@ set TWSTOCK_DATA_DIR=your/custom/path
 - 改進性能監控
 - 優化用戶體驗
 
+### v1.6.0 (2026-06-11) ✅ **持倉籌碼監控與下鑽 (Phase 4.2)**
+- **持倉籌碼監控 (Portfolio Chip Monitor)**：
+  - 於投資組合管理 (Portfolio View) 內新增「籌碼監控 Tab」，動態讀取 SQLite/CSV 的追蹤分點成交數據。
+  - 計算近 5 日/20 日累計買賣超、集中度及連續天數，智能評估風險評級為 `bullish` (偏多)、`neutral` (中性)、`bearish` (偏空) 並給出具體原因。
+- **雙向下鑽與定位連動 (Drill-down)**：
+  - 新增「🔍 下鑽詳細主力流向」功能，點擊後自動跳轉至「市場觀察 -> 主力流向」子 Tab。
+  - 於主力流向 Scanner 實作 `select_stock` 定位功能，自動高亮、滾動定位該個股，並在右側載入主力分點明細。
+- **數據精度與測試修復**：
+  - 修正 SQLite 數據單位偏差（1000 倍股數），確保 SQLite 表交易數據單位與 CSV（股）一致。
+  - 允許偏空股票呈現在 Scanner 表中，支援雙向下鑽定位與標籤計算。
+  - 修復 pytest 因 module level 連網及 stdout 輸出導致的 `ValueError: I/O operation on closed file` 崩潰問題。
+  - 修正 Portfolio condition monitor 回歸測試中的 mock 缺失問題。
+
 ### v1.5.3 (2025-12-27) ✅ **券商分點資料更新功能**
 - **BrokerBranchUpdateService 模組**：
   - 實現券商分點資料抓取、標準化、合併功能
@@ -1009,3 +1022,7 @@ set TWSTOCK_DATA_DIR=your/custom/path
   - 採用方案 A（最小重工），不搬動檔案，service 層內部 import `ui_app` 模組
   - 向後兼容：保留原有實例，確保現有 Tkinter UI 繼續正常工作
   - `ui_app/main.py` 已整合 `RecommendationService` 
+
+## 2026-06-11 券商分點單位邊界
+
+券商分點資料層同時保存張數與仟元金額。Smart Money 與 Portfolio Chip Monitor 的既有門檻只依賴明確張數欄位；legacy B-only 資料不再進入張數決策。
