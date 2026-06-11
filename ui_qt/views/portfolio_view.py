@@ -30,6 +30,7 @@ from app_module.portfolio_condition_monitor import (
 from portfolio_module import PortfolioValidationError
 from ui_qt.widgets.info_button import InfoButton
 from app_module.strategy_version_service import StrategyVersionService
+from app_module.portfolio_chip_service import PortfolioChipService
 
 logger = logging.getLogger(__name__)
 
@@ -275,6 +276,10 @@ class PortfolioView(QWidget):
         self.recommendation_service = recommendation_service
         self.condition_monitor = condition_monitor or PortfolioConditionMonitor()
         self.strategy_version_service = StrategyVersionService(self.portfolio_service.config)
+        self.chip_service = PortfolioChipService(
+            self.portfolio_service.config,
+            self.recommendation_service.broker_flow_service if self.recommendation_service else None
+        )
 
         self.positions_model: Optional[PandasTableModel] = None
         self.trades_model: Optional[PandasTableModel] = None
@@ -467,6 +472,64 @@ class PortfolioView(QWidget):
         monitor_layout.addStretch()
 
         right_widget.addTab(monitor_tab, "策略與價格監控")
+
+        # Right Tab 4: 籌碼監控 (Chip Monitor)
+        chip_tab = QWidget()
+        chip_layout = QVBoxLayout(chip_tab)
+        chip_layout.setContentsMargins(10, 10, 10, 10)
+        chip_layout.setSpacing(10)
+
+        # 1. 籌碼狀態與風險警告區
+        chip_risk_group = QGroupBox("主力籌碼風險警示")
+        chip_risk_form = QFormLayout(chip_risk_group)
+        chip_risk_form.setSpacing(8)
+
+        self.lbl_chip_risk_level = QLabel("-")
+        self.lbl_chip_consecutive = QLabel("-")
+        self.lbl_chip_net_5d = QLabel("-")
+        self.lbl_chip_concentration = QLabel("-")
+        self.lbl_chip_reasons = QLabel("-")
+        self.lbl_chip_reasons.setWordWrap(True)
+
+        chip_risk_form.addRow("籌碼風險評級:", self.lbl_chip_risk_level)
+        chip_risk_form.addRow("連續買賣超天數:", self.lbl_chip_consecutive)
+        chip_risk_form.addRow("近 5 日累計淨買賣超:", self.lbl_chip_net_5d)
+        chip_risk_form.addRow("主力籌碼集中度:", self.lbl_chip_concentration)
+        chip_risk_form.addRow("警示原因:", self.lbl_chip_reasons)
+
+        chip_layout.addWidget(chip_risk_group)
+
+        # 2. 分點買賣明細表
+        chip_detail_group = QGroupBox("追蹤分點近 5 日買賣明細 (張)")
+        chip_detail_layout = QVBoxLayout(chip_detail_group)
+        chip_detail_layout.setContentsMargins(6, 6, 6, 6)
+
+        self.chip_detail_table = QTableView()
+        self.chip_detail_table.setAlternatingRowColors(True)
+        self.chip_detail_table.setSelectionBehavior(QTableView.SelectRows)
+        self.chip_detail_table.horizontalHeader().setStretchLastSection(True)
+        chip_detail_layout.addWidget(self.chip_detail_table)
+
+        chip_layout.addWidget(chip_detail_group)
+
+        # 3. 下鑽詳細主力流向按鈕
+        self.btn_drill_down_chip = QPushButton("🔍 下鑽詳細主力流向")
+        self.btn_drill_down_chip.setStyleSheet("""
+            QPushButton {
+                background-color: #2b6cb0;
+                color: white;
+                font-weight: bold;
+                padding: 6px 12px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #3182ce;
+            }
+        """)
+        self.btn_drill_down_chip.clicked.connect(self._on_drill_down_chip_clicked)
+        chip_layout.addWidget(self.btn_drill_down_chip)
+
+        right_widget.addTab(chip_tab, "籌碼監控")
 
         main_splitter.addWidget(right_widget)
 
@@ -897,6 +960,17 @@ class PortfolioView(QWidget):
             self.lbl_strat_version.setText("-")
             self.lbl_strat_params.setText("-")
             self.lbl_strat_perf.setText("-")
+
+            # 清空籌碼監控
+            self.lbl_chip_risk_level.setText("-")
+            self.lbl_chip_risk_level.setStyleSheet("color: white;")
+            self.lbl_chip_consecutive.setText("-")
+            self.lbl_chip_consecutive.setStyleSheet("color: white;")
+            self.lbl_chip_net_5d.setText("-")
+            self.lbl_chip_net_5d.setStyleSheet("color: white;")
+            self.lbl_chip_concentration.setText("-")
+            self.lbl_chip_reasons.setText("-")
+            self.chip_detail_table.setModel(None)
             return
 
         try:
@@ -1036,5 +1110,84 @@ class PortfolioView(QWidget):
                 self.lbl_strat_version.setText(f"來源類型: {source_type or '未知'}")
                 if source_id:
                     self.lbl_strat_version.setText(self.lbl_strat_version.text() + f" (ID: {source_id})")
+
+            # 更新籌碼監控
+            try:
+                chip_summary = self.chip_service.get_stock_chip_summary(position_dto.stock_code, period_days=5)
+                
+                # 籌碼評級
+                risk_level = chip_summary.get('risk_level', 'neutral')
+                self.lbl_chip_risk_level.setText(risk_level.upper())
+                if risk_level == 'bearish':
+                    self.lbl_chip_risk_level.setStyleSheet("background-color: #742a2a; color: #fff5f5; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+                elif risk_level == 'bullish':
+                    self.lbl_chip_risk_level.setStyleSheet("background-color: #22543d; color: #f0fff4; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+                else:
+                    self.lbl_chip_risk_level.setStyleSheet("background-color: #2d3748; color: #e2e8f0; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+
+                # 連續買賣超
+                consecutive = chip_summary.get('consecutive_days', 0)
+                if consecutive > 0:
+                    self.lbl_chip_consecutive.setText(f"連續 {consecutive} 天淨買超")
+                    self.lbl_chip_consecutive.setStyleSheet("color: #48bb78; font-weight: bold;")
+                elif consecutive < 0:
+                    self.lbl_chip_consecutive.setText(f"連續 {abs(consecutive)} 天淨賣超")
+                    self.lbl_chip_consecutive.setStyleSheet("color: #f56565; font-weight: bold;")
+                else:
+                    self.lbl_chip_consecutive.setText("0 天")
+                    self.lbl_chip_consecutive.setStyleSheet("color: white;")
+
+                # 近 5 日累計淨買賣超
+                net_qty = chip_summary.get('accumulated_net', 0)
+                net_lots = net_qty / 1000.0
+                self.lbl_chip_net_5d.setText(f"{net_lots:+.1f} 張")
+                if net_qty > 0:
+                    self.lbl_chip_net_5d.setStyleSheet("color: #48bb78; font-weight: bold;")
+                elif net_qty < 0:
+                    self.lbl_chip_net_5d.setStyleSheet("color: #f56565; font-weight: bold;")
+                else:
+                    self.lbl_chip_net_5d.setStyleSheet("color: white;")
+
+                # 集中度
+                concentration = chip_summary.get('concentration', 0.0)
+                self.lbl_chip_concentration.setText(f"{concentration:.2%}")
+
+                # 警示原因
+                reasons = chip_summary.get('risk_reasons', [])
+                self.lbl_chip_reasons.setText("；".join(reasons) if reasons else "正常")
+
+                # 分點明細
+                details = chip_summary.get('branch_details', [])
+                detail_data = []
+                for d in details:
+                    detail_data.append({
+                        '分點名稱': d['display_name'],
+                        '買進張數': d['buy_qty'] / 1000.0,
+                        '賣出張數': d['sell_qty'] / 1000.0,
+                        '淨買賣超': d['net_qty'] / 1000.0
+                    })
+                df_detail = pd.DataFrame(detail_data) if detail_data else pd.DataFrame(columns=['分點名稱', '買進張數', '賣出張數', '淨買賣超'])
+                detail_model = PandasTableModel(df_detail)
+                self.chip_detail_table.setModel(detail_model)
+                self.chip_detail_table.resizeColumnsToContents()
+                
+            except Exception as ce:
+                logger.error("Failed to update chip monitoring UI values: %s", ce)
+
         except Exception as e:
             logger.error("Failed to update monitoring tab UI: %s", e)
+
+    def _on_drill_down_chip_clicked(self):
+        """下鑽詳細主力流向"""
+        if not self.selected_stock_code:
+            QMessageBox.warning(self, "提示", "請先選擇要下鑽的持倉個股")
+            return
+            
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, 'show_smart_money_flow_for_stock'):
+                parent.show_smart_money_flow_for_stock(self.selected_stock_code)
+                return
+            parent = parent.parent()
+            
+        QMessageBox.warning(self, "提示", "未找到 MainWindow 主視圖，無法完成下鑽")

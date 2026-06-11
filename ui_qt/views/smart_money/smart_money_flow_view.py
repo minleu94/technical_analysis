@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTableView, QMessageBox,
     QTabWidget, QSplitter, QComboBox, QHeaderView, QFrame
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QItemSelectionModel
 from PySide6.QtGui import QColor
 
 from ui_qt.widgets.info_button import InfoButton
@@ -505,3 +505,28 @@ class SmartMoneyFlowView(QWidget):
         if not self._data_loaded:
             self._refresh_data()
             self._data_loaded = True
+
+    def select_stock(self, stock_code: str):
+        """程式化選取並高亮掃描表格中的個股"""
+        self.load_data_if_needed()
+        if not hasattr(self, 'scanner_model') or self.scanner_model is None:
+            return
+            
+        stock_code = str(stock_code).strip()
+        row_idx = -1
+        for r in range(self.scanner_model.rowCount()):
+            sig = self.scanner_model.get_signal_at(r)
+            if sig and sig.stock_code == stock_code:
+                row_idx = r
+                break
+                
+        if row_idx != -1:
+            selection_model = self.scanner_table.selectionModel()
+            if selection_model:
+                index = self.scanner_model.index(row_idx, 0)
+                selection_model.select(
+                    index,
+                    QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows
+                )
+                self.scanner_table.scrollTo(index)
+                self._on_scanner_selection_changed()

@@ -307,6 +307,8 @@ class MainWindow(QMainWindow):
             # 保存 tabs 和 backtest 引用（用於一鍵送回測）
             self.tabs = tabs
             self.backtest_view = backtest
+            self.smart_money_flow = smart_money_flow
+            self.market_tabs = market_tabs
             
             # --- Runtime Observatory MVP Integration ---
             try:
@@ -388,6 +390,28 @@ class MainWindow(QMainWindow):
             print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             raise
     
+    def show_smart_money_flow_for_stock(self, stock_code: str):
+        """切換至市場觀察 -> 主力流向，並定位至該個股"""
+        try:
+            if hasattr(self, 'tabs') and hasattr(self, 'market_tabs'):
+                for i in range(self.tabs.count()):
+                    if self.tabs.widget(i) == self.market_tabs:
+                        self.tabs.setCurrentIndex(i)
+                        break
+                if hasattr(self, 'smart_money_flow'):
+                    for j in range(self.market_tabs.count()):
+                        if self.market_tabs.widget(j) == self.smart_money_flow:
+                            self.market_tabs.setCurrentIndex(j)
+                            break
+                    self.smart_money_flow.select_stock(stock_code)
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(
+                self,
+                "下鑽錯誤",
+                f"無法下鑽主力流向：\n{str(e)}\n\n{traceback.format_exc()}"
+            )
+
     def closeEvent(self, event):
         """關閉事件"""
         # TODO: 清理資源

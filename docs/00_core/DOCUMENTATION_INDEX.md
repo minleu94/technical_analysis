@@ -175,9 +175,9 @@
 
 ## 目前開發狀態
 
-- **已完成（三個產品閉環之基礎建置與部分深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/一鍵安全數據更新工作台/技術指標 280 萬筆全量重算）、研究驗證閉環（Research Lab 多模式實驗室/單股回測/最佳化/Walk-forward/推薦組合回測 MVP 與穩健性指標/Fast Renderer 圖表/Promote 晉升與 SOP 驗證）、持倉檢查閉環 MVP（domain/service/test/Portfolio Tab/條件監控/手動與回測來源追溯及強制平倉標記/覆盤日記）。
-- **進行中 / 當前治理**：Roadmap Rebaseline、回測時間軸契約治理、金融核心數值治理（Decimal 重構隔離），以及持倉檢查閉環的深化（策略版本追蹤視圖、Price 對照、持倉層風險提示）。
-- **待開始 (Backlog)**：Phase 5 中大表格分頁、批次回測並行化、Excel/PDF 報告輸出，以及 Phase 4.2 券商下鑽至持倉。
+- **已完成（三個產品閉環之基礎建置與完整深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/一鍵安全數據更新工作台/技術指標 280 萬筆全量重算）、研究驗證閉環（Research Lab 多模式實驗室/單股回測/最佳化/Walk-forward/推薦組合回測 MVP 與穩健性指標/Fast Renderer 圖表/Promote 晉升與 SOP 驗證）、持倉檢查閉環（domain/service/test/Portfolio Tab/條件監控/手動與回測來源追溯及強制平倉標記/覆盤日記/策略與價格監控/停損停利警示/籌碼監控與下鑽）。
+- **進行中 / 當前治理**：當前無阻礙之進行中項目。
+- **待開始 (Backlog)**：Phase 5 中大表格分頁、批次回測並行化、Excel/PDF 報告輸出。
 
 ---
 
@@ -200,8 +200,8 @@
 - 2026-06-09：新增 [NEXT_ACTION_PLAN.md](NEXT_ACTION_PLAN.md)，整理 Tech Lead 審查後的下一輪 Roadmap Rebaseline、回測時間軸治理、金融核心數值治理與 Agent 交接順序。
 - 2026-06-09：執行 Roadmap Rebaseline，將 Living Section 改為三個產品閉環敘事，同步更新 Snapshot / AI Context Pack / Navigation / Inventory。
 - 2026-06-09：更新 system_architecture.md、UI_FEATURES_DOCUMENTATION.md、BACKTEST_LAB_FEATURES.md 與 BACKTEST_LAB_CHECKLIST.md，統一產品閉環、Tab 結構、Sortino/Sharpe/Monte Carlo 指標以及參數最佳化進度與雙擊套用功能的描述，消除歷史 Phase 矛盾。
-- 2026-06-11：新增金融 float 邊界自動治理設計規格，定義 AST 掃描白名單、逐行分類標記與 pytest 防回歸 gate。
 - 2026-06-11：新增金融 float 邊界治理實作計畫，依 TDD 拆分 source scanner、CLI、repository gate 與文件收尾。
+- 2026-06-11：完成 Phase 4.2 持倉層籌碼面風險提示與下鑽整合，實作 SQLite/CSV 雙軌籌碼監控服務與 UI Tab，並打通「🔍 下鑽詳細主力流向」之 Tab 切換與個股自動定位高亮連動。
 
 
 

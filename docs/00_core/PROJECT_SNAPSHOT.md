@@ -23,10 +23,11 @@
   - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest MVP ✅ / Backtest chart fast renderer ✅
   - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅
 
-- **閉環 3：持倉檢查閉環** ✅ 基礎與深化已完成
+- **閉環 3：持倉檢查閉環** ✅ 基礎與深化與下鑽已完成
   - Recommendation / Backtest → Portfolio → Condition Monitor → Journal → 回到研究
   - Phase 4.1 Portfolio MVP 與深化 ✅：domain/service/test、Portfolio Tab、來源追溯 metadata、ConditionMonitor 複合警告與停損停利已實作
   - 策略版本與推薦來源追蹤視圖、目前價格對比、未實現損益計算已深化完成，且已修正 float 邊界合規漏洞與三層防禦策略版本串接 (2026-06-11)
+  - Phase 4.2 Portfolio 籌碼監控與下鑽 ✅：新增籌碼監控 Tab 與追蹤分點表格，依淨買賣、集中度及連續天數評估風險（bullish/neutral/bearish），並實作🔍 下鑽主力流向按鈕與自動高亮定位功能 (2026-06-11)
 
 - **效能與研究輸出（Phase 5）** 🚧 部分已完成
   - 圖表渲染優化 ✅ / 大表格分頁、批次回測並行化、報告輸出仍在後續
@@ -45,8 +46,8 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Portfolio Phase 4.2 籌碼下鑽規劃：持倉層籌碼面風險提示設計與下鑽整合
-2. 效能與研究輸出 (Phase 5)：規劃批次回測並行化及報告輸出
+1. 效能與研究輸出 (Phase 5)：規劃批次回測並行化及報告輸出
+2. 參數設計優化 (Phase 2.5 優先級 3)：指標參數改進與 `buy_score`/`sell_score` 分位數化設計
 3. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔
 
 ## 高風險區（改動需謹慎）
@@ -84,6 +85,13 @@
 - Blockers / Risks 新增回測時間軸未定義、金融核心裸 float、文檔不一致三項。
 - 高風險區新增 `portfolio_module/core.py` 與 `app_module/portfolio_condition_monitor.py`。
 - 指定權威文件新增 `NEXT_ACTION_PLAN.md`。
+
+## 2026-06-11 持倉管理籌碼面監控與下鑽 (Phase 4.2 Portfolio Chip Monitor & Drill Down) 成果
+
+- **籌碼監控服務實作**：實作 `PortfolioChipService`，支援 SQLite 和 CSV 雙軌，計算主力淨買賣超、集中度、連續流向天數，並評估結構化籌碼風險級別（`bullish`/`neutral`/`bearish`）。
+- **持倉籌碼監控 UI Tab**：在右側面板新增「籌碼監控」Tab，呈現籌碼風險警告卡片與追蹤分點近 5 日買賣明細表格。
+- **雙向下鑽與定位連動**：新增「🔍 下鑽詳細主力流向」按鈕，程式化切換至「市場觀察 -> 主力流向」子 Tab；主力流向 View 實作 `select_stock` 以自動定位並高亮該股，完成下鑽閉環。
+- **測試與驗證全綠**：新增 `tests/test_portfolio_chip_monitor.py` 測試。mypy、py_compile 與 `qa_validate_update_tab.py` 驗證皆綠燈通過。
 
 ## 2026-06-11 持倉管理深化 (Phase 4.1 Portfolio Deepening) 成果
 
