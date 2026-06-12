@@ -1,28 +1,29 @@
-task_id: financial-float-boundary-governance
-task_name: 金融 float 邊界自動治理
-status: done
-owner: Codex / Antigravity
+task_id: broker-flow-sqlite-and-ui-recovery
+task_name: 券商分點 SQLite 與 UI 復原
+status: completed
+owner: Antigravity
 risk_level: high
 scope_in:
-  - 金融核心白名單的 AST float 邊界掃描
-  - dto、analytics、visualization 逐行標記
-  - pytest repository gate
-  - Roadmap、Snapshot、Next Action Plan 與索引同步
+  - 修正 MoneyDJ HTML 剖析器對 ETF 證券代號的解析，從 'ETF' 改成實際代碼 (如 '0050')
+  - 修正 `merge_broker_branch_data` 避免去重時漏掉 ETF 資料
+  - 在 `UpdateService` 的載入端增加 DataFrame 唯一鍵檢測與 E/B 互補合併邏輯
+  - 讓 `_replace_sqlite_dates` 與 `_replace_sqlite_table` 在失敗時拋出例外以利排錯
 scope_out:
-  - Portfolio UI 深化
-  - 正式資料與 SQLite 寫入
-  - 全專案 float 全面遷移
-  - 策略、成交、停損停利與 benchmark 行為變更
+  - 變更除券商分點外的其他數據同步邏輯
+  - 大量重構 UI
+  - 重建正式 SQLite 數據庫 (由使用者確認後才執行)
 safety:
-  sqlite_write: false
+  sqlite_write: true
   formal_data_root: false
   look_ahead_check: pass
   numeric_boundary_check: pass
 verification:
-  pytest: pass
-  mypy: pass
-  py_compile: pass
+  pytest: passed
+  mypy: passed
+  py_compile: passed
 documents:
-  design: docs/superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md
-  plan: docs/superpowers/plans/2026-06-11-financial-float-boundary-governance.md
-next_action: 進入 Portfolio Phase 4.1 深化設計
+  design: docs/superpowers/plans/2026-06-11-broker-flow-sqlite-and-ui-recovery.md
+  plan: implementation_plan.md
+next_action: 已完成所有任務並成功通過驗收驗證
+
+

@@ -215,6 +215,22 @@ class UpdateService:
                 'net_qty': '買賣超金額千元',
             }
             df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+            if '證券代號' in df.columns and '證券名稱' in df.columns:
+                df['證券代號'] = df['證券代號'].astype(str).str.strip()
+                etf_map = {
+                    '元大台灣50': '0050',
+                    '元大高股息': '0056',
+                    '富邦科技': '0052',
+                    '元大MSCI金融': '0055',
+                }
+                mask = df['證券代號'].isin(['ETF', 'UNKNOWN'])
+                if mask.any():
+                    mapped = df.loc[mask, '證券名稱'].astype(str).str.strip().map(etf_map)
+                    unmapped = df.loc[mask & mapped.isna(), '證券名稱'].unique()
+                    if len(unmapped) > 0:
+                        import logging
+                        logging.getLogger(__name__).warning(f"[UpdateService] Historical ETF repair found unmapped stock name: {unmapped.tolist()}")
+                    df.loc[mask, '證券代號'] = mapped.fillna(df.loc[mask, '證券代號'])
             if '分點名稱' not in df.columns:
                 df['分點名稱'] = branch_name
             frames.append(df)
@@ -246,7 +262,8 @@ class UpdateService:
                 df_all[col] = None
         df_all = df_all[keep_cols]
 
-        return self._normalize_sqlite_dates(df_all)
+        normalized = self._normalize_sqlite_dates(df_all)
+        return self._deduplicate_and_merge_broker_flows(normalized)
 
     def _load_broker_branch_files_for_sqlite(
         self,
@@ -304,6 +321,22 @@ class UpdateService:
                         'net_qty': '買賣超金額千元',
                     }
                     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+                    if '證券代號' in df.columns and '證券名稱' in df.columns:
+                        df['證券代號'] = df['證券代號'].astype(str).str.strip()
+                        etf_map = {
+                            '元大台灣50': '0050',
+                            '元大高股息': '0056',
+                            '富邦科技': '0052',
+                            '元大MSCI金融': '0055',
+                        }
+                        mask = df['證券代號'].isin(['ETF', 'UNKNOWN'])
+                        if mask.any():
+                            mapped = df.loc[mask, '證券名稱'].astype(str).str.strip().map(etf_map)
+                            unmapped = df.loc[mask & mapped.isna(), '證券名稱'].unique()
+                            if len(unmapped) > 0:
+                                import logging
+                                logging.getLogger(__name__).warning(f"[UpdateService] Historical ETF repair found unmapped stock name: {unmapped.tolist()}")
+                            df.loc[mask, '證券代號'] = mapped.fillna(df.loc[mask, '證券代號'])
                     if '分點名稱' not in df.columns:
                         df['分點名稱'] = branch_name
                     if '日期' not in df.columns:
@@ -339,7 +372,8 @@ class UpdateService:
                 df_all[col] = None
         df_all = df_all[keep_cols]
 
-        return self._normalize_sqlite_dates(df_all)
+        normalized = self._normalize_sqlite_dates(df_all)
+        return self._deduplicate_and_merge_broker_flows(normalized)
 
     def _normalize_sqlite_dates(self, df: Any) -> Any:
         if '日期' not in df.columns:
@@ -347,6 +381,60 @@ class UpdateService:
         normalized = df.copy()
         normalized['日期'] = normalized['日期'].map(lambda value: self._date_key(value))
         return normalized
+
+    def _deduplicate_and_merge_broker_flows(self, df: Any) -> Any:
+        import pandas as pd  # type: ignore[import-untyped]
+
+        if df.empty:
+            return df
+
+        key_cols = ['分點名稱', '證券代號', '日期']
+        dup_mask = df.duplicated(subset=key_cols, keep=False)
+        if not dup_mask.any():
+            return df
+
+        df_clean = df[~dup_mask]
+        df_dup = df[dup_mask]
+
+        resolved_rows = []
+        numeric_cols = [
+            '買進股數', '賣出股數', '買賣超股數',
+            '買進金額千元', '賣出金額千元', '買賣超金額千元'
+        ]
+
+        grouped = df_dup.groupby(key_cols, as_index=False)
+        for key_vals, group in grouped:
+            name_series = group['證券名稱'].dropna()
+            name_series = name_series[name_series.astype(str).str.strip() != '']
+            stock_name = name_series.iloc[0] if not name_series.empty else ''
+
+            resolved_row = {
+                '分點名稱': key_vals[0],
+                '證券代號': key_vals[1],
+                '日期': key_vals[2],
+                '證券名稱': stock_name
+            }
+
+            for col in numeric_cols:
+                if col in group.columns:
+                    vals = group[col].dropna()
+                    non_zeros = vals[vals != 0].unique()
+                    if len(non_zeros) > 1:
+                        raise ValueError(
+                            f"唯一鍵衝突於 {key_cols}={key_vals}, 欄位 '{col}' 存在衝突的非零數值: {non_zeros.tolist()}"
+                        )
+                    elif len(non_zeros) == 1:
+                        resolved_row[col] = int(non_zeros[0])
+                    else:
+                        resolved_row[col] = 0
+                else:
+                    resolved_row[col] = 0
+
+            resolved_rows.append(resolved_row)
+
+        df_resolved = pd.DataFrame(resolved_rows)
+        df_resolved = df_resolved.reindex(columns=df.columns)
+        return pd.concat([df_clean, df_resolved], ignore_index=True)
 
     def _date_key(self, value: Any) -> str:
         import pandas as pd  # type: ignore[import-untyped]
@@ -390,7 +478,7 @@ class UpdateService:
             return True
         dates = sorted({str(v) for v in df['日期'].dropna().tolist() if str(v)})
         if not dates:
-            return False
+            raise ValueError(f"無法從 DataFrame 提取有效日期進行替換: table={table_name}")
 
         try:
             db.ensure_columns(table_name, list(df.columns))
@@ -399,8 +487,11 @@ class UpdateService:
                 conn.execute(f'DELETE FROM {table_name} WHERE 日期 IN ({placeholders});', dates)
                 df.to_sql(table_name, conn, if_exists='append', index=False)
             return True
-        except Exception:
-            return False
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[UpdateService] _replace_sqlite_dates 失敗: table={table_name}, 錯誤={e}")
+            raise
 
     def _replace_sqlite_table(self, db: Any, table_name: str, df: Any) -> bool:
         if df.empty:
@@ -412,8 +503,11 @@ class UpdateService:
                 conn.execute(f'DELETE FROM {table_name};')
                 df.to_sql(table_name, conn, if_exists='append', index=False)
             return True
-        except Exception:
-            return False
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[UpdateService] _replace_sqlite_table 失敗: table={table_name}, 錯誤={e}")
+            raise
     
     def update_daily(
         self, 

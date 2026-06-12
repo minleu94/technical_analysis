@@ -527,3 +527,113 @@ def test_market_index_yfinance_fallback_never_uses_future_date(tmp_path, monkeyp
 
     assert result is False
     assert not config.market_index_file.exists()
+
+
+def test_etf_code_repair_during_load(tmp_path):
+    config = _sqlite_config(tmp_path)
+    branch_dir = config.broker_flow_dir / "8450_845B"
+    (branch_dir / "meta").mkdir(parents=True)
+
+    pd.DataFrame([{
+        "date": "2026-06-11",
+        "branch_system_key": "8450_845B",
+        "counterparty_broker_code": "ETF",
+        "counterparty_broker_name": "元大台灣50",
+        "buy_lots": 100,
+        "sell_lots": 0,
+        "net_lots": 100,
+        "buy_amount_k_twd": 15000,
+        "sell_amount_k_twd": 0,
+        "net_amount_k_twd": 15000,
+    }, {
+        "date": "2026-06-11",
+        "branch_system_key": "8450_845B",
+        "counterparty_broker_code": "ETF",
+        "counterparty_broker_name": "元大高股息",
+        "buy_lots": 50,
+        "sell_lots": 0,
+        "net_lots": 50,
+        "buy_amount_k_twd": 2000,
+        "sell_amount_k_twd": 0,
+        "net_amount_k_twd": 2000,
+    }]).to_csv(branch_dir / "meta" / "merged.csv", index=False, encoding="utf-8-sig")
+
+    service = UpdateService(config)
+    loaded = service._load_broker_branch_csv_for_sqlite()
+
+    assert len(loaded) == 2
+    row_0050 = loaded[loaded["證券代號"] == "0050"].iloc[0]
+    row_0056 = loaded[loaded["證券代號"] == "0056"].iloc[0]
+    assert row_0050["買進股數"] == 100000
+    assert row_0050["買進金額千元"] == 15000
+    assert row_0056["買進股數"] == 50000
+    assert row_0056["買進金額千元"] == 2000
+
+
+def test_deduplicate_and_merge_broker_flows_complementary(tmp_path):
+    config = _sqlite_config(tmp_path)
+    service = UpdateService(config)
+
+    df = pd.DataFrame([{
+        "日期": "20260611",
+        "分點名稱": "測試分點",
+        "證券代號": "2330",
+        "證券名稱": "台積電",
+        "買進股數": 1000,
+        "賣出股數": 0,
+        "買賣超股數": 1000,
+        "買進金額千元": 0,
+        "賣出金額千元": 0,
+        "買賣超金額千元": 0,
+    }, {
+        "日期": "20260611",
+        "分點名稱": "測試分點",
+        "證券代號": "2330",
+        "證券名稱": "台積電",
+        "買進股數": 0,
+        "賣出股數": 0,
+        "買賣超股數": 0,
+        "買進金額千元": 950,
+        "賣出金額千元": 0,
+        "買賣超金額千元": 950,
+    }])
+
+    merged = service._deduplicate_and_merge_broker_flows(df)
+    assert len(merged) == 1
+    row = merged.iloc[0]
+    assert row["買進股數"] == 1000
+    assert row["買進金額千元"] == 950
+    assert row["買賣超金額千元"] == 950
+
+
+def test_deduplicate_and_merge_broker_flows_conflict(tmp_path):
+    import pytest
+    config = _sqlite_config(tmp_path)
+    service = UpdateService(config)
+
+    df = pd.DataFrame([{
+        "日期": "20260611",
+        "分點名稱": "測試分點",
+        "證券代號": "2330",
+        "證券名稱": "台積電",
+        "買進股數": 1000,
+        "賣出股數": 0,
+        "買賣超股數": 1000,
+        "買進金額千元": 900,
+        "賣出金額千元": 0,
+        "買賣超金額千元": 900,
+    }, {
+        "日期": "20260611",
+        "分點名稱": "測試分點",
+        "證券代號": "2330",
+        "證券名稱": "台積電",
+        "買進股數": 2000,
+        "賣出股數": 0,
+        "買賣超股數": 2000,
+        "買進金額千元": 0,
+        "賣出金額千元": 0,
+        "買賣超金額千元": 0,
+    }])
+
+    with pytest.raises(ValueError, match="唯一鍵衝突"):
+        service._deduplicate_and_merge_broker_flows(df)

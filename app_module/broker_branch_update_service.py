@@ -493,23 +493,23 @@ class BrokerBranchUpdateService:
                 if len(values) != 3:
                     continue
 
-                counterparty_text = cols[0].get_text(strip=True)
-                if not counterparty_text:
-                    script_text = " ".join(
-                        script.get_text(" ", strip=True)
-                        for script in cols[0].find_all("script")
-                    )
-                    script_match = re.search(
-                        r"GenLink2stk\('(?:AS)?([^']+)','([^']+)'\)",
-                        script_text,
-                    )
-                    if script_match:
-                        counterparty_text = (
-                            f"{script_match.group(1)}{script_match.group(2)}"
-                        )
-                counterparty_code, counterparty_name = self._parse_counterparty_broker_name(
-                    counterparty_text
+                # 優先檢查 Script 標籤中的 GenLink2stk (以獲取真實的股票/ETF 代碼)
+                script_text = " ".join(
+                    script.get_text(" ", strip=True)
+                    for script in cols[0].find_all("script")
                 )
+                script_match = re.search(
+                    r"GenLink2stk\('(?:AS)?([^']+)','([^']+)'\)",
+                    script_text,
+                )
+                if script_match:
+                    counterparty_code = script_match.group(1).strip()
+                    counterparty_name = script_match.group(2).strip()
+                else:
+                    counterparty_text = cols[0].get_text(strip=True)
+                    counterparty_code, counterparty_name = self._parse_counterparty_broker_name(
+                        counterparty_text
+                    )
                 if counterparty_code == "UNKNOWN":
                     continue
 
@@ -1265,6 +1265,12 @@ class BrokerBranchUpdateService:
                         df = pd.read_csv(daily_file, encoding='utf-8-sig')
                         
                         # 驗證必要欄位
+                        rename_map = {
+                            'buy_qty': 'buy_amount_k_twd',
+                            'sell_qty': 'sell_amount_k_twd',
+                            'net_qty': 'net_amount_k_twd',
+                        }
+                        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
                         required_cols = [
                             'date', 'trade_type', 'branch_system_key',
                             'branch_broker_code', 'branch_code', 'branch_display_name',
@@ -1272,6 +1278,10 @@ class BrokerBranchUpdateService:
                             'buy_lots', 'sell_lots', 'net_lots',
                             'buy_amount_k_twd', 'sell_amount_k_twd', 'net_amount_k_twd'
                         ]
+                        for col in required_cols:
+                            if col not in df.columns:
+                                df[col] = 0 if col in ['buy_lots', 'sell_lots', 'net_lots', 'buy_amount_k_twd', 'sell_amount_k_twd', 'net_amount_k_twd'] else ''
+                        df = df[required_cols]
                         
                         missing_cols = [col for col in required_cols if col not in df.columns]
                         if missing_cols:
