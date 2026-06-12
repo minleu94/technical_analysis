@@ -4,6 +4,7 @@ Flow Signal Data Transfer Objects (DTOs)
 """
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import List, Any
 from app_module.dtos.broker_flow_dtos import StockFlowAggregation
 
@@ -45,6 +46,11 @@ class FlowSignalDTO:
     intensity_level: int = 0
     lots_available: bool = True
     has_estimated_lots: bool = False
+    observed_event_count: int = 0
+    estimated_event_count: int = 0
+    unavailable_event_count: int = 0
+    usable_event_count: int = 0
+    lots_coverage_ratio: Decimal = Decimal("1")
 
 @dataclass
 class SmartMoneySummaryDTO:

@@ -30,6 +30,8 @@ def test_broker_flow_service_reads_explicit_lot_columns(tmp_path):
     assert events[0].buy_qty == 160
     assert events[0].net_qty == 140
     assert events[0].buy_amount_k_twd == 5291
+    assert events[0].lots_quality == "observed"
+    assert events[0].amount_quality == "observed"
 
 
 def test_broker_flow_service_does_not_treat_legacy_b_values_as_lots(tmp_path):
@@ -89,7 +91,12 @@ def test_flow_signal_engine_estimated_discount():
         selling_branches=[],
         events=[event],
         lots_available=True,
-        has_estimated_lots=True
+        has_estimated_lots=True,
+        observed_event_count=0,
+        estimated_event_count=1,
+        unavailable_event_count=0,
+        usable_event_count=1,
+        lots_coverage_ratio=1.0
     )
 
     engine = FlowSignalEngine()
@@ -97,8 +104,9 @@ def test_flow_signal_engine_estimated_discount():
 
     # Base flow score: min(40, sqrt(100)/2) = 5.0
     # Branch concentration: 1.0 (>= 0.7) -> +10.0 score
-    # Score sum = 15.0 -> Discounted by 0.8 -> 15.0 * 0.8 = 12.0
-    assert signal.smart_money_score == 12.0
+    # Score sum = 15.0 (no raw score discount anymore)
+    assert signal.smart_money_score == 15.0
+    assert signal.confidence == 0.6  # base_confidence 0.6 * coverage_ratio 1.0 = 0.6. max_confidence = 1.0 - 0.4 * 1.0 = 0.6. min(0.6, 0.6) = 0.6
     assert signal.has_estimated_lots is True
     assert "金額估算" in signal.signal_tags
 
@@ -142,6 +150,8 @@ def test_broker_flow_service_no_price_remains_none(tmp_path):
         assert events[0].buy_qty is None
         assert events[0].lots_available is False
         assert events[0].has_estimated_lots is False
+        assert events[0].lots_quality == "unavailable"
+        assert events[0].amount_quality == "observed"
     finally:
         data_module.db_manager.DBManager = original_db_manager
 
@@ -192,5 +202,43 @@ def test_broker_flow_service_estimates_lots_with_price(tmp_path):
         assert events[0].buy_qty == 150
         assert events[0].lots_available is True
         assert events[0].has_estimated_lots is True
+        assert events[0].lots_quality == "estimated"
+        assert events[0].amount_quality == "observed"
     finally:
         data_module.db_manager.DBManager = original_db_manager
+
+
+def test_broker_flow_service_preserves_ranked_metric_metadata(tmp_path):
+    branch_dir = tmp_path / "broker_flow" / "8450_845B" / "meta"
+    branch_dir.mkdir(parents=True)
+    pd.DataFrame([{
+        "date": "2026-06-11",
+        "trade_type": "買超",
+        "branch_system_key": "8450_845B",
+        "branch_display_name": "康和-永和",
+        "counterparty_broker_code": "2330",
+        "counterparty_broker_name": "台積電",
+        "buy_lots": 100,
+        "sell_lots": 20,
+        "net_lots": 80,
+        "buy_amount_k_twd": None,
+        "sell_amount_k_twd": None,
+        "net_amount_k_twd": None,
+        "lots_observed": True,
+        "amount_observed": False,
+        "lots_rank": 7,
+        "amount_rank": None,
+    }]).to_csv(branch_dir / "merged.csv", index=False, encoding="utf-8-sig")
+    config = SimpleNamespace(
+        broker_flow_dir=tmp_path / "broker_flow",
+        data_dir=tmp_path,
+    )
+
+    event = BrokerFlowService(config)._load_data()[0]
+
+    assert event.lots_observed is True
+    assert event.amount_observed is False
+    assert event.lots_rank == 7
+    assert event.amount_rank is None
+    assert event.lots_quality == "observed"
+    assert event.amount_quality == "unavailable"

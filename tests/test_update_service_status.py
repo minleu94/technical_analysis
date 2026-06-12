@@ -344,6 +344,78 @@ def test_broker_branch_sqlite_loader_keeps_lots_and_amount_units_separate(tmp_pa
     assert loaded.loc[0, "買賣超金額千元"] == 4638
 
 
+def test_broker_branch_sqlite_loader_preserves_rank_and_trade_type(tmp_path):
+    config = _config(tmp_path)
+    branch_dir = config.broker_flow_dir / "8450_845B"
+    (branch_dir / "meta").mkdir(parents=True)
+    pd.DataFrame([{
+        "date": "2026-06-11",
+        "trade_type": "賣超",
+        "branch_system_key": "8450_845B",
+        "branch_display_name": "康和-永和",
+        "counterparty_broker_code": "2330",
+        "counterparty_broker_name": "台積電",
+        "buy_lots": None,
+        "sell_lots": None,
+        "net_lots": None,
+        "buy_amount_k_twd": 100,
+        "sell_amount_k_twd": 500,
+        "net_amount_k_twd": -400,
+        "lots_observed": False,
+        "amount_observed": True,
+        "lots_rank": None,
+        "amount_rank": 9,
+    }]).to_csv(branch_dir / "meta" / "merged.csv", index=False, encoding="utf-8-sig")
+
+    loaded = UpdateService(config)._load_broker_branch_csv_for_sqlite()
+
+    assert loaded.loc[0, "trade_type"] == "賣超"
+    assert pd.isna(loaded.loc[0, "lots_rank"])
+    assert loaded.loc[0, "amount_rank"] == 9
+
+
+def test_broker_branch_sqlite_loader_infers_missing_metric_ranks(tmp_path):
+    config = _config(tmp_path)
+    branch_dir = config.broker_flow_dir / "8450_845B"
+    (branch_dir / "meta").mkdir(parents=True)
+    pd.DataFrame([
+        {
+            "date": "2026-06-11",
+            "trade_type": "買超",
+            "branch_display_name": "康和-永和",
+            "counterparty_broker_code": "2330",
+            "counterparty_broker_name": "台積電",
+            "buy_lots": 100,
+            "sell_lots": 0,
+            "net_lots": 100,
+            "buy_amount_k_twd": 1000,
+            "sell_amount_k_twd": 0,
+            "net_amount_k_twd": 1000,
+        },
+        {
+            "date": "2026-06-11",
+            "trade_type": "買超",
+            "branch_display_name": "康和-永和",
+            "counterparty_broker_code": "2317",
+            "counterparty_broker_name": "鴻海",
+            "buy_lots": 200,
+            "sell_lots": 0,
+            "net_lots": 200,
+            "buy_amount_k_twd": 500,
+            "sell_amount_k_twd": 0,
+            "net_amount_k_twd": 500,
+        },
+    ]).to_csv(branch_dir / "meta" / "merged.csv", index=False, encoding="utf-8-sig")
+
+    loaded = UpdateService(config)._load_broker_branch_csv_for_sqlite()
+    by_code = loaded.set_index("證券代號")
+
+    assert by_code.loc["2317", "lots_rank"] == 1
+    assert by_code.loc["2330", "lots_rank"] == 2
+    assert by_code.loc["2330", "amount_rank"] == 1
+    assert by_code.loc["2317", "amount_rank"] == 2
+
+
 def test_broker_branch_sqlite_loader_rejects_legacy_b_only_values_as_lots(tmp_path):
     config = _config(tmp_path)
     branch_dir = config.broker_flow_dir / "8450_845B"
@@ -360,8 +432,8 @@ def test_broker_branch_sqlite_loader_rejects_legacy_b_only_values_as_lots(tmp_pa
 
     loaded = UpdateService(config)._load_broker_branch_csv_for_sqlite()
 
-    assert loaded.loc[0, "買進股數"] == 0
-    assert loaded.loc[0, "買賣超股數"] == 0
+    assert pd.isna(loaded.loc[0, "買進股數"])
+    assert pd.isna(loaded.loc[0, "買賣超股數"])
     assert loaded.loc[0, "買進金額千元"] == 5291
     assert loaded.loc[0, "買賣超金額千元"] == 4638
 

@@ -199,5 +199,8 @@ python scripts/update_daily_stock_data.py --date 2025-08-29 --merge
 
 - 新版日檔必須同時包含 `*_lots` 與 `*_amount_k_twd` 六個欄位。
 - 僅有舊 `buy_qty/sell_qty/net_qty` 的檔案是 `c=B` 仟元資料，更新流程會視為待補抓。
-- Phase 4.2 只使用 `c=E` 張數；金額欄位不參與既有張數門檻。
+- MoneyDJ E/B 各自是買超 50 筆與賣超 50 筆的獨立榜單；合併時採 union，不得把另一榜未出現解讀為 0。
+- B-only 且有當日有效收盤價時，Smart Money 與 Portfolio Chip Monitor 可用 `Decimal + ROUND_HALF_UP` 折算估計張數，並降低信心度及顯示估算標記。
+- 無有效收盤價時保持不可用，不猜測固定股價；單筆不可用事件只排除自身，不會污染同股票的其他可用事件。
+- 完整重建衍生資料可執行 `merge_broker_branch_data(force_all=True)` 後同步 `broker_branch`；此流程不修改 `daily/*.csv` 原始檔。
 

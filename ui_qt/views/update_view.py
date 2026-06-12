@@ -4,7 +4,7 @@
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QGroupBox, QProgressBar,
     QTextEdit, QRadioButton, QButtonGroup,
     QDateEdit, QMessageBox, QFormLayout, QSpinBox, QLineEdit,
@@ -30,14 +30,14 @@ class StatusCard(QFrame):
         self.title = title
         self.icon_str = icon_str
         self._raw_text = ""
-        
+
         self.setObjectName("CardFrame")
         # 設置現代暗色玻璃擬態樣式
         self.setStyleSheet("""
             QFrame#CardFrame {
                 background-color: qlineargradient(
                     x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(30, 41, 59, 0.65), 
+                    stop:0 rgba(30, 41, 59, 0.65),
                     stop:1 rgba(15, 23, 42, 0.8)
                 );
                 border: 1px solid rgba(255, 255, 255, 0.08);
@@ -46,54 +46,54 @@ class StatusCard(QFrame):
             QFrame#CardFrame:hover {
                 background-color: qlineargradient(
                     x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(51, 65, 85, 0.75), 
+                    stop:0 rgba(51, 65, 85, 0.75),
                     stop:1 rgba(30, 41, 59, 0.85)
                 );
                 border: 1px solid rgba(255, 255, 255, 0.18);
             }
         """)
-        
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(6)
-        
+
         # 頂部：圖示 + 標題 + 狀態燈
         header_layout = QHBoxLayout()
         header_layout.setSpacing(6)
-        
+
         self.title_label = QLabel(f"<span style='font-size:12px; font-weight:bold; color:#cbd5e1;'>{icon_str} {title}</span>")
         self.indicator_label = QLabel("<span style='font-size:13px; color:#94a3b8;'>⚪</span>")
-        
+
         header_layout.addWidget(self.title_label)
         header_layout.addStretch()
         header_layout.addWidget(self.indicator_label)
         layout.addLayout(header_layout)
-        
+
         # 中間最新日期
         self.date_label = QLabel("<span style='color:#94a3b8;'>最新日期：</span><b style='color:#f8fafc;'>--</b>")
         self.date_label.setStyleSheet("font-size: 11px;")
         layout.addWidget(self.date_label)
-        
+
         # 總筆數
         self.records_label = QLabel("<span style='color:#94a3b8;'>總記錄數：</span><b style='color:#f8fafc;'>--</b>")
         self.records_label.setStyleSheet("font-size: 11px;")
         layout.addWidget(self.records_label)
-        
+
         # 額外資訊（例如技術指標數量）
         self.extra_label = QLabel("")
         self.extra_label.setStyleSheet("color:#94a3b8; font-size: 11px;")
         self.extra_label.setVisible(False)
         layout.addWidget(self.extra_label)
-        
+
     def setPlainText(self, text: str):
         """相容 QTextEdit.setPlainText，用於解析並更新卡片 UI"""
         self._raw_text = text
-        
+
         latest_date = "未知"
         total_records = "--"
         status_str = "unknown"
         extra_info = ""
-        
+
         lines = text.split('\n')
         for line in lines:
             if "最新日期" in line:
@@ -104,16 +104,16 @@ class StatusCard(QFrame):
                 status_str = line.split("：")[-1].strip()
             elif "指標檔數" in line:
                 extra_info = line.strip()
-                
+
         self.date_label.setText(f"<span style='color:#94a3b8;'>最新日期：</span><b style='color:#f8fafc;'>{latest_date}</b>")
         self.records_label.setText(f"<span style='color:#94a3b8;'>總記錄數：</span><b style='color:#f8fafc;'>{total_records}</b>")
-        
+
         if extra_info:
             self.extra_label.setText(f"<span style='color:#94a3b8;'>{extra_info}</span>")
             self.extra_label.setVisible(True)
         else:
             self.extra_label.setVisible(False)
-            
+
         # 燈號判定
         if "點擊" in text or "尚未檢查" in text:
             self.indicator_label.setText("<span style='font-size:13px; color:#94a3b8;'>⚪</span>") # 未檢查
@@ -123,7 +123,7 @@ class StatusCard(QFrame):
             self.indicator_label.setText("<span style='font-size:13px; color:#22c55e;'>🟢</span>") # 正常/最新
         else:
             self.indicator_label.setText("<span style='font-size:13px; color:#eab308;'>🟡</span>") # 待更新
-            
+
     def toPlainText(self) -> str:
         """相容 QTextEdit.toPlainText"""
         return self._raw_text
@@ -131,11 +131,11 @@ class StatusCard(QFrame):
     def setReadOnly(self, ro: bool):
         """相容 QTextEdit.setReadOnly"""
         pass
-        
+
     def setMaximumHeight(self, h: int):
         """相容 QTextEdit.setMaximumHeight"""
         pass
-        
+
     def clear(self):
         """清除卡片"""
         self.date_label.setText("最新日期：--")
@@ -146,10 +146,10 @@ class StatusCard(QFrame):
 
 class UpdateView(QWidget):
     """數據更新視圖"""
-    
+
     def __init__(self, update_service: UpdateService, parent=None):
         """初始化數據更新視圖
-        
+
         Args:
             update_service: 數據更新服務實例
             parent: 父窗口
@@ -157,13 +157,13 @@ class UpdateView(QWidget):
         super().__init__(parent)
         self.update_service = update_service
         self._loaded_detail_sources: set[str] = set()
-        
+
         # Worker
         self.worker: Optional[TaskWorker] = None
-        
+
         self._setup_ui()
         self._check_data_status()
-    
+
     def _setup_ui(self):
         """設置 UI"""
         # 最外層主布局
@@ -244,13 +244,13 @@ class UpdateView(QWidget):
 
         # 右側堆疊視窗
         self.content_stack = QStackedWidget()
-        
+
         # 建立看板（全部資料）頁面
         all_page = QWidget()
         all_layout = QVBoxLayout(all_page)
         all_layout.setSpacing(15)
         all_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # 頂部標題列
         title_layout = QHBoxLayout()
         title = QLabel("數據更新看板")
@@ -291,7 +291,7 @@ class UpdateView(QWidget):
 
         # 一鍵更新與輔助按鈕
         actions_layout = QHBoxLayout()
-        
+
         self.quick_update_all_btn = QPushButton("⚡ 快速更新 (僅 SQLite)")
         self.quick_update_all_btn.setMinimumHeight(45)
         self.quick_update_all_btn.setToolTip(
@@ -389,7 +389,7 @@ class UpdateView(QWidget):
         actions_layout.addWidget(self.check_status_btn, stretch=1)
         all_layout.addLayout(actions_layout)
         all_layout.addStretch()
-        
+
         self.content_stack.addWidget(all_page)
 
         # 建立其他分頁
@@ -402,7 +402,7 @@ class UpdateView(QWidget):
                     page_layout.addWidget(QLabel("SQLite 未啟用或測試環境中無 Config"))
                     self.content_stack.addWidget(page)
                     continue
-                
+
                 from app_module.sqlite_inspector_service import SqliteInspectorService
                 from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
                 service = SqliteInspectorService(config)
@@ -414,7 +414,7 @@ class UpdateView(QWidget):
             page_layout = QVBoxLayout(page)
             page_layout.setContentsMargins(0, 0, 0, 0)
             page_layout.setSpacing(15)
-            
+
             # 分頁標題
             sub_title_layout = QHBoxLayout()
             sub_title = QLabel(label)
@@ -431,20 +431,20 @@ class UpdateView(QWidget):
             self.content_stack.addWidget(page)
 
         self.nav_list.currentRowChanged.connect(self._on_nav_changed)
-        
+
         workbench_layout.addWidget(self.nav_list)
         workbench_layout.addWidget(self.content_stack, stretch=1)
         main_layout.addLayout(workbench_layout)
-        
+
         # 4. 底部全域共享的進度條與日誌 console
         main_layout.addWidget(QLabel("")) # 微小間隔
-        
+
         # 進度文字與進度條
         self.progress_label = QLabel("")
         self.progress_label.setStyleSheet("color: #475569; font-size: 12px;")
         self.progress_label.setVisible(False)
         main_layout.addWidget(self.progress_label)
-        
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -482,7 +482,7 @@ class UpdateView(QWidget):
         """)
         log_layout = QVBoxLayout(log_group)
         log_layout.setContentsMargins(10, 15, 10, 10)
-        
+
         # 日誌輔助工具列 (如清除日誌)
         log_toolbar = QHBoxLayout()
         log_toolbar.addStretch()
@@ -536,7 +536,7 @@ class UpdateView(QWidget):
             "broker_branch": "維護 MoneyDJ 的 6 大追蹤分點之買賣超資料，並可執行券商分點合併至 SQLite broker_flows 表。",
             "technical": "增量或全量重新計算個股的技術指標（KD, MACD, RSI 等），並高速批量儲存至資料庫中。",
         }
-        
+
         desc_label = QLabel(descriptions.get(key, "檢查此資料來源的更新狀態。"))
         desc_label.setStyleSheet("color: #64748b; font-size: 12px;")
         desc_label.setWordWrap(True)
@@ -557,7 +557,7 @@ class UpdateView(QWidget):
             """)
             date_layout = QFormLayout(date_group)
             date_layout.setSpacing(8)
-            
+
             end_date_edit = QDateEdit()
             end_date_edit.setDate(QDate.currentDate())
             end_date_edit.setCalendarPopup(True)
@@ -567,7 +567,7 @@ class UpdateView(QWidget):
                 "設定下載或更新資料的截止日期。\n"
                 "當您在任何一個分頁修改此日期，其他分頁的結束日期將同步聯動更新。"
             )
-            
+
             lookback_spin = QSpinBox()
             lookback_spin.setRange(1, 365)
             lookback_spin.setValue(10)
@@ -577,17 +577,17 @@ class UpdateView(QWidget):
                 "設定從「結束日期」往前推算的查找天數。\n"
                 "例如設定 10 天，代表下載或檢查結束日期前 10 天內的所有交易日資料。"
             )
-            
+
             date_layout.addRow("結束日期:", end_date_edit)
             date_layout.addRow("最近範圍:", lookback_spin)
             layout.addWidget(date_group)
-            
+
             setattr(self, f"{key}_end_date", end_date_edit)
             setattr(self, f"{key}_lookback", lookback_spin)
-            
+
             end_date_edit.dateChanged.connect(lambda _d, k=key: self._sync_dates(k))
             lookback_spin.valueChanged.connect(lambda _v, k=key: self._sync_dates(k))
-            
+
             if key == "daily":
                 self.end_date = end_date_edit
                 self.lookback_days = lookback_spin
@@ -607,10 +607,10 @@ class UpdateView(QWidget):
             """)
             tech_layout = QVBoxLayout(tech_group)
             tech_layout.setSpacing(8)
-            
+
             mode_layout = QHBoxLayout()
             mode_layout.addWidget(QLabel("計算模式:"))
-            
+
             self.tech_incremental_radio = QRadioButton("增量更新（只計算新數據）")
             self.tech_incremental_radio.setChecked(True)
             self.tech_incremental_radio.setToolTip(
@@ -619,7 +619,7 @@ class UpdateView(QWidget):
                 "計算速度極快，是日常更新的首選模式。"
             )
             mode_layout.addWidget(self.tech_incremental_radio)
-            
+
             self.tech_force_all_radio = QRadioButton("強制全量更新（重新計算所有數據）")
             self.tech_force_all_radio.setToolTip(
                 "【強制全量更新模式】\n"
@@ -629,7 +629,7 @@ class UpdateView(QWidget):
             mode_layout.addWidget(self.tech_force_all_radio)
             mode_layout.addStretch()
             tech_layout.addLayout(mode_layout)
-            
+
             stock_form = QFormLayout()
             self.tech_stock_input = QLineEdit()
             self.tech_stock_input.setPlaceholderText("留空則處理所有股票，例如：2330")
@@ -640,7 +640,7 @@ class UpdateView(QWidget):
             )
             stock_form.addRow("股票代號（可選）:", self.tech_stock_input)
             tech_layout.addLayout(stock_form)
-            
+
             layout.addWidget(tech_group)
 
         # 操作按鈕面板
@@ -823,11 +823,11 @@ class UpdateView(QWidget):
             """)
             danger_layout = QVBoxLayout(danger_group)
             danger_layout.setSpacing(6)
-            
+
             danger_desc = QLabel("注意：強制重新合併將完全忽略現有合併結果，並重新讀取 daily_price/ 底下的所有 CSV 檔案寫入資料庫。\n此操作耗時較長，通常僅在資料庫損毀或修復資料時使用。")
             danger_desc.setStyleSheet("color: #64748b; font-size: 11px;")
             danger_desc.setWordWrap(True)
-            
+
             self.force_merge_btn = QPushButton("⚠️ 強制重新合併所有每日股價")
             self.force_merge_btn.setMinimumHeight(35)
             self.force_merge_btn.setToolTip(
@@ -853,7 +853,7 @@ class UpdateView(QWidget):
                 }
             """)
             self.force_merge_btn.clicked.connect(self._execute_force_merge)
-            
+
             danger_layout.addWidget(danger_desc)
             danger_layout.addWidget(self.force_merge_btn)
             layout.addWidget(danger_group)
@@ -865,30 +865,30 @@ class UpdateView(QWidget):
         try:
             end_date_widget = getattr(self, f"{source_name}_end_date", None)
             lookback_widget = getattr(self, f"{source_name}_lookback", None)
-            
+
             if not end_date_widget or not lookback_widget:
                 return
-                
+
             target_date = end_date_widget.date()
             target_days = lookback_widget.value()
-            
+
             # 同步全域變數 (供底層業務代碼使用)
             self.end_date.setDate(target_date)
             self.lookback_days.setValue(target_days)
-            
+
             # 同步其他分頁的元件
             for name in ["daily", "market", "industry", "broker_branch"]:
                 if name == source_name:
                     continue
-                
+
                 other_date = getattr(self, f"{name}_end_date", None)
                 other_days = getattr(self, f"{name}_lookback", None)
-                
+
                 if other_date:
                     other_date.blockSignals(True)
                     other_date.setDate(target_date)
                     other_date.blockSignals(False)
-                    
+
                 if other_days:
                     other_days.blockSignals(True)
                     other_days.setValue(target_days)
@@ -907,13 +907,13 @@ class UpdateView(QWidget):
         radio_btn = radio_map.get(key)
         if radio_btn:
             radio_btn.setChecked(True)
-            
+
         end_date_widget = getattr(self, f"{key}_end_date", None)
         lookback_widget = getattr(self, f"{key}_lookback", None)
         if end_date_widget and lookback_widget:
             self.end_date.setDate(end_date_widget.date())
             self.lookback_days.setValue(lookback_widget.value())
-            
+
         self._execute_update()
 
     def _on_nav_changed(self, row: int):
@@ -922,7 +922,7 @@ class UpdateView(QWidget):
             return
         self.content_stack.setCurrentIndex(row)
         key = self._nav_items[row][0]
-        
+
         if key == "daily":
             self.daily_radio.setChecked(True)
         elif key == "market":
@@ -947,19 +947,19 @@ class UpdateView(QWidget):
             if self.worker and self.worker.isRunning():
                 self.worker.cancel()
                 self.worker.wait(3000)  # 等待最多 3 秒
-            
+
             self.check_status_btn.setEnabled(False)
             self.check_status_btn.setText("檢查中...")
-            
+
             # 在背景執行
             def check_task():
                 return self._get_overview_status()
-            
+
             self.worker = TaskWorker(check_task)
             self.worker.finished.connect(self._on_status_checked)
             self.worker.error.connect(self._on_status_error)
             self.worker.start()
-            
+
         except Exception as e:
             QMessageBox.critical(self, "錯誤", f"檢查數據狀態失敗：\n{str(e)}")
             self.check_status_btn.setEnabled(True)
@@ -1008,26 +1008,41 @@ class UpdateView(QWidget):
         if source:
             self._loaded_detail_sources.add(source)
         self._on_status_checked(status)
-    
+
     def _on_status_checked(self, status: Dict[str, Any]):
         """數據狀態檢查完成"""
         self.check_status_btn.setEnabled(True)
         self.check_status_btn.setText("檢查數據狀態")
-        
+
         # 分別更新四個區塊
         daily_text = self.daily_status_text.toPlainText()
         market_text = self.market_status_text.toPlainText()
         industry_text = self.industry_status_text.toPlainText()
         broker_branch_text = self.broker_branch_status_text.toPlainText()
         technical_text = self.technical_status_text.toPlainText()
-        
+
         for key, value in status.items():
             latest_date = value.get('latest_date', '未知')
             total_records = value.get('total_records', 0)
             status_str = value.get('status', 'unknown')
-            
-            status_display = f"最新日期：{latest_date}\n總記錄數：{total_records:,}\n狀態：{status_str}"
-            
+
+            if key == 'broker_branch':
+                date_count = value.get('date_count', 0)
+                e_only = value.get('e_only_count', 0)
+                b_only = value.get('b_only_count', 0)
+                dual = value.get('dual_count', 0)
+                status_display = (
+                    f"最新日期：{latest_date}\n"
+                    f"實際天數：{date_count} 天\n"
+                    f"雙榜紀錄 (E&B)：{dual:,}\n"
+                    f"張數榜專屬 (E-only)：{e_only:,}\n"
+                    f"金額榜專屬 (B-only)：{b_only:,}\n"
+                    f"總記錄數：{total_records:,}\n"
+                    f"狀態：{status_str}"
+                )
+            else:
+                status_display = f"最新日期：{latest_date}\n總記錄數：{total_records:,}\n狀態：{status_str}"
+
             if key == 'daily_data':
                 daily_text = status_display
             elif key == 'market_index':
@@ -1041,7 +1056,7 @@ class UpdateView(QWidget):
                 if file_count is not None:
                     status_display += f"\n指標檔數：{file_count:,}"
                 technical_text = status_display
-        
+
         # 如果沒有數據，顯示提示
         if not daily_text:
             daily_text = "尚未檢查"
@@ -1053,21 +1068,21 @@ class UpdateView(QWidget):
             broker_branch_text = "尚未檢查"
         if not technical_text:
             technical_text = "尚未檢查"
-        
+
         self.daily_status_text.setPlainText(daily_text)
         self.market_status_text.setPlainText(market_text)
         self.industry_status_text.setPlainText(industry_text)
         self.broker_branch_status_text.setPlainText(broker_branch_text)
         self.technical_status_text.setPlainText(technical_text)
         self._log(f"數據狀態檢查完成")
-    
+
     def _on_status_error(self, error_msg: str):
         """數據狀態檢查出錯"""
         self.check_status_btn.setEnabled(True)
         self.check_status_btn.setText("檢查數據狀態")
         QMessageBox.critical(self, "錯誤", f"檢查數據狀態失敗：\n{error_msg}")
         self._log(f"錯誤：{error_msg}")
-    
+
     def _get_selected_date_range(self) -> tuple[str, str]:
         """取得目前 UI 選定的查找日期範圍"""
         end_date = self.end_date.date().toString("yyyy-MM-dd")
@@ -1095,7 +1110,7 @@ class UpdateView(QWidget):
 
         use_sqlite = getattr(self.update_service.config, "use_sqlite", False)
         is_quick_mode = (mode == "quick" and use_sqlite)
-        
+
         # 在快速更新模式下，限制券商分點僅更新最近 2 天，避免大量全新分點補歷史資料造成的嚴重卡頓
         if is_quick_mode:
             from datetime import datetime, timedelta
@@ -1106,7 +1121,7 @@ class UpdateView(QWidget):
                 quick_start_date = start_date
         else:
             quick_start_date = start_date
-        
+
         steps = [
             ("檢查資料狀態", 0, lambda: self._get_overview_status()),
             ("每日股價更新", 12, lambda: self.update_service.update_daily(start_date, end_date)),
@@ -1117,9 +1132,9 @@ class UpdateView(QWidget):
             ("同步產業指數至 SQLite", 42, lambda: self.update_service.sync_source_to_sqlite("industry_index")),
             ("券商分點更新", 48, lambda: self.update_service.update_broker_branch(quick_start_date, end_date)),
         ]
-        
+
         is_quick_mode = (mode == "quick" and use_sqlite)
-        
+
         if is_quick_mode:
             # ⚡ 快速更新 (僅 SQLite)：跳過合併 CSV，直接同步單日檔案至 SQLite
             steps.extend([
@@ -1133,7 +1148,7 @@ class UpdateView(QWidget):
                 ("合併券商分點", 69, lambda: self.update_service.merge_broker_branch_data()),
                 ("同步券商分點至 SQLite", 76, lambda: self.update_service.sync_source_to_sqlite("broker_branch")),
             ])
-            
+
         steps.extend([
             (
                 "增量計算技術指標",
@@ -1185,18 +1200,18 @@ class UpdateView(QWidget):
     def _execute_update_all(self, mode="quick"):
         """以背景工作執行更新所有數據"""
         self._current_update_mode = mode
-        
+
         self.quick_update_all_btn.setEnabled(False)
         self.safe_update_all_btn.setEnabled(False)
-        
+
         mode_name = "快速更新" if mode == "quick" else "安全更新"
         btn_text = "快速更新中..." if mode == "quick" else "安全更新中..."
-        
+
         if mode == "quick":
             self.quick_update_all_btn.setText(btn_text)
         else:
             self.safe_update_all_btn.setText(btn_text)
-            
+
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -1253,10 +1268,10 @@ class UpdateView(QWidget):
         self.safe_update_all_btn.setText("🛡️ 安全更新 (完整 CSV + SQLite)")
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         mode_name = "快速更新" if getattr(self, "_current_update_mode", "quick") == "quick" else "安全更新"
         self._log(f"{mode_name}錯誤：{error_msg}")
-        
+
         error_display = error_msg
         if len(error_display) > 500:
             error_display = error_display[:500] + "\n\n（錯誤訊息過長，已截斷，請查看日誌獲取完整訊息）"
@@ -1274,42 +1289,42 @@ class UpdateView(QWidget):
             update_type = 'industry'
         elif self.broker_branch_radio.isChecked():
             update_type = 'broker_branch'
-        
+
         self._active_update_type = update_type
-        
+
         # 獲取查找範圍
         end_date = self.end_date.date().toString("yyyy-MM-dd")
         lookback_days = self.lookback_days.value()
-        
+
         # 計算開始日期（從結束日期往前推）
         from datetime import datetime, timedelta
         end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
         start_date_obj = end_date_obj - timedelta(days=lookback_days)
         start_date = start_date_obj.strftime("%Y-%m-%d")
-        
+
         # 禁用按鈕
         current_update_btn = getattr(self, f"{update_type}_update_btn", None)
         if current_update_btn:
             current_update_btn.setEnabled(False)
             current_update_btn.setText("更新中...")
-        
+
         # 顯示進度條
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)  # 不確定進度
         self.progress_label.setVisible(True)
         self.progress_label.setText(f"正在更新{self._get_update_type_name(update_type)}...")
-        
+
         # 清空日誌
         self.log_text.clear()
         self._log(f"開始更新 {self._get_update_type_name(update_type)}")
         self._log(f"查找範圍：{start_date} 至 {end_date}（最近 {lookback_days} 天）")
         self._log(f"說明：系統會在該範圍內查找缺失的日期並下載，合併時會合併所有數據")
-        
+
         # ✅ 取消之前的 Worker（如果存在）
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(3000)  # 等待最多 3 秒
-        
+
         # 創建 Worker 任務
         def update_task(progress_callback=None):
             import logging
@@ -1324,7 +1339,7 @@ class UpdateView(QWidget):
                     result = self.update_service.update_industry(start_date, end_date)
                 elif update_type == 'broker_branch':
                     result = self.update_service.update_broker_branch(
-                        start_date=start_date, 
+                        start_date=start_date,
                         end_date=end_date,
                         progress_callback=progress_callback
                     )
@@ -1338,13 +1353,13 @@ class UpdateView(QWidget):
                 logger.error(f"[UpdateView] {error_msg}")
                 # ✅ 不要 raise，讓 Worker 的異常處理機制處理
                 raise
-        
+
         self.worker = ProgressTaskWorker(update_task)
         self.worker.progress.connect(self._on_update_progress)
         self.worker.finished.connect(self._on_update_finished)
         self.worker.error.connect(self._on_update_error)
         self.worker.start()
-    
+
     def _on_update_progress(self, message: str, percentage: int):
         """更新進度回調"""
         if self.progress_bar.maximum() == 0:
@@ -1354,7 +1369,7 @@ class UpdateView(QWidget):
         # 只在有實際進度變更時才記錄，避免日誌過多
         if percentage % 10 == 0 or percentage == 100:
             self._log(f"[進度 {percentage}%] {message}")
-    
+
     def _on_update_finished(self, result: Dict[str, Any]):
         """更新完成"""
         # 恢復按鈕
@@ -1363,32 +1378,32 @@ class UpdateView(QWidget):
         if current_update_btn:
             current_update_btn.setEnabled(True)
             current_update_btn.setText("📥 手動下載此資料源")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 顯示結果
         if result.get('success', False):
             message = result.get('message', '更新完成')
             updated_dates = result.get('updated_dates', [])
             failed_dates = result.get('failed_dates', [])
-            
+
             self._log(f"更新完成：{message}")
             if updated_dates:
                 self._log(f"成功更新日期：{len(updated_dates)} 個")
             if failed_dates:
                 self._log(f"失敗日期：{len(failed_dates)} 個")
-            
+
             QMessageBox.information(self, "更新完成", message)
-            
+
             # 自動刷新數據狀態
             self._check_data_status()
         else:
             message = result.get('message', '更新失敗')
             self._log(f"更新失敗：{message}")
             QMessageBox.warning(self, "更新失敗", message)
-    
+
     def _on_update_error(self, error_msg: str):
         """更新出錯"""
         # 恢復按鈕
@@ -1397,15 +1412,15 @@ class UpdateView(QWidget):
         if current_update_btn:
             current_update_btn.setEnabled(True)
             current_update_btn.setText("📥 手動下載此資料源")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 顯示錯誤
         self._log(f"錯誤：{error_msg}")
         QMessageBox.critical(self, "更新失敗", f"數據更新失敗：\n{error_msg}")
-    
+
     def _get_update_type_name(self, update_type: str) -> str:
         """獲取更新類型名稱"""
         names = {
@@ -1415,29 +1430,29 @@ class UpdateView(QWidget):
             'broker_branch': '券商分點資料'
         }
         return names.get(update_type, update_type)
-    
+
     def _execute_merge(self):
         """執行數據合併（增量合併）"""
         # 確認對話框
         reply = QMessageBox.question(
-            self, 
-            "確認合併", 
+            self,
+            "確認合併",
             "確定要合併每日股票數據嗎？\n這將把 daily_price/ 目錄中的新 CSV 文件合併到 stock_data_whole.csv\n（只合併新數據，不會重新合併已有數據）",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        
+
         if reply != QMessageBox.Yes:
             return
-        
+
         self._do_merge(force_all=False)
-    
+
     def _execute_force_merge(self):
         """執行強制重新合併所有數據"""
         # 警告對話框
         reply = QMessageBox.warning(
-            self, 
-            "警告：強制重新合併", 
+            self,
+            "警告：強制重新合併",
             "確定要強制重新合併所有數據嗎？\n\n"
             "⚠️ 這將：\n"
             "• 忽略現有的 stock_data_whole.csv\n"
@@ -1447,12 +1462,12 @@ class UpdateView(QWidget):
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        
+
         if reply != QMessageBox.Yes:
             return
-        
+
         self._do_merge(force_all=True)
-    
+
     def _do_merge(self, force_all: bool = False):
         """執行合併操作（內部方法）"""
         # 禁用按鈕
@@ -1462,7 +1477,7 @@ class UpdateView(QWidget):
         else:
             self.merge_btn.setEnabled(False)
             self.merge_btn.setText("合併中...")
-        
+
         # 顯示進度條
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)  # 不確定進度
@@ -1471,19 +1486,19 @@ class UpdateView(QWidget):
             self.progress_label.setText("正在強制重新合併所有每日股票數據...")
         else:
             self.progress_label.setText("正在合併每日股票數據...")
-        
+
         # 清空日誌
         self.log_text.clear()
         if force_all:
             self._log("開始強制重新合併所有每日股票數據")
         else:
             self._log("開始合併每日股票數據（增量模式）")
-        
+
         # ✅ 取消之前的 Worker（如果存在）
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(3000)  # 等待最多 3 秒
-        
+
         # 創建 Worker 任務
         def merge_task():
             import logging
@@ -1499,12 +1514,12 @@ class UpdateView(QWidget):
                 logger.error(f"[UpdateView] {error_msg}")
                 # ✅ 不要 raise，讓 Worker 的異常處理機制處理
                 raise
-        
+
         self.worker = TaskWorker(merge_task)
         self.worker.finished.connect(self._on_merge_finished)
         self.worker.error.connect(self._on_merge_error)
         self.worker.start()
-    
+
     def _on_merge_finished(self, result: Dict[str, Any]):
         """合併完成"""
         # 恢復按鈕
@@ -1512,64 +1527,64 @@ class UpdateView(QWidget):
         self.merge_btn.setText("合併每日數據")
         self.force_merge_btn.setEnabled(True)
         self.force_merge_btn.setText("強制重新合併")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 顯示結果
         if result.get('success', False):
             message = result.get('message', '合併完成')
             total_records = result.get('total_records', 0)
             merged_files = result.get('merged_files', 0)
-            
+
             self._log(f"合併完成：{message}")
             if total_records > 0:
                 self._log(f"總記錄數：{total_records:,}")
             if merged_files > 0:
                 self._log(f"合併文件數：{merged_files}")
-            
+
             QMessageBox.information(self, "合併完成", f"{message}\n總記錄數：{total_records:,}")
-            
+
             # 自動刷新數據狀態
             self._check_data_status()
         else:
             message = result.get('message', '合併失敗')
             self._log(f"合併失敗：{message}")
             QMessageBox.warning(self, "合併失敗", message)
-    
+
     def _on_merge_error(self, error_msg: str):
         """合併出錯"""
         import logging
         logger = logging.getLogger(__name__)
-        
+
         # ✅ 記錄錯誤
         logger.error(f"[UpdateView] 合併數據時發生錯誤: {error_msg}")
-        
+
         # 恢復按鈕
         self.merge_btn.setEnabled(True)
         self.merge_btn.setText("合併每日數據")
         self.force_merge_btn.setEnabled(True)
         self.force_merge_btn.setText("強制重新合併")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 顯示錯誤
         self._log(f"錯誤：{error_msg}")
-        
+
         # ✅ 顯示更友好的錯誤訊息
         error_display = error_msg
         if len(error_msg) > 500:
             error_display = error_msg[:500] + "\n\n（錯誤訊息過長，已截斷，請查看日誌獲取完整信息）"
-        
+
         QMessageBox.critical(
-            self, 
-            "合併失敗", 
+            self,
+            "合併失敗",
             f"數據合併失敗：\n\n{error_display}\n\n請查看日誌獲取詳細信息。"
         )
-    
+
     def _execute_merge_broker_branch(self):
         """執行券商分點資料合併"""
         # 確認對話框
@@ -1580,29 +1595,29 @@ class UpdateView(QWidget):
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        
+
         if reply != QMessageBox.Yes:
             return
-        
+
         # 禁用按鈕
         self.merge_broker_branch_btn.setEnabled(False)
         self.merge_broker_branch_btn.setText("合併中...")
-        
+
         # 顯示進度條
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)  # 不確定進度
         self.progress_label.setVisible(True)
         self.progress_label.setText("正在合併券商分點資料...")
-        
+
         # 清空日誌
         self.log_text.clear()
         self._log("開始合併券商分點資料（增量模式）")
-        
+
         # ✅ 取消之前的 Worker（如果存在）
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(3000)
-        
+
         # 創建 Worker 任務
         def merge_task():
             import logging
@@ -1617,22 +1632,22 @@ class UpdateView(QWidget):
                 error_msg = f"券商分點資料合併任務執行時發生異常: {str(e)}\n{traceback.format_exc()}"
                 logger.error(f"[UpdateView] {error_msg}")
                 raise
-        
+
         self.worker = TaskWorker(merge_task)
         self.worker.finished.connect(self._on_merge_broker_branch_finished)
         self.worker.error.connect(self._on_merge_broker_branch_error)
         self.worker.start()
-    
+
     def _on_merge_broker_branch_finished(self, result: Dict[str, Any]):
         """券商分點資料合併完成"""
         # 恢復按鈕
         self.merge_broker_branch_btn.setEnabled(True)
         self.merge_broker_branch_btn.setText("合併券商分點資料")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
             # 顯示結果
         if result.get('success', False):
             message = result.get('message', '合併完成')
@@ -1640,7 +1655,7 @@ class UpdateView(QWidget):
             new_records = result.get('new_records', 0)
             total_records = result.get('total_records', 0)
             date_range = result.get('date_range', {})
-            
+
             self._log(f"合併完成：{message}")
             if merged_branches:
                 self._log(f"成功合併的分點：{len(merged_branches)} 個")
@@ -1648,65 +1663,65 @@ class UpdateView(QWidget):
                 self._log(f"新增記錄數：{new_records:,}")
             if total_records > 0:
                 self._log(f"總記錄數：{total_records:,}")
-            
+
             # 構建詳細訊息
             detail_message = f"{message}\n\n成功合併分點：{len(merged_branches)} 個\n新增記錄：{new_records:,}\n總記錄：{total_records:,}"
             if date_range.get('start_date') and date_range.get('end_date'):
                 detail_message += f"\n\n日期範圍：{date_range['start_date']} 至 {date_range['end_date']}"
                 detail_message += f"\n最新日期：{date_range['end_date']}"
-            
+
             QMessageBox.information(
                 self,
                 "券商分點資料合併完成",
                 detail_message
             )
-            
+
             # 自動刷新數據狀態
             self._check_data_status()
         else:
             message = result.get('message', '合併失敗')
             self._log(f"合併失敗：{message}")
             QMessageBox.warning(self, "合併失敗", message)
-    
+
     def _on_merge_broker_branch_error(self, error_msg: str):
         """券商分點資料合併出錯"""
         # 恢復按鈕
         self.merge_broker_branch_btn.setEnabled(True)
         self.merge_broker_branch_btn.setText("合併券商分點資料")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 顯示錯誤
         self._log(f"錯誤：{error_msg}")
-        
+
         # 顯示友好的錯誤訊息
         error_display = error_msg
         if len(error_msg) > 500:
             error_display = error_msg[:500] + "\n\n（錯誤訊息過長，已截斷，請查看日誌獲取完整信息）"
-        
+
         QMessageBox.critical(
             self,
             "合併失敗",
             f"券商分點資料合併失敗：\n\n{error_display}\n\n請查看日誌獲取詳細信息。"
         )
-    
+
     def _log(self, message: str):
         """添加日誌"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
-    
+
     def _execute_calculate_technical_indicators(self):
         """執行技術指標計算"""
         # 獲取計算模式
         force_all = self.tech_force_all_radio.isChecked()
-        
+
         # 獲取股票代號（如果指定）
         target_stock = self.tech_stock_input.text().strip()
         if not target_stock:
             target_stock = None
-        
+
         # 確認對話框
         if force_all:
             reply = QMessageBox.question(
@@ -1728,32 +1743,32 @@ class UpdateView(QWidget):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.Yes
             )
-        
+
         if reply != QMessageBox.Yes:
             return
-        
+
         # 禁用按鈕
         self.calculate_tech_btn.setEnabled(False)
         self.calculate_tech_btn.setText("計算中...")
-        
+
         # 顯示進度條
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
         self.progress_label.setText("準備開始計算技術指標...")
-        
+
         # 清空日誌
         self.log_text.clear()
         mode_text = "強制全量更新" if force_all else "增量更新"
         stock_text = f"股票：{target_stock}" if target_stock else "股票：全部"
         self._log(f"開始計算技術指標（{mode_text}，{stock_text}）")
-        
+
         # ✅ 取消之前的 Worker（如果存在）
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(3000)
-        
+
         # 創建 Worker 任務（使用 ProgressTaskWorker 支持進度回調）
         def calculate_task(progress_callback=None):
             """技術指標計算任務（支持進度回調）"""
@@ -1774,29 +1789,29 @@ class UpdateView(QWidget):
                 error_msg = f"技術指標計算任務執行時發生異常: {str(e)}\n{traceback.format_exc()}"
                 logger.error(f"[UpdateView] {error_msg}")
                 raise
-        
+
         self.worker = ProgressTaskWorker(calculate_task)
         self.worker.progress.connect(self._on_tech_progress)
         self.worker.finished.connect(self._on_tech_calculate_finished)
         self.worker.error.connect(self._on_tech_calculate_error)
         self.worker.start()
-    
+
     def _on_tech_progress(self, message: str, progress: int):
         """技術指標計算進度更新"""
         self.progress_label.setText(message)
         self.progress_bar.setValue(progress)
         self._log(f"[進度 {progress}%] {message}")
-    
+
     def _on_tech_calculate_finished(self, result: Dict[str, Any]):
         """技術指標計算完成"""
         # 恢復按鈕
         self.calculate_tech_btn.setEnabled(True)
         self.calculate_tech_btn.setText("計算技術指標")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 顯示結果
         if result.get('success', False):
             message = result.get('message', '計算完成')
@@ -1806,7 +1821,7 @@ class UpdateView(QWidget):
             insufficient_count = result.get('insufficient_data_count', 0)
             updated_stocks = result.get('updated_stocks', [])
             failed_stocks = result.get('failed_stocks', [])
-            
+
             self._log(f"計算完成：{message}")
             if updated_stocks:
                 self._log(f"成功更新的股票：{len(updated_stocks)} 檔")
@@ -1816,7 +1831,7 @@ class UpdateView(QWidget):
                 self._log(f"失敗的股票：{len(failed_stocks)} 檔")
                 if len(failed_stocks) <= 10:
                     self._log(f"股票列表：{', '.join(failed_stocks)}")
-            
+
             # 顯示詳細結果對話框
             detail_message = (
                 f"技術指標計算完成\n\n"
@@ -1826,37 +1841,37 @@ class UpdateView(QWidget):
                 f"數據不足股票數：{insufficient_count}\n"
                 f"處理數據日期範圍：{result.get('start_date', '未知')} 至 {result.get('end_date', '未知')}"
             )
-            
+
             QMessageBox.information(self, "計算完成", detail_message)
         else:
             message = result.get('message', '計算失敗')
             self._log(f"計算失敗：{message}")
             QMessageBox.warning(self, "計算失敗", message)
-    
+
     def _on_tech_calculate_error(self, error_msg: str):
         """技術指標計算出錯"""
         # 恢復按鈕
         self.calculate_tech_btn.setEnabled(True)
         self.calculate_tech_btn.setText("計算技術指標")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 顯示錯誤
         self._log(f"錯誤：{error_msg}")
-        
+
         # 顯示友好的錯誤訊息
         error_display = error_msg
         if len(error_msg) > 500:
             error_display = error_msg[:500] + "\n\n（錯誤訊息過長，已截斷，請查看日誌獲取完整信息）"
-        
+
         QMessageBox.critical(
             self,
             "計算失敗",
             f"技術指標計算失敗：\n\n{error_display}\n\n請查看日誌獲取詳細信息。"
         )
-    
+
     def _execute_export_csv(self, source: str):
         """執行 CSV 匯出邏輯（支援範圍選擇與非同步處理）"""
         table_mapping = {
@@ -1866,15 +1881,15 @@ class UpdateView(QWidget):
             "broker_branch": "broker_flows",
             "technical": "technical_indicators",
         }
-        
+
         table_name = table_mapping.get(source)
         if not table_name:
             QMessageBox.warning(self, "警告", f"未知的匯出來源：{source}")
             return
-            
+
         # 1. 取得 UI 設定日期範圍並彈出選擇對話框
         start_date, end_date = self._get_selected_date_range()
-        
+
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("匯出 CSV 範圍選擇")
         msg_box.setText("請選擇要匯出的資料日期範圍：")
@@ -1883,31 +1898,31 @@ class UpdateView(QWidget):
             f"點選「最近範圍」將只匯出此區間資料。\n"
             f"點選「全部歷史」將匯出該資料表內的所有歷史資料。"
         )
-        
+
         btn_range = msg_box.addButton("最近範圍", QMessageBox.ButtonRole.YesRole)
         btn_all = msg_box.addButton("全部歷史", QMessageBox.ButtonRole.NoRole)
         btn_cancel = msg_box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
-        
+
         msg_box.exec()
-        
+
         if msg_box.clickedButton() == btn_cancel:
             return
         elif msg_box.clickedButton() == btn_range:
             s_date, e_date = start_date, end_date
         else:
             s_date, e_date = None, None
-            
+
         # 2. 選擇檔案儲存路徑
         import os
         from pathlib import Path
-        
+
         export_date = datetime.now().strftime("%Y%m%d")
         default_filename = f"{table_name}_export_{export_date}.csv"
-        
+
         # 預設儲存於 config 的 data_root 或是 專案根目錄/exports
         default_dir = getattr(self.update_service.config, "data_root", Path.cwd())
         default_path = Path(default_dir) / default_filename
-        
+
         from PySide6.QtWidgets import QFileDialog
         file_path_str, _ = QFileDialog.getSaveFileName(
             self,
@@ -1915,23 +1930,23 @@ class UpdateView(QWidget):
             str(default_path),
             "CSV 檔案 (*.csv)"
         )
-        
+
         if not file_path_str:
             return
-            
+
         target_path = Path(file_path_str)
-        
+
         # 3. 啟動背景 Worker 執行匯出
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0) # 跑馬燈模式
         self.progress_label.setVisible(True)
         self.progress_label.setText(f"正在匯出 {table_name} 資料至 CSV...")
         self._log(f"開始匯出 {table_name} 資料至 {target_path}")
-        
+
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(3000)
-            
+
         def export_task():
             return self.update_service.export_table_to_csv(
                 table_name=table_name,
@@ -1939,9 +1954,9 @@ class UpdateView(QWidget):
                 start_date=s_date,
                 end_date=e_date
             )
-            
+
         self.worker = TaskWorker(export_task)
-        
+
         def on_export_finished(result: Dict[str, Any]):
             self.progress_bar.setVisible(False)
             self.progress_label.setVisible(False)
@@ -1953,13 +1968,13 @@ class UpdateView(QWidget):
                 msg = result.get("message", "匯出失敗")
                 self._log(f"匯出失敗：{msg}")
                 QMessageBox.warning(self, "匯出失敗", msg)
-                
+
         def on_export_error(error_msg: str):
             self.progress_bar.setVisible(False)
             self.progress_label.setVisible(False)
             self._log(f"匯出出錯：{error_msg}")
             QMessageBox.critical(self, "匯出失敗", f"匯出過程發生錯誤：\n{error_msg}")
-            
+
         self.worker.finished.connect(on_export_finished)
         self.worker.error.connect(on_export_error)
         self.worker.start()

@@ -435,16 +435,36 @@ class SmartMoneyFlowView(QWidget):
         period = self._get_current_period_val()
         details = self.flow_service.get_stock_detail_by_branches(signal.stock_code, period)
 
+        # 先按淨買賣超數值進行數值排序 (None 視為極小)
+        details_sorted = sorted(
+            details,
+            key=lambda x: x.total_net_qty if x.total_net_qty is not None else -99999999,
+            reverse=True
+        )
+
         data = []
-        for d in details:
+        for d in details_sorted:
+            if d.usable_event_count == 0:
+                buy_val = "—"
+                sell_val = "—"
+                net_val = "不可用"
+            else:
+                if d.has_estimated_lots:
+                    buy_val = f"{d.total_buy_qty:,}*(估)" if d.total_buy_qty is not None else "—"
+                    sell_val = f"{d.total_sell_qty:,}*(估)" if d.total_sell_qty is not None else "—"
+                    net_val = f"{d.total_net_qty:+,}*(估)" if d.total_net_qty is not None else "0*(估)"
+                else:
+                    buy_val = f"{d.total_buy_qty:,}" if d.total_buy_qty is not None else "—"
+                    sell_val = f"{d.total_sell_qty:,}" if d.total_sell_qty is not None else "—"
+                    net_val = f"{d.total_net_qty:+,}" if d.total_net_qty is not None else "0"
+
             data.append({
                 '分點名稱': d.branch_display_name,
-                '買進張數': d.total_buy_qty,
-                '賣出張數': d.total_sell_qty,
-                '淨買賣超': d.total_net_qty
+                '買進張數': buy_val,
+                '賣出張數': sell_val,
+                '淨買賣超': net_val
             })
 
-        data.sort(key=lambda x: x['淨買賣超'], reverse=True)
         df_detail = pd.DataFrame(data) if data else pd.DataFrame(columns=['分點名稱', '買進張數', '賣出張數', '淨買賣超'])
         self.detail_table.setModel(PandasTableModel(df_detail))
         self.detail_table.resizeColumnsToContents()

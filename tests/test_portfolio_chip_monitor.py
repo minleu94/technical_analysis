@@ -2,6 +2,7 @@
 """
 
 import unittest
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 import pandas as pd
 
@@ -168,9 +169,8 @@ class TestPortfolioChipService(unittest.TestCase):
         self.assertTrue(any("估計股數" in reason for reason in summary['risk_reasons']))
 
     @patch('data_module.db_manager.DBManager')
-    def test_large_threshold_doubles_on_estimates(self, mock_db_class):
-        # 測試當包含估算股數時，大額警示門檻 (large_threshold) 提高一倍至 1,000,000 股
-        # 買進 600,000 股 (低於 1,000,000)，若無估算會觸發 bullish，但此處包含估算，應為 neutral
+    def test_estimated_rows_use_standard_large_flow_threshold(self, mock_db_class):
+        # Phase 3 改以 coverage 表達資料品質，不再用門檻加倍隱藏估算訊號。
         self.config.use_sqlite = True
         mock_db = MagicMock()
         mock_db_class.return_value = mock_db
@@ -195,9 +195,9 @@ class TestPortfolioChipService(unittest.TestCase):
 
         summary = self.service._aggregate_flow_dataframe(df, "2330", 5, ["20260611"])
         self.assertEqual(summary['accumulated_net'], 600000)
-        # 由於門檻提高至 1,000,000，600,000 股無法觸發大額買進警示，risk_level 應為 neutral 或是其他非 bullish 原因
-        # 除非有連續天數警示。此處連續 1 天 (未達 3 天)，故應為 neutral
-        self.assertEqual(summary['risk_level'], 'neutral')
+        self.assertEqual(summary['risk_level'], 'bullish')
+        self.assertEqual(summary['estimated_event_count'], 1)
+        self.assertEqual(summary['lots_coverage_ratio'], Decimal('1'))
 
         # 再測試買進 1,200,000 股 (超過 1,000,000)，應觸發大額買進警示 (bullish)
         df_large = pd.DataFrame([
@@ -243,6 +243,46 @@ class TestPortfolioChipService(unittest.TestCase):
         summary = self.service._aggregate_flow_dataframe(df, "2330", 5, ["20260611"])
         # 無價格，股數保持 0 (即 None fallback)
         self.assertEqual(summary['accumulated_net'], 0)
+
+    def test_unavailable_row_does_not_poison_observed_portfolio_flow(self):
+        df = pd.DataFrame([
+            {
+                '日期': '20260611',
+                '分點名稱': 'branch_observed',
+                '買進股數': 600000,
+                '賣出股數': 0,
+                '買賣超股數': 600000,
+                'lots_observed': True,
+                'amount_observed': False,
+            },
+            {
+                '日期': '20260611',
+                '分點名稱': 'branch_unavailable',
+                '買進股數': None,
+                '賣出股數': None,
+                '買賣超股數': None,
+                '買進金額千元': None,
+                '賣出金額千元': None,
+                '買賣超金額千元': None,
+                'lots_observed': False,
+                'amount_observed': False,
+            },
+        ])
+
+        summary = self.service._aggregate_flow_dataframe(
+            df,
+            "2330",
+            5,
+            ["20260611"],
+        )
+
+        self.assertEqual(summary['accumulated_net'], 600000)
+        self.assertEqual(summary['risk_level'], 'bullish')
+        self.assertTrue(summary['lots_available'])
+        self.assertEqual(summary['observed_event_count'], 1)
+        self.assertEqual(summary['estimated_event_count'], 0)
+        self.assertEqual(summary['unavailable_event_count'], 1)
+        self.assertEqual(summary['lots_coverage_ratio'], Decimal('0.5'))
 
 
 if __name__ == '__main__':

@@ -5,6 +5,7 @@ Broker Flow Orchestration Service
 
 import logging
 import pandas as pd
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, List, Dict, Optional
 from collections import defaultdict
@@ -76,19 +77,36 @@ class BrokerFlowService:
                     raw_date = str(row.get('date', '')).strip()
                     db_date = raw_date.replace('-', '').replace('/', '')
 
+                    # 嘗試讀取 observed metadata
+                    lots_observed = row.get('lots_observed')
+                    amount_observed = row.get('amount_observed')
+                    lots_rank = row.get('lots_rank')
+                    amount_rank = row.get('amount_rank')
+
                     buy_lots = row.get('buy_lots') if has_cols else None
                     sell_lots = row.get('sell_lots') if has_cols else None
                     net_lots = row.get('net_lots') if has_cols else None
 
-                    # 只要 buy_lots 或 sell_lots 任何一欄缺失，即視為 Lots 缺失
                     is_missing = (
-                        not has_cols or
                         pd.isna(buy_lots) or buy_lots is None or
                         pd.isna(sell_lots) or sell_lots is None or
                         pd.isna(net_lots) or net_lots is None
                     )
 
-                    if is_missing:
+                    if pd.isna(lots_observed) or lots_observed is None:
+                        lots_observed = not is_missing
+                    else:
+                        lots_observed = bool(lots_observed)
+
+                    if pd.isna(amount_observed) or amount_observed is None:
+                        amount_observed = not pd.isna(row.get('buy_amount_k_twd'))
+                    else:
+                        amount_observed = bool(amount_observed)
+
+                    lots_rank = None if pd.isna(lots_rank) or lots_rank is None else int(lots_rank)
+                    amount_rank = None if pd.isna(amount_rank) or amount_rank is None else int(amount_rank)
+
+                    if not lots_observed:
                         missing_keys.add((db_date, stock_code))
 
                     temp_events.append({
@@ -104,83 +122,107 @@ class BrokerFlowService:
                         'buy_amount_k_twd': row.get('buy_amount_k_twd'),
                         'sell_amount_k_twd': row.get('sell_amount_k_twd'),
                         'net_amount_k_twd': row.get('net_amount_k_twd'),
-                        'is_missing': is_missing
+                        'lots_observed': lots_observed,
+                        'amount_observed': amount_observed,
+                        'lots_rank': lots_rank,
+                        'amount_rank': amount_rank
                     })
 
             except Exception as e:
                 self.logger.error(f"讀取分點資料失敗 {merged_file}: {e}")
 
-        # 第二步：批次向 SQLite 查詢收盤價對照表
+        # 第二步：批次向 SQLite 查詢收盤價對照表 (優化為按日期分組 + IN 查詢)
         price_map = {}
         if missing_keys and getattr(self.config, 'use_sqlite', False):
             try:
                 from data_module.db_manager import DBManager
                 db = DBManager(self.config)
 
-                keys_list = list(missing_keys)
-                chunk_size = 400
-                for i in range(0, len(keys_list), chunk_size):
-                    chunk = keys_list[i:i + chunk_size]
-                    clauses = []
-                    params = []
-                    for d, s in chunk:
-                        clauses.append("(日期 = ? AND 證券代號 = ?)")
-                        params.extend([d, s])
+                # 按日期分組收集股票代號
+                date_to_stocks = defaultdict(set)
+                for d, s in missing_keys:
+                    date_to_stocks[d].add(s)
 
-                    query = "SELECT 日期, 證券代號, 收盤價 FROM daily_prices WHERE " + " OR ".join(clauses)
-                    df_prices = db.execute_query(query, tuple(params))
-                    for _, row_p in df_prices.iterrows():
-                        d_val = str(row_p['日期']).strip()
-                        s_val = str(row_p['證券代號']).strip()
-                        try:
-                            price_map[(d_val, s_val)] = float(row_p['收盤價'])
-                        except:
-                            continue
+                # 每日執行一次 IN 查詢
+                for d_val, stocks in date_to_stocks.items():
+                    stocks_list = list(stocks)
+                    chunk_size = 200
+                    for k in range(0, len(stocks_list), chunk_size):
+                        sub_stocks = stocks_list[k:k + chunk_size]
+                        placeholders = ",".join("?" for _ in sub_stocks)
+                        query = f"SELECT 證券代號, 收盤價 FROM daily_prices WHERE 日期 = ? AND 證券代號 IN ({placeholders})"
+                        df_prices = db.execute_query(query, (d_val, *sub_stocks))
+                        for _, row_p in df_prices.iterrows():
+                            s_val = str(row_p['證券代號']).strip()
+                            price_map[(d_val, s_val)] = str(row_p['收盤價']).strip()
             except Exception as e:
-                self.logger.warning(f"批次查詢收盤價失敗: {e}")
+                self.logger.warning(f"分組查詢收盤價失敗: {e}")
 
         # 第三步：套用 Decimal 與 ROUND_HALF_UP 折算
         from decimal import Decimal, ROUND_HALF_UP
 
         for item in temp_events:
-            buy_amount_k = self._int_value(item['buy_amount_k_twd'])
-            sell_amount_k = self._int_value(item['sell_amount_k_twd'])
-            net_amount_k = self._int_value(item['net_amount_k_twd'])
+            buy_amount_k = item['buy_amount_k_twd']
+            sell_amount_k = item['sell_amount_k_twd']
+            net_amount_k = item['net_amount_k_twd']
 
-            if not item['is_missing']:
-                buy_qty = self._int_value(item['buy_lots'])
-                sell_qty = self._int_value(item['sell_lots'])
-                net_qty = self._int_value(item['net_lots'])
-                has_estimated_lots = False
-                lots_available = True
+            lots_observed = item['lots_observed']
+            amount_observed = item['amount_observed']
+            lots_rank = item['lots_rank']
+            amount_rank = item['amount_rank']
+
+            buy_amount_k = None if pd.isna(buy_amount_k) or buy_amount_k is None else int(buy_amount_k)
+            sell_amount_k = None if pd.isna(sell_amount_k) or sell_amount_k is None else int(sell_amount_k)
+            net_amount_k = None if pd.isna(net_amount_k) or net_amount_k is None else int(net_amount_k)
+
+            if lots_observed:
+                buy_qty = None if pd.isna(item['buy_lots']) or item['buy_lots'] is None else int(item['buy_lots'])
+                sell_qty = None if pd.isna(item['sell_lots']) or item['sell_lots'] is None else int(item['sell_lots'])
+                net_qty = None if pd.isna(item['net_lots']) or item['net_lots'] is None else int(item['net_lots'])
+                lots_quality = "observed"
+
+                if not amount_observed:
+                    buy_amount_k = None
+                    sell_amount_k = None
+                    net_amount_k = None
+                    amount_quality = "unavailable"
+                else:
+                    amount_quality = "observed"
             else:
+                amount_quality = "observed" if amount_observed else "unavailable"
                 key = (item['db_date'], item['stock_code'])
-                close_price = price_map.get(key)
-                if close_price is not None and close_price > 0:
+                close_price_str = price_map.get(key)
+
+                if amount_observed and close_price_str is not None:
                     try:
-                        d_buy = Decimal(str(buy_amount_k))
-                        d_sell = Decimal(str(sell_amount_k))
-                        d_close = Decimal(str(close_price))
+                        d_buy = Decimal(str(self._int_value(buy_amount_k)))
+                        d_sell = Decimal(str(self._int_value(sell_amount_k)))
+                        d_close = Decimal(close_price_str)
 
-                        buy_qty = int((d_buy / d_close).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-                        sell_qty = int((d_sell / d_close).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-                        net_qty = buy_qty - sell_qty
-
-                        has_estimated_lots = True
-                        lots_available = True
+                        if d_close.is_finite() and d_close > 0:
+                            buy_qty = int((d_buy / d_close).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                            sell_qty = int((d_sell / d_close).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                            net_qty = buy_qty - sell_qty
+                            lots_quality = "estimated"
+                        else:
+                            buy_qty = None
+                            sell_qty = None
+                            net_qty = None
+                            lots_quality = "unavailable"
                     except Exception as e:
                         self.logger.warning(f"折算張數失敗 for {item['stock_code']} on {item['db_date']}: {e}")
                         buy_qty = None
                         sell_qty = None
                         net_qty = None
-                        has_estimated_lots = False
-                        lots_available = False
+                        lots_quality = "unavailable"
                 else:
                     buy_qty = None
                     sell_qty = None
                     net_qty = None
-                    has_estimated_lots = False
-                    lots_available = False
+                    lots_quality = "unavailable"
+
+            lots_available = lots_quality != "unavailable"
+            has_estimated_lots = lots_quality == "estimated"
 
             event = BrokerFlowEvent(
                 date=item['raw_date'],
@@ -195,7 +237,13 @@ class BrokerFlowService:
                 sell_amount_k_twd=sell_amount_k,
                 net_amount_k_twd=net_amount_k,
                 lots_available=lots_available,
-                has_estimated_lots=has_estimated_lots
+                has_estimated_lots=has_estimated_lots,
+                lots_observed=lots_observed,
+                amount_observed=amount_observed,
+                lots_rank=lots_rank,
+                amount_rank=amount_rank,
+                lots_quality=lots_quality,
+                amount_quality=amount_quality,
             )
             events.append(event)
 
@@ -254,24 +302,38 @@ class BrokerFlowService:
                 )
 
             agg = agg_map[e.stock_code]
+            agg.events.append(e)
+
+            if e.lots_quality == "observed":
+                agg.observed_event_count += 1
+                agg.usable_event_count += 1
+            elif e.lots_quality == "estimated":
+                agg.estimated_event_count += 1
+                agg.usable_event_count += 1
+            else:
+                agg.unavailable_event_count += 1
+
             if e.buy_qty is not None:
                 agg.total_buy_qty += e.buy_qty
             if e.sell_qty is not None:
                 agg.total_sell_qty += e.sell_qty
             if e.net_qty is not None:
                 agg.total_net_qty += e.net_qty
-            agg.events.append(e)
-
-            if not e.lots_available:
-                agg.lots_available = False
-            if e.has_estimated_lots:
-                agg.has_estimated_lots = True
 
             if e.net_qty is not None:
                 if e.net_qty > 0 and e.branch_display_name not in agg.buying_branches:
                     agg.buying_branches.append(e.branch_display_name)
                 elif e.net_qty < 0 and e.branch_display_name not in agg.selling_branches:
                     agg.selling_branches.append(e.branch_display_name)
+
+        for agg in agg_map.values():
+            total_events = len(agg.events)
+            if total_events > 0:
+                agg.lots_coverage_ratio = Decimal(agg.usable_event_count) / Decimal(total_events)
+            else:
+                agg.lots_coverage_ratio = Decimal("1")
+            agg.lots_available = agg.usable_event_count > 0
+            agg.has_estimated_lots = agg.estimated_event_count > 0
 
         # 轉換為信號
         aggregations = list(agg_map.values())
@@ -326,18 +388,32 @@ class BrokerFlowService:
                 )
 
             agg = agg_map[key]
+            agg.events.append(e)
+
+            if e.lots_quality == "observed":
+                agg.observed_event_count += 1
+                agg.usable_event_count += 1
+            elif e.lots_quality == "estimated":
+                agg.estimated_event_count += 1
+                agg.usable_event_count += 1
+            else:
+                agg.unavailable_event_count += 1
+
             if e.buy_qty is not None:
                 agg.total_buy_qty += e.buy_qty
             if e.sell_qty is not None:
                 agg.total_sell_qty += e.sell_qty
             if e.net_qty is not None:
                 agg.total_net_qty += e.net_qty
-            agg.events.append(e)
 
-            if not e.lots_available:
-                agg.lots_available = False
-            if e.has_estimated_lots:
-                agg.has_estimated_lots = True
+        for agg in agg_map.values():
+            total_events = len(agg.events)
+            if total_events > 0:
+                agg.lots_coverage_ratio = Decimal(agg.usable_event_count) / Decimal(total_events)
+            else:
+                agg.lots_coverage_ratio = Decimal("1")
+            agg.lots_available = agg.usable_event_count > 0
+            agg.has_estimated_lots = agg.estimated_event_count > 0
 
         # 計算不論過濾週期、所有歷史事件的每日淨量作為近期 5 筆交易紀錄
         branch_stock_all_daily_net: Dict[tuple, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -388,18 +464,32 @@ class BrokerFlowService:
                     stock_name=e.stock_name
                 )
             agg = agg_map[e.stock_code]
+            agg.events.append(e)
+
+            if e.lots_quality == "observed":
+                agg.observed_event_count += 1
+                agg.usable_event_count += 1
+            elif e.lots_quality == "estimated":
+                agg.estimated_event_count += 1
+                agg.usable_event_count += 1
+            else:
+                agg.unavailable_event_count += 1
+
             if e.buy_qty is not None:
                 agg.total_buy_qty += e.buy_qty
             if e.sell_qty is not None:
                 agg.total_sell_qty += e.sell_qty
             if e.net_qty is not None:
                 agg.total_net_qty += e.net_qty
-            agg.events.append(e)
 
-            if not e.lots_available:
-                agg.lots_available = False
-            if e.has_estimated_lots:
-                agg.has_estimated_lots = True
+        for agg in agg_map.values():
+            total_events = len(agg.events)
+            if total_events > 0:
+                agg.lots_coverage_ratio = Decimal(agg.usable_event_count) / Decimal(total_events)
+            else:
+                agg.lots_coverage_ratio = Decimal("1")
+            agg.lots_available = agg.usable_event_count > 0
+            agg.has_estimated_lots = agg.estimated_event_count > 0
 
         aggregations = list(agg_map.values())
         all_signals = self.signal_engine.generate_signals(aggregations)

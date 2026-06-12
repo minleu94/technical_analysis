@@ -1025,4 +1025,12 @@ set TWSTOCK_DATA_DIR=your/custom/path
 
 ## 2026-06-11 券商分點單位邊界
 
-券商分點資料層同時保存張數與仟元金額。Smart Money 與 Portfolio Chip Monitor 的既有門檻只依賴明確張數欄位；legacy B-only 資料不再進入張數決策。
+券商分點資料層同時保存張數與仟元金額。MoneyDJ E/B 為獨立 Top 50 榜單，資料層以 union 保存 `trade_type`、observed 狀態及 rank；榜外欄位使用 `NULL`，不可當成 0。
+
+Smart Money 與 Portfolio Chip Monitor 採三態品質治理：
+
+- `observed`：E 榜直接觀測張數。
+- `estimated`：B-only 且有有效當日收盤價，以 `Decimal + ROUND_HALF_UP` 折算。
+- `unavailable`：無張數且無有效價格，只排除該事件。
+
+訊號信心度依可用事件覆蓋率折舊，UI 顯示真實、估算與不可用比例。

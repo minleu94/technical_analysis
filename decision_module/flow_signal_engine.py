@@ -38,8 +38,8 @@ class FlowSignalEngine:
     def _process_single_stock(self, agg: StockFlowAggregation) -> FlowSignalDTO:
         """處理單一股票的信號邏輯"""
 
-        # 0. 處理張數不可用
-        if not agg.lots_available:
+        # 0. 處理張數不可用 (usable_event_count == 0)
+        if not agg.lots_available or agg.usable_event_count == 0:
             return FlowSignalDTO(
                 stock_code=agg.stock_code,
                 stock_name=agg.stock_name,
@@ -52,7 +52,12 @@ class FlowSignalEngine:
                 sparkline_data=[],
                 intensity_level=0,
                 lots_available=False,
-                has_estimated_lots=False
+                has_estimated_lots=False,
+                observed_event_count=agg.observed_event_count,
+                estimated_event_count=agg.estimated_event_count,
+                unavailable_event_count=agg.unavailable_event_count,
+                usable_event_count=agg.usable_event_count,
+                lots_coverage_ratio=agg.lots_coverage_ratio
             )
 
         score = 0.0
@@ -158,28 +163,51 @@ class FlowSignalEngine:
                         top_branch = max(branch_net_sell.items(), key=lambda x: x[1])[0]
                         reasons.append(f"籌碼高度集中於特定賣方主力 ({top_branch} 佔 {concentration:.0%})")
 
+        from decimal import Decimal
+
         # 限制最高 100 分
         final_score = min(100.0, score)
 
         # 信心度計算 (基於資料點的多寡與一致性)
         if agg.total_net_qty > 0:
             base_confidence = 0.5
-            # 多家分點買進提升信心
             if buy_branch_count >= 3: base_confidence += 0.2
-            # 多天連續買進提升信心
             if continuous_days >= 3: base_confidence += 0.2
-            # 賣方力量小提升信心
             if sell_branch_count == 0: base_confidence += 0.1
             confidence = min(1.0, base_confidence)
         else:
             confidence = 0.1
 
-        # 若為估計值，進行分數與信心度折減，並加入警告標記
+        # 覆蓋率與估計比例折舊 (Decimal)
+        total_events = len(agg.events)
+        if total_events > 0:
+            coverage_ratio = Decimal(str(agg.usable_event_count)) / Decimal(str(total_events))
+        else:
+            coverage_ratio = Decimal('1')
+
+        if agg.usable_event_count > 0:
+            estimated_ratio = Decimal(str(agg.estimated_event_count)) / Decimal(str(agg.usable_event_count))
+        else:
+            estimated_ratio = Decimal('0')
+
+        confidence_dec = Decimal(str(confidence)) * coverage_ratio
+        max_confidence = Decimal('1.0') - Decimal('0.4') * estimated_ratio
+        confidence_dec = min(confidence_dec, max_confidence)
+        confidence = float(confidence_dec)  # numeric-boundary: dto
+
+        # 若包含任何估計值，加入警告與標記
         if agg.has_estimated_lots:
-            final_score = final_score * 0.8
-            confidence = min(0.6, confidence)
             tags.append("金額估算")
-            reasons.append("⚠️ 注意：此訊號包含歷史金額與股價折算之估計張數資料。")
+            total_dec = Decimal(total_events)
+            obs_pct = int(Decimal(agg.observed_event_count) * 100 / total_dec) if total_events > 0 else 0
+            est_pct = int(Decimal(agg.estimated_event_count) * 100 / total_dec) if total_events > 0 else 0
+            unavail_pct = int(Decimal(agg.unavailable_event_count) * 100 / total_dec) if total_events > 0 else 0
+            reasons.append(
+                f"⚠️ 注意：此期間包含金額估算張數（真實 {obs_pct}%｜估算 {est_pct}%｜不可用 {unavail_pct}%）。"
+            )
+        elif agg.unavailable_event_count > 0:
+            coverage_pct = int(coverage_ratio * 100)
+            reasons.append(f"⚠️ 張數資料覆蓋率 {coverage_pct}%，榜外且無價格資料已排除。")
 
         # 5. 計算 Sparkline 資料 (依日期排序的每日淨買賣超序列)
         daily_net: defaultdict[str, int] = defaultdict(int)
@@ -198,16 +226,10 @@ class FlowSignalEngine:
             elif final_score >= 50: intensity_level = 2
             elif final_score >= 20: intensity_level = 1
         elif agg.total_net_qty < 0:
-            # 賣超時，由於分數預設為0，依據賣超張數來決定負向強度
-            # 若為估計值，將負向賣超大額門檻提高一倍，否則為 -500, -200
-            if agg.has_estimated_lots:
-                if agg.total_net_qty <= -1000: intensity_level = -3
-                elif agg.total_net_qty <= -400: intensity_level = -2
-                else: intensity_level = -1
-            else:
-                if agg.total_net_qty <= -500: intensity_level = -3
-                elif agg.total_net_qty <= -200: intensity_level = -2
-                else: intensity_level = -1
+            # 賣超時，由於分數預設為0，依據賣超張數來決定負向強度 (取消硬編碼估值加倍)
+            if agg.total_net_qty <= -500: intensity_level = -3
+            elif agg.total_net_qty <= -200: intensity_level = -2
+            else: intensity_level = -1
 
         return FlowSignalDTO(
             stock_code=agg.stock_code,
@@ -221,5 +243,10 @@ class FlowSignalEngine:
             sparkline_data=sparkline_data,
             intensity_level=intensity_level,
             lots_available=agg.lots_available,
-            has_estimated_lots=agg.has_estimated_lots
+            has_estimated_lots=agg.has_estimated_lots,
+            observed_event_count=agg.observed_event_count,
+            estimated_event_count=agg.estimated_event_count,
+            unavailable_event_count=agg.unavailable_event_count,
+            usable_event_count=agg.usable_event_count,
+            lots_coverage_ratio=agg.lots_coverage_ratio
         )

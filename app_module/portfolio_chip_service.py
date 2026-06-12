@@ -5,7 +5,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 import pandas as pd
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from data_module.config import TWStockConfig
 from app_module.broker_flow_service import BrokerFlowService
@@ -82,7 +82,8 @@ class PortfolioChipService:
             # 2. 取得明細
             query = f"""
                 SELECT 日期, 分點名稱, 買進股數, 賣出股數, 買賣超股數,
-                       買進金額千元, 賣出金額千元, 買賣超金額千元
+                       買進金額千元, 賣出金額千元, 買賣超金額千元,
+                       lots_observed, amount_observed, lots_rank, amount_rank
                 FROM broker_flows
                 WHERE 證券代號 = ? AND 日期 IN ({placeholders})
                 ORDER BY 日期 DESC;
@@ -128,7 +129,10 @@ class PortfolioChipService:
                     '賣出金額千元': e.sell_amount_k_twd,
                     '買賣超金額千元': e.net_amount_k_twd,
                     'lots_available': e.lots_available,
-                    'has_estimated_lots': e.has_estimated_lots
+                    'has_estimated_lots': e.has_estimated_lots,
+                    'lots_observed': e.lots_observed,
+                    'amount_observed': e.amount_observed,
+                    'lots_quality': e.lots_quality,
                 })
             df = pd.DataFrame(data)
             return self._aggregate_flow_dataframe(df, stock_code, period_days, unique_dates)
@@ -148,7 +152,14 @@ class PortfolioChipService:
             'consecutive_days': 0,
             'branch_details': [],
             'risk_level': 'neutral',
-            'risk_reasons': ['無主力分點交易數據']
+            'risk_reasons': ['無主力分點交易數據'],
+            'lots_available': False,
+            'has_estimated_lots': False,
+            'observed_event_count': 0,
+            'estimated_event_count': 0,
+            'unavailable_event_count': 0,
+            'usable_event_count': 0,
+            'lots_coverage_ratio': Decimal('0'),
         }
 
     def _aggregate_flow_dataframe(
@@ -163,7 +174,7 @@ class PortfolioChipService:
             return self._empty_summary(stock_code, period_days)
 
         # 取得日期價格 Map
-        price_map = {}
+        price_map: Dict[str, Decimal] = {}
         if getattr(self.config, 'use_sqlite', False) and dates:
             try:
                 from data_module.db_manager import DBManager
@@ -174,24 +185,23 @@ class PortfolioChipService:
                 for _, row in price_df.iterrows():
                     d_val = str(row['日期']).strip()
                     try:
-                        price_map[d_val] = float(row['收盤價'])
-                    except:
+                        price = Decimal(str(row['收盤價']))
+                        if price.is_finite() and price > 0:
+                            price_map[d_val] = price
+                    except Exception:
                         continue
             except Exception as e:
                 self.logger.warning("查詢收盤價對照失敗: %s", e)
 
-        from decimal import Decimal, ROUND_HALF_UP
-
         has_estimated_lots = False
-        lots_available = True
+        observed_event_count = 0
+        estimated_event_count = 0
+        unavailable_event_count = 0
 
         resolved_rows = []
         for _, row in df.iterrows():
             d_val = str(row['日期']).strip()
             db_date = d_val.replace('-', '').replace('/', '')
-
-            row_lots_available = row.get('lots_available', True)
-            row_has_estimated_lots = row.get('has_estimated_lots', False)
 
             buy_vol = row['買進股數']
             sell_vol = row['賣出股數']
@@ -204,57 +214,86 @@ class PortfolioChipService:
                 pd.isna(net_vol) or net_vol is None
             )
 
-            if is_missing and '買進金額千元' in row:
+            lots_observed_value = row.get('lots_observed')
+            if lots_observed_value is None or pd.isna(lots_observed_value):
+                lots_observed = not is_missing
+            else:
+                lots_observed = bool(lots_observed_value)
+
+            amount_observed_value = row.get('amount_observed')
+            if amount_observed_value is None or pd.isna(amount_observed_value):
+                amount_observed = any(
+                    col in row and row.get(col) is not None and not pd.isna(row.get(col))
+                    for col in ('買進金額千元', '賣出金額千元', '買賣超金額千元')
+                )
+            else:
+                amount_observed = bool(amount_observed_value)
+
+            if lots_observed and not is_missing:
+                buy_vol = int(buy_vol)
+                sell_vol = int(sell_vol)
+                net_vol = int(net_vol)
+                row_quality = 'observed'
+                observed_event_count += 1
+            elif amount_observed and '買進金額千元' in row:
                 buy_amt = row.get('買進金額千元', 0)
                 sell_amt = row.get('賣出金額千元', 0)
                 buy_amt = 0 if pd.isna(buy_amt) or buy_amt is None else int(buy_amt)
                 sell_amt = 0 if pd.isna(sell_amt) or sell_amt is None else int(sell_amt)
 
                 close_price = price_map.get(db_date)
-                if close_price is not None and close_price > 0:
+                if close_price is not None:
                     try:
                         d_buy_amt = Decimal(str(buy_amt)) * Decimal('1000')
                         d_sell_amt = Decimal(str(sell_amt)) * Decimal('1000')
-                        d_close = Decimal(str(close_price))
 
-                        buy_vol = int((d_buy_amt / d_close).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-                        sell_vol = int((d_sell_amt / d_close).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                        buy_vol = int((d_buy_amt / close_price).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                        sell_vol = int((d_sell_amt / close_price).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
                         net_vol = buy_vol - sell_vol
-
-                        row_has_estimated_lots = True
-                        row_lots_available = True
+                        row_quality = 'estimated'
+                        estimated_event_count += 1
+                        has_estimated_lots = True
                     except Exception as e:
                         self.logger.warning(f"折算股數失敗 for {stock_code} on {d_val}: {e}")
-                        buy_vol = 0
-                        sell_vol = 0
-                        net_vol = 0
-                        row_lots_available = False
-                        row_has_estimated_lots = False
+                        buy_vol = None
+                        sell_vol = None
+                        net_vol = None
+                        row_quality = 'unavailable'
+                        unavailable_event_count += 1
                 else:
-                    buy_vol = 0
-                    sell_vol = 0
-                    net_vol = 0
-                    row_lots_available = False
-                    row_has_estimated_lots = False
+                    buy_vol = None
+                    sell_vol = None
+                    net_vol = None
+                    row_quality = 'unavailable'
+                    unavailable_event_count += 1
             else:
-                buy_vol = 0 if pd.isna(buy_vol) or buy_vol is None else int(buy_vol)
-                sell_vol = 0 if pd.isna(sell_vol) or sell_vol is None else int(sell_vol)
-                net_vol = 0 if pd.isna(net_vol) or net_vol is None else int(net_vol)
+                buy_vol = None
+                sell_vol = None
+                net_vol = None
+                row_quality = 'unavailable'
+                unavailable_event_count += 1
 
-            if not row_lots_available:
-                lots_available = False
-            if row_has_estimated_lots:
-                has_estimated_lots = True
+            if row_quality != 'unavailable':
+                resolved_rows.append({
+                    '分點名稱': row['分點名稱'],
+                    '買進股數': buy_vol,
+                    '賣出股數': sell_vol,
+                    '買賣超股數': net_vol,
+                    '日期': d_val,
+                })
 
-            resolved_rows.append({
-                '分點名稱': row['分點名稱'],
-                '買進股數': buy_vol,
-                '賣出股數': sell_vol,
-                '買賣超股數': net_vol,
-                '日期': d_val
-            })
-
-        df_resolved = pd.DataFrame(resolved_rows)
+        df_resolved = pd.DataFrame(
+            resolved_rows,
+            columns=['分點名稱', '買進股數', '賣出股數', '買賣超股數', '日期'],
+        )
+        usable_event_count = observed_event_count + estimated_event_count
+        total_event_count = usable_event_count + unavailable_event_count
+        lots_available = usable_event_count > 0
+        lots_coverage_ratio = (
+            Decimal(usable_event_count) / Decimal(total_event_count)
+            if total_event_count > 0
+            else Decimal('0')
+        )
 
         # 1. 計算總額
         total_buy = int(df_resolved['買進股數'].sum())
@@ -265,7 +304,7 @@ class PortfolioChipService:
         concentration = 0.0
         total_volume = total_buy + total_sell
         if total_volume > 0:
-            concentration = float(Decimal(str(total_net)) / Decimal(str(total_volume)))
+            concentration = float(Decimal(total_net) / Decimal(total_volume))  # numeric-boundary: dto
 
         # 2. 按分點名稱聚合明細
         branch_agg = df_resolved.groupby('分點名稱').agg({
@@ -310,6 +349,9 @@ class PortfolioChipService:
 
         if has_estimated_lots:
             risk_reasons.append("⚠️ 此期間包含歷史金額與股價折算之估計股數資料。")
+        if unavailable_event_count > 0:
+            coverage_pct = int(lots_coverage_ratio * 100)
+            risk_reasons.append(f"⚠️ 股數資料覆蓋率 {coverage_pct}%，不可用事件已排除。")
 
         # 規則 A: 連續賣出警示
         if consecutive_days <= -3:
@@ -319,16 +361,18 @@ class PortfolioChipService:
             risk_level = 'bullish'
             risk_reasons.append(f"主力分點連續 {consecutive_days} 日淨吸籌")
 
-        # 規則 B: 大額拋售/吸籌警示 (若包含估算資料，警示門檻提高一倍至 1,000,000 股，即 1000 張)
-        large_threshold = 1000000 if has_estimated_lots else 500000
+        # 規則 B: 大額拋售/吸籌警示。資料品質由 coverage 另外揭露。
+        large_threshold = 500000
         if total_net <= -large_threshold:
             risk_level = 'bearish'
-            risk_reasons.append(f"近 {len(dates)} 日主力累計大額拋售達 {abs(total_net) / 1000:,.1f} 張")
+            lots = Decimal(abs(total_net)) / Decimal('1000')
+            risk_reasons.append(f"近 {len(dates)} 日主力累計大額拋售達 {lots:,.1f} 張")
         elif total_net >= large_threshold:
             # 若無連續賣出警示，則可維持偏多
             if risk_level != 'bearish':
                 risk_level = 'bullish'
-            risk_reasons.append(f"近 {len(dates)} 日主力累計大額買進達 {total_net / 1000:,.1f} 張")
+            lots = Decimal(total_net) / Decimal('1000')
+            risk_reasons.append(f"近 {len(dates)} 日主力累計大額買進達 {lots:,.1f} 張")
 
         # 規則 C: 籌碼渙散 (累計淨買賣超小，無主力買盤支撐)
         if risk_level == 'neutral':
@@ -347,5 +391,12 @@ class PortfolioChipService:
             'consecutive_days': consecutive_days,
             'branch_details': branch_details,
             'risk_level': risk_level,
-            'risk_reasons': risk_reasons
+            'risk_reasons': risk_reasons,
+            'lots_available': lots_available,
+            'has_estimated_lots': has_estimated_lots,
+            'observed_event_count': observed_event_count,
+            'estimated_event_count': estimated_event_count,
+            'unavailable_event_count': unavailable_event_count,
+            'usable_event_count': usable_event_count,
+            'lots_coverage_ratio': lots_coverage_ratio,
         }

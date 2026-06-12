@@ -177,4 +177,10 @@
 - 更新流程改為同時抓取 `c=E` 張數與 `c=B` 仟元並分欄保存。
 - 舊 B-only 資料保留，但不再進入 Phase 4.2 張數判斷；重新抓取 E 後才具備有效籌碼訊號。
 
+## 2026-06-12 券商分點 Ranked Metric 資料品質治理
+
+- MoneyDJ `c=E` 張數與 `c=B` 金額確認為各自獨立 Top 50 榜單，資料層採 union 並保存 observed 狀態、方向與 rank。
+- Smart Money 與 Portfolio Chip Monitor 使用 observed / estimated / unavailable 三態，單筆不可用不再污染同股票其他事件。
+- 正式 `broker_flows` 已由既有 daily 檔無破壞重建為 104,986 筆、158 天，rank 範圍 1 至 50，唯一鍵與 NULL 契約檢查均通過。
+
 

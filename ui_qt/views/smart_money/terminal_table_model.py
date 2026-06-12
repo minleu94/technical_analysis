@@ -78,6 +78,28 @@ class TerminalTableModel(QAbstractTableModel):
         # -- 滑鼠懸浮提示 (ToolTip) --
         if role == Qt.ToolTipRole:
             tooltip_lines = []
+
+            # 計算並顯示資料品質覆蓋率
+            obs_cnt = getattr(signal, 'observed_event_count', 0)
+            est_cnt = getattr(signal, 'estimated_event_count', 0)
+            unavail_cnt = getattr(signal, 'unavailable_event_count', 0)
+            total_cnt = obs_cnt + est_cnt + unavail_cnt
+
+            if total_cnt > 0:
+                obs_pct = (obs_cnt / total_cnt) * 100.0
+                est_pct = (est_cnt / total_cnt) * 100.0
+                unavail_pct = (unavail_cnt / total_cnt) * 100.0
+                tooltip_lines.append(f"📊 資料品質：真實 {obs_pct:.0f}%｜估算 {est_pct:.0f}%｜不可用 {unavail_pct:.0f}%")
+            else:
+                tooltip_lines.append("📊 資料品質：真實 100%｜估算 0%｜不可用 0%")
+
+            tooltip_lines.append("💡 MoneyDJ 榜單特性說明：")
+            tooltip_lines.append("• MoneyDJ 分點買賣包含張數榜 (c=E) 與金額榜 (c=B)，均僅取前 50 名。")
+            tooltip_lines.append("• 真實：事件進入張數榜，有真實張數。")
+            tooltip_lines.append("• 估算：事件僅入金額榜，由收盤價精確估算張數。")
+            tooltip_lines.append("• 不可用：事件僅入金額榜但無收盤價折算，張數未知 (不代表無交易，更非 0 交易)。")
+            tooltip_lines.append("-" * 35)
+
             if getattr(signal, 'has_estimated_lots', False):
                 tooltip_lines.append("⚠️ 注意：此期間包含歷史金額與股價折算之估計張數資料。")
 
@@ -205,6 +227,28 @@ class BranchTrackerTableModel(QAbstractTableModel):
         # -- 滑鼠懸浮提示 (ToolTip) --
         if role == Qt.ToolTipRole:
             tooltip_lines = []
+
+            # 計算並顯示資料品質覆蓋率
+            obs_cnt = getattr(agg, 'observed_event_count', 0)
+            est_cnt = getattr(agg, 'estimated_event_count', 0)
+            unavail_cnt = getattr(agg, 'unavailable_event_count', 0)
+            total_cnt = obs_cnt + est_cnt + unavail_cnt
+
+            if total_cnt > 0:
+                obs_pct = (obs_cnt / total_cnt) * 100.0
+                est_pct = (est_cnt / total_cnt) * 100.0
+                unavail_pct = (unavail_cnt / total_cnt) * 100.0
+                tooltip_lines.append(f"📊 資料品質：真實 {obs_pct:.0f}%｜估算 {est_pct:.0f}%｜不可用 {unavail_pct:.0f}%")
+            else:
+                tooltip_lines.append("📊 資料品質：真實 100%｜估算 0%｜不可用 0%")
+
+            tooltip_lines.append("💡 MoneyDJ 榜單特性說明：")
+            tooltip_lines.append("• MoneyDJ 分點買賣包含張數榜 (c=E) 與金額榜 (c=B)，均僅取前 50 名。")
+            tooltip_lines.append("• 真實：事件進入張數榜，有真實張數。")
+            tooltip_lines.append("• 估算：事件僅入金額榜，由收盤價精確估算張數。")
+            tooltip_lines.append("• 不可用：事件僅入金額榜但無收盤價折算，張數未知 (不代表無交易，更非 0 交易)。")
+            tooltip_lines.append("-" * 35)
+
             if getattr(agg, 'has_estimated_lots', False):
                 tooltip_lines.append("⚠️ 注意：此期間包含歷史金額與股價折算之估計張數資料。")
 

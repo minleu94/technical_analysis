@@ -378,6 +378,9 @@ if file_path.exists():
 
 - `c=E`：張數，寫入 `*_lots`。
 - `c=B`：金額，單位仟元，寫入 `*_amount_k_twd`。
+- E 與 B 是兩份獨立排序的買超/賣超 Top 50 榜單，兩榜顯示股票集合不必相同。
 - 更新服務同日抓取兩個頁面，使用表頭辨認資料表，不依賴固定 table index。
 - `GenLink2stk(...)` JavaScript 股票列也會解析，避免遺漏資料。
+- 每筆保留 `trade_type`、`lots_observed`、`amount_observed`、`lots_rank` 與 `amount_rank`。
+- E-only/B-only 的榜外欄位保存為 `NULL`，不可解讀為 0；舊檔缺少 rank 時，依各方向榜單淨值排序補回 1 至 50。
 

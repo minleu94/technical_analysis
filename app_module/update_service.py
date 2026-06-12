@@ -236,6 +236,7 @@ class UpdateService:
             return pd.DataFrame()
 
         frames = []
+        name_to_code_map = self._get_stock_name_to_code_map()
         for path in sorted(Path(broker_dir).glob('*/meta/merged.csv')):
             df = pd.read_csv(path, encoding='utf-8-sig')
             if df.empty:
@@ -264,7 +265,6 @@ class UpdateService:
             df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
             if '證券代號' in df.columns and '證券名稱' in df.columns:
                 df['證券代號'] = df['證券代號'].astype(str).str.strip()
-                name_to_code_map = self._get_stock_name_to_code_map()
                 mask = df['證券代號'].isin(['ETF', 'UNKNOWN'])
                 if mask.any():
                     mapped = df.loc[mask, '證券名稱'].astype(str).str.strip().map(name_to_code_map)
@@ -282,22 +282,59 @@ class UpdateService:
         df_all = pd.concat(frames, ignore_index=True)
         lot_cols = ['買進張數', '賣出張數', '買賣超張數']
         amount_cols = ['買進金額千元', '賣出金額千元', '買賣超金額千元']
-        source_cols = ['日期', '分點名稱', '證券代號', '證券名稱', *lot_cols, *amount_cols]
-        for col in source_cols:
-            if col not in df_all.columns:
-                df_all[col] = 0 if col in lot_cols or col in amount_cols else None
-        df_all = df_all[source_cols]
 
+        # 確保 metadata 欄位存在
+        metadata_cols = ['trade_type', 'lots_observed', 'amount_observed', 'lots_rank', 'amount_rank']
+        for col in metadata_cols:
+            if col not in df_all.columns:
+                if col == 'trade_type':
+                    df_all[col] = None
+                elif col == 'lots_observed':
+                    if 'buy_lots' in df_all.columns:
+                        df_all[col] = df_all['buy_lots'].notna()
+                    elif '買進張數' in df_all.columns:
+                        df_all[col] = df_all['買進張數'].notna()
+                    else:
+                        df_all[col] = False
+                elif col == 'amount_observed':
+                    if 'buy_amount_k_twd' in df_all.columns:
+                        df_all[col] = df_all['buy_amount_k_twd'].notna()
+                    elif '買進金額千元' in df_all.columns:
+                        df_all[col] = df_all['買進金額千元'].notna()
+                    else:
+                        df_all[col] = False
+                else:
+                    df_all[col] = None
+
+        # 轉換為 Nullable Integer (Int64)
         for col in lot_cols + amount_cols:
-            df_all[col] = pd.to_numeric(df_all[col], errors='coerce').fillna(0).astype(int)
-        df_all['買進股數'] = df_all['買進張數'] * 1000
-        df_all['賣出股數'] = df_all['賣出張數'] * 1000
-        df_all['買賣超股數'] = df_all['買賣超張數'] * 1000
+            if col in df_all.columns:
+                df_all[col] = pd.to_numeric(df_all[col], errors='coerce').astype('Int64')
+            else:
+                df_all[col] = pd.Series([None] * len(df_all), dtype='Int64')
+        df_all = self._infer_broker_metric_ranks(df_all)
+
+        # 計算股數：只由 observed lots 轉換，非 observed 則保持 <NA>
+        df_all['買進股數'] = pd.Series([None] * len(df_all), dtype='Int64')
+        df_all['賣出股數'] = pd.Series([None] * len(df_all), dtype='Int64')
+        df_all['買賣超股數'] = pd.Series([None] * len(df_all), dtype='Int64')
+
+        lots_mask = df_all['lots_observed'] == True
+        df_all.loc[lots_mask, '買進股數'] = df_all.loc[lots_mask, '買進張數'] * 1000
+        df_all.loc[lots_mask, '賣出股數'] = df_all.loc[lots_mask, '賣出張數'] * 1000
+        df_all.loc[lots_mask, '買賣超股數'] = df_all.loc[lots_mask, '買賣超張數'] * 1000
+
+        # 將非 observed amount 的欄位設為 <NA>
+        amount_mask = df_all['amount_observed'] == False
+        df_all.loc[amount_mask, '買進金額千元'] = None
+        df_all.loc[amount_mask, '賣出金額千元'] = None
+        df_all.loc[amount_mask, '買賣超金額千元'] = None
 
         keep_cols = [
             '日期', '分點名稱', '證券代號', '證券名稱',
             '買進股數', '賣出股數', '買賣超股數',
             *amount_cols,
+            *metadata_cols
         ]
         for col in keep_cols:
             if col not in df_all.columns:
@@ -321,6 +358,7 @@ class UpdateService:
         start_key = self._date_key(start_date) if start_date else None
         end_key = self._date_key(end_date) if end_date else None
         frames = []
+        name_to_code_map = self._get_stock_name_to_code_map()
 
         # 遍歷所有券商分點的目錄
         for branch_dir in sorted(Path(broker_dir).glob('*')):
@@ -365,7 +403,6 @@ class UpdateService:
                     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
                     if '證券代號' in df.columns and '證券名稱' in df.columns:
                         df['證券代號'] = df['證券代號'].astype(str).str.strip()
-                        name_to_code_map = self._get_stock_name_to_code_map()
                         mask = df['證券代號'].isin(['ETF', 'UNKNOWN'])
                         if mask.any():
                             mapped = df.loc[mask, '證券名稱'].astype(str).str.strip().map(name_to_code_map)
@@ -387,22 +424,59 @@ class UpdateService:
         df_all = pd.concat(frames, ignore_index=True)
         lot_cols = ['買進張數', '賣出張數', '買賣超張數']
         amount_cols = ['買進金額千元', '賣出金額千元', '買賣超金額千元']
-        source_cols = ['日期', '分點名稱', '證券代號', '證券名稱', *lot_cols, *amount_cols]
-        for col in source_cols:
-            if col not in df_all.columns:
-                df_all[col] = 0 if col in lot_cols or col in amount_cols else None
-        df_all = df_all[source_cols]
 
+        # 確保 metadata 欄位存在
+        metadata_cols = ['trade_type', 'lots_observed', 'amount_observed', 'lots_rank', 'amount_rank']
+        for col in metadata_cols:
+            if col not in df_all.columns:
+                if col == 'trade_type':
+                    df_all[col] = None
+                elif col == 'lots_observed':
+                    if 'buy_lots' in df_all.columns:
+                        df_all[col] = df_all['buy_lots'].notna()
+                    elif '買進張數' in df_all.columns:
+                        df_all[col] = df_all['買進張數'].notna()
+                    else:
+                        df_all[col] = False
+                elif col == 'amount_observed':
+                    if 'buy_amount_k_twd' in df_all.columns:
+                        df_all[col] = df_all['buy_amount_k_twd'].notna()
+                    elif '買進金額千元' in df_all.columns:
+                        df_all[col] = df_all['買進金額千元'].notna()
+                    else:
+                        df_all[col] = False
+                else:
+                    df_all[col] = None
+
+        # 轉換為 Nullable Integer (Int64)
         for col in lot_cols + amount_cols:
-            df_all[col] = pd.to_numeric(df_all[col], errors='coerce').fillna(0).astype(int)
-        df_all['買進股數'] = df_all['買進張數'] * 1000
-        df_all['賣出股數'] = df_all['賣出張數'] * 1000
-        df_all['買賣超股數'] = df_all['買賣超張數'] * 1000
+            if col in df_all.columns:
+                df_all[col] = pd.to_numeric(df_all[col], errors='coerce').astype('Int64')
+            else:
+                df_all[col] = pd.Series([None] * len(df_all), dtype='Int64')
+        df_all = self._infer_broker_metric_ranks(df_all)
+
+        # 計算股數：只由 observed lots 轉換，非 observed 則保持 <NA>
+        df_all['買進股數'] = pd.Series([None] * len(df_all), dtype='Int64')
+        df_all['賣出股數'] = pd.Series([None] * len(df_all), dtype='Int64')
+        df_all['買賣超股數'] = pd.Series([None] * len(df_all), dtype='Int64')
+
+        lots_mask = df_all['lots_observed'] == True
+        df_all.loc[lots_mask, '買進股數'] = df_all.loc[lots_mask, '買進張數'] * 1000
+        df_all.loc[lots_mask, '賣出股數'] = df_all.loc[lots_mask, '賣出張數'] * 1000
+        df_all.loc[lots_mask, '買賣超股數'] = df_all.loc[lots_mask, '買賣超張數'] * 1000
+
+        # 將非 observed amount 的欄位設為 <NA>
+        amount_mask = df_all['amount_observed'] == False
+        df_all.loc[amount_mask, '買進金額千元'] = None
+        df_all.loc[amount_mask, '賣出金額千元'] = None
+        df_all.loc[amount_mask, '買賣超金額千元'] = None
 
         keep_cols = [
             '日期', '分點名稱', '證券代號', '證券名稱',
             '買進股數', '賣出股數', '買賣超股數',
             *amount_cols,
+            *metadata_cols
         ]
         for col in keep_cols:
             if col not in df_all.columns:
@@ -411,6 +485,49 @@ class UpdateService:
 
         normalized = self._normalize_sqlite_dates(df_all)
         return self._deduplicate_and_merge_broker_flows(normalized)
+
+    @staticmethod
+    def _infer_broker_metric_ranks(df: Any) -> Any:
+        """由 MoneyDJ 榜單方向與淨值補齊缺失 rank，不覆蓋已觀測排名。"""
+        import pandas as pd  # type: ignore[import-untyped]
+
+        required = {'日期', '分點名稱', 'trade_type'}
+        if df.empty or not required.issubset(df.columns):
+            return df
+
+        result = df.copy()
+        metric_specs = (
+            ('lots_observed', 'lots_rank', '買賣超張數'),
+            ('amount_observed', 'amount_rank', '買賣超金額千元'),
+        )
+        group_cols = ['日期', '分點名稱', 'trade_type']
+
+        for observed_col, rank_col, value_col in metric_specs:
+            if observed_col not in result.columns or value_col not in result.columns:
+                continue
+            if rank_col not in result.columns:
+                result[rank_col] = pd.Series([None] * len(result), dtype='Int64')
+
+            observed_mask = result[observed_col].fillna(False).astype(bool)
+            missing_rank_mask = pd.to_numeric(result[rank_col], errors='coerce').isna()
+            eligible = result[observed_mask & missing_rank_mask & result[value_col].notna()]
+
+            for group_key, group in eligible.groupby(group_cols, dropna=False, sort=False):
+                trade_type = str(group_key[2])
+                if trade_type not in {'買超', '賣超'}:
+                    continue
+                ascending = trade_type == '賣超'
+                ordered_indexes = group.sort_values(
+                    value_col,
+                    ascending=ascending,
+                    kind='stable',
+                ).index
+                for rank, index in enumerate(ordered_indexes, start=1):
+                    result.at[index, rank_col] = rank
+
+            result[rank_col] = pd.to_numeric(result[rank_col], errors='coerce').astype('Int64')
+
+        return result
 
     def _normalize_sqlite_dates(self, df: Any) -> Any:
         if '日期' not in df.columns:
@@ -429,6 +546,34 @@ class UpdateService:
         dup_mask = df.duplicated(subset=key_cols, keep=False)
         if not dup_mask.any():
             return df
+
+        # 如果 df 中缺少 lots_observed/amount_observed 欄位，自動為其動態推導
+        df = df.copy()
+        if 'lots_observed' not in df.columns:
+            if 'buy_lots' in df.columns:
+                df['lots_observed'] = df['buy_lots'].notna()
+            elif '買進張數' in df.columns:
+                has_amt = '買進金額千元' in df.columns
+                amt_zero_or_nan = (df['買進金額千元'].isna() | (df['買進金額千元'] == 0)) if has_amt else True
+                df['lots_observed'] = df['買進張數'].notna() & ((df['買進張數'] != 0) | (df.get('賣出張數', 0) != 0) | amt_zero_or_nan)
+            elif '買進股數' in df.columns:
+                has_amt = '買進金額千元' in df.columns
+                amt_zero_or_nan = (df['買進金額千元'].isna() | (df['買進金額千元'] == 0)) if has_amt else True
+                df['lots_observed'] = df['買進股數'].notna() & ((df['買進股數'] != 0) | (df.get('賣出股數', 0) != 0) | amt_zero_or_nan)
+            else:
+                df['lots_observed'] = False
+
+        if 'amount_observed' not in df.columns:
+            if 'buy_amount_k_twd' in df.columns:
+                df['amount_observed'] = df['buy_amount_k_twd'].notna()
+            elif '買進金額千元' in df.columns:
+                has_lots = '買進張數' in df.columns
+                lots_zero_or_nan = (df['買進張數'].isna() | (df['買進張數'] == 0)) if has_lots else True
+                has_vol = '買進股數' in df.columns
+                vol_zero_or_nan = (df['買進股數'].isna() | (df['買進股數'] == 0)) if has_vol else True
+                df['amount_observed'] = df['買進金額千元'].notna() & ((df['買進金額千元'] != 0) | (df.get('賣出金額千元', 0) != 0) | (lots_zero_or_nan & vol_zero_or_nan))
+            else:
+                df['amount_observed'] = False
 
         df_clean = df[~dup_mask]
         df_dup = df[dup_mask]
@@ -452,24 +597,66 @@ class UpdateService:
                 '證券名稱': stock_name
             }
 
+            # 1. 識別與合併 metadata 欄位
+            metadata_cols = ['trade_type', 'lots_observed', 'amount_observed', 'lots_rank', 'amount_rank']
+            for m_col in metadata_cols:
+                if m_col in group.columns:
+                    vals = group[m_col].dropna()
+                    if not vals.empty:
+                        if m_col in ['lots_observed', 'amount_observed']:
+                            resolved_row[m_col] = bool(vals.any())
+                        elif m_col == 'trade_type':
+                            unique_values = vals.astype(str).unique()
+                            if len(unique_values) > 1:
+                                raise ValueError(
+                                    f"唯一鍵衝突於 {key_cols}={key_vals}, trade_type 存在衝突: {unique_values.tolist()}"
+                                )
+                            resolved_row[m_col] = unique_values[0]
+                        else:
+                            resolved_row[m_col] = vals.iloc[0]
+                    else:
+                        resolved_row[m_col] = False if m_col in ['lots_observed', 'amount_observed'] else None
+                else:
+                    resolved_row[m_col] = False if m_col in ['lots_observed', 'amount_observed'] else None
+
+            # 2. 根據 observed 狀態合併數值
             for col in numeric_cols:
                 if col in group.columns:
-                    vals = group[col].dropna()
-                    non_zeros = vals[vals != 0].unique()
-                    if len(non_zeros) > 1:
-                        raise ValueError(
-                            f"唯一鍵衝突於 {key_cols}={key_vals}, 欄位 '{col}' 存在衝突的非零數值: {non_zeros.tolist()}"
-                        )
-                    elif len(non_zeros) == 1:
-                        resolved_row[col] = int(non_zeros[0])
+                    is_lots_col = col in ['買進股數', '賣出股數', '買賣超股數']
+                    is_observed = resolved_row['lots_observed'] if is_lots_col else resolved_row['amount_observed']
+
+                    if not is_observed:
+                        resolved_row[col] = None
                     else:
-                        resolved_row[col] = 0
+                        vals = group[col].dropna()
+                        non_zeros = vals[vals != 0].unique()
+                        if len(non_zeros) > 1:
+                            raise ValueError(
+                                f"唯一鍵衝突於 {key_cols}={key_vals}, 欄位 '{col}' 存在衝突的非零數值: {non_zeros.tolist()}"
+                            )
+                        elif len(non_zeros) == 1:
+                            resolved_row[col] = int(non_zeros[0])
+                        else:
+                            resolved_row[col] = 0
                 else:
-                    resolved_row[col] = 0
+                    resolved_row[col] = None
 
             resolved_rows.append(resolved_row)
 
         df_resolved = pd.DataFrame(resolved_rows)
+        # 確保 df_resolved 擁有正確的 columns 及 Nullable Int64 型態
+        for col in numeric_cols:
+            if col in df.columns:
+                df_resolved[col] = pd.to_numeric(df_resolved[col], errors='coerce').astype('Int64')
+        for col in metadata_cols:
+            if col in df.columns:
+                if col in ['lots_observed', 'amount_observed']:
+                    df_resolved[col] = df_resolved[col].astype(bool)
+                elif col == 'trade_type':
+                    df_resolved[col] = df_resolved[col].astype('string')
+                else:
+                    df_resolved[col] = pd.to_numeric(df_resolved[col], errors='coerce').astype('Int64')
+
         df_resolved = df_resolved.reindex(columns=df.columns)
         return pd.concat([df_clean, df_resolved], ignore_index=True)
 
@@ -1078,19 +1265,50 @@ class UpdateService:
         try:
             from data_module.db_manager import DBManager
             db = DBManager(self.config)
-            df = db.execute_query("""
-                SELECT
-                    COUNT(*) as count,
-                    MAX(日期) as max_date,
-                    COUNT(DISTINCT 分點名稱) as broker_count,
-                    MIN(日期) as min_date
-                FROM broker_flows;
-            """)
+
+            columns = db.get_table_columns("broker_flows")
+            has_observed_cols = "lots_observed" in columns and "amount_observed" in columns
+
+            if has_observed_cols:
+                query = """
+                    SELECT
+                        COUNT(*) as count,
+                        MAX(日期) as max_date,
+                        COUNT(DISTINCT 分點名稱) as broker_count,
+                        MIN(日期) as min_date,
+                        COUNT(DISTINCT 日期) as date_count,
+                        SUM(CASE WHEN lots_observed = 1 AND amount_observed = 1 THEN 1 ELSE 0 END) as dual_cnt,
+                        SUM(CASE WHEN lots_observed = 1 AND (amount_observed = 0 OR amount_observed IS NULL) THEN 1 ELSE 0 END) as e_only_cnt,
+                        SUM(CASE WHEN (lots_observed = 0 OR lots_observed IS NULL) AND amount_observed = 1 THEN 1 ELSE 0 END) as b_only_cnt
+                    FROM broker_flows;
+                """
+            else:
+                query = """
+                    SELECT
+                        COUNT(*) as count,
+                        MAX(日期) as max_date,
+                        COUNT(DISTINCT 分點名稱) as broker_count,
+                        MIN(日期) as min_date,
+                        COUNT(DISTINCT 日期) as date_count
+                    FROM broker_flows;
+                """
+
+            df = db.execute_query(query)
             if not df.empty:
-                cnt = int(df.iloc[0]['count'])
+                cnt = int(df.iloc[0]['count'] or 0)
                 max_d = df.iloc[0]['max_date']
                 min_d = df.iloc[0]['min_date']
-                broker_cnt = int(df.iloc[0]['broker_count'])
+                broker_cnt = int(df.iloc[0]['broker_count'] or 0)
+                date_cnt = int(df.iloc[0]['date_count'] or 0)
+
+                if has_observed_cols:
+                    dual_cnt = int(df.iloc[0]['dual_cnt'] or 0)
+                    e_only_cnt = int(df.iloc[0]['e_only_cnt'] or 0)
+                    b_only_cnt = int(df.iloc[0]['b_only_cnt'] or 0)
+                else:
+                    dual_cnt = 0
+                    e_only_cnt = 0
+                    b_only_cnt = cnt
 
                 def fmt_d(d):
                     if not d: return None
@@ -1101,15 +1319,18 @@ class UpdateService:
                     'latest_date': fmt_d(max_d),
                     'total_records': cnt,
                     'broker_count': broker_cnt,
-                    'date_count': 0,  # 相容格式
+                    'date_count': date_cnt,
+                    'e_only_count': e_only_cnt,
+                    'b_only_count': b_only_cnt,
+                    'dual_count': dual_cnt,
                     'date_range': {'start_date': fmt_d(min_d), 'end_date': fmt_d(max_d)},
                     'status': 'ok' if cnt > 0 else 'empty'
                 }
-            return {'latest_date': None, 'total_records': 0, 'broker_count': 0, 'status': 'empty'}
+            return {'latest_date': None, 'total_records': 0, 'broker_count': 0, 'date_count': 0, 'status': 'empty'}
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite 獲取券商分點狀態失敗: {e}")
-            return {'latest_date': None, 'total_records': 0, 'broker_count': 0, 'status': f'error: {e}'}
+            return {'latest_date': None, 'total_records': 0, 'broker_count': 0, 'date_count': 0, 'status': f'error: {e}'}
 
     def _technical_status_from_sqlite(self) -> Dict[str, Any]:
         """從 SQLite 資料庫極速獲取技術指標的狀態"""

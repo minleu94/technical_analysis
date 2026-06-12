@@ -144,6 +144,11 @@ class DBManager:
                     買進金額千元 INTEGER,
                     賣出金額千元 INTEGER,
                     買賣超金額千元 INTEGER,
+                    trade_type TEXT,
+                    lots_observed INTEGER,
+                    amount_observed INTEGER,
+                    lots_rank INTEGER,
+                    amount_rank INTEGER,
                     PRIMARY KEY (分點名稱, 證券代號, 日期)
                 );
             """)
@@ -176,13 +181,14 @@ class DBManager:
                 # 處理欄位名稱有括號或特殊字元，使用雙引號包裹以保安全
                 # 預設新增的技術指標皆為 REAL 類型，非技術指標做類型判斷
                 col_type = "REAL"
-                if col in ['日期', '證券代號', '證券名稱', '漲跌']:
+                if col in ['日期', '證券代號', '證券名稱', '漲跌', 'trade_type']:
                     col_type = "TEXT"
                 elif col in [
                     '成交股數', '成交筆數', '成交金額',
                     '最後揭示買量', '最後揭示賣量',
                     '買進股數', '賣出股數', '買賣超股數',
                     '買進金額千元', '賣出金額千元', '買賣超金額千元',
+                    'lots_observed', 'amount_observed', 'lots_rank', 'amount_rank',
                 ]:
                     col_type = "INTEGER"
                 

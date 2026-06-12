@@ -4,6 +4,7 @@ Broker Flow Data Transfer Objects (DTOs)
 """
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import List, Optional, Any
 
 @dataclass
@@ -17,11 +18,17 @@ class BrokerFlowEvent:
     buy_qty: Optional[int] = None
     sell_qty: Optional[int] = None
     net_qty: Optional[int] = None
-    buy_amount_k_twd: int = 0
-    sell_amount_k_twd: int = 0
-    net_amount_k_twd: int = 0
+    buy_amount_k_twd: Optional[int] = None
+    sell_amount_k_twd: Optional[int] = None
+    net_amount_k_twd: Optional[int] = None
     lots_available: bool = True
     has_estimated_lots: bool = False
+    lots_observed: bool = True
+    amount_observed: bool = True
+    lots_rank: Optional[int] = None
+    amount_rank: Optional[int] = None
+    lots_quality: str = "observed"  # 'observed' | 'estimated' | 'unavailable'
+    amount_quality: str = "observed"  # 'observed' | 'unavailable'
 
 @dataclass
 class StockFlowAggregation:
@@ -39,6 +46,11 @@ class StockFlowAggregation:
     events: List[BrokerFlowEvent] = field(default_factory=list)
     lots_available: bool = True
     has_estimated_lots: bool = False
+    observed_event_count: int = 0
+    estimated_event_count: int = 0
+    unavailable_event_count: int = 0
+    usable_event_count: int = 0
+    lots_coverage_ratio: Decimal = Decimal("1")
 
 @dataclass
 class BranchFlowAggregation:
@@ -58,3 +70,8 @@ class BranchFlowAggregation:
     sparkline_details: List[Any] = field(default_factory=list)
     lots_available: bool = True
     has_estimated_lots: bool = False
+    observed_event_count: int = 0
+    estimated_event_count: int = 0
+    unavailable_event_count: int = 0
+    usable_event_count: int = 0
+    lots_coverage_ratio: Decimal = Decimal("1")

@@ -486,3 +486,5 @@ manager.evaluate_models()
 - 更新服務針對同一分點與日期同時抓取 E/B，並以股票代碼及買賣超方向合併。
 - CSV 保存 `buy_lots`、`sell_lots`、`net_lots` 與 `buy_amount_k_twd`、`sell_amount_k_twd`、`net_amount_k_twd`。
 - 2026-06-11 前的 `buy_qty/sell_qty/net_qty` 來源是 `c=B`，屬 legacy 仟元資料，不得作為張數分析。
+- E/B 各自是獨立 Top 50 ranked dataset；合併結果保存兩榜 union、方向、observed 狀態與各自 rank。
+- 榜外 metric 使用 `NULL` 表示未觀測，不表示交易值為 0。歷史缺 rank 的衍生資料可依同日期、分點、方向與淨值排序重建。

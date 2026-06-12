@@ -15,21 +15,21 @@ class DummyConfig:
 def test_decode_unicode_hex(tmp_path):
     config = DummyConfig(tmp_path)
     service = BrokerBranchUpdateService(config)
-    
+
     # 測試正常解密
     assert service._decode_unicode_hex("0039004100390069") == "9A9i"
     assert service._decode_unicode_hex("003800380038004b") == "888K"
-    
+
     # 測試自動補零解密 (長度 12 到 15 之間)
     # "003800380038004b" 少前置 00 為 "3800380038004b" (14碼)
     assert service._decode_unicode_hex("3800380038004b") == "888K"
-    
+
     # 測試非 hex 字串
     assert service._decode_unicode_hex("not_hex_string_1") == "not_hex_string_1"
-    
+
     # 測試短字串
     assert service._decode_unicode_hex("short") == "short"
-    
+
     # 測試空值
     assert service._decode_unicode_hex("") == ""
     assert service._decode_unicode_hex(None) is None
@@ -60,8 +60,14 @@ def test_merge_metric_records_keeps_lots_and_amount_separate(tmp_path):
     }
 
     merged = service._merge_metric_records(
-        [{**common, "buy_lots": 160, "sell_lots": 20, "net_lots": 140}],
-        [{**common, "buy_amount_k_twd": 5291, "sell_amount_k_twd": 653, "net_amount_k_twd": 4638}],
+        [{**common, "buy_lots": 160, "sell_lots": 20, "net_lots": 140, "metric_rank": 3}],
+        [{
+            **common,
+            "buy_amount_k_twd": 5291,
+            "sell_amount_k_twd": 653,
+            "net_amount_k_twd": 4638,
+            "metric_rank": 7,
+        }],
     )
 
     assert merged == [{
@@ -72,6 +78,10 @@ def test_merge_metric_records_keeps_lots_and_amount_separate(tmp_path):
         "buy_amount_k_twd": 5291,
         "sell_amount_k_twd": 653,
         "net_amount_k_twd": 4638,
+        "lots_observed": True,
+        "amount_observed": True,
+        "lots_rank": 3,
+        "amount_rank": 7,
     }]
 
 
@@ -147,11 +157,42 @@ def test_parse_metric_tables_reads_genlink2stk_script_rows(tmp_path):
     assert records[0]["counterparty_broker_code"] == "3296"
     assert records[0]["counterparty_broker_name"] == "勝德"
     assert records[0]["net_lots"] == 163
+    assert records[0]["metric_source"] == "lots"
+    assert records[0]["metric_rank"] == 1
+
+
+def test_infer_metric_ranks_for_legacy_daily_rows(tmp_path):
+    service = BrokerBranchUpdateService(DummyConfig(tmp_path))
+    df = pd.DataFrame([
+        {
+            "date": "2026-06-11",
+            "trade_type": "買超",
+            "branch_system_key": "8450_845B",
+            "net_lots": 100,
+            "net_amount_k_twd": 1000,
+            "lots_observed": True,
+            "amount_observed": True,
+        },
+        {
+            "date": "2026-06-11",
+            "trade_type": "買超",
+            "branch_system_key": "8450_845B",
+            "net_lots": 200,
+            "net_amount_k_twd": 500,
+            "lots_observed": True,
+            "amount_observed": True,
+        },
+    ])
+
+    ranked = service._infer_metric_ranks(df)
+
+    assert ranked["lots_rank"].tolist() == [2, 1]
+    assert ranked["amount_rank"].tolist() == [1, 2]
 
 def test_headquarters_detection_and_decoding(tmp_path):
     config = DummyConfig(tmp_path)
     config.meta_data_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # 建立測試用的 registry CSV
     df = pd.DataFrame({
         "branch_system_key": ["9200_9200", "9200_9201", "1110_1110", "1110_111A", "0039_0039"],
@@ -163,30 +204,30 @@ def test_headquarters_detection_and_decoding(tmp_path):
         "url_param_b": ["0039003200300030", "0039003200300031", "0031003100310030", "0031003100310041", "0039004100390069"],
         "is_active": [True, True, True, True, True]
     })
-    
+
     df.to_csv(config.broker_branch_registry_file, index=False, encoding="utf-8-sig")
-    
+
     service = BrokerBranchUpdateService(config)
     branches = service._load_branch_registry(active_only=True)
-    
+
     assert len(branches) == 5
-    
+
     # 9200_9200: branch_broker_code == branch_code ("9200" == "9200"), is_headquarters 應為 True
     b1 = next(b for b in branches if b["branch_system_key"] == "9200_9200")
     assert b1["is_headquarters"] is True
-    
+
     # 9200_9201: display_name 包含 "-台北分公司", is_headquarters 應為 False
     b2 = next(b for b in branches if b["branch_system_key"] == "9200_9201")
     assert b2["is_headquarters"] is False
-    
+
     # 1110_1110: branch_broker_code == branch_code,且 display_name 是 "土銀", is_headquarters 應為 True
     b3 = next(b for b in branches if b["branch_system_key"] == "1110_1110")
     assert b3["is_headquarters"] is True
-    
+
     # 1110_111A: display_name 包含 "分行", is_headquarters 應為 False
     b4 = next(b for b in branches if b["branch_system_key"] == "1110_111A")
     assert b4["is_headquarters"] is False
-    
+
     # 0039_0039: url_param_b 是 "0039004100390069"，解密後為 "9A9i"，應自動覆蓋至 branch_code
     b5 = next(b for b in branches if b["branch_system_key"] == "0039_0039")
     assert b5["branch_code"] == "9A9i"
