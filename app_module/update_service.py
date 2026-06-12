@@ -12,10 +12,10 @@ from datetime import datetime, timedelta
 
 class UpdateService:
     """數據更新服務類"""
-    
+
     def __init__(self, config):
         """初始化數據更新服務
-        
+
         Args:
             config: TWStockConfig 實例
         """
@@ -181,6 +181,53 @@ class UpdateService:
             return pd.DataFrame()
         return self._normalize_sqlite_dates(pd.concat(frames, ignore_index=True))
 
+    def _get_stock_name_to_code_map(self) -> Dict[str, str]:
+        """建立證券名稱到證券代號的對照表，合併 SQLite, CSV 與硬編碼對照"""
+        name_to_code = {}
+
+        # 1. Fallback 硬編碼對照表 (兜底)
+        fallback_map = {
+            '元大台灣50': '0050',
+            '元大高股息': '0056',
+            '富邦科技': '0052',
+            '元大MSCI金融': '0055',
+        }
+        name_to_code.update(fallback_map)
+
+        # 2. 從 CSV 股票數據中讀取對照
+        try:
+            stock_data_file = getattr(self.config, 'stock_data_file', None)
+            if stock_data_file and stock_data_file.exists():
+                import pandas as pd
+                df_csv = pd.read_csv(stock_data_file, encoding='utf-8-sig')
+                if '證券代號' in df_csv.columns and '證券名稱' in df_csv.columns:
+                    for _, row in df_csv.dropna(subset=['證券代號', '證券名稱']).iterrows():
+                        code = str(row['證券代號']).strip()
+                        name = str(row['證券名稱']).strip()
+                        if code and name and code not in ('ETF', 'UNKNOWN') and name:
+                            name_to_code[name] = code
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[UpdateService] 從 CSV 建立股票代號映射失敗: {e}")
+
+        # 3. 從 SQLite daily_prices 讀取對照 (最高優先順序，覆蓋前面)
+        if getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+                query = "SELECT DISTINCT 證券名稱, 證券代號 FROM daily_prices WHERE 證券名稱 IS NOT NULL AND 證券名稱 != '' AND 證券代號 NOT IN ('ETF', 'UNKNOWN');"
+                df_prices = db.execute_query(query)
+                for _, row in df_prices.iterrows():
+                    name = str(row['證券名稱']).strip()
+                    code = str(row['證券代號']).strip()
+                    if name and code:
+                        name_to_code[name] = code
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite daily_prices 建立股票代號映射失敗: {e}")
+
+        return name_to_code
+
     def _load_broker_branch_csv_for_sqlite(self) -> Any:
         import pandas as pd  # type: ignore[import-untyped]
 
@@ -217,15 +264,10 @@ class UpdateService:
             df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
             if '證券代號' in df.columns and '證券名稱' in df.columns:
                 df['證券代號'] = df['證券代號'].astype(str).str.strip()
-                etf_map = {
-                    '元大台灣50': '0050',
-                    '元大高股息': '0056',
-                    '富邦科技': '0052',
-                    '元大MSCI金融': '0055',
-                }
+                name_to_code_map = self._get_stock_name_to_code_map()
                 mask = df['證券代號'].isin(['ETF', 'UNKNOWN'])
                 if mask.any():
-                    mapped = df.loc[mask, '證券名稱'].astype(str).str.strip().map(etf_map)
+                    mapped = df.loc[mask, '證券名稱'].astype(str).str.strip().map(name_to_code_map)
                     unmapped = df.loc[mask & mapped.isna(), '證券名稱'].unique()
                     if len(unmapped) > 0:
                         import logging
@@ -323,15 +365,10 @@ class UpdateService:
                     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
                     if '證券代號' in df.columns and '證券名稱' in df.columns:
                         df['證券代號'] = df['證券代號'].astype(str).str.strip()
-                        etf_map = {
-                            '元大台灣50': '0050',
-                            '元大高股息': '0056',
-                            '富邦科技': '0052',
-                            '元大MSCI金融': '0055',
-                        }
+                        name_to_code_map = self._get_stock_name_to_code_map()
                         mask = df['證券代號'].isin(['ETF', 'UNKNOWN'])
                         if mask.any():
-                            mapped = df.loc[mask, '證券名稱'].astype(str).str.strip().map(etf_map)
+                            mapped = df.loc[mask, '證券名稱'].astype(str).str.strip().map(name_to_code_map)
                             unmapped = df.loc[mask & mapped.isna(), '證券名稱'].unique()
                             if len(unmapped) > 0:
                                 import logging
@@ -508,22 +545,22 @@ class UpdateService:
             logger = logging.getLogger(__name__)
             logger.error(f"[UpdateService] _replace_sqlite_table 失敗: table={table_name}, 錯誤={e}")
             raise
-    
+
     def update_daily(
-        self, 
-        start_date: str, 
+        self,
+        start_date: str,
         end_date: str,
         delay_seconds: float = 4.0
     ) -> Dict[str, Any]:
         """更新每日股票數據
-        
+
         在指定日期範圍內查找缺失的日期並下載
-        
+
         Args:
             start_date: 開始日期（YYYY-MM-DD）- 用於查找缺失日期的範圍
             end_date: 結束日期（YYYY-MM-DD）- 用於查找缺失日期的範圍
             delay_seconds: 每次請求間隔（秒）
-            
+
         Returns:
             dict: {
                 'success': bool,
@@ -535,15 +572,15 @@ class UpdateService:
         import subprocess
         import sys
         import logging
-        
+
         logger = logging.getLogger(__name__)
-        
+
         # ✅ 記錄輸入參數
         logger.info(
             f"[UpdateService] 開始更新每日股票數據: "
             f"start_date={start_date}, end_date={end_date}, delay_seconds={delay_seconds}"
         )
-        
+
         # 調用 batch_update_daily_data.py
         script_path = self.scripts_dir / 'batch_update_daily_data.py'
         logger.debug(f"[UpdateService] 更新腳本路徑: {script_path}")
@@ -555,11 +592,11 @@ class UpdateService:
                 'updated_dates': [],
                 'failed_dates': []
             }
-        
+
         try:
             # 執行腳本（腳本內部會檢查文件是否已存在，只下載缺失的）
             result = subprocess.run(
-                [sys.executable, str(script_path), 
+                [sys.executable, str(script_path),
                  '--start-date', start_date,
                  '--end-date', end_date,
                  '--delay-min', str(delay_seconds),
@@ -568,18 +605,18 @@ class UpdateService:
                 text=True,
                 encoding='utf-8'
             )
-            
+
             if result.returncode == 0:
                 # 解析輸出，提取成功和失敗的日期
                 output = result.stdout + result.stderr  # 合併 stdout 和 stderr（日誌可能在 stderr）
                 updated_dates = []
                 failed_dates = []
                 skipped_dates = []  # 已存在並跳過的日期
-                
+
                 import re
                 # ✅ 調試：記錄輸出長度和關鍵行
                 logger.debug(f"[UpdateService] 輸出長度: stdout={len(result.stdout)}, stderr={len(result.stderr)}")
-                
+
                 # 方法 1：從總結行解析（更可靠）
                 # 優先查找 [UPDATE_SUMMARY] 標記的總結行（最可靠）
                 # 格式: [UPDATE_SUMMARY] SUCCESS: X days, FAILED: Y days
@@ -591,19 +628,19 @@ class UpdateService:
                 else:
                     success_count_from_summary = None
                     fail_count_from_summary = None
-                
+
                 # 方法 2：從日誌行解析（備用）
                 # 查找 "成功: X 天" 和 "失敗: X 天" 的總結行
                 # 支持日誌格式：2026-01-02 02:01:58,598 - __main__ - INFO - 成功: 6 天
                 success_match = re.search(r'成功[：:]\s*(\d+)\s*天', output)
                 fail_match = re.search(r'失敗[：:]\s*(\d+)\s*天', output)
-                
+
                 # 如果沒找到，嘗試查找 "成功 X 天"（沒有冒號）
                 if not success_match:
                     success_match = re.search(r'成功\s+(\d+)\s*天', output)
                 if not fail_match:
                     fail_match = re.search(r'失敗\s+(\d+)\s*天', output)
-                
+
                 # ✅ 調試：記錄匹配結果和實際輸出
                 if success_match:
                     logger.debug(f"[UpdateService] 找到成功匹配: {success_match.group(1)}")
@@ -619,7 +656,7 @@ class UpdateService:
                     logger.debug(f"[UpdateService] 找到失敗匹配: {fail_match.group(1)}")
                 else:
                     logger.warning(f"[UpdateService] 未找到失敗匹配")
-                
+
                 # 方法 2：逐行解析日期（用於獲取具體日期列表）
                 lines = output.split('\n')
                 for line in lines:
@@ -627,12 +664,12 @@ class UpdateService:
                     date_match = re.search(r'(\d{4}-\d{2}-\d{2})', line)
                     if not date_match:
                         continue
-                    
+
                     date_str = date_match.group(1)
-                    
+
                     # 檢查是否為成功（更新成功或已存在並跳過）
                     # 使用多種方式匹配，包括 Unicode 字符和轉義序列
-                    if ('更新成功' in line or '✓' in line or '\u2713' in line or 
+                    if ('更新成功' in line or '✓' in line or '\u2713' in line or
                         '成功' in line and '筆記錄' in line):
                         if date_str not in updated_dates:
                             updated_dates.append(date_str)
@@ -647,12 +684,12 @@ class UpdateService:
                           '失敗' in line and '無法獲取' in line):
                         if date_str not in failed_dates:
                             failed_dates.append(date_str)
-                
+
                 # ✅ 如果從總結行解析到數字，使用總結行的數字（更準確）
                 if success_match and fail_match:
                     success_count = int(success_match.group(1))
                     fail_count = int(fail_match.group(1))
-                    
+
                     # 如果解析到的日期數量與總結不一致，使用總結的數字
                     if len(updated_dates) != success_count or len(failed_dates) != fail_count:
                         logger.warning(
@@ -666,16 +703,16 @@ class UpdateService:
                             updated_dates = [f"成功_{i+1}" for i in range(success_count)]
                         if len(failed_dates) == 0:
                             failed_dates = [f"失敗_{i+1}" for i in range(fail_count)]
-                
+
                 # ✅ 記錄結果（去重）
                 updated_dates = list(set(updated_dates))
                 failed_dates = list(set(failed_dates))
                 skipped_dates = list(set(skipped_dates))
-                
+
                 # ✅ 優先使用總結行的數字（如果有的話）
                 final_success_count = len(updated_dates)
                 final_fail_count = len(failed_dates)
-                
+
                 # 優先使用 [UPDATE_SUMMARY] 標記的數字
                 if success_count_from_summary is not None and fail_count_from_summary is not None:
                     final_success_count = success_count_from_summary
@@ -683,13 +720,13 @@ class UpdateService:
                 elif success_match and fail_match:
                     final_success_count = int(success_match.group(1))
                     final_fail_count = int(fail_match.group(1))
-                
+
                 # 生成訊息
                 if skipped_dates:
                     message = f'更新完成：成功 {final_success_count} 天（其中 {len(skipped_dates)} 天已存在並跳過），失敗 {final_fail_count} 天'
                 else:
                     message = f'更新完成：成功 {final_success_count} 天，失敗 {final_fail_count} 天'
-                
+
                 logger.info(
                     f"[UpdateService] 更新完成: "
                     f"成功 {final_success_count} 天（跳過 {len(skipped_dates)} 天）, 失敗 {final_fail_count} 天"
@@ -720,18 +757,18 @@ class UpdateService:
                 'updated_dates': [],
                 'failed_dates': []
             }
-    
+
     def update_market(
-        self, 
-        start_date: str, 
+        self,
+        start_date: str,
         end_date: str
     ) -> Dict[str, Any]:
         """更新大盤指數數據
-        
+
         Args:
             start_date: 開始日期（YYYY-MM-DD）
             end_date: 結束日期（YYYY-MM-DD）
-            
+
         Returns:
             dict: {
                 'success': bool,
@@ -745,22 +782,22 @@ class UpdateService:
         import logging
         import traceback
         import re
-        
+
         logger = logging.getLogger(__name__)
-        
+
         # ✅ 記錄輸入參數
         logger.info(
             f"[UpdateService] 開始更新大盤指數數據: "
             f"start_date={start_date}, end_date={end_date}"
         )
-        
+
         try:
             # 動態導入並調用 batch_update_market_index 函數
             import importlib.util
-            
+
             script_path = self.scripts_dir / 'batch_update_market_and_industry_index.py'
             logger.debug(f"[UpdateService] 更新腳本路徑: {script_path}")
-            
+
             if not script_path.exists():
                 error_msg = f'找不到更新腳本: {script_path}'
                 logger.error(f"[UpdateService] {error_msg}")
@@ -770,13 +807,13 @@ class UpdateService:
                     'updated_dates': [],
                     'failed_dates': []
                 }
-            
+
             # 動態導入模組
             try:
                 spec = importlib.util.spec_from_file_location("batch_update_market_and_industry_index", script_path)
                 if spec is None or spec.loader is None:
                     raise ImportError(f"無法創建模組規格: {script_path}")
-                
+
                 update_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(update_module)
                 logger.debug(f"[UpdateService] 模組導入成功")
@@ -790,7 +827,7 @@ class UpdateService:
                     'updated_dates': [],
                     'failed_dates': []
                 }
-            
+
             # 檢查函數是否存在
             if not hasattr(update_module, 'batch_update_market_index'):
                 error_msg = f"更新模組中找不到 batch_update_market_index 函數"
@@ -801,7 +838,7 @@ class UpdateService:
                     'updated_dates': [],
                     'failed_dates': []
                 }
-            
+
             # 執行更新函數
             logger.info(f"[UpdateService] 開始執行大盤指數更新函數")
             try:
@@ -810,7 +847,7 @@ class UpdateService:
                 update_func = update_module.batch_update_market_index
                 sig = inspect.signature(update_func)
                 params = list(sig.parameters.keys())
-                
+
                 if 'config' in params:
                     logger.debug(f"[UpdateService] 更新函數支持 config 參數，傳遞配置")
                     result = update_func(start_date=start_date, end_date=end_date, config=self.config)
@@ -818,7 +855,7 @@ class UpdateService:
                     logger.debug(f"[UpdateService] 更新函數不支持 config 參數，使用默認參數")
                     result = update_func(start_date=start_date, end_date=end_date)
                 logger.info(f"[UpdateService] 大盤指數更新函數執行完成")
-                
+
                 # 解析結果（函數可能沒有返回值）
                 if result is None:
                     # 函數沒有返回值，假設成功
@@ -853,7 +890,7 @@ class UpdateService:
                     'updated_dates': [],
                     'failed_dates': []
                 }
-        
+
         except Exception as e:
             error_msg = f"更新大盤指數數據時發生異常: {str(e)}"
             logger.error(f"[UpdateService] {error_msg}")
@@ -864,18 +901,18 @@ class UpdateService:
                 'updated_dates': [],
                 'failed_dates': []
             }
-    
+
     def update_industry(
-        self, 
-        start_date: str, 
+        self,
+        start_date: str,
         end_date: str
     ) -> Dict[str, Any]:
         """更新產業指數數據
-        
+
         Args:
             start_date: 開始日期（YYYY-MM-DD）
             end_date: 結束日期（YYYY-MM-DD）
-            
+
         Returns:
             dict: {
                 'success': bool,
@@ -889,22 +926,22 @@ class UpdateService:
         import logging
         import traceback
         import re
-        
+
         logger = logging.getLogger(__name__)
-        
+
         # ✅ 記錄輸入參數
         logger.info(
             f"[UpdateService] 開始更新產業指數數據: "
             f"start_date={start_date}, end_date={end_date}"
         )
-        
+
         try:
             # 動態導入並調用 batch_update_industry_index 函數
             import importlib.util
-            
+
             script_path = self.scripts_dir / 'batch_update_market_and_industry_index.py'
             logger.debug(f"[UpdateService] 更新腳本路徑: {script_path}")
-            
+
             if not script_path.exists():
                 error_msg = f'找不到更新腳本: {script_path}'
                 logger.error(f"[UpdateService] {error_msg}")
@@ -914,13 +951,13 @@ class UpdateService:
                     'updated_dates': [],
                     'failed_dates': []
                 }
-            
+
             # 動態導入模組
             try:
                 spec = importlib.util.spec_from_file_location("batch_update_market_and_industry_index", script_path)
                 if spec is None or spec.loader is None:
                     raise ImportError(f"無法創建模組規格: {script_path}")
-                
+
                 update_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(update_module)
                 logger.debug(f"[UpdateService] 模組導入成功")
@@ -934,7 +971,7 @@ class UpdateService:
                     'updated_dates': [],
                     'failed_dates': []
                 }
-            
+
             # 檢查函數是否存在
             if not hasattr(update_module, 'batch_update_industry_index'):
                 error_msg = f"更新模組中找不到 batch_update_industry_index 函數"
@@ -945,7 +982,7 @@ class UpdateService:
                     'updated_dates': [],
                     'failed_dates': []
                 }
-            
+
             # 執行更新函數
             logger.info(f"[UpdateService] 開始執行產業指數更新函數")
             try:
@@ -954,7 +991,7 @@ class UpdateService:
                 update_func = update_module.batch_update_industry_index
                 sig = inspect.signature(update_func)
                 params = list(sig.parameters.keys())
-                
+
                 if 'config' in params:
                     logger.debug(f"[UpdateService] 更新函數支持 config 參數，傳遞配置")
                     result = update_func(start_date=start_date, end_date=end_date, config=self.config)
@@ -962,7 +999,7 @@ class UpdateService:
                     logger.debug(f"[UpdateService] 更新函數不支持 config 參數，使用默認參數")
                     result = update_func(start_date=start_date, end_date=end_date)
                 logger.info(f"[UpdateService] 產業指數更新函數執行完成")
-                
+
                 # 解析結果（函數可能沒有返回值）
                 if result is None:
                     return {
@@ -995,7 +1032,7 @@ class UpdateService:
                     'updated_dates': [],
                     'failed_dates': []
                 }
-        
+
         except Exception as e:
             error_msg = f"更新產業指數數據時發生異常: {str(e)}"
             logger.error(f"[UpdateService] {error_msg}")
@@ -1016,7 +1053,7 @@ class UpdateService:
             if not df.empty:
                 cnt = int(df.iloc[0]['count'])
                 max_d = df.iloc[0]['max_date']
-                
+
                 max_date_str = None
                 if max_d:
                     max_d_str = str(max_d)
@@ -1024,7 +1061,7 @@ class UpdateService:
                         max_date_str = f"{max_d_str[:4]}-{max_d_str[4:6]}-{max_d_str[6:]}"
                     else:
                         max_date_str = max_d_str
-                
+
                 return {
                     'latest_date': max_date_str,
                     'total_records': cnt,
@@ -1042,9 +1079,9 @@ class UpdateService:
             from data_module.db_manager import DBManager
             db = DBManager(self.config)
             df = db.execute_query("""
-                SELECT 
-                    COUNT(*) as count, 
-                    MAX(日期) as max_date, 
+                SELECT
+                    COUNT(*) as count,
+                    MAX(日期) as max_date,
                     COUNT(DISTINCT 分點名稱) as broker_count,
                     MIN(日期) as min_date
                 FROM broker_flows;
@@ -1054,7 +1091,7 @@ class UpdateService:
                 max_d = df.iloc[0]['max_date']
                 min_d = df.iloc[0]['min_date']
                 broker_cnt = int(df.iloc[0]['broker_count'])
-                
+
                 def fmt_d(d):
                     if not d: return None
                     d_str = str(d)
@@ -1080,9 +1117,9 @@ class UpdateService:
             from data_module.db_manager import DBManager
             db = DBManager(self.config)
             df = db.execute_query("""
-                SELECT 
-                    COUNT(*) as count, 
-                    MAX(日期) as max_date, 
+                SELECT
+                    COUNT(*) as count,
+                    MAX(日期) as max_date,
                     COUNT(DISTINCT 證券代號) as stock_count,
                     MIN(日期) as min_date
                 FROM technical_indicators;
@@ -1092,7 +1129,7 @@ class UpdateService:
                 max_d = df.iloc[0]['max_date']
                 min_d = df.iloc[0]['min_date']
                 stock_cnt = int(df.iloc[0]['stock_count'])
-                
+
                 def fmt_d(d):
                     if not d: return None
                     d_str = str(d)
@@ -1116,10 +1153,10 @@ class UpdateService:
         import pandas as pd
         from datetime import datetime
         import logging
-        
+
         logger = logging.getLogger(__name__)
         logger.info("[UpdateService] 開始檢查數據狀態")
-        
+
         # 🌟 如果啟用 SQLite，直接從資料庫極速統計！
         if getattr(self.config, 'use_sqlite', False):
             try:
@@ -1162,7 +1199,7 @@ class UpdateService:
             return result
         except Exception as fast_error:
             logger.warning(f"[UpdateService] 快速狀態檢查失敗，改用舊路徑: {fast_error}")
-        
+
         # 檢查每日股票數據（stock_data_whole.csv）
         stock_file = self.config.stock_data_file
         logger.debug(f"[UpdateService] 檢查每日股票數據文件: {stock_file}")
@@ -1173,7 +1210,7 @@ class UpdateService:
                     total_records = sum(1 for _ in f) - 1  # 減去標題行
                 result['daily_data']['total_records'] = total_records
                 logger.debug(f"[UpdateService] 每日股票數據總記錄數: {total_records:,}")
-                
+
                 try:
                     header_df = pd.read_csv(stock_file, encoding='utf-8-sig', nrows=0)
                     if '日期' not in header_df.columns:
@@ -1207,7 +1244,7 @@ class UpdateService:
                             )
                     except:
                         df_tail = pd.DataFrame()
-                
+
                 if '日期' in df_tail.columns and len(df_tail) > 0:
                     df_tail['日期'] = df_tail['日期'].astype(str)
                     valid_dates = df_tail[df_tail['日期'].notna() & (df_tail['日期'] != 'nan') & (df_tail['日期'] != '')]['日期']
@@ -1233,20 +1270,20 @@ class UpdateService:
                     result['daily_data']['status'] = 'ok'
             except Exception as e:
                 result['daily_data']['status'] = f'error: {str(e)}'
-        
+
         # 檢查大盤指數數據
         market_file = self.config.market_index_file
         logger.debug(f"[UpdateService] 檢查大盤指數文件: {market_file}")
         if market_file.exists():
             try:
                 df = pd.read_csv(
-                    market_file, 
-                    encoding='utf-8-sig', 
-                    on_bad_lines='skip', 
+                    market_file,
+                    encoding='utf-8-sig',
+                    on_bad_lines='skip',
                     engine='python'
                 )
                 result['market_index']['total_records'] = len(df)
-                
+
                 if '日期' in df.columns:
                     df['日期'] = df['日期'].astype(str)
                     valid_dates = df[df['日期'].notna() & (df['日期'] != 'nan') & (df['日期'] != '')]['日期']
@@ -1261,20 +1298,20 @@ class UpdateService:
                 logger.warning(f"[UpdateService] 檢查大盤指數時發生錯誤: {str(e)}")
         else:
             logger.debug(f"[UpdateService] 大盤指數文件不存在: {market_file}")
-        
+
         # 檢查產業指數數據
         industry_file = self.config.industry_index_file
         logger.debug(f"[UpdateService] 檢查產業指數文件: {industry_file}")
         if industry_file.exists():
             try:
                 df = pd.read_csv(
-                    industry_file, 
-                    encoding='utf-8-sig', 
-                    on_bad_lines='skip', 
+                    industry_file,
+                    encoding='utf-8-sig',
+                    on_bad_lines='skip',
                     engine='python'
                 )
                 result['industry_index']['total_records'] = len(df)
-                
+
                 if '日期' in df.columns:
                     df['日期'] = df['日期'].astype(str)
                     valid_dates = df[df['日期'].notna() & (df['日期'] != 'nan') & (df['日期'] != '')]['日期']
@@ -1290,7 +1327,7 @@ class UpdateService:
                                     parsed_dates.append(parsed_date)
                             except:
                                 continue
-                        
+
                         if parsed_dates:
                             latest_industry_date = max(parsed_dates)
                             result['industry_index']['latest_date'] = latest_industry_date.strftime('%Y-%m-%d')
@@ -1304,7 +1341,7 @@ class UpdateService:
 
         result['broker_branch'] = self.check_broker_branch_data_status()
         result['technical_indicators'] = self._check_technical_indicator_status()
-        
+
         return result
 
     def check_data_overview(self) -> Dict[str, Any]:
@@ -1693,15 +1730,15 @@ class UpdateService:
             }
         except Exception:
             return summary
-    
+
     def merge_daily_data(self, force_all: bool = False) -> Dict[str, Any]:
         """合併每日股票數據
-        
+
         將 daily_price/ 目錄中的 CSV 文件合併到 stock_data_whole.csv
-        
+
         Args:
             force_all: 是否強制重新合併所有數據（忽略現有數據）
-        
+
         Returns:
             dict: {
                 'success': bool,
@@ -1715,23 +1752,23 @@ class UpdateService:
         from datetime import datetime
         import logging
         import traceback
-        
+
         logger = logging.getLogger(__name__)
-        
+
         # ✅ 記錄輸入參數
         logger.info(
             f"[UpdateService] 開始合併每日股票數據: "
             f"force_all={force_all}"
         )
-        
+
         try:
             # 直接調用 merge 腳本的函數
             import sys
             import importlib.util
-            
+
             merge_script = self.project_root / 'scripts' / 'merge_daily_data.py'
             logger.debug(f"[UpdateService] 合併腳本路徑: {merge_script}")
-            
+
             if not merge_script.exists():
                 logger.error(f"[UpdateService] 找不到合併腳本: {merge_script}")
                 return {
@@ -1740,7 +1777,7 @@ class UpdateService:
                     'merged_files': 0,
                     'total_records': 0
                 }
-            
+
             # 動態導入 merge 函數
             logger.debug(f"[UpdateService] 開始動態導入合併模組")
             try:
@@ -1754,7 +1791,7 @@ class UpdateService:
                         'merged_files': 0,
                         'total_records': 0
                     }
-                
+
                 merge_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(merge_module)
                 logger.debug(f"[UpdateService] 模組導入成功")
@@ -1768,7 +1805,7 @@ class UpdateService:
                     'merged_files': 0,
                     'total_records': 0
                 }
-            
+
             # 檢查函數是否存在
             if not hasattr(merge_module, 'merge_daily_data'):
                 error_msg = f"合併模組中找不到 merge_daily_data 函數"
@@ -1779,7 +1816,7 @@ class UpdateService:
                     'merged_files': 0,
                     'total_records': 0
                 }
-            
+
             # 執行合併函數（傳遞 force_all 參數）
             logger.info(f"[UpdateService] 開始執行合併函數: force_all={force_all}")
             try:
@@ -1789,14 +1826,14 @@ class UpdateService:
                 merge_func = merge_module.merge_daily_data
                 sig = inspect.signature(merge_func)
                 params = list(sig.parameters.keys())
-                
+
                 if 'config' in params:
                     logger.debug(f"[UpdateService] 合併函數支持 config 參數，傳遞配置")
                     merge_func(force_all=force_all, config=self.config)
                 else:
                     logger.debug(f"[UpdateService] 合併函數不支持 config 參數，只傳遞 force_all")
                     merge_func(force_all=force_all)
-                
+
                 logger.info(f"[UpdateService] 合併函數執行完成")
             except Exception as e:
                 error_msg = f"執行合併函數時發生錯誤: {str(e)}"
@@ -1808,7 +1845,7 @@ class UpdateService:
                     'merged_files': 0,
                     'total_records': 0
                 }
-            
+
             # 讀取合併後的數據統計
             stock_file = self.config.stock_data_file
             if stock_file.exists():
@@ -1818,7 +1855,7 @@ class UpdateService:
                     # 讀取文件總行數
                     with open(stock_file, 'r', encoding='utf-8-sig') as f:
                         total_records = sum(1 for _ in f) - 1  # 減去標題行
-                    
+
                     # 獲取最新日期（讀取文件最後幾行，因為最新日期通常在文件末尾）
                     if '日期' in df.columns:
                         try:
@@ -1826,27 +1863,27 @@ class UpdateService:
                             # 先獲取總行數
                             with open(stock_file, 'r', encoding='utf-8-sig') as f:
                                 total_lines = sum(1 for _ in f) - 1  # 減去標題行
-                            
+
                             if total_lines > 0:
                                 # 讀取最後 10000 行（或全部，如果總行數少於 10000）
                                 skip_rows = max(0, total_lines - 10000)
                                 df_tail = pd.read_csv(
-                                    stock_file, 
-                                    encoding='utf-8-sig', 
+                                    stock_file,
+                                    encoding='utf-8-sig',
                                     usecols=['日期'],
                                     skiprows=range(1, skip_rows + 1)  # 跳過前面的行，保留標題行
                                 )
-                                
+
                                 if len(df_tail) > 0:
                                     # 轉換日期格式
                                     df_tail['日期'] = df_tail['日期'].astype(str)
                                     valid_dates = df_tail[
-                                        df_tail['日期'].notna() & 
-                                        (df_tail['日期'] != 'nan') & 
+                                        df_tail['日期'].notna() &
+                                        (df_tail['日期'] != 'nan') &
                                         (df_tail['日期'] != '') &
                                         (df_tail['日期'] != 'None')
                                     ]['日期']
-                                    
+
                                     if len(valid_dates) > 0:
                                         # 嘗試解析日期並找到最大值
                                         parsed_dates = []
@@ -1865,7 +1902,7 @@ class UpdateService:
                                                         parsed_dates.append(parsed.to_pydatetime())
                                             except:
                                                 continue
-                                        
+
                                         if parsed_dates:
                                             latest_date = max(parsed_dates).strftime('%Y-%m-%d')
                                             message = f'數據合併成功，最新日期：{latest_date}'
@@ -1888,7 +1925,7 @@ class UpdateService:
                             message = '數據合併成功'
                     else:
                         message = '數據合併成功'
-                    
+
                     # ✅ 記錄結果
                     logger.info(
                         f"[UpdateService] 合併完成: "
@@ -1916,7 +1953,7 @@ class UpdateService:
                     'merged_files': 0,
                     'total_records': 0
                 }
-                
+
         except Exception as e:
             import traceback
             logger.error(f"[UpdateService] 合併過程出錯: {str(e)}")
@@ -1927,7 +1964,7 @@ class UpdateService:
                 'merged_files': 0,
                 'total_records': 0
             }
-    
+
     def update_broker_branch(
         self,
         start_date: str,
@@ -1938,7 +1975,7 @@ class UpdateService:
         progress_callback=None
     ) -> Dict[str, Any]:
         """更新券商分點資料
-        
+
         Args:
             start_date: 開始日期（YYYY-MM-DD）
             end_date: 結束日期（YYYY-MM-DD）
@@ -1946,22 +1983,22 @@ class UpdateService:
             delay_seconds: 請求間隔（秒）
             force_all: 是否強制重新抓取
             progress_callback: 進度回調函數
-            
+
         Returns:
             dict: 更新結果
         """
         import logging
         logger = logging.getLogger(__name__)
-        
+
         logger.info(
             f"[UpdateService] 開始更新券商分點資料: "
             f"start_date={start_date}, end_date={end_date}, "
             f"branch_system_keys={branch_system_keys}, force_all={force_all}"
         )
-        
+
         try:
             from app_module.broker_branch_update_service import BrokerBranchUpdateService
-            
+
             service = BrokerBranchUpdateService(self.config)
             result = service.update_broker_branch_data(
                 start_date=start_date,
@@ -1971,10 +2008,10 @@ class UpdateService:
                 force_all=force_all,
                 progress_callback=progress_callback
             )
-            
+
             logger.info(f"[UpdateService] 券商分點資料更新完成: success={result.get('success', False)}")
             return result
-            
+
         except Exception as e:
             import traceback
             error_msg = f"更新券商分點資料時發生錯誤: {str(e)}"
@@ -1991,41 +2028,41 @@ class UpdateService:
                 'total_processed': 0,
                 'total_records': 0
             }
-    
+
     def merge_broker_branch_data(
         self,
         branch_system_keys: Optional[List[str]] = None,
         force_all: bool = False
     ) -> Dict[str, Any]:
         """合併券商分點資料
-        
+
         Args:
             branch_system_keys: 要合併的分點列表（None=全部）
             force_all: 是否強制重新合併
-            
+
         Returns:
             dict: 合併結果
         """
         import logging
         logger = logging.getLogger(__name__)
-        
+
         logger.info(
             f"[UpdateService] 開始合併券商分點資料: "
             f"branch_system_keys={branch_system_keys}, force_all={force_all}"
         )
-        
+
         try:
             from app_module.broker_branch_update_service import BrokerBranchUpdateService
-            
+
             service = BrokerBranchUpdateService(self.config)
             result = service.merge_broker_branch_data(
                 branch_system_keys=branch_system_keys,
                 force_all=force_all
             )
-            
+
             logger.info(f"[UpdateService] 券商分點資料合併完成: success={result.get('success', False)}")
             return result
-            
+
         except Exception as e:
             import traceback
             error_msg = f"合併券商分點資料時發生錯誤: {str(e)}"
@@ -2041,35 +2078,35 @@ class UpdateService:
                 'date_range': {'start_date': '', 'end_date': ''},
                 'duplicate_records': 0
             }
-    
+
     def check_broker_branch_data_status(
         self,
         branch_system_keys: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """檢查券商分點資料狀態
-        
+
         Args:
             branch_system_keys: 要檢查的分點列表（None=全部）
-            
+
         Returns:
             dict: 狀態字典
         """
         import logging
         logger = logging.getLogger(__name__)
-        
+
         logger.info(f"[UpdateService] 檢查券商分點資料狀態: branch_system_keys={branch_system_keys}")
-        
+
         try:
             from app_module.broker_branch_update_service import BrokerBranchUpdateService
-            
+
             service = BrokerBranchUpdateService(self.config)
             result = service.check_broker_branch_data_status(
                 branch_system_keys=branch_system_keys
             )
-            
+
             logger.info(f"[UpdateService] 券商分點資料狀態檢查完成: status={result.get('status', 'unknown')}")
             return result
-            
+
         except Exception as e:
             import traceback
             error_msg = f"檢查券商分點資料狀態時發生錯誤: {str(e)}"
@@ -2110,7 +2147,7 @@ class UpdateService:
             return parsed.max().strftime('%Y-%m-%d')
         except Exception:
             return None
-    
+
     def calculate_technical_indicators(
         self,
         target_stock: Optional[str] = None,
@@ -2121,7 +2158,7 @@ class UpdateService:
         incremental_lookback_days: int = 250
     ) -> Dict[str, Any]:
         """計算技術指標
-        
+
         Args:
             target_stock: 要處理的特定股票代號，如為None則處理所有股票
             force_all: 是否強制更新所有數據（忽略日期檢查）
@@ -2129,7 +2166,7 @@ class UpdateService:
             progress_callback: 進度回調函數 (message: str, progress: int) -> None
             ignore_existing_files: 是否忽略現有指標文件，直接覆蓋（用於修復有問題的文件）
             incremental_lookback_days: 增量更新時往前回補的交易日數，避免技術指標缺少歷史序列
-            
+
         Returns:
             dict: {
                 'success': bool,
@@ -2148,27 +2185,27 @@ class UpdateService:
         import importlib.util
         import logging
         import traceback
-        
+
         logger = logging.getLogger(__name__)
-        
+
         logger.info(
             f"[UpdateService] 開始計算技術指標: "
             f"target_stock={target_stock}, force_all={force_all}, start_date={start_date}"
         )
-        
+
         if progress_callback:
             progress_callback("初始化技術指標計算器...", 5)
-        
+
         try:
             # 導入技術指標計算模組
             from analysis_module.technical_analysis.technical_indicators import TechnicalIndicatorCalculator
-            
+
             # 創建計算器
             calculator = TechnicalIndicatorCalculator(logger)
-            
+
             if progress_callback:
                 progress_callback("讀取股票數據...", 10)
-            
+
             # 讀取股票數據
             import pandas as pd
             if getattr(self.config, 'use_sqlite', False):
@@ -2195,10 +2232,10 @@ class UpdateService:
                     stock_data = pd.read_csv(self.config.stock_data_file, dtype={'證券代號': str}, low_memory=False)
             else:
                 stock_data = pd.read_csv(self.config.stock_data_file, dtype={'證券代號': str}, low_memory=False)
-            
+
             # 只保留正常股票（一般為4位數）
             stock_data = stock_data[stock_data['證券代號'].str.match(r'^\d{4}$')]
-            
+
             # 如果指定了特定股票，只處理該股票
             if target_stock:
                 if target_stock not in stock_data['證券代號'].unique():
@@ -2215,7 +2252,7 @@ class UpdateService:
                         'end_date': ''
                     }
                 stock_data = stock_data[stock_data['證券代號'] == target_stock]
-            
+
             auto_incremental = not force_all and start_date is None
             if auto_incremental:
                 logger.info(
@@ -2231,14 +2268,14 @@ class UpdateService:
                 logger.info("強制更新所有數據")
                 if progress_callback:
                     progress_callback("強制更新所有數據", 15)
-            
+
             # 批次處理
             grouped = stock_data.groupby('證券代號')
             total_stocks = len(grouped)
-            
+
             if progress_callback:
                 progress_callback(f"開始處理 {total_stocks} 支股票的技術指標...", 20)
-            
+
             results: Dict[str, Any] = {
                 'total_stocks': total_stocks,
                 'success_count': 0,
@@ -2250,31 +2287,31 @@ class UpdateService:
                 'start_date': '',
                 'end_date': ''
             }
-            
+
             all_data = []
             min_date = "9999-12-31"
             max_date = "1900-01-01"
-            
+
             # 處理每檔股票
             for idx, (stock_id, group_df) in enumerate(grouped):
                 progress = 20 + int((idx / total_stocks) * 70)  # 20% 到 90%
                 if progress_callback:
                     progress_callback(f"處理 {stock_id} ({idx+1}/{total_stocks})...", progress)
-                
+
                 # 跳過數據量不足的股票
                 if len(group_df) < self.config.min_data_days:
                     logger.debug(f"股票 {stock_id} 數據量不足，跳過")
                     results['insufficient_data_count'] += 1
                     results['insufficient_stocks'].append(stock_id)
                     continue
-                
+
                 # 記錄日期範圍
                 if '日期' in group_df.columns:
                     group_min_date = str(group_df['日期'].min())
                     group_max_date = str(group_df['日期'].max())
                     min_date = min(min_date, group_min_date)
                     max_date = max(max_date, group_max_date)
-                
+
                 # 檢查是否需要更新（基於日期）
                 if auto_incremental and '日期' in group_df.columns:
                     indicator_file = self.config.technical_dir / f'{stock_id}_indicators.csv'
@@ -2317,7 +2354,7 @@ class UpdateService:
                         logger.debug(f"股票 {stock_id} 沒有新數據需要更新")
                         continue
                     group_df = filtered_df
-                
+
                 # 計算並保存指標
                 try:
                     result = calculator.calculate_and_store_indicators(
@@ -2326,7 +2363,7 @@ class UpdateService:
                         output_dir=self.config.technical_dir,
                         ignore_existing=ignore_existing_files or force_all
                     )
-                    
+
                     if isinstance(result, pd.DataFrame):
                         all_data.append(result)
                         results['success_count'] += 1
@@ -2340,32 +2377,32 @@ class UpdateService:
                     logger.error(f"處理股票 {stock_id} 時發生錯誤: {str(e)}")
                     results['fail_count'] += 1
                     results['failed_stocks'].append(stock_id)
-            
+
             # 更新結果日期範圍
             results['start_date'] = min_date if min_date != "9999-12-31" else "未知"
             results['end_date'] = max_date if max_date != "1900-01-01" else "未知"
-            
+
             # 合併並儲存所有結果
             if all_data:
                 if progress_callback:
                     progress_callback("合併所有指標數據...", 90)
-                
+
                 logger.info("合併所有指標數據...")
-                
+
                 # ✅ 數據驗證：檢查每個 DataFrame 的完整性
                 valid_data = []
                 for idx, df in enumerate(all_data):
                     if df is None or len(df) == 0:
                         logger.warning(f"跳過空數據（索引 {idx}）")
                         continue
-                    
+
                     # 檢查必要欄位
                     required_cols = ['日期', '證券代號']
                     missing_cols = [col for col in required_cols if col not in df.columns]
                     if missing_cols:
                         logger.warning(f"跳過缺少必要欄位 {missing_cols} 的數據（索引 {idx}）")
                         continue
-                    
+
                     # 檢查日期欄位是否有效
                     if '日期' in df.columns:
                         date_col = pd.to_datetime(df['日期'], errors='coerce')
@@ -2373,9 +2410,9 @@ class UpdateService:
                         if valid_dates == 0:
                             logger.warning(f"跳過日期欄位無效的數據（索引 {idx}）")
                             continue
-                    
+
                     valid_data.append(df)
-                
+
                 if not valid_data:
                     logger.error("沒有有效的數據可以合併！")
                     return {
@@ -2383,15 +2420,15 @@ class UpdateService:
                         'message': '沒有有效的數據可以合併，請檢查技術指標計算結果',
                         **results
                     }
-                
+
                 # 合併有效數據
                 final_df = pd.concat(valid_data, ignore_index=True)
-                
+
                 # ✅ 數據驗證：檢查合併後的數據
                 logger.info(f"合併前有效數據數量: {len(valid_data)}")
                 logger.info(f"合併後總筆數: {len(final_df):,}")
                 logger.info(f"合併後股票數量: {final_df['證券代號'].nunique() if '證券代號' in final_df.columns else 'N/A'}")
-                
+
                 # 檢查是否有重複數據
                 if '日期' in final_df.columns and '證券代號' in final_df.columns:
                     duplicates = final_df.duplicated(subset=['日期', '證券代號']).sum()
@@ -2399,23 +2436,23 @@ class UpdateService:
                         logger.warning(f"發現 {duplicates} 筆重複數據（日期+證券代號），將去重")
                         final_df = final_df.drop_duplicates(subset=['日期', '證券代號'], keep='last')
                         logger.info(f"去重後總筆數: {len(final_df):,}")
-                
+
                 save_path = self.config.all_stocks_data_file
                 skip_csv_save = getattr(self.config, 'use_sqlite', False) and auto_incremental
-                
+
                 if not skip_csv_save:
                     # 創建備份
                     if save_path.exists():
                         logger.info(f"備份現有的整合指標文件: {save_path}")
                         self.config.create_backup(save_path)
-                    
+
                     # 保存
                     final_df.to_csv(save_path, index=False, encoding='utf-8-sig')
                     file_size_mb = save_path.stat().st_size / 1024 / 1024
                     logger.info(f"已保存整合指標到: {save_path}（檔案大小: {file_size_mb:.2f} MB）")
                 else:
                     logger.info("智慧增量模式且啟用 SQLite，跳過大型 all_stocks_data.csv 合併重寫，直接使用增量寫入 SQLite。")
-                
+
                 # 🌟 如果啟用 SQLite，同步將指標寫入 SQLite technical_indicators 表中
                 if getattr(self.config, 'use_sqlite', False):
                     logger.info("檢測到啟用 SQLite，開始同步寫入資料庫 technical_indicators 表...")
@@ -2424,22 +2461,22 @@ class UpdateService:
                     try:
                         from data_module.db_manager import DBManager
                         db = DBManager(self.config)
-                        
+
                         df_db = final_df.copy()
                         # 統一日期與代號格式
                         df_db['日期'] = df_db['日期'].apply(lambda x: str(x).replace('-', '').replace('/', ''))
                         df_db['證券代號'] = df_db['證券代號'].astype(str).str.zfill(4)
-                        
+
                         # 剔除價格與重複欄位以防止重複儲存
                         cols_to_drop = [c for c in ['證券名稱', '開盤價', '最高價', '最低價', '收盤價', '成交股數', '成交量'] if c in df_db.columns]
                         if cols_to_drop:
                             df_db = df_db.drop(columns=cols_to_drop)
-                            
+
                         # 確保 non-PK 欄位為數值型
                         for col in df_db.columns:
                             if col not in ['日期', '證券代號']:
                                 df_db[col] = pd.to_numeric(df_db[col], errors='coerce')
-                                
+
                         # 判斷是否為增量更新
                         if auto_incremental:
                             logger.info("智慧增量模式下，僅刪除並更新變更的技術指標記錄...")
@@ -2461,10 +2498,10 @@ class UpdateService:
                             logger.error("技術指標寫入 SQLite 失敗！")
                     except Exception as sql_err:
                         logger.error(f"技術指標同步寫入 SQLite 時發生錯誤: {sql_err}")
-                
+
                 if progress_callback:
                     progress_callback("技術指標計算完成", 100)
-            
+
             # 生成結果訊息
             message = (
                 f"技術指標計算完成：\n"
@@ -2474,13 +2511,13 @@ class UpdateService:
                 f"數據不足股票數: {results['insufficient_data_count']}\n"
                 f"處理數據日期範圍: {results['start_date']} 至 {results['end_date']}"
             )
-            
+
             return {
                 'success': True,
                 'message': message,
                 **results
             }
-            
+
         except Exception as e:
             error_msg = f"計算技術指標時發生錯誤: {str(e)}"
             logger.error(error_msg)
@@ -2506,7 +2543,7 @@ class UpdateService:
         end_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """從 SQLite 匯出指定表和日期範圍的資料至 CSV
-        
+
         Args:
             table_name: SQLite 表名
             target_path: 匯出的 CSV 檔案路徑
@@ -2516,16 +2553,16 @@ class UpdateService:
         import pandas as pd
         import logging
         logger = logging.getLogger(__name__)
-        
+
         try:
             from data_module.db_manager import DBManager
             db = DBManager(self.config)
-            
+
             # 構建 SQL 語句
             query = f"SELECT * FROM {table_name}"
             conditions = []
             params = []
-            
+
             if start_date:
                 s_date = self._date_key(start_date)
                 if s_date:
@@ -2536,14 +2573,14 @@ class UpdateService:
                 if e_date:
                     conditions.append("日期 <= ?")
                     params.append(e_date)
-                    
+
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
-            
+
             query += " ORDER BY 日期 ASC;"
-            
+
             logger.info(f"[UpdateService] 開始從 SQLite 匯出 {table_name} 到 {target_path}，查詢: {query}，參數: {params}")
-            
+
             # 執行查詢
             df = db.execute_query(query, tuple(params))
             if df.empty:
@@ -2551,23 +2588,23 @@ class UpdateService:
                     'success': False,
                     'message': '沒有符合條件的資料可供匯出'
                 }
-            
+
             # 還原日期格式為 YYYY-MM-DD 以便於人工檢查
             if '日期' in df.columns:
                 df['日期'] = df['日期'].apply(lambda x: f"{str(x)[:4]}-{str(x)[4:6]}-{str(x)[6:]}" if len(str(x)) == 8 else str(x))
-                
+
             # 寫入 CSV 檔案
             target_path.parent.mkdir(parents=True, exist_ok=True)
             df.to_csv(target_path, index=False, encoding='utf-8-sig')
             logger.info(f"[UpdateService] 成功匯出 {len(df)} 筆資料至 {target_path}")
-            
+
             return {
                 'success': True,
                 'message': f'成功匯出 {len(df):,} 筆資料至 {target_path.name}',
                 'total_records': len(df),
                 'file_path': str(target_path)
             }
-            
+
         except Exception as e:
             logger.exception(f"[UpdateService] 匯出 {table_name} 失敗")
             return {

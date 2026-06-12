@@ -16,12 +16,12 @@ from decision_module.flow_signal_engine import FlowSignalEngine
 
 class BrokerFlowService:
     """Smart Money Flow 服務編排層"""
-    
+
     def __init__(self, config):
         self.config = config
         self.logger = logging.getLogger(__name__)
         self.signal_engine = FlowSignalEngine()
-        
+
         # 記憶體快取
         self._cached_events: List[BrokerFlowEvent] = []
         self._last_load_time = None
@@ -31,84 +31,191 @@ class BrokerFlowService:
         if value is None or pd.isna(value):
             return 0
         return int(value)
-        
+
     def _load_data(self, force_reload: bool = False) -> List[BrokerFlowEvent]:
         """從檔案系統載入所有追蹤分點的原始事件資料"""
-        
+
         # 簡單快取機制：如果已經載入且不強制重新載入，直接返回
         if not force_reload and self._cached_events:
             return self._cached_events
-            
+
         events = []
         flow_dir = getattr(self.config, 'broker_flow_dir', Path(self.config.data_dir) / 'broker_flow')
-        
+
         if not flow_dir.exists():
             self.logger.warning(f"分點資料目錄不存在: {flow_dir}")
             return []
-            
+
+        # 第一步先遍歷 CSV 並記錄缺失 Lots 欄位事件的 (date_str, stock_code)
+        temp_events = []
+        missing_keys = set()
+
         # 遍歷所有分點目錄
         for branch_dir in flow_dir.iterdir():
             if not branch_dir.is_dir():
                 continue
-                
+
             merged_file = branch_dir / 'meta' / 'merged.csv'
             if not merged_file.exists():
                 continue
-                
+
             try:
                 # 讀取合併的 CSV
                 df = pd.read_csv(merged_file)
                 lot_columns = {'buy_lots', 'sell_lots', 'net_lots'}
-                if not lot_columns.issubset(df.columns):
-                    self.logger.warning(
-                        "略過缺少明確張數欄位的 legacy 券商資料: %s",
-                        merged_file,
-                    )
-                    continue
-                # 轉換為 BrokerFlowEvent 列表
+                # 如果連這幾欄都沒有，則視為全部缺失
+                has_cols = lot_columns.issubset(df.columns)
+
                 for _, row in df.iterrows():
-                    # 嘗試各種可能的對手券商/股票代號欄位名稱
-                    stock_code = str(row.get('counterparty_broker_code', ''))
-                    stock_name = str(row.get('counterparty_broker_name', ''))
-                    
+                    stock_code = str(row.get('counterparty_broker_code', '')).strip()
+                    stock_name = str(row.get('counterparty_broker_name', '')).strip()
+
                     if not stock_code or stock_code == 'nan' or stock_code == 'UNKNOWN':
                         continue
-                        
-                    event = BrokerFlowEvent(
-                        date=str(row.get('date', '')),
-                        branch_system_key=str(row.get('branch_system_key', branch_dir.name)),
-                        branch_display_name=str(row.get('branch_display_name', branch_dir.name)),
-                        stock_code=stock_code,
-                        stock_name=stock_name,
-                        buy_qty=self._int_value(row.get('buy_lots', 0)),
-                        sell_qty=self._int_value(row.get('sell_lots', 0)),
-                        net_qty=self._int_value(row.get('net_lots', 0)),
-                        buy_amount_k_twd=self._int_value(row.get('buy_amount_k_twd', 0)),
-                        sell_amount_k_twd=self._int_value(row.get('sell_amount_k_twd', 0)),
-                        net_amount_k_twd=self._int_value(row.get('net_amount_k_twd', 0)),
+
+                    raw_date = str(row.get('date', '')).strip()
+                    db_date = raw_date.replace('-', '').replace('/', '')
+
+                    buy_lots = row.get('buy_lots') if has_cols else None
+                    sell_lots = row.get('sell_lots') if has_cols else None
+                    net_lots = row.get('net_lots') if has_cols else None
+
+                    # 只要 buy_lots 或 sell_lots 任何一欄缺失，即視為 Lots 缺失
+                    is_missing = (
+                        not has_cols or
+                        pd.isna(buy_lots) or buy_lots is None or
+                        pd.isna(sell_lots) or sell_lots is None or
+                        pd.isna(net_lots) or net_lots is None
                     )
-                    events.append(event)
-                    
+
+                    if is_missing:
+                        missing_keys.add((db_date, stock_code))
+
+                    temp_events.append({
+                        'raw_date': raw_date,
+                        'db_date': db_date,
+                        'branch_system_key': str(row.get('branch_system_key', branch_dir.name)),
+                        'branch_display_name': str(row.get('branch_display_name', branch_dir.name)),
+                        'stock_code': stock_code,
+                        'stock_name': stock_name,
+                        'buy_lots': buy_lots,
+                        'sell_lots': sell_lots,
+                        'net_lots': net_lots,
+                        'buy_amount_k_twd': row.get('buy_amount_k_twd'),
+                        'sell_amount_k_twd': row.get('sell_amount_k_twd'),
+                        'net_amount_k_twd': row.get('net_amount_k_twd'),
+                        'is_missing': is_missing
+                    })
+
             except Exception as e:
                 self.logger.error(f"讀取分點資料失敗 {merged_file}: {e}")
-                
+
+        # 第二步：批次向 SQLite 查詢收盤價對照表
+        price_map = {}
+        if missing_keys and getattr(self.config, 'use_sqlite', False):
+            try:
+                from data_module.db_manager import DBManager
+                db = DBManager(self.config)
+
+                keys_list = list(missing_keys)
+                chunk_size = 400
+                for i in range(0, len(keys_list), chunk_size):
+                    chunk = keys_list[i:i + chunk_size]
+                    clauses = []
+                    params = []
+                    for d, s in chunk:
+                        clauses.append("(日期 = ? AND 證券代號 = ?)")
+                        params.extend([d, s])
+
+                    query = "SELECT 日期, 證券代號, 收盤價 FROM daily_prices WHERE " + " OR ".join(clauses)
+                    df_prices = db.execute_query(query, tuple(params))
+                    for _, row_p in df_prices.iterrows():
+                        d_val = str(row_p['日期']).strip()
+                        s_val = str(row_p['證券代號']).strip()
+                        try:
+                            price_map[(d_val, s_val)] = float(row_p['收盤價'])
+                        except:
+                            continue
+            except Exception as e:
+                self.logger.warning(f"批次查詢收盤價失敗: {e}")
+
+        # 第三步：套用 Decimal 與 ROUND_HALF_UP 折算
+        from decimal import Decimal, ROUND_HALF_UP
+
+        for item in temp_events:
+            buy_amount_k = self._int_value(item['buy_amount_k_twd'])
+            sell_amount_k = self._int_value(item['sell_amount_k_twd'])
+            net_amount_k = self._int_value(item['net_amount_k_twd'])
+
+            if not item['is_missing']:
+                buy_qty = self._int_value(item['buy_lots'])
+                sell_qty = self._int_value(item['sell_lots'])
+                net_qty = self._int_value(item['net_lots'])
+                has_estimated_lots = False
+                lots_available = True
+            else:
+                key = (item['db_date'], item['stock_code'])
+                close_price = price_map.get(key)
+                if close_price is not None and close_price > 0:
+                    try:
+                        d_buy = Decimal(str(buy_amount_k))
+                        d_sell = Decimal(str(sell_amount_k))
+                        d_close = Decimal(str(close_price))
+
+                        buy_qty = int((d_buy / d_close).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                        sell_qty = int((d_sell / d_close).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                        net_qty = buy_qty - sell_qty
+
+                        has_estimated_lots = True
+                        lots_available = True
+                    except Exception as e:
+                        self.logger.warning(f"折算張數失敗 for {item['stock_code']} on {item['db_date']}: {e}")
+                        buy_qty = None
+                        sell_qty = None
+                        net_qty = None
+                        has_estimated_lots = False
+                        lots_available = False
+                else:
+                    buy_qty = None
+                    sell_qty = None
+                    net_qty = None
+                    has_estimated_lots = False
+                    lots_available = False
+
+            event = BrokerFlowEvent(
+                date=item['raw_date'],
+                branch_system_key=item['branch_system_key'],
+                branch_display_name=item['branch_display_name'],
+                stock_code=item['stock_code'],
+                stock_name=item['stock_name'],
+                buy_qty=buy_qty,
+                sell_qty=sell_qty,
+                net_qty=net_qty,
+                buy_amount_k_twd=buy_amount_k,
+                sell_amount_k_twd=sell_amount_k,
+                net_amount_k_twd=net_amount_k,
+                lots_available=lots_available,
+                has_estimated_lots=has_estimated_lots
+            )
+            events.append(event)
+
         self._cached_events = events
         self._last_load_time = datetime.now()
         self.logger.info(f"成功載入 {len(events)} 筆分點交易事件")
         return events
-        
+
     def _filter_events_by_period(self, events: List[BrokerFlowEvent], period: str) -> List[BrokerFlowEvent]:
         """過濾特定時間範圍的事件"""
         if not events:
             return []
-            
+
         # 找出最新日期 (作為基準點)
         latest_date_str = max(e.date for e in events)
         try:
             latest_date = datetime.strptime(latest_date_str, "%Y-%m-%d")
         except ValueError:
             latest_date = datetime.now()
-            
+
         if period == 'day':
             start_date = latest_date
         elif period == 'week':
@@ -117,62 +224,72 @@ class BrokerFlowService:
             start_date = latest_date - timedelta(days=30)
         else:
             return events # All time
-            
+
         start_date_str = start_date.strftime("%Y-%m-%d")
         return [e for e in events if e.date >= start_date_str]
 
     def get_stock_flow_signals(self, period: str = 'week', force_reload: bool = False) -> List[FlowSignalDTO]:
         """
         [Overview Mode] 取得以「股票」為中心的 Smart Money 流向信號
-        
+
         Args:
             period: 'day', 'week', 'month'
             force_reload: 是否重新讀取 CSV
-            
+
         Returns:
             FlowSignalDTO 列表，按主力分數降序排列
         """
         events = self._load_data(force_reload)
         filtered_events = self._filter_events_by_period(events, period)
-        
+
         # 聚合資料
         # dict key: stock_code
         agg_map: Dict[str, StockFlowAggregation] = {}
-        
+
         for e in filtered_events:
             if e.stock_code not in agg_map:
                 agg_map[e.stock_code] = StockFlowAggregation(
                     stock_code=e.stock_code,
                     stock_name=e.stock_name
                 )
-                
+
             agg = agg_map[e.stock_code]
-            agg.total_buy_qty += e.buy_qty
-            agg.total_sell_qty += e.sell_qty
-            agg.total_net_qty += e.net_qty
+            if e.buy_qty is not None:
+                agg.total_buy_qty += e.buy_qty
+            if e.sell_qty is not None:
+                agg.total_sell_qty += e.sell_qty
+            if e.net_qty is not None:
+                agg.total_net_qty += e.net_qty
             agg.events.append(e)
-            
-            if e.net_qty > 0 and e.branch_display_name not in agg.buying_branches:
-                agg.buying_branches.append(e.branch_display_name)
-            elif e.net_qty < 0 and e.branch_display_name not in agg.selling_branches:
-                agg.selling_branches.append(e.branch_display_name)
-                
+
+            if not e.lots_available:
+                agg.lots_available = False
+            if e.has_estimated_lots:
+                agg.has_estimated_lots = True
+
+            if e.net_qty is not None:
+                if e.net_qty > 0 and e.branch_display_name not in agg.buying_branches:
+                    agg.buying_branches.append(e.branch_display_name)
+                elif e.net_qty < 0 and e.branch_display_name not in agg.selling_branches:
+                    agg.selling_branches.append(e.branch_display_name)
+
         # 轉換為信號
         aggregations = list(agg_map.values())
         signals = self.signal_engine.generate_signals(aggregations)
-        
+
         # 計算不論過濾週期、所有歷史事件的每日淨量作為近期 5 筆交易紀錄
         stock_all_daily_net: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
         for e in events:
-            stock_all_daily_net[e.stock_code][e.date] += e.net_qty
-            
+            if e.net_qty is not None:
+                stock_all_daily_net[e.stock_code][e.date] += e.net_qty
+
         for s in signals:
             daily_map = stock_all_daily_net[s.stock_code]
             sorted_dates = sorted(daily_map.keys())
             last_5_dates = sorted_dates[-5:]
             s.sparkline_data = [float(daily_map[d]) for d in last_5_dates]
             s.sparkline_details = [(d, daily_map[d]) for d in last_5_dates]
-        
+
         # 過濾掉沒有訊號的個股。偏多股票要求主力分數大於零；偏空股票要求強度等級小於零 (淨量小於零)
         filtered_signals = [
             s for s in signals
@@ -183,21 +300,21 @@ class BrokerFlowService:
     def get_branch_flow_details(self, period: str = 'week', force_reload: bool = False) -> List[BranchFlowAggregation]:
         """
         [Branch Tracker Mode] 取得以「分點」為中心的聚合流向
-        
+
         Args:
             period: 'day', 'week', 'month'
             force_reload: 是否重新讀取 CSV
-            
+
         Returns:
             BranchFlowAggregation 列表，通常用於 UI 分群顯示
         """
         events = self._load_data(force_reload)
         filtered_events = self._filter_events_by_period(events, period)
-        
+
         # 聚合資料
         # dict key: (branch_key, stock_code)
         agg_map: Dict[tuple, BranchFlowAggregation] = {}
-        
+
         for e in filtered_events:
             key = (e.branch_system_key, e.stock_code)
             if key not in agg_map:
@@ -207,27 +324,36 @@ class BrokerFlowService:
                     stock_code=e.stock_code,
                     stock_name=e.stock_name
                 )
-                
+
             agg = agg_map[key]
-            agg.total_buy_qty += e.buy_qty
-            agg.total_sell_qty += e.sell_qty
-            agg.total_net_qty += e.net_qty
+            if e.buy_qty is not None:
+                agg.total_buy_qty += e.buy_qty
+            if e.sell_qty is not None:
+                agg.total_sell_qty += e.sell_qty
+            if e.net_qty is not None:
+                agg.total_net_qty += e.net_qty
             agg.events.append(e)
-            
+
+            if not e.lots_available:
+                agg.lots_available = False
+            if e.has_estimated_lots:
+                agg.has_estimated_lots = True
+
         # 計算不論過濾週期、所有歷史事件的每日淨量作為近期 5 筆交易紀錄
         branch_stock_all_daily_net: Dict[tuple, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
         for e in events:
-            branch_stock_all_daily_net[(e.branch_system_key, e.stock_code)][e.date] += e.net_qty
-            
+            if e.net_qty is not None:
+                branch_stock_all_daily_net[(e.branch_system_key, e.stock_code)][e.date] += e.net_qty
+
         for key, agg in agg_map.items():
             daily_map = branch_stock_all_daily_net[key]
             sorted_dates = sorted(daily_map.keys())
             last_5_dates = sorted_dates[-5:]
             agg.sparkline_data = [float(daily_map[d]) for d in last_5_dates]
             agg.sparkline_details = [(d, daily_map[d]) for d in last_5_dates]
-            
+
         return list(agg_map.values())
-        
+
     def get_stock_detail_by_branches(self, stock_code: str, period: str = 'week') -> List[BranchFlowAggregation]:
         """取得特定股票的所有分點進出明細 (供 Overview Mode 的 Master-Detail Drill-down 使用)"""
         # 利用現有方法取得所有分點資料，然後過濾
@@ -237,12 +363,12 @@ class BrokerFlowService:
     def get_tracked_branches(self) -> List[Dict[str, str]]:
         """取得目前有資料的分點清單 (供 Branch Tracker 模式選單使用)"""
         events = self._load_data()
-        
+
         branches = {}
         for e in events:
             if e.branch_system_key not in branches:
                 branches[e.branch_system_key] = e.branch_display_name
-                
+
         # 轉換為 list of dicts 方便 UI 使用
         return [{"system_key": k, "display_name": v} for k, v in branches.items()]
 
@@ -253,7 +379,7 @@ class BrokerFlowService:
         # 重新獲取全部信號 (不進行淨量大於零之過濾)，以獲得正確的多空總家數與市場熱度
         events = self._load_data()
         filtered_events = self._filter_events_by_period(events, period)
-        
+
         agg_map: Dict[str, StockFlowAggregation] = {}
         for e in filtered_events:
             if e.stock_code not in agg_map:
@@ -262,16 +388,24 @@ class BrokerFlowService:
                     stock_name=e.stock_name
                 )
             agg = agg_map[e.stock_code]
-            agg.total_buy_qty += e.buy_qty
-            agg.total_sell_qty += e.sell_qty
-            agg.total_net_qty += e.net_qty
+            if e.buy_qty is not None:
+                agg.total_buy_qty += e.buy_qty
+            if e.sell_qty is not None:
+                agg.total_sell_qty += e.sell_qty
+            if e.net_qty is not None:
+                agg.total_net_qty += e.net_qty
             agg.events.append(e)
-            
+
+            if not e.lots_available:
+                agg.lots_available = False
+            if e.has_estimated_lots:
+                agg.has_estimated_lots = True
+
         aggregations = list(agg_map.values())
         all_signals = self.signal_engine.generate_signals(aggregations)
-            
+
         summary = SmartMoneySummaryDTO()
-        
+
         # 統計多空個股數量與異常警示數
         for s in all_signals:
             net_qty = s.aggregation.total_net_qty
@@ -285,18 +419,18 @@ class BrokerFlowService:
                 # 偏空異常警示：大額淨賣出 (<= -500張) ➔ 指標型出貨倒貨
                 if net_qty <= -500:
                     summary.abnormal_signal_count += 1
-                    
+
         # 計算市場熱度 (偏多個股佔多空個股比例)
         total_stocks = summary.bullish_stock_count + summary.bearish_stock_count
         if total_stocks > 0:
             bull_ratio = summary.bullish_stock_count / total_stocks
             summary.market_heat_score = bull_ratio * 100.0
-            
+
         if summary.market_heat_score > 60:
             summary.market_regime = "Bullish Flow"
         elif summary.market_heat_score < 40:
             summary.market_regime = "Bearish Flow"
         else:
             summary.market_regime = "Neutral"
-            
+
         return summary

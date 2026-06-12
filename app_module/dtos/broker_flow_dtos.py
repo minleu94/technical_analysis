@@ -14,12 +14,14 @@ class BrokerFlowEvent:
     branch_display_name: str
     stock_code: str
     stock_name: str
-    buy_qty: int
-    sell_qty: int
-    net_qty: int
+    buy_qty: Optional[int] = None
+    sell_qty: Optional[int] = None
+    net_qty: Optional[int] = None
     buy_amount_k_twd: int = 0
     sell_amount_k_twd: int = 0
     net_amount_k_twd: int = 0
+    lots_available: bool = True
+    has_estimated_lots: bool = False
 
 @dataclass
 class StockFlowAggregation:
@@ -35,6 +37,8 @@ class StockFlowAggregation:
     selling_branches: List[str] = field(default_factory=list)
     # 此股票所有相關的原始事件
     events: List[BrokerFlowEvent] = field(default_factory=list)
+    lots_available: bool = True
+    has_estimated_lots: bool = False
 
 @dataclass
 class BranchFlowAggregation:
@@ -52,3 +56,5 @@ class BranchFlowAggregation:
     sparkline_data: List[float] = field(default_factory=list)
     # 趨勢詳細資料 (包含日期與買賣超張數，用於 ToolTip)
     sparkline_details: List[Any] = field(default_factory=list)
+    lots_available: bool = True
+    has_estimated_lots: bool = False
