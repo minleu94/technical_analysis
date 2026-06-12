@@ -23,6 +23,7 @@ from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.portfolio_service import PortfolioService
 from app_module.journal_service import JournalService
 from app_module.recommendation_service import RecommendationService
+from app_module.broker_flow_service import BrokerFlowService
 from app_module.portfolio_condition_monitor import (
     PortfolioConditionMonitor,
     PortfolioCurrentSnapshot,
@@ -267,6 +268,7 @@ class PortfolioView(QWidget):
         portfolio_service: PortfolioService,
         journal_service: JournalService,
         recommendation_service: Optional[RecommendationService] = None,
+        broker_flow_service: Optional[BrokerFlowService] = None,
         condition_monitor: Optional[PortfolioConditionMonitor] = None,
         parent=None
     ):
@@ -278,7 +280,7 @@ class PortfolioView(QWidget):
         self.strategy_version_service = StrategyVersionService(self.portfolio_service.config)
         self.chip_service = PortfolioChipService(
             self.portfolio_service.config,
-            self.recommendation_service.broker_flow_service if self.recommendation_service else None
+            broker_flow_service,
         )
 
         self.positions_model: Optional[PandasTableModel] = None

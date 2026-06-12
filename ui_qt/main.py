@@ -284,6 +284,7 @@ class MainWindow(QMainWindow):
                     portfolio_service=self.portfolio_service,
                     journal_service=self.journal_service,
                     recommendation_service=self.recommendation_service,
+                    broker_flow_service=self.broker_flow_service,
                     parent=self
                 )
                 portfolio_tab_index = tabs.addTab(portfolio_view, "持倉管理")

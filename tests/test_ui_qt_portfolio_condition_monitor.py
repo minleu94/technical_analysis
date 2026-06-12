@@ -67,6 +67,10 @@ class FakeJournalService:
         return []
 
 
+class FakeBrokerFlowService:
+    pass
+
+
 class FakeConditionMonitor:
     def evaluate(self, position, current_snapshot=None):
         return PortfolioConditionResult(
@@ -98,3 +102,17 @@ def test_portfolio_view_displays_condition_monitor_result_in_positions_table():
     assert df.iloc[0]["監控原因"] == "評分下降 23.0 分"
     assert df.iloc[0]["進場分數"] == "85.0"
     assert df.iloc[0]["目前分數"] == "62.0"
+
+
+def test_portfolio_view_accepts_broker_flow_service_dependency():
+    app()
+    broker_flow_service = FakeBrokerFlowService()
+
+    view = PortfolioView(
+        portfolio_service=FakePortfolioService(),
+        journal_service=FakeJournalService(),
+        broker_flow_service=broker_flow_service,
+        condition_monitor=FakeConditionMonitor(),
+    )
+
+    assert view.chip_service.broker_flow_service is broker_flow_service
