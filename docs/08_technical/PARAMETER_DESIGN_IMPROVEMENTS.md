@@ -124,10 +124,35 @@ match_factor ∈ [0.9, 1.1]
 # 當前：固定分數
 buy_score = 70
 
-# 建議：分位數（更穩定）
-buy_quantile = 0.8  # 前 20% 才買
-sell_quantile = 0.4
+# 核准：雙模式漸進遷移
+threshold_mode = "quantile"
+buy_quantile_bp = 8000  # 第 80 百分位
+sell_quantile_bp = 4000
 ```
+
+回測契約：
+
+- 舊策略缺少 `threshold_mode` 時維持 `fixed`。
+- quantile 使用單股 Expanding 歷史分布。
+- T 日門檻只使用 T-1 以前的 `TotalScore`。
+- 固定暖機為 60 個有效觀測值；暖機不足時不產生訊號。
+- 第一版不支援 rolling window。
+- `TotalScore` 先用 `Decimal(str(value))` 與 `ROUND_HALF_UP` 量化成整數 `score_bp`。
+- 分位數採整數 `nearest_rank`，不在決策核心使用浮點插值。
+
+推薦契約：
+
+- 在最新交易日通過資料完整性、產業、流動性與硬篩選的 eligible universe 上計算橫斷面百分位。
+- `top_n` 截取發生在百分位計算後。
+- 推薦橫斷面排名不得放入單股 `ScoringEngine`。
+- 第一版 eligible universe 至少 20 檔；不足時回傳診斷，不降級。
+- 同分依 `FinalScore` 降序、股票代碼升序確定排序。
+
+數值契約：
+
+- Service / Domain / Executor 使用 `0..10000` 的整數基點。
+- UI 可顯示百分比，但不得把裸 `float` 分位數傳入決策核心。
+- 正式設計見 `docs/superpowers/specs/2026-06-13-strategy-scoring-governance-design.md`。
 
 ### 新增參數
 - `max_positions`：最多同時持有幾檔
@@ -213,9 +238,9 @@ warmup_bars = max(60, 3*max_indicator_period)
 6. ✅ 加入 max_positions / position_sizing
 
 ### Phase 3：中期（兩週內）
-7. ✅ 指標參數改進
-8. ✅ buy_score/sell_score 改為分位數
-9. ✅ 推薦系統參數改進
+7. ⚠️ 指標參數改進（待執行）
+8. 🚧 buy_score/sell_score 分位數（設計已核准，待實作）
+9. ⚠️ 推薦系統參數改進（待執行）
 
 ### Phase 4：長期（一個月內）
 10. ✅ Walk-forward 暖機期
@@ -272,5 +297,11 @@ warmup_bars = max(60, 3*max_indicator_period)
 
 ---
 
-**最後更新：Phase 2.5 UI 整合完成後**
+## 2026-06-13 更新
+
+- 修正分位數治理誤標為已完成的狀態。
+- 核准 fixed / quantile 雙模式、Expanding T-1、60 個有效觀測值暖機及整數基點契約。
+- 將回測時間序列分位數與推薦橫斷面百分位拆成兩個增量。
+
+**最後更新：2026-06-13**
 

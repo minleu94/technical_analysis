@@ -57,7 +57,7 @@
 #### 3. ✅ Scoring contract 統一（所有子分數 0~100，Regime 用權重切換）
 
 **實現位置**：
-- `ui_app/scoring_engine.py`（第 17-79 行）
+- `decision_module/scoring_engine.py`（`calculate_total_score()` 與各子分數方法）
 
 **實現方式**：
 - ✅ 所有子分數統一為 0-100：
@@ -208,10 +208,19 @@
 #### 2. ⚠️ buy_score/sell_score 改為分位數
 
 **檢查結果**：
-- ⚠️ 未找到 buy_score/sell_score 相關實現
-- ⚠️ 推薦系統使用 FinalScore 排序，但未使用分位數
+- ✅ 已確認固定門檻實作存在於 `app_module/strategies/baseline_score_executor.py`、`momentum_aggressive_executor.py` 與 `stable_conservative_executor.py`
+- ✅ `app_module/backtest_service.py` 已提供固定門檻命中診斷
+- ⚠️ fixed / quantile 雙模式尚未實作
+- ⚠️ 推薦系統使用 `FinalScore` 排序，但尚未加入 eligible universe 橫斷面百分位
 
-**狀態**：❌ **未完成**
+**狀態**：🚧 **正式設計已核准，待實作**
+
+**核准契約（2026-06-13）**：
+- 舊策略維持 fixed；缺少 `threshold_mode` 時不得改變既有結果
+- 回測採 Expanding T-1 與 60 個有效觀測值暖機
+- 分位數參數使用整數基點
+- 推薦橫斷面與回測時間序列分開實作
+- 設計文件：`docs/superpowers/specs/2026-06-13-strategy-scoring-governance-design.md`
 
 ---
 
@@ -314,7 +323,7 @@ Phase 2.5 的**核心部分（優先級 1 和 2）已 100% 完成**：
 優先級 3 和 4 的項目屬於**後續改進**，不影響 Phase 2.5 的核心目標：
 
 1. ⚠️ 指標參數改進（可移至 Phase 3 或後續階段）
-2. ⚠️ buy_score/sell_score 分位數（可移至 Phase 3）
+2. 🚧 buy_score/sell_score 分位數（Strategy & Scoring Governance 設計已核准，待實作）
 3. ⚠️ 推薦系統參數改進（可移至 Phase 3）
 4. ⚠️ Walk-forward 暖機期參數（可移至 Phase 3）
 5. ⚠️ 完整測試與驗證（優先級 1 和 2 已驗證）

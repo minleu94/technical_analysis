@@ -46,8 +46,8 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. 效能與研究輸出 (Phase 5)：完成批次回測並行化（合作式軟取消與防回歸），規劃大表格分頁及報告輸出
-2. 參數設計優化 (Phase 2.5 優先級 3)：指標參數改進與 `buy_score`/`sell_score` 分位數化設計
+1. Strategy & Scoring Governance：規劃並實作 fixed / quantile 雙模式；回測採 Expanding T-1、60 個有效觀測值暖機與整數 nearest-rank，先完成向後相容及 Look-ahead gate
+2. 推薦評分治理：在增量 A 通過後，加入 eligible universe 橫斷面百分位，不把跨股票排名塞入單股 `ScoringEngine`
 3. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔
 
 ## 高風險區（改動需謹慎）
@@ -55,6 +55,8 @@
 - 金融核心數值計算與邊界（如交易成本、手續費、PnL、持倉 average_cost）：改動需極度謹慎，且必須通過 `scripts/check_financial_float_boundaries.py` 及 pytest repository gate 的自動防回歸掃描。
 - `app_module/backtest_service.py` / `backtest_module/*`
 - `app_module/recommendation_service.py`
+- `decision_module/scoring_engine.py` / `decision_module/strategy_configurator.py`
+- `app_module/strategies/*`（fixed / quantile 門檻、確認天數與 Look-ahead 契約）
 - `app_module/recommendation_replay_service.py` / `app_module/recommendation_portfolio_backtest_service.py`
 - Strategy registry / preset / promotion 相關服務
 - UI ↔ service contract（DTO）
@@ -63,6 +65,12 @@
 - `ui_qt/views/update_view.py` / `app_module/update_service.py`（數據更新工作台與安全更新流程）
 - `portfolio_module/core.py` / `app_module/portfolio_condition_monitor.py`（Portfolio domain 與條件監控）
 
+分位數治理的額外風險：
+
+- 回測 T 日門檻只能使用 T-1 以前的分數，禁止使用完整期間分布。
+- 推薦橫斷面排名必須先固定當日 eligible universe。
+- 舊策略未提供 `threshold_mode` 時必須維持 fixed，確保歷史回測可重現。
+
 ## 指定權威文件（需要細節再看）
 
 - `DEVELOPMENT_ROADMAP.md` - 完整開發路線圖（Single Source of Truth）
@@ -70,6 +78,7 @@
 - `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則
 - `DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（Documentation Agent 判斷 coverage 的規則）
 - `PROJECT_NAVIGATION.md` / `PROJECT_INVENTORY.md` - 專案導航與盤點
+- `../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md` - 下一階段 fixed / quantile 雙模式與分位數安全契約
 
 ---
 

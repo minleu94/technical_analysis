@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-06-11
+> **最後整理**：2026-06-13
 > **判讀規則**：Phase 狀態以 `DEVELOPMENT_ROADMAP.md` 的 Living Section 為準；本索引用於導航，不取代 roadmap。
 
 ---
@@ -94,6 +94,7 @@
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/specs/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 多模式實驗室、候選池與 Phase 3 → Portfolio 來源追溯設計。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/plans/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 工作流重整第一階段實作計畫。 |
 | [2026-06-11-financial-float-boundary-governance-design.md](../superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md) | 金融核心白名單的 AST float 邊界掃描、逐行分類標記與 pytest 防回歸設計。 |
+| [2026-06-13-strategy-scoring-governance-design.md](../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md) | fixed / quantile 雙模式、回測 Expanding T-1 與推薦 eligible universe 橫斷面百分位設計。 |
 | [2026-06-11-financial-float-boundary-governance.md](../superpowers/plans/2026-06-11-financial-float-boundary-governance.md) | 金融 float 邊界 AST 掃描、逐行標記與 pytest gate 實作計畫。 |
 | [2026-06-11-broker-flow-sqlite-and-ui-recovery.md](../superpowers/plans/2026-06-11-broker-flow-sqlite-and-ui-recovery.md) | 券商分點 SQLite 唯一鍵、ETF 代號與 UI 復原計畫。 |
 | [2026-06-12-broker-flow-ranked-metric-reconciliation.md](../superpowers/plans/2026-06-12-broker-flow-ranked-metric-reconciliation.md) | MoneyDJ E/B 獨立榜單 union、三態品質與覆蓋率治理計畫。 |
@@ -209,6 +210,7 @@
 - 2026-06-11：完成 Phase 4.2 持倉層籌碼面風險提示與下鑽整合，實作 SQLite/CSV 雙軌籌碼監控服務與 UI Tab，並打通「🔍 下鑽詳細主力流向」之 Tab 切換與個股自動定位高亮連動。
 - 2026-06-12：將已執行完畢的 [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md) 移至歸檔目錄 `docs/09_archive/`，並更新文檔索引。
 - 2026-06-12：完成批次回測並行化與安全軟取消實作，修復 `max_workers=None` 路徑，新增真實 BrokenProcessPool 測試；回測與最佳化採合作式取消，其他長任務頁面維持既有取消行為相容，並明確記錄 legacy `terminate()` 技術債。
+- 2026-06-13：新增 Strategy & Scoring Governance 正式設計，核准 fixed / quantile 雙模式、回測 Expanding T-1、60 個有效觀測值暖機、整數基點與推薦 eligible universe 橫斷面排名契約；同步修正 Phase 2.5 分位數誤標完成與 Active 文件舊路徑。
 
 
 
