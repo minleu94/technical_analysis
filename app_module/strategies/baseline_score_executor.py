@@ -66,6 +66,9 @@ class BaselineScoreExecutor(StrategyExecutor):
         self.buy_confirm_days = params.get('buy_confirm_days', 2)
         self.sell_confirm_days = params.get('sell_confirm_days', 2)
         self.cooldown_days = params.get('cooldown_days', 3)
+        
+        from decision_module.score_threshold_policy import ScoreThresholdPolicy
+        self.threshold_policy = ScoreThresholdPolicy(params)
     
     def generate_signals(
         self,
@@ -90,7 +93,7 @@ class BaselineScoreExecutor(StrategyExecutor):
         
         df = df.sort_index()
         
-        # 數據清理和類型轉換
+        # 數據清理 and 類型轉換
         df = self._prepare_dataframe(df)
         
         # 獲取策略配置
@@ -107,8 +110,20 @@ class BaselineScoreExecutor(StrategyExecutor):
         regime = config.get('regime', None)
         df = self.scoring_engine.calculate_total_score(df, config, regime=regime)
         
-        # 4. 生成信號（帶連續確認和 cooldown）
-        signals = self._generate_signals_with_cooldown(df)
+        # 4. 門檻評估與信號生成
+        thresholds = self.threshold_policy.evaluate(df['TotalScore'])
+        df['score_bp'] = thresholds.score_bp
+        df['buy_threshold_score_bp'] = thresholds.buy_threshold_score_bp
+        df['sell_threshold_score_bp'] = thresholds.sell_threshold_score_bp
+        df['threshold_warmup_ready'] = thresholds.warmup_ready
+        df['buy_threshold_hit'] = thresholds.buy_candidate
+        df['sell_threshold_hit'] = thresholds.sell_candidate
+        
+        signals = self._generate_signals_with_cooldown(
+            df=df,
+            buy_candidate=thresholds.buy_candidate,
+            sell_candidate=thresholds.sell_candidate
+        )
         
         # 5. 生成理由標籤
         reason_tags_list = []
@@ -140,12 +155,19 @@ class BaselineScoreExecutor(StrategyExecutor):
         
         return signal_frame
     
-    def _generate_signals_with_cooldown(self, df: pd.DataFrame) -> pd.Series:
+    def _generate_signals_with_cooldown(
+        self,
+        df: pd.DataFrame,
+        buy_candidate: pd.Series,
+        sell_candidate: pd.Series
+    ) -> pd.Series:
         """
         生成信號（帶連續確認和 cooldown）
         
         Args:
-            df: 包含 TotalScore 的 DataFrame
+            df: 包含資料的 DataFrame
+            buy_candidate: 買入候選序列
+            sell_candidate: 賣出候選序列
         
         Returns:
             信號序列（1=買入, 0=持有, -1=賣出）
@@ -158,11 +180,11 @@ class BaselineScoreExecutor(StrategyExecutor):
         
         # 計算連續確認
         buy_confirmed = self._calculate_confirmed_signals(
-            df['TotalScore'] >= self.buy_score,
+            buy_candidate,
             self.buy_confirm_days
         )
         sell_confirmed = self._calculate_confirmed_signals(
-            df['TotalScore'] <= self.sell_score,
+            sell_candidate,
             self.sell_confirm_days
         )
         
