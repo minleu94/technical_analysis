@@ -136,14 +136,20 @@ threshold_score_bp = sorted_history[rank - 1]
 
 ```python
 {
-    "recommendation_min_percentile_bp": 8000,
-    "recommendation_min_universe_size": 20,
-    "recommendation_ranking_method": "nearest_rank",
+    "recommendation_ranking": {
+        "threshold_mode": "fixed",
+        "recommendation_min_percentile_bp": 8000,
+        "recommendation_min_universe_size": 20,
+        "recommendation_ranking_method": "nearest_rank",
+    }
 }
 ```
 
+- `recommendation_ranking` 缺少或其 `threshold_mode` 缺少時，維持既有 fixed 排序與 `top_n` 行為。
+- 只有 `recommendation_ranking.threshold_mode == "quantile"` 時才啟用橫斷面百分位門檻。
 - eligible universe 少於 20 檔時必須回傳明確診斷，不得靜默降級成 fixed。
 - 同分時依 `FinalScore` 降序、`stock_code` 升序確定排序，確保重播一致。
+- 百分位採 empirical CDF：`ceil(count(score <= current_score) * 10000 / universe_size)`；同分股票取得相同百分位基點。
 - 百分位以整數名次換算成 `0..10000` 基點，不在決策層保存浮點百分位。
 
 ## 7. 架構邊界
