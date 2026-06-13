@@ -63,7 +63,7 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Strategy & Scoring Governance 實證：使用固定股票池與成本假設完成 fixed / quantile walk-forward 績效比較。
+1. (✅已完成) Strategy & Scoring Governance 實證：使用固定股票池與成本假設完成 fixed / quantile walk-forward 績效比較。
 2. Legacy Carryover Month 1：完成大表格分頁、規格化報告與穩定性基準，不只停在設計稿。
 3. Legacy Carryover Month 2：完成 Indicator Parameter Registry、Recommendation Weight Contract 與 Research Run Registry。
 
@@ -138,8 +138,8 @@
 ## Strategy & Scoring Governance 驗證限制
 
 - 功能與機制回歸已完成。
-- 真實股票池 fixed / quantile walk-forward 績效比較尚未執行。
-- 在實證結果完成前，quantile 維持 opt-in，不宣稱改善績效或穩健度。
+- 真實股票池 fixed / quantile walk-forward 績效比較已於 2026-06-13 完成（詳見 [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md)）。
+- 在實證結果完成後，可提供決策支持；但 quantile 仍應與 fixed 模式並行列入觀察。
 
 ## 2026-06-11 券商分點擴充與數據更新流程分流成果
 
