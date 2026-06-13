@@ -71,9 +71,52 @@ class RecommendationDTO:
             result['排名日期'] = self.eligible_universe_date if self.eligible_universe_date is not None else "N/A"
             result['排名方法'] = self.ranking_method if self.ranking_method is not None else "N/A"
             result['門檻模式'] = '百分位'
-        else:
-            result['門檻模式'] = '固定'
         return result
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'RecommendationDTO':
+        """從字典還原 RecommendationDTO，支援英文與舊有中文 key，並確保對歷史欄位的相容性"""
+        stock_code = data.get('stock_code', data.get('證券代號', ''))
+        stock_name = data.get('stock_name', data.get('證券名稱', ''))
+        close_price = data.get('close_price', data.get('收盤價', 0.0))
+        price_change = data.get('price_change', data.get('漲幅%', 0.0))
+        total_score = data.get('total_score', data.get('總分', 0.0))
+        indicator_score = data.get('indicator_score', data.get('指標分', 0.0))
+        pattern_score = data.get('pattern_score', data.get('圖形分', 0.0))
+        volume_score = data.get('volume_score', data.get('成交量分', 0.0))
+        recommendation_reasons = data.get('recommendation_reasons', data.get('推薦理由', ''))
+        industry = data.get('industry', data.get('產業', ''))
+        
+        regime_match_val = data.get('regime_match', data.get('Regime匹配', False))
+        if isinstance(regime_match_val, str):
+            regime_match = (regime_match_val == '是')
+        else:
+            regime_match = bool(regime_match_val)
+            
+        score_percentile_bp = data.get('score_percentile_bp')
+        eligible_universe_size = data.get('eligible_universe_size')
+        eligible_universe_date = data.get('eligible_universe_date')
+        ranking_method = data.get('ranking_method')
+        threshold_mode = data.get('threshold_mode', 'fixed')
+        
+        return cls(
+            stock_code=str(stock_code),
+            stock_name=str(stock_name),
+            close_price=float(close_price),
+            price_change=float(price_change),
+            total_score=float(total_score),
+            indicator_score=float(indicator_score),
+            pattern_score=float(pattern_score),
+            volume_score=float(volume_score),
+            recommendation_reasons=str(recommendation_reasons),
+            industry=str(industry),
+            regime_match=regime_match,
+            score_percentile_bp=score_percentile_bp,
+            eligible_universe_size=eligible_universe_size,
+            eligible_universe_date=eligible_universe_date,
+            ranking_method=ranking_method,
+            threshold_mode=threshold_mode
+        )
 
 
 @dataclass
@@ -121,7 +164,7 @@ class RecommendationResultDTO:
     def from_dict(cls, data: dict) -> 'RecommendationResultDTO':
         """從字典創建對象"""
         recommendations = [
-            RecommendationDTO(**rec) if isinstance(rec, dict) else rec
+            RecommendationDTO.from_dict(rec) if isinstance(rec, dict) else rec
             for rec in data.get('recommendations', [])
         ]
         return cls(
