@@ -1,14 +1,26 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
-> **開場 30 秒內讀完** - 只放今天的狀態，不放歷史細節
+> **開場 30 秒內讀完** - 只放今天的狀態與入口，不放完整歷史細節
 
 ## 系統定位（一句話）
 
 這不是每天吐股票的工具，而是一個可驗證、可回溯、可演化的投資決策系統。
 
-## 當前狀態（以 DEVELOPMENT_ROADMAP.md 的 Living Section 為準）
+## 文件權威判讀
 
-> **注意**：Living Section 定義見 `DEVELOPMENT_ROADMAP.md` 的「📍 Living Section 定義」段落。
+本專案已改採 **Scoped SSOT（分範圍單一真相來源）**：
+
+- **現在狀態 / 本週優先事項 / 高風險區**：以本文件為準。
+- **未來 6 個月工程路線**：以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準。
+- **目前架構與模組邊界**：以 `docs/01_architecture/system_architecture.md` 為準。
+- **文件導航**：以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
+- **舊 Phase 與歷史 Done**：只看 `docs/09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md`，不作目前狀態依據。
+- **舊 Roadmap 未完成事項移交**：以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。
+- **目前完整操作方式**：以 `docs/07_guides/APPLICATION_MANUAL.md` 為準。
+
+`docs/00_core/DEVELOPMENT_ROADMAP.md` 現在是 Roadmap Hub，只負責指向上述權威文件，不再保存完整歷史長文。
+
+## 當前狀態
 
 專案已超出早期線性 Phase 規劃，實際產品主線已形成三個閉環：
 
@@ -32,6 +44,11 @@
 - **效能與研究輸出（Phase 5）** 🚧 部分已完成
   - 圖表渲染優化 ✅ / 批次回測並行化 ✅ / 大表格分頁、報告輸出仍在後續
 
+- **文件治理與 Manual** ✅ 本輪完成
+  - Roadmap Hub、6M Roadmap、Legacy Carryover、Architecture、Index 與 Agent 指引已採 Scoped SSOT。
+  - 已建立 7 個頂層工作區的完整操作手冊。
+  - 舊 Roadmap 工程欠項已全部取得「已完成 / Month X 移交 / 被取代」唯一處置；實作進度仍依 6M Roadmap 執行。
+
 ## 現在的工作模式（你每天要用的流程）
 
 1. Update 使用「⚡ 快速更新 (僅 SQLite)」或「🛡️ 安全更新 (完整 CSV + SQLite)」或左側資料來源頁更新資料
@@ -47,8 +64,8 @@
 ## 本週優先事項（只列 3 個）
 
 1. Strategy & Scoring Governance 實證：使用固定股票池與成本假設完成 fixed / quantile walk-forward 績效比較。
-2. Phase 5 研究輸出：大表格分頁與 Excel/PDF 報告匯出。
-3. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔。
+2. Legacy Carryover Month 1：完成大表格分頁、規格化報告與穩定性基準，不只停在設計稿。
+3. Legacy Carryover Month 2：完成 Indicator Parameter Registry、Recommendation Weight Contract 與 Research Run Registry。
 
 ## 高風險區（改動需謹慎）
 
@@ -73,24 +90,29 @@
 
 ## 指定權威文件（需要細節再看）
 
-- `DEVELOPMENT_ROADMAP.md` - 完整開發路線圖（Single Source of Truth）
-- `DOCUMENTATION_INDEX.md` - 文檔索引
-- `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則
-- `DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（Documentation Agent 判斷 coverage 的規則）
-- `PROJECT_NAVIGATION.md` / `PROJECT_INVENTORY.md` - 專案導航與盤點
-- `../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md` - fixed / quantile 雙模式與分位數安全契約
-- `../06_qa/WALK_FORWARD_COMPARISON_REPORT.md` - 治理機制驗證證據與實證比較待辦
+- `DEVELOPMENT_ROADMAP.md` - Roadmap Hub，指向目前狀態、6 個月路線、架構與 archive。
+- `ROADMAP_6M_ENGINEERING.md` - 未來 6 個月可執行工程路線。
+- `LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 未完成事項的逐項移交與結案 Gate。
+- `DOCUMENTATION_INDEX.md` - 文檔索引。
+- `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則。
+- `DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣與 scoped authority 規則。
+- `../01_architecture/system_architecture.md` - 目前系統架構與模組邊界。
+- `../07_guides/APPLICATION_MANUAL.md` - 目前 7 個工作區的完整操作手冊。
+- `../../PROJECT_NAVIGATION.md` / `../../PROJECT_INVENTORY.md` - 專案導航與盤點。
+- `../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` - 舊完整 Roadmap，僅供歷史追溯。
+- `../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md` - fixed / quantile 雙模式與分位數安全契約。
+- `../06_qa/WALK_FORWARD_COMPARISON_REPORT.md` - 治理機制驗證證據與實證比較待辦。
 
 ---
 
-**注意**：此 Snapshot 內容從 `DEVELOPMENT_ROADMAP.md` 的「Living Section」（定義見該文件的「📍 Living Section 定義」段落）與 `DOCUMENTATION_INDEX.md` 抽出的短版入口。詳細資訊請參考權威文件。
+**注意**：此 Snapshot 是目前狀態入口；未來方向請看 6 個月工程 Roadmap，架構細節請看 system architecture，完整歷史請看 archive。
 
  
-## 2026-06-09 Roadmap Rebaseline
+## 2026-06-09 Roadmap Rebaseline（歷史記錄）
 
-- Roadmap Living Section 從舊線性 Phase 敘事重寫為三個產品閉環（資料與市場狀態、研究驗證、持倉檢查）+ Backlog + 技術治理 Next。
+- 當時 Roadmap current section 從舊線性 Phase 敘事重寫為三個產品閉環（資料與市場狀態、研究驗證、持倉檢查）+ Backlog + 技術治理 Next。
 - Phase 4.1 已標記為「Portfolio MVP 已建立，深化仍在進行」；Phase 5 圖表渲染已標記完成，其餘項保留。
-- 本週優先事項改為 Rebaseline → 回測時間軸契約 → 金融核心數值治理。
+- 當時本週優先事項改為 Rebaseline → 回測時間軸契約 → 金融核心數值治理。
 - Blockers / Risks 新增回測時間軸未定義、金融核心裸 float、文檔不一致三項。
 - 高風險區新增 `portfolio_module/core.py` 與 `app_module/portfolio_condition_monitor.py`。
 - 指定權威文件新增 `NEXT_ACTION_PLAN.md`。

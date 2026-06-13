@@ -20,7 +20,11 @@
 2. `docs/agents/shared_context.md`
 3. `docs/agents/git_exclusions.md`
 4. `docs/00_core/PROJECT_SNAPSHOT.md`
-5. 與任務對應的 Agent 權威文件：
+5. `docs/00_core/DEVELOPMENT_ROADMAP.md`
+6. `docs/00_core/ROADMAP_6M_ENGINEERING.md`（涉及方向、優先順序或大型規劃時）
+7. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`（涉及舊工作承接或 Phase Gate 時）
+8. `docs/07_guides/APPLICATION_MANUAL.md`（涉及 UI、使用流程、參數、結果判讀或安全限制時）
+9. 與任務對應的 Agent 權威文件：
    - 架構判斷：`docs/agents/tech_lead.md`
    - 受控實作：`docs/agents/execution_agent.md`
    - 文檔同步：`docs/agents/documentation_agent.md`
@@ -35,7 +39,7 @@
 | 架構判斷、風險雷達、是否該做 | `docs/agents/tech_lead.md` | Tech Lead 權威角色 |
 | 明確 scope 實作、bugfix | `docs/agents/execution_agent.md` | Execution 權威角色 |
 | 完成前驗證、測試矩陣、回歸確認 | `docs/agents/execution_agent.md` + `docs/agents/shared_context.md` | 依專案驗證規則執行 |
-| 文檔 coverage、索引、Roadmap / Snapshot 同步 | `docs/agents/documentation_agent.md` | Documentation 權威角色 |
+| 文檔 coverage、索引、Snapshot / Roadmap Hub / 6M Roadmap / Carryover / Architecture / Manual 同步 | `docs/agents/documentation_agent.md` | Documentation 權威角色 |
 | 資料完整性、SQLite / CSV 一致性 | `docs/agents/data_audit_agent.md` | Data Audit 權威角色 |
 | 清理、移除、死碼、依賴精簡 | `docs/agents/data_cleanup_agent.md` | Cleanup 權威角色 |
 
@@ -86,6 +90,8 @@
 - 不得覆寫使用者、Codex、Antigravity 或其他 Agent 的未提交變更。
 - 不得擴張未被要求的 scope。
 - 修改功能時必須檢查文檔同步需求。
+- 文件判讀採 Scoped SSOT：目前狀態看 Snapshot，未來工程路線看 6M Roadmap，舊工作承接看 Legacy Carryover，架構看 system architecture，操作看 Application Manual，歷史看 archive。
+- 使用者可見流程、參數、結果判讀或安全限制改變時，必須同步 Application Manual。
 - Stage / commit 前必須先讀 `docs/agents/git_exclusions.md`。
 - 涉及量化核心計算時，嚴禁新增裸 `float`。
 - 涉及策略、回測、推薦、績效、風控時，必須先做 Look-ahead bias 自查。
@@ -106,3 +112,5 @@
 
 - 2026-06-09：改為「索引 + 分冊」架構，將本文件降級為短索引，技能細則移至 `docs/agents/skills/`。
 - 2026-06-09：修正為「既有 Agent 單一權威制」，`skills/` 僅保留團隊協作與交接流程，不建立同名角色分冊。
+- 2026-06-13：更新固定必讀與文件同步描述，對齊 Snapshot / Roadmap Hub / 6M Roadmap / Architecture 的 Scoped SSOT。
+- 2026-06-13：補入 Legacy Carryover 與 Application Manual 的條件式必讀及權威範圍。

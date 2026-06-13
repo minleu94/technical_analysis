@@ -2,45 +2,43 @@
 
 > **給 Documentation Agent 用來判斷 coverage 的規則文件**
 
-## 一、文件權威順序（Single Source of Truth Priority）
+## 一、文件權威邊界（Scoped SSOT）
 
-當文件描述衝突時，依以下順序判斷權威性：
+本專案不再使用單一文件承擔所有最高權威。當文件描述衝突時，先判斷主題，再依主題對應的權威文件處理。
 
-1. **`docs/00_core/DEVELOPMENT_ROADMAP.md`** - 最高權威
-   - Phase 狀態、功能清單、技術架構的 Single Source of Truth
-   - 所有其他文件必須與 Roadmap 的 Living Section 一致
-   - **Living Section 定義**：見該文件的「📍 Living Section 定義」段落
+| 主題 | 權威文件 | 判斷規則 |
+|---|---|---|
+| 目前狀態、本週優先事項、高風險區 | `docs/00_core/PROJECT_SNAPSHOT.md` | 開場與日常工作先看 Snapshot。 |
+| 未來 6 個月工程路線 | `docs/00_core/ROADMAP_6M_ENGINEERING.md` | 里程碑、交付物與驗收標準以 6M Roadmap 為準。 |
+| Roadmap 入口與權威導覽 | `docs/00_core/DEVELOPMENT_ROADMAP.md` | Roadmap Hub 只保存入口與短版 Next，不保存完整歷史。 |
+| 舊 Roadmap 未完成事項移交 | `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` | 每個 Legacy 項目必須有唯一處置、月份與驗收定義。 |
+| 系統架構、模組邊界、資料流 | `docs/01_architecture/system_architecture.md` | 架構描述衝突時，以系統架構文件為準。 |
+| 目前使用者完整操作流程 | `docs/07_guides/APPLICATION_MANUAL.md` | 7 個頂層工作區、跨工作區流程、安全限制與排錯以本手冊為準。 |
+| 文檔位置與分類 | `docs/00_core/DOCUMENTATION_INDEX.md` | 只作導航，不取代狀態或架構權威。 |
+| 文檔生命週期與歸檔規則 | `docs/00_core/DOCUMENTATION_STRUCTURE.md` | 刪除、搬移、歸檔 Markdown 前必須參考。 |
+| 歷史 Phase、舊 Done、舊 Roadmap current section | `docs/09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` | 只作追溯，不作目前狀態依據。 |
 
-2. **`docs/00_core/PROJECT_SNAPSHOT.md`** - 次級權威
-   - 從 Roadmap 抽出的短版入口
-   - 必須與 Roadmap 的當前狀態一致
+其他專項文件權威：
 
-3. **`docs/00_core/DOCUMENTATION_INDEX.md`** - 索引權威
-   - 文檔結構與導航的 Single Source of Truth
-   - 若索引內進度文字與 Roadmap 衝突，以 Roadmap 為準
-
-4. **`docs/00_core/DOCUMENTATION_STRUCTURE.md`** - 結構與生命週期權威
-   - `docs/` 資料夾歸屬、Active / Historical / Delete 判斷
-   - 刪除或歸檔 Markdown 前必須參考
-
-5. **`PROJECT_NAVIGATION.md`** - 架構導航權威
+1. **`PROJECT_NAVIGATION.md`** - 開發者導航權威
    - 三層架構（UI / Service / Domain）的導航說明
    - 功能導航（我要做 X，要去哪裡看？）
 
-6. **`AGENTS.md` / `docs/agents/`** - Codex 與 Agent 指引權威
+2. **`AGENTS.md` / `docs/agents/`** - Codex 與 Agent 指引權威
    - `AGENTS.md` 是 Codex 自動讀取的 repo 指令入口
    - `docs/agents/` 保存完整 Agent 職責、Prompt 與共用上下文
 
-7. **其他專項文檔** - 功能特定權威
+3. **其他專項文檔** - 功能特定權威
    - `docs/02_features/UI_FEATURES_DOCUMENTATION.md` - UI 功能說明
-   - `docs/02_features/USER_GUIDE.md` - 使用者指南
-   - `docs/01_architecture/system_architecture.md` - 系統架構
+   - `docs/07_guides/APPLICATION_MANUAL.md` - 完整使用手冊
+   - `docs/02_features/USER_GUIDE.md` - 進階專題教學
    - `docs/02_features/STRATEGY_DESIGN_SPECIFICATION.md` - 策略設計規格
 
 **衝突處理規則：**
-- 若 Snapshot / Index 與 Roadmap 衝突 → 以 Roadmap 為準，更新 Snapshot / Index
-- 若專項文檔與 Roadmap 衝突 → 以 Roadmap 為準，更新專項文檔
-- 若專項文檔之間衝突 → 以 Roadmap 為準，或要求使用者澄清
+- 若 Snapshot、6M Roadmap、Architecture 之間衝突 → 先判斷主題，依上表權威文件修正。
+- 若 Index 路徑與實際檔案不符 → 以實際檔案與文件結構規則修正 Index。
+- 若 Active 專項文檔仍引用舊 Phase 或舊 Roadmap current section → 更新為 scoped authority；歷史內容移至 archive 或保留歷史語意。
+- 無法判斷主題歸屬時，標示「需要確認」，不要自行建立第二套權威。
 
 ## 二、變更類型 → 必須更新的文件對照表
 
@@ -53,13 +51,14 @@
 
 **必須更新（Must）：**
 - `docs/02_features/UI_FEATURES_DOCUMENTATION.md` - UI 功能說明
+- `docs/07_guides/APPLICATION_MANUAL.md` - 新增或改變使用者可操作功能、參數、結果或限制時
 - `docs/00_core/PROJECT_SNAPSHOT.md` - 「現在的工作模式」段落（如影響使用流程）
 - `docs/00_core/DOCUMENTATION_INDEX.md` - 若新增文檔，需更新索引
 
 **應該更新（Should）：**
 - `docs/02_features/USER_GUIDE.md` - 使用者指南（如有操作流程變更）
 - `PROJECT_NAVIGATION.md` - 「功能導航」段落（如新增功能）
-- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Living Section（如影響 Phase 狀態）
+- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub（如影響短版 Next、入口或歷史導引）
 
 **可選更新（Nice-to-have）：**
 - `README.md` - 專案主文檔（如為重大功能變更）
@@ -78,8 +77,8 @@
 - `docs/01_architecture/system_architecture.md` - 系統架構文檔（如架構變更）
 
 **應該更新（Should）：**
-- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Living Section（如影響 Phase 狀態）
 - `docs/00_core/PROJECT_SNAPSHOT.md` - 「高風險區」段落（如涉及高風險模組）
+- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub（如影響短版 Next、入口或歷史導引）
 
 **可選更新（Nice-to-have）：**
 - `PROJECT_INVENTORY.md` - 專案盤點（如為重大模組變更）
@@ -98,16 +97,17 @@
 
 **必須更新（Must）：**
 - `docs/02_features/BACKTEST_LAB_FEATURES.md` - 回測功能文檔（如回測邏輯變更）
+- `docs/07_guides/APPLICATION_MANUAL.md` - 回測模式、參數、結果判讀或 Promote 規則變更
 - `docs/02_features/USER_GUIDE.md` - 使用者指南（如操作流程變更）
 - `docs/00_core/PROJECT_SNAPSHOT.md` - 「高風險區」段落（這些都是高風險區）
 
 **應該更新（Should）：**
 - `docs/02_features/STRATEGY_DESIGN_SPECIFICATION.md` - 策略設計規格（如策略邏輯變更）
-- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Living Section（如影響 Phase 狀態）
+- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub（如影響短版 Next、入口或歷史導引）
 - `docs/00_core/DOCUMENTATION_INDEX.md` - 若新增文檔，需更新索引
 
 **可選更新（Nice-to-have）：**
-- `docs/UI_FEATURES_DOCUMENTATION.md` - UI 功能說明（如 UI 行為變更）
+- `docs/02_features/UI_FEATURES_DOCUMENTATION.md` - UI 功能說明（如 UI 行為變更）
 
 ---
 
@@ -131,23 +131,24 @@
 
 ---
 
-### 使用流程或 Phase 狀態變更
+### 使用流程、目前狀態或 Roadmap 變更
 
 **變更範圍：**
-- Phase 完成狀態變更
+- 目前狀態或產品閉環狀態變更
 - 工作流程變更（「現在的工作模式」）
 - 優先事項變更
 - 系統定位變更
+- 未來 6 個月工程路線變更
 
 **必須更新（Must）：**
-- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Living Section（Phase 狀態、Next、Blockers）
-  - **Living Section 範圍**：見該文件的「📍 Living Section 定義」段落
-- `docs/00_core/PROJECT_SNAPSHOT.md` - 所有相關段落（當前狀態、工作模式、優先事項）
+- `docs/00_core/PROJECT_SNAPSHOT.md` - 目前狀態、工作模式、優先事項、高風險區
+- `docs/00_core/ROADMAP_6M_ENGINEERING.md` - 若影響 6 個月里程碑、交付物或驗收標準
+- `docs/00_core/DEVELOPMENT_ROADMAP.md` - 若新增或調整 Roadmap Hub 入口與短版 Next
 - `docs/00_core/DOCUMENTATION_INDEX.md` - 若索引內進度文字過期，需更新
 
 **應該更新（Should）：**
 - `README.md` - 專案主文檔（如 Phase 狀態變更）
-- `docs/00_core/PROJECT_SNAPSHOT.md` - 專案快照（開場 30 秒必讀）
+- `PROJECT_NAVIGATION.md` / `PROJECT_INVENTORY.md` - 若影響開發導航或盤點
 
 **可選更新（Nice-to-have）：**
 - `PROJECT_INVENTORY.md` - 專案盤點（如為重大狀態變更）
@@ -170,7 +171,8 @@
 - `docs/00_core/DOCUMENTATION_INDEX.md` - 若新增文檔，需更新索引
 
 **可選更新（Nice-to-have）：**
-- `docs/USER_GUIDE.md` - 使用者指南（如影響使用者操作）
+- `docs/02_features/USER_GUIDE.md` - 進階使用者指南（如影響使用者操作）
+- `docs/07_guides/APPLICATION_MANUAL.md` - 完整操作手冊（如影響使用流程、參數、結果判讀或安全限制）
 
 ---
 
@@ -190,7 +192,7 @@
 - `docs/02_features/BACKTEST_LAB_FEATURES.md` - 回測功能文檔（如策略回測變更）
 
 **可選更新（Nice-to-have）：**
-- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Living Section（如為重大策略變更）
+- `docs/00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub（如為重大策略方向或入口變更）
 
 ---
 
@@ -220,21 +222,30 @@
    - 根據「變更類型 → 必須更新的文件對照表」檢查
    - 所有標示為 Must 的文件都已更新
 
-2. **Snapshot / Index / Roadmap 一致性檢查通過**
-   - `docs/00_core/PROJECT_SNAPSHOT.md` 與 `docs/00_core/DEVELOPMENT_ROADMAP.md` 的 Living Section 一致
-   - `docs/00_core/DOCUMENTATION_INDEX.md` 與 `docs/00_core/DEVELOPMENT_ROADMAP.md` 的 Living Section 進度描述一致
-   - 若發現不一致，必須修正（以 Roadmap 的 Living Section 為準）
-   - **Living Section 定義**：見 `docs/00_core/DEVELOPMENT_ROADMAP.md` 的「📍 Living Section 定義」段落
+2. **Scoped Authority 一致性檢查通過**
+   - `PROJECT_SNAPSHOT.md` 的目前狀態與本週優先事項合理反映當前工作。
+   - `ROADMAP_6M_ENGINEERING.md` 的 6 個月路線與 Roadmap Hub 的 Next 不衝突。
+   - `system_architecture.md` 的架構描述不落後於 Snapshot 的已完成能力。
+   - `DOCUMENTATION_INDEX.md` 包含新增、搬移或歸檔的 Markdown。
+   - 若發現不一致，必須依主題權威文件修正，而不是一律回寫 Roadmap。
 
 3. **文件結構已更新**
    - 新增/刪除/搬移 Markdown 後，`DOCUMENTATION_INDEX.md` 必須同步
    - 若文件分類或刪除規則改變，`DOCUMENTATION_STRUCTURE.md` 必須同步
 
 4. **相關使用指南已更新**
-   - 若變更影響使用者操作流程，`docs/02_features/USER_GUIDE.md` 必須更新
+   - 若變更影響使用者操作流程，`docs/07_guides/APPLICATION_MANUAL.md` 必須更新
+   - 若變更影響進階專題教學，`docs/02_features/USER_GUIDE.md` 必須更新
    - 若變更影響 UI 功能，`docs/02_features/UI_FEATURES_DOCUMENTATION.md` 必須更新
 
-5. **變更日誌已記錄**
+5. **Manual 完整性 Gate 已通過**
+   - 每個使用者可見工作區都有入口與前置條件。
+   - 每個可操作功能都有步驟與參數意義。
+   - 結果頁有判讀方式，不只列出功能名稱。
+   - 危險操作、不可逆行為與目前限制有明確警告。
+   - 至少包含常見失敗與排錯入口。
+
+6. **變更日誌已記錄**
    - 根據 `docs/agents/shared_context.md` 的「更新記錄 / 變更日誌規範」記錄變更
    - 若存在變更日誌文件（如 `docs/UPDATE_LOG_*.md`），需記錄變更
 
@@ -264,20 +275,20 @@
 
 每次文件更新後，必須檢查以下一致性：
 
-### Snapshot ↔ Roadmap 一致性
-- [ ] Phase 狀態一致（Snapshot 的「當前狀態」與 Roadmap Living Section 的「現況」一致）
-- [ ] 工作模式描述一致（Snapshot 的「現在的工作模式」與 Roadmap Living Section 一致）
-- [ ] 優先事項一致（Snapshot 的「本週優先事項」與 Roadmap Living Section 的「下一步 Next」一致）
-- [ ] 高風險區一致（Snapshot 的「高風險區」與 Roadmap Living Section 的「Blockers / Risks」一致）
+### Snapshot ↔ Roadmap Hub ↔ 6M Roadmap 一致性
+- [ ] Snapshot 的「本週優先事項」落在 6M Roadmap 的 Month 1 或當前月度目標內。
+- [ ] Roadmap Hub 的 Next 不新增與 6M Roadmap 衝突的平行方向。
+- [ ] Snapshot 的高風險區涵蓋 6M Roadmap 近期任務的高風險模組。
 
-### Index ↔ Roadmap 一致性
-- [ ] 進度描述一致（Index 的進度描述與 Roadmap Living Section 一致，以 Roadmap 為準）
+### Index ↔ Scoped Authority 一致性
+- [ ] Index 的進度描述不與 Snapshot、6M Roadmap 或 Architecture 衝突。
 - [ ] 文檔索引完整（所有新文檔已加入索引）
 
-### 專項文檔 ↔ Roadmap 一致性
-- [ ] UI 功能描述與 Roadmap 一致
-- [ ] 使用者指南與 Roadmap 一致
-- [ ] 架構文檔與 Roadmap 一致
+### 專項文檔 ↔ Scoped Authority 一致性
+- [ ] UI 功能描述與 Snapshot / UI docs 一致。
+- [ ] 完整操作手冊與目前 7 個工作區、按鈕啟用狀態及工作模式一致。
+- [ ] 進階使用者指南與完整操作手冊不衝突。
+- [ ] 架構文檔與目前模組實際邊界一致。
 
 ---
 
@@ -296,7 +307,7 @@
 2. **`docs/00_core/DOCUMENTATION_INDEX.md`**
    - 當新增/刪除文檔時 → 必須更新索引
    - 當文檔結構變更時 → 必須更新索引
-   - 當進度描述過期時 → 必須更新（以 Roadmap 為準）
+   - 當進度描述過期時 → 必須依 Scoped Authority 更新
 
 3. **`docs/00_core/DOCUMENTATION_STRUCTURE.md`**
    - 當新增/刪除資料夾時 → 必須更新資料夾歸屬
@@ -304,18 +315,20 @@
    - 當文件被改為 Historical 時 → 必須確認是否應移入 `09_archive/`
 
 4. **`docs/00_core/DEVELOPMENT_ROADMAP.md`**
-   - 當 Phase 狀態變更時 → 必須更新 Living Section 的「現況」段落
-   - 當優先事項變更時 → 必須更新 Living Section 的「下一步 Next」段落
-   - 當風險變更時 → 必須更新 Living Section 的「Blockers / Risks」段落
-   - **Living Section 定義**：見該文件的「📍 Living Section 定義」段落
+   - 當 Roadmap Hub 入口、Next 摘要或權威文件指向變更時 → 必須更新。
+   - 不再把完整歷史 Done、長期架構細節或所有風險都塞回本文件。
+
+5. **`docs/00_core/ROADMAP_6M_ENGINEERING.md`**
+   - 當 6 個月工程方向、月度里程碑、交付物或驗收標準變更時 → 必須更新。
+   - 當只是單日完成小修復，且不影響 6 個月方向時 → 不需要更新。
 
 ### 特定變更類型必須檢查
 
-5. **`PROJECT_NAVIGATION.md`**
+6. **`PROJECT_NAVIGATION.md`**
    - 當架構變更時 → 必須更新「三層架構導航」
    - 當功能變更時 → 必須更新「功能導航」
 
-6. **`README.md`**
+7. **`README.md`**
    - 當為重大功能變更時 → 應該更新（雖然優先級較低，但容易被忽略）
 
 ## 使用說明（給 Documentation Agent）
@@ -327,13 +340,13 @@
 
 2. **執行 Coverage Pass 時**：
    - 列出所有需要更新的文件清單（包括容易被忽略的文件）
-   - 檢查 Snapshot / Index / Roadmap 一致性（使用下方「一致性檢查清單」）
+   - 檢查 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index 一致性（使用下方「一致性檢查清單」）
    - 標示需要更新的具體段落
 
 3. **執行 Patch Pass 時**：
    - 僅更新已確認的 Coverage 清單中的文件
    - 確保所有 Must 優先級的文件已更新
-   - **特別確保 Snapshot / Index / Roadmap 已更新並一致**
+   - **特別確保 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index 已更新並一致**
 
 4. **完成後驗證**：
    - 執行「一致性檢查清單」
@@ -342,5 +355,5 @@
 
 ---
 
-**最後更新**：2026-05-19
+**最後更新**：2026-06-13
 

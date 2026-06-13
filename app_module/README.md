@@ -1,165 +1,119 @@
-# 應用服務層 (Application Service Layer)
+# Application Service Layer
 
-## 概述
+`app_module/` 是 UI、domain、資料存取與研究引擎之間的應用服務層。主要 UI `ui_qt/` 應透過 service 與 DTO 使用系統能力，不直接實作業務規則。
 
-`app_module/` 是應用服務層，提供統一的業務邏輯接口，供各種 UI（Tkinter/Qt/Web/CLI）調用。
+## 目前架構
 
-## 架構設計原則
-
-### 方案 A：最小重工（當前採用）
-
-- **不搬檔案**：`ui_app/` 中的業務邏輯模組（`stock_screener.py`, `strategy_configurator.py` 等）暫時保留在原位置
-- **Service 層包裝**：`app_module/*_service.py` 內部 import `ui_app` 模組
-- **未來遷移**：等 Qt UI 穩定後，再將這些模組搬到 `recommendation_module/` 或新建 `decision_module/`
-
-### 優勢
-
-- ✅ 最小改動，不破壞現有功能
-- ✅ UI 與邏輯解耦，未來可支持多種 UI
-- ✅ 逐步遷移，風險可控
-
-## 目錄結構
-
-```
-app_module/
-├── __init__.py              # 模組導出
-├── dtos.py                  # 數據傳輸對象定義
-├── recommendation_service.py # 推薦服務（已完成）
-├── screening_service.py     # 強勢股/產業篩選服務（待實現）
-├── regime_service.py        # 市場狀態檢測服務（待實現）
-├── update_service.py        # 數據更新服務（待實現）
-└── backtest_service.py      # 回測服務（待實現）
+```text
+ui_qt
+  -> app_module services / repositories / DTOs
+      -> decision_module
+      -> backtest_module
+      -> portfolio_module
+      -> data_module
+      -> runtime
 ```
 
-## 已實現服務
+早期由 service 包裝 `ui_app` 業務邏輯的過渡方案已結束。核心決策邏輯目前位於 `decision_module/`，回測位於 `backtest_module/`，持倉 domain 位於 `portfolio_module/`。
 
-### RecommendationService
+## 主要責任
 
-**功能**：執行股票推薦分析
+### 市場與推薦
 
-**主要方法**：
-- `run_recommendation(config, max_stocks=200, top_n=50) -> List[RecommendationDTO]`
-  - 執行策略分析，返回推薦股票列表
-  - 內部調用 `ui_app.strategy_configurator`, `ui_app.reason_engine`, `ui_app.industry_mapper`
-  
-- `detect_regime() -> Dict[str, Any]`
-  - 檢測市場狀態（Trend/Reversion/Breakout）
-  - 內部調用 `ui_app.market_regime_detector`
-  
-- `get_strategy_config_for_regime(regime) -> Dict[str, Any]`
-  - 獲取指定市場狀態的策略配置
+- `recommendation_service.py`
+- `screening_service.py`
+- `regime_service.py`
+- `broker_flow_service.py`
+- `portfolio_chip_service.py`
 
-**使用範例**：
+負責組合決策元件、資料來源與 DTO，提供 UI 可使用的推薦、篩選、Regime 與籌碼結果。
+
+### 資料更新
+
+- `update_service.py`
+- `broker_branch_update_service.py`
+- `sqlite_inspector_service.py`
+
+負責下載、合併、SQLite 同步、技術指標更新、資料狀態與唯讀檢視。
+
+### 回測與研究
+
+- `backtest_service.py`
+- `batch_backtest_service.py`
+- `walkforward_service.py`
+- `optimization_service.py`
+- `recommendation_portfolio_backtest_service.py`
+- `recommendation_replay_service.py`
+
+負責一般回測、批次回測、最佳化、Walk-forward、推薦回放與研究結果組裝。
+
+### 保存與治理
+
+- `backtest_repository.py`
+- `recommendation_repository.py`
+- `recommendation_portfolio_run_repository.py`
+- `result_store.py`
+- `strategy_version_service.py`
+- `preset_service.py`
+- `universe_service.py`
+
+負責研究結果、推薦結果、策略版本、Preset 與 Universe 的保存及追溯。
+
+### Portfolio
+
+- `portfolio_service.py`
+- `portfolio_condition_monitor.py`
+- `portfolio_source_adapter.py`
+
+負責交易記錄、持倉投影、來源 metadata 與條件監控。核心金額規則仍由 `portfolio_module/` domain 負責。
+
+### Runtime
+
+- `runtime_services/`
+- `dtos/runtime_dtos.py`
+
+負責 Runtime controller、健康快照與 UI DTO。
+
+## DTO 原則
+
+`app_module/dtos.py` 與子 DTO 模組是 UI contract。新增或修改欄位時必須：
+
+1. 保持歷史資料 round-trip 相容，或提供 migration。
+2. 明確標示資料日期、品質與來源。
+3. 金融核心值遵守 Decimal、整數股數/基點與 numeric boundary 規範。
+4. 同步更新 UI、測試與使用文件。
+
+## 研究與金融防線
+
+- 回測與推薦不得使用決策日之後的資料。
+- quantile 回測門檻只能使用 T-1 以前歷史。
+- 推薦百分位必須先固定 eligible universe。
+- 核心金額、PnL、成本與倉位不得新增裸 `float` 計算。
+- Factor 擴充必須走 Factor Contract，不直接耦合新資料表到 ScoringEngine。
+
+## 使用方式
+
+UI 層通常由 `ui_qt/main.py` 建立 service 並注入 view。獨立腳本應先建立 `TWStockConfig`：
+
 ```python
-from app_module.recommendation_service import RecommendationService
 from data_module.config import TWStockConfig
+from app_module.regime_service import RegimeService
 
 config = TWStockConfig()
-service = RecommendationService(config)
-
-# 執行推薦
-recommendations = service.run_recommendation(
-    config={
-        'technical': {...},
-        'patterns': {...},
-        'signals': {...},
-        'filters': {...},
-        'regime': 'Trend'
-    },
-    max_stocks=200,
-    top_n=50
-)
-
-# 使用推薦結果
-for rec in recommendations:
-    print(f"{rec.stock_code}: {rec.total_score}")
+service = RegimeService(config)
+result = service.detect_regime()
 ```
 
-## 已實現服務（骨架）
+具體方法簽名以服務程式碼與測試為準，不在 README 複製可能快速過期的完整 API 清單。
 
-### ScreeningService ✅
+## 近期工程方向
 
-**功能**：強勢股/產業篩選
+以 [ROADMAP_6M_ENGINEERING.md](../docs/00_core/ROADMAP_6M_ENGINEERING.md) 為準：
 
-**主要方法**：
-- `get_strong_stocks(period='day', top_n=20, min_volume=None) -> pd.DataFrame`
-- `get_strong_industries(period='day', top_n=20) -> pd.DataFrame`
-
-**內部調用**：`ui_app.stock_screener`
-
-### RegimeService ✅
-
-**功能**：市場狀態檢測
-
-**主要方法**：
-- `detect_regime(date=None) -> RegimeResultDTO`
-- `get_strategy_config(regime) -> Dict[str, Any]`
-
-**內部調用**：`ui_app.market_regime_detector`
-
-### UpdateService ✅（完整實現）
-
-**功能**：數據更新
-
-**主要方法**：
-- `update_daily(start_date, end_date, delay_seconds=4.0) -> Dict[str, Any]`
-  - 更新每日股票數據，調用 `scripts/batch_update_daily_data.py`
-  - 返回更新結果：成功/失敗日期列表、消息
-- `update_market(start_date, end_date) -> Dict[str, Any]`
-  - 更新大盤指數數據（待實現）
-- `update_industry(start_date, end_date) -> Dict[str, Any]`
-  - 更新產業指數數據（待實現）
-- `merge_daily_data(force_all=False) -> Dict[str, Any]`
-  - 合併每日數據到 `stock_data_whole.csv`
-  - `force_all=True`：強制重新合併所有數據（完全重建）
-  - `force_all=False`：增量合併，只處理新文件
-- `check_data_status() -> Dict[str, Any]`
-  - 檢查數據狀態：每日股票數據、大盤指數、產業指數的最新日期
-
-**內部調用**：
-- `scripts/batch_update_daily_data.py`：每日數據更新
-- `scripts/merge_daily_data.py`：數據合併
-
-### BacktestService ✅（Stub）
-
-**功能**：回測分析
-
-**主要方法**：
-- `run_backtest(stock_code, start_date, end_date, capital=1000000.0, strategy_name='default', strategy_config=None) -> BacktestReportDTO`
-- `run_multi_stock_backtest(stock_codes, start_date, end_date, capital=1000000.0, strategy_name='default', strategy_config=None) -> Dict[str, BacktestReportDTO]`
-
-**內部調用**：`backtest_module.strategy_tester`, `backtest_module.performance_analyzer`（待實現）
-
-## 數據傳輸對象 (DTOs)
-
-定義在 `dtos.py`：
-
-- `RecommendationDTO`：股票推薦結果
-- `RegimeResultDTO`：市場狀態檢測結果
-- `BacktestReportDTO`：回測報告（待實現）
-
-## 遷移計劃
-
-### Step 1：✅ 已完成
-- [x] 創建 `app_module/` 目錄
-- [x] 創建 `dtos.py`
-- [x] 創建 `recommendation_service.py`
-- [x] 修改 `ui_app/main.py` 使用 `RecommendationService`
-
-### Step 2：✅ 已完成
-- [x] 實現 `screening_service.py`（完整實現）
-- [x] 實現 `regime_service.py`（完整實現）
-- [x] 實現 `update_service.py`（完整實現：數據更新、合併、狀態檢查）
-- [x] 實現 `backtest_service.py`（Stub，方法簽名穩定）
-
-### Step 3：未來遷移
-- [ ] 將 `ui_app/stock_screener.py` 等模組搬到 `recommendation_module/` 或新建 `decision_module/`
-- [ ] 更新所有 import 路徑
-- [ ] 移除 `ui_app/` 中的業務邏輯，只保留 UI 代碼
-
-## 注意事項
-
-1. **向後兼容**：`ui_app/main.py` 仍保留原有實例（`self.strategy_configurator` 等），確保現有代碼不中斷
-2. **逐步遷移**：不要一次性搬動所有模組，先確保 service 層穩定
-3. **測試優先**：每次遷移後都要測試，確保功能正常
+- Research Run Registry
+- Indicator Parameter Registry
+- Recommendation Weight Contract
+- Factor DTO / registry / scoring adapter
+- Cross-run Comparison
+- 策略生命週期與 Portfolio attribution
 

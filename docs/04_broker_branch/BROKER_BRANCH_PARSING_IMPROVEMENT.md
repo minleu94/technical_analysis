@@ -169,7 +169,8 @@ python scripts/test_counterparty_parsing.py
 
 - `BROKER_BRANCH_TESTING_AND_TROUBLESHOOTING.md`：測試與故障排除指南（同目錄）
 - `BROKER_BRANCH_DATA_MODULE_DESIGN_V2.md`：設計文檔（同目錄）
-- `../00_core/DEVELOPMENT_ROADMAP.md`：開發路線圖
+- `../00_core/DEVELOPMENT_ROADMAP.md`：Roadmap Hub
+- `../00_core/ROADMAP_6M_ENGINEERING.md`：未來資料擴充路線
 
 ---
 

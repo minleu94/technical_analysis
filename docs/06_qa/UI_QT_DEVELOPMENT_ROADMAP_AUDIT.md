@@ -1,14 +1,15 @@
-# UI_QT Development Roadmap 對照審核報表
+# UI_QT Development Roadmap 對照審核報表（歷史）
 
 **審核日期**：2026-05-19  
 **審核範圍**：`docs/00_core/DEVELOPMENT_ROADMAP.md`、`ui_qt/`、相關 `app_module/` service、QA/測試文件  
-**真相來源**：以 `docs/00_core/DEVELOPMENT_ROADMAP.md` 為主，並參照 Living Section、`docs/02_features/UI_FEATURES_DOCUMENTATION.md`、Phase 4 設計文件。
+**報表性質**：本文件保留 2026-05-19 當時的 UI / Roadmap 對照結果，只作歷史追溯；目前狀態請以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準，6 個月工程路線請以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準。
+**當時真相來源**：當時以 `docs/00_core/DEVELOPMENT_ROADMAP.md`、Roadmap 補充記錄、`docs/02_features/UI_FEATURES_DOCUMENTATION.md`、Phase 4 設計文件為審核依據。
 
 ---
 
 ## 一、總結
 
-目前 `ui_qt` **大致符合 Phase 1 ~ Phase 3.3b 的功能進度**，也已納入 Living Section 提到的 **Runtime Observatory MVP** 與 **Smart Money Terminal MVP**。
+截至 2026-05-19，`ui_qt` **大致符合 Phase 1 ~ Phase 3.3b 的功能進度**，也已納入當時 Roadmap 補充記錄提到的 **Runtime Observatory MVP** 與 **Smart Money Terminal MVP**。
 
 但有三個明顯落差：
 
@@ -16,7 +17,7 @@
    - Roadmap 規定 Phase 1 ~ 3 固定 4 個頂層 Tab：Update / Market Watch / Recommendation / Backtest。
    - 目前 `ui_qt/main.py` 實際頂層包含：數據更新、市場觀察、策略回測、推薦分析、觀察清單、Runtime Observatory。
    - `Watchlist` 被做成獨立頂層 Tab，與 roadmap「非獨立頂層 Tab」不一致。
-   - `Runtime Observatory` 也是新增頂層 Tab，Living Section 有記錄完成，但 roadmap 的 IA 區塊尚未同步。
+   - `Runtime Observatory` 也是新增頂層 Tab，當時 Roadmap 補充記錄有記錄完成，但 roadmap 的 IA 區塊尚未同步。
 
 2. **Phase 4 尚未在 `ui_qt` 完成**
    - 已有 Phase 4.1 的 domain/service/test 骨架：`portfolio_module/`、`app_module/portfolio_service.py`、`app_module/journal_service.py`、`tests/test_portfolio_mvp.py`。
@@ -25,7 +26,7 @@
 
 3. **文件狀態互相打架**
    - `DEVELOPMENT_ROADMAP.md` 和 `UI_FEATURES_DOCUMENTATION.md` 已到 Phase 3.3b 完成。
-   - `ui_qt/README.md` 的「未來計劃」仍寫 Phase 3.2 / 3.3 待開始，已過期。
+   - 2026-06-13 文件治理重構前，`ui_qt/README.md` 的「未來計劃」仍寫 Phase 3.2 / 3.3 待開始；此項已於文件重構中修正。
    - Roadmap Phase 2.5 仍提到 Walk-forward 暖機期未完成，但 Phase 3.3b 與 UI 文件已標示 warmup_days 完成。
 
 ---
@@ -112,7 +113,7 @@
 | Regime → Profile 建議 | 完成 | `RecommendationView` 會偵測 Regime 並顯示建議 Profile。 |
 | Profile meta 可追溯 | 完成 | 一鍵送回測與保存結果會帶 profile / regime snapshot。 |
 
-**結論**：Phase 3.2 符合；但 `ui_qt/README.md` 仍寫待開始，需更新。
+**結論**：Phase 3.2 符合；`ui_qt/README.md` 的過期狀態已於 2026-06-13 修正。
 
 ### Phase 3.3a：研究閉環核心功能
 
@@ -134,7 +135,7 @@
 
 **結論**：Phase 3.3b 功能符合。
 
-### Living Section：AI Runtime MVP
+### 當時 Roadmap 補充記錄：AI Runtime MVP
 
 | 功能 | 狀態 | 說明 |
 |---|---|---|
@@ -142,9 +143,9 @@
 | QtRuntimeBridge | 完成 | `QtRuntimeBridge` 將 event bus 轉成 Qt signal。 |
 | QTimer 輪詢 | 完成 | `main.py` 每秒 poll updates。 |
 
-**結論**：功能符合 Living Section，但需要補進 roadmap 的 UI / Tab IA，否則與「Phase 1~3 固定 4 Tab」規則衝突。
+**結論**：功能符合當時 Roadmap 補充記錄，但需要補進 roadmap 的 UI / Tab IA，否則與「Phase 1~3 固定 4 Tab」規則衝突。
 
-### Living Section：Smart Money Terminal MVP / Phase 4.2 前置能力
+### 當時 Roadmap 補充記錄：Smart Money Terminal MVP / Phase 4.2 前置能力
 
 | 功能 | 狀態 | 說明 |
 |---|---|---|
@@ -175,7 +176,7 @@
 | 批次回測並行化 | 部分完成 | Optimizer 有多線程優化；Phase 5 更廣義的大規模 batch/table/chart 仍未完成。 |
 | 匯出研究報告 Excel / PDF | 未完成 | 未見 UI 匯出研究報告功能。 |
 
-**結論**：Phase 5 尚未開始或僅有局部性能優化。
+**結論**：Phase 5 已完成圖表渲染與批次回測並行化；大表格分頁與 Excel/PDF 報告仍待完成。
 
 ---
 
@@ -255,4 +256,3 @@
 `ui_qt` 目前**已符合 Phase 3.3b 完成後的主要產品能力**，而且比原始 Phase 1~3 roadmap 多了 Runtime Observatory 與 Smart Money Terminal。
 
 真正尚未完成的是 **Phase 4 的使用者可見 UI 與 Phase 3 → Portfolio 的閉環整合**。目前 Phase 4 只有服務層、domain 與測試骨架，還不能算 `ui_qt` 層完成。
-

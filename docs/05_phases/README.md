@@ -2,7 +2,7 @@
 
 > **Phase 開發階段相關文檔**
 
-本目錄包含所有 Phase 相關的設計和實施文檔。
+本目錄保留 Phase 相關的設計和實施脈絡。這些文件主要用於追溯架構與功能演進，不作為目前狀態或未來 6 個月工程路線的唯一依據。
 
 ## 📄 文檔列表
 
@@ -45,11 +45,15 @@
 
 ## 狀態判讀
 
-- 最新進度以 `../00_core/DEVELOPMENT_ROADMAP.md` 為準。
+- 目前狀態、本週優先事項與高風險區以 `../00_core/PROJECT_SNAPSHOT.md` 為準。
+- 未來 6 個月工程路線以 `../00_core/ROADMAP_6M_ENGINEERING.md` 為準。
+- Roadmap 入口、Next 摘要與歷史導引由 `../00_core/DEVELOPMENT_ROADMAP.md` 負責。
 - Phase 3.3b 相關文件保留為設計與實作脈絡，不再代表目前未完成狀態。
-- Phase 4 目前以 Portfolio MVP 為主線：domain/service/test skeleton 已開始，UI Qt Portfolio Tab 與跨模組串接仍待完成。
+- Phase 4 Portfolio 主要深化已完成；後續重點轉向 Strategy & Scoring Governance 實證、Phase 5 研究輸出與 6M Roadmap 的資料 / factor 擴充。
 
 ## 🔗 相關目錄
 
-- `../00_core/DEVELOPMENT_ROADMAP.md` - 開發路線圖
+- `../00_core/PROJECT_SNAPSHOT.md` - 目前狀態入口
+- `../00_core/ROADMAP_6M_ENGINEERING.md` - 6 個月工程路線
+- `../00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub
 - `../02_features/` - 功能文檔

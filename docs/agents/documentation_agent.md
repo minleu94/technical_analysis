@@ -27,8 +27,12 @@
 **Documentation Agent 補充必讀：**
 5. `docs/00_core/DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（判斷 coverage 的規則文件）⭐ **必須讀取**
 6. `docs/00_core/DOCUMENTATION_INDEX.md` - 文檔索引（了解文檔結構）
-7. `docs/00_core/DEVELOPMENT_ROADMAP.md` - 開發路線圖（先讀「📍 Living Section 定義」，再看 Living Section 段落）
-8. 本次變更涉及的檔案（由使用者提供，或由 Agent 提出需求）
+7. `docs/00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub
+8. `docs/00_core/ROADMAP_6M_ENGINEERING.md` - 6 個月工程路線
+9. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 移交矩陣
+10. `docs/01_architecture/system_architecture.md` - 系統架構
+11. `docs/07_guides/APPLICATION_MANUAL.md` - 完整操作手冊（涉及 UI / 使用流程時必讀）
+12. 本次變更涉及的檔案（由使用者提供，或由 Agent 提出需求）
 
 **未完成上述閱讀，不得執行任何任務。**
 
@@ -37,15 +41,20 @@
 以下文件是專案的關鍵入口，任何變更都可能影響它們，必須優先檢查：
 
 - **`docs/00_core/PROJECT_SNAPSHOT.md`** - 專案快照（開場 30 秒狀態）
-- **`docs/00_core/DOCUMENTATION_INDEX.md`** - 文檔索引（文檔結構的 Single Source of Truth）
-- **`docs/00_core/DEVELOPMENT_ROADMAP.md`** - 開發路線圖（Phase 狀態的 Single Source of Truth）
-- **`PROJECT_NAVIGATION.md`** - 專案導航（架構導航的 Single Source of Truth）
+- **`docs/00_core/ROADMAP_6M_ENGINEERING.md`** - 6 個月工程路線（未來方向的 scoped authority）
+- **`docs/00_core/DEVELOPMENT_ROADMAP.md`** - Roadmap Hub（權威文件入口）
+- **`docs/00_core/DOCUMENTATION_INDEX.md`** - 文檔索引（文檔位置的 scoped authority）
+- **`docs/01_architecture/system_architecture.md`** - 系統架構（架構與模組邊界的 scoped authority）
+- **`docs/07_guides/APPLICATION_MANUAL.md`** - 目前 7 個工作區與跨工作區操作的使用者權威
+- **`PROJECT_NAVIGATION.md`** - 專案導航（開發者功能導航）
 
 ### 容易被忽略但必須更新的文件
 
 以下文件在變更時容易被忽略，但根據 `DOC_COVERAGE_MAP.md` 的規則，必須檢查：
 
-- **`docs/00_core/PROJECT_SNAPSHOT.md`** - 當變更影響使用流程、Phase 狀態、優先事項時
+- **`docs/00_core/PROJECT_SNAPSHOT.md`** - 當變更影響使用流程、目前狀態、優先事項時
+- **`docs/00_core/ROADMAP_6M_ENGINEERING.md`** - 當變更影響 6 個月工程方向、里程碑或驗收標準時
+- **`docs/01_architecture/system_architecture.md`** - 當變更影響架構、模組邊界或資料流時
 - **`docs/00_core/DOCUMENTATION_INDEX.md`** - 當新增/刪除文檔時
 - **`PROJECT_NAVIGATION.md`** - 當架構或功能導航變更時
 - **`README.md`** - 當為重大變更時（雖然優先級較低，但容易被忽略）
@@ -56,7 +65,8 @@
 - ✅ 列出需要更新的文件清單
 - ✅ 指出需要更新的具體段落
 - ✅ 檢查文件與代碼的一致性
-- ✅ 檢查 Snapshot / Index / Roadmap 的一致性
+- ✅ 檢查 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index 的一致性
+- ✅ 檢查完整操作手冊是否涵蓋入口、步驟、參數、結果判讀、安全限制與排錯
 - ✅ 標示文件更新優先級（Must / Should / Nice-to-have）
 - ✅ 產出文件修改內容（僅在 Coverage Pass 確認後）
 
@@ -78,8 +88,9 @@
 1. 列出「哪些文件需要更新」（表格格式）
 2. 標示優先級：Must / Should / Nice-to-have
 3. 標示每個文件需要更新的段落/章節
-4. 檢查 Snapshot / Index / Roadmap 一致性
-5. 列出需要使用者補充的資訊（如有）
+4. 檢查 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index 一致性
+5. 對使用者可見功能執行 Manual completeness Gate
+6. 列出需要使用者補充的資訊（如有）
 
 **不得在此階段產出文件修改內容。**
 
@@ -115,7 +126,11 @@
 **Documentation Agent 補充必讀：**
 5. docs/00_core/DOC_COVERAGE_MAP.md ⭐ **必須讀取，用於判斷 coverage**
 6. docs/00_core/DOCUMENTATION_INDEX.md
-7. docs/00_core/DEVELOPMENT_ROADMAP.md（先讀「📍 Living Section 定義」，再看 Living Section 段落）
+7. docs/00_core/DEVELOPMENT_ROADMAP.md（Roadmap Hub）
+8. docs/00_core/ROADMAP_6M_ENGINEERING.md（6 個月工程路線）
+9. docs/00_core/LEGACY_ROADMAP_CARRYOVER.md（舊 Roadmap 移交矩陣）
+10. docs/01_architecture/system_architecture.md（系統架構）
+11. docs/07_guides/APPLICATION_MANUAL.md（涉及 UI / 使用流程時必讀）
 
 **你的角色定位：**
 - 你不是功能設計者，也不是工程師
@@ -130,11 +145,11 @@
 
 **請執行 Coverage Pass：**
 1. **根據 `docs/00_core/DOC_COVERAGE_MAP.md` 的「變更類型 → 必須更新的文件對照表」識別所有需要更新的文件**
-2. **特別檢查「容易被忽略但必須更新的文件」**（Snapshot、Index、Navigation、README）
+2. **特別檢查「容易被忽略但必須更新的文件」**（Snapshot、6M Roadmap、Legacy Carryover、Architecture、Application Manual、Index、Navigation、README）
 3. 列出需要更新的文件清單（表格格式）
 4. 標示優先級（Must / Should / Nice-to-have）
 5. 標示需要更新的段落/章節
-6. 檢查 Snapshot / Index / Roadmap 一致性（使用 `DOC_COVERAGE_MAP.md` 的「一致性檢查清單」）
+6. 檢查 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index 一致性（使用 `DOC_COVERAGE_MAP.md` 的「一致性檢查清單」）
 7. 列出需要補充的資訊（如有）
 
 **不得在此階段產出文件修改內容。**
@@ -157,7 +172,7 @@
 **請提供：**
 1. 變更摘要（1-2 句話）
 2. 文件更新清單（表格格式，包含：文件路徑、優先級、需要更新的段落、原因）
-3. Snapshot / Index / Roadmap 一致性檢查結果
+3. Scoped Authority 一致性檢查結果
 4. 需要使用者補充的資訊（如有）
 
 **輸出格式：**
@@ -174,6 +189,14 @@
 ## 一致性檢查
 
 ### PROJECT_SNAPSHOT.md
+- [ ] 需要更新：[說明需要更新的內容]
+- [ ] 無需更新
+
+### ROADMAP_6M_ENGINEERING.md
+- [ ] 需要更新：[說明需要更新的內容]
+- [ ] 無需更新
+
+### system_architecture.md
 - [ ] 需要更新：[說明需要更新的內容]
 - [ ] 無需更新
 
@@ -231,21 +254,23 @@
 
 **檢查範圍：**
 - docs/00_core/PROJECT_SNAPSHOT.md
+- docs/00_core/ROADMAP_6M_ENGINEERING.md
+- docs/01_architecture/system_architecture.md
 - docs/00_core/DOCUMENTATION_INDEX.md
-- docs/00_core/DEVELOPMENT_ROADMAP.md（Living Section，定義見該文件的「📍 Living Section 定義」段落）
+- docs/00_core/DEVELOPMENT_ROADMAP.md（Roadmap Hub）
 
 **檢查項目（使用 docs/00_core/DOC_COVERAGE_MAP.md 的「一致性檢查清單」）：**
-1. Phase 狀態是否一致（Snapshot 的「當前狀態」與 Roadmap Living Section 的「現況」一致）
-2. 工作模式描述是否一致（Snapshot 的「現在的工作模式」與 Roadmap Living Section 一致）
-3. 優先事項是否一致（Snapshot 的「本週優先事項」與 Roadmap Living Section 的「下一步 Next」一致）
-4. 高風險區是否一致（Snapshot 的「高風險區」與 Roadmap Living Section 的「Blockers / Risks」一致）
-5. 進度描述是否一致（Index 的進度描述與 Roadmap Living Section 一致，以 Roadmap 為準）
-6. 文檔索引是否完整（Index，所有新文檔已加入）
+1. Snapshot 的目前狀態是否與系統架構描述一致。
+2. Snapshot 的本週優先事項是否落在 6M Roadmap 的當前月度目標內。
+3. Roadmap Hub 是否只作入口與短版 Next，不重新保存完整歷史。
+4. Architecture 是否反映目前模組邊界與資料流。
+5. Index 是否包含所有新增、搬移、歸檔 Markdown。
+6. Archive 是否明確標示歷史文件不作目前狀態依據。
 
 **請提供：**
 - 一致性檢查結果（表格格式）
 - 發現的不一致項目
-- 建議的修正方案（以 Roadmap 為準）
+- 建議的修正方案（依主題對應 scoped authority）
 ```
 
 ## 📊 強制輸出格式
@@ -268,6 +293,14 @@
 
 ### PROJECT_SNAPSHOT.md
 - [x] 需要更新：當前狀態需反映新功能
+- [ ] 無需更新
+
+### ROADMAP_6M_ENGINEERING.md
+- [x] 需要更新：若新功能影響 6 個月方向、里程碑或驗收標準
+- [ ] 無需更新
+
+### system_architecture.md
+- [x] 需要更新：若新功能影響架構、模組邊界或資料流
 - [ ] 無需更新
 
 ### DOCUMENTATION_INDEX.md
@@ -317,7 +350,8 @@
 - [ ] 已列出所有需要更新的文件
 - [ ] 已標示優先級（Must / Should / Nice-to-have）
 - [ ] 已標示需要更新的具體段落
-- [ ] 已檢查 Snapshot / Index / Roadmap 一致性
+- [ ] 已檢查 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index 一致性
+- [ ] 已檢查每個受影響工作區的 Manual 入口、操作、參數、結果、安全與排錯
 - [ ] 已列出需要補充的資訊
 - [ ] 未產出文件修改內容
 
@@ -332,12 +366,16 @@
 
 - **共用上下文**：[shared_context.md](./shared_context.md)
 - **專案快照**：`docs/00_core/PROJECT_SNAPSHOT.md`
+- **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
 - **文檔索引**：`docs/00_core/DOCUMENTATION_INDEX.md`
-- **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
+- **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
+- **系統架構**：`docs/01_architecture/system_architecture.md`
 - **專案導航**：`PROJECT_NAVIGATION.md`
 - **文檔覆蓋矩陣**：`docs/00_core/DOC_COVERAGE_MAP.md`
+- **完整操作手冊**：`docs/07_guides/APPLICATION_MANUAL.md`
 
 ## 🔄 更新記錄
 
 - 2026-01-03：重構為文檔覆蓋完整性 Agent，加入兩階段工作流程
 - 2026-05-20：修正 DOC_COVERAGE_MAP 路徑為 `docs/00_core/DOC_COVERAGE_MAP.md`
+- 2026-06-13：加入 Legacy Carryover 與 Manual completeness Gate。

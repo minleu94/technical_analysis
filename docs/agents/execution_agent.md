@@ -128,7 +128,7 @@
 - **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 - 保持向後相容性
 - 確保代碼品質
-- 同步更新文檔與測試
+- 同步更新文檔與測試；文檔判讀採 Scoped SSOT（Snapshot / 6M Roadmap / Roadmap Hub / Architecture / Index）
 - **不主動重構或最佳化未指定的代碼**
 - **不補齊未明確要求的步驟**
 
@@ -266,6 +266,7 @@
 
 ### 文檔更新
 - [ ] 更新相關文檔
+- [ ] 依 `docs/00_core/DOC_COVERAGE_MAP.md` 檢查 Snapshot / 6M Roadmap / Roadmap Hub / Architecture / Index 是否需要同步
 - [ ] 更新 API 文檔（如有變更）
 - [ ] 更新使用指南（如有新功能）
 - [ ] 記錄變更日誌
@@ -408,7 +409,9 @@
 
 - **共用上下文**：[shared_context.md](./shared_context.md)
 - **技術總管 Agent**：[tech_lead.md](./tech_lead.md)（用於代碼審查）
-- **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
+- **目前狀態**：`docs/00_core/PROJECT_SNAPSHOT.md`
+- **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **系統架構**：`docs/01_architecture/system_architecture.md`
 - **目前 UI 入口**：`ui_qt/main.py`
 - **資料路徑設定**：`data_module/config.py`
@@ -418,5 +421,6 @@
 - 2025-01-XX：初始建立執行型 Agent 文檔
 - 2026-01-03：新增「標準回滾清單格式」定義，明確回滾清單的強制輸出格式與執行規則
 - 2026-05-20：更新技術棧描述為 PySide6 / `ui_qt`，補上資料路徑設定參考
+- 2026-06-13：補充 Scoped SSOT 文檔同步檢查，對齊 Snapshot / 6M Roadmap / Architecture 權威邊界
 - 2026-05-29：新增量化防禦條款，並將 UI 修改後 QA script 與型態檢查納入驗證清單
 

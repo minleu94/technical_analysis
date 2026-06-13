@@ -1,6 +1,6 @@
 # 專案盤點報告
 
-> **最後整理**：2026-06-09
+> **最後整理**：2026-06-13
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 
 ---
@@ -34,7 +34,7 @@
 | `decision_module/` | Domain Layer：篩選、打分、推薦理由、Regime、籌碼信號 | Active |
 | `app_module/` | Application Service Layer：推薦、回測、資料更新、Runtime、Portfolio services | Active |
 | `backtest_module/` | 策略測試、績效分析、交易模擬與風險指標 | Active |
-| `portfolio_module/` | Phase 4.1 Portfolio MVP domain layer | In Progress |
+| `portfolio_module/` | Portfolio domain layer（append-only trades、positions projection、Decimal 邊界） | Active |
 | `runtime/` | Governance-aware AI Runtime、event/store/state/registry | Active |
 
 ---
@@ -58,7 +58,7 @@ python ui_qt/main.py
 - 7 個頂層 Tab：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、策略回測（Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。
 - `ui_qt/views/update_view.py` 已重整為數據更新工作台，包含左側資料來源導覽與「安全更新所有數據」入口。
 - `ui_qt/views/runtime_view.py` 與 `runtime/` 已完成 Runtime Observatory MVP。
-- `ui_qt/views/portfolio_view.py`：Portfolio Tab 已建立，含 `PortfolioConditionMonitor` 條件監控 MVP。策略版本追蹤、Price 對照、持倉層風險提示待深化。
+- `ui_qt/views/portfolio_view.py`：Portfolio Tab 已建立，含策略與價格監控、未實現損益、停損停利警示、籌碼監控與 Smart Money 下鑽。
 - 策略回測頁已整理為 Research Lab 多模式實驗室語意。
 
 回測圖表渲染：
@@ -74,7 +74,7 @@ python ui_qt/main.py
 
 | 目錄 | 角色 |
 |---|---|
-| `docs/00_core/` | roadmap、snapshot、文件索引與維護規則 |
+| `docs/00_core/` | snapshot、6 個月 roadmap、Roadmap Hub、文件索引與維護規則 |
 | `docs/01_architecture/` | 架構與流程 |
 | `docs/02_features/` | 使用者可見功能與策略回測文件 |
 | `docs/03_data/` | 資料更新、資料流與故障排除 |
@@ -91,18 +91,21 @@ python ui_qt/main.py
 
 - `docs/README.md`
 - `docs/00_core/DEVELOPMENT_ROADMAP.md`
+- `docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
 - `docs/00_core/PROJECT_SNAPSHOT.md`
 - `docs/00_core/DOCUMENTATION_INDEX.md`
 - `docs/00_core/DOCUMENTATION_STRUCTURE.md`
+- `docs/07_guides/APPLICATION_MANUAL.md`
 
 ---
 
 ## 5. 目前開發主線
 
-專案已形成三個產品閉環：資料與市場狀態 ✅、研究驗證 ✅、持倉檢查 🚧。
+專案已形成三個產品閉環：資料與市場狀態 ✅、研究驗證 ✅、持倉檢查 ✅。
 
-- Phase 1-3.3b 全部完成。Phase 4.1 Portfolio MVP 已建立（Portfolio Tab + 來源追溯 + 條件監控 MVP）。
-- 當前優先：Roadmap Rebaseline → 回測時間軸契約治理 → 金融核心數值治理。
-- 待深化：策略版本追蹤視圖、Price 對照、持倉層風險提示。
+- Strategy & Scoring Governance 增量 A / B 已完成機制回歸；真實股票池 fixed / quantile walk-forward 實證仍待執行。
+- Phase 5 圖表渲染與批次並行化已完成；大表格分頁與 Excel/PDF 報告輸出仍待做。
+- 6 個月主線：Research Run Registry、Factor Layer、營收與估值、三大法人、Portfolio 回饋閉環。
 
-詳細狀態以 `docs/00_core/DEVELOPMENT_ROADMAP.md` 的 Living Section 為準。
+目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；舊 Roadmap 未完成事項是否已承接，以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。

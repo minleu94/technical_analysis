@@ -7,22 +7,22 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具，而是一個「可驗證、可回溯、可演化」的投資決策系統。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：Phase 3.3b 已完成，Portfolio MVP 已建立（Phase 4.1），目前進入 Roadmap Rebaseline 與技術治理階段。產品主線已從舊線性 Phase 敘事轉為三個產品閉環（資料與市場狀態、研究驗證、持倉檢查）。
+* **Current Phase (目前階段)**：三個產品閉環的基礎與主要深化已完成。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、archive 管歷史。
 * **Core Architecture (核心架構)**：三層式解耦架構。
   1. `ui_qt/`（純粹的觀察者 Observatory / 渲染層）
   2. `app_module/`（應用服務層與協調器 Orchestrator）
   3. Domain 模組（`backtest_module/`、`analysis_module/`、`runtime/`）
-* **Major Modules (主要模組)**：資料收集器、市場觀察儀、推薦引擎、策略回測實驗室、籌碼分析終端 (Smart Money Terminal MVP)、Runtime 子系統。
+* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、籌碼分析終端、Portfolio 監控、Runtime 子系統。
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 7 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。大量使用 `pandas_table_model` 呈現高密度數據網格。
 * **Current Priorities (目前優先事項)**：
-  1. Roadmap Rebaseline 與文件重整（對齊三個產品閉環敘事）。
-  2. 回測時間軸契約與 no-look-ahead 測試定義。
-  3. 金融核心數值治理啟動（停止在核心新增裸 float）。
+  1. Fixed / quantile 真實股票池 walk-forward 實證。
+  2. 文件治理 scoped authority 收尾（Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Agent 指引）。
+  3. Phase 5 研究輸出（大表格分頁與 Excel / PDF 報告）。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
-  1. 券商分點資料爬蟲容易因特殊股票代碼（如 ETF）解析失敗。
-  2. UI 與 Service 狀態的同步一致性挑戰。
-  3. 參數的單位一致性與可比較性（已在 Phase 2.5 透過 ATR-based 與 z-score 獲得大幅改善）。
+  1. Quantile 機制已完成，但尚未有真實 walk-forward 績效證據。
+  2. 營收、基本面、估值與三大法人尚未成為正式資料因子。
+  3. 新資料必須走 factor layer，避免污染既有 scoring engine。
 
 ---
 
@@ -32,7 +32,7 @@
 
 ### Tech Lead Agent (`tech_lead.md`)
 * **Purpose (目的)**：負責技術決策、架構方向與風險評估。
-* **Responsibilities (職責)**：評估設計提案，確保符合 Roadmap。
+* **Responsibilities (職責)**：評估設計提案，確保符合 Snapshot、6M Roadmap、Architecture 與專項規格的 scoped authority。
 * **Strong At (擅長)**：風險雷達 (Risk Radar)、架構審查。
 * **Weak At (弱項)**：實作細節與寫 code。
 * **Typical Tasks (典型任務)**：評估是否該實作某功能並定義 MVP 範圍。
@@ -68,8 +68,8 @@
 
 ### Documentation Agent (`documentation_agent.md`)
 * **Purpose (目的)**：確保文檔與 codebase 狀態同步。
-* **Responsibilities (職責)**：掃描 PR/diff 並更新索引、快照 (Snapshot) 與開發路線圖。
-* **Strong At (擅長)**：維持 Single Source of Truth (SSOT)。
+* **Responsibilities (職責)**：掃描 PR/diff 並更新 Snapshot、6M Roadmap、Roadmap Hub、Architecture、Index 與專項文檔。
+* **Strong At (擅長)**：維持 Scoped SSOT 與文件一致性。
 * **Allowed Areas (允許範圍)**：`docs/` 資料夾。
 * **Forbidden Areas (禁止範圍)**：修改業務邏輯。
 
@@ -123,9 +123,13 @@
 
 ## 5. Documentation Index (重要文檔索引)
 
-### Canonical Docs (權威文檔 - Source-of-Truth Level: HIGH)
-* **`docs/00_core/DEVELOPMENT_ROADMAP.md`**：專案開發階段的絕對 SSOT。請特別注意「Living Section」段落以獲取當前最新狀態。
-* **`docs/00_core/PROJECT_SNAPSHOT.md`**：開場 30 秒必讀的快照文件。內容必須與 Roadmap 的 Living Section 同步。
+### Canonical Docs (權威文檔 - Scoped Source-of-Truth)
+* **`docs/00_core/PROJECT_SNAPSHOT.md`**：開場 30 秒必讀的目前狀態、本週優先事項與高風險區。
+* **`docs/00_core/ROADMAP_6M_ENGINEERING.md`**：未來 6 個月可執行工程路線。
+* **`docs/00_core/DEVELOPMENT_ROADMAP.md`**：Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與 archive。
+* **`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`**：舊 Roadmap 未完成事項的唯一移交與驗收矩陣。
+* **`docs/01_architecture/system_architecture.md`**：目前架構、模組邊界與資料流權威。
+* **`docs/07_guides/APPLICATION_MANUAL.md`**：目前 7 個工作區與跨工作區流程的完整操作權威。
 * **`docs/01_architecture/multi_agent_workflow.md`**：規範 AI Agent 應如何分支與合併的協議。
 * **`docs/01_architecture/runtime_observatory_rules.md`**：嚴格的相依性與 DTO 架構治理規則。
 
@@ -136,9 +140,10 @@
 
 ### Outdated / Deprecated Docs (過時與冗餘文檔)
 * 舊版 `ui_app/README.md` (Tkinter) 相較於新的 `ui_qt` 堆疊已屬舊版遺產。
-* Roadmap 中歷史 Phase 的 Exit criteria 屬於歷史紀錄；理解當前狀態請只看「Living Section」。
+* 舊 Roadmap 中歷史 Phase 的 Exit criteria 屬於歷史紀錄；理解當前狀態請看 `PROJECT_SNAPSHOT.md`，理解未來方向請看 `ROADMAP_6M_ENGINEERING.md`。
 * （已清理：重複的 `docs/architecture/` 與空的 `docs/governance/` 資料夾已被移除，統一收斂至 `01_architecture/`）。
 * `docs/agents/archive/CURSOR_SKILLS_DEFINITIONS.md` 是舊 Cursor Skills 歷史定義，僅保留作為遷移參考；Codex / Antigravity 日常協作請使用 `docs/agents/skills_registry.md` 與 `docs/agents/*.md`。
+* `docs/09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` 是舊完整 Roadmap，只作追溯，不作目前狀態或未來工程路線依據。
 
 ---
 
@@ -168,25 +173,26 @@
 
 ## 7. Current Active Roadmap (目前活躍開發路線)
 
-* **Active Phase (目前階段)**：Roadmap Rebaseline 與技術治理。產品主線已轉為三個產品閉環 + Backlog 敘事。
+* **Active Phase (目前階段)**：三個產品閉環已建立，進入 6 個月工程路線執行期。
 * **In Progress (進行中)**：
-  * Roadmap Rebaseline 與文件重整。
-  * 回測時間軸契約治理（no-look-ahead 測試優先）。
-  * 金融核心數值治理（停止在核心新增裸 float）。
-* **Planned (計畫中)**：Phase 4.1 Portfolio 深化（策略版本追蹤、Price 對照、持倉層風險提示）。Phase 5 中尚未完成的大表格分頁、批次並行與報告輸出。
+  * Fixed / quantile 真實 walk-forward 實證。
+  * 文件治理 scoped authority 收尾。
+  * Phase 5 大表格分頁與報告輸出。
+* **Planned (計畫中)**：Research Run Registry、Factor Layer v1、營收與估值資料、三大法人資料、Portfolio post-trade attribution。
 * **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Smart Money Terminal MVP, AI Runtime MVP。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
-* **Backlog**：Phase 4.2 券商下鑽到持倉（等 Phase 4.1 深化完成後評估）；Phase 2.5 優先級 3 未完成項歸入研究驗證閉環 / Strategy & Scoring Governance。
+* **Backlog**：Factor attribution、cross-run comparison、策略 promote / demote / retire 規則、估值相對分位與法人籌碼交叉驗證。
 
 ---
 
 ## 8. Risk Report (風險雷達與報告)
 
-* **Backtest Timeline Undefined (回測時間軸未定義風險)**：推薦組合回測的訊號日、成交日、equity curve 記錄日尚無統一契約，擴大推薦組合回測前必須先定義。
-* **Financial Core Bare Float (金融核心裸 float 風險)**：`broker_simulator.py`、`performance_metrics.py`、`portfolio_module/core.py` 等核心計算仍使用裸 `float`，存在精度風險。
+* **Quantile Evidence Gap (分位數實證缺口)**：fixed / quantile 機制已完成，但真實股票池 walk-forward 比較尚未完成，不能宣稱 quantile 更準。
+* **Factor Look-ahead Risk (因子未來函數風險)**：營收、財報、法人與估值資料必須保存可得日，決策不得使用當下尚未公告的資料。
+* **Financial Core Boundary Risk (金融核心數值邊界風險)**：核心金額、交易成本、PnL、倉位與風控不可新增裸 `float`；analytics / visualization 邊界需清楚標示。
 * **AI Coordination Risk (AI 協作風險)**：`codex` 與 `ag` 兩個 Agent 容易在修改共同索引（如 `DOCUMENTATION_INDEX.md`）時發生 Merge Conflict。必須嚴格遵循不覆寫對方實作的衝突解決規範。
 * **Branch Management Overhead (分支管理成本風險)**：過多的分支與複雜的 Handoff 工作流會導致開發節奏拖慢與狀態混淆。解決方案：嚴格遵循 Main-Centric 工作流，減少不必要的分支切換。現有 feature 分支在驗證後應盡快合併至 `main`、封存或刪除。
 * **Governance Risk (架構治理風險)**：隱性耦合 (Hidden coupling)。例如偷偷在共用 DTO 內增加非標準欄位，或是繞過 `EventBus` 直接在 UI 呼叫底層 API。
 * **Unclear Ownership (邊界模糊風險)**：將過多資料處理邏輯放在 `ui_qt` 裡面，而非在 Domain 處理完畢後透過 DTO 傳遞。UI 必須純粹是個 Observatory。
 * **Workflow Confusion (工作流混亂)**：目前存在多個 `qa_validate_*.py` 腳本，AI 在開發後可能會忘記執行對應模組的 QA 腳本導致 Regression。
-* **Doc Inconsistency (文檔不一致風險)**：Agent 在修改程式碼後，常常忘記呼叫 Documentation Agent 同步更新 `PROJECT_SNAPSHOT.md` 與 `DEVELOPMENT_ROADMAP.md` 的 Living Section（本次 Rebaseline 正在修正）。
+* **Doc Authority Confusion (文檔權威混淆風險)**：Agent 可能把所有狀態重新塞回 Roadmap Hub。正確做法是依主題更新 Snapshot、6M Roadmap、Architecture、Index 或 archive。

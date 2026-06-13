@@ -23,11 +23,17 @@
 2. `docs/agents/shared_context.md`
 3. `docs/agents/git_exclusions.md`
 4. `docs/00_core/PROJECT_SNAPSHOT.md`
+5. `docs/00_core/DEVELOPMENT_ROADMAP.md`
 
-若涉及交接或中高風險任務，額外閱讀：
+若涉及技術方向、Roadmap、架構邊界或中高風險任務，額外閱讀：
 
-5. `docs/agents/shared_state/active_task.yaml`
-6. `docs/agents/shared_state/handoff_log.md`
+6. `docs/00_core/ROADMAP_6M_ENGINEERING.md`
+7. `docs/01_architecture/system_architecture.md`
+
+若涉及交接，額外閱讀：
+
+8. `docs/agents/shared_state/active_task.yaml`
+9. `docs/agents/shared_state/handoff_log.md`
 
 若需要判斷任務類型，依情況閱讀對應的權威 Agent 文件：
 
@@ -114,7 +120,7 @@
 |---|---|
 | 是否該做、架構選型、風險判斷 | Tech Lead | `docs/agents/tech_lead.md` |
 | 明確 scope 的實作或 bugfix | Execution | `docs/agents/execution_agent.md` |
-| 文檔 coverage、索引、Roadmap / Snapshot 同步 | Documentation | `docs/agents/documentation_agent.md` |
+| 文檔 coverage、索引、Snapshot / Roadmap Hub / 6M Roadmap / Architecture 同步 | Documentation | `docs/agents/documentation_agent.md` |
 | 資料完整性、資料對比、SQLite / CSV 一致性 | Data Audit | `docs/agents/data_audit_agent.md` |
 | 清理、移除、死碼、依賴精簡 | Cleanup | `docs/agents/data_cleanup_agent.md` |
 | 完成前驗證、測試矩陣、git safety | QA Gate | `docs/agents/execution_agent.md` 與 `docs/agents/shared_context.md` |

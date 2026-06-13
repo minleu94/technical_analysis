@@ -91,11 +91,7 @@ python ui_qt/main.py
 
 ### ⚠️ Legacy 啟動方式（僅供參考）
 
-```bash
-python ui_app/main.py
-```
-
-**這是什麼**：Tkinter UI（舊版），業務邏輯已遷移到 `decision_module/`，此 UI 僅保留 Tkinter 相關代碼
+`ui_app/main.py` 是舊 Tkinter UI 的歷史入口，不作為目前安裝、操作、驗證或新功能開發依據。需要目前 UI 請使用 `ui_qt/main.py`。
 
 ---
 
@@ -259,13 +255,14 @@ python ui_app/main.py
 
 ### 📌 Portfolio（持倉管理）
 
-**目前狀態**：Phase 4.1 MVP 已建立：Portfolio Tab、domain/service/test、Recommendation/Backtest 來源追溯 metadata、`PortfolioConditionMonitor` 條件監控 MVP 已完成。策略版本追蹤、Price 對照、持倉層風險提示待深化。
+**目前狀態**：Portfolio 閉環已建立且完成主要深化：Portfolio Tab、domain/service/test、Recommendation/Backtest 來源追溯 metadata、策略與價格監控、目前價格對照、未實現損益、停損停利警示、籌碼監控與 Smart Money 下鑽皆已完成。
 
 **從哪個 UI 進**：`ui_qt/views/portfolio_view.py`（持倉管理 Tab）
 
 **對應的 Service**：
 - `app_module/portfolio_service.py`：Portfolio use case 編排
 - `app_module/portfolio_condition_monitor.py`：條件監控（來源快照 vs 目前快照 Regime/TotalScore 對照）
+- `app_module/portfolio_chip_service.py`：持倉層籌碼監控與分點資料彙整
 - `app_module/journal_service.py`：交易/決策紀錄服務
 
 **真正動邏輯的地方**：
@@ -357,7 +354,7 @@ python ui_app/main.py
 **狀態**：
 - 業務邏輯已遷移到 `decision_module/`
 - 僅保留 Tkinter UI 相關代碼
-- `ui_app/main.py` 已更新為使用 `decision_module/`
+- 不保證 Legacy UI 與目前 7 個工作區、資料契約或使用手冊同步
 
 **使用建議**：新功能不應再引用 `ui_app/` 中的業務邏輯檔案（如 `strategy_configurator.py`、`stock_screener.py` 等），這些檔案已不存在或已遷移。
 
@@ -386,7 +383,11 @@ python ui_app/main.py
 
 ## 📚 相關文檔
 
-- **開發演進地圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`（了解系統演進計劃）
+- **目前狀態快照**：`docs/00_core/PROJECT_SNAPSHOT.md`
+- **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
+- **舊 Roadmap 移交矩陣**：`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
+- **完整操作手冊**：`docs/07_guides/APPLICATION_MANUAL.md`
 - **專案盤點報告**：`PROJECT_INVENTORY.md`（完整的專案結構盤點，與本文檔同層）
 - **文檔索引**：`docs/00_core/DOCUMENTATION_INDEX.md`（所有文檔的索引）
 

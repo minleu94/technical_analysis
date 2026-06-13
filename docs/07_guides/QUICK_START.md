@@ -1,91 +1,71 @@
 # 快速開始指南
 
-## 🚀 三步快速開始
+> 目前主要 UI 是 PySide6，入口為 `ui_qt/main.py`。
 
-### 1. 安裝依賴
+## 三步開始
 
-```bash
-pip install -r requirements.txt
+### 1. 建立或使用虛擬環境
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-或使用安裝 notebook：
-```bash
-jupyter notebook install_dependencies.ipynb
+若 `.venv` 已存在且可用，可略過建立步驟。
+
+### 2. 啟動應用程式
+
+```powershell
+.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
-### 2. 啟動 UI 應用程式
+### 3. 更新並檢查資料
 
-```bash
-python ui_app/main.py
+1. 開啟「數據更新」。
+2. 點擊「檢查數據狀態」。
+3. 日常使用「快速更新（僅 SQLite）」。
+4. 需要完整 CSV 備份時使用「安全更新（完整 CSV + SQLite）」。
+5. 確認每日股價與技術指標日期正常後，再執行推薦或回測。
+
+## 常用命令
+
+```powershell
+# 主 UI
+.\.venv\Scripts\python.exe ui_qt\main.py
+
+# 批量更新每日股價
+.\.venv\Scripts\python.exe scripts\batch_update_daily_data.py --start-date 2026-06-01
+
+# 更新單一交易日並合併
+.\.venv\Scripts\python.exe scripts\update_daily_stock_data.py --date 2026-06-12 --merge
 ```
 
-### 3. 在 UI 中更新數據
+## 驗證環境
 
-1. 選擇「數據更新」標籤頁
-2. 日常維護建議先設定查找範圍或日期範圍
-3. 點擊「安全更新所有數據」，讓系統依序更新每日股價、大盤指數、產業指數、券商分點、合併資料並計算技術指標
-4. 若只想更新單一資料來源，使用左側導覽切換到每日股價、大盤指數、產業指數、券商分點或技術指標頁面後單獨執行
-
-## 📋 完整命令選項
-
-### 使用 UI（推薦）
-
-```bash
-python ui_app/main.py
+```powershell
+.\.venv\Scripts\python.exe -c "import pandas, PySide6; print('environment OK')"
 ```
 
-### 使用命令行
+## 常見問題
 
-```bash
-# 批量更新多日數據
-python scripts/batch_update_daily_data.py --start-date 2025-08-28
+### PySide6 無法匯入
 
-# 更新單日數據
-python scripts/update_daily_stock_data.py --date 2025-08-28 --merge
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-## ✅ 驗證安裝
+### UI 啟動但資料為空
 
-運行以下命令驗證安裝：
+確認 `DATA_ROOT` 指向正確資料根目錄，然後在數據更新頁執行狀態檢查。
 
-```bash
-python -c "import pandas; print('pandas OK')"
-python -c "import requests; print('requests OK')"
-```
+### 更新失敗
 
-## 🔍 檢查數據狀態
+確認日期是交易日、網路可用，並查看數據更新頁底部日誌。
 
-使用 UI 應用程式：
-1. 打開 UI
-2. 選擇「數據更新」標籤頁
-3. 在上方狀態摘要點擊「檢查數據狀態」
-4. 需要細查單一來源時，切換左側對應頁面查看更新控制與日誌
+## 下一步
 
-## ⚠️ 常見問題
-
-### 問題 1：pandas 未安裝
-
-**解決**：
-```bash
-pip install pandas
-```
-
-### 問題 2：tkinter 未安裝
-
-**解決**：
-- Windows：通常已包含
-- Linux：`sudo apt-get install python3-tk`
-
-### 問題 3：API 連接失敗
-
-**解決**：
-- 使用 UI 應用程式（已包含錯誤處理）
-- 檢查網絡連接
-- 確認日期為交易日
-
-## 📚 更多資訊
-
-- `INSTALL_GUIDE.md` - 詳細安裝指南
-- `../03_data/HOW_TO_UPDATE_DAILY_DATA.md` - 完整使用說明
-- `ui_app/README.md` - UI 應用程式說明
+- [完整操作手冊](APPLICATION_MANUAL.md)
+- [安裝指南](INSTALL_GUIDE.md)
+- [每日資料更新](../03_data/HOW_TO_UPDATE_DAILY_DATA.md)
+- [資料更新故障排除](../03_data/TROUBLESHOOTING_DAILY_UPDATE.md)
 

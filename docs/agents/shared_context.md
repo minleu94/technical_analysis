@@ -108,6 +108,7 @@ docs/                # 專案文檔
 - 歷史 replay 需要保留 `candidate_limit` / prefilter 機制；不要在沒有上限的情況下對全市場每期都跑完整 pattern analysis。
 - Pattern regression 點位不足或 x 值退化時應安全跳過，不應讓 `np.polyfit` 的 underconstrained case 汙染 UI log 或中斷推薦 replay。
 - 後續擴充券商表現、營收數據、Sortino / Sharpe / Monte Carlo 等穩健分析時，應新增 factor/metric layer，避免把新因子硬塞進 UI 或現有單一 scoring 函式。
+- 後續擴充營收、基本面、估值、三大法人與其他資料因子時，必須保存 `as_of_date` / `available_date` / 資料品質狀態，避免未來函數滲漏。
 
 ## ⚠️ 禁止事項
 
@@ -196,7 +197,8 @@ docs/                # 專案文檔
 **更新範圍：**
 - 根據 `docs/00_core/DOC_COVERAGE_MAP.md` 的「變更類型 → 必須更新的文件對照表」識別
 - 所有標示為 Must 優先級的文件必須更新
-- 必須執行 Snapshot / Index / Roadmap 一致性檢查
+- 必須執行 Snapshot / Roadmap Hub / 6M Roadmap / Legacy Carryover / Architecture / Manual / Index 一致性檢查
+- 使用者可見流程、參數、結果判讀或安全限制改變時，必須同步 `docs/07_guides/APPLICATION_MANUAL.md`
 
 ### 可以不更新文件的情況
 
@@ -278,8 +280,12 @@ docs/                # 專案文檔
 
 - **專案文檔**：`docs/` 目錄
 - **策略文檔**：`docs/strategies/`
-- **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
+- **目前狀態**：`docs/00_core/PROJECT_SNAPSHOT.md`
+- **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
+- **舊 Roadmap 移交**：`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
 - **系統架構**：`docs/01_architecture/system_architecture.md`
+- **完整操作手冊**：`docs/07_guides/APPLICATION_MANUAL.md`
 
 ## 🔄 更新記錄
 
@@ -287,4 +293,6 @@ docs/                # 專案文檔
 - 2026-01-03：新增「文件更新責任與規範」段落（定義更新責任、必須/可以不更新情況、更新記錄格式）
 - 2026-05-20：更新資料根目錄、`ui_qt`/PySide6、Portfolio 與 Runtime 現況，避免 Agent 誤判 repo 內 `data/` 為正式資料位置
 - 2026-05-29：新增股票/量化防禦條款，並將 UI 修改後 QA script 與型態檢查列為強制驗證流程
+- 2026-06-13：更新文件治理規範為 Scoped SSOT，補充 factor layer 資料可得日與品質治理要求
+- 2026-06-13：補入 Legacy Carryover 與 Application Manual 的權威範圍及同步要求
 

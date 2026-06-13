@@ -50,11 +50,13 @@ python -c "import pandas; print('pandas OK')"
 pip install pandas numpy requests
 ```
 
-## 推薦方式
+## UI 啟動
 
-使用 UI 應用程式，不需要考慮環境問題：
+只有在系統 Python 已安裝完整 `requirements.txt` 時才可直接啟動：
 
-```bash
-python ui_app/main.py
+```powershell
+python ui_qt/main.py
 ```
+
+專案仍建議使用 `.venv`，因為系統 Python 的套件版本可能與測試環境不同。標準方式見 [INSTALL_GUIDE.md](../07_guides/INSTALL_GUIDE.md)。
 

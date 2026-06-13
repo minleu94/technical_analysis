@@ -30,7 +30,7 @@
 
 - **未被指定的模組、檔案、功能不得評論**
 - **不推動未被詢問的重構或新功能**
-- **不修改 roadmap 或 phase 定位**
+- **不在未授權情況下修改 scoped authority、roadmap track 或 phase / 產品閉環定位**
 - **若背景資訊不足，必須要求補充，而非自行假設**
 - **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 
@@ -52,8 +52,10 @@
 4. docs/agents/tech_lead.md（本文件）
 
 **Tech Lead 補充必讀：**
-5. docs/00_core/DEVELOPMENT_ROADMAP.md（先讀「📍 Living Section 定義」，再看 Living Section 的「現況 / 下一步 Next / Blockers / Risks」段落）
-6. docs/00_core/DOCUMENTATION_INDEX.md（只用來定位文件入口，不作為事實來源）
+5. docs/00_core/DEVELOPMENT_ROADMAP.md（Roadmap Hub，了解文件權威入口）
+6. docs/00_core/ROADMAP_6M_ENGINEERING.md（涉及方向、優先順序或大型規劃時必讀）
+7. docs/01_architecture/system_architecture.md（涉及架構、模組邊界或資料流時必讀）
+8. docs/00_core/DOCUMENTATION_INDEX.md（只用來定位文件入口，不作為事實來源）
 
 任務：
 1) 用 5 點以內摘要「專案目前在哪」
@@ -75,7 +77,7 @@
 **行為邊界：**
 - 未被指定的模組、檔案、功能不得評論
 - 不推動未被詢問的重構或新功能
-- 不修改 roadmap 或 phase 定位
+- 不在未授權情況下修改 scoped authority、roadmap track 或 phase / 產品閉環定位
 - 若背景資訊不足，必須要求補充，而非自行假設
 - **必須使用繁體中文**（所有文檔、對話、回答、註解都必須使用繁體中文，禁止使用簡體中文）
 ```
@@ -196,7 +198,7 @@
 - 專案現有技術棧：[列出相關技術]
 - 性能要求：[如有]
 - 維護成本考量：[如有]
-- **不修改 roadmap 或 phase 定位**
+- **不在未授權情況下修改 scoped authority、roadmap track 或 phase / 產品閉環定位**
 
 **請提供：**
 1. 各選項的優缺點分析
@@ -234,7 +236,9 @@
 
 - **共用上下文**：[shared_context.md](./shared_context.md)
 - **系統架構文檔**：`docs/01_architecture/system_architecture.md`
-- **開發路線圖**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
+- **目前狀態**：`docs/00_core/PROJECT_SNAPSHOT.md`
+- **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **專案清單**：`PROJECT_INVENTORY.md`
 - **目前 UI 入口**：`ui_qt/main.py`
 - **資料路徑設定**：`data_module/config.py`

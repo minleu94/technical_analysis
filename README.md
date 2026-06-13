@@ -1,31 +1,29 @@
 # 台股技術分析系統
 
-> **最後整理**：2026-05-27
-> **目前主線**：Recommendation Portfolio Backtest MVP + Phase 4.1 Portfolio MVP
+> **最後整理**：2026-06-13
+> **目前主線**：三個產品閉環已建立，進入 6 個月工程路線與實證治理階段
 > **主要入口**：`ui_qt/main.py`
 
 這是一個台股投資決策系統，核心目標是把資料更新、市場觀察、推薦分析、策略回測、籌碼分析與持倉管理串成可驗證、可回溯、可演化的研究流程。
 
 ## 目前狀態
 
-- Phase 1 市場觀察儀：已完成。
-- Phase 2 策略資料庫 / 回測基礎：已完成。
-- Phase 2.5 參數設計優化：已完成。
-- Phase 3.1 / 3.2 / 3.3a / 3.3b：已完成，包含推薦可用化、Profiles、研究閉環、Walk-forward、Baseline、過擬合風險與 K 線視覺驗證。
+- 資料與市場狀態閉環：已完成 SQLite-first 更新、Market Watch、Smart Money 與候選池串接。
+- 研究驗證閉環：已完成 Recommendation、Research Lab、Backtest、Replay、Walk-forward、Promote 與 Strategy & Scoring Governance 機制回歸。
+- 持倉檢查閉環：已完成 Portfolio、來源追溯、策略與價格監控、停損停利警示、籌碼監控與 Smart Money 下鑽。
 - AI Runtime Subsystem MVP：已完成。
-- Smart Money Terminal MVP：已完成。
 - UI Qt Backtest chart rendering：已完成 QtWebEngine + HTML5 Canvas fast renderer，回測圖表保留 Matplotlib fallback。
-- Recommendation Portfolio Backtest MVP：已完成，可從推薦 Tab 將 Profile/Config 送到回測 Tab，在歷史日期重播推薦邏輯，產出整組推薦組合績效、期間持股、個股貢獻與交易紀錄。
-- 數據更新工作台：已完成左側導覽工作台重整，新增「安全更新所有數據」日常維護入口。
+- Recommendation Portfolio Backtest MVP：已完成，可從推薦 Tab 將 Profile/Config 送到回測 Tab，在歷史日期重播推薦邏輯。
+- 數據更新工作台：已完成左側導覽工作台重整，新增快速/安全更新分流。
 - Codex / Agent 指引：已新增根目錄 `AGENTS.md`，`docs/agents/` 已對齊目前 `ui_qt` 與資料路徑規則。
-- Phase 4.1 Portfolio MVP：domain / service / test skeleton 已開始，`ui_qt` Portfolio Tab 與跨模組串接尚未完成。
+- 當前 P0：完成 fixed / quantile 真實股票池 walk-forward 實證；實證完成前 quantile 維持 opt-in。
 
-最新進度以 [docs/00_core/DEVELOPMENT_ROADMAP.md](docs/00_core/DEVELOPMENT_ROADMAP.md) 為準。
+目前狀態以 [docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md) 為準；未來 6 個月工程路線以 [docs/00_core/ROADMAP_6M_ENGINEERING.md](docs/00_core/ROADMAP_6M_ENGINEERING.md) 為準。
 
 ## 快速啟動
 
-```bash
-python ui_qt/main.py
+```powershell
+.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
 如需執行測試，建議使用專案虛擬環境：
@@ -49,7 +47,11 @@ python ui_qt/main.py
 
 - [docs/README.md](docs/README.md) - docs 總入口與資料夾歸屬。
 - [docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md) - 30 秒讀完目前狀態。
+- [docs/00_core/ROADMAP_6M_ENGINEERING.md](docs/00_core/ROADMAP_6M_ENGINEERING.md) - 未來 6 個月可執行工程路線。
+- [docs/00_core/LEGACY_ROADMAP_CARRYOVER.md](docs/00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊 Roadmap 未完成事項的逐項移交與結案 Gate。
+- [docs/00_core/DEVELOPMENT_ROADMAP.md](docs/00_core/DEVELOPMENT_ROADMAP.md) - Roadmap Hub。
 - [docs/00_core/DOCUMENTATION_INDEX.md](docs/00_core/DOCUMENTATION_INDEX.md) - 完整文件索引。
+- [docs/07_guides/APPLICATION_MANUAL.md](docs/07_guides/APPLICATION_MANUAL.md) - 目前 7 個工作區的完整操作手冊。
 - [docs/02_features/UI_FEATURES_DOCUMENTATION.md](docs/02_features/UI_FEATURES_DOCUMENTATION.md) - Qt UI 功能說明。
 - [docs/02_features/USER_GUIDE.md](docs/02_features/USER_GUIDE.md) - 使用者操作指南。
 - [AGENTS.md](AGENTS.md) - Codex repo 指令入口。

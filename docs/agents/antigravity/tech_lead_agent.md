@@ -11,9 +11,11 @@
 3. `docs/agents/shared_context.md`
 4. `docs/agents/git_exclusions.md`
 5. `docs/00_core/PROJECT_SNAPSHOT.md`
-6. `docs/00_core/DEVELOPMENT_ROADMAP.md` 的 Living Section
-7. `docs/00_core/DOCUMENTATION_INDEX.md`
-8. `docs/agents/tech_lead.md`
+6. `docs/00_core/DEVELOPMENT_ROADMAP.md`（Roadmap Hub）
+7. `docs/00_core/ROADMAP_6M_ENGINEERING.md`
+8. `docs/01_architecture/system_architecture.md`
+9. `docs/00_core/DOCUMENTATION_INDEX.md`
+10. `docs/agents/tech_lead.md`
 
 ## 輸出要求
 
@@ -25,6 +27,6 @@
 
 ## 本週預設焦點
 
-- 推薦組合回測穩健分析：Sortino、Sharpe、Monte Carlo。
-- 評估回測最佳 Profile / Config 回灌推薦頁。
-- 保持 Roadmap / Snapshot / Index / UI docs / Agent docs 一致。
+- Strategy & Scoring Governance 實證：完成 fixed / quantile walk-forward 對照與統計摘要。
+- 依 6 個月工程路線推進 Research Run Registry、Factor Layer、營收估值與三大法人資料層。
+- 保持 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index / Agent docs 一致。

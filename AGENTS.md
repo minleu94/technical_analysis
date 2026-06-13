@@ -10,8 +10,13 @@
 2. `docs/agents/shared_context.md` - 全 Agent 共用規範
 3. `docs/agents/git_exclusions.md` - Git 排除與不應提交清單
 4. `docs/00_core/PROJECT_SNAPSHOT.md` - 專案目前狀態
-5. `docs/agents/skills_registry.md` - Codex / Antigravity 共用的角色選擇與協作入口
-6. 與任務對應的 Agent 文件：
+5. `docs/00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub 與文件權威入口
+6. `docs/00_core/ROADMAP_6M_ENGINEERING.md` - 未來 6 個月工程路線（涉及方向、優先序或大型規劃時必讀）
+7. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 移交與 Gate（涉及舊工作承接、Phase 或優先順序時必讀）
+8. `docs/01_architecture/system_architecture.md` - 系統架構（涉及架構、模組邊界或資料流時必讀）
+9. `docs/agents/skills_registry.md` - Codex / Antigravity 共用的角色選擇與協作入口
+10. `docs/07_guides/APPLICATION_MANUAL.md` - 完整操作手冊（涉及 UI、使用流程、參數、結果判讀或安全限制時必讀）
+11. 與任務對應的 Agent 文件：
    - 架構判斷、技術決策：`docs/agents/tech_lead.md`
    - 資料完整性、資料對比：`docs/agents/data_audit_agent.md`
    - 清理、移除、整理：`docs/agents/data_cleanup_agent.md`
@@ -35,6 +40,8 @@
 - 股票/量化防禦條款：策略、回測、資金、倉位、風控與績效等核心計算嚴禁新增裸 `float` 計算；必須使用 `Decimal`、整數基點/股數/分為單位，或在明確隔離的資料分析/視覺化邊界內處理。
 - 實作任何策略、回測、推薦或績效邏輯前，必須先做未來函數（Look-ahead bias）自查，確認訊號、特徵、篩選、標準化、停損停利與 benchmark 都只使用決策當下可取得的資料。
 - 修改功能時同步更新相關文檔。
+- 使用者可見功能變更時，完整 Manual 必須同步入口、操作步驟、參數意義、結果判讀、安全限制與排錯。
+- 文件判讀採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月方向看 `ROADMAP_6M_ENGINEERING.md`，舊工作承接看 `LEGACY_ROADMAP_CARRYOVER.md`，架構看 `system_architecture.md`，操作看 `APPLICATION_MANUAL.md`，歷史看 `docs/09_archive/`。
 - Stage / commit 前先看 `docs/agents/git_exclusions.md`，不要把本機暫存、工具輸出或非本任務 QA output 順手提交。
 - 優先遵循既有架構與測試方式。
 - 不要覆寫使用者或其他 agent 的未提交變更。

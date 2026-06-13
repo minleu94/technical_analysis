@@ -14,7 +14,9 @@
 - [ ] `docs/agents/shared_context.md`
 - [ ] `docs/agents/git_exclusions.md`
 - [ ] `docs/00_core/PROJECT_SNAPSHOT.md`
-- [ ] `docs/00_core/DEVELOPMENT_ROADMAP.md` Living Section
+- [ ] `docs/00_core/DEVELOPMENT_ROADMAP.md`（Roadmap Hub）
+- [ ] `docs/00_core/ROADMAP_6M_ENGINEERING.md`（涉及方向 / 中高風險時）
+- [ ] `docs/01_architecture/system_architecture.md`（涉及架構 / 資料流時）
 - [ ] 任務對應角色文件：
 
 ## 變更摘要

@@ -10,10 +10,10 @@
 ## 注意
 
 這些文件已經被新的系統取代：
-- 新的主程式：`ui_app/main.py`（圖形化界面）
+- 目前主程式：`ui_qt/main.py`（PySide6 圖形界面）
 - 新的配置系統：`data_module/config.py`
 
 如需使用新系統，請參考：
-- `ui_app/README.md` - UI 應用程式使用說明
-- `docs/` - 完整文檔
+- `ui_qt/README.md` - UI 模組說明
+- `docs/07_guides/APPLICATION_MANUAL.md` - 完整操作手冊
 

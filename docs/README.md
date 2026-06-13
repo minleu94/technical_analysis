@@ -1,15 +1,18 @@
 # Docs 文檔目錄
 
-> **最後整理**：2026-05-20
-> **權威順序**：先看 `00_core/DEVELOPMENT_ROADMAP.md` 的 Living Section，再看 `00_core/PROJECT_SNAPSHOT.md` 和 `00_core/DOCUMENTATION_INDEX.md`。
+> **最後整理**：2026-06-13
+> **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
 
-1. [開發演進地圖](00_core/DEVELOPMENT_ROADMAP.md) - Phase 狀態與下一步的 Single Source of Truth
-2. [專案快照](00_core/PROJECT_SNAPSHOT.md) - 30 秒讀完的目前狀態
-3. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
-4. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
-5. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
+1. [專案快照](00_core/PROJECT_SNAPSHOT.md) - 30 秒讀完的目前狀態、本週優先事項與高風險區
+2. [6 個月工程路線](00_core/ROADMAP_6M_ENGINEERING.md) - 未來 6 個月的可執行工程計畫
+3. [Roadmap Hub](00_core/DEVELOPMENT_ROADMAP.md) - Roadmap 入口與權威文件導覽
+4. [舊 Roadmap 移交矩陣](00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊版未完成事項的新位置與驗收條件
+5. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 7 個工作區、跨頁流程、安全限制與排錯
+6. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
+7. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
+8. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
 
 ---
 
@@ -17,7 +20,7 @@
 
 | 目錄 | 用途 | 狀態 |
 |---|---|---|
-| `00_core/` | 權威入口、roadmap、snapshot、索引、coverage 規則 | 必讀 |
+| `00_core/` | snapshot、6 個月 roadmap、Roadmap Hub、索引、coverage 規則 | 必讀 |
 | `01_architecture/` | 系統架構、資料流、Runtime 規範、多 Agent 工作流 | 長期維護 |
 | `02_features/` | UI、使用者指南、回測、評分、策略規格 | 使用者與功能說明 |
 | `03_data/` | 每日資料、資料流、重建與故障排除 | 資料更新操作 |
@@ -37,17 +40,16 @@
 
 ## 目前狀態摘要
 
-- Phase 1、Phase 2、Phase 2.5 核心：已完成。
-- Phase 3.1、3.2、3.3a、3.3b：已完成，包含推薦可用化、Profiles、研究閉環、Promote、Walk-forward、Baseline、過擬合風險與 K 線視覺驗證。
+- 三個產品閉環已建立：資料與市場狀態、研究驗證、持倉檢查。
+- Strategy & Scoring Governance 增量 A / B 已完成機制回歸；真實 fixed / quantile walk-forward 實證仍是 P0。
 - AI Runtime Subsystem MVP：已完成。
-- Smart Money Terminal MVP：已完成。
 - UI Qt Backtest chart rendering：已完成 QtWebEngine + HTML5 Canvas fast renderer，回測圖表保留 Matplotlib fallback。
-- 數據更新工作台：已完成左側導覽維運工作台與「安全更新所有數據」入口。
+- 數據更新工作台：已完成左側導覽維運工作台與快速/安全更新分流。
 - Codex / Agent 指引：根目錄 `AGENTS.md` 已建立，`docs/agents/` 已同步目前 `ui_qt`、資料根目錄與 coverage 路徑規則。
-- Phase 4.1 Portfolio：服務層 / domain / 測試骨架已開始，`ui_qt` 使用者可見 Portfolio Tab 尚未完成。
-- Phase 5：尚未開始，僅有部分回測/最佳化效能改善。
+- Portfolio：已完成來源追溯、策略與價格監控、停損停利警示、籌碼監控與 Smart Money 下鑽。
+- Phase 5：圖表渲染與批次並行化已完成；大表格分頁與 Excel/PDF 報告輸出仍待做。
 
-詳細狀態永遠以 [DEVELOPMENT_ROADMAP.md](00_core/DEVELOPMENT_ROADMAP.md) 的 Living Section 為準。
+詳細狀態以 [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md) 為準；未來方向以 [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md) 為準。
 
 ---
 
@@ -56,9 +58,10 @@
 ### 第一次接觸
 
 1. [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md)
-2. [DEVELOPMENT_ROADMAP.md](00_core/DEVELOPMENT_ROADMAP.md)
-3. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
-4. [system_architecture.md](01_architecture/system_architecture.md)
+2. [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md)
+3. [DEVELOPMENT_ROADMAP.md](00_core/DEVELOPMENT_ROADMAP.md)
+4. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
+5. [system_architecture.md](01_architecture/system_architecture.md)
 
 ### 要查策略回測
 
@@ -69,10 +72,11 @@
 
 ### 要使用系統
 
-1. [QUICK_START.md](07_guides/QUICK_START.md)
-2. [USER_GUIDE.md](02_features/USER_GUIDE.md)
-3. [UI_FEATURES_DOCUMENTATION.md](02_features/UI_FEATURES_DOCUMENTATION.md)
-4. [HOW_TO_UPDATE_DAILY_DATA.md](03_data/HOW_TO_UPDATE_DAILY_DATA.md)
+1. [APPLICATION_MANUAL.md](07_guides/APPLICATION_MANUAL.md)
+2. [QUICK_START.md](07_guides/QUICK_START.md)
+3. [USER_GUIDE.md](02_features/USER_GUIDE.md)
+4. [UI_FEATURES_DOCUMENTATION.md](02_features/UI_FEATURES_DOCUMENTATION.md)
+5. [HOW_TO_UPDATE_DAILY_DATA.md](03_data/HOW_TO_UPDATE_DAILY_DATA.md)
 
 ### 要開發或整理文件
 
@@ -85,7 +89,7 @@
 
 ## 維護原則
 
-- 不確定狀態時，以 roadmap Living Section 為準。
+- 不確定狀態時，先判斷主題：現在看 Snapshot，未來路線看 6M Roadmap，架構看 system architecture。
 - 新增、刪除或搬移文件後，必須更新 `00_core/DOCUMENTATION_INDEX.md`。
-- 會影響使用者操作的變更，必須同步 `02_features/USER_GUIDE.md` 或 `02_features/UI_FEATURES_DOCUMENTATION.md`。
+- 會影響使用者操作、參數、結果判讀或安全限制的變更，必須同步 `07_guides/APPLICATION_MANUAL.md`；專題教學或功能說明再同步 `02_features/USER_GUIDE.md`、`02_features/UI_FEATURES_DOCUMENTATION.md`。
 - 過期但仍有歷史價值的文件放入 `09_archive/`；沒有引用、沒有歷史價值、且內容已被新文件取代的文件可以刪除。

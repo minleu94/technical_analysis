@@ -175,14 +175,14 @@ else:
     print("獲取數據失敗，請查看錯誤排查指南")
 ```
 
-### 方法 4：使用 UI 應用程式（最新 ⭐⭐⭐）
+### 方法 4：使用目前 PySide6 UI
 
-```bash
+```powershell
 # 啟動圖形化界面
-python ui_app/main.py
+.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
-在 UI 中選擇「數據更新」標籤頁，選擇更新類型（每日/大盤/產業），設定日期範圍，點擊「開始更新」。
+在 UI 中選擇「數據更新」，日常可使用快速更新；需要完整 CSV 備份時使用安全更新。個別資料來源可從左側導覽設定日期範圍與手動下載。
 
 ## 錯誤排查指南
 
@@ -297,14 +297,14 @@ if file_path.exists():
 ### 📞 需要更多幫助？
 
 1. 查看 `TROUBLESHOOTING_DAILY_UPDATE.md` - 每日股票更新故障排除指南
-2. 查看 `docs/note.txt` - 開發進度記錄
+2. 查看 `../00_core/PROJECT_SNAPSHOT.md` - 目前狀態、已知風險與優先事項
 3. 查看 `../01_architecture/data_collection_architecture.md` - 數據收集架構說明
 
 ## 相關文檔
 
 ### 主要文檔
 - **`TROUBLESHOOTING_DAILY_UPDATE.md`** - 每日股票更新故障排除指南（包含 API 連接問題解決方案）
-- **`docs/note.txt`** - 開發進度記錄（包含數據源連接不穩定問題）
+- **`../00_core/PROJECT_SNAPSHOT.md`** - 目前狀態、已知風險與優先事項
 - **`../01_architecture/data_collection_architecture.md`** - 數據收集架構說明
 
 ### 腳本文檔
@@ -351,7 +351,7 @@ if file_path.exists():
 - ✅ `data_module/data_loader.py` 的 `download_from_api` - **已添加延遲和 Session**
 - ✅ `scripts/batch_update_daily_data.py` - **已添加延遲和 Session**
 - ✅ `scripts/update_daily_stock_data.py` - **已添加延遲和 Session**
-- ✅ `ui_app/main.py` - **已整合到 UI**
+- ✅ `ui_qt/main.py` - **目前主要 PySide6 UI**
 
 ## 注意事項
 

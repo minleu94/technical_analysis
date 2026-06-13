@@ -6,7 +6,7 @@
 
 > [!NOTE]
 > **本文件已歸檔**。本文件保留了 Phase 3.3b 的歷史實施規劃脈絡。
-> 該階段所定義的所有三個 Epic 均已於 2026-01-02 100% 實作完成，並通過完整綠燈驗證。最新完成狀態請參閱 [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md) 的 Living Section。
+> 該階段所定義的所有三個 Epic 均已於 2026-01-02 100% 實作完成，並通過完整綠燈驗證。最新專案狀態請參閱 [PROJECT_SNAPSHOT.md](../00_core/PROJECT_SNAPSHOT.md)，Roadmap 入口請參閱 [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md)。
 
 ## 歷史進度存檔
 - ✅ **Epic 1：Promote 機制**：已於 2026-01-02 實作完成，回測結果可升級為 Presets/Versions。

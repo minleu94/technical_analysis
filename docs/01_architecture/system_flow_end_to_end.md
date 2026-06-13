@@ -53,7 +53,7 @@
 - `scripts/batch_update_daily_data.py` - 批量更新個股數據
 - `scripts/batch_update_market_and_industry_index.py` - 更新大盤和產業指數
 - `scripts/update_daily_stock_data.py` - 更新單日數據
-- `ui_app/main.py` - UI 應用程式（整合所有更新功能）
+- `ui_qt/main.py` - 目前 PySide6 UI 應用程式（整合所有更新功能）
 
 **對應模組**：`data_module/data_loader.py`
 
@@ -219,7 +219,8 @@ python ui_qt/main.py
 ```
 
 **相關文檔**：
-- `docs/UI_FEATURES_DOCUMENTATION.md` - 完整的 UI 功能說明
-- `docs/USER_GUIDE.md` - 複雜功能的使用教程
+- `../02_features/UI_FEATURES_DOCUMENTATION.md` - UI 功能與產品行為說明
+- `../02_features/USER_GUIDE.md` - 進階功能與專題教程
+- `../07_guides/APPLICATION_MANUAL.md` - 目前完整操作手冊
 - `ui_qt/README.md` - Qt UI 詳細說明
 

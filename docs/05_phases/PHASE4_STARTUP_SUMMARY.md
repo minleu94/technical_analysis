@@ -203,11 +203,12 @@ Phase 4 的最小可用骨架已建立，提供 **Read-only / Decision-support**
 
 - [Phase 4 設計規格](PHASE4_PORTFOLIO_DESIGN.md) - 完整的設計文檔
 - [Phase 4 進入條件](phase3_5_research/PHASE4_ENTRY_CRITERIA.md) - 進入 Phase 4 的前置條件
-- [開發路線圖](../00_core/DEVELOPMENT_ROADMAP.md) - Phase 4 的整體規劃
+- [PROJECT_SNAPSHOT.md](../00_core/PROJECT_SNAPSHOT.md) - 目前 Portfolio 與 Phase 4 狀態
+- [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md) - Roadmap Hub
 
 ---
 
 **文檔版本**：v1.0  
 **最後更新**：2026-06-09  
-**狀態**：最小 UI / handoff / 條件監控 MVP 已建立，待深化策略版本追蹤與 Price 對照
+**狀態**：歷史啟動摘要；Portfolio 後續已完成主要深化，現況請以 `../00_core/PROJECT_SNAPSHOT.md` 為準。
 

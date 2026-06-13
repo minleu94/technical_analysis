@@ -1,266 +1,124 @@
-# 如何更新 Daily Data - 快速指南
+# 每日資料更新操作指南
 
-## 🎯 推薦方式（使用主模組）
+> 日常使用優先從 PySide6 UI 的「數據更新」工作區執行。
+> 完整 UI 說明見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
 
-### 使用 UI 應用程式（最推薦 ⭐⭐⭐）
+## 1. 啟動
 
-```bash
-python ui_app/main.py
+```powershell
+.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
-在 UI 中：
-1. 選擇「數據更新」標籤頁
-2. 選擇更新類型（每日/大盤/產業）
-3. 設定日期範圍
-4. 點擊「開始更新」
+## 2. 日常首選：快速更新
 
-**優點：**
-- ✅ 圖形化界面，操作簡單
-- ✅ 整合所有更新功能
-- ✅ 顯示詳細日誌
-- ✅ 自動錯誤處理
+1. 開啟「數據更新」。
+2. 點擊「檢查數據狀態」。
+3. 點擊「快速更新（僅 SQLite）」。
+4. 等待底部日誌顯示完成。
+5. 再次檢查狀態，確認每日股價與技術指標日期。
 
----
+快速更新會下載近期缺失資料並直接同步 SQLite，略過大型歷史 CSV 重寫。
 
-### 批量更新多日數據（推薦 ⭐⭐）
+## 3. 完整備份：安全更新
 
-```bash
-# 更新從指定日期之後到今天的所有交易日
-python scripts/batch_update_daily_data.py --start-date 2025-08-28
+使用「安全更新（完整 CSV + SQLite）」時，系統會保留完整 CSV 整合與 SQLite 同步流程。適合：
 
-# 更新指定日期範圍
-python scripts/batch_update_daily_data.py --start-date 2025-08-28 --end-date 2025-09-05
+- 定期備份
+- 資料修復後
+- 需要人工檢查完整 CSV
+- 確認雙軌資料一致性
 
-# 自訂延遲時間（更安全，避免 API 限制）
-python scripts/batch_update_daily_data.py --start-date 2025-08-28 --delay-min 4 --delay-max 4
+## 4. 手動更新單一來源
+
+### 每日股價
+
+1. 選擇「每日股價」。
+2. 設定結束日期與最近範圍。
+3. 點擊「手動下載此資料源」。
+4. 點擊「合併每日股價」。
+5. 到「技術指標」執行增量更新。
+
+### 大盤與產業
+
+設定日期範圍後下載，並確認資料已同步至 `market_indices` 或 `industry_indices`。
+
+### 券商分點
+
+1. 設定日期範圍。
+2. 手動下載。
+3. 點擊「合併券商分點」。
+4. 確認 `broker_flows` 日期與筆數。
+
+目前 registry 已擴充至 37 個追蹤分點；資料品質使用 observed、estimated、unavailable 三態。
+
+### 技術指標
+
+- 增量更新：日常使用。
+- 強制全量更新：只在算法變更或資料修復時使用。
+- 可輸入單一股票代號限制處理範圍。
+
+## 5. SQLite Inspector
+
+使用「SQLite 資料檢視」可唯讀查看：
+
+- 資料預覽
+- Schema
+- 股票、分點與日期篩選
+- 受控筆數上限
+
+不要把 Inspector 當成資料修改工具。
+
+## 6. 匯出 CSV
+
+個別資料頁的「匯出 CSV 備案」可輸出最近範圍或全部歷史，使用 UTF-8 with BOM。
+
+## 7. 命令列替代方式
+
+### 批量更新
+
+```powershell
+.\.venv\Scripts\python.exe scripts\batch_update_daily_data.py --start-date 2026-06-01
 ```
 
-**優點：**
-- ✅ **使用主模組**（`data_module/data_loader.py`）
-- ✅ 自動更新多個交易日（排除週末）
-- ✅ 已包含 delay time（預設 4 秒，可調整）
-- ✅ 自動跳過已存在的文件
-- ✅ 顯示詳細進度和結果摘要
-- ✅ 統一的日誌記錄
-- ✅ 符合專案架構
+指定結束日期：
 
----
-
-### 更新單日數據
-
-```bash
-# 更新指定日期的數據（只更新 daily_price）
-python scripts/update_daily_stock_data.py --date 2025-08-29
-
-# 更新並自動合併到 meta_data
-python scripts/update_daily_stock_data.py --date 2025-08-29 --merge
+```powershell
+.\.venv\Scripts\python.exe scripts\batch_update_daily_data.py --start-date 2026-06-01 --end-date 2026-06-12
 ```
 
-**優點：**
-- ✅ **使用主模組**（`data_module/data_loader.py`）
-- ✅ 已包含 delay time 和 Session 處理（避免 307 錯誤）
-- ✅ 使用成功驗證的邏輯（MI_INDEX API, type=ALL）
-- ✅ 可以選擇是否自動合併
-- ✅ 統一的日誌記錄
-- ✅ 符合專案架構
+### 單日更新
 
----
-
-## 📋 所有可用的更新方式
-
-### 方式 1：UI 應用程式（最推薦 ⭐⭐⭐）
-
-**用途：** 圖形化界面更新數據
-
-```bash
-python ui_app/main.py
+```powershell
+.\.venv\Scripts\python.exe scripts\update_daily_stock_data.py --date 2026-06-12 --merge
 ```
 
-**特點：**
-- 圖形化界面，操作簡單
-- 整合所有更新功能（每日/大盤/產業）
-- 顯示詳細日誌
-- 自動錯誤處理
+### 合併既有每日檔
 
----
-
-### 方式 2：scripts/batch_update_daily_data.py（推薦 ⭐⭐）
-
-**用途：** 批量更新多個交易日的數據
-
-```bash
-# 更新從指定日期之後到今天的所有交易日
-python scripts/batch_update_daily_data.py --start-date 2025-08-28
-
-# 更新指定日期範圍
-python scripts/batch_update_daily_data.py --start-date 2025-08-28 --end-date 2025-09-05
-
-# 自訂延遲時間（秒）
-python scripts/batch_update_daily_data.py --start-date 2025-08-28 --delay-min 4 --delay-max 4
+```powershell
+.\.venv\Scripts\python.exe scripts\merge_daily_data.py
 ```
 
-**特點：**
-- 使用主模組 `data_module/data_loader.py` 的 `download_from_api()` 方法
-- 自動更新多個交易日（排除週末）
-- 已包含 delay time（預設 4 秒，可調整）
-- 自動跳過已存在的文件
-- 顯示詳細進度和結果摘要
-- 使用 Session 和 cookie 處理
-- 使用 MI_INDEX API (type=ALL)
-- 統一的日誌記錄
-- 符合專案架構
+## 8. 注意事項
 
----
+1. 日期使用 `YYYY-MM-DD`。
+2. 週末與休市日沒有交易資料。
+3. 手動下載不等於分析資料已可用；仍需合併與計算技術指標。
+4. 不要把強制重建當成日常更新。
+5. 不得刪除正式 raw 原始資料。
 
-### 方式 3：scripts/update_daily_stock_data.py（推薦 ⭐⭐）
+## 9. 排錯
 
-**用途：** 使用主模組更新單日數據
+### API 或網路錯誤
 
-```bash
-# 更新並自動合併
-python scripts/update_daily_stock_data.py --date 2025-08-29 --merge
+檢查網路、交易日與底部日誌，等待後重試缺失日期。
 
-# 只更新 daily_price，不合併
-python scripts/update_daily_stock_data.py --date 2025-08-29
-```
+### 更新完成但 UI 日期未變
 
-**特點：**
-- 使用主模組 `data_module/data_loader.py` 的 `download_from_api()` 方法
-- 已包含 delay time（1.5-2.5 秒）
-- 使用 Session 和 cookie 處理
-- 使用 MI_INDEX API (type=ALL)
-- 統一的日誌記錄
-- 符合專案架構
+1. 重新檢查數據狀態。
+2. 確認資料已合併至 SQLite。
+3. 確認技術指標已計算。
+4. 使用 SQLite Inspector 查看對應資料表。
 
----
+### 詳細故障排除
 
-### 方式 4：使用主模組（程式碼方式）
-
-**用途：** 在 Python 程式中直接使用主模組
-
-```python
-from data_module.config import TWStockConfig
-from data_module.data_loader import DataLoader
-
-config = TWStockConfig()
-loader = DataLoader(config)
-
-# 方法 1：只下載數據（保存到 daily_price）
-df = loader.download_from_api("2025-08-29")
-
-# 方法 2：更新數據（調用 download_from_api）
-success = loader.update_daily_data("2025-08-29")
-```
-
-**特點：**
-- 已包含 delay time 和 Session 處理
-- 適合整合到其他腳本中
-- 使用主模組方法
-
----
-
-### 方式 5：只合併數據（不更新）
-
-**用途：** 只合併已存在的 daily_price 文件到 meta_data
-
-```bash
-python scripts/merge_daily_data.py
-```
-
-**特點：**
-- 只合併，不更新
-- 自動檢測新的 daily_price 文件
-- 增量合併（只處理新文件）
-
----
-
-## 🔄 完整更新流程
-
-### 標準流程（推薦）
-
-```bash
-# 步驟 1：更新單日數據（只更新 daily_price）
-python scripts/update_daily_stock_data.py --date 2025-08-29
-
-# 步驟 2：合併到 meta_data（可選，也可以累積多日後再合併）
-python scripts/merge_daily_data.py
-```
-
-### 一鍵更新（自動合併）
-
-```bash
-# 更新並自動合併
-python scripts/update_daily_stock_data.py --date 2025-08-29 --merge
-```
-
----
-
-## 📝 使用範例
-
-### 範例 1：更新今天的數據
-
-```bash
-# 假設今天是 2025-08-29
-python scripts/update_daily_stock_data.py --date 2025-08-29 --merge
-```
-
-### 範例 2：更新昨天的數據（只更新，不合併）
-
-```bash
-python scripts/update_daily_stock_data.py --date 2025-08-28
-```
-
-### 範例 3：批量更新多日數據（推薦）
-
-```bash
-# 更新從 8/28 之後到今天的所有交易日
-python scripts/batch_update_daily_data.py --start-date 2025-08-28
-
-# 更新後合併所有新數據
-python scripts/merge_daily_data.py
-```
-
----
-
-## ⚠️ 注意事項
-
-1. **日期格式：** 必須使用 `YYYY-MM-DD` 格式（如 `2025-08-29`）
-
-2. **交易日：** 只能更新交易日（週末和假日會失敗）
-
-3. **延遲時間：** 
-   - 單日更新：每次請求會自動延遲 1.5-2.5 秒
-   - 批量更新：預設 4 秒（可調整），請耐心等待
-
-4. **批量更新：** 
-   - 推薦使用 `batch_update_daily_data.py` 批量更新
-   - 自動跳過已存在的文件，可安全重新執行
-   - 更新完成後再統一合併
-
-5. **備份：** 合併前會自動創建備份，不用擔心數據丟失
-
----
-
-## 🆘 遇到問題時
-
-### 問題 1：HTTP 307 錯誤
-→ 使用 UI 應用程式或主模組腳本（已包含處理）
-
-### 問題 2：API 返回錯誤狀態
-→ 檢查日期是否為交易日，日期格式是否正確
-
-### 問題 3：數據為空
-→ 查看 `DATA_FETCHING_LOGIC.md` 的錯誤排查指南
-
----
-
-## 📚 相關文檔
-
-- **`daily_data_update_guide.md`** ⭐ - 每日數據更新詳細指南（包含技術細節、API 資訊、問題排查）
-- **`DATA_FETCHING_LOGIC.md`** - 數據獲取邏輯詳細說明
-- **`../01_architecture/data_collection_architecture.md`** - 數據收集架構說明
-- **`TROUBLESHOOTING_DAILY_UPDATE.md`** - 每日股票更新故障排除指南
-- **`ui_app/README.md`** - UI 應用程式使用說明
-
-> **提示**：本文檔為快速指南，如需更詳細的技術說明、API 資訊和問題排查，請參考 [daily_data_update_guide.md](daily_data_update_guide.md)
-
+見 [TROUBLESHOOTING_DAILY_UPDATE.md](TROUBLESHOOTING_DAILY_UPDATE.md) 與 [DATA_FETCHING_LOGIC.md](DATA_FETCHING_LOGIC.md)。

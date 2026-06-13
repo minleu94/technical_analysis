@@ -464,13 +464,13 @@ def _create_empty_report(self, error_message: str) -> BacktestReportDTO:
 
 ---
 
-### 步驟 4.2：更新開發路線圖
+### 步驟 4.2：更新開發狀態入口
 
-**檔案**：`../00_core/DEVELOPMENT_ROADMAP.md`
+**檔案**：`../00_core/PROJECT_SNAPSHOT.md`；若影響入口或未來路線，再同步 `../00_core/DEVELOPMENT_ROADMAP.md` 與 `../00_core/ROADMAP_6M_ENGINEERING.md`
 
 **更新內容**：
-- [ ] 更新 Phase 3.3b 進度
-- [ ] 標註 Epic 2 MVP-2 完成狀態
+- [ ] 更新目前狀態或歷史完成紀錄
+- [ ] 標註 Epic 2 MVP-2 完成狀態與驗證證據
 
 ---
 

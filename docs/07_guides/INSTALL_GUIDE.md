@@ -1,90 +1,81 @@
-# 安裝指南
+# 安裝與環境設定
 
-## 📦 安裝依賴
+## 1. 前置條件
 
-### 方法 1：使用 requirements.txt（推薦）
+- Windows PowerShell
+- 可建立 Python 虛擬環境的 Python 安裝
+- 可存取專案資料根目錄
 
-```bash
-pip install -r requirements.txt
+以專案現有 `.venv` 的 Python 版本為優先，不要在未驗證相容性前任意更換主要版本。
+
+## 2. 建立虛擬環境
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 方法 2：使用安裝 notebook
+`requirements.txt` 已包含 PySide6、pandas、NumPy、Matplotlib、Selenium 與研究所需套件。
 
-```bash
-# 打開 Jupyter Notebook
-jupyter notebook install_dependencies.ipynb
+## 3. 設定資料目錄
+
+預設：
+
+```text
+D:/Min/Python/Project/FA_Data
 ```
 
-然後依序執行每個 cell 來安裝套件。
+臨時覆蓋：
 
-### 方法 3：手動安裝
-
-```bash
-# 基本套件
-pip install pandas numpy requests
-
-# 技術分析
-pip install ta  # 或嘗試安裝 talib（Windows 上較複雜）
-
-# 可視化
-pip install matplotlib seaborn
-
-# 其他工具
-pip install tqdm yfinance
+```powershell
+$env:DATA_ROOT = "D:\your\data\root"
+$env:OUTPUT_ROOT = "D:\your\data\root\output"
 ```
 
-## 🚀 快速開始
+設定只作用於目前 PowerShell session。永久設定請使用 Windows 環境變數管理。
 
-### 1. 安裝依賴
+## 4. 啟動 PySide6 UI
 
-```bash
-pip install -r requirements.txt
+```powershell
+.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
-### 2. 啟動 UI 應用程式
+Legacy `ui_app/main.py` 不是目前主要使用者入口。
 
-```bash
-python ui_app/main.py
+## 5. 安裝驗證
+
+```powershell
+.\.venv\Scripts\python.exe -c "import pandas, numpy, PySide6; print('core imports OK')"
+.\.venv\Scripts\python.exe -c "from data_module.config import TWStockConfig; print(TWStockConfig().data_root)"
 ```
 
-## ⚙️ 配置
+## 6. 故障排除
 
-### 數據路徑配置
+### PySide6 或 Qt 模組缺失
 
-數據路徑預設為 `D:/Min/Python/Project/FA_Data/`，可在 `data_module/config.py` 中修改。
-
-### 環境變量（可選）
-
-可以通過環境變量覆蓋數據路徑：
-```bash
-set DATA_ROOT=your/custom/path
-set OUTPUT_ROOT=your/custom/output/path
+```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade PySide6
 ```
 
-## 🔧 故障排除
+### TA-Lib 安裝失敗
 
-### 問題 1：pandas 未安裝
+先保留完整錯誤訊息，不要移除其他依賴。確認目前 Python 架構與 wheel 相容；專案也包含相容處理，但仍應以測試驗證實際路徑。
 
-**解決**：
-```bash
-pip install pandas
-```
+### 圖表空白
 
-### 問題 2：talib 安裝失敗（Windows）
+查看 terminal 是否有 QtWebEngine 匯入錯誤。回測圖表有 Matplotlib fallback，但環境仍需具備基本 Qt 顯示能力。
 
-**解決**：
-- 使用 `ta` 套件替代（已包含在 `talib_compatibility.py`）
-- 或參考 `install_dependencies.ipynb` 中的說明
+### 無法讀取資料
 
-### 問題 3：tkinter 未安裝
+確認：
 
-**解決**：
-- Windows：通常已包含在 Python 安裝中
-- Linux：`sudo apt-get install python3-tk`
+1. `DATA_ROOT` 存在。
+2. 使用者有讀寫權限。
+3. `<DATA_ROOT>/sqlite/twstock.db` 可存取。
+4. 沒有把正式資料根目錄指向測試資料夾。
 
-## 📝 注意事項
+## 7. 完整使用說明
 
-1. **Python 版本**：建議使用 Python 3.8 或更高版本
-2. **虛擬環境**：可選，但建議使用以隔離依賴
-3. **Windows 編碼**：系統已處理 UTF-8 編碼問題
+安裝完成後閱讀 [APPLICATION_MANUAL.md](APPLICATION_MANUAL.md)。
 

@@ -52,11 +52,11 @@ success = loader.update_industry_index("2025-08-29")
 
 ### 方式 1：使用 UI 應用程式（最推薦 ⭐⭐⭐）
 
-```bash
-python ui_app/main.py
+```powershell
+.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
-在 UI 中選擇「數據更新」標籤頁，選擇「產業指數數據」，設定日期範圍，點擊「開始更新」。
+在 UI 中選擇「數據更新」→「產業指數」，設定結束日期與最近範圍，點擊「手動下載此資料源」；日常也可由快速或安全更新統一處理。
 
 ### 方式 2：使用主模組（推薦 ⭐⭐）
 

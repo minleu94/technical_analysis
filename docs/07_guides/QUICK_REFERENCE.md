@@ -1,66 +1,61 @@
-# 快速參考指南
+# 快速參考
 
-> **注意**：本文檔提供常用命令和操作的快速參考。如需完整的文檔索引和導航，請參考 [../00_core/DOCUMENTATION_INDEX.md](../00_core/DOCUMENTATION_INDEX.md)。
+## 常用入口
 
-## 📖 文檔導航
+| 需求 | 文件 |
+|---|---|
+| 完整 UI 操作 | [APPLICATION_MANUAL.md](APPLICATION_MANUAL.md) |
+| 三步啟動 | [QUICK_START.md](QUICK_START.md) |
+| 安裝與環境 | [INSTALL_GUIDE.md](INSTALL_GUIDE.md) |
+| 更新每日資料 | [HOW_TO_UPDATE_DAILY_DATA.md](../03_data/HOW_TO_UPDATE_DAILY_DATA.md) |
+| 更新故障排除 | [TROUBLESHOOTING_DAILY_UPDATE.md](../03_data/TROUBLESHOOTING_DAILY_UPDATE.md) |
+| 回測功能 | [BACKTEST_LAB_FEATURES.md](../02_features/BACKTEST_LAB_FEATURES.md) |
+| 回測 FAQ | [BACKTEST_LAB_FAQ.md](../02_features/BACKTEST_LAB_FAQ.md) |
+| 目前狀態 | [PROJECT_SNAPSHOT.md](../00_core/PROJECT_SNAPSHOT.md) |
+| 未來路線 | [ROADMAP_6M_ENGINEERING.md](../00_core/ROADMAP_6M_ENGINEERING.md) |
 
-### 遇到問題時
-1. **數據更新失敗** → 查看 `../03_data/DATA_FETCHING_LOGIC.md` 的錯誤排查指南
-2. **API 連接問題** → 查看 `../03_data/TROUBLESHOOTING_DAILY_UPDATE.md`
-3. **數據格式問題** → 查看 `../03_data/DATA_FETCHING_LOGIC.md` 的獲取邏輯章節
+## 啟動
 
-### 需要使用時
-1. **更新單日數據** → 查看 `../03_data/HOW_TO_UPDATE_DAILY_DATA.md`
-2. **了解數據結構** → 查看 `../01_architecture/data_collection_architecture.md`
-3. **了解系統架構** → 查看 `../01_architecture/system_architecture.md`
-
-### 開發時
-1. **查看開發進度** → 查看 `../00_core/note.txt`
-2. **遇到更新問題** → 查看 `../03_data/TROUBLESHOOTING_DAILY_UPDATE.md`
-3. **查看數據獲取邏輯** → 查看 `../03_data/DATA_FETCHING_LOGIC.md`
-
-## 🚀 快速開始
-
-### 使用 UI 應用程式（最推薦）
-
-```bash
-python ui_app/main.py
+```powershell
+.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
-### 更新單日股票數據
+## 日常更新
 
-```bash
-# 方法 1：使用批量更新腳本（推薦）
-python scripts/batch_update_daily_data.py --start-date 2025-08-28
+- 速度優先：數據更新 → 快速更新（僅 SQLite）
+- 完整備份：數據更新 → 安全更新（完整 CSV + SQLite）
+- 只查狀態：數據更新 → 檢查數據狀態
 
-# 方法 2：使用單日更新腳本
-python scripts/update_daily_stock_data.py --date 2025-08-28 --merge
+## 研究流程
+
+```text
+Update
+  -> Market Watch / Smart Money
+  -> Recommendation
+  -> 候選池 / 選股清單
+  -> Research Lab
+  -> 保存 / Promote
+  -> Portfolio / Journal
 ```
 
-### 合併數據到 meta_data
+## 常用維護命令
 
-```bash
-python scripts/merge_daily_data.py
+```powershell
+# 批量更新股價
+.\.venv\Scripts\python.exe scripts\batch_update_daily_data.py --start-date 2026-06-01
+
+# 更新單日並合併
+.\.venv\Scripts\python.exe scripts\update_daily_stock_data.py --date 2026-06-12 --merge
+
+# 合併既有每日檔
+.\.venv\Scripts\python.exe scripts\merge_daily_data.py
 ```
 
-## 🔧 常見問題快速解決
+## 快速排錯
 
-### HTTP 307 錯誤
-→ 使用 UI 應用程式或主模組腳本（已包含處理）
-
-### API 返回錯誤狀態
-→ 檢查日期是否為交易日，日期格式是否正確
-
-### 數據為空
-→ 查看 `../03_data/DATA_FETCHING_LOGIC.md` 的錯誤排查指南
-
-## 📚 主要文檔位置
-
-- **`../03_data/DATA_FETCHING_LOGIC.md`** - 數據獲取邏輯、使用方式、錯誤排查（**最重要**）
-- **`../03_data/HOW_TO_UPDATE_DAILY_DATA.md`** - 如何更新每日數據（**推薦閱讀**）
-- **`../03_data/TROUBLESHOOTING_DAILY_UPDATE.md`** - 每日股票更新故障排除指南
-- **`../00_core/note.txt`** - 開發進度記錄
-- **`../01_architecture/data_collection_architecture.md`** - 數據收集架構說明
-- **`../01_architecture/system_architecture.md`** - 系統架構說明
-- **`../../ui_app/README.md`** - UI 應用程式使用說明
+- 推薦沒有最新資料：檢查 `daily_prices` 與 `technical_indicators` 日期。
+- Smart Money 無資料：檢查券商分點下載、合併與 `broker_flows`。
+- 回測 0 交易：檢查整股資金、暖機、門檻與成交量限制。
+- Promote 停用：先保存結果並確認驗證狀態不是 FAIL。
+- Watchlist 直接送回測停用：先保存為選股清單，再從 Research Lab 載入。
 
