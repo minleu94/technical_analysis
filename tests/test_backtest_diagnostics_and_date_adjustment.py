@@ -104,6 +104,80 @@ def test_score_diagnostics_calculation():
         assert diag['sell_hit_days'] == 2
         assert diag['total_days'] == 10
 
+def test_backtest_diagnostics_quantile():
+    """驗證 quantile 模式下，score_diagnostics 是否包含分位數專屬統計欄位"""
+    config = MockConfig()
+    service = BacktestService(config)
+    
+    dates = pd.date_range("2026-06-01", "2026-06-10")
+    scores = [50.0] * 10
+    
+    mock_df = pd.DataFrame({
+        '開盤價': [100.0] * 10,
+        '最高價': [101.0] * 10,
+        '最低價': [99.0] * 10,
+        '收盤價': [100.0] * 10,
+        '成交股數': [1000.0] * 10,
+        'score': scores
+    }, index=dates)
+    
+    strategy_spec = StrategySpec(
+        strategy_id="test_strat_quantile",
+        strategy_version="1.0",
+        config={
+            'params': {
+                'threshold_mode': 'quantile',
+                'buy_quantile_bp': 8000,
+                'sell_quantile_bp': 4000,
+                'quantile_warmup_observations': 6,
+                'quantile_method': 'nearest_rank'
+            }
+        }
+    )
+    
+    # Mock strategy executor that generates quantile output columns
+    mock_executor = MagicMock()
+    mock_df_with_signal = mock_df.copy()
+    mock_df_with_signal['signal'] = 0
+    mock_df_with_signal['TotalScore'] = scores
+    mock_df_with_signal['IndicatorScore'] = 50.0
+    mock_df_with_signal['PatternScore'] = 50.0
+    mock_df_with_signal['VolumeScore'] = 50.0
+    mock_df_with_signal['reason_tags'] = ""
+    mock_df_with_signal['regime_match'] = True
+    
+    # Add quantile specific columns to Mock output
+    mock_df_with_signal['score_bp'] = 5000
+    mock_df_with_signal['buy_threshold_score_bp'] = 5000
+    mock_df_with_signal['sell_threshold_score_bp'] = 5000
+    mock_df_with_signal['threshold_warmup_ready'] = [False] * 5 + [True] * 5
+    mock_df_with_signal['buy_threshold_hit'] = [False] * 5 + [True] * 3 + [False] * 2
+    mock_df_with_signal['sell_threshold_hit'] = [False] * 10
+    
+    mock_executor.generate_signals.return_value = mock_df_with_signal
+    
+    with patch.object(service, '_load_price_data', return_value=mock_df), \
+         patch.object(service, '_load_indicator_data', return_value=None), \
+         patch("app_module.strategy_registry.StrategyRegistry.get_executor", return_value=mock_executor):
+         
+        report = service.run_backtest(
+            stock_code="2330",
+            start_date="2026-06-01",
+            end_date="2026-06-10",
+            strategy_spec=strategy_spec
+        )
+        
+        assert 'score_diagnostics' in report.details
+        diag = report.details['score_diagnostics']
+        assert diag['threshold_mode'] == 'quantile'
+        assert diag['buy_quantile_bp'] == 8000
+        assert diag['sell_quantile_bp'] == 4000
+        assert diag['quantile_warmup_observations'] == 6
+        assert diag['quantile_method'] == 'nearest_rank'
+        assert diag['warmup_ready_days'] == 5
+        assert diag['buy_hit_days'] == 3
+        assert diag['sell_hit_days'] == 0
+
 def test_strategy_regression_trades():
     """驗證三種策略配置（baseline、暴衝、穩健）在分數達到門檻時，是否順利生成訊號與至少 1 筆交易"""
     config = MockConfig()

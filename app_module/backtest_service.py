@@ -235,6 +235,8 @@ class BacktestService:
         
         # 計算策略分數診斷
         strategy_params = strategy_spec.config.get('params', {})
+        threshold_mode = strategy_params.get('threshold_mode', 'fixed')
+        
         buy_score = strategy_params.get('buy_score', strategy_spec.default_params.get('buy_score', 60.0))
         sell_score = strategy_params.get('sell_score', strategy_spec.default_params.get('sell_score', 40.0))
         
@@ -244,12 +246,31 @@ class BacktestService:
             'max_score': float(score_series.max()) if not score_series.empty else 50.0,
             'min_score': float(score_series.min()) if not score_series.empty else 50.0,
             'avg_score': float(score_series.mean()) if not score_series.empty else 50.0,
-            'buy_hit_days': int((score_series >= buy_score).sum()),
-            'sell_hit_days': int((score_series <= sell_score).sum()),
             'total_days': int(len(score_series)),
-            'buy_score': float(buy_score),
-            'sell_score': float(sell_score)
+            'threshold_mode': threshold_mode
         }
+        
+        if threshold_mode == 'fixed':
+            score_diagnostics.update({
+                'buy_hit_days': int((score_series >= buy_score).sum()),
+                'sell_hit_days': int((score_series <= sell_score).sum()),
+                'buy_score': float(buy_score),
+                'sell_score': float(sell_score)
+            })
+        else:  # quantile
+            warmup_ready_days = int(signal_frame['threshold_warmup_ready'].sum()) if 'threshold_warmup_ready' in signal_frame.columns else 0
+            buy_hit_days = int(signal_frame['buy_threshold_hit'].sum()) if 'buy_threshold_hit' in signal_frame.columns else 0
+            sell_hit_days = int(signal_frame['sell_threshold_hit'].sum()) if 'sell_threshold_hit' in signal_frame.columns else 0
+            
+            score_diagnostics.update({
+                'buy_quantile_bp': int(strategy_params.get('buy_quantile_bp', 8000)),
+                'sell_quantile_bp': int(strategy_params.get('sell_quantile_bp', 4000)),
+                'quantile_warmup_observations': int(strategy_params.get('quantile_warmup_observations', 60)),
+                'quantile_method': strategy_params.get('quantile_method', 'nearest_rank'),
+                'warmup_ready_days': warmup_ready_days,
+                'buy_hit_days': buy_hit_days,
+                'sell_hit_days': sell_hit_days
+            })
         
         # 8. 構建 BacktestReportDTO
         return BacktestReportDTO(
