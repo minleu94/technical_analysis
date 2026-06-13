@@ -58,45 +58,55 @@ TotalScore = W_pattern × PatternScore + W_indicator × IndicatorScore + W_volum
 
 ---
 
-## buy_score 與 sell_score 的作用
+## 門檻判定模式 (threshold_mode)
 
-### buy_score（買入閾值）
+系統支援雙門檻判定模式，以提供向後相容的固定門檻以及適應市場變化的動態歷史分位數門檻：
 
-**預設值**：60 分
+1. **固定分數門檻 (fixed 模式)**：直接與設定之 `buy_score` (預設 60) 與 `sell_score` (預設 40) 比對。
+2. **動態分位數門檻 (quantile 模式)**：採單股 Expanding 歷史分布，透過基點 `buy_quantile_bp` (預設 8000，即 80%) 與 `sell_quantile_bp` (預設 4000，即 40%) 動態判定。
 
-**作用**：
-- 當 `TotalScore >= buy_score` 時，觸發**買入信號候選**
-- 需要連續 `buy_confirm_days` 天都滿足條件，才會真正產生買入信號
-- 例如：`buy_score = 60`，`buy_confirm_days = 2` 表示需要連續 2 天總分都 >= 60 才會買入
+---
 
-**邏輯**：
-```python
-# 計算連續確認
-buy_confirmed = 連續 buy_confirm_days 天都滿足 (TotalScore >= buy_score)
+## buy_score 與 sell_score (fixed 模式)
 
-# 進場條件
-if 未持倉 and buy_confirmed and 不在 cooldown 期間:
-    產生買入信號
-```
+### buy_score（買入分數閾值）
+- **預設值**：60 分
+- **作用**：當 `TotalScore >= buy_score` 時，觸發**買入信號候選**。
+- 需要連續 `buy_confirm_days` 天滿足條件才產生信號。
 
-### sell_score（賣出閾值）
+### sell_score（賣出分數閾值）
+- **預設值**：40 分
+- **作用**：當 `TotalScore <= sell_score` 時，觸發**賣出信號候選**。
+- 需要連續 `sell_confirm_days` 天滿足條件才產生信號。
 
-**預設值**：40 分
+---
 
-**作用**：
-- 當 `TotalScore <= sell_score` 時，觸發**賣出信號候選**
-- 需要連續 `sell_confirm_days` 天都滿足條件，才會真正產生賣出信號
-- 例如：`sell_score = 40`，`sell_confirm_days = 2` 表示需要連續 2 天總分都 <= 40 才會賣出
+## buy_quantile_bp 與 sell_quantile_bp (quantile 模式)
 
-**邏輯**：
-```python
-# 計算連續確認
-sell_confirmed = 連續 sell_confirm_days 天都滿足 (TotalScore <= sell_score)
+在分位數模式下，門檻並非固定分數，而是隨歷史 Expanding 數據動態變化。為了防範未來函數 (Look-ahead bias)，T 日的門檻只能使用 T-1 日以前的 TotalScore 歷史分布來計算：
 
-# 出場條件
-if 已持倉 and sell_confirmed and 不在 cooldown 期間:
-    產生賣出信號
-```
+### 計算規則
+- **暖機期 (Warm-up)**：固定為 60 個交易日。若歷史數據不足 60 個交易日，則不會產生買入與賣出信號。
+- **門檻計算公式**：先把 T-1 以前的有效 `score_bp` 排序，再使用整數 nearest-rank：
+  - `rank = max(1, (sample_count * quantile_bp + 9999) // 10000)`
+  - `threshold_score_bp = sorted_history[rank - 1]`
+- **進出場信號判定**：
+  - 買入信號候選：`TotalScore_T >= buy_threshold_T` (即大於或等於 T-1 以前歷史分布的 buy_quantile 分位值)。
+  - 賣出信號候選：`TotalScore_T <= sell_threshold_T` (即小於或等於 T-1 以前歷史分布的 sell_quantile 分位值)。
+- 基點單位：以 `0-10000` 整數基點 (basis points) 進行嚴謹量化，例如 `8000` 基點即代表第 80 百分位。
+
+---
+
+## 推薦橫斷面百分位排名 (Recommendation Quantile Mode)
+
+在「推薦分析」中，若啟用了「百分位排名 (quantile)」模式，則會對當日所有符合基本篩選條件之 Eligible Universe 進行**橫斷面百分位排名**：
+
+- **統計一致性**：採用 Empirical CDF 公式計算百分位，同分時取得相同百分位，且排序不受個股輸入順序影響。
+- **合格母體安全閥 (recommendation_min_universe_size)**：
+  - 為了保障分位數的統計嚴謹性，當合格母體大小低於最低要求 (預設 20 檔) 時，推薦服務會拋出 `RecommendationUniverseTooSmallError` 且**不進行降級**。
+- **百分位篩選門檻 (recommendation_min_percentile_bp)**：
+  - 只推薦橫斷面百分位大於或等於最低百分位 (預設 8000，即 80%) 的個股。
+- **穩定排序**：符合百分位門檻之個股以 `(total_score desc, stock_code asc)` 雙重排序進行穩定排序，隨後套用 `top_n`。
 
 ---
 
@@ -174,8 +184,11 @@ if 已持倉 and sell_confirmed and 不在 cooldown 期間:
 
 > **注意**：以下預設值適用於 **Baseline Score Threshold** 策略。其他策略（如暴衝策略、穩健策略）有不同的預設值，詳見 [UI 功能文檔](UI_FEATURES_DOCUMENTATION.md)。
 
-- **buy_score**：買入閾值（預設 60）
-- **sell_score**：賣出閾值（預設 40）
+- **threshold_mode**：門檻判定模式 (預設 `fixed`)
+- **buy_score**：固定買入分數閾值 (預設 60)
+- **sell_score**：固定賣出分數閾值 (預設 40)
+- **buy_quantile_bp**：分位數買入基點 (預設 8000，即 80%)
+- **sell_quantile_bp**：分位數賣出基點 (預設 4000，即 40%)
 - **buy_confirm_days**：買入確認天數（預設 2）
 - **sell_confirm_days**：賣出確認天數（預設 2）
 - **cooldown_days**：交易後冷卻天數（預設 3）

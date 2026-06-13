@@ -47,8 +47,13 @@ class StableConservativeExecutor(StrategyExecutor):
             risk_description='低風險策略，追求穩定報酬。但可能錯過快速上漲的機會。',
             target_type='stock',
             default_params={
+                'threshold_mode': 'fixed',
                 'buy_score': 55,  # 較低的買入閾值（尋找被低估）
                 'sell_score': 45,  # 較低的賣出閾值（穩定獲利）
+                'buy_quantile_bp': 8000,
+                'sell_quantile_bp': 4000,
+                'quantile_warmup_observations': 60,
+                'quantile_method': 'nearest_rank',
                 'buy_confirm_days': 3,  # 較長的確認期（避免假信號）
                 'sell_confirm_days': 3,  # 較長的確認期
                 'cooldown_days': 5  # 較長的冷卻期（避免頻繁交易）

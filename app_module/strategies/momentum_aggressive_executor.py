@@ -47,8 +47,13 @@ class MomentumAggressiveExecutor(StrategyExecutor):
             risk_description='高風險策略，可能出現大幅波動和快速虧損。建議嚴格控制部位大小。',
             target_type='stock',
             default_params={
+                'threshold_mode': 'fixed',
                 'buy_score': 70,  # 較高的買入閾值
                 'sell_score': 50,  # 較高的賣出閾值（快速止盈）
+                'buy_quantile_bp': 8000,
+                'sell_quantile_bp': 4000,
+                'quantile_warmup_observations': 60,
+                'quantile_method': 'nearest_rank',
                 'buy_confirm_days': 1,  # 快速進場
                 'sell_confirm_days': 1,  # 快速出場
                 'cooldown_days': 2  # 較短的冷卻期

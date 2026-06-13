@@ -1,9 +1,10 @@
 import bisect
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence
 import numpy as np
 import pandas as pd
+
 
 @dataclass(frozen=True)
 class ScoreThresholdResult:
@@ -24,6 +25,7 @@ class ScoreThresholdResult:
             "sell_threshold_hit": self.sell_candidate,
         })
 
+
 def quantize_score_to_basis_points(value: object) -> Optional[int]:
     if value is None or pd.isna(value):
         return None
@@ -33,11 +35,20 @@ def quantize_score_to_basis_points(value: object) -> Optional[int]:
         raise ValueError("score must be between 0 and 100")
     return int((score * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
+
+def _try_quantize_fixed_diagnostic(value: object) -> Optional[int]:
+    try:
+        return quantize_score_to_basis_points(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def nearest_rank(sorted_values: Sequence[int], quantile_bp: int) -> int:
     if not sorted_values:
         raise ValueError("sorted_values cannot be empty")
     rank = max(1, (len(sorted_values) * quantile_bp + 9999) // 10000)
     return sorted_values[rank - 1]
+
 
 class ScoreThresholdPolicy:
     def __init__(self, params: dict):
@@ -69,42 +80,47 @@ class ScoreThresholdPolicy:
             
             if self.quantile_method != "nearest_rank":
                 raise ValueError(f"Unsupported quantile_method: {self.quantile_method}")
-            
+
+            if type(self.buy_quantile_bp) is not int:
+                raise ValueError("buy_quantile_bp must be an integer")
+            if type(self.sell_quantile_bp) is not int:
+                raise ValueError("sell_quantile_bp must be an integer")
+            if type(self.warmup_observations) is not int:
+                raise ValueError("quantile_warmup_observations must be an integer")
             if not (0 <= self.buy_quantile_bp <= 10000):
                 raise ValueError("buy_quantile_bp must be between 0 and 10000")
             if not (0 <= self.sell_quantile_bp <= 10000):
                 raise ValueError("sell_quantile_bp must be between 0 and 10000")
-            if self.buy_quantile_bp == self.sell_quantile_bp:
-                raise ValueError("buy_quantile_bp and sell_quantile_bp cannot be equal")
-            if self.warmup_observations <= 0:
-                raise ValueError("quantile_warmup_observations must be positive")
+            if self.buy_quantile_bp <= self.sell_quantile_bp:
+                raise ValueError("buy_quantile_bp must be greater than sell_quantile_bp")
+            if self.warmup_observations != 60:
+                raise ValueError("quantile_warmup_observations must be 60")
 
     def evaluate(self, scores: pd.Series) -> ScoreThresholdResult:
         if not isinstance(scores, pd.Series):
             raise ValueError("scores must be a pandas Series")
         
-        score_bp = scores.apply(quantize_score_to_basis_points)
-        
         if self.threshold_mode == "fixed":
+            score_bp = scores.apply(_try_quantize_fixed_diagnostic)
             buy_candidate = scores >= self.buy_score
             sell_candidate = scores <= self.sell_score
             
-            # For fixed mode, buy_threshold_score_bp and sell_threshold_score_bp are filled with fixed values
-            buy_threshold_val = quantize_score_to_basis_points(self.buy_score)
-            sell_threshold_val = quantize_score_to_basis_points(self.sell_score)
+            buy_threshold_val = _try_quantize_fixed_diagnostic(self.buy_score)
+            sell_threshold_val = _try_quantize_fixed_diagnostic(self.sell_score)
             
             buy_threshold_score_bp = pd.Series(buy_threshold_val, index=scores.index)
             sell_threshold_score_bp = pd.Series(sell_threshold_val, index=scores.index)
             
             warmup_ready = pd.Series(True, index=scores.index)
         else:  # quantile
+            score_bp = scores.apply(quantize_score_to_basis_points)
             buy_threshold_score_bp = pd.Series(np.nan, index=scores.index)
             sell_threshold_score_bp = pd.Series(np.nan, index=scores.index)
             warmup_ready = pd.Series(False, index=scores.index)
             buy_candidate = pd.Series(False, index=scores.index)
             sell_candidate = pd.Series(False, index=scores.index)
             
-            history = []
+            history: list[int] = []
             for position, raw_score in enumerate(scores):
                 current_bp = quantize_score_to_basis_points(raw_score)
                 if len(history) >= self.warmup_observations and current_bp is not None:

@@ -75,6 +75,24 @@
 - **語義解釋**：避免買賣信號快速切換，降低交易頻率與成本
 - **設計原則**：0 表示無冷卻；過長可能錯過反向機會
 
+#### threshold_mode（門檻判定模式）
+- **定義**：決定如何評估 buy/sell score 門檻。可選值為 `fixed`（固定分數）或 `quantile`（動態分位數）
+- **預設值**：`fixed`
+- **語義解釋**：
+  - `fixed` 模式：延用 `buy_score` / `sell_score` 固定數值判定。
+  - `quantile` 模式：採用 Expanding 歷史分布之分位數動態判定，排除市場狀態漂移影響。
+
+#### buy_quantile_bp（買入分位數基點 - 分位數門檻模式適用）
+- **定義**：採 Expanding 歷史分布的買入分位數門檻。以基點 (basis points) 為單位，100 代表 1%，10000 代表 100%
+- **預設值**：8000 (80%)
+- **有效範圍**：0 - 10000 (基點)
+- **暖機期要求**：必須滿足 60 個有效交易日觀測值，且 T 日門檻僅使用 T-1 以前的 Expanding 歷史分數，防範 Look-ahead bias。
+
+#### sell_quantile_bp（賣出分位數基點 - 分位數門檻模式適用）
+- **定義**：採 Expanding 歷史分布的賣出分位數門檻。以基點為單位
+- **預設值**：4000 (40%)
+- **有效範圍**：0 - 10000 (基點)
+
 ### 2.3 信號生成邏輯
 
 #### 買入信號生成條件
@@ -479,11 +497,17 @@
 
 | 參數名稱 | 預設值 | 有效範圍 | 單位 | 說明 |
 |---------|--------|---------|------|------|
-| buy_score | 60 | 0-100 | 分 | 買入閾值 |
-| sell_score | 40 | 0-100 | 分 | 賣出閾值 |
+| buy_score | 60 | 0-100 | 分 | 買入分數閾值（固定門檻模式適用） |
+| sell_score | 40 | 0-100 | 分 | 賣出分數閾值（固定門檻模式適用） |
+| threshold_mode | fixed | fixed / quantile | - | 門檻判定模式 (固定/歷史分位數) |
+| buy_quantile_bp | 8000 | 0-10000 | 基點 | 買入 Expanding 歷史分位數門檻 (分位數模式) |
+| sell_quantile_bp | 4000 | 0-10000 | 基點 | 賣出 Expanding 歷史分位數門檻 (分位數模式) |
 | buy_confirm_days | 2 | 1-10 | 天 | 買入確認天數 |
 | sell_confirm_days | 2 | 1-10 | 天 | 賣出確認天數 |
 | cooldown_days | 3 | 0-30 | 天 | 交易後冷卻天數 |
+| recommendation_min_percentile_bp | 8000 | 0-10000 | 基點 | 推薦橫斷面最低百分位篩選門檻 |
+| recommendation_min_universe_size | 20 | >= 0 | 檔 | 推薦橫斷面計算最低合格母體證券數 |
+| recommendation_ranking_method | nearest_rank | - | - | 百分位數計算排名演算法 (例如 nearest_rank) |
 
 ---
 

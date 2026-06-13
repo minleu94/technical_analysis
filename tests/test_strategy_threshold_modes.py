@@ -174,8 +174,8 @@ def test_quantile_mode_warmup_required(executor_cls):
         # 由於 buy_confirm_days = 2，所以 index 60 與 index 61 都必須符合條件，在 index 61 才能確認買入訊號。
         # 因此，在 index < 61 前均為 0 訊號。
         assert not (sf['signal'].iloc[:61] != 0).any()
-        assert sf['threshold_warmup_ready'].iloc[60] is True
-        assert sf['threshold_warmup_ready'].iloc[59] is False
+        assert bool(sf['threshold_warmup_ready'].iloc[60]) is True
+        assert bool(sf['threshold_warmup_ready'].iloc[59]) is False
 
 @pytest.mark.parametrize("executor_cls", [
     (BaselineScoreExecutor),

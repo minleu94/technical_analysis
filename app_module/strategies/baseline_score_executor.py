@@ -39,8 +39,13 @@ class BaselineScoreExecutor(StrategyExecutor):
             'description': '總分閾值策略（帶 cooldown 防護），用於回歸測試',
             'category': 'baseline',
             'params': {
+                'threshold_mode': {'type': 'choice', 'default': 'fixed', 'choices': ['fixed', 'quantile'], 'description': '門檻模式'},
                 'buy_score': {'type': 'float', 'default': 60, 'description': '買入閾值'},
                 'sell_score': {'type': 'float', 'default': 40, 'description': '賣出閾值'},
+                'buy_quantile_bp': {'type': 'int', 'default': 8000, 'description': '買入分位數基點'},
+                'sell_quantile_bp': {'type': 'int', 'default': 4000, 'description': '賣出分位數基點'},
+                'quantile_warmup_observations': {'type': 'int', 'default': 60, 'description': '分位數暖機期'},
+                'quantile_method': {'type': 'choice', 'default': 'nearest_rank', 'choices': ['nearest_rank'], 'description': '分位數方法'},
                 'buy_confirm_days': {'type': 'int', 'default': 2, 'description': '買入確認天數'},
                 'sell_confirm_days': {'type': 'int', 'default': 2, 'description': '賣出確認天數'},
                 'cooldown_days': {'type': 'int', 'default': 3, 'description': '交易後冷卻天數'}
@@ -93,7 +98,7 @@ class BaselineScoreExecutor(StrategyExecutor):
         
         df = df.sort_index()
         
-        # 數據清理 and 類型轉換
+        # 數據清理和類型轉換
         df = self._prepare_dataframe(df)
         
         # 獲取策略配置

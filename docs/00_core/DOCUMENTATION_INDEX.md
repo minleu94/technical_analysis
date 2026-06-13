@@ -118,6 +118,7 @@
 | [QA_UPDATE_TAB_ISSUES.md](../06_qa/QA_UPDATE_TAB_ISSUES.md) | 數據更新 Tab QA 問題。 |
 | [QA_UPDATE_TAB_SUMMARY.md](../06_qa/QA_UPDATE_TAB_SUMMARY.md) | 數據更新 Tab QA 總結。 |
 | [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
+| [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制與回歸驗證；真實 walk-forward 績效比較待執行。 |
 
 ---
 
@@ -215,6 +216,7 @@
 - 2026-06-12：將已執行完畢的 [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md) 移至歸檔目錄 `docs/09_archive/`，並更新文檔索引。
 - 2026-06-12：完成批次回測並行化與安全軟取消實作，修復 `max_workers=None` 路徑，新增真實 BrokenProcessPool 測試；回測與最佳化採合作式取消，其他長任務頁面維持既有取消行為相容，並明確記錄 legacy `terminate()` 技術債。
 - 2026-06-13：新增 Strategy & Scoring Governance 正式設計，核准 fixed / quantile 雙模式、回測 Expanding T-1、60 個有效觀測值暖機、整數基點與推薦 eligible universe 橫斷面排名契約；同步修正 Phase 2.5 分位數誤標完成與 Active 文件舊路徑。
+- 2026-06-13：完成 Strategy & Scoring Governance 增量 A、B 的功能實作與機制回歸驗證；真實股票池的 fixed / quantile walk-forward 績效比較尚待執行。
 
 
 

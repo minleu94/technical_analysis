@@ -54,7 +54,7 @@ class SOPValidator:
         if total_trades < 10:
             insufficient_flags['trade_count'] = True
             messages.append(f"⚠️ 樣本不足：交易次數僅 {total_trades} 次，無法可靠判斷策略有效性。")
-            messages.append("   建議：擴大回測期間範圍、降低 buy_score 或 sell_score 閾值、檢查選股清單是否合適")
+            messages.append("   建議：擴大回測期間範圍、調整分數門檻或分位數、檢查選股清單是否合適")
         else:
             insufficient_flags['trade_count'] = False
         

@@ -35,7 +35,7 @@ def mock_stock_data():
 @patch("pandas.read_csv")
 def test_recommendation_service_fixed_mode_keeps_original_behavior(mock_read_csv, mock_config, mock_stock_data):
     mock_read_csv.return_value = mock_stock_data
-    service = RecommendationService(mock_config)
+    service = RecommendationService(mock_config, industry_mapper=MagicMock())
     
     # Mock generate_recommendations
     def side_effect(stock_df, config):
@@ -76,7 +76,7 @@ def test_recommendation_service_fixed_mode_keeps_original_behavior(mock_read_csv
 @patch("pandas.read_csv")
 def test_recommendation_service_quantile_mode_calculates_percentile_and_stable_sort(mock_read_csv, mock_config, mock_stock_data):
     mock_read_csv.return_value = mock_stock_data
-    service = RecommendationService(mock_config)
+    service = RecommendationService(mock_config, industry_mapper=MagicMock())
     
     def side_effect(stock_df, config):
         stock_code = stock_df["證券代號"].iloc[0]
@@ -126,13 +126,57 @@ def test_recommendation_service_quantile_mode_calculates_percentile_and_stable_s
     # 驗證其他 metadata
     assert recs[0].threshold_mode == "quantile"
     assert recs[0].eligible_universe_size == 4
-    assert recs[0].eligible_universe_date == "2026-05-20"  # mock_stock_data 中最大日期
+    assert recs[0].eligible_universe_date == "2026-05-20"
     assert recs[0].ranking_method == "nearest_rank"
+
+
+@patch("pandas.read_csv")
+@pytest.mark.parametrize("ranking_config", [
+    {"threshold_mode": "unknown"},
+    {
+        "threshold_mode": "quantile",
+        "recommendation_min_universe_size": 3,
+        "recommendation_ranking_method": "nearest_rank",
+    },
+    {
+        "threshold_mode": "quantile",
+        "recommendation_min_percentile_bp": 8000,
+        "recommendation_ranking_method": "nearest_rank",
+    },
+    {
+        "threshold_mode": "quantile",
+        "recommendation_min_percentile_bp": 8000,
+        "recommendation_min_universe_size": 3,
+    },
+    {
+        "threshold_mode": "quantile",
+        "recommendation_min_percentile_bp": 10001,
+        "recommendation_min_universe_size": 3,
+        "recommendation_ranking_method": "nearest_rank",
+    },
+    {
+        "threshold_mode": "quantile",
+        "recommendation_min_percentile_bp": 8000,
+        "recommendation_min_universe_size": 3,
+        "recommendation_ranking_method": "linear",
+    },
+])
+def test_recommendation_ranking_rejects_invalid_or_incomplete_config(
+    mock_read_csv,
+    mock_config,
+    mock_stock_data,
+    ranking_config,
+):
+    mock_read_csv.return_value = mock_stock_data
+    service = RecommendationService(mock_config, industry_mapper=MagicMock())
+
+    with pytest.raises(ValueError):
+        service.run_recommendation(config={"recommendation_ranking": ranking_config})
 
 @patch("pandas.read_csv")
 def test_recommendation_service_quantile_mode_universe_too_small_raises_exception(mock_read_csv, mock_config, mock_stock_data):
     mock_read_csv.return_value = mock_stock_data
-    service = RecommendationService(mock_config)
+    service = RecommendationService(mock_config, industry_mapper=MagicMock())
     
     # 只返回一檔
     def side_effect(stock_df, config):
@@ -151,7 +195,8 @@ def test_recommendation_service_quantile_mode_universe_too_small_raises_exceptio
                 "recommendation_ranking": {
                     "threshold_mode": "quantile",
                     "recommendation_min_percentile_bp": 5000,
-                    "recommendation_min_universe_size": 5
+                    "recommendation_min_universe_size": 5,
+                    "recommendation_ranking_method": "nearest_rank",
                 }
             }
         )
@@ -161,7 +206,7 @@ def test_recommendation_service_quantile_mode_universe_too_small_raises_exceptio
 @patch("pandas.read_csv")
 def test_recommendation_service_quantile_mode_top_n_does_not_affect_percentile_calculation(mock_read_csv, mock_config, mock_stock_data):
     mock_read_csv.return_value = mock_stock_data
-    service = RecommendationService(mock_config)
+    service = RecommendationService(mock_config, industry_mapper=MagicMock())
     
     def side_effect(stock_df, config):
         stock_code = stock_df["證券代號"].iloc[0]
@@ -185,7 +230,8 @@ def test_recommendation_service_quantile_mode_top_n_does_not_affect_percentile_c
             "recommendation_ranking": {
                 "threshold_mode": "quantile",
                 "recommendation_min_percentile_bp": 5000,
-                "recommendation_min_universe_size": 3
+                "recommendation_min_universe_size": 3,
+                "recommendation_ranking_method": "nearest_rank",
             }
         },
         top_n=1

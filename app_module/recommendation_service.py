@@ -46,6 +46,41 @@ class RecommendationService:
         else:
             self.industry_mapper = industry_mapper
         self.regime_detector = MarketRegimeDetector(config)
+
+    @staticmethod
+    def _validate_ranking_config(config: Dict[str, Any]) -> tuple[Dict[str, Any], str]:
+        ranking_config = config.get("recommendation_ranking", {})
+        threshold_mode = ranking_config.get("threshold_mode", "fixed")
+
+        if threshold_mode not in {"fixed", "quantile"}:
+            raise ValueError("recommendation threshold_mode must be 'fixed' or 'quantile'")
+        if threshold_mode == "fixed":
+            return ranking_config, threshold_mode
+
+        required_keys = {
+            "recommendation_min_percentile_bp",
+            "recommendation_min_universe_size",
+            "recommendation_ranking_method",
+        }
+        missing_keys = sorted(required_keys - ranking_config.keys())
+        if missing_keys:
+            raise ValueError(
+                "missing recommendation ranking parameters: "
+                + ", ".join(missing_keys)
+            )
+
+        min_percentile_bp = ranking_config["recommendation_min_percentile_bp"]
+        min_universe_size = ranking_config["recommendation_min_universe_size"]
+        ranking_method = ranking_config["recommendation_ranking_method"]
+
+        if type(min_percentile_bp) is not int or not 0 <= min_percentile_bp <= 10000:
+            raise ValueError("recommendation_min_percentile_bp must be an integer between 0 and 10000")
+        if type(min_universe_size) is not int or min_universe_size < 2:
+            raise ValueError("recommendation_min_universe_size must be an integer of at least 2")
+        if ranking_method != "nearest_rank":
+            raise ValueError("recommendation_ranking_method must be 'nearest_rank'")
+
+        return ranking_config, threshold_mode
     
     def run_recommendation(
         self, 
@@ -67,6 +102,7 @@ class RecommendationService:
         """
         import logging
         logger = logging.getLogger(__name__)
+        ranking_config, threshold_mode = self._validate_ranking_config(config)
         
         # ✅ 記錄輸入參數
         logger.info(
@@ -473,13 +509,14 @@ class RecommendationService:
                 )
         
         # 解析 recommendation_ranking 配置
-        ranking_config = config.get("recommendation_ranking", {})
-        threshold_mode = ranking_config.get("threshold_mode", "fixed")
-        
         if threshold_mode == "quantile":
             from decision_module.score_threshold_policy import quantize_score_to_basis_points
             from decision_module.recommendation_percentile_ranker import calculate_score_percentiles
             from app_module.recommendation_errors import RecommendationUniverseTooSmallError
+
+            min_percentile_bp = ranking_config["recommendation_min_percentile_bp"]
+            min_universe_size = ranking_config["recommendation_min_universe_size"]
+            ranking_method = ranking_config["recommendation_ranking_method"]
             
             # 1. 進行分數的量化
             scores_by_stock = {}
@@ -491,7 +528,6 @@ class RecommendationService:
             
             # 2. 檢查合格母體大小
             actual_size = len(all_recommendations)
-            min_universe_size = ranking_config.get("recommendation_min_universe_size", 20)
             if actual_size < min_universe_size:
                 raise RecommendationUniverseTooSmallError(actual_size, min_universe_size)
                 
@@ -503,9 +539,6 @@ class RecommendationService:
             if not df.empty and '日期' in df.columns:
                 latest_date_str = df['日期'].max().strftime('%Y-%m-%d')
                 
-            min_percentile_bp = ranking_config.get("recommendation_min_percentile_bp", 8000)
-            ranking_method = ranking_config.get("recommendation_ranking_method", "nearest_rank")
-            
             filtered_recs = []
             for rec in all_recommendations:
                 pct_bp = percentiles.get(rec.stock_code, 0)

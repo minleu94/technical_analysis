@@ -841,21 +841,45 @@ class BacktestView(QWidget):
             score_diag = report.details.get('score_diagnostics', {})
             max_score = score_diag.get('max_score', 0.0)
             buy_score = score_diag.get('buy_score', 60.0)
+            threshold_mode = score_diag.get('threshold_mode', 'fixed')
 
             no_trade_msg = (
                 "\n💡 === 診斷建議：無任何交易 ===\n"
                 "原因：單股回測交易次數為 0，無法記錄交易到 Portfolio。\n"
             )
-            if max_score < buy_score:
-                no_trade_msg += f"具體原因：本標的最高分未達買進門檻 (最高分 {max_score:.1f} < 買進門檻 {buy_score:.1f})，因此未觸發買入信號。\n"
+
+            if threshold_mode == 'quantile':
+                buy_quantile_bp = score_diag.get('buy_quantile_bp', 8000)
+                sell_quantile_bp = score_diag.get('sell_quantile_bp', 4000)
+                warmup_ready_days = score_diag.get('warmup_ready_days', 0)
+                total_days = score_diag.get('total_days', 0)
+                buy_hit_days = score_diag.get('buy_hit_days', 0)
+                sell_hit_days = score_diag.get('sell_hit_days', 0)
+                warmup_obs = score_diag.get('quantile_warmup_observations', 60)
+
+                no_trade_msg += (
+                    f"具體原因：目前採用分位數門檻模式（買進分位數：{buy_quantile_bp/100:.1f}%, 賣出分位數：{sell_quantile_bp/100:.1f}%）。\n"
+                    f"暖機狀態：回測共 {total_days} 個交易日，其中 {warmup_ready_days} 個交易日已完成暖機（至少需滿 {warmup_obs} 個觀測日）。\n"
+                    f"命中次數：在已暖機交易日中，動態買進門檻命中 {buy_hit_days} 天，動態賣出門檻命中 {sell_hit_days} 天。\n"
+                )
+                no_trade_msg += (
+                    "建議操作：\n"
+                    "  1. 降低「buy_quantile_bp」買入分位數基點，讓更多高分日能觸發進場（例如從 8000 降至 7000）。\n"
+                    "  2. 確保回測時間夠長（如超過 60 個交易日暖機期），否則暖機不足將不會產生任何交易。\n"
+                    "  3. 縮短「buy_confirm_days」連續確認天數。\n"
+                    "  4. 擴大回測日期範圍，以涵蓋更多市場週期與價格波動。"
+                )
             else:
-                no_trade_msg += f"具體原因：雖然最高分 ({max_score:.1f}) 有達到門檻 ({buy_score:.1f})，但因連續確認天數不足或處於交易冷卻期 (Cooldown)，或在回測結束前尚未形成完整進出場交易對。\n"
-            no_trade_msg += (
-                "建議操作：\n"
-                "  1. 降低「buy_score」買入門檻，讓指標能順利觸發進場。\n"
-                "  2. 縮短「buy_confirm_days」連續確認天數。\n"
-                "  3. 擴大回測日期範圍，以涵蓋更多市場週期與價格波動。"
-            )
+                if max_score < buy_score:
+                    no_trade_msg += f"具體原因：本標的最高分未達買進門檻 (最高分 {max_score:.1f} < 買進門檻 {buy_score:.1f})，因此未觸發買入信號。\n"
+                else:
+                    no_trade_msg += f"具體原因：雖然最高分 ({max_score:.1f}) 有達到門檻 ({buy_score:.1f})，但因連續確認天數不足或處於交易冷卻期 (Cooldown)，或在回測結束前尚未形成完整進出場交易對。\n"
+                no_trade_msg += (
+                    "建議操作：\n"
+                    "  1. 降低「buy_score」買入門檻，讓指標能順利觸發進場。\n"
+                    "  2. 縮短「buy_confirm_days」連續確認天數。\n"
+                    "  3. 擴大回測日期範圍，以涵蓋更多市場週期與價格波動。"
+                )
             guides.append(no_trade_msg)
 
         # 2. SOP FAIL / 交易量不足 (1-9次交易)
@@ -1438,10 +1462,31 @@ class BacktestView(QWidget):
             summary_lines.append("")
             summary_lines.append("--- 策略分數診斷 (Scoring Diagnostics) ---")
             summary_lines.append(f"最高得分: {score_diag['max_score']:.1f} | 最低得分: {score_diag['min_score']:.1f} | 平均得分: {score_diag['avg_score']:.1f}")
-            buy_pct = (score_diag['buy_hit_days'] / score_diag['total_days'] * 100.0) if score_diag['total_days'] > 0 else 0.0
-            sell_pct = (score_diag['sell_hit_days'] / score_diag['total_days'] * 100.0) if score_diag['total_days'] > 0 else 0.0
-            summary_lines.append(f"買進門檻 ({score_diag['buy_score']:.1f}) 命中天數: {score_diag['buy_hit_days']} 天 / {score_diag['total_days']} 天 ({buy_pct:.1f}%)")
-            summary_lines.append(f"賣出門檻 ({score_diag['sell_score']:.1f}) 命中天數: {score_diag['sell_hit_days']} 天 / {score_diag['total_days']} 天 ({sell_pct:.1f}%)")
+
+            threshold_mode = score_diag.get('threshold_mode', 'fixed')
+            if threshold_mode == 'quantile':
+                buy_quantile_bp = score_diag.get('buy_quantile_bp', 8000)
+                sell_quantile_bp = score_diag.get('sell_quantile_bp', 4000)
+                warmup_ready_days = score_diag.get('warmup_ready_days', 0)
+                total_days = score_diag.get('total_days', 0)
+                buy_hit_days = score_diag.get('buy_hit_days', 0)
+                sell_hit_days = score_diag.get('sell_hit_days', 0)
+
+                buy_pct = (buy_hit_days / warmup_ready_days * 100.0) if warmup_ready_days > 0 else 0.0
+                sell_pct = (sell_hit_days / warmup_ready_days * 100.0) if warmup_ready_days > 0 else 0.0
+
+                summary_lines.append(f"門檻模式: 分位數 (暖機完成日數: {warmup_ready_days} 天 / 總日數: {total_days} 天)")
+                summary_lines.append(f"動態買進分位數 ({buy_quantile_bp/100:.1f}%) 命中天數: {buy_hit_days} 天 / 已暖機 {warmup_ready_days} 天 ({buy_pct:.1f}%)")
+                summary_lines.append(f"動態賣出分位數 ({sell_quantile_bp/100:.1f}%) 命中天數: {sell_hit_days} 天 / 已暖機 {warmup_ready_days} 天 ({sell_pct:.1f}%)")
+            else:
+                total_days = score_diag.get('total_days', 0)
+                buy_hit_days = score_diag.get('buy_hit_days', 0)
+                sell_hit_days = score_diag.get('sell_hit_days', 0)
+
+                buy_pct = (buy_hit_days / total_days * 100.0) if total_days > 0 else 0.0
+                sell_pct = (sell_hit_days / total_days * 100.0) if total_days > 0 else 0.0
+                summary_lines.append(f"買進門檻 ({score_diag.get('buy_score', 0.0):.1f}) 命中天數: {buy_hit_days} 天 / {total_days} 天 ({buy_pct:.1f}%)")
+                summary_lines.append(f"賣出門檻 ({score_diag.get('sell_score', 0.0):.1f}) 命中天數: {sell_hit_days} 天 / {total_days} 天 ({sell_pct:.1f}%)")
 
         # ========== Phase 3.5 SOP 護欄：Primary 指標置頂 ==========
         summary_lines.append("")
@@ -1674,20 +1719,29 @@ class BacktestView(QWidget):
                 child.widget().deleteLater()
 
         self.param_widgets = {}
+        self.param_labels = {}
 
         # 添加參數控件
         for param_name, param_info in params.items():
             # 處理兩種格式：
             # 1. 字典格式：{'type': 'float', 'default': 60, 'description': '買入閾值'}（baseline 策略）
             # 2. 簡單值格式：70（暴衝/穩健策略）
+            choices = []
             if isinstance(param_info, dict):
                 param_type = param_info.get('type', 'float')
                 default_value = param_info.get('default', 0)
                 description = param_info.get('description', param_name) or param_name
+                choices = param_info.get('choices', [])
             else:
                 # 簡單值格式，推斷類型
                 default_value = param_info
-                if isinstance(default_value, int):
+                if param_name == 'threshold_mode':
+                    param_type = 'choice'
+                    choices = ['fixed', 'quantile']
+                elif param_name == 'quantile_method':
+                    param_type = 'choice'
+                    choices = ['nearest_rank']
+                elif isinstance(default_value, int):
                     param_type = 'int'
                 elif isinstance(default_value, float):
                     param_type = 'float'
@@ -1706,9 +1760,22 @@ class BacktestView(QWidget):
                 description = display_names[param_name]
 
             # 創建輸入控件
-            if param_type == 'int':
+            if param_type == 'choice':
+                widget = QComboBox()
+                widget.addItems(choices)
+                idx = widget.findText(str(default_value))
+                if idx >= 0:
+                    widget.setCurrentIndex(idx)
+                if param_name == 'threshold_mode':
+                    widget.currentIndexChanged.connect(self._on_threshold_mode_changed)
+            elif param_type == 'int':
                 widget = QSpinBox()
-                widget.setRange(0, 1000)
+                if param_name in {'buy_quantile_bp', 'sell_quantile_bp'}:
+                    widget.setRange(0, 10000)
+                elif param_name == 'quantile_warmup_observations':
+                    widget.setRange(60, 60)
+                else:
+                    widget.setRange(0, 1000)
                 widget.setValue(int(default_value))
             else:  # float
                 widget = QDoubleSpinBox()
@@ -1719,6 +1786,7 @@ class BacktestView(QWidget):
             label = QLabel(description + ":")
             self.params_layout.addRow(label, widget)
             self.param_widgets[param_name] = widget
+            self.param_labels[param_name] = label
 
             # 為策略參數添加 tooltip
             if param_name in self.parameter_descriptions:
@@ -1729,6 +1797,33 @@ class BacktestView(QWidget):
                     widget.setToolTip(tooltip_text)
                     label.setToolTip(tooltip_text)
 
+        # 觸發一次隱藏/顯示切換
+        self._on_threshold_mode_changed()
+
+    def _on_threshold_mode_changed(self):
+        """當門檻模式改變時，動態隱藏/顯示對應參數"""
+        threshold_mode_widget = self.param_widgets.get('threshold_mode')
+        if not threshold_mode_widget or not isinstance(threshold_mode_widget, QComboBox):
+            return
+
+        mode = threshold_mode_widget.currentText()
+        is_fixed = (mode == 'fixed')
+
+        # 固定分數參數
+        fixed_params = ['buy_score', 'sell_score']
+        # 分位數參數
+        quantile_params_list = ['buy_quantile_bp', 'sell_quantile_bp', 'quantile_warmup_observations', 'quantile_method']
+
+        for param_name in fixed_params:
+            if param_name in self.param_widgets:
+                self.param_widgets[param_name].setVisible(is_fixed)
+                self.param_labels[param_name].setVisible(is_fixed)
+
+        for param_name in quantile_params_list:
+            if param_name in self.param_widgets:
+                self.param_widgets[param_name].setVisible(not is_fixed)
+                self.param_labels[param_name].setVisible(not is_fixed)
+
     def _get_strategy_params(self) -> Dict:
         """獲取策略參數"""
         params = {}
@@ -1737,11 +1832,15 @@ class BacktestView(QWidget):
                 params[param_name] = widget.value()
             elif isinstance(widget, QDoubleSpinBox):
                 params[param_name] = widget.value()
+            elif isinstance(widget, QComboBox):
+                params[param_name] = widget.currentText()
         if getattr(self, 'optimization_group', None) is not None and self.optimization_group.isChecked():
             for param_name, widgets in getattr(self, 'optimization_param_widgets', {}).items():
                 fixed_widget = widgets.get('fixed') if isinstance(widgets, dict) else None
                 if isinstance(fixed_widget, (QSpinBox, QDoubleSpinBox)):
                     params[param_name] = fixed_widget.value()
+                elif isinstance(fixed_widget, QComboBox):
+                    params[param_name] = fixed_widget.currentText()
         return params
 
     # ========== 策略預設相關方法 ==========
@@ -1835,6 +1934,10 @@ class BacktestView(QWidget):
                 widget = self.param_widgets[param_name]
                 if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
                     widget.setValue(value)
+                elif isinstance(widget, QComboBox):
+                    idx = widget.findText(str(value))
+                    if idx >= 0:
+                        widget.setCurrentIndex(idx)
 
     def _delete_preset(self):
         """刪除策略預設"""
@@ -2735,17 +2838,22 @@ class BacktestView(QWidget):
             logger.info("[BacktestView] 開始創建參數控件，共 {len(params)} 個參數")
             for param_name, param_info in params.items():
                 logger.info("[BacktestView] 處理參數: {param_name}, 類型: {type(param_info)}, 值: {param_info}")
-                # 處理兩種格式：
-                # 1. 字典格式：{'type': 'float', 'default': 60, 'description': '買入閾值'}
-                # 2. 簡單值格式：70（需要推斷類型）
+                choices = []
                 if isinstance(param_info, dict):
                     param_type = param_info.get('type', 'float')
                     default_value = param_info.get('default', 0)
                     description = param_info.get('description', param_name) or param_name
+                    choices = param_info.get('choices', [])
                 else:
                     # 簡單值格式，推斷類型
                     default_value = param_info
-                    if isinstance(default_value, int):
+                    if param_name == 'threshold_mode':
+                        param_type = 'choice'
+                        choices = ['fixed', 'quantile']
+                    elif param_name == 'quantile_method':
+                        param_type = 'choice'
+                        choices = ['nearest_rank']
+                    elif isinstance(default_value, int):
                         param_type = 'int'
                     elif isinstance(default_value, float):
                         param_type = 'float'
@@ -2763,8 +2871,10 @@ class BacktestView(QWidget):
                 if param_name in display_names:
                     description = display_names[param_name]
 
-                # 創建範圍設定行（無論是字典格式還是簡單值格式都需要）
-                range_row = QHBoxLayout()
+                # 創建行容器 widget，以便於整行顯示/隱藏
+                row_widget = QWidget()
+                range_row = QHBoxLayout(row_widget)
+                range_row.setContentsMargins(0, 0, 0, 0)
 
                 # 參數名稱標籤
                 label = QLabel(description + ":")
@@ -2773,15 +2883,36 @@ class BacktestView(QWidget):
 
                 # 模式選擇（固定值/範圍）
                 mode_combo = QComboBox()
-                mode_combo.addItems(["固定值", "範圍"])
+                is_fixed_only = (
+                    param_type == 'choice'
+                    or param_name == 'quantile_warmup_observations'
+                )
+                if is_fixed_only:
+                    mode_combo.addItems(["固定值"])
+                    mode_combo.setEnabled(False)
+                else:
+                    mode_combo.addItems(["固定值", "範圍"])
                 mode_combo.setCurrentText("固定值")
                 mode_combo.setMaximumWidth(80)
                 range_row.addWidget(mode_combo)
 
                 # 固定值輸入
-                if param_type == 'int':
+                if param_type == 'choice':
+                    fixed_widget = QComboBox()
+                    fixed_widget.addItems(choices)
+                    idx = fixed_widget.findText(str(default_value))
+                    if idx >= 0:
+                        fixed_widget.setCurrentIndex(idx)
+                    if param_name == 'threshold_mode':
+                        fixed_widget.currentTextChanged.connect(self._on_optimization_threshold_mode_changed)
+                elif param_type == 'int':
                     fixed_widget = QSpinBox()
-                    fixed_widget.setRange(0, 1000)
+                    if param_name in {'buy_quantile_bp', 'sell_quantile_bp'}:
+                        fixed_widget.setRange(0, 10000)
+                    elif param_name == 'quantile_warmup_observations':
+                        fixed_widget.setRange(60, 60)
+                    else:
+                        fixed_widget.setRange(0, 1000)
                     fixed_widget.setValue(int(default_value))
                 else:
                     fixed_widget = QDoubleSpinBox()
@@ -2794,16 +2925,38 @@ class BacktestView(QWidget):
                 range_layout = QHBoxLayout(range_widget)
                 range_layout.setContentsMargins(0, 0, 0, 0)
 
-                if param_type == 'int':
+                if param_type == 'choice':
+                    min_widget = QDoubleSpinBox()
+                    max_widget = QDoubleSpinBox()
+                    step_widget = QDoubleSpinBox()
+                    min_widget.setValue(0.0)
+                    max_widget.setValue(0.0)
+                    step_widget.setValue(0.0)
+                elif param_type == 'int':
                     min_widget = QSpinBox()
                     max_widget = QSpinBox()
                     step_widget = QSpinBox()
-                    min_widget.setRange(0, 1000)
-                    max_widget.setRange(0, 1000)
-                    step_widget.setRange(1, 100)
-                    min_widget.setValue(int(default_value) - 10)
-                    max_widget.setValue(int(default_value) + 10)
-                    step_widget.setValue(1)
+                    if param_name in {'buy_quantile_bp', 'sell_quantile_bp'}:
+                        min_widget.setRange(0, 10000)
+                        max_widget.setRange(0, 10000)
+                        step_widget.setRange(1, 10000)
+                        min_widget.setValue(max(0, int(default_value) - 1000))
+                        max_widget.setValue(min(10000, int(default_value) + 1000))
+                        step_widget.setValue(100)
+                    elif param_name == 'quantile_warmup_observations':
+                        min_widget.setRange(60, 60)
+                        max_widget.setRange(60, 60)
+                        step_widget.setRange(1, 1)
+                        min_widget.setValue(60)
+                        max_widget.setValue(60)
+                        step_widget.setValue(1)
+                    else:
+                        min_widget.setRange(0, 1000)
+                        max_widget.setRange(0, 1000)
+                        step_widget.setRange(1, 100)
+                        min_widget.setValue(max(0, int(default_value) - 10))
+                        max_widget.setValue(int(default_value) + 10)
+                        step_widget.setValue(1)
                 else:
                     min_widget = QDoubleSpinBox()
                     max_widget = QDoubleSpinBox()
@@ -2814,7 +2967,7 @@ class BacktestView(QWidget):
                     min_widget.setDecimals(2)
                     max_widget.setDecimals(2)
                     step_widget.setDecimals(2)
-                    min_widget.setValue(float(default_value) - 10)
+                    min_widget.setValue(max(0.0, float(default_value) - 10))
                     max_widget.setValue(float(default_value) + 10)
                     step_widget.setValue(1.0)
 
@@ -2860,7 +3013,7 @@ class BacktestView(QWidget):
                 range_row.addWidget(container_widget)
                 range_row.addStretch()
 
-                self.optimization_params_layout.addRow(range_row)
+                self.optimization_params_layout.addRow(row_widget)
 
                 # 保存控件引用
                 self.optimization_param_widgets[param_name] = {
@@ -2869,7 +3022,8 @@ class BacktestView(QWidget):
                     'min': min_widget,
                     'max': max_widget,
                     'step': step_widget,
-                    'type': param_type
+                    'type': param_type,
+                    'row_widget': row_widget
                 }
 
             # 如果沒有參數，顯示提示
@@ -2880,6 +3034,40 @@ class BacktestView(QWidget):
                 self.optimization_params_layout.addRow(hint_label)
             else:
                 logger.info("[BacktestView] 成功創建 {len(self.optimization_param_widgets)} 個參數控件")
+                # 觸發一次最佳化面板門檻模式切換
+                self._on_optimization_threshold_mode_changed()
+        except Exception as e:
+            import traceback
+            logger.info("[BacktestView] 更新最佳化參數表單失敗: {e}")
+            logger.error(traceback.format_exc())
+
+    def _on_optimization_threshold_mode_changed(self):
+        """當最佳化面板中的門檻模式改變時，動態隱藏/顯示對應的最佳化參數"""
+        try:
+            widgets_dict = getattr(self, 'optimization_param_widgets', {})
+            threshold_mode_info = widgets_dict.get('threshold_mode')
+            if not threshold_mode_info:
+                return
+
+            threshold_mode_widget = threshold_mode_info.get('fixed')
+            if not threshold_mode_widget or not isinstance(threshold_mode_widget, QComboBox):
+                return
+
+            mode = threshold_mode_widget.currentText()
+            is_fixed = (mode == 'fixed')
+
+            # 固定分數參數
+            fixed_params = ['buy_score', 'sell_score']
+            # 分位數參數
+            quantile_params_list = ['buy_quantile_bp', 'sell_quantile_bp', 'quantile_warmup_observations', 'quantile_method']
+
+            for param_name in fixed_params:
+                if param_name in widgets_dict and 'row_widget' in widgets_dict[param_name]:
+                    widgets_dict[param_name]['row_widget'].setVisible(is_fixed)
+
+            for param_name in quantile_params_list:
+                if param_name in widgets_dict and 'row_widget' in widgets_dict[param_name]:
+                    widgets_dict[param_name]['row_widget'].setVisible(not is_fixed)
         except Exception as e:
             import traceback
             logger.info("[BacktestView] 更新最佳化參數表單失敗: {e}")
@@ -2918,6 +3106,8 @@ class BacktestView(QWidget):
                 # 固定值，加入基礎參數
                 if isinstance(widgets['fixed'], QSpinBox):
                     base_params[param_name] = widgets['fixed'].value()
+                elif isinstance(widgets['fixed'], QComboBox):
+                    base_params[param_name] = widgets['fixed'].currentText()
                 else:
                     base_params[param_name] = widgets['fixed'].value()
             else:

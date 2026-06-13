@@ -17,11 +17,11 @@
   - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 快速/安全更新分流 ✅ / Phase 2A/2B/2C SQLite DB-first ✅ / Phase 3 CSV 手動匯出 ✅
   - 數據更新工作台（Dashboard + 快速/安全更新分流）✅ / SQLite 儲存升級 ✅ / Smart Money Terminal MVP ✅ / 券商分點長碼解密與總公司判定 ✅
 
-- **閉環 2：研究驗證閉環** ✅ 基礎已建立
+- **閉環 2：研究驗證閉環** ✅ 基礎與治理已建立
   - Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Promote
-  - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3a ✅ / Phase 3.3b ✅
+  - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3a ✅ / Phase 3.3b ✅ / Strategy Scoring Governance (增量 A & B) ✅
   - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest MVP ✅ / Backtest chart fast renderer ✅
-  - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅
+  - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅ / 回測 fixed-quantile 雙模式與 Expanding T-1 歷史門檻 ✅ / 推薦 eligible universe 橫斷面百分位排名與門檻限制 ✅
 
 - **閉環 3：持倉檢查閉環** ✅ 基礎與深化與下鑽已完成
   - Recommendation / Backtest → Portfolio → Condition Monitor → Journal → 回到研究
@@ -46,9 +46,9 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Strategy & Scoring Governance：規劃並實作 fixed / quantile 雙模式；回測採 Expanding T-1、60 個有效觀測值暖機與整數 nearest-rank，先完成向後相容及 Look-ahead gate
-2. 推薦評分治理：在增量 A 通過後，加入 eligible universe 橫斷面百分位，不把跨股票排名塞入單股 `ScoringEngine`
-3. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔
+1. Strategy & Scoring Governance 增量 B：推薦橫斷面百分位排名（已完成 ✅）。
+2. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔。
+3. 批次回測進度與異常監控優化。
 
 ## 高風險區（改動需謹慎）
 
@@ -93,6 +93,30 @@
 - Blockers / Risks 新增回測時間軸未定義、金融核心裸 float、文檔不一致三項。
 - 高風險區新增 `portfolio_module/core.py` 與 `app_module/portfolio_condition_monitor.py`。
 - 指定權威文件新增 `NEXT_ACTION_PLAN.md`。
+
+## 2026-06-13 Strategy & Scoring Governance (增量 B：推薦橫斷面排名) 成果
+
+- **橫斷面百分位排名元件實作**：實作 `calculate_score_percentiles` 函式，採用 empirical CDF 計算公式，並以 `bisect_right` 保證同分時取得相同百分位，徹底鎖定排名演算法之統計一致性與輸入順序無涉。
+- **策略推薦服務與 metadata 追溯**：整合 `RecommendationService`，在合格母體大小不足時拋出 `RecommendationUniverseTooSmallError` 且拒絕降級；在符合百分位門檻下注入 `score_percentile_bp` 等元數據，並使用 total_score 降序與 stock_code 升序進行穩定化排序。
+- **DTO 與儲存庫 round-trip 還原**：於 `RecommendationDTO` 擴充 metadata 欄位，實作相容英文、中文 key 且向後相容歷史 JSON 數據的 `from_dict` 方法，並經 `RecommendationResultDTO` 還原驗證。JSON 檔案自動落盤，不破壞 SQLite schemas。
+- **推薦 UI 欄位與控制項整合**：重構 `RecommendationView` 於進階模式下提供門檻模式、最低百分位、最小母體數及排名方法控制項，且隨 fixed/quantile 動態隱藏與顯示；在結果表格中顯示百分位與母體，並於母體不足時發出友善警示與調整建議。
+  - **測試驗證**：新增單元測試 `tests/test_recommendation_percentile_ranker.py`、`tests/test_recommendation_ranking_service.py` 與 `tests/test_recommendation_dto_roundtrip.py`，並納入 UI workflow 與推薦組合回測重播驗證。
+
+## 2026-06-13 Strategy & Scoring Governance (增量 A：回測雙模式門檻) 成果
+
+- **純門檻評估元件實作**：實作 `ScoreThresholdPolicy`，支援 `fixed` 與 `quantile` 雙門檻模式。在 `fixed` 下完全向後相容舊策略；在 `quantile` 下，基點範圍採 0-10000 整數以符合量化防禦條款，並實作單股 Expanding 歷史分位數計算（暖機期 60 天），徹底排除未來函數 (Look-ahead bias)。
+- **策略執行器與回測整合**：將 `ScoreThresholdPolicy` 成功接入 `BaselineScoreExecutor`、`MomentumAggressiveExecutor` 與 `StableConservativeExecutor`。擴充 `BacktestService` 診斷，在 quantile 下從訊號中安全提取動態門檻、暖機狀態與命中天數等指標，不再在 service 重算分位數。
+- **UI 與最佳化表單對齊**：
+  - 更新正常參數表單，支援 `threshold_mode` 等 choice 下拉選單（`QComboBox`），並在模式切換時動態隱藏/顯示對應欄位。
+  - 重構最佳化參數表單 `_update_optimization_params_form`，將每一行包裹在 `row_widget` 中以支援最佳化面板的行動態顯示/隱藏。Choice 參數不再生成數值範圍，僅能作為固定值進行參數掃描。
+- **無交易診斷與 Preset 存取**：更新無交易診斷文案，若採用 quantile 模式，會動態顯示暖機進度與命中次數，不再建議降低 `buy_score`；完成 5 個新參數在 Preset & StrategyVersion 的 100% round-trip 一致性驗證。
+  - **測試驗證**：新增單元測試 `tests/test_score_threshold_policy.py`、`tests/test_strategy_threshold_modes.py`，並在 `tests/test_ui_qt_research_workflow.py` 新增下拉選單載入、顯示切換及無交易診斷測試。
+
+## Strategy & Scoring Governance 驗證限制
+
+- 功能與機制回歸已完成。
+- 真實股票池 fixed / quantile walk-forward 績效比較尚未執行。
+- 在實證結果完成前，quantile 維持 opt-in，不宣稱改善績效或穩健度。
 
 ## 2026-06-11 券商分點擴充與數據更新流程分流成果
 

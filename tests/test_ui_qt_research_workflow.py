@@ -449,6 +449,10 @@ def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
     assert view.param_widgets["sell_score"].isHidden() is True
     assert view.param_widgets["buy_quantile_bp"].isHidden() is False
     assert view.param_widgets["sell_quantile_bp"].isHidden() is False
+    assert view.param_widgets["buy_quantile_bp"].maximum() == 10000
+    assert view.param_widgets["sell_quantile_bp"].maximum() == 10000
+    assert view.param_widgets["quantile_warmup_observations"].minimum() == 60
+    assert view.param_widgets["quantile_warmup_observations"].maximum() == 60
 
     # 5. 驗證最佳化面板
     view.optimization_group.setChecked(True)
@@ -471,6 +475,11 @@ def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
     opt_widgets["fixed"].setCurrentText("quantile")
     assert view.optimization_param_widgets["buy_score"]["row_widget"].isHidden() is True
     assert view.optimization_param_widgets["buy_quantile_bp"]["row_widget"].isHidden() is False
+    assert view.optimization_param_widgets["buy_quantile_bp"]["fixed"].maximum() == 10000
+    warmup_widgets = view.optimization_param_widgets["quantile_warmup_observations"]
+    assert warmup_widgets["mode"].isEnabled() is False
+    assert warmup_widgets["fixed"].minimum() == 60
+    assert warmup_widgets["fixed"].maximum() == 60
 
 
 def test_recommendation_view_threshold_mode_combobox_loading_and_toggling(qt_app):
