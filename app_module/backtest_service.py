@@ -69,7 +69,8 @@ class BacktestService:
         walkforward_results: Optional[List['WalkForwardResult']] = None,
         enable_overfitting_risk: bool = True,
         changed_layers: Optional[List[str]] = None,
-        walkforward_executed: bool = False
+        walkforward_executed: bool = False,
+        signal_context_start_date: Optional[str] = None
     ) -> BacktestReportDTO:
         """
         執行回測
@@ -93,6 +94,7 @@ class BacktestService:
             max_participation_rate: 最大參與率（0.05 = 5%）
             changed_layers: 本次研究中被修改的層級（Phase 3.5 SOP 護欄）
             walkforward_executed: 是否已執行 Walk-Forward 驗證（Phase 3.5 SOP 護欄）
+            signal_context_start_date: 產生訊號時可讀取的歷史起點；撮合仍從 start_date 開始
         
         Returns:
             BacktestReportDTO: 回測報告
@@ -108,7 +110,12 @@ class BacktestService:
                 actual_end_date = df.index.max().strftime('%Y-%m-%d')
             logger.debug(f"[BacktestService] 使用預載入的數據（股票 {stock_code}，共 {len(df)} 筆）")
         else:
-            df, actual_start_date, actual_end_date = self._load_stock_data(stock_code, start_date, end_date)
+            load_start_date = signal_context_start_date or start_date
+            df, actual_start_date, actual_end_date = self._load_stock_data(
+                stock_code,
+                load_start_date,
+                end_date,
+            )
             
             if df is None or len(df) == 0:
                 # 提供更詳細的錯誤信息
@@ -123,7 +130,10 @@ class BacktestService:
         
         # ✅ 記錄日期調整信息（只在第一次載入時顯示）
         date_adjusted_msg = None
-        if actual_start_date != start_date or actual_end_date != end_date:
+        if (
+            signal_context_start_date is None
+            and (actual_start_date != start_date or actual_end_date != end_date)
+        ):
             date_adjusted_msg = f"日期範圍已自動調整: 請求 {start_date}~{end_date} → 實際 {actual_start_date}~{actual_end_date}"
             if preloaded_data is None:  # 只在第一次載入時顯示警告
                 logger.warning(f"[BacktestService] {date_adjusted_msg}")
@@ -137,12 +147,37 @@ class BacktestService:
                 # 否則從 registry 獲取
                 executor = StrategyRegistry.get_executor(strategy_spec)
             
-            signal_frame = executor.generate_signals(df, strategy_spec)
+            signal_frame = executor.generate_signals(
+                df,
+                strategy_spec,
+                execution_start_date=start_date
+                if signal_context_start_date is not None
+                else None,
+            )
         except Exception as e:
             return self._create_empty_report(f"生成信號失敗: {str(e)}")
         
         if signal_frame is None or len(signal_frame) == 0:
             return self._create_empty_report("未生成任何信號")
+
+        if signal_context_start_date is not None:
+            execution_start = pd.to_datetime(start_date)
+            execution_end = pd.to_datetime(end_date)
+            signal_frame = signal_frame.loc[
+                (signal_frame.index >= execution_start)
+                & (signal_frame.index <= execution_end)
+            ]
+            df = df.loc[(df.index >= execution_start) & (df.index <= execution_end)]
+            if signal_frame.empty or df.empty:
+                return self._create_empty_report("訊號歷史存在，但指定測試期間沒有可撮合資料")
+            actual_start_date = df.index.min().strftime("%Y-%m-%d")
+            actual_end_date = df.index.max().strftime("%Y-%m-%d")
+            if actual_start_date != start_date or actual_end_date != end_date:
+                date_adjusted_msg = (
+                    f"日期範圍已自動調整: 請求 {start_date}~{end_date} "
+                    f"→ 實際 {actual_start_date}~{actual_end_date}"
+                )
+                logger.warning(f"[BacktestService] {date_adjusted_msg}")
         
         # 3. 使用 BrokerSimulator 執行撮合
         broker_config = BrokerConfig(

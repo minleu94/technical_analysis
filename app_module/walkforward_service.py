@@ -214,7 +214,8 @@ class WalkForwardService:
                     fee_bps=fee_bps,
                     slippage_bps=slippage_bps,
                     stop_loss_pct=stop_loss_pct,
-                    take_profit_pct=take_profit_pct
+                    take_profit_pct=take_profit_pct,
+                    signal_context_start_date=actual_train_start.strftime('%Y-%m-%d')
                 )
                 
                 # 計算退化程度（測試期相對於訓練期的表現）

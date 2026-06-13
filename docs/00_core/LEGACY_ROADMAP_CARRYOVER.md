@@ -30,7 +30,7 @@
 
 | Legacy 後續工作 | 處置 | 新版落點 | 驗收定義 |
 |---|---|---|---|
-| fixed / quantile 真實 walk-forward 比較 | 移交 | Month 1 | 同股票池、資料版本、成本、成交假設與窗口；無論結果是否改善都保存。 |
+| fixed / quantile 真實 walk-forward 比較 | 移交；pilot 未過 Gate | Month 1 | 同股票池、資料版本、成本、成交假設與窗口；無論結果是否改善都保存。2026-06-13 pilot 因 fixed 無 OOS 交易且缺 regime 分層，尚未完成正式驗收。 |
 | 推薦組合跨 run 比較 | 移交 | Month 2 | 至少比較 3 個策略版本或參數組合的 OOS 指標。 |
 | Benchmark-relative attribution | 移交 | Month 2 | 可對 TAIEX、產業與 buy-and-hold 顯示超額報酬與風險差異。 |
 | Factor / failure attribution | 移交 | Month 3 與 Month 6 | 研究 run 保存 factor contribution；Portfolio 可區分訊號、執行、資料與市場落差。 |
@@ -41,7 +41,7 @@
 
 新版 Roadmap 可以執行 Month 1 與 Month 2，但 **Month 3 Factor Layer 不得在下列項目仍無正式結果時宣告開始**：
 
-1. fixed / quantile 真實 walk-forward 比較已完成並保存。
+1. fixed / quantile 真實 walk-forward pilot 已保存；正式驗收仍需有效 fixed 基準樣本、擴大股票池與 regime 分層。
 2. Phase 5 最小可用輸出已有實作結果，不只是設計稿。
 3. Indicator Parameter Registry 與 Recommendation Weight Contract 已完成或有正式取消決策。
 4. Research Run Registry 能保存資料、策略、參數、成本與成交假設。

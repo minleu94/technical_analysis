@@ -78,7 +78,8 @@ class BaselineScoreExecutor(StrategyExecutor):
     def generate_signals(
         self,
         df: pd.DataFrame,
-        spec: StrategySpec
+        spec: StrategySpec,
+        execution_start_date: str | None = None,
     ) -> pd.DataFrame:
         """
         生成每日信號（帶 cooldown 和連續確認）
@@ -127,7 +128,8 @@ class BaselineScoreExecutor(StrategyExecutor):
         signals = self._generate_signals_with_cooldown(
             df=df,
             buy_candidate=thresholds.buy_candidate,
-            sell_candidate=thresholds.sell_candidate
+            sell_candidate=thresholds.sell_candidate,
+            execution_start_date=execution_start_date,
         )
         
         # 5. 生成理由標籤
@@ -164,7 +166,8 @@ class BaselineScoreExecutor(StrategyExecutor):
         self,
         df: pd.DataFrame,
         buy_candidate: pd.Series,
-        sell_candidate: pd.Series
+        sell_candidate: pd.Series,
+        execution_start_date: str | None = None,
     ) -> pd.Series:
         """
         生成信號（帶連續確認和 cooldown）
@@ -193,7 +196,14 @@ class BaselineScoreExecutor(StrategyExecutor):
             self.sell_confirm_days
         )
         
+        execution_start = (
+            pd.to_datetime(execution_start_date)
+            if execution_start_date is not None
+            else None
+        )
         for i, (date, row) in enumerate(df.iterrows()):
+            if execution_start is not None and date < execution_start:
+                continue
             # 檢查 cooldown
             in_cooldown = False
             if last_trade_date is not None:

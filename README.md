@@ -16,7 +16,7 @@
 - Recommendation Portfolio Backtest MVP：已完成，可從推薦 Tab 將 Profile/Config 送到回測 Tab，在歷史日期重播推薦邏輯。
 - 數據更新工作台：已完成左側導覽工作台重整，新增快速/安全更新分流。
 - Codex / Agent 指引：已新增根目錄 `AGENTS.md`，`docs/agents/` 已對齊目前 `ui_qt` 與資料路徑規則。
-- 當前 P0：完成 fixed / quantile 真實股票池 walk-forward 實證；實證完成前 quantile 維持 opt-in。
+- 當前 P0：5 檔 fixed / quantile pilot 已保存，但 fixed 無 OOS 交易且缺 regime 分層；正式實證驗收前 quantile 維持 opt-in。
 
 目前狀態以 [docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md) 為準；未來 6 個月工程路線以 [docs/00_core/ROADMAP_6M_ENGINEERING.md](docs/00_core/ROADMAP_6M_ENGINEERING.md) 為準。
 

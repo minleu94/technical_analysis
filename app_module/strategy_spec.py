@@ -94,7 +94,8 @@ class StrategyExecutor(Protocol):
     def generate_signals(
         self, 
         df: pd.DataFrame, 
-        spec: StrategySpec
+        spec: StrategySpec,
+        execution_start_date: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         生成每日信號
@@ -102,6 +103,7 @@ class StrategyExecutor(Protocol):
         Args:
             df: 股票數據 DataFrame（必須包含日期索引和技術指標）
             spec: 策略規格
+            execution_start_date: 交易狀態開始日；更早資料只供指標與門檻歷史使用
         
         Returns:
             DailySignalFrame: index=date，欄位含 signal, score breakdown, reason tags

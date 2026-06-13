@@ -185,6 +185,7 @@ Factor `available_date` 晚於決策日時必須拒絕使用。
 - `next_open`：T 日訊號，最早以 T+1 開盤成交。
 - `close`：同根 K 收盤成交假設，必須在 metadata 與報告揭露。
 - benchmark、停損停利、標準化與篩選都只能使用決策當下可取得資料。
+- Walk-forward 的 OOS 測試可用該 fold 訓練起點至 T-1 的歷史產生訊號門檻，但交易狀態必須在測試窗起點以空倉重置，撮合、權益曲線與績效也只從測試窗起點計算；`signal_context_start_date` 不得把訓練期持倉或交易混入 OOS 指標。
 
 ### 金融數值防線
 

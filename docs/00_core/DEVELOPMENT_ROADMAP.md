@@ -39,7 +39,7 @@
 目前狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。短版摘要如下：
 
 - 三個產品閉環的基礎與主要深化已完成。
-- Strategy & Scoring Governance 增量 A / B 已完成機制回歸；真實股票池 fixed / quantile walk-forward 實證仍是 P0。
+- Strategy & Scoring Governance 增量 A / B 已完成機制回歸；5 檔 pilot 已保存，但 fixed 無 OOS 交易，正式 fixed / quantile walk-forward 實證仍是 P0。
 - Phase 5 已完成圖表渲染優化與批次回測並行化；大表格分頁與 Excel / PDF 報告仍待做。
 - Portfolio 已具備策略/價格監控、停損停利警示、籌碼監控與 Smart Money 下鑽。
 - 後續要提升「準確度」必須先建立實證比較、factor attribution、資料因子層與實驗治理，不應直接把新資料硬塞進 scoring engine。
@@ -55,7 +55,7 @@
 1. **P0：Fixed / Quantile 真實 Walk-forward 實證**
    - 固定股票池、資料版本、交易成本、成交假設與訓練/驗證/測試窗口。
    - 比較報酬、最大回撤、Sharpe、交易次數、暖機後有效日數、推薦通過率與換手。
-   - 實證完成前 quantile 維持 opt-in，不宣稱改善績效或穩健度。
+   - 2026-06-13 pilot 因 fixed 無 OOS 交易而未通過驗收；quantile 維持 opt-in，不宣稱改善績效或穩健度。
 
 2. **P1：Phase 5 研究輸出**
    - 大表格分頁或虛擬滾動。

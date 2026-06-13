@@ -93,6 +93,8 @@
 
 ### Month 1：實證基準線與文件治理完成
 
+> 2026-06-13 狀態：5 檔 pilot 已保存資料指紋與 OOS 結果，但 fixed 的 40 個 OOS fold 均無完成交易，且尚未完成 regime 分層，因此本里程碑的正式實證驗收尚未通過。
+
 目標：
 
 - 完成 fixed / quantile 真實 walk-forward 比較。

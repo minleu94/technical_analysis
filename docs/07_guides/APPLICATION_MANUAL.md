@@ -20,7 +20,7 @@
 目前不能保證：
 
 - 推薦股票一定上漲或策略一定獲利。
-- quantile 一定優於 fixed；真實股票池 walk-forward 實證仍待完成。
+- quantile 一定優於 fixed；2026-06-13 pilot 未形成有效 fixed 基準樣本，正式 walk-forward 實證仍待完成。
 - 推薦回放等同可成交的實盤績效。
 - Runtime Observatory 會自動修復問題或自動下單。
 - 觀察清單等同實際投資組合。

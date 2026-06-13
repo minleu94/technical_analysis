@@ -76,7 +76,12 @@ class MomentumAggressiveExecutor(StrategyExecutor):
         from decision_module.score_threshold_policy import ScoreThresholdPolicy
         self.threshold_policy = ScoreThresholdPolicy(params)
     
-    def generate_signals(self, df: pd.DataFrame, spec: StrategySpec) -> pd.DataFrame:
+    def generate_signals(
+        self,
+        df: pd.DataFrame,
+        spec: StrategySpec,
+        execution_start_date: str | None = None,
+    ) -> pd.DataFrame:
         """生成每日信號"""
         if '日期' in df.columns:
             df = df.set_index('日期')
@@ -111,7 +116,8 @@ class MomentumAggressiveExecutor(StrategyExecutor):
         signals = self._generate_signals(
             df=df,
             buy_candidate=thresholds.buy_candidate,
-            sell_candidate=thresholds.sell_candidate
+            sell_candidate=thresholds.sell_candidate,
+            execution_start_date=execution_start_date,
         )
         
         # 生成理由標籤
@@ -143,7 +149,8 @@ class MomentumAggressiveExecutor(StrategyExecutor):
         self,
         df: pd.DataFrame,
         buy_candidate: pd.Series,
-        sell_candidate: pd.Series
+        sell_candidate: pd.Series,
+        execution_start_date: str | None = None,
     ) -> pd.Series:
         """生成信號（快速進出）"""
         signals = pd.Series(0, index=df.index)
@@ -160,7 +167,14 @@ class MomentumAggressiveExecutor(StrategyExecutor):
             self.sell_confirm_days
         )
         
+        execution_start = (
+            pd.to_datetime(execution_start_date)
+            if execution_start_date is not None
+            else None
+        )
         for i, (date, row) in enumerate(df.iterrows()):
+            if execution_start is not None and date < execution_start:
+                continue
             in_cooldown = False
             if last_trade_date is not None:
                 days_since_trade = (date - last_trade_date).days
