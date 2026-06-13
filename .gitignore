@@ -30,6 +30,9 @@ coverage.xml
 .superpowers/
 docs/.tmp.driveupload/
 
+# Agent 本機任務狀態（不提交）
+docs/agents/shared_state/active_task.yaml
+
 # 虛擬環境
 venv/
 env/
