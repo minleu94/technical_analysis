@@ -46,9 +46,9 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Strategy & Scoring Governance 增量 B：推薦橫斷面百分位排名（已完成 ✅）。
-2. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔。
-3. 批次回測進度與異常監控優化。
+1. Strategy & Scoring Governance 實證：使用固定股票池與成本假設完成 fixed / quantile walk-forward 績效比較。
+2. Phase 5 研究輸出：大表格分頁與 Excel/PDF 報告匯出。
+3. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔。
 
 ## 高風險區（改動需謹慎）
 
@@ -78,7 +78,8 @@
 - `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則
 - `DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（Documentation Agent 判斷 coverage 的規則）
 - `PROJECT_NAVIGATION.md` / `PROJECT_INVENTORY.md` - 專案導航與盤點
-- `../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md` - 下一階段 fixed / quantile 雙模式與分位數安全契約
+- `../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md` - fixed / quantile 雙模式與分位數安全契約
+- `../06_qa/WALK_FORWARD_COMPARISON_REPORT.md` - 治理機制驗證證據與實證比較待辦
 
 ---
 

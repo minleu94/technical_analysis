@@ -1,7 +1,7 @@
 # 專案導航文件
 
-**版本**：v1.3.0
-**最後更新**：2026-06-09
+**版本**：v1.4.0
+**最後更新**：2026-06-13
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -52,6 +52,8 @@
 - 推薦理由引擎（ReasonEngine）
 - 市場狀態檢測（MarketRegimeDetector）
 - 產業映射（IndustryMapper）
+- 回測分數門檻策略（ScoreThresholdPolicy）：fixed / Expanding T-1 quantile、60 個有效觀測暖機
+- 推薦橫斷面百分位排名（Recommendation Percentile Ranker）：eligible universe empirical CDF
 
 **為什麼它是核心**：
 - 所有業務邏輯的實際實作都在這裡
@@ -178,6 +180,11 @@ python ui_app/main.py
 **真正動邏輯的地方**：
 - `decision_module/strategy_configurator.py`：策略配置（技術指標、圖形模式設定）
 - `decision_module/scoring_engine.py`：打分引擎（統一打分模型，0-100 分）
+- `decision_module/recommendation_percentile_ranker.py`：推薦 eligible universe 橫斷面百分位
+
+**門檻模式**：
+- `fixed`：維持既有總分排序與 `top_n`
+- `quantile`：先建立 eligible universe，再依 empirical CDF 百分位篩選；母體不足時拒絕降級
 - `decision_module/reason_engine.py`：推薦理由生成（Why / Why Not）
 
 **如果我要改推薦邏輯**：

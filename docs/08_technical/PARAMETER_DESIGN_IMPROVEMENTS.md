@@ -239,7 +239,7 @@ warmup_bars = max(60, 3*max_indicator_period)
 
 ### Phase 3：中期（兩週內）
 7. ⚠️ 指標參數改進（待執行）
-8. 🚧 buy_score/sell_score 分位數（設計已核准，待實作）
+8. ✅ buy_score/sell_score 分位數治理（fixed / Expanding T-1 quantile 與推薦橫斷面排名已完成；真實 walk-forward 績效比較待執行）
 9. ⚠️ 推薦系統參數改進（待執行）
 
 ### Phase 4：長期（一個月內）

@@ -41,7 +41,17 @@
 
 ## 3. Fresh Verification
 
-驗收時應重新執行下列命令，不可只引用先前紀錄：
+2026-06-13 收尾驗收結果：
+
+- 核心、相容與整合測試：`82 passed`，另有 7 個既有的理想化同日收盤成交假設警告。
+- 數據更新工作台 UI：`9 passed`。
+- 金融 float boundary 測試：`37 passed`。
+- Update Tab QA：`21 passed, 0 failed, 4 skipped`。
+- Mypy：`Success: no issues found in 144 source files`。
+- AST float boundary 掃描、`py_compile` 與 `git diff --check`：通過。
+- 驗收修正提交：`7d94c35`。
+
+重驗命令：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\test_score_threshold_policy.py tests\test_strategy_threshold_modes.py tests\test_backtest_diagnostics_and_date_adjustment.py tests\test_recommendation_percentile_ranker.py tests\test_recommendation_ranking_service.py tests\test_recommendation_dto_roundtrip.py tests\test_recommendation_portfolio_backtest.py tests\test_ui_qt_research_workflow.py tests\test_strategy_params_persistence_roundtrip.py -q -o addopts=

@@ -217,6 +217,7 @@
 - 2026-06-12：完成批次回測並行化與安全軟取消實作，修復 `max_workers=None` 路徑，新增真實 BrokenProcessPool 測試；回測與最佳化採合作式取消，其他長任務頁面維持既有取消行為相容，並明確記錄 legacy `terminate()` 技術債。
 - 2026-06-13：新增 Strategy & Scoring Governance 正式設計，核准 fixed / quantile 雙模式、回測 Expanding T-1、60 個有效觀測值暖機、整數基點與推薦 eligible universe 橫斷面排名契約；同步修正 Phase 2.5 分位數誤標完成與 Active 文件舊路徑。
 - 2026-06-13：完成 Strategy & Scoring Governance 增量 A、B 的功能實作與機制回歸驗證；真實股票池的 fixed / quantile walk-forward 績效比較尚待執行。
+- 2026-06-13：完成治理成果收尾驗收，補齊 Snapshot、Roadmap、Phase 2.5 狀態與 Project Navigation；記錄 `82 + 9 + 37` 項 pytest、Update Tab QA `21/0` 與 mypy 144 檔通過證據。
 
 
 

@@ -323,7 +323,7 @@ Phase 2.5 的**核心部分（優先級 1 和 2）已 100% 完成**：
 優先級 3 和 4 的項目屬於**後續改進**，不影響 Phase 2.5 的核心目標：
 
 1. ⚠️ 指標參數改進（可移至 Phase 3 或後續階段）
-2. 🚧 buy_score/sell_score 分位數（Strategy & Scoring Governance 設計已核准，待實作）
+2. ✅ buy_score/sell_score 分位數治理（Strategy & Scoring Governance 增量 A、B 已完成；真實 walk-forward 績效比較待執行）
 3. ⚠️ 推薦系統參數改進（可移至 Phase 3）
 4. ⚠️ Walk-forward 暖機期參數（可移至 Phase 3）
 5. ⚠️ 完整測試與驗證（優先級 1 和 2 已驗證）
