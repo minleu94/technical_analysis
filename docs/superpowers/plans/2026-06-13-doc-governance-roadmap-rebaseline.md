@@ -139,15 +139,15 @@ Expected: 新 Roadmap Hub、6M Roadmap 與 legacy archive 均有正確入口。
 - Modify: `docs/00_core/DEVELOPMENT_ROADMAP.md`
 - Modify: `docs/00_core/ROADMAP_6M_ENGINEERING.md`
 
-- [ ] **Step 1: Inventory every unresolved legacy item**
+- [x] **Step 1: Inventory every unresolved legacy item**
 
 逐項涵蓋舊 Roadmap 未勾選項目與 current section 中明確記錄的後續工作。
 
-- [ ] **Step 2: Give every item one disposition**
+- [x] **Step 2: Give every item one disposition**
 
 每個項目必須標示為「已完成」、「移交至 Month X」、「被新架構取代」或「正式取消」，不得只寫「後續處理」。
 
-- [ ] **Step 3: Add carryover gate**
+- [x] **Step 3: Add carryover gate**
 
 在 6M Roadmap 中明定 Month 3 開始前，所有 Legacy Carryover 必須完成或有正式決策記錄。
 
@@ -166,15 +166,15 @@ Expected: 新 Roadmap Hub、6M Roadmap 與 legacy archive 均有正確入口。
 - Modify: `app_module/README.md`
 - Modify: other active Markdown files still presenting `ui_app/main.py` as the primary entry
 
-- [ ] **Step 1: Replace stale primary UI entry**
+- [x] **Step 1: Replace stale primary UI entry**
 
 Current user instructions must use `.\.venv\Scripts\python.exe ui_qt\main.py` or `python ui_qt/main.py`.
 
-- [ ] **Step 2: Remove obsolete Tkinter troubleshooting**
+- [x] **Step 2: Remove obsolete Tkinter troubleshooting**
 
 Replace Tkinter-specific guidance with PySide6 and QtWebEngine troubleshooting.
 
-- [ ] **Step 3: Correct stale phase and service status**
+- [x] **Step 3: Correct stale phase and service status**
 
 Update completed Phase 3/4 capabilities, current service boundaries, and the remaining Phase 5 backlog.
 
@@ -186,19 +186,19 @@ Update completed Phase 3/4 capabilities, current service boundaries, and the rem
 - Modify: `docs/07_guides/README.md`
 - Modify: `docs/02_features/README.md`
 
-- [ ] **Step 1: Document installation and launch**
+- [x] **Step 1: Document installation and launch**
 
 Include virtual environment, data root, launch command, first-run checks, and current limitations.
 
-- [ ] **Step 2: Document all seven top-level workspaces**
+- [x] **Step 2: Document all seven top-level workspaces**
 
 Cover Update, Market Watch, Recommendation, Research Lab, Watchlist, Portfolio, and Runtime Observatory.
 
-- [ ] **Step 3: Document cross-workspace workflows**
+- [x] **Step 3: Document cross-workspace workflows**
 
 Cover Update to Market Watch, Recommendation to Candidate Pool, Candidate Pool to Research Lab, and Recommendation/Backtest to Portfolio.
 
-- [ ] **Step 4: Document safety and interpretation**
+- [x] **Step 4: Document safety and interpretation**
 
 Cover quick vs safe update, SQLite Inspector read-only constraints, observed/estimated/unavailable data quality, fixed/quantile limitations, Promote gates, and destructive operations.
 
@@ -211,33 +211,33 @@ Cover quick vs safe update, SQLite Inspector read-only constraints, observed/est
 - Modify: `docs/01_architecture/system_architecture.md`
 - Modify: `docs/agents/documentation_agent.md`
 
-- [ ] **Step 1: Register the manual and carryover matrix**
+- [x] **Step 1: Register the manual and carryover matrix**
 
 Add both documents to the core index and relevant navigation pages.
 
-- [ ] **Step 2: Make manual coverage a Definition of Done**
+- [x] **Step 2: Make manual coverage a Definition of Done**
 
 Require launch steps, operation steps, parameter meaning, result interpretation, safety notes, and troubleshooting for every user-facing workspace.
 
-- [ ] **Step 3: Record documentation closure**
+- [x] **Step 3: Record documentation closure**
 
 Update Snapshot and Roadmap Hub to distinguish documentation completion from still-unimplemented product backlog.
 
 ### Task 10: Final Verification And Publication
 
-- [ ] **Step 1: Scan active docs for stale entry points and statuses**
+- [x] **Step 1: Scan active docs for stale entry points and statuses**
 
 Run `rg` across active Markdown while excluding archive and historical Superpowers plans/specs.
 
-- [ ] **Step 2: Validate Markdown links**
+- [x] **Step 2: Validate Markdown links**
 
 Run a repository-local Markdown link checker script or equivalent deterministic path check.
 
-- [ ] **Step 3: Review git diff and exclusions**
+- [x] **Step 3: Review git diff and exclusions**
 
 Confirm no data, local QA output, caches, or unrelated files are staged.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Commit the completed documentation rebaseline and push `codex/docs-roadmap-rebaseline` to `origin`.
 
