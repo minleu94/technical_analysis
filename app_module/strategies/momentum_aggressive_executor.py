@@ -67,6 +67,9 @@ class MomentumAggressiveExecutor(StrategyExecutor):
         self.buy_confirm_days = params.get('buy_confirm_days', 1)
         self.sell_confirm_days = params.get('sell_confirm_days', 1)
         self.cooldown_days = params.get('cooldown_days', 2)
+        
+        from decision_module.score_threshold_policy import ScoreThresholdPolicy
+        self.threshold_policy = ScoreThresholdPolicy(params)
     
     def generate_signals(self, df: pd.DataFrame, spec: StrategySpec) -> pd.DataFrame:
         """生成每日信號"""
@@ -91,8 +94,20 @@ class MomentumAggressiveExecutor(StrategyExecutor):
         regime = config.get('regime', None)
         df = self.scoring_engine.calculate_total_score(df, config, regime=regime)
         
-        # 生成信號
-        signals = self._generate_signals(df)
+        # 4. 門檻評估與信號生成
+        thresholds = self.threshold_policy.evaluate(df['TotalScore'])
+        df['score_bp'] = thresholds.score_bp
+        df['buy_threshold_score_bp'] = thresholds.buy_threshold_score_bp
+        df['sell_threshold_score_bp'] = thresholds.sell_threshold_score_bp
+        df['threshold_warmup_ready'] = thresholds.warmup_ready
+        df['buy_threshold_hit'] = thresholds.buy_candidate
+        df['sell_threshold_hit'] = thresholds.sell_candidate
+        
+        signals = self._generate_signals(
+            df=df,
+            buy_candidate=thresholds.buy_candidate,
+            sell_candidate=thresholds.sell_candidate
+        )
         
         # 生成理由標籤
         reason_tags_list = []
@@ -119,7 +134,12 @@ class MomentumAggressiveExecutor(StrategyExecutor):
             regime_match=regime_match
         )
     
-    def _generate_signals(self, df: pd.DataFrame) -> pd.Series:
+    def _generate_signals(
+        self,
+        df: pd.DataFrame,
+        buy_candidate: pd.Series,
+        sell_candidate: pd.Series
+    ) -> pd.Series:
         """生成信號（快速進出）"""
         signals = pd.Series(0, index=df.index)
         in_position = False
@@ -127,11 +147,11 @@ class MomentumAggressiveExecutor(StrategyExecutor):
         last_trade_type = None
         
         buy_confirmed = self._calculate_confirmed_signals(
-            df['TotalScore'] >= self.buy_score,
+            buy_candidate,
             self.buy_confirm_days
         )
         sell_confirmed = self._calculate_confirmed_signals(
-            df['TotalScore'] <= self.sell_score,
+            sell_candidate,
             self.sell_confirm_days
         )
         
