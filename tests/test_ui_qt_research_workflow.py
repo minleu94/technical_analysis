@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 # 設定為 offscreen 以免開啟實際 GUI 視窗
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QListWidgetItem, QDialog
+from PySide6.QtWidgets import QApplication, QListWidgetItem, QDialog, QComboBox
 from PySide6.QtCore import Qt, QDate
 import pytest
 import pandas as pd
@@ -204,6 +204,84 @@ def test_backtest_view_explains_empty_trade_list(qt_app):
     assert view.trades_table.model() is None
 
 
+def test_backtest_view_zero_trade_diagnostics_modes(qt_app):
+    """驗證無交易時，fixed 模式與 quantile 模式能給出正確的診斷建議文案"""
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+
+    # 1. 測試 quantile 模式的診斷建議
+    report_quantile = BacktestReportDTO(
+        total_return=0.0,
+        annual_return=0.0,
+        sharpe_ratio=0.0,
+        max_drawdown=0.0,
+        win_rate=0.0,
+        total_trades=0,
+        expectancy=0.0,
+        details={
+            "stock_code": "2330",
+            "start_date": "2025-01-02",
+            "end_date": "2026-06-01",
+            "strategy_id": "momentum_aggressive_v1",
+            "trade_list": pd.DataFrame(),
+            "equity_curve": pd.DataFrame(),
+            "score_diagnostics": {
+                "threshold_mode": "quantile",
+                "buy_quantile_bp": 8000,
+                "sell_quantile_bp": 4000,
+                "warmup_ready_days": 10,
+                "total_days": 70,
+                "buy_hit_days": 2,
+                "sell_hit_days": 0,
+                "quantile_warmup_observations": 60,
+                "max_score": 75.0,
+                "min_score": 30.0,
+                "avg_score": 50.0
+            }
+        },
+    )
+
+    view._on_backtest_finished(report_quantile)
+    summary_quantile = view.summary_text.toPlainText()
+    assert "目前採用分位數門檻模式" in summary_quantile
+    assert "暖機狀態：回測共 70 個交易日，其中 10 個交易日已完成暖機" in summary_quantile
+    assert "動態買進門檻命中 2 天" in summary_quantile
+    assert "降低「buy_quantile_bp」買入分位數基點" in summary_quantile
+    assert "降低「buy_score」買入門檻" not in summary_quantile
+
+    # 2. 測試 fixed 模式的診斷建議
+    report_fixed = BacktestReportDTO(
+        total_return=0.0,
+        annual_return=0.0,
+        sharpe_ratio=0.0,
+        max_drawdown=0.0,
+        win_rate=0.0,
+        total_trades=0,
+        expectancy=0.0,
+        details={
+            "stock_code": "2330",
+            "start_date": "2025-01-02",
+            "end_date": "2026-06-01",
+            "strategy_id": "momentum_aggressive_v1",
+            "trade_list": pd.DataFrame(),
+            "equity_curve": pd.DataFrame(),
+            "score_diagnostics": {
+                "threshold_mode": "fixed",
+                "buy_score": 60.0,
+                "max_score": 55.0,
+                "min_score": 30.0,
+                "avg_score": 45.0
+            }
+        },
+    )
+
+    view._on_backtest_finished(report_fixed)
+    summary_fixed = view.summary_text.toPlainText()
+    assert "本標的最高分未達買進門檻" in summary_fixed
+    assert "降低「buy_score」買入門檻" in summary_fixed
+    assert "目前採用分位數門檻模式" not in summary_fixed
+
+
 def test_backtest_view_uses_optimization_fixed_values_when_enabled(qt_app):
     mock_backtest_service = MagicMock()
     view = BacktestView(backtest_service=mock_backtest_service, config=None)
@@ -340,3 +418,100 @@ def test_watchlist_view_batch_backtest_button_state(qt_app):
     assert view.send_to_research_lab_btn.text() == "送 Research Lab 批次回測"
     assert view.send_to_research_lab_btn.isEnabled() is False
     assert "此入口將在 Research Lab 批次回測整合時啟用。" in view.send_to_research_lab_btn.toolTip()
+
+
+def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
+    """驗證門檻模式下拉選單的載入、正常參數面板與最佳化面板的動態顯示/隱藏"""
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+
+    # 1. 切換策略至 momentum_aggressive_v1
+    strategy_index = view.strategy_combo.findData("momentum_aggressive_v1")
+    assert strategy_index >= 0
+    view.strategy_combo.setCurrentIndex(strategy_index)
+    view._on_strategy_changed()
+
+    # 2. 驗證正常面板中 threshold_mode 控制元件是 QComboBox
+    assert "threshold_mode" in view.param_widgets
+    threshold_mode_widget = view.param_widgets["threshold_mode"]
+    assert isinstance(threshold_mode_widget, QComboBox)
+    assert threshold_mode_widget.currentText() == "fixed"
+
+    # 3. 驗證 fixed 模式下，分數門檻顯示，分位數門檻隱藏
+    assert view.param_widgets["buy_score"].isHidden() is False
+    assert view.param_widgets["sell_score"].isHidden() is False
+    assert view.param_widgets["buy_quantile_bp"].isHidden() is True
+    assert view.param_widgets["sell_quantile_bp"].isHidden() is True
+
+    # 4. 切換為 quantile 模式，驗證顯示狀態反轉
+    threshold_mode_widget.setCurrentText("quantile")
+    assert view.param_widgets["buy_score"].isHidden() is True
+    assert view.param_widgets["sell_score"].isHidden() is True
+    assert view.param_widgets["buy_quantile_bp"].isHidden() is False
+    assert view.param_widgets["sell_quantile_bp"].isHidden() is False
+
+    # 5. 驗證最佳化面板
+    view.optimization_group.setChecked(True)
+    view._on_optimization_toggled(True)
+    view._update_optimization_params_form()
+
+    # 驗證最佳化面板中 threshold_mode 控制元件
+    assert "threshold_mode" in view.optimization_param_widgets
+    opt_widgets = view.optimization_param_widgets["threshold_mode"]
+    assert opt_widgets["mode"].currentText() == "固定值"
+    assert opt_widgets["mode"].isEnabled() is False  # Choice 不支援範圍最佳化
+    assert isinstance(opt_widgets["fixed"], QComboBox)
+    assert opt_widgets["fixed"].currentText() == "fixed"  # 預設為 fixed
+
+    # 驗證最佳化面板的行隱藏顯示
+    assert view.optimization_param_widgets["buy_score"]["row_widget"].isHidden() is False
+    assert view.optimization_param_widgets["buy_quantile_bp"]["row_widget"].isHidden() is True
+
+    # 切換最佳化面板的 threshold_mode 固定值至 quantile
+    opt_widgets["fixed"].setCurrentText("quantile")
+    assert view.optimization_param_widgets["buy_score"]["row_widget"].isHidden() is True
+    assert view.optimization_param_widgets["buy_quantile_bp"]["row_widget"].isHidden() is False
+
+
+def test_recommendation_view_threshold_mode_combobox_loading_and_toggling(qt_app):
+    """驗證推薦分析視圖門檻模式選單的載入與進階面板顯示聯動"""
+    mock_rec_service = MagicMock()
+    mock_regime_service = MagicMock()
+    
+    view = RecommendationView(
+        recommendation_service=mock_rec_service,
+        regime_service=mock_regime_service
+    )
+    
+    # 預設為新手模式，切換為進階模式以顯示排名門檻控制項
+    view.is_beginner_mode = False
+    view._update_mode_ui()
+    
+    # 1. 驗證控制項存在
+    assert hasattr(view, "threshold_mode_combo")
+    assert hasattr(view, "min_percentile_bp_spin")
+    assert hasattr(view, "min_universe_size_spin")
+    assert hasattr(view, "ranking_method_combo")
+    
+    # 2. 預設 fixed 模式下，百分位、母體與排名方法隱藏
+    assert view.threshold_mode_combo.currentText() == "固定門檻"
+    assert view.percentile_container.isHidden() is True
+    assert view.universe_container.isHidden() is True
+    assert view.method_container.isHidden() is True
+    
+    # 3. 切換為 quantile 百分位排名模式，驗證顯示狀態
+    view.threshold_mode_combo.setCurrentText("百分位排名")
+    assert view.percentile_container.isHidden() is False
+    assert view.universe_container.isHidden() is False
+    assert view.method_container.isHidden() is False
+    
+    # 4. 驗證配置收集
+    view.min_percentile_bp_spin.setValue(85.5)
+    view.min_universe_size_spin.setValue(30)
+    
+    config = view._collect_config()
+    ranking = config.get("recommendation_ranking", {})
+    assert ranking.get("threshold_mode") == "quantile"
+    assert ranking.get("recommendation_min_percentile_bp") == 8550
+    assert ranking.get("recommendation_min_universe_size") == 30
+    assert ranking.get("recommendation_ranking_method") == "nearest_rank"

@@ -1081,6 +1081,70 @@ class RecommendationView(QWidget):
         layout.addWidget(filter_group)
         self.filter_group = filter_group  # 保存引用以便切換顯示
         
+        # 排名門檻 - 進階模式才顯示
+        ranking_group = QGroupBox("排名門檻")
+        ranking_layout = QVBoxLayout()
+        
+        # 門檻模式
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(QLabel("門檻模式:"))
+        self.threshold_mode_combo = QComboBox()
+        self.threshold_mode_combo.addItem("固定門檻", "fixed")
+        self.threshold_mode_combo.addItem("百分位排名", "quantile")
+        mode_layout.addWidget(self.threshold_mode_combo)
+        ranking_layout.addLayout(mode_layout)
+        
+        # 最低百分位
+        percentile_layout = QHBoxLayout()
+        self.percentile_label = QLabel("最低百分位%:")
+        percentile_layout.addWidget(self.percentile_label)
+        self.min_percentile_bp_spin = QDoubleSpinBox()
+        self.min_percentile_bp_spin.setRange(0.0, 100.0)
+        self.min_percentile_bp_spin.setValue(80.0)
+        self.min_percentile_bp_spin.setDecimals(1)
+        self.min_percentile_bp_spin.setSuffix("%")
+        percentile_layout.addWidget(self.min_percentile_bp_spin)
+        self.percentile_container = QWidget()
+        self.percentile_container_layout = QHBoxLayout(self.percentile_container)
+        self.percentile_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.percentile_container_layout.addLayout(percentile_layout)
+        ranking_layout.addWidget(self.percentile_container)
+        
+        # 最小母體數
+        universe_layout = QHBoxLayout()
+        self.universe_label = QLabel("最小母體數:")
+        universe_layout.addWidget(self.universe_label)
+        self.min_universe_size_spin = QSpinBox()
+        self.min_universe_size_spin.setRange(2, 1000)
+        self.min_universe_size_spin.setValue(20)
+        universe_layout.addWidget(self.min_universe_size_spin)
+        self.universe_container = QWidget()
+        self.universe_container_layout = QHBoxLayout(self.universe_container)
+        self.universe_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.universe_container_layout.addLayout(universe_layout)
+        ranking_layout.addWidget(self.universe_container)
+        
+        # 排名方法
+        method_layout = QHBoxLayout()
+        self.method_label = QLabel("排名方法:")
+        method_layout.addWidget(self.method_label)
+        self.ranking_method_combo = QComboBox()
+        self.ranking_method_combo.addItem("Nearest Rank", "nearest_rank")
+        method_layout.addWidget(self.ranking_method_combo)
+        self.method_container = QWidget()
+        self.method_container_layout = QHBoxLayout(self.method_container)
+        self.method_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.method_container_layout.addLayout(method_layout)
+        ranking_layout.addWidget(self.method_container)
+        
+        ranking_group.setLayout(ranking_layout)
+        layout.addWidget(ranking_group)
+        self.ranking_group = ranking_group  # 保存引用以便切換顯示
+        
+        # 連接事件
+        self.threshold_mode_combo.currentIndexChanged.connect(self._on_threshold_mode_changed)
+        self._on_threshold_mode_changed(0)
+        
         # 執行按鈕
         self.execute_btn = QPushButton("執行推薦分析")
         self.execute_btn.setMinimumHeight(40)
@@ -1338,8 +1402,33 @@ class RecommendationView(QWidget):
         self.price_change_min.setValue(filters.get('price_change_min', 0.0))
         self.volume_ratio_min.setValue(filters.get('volume_ratio_min', 1.0))
         
+        # 更新排名門檻
+        ranking_config = self.strategy_config.get('recommendation_ranking', {})
+        threshold_mode = ranking_config.get('threshold_mode', 'fixed')
+        
+        mode_idx = self.threshold_mode_combo.findData(threshold_mode)
+        if mode_idx >= 0:
+            self.threshold_mode_combo.setCurrentIndex(mode_idx)
+            
+        self.min_percentile_bp_spin.setValue(ranking_config.get('recommendation_min_percentile_bp', 8000) / 100.0)
+        self.min_universe_size_spin.setValue(ranking_config.get('recommendation_min_universe_size', 20))
+        
+        method_idx = self.ranking_method_combo.findData(ranking_config.get('recommendation_ranking_method', 'nearest_rank'))
+        if method_idx >= 0:
+            self.ranking_method_combo.setCurrentIndex(method_idx)
+            
+        self._on_threshold_mode_changed(self.threshold_mode_combo.currentIndex())
+        
         # 更新策略傾向
         self._update_strategy_tendency()
+        
+    def _on_threshold_mode_changed(self, index: int):
+        """門檻模式切換事件"""
+        mode = self.threshold_mode_combo.itemData(index)
+        is_quantile = (mode == "quantile")
+        self.percentile_container.setVisible(is_quantile)
+        self.universe_container.setVisible(is_quantile)
+        self.method_container.setVisible(is_quantile)
     
     def _toggle_mode(self):
         """切換新手/進階模式"""
@@ -1355,6 +1444,7 @@ class RecommendationView(QWidget):
             self.tech_group.setVisible(False)
             self.pattern_group.setVisible(False)
             self.filter_group.setVisible(False)
+            self.ranking_group.setVisible(False)
             self.strategy_tendency_group.setVisible(False)
             # Regime 建議在新手模式下顯示
             if hasattr(self, 'regime_suggestion_group'):
@@ -1366,6 +1456,7 @@ class RecommendationView(QWidget):
             self.tech_group.setVisible(True)
             self.pattern_group.setVisible(True)
             self.filter_group.setVisible(True)
+            self.ranking_group.setVisible(True)
             self.strategy_tendency_group.setVisible(True)
             # Regime 建議在進階模式下也顯示（但一鍵套用按鈕可能不太有用）
             if hasattr(self, 'regime_suggestion_group'):
@@ -1567,6 +1658,7 @@ class RecommendationView(QWidget):
                 config = profile['config'].copy()
                 # 添加 Regime 信息
                 config['regime'] = self.strategy_config.get('regime')
+                config['recommendation_ranking'] = {'threshold_mode': 'fixed'}
                 return config
         
         # 進階模式或未選擇 Profile：使用 UI 配置
@@ -1636,6 +1728,18 @@ class RecommendationView(QWidget):
             'industry': self.industry_filter.currentText()
         }
         
+        # 排名門檻
+        threshold_mode = self.threshold_mode_combo.currentData()
+        ranking_config = {
+            'threshold_mode': threshold_mode
+        }
+        if threshold_mode == "quantile":
+            ranking_config.update({
+                'recommendation_min_percentile_bp': int(self.min_percentile_bp_spin.value() * 100),
+                'recommendation_min_universe_size': self.min_universe_size_spin.value(),
+                'recommendation_ranking_method': self.ranking_method_combo.currentData()
+            })
+        
         config = {
             'technical': {
                 'momentum': momentum,
@@ -1651,6 +1755,7 @@ class RecommendationView(QWidget):
                 'weights': {'pattern': 0.30, 'technical': 0.50, 'volume': 0.20}
             },
             'filters': filters,
+            'recommendation_ranking': ranking_config,
             'regime': self.strategy_config.get('regime')
         }
         
@@ -1792,6 +1897,27 @@ class RecommendationView(QWidget):
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+        
+        # 判斷是否為 UniverseTooSmall 錯誤
+        if "eligible universe too small" in error_msg:
+            try:
+                import re
+                match = re.search(r"actual=(\d+),\s*minimum=(\d+)", error_msg)
+                if match:
+                    actual = match.group(1)
+                    minimum = match.group(2)
+                    QMessageBox.warning(
+                        self,
+                        "個股合格母體不足",
+                        f"在當前策略篩選條件下，合格的個股母體數量為 {actual} 檔，低於設定的最低限制 {minimum} 檔。\n\n"
+                        f"為確保百分位排名計算的統計嚴謹性，系統已拒絕執行且沒有自動降級。\n\n"
+                        f"建議：\n"
+                        f"1. 放寬篩選條件（例如：降低最小漲幅、調降成交量比率）\n"
+                        f"2. 在「排名門檻」中降低「最小母體數」"
+                    )
+                    return
+            except Exception as e:
+                print(f"[RecommendationView] 解析 UniverseTooSmall 錯誤訊息失敗: {e}")
         
         # 顯示錯誤（如果錯誤信息太長，截取前500字符）
         display_msg = error_msg[:500] + "..." if len(error_msg) > 500 else error_msg
