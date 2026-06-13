@@ -2984,6 +2984,12 @@ class BacktestView(QWidget):
         self.progress_label.setVisible(True)
         self.progress_label.setText("正在執行參數掃描...")
 
+        # 顯示取消按鈕
+        if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+            self.config_panel.cancel_btn.setVisible(True)
+            self.config_panel.cancel_btn.setEnabled(True)
+            self.config_panel.cancel_btn.setText("取消執行")
+
         # 清空結果
         if hasattr(self, 'optimization_table'):
             self.optimization_table.setModel(None)
@@ -3013,7 +3019,8 @@ class BacktestView(QWidget):
                 take_profit_pct=take_profit_pct,
                 objective=objective,
                 top_n=20,
-                progress_callback=wrapped_callback
+                progress_callback=wrapped_callback,
+                check_cancel=lambda: self.worker._is_cancelled if self.worker else False
             )
 
         # 使用 ProgressTaskWorker 以支持進度回調
@@ -3022,6 +3029,7 @@ class BacktestView(QWidget):
         self.worker.progress.connect(self._on_optimization_progress)
         self.worker.finished.connect(self._on_optimization_finished)
         self.worker.error.connect(self._on_optimization_error)
+        self.worker.cancelled.connect(self._on_optimization_cancelled)
         self.worker.start()
 
     def _on_optimization_progress(self, message: str, percentage: int):
@@ -3035,6 +3043,8 @@ class BacktestView(QWidget):
         self.optimize_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+        if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+            self.config_panel.cancel_btn.setVisible(False)
 
         if not results:
             QMessageBox.warning(self, "提示", "沒有找到有效結果")
@@ -3062,8 +3072,20 @@ class BacktestView(QWidget):
         self.optimize_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+        if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+            self.config_panel.cancel_btn.setVisible(False)
 
         QMessageBox.critical(self, "錯誤", f"參數掃描失敗：\n\n{error_msg}")
+
+    def _on_optimization_cancelled(self):
+        """參數最佳化被取消"""
+        self.optimize_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+            self.config_panel.cancel_btn.setVisible(False)
+
+        QMessageBox.information(self, "已取消", "參數最佳化任務已成功取消。")
 
     def _apply_optimization_params(self):
         """套用選中的最佳化參數"""
@@ -3567,6 +3589,22 @@ class BacktestView(QWidget):
             # 使用 QTimer.singleShot 並指定 self (receiver) 確保在主線程執行
             QTimer.singleShot(0, self, lambda: self._update_batch_progress(current, total_count, stock_code, message))
 
+        # 獲取並行與取消設定
+        is_parallel = self.config_panel.parallel_checkbox.isChecked() if hasattr(self.config_panel, 'parallel_checkbox') else False
+        parallel_threshold = 2 if is_parallel else None
+
+        if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+            self.config_panel.cancel_btn.setVisible(True)
+            self.config_panel.cancel_btn.setEnabled(True)
+            self.config_panel.cancel_btn.setText("取消執行")
+
+        self.execute_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(0)
+        self.progress_label.setVisible(True)
+        self.progress_label.setText("正在初始化批次回測...")
+
         # 創建 Worker
         def batch_backtest_task():
             return self.batch_backtest_service.run_batch_backtest(
@@ -3594,12 +3632,15 @@ class BacktestView(QWidget):
                 enable_volume_constraint=enable_volume,
                 max_participation_rate=max_participation,
                 save_runs=True,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                check_cancel=lambda: self.worker._is_cancelled if self.worker else False,
+                parallel_threshold=parallel_threshold
             )
 
         self.worker = TaskWorker(batch_backtest_task)
         self.worker.finished.connect(self._on_batch_backtest_finished)
         self.worker.error.connect(self._on_batch_backtest_error)
+        self.worker.cancelled.connect(self._on_batch_backtest_cancelled)
         self.worker.start()
 
     def _update_batch_progress(self, current: int, total: int, stock_code: str, message: str):
@@ -3616,6 +3657,8 @@ class BacktestView(QWidget):
         self.execute_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+        if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+            self.config_panel.cancel_btn.setVisible(False)
 
         # 保存當前批次結果
         self.current_batch_result = batch_result
@@ -3657,8 +3700,40 @@ class BacktestView(QWidget):
         self.execute_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+        if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+            self.config_panel.cancel_btn.setVisible(False)
 
         QMessageBox.critical(self, "錯誤", f"批次回測失敗：\n\n{error_msg}")
+
+    def _on_batch_backtest_cancelled(self):
+        """批次回測被取消"""
+        self.execute_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+            self.config_panel.cancel_btn.setVisible(False)
+
+        QMessageBox.information(self, "已取消", "批次回測任務已成功取消。")
+
+    def _on_cancel_clicked(self):
+        """點擊取消執行按鈕"""
+        if not self.worker:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "確認取消",
+            "確定要取消目前正在執行的回測或最佳化任務嗎？\n\n警告：系統將安全等待當前已在執行的子任務完成後才解鎖 UI。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
+                self.config_panel.cancel_btn.setEnabled(False)
+                self.config_panel.cancel_btn.setText("正在取消...")
+            self.progress_label.setText("正在取消中，請稍候...")
+            self.worker.cancel(cooperative=True, wait=False)
 
     def _update_batch_leaderboard(self, batch_result):
         """更新排行榜表格"""

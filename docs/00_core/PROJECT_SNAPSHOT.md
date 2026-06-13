@@ -30,7 +30,7 @@
   - Phase 4.2 Portfolio 籌碼監控與下鑽 ✅：新增籌碼監控 Tab 與追蹤分點表格，依淨買賣、集中度及連續天數評估風險（bullish/neutral/bearish），並實作🔍 下鑽主力流向按鈕與自動高亮定位功能 (2026-06-11)
 
 - **效能與研究輸出（Phase 5）** 🚧 部分已完成
-  - 圖表渲染優化 ✅ / 大表格分頁、批次回測並行化、報告輸出仍在後續
+  - 圖表渲染優化 ✅ / 批次回測並行化 ✅ / 大表格分頁、報告輸出仍在後續
 
 ## 現在的工作模式（你每天要用的流程）
 
@@ -46,7 +46,7 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. 效能與研究輸出 (Phase 5)：規劃批次回測並行化及報告輸出
+1. 效能與研究輸出 (Phase 5)：完成批次回測並行化（合作式軟取消與防回歸），規劃大表格分頁及報告輸出
 2. 參數設計優化 (Phase 2.5 優先級 3)：指標參數改進與 `buy_score`/`sell_score` 分位數化設計
 3. Nice-to-have 文件清理：`app_module/README.md`、`ui_qt/README.md`、資料流舊文檔
 
@@ -66,7 +66,6 @@
 ## 指定權威文件（需要細節再看）
 
 - `DEVELOPMENT_ROADMAP.md` - 完整開發路線圖（Single Source of Truth）
-- `NEXT_ACTION_PLAN.md` - 下一輪 Rebaseline、技術治理與 Agent 交接行動計畫
 - `DOCUMENTATION_INDEX.md` - 文檔索引
 - `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則
 - `DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（Documentation Agent 判斷 coverage 的規則）
@@ -184,3 +183,10 @@
 - 正式 `broker_flows` 已由既有 daily 檔無破壞重建為 104,986 筆、158 天，rank 範圍 1 至 50，唯一鍵與 NULL 契約檢查均通過。
 
 
+## 2026-06-12 批次回測並行化與安全軟取消成果
+
+- **批次回測並行化實作**：實作 ProcessPoolExecutor 並行處理機制，當回測個股數大於 threshold 時自動並行，並支援 `max_workers=None` 自適應調整 CPU 核心數。
+- **合作式軟取消**：實作非暴力 cooperative 取消機制，取消時停止向進程池提交新任務，且 Worker 等待 active 子行程清空後才發送 `cancelled` 信號並恢復 UI 按鈕，避免 UI 提前解鎖造成新舊任務重疊。
+- **唯一性 run_id 寫入**：在循序與並行路徑皆引入 UUID 來生成唯一 `run_id`，避免 SQLite 與 parquet 同秒覆寫衝突。
+- **TaskWorker 軟取消回歸防護**：保留 `TaskWorker` 取消時的 legacy `terminate()` 行為，並將新合作式軟取消限制在回測專用 Worker，維持 Update、Recommendation 與 SQLite Inspector 等既有頁面的行為相容；legacy 強制終止風險列為後續技術債。
+- **測試與驗證**：新增單元測試 `tests/test_backtest/test_parallel_safety.py`，覆蓋 UUID 唯一性、軟取消、自適應循序分流、非法股票處理、真實 `BrokenProcessPool` 異常重現及 `max_workers=None`。

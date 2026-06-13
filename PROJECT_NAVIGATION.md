@@ -195,13 +195,14 @@ python ui_app/main.py
 
 **對應的 Service**：
 - `app_module/backtest_service.py`：單次回測
-- `app_module/batch_backtest_service.py`：批次回測
+- `app_module/batch_backtest_service.py`：批次回測；負責 ProcessPool 工作分派、bounded in-flight queue、合作式取消與主行程集中保存
 - `app_module/recommendation_replay_service.py`：歷史日期重播推薦邏輯
 - `app_module/recommendation_portfolio_backtest_service.py`：推薦組合資金配置、持有期與績效彙整
 - `app_module/recommendation_dataframe_provider.py`：推薦 replay 用資料提供與候選集 prefilter
 - `app_module/recommendation_portfolio_dates.py`：台股資料日期解析工具，避免數字型 `YYYYMMDD` 誤判
 - `app_module/walkforward_service.py`：Walk-forward 驗證
-- `app_module/optimizer_service.py`：參數最佳化
+- `app_module/optimizer_service.py`：參數最佳化；使用 ThreadPool 與合作式取消
+- `app_module/exceptions.py`：跨服務共用的取消例外
 
 **真正動邏輯的地方**：
 - `backtest_module/strategy_tester.py`：策略測試器（執行策略邏輯）

@@ -21,6 +21,12 @@
 - **`API_INVESTIGATION_REPORT.md`**
   - API 調查報告（歷史記錄）
 
+- **`PHASE_3_3B_IMPLEMENTATION_PLAN.md`**
+  - Phase 3.3b 實施規劃（已執行，歷史歸檔）
+
+- **`NEXT_ACTION_PLAN.md`**
+  - 下一輪 Roadmap Rebaseline、技術治理與 Agent 交接行動計畫（已執行，歷史歸檔）
+
 - **`readme_test.txt`**
   - 歷史測試文檔（已過時，保留作為參考）
 

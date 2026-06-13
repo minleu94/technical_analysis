@@ -461,10 +461,16 @@ set TWSTOCK_DATA_DIR=your/custom/path
       - 支援部位管理（max_positions、position_sizing、allow_pyramid、allow_reentry）
     - `_load_stock_data()`: 載入股票數據和技術指標（自動調整日期範圍）
     - `_load_indicator_data()`: 載入技術指標數據（支援 YYYYMMDD 格式日期解析）
+  * **批次回測服務**（✅ 已完成）：
+    - `BatchBacktestService.run_batch_backtest()`: 依工作量選擇循序或 `ProcessPoolExecutor` 並行路徑
+    - bounded in-flight queue 控制記憶體占用，取消時停止提交新工作並等待已啟動工作安全收尾
+    - 子行程只回傳計算結果，SQLite / Parquet 由主行程集中保存
+    - 循序與並行路徑皆使用 UUID 唯一 `run_id`，避免同秒保存覆寫
   * **參數最佳化服務**（✅ 已完成）：
     - `grid_search()`: Grid Search 參數掃描
       - 預載入數據一次，所有參數組合共用（性能優化）
       - 多線程並行執行（預設最多 8 個線程）
+      - 合作式取消並等待已啟動工作安全收尾
       - 支援多種目標指標（sharpe_ratio、cagr、cagr_mdd）
       - 進度回調支援
 - **架構優勢**：

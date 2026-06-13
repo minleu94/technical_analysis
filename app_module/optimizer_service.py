@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime
 import pandas as pd
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from app_module.exceptions import BacktestCancelledError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,11 +38,11 @@ class OptimizationResult:
 
 class OptimizerService:
     """參數最佳化服務"""
-    
+
     def __init__(self, backtest_service, run_repository=None, max_workers: Optional[int] = None):
         """
         初始化最佳化服務
-        
+
         Args:
             backtest_service: BacktestService 實例
             run_repository: BacktestRunRepository 實例（可選，用於保存結果）
@@ -54,19 +55,19 @@ class OptimizerService:
         self.max_workers = max_workers
         logger.info(f"[OptimizerService] 初始化，最大並行線程數: {self.max_workers}")
         self.run_repository = run_repository
-    
+
     def generate_param_grid(self, param_ranges: Dict[str, ParamRange]) -> List[Dict[str, Any]]:
         """
         生成參數網格
-        
+
         Args:
             param_ranges: 參數範圍字典 {param_name: ParamRange}
-        
+
         Returns:
             參數組合列表
         """
         param_combinations = []
-        
+
         # 為每個參數生成值列表
         param_value_lists = {}
         for param_name, param_range in param_ranges.items():
@@ -94,17 +95,17 @@ class OptimizerService:
                     param_value_lists[param_name] = values
                 else:
                     param_value_lists[param_name] = param_range.values
-        
+
         # 生成所有組合
         param_names = list(param_value_lists.keys())
         param_values = [param_value_lists[name] for name in param_names]
-        
+
         for combination in itertools.product(*param_values):
             param_dict = dict(zip(param_names, combination))
             param_combinations.append(param_dict)
-        
+
         return param_combinations
-    
+
     def grid_search(
         self,
         stock_code: str,
@@ -120,11 +121,12 @@ class OptimizerService:
         take_profit_pct: Optional[float] = None,
         objective: str = 'sharpe_ratio',  # 'sharpe_ratio', 'cagr', 'cagr_mdd'
         top_n: int = 20,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        check_cancel: Optional[Callable[[], bool]] = None
     ) -> List[OptimizationResult]:
         """
         執行 Grid Search 參數掃描
-        
+
         Args:
             stock_code: 股票代號
             start_date: 開始日期
@@ -140,51 +142,51 @@ class OptimizerService:
             objective: 目標指標
             top_n: 返回前N名結果
             progress_callback: 進度回調函數 (current, total, message)
-        
+
         Returns:
             最佳化結果列表（已排序）
         """
         from app_module.strategy_spec import StrategySpec
         from app_module.strategy_registry import StrategyRegistry
-        
+
         # 生成參數網格
         param_combinations = self.generate_param_grid(param_ranges)
         total_combinations = len(param_combinations)
-        
+
         if progress_callback:
             progress_callback(0, total_combinations, f"開始掃描 {total_combinations} 組參數（使用 {self.max_workers} 個線程）...")
-        
+
         logger.info(f"[OptimizerService] 開始 Grid Search，共 {total_combinations} 組參數，使用 {self.max_workers} 個並行線程")
-        
+
         # ✅ 優化：預先載入數據一次，所有參數組合共用
         logger.info(f"[OptimizerService] 預先載入數據（股票 {stock_code}，日期範圍 {start_date} 到 {end_date}）...")
         preloaded_data, actual_start_date, actual_end_date = self.backtest_service._load_stock_data(
             stock_code, start_date, end_date
         )
-        
+
         if preloaded_data is None or len(preloaded_data) == 0:
             logger.error(f"[OptimizerService] 無法載入數據，參數掃描終止")
             return []
-        
+
         # 記錄日期調整信息（只在第一次顯示）
         if actual_start_date != start_date or actual_end_date != end_date:
             logger.warning(
                 f"[OptimizerService] ⚠️ 日期範圍已自動調整: "
                 f"請求 {start_date}~{end_date} → 實際 {actual_start_date}~{actual_end_date}"
             )
-        
+
         logger.info(f"[OptimizerService] 數據載入完成，共 {len(preloaded_data)} 筆數據，開始參數掃描...")
-        
+
         results = []
         completed_count = 0
-        
+
         # 定義單個參數組合的回測函數
         def run_single_backtest(param_combo, idx):
             """執行單個參數組合的回測"""
             try:
                 # 合併基礎參數和掃描參數
                 full_params = {**base_params, **param_combo}
-                
+
                 # 創建策略規格
                 strategy_info = StrategyRegistry.list_strategies().get(strategy_id, {})
                 strategy_spec = StrategySpec(
@@ -199,7 +201,7 @@ class OptimizerService:
                         'params': full_params
                     }
                 )
-                
+
                 # 執行回測（使用預載入的數據）
                 report = self.backtest_service.run_backtest(
                     stock_code=stock_code,
@@ -215,7 +217,7 @@ class OptimizerService:
                     actual_start_date=actual_start_date,  # ✅ 傳遞實際日期範圍
                     actual_end_date=actual_end_date
                 )
-                
+
                 # 計算目標分數
                 if objective == 'sharpe_ratio':
                     score = report.sharpe_ratio
@@ -226,7 +228,7 @@ class OptimizerService:
                     score = report.annual_return + report.max_drawdown
                 else:
                     score = report.sharpe_ratio
-                
+
                 # 構建結果
                 result = OptimizationResult(
                     params=full_params,
@@ -243,65 +245,90 @@ class OptimizerService:
                     }
                 )
                 return (idx, result, None)
-                
+
             except Exception as e:
                 # 記錄錯誤但繼續
                 error_msg = f"參數組合 {param_combo} 回測失敗: {e}"
                 logger.warning(f"[OptimizerService] {error_msg}")
                 return (idx, None, error_msg)
-        
-        # 使用線程池並行執行
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # 提交所有任務
-            future_to_idx = {
-                executor.submit(run_single_backtest, param_combo, idx): idx
-                for idx, param_combo in enumerate(param_combinations)
-            }
-            
-            # 收集結果（按完成順序）
-            completed_results = {}
-            for future in as_completed(future_to_idx):
-                idx, result, error = future.result()
-                completed_results[idx] = (result, error)
-                completed_count += 1
-                
-                # 更新進度
-                if progress_callback:
-                    progress_callback(
-                        completed_count,
-                        total_combinations,
-                        f"已完成 {completed_count}/{total_combinations} ({completed_count/total_combinations*100:.1f}%)"
-                    )
-        
+
+        # 使用線程池並行執行，手動初始化以利安全軟取消
+        executor = ThreadPoolExecutor(max_workers=self.max_workers)
+
+        # 提交所有任務
+        future_to_idx = {
+            executor.submit(run_single_backtest, param_combo, idx): idx
+            for idx, param_combo in enumerate(param_combinations)
+        }
+
+        pending = set(future_to_idx.keys())
+        completed_results = {}
+        cancellation_requested = False
+
+        try:
+            while pending:
+                # 輪詢檢查取消旗標
+                if not cancellation_requested and check_cancel and check_cancel():
+                    cancellation_requested = True
+                    for fut in pending:
+                        fut.cancel()
+                    executor.shutdown(wait=False, cancel_futures=True)
+
+                done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+
+                for future in done:
+                    idx = future_to_idx[future]
+                    try:
+                        idx_res, result, error = future.result()
+                        if not cancellation_requested:
+                            completed_results[idx] = (result, error)
+                            completed_count += 1
+
+                            # 更新進度
+                            if progress_callback:
+                                progress_callback(
+                                    completed_count,
+                                    total_combinations,
+                                    f"已完成 {completed_count}/{total_combinations} ({completed_count/total_combinations*100:.1f}%)"
+                                )
+                    except Exception as e:
+                        logger.error(f"最佳化子任務 {idx} 異常: {e}")
+
+            if cancellation_requested:
+                raise BacktestCancelledError("參數最佳化任務已被使用者取消")
+        finally:
+            if not cancellation_requested:
+                executor.shutdown(wait=True)
+
         # 按原始順序整理結果
         for idx in range(total_combinations):
             if idx in completed_results:
                 result, error = completed_results[idx]
                 if result is not None:
                     results.append(result)
-        
+
         # 按目標分數排序
         results.sort(key=lambda x: x.metrics.get('score', 0), reverse=True)
-        
+
         # 設置排名
         for rank, result in enumerate(results, 1):
             result.rank = rank
-        
+
         # 返回前N名
         return results[:top_n]
-    
+
     def create_optimization_summary(self, results: List[OptimizationResult]) -> pd.DataFrame:
         """
         創建最佳化結果摘要表格
-        
+
         Args:
             results: 最佳化結果列表
-        
+
         Returns:
             DataFrame
         """
         summary_data = []
-        
+
         for result in results:
             row = {
                 '排名': result.rank,
@@ -317,6 +344,6 @@ class OptimizerService:
                 '目標分數': result.metrics.get('score', 0)
             }
             summary_data.append(row)
-        
+
         return pd.DataFrame(summary_data)
 

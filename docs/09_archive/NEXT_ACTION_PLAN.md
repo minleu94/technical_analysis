@@ -1,7 +1,8 @@
 # 下一步行動計畫
 
 > 建立日期：2026-06-09  
-> 用途：給使用者與後續 Agent 的交接文件。若本文件與 `DEVELOPMENT_ROADMAP.md` 衝突，以 Roadmap Living Section 為準，但本文件指出下一輪應如何重整 Roadmap。
+> 歷史歸檔：2026-06-12
+> 狀態：✅ 已全數執行完畢
 
 ---
 
@@ -103,7 +104,7 @@
 - 已新增 `financial_module/units.py` 並將手續費、滑價、稅率等轉為 Decimal/整數/基點處理。
 - 已實施金融核心白名單（6 個核心檔案）的 `float()`、`.astype(float)`、`dtype=float` 防回歸靜態掃描器（`check_financial_float_boundaries.py`）。
 - 成功為所有白名單檔案的 float 轉換加入 `dto` / `analytics` / `visualization` 的 `# numeric-boundary:` 行尾註解。
-- 建立 pytest repository gate（`test_financial_core_allowlist_has_no_unmarked_float_boundaries`）自動阻擋任何未標記的 float 邊界。
+- 建立 pytest repository gate（`test_financial_core_allowlist_has_no_unmarked_float_boundaries`）自動阻擋 any 未標記的 float 邊界。
 
 優先範圍：
 

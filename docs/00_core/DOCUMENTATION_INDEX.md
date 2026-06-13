@@ -12,7 +12,6 @@
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | 系統定位、Phase 狀態、Living Section、Next、Risks。最高權威。 |
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 本文件，文檔導航。 |
-| [NEXT_ACTION_PLAN.md](NEXT_ACTION_PLAN.md) | 下一輪 Roadmap Rebaseline、技術治理與 Agent 交接行動計畫。 |
 | [DOCUMENTATION_STRUCTURE.md](DOCUMENTATION_STRUCTURE.md) | `docs/` 資料夾歸屬、生命週期、刪除/歸檔規則。 |
 | [DOC_COVERAGE_MAP.md](DOC_COVERAGE_MAP.md) | 變更類型對應需要同步更新的文件。 |
 | [AI_CONTEXT_PACK.md](AI_CONTEXT_PACK.md) | 給外部 AI / Agent 的高密度專案上下文。 |
@@ -172,14 +171,17 @@
 ## 10. Archive
 
 [09_archive/](../09_archive/README.md) 只放歷史文件、已執行提案、舊調查與不再作為日常依據的內容。Active 文件不應依賴 archive 來判斷目前狀態。
+主要封存文檔：
+- [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md)：2026-06-09 下一輪行動計畫（已執行完畢）。
+- [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md)：Phase 3.3b 實施規劃（已執行完畢）。
 
 ---
 
 ## 目前開發狀態
 
-- **已完成（三個產品閉環之基礎建置與完整深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/一鍵安全數據更新工作台/技術指標 280 萬筆全量重算）、研究驗證閉環（Research Lab 多模式實驗室/單股回測/最佳化/Walk-forward/推薦組合回測 MVP 與穩健性指標/Fast Renderer 圖表/Promote 晉升與 SOP 驗證）、持倉檢查閉環（domain/service/test/Portfolio Tab/條件監控/手動與回測來源追溯及強制平倉標記/覆盤日記/策略與價格監控/停損停利警示/籌碼監控與下鑽）。
+- **已完成（三個產品閉環之基礎建置與完整深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/一鍵安全數據更新工作台/技術指標 280 萬筆全量重算）、研究驗證閉環（Research Lab 多模式實驗室/單股回測/最佳化/Walk-forward/推薦組合回測 MVP 與穩健性指標/Fast Renderer 圖表/Promote 晉升與 SOP 驗證/批次回測並行化與安全軟取消）、持倉檢查閉環（domain/service/test/Portfolio Tab/條件監控/手動與回測來源追溯及強制平倉標記/覆盤日記/策略與價格監控/停損停利警示/籌碼監控與下鑽）。
 - **進行中 / 當前治理**：當前無阻礙之進行中項目。
-- **待開始 (Backlog)**：Phase 5 中大表格分頁、批次回測並行化、Excel/PDF 報告輸出。
+- **待開始 (Backlog)**：Phase 5 中大表格分頁、Excel/PDF 報告輸出。
 
 ---
 
@@ -205,6 +207,8 @@
 - 2026-06-11：新增金融 float 邊界治理實作計畫，依 TDD 拆分 source scanner、CLI、repository gate 與文件收尾。
 - 2026-06-12：新增券商分點 SQLite/UI 復原與 E/B ranked metric reconciliation 實作計畫。
 - 2026-06-11：完成 Phase 4.2 持倉層籌碼面風險提示與下鑽整合，實作 SQLite/CSV 雙軌籌碼監控服務與 UI Tab，並打通「🔍 下鑽詳細主力流向」之 Tab 切換與個股自動定位高亮連動。
+- 2026-06-12：將已執行完畢的 [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md) 移至歸檔目錄 `docs/09_archive/`，並更新文檔索引。
+- 2026-06-12：完成批次回測並行化與安全軟取消實作，修復 `max_workers=None` 路徑，新增真實 BrokenProcessPool 測試；回測與最佳化採合作式取消，其他長任務頁面維持既有取消行為相容，並明確記錄 legacy `terminate()` 技術債。
 
 
 
