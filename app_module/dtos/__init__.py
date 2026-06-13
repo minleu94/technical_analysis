@@ -38,9 +38,16 @@ class RecommendationDTO:
     industry: str
     regime_match: bool
     
+    # 追溯元數據
+    score_percentile_bp: Optional[int] = None
+    eligible_universe_size: Optional[int] = None
+    eligible_universe_date: Optional[str] = None
+    ranking_method: Optional[str] = None
+    threshold_mode: str = "fixed"
+    
     def to_dict(self) -> dict:
         """轉換為字典"""
-        return {
+        result = {
             '證券代號': self.stock_code,
             '證券名稱': self.stock_name,
             '收盤價': self.close_price,
@@ -51,8 +58,22 @@ class RecommendationDTO:
             '成交量分': self.volume_score,
             '推薦理由': self.recommendation_reasons,
             '產業': self.industry,
-            'Regime匹配': '是' if self.regime_match else '否'
+            'Regime匹配': '是' if self.regime_match else '否',
+            'score_percentile_bp': self.score_percentile_bp,
+            'eligible_universe_size': self.eligible_universe_size,
+            'eligible_universe_date': self.eligible_universe_date,
+            'ranking_method': self.ranking_method,
+            'threshold_mode': self.threshold_mode
         }
+        if self.threshold_mode == "quantile":
+            result['百分位'] = f"{self.score_percentile_bp / 100:.2f}%" if self.score_percentile_bp is not None else "N/A"
+            result['母體數'] = self.eligible_universe_size if self.eligible_universe_size is not None else "N/A"
+            result['排名日期'] = self.eligible_universe_date if self.eligible_universe_date is not None else "N/A"
+            result['排名方法'] = self.ranking_method if self.ranking_method is not None else "N/A"
+            result['門檻模式'] = '百分位'
+        else:
+            result['門檻模式'] = '固定'
+        return result
 
 
 @dataclass

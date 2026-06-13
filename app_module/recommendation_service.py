@@ -472,8 +472,62 @@ class RecommendationService:
                     f"3. 技術指標或圖形模式是否過於嚴格"
                 )
         
-        # 按總分降序排序，返回前 top_n 名
-        all_recommendations.sort(key=lambda x: x.total_score, reverse=True)
+        # 解析 recommendation_ranking 配置
+        ranking_config = config.get("recommendation_ranking", {})
+        threshold_mode = ranking_config.get("threshold_mode", "fixed")
+        
+        if threshold_mode == "quantile":
+            from decision_module.score_threshold_policy import quantize_score_to_basis_points
+            from decision_module.recommendation_percentile_ranker import calculate_score_percentiles
+            from app_module.recommendation_errors import RecommendationUniverseTooSmallError
+            
+            # 1. 進行分數的量化
+            scores_by_stock = {}
+            for rec in all_recommendations:
+                val_bp = quantize_score_to_basis_points(rec.total_score)
+                if val_bp is None:
+                     raise ValueError(f"cannot quantize total score for stock {rec.stock_code}: score={rec.total_score}")
+                scores_by_stock[rec.stock_code] = val_bp
+            
+            # 2. 檢查合格母體大小
+            actual_size = len(all_recommendations)
+            min_universe_size = ranking_config.get("recommendation_min_universe_size", 20)
+            if actual_size < min_universe_size:
+                raise RecommendationUniverseTooSmallError(actual_size, min_universe_size)
+                
+            # 3. 計算百分位
+            percentiles = calculate_score_percentiles(scores_by_stock)
+            
+            # 4. 百分位門檻篩選與 metadata 寫入
+            latest_date_str = ""
+            if not df.empty and '日期' in df.columns:
+                latest_date_str = df['日期'].max().strftime('%Y-%m-%d')
+                
+            min_percentile_bp = ranking_config.get("recommendation_min_percentile_bp", 8000)
+            ranking_method = ranking_config.get("recommendation_ranking_method", "nearest_rank")
+            
+            filtered_recs = []
+            for rec in all_recommendations:
+                pct_bp = percentiles.get(rec.stock_code, 0)
+                if pct_bp >= min_percentile_bp:
+                    rec.score_percentile_bp = pct_bp
+                    rec.eligible_universe_size = actual_size
+                    rec.eligible_universe_date = latest_date_str
+                    rec.ranking_method = ranking_method
+                    rec.threshold_mode = "quantile"
+                    filtered_recs.append(rec)
+            
+            # 5. 穩定排序 (total_score 降序, stock_code 升序)
+            filtered_recs.sort(key=lambda x: x.stock_code)
+            filtered_recs.sort(key=lambda x: x.total_score, reverse=True)
+            
+            all_recommendations = filtered_recs
+        else:
+            # fixed 模式：設定 DTO 門檻模式，並依原行為排序
+            for rec in all_recommendations:
+                rec.threshold_mode = "fixed"
+            all_recommendations.sort(key=lambda x: x.total_score, reverse=True)
+            
         return all_recommendations[:top_n]
     
     def detect_regime(self) -> Dict[str, Any]:
