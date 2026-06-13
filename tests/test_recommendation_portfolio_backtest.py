@@ -489,3 +489,46 @@ def test_recommendation_portfolio_payload_preserves_profile_config():
     assert config["mode"] == "recommendation_portfolio"
     assert config["strategy_config"]["filters"]["price_change_min"] == 2
     assert config["allocation_method"] == "score_weight"
+
+
+def test_portfolio_backtest_with_percentile_ranking():
+    configs_received = []
+    
+    def provider(as_of_data, config, top_n):
+        configs_received.append(config)
+        return [
+            {"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}
+        ]
+        
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+    
+    service = RecommendationPortfolioBacktestService(provider=provider)
+    result = service.run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={
+            "regime": "Trend",
+            "recommendation_ranking": {
+                "threshold_mode": "quantile",
+                "recommendation_min_percentile_bp": 8000,
+                "recommendation_min_universe_size": 20
+            }
+        },
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+    
+    assert len(configs_received) > 0
+    assert configs_received[0]["recommendation_ranking"]["threshold_mode"] == "quantile"
+    assert configs_received[0]["recommendation_ranking"]["recommendation_min_percentile_bp"] == 8000
