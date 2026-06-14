@@ -65,7 +65,7 @@
 
 1. Strategy & Scoring Governance 實證：10 檔、每檔 8 個 OOS fold 已完成；fixed 57 筆、quantile 79 筆與 100% Regime coverage 均通過 Gate，但 quantile 未優於 fixed，維持 opt-in。
 2. Legacy Carryover Month 1：Walk-forward 實證、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 仍待後續。
-3. Legacy Carryover Month 2：M2-A 參數與權重契約已完成；M2-B Research Run Registry schema / immutable save / legacy backfill / UI save 已完成；M2-C Comparability Service、Registry 比較子頁與 Registry-based Promote Gate 已完成，下一步是 M2-C 文件與最終驗證收尾。
+3. Legacy Carryover Month 2：M2-A 參數與權重契約、M2-B Research Run Registry 基礎保存、M2-C Cross-run Comparison / Registry 比較子頁 / Registry-based Promote Gate 與 final registry governance gate 均已完成；下一步轉向 Month 3 Factor Contract / Factor Layer 前置設計，不先接營收與法人。
 
 ## 高風險區（改動需謹慎）
 

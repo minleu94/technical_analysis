@@ -124,19 +124,21 @@
 - 讓每一次研究 run 可保存、可比較、可重播。
 - 完成舊 Roadmap 的指標參數與推薦權重治理，避免新 Factor 建在不可追溯的參數底座上。
 
+> 2026-06-14 狀態：M2-A、M2-B、M2-C 與 final registry governance gate 已完成。Month 2 後續只保留缺陷修補與回歸驗證，不再作為主要下一步。
+
 交付物：
 
 - run metadata：資料截止日、資料 hash、策略版本、參數、成本、成交假設、universe。（M2-B 基礎保存已完成）
 - Research Run Registry immutable save：SQLite metadata、Parquet 明細、hash 驗證、crash reconciliation、legacy backfill 與 UI 保存入口。（M2-B 已完成）
 - Indicator Parameter Registry。（M2-A 已完成）
 - Recommendation Weight Contract，並移除核心推薦權重只靠硬編碼保存的狀態。（M2-A 已完成）
-- Cross-run comparison UI 與服務。（M2-C 已完成第一版；支援 2-5 個 run、三態 comparability、參數差異、metrics、Regime、benchmark 與正規化 equity 交集比較）
-- strategy promote gate 改為讀取 registry，不只讀單次 summary。（M2-C 已完成第一版；以 Registry run 為來源，採 JSON Strategy Version 補償交易與 reconciliation 掃描）
+- Cross-run comparison UI 與服務。（M2-C 已完成；支援 2-5 個 run、三態 comparability、參數差異、metrics、Regime、benchmark 與正規化 equity 交集比較）
+- strategy promote gate 改為讀取 registry，不只讀單次 summary。（M2-C 已完成；以 Registry run 為來源，採 JSON Strategy Version 補償交易與 reconciliation 掃描）
 
 驗收標準：
 
 - 任一 promoted strategy 都能追溯到當時資料、參數、成本模型與結果。（M2-C Gate 已完成服務層 gate 與補償 / reconciliation 防線）
-- 至少能比較 3 個策略版本或 3 組參數的 OOS 指標。（M2-C Gate 已完成第一版；比較 UI 支援 2-5 個 run，並禁止 incompatible run 被排序成優劣）
+- 至少能比較 3 個策略版本或 3 組參數的 OOS 指標。（M2-C Gate 已完成；比較 UI 支援 2-5 個 run，並禁止 incompatible run 被排序成優劣）
 - 任一推薦或策略研究 run 都能還原當時的指標參數與權重版本。（M2-A / M2-B 已完成，M2-C 已補上比較與 promote 驗收）
 
 ### Month 3：Factor Layer v1
@@ -215,12 +217,11 @@
 
 ## 5. 立即待辦清單
 
-1. Fixed / quantile walk-forward 實證已完成；Research Run Registry 已承接 Cross-run comparison 與已保存 benchmark-relative attribution。
-2. 大表格分頁 (SQLite 穩定分頁) 與規格化報告 (Excel 報告匯出) 已完成，PDF 仍在後續。
-3. Research Run Registry immutable save、Cross-run comparison 與 registry-based promote gate 已完成第一版。
-4. 定義 Factor Contract，不先接營收與法人。
-5. 更新 `system_architecture.md` 已完成。
-6. 依 [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) 關閉所有已完成的舊 Roadmap 移交項目。
+1. 定義 Factor Contract，不先接營收與法人。
+2. 設計 Factor DTO / registry / scoring adapter，先包裝技術、量能與券商分點。
+3. 保持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
+4. 大表格分頁 (SQLite 穩定分頁) 與規格化報告 (Excel 報告匯出) 已完成；PDF 報告輸出仍在後續研究輸出 backlog。
+5. 依 [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) 維持 Carryover Gate 證據，不把已關閉項目重新列為進行中。
 
 ---
 

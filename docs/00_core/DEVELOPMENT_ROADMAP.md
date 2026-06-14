@@ -41,7 +41,7 @@
 - 三個產品閉環的基礎與主要深化已完成。
 - Strategy & Scoring Governance 增量 A / B 與 10 檔 fixed / quantile OOS 實證已完成；交易樣本與 Regime coverage Gate 通過，quantile 未優於 fixed 並維持 opt-in。
 - Phase 5 已完成圖表渲染優化、批次回測並行化、大表格分頁與 Excel 報告；PDF 仍待後續。
-- Month 2 M2-B Research Run Registry 基礎保存已完成：schema、immutable save、crash reconciliation、legacy backfill 與 UI 保存入口已落地。M2-C 已完成 Comparability Service、Registry 比較子頁與 Registry-based Promote Gate；仍需最終文件與完整 Gate 收尾。
+- Month 2 M2-A / M2-B / M2-C 與 final registry governance gate 已完成：參數與權重契約、Research Run Registry 基礎保存、Comparability Service、Registry 比較子頁、Registry-based Promote Gate、補償 / reconciliation 防線與文件收尾均已落地。
 - Portfolio 已具備策略/價格監控、停損停利警示、籌碼監控與 Smart Money 下鑽。
 - 後續要提升「準確度」必須先建立實證比較、factor attribution、資料因子層與實驗治理，不應直接把新資料硬塞進 scoring engine。
 
@@ -58,17 +58,16 @@
    - Fixed 57 筆、quantile 79 筆交易與 100% Regime coverage 通過 Gate。
    - Quantile 未優於 fixed，維持 opt-in，不宣稱改善績效或穩健度。
 
-2. **P1：Month 2 M2-C 最終驗證收尾**
-   - Cross-run Comparability Service、Registry 比較子頁與 Registry-based Promote Gate 已完成。
-   - 下一步完成 M2-C 文件、手動 Gate 與完整 QA。
+2. **P1：Month 3 Factor Contract / Factor Layer 前置**
+   - Month 2 Registry governance gate 已關閉。
+   - 下一步定義 Factor DTO / registry / scoring adapter 契約，先包裝技術、量能與券商分點，不直接接營收與法人。
 
 3. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續。
 
-4. **P3：文件治理收尾**
-   - 依 [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) 完成逐項移交。
-   - 確保 Snapshot、6M Roadmap、Architecture、Index、Agent 指引一致。
-   - 清理仍引用舊 Phase / 舊 UI 路徑的 Active 文件並補齊全功能 Manual。
+4. **P3：文件治理持續檢查**
+   - Snapshot、6M Roadmap、Architecture、Index、Agent 指引已採 Scoped SSOT；後續功能變更需依 Coverage Map 同步更新入口摘要。
+   - 清理仍引用舊 Phase / 舊 UI 路徑的 Active 文件，並維持 Manual completeness Gate。
 
 ---
 

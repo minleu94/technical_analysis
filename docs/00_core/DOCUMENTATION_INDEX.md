@@ -193,7 +193,7 @@
 ## 目前開發狀態
 
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
-- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-B 基礎保存、M2-C Comparability Service、Registry 比較子頁與 Registry-based Promote Gate 已完成，後續進入 M2-C 最終驗證收尾。
+- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成，後續轉向 Month 3 Factor Contract / Factor Layer 前置。
 - **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，包含 Research Run Registry、Factor Layer、營收與估值、三大法人、Portfolio 回饋閉環。
 - **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
@@ -233,9 +233,10 @@
 - 2026-06-14：完成舊測試治理，將歷史網路／真實路徑／互動式腳本移至 `tests/manual/`，以現行 `TWStockConfig`、`DataLoader` 與分析 API 重建正式契約；pytest 完整收集與 `344` 項測試通過。
 - 2026-06-14：新增並 review 量化精度與未來函數一鍵式靜態檢測工具、SQLite/Git MCP 與 `auto_state_sync.py`；補強 fail-closed、SQLite 強制唯讀、Git 輸出限制及 Codex / Antigravity 雙端註冊。
 - 2026-06-14：新增 Month 2 參數與研究儲存治理總控實作計畫，拆分 M2-A、M2-B、M2-C Gate 並記錄目前 M2-A 修復狀態。
-- 2026-06-14：完成 Month 2 M2-B Research Run Registry 基礎保存：新增 SQLite metadata / Parquet 明細 / hash integrity / crash reconciliation / legacy backfill，並將 Research Lab「保存結果」入口改由 `ResearchRunService` 負責；M2-C Cross-run Comparison 與 Registry-based Promote Gate 仍待使用者核准。
+- 2026-06-14：完成 Month 2 M2-B Research Run Registry 基礎保存：新增 SQLite metadata / Parquet 明細 / hash integrity / crash reconciliation / legacy backfill，並將 Research Lab「保存結果」入口改由 `ResearchRunService` 負責。
 - 2026-06-14：完成 Month 2 M2-C Cross-run Comparison 第一段：新增 `ResearchRunComparisonService`，並在 Research Lab 掛入「Registry 比較」子頁，支援篩選、分頁、2 至 5 run 多選、comparability badge、參數差異、normalized equity、metrics、Regime 與保存 benchmark 檢視。
 - 2026-06-14：完成 Month 2 M2-C Registry-based Promote Gate：promotion 改可讀取 Registry run，新增策略版本 JSON 原子寫入、Registry 回填失敗補償刪除與 reconciliation 掃描，避免 SQLite/JSON 狀態不一致被靜默忽略。
+- 2026-06-14：完成 Month 2 final registry governance gate 文件收尾，確認 M2-C 不再列為當前待辦，下一步轉向 Factor Contract / Factor Layer 前置。
 
 
 

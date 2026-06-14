@@ -23,7 +23,7 @@
 | 推薦系統參數改進 | 已完成 | Month 2「參數與權重治理」 | 推薦技術、圖形、量能權重已建立可版本化 Recommendation Weight Contract，並可保存到 Research Run。 |
 | 完整測試與穩定性驗證 | 已完成 | Month 2 Registry | 2026-06-14 已完成 10 檔個股 OOS 比較、資料版本/成本/成交假設鎖定實證；並完成 Unified Research Run Registry 實作、hash integrity、crash reconciliation、UI 保存、比較 UI、promotion gate 與完整驗證。 |
 | 大表格分頁 | 已完成 | Month 1「Phase 5 最小可用輸出」 | 已完成 SQLite Inspector 穩定分頁查詢與 UI 頁碼控制，解決大量資料載入 UI 假死。 |
-| 匯出研究報告（Excel / PDF） | 部分完成 | Month 1「Phase 5 最小可用輸出」 | Excel 報告匯出與資料完整性/追溯元數據已完成，背景 TaskWorker + 原子寫入防護；PDF 移交 Month 2+。 |
+| 匯出研究報告（Excel / PDF） | 部分完成 | Month 1「Phase 5 最小可用輸出」；PDF 移交 Month 3 之後的研究輸出 backlog | Excel 報告匯出與資料完整性/追溯元數據已完成，背景 TaskWorker + 原子寫入防護；PDF 尚未完成，後續驗收需具備同等元數據、資料完整性區域與非阻塞匯出防護。 |
 | 回測結果摘要模板 | 已完成 | Month 1「Phase 5 最小可用輸出」 | Excel 報告中已包含完整元數據與資料完整性檢核區域。 |
 
 ## 3. 舊 Roadmap current section 的後續工作

@@ -1,6 +1,6 @@
 # 台股技術分析系統
 
-> **最後整理**：2026-06-13
+> **最後整理**：2026-06-14
 > **目前主線**：三個產品閉環已建立，進入 6 個月工程路線與實證治理階段
 > **主要入口**：`ui_qt/main.py`
 
@@ -9,14 +9,14 @@
 ## 目前狀態
 
 - 資料與市場狀態閉環：已完成 SQLite-first 更新、Market Watch、Smart Money 與候選池串接。
-- 研究驗證閉環：已完成 Recommendation、Research Lab、Backtest、Replay、Walk-forward、Promote 與 Strategy & Scoring Governance 機制回歸。
+- 研究驗證閉環：已完成 Recommendation、Research Lab、Backtest、Replay、Walk-forward、Promote、Strategy & Scoring Governance 實證、Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate。
 - 持倉檢查閉環：已完成 Portfolio、來源追溯、策略與價格監控、停損停利警示、籌碼監控與 Smart Money 下鑽。
 - AI Runtime Subsystem MVP：已完成。
 - UI Qt Backtest chart rendering：已完成 QtWebEngine + HTML5 Canvas fast renderer，回測圖表保留 Matplotlib fallback。
 - Recommendation Portfolio Backtest MVP：已完成，可從推薦 Tab 將 Profile/Config 送到回測 Tab，在歷史日期重播推薦邏輯。
 - 數據更新工作台：已完成左側導覽工作台重整，新增快速/安全更新分流。
 - Codex / Agent 指引：已新增根目錄 `AGENTS.md`，`docs/agents/` 已對齊目前 `ui_qt` 與資料路徑規則。
-- 當前 P0：5 檔 fixed / quantile pilot 已保存，但 fixed 無 OOS 交易且缺 regime 分層；正式實證驗收前 quantile 維持 opt-in。
+- 當前 P0：10 檔 fixed / quantile OOS 實證已完成；fixed 57 筆、quantile 79 筆與 100% Regime coverage 通過 Gate，但 quantile 未優於 fixed，維持 opt-in。Month 2 Registry governance gate 已完成，下一步轉向 Month 3 Factor Contract / Factor Layer 前置。
 
 目前狀態以 [docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md) 為準；未來 6 個月工程路線以 [docs/00_core/ROADMAP_6M_ENGINEERING.md](docs/00_core/ROADMAP_6M_ENGINEERING.md) 為準。
 
