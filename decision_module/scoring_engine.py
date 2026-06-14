@@ -6,6 +6,8 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
+from decimal import Decimal
+from decision_module.weight_contract import RecommendationWeightContract, LegacyWeightMigrationAdapter
 
 class ScoringEngine:
     """統一打分引擎"""
@@ -17,8 +19,8 @@ class ScoringEngine:
     def calculate_total_score(self, df: pd.DataFrame, config: Dict, regime: str = None, regime_match: bool = None) -> pd.DataFrame:
         """計算總分（含 Regime Match Factor）
         
-        TotalScore = W_pattern * PatternScore + W_indicator * IndicatorScore + W_volume * VolumeScore
-        FinalScore = TotalScore * RegimeMatchFactor
+        TotalScore = (W_pattern * PatternScore + W_indicator * IndicatorScore + W_volume * VolumeScore) / 10000
+        FinalScore = TotalScore * RegimeMatchFactor (不再乘倍率，改用權重調整)
         
         Args:
             df: 股票數據DataFrame（已包含技術指標）
@@ -31,53 +33,106 @@ class ScoringEngine:
         """
         df_result = df.copy()
         
-        # 獲取權重（自動normalize）
-        weights = self._normalize_weights(config.get('signals', {}).get('weights', {}))
+        # 1. 獲取並驗證權重 (整數 bp 契約)
+        base_weights_raw = config.get('signals', {}).get('weights') or config.get('weights')
+        if not base_weights_raw:
+            bp_weights = RecommendationWeightContract.DEFAULT_WEIGHTS
+        else:
+            # 判斷是否需要進行舊版 float 遷移
+            is_float = any(isinstance(v, float) and v <= 1.0 for v in base_weights_raw.values())
+            if is_float:
+                bp_weights = LegacyWeightMigrationAdapter.migrate_float_to_bp(base_weights_raw)
+            else:
+                bp_weights = RecommendationWeightContract.validate_and_enforce(base_weights_raw)
+                
+        # 建立權重契約以確保合規
+        contract = RecommendationWeightContract(bp_weights)
+        weights_to_use = contract.weights
         
-        # 計算各項分數（傳遞 regime 信息）
+        # 2. 計算各項分數 (0-100)
         indicator_score = self.calculate_indicator_score(df_result, config, regime=regime)
         pattern_score = self.calculate_pattern_score(df_result, config)
         volume_score = self.calculate_volume_score(df_result, config)
         
-        # 計算總分
         df_result['IndicatorScore'] = indicator_score
         df_result['PatternScore'] = pattern_score
         df_result['VolumeScore'] = volume_score
         
-        df_result['TotalScore'] = (
-            weights['pattern'] * pattern_score +
-            weights['technical'] * indicator_score +
-            weights['volume'] * volume_score
-        )
-        
-        # Regime 權重切換（不再使用倍率，改用權重調整）
-        # 根據 Regime 調整權重，而不是乘以倍率
+        # 3. 處理 Regime 調整
         if regime:
-            # 自動判斷是否匹配
             if regime_match is None:
                 df_result['RegimeMatch'] = self._check_regime_match(df_result, regime, config)
             else:
                 df_result['RegimeMatch'] = pd.Series(regime_match, index=df_result.index)
-            
-            # 根據 Regime 調整權重（而不是倍率）
-            regime_weights = self._get_regime_weights(regime, weights)
-            
-            # 重新計算總分（使用 Regime 權重）
-            df_result['TotalScore'] = (
-                regime_weights['pattern'] * pattern_score +
-                regime_weights['technical'] * indicator_score +
-                regime_weights['volume'] * volume_score
-            )
-            
-            # FinalScore = TotalScore（不再使用倍率）
-            df_result['FinalScore'] = df_result['TotalScore']
+                
+            # 計算調整後的 Regime 權重 (也是合規的 10000 bp 契約)
+            adjusted_dict = self._get_regime_weights(regime, weights_to_use)
+            adjusted_contract = RecommendationWeightContract(adjusted_dict)
+            weights_to_use = adjusted_contract.weights
         else:
-            # 沒有 Regime 信息，FinalScore = TotalScore
-            df_result['FinalScore'] = df_result['TotalScore']
             df_result['RegimeMatch'] = True
+            
+        # 4. 計算總分 (以整數 bp 權重乘，最後除以 10000，保障數值防禦契約)
+        # 先將各項分數轉為 Decimal 類型的 Series，徹底消除裸 float 運算
+        dec_pattern = pattern_score.apply(lambda x: Decimal(str(x)) if not pd.isna(x) else Decimal('NaN'))
+        dec_indicator = indicator_score.apply(lambda x: Decimal(str(x)) if not pd.isna(x) else Decimal('NaN'))
+        dec_volume = volume_score.apply(lambda x: Decimal(str(x)) if not pd.isna(x) else Decimal('NaN'))
+        
+        w_pattern = Decimal(str(weights_to_use['pattern']))
+        w_tech = Decimal(str(weights_to_use['technical']))
+        w_vol = Decimal(str(weights_to_use['volume']))
+        
+        total_score_dec = (
+            w_pattern * dec_pattern +
+            w_tech * dec_indicator +
+            w_vol * dec_volume
+        ) / Decimal('10000')
+        
+        df_result['TotalScore'] = total_score_dec
+        df_result['FinalScore'] = total_score_dec
         
         return df_result
     
+    def _normalize_to_10000_bp(self, raw_weights: Dict[str, Decimal]) -> Dict[str, int]:
+        """將任意 Decimal 權重字典正規化為總和嚴格等於 10000 bp 的整數字典
+        使用最大餘額法 (Largest Remainder Method)，同分餘額按 key 字母順序排序
+        """
+        from decimal import Decimal
+        import math
+        
+        total_raw = sum(raw_weights.values())
+        if total_raw == Decimal('0'):
+            return {'pattern': 3000, 'technical': 5000, 'volume': 2000}
+            
+        factor = Decimal('10000')
+        exact_vals = {}
+        floor_ints = {}
+        remainders = {}
+        
+        # 1. 計算精確值與向下取整值
+        for k, v in raw_weights.items():
+            exact_val = (v / total_raw) * factor
+            exact_vals[k] = exact_val
+            floor_int = math.floor(exact_val)
+            floor_ints[k] = floor_int
+            remainders[k] = exact_val - Decimal(str(floor_int))
+            
+        sum_floor = sum(floor_ints.values())
+        diff = 10000 - sum_floor
+        
+        # 2. 將差額依照 (餘額降序, key 字母升序) 排序分配 1 bp
+        sorted_keys = sorted(
+            raw_weights.keys(),
+            key=lambda k: (-remainders[k], k)
+        )
+        
+        bp_weights = floor_ints.copy()
+        for i in range(diff):
+            k = sorted_keys[i % len(sorted_keys)]
+            bp_weights[k] += 1
+            
+        return bp_weights
+
     def _get_regime_weights(self, regime: str, base_weights: Dict) -> Dict:
         """根據 Regime 調整權重
         
@@ -88,41 +143,34 @@ class ScoringEngine:
         Returns:
             Dict: 調整後的權重字典
         """
+        from decimal import Decimal
         # 複製基礎權重
-        regime_weights = base_weights.copy()
+        base_dict = base_weights.copy()
         
-        # 根據不同 Regime 調整權重
+        # 根據不同 Regime 調整權重 (採用 Decimal 乘法防範裸 float 運算)
         if regime == 'Trend':
-            # Trend 策略：重視技術指標和成交量
-            regime_weights = {
-                'pattern': base_weights.get('pattern', 0.3) * 0.8,  # 降低圖形權重
-                'technical': base_weights.get('technical', 0.5) * 1.2,  # 提高技術指標權重
-                'volume': base_weights.get('volume', 0.2) * 1.0
+            raw_weights = {
+                'pattern': Decimal(str(base_dict.get('pattern', 3000))) * Decimal('0.8'),
+                'technical': Decimal(str(base_dict.get('technical', 5000))) * Decimal('1.2'),
+                'volume': Decimal(str(base_dict.get('volume', 2000))) * Decimal('1.0')
             }
         elif regime == 'Reversion':
-            # Reversion 策略：重視圖形模式
-            regime_weights = {
-                'pattern': base_weights.get('pattern', 0.3) * 1.3,  # 提高圖形權重
-                'technical': base_weights.get('technical', 0.5) * 0.9,  # 降低技術指標權重
-                'volume': base_weights.get('volume', 0.2) * 0.8
+            raw_weights = {
+                'pattern': Decimal(str(base_dict.get('pattern', 3000))) * Decimal('1.3'),
+                'technical': Decimal(str(base_dict.get('technical', 5000))) * Decimal('0.9'),
+                'volume': Decimal(str(base_dict.get('volume', 2000))) * Decimal('0.8')
             }
         elif regime == 'Breakout':
-            # Breakout 策略：重視成交量和技術指標
-            regime_weights = {
-                'pattern': base_weights.get('pattern', 0.3) * 1.0,
-                'technical': base_weights.get('technical', 0.5) * 1.1,
-                'volume': base_weights.get('volume', 0.2) * 1.4  # 大幅提高成交量權重
+            raw_weights = {
+                'pattern': Decimal(str(base_dict.get('pattern', 3000))) * Decimal('1.0'),
+                'technical': Decimal(str(base_dict.get('technical', 5000))) * Decimal('1.1'),
+                'volume': Decimal(str(base_dict.get('volume', 2000))) * Decimal('1.4')
             }
         else:
             # 未知 Regime，使用基礎權重
-            regime_weights = base_weights
-        
-        # 正規化權重（確保總和為 1）
-        total = sum(regime_weights.values())
-        if total > 0:
-            regime_weights = {k: v / total for k, v in regime_weights.items()}
-        
-        return regime_weights
+            return base_dict
+            
+        return self._normalize_to_10000_bp(raw_weights)
     
     def _check_regime_match(self, df: pd.DataFrame, regime: str, config: Dict) -> pd.Series:
         """檢查股票行為是否匹配市場狀態
@@ -181,13 +229,14 @@ class ScoringEngine:
         
         return match
     
-    def _normalize_weights(self, weights: Dict) -> Dict:
-        """正規化權重，確保總和為1.0"""
-        total = sum(weights.values())
-        if total == 0:
-            # 預設權重
-            return {'pattern': 0.3, 'technical': 0.5, 'volume': 0.2}
-        return {k: v / total for k, v in weights.items()}
+    def _normalize_weights(self, weights: Dict) -> Dict[str, int]:
+        """驗證並確保權重為合規的整數 bp"""
+        if not weights:
+            return RecommendationWeightContract.DEFAULT_WEIGHTS.copy()
+        is_float = any(isinstance(v, float) and v <= 1.0 for v in weights.values())
+        if is_float:
+            return LegacyWeightMigrationAdapter.migrate_float_to_bp(weights)
+        return RecommendationWeightContract.validate_and_enforce(weights)
     
     def calculate_indicator_score(self, df: pd.DataFrame, config: Dict, regime: str = None) -> pd.Series:
         """計算技術指標分數（0-100）

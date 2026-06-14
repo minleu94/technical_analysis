@@ -65,7 +65,7 @@
 
 1. Strategy & Scoring Governance 實證：10 檔、每檔 8 個 OOS fold 已完成；fixed 57 筆、quantile 79 筆與 100% Regime coverage 均通過 Gate，但 quantile 未優於 fixed，維持 opt-in。
 2. Legacy Carryover Month 1：Walk-forward 實證、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 仍待後續。
-3. Legacy Carryover Month 2：完成 Indicator Parameter Registry、Recommendation Weight Contract 與 Research Run Registry。
+3. Legacy Carryover Month 2：M2-A 參數與權重契約治理未通過，修復進行中。
 
 ## 高風險區（改動需謹慎）
 

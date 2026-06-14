@@ -12,6 +12,8 @@ from analysis_module import (
     MLAnalyzer
 )
 from decision_module.scoring_engine import ScoringEngine
+from decision_module.indicator_parameter_registry import InvalidParameterError
+from decision_module.weight_contract import InvalidWeightError, WeightMigrationError
 
 class StrategyConfigurator:
     """策略配置器，整合所有分析功能"""
@@ -30,64 +32,76 @@ class StrategyConfigurator:
             '三角形', '旗形', 'V形反轉', '圓頂', '圓底', '矩形', '楔形'
         ]
     
-    def configure_technical_indicators(self, df, config):
+    def configure_technical_indicators(self, df, config, full_config=None):
         """配置技術指標
         
         Args:
             df: 股票數據DataFrame
-            config: 配置字典，格式如下：
-                {
-                    'momentum': {
-                        'enabled': True,
-                        'rsi': {'enabled': True, 'period': 14},
-                        'macd': {'enabled': True, 'fast': 12, 'slow': 26, 'signal': 9},
-                        'kd': {'enabled': False}
-                    },
-                    'volatility': {
-                        'enabled': True,
-                        'bollinger': {'enabled': True, 'window': 20, 'std': 2},
-                        'atr': {'enabled': True, 'period': 14}
-                    },
-                    'trend': {
-                        'enabled': True,
-                        'adx': {'enabled': True, 'period': 14},
-                        'ma': {'enabled': True, 'windows': [5, 10, 20, 60]}
-                    }
-                }
+            config: 配置字典
+            full_config: 完整配置字典
         
         Returns:
             DataFrame: 添加技術指標後的數據
         """
         df_result = df.copy()
         
+        # 解析 schema_version
+        schema_version = 0
+        if full_config and isinstance(full_config, dict):
+            try:
+                schema_version = int(full_config.get('config_schema_version', 0))
+            except (ValueError, TypeError):
+                schema_version = 0
+
+        # 複製配置以防修改呼叫者的字典
+        config_copy = {}
+        if config:
+            for k, v in config.items():
+                if isinstance(v, dict):
+                    config_copy[k] = v.copy()
+                else:
+                    config_copy[k] = v
+
+        for section in ['momentum', 'volatility', 'trend']:
+            if section in config_copy and isinstance(config_copy[section], dict):
+                sub_config = config_copy[section]
+                if 'enabled' not in sub_config:
+                    if schema_version >= 1:
+                        sub_config['enabled'] = True
+                    else:
+                        sub_config['enabled'] = False
+
         try:
-            # 動量指標
-            if config.get('momentum', {}).get('enabled', False):
-                momentum_config = config['momentum']
-                if momentum_config.get('rsi', {}).get('enabled', False):
-                    df_result = self.technical_analyzer.add_momentum_indicators(df_result)
-                if momentum_config.get('macd', {}).get('enabled', False):
-                    df_result = self.technical_analyzer.add_momentum_indicators(df_result)
-                if momentum_config.get('kd', {}).get('enabled', False):
-                    df_result = self.technical_analyzer.add_momentum_indicators(df_result)
+            # 動量指標 (rsi, macd, kd)
+            if config_copy.get('momentum', {}).get('enabled', False):
+                momentum_config = config_copy['momentum']
+                df_result = self.technical_analyzer.add_momentum_indicators(df_result, config=momentum_config, full_config=full_config)
+        except (InvalidParameterError, InvalidWeightError, WeightMigrationError) as e:
+            raise e
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
             logger.debug(f"配置動量指標時發生異常: {str(e)}")
         
         try:
-            # 波動率指標
-            if config.get('volatility', {}).get('enabled', False):
-                df_result = self.technical_analyzer.add_volatility_indicators(df_result)
+            # 波動率指標 (bollinger, sar, atr)
+            if config_copy.get('volatility', {}).get('enabled', False):
+                volatility_config = config_copy['volatility']
+                df_result = self.technical_analyzer.add_volatility_indicators(df_result, config=volatility_config, full_config=full_config)
+        except (InvalidParameterError, InvalidWeightError, WeightMigrationError) as e:
+            raise e
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
             logger.debug(f"配置波動率指標時發生異常: {str(e)}")
         
         try:
-            # 趨勢指標
-            if config.get('trend', {}).get('enabled', False):
-                df_result = self.technical_analyzer.add_trend_indicators(df_result)
+            # 趨勢指標 (tsf, adx, ma)
+            if config_copy.get('trend', {}).get('enabled', False):
+                trend_config = config_copy['trend']
+                df_result = self.technical_analyzer.add_trend_indicators(df_result, config=trend_config, full_config=full_config)
+        except (InvalidParameterError, InvalidWeightError, WeightMigrationError) as e:
+            raise e
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
@@ -298,7 +312,7 @@ class StrategyConfigurator:
                 df = df.sort_values('日期')
             
             # 1. 配置技術指標
-            df = self.configure_technical_indicators(df, config.get('technical', {}))
+            df = self.configure_technical_indicators(df, config.get('technical', {}), full_config=config)
             
             # ✅ 記錄技術指標計算結果
             indicator_cols = [col for col in df.columns if col in ['RSI', 'RSI_14', 'MACD', 'MACD_signal', 'MACD_hist', 
@@ -408,6 +422,8 @@ class StrategyConfigurator:
                         latest_df['成交量變化率%'] = (volume_ratio - 1) * 100
                 else:
                     latest_df['成交量變化率%'] = 0.0
+        except (InvalidParameterError, InvalidWeightError, WeightMigrationError) as e:
+            raise e
         except Exception as e:
             # 記錄異常但不中斷整個流程
             import logging

@@ -218,42 +218,65 @@ class TechnicalIndicatorCalculator:
             self.logger.error(f"預處理股票 {stock_id} 資料時發生錯誤: {str(e)}")
             return None
     
-    def calculate_ma_series(self, df):
+    def calculate_ma_series(self, df, params=None, full_config=None):
         """計算移動平均線系列
         
         Args:
             df: 股票數據DataFrame
+            params: MA 參數字典
+            full_config: 完整配置字典
             
         Returns:
             DataFrame: 添加移動平均線後的DataFrame
         """
+        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             df_result = df.copy()
             close_col = self._get_column_name(df, 'Close')
             
             if close_col:
                 close_prices = np.ascontiguousarray(df[close_col].values, dtype=np.float64)
+                
+                # 預設計算 SMA30, DEMA30, EMA30 用於相容
                 df_result['SMA30'] = talib.SMA(close_prices, timeperiod=30)
                 df_result['DEMA30'] = talib.DEMA(close_prices, timeperiod=30)
                 df_result['EMA30'] = talib.EMA(close_prices, timeperiod=30)
                 
+                # 若 params 不為 None，計算自訂 windows 均線
+                if params is not None:
+                    ma_clean = {k: v for k, v in params.items() if k != 'enabled'}
+                    ma_sanitized = IndicatorParameterRegistry.validate_and_sanitize('ma', ma_clean, full_config)
+                    windows = ma_sanitized['windows']
+                    for w in windows:
+                        df_result[f'MA{w}'] = talib.SMA(close_prices, timeperiod=w)
+                
             return df_result
             
+        except InvalidParameterError as e:
+            raise e
         except Exception as e:
             self.logger.error(f"計算移動平均線時發生錯誤: {str(e)}")
             return df.copy()
     
-    def calculate_momentum_indicators(self, df):
+    def calculate_momentum_indicators(self, df, rsi_params=None, macd_params=None, full_config=None):
         """計算動量指標
         
         Args:
             df: 股票數據DataFrame
+            rsi_params: RSI 參數字典
+            macd_params: MACD 參數字典
+            full_config: 完整配置字典
             
         Returns:
             Dict: 包含動量指標的字典
         """
+        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
+            if rsi_params is None and macd_params is None:
+                rsi_params = {}
+                macd_params = {}
+                
             close_col = self._get_column_name(df, 'Close')
             
             if close_col:
@@ -273,41 +296,63 @@ class TechnicalIndicatorCalculator:
                 
                 close_prices = clean_price_series(df[close_col])
                 
-                # RSI計算
-                rsi = talib.RSI(close_prices, timeperiod=14)
-                result['RSI'] = np.clip(np.nan_to_num(rsi, nan=50.0), 0, 100)
+                # 驗證 RSI 參數並計算
+                if rsi_params is not None:
+                    rsi_clean = {k: v for k, v in rsi_params.items() if k != 'enabled'}
+                    rsi_sanitized = IndicatorParameterRegistry.validate_and_sanitize('rsi', rsi_clean, full_config)
+                    rsi_period = rsi_sanitized['timeperiod']
+                    rsi = talib.RSI(close_prices, timeperiod=rsi_period)
+                    result['RSI'] = np.clip(np.nan_to_num(rsi, nan=50.0), 0, 100)
                 
-                # MACD計算
-                macd, signal, hist = talib.MACD(close_prices, 
-                                           fastperiod=12, 
-                                           slowperiod=26, 
-                                           signalperiod=9)
-                result['MACD'] = macd
-                result['MACD_signal'] = signal
-                result['MACD_hist'] = hist
+                # 驗證 MACD 參數並計算
+                if macd_params is not None:
+                    macd_clean = {k: v for k, v in macd_params.items() if k != 'enabled'}
+                    macd_sanitized = IndicatorParameterRegistry.validate_and_sanitize('macd', macd_clean, full_config)
+                    fast = macd_sanitized['fastperiod']
+                    slow = macd_sanitized['slowperiod']
+                    signal_period = macd_sanitized['signalperiod']
+                    macd, signal, hist = talib.MACD(close_prices, 
+                                               fastperiod=fast, 
+                                               slowperiod=slow, 
+                                               signalperiod=signal_period)
+                    result['MACD'] = macd
+                    result['MACD_signal'] = signal
+                    result['MACD_hist'] = hist
                 
             return result
             
+        except InvalidParameterError as e:
+            raise e
         except Exception as e:
             self.logger.error(f"計算動量指標時發生錯誤: {str(e)}")
             return {}
     
-    def calculate_kd_indicator(self, df):
+    def calculate_kd_indicator(self, df, params=None, full_config=None):
         """計算KD指標
         
         Args:
             df: 股票數據DataFrame
+            params: KD 參數字典
+            full_config: 完整配置字典
             
         Returns:
             Dict: 包含KD指標的字典
         """
+        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
+            if params is None:
+                return result
+                
             high_col = self._get_column_name(df, 'High')
             low_col = self._get_column_name(df, 'Low')
             close_col = self._get_column_name(df, 'Close')
             
             if high_col and low_col and close_col:
+                # 驗證 KD 參數
+                kd_clean = {k: v for k, v in params.items() if k != 'enabled'}
+                sanitized = IndicatorParameterRegistry.validate_and_sanitize('kd', kd_clean, full_config)
+                
                 # 清理價格序列（處理 '--' 和其他無效值）
                 def clean_price_series(series):
                     """清理價格序列"""
@@ -329,58 +374,72 @@ class TechnicalIndicatorCalculator:
                 slowk, slowd = talib.STOCH(high_prices, 
                                       low_prices, 
                                       close_prices,
-                                      fastk_period=5, 
-                                      slowk_period=3, 
-                                      slowk_matype=0,
-                                      slowd_period=3, 
-                                      slowd_matype=0)
+                                      fastk_period=sanitized['fastk_period'], 
+                                      slowk_period=sanitized['slowk_period'], 
+                                      slowk_matype=sanitized['slowk_matype'],
+                                      slowd_period=sanitized['slowd_period'], 
+                                      slowd_matype=sanitized['slowd_matype'])
                                      
                 result['slowk'] = np.clip(np.nan_to_num(slowk, nan=50.0), 0, 100)
                 result['slowd'] = np.clip(np.nan_to_num(slowd, nan=50.0), 0, 100)
                 
             return result
             
+        except InvalidParameterError as e:
+            raise e
         except Exception as e:
             self.logger.error(f"計算KD指標時發生錯誤: {str(e)}")
             return {}
     
-    def calculate_volatility_indicators(self, df):
+    def calculate_volatility_indicators(self, df, bollinger_params=None, sar_params=None, full_config=None):
         """計算波動指標
         
         Args:
             df: 股票數據DataFrame
+            bollinger_params: 布林通道參數字典
+            sar_params: SAR 參數字典
+            full_config: 完整配置字典
             
         Returns:
             Dict: 包含波動指標的字典
         """
+        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
+            if bollinger_params is None and sar_params is None:
+                bollinger_params = {}
+                sar_params = {}
+                
             high_col = self._get_column_name(df, 'High')
             low_col = self._get_column_name(df, 'Low')
             close_col = self._get_column_name(df, 'Close')
             
-            if close_col:
+            if close_col and bollinger_params is not None:
                 close_prices = np.ascontiguousarray(df[close_col].values, dtype=np.float64)
                 
-                # 布林通道
+                # 驗證布林通道參數並計算
+                boll_clean = {k: v for k, v in bollinger_params.items() if k != 'enabled'}
+                boll_sanitized = IndicatorParameterRegistry.validate_and_sanitize('bollinger', boll_clean, full_config)
                 upper, middle, lower = talib.BBANDS(close_prices, 
-                                              timeperiod=30,
-                                              nbdevup=2,
-                                              nbdevdn=2,
-                                              matype=0)
+                                              timeperiod=boll_sanitized['timeperiod'],
+                                              nbdevup=boll_sanitized['nbdevup'],
+                                              nbdevdn=boll_sanitized['nbdevdn'],
+                                              matype=boll_sanitized['matype'])
                 result['middleband'] = middle
                 result['upperband'] = upper
                 result['lowerband'] = lower
                 
-            if high_col and low_col:
+            if high_col and low_col and sar_params is not None:
                 high_prices = np.ascontiguousarray(df[high_col].values, dtype=np.float64)
                 low_prices = np.ascontiguousarray(df[low_col].values, dtype=np.float64)
                 
-                # SAR指標
+                # 驗證 SAR 參數並計算
+                sar_clean = {k: v for k, v in sar_params.items() if k != 'enabled'}
+                sar_sanitized = IndicatorParameterRegistry.validate_and_sanitize('sar', sar_clean, full_config)
                 sar = talib.SAR(high_prices,
                            low_prices,
-                           acceleration=0.02,
-                           maximum=0.2)
+                           acceleration=sar_sanitized['acceleration'],
+                           maximum=sar_sanitized['maximum'])
                 
                 if close_col:
                     # 處理SAR的極端值
@@ -393,21 +452,29 @@ class TechnicalIndicatorCalculator:
                 
             return result
             
+        except InvalidParameterError as e:
+            raise e
         except Exception as e:
             self.logger.error(f"計算波動指標時發生錯誤: {str(e)}")
             return {}
     
-    def calculate_trend_indicators(self, df):
+    def calculate_trend_indicators(self, df, tsf_params=None, full_config=None):
         """計算趨勢指標
         
         Args:
             df: 股票數據DataFrame
+            tsf_params: TSF 參數字典
+            full_config: 完整配置字典
             
         Returns:
             Dict: 包含趨勢指標的字典
         """
+        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
+            if tsf_params is None:
+                return result
+                
             close_col = self._get_column_name(df, 'Close')
             
             if close_col:
@@ -427,14 +494,123 @@ class TechnicalIndicatorCalculator:
                 if mask.any():
                     close_prices = pd.Series(close_prices).ffill().bfill().fillna(0.0).values
                 
-                result['TSF'] = talib.TSF(close_prices, timeperiod=14)
+                # 驗證 TSF 參數並計算
+                tsf_clean = {k: v for k, v in tsf_params.items() if k != 'enabled'}
+                tsf_sanitized = IndicatorParameterRegistry.validate_and_sanitize('tsf', tsf_clean, full_config)
+                result['TSF'] = talib.TSF(close_prices, timeperiod=tsf_sanitized['timeperiod'])
                 
             return result
             
+        except InvalidParameterError as e:
+            raise e
         except Exception as e:
             self.logger.error(f"計算趨勢指標時發生錯誤: {str(e)}")
             return {}
-    
+
+    def calculate_atr_indicator(self, df, params=None, full_config=None):
+        """計算 ATR 指標
+        
+        Args:
+            df: 股票數據DataFrame
+            params: ATR 參數字典
+            full_config: 完整配置字典
+            
+        Returns:
+            Dict: 包含 ATR 指標的字典
+        """
+        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        try:
+            result = {}
+            if params is None:
+                return result
+                
+            high_col = self._get_column_name(df, 'High')
+            low_col = self._get_column_name(df, 'Low')
+            close_col = self._get_column_name(df, 'Close')
+            
+            if high_col and low_col and close_col:
+                # 驗證 ATR 參數
+                atr_clean = {k: v for k, v in params.items() if k != 'enabled'}
+                sanitized = IndicatorParameterRegistry.validate_and_sanitize('atr', atr_clean, full_config)
+                timeperiod = sanitized['timeperiod']
+                
+                def clean_price_series(series):
+                    if series.dtype == 'object':
+                        series = series.replace(['--', '', 'nan', 'NaN', 'None'], np.nan)
+                        series = pd.to_numeric(series, errors='coerce')
+                    prices = np.ascontiguousarray(series.values, dtype=np.float64)
+                    mask = np.isnan(prices)
+                    if mask.any():
+                        prices = pd.Series(prices).ffill().bfill().fillna(0.0).values
+                    return prices
+                
+                high_prices = clean_price_series(df[high_col])
+                low_prices = clean_price_series(df[low_col])
+                close_prices = clean_price_series(df[close_col])
+                
+                atr = talib.ATR(high_prices, low_prices, close_prices, timeperiod=timeperiod)
+                result['ATR'] = np.nan_to_num(atr, nan=0.0)
+                
+            return result
+            
+        except InvalidParameterError as e:
+            raise e
+        except Exception as e:
+            self.logger.error(f"計算 ATR 指標時發生錯誤: {str(e)}")
+            return {}
+
+    def calculate_adx_indicator(self, df, params=None, full_config=None):
+        """計算 ADX 指標
+        
+        Args:
+            df: 股票數據DataFrame
+            params: ADX 參數字典
+            full_config: 完整配置字典
+            
+        Returns:
+            Dict: 包含 ADX 指標的字典
+        """
+        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        try:
+            result = {}
+            if params is None:
+                return result
+                
+            high_col = self._get_column_name(df, 'High')
+            low_col = self._get_column_name(df, 'Low')
+            close_col = self._get_column_name(df, 'Close')
+            
+            if high_col and low_col and close_col:
+                # 驗證 ADX 參數
+                adx_clean = {k: v for k, v in params.items() if k != 'enabled'}
+                sanitized = IndicatorParameterRegistry.validate_and_sanitize('adx', adx_clean, full_config)
+                timeperiod = sanitized['timeperiod']
+                
+                def clean_price_series(series):
+                    if series.dtype == 'object':
+                        series = series.replace(['--', '', 'nan', 'NaN', 'None'], np.nan)
+                        series = pd.to_numeric(series, errors='coerce')
+                    prices = np.ascontiguousarray(series.values, dtype=np.float64)
+                    mask = np.isnan(prices)
+                    if mask.any():
+                        prices = pd.Series(prices).ffill().bfill().fillna(0.0).values
+                    return prices
+                
+                high_prices = clean_price_series(df[high_col])
+                low_prices = clean_price_series(df[low_col])
+                close_prices = clean_price_series(df[close_col])
+                
+                adx = talib.ADX(high_prices, low_prices, close_prices, timeperiod=timeperiod)
+                result['ADX'] = np.nan_to_num(adx, nan=0.0)
+                
+            return result
+            
+        except InvalidParameterError as e:
+            raise e
+        except Exception as e:
+            self.logger.error(f"計算 ADX 指標時發生錯誤: {str(e)}")
+            return {}
+            
     def validate_indicator_results(self, df):
         """驗證指標計算結果
         
@@ -464,7 +640,7 @@ class TechnicalIndicatorCalculator:
         except Exception as e:
             self.logger.error(f"驗證指標結果時發生錯誤: {str(e)}")
             return df.copy()
-    
+            
     def calculate_all_indicators(self, df, stock_id=None):
         """計算所有技術指標
         
@@ -483,31 +659,31 @@ class TechnicalIndicatorCalculator:
                 
             # 2. 計算各類指標
             # 計算移動平均線
-            ma_result = self.calculate_ma_series(df_result)
+            ma_result = self.calculate_ma_series(df_result, params={})
             if not isinstance(ma_result, pd.DataFrame):
                 return None
             df_result = ma_result
             
             # 計算動量指標
-            momentum_indicators = self.calculate_momentum_indicators(df_result)
+            momentum_indicators = self.calculate_momentum_indicators(df_result, rsi_params={}, macd_params={})
             if momentum_indicators:
                 for key, value in momentum_indicators.items():
                     df_result[key] = value
             
             # 計算KD指標
-            kd_indicators = self.calculate_kd_indicator(df_result)
+            kd_indicators = self.calculate_kd_indicator(df_result, params={})
             if kd_indicators:
                 for key, value in kd_indicators.items():
                     df_result[key] = value
             
             # 計算波動指標
-            volatility_indicators = self.calculate_volatility_indicators(df_result)
+            volatility_indicators = self.calculate_volatility_indicators(df_result, bollinger_params={}, sar_params={})
             if volatility_indicators:
                 for key, value in volatility_indicators.items():
                     df_result[key] = value
             
             # 計算趨勢指標
-            trend_indicators = self.calculate_trend_indicators(df_result)
+            trend_indicators = self.calculate_trend_indicators(df_result, tsf_params={})
             if trend_indicators:
                 for key, value in trend_indicators.items():
                     df_result[key] = value
