@@ -41,7 +41,7 @@
 - 三個產品閉環的基礎與主要深化已完成。
 - Strategy & Scoring Governance 增量 A / B 與 10 檔 fixed / quantile OOS 實證已完成；交易樣本與 Regime coverage Gate 通過，quantile 未優於 fixed 並維持 opt-in。
 - Phase 5 已完成圖表渲染優化、批次回測並行化、大表格分頁與 Excel 報告；PDF 仍待後續。
-- Month 2 M2-B Research Run Registry 基礎保存已完成：schema、immutable save、crash reconciliation、legacy backfill 與 UI 保存入口已落地；Cross-run Comparison / Registry-based Promote 尚待 M2-C。
+- Month 2 M2-B Research Run Registry 基礎保存已完成：schema、immutable save、crash reconciliation、legacy backfill 與 UI 保存入口已落地。M2-C 已完成 Comparability Service 與 Registry 比較子頁；Registry-based Promote 尚待後續。
 - Portfolio 已具備策略/價格監控、停損停利警示、籌碼監控與 Smart Money 下鑽。
 - 後續要提升「準確度」必須先建立實證比較、factor attribution、資料因子層與實驗治理，不應直接把新資料硬塞進 scoring engine。
 
@@ -58,9 +58,9 @@
    - Fixed 57 筆、quantile 79 筆交易與 100% Regime coverage 通過 Gate。
    - Quantile 未優於 fixed，維持 opt-in，不宣稱改善績效或穩健度。
 
-2. **P1：Month 2 Research Run Registry 收尾**
-   - M2-B 文件與完整驗證完成後，等待使用者核准。
-   - 核准後才開始 M2-C Cross-run Comparison 與 Registry-based Promote Gate。
+2. **P1：Month 2 Registry-based Promote Gate**
+   - Cross-run Comparability Service 與 Registry 比較子頁已完成。
+   - 下一步完成 Registry-based Promote Gate 與 SQLite/JSON reconciliation。
 
 3. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續。

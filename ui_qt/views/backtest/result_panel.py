@@ -16,6 +16,7 @@ from ui_qt.widgets.fast_chart_widget import (
     create_holding_days_histogram_widget,
     create_trade_return_histogram_widget,
 )
+from ui_qt.views.research_lab.run_registry_compare_widget import RunRegistryCompareWidget
 
 
 class BacktestResultPanel(QWidget):
@@ -318,3 +319,20 @@ class BacktestResultPanel(QWidget):
         self.result_tabs.addTab(recommendation_portfolio_tab, "推薦回放")
         
         layout.addWidget(self.result_tabs)
+
+        if getattr(self.parent_view, "research_run_service", None):
+            self.add_registry_compare_tab()
+
+    def add_registry_compare_tab(self):
+        """將 Research Run Registry 比較頁掛入既有 Research Lab 結果分頁。"""
+        existing = getattr(self, "run_registry_compare_widget", None)
+        if existing is not None:
+            return existing
+
+        service = getattr(self.parent_view, "research_run_service", None)
+        if service is None:
+            return None
+
+        self.run_registry_compare_widget = RunRegistryCompareWidget(service)
+        self.result_tabs.addTab(self.run_registry_compare_widget, "Registry 比較")
+        return self.run_registry_compare_widget

@@ -308,6 +308,10 @@ class BacktestView(QWidget):
         return self.result_panel.compare_table
 
     @property
+    def run_registry_compare_widget(self):
+        return self.result_panel.run_registry_compare_widget
+
+    @property
     def batch_sort_combo(self):
         return self.result_panel.batch_sort_combo
 

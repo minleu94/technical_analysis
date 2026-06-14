@@ -413,7 +413,8 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - 實驗摘要：績效摘要與交易明細。
 - 圖表：權益、回撤、報酬分布、持有天數。
 - 最佳化 / 驗證：參數掃描與 Walk-forward。
-- 歷史與比較：載入、刪除與比較 legacy 已保存結果；完整 Research Run Registry Cross-run Comparison 仍待 M2-C。
+- 歷史與比較：載入、刪除與比較 legacy 已保存結果。
+- Registry 比較：列出 Research Run Registry 中的 run，可依 run type、strategy、tag 篩選並分頁瀏覽；選取 2 至 5 個 run 後顯示 comparability badge、參數差異、normalized equity、metrics、Regime 與已保存 benchmark 結果。
 - 批次結果：排行榜與整體統計，雙擊股票可載入明細。
 - 推薦回放：組合價值、回撤、期間持倉、股票貢獻與交易。
 
@@ -423,7 +424,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - 在「推薦回放」設有「匯出回放 Excel」按鈕（僅在推薦組合回測成功後啟用）。
 - **安全設計**：所有匯出皆在背景線程（`TaskWorker`）執行，防止 UI 卡死，並採用臨時檔寫入後 `os.replace` 原子替換；替換失敗時既有報告保持不變。報告使用執行結果與參數快照，不重跑策略或摘要績效；equity curve 可接受 `日期`、`date` 或日期 index。若元數據缺失，會在「資料完整性」警示中標示 `N/A`，不以目前 UI 值或預設常數代填。
 
-目前歷史比較不是完整 Research Run Registry 的 Cross-run Comparison；後者仍在 Month 2 M2-C Roadmap，需等使用者核准後才開始。
+Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為 Incompatible；期間、Universe 或成本不同時標示為 Caution，不應直接做優劣排名。Registry-based Promote Gate 仍待 M2-C 後續任務完成。
 
 ### 8.10 推薦回放
 

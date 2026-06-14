@@ -848,10 +848,10 @@ Incompatible
 **Files:**
 - Create: `ui_qt/views/research_lab/run_registry_compare_widget.py`
 - Modify: `ui_qt/views/backtest_view.py`
-- Modify: `ui_qt/views/backtest/config_panel.py`
+- Modify: `ui_qt/views/backtest/result_panel.py`
 - Test: `tests/test_ui_qt_run_registry_compare.py`
 
-- [ ] **Step 1: 新增子 Tab，不新增頂層 Tab**
+- [x] **Step 1: 新增子 Tab，不新增頂層 Tab**
 
 功能：
 
@@ -863,9 +863,11 @@ Incompatible
 - normalized equity chart。
 - metrics、Regime、benchmark comparison。
 
-- [ ] **Step 2: stale request 防護**
+- [x] **Step 2: stale request 防護**
 
 沿用 request ID 模式，舊背景查詢不得覆蓋最新結果。
+
+驗證證據（2026-06-14）：`.\.venv\Scripts\python.exe -m pytest tests\test_ui_qt_run_registry_compare.py -q -o addopts=` 先 RED：缺少 `ui_qt.views.research_lab`；實作後 -> 4 passed in 1.61s。`.\.venv\Scripts\python.exe -m pytest tests\test_ui_qt_run_registry_compare.py tests\test_ui_qt_research_workflow.py tests\test_ui_qt_research_run_save.py tests\test_ui_qt_report_export.py tests\test_ui_qt_update_view_workbench.py -q -o addopts=` -> 36 passed in 2.61s；changed-files py_compile -> exit 0；`.\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime` -> Success: no issues found in 155 source files；`.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py` -> passed 21 / failed 0 / skipped 4；`.\.venv\Scripts\python.exe -m pytest -q -o addopts=` -> 434 passed, 7 warnings in 17.11s。
 
 ## Task C3: Registry-based Promotion
 

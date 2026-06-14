@@ -122,7 +122,7 @@
 1. 執行回測
 2. 回測完成後，點擊「保存結果」
 3. 輸入執行名稱和備註
-4. 系統寫入 Research Run Registry。完整 Cross-run Comparison UI 尚未完成前，「比較」Tab 仍以 legacy 歷史功能為主。
+4. 系統寫入 Research Run Registry。後續可在「Registry 比較」子頁選取 2 至 5 個 registry run 進行 comparability 與結果並列檢視。
 
 安全限制：
 
@@ -153,6 +153,28 @@
 2. 在歷史列表中選擇多個結果（Ctrl+點擊多選）
 3. 點擊「比較選中」
 4. 查看比較表格
+
+### ✅ 4.1 Research Run Registry 比較
+
+**使用者價值**：
+- 比較不同 Research Run Registry run 前，先知道它們是否可直接比較。
+- 避免資料 fingerprint、成交假設或 sizing mode 不同的 run 被誤當作同條件績效排名。
+
+**UI 位置**：
+- 策略回測 / Research Lab 右側結果面板的「Registry 比較」子頁。
+
+**主要能力**：
+- run type、strategy、tag 篩選。
+- 分頁 run 列表。
+- 2 至 5 個 run 多選。
+- comparability badge：Comparable / Caution / Incompatible。
+- 參數差異、metrics、Regime、保存 benchmark 與 normalized equity 表格。
+
+**限制**：
+- `Incompatible` 代表資料 fingerprint、execution 或 sizing mode 不一致，禁止直接績效比較。
+- `Caution` 代表期間、Universe 或成本模型不同，只適合並列檢視，不適合做優劣排名。
+- Benchmark attribution 只讀取 run 已保存的 `benchmark_results`，不重新抓取目前資料。
+- Registry-based Promote Gate 仍待 M2-C 後續任務，不因比較頁完成而自動開放策略升級。
 
 ---
 
