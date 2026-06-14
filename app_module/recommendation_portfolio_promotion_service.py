@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from app_module.recommendation_portfolio_run_repository import (
     RecommendationPortfolioRunRepository,
 )
+from app_module.promotion_reconciliation_service import PromotionReconciliationService
 from app_module.strategy_version_service import StrategyVersionService
 
 
@@ -19,9 +20,11 @@ class RecommendationPortfolioPromotionService:
         self,
         run_repository: RecommendationPortfolioRunRepository,
         strategy_version_service: StrategyVersionService,
+        promotion_reconciliation_service: Optional[PromotionReconciliationService] = None,
     ):
         self.run_repository = run_repository
         self.strategy_version_service = strategy_version_service
+        self.promotion_reconciliation_service = promotion_reconciliation_service
 
     def promote_to_strategy_version(
         self,
@@ -38,6 +41,12 @@ class RecommendationPortfolioPromotionService:
         Returns:
             策略版本 ID；若 run 不存在或未達最低升級條件則回傳 None。
         """
+        if self.promotion_reconciliation_service is not None:
+            return self.promotion_reconciliation_service.promote_registry_run(
+                run_id,
+                notes=notes,
+            )
+
         run_data = self.run_repository.load_run(run_id)
         if not run_data:
             return None

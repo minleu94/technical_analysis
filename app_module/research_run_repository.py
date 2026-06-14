@@ -273,9 +273,9 @@ class ResearchRunRepository:
                 (run_id,),
             )
 
-    def mark_promoted(self, run_id: str, version_id: str) -> None:
+    def mark_promoted(self, run_id: str, version_id: str) -> bool:
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE research_runs
                 SET promoted_version_id = ?,
@@ -284,6 +284,20 @@ class ResearchRunRepository:
                 """,
                 (version_id, run_id),
             )
+            return cursor.rowcount > 0
+
+    def mark_promotion_reconciliation_required(self, run_id: str, version_id: str) -> bool:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                """
+                UPDATE research_runs
+                SET promoted_version_id = ?,
+                    promotion_reconciliation_status = 'reconciliation_required'
+                WHERE run_id = ?
+                """,
+                (version_id, run_id),
+            )
+            return cursor.rowcount > 0
 
     def _dto_to_row(self, metadata: ResearchRunMetadataDTO) -> dict[str, Any]:
         row: dict[str, Any] = {}

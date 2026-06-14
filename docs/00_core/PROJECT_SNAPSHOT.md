@@ -32,7 +32,7 @@
 - **閉環 2：研究驗證閉環** ✅ 基礎與治理已建立
   - Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Research Run Registry → Promote
   - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3a ✅ / Phase 3.3b ✅ / Strategy Scoring Governance (增量 A & B) ✅
-  - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest MVP ✅ / Backtest chart fast renderer ✅ / Research Run Registry M2-B 基礎保存 ✅ / Registry Cross-run 比較子頁 C2 ✅
+  - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest MVP ✅ / Backtest chart fast renderer ✅ / Research Run Registry M2-B 基礎保存 ✅ / Registry Cross-run 比較子頁 C2 ✅ / Registry-based Promote Gate C3 ✅
   - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅ / 回測 fixed-quantile 雙模式與 Expanding T-1 歷史門檻 ✅ / 推薦 eligible universe 橫斷面百分位排名與門檻限制 ✅
 
 - **閉環 3：持倉檢查閉環** ✅ 基礎與深化與下鑽已完成
@@ -65,7 +65,7 @@
 
 1. Strategy & Scoring Governance 實證：10 檔、每檔 8 個 OOS fold 已完成；fixed 57 筆、quantile 79 筆與 100% Regime coverage 均通過 Gate，但 quantile 未優於 fixed，維持 opt-in。
 2. Legacy Carryover Month 1：Walk-forward 實證、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 仍待後續。
-3. Legacy Carryover Month 2：M2-A 參數與權重契約已完成；M2-B Research Run Registry schema / immutable save / legacy backfill / UI save 已完成；M2-C 已完成 Comparability Service 與 Registry 比較子頁，下一步是 Registry-based Promote Gate。
+3. Legacy Carryover Month 2：M2-A 參數與權重契約已完成；M2-B Research Run Registry schema / immutable save / legacy backfill / UI save 已完成；M2-C Comparability Service、Registry 比較子頁與 Registry-based Promote Gate 已完成，下一步是 M2-C 文件與最終驗證收尾。
 
 ## 高風險區（改動需謹慎）
 

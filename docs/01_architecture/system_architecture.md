@@ -359,7 +359,7 @@ Research Run Registry 由 `ResearchRunService` 統一負責保存 owner，metada
 
 既有 `BacktestRunRepository` 與 `RecommendationPortfolioRunRepository` 仍作為 legacy repository 存在；新「保存結果」入口已改由 UI 呼叫 `ResearchRunService.save_run()`。歷史 run 可由 `scripts/backfill_legacy_runs.py --apply` 明確匯入 registry，dry-run 為預設行為，且不刪除舊資料。
 
-完整 Cross-run Comparison 與 Registry-based Promote Gate 尚未完成，屬 Month 2 M2-C。完成前，UI 不應將 registry run 直接宣稱可升級為策略版本；promotion 必須等 registry gate 與 SQLite/JSON 補償交易完成。
+Month 2 M2-C 已新增 Cross-run Comparison service / UI 與 Registry-based Promote Gate。Promotion 以 Registry run 為單一來源，前置檢查要求 committed / valid、未 archive、未 promoted、可還原 parameter contract version，且通過最低 validation gate。策略版本 JSON 採 temporary file + atomic replace 寫入；若 Registry 回填 `promoted_version_id` 失敗，系統會刪除已寫入 JSON，刪除失敗時標記 `promotion_reconciliation_status='reconciliation_required'`，不宣稱為 SQLite transaction rollback。Reconciliation service 會掃描 JSON 與 Registry 的 source_run_id / promoted_version_id 不一致狀態，提供受控修復依據。
 
 ## 12. 報告匯出與分頁資料流
 

@@ -878,7 +878,7 @@ Incompatible
 - Create: `app_module/promotion_reconciliation_service.py`
 - Test: `tests/test_promotion_reconciliation.py`
 
-- [ ] **Step 1: Promotion 只讀 Registry**
+- [x] **Step 1: Promotion 只讀 Registry**
 
 新 promotion 必須提供有效 `run_id`，且 run：
 
@@ -888,7 +888,7 @@ Incompatible
 - OOS / validation Gate 通過。
 - 參數與權重 contract version 可還原。
 
-- [ ] **Step 2: 實作 JSON 補償交易**
+- [x] **Step 2: 實作 JSON 補償交易**
 
 流程：
 
@@ -903,7 +903,7 @@ write strategy version temp JSON
 
 不得稱為 SQLite transaction rollback。
 
-- [ ] **Step 3: reconciliation**
+- [x] **Step 3: reconciliation**
 
 掃描：
 
@@ -912,6 +912,8 @@ write strategy version temp JSON
 - 雙方 ID 不一致。
 
 只產生受控修復建議或明確 apply 操作，不靜默刪除。
+
+驗證證據（2026-06-14）：`.\.venv\Scripts\python.exe -m pytest tests\test_promotion_reconciliation.py -q -o addopts=` 先 RED：缺少 `app_module.promotion_reconciliation_service`；實作後 -> 7 passed in 1.38s，補整合防回歸後 C3 組合測試 `.\.venv\Scripts\python.exe -m pytest tests\test_promotion_reconciliation.py tests\test_recommendation_portfolio_promotion_service.py tests\test_strategy_params_persistence_roundtrip.py tests\test_research_run_repository.py tests\test_research_run_service.py -q -o addopts=` -> 27 passed in 2.06s；changed-files py_compile -> exit 0；C3 changed-files mypy -> Success: no issues found in 6 source files。
 
 ## Task C4: M2-C 文件與最終驗證
 

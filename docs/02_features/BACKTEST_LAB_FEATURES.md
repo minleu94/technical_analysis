@@ -128,7 +128,7 @@
 
 - 新一輪回測開始後，舊 pending result 不可保存。
 - hash 不符或 parquet 檔案不完整時，registry 載入會失敗並標示 integrity 問題。
-- 已 promoted 的 run 不可 archive。Registry-based promotion 尚未完成前，保存成功不代表可立即升級策略版本。
+- 已 promoted 的 run 不可 archive。Registry-based promotion 會先檢查 run 的 integrity、archive/promoted 狀態、參數合約版本與最低 validation gate；保存成功不代表一定可升級策略版本。
 
 ---
 
@@ -174,7 +174,7 @@
 - `Incompatible` 代表資料 fingerprint、execution 或 sizing mode 不一致，禁止直接績效比較。
 - `Caution` 代表期間、Universe 或成本模型不同，只適合並列檢視，不適合做優劣排名。
 - Benchmark attribution 只讀取 run 已保存的 `benchmark_results`，不重新抓取目前資料。
-- Registry-based Promote Gate 仍待 M2-C 後續任務，不因比較頁完成而自動開放策略升級。
+- Registry-based Promote Gate 已在 service 層接入；比較頁完成不代表任一 run 都可升級，仍需通過 Registry Gate。
 
 ---
 
@@ -459,7 +459,7 @@
 
 ## 2026-05-28 推薦組合 Research Run Promote
 
-Legacy 已保存的推薦組合 research run 可透過 Backtest「推薦組合回測」區塊升級為策略版本。Month 2 M2-B 完成後，新 registry run 的 Promote 需等 M2-C Registry-based Promote Gate；該 Gate 會讀取 registry metadata、OOS/benchmark/data quality 與 SQLite/JSON reconciliation，不再只讀單次 summary。
+Legacy 已保存的推薦組合 research run 可透過 Backtest「推薦組合回測」區塊升級為策略版本。Month 2 M2-C 後，新 registry run 的 Promote 會走 Registry-based Promote Gate；該 Gate 讀取 registry metadata、validation metrics、資料完整性與參數合約版本，不再只讀單次 summary。策略版本 JSON 先以 temporary file 原子替換建立，Registry 回填失敗時會補償刪除 JSON；刪除失敗則標記 reconciliation required。
 
 ---
 

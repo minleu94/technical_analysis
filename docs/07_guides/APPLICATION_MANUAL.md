@@ -397,7 +397,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - 「執行實驗」：開始目前模式。
 - 「取消執行」：合作式取消；已開始的單檔工作可能安全收尾。
 - 「保存結果」：將單股回測或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、equity curve 與 trades。
-- 「升級為策略版本」：Registry-based Promote Gate 尚未完成前維持停用或 legacy 限制；不得只靠單次 summary 升級策略版本。
+- 「升級為策略版本」：新版 Gate 必須讀取 Research Run Registry，不得只靠單次 summary；run 需 committed / valid、未封存、未升級、具備可還原參數合約版本，且通過最低 validation gate。
 
 目前最低樣本 Gate 為 10 筆交易。通過最低 Gate 不代表已完成充分 OOS 驗證。
 
@@ -424,7 +424,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - 在「推薦回放」設有「匯出回放 Excel」按鈕（僅在推薦組合回測成功後啟用）。
 - **安全設計**：所有匯出皆在背景線程（`TaskWorker`）執行，防止 UI 卡死，並採用臨時檔寫入後 `os.replace` 原子替換；替換失敗時既有報告保持不變。報告使用執行結果與參數快照，不重跑策略或摘要績效；equity curve 可接受 `日期`、`date` 或日期 index。若元數據缺失，會在「資料完整性」警示中標示 `N/A`，不以目前 UI 值或預設常數代填。
 
-Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為 Incompatible；期間、Universe 或成本不同時標示為 Caution，不應直接做優劣排名。Registry-based Promote Gate 仍待 M2-C 後續任務完成。
+Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為 Incompatible；期間、Universe 或成本不同時標示為 Caution，不應直接做優劣排名。Registry-based Promote 會先做 Registry Gate，通過後才建立策略版本。
 
 ### 8.10 推薦回放
 
@@ -438,7 +438,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 每週重播或只跑一次
 - 等權或分數加權
 
-執行後可保存到 Research Run Registry。歷史載入、刪除與 legacy Promote 能力仍保留在舊 repository 邊界；Registry-based Cross-run Comparison 與 Promote Gate 尚未完成。結果仍依成交與推薦回放假設，不等同實盤。
+執行後可保存到 Research Run Registry。歷史載入、刪除與 legacy Promote 能力仍保留在舊 repository 邊界；新版 Cross-run Comparison 與 Registry-based Promote Gate 以 Registry run 為準。結果仍依成交與推薦回放假設，不等同實盤。
 
 ## 9. 持倉管理
 
@@ -557,7 +557,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ### Promote 按鈕不能使用
 
-確認結果已保存，且驗證狀態不是 FAIL。樣本不足、無結果、未保存，或目前 run 已切換到 Research Run Registry 但 M2-C Registry-based Promote Gate 尚未完成時，不允許升級。
+確認結果已保存，且驗證狀態不是 FAIL。樣本不足、無結果、未保存、run 已封存、run 已升級、資料完整性不是 valid、缺少參數合約版本，或最低 validation gate 未通過時，不允許升級。若策略版本 JSON 已寫入但 Registry 回填失敗，系統會執行補償刪除；刪除失敗時標記 reconciliation required，需進入受控修復流程。
 
 ## 12. Manual 覆蓋狀態
 

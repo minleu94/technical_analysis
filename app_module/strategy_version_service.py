@@ -5,6 +5,7 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
@@ -195,17 +196,11 @@ class StrategyVersionService:
             notes=notes
         )
         
-        # 儲存為 JSON
-        version_file = self.versions_dir / f"{version_id}.json"
         version_data = {
             'version': 1,
             **version.to_dict()
         }
-        
-        version_file.write_text(
-            json.dumps(version_data, ensure_ascii=False, indent=2),
-            encoding='utf-8'
-        )
+        self._write_version_json_atomic(version_id, version_data)
         
         logger.info(
             f"[StrategyVersionService] 創建策略版本: "
@@ -214,6 +209,32 @@ class StrategyVersionService:
         )
         
         return version_id
+
+    def delete_version_file(self, version_id: str) -> bool:
+        """刪除策略版本 JSON，供 promotion 補償流程使用。"""
+        version_file = self.versions_dir / f"{version_id}.json"
+        if not version_file.exists():
+            return True
+        try:
+            version_file.unlink()
+            return True
+        except OSError:
+            return False
+
+    def _write_version_json_atomic(self, version_id: str, version_data: Dict[str, Any]) -> None:
+        """以 temporary JSON + atomic replace 寫入策略版本。"""
+        final_path = self.versions_dir / f"{version_id}.json"
+        temp_path = self.versions_dir / f"{version_id}.tmp.json"
+        payload = json.dumps(version_data, ensure_ascii=False, indent=2)
+
+        with temp_path.open("w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            try:
+                os.fsync(handle.fileno())
+            except OSError:
+                pass
+        os.replace(temp_path, final_path)
     
     def get_version(self, version_id: str) -> Optional[StrategyVersion]:
         """

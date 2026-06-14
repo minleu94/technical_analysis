@@ -13,6 +13,7 @@ from app_module.backtest_service import BacktestService
 from app_module.walkforward_service import WalkForwardService
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.preset_service import PresetService
+from app_module.promotion_reconciliation_service import PromotionReconciliationService
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class PromotionService:
         strategy_version_service: StrategyVersionService,
         preset_service: PresetService,
         walkforward_service: Optional[WalkForwardService] = None,
+        promotion_reconciliation_service: Optional[PromotionReconciliationService] = None,
     ):
         """
         初始化 Promote 服務
@@ -54,6 +56,7 @@ class PromotionService:
         self.walkforward_service = walkforward_service
         self.strategy_version_service = strategy_version_service
         self.preset_service = preset_service
+        self.promotion_reconciliation_service = promotion_reconciliation_service
     
     def check_promotion_criteria(
         self,
@@ -169,6 +172,13 @@ class PromotionService:
             策略版本 ID，如果失敗則返回 None
         """
         logger.info(f"[PromotionService] 開始升級回測結果: run_id={run_id}")
+
+        if self.promotion_reconciliation_service is not None:
+            return self.promotion_reconciliation_service.promote_registry_run(
+                run_id,
+                profile_id=profile_id,
+                notes=notes,
+            )
         
         # 1. 檢查升級條件
         criteria = self.check_promotion_criteria(run_id)
