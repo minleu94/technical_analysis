@@ -11,6 +11,11 @@ import pytest
 import pandas as pd
 
 from app_module.dtos import ValidationStatus
+from app_module.batch_backtest_service import (
+    BatchBacktestService,
+    BatchBacktestResultDTO,
+    StockBacktestResult,
+)
 from app_module.report_export_dtos import ReportMetadata
 from app_module.report_export_service import ReportExportService
 
@@ -66,7 +71,6 @@ def app():
 class FakeBacktestReport:
     def __init__(self):
         self.total_return = Decimal("0.12")
-        self.annualized_return = Decimal("0.08")
         self.annual_return = Decimal("0.08")
         self.expectancy = Decimal("0.02")
         self.max_drawdown = Decimal("-0.05")
@@ -161,13 +165,76 @@ def test_backtest_export_button_enabled_only_with_current_report(backtest_view):
     assert backtest_view.export_report_btn.isEnabled()
 
 def test_batch_export_uses_raw_batch_result_not_formatted_table(backtest_view):
-    batch_result = FakeBatchResult()
+    batch_result = BatchBacktestResultDTO(
+        batch_id="batch-1",
+        batch_name="integration shape",
+        stock_results=[
+            StockBacktestResult(
+                stock_code="2330",
+                success=True,
+                run_id="run-1",
+                cagr=0.25,
+                sharpe=1.5,
+                mdd=-0.08,
+                total_trades=10,
+                win_rate=0.6,
+                profit_factor=1.8,
+            )
+        ],
+        overall_stats={"total_stocks": 1, "successful_stocks": 1},
+        created_at="2026-06-14T12:00:00",
+    )
     backtest_view.current_batch_result = batch_result
+    backtest_view.batch_backtest_service.create_leaderboard_dataframe.side_effect = (
+        lambda result, sort_by: BatchBacktestService.create_leaderboard_dataframe(
+            None, result, sort_by
+        )
+    )
     # 提供預設的 current_run_params
     backtest_view.current_run_params = {"strategy_id": "test_strat"}
     payload = backtest_view._build_batch_export_payload()
     assert payload.overall_stats == batch_result.overall_stats
-    pd.testing.assert_frame_equal(payload.leaderboard, batch_result.leaderboard)
+    assert payload.leaderboard.loc[0, "股票代號"] == "2330"
+    assert payload.leaderboard.loc[0, "CAGR%"] == 25.0
+
+
+def test_single_export_payload_uses_real_metric_names_and_missing_metadata(backtest_view):
+    report = FakeBacktestReport()
+    report.details = {
+        "trade_list": pd.DataFrame(),
+        "equity_curve": pd.DataFrame(),
+    }
+    backtest_view.current_report = report
+    backtest_view.current_run_params = {"strategy_id": "test_strat"}
+
+    payload = backtest_view._build_single_backtest_export_payload()
+
+    assert payload.metrics["年化報酬率"] == Decimal("0.08")
+    assert payload.metadata.strategy_version == ""
+    assert payload.metadata.benchmark == ""
+
+
+def test_recommendation_replay_export_uses_run_snapshot_without_defaults(backtest_view):
+    result = FakeRecommendationPortfolioResult()
+    result.details = {}
+    backtest_view.current_recommendation_portfolio_result = result
+    backtest_view.current_recommendation_portfolio_config = {
+        "strategy_config": {"strategy_id": "rec-strategy"}
+    }
+    backtest_view.current_recommendation_portfolio_run_params = {
+        "initial_capital": 123456,
+        "top_n": 7,
+        "rebalance_frequency": "weekly",
+        "allocation_method": "equal_weight",
+    }
+
+    payload = backtest_view._build_recommendation_replay_export_payload()
+
+    assert payload.metadata.strategy_version == ""
+    assert payload.metadata.benchmark == ""
+    assert payload.metadata.execution_assumption == ""
+    assert payload.run_params["初始資金"] == 123456
+
 
 def test_export_failure_restores_button_and_preserves_existing_file(backtest_view, tmp_path, monkeypatch):
     target = tmp_path / "existing.xlsx"
@@ -208,3 +275,6 @@ def test_recommendation_export_uses_result_snapshot(recommendation_view):
     payload = recommendation_view._build_current_recommendation_export_payload()
     assert payload.recommendations.shape[0] == len(recs)
     assert payload.metadata.strategy_id == "rec_strat"
+    assert payload.metadata.strategy_version == ""
+    assert payload.metadata.benchmark == ""
+    assert payload.metadata.execution_assumption == ""

@@ -253,10 +253,12 @@
   - 於 `SqliteInspectorService` 實作 count 與 offset 穩定分頁，共用 filter builder。
   - 設計 `日期 DESC, 證券代號 ASC` 搭配 `rowid ASC` 穩定排序，保證跨頁無重複與遺漏。
   - UI 介面整合「上一頁/下一頁/跳頁/當前與總頁碼」控制列，並在篩選變更時自動重設回第一頁，且快取 schema 避免重複拉取。
-  - 實作單調遞增 `request_id` 防 stale 異步查詢覆蓋最新結果。
+  - 實作單調遞增 `request_id` 防 stale 異步查詢覆蓋最新結果；快速連續查詢會保留各執行中 worker 至自然結束，避免斷開或提前銷毀 `QThread`。
 - **四種規格化 Excel 報告背景匯出**：
-  - 定義不可變 payload DTO 快照 (`report_export_dtos.py`)：單股、批次、組合回放、目前推薦結果。
+  - 定義防禦性複製 payload DTO 快照 (`report_export_dtos.py`)：單股、批次、組合回放、目前推薦結果。
   - 於 `ReportExportService` 實作 Excel workbook 的資料格式化 (金額/百分比/天數/日期)、自適應欄寬上限與凍結/自動篩選。
   - 開闢「資料完整性」專用區域，在缺少追溯元數據時明確標註 `N/A` 並列出缺失欄位清單。
   - 整合 Pyside6 `TaskWorker` 於背景線程寫入暫存檔，完成後採原子替換 (`os.replace`)，保障 UI 介面不假死且不破壞原有報告。
-  - **測試與 QA 覆蓋**： focused pytest、強制 UI tests、Update Tab QA 驗證與 mypy 型態檢查 100% 綠燈通過，金融 float boundaries 零違反。
+  - 匯出 payload 直接使用正式 `BacktestReportDTO` / `BatchBacktestResultDTO` 欄位與推薦回放執行快照；缺失 metadata 不以 UI 當前值或預設常數偽裝。
+  - equity curve 支援 `日期`、`date` 欄位與日期 index，批次排行榜由正式 `stock_results` 建構。
+  - **測試與 QA 覆蓋**：包含原檔替換失敗保留、快速連續分頁、正式 DTO、equity curve 真實形狀等回歸案例；完整 gate 以本次 commit 驗證記錄為準。

@@ -1090,28 +1090,48 @@ class BacktestView(QWidget):
         self.progress_label.setText("推薦組合回測執行中...")
         self.progress_label.setVisible(True)
 
+        run_params_snapshot = {
+            "initial_capital": self.capital_input.value(),
+            "top_n": self.recommendation_portfolio_top_n.value(),
+            "max_stocks": self.recommendation_portfolio_max_stocks.value(),
+            "rebalance_frequency": self._recommendation_portfolio_rebalance_value(),
+            "allocation_method": self._recommendation_portfolio_allocation_value(),
+            "holding_days": self.recommendation_portfolio_holding_days.value(),
+            "stop_loss_pct": (
+                self.stop_loss_input.value() / 100.0
+                if self.stop_loss_input.value() > 0
+                else None
+            ),
+            "take_profit_pct": (
+                self.take_profit_input.value() / 100.0
+                if self.take_profit_input.value() > 0
+                else None
+            ),
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+        self.current_recommendation_portfolio_run_params = dict(run_params_snapshot)
+
         def backtest_task():
             history = self._load_recommendation_portfolio_history(start_date, end_date)
             provider = RecommendationDataFrameProvider()
             service = RecommendationPortfolioBacktestService(provider=provider)
             recommendation_config = dict(config.get("strategy_config", {}))
             recommendation_config.setdefault("_portfolio_lookback_days", 80)
-            recommendation_config["_portfolio_max_stocks"] = self.recommendation_portfolio_max_stocks.value()
-            stop_loss_pct = self.stop_loss_input.value() / 100.0 if self.stop_loss_input.value() > 0 else None
-            take_profit_pct = self.take_profit_input.value() / 100.0 if self.take_profit_input.value() > 0 else None
+            recommendation_config["_portfolio_max_stocks"] = run_params_snapshot["max_stocks"]
             return service.run_portfolio_backtest(
                 start_date=start_date,
                 end_date=end_date,
                 profile_id=config.get("profile_id") or "advanced",
                 recommendation_config=recommendation_config,
                 history=history,
-                initial_capital=self.capital_input.value(),
-                rebalance_frequency=self._recommendation_portfolio_rebalance_value(),
-                top_n=self.recommendation_portfolio_top_n.value(),
-                allocation_method=self._recommendation_portfolio_allocation_value(),
-                holding_days=self.recommendation_portfolio_holding_days.value(),
-                stop_loss_pct=stop_loss_pct,
-                take_profit_pct=take_profit_pct,
+                initial_capital=run_params_snapshot["initial_capital"],
+                rebalance_frequency=run_params_snapshot["rebalance_frequency"],
+                top_n=run_params_snapshot["top_n"],
+                allocation_method=run_params_snapshot["allocation_method"],
+                holding_days=run_params_snapshot["holding_days"],
+                stop_loss_pct=run_params_snapshot["stop_loss_pct"],
+                take_profit_pct=run_params_snapshot["take_profit_pct"],
             )
 
         self.worker = TaskWorker(backtest_task)
@@ -4328,14 +4348,9 @@ class BacktestView(QWidget):
             details = self.current_report.details or {}
 
         data_version = details.get("data_version", "")
-        strategy_version = details.get("strategy_version", "1.0")
+        strategy_version = details.get("strategy_version", "")
         regime = details.get("regime", "")
-        if not regime and hasattr(self, "current_regime"):
-            regime = str(getattr(self, "current_regime", ""))
-        
         benchmark = details.get("benchmark", "")
-        if not benchmark and hasattr(self, "benchmark_combo"):
-            benchmark = self.benchmark_combo.currentText()
 
         execution_assumption = details.get("execution_price", "")
         if not execution_assumption and self.current_run_params:
@@ -4358,12 +4373,12 @@ class BacktestView(QWidget):
         if self.current_report:
             metrics = {
                 "總報酬率": getattr(self.current_report, "total_return", 0.0),
-                "年化報酬率": getattr(self.current_report, "annualized_return", 0.0),
+                "年化報酬率": getattr(self.current_report, "annual_return", None),
                 "最大回撤": getattr(self.current_report, "max_drawdown", 0.0),
                 "交易次數": getattr(self.current_report, "total_trades", 0),
                 "勝率": getattr(self.current_report, "win_rate", 0.0),
                 "Sharpe": getattr(self.current_report, "sharpe_ratio", 0.0),
-                "Sortino": getattr(self.current_report, "sortino_ratio", 0.0),
+                "Sortino": getattr(self.current_report, "sortino_ratio", None),
             }
 
         validation_status = "N/A"
@@ -4404,14 +4419,9 @@ class BacktestView(QWidget):
             details = self.current_batch_result.details or {}
 
         data_version = details.get("data_version", "")
-        strategy_version = details.get("strategy_version", "1.0")
+        strategy_version = details.get("strategy_version", "")
         regime = details.get("regime", "")
-        if not regime and hasattr(self, "current_regime"):
-            regime = str(getattr(self, "current_regime", ""))
-        
         benchmark = details.get("benchmark", "")
-        if not benchmark and hasattr(self, "benchmark_combo"):
-            benchmark = self.benchmark_combo.currentText()
 
         execution_assumption = details.get("execution_price", "")
         if not execution_assumption and self.current_run_params:
@@ -4430,15 +4440,16 @@ class BacktestView(QWidget):
         )
 
         leaderboard = pd.DataFrame()
-        if self.current_batch_result and hasattr(self.current_batch_result, "leaderboard"):
-            leaderboard = self.current_batch_result.leaderboard
+        if self.current_batch_result:
+            leaderboard = self.batch_backtest_service.create_leaderboard_dataframe(
+                self.current_batch_result,
+                sort_by="cagr_mdd",
+            )
 
-        overall_stats = ""
+        overall_stats = {}
         if self.current_batch_result:
             if hasattr(self.current_batch_result, "overall_stats"):
-                overall_stats = self.current_batch_result.overall_stats
-            elif hasattr(self.current_batch_result, "overall_stats_text"):
-                overall_stats = self.current_batch_result.overall_stats_text
+                overall_stats = dict(self.current_batch_result.overall_stats or {})
 
         return BatchBacktestExportPayload(
             metadata=metadata,
@@ -4458,37 +4469,47 @@ class BacktestView(QWidget):
         if result and hasattr(result, "details"):
             details = result.details or {}
 
-        data_version = details.get("data_version", "")
-        strategy_version = details.get("strategy_version", "1.0")
-        regime = details.get("regime", "")
-        if not regime and hasattr(self, "current_regime"):
-            regime = str(getattr(self, "current_regime", ""))
-        
-        benchmark = details.get("benchmark", "")
-        if not benchmark and hasattr(self, "benchmark_combo"):
-            benchmark = self.benchmark_combo.currentText()
-
-        execution_assumption = details.get("execution_price", "")
-        if not execution_assumption and self.current_run_params:
-            execution_assumption = self.current_run_params.get("execution_price", "")
+        strategy_config = config.get("strategy_config", {})
+        data_version = details.get("data_version") or config.get("data_version", "")
+        strategy_version = (
+            details.get("strategy_version")
+            or config.get("strategy_version")
+            or strategy_config.get("strategy_version", "")
+        )
+        regime = details.get("regime") or config.get("regime", "")
+        benchmark = details.get("benchmark") or config.get("benchmark", "")
+        execution_assumption = (
+            details.get("execution_price")
+            or config.get("execution_price", "")
+        )
 
         metadata = ReportMetadata(
             report_type="recommendation_replay",
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            data_as_of_date=details.get("data_as_of_date", ""),
+            data_as_of_date=(
+                details.get("data_as_of_date")
+                or config.get("data_as_of_date", "")
+            ),
             data_version=data_version,
-            strategy_id=config.get("strategy_config", {}).get("strategy_id", ""),
+            strategy_id=strategy_config.get("strategy_id", ""),
             strategy_version=strategy_version,
             regime=regime,
             benchmark=benchmark,
             execution_assumption=execution_assumption,
         )
 
+        run_snapshot = dict(
+            getattr(self, "current_recommendation_portfolio_run_params", {}) or {}
+        )
         run_params = {
-            "初始資金": self.capital_input.value(),
-            "單股最大持倉上限": self.recommendation_portfolio_max_stocks.value(),
-            "調倉頻率": self._recommendation_portfolio_rebalance_value(),
-            "配置權重模式": self._recommendation_portfolio_allocation_value(),
+            "初始資金": run_snapshot.get("initial_capital"),
+            "單股最大持倉上限": run_snapshot.get("max_stocks"),
+            "每期選股數": run_snapshot.get("top_n"),
+            "調倉頻率": run_snapshot.get("rebalance_frequency"),
+            "配置權重模式": run_snapshot.get("allocation_method"),
+            "持有天數": run_snapshot.get("holding_days"),
+            "開始日期": run_snapshot.get("start_date"),
+            "結束日期": run_snapshot.get("end_date"),
         }
 
         summary = {}

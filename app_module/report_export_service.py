@@ -94,14 +94,11 @@ class ReportExportService:
         tmp_path = target_path.with_name(f".{target_path.name}.{uuid4().hex}.tmp")
         try:
             wb.save(tmp_path)
-            # 覆蓋或重新命名
-            if os.path.exists(target_path):
-                os.remove(target_path)
-            os.rename(tmp_path, target_path)
-        except Exception as e:
+            os.replace(tmp_path, target_path)
+        except Exception:
             if tmp_path.exists():
                 tmp_path.unlink()
-            raise e
+            raise
         finally:
             if tmp_path.exists():
                 tmp_path.unlink()
@@ -288,23 +285,7 @@ class ReportExportService:
         ws_equity = wb.create_sheet(title="淨值與回撤")
         ws_equity.views.sheetView[0].showGridLines = True
         
-        eq_df = payload.equity_curve.copy()
-        if not eq_df.empty:
-            # 如果沒有 drawdown，自動計算
-            if "drawdown" not in eq_df.columns:
-                if "equity" in eq_df.columns:
-                    eq_df["drawdown"] = self._build_drawdown_series(eq_df["equity"])
-                else:
-                    eq_df["drawdown"] = 0
-            
-            # 保證 drawdown 欄位存在
-            if "equity" in eq_df.columns and "drawdown" in eq_df.columns:
-                # 重新排列欄位，使順序為 日期, equity, drawdown
-                cols = ["日期", "equity", "drawdown"]
-                # 把其他可能存在的欄位也塞在後面
-                cols.extend([c for c in eq_df.columns if c not in cols])
-                eq_df = eq_df[cols]
-                
+        eq_df = self._normalize_equity_curve(payload.equity_curve)
         self._write_dataframe(ws_equity, eq_df)
 
     def _build_drawdown_series(self, equity_series: pd.Series) -> pd.Series:
@@ -316,6 +297,29 @@ class ReportExportService:
         drawdowns = (vals - peaks) / peaks.replace(0, 1.0)
         return drawdowns
 
+    def _normalize_equity_curve(self, equity_curve: pd.DataFrame) -> pd.DataFrame:
+        """Normalize supported date shapes before writing an equity worksheet."""
+        eq_df = equity_curve.copy()
+        if eq_df.empty:
+            return eq_df
+
+        if "日期" not in eq_df.columns:
+            if "date" in eq_df.columns:
+                eq_df = eq_df.rename(columns={"date": "日期"})
+            elif not isinstance(eq_df.index, pd.RangeIndex):
+                eq_df = eq_df.reset_index()
+                eq_df = eq_df.rename(columns={eq_df.columns[0]: "日期"})
+
+        if "drawdown" not in eq_df.columns:
+            if "equity" in eq_df.columns:
+                eq_df["drawdown"] = self._build_drawdown_series(eq_df["equity"])
+            else:
+                eq_df["drawdown"] = 0
+
+        preferred = [name for name in ("日期", "equity", "drawdown") if name in eq_df.columns]
+        preferred.extend(name for name in eq_df.columns if name not in preferred)
+        return eq_df[preferred]
+
     def _build_batch_backtest_workbook(self, wb: openpyxl.Workbook, payload: BatchBacktestExportPayload):
         """建立批次回測的 Sheet"""
         # Sheet 1: 批次總覽
@@ -326,11 +330,12 @@ class ReportExportService:
         next_row = self._write_metadata_section(ws_summary, payload.metadata)
         
         # 寫入整體統計
-        ws_summary.cell(row=next_row, column=1, value="整體統計資訊").font = self.section_font
-        cell_stats = ws_summary.cell(row=next_row + 1, column=1, value=payload.overall_stats)
-        cell_stats.font = self.data_font
-        cell_stats.alignment = Alignment(wrap_text=True)
-        ws_summary.row_dimensions[next_row + 1].height = 60
+        self._write_key_value_section(
+            ws_summary,
+            next_row,
+            "整體統計資訊",
+            payload.overall_stats,
+        )
         self._set_bounded_column_widths(ws_summary)
 
         # Sheet 2: 排行榜
@@ -353,6 +358,18 @@ class ReportExportService:
             
             if status_col:
                 fail_df = payload.leaderboard[payload.leaderboard[status_col].astype(str).str.upper() != "SUCCESS"]
+            else:
+                failure_reason_col = next(
+                    (
+                        col
+                        for col in payload.leaderboard.columns
+                        if "失敗原因" in col or "error" in col.lower()
+                    ),
+                    None,
+                )
+                if failure_reason_col:
+                    reasons = payload.leaderboard[failure_reason_col].fillna("").astype(str).str.strip()
+                    fail_df = payload.leaderboard[reasons.ne("")]
                 
         self._write_dataframe(ws_fails, fail_df)
 
@@ -404,19 +421,7 @@ class ReportExportService:
         ws_equity = wb.create_sheet(title="淨值與回撤")
         ws_equity.views.sheetView[0].showGridLines = True
         
-        eq_df = payload.equity_curve.copy()
-        if not eq_df.empty:
-            if "drawdown" not in eq_df.columns:
-                if "equity" in eq_df.columns:
-                    eq_df["drawdown"] = self._build_drawdown_series(eq_df["equity"])
-                else:
-                    eq_df["drawdown"] = 0
-            
-            if "equity" in eq_df.columns and "drawdown" in eq_df.columns:
-                cols = ["日期", "equity", "drawdown"]
-                cols.extend([c for c in eq_df.columns if c not in cols])
-                eq_df = eq_df[cols]
-                
+        eq_df = self._normalize_equity_curve(payload.equity_curve)
         self._write_dataframe(ws_equity, eq_df)
 
     def _build_current_recommendation_workbook(self, wb: openpyxl.Workbook, payload: CurrentRecommendationExportPayload):

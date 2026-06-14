@@ -56,7 +56,7 @@ class BatchBacktestExportPayload:
     """批次回測匯出資料載荷"""
     metadata: ReportMetadata
     leaderboard: pd.DataFrame
-    overall_stats: str
+    overall_stats: Dict[str, Any]
 
     def __post_init__(self):
         self.leaderboard = self.leaderboard.copy()

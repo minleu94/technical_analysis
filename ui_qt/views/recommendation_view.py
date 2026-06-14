@@ -2809,22 +2809,20 @@ class RecommendationView(QWidget):
 
         config = self.current_config or {}
         regime = config.get("regime", "")
-        if not regime:
-            regime = self.current_regime or ""
 
         data_version = config.get("data_version", "")
-        strategy_version = config.get("strategy_version", "1.0")
+        strategy_version = config.get("strategy_version", "")
 
         metadata = ReportMetadata(
             report_type="current_recommendation",
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             data_as_of_date=config.get("data_as_of_date", ""),
             data_version=data_version,
-            strategy_id=config.get("strategy_id", "recommendation"),
+            strategy_id=config.get("strategy_id", ""),
             strategy_version=strategy_version,
             regime=regime,
-            benchmark=config.get("benchmark", "TAIEX"),
-            execution_assumption=config.get("execution_price", "next_open"),
+            benchmark=config.get("benchmark", ""),
+            execution_assumption=config.get("execution_price", ""),
         )
 
         run_params = {

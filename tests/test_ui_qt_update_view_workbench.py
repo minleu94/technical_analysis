@@ -372,6 +372,63 @@ class SynchronousTaskWorker:
         pass
 
 
+class DeferredTaskWorker:
+    instances = []
+
+    def __init__(self, task_function, *args, **kwargs):
+        self.task_function = task_function
+        self.args = args
+        self.kwargs = kwargs
+
+        class DummySignal:
+            def __init__(self):
+                self.slots = []
+
+            def connect(self, slot):
+                self.slots.append(slot)
+
+            def emit(self, *args):
+                for slot in list(self.slots):
+                    slot(*args)
+
+        self.finished = DummySignal()
+        self.error = DummySignal()
+        self.cancelled = DummySignal()
+        self._running = False
+        DeferredTaskWorker.instances.append(self)
+
+    def start(self):
+        self._running = True
+
+    def isRunning(self):
+        return self._running
+
+    def wait(self):
+        self._running = False
+
+    def disconnect(self):
+        raise AssertionError("running workers must not be disconnected")
+
+
+def test_sqlite_inspector_rapid_requests_keep_running_workers_alive(monkeypatch):
+    from ui_qt.widgets import sqlite_inspector_widget
+
+    DeferredTaskWorker.instances = []
+    monkeypatch.setattr(sqlite_inspector_widget, "TaskWorker", DeferredTaskWorker)
+
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+
+    widget = SqliteInspectorWidget(FakeInspectorService(total=250))
+    widget.current_table = "daily_prices"
+
+    widget._request_page(load_schema=False)
+    widget._request_page(load_schema=False)
+
+    assert len(DeferredTaskWorker.instances) == 2
+    assert len(widget._active_workers) == 2
+
+
 def test_sqlite_inspector_next_page_uses_offset(monkeypatch):
     from ui_qt.widgets import sqlite_inspector_widget
     from PySide6.QtWidgets import QMessageBox

@@ -32,6 +32,7 @@ class SqliteInspectorWidget(QWidget):
         
         self.current_table = ""
         self.worker: Optional[TaskWorker] = None
+        self._active_workers: List[TaskWorker] = []
         
         # 表格 Model
         self.preview_model: Optional[PandasTableModel] = None
@@ -331,15 +332,49 @@ class SqliteInspectorWidget(QWidget):
                 'preview': preview_df
             }
 
-        # 斷開舊 worker，防範 terminate 帶來的執行緒安全性問題
-        if self.worker and self.worker.isRunning():
-            self.worker.disconnect()
+        worker = TaskWorker(fetch_task)
+        self.worker = worker
+        self._active_workers.append(worker)
+        worker.finished.connect(
+            lambda payload, current_worker=worker: self._on_worker_finished(
+                current_worker, payload
+            )
+        )
+        worker.error.connect(
+            lambda error_msg, current_worker=worker, current_request_id=request_id:
+                self._on_worker_error(current_worker, current_request_id, error_msg)
+        )
+        worker.cancelled.connect(
+            lambda current_worker=worker: self._release_worker(current_worker)
+        )
+        worker.start()
+
+    def _release_worker(self, worker: TaskWorker):
+        """Retain a worker until its thread has fully stopped."""
+        if worker.isRunning():
+            worker.wait()
+        if worker in self._active_workers:
+            self._active_workers.remove(worker)
+        if self.worker is worker:
             self.worker = None
 
-        self.worker = TaskWorker(fetch_task)
-        self.worker.finished.connect(self._on_table_data_loaded)
-        self.worker.error.connect(self._on_table_data_error)
-        self.worker.start()
+    def _on_worker_finished(self, worker: TaskWorker, payload: Dict[str, Any]):
+        try:
+            self._on_table_data_loaded(payload)
+        finally:
+            self._release_worker(worker)
+
+    def _on_worker_error(
+        self,
+        worker: TaskWorker,
+        request_id: int,
+        error_msg: str,
+    ):
+        try:
+            if request_id == self._active_request_id:
+                self._on_table_data_error(error_msg)
+        finally:
+            self._release_worker(worker)
 
     def _on_table_data_loaded(self, payload: Dict[str, Any]):
         """資料載入完畢，更新 UI 顯示"""

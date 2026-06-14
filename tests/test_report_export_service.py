@@ -118,7 +118,11 @@ def test_export_batch_backtest(tmp_path, exporter, sample_metadata):
     payload = BatchBacktestExportPayload(
         metadata=sample_metadata,
         leaderboard=leaderboard,
-        overall_stats="總計測試 2 檔股票，1 檔成功，1 檔失敗。"
+        overall_stats={
+            "total_stocks": 2,
+            "successful_stocks": 1,
+            "failed_stocks": 1,
+        },
     )
     
     output_path = exporter.export_batch_backtest(target, payload)
@@ -199,6 +203,92 @@ def test_atomic_write_failure_cleanup(tmp_path, exporter, sample_metadata):
     assert not target.exists()
     tmp_files = list(tmp_path.glob("*.tmp"))
     assert len(tmp_files) == 0
+
+
+def test_atomic_replace_failure_preserves_existing_report(
+    tmp_path, exporter, sample_metadata, monkeypatch
+):
+    target = tmp_path / "existing_report.xlsx"
+    original = b"existing report"
+    target.write_bytes(original)
+    payload = SingleBacktestExportPayload(
+        metadata=sample_metadata,
+        run_params={},
+        metrics={},
+        validation={},
+        trades=pd.DataFrame(),
+        equity_curve=pd.DataFrame(),
+    )
+
+    def fail_replace(source, destination):
+        raise PermissionError("target is locked")
+
+    monkeypatch.setattr(os, "replace", fail_replace)
+
+    with pytest.raises(PermissionError, match="target is locked"):
+        exporter.export_single_backtest(target, payload)
+
+    assert target.read_bytes() == original
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+@pytest.mark.parametrize(
+    "equity_curve",
+    [
+        pd.DataFrame([{"date": "2026-06-01", "equity": 100000}]),
+        pd.DataFrame(
+            {"equity": [100000]},
+            index=pd.Index(["2026-06-01"], name="date"),
+        ),
+        pd.DataFrame(
+            {"equity": [100000]},
+            index=pd.Index(["2026-06-01"]),
+        ),
+    ],
+)
+def test_single_export_normalizes_real_equity_curve_date_shapes(
+    tmp_path, exporter, sample_metadata, equity_curve
+):
+    target = tmp_path / "real_equity_shape.xlsx"
+    payload = SingleBacktestExportPayload(
+        metadata=sample_metadata,
+        run_params={},
+        metrics={},
+        validation={},
+        trades=pd.DataFrame(),
+        equity_curve=equity_curve,
+    )
+
+    exporter.export_single_backtest(target, payload)
+
+    workbook = openpyxl.load_workbook(target)
+    sheet = workbook["淨值與回撤"]
+    assert sheet["A1"].value == "日期"
+    assert sheet["A2"].value == "2026-06-01"
+    assert sheet["B1"].value == "equity"
+
+
+def test_batch_export_failure_sheet_supports_real_leaderboard_shape(
+    tmp_path, exporter, sample_metadata
+):
+    target = tmp_path / "batch_real_shape.xlsx"
+    payload = BatchBacktestExportPayload(
+        metadata=sample_metadata,
+        leaderboard=pd.DataFrame(
+            [
+                {"股票代號": "2330", "CAGR%": 25.0, "失敗原因": ""},
+                {"股票代號": "2454", "CAGR%": None, "失敗原因": "資料不足"},
+            ]
+        ),
+        overall_stats={"total_stocks": 2, "successful_stocks": 1},
+    )
+
+    exporter.export_batch_backtest(target, payload)
+
+    workbook = openpyxl.load_workbook(target)
+    failure_sheet = workbook["失敗與警告"]
+    assert failure_sheet["A2"].value == "2454"
+    assert failure_sheet["C2"].value == "資料不足"
 
 
 def test_safe_excel_value_conversion(tmp_path, exporter, sample_metadata):
