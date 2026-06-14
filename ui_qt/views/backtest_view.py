@@ -21,10 +21,13 @@ from PySide6.QtCore import Qt, Signal, QDate, QTimer
 from PySide6.QtGui import QFont
 import pandas as pd
 from typing import Dict, Any, Optional, List
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from datetime import datetime, timedelta
 from pathlib import Path
 import logging
+import hashlib
+import uuid
 
 logger = logging.getLogger(__name__)
 _QWIDGET_DIR = set(dir(QWidget))
@@ -41,6 +44,8 @@ from app_module.universe_service import UniverseService
 from app_module.backtest_repository import BacktestRunRepository
 from app_module.recommendation_portfolio_run_repository import RecommendationPortfolioRunRepository
 from app_module.recommendation_portfolio_promotion_service import RecommendationPortfolioPromotionService
+from app_module.research_run_dtos import ResearchRunMetadataDTO, canonical_json
+from app_module.research_run_service import ResearchRunService
 from app_module.chart_data_service import ChartDataService
 from app_module.promotion_service import PromotionService
 from app_module.strategy_version_service import StrategyVersionService
@@ -77,6 +82,7 @@ class BacktestView(QWidget):
     universe_service: Optional[UniverseService]
     run_repository: Optional[BacktestRunRepository]
     portfolio_run_repository: Optional[RecommendationPortfolioRunRepository]
+    research_run_service: Optional[ResearchRunService]
     chart_data_service: Optional[ChartDataService]
     strategy_version_service: Optional[StrategyVersionService]
     promotion_service: Optional[PromotionService]
@@ -114,6 +120,7 @@ class BacktestView(QWidget):
             self.universe_service = UniverseService(config)
             self.run_repository = BacktestRunRepository(config)
             self.portfolio_run_repository = RecommendationPortfolioRunRepository(config)
+            self.research_run_service = ResearchRunService(config)
             self.chart_data_service = ChartDataService(self.run_repository)
             # 如果沒有傳入 batch_backtest_service，則創建一個
             if not self.batch_backtest_service:
@@ -138,6 +145,7 @@ class BacktestView(QWidget):
             self.universe_service = None
             self.run_repository = None
             self.portfolio_run_repository = None
+            self.research_run_service = None
             self.chart_data_service = None
             self.strategy_version_service = None
             self.promotion_service = None
@@ -168,6 +176,9 @@ class BacktestView(QWidget):
         # 當前回測結果（用於保存）
         self.current_report: Optional[BacktestReportDTO] = None
         self.current_run_params: Optional[Dict] = None
+        self._execution_generation = 0
+        self._single_backtest_result_generation: Optional[int] = None
+        self._recommendation_portfolio_result_generation: Optional[int] = None
 
         # 初始化說明資料結構（集中管理）
         self._init_parameter_descriptions()
@@ -595,6 +606,16 @@ class BacktestView(QWidget):
         # 初始根據選中的實驗模式更新 UI 狀態
         self._update_ui_state_by_mode(self.research_lab_mode_combo.currentData() or "single_stock")
 
+    def _mark_research_execution_started(self) -> None:
+        """標記新一輪研究執行已開始，用於阻擋舊結果保存。"""
+        self._execution_generation += 1
+        self.current_report = None
+        self.current_run_id = None
+        self.current_recommendation_portfolio_result = None
+        self.current_portfolio_run_id = None
+        self._single_backtest_result_generation = None
+        self._recommendation_portfolio_result_generation = None
+
     def _execute_backtest(self):
         """執行回測（支援單檔和批次模式）"""
         # 委派參數最佳化與 Walk-forward 驗證
@@ -714,6 +735,7 @@ class BacktestView(QWidget):
             self.progress_label.setText("正在執行回測...")
 
         # 清空結果
+        self._mark_research_execution_started()
         self.summary_text.clear()
         self.trades_table.setModel(None)
 
@@ -828,6 +850,7 @@ class BacktestView(QWidget):
 
         # 保存當前結果（用於後續保存）
         self.current_report = report
+        self._single_backtest_result_generation = self._execution_generation
 
         # 更新圖表 run 列表（如果有）
         if hasattr(self, 'chart_run_combo'):
@@ -934,17 +957,17 @@ class BacktestView(QWidget):
         # 直接從當前結果繪製圖表（不需要保存）
         self._plot_charts_from_report(report)
 
-        # 啟用保存按鈕（確保有 run_repository 和 current_report）
+        # 啟用保存按鈕（確保有 ResearchRunService 和 current_report）
         save_btn = getattr(self, 'save_result_btn', None)
         if save_btn is not None:
-            if self.run_repository and self.current_report and self.current_run_params:
+            if self.research_run_service and self.current_report and self.current_run_params:
                 save_btn.setEnabled(True)
-                logger.info("[BacktestView] 保存按鈕已啟用 (run_repository={self.run_repository is not None}, report={self.current_report is not None}, params={self.current_run_params is not None})")
+                logger.info("[BacktestView] 保存按鈕已啟用 (research_run_service={self.research_run_service is not None}, report={self.current_report is not None}, params={self.current_run_params is not None})")
             else:
-                # 如果沒有 repository，禁用按鈕並顯示提示
+                # 如果沒有 registry service，禁用按鈕並顯示提示
                 save_btn.setEnabled(False)
-                if not self.run_repository:
-                    logger.warning("[BacktestView] 警告: run_repository 未初始化，無法保存結果")
+                if not self.research_run_service:
+                    logger.warning("[BacktestView] 警告: research_run_service 未初始化，無法保存結果")
                 if not self.current_report:
                     logger.warning("[BacktestView] 警告: current_report 為空，無法保存結果")
                 if not self.current_run_params:
@@ -1089,6 +1112,7 @@ class BacktestView(QWidget):
         self.progress_bar.setRange(0, 0)
         self.progress_label.setText("推薦組合回測執行中...")
         self.progress_label.setVisible(True)
+        self._mark_research_execution_started()
 
         run_params_snapshot = {
             "initial_capital": self.capital_input.value(),
@@ -1236,6 +1260,7 @@ class BacktestView(QWidget):
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+        self._recommendation_portfolio_result_generation = self._execution_generation
         self._show_recommendation_portfolio_result(result)
 
         if hasattr(self, "save_portfolio_result_btn"):
@@ -1291,7 +1316,7 @@ class BacktestView(QWidget):
         """保存當前的推薦組合回測結果"""
         result = getattr(self, "current_recommendation_portfolio_result", None)
         config = getattr(self, "current_recommendation_portfolio_config", None)
-        if not result or not config or not self.portfolio_run_repository:
+        if not result or not config or not self.research_run_service:
             QMessageBox.warning(self, "錯誤", "沒有可保存的推薦回測結果")
             return
 
@@ -1325,23 +1350,17 @@ class BacktestView(QWidget):
             end_date = self.end_date.date().toString("yyyy-MM-dd")
 
             try:
-                run_id = self.portfolio_run_repository.save_run(
-                    run_name=run_name,
-                    profile_id=profile_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    initial_capital=self.capital_input.value(),
-                    rebalance_frequency=self._recommendation_portfolio_rebalance_value(),
-                    top_n=self.recommendation_portfolio_top_n.value(),
-                    allocation_method=self._recommendation_portfolio_allocation_value(),
-                    holding_days=self.recommendation_portfolio_holding_days.value(),
-                    stop_loss_pct=self.stop_loss_input.value() / 100.0 if self.stop_loss_input.value() > 0 else None,
-                    take_profit_pct=self.take_profit_input.value() / 100.0 if self.take_profit_input.value() > 0 else None,
-                    result=result,
-                    notes=notes
-                )
+                run_params = dict(getattr(self, "current_recommendation_portfolio_run_params", {}) or {})
+                run_params.setdefault("start_date", start_date)
+                run_params.setdefault("end_date", end_date)
+                run_params.setdefault("initial_capital", self.capital_input.value())
+                run_params.setdefault("rebalance_frequency", self._recommendation_portfolio_rebalance_value())
+                run_params.setdefault("top_n", self.recommendation_portfolio_top_n.value())
+                run_params.setdefault("allocation_method", self._recommendation_portfolio_allocation_value())
+                run_params.setdefault("holding_days", self.recommendation_portfolio_holding_days.value())
+                self.current_recommendation_portfolio_run_params = run_params
+                run_id = self._save_recommendation_portfolio_to_research_registry(run_name, notes)
                 QMessageBox.information(self, "成功", f"推薦組合回測結果已保存: {run_name}")
-                self.current_portfolio_run_id = run_id
 
                 # 重新載入下拉選單
                 self._refresh_portfolio_history_combo()
@@ -1355,7 +1374,7 @@ class BacktestView(QWidget):
 
                 # 啟用刪除按鈕
                 self.delete_portfolio_result_btn.setEnabled(True)
-                self.promote_portfolio_result_btn.setEnabled(True)
+                self.promote_portfolio_result_btn.setEnabled(False)
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"保存失敗: {str(e)}")
 
@@ -2360,9 +2379,182 @@ class BacktestView(QWidget):
 
     # ========== 回測結果保存相關方法 ==========
 
+    def _ensure_current_single_backtest_is_saveable(self) -> None:
+        if not self.research_run_service or not self.current_report or not self.current_run_params:
+            raise ValueError("沒有可保存的結果")
+        if self._single_backtest_result_generation != self._execution_generation:
+            raise ValueError("stale backtest result cannot be saved")
+
+    def _ensure_current_recommendation_portfolio_is_saveable(self) -> None:
+        if (
+            not self.research_run_service
+            or not getattr(self, "current_recommendation_portfolio_result", None)
+            or not getattr(self, "current_recommendation_portfolio_run_params", None)
+        ):
+            raise ValueError("沒有可保存的推薦回測結果")
+        if self._recommendation_portfolio_result_generation != self._execution_generation:
+            raise ValueError("stale recommendation portfolio result cannot be saved")
+
+    def _save_single_backtest_to_research_registry(self, run_name: str, notes: str) -> str:
+        self._ensure_current_single_backtest_is_saveable()
+        report = self.current_report
+        params = dict(self.current_run_params or {})
+        details = dict(report.details or {})
+        equity = details.get("equity_curve")
+        trades = details.get("trade_list")
+        if not isinstance(equity, pd.DataFrame):
+            equity = pd.DataFrame()
+        if not isinstance(trades, pd.DataFrame):
+            trades = pd.DataFrame()
+
+        metrics = self._single_backtest_metrics(report)
+        original_input = {
+            "source": "BacktestView",
+            "notes": notes,
+            "raw_params": params,
+        }
+        normalized_params = dict(params.get("strategy_params", {}) or {})
+        payload_hash = self._research_payload_hash(
+            {
+                "run_type": "single_backtest",
+                "params": params,
+                "metrics": metrics,
+                "validation_status": getattr(report.validation_status, "value", ""),
+            }
+        )
+        metadata = ResearchRunMetadataDTO(
+            run_id=self._next_research_run_id("single_backtest"),
+            run_name=run_name,
+            run_type="single_backtest",
+            strategy_id=str(params.get("strategy_id", "")),
+            strategy_version=str(details.get("strategy_version", "")),
+            parameter_contract_version=str(details.get("parameter_contract_version", "")),
+            original_input=original_input,
+            normalized_params=normalized_params,
+            fallback_reason=dict(details.get("fallback_reason", {}) or {}),
+            universe=[str(params.get("stock_code", ""))] if params.get("stock_code") else [],
+            start_date=str(params.get("start_date", "")),
+            end_date=str(params.get("end_date", "")),
+            data_cutoff_date=str(details.get("data_as_of_date", "")),
+            data_fingerprint=str(details.get("data_version", "")),
+            fingerprint_algorithm="sha256" if str(details.get("data_version", "")).startswith("sha256") else "",
+            data_manifest=dict(details.get("data_manifest", {}) or {}),
+            capital_cents=self._money_to_cents(params.get("capital", 0)),
+            fee_bp_x100=self._bps_to_bp_x100(params.get("fee_bps", 0)),
+            slippage_bp_x100=self._bps_to_bp_x100(params.get("slippage_bps", 0)),
+            stop_loss_bp=self._pct_to_bp(params.get("stop_loss_pct")),
+            take_profit_bp=self._pct_to_bp(params.get("take_profit_pct")),
+            execution_price=str(params.get("execution_price") or details.get("execution_price", "")),
+            sizing_mode=str(params.get("sizing_mode", "")),
+            metrics=metrics,
+            regime_breakdown=dict(details.get("regime_breakdown", {}) or {}),
+            benchmark_results=dict(details.get("benchmark_results", {}) or {}),
+            payload_hash=payload_hash,
+            created_at=datetime.now().isoformat(),
+        )
+        self.research_run_service.save_run(metadata, equity, trades)
+        self.current_run_id = metadata.run_id
+        return metadata.run_id
+
+    def _save_recommendation_portfolio_to_research_registry(self, run_name: str, notes: str) -> str:
+        self._ensure_current_recommendation_portfolio_is_saveable()
+        result = self.current_recommendation_portfolio_result
+        config = dict(getattr(self, "current_recommendation_portfolio_config", {}) or {})
+        run_params = dict(getattr(self, "current_recommendation_portfolio_run_params", {}) or {})
+        details = dict(getattr(result, "details", {}) or {})
+        strategy_config = dict(config.get("strategy_config", {}) or {})
+        metrics = dict(getattr(result, "summary", {}) or {})
+        payload_hash = self._research_payload_hash(
+            {
+                "run_type": "recommendation_portfolio",
+                "config": config,
+                "run_params": run_params,
+                "metrics": metrics,
+            }
+        )
+        metadata = ResearchRunMetadataDTO(
+            run_id=self._next_research_run_id("recommendation_portfolio"),
+            run_name=run_name,
+            run_type="recommendation_portfolio",
+            strategy_id=str(strategy_config.get("strategy_id") or config.get("profile_id", "")),
+            strategy_version=str(details.get("strategy_version", "")),
+            parameter_contract_version=str(details.get("parameter_contract_version", "")),
+            original_input={
+                "source": "BacktestView",
+                "notes": notes,
+                "config": config,
+            },
+            normalized_params=run_params,
+            fallback_reason=dict(details.get("fallback_reason", {}) or {}),
+            universe=list(config.get("universe", []) or []),
+            start_date=str(run_params.get("start_date", "")),
+            end_date=str(run_params.get("end_date", "")),
+            data_cutoff_date=str(details.get("data_as_of_date", "")),
+            data_fingerprint=str(details.get("data_version", "")),
+            fingerprint_algorithm="sha256" if str(details.get("data_version", "")).startswith("sha256") else "",
+            data_manifest=dict(details.get("data_manifest", {}) or {}),
+            capital_cents=self._money_to_cents(run_params.get("initial_capital", 0)),
+            stop_loss_bp=self._pct_to_bp(run_params.get("stop_loss_pct")),
+            take_profit_bp=self._pct_to_bp(run_params.get("take_profit_pct")),
+            execution_price=str(details.get("execution_price", "")),
+            sizing_mode=str(run_params.get("allocation_method", "")),
+            metrics=metrics,
+            regime_breakdown=dict(details.get("regime_breakdown", {}) or {}),
+            benchmark_results=dict(details.get("benchmark_results", {}) or {}),
+            payload_hash=payload_hash,
+            created_at=datetime.now().isoformat(),
+        )
+        equity = result.equity_curve if isinstance(result.equity_curve, pd.DataFrame) else pd.DataFrame()
+        trades = result.trades if isinstance(result.trades, pd.DataFrame) else pd.DataFrame()
+        self.research_run_service.save_run(metadata, equity, trades)
+        self.current_portfolio_run_id = metadata.run_id
+        return metadata.run_id
+
+    def _single_backtest_metrics(self, report: BacktestReportDTO) -> dict[str, Any]:
+        return {
+            "total_return": getattr(report, "total_return", None),
+            "annual_return": getattr(report, "annual_return", None),
+            "sharpe_ratio": getattr(report, "sharpe_ratio", None),
+            "max_drawdown": getattr(report, "max_drawdown", None),
+            "win_rate": getattr(report, "win_rate", None),
+            "total_trades": getattr(report, "total_trades", None),
+            "expectancy": getattr(report, "expectancy", None),
+        }
+
+    def _next_research_run_id(self, prefix: str) -> str:
+        return f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
+    def _research_payload_hash(self, payload: dict[str, Any]) -> str:
+        digest = hashlib.sha256(canonical_json(self._json_safe(payload)).encode("utf-8")).hexdigest()
+        return f"sha256:{digest}"
+
+    def _json_safe(self, value: Any) -> Any:
+        if isinstance(value, pd.DataFrame):
+            return value.to_dict(orient="records")
+        if isinstance(value, Decimal):
+            return str(value)
+        if isinstance(value, dict):
+            return {str(key): self._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [self._json_safe(item) for item in value]
+        if hasattr(value, "value") and value.__class__.__name__.endswith("Status"):
+            return value.value
+        return value
+
+    def _money_to_cents(self, value: Any) -> int:
+        return int((Decimal(str(value or 0)) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
+
+    def _bps_to_bp_x100(self, value: Any) -> int:
+        return int((Decimal(str(value or 0)) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
+
+    def _pct_to_bp(self, value: Any) -> int | None:
+        if value is None:
+            return None
+        return int((Decimal(str(value)) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
+
     def _save_backtest_result(self):
         """保存回測結果"""
-        if not self.run_repository or not self.current_report or not self.current_run_params:
+        if not self.research_run_service or not self.current_report or not self.current_run_params:
             QMessageBox.warning(self, "錯誤", "沒有可保存的結果")
             return
 
@@ -2396,23 +2588,8 @@ class BacktestView(QWidget):
             notes = notes_input.toPlainText().strip()
 
             try:
-                run_id = self.run_repository.save_run(
-                    run_name=run_name,
-                    stock_code=self.current_run_params.get('stock_code', ''),
-                    start_date=self.current_run_params.get('start_date', ''),
-                    end_date=self.current_run_params.get('end_date', ''),
-                    strategy_id=self.current_run_params.get('strategy_id', ''),
-                    strategy_params=self.current_run_params.get('strategy_params', {}),
-                    capital=self.current_run_params.get('capital', 1000000),
-                    fee_bps=self.current_run_params.get('fee_bps', 14.25),
-                    slippage_bps=self.current_run_params.get('slippage_bps', 5.0),
-                    stop_loss_pct=self.current_run_params.get('stop_loss_pct'),
-                    take_profit_pct=self.current_run_params.get('take_profit_pct'),
-                    report=self.current_report,
-                    notes=notes
-                )
+                run_id = self._save_single_backtest_to_research_registry(run_name, notes)
                 QMessageBox.information(self, "成功", f"結果已保存: {run_name}")
-                self.current_run_id = run_id  # 保存當前 run_id
                 self._refresh_history()
                 self._update_chart_run_combo()
                 # 自動選中剛保存的結果
@@ -2421,14 +2598,8 @@ class BacktestView(QWidget):
                     self.chart_run_combo.setCurrentIndex(index)
                 # ========== Phase 3.5 SOP 護欄：啟用 Promote 按鈕（需檢查驗證狀態） ==========
                 if hasattr(self, 'promote_btn'):
-                    # 只有在驗證狀態不是 FAIL 時才啟用
-                    from app_module.dtos import ValidationStatus
-                    if self.current_report.validation_status != ValidationStatus.FAIL:
-                        self.promote_btn.setEnabled(True)
-                        logger.info("[BacktestView] Promote 按鈕已啟用（驗證狀態：{self.current_report.validation_status.value}）")
-                    else:
-                        self.promote_btn.setEnabled(False)
-                        logger.warning("[BacktestView] ⚠️ SOP 護欄：驗證狀態為 FAIL，Promote 按鈕保持禁用")
+                    self.promote_btn.setEnabled(False)
+                    logger.info("[BacktestView] Registry run 已保存，Promote 將於 Registry-based Gate 完成後啟用")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"保存失敗: {str(e)}")
 
