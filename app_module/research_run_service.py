@@ -25,6 +25,10 @@ class ResearchRunIntegrityError(ResearchRunServiceError):
     """Parquet payload hash 與 registry metadata 不一致。"""
 
 
+class PromotedResearchRunArchiveError(ResearchRunServiceError):
+    """已升級策略版本的 run 不可封存。"""
+
+
 class InjectedResearchRunFailure(ResearchRunServiceError):
     """測試用注入式崩潰點。"""
 
@@ -134,6 +138,19 @@ class ResearchRunService:
             equity=pd.read_parquet(metadata.equity_path),
             trades=pd.read_parquet(metadata.trades_path),
         )
+
+    def list_runs(self, *, include_archived: bool = False) -> list[ResearchRunMetadataDTO]:
+        return self.repository.list_metadata(include_archived=include_archived)
+
+    def archive_run(self, run_id: str) -> None:
+        metadata = self.repository.get_metadata(run_id)
+        if metadata is None:
+            raise ResearchRunIntegrityError(f"找不到 research run: {run_id}")
+        if metadata.promoted_version_id:
+            raise PromotedResearchRunArchiveError(
+                f"已升級策略版本的 run 不可封存: {run_id}"
+            )
+        self.repository.archive_run(run_id)
 
     def reconcile_incomplete_saves(self) -> None:
         for row in self.repository.list_uncommitted_rows():

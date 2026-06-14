@@ -106,3 +106,30 @@ def test_load_run_data_rejects_hash_mismatch(tmp_path):
 
     with pytest.raises(ResearchRunIntegrityError):
         service.load_run_data(saved.run_id)
+
+
+def test_archive_run_is_soft_delete_and_default_list_excludes_it(tmp_path):
+    from app_module.research_run_service import ResearchRunService
+
+    service = ResearchRunService(_config(tmp_path))
+    saved = service.save_run(_metadata(), _equity_frame(), _trades_frame())
+
+    service.archive_run(saved.run_id)
+
+    raw = ResearchRunRepository(service.config).get_raw_metadata_row(saved.run_id)
+    assert raw["is_archived"] == 1
+    assert Path(saved.equity_path).exists()
+    assert Path(saved.trades_path).exists()
+    assert service.list_runs() == []
+    assert [run.run_id for run in service.list_runs(include_archived=True)] == [saved.run_id]
+
+
+def test_archive_run_rejects_promoted_run(tmp_path):
+    from app_module.research_run_service import PromotedResearchRunArchiveError, ResearchRunService
+
+    service = ResearchRunService(_config(tmp_path))
+    saved = service.save_run(_metadata(), _equity_frame(), _trades_frame())
+    service.repository.mark_promoted(saved.run_id, "strategy-v1")
+
+    with pytest.raises(PromotedResearchRunArchiveError):
+        service.archive_run(saved.run_id)

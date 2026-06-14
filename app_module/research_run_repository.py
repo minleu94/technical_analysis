@@ -253,6 +253,38 @@ class ResearchRunRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_metadata(self, *, include_archived: bool = False) -> list[ResearchRunMetadataDTO]:
+        where = "" if include_archived else "WHERE is_archived = 0"
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"""
+                SELECT * FROM research_runs
+                {where}
+                ORDER BY created_at DESC, run_id ASC
+                """
+            ).fetchall()
+        return [self._row_to_dto(dict(row)) for row in rows]
+
+    def archive_run(self, run_id: str) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE research_runs SET is_archived = 1 WHERE run_id = ?",
+                (run_id,),
+            )
+
+    def mark_promoted(self, run_id: str, version_id: str) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                UPDATE research_runs
+                SET promoted_version_id = ?,
+                    promotion_reconciliation_status = 'synced'
+                WHERE run_id = ?
+                """,
+                (version_id, run_id),
+            )
+
     def _dto_to_row(self, metadata: ResearchRunMetadataDTO) -> dict[str, Any]:
         row: dict[str, Any] = {}
         for field_info in fields(metadata):
