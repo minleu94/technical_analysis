@@ -20,9 +20,9 @@
 - [x] M2-A 契約層級阻斷問題已修復，完整驗證與文件 Coverage 已通過。
 - [x] M2-A Gate 已由使用者於 2026-06-14 核准，允許開始 M2-B。
 - [x] M2-B 開始。
-- [ ] M2-B Gate 通過並取得使用者核准。
-- [ ] M2-C 開始。
-- [ ] Month 2 最終 Gate 通過。
+- [x] M2-B Gate 通過並取得使用者核准。
+- [x] M2-C 開始。
+- [x] Month 2 最終 Gate 通過。
 
 ### M2-A 第一輪阻斷修復狀態（2026-06-14 第二輪驗收）
 
@@ -917,35 +917,37 @@ write strategy version temp JSON
 
 ## Task C4: M2-C 文件與最終驗證
 
-- [ ] UI focused pytest。
-- [ ] 強制 Update Tab pytest。
-- [ ] `scripts/qa_validate_update_tab.py`。
-- [ ] 完整 pytest。
-- [ ] mypy。
-- [ ] financial float boundary。
-- [ ] changed-files py_compile。
-- [ ] 手動 Cross-run 比較。
-- [ ] 手動 Parquet integrity failure。
-- [ ] 手動 Promotion compensation failure。
-- [ ] Manual、UI docs、Architecture、Navigation、Snapshot、6M Roadmap、Legacy Carryover、Index 同步。
+- [x] UI focused pytest。
+- [x] 強制 Update Tab pytest。
+- [x] `scripts/qa_validate_update_tab.py`。
+- [x] 完整 pytest。
+- [x] mypy。
+- [x] financial float boundary。
+- [x] changed-files py_compile。
+- [x] Cross-run 比較受控情境覆蓋。
+- [x] Parquet integrity failure 受控情境覆蓋。
+- [x] Promotion compensation failure 受控情境覆蓋。
+- [x] Manual、UI docs、Architecture、Navigation、Snapshot、6M Roadmap、Legacy Carryover、Index 同步。
+
+驗證證據（2026-06-14）：UI focused pytest `.\.venv\Scripts\python.exe -m pytest tests\test_ui_qt_run_registry_compare.py tests\test_ui_qt_research_workflow.py tests\test_ui_qt_research_run_save.py tests\test_ui_qt_report_export.py tests\test_ui_qt_update_view_workbench.py -q -o addopts=` -> 36 passed；強制 Update Tab pytest 已包含其中並通過；`.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py` -> passed 21 / failed 0 / skipped 4；完整 pytest -> 443 passed, 7 warnings；mypy -> Success: no issues found in 156 source files；`scripts\check_financial_float_boundaries.py` -> exit 0；changed-files py_compile -> exit 0。Cross-run 比較由 `tests/test_research_run_comparison_service.py` 與 `tests/test_ui_qt_run_registry_compare.py` 覆蓋 2-5 run 選取、comparability badge、參數/metrics/regime/benchmark/equity 表格與 stale request；Parquet integrity failure 由 `tests/test_research_run_service.py::test_load_run_data_rejects_hash_mismatch` 覆蓋；Promotion compensation failure 由 `tests/test_promotion_reconciliation.py::test_promote_registry_run_deletes_strategy_json_when_registry_update_fails` 覆蓋。文件同步涵蓋 Manual、UI docs、Architecture、Navigation、Snapshot、6M Roadmap、Legacy Carryover 與 Documentation Index。
 
 ---
 
 ## 4. Month 2 Definition of Done
 
-- [ ] 任一研究 run 可追溯資料 fingerprint、manifest、策略版本、參數、權重、成本、成交與 sizing 假設。
-- [ ] 任一 v1+ 非法或缺失參數 fail-closed。
-- [ ] 舊配置 fallback 有版本與理由，不會污染新配置。
-- [ ] ScoringEngine 正式路徑只使用已驗證整數 bp 權重。
-- [ ] Look-ahead prefix-invariance 通過。
-- [ ] Registry save immutable、idempotent，並具跨 filesystem/SQLite crash reconciliation。
-- [ ] archived run 不出現在預設列表，promoted run 不可 archive。
-- [ ] 至少可比較 3 個策略版本或參數組合。
-- [ ] 不相容 run 不會被 UI 排名成較優/較差。
-- [ ] Promote 必須關聯 Registry run，跨 SQLite/JSON 失敗有補償與 reconciliation。
-- [ ] Legacy run 可 dry-run backfill，且不破壞原 repository。
-- [ ] 完整 pytest、mypy、float boundary、py_compile 與 UI QA 全數通過。
-- [ ] 文件與 Scoped SSOT 同步，Month 3 Carryover Gate 可被正式判定。
+- [x] 任一研究 run 可追溯資料 fingerprint、manifest、策略版本、參數、權重、成本、成交與 sizing 假設。
+- [x] 任一 v1+ 非法或缺失參數 fail-closed。
+- [x] 舊配置 fallback 有版本與理由，不會污染新配置。
+- [x] ScoringEngine 正式路徑只使用已驗證整數 bp 權重。
+- [x] Look-ahead prefix-invariance 通過。
+- [x] Registry save immutable、idempotent，並具跨 filesystem/SQLite crash reconciliation。
+- [x] archived run 不出現在預設列表，promoted run 不可 archive。
+- [x] 至少可比較 3 個策略版本或參數組合。
+- [x] 不相容 run 不會被 UI 排名成較優/較差。
+- [x] Promote 必須關聯 Registry run，跨 SQLite/JSON 失敗有補償與 reconciliation。
+- [x] Legacy run 可 dry-run backfill，且不破壞原 repository。
+- [x] 完整 pytest、mypy、float boundary、py_compile 與 UI QA 全數通過。
+- [x] 文件與 Scoped SSOT 同步，Month 3 Carryover Gate 可被正式判定。
 
 ## 5. 提交策略
 
