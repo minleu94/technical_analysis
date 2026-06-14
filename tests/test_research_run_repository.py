@@ -35,7 +35,7 @@ def test_research_run_repository_initializes_versioned_schema(tmp_path):
             for row in conn.execute("PRAGMA table_info(research_runs)").fetchall()
         }
 
-    assert schema_version == (1,)
+    assert schema_version == (2,)
     assert {
         "run_id",
         "run_name",
@@ -47,6 +47,8 @@ def test_research_run_repository_initializes_versioned_schema(tmp_path):
         "benchmark_results_json",
         "is_archived",
         "promotion_reconciliation_status",
+        "storage_state",
+        "integrity_status",
     }.issubset(columns)
 
 

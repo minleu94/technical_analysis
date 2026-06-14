@@ -31,7 +31,7 @@ class ResearchRunRepository:
     """
 
     SCHEMA_NAME = "research_runs"
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     JSON_FIELD_MAP = {
         "original_input": "original_input_json",
@@ -70,6 +70,9 @@ class ResearchRunRepository:
 
             if current_version < 1:
                 self._migrate_v1(conn)
+                current_version = 1
+            if current_version < 2:
+                self._migrate_v2(conn)
 
             conn.execute(
                 """
@@ -137,6 +140,35 @@ class ResearchRunRepository:
             "ON research_runs(is_archived)"
         )
 
+    def _migrate_v2(self, conn: sqlite3.Connection) -> None:
+        self._add_column_if_missing(
+            conn,
+            "research_runs",
+            "storage_state",
+            "TEXT NOT NULL DEFAULT 'committed'",
+        )
+        self._add_column_if_missing(
+            conn,
+            "research_runs",
+            "integrity_status",
+            "TEXT NOT NULL DEFAULT 'valid'",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_research_runs_storage_state "
+            "ON research_runs(storage_state)"
+        )
+
+    def _add_column_if_missing(
+        self,
+        conn: sqlite3.Connection,
+        table_name: str,
+        column_name: str,
+        definition: str,
+    ) -> None:
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+        if column_name not in columns:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
     def insert_metadata(self, metadata: ResearchRunMetadataDTO) -> ResearchRunMetadataDTO:
         existing = self.get_metadata(metadata.run_id)
         if existing:
@@ -174,6 +206,52 @@ class ResearchRunRepository:
         if row is None:
             return None
         return dict(row)
+
+    def update_storage_fields(
+        self,
+        run_id: str,
+        *,
+        equity_path: str | None = None,
+        equity_parquet_hash: str | None = None,
+        trades_path: str | None = None,
+        trades_parquet_hash: str | None = None,
+        storage_state: str | None = None,
+        integrity_status: str | None = None,
+    ) -> None:
+        updates: dict[str, Any] = {}
+        if equity_path is not None:
+            updates["equity_path"] = equity_path
+        if equity_parquet_hash is not None:
+            updates["equity_parquet_hash"] = equity_parquet_hash
+        if trades_path is not None:
+            updates["trades_path"] = trades_path
+        if trades_parquet_hash is not None:
+            updates["trades_parquet_hash"] = trades_parquet_hash
+        if storage_state is not None:
+            updates["storage_state"] = storage_state
+        if integrity_status is not None:
+            updates["integrity_status"] = integrity_status
+        if not updates:
+            return
+
+        set_sql = ", ".join(f"{column} = ?" for column in updates)
+        params = [*updates.values(), run_id]
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                f"UPDATE research_runs SET {set_sql} WHERE run_id = ?",
+                params,
+            )
+
+    def list_uncommitted_rows(self) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT * FROM research_runs
+                WHERE storage_state IN ('staging', 'files_ready')
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def _dto_to_row(self, metadata: ResearchRunMetadataDTO) -> dict[str, Any]:
         row: dict[str, Any] = {}
