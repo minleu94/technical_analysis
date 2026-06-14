@@ -231,7 +231,7 @@ class TestDataPathIsolation:
         monkeypatch.setenv("PROFILE", "test")
         
         # 模擬腳本參數
-        script_args = ["--dry-run", "--days", "5"]
+        script_args = ["--dry-run", "--profile", "test"]
         
         # 測試配置解析
         config, parsed_args = TWStockConfig.from_args(script_args)

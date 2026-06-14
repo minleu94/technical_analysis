@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import sys
 import pandas as pd
@@ -507,4 +509,4 @@ def test_extended_patterns():
     print("\n擴展圖形模式識別測試完成！")
 
 if __name__ == "__main__":
-    test_extended_patterns() 
+    test_extended_patterns()

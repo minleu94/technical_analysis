@@ -1,80 +1,66 @@
-import pytest
-import pandas as pd
 import numpy as np
-from analysis_module.technical_analysis.technical_indicators import TechnicalIndicatorCalculator
-from analysis_module.technical_analysis.technical_analyzer import TechnicalAnalyzer
+import pandas as pd
 
-class TestTechnicalIndicators:
-    """測試技術指標計算"""
-    
-    def test_moving_averages(self, sample_stock_data):
-        """測試移動平均線計算"""
-        calculator = TechnicalIndicatorCalculator()
-        df = calculator.calculate_moving_averages(sample_stock_data)
-        
-        assert 'MA5' in df.columns
-        assert 'MA10' in df.columns
-        assert 'MA20' in df.columns
-        assert not df['MA5'].isna().all()
-        assert not df['MA10'].isna().all()
-        assert not df['MA20'].isna().all()
-    
-    def test_momentum_indicators(self, sample_stock_data):
-        """測試動量指標計算"""
-        calculator = TechnicalIndicatorCalculator()
-        df = calculator.calculate_momentum_indicators(sample_stock_data)
-        
-        assert 'RSI' in df.columns
-        assert 'MACD' in df.columns
-        assert 'MACD_Signal' in df.columns
-        assert 'MACD_Hist' in df.columns
-        assert not df['RSI'].isna().all()
-        assert not df['MACD'].isna().all()
-    
-    def test_volatility_indicators(self, sample_stock_data):
-        """測試波動率指標計算"""
-        calculator = TechnicalIndicatorCalculator()
-        df = calculator.calculate_volatility_indicators(sample_stock_data)
-        
-        assert 'ATR' in df.columns
-        assert 'BB_Upper' in df.columns
-        assert 'BB_Lower' in df.columns
-        assert not df['ATR'].isna().all()
-        assert not df['BB_Upper'].isna().all()
-        assert not df['BB_Lower'].isna().all()
+from analysis_module.technical_analysis.technical_analyzer import TechnicalAnalyzer
+from analysis_module.technical_analysis.technical_indicators import (
+    TechnicalIndicatorCalculator,
+)
+
+
+def _price_data(rows: int = 60) -> pd.DataFrame:
+    close = np.linspace(100.0, 130.0, rows)
+    return pd.DataFrame(
+        {
+            "Date": pd.date_range("2024-01-01", periods=rows),
+            "Open": close - 0.5,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.arange(rows) + 1_000,
+        }
+    )
+
+
+class TestTechnicalIndicatorCalculator:
+    def test_calculate_ma_series_returns_indicator_dataframe(self) -> None:
+        result = TechnicalIndicatorCalculator().calculate_ma_series(_price_data())
+
+        assert {"SMA30", "DEMA30", "EMA30"} <= set(result.columns)
+        assert result["SMA30"].notna().any()
+
+    def test_calculate_momentum_indicators_returns_named_arrays(self) -> None:
+        result = TechnicalIndicatorCalculator().calculate_momentum_indicators(
+            _price_data()
+        )
+
+        assert {"RSI", "MACD", "MACD_signal", "MACD_hist"} <= set(result)
+        assert all(len(values) == 60 for values in result.values())
+
+    def test_calculate_volatility_indicators_returns_named_arrays(self) -> None:
+        result = TechnicalIndicatorCalculator().calculate_volatility_indicators(
+            _price_data()
+        )
+
+        assert {"upperband", "middleband", "lowerband", "SAR"} <= set(result)
+        assert all(len(values) == 60 for values in result.values())
+
 
 class TestTechnicalAnalyzer:
-    """測試技術分析器"""
-    
-    def test_trend_analysis(self, sample_stock_data):
-        """測試趨勢分析"""
-        analyzer = TechnicalAnalyzer()
-        df = analyzer.analyze_trend(sample_stock_data)
-        
-        assert 'Trend' in df.columns
-        assert 'Trend_Strength' in df.columns
-        assert not df['Trend'].isna().all()
-        assert not df['Trend_Strength'].isna().all()
-    
-    def test_support_resistance(self, sample_stock_data):
-        """測試支撐阻力位分析"""
-        analyzer = TechnicalAnalyzer()
-        levels = analyzer.find_support_resistance(sample_stock_data)
-        
-        assert isinstance(levels, dict)
-        assert 'support' in levels
-        assert 'resistance' in levels
-        assert len(levels['support']) > 0
-        assert len(levels['resistance']) > 0
-    
-    def test_pattern_recognition(self, sample_stock_data):
-        """測試形態識別"""
-        analyzer = TechnicalAnalyzer()
-        patterns = analyzer.identify_patterns(sample_stock_data)
-        
-        assert isinstance(patterns, list)
-        assert len(patterns) > 0
-        for pattern in patterns:
-            assert 'type' in pattern
-            assert 'start_date' in pattern
-            assert 'end_date' in pattern 
+    def test_add_momentum_indicators_returns_enriched_dataframe(self) -> None:
+        result = TechnicalAnalyzer().add_momentum_indicators(_price_data())
+
+        assert {"RSI", "MACD", "MACD_signal", "MACD_hist", "SlowK", "SlowD"} <= set(
+            result.columns
+        )
+
+    def test_add_volatility_indicators_returns_enriched_dataframe(self) -> None:
+        result = TechnicalAnalyzer().add_volatility_indicators(_price_data())
+
+        assert {"BB_Upper", "BB_Middle", "BB_Lower", "SAR", "ATR"} <= set(
+            result.columns
+        )
+
+    def test_add_trend_indicators_returns_enriched_dataframe(self) -> None:
+        result = TechnicalAnalyzer().add_trend_indicators(_price_data())
+
+        assert {"TSF", "ADX"} <= set(result.columns)

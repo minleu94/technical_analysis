@@ -137,6 +137,7 @@ class TWStockConfig:
     def _ensure_directories(self):
         """確保所需目錄結構存在"""
         directories = [
+            self.output_root,
             self.daily_price_dir,
             self.meta_data_dir,
             self.technical_dir,

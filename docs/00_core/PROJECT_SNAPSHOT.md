@@ -107,6 +107,20 @@
 
 **注意**：此 Snapshot 是目前狀態入口；未來方向請看 6 個月工程 Roadmap，架構細節請看 system architecture，完整歷史請看 archive。
 
+## 2026-06-14 舊測試治理與模組責任確認
+
+- repo 根目錄已建立正式 `pytest.ini`，預設只收集可重現的自動測試；
+  `tests/manual/` 與 `tests/scripts/` 明確排除。
+- 早期測試引用的 `DataConfig`、`DataProcessor` 並非被移除後遺失功能的正式
+  API。現行責任由 `TWStockConfig`、`DataLoader`、
+  `TechnicalIndicatorCalculator` 與各領域 service 分工承接。
+- `PatternAnalyzer`、`TechnicalAnalyzer` 仍為現行功能，正式路徑分別位於
+  `analysis_module.pattern_analysis` 與 `analysis_module.technical_analysis`。
+- 固定真實路徑、外部網路、互動輸入、繪圖與長時間訓練腳本已移至
+  `tests/manual/` 並標示棄用，不再阻塞 pytest collection。
+- 設定、DataLoader 與技術分析測試已改寫為現行 API、正式資料 schema 與
+  `tmp_path` 隔離契約；完整 pytest 為 `344 passed`。
+
  
 ## 2026-06-09 Roadmap Rebaseline（歷史記錄）
 

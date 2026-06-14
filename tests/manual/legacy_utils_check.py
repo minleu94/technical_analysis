@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import pytest
 import pandas as pd
 from datetime import datetime, timedelta
@@ -73,4 +75,4 @@ class TestDataUtils:
         })
         
         assert DataUtils.validate_data(df, required_columns=['price', 'volume'])
-        assert not DataUtils.validate_data(df, required_columns=['price', 'volume', 'missing']) 
+        assert not DataUtils.validate_data(df, required_columns=['price', 'volume', 'missing'])

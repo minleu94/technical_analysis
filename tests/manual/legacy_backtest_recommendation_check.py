@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -290,4 +292,4 @@ def main():
     print("\n所有測試完成！")
 
 if __name__ == "__main__":
-    main() 
+    main()

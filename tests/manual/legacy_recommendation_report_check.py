@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 from data_module import DataLoader, DataProcessor
@@ -88,4 +90,4 @@ def test_recommendation_report():
     print("測試完成!")
 
 if __name__ == "__main__":
-    test_recommendation_report() 
+    test_recommendation_report()

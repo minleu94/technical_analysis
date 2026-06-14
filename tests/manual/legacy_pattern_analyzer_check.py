@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -384,4 +386,4 @@ def test_pattern_analyzer():
     print("\n圖形模式分析測試完成")
 
 if __name__ == "__main__":
-    test_pattern_analyzer() 
+    test_pattern_analyzer()

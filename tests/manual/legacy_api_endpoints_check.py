@@ -1,4 +1,6 @@
 """測試不同的 TWSE API 端點，確認哪個可用"""
+"""Deprecated manual network check; see tests/manual/README.md."""
+
 import requests
 import time
 from datetime import datetime

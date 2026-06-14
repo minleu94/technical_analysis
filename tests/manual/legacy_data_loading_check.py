@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -78,4 +80,4 @@ def test_data_loading():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    test_data_loading() 
+    test_data_loading()

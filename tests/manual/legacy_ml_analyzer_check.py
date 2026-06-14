@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 import numpy as np
@@ -173,4 +175,4 @@ def test_ml_analyzer():
     print("\n機器學習分析器測試完成！")
 
 if __name__ == "__main__":
-    test_ml_analyzer() 
+    test_ml_analyzer()

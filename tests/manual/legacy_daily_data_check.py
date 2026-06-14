@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -67,4 +69,4 @@ def main():
         print(f"無法從API獲取日期 {date} 的數據")
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import sys
 import pandas as pd
@@ -507,4 +509,4 @@ def test_pattern_comparison(df, ticker, pattern_analyzer, test_data_path):
         traceback.print_exc()
 
 if __name__ == "__main__":
-    test_advanced_patterns() 
+    test_advanced_patterns()

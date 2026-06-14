@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -190,4 +192,4 @@ def test_math_analyzer():
 
 if __name__ == "__main__":
     import numpy as np  # 添加這一行，因為我們在腳本中使用了np
-    test_math_analyzer() 
+    test_math_analyzer()

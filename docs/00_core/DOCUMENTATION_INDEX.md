@@ -100,6 +100,8 @@
 | [2026-06-13-strategy-scoring-governance.md](../superpowers/plans/2026-06-13-strategy-scoring-governance.md) | 策略分數治理總控計畫與增量 Gate。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
+| [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |
+| [2026-06-14-legacy-test-governance.md](../superpowers/plans/2026-06-14-legacy-test-governance.md) | 舊測試遷移、拆分、棄用與完整驗證計畫。 |
 | [2026-06-11-financial-float-boundary-governance.md](../superpowers/plans/2026-06-11-financial-float-boundary-governance.md) | 金融 float 邊界 AST 掃描、逐行標記與 pytest gate 實作計畫。 |
 | [2026-06-11-broker-flow-sqlite-and-ui-recovery.md](../superpowers/plans/2026-06-11-broker-flow-sqlite-and-ui-recovery.md) | 券商分點 SQLite 唯一鍵、ETF 代號與 UI 復原計畫。 |
 | [2026-06-12-broker-flow-ranked-metric-reconciliation.md](../superpowers/plans/2026-06-12-broker-flow-ranked-metric-reconciliation.md) | MoneyDJ E/B 獨立榜單 union、三態品質與覆蓋率治理計畫。 |
@@ -226,6 +228,9 @@
 - 2026-06-13：完成 Roadmap Hub / 6M Roadmap 重構，新增 Legacy Carryover Matrix 與完整 Application Manual，修正主要 UI 入口、過期 Phase 狀態與 service 架構文件。
 - 2026-06-13：修正 fixed / quantile pilot 的 OOS 時間軸與不實結論；保存資料指紋，並記錄 fixed 無交易與 regime 分層未完成，因此正式實證仍未過 Gate。
 - 2026-06-14：完成 Phase 5 Month 1 SQLite 穩定分頁與規格化 Excel 報告匯出實作計畫，補齊 report payload 契約、背景寫檔、原子替換、文件 coverage 與完整 QA Gate。
+- 2026-06-14：完成舊測試治理，將歷史網路／真實路徑／互動式腳本移至
+  `tests/manual/`，以現行 `TWStockConfig`、`DataLoader` 與分析 API 重建正式
+  契約；pytest 完整收集與 `344` 項測試通過。
 
 
 

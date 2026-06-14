@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+"""Deprecated manual check; see tests/manual/README.md."""
 # -*- coding: utf-8 -*-
 
 """
@@ -604,4 +605,4 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 import numpy as np
@@ -335,4 +337,4 @@ def main():
     print(f"\n所有測試結果已保存至: {results_dir}")
 
 if __name__ == '__main__':
-    main() 
+    main()

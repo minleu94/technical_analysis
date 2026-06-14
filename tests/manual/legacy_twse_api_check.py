@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import pytest
 import pandas as pd
 from datetime import datetime, timedelta
@@ -67,4 +69,4 @@ class TestTWSEAPI:
             assert not df['close'].isna().all()
             assert not df['volume'].isna().all()
             assert df['close'].min() > 0
-            assert df['volume'].min() >= 0 
+            assert df['volume'].min() >= 0

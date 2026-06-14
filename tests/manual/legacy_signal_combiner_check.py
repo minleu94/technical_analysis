@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -135,4 +137,4 @@ def test_signal_combiner():
     print("\n測試完成!")
 
 if __name__ == "__main__":
-    test_signal_combiner() 
+    test_signal_combiner()

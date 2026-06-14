@@ -23,30 +23,36 @@ class TestDataLoader:
     def test_load_market_index(self, test_config, sample_market_data):
         """測試加載市場指數"""
         # 保存測試數據
+        market_data = sample_market_data.rename(
+            columns={"date": "日期", "close": "收盤指數"}
+        )
         test_file = test_config.meta_data_dir / "market_index.csv"
-        sample_market_data.to_csv(test_file, index=False)
+        market_data.to_csv(test_file, index=False, encoding="utf-8-sig")
         
         # 測試加載
         loader = DataLoader(test_config)
         df = loader.load_market_index()
         assert df is not None
         assert len(df) > 0
-        assert 'date' in df.columns
-        assert 'close' in df.columns
+        assert '日期' in df.columns
+        assert '收盤指數' in df.columns
     
     def test_load_industry_index(self, test_config, sample_index_data):
         """測試加載產業指數"""
         # 保存測試數據
+        industry_data = sample_index_data.rename(
+            columns={"date": "日期", "index_name": "指數名稱"}
+        )
         test_file = test_config.meta_data_dir / "industry_index.csv"
-        sample_index_data.to_csv(test_file, index=False)
+        industry_data.to_csv(test_file, index=False, encoding="utf-8-sig")
         
         # 測試加載
         loader = DataLoader(test_config)
         df = loader.load_industry_index()
         assert df is not None
         assert len(df) > 0
-        assert 'date' in df.columns
-        assert 'index_name' in df.columns
+        assert '日期' in df.columns
+        assert '指數名稱' in df.columns
     
     def test_load_nonexistent_file(self, test_config):
         """測試加載不存在的文件"""
@@ -58,8 +64,14 @@ class TestDataLoader:
     def test_data_validation(self, test_config, sample_stock_data):
         """測試數據驗證"""
         loader = DataLoader(test_config)
-        assert loader.validate_data(sample_stock_data)
+        valid_df = pd.DataFrame(
+            {
+                "證券代號": ["2330", "2317"],
+                "證券名稱": ["台積電", "鴻海"],
+            }
+        )
+        assert loader.validate_stock_data(valid_df)
         
         # 測試無效數據
         invalid_df = pd.DataFrame({'invalid': [1, 2, 3]})
-        assert not loader.validate_data(invalid_df) 
+        assert not loader.validate_stock_data(invalid_df)

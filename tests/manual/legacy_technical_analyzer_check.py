@@ -1,3 +1,5 @@
+"""Deprecated manual check; see tests/manual/README.md."""
+
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -177,4 +179,4 @@ def test_technical_analyzer():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    test_technical_analyzer() 
+    test_technical_analyzer()
