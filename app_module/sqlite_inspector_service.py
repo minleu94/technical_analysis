@@ -166,7 +166,7 @@ class SqliteInspectorService:
             result['message'] = error_msg
             return result
 
-    def query_table_data(
+    def _build_filtered_query(
         self,
         table_name: str,
         stock_code: Optional[str] = None,
@@ -175,49 +175,16 @@ class SqliteInspectorService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         broker_branch: Optional[str] = None,
-        limit: int = 100
-    ) -> pd.DataFrame:
-        """受控的表格資料查詢
-        
-        Args:
-            table_name: 資料表名稱 (必須在 ALLOWED_TABLES 白名單中)
-            stock_code: 證券代號 (選填)
-            stock_name: 證券名稱 (選填)
-            date_str: 日期字串，格式為 YYYY-MM-DD 或 YYYYMMDD (選填)
-            start_date: 開始日期字串 (選填)
-            end_date: 結束日期字串 (選填)
-            broker_branch: 分點名稱 (選填)
-            limit: 限制筆數
-            
-        Returns:
-            pd.DataFrame: 查詢結果
-        """
-        if not self.is_enabled():
-            raise RuntimeError("SQLite 未啟用")
-
-        if table_name not in self.ALLOWED_TABLES:
-            raise ValueError(f"拒絕訪問非白名單資料表: {table_name}")
-
-        # limit clamp 限制，確保在 10 ~ 5000 之間，防範大資料量 OOM
-        limit = max(10, min(limit, 5000))
-
-        # 1. 取得 Table schema 以驗證欄位白名單，並安全拼裝 SELECT 欄位
+    ) -> tuple[list[str], str, list[Any], str]:
+        """建立篩選條件與排序 SQL，回傳 (valid_columns, WHERE_SQL, params, ORDER_BY_SQL)"""
+        # 1. 取得 Table schema 以驗證欄位白名單
         schema_df = self.get_table_schema(table_name)
         if schema_df.empty:
-            return pd.DataFrame()
+            return [], "", [], ""
 
-        # get_table_schema 傳回的 DF 中，欄位名稱欄重命名成了 '欄位名稱'
         valid_columns = schema_df['欄位名稱'].tolist()
-        if not valid_columns:
-            return pd.DataFrame()
-
-        # 安全地將欄位名稱用引號括起來，以防止 SQL Injection
-        escaped_cols = ", ".join([f'"{col}"' for col in valid_columns])
-
-        # 2. 建構 SQL 語句
-        sql = f'SELECT {escaped_cols} FROM "{table_name}"'
         where_clauses = []
-        params: List[Any] = []
+        params = []
 
         def parse_date(d):
             if not d:
@@ -239,7 +206,6 @@ class SqliteInspectorService:
 
         # 篩選：日期
         if '日期' in valid_columns:
-            # 單一日期優先
             d_val = parse_date(date_str)
             if d_val:
                 where_clauses.append('"日期" = ?')
@@ -259,21 +225,109 @@ class SqliteInspectorService:
             where_clauses.append('"分點名稱" LIKE ?')
             params.append(f"%{str(broker_branch).strip()}%")
 
+        where_sql = ""
         if where_clauses:
-            sql += " WHERE " + " AND ".join(where_clauses)
+            where_sql = " WHERE " + " AND ".join(where_clauses)
 
-        # 自動排序：如果表有日期欄位，優先按日期降序排列
+        # 穩定排序規則設計：
+        # - 有 `日期`：`"日期" DESC`
+        # - 有 `證券代號`：再加 `"證券代號" ASC`
+        # - 有其他可能的識別欄位：如分點名稱，加上 `"分點名稱" ASC`
+        # - 最後一律加上 rowid ASC 作為最終的 tie-breaker
+        order_clauses = []
         if '日期' in valid_columns:
-            sql += ' ORDER BY "日期" DESC'
+            order_clauses.append('"日期" DESC')
+        if '證券代號' in valid_columns:
+            order_clauses.append('"證券代號" ASC')
+        if '分點名稱' in valid_columns:
+            order_clauses.append('"分點名稱" ASC')
+            
+        order_clauses.append('rowid ASC')
+        order_by_sql = " ORDER BY " + ", ".join(order_clauses)
 
-        # 限制筆數
-        sql += " LIMIT ?"
-        params.append(limit)
+        return valid_columns, where_sql, params, order_by_sql
+
+    def query_table_data(
+        self,
+        table_name: str,
+        stock_code: Optional[str] = None,
+        stock_name: Optional[str] = None,
+        date_str: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        broker_branch: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> pd.DataFrame:
+        """受控的表格資料分頁查詢"""
+        if not self.is_enabled():
+            raise RuntimeError("SQLite 未啟用")
+
+        if table_name not in self.ALLOWED_TABLES:
+            raise ValueError(f"拒絕訪問非白名單資料表: {table_name}")
+
+        limit = max(1, min(limit, 5000))
+        offset = max(0, int(offset))
+
+        valid_columns, where_sql, params, order_by_sql = self._build_filtered_query(
+            table_name=table_name,
+            stock_code=stock_code,
+            stock_name=stock_name,
+            date_str=date_str,
+            start_date=start_date,
+            end_date=end_date,
+            broker_branch=broker_branch
+        )
+
+        if not valid_columns:
+            return pd.DataFrame()
+
+        escaped_cols = ", ".join([f'"{col}"' for col in valid_columns])
+        sql = f'SELECT {escaped_cols} FROM "{table_name}"' + where_sql + order_by_sql + " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
         try:
             return self.db_manager.execute_query(sql, tuple(params))
         except Exception as e:
-            self.logger.error(f"[SqliteInspectorService] 執行受控查詢失敗: {e}")
+            self.logger.error(f"[SqliteInspectorService] 執行受控分頁查詢失敗: {e}")
+            raise e
+
+    def query_table_data_count(
+        self,
+        table_name: str,
+        stock_code: Optional[str] = None,
+        stock_name: Optional[str] = None,
+        date_str: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        broker_branch: Optional[str] = None,
+    ) -> int:
+        """獲取受控查詢的總筆數 (計數)"""
+        if not self.is_enabled():
+            return 0
+
+        if table_name not in self.ALLOWED_TABLES:
+            raise ValueError(f"拒絕訪問非白名單資料表: {table_name}")
+
+        _, where_sql, params, _ = self._build_filtered_query(
+            table_name=table_name,
+            stock_code=stock_code,
+            stock_name=stock_name,
+            date_str=date_str,
+            start_date=start_date,
+            end_date=end_date,
+            broker_branch=broker_branch
+        )
+
+        sql = f'SELECT COUNT(*) as cnt FROM "{table_name}"' + where_sql
+
+        try:
+            df = self.db_manager.execute_query(sql, tuple(params))
+            if not df.empty:
+                return int(df.iloc[0]['cnt'])
+            return 0
+        except Exception as e:
+            self.logger.error(f"[SqliteInspectorService] 執行計數查詢失敗: {e}")
             raise e
 
     def _format_date(self, val: Any) -> Optional[str]:
@@ -284,3 +338,4 @@ class SqliteInspectorService:
         if len(s) == 8 and s.isdigit():
             return f"{s[:4]}-{s[4:6]}-{s[6:]}"
         return s
+

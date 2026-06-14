@@ -152,3 +152,60 @@ def test_sqlite_inspector_service_limit_clamp(test_config):
     df_small = service.query_table_data('market_indices', limit=2)
     assert isinstance(df_small, pd.DataFrame)
 
+
+def test_query_table_data_count_uses_same_filters(test_config):
+    """測試資料筆數計算與篩選條件一致"""
+    service = SqliteInspectorService(test_config)
+    
+    # 獲取總筆數 (無篩選，fixture 中 daily_prices 有 2 筆)
+    total_count = service.query_table_data_count("daily_prices")
+    assert total_count == 2
+    
+    # 帶有篩選的筆數 (2330 有 2 筆)
+    count_2330 = service.query_table_data_count("daily_prices", stock_code="2330")
+    assert count_2330 == 2
+
+    # 不存在的股票代號應為 0
+    count_none = service.query_table_data_count("daily_prices", stock_code="9999")
+    assert count_none == 0
+
+
+def test_paginated_rows_are_stable_without_overlap(test_config):
+    """測試分頁查詢的穩定性，確保跨頁資料無重複且無遺漏"""
+    from data_module.db_manager import DBManager
+    db = DBManager(test_config)
+    # 多插入幾筆 daily_prices 資料以供測試
+    with db.connect() as conn:
+        conn.execute("INSERT INTO daily_prices (日期, 證券代號, 證券名稱, 收盤價) VALUES ('20260527', '2330', '台積電', 780.0);")
+        conn.execute("INSERT INTO daily_prices (日期, 證券代號, 證券名稱, 收盤價) VALUES ('20260526', '2330', '台積電', 770.0);")
+
+    service = SqliteInspectorService(test_config)
+    # 總共有 4 筆，依日期降序排列
+    # 測試 limit=2, offset=0 (第一頁)
+    page_1 = service.query_table_data("daily_prices", limit=2, offset=0)
+    assert len(page_1) == 2
+    
+    # 測試 limit=2, offset=2 (第二頁)
+    page_2 = service.query_table_data("daily_prices", limit=2, offset=2)
+    assert len(page_2) == 2
+    
+    # 確保兩頁的資料主鍵(日期+證券代號)無交集
+    keys_1 = set(zip(page_1["日期"], page_1["證券代號"]))
+    keys_2 = set(zip(page_2["日期"], page_2["證券代號"]))
+    assert keys_1.isdisjoint(keys_2)
+    
+    # 合併後共 4 筆
+    assert len(keys_1.union(keys_2)) == 4
+
+
+def test_negative_offset_is_clamped_to_zero(test_config):
+    """測試負數 offset 會被自動導正為 0"""
+    service = SqliteInspectorService(test_config)
+    
+    # offset = -100 應該與 offset = 0 的查詢結果完全一致
+    actual = service.query_table_data("daily_prices", limit=10, offset=-100)
+    expected = service.query_table_data("daily_prices", limit=10, offset=0)
+    
+    pd.testing.assert_frame_equal(actual, expected)
+
+
