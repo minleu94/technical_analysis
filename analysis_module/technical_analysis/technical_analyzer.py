@@ -149,10 +149,14 @@ class TechnicalAnalyzer:
                 full_config=full_config
             )
             if volatility_indicators:
-                df_result['BB_Upper'] = volatility_indicators.get('upperband')
-                df_result['BB_Middle'] = volatility_indicators.get('middleband')
-                df_result['BB_Lower'] = volatility_indicators.get('lowerband')
-                df_result['SAR'] = volatility_indicators.get('SAR')
+                if 'upperband' in volatility_indicators:
+                    df_result['BB_Upper'] = volatility_indicators['upperband']
+                if 'middleband' in volatility_indicators:
+                    df_result['BB_Middle'] = volatility_indicators['middleband']
+                if 'lowerband' in volatility_indicators:
+                    df_result['BB_Lower'] = volatility_indicators['lowerband']
+                if 'SAR' in volatility_indicators:
+                    df_result['SAR'] = volatility_indicators['SAR']
             
         # 只有在啟用 ATR 時，才呼叫 calculate_atr_indicator
         if atr_params is not None:

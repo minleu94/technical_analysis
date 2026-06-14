@@ -273,10 +273,49 @@ def test_decimal_score_type(sample_stock_df):
     for v in res_df['FinalScore'].dropna():
         assert isinstance(v, Decimal)
 
-def test_single_indicator_disabled(sample_stock_df):
-    """測試 RSI, MACD, KD, ATR, ADX, MA 等各指標單獨停用的混合情境"""
+@pytest.mark.parametrize(
+    ("section", "indicator", "invalid_params", "disabled_columns", "enabled_column"),
+    [
+        ("momentum", "rsi", {"timeperiod": 1}, ["RSI"], "MACD"),
+        (
+            "momentum",
+            "macd",
+            {"fastperiod": 30, "slowperiod": 10, "signalperiod": 9},
+            ["MACD", "MACD_signal", "MACD_hist"],
+            "RSI",
+        ),
+        (
+            "momentum",
+            "kd",
+            {"fastk_period": 1, "slowk_period": 3, "slowd_period": 3, "slowk_matype": 0, "slowd_matype": 0},
+            ["SlowK", "SlowD"],
+            "RSI",
+        ),
+        (
+            "volatility",
+            "bollinger",
+            {"timeperiod": 1, "nbdevup": 2.0, "nbdevdn": 2.0, "matype": 0},
+            ["BB_Upper", "BB_Middle", "BB_Lower"],
+            "SAR",
+        ),
+        ("volatility", "sar", {"acceleration": 0.5, "maximum": 0.2}, ["SAR"], "BB_Upper"),
+        ("volatility", "atr", {"timeperiod": 1}, ["ATR"], "SAR"),
+        ("trend", "tsf", {"timeperiod": 1}, ["TSF"], "ADX"),
+        ("trend", "adx", {"timeperiod": 1}, ["ADX"], "TSF"),
+        ("trend", "ma", {"windows": [1, 5]}, ["MA5", "MA10", "MA20", "MA60"], "ADX"),
+    ],
+)
+def test_single_indicator_disabled(
+    sample_stock_df,
+    section,
+    indicator,
+    invalid_params,
+    disabled_columns,
+    enabled_column,
+):
+    """停用指標必須略過非法參數驗證與計算，其他啟用指標仍須正常產生。"""
     configurator = StrategyConfigurator()
-    
+
     base_config = {
         'config_schema_version': 1,
         'weights': {'pattern': 3000, 'technical': 5000, 'volume': 2000},
@@ -301,42 +340,22 @@ def test_single_indicator_disabled(sample_stock_df):
             }
         }
     }
-    
-    # 1. 停用 RSI
-    cfg = copy_config(base_config)
-    cfg['technical']['momentum']['rsi']['enabled'] = False
-    res = configurator.scoring_engine.calculate_total_score(sample_stock_df, cfg)
-    assert 'RSI' not in res.columns or pd.isna(res.iloc[-1].get('RSI')) or res.iloc[-1].get('RSI') == 50.0
-    
-    # 2. 停用 MACD
-    cfg = copy_config(base_config)
-    cfg['technical']['momentum']['macd']['enabled'] = False
-    res = configurator.scoring_engine.calculate_total_score(sample_stock_df, cfg)
-    assert 'MACD' not in res.columns or pd.isna(res.iloc[-1].get('MACD'))
-    
-    # 3. 停用 KD
-    cfg = copy_config(base_config)
-    cfg['technical']['momentum']['kd']['enabled'] = False
-    res = configurator.scoring_engine.calculate_total_score(sample_stock_df, cfg)
-    assert 'SlowK' not in res.columns or pd.isna(res.iloc[-1].get('SlowK'))
-    
-    # 4. 停用 ATR
-    cfg = copy_config(base_config)
-    cfg['technical']['volatility']['atr']['enabled'] = False
-    res = configurator.scoring_engine.calculate_total_score(sample_stock_df, cfg)
-    assert 'ATR' not in res.columns or pd.isna(res.iloc[-1].get('ATR'))
 
-    # 5. 停用 ADX
     cfg = copy_config(base_config)
-    cfg['technical']['trend']['adx']['enabled'] = False
-    res = configurator.scoring_engine.calculate_total_score(sample_stock_df, cfg)
-    assert 'ADX' not in res.columns or pd.isna(res.iloc[-1].get('ADX'))
-    
-    # 6. 停用 MA
-    cfg = copy_config(base_config)
-    cfg['technical']['trend']['ma']['enabled'] = False
-    res = configurator.scoring_engine.calculate_total_score(sample_stock_df, cfg)
-    assert 'MA5' not in res.columns
+    cfg['technical'][section][indicator] = {
+        'enabled': False,
+        **invalid_params,
+    }
+
+    result = configurator.configure_technical_indicators(
+        sample_stock_df,
+        cfg['technical'],
+        full_config=cfg,
+    )
+
+    assert enabled_column in result.columns
+    for column in disabled_columns:
+        assert column not in result.columns
 
 def test_generate_recommendations_fail_closed_propagation(sample_stock_df):
     """測試 generate_recommendations 的端到端 Fail-Closed 異常傳播"""
