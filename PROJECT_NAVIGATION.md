@@ -176,6 +176,8 @@ python ui_qt/main.py
 **真正動邏輯的地方**：
 - `decision_module/strategy_configurator.py`：策略配置（技術指標、圖形模式設定）
 - `decision_module/scoring_engine.py`：打分引擎（統一打分模型，0-100 分）
+- `decision_module/indicator_parameter_registry.py`：指標參數 schema、版本、alias 與 Fail-Closed 驗證
+- `decision_module/weight_contract.py`：推薦權重整數 bp 契約與 legacy migration
 - `decision_module/recommendation_percentile_ranker.py`：推薦 eligible universe 橫斷面百分位
 
 **門檻模式**：

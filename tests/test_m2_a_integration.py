@@ -5,7 +5,11 @@ from decimal import Decimal
 import json
 from decision_module.strategy_configurator import StrategyConfigurator
 from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
-from decision_module.weight_contract import RecommendationWeightContract, InvalidWeightError
+from decision_module.weight_contract import (
+    RecommendationWeightContract,
+    InvalidWeightError,
+    WeightMigrationError,
+)
 from decision_module.scoring_engine import ScoringEngine
 
 def copy_config(cfg):
@@ -206,6 +210,31 @@ def test_scoring_engine_decimal_accuracy_and_regime_limit(sample_stock_df):
     latest_score = res_df.iloc[-1]['TotalScore']
     assert isinstance(latest_score, Decimal)
     assert 0 <= latest_score <= 100
+
+
+def test_scoring_engine_uses_controlled_legacy_weight_migration(sample_stock_df):
+    engine = ScoringEngine()
+    valid_config = {
+        'weights': {
+            'pattern': 0.3,
+            'technical': 0.5,
+            'volume': 0.2,
+        }
+    }
+
+    result = engine.calculate_total_score(sample_stock_df, valid_config)
+    assert isinstance(result.iloc[-1]['TotalScore'], Decimal)
+
+    invalid_config = {
+        'weights': {
+            'pattern': 0.33333,
+            'technical': 0.5,
+            'volume': 0.16667,
+        }
+    }
+    with pytest.raises(WeightMigrationError):
+        engine.calculate_total_score(sample_stock_df, invalid_config)
+
 
 def test_no_look_ahead_prefix_invariance(sample_stock_df):
     """測試前綴不變性 (Prefix-Invariance)，以驗證絕無未來函數 Look-ahead bias"""

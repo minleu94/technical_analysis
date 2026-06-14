@@ -17,9 +17,17 @@
 
 #### TotalScore（總分）
 - **定義**：0-100 分的綜合評分，由三個子分數加權計算
-- **公式**：`TotalScore = W_pattern × PatternScore + W_indicator × IndicatorScore + W_volume × VolumeScore`
-- **權重約束**：`W_pattern + W_indicator + W_volume = 1.0`（自動正規化）
-- **市場狀態調整**：權重可根據 Regime（Trend/Reversion/Breakout）動態調整
+- **公式**：`TotalScore = (pattern_bp × PatternScore + technical_bp × IndicatorScore + volume_bp × VolumeScore) / 10000`
+- **權重約束**：key 必須精確為 `pattern`、`technical`、`volume`；值為非 bool 整數 bp，總和嚴格等於 `10000`
+- **數值契約**：核心計算使用 `Decimal`，以 `ROUND_HALF_UP` 量化至 `0.01` 分
+- **市場狀態調整**：Regime（Trend/Reversion/Breakout）使用 Decimal 倍率，並以最大餘額法穩定分配回 `10000 bp`
+- **失敗政策**：非法權重不自動 normalize；legacy float 只能經嚴格 migration adapter 轉換
+
+#### 指標參數治理
+- `config_schema_version` 缺失時視為 legacy v0；提供時只能是非 bool、非負原生整數。
+- v0 缺少指標欄位可使用 legacy defaults；v1+ 啟用的指標缺少必要參數時 Fail-Closed。
+- 未知欄位、錯誤型態、越界值與跨欄位衝突一律拒絕。
+- `enabled=False` 的指標不驗證、不計算，也不建立空結果欄位。
 
 #### PatternScore（圖形分數）
 - **定義**：0-100 分，基於技術圖形模式識別結果

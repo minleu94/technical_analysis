@@ -117,6 +117,8 @@ Application Services / DTO / Repository
 
 - `strategy_configurator.py`
 - `scoring_engine.py`
+- `indicator_parameter_registry.py`
+- `weight_contract.py`
 - `score_threshold_policy.py`
 - `recommendation_percentile_ranker.py`
 - `reason_engine.py`
@@ -126,6 +128,13 @@ Application Services / DTO / Repository
 - `flow_signal_engine.py`
 
 ### 核心契約
+
+#### 指標參數與推薦權重
+
+- `IndicatorParameterRegistry` 是技術指標參數 schema、alias、版本與跨欄位限制的權威。
+- v1+ 啟用指標缺少必要參數、未知欄位、錯誤型態或非法值時 Fail-Closed；disabled 指標完全跳過。
+- `RecommendationWeightContract` 只接受 `pattern`、`technical`、`volume` 三個非 bool 整數 bp，總和固定為 `10000`。
+- `ScoringEngine` 使用 Decimal 核心加權，Regime 採最大餘額法重分配，總分以 `ROUND_HALF_UP` 量化至 `0.01` 分。
 
 #### fixed / quantile 回測門檻
 

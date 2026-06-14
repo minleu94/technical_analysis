@@ -14,14 +14,22 @@
 ### 公式
 
 ```
-TotalScore = W_pattern × PatternScore + W_indicator × IndicatorScore + W_volume × VolumeScore
+TotalScore = (
+    pattern_bp × PatternScore
+  + technical_bp × IndicatorScore
+  + volume_bp × VolumeScore
+) / 10000
 ```
 
 其中：
 - **PatternScore（圖形分數）**：0-100 分，基於識別到的技術圖形模式（如頭肩頂、雙底等）
 - **IndicatorScore（指標分數）**：0-100 分，基於技術指標的綜合評分
 - **VolumeScore（成交量分數）**：0-100 分，基於成交量的變化與異常
-- **權重（W_pattern, W_indicator, W_volume）**：各子分數的權重，會根據市場狀態（Regime）自動調整
+- **權重（pattern / technical / volume）**：使用非 bool 整數基點，三項必須完整且總和嚴格等於 `10000 bp`
+- **數值精度**：核心加權使用 `Decimal`，最後以 `ROUND_HALF_UP` 量化至 `0.01` 分
+- **Regime 調整**：使用 Decimal 倍率與最大餘額法重新分配成總和 `10000 bp` 的整數權重
+
+舊版 `0.3 / 0.5 / 0.2` 權重只能經 legacy migration adapter 無損轉換；若乘積不是整數 bp、key 不完整或總和不是 `10000 bp`，系統會拒絕執行，不會自動補差額。
 
 ### 子分數的詳細計算
 

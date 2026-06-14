@@ -17,8 +17,8 @@
 - [x] Month 2 Roadmap、Legacy Carryover 與 Research Run Registry schema 規格已建立。
 - [x] M2-A 第一版程式與單元測試已產出。
 - [x] M2-A Blocker 修復版 2 已產出：Decimal 評分、最大餘額法、治理例外傳播、跨欄位驗證與 Prefix-Invariance 測試均已接入。
-- [/] M2-A 第二輪驗收進行中；2026-06-14 新鮮驗證為 `385 passed`、Mypy 148 files 通過、金融邊界掃描與 changed-files `py_compile` 通過，但仍有精確型態與測試有效性阻斷問題。
-- [ ] M2-A 契約層級阻斷問題修復完成並取得使用者核准。
+- [x] M2-A 契約層級阻斷問題已修復，完整驗證與文件 Coverage 已通過。
+- [/] M2-A 等待使用者核准 Gate；核准前不得開始 M2-B。
 - [ ] M2-B 開始。
 - [ ] M2-B Gate 通過並取得使用者核准。
 - [ ] M2-C 開始。
@@ -43,17 +43,18 @@
 
 目前程式契約阻斷已清除。M2-A 仍需完成完整驗證、文件 Coverage、Review Gate 與使用者核准，才可標示 Gate 通過並開始 M2-B。
 
-### 第二輪驗證證據（2026-06-14）
+### 最終驗證證據（2026-06-14）
 
 ```text
-focused pytest: 31 passed in 1.11s
-full pytest: 385 passed, 7 warnings in 14.57s
+focused pytest: 36 passed in 1.12s
+full pytest: 405 passed, 7 warnings in 15.92s
 mypy: Success: no issues found in 148 source files
 financial float boundary scanner: exit 0
+financial float boundary tests: 37 passed in 0.10s
 changed-files py_compile: exit 0
 ```
 
-結論：修復版 2 與後續修復已清除目前已知程式契約阻斷；M2-A Gate 尚未通過，必須完成完整驗證、文件 Coverage、review 與使用者核准。
+結論：M2-A 程式、測試、數值防線、Look-ahead Gate、文件 Coverage 與 review 已完成；目前只等待使用者明確核准，核准後才能開始 M2-B。
 
 ### 強制順序
 
@@ -399,23 +400,25 @@ Expected: PASS。
 - Modify: `decision_module/scoring_engine.py`
 - Modify: `tests/test_m2_a_integration.py`
 
-- [ ] **Step 1: 寫入正式路徑失敗測試**
+- [x] **Step 1: 寫入正式路徑 migration / 失敗測試**
 
-測試不能只呼叫 Contract，必須呼叫 `ScoringEngine.calculate_total_score()`：
+測試不能只呼叫 Contract，必須呼叫 `ScoringEngine.calculate_total_score()`。可無損轉換的 legacy float 應經 adapter 成功；非整數 bp 或總和不合規時必須拒絕：
 
 ```python
-def test_scoring_engine_rejects_non_bp_weights(scoring_frame):
-    config = {
-        "signals": {
-            "weights": {
-                "pattern": 0.3,
-                "technical": 0.5,
-                "volume": 0.2,
-            }
+def test_scoring_engine_uses_controlled_legacy_weight_migration(scoring_frame):
+    valid = {"weights": {"pattern": 0.3, "technical": 0.5, "volume": 0.2}}
+    result = ScoringEngine().calculate_total_score(scoring_frame, valid)
+    assert isinstance(result.iloc[-1]["TotalScore"], Decimal)
+
+    invalid = {
+        "weights": {
+            "pattern": 0.33333,
+            "technical": 0.5,
+            "volume": 0.16667,
         }
     }
-    with pytest.raises(InvalidWeightError):
-        ScoringEngine().calculate_total_score(scoring_frame, config)
+    with pytest.raises(WeightMigrationError):
+        ScoringEngine().calculate_total_score(scoring_frame, invalid)
 ```
 
 - [x] **Step 2: 定義總分公式**
@@ -533,7 +536,7 @@ Expected: PASS。
 **Files:**
 - Modify only after Coverage Pass confirms exact set.
 
-- [/] **Step 1: 執行 Documentation Coverage Pass**
+- [x] **Step 1: 執行 Documentation Coverage Pass**
 
 至少檢查：
 
@@ -548,7 +551,7 @@ Expected: PASS。
 - `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
 - `docs/00_core/DOCUMENTATION_INDEX.md`
 
-第二輪 Coverage 結論：主計畫、Snapshot 與 Index 已納入追蹤；正式評分契約改動仍需在 M2-A Gate 前確認 Strategy Design / User Guide / Backtest Lab / Application Manual 是否需要同步。
+Coverage 已同步 Strategy Design、Score Explanation、User Guide、Backtest Lab、Application Manual、Architecture、Navigation、Snapshot、Index 與本計畫。
 
 - [x] **Step 2: 執行完整 pytest**
 
@@ -575,7 +578,7 @@ Expected: PASS。
 .\.venv\Scripts\python.exe -m py_compile decision_module\indicator_parameter_registry.py decision_module\weight_contract.py decision_module\scoring_engine.py decision_module\strategy_configurator.py analysis_module\technical_analysis\technical_indicators.py analysis_module\technical_analysis\technical_analyzer.py
 ```
 
-- [ ] **Step 6: M2-A Review Gate**
+- [x] **Step 6: M2-A Review Gate**
 
 必須確認：
 
