@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 import hashlib
 import os
 from pathlib import Path
+import re
 from typing import Any
 
 import pandas as pd
@@ -206,12 +207,18 @@ class ResearchRunService:
         return True
 
     def _paths_for(self, run_id: str) -> dict[str, Path]:
+        file_stem = self._safe_file_stem(run_id)
         return {
-            "equity_temp": self.staging_dir / f"{run_id}_equity.tmp.parquet",
-            "trades_temp": self.staging_dir / f"{run_id}_trades.tmp.parquet",
-            "equity_final": self.parquet_dir / f"{run_id}_equity.parquet",
-            "trades_final": self.parquet_dir / f"{run_id}_trades.parquet",
+            "equity_temp": self.staging_dir / f"{file_stem}_equity.tmp.parquet",
+            "trades_temp": self.staging_dir / f"{file_stem}_trades.tmp.parquet",
+            "equity_final": self.parquet_dir / f"{file_stem}_equity.parquet",
+            "trades_final": self.parquet_dir / f"{file_stem}_trades.parquet",
         }
+
+    def _safe_file_stem(self, run_id: str) -> str:
+        sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", run_id).strip("._")
+        suffix = hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:12]
+        return f"{sanitized}_{suffix}" if sanitized else suffix
 
     def _verify_hash(self, path: Path, expected_hash: str) -> None:
         if not path.exists():
