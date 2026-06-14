@@ -818,7 +818,7 @@ Backtest/replay services 只回傳 DTO。現有「保存結果」入口呼叫 `R
 - Create: `app_module/research_run_comparison_service.py`
 - Test: `tests/test_research_run_comparison_service.py`
 
-- [ ] **Step 1: 定義三態**
+- [x] **Step 1: 定義三態**
 
 ```text
 Comparable
@@ -830,16 +830,18 @@ Incompatible
 - `Caution`：Universe、期間或成本不同，只顯示並列，不產生優劣排名。
 - `Incompatible`：資料 fingerprint、execution 或 sizing mode 不同，禁用直接績效比較。
 
-- [ ] **Step 2: 定義曲線比較**
+- [x] **Step 2: 定義曲線比較**
 
 - 各 run 以起始值正規化為 100。
 - 只比較明確日期交集。
 - 缺值不 forward-fill 跨越 run 不存在期間。
 - UI 顯示使用的日期交集與排除原因。
 
-- [ ] **Step 3: benchmark-relative attribution**
+- [x] **Step 3: benchmark-relative attribution**
 
 只使用 run 已保存的 benchmark results，不在比較時重新抓取目前資料。
+
+驗證證據（2026-06-14）：`.\.venv\Scripts\python.exe -m pytest tests\test_research_run_comparison_service.py -q -o addopts=` 先 RED：缺少 `app_module.research_run_comparison_service`；實作後 -> 5 passed in 1.11s。`.\.venv\Scripts\python.exe -m pytest tests\test_research_run_comparison_service.py tests\test_research_run_repository.py tests\test_research_run_service.py -q -o addopts=` -> 20 passed in 1.66s；changed-files py_compile -> exit 0；`.\.venv\Scripts\python.exe -m mypy app_module\research_run_comparison_service.py app_module\research_run_dtos.py tests\test_research_run_comparison_service.py` -> Success: no issues found in 3 source files。
 
 ## Task C2: Research Lab 子 Tab
 
