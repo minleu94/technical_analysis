@@ -51,3 +51,15 @@ def test_legacy_weight_migration_invalid_sum():
     with pytest.raises(WeightMigrationError) as excinfo:
         LegacyWeightMigrationAdapter.migrate_float_to_bp(float_weights)
     assert "總和不為 10000 bp" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "float_weights",
+    [
+        {'pattern': 0.3, 'technical': 0.7},
+        {'pattern': 0.3, 'technical': 0.5, 'volume': 0.2, 'other': 0.0},
+    ],
+)
+def test_legacy_weight_migration_rejects_missing_or_extra_keys(float_weights):
+    with pytest.raises(WeightMigrationError, match="鍵值不匹配"):
+        LegacyWeightMigrationAdapter.migrate_float_to_bp(float_weights)

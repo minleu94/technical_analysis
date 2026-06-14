@@ -36,17 +36,15 @@
 6. Prefix-Invariance 已逐日比對 RSI、SlowK、SlowD 中間指標。
 7. `config_schema_version` 已收緊為只接受非 bool、非負的原生 `int`。
 8. MA windows 已逐元素拒絕 bool、float 與 string，不再執行 `int(x)` 隱式轉換。
+9. LegacyWeightMigrationAdapter 已要求精確三鍵集合，不再補缺漏 key 或忽略額外 key。
 
 仍未結案的 Gate 阻斷：
 
-1. **LegacyWeightMigrationAdapter 未拒絕額外 key**：
-   - `{"pattern": 0.3, "technical": 0.5, "volume": 0.2, "other": 0.0}` 目前會被接受，且 `other` 被靜默忽略。
-   - migration adapter 必須與正式權重契約相同，要求 key 集合精確等於 `pattern`、`technical`、`volume`。
-2. **單獨停用指標測試沒有走指標計算路徑**：
+1. **單獨停用指標測試沒有走指標計算路徑**：
    - `test_single_indicator_disabled` 直接把原始價格資料傳給 `ScoringEngine.calculate_total_score()`，沒有呼叫 `configure_technical_indicators()` 或 `generate_recommendations()`。
    - 目前斷言只證明原始 DataFrame 沒有 RSI / MACD / KD / ATR / ADX / MA 欄位，無法證明 disabled 指標真的被跳過。
    - 必須逐一透過正式指標配置路徑，並同時斷言停用欄位不存在、啟用欄位存在。
-3. **Decimal 最終精度契約尚未落實**：
+2. **Decimal 最終精度契約尚未落實**：
    - `TotalScore` / `FinalScore` 已是 Decimal，但目前沒有依 Task A4 定義使用 `ROUND_HALF_UP` 量化至既有分數 contract 的固定精度。
    - 必須先確認既有分數欄位的權威精度，再於核心 Decimal 計算完成後統一 quantize；不得在核心路徑轉回 float。
 
@@ -60,7 +58,7 @@ financial float boundary scanner: exit 0
 changed-files py_compile: exit 0
 ```
 
-結論：修復版 2 已解決第一輪多數阻斷，且精確版本與 MA windows 型態契約已於本輪補齊；M2-A Gate 尚未通過，完成上述三項後必須重新執行完整驗證與 review。
+結論：修復版 2 已解決第一輪多數阻斷，且精確版本、MA windows 型態與 migration key 契約已於本輪補齊；M2-A Gate 尚未通過，完成上述兩項後必須重新執行完整驗證與 review。
 
 ### 強制順序
 
@@ -333,7 +331,7 @@ def test_weight_contract_rejects_bool():
 
 保留 `Decimal(str(value))`，乘積不是整數或總和不是 10000 時拒絕。
 
-- [/] **Step 3: 實作並執行測試**
+- [x] **Step 3: 實作並執行測試**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\test_weight_contract.py -q -o addopts=
@@ -341,7 +339,7 @@ def test_weight_contract_rejects_bool():
 
 Expected: PASS。
 
-第二輪驗收：正式 Contract 已拒絕缺少 / 額外 key 與 bool；LegacyWeightMigrationAdapter 仍會靜默忽略額外 key，需補測試與實作後才能完成。
+第二輪驗收後修復：正式 Contract 與 LegacyWeightMigrationAdapter 均已拒絕缺少 / 額外 key，正式 Contract 同時拒絕 bool。
 
 ## Task A3: 正確處理 enabled/disabled 指標
 

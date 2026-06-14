@@ -109,14 +109,21 @@ class LegacyWeightMigrationAdapter:
         使用 Decimal 將舊的浮點數權重無損且嚴格轉換為整數 bp。
         若乘積非整數或總和不等於 10000 bp，直接拋出 WeightMigrationError。
         """
-        if not float_weights:
-            raise WeightMigrationError("輸入的浮點數權重為空。")
+        if not isinstance(float_weights, dict) or not float_weights:
+            raise WeightMigrationError("輸入的浮點數權重必須為非空字典。")
+
+        required_keys = {'pattern', 'technical', 'volume'}
+        actual_keys = set(float_weights.keys())
+        if actual_keys != required_keys:
+            raise WeightMigrationError(
+                f"浮點數權重鍵值不匹配。預期: {required_keys}，實際: {actual_keys}。"
+            )
 
         bp_weights = {}
         factor = Decimal('10000')
 
         for k in ['pattern', 'technical', 'volume']:
-            val = float_weights.get(k, 0.0)
+            val = float_weights[k]
             try:
                 # 採用 Decimal(str(value)) 無損高精度轉換
                 dec_val = Decimal(str(val))
