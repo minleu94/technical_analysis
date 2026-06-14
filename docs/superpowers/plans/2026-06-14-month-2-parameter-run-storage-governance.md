@@ -38,12 +38,9 @@
 8. MA windows 已逐元素拒絕 bool、float 與 string，不再執行 `int(x)` 隱式轉換。
 9. LegacyWeightMigrationAdapter 已要求精確三鍵集合，不再補缺漏 key 或忽略額外 key。
 10. disabled 測試已改走 `configure_technical_indicators()` 正式路徑，逐一覆蓋 RSI、MACD、KD、Bollinger、SAR、ATR、TSF、ADX、MA；Bollinger / SAR 停用時不再產生空欄位。
+11. `TotalScore` / `FinalScore` 已依既有 score basis-point 契約，以 `Decimal('0.01')` 與 `ROUND_HALF_UP` 統一量化。
 
-仍未結案的 Gate 阻斷：
-
-1. **Decimal 最終精度契約尚未落實**：
-   - `TotalScore` / `FinalScore` 已是 Decimal，但目前沒有依 Task A4 定義使用 `ROUND_HALF_UP` 量化至既有分數 contract 的固定精度。
-   - 必須先確認既有分數欄位的權威精度，再於核心 Decimal 計算完成後統一 quantize；不得在核心路徑轉回 float。
+目前程式契約阻斷已清除。M2-A 仍需完成完整驗證、文件 Coverage、Review Gate 與使用者核准，才可標示 Gate 通過並開始 M2-B。
 
 ### 第二輪驗證證據（2026-06-14）
 
@@ -55,7 +52,7 @@ financial float boundary scanner: exit 0
 changed-files py_compile: exit 0
 ```
 
-結論：修復版 2 已解決第一輪多數阻斷，且精確版本、MA windows 型態、migration key 與 disabled 正式路徑已於本輪補齊；M2-A Gate 尚未通過，完成 Decimal 固定精度後必須重新執行完整驗證與 review。
+結論：修復版 2 與後續修復已清除目前已知程式契約阻斷；M2-A Gate 尚未通過，必須完成完整驗證、文件 Coverage、review 與使用者核准。
 
 ### 強制順序
 
@@ -420,7 +417,7 @@ def test_scoring_engine_rejects_non_bp_weights(scoring_frame):
         ScoringEngine().calculate_total_score(scoring_frame, config)
 ```
 
-- [/] **Step 2: 定義總分公式**
+- [x] **Step 2: 定義總分公式**
 
 核心計算使用 Decimal：
 
@@ -435,7 +432,7 @@ total_score = weighted_numerator / 10000
 
 最終 rounding 採 `ROUND_HALF_UP` 至既有分數 contract 所需精度；只有 DataFrame analytics/UI 邊界才轉 float。
 
-第二輪驗收：Decimal 加權公式已完成；固定精度 `ROUND_HALF_UP` quantize 尚未實作。
+第二輪驗收後修復：Decimal 加權公式已完成，並依 score basis-point 契約量化至 `0.01` 分。
 
 - [x] **Step 3: 實作 Regime 權重重分配**
 

@@ -6,11 +6,13 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from decision_module.weight_contract import RecommendationWeightContract, LegacyWeightMigrationAdapter
 
 class ScoringEngine:
     """統一打分引擎"""
+
+    SCORE_QUANTUM = Decimal('0.01')
     
     def __init__(self):
         """初始化打分引擎"""
@@ -87,6 +89,11 @@ class ScoringEngine:
             w_tech * dec_indicator +
             w_vol * dec_volume
         ) / Decimal('10000')
+        total_score_dec = total_score_dec.apply(
+            lambda value: value.quantize(self.SCORE_QUANTUM, rounding=ROUND_HALF_UP)
+            if value.is_finite()
+            else value
+        )
         
         df_result['TotalScore'] = total_score_dec
         df_result['FinalScore'] = total_score_dec

@@ -273,6 +273,32 @@ def test_decimal_score_type(sample_stock_df):
     for v in res_df['FinalScore'].dropna():
         assert isinstance(v, Decimal)
 
+
+def test_total_score_quantizes_to_score_basis_points_with_half_up():
+    """核心評分以 0.01 分為單位，並使用 ROUND_HALF_UP 決定中點。"""
+    engine = ScoringEngine()
+    frame = pd.DataFrame({'收盤價': [100.0]})
+    score = pd.Series([Decimal('60.005')])
+
+    engine.calculate_pattern_score = lambda df, config: score
+    engine.calculate_indicator_score = lambda df, config, regime=None: pd.Series([Decimal('0')])
+    engine.calculate_volume_score = lambda df, config: pd.Series([Decimal('0')])
+
+    result = engine.calculate_total_score(
+        frame,
+        {
+            'weights': {
+                'pattern': 10000,
+                'technical': 0,
+                'volume': 0,
+            }
+        },
+    )
+
+    assert result.iloc[0]['TotalScore'] == Decimal('60.01')
+    assert result.iloc[0]['FinalScore'] == Decimal('60.01')
+
+
 @pytest.mark.parametrize(
     ("section", "indicator", "invalid_params", "disabled_columns", "enabled_column"),
     [
