@@ -18,8 +18,8 @@
 - [x] M2-A 第一版程式與單元測試已產出。
 - [x] M2-A Blocker 修復版 2 已產出：Decimal 評分、最大餘額法、治理例外傳播、跨欄位驗證與 Prefix-Invariance 測試均已接入。
 - [x] M2-A 契約層級阻斷問題已修復，完整驗證與文件 Coverage 已通過。
-- [/] M2-A 等待使用者核准 Gate；核准前不得開始 M2-B。
-- [ ] M2-B 開始。
+- [x] M2-A Gate 已由使用者於 2026-06-14 核准，允許開始 M2-B。
+- [x] M2-B 開始。
 - [ ] M2-B Gate 通過並取得使用者核准。
 - [ ] M2-C 開始。
 - [ ] Month 2 最終 Gate 通過。
@@ -604,7 +604,7 @@ Coverage 已同步 Strategy Design、Score Explanation、User Guide、Backtest L
 - Modify: `data_module/config.py`
 - Test: `tests/test_research_run_repository.py`
 
-- [ ] **Step 1: 寫入 schema 與路徑失敗測試**
+- [x] **Step 1: 寫入 schema 與路徑失敗測試**
 
 `TWStockConfig` 新增：
 
@@ -616,7 +616,7 @@ research_run_staging_dir: Path
 
 路徑由 `output_root` 衍生，測試必須使用 `tmp_path`。
 
-- [ ] **Step 2: 定義 ResearchRunMetadataDTO**
+- [x] **Step 2: 定義 ResearchRunMetadataDTO**
 
 必要欄位：
 
@@ -658,13 +658,15 @@ promotion_reconciliation_status
 created_at
 ```
 
-- [ ] **Step 3: 建立 versioned migration**
+- [x] **Step 3: 建立 versioned migration**
 
 不得只在 constructor 中散落多個 `ALTER TABLE`。建立 `schema_version` 表或等價 migration runner，migration 必須可重複執行。
 
-- [ ] **Step 4: 測試 schema round-trip**
+- [x] **Step 4: 測試 schema round-trip**
 
 Expected: 所有 JSON 欄位 canonical serialization 後可還原。
+
+驗證證據（2026-06-14）：`.\.venv\Scripts\python.exe -m pytest tests\test_research_run_repository.py -q -o addopts=` -> 4 passed in 1.22s；`.\.venv\Scripts\python.exe -m py_compile data_module\config.py app_module\research_run_dtos.py app_module\research_run_repository.py tests\test_research_run_repository.py` -> exit 0；`.\.venv\Scripts\python.exe -m mypy app_module\research_run_dtos.py app_module\research_run_repository.py data_module\config.py` -> Success: no issues found in 3 source files；`git diff --check` -> exit 0（僅 CRLF 提示）。
 
 ## Task B2: 實作 immutable save 與跨媒介 crash recovery
 

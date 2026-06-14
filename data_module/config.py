@@ -32,6 +32,9 @@ class TWStockConfig:
     log_dir: Path = field(init=False)  # 新增日誌目錄
     sqlite_dir: Path = field(init=False)  # SQLite 資料庫目錄
     db_file: Path = field(init=False)  # SQLite 資料庫檔案路徑
+    research_run_db_file: Path = field(init=False)  # Research Run Registry SQLite 檔案
+    research_run_parquet_dir: Path = field(init=False)  # Research Run 詳細資料目錄
+    research_run_staging_dir: Path = field(init=False)  # Research Run 暫存目錄
     use_sqlite: bool = True  # 是否使用 SQLite 儲存
     
     # 關鍵檔案路徑
@@ -66,6 +69,10 @@ class TWStockConfig:
         self.log_dir = self.data_dir / 'logs'
         self.sqlite_dir = self.data_dir / 'sqlite'
         self.db_file = self.sqlite_dir / 'twstock.db'
+        research_run_dir = self.output_root / 'research_runs'
+        self.research_run_db_file = research_run_dir / 'research_runs.db'
+        self.research_run_parquet_dir = research_run_dir / 'parquet'
+        self.research_run_staging_dir = research_run_dir / 'staging'
         
         # 設定關鍵檔案路徑
         self.market_index_file = self.meta_data_dir / 'market_index.csv'
@@ -143,7 +150,10 @@ class TWStockConfig:
             self.technical_dir,
             self.backup_dir,
             self.log_dir,  # 新增日誌目錄
-            self.sqlite_dir  # SQLite 資料庫目錄
+            self.sqlite_dir,  # SQLite 資料庫目錄
+            self.research_run_db_file.parent,
+            self.research_run_parquet_dir,
+            self.research_run_staging_dir,
         ]
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
