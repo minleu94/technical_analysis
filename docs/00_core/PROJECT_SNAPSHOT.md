@@ -41,8 +41,8 @@
   - 策略版本與推薦來源追蹤視圖、目前價格對比、未實現損益計算已深化完成，且已修正 float 邊界合規漏洞與三層防禦策略版本串接 (2026-06-11)
   - Phase 4.2 Portfolio 籌碼監控與下鑽 ✅：新增籌碼監控 Tab 與追蹤分點表格，依淨買賣、集中度及連續天數評估風險（bullish/neutral/bearish），並實作🔍 下鑽主力流向按鈕與自動高亮定位功能 (2026-06-11)
 
-- **效能與研究輸出（Phase 5）** 🚧 部分已完成
-  - 圖表渲染優化 ✅ / 批次回測並行化 ✅ / 大表格分頁、報告輸出仍在後續
+- **效能與研究輸出（Phase 5）** ✅ SQLite 檢視器分頁與規格化 Excel 報告匯出已完成 (2026-06-14)
+  - 圖表渲染優化 ✅ / 批次回測並行化 ✅ / SQLite 檢視器穩定分頁 ✅ / 規格化 Excel 報告匯出 ✅
 
 - **文件治理與 Manual** ✅ 本輪完成
   - Roadmap Hub、6M Roadmap、Legacy Carryover、Architecture、Index 與 Agent 指引已採 Scoped SSOT。
@@ -64,7 +64,7 @@
 ## 本週優先事項（只列 3 個）
 
 1. Strategy & Scoring Governance 實證：已完成可追溯 pilot，但 fixed 的 40 個 OOS fold 均無交易，尚需建立有效基準樣本與 regime 分層後才能驗收。
-2. Legacy Carryover Month 1：完成大表格分頁、規格化報告與穩定性基準，不只停在設計稿。
+2. Legacy Carryover Month 1：大表格分頁 (SQLite 穩定分頁) 與規格化報告 (Excel 報告匯出) 已完成，PDF 仍待後續； walk-forward 實證與基準線待持續推進。
 3. Legacy Carryover Month 2：完成 Indicator Parameter Registry、Recommendation Weight Contract 與 Research Run Registry。
 
 ## 高風險區（改動需謹慎）
@@ -246,3 +246,17 @@
 - **唯一性 run_id 寫入**：在循序與並行路徑皆引入 UUID 來生成唯一 `run_id`，避免 SQLite 與 parquet 同秒覆寫衝突。
 - **TaskWorker 軟取消回歸防護**：保留 `TaskWorker` 取消時的 legacy `terminate()` 行為，並將新合作式軟取消限制在回測專用 Worker，維持 Update、Recommendation 與 SQLite Inspector 等既有頁面的行為相容；legacy 強制終止風險列為後續技術債。
 - **測試與驗證**：新增單元測試 `tests/test_backtest/test_parallel_safety.py`，覆蓋 UUID 唯一性、軟取消、自適應循序分流、非法股票處理、真實 `BrokenProcessPool` 異常重現及 `max_workers=None`。
+
+## 2026-06-14 SQLite 檢視器穩定分頁與規格化 Excel 報告匯出成果
+
+- **SQLite 檢視器資料庫層分頁**：
+  - 於 `SqliteInspectorService` 實作 count 與 offset 穩定分頁，共用 filter builder。
+  - 設計 `日期 DESC, 證券代號 ASC` 搭配 `rowid ASC` 穩定排序，保證跨頁無重複與遺漏。
+  - UI 介面整合「上一頁/下一頁/跳頁/當前與總頁碼」控制列，並在篩選變更時自動重設回第一頁，且快取 schema 避免重複拉取。
+  - 實作單調遞增 `request_id` 防 stale 異步查詢覆蓋最新結果。
+- **四種規格化 Excel 報告背景匯出**：
+  - 定義不可變 payload DTO 快照 (`report_export_dtos.py`)：單股、批次、組合回放、目前推薦結果。
+  - 於 `ReportExportService` 實作 Excel workbook 的資料格式化 (金額/百分比/天數/日期)、自適應欄寬上限與凍結/自動篩選。
+  - 開闢「資料完整性」專用區域，在缺少追溯元數據時明確標註 `N/A` 並列出缺失欄位清單。
+  - 整合 Pyside6 `TaskWorker` 於背景線程寫入暫存檔，完成後採原子替換 (`os.replace`)，保障 UI 介面不假死且不破壞原有報告。
+  - **測試與 QA 覆蓋**： focused pytest、強制 UI tests、Update Tab QA 驗證與 mypy 型態檢查 100% 綠燈通過，金融 float boundaries 零違反。

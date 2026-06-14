@@ -345,7 +345,31 @@ runtime/ core
 - OOS 與 benchmark 結果
 - factor contribution
 
-## 12. 文件架構
+## 12. 報告匯出與分頁資料流
+
+### 12.1 SQLite 檢視器穩定分頁
+
+- **分頁機制**：透過 `SqliteInspectorService` 的 count 與 page 查詢共用 filter builder。預覽查詢藉由 `LIMIT ? OFFSET ?` 完成。
+- **排序穩定契約**：依 `日期 DESC, 證券代號 ASC` 加上其他關鍵欄位作為 tie-breaker，最後補上唯一 `rowid ASC`，確保跨頁無重複與遺漏。
+- **防禦與 stale 處理**：當重新查詢或變更篩選時，頁碼重設為 1。背景 `TaskWorker` 攜帶單調遞增的 `request_id`，UI 在讀取完畢時會校驗 `request_id` 與當前最新請求是否相符，丟棄過期 (stale) 結果。
+
+### 12.2 規格化 Excel 報告匯出
+
+```text
+Current Result DTO / Run Metadata
+  -> UI Payload Builder
+  -> Immutable Export Payload DTO (app_module/report_export_dtos.py)
+  -> TaskWorker (Background Thread)
+  -> ReportExportService (app_module/report_export_service.py)
+  -> temporary .xlsx (Atomic temp file)
+  -> os.replace (Atomic file replacement)
+```
+
+- **不可變快照 (DTO-first)**：UI 將當前成功回測或推薦的結果 DTO 與元數據，透過 UI 端的 payload builder 轉換為不可變 of `ExportPayload` DTO 快照，防範 UI 狀態在此時被使用者切換或修改。
+- **原子性安全寫入**：匯出服務在寫入目標路徑時，會先建立 `.tmp` 暫存檔，寫入成功後再進行原子性檔案替換 (`os.replace`)，確保匯出失敗或被 Excel 鎖定時不損壞原有報告。
+- **無二次計算防線**：`ReportExportService` 屬於純 presentation serialization layer，僅序列化已提供的 payload 內容，嚴禁進行績效、Sharpe、Monte Carlo 等指標 of 二次計算。缺失的追溯欄位統一輸出 `N/A`。
+
+## 13. 文件架構
 
 本專案採 Scoped SSOT：
 
@@ -360,7 +384,7 @@ runtime/ core
 
 Roadmap Hub 只負責入口與短版 Next，不保存完整歷史或架構細節。
 
-## 13. 高風險修改清單
+## 14. 高風險修改清單
 
 修改以下區域必須提高驗證強度：
 
@@ -380,7 +404,7 @@ Roadmap Hub 只負責入口與短版 Next，不保存完整歷史或架構細節
 
 策略、回測、推薦、Factor 與 Portfolio 改動前必須做 Look-ahead 自查與金融數值邊界檢查。
 
-## 14. 驗證
+## 15. 驗證
 
 UI 修改：
 
@@ -399,5 +423,5 @@ UI 修改：
 文件修改：
 
 - 檢查 Active docs 不再把 Legacy Roadmap 或 `ui_app/main.py` 當目前入口。
-- 驗證 Markdown 相對連結。
+- 驗證 Markdown relative 連結。
 - 更新 `DOCUMENTATION_INDEX.md` 與 Manual coverage。

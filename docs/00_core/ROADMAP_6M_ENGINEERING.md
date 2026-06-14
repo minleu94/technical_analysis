@@ -93,29 +93,29 @@
 
 ### Month 1：實證基準線與文件治理完成
 
-> 2026-06-13 狀態：5 檔 pilot 已保存資料指紋與 OOS 結果，但 fixed 的 40 個 OOS fold 均無完成交易，且尚未完成 regime 分層，因此本里程碑的正式實證驗收尚未通過。
+> 2026-06-14 狀態：SQLite 穩定分頁與規格化 Excel 報告背景原子寫入已於 2026-06-14 完成並通過 mypy/pytest QA。5 檔 pilot walk-forward 正式實證仍在進行（等待有效 fixed 基準樣本與 regime 分層後正式驗收）。
 
 目標：
 
 - 完成 fixed / quantile 真實 walk-forward 比較。
 - 完成文件治理重構，讓 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Agent 指引一致。
 - 完成 Phase 5 報告輸出的最小規格。
-- 完成 Phase 5 最小可用實作，不只停留在設計文件。
+- 完成 Phase 5 最小可用實作 (SQLite 檢視器分頁與規格化 Excel 報告匯出已完成，PDF 仍在後續)。
 
 交付物：
 
 - 更新 [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md)，加入真實股票池比較結果。
 - 建立 `ResearchRun` 或等價 registry 規格。
-- SQLite Inspector 與大型研究表格的分頁或虛擬捲動。
-- 回測 run / 推薦回放的規格化 Excel / PDF 匯出與摘要模板。
-- Active docs 不再把舊 Roadmap 當單一最高權威。
+- SQLite Inspector 穩定分頁。 (已完成)
+- 回測 run / 推薦回放的規格化 Excel 匯出。 (已完成 Excel 匯出；PDF 仍待後續)
+- Active docs 不再把舊 Roadmap 當單一最高權威。 (已完成)
 
 驗收標準：
 
 - fixed / quantile 使用同一資料版本、成本模型、成交假設與股票池。
 - 報告明確列出 quantile 是否改善，若沒有改善也要保留結果。
 - 所有 Agent 必讀規則能清楚指向 scoped authority。
-- Phase 5 最小輸出可實際操作，且報告包含資料、策略、參數、成本、成交假設、Regime、benchmark、風險與驗證狀態。
+- Phase 5 最小輸出可實際操作，且報告包含資料、策略、參數、成本、成交假設、Regime、benchmark、風險與驗證狀態。 (Excel 匯出符合此標準)
 
 ### Month 2：參數治理、Research Run Registry 與 Cross-run Comparison
 
@@ -215,11 +215,11 @@
 ## 5. 立即待辦清單
 
 1. 固定股票池與資料版本，完成 fixed / quantile walk-forward 實證。
-2. 完成大表格分頁與報告匯出規格。
+2. 大表格分頁 (SQLite 穩定分頁) 與規格化報告 (Excel 報告匯出) 已完成，PDF 仍在後續。
 3. 建立 Research Run Registry 設計規格。
 4. 定義 Factor Contract，不先接營收與法人。
-5. 更新 `system_architecture.md`，使其反映三閉環、SQLite-first、factor layer 與 scoped docs authority。
-6. 依 [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) 關閉所有舊 Roadmap 移交項目；Month 3 前不得留下無處置項目。
+5. 更新 `system_architecture.md` 已完成。
+6. 依 [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) 關閉所有已完成的舊 Roadmap 移交項目。
 
 ---
 
@@ -234,5 +234,6 @@
 
 ## 7. 更新記錄
 
+- 2026-06-14：完成 Phase 5 Month 1 的 SQLite 檢視器分頁與規格化 Excel 報告匯出 (單股/批次/組合回放/目前推薦)，並更新 6M Roadmap、Snapshot 及 Architecture。
 - 2026-06-13：建立 6 個月可執行工程路線，作為未來方向的 scoped authority。
 - 2026-06-13：加入 Legacy Carryover Gate，明確承接指標參數治理、推薦權重治理、Phase 5 輸出與穩定性驗證。

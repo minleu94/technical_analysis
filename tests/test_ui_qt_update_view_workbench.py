@@ -4,9 +4,11 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget
+from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget, QMessageBox
+import pandas as pd
 
 from ui_qt.views.update_view import UpdateView
+
 
 
 class _TestableUpdateView(UpdateView):
@@ -289,3 +291,151 @@ def test_safe_update_all_runs_conservative_sequence_sqlite():
     assert ("sync_source_to_sqlite", "broker_branch_files", "2026-05-23", "2026-06-02") in view.update_service.calls or any(
         call[0] == "sync_source_to_sqlite" and call[1] == "broker_branch_files" for call in view.update_service.calls
     )
+
+
+class FakeInspectorService:
+    def __init__(self, total=250):
+        self.total = total
+        self.last_query = {}
+        
+    def is_enabled(self):
+        return True
+        
+    def get_tables(self):
+        return ["daily_prices"]
+        
+    def get_table_info(self, table_name):
+        return {
+            "success": True,
+            "table_name": table_name,
+            "total_records": self.total,
+            "columns_count": 5,
+            "earliest_date": "2026-05-01",
+            "latest_date": "2026-05-30"
+        }
+        
+    def get_table_schema(self, table_name):
+        return pd.DataFrame([{"cid": 0, "name": "日期", "type": "TEXT"}])
+        
+    def query_table_data_count(self, **kwargs):
+        return self.total
+        
+    def query_table_data(self, table_name, **kwargs):
+        self.last_query = kwargs
+        limit = kwargs.get("limit", 100)
+        return pd.DataFrame([{"日期": f"2026-05-{i:02d}", "證券代號": "2330"} for i in range(min(limit, 10))])
+
+
+class SynchronousTaskWorker:
+    def __init__(self, task_function, *args, **kwargs):
+        self.task_function = task_function
+        self.args = args
+        self.kwargs = kwargs
+        
+        class DummySignal:
+            def __init__(self, name):
+                self.name = name
+                self.slots = []
+            def connect(self, slot):
+                self.slots.append(slot)
+            def emit(self, *args):
+                print(f"[DummySignal] emitting {self.name}")
+                for slot in self.slots:
+                    slot(*args)
+        
+        self.started = DummySignal("started")
+        self.finished = DummySignal("finished")
+        self.error = DummySignal("error")
+        self.progress = DummySignal("progress")
+        self.cancelled = DummySignal("cancelled")
+
+    def start(self):
+        try:
+            print("[SynchronousTaskWorker] start called")
+            self.started.emit()
+            print("[SynchronousTaskWorker] calling task_function")
+            result = self.task_function(*self.args, **self.kwargs)
+            print("[SynchronousTaskWorker] task_function finished, emitting finished")
+            self.finished.emit(result)
+            print("[SynchronousTaskWorker] finished emitted successfully")
+        except Exception as e:
+            print(f"[SynchronousTaskWorker] error: {e}")
+            self.error.emit(str(e))
+
+    def isRunning(self):
+        return False
+
+    def disconnect(self):
+        pass
+
+    def wait(self):
+        pass
+
+
+def test_sqlite_inspector_next_page_uses_offset(monkeypatch):
+    from ui_qt.widgets import sqlite_inspector_widget
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(sqlite_inspector_widget, "TaskWorker", SynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+    
+    app()
+    print("[Test] app() initialized")
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+    service = FakeInspectorService(total=250)
+    widget = SqliteInspectorWidget(service)
+    widget._adjust_table_header = lambda *args, **kwargs: None
+    widget.current_table = "daily_prices"
+    widget.page_size = 100
+    widget.current_page = 2
+    print("[Test] calling _request_page")
+    widget._request_page(load_schema=False)
+    print("[Test] _request_page returned")
+    
+    assert service.last_query.get("offset") == 100
+
+
+
+def test_filter_reload_resets_to_first_page(monkeypatch):
+    from ui_qt.widgets import sqlite_inspector_widget
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(sqlite_inspector_widget, "TaskWorker", SynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+    
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+    service = FakeInspectorService(total=250)
+    widget = SqliteInspectorWidget(service)
+    widget._adjust_table_header = lambda *args, **kwargs: None
+    widget.current_table = "daily_prices"
+    widget.current_page = 4
+    widget.stock_code_input.setText("2330")
+    widget._load_current_table_data()
+    
+    assert widget.current_page == 1
+
+
+
+
+
+
+def test_stale_worker_result_is_ignored():
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+    import pandas as pd
+    service = FakeInspectorService(total=250)
+    widget = SqliteInspectorWidget(service)
+    widget._active_request_id = 2
+    widget._on_table_data_loaded(
+        {
+            "request_id": 1,
+            "table_name": "daily_prices",
+            "load_schema": False,
+            "info": None,
+            "schema": None,
+            "filtered_count": 0,
+            "preview": pd.DataFrame(),
+        }
+    )
+    assert widget.preview_model is None
+
+

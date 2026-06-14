@@ -22,9 +22,9 @@
 | `buy_score` / `sell_score` 改為分位數 | 已完成機制；實證移交 | 機制已完成；真實績效比較在 Month 1 | fixed / quantile 雙模式、Expanding T-1、60 個有效觀測暖機與推薦橫斷面百分位已完成；Month 1 必須用相同資料與成本完成實證。 |
 | 推薦系統參數改進 | 移交 | Month 2「參數與權重治理」 | 推薦技術、圖形、量能權重不得只存在硬編碼；建立可版本化 Recommendation Weight Contract，並保存到 Research Run。 |
 | 完整測試與穩定性驗證 | 移交 | Month 1 基準線；Month 2 Registry；之後為持續 Gate | 完成真實股票池 OOS 比較、資料版本鎖定、成本與成交假設鎖定；後續 promote 必須讀取可追溯驗證結果。 |
-| 大表格分頁 | 移交 | Month 1「Phase 5 最小可用輸出」 | SQLite Inspector 與至少一個大型研究結果表具分頁或虛擬捲動；大量資料不得一次載入造成 UI 假死。 |
-| 匯出研究報告（Excel / PDF） | 移交 | Month 1「Phase 5 最小可用輸出」 | 回測 run 與推薦回放至少可匯出一種規格化研究包；Excel/PDF 均有明確 schema 與缺失資料標示。 |
-| 回測結果摘要模板 | 移交 | Month 1「Phase 5 最小可用輸出」 | 報告包含資料版本、策略版本、參數、成本、成交假設、Regime、benchmark、風險與驗證狀態。 |
+| 大表格分頁 | 已完成 | Month 1「Phase 5 最小可用輸出」 | 已完成 SQLite Inspector 穩定分頁查詢與 UI 頁碼控制，解決大量資料載入 UI 假死。 |
+| 匯出研究報告（Excel / PDF） | 部分完成 | Month 1「Phase 5 最小可用輸出」 | Excel 報告匯出與資料完整性/追溯元數據已完成，背景 TaskWorker + 原子寫入防護；PDF 移交 Month 2+。 |
+| 回測結果摘要模板 | 已完成 | Month 1「Phase 5 最小可用輸出」 | Excel 報告中已包含完整元數據與資料完整性檢核區域。 |
 
 ## 3. 舊 Roadmap current section 的後續工作
 

@@ -18,7 +18,6 @@ from app_module.sqlite_inspector_service import SqliteInspectorService
 
 
 class SqliteInspectorWidget(QWidget):
-    """SQLite 資料表視覺化檢視與受控篩選面板"""
 
     def __init__(self, inspector_service: SqliteInspectorService, parent=None):
         """初始化檢視面板
@@ -37,6 +36,15 @@ class SqliteInspectorWidget(QWidget):
         # 表格 Model
         self.preview_model: Optional[PandasTableModel] = None
         self.schema_model: Optional[PandasTableModel] = None
+
+        # 分頁與查詢狀態
+        self.current_page = 1
+        self.page_size = 100
+        self.total_filtered_records = 0
+        self.total_pages = 0
+        self._active_request_id = 0
+        self._cached_schema_table = ""
+        self._cached_schema_df = pd.DataFrame()
         
         self._init_ui()
 
@@ -64,14 +72,14 @@ class SqliteInspectorWidget(QWidget):
         self.table_selector.currentTextChanged.connect(self._on_table_changed)
         row1_layout.addWidget(self.table_selector)
 
-        row1_layout.addWidget(QLabel("預覽筆數:"))
+        row1_layout.addWidget(QLabel("每頁筆數:"))
         self.limit_spin = QSpinBox()
         self.limit_spin.setRange(10, 5000)
         self.limit_spin.setValue(100)
         self.limit_spin.setSingleStep(50)
         self.limit_spin.setToolTip(
-            "【預覽筆數】\n"
-            "設定查詢時最大載入與預覽筆數，預設 100 筆。過大的筆數可能會導致介面暫時卡頓。"
+            "【每頁筆數】\n"
+            "設定查詢時單頁載入筆數，預設 100 筆。過大的筆數可能會導致分頁載入時介面暫時卡頓。"
         )
         row1_layout.addWidget(self.limit_spin)
 
@@ -79,7 +87,7 @@ class SqliteInspectorWidget(QWidget):
         self.load_btn.setMinimumHeight(30)
         self.load_btn.setToolTip(
             "【載入數據與結構】\n"
-            "點擊後向資料庫發出查詢，並載入與上方篩選條件相符的資料及該表的欄位 Schema 結構。"
+            "點擊後向資料庫發出查詢，重設為第一頁，並載入與上方篩選條件相符的資料及該表的欄位 Schema 結構。"
         )
         self.load_btn.clicked.connect(self._load_current_table_data)
         row1_layout.addWidget(self.load_btn)
@@ -165,9 +173,46 @@ class SqliteInspectorWidget(QWidget):
         # Tab 1: 資料數據預覽
         self.preview_tab = QWidget()
         preview_layout = QVBoxLayout(self.preview_tab)
+        
         self.preview_table = QTableView()
         self.preview_table.setAlternatingRowColors(True)
         preview_layout.addWidget(self.preview_table)
+
+        # 加入分頁控制列
+        pagination_layout = QHBoxLayout()
+        self.prev_btn = QPushButton("上一頁")
+        self.prev_btn.setEnabled(False)
+        self.prev_btn.clicked.connect(self._on_prev_page)
+        pagination_layout.addWidget(self.prev_btn)
+
+        self.page_label = QLabel("第 0 / 0 頁")
+        self.page_label.setAlignment(Qt.AlignCenter)
+        self.page_label.setMinimumWidth(80)
+        pagination_layout.addWidget(self.page_label)
+
+        self.next_btn = QPushButton("下一頁")
+        self.next_btn.setEnabled(False)
+        self.next_btn.clicked.connect(self._on_next_page)
+        pagination_layout.addWidget(self.next_btn)
+
+        pagination_layout.addSpacing(20)
+        pagination_layout.addWidget(QLabel("跳至:"))
+        self.jump_spin = QSpinBox()
+        self.jump_spin.setRange(1, 1)
+        self.jump_spin.setMinimumWidth(60)
+        pagination_layout.addWidget(self.jump_spin)
+
+        self.jump_btn = QPushButton("跳頁")
+        self.jump_btn.setEnabled(False)
+        self.jump_btn.clicked.connect(self._on_jump_page)
+        pagination_layout.addWidget(self.jump_btn)
+
+        pagination_layout.addStretch()
+        self.records_label = QLabel("共 0 筆")
+        self.records_label.setStyleSheet("color: #666; font-weight: bold;")
+        pagination_layout.addWidget(self.records_label)
+
+        preview_layout.addLayout(pagination_layout)
         self.tabs.addTab(self.preview_tab, "📊 數據預覽")
 
         # Tab 2: 欄位 Schema 結構
@@ -202,22 +247,24 @@ class SqliteInspectorWidget(QWidget):
     def _on_table_changed(self, table_name: str):
         """當下拉選單的資料表變更時"""
         self.current_table = table_name
+        self.current_page = 1
+        self.total_filtered_records = 0
+        self.total_pages = 0
+        self._update_pagination_ui()
 
     def _load_current_table_data(self):
-        """背景線程載入目前選定表的 Preview、Schema 與 Info"""
+        """重新載入目前選定表的 Preview、Schema 與 Info (回到第一頁)"""
         if not self.current_table:
             return
 
+        self.current_page = 1
+        self.page_size = self.limit_spin.value()
+        self._request_page(load_schema=True)
+
+    def _request_page(self, *, load_schema: bool):
+        """發送特定分頁的載入請求"""
         self._set_loading_state(True)
         
-        # 取消之前的 Worker
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait()
-
-        limit = self.limit_spin.value()
-        table_name = self.current_table
-
         # 獲取篩選值
         stock_code = self.stock_code_input.text().strip()
         stock_name = self.stock_name_input.text().strip()
@@ -226,12 +273,43 @@ class SqliteInspectorWidget(QWidget):
         start_date = self.start_date_input.text().strip()
         end_date = self.end_date_input.text().strip()
 
+        request_id = self._active_request_id + 1
+        self._active_request_id = request_id
+        
+        limit = self.page_size
+        offset = (self.current_page - 1) * limit
+        table_name = self.current_table
+
+        use_cached_schema = (
+            not load_schema and 
+            self._cached_schema_table == table_name and 
+            not self._cached_schema_df.empty
+        )
+
         def fetch_task():
-            # 1. 取得表 metadata
-            info = self.inspector_service.get_table_info(table_name)
-            # 2. 取得 Schema df
-            schema_df = self.inspector_service.get_table_schema(table_name)
-            # 3. 取得受控 Preview df
+            # 1. 取得 count 總數
+            filtered_count = self.inspector_service.query_table_data_count(
+                table_name=table_name,
+                stock_code=stock_code if stock_code else None,
+                stock_name=stock_name if stock_name else None,
+                date_str=date_str if date_str else None,
+                start_date=start_date if start_date else None,
+                end_date=end_date if end_date else None,
+                broker_branch=broker_branch if broker_branch else None,
+            )
+            
+            # 2. 取得 Schema df 與 metadata
+            if use_cached_schema:
+                schema_df = self._cached_schema_df
+                info = self.inspector_service.get_table_info(table_name)
+            elif load_schema:
+                schema_df = self.inspector_service.get_table_schema(table_name)
+                info = self.inspector_service.get_table_info(table_name)
+            else:
+                schema_df = pd.DataFrame()
+                info = None
+
+            # 3. 取得分頁 Preview df
             preview_df = self.inspector_service.query_table_data(
                 table_name=table_name,
                 stock_code=stock_code if stock_code else None,
@@ -240,13 +318,23 @@ class SqliteInspectorWidget(QWidget):
                 start_date=start_date if start_date else None,
                 end_date=end_date if end_date else None,
                 broker_branch=broker_branch if broker_branch else None,
-                limit=limit
+                limit=limit,
+                offset=offset
             )
             return {
+                'request_id': request_id,
+                'table_name': table_name,
+                'load_schema': load_schema or use_cached_schema,
                 'info': info,
                 'schema': schema_df,
+                'filtered_count': filtered_count,
                 'preview': preview_df
             }
+
+        # 斷開舊 worker，防範 terminate 帶來的執行緒安全性問題
+        if self.worker and self.worker.isRunning():
+            self.worker.disconnect()
+            self.worker = None
 
         self.worker = TaskWorker(fetch_task)
         self.worker.finished.connect(self._on_table_data_loaded)
@@ -255,20 +343,31 @@ class SqliteInspectorWidget(QWidget):
 
     def _on_table_data_loaded(self, payload: Dict[str, Any]):
         """資料載入完畢，更新 UI 顯示"""
+        # stale result 防護：丟棄非當前 request id 的異步結果
+        if payload['request_id'] != self._active_request_id:
+            return
+
         self._set_loading_state(False)
         
         info = payload['info']
         schema_df = payload['schema']
         preview_df = payload['preview']
+        filtered_count = payload['filtered_count']
+        table_name = payload['table_name']
 
         # 1. 更新狀態摘要 Label
-        if info['success']:
-            summary_txt = f"資料表：【{info['table_name']}】 | 總記錄數：{info['total_records']:,} 筆 | 欄位數：{info['columns_count']} 個"
-            if info['earliest_date'] and info['latest_date']:
-                summary_txt += f" | 日期區間：{info['earliest_date']} 至 {info['latest_date']}"
-            self.summary_label.setText(summary_txt)
-        else:
-            self.summary_label.setText(f"資料表載入失敗：{info['message']}")
+        if payload['load_schema'] and info:
+            if info['success']:
+                summary_txt = f"資料表：【{info['table_name']}】 | 總記錄數：{info['total_records']:,} 筆 | 欄位數：{info['columns_count']} 個"
+                if info['earliest_date'] and info['latest_date']:
+                    summary_txt += f" | 日期區間：{info['earliest_date']} 至 {info['latest_date']}"
+                self.summary_label.setText(summary_txt)
+                
+                # 快取 schema 避免分頁時重複拉取描述
+                self._cached_schema_table = table_name
+                self._cached_schema_df = schema_df
+            else:
+                self.summary_label.setText(f"資料表載入失敗：{info['message']}")
 
         # 2. 渲染數據預覽 TableView
         self.preview_model = PandasTableModel(preview_df)
@@ -276,9 +375,23 @@ class SqliteInspectorWidget(QWidget):
         self._adjust_table_header(self.preview_table)
 
         # 3. 渲染 Schema TableView
-        self.schema_model = PandasTableModel(schema_df)
-        self.schema_table.setModel(self.schema_model)
-        self._adjust_table_header(self.schema_table)
+        if payload['load_schema'] and not schema_df.empty:
+            self.schema_model = PandasTableModel(schema_df)
+            self.schema_table.setModel(self.schema_model)
+            self._adjust_table_header(self.schema_table)
+
+        # 4. 更新分頁
+        self.total_filtered_records = filtered_count
+        import math
+        self.total_pages = math.ceil(self.total_filtered_records / self.page_size) if self.total_filtered_records else 0
+
+        # 防禦：如果分頁因為篩選更新而越界，clamp 至末頁並重新查詢一次
+        if self.current_page > self.total_pages and self.total_pages > 0:
+            self.current_page = self.total_pages
+            self._request_page(load_schema=False)
+            return
+
+        self._update_pagination_ui()
 
     def _on_table_data_error(self, error_msg: str):
         """載入出錯"""
@@ -286,22 +399,56 @@ class SqliteInspectorWidget(QWidget):
         QMessageBox.critical(self, "錯誤", f"讀取 SQLite 表資料失敗：\n{error_msg}")
         self.summary_label.setText("資料庫狀態：資料表載入失敗")
 
+    def _update_pagination_ui(self):
+        """更新分頁按鈕與文字狀態"""
+        if self.total_pages == 0:
+            self.page_label.setText("第 0 / 0 頁")
+            self.records_label.setText("共 0 筆")
+        else:
+            self.page_label.setText(f"第 {self.current_page} / {self.total_pages} 頁")
+            self.records_label.setText(f"共 {self.total_filtered_records:,} 筆")
+
+        self.prev_btn.setEnabled(self.current_page > 1)
+        self.next_btn.setEnabled(self.current_page < self.total_pages)
+        self.jump_btn.setEnabled(self.total_pages > 0)
+        self.jump_spin.setRange(1, max(1, self.total_pages))
+        self.jump_spin.setValue(self.current_page)
+
+    def _on_prev_page(self):
+        """上一頁"""
+        if self.current_page > 1:
+            self.current_page -= 1
+            self._request_page(load_schema=False)
+
+    def _on_next_page(self):
+        """下一頁"""
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self._request_page(load_schema=False)
+
+    def _on_jump_page(self):
+        """跳頁"""
+        target_page = self.jump_spin.value()
+        if 1 <= target_page <= self.total_pages and target_page != self.current_page:
+            self.current_page = target_page
+            self._request_page(load_schema=False)
+
     def _adjust_table_header(self, table_view: QTableView):
         """自適應調整 TableView 欄寬"""
         header = table_view.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        # 先根據內容自適應，再還原為 Interactive 方便使用者拉伸
         table_view.resizeColumnsToContents()
-        # 防禦性設定最大欄寬，防止超大欄位拉得太長
         for col in range(header.count()):
             width = min(max(header.sectionSize(col), 80), 300)
             header.resizeSection(col, width)
 
     def _set_loading_state(self, is_loading: bool):
-        """設定載入狀態按鈕 disable"""
+        """設定載入狀態"""
         self.load_btn.setEnabled(not is_loading)
         self.table_selector.setEnabled(not is_loading)
         if is_loading:
             self.load_btn.setText("載入中...")
         else:
             self.load_btn.setText("載入數據與結構")
+
+

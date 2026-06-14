@@ -15,6 +15,7 @@ from PySide6.QtGui import QFont
 import pandas as pd
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from pathlib import Path
 
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.workers.task_worker import ProgressTaskWorker
@@ -98,6 +99,9 @@ class RecommendationView(QWidget):
         
         # Worker
         self.worker: Optional[ProgressTaskWorker] = None
+        from app_module.report_export_service import ReportExportService
+        self.report_export_service = ReportExportService()
+        self._report_export_workers = []
         
         # 策略配置狀態
         self.strategy_config = self._get_default_config()
@@ -1213,6 +1217,12 @@ class RecommendationView(QWidget):
         )
         title_layout.addWidget(self.send_profile_to_portfolio_backtest_btn)
         
+        # 📊 匯出 Excel 按鈕
+        self.export_report_btn = QPushButton("📊 匯出 Excel")
+        self.export_report_btn.setVisible(False)
+        self.export_report_btn.clicked.connect(self._export_current_recommendation)
+        title_layout.addWidget(self.export_report_btn)
+        
         layout.addLayout(title_layout)
         
         # 使用分割器來控制表格和詳情的比例
@@ -1804,6 +1814,8 @@ class RecommendationView(QWidget):
         # 隱藏保存按鈕（等待結果）
         if self.recommendation_repository:
             self.save_result_btn.setVisible(False)
+        self.export_report_btn.setVisible(False)
+        self.current_recommendations = None
         
         # 創建 Worker 包裝推薦服務調用
         def recommendation_task(progress_callback=None):
@@ -1887,6 +1899,7 @@ class RecommendationView(QWidget):
         # 一鍵送回測按鈕（只要有推薦結果就顯示）
         self.send_to_backtest_btn.setVisible(True)
         self.send_profile_to_portfolio_backtest_btn.setVisible(True)
+        self.export_report_btn.setVisible(True)
     
     def _on_recommendation_error(self, error_msg: str):
         """推薦分析出錯"""
@@ -2789,10 +2802,118 @@ class RecommendationView(QWidget):
         elif action == action_add_watchlist:
             self._add_selected_to_watchlist()
     
+    def _build_current_recommendation_export_payload(self):
+        from app_module.report_export_dtos import ReportMetadata, CurrentRecommendationExportPayload
+        import pandas as pd
+        from datetime import datetime
+
+        config = self.current_config or {}
+        regime = config.get("regime", "")
+        if not regime:
+            regime = self.current_regime or ""
+
+        data_version = config.get("data_version", "")
+        strategy_version = config.get("strategy_version", "1.0")
+
+        metadata = ReportMetadata(
+            report_type="current_recommendation",
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            data_as_of_date=config.get("data_as_of_date", ""),
+            data_version=data_version,
+            strategy_id=config.get("strategy_id", "recommendation"),
+            strategy_version=strategy_version,
+            regime=regime,
+            benchmark=config.get("benchmark", "TAIEX"),
+            execution_assumption=config.get("execution_price", "next_open"),
+        )
+
+        run_params = {
+            "推薦模式": "Beginner" if self.is_beginner_mode else "Advanced",
+            "當前配置 Profile": str(self.current_profile or "Default"),
+            "篩選門檻模式": config.get("signals", {}).get("threshold_mode", "fixed"),
+        }
+
+        regime_snapshot = None
+        if hasattr(self, "_last_suggestion") and self._last_suggestion:
+            regime_snapshot = {
+                "偵測 Regime": self._last_suggestion.get("regime", "N/A"),
+                "置信度": self._last_suggestion.get("confidence", 0.0),
+                "推薦配置 ID": self._last_suggestion.get("profile_id", "N/A"),
+            }
+
+        recs_df = pd.DataFrame()
+        if self.current_recommendations:
+            data = [rec.to_dict() for rec in self.current_recommendations]
+            recs_df = pd.DataFrame(data)
+
+        return CurrentRecommendationExportPayload(
+            metadata=metadata,
+            run_params=run_params,
+            recommendations=recs_df,
+            regime_snapshot=regime_snapshot,
+        )
+
+    def _export_current_recommendation(self):
+        if not self.current_recommendations:
+            QMessageBox.warning(self, "錯誤", "無可匯出的推薦結果")
+            return
+            
+        from PySide6.QtWidgets import QFileDialog
+        default_filename = f"current_recommendation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        target_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "匯出今日推薦 Excel 報告",
+            default_filename,
+            "Excel Files (*.xlsx)"
+        )
+        if not target_path:
+            return
+        self._export_current_recommendation_to_path(Path(target_path))
+
+    def _export_current_recommendation_to_path(self, target_path: Path):
+        payload = self._build_current_recommendation_export_payload()
+        
+        self.export_report_btn.setEnabled(False)
+        self.export_report_btn.setText("匯出中...")
+        
+        from ui_qt.workers.task_worker import TaskWorker
+        worker = TaskWorker(
+            self.report_export_service.export_current_recommendation,
+            target_path,
+            payload
+        )
+        
+        worker.finished.connect(self._on_excel_export_finished)
+        worker.error.connect(self._on_excel_export_error)
+        worker.cancelled.connect(self._on_excel_export_cancelled)
+        
+        self._report_export_workers.append(worker)
+        worker.start()
+
+    def _on_excel_export_finished(self, path):
+        self.export_report_btn.setEnabled(True)
+        self.export_report_btn.setText("📊 匯出 Excel")
+        QMessageBox.information(self, "匯出成功", f"報告已成功匯出至：\n{path}")
+
+    def _on_excel_export_error(self, message):
+        self.export_report_btn.setEnabled(True)
+        self.export_report_btn.setText("📊 匯出 Excel")
+        from loguru import logger
+        logger.error(f"Excel 匯出失敗：{message}")
+        short_msg = message.split("\n")[0]
+        QMessageBox.critical(self, "匯出失敗", f"匯出 Excel 報告時發生錯誤：\n{short_msg}")
+
+    def _on_excel_export_cancelled(self):
+        self.export_report_btn.setEnabled(True)
+        self.export_report_btn.setText("📊 匯出 Excel")
+        QMessageBox.information(self, "取消", "匯出已被取消")
+
     def closeEvent(self, event):
         """關閉事件"""
-        # 取消正在運行的 Worker
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
+        for worker in self._report_export_workers:
+            if worker.isRunning():
+                worker.wait()
         event.accept()
 

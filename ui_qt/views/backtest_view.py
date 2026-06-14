@@ -23,6 +23,7 @@ import pandas as pd
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from datetime import datetime, timedelta
+from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -160,6 +161,9 @@ class BacktestView(QWidget):
 
         # Worker
         self.worker: Optional[TaskWorker] = None
+        from app_module.report_export_service import ReportExportService
+        self.report_export_service = ReportExportService()
+        self._report_export_workers = []
 
         # 當前回測結果（用於保存）
         self.current_report: Optional[BacktestReportDTO] = None
@@ -694,6 +698,10 @@ class BacktestView(QWidget):
 
         # 禁用按鈕
         self.execute_btn.setEnabled(False)
+        if hasattr(self, 'export_report_btn'):
+            self.export_report_btn.setEnabled(False)
+        if hasattr(self, 'export_batch_report_btn'):
+            self.export_batch_report_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
         if is_batch_mode:
             self.progress_bar.setRange(0, len(stock_codes))
@@ -964,6 +972,9 @@ class BacktestView(QWidget):
                 if can_promote_basic and not can_promote_sop:
                     logger.warning("[BacktestView] ⚠️ SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
 
+        if hasattr(self, 'export_report_btn'):
+            self.export_report_btn.setEnabled(True)
+
     def _show_recommendation_portfolio_result(self, result):
         """顯示推薦組合回測結果。"""
         self.current_recommendation_portfolio_result = result
@@ -1072,6 +1083,8 @@ class BacktestView(QWidget):
             return
 
         self.execute_recommendation_portfolio_btn.setEnabled(False)
+        if hasattr(self, 'export_portfolio_report_btn'):
+            self.export_portfolio_report_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
         self.progress_label.setText("推薦組合回測執行中...")
@@ -1211,6 +1224,8 @@ class BacktestView(QWidget):
             self.delete_portfolio_result_btn.setEnabled(False)
         if hasattr(self, "promote_portfolio_result_btn"):
             self.promote_portfolio_result_btn.setEnabled(False)
+        if hasattr(self, "export_portfolio_report_btn"):
+            self.export_portfolio_report_btn.setEnabled(True)
         self.current_portfolio_run_id = None
 
         QMessageBox.information(self, "完成", "推薦組合回測完成，請查看右側「推薦組合」結果頁。")
@@ -3879,6 +3894,9 @@ class BacktestView(QWidget):
                 if result_tabs:
                     break
 
+        if hasattr(self, 'export_batch_report_btn'):
+            self.export_batch_report_btn.setEnabled(True)
+
         QMessageBox.information(
             self,
             "完成",
@@ -4299,4 +4317,330 @@ class BacktestView(QWidget):
                         QMessageBox.critical(self, "記錄交易失敗", f"無法記入交易，領域規則校驗失敗：\n{e}")
             else:
                 QMessageBox.warning(self, "錯誤", "持倉服務未能在主窗口初始化")
+
+    def _build_single_backtest_export_payload(self):
+        from app_module.report_export_dtos import ReportMetadata, SingleBacktestExportPayload
+        import pandas as pd
+        from datetime import datetime
+
+        details = {}
+        if self.current_report and hasattr(self.current_report, "details"):
+            details = self.current_report.details or {}
+
+        data_version = details.get("data_version", "")
+        strategy_version = details.get("strategy_version", "1.0")
+        regime = details.get("regime", "")
+        if not regime and hasattr(self, "current_regime"):
+            regime = str(getattr(self, "current_regime", ""))
+        
+        benchmark = details.get("benchmark", "")
+        if not benchmark and hasattr(self, "benchmark_combo"):
+            benchmark = self.benchmark_combo.currentText()
+
+        execution_assumption = details.get("execution_price", "")
+        if not execution_assumption and self.current_run_params:
+            execution_assumption = self.current_run_params.get("execution_price", "")
+
+        metadata = ReportMetadata(
+            report_type="single_backtest",
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            data_as_of_date=details.get("data_as_of_date", ""),
+            data_version=data_version,
+            strategy_id=self.current_run_params.get("strategy_id", "") if self.current_run_params else "",
+            strategy_version=strategy_version,
+            regime=regime,
+            benchmark=benchmark,
+            execution_assumption=execution_assumption,
+        )
+
+        run_params = dict(self.current_run_params or {})
+        metrics = {}
+        if self.current_report:
+            metrics = {
+                "總報酬率": getattr(self.current_report, "total_return", 0.0),
+                "年化報酬率": getattr(self.current_report, "annualized_return", 0.0),
+                "最大回撤": getattr(self.current_report, "max_drawdown", 0.0),
+                "交易次數": getattr(self.current_report, "total_trades", 0),
+                "勝率": getattr(self.current_report, "win_rate", 0.0),
+                "Sharpe": getattr(self.current_report, "sharpe_ratio", 0.0),
+                "Sortino": getattr(self.current_report, "sortino_ratio", 0.0),
+            }
+
+        validation_status = "N/A"
+        validation_messages = []
+        if self.current_report and getattr(self.current_report, "validation_status", None):
+            validation_status = self.current_report.validation_status.value
+            validation_messages = getattr(self.current_report, "validation_messages", [])
+
+        validation = {
+            "驗證狀態": validation_status,
+            "驗證訊息": "\n".join(validation_messages) if validation_messages else "無警報",
+        }
+
+        trades = pd.DataFrame()
+        if self.current_report and "trade_list" in details and isinstance(details["trade_list"], pd.DataFrame):
+            trades = details["trade_list"]
+
+        equity_curve = pd.DataFrame()
+        if self.current_report and "equity_curve" in details and isinstance(details["equity_curve"], pd.DataFrame):
+            equity_curve = details["equity_curve"]
+
+        return SingleBacktestExportPayload(
+            metadata=metadata,
+            run_params=run_params,
+            metrics=metrics,
+            validation=validation,
+            trades=trades,
+            equity_curve=equity_curve,
+        )
+
+    def _build_batch_export_payload(self):
+        from app_module.report_export_dtos import ReportMetadata, BatchBacktestExportPayload
+        import pandas as pd
+        from datetime import datetime
+
+        details = {}
+        if self.current_batch_result and hasattr(self.current_batch_result, "details"):
+            details = self.current_batch_result.details or {}
+
+        data_version = details.get("data_version", "")
+        strategy_version = details.get("strategy_version", "1.0")
+        regime = details.get("regime", "")
+        if not regime and hasattr(self, "current_regime"):
+            regime = str(getattr(self, "current_regime", ""))
+        
+        benchmark = details.get("benchmark", "")
+        if not benchmark and hasattr(self, "benchmark_combo"):
+            benchmark = self.benchmark_combo.currentText()
+
+        execution_assumption = details.get("execution_price", "")
+        if not execution_assumption and self.current_run_params:
+            execution_assumption = self.current_run_params.get("execution_price", "")
+
+        metadata = ReportMetadata(
+            report_type="batch_backtest",
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            data_as_of_date=details.get("data_as_of_date", ""),
+            data_version=data_version,
+            strategy_id=self.current_run_params.get("strategy_id", "") if self.current_run_params else "",
+            strategy_version=strategy_version,
+            regime=regime,
+            benchmark=benchmark,
+            execution_assumption=execution_assumption,
+        )
+
+        leaderboard = pd.DataFrame()
+        if self.current_batch_result and hasattr(self.current_batch_result, "leaderboard"):
+            leaderboard = self.current_batch_result.leaderboard
+
+        overall_stats = ""
+        if self.current_batch_result:
+            if hasattr(self.current_batch_result, "overall_stats"):
+                overall_stats = self.current_batch_result.overall_stats
+            elif hasattr(self.current_batch_result, "overall_stats_text"):
+                overall_stats = self.current_batch_result.overall_stats_text
+
+        return BatchBacktestExportPayload(
+            metadata=metadata,
+            leaderboard=leaderboard,
+            overall_stats=overall_stats,
+        )
+
+    def _build_recommendation_replay_export_payload(self):
+        from app_module.report_export_dtos import ReportMetadata, RecommendationReplayExportPayload
+        import pandas as pd
+        from datetime import datetime
+
+        result = self.current_recommendation_portfolio_result
+        config = getattr(self, "current_recommendation_portfolio_config", {}) or {}
+
+        details = {}
+        if result and hasattr(result, "details"):
+            details = result.details or {}
+
+        data_version = details.get("data_version", "")
+        strategy_version = details.get("strategy_version", "1.0")
+        regime = details.get("regime", "")
+        if not regime and hasattr(self, "current_regime"):
+            regime = str(getattr(self, "current_regime", ""))
+        
+        benchmark = details.get("benchmark", "")
+        if not benchmark and hasattr(self, "benchmark_combo"):
+            benchmark = self.benchmark_combo.currentText()
+
+        execution_assumption = details.get("execution_price", "")
+        if not execution_assumption and self.current_run_params:
+            execution_assumption = self.current_run_params.get("execution_price", "")
+
+        metadata = ReportMetadata(
+            report_type="recommendation_replay",
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            data_as_of_date=details.get("data_as_of_date", ""),
+            data_version=data_version,
+            strategy_id=config.get("strategy_config", {}).get("strategy_id", ""),
+            strategy_version=strategy_version,
+            regime=regime,
+            benchmark=benchmark,
+            execution_assumption=execution_assumption,
+        )
+
+        run_params = {
+            "初始資金": self.capital_input.value(),
+            "單股最大持倉上限": self.recommendation_portfolio_max_stocks.value(),
+            "調倉頻率": self._recommendation_portfolio_rebalance_value(),
+            "配置權重模式": self._recommendation_portfolio_allocation_value(),
+        }
+
+        summary = {}
+        period_holdings = pd.DataFrame()
+        stock_contribution = pd.DataFrame()
+        trades = pd.DataFrame()
+        equity_curve = pd.DataFrame()
+        diagnostics = []
+        improvement_hints = []
+
+        if result:
+            summary = dict(result.summary or {})
+            period_holdings = result.period_holdings_dataframe()
+            stock_contribution = result.stock_contribution_dataframe()
+            trades = result.trades
+            equity_curve = result.equity_curve
+            diagnostics = getattr(result, "diagnostics", [])
+            improvement_hints = getattr(result, "improvement_hints", [])
+
+        return RecommendationReplayExportPayload(
+            metadata=metadata,
+            run_params=run_params,
+            summary=summary,
+            period_holdings=period_holdings,
+            stock_contribution=stock_contribution,
+            trades=trades,
+            equity_curve=equity_curve,
+            diagnostics=diagnostics,
+            improvement_hints=improvement_hints,
+        )
+
+    def _start_excel_export(self, target_path, export_callable, payload, button, default_btn_text):
+        button.setEnabled(False)
+        button.setText("匯出中...")
+        
+        from ui_qt.workers.task_worker import TaskWorker
+        worker = TaskWorker(export_callable, Path(target_path), payload)
+        
+        worker.finished.connect(
+            lambda path, btn=button, txt=default_btn_text: self._on_excel_export_finished(btn, path, txt)
+        )
+        worker.error.connect(
+            lambda message, btn=button, txt=default_btn_text: self._on_excel_export_error(btn, message, txt)
+        )
+        worker.cancelled.connect(
+            lambda btn=button, txt=default_btn_text: self._on_excel_export_cancelled(btn, txt)
+        )
+        self._report_export_workers.append(worker)
+        worker.start()
+
+    def _on_excel_export_finished(self, button, path, default_text):
+        button.setEnabled(True)
+        button.setText(default_text)
+        QMessageBox.information(self, "匯出成功", f"報告已成功匯出至：\n{path}")
+
+    def _on_excel_export_error(self, button, message, default_text):
+        button.setEnabled(True)
+        button.setText(default_text)
+        logger.error(f"Excel 匯出失敗：{message}")
+        short_msg = message.split("\n")[0]
+        QMessageBox.critical(self, "匯出失敗", f"匯出 Excel 報告時發生錯誤：\n{short_msg}")
+
+    def _on_excel_export_cancelled(self, button, default_text):
+        button.setEnabled(True)
+        button.setText(default_text)
+        QMessageBox.information(self, "取消", "匯出已被取消")
+
+    def _export_single_backtest(self):
+        if not self.current_report:
+            QMessageBox.warning(self, "錯誤", "無可匯出的回測結果")
+            return
+        
+        from PySide6.QtWidgets import QFileDialog
+        stock_code = self.current_run_params.get('stock_code', 'report') if self.current_run_params else 'report'
+        default_filename = f"single_backtest_{stock_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        target_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "匯出單股回測 Excel 報告",
+            default_filename,
+            "Excel Files (*.xlsx)"
+        )
+        if not target_path:
+            return
+        self._export_single_backtest_to_path(Path(target_path))
+
+    def _export_single_backtest_to_path(self, target_path: Path):
+        payload = self._build_single_backtest_export_payload()
+        self._start_excel_export(
+            target_path,
+            self.report_export_service.export_single_backtest,
+            payload,
+            self.export_report_btn,
+            "📊 匯出 Excel 報告"
+        )
+
+    def _export_batch_backtest(self):
+        if not self.current_batch_result:
+            QMessageBox.warning(self, "錯誤", "無可匯出的批次回測結果")
+            return
+            
+        from PySide6.QtWidgets import QFileDialog
+        default_filename = f"batch_backtest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        target_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "匯出批次回測 Excel 報告",
+            default_filename,
+            "Excel Files (*.xlsx)"
+        )
+        if not target_path:
+            return
+        self._export_batch_backtest_to_path(Path(target_path))
+
+    def _export_batch_backtest_to_path(self, target_path: Path):
+        payload = self._build_batch_export_payload()
+        self._start_excel_export(
+            target_path,
+            self.report_export_service.export_batch_backtest,
+            payload,
+            self.export_batch_report_btn,
+            "📊 匯出批次 Excel"
+        )
+
+    def _export_recommendation_replay(self):
+        if not self.current_recommendation_portfolio_result:
+            QMessageBox.warning(self, "錯誤", "無可匯出的推薦回放結果")
+            return
+            
+        from PySide6.QtWidgets import QFileDialog
+        default_filename = f"recommendation_replay_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        target_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "匯出推薦回放 Excel 報告",
+            default_filename,
+            "Excel Files (*.xlsx)"
+        )
+        if not target_path:
+            return
+        self._export_recommendation_replay_to_path(Path(target_path))
+
+    def _export_recommendation_replay_to_path(self, target_path: Path):
+        payload = self._build_recommendation_replay_export_payload()
+        self._start_excel_export(
+            target_path,
+            self.report_export_service.export_recommendation_replay,
+            payload,
+            self.export_portfolio_report_btn,
+            "📊 匯出回放 Excel"
+        )
+
+    def closeEvent(self, event):
+        for worker in self._report_export_workers:
+            if worker.isRunning():
+                worker.wait()
+        super().closeEvent(event)
 

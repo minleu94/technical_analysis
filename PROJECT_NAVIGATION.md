@@ -1,7 +1,7 @@
 # 專案導航文件
 
-**版本**：v1.4.0
-**最後更新**：2026-06-13
+**版本**：v1.4.1
+**最後更新**：2026-06-14
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -122,7 +122,7 @@ python ui_qt/main.py
 - `scripts/calculate_technical_indicators.py`：計算技術指標
 - `app_module/broker_branch_update_service.py`：券商分點資料抓取、標準化與合併
 
-**如果我要改數據更新邏輯**：先看 `app_module/update_service.py`，再看對應的腳本檔案。
+**如果我要改數據更新邏輯**：先看 `app_module/update_service.py`，再看對應的腳本檔案。如果要改 SQLite 資料檢視器分頁或查詢邏輯，看 `app_module/sqlite_inspector_service.py` 與 `ui_qt/widgets/sqlite_inspector_widget.py`。
 
 ---
 
@@ -187,6 +187,7 @@ python ui_qt/main.py
 - 改策略配置 → `decision_module/strategy_configurator.py`
 - 改打分邏輯 → `decision_module/scoring_engine.py`
 - 改推薦理由 → `decision_module/reason_engine.py`
+- 改推薦結果 Excel 匯出 → `app_module/report_export_service.py` / `app_module/report_export_dtos.py`
 
 ---
 
@@ -220,6 +221,7 @@ python ui_qt/main.py
 - 改績效計算 → `backtest_module/performance_metrics.py`
 - 改策略執行 → `app_module/strategies/` 對應的執行器
 - 改 Walk-Forward → `app_module/walkforward_service.py`
+- 改報告匯出或 Excel 結構 → `app_module/report_export_service.py` / `app_module/report_export_dtos.py`
 
 **如果我要改回測圖表 / 視覺化**：
 - 改圖表資料轉換 → `ui_qt/widgets/chart_payloads.py`

@@ -66,6 +66,16 @@ class BacktestResultPanel(QWidget):
         self.summary_text.setFont(QFont("Consolas", 9))
         summary_layout.addWidget(self.summary_text)
         
+        # 單股回測 Excel 匯出按鈕
+        btn_layout = QHBoxLayout()
+        self.export_report_btn = QPushButton("📊 匯出 Excel 報告")
+        self.export_report_btn.setEnabled(False)
+        self.export_report_btn.setToolTip("匯出目前單股回測的詳細研究報告（報告僅輸出目前結果，不重新計算績效）")
+        self.export_report_btn.clicked.connect(self.parent_view._export_single_backtest)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.export_report_btn)
+        summary_layout.addLayout(btn_layout)
+        
         summary_group.setLayout(summary_layout)
         result_layout.addWidget(summary_group, stretch=65)
         
@@ -214,6 +224,13 @@ class BacktestResultPanel(QWidget):
             self.batch_sort_combo.currentTextChanged.connect(self.parent_view._on_batch_sort_changed)
             sort_row.addWidget(self.batch_sort_combo)
             sort_row.addStretch()
+            
+            self.export_batch_report_btn = QPushButton("📊 匯出批次 Excel")
+            self.export_batch_report_btn.setEnabled(False)
+            self.export_batch_report_btn.setToolTip("匯出目前批次操作的排行榜與統計報告")
+            self.export_batch_report_btn.clicked.connect(self.parent_view._export_batch_backtest)
+            sort_row.addWidget(self.export_batch_report_btn)
+            
             batch_result_layout.addLayout(sort_row)
             
             batch_leaderboard_group = QGroupBox("排行榜")
@@ -257,6 +274,16 @@ class BacktestResultPanel(QWidget):
         self.portfolio_summary_text.setMaximumHeight(200)
         self.portfolio_summary_text.setFont(QFont("Consolas", 9))
         recommendation_portfolio_layout.addWidget(self.portfolio_summary_text)
+        
+        # 推薦回放 Excel 匯出按鈕列
+        portfolio_btn_row = QHBoxLayout()
+        portfolio_btn_row.addStretch()
+        self.export_portfolio_report_btn = QPushButton("📊 匯出回放 Excel")
+        self.export_portfolio_report_btn.setEnabled(False)
+        self.export_portfolio_report_btn.setToolTip("匯出推薦回放的組合持倉與個股貢獻報告")
+        self.export_portfolio_report_btn.clicked.connect(self.parent_view._export_recommendation_replay)
+        portfolio_btn_row.addWidget(self.export_portfolio_report_btn)
+        recommendation_portfolio_layout.addLayout(portfolio_btn_row)
         
         self.portfolio_chart_tabs = QTabWidget()
         self.portfolio_equity_chart = create_equity_curve_widget()

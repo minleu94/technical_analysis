@@ -188,10 +188,10 @@
 
 ## 目前開發狀態
 
-- **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）。
+- **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
 - **進行中 / 當前治理**：fixed / quantile pilot 已保存但未通過正式驗收；Legacy Carryover 工程項目依 Month 1/2 執行。
 - **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，包含 Research Run Registry、Factor Layer、營收與估值、三大法人、Portfolio 回饋閉環。
-- **待開始 (Backlog)**：Phase 5 中大表格分頁、Excel/PDF 報告輸出。
+- **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
 ---
 
@@ -225,6 +225,7 @@
 - 2026-06-13：完成治理成果收尾驗收，補齊 Snapshot、Roadmap、Phase 2.5 狀態與 Project Navigation；記錄 `82 + 9 + 37` 項 pytest、Update Tab QA `21/0` 與 mypy 144 檔通過證據。
 - 2026-06-13：完成 Roadmap Hub / 6M Roadmap 重構，新增 Legacy Carryover Matrix 與完整 Application Manual，修正主要 UI 入口、過期 Phase 狀態與 service 架構文件。
 - 2026-06-13：修正 fixed / quantile pilot 的 OOS 時間軸與不實結論；保存資料指紋，並記錄 fixed 無交易與 regime 分層未完成，因此正式實證仍未過 Gate。
+- 2026-06-14：完成 Phase 5 Month 1 SQLite 穩定分頁與規格化 Excel 報告匯出實作計畫，補齊 report payload 契約、背景寫檔、原子替換、文件 coverage 與完整 QA Gate。
 
 
 
