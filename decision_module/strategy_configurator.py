@@ -12,7 +12,7 @@ from analysis_module import (
     MLAnalyzer
 )
 from decision_module.scoring_engine import ScoringEngine
-from decision_module.indicator_parameter_registry import InvalidParameterError
+from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
 from decision_module.weight_contract import InvalidWeightError, WeightMigrationError
 
 class StrategyConfigurator:
@@ -45,13 +45,7 @@ class StrategyConfigurator:
         """
         df_result = df.copy()
         
-        # 解析 schema_version
-        schema_version = 0
-        if full_config and isinstance(full_config, dict):
-            try:
-                schema_version = int(full_config.get('config_schema_version', 0))
-            except (ValueError, TypeError):
-                schema_version = 0
+        schema_version = IndicatorParameterRegistry.get_config_schema_version(full_config)
 
         # 複製配置以防修改呼叫者的字典
         config_copy = {}

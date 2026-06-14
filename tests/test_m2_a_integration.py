@@ -405,6 +405,27 @@ def test_generate_recommendations_fail_closed_propagation(sample_stock_df):
     with pytest.raises(InvalidParameterError):
         configurator.generate_recommendations(sample_stock_df, config_invalid)
 
+
+@pytest.mark.parametrize("version", ["1", -1, True, 1.5])
+def test_generate_recommendations_rejects_invalid_schema_version_when_indicators_are_disabled(
+    sample_stock_df,
+    version,
+):
+    configurator = StrategyConfigurator()
+    config_invalid = {
+        'config_schema_version': version,
+        'weights': {'pattern': 3000, 'technical': 5000, 'volume': 2000},
+        'technical': {
+            'momentum': {'enabled': False},
+            'volatility': {'enabled': False},
+            'trend': {'enabled': False},
+        },
+    }
+
+    with pytest.raises(InvalidParameterError, match="config_schema_version"):
+        configurator.generate_recommendations(sample_stock_df, config_invalid)
+
+
 def test_cross_field_validations():
     """測試 MACD, SAR, MA 跨欄位契約校驗失敗"""
     # 1. MACD fastperiod >= slowperiod

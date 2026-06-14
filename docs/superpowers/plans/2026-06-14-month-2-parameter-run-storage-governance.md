@@ -39,6 +39,7 @@
 9. LegacyWeightMigrationAdapter 已要求精確三鍵集合，不再補缺漏 key 或忽略額外 key。
 10. disabled 測試已改走 `configure_technical_indicators()` 正式路徑，逐一覆蓋 RSI、MACD、KD、Bollinger、SAR、ATR、TSF、ADX、MA；Bollinger / SAR 停用時不再產生空欄位。
 11. `TotalScore` / `FinalScore` 已依既有 score basis-point 契約，以 `Decimal('0.01')` 與 `ROUND_HALF_UP` 統一量化。
+12. `StrategyConfigurator` 已在任何指標 section 執行前驗證 `config_schema_version`，即使全部指標停用也不能繞過版本 Fail-Closed。
 
 目前程式契約阻斷已清除。M2-A 仍需完成完整驗證、文件 Coverage、Review Gate 與使用者核准，才可標示 Gate 通過並開始 M2-B。
 

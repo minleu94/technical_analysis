@@ -69,6 +69,21 @@ class IndicatorParameterRegistry:
         return default_config
 
     @classmethod
+    def get_config_schema_version(cls, full_config: Optional[Dict[str, Any]] = None) -> int:
+        """從完整配置解析非負整數 schema version；缺失配置視為 legacy v0。"""
+        if full_config is None:
+            return 0
+        if not isinstance(full_config, dict):
+            raise InvalidParameterError("Invalid full_config format")
+
+        raw_version = full_config.get('config_schema_version', 0)
+        if isinstance(raw_version, bool) or not isinstance(raw_version, int):
+            raise InvalidParameterError("Invalid config_schema_version format")
+        if raw_version < 0:
+            raise InvalidParameterError("config_schema_version must be non-negative")
+        return raw_version
+
+    @classmethod
     def validate_and_sanitize(cls, indicator_name: str, params: Dict[str, Any], full_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         驗證並清理指定指標的自訂參數。新版（v1+）缺失或任何版本值非法一律拋出 InvalidParameterError (Fail-Closed)。
@@ -85,15 +100,7 @@ class IndicatorParameterRegistry:
         if indicator_name not in cls.SCHEMAS:
             raise InvalidParameterError(f"未知的技術指標名稱: {indicator_name}")
 
-        # 解析 config_schema_version，受控處理轉換 ValueError
-        config_schema_version = 0
-        if full_config and isinstance(full_config, dict):
-            raw_version = full_config.get('config_schema_version', 0)
-            if isinstance(raw_version, bool) or not isinstance(raw_version, int):
-                raise InvalidParameterError("Invalid config_schema_version format")
-            if raw_version < 0:
-                raise InvalidParameterError("config_schema_version must be non-negative")
-            config_schema_version = raw_version
+        config_schema_version = cls.get_config_schema_version(full_config)
 
         schema = cls.SCHEMAS[indicator_name]
 
