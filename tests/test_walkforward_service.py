@@ -1,3 +1,5 @@
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -9,7 +11,14 @@ from app_module.walkforward_service import WalkForwardService
 from app_module.strategies.momentum_aggressive_executor import (
     MomentumAggressiveExecutor,
 )
-from scripts.run_walk_forward_comparison import build_empirical_conclusion
+from decision_module.market_regime_detector import MarketRegimeDetector
+from scripts.run_walk_forward_comparison import (
+    _build_equal_weight_daily_returns,
+    _iter_walk_forward_windows,
+    _run_walk_forward_with_details,
+    _resolve_regime_label,
+    build_empirical_conclusion,
+)
 
 
 def _report() -> BacktestReportDTO:
@@ -141,3 +150,108 @@ def test_oos_signal_generation_resets_position_state_at_execution_start():
     )
 
     assert signals.tolist() == [0, 0, 0, 0]
+
+
+def test_walk_forward_windows_are_precomputed_independently_of_fold_execution():
+    windows = list(
+        _iter_walk_forward_windows(
+            start_date="2024-01-01",
+            end_date="2025-01-02",
+            train_months=6,
+            test_months=3,
+            step_months=3,
+        )
+    )
+
+    assert [window.fold for window in windows] == [1, 2]
+    assert windows[0].test_start == "2024-07-02"
+    assert windows[1].train_start == "2024-04-01"
+
+
+def test_missing_regime_label_is_unavailable_instead_of_reversion():
+    label, observed = _resolve_regime_label({}, "2026-06-01")
+
+    assert label == "unavailable"
+    assert observed is False
+
+
+def test_regime_label_uses_latest_observation_available_on_decision_date():
+    label, observed = _resolve_regime_label(
+        {
+            "2026-05-29": "Trend",
+            "2026-06-02": "Breakout",
+        },
+        "2026-06-01",
+    )
+
+    assert label == "Trend"
+    assert observed is True
+
+
+def test_equal_weight_daily_returns_aggregate_stocks_before_regime_stats():
+    records = [
+        {"stock": "2330", "date": "2026-06-01", "return": 0.10, "regime": "Trend"},
+        {"stock": "2317", "date": "2026-06-01", "return": -0.10, "regime": "Trend"},
+        {"stock": "2330", "date": "2026-06-02", "return": 0.20, "regime": "Trend"},
+    ]
+
+    aggregated = _build_equal_weight_daily_returns(records)
+
+    assert aggregated == [
+        {"date": "2026-06-01", "return": 0.0, "regime": "Trend"},
+        {"date": "2026-06-02", "return": 0.2, "regime": "Trend"},
+    ]
+
+
+def test_isolated_regime_detector_does_not_load_or_write_persistent_history(
+    tmp_path: Path,
+):
+    history_path = tmp_path / "regime_history.json"
+    history_path.write_text(
+        '{"2099-01-01": {"regime": "Trend", "timestamp": "future"}}',
+        encoding="utf-8",
+    )
+    config = SimpleNamespace(resolve_output_path=lambda _: tmp_path)
+    detector = MarketRegimeDetector(config, use_persistent_history=False)
+
+    detector._save_regime_history("2026-06-01", "Breakout")
+
+    assert detector.regime_history == {
+        "2026-06-01": {"regime": "Breakout", "timestamp": detector.regime_history["2026-06-01"]["timestamp"]}
+    }
+    assert "2099-01-01" not in detector.regime_history
+    assert history_path.read_text(encoding="utf-8").startswith('{"2099-01-01"')
+
+
+def test_failed_fold_does_not_prevent_later_walk_forward_windows():
+    backtest_service = MagicMock()
+    backtest_service.run_backtest.side_effect = [
+        RuntimeError("first fold failed"),
+        *[_report() for _ in range(14)],
+    ]
+
+    results, trades, returns = _run_walk_forward_with_details(
+        backtest_service,
+        "2330",
+        "fixed",
+        {},
+    )
+
+    assert len(results) == 7
+    assert results[0].test_period == ("2024-10-02", "2025-01-02")
+    assert backtest_service.run_backtest.call_count == 15
+    assert trades == []
+    assert returns == []
+
+
+def test_regime_hysteresis_ignores_history_after_target_date(tmp_path: Path):
+    config = SimpleNamespace(resolve_output_path=lambda _: tmp_path)
+    detector = MarketRegimeDetector(config, use_persistent_history=False)
+    detector.regime_history = {
+        "2026-05-31": {"regime": "Reversion", "timestamp": "past"},
+        "2099-01-01": {"regime": "Trend", "timestamp": "future"},
+    }
+
+    regime = detector._apply_regime_hysteresis("Trend", "2026-06-01")
+
+    assert regime == "Reversion"

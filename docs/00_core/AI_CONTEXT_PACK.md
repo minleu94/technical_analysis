@@ -15,12 +15,12 @@
 * **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、籌碼分析終端、Portfolio 監控、Runtime 子系統。
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 7 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。大量使用 `pandas_table_model` 呈現高密度數據網格。
 * **Current Priorities (目前優先事項)**：
-  1. Fixed / quantile 真實股票池 walk-forward 實證。
+  1. Research Run Registry、Cross-run comparison 與 benchmark-relative attribution。
   2. 文件治理 scoped authority 收尾（Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Agent 指引）。
   3. Phase 5 研究輸出（大表格分頁與 Excel / PDF 報告）。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
-  1. Quantile 機制已完成；5 檔 walk-forward pilot 已保存，但 fixed 無 OOS 交易且缺 regime 分層，尚無足以驗收的相對績效證據。
+  1. Fixed / quantile 實證 Gate 已完成，但尚未建立完整 Cross-run 與 benchmark-relative attribution；quantile 未優於 fixed。
   2. 營收、基本面、估值與三大法人尚未成為正式資料因子。
   3. 新資料必須走 factor layer，避免污染既有 scoring engine。
 
@@ -175,7 +175,7 @@
 
 * **Active Phase (目前階段)**：三個產品閉環已建立，進入 6 個月工程路線執行期。
 * **In Progress (進行中)**：
-  * Fixed / quantile 真實 walk-forward 實證。
+  * Research Run Registry 與 Cross-run comparison。
   * 文件治理 scoped authority 收尾。
   * Phase 5 大表格分頁與報告輸出。
 * **Planned (計畫中)**：Research Run Registry、Factor Layer v1、營收與估值資料、三大法人資料、Portfolio post-trade attribution。
@@ -187,7 +187,7 @@
 
 ## 8. Risk Report (風險雷達與報告)
 
-* **Quantile Evidence Gap (分位數實證缺口)**：fixed / quantile 機制已完成；pilot 因 fixed 無 OOS 交易且缺 regime 分層未過 Gate，不能宣稱 quantile 更準。
+* **Quantile Evidence Result (分位數實證結果)**：10 檔 OOS pilot 的樣本與 Regime coverage Gate 已通過，但 quantile 未優於 fixed，不能宣稱 quantile 更準。
 * **Factor Look-ahead Risk (因子未來函數風險)**：營收、財報、法人與估值資料必須保存可得日，決策不得使用當下尚未公告的資料。
 * **Financial Core Boundary Risk (金融核心數值邊界風險)**：核心金額、交易成本、PnL、倉位與風控不可新增裸 `float`；analytics / visualization 邊界需清楚標示。
 * **AI Coordination Risk (AI 協作風險)**：`codex` 與 `ag` 兩個 Agent 容易在修改共同索引（如 `DOCUMENTATION_INDEX.md`）時發生 Merge Conflict。必須嚴格遵循不覆寫對方實作的衝突解決規範。

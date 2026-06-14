@@ -1,6 +1,6 @@
 # 6 個月可執行工程路線（2026-06 至 2026-12）
 
-> **最後更新**：2026-06-13
+> **最後更新**：2026-06-14
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。當它與短期 Snapshot 衝突時，以 Snapshot 的「本週優先事項」決定今天先做什麼；當它與歷史 Roadmap 衝突時，以本文件作為未來方向依據。
 
 ---
@@ -93,7 +93,7 @@
 
 ### Month 1：實證基準線與文件治理完成
 
-> 2026-06-14 狀態：SQLite 穩定分頁與規格化 Excel 報告背景原子寫入已於 2026-06-14 完成並通過 mypy/pytest QA。5 檔 pilot walk-forward 正式實證仍在進行（等待有效 fixed 基準樣本與 regime 分層後正式驗收）。
+> 2026-06-14 狀態：10 檔 fixed / quantile OOS 實證、100% Regime coverage、SQLite 穩定分頁與規格化 Excel 報告背景原子寫入均已完成。Quantile 未優於 fixed，維持 opt-in。
 
 目標：
 
@@ -214,9 +214,9 @@
 
 ## 5. 立即待辦清單
 
-1. 固定股票池與資料版本，完成 fixed / quantile walk-forward 實證。
+1. Fixed / quantile walk-forward 實證已完成；後續以 Research Run Registry 承接 Cross-run 與 benchmark-relative attribution。
 2. 大表格分頁 (SQLite 穩定分頁) 與規格化報告 (Excel 報告匯出) 已完成，PDF 仍在後續。
-3. 建立 Research Run Registry 設計規格。
+3. Research Run Registry 設計規格已完成；進入實作與 Cross-run comparison。
 4. 定義 Factor Contract，不先接營收與法人。
 5. 更新 `system_architecture.md` 已完成。
 6. 依 [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) 關閉所有已完成的舊 Roadmap 移交項目。

@@ -36,6 +36,7 @@
 | 任務類型 | 權威文件 / 流程文件 | 用途 |
 |---|---|---|
 | 團隊分流、交接、角色選擇 | `docs/agents/skills/team.md` | Task Intake、Role Routing、Handoff Pack |
+| 量化合規檢查（Float / 未來函數） | `docs/agents/skills/quant_defense_guard.md` | 量化精度防禦與未來函數審查技能 |
 | 架構判斷、風險雷達、是否該做 | `docs/agents/tech_lead.md` | Tech Lead 權威角色 |
 | 明確 scope 實作、bugfix | `docs/agents/execution_agent.md` | Execution 權威角色 |
 | 完成前驗證、測試矩陣、回歸確認 | `docs/agents/execution_agent.md` + `docs/agents/shared_context.md` | 依專案驗證規則執行 |
@@ -108,9 +109,23 @@
 
 若未來需要輕量操作卡，必須明確標示為「調用卡」或「流程卡」，且只能指回 `docs/agents/*.md` 權威文件，不得複製或改寫角色規則。
 
-## 7. 更新記錄
+## 7. 本地輔助 MCP 伺服器
+
+專案配備以下 Python 版本地 MCP 伺服器（基於 `fastmcp`）。程式碼存在不代表目前 Agent session 已載入；修改 MCP 設定後必須重啟 Codex / Antigravity，再由工具清單確認：
+
+- **`twstock-context`** (`mcp_servers/project_context_server.py`)：提供專案啟動上下文與 `TWStockConfig` 配置快照。
+- **`twstock-sqlite-inspector`** (`mcp_servers/sqlite_server.py`)：提供強制唯讀 SQLite 查詢、執行計劃審查與 Schema 檢索；最多回傳 1000 列。它可協助診斷索引與查詢計劃，但不保證消除 database lock。
+- **`twstock-git-assistant`** (`mcp_servers/git_server.py`)：提供 Git 工作區狀態、Diff 與 Log 輔助；Git 失敗會明確拋錯，Diff 輸出設有安全上限。
+
+本機註冊位置：
+
+- Codex：`C:\Users\archi\.codex\config.toml`
+- Antigravity：`C:\Users\archi\.gemini\config\mcp_config.json`
+
+## 8. 更新記錄
 
 - 2026-06-09：改為「索引 + 分冊」架構，將本文件降級為短索引，技能細則移至 `docs/agents/skills/`。
 - 2026-06-09：修正為「既有 Agent 單一權威制」，`skills/` 僅保留團隊協作與交接流程，不建立同名角色分冊。
 - 2026-06-13：更新固定必讀與文件同步描述，對齊 Snapshot / Roadmap Hub / 6M Roadmap / Architecture 的 Scoped SSOT。
 - 2026-06-13：補入 Legacy Carryover 與 Application Manual 的條件式必讀及權威範圍。
+- 2026-06-14：新增量化防禦技能 `quant_defense_guard.md` 與本地輔助 MCP 伺服器說明。

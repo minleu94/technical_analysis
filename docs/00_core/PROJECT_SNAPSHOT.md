@@ -63,8 +63,8 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Strategy & Scoring Governance 實證：已完成可追溯 pilot，但 fixed 的 40 個 OOS fold 均無交易，尚需建立有效基準樣本與 regime 分層後才能驗收。
-2. Legacy Carryover Month 1：大表格分頁 (SQLite 穩定分頁) 與規格化報告 (Excel 報告匯出) 已完成，PDF 仍待後續； walk-forward 實證與基準線待持續推進。
+1. Strategy & Scoring Governance 實證：10 檔、每檔 8 個 OOS fold 已完成；fixed 57 筆、quantile 79 筆與 100% Regime coverage 均通過 Gate，但 quantile 未優於 fixed，維持 opt-in。
+2. Legacy Carryover Month 1：Walk-forward 實證、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 仍待後續。
 3. Legacy Carryover Month 2：完成 Indicator Parameter Registry、Recommendation Weight Contract 與 Research Run Registry。
 
 ## 高風險區（改動需謹慎）
@@ -101,7 +101,7 @@
 - `../../PROJECT_NAVIGATION.md` / `../../PROJECT_INVENTORY.md` - 專案導航與盤點。
 - `../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` - 舊完整 Roadmap，僅供歷史追溯。
 - `../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md` - fixed / quantile 雙模式與分位數安全契約。
-- `../06_qa/WALK_FORWARD_COMPARISON_REPORT.md` - 治理機制驗證證據與實證比較待辦。
+- `../06_qa/WALK_FORWARD_COMPARISON_REPORT.md` - Fixed / quantile OOS 實證、Regime 分層與 Gate 證據。
 
 ---
 
@@ -152,8 +152,8 @@
 ## Strategy & Scoring Governance 驗證限制
 
 - 功能與機制回歸已完成。
-- 2026-06-13 已完成 5 檔股票 pilot 與資料指紋保存，但 fixed 在 40 個 OOS fold 均無完成交易，結果不足以判定相對績效（詳見 [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md)）。
-- Quantile 維持 opt-in；補齊有效 fixed 基準樣本、擴大股票池與 regime 分層前，不宣稱改善績效或穩健度。
+- 2026-06-14 已完成 10 檔股票、每檔 8 個 OOS fold 的比較；fixed 57 筆、quantile 79 筆交易與 100% Regime coverage 均通過 Gate（詳見 [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md)）。
+- Quantile 平均 OOS Sharpe 未優於 fixed，因此維持 opt-in，不宣稱改善績效或穩健度。
 
 ## 2026-06-11 券商分點擴充與數據更新流程分流成果
 

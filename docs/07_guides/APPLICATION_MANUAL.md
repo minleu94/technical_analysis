@@ -1,6 +1,6 @@
 # 台股投資決策系統完整操作手冊
 
-> **最後更新**：2026-06-13
+> **最後更新**：2026-06-14
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前 7 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
@@ -20,7 +20,7 @@
 目前不能保證：
 
 - 推薦股票一定上漲或策略一定獲利。
-- quantile 一定優於 fixed；2026-06-13 pilot 未形成有效 fixed 基準樣本，正式 walk-forward 實證仍待完成。
+- quantile 一定優於 fixed；2026-06-14 的 10 檔 OOS 實證未顯示 quantile 優於 fixed，因此仍為 opt-in。
 - 推薦回放等同可成交的實盤績效。
 - Runtime Observatory 會自動修復問題或自動下單。
 - 觀察清單等同實際投資組合。
@@ -382,6 +382,8 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - 交易次數是否足夠
 - 不同窗口是否只靠單一期間獲利
 - fixed / quantile 是否用完全相同條件
+
+本專案 2026-06-14 基準實證使用 10 檔股票、每檔 8 個 OOS fold；fixed 57 筆、quantile 79 筆交易均通過 20 筆最低樣本 Gate，Regime coverage 為 100%。結果未顯示 quantile 的平均 OOS Sharpe 優於 fixed，詳見 `docs/06_qa/WALK_FORWARD_COMPARISON_REPORT.md`。
 
 ### 8.8 執行、取消、保存與升級
 

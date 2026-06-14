@@ -122,7 +122,7 @@
 | [QA_UPDATE_TAB_ISSUES.md](../06_qa/QA_UPDATE_TAB_ISSUES.md) | 數據更新 Tab QA 問題。 |
 | [QA_UPDATE_TAB_SUMMARY.md](../06_qa/QA_UPDATE_TAB_SUMMARY.md) | 數據更新 Tab QA 總結。 |
 | [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
-| [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸與可追溯 pilot；正式實證尚未通過樣本與 regime Gate。 |
+| [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
 
 ---
 
@@ -165,6 +165,7 @@
 | [agents/data_cleanup_agent.md](../agents/data_cleanup_agent.md) | Data Cleanup Agent。 |
 | [agents/skills_registry.md](../agents/skills_registry.md) | Codex / Antigravity 共用的角色選擇、流程導引與 shared context 入口。 |
 | [agents/skills/team.md](../agents/skills/team.md) | Codex / Antigravity 任務分流與交接流程。 |
+| [agents/skills/quant_defense_guard.md](../agents/skills/quant_defense_guard.md) | 量化精度防禦與未來函數審查技能及一鍵式檢測工具。 |
 | [agents/antigravity/README.md](../agents/antigravity/README.md) | Antigravity Agent 入口與角色分流。 |
 | [agents/antigravity/tech_lead_agent.md](../agents/antigravity/tech_lead_agent.md) | Antigravity Tech Lead Agent。 |
 | [agents/antigravity/execution_agent.md](../agents/antigravity/execution_agent.md) | Antigravity Execution Agent。 |
@@ -191,7 +192,7 @@
 ## 目前開發狀態
 
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
-- **進行中 / 當前治理**：fixed / quantile pilot 已保存但未通過正式驗收；Legacy Carryover 工程項目依 Month 1/2 執行。
+- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in，後續進入 Research Run Registry 與 Cross-run。
 - **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，包含 Research Run Registry、Factor Layer、營收與估值、三大法人、Portfolio 回饋閉環。
 - **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
@@ -228,9 +229,8 @@
 - 2026-06-13：完成 Roadmap Hub / 6M Roadmap 重構，新增 Legacy Carryover Matrix 與完整 Application Manual，修正主要 UI 入口、過期 Phase 狀態與 service 架構文件。
 - 2026-06-13：修正 fixed / quantile pilot 的 OOS 時間軸與不實結論；保存資料指紋，並記錄 fixed 無交易與 regime 分層未完成，因此正式實證仍未過 Gate。
 - 2026-06-14：完成 Phase 5 Month 1 SQLite 穩定分頁與規格化 Excel 報告匯出實作計畫，補齊 report payload 契約、背景寫檔、原子替換、文件 coverage 與完整 QA Gate。
-- 2026-06-14：完成舊測試治理，將歷史網路／真實路徑／互動式腳本移至
-  `tests/manual/`，以現行 `TWStockConfig`、`DataLoader` 與分析 API 重建正式
-  契約；pytest 完整收集與 `344` 項測試通過。
+- 2026-06-14：完成舊測試治理，將歷史網路／真實路徑／互動式腳本移至 `tests/manual/`，以現行 `TWStockConfig`、`DataLoader` 與分析 API 重建正式契約；pytest 完整收集與 `344` 項測試通過。
+- 2026-06-14：新增並 review 量化精度與未來函數一鍵式靜態檢測工具、SQLite/Git MCP 與 `auto_state_sync.py`；補強 fail-closed、SQLite 強制唯讀、Git 輸出限制及 Codex / Antigravity 雙端註冊。
 
 
 

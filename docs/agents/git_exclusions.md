@@ -7,8 +7,9 @@
 這些是本機快取、工具暫存或 agent 工作目錄，不應提交：
 
 - `.superpowers/`：Superpowers plugin 的本機工作狀態。
-- `docs/.tmp.driveupload/`：文件/雲端上傳流程的暫存目錄。
+- `**/.tmp.driveupload/`：文件或工具在任意工作目錄建立的雲端上傳暫存目錄。
 - `docs/agents/shared_state/active_task.yaml`：Agent 本機任務交接狀態；各工作階段可自行更新，不應提交。
+- `docs/agents/shared_state/handoff_log.md`：本機跨 Agent 交接紀錄；可能包含進行中工作資訊，不應提交。
 - `.pytest_cache/`、`.coverage`、`htmlcov/`、`.tox/`、`.cache/`：測試與 coverage 輸出。
 - `*.log`、`logs/`：執行日誌。
 - `venv/`、`env/`、`ENV/`：本機虛擬環境。

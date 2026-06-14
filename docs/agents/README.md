@@ -43,6 +43,8 @@
 - **[Shared AI Skills Registry](./skills_registry.md)** (`skills_registry.md`)
   - Codex 與 Antigravity 共用的角色選擇、流程導引與 shared context 入口
   - 僅指向既有 Agent 權威文件，不重新定義角色規則
+- **[Quant Defense Guard](./skills/quant_defense_guard.md)** (`skills/quant_defense_guard.md`)
+  - 量化精度防禦（無裸 float）與未來函數審查技能及一鍵式檢測工具說明
 - **[Antigravity Agent 入口](./antigravity/README.md)** (`antigravity/README.md`)
   - 給 Antigravity 使用的角色分流與必讀規則
   - 與 repo 根目錄 `GEMINI.md`、`.agent/rules/` 搭配使用
@@ -194,4 +196,6 @@ Antigravity 的 repo 根目錄入口是 `GEMINI.md`，輔助規則放在 `.agent
 - 2026-06-09：新增 `skills_registry.md` 作為 Codex / Antigravity 共用協作入口，明確 `docs/agents/*.md` 為唯一角色權威，Antigravity 文件降級為適配摘要
 - 2026-06-13：配合 Roadmap Hub 與 6 個月工程 Roadmap，更新 Agent 必讀順序與 scoped authority 判讀規則
 - 2026-06-13：補入 Legacy Carryover 與 Application Manual 的條件式必讀及權威範圍
+- 2026-06-14：新增量化防禦技能與一鍵檢測工具，整合 Python 版本地 MCP 伺服器並更新文檔結構說明。
+- 2026-06-14：治理工具 review 後補強 fail-closed、SQLite 強制唯讀、Git 輸出上限與 MCP 雙端註冊；設定異動後需重啟 Agent 應用。
 

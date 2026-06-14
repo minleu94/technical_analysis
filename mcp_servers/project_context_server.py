@@ -92,4 +92,4 @@ def create_mcp_server():
 
 
 if __name__ == "__main__":
-    create_mcp_server().run()
+    create_mcp_server().run(show_banner=False)

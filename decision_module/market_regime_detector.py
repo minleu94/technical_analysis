@@ -34,19 +34,22 @@ logger = logging.getLogger(__name__)
 class MarketRegimeDetector:
     """市場狀態判斷器"""
     
-    def __init__(self, config):
+    def __init__(self, config, *, use_persistent_history: bool = True):
         """初始化市場狀態判斷器
         
         Args:
             config: TWStockConfig 實例
         """
         self.config = config
+        self.use_persistent_history = use_persistent_history
         
         # Regime 抖動防護：保存歷史狀態
         # 注意：resolve_output_path 用於目錄，對於文件需要手動構建路徑
         output_dir = config.resolve_output_path('')  # 獲取輸出目錄
         self.regime_history_file = output_dir / 'regime_history.json'
-        self.regime_history = self._load_regime_history()
+        self.regime_history = (
+            self._load_regime_history() if use_persistent_history else {}
+        )
         
         # 抖動防護參數
         self.min_confirm_days = 2  # 至少連續 N 天才切換
@@ -68,6 +71,8 @@ class MarketRegimeDetector:
             'regime': regime,
             'timestamp': datetime.now().isoformat()
         }
+        if not self.use_persistent_history:
+            return
         try:
             # 確保目錄存在
             self.regime_history_file.parent.mkdir(parents=True, exist_ok=True)
@@ -452,7 +457,7 @@ class MarketRegimeDetector:
             
             # 判斷 Regime（帶抖動防護）
             regime_result = self._classify_regime(
-                latest_close, latest_ma20, latest_ma60,
+                close, latest_ma20, latest_ma60,
                 ma20_slope, latest_adx, latest_plus_di, latest_minus_di,
                 latest_atr, atr, latest_bb_bandwidth, bb_bandwidth,
                 latest_rsi, trend_distance, volume, date
@@ -491,7 +496,14 @@ class MarketRegimeDetector:
             str: 最終的 Regime（可能被防護機制修改）
         """
         # 獲取最近 N 天的 Regime 歷史（按日期排序）
-        sorted_history = sorted(self.regime_history.items(), reverse=True)
+        sorted_history = sorted(
+            (
+                (hist_date, hist_data)
+                for hist_date, hist_data in self.regime_history.items()
+                if hist_date < date
+            ),
+            reverse=True,
+        )
         
         if len(sorted_history) == 0:
             # 沒有歷史，直接保存
@@ -554,6 +566,7 @@ class MarketRegimeDetector:
         rsi_value, trend_distance, volume_series, date: str
     ):
         """分類市場狀態（改進版）"""
+        latest_close = close.iloc[-1]
         details = {}
         
         # 1. Trend（趨勢追蹤）- 結構分 + 強度分設計
@@ -564,7 +577,7 @@ class MarketRegimeDetector:
         structure_conditions = []
         
         # 條件 1: close > ma60
-        close_above_ma60 = close > ma60
+        close_above_ma60 = latest_close > ma60
         structure_conditions.append(close_above_ma60)
         trend_conditions['close_above_ma60'] = close_above_ma60
         
@@ -630,7 +643,7 @@ class MarketRegimeDetector:
         
         if trend_condition:
             details.update({
-                'close': close,
+                'close': latest_close,
                 'ma20': ma20,
                 'ma60': ma60,
                 'ma20_slope': ma20_slope,
@@ -664,7 +677,7 @@ class MarketRegimeDetector:
             breakout_conditions['bandwidth_compressed'] = False
         
         # 條件 2: 價格在區間內
-        if abs(close - ma20) / ma20 < 0.03:  # 價格接近 MA20（3% 以內）
+        if abs(latest_close - ma20) / ma20 < 0.03:  # 價格接近 MA20（3% 以內）
             breakout_score += 0.3
             breakout_conditions['price_in_range'] = True
         else:
@@ -694,7 +707,7 @@ class MarketRegimeDetector:
         
         if breakout_condition:
             details.update({
-                'close': close,
+                'close': latest_close,
                 'ma20': ma20,
                 'bb_bandwidth': latest_bb_bandwidth,
                 'adx': adx_value,
@@ -714,7 +727,7 @@ class MarketRegimeDetector:
         reversion_conditions = {}
         
         # 條件 1: 價格在 MA20-MA60 區間內
-        if (ma20 <= close <= ma60) or (ma60 <= close <= ma20):
+        if (ma20 <= latest_close <= ma60) or (ma60 <= latest_close <= ma20):
             reversion_score += 0.3
             reversion_conditions['price_in_range'] = True
         else:
@@ -746,7 +759,7 @@ class MarketRegimeDetector:
         if len(close) >= 20:
             price_std = close.iloc[-20:].std()
             if price_std > 0:
-                z_score = abs((close - ma20) / price_std)
+                z_score = abs((latest_close - ma20) / price_std)
                 if z_score > 1.5:  # 偏離超過 1.5 個標準差
                     reversion_score += 0.2
                     reversion_conditions['price_deviation'] = True
@@ -762,7 +775,7 @@ class MarketRegimeDetector:
         
         if reversion_condition:
             details.update({
-                'close': close,
+                'close': latest_close,
                 'ma20': ma20,
                 'ma60': ma60,
                 'adx': adx_value,
@@ -780,7 +793,7 @@ class MarketRegimeDetector:
         
         # 預設返回 Reversion（但 confidence 較低）
         details = {
-            'close': close,
+            'close': latest_close,
             'ma20': ma20,
             'ma60': ma60,
             'adx': adx_value,
