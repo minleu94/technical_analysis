@@ -63,9 +63,9 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Strategy & Scoring Governance 實證：10 檔、每檔 8 個 OOS fold 已完成；fixed 57 筆、quantile 79 筆與 100% Regime coverage 均通過 Gate，但 quantile 未優於 fixed，維持 opt-in。
-2. Legacy Carryover Month 1：Walk-forward 實證、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 仍待後續。
-3. Legacy Carryover Month 2：M2-A 參數與權重契約、M2-B Research Run Registry 基礎保存、M2-C Cross-run Comparison / Registry 比較子頁 / Registry-based Promote Gate 與 final registry governance gate 均已完成；下一步轉向 Month 3 Factor Contract / Factor Layer 前置設計，不先接營收與法人。
+1. Month 3 起手式：定義 Factor Contract / Factor Layer 前置設計，先建立 DTO、registry、adapter、Look-ahead gate 與資料品質契約，不先接營收與法人。
+2. Month 3 最小實作範圍：先包裝既有技術、量能與券商分點資料為 factor，驗證 `available_date <= decision_date` 與 missing / neutral / stale 三態處理。
+3. 已完成 Gate 維持回歸：Month 1 fixed / quantile OOS 實證、SQLite 穩定分頁、規格化 Excel 報告匯出，以及 Month 2 M2-A / M2-B / M2-C / final registry governance gate 均已完成；PDF 報告輸出是後續研究輸出 backlog，不阻塞 Month 3。
 
 ## 高風險區（改動需謹慎）
 
