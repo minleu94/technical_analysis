@@ -72,7 +72,7 @@ def test_validate_and_sanitize_invalid_type():
 
 def test_validate_and_sanitize_ma_list():
     # 測試 ma 的 windows list 校驗
-    params = {'windows': [5, '10', 20]}
+    params = {'windows': [5, 10, 20]}
     sanitized = IndicatorParameterRegistry.validate_and_sanitize('ma', params, full_config={'config_schema_version': 1})
     assert sanitized['windows'] == [5, 10, 20]
 
@@ -80,3 +80,23 @@ def test_validate_and_sanitize_ma_list():
     params_invalid = {'windows': [1, 10]}
     with pytest.raises(InvalidParameterError):
         IndicatorParameterRegistry.validate_and_sanitize('ma', params_invalid, full_config={'config_schema_version': 1})
+
+
+@pytest.mark.parametrize("version", ["1", -1])
+def test_validate_and_sanitize_rejects_non_contract_schema_version(version):
+    with pytest.raises(InvalidParameterError, match="config_schema_version"):
+        IndicatorParameterRegistry.validate_and_sanitize(
+            'rsi',
+            {'timeperiod': 14},
+            full_config={'config_schema_version': version},
+        )
+
+
+@pytest.mark.parametrize("window", ["5", 5.5])
+def test_validate_and_sanitize_rejects_non_integer_ma_window(window):
+    with pytest.raises(InvalidParameterError, match="整數"):
+        IndicatorParameterRegistry.validate_and_sanitize(
+            'ma',
+            {'windows': [window, 10]},
+            full_config={'config_schema_version': 1},
+        )

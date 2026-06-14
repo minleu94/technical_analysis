@@ -89,12 +89,11 @@ class IndicatorParameterRegistry:
         config_schema_version = 0
         if full_config and isinstance(full_config, dict):
             raw_version = full_config.get('config_schema_version', 0)
-            if isinstance(raw_version, (bool, float)):
+            if isinstance(raw_version, bool) or not isinstance(raw_version, int):
                 raise InvalidParameterError("Invalid config_schema_version format")
-            try:
-                config_schema_version = int(raw_version)
-            except (ValueError, TypeError):
-                raise InvalidParameterError("Invalid config_schema_version format")
+            if raw_version < 0:
+                raise InvalidParameterError("config_schema_version must be non-negative")
+            config_schema_version = raw_version
 
         schema = cls.SCHEMAS[indicator_name]
 
@@ -179,14 +178,12 @@ class IndicatorParameterRegistry:
                 for x in val:
                     if isinstance(x, bool):
                         raise InvalidParameterError(f"均線窗口元素 {x} 不可為 bool。")
-                    try:
-                        int_x = int(x)
-                        if 2 <= int_x <= 500:
-                            cleaned_list.append(int_x)
-                        else:
-                            raise InvalidParameterError(f"均線窗口 {int_x} 超出合理範圍 [2, 500]。")
-                    except (ValueError, TypeError):
+                    if not isinstance(x, int):
                         raise InvalidParameterError(f"均線窗口 {x} 不是合法的整數。")
+                    if 2 <= x <= 500:
+                        cleaned_list.append(x)
+                    else:
+                        raise InvalidParameterError(f"均線窗口 {x} 超出合理範圍 [2, 500]。")
                 
                 # 校驗重複數值
                 if len(cleaned_list) != len(set(cleaned_list)):

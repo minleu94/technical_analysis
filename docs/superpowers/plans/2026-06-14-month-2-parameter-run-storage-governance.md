@@ -34,25 +34,19 @@
 4. Registry 已加入 MACD `fastperiod < slowperiod`、SAR `acceleration <= maximum`、MA windows 不重複與 bool 元素拒絕。
 5. Recommendation Weight Contract 已拒絕 bool 權重。
 6. Prefix-Invariance 已逐日比對 RSI、SlowK、SlowD 中間指標。
+7. `config_schema_version` 已收緊為只接受非 bool、非負的原生 `int`。
+8. MA windows 已逐元素拒絕 bool、float 與 string，不再執行 `int(x)` 隱式轉換。
 
 仍未結案的 Gate 阻斷：
 
-1. **`config_schema_version` 尚未遵守精確 int 契約**：
-   - 字串 `"1"` 仍會被 `int(raw_version)` 接受。
-   - 負整數 `-1` 仍會被接受並落入 legacy 行為。
-   - 必須只接受非 bool、非負的原生 `int`。
-2. **MA windows 仍有隱式型態轉換**：
-   - `[5.5, 10]` 會被接受並轉成 `[5, 10]`。
-   - `["5", 10]` 會被接受並轉成 `[5, 10]`。
-   - 必須逐元素只接受非 bool 的原生 `int`，不得呼叫 `int(x)` 修正輸入。
-3. **LegacyWeightMigrationAdapter 未拒絕額外 key**：
+1. **LegacyWeightMigrationAdapter 未拒絕額外 key**：
    - `{"pattern": 0.3, "technical": 0.5, "volume": 0.2, "other": 0.0}` 目前會被接受，且 `other` 被靜默忽略。
    - migration adapter 必須與正式權重契約相同，要求 key 集合精確等於 `pattern`、`technical`、`volume`。
-4. **單獨停用指標測試沒有走指標計算路徑**：
+2. **單獨停用指標測試沒有走指標計算路徑**：
    - `test_single_indicator_disabled` 直接把原始價格資料傳給 `ScoringEngine.calculate_total_score()`，沒有呼叫 `configure_technical_indicators()` 或 `generate_recommendations()`。
    - 目前斷言只證明原始 DataFrame 沒有 RSI / MACD / KD / ATR / ADX / MA 欄位，無法證明 disabled 指標真的被跳過。
    - 必須逐一透過正式指標配置路徑，並同時斷言停用欄位不存在、啟用欄位存在。
-5. **Decimal 最終精度契約尚未落實**：
+3. **Decimal 最終精度契約尚未落實**：
    - `TotalScore` / `FinalScore` 已是 Decimal，但目前沒有依 Task A4 定義使用 `ROUND_HALF_UP` 量化至既有分數 contract 的固定精度。
    - 必須先確認既有分數欄位的權威精度，再於核心 Decimal 計算完成後統一 quantize；不得在核心路徑轉回 float。
 
@@ -66,7 +60,7 @@ financial float boundary scanner: exit 0
 changed-files py_compile: exit 0
 ```
 
-結論：修復版 2 已解決第一輪多數阻斷，但 M2-A Gate 尚未通過；完成上述五項後必須重新執行完整驗證與 review。
+結論：修復版 2 已解決第一輪多數阻斷，且精確版本與 MA windows 型態契約已於本輪補齊；M2-A Gate 尚未通過，完成上述三項後必須重新執行完整驗證與 review。
 
 ### 強制順序
 
@@ -221,7 +215,7 @@ changed-files py_compile: exit 0
 - Modify: `decision_module/indicator_parameter_registry.py`
 - Modify: `tests/test_indicator_parameter_registry.py`
 
-- [ ] **Step 1: 寫入嚴格型態與未知欄位失敗測試**
+- [x] **Step 1: 寫入嚴格型態與未知欄位失敗測試**
 
 測試至少包含：
 
@@ -260,7 +254,7 @@ def test_invalid_config_schema_version_is_controlled(version):
         )
 ```
 
-- [ ] **Step 2: 執行測試並確認失敗**
+- [x] **Step 2: 執行測試並確認失敗**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\test_indicator_parameter_registry.py -q -o addopts=
@@ -268,7 +262,7 @@ def test_invalid_config_schema_version_is_controlled(version):
 
 Expected: 新增 strict-contract cases FAIL。
 
-- [ ] **Step 3: 實作 canonicalization 與 strict validation**
+- [x] **Step 3: 實作 canonicalization 與 strict validation**
 
 順序必須固定：
 
@@ -293,16 +287,16 @@ if raw_version < 0:
     raise InvalidParameterError("config_schema_version must be non-negative")
 ```
 
-- [/] **Step 4: 加入跨欄位限制**
+- [x] **Step 4: 加入跨欄位限制**
 
 - MACD：`fastperiod < slowperiod`。
 - SAR：`acceleration <= maximum`。
 - MA windows：非空、非 bool 整數、範圍 `2..500`、不得重複。
 - Bollinger：`nbdevup` / `nbdevdn` 只在 TA-Lib 邊界轉 float。
 
-第二輪驗收：MACD、SAR、重複值與 bool 已完成；MA windows 仍會把 float / string 透過 `int(x)` 隱式轉換，尚未完成精確型態契約。
+第二輪驗收後修復：MACD、SAR、重複值、bool 與 MA windows 精確型態契約均已完成。
 
-- [ ] **Step 5: 執行 Registry 測試**
+- [x] **Step 5: 執行 Registry 測試**
 
 Expected: PASS。
 
