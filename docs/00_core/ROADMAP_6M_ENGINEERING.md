@@ -126,17 +126,18 @@
 
 交付物：
 
-- run metadata：資料截止日、資料 hash、策略版本、參數、成本、成交假設、universe。
-- Indicator Parameter Registry。
-- Recommendation Weight Contract，並移除核心推薦權重只靠硬編碼保存的狀態。
-- Cross-run comparison UI 或報告。
-- strategy promote gate 改為讀取 registry，不只讀單次 summary。
+- run metadata：資料截止日、資料 hash、策略版本、參數、成本、成交假設、universe。（M2-B 基礎保存已完成）
+- Research Run Registry immutable save：SQLite metadata、Parquet 明細、hash 驗證、crash reconciliation、legacy backfill 與 UI 保存入口。（M2-B 已完成）
+- Indicator Parameter Registry。（M2-A 已完成）
+- Recommendation Weight Contract，並移除核心推薦權重只靠硬編碼保存的狀態。（M2-A 已完成）
+- Cross-run comparison UI 或報告。（M2-C 待核准後開始）
+- strategy promote gate 改為讀取 registry，不只讀單次 summary。（M2-C 待核准後開始）
 
 驗收標準：
 
-- 任一 promoted strategy 都能追溯到當時資料、參數、成本模型與結果。
-- 至少能比較 3 個策略版本或 3 組參數的 OOS 指標。
-- 任一推薦或策略研究 run 都能還原當時的指標參數與權重版本。
+- 任一 promoted strategy 都能追溯到當時資料、參數、成本模型與結果。（M2-C Gate）
+- 至少能比較 3 個策略版本或 3 組參數的 OOS 指標。（M2-C Gate）
+- 任一推薦或策略研究 run 都能還原當時的指標參數與權重版本。（M2-A / M2-B 基礎完成，仍需 M2-C 比較與 promote 驗收）
 
 ### Month 3：Factor Layer v1
 

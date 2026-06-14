@@ -30,9 +30,9 @@
   - 數據更新工作台（Dashboard + 快速/安全更新分流）✅ / SQLite 儲存升級 ✅ / Smart Money Terminal MVP ✅ / 券商分點長碼解密與總公司判定 ✅
 
 - **閉環 2：研究驗證閉環** ✅ 基礎與治理已建立
-  - Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Promote
+  - Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Research Run Registry → Promote
   - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3a ✅ / Phase 3.3b ✅ / Strategy Scoring Governance (增量 A & B) ✅
-  - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest MVP ✅ / Backtest chart fast renderer ✅
+  - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest MVP ✅ / Backtest chart fast renderer ✅ / Research Run Registry M2-B 基礎保存 ✅
   - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅ / 回測 fixed-quantile 雙模式與 Expanding T-1 歷史門檻 ✅ / 推薦 eligible universe 橫斷面百分位排名與門檻限制 ✅
 
 - **閉環 3：持倉檢查閉環** ✅ 基礎與深化與下鑽已完成
@@ -54,7 +54,7 @@
 1. Update 使用「⚡ 快速更新 (僅 SQLite)」或「🛡️ 安全更新 (完整 CSV + SQLite)」或左側資料來源頁更新資料
 2. Market Watch 看 Regime + 強弱
 3. Recommendation 用 Profile 出名單 + 看 Why/WhyNot → 加入候選池，或送 Research Lab 批次回測 / 推薦回放
-4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；必要時把明確交易記錄到 Portfolio 並保留來源追溯
+4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；成功結果可保存到 Research Run Registry，必要時把明確交易記錄到 Portfolio 並保留來源追溯
 
 ## Tech Lead 的預設任務（開場要先做什麼）
 
@@ -65,7 +65,7 @@
 
 1. Strategy & Scoring Governance 實證：10 檔、每檔 8 個 OOS fold 已完成；fixed 57 筆、quantile 79 筆與 100% Regime coverage 均通過 Gate，但 quantile 未優於 fixed，維持 opt-in。
 2. Legacy Carryover Month 1：Walk-forward 實證、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 仍待後續。
-3. Legacy Carryover Month 2：M2-A 參數與權重契約的程式修復與完整 QA 已通過，等待使用者核准 Gate；核准前不得開始 M2-B。
+3. Legacy Carryover Month 2：M2-A 參數與權重契約已完成；M2-B Research Run Registry schema / immutable save / legacy backfill / UI save 已完成，等待完整文件與驗證收尾。使用者核准前不得開始 M2-C Cross-run Comparison / Registry-based Promote Gate。
 
 ## 高風險區（改動需謹慎）
 
@@ -75,6 +75,7 @@
 - `decision_module/scoring_engine.py` / `decision_module/strategy_configurator.py`
 - `app_module/strategies/*`（fixed / quantile 門檻、確認天數與 Look-ahead 契約）
 - `app_module/recommendation_replay_service.py` / `app_module/recommendation_portfolio_backtest_service.py`
+- `app_module/research_run_service.py` / `app_module/research_run_repository.py`（Research Run Registry metadata、Parquet hash、archive / promoted guard）
 - Strategy registry / preset / promotion 相關服務
 - UI ↔ service contract（DTO）
 - `runtime/` 核心子系統與 FSM 狀態機

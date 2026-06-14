@@ -799,12 +799,14 @@ Backtest/replay services 只回傳 DTO。現有「保存結果」入口呼叫 `R
 
 ## Task B6: M2-B 文件與驗證
 
-- [ ] Repository/service focused tests。
-- [ ] Crash-recovery injection tests。
-- [ ] Legacy dry-run 使用隔離測試資料。
-- [ ] 完整 pytest、mypy、float gate、py_compile。
-- [ ] 更新 Registry spec、Architecture、Navigation、Manual 與相關功能文件。
+- [x] Repository/service focused tests。
+- [x] Crash-recovery injection tests。
+- [x] Legacy dry-run 使用隔離測試資料。
+- [x] 完整 pytest、mypy、float gate、py_compile。
+- [x] 更新 Registry spec、Architecture、Navigation、Manual 與相關功能文件。
 - [ ] 使用者核准後才開始 M2-C。
+
+驗證證據（2026-06-14）：`.\.venv\Scripts\python.exe -m pytest tests\test_research_run_repository.py tests\test_research_run_service.py tests\test_research_run_legacy_adapter.py tests\test_ui_qt_research_run_save.py -q -o addopts=` -> 20 passed in 2.63s；`.\.venv\Scripts\python.exe scripts\check_financial_float_boundaries.py` -> exit 0；changed-files py_compile -> exit 0；`.\.venv\Scripts\python.exe -m pytest -q -o addopts=` -> 425 passed, 7 warnings in 17.08s；`.\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime` -> Success: no issues found in 152 source files；`.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py` -> passed 21 / failed 0 / skipped 4。文件同步涵蓋 Registry spec / Architecture / Navigation / Manual / UI features / Backtest Lab / User Guide / Snapshot / Roadmap Hub / 6M Roadmap / Documentation Index。
 
 ---
 

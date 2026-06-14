@@ -447,6 +447,12 @@ Explain 面板提供推薦分數的詳細拆解，幫助使用者理解每檔股
 - 收到完成、取消或錯誤結果前，不會重新開放執行按鈕，以避免新舊批次重疊。
 - 每檔保存結果使用唯一 run ID，同一秒執行多檔股票也不會互相覆寫。
 
+### Research Run Registry 保存
+- 單股回測與推薦組合回放完成後，新的「保存結果」入口會寫入 Research Run Registry。
+- Registry 會保存執行參數、資料 fingerprint、成本與成交假設、績效摘要、equity curve 與 trades；明細使用 Parquet，metadata 使用 SQLite。
+- 開始新一輪回測後，上一輪尚未保存的結果會視為 stale，系統不允許再保存。
+- 舊 Backtest / Recommendation Portfolio 保存庫仍可作歷史查詢與 backfill 來源；完整 Cross-run Comparison 與 Registry-based Promote 尚未完成。
+
 ### 注意事項
 - 一鍵送回測最多載入 20 檔股票（避免過多）
 - 如果選擇了股票，只會載入選中的股票
@@ -795,6 +801,7 @@ Promote 機制可以將通過驗證的回測結果升級為策略版本，並在
 - **Promote 後的策略版本會保存完整的參數、配置和回測摘要**
 - **可以在推薦分析中選擇已 Promote 的策略版本作為參數預設**
 - **建議在 Promote 前先執行 Walk-Forward 驗證，確保策略穩定性**
+- **Month 2 M2-B 後，新保存的 registry run 需等 M2-C Registry-based Promote Gate 完成後才可走新版升級流程；完成前不得把 registry save 視為可直接升級**
 
 ---
 

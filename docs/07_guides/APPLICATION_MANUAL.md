@@ -396,17 +396,24 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 - 「執行實驗」：開始目前模式。
 - 「取消執行」：合作式取消；已開始的單檔工作可能安全收尾。
-- 「保存結果」：保存一般回測 run。
-- 「升級為策略版本」：需要已保存結果，且目前驗證狀態不能是 FAIL。
+- 「保存結果」：將單股回測或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、equity curve 與 trades。
+- 「升級為策略版本」：Registry-based Promote Gate 尚未完成前維持停用或 legacy 限制；不得只靠單次 summary 升級策略版本。
 
 目前最低樣本 Gate 為 10 筆交易。通過最低 Gate 不代表已完成充分 OOS 驗證。
+
+保存安全限制：
+
+- 只有目前成功完成且尚未被新一輪執行取代的結果可以保存。
+- 開始新一輪回測或推薦回放後，舊 pending result 會被視為 stale，不可再保存。
+- Registry 寫入採 SQLite metadata + Parquet 明細；若 hash 不符或檔案不完整，載入時會以完整性錯誤處理，不會靜默讀取部分結果。
+- Legacy 單股回測 / 推薦組合保存庫仍可用於歷史資料與 backfill；新的「保存結果」入口以 Research Run Registry 為準。
 
 ### 8.9 結果分頁
 
 - 實驗摘要：績效摘要與交易明細。
 - 圖表：權益、回撤、報酬分布、持有天數。
 - 最佳化 / 驗證：參數掃描與 Walk-forward。
-- 歷史與比較：載入、刪除與比較已保存結果。
+- 歷史與比較：載入、刪除與比較 legacy 已保存結果；完整 Research Run Registry Cross-run Comparison 仍待 M2-C。
 - 批次結果：排行榜與整體統計，雙擊股票可載入明細。
 - 推薦回放：組合價值、回撤、期間持倉、股票貢獻與交易。
 
@@ -416,7 +423,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - 在「推薦回放」設有「匯出回放 Excel」按鈕（僅在推薦組合回測成功後啟用）。
 - **安全設計**：所有匯出皆在背景線程（`TaskWorker`）執行，防止 UI 卡死，並採用臨時檔寫入後 `os.replace` 原子替換；替換失敗時既有報告保持不變。報告使用執行結果與參數快照，不重跑策略或摘要績效；equity curve 可接受 `日期`、`date` 或日期 index。若元數據缺失，會在「資料完整性」警示中標示 `N/A`，不以目前 UI 值或預設常數代填。
 
-目前歷史比較不是完整 Research Run Registry 的 Cross-run Comparison；後者仍在新版 Roadmap。
+目前歷史比較不是完整 Research Run Registry 的 Cross-run Comparison；後者仍在 Month 2 M2-C Roadmap，需等使用者核准後才開始。
 
 ### 8.10 推薦回放
 
@@ -430,7 +437,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - 每週重播或只跑一次
 - 等權或分數加權
 
-執行後可保存、載入、刪除，符合目前條件時可升級策略版本。結果仍依成交與推薦回放假設，不等同實盤。
+執行後可保存到 Research Run Registry。歷史載入、刪除與 legacy Promote 能力仍保留在舊 repository 邊界；Registry-based Cross-run Comparison 與 Promote Gate 尚未完成。結果仍依成交與推薦回放假設，不等同實盤。
 
 ## 9. 持倉管理
 
@@ -549,7 +556,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 ### Promote 按鈕不能使用
 
-確認結果已保存，且驗證狀態不是 FAIL。樣本不足、無結果或未保存時不允許升級。
+確認結果已保存，且驗證狀態不是 FAIL。樣本不足、無結果、未保存，或目前 run 已切換到 Research Run Registry 但 M2-C Registry-based Promote Gate 尚未完成時，不允許升級。
 
 ## 12. Manual 覆蓋狀態
 

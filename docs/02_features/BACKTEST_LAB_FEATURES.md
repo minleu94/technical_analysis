@@ -103,23 +103,32 @@
 - 右側「比較」Tab → 回測歷史列表
 
 **後端實作**：
-- `app_module/backtest_repository.py` - BacktestRunRepository
-- 儲存方式：SQLite 資料庫 + Parquet 檔案
-- 資料庫：`{output_root}/backtest/runs/backtest_runs.db`
-- 檔案：`{output_root}/backtest/runs/{run_id}_equity_curve.parquet`
-- 檔案：`{output_root}/backtest/runs/{run_id}_trades.parquet`
+- `app_module/research_run_service.py` - ResearchRunService，為新保存入口的唯一 owner
+- `app_module/research_run_repository.py` - ResearchRunRepository，保存 SQLite metadata
+- 儲存方式：SQLite metadata + Parquet 明細檔案
+- 資料庫：`config.research_run_db_file`
+- 檔案目錄：`config.research_run_parquet_dir`
+- Legacy：`app_module/backtest_repository.py` 仍保留作歷史資料載入與 backfill 來源
 
 **儲存內容**：
 - 基本資訊：執行名稱、股票代號、日期範圍、策略ID、參數
 - 成本設定：初始資金、手續費、滑價、停損/停利
 - 績效指標：總報酬、年化報酬、夏普比率、最大回撤、勝率、交易次數等
-- 完整資料：權益曲線、交易明細（Parquet格式）
+- 追溯資料：資料截止日、資料 fingerprint、策略版本、參數合約版本、成本、成交假設、Universe
+- 完整資料：權益曲線、交易明細（Parquet 格式）與 hash
+- 治理狀態：storage_state、integrity_status、archive / promoted guard
 
 **使用方式**：
 1. 執行回測
 2. 回測完成後，點擊「保存結果」
 3. 輸入執行名稱和備註
-4. 在「比較」Tab 查看歷史列表
+4. 系統寫入 Research Run Registry。完整 Cross-run Comparison UI 尚未完成前，「比較」Tab 仍以 legacy 歷史功能為主。
+
+安全限制：
+
+- 新一輪回測開始後，舊 pending result 不可保存。
+- hash 不符或 parquet 檔案不完整時，registry 載入會失敗並標示 integrity 問題。
+- 已 promoted 的 run 不可 archive。Registry-based promotion 尚未完成前，保存成功不代表可立即升級策略版本。
 
 ---
 
@@ -424,11 +433,11 @@
 
 ## 2026-05-27 推薦組合 Research Run 保存
 
-推薦組合回測新增獨立保存機制 `RecommendationPortfolioRunRepository`，使用 SQLite metadata 搭配 JSON 詳情檔案保存 profile/config、回測參數、summary、equity curve、期間持倉、個股貢獻與改善建議。此資料模型與單股回測 run 分離，避免混淆單股策略回測與推薦組合研究紀錄。
+推薦組合回測曾新增獨立保存機制 `RecommendationPortfolioRunRepository`，使用 SQLite metadata 搭配 JSON 詳情檔案保存 profile/config、回測參數、summary、equity curve、期間持倉、個股貢獻與改善建議。Month 2 M2-B 後，新的 UI「保存結果」入口已改寫到統一 Research Run Registry；舊 repository 僅保留作歷史資料、載入相容與 backfill 來源。
 
 ## 2026-05-28 推薦組合 Research Run Promote
 
-已保存的推薦組合 research run 可透過 Backtest「推薦組合回測」區塊升級為策略版本。升級流程會讀取保存的 portfolio config、第一期推薦設定、回測 summary、Regime 與改善建議，建立 `recommendation_portfolio:<profile_id>` 策略版本，並在原 run metadata / JSON detail 回寫 `promoted_version_id`，保留「推薦組合回測 → 策略版本」的來源追溯。
+Legacy 已保存的推薦組合 research run 可透過 Backtest「推薦組合回測」區塊升級為策略版本。Month 2 M2-B 完成後，新 registry run 的 Promote 需等 M2-C Registry-based Promote Gate；該 Gate 會讀取 registry metadata、OOS/benchmark/data quality 與 SQLite/JSON reconciliation，不再只讀單次 summary。
 
 ---
 

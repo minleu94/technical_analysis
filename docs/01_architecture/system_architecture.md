@@ -337,14 +337,16 @@ runtime/ core
 目前保存能力包括：
 
 - 推薦結果
-- 一般回測 run
-- 推薦回放 run
+- Research Run Registry（單股回測與推薦回放的新保存入口）
+- legacy 一般回測 run 與推薦回放 run（僅保留相容、歷史載入與 backfill）
 - Preset
 - Strategy Version
 - Universe
 - Portfolio trade / journal
 
-目前仍缺少統一 Research Run Registry 與完整 Cross-run Comparison。新版架構將以 registry 保存：
+Research Run Registry 由 `ResearchRunService` 統一負責保存 owner，metadata 寫入 SQLite，equity curve 與 trades 寫入 Parquet。保存流程採 staging → files_ready → committed 狀態轉移，並以 payload / file hash 做完整性檢查；失敗或中斷時可透過 reconciliation 標記不完整 run，不把部分資料冒充為成功結果。
+
+目前 registry 已保存：
 
 - 資料截止日與 hash
 - 策略版本
@@ -352,7 +354,12 @@ runtime/ core
 - 成本與成交假設
 - Universe
 - OOS 與 benchmark 結果
-- factor contribution
+- equity curve 與 trades parquet hash
+- storage / integrity 狀態
+
+既有 `BacktestRunRepository` 與 `RecommendationPortfolioRunRepository` 仍作為 legacy repository 存在；新「保存結果」入口已改由 UI 呼叫 `ResearchRunService.save_run()`。歷史 run 可由 `scripts/backfill_legacy_runs.py --apply` 明確匯入 registry，dry-run 為預設行為，且不刪除舊資料。
+
+完整 Cross-run Comparison 與 Registry-based Promote Gate 尚未完成，屬 Month 2 M2-C。完成前，UI 不應將 registry run 直接宣稱可升級為策略版本；promotion 必須等 registry gate 與 SQLite/JSON 補償交易完成。
 
 ## 12. 報告匯出與分頁資料流
 
