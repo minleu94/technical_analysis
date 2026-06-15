@@ -11,6 +11,7 @@ from app_module.decision_desk_dtos import (
     PortfolioAlertSummary,
     SectorRotationSummary,
     WatchlistTriggerSummary,
+    RelativeStrengthLiquiditySummary,
 )
 
 
@@ -42,6 +43,11 @@ class PortfolioAlertSectionService(Protocol):
     def build_snapshot(self, as_of_date: date) -> PortfolioAlertSummary: ...
 
 
+class RelativeStrengthLiquiditySectionService(Protocol):
+    def build_snapshot(self, as_of_date: date) -> RelativeStrengthLiquiditySummary: ...
+
+
+
 class DecisionDeskSnapshotBuilder:
     """Builder for Daily Decision Desk snapshot."""
 
@@ -53,6 +59,7 @@ class DecisionDeskSnapshotBuilder:
         clock: Callable[[], datetime] | None = None,
         market_breadth_service: MarketBreadthSectionService | None = None,
         sector_rotation_service: SectorRotationSectionService | None = None,
+        relative_strength_liquidity_service: RelativeStrengthLiquiditySectionService | None = None,
         watchlist_trigger_service: WatchlistTriggerSectionService | None = None,
         portfolio_alert_service: PortfolioAlertSectionService | None = None,
     ):
@@ -61,6 +68,7 @@ class DecisionDeskSnapshotBuilder:
         self.clock = clock or datetime.now
         self.market_breadth_service = market_breadth_service
         self.sector_rotation_service = sector_rotation_service
+        self.relative_strength_liquidity_service = relative_strength_liquidity_service
         self.watchlist_trigger_service = watchlist_trigger_service
         self.portfolio_alert_service = portfolio_alert_service
 
@@ -68,12 +76,14 @@ class DecisionDeskSnapshotBuilder:
         market_regime = self._build_market_regime(as_of_date)
         market_breadth = self._build_market_breadth(as_of_date)
         sector_rotation = self._build_sector_rotation(as_of_date)
+        relative_strength_liquidity = self._build_relative_strength_liquidity(as_of_date)
         watchlist_triggers = self._build_watchlist_triggers(as_of_date)
         portfolio_alerts = self._build_portfolio_alerts(as_of_date)
         sections = (
             market_regime,
             market_breadth,
             sector_rotation,
+            relative_strength_liquidity,
             watchlist_triggers,
             portfolio_alerts,
         )
@@ -90,6 +100,7 @@ class DecisionDeskSnapshotBuilder:
             market_regime=market_regime,
             market_breadth=market_breadth,
             sector_rotation=sector_rotation,
+            relative_strength_liquidity=relative_strength_liquidity,
             watchlist_triggers=watchlist_triggers,
             portfolio_alerts=portfolio_alerts,
         )
@@ -190,6 +201,25 @@ class DecisionDeskSnapshotBuilder:
             )
         return snapshot
 
+    def _build_relative_strength_liquidity(self, as_of_date: date) -> RelativeStrengthLiquiditySummary:
+        if self.relative_strength_liquidity_service is not None:
+            try:
+                snapshot = self.relative_strength_liquidity_service.build_snapshot(as_of_date)
+            except Exception as exc:  # noqa: BLE001
+                return RelativeStrengthLiquiditySummary(
+                    as_of_date=as_of_date,
+                    quality=DecisionDeskQuality.DEGRADED,
+                    warnings=(f"relative_strength_liquidity_fetch_error:{exc}",),
+                )
+            if snapshot is not None:
+                return snapshot
+
+        return RelativeStrengthLiquiditySummary(
+            as_of_date=as_of_date,
+            quality=DecisionDeskQuality.MISSING,
+            warnings=("relative_strength_liquidity_missing",),
+        )
+
     def _build_watchlist_triggers(self, as_of_date: date) -> WatchlistTriggerSummary:
         snapshot: WatchlistTriggerSummary | None
         if self.watchlist_trigger_service is not None:
@@ -286,6 +316,7 @@ class DecisionDeskSnapshotBuilder:
             MarketRegimeSummary,
             MarketBreadthSummary,
             SectorRotationSummary,
+            RelativeStrengthLiquiditySummary,
             WatchlistTriggerSummary,
             PortfolioAlertSummary,
         ],
@@ -305,16 +336,18 @@ class DecisionDeskSnapshotBuilder:
             MarketRegimeSummary,
             MarketBreadthSummary,
             SectorRotationSummary,
+            RelativeStrengthLiquiditySummary,
             WatchlistTriggerSummary,
             PortfolioAlertSummary,
         ],
     ) -> tuple[str, ...]:
         warnings: list[str] = []
-        market_regime, market_breadth, sector_rotation, watchlist_triggers, portfolio_alerts = sections
+        market_regime, market_breadth, sector_rotation, relative_strength_liquidity, watchlist_triggers, portfolio_alerts = sections
         section_warnings = (
             ("market_regime", market_regime.warnings),
             ("market_breadth", market_breadth.warnings),
             ("sector_rotation", sector_rotation.warnings),
+            ("relative_strength_liquidity", relative_strength_liquidity.warnings),
             ("watchlist_triggers", watchlist_triggers.warnings),
             ("portfolio_alerts", portfolio_alerts.warnings),
         )

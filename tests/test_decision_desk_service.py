@@ -8,6 +8,7 @@ from app_module.decision_desk_dtos import (
     PortfolioAlertSummary,
     SectorRotationSummary,
     WatchlistTriggerSummary,
+    RelativeStrengthLiquiditySummary,
 )
 from app_module.decision_desk_service import DailyDecisionDeskProvider
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
@@ -406,3 +407,42 @@ def test_decision_desk_snapshot_generated_at_can_be_injected_for_test_stability(
 
     assert snapshot.generated_at == fixed_now
     assert snapshot.to_dict()["generated_at"] == "2026-06-15T09:30:00"
+
+
+def test_decision_desk_snapshot_serializes_relative_strength_liquidity_section():
+    class FakeProvider:
+        def fetch_market_regime(self, as_of_date: date): return None
+        def fetch_market_breadth(self, as_of_date: date): return None
+        def fetch_sector_rotation(self, as_of_date: date): return None
+        def fetch_watchlist_triggers(self, as_of_date: date): return None
+        def fetch_portfolio_alerts(self, as_of_date: date): return None
+
+    sample_date = date(2026, 6, 15)
+    builder = DecisionDeskSnapshotBuilder(
+        provider=FakeProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=sample_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+                top_strength_codes=("2330", "2454"),
+                low_liquidity_codes=("1101",),
+                meta={
+                    "ranking": [
+                        {"stock_code": "2330", "strength_20d_bp": 1200, "avg_turnover": 900000000},
+                        {"stock_code": "2454", "strength_20d_bp": 900, "avg_turnover": 700000000},
+                    ]
+                },
+            ),
+        ),
+    )
+
+    snapshot = builder.build_snapshot(sample_date)
+    payload = snapshot.to_dict()
+
+    assert snapshot.relative_strength_liquidity.quality == DecisionDeskQuality.OBSERVED
+    assert payload["relative_strength_liquidity"]["top_strength_codes"] == ["2330", "2454"]
+    assert payload["relative_strength_liquidity"]["low_liquidity_codes"] == ["1101"]
+    assert payload["relative_strength_liquidity"]["meta"]["ranking"][0]["stock_code"] == "2330"
+

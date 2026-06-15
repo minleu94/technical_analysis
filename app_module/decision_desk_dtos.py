@@ -133,6 +133,34 @@ class SectorRotationSummary:
 
 
 @dataclass(frozen=True)
+class RelativeStrengthLiquiditySummary:
+    as_of_date: date | None
+    quality: DecisionDeskQuality
+    warnings: tuple[str, ...]
+    top_strength_codes: tuple[str, ...] = ()
+    weak_strength_codes: tuple[str, ...] = ()
+    low_liquidity_codes: tuple[str, ...] = ()
+    meta: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "warnings", _normalize_warnings(self.warnings))
+        object.__setattr__(self, "top_strength_codes", tuple(str(code) for code in self.top_strength_codes))
+        object.__setattr__(self, "weak_strength_codes", tuple(str(code) for code in self.weak_strength_codes))
+        object.__setattr__(self, "low_liquidity_codes", tuple(str(code) for code in self.low_liquidity_codes))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "as_of_date": self.as_of_date.isoformat() if self.as_of_date else None,
+            "quality": self.quality.value,
+            "warnings": list(self.warnings),
+            "top_strength_codes": list(self.top_strength_codes),
+            "weak_strength_codes": list(self.weak_strength_codes),
+            "low_liquidity_codes": list(self.low_liquidity_codes),
+            "meta": _as_dict(self.meta) if self.meta is not None else None,
+        }
+
+
+@dataclass(frozen=True)
 class WatchlistTriggerSummary:
     as_of_date: date | None
     quality: DecisionDeskQuality
@@ -189,6 +217,7 @@ class DecisionDeskSnapshot:
     market_regime: MarketRegimeSummary
     market_breadth: MarketBreadthSummary
     sector_rotation: SectorRotationSummary
+    relative_strength_liquidity: RelativeStrengthLiquiditySummary
     watchlist_triggers: WatchlistTriggerSummary
     portfolio_alerts: PortfolioAlertSummary
     warnings: tuple[str, ...] = ()
@@ -196,7 +225,12 @@ class DecisionDeskSnapshot:
     def __post_init__(self) -> None:
         if self.schema_version <= 0:
             raise ValueError("schema_version must be positive")
-        if self.market_regime is None or self.market_breadth is None or self.sector_rotation is None:
+        if (
+            self.market_regime is None
+            or self.market_breadth is None
+            or self.sector_rotation is None
+            or self.relative_strength_liquidity is None
+        ):
             raise ValueError("all decision sections must be provided")
         if self.watchlist_triggers is None or self.portfolio_alerts is None:
             raise ValueError("all decision sections must be provided")
@@ -214,6 +248,7 @@ class DecisionDeskSnapshot:
             "market_regime": self.market_regime.to_dict(),
             "market_breadth": self.market_breadth.to_dict(),
             "sector_rotation": self.sector_rotation.to_dict(),
+            "relative_strength_liquidity": self.relative_strength_liquidity.to_dict(),
             "watchlist_triggers": self.watchlist_triggers.to_dict(),
             "portfolio_alerts": self.portfolio_alerts.to_dict(),
         }
