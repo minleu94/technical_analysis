@@ -364,6 +364,8 @@ Watchlist Trigger v1 會從 `WatchlistService` 與 SQLite `technical_indicators`
 
 若指定日期不是交易日或該日無指標資料，本頁會採用最近可用交易日，並在 `warnings` 顯示 fallback 日期，且 quality 降級為 `DEGRADED`（在 warnings 中標註 `watchlist_trigger_as_of_fallback:<date>`）。
 
+Portfolio Alert v1 會整合持倉條件監控與 `PortfolioChipService` 籌碼摘要。當持倉條件失效、警告，或個股籌碼風險為 bearish / extreme / risk 時，會列入持倉警示；若籌碼股數資料缺失、估算或部分事件不可用，會在 warnings 顯示 `portfolio_alerts_chip_*`，並將 quality 降級為 `ESTIMATED` 或 `DEGRADED`。
+
 #### quality 與 warnings 規則
 
 - `OBSERVED`：當前節點資料完整且已驗證可用。
@@ -374,7 +376,7 @@ Watchlist Trigger v1 會從 `WatchlistService` 與 SQLite `technical_indicators`
 #### 限制與排錯
 
 - 本頁是每日決策摘要，不是自動交易或下單介面。
-- Market Breadth v1、Sector Rotation v1 與 Watchlist Trigger v1 已接線，但仍可能因 SQLite 缺資料、資料日期 fallback 或歷史不足而降級顯示 `DEGRADED`。Portfolio Alert 目前仍為逐步接線。
+- Market Breadth v1、Sector Rotation v1、Watchlist Trigger v1 與 Portfolio Alert v1 已接線，但仍可能因 SQLite 缺資料、資料日期 fallback、歷史不足或籌碼資料缺失而降級顯示 `DEGRADED` 或 `ESTIMATED`。
 - Portfolio Alert 僅為持倉摘要警示，未直接改變持倉。
 
 ## 9. Research Lab / 策略回測
@@ -626,7 +628,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 | 市場觀察 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 推薦分析 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 觀察清單 | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 每日決策 | 完成（v1 首頁） | 完成 | 完成 | quality / warnings 判讀；Market Breadth v1 / Sector Rotation v1 / Watchlist Trigger v1 已接線 | 部分接線 |
+| 每日決策 | 完成（v1 首頁） | 完成 | 完成 | quality / warnings 判讀；Market Breadth v1 / Sector Rotation v1 / Watchlist Trigger v1 / Portfolio Alert v1 已接線 | 部分接線 |
 | Research Lab | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 持倉管理 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
@@ -635,6 +637,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ## 14. 更新記錄
 
+- 2026-06-15：補充 Portfolio Alert v1 已由 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService` 共同接線，說明如何整合條件與籌碼風險警示，以及籌碼缺資料、估算、unavailable 的 quality / warnings 判讀。
 - 2026-06-15：補充 Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 接線，說明強度 `score_bp`、風險 `risk_alert`、觸發統計與非交易日 fallback warning。
 - 2026-06-15：補充 Daily Decision Desk v1 已接上主 UI 頂層「每日決策」頁籤，並更新質量欄位（OBSERVED / ESTIMATED / DEGRADED / MISSING）與 warnings 的解讀方式。
 - 2026-06-15：補充 Market Breadth v1 已由 SQLite `daily_prices` 接線，說明多方 / 空方 / 持平、廣度比率、新高新低 metadata、成交量擴散與非交易日 fallback warning。

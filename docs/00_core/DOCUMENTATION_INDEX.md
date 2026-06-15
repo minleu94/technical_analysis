@@ -104,6 +104,8 @@
 | [2026-06-14-month-3-factor-layer.md](../superpowers/plans/2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫，拆分 Factor Contract、Registry、Look-ahead Gate、v1 adapters 與 Research Run 追溯保存。 |
 | [2026-06-14-month-3-factor-run-integration.md](../superpowers/plans/2026-06-14-month-3-factor-run-integration.md) | Month 3 Factor Run Integration 計畫，將 factor snapshot / contribution summary 接入 Research Run 實際保存流程。 |
 | [2026-06-15-month-3-recommendation-factor-feed.md](../superpowers/plans/2026-06-15-month-3-recommendation-factor-feed.md) | Month 3 Recommendation Factor Feed 計畫，讓推薦組合回放產生並保存 factor snapshot / contribution metadata。 |
+| [2026-06-15-decision-desk-watchlist-trigger.md](../superpowers/plans/2026-06-15-decision-desk-watchlist-trigger.md) | Daily Decision Desk Watchlist Trigger v1 接線計畫，對接 `WatchlistService` 與 SQLite `technical_indicators`，並定義日期 fallback、quality 與 warnings 契約。 |
+| [2026-06-15-decision-desk-portfolio-alert-chip-provider.md](../superpowers/plans/2026-06-15-decision-desk-portfolio-alert-chip-provider.md) | Daily Decision Desk Portfolio Alert Chip Provider 實作計畫，對接 `PortfolioChipService` 籌碼資料源，並定義 quality 與 warnings 降級契約。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
 | [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |
@@ -246,6 +248,8 @@
 - 2026-06-14：Month 3 Factor Layer v1 進入實作：新增 Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization、Research Run 實際寫入整合與 saved factor metadata reader。
 - 2026-06-15：Month 3 推薦組合回放 factor feed：由 replay snapshot recommendations 產生 `technical.total_score` / `volume.volume_ratio` metadata，並透過既有 Research Run 保存流程落盤。
 - 2026-06-15：依 IDS 願景更新文檔索引，新增 system vision 的產品北極星定位，並同步 6M Roadmap 新主線：Portfolio Replay 可信度、Daily Decision Desk、Fundamental Layer 與 Strategy Lifecycle。
+- 2026-06-15：補列 Daily Decision Desk Watchlist Trigger v1 provider 接線計畫至 Superpowers plans 索引。
+- 2026-06-15：補列 Daily Decision Desk Portfolio Alert v1 籌碼對接實作計畫至 Superpowers plans 索引。
 
 
 
