@@ -38,6 +38,7 @@ class RecommendationPortfolioBacktestService:
         holding_days: int,
         stop_loss_pct: float | None = None,
         take_profit_pct: float | None = None,
+        max_participation_rate: float | None = None,
     ) -> RecommendationPortfolioBacktestResultDTO:
         """
         執行推薦組合回測。
@@ -59,10 +60,16 @@ class RecommendationPortfolioBacktestService:
         start_ts = pd.to_datetime(start_date)
         end_ts = pd.to_datetime(end_date)
         rebalance_dates = self._get_rebalance_dates(data, start_ts, end_ts, rebalance_frequency)
+        credibility_manifest = self._build_credibility_manifest(
+            rebalance_frequency=rebalance_frequency,
+            allocation_method=allocation_method,
+            max_participation_rate=max_participation_rate,
+        )
 
         snapshots = []
         period_holdings = []
         trade_rows = []
+        unfilled_orders = []
         capital_per_period = initial_capital
 
         for rebalance_ts in rebalance_dates:
@@ -82,18 +89,53 @@ class RecommendationPortfolioBacktestService:
 
             weights = self._calculate_weights(recommendations, allocation_method)
             for rank, rec in enumerate(recommendations, 1):
+                allocation_amount = capital_per_period * weights[rank - 1]
+                allocation_weight = weights[rank - 1]
+                liquidity_unfilled = self._liquidity_unfilled_reason(
+                    data=data,
+                    rec=rec,
+                    rebalance_ts=rebalance_ts,
+                    planned_exit_ts=planned_exit_ts,
+                    allocation_amount=allocation_amount,
+                    max_participation_rate=max_participation_rate,
+                )
+                if liquidity_unfilled is not None:
+                    unfilled_orders.append(
+                        self._build_unfilled_order(
+                            rec=rec,
+                            rank=rank,
+                            rebalance_ts=rebalance_ts,
+                            planned_exit_ts=planned_exit_ts,
+                            allocation_amount=allocation_amount,
+                            allocation_weight=allocation_weight,
+                            reason="liquidity_limited",
+                            liquidity=liquidity_unfilled,
+                        )
+                    )
+                    continue
                 holding = self._build_period_holding(
                     data=data,
                     rec=rec,
                     rank=rank,
                     rebalance_ts=rebalance_ts,
                     planned_exit_ts=planned_exit_ts,
-                    allocation_amount=capital_per_period * weights[rank - 1],
-                    allocation_weight=weights[rank - 1],
+                    allocation_amount=allocation_amount,
+                    allocation_weight=allocation_weight,
                     stop_loss_pct=stop_loss_pct,
                     take_profit_pct=take_profit_pct,
                 )
                 if holding is None:
+                    unfilled_orders.append(
+                        self._build_unfilled_order(
+                            rec=rec,
+                            rank=rank,
+                            rebalance_ts=rebalance_ts,
+                            planned_exit_ts=planned_exit_ts,
+                            allocation_amount=allocation_amount,
+                            allocation_weight=allocation_weight,
+                            reason="missing_price_rows",
+                        )
+                    )
                     continue
                 period_holdings.append(holding)
                 trade_rows.extend(self._build_trade_rows(holding))
@@ -114,15 +156,25 @@ class RecommendationPortfolioBacktestService:
             equity_curve = pd.DataFrame([{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}])
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
+                "portfolio_credibility": credibility_manifest,
+                "unfilled_orders": unfilled_orders,
             }
             return RecommendationPortfolioBacktestResultDTO(
-                summary={"total_return": 0.0, "max_drawdown": 0.0, "total_trades": 0, "execution_assumption": "idealized_same_day_close"},
+                summary={
+                    "total_return": 0.0,
+                    "max_drawdown": 0.0,
+                    "total_trades": 0,
+                    "execution_assumption": "idealized_same_day_close",
+                    "credibility_status": credibility_manifest["status"],
+                    "credibility_warning_count": len(credibility_manifest["warnings"]),
+                    "unfilled_order_count": len(unfilled_orders),
+                },
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
                 snapshots=snapshots,
                 period_holdings=[],
                 stock_contribution=[],
-                selection_diagnostics=["no_recommendations"],
+                selection_diagnostics=["no_recommendations"] + self._unfilled_order_diagnostics(unfilled_orders),
                 details=details,
             )
 
@@ -140,6 +192,9 @@ class RecommendationPortfolioBacktestService:
             ),
             "capital_used": sum(holding.allocation_amount for holding in period_holdings),
             "execution_assumption": "idealized_same_day_close",
+            "credibility_status": credibility_manifest["status"],
+            "credibility_warning_count": len(credibility_manifest["warnings"]),
+            "unfilled_order_count": len(unfilled_orders),
         }
         summary.update(self._build_exit_diagnostics(period_holdings, stock_contribution))
         summary.update(
@@ -152,6 +207,8 @@ class RecommendationPortfolioBacktestService:
         improvement_hints = generate_improvement_hints(summary)
         details = {
             "data_manifest": self._build_factor_manifest(snapshots),
+            "portfolio_credibility": credibility_manifest,
+            "unfilled_orders": unfilled_orders,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -161,7 +218,9 @@ class RecommendationPortfolioBacktestService:
             snapshots=snapshots,
             period_holdings=period_holdings,
             stock_contribution=stock_contribution,
-            selection_diagnostics=[item for snapshot in snapshots for item in snapshot.diagnostics],
+            selection_diagnostics=[
+                item for snapshot in snapshots for item in snapshot.diagnostics
+            ] + self._unfilled_order_diagnostics(unfilled_orders),
             improvement_hints=improvement_hints,
             details=details,
         )
@@ -194,6 +253,77 @@ class RecommendationPortfolioBacktestService:
             seen_weeks.add(week_key)
             rebalance_dates.append(ts)
         return rebalance_dates
+
+    def _liquidity_unfilled_reason(
+        self,
+        *,
+        data: pd.DataFrame,
+        rec: Dict[str, Any],
+        rebalance_ts: pd.Timestamp,
+        planned_exit_ts: pd.Timestamp,
+        allocation_amount: float,
+        max_participation_rate: float | None,
+    ) -> Dict[str, Any] | None:
+        if max_participation_rate is None or max_participation_rate <= 0:
+            return None
+        code = str(rec.get("stock_code", ""))
+        stock_rows = data[
+            (data["證券代號"].astype(str) == code)
+            & (data["日期"] >= rebalance_ts)
+            & (data["日期"] <= planned_exit_ts)
+        ]
+        if stock_rows.empty:
+            return None
+        entry_row = stock_rows.iloc[0]
+        if "成交股數" not in entry_row.index:
+            return None
+        volume = pd.to_numeric(entry_row["成交股數"], errors="coerce")
+        if pd.isna(volume):
+            return None
+        volume_shares = int(volume)
+        close_price = float(entry_row["收盤價"])  # numeric-boundary: analytics
+        max_amount = round(float(volume_shares * close_price * max_participation_rate), 6)  # numeric-boundary: analytics
+        if allocation_amount <= max_amount:
+            return None
+        return {
+            "volume_shares": volume_shares,
+            "close_price": close_price,
+            "max_participation_rate": max_participation_rate,
+            "max_participation_amount": max_amount,
+        }
+
+    def _build_unfilled_order(
+        self,
+        *,
+        rec: Dict[str, Any],
+        rank: int,
+        rebalance_ts: pd.Timestamp,
+        planned_exit_ts: pd.Timestamp,
+        allocation_amount: float,
+        allocation_weight: float,
+        reason: str,
+        liquidity: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        order = {
+            "rebalance_date": rebalance_ts.strftime("%Y-%m-%d"),
+            "stock_code": str(rec.get("stock_code", "")),
+            "stock_name": str(rec.get("stock_name", "")),
+            "rank": rank,
+            "reason": reason,
+            "planned_exit_date": planned_exit_ts.strftime("%Y-%m-%d"),
+            "allocation_amount": allocation_amount,
+            "allocation_weight": allocation_weight,
+            "total_score": float(rec.get("total_score", 0.0)),  # numeric-boundary: dto
+        }
+        if liquidity is not None:
+            order["liquidity"] = liquidity
+        return order
+
+    def _unfilled_order_diagnostics(self, unfilled_orders: List[Dict[str, Any]]) -> List[str]:
+        return [
+            f"unfilled_order:{order['stock_code']}:{order['reason']}"
+            for order in unfilled_orders
+        ]
 
     def _build_period_holding(
         self,
@@ -372,6 +502,51 @@ class RecommendationPortfolioBacktestService:
                 )
             )
         return sorted(results, key=lambda item: item.total_pnl, reverse=True)
+
+    def _build_credibility_manifest(
+        self,
+        *,
+        rebalance_frequency: str,
+        allocation_method: str,
+        max_participation_rate: float | None = None,
+    ) -> Dict[str, Any]:
+        liquidity_supported: bool | str = "partial" if max_participation_rate else False
+        liquidity_policy = (
+            "entry_day_volume_participation_checked"
+            if max_participation_rate
+            else "volume_limit_and_gap_risk_not_applied"
+        )
+        warnings = [
+            "cash_account_not_modeled",
+            "rebalance_cash_reuse_not_modeled",
+            "liquidity_gap_not_modeled",
+            "same_day_close_execution_assumption",
+        ]
+        return {
+            "schema_version": 1,
+            "status": "limited",
+            "execution_assumption": "idealized_same_day_close",
+            "rebalance_frequency": rebalance_frequency,
+            "allocation_method": allocation_method,
+            "cash_account": {
+                "supported": False,
+                "policy": "capital_per_period_reused_without_cash_ledger",
+            },
+            "rebalance": {
+                "supported": False,
+                "policy": "period_holdings_are_independent_replay_slices",
+            },
+            "unfilled_orders": {
+                "supported": True,
+                "policy": "missing_price_rows_are_recorded_as_unfilled_orders",
+            },
+            "liquidity_gap": {
+                "supported": liquidity_supported,
+                "policy": liquidity_policy,
+                "max_participation_rate": max_participation_rate,
+            },
+            "warnings": warnings,
+        }
 
     def _build_factor_manifest(
         self,
