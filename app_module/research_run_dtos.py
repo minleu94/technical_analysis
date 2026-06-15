@@ -76,3 +76,17 @@ class ResearchRunMetadataDTO:
     promoted_version_id: str | None = None
     promotion_reconciliation_status: str = "none"
     created_at: str = ""
+
+    @property
+    def factor_snapshot(self) -> JsonObject:
+        snapshot = self.data_manifest.get("factor_snapshot", {})
+        if not isinstance(snapshot, dict):
+            raise ValueError("factor_snapshot 必須是 object")
+        return snapshot
+
+    @property
+    def factor_contributions(self) -> JsonObject:
+        contributions = self.data_manifest.get("factor_contributions", {})
+        if not isinstance(contributions, dict):
+            raise ValueError("factor_contributions 必須是 object")
+        return contributions

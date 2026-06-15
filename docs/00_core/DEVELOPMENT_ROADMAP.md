@@ -58,9 +58,9 @@
    - Fixed 57 筆、quantile 79 筆交易與 100% Regime coverage 通過 Gate。
    - Quantile 未優於 fixed，維持 opt-in，不宣稱改善績效或穩健度。
 
-2. **P1：Month 3 Factor Contract / Factor Layer 前置**
+2. **P1：Month 3 Factor Layer v1 實作**
    - Month 2 Registry governance gate 已關閉。
-   - 下一步定義 Factor DTO / registry / scoring adapter 契約，先包裝技術、量能與券商分點，不直接接營收與法人。
+   - Factor DTO / registry / Look-ahead gate / adapters / FactorService snapshot serialization 已開始落地；下一步是把 `factor_snapshot` / `factor_contributions` 接進實際 Research Run 寫入流程，不直接接營收與法人。
 
 3. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續。

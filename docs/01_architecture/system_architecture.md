@@ -151,9 +151,9 @@ Application Services / DTO / Repository
 - 母體過小時拒絕執行，不靜默退回 fixed。
 - 結果保存母體數、門檻模式與百分位 metadata。
 
-#### 未來 Factor Layer
+#### Factor Layer v1
 
-新資料不得直接硬接 `ScoringEngine`。Factor 必須具備：
+新資料不得直接硬接 `ScoringEngine`。Month 3 v1 先以 `decision_module/factors/` 建立 factor contract、registry、Look-ahead gate 與既有資料 adapters，並以 `app_module/factor_service.py` 建立 application snapshot serialization。Factor 必須具備：
 
 ```text
 factor_name
@@ -167,6 +167,16 @@ source_version
 ```
 
 Factor `available_date` 晚於決策日時必須拒絕使用。
+
+目前 v1 元件：
+
+- `decision_module/factors/factor_dtos.py`
+- `decision_module/factors/factor_registry.py`
+- `decision_module/factors/factor_gate.py`
+- `decision_module/factors/factor_adapters.py`
+- `app_module/factor_service.py`
+
+Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manifest.factor_contributions` 保存 factor 追溯資料；Cross-run Comparison 只能讀已保存 metadata，不得為比較重新抓取當前資料。
 
 ## 6. Backtest Engine
 

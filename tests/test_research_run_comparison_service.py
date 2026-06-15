@@ -20,6 +20,7 @@ def _metadata(
     execution_price: str = "next_open",
     sizing_mode: str = "fixed_amount",
     benchmark_results: dict | None = None,
+    data_manifest: dict | None = None,
 ) -> ResearchRunMetadataDTO:
     return ResearchRunMetadataDTO(
         run_id=run_id,
@@ -36,6 +37,7 @@ def _metadata(
         execution_price=execution_price,
         sizing_mode=sizing_mode,
         benchmark_results=benchmark_results or {},
+        data_manifest=data_manifest or {},
         payload_hash=f"sha256:{run_id}",
         created_at="2026-06-14T12:00:00",
     )
@@ -155,4 +157,33 @@ def test_benchmark_attribution_reads_saved_benchmark_results_only():
             }
         },
         "run-b": {},
+    }
+
+
+def test_collect_factor_attribution_reads_saved_factor_snapshot_only():
+    service = ResearchRunComparisonService()
+    run = _metadata(
+        "run-factor",
+        data_manifest={
+            "factor_snapshot": {
+                "schema_version": 1,
+                "decision_date": "2026-06-14",
+                "records": [
+                    {"factor_name": "technical.total_score", "stock_code": "2330"}
+                ],
+            },
+            "factor_contributions": {
+                "technical.total_score": {"accepted_count": 1}
+            },
+        },
+    )
+
+    result = service.collect_factor_attribution([run])
+
+    assert (
+        result["run-factor"]["factor_snapshot"]["records"][0]["factor_name"]
+        == "technical.total_score"
+    )
+    assert result["run-factor"]["factor_contributions"] == {
+        "technical.total_score": {"accepted_count": 1}
     }

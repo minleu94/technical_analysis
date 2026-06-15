@@ -143,21 +143,23 @@
 
 ### Month 3：Factor Layer v1
 
+> 2026-06-14 狀態：Factor Contract / Registry / Look-ahead Gate / v1 adapters / FactorService snapshot serialization 已進入實作；Research Run metadata 可保存 factor snapshot，Cross-run Comparison 只讀已保存 factor metadata。v1 不接營收、法人或估值新資料源，也不改 `ScoringEngine` 核心。
+
 目標：
 
 - 把新資料接入方式標準化，先不急著新增所有資料。
 
 交付物：
 
-- Factor DTO / registry / scoring adapter。
-- 技術、量能、券商分點先以 factor contract 包裝。
-- 推薦組合回測保存 factor contribution。
+- Factor DTO / registry / Look-ahead gate / scoring adapter。（v1 基礎已實作）
+- 技術、量能、券商分點先以 factor contract 包裝。（v1 adapters 已實作）
+- 推薦組合回測保存 factor contribution。（metadata helper 與 saved-metadata reader 已實作；實際推薦組合寫入仍待後續整合）
 
 驗收標準：
 
 - [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) 的 Carryover Gate 已通過；若未通過，Month 3 不得宣告開始。
-- 缺少某因子資料時回傳 `missing` 或 `neutral`，不讓流程中斷。
-- factor `available_date` 晚於決策日時必須拒絕使用。
+- 缺少某因子資料時回傳 `missing`、`neutral` 或 `skip`，不讓流程中斷且留下 diagnostics。
+- factor `available_date` 晚於決策日時必須 fail-closed、neutralize 或 skip，依 factor policy 處理且留下 diagnostics。
 - `ScoringEngine` 不直接依賴新資料表。
 
 ### Month 4：營收與估值資料 v1
@@ -217,8 +219,8 @@
 
 ## 5. 立即待辦清單
 
-1. 定義 Factor Contract，不先接營收與法人。
-2. 設計 Factor DTO / registry / scoring adapter，先包裝技術、量能與券商分點。
+1. 將 Factor Layer v1 與 Research Run 實際寫入流程整合，保存 `factor_snapshot` / `factor_contributions`。
+2. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查。
 3. 保持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
 4. 大表格分頁 (SQLite 穩定分頁) 與規格化報告 (Excel 報告匯出) 已完成；PDF 報告輸出仍在後續研究輸出 backlog。
 5. 依 [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) 維持 Carryover Gate 證據，不把已關閉項目重新列為進行中。

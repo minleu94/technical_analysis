@@ -85,6 +85,17 @@ class ResearchRunComparisonService:
     ) -> dict[str, dict[str, Any]]:
         return {run.run_id: dict(run.benchmark_results) for run in runs}
 
+    def collect_factor_attribution(
+        self, runs: list[ResearchRunMetadataDTO]
+    ) -> dict[str, dict[str, Any]]:
+        return {
+            run.run_id: {
+                "factor_snapshot": dict(run.factor_snapshot),
+                "factor_contributions": dict(run.factor_contributions),
+            }
+            for run in runs
+        }
+
     def _incompatible_reasons(
         self,
         baseline: ResearchRunMetadataDTO,
