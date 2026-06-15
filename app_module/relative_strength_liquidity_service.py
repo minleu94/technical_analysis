@@ -72,7 +72,14 @@ class RelativeStrengthLiquidityService:
                 warnings=("relative_strength_liquidity_missing",),
             )
 
-        effective_date = max(item for item in data["_date"].unique() if item <= as_of_date)
+        eligible_dates = [item for item in data["_date"].unique() if item <= as_of_date]
+        if not eligible_dates:
+            return RelativeStrengthLiquiditySummary(
+                as_of_date=as_of_date,
+                quality=DecisionDeskQuality.MISSING,
+                warnings=("relative_strength_liquidity_missing",),
+            )
+        effective_date = max(eligible_dates)
         warnings: list[str] = []
         if effective_date != as_of_date:
             warnings.append(f"relative_strength_liquidity_as_of_fallback:{effective_date.isoformat()}")

@@ -79,3 +79,17 @@ def test_relative_strength_liquidity_service_marks_degraded_when_history_is_insu
     assert snapshot.quality == DecisionDeskQuality.DEGRADED
     assert snapshot.top_strength_codes == ()
     assert "relative_strength_liquidity_insufficient_history" in snapshot.warnings
+
+
+def test_relative_strength_liquidity_service_missing_when_frame_has_only_future_dates():
+    frame = pd.DataFrame(
+        [
+            {"日期": "2026-06-16", "證券代號": "2330", "收盤價": "120", "成交股數": "10000000"},
+        ]
+    )
+    service = RelativeStrengthLiquidityService(FakeProvider(frame), top_n=3)
+
+    snapshot = service.build_snapshot(date(2026, 6, 15))
+
+    assert snapshot.quality == DecisionDeskQuality.MISSING
+    assert snapshot.warnings == ("relative_strength_liquidity_missing",)
