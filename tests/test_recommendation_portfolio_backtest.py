@@ -616,9 +616,70 @@ def test_portfolio_backtest_result_includes_credibility_manifest():
     assert credibility["status"] == "limited"
     assert credibility["cash_account"]["supported"] is False
     assert credibility["rebalance"]["supported"] is False
-    assert credibility["unfilled_orders"]["supported"] is False
+    assert credibility["unfilled_orders"]["supported"] is True
     assert credibility["liquidity_gap"]["supported"] is False
     assert credibility["execution_assumption"] == "idealized_same_day_close"
     assert "cash_account_not_modeled" in credibility["warnings"]
+    assert "unfilled_orders_not_modeled" not in credibility["warnings"]
     assert result.summary["credibility_status"] == "limited"
     assert result.summary["credibility_warning_count"] == len(credibility["warnings"])
+
+
+def test_portfolio_backtest_records_unfilled_order_when_recommended_stock_has_no_price_rows():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"volume": 70.0},
+            },
+            {
+                "stock_code": "9999",
+                "stock_name": "缺價股",
+                "total_score": 80.0,
+                "factor_scores": {"volume": 60.0},
+            },
+        ][:top_n]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=2,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    unfilled_orders = result.details["unfilled_orders"]
+
+    assert len(result.period_holdings) == 1
+    assert result.summary["total_trades"] == 1
+    assert result.summary["unfilled_order_count"] == 1
+    assert unfilled_orders == [
+        {
+            "rebalance_date": "2026-01-02",
+            "stock_code": "9999",
+            "stock_name": "缺價股",
+            "rank": 2,
+            "reason": "missing_price_rows",
+            "planned_exit_date": "2026-01-06",
+            "allocation_amount": 500000.0,
+            "allocation_weight": 0.5,
+            "total_score": 80.0,
+        }
+    ]
+    assert "unfilled_order:9999:missing_price_rows" in result.selection_diagnostics
+    assert result.details["portfolio_credibility"]["unfilled_orders"]["supported"] is True

@@ -67,6 +67,7 @@ class RecommendationPortfolioBacktestService:
         snapshots = []
         period_holdings = []
         trade_rows = []
+        unfilled_orders = []
         capital_per_period = initial_capital
 
         for rebalance_ts in rebalance_dates:
@@ -98,6 +99,17 @@ class RecommendationPortfolioBacktestService:
                     take_profit_pct=take_profit_pct,
                 )
                 if holding is None:
+                    unfilled_orders.append(
+                        self._build_unfilled_order(
+                            rec=rec,
+                            rank=rank,
+                            rebalance_ts=rebalance_ts,
+                            planned_exit_ts=planned_exit_ts,
+                            allocation_amount=capital_per_period * weights[rank - 1],
+                            allocation_weight=weights[rank - 1],
+                            reason="missing_price_rows",
+                        )
+                    )
                     continue
                 period_holdings.append(holding)
                 trade_rows.extend(self._build_trade_rows(holding))
@@ -119,6 +131,7 @@ class RecommendationPortfolioBacktestService:
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
                 "portfolio_credibility": credibility_manifest,
+                "unfilled_orders": unfilled_orders,
             }
             return RecommendationPortfolioBacktestResultDTO(
                 summary={
@@ -128,13 +141,14 @@ class RecommendationPortfolioBacktestService:
                     "execution_assumption": "idealized_same_day_close",
                     "credibility_status": credibility_manifest["status"],
                     "credibility_warning_count": len(credibility_manifest["warnings"]),
+                    "unfilled_order_count": len(unfilled_orders),
                 },
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
                 snapshots=snapshots,
                 period_holdings=[],
                 stock_contribution=[],
-                selection_diagnostics=["no_recommendations"],
+                selection_diagnostics=["no_recommendations"] + self._unfilled_order_diagnostics(unfilled_orders),
                 details=details,
             )
 
@@ -154,6 +168,7 @@ class RecommendationPortfolioBacktestService:
             "execution_assumption": "idealized_same_day_close",
             "credibility_status": credibility_manifest["status"],
             "credibility_warning_count": len(credibility_manifest["warnings"]),
+            "unfilled_order_count": len(unfilled_orders),
         }
         summary.update(self._build_exit_diagnostics(period_holdings, stock_contribution))
         summary.update(
@@ -167,6 +182,7 @@ class RecommendationPortfolioBacktestService:
         details = {
             "data_manifest": self._build_factor_manifest(snapshots),
             "portfolio_credibility": credibility_manifest,
+            "unfilled_orders": unfilled_orders,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -176,7 +192,9 @@ class RecommendationPortfolioBacktestService:
             snapshots=snapshots,
             period_holdings=period_holdings,
             stock_contribution=stock_contribution,
-            selection_diagnostics=[item for snapshot in snapshots for item in snapshot.diagnostics],
+            selection_diagnostics=[
+                item for snapshot in snapshots for item in snapshot.diagnostics
+            ] + self._unfilled_order_diagnostics(unfilled_orders),
             improvement_hints=improvement_hints,
             details=details,
         )
@@ -209,6 +227,35 @@ class RecommendationPortfolioBacktestService:
             seen_weeks.add(week_key)
             rebalance_dates.append(ts)
         return rebalance_dates
+
+    def _build_unfilled_order(
+        self,
+        *,
+        rec: Dict[str, Any],
+        rank: int,
+        rebalance_ts: pd.Timestamp,
+        planned_exit_ts: pd.Timestamp,
+        allocation_amount: float,
+        allocation_weight: float,
+        reason: str,
+    ) -> Dict[str, Any]:
+        return {
+            "rebalance_date": rebalance_ts.strftime("%Y-%m-%d"),
+            "stock_code": str(rec.get("stock_code", "")),
+            "stock_name": str(rec.get("stock_name", "")),
+            "rank": rank,
+            "reason": reason,
+            "planned_exit_date": planned_exit_ts.strftime("%Y-%m-%d"),
+            "allocation_amount": allocation_amount,
+            "allocation_weight": allocation_weight,
+            "total_score": float(rec.get("total_score", 0.0)),  # numeric-boundary: dto
+        }
+
+    def _unfilled_order_diagnostics(self, unfilled_orders: List[Dict[str, Any]]) -> List[str]:
+        return [
+            f"unfilled_order:{order['stock_code']}:{order['reason']}"
+            for order in unfilled_orders
+        ]
 
     def _build_period_holding(
         self,
@@ -392,7 +439,6 @@ class RecommendationPortfolioBacktestService:
         warnings = [
             "cash_account_not_modeled",
             "rebalance_cash_reuse_not_modeled",
-            "unfilled_orders_not_modeled",
             "liquidity_gap_not_modeled",
             "same_day_close_execution_assumption",
         ]
@@ -411,8 +457,8 @@ class RecommendationPortfolioBacktestService:
                 "policy": "period_holdings_are_independent_replay_slices",
             },
             "unfilled_orders": {
-                "supported": False,
-                "policy": "missing_price_rows_are_skipped_without_order_state",
+                "supported": True,
+                "policy": "missing_price_rows_are_recorded_as_unfilled_orders",
             },
             "liquidity_gap": {
                 "supported": False,
