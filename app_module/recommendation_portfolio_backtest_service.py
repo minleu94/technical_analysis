@@ -182,6 +182,10 @@ class RecommendationPortfolioBacktestService:
                     )
                     continue
                 actual_allocation_dec = quantize_money(to_decimal(holding.allocation_amount))
+                holding.actual_allocation_weight = self._weight_from_amount(
+                    amount=actual_allocation_dec,
+                    initial_capital=initial_capital,
+                )
                 buy_costs = self._build_execution_costs(
                     gross_amount=actual_allocation_dec,
                     fee_bps=fee_bps,
@@ -253,11 +257,16 @@ class RecommendationPortfolioBacktestService:
 
         if not period_holdings:
             equity_curve = pd.DataFrame([{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}])
+            weight_exposure = self._build_weight_exposure(
+                period_holdings=period_holdings,
+                unfilled_orders=unfilled_orders,
+            )
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
                 "portfolio_credibility": credibility_manifest,
                 "unfilled_orders": unfilled_orders,
                 "cash_ledger": cash_ledger,
+                "weight_exposure": weight_exposure,
             }
             return RecommendationPortfolioBacktestResultDTO(
                 summary={
@@ -309,11 +318,16 @@ class RecommendationPortfolioBacktestService:
         )
 
         improvement_hints = generate_improvement_hints(summary)
+        weight_exposure = self._build_weight_exposure(
+            period_holdings=period_holdings,
+            unfilled_orders=unfilled_orders,
+        )
         details = {
             "data_manifest": self._build_factor_manifest(snapshots),
             "portfolio_credibility": credibility_manifest,
             "unfilled_orders": unfilled_orders,
             "cash_ledger": cash_ledger,
+            "weight_exposure": weight_exposure,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -738,6 +752,65 @@ class RecommendationPortfolioBacktestService:
                 return [score / total for score in scores]
         return [1.0 / len(recommendations)] * len(recommendations)
 
+    def _weight_from_amount(self, *, amount: Decimal, initial_capital: float) -> float:
+        capital = to_decimal(initial_capital)
+        if capital <= 0:
+            return 0.0
+        return float((amount / capital).quantize(Decimal("0.000001")))  # numeric-boundary: dto
+
+    def _build_weight_exposure(
+        self,
+        *,
+        period_holdings: List[PeriodHoldingDTO],
+        unfilled_orders: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        period_keys = sorted(
+            {holding.rebalance_date for holding in period_holdings}
+            | {
+                str(order.get("rebalance_date", ""))
+                for order in unfilled_orders
+                if order.get("rebalance_date")
+            }
+        )
+        periods = []
+        for rebalance_date in period_keys:
+            holdings = [holding for holding in period_holdings if holding.rebalance_date == rebalance_date]
+            orders = [order for order in unfilled_orders if order.get("rebalance_date") == rebalance_date]
+            target_weight = sum(
+                (to_decimal(holding.allocation_weight) for holding in holdings),
+                to_decimal("0"),
+            )
+            target_weight += sum(
+                (to_decimal(order.get("allocation_weight", 0)) for order in orders),
+                to_decimal("0"),
+            )
+            actual_weight = sum(
+                (to_decimal(holding.actual_allocation_weight or 0) for holding in holdings),
+                to_decimal("0"),
+            )
+            unfilled_weight = sum(
+                (to_decimal(order.get("allocation_weight", 0)) for order in orders),
+                to_decimal("0"),
+            )
+            cash_residual_weight = max(to_decimal("0"), target_weight - actual_weight - unfilled_weight)
+            periods.append(
+                {
+                    "rebalance_date": rebalance_date,
+                    "target_weight": float(target_weight.quantize(Decimal("0.000001"))),  # numeric-boundary: dto
+                    "actual_weight": float(actual_weight.quantize(Decimal("0.000001"))),  # numeric-boundary: dto
+                    "unfilled_weight": float(unfilled_weight.quantize(Decimal("0.000001"))),  # numeric-boundary: dto
+                    "cash_residual_weight": float(cash_residual_weight.quantize(Decimal("0.000001"))),  # numeric-boundary: dto
+                    "holding_count": len(holdings),
+                    "unfilled_order_count": len(orders),
+                }
+            )
+        return {
+            "schema_version": 1,
+            "supported": "partial",
+            "policy": "target_weight_vs_executable_weight_by_rebalance_date",
+            "periods": periods,
+        }
+
     def _build_stock_contribution(self, holdings: List[PeriodHoldingDTO]) -> List[StockContributionDTO]:
         grouped = defaultdict(list)
         for holding in holdings:
@@ -807,6 +880,10 @@ class RecommendationPortfolioBacktestService:
             "unfilled_orders": {
                 "supported": True,
                 "policy": "missing_price_rows_are_recorded_as_unfilled_orders",
+            },
+            "weights": {
+                "supported": "partial",
+                "policy": "target_and_actual_executable_weights_reported",
             },
             "liquidity_gap": {
                 "supported": liquidity_supported,
