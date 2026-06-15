@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 import pandas as pd
 from unittest.mock import MagicMock, patch
@@ -72,6 +74,34 @@ def test_recommendation_service_fixed_mode_keeps_original_behavior(mock_read_csv
     # 檢查沒有寫入 percentile metadata
     assert recs[0].score_percentile_bp is None
     assert recs[0].threshold_mode == "fixed"
+
+
+@patch("pandas.read_csv")
+def test_recommendation_service_accepts_decimal_scores_when_checking_regime_match(
+    mock_read_csv, mock_config, mock_stock_data
+):
+    mock_read_csv.return_value = mock_stock_data[mock_stock_data["證券代號"] == "STOCK_0"]
+    service = RecommendationService(mock_config, industry_mapper=MagicMock())
+
+    def side_effect(stock_df, config):
+        return pd.DataFrame({
+            "TotalScore": [Decimal("80.00")],
+            "FinalScore": [Decimal("84.01")],
+            "收盤價": [100.0],
+            "成交股數": [1000],
+        })
+
+    service.strategy_configurator.generate_recommendations = side_effect
+
+    recs = service.run_recommendation(
+        config={"regime": "Trend", "recommendation_ranking": {"threshold_mode": "fixed"}},
+        top_n=1,
+    )
+
+    assert len(recs) == 1
+    assert recs[0].stock_code == "STOCK_0"
+    assert recs[0].regime_match is True
+
 
 @patch("pandas.read_csv")
 def test_recommendation_service_quantile_mode_calculates_percentile_and_stable_sort(mock_read_csv, mock_config, mock_stock_data):
