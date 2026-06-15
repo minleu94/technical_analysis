@@ -29,6 +29,7 @@
 | 文件 | 用途 |
 |---|---|
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統模組、分層架構、資料流與模組邊界的架構權威。 |
+| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | 系統最終樣貌規劃、完整程式分層框架與 6 個月 Roadmap 說明書。 |
 | [system_flow_end_to_end.md](../01_architecture/system_flow_end_to_end.md) | 端到端流程。 |
 | [data_collection_architecture.md](../01_architecture/data_collection_architecture.md) | 資料收集架構。 |
 | [runtime_observatory_rules.md](../01_architecture/runtime_observatory_rules.md) | Runtime Observatory 架構治理規範。 |
