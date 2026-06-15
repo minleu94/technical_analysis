@@ -60,6 +60,7 @@ class RecommendationPortfolioBacktestResultDTO:
     stock_contribution: List[StockContributionDTO]
     selection_diagnostics: List[str] = field(default_factory=list)
     improvement_hints: List[str] = field(default_factory=list)
+    details: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         from dataclasses import asdict
@@ -72,6 +73,7 @@ class RecommendationPortfolioBacktestResultDTO:
             "stock_contribution": [asdict(c) for c in self.stock_contribution],
             "selection_diagnostics": self.selection_diagnostics,
             "improvement_hints": self.improvement_hints,
+            "details": self.details,
         }
 
     @classmethod
@@ -94,6 +96,7 @@ class RecommendationPortfolioBacktestResultDTO:
             
         selection_diagnostics = data.get("selection_diagnostics", [])
         improvement_hints = data.get("improvement_hints", [])
+        details = data.get("details", {})
         
         return cls(
             summary=summary,
@@ -104,6 +107,7 @@ class RecommendationPortfolioBacktestResultDTO:
             stock_contribution=stock_contribution,
             selection_diagnostics=selection_diagnostics,
             improvement_hints=improvement_hints,
+            details=details,
         )
 
     def period_holdings_dataframe(self) -> pd.DataFrame:

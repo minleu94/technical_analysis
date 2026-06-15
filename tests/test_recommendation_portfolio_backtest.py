@@ -532,3 +532,47 @@ def test_portfolio_backtest_with_percentile_ranking():
     assert len(configs_received) > 0
     assert configs_received[0]["recommendation_ranking"]["threshold_mode"] == "quantile"
     assert configs_received[0]["recommendation_ranking"]["recommendation_min_percentile_bp"] == 8000
+
+
+def test_portfolio_backtest_result_includes_factor_manifest_from_replay_snapshots():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 82.35,
+                "factor_scores": {"volume": 70.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    manifest = result.details["data_manifest"]
+    snapshot = manifest["factor_snapshot"]
+    contributions = manifest["factor_contributions"]
+
+    assert snapshot["records"][0]["factor_name"] == "technical.total_score"
+    assert snapshot["records"][0]["score_bp"] == 8235
+    assert snapshot["records"][1]["factor_name"] == "volume.volume_ratio"
+    assert snapshot["records"][1]["metadata"]["source_field"] == "factor_scores.volume"
+    assert contributions["by_stock"]["2330"][0]["state"] == "accepted"
+    assert contributions["summary_by_factor"]["volume.volume_ratio"]["accepted_count"] == 1

@@ -143,7 +143,7 @@
 
 ### Month 3：Factor Layer v1
 
-> 2026-06-14 狀態：Factor Contract / Registry / Look-ahead Gate / v1 adapters / FactorService snapshot/contribution serialization 已進入實作；`ResearchRunService.save_run()` 可在實際寫入流程保存 factor snapshot 與 contribution summary，Cross-run Comparison 只讀已保存 factor metadata。v1 不接營收、法人或估值新資料源，也不改 `ScoringEngine` 核心。
+> 2026-06-15 狀態：Factor Contract / Registry / Look-ahead Gate / v1 adapters / FactorService snapshot/contribution serialization 已進入實作；`ResearchRunService.save_run()` 可在實際寫入流程保存 factor snapshot 與 contribution summary，推薦組合回放已先供給 `technical.total_score` 與 `volume.volume_ratio` metadata，Cross-run Comparison 只讀已保存 factor metadata。v1 不接營收、法人或估值新資料源，也不改 `ScoringEngine` 核心。
 
 目標：
 
@@ -153,7 +153,7 @@
 
 - Factor DTO / registry / Look-ahead gate / scoring adapter。（v1 基礎已實作）
 - 技術、量能、券商分點先以 factor contract 包裝。（v1 adapters 已實作）
-- Research Run 保存 factor snapshot / contribution。（metadata helper、saved-metadata reader 與 `save_run()` 寫入整合已實作；後續仍需把更多上游推薦回放 factor records 餵入此入口）
+- Research Run 保存 factor snapshot / contribution。（metadata helper、saved-metadata reader、`save_run()` 寫入整合與推薦組合回放 factor records 初始供給已實作；後續仍需擴大到更多 Research Lab 路徑）
 
 驗收標準：
 
@@ -219,7 +219,7 @@
 
 ## 5. 立即待辦清單
 
-1. 延伸上游 Research Lab / 推薦回放 factor records 供給，讓更多 run 自動產生 `factor_snapshot` / `factor_contributions`。
+1. 延伸單股回測與更多 Research Lab 路徑的 factor records 供給，讓更多 run 自動產生 `factor_snapshot` / `factor_contributions`。
 2. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查。
 3. 保持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
 4. 大表格分頁 (SQLite 穩定分頁) 與規格化報告 (Excel 報告匯出) 已完成；PDF 報告輸出仍在後續研究輸出 backlog。

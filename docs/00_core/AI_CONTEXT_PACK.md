@@ -16,12 +16,12 @@
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 7 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。大量使用 `pandas_table_model` 呈現高密度數據網格。
 * **Current Priorities (目前優先事項)**：
   1. Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot/contribution serialization。
-  2. Month 3 研究追溯：`ResearchRunService.save_run()` 已可在實際寫入流程保存 `factor_snapshot` / `factor_contributions`，後續要擴大上游 Research Lab / 推薦回放 factor records 供給。
+  2. Month 3 研究追溯：`ResearchRunService.save_run()` 已可在實際寫入流程保存 `factor_snapshot` / `factor_contributions`；推薦組合回放已先供給 `technical.total_score` 與 `volume.volume_ratio` metadata，後續要擴大到單股回測與更多 Research Lab 路徑。
   3. 已完成 Gate 的回歸維護：Month 1 fixed / quantile OOS 實證、SQLite 穩定分頁、規格化 Excel 報告匯出、Month 2 M2-A / M2-B / M2-C / final registry governance gate。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
   1. Quantile 的真實 OOS 實證未優於 fixed，因此仍維持 opt-in，不可宣稱更準。
-  2. Factor Layer v1 已建立基礎與 Research Run 實際保存入口，但更多上游流程仍需持續餵入 factor records，避免只有空的追溯欄位。
+  2. Factor Layer v1 已建立基礎與 Research Run 實際保存入口，推薦組合回放已有初始 factor feed；更多上游流程仍需持續餵入 factor records，避免部分 run 只有空的追溯欄位。
   3. 營收、基本面、估值與三大法人尚未成為正式資料因子；未來接入必須保存 `available_date`、quality 與 missing policy。
   4. PDF 研究報告輸出仍是後續 backlog；Excel 報告與 SQLite 穩定分頁已完成。
 
@@ -183,12 +183,12 @@
 * **Active Phase (目前階段)**：三個產品閉環已建立，進入 6 個月工程路線執行期。
 * **In Progress (進行中)**：
   * Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization。
-  * Research Run factor metadata 追溯：`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際保存流程；後續擴大上游 factor records 供給。
+  * Research Run factor metadata 追溯：`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際保存流程；推薦組合回放已供給初始 factor records，後續擴大到單股回測等路徑。
   * Month 2 Registry governance gate 回歸維護。
 * **Planned (計畫中)**：營收與估值資料、三大法人資料、Portfolio post-trade attribution、PDF 研究報告輸出、策略 promote / demote / retire 規則。
 * **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Smart Money Terminal MVP, AI Runtime MVP。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
-* **Backlog**：上游 Research Lab / 推薦回放 factor records 自動供給、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。
+* **Backlog**：單股回測與更多 Research Lab 路徑的 factor records 自動供給、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。
 
 ---
 

@@ -1,16 +1,22 @@
 from collections import defaultdict
+from datetime import date
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Callable, Dict, List
 
 import pandas as pd
 
+from app_module.factor_service import FactorService
 from app_module.recommendation_portfolio_dtos import (
     PeriodHoldingDTO,
+    RecommendationSnapshotDTO,
     RecommendationPortfolioBacktestResultDTO,
     StockContributionDTO,
 )
 from app_module.recommendation_portfolio_dates import parse_stock_dates
 from app_module.recommendation_portfolio_metrics import calculate_robustness_metrics, generate_improvement_hints
 from app_module.recommendation_replay_service import RecommendationReplayService
+from decision_module.factors.factor_adapters import build_technical_total_score_factor
+from decision_module.factors.factor_dtos import FactorQuality, FactorRecord, MissingPolicy
 from financial_module.units import quantize_money, to_decimal
 
 
@@ -106,6 +112,9 @@ class RecommendationPortfolioBacktestService:
 
         if not period_holdings:
             equity_curve = pd.DataFrame([{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}])
+            details = {
+                "data_manifest": self._build_factor_manifest(snapshots),
+            }
             return RecommendationPortfolioBacktestResultDTO(
                 summary={"total_return": 0.0, "max_drawdown": 0.0, "total_trades": 0, "execution_assumption": "idealized_same_day_close"},
                 equity_curve=equity_curve,
@@ -114,6 +123,7 @@ class RecommendationPortfolioBacktestService:
                 period_holdings=[],
                 stock_contribution=[],
                 selection_diagnostics=["no_recommendations"],
+                details=details,
             )
 
         final_equity = initial_capital + sum(holding.pnl() for holding in period_holdings)
@@ -140,6 +150,9 @@ class RecommendationPortfolioBacktestService:
         )
 
         improvement_hints = generate_improvement_hints(summary)
+        details = {
+            "data_manifest": self._build_factor_manifest(snapshots),
+        }
 
         return RecommendationPortfolioBacktestResultDTO(
             summary=summary,
@@ -150,6 +163,7 @@ class RecommendationPortfolioBacktestService:
             stock_contribution=stock_contribution,
             selection_diagnostics=[item for snapshot in snapshots for item in snapshot.diagnostics],
             improvement_hints=improvement_hints,
+            details=details,
         )
 
     def _get_rebalance_dates(
@@ -358,6 +372,81 @@ class RecommendationPortfolioBacktestService:
                 )
             )
         return sorted(results, key=lambda item: item.total_pnl, reverse=True)
+
+    def _build_factor_manifest(
+        self,
+        snapshots: List[RecommendationSnapshotDTO],
+    ) -> Dict[str, Any]:
+        factor_service = FactorService()
+        combined_snapshot: Dict[str, Any] = {
+            "schema_version": 1,
+            "factor_set_version": "factor-layer-v1",
+            "decision_date": snapshots[-1].as_of_date if snapshots else "",
+            "decision_dates": [snapshot.as_of_date for snapshot in snapshots],
+            "records": [],
+            "neutralized": [],
+            "skipped": [],
+            "diagnostics": [],
+        }
+
+        for snapshot in snapshots:
+            records = self._factor_records_from_snapshot(snapshot)
+            if not records:
+                continue
+            decision_date = date.fromisoformat(snapshot.as_of_date)
+            gated = factor_service.build_snapshot(records, decision_date=decision_date)
+            combined_snapshot["records"].extend(gated["records"])
+            combined_snapshot["neutralized"].extend(gated["neutralized"])
+            combined_snapshot["skipped"].extend(gated["skipped"])
+            combined_snapshot["diagnostics"].extend(gated["diagnostics"])
+
+        return {
+            "factor_snapshot": combined_snapshot,
+            "factor_contributions": factor_service.build_contributions(combined_snapshot),
+        }
+
+    def _factor_records_from_snapshot(
+        self,
+        snapshot: RecommendationSnapshotDTO,
+    ) -> List[FactorRecord]:
+        as_of_date = date.fromisoformat(snapshot.as_of_date)
+        records: List[FactorRecord] = []
+        for recommendation in snapshot.recommendations:
+            stock_code = str(recommendation.get("stock_code", ""))
+            if not stock_code:
+                continue
+            if recommendation.get("total_score") is not None:
+                records.append(
+                    build_technical_total_score_factor(
+                        stock_code=stock_code,
+                        as_of_date=as_of_date,
+                        available_date=as_of_date,
+                        total_score=Decimal(str(recommendation["total_score"])),
+                    )
+                )
+
+            factor_scores = recommendation.get("factor_scores", {})
+            if isinstance(factor_scores, dict) and factor_scores.get("volume") is not None:
+                volume_score = Decimal(str(factor_scores["volume"]))
+                records.append(
+                    FactorRecord(
+                        factor_name="volume.volume_ratio",
+                        stock_code=stock_code,
+                        as_of_date=as_of_date,
+                        available_date=as_of_date,
+                        value=volume_score,
+                        score_bp=self._score_to_bp(volume_score),
+                        quality=FactorQuality.OBSERVED,
+                        missing_policy=MissingPolicy.NEUTRAL,
+                        source_version="volume-v1",
+                        metadata={"source_field": "factor_scores.volume"},
+                    )
+                )
+        return records
+
+    def _score_to_bp(self, score: Decimal) -> int:
+        score_bp = (score * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP)
+        return max(0, min(10000, int(score_bp)))
 
     def _build_exit_diagnostics(
         self,

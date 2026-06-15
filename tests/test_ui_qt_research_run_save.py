@@ -64,6 +64,16 @@ class _FakePortfolioResult:
         "data_as_of_date": "2026-06-13",
         "strategy_version": "recommendation_replay@1.0",
         "execution_price": "next_open",
+        "data_manifest": {
+            "factor_snapshot": {
+                "schema_version": 1,
+                "records": [{"factor_name": "technical.total_score"}],
+            },
+            "factor_contributions": {
+                "schema_version": 1,
+                "by_stock": {"2330": [{"factor_name": "technical.total_score"}]},
+            },
+        },
     }
 
 
@@ -148,5 +158,7 @@ def test_recommendation_replay_save_uses_research_run_service(backtest_view):
     assert metadata.strategy_id == "recommendation_replay"
     assert metadata.normalized_params["top_n"] == 5
     assert metadata.capital_cents == 100000000
+    assert metadata.factor_snapshot["records"][0]["factor_name"] == "technical.total_score"
+    assert metadata.factor_contributions["by_stock"]["2330"][0]["factor_name"] == "technical.total_score"
     assert equity.equals(result.equity_curve)
     assert trades.equals(result.trades)

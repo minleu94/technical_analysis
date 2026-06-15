@@ -176,7 +176,7 @@ Factor `available_date` 晚於決策日時必須拒絕使用。
 - `decision_module/factors/factor_adapters.py`
 - `app_module/factor_service.py`
 
-Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manifest.factor_contributions` 保存 factor 追溯資料。`ResearchRunService.save_run()` 在 metadata 寫入前可合併 explicit factor metadata，或由 `FactorRecord` 與 decision date 透過 `FactorService` 產生 snapshot 與 contribution summary；Cross-run Comparison 只能讀已保存 metadata，不得為比較重新抓取當前資料。
+Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manifest.factor_contributions` 保存 factor 追溯資料。`ResearchRunService.save_run()` 在 metadata 寫入前可合併 explicit factor metadata，或由 `FactorRecord` 與 decision date 透過 `FactorService` 產生 snapshot 與 contribution summary。推薦組合回放結果會從 replay snapshot recommendations 產生初版 factor manifest；Cross-run Comparison 只能讀已保存 metadata，不得為比較重新抓取當前資料。
 
 ## 6. Backtest Engine
 
