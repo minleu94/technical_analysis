@@ -157,3 +157,68 @@ def test_portfolio_alert_service_returns_degraded_on_condition_monitor_error():
     assert snapshot.alert_count == 0
     assert snapshot.alert_level == "low"
     assert any("condition_monitor_error" in warning for warning in snapshot.warnings)
+
+
+def test_portfolio_alert_service_marks_estimated_when_chip_summary_has_estimated_lots():
+    positions = [
+        make_position("2330", "manual", ""),
+    ]
+    chip_provider = FakeChipSummaryProvider(
+        {
+            "2330": {
+                "risk_level": "bearish",
+                "lots_available": True,
+                "has_estimated_lots": True,
+                "observed_event_count": 1,
+                "estimated_event_count": 2,
+                "unavailable_event_count": 0,
+                "risk_reasons": ["估計股數資料"],
+            }
+        }
+    )
+    service = PortfolioAlertService(
+        FakePortfolioService(positions),
+        FakeConditionMonitor({"2330": "valid"}),
+        chip_provider,
+    )
+
+    snapshot = service.build_snapshot(date(2026, 6, 15))
+
+    assert snapshot.quality == DecisionDeskQuality.ESTIMATED
+    assert snapshot.alert_count == 1
+    assert snapshot.alert_codes == ("2330",)
+    assert snapshot.alert_level == "high"
+    assert "portfolio_alerts_chip_estimated:2330" in snapshot.warnings
+
+
+def test_portfolio_alert_service_warns_when_chip_lots_are_missing():
+    positions = [
+        make_position("1101", "manual", ""),
+    ]
+    chip_provider = FakeChipSummaryProvider(
+        {
+            "1101": {
+                "risk_level": "neutral",
+                "lots_available": False,
+                "has_estimated_lots": False,
+                "observed_event_count": 0,
+                "estimated_event_count": 0,
+                "unavailable_event_count": 3,
+                "risk_reasons": ["無主力分點交易數據"],
+            }
+        }
+    )
+    service = PortfolioAlertService(
+        FakePortfolioService(positions),
+        FakeConditionMonitor({"1101": "valid"}),
+        chip_provider,
+    )
+
+    snapshot = service.build_snapshot(date(2026, 6, 15))
+
+    assert snapshot.quality == DecisionDeskQuality.ESTIMATED
+    assert snapshot.alert_count == 0
+    assert snapshot.alert_codes == ()
+    assert snapshot.alert_level == "low"
+    assert "portfolio_alerts_chip_data_missing:1101" in snapshot.warnings
+

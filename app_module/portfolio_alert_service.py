@@ -164,12 +164,34 @@ class PortfolioAlertService:
             return 1
 
         if not isinstance(summary, Mapping):
+            warnings.append(f"portfolio_alerts_chip_summary_invalid:{stock_code}")
             return 0
+
+        lots_available = bool(summary.get("lots_available", True))
+        has_estimated_lots = bool(summary.get("has_estimated_lots", False))
+        unavailable_count = self._read_non_negative_int(summary.get("unavailable_event_count"))
+        estimated_count = self._read_non_negative_int(summary.get("estimated_event_count"))
+
+        if not lots_available:
+            warnings.append(f"portfolio_alerts_chip_data_missing:{stock_code}")
+        if has_estimated_lots or estimated_count > 0:
+            warnings.append(f"portfolio_alerts_chip_estimated:{stock_code}")
+        if unavailable_count > 0:
+            warnings.append(f"portfolio_alerts_chip_unavailable_events:{stock_code}:{unavailable_count}")
 
         risk_level = str(summary.get("risk_level", "")).lower().strip()
         if risk_level in {"bearish", "extreme", "risk"}:
             return 80
         return 0
+
+    def _read_non_negative_int(self, value: Any) -> int:
+        if isinstance(value, bool) or value is None:
+            return 0
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 0
+        return parsed if parsed > 0 else 0
 
     def _status_severity(self, status: str) -> int:
         if status == "invalid":
