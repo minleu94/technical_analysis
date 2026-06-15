@@ -15,6 +15,7 @@ from app_module.decision_desk_dtos import (
     PortfolioAlertSummary,
     SectorRotationSummary,
     WatchlistTriggerSummary,
+    RelativeStrengthLiquiditySummary,
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
@@ -36,11 +37,13 @@ def _snapshot(
     market_regime_quality=DecisionDeskQuality.OBSERVED,
     market_breadth_quality=DecisionDeskQuality.OBSERVED,
     sector_rotation_quality=DecisionDeskQuality.OBSERVED,
+    relative_strength_liquidity_quality=DecisionDeskQuality.OBSERVED,
     watchlist_quality=DecisionDeskQuality.OBSERVED,
     portfolio_quality=DecisionDeskQuality.OBSERVED,
     market_regime_warnings=(),
     market_breadth_warnings=(),
     sector_rotation_warnings=(),
+    relative_strength_liquidity_warnings=(),
     watchlist_warnings=(),
     portfolio_warnings=(),
     overall_warnings=(),
@@ -75,6 +78,14 @@ def _snapshot(
             leading_sector="半導體",
             trailing_sector="金融",
             rotation_intensity_bp=150,
+        ),
+        relative_strength_liquidity=RelativeStrengthLiquiditySummary(
+            as_of_date=as_of,
+            quality=relative_strength_liquidity_quality,
+            warnings=relative_strength_liquidity_warnings,
+            top_strength_codes=("2330", "2454"),
+            weak_strength_codes=("1101",),
+            low_liquidity_codes=(),
         ),
         watchlist_triggers=WatchlistTriggerSummary(
             as_of_date=as_of,

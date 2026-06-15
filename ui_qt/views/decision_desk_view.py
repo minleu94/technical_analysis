@@ -77,6 +77,8 @@ class DecisionDeskView(QWidget):
         self.market_breadth_value = QLabel("")
         self.sector_rotation_status = QLabel("")
         self.sector_rotation_value = QLabel("")
+        self.relative_strength_liquidity_status = QLabel("")
+        self.relative_strength_liquidity_value = QLabel("")
         self.watchlist_triggers_status = QLabel("")
         self.watchlist_triggers_value = QLabel("")
         self.portfolio_alerts_status = QLabel("")
@@ -87,6 +89,7 @@ class DecisionDeskView(QWidget):
         sections_layout.addWidget(self._make_section_row("市場情緒", self.market_regime_status, self.market_regime_value))
         sections_layout.addWidget(self._make_section_row("市況廣度", self.market_breadth_status, self.market_breadth_value))
         sections_layout.addWidget(self._make_section_row("產業輪動", self.sector_rotation_status, self.sector_rotation_value))
+        sections_layout.addWidget(self._make_section_row("強弱與流動性", self.relative_strength_liquidity_status, self.relative_strength_liquidity_value))
         sections_layout.addWidget(self._make_section_row("Watchlist 提示", self.watchlist_triggers_status, self.watchlist_triggers_value))
         sections_layout.addWidget(self._make_section_row("持倉警示", self.portfolio_alerts_status, self.portfolio_alerts_value))
         layout.addWidget(sections_group)
@@ -146,6 +149,15 @@ class DecisionDeskView(QWidget):
             f"輪動強度BP：{snapshot.sector_rotation.rotation_intensity_bp if snapshot.sector_rotation.rotation_intensity_bp is not None else 'N/A'}"
         )
 
+        self.relative_strength_liquidity_status.setText(
+            f"品質：{self._quality_label(snapshot.relative_strength_liquidity.quality)}"
+        )
+        self.relative_strength_liquidity_value.setText(
+            f"強勢：{', '.join(snapshot.relative_strength_liquidity.top_strength_codes) if snapshot.relative_strength_liquidity.top_strength_codes else '無'}；"
+            f"弱勢：{', '.join(snapshot.relative_strength_liquidity.weak_strength_codes) if snapshot.relative_strength_liquidity.weak_strength_codes else '無'}；"
+            f"低流動性：{', '.join(snapshot.relative_strength_liquidity.low_liquidity_codes) if snapshot.relative_strength_liquidity.low_liquidity_codes else '無'}"
+        )
+
         self.watchlist_triggers_status.setText(f"品質：{self._quality_label(snapshot.watchlist_triggers.quality)}")
         self.watchlist_triggers_value.setText(
             f"觸發數：{snapshot.watchlist_triggers.trigger_count or 0}；"
@@ -187,6 +199,7 @@ class DecisionDeskView(QWidget):
             market_regime=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"市場情勢:{error_message}",)),
             market_breadth=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"市場廣度:{error_message}",)),
             sector_rotation=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"產業輪動:{error_message}",)),
+            relative_strength_liquidity=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"強弱與流動性:{error_message}",)),
             watchlist_triggers=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"Watchlist:{error_message}",)),
             portfolio_alerts=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"持倉警示:{error_message}",)),
             warnings=(f"snapshot_error:{error_message}",),
@@ -210,6 +223,7 @@ class DecisionDeskView(QWidget):
             ("市場情勢", snapshot.market_regime.warnings),
             ("市場廣度", snapshot.market_breadth.warnings),
             ("產業輪動", snapshot.sector_rotation.warnings),
+            ("強弱與流動性", snapshot.relative_strength_liquidity.warnings),
             ("Watchlist", snapshot.watchlist_triggers.warnings),
             ("持倉警示", snapshot.portfolio_alerts.warnings),
         ]
@@ -238,6 +252,9 @@ class _EmptySection:
         self.trigger_count = None
         self.triggered_codes: tuple[str, ...] = ()
         self.top_signal = None
+        self.top_strength_codes: tuple[str, ...] = ()
+        self.weak_strength_codes: tuple[str, ...] = ()
+        self.low_liquidity_codes: tuple[str, ...] = ()
         self.alert_count = None
         self.alert_codes: tuple[str, ...] = ()
         self.alert_level = None

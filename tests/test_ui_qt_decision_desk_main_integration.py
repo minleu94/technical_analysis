@@ -14,6 +14,7 @@ from app_module.decision_desk_dtos import (
     PortfolioAlertSummary,
     SectorRotationSummary,
     WatchlistTriggerSummary,
+    RelativeStrengthLiquiditySummary,
 )
 
 import ui_qt.main as main_module
@@ -61,6 +62,7 @@ def _snapshot() -> DecisionDeskSnapshot:
         market_regime=MarketRegimeSummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("market_regime_missing",)),
         market_breadth=MarketBreadthSummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("market_breadth_missing",)),
         sector_rotation=SectorRotationSummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("sector_rotation_missing",)),
+        relative_strength_liquidity=RelativeStrengthLiquiditySummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("relative_strength_liquidity_missing",)),
         watchlist_triggers=WatchlistTriggerSummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("watchlist_triggers_missing",), trigger_count=0),
         portfolio_alerts=PortfolioAlertSummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("portfolio_alerts_missing",), alert_count=0),
         warnings=(),
@@ -321,5 +323,21 @@ def test_portfolio_alert_service_receives_portfolio_chip_provider(monkeypatch):
     portfolio_alert_service = _TrackingDecisionDeskBuilder.instances[-1].kwargs["portfolio_alert_service"]
     assert portfolio_alert_service is not None
     assert portfolio_alert_service.chip_summary_provider is _FakePortfolioChipService.instances[-1]
+
+
+def test_relative_strength_liquidity_service_is_injected_into_decision_desk_builder(monkeypatch):
+    app()
+    _TrackingDecisionDeskBuilder.instances = []
+    _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
+
+    target_window = _build_main_window()
+    target_window.config = types.SimpleNamespace(db_file="C:/tmp/not-used.db")
+    target_window._setup_ui()
+
+    assert _TrackingDecisionDeskBuilder.instances
+    builder = _TrackingDecisionDeskBuilder.instances[-1]
+    assert builder.kwargs["relative_strength_liquidity_service"] is not None
+    assert callable(getattr(builder.kwargs["relative_strength_liquidity_service"], "build_snapshot", None))
+
 
 

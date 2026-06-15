@@ -21,6 +21,10 @@ from app_module.decision_desk_dtos import DecisionDeskQuality, MarketRegimeSumma
 from app_module.market_breadth_service import MarketBreadthService, SQLiteDailyPriceMarketBreadthProvider
 from app_module.sector_rotation_service import SectorRotationService, SQLiteIndustryIndexSectorRotationProvider
 from app_module.watchlist_trigger_service import WatchlistTriggerService, WatchlistServiceWatchlistProvider, SQLiteRankingProvider
+from app_module.relative_strength_liquidity_service import (
+    RelativeStrengthLiquidityService,
+    SQLiteDailyPriceRelativeStrengthLiquidityProvider,
+)
 from app_module.recommendation_service import RecommendationService
 from app_module.portfolio_alert_service import PortfolioAlertService
 from app_module.portfolio_condition_monitor import PortfolioConditionMonitor
@@ -174,10 +178,20 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             print(f"[MainWindow] 決策桌面 WatchlistTriggerService 初始化失敗：{exc}")
 
+        relative_strength_liquidity_service = None
+        try:
+            relative_strength_liquidity_provider = SQLiteDailyPriceRelativeStrengthLiquidityProvider(self.config.db_file)
+            relative_strength_liquidity_service = RelativeStrengthLiquidityService(
+                provider=relative_strength_liquidity_provider
+            )
+        except Exception as exc:
+            print(f"[MainWindow] 決策桌面 RelativeStrengthLiquidityService 初始化失敗：{exc}")
+
         return DecisionDeskSnapshotBuilder(
             provider=provider,
             market_breadth_service=market_breadth_service,
             sector_rotation_service=sector_rotation_service,
+            relative_strength_liquidity_service=relative_strength_liquidity_service,
             watchlist_trigger_service=watchlist_trigger_service,
             portfolio_alert_service=portfolio_alert_service,
         )
