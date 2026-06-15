@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Protocol, Sequence
 from numbers import Integral, Real
 
 import pandas as pd
+from decimal import Decimal, ROUND_HALF_UP
 
 from app_module.decision_desk_dtos import DecisionDeskQuality, WatchlistTriggerSummary
 
@@ -64,6 +65,15 @@ class WatchlistTriggerService:
                 as_of_date=as_of_date,
                 quality=DecisionDeskQuality.DEGRADED,
                 warnings=(f"watchlist_trigger_ranking_provider_error:{exc}",),
+                trigger_count=0,
+                triggered_codes=(),
+            )
+
+        if not current_scores:
+            return WatchlistTriggerSummary(
+                as_of_date=as_of_date,
+                quality=DecisionDeskQuality.MISSING,
+                warnings=("watchlist_trigger_ranking_missing",),
                 trigger_count=0,
                 triggered_codes=(),
             )
@@ -269,42 +279,80 @@ class SQLiteRankingProvider:
         self.db_path = Path(db_path)
         self.actual_date: date | None = None
 
+    def _compute_metrics(self, rsi_val: Any, close_val: Any, lower_val: Any) -> tuple[int | None, bool]:
+        # numeric-boundary: analytics
+        score_bp = None
+        risk_alert = False
+
+        def to_decimal(val: Any) -> Decimal | None:
+            if val is None or pd.isna(val):
+                return None
+            try:
+                return Decimal(str(val))
+            except (ValueError, TypeError, ArithmeticError):
+                return None
+
+        dec_rsi = to_decimal(rsi_val)
+        dec_close = to_decimal(close_val)
+        dec_lower = to_decimal(lower_val)
+
+        if dec_rsi is not None:
+            try:
+                score_dec = dec_rsi * Decimal("100")
+                score_bp = int(score_dec.to_integral_value(rounding=ROUND_HALF_UP))
+            except (ValueError, TypeError, ArithmeticError):
+                pass
+
+            if dec_rsi > Decimal("80") or dec_rsi < Decimal("20"):
+                risk_alert = True
+
+        if dec_close is not None and dec_lower is not None:
+            if dec_close < dec_lower:
+                risk_alert = True
+
+        return score_bp, risk_alert
+
     def fetch(self, as_of_date: date) -> dict[str, dict[str, Any]]:
         self.actual_date = as_of_date
         if not self.db_path.exists():
             return {}
 
         target_key = as_of_date.strftime("%Y%m%d")
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT DISTINCT 日期
-                FROM technical_indicators
-                WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
-                ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') DESC
-                LIMIT 1
-                """,
-                (target_key,),
-            )
-            row = cursor.fetchone()
-            if row is None or not row[0]:
-                return {}
-            actual_key = str(row[0]).replace("-", "").replace("/", "")
-            try:
-                self.actual_date = datetime.strptime(actual_key, "%Y%m%d").date()
-            except ValueError:
-                pass
+        try:
+            db_uri = f"{self.db_path.resolve().as_uri()}?mode=ro"
+            with sqlite3.connect(db_uri, uri=True) as conn:
+                conn.execute("PRAGMA query_only=ON")
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT DISTINCT 日期
+                    FROM technical_indicators
+                    WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
+                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') DESC
+                    LIMIT 1
+                    """,
+                    (target_key,),
+                )
+                row = cursor.fetchone()
+                if row is None or not row[0]:
+                    return {}
+                actual_key = str(row[0]).replace("-", "").replace("/", "")
+                try:
+                    self.actual_date = datetime.strptime(actual_key, "%Y%m%d").date()
+                except ValueError:
+                    pass
 
-            df = pd.read_sql_query(
-                """
-                SELECT 證券代號, RSI, Close, lowerband
-                FROM technical_indicators
-                WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') = ?
-                """,
-                conn,
-                params=(actual_key,),
-            )
+                df = pd.read_sql_query(
+                    """
+                    SELECT 證券代號, RSI, Close, lowerband
+                    FROM technical_indicators
+                    WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') = ?
+                    """,
+                    conn,
+                    params=(actual_key,),
+                )
+        except sqlite3.OperationalError:
+            return {}
 
         if df.empty:
             return {}
@@ -316,20 +364,7 @@ class SQLiteRankingProvider:
             close_val = r["Close"]
             lower_val = r["lowerband"]
 
-            score_bp = None
-            if rsi_val is not None and not pd.isna(rsi_val):
-                try:
-                    score_bp = int(float(rsi_val) * 100)
-                except (ValueError, TypeError):
-                    pass
-
-            risk_alert = False
-            if rsi_val is not None and not pd.isna(rsi_val):
-                if float(rsi_val) > 80 or float(rsi_val) < 20:
-                    risk_alert = True
-            if close_val is not None and not pd.isna(close_val) and lower_val is not None and not pd.isna(lower_val):
-                if float(close_val) < float(lower_val):
-                    risk_alert = True
+            score_bp, risk_alert = self._compute_metrics(rsi_val, close_val, lower_val)
 
             result[code] = {
                 "score_bp": score_bp,
@@ -342,32 +377,37 @@ class SQLiteRankingProvider:
             return None
 
         target_key = as_of_date.strftime("%Y%m%d")
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT DISTINCT 日期
-                FROM technical_indicators
-                WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') < ?
-                ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') DESC
-                LIMIT 1
-                """,
-                (target_key,),
-            )
-            row = cursor.fetchone()
-            if row is None or not row[0]:
-                return None
-            prev_key = str(row[0]).replace("-", "").replace("/", "")
+        try:
+            db_uri = f"{self.db_path.resolve().as_uri()}?mode=ro"
+            with sqlite3.connect(db_uri, uri=True) as conn:
+                conn.execute("PRAGMA query_only=ON")
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT DISTINCT 日期
+                    FROM technical_indicators
+                    WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') < ?
+                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') DESC
+                    LIMIT 1
+                    """,
+                    (target_key,),
+                )
+                row = cursor.fetchone()
+                if row is None or not row[0]:
+                    return None
+                prev_key = str(row[0]).replace("-", "").replace("/", "")
 
-            df = pd.read_sql_query(
-                """
-                SELECT 證券代號, RSI, Close, lowerband
-                FROM technical_indicators
-                WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') = ?
-                """,
-                conn,
-                params=(prev_key,),
-            )
+                df = pd.read_sql_query(
+                    """
+                    SELECT 證券代號, RSI, Close, lowerband
+                    FROM technical_indicators
+                    WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') = ?
+                    """,
+                    conn,
+                    params=(prev_key,),
+                )
+        except sqlite3.OperationalError:
+            return None
 
         if df.empty:
             return {}
@@ -379,20 +419,7 @@ class SQLiteRankingProvider:
             close_val = r["Close"]
             lower_val = r["lowerband"]
 
-            score_bp = None
-            if rsi_val is not None and not pd.isna(rsi_val):
-                try:
-                    score_bp = int(float(rsi_val) * 100)
-                except (ValueError, TypeError):
-                    pass
-
-            risk_alert = False
-            if rsi_val is not None and not pd.isna(rsi_val):
-                if float(rsi_val) > 80 or float(rsi_val) < 20:
-                    risk_alert = True
-            if close_val is not None and not pd.isna(close_val) and lower_val is not None and not pd.isna(lower_val):
-                if float(close_val) < float(lower_val):
-                    risk_alert = True
+            score_bp, risk_alert = self._compute_metrics(rsi_val, close_val, lower_val)
 
             result[code] = {
                 "score_bp": score_bp,

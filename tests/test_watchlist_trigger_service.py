@@ -193,4 +193,46 @@ def test_sqlite_ranking_provider_queries_db_correctly(tmp_path):
     assert prev_res["1101"]["score_bp"] == 2500
 
 
+def test_watchlist_trigger_service_missing_ranking_data_quality_is_missing():
+    from app_module.watchlist_trigger_service import WatchlistTriggerService
+    from app_module.decision_desk_dtos import DecisionDeskQuality
+
+    class FakeWatchlist:
+        def fetch(self, as_of_date: date):
+            return ["2330", "1101"]
+
+    class FakeEmptyRanking:
+        def fetch(self, as_of_date: date):
+            return {}
+        def fetch_previous(self, as_of_date: date):
+            return {}
+
+    service = WatchlistTriggerService(FakeWatchlist(), FakeEmptyRanking())
+    snapshot = service.build_snapshot(date(2026, 6, 15))
+
+    assert snapshot.quality == DecisionDeskQuality.MISSING
+    assert snapshot.trigger_count == 0
+    assert snapshot.triggered_codes == ()
+    assert "watchlist_trigger_ranking_missing" in snapshot.warnings
+    assert not any("watchlist_trigger_data_insufficient" in w for w in snapshot.warnings)
+
+
+def test_sqlite_ranking_provider_handles_missing_db_gracefully(tmp_path):
+    from app_module.watchlist_trigger_service import SQLiteRankingProvider
+
+    non_existent_db = tmp_path / "non_existent_directory" / "no_such_file.db"
+    assert not non_existent_db.exists()
+
+    provider = SQLiteRankingProvider(non_existent_db)
+
+    res = provider.fetch(date(2026, 6, 15))
+    assert res == {}
+
+    prev_res = provider.fetch_previous(date(2026, 6, 15))
+    assert prev_res is None
+
+    assert not non_existent_db.exists()
+
+
+
 
