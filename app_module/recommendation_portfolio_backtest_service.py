@@ -261,12 +261,14 @@ class RecommendationPortfolioBacktestService:
                 period_holdings=period_holdings,
                 unfilled_orders=unfilled_orders,
             )
+            gap_risk = self._build_gap_risk_manifest(period_holdings, data)
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
                 "portfolio_credibility": credibility_manifest,
                 "unfilled_orders": unfilled_orders,
                 "cash_ledger": cash_ledger,
                 "weight_exposure": weight_exposure,
+                "gap_risk": gap_risk,
             }
             return RecommendationPortfolioBacktestResultDTO(
                 summary={
@@ -322,12 +324,14 @@ class RecommendationPortfolioBacktestService:
             period_holdings=period_holdings,
             unfilled_orders=unfilled_orders,
         )
+        gap_risk = self._build_gap_risk_manifest(period_holdings, data)
         details = {
             "data_manifest": self._build_factor_manifest(snapshots),
             "portfolio_credibility": credibility_manifest,
             "unfilled_orders": unfilled_orders,
             "cash_ledger": cash_ledger,
             "weight_exposure": weight_exposure,
+            "gap_risk": gap_risk,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -811,6 +815,79 @@ class RecommendationPortfolioBacktestService:
             "periods": periods,
         }
 
+    def _build_gap_risk_manifest(
+        self,
+        holdings: List[PeriodHoldingDTO],
+        data: pd.DataFrame,
+    ) -> Dict[str, Any]:
+        records = []
+        if "開盤價" not in data.columns:
+            return {
+                "schema_version": 1,
+                "supported": "partial",
+                "policy": "next_open_gap_labels_when_open_price_available",
+                "record_count": 0,
+                "max_abs_gap_pct": 0.0,
+                "records": records,
+            }
+        for holding in holdings:
+            entry_ts = pd.to_datetime(holding.entry_date)
+            stock_rows = data[
+                (data["證券代號"].astype(str) == holding.stock_code)
+                & (data["日期"] > entry_ts)
+            ].sort_values("日期")
+            if stock_rows.empty:
+                continue
+            next_row = stock_rows.iloc[0]
+            next_open = pd.to_numeric(next_row["開盤價"], errors="coerce")
+            if pd.isna(next_open) or holding.entry_price <= 0:
+                continue
+            gap_pct = self._quantize_ratio(
+                (to_decimal(next_open) / to_decimal(holding.entry_price)) - to_decimal("1")
+            )
+            records.append(
+                {
+                    "stock_code": holding.stock_code,
+                    "stock_name": holding.stock_name,
+                    "rebalance_date": holding.rebalance_date,
+                    "entry_date": holding.entry_date,
+                    "entry_close_price": holding.entry_price,
+                    "next_open_date": pd.to_datetime(next_row["日期"]).strftime("%Y-%m-%d"),
+                    "next_open_price": float(next_open),  # numeric-boundary: dto
+                    "gap_pct": gap_pct,
+                    "gap_direction": self._gap_direction(gap_pct),
+                    "severity": self._gap_severity(gap_pct),
+                }
+            )
+        max_abs_gap = max((abs(to_decimal(record["gap_pct"])) for record in records), default=to_decimal("0"))
+        return {
+            "schema_version": 1,
+            "supported": "partial",
+            "policy": "next_open_gap_labels_when_open_price_available",
+            "record_count": len(records),
+            "max_abs_gap_pct": float(max_abs_gap.quantize(Decimal("0.000001"))),  # numeric-boundary: dto
+            "records": records,
+        }
+
+    def _quantize_ratio(self, value: Decimal) -> float:
+        return float(value.quantize(Decimal("0.000001")))  # numeric-boundary: dto
+
+    def _gap_direction(self, gap_pct: float) -> str:
+        gap = to_decimal(gap_pct)
+        if gap > 0:
+            return "gap_up"
+        if gap < 0:
+            return "gap_down"
+        return "flat"
+
+    def _gap_severity(self, gap_pct: float) -> str:
+        gap = abs(to_decimal(gap_pct))
+        if gap >= to_decimal("0.05"):
+            return "high"
+        if gap >= to_decimal("0.02"):
+            return "medium"
+        return "low"
+
     def _build_stock_contribution(self, holdings: List[PeriodHoldingDTO]) -> List[StockContributionDTO]:
         grouped = defaultdict(list)
         for holding in holdings:
@@ -889,6 +966,10 @@ class RecommendationPortfolioBacktestService:
                 "supported": liquidity_supported,
                 "policy": liquidity_policy,
                 "max_participation_rate": max_participation_rate,
+            },
+            "gap_risk": {
+                "supported": "partial",
+                "policy": "next_open_gap_labels_when_open_price_available",
             },
             "execution_costs": {
                 "supported": execution_costs_supported,
