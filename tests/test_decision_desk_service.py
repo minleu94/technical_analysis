@@ -160,7 +160,17 @@ class PartialDecisionDeskProvider:
 
 def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
     as_of_date = date(2026, 6, 15)
-    builder = DecisionDeskSnapshotBuilder(FakeDecisionDeskProvider())
+    builder = DecisionDeskSnapshotBuilder(
+        FakeDecisionDeskProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=as_of_date,
+                quality=DecisionDeskQuality.ESTIMATED,
+                warnings=(),
+            ),
+        ),
+    )
     snapshot = builder.build_snapshot(as_of_date)
 
     assert snapshot.schema_version == 1
@@ -180,6 +190,7 @@ def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
         "market_regime",
         "market_breadth",
         "sector_rotation",
+        "relative_strength_liquidity",
         "watchlist_triggers",
         "portfolio_alerts",
     }
@@ -188,14 +199,34 @@ def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
 
 def test_decision_desk_snapshot_overall_quality_is_observed_when_all_sections_observed():
     as_of_date = date(2026, 6, 15)
-    builder = DecisionDeskSnapshotBuilder(AllObservedDecisionDeskProvider())
+    builder = DecisionDeskSnapshotBuilder(
+        AllObservedDecisionDeskProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=as_of_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+            ),
+        ),
+    )
     snapshot = builder.build_snapshot(as_of_date)
 
     assert snapshot.overall_quality == DecisionDeskQuality.OBSERVED
 
 
 def test_decision_desk_builder_keeps_snapshot_when_data_missing():
-    builder = DecisionDeskSnapshotBuilder(PartialDecisionDeskProvider())
+    builder = DecisionDeskSnapshotBuilder(
+        PartialDecisionDeskProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=date(2026, 6, 15),
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+            ),
+        ),
+    )
     snapshot = builder.build_snapshot(date(2026, 6, 15))
 
     assert snapshot.market_breadth.quality == DecisionDeskQuality.MISSING
@@ -227,6 +258,14 @@ def test_decision_desk_builder_uses_injected_section_services():
     as_of_date = date(2026, 6, 15)
     builder = DecisionDeskSnapshotBuilder(
         AllObservedDecisionDeskProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=as_of_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+            ),
+        ),
         market_breadth_service=FakeSectionService(
             "market_breadth",
             MarketBreadthSummary(
@@ -296,6 +335,14 @@ def test_decision_desk_builder_degrades_only_failed_section():
 
     builder = DecisionDeskSnapshotBuilder(
         FailingMarketRegimeProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=as_of_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+            ),
+        ),
         market_breadth_service=FakeSectionService(
             "market_breadth",
             MarketBreadthSummary(
@@ -350,6 +397,14 @@ def test_decision_desk_snapshot_warnings_are_aggregated_with_section_prefix():
     provider = AllObservedDecisionDeskProvider()
     builder = DecisionDeskSnapshotBuilder(
         provider,
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=as_of_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=("strength unstable",),
+            ),
+        ),
         market_breadth_service=FakeSectionService(
             "market_breadth",
             MarketBreadthSummary(
@@ -393,6 +448,7 @@ def test_decision_desk_snapshot_warnings_are_aggregated_with_section_prefix():
     assert "market_breadth:breadth unstable" in snapshot.warnings
     assert "watchlist_triggers:watchlist lagging" in snapshot.warnings
     assert "portfolio_alerts:price missing" in snapshot.warnings
+    assert "relative_strength_liquidity:strength unstable" in snapshot.warnings
     assert "market_regime" not in "".join(snapshot.warnings)
 
 
@@ -402,6 +458,14 @@ def test_decision_desk_snapshot_generated_at_can_be_injected_for_test_stability(
     builder = DecisionDeskSnapshotBuilder(
         AllObservedDecisionDeskProvider(),
         clock=lambda: fixed_now,
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=as_of_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+            ),
+        ),
     )
     snapshot = builder.build_snapshot(as_of_date)
 

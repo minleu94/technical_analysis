@@ -27,7 +27,7 @@
 - 不把推薦組合回測結果宣稱為實盤績效，除非成交假設、現金帳、流動性限制與再平衡規則完整揭露。
 - 不導入黑箱 ML 作為主線；若未建立資料版本、OOS、因子歸因與漂移監控，ML 只會增加不可解釋風險。
 - 不重建或破壞正式資料；所有資料新增必須非破壞性、可回溯、可降級。
-- Daily Decision Desk 已接上主 UI v1 首頁；Market Breadth v1 已由 SQLite `daily_prices` provider 接線，Sector Rotation v1 已由 SQLite `industry_indices` provider 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導接線，Portfolio Alert v1 已由 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService` 共同接線。
+- Daily Decision Desk 已接上主 UI v1 首頁；Market Breadth v1 已由 SQLite `daily_prices` provider 接線，Sector Rotation v1 已由 SQLite `industry_indices` provider 接線，Relative Strength / Liquidity Ranking v1 已由 SQLite `daily_prices` provider 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導接線，Portfolio Alert v1 已由 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService` 共同接線。
 
 ---
 
@@ -177,9 +177,9 @@
 - `DecisionDeskSnapshot` / `DecisionDeskSnapshotBuilder` 或等價 DTO / service。
 - Market Breadth service（v1 已接 SQLite `daily_prices`，輸出多方 / 空方 / 持平與新高新低、成交量擴散等 metadata）。
 - Sector Rotation service（v1 已接 SQLite `industry_indices`，輸出領先 / 落後產業、5 / 20 日變化與輪動強度）。
-- Relative Strength / Liquidity Ranking。
+- Relative Strength / Liquidity Ranking v1 已由 SQLite `daily_prices` 接線，推導強弱與低流動性股。
 - Watchlist Trigger service。
-- Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`；下一步聚焦 Relative Strength / Liquidity Ranking 與 Portfolio Alert 後續來源差異歸因。
+- Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`；下一步聚焦 Portfolio Alert 後續來源差異歸因。
 - Manual 與 UI docs 完整描述新首頁入口、參數、結果判讀與限制（含 `OBSERVED`、`ESTIMATED`、`DEGRADED`、`MISSING`）。
 
 驗收標準：
@@ -235,8 +235,8 @@
 
 ## 5. 立即待辦清單
 
-1. 深化 Month 4 Daily Decision Desk provider 接線：Market Breadth v1 已接 SQLite `daily_prices`，Sector Rotation v1 已接 SQLite `industry_indices`，Watchlist Trigger v1 已接 `WatchlistService` 與 SQLite `technical_indicators`，Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`；下一步聚焦 Relative Strength / Liquidity Ranking 與 Portfolio Alert 後續來源差異歸因，並維持 `quality / warnings` 降級契約。
-2. 補上 Relative Strength / Liquidity Ranking 與 Why Not / 風險提示的決策桌面銜接，不在 UI 層重算 scoring、screening 或 portfolio logic。
+1. 深化 Month 4 Daily Decision Desk provider 接線：Market Breadth v1 已接 SQLite `daily_prices`，Sector Rotation v1 已接 SQLite `industry_indices`，Relative Strength / Liquidity Ranking v1 已接 SQLite `daily_prices`，Watchlist Trigger v1 已接 `WatchlistService` 與 SQLite `technical_indicators`，Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`；下一步聚焦 Portfolio Alert 後續來源差異歸因，並維持 `quality / warnings` 降級契約。
+2. 補上 Why Not / 風險提示的決策桌面銜接，不在 UI 層重算 scoring、screening 或 portfolio logic。
 3. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
 4. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
 5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 4 / Month 5。
@@ -255,6 +255,7 @@
 
 ## 7. 更新記錄
 
+- 2026-06-15：完成 Daily Decision Desk Relative Strength / Liquidity Ranking v1，從 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性股，不重算且以 quality / warnings 呈現品質缺口與歷史不足警告。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert v1 籌碼對接，整合 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，使持倉失效/警告與 bearish/extreme/risk 籌碼風險能彙總為持倉警示，並以 quality / warnings 呈現資料品質缺口。
 - 2026-06-15：完成 Daily Decision Desk Watchlist Trigger v1 provider 接線，對接 `WatchlistService` 與 SQLite `technical_indicators` 以產生強度 `score_bp` 與風險 `risk_alert` 統計；非交易日採最近可用交易日並以 warnings 揭露，quality 降級為 `DEGRADED`。
 - 2026-06-15：依 IDS 最終樣貌重排 Month 3 至 Month 6；Month 3 聚焦 Factor Layer 與 Portfolio Replay 可信度，Month 4 改為 Market Intelligence / Daily Decision Desk，Month 5 改為 Fundamental Layer 初版，Month 6 聚焦 Strategy Lifecycle 與 Portfolio Feedback。
