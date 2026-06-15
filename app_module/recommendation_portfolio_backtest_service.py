@@ -59,6 +59,10 @@ class RecommendationPortfolioBacktestService:
         start_ts = pd.to_datetime(start_date)
         end_ts = pd.to_datetime(end_date)
         rebalance_dates = self._get_rebalance_dates(data, start_ts, end_ts, rebalance_frequency)
+        credibility_manifest = self._build_credibility_manifest(
+            rebalance_frequency=rebalance_frequency,
+            allocation_method=allocation_method,
+        )
 
         snapshots = []
         period_holdings = []
@@ -114,9 +118,17 @@ class RecommendationPortfolioBacktestService:
             equity_curve = pd.DataFrame([{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}])
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
+                "portfolio_credibility": credibility_manifest,
             }
             return RecommendationPortfolioBacktestResultDTO(
-                summary={"total_return": 0.0, "max_drawdown": 0.0, "total_trades": 0, "execution_assumption": "idealized_same_day_close"},
+                summary={
+                    "total_return": 0.0,
+                    "max_drawdown": 0.0,
+                    "total_trades": 0,
+                    "execution_assumption": "idealized_same_day_close",
+                    "credibility_status": credibility_manifest["status"],
+                    "credibility_warning_count": len(credibility_manifest["warnings"]),
+                },
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
                 snapshots=snapshots,
@@ -140,6 +152,8 @@ class RecommendationPortfolioBacktestService:
             ),
             "capital_used": sum(holding.allocation_amount for holding in period_holdings),
             "execution_assumption": "idealized_same_day_close",
+            "credibility_status": credibility_manifest["status"],
+            "credibility_warning_count": len(credibility_manifest["warnings"]),
         }
         summary.update(self._build_exit_diagnostics(period_holdings, stock_contribution))
         summary.update(
@@ -152,6 +166,7 @@ class RecommendationPortfolioBacktestService:
         improvement_hints = generate_improvement_hints(summary)
         details = {
             "data_manifest": self._build_factor_manifest(snapshots),
+            "portfolio_credibility": credibility_manifest,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -372,6 +387,39 @@ class RecommendationPortfolioBacktestService:
                 )
             )
         return sorted(results, key=lambda item: item.total_pnl, reverse=True)
+
+    def _build_credibility_manifest(self, *, rebalance_frequency: str, allocation_method: str) -> Dict[str, Any]:
+        warnings = [
+            "cash_account_not_modeled",
+            "rebalance_cash_reuse_not_modeled",
+            "unfilled_orders_not_modeled",
+            "liquidity_gap_not_modeled",
+            "same_day_close_execution_assumption",
+        ]
+        return {
+            "schema_version": 1,
+            "status": "limited",
+            "execution_assumption": "idealized_same_day_close",
+            "rebalance_frequency": rebalance_frequency,
+            "allocation_method": allocation_method,
+            "cash_account": {
+                "supported": False,
+                "policy": "capital_per_period_reused_without_cash_ledger",
+            },
+            "rebalance": {
+                "supported": False,
+                "policy": "period_holdings_are_independent_replay_slices",
+            },
+            "unfilled_orders": {
+                "supported": False,
+                "policy": "missing_price_rows_are_skipped_without_order_state",
+            },
+            "liquidity_gap": {
+                "supported": False,
+                "policy": "volume_limit_and_gap_risk_not_applied",
+            },
+            "warnings": warnings,
+        }
 
     def _build_factor_manifest(
         self,

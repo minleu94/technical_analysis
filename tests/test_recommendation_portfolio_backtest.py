@@ -576,3 +576,49 @@ def test_portfolio_backtest_result_includes_factor_manifest_from_replay_snapshot
     assert snapshot["records"][1]["metadata"]["source_field"] == "factor_scores.volume"
     assert contributions["by_stock"]["2330"][0]["state"] == "accepted"
     assert contributions["summary_by_factor"]["volume.volume_ratio"]["accepted_count"] == 1
+
+
+def test_portfolio_backtest_result_includes_credibility_manifest():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 82.35,
+                "factor_scores": {"volume": 70.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    credibility = result.details["portfolio_credibility"]
+
+    assert credibility["schema_version"] == 1
+    assert credibility["status"] == "limited"
+    assert credibility["cash_account"]["supported"] is False
+    assert credibility["rebalance"]["supported"] is False
+    assert credibility["unfilled_orders"]["supported"] is False
+    assert credibility["liquidity_gap"]["supported"] is False
+    assert credibility["execution_assumption"] == "idealized_same_day_close"
+    assert "cash_account_not_modeled" in credibility["warnings"]
+    assert result.summary["credibility_status"] == "limited"
+    assert result.summary["credibility_warning_count"] == len(credibility["warnings"])
