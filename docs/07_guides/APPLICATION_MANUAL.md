@@ -22,7 +22,7 @@
 - 推薦股票一定上漲或策略一定獲利。
 - quantile 一定優於 fixed；2026-06-14 的 10 檔 OOS 實證未顯示 quantile 優於 fixed，因此仍為 opt-in。
 - 推薦回放等同可成交的實盤績效。
-- Daily Decision Desk 已接上主 UI「每日決策」頁籤（v1），可直接查看每日整合摘要；Market Breadth v1 已由 SQLite `daily_prices` 接線，Sector Rotation v1 已由 SQLite `industry_indices` 接線，其餘資料供應仍逐步補齊，缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
+- Daily Decision Desk 已接上主 UI「每日決策」頁籤（v1），可直接查看每日整合摘要；Market Breadth v1 已由 SQLite `daily_prices` 接線，Sector Rotation v1 已由 SQLite `industry_indices` 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 接線，其餘資料供應（如 Portfolio Alert 真實 chip provider）仍逐步補齊，缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
 - Runtime Observatory 會自動修復問題或自動下單。
 - 觀察清單等同實際投資組合。
 
@@ -356,6 +356,14 @@ Sector Rotation v1 會從 SQLite `industry_indices` 唯讀推導：
 
 若指定日期不是交易日或該日尚無產業指數資料，本頁會使用最近可用交易日並在 warnings 顯示 fallback 日期。若某產業歷史不足 21 筆，該產業會被降級提示，不會強制補值。
 
+Watchlist Trigger v1 會從 `WatchlistService` 與 SQLite `technical_indicators` 唯讀推導：
+
+- 個股強度評分 `score_bp`（RSI * 100，值域 0~10000）
+- 個股風險警示 `risk_alert`（偏離 RSI > 80 / < 20 或收盤價低於布林通道下軌 `Close < lowerband`）
+- 新進候選、強度提升、強度下降等觸發統計
+
+若指定日期不是交易日或該日無指標資料，本頁會採用最近可用交易日，並在 `warnings` 顯示 fallback 日期，且 quality 降級為 `DEGRADED`（在 warnings 中標註 `watchlist_trigger_as_of_fallback:<date>`）。
+
 #### quality 與 warnings 規則
 
 - `OBSERVED`：當前節點資料完整且已驗證可用。
@@ -366,7 +374,7 @@ Sector Rotation v1 會從 SQLite `industry_indices` 唯讀推導：
 #### 限制與排錯
 
 - 本頁是每日決策摘要，不是自動交易或下單介面。
-- Watchlist Trigger 目前仍為逐步接線；缺口時只會降級，不會強制補值。Market Breadth v1 與 Sector Rotation v1 已接線，但仍可能因 SQLite 缺資料、資料日期 fallback 或歷史不足顯示 `DEGRADED`。
+- Market Breadth v1、Sector Rotation v1 與 Watchlist Trigger v1 已接線，但仍可能因 SQLite 缺資料、資料日期 fallback 或歷史不足而降級顯示 `DEGRADED`。Portfolio Alert 目前仍為逐步接線。
 - Portfolio Alert 僅為持倉摘要警示，未直接改變持倉。
 
 ## 9. Research Lab / 策略回測
@@ -618,7 +626,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 | 市場觀察 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 推薦分析 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 觀察清單 | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 每日決策 | 完成（v1 首頁） | 完成 | 完成 | quality / warnings 判讀；Market Breadth v1 / Sector Rotation v1 已接線 | 部分接線 |
+| 每日決策 | 完成（v1 首頁） | 完成 | 完成 | quality / warnings 判讀；Market Breadth v1 / Sector Rotation v1 / Watchlist Trigger v1 已接線 | 部分接線 |
 | Research Lab | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 持倉管理 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
@@ -627,6 +635,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ## 14. 更新記錄
 
+- 2026-06-15：補充 Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 接線，說明強度 `score_bp`、風險 `risk_alert`、觸發統計與非交易日 fallback warning。
 - 2026-06-15：補充 Daily Decision Desk v1 已接上主 UI 頂層「每日決策」頁籤，並更新質量欄位（OBSERVED / ESTIMATED / DEGRADED / MISSING）與 warnings 的解讀方式。
 - 2026-06-15：補充 Market Breadth v1 已由 SQLite `daily_prices` 接線，說明多方 / 空方 / 持平、廣度比率、新高新低 metadata、成交量擴散與非交易日 fallback warning。
 - 2026-06-15：補充 Sector Rotation v1 已由 SQLite `industry_indices` 接線，說明領先 / 落後產業、5 / 20 日變化、輪動強度、產業排名 metadata 與非交易日 fallback warning。

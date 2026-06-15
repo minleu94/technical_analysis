@@ -27,7 +27,7 @@
 - 不把推薦組合回測結果宣稱為實盤績效，除非成交假設、現金帳、流動性限制與再平衡規則完整揭露。
 - 不導入黑箱 ML 作為主線；若未建立資料版本、OOS、因子歸因與漂移監控，ML 只會增加不可解釋風險。
 - 不重建或破壞正式資料；所有資料新增必須非破壞性、可回溯、可降級。
-- Daily Decision Desk 已接上主 UI v1 首頁；Market Breadth v1 已由 SQLite `daily_prices` provider 接線，Sector Rotation v1 已由 SQLite `industry_indices` provider 接線，其餘 Watchlist Trigger 與 Portfolio Alert 仍以 provider 完整度逐步接線。
+- Daily Decision Desk 已接上主 UI v1 首頁；Market Breadth v1 已由 SQLite `daily_prices` provider 接線，Sector Rotation v1 已由 SQLite `industry_indices` provider 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導接線，其餘 Portfolio Alert 仍以 provider 完整度逐步接線。
 
 ---
 
@@ -235,7 +235,7 @@
 
 ## 5. 立即待辦清單
 
-1. 深化 Month 4 Daily Decision Desk provider 接線：Market Breadth v1 已接 SQLite `daily_prices`，Sector Rotation v1 已接 SQLite `industry_indices`；下一步補齊 Watchlist Trigger 的主 UI 真實資料來源，並維持 `quality / warnings` 降級契約。
+1. 深化 Month 4 Daily Decision Desk provider 接線：Market Breadth v1 已接 SQLite `daily_prices`，Sector Rotation v1 已接 SQLite `industry_indices`，Watchlist Trigger v1 已接 `WatchlistService` 與 SQLite `technical_indicators`；下一步補齊 Portfolio Alert 的真實 chip provider 與主 UI 資料來源，並維持 `quality / warnings` 降級契約。
 2. 補上 Relative Strength / Liquidity Ranking 與 Why Not / 風險提示的決策桌面銜接，不在 UI 層重算 scoring、screening 或 portfolio logic。
 3. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
 4. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
@@ -255,6 +255,7 @@
 
 ## 7. 更新記錄
 
+- 2026-06-15：完成 Daily Decision Desk Watchlist Trigger v1 provider 接線，對接 `WatchlistService` 與 SQLite `technical_indicators` 以產生強度 `score_bp` 與風險 `risk_alert` 統計；非交易日採最近可用交易日並以 warnings 揭露，quality 降級為 `DEGRADED`。
 - 2026-06-15：依 IDS 最終樣貌重排 Month 3 至 Month 6；Month 3 聚焦 Factor Layer 與 Portfolio Replay 可信度，Month 4 改為 Market Intelligence / Daily Decision Desk，Month 5 改為 Fundamental Layer 初版，Month 6 聚焦 Strategy Lifecycle 與 Portfolio Feedback。
 - 2026-06-15：完成 Daily Decision Desk Market Breadth v1 provider 接線，從 SQLite `daily_prices` 產生多方 / 空方 / 持平、成交量擴散與新高新低 metadata；非交易日採最近可用交易日並以 warnings 揭露。
 - 2026-06-15：完成 Daily Decision Desk Sector Rotation v1 provider 接線，從 SQLite `industry_indices` 產生領先 / 落後產業、5 / 20 日變化與輪動強度；非交易日採最近可用交易日並以 warnings 揭露。
