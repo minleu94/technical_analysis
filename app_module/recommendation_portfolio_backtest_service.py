@@ -154,10 +154,12 @@ class RecommendationPortfolioBacktestService:
 
         if not period_holdings:
             equity_curve = pd.DataFrame([{"date": start_ts.strftime("%Y-%m-%d"), "equity": initial_capital}])
+            cash_ledger, ending_cash = self._build_cash_ledger(initial_capital, period_holdings)
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
                 "portfolio_credibility": credibility_manifest,
                 "unfilled_orders": unfilled_orders,
+                "cash_ledger": cash_ledger,
             }
             return RecommendationPortfolioBacktestResultDTO(
                 summary={
@@ -168,6 +170,7 @@ class RecommendationPortfolioBacktestService:
                     "credibility_status": credibility_manifest["status"],
                     "credibility_warning_count": len(credibility_manifest["warnings"]),
                     "unfilled_order_count": len(unfilled_orders),
+                    "ending_cash": ending_cash,
                 },
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
@@ -181,6 +184,7 @@ class RecommendationPortfolioBacktestService:
         final_equity = initial_capital + sum(holding.pnl() for holding in period_holdings)
         equity_curve = self._build_equity_curve(initial_capital, period_holdings, start_ts, end_ts, data)
         stock_contribution = self._build_stock_contribution(period_holdings)
+        cash_ledger, ending_cash = self._build_cash_ledger(initial_capital, period_holdings)
         summary = {
             "total_return": (final_equity / initial_capital) - 1 if initial_capital > 0 else 0.0,
             "max_drawdown": self._calculate_max_drawdown(equity_curve["equity"]),
@@ -195,6 +199,7 @@ class RecommendationPortfolioBacktestService:
             "credibility_status": credibility_manifest["status"],
             "credibility_warning_count": len(credibility_manifest["warnings"]),
             "unfilled_order_count": len(unfilled_orders),
+            "ending_cash": ending_cash,
         }
         summary.update(self._build_exit_diagnostics(period_holdings, stock_contribution))
         summary.update(
@@ -209,6 +214,7 @@ class RecommendationPortfolioBacktestService:
             "data_manifest": self._build_factor_manifest(snapshots),
             "portfolio_credibility": credibility_manifest,
             "unfilled_orders": unfilled_orders,
+            "cash_ledger": cash_ledger,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -324,6 +330,49 @@ class RecommendationPortfolioBacktestService:
             f"unfilled_order:{order['stock_code']}:{order['reason']}"
             for order in unfilled_orders
         ]
+
+    def _build_cash_ledger(
+        self,
+        initial_capital: float,
+        period_holdings: List[PeriodHoldingDTO],
+    ) -> tuple[List[Dict[str, Any]], float]:
+        events = []
+        for holding in period_holdings:
+            allocation_amount = to_decimal(holding.allocation_amount)
+            sell_amount = quantize_money(allocation_amount + to_decimal(holding.pnl()))
+            events.append(
+                {
+                    "date": holding.entry_date,
+                    "stock_code": holding.stock_code,
+                    "event": "buy",
+                    "amount_dec": -allocation_amount,
+                    "sort_order": 1,
+                }
+            )
+            events.append(
+                {
+                    "date": holding.actual_exit_date,
+                    "stock_code": holding.stock_code,
+                    "event": "sell",
+                    "amount_dec": sell_amount,
+                    "sort_order": 0,
+                }
+            )
+
+        cash_balance = to_decimal(initial_capital)
+        ledger = []
+        for event in sorted(events, key=lambda item: (item["date"], item["sort_order"], item["stock_code"])):
+            cash_balance = quantize_money(cash_balance + event["amount_dec"])
+            ledger.append(
+                {
+                    "date": event["date"],
+                    "stock_code": event["stock_code"],
+                    "event": event["event"],
+                    "amount": float(quantize_money(event["amount_dec"])),  # numeric-boundary: dto
+                    "cash_balance": float(cash_balance),  # numeric-boundary: dto
+                }
+            )
+        return ledger, float(quantize_money(cash_balance))  # numeric-boundary: dto
 
     def _build_period_holding(
         self,
@@ -517,7 +566,7 @@ class RecommendationPortfolioBacktestService:
             else "volume_limit_and_gap_risk_not_applied"
         )
         warnings = [
-            "cash_account_not_modeled",
+            "cash_account_partial_ledger_not_execution_constraint",
             "rebalance_cash_reuse_not_modeled",
             "liquidity_gap_not_modeled",
             "same_day_close_execution_assumption",
@@ -529,8 +578,8 @@ class RecommendationPortfolioBacktestService:
             "rebalance_frequency": rebalance_frequency,
             "allocation_method": allocation_method,
             "cash_account": {
-                "supported": False,
-                "policy": "capital_per_period_reused_without_cash_ledger",
+                "supported": "partial",
+                "policy": "derived_from_period_holdings_not_used_for_order_sizing",
             },
             "rebalance": {
                 "supported": False,
