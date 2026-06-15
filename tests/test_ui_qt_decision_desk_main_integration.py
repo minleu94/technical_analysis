@@ -249,6 +249,21 @@ def test_market_breadth_service_is_injected_into_decision_desk_builder(monkeypat
     assert callable(getattr(builder.kwargs["market_breadth_service"], "build_snapshot", None))
 
 
+def test_sector_rotation_service_is_injected_into_decision_desk_builder(monkeypatch):
+    app()
+    _TrackingDecisionDeskBuilder.instances = []
+    _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
+
+    target_window = _build_main_window()
+    target_window.config = types.SimpleNamespace(db_file="C:/tmp/not-used.db")
+    target_window._setup_ui()
+
+    assert _TrackingDecisionDeskBuilder.instances
+    builder = _TrackingDecisionDeskBuilder.instances[-1]
+    assert builder.kwargs["sector_rotation_service"] is not None
+    assert callable(getattr(builder.kwargs["sector_rotation_service"], "build_snapshot", None))
+
+
 def test_main_window_degrades_daily_decision_tab_when_builder_fails(monkeypatch):
     app()
     _install_fake_dependencies(monkeypatch, _FailingDecisionDeskBuilder)

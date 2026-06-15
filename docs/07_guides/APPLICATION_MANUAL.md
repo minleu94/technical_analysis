@@ -22,7 +22,7 @@
 - 推薦股票一定上漲或策略一定獲利。
 - quantile 一定優於 fixed；2026-06-14 的 10 檔 OOS 實證未顯示 quantile 優於 fixed，因此仍為 opt-in。
 - 推薦回放等同可成交的實盤績效。
-- Daily Decision Desk 已接上主 UI「每日決策」頁籤（v1），可直接查看每日整合摘要；Market Breadth v1 已由 SQLite `daily_prices` 接線，其餘資料供應仍逐步補齊，缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
+- Daily Decision Desk 已接上主 UI「每日決策」頁籤（v1），可直接查看每日整合摘要；Market Breadth v1 已由 SQLite `daily_prices` 接線，Sector Rotation v1 已由 SQLite `industry_indices` 接線，其餘資料供應仍逐步補齊，缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
 - Runtime Observatory 會自動修復問題或自動下單。
 - 觀察清單等同實際投資組合。
 
@@ -347,6 +347,15 @@ Market Breadth v1 會從 SQLite `daily_prices` 唯讀推導：
 
 若指定日期不是交易日或該日尚無資料，本頁會使用最近可用交易日並在 warnings 顯示 fallback 日期，不會把缺資料補成當日觀測值。
 
+Sector Rotation v1 會從 SQLite `industry_indices` 唯讀推導：
+
+- 領先 / 落後產業
+- 5 / 20 日變化
+- 輪動強度 BP
+- 產業排名 metadata
+
+若指定日期不是交易日或該日尚無產業指數資料，本頁會使用最近可用交易日並在 warnings 顯示 fallback 日期。若某產業歷史不足 21 筆，該產業會被降級提示，不會強制補值。
+
 #### quality 與 warnings 規則
 
 - `OBSERVED`：當前節點資料完整且已驗證可用。
@@ -357,7 +366,7 @@ Market Breadth v1 會從 SQLite `daily_prices` 唯讀推導：
 #### 限制與排錯
 
 - 本頁是每日決策摘要，不是自動交易或下單介面。
-- Sector Rotation、Watchlist Trigger 目前仍為逐步接線；缺口時只會降級，不會強制補值。Market Breadth v1 已接線，但仍可能因 SQLite 缺資料或資料日期 fallback 顯示 `DEGRADED`。
+- Watchlist Trigger 目前仍為逐步接線；缺口時只會降級，不會強制補值。Market Breadth v1 與 Sector Rotation v1 已接線，但仍可能因 SQLite 缺資料、資料日期 fallback 或歷史不足顯示 `DEGRADED`。
 - Portfolio Alert 僅為持倉摘要警示，未直接改變持倉。
 
 ## 9. Research Lab / 策略回測
@@ -609,7 +618,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 | 市場觀察 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 推薦分析 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 觀察清單 | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 每日決策 | 完成（v1 首頁） | 完成 | 完成 | quality / warnings 判讀；Market Breadth v1 已接線 | 部分接線 |
+| 每日決策 | 完成（v1 首頁） | 完成 | 完成 | quality / warnings 判讀；Market Breadth v1 / Sector Rotation v1 已接線 | 部分接線 |
 | Research Lab | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 持倉管理 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
@@ -620,3 +629,4 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 - 2026-06-15：補充 Daily Decision Desk v1 已接上主 UI 頂層「每日決策」頁籤，並更新質量欄位（OBSERVED / ESTIMATED / DEGRADED / MISSING）與 warnings 的解讀方式。
 - 2026-06-15：補充 Market Breadth v1 已由 SQLite `daily_prices` 接線，說明多方 / 空方 / 持平、廣度比率、新高新低 metadata、成交量擴散與非交易日 fallback warning。
+- 2026-06-15：補充 Sector Rotation v1 已由 SQLite `industry_indices` 接線，說明領先 / 落後產業、5 / 20 日變化、輪動強度、產業排名 metadata 與非交易日 fallback warning。

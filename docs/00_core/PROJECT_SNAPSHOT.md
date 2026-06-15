@@ -46,7 +46,7 @@
 
 - **目標閉環 4：每日決策工作台（Daily Decision Desk）** ✅ 已接上首頁 v1
   - 目標：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。
-  - 目前主 UI 已接上「每日決策」工作區，各 section 已具備 snapshot 顯示框架；Market Regime、Market Breadth v1 與 Portfolio Alert 已接主 UI。Market Breadth v1 由 SQLite `daily_prices` 推導多方 / 空方 / 持平、成交量擴散與新高新低等 metadata；若指定日無資料會採最近可用交易日並以 `warnings` 揭露。Sector Rotation、Watchlist Trigger 若 provider 尚未接線會以 `MISSING` / `DEGRADED` / `ESTIMATED` 表示缺口，不做資料補值回填，並彙總 `warnings`。
+  - 目前主 UI 已接上「每日決策」工作區，各 section 已具備 snapshot 顯示框架；Market Regime、Market Breadth v1、Sector Rotation v1 與 Portfolio Alert 已接主 UI。Market Breadth v1 由 SQLite `daily_prices` 推導多方 / 空方 / 持平、成交量擴散與新高新低等 metadata；Sector Rotation v1 由 SQLite `industry_indices` 推導領先 / 落後產業、5 / 20 日變化與輪動強度。若指定日無資料會採最近可用交易日並以 `warnings` 揭露。Watchlist Trigger 若 provider 尚未接線會以 `MISSING` / `DEGRADED` / `ESTIMATED` 表示缺口，不做資料補值回填，並彙總 `warnings`。
 
 - **文件治理與 Manual** ✅ 本輪完成
   - Roadmap Hub、6M Roadmap、Legacy Carryover、Architecture、Index 與 Agent 指引已採 Scoped SSOT。
@@ -69,7 +69,7 @@
 
 1. Month 3 Factor Layer v1 已完成：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization 與 Research Run 保存流程已落地；推薦回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata。v1 不接營收、法人或估值新資料源。
 2. Month 3 Portfolio Replay 可信度 v1 已完成：推薦組合回放已輸出 `portfolio_credibility`、`unfilled_orders`、`cash_ledger`、`weight_exposure` 與 `gap_risk`；可揭露缺價、流動性限制、現金不足、整股限制、成本、目標 / 實際權重落差與 next-open gap 風險。零股、買賣價差、Gap 實際成交與完整撮合模型列入後續執行模型深化，不再阻塞 Month 3 v1。
-3. Month 4 Daily Decision Desk 已接上主 UI：`DecisionDeskSnapshot` 已進入首頁，Market Regime、Market Breadth v1 與 Portfolio Alert 已接真實 service；Sector Rotation、Watchlist Trigger 仍按 provider 完整度逐步接線，缺口以 `quality / warnings` 顯示，缺值不補值。
+3. Month 4 Daily Decision Desk 已接上主 UI：`DecisionDeskSnapshot` 已進入首頁，Market Regime、Market Breadth v1、Sector Rotation v1 與 Portfolio Alert 已接真實 service；Watchlist Trigger 仍按 provider 完整度逐步接線，缺口以 `quality / warnings` 顯示，缺值不補值。
 
 ## 高風險區（改動需謹慎）
 

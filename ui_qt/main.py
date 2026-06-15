@@ -19,6 +19,7 @@ from app_module.screening_service import ScreeningService
 from app_module.regime_service import RegimeService
 from app_module.decision_desk_dtos import DecisionDeskQuality, MarketRegimeSummary
 from app_module.market_breadth_service import MarketBreadthService, SQLiteDailyPriceMarketBreadthProvider
+from app_module.sector_rotation_service import SectorRotationService, SQLiteIndustryIndexSectorRotationProvider
 from app_module.recommendation_service import RecommendationService
 from app_module.portfolio_alert_service import PortfolioAlertService
 from app_module.portfolio_condition_monitor import PortfolioConditionMonitor
@@ -133,6 +134,14 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             print(f"[MainWindow] 決策桌面 MarketBreadthService 初始化失敗：{exc}")
 
+        sector_rotation_service = None
+        try:
+            sector_rotation_service = SectorRotationService(
+                SQLiteIndustryIndexSectorRotationProvider(self.config.db_file)
+            )
+        except Exception as exc:
+            print(f"[MainWindow] 決策桌面 SectorRotationService 初始化失敗：{exc}")
+
         portfolio_alert_service = None
         try:
             condition_monitor = PortfolioConditionMonitor()
@@ -152,6 +161,7 @@ class MainWindow(QMainWindow):
         return DecisionDeskSnapshotBuilder(
             provider=provider,
             market_breadth_service=market_breadth_service,
+            sector_rotation_service=sector_rotation_service,
             portfolio_alert_service=portfolio_alert_service,
         )
 
