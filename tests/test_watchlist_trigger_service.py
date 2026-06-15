@@ -119,3 +119,78 @@ def test_watchlist_trigger_service_uses_actual_date_fallback_and_warning():
     assert "watchlist_trigger_as_of_fallback:2026-06-12" in snapshot.warnings
 
 
+def test_watchlist_service_watchlist_provider_fetches_correctly():
+    from app_module.watchlist_trigger_service import WatchlistServiceWatchlistProvider
+    
+    class FakeWatchlistService:
+        def get_stocks(self, watchlist_id):
+            if watchlist_id == "my_list":
+                return [{"stock_code": "2330", "name": "TSMC"}, {"stock_code": "2454"}]
+            return []
+
+    service = FakeWatchlistService()
+    provider = WatchlistServiceWatchlistProvider(service, watchlist_id="my_list")
+    
+    res = provider.fetch(date(2026, 6, 15))
+    assert len(res) == 2
+    assert res[0]["stock_code"] == "2330"
+    assert res[1]["stock_code"] == "2454"
+
+
+def test_sqlite_ranking_provider_queries_db_correctly(tmp_path):
+    import sqlite3
+    from app_module.watchlist_trigger_service import SQLiteRankingProvider
+    
+    db_file = tmp_path / "test_twstock.db"
+    
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("""
+            CREATE TABLE technical_indicators (
+                日期 TEXT,
+                證券代號 TEXT,
+                RSI REAL,
+                Close REAL,
+                lowerband REAL
+            )
+        """)
+        conn.executemany("""
+            INSERT INTO technical_indicators (日期, 證券代號, RSI, Close, lowerband)
+            VALUES (?, ?, ?, ?, ?)
+        """, [
+            ("2026-06-12", "2330", 72.5, 950.0, 900.0),
+            ("2026-06-12", "1101", 15.0, 35.0, 36.0),
+            ("2026-06-12", "2603", 50.0, 140.0, 145.0),
+        ])
+        
+        conn.executemany("""
+            INSERT INTO technical_indicators (日期, 證券代號, RSI, Close, lowerband)
+            VALUES (?, ?, ?, ?, ?)
+        """, [
+            ("2026-06-11", "2330", 68.0, 940.0, 890.0),
+            ("2026-06-11", "1101", 25.0, 36.0, 36.5),
+        ])
+        
+    provider = SQLiteRankingProvider(db_file)
+    
+    res = provider.fetch(date(2026, 6, 15))
+    assert provider.actual_date == date(2026, 6, 12)
+    assert "2330" in res
+    assert res["2330"]["score_bp"] == 7250
+    assert res["2330"]["risk_alert"] is False
+    
+    assert "1101" in res
+    assert res["1101"]["score_bp"] == 1500
+    assert res["1101"]["risk_alert"] is True
+    
+    assert "2603" in res
+    assert res["2603"]["score_bp"] == 5000
+    assert res["2603"]["risk_alert"] is True
+    
+    prev_res = provider.fetch_previous(provider.actual_date)
+    assert prev_res is not None
+    assert "2330" in prev_res
+    assert prev_res["2330"]["score_bp"] == 6800
+    assert prev_res["1101"]["score_bp"] == 2500
+
+
+

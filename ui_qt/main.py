@@ -20,6 +20,7 @@ from app_module.regime_service import RegimeService
 from app_module.decision_desk_dtos import DecisionDeskQuality, MarketRegimeSummary
 from app_module.market_breadth_service import MarketBreadthService, SQLiteDailyPriceMarketBreadthProvider
 from app_module.sector_rotation_service import SectorRotationService, SQLiteIndustryIndexSectorRotationProvider
+from app_module.watchlist_trigger_service import WatchlistTriggerService, WatchlistServiceWatchlistProvider, SQLiteRankingProvider
 from app_module.recommendation_service import RecommendationService
 from app_module.portfolio_alert_service import PortfolioAlertService
 from app_module.portfolio_condition_monitor import PortfolioConditionMonitor
@@ -158,10 +159,22 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             print(f"[MainWindow] 決策桌面 PortfolioAlertService 初始化失敗：{exc}")
 
+        watchlist_trigger_service = None
+        try:
+            watchlist_provider = WatchlistServiceWatchlistProvider(self.watchlist_service)
+            ranking_provider = SQLiteRankingProvider(self.config.db_file)
+            watchlist_trigger_service = WatchlistTriggerService(
+                watchlist_provider=watchlist_provider,
+                ranking_provider=ranking_provider,
+            )
+        except Exception as exc:
+            print(f"[MainWindow] 決策桌面 WatchlistTriggerService 初始化失敗：{exc}")
+
         return DecisionDeskSnapshotBuilder(
             provider=provider,
             market_breadth_service=market_breadth_service,
             sector_rotation_service=sector_rotation_service,
+            watchlist_trigger_service=watchlist_trigger_service,
             portfolio_alert_service=portfolio_alert_service,
         )
 
