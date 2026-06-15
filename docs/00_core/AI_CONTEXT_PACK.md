@@ -7,22 +7,23 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具，而是一個「可驗證、可回溯、可演化」的投資決策系統。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：三個產品閉環的基礎與主要深化已完成。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、archive 管歷史。
-* **Core Architecture (核心架構)**：三層式解耦架構。
-  1. `ui_qt/`（純粹的觀察者 Observatory / 渲染層）
-  2. `app_module/`（應用服務層與協調器 Orchestrator）
-  3. Domain 模組（`backtest_module/`、`analysis_module/`、`runtime/`）
-* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、籌碼分析終端、Portfolio 監控、Runtime 子系統。
+* **Current Phase (目前階段)**：三個產品閉環的基礎與主要深化已完成。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、archive 管歷史。當前主線是 Month 3 Factor Layer v1 與 Research Run factor metadata 追溯。
+* **Core Architecture (核心架構)**：分層解耦架構。
+  1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
+  2. `app_module/`（應用服務層、DTO、Repository 與 use case orchestrator）
+  3. Domain / Engine 模組（`decision_module/`、`backtest_module/`、`portfolio_module/`、`analysis_module/`、`data_module/`、`runtime/`）
+* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、Research Run Registry、Factor Layer v1、籌碼分析終端、Portfolio 監控、Runtime 子系統。
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 7 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。大量使用 `pandas_table_model` 呈現高密度數據網格。
 * **Current Priorities (目前優先事項)**：
-  1. Research Run Registry、Cross-run comparison 與 benchmark-relative attribution。
-  2. 文件治理 scoped authority 收尾（Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Agent 指引）。
-  3. Phase 5 研究輸出（大表格分頁與 Excel / PDF 報告）。
+  1. Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot/contribution serialization。
+  2. Month 3 研究追溯：`ResearchRunService.save_run()` 已可在實際寫入流程保存 `factor_snapshot` / `factor_contributions`，後續要擴大上游 Research Lab / 推薦回放 factor records 供給。
+  3. 已完成 Gate 的回歸維護：Month 1 fixed / quantile OOS 實證、SQLite 穩定分頁、規格化 Excel 報告匯出、Month 2 M2-A / M2-B / M2-C / final registry governance gate。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
-  1. Fixed / quantile 實證 Gate 已完成，但尚未建立完整 Cross-run 與 benchmark-relative attribution；quantile 未優於 fixed。
-  2. 營收、基本面、估值與三大法人尚未成為正式資料因子。
-  3. 新資料必須走 factor layer，避免污染既有 scoring engine。
+  1. Quantile 的真實 OOS 實證未優於 fixed，因此仍維持 opt-in，不可宣稱更準。
+  2. Factor Layer v1 已建立基礎與 Research Run 實際保存入口，但更多上游流程仍需持續餵入 factor records，避免只有空的追溯欄位。
+  3. 營收、基本面、估值與三大法人尚未成為正式資料因子；未來接入必須保存 `available_date`、quality 與 missing policy。
+  4. PDF 研究報告輸出仍是後續 backlog；Excel 報告與 SQLite 穩定分頁已完成。
 
 ---
 
@@ -79,7 +80,7 @@
 
 ### A. 日常人類研究工作流 (Daily Human Research Workflow)
 * **Purpose (目的)**：日常選股與投資研究。
-* **Path (路徑)**：數據更新工作台執行安全更新 (Update Workbench) ➔ 市場觀察看 Regime (Market Watch) ➔ 推薦分析選 Profile (Recommendation) ➔ 加入候選池 (Watchlist) ➔ 策略回測驗證 (Backtest) ➔ 升級保存策略 (Promote)。
+* **Path (路徑)**：數據更新工作台執行快速更新或安全更新 (Update Workbench) ➔ 市場觀察看 Regime / Smart Money (Market Watch) ➔ 推薦分析選 Profile 並查看 Why / Why Not (Recommendation) ➔ 加入候選池 (Watchlist) ➔ Research Lab 執行單股 / 批次 / 固定組合 / 推薦回放驗證 ➔ 保存到 Research Run Registry ➔ 符合 Gate 才升級策略版本 (Promote)。
 * **Dependent Agents (依賴 Agent)**：Execution Agent（用於擴展 UI 或除錯）。
 * **Typical Use Case (典型情境)**：每日盤後產生推薦清單並驗證策略勝率。
 
@@ -108,6 +109,7 @@
 * **UI Layer (`ui_qt/`)**：絕對不可 import `repository/db` 或內部 Domain 邏輯檔案。必須只透過 `app_module` 的 DTOs 溝通。
 * **App Layer (`app_module/`)**：絕對不可 import `PySide6` 或任何 Qt 專屬套件。不可包含 HTML/CSS 等 UI 格式化字串。
 * **Domain/Runtime Layer (`runtime/`)**：絕對不可 import `app_module` 或 `ui_qt`。必須保持純 Python 實作。
+* **Factor Layer (`decision_module/factors/` + `app_module/factor_service.py`)**：新資料不得直接硬接 `ScoringEngine`。所有 factor 必須保留 `as_of_date`、`available_date`、quality、missing policy 與 source version，並由 Look-ahead Gate 驗證。
 
 ### Shared Contract Safety (DTO 規則)
 * **Rules (規則)**：禁止靜默重新命名共用 DTO、禁止隨意改變 event payload schema 或服務簽名 (signatures)。
@@ -118,6 +120,11 @@
 * **Bridging**：透過 `QtRuntimeBridge` 將 EventBus 的事件解耦並翻譯為 UI 需要的 `pyqtSignal`。
 * **Runtime Rules**：嚴格的狀態機生命週期 (`IDLE` ➔ `DISPATCHED` ➔ `THINKING` ➔ `VALIDATING` ➔ `APPROVED`/`ERROR`/`HALTED`)。
 * **Decision Module Rules**：UI 必須是純粹的觀察者 (Observatory)，將決策邏輯推遲到 Domain 層。
+
+### Research Run / Factor Traceability Rules (研究保存與因子追溯規則)
+* **Research Run Registry**：新「保存結果」入口以 `ResearchRunService.save_run()` 為唯一寫入 owner；metadata 寫入 SQLite，equity curve 與 trades 寫入 Parquet，並以 staging / files_ready / committed 狀態與 hash 驗證防止半成品被當成成功結果。
+* **Factor Metadata**：`data_manifest.factor_snapshot` 保存當時可見的 factor 狀態，`data_manifest.factor_contributions` 保存由 snapshot 產生的 contribution summary。Cross-run Comparison 只能讀已保存 metadata，不得比較時重新抓取當前資料。
+* **No Performance Claim**：Factor Layer v1 只建立可追溯與資料治理能力，不代表績效改善；任何「更準」宣稱都必須另走 OOS 實證。
 
 ---
 
@@ -175,13 +182,13 @@
 
 * **Active Phase (目前階段)**：三個產品閉環已建立，進入 6 個月工程路線執行期。
 * **In Progress (進行中)**：
-  * Research Run Registry 與 Cross-run comparison。
-  * 文件治理 scoped authority 收尾。
-  * Phase 5 大表格分頁與報告輸出。
-* **Planned (計畫中)**：Research Run Registry、Factor Layer v1、營收與估值資料、三大法人資料、Portfolio post-trade attribution。
+  * Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization。
+  * Research Run factor metadata 追溯：`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際保存流程；後續擴大上游 factor records 供給。
+  * Month 2 Registry governance gate 回歸維護。
+* **Planned (計畫中)**：營收與估值資料、三大法人資料、Portfolio post-trade attribution、PDF 研究報告輸出、策略 promote / demote / retire 規則。
 * **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Smart Money Terminal MVP, AI Runtime MVP。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
-* **Backlog**：Factor attribution、cross-run comparison、策略 promote / demote / retire 規則、估值相對分位與法人籌碼交叉驗證。
+* **Backlog**：上游 Research Lab / 推薦回放 factor records 自動供給、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。
 
 ---
 

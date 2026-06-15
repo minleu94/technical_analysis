@@ -63,8 +63,8 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot serialization 已進入實作；v1 不先接營收與法人。
-2. Month 3 研究追溯：Research Run metadata 已可保存 `factor_snapshot` / `factor_contributions`，Cross-run Comparison 只讀已保存 factor metadata，不重抓當前資料。
+1. Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot/contribution serialization 已進入實作；v1 不先接營收與法人。
+2. Month 3 研究追溯：`ResearchRunService.save_run()` 已可在實際寫入流程保存 `factor_snapshot` / `factor_contributions`，Cross-run Comparison 只讀已保存 factor metadata，不重抓當前資料。
 3. 已完成 Gate 維持回歸：Month 1 fixed / quantile OOS 實證、SQLite 穩定分頁、規格化 Excel 報告匯出，以及 Month 2 M2-A / M2-B / M2-C / final registry governance gate 均已完成；PDF 報告輸出是後續研究輸出 backlog，不阻塞 Month 3。
 
 ## 高風險區（改動需謹慎）

@@ -7,15 +7,18 @@ import hashlib
 import os
 from pathlib import Path
 import re
+from datetime import date
 from typing import Any
 
 import pandas as pd
 
+from app_module.factor_service import FactorService
 from app_module.research_run_dtos import ResearchRunMetadataDTO
 from app_module.research_run_repository import (
     ResearchRunConflictError,
     ResearchRunRepository,
 )
+from decision_module.factors.factor_dtos import FactorRecord
 
 
 class ResearchRunServiceError(Exception):
@@ -63,8 +66,19 @@ class ResearchRunService:
         equity: pd.DataFrame,
         trades: pd.DataFrame,
         *,
+        factor_records: list[FactorRecord] | None = None,
+        factor_decision_date: date | None = None,
+        factor_snapshot: dict[str, Any] | None = None,
+        factor_contributions: dict[str, Any] | None = None,
         fail_at: str | None = None,
     ) -> ResearchRunMetadataDTO:
+        metadata = self._metadata_with_factor_manifest(
+            metadata,
+            factor_records=factor_records,
+            factor_decision_date=factor_decision_date,
+            factor_snapshot=factor_snapshot,
+            factor_contributions=factor_contributions,
+        )
         existing_raw = self.repository.get_raw_metadata_row(metadata.run_id)
         if existing_raw:
             existing = self.repository.get_metadata(metadata.run_id)
@@ -219,6 +233,38 @@ class ResearchRunService:
         sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", run_id).strip("._")
         suffix = hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:12]
         return f"{sanitized}_{suffix}" if sanitized else suffix
+
+    def _metadata_with_factor_manifest(
+        self,
+        metadata: ResearchRunMetadataDTO,
+        *,
+        factor_records: list[FactorRecord] | None,
+        factor_decision_date: date | None,
+        factor_snapshot: dict[str, Any] | None,
+        factor_contributions: dict[str, Any] | None,
+    ) -> ResearchRunMetadataDTO:
+        if factor_records is None and factor_snapshot is None and factor_contributions is None:
+            return metadata
+
+        factor_service = FactorService()
+        snapshot = dict(factor_snapshot) if factor_snapshot is not None else None
+        if factor_records is not None:
+            if factor_decision_date is None:
+                raise ValueError("factor_decision_date is required when factor_records are provided")
+            snapshot = factor_service.build_snapshot(
+                factor_records,
+                decision_date=factor_decision_date,
+            )
+        contributions = (
+            dict(factor_contributions)
+            if factor_contributions is not None
+            else factor_service.build_contributions(snapshot or {})
+        )
+        data_manifest = dict(metadata.data_manifest)
+        if snapshot is not None:
+            data_manifest["factor_snapshot"] = snapshot
+        data_manifest["factor_contributions"] = contributions
+        return replace(metadata, data_manifest=data_manifest)
 
     def _verify_hash(self, path: Path, expected_hash: str) -> None:
         if not path.exists():

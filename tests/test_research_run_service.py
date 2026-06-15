@@ -1,10 +1,13 @@
 from pathlib import Path
+from datetime import date
+from decimal import Decimal
 
 import pandas as pd
 import pytest
 
 from app_module.research_run_dtos import ResearchRunMetadataDTO
 from app_module.research_run_repository import ResearchRunConflictError, ResearchRunRepository
+from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from data_module.config import TWStockConfig
 
 
@@ -57,6 +60,61 @@ def test_save_run_is_immutable_and_idempotent(tmp_path):
 
     with pytest.raises(ResearchRunConflictError):
         service.save_run(_metadata(payload_hash="sha256:changed"), _equity_frame(), _trades_frame())
+
+
+def test_save_run_persists_factor_snapshot_and_contributions(tmp_path):
+    from app_module.research_run_service import ResearchRunService
+
+    service = ResearchRunService(_config(tmp_path))
+    factor_records = [
+        build_technical_total_score_factor(
+            stock_code="2330",
+            as_of_date=date(2026, 6, 12),
+            available_date=date(2026, 6, 12),
+            total_score=Decimal("82.35"),
+        )
+    ]
+
+    saved = service.save_run(
+        _metadata(run_id="run-factor"),
+        _equity_frame(),
+        _trades_frame(),
+        factor_records=factor_records,
+        factor_decision_date=date(2026, 6, 14),
+    )
+    loaded = service.load_run_data(saved.run_id)
+
+    assert loaded.metadata.factor_snapshot["records"][0]["factor_name"] == "technical.total_score"
+    assert loaded.metadata.factor_contributions["by_stock"]["2330"][0]["score_bp"] == 8235
+    assert loaded.metadata.factor_contributions["summary_by_factor"]["technical.total_score"][
+        "accepted_count"
+    ] == 1
+
+
+def test_save_run_preserves_existing_manifest_when_explicit_factor_metadata_is_added(tmp_path):
+    from app_module.research_run_service import ResearchRunService
+
+    service = ResearchRunService(_config(tmp_path))
+    metadata = ResearchRunMetadataDTO(
+        run_id="run-explicit-factor",
+        run_name="Research Run",
+        run_type="single_backtest",
+        payload_hash="sha256:explicit",
+        data_manifest={"daily_prices": {"max_date": "2026-06-12"}},
+        created_at="2026-06-14T12:00:00",
+    )
+
+    saved = service.save_run(
+        metadata,
+        _equity_frame(),
+        _trades_frame(),
+        factor_snapshot={"schema_version": 1, "records": []},
+        factor_contributions={"schema_version": 1, "by_stock": {}},
+    )
+
+    assert saved.data_manifest["daily_prices"]["max_date"] == "2026-06-12"
+    assert saved.factor_snapshot["schema_version"] == 1
+    assert saved.factor_contributions["by_stock"] == {}
 
 
 @pytest.mark.parametrize(
