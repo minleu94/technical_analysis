@@ -59,19 +59,19 @@
    - Fixed 57 筆、quantile 79 筆交易與 100% Regime coverage 通過 Gate。
    - Quantile 未優於 fixed，維持 opt-in，不宣稱改善績效或穩健度。
 
-2. **P1：Month 3 Factor Layer v1 與 Portfolio Replay 可信度**
+2. **已完成：Month 3 Factor Layer v1 與 Portfolio Replay 可信度**
    - Month 2 Registry governance gate 已關閉。
-   - Factor DTO / registry / Look-ahead gate / adapters / FactorService snapshot/contribution serialization 已開始落地；`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際寫入流程，推薦組合回放、單股回測與批次回測已開始供給 factor records。
-   - 接下來需補齊固定組合與更多 Research Lab 路徑的 factor metadata，並設計推薦 / 固定組合回放的現金帳、權重、再平衡、未成交、Liquidity / Gap 標記，不直接接營收與法人。
+   - Factor DTO / registry / Look-ahead gate / adapters / FactorService snapshot/contribution serialization 已落地；`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際寫入流程，推薦組合回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata。
+   - 推薦組合回放已具備現金帳、權重、再平衡、未成交、Liquidity、成本、整股 sizing、weight exposure 與 Gap risk labels；更細的零股、價差、完整撮合與 Gap 實際成交模型列為後續深化，不阻塞 Month 4。
 
-3. **P2：Month 4 Daily Decision Desk 前置設計**
+3. **P1：Month 4 Daily Decision Desk 前置設計**
    - Daily Decision Desk 是目標首頁，尚未完成。
    - 需先定義 `DecisionDeskSnapshot` / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert，不在 UI 層複製既有 scoring / screening / portfolio 計算。
 
-4. **P3：Phase 5 研究輸出後續**
+4. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
 
-5. **P4：文件治理持續檢查**
+5. **P3：文件治理持續檢查**
    - Snapshot、6M Roadmap、Architecture、Index、Agent 指引已採 Scoped SSOT；後續功能變更需依 Coverage Map 同步更新入口摘要。
    - 清理仍引用舊 Phase / 舊 UI 路徑的 Active 文件，並維持 Manual completeness Gate。
 

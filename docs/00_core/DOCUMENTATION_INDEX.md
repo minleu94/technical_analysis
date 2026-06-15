@@ -199,8 +199,8 @@
 ## 目前開發狀態
 
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
-- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1 已進入實作，包含 Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization、Research Run 實際寫入整合、推薦組合回放 / 單股 / 批次 factor records 供給與 saved factor metadata reader。
-- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，包含 Factor Layer 覆蓋補齊、Portfolio Replay 可信度、Daily Decision Desk、Fundamental Layer 初版與 Strategy Lifecycle / Portfolio Feedback。
+- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1 與 Portfolio Replay 可信度已關閉，包含 Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization、Research Run 實際寫入整合、推薦組合回放 / 單股 / 批次 / 固定組合 per-stock factor records 供給、saved factor metadata reader、portfolio credibility manifest、cash ledger、weight exposure 與 gap risk labels。
+- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，下一步是 Daily Decision Desk，後續包含 Fundamental Layer 初版與 Strategy Lifecycle / Portfolio Feedback；零股、買賣價差、完整撮合與 Gap 實際成交模型列為執行模型深化。
 - **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
 ---

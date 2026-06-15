@@ -67,9 +67,9 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Month 3 Factor Layer 覆蓋補齊：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot/contribution serialization 已進入實作；固定組合回測已沿用批次 per-stock 保存路徑並以 `fixed_basket_stock` 標記寫入 factor records，接下來仍需補更多 Research Lab 路徑覆蓋，v1 不先接營收、法人或估值。
-2. Month 3 Portfolio Replay 可信度：推薦組合回放已能產生 factor metadata，並輸出 `portfolio_credibility` manifest；缺價推薦會記錄為 `unfilled_orders`，有 `max_participation_rate` 時也會用 entry-day 成交股數檢查配置金額並記錄 `liquidity_limited`。回放現在會在建立 holding 前檢查可用現金，現金不足會記錄 `cash_limited`，並由 cash gate 流程產生 `cash_ledger` 與 `ending_cash`；若呼叫端提供 fee / tax / slippage bps，也會套用到 cash gate、ledger breakdown 與 `total_transaction_cost`；若提供 `lot_size`，會將配置金額向下取整為可成交整股，買不起最小單位時記錄 `lot_size_limited`。結果也會以 `weight_exposure` 揭露每期目標權重、實際可成交權重、未成交權重與殘餘現金權重；若歷史資料含「開盤價」，也會以 `gap_risk` 揭露 entry close 到下一個可用 open 的跳空方向、幅度與嚴重度。零股、價差、Gap 實際成交與完整撮合模型仍需補強，避免後續策略生命週期建立在不完整組合績效上。
-3. Month 4 Daily Decision Desk 前置設計：定義 `DecisionDeskSnapshot` / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert；此首頁尚未完成，不得描述為目前可用。
+1. Month 3 Factor Layer v1 已完成：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization 與 Research Run 保存流程已落地；推薦回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata。v1 不接營收、法人或估值新資料源。
+2. Month 3 Portfolio Replay 可信度 v1 已完成：推薦組合回放已輸出 `portfolio_credibility`、`unfilled_orders`、`cash_ledger`、`weight_exposure` 與 `gap_risk`；可揭露缺價、流動性限制、現金不足、整股限制、成本、目標 / 實際權重落差與 next-open gap 風險。零股、買賣價差、Gap 實際成交與完整撮合模型列入後續執行模型深化，不再阻塞 Month 3 v1。
+3. Month 4 Daily Decision Desk 前置設計：下一步進入 `DecisionDeskSnapshot` / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert；此首頁尚未完成，不得描述為目前可用。
 
 ## 高風險區（改動需謹慎）
 
@@ -79,7 +79,7 @@
 - `decision_module/scoring_engine.py` / `decision_module/strategy_configurator.py`
 - `app_module/strategies/*`（fixed / quantile 門檻、確認天數與 Look-ahead 契約）
 - `app_module/recommendation_replay_service.py` / `app_module/recommendation_portfolio_backtest_service.py`
-- 推薦 / 固定組合回放的現金帳、再平衡、Liquidity / Gap 標記（Month 3 新高風險方向）
+- 推薦 / 固定組合回放的現金帳、再平衡、Liquidity / Gap 標記（Month 3 v1 已完成；後續執行模型深化仍屬高風險）
 - `app_module/research_run_service.py` / `app_module/research_run_repository.py`（Research Run Registry metadata、Parquet hash、archive / promoted guard）
 - Strategy registry / preset / promotion 相關服務
 - UI ↔ service contract（DTO）
