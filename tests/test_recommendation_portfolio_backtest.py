@@ -190,7 +190,7 @@ def test_portfolio_backtest_records_period_holdings_and_contributions():
     assert result.summary["total_return"] == 0.0
 
 
-def test_portfolio_backtest_exposes_derived_cash_ledger_for_successful_holding():
+def test_portfolio_backtest_exposes_cash_ledger_for_successful_holding():
     history = pd.DataFrame(
         [
             {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
@@ -241,7 +241,101 @@ def test_portfolio_backtest_exposes_derived_cash_ledger_for_successful_holding()
         },
     ]
     assert result.summary["ending_cash"] == 1100000.0
-    assert result.details["portfolio_credibility"]["cash_account"]["supported"] == "partial"
+    assert result.details["portfolio_credibility"]["cash_account"]["supported"] == "order_sizing"
+
+
+def test_portfolio_backtest_releases_exit_cash_before_same_day_rebalance_buy():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+            {"日期": "2026-01-09", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 120},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 80.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-09",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="weekly",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    cash_ledger = result.details["cash_ledger"]
+
+    assert [row["event"] for row in cash_ledger] == ["buy", "sell", "buy", "sell"]
+    assert cash_ledger[1]["date"] == "2026-01-06"
+    assert cash_ledger[1]["amount"] == 1100000.0
+    assert cash_ledger[1]["cash_balance"] == 1100000.0
+    assert cash_ledger[2]["date"] == "2026-01-06"
+    assert cash_ledger[2]["amount"] == -1000000.0
+    assert cash_ledger[2]["cash_balance"] == 100000.0
+    assert result.summary["ending_cash"] == 1190909.09
+
+
+def test_portfolio_backtest_records_cash_limited_when_rebalance_cash_is_unavailable():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 105},
+            {"日期": "2026-01-09", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 80.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-09",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="weekly",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=10,
+    )
+
+    unfilled_orders = result.details["unfilled_orders"]
+
+    assert len(result.period_holdings) == 1
+    assert result.summary["total_trades"] == 1
+    assert result.summary["unfilled_order_count"] == 1
+    assert unfilled_orders[0]["reason"] == "cash_limited"
+    assert unfilled_orders[0]["stock_code"] == "2330"
+    assert unfilled_orders[0]["cash"] == {
+        "available_cash": 0.0,
+        "required_cash": 1000000.0,
+        "cash_shortfall": 1000000.0,
+    }
+    assert "unfilled_order:2330:cash_limited" in result.selection_diagnostics
+    assert result.summary["ending_cash"] == 1100000.0
 
 
 def test_portfolio_backtest_marks_equity_to_market_each_trading_day():
@@ -668,13 +762,13 @@ def test_portfolio_backtest_result_includes_credibility_manifest():
 
     assert credibility["schema_version"] == 1
     assert credibility["status"] == "limited"
-    assert credibility["cash_account"]["supported"] == "partial"
-    assert credibility["cash_account"]["policy"] == "derived_from_period_holdings_not_used_for_order_sizing"
+    assert credibility["cash_account"]["supported"] == "order_sizing"
+    assert credibility["cash_account"]["policy"] == "available_cash_checked_before_holding_creation"
     assert credibility["rebalance"]["supported"] is False
     assert credibility["unfilled_orders"]["supported"] is True
     assert credibility["liquidity_gap"]["supported"] is False
     assert credibility["execution_assumption"] == "idealized_same_day_close"
-    assert "cash_account_partial_ledger_not_execution_constraint" in credibility["warnings"]
+    assert "rebalance_cash_reuse_partial" in credibility["warnings"]
     assert "unfilled_orders_not_modeled" not in credibility["warnings"]
     assert result.summary["credibility_status"] == "limited"
     assert result.summary["credibility_warning_count"] == len(credibility["warnings"])

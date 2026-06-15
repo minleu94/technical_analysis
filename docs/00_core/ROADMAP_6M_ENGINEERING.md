@@ -143,7 +143,7 @@
 
 ### Month 3：Factor Layer 與 Portfolio Replay 可信度
 
-> 2026-06-15 狀態：Factor Contract / Registry / Look-ahead Gate / v1 adapters / FactorService snapshot/contribution serialization 已進入實作；`ResearchRunService.save_run()` 可在實際寫入流程保存 factor snapshot 與 contribution summary。推薦組合回放已供給 `technical.total_score` 與 `volume.volume_ratio` metadata，並輸出 `portfolio_credibility` manifest；缺價推薦會記錄為 `unfilled_orders`，有 `max_participation_rate` 時也會用 entry-day 成交股數檢查配置金額並記錄 `liquidity_limited`，且結果 details 已提供由 holdings 推導的 `cash_ledger`。單股回測與批次回測已由 signal score 序列供給 `technical.total_score` factor records。固定組合回測共用批次執行路徑，但 Research Run Registry 會以 `fixed_basket_stock` 標記每檔保存結果，並沿用回測產生的 factor records 生成 `factor_snapshot` / `factor_contributions`。v1 不接營收、法人或估值新資料源，也不改 `ScoringEngine` 核心。
+> 2026-06-15 狀態：Factor Contract / Registry / Look-ahead Gate / v1 adapters / FactorService snapshot/contribution serialization 已進入實作；`ResearchRunService.save_run()` 可在實際寫入流程保存 factor snapshot 與 contribution summary。推薦組合回放已供給 `technical.total_score` 與 `volume.volume_ratio` metadata，並輸出 `portfolio_credibility` manifest；缺價推薦會記錄為 `unfilled_orders`，有 `max_participation_rate` 時也會用 entry-day 成交股數檢查配置金額並記錄 `liquidity_limited`，且建立 holding 前會檢查可用現金並以 `cash_limited` 記錄現金不足推薦。單股回測與批次回測已由 signal score 序列供給 `technical.total_score` factor records。固定組合回測共用批次執行路徑，但 Research Run Registry 會以 `fixed_basket_stock` 標記每檔保存結果，並沿用回測產生的 factor records 生成 `factor_snapshot` / `factor_contributions`。v1 不接營收、法人或估值新資料源，也不改 `ScoringEngine` 核心。
 
 目標：
 
@@ -154,7 +154,7 @@
 
 - 固定組合 per-stock factor records 供給已接入 Registry；後續補更多 Research Lab 路徑的 factor records 供給。
 - Factor Gate / adapters focused regression 與 no-look-ahead tests。
-- 推薦組合回放已具備 `portfolio_credibility` 限制揭露、缺價型 `unfilled_orders`、entry-day 成交量參與率檢查與 derived cash ledger；後續補完整下單現金約束、權重、再平衡現金重用、完整撮合與 Gap 模型。
+- 推薦組合回放已具備 `portfolio_credibility` 限制揭露、缺價型 `unfilled_orders`、entry-day 成交量參與率檢查與 cash-gated holding creation；後續補權重、交易成本、整股、滑價、完整撮合與 Gap 模型。
 - Liquidity / Gap 風險在回放結果摘要中可追溯。
 - PDF 報告輸出可保留為研究輸出 backlog，不阻塞 Month 3。
 
@@ -236,7 +236,7 @@
 ## 5. 立即待辦清單
 
 1. 延伸更多 Research Lab 路徑的 factor records 供給；固定組合 per-stock Registry 保存已能自動產生 `factor_snapshot` / `factor_contributions`。
-2. 設計 Portfolio Replay 可信度補強：`portfolio_credibility` manifest 已開始揭露限制，缺價推薦已記錄為 `unfilled_orders`，提供 `max_participation_rate` 時會記錄 entry-day 成交量不足的 `liquidity_limited`，且已輸出由 holdings 推導的 `cash_ledger`；後續補完整下單現金約束、權重、再平衡現金重用、完整撮合與 Gap 實際模型。
+2. 設計 Portfolio Replay 可信度補強：`portfolio_credibility` manifest 已開始揭露限制，缺價推薦已記錄為 `unfilled_orders`，提供 `max_participation_rate` 時會記錄 entry-day 成交量不足的 `liquidity_limited`，建立 holding 前也會用可用現金 gate 並記錄 `cash_limited`；後續補權重、交易成本、整股、滑價、完整撮合與 Gap 實際模型。
 3. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查。
 4. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
 5. 為 Month 4 Daily Decision Desk 預先定義 snapshot DTO、資料品質欄位與不重算現有頁面資料的 service 邊界。
