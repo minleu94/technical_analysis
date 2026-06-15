@@ -244,6 +244,64 @@ def test_portfolio_backtest_exposes_cash_ledger_for_successful_holding():
     assert result.details["portfolio_credibility"]["cash_account"]["supported"] == "order_sizing"
 
 
+def test_portfolio_backtest_applies_optional_execution_costs_to_cash_ledger():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 80.0},
+            },
+            {
+                "stock_code": "2317",
+                "stock_name": "鴻海",
+                "total_score": 80.0,
+                "factor_scores": {"technical": 70.0},
+            },
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=2,
+        allocation_method="equal_weight",
+        holding_days=4,
+        fee_bps=10,
+        slippage_bps=5,
+        tax_bps=30,
+    )
+
+    cash_ledger = result.details["cash_ledger"]
+
+    assert cash_ledger[0]["event"] == "buy"
+    assert cash_ledger[0]["gross_amount"] == -500000.0
+    assert cash_ledger[0]["costs"] == {"fee": 500.0, "tax": 0.0, "slippage": 250.0, "total": 750.0}
+    assert cash_ledger[0]["amount"] == -500750.0
+    assert cash_ledger[0]["cash_balance"] == 499250.0
+    assert cash_ledger[1]["event"] == "sell"
+    assert cash_ledger[1]["gross_amount"] == 550000.0
+    assert cash_ledger[1]["costs"] == {"fee": 550.0, "tax": 1650.0, "slippage": 275.0, "total": 2475.0}
+    assert cash_ledger[1]["amount"] == 547525.0
+    assert result.summary["ending_cash"] == 1046775.0
+    assert result.summary["total_transaction_cost"] == 3225.0
+    assert result.details["unfilled_orders"][0]["reason"] == "cash_limited"
+    assert result.details["portfolio_credibility"]["execution_costs"]["supported"] == "partial"
+
+
 def test_portfolio_backtest_releases_exit_cash_before_same_day_rebalance_buy():
     history = pd.DataFrame(
         [

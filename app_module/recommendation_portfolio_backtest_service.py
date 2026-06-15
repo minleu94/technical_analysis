@@ -17,7 +17,7 @@ from app_module.recommendation_portfolio_metrics import calculate_robustness_met
 from app_module.recommendation_replay_service import RecommendationReplayService
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from decision_module.factors.factor_dtos import FactorQuality, FactorRecord, MissingPolicy
-from financial_module.units import quantize_money, to_decimal
+from financial_module.units import bps_to_rate, calculate_fee, quantize_money, to_decimal
 
 
 class RecommendationPortfolioBacktestService:
@@ -39,6 +39,9 @@ class RecommendationPortfolioBacktestService:
         stop_loss_pct: float | None = None,
         take_profit_pct: float | None = None,
         max_participation_rate: float | None = None,
+        fee_bps: float | None = None,
+        slippage_bps: float | None = None,
+        tax_bps: float | None = None,
     ) -> RecommendationPortfolioBacktestResultDTO:
         """
         執行推薦組合回測。
@@ -64,6 +67,9 @@ class RecommendationPortfolioBacktestService:
             rebalance_frequency=rebalance_frequency,
             allocation_method=allocation_method,
             max_participation_rate=max_participation_rate,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            tax_bps=tax_bps,
         )
 
         snapshots = []
@@ -73,15 +79,20 @@ class RecommendationPortfolioBacktestService:
         active_holdings: List[PeriodHoldingDTO] = []
         cash_ledger: List[Dict[str, Any]] = []
         available_cash = to_decimal(initial_capital)
+        total_transaction_cost = to_decimal("0.00")
         capital_per_period = initial_capital
 
         for rebalance_ts in rebalance_dates:
-            available_cash = self._release_exited_holdings(
+            available_cash, released_cost = self._release_exited_holdings(
                 rebalance_ts=rebalance_ts,
                 active_holdings=active_holdings,
                 cash_ledger=cash_ledger,
                 available_cash=available_cash,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                tax_bps=tax_bps,
             )
+            total_transaction_cost = quantize_money(total_transaction_cost + released_cost)
             planned_exit_ts = min(rebalance_ts + pd.Timedelta(days=holding_days), end_ts)
             snapshot = self.replay_service.run_snapshot(
                 as_of_date=rebalance_ts.strftime("%Y-%m-%d"),
@@ -101,7 +112,15 @@ class RecommendationPortfolioBacktestService:
                 allocation_amount = capital_per_period * weights[rank - 1]
                 allocation_weight = weights[rank - 1]
                 allocation_amount_dec = quantize_money(to_decimal(allocation_amount))
-                if allocation_amount_dec > available_cash:
+                buy_costs = self._build_execution_costs(
+                    gross_amount=allocation_amount_dec,
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    tax_bps=tax_bps,
+                    include_tax=False,
+                )
+                buy_cash_required = quantize_money(allocation_amount_dec + buy_costs["total"])
+                if buy_cash_required > available_cash:
                     unfilled_orders.append(
                         self._build_unfilled_order(
                             rec=rec,
@@ -113,8 +132,8 @@ class RecommendationPortfolioBacktestService:
                             reason="cash_limited",
                             cash={
                                 "available_cash": float(available_cash),  # numeric-boundary: dto
-                                "required_cash": float(allocation_amount_dec),  # numeric-boundary: dto
-                                "cash_shortfall": float(quantize_money(allocation_amount_dec - available_cash)),  # numeric-boundary: dto
+                                "required_cash": float(buy_cash_required),  # numeric-boundary: dto
+                                "cash_shortfall": float(quantize_money(buy_cash_required - available_cash)),  # numeric-boundary: dto
                             },
                         )
                     )
@@ -167,25 +186,34 @@ class RecommendationPortfolioBacktestService:
                     continue
                 period_holdings.append(holding)
                 active_holdings.append(holding)
-                available_cash = quantize_money(available_cash - allocation_amount_dec)
+                available_cash = quantize_money(available_cash - buy_cash_required)
+                total_transaction_cost = quantize_money(total_transaction_cost + buy_costs["total"])
                 cash_ledger.append(
-                    {
-                        "date": holding.entry_date,
-                        "stock_code": holding.stock_code,
-                        "event": "buy",
-                        "amount": float(-allocation_amount_dec),  # numeric-boundary: dto
-                        "cash_balance": float(available_cash),  # numeric-boundary: dto
-                    }
+                    self._build_cash_ledger_row(
+                        date=holding.entry_date,
+                        stock_code=holding.stock_code,
+                        event="buy",
+                        gross_amount=-allocation_amount_dec,
+                        costs=buy_costs,
+                        net_amount=-buy_cash_required,
+                        cash_balance=available_cash,
+                        include_costs=self._has_execution_cost_params(fee_bps, slippage_bps, tax_bps),
+                    )
                 )
                 trade_rows.extend(self._build_trade_rows(holding))
 
-        available_cash = self._release_exited_holdings(
+        available_cash, released_cost = self._release_exited_holdings(
             rebalance_ts=end_ts + pd.Timedelta(days=1),
             active_holdings=active_holdings,
             cash_ledger=cash_ledger,
             available_cash=available_cash,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            tax_bps=tax_bps,
         )
+        total_transaction_cost = quantize_money(total_transaction_cost + released_cost)
         ending_cash = float(quantize_money(available_cash))  # numeric-boundary: dto
+        total_transaction_cost_float = float(quantize_money(total_transaction_cost))  # numeric-boundary: dto
 
         if not snapshots:
             snapshots.append(
@@ -217,6 +245,7 @@ class RecommendationPortfolioBacktestService:
                     "credibility_warning_count": len(credibility_manifest["warnings"]),
                     "unfilled_order_count": len(unfilled_orders),
                     "ending_cash": ending_cash,
+                    "total_transaction_cost": total_transaction_cost_float,
                 },
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
@@ -245,6 +274,7 @@ class RecommendationPortfolioBacktestService:
             "credibility_warning_count": len(credibility_manifest["warnings"]),
             "unfilled_order_count": len(unfilled_orders),
             "ending_cash": ending_cash,
+            "total_transaction_cost": total_transaction_cost_float,
         }
         summary.update(self._build_exit_diagnostics(period_holdings, stock_contribution))
         summary.update(
@@ -379,6 +409,74 @@ class RecommendationPortfolioBacktestService:
             for order in unfilled_orders
         ]
 
+    def _has_execution_cost_params(
+        self,
+        fee_bps: float | None,
+        slippage_bps: float | None,
+        tax_bps: float | None,
+    ) -> bool:
+        return fee_bps is not None or slippage_bps is not None or tax_bps is not None
+
+    def _build_execution_costs(
+        self,
+        *,
+        gross_amount: Decimal,
+        fee_bps: float | None,
+        slippage_bps: float | None,
+        tax_bps: float | None,
+        include_tax: bool,
+    ) -> Dict[str, Decimal]:
+        amount = quantize_money(abs(gross_amount))
+        fee = (
+            calculate_fee(amount, fee_bps, minimum_fee=to_decimal("0.00"))
+            if fee_bps is not None
+            else to_decimal("0.00")
+        )
+        tax = (
+            calculate_fee(amount, tax_bps, minimum_fee=to_decimal("0.00"))
+            if include_tax and tax_bps is not None
+            else to_decimal("0.00")
+        )
+        slippage = (
+            quantize_money(amount * bps_to_rate(slippage_bps))
+            if slippage_bps is not None
+            else to_decimal("0.00")
+        )
+        total = quantize_money(fee + tax + slippage)
+        return {"fee": fee, "tax": tax, "slippage": slippage, "total": total}
+
+    def _serialize_execution_costs(self, costs: Dict[str, Decimal]) -> Dict[str, float]:
+        return {
+            "fee": float(costs["fee"]),  # numeric-boundary: dto
+            "tax": float(costs["tax"]),  # numeric-boundary: dto
+            "slippage": float(costs["slippage"]),  # numeric-boundary: dto
+            "total": float(costs["total"]),  # numeric-boundary: dto
+        }
+
+    def _build_cash_ledger_row(
+        self,
+        *,
+        date: str,
+        stock_code: str,
+        event: str,
+        gross_amount: Decimal,
+        costs: Dict[str, Decimal],
+        net_amount: Decimal,
+        cash_balance: Decimal,
+        include_costs: bool,
+    ) -> Dict[str, Any]:
+        row = {
+            "date": date,
+            "stock_code": stock_code,
+            "event": event,
+            "amount": float(net_amount),  # numeric-boundary: dto
+            "cash_balance": float(cash_balance),  # numeric-boundary: dto
+        }
+        if include_costs:
+            row["gross_amount"] = float(gross_amount)  # numeric-boundary: dto
+            row["costs"] = self._serialize_execution_costs(costs)
+        return row
+
     def _release_exited_holdings(
         self,
         *,
@@ -386,26 +484,43 @@ class RecommendationPortfolioBacktestService:
         active_holdings: List[PeriodHoldingDTO],
         cash_ledger: List[Dict[str, Any]],
         available_cash: Decimal,
-    ) -> Decimal:
+        fee_bps: float | None,
+        slippage_bps: float | None,
+        tax_bps: float | None,
+    ) -> tuple[Decimal, Decimal]:
         remaining = []
+        released_cost = to_decimal("0.00")
+        include_costs = self._has_execution_cost_params(fee_bps, slippage_bps, tax_bps)
         for holding in active_holdings:
             exit_ts = pd.to_datetime(holding.actual_exit_date)
             if exit_ts <= rebalance_ts:
-                sell_amount = quantize_money(to_decimal(holding.allocation_amount) + to_decimal(holding.pnl()))
+                gross_amount = quantize_money(to_decimal(holding.allocation_amount) + to_decimal(holding.pnl()))
+                sell_costs = self._build_execution_costs(
+                    gross_amount=gross_amount,
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    tax_bps=tax_bps,
+                    include_tax=True,
+                )
+                sell_amount = quantize_money(gross_amount - sell_costs["total"])
                 available_cash = quantize_money(available_cash + sell_amount)
+                released_cost = quantize_money(released_cost + sell_costs["total"])
                 cash_ledger.append(
-                    {
-                        "date": holding.actual_exit_date,
-                        "stock_code": holding.stock_code,
-                        "event": "sell",
-                        "amount": float(sell_amount),  # numeric-boundary: dto
-                        "cash_balance": float(available_cash),  # numeric-boundary: dto
-                    }
+                    self._build_cash_ledger_row(
+                        date=holding.actual_exit_date,
+                        stock_code=holding.stock_code,
+                        event="sell",
+                        gross_amount=gross_amount,
+                        costs=sell_costs,
+                        net_amount=sell_amount,
+                        cash_balance=available_cash,
+                        include_costs=include_costs,
+                    )
                 )
             else:
                 remaining.append(holding)
         active_holdings[:] = remaining
-        return available_cash
+        return available_cash, released_cost
 
     def _build_period_holding(
         self,
@@ -591,12 +706,23 @@ class RecommendationPortfolioBacktestService:
         rebalance_frequency: str,
         allocation_method: str,
         max_participation_rate: float | None = None,
+        fee_bps: float | None = None,
+        slippage_bps: float | None = None,
+        tax_bps: float | None = None,
     ) -> Dict[str, Any]:
         liquidity_supported: bool | str = "partial" if max_participation_rate else False
         liquidity_policy = (
             "entry_day_volume_participation_checked"
             if max_participation_rate
             else "volume_limit_and_gap_risk_not_applied"
+        )
+        execution_costs_supported: bool | str = (
+            "partial" if self._has_execution_cost_params(fee_bps, slippage_bps, tax_bps) else False
+        )
+        execution_costs_policy = (
+            "fee_tax_slippage_bps_applied_to_cash_ledger"
+            if execution_costs_supported
+            else "not_applied"
         )
         warnings = [
             "rebalance_cash_reuse_partial",
@@ -625,6 +751,13 @@ class RecommendationPortfolioBacktestService:
                 "supported": liquidity_supported,
                 "policy": liquidity_policy,
                 "max_participation_rate": max_participation_rate,
+            },
+            "execution_costs": {
+                "supported": execution_costs_supported,
+                "policy": execution_costs_policy,
+                "fee_bps": fee_bps,
+                "slippage_bps": slippage_bps,
+                "tax_bps": tax_bps,
             },
             "warnings": warnings,
         }
