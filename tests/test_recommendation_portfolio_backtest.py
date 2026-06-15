@@ -249,6 +249,8 @@ def test_portfolio_backtest_applies_optional_execution_costs_to_cash_ledger():
         [
             {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
             {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+            {"日期": "2026-01-02", "證券代號": "2317", "證券名稱": "鴻海", "收盤價": 50},
+            {"日期": "2026-01-06", "證券代號": "2317", "證券名稱": "鴻海", "收盤價": 55},
         ]
     )
     history["日期"] = pd.to_datetime(history["日期"])
@@ -300,6 +302,98 @@ def test_portfolio_backtest_applies_optional_execution_costs_to_cash_ledger():
     assert result.summary["total_transaction_cost"] == 3225.0
     assert result.details["unfilled_orders"][0]["reason"] == "cash_limited"
     assert result.details["portfolio_credibility"]["execution_costs"]["supported"] == "partial"
+
+
+def test_portfolio_backtest_rounds_allocation_down_to_lot_size():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 333},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 370},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 80.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+        lot_size=1000,
+    )
+
+    holding = result.period_holdings[0]
+
+    assert holding.shares == 3000
+    assert holding.allocation_amount == 999000.0
+    assert result.details["cash_ledger"][0]["amount"] == -999000.0
+    assert result.details["cash_ledger"][0]["cash_balance"] == 1000.0
+    assert result.summary["ending_cash"] == 1111000.0
+    assert result.details["portfolio_credibility"]["share_sizing"]["supported"] == "partial"
+
+
+def test_portfolio_backtest_records_unfilled_order_when_lot_size_cannot_be_met():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 333},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 370},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 80.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=100000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+        lot_size=1000,
+    )
+
+    unfilled_orders = result.details["unfilled_orders"]
+
+    assert result.period_holdings == []
+    assert result.summary["total_trades"] == 0
+    assert result.summary["unfilled_order_count"] == 1
+    assert unfilled_orders[0]["reason"] == "lot_size_limited"
+    assert unfilled_orders[0]["sizing"] == {
+        "lot_size": 1000,
+        "entry_price": 333.0,
+        "planned_allocation_amount": 100000.0,
+        "shares": 0,
+        "executable_amount": 0.0,
+    }
+    assert "unfilled_order:2330:lot_size_limited" in result.selection_diagnostics
 
 
 def test_portfolio_backtest_releases_exit_cash_before_same_day_rebalance_buy():

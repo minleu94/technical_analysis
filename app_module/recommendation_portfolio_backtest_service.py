@@ -42,6 +42,7 @@ class RecommendationPortfolioBacktestService:
         fee_bps: float | None = None,
         slippage_bps: float | None = None,
         tax_bps: float | None = None,
+        lot_size: int | None = None,
     ) -> RecommendationPortfolioBacktestResultDTO:
         """
         執行推薦組合回測。
@@ -56,6 +57,8 @@ class RecommendationPortfolioBacktestService:
         )
         if rebalance_frequency not in {"once", "weekly"}:
             raise ValueError("目前推薦組合回測支援 once 或 weekly rebalance")
+        if lot_size is not None and lot_size <= 0:
+            raise ValueError("lot_size must be positive when provided")
 
         data = history.copy()
         data["日期"] = parse_stock_dates(data["日期"])
@@ -70,6 +73,7 @@ class RecommendationPortfolioBacktestService:
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
             tax_bps=tax_bps,
+            lot_size=lot_size,
         )
 
         snapshots = []
@@ -112,32 +116,6 @@ class RecommendationPortfolioBacktestService:
                 allocation_amount = capital_per_period * weights[rank - 1]
                 allocation_weight = weights[rank - 1]
                 allocation_amount_dec = quantize_money(to_decimal(allocation_amount))
-                buy_costs = self._build_execution_costs(
-                    gross_amount=allocation_amount_dec,
-                    fee_bps=fee_bps,
-                    slippage_bps=slippage_bps,
-                    tax_bps=tax_bps,
-                    include_tax=False,
-                )
-                buy_cash_required = quantize_money(allocation_amount_dec + buy_costs["total"])
-                if buy_cash_required > available_cash:
-                    unfilled_orders.append(
-                        self._build_unfilled_order(
-                            rec=rec,
-                            rank=rank,
-                            rebalance_ts=rebalance_ts,
-                            planned_exit_ts=planned_exit_ts,
-                            allocation_amount=allocation_amount,
-                            allocation_weight=allocation_weight,
-                            reason="cash_limited",
-                            cash={
-                                "available_cash": float(available_cash),  # numeric-boundary: dto
-                                "required_cash": float(buy_cash_required),  # numeric-boundary: dto
-                                "cash_shortfall": float(quantize_money(buy_cash_required - available_cash)),  # numeric-boundary: dto
-                            },
-                        )
-                    )
-                    continue
                 liquidity_unfilled = self._liquidity_unfilled_reason(
                     data=data,
                     rec=rec,
@@ -184,6 +162,52 @@ class RecommendationPortfolioBacktestService:
                         )
                     )
                     continue
+                sizing_unfilled = self._apply_lot_sizing(
+                    holding=holding,
+                    planned_allocation_amount=allocation_amount_dec,
+                    lot_size=lot_size,
+                )
+                if sizing_unfilled is not None:
+                    unfilled_orders.append(
+                        self._build_unfilled_order(
+                            rec=rec,
+                            rank=rank,
+                            rebalance_ts=rebalance_ts,
+                            planned_exit_ts=planned_exit_ts,
+                            allocation_amount=allocation_amount,
+                            allocation_weight=allocation_weight,
+                            reason="lot_size_limited",
+                            sizing=sizing_unfilled,
+                        )
+                    )
+                    continue
+                actual_allocation_dec = quantize_money(to_decimal(holding.allocation_amount))
+                buy_costs = self._build_execution_costs(
+                    gross_amount=actual_allocation_dec,
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    tax_bps=tax_bps,
+                    include_tax=False,
+                )
+                buy_cash_required = quantize_money(actual_allocation_dec + buy_costs["total"])
+                if buy_cash_required > available_cash:
+                    unfilled_orders.append(
+                        self._build_unfilled_order(
+                            rec=rec,
+                            rank=rank,
+                            rebalance_ts=rebalance_ts,
+                            planned_exit_ts=planned_exit_ts,
+                            allocation_amount=allocation_amount,
+                            allocation_weight=allocation_weight,
+                            reason="cash_limited",
+                            cash={
+                                "available_cash": float(available_cash),  # numeric-boundary: dto
+                                "required_cash": float(buy_cash_required),  # numeric-boundary: dto
+                                "cash_shortfall": float(quantize_money(buy_cash_required - available_cash)),  # numeric-boundary: dto
+                            },
+                        )
+                    )
+                    continue
                 period_holdings.append(holding)
                 active_holdings.append(holding)
                 available_cash = quantize_money(available_cash - buy_cash_required)
@@ -193,7 +217,7 @@ class RecommendationPortfolioBacktestService:
                         date=holding.entry_date,
                         stock_code=holding.stock_code,
                         event="buy",
-                        gross_amount=-allocation_amount_dec,
+                        gross_amount=-actual_allocation_dec,
                         costs=buy_costs,
                         net_amount=-buy_cash_required,
                         cash_balance=available_cash,
@@ -385,6 +409,7 @@ class RecommendationPortfolioBacktestService:
         reason: str,
         liquidity: Dict[str, Any] | None = None,
         cash: Dict[str, Any] | None = None,
+        sizing: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         order = {
             "rebalance_date": rebalance_ts.strftime("%Y-%m-%d"),
@@ -401,6 +426,8 @@ class RecommendationPortfolioBacktestService:
             order["liquidity"] = liquidity
         if cash is not None:
             order["cash"] = cash
+        if sizing is not None:
+            order["sizing"] = sizing
         return order
 
     def _unfilled_order_diagnostics(self, unfilled_orders: List[Dict[str, Any]]) -> List[str]:
@@ -476,6 +503,39 @@ class RecommendationPortfolioBacktestService:
             row["gross_amount"] = float(gross_amount)  # numeric-boundary: dto
             row["costs"] = self._serialize_execution_costs(costs)
         return row
+
+    def _apply_lot_sizing(
+        self,
+        *,
+        holding: PeriodHoldingDTO,
+        planned_allocation_amount: Decimal,
+        lot_size: int | None,
+    ) -> Dict[str, Any] | None:
+        if lot_size is None:
+            return None
+        entry_price = to_decimal(holding.entry_price)
+        if entry_price <= 0:
+            return {
+                "lot_size": lot_size,
+                "entry_price": float(entry_price),  # numeric-boundary: dto
+                "planned_allocation_amount": float(planned_allocation_amount),  # numeric-boundary: dto
+                "shares": 0,
+                "executable_amount": 0.0,
+            }
+        raw_shares = int(planned_allocation_amount / entry_price)
+        shares = (raw_shares // lot_size) * lot_size
+        executable_amount = quantize_money(entry_price * to_decimal(shares))
+        if shares <= 0:
+            return {
+                "lot_size": lot_size,
+                "entry_price": float(entry_price),  # numeric-boundary: dto
+                "planned_allocation_amount": float(planned_allocation_amount),  # numeric-boundary: dto
+                "shares": shares,
+                "executable_amount": float(executable_amount),  # numeric-boundary: dto
+            }
+        holding.shares = shares
+        holding.allocation_amount = float(executable_amount)  # numeric-boundary: dto
+        return None
 
     def _release_exited_holdings(
         self,
@@ -709,6 +769,7 @@ class RecommendationPortfolioBacktestService:
         fee_bps: float | None = None,
         slippage_bps: float | None = None,
         tax_bps: float | None = None,
+        lot_size: int | None = None,
     ) -> Dict[str, Any]:
         liquidity_supported: bool | str = "partial" if max_participation_rate else False
         liquidity_policy = (
@@ -758,6 +819,11 @@ class RecommendationPortfolioBacktestService:
                 "fee_bps": fee_bps,
                 "slippage_bps": slippage_bps,
                 "tax_bps": tax_bps,
+            },
+            "share_sizing": {
+                "supported": "partial" if lot_size else False,
+                "policy": "full_lot_floor_sizing" if lot_size else "money_allocation_without_share_sizing",
+                "lot_size": lot_size,
             },
             "warnings": warnings,
         }

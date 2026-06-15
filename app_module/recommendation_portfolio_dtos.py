@@ -34,6 +34,7 @@ class PeriodHoldingDTO:
     exit_reason: str
     holding_days: int
     return_pct: float
+    shares: int | None = None
 
     def pnl(self) -> float:
         return float(quantize_money(to_decimal(self.allocation_amount) * to_decimal(self.return_pct)))  # numeric-boundary: dto
