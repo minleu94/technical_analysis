@@ -1,5 +1,7 @@
 import os
 import sys
+from datetime import date
+from decimal import Decimal
 from unittest.mock import MagicMock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -10,6 +12,7 @@ from PySide6.QtWidgets import QApplication
 
 from app_module.dtos import BacktestReportDTO
 from data_module.config import TWStockConfig
+from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from ui_qt.views.backtest_view import BacktestView
 
 
@@ -111,6 +114,35 @@ def test_single_backtest_save_uses_research_run_service_not_legacy_repo(backtest
     assert metadata.slippage_bp_x100 == 500
     assert equity.equals(report.details["equity_curve"])
     assert trades.equals(report.details["trade_list"])
+
+
+def test_single_backtest_save_forwards_factor_records_to_research_run_service(backtest_view):
+    factor_record = build_technical_total_score_factor(
+        stock_code="2330",
+        as_of_date=date(2026, 1, 5),
+        available_date=date(2026, 1, 5),
+        total_score=Decimal("82.35"),
+    )
+    report = _backtest_report()
+    report.details["factor_records"] = [factor_record]
+    report.details["factor_decision_date"] = date(2026, 1, 5)
+    backtest_view.current_report = report
+    backtest_view.current_run_params = {
+        "stock_code": "2330",
+        "start_date": "2026-01-01",
+        "end_date": "2026-03-31",
+        "strategy_id": "baseline_score",
+        "strategy_params": {"buy_score": 55},
+        "capital": 1000000,
+    }
+    backtest_view._execution_generation = 1
+    backtest_view._single_backtest_result_generation = 1
+
+    backtest_view._save_single_backtest_to_research_registry("Run Name", "")
+
+    kwargs = backtest_view.research_run_service.save_run.call_args.kwargs
+    assert kwargs["factor_records"] == [factor_record]
+    assert kwargs["factor_decision_date"] == date(2026, 1, 5)
 
 
 def test_single_backtest_save_rejects_stale_result(backtest_view):

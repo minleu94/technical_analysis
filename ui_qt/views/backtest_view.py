@@ -2456,7 +2456,8 @@ class BacktestView(QWidget):
             payload_hash=payload_hash,
             created_at=datetime.now().isoformat(),
         )
-        self.research_run_service.save_run(metadata, equity, trades)
+        save_kwargs = self._factor_save_kwargs(details)
+        self.research_run_service.save_run(metadata, equity, trades, **save_kwargs)
         self.current_run_id = metadata.run_id
         return metadata.run_id
 
@@ -2513,6 +2514,16 @@ class BacktestView(QWidget):
         self.research_run_service.save_run(metadata, equity, trades)
         self.current_portfolio_run_id = metadata.run_id
         return metadata.run_id
+
+    def _factor_save_kwargs(self, details: dict[str, Any]) -> dict[str, Any]:
+        factor_records = details.get("factor_records")
+        factor_decision_date = details.get("factor_decision_date")
+        if not factor_records or factor_decision_date is None:
+            return {}
+        return {
+            "factor_records": list(factor_records),
+            "factor_decision_date": factor_decision_date,
+        }
 
     def _single_backtest_metrics(self, report: BacktestReportDTO) -> dict[str, Any]:
         return {

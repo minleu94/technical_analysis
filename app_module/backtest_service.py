@@ -6,9 +6,10 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 import logging
+from decimal import Decimal, InvalidOperation
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,8 @@ from app_module.dtos import BacktestReportDTO, ValidationStatus
 from app_module.sop_validator import SOPValidator
 from backtest_module.broker_simulator import BrokerSimulator, BrokerConfig
 from backtest_module.performance_metrics import PerformanceAnalyzer
+from decision_module.factors.factor_adapters import build_technical_total_score_factor
+from decision_module.factors.factor_dtos import FactorRecord
 
 if TYPE_CHECKING:
     from app_module.walkforward_service import WalkForwardResult
@@ -276,6 +279,11 @@ class BacktestService:
         sell_score = strategy_params.get('sell_score', strategy_spec.default_params.get('sell_score', 40.0))
         
         score_series = signal_frame.get('score', pd.Series(50.0, index=signal_frame.index))
+        factor_records = self._build_score_factor_records(
+            stock_code=stock_code,
+            score_series=score_series,
+        )
+        factor_decision_date = self._factor_decision_date(signal_frame)
         
         score_diagnostics = {
             'max_score': float(score_series.max()) if not score_series.empty else 50.0,
@@ -341,11 +349,51 @@ class BacktestService:
                 'largest_loss': metrics.largest_loss,
                 'equity_curve': equity_curve,
                 'trade_list': trade_list,
+                'factor_records': factor_records,
+                'factor_decision_date': factor_decision_date,
                 'can_promote': validation_result['can_promote'],  # 記錄是否可以 Promote
                 'score_diagnostics': score_diagnostics
             }
         )
     
+    def _build_score_factor_records(
+        self,
+        *,
+        stock_code: str,
+        score_series: pd.Series,
+    ) -> list[FactorRecord]:
+        records: list[FactorRecord] = []
+        for index, score in score_series.items():
+            if pd.isna(score):
+                continue
+            try:
+                score_decimal = Decimal(str(score))
+            except (InvalidOperation, ValueError):
+                continue
+            as_of_date = self._date_from_index(index)
+            if as_of_date is None:
+                continue
+            records.append(
+                build_technical_total_score_factor(
+                    stock_code=stock_code,
+                    as_of_date=as_of_date,
+                    available_date=as_of_date,
+                    total_score=score_decimal,
+                )
+            )
+        return records
+
+    def _factor_decision_date(self, signal_frame: pd.DataFrame) -> date | None:
+        if signal_frame.empty:
+            return None
+        return self._date_from_index(signal_frame.index.max())
+
+    def _date_from_index(self, value: Any) -> date | None:
+        timestamp = pd.Timestamp(value)
+        if pd.isna(timestamp):
+            return None
+        return timestamp.date()
+
     def _load_stock_data(
         self,
         stock_code: str,
