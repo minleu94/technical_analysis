@@ -68,7 +68,16 @@ class WatchlistTriggerService:
                 triggered_codes=(),
             )
 
-        previous_scores = self._load_previous_scores(as_of_date)
+        # Check actual_date fallback
+        actual_date = as_of_date
+        has_fallback = False
+        if hasattr(self.ranking_provider, "actual_date"):
+            prov_actual = getattr(self.ranking_provider, "actual_date")
+            if isinstance(prov_actual, date) and prov_actual != as_of_date:
+                actual_date = prov_actual
+                has_fallback = True
+
+        previous_scores = self._load_previous_scores(actual_date)
 
         new_candidates: list[str] = []
         increases: list[str] = []
@@ -76,6 +85,9 @@ class WatchlistTriggerService:
         data_insufficient_codes: list[str] = []
         risk_codes: list[str] = []
         warnings: list[str] = []
+
+        if has_fallback:
+            warnings.append(f"watchlist_trigger_as_of_fallback:{actual_date.isoformat()}")
 
         for code in watchlist_codes:
             current = self._read_score(current_scores.get(code))
@@ -104,14 +116,15 @@ class WatchlistTriggerService:
         has_data_gap = len(data_insufficient_codes) > 0
         has_any_warning = bool(warnings)
 
-        if has_any_warning:
-            # Degraded is reserved for hard errors. Data gaps remain estimated.
+        if has_fallback:
+            quality = DecisionDeskQuality.DEGRADED
+        elif has_any_warning:
             quality = DecisionDeskQuality.ESTIMATED
         else:
             quality = DecisionDeskQuality.OBSERVED
 
         return WatchlistTriggerSummary(
-            as_of_date=as_of_date,
+            as_of_date=actual_date,
             quality=quality,
             warnings=tuple(warnings),
             trigger_count=len(triggered_codes),

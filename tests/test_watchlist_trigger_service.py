@@ -94,3 +94,28 @@ def test_watchlist_trigger_providers_can_be_imported():
     assert WatchlistServiceWatchlistProvider is not None
     assert SQLiteRankingProvider is not None
 
+
+def test_watchlist_trigger_service_uses_actual_date_fallback_and_warning():
+    from app_module.watchlist_trigger_service import WatchlistTriggerService
+    from app_module.decision_desk_dtos import DecisionDeskQuality
+    
+    class FakeWatchlistForFallback:
+        def fetch(self, as_of_date):
+            return ["2330"]
+            
+    class FakeRankingForFallback:
+        def __init__(self):
+            self.actual_date = date(2026, 6, 12)
+        def fetch(self, as_of_date):
+            return {"2330": {"score_bp": 7000}}
+        def fetch_previous(self, as_of_date):
+            return {"2330": {"score_bp": 6800}}
+
+    service = WatchlistTriggerService(FakeWatchlistForFallback(), FakeRankingForFallback())
+    snapshot = service.build_snapshot(date(2026, 6, 15))
+    
+    assert snapshot.quality == DecisionDeskQuality.DEGRADED
+    assert snapshot.as_of_date == date(2026, 6, 12)
+    assert "watchlist_trigger_as_of_fallback:2026-06-12" in snapshot.warnings
+
+
