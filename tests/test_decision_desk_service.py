@@ -9,6 +9,9 @@ from app_module.decision_desk_dtos import (
     SectorRotationSummary,
     WatchlistTriggerSummary,
     RelativeStrengthLiquiditySummary,
+    DecisionDeskRiskPrompt,
+    DecisionDeskRiskPromptSummary,
+    DecisionDeskSnapshot,
 )
 from app_module.decision_desk_service import DailyDecisionDeskProvider
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
@@ -175,7 +178,7 @@ def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
 
     assert snapshot.schema_version == 1
     assert snapshot.as_of_date == as_of_date
-    assert snapshot.overall_quality == DecisionDeskQuality.ESTIMATED
+    assert snapshot.overall_quality == DecisionDeskQuality.DEGRADED
     assert snapshot.market_regime.to_dict()["quality"] == DecisionDeskQuality.OBSERVED.value
     assert snapshot.market_breadth.to_dict()["quality"] == DecisionDeskQuality.ESTIMATED.value
     assert snapshot.watchlist_triggers.to_dict()["warnings"] == []
@@ -193,6 +196,7 @@ def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
         "relative_strength_liquidity",
         "watchlist_triggers",
         "portfolio_alerts",
+        "risk_prompts",
     }
     assert payload["portfolio_alerts"]["alert_level"] == "low"
 
@@ -316,7 +320,7 @@ def test_decision_desk_builder_uses_injected_section_services():
     assert snapshot.sector_rotation.quality == DecisionDeskQuality.ESTIMATED
     assert snapshot.watchlist_triggers.quality == DecisionDeskQuality.OBSERVED
     assert snapshot.portfolio_alerts.quality == DecisionDeskQuality.OBSERVED
-    assert snapshot.overall_quality == DecisionDeskQuality.ESTIMATED
+    assert snapshot.overall_quality == DecisionDeskQuality.DEGRADED
 
 
 def test_decision_desk_builder_degrades_only_failed_section():
@@ -509,4 +513,91 @@ def test_decision_desk_snapshot_serializes_relative_strength_liquidity_section()
     assert payload["relative_strength_liquidity"]["top_strength_codes"] == ["2330", "2454"]
     assert payload["relative_strength_liquidity"]["low_liquidity_codes"] == ["1101"]
     assert payload["relative_strength_liquidity"]["meta"]["ranking"][0]["stock_code"] == "2330"
+
+
+def test_decision_desk_builder_derives_risk_prompts_from_existing_sections():
+    sample_date = date(2026, 6, 15)
+    provider = AllObservedDecisionDeskProvider()
+    builder = DecisionDeskSnapshotBuilder(
+        provider=provider,
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=sample_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+                low_liquidity_codes=("1101",),
+            ),
+        ),
+        watchlist_trigger_service=FakeSectionService(
+            "watchlist",
+            WatchlistTriggerSummary(
+                as_of_date=sample_date,
+                quality=DecisionDeskQuality.DEGRADED,
+                warnings=("watchlist_trigger_risk_alert:2603",),
+                trigger_count=1,
+                triggered_codes=("2603",),
+            ),
+        ),
+        portfolio_alert_service=FakeSectionService(
+            "portfolio_alert",
+            PortfolioAlertSummary(
+                as_of_date=sample_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+                alert_count=1,
+                alert_codes=("2330",),
+                alert_level="high",
+            ),
+        ),
+    )
+
+    snapshot = builder.build_snapshot(sample_date)
+
+    assert snapshot.risk_prompts.quality == DecisionDeskQuality.DEGRADED
+    assert any(prompt.category == "liquidity" and prompt.code == "1101" for prompt in snapshot.risk_prompts.prompts)
+    assert any(prompt.category == "watchlist_risk" and prompt.code == "2603" for prompt in snapshot.risk_prompts.prompts)
+    assert any(prompt.category == "portfolio_alert" and prompt.code == "2330" for prompt in snapshot.risk_prompts.prompts)
+    assert "risk_prompts:risk_prompt_source_quality:watchlist_triggers:degraded" in snapshot.warnings
+
+
+
+def test_decision_desk_snapshot_serializes_risk_prompts_section():
+    sample_date = date(2026, 6, 15)
+    prompt = DecisionDeskRiskPrompt(
+        category="liquidity",
+        severity="warning",
+        source="relative_strength_liquidity",
+        code="1101",
+        title="低流動性",
+        reason="1101 低於平均成交金額門檻",
+        action_hint="下單或加入研究前檢查可成交金額與部位大小",
+    )
+    summary = DecisionDeskRiskPromptSummary(
+        as_of_date=sample_date,
+        quality=DecisionDeskQuality.OBSERVED,
+        warnings=(),
+        prompts=(prompt,),
+    )
+    snapshot = DecisionDeskSnapshot(
+        as_of_date=sample_date,
+        generated_at=datetime(2026, 6, 15, 9, 0, 0),
+        schema_version=1,
+        overall_quality=DecisionDeskQuality.OBSERVED,
+        warnings=(),
+        market_regime=MarketRegimeSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        market_breadth=MarketBreadthSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        sector_rotation=SectorRotationSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        relative_strength_liquidity=RelativeStrengthLiquiditySummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        watchlist_triggers=WatchlistTriggerSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        portfolio_alerts=PortfolioAlertSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        risk_prompts=summary,
+    )
+
+    payload = snapshot.to_dict()
+
+    assert payload["risk_prompts"]["quality"] == "observed"
+    assert payload["risk_prompts"]["prompts"][0]["category"] == "liquidity"
+    assert payload["risk_prompts"]["prompts"][0]["code"] == "1101"
+
 

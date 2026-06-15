@@ -209,6 +209,53 @@ class PortfolioAlertSummary:
 
 
 @dataclass(frozen=True)
+class DecisionDeskRiskPrompt:
+    category: str
+    severity: str
+    source: str
+    code: str | None
+    title: str
+    reason: str
+    action_hint: str
+
+    def __post_init__(self) -> None:
+        allowed = {"info", "warning", "critical"}
+        if self.severity not in allowed:
+            raise ValueError(f"unsupported risk prompt severity: {self.severity}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "category": self.category,
+            "severity": self.severity,
+            "source": self.source,
+            "code": self.code,
+            "title": self.title,
+            "reason": self.reason,
+            "action_hint": self.action_hint,
+        }
+
+
+@dataclass(frozen=True)
+class DecisionDeskRiskPromptSummary:
+    as_of_date: date | None
+    quality: DecisionDeskQuality
+    warnings: tuple[str, ...]
+    prompts: tuple[DecisionDeskRiskPrompt, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "warnings", _normalize_warnings(self.warnings))
+        object.__setattr__(self, "prompts", tuple(self.prompts))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "as_of_date": self.as_of_date.isoformat() if self.as_of_date else None,
+            "quality": self.quality.value,
+            "warnings": list(self.warnings),
+            "prompts": [prompt.to_dict() for prompt in self.prompts],
+        }
+
+
+@dataclass(frozen=True)
 class DecisionDeskSnapshot:
     as_of_date: date
     generated_at: datetime
@@ -220,6 +267,7 @@ class DecisionDeskSnapshot:
     relative_strength_liquidity: RelativeStrengthLiquiditySummary
     watchlist_triggers: WatchlistTriggerSummary
     portfolio_alerts: PortfolioAlertSummary
+    risk_prompts: DecisionDeskRiskPromptSummary
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -232,7 +280,7 @@ class DecisionDeskSnapshot:
             or self.relative_strength_liquidity is None
         ):
             raise ValueError("all decision sections must be provided")
-        if self.watchlist_triggers is None or self.portfolio_alerts is None:
+        if self.watchlist_triggers is None or self.portfolio_alerts is None or self.risk_prompts is None:
             raise ValueError("all decision sections must be provided")
         if self.warnings is None:
             raise ValueError("warnings must not be None")
@@ -251,4 +299,6 @@ class DecisionDeskSnapshot:
             "relative_strength_liquidity": self.relative_strength_liquidity.to_dict(),
             "watchlist_triggers": self.watchlist_triggers.to_dict(),
             "portfolio_alerts": self.portfolio_alerts.to_dict(),
+            "risk_prompts": self.risk_prompts.to_dict(),
         }
+

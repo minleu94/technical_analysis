@@ -12,7 +12,9 @@ from app_module.decision_desk_dtos import (
     SectorRotationSummary,
     WatchlistTriggerSummary,
     RelativeStrengthLiquiditySummary,
+    DecisionDeskRiskPromptSummary,
 )
+from app_module.decision_desk_risk_prompt_service import DecisionDeskRiskPromptService
 
 
 class DailyDecisionDeskProvider(Protocol):
@@ -62,6 +64,7 @@ class DecisionDeskSnapshotBuilder:
         relative_strength_liquidity_service: RelativeStrengthLiquiditySectionService | None = None,
         watchlist_trigger_service: WatchlistTriggerSectionService | None = None,
         portfolio_alert_service: PortfolioAlertSectionService | None = None,
+        risk_prompt_service: DecisionDeskRiskPromptService | None = None,
     ):
         self.provider = provider
         self.schema_version = schema_version
@@ -71,6 +74,7 @@ class DecisionDeskSnapshotBuilder:
         self.relative_strength_liquidity_service = relative_strength_liquidity_service
         self.watchlist_trigger_service = watchlist_trigger_service
         self.portfolio_alert_service = portfolio_alert_service
+        self.risk_prompt_service = risk_prompt_service or DecisionDeskRiskPromptService()
 
     def build_snapshot(self, as_of_date: date) -> DecisionDeskSnapshot:
         market_regime = self._build_market_regime(as_of_date)
@@ -79,6 +83,15 @@ class DecisionDeskSnapshotBuilder:
         relative_strength_liquidity = self._build_relative_strength_liquidity(as_of_date)
         watchlist_triggers = self._build_watchlist_triggers(as_of_date)
         portfolio_alerts = self._build_portfolio_alerts(as_of_date)
+        risk_prompts = self.risk_prompt_service.build_summary(
+            as_of_date=as_of_date,
+            market_regime=market_regime,
+            market_breadth=market_breadth,
+            sector_rotation=sector_rotation,
+            relative_strength_liquidity=relative_strength_liquidity,
+            watchlist_triggers=watchlist_triggers,
+            portfolio_alerts=portfolio_alerts,
+        )
         sections = (
             market_regime,
             market_breadth,
@@ -86,6 +99,7 @@ class DecisionDeskSnapshotBuilder:
             relative_strength_liquidity,
             watchlist_triggers,
             portfolio_alerts,
+            risk_prompts,
         )
         generated_at = self.clock()
         overall_quality = self._compute_overall_quality(sections)
@@ -103,6 +117,7 @@ class DecisionDeskSnapshotBuilder:
             relative_strength_liquidity=relative_strength_liquidity,
             watchlist_triggers=watchlist_triggers,
             portfolio_alerts=portfolio_alerts,
+            risk_prompts=risk_prompts,
         )
 
     def _build_market_regime(self, as_of_date: date) -> MarketRegimeSummary:
@@ -319,6 +334,7 @@ class DecisionDeskSnapshotBuilder:
             RelativeStrengthLiquiditySummary,
             WatchlistTriggerSummary,
             PortfolioAlertSummary,
+            DecisionDeskRiskPromptSummary,
         ],
     ) -> DecisionDeskQuality:
         qualities = [section.quality for section in sections]
@@ -339,10 +355,11 @@ class DecisionDeskSnapshotBuilder:
             RelativeStrengthLiquiditySummary,
             WatchlistTriggerSummary,
             PortfolioAlertSummary,
+            DecisionDeskRiskPromptSummary,
         ],
     ) -> tuple[str, ...]:
         warnings: list[str] = []
-        market_regime, market_breadth, sector_rotation, relative_strength_liquidity, watchlist_triggers, portfolio_alerts = sections
+        market_regime, market_breadth, sector_rotation, relative_strength_liquidity, watchlist_triggers, portfolio_alerts, risk_prompts = sections
         section_warnings = (
             ("market_regime", market_regime.warnings),
             ("market_breadth", market_breadth.warnings),
@@ -350,6 +367,7 @@ class DecisionDeskSnapshotBuilder:
             ("relative_strength_liquidity", relative_strength_liquidity.warnings),
             ("watchlist_triggers", watchlist_triggers.warnings),
             ("portfolio_alerts", portfolio_alerts.warnings),
+            ("risk_prompts", risk_prompts.warnings),
         )
         for section_name, section_warning in section_warnings:
             for warning in section_warning:
