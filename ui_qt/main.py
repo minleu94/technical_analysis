@@ -18,6 +18,7 @@ from data_module.config import TWStockConfig
 from app_module.screening_service import ScreeningService
 from app_module.regime_service import RegimeService
 from app_module.decision_desk_dtos import DecisionDeskQuality, MarketRegimeSummary
+from app_module.market_breadth_service import MarketBreadthService, SQLiteDailyPriceMarketBreadthProvider
 from app_module.recommendation_service import RecommendationService
 from app_module.portfolio_alert_service import PortfolioAlertService
 from app_module.portfolio_condition_monitor import PortfolioConditionMonitor
@@ -124,6 +125,14 @@ class MainWindow(QMainWindow):
 
     def _create_decision_desk_builder(self) -> DecisionDeskSnapshotBuilder:
         provider = self._DecisionDeskMarketRegimeProvider(self.regime_service)
+        market_breadth_service = None
+        try:
+            market_breadth_service = MarketBreadthService(
+                SQLiteDailyPriceMarketBreadthProvider(self.config.db_file)
+            )
+        except Exception as exc:
+            print(f"[MainWindow] 決策桌面 MarketBreadthService 初始化失敗：{exc}")
+
         portfolio_alert_service = None
         try:
             condition_monitor = PortfolioConditionMonitor()
@@ -142,6 +151,7 @@ class MainWindow(QMainWindow):
 
         return DecisionDeskSnapshotBuilder(
             provider=provider,
+            market_breadth_service=market_breadth_service,
             portfolio_alert_service=portfolio_alert_service,
         )
 

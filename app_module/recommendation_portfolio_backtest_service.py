@@ -820,7 +820,7 @@ class RecommendationPortfolioBacktestService:
         holdings: List[PeriodHoldingDTO],
         data: pd.DataFrame,
     ) -> Dict[str, Any]:
-        records = []
+        records: List[Dict[str, Any]] = []
         if "開盤價" not in data.columns:
             return {
                 "schema_version": 1,

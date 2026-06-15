@@ -1,7 +1,13 @@
-import pandas as pd
 from datetime import date
+import sqlite3
 
-from app_module.market_breadth_service import MarketBreadthProvider, MarketBreadthService
+import pandas as pd
+
+from app_module.market_breadth_service import (
+    MarketBreadthProvider,
+    MarketBreadthService,
+    SQLiteDailyPriceMarketBreadthProvider,
+)
 from app_module.decision_desk_dtos import DecisionDeskQuality
 
 
@@ -117,3 +123,76 @@ def test_market_breadth_service_handles_non_contiguous_index_and_matches_target_
     assert snapshot.declining == 37
     assert snapshot.breadth_ratio_bp == 6300
     assert snapshot.warnings == ()
+
+
+def test_sqlite_daily_price_provider_builds_market_breadth_from_daily_prices(tmp_path):
+    db_path = tmp_path / "twstock.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE daily_prices (
+                日期 TEXT,
+                證券代號 TEXT,
+                收盤價 REAL,
+                漲跌價差 REAL,
+                成交股數 INTEGER,
+                PRIMARY KEY (證券代號, 日期)
+            )
+            """
+        )
+        conn.executemany(
+            "INSERT INTO daily_prices (日期, 證券代號, 收盤價, 漲跌價差, 成交股數) VALUES (?, ?, ?, ?, ?)",
+            [
+                ("20260612", "2330", 100, 1, 1_000),
+                ("20260612", "2317", 50, -1, 2_000),
+                ("20260612", "2454", 75, 0, 1_000),
+                ("20260615", "2330", 110, 10, 3_000),
+                ("20260615", "2317", 49, -1, 1_000),
+                ("20260615", "2454", 75, 0, 2_000),
+            ],
+        )
+
+    service = MarketBreadthService(SQLiteDailyPriceMarketBreadthProvider(db_path))
+    snapshot = service.build_snapshot(date(2026, 6, 15))
+
+    assert snapshot.quality == DecisionDeskQuality.OBSERVED
+    assert snapshot.advancing == 1
+    assert snapshot.declining == 1
+    assert snapshot.unchanged == 1
+    assert snapshot.breadth_ratio_bp == 5000
+    assert snapshot.meta["source"] == "sqlite_daily_prices"
+    assert snapshot.meta["volume_expansion_bp"] == 15000
+    assert snapshot.meta["limit_up_count"] == 1
+
+
+def test_sqlite_daily_price_provider_uses_latest_available_date_with_warning(tmp_path):
+    db_path = tmp_path / "twstock.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE daily_prices (
+                日期 TEXT,
+                證券代號 TEXT,
+                收盤價 REAL,
+                漲跌價差 REAL,
+                成交股數 INTEGER,
+                PRIMARY KEY (證券代號, 日期)
+            )
+            """
+        )
+        conn.executemany(
+            "INSERT INTO daily_prices (日期, 證券代號, 收盤價, 漲跌價差, 成交股數) VALUES (?, ?, ?, ?, ?)",
+            [
+                ("20260612", "2330", 100, 1, 1_000),
+                ("20260612", "2317", 50, -1, 2_000),
+            ],
+        )
+
+    service = MarketBreadthService(SQLiteDailyPriceMarketBreadthProvider(db_path))
+    snapshot = service.build_snapshot(date(2026, 6, 15))
+
+    assert snapshot.quality == DecisionDeskQuality.DEGRADED
+    assert snapshot.as_of_date == date(2026, 6, 12)
+    assert snapshot.advancing == 1
+    assert snapshot.declining == 1
+    assert "market_breadth_as_of_fallback:2026-06-12" in snapshot.warnings
