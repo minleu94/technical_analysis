@@ -749,6 +749,7 @@ class BacktestView(QWidget):
 
         if is_batch_mode:
             # 批次模式
+            research_mode = str(self.research_lab_mode_combo.currentData() or "batch_stock")
             self._execute_batch_backtest(
                 stock_codes=stock_codes,
                 start_date=start_date,
@@ -772,7 +773,8 @@ class BacktestView(QWidget):
                 reentry_cooldown_days=reentry_cooldown_days,
                 enable_limit=enable_limit,
                 enable_volume=enable_volume,
-                max_participation=max_participation
+                max_participation=max_participation,
+                research_mode=research_mode,
             )
         else:
             # 單檔模式
@@ -3985,9 +3987,12 @@ class BacktestView(QWidget):
         reentry_cooldown_days: int,
         enable_limit: bool,
         enable_volume: bool,
-        max_participation: float
+        max_participation: float,
+        research_mode: str | None = None,
     ):
         """執行批次回測"""
+        if research_mode is None:
+            research_mode = str(self.research_lab_mode_combo.currentData() or "batch_stock")
         if not self.batch_backtest_service:
             from app_module.batch_backtest_service import BatchBacktestService
             if self.backtest_service and self.run_repository:
@@ -4053,7 +4058,8 @@ class BacktestView(QWidget):
                 save_runs=True,
                 progress_callback=progress_callback,
                 check_cancel=lambda: self.worker._is_cancelled if self.worker else False,
-                parallel_threshold=parallel_threshold
+                parallel_threshold=parallel_threshold,
+                research_mode=research_mode,
             )
 
         self.worker = TaskWorker(batch_backtest_task)

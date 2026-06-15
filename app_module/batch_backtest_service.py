@@ -166,7 +166,8 @@ class BatchBacktestService:
         progress_callback: Optional[Any] = None,
         check_cancel: Optional[Callable[[], bool]] = None,
         parallel_threshold: Optional[int] = None,
-        max_workers: Optional[int] = None
+        max_workers: Optional[int] = None,
+        research_mode: str = "batch_stock",
     ) -> BatchBacktestResultDTO:
         """
         執行批次回測
@@ -316,6 +317,7 @@ class BatchBacktestService:
                                 sizing_mode=sizing_mode,
                                 report=report,
                                 notes=f"批次回測：{batch_name}" + (f" ({error_reason})" if error_reason else ""),
+                                research_mode=research_mode,
                             )
                             logger.info(f"[BatchBacktestService] 已保存 {stock_code} 的回測結果 (run_id: {run_id})")
                         except Exception as e:
@@ -454,6 +456,7 @@ class BatchBacktestService:
                                             sizing_mode=sizing_mode,
                                             report=report,
                                             notes=f"批次回測：{batch_name}" + (f" ({error_reason})" if error_reason else ""),
+                                            research_mode=research_mode,
                                         )
                                     except Exception as e:
                                         logger.error(f"[BatchBacktestService] 保存 {code} 失敗: {e}")
@@ -528,6 +531,7 @@ class BatchBacktestService:
         sizing_mode: str,
         report: BacktestReportDTO,
         notes: str,
+        research_mode: str = "batch_stock",
     ) -> None:
         if self.research_run_service is None:
             return
@@ -542,10 +546,11 @@ class BatchBacktestService:
 
         metrics = self._report_metrics(report)
         normalized_params = dict(strategy_spec.config.get("params", {}) or {})
+        run_type = "fixed_basket_stock" if research_mode == "fixed_basket" else "batch_backtest_stock"
         metadata = ResearchRunMetadataDTO(
             run_id=f"batch-backtest:{legacy_run_id}",
             run_name=f"{batch_name}_{stock_code}",
-            run_type="batch_backtest_stock",
+            run_type=run_type,
             strategy_id=strategy_spec.strategy_id,
             strategy_version=str(details.get("strategy_version", "")),
             parameter_contract_version=str(details.get("parameter_contract_version", "")),
@@ -554,6 +559,7 @@ class BatchBacktestService:
                 "legacy_run_id": legacy_run_id,
                 "batch_id": batch_id,
                 "batch_name": batch_name,
+                "research_mode": research_mode,
                 "notes": notes,
             },
             normalized_params=normalized_params,
@@ -577,7 +583,7 @@ class BatchBacktestService:
             benchmark_results=dict(details.get("benchmark_results", {}) or {}),
             payload_hash=self._research_payload_hash(
                 {
-                    "run_type": "batch_backtest_stock",
+                    "run_type": run_type,
                     "legacy_run_id": legacy_run_id,
                     "batch_id": batch_id,
                     "stock_code": stock_code,

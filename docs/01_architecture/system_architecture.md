@@ -184,7 +184,7 @@ Factor `available_date` 晚於決策日時必須拒絕使用。
 - `decision_module/factors/factor_adapters.py`
 - `app_module/factor_service.py`
 
-Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manifest.factor_contributions` 保存 factor 追溯資料。`ResearchRunService.save_run()` 在 metadata 寫入前可合併 explicit factor metadata，或由 `FactorRecord` 與 decision date 透過 `FactorService` 產生 snapshot 與 contribution summary。推薦組合回放結果會從 replay snapshot recommendations 產生初版 factor manifest；單股回測會從 `BacktestService` 已產生的 signal score 序列建立 `technical.total_score` factor records，並由 `BacktestView` 保存 Research Run 時轉交 `ResearchRunService`；批次回測沿用每檔 `BacktestReportDTO` 內的 factor records，在 legacy run 保存成功後以 `batch-backtest:<legacy_run_id>` 寫入 Research Run Registry。這些保存路徑都不在 UI 重算分數或重新抓取資料。Cross-run Comparison 只能讀已保存 metadata，不得為比較重新抓取當前資料。
+Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manifest.factor_contributions` 保存 factor 追溯資料。`ResearchRunService.save_run()` 在 metadata 寫入前可合併 explicit factor metadata，或由 `FactorRecord` 與 decision date 透過 `FactorService` 產生 snapshot 與 contribution summary。推薦組合回放結果會從 replay snapshot recommendations 產生初版 factor manifest；單股回測會從 `BacktestService` 已產生的 signal score 序列建立 `technical.total_score` factor records，並由 `BacktestView` 保存 Research Run 時轉交 `ResearchRunService`；批次回測沿用每檔 `BacktestReportDTO` 內的 factor records，在 legacy run 保存成功後以 `batch-backtest:<legacy_run_id>` 寫入 Research Run Registry。固定組合目前共用批次執行路徑，但 UI 會將 Research Lab mode 傳入 service，Registry metadata 以 `fixed_basket_stock` 區分固定組合 per-stock 保存結果。這些保存路徑都不在 UI 重算分數或重新抓取資料。Cross-run Comparison 只能讀已保存 metadata，不得為比較重新抓取當前資料。
 
 長期 factor 權重可擴充到 chip / fundamental / market / risk，但目前正式 `RecommendationWeightContract` 仍只接受 `pattern`、`technical`、`volume` 三項整數 bp。擴充前必須先完成資料可得日、品質狀態與 missing policy 治理。
 
@@ -469,4 +469,4 @@ UI 修改：
 
 ## 16. 更新記錄
 
-- 2026-06-15：補入 IDS 願景與架構權威邊界，明確標示 Daily Decision Desk、`market_module/`、Market Breadth、Watchlist Trigger 與 Strategy Drift 尚未完成；同步 Month 3 Portfolio Replay 可信度與後續資料因子接入防線。
+- 2026-06-15：補入 IDS 願景與架構權威邊界，明確標示 Daily Decision Desk、`market_module/`、Market Breadth、Watchlist Trigger 與 Strategy Drift 尚未完成；同步 Month 3 Portfolio Replay 可信度、固定組合 per-stock factor metadata 保存與後續資料因子接入防線。

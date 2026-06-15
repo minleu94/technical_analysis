@@ -329,7 +329,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 |---|---|
 | 單股回測 | 驗證一檔股票套用策略後的交易表現。 |
 | 批次股票回測 | 比較同一策略在多檔候選股票上的差異。 |
-| 固定組合回測 | 研究固定股票清單的組合表現。 |
+| 固定組合回測 | 研究固定股票清單的組合表現；目前 Registry 保存採 per-stock run，並以固定組合 metadata 區分來源。 |
 | 推薦系統回放 | 回放推薦配置與名單。 |
 | 策略研究 | 比較策略模板、參數、最佳化與驗證結果。 |
 
@@ -397,7 +397,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 - 「執行實驗」：開始目前模式。
 - 「取消執行」：合作式取消；已開始的單檔工作可能安全收尾。
-- 「保存結果」：將單股回測、批次回測單檔結果或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、factor snapshot / contribution metadata、equity curve 與 trades。單股與批次回測的 factor metadata 來自該次回測已產生的 score/factor records，不會在保存時重算分數或重新抓取資料。
+- 「保存結果」：將單股回測、批次回測單檔結果、固定組合 per-stock 結果或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、factor snapshot / contribution metadata、equity curve 與 trades。單股、批次與固定組合 per-stock 結果的 factor metadata 來自該次回測已產生的 score/factor records，不會在保存時重算分數或重新抓取資料。
 - 「升級為策略版本」：新版 Gate 必須讀取 Research Run Registry，不得只靠單次 summary；run 需 committed / valid、未封存、未升級、具備可還原參數合約版本，且通過最低 validation gate。
 
 目前最低樣本 Gate 為 10 筆交易。通過最低 Gate 不代表已完成充分 OOS 驗證。
@@ -426,6 +426,8 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - **安全設計**：所有匯出皆在背景線程（`TaskWorker`）執行，防止 UI 卡死，並採用臨時檔寫入後 `os.replace` 原子替換；替換失敗時既有報告保持不變。報告使用執行結果與參數快照，不重跑策略或摘要績效；equity curve 可接受 `日期`、`date` 或日期 index。若元數據缺失，會在「資料完整性」警示中標示 `N/A`，不以目前 UI 值或預設常數代填。
 
 Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為 Incompatible；期間、Universe 或成本不同時標示為 Caution，不應直接做優劣排名。Registry-based Promote 會先做 Registry Gate，通過後才建立策略版本。
+
+固定組合目前的 Registry 保存粒度是每檔股票的 per-stock run，metadata 會標記為 `fixed_basket_stock` 以保留固定組合來源。完整組合層級的現金帳、再平衡、未成交、Liquidity / Gap 風險揭露仍屬 Month 3 後續可信度補強，不應把 per-stock 保存結果解讀為完整可成交的組合績效。
 
 ### 8.10 推薦回放
 

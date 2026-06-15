@@ -2,7 +2,7 @@ import os
 import sys
 from datetime import date
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -11,6 +11,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from app_module.dtos import BacktestReportDTO
+from app_module.strategy_spec import StrategySpec
 from data_module.config import TWStockConfig
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from ui_qt.views.backtest_view import BacktestView
@@ -194,3 +195,51 @@ def test_recommendation_replay_save_uses_research_run_service(backtest_view):
     assert metadata.factor_contributions["by_stock"]["2330"][0]["factor_name"] == "technical.total_score"
     assert equity.equals(result.equity_curve)
     assert trades.equals(result.trades)
+
+
+def test_fixed_basket_execution_forwards_research_mode_to_batch_service(backtest_view):
+    backtest_view.batch_backtest_service = MagicMock()
+    backtest_view.research_lab_mode_combo.setCurrentIndex(
+        backtest_view.research_lab_mode_combo.findData("fixed_basket")
+    )
+    strategy_spec = StrategySpec(
+        strategy_id="baseline_score",
+        strategy_version="1.0",
+        default_params={"buy_score": 60, "sell_score": 40},
+        config={"params": {"threshold_mode": "fixed", "buy_score": 60, "sell_score": 40}},
+    )
+
+    with patch("ui_qt.views.backtest_view.TaskWorker") as task_worker_cls:
+        worker = MagicMock()
+        task_worker_cls.return_value = worker
+
+        backtest_view._execute_batch_backtest(
+            stock_codes=["2330", "2317"],
+            start_date="2026-01-05",
+            end_date="2026-01-07",
+            strategy_spec=strategy_spec,
+            capital=1000000,
+            fee_bps=14.25,
+            slippage_bps=5,
+            execution_price="next_open",
+            stop_loss_pct=None,
+            take_profit_pct=None,
+            stop_loss_atr_mult=None,
+            take_profit_atr_mult=None,
+            sizing_mode="all_in",
+            fixed_amount=None,
+            risk_pct=None,
+            max_positions=None,
+            position_sizing="equal_weight",
+            allow_pyramid=False,
+            allow_reentry=True,
+            reentry_cooldown_days=0,
+            enable_limit=True,
+            enable_volume=True,
+            max_participation=0.05,
+        )
+
+    task = task_worker_cls.call_args.args[0]
+    task()
+    kwargs = backtest_view.batch_backtest_service.run_batch_backtest.call_args.kwargs
+    assert kwargs["research_mode"] == "fixed_basket"

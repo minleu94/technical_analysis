@@ -101,3 +101,41 @@ def test_batch_save_forwards_factor_records_to_research_run_service():
     assert list(trades["stock_code"]) == ["2330"]
     assert kwargs["factor_records"] == [factor_record]
     assert kwargs["factor_decision_date"] == date(2026, 1, 7)
+
+
+def test_fixed_basket_save_marks_run_type_and_forwards_factor_records():
+    factor_record = build_technical_total_score_factor(
+        stock_code="2330",
+        as_of_date=date(2026, 1, 7),
+        available_date=date(2026, 1, 7),
+        total_score=Decimal("82.35"),
+    )
+    report = _report_with_factor_records(factor_record)
+    research_run_service = MagicMock()
+    batch_service = BatchBacktestService(
+        _FakeBacktestService(report),
+        _FakeRunRepository(),
+        research_run_service=research_run_service,
+    )
+
+    batch_service.run_batch_backtest(
+        stock_codes=["2330"],
+        start_date="2026-01-05",
+        end_date="2026-01-07",
+        strategy_spec=_strategy_spec(),
+        save_runs=True,
+        parallel_threshold=5,
+        batch_name="Fixed Basket Factor Test",
+        research_mode="fixed_basket",
+    )
+
+    metadata, equity, trades = research_run_service.save_run.call_args.args
+    kwargs = research_run_service.save_run.call_args.kwargs
+    assert metadata.run_type == "fixed_basket_stock"
+    assert metadata.original_input["research_mode"] == "fixed_basket"
+    assert metadata.original_input["batch_name"] == "Fixed Basket Factor Test"
+    assert metadata.universe == ["2330"]
+    assert list(equity["portfolio_value"]) == [1000, 1120]
+    assert list(trades["stock_code"]) == ["2330"]
+    assert kwargs["factor_records"] == [factor_record]
+    assert kwargs["factor_decision_date"] == date(2026, 1, 7)
