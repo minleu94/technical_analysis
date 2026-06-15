@@ -13,7 +13,7 @@
 | Roadmap 入口與權威導覽 | `docs/00_core/DEVELOPMENT_ROADMAP.md` | Roadmap Hub 只保存入口與短版 Next，不保存完整歷史。 |
 | 舊 Roadmap 未完成事項移交 | `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` | 每個 Legacy 項目必須有唯一處置、月份與驗收定義。 |
 | 系統架構、模組邊界、資料流 | `docs/01_architecture/system_architecture.md` | 架構描述衝突時，以系統架構文件為準。 |
-| 目前使用者完整操作流程 | `docs/07_guides/APPLICATION_MANUAL.md` | 7 個頂層工作區、跨工作區流程、安全限制與排錯以本手冊為準。 |
+| 目前使用者完整操作流程 | `docs/07_guides/APPLICATION_MANUAL.md` | 8 個頂層工作區、跨工作區流程、安全限制與排錯以本手冊為準。 |
 | 文檔位置與分類 | `docs/00_core/DOCUMENTATION_INDEX.md` | 只作導航，不取代狀態或架構權威。 |
 | 文檔生命週期與歸檔規則 | `docs/00_core/DOCUMENTATION_STRUCTURE.md` | 刪除、搬移、歸檔 Markdown 前必須參考。 |
 | 歷史 Phase、舊 Done、舊 Roadmap current section | `docs/09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` | 只作追溯，不作目前狀態依據。 |
@@ -286,7 +286,7 @@
 
 ### 專項文檔 ↔ Scoped Authority 一致性
 - [ ] UI 功能描述與 Snapshot / UI docs 一致。
-- [ ] 完整操作手冊與目前 7 個工作區、按鈕啟用狀態及工作模式一致。
+- [ ] 完整操作手冊與目前 8 個工作區、按鈕啟用狀態及工作模式一致。
 - [ ] 進階使用者指南與完整操作手冊不衝突。
 - [ ] 架構文檔與目前模組實際邊界一致。
 

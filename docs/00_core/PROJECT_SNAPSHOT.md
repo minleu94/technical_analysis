@@ -44,13 +44,13 @@
 - **效能與研究輸出（Phase 5）** ✅ SQLite 檢視器分頁與規格化 Excel 報告匯出已完成 (2026-06-14)
   - 圖表渲染優化 ✅ / 批次回測並行化 ✅ / SQLite 檢視器穩定分頁 ✅ / 規格化 Excel 報告匯出 ✅
 
-- **目標閉環 4：每日決策工作台（Daily Decision Desk）** ⏳ 尚未完成，列入 Month 4
+- **目標閉環 4：每日決策工作台（Daily Decision Desk）** ✅ 已接上首頁 v1
   - 目標：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。
-  - 目前已有 Market Watch、Smart Money、Recommendation、Research Lab 與 Portfolio 監控作為素材，但尚無整合式首頁、Market Breadth service、Watchlist Trigger service、Strategy Drift 或 Post-trade Attribution。
+  - 目前主 UI 已接上「每日決策」工作區，各 section 已具備 snapshot 顯示框架；Market Regime 與 Portfolio Alert 已接主 UI，Market Breadth、Sector Rotation、Watchlist Trigger 若 provider 尚未接線會以 `MISSING` / `DEGRADED` / `ESTIMATED` 表示缺口，不做資料補值回填，並彙總 `warnings`。
 
 - **文件治理與 Manual** ✅ 本輪完成
   - Roadmap Hub、6M Roadmap、Legacy Carryover、Architecture、Index 與 Agent 指引已採 Scoped SSOT。
-  - 已建立 7 個頂層工作區的完整操作手冊。
+  - 已建立 8 個頂層工作區的完整操作手冊。
   - 舊 Roadmap 工程欠項已全部取得「已完成 / Month X 移交 / 被取代」唯一處置；實作進度仍依 6M Roadmap 執行。
 
 ## 現在的工作模式（你每天要用的流程）
@@ -69,7 +69,7 @@
 
 1. Month 3 Factor Layer v1 已完成：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization 與 Research Run 保存流程已落地；推薦回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata。v1 不接營收、法人或估值新資料源。
 2. Month 3 Portfolio Replay 可信度 v1 已完成：推薦組合回放已輸出 `portfolio_credibility`、`unfilled_orders`、`cash_ledger`、`weight_exposure` 與 `gap_risk`；可揭露缺價、流動性限制、現金不足、整股限制、成本、目標 / 實際權重落差與 next-open gap 風險。零股、買賣價差、Gap 實際成交與完整撮合模型列入後續執行模型深化，不再阻塞 Month 3 v1。
-3. Month 4 Daily Decision Desk 前置設計：下一步進入 `DecisionDeskSnapshot` / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert；此首頁尚未完成，不得描述為目前可用。
+3. Month 4 Daily Decision Desk 已接上主 UI：`DecisionDeskSnapshot` 已進入首頁，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert；缺口以 `quality / warnings` 顯示，缺值不補值。
 
 ## 高風險區（改動需謹慎）
 
@@ -87,7 +87,7 @@
 - `ui_qt/widgets/fast_chart_widget.py` / `ui_qt/widgets/chart_payloads.py`（回測圖表 renderer 與資料 payload contract）
 - `ui_qt/views/update_view.py` / `app_module/update_service.py`（數據更新工作台與安全更新流程）
 - `portfolio_module/core.py` / `app_module/portfolio_condition_monitor.py`（Portfolio domain 與條件監控）
-- Daily Decision Desk / Market Breadth / Watchlist Trigger / Portfolio Alert 聚合層（尚未完成；實作時不得在 UI 複製 domain 計算）
+- Daily Decision Desk / Market Breadth / Sector Rotation / Watchlist Trigger / Portfolio Alert 聚合層（`MISSING` / `DEGRADED` / `ESTIMATED` 可降級，實作時不得在 UI 複製 domain 計算）
 
 分位數治理的額外風險：
 
@@ -105,7 +105,7 @@
 - `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則。
 - `DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣與 scoped authority 規則。
 - `../01_architecture/system_architecture.md` - 目前系統架構與模組邊界。
-- `../07_guides/APPLICATION_MANUAL.md` - 目前 7 個工作區的完整操作手冊。
+- `../07_guides/APPLICATION_MANUAL.md` - 目前 8 個工作區的完整操作手冊。
 - `../../PROJECT_NAVIGATION.md` / `../../PROJECT_INVENTORY.md` - 專案導航與盤點。
 - `../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` - 舊完整 Roadmap，僅供歷史追溯。
 - `../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md` - fixed / quantile 雙模式與分位數安全契約。

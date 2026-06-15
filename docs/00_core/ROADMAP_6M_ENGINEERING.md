@@ -27,7 +27,7 @@
 - 不把推薦組合回測結果宣稱為實盤績效，除非成交假設、現金帳、流動性限制與再平衡規則完整揭露。
 - 不導入黑箱 ML 作為主線；若未建立資料版本、OOS、因子歸因與漂移監控，ML 只會增加不可解釋風險。
 - 不重建或破壞正式資料；所有資料新增必須非破壞性、可回溯、可降級。
-- 不把 Daily Decision Desk 寫成已完成首頁；它是 Month 4 交付物。
+- Daily Decision Desk 已接上主 UI v1 首頁；其餘 Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert 仍以 provider 完整度逐步接線。
 
 ---
 
@@ -165,7 +165,7 @@
 - `ScoringEngine` 不直接依賴新資料表。
 - 推薦組合 / 固定組合回放結果能揭露現金、權重、再平衡、成交限制與風險標記。
 
-### Month 4：Market Intelligence 與 Daily Decision Desk
+### Month 4：Market Intelligence 與 Daily Decision Desk（v1 已上線首頁）
 
 目標：
 
@@ -173,14 +173,14 @@
 
 交付物：
 
-- Daily Decision Desk 首頁或等價頂層工作區。
+- Daily Decision Desk 首頁或等價頂層工作區（已上線 v1）。
 - `DecisionDeskSnapshot` / `DecisionDeskSnapshotBuilder` 或等價 DTO / service。
 - Market Breadth service。
 - Sector Rotation service。
 - Relative Strength / Liquidity Ranking。
 - Watchlist Trigger service。
-- Portfolio Alert 初版。
-- Manual 與 UI docs 完整描述新首頁入口、參數、結果判讀與限制。
+- Portfolio Alert 初版（缺口以 `MISSING` / `DEGRADED` / `ESTIMATED` 呈現）。
+- Manual 與 UI docs 完整描述新首頁入口、參數、結果判讀與限制（含 `OBSERVED`、`ESTIMATED`、`DEGRADED`、`MISSING`）。
 
 驗收標準：
 
@@ -235,11 +235,11 @@
 
 ## 5. 立即待辦清單
 
-1. 進入 Month 4 Daily Decision Desk：定義 snapshot DTO、資料品質欄位與不重算現有頁面資料的 service 邊界。
-2. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
-3. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
-4. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化，不阻塞 Month 4 首頁整合。
-5. PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 3 / Month 4。
+1. 深化 Month 4 Daily Decision Desk provider 接線：補齊 Market Breadth、Sector Rotation、Watchlist Trigger 的主 UI 真實資料來源，並維持 `quality / warnings` 降級契約。
+2. 補上 Relative Strength / Liquidity Ranking 與 Why Not / 風險提示的決策桌面銜接，不在 UI 層重算 scoring、screening 或 portfolio logic。
+3. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
+4. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
+5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 4 / Month 5。
 
 ---
 

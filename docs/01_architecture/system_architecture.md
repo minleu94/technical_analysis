@@ -13,7 +13,7 @@
 2. 研究驗證：Recommendation → Research Lab / Backtest / Replay / Walk-forward → Promote。
 3. 持倉檢查：Recommendation / Backtest → Portfolio → Condition / Chip Monitor → Journal → 回到研究。
 
-目標中的第四閉環是 Daily Decision Desk：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。此閉環尚未完成，目前沒有正式 `market_module/`、Daily Decision Desk 首頁、Market Breadth service 或 Watchlist Trigger service。
+目標中的第四閉環是 Daily Decision Desk：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。v1 已接上主 UI，作為每日決策頂層入口；目前由 service snapshot 聚合並保留 Market Breadth / Sector Rotation / Watchlist / Portfolio Alert 的缺口降級機制。
 
 未來 6 個月的工程方向見 [ROADMAP_6M_ENGINEERING.md](../00_core/ROADMAP_6M_ENGINEERING.md)，舊 Roadmap 移交狀態見 [LEGACY_ROADMAP_CARRYOVER.md](../00_core/LEGACY_ROADMAP_CARRYOVER.md)。
 
@@ -70,7 +70,7 @@ Application Services / DTO / Repository
 - 不在 UI 內複製 application/domain 計算。
 - Runtime UI 不得直接讀寫 Runtime store。
 
-### 目前 7 個頂層工作區
+### 目前 8 個頂層工作區
 
 1. 數據更新
 2. 市場觀察
@@ -79,8 +79,7 @@ Application Services / DTO / Repository
 5. 觀察清單
 6. 持倉管理
 7. Runtime Observatory
-
-Daily Decision Desk 是 Month 4 目標首頁，不屬於目前 7 個頂層工作區；完成前不得在操作文件中描述為可用入口。
+8. Daily Decision Desk（v1 首頁）
 
 完整操作見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
 
@@ -469,4 +468,4 @@ UI 修改：
 
 ## 16. 更新記錄
 
-- 2026-06-15：補入 IDS 願景與架構權威邊界，明確標示 Daily Decision Desk、`market_module/`、Market Breadth、Watchlist Trigger 與 Strategy Drift 尚未完成；同步 Month 3 Portfolio Replay 可信度、固定組合 per-stock factor metadata 保存與後續資料因子接入防線。
+- 2026-06-15：補入 IDS 願景與架構權威邊界，更新 Daily Decision Desk v1 已接上主 UI；Market Breadth、Sector Rotation、Watchlist Trigger 的 provider 完整度、Strategy Drift 與 Post-trade Attribution 仍屬後續工作；同步 Month 3 Portfolio Replay 可信度、固定組合 per-stock factor metadata 保存與後續資料因子接入防線。

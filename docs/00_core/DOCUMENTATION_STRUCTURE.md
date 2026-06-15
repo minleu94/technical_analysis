@@ -25,7 +25,7 @@
 
 5. **目前操作手冊**
    - `docs/07_guides/APPLICATION_MANUAL.md`
-   - 保存目前 7 個工作區的完整操作、結果判讀、安全限制與排錯方式。
+   - 保存目前 8 個工作區的完整操作、結果判讀、安全限制與排錯方式。
 
 6. **架構權威**
    - `docs/01_architecture/system_architecture.md`

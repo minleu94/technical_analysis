@@ -9,7 +9,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QStatusBar, QTabWidget, QMessageBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QStatusBar, QTabWidget, QMessageBox, QLabel
 from typing import Dict, Any
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
@@ -17,7 +17,10 @@ from PySide6.QtGui import QIcon
 from data_module.config import TWStockConfig
 from app_module.screening_service import ScreeningService
 from app_module.regime_service import RegimeService
+from app_module.decision_desk_dtos import DecisionDeskQuality, MarketRegimeSummary
 from app_module.recommendation_service import RecommendationService
+from app_module.portfolio_alert_service import PortfolioAlertService
+from app_module.portfolio_condition_monitor import PortfolioConditionMonitor
 from app_module.update_service import UpdateService
 from app_module.backtest_service import BacktestService
 from app_module.batch_backtest_service import BatchBacktestService
@@ -38,6 +41,8 @@ from ui_qt.views.watchlist_view import WatchlistView
 from ui_qt.widgets.session_context_strip import SessionContextStrip
 from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
 from app_module.broker_flow_service import BrokerFlowService
+from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from ui_qt.views.decision_desk_view import DecisionDeskView
 
 # Runtime Observatory Imports
 from app_module.runtime_services.runtime_controller import RuntimeController
@@ -50,6 +55,96 @@ import os
 class MainWindow(QMainWindow):
     """主窗口"""
     
+    class _DecisionDeskMarketRegimeProvider:
+        """僅供主畫面使用的 market regime provider（決策桌面適配器）。"""
+
+        def __init__(self, regime_service: RegimeService):
+            self.regime_service = regime_service
+
+        def _to_confidence_bp(self, confidence) -> int | None:
+            if confidence is None:
+                return None
+            try:
+                value = float(confidence)
+            except (TypeError, ValueError):
+                return None
+            if 0 <= value <= 1:
+                return int(value * 10000)
+            if 0 <= value <= 100:
+                return int(value * 100)
+            return int(value)
+
+        def fetch_market_regime(self, as_of_date):
+            if self.regime_service is None:
+                return None
+            try:
+                as_of_date_str = as_of_date.isoformat()
+                try:
+                    result = self.regime_service.detect_regime(as_of_date=as_of_date_str)
+                except TypeError:
+                    result = self.regime_service.detect_regime(date=as_of_date_str)
+                except Exception:
+                    result = self.regime_service.detect_regime(as_of_date_str)
+                details = dict(getattr(result, "details", {}) or {})
+                confidence_bp = self._to_confidence_bp(getattr(result, "confidence", None))
+                regime_score = details.get("ma20_slope")
+                if regime_score is None:
+                    regime_score = details.get("score")
+                if regime_score is None:
+                    regime_score = details.get("regime_score")
+                if regime_score is not None:
+                    try:
+                        regime_score = int(float(regime_score) * 100)
+                    except (TypeError, ValueError):
+                        regime_score = None
+
+                return MarketRegimeSummary(
+                    as_of_date=as_of_date,
+                    quality=DecisionDeskQuality.OBSERVED,
+                    warnings=(),
+                    regime_label=getattr(result, "regime_name_cn", None) or getattr(result, "regime", None),
+                    regime_score=regime_score,
+                    regime_confidence=confidence_bp,
+                    meta=details,
+                )
+            except Exception:
+                return None
+
+        def fetch_market_breadth(self, as_of_date):
+            return None
+
+        def fetch_sector_rotation(self, as_of_date):
+            return None
+
+        def fetch_watchlist_triggers(self, as_of_date):
+            return None
+
+        def fetch_portfolio_alerts(self, as_of_date):
+            return None
+
+    def _create_decision_desk_builder(self) -> DecisionDeskSnapshotBuilder:
+        provider = self._DecisionDeskMarketRegimeProvider(self.regime_service)
+        portfolio_alert_service = None
+        try:
+            condition_monitor = PortfolioConditionMonitor()
+            chip_summary_provider = None
+            if hasattr(self, "broker_flow_service") and self.broker_flow_service is not None:
+                provider_candidate = getattr(self.broker_flow_service, "get_stock_chip_summary", None)
+                if callable(provider_candidate):
+                    chip_summary_provider = self.broker_flow_service
+            portfolio_alert_service = PortfolioAlertService(
+                portfolio_service=self.portfolio_service,
+                condition_monitor=condition_monitor,
+                chip_summary_provider=chip_summary_provider,
+            )
+        except Exception as exc:
+            print(f"[MainWindow] 決策桌面 PortfolioAlertService 初始化失敗：{exc}")
+
+        return DecisionDeskSnapshotBuilder(
+            provider=provider,
+            portfolio_alert_service=portfolio_alert_service,
+        )
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("台股技術分析系統")
@@ -220,6 +315,22 @@ class MainWindow(QMainWindow):
                     on_market_tab_changed(current_sub_index)
             
             tabs.currentChanged.connect(on_main_tab_changed)
+
+            # 每日決策分頁（失敗時降級，不影響整體啟動）
+            print("[MainWindow] 開始建立每日決策分頁...")
+            try:
+                self.decision_desk_builder = self._create_decision_desk_builder()
+                decision_desk_view = DecisionDeskView(
+                    decision_desk_builder=self.decision_desk_builder,
+                    parent=self,
+                )
+                tabs.addTab(decision_desk_view, "每日決策")
+                print("[MainWindow] 每日決策分頁建立成功")
+            except Exception as e:
+                print(f"[MainWindow] 警告：每日決策分頁初始化失敗：{e}")
+                fallback_tab = QLabel(f"每日決策初始化失敗，已降級顯示：{e}")
+                fallback_tab.setWordWrap(True)
+                tabs.addTab(fallback_tab, "每日決策")
             
             # 策略回測標籤（先創建，因為推薦分析需要引用它）
             print("[MainWindow] 創建策略回測視圖...")

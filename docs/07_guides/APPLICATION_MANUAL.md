@@ -2,7 +2,7 @@
 
 > **最後更新**：2026-06-15
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
-> **範圍**：本手冊涵蓋目前 7 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
+> **範圍**：本手冊涵蓋目前 8 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
 ## 1. 系統能做什麼
 
@@ -22,7 +22,7 @@
 - 推薦股票一定上漲或策略一定獲利。
 - quantile 一定優於 fixed；2026-06-14 的 10 檔 OOS 實證未顯示 quantile 優於 fixed，因此仍為 opt-in。
 - 推薦回放等同可成交的實盤績效。
-- Daily Decision Desk 不是目前可用首頁；它是 Month 4 Roadmap 目標，目前仍需分別使用市場觀察、推薦分析、Research Lab 與持倉管理取得每日判斷素材。
+- Daily Decision Desk 已接上主 UI「每日決策」頁籤（v1），可直接查看每日整合摘要；但資料供應仍逐步補齊，缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
 - Runtime Observatory 會自動修復問題或自動下單。
 - 觀察清單等同實際投資組合。
 
@@ -321,9 +321,39 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 3. 選擇「批次股票回測」。
 4. 從選股清單下拉載入。
 
-## 8. Research Lab / 策略回測
+## 8. 每日決策（Daily Decision Desk）
 
-### 8.1 五種實驗模式
+### 8.1 進入與刷新
+
+1. 進入主視窗頂層 tab「每日決策」。
+2. 點選「刷新」可重建 Snapshot。
+3. 若初始化或刷新失敗，畫面會保留可閱讀狀態並顯示 fallback 提示，不會中斷整體 App。
+
+### 8.2 結果解讀
+
+每日決策摘要會顯示：
+
+- `as_of_date`：資料對應日期
+- `quality`：整體品質（`OBSERVED` / `ESTIMATED` / `DEGRADED` / `MISSING`）
+- `warnings`：所有 section 的缺口與降級原因彙總
+- 各區塊 section：如 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger、Portfolio Alert
+
+#### quality 與 warnings 規則
+
+- `OBSERVED`：當前節點資料完整且已驗證可用。
+- `ESTIMATED`：有可補值但非直接觀測值。
+- `DEGRADED`：有資料但需降級顯示，需注意風險。
+- `MISSING`：節點缺資料，僅保留警示，不能視為可交易依據。
+
+#### 限制與排錯
+
+- 本頁是每日決策摘要，不是自動交易或下單介面。
+- Market Breadth、Sector Rotation、Watchlist Trigger 目前仍為逐步接線；缺口時只會降級，不會強制補值。
+- Portfolio Alert 僅為持倉摘要警示，未直接改變持倉。
+
+## 9. Research Lab / 策略回測
+
+### 9.1 五種實驗模式
 
 | 模式 | 主要用途 |
 |---|---|
@@ -333,7 +363,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 | 推薦系統回放 | 回放推薦配置與名單。 |
 | 策略研究 | 比較策略模板、參數、最佳化與驗證結果。 |
 
-### 8.2 基本設定
+### 9.2 基本設定
 
 1. 選擇策略來源或載入 Preset。
 2. 選擇單股或選股清單。
@@ -341,7 +371,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 4. 設定初始資金、手續費與滑價。
 5. 執行價格建議使用 `next_open`；`close` 是同根 K 收盤成交假設，必須清楚揭露。
 
-### 8.3 停損、停利與部位
+### 9.3 停損、停利與部位
 
 - 百分比模式：使用固定停損停利百分比。
 - ATR 倍數模式：依市場波動調整距離。
@@ -353,7 +383,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 台股整股模擬以 1000 股為單位。高價股若資金不足一張，可能產生 0 交易。
 
-### 8.4 市場限制
+### 9.4 市場限制
 
 - 漲跌停限制
 - 成交量限制
@@ -361,14 +391,14 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 如果訊號很多但交易為 0，先檢查資金、整股限制、成交量與參與率，不要直接判定策略沒有訊號。
 
-### 8.5 fixed 與 quantile
+### 9.5 fixed 與 quantile
 
 - fixed 使用固定買賣分數。
 - quantile 使用 T-1 以前的 expanding 歷史分布，暖機需要 60 個有效觀測值。
 - 暖機完成前不應產生 quantile 交易訊號。
 - 比較兩模式時必須使用相同資料、成本、成交假設與期間。
 
-### 8.6 參數最佳化
+### 9.6 參數最佳化
 
 1. 選擇目標：Sharpe、年化報酬或 CAGR-MDD。
 2. 對要掃描的參數設定固定值或範圍。
@@ -378,7 +408,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 最佳化結果是 In-Sample 候選，不能直接視為可靠策略。
 
-### 8.7 Walk-forward
+### 9.7 Walk-forward
 
 - Train-Test Split：單次訓練/測試切分。
 - Walk-forward：以訓練月數、測試月數與步進月份滾動驗證。
@@ -393,7 +423,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 本專案 2026-06-14 基準實證使用 10 檔股票、每檔 8 個 OOS fold；fixed 57 筆、quantile 79 筆交易均通過 20 筆最低樣本 Gate，Regime coverage 為 100%。結果未顯示 quantile 的平均 OOS Sharpe 優於 fixed，詳見 `docs/06_qa/WALK_FORWARD_COMPARISON_REPORT.md`。
 
-### 8.8 執行、取消、保存與升級
+### 9.8 執行、取消、保存與升級
 
 - 「執行實驗」：開始目前模式。
 - 「取消執行」：合作式取消；已開始的單檔工作可能安全收尾。
@@ -409,7 +439,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - Registry 寫入採 SQLite metadata + Parquet 明細；若 hash 不符或檔案不完整，載入時會以完整性錯誤處理，不會靜默讀取部分結果。
 - Legacy 單股回測 / 推薦組合保存庫仍可用於歷史資料與 backfill；新的「保存結果」入口以 Research Run Registry 為準。
 
-### 8.9 結果分頁
+### 9.9 結果分頁
 
 - 實驗摘要：績效摘要與交易明細。
 - 圖表：權益、回撤、報酬分布、持有天數。
@@ -429,7 +459,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 固定組合目前的 Registry 保存粒度是每檔股票的 per-stock run，metadata 會標記為 `fixed_basket_stock` 以保留固定組合來源，並沿用該檔回測產生的 factor records 生成 `factor_snapshot` / `factor_contributions`。完整固定組合層級的現金帳、再平衡、未成交、Liquidity / Gap 風險揭露仍未建成，不應把 per-stock 保存結果解讀為完整可成交的固定組合績效；Month 3 v1 的完整 portfolio credibility 揭露集中在推薦組合回放。
 
-### 8.10 推薦回放
+### 9.10 推薦回放
 
 建議從推薦頁按「送 Research Lab 推薦回放」載入配置。
 
@@ -443,9 +473,9 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 執行後可保存到 Research Run Registry。歷史載入、刪除與 legacy Promote 能力仍保留在舊 repository 邊界；新版 Cross-run Comparison 與 Registry-based Promote Gate 以 Registry run 為準。結果 details 會包含 `portfolio_credibility`、`unfilled_orders`、`cash_ledger`、`weight_exposure` 與 `gap_risk`：若推薦股票在回放視窗內沒有可用價格列，會以 `missing_price_rows` 記錄為未成交，而不是靜默跳過；若呼叫端提供 `max_participation_rate`，系統會用進場日成交股數與收盤價估算可參與金額，配置金額超過時以 `liquidity_limited` 記錄為未成交。回放現在會在建立 holding 前檢查可用現金，現金不足時以 `cash_limited` 記錄為未成交；`cash_ledger` 由這個現金 gate 流程產生買進、賣出與 `ending_cash`。若呼叫端提供 fee / tax / slippage bps，成本會套用到買賣現金流、ledger breakdown 與 `total_transaction_cost`；未提供時維持無成本回放。若呼叫端提供 `lot_size`，配置金額會依進場價向下取整為可成交整股股數，買不起最小交易單位時以 `lot_size_limited` 記錄為未成交。期間持倉的 `allocation_weight` 代表推薦配置的目標權重，`actual_allocation_weight` 代表整股 sizing 與 cash gate 後的實際可成交權重；`weight_exposure` 會依每個再平衡日彙總目標權重、實際權重、未成交權重與殘餘現金權重。若歷史資料含「開盤價」，`gap_risk.records` 會列出每筆 holding 的 `entry_close_price`、下一個可用交易日 `next_open_price`、`gap_pct`、`gap_direction` 與 `severity`，用來揭露同日收盤成交假設在隔日開盤可能遇到的跳空風險。`portfolio_credibility` 仍會揭露同日收盤成交、再平衡現金重用限制、成交量 / Liquidity 與 Gap 限制；目前仍未建零股、委託簿撮合、買賣價差或 gap 實際成交模型，`gap_risk` 只做風險標籤，不會改變 PnL、成交價、cash ledger 或 sizing。這些 warning 應先讀完，再判讀回放績效。結果仍依成交與推薦回放假設，不等同實盤。
 
-## 9. 持倉管理
+## 10. 持倉管理
 
-### 9.1 手動記錄交易
+### 10.1 手動記錄交易
 
 1. 點擊「手動記錄交易」。
 2. 輸入股票、買賣別、價格、股數、日期、費用與稅金。
@@ -454,14 +484,14 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 賣出數量不得超過目前可用持倉。
 
-### 9.2 從推薦或回測建立來源追溯
+### 10.2 從推薦或回測建立來源追溯
 
 - 推薦結果表右鍵「記錄到持倉管理」。
 - 回測交易明細右鍵記錄交易。
 
 這些入口會保存推薦結果、回測 run 或策略版本來源。它們仍是手動記錄，不會送出券商委託。
 
-### 9.3 持倉與交易歷史
+### 10.3 持倉與交易歷史
 
 選取持倉後，右側同步顯示：
 
@@ -472,13 +502,13 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 交易歷史可用右鍵刪除；刪除後持倉與成本會重新計算。
 
-### 9.4 覆盤日誌
+### 10.4 覆盤日誌
 
 1. 選取持倉。
 2. 點擊「新增日記」。
 3. 記錄進場假設、風險、觀察結果與出場理由。
 
-### 9.5 策略與價格監控
+### 10.5 策略與價格監控
 
 顯示：
 
@@ -490,15 +520,15 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 警示是輔助判讀，不會自動平倉。
 
-### 9.6 籌碼監控
+### 10.6 籌碼監控
 
 顯示籌碼風險、近期分點買賣明細與資料品質。按「下鑽詳細主力流向」會切換至市場觀察的 Smart Money 並定位目前股票。
 
-### 9.7 清空全體數據
+### 10.7 清空全體數據
 
 此操作會永久清空持倉交易與日誌，需要二次確認。執行前應先確認資料是否已備份。
 
-## 10. Runtime Observatory
+## 11. Runtime Observatory
 
 這是唯讀工程治理頁，不是選股工具。
 
@@ -521,7 +551,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 此頁不會修改資料、重新啟動服務或自動修復。
 
-## 11. 常見問題
+## 12. 常見問題
 
 ### UI 無法啟動
 
@@ -562,7 +592,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 確認結果已保存，且驗證狀態不是 FAIL。樣本不足、無結果、未保存、run 已封存、run 已升級、資料完整性不是 valid、缺少參數合約版本，或最低 validation gate 未通過時，不允許升級。若策略版本 JSON 已寫入但 Registry 回填失敗，系統會執行補償刪除；刪除失敗時標記 reconciliation required，需進入受控修復流程。
 
-## 12. Manual 覆蓋狀態
+## 13. Manual 覆蓋狀態
 
 | 工作區 | 啟動/入口 | 操作 | 參數 | 結果解讀 | 安全/排錯 |
 |---|---:|---:|---:|---:|---:|
@@ -570,12 +600,13 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 | 市場觀察 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 推薦分析 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 觀察清單 | 完成 | 完成 | 完成 | 完成 | 完成 |
+| 每日決策 | 完成（v1 首頁） | 完成 | 完成 | quality / warnings 判讀 | 部分接線 |
 | Research Lab | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 持倉管理 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
 
 功能行為改動時，必須同步更新本表與對應章節。
 
-## 13. 更新記錄
+## 14. 更新記錄
 
-- 2026-06-15：補充 Daily Decision Desk 尚未成為目前可用首頁，避免與 IDS 願景文件及 6M Roadmap 的 Month 4 目標混淆。
+- 2026-06-15：補充 Daily Decision Desk v1 已接上主 UI 頂層「每日決策」頁籤，並更新質量欄位（OBSERVED / ESTIMATED / DEGRADED / MISSING）與 warnings 的解讀方式。
