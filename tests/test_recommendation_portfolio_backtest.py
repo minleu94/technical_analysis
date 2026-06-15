@@ -49,6 +49,7 @@ def test_recommendation_portfolio_result_exposes_readable_tables():
         exit_reason="holding_period",
         holding_days=4,
         return_pct=0.10,
+        actual_allocation_weight=0.4995,
     )
     contribution = StockContributionDTO(
         stock_code="2330",
@@ -72,6 +73,7 @@ def test_recommendation_portfolio_result_exposes_readable_tables():
     assert result.summary["total_return"] == 0.05
     assert holding.pnl() == 50000.0
     assert result.period_holdings_dataframe().iloc[0]["股票代號"] == "2330"
+    assert result.period_holdings_dataframe().iloc[0]["實際配置權重"] == 0.4995
     assert result.period_holdings_dataframe().iloc[0]["損益"] == 50000.0
     assert result.stock_contribution_dataframe().iloc[0]["股票代號"] == "2330"
     assert result.stock_contribution_dataframe().iloc[0]["總損益"] == 50000.0
@@ -345,6 +347,59 @@ def test_portfolio_backtest_rounds_allocation_down_to_lot_size():
     assert result.details["cash_ledger"][0]["cash_balance"] == 1000.0
     assert result.summary["ending_cash"] == 1111000.0
     assert result.details["portfolio_credibility"]["share_sizing"]["supported"] == "partial"
+
+
+def test_portfolio_backtest_exposes_actual_weight_after_lot_sizing():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 333},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 370},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 80.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+        lot_size=1000,
+    )
+
+    holding = result.period_holdings[0]
+    exposure = result.details["weight_exposure"]
+
+    assert holding.allocation_weight == 1.0
+    assert holding.actual_allocation_weight == 0.999
+    assert exposure["supported"] == "partial"
+    assert exposure["periods"] == [
+        {
+            "rebalance_date": "2026-01-02",
+            "target_weight": 1.0,
+            "actual_weight": 0.999,
+            "unfilled_weight": 0.0,
+            "cash_residual_weight": 0.001,
+            "holding_count": 1,
+            "unfilled_order_count": 0,
+        }
+    ]
+    assert result.details["portfolio_credibility"]["weights"]["supported"] == "partial"
 
 
 def test_portfolio_backtest_records_unfilled_order_when_lot_size_cannot_be_met():

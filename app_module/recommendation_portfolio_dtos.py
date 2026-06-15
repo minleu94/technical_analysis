@@ -35,6 +35,7 @@ class PeriodHoldingDTO:
     holding_days: int
     return_pct: float
     shares: int | None = None
+    actual_allocation_weight: float | None = None
 
     def pnl(self) -> float:
         return float(quantize_money(to_decimal(self.allocation_amount) * to_decimal(self.return_pct)))  # numeric-boundary: dto
@@ -120,6 +121,7 @@ class RecommendationPortfolioBacktestResultDTO:
             "總分",
             "配置金額",
             "配置權重",
+            "實際配置權重",
             "進場日",
             "進場價",
             "預計出場日",
@@ -141,6 +143,7 @@ class RecommendationPortfolioBacktestResultDTO:
                     "總分": holding.total_score,
                     "配置金額": holding.allocation_amount,
                     "配置權重": holding.allocation_weight,
+                    "實際配置權重": holding.actual_allocation_weight,
                     "進場日": holding.entry_date,
                     "進場價": holding.entry_price,
                     "預計出場日": holding.planned_exit_date,
