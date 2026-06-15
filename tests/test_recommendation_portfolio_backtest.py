@@ -190,6 +190,60 @@ def test_portfolio_backtest_records_period_holdings_and_contributions():
     assert result.summary["total_return"] == 0.0
 
 
+def test_portfolio_backtest_exposes_derived_cash_ledger_for_successful_holding():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 80.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    cash_ledger = result.details["cash_ledger"]
+
+    assert cash_ledger == [
+        {
+            "date": "2026-01-02",
+            "stock_code": "2330",
+            "event": "buy",
+            "amount": -1000000.0,
+            "cash_balance": 0.0,
+        },
+        {
+            "date": "2026-01-06",
+            "stock_code": "2330",
+            "event": "sell",
+            "amount": 1100000.0,
+            "cash_balance": 1100000.0,
+        },
+    ]
+    assert result.summary["ending_cash"] == 1100000.0
+    assert result.details["portfolio_credibility"]["cash_account"]["supported"] == "partial"
+
+
 def test_portfolio_backtest_marks_equity_to_market_each_trading_day():
     date_col = "\u65e5\u671f"
     code_col = "\u8b49\u5238\u4ee3\u865f"
@@ -614,12 +668,13 @@ def test_portfolio_backtest_result_includes_credibility_manifest():
 
     assert credibility["schema_version"] == 1
     assert credibility["status"] == "limited"
-    assert credibility["cash_account"]["supported"] is False
+    assert credibility["cash_account"]["supported"] == "partial"
+    assert credibility["cash_account"]["policy"] == "derived_from_period_holdings_not_used_for_order_sizing"
     assert credibility["rebalance"]["supported"] is False
     assert credibility["unfilled_orders"]["supported"] is True
     assert credibility["liquidity_gap"]["supported"] is False
     assert credibility["execution_assumption"] == "idealized_same_day_close"
-    assert "cash_account_not_modeled" in credibility["warnings"]
+    assert "cash_account_partial_ledger_not_execution_constraint" in credibility["warnings"]
     assert "unfilled_orders_not_modeled" not in credibility["warnings"]
     assert result.summary["credibility_status"] == "limited"
     assert result.summary["credibility_warning_count"] == len(credibility["warnings"])
