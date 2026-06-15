@@ -83,6 +83,9 @@ class DecisionDeskView(QWidget):
         self.watchlist_triggers_value = QLabel("")
         self.portfolio_alerts_status = QLabel("")
         self.portfolio_alerts_value = QLabel("")
+        self.risk_prompts_status = QLabel("")
+        self.risk_prompts_value = QLabel("")
+        self.risk_prompts_value.setWordWrap(True)
 
         sections_group = QGroupBox("各模組狀態")
         sections_layout = QVBoxLayout(sections_group)
@@ -92,6 +95,7 @@ class DecisionDeskView(QWidget):
         sections_layout.addWidget(self._make_section_row("強弱與流動性", self.relative_strength_liquidity_status, self.relative_strength_liquidity_value))
         sections_layout.addWidget(self._make_section_row("Watchlist 提示", self.watchlist_triggers_status, self.watchlist_triggers_value))
         sections_layout.addWidget(self._make_section_row("持倉警示", self.portfolio_alerts_status, self.portfolio_alerts_value))
+        sections_layout.addWidget(self._make_section_row("Why Not / 風險提示", self.risk_prompts_status, self.risk_prompts_value))
         layout.addWidget(sections_group)
 
     def _make_section_row(self, title: str, status_label: QLabel, value_label: QLabel) -> QWidget:
@@ -172,6 +176,9 @@ class DecisionDeskView(QWidget):
             f"等級：{snapshot.portfolio_alerts.alert_level or '無'}"
         )
 
+        self.risk_prompts_status.setText(f"品質：{self._quality_label(snapshot.risk_prompts.quality)}")
+        self.risk_prompts_value.setText(self._format_risk_prompts(snapshot.risk_prompts.prompts))
+
         for section_text in self._collect_warnings(snapshot):
             if section_text not in warning_lines:
                 warning_lines.append(section_text)
@@ -189,6 +196,16 @@ class DecisionDeskView(QWidget):
         else:
             self.overall_status_label.setStyleSheet("")
 
+    @staticmethod
+    def _format_risk_prompts(prompts) -> str:
+        if not prompts:
+            return "無"
+        parts = []
+        for prompt in prompts[:5]:
+            code = f"{prompt.code} " if prompt.code else ""
+            parts.append(f"[{prompt.severity}] {code}{prompt.title}：{prompt.action_hint}")
+        return "；".join(parts)
+
     def _display_exception_snapshot(self, error_message: str):
         now = datetime.now()
         fallback_snapshot = DecisionDeskSnapshot(
@@ -202,6 +219,7 @@ class DecisionDeskView(QWidget):
             relative_strength_liquidity=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"強弱與流動性:{error_message}",)),
             watchlist_triggers=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"Watchlist:{error_message}",)),
             portfolio_alerts=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"持倉警示:{error_message}",)),
+            risk_prompts=_EmptySection(DecisionDeskQuality.DEGRADED, warnings=(f"Why Not / 風險提示:{error_message}",)),
             warnings=(f"snapshot_error:{error_message}",),
         )
         self._render_snapshot(fallback_snapshot)
@@ -226,6 +244,7 @@ class DecisionDeskView(QWidget):
             ("強弱與流動性", snapshot.relative_strength_liquidity.warnings),
             ("Watchlist", snapshot.watchlist_triggers.warnings),
             ("持倉警示", snapshot.portfolio_alerts.warnings),
+            ("Why Not / 風險提示", snapshot.risk_prompts.warnings),
         ]
         for section_name, section_warnings in section_statuses:
             for warning in section_warnings:
@@ -258,3 +277,4 @@ class _EmptySection:
         self.alert_count = None
         self.alert_codes: tuple[str, ...] = ()
         self.alert_level = None
+        self.prompts: tuple[object, ...] = ()

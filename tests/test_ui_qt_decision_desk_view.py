@@ -1,5 +1,6 @@
 import os
 from datetime import date, datetime
+from dataclasses import replace
 
 import sys
 
@@ -16,6 +17,8 @@ from app_module.decision_desk_dtos import (
     SectorRotationSummary,
     WatchlistTriggerSummary,
     RelativeStrengthLiquiditySummary,
+    DecisionDeskRiskPrompt,
+    DecisionDeskRiskPromptSummary,
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
@@ -40,12 +43,14 @@ def _snapshot(
     relative_strength_liquidity_quality=DecisionDeskQuality.OBSERVED,
     watchlist_quality=DecisionDeskQuality.OBSERVED,
     portfolio_quality=DecisionDeskQuality.OBSERVED,
+    risk_prompts_quality=DecisionDeskQuality.OBSERVED,
     market_regime_warnings=(),
     market_breadth_warnings=(),
     sector_rotation_warnings=(),
     relative_strength_liquidity_warnings=(),
     watchlist_warnings=(),
     portfolio_warnings=(),
+    risk_prompts_warnings=(),
     overall_warnings=(),
 ) -> DecisionDeskSnapshot:
     as_of = date(2026, 6, 15)
@@ -102,6 +107,12 @@ def _snapshot(
             alert_count=1,
             alert_codes=("AAPL",),
             alert_level="low",
+        ),
+        risk_prompts=DecisionDeskRiskPromptSummary(
+            as_of_date=as_of,
+            quality=risk_prompts_quality,
+            warnings=risk_prompts_warnings,
+            prompts=(),
         ),
         warnings=overall_warnings,
     )
@@ -184,3 +195,30 @@ def test_decision_desk_view_fallback_to_degraded_if_builder_exception():
 
     assert "降級" in view.overall_status_label.text()
     assert "snapshot_error" in view.overall_warn_label.toPlainText()
+
+
+def test_decision_desk_view_renders_risk_prompts():
+    app()
+    s = _snapshot()
+    prompt = DecisionDeskRiskPrompt(
+        category="liquidity",
+        severity="warning",
+        source="relative_strength_liquidity",
+        code="1101",
+        title="低流動性",
+        reason="1101 低於平均成交金額門檻",
+        action_hint="檢查可成交金額",
+    )
+    s = replace(
+        s,
+        risk_prompts=DecisionDeskRiskPromptSummary(
+            as_of_date=s.as_of_date,
+            quality=DecisionDeskQuality.OBSERVED,
+            warnings=(),
+            prompts=(prompt,),
+        ),
+    )
+    view = DecisionDeskView(FakeBuilder(s))
+
+    assert "低流動性" in view.risk_prompts_value.text()
+    assert "1101" in view.risk_prompts_value.text()
