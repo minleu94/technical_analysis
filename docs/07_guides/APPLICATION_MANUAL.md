@@ -427,7 +427,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為 Incompatible；期間、Universe 或成本不同時標示為 Caution，不應直接做優劣排名。Registry-based Promote 會先做 Registry Gate，通過後才建立策略版本。
 
-固定組合目前的 Registry 保存粒度是每檔股票的 per-stock run，metadata 會標記為 `fixed_basket_stock` 以保留固定組合來源。完整組合層級的現金帳、再平衡、未成交、Liquidity / Gap 風險揭露仍屬 Month 3 後續可信度補強，不應把 per-stock 保存結果解讀為完整可成交的組合績效。
+固定組合目前的 Registry 保存粒度是每檔股票的 per-stock run，metadata 會標記為 `fixed_basket_stock` 以保留固定組合來源，並沿用該檔回測產生的 factor records 生成 `factor_snapshot` / `factor_contributions`。完整固定組合層級的現金帳、再平衡、未成交、Liquidity / Gap 風險揭露仍未建成，不應把 per-stock 保存結果解讀為完整可成交的固定組合績效；Month 3 v1 的完整 portfolio credibility 揭露集中在推薦組合回放。
 
 ### 8.10 推薦回放
 

@@ -7,7 +7,7 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具，而是一個「可驗證、可回溯、可演化」的投資決策系統。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：三個已落地產品閉環的基礎與主要深化已完成，Daily Decision Desk 是尚未完成的第四目標閉環。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、system vision 管產品北極星、archive 管歷史。當前主線是 Month 3 Factor Layer v1 覆蓋補齊與 Portfolio Replay 可信度。
+* **Current Phase (目前階段)**：三個已落地產品閉環的基礎與主要深化已完成，Month 3 Factor Layer v1 與 Portfolio Replay 可信度已關閉；Daily Decision Desk 是尚未完成的第四目標閉環。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、system vision 管產品北極星、archive 管歷史。當前主線是 Month 4 Daily Decision Desk 前置設計。
 * **Core Architecture (核心架構)**：分層解耦架構。
   1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
   2. `app_module/`（應用服務層、DTO、Repository 與 use case orchestrator）
@@ -15,13 +15,13 @@
 * **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、Research Run Registry、Factor Layer v1、籌碼分析終端、Portfolio 監控、Runtime 子系統。`market_module/`、Daily Decision Desk、Market Breadth service 與 Watchlist Trigger service 尚未正式存在。
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 7 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。Daily Decision Desk 是 Month 4 目標首頁，尚非目前可用 Tab。
 * **Current Priorities (目前優先事項)**：
-  1. Month 3 Factor Layer 覆蓋補齊：固定組合與更多 Research Lab 路徑需自動產生 `factor_snapshot` / `factor_contributions`。
-  2. Month 3 Portfolio Replay 可信度：補現金帳、權重、再平衡、未成交、Liquidity / Gap 標記，避免後續策略生命週期建立在不完整組合績效上。
-  3. Month 4 Daily Decision Desk 前置設計：定義 snapshot / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert。
+  1. Month 4 Daily Decision Desk 前置設計：定義 snapshot / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert。
+  2. 維持 Month 3 Factor Layer / Portfolio Replay 可信度 regression，避免 Month 4 聚合層破壞 factor metadata、Registry 保存或 replay credibility manifest。
+  3. 將零股、買賣價差、完整撮合與 Gap 實際成交模型保留為後續執行模型深化，不阻塞 Daily Decision Desk。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
   1. Quantile 的真實 OOS 實證未優於 fixed，因此仍維持 opt-in，不可宣稱更準。
-  2. Factor Layer v1 已建立基礎與 Research Run 實際保存入口，推薦組合回放已有初始 factor feed；更多上游流程仍需持續餵入 factor records，避免部分 run 只有空的追溯欄位。
+  2. Factor Layer v1 已建立 Research Run 實際保存入口，推薦組合回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata；後續新增 Research Lab 路徑仍需遵守同一保存契約。
   3. Daily Decision Desk、Market Breadth、Watchlist Trigger、Strategy Drift 與 Post-trade Attribution 尚未完成，不得描述為目前可用。
   4. 營收、基本面、估值與三大法人尚未成為正式資料因子；未來接入必須保存 `available_date`、quality 與 missing policy。
   5. PDF 研究報告輸出仍是後續 backlog；Excel 報告與 SQLite 穩定分頁已完成。
@@ -184,13 +184,12 @@
 
 * **Active Phase (目前階段)**：三個產品閉環已建立，進入 6 個月工程路線執行期。
 * **In Progress (進行中)**：
-  * Month 3 Factor Layer v1 覆蓋補齊：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization；後續補固定組合與更多 Research Lab 路徑。
-  * Portfolio Replay 可信度：推薦組合回放已供給初始 factor records，後續需補現金帳、權重、再平衡、未成交、Liquidity / Gap 標記。
-  * Month 2 Registry governance gate 回歸維護。
-* **Planned (計畫中)**：Daily Decision Desk、Market Breadth、Sector Rotation、Watchlist Trigger、Fundamental Layer 初版、Portfolio post-trade attribution、PDF 研究報告輸出、策略 promote / demote / retire 規則。
+  * Month 4 Daily Decision Desk 前置設計：`DecisionDeskSnapshot`、service 邊界、資料品質欄位與不重算既有頁面資料的聚合契約。
+  * Month 2 Registry governance gate 與 Month 3 Factor / Replay credibility 回歸維護。
+* **Planned (計畫中)**：Market Breadth、Sector Rotation、Watchlist Trigger、Fundamental Layer 初版、Portfolio post-trade attribution、PDF 研究報告輸出、策略 promote / demote / retire 規則。
 * **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Smart Money Terminal MVP, AI Runtime MVP。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
-* **Backlog**：固定組合與更多 Research Lab 路徑的 factor records 自動供給、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。
+* **Backlog**：零股、買賣價差、完整撮合與 Gap 實際成交模型、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。
 
 ---
 
