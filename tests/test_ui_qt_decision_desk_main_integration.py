@@ -292,3 +292,34 @@ def test_watchlist_trigger_service_is_injected_into_decision_desk_builder(monkey
     assert builder.kwargs["watchlist_trigger_service"] is not None
     assert callable(getattr(builder.kwargs["watchlist_trigger_service"], "build_snapshot", None))
 
+
+class _FakePortfolioChipService:
+    instances = []
+
+    def __init__(self, config, broker_flow_service=None):
+        self.config = config
+        self.broker_flow_service = broker_flow_service
+        _FakePortfolioChipService.instances.append(self)
+
+    def get_stock_chip_summary(self, stock_code: str, period_days: int = 5):
+        return {"risk_level": "neutral", "lots_available": True}
+
+
+def test_portfolio_alert_service_receives_portfolio_chip_provider(monkeypatch):
+    app()
+    _TrackingDecisionDeskBuilder.instances = []
+    _FakePortfolioChipService.instances = []
+    _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
+    monkeypatch.setattr(main_module, "PortfolioChipService", _FakePortfolioChipService)
+
+    target_window = _build_main_window()
+    target_window.config = types.SimpleNamespace(db_file="C:/tmp/not-used.db")
+    target_window._setup_ui()
+
+    assert _TrackingDecisionDeskBuilder.instances
+    assert _FakePortfolioChipService.instances
+    portfolio_alert_service = _TrackingDecisionDeskBuilder.instances[-1].kwargs["portfolio_alert_service"]
+    assert portfolio_alert_service is not None
+    assert portfolio_alert_service.chip_summary_provider is _FakePortfolioChipService.instances[-1]
+
+

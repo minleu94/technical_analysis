@@ -24,6 +24,7 @@ from app_module.watchlist_trigger_service import WatchlistTriggerService, Watchl
 from app_module.recommendation_service import RecommendationService
 from app_module.portfolio_alert_service import PortfolioAlertService
 from app_module.portfolio_condition_monitor import PortfolioConditionMonitor
+from app_module.portfolio_chip_service import PortfolioChipService
 from app_module.update_service import UpdateService
 from app_module.backtest_service import BacktestService
 from app_module.batch_backtest_service import BatchBacktestService
@@ -147,10 +148,13 @@ class MainWindow(QMainWindow):
         try:
             condition_monitor = PortfolioConditionMonitor()
             chip_summary_provider = None
-            if hasattr(self, "broker_flow_service") and self.broker_flow_service is not None:
-                provider_candidate = getattr(self.broker_flow_service, "get_stock_chip_summary", None)
-                if callable(provider_candidate):
-                    chip_summary_provider = self.broker_flow_service
+            try:
+                chip_summary_provider = PortfolioChipService(
+                    self.config,
+                    broker_flow_service=getattr(self, "broker_flow_service", None),
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"[MainWindow] 決策桌面 PortfolioChipService 初始化失敗：{exc}")
             portfolio_alert_service = PortfolioAlertService(
                 portfolio_service=self.portfolio_service,
                 condition_monitor=condition_monitor,
