@@ -591,6 +591,61 @@ def test_portfolio_backtest_marks_equity_to_market_each_trading_day():
     }
 
 
+def test_portfolio_backtest_records_next_open_gap_risk_labels():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100, "開盤價": 99},
+            {"日期": "2026-01-03", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 121, "開盤價": 120},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 125, "開盤價": 122},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"technical": 80.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    gap_risk = result.details["gap_risk"]
+
+    assert gap_risk["supported"] == "partial"
+    assert gap_risk["record_count"] == 1
+    assert gap_risk["max_abs_gap_pct"] == 0.2
+    assert gap_risk["records"] == [
+        {
+            "stock_code": "2330",
+            "stock_name": "台積電",
+            "rebalance_date": "2026-01-02",
+            "entry_date": "2026-01-02",
+            "entry_close_price": 100.0,
+            "next_open_date": "2026-01-03",
+            "next_open_price": 120.0,
+            "gap_pct": 0.2,
+            "gap_direction": "gap_up",
+            "severity": "high",
+        }
+    ]
+    assert result.details["portfolio_credibility"]["gap_risk"]["supported"] == "partial"
+
+
 def test_portfolio_backtest_exits_early_on_stop_loss_and_summarizes_diagnostics():
     date_col = "\u65e5\u671f"
     code_col = "\u8b49\u5238\u4ee3\u865f"
