@@ -26,6 +26,7 @@ from app_module.dtos import RecommendationDTO
 from app_module.strategy_spec import StrategySpec
 from app_module.preset_service import PresetService
 from app_module.strategy_version_service import StrategyVersionService
+from financial_module.units import to_decimal
 
 
 class RecommendationService:
@@ -141,14 +142,19 @@ class RecommendationService:
                         df = sql_df.loc[:, ~sql_df.columns.duplicated()]
                         
                         # 轉換日期與資料型態
-                        df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce')
-                        df = df[df['日期'].notna()]
-                        df['證券代號'] = df['證券代號'].astype(str).str.strip()
+                        df = df.copy()
+                        df.loc[:, '日期'] = pd.to_datetime(
+                            df['日期'].astype(str),
+                            format='%Y%m%d',
+                            errors='coerce',
+                        )
+                        df = df[df['日期'].notna()].copy()
+                        df.loc[:, '證券代號'] = df['證券代號'].astype(str).str.strip()
                         
                         numeric_cols = ['收盤價', '開盤價', '最高價', '最低價', '成交股數', '成交金額']
                         for col in numeric_cols:
                             if col in df.columns:
-                                df[col] = pd.to_numeric(df[col], errors='coerce')
+                                df.loc[:, col] = pd.to_numeric(df[col], errors='coerce')
                                 
                         logger.info(f"[RecommendationService] 成功從 SQLite 載入 {len(df)} 筆股價及指標資料")
             except Exception as sql_err:
@@ -193,19 +199,20 @@ class RecommendationService:
             )
             
             if '日期' in df.columns:
+                df = df.copy()
                 date_col = df['日期'].copy()
                 if date_col.dtype in ['int64', 'int32', 'float64']:
-                    df['日期'] = pd.to_datetime(date_col.astype(str), errors='coerce', format='%Y%m%d')
+                    df.loc[:, '日期'] = pd.to_datetime(date_col.astype(str), errors='coerce', format='%Y%m%d')
                 else:
                     date_str = date_col.astype(str)
                     if date_str.str.len().eq(8).all() and date_str.str.isdigit().all():
-                        df['日期'] = pd.to_datetime(date_str, errors='coerce', format='%Y%m%d')
+                        df.loc[:, '日期'] = pd.to_datetime(date_str, errors='coerce', format='%Y%m%d')
                     else:
-                        df['日期'] = pd.to_datetime(date_col, errors='coerce')
+                        df.loc[:, '日期'] = pd.to_datetime(date_col, errors='coerce')
             else:
                 raise ValueError("找不到日期欄位")
             
-            df = df[df['日期'].notna()]
+            df = df[df['日期'].notna()].copy()
             if len(df) == 0:
                 raise ValueError("沒有找到股票數據")
             
@@ -438,7 +445,7 @@ class RecommendationService:
                     if regime:
                         # 簡單判斷：如果 FinalScore > TotalScore，則匹配
                         total_score = latest_row.get('TotalScore', 0)
-                        if final_score > total_score * 1.05:  # 允許5%誤差
+                        if to_decimal(final_score) > to_decimal(total_score) * to_decimal("1.05"):  # 允許5%誤差
                             regime_match = True
                     
                     # 創建 DTO
