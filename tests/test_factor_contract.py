@@ -1,4 +1,5 @@
 import json
+import pickle
 from datetime import date
 from decimal import Decimal
 
@@ -208,6 +209,26 @@ def test_factor_record_metadata_is_deep_frozen_after_construction():
         record.metadata["outer"]["inner"]["x"] = 3
     with pytest.raises(TypeError):
         record.metadata["items"][0]["x"] = 3
+
+
+def test_factor_record_can_round_trip_through_pickle():
+    record = FactorRecord(
+        factor_name="technical.total_score",
+        stock_code="2330",
+        as_of_date=date(2026, 6, 12),
+        available_date=date(2026, 6, 12),
+        value=Decimal("82.35"),
+        score_bp=8235,
+        quality=FactorQuality.OBSERVED,
+        missing_policy=MissingPolicy.FAIL_CLOSED,
+        source_version="technical-v1",
+        metadata={"outer": {"inner": {"x": 1}}},
+    )
+
+    restored = pickle.loads(pickle.dumps(record))
+
+    assert restored == record
+    assert restored.metadata["outer"]["inner"]["x"] == 1
 
 
 def test_factor_record_to_dict_serializes_metadata_json_safely():

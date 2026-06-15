@@ -76,6 +76,23 @@ class FactorRecord:
             "metadata": _to_json_safe(self.metadata),
         }
 
+    def __reduce__(self) -> tuple[Any, tuple[Any, ...]]:
+        return (
+            FactorRecord,
+            (
+                self.factor_name,
+                self.stock_code,
+                self.as_of_date,
+                self.available_date,
+                self.value,
+                self.score_bp,
+                self.quality,
+                self.missing_policy,
+                self.source_version,
+                _deep_thaw(self.metadata),
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class FactorDefinition:
@@ -177,3 +194,13 @@ def _deep_freeze(value: Any) -> Any:
     if isinstance(value, (set, frozenset)):
         return frozenset(_deep_freeze(item) for item in value)
     raise TypeError(f"metadata value type is not supported: {type(value).__name__}")
+
+
+def _deep_thaw(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _deep_thaw(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_deep_thaw(item) for item in value]
+    if isinstance(value, frozenset):
+        return {_deep_thaw(item) for item in value}
+    return value

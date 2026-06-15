@@ -125,7 +125,11 @@ class BacktestView(QWidget):
             # 如果沒有傳入 batch_backtest_service，則創建一個
             if not self.batch_backtest_service:
                 from app_module.batch_backtest_service import BatchBacktestService
-                self.batch_backtest_service = BatchBacktestService(self.backtest_service, self.run_repository)
+                self.batch_backtest_service = BatchBacktestService(
+                    self.backtest_service,
+                    self.run_repository,
+                    research_run_service=self.research_run_service,
+                )
             # 初始化 Promote 相關服務
             self.strategy_version_service = StrategyVersionService(config)
             self.promotion_service = PromotionService(
@@ -3987,7 +3991,11 @@ class BacktestView(QWidget):
         if not self.batch_backtest_service:
             from app_module.batch_backtest_service import BatchBacktestService
             if self.backtest_service and self.run_repository:
-                self.batch_backtest_service = BatchBacktestService(self.backtest_service, self.run_repository)
+                self.batch_backtest_service = BatchBacktestService(
+                    self.backtest_service,
+                    self.run_repository,
+                    research_run_service=self.research_run_service,
+                )
             else:
                 QMessageBox.critical(self, "錯誤", "批次回測服務未初始化")
                 return

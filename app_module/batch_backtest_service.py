@@ -7,6 +7,8 @@ import os
 import logging
 import pandas as pd
 import numpy as np
+import hashlib
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +20,7 @@ from app_module.backtest_repository import BacktestRunRepository
 from app_module.strategy_spec import StrategySpec
 from app_module.dtos import BacktestReportDTO
 from app_module.exceptions import BacktestCancelledError
+from app_module.research_run_dtos import ResearchRunMetadataDTO, canonical_json
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +120,8 @@ class BatchBacktestService:
         self,
         backtest_service: BacktestService,
         run_repository: Optional[BacktestRunRepository] = None,
-        worker_callable: Callable = _run_batch_backtest_worker
+        worker_callable: Callable = _run_batch_backtest_worker,
+        research_run_service: Optional[Any] = None,
     ):
         """
         初始化批次回測服務
@@ -130,6 +134,7 @@ class BatchBacktestService:
         self.backtest_service = backtest_service
         self.run_repository = run_repository
         self.worker_callable = worker_callable
+        self.research_run_service = research_run_service
 
     def run_batch_backtest(
         self,
@@ -294,6 +299,24 @@ class BatchBacktestService:
                                 run_id=unique_run_id
                             )
                             result.run_id = run_id
+                            self._save_batch_research_run(
+                                legacy_run_id=run_id,
+                                batch_id=batch_id,
+                                batch_name=batch_name,
+                                stock_code=stock_code,
+                                start_date=start_date,
+                                end_date=end_date,
+                                strategy_spec=strategy_spec,
+                                capital=capital,
+                                fee_bps=fee_bps,
+                                slippage_bps=slippage_bps,
+                                stop_loss_pct=stop_loss_pct,
+                                take_profit_pct=take_profit_pct,
+                                execution_price=execution_price,
+                                sizing_mode=sizing_mode,
+                                report=report,
+                                notes=f"批次回測：{batch_name}" + (f" ({error_reason})" if error_reason else ""),
+                            )
                             logger.info(f"[BatchBacktestService] 已保存 {stock_code} 的回測結果 (run_id: {run_id})")
                         except Exception as e:
                             logger.error(f"[BatchBacktestService] 保存 {stock_code} 失敗: {e}")
@@ -414,6 +437,24 @@ class BatchBacktestService:
                                             run_id=unique_run_id
                                         )
                                         result.run_id = run_id
+                                        self._save_batch_research_run(
+                                            legacy_run_id=run_id,
+                                            batch_id=batch_id,
+                                            batch_name=batch_name,
+                                            stock_code=code,
+                                            start_date=start_date,
+                                            end_date=end_date,
+                                            strategy_spec=strategy_spec,
+                                            capital=capital,
+                                            fee_bps=fee_bps,
+                                            slippage_bps=slippage_bps,
+                                            stop_loss_pct=stop_loss_pct,
+                                            take_profit_pct=take_profit_pct,
+                                            execution_price=execution_price,
+                                            sizing_mode=sizing_mode,
+                                            report=report,
+                                            notes=f"批次回測：{batch_name}" + (f" ({error_reason})" if error_reason else ""),
+                                        )
                                     except Exception as e:
                                         logger.error(f"[BatchBacktestService] 保存 {code} 失敗: {e}")
                                 stock_results.append(result)
@@ -467,6 +508,129 @@ class BatchBacktestService:
             overall_stats=overall_stats,
             created_at=datetime.now().isoformat()
         )
+
+    def _save_batch_research_run(
+        self,
+        *,
+        legacy_run_id: str,
+        batch_id: str,
+        batch_name: str,
+        stock_code: str,
+        start_date: str,
+        end_date: str,
+        strategy_spec: StrategySpec,
+        capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        stop_loss_pct: Optional[float],
+        take_profit_pct: Optional[float],
+        execution_price: str,
+        sizing_mode: str,
+        report: BacktestReportDTO,
+        notes: str,
+    ) -> None:
+        if self.research_run_service is None:
+            return
+
+        details = dict(report.details or {})
+        equity = details.get("equity_curve")
+        trades = details.get("trade_list")
+        if not isinstance(equity, pd.DataFrame):
+            equity = pd.DataFrame()
+        if not isinstance(trades, pd.DataFrame):
+            trades = pd.DataFrame()
+
+        metrics = self._report_metrics(report)
+        normalized_params = dict(strategy_spec.config.get("params", {}) or {})
+        metadata = ResearchRunMetadataDTO(
+            run_id=f"batch-backtest:{legacy_run_id}",
+            run_name=f"{batch_name}_{stock_code}",
+            run_type="batch_backtest_stock",
+            strategy_id=strategy_spec.strategy_id,
+            strategy_version=str(details.get("strategy_version", "")),
+            parameter_contract_version=str(details.get("parameter_contract_version", "")),
+            original_input={
+                "source": "BatchBacktestService",
+                "legacy_run_id": legacy_run_id,
+                "batch_id": batch_id,
+                "batch_name": batch_name,
+                "notes": notes,
+            },
+            normalized_params=normalized_params,
+            fallback_reason=dict(details.get("fallback_reason", {}) or {}),
+            universe=[stock_code],
+            start_date=start_date,
+            end_date=end_date,
+            data_cutoff_date=str(details.get("data_as_of_date", "")),
+            data_fingerprint=str(details.get("data_version", "")),
+            fingerprint_algorithm="sha256" if str(details.get("data_version", "")).startswith("sha256") else "",
+            data_manifest=dict(details.get("data_manifest", {}) or {}),
+            capital_cents=self._money_to_cents(capital),
+            fee_bp_x100=self._bps_to_bp_x100(fee_bps),
+            slippage_bp_x100=self._bps_to_bp_x100(slippage_bps),
+            stop_loss_bp=self._pct_to_bp(stop_loss_pct),
+            take_profit_bp=self._pct_to_bp(take_profit_pct),
+            execution_price=execution_price,
+            sizing_mode=sizing_mode,
+            metrics=metrics,
+            regime_breakdown=dict(details.get("regime_breakdown", {}) or {}),
+            benchmark_results=dict(details.get("benchmark_results", {}) or {}),
+            payload_hash=self._research_payload_hash(
+                {
+                    "run_type": "batch_backtest_stock",
+                    "legacy_run_id": legacy_run_id,
+                    "batch_id": batch_id,
+                    "stock_code": stock_code,
+                    "strategy_id": strategy_spec.strategy_id,
+                    "normalized_params": normalized_params,
+                    "metrics": metrics,
+                }
+            ),
+            created_at=datetime.now().isoformat(),
+        )
+        self.research_run_service.save_run(
+            metadata,
+            equity,
+            trades,
+            **self._factor_save_kwargs(details),
+        )
+
+    def _report_metrics(self, report: BacktestReportDTO) -> dict[str, Any]:
+        return {
+            "total_return": report.total_return,
+            "annual_return": report.annual_return,
+            "sharpe_ratio": report.sharpe_ratio,
+            "max_drawdown": report.max_drawdown,
+            "win_rate": report.win_rate,
+            "total_trades": report.total_trades,
+            "expectancy": report.expectancy,
+            "profit_factor": report.details.get("profit_factor", 0.0),
+        }
+
+    def _factor_save_kwargs(self, details: dict[str, Any]) -> dict[str, Any]:
+        factor_records = details.get("factor_records")
+        factor_decision_date = details.get("factor_decision_date")
+        if not factor_records or factor_decision_date is None:
+            return {}
+        return {
+            "factor_records": list(factor_records),
+            "factor_decision_date": factor_decision_date,
+        }
+
+    def _research_payload_hash(self, payload: dict[str, Any]) -> str:
+        digest = hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+        return f"sha256:{digest}"
+
+    def _money_to_cents(self, value: Any) -> int:
+        return int((Decimal(str(value)) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
+
+    def _bps_to_bp_x100(self, value: Any) -> int:
+        return int((Decimal(str(value)) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
+
+    def _pct_to_bp(self, value: Any) -> int | None:
+        if value is None:
+            return None
+        return int((Decimal(str(value)) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
 
     def _calculate_overall_stats(self, stock_results: List[StockBacktestResult]) -> Dict[str, Any]:
         """

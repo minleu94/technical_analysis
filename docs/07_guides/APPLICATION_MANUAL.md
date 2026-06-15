@@ -396,7 +396,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 - 「執行實驗」：開始目前模式。
 - 「取消執行」：合作式取消；已開始的單檔工作可能安全收尾。
-- 「保存結果」：將單股回測或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、factor snapshot / contribution metadata、equity curve 與 trades。
+- 「保存結果」：將單股回測、批次回測單檔結果或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、factor snapshot / contribution metadata、equity curve 與 trades。單股與批次回測的 factor metadata 來自該次回測已產生的 score/factor records，不會在保存時重算分數或重新抓取資料。
 - 「升級為策略版本」：新版 Gate 必須讀取 Research Run Registry，不得只靠單次 summary；run 需 committed / valid、未封存、未升級、具備可還原參數合約版本，且通過最低 validation gate。
 
 目前最低樣本 Gate 為 10 筆交易。通過最低 Gate 不代表已完成充分 OOS 驗證。
