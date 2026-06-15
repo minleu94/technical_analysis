@@ -1,6 +1,6 @@
 # DEVELOPMENT_ROADMAP（Roadmap Hub）
 
-> **最後更新**：2026-06-14
+> **最後更新**：2026-06-15
 > **定位**：本文件是 Roadmap Hub，不再保存完整歷史長文。它負責指向目前狀態、6 個月工程路線、系統架構與歷史歸檔。
 
 ---
@@ -26,11 +26,12 @@
 
 這不是每天吐股票的工具，而是一個可驗證、可回溯、可演化的台股投資決策系統。
 
-目前產品已形成三個閉環：
+目前產品已形成三個已落地的產品閉環，並新增一個未來目標閉環：
 
 1. **資料與市場狀態閉環**：Update → SQLite 狀態 → Market Watch / Smart Money → 候選池。
 2. **研究驗證閉環**：Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Promote。
 3. **持倉檢查閉環**：Recommendation / Backtest → Portfolio → Condition Monitor / Chip Monitor → Journal → 回到研究。
+4. **每日決策閉環（目標）**：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。此閉環尚未完成，落在 6M Roadmap Month 4。
 
 ---
 
@@ -49,7 +50,7 @@
 
 ## 4. 下一步 Next
 
-未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準。
+未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
 
 目前立即執行優先順序：
 
@@ -58,14 +59,19 @@
    - Fixed 57 筆、quantile 79 筆交易與 100% Regime coverage 通過 Gate。
    - Quantile 未優於 fixed，維持 opt-in，不宣稱改善績效或穩健度。
 
-2. **P1：Month 3 Factor Layer v1 實作**
+2. **P1：Month 3 Factor Layer v1 與 Portfolio Replay 可信度**
    - Month 2 Registry governance gate 已關閉。
-   - Factor DTO / registry / Look-ahead gate / adapters / FactorService snapshot/contribution serialization 已開始落地；`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際寫入流程，推薦組合回放已開始供給 factor records，不直接接營收與法人。
+   - Factor DTO / registry / Look-ahead gate / adapters / FactorService snapshot/contribution serialization 已開始落地；`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際寫入流程，推薦組合回放、單股回測與批次回測已開始供給 factor records。
+   - 接下來需補齊固定組合與更多 Research Lab 路徑的 factor metadata，並設計推薦 / 固定組合回放的現金帳、權重、再平衡、未成交、Liquidity / Gap 標記，不直接接營收與法人。
 
-3. **P2：Phase 5 研究輸出後續**
-   - PDF 規格化報告仍待後續。
+3. **P2：Month 4 Daily Decision Desk 前置設計**
+   - Daily Decision Desk 是目標首頁，尚未完成。
+   - 需先定義 `DecisionDeskSnapshot` / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert，不在 UI 層複製既有 scoring / screening / portfolio 計算。
 
-4. **P3：文件治理持續檢查**
+4. **P3：Phase 5 研究輸出後續**
+   - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
+
+5. **P4：文件治理持續檢查**
    - Snapshot、6M Roadmap、Architecture、Index、Agent 指引已採 Scoped SSOT；後續功能變更需依 Coverage Map 同步更新入口摘要。
    - 清理仍引用舊 Phase / 舊 UI 路徑的 Active 文件，並維持 Manual completeness Gate。
 
@@ -77,6 +83,7 @@
 - **Look-ahead bias**：任何策略、回測、推薦、factor、benchmark、停損停利與標準化改動都必須先自查資料可得日。
 - **金融核心數值邊界**：核心金額、交易成本、倉位、PnL 與風控不可新增裸 `float`；必須使用 `Decimal`、整數單位或明確標示的 analytics / visualization 邊界。
 - **資料因子擴充風險**：營收、財報、三大法人、估值與籌碼因子必須走 factor layer，不得直接污染既有 scoring engine。
+- **Daily Decision Desk 誤標風險**：Daily Decision Desk、Market Breadth、Watchlist Trigger、Strategy Drift 與 Post-trade Attribution 尚未完成，不得在操作文件或 Snapshot 中描述為已可用。
 - **文件權威混淆**：Roadmap Hub 只指向權威文件；不要把完整歷史、架構細節與長期研究筆記重新塞回本文件。
 
 ---
@@ -94,3 +101,4 @@
 
 - 2026-06-13：將 Roadmap 從單一最高權威文件重構為 Roadmap Hub；引入 Scoped SSOT，新增 6 個月工程 Roadmap，並將舊 Roadmap 完整歸檔。
 - 2026-06-13：新增 Legacy Carryover Matrix，逐項承接舊 Roadmap 未完成事項並設定 Month 3 前結案 Gate。
+- 2026-06-15：依 IDS 願景重排 Roadmap Hub 的短版 Next，將 Month 3 補強為 Factor Layer + Portfolio Replay 可信度，並將 Daily Decision Desk 明確列為 Month 4 目標而非已完成能力。

@@ -7,23 +7,24 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具，而是一個「可驗證、可回溯、可演化」的投資決策系統。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：三個產品閉環的基礎與主要深化已完成。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、archive 管歷史。當前主線是 Month 3 Factor Layer v1 與 Research Run factor metadata 追溯。
+* **Current Phase (目前階段)**：三個已落地產品閉環的基礎與主要深化已完成，Daily Decision Desk 是尚未完成的第四目標閉環。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、system vision 管產品北極星、archive 管歷史。當前主線是 Month 3 Factor Layer v1 覆蓋補齊與 Portfolio Replay 可信度。
 * **Core Architecture (核心架構)**：分層解耦架構。
   1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
   2. `app_module/`（應用服務層、DTO、Repository 與 use case orchestrator）
   3. Domain / Engine 模組（`decision_module/`、`backtest_module/`、`portfolio_module/`、`analysis_module/`、`data_module/`、`runtime/`）
-* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、Research Run Registry、Factor Layer v1、籌碼分析終端、Portfolio 監控、Runtime 子系統。
-* **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 7 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。大量使用 `pandas_table_model` 呈現高密度數據網格。
+* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、Research Run Registry、Factor Layer v1、籌碼分析終端、Portfolio 監控、Runtime 子系統。`market_module/`、Daily Decision Desk、Market Breadth service 與 Watchlist Trigger service 尚未正式存在。
+* **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 7 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。Daily Decision Desk 是 Month 4 目標首頁，尚非目前可用 Tab。
 * **Current Priorities (目前優先事項)**：
-  1. Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot/contribution serialization。
-  2. Month 3 研究追溯：`ResearchRunService.save_run()` 已可在實際寫入流程保存 `factor_snapshot` / `factor_contributions`；推薦組合回放已先供給 `technical.total_score` 與 `volume.volume_ratio` metadata，後續要擴大到單股回測與更多 Research Lab 路徑。
-  3. 已完成 Gate 的回歸維護：Month 1 fixed / quantile OOS 實證、SQLite 穩定分頁、規格化 Excel 報告匯出、Month 2 M2-A / M2-B / M2-C / final registry governance gate。
+  1. Month 3 Factor Layer 覆蓋補齊：固定組合與更多 Research Lab 路徑需自動產生 `factor_snapshot` / `factor_contributions`。
+  2. Month 3 Portfolio Replay 可信度：補現金帳、權重、再平衡、未成交、Liquidity / Gap 標記，避免後續策略生命週期建立在不完整組合績效上。
+  3. Month 4 Daily Decision Desk 前置設計：定義 snapshot / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
   1. Quantile 的真實 OOS 實證未優於 fixed，因此仍維持 opt-in，不可宣稱更準。
   2. Factor Layer v1 已建立基礎與 Research Run 實際保存入口，推薦組合回放已有初始 factor feed；更多上游流程仍需持續餵入 factor records，避免部分 run 只有空的追溯欄位。
-  3. 營收、基本面、估值與三大法人尚未成為正式資料因子；未來接入必須保存 `available_date`、quality 與 missing policy。
-  4. PDF 研究報告輸出仍是後續 backlog；Excel 報告與 SQLite 穩定分頁已完成。
+  3. Daily Decision Desk、Market Breadth、Watchlist Trigger、Strategy Drift 與 Post-trade Attribution 尚未完成，不得描述為目前可用。
+  4. 營收、基本面、估值與三大法人尚未成為正式資料因子；未來接入必須保存 `available_date`、quality 與 missing policy。
+  5. PDF 研究報告輸出仍是後續 backlog；Excel 報告與 SQLite 穩定分頁已完成。
 
 ---
 
@@ -136,6 +137,7 @@
 * **`docs/00_core/DEVELOPMENT_ROADMAP.md`**：Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與 archive。
 * **`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`**：舊 Roadmap 未完成事項的唯一移交與驗收矩陣。
 * **`docs/01_architecture/system_architecture.md`**：目前架構、模組邊界與資料流權威。
+* **`docs/01_architecture/system_vision_specification.md`**：IDS 產品北極星、目標閉環與能力狀態盤點；不作為目前可用功能依據。
 * **`docs/07_guides/APPLICATION_MANUAL.md`**：目前 7 個工作區與跨工作區流程的完整操作權威。
 * **`docs/01_architecture/multi_agent_workflow.md`**：規範 AI Agent 應如何分支與合併的協議。
 * **`docs/01_architecture/runtime_observatory_rules.md`**：嚴格的相依性與 DTO 架構治理規則。
@@ -182,13 +184,13 @@
 
 * **Active Phase (目前階段)**：三個產品閉環已建立，進入 6 個月工程路線執行期。
 * **In Progress (進行中)**：
-  * Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization。
-  * Research Run factor metadata 追溯：`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際保存流程；推薦組合回放已供給初始 factor records，後續擴大到單股回測等路徑。
+  * Month 3 Factor Layer v1 覆蓋補齊：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization；後續補固定組合與更多 Research Lab 路徑。
+  * Portfolio Replay 可信度：推薦組合回放已供給初始 factor records，後續需補現金帳、權重、再平衡、未成交、Liquidity / Gap 標記。
   * Month 2 Registry governance gate 回歸維護。
-* **Planned (計畫中)**：營收與估值資料、三大法人資料、Portfolio post-trade attribution、PDF 研究報告輸出、策略 promote / demote / retire 規則。
+* **Planned (計畫中)**：Daily Decision Desk、Market Breadth、Sector Rotation、Watchlist Trigger、Fundamental Layer 初版、Portfolio post-trade attribution、PDF 研究報告輸出、策略 promote / demote / retire 規則。
 * **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Smart Money Terminal MVP, AI Runtime MVP。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
-* **Backlog**：單股回測與更多 Research Lab 路徑的 factor records 自動供給、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。
+* **Backlog**：固定組合與更多 Research Lab 路徑的 factor records 自動供給、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。
 
 ---
 

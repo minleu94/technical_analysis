@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-06-13
+> **最後整理**：2026-06-15
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
 
 ---
@@ -11,6 +11,7 @@
 |---|---|
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與歷史歸檔。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
+| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | IDS 產品北極星、最終樣貌、長期能力圖像與已完成 / 進行中 / 未完成能力盤點；不取代 Snapshot、6M Roadmap 或 Architecture。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要、本週優先事項與高風險區。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 本文件，文檔導航。 |
@@ -29,7 +30,7 @@
 | 文件 | 用途 |
 |---|---|
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統模組、分層架構、資料流與模組邊界的架構權威。 |
-| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | 系統最終樣貌規劃、完整程式分層框架與 6 個月 Roadmap 說明書。 |
+| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | IDS 產品北極星、四個目標閉環、Daily Decision Desk 目標、完成狀態盤點與 6 個月 Roadmap 對齊。 |
 | [system_flow_end_to_end.md](../01_architecture/system_flow_end_to_end.md) | 端到端流程。 |
 | [data_collection_architecture.md](../01_architecture/data_collection_architecture.md) | 資料收集架構。 |
 | [runtime_observatory_rules.md](../01_architecture/runtime_observatory_rules.md) | Runtime Observatory 架構治理規範。 |
@@ -198,8 +199,8 @@
 ## 目前開發狀態
 
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
-- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1 已進入實作，包含 Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization、Research Run 實際寫入整合、推薦組合回放 factor records 初始供給與 saved factor metadata reader。
-- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，包含 Research Run Registry、Factor Layer、營收與估值、三大法人、Portfolio 回饋閉環。
+- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1 已進入實作，包含 Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization、Research Run 實際寫入整合、推薦組合回放 / 單股 / 批次 factor records 供給與 saved factor metadata reader。
+- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，包含 Factor Layer 覆蓋補齊、Portfolio Replay 可信度、Daily Decision Desk、Fundamental Layer 初版與 Strategy Lifecycle / Portfolio Feedback。
 - **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
 ---
@@ -244,6 +245,7 @@
 - 2026-06-14：完成 Month 2 final registry governance gate 文件收尾，確認 M2-C 不再列為當前待辦，並轉向 Factor Contract / Factor Layer 前置。
 - 2026-06-14：Month 3 Factor Layer v1 進入實作：新增 Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization、Research Run 實際寫入整合與 saved factor metadata reader。
 - 2026-06-15：Month 3 推薦組合回放 factor feed：由 replay snapshot recommendations 產生 `technical.total_score` / `volume.volume_ratio` metadata，並透過既有 Research Run 保存流程落盤。
+- 2026-06-15：依 IDS 願景更新文檔索引，新增 system vision 的產品北極星定位，並同步 6M Roadmap 新主線：Portfolio Replay 可信度、Daily Decision Desk、Fundamental Layer 與 Strategy Lifecycle。
 
 
 

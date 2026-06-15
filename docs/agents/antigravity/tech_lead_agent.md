@@ -27,6 +27,7 @@
 
 ## 本週預設焦點
 
-- Strategy & Scoring Governance 實證：完成 fixed / quantile walk-forward 對照與統計摘要。
-- 依 6 個月工程路線推進 Research Run Registry、Factor Layer、營收估值與三大法人資料層。
+- Month 3 Factor Layer 覆蓋補齊：固定組合與更多 Research Lab 路徑的 factor records、Factor Gate 回歸與 no-look-ahead 防線。
+- Month 3 Portfolio Replay 可信度：現金帳、權重、再平衡、未成交、Liquidity / Gap 標記。
+- Month 4 Daily Decision Desk 前置：先定義 snapshot / service 邊界，避免在 UI 層重算市場、推薦或持倉邏輯。
 - 保持 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index / Agent docs 一致。

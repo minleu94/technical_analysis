@@ -1,6 +1,6 @@
 # 專案盤點報告
 
-> **最後整理**：2026-06-14
+> **最後整理**：2026-06-15
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 
 ---
@@ -102,10 +102,14 @@ python ui_qt/main.py
 
 ## 5. 目前開發主線
 
-專案已形成三個產品閉環：資料與市場狀態 ✅、研究驗證 ✅、持倉檢查 ✅。
+專案已形成三個已落地產品閉環：資料與市場狀態 ✅、研究驗證 ✅、持倉檢查 ✅；Daily Decision Desk 是尚未完成的第四目標閉環，列入 6M Roadmap Month 4。
 
 - Strategy & Scoring Governance 增量 A / B 與 10 檔 fixed / quantile OOS 實證已完成；quantile 未優於 fixed，維持 opt-in。
 - Phase 5 圖表渲染、批次並行化、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 報告輸出仍在後續 backlog。
-- Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；6 個月主線下一步轉向 Factor Layer、營收與估值、三大法人、Portfolio 回饋閉環。
+- Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；6 個月主線下一步轉向 Factor Layer 覆蓋補齊、Portfolio Replay 可信度、Daily Decision Desk、Fundamental Layer 初版與 Strategy Lifecycle / Portfolio 回饋閉環。
 
 目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；舊 Roadmap 未完成事項是否已承接，以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。
+
+## 6. 更新記錄
+
+- 2026-06-15：同步 IDS 願景與新版 6M Roadmap，標示 Daily Decision Desk 為未完成目標閉環，並更新未來主線排序。

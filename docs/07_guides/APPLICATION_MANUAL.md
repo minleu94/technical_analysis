@@ -1,6 +1,6 @@
 # 台股投資決策系統完整操作手冊
 
-> **最後更新**：2026-06-14
+> **最後更新**：2026-06-15
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前 7 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
@@ -22,6 +22,7 @@
 - 推薦股票一定上漲或策略一定獲利。
 - quantile 一定優於 fixed；2026-06-14 的 10 檔 OOS 實證未顯示 quantile 優於 fixed，因此仍為 opt-in。
 - 推薦回放等同可成交的實盤績效。
+- Daily Decision Desk 不是目前可用首頁；它是 Month 4 Roadmap 目標，目前仍需分別使用市場觀察、推薦分析、Research Lab 與持倉管理取得每日判斷素材。
 - Runtime Observatory 會自動修復問題或自動下單。
 - 觀察清單等同實際投資組合。
 
@@ -572,3 +573,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
 
 功能行為改動時，必須同步更新本表與對應章節。
+
+## 13. 更新記錄
+
+- 2026-06-15：補充 Daily Decision Desk 尚未成為目前可用首頁，避免與 IDS 願景文件及 6M Roadmap 的 Month 4 目標混淆。

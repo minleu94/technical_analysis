@@ -1,7 +1,7 @@
 # 專案導航文件
 
-**版本**：v1.4.1
-**最後更新**：2026-06-14
+**版本**：v1.4.2
+**最後更新**：2026-06-15
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -11,6 +11,8 @@
 **這是一個「可驗證、可回溯、可演化」的台股投資決策系統。**
 
 系統提供完整的數據更新、市場觀察、股票推薦、策略回測功能，讓策略成為可被描述、被比較、被淘汰的研究對象。這不是單純的策略腳本，而是一個工具型系統。
+
+產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 是 Month 4 目標首頁，目前尚未成為可用頂層工作區；現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
 
 ---
 
@@ -62,6 +64,30 @@
 
 ---
 
+### Planned Market Intelligence Layer（目標 `market_module/`）
+
+**目前狀態**：尚未建立正式 `market_module/`。
+
+**目標責任**：
+- Market Breadth
+- Sector Rotation
+- Relative Strength / Liquidity Ranking
+- Watchlist Trigger
+- Daily Decision Desk snapshot
+
+**目前替代位置**：
+- `decision_module/market_regime_detector.py`
+- `decision_module/stock_screener.py`
+- `decision_module/industry_mapper.py`
+- `decision_module/flow_signal_engine.py`
+- `app_module/regime_service.py`
+- `app_module/screening_service.py`
+- `app_module/broker_flow_service.py`
+
+新增 Daily Decision Desk 前，必須先定義 service / DTO 邊界，不能在 UI 直接複製上述 domain 計算。
+
+---
+
 ### AI Runtime Subsystem (`runtime/`)
 
 **這一層負責什麼**：
@@ -86,6 +112,8 @@ python ui_qt/main.py
 ```
 
 **這是什麼**：PySide6 Qt 圖形界面，包含 7 個頂層 Tab：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、策略回測（即 Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory
+
+Daily Decision Desk 尚未加入這 7 個頂層 Tab；它是 6M Roadmap Month 4 目標。
 
 ---
 
@@ -145,6 +173,8 @@ python ui_qt/main.py
 - `decision_module/industry_mapper.py`：產業映射與產業指數處理
 
 **如果我要改市場觀察邏輯**：先看 `app_module/screening_service.py` 或 `app_module/regime_service.py`，再看 `decision_module/` 對應的檔案。
+
+**如果我要做 Daily Decision Desk / Market Breadth / Watchlist Trigger**：先看 `docs/01_architecture/system_vision_specification.md` 與 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 的 Month 4；實作前先設計 `DecisionDeskSnapshot` / service 邊界，不要直接在 UI 層重算。
 
 ---
 
@@ -398,6 +428,7 @@ python ui_qt/main.py
 
 - **目前狀態快照**：`docs/00_core/PROJECT_SNAPSHOT.md`
 - **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- **IDS 產品北極星**：`docs/01_architecture/system_vision_specification.md`
 - **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **舊 Roadmap 移交矩陣**：`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
 - **完整操作手冊**：`docs/07_guides/APPLICATION_MANUAL.md`

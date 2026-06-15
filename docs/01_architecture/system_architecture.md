@@ -1,15 +1,19 @@
 # 系統架構
 
-> **最後更新**：2026-06-14
+> **最後更新**：2026-06-15
 > **定位**：本文件是目前模組邊界、依賴方向、資料流與高風險技術契約的架構權威。歷史遷移過程不在本文件維護。
 
 ## 1. 系統定位
 
-本系統是一個可驗證、可回溯、可演化的台股投資決策系統，形成三個產品閉環：
+本系統是一個可驗證、可回溯、可演化的台股投資決策系統。產品北極星與長期能力圖像見 [system_vision_specification.md](system_vision_specification.md)；本文件只描述目前架構與模組邊界。
+
+目前已落地三個產品閉環：
 
 1. 資料與市場狀態：Update → SQLite → Market Watch / Smart Money → 候選池。
 2. 研究驗證：Recommendation → Research Lab / Backtest / Replay / Walk-forward → Promote。
 3. 持倉檢查：Recommendation / Backtest → Portfolio → Condition / Chip Monitor → Journal → 回到研究。
+
+目標中的第四閉環是 Daily Decision Desk：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。此閉環尚未完成，目前沒有正式 `market_module/`、Daily Decision Desk 首頁、Market Breadth service 或 Watchlist Trigger service。
 
 未來 6 個月的工程方向見 [ROADMAP_6M_ENGINEERING.md](../00_core/ROADMAP_6M_ENGINEERING.md)，舊 Roadmap 移交狀態見 [LEGACY_ROADMAP_CARRYOVER.md](../00_core/LEGACY_ROADMAP_CARRYOVER.md)。
 
@@ -76,6 +80,8 @@ Application Services / DTO / Repository
 6. 持倉管理
 7. Runtime Observatory
 
+Daily Decision Desk 是 Month 4 目標首頁，不屬於目前 7 個頂層工作區；完成前不得在操作文件中描述為可用入口。
+
 完整操作見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
 
 ## 4. Application Layer
@@ -106,6 +112,8 @@ Application Services / DTO / Repository
 | Runtime | `runtime_services/`、`dtos/runtime_dtos.py` |
 
 `app_module` 不依賴 `ui_app`。Legacy Tkinter UI 不是目前 service 架構的一部分。
+
+Daily Decision Desk 後續應以 application service / DTO 聚合既有市場、推薦、watchlist 與 portfolio 結果，不得在 UI 層重算 scoring、screening、broker flow 或 portfolio logic。
 
 ## 5. Decision Domain
 
@@ -178,6 +186,8 @@ Factor `available_date` 晚於決策日時必須拒絕使用。
 
 Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manifest.factor_contributions` 保存 factor 追溯資料。`ResearchRunService.save_run()` 在 metadata 寫入前可合併 explicit factor metadata，或由 `FactorRecord` 與 decision date 透過 `FactorService` 產生 snapshot 與 contribution summary。推薦組合回放結果會從 replay snapshot recommendations 產生初版 factor manifest；單股回測會從 `BacktestService` 已產生的 signal score 序列建立 `technical.total_score` factor records，並由 `BacktestView` 保存 Research Run 時轉交 `ResearchRunService`；批次回測沿用每檔 `BacktestReportDTO` 內的 factor records，在 legacy run 保存成功後以 `batch-backtest:<legacy_run_id>` 寫入 Research Run Registry。這些保存路徑都不在 UI 重算分數或重新抓取資料。Cross-run Comparison 只能讀已保存 metadata，不得為比較重新抓取當前資料。
 
+長期 factor 權重可擴充到 chip / fundamental / market / risk，但目前正式 `RecommendationWeightContract` 仍只接受 `pattern`、`technical`、`volume` 三項整數 bp。擴充前必須先完成資料可得日、品質狀態與 missing policy 治理。
+
 ## 6. Backtest Engine
 
 ### 位置
@@ -205,6 +215,8 @@ Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manife
 - `close`：同根 K 收盤成交假設，必須在 metadata 與報告揭露。
 - benchmark、停損停利、標準化與篩選都只能使用決策當下可取得資料。
 - Walk-forward 的 OOS 測試可用該 fold 訓練起點至 T-1 的歷史產生訊號門檻，但交易狀態必須在測試窗起點以空倉重置，撮合、權益曲線與績效也只從測試窗起點計算；`signal_context_start_date` 不得把訓練期持倉或交易混入 OOS 指標。
+
+推薦組合回放目前已有持有天數、配置權重與 equity curve；Month 3 後續需補強現金帳、再平衡、未成交、Liquidity / Gap 標記與結果揭露，才可作為策略生命週期的可靠證據。
 
 ### 金融數值防線
 
@@ -295,6 +307,8 @@ db_file    -> <DATA_ROOT>/sqlite/twstock.db
 - 估值
 - `institutional_flows`
 - Factor registry / values
+
+這些資料表尚未成為正式可用資料源。接入時必須保留 `as_of_date`、`available_date`、資料品質、來源版本與 fallback / migration。
 
 ### 資料完整性
 
@@ -452,3 +466,7 @@ UI 修改：
 - 檢查 Active docs 不再把 Legacy Roadmap 或 `ui_app/main.py` 當目前入口。
 - 驗證 Markdown relative 連結。
 - 更新 `DOCUMENTATION_INDEX.md` 與 Manual coverage。
+
+## 16. 更新記錄
+
+- 2026-06-15：補入 IDS 願景與架構權威邊界，明確標示 Daily Decision Desk、`market_module/`、Market Breadth、Watchlist Trigger 與 Strategy Drift 尚未完成；同步 Month 3 Portfolio Replay 可信度與後續資料因子接入防線。

@@ -1,192 +1,537 @@
-# 台股投資決策系統：最終樣貌與架構說明書
+# 台股投資決策系統 IDS：最終樣貌與架構說明書
 
 > **最後更新**：2026-06-15  
-> **定位**：本文件是本系統的最終樣貌規劃、程式框架架構與 6 個月 Roadmap 演進的完整說明書，旨在清晰描繪系統的終極能力與核心邊界。
+> **系統定位**：本文件描述台股投資決策系統（Investment Decision System, IDS）的長期產品北極星、核心閉環、能力盤點、目標架構與 Roadmap 規劃。
+> **核心原則**：本系統不以自動交易、不以 AI 報牌、不以預測明日漲跌為目標；本系統的目標是建立一套可驗證、可回溯、可解釋、可持續改進的台股投資研究與決策工作台。
+> **權威邊界**：本文件提供產品願景與長期能力圖像，不取代 Scoped SSOT。當前實作狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月工程路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；目前模組邊界以 `docs/01_architecture/system_architecture.md` 為準；操作方式以 `docs/07_guides/APPLICATION_MANUAL.md` 為準。
 
 ---
 
-## 1. 系統的核心定位與願景
+## 1. 系統核心定位
 
-本系統並非「預測明日漲跌」的黑箱報牌工具，而是一個**「可驗證、可回溯、可演化」的台股投資決策系統（Investment Decision System, IDS）**。其核心願景是通過「嚴格的數據時序治理」與「科學的回測實證」，將人類的主觀分析、技術指標與籌碼因子轉換為可追溯的策略版本，並在持倉管理中建立反饋閉環。
+本系統並非「預測明日漲跌」的黑箱報牌工具，也不是自動交易系統。
 
-系統最終會將以下**「三個產品閉環」**推向成熟：
+本系統是一套以「市場觀察、決策摘要、策略驗證、持倉追蹤、覆盤回饋」為核心的台股投資決策系統。系統每天最重要的任務，是穩定回答以下五個問題：
+
+1. 現在市場處於什麼狀態？
+2. 哪些產業與股票正在轉強或轉弱？
+3. 哪些股票值得進一步研究？
+4. 我的持倉是否仍符合原始投資假設？
+5. 我的策略是否正在失效或需要調整？
+
+所有資料更新、技術指標、籌碼因子、基本面因子、回測、推薦、持倉管理與覆盤功能，都應服務於上述五個問題。系統的北極星不是「做出最多功能」，而是讓使用者每天打開系統後，能在短時間內形成清楚、可驗證、可回溯的市場判斷。
+
+---
+
+## 2. 設計第一原則
+
+### 2.1 Decision First
+
+本系統優先是一個投資決策工作台，其次才是量化研究平台。功能優先順序應為：
+
+```text
+市場判斷
+↓
+候選股票
+↓
+研究驗證
+↓
+持倉檢查
+↓
+覆盤回饋
+```
+
+回測與因子研究很重要，但它們必須回到最終問題：今天市場怎麼了、我該研究誰、我的持倉有沒有變壞、策略是否仍有效。
+
+### 2.2 可驗證
+
+任何推薦、排名、策略與警示，都必須能回到明確資料來源、參數設定與計算邏輯。系統不得只輸出「推薦買入」，而應輸出入選原因、排除原因與風險。
+
+### 2.3 可回溯
+
+任何研究結果、推薦清單、回測結果、持倉來源與策略版本，都應保留當時的資料快照、參數、版本與輸出結果，讓使用者能回答：
+
+```text
+當時為什麼選這支股票？
+當時的市場狀態是什麼？
+當時策略版本是什麼？
+當時回測證據是什麼？
+後來失效的原因是什麼？
+```
+
+### 2.4 可解釋
+
+系統不應只產生分數，而要能拆解分數。每一支股票至少應能輸出：
+
+```text
+Why：為什麼入選？
+Why Not：為什麼被淘汰？
+Risk：主要風險是什麼？
+Drift：目前是否偏離原始投資假設？
+```
+
+Explainability 必須由資料結構、規則、欄位、分數拆解與 UI 呈現支撐，不應依賴 AI 自然語言生成來補足核心證據。
+
+### 2.5 防止未來函數
+
+所有回測、推薦、分位數門檻、基本面因子與籌碼因子，都必須遵守時間序列治理：
+
+```text
+決策日只能使用當時已知資料。
+```
+
+任何因子若無法確認資料可用日期，必須依政策標記為 estimated、missing、neutral 或 skipped，不得直接當成 observed 使用。
+
+---
+
+## 3. 核心產品閉環
+
+系統最終應形成四個閉環；其中閉環 1、3、4 的基礎已存在，閉環 2「Daily Decision Desk」仍是後續 Roadmap 重點。
+
+### 3.1 閉環 1：Data & Market State
+
+目的：讓系統知道目前市場環境。
 
 ```mermaid
 graph TD
-    %% 閉環 1: 資料與市場狀態
-    subgraph Loop1 [閉環 1：資料與市場狀態]
-        Update[數據更新工作台] -->|寫入與同步| DB[(SQLite 主資料庫)]
-        DB -->|DB-first 載入| Watch[市場觀察 / Smart Money]
-        Watch -->|人工篩選| Watchlist[觀察清單 / 候選池]
-    end
-
-    %% 閉環 2: 研究與驗證
-    subgraph Loop2 [閉環 2：研究驗證]
-        Watchlist -->|研究輸入| Lab[Research Lab / 回測引擎]
-        Lab -->|最佳化 / Walk-forward| Registry[Research Run Registry]
-        Registry -->|OOS Gate & 補償交易| Promote[策略版本升級 Promote]
-    end
-
-    %% 閉環 3: 持倉與反饋
-    subgraph Loop3 [閉環 3：持倉檢查]
-        Promote -->|策略載入 / 推薦結果| Portfolio[持倉管理 / SL-TP 監控]
-        Portfolio -->|主力流向下鑽| Watch
-        Portfolio -->| post-trade 歸因| Journal[覆盤日誌]
-        Journal -->|策略失效反饋| Lab
-    end
+    Update[數據更新工作台] --> DB[(SQLite / CSV / Parquet 資料層)]
+    DB --> Market[Market Intelligence 能力]
+    Market --> Regime[Market Regime]
+    Market --> Strength[強弱個股與產業]
+    Market --> Flow[Smart Money / Chip Flow]
 ```
+
+此閉環回答：市場偏多還偏空、哪些產業正在轉強、資金流向是否集中、資料品質是否足夠。
+
+### 3.2 閉環 2：Decision Desk
+
+目的：把資料變成每日可執行的觀察結論。
+
+```mermaid
+graph TD
+    Market[Market Intelligence 能力] --> Desk[Daily Decision Desk]
+    Desk --> Candidates[候選股票 / Watchlist Trigger]
+    Desk --> Alerts[持倉風險警示]
+    Desk --> ResearchInput[研究輸入]
+```
+
+Daily Decision Desk 是目標首頁，而非目前已完成的頂層工作區。此閉環要回答：今天要不要積極研究、最強產業是什麼、哪些股票剛進入觀察條件、哪些持倉出現警訊。
+
+### 3.3 閉環 3：Research Validation
+
+目的：驗證候選股票與策略假設。
+
+```mermaid
+graph TD
+    Watchlist[Watchlist / Candidate Universe] --> Lab[Research Lab]
+    Lab --> Backtest[Backtest Engine]
+    Backtest --> Registry[Research Run Registry]
+    Registry --> Compare[Run Comparison]
+    Compare --> Promote[Strategy Promotion Gate]
+```
+
+此閉環回答：條件過去是否有效、不同 Regime 下表現如何、是否過度擬合、是否值得升級為策略版本。
+
+### 3.4 閉環 4：Portfolio Feedback
+
+目的：讓持倉成為策略驗證的一部分，而不只是損益紀錄。
+
+```mermaid
+graph TD
+    Promote[Promoted Strategy] --> Portfolio[Portfolio Engine]
+    Portfolio --> Monitor[Risk / SLTP / Chip Monitor]
+    Monitor --> Journal[Post-trade Journal]
+    Journal --> Lab[Research Lab]
+```
+
+此閉環回答：持倉來自哪個策略、當初買入假設是否仍成立、目前是正常回撤還是策略失效、實際表現與回測預期差在哪裡。
 
 ---
 
-## 2. 完整的程式分層框架
+## 4. 目標首頁：Daily Decision Desk
 
-系統採用明確的**單向依賴分層架構**，確保金融計算與 UI 界面解耦，便於自動化測試與靜態合規掃描。
+Daily Decision Desk 是整個 IDS 的目標核心頁。使用者每天打開系統後，應能在 30 秒內知道：
+
+```text
+今天市場如何？
+我該研究誰？
+我的持倉有沒有問題？
+```
+
+目前系統已有 Market Watch、Smart Money、Recommendation、Portfolio 監控與 Research Lab，但尚未有整合式首頁。Daily Decision Desk 應在 Roadmap 中作為獨立能力交付，而不是把現有各頁文字合併。
+
+### 4.1 Market Regime Summary
+
+輸出市場狀態，例如 Strong Bull、Bull、Neutral、Bear、Strong Bear。Regime 不應只看大盤漲跌，應逐步納入大盤趨勢、成交量、市場寬度、產業擴散、權值股與中小型股背離。
+
+### 4.2 Market Breadth
+
+目標輸出市場健康度：
+
+```text
+上漲家數 / 下跌家數
+創 20 日與 60 日新高家數
+創 20 日與 60 日新低家數
+漲停 / 跌停家數
+成交量擴散率
+```
+
+目前僅有強弱股與部分新高、漲停標籤邏輯，尚未形成完整 Market Breadth 服務。
+
+### 4.3 Sector Rotation
+
+目標輸出最強 / 最弱產業、產業強度變化、產業成交量變化、產業內強勢股比例與創新高比例。目前已有強弱產業頁與 `IndustryMapper`，但尚未形成獨立 Sector Rotation service 與 Decision Desk snapshot。
+
+### 4.4 Smart Money / Chip Flow
+
+目標輸出外資、投信、自營商、券商分點集中度、主力連買連賣、籌碼共振與背離。目前已完成券商分點 Smart Money 與 Portfolio Chip Monitor；三大法人資料尚未正式接入。
+
+### 4.5 Watchlist Trigger
+
+目標輸出新進候選、移除候選、強度提升、強度下降、突破條件、量能條件、籌碼條件與風險條件。目前 Watchlist / Universe 已可管理候選池，但尚未有自動 Watchlist Trigger service。
+
+### 4.6 Portfolio Alert
+
+目標輸出停損警示、停利警示、策略漂移警示、籌碼惡化警示、產業轉弱警示與流動性下降警示。目前已具備價格 / 策略條件監控與籌碼監控，策略漂移與 post-trade attribution 尚未完成。
+
+---
+
+## 5. 目標程式分層架構
+
+目前架構權威仍是 `system_architecture.md`。以下是 IDS 最終樣貌的目標分層，其中 `market_module/` 是建議方向，尚未在目前程式碼中成為正式模組。
 
 ```text
 PySide6 視覺介面層 (ui_qt/)
-       |
-       v
+        |
+        v
 應用協調與儲存服務層 (app_module/)
-       |
-       +---> 決策與因子領域層 (decision_module/)
-       |
-       +---> 回測撮合引擎層 (backtest_module/)
-       |
-       +---> 持倉帳務領域層 (portfolio_module/)
-       |
-       +---> 數據存儲底座層 (data_module/)
-       |
-       v
+        |
+        +---> 市場決策領域層 (market_module/)        [目標模組，尚未建立]
+        |
+        +---> 決策與因子領域層 (decision_module/)
+        |
+        +---> 回測撮合引擎層 (backtest_module/)
+        |
+        +---> 持倉帳務領域層 (portfolio_module/)
+        |
+        +---> 數據存儲底座層 (data_module/)
+        |
+        v
 Runtime 運作核心層 (runtime/)
 ```
 
-### 2.1 各分層的責任與核心組件
+### 5.1 UI Layer：`ui_qt/`
 
-#### A. 視覺介面層 (UI Layer - `ui_qt/`)
-- **責任**：收集使用者操作、設定參數，並非同步呼叫應用服務（防止 UI 假死）；直觀呈現績效、指標對比及圖表。
-- **頂層工作區**：
-  1. **數據更新**：提供快速更新（直寫 SQLite）與安全更新（備份 CSV + SQLite），提供唯讀式 SQLite 資料檢視器。
-  2. **市場觀察**：包含大盤 Regime 信心檢測、強弱勢個股與產業排名，以及 Smart Money 主力資金流向。
-  3. **策略回測 / Research Lab**：整合單股、批次、組合、回放及策略研究等 5 種實驗模式。
-  4. **推薦分析**：基於 Profile 一鍵配置或進階參數生成當日推薦，拆解 Why / Why Not。
-  5. **觀察清單**：管理候選 Universe。
-  6. **持倉管理**：記錄真實或模擬持倉，提供價格、損益與籌碼監控。
-  7. **Runtime Observatory**：唯讀觀測狀態機運作與事件日誌。
+目前頂層工作區為數據更新、市場觀察、策略回測 / Research Lab、推薦分析、觀察清單、持倉管理與 Runtime Observatory。目標狀態會新增 Daily Decision Desk 作為首頁；Research Run Registry 可維持在 Research Lab 子頁，不必急著拆成頂層工作區。
 
-#### B. 應用與儲存服務層 (Application Layer - `app_module/`)
-- **責任**：封裝 Use Cases、組裝 DTO、管理儲存庫（Repository）與版本控制。
-- **儲存防線**：`ResearchRunService` 統一管理 metadata（SQLite）與明細（Parquet），使用 Staging 狀態機與 Hash Integrity 確保資料不損壞、不覆寫。
-- **報告防線**：`ReportExportService` 負責在背景 thread 將回測或推薦快照規格化匯出成 Excel，使用臨時檔寫入後進行 `os.replace` 原子替換。
+### 5.2 Application Layer：`app_module/`
 
-#### C. 決策與因子領域層 (Decision Domain - `decision_module/`)
-- **責任**：管理策略配置、指標與權重契約，以及百分位數排名與因子層。
-- **三大安全防線**：
-  - **參數契約 (`IndicatorParameterRegistry`)**：嚴格限制指標範圍與型態，非法值 Fail-Closed。
-  - **權重契約 (`RecommendationWeightContract`)**：限制 key 為 `pattern`、`technical`、`volume`，值為整數 bp，總和必為 10000。
-  - **時序分位數 (`ScoreThresholdPolicy`)**：分位數買賣門檻僅能使用 T-1 日以前的 Expanding 歷史分布，暖機期 60 天，徹底防止未來函數。
-  - **因子層 v1 (`factors/`)**：建立 `FactorRecord` 品質三態（observed / estimated / missing）與 `FactorGate`（Look-ahead 門禁），防範未來數據滲漏。
+責任是封裝 use case、組裝 DTO、管理 Repository、協調多模組流程、管理 Research Run 保存與報表輸出。已存在的關鍵服務包括 `RecommendationService`、`ResearchRunService`、`ReportExportService`、`BrokerFlowService`、`PortfolioService` 與 `PortfolioConditionMonitor`。
 
-#### D. 回測撮合引擎層 (Backtest Engine - `backtest_module/`)
-- **責任**：模擬台股交易機制、撮合、費用、滑價與風控。
-- **金額防線**：全面改用 `Decimal` 計算交易成本、手續費與 PnL，杜絕裸 `float` 精度漏洞。
-- **時間軸防線**：限制訊號最早於 T+1 開盤成交 (`next_open`)，不混淆 OOS 與 IS 資料。
-
-#### E. 持倉與帳務層 (Portfolio Domain - `portfolio_module/` & `app_module/`)
-- **責任**：管理交易明細、持倉平均成本、實現/未實現損益、停損停利 (SL/TP) 警示。
-- **來源追溯**：持倉能明確關聯其來源（如推薦 Profile、特定回測 Run 或 Promoted 策略版本）。
-
-#### F. 數據存儲底座層 (Data Infrastructure - `data_module/`)
-- **責任**：管理 SQLite 資料庫 (`twstock.db`) 與 CSV 檔案，設定統一配置 `TWStockConfig`。
-
-#### G. Runtime 運作核心層 (Runtime Core - `runtime/`)
-- **責任**：以有限狀態機 (FSM) 驅動系統事件，保障核心狀態不因意外崩潰而失控。
-
----
-
-## 3. 系統最終能做到哪些事？
-
-當系統完全演進至最終狀態時，將能實現以下全自動與受控工作流：
-
-### 3.1 數據同步與高速檢視
-- **能做到的事**：
-  - 每天自動抓取並同步台股每日股價、大盤指數、產業指數、券商分點與技術指標。
-  - 數據載入較 CSV 提速 **320 倍以上**（複合索引 SQLite 查詢僅需 20~30 毫秒）。
-  - 使用者能直接在 UI 透過穩定分頁檢視幾百萬筆資料，自由篩選、排序、並將唯讀查詢結果原子化地匯出為符合 Excel 規範的報告。
-
-### 3.2 嚴格治理的策略推薦與評分
-- **能做到的事**：
-  - 使用者可選擇不同的策略範本（暴衝/穩健/長期等 Profile）進行一鍵個股評分。
-  - **橫斷面百分位排名 (Quantile Mode)**：可對當日符合 Universe 門檻的全部股票計算分位數，排除因大盤暴漲暴跌導致絕對分數失效的缺點。
-  - 清楚拆解並說明為何入選（Why）與為何被淘汰（Why Not），將主觀分析公式化與參數化。
-
-### 3.3 零未來函數的科學化回測與驗證
-- **能做到的事**：
-  - **單股與批次並行回測**：支援多核心 CPU 並行運算，可同時回測上百檔股票，且具備安全取消機制。
-  - **推薦組合歷史回放**：模擬過去數年每週或每期套用推薦 Profile 的投資組合淨值曲線，展示 Rolling Sharpe、Sortino 及蒙地卡羅模擬（P05/P50/P95）的極端風險。
-  - **滾動式 walk-forward 驗證**：自動進行 Out-of-Sample (OOS) 的滾動訓練與測試，確保參數最佳化不是來自於對歷史資料的過度擬合 (Overfitting)。
-
-### 3.4 具交易完整性與原子性的策略升級 (Promotion Gate)
-- **能做到的事**：
-  - 研究結果在滿足最少交易次數門檻 (例如 10 筆以上 OOS 交易) 且資料完整性檢核成功後，可一鍵升級為正式「策略版本」。
-  - 升級過程跨越 SQLite 數據庫與 JSON 版本文件，具備補償交易（寫入失敗時自動回滾 JSON）與雙向對齊（Reconciliation），絕不遺留懸空版本或版本衝突。
-
-### 3.5 主動監控的持倉與籌碼流向下鑽
-- **能做到的事**：
-  - 結合當前最新股價，即時更新庫存持倉的未實現損益（Decimal 級精度）。
-  - **主動 SL/TP 風控警告**：當股價跌破停損線或漲過停利線時，持倉狀態自動變更為「假設失效」並顯示複合警示。
-  - **主力籌碼流向下鑽**：使用者可一鍵下鑽 (Drill-Down) 至主力流向 Tab，系統會自動高亮並定位該持倉個股的最新分點買賣張數、集中度與異常籌碼行為。
-
----
-
-## 4. 系統 Roadmap 演進與最終狀態
-
-系統的研發進度規劃為 6 個月，目前已完成 Month 1~3 的核心地基：
-
-### 4.1 已完成的里程碑 (Month 1 ~ Month 3)
-- **Month 1（實證與分頁匯出）**：
-  - 完成了 fixed / quantile 雙模式的 walk-forward 實證基準線與 regime 分層歸因。
-  - 實作了 SQLite 資料分頁與 Excel 背景原子寫入。
-- **Month 2（研究儲存與 Promote）**：
-  - 實作了 `IndicatorParameterRegistry` 與 `WeightContract` 參數權重 bp 契約。
-  - 建立了 `ResearchRunRegistry`（SQLite + Parquet）的 immutable 儲存、crash recovery 與橫向對比 (2-5 run) 頁面。
-  - 實作了基於 Registry 的 Promote Gate 與 JSON 補償交易。
-- **Month 3（Factor Layer 基礎）**：
-  - 建立了可防未來函數的 Factor Contract、Look-ahead Gate、既有技術/量能/籌碼 adapter，並將因子 snapshot 序列化寫入 Research Run。
-
-### 4.2 未來 Roadmap 規劃 (Month 4 ~ Month 6)
-
-後續月份將逐步推進「外部因子擴充」與「策略生命週期」，這也是程式的**最終樣貌完成期**：
+目標新增或深化：
 
 ```text
-               【Month 4】                           【Month 5】                           【Month 6】
-      ┌─────────────────────────────┐       ┌─────────────────────────────┐       ┌─────────────────────────────┐
-      │     基本面與估值因子 v1      │       │     三大法人與籌碼共振      │       │    策略生命週期與後驗歸因    │
-      ├─────────────────────────────┤       ├─────────────────────────────┤       ├─────────────────────────────┤
-      │ • 接入月營收與財報數據        │       │ • 接入三大法人買賣超數據     │       │ • 建立 Promote/Demote/Retire│
-      │ • 實作 YoY / MoM 因子        │ ───>  │ • 計算法人連買/成交占比     │ ───>  │   策略生命週期淘汰機制       │
-      │ • 建立 PE / PB / PS 估值分位 │       │ • 法人與分點籌碼共振/背離    │       │ • 實作 post-trade 績效歸因  │
-      │ • avaliable_date 時序防線   │       │   診斷模型                  │       │ • 分析回測與實盤滑價落差     │
-      └─────────────────────────────┘       └─────────────────────────────┘       └─────────────────────────────┘
+MarketDashboardService
+WatchlistTriggerService
+PortfolioReviewService
+DecisionDeskSnapshotBuilder
 ```
 
-- **Month 4：基本面與估值因子 v1**
-  - **功能**：新增月營收與公司財報資料表，計算營收增長與財務指標。建立 P/E、P/B、P/S 等產業相對估值因子。
-  - **防線**：因子公告日時序防線（Available Date），回測與評分只能讀取該決策日當下已公告的營收。
-- **Month 5：三大法人與籌碼因子 v1**
-  - **功能**：接入外資、投信、自營商買賣超資料，計算連買連賣、成交占比等。
-  - **能做到的事**：將三大法人因子的「大資金流向」與券商分點的「主力流向」進行交叉對比，形成「籌碼共振與背離診斷」。
-- **Month 6：策略生命週期與 Portfolio 回饋**
-  - **功能**：建立系統性的策略生命週期規則（Promote / Demote / Retire）。
-  - **能做到的事**：
-    - 策略版本不能只因一次高回測報酬就被保留，若在實盤/模擬中 Sharpe 退化、出現資料漂移或交易量萎縮，系統將自動建議 Demote（降級）或 Retire（淘汰）。
-    - 實作持倉的後驗歸因（Post-trade attribution），自動統計實盤滑價、進場點偏離度，並回答「這筆交易的原始策略假設是否仍成立」。
+### 5.3 Market Domain：目標 `market_module/`
+
+此層尚未獨立存在。目前市場狀態能力分散在 `decision_module/market_regime_detector.py`、`decision_module/stock_screener.py`、`decision_module/industry_mapper.py`、`decision_module/flow_signal_engine.py` 與 application services。若後續建立 `market_module/`，責任應是市場狀態判斷、市場寬度、產業輪動、相對強度、流動性排名、Smart Money 摘要與 Daily Decision Desk 資料供應。
+
+### 5.4 Decision Domain：`decision_module/`
+
+目前已包含策略配置、評分、指標參數治理、推薦權重契約、fixed / quantile 門檻、推薦橫斷面百分位與 Factor Layer v1。
+
+長期權重契約可擴充至：
+
+```text
+pattern
+technical
+volume
+chip
+fundamental
+market
+risk
+```
+
+但目前正式 `RecommendationWeightContract` 僅接受 `pattern`、`technical`、`volume` 三項，總和固定為 `10000 bp`。擴充前必須先完成資料可得日、品質與 missing policy 治理。
+
+### 5.5 Backtest Engine：`backtest_module/`
+
+目前已具備撮合、成本、滑價、整股、漲跌停、成交量限制、最大參與率、single-stock 回測、批次回測與 walk-forward。推薦組合回放已有資金配置與持有期模擬，但仍不是完整 Portfolio Replay Engine。
+
+目標深化：
+
+```text
+PortfolioReplayEngine
+VirtualAccountStateMachine
+RebalanceEngine
+GapLimiter
+LiquidityGate
+Rolling Risk Metrics
+```
+
+### 5.6 Portfolio Domain：`portfolio_module/` 與 `app_module/`
+
+目前已具備交易紀錄、平均成本、實現 / 未實現損益、來源追溯、停損停利警示與籌碼監控。目標深化為策略漂移偵測、post-trade attribution、Portfolio Review Dashboard 與策略生命週期回饋。
+
+### 5.7 Data Infrastructure：`data_module/`
+
+目前採 SQLite-first 查詢、CSV 保留人工檢查與備份、Parquet 儲存研究明細。未來資料擴充必須保留 `as_of_date`、`available_date`、quality、source_version 與 missing policy。
+
+### 5.8 Runtime Core：`runtime/`
+
+Runtime 層只負責背景任務狀態、事件日誌、治理觀測與錯誤恢復，不應混入策略邏輯。
 
 ---
 
-## 5. 系統最終樣貌總結
+## 6. 核心防線
 
-當 Month 6 結束時，本股票決策程式將成為一個**高度工程化、安全且具有嚴格防禦機制的台股量化工作台**：
-1. **數據層**：SQLite-first 複合存儲，完美兼顧 CSV 人工檢查與 DB 高速查詢。
-2. **決策層**：由 Registry 時序 Gate 與 bp 契約把關，徹底杜絕主觀猜測與過度擬合的「未來函數」。
-3. **研究層**：具備並行回測、最佳化、Walk-forward 與多 Run 對比分析，每一次策略的優劣都是數據說了算。
-4. **交易層（持倉面）**：與策略版本、籌碼流向、SL/TP 風控及覆盤日誌完全打通，讓持倉不僅是損益數字，更是策略假設的「後驗實驗室」。
+### 6.1 No-look-ahead Gate
+
+任何回測與推薦不得使用決策日尚不可得資料。所有 factor 應包含：
+
+```text
+symbol
+factor_name
+value
+as_of_date
+available_date
+source
+quality_status
+```
+
+### 6.2 Liquidity Gate
+
+Liquidity Gate 是台股回測與推薦的核心防線之一。現有回測已具備成交量限制、最大參與率與漲跌停限制；完整 Liquidity Gate 尚需延伸到推薦、Watchlist Trigger 與 Why Not。
+
+目標支援：
+
+```text
+20 日均成交金額門檻
+20 日均成交量門檻
+單筆交易不得超過當日成交量上限
+漲停不得假設可買入
+跌停不得假設可順利賣出
+停牌排除
+處置股標記或排除
+全額交割股標記或排除
+極低價股標記或排除
+```
+
+### 6.3 Gap Limiter
+
+若策略假設使用 T+1 開盤成交，必須處理跳空問題。Gap Limiter 目前尚未形成獨立模組；目標是支援開盤跳空超過門檻時增加滑價、降低成交率、視為不成交或標記高風險成交，並把結果寫入研究摘要。
+
+### 6.4 Cost Model
+
+台股交易成本至少應考慮手續費、證交稅、最低手續費、滑價、零股或整股限制。核心金融數值不得新增裸 `float` 計算，需使用 Decimal、整數股數、整數基點或分為單位的整數金額。
+
+### 6.5 Fundamental Flag
+
+基本面資料第一階段不應直接建立過度自信的「業外損益扣除器」。更務實的做法是先建立 `AbnormalFundamentalFlag`，標記 EPS 暴增但營業利益未同步改善、營收成長與獲利成長背離、單季非營業利益異常、處分資產、匯兌收益或投資收益異常。第一階段只做標記與降權，不自動假設能精準扣除。
+
+### 6.6 Passive Flow Noise Tag
+
+籌碼資料不應把所有法人買超都視為主動看多。後續法人資料接入後，應建立 `PassiveFlowNoiseTag` 標記 ETF 成分股調整附近日期、單日異常大量、法人買超但價格未延續、法人買超但產業未同步轉強等情境。第一階段只做標記與降權，不假設能完全過濾。
+
+---
+
+## 7. Explainability Layer
+
+Explainability Layer 是系統核心，不是附屬功能。每一個推薦、淘汰、警示與策略結果，都應能轉換成可理解的原因。
+
+### 7.1 股票層級解釋
+
+每支股票應輸出 Why、Why Not、Risk、Drift。目前推薦已有 Why / Why Not 與分數拆解；Risk 與 Drift 仍需隨 Daily Decision Desk、Liquidity Gate、Portfolio Feedback 深化。
+
+### 7.2 策略層級解釋
+
+每個策略應輸出有效市場 Regime、失效市場 Regime、主要獲利來源、主要虧損來源、最大風險、OOS 表現與 IS / OOS 差異。目前 Research Run Registry、Cross-run Comparison 與 benchmark metadata 已建立基礎；策略生命週期解釋仍在 Month 6。
+
+### 7.3 持倉層級解釋
+
+每筆持倉應輸出原始假設、目前狀態、偏離項目、風險事件與建議檢查項目。目前已具備來源追溯、價格與籌碼監控；完整 Strategy Drift 與 Post-trade Attribution 尚未完成。
+
+---
+
+## 8. 目前能力盤點
+
+| 能力 | 狀態 | 證據 / 說明 |
+|---|---|---|
+| SQLite-first 更新、查詢與分頁 | 已完成 | `UpdateService`、`SqliteInspectorService`、SQLite Inspector UI、穩定分頁與唯讀查詢。 |
+| CSV 備份與 Excel 匯出 | 已完成 | 快速 / 安全更新分流、CSV 匯出、`ReportExportService` 背景原子寫入。 |
+| Market Regime、強弱股、強弱產業 | 已完成基礎 | `RegimeService`、`MarketRegimeDetector`、`StockScreener`、`IndustryMapper` 與市場觀察工作區。 |
+| Smart Money / 券商分點 | 已完成基礎並深化品質治理 | `BrokerFlowService`、`FlowSignalEngine`、observed / estimated / unavailable 三態。 |
+| Daily Decision Desk | 未完成 | 尚無整合式首頁、`DecisionDeskSnapshotBuilder` 或 Watchlist Trigger service。 |
+| Market Breadth 完整服務 | 未完成 | 目前僅有強弱股與部分標籤，尚未有完整廣度服務與 snapshot。 |
+| Sector Rotation service | 部分完成 | 已有強弱產業與產業映射，尚未有獨立 rotation / breadth / divergence service。 |
+| fixed / quantile 與 OOS 實證 | 已完成 | 10 檔 OOS、Regime coverage Gate、quantile 維持 opt-in。 |
+| Research Run Registry | 已完成基礎 | SQLite metadata、Parquet 明細、hash integrity、crash reconciliation、comparison、Promote Gate。 |
+| Factor Layer v1 | 進行中 | Contract、Registry、Gate、v1 adapters、FactorService、推薦回放 / 單股 / 批次 factor metadata 已接入；固定組合與更多路徑待補。 |
+| 推薦組合回放 | 部分完成 | 已有持有天數、等權 / 分數加權、equity curve；完整 Virtual Account、再平衡、現金帳、Gap / Liquidity gate 待補。 |
+| Portfolio 監控 | 已完成基礎 | 持倉、來源追溯、SL/TP、籌碼監控與 Smart Money 下鑽。 |
+| Strategy Drift / Post-trade Attribution | 未完成 | Month 6 Roadmap。 |
+| 月營收、基本面、估值 | 未完成 | Month 5 Roadmap；必須走 Factor Layer。 |
+| 三大法人 | 未完成 | 可納入後續籌碼 / Market Intelligence 擴充；必須保存資料品質與可得日。 |
+| PDF 報告 | 未完成 | Excel 已完成，PDF 屬研究輸出 backlog。 |
+
+---
+
+## 9. 六個月 Roadmap 對齊
+
+此 Roadmap 以「先提高每日決策價值，再提高研究深度」為原則；正式工程交付物與驗收標準以 `ROADMAP_6M_ENGINEERING.md` 為準。
+
+### Month 1：實證與資料檢視基礎
+
+狀態：已完成主要 Gate。
+
+主要成果：
+
+```text
+Fixed / Quantile 雙模式基準
+Walk-forward 初版與 Regime 分層歸因
+SQLite 分頁查詢
+Excel 原子匯出
+```
+
+### Month 2：研究儲存與策略版本基礎
+
+狀態：已完成主要 Gate。
+
+主要成果：
+
+```text
+IndicatorParameterRegistry
+RecommendationWeightContract
+ResearchRunRegistry
+SQLite + Parquet 儲存
+Run Comparison
+Registry-based Promote Gate
+```
+
+### Month 3：Factor Layer 與 Portfolio Replay 可信度
+
+狀態：進行中。
+
+主要項目：
+
+```text
+FactorRecord
+FactorGate
+FactorSnapshot
+固定組合與更多 Research Lab 路徑 factor metadata
+Portfolio Replay 資金帳、再平衡、買不到 / 賣不掉處理
+No-look-ahead Regression Tests
+```
+
+Month 3 的攻堅核心是讓組合回放結果可信。若組合回放沒有現金、權重、再平衡、買不到 / 賣不掉處理，後續策略生命週期會建立在不可靠績效上。
+
+### Month 4：Market Intelligence 與 Daily Decision Desk
+
+狀態：未開始。
+
+主要項目：
+
+```text
+Daily Decision Desk
+Market Regime Summary
+Market Breadth
+Sector Rotation
+Relative Strength
+Liquidity Gate
+Watchlist Trigger
+Portfolio Alert 初版
+```
+
+Month 4 不優先投入完整財報清洗。核心價值是把系統從研究平台推進成每日決策工作台。
+
+### Month 5：Fundamental Layer 初版
+
+狀態：未開始。
+
+主要項目：
+
+```text
+月營收資料
+Revenue YoY
+Revenue MoM
+3M Revenue Trend
+Revenue New High
+available_date
+AbnormalFundamentalFlag
+PE / PB / PS 初版
+```
+
+第一階段只做標記、降權與提示風險，不自動修正財報、不自動扣除業外、不自動產生單點目標價。
+
+### Month 6：Strategy Lifecycle 與 Portfolio Feedback
+
+狀態：未開始。
+
+主要項目：
+
+```text
+Promote / Demote / Retire
+StrategyDriftDetector
+Post-trade Attribution
+Regime Compatibility
+Live vs Research Gap
+Portfolio Review Dashboard
+```
+
+Month 6 的核心問題是策略是否仍有效、持倉是否仍符合原始假設、實際表現與研究預期差在哪。
+
+---
+
+## 10. 成功標準
+
+本系統成功與否，不應只用回測報酬率判斷。一套成功的 IDS 應滿足：
+
+```text
+每天能判斷市場狀態
+能找出值得研究的股票
+能排除不該碰的股票
+能追蹤持倉是否變壞
+能保存研究證據
+能比較策略版本
+能發現策略失效
+能避免未來函數
+能避免低流動性假績效
+能讓使用者知道每個決策背後的原因
+```
+
+更精簡地說，系統每天應能回答三個問題：
+
+```text
+今天市場怎麼了？
+我該研究誰？
+我的持倉有沒有問題？
+```
+
+---
+
+## 11. 非目標
+
+本系統明確不以以下事項為優先目標：
+
+```text
+自動下單
+高頻交易
+即時逐筆交易
+黑箱 AI 報牌
+預測明日漲跌
+過度參數最佳化
+用單一模型取代完整研究流程
+```
+
+若未來增加 AI 輔助，也應只作為分析摘要、文件產生或查詢介面，不應取代系統本身的資料治理、回測驗證、持倉檢查與策略生命週期管理。
+
+---
+
+## 12. 更新記錄
+
+- 2026-06-15：依 IDS 最終樣貌重新整理北極星、四個產品閉環、Daily Decision Desk 目標、完成狀態盤點與 6 個月 Roadmap 對齊；明確標示已完成、進行中與未完成能力，避免將願景誤寫為現況。

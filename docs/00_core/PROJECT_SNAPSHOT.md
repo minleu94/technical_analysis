@@ -22,7 +22,7 @@
 
 ## 當前狀態
 
-專案已超出早期線性 Phase 規劃，實際產品主線已形成三個閉環：
+專案已超出早期線性 Phase 規劃，實際產品主線已形成三個已落地閉環，並新增一個後續目標閉環：
 
 - **閉環 1：資料與市場狀態閉環** ✅ 基礎已建立
   - Update → SQLite 狀態 → Market Watch / Smart Money（市場觀察子 Tab）→ 候選池
@@ -44,6 +44,10 @@
 - **效能與研究輸出（Phase 5）** ✅ SQLite 檢視器分頁與規格化 Excel 報告匯出已完成 (2026-06-14)
   - 圖表渲染優化 ✅ / 批次回測並行化 ✅ / SQLite 檢視器穩定分頁 ✅ / 規格化 Excel 報告匯出 ✅
 
+- **目標閉環 4：每日決策工作台（Daily Decision Desk）** ⏳ 尚未完成，列入 Month 4
+  - 目標：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。
+  - 目前已有 Market Watch、Smart Money、Recommendation、Research Lab 與 Portfolio 監控作為素材，但尚無整合式首頁、Market Breadth service、Watchlist Trigger service、Strategy Drift 或 Post-trade Attribution。
+
 - **文件治理與 Manual** ✅ 本輪完成
   - Roadmap Hub、6M Roadmap、Legacy Carryover、Architecture、Index 與 Agent 指引已採 Scoped SSOT。
   - 已建立 7 個頂層工作區的完整操作手冊。
@@ -63,9 +67,9 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Month 3 Factor Layer v1：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot/contribution serialization 已進入實作；v1 不先接營收與法人。
-2. Month 3 研究追溯：`ResearchRunService.save_run()` 已可在實際寫入流程保存 `factor_snapshot` / `factor_contributions`；推薦組合回放已先由 replay snapshot 的 `total_score` / `factor_scores.volume` 產生 factor metadata，單股回測與批次回測已由 signal score 序列產生 `technical.total_score` factor records 並在保存 Research Run 時交由 FactorService gate 序列化；Cross-run Comparison 只讀已保存 factor metadata，不重抓當前資料。
-3. 已完成 Gate 維持回歸：Month 1 fixed / quantile OOS 實證、SQLite 穩定分頁、規格化 Excel 報告匯出，以及 Month 2 M2-A / M2-B / M2-C / final registry governance gate 均已完成；PDF 報告輸出是後續研究輸出 backlog，不阻塞 Month 3。
+1. Month 3 Factor Layer 覆蓋補齊：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot/contribution serialization 已進入實作；接下來補固定組合與更多 Research Lab 路徑的 factor records，v1 不先接營收、法人或估值。
+2. Month 3 Portfolio Replay 可信度：推薦組合回放已能產生 factor metadata，但仍需補強現金帳、權重、再平衡、未成交、Liquidity / Gap 標記，避免後續策略生命週期建立在不完整組合績效上。
+3. Month 4 Daily Decision Desk 前置設計：定義 `DecisionDeskSnapshot` / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert；此首頁尚未完成，不得描述為目前可用。
 
 ## 高風險區（改動需謹慎）
 
@@ -75,6 +79,7 @@
 - `decision_module/scoring_engine.py` / `decision_module/strategy_configurator.py`
 - `app_module/strategies/*`（fixed / quantile 門檻、確認天數與 Look-ahead 契約）
 - `app_module/recommendation_replay_service.py` / `app_module/recommendation_portfolio_backtest_service.py`
+- 推薦 / 固定組合回放的現金帳、再平衡、Liquidity / Gap 標記（Month 3 新高風險方向）
 - `app_module/research_run_service.py` / `app_module/research_run_repository.py`（Research Run Registry metadata、Parquet hash、archive / promoted guard）
 - Strategy registry / preset / promotion 相關服務
 - UI ↔ service contract（DTO）
@@ -82,6 +87,7 @@
 - `ui_qt/widgets/fast_chart_widget.py` / `ui_qt/widgets/chart_payloads.py`（回測圖表 renderer 與資料 payload contract）
 - `ui_qt/views/update_view.py` / `app_module/update_service.py`（數據更新工作台與安全更新流程）
 - `portfolio_module/core.py` / `app_module/portfolio_condition_monitor.py`（Portfolio domain 與條件監控）
+- Daily Decision Desk / Market Breadth / Watchlist Trigger / Portfolio Alert 聚合層（尚未完成；實作時不得在 UI 複製 domain 計算）
 
 分位數治理的額外風險：
 
@@ -93,6 +99,7 @@
 
 - `DEVELOPMENT_ROADMAP.md` - Roadmap Hub，指向目前狀態、6 個月路線、架構與 archive。
 - `ROADMAP_6M_ENGINEERING.md` - 未來 6 個月可執行工程路線。
+- `../01_architecture/system_vision_specification.md` - IDS 產品北極星、最終樣貌與能力狀態盤點；不作為目前可用功能依據。
 - `LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 未完成事項的逐項移交與結案 Gate。
 - `DOCUMENTATION_INDEX.md` - 文檔索引。
 - `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則。
