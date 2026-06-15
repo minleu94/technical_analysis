@@ -84,3 +84,13 @@ def test_watchlist_trigger_service_degraded_when_provider_fails():
     assert snapshot.quality == DecisionDeskQuality.DEGRADED
     assert snapshot.trigger_count == 0
     assert any("watchlist_trigger_ranking_provider_error" in item for item in snapshot.warnings)
+
+
+def test_watchlist_trigger_providers_can_be_imported():
+    from app_module.watchlist_trigger_service import (
+        WatchlistServiceWatchlistProvider,
+        SQLiteRankingProvider,
+    )
+    assert WatchlistServiceWatchlistProvider is not None
+    assert SQLiteRankingProvider is not None
+
