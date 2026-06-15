@@ -683,3 +683,51 @@ def test_portfolio_backtest_records_unfilled_order_when_recommended_stock_has_no
     ]
     assert "unfilled_order:9999:missing_price_rows" in result.selection_diagnostics
     assert result.details["portfolio_credibility"]["unfilled_orders"]["supported"] is True
+
+
+def test_portfolio_backtest_records_unfilled_order_when_liquidity_is_insufficient():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100, "成交股數": 1000},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110, "成交股數": 1000},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [
+            {
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "total_score": 90.0,
+                "factor_scores": {"volume": 70.0},
+            }
+        ]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+        max_participation_rate=0.05,
+    )
+
+    unfilled_orders = result.details["unfilled_orders"]
+
+    assert result.period_holdings == []
+    assert result.summary["total_trades"] == 0
+    assert result.summary["unfilled_order_count"] == 1
+    assert unfilled_orders[0]["reason"] == "liquidity_limited"
+    assert unfilled_orders[0]["stock_code"] == "2330"
+    assert unfilled_orders[0]["allocation_amount"] == 1000000.0
+    assert unfilled_orders[0]["liquidity"]["volume_shares"] == 1000
+    assert unfilled_orders[0]["liquidity"]["max_participation_rate"] == 0.05
+    assert unfilled_orders[0]["liquidity"]["max_participation_amount"] == 5000.0
+    assert "unfilled_order:2330:liquidity_limited" in result.selection_diagnostics
+    assert result.details["portfolio_credibility"]["liquidity_gap"]["supported"] == "partial"

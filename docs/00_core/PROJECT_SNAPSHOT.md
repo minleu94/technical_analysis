@@ -68,7 +68,7 @@
 ## 本週優先事項（只列 3 個）
 
 1. Month 3 Factor Layer 覆蓋補齊：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters 與 FactorService snapshot/contribution serialization 已進入實作；固定組合回測已沿用批次 per-stock 保存路徑並以 `fixed_basket_stock` 標記寫入 factor records，接下來仍需補更多 Research Lab 路徑覆蓋，v1 不先接營收、法人或估值。
-2. Month 3 Portfolio Replay 可信度：推薦組合回放已能產生 factor metadata，並輸出 `portfolio_credibility` manifest；缺價推薦會記錄為 `unfilled_orders`，不再靜默跳過。完整現金帳、權重、再平衡現金重用、成交量 / Liquidity 與 Gap 模型仍需補強，避免後續策略生命週期建立在不完整組合績效上。
+2. Month 3 Portfolio Replay 可信度：推薦組合回放已能產生 factor metadata，並輸出 `portfolio_credibility` manifest；缺價推薦會記錄為 `unfilled_orders`，有 `max_participation_rate` 時也會用 entry-day 成交股數檢查配置金額並記錄 `liquidity_limited`。完整現金帳、權重、再平衡現金重用、Gap 與完整撮合模型仍需補強，避免後續策略生命週期建立在不完整組合績效上。
 3. Month 4 Daily Decision Desk 前置設計：定義 `DecisionDeskSnapshot` / service 邊界，聚合 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger 與 Portfolio Alert；此首頁尚未完成，不得描述為目前可用。
 
 ## 高風險區（改動需謹慎）

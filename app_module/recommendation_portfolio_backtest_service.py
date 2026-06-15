@@ -38,6 +38,7 @@ class RecommendationPortfolioBacktestService:
         holding_days: int,
         stop_loss_pct: float | None = None,
         take_profit_pct: float | None = None,
+        max_participation_rate: float | None = None,
     ) -> RecommendationPortfolioBacktestResultDTO:
         """
         執行推薦組合回測。
@@ -62,6 +63,7 @@ class RecommendationPortfolioBacktestService:
         credibility_manifest = self._build_credibility_manifest(
             rebalance_frequency=rebalance_frequency,
             allocation_method=allocation_method,
+            max_participation_rate=max_participation_rate,
         )
 
         snapshots = []
@@ -87,14 +89,38 @@ class RecommendationPortfolioBacktestService:
 
             weights = self._calculate_weights(recommendations, allocation_method)
             for rank, rec in enumerate(recommendations, 1):
+                allocation_amount = capital_per_period * weights[rank - 1]
+                allocation_weight = weights[rank - 1]
+                liquidity_unfilled = self._liquidity_unfilled_reason(
+                    data=data,
+                    rec=rec,
+                    rebalance_ts=rebalance_ts,
+                    planned_exit_ts=planned_exit_ts,
+                    allocation_amount=allocation_amount,
+                    max_participation_rate=max_participation_rate,
+                )
+                if liquidity_unfilled is not None:
+                    unfilled_orders.append(
+                        self._build_unfilled_order(
+                            rec=rec,
+                            rank=rank,
+                            rebalance_ts=rebalance_ts,
+                            planned_exit_ts=planned_exit_ts,
+                            allocation_amount=allocation_amount,
+                            allocation_weight=allocation_weight,
+                            reason="liquidity_limited",
+                            liquidity=liquidity_unfilled,
+                        )
+                    )
+                    continue
                 holding = self._build_period_holding(
                     data=data,
                     rec=rec,
                     rank=rank,
                     rebalance_ts=rebalance_ts,
                     planned_exit_ts=planned_exit_ts,
-                    allocation_amount=capital_per_period * weights[rank - 1],
-                    allocation_weight=weights[rank - 1],
+                    allocation_amount=allocation_amount,
+                    allocation_weight=allocation_weight,
                     stop_loss_pct=stop_loss_pct,
                     take_profit_pct=take_profit_pct,
                 )
@@ -105,8 +131,8 @@ class RecommendationPortfolioBacktestService:
                             rank=rank,
                             rebalance_ts=rebalance_ts,
                             planned_exit_ts=planned_exit_ts,
-                            allocation_amount=capital_per_period * weights[rank - 1],
-                            allocation_weight=weights[rank - 1],
+                            allocation_amount=allocation_amount,
+                            allocation_weight=allocation_weight,
                             reason="missing_price_rows",
                         )
                     )
@@ -228,6 +254,44 @@ class RecommendationPortfolioBacktestService:
             rebalance_dates.append(ts)
         return rebalance_dates
 
+    def _liquidity_unfilled_reason(
+        self,
+        *,
+        data: pd.DataFrame,
+        rec: Dict[str, Any],
+        rebalance_ts: pd.Timestamp,
+        planned_exit_ts: pd.Timestamp,
+        allocation_amount: float,
+        max_participation_rate: float | None,
+    ) -> Dict[str, Any] | None:
+        if max_participation_rate is None or max_participation_rate <= 0:
+            return None
+        code = str(rec.get("stock_code", ""))
+        stock_rows = data[
+            (data["證券代號"].astype(str) == code)
+            & (data["日期"] >= rebalance_ts)
+            & (data["日期"] <= planned_exit_ts)
+        ]
+        if stock_rows.empty:
+            return None
+        entry_row = stock_rows.iloc[0]
+        if "成交股數" not in entry_row.index:
+            return None
+        volume = pd.to_numeric(entry_row["成交股數"], errors="coerce")
+        if pd.isna(volume):
+            return None
+        volume_shares = int(volume)
+        close_price = float(entry_row["收盤價"])  # numeric-boundary: analytics
+        max_amount = round(float(volume_shares * close_price * max_participation_rate), 6)  # numeric-boundary: analytics
+        if allocation_amount <= max_amount:
+            return None
+        return {
+            "volume_shares": volume_shares,
+            "close_price": close_price,
+            "max_participation_rate": max_participation_rate,
+            "max_participation_amount": max_amount,
+        }
+
     def _build_unfilled_order(
         self,
         *,
@@ -238,8 +302,9 @@ class RecommendationPortfolioBacktestService:
         allocation_amount: float,
         allocation_weight: float,
         reason: str,
+        liquidity: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
-        return {
+        order = {
             "rebalance_date": rebalance_ts.strftime("%Y-%m-%d"),
             "stock_code": str(rec.get("stock_code", "")),
             "stock_name": str(rec.get("stock_name", "")),
@@ -250,6 +315,9 @@ class RecommendationPortfolioBacktestService:
             "allocation_weight": allocation_weight,
             "total_score": float(rec.get("total_score", 0.0)),  # numeric-boundary: dto
         }
+        if liquidity is not None:
+            order["liquidity"] = liquidity
+        return order
 
     def _unfilled_order_diagnostics(self, unfilled_orders: List[Dict[str, Any]]) -> List[str]:
         return [
@@ -435,7 +503,19 @@ class RecommendationPortfolioBacktestService:
             )
         return sorted(results, key=lambda item: item.total_pnl, reverse=True)
 
-    def _build_credibility_manifest(self, *, rebalance_frequency: str, allocation_method: str) -> Dict[str, Any]:
+    def _build_credibility_manifest(
+        self,
+        *,
+        rebalance_frequency: str,
+        allocation_method: str,
+        max_participation_rate: float | None = None,
+    ) -> Dict[str, Any]:
+        liquidity_supported: bool | str = "partial" if max_participation_rate else False
+        liquidity_policy = (
+            "entry_day_volume_participation_checked"
+            if max_participation_rate
+            else "volume_limit_and_gap_risk_not_applied"
+        )
         warnings = [
             "cash_account_not_modeled",
             "rebalance_cash_reuse_not_modeled",
@@ -461,8 +541,9 @@ class RecommendationPortfolioBacktestService:
                 "policy": "missing_price_rows_are_recorded_as_unfilled_orders",
             },
             "liquidity_gap": {
-                "supported": False,
-                "policy": "volume_limit_and_gap_risk_not_applied",
+                "supported": liquidity_supported,
+                "policy": liquidity_policy,
+                "max_participation_rate": max_participation_rate,
             },
             "warnings": warnings,
         }
