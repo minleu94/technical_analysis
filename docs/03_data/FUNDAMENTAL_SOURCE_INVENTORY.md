@@ -44,7 +44,8 @@ financial_data = D:/Min/Python/Project/FA_Data/financial_data
 | 現金流量表 | `financial_data/*_cash_flows_statement.csv` | 既有 raw CSV，約 1,562 檔 | CSV | 有報表日、科目、數值與原始中文科目；缺公告日 / 可得日 | 可作 raw source 候選；不得直接算 cash-flow 因子 |
 | 日資料本益比 | SQLite `daily_prices.本益比` / `technical_indicators.本益比` | 已在日資料表 | SQLite | 屬日成交資料附帶欄位，不是完整估值 layer；有交易日但無估值來源版本與品質政策 | 可列 valuation preflight 候選；需建立相對分位與 quality policy |
 | P/B / P/S / 殖利率 | 未發現正式來源 | unavailable | - | 無正式 CSV 或 SQLite 表 | Month 5 不得假造；需另定來源 |
-| 公告日 / 財報公告日 | 未發現正式來源 | unavailable | - | 既有 raw CSV 未保存公告日 | 必須補來源或制定 conservative `available_date` 政策 |
+| 月營收公告日 | TWSE / TPEX OpenAPI 最新月；MOPS 歷史頁待人工可追溯來源 | partial | JSON / HTML | TWSE/TPEX 最新月彙總表有 `出表日期`；目前未取得可穩定自動化的歷史公告日來源 | 可產生候選 mapping；正式寫入前必須人工確認 |
+| 財報公告日 | 未發現正式來源 | unavailable | - | 既有 raw CSV 未保存公告日 | 必須補來源或制定 conservative `available_date` 政策 |
 | source_version / quality | 未發現正式 fundamental 欄位 | unavailable | - | 既有 raw CSV 沒有資料品質與來源版本欄位 | 必須由 migration / adapter 補齊 |
 
 ## 3.1 候選 SQLite Schema
@@ -265,6 +266,7 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - `manual.twse_monthly_revenue_announcement_log`
 - `manual.available_date_mapping`
 - `twse.monthly_revenue_announcement`
+- `tpex.monthly_revenue_announcement`
 - `mops.monthly_revenue_announcement`
 
 若 mapping 檔不存在，驗證結果會回傳 `fundamental_availability.mapping_file_missing`；若使用 `financial_data.monthly_revenue_csv` 或其他未治理來源，驗證結果會保留 diagnostics 並判定 invalid。CLI 入口為：
@@ -275,7 +277,7 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 
 未提供 `--path` 時，CLI 只讀取 `TWStockConfig.monthly_revenue_availability_file` 指向的位置並輸出 Markdown 摘要；它不會建立正式 mapping 檔、不會改寫 raw CSV，也不會寫入 SQLite。
 
-### 5.2.2 TWSE OpenAPI 候選產生器
+### 5.2.2 TWSE / TPEX OpenAPI 與 historical dry-run 候選產生器
 
 `data_module/monthly_revenue_availability_builder.py` 與 `scripts/build_monthly_revenue_availability.py` 提供月營收 availability mapping 候選產生器，可從 TWSE OpenAPI `https://openapi.twse.com.tw/v1/opendata/t187ap05_P` 讀取公開發行公司每月營業收入彙總表，使用官方欄位 `出表日期`、`資料年月`、`公司代號` 產生受治理 mapping row。產生器會：
 
@@ -295,6 +297,31 @@ CLI 範例：
 未提供 `--output` 時只輸出 Markdown 摘要，不建立檔案。即使提供 `--output`，也只會寫入使用者指定的候選 CSV；不得直接覆寫 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`，正式寫入前仍需人工確認、備份與驗證入口通過。
 
 2026-06-16 對真實 TWSE OpenAPI 執行 dry-run 時，官方端點回傳 299 筆最新月資料，本機 raw monthly revenue 期間為 175,234 組，兩者交集為 0，因此未產生候選 row、未寫入正式 mapping。MOPS 個股 ajax 歷史查詢在一般自動化請求下回傳安全性阻擋頁，尚不能列為穩定自動下載來源；若要補歷史 mapping，需另取得可追溯的官方批次檔、人工公告日 log，或使用受控手動 mapping 後再經 validator 驗證。
+
+`data_module/monthly_revenue_availability_history.py` 與 `scripts/build_monthly_revenue_availability_history.py` 是下一版 historical dry-run builder。它支援：
+
+- `--start-period YYYY-MM` / `--end-period YYYY-MM`
+- `--markets twse,tpex`
+- `--stock-code 2330` 單股篩選
+- `--output <candidate-csv>`；未指定時只輸出 summary，不寫檔
+- `--source-json-dir <dir>` 供測試或人工下載的官方 JSON 檔使用（檔名為 `twse.json` / `tpex.json`）
+
+目前官方 OpenAPI 驗證結果：
+
+| 來源 | endpoint | 歷史支援判定 | 欄位 / 樣本 |
+|---|---|---|---|
+| TWSE 上市公司每月營業收入彙總表 | `https://openapi.twse.com.tw/v1/opendata/t187ap05_L` | swagger 未提供 period query；目前回最新月 | 2026-06-16 查得 1,076 rows；`2330` 與 `9935` 均為 `資料年月=11505`、`出表日期=1150615` |
+| TPEX 上櫃公司每月營業收入彙總表 | `https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O` | swagger 未提供 period query；目前回最新月 | 2026-06-16 查得 889 rows；`3207` 為 `資料年月=11505`、`出表日期=1150616` |
+| data.gov 上市公司每月營業收入彙總表 | `https://data.gov.tw/dataset/18420` | 資料集欄位確認有 `出表日期`；資源指向 TWSE / MOPS 最新資料 | 欄位包含 `出表日期`、`資料年月`、`公司代號`、營收與累計營收欄位 |
+| MOPS 採用 IFRSs 後月營收頁 | `https://mops.twse.com.tw/mops/web/t05st10_ifrs` | 直接 POST historical query 目前回安全性阻擋頁；舊 `nas/t21/...` 靜態路徑目前回 404 | 不能列為穩定自動來源；只可記錄為待人工確認來源 |
+
+2026-06-16 對正式 raw 路徑執行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_monthly_revenue_availability_history.py --start-period 2020-01 --end-period 2026-05 --markets twse,tpex --fetch-date 2026-06-16
+```
+
+結果為 `requested_periods=77`、`fetched_periods=1`、`matched_raw_monthly_revenue_rows=0`、`missing_availability_rows=76902`、`duplicate_mapping_rows=0`、`diagnostics=0`。原因是正式 raw 月營收目前涵蓋 `2014-04` 至 `2024-04`，而 TWSE/TPEX OpenAPI 最新月為 `2026-05`，沒有 period overlap。此結果不產生候選 CSV，也不得用 raw CSV 期間日期補值。
 
 ### 5.3 估值呈現政策 v1
 
@@ -329,7 +356,7 @@ CLI 範例：
 
 ## 7. Month 5 下一步
 
-1. 填入或下載真實月營收公告日資料到 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`；目前 repo 只提供欄位範本與 dry-run 驗證入口，不提供正式資料。
+1. 填入或下載真實月營收公告日資料到候選 CSV，先以 historical dry-run builder 與 validator 驗證；目前 repo 只提供欄位範本、TWSE/TPEX 最新月 builder 與 dry-run 驗證入口，不提供正式 mapping。正式寫入 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 前必須人工確認。
 2. 正式 SQLite schema migration 已完成；後續不得繞過 loader / validator 直接寫入三張 fundamental 表。
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
@@ -362,3 +389,4 @@ CLI 範例：
 - 2026-06-16：新增 Abnormal Fundamental diagnostics policy / application service / Daily Decision Desk prompt bridge；異常基本面只作 Research metadata 與風險提示，不改寫財報、不自動調整分數。
 - 2026-06-16：新增 TPEX daily price backfill workflow 與 CLI，對正式 `daily_prices` 補入 `20260616` 上櫃四碼普通股日價 877 筆；正式 apply 前備份 DB，驗證 0 duplicate primary keys，`3207` 日價缺口已補齊。
 - 2026-06-16：TPEX official daily close quotes 已接入日常每日股價更新管線；歷史 TPEX 缺漏仍需 dry-run plan 與人工確認，不由 fundamental layer 補值。
+- 2026-06-16：新增 TWSE/TPEX 月營收 historical dry-run builder 與 CLI，支援 `2020-01..2026-05` 期間 summary、單股篩選、候選 CSV 輸出與 diagnostics；真實來源驗證確認 TWSE/TPEX OpenAPI 目前只提供最新月、MOPS historical 自動化查詢仍不可穩定使用，正式 raw 月營收 `2014-04..2024-04` 與最新月來源無交集，因此未產生正式 mapping。

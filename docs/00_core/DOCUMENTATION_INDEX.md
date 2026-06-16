@@ -116,6 +116,7 @@
 | [2026-06-16-month5-fundamental-layer-preflight.md](../superpowers/plans/2026-06-16-month5-fundamental-layer-preflight.md) | Month 5 Fundamental Layer preflight 計畫，定義資料來源盤點、available_date 契約、factor adapter 邊界、no-look-ahead 測試與非目標。 |
 | [2026-06-16-month5-fundamental-main-sequence.md](../superpowers/plans/2026-06-16-month5-fundamental-main-sequence.md) | Month 5 基本面主線 sequencing memo，定義五份後續 superpowers plan 的執行順序、共用非目標與驗證規範。 |
 | [2026-06-16-month5-availability-data-entrypoint.md](../superpowers/plans/2026-06-16-month5-availability-data-entrypoint.md) | Month 5 真實公告日 / available_date 資料入口 plan，建立月營收可得日 mapping 的正式驗證流程。 |
+| `data_module/monthly_revenue_availability_history.py` / `scripts/build_monthly_revenue_availability_history.py` | Month 5 月營收公告日 historical dry-run builder；支援 TWSE/TPEX 最新月來源、人工官方 JSON、期間 summary、候選 CSV 與 diagnostics，不寫正式 mapping。 |
 | [2026-06-16-month5-fundamental-sqlite-migration-v1.md](../superpowers/plans/2026-06-16-month5-fundamental-sqlite-migration-v1.md) | Month 5 Fundamental SQLite 受控 migration v1 plan，要求 working-copy dry-run、backup、rollback 與 schema preservation tests。 |
 | [2026-06-16-month5-revenue-factor-pack-v1.md](../superpowers/plans/2026-06-16-month5-revenue-factor-pack-v1.md) | Month 5 Revenue Factor Pack v1 plan，實作 Revenue YoY、MoM、3M trend 與 new high factor adapters，並強制 available_date gate。 |
 | [2026-06-16-month5-valuation-data-layer-v1.md](../superpowers/plans/2026-06-16-month5-valuation-data-layer-v1.md) | Month 5 Valuation Data Layer v1 plan，建立估值 metric 的 industry percentile 來源與 adapter，只輸出相對區間與 diagnostics。 |
@@ -283,6 +284,7 @@
 - 2026-06-16：新增 valuation metrics backfill workflow 文件同步，記錄 `daily_prices.本益比` dry-run、`companies.csv` 產業 mapping、同產業 percentile、apply confirm、官方 company registry 更新與正式 DB 已寫入 831 筆 P/E records。
 - 2026-06-16：新增 official company registry workflow 文件同步，記錄 TWSE/TPEX 官方公司基本資料更新 `companies.csv`、備份、`9935` 產業修正與 `3207` TPEX daily price 歷史缺口判讀。
 - 2026-06-16：完成 Fundamental factor service 文件同步，記錄服務只串接 provider、adapters 與 FactorGate，輸出 records / diagnostics 但不接 `ScoringEngine`。
+- 2026-06-16：新增月營收公告日 historical dry-run builder 索引，記錄 TWSE/TPEX 最新月 OpenAPI 與候選 mapping CLI；正式 mapping 寫入與月營收回填仍維持人工 gate。
 - 2026-06-16：新增 TPEX daily price backfill plan 與文件同步，記錄官方 TPEX daily close quotes 受控寫入 `daily_prices`、DB 備份、`3207` 補價與 877 筆正式寫入驗證。
 - 2026-06-16：更新 Full App Healthcheck，整合 TPEX 日常管線、SQLite Inspector 顯示防護與 `broker_flows.trade_type` 主鍵治理的人工驗證入口。
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
