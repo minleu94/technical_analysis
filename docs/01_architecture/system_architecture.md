@@ -186,7 +186,7 @@ Factor `available_date` 晚於決策日時必須拒絕使用。
 - `app_module/fundamental_diagnostics_service.py`（Research metadata application boundary；序列化 abnormal diagnostics）
 - `data_module/valuation_data.py`（Month 5 valuation data layer；建立 governed `ValuationObservation` 與同產業整數基點分位，不產生估值結論）
 - `data_module/company_registry.py` / `scripts/update_company_registry.py`（Month 5 official company registry workflow；以 TWSE/TPEX 官方基本資料更新 `companies.csv`，維持既有 schema 並先 dry-run / backup / confirm）
-- `data_module/monthly_revenue_availability_history.py` / `scripts/build_monthly_revenue_availability_history.py`（Month 5 月營收公告日 historical dry-run builder；讀 TWSE/TPEX 官方 `出表日期`、人工提供 JSON、人工保存的 MOPS 官方 HTML，或新版 MOPS redirectToOld / mopsov static report，輸出候選 mapping / diagnostics，不寫正式 mapping 或 SQLite）
+- `data_module/monthly_revenue_availability_history.py` / `scripts/build_monthly_revenue_availability_history.py`（Month 5 月營收公告日 historical dry-run builder；讀 TWSE/TPEX 官方 `出表日期`、人工提供 JSON、人工保存的 MOPS 官方 HTML、新版 MOPS redirectToOld / mopsov static report，或授權 PIT 月營收公告日 CSV，輸出候選 mapping / diagnostics，不寫正式 mapping 或 SQLite）
 - `data_module/tpex_daily_price_source.py`（TPEX daily close quotes 日常 adapter；輸出 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，交由既有 SQLite sync upsert `daily_prices`，不接 company registry 或 fundamental layer）
 - `data_module/tpex_daily_price_history_plan.py` / `scripts/plan_tpex_daily_price_history_backfill.py`（TPEX 歷史日價 dry-run planner；估算來源筆數、既有筆數、新增候選筆數與失敗日期，不寫正式 DB）
 - `data_module/tpex_daily_price_backfill.py` / `scripts/backfill_tpex_daily_prices.py`（TPEX 市場日價受控補寫 workflow；以官方 daily close quotes 補寫 `daily_prices`，預設 dry-run，正式 apply 需 confirm 與備份，不寫 company registry 或 fundamental tables）
@@ -491,6 +491,7 @@ UI 修改：
 - 2026-06-16：新增月營收 availability historical dry-run builder 架構邊界，確認 TWSE/TPEX 最新月 OpenAPI 或人工官方 JSON 只能產生候選 mapping / diagnostics，正式 mapping 寫入與 monthly revenue backfill 仍需人工 gate。
 - 2026-06-16：補上 MOPS 官方 HTML source-dir 架構邊界；`--mops-html-dir` 只讀人工保存且含 `出表日期` 的官方 HTML，缺欄位時 fail-closed，不由 raw CSV 補日期。
 - 2026-06-17：補上 MOPS `--mops-static` 架構邊界與 45 天合理揭露窗口；historical static report 的重新出表日會被視為過晚 available_date，不得形成 candidate row。
+- 2026-06-16：補上授權 PIT 月營收公告日 CSV 架構邊界；`--pit-csv` 只接受具 source_version 的 point-in-time 匯出檔並產生候選 mapping，不寫正式 mapping、不回填 SQLite、不接 ScoringEngine。
 - 2026-06-16：新增估值呈現政策 / adapter 架構邊界，確認只輸出相對估值區間與 diagnostics，不接 ScoringEngine，不產生目標價、合理價、上漲空間或買賣建議。
 - 2026-06-16：新增 valuation data layer 架構邊界，確認資料層只建立受治理 observation 與同產業分位，估值輸出仍由 presentation policy 控制。
 - 2026-06-16：新增 valuation metrics backfill 架構邊界，確認 `daily_prices.本益比` 需經 dry-run / confirm / backup workflow 才能寫入 `fundamental_valuation_metrics`，且不接 ScoringEngine。
