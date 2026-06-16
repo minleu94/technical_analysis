@@ -17,7 +17,7 @@
 
 正式 SQLite 尚無月營收、財報、估值或基本面專用表。`DATA_ROOT/financial_data/` 內存在舊 CSV 原始資料，但缺少公告日與 `available_date`，因此只能列為 raw candidate source，不得直接用於回測、推薦、策略分數或 Daily Decision Desk。
 
-Month 5 下一步必須先完成 available-date contract 與 no-look-ahead tests，再考慮正式 migration。2026-06-16 已建立 `data_module/fundamental_data.py` 作為唯讀正規化契約：raw 月營收 row 必須搭配外部 `available_date` mapping 才會產生 normalized record；缺 mapping 時只輸出 diagnostics。同日亦建立 `data_module/fundamental_schema.py` 作為候選 schema dry-run 模組，目前尚未接入 `DBManager.init_database()`，不會自動修改正式 SQLite。該模組提供 `generate_fundamental_schema_dry_run_report()` 與 `generate_fundamental_schema_copy_dry_run_report()`，可在暫時 SQLite connection 或正式 DB working copy 上確認既有核心表不被修改。`data_module/fundamental_availability.py` 則集中公告日 / available_date 策略，避免 parser、adapter 或後續 migration 各自發明時間軸規則。
+Month 5 下一步必須先完成 available-date contract 與 no-look-ahead tests，再考慮正式 migration。2026-06-16 已建立 `data_module/fundamental_data.py` 作為唯讀正規化契約：raw 月營收 row 必須搭配外部 `available_date` mapping 才會產生 normalized record；缺 mapping 時只輸出 diagnostics。同日亦建立 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / `available_date` mapping 契約，允許人工或後續下載來源提供 `announced_date`、`available_date`、`source` 與 `source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。`data_module/fundamental_schema.py` 作為候選 schema dry-run 模組，目前尚未接入 `DBManager.init_database()`，不會自動修改正式 SQLite。該模組提供 `generate_fundamental_schema_dry_run_report()` 與 `generate_fundamental_schema_copy_dry_run_report()`，可在暫時 SQLite connection 或正式 DB working copy 上確認既有核心表不被修改。`data_module/fundamental_availability.py` 則集中公告日 / available_date 策略，避免 parser、adapter 或後續 migration 各自發明時間軸規則。
 
 ## 2. 盤點依據
 
@@ -111,6 +111,22 @@ available_date <= decision_date
 
 此政策不允許把 raw CSV 的 `date` 推定為公告日或可得日。
 
+### 5.2 受治理 Mapping 契約
+
+`data_module/fundamental_availability_sources.py` 定義月營收 availability mapping loader。每筆 mapping 至少必須提供：
+
+| 欄位 | 要求 |
+|---|---|
+| `stock_code` | 股票代號 |
+| `period` | `YYYY-MM` 月營收期別 |
+| `as_of_date` | 該期別月底日期 |
+| `announced_date` | 公告日；可缺，但缺失時只能降級為 `DEGRADED` |
+| `available_date` | 系統可安全使用日；缺失時不產生 override |
+| `source` | mapping 來源；不得為 `financial_data.monthly_revenue_csv` |
+| `source_version` | mapping 版本 |
+
+此契約目前解決「資料如何被標記為可得」的工程邊界；它不是公告日資料本身。正式接入前仍需建立可追溯的公告日資料來源或人工維護流程。
+
 ## 6. Factor Adapter 邊界
 
 允許：
@@ -129,7 +145,7 @@ available_date <= decision_date
 
 ## 7. Month 5 下一步
 
-1. 尋找或建立正式公告日來源；目前 explicit `available_date` mapping 只是 preflight 邊界，不是長期資料源。
+1. 尋找或建立正式公告日來源；目前 governed `available_date` mapping 只是 preflight 邊界，不是長期資料源。
 2. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 3. 擴充 fundamental adapter 測試骨架，不接入 `ScoringEngine`。
 4. 規劃 migration / fallback；任何寫入正式資料前需先備份並取得確認。
@@ -143,3 +159,4 @@ available_date <= decision_date
 - 2026-06-16：新增公告日 / available_date 初版政策，集中處理 observed / degraded / missing 判定與不合法時間軸 diagnostics。
 - 2026-06-16：新增 schema dry-run report API，可在暫時 SQLite connection 驗證候選 fundamental schema 不修改既有核心表。
 - 2026-06-16：新增正式 DB working copy dry-run API，並以正式 `twstock.db` 複本驗證候選 schema 只新增三張 fundamental 表、不修改既有五張核心表；暫存複本已清理，正式 DB 未寫入。
+- 2026-06-16：新增受治理月營收 availability mapping 契約，支援保留 `announced_date` / `available_date` / `source_version`，並拒絕把 raw 月營收 CSV 日期當成可得日來源。

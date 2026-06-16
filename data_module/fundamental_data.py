@@ -12,10 +12,12 @@ from data_module.fundamental_availability import (
     FundamentalAvailabilityInput,
     resolve_fundamental_availability,
 )
+from data_module.fundamental_availability_sources import FundamentalAvailabilityOverride
 from decision_module.factors.factor_dtos import FactorDiagnostic, FactorQuality
 
 
 AvailableDateKey = tuple[str, str]
+AvailableDateValue = date | FundamentalAvailabilityOverride
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,7 @@ class MonthlyRevenueParseResult:
 def parse_monthly_revenue_rows(
     rows: Iterable[Mapping[str, str]],
     *,
-    available_dates: Mapping[AvailableDateKey, date],
+    available_dates: Mapping[AvailableDateKey, AvailableDateValue],
     source_version: str,
 ) -> MonthlyRevenueParseResult:
     records: list[MonthlyRevenueRecord] = []
@@ -69,15 +71,11 @@ def parse_monthly_revenue_rows(
             )
             continue
 
-        availability = resolve_fundamental_availability(
-            FundamentalAvailabilityInput(
-                stock_code=stock_code,
-                period=period,
-                as_of_date=_month_end(row),
-                announced_date=None,
-                explicit_available_date=available_dates.get((stock_code, period)),
-                source="financial_data.monthly_revenue_csv",
-            )
+        availability = _resolve_row_availability(
+            stock_code=stock_code,
+            period=period,
+            as_of_date=_month_end(row),
+            availability_value=available_dates.get((stock_code, period)),
         )
         diagnostics.extend(availability.diagnostics)
         if availability.available_date is None:
@@ -105,6 +103,37 @@ def _period(row: Mapping[str, str]) -> str:
     year = int(row["revenue_year"])
     month = int(row["revenue_month"])
     return f"{year:04d}-{month:02d}"
+
+
+def _resolve_row_availability(
+    *,
+    stock_code: str,
+    period: str,
+    as_of_date: date,
+    availability_value: AvailableDateValue | None,
+):
+    if isinstance(availability_value, FundamentalAvailabilityOverride):
+        return resolve_fundamental_availability(
+            FundamentalAvailabilityInput(
+                stock_code=stock_code,
+                period=period,
+                as_of_date=as_of_date,
+                announced_date=availability_value.announced_date,
+                explicit_available_date=availability_value.available_date,
+                source=availability_value.source,
+            )
+        )
+
+    return resolve_fundamental_availability(
+        FundamentalAvailabilityInput(
+            stock_code=stock_code,
+            period=period,
+            as_of_date=as_of_date,
+            announced_date=None,
+            explicit_available_date=availability_value,
+            source="financial_data.monthly_revenue_csv",
+        )
+    )
 
 
 def _month_end(row: Mapping[str, str]) -> date:
