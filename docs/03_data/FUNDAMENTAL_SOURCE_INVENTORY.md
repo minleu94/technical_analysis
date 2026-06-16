@@ -167,6 +167,27 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 
 未提供 `--path` 時，CLI 只讀取 `TWStockConfig.monthly_revenue_availability_file` 指向的位置並輸出 Markdown 摘要；它不會建立正式 mapping 檔、不會改寫 raw CSV，也不會寫入 SQLite。
 
+### 5.2.2 TWSE OpenAPI 候選產生器
+
+`data_module/monthly_revenue_availability_builder.py` 與 `scripts/build_monthly_revenue_availability.py` 提供月營收 availability mapping 候選產生器，可從 TWSE OpenAPI `https://openapi.twse.com.tw/v1/opendata/t187ap05_P` 讀取公開發行公司每月營業收入彙總表，使用官方欄位 `出表日期`、`資料年月`、`公司代號` 產生受治理 mapping row。產生器會：
+
+- 將民國 `資料年月` 轉為 `YYYY-MM`，並以該月月底作 `as_of_date`。
+- 將民國 `出表日期` 轉為 `announced_date`。
+- 以 `announced_date + 1 calendar day` 作為保守 `available_date`，避免同日盤中可得性假設。
+- 僅輸出本機 `financial_data/*_monthly_revenue.csv` 已存在的 `(stock_code, period)`，避免產生無 raw record 可對應的 mapping。
+- 使用 `source=twse.monthly_revenue_announcement` 與 `source_version=twse-openapi-t187ap05-p-<fetch_date>`。
+
+CLI 範例：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_monthly_revenue_availability.py --fetch-date 2026-06-16
+.\.venv\Scripts\python.exe scripts\build_monthly_revenue_availability.py --source-json <twse-json> --output <candidate-csv> --fetch-date 2026-06-16
+```
+
+未提供 `--output` 時只輸出 Markdown 摘要，不建立檔案。即使提供 `--output`，也只會寫入使用者指定的候選 CSV；不得直接覆寫 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`，正式寫入前仍需人工確認、備份與驗證入口通過。
+
+2026-06-16 對真實 TWSE OpenAPI 執行 dry-run 時，官方端點回傳 299 筆最新月資料，本機 raw monthly revenue 期間為 175,234 組，兩者交集為 0，因此未產生候選 row、未寫入正式 mapping。MOPS 個股 ajax 歷史查詢在一般自動化請求下回傳安全性阻擋頁，尚不能列為穩定自動下載來源；若要補歷史 mapping，需另取得可追溯的官方批次檔、人工公告日 log，或使用受控手動 mapping 後再經 validator 驗證。
+
 ### 5.3 估值呈現政策 v1
 
 `data_module/valuation_data.py` 建立 valuation data layer v1，可由已治理 row 建立 `ValuationObservation`，保留 `as_of_date`、`available_date`、raw `metric_value`、`quality`、`source_version` 與選擇性的 `industry_percentile_bp`。`calculate_industry_percentiles_bp()` 只在同產業 universe 內計算整數基點分位；單一樣本或缺少同業比較時回 `None`，交由後續 policy 輸出 diagnostics。此資料層不產生 fair value、target price、upside 或 recommendation。
@@ -220,6 +241,7 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - 2026-06-16：新增 valuation data layer v1，建立受治理 `ValuationObservation` 與同產業整數基點分位計算；缺分位仍只經既有 presentation policy 輸出 diagnostics，不產生目標價或建議。
 - 2026-06-16：新增月營收公告日 mapping CSV loader、`TWStockConfig.monthly_revenue_availability_file` 預設路徑與 docs 範本；缺檔只輸出 diagnostic，不自動補值或寫正式資料。
 - 2026-06-16：新增月營收 availability mapping 正式驗證入口與 CLI dry-run validator，允許治理來源、拒絕 raw CSV available-date 來源，並保持不建立、不改寫正式 mapping 檔或 SQLite。
+- 2026-06-16：新增 TWSE OpenAPI 月營收 availability 候選產生器與 CLI，可用官方 `出表日期` / `資料年月` / `公司代號` 產生候選 mapping；真實 dry-run 顯示最新月端點與本機歷史 raw 期間暫無交集，因此未寫入正式 mapping。
 - 2026-06-16：新增 Fundamental SQLite 受控 migration service 與 CLI，支援 working-copy dry-run、apply 前備份、失敗 restore 與 `--confirm apply-fundamental-schema` 人工確認；正式 `twstock.db` 尚未套用 migration。
 - 2026-06-16：新增 Revenue Factor Pack v1 adapters，從已正規化月營收 records 產生 YoY、MoM、3M trend 與 new high factor records；缺 baseline 只輸出 diagnostics，未來 available_date 由 `FactorGate` skip，不接 `ScoringEngine`。
 - 2026-06-16：新增 Abnormal Fundamental diagnostics policy / application service / Daily Decision Desk prompt bridge；異常基本面只作 Research metadata 與風險提示，不改寫財報、不自動調整分數。
