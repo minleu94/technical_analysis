@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from data_module.fundamental_data import MonthlyRevenueRecord
 from decision_module.factors.factor_dtos import FactorQuality, MissingPolicy
+from decision_module.factors.factor_gate import FactorGate
 from decision_module.factors.fundamental_adapters import build_revenue_factor_pack
 
 
@@ -43,3 +44,33 @@ def test_build_revenue_factor_pack_emits_yoy_mom_trend_and_new_high():
         assert record.missing_policy == MissingPolicy.SKIP
         assert record.score_bp is None
         assert record.source_version == "financial-data-csv-v1"
+
+
+def test_revenue_factor_pack_reports_missing_yoy_baseline_without_neutral_record():
+    records = (
+        _record("2026-04", "120", date(2026, 5, 10)),
+        _record("2026-05", "150", date(2026, 6, 10)),
+    )
+
+    result = build_revenue_factor_pack(records, stock_code="2330", decision_period="2026-05")
+
+    assert "fundamental.revenue_yoy" not in {record.factor_name for record in result.records}
+    assert any(item.code == "fundamental_revenue.baseline_missing" for item in result.diagnostics)
+
+
+def test_revenue_factor_gate_skips_future_available_date():
+    records = (
+        _record("2025-05", "100", date(2025, 6, 10)),
+        _record("2026-04", "120", date(2026, 5, 10)),
+        _record("2026-05", "150", date(2026, 6, 20)),
+    )
+
+    result = build_revenue_factor_pack(records, stock_code="2330", decision_period="2026-05")
+    gate_result = FactorGate().validate_for_decision(
+        result.records,
+        decision_date=date(2026, 6, 16),
+    )
+
+    assert gate_result.accepted == ()
+    assert len(gate_result.skipped) == len(result.records)
+    assert gate_result.diagnostics[0].code == "factor.skipped_lookahead"
