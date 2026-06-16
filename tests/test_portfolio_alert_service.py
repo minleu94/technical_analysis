@@ -155,8 +155,9 @@ def test_portfolio_alert_service_returns_degraded_on_condition_monitor_error():
     snapshot = service.build_snapshot(date(2026, 6, 15))
 
     assert snapshot.quality == DecisionDeskQuality.DEGRADED
-    assert snapshot.alert_count == 0
-    assert snapshot.alert_level == "low"
+    assert snapshot.alert_count == 1
+    assert snapshot.alert_codes == ("1101",)
+    assert snapshot.alert_level == "high"
     assert any("condition_monitor_error" in warning for warning in snapshot.warnings)
 
 
@@ -218,8 +219,8 @@ def test_portfolio_alert_service_warns_when_chip_lots_are_missing():
     snapshot = service.build_snapshot(date(2026, 6, 15))
 
     assert snapshot.quality == DecisionDeskQuality.ESTIMATED
-    assert snapshot.alert_count == 0
-    assert snapshot.alert_codes == ()
+    assert snapshot.alert_count == 1
+    assert snapshot.alert_codes == ("1101",)
     assert snapshot.alert_level == "low"
     assert "portfolio_alerts_chip_data_missing:1101" in snapshot.warnings
 
@@ -253,5 +254,55 @@ def test_portfolio_alert_summary_serializes_attributions():
     assert payload["attributions"][0]["chip_risk_level"] == "bearish"
     assert payload["attributions"][0]["reasons"] == ["condition:warning", "chip:risk_level:bearish"]
     assert payload["attributions"][0]["data_quality_flags"] == ["chip_estimated"]
+
+
+def test_portfolio_alert_service_builds_condition_and_chip_attributions():
+    positions = [
+        make_position("2330", "recommendation_result", "rec_001"),
+        make_position("2603", "backtest_run", "bt_007"),
+    ]
+    service = PortfolioAlertService(
+        FakePortfolioService(positions),
+        FakeConditionMonitor(
+            {
+                "2330": "warning",
+                "2603": "invalid",
+            }
+        ),
+        FakeChipSummaryProvider(
+            {
+                "2330": {
+                    "risk_level": "bearish",
+                    "lots_available": True,
+                    "has_estimated_lots": True,
+                    "estimated_event_count": 1,
+                    "unavailable_event_count": 0,
+                },
+                "2603": {
+                    "risk_level": "neutral",
+                    "lots_available": False,
+                    "has_estimated_lots": False,
+                    "estimated_event_count": 0,
+                    "unavailable_event_count": 2,
+                },
+            }
+        ),
+    )
+
+    snapshot = service.build_snapshot(date(2026, 6, 15))
+
+    by_code = {item.stock_code: item for item in snapshot.attributions}
+    assert tuple(by_code) == ("2603", "2330")
+    assert by_code["2330"].source_label == "recommendation_result:rec_001"
+    assert by_code["2330"].condition_status == "warning"
+    assert by_code["2330"].chip_risk_level == "bearish"
+    assert "condition:warning" in by_code["2330"].reasons
+    assert "chip:risk_level:bearish" in by_code["2330"].reasons
+    assert "chip_estimated" in by_code["2330"].data_quality_flags
+    assert by_code["2603"].condition_status == "invalid"
+    assert "condition:invalid" in by_code["2603"].reasons
+    assert "chip_data_missing" in by_code["2603"].data_quality_flags
+    assert "chip_unavailable_events" in by_code["2603"].data_quality_flags
+
 
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
-from app_module.decision_desk_dtos import DecisionDeskQuality, PortfolioAlertSummary
+from app_module.decision_desk_dtos import DecisionDeskQuality, PortfolioAlertAttribution, PortfolioAlertSummary
 
 
 class PortfolioPositionProvider(Protocol):
@@ -32,6 +32,18 @@ class _AlertItem:
     source_label: str
     severity: int
     reasons: tuple[str, ...]
+    condition_status: str
+    chip_risk_level: str
+    data_quality_flags: tuple[str, ...]
+
+
+
+@dataclass(frozen=True)
+class _ChipRiskResult:
+    severity: int
+    risk_level: str
+    reasons: tuple[str, ...]
+    data_quality_flags: tuple[str, ...]
 
 
 class PortfolioAlertService:
@@ -83,6 +95,8 @@ class PortfolioAlertService:
             warnings.extend(source_summary)
         warnings.extend(warnings_for_quality)
 
+        attributions = self._build_attributions(alerts)
+
         if not alerts:
             quality = (
                 DecisionDeskQuality.DEGRADED
@@ -96,6 +110,7 @@ class PortfolioAlertService:
                 alert_count=0,
                 alert_codes=(),
                 alert_level="low",
+                attributions=attributions,
             )
 
         return PortfolioAlertSummary(
@@ -109,7 +124,24 @@ class PortfolioAlertService:
             alert_count=len(alerts),
             alert_codes=self._top_alert_codes(alerts),
             alert_level=self._infer_alert_level(alerts),
+            attributions=attributions,
         )
+
+    def _build_attributions(self, alerts: list[_AlertItem]) -> tuple[PortfolioAlertAttribution, ...]:
+        sorted_alerts = sorted(alerts, key=lambda item: (-item.severity, item.stock_code))
+        return tuple(
+            PortfolioAlertAttribution(
+                stock_code=item.stock_code,
+                source_label=item.source_label,
+                condition_status=item.condition_status,
+                chip_risk_level=item.chip_risk_level,
+                severity=item.severity,
+                reasons=item.reasons,
+                data_quality_flags=item.data_quality_flags,
+            )
+            for item in sorted_alerts
+        )
+
 
     def _collect_alerts(
         self,
@@ -127,6 +159,17 @@ class PortfolioAlertService:
             except Exception as exc:  # noqa: BLE001
                 warnings.append(f"portfolio_alerts_condition_monitor_error:{stock_code}:{exc}")
                 hard_failures += 1
+                items.append(
+                    _AlertItem(
+                        stock_code=stock_code,
+                        source_label=source_label,
+                        severity=100,
+                        reasons=("condition:error",),
+                        condition_status="error",
+                        chip_risk_level="unavailable",
+                        data_quality_flags=("condition_error",),
+                    )
+                )
                 continue
 
             status = str(getattr(condition_result, "status", "")).lower()
@@ -136,37 +179,44 @@ class PortfolioAlertService:
                 reasons.append(f"condition:{status}")
             status_severity = self._status_severity(status)
 
-            chip_risk_severity = self._chip_risk_severity(stock_code, warnings)
-            if chip_risk_severity > 0:
+            chip_result = self._evaluate_chip_risk(stock_code, warnings)
+            if chip_result.severity > 0:
                 reasons.append("chip_alert")
+            reasons.extend(chip_result.reasons)
 
-            if status_severity > 0 or chip_risk_severity > 0:
-                severity = max(status_severity, chip_risk_severity)
+            if status_severity > 0 or chip_result.severity > 0 or chip_result.data_quality_flags:
+                severity = max(status_severity, chip_result.severity)
                 items.append(
                     _AlertItem(
                         stock_code=stock_code,
                         source_label=source_label,
                         severity=severity,
-                        reasons=tuple(reasons),
+                        reasons=tuple(dict.fromkeys(reasons)),
+                        condition_status=status or "unknown",
+                        chip_risk_level=chip_result.risk_level,
+                        data_quality_flags=chip_result.data_quality_flags,
                     )
                 )
 
         return items, hard_failures
 
-    def _chip_risk_severity(self, stock_code: str, warnings: list[str]) -> int:
+
+    def _evaluate_chip_risk(self, stock_code: str, warnings: list[str]) -> _ChipRiskResult:
         provider = self.chip_summary_provider
         if provider is None:
-            return 0
+            return _ChipRiskResult(0, "unavailable", (), ())
         try:
             summary = provider.get_stock_chip_summary(stock_code, period_days=self.chip_lookback_days)
         except Exception as exc:  # noqa: BLE001
             warnings.append(f"portfolio_alerts_chip_provider_error:{stock_code}:{exc}")
-            return 1
+            return _ChipRiskResult(1, "error", ("chip:provider_error",), ("chip_provider_error",))
 
         if not isinstance(summary, Mapping):
             warnings.append(f"portfolio_alerts_chip_summary_invalid:{stock_code}")
-            return 0
+            return _ChipRiskResult(0, "invalid", ("chip:summary_invalid",), ("chip_summary_invalid",))
 
+        reasons: list[str] = []
+        data_quality_flags: list[str] = []
         lots_available = bool(summary.get("lots_available", True))
         has_estimated_lots = bool(summary.get("has_estimated_lots", False))
         unavailable_count = self._read_non_negative_int(summary.get("unavailable_event_count"))
@@ -174,15 +224,23 @@ class PortfolioAlertService:
 
         if not lots_available:
             warnings.append(f"portfolio_alerts_chip_data_missing:{stock_code}")
+            reasons.append("chip:data_missing")
+            data_quality_flags.append("chip_data_missing")
         if has_estimated_lots or estimated_count > 0:
             warnings.append(f"portfolio_alerts_chip_estimated:{stock_code}")
+            reasons.append("chip:estimated")
+            data_quality_flags.append("chip_estimated")
         if unavailable_count > 0:
             warnings.append(f"portfolio_alerts_chip_unavailable_events:{stock_code}:{unavailable_count}")
+            reasons.append(f"chip:unavailable_events:{unavailable_count}")
+            data_quality_flags.append("chip_unavailable_events")
 
-        risk_level = str(summary.get("risk_level", "")).lower().strip()
+        risk_level = str(summary.get("risk_level", "")).lower().strip() or "neutral"
         if risk_level in {"bearish", "extreme", "risk"}:
-            return 80
-        return 0
+            reasons.append(f"chip:risk_level:{risk_level}")
+            return _ChipRiskResult(80, risk_level, tuple(reasons), tuple(data_quality_flags))
+        return _ChipRiskResult(0, risk_level, tuple(reasons), tuple(data_quality_flags))
+
 
     def _read_non_negative_int(self, value: Any) -> int:
         if isinstance(value, bool) or value is None:
