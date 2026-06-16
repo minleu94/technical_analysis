@@ -325,6 +325,8 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 ### 8.1 進入與刷新
 
+Daily Decision Desk 採用 Midnight Analyst 深色介面：深色背景、狀態 badge、緊湊摘要卡片與分行代碼清單。強勢、弱勢與低流動性代碼每類預設顯示前 8 檔，其餘以剩餘檔數摘要；完整資料仍由 service snapshot 保留，不因 UI 摘要而改變計算結果。
+
 1. 進入主視窗頂層 tab「每日決策」。
 2. 點選「刷新」可重建 Snapshot。
 3. 若初始化或刷新失敗，畫面會保留可閱讀狀態並顯示 fallback 提示，不會中斷整體 App。
@@ -367,6 +369,7 @@ Watchlist Trigger v1 會從 `WatchlistService` 與 SQLite `technical_indicators`
 Portfolio Alert v1 會整合持倉條件監控與 `PortfolioChipService` 籌碼摘要。當持倉條件失效、警告，或個股籌碼風險為 bearish / extreme / risk 時，會列入持倉警示；若籌碼股數資料缺失、估算或部分事件不可用，會在 warnings 顯示 `portfolio_alerts_chip_*`，並將 quality 降級為 `ESTIMATED` 或 `DEGRADED`。Portfolio Alert 的來源歸因會顯示每檔警示持倉的來源標籤、condition 狀態、chip risk level 與原因 token。這用於解釋警示來源，不代表自動賣出或調倉。
 
 Relative Strength / Liquidity Ranking v1 會從 SQLite `daily_prices` 唯讀推導 5 / 20 日相對強度與平均成交金額，顯示強勢代碼、弱勢代碼與低流動性代碼。
+- **畫面呈現**：每日決策頁會把強勢、弱勢與低流動性代碼分行顯示，單類別只顯示前 8 檔並標示剩餘檔數，避免大量股票代碼撐寬主視窗。
 - **流動性過濾**：當 20 日平均成交金額低於預設的 20,000,000 元時，該股將被列為低流動性代碼。
 - **強弱勢判定**：股票的 20 日相對強度必須至少有 21 個有效交易觀測值（當日 + 前 20 日歷史）。若因歷史資料不足（如新上市股票或資料缺失）無法滿足 21 天，該股票將不參與強度排序，直接跳過；若整個模組無可用觀測歷史，quality 將降級為 `DEGRADED` 且在 warnings 中標註 `relative_strength_liquidity_insufficient_history`。
 
@@ -649,6 +652,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ## 14. 更新記錄
 
+- 2026-06-15：整理 Daily Decision Desk 顯示密度，將強弱與流動性代碼改為分行摘要並限制單類別顯示數量，避免主視窗被長清單撐寬。
 - 2026-06-15：補充 Portfolio Alert Attribution v1，說明每檔持倉警示的來源標籤、condition 狀態、chip risk level 與原因 token 歸因呈現，用於輔助警示來源之分析與判讀。
 - 2026-06-15：補充 Why Not / 風險提示 v1 對接，說明如何由既有 section DTO 屬性與 quality/warnings 推導風險提示、各提示類別之解讀與 quality 降級規則。
 

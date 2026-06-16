@@ -257,3 +257,69 @@ def test_decision_desk_view_renders_portfolio_alert_attributions():
     assert "condition=warning" in view.portfolio_alerts_value.text()
     assert "chip=bearish" in view.portfolio_alerts_value.text()
 
+
+def test_decision_desk_view_compacts_long_relative_strength_lists():
+    app()
+    snapshot = _snapshot()
+    snapshot = replace(
+        snapshot,
+        relative_strength_liquidity=RelativeStrengthLiquiditySummary(
+            as_of_date=snapshot.as_of_date,
+            quality=DecisionDeskQuality.OBSERVED,
+            warnings=(),
+            top_strength_codes=tuple(f"T{i:03d}" for i in range(20)),
+            weak_strength_codes=tuple(f"W{i:03d}" for i in range(18)),
+            low_liquidity_codes=tuple(f"L{i:03d}" for i in range(22)),
+        ),
+    )
+
+    view = DecisionDeskView(FakeBuilder(snapshot))
+    rendered = view.relative_strength_liquidity_value.text()
+
+    assert view.relative_strength_liquidity_value.wordWrap()
+    assert "\n" in rendered
+    assert "另 12 檔" in rendered
+    assert "T019" not in rendered
+
+
+def test_decision_desk_view_uses_readable_overview_typography():
+    app()
+    view = DecisionDeskView(FakeBuilder(_snapshot()))
+
+    assert view.overall_status_label.font().pointSize() >= 12
+    assert view.generated_at_label.font().pointSize() >= 10
+    assert "background" in view.overall_status_label.styleSheet()
+
+
+def test_decision_desk_view_uses_midnight_reference_widgets():
+    app()
+    view = DecisionDeskView(FakeBuilder(_snapshot()))
+
+    assert hasattr(view, "overall_quality_badge")
+    assert hasattr(view, "relative_strength_codes")
+    assert hasattr(view, "warning_list")
+    assert view.relative_strength_codes.wordWrap()
+    assert "#08111f" not in view.styleSheet()
+
+
+def test_decision_desk_view_renders_compact_code_widget_from_snapshot():
+    app()
+    snapshot = _snapshot()
+    snapshot = replace(
+        snapshot,
+        relative_strength_liquidity=RelativeStrengthLiquiditySummary(
+            as_of_date=snapshot.as_of_date,
+            quality=DecisionDeskQuality.OBSERVED,
+            warnings=(),
+            top_strength_codes=tuple(f"T{i:03d}" for i in range(10)),
+            weak_strength_codes=("W001",),
+            low_liquidity_codes=("L001", "L002"),
+        ),
+    )
+
+    view = DecisionDeskView(FakeBuilder(snapshot))
+    text = view.relative_strength_codes.text()
+
+    assert "強勢：T000, T001, T002, T003, T004, T005, T006, T007（另 2 檔）" in text
+    assert "弱勢：W001" in text
+    assert "低流動性：L001, L002" in text

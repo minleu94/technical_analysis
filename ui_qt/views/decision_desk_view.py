@@ -11,8 +11,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QTextEdit,
-    QGroupBox,
+    QScrollArea,
+    QSizePolicy,
 )
 
 from app_module.decision_desk_dtos import (
@@ -20,6 +20,8 @@ from app_module.decision_desk_dtos import (
     DecisionDeskSnapshot,
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from ui_qt.theme import MIDNIGHT_ANALYST
+from ui_qt.widgets.theme_widgets import CompactCodeList, MetricCard, SectionPanel, StatusBadge, WarningList
 
 
 class DecisionDeskView(QWidget):
@@ -41,13 +43,22 @@ class DecisionDeskView(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
+        scroll_content = QWidget()
+        content_layout = QVBoxLayout(scroll_content)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(0, 0, 0, 0)
 
         title_layout = QHBoxLayout()
         title = QLabel("每日決策")
         title_font = QFont()
-        title_font.setPointSize(14)
+        title_font.setPointSize(17)
         title_font.setBold(True)
         title.setFont(title_font)
         title_layout.addWidget(title)
@@ -56,20 +67,39 @@ class DecisionDeskView(QWidget):
         self.refresh_btn = QPushButton("更新決策摘要")
         self.refresh_btn.clicked.connect(self.refresh_snapshot)
         title_layout.addWidget(self.refresh_btn)
-        layout.addLayout(title_layout)
+        content_layout.addLayout(title_layout)
 
         self.overall_status_label = QLabel("")
         self.generated_at_label = QLabel("")
-        self.overall_warn_label = QTextEdit()
-        self.overall_warn_label.setReadOnly(True)
-        self.overall_warn_label.setMaximumHeight(90)
+        self.overall_status_label.setWordWrap(True)
+        status_font = QFont()
+        status_font.setPointSize(13)
+        status_font.setBold(True)
+        self.overall_status_label.setFont(status_font)
+        generated_font = QFont()
+        generated_font.setPointSize(10)
+        self.generated_at_label.setFont(generated_font)
+        self.generated_at_label.setStyleSheet("color: #4b5563;")
+        self.overall_quality_badge = StatusBadge("", "observed")
+        self.warning_list = WarningList()
+        self.warning_list.setMaximumHeight(120)
+        self.overall_warn_label = self.warning_list
+        self.decision_date_card = MetricCard("決策日", self.as_of_date.isoformat())
+        self.generated_at_card = MetricCard("生成時間", "N/A")
 
-        info_group = QGroupBox("總覽")
-        info_layout = QVBoxLayout(info_group)
-        info_layout.addWidget(self.overall_status_label)
+        info_group = SectionPanel("總覽")
+        info_layout = info_group.layout
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(self.overall_status_label, 1)
+        status_layout.addWidget(self.overall_quality_badge, 0)
+        info_layout.addLayout(status_layout)
+        metric_layout = QHBoxLayout()
+        metric_layout.addWidget(self.decision_date_card)
+        metric_layout.addWidget(self.generated_at_card)
+        info_layout.addLayout(metric_layout)
         info_layout.addWidget(self.generated_at_label)
-        info_layout.addWidget(self.overall_warn_label)
-        layout.addWidget(info_group)
+        info_layout.addWidget(self.warning_list)
+        content_layout.addWidget(info_group)
 
         self.market_regime_status = QLabel("")
         self.market_regime_value = QLabel("")
@@ -85,27 +115,48 @@ class DecisionDeskView(QWidget):
         self.portfolio_alerts_value = QLabel("")
         self.risk_prompts_status = QLabel("")
         self.risk_prompts_value = QLabel("")
-        self.risk_prompts_value.setWordWrap(True)
+        self.relative_strength_codes = CompactCodeList()
 
-        sections_group = QGroupBox("各模組狀態")
-        sections_layout = QVBoxLayout(sections_group)
+        sections_group = SectionPanel("各模組狀態")
+        sections_layout = sections_group.layout
         sections_layout.addWidget(self._make_section_row("市場情緒", self.market_regime_status, self.market_regime_value))
         sections_layout.addWidget(self._make_section_row("市況廣度", self.market_breadth_status, self.market_breadth_value))
         sections_layout.addWidget(self._make_section_row("產業輪動", self.sector_rotation_status, self.sector_rotation_value))
         sections_layout.addWidget(self._make_section_row("強弱與流動性", self.relative_strength_liquidity_status, self.relative_strength_liquidity_value))
+        sections_layout.addWidget(self.relative_strength_codes)
         sections_layout.addWidget(self._make_section_row("Watchlist 提示", self.watchlist_triggers_status, self.watchlist_triggers_value))
         sections_layout.addWidget(self._make_section_row("持倉警示", self.portfolio_alerts_status, self.portfolio_alerts_value))
         sections_layout.addWidget(self._make_section_row("Why Not / 風險提示", self.risk_prompts_status, self.risk_prompts_value))
-        layout.addWidget(sections_group)
+        content_layout.addWidget(sections_group)
+        content_layout.addStretch()
+
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area)
 
     def _make_section_row(self, title: str, status_label: QLabel, value_label: QLabel) -> QWidget:
         row = QWidget()
+        row.setObjectName("decisionDeskSectionRow")
         row_layout = QVBoxLayout(row)
-        row_layout.setContentsMargins(0, 4, 0, 4)
+        row_layout.setContentsMargins(8, 6, 8, 6)
+        row_layout.setSpacing(3)
         title_label = QLabel(title)
         title_font = QFont()
+        title_font.setPointSize(11)
         title_font.setBold(True)
         title_label.setFont(title_font)
+        title_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
+        status_label.setWordWrap(True)
+        value_label.setWordWrap(True)
+        status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        value_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        status_label.setMinimumWidth(0)
+        value_label.setMinimumWidth(0)
+        status_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 10pt;")
+        value_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary}; font-size: 10pt; line-height: 130%;")
+        row.setStyleSheet(
+            f"#decisionDeskSectionRow {{ background: {MIDNIGHT_ANALYST.surface_1}; "
+            f"border-bottom: 1px solid {MIDNIGHT_ANALYST.border}; }}"
+        )
 
         row_layout.addWidget(title_label)
         row_layout.addWidget(status_label)
@@ -128,9 +179,13 @@ class DecisionDeskView(QWidget):
     def _render_snapshot(self, snapshot: DecisionDeskSnapshot) -> None:
         self.overall_status_label.setText(f"整體品質：{self._quality_label(snapshot.overall_quality)}")
         self.generated_at_label.setText(f"生成時間：{snapshot.generated_at.isoformat()}（決策日 {snapshot.as_of_date.isoformat()}）")
+        self.overall_quality_badge.setText(self._quality_label(snapshot.overall_quality))
+        self.overall_quality_badge.set_quality(self._quality_token(snapshot.overall_quality))
+        self.decision_date_card.value_label.setText(snapshot.as_of_date.isoformat())
+        self.generated_at_card.value_label.setText(snapshot.generated_at.strftime("%H:%M:%S"))
 
         warning_lines = list(snapshot.warnings)
-        self.overall_warn_label.setPlainText("\n".join(warning_lines) if warning_lines else "無警示")
+        self.warning_list.set_warnings(warning_lines)
 
         self.market_regime_status.setText(f"品質：{self._quality_label(snapshot.market_regime.quality)}")
         self.market_regime_value.setText(
@@ -157,9 +212,16 @@ class DecisionDeskView(QWidget):
             f"品質：{self._quality_label(snapshot.relative_strength_liquidity.quality)}"
         )
         self.relative_strength_liquidity_value.setText(
-            f"強勢：{', '.join(snapshot.relative_strength_liquidity.top_strength_codes) if snapshot.relative_strength_liquidity.top_strength_codes else '無'}；"
-            f"弱勢：{', '.join(snapshot.relative_strength_liquidity.weak_strength_codes) if snapshot.relative_strength_liquidity.weak_strength_codes else '無'}；"
-            f"低流動性：{', '.join(snapshot.relative_strength_liquidity.low_liquidity_codes) if snapshot.relative_strength_liquidity.low_liquidity_codes else '無'}"
+            "強勢：" + self._format_code_list(snapshot.relative_strength_liquidity.top_strength_codes) + "\n"
+            "弱勢：" + self._format_code_list(snapshot.relative_strength_liquidity.weak_strength_codes) + "\n"
+            "低流動性：" + self._format_code_list(snapshot.relative_strength_liquidity.low_liquidity_codes)
+        )
+        self.relative_strength_codes.set_groups(
+            [
+                ("強勢", snapshot.relative_strength_liquidity.top_strength_codes),
+                ("弱勢", snapshot.relative_strength_liquidity.weak_strength_codes),
+                ("低流動性", snapshot.relative_strength_liquidity.low_liquidity_codes),
+            ]
         )
 
         self.watchlist_triggers_status.setText(f"品質：{self._quality_label(snapshot.watchlist_triggers.quality)}")
@@ -187,16 +249,28 @@ class DecisionDeskView(QWidget):
 
         if warning_lines:
             warning_lines = [str(item) for item in warning_lines]
-            self.overall_warn_label.setPlainText("\n".join(warning_lines))
+            self.warning_list.set_warnings(warning_lines)
         else:
-            self.overall_warn_label.setPlainText("無警示")
+            self.warning_list.set_warnings(())
 
         if snapshot.overall_quality == DecisionDeskQuality.DEGRADED:
-            self.overall_status_label.setStyleSheet("color: #b71c1c;")
+            self.overall_status_label.setStyleSheet(
+                f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.warning}; "
+                f"border: 1px solid {MIDNIGHT_ANALYST.warning}; "
+                "border-radius: 6px; padding: 8px; font-size: 13pt; font-weight: 700;"
+            )
         elif snapshot.overall_quality == DecisionDeskQuality.MISSING:
-            self.overall_status_label.setStyleSheet("color: #f57f17;")
+            self.overall_status_label.setStyleSheet(
+                f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.danger}; "
+                f"border: 1px solid {MIDNIGHT_ANALYST.danger}; "
+                "border-radius: 6px; padding: 8px; font-size: 13pt; font-weight: 700;"
+            )
         else:
-            self.overall_status_label.setStyleSheet("")
+            self.overall_status_label.setStyleSheet(
+                f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.success}; "
+                f"border: 1px solid {MIDNIGHT_ANALYST.success}; "
+                "border-radius: 6px; padding: 8px; font-size: 13pt; font-weight: 700;"
+            )
 
     @staticmethod
     def _format_risk_prompts(prompts) -> str:
@@ -219,6 +293,15 @@ class DecisionDeskView(QWidget):
                 f"condition={item.condition_status} chip={item.chip_risk_level}"
             )
         return "；".join(parts)
+
+    @staticmethod
+    def _format_code_list(codes, limit: int = 8) -> str:
+        items = [str(code) for code in codes or () if str(code)]
+        if not items:
+            return "無"
+        shown = items[:limit]
+        suffix = f"（另 {len(items) - limit} 檔）" if len(items) > limit else ""
+        return ", ".join(shown) + suffix
 
     def _display_exception_snapshot(self, error_message: str):
         now = datetime.now()
@@ -247,6 +330,10 @@ class DecisionDeskView(QWidget):
         if quality == DecisionDeskQuality.MISSING:
             return "缺漏 (missing)"
         return "降級 (degraded)"
+
+    @staticmethod
+    def _quality_token(quality: DecisionDeskQuality) -> str:
+        return quality.value if hasattr(quality, "value") else str(quality).lower()
 
     @staticmethod
     def _collect_warnings(snapshot: DecisionDeskSnapshot) -> list[str]:
@@ -293,4 +380,3 @@ class _EmptySection:
         self.alert_level = None
         self.prompts: tuple[object, ...] = ()
         self.attributions: tuple[object, ...] = ()
-

@@ -34,6 +34,7 @@
 | [system_flow_end_to_end.md](../01_architecture/system_flow_end_to_end.md) | 端到端流程。 |
 | [data_collection_architecture.md](../01_architecture/data_collection_architecture.md) | 資料收集架構。 |
 | [runtime_observatory_rules.md](../01_architecture/runtime_observatory_rules.md) | Runtime Observatory 架構治理規範。 |
+| [ui_design_system_midnight_analyst.md](../01_architecture/ui_design_system_midnight_analyst.md) | Midnight Analyst 深色 UI 設計系統規格，包含 theme tokens、全域 QSS、共用元件、效能限制與後續 agent 修改流程。 |
 | [multi_agent_workflow.md](../01_architecture/multi_agent_workflow.md) | 多 Agent 協作與合併規範。 |
 | [REFACTORING_MIGRATION_PLAN.md](../01_architecture/REFACTORING_MIGRATION_PLAN.md) | 歷史/長期 refactor 遷移計畫。 |
 
@@ -109,6 +110,7 @@
 | [2026-06-15-decision-desk-relative-strength-liquidity-ranking.md](../superpowers/plans/2026-06-15-decision-desk-relative-strength-liquidity-ranking.md) | Daily Decision Desk Relative Strength / Liquidity Ranking v1 實作計畫，從 SQLite `daily_prices` 推導強弱排名、低流動性代碼與 quality / warnings 降級契約。 |
 | [2026-06-15-decision-desk-risk-prompt-bridge.md](../superpowers/plans/2026-06-15-decision-desk-risk-prompt-bridge.md) | Daily Decision Desk Why Not / 風險提示橋接 v1 實作計畫，將既有 section DTO 的低流動性、弱勢、watchlist risk alert、portfolio alert 與品質缺口整理成可行動提示。 |
 | [2026-06-15-decision-desk-portfolio-alert-attribution.md](../superpowers/plans/2026-06-15-decision-desk-portfolio-alert-attribution.md) | Daily Decision Desk Portfolio Alert Attribution v1 實作計畫，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags。 |
+| [2026-06-16-month4-daily-decision-desk-closure.md](../superpowers/plans/2026-06-16-month4-daily-decision-desk-closure.md) | Month 4 Daily Decision Desk 收尾計畫，定義 reference screen、UI/service 邊界、資料品質驗收、文件關閉與 Month 5 handoff。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
 | [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |
@@ -220,6 +222,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-06-16：新增 Midnight Analyst UI 設計系統規格索引，作為後續深色主題、共用元件與 UI 統一工作的設計參考入口。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並對接至主 UI 與風險提示服務。
 - 2026-06-03：完成 Phase 2C 實作，新增 SQLite 資料庫視覺化檢視面板 (SqliteInspectorWidget) 與防禦性唯讀查詢服務 (SqliteInspectorService) 整合至數據更新工作台。
 - 2026-06-03：新增 Phase 2A 數據讀取來源盤點報告 (PHASE_2A_DATA_SOURCES_AUDIT.md) 連結至文檔索引，並標記 Phase 2A/2B 已完成。
@@ -257,6 +260,7 @@
 - 2026-06-15：補列 Daily Decision Desk Relative Strength / Liquidity Ranking v1 實作計畫至 Superpowers plans 索引。
 - 2026-06-15：補列 Daily Decision Desk Why Not / 風險提示橋接 v1 實作計畫至 Superpowers plans 索引。
 - 2026-06-15：補列 Daily Decision Desk Portfolio Alert Attribution v1 實作計畫至 Superpowers plans 索引。
+- 2026-06-16：新增 Month 4 Daily Decision Desk 收尾計畫，明確定義 reference screen、UI/service 邊界、資料品質驗收、文件關閉與 Month 5 handoff。
 
 
 

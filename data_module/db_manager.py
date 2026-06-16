@@ -24,6 +24,7 @@ class DBManager:
         """設置日誌"""
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
+        self.logger.propagate = False
         
         if not self.logger.handlers:
             file_handler = logging.FileHandler(
@@ -33,7 +34,7 @@ class DBManager:
             file_handler.setLevel(logging.INFO)
             
             console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.INFO)
+            console_handler.setLevel(logging.WARNING)
             
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             file_handler.setFormatter(formatter)

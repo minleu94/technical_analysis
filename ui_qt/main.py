@@ -51,6 +51,7 @@ from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
 from app_module.broker_flow_service import BrokerFlowService
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
+from ui_qt.theme import build_global_stylesheet
 
 # Runtime Observatory Imports
 from app_module.runtime_services.runtime_controller import RuntimeController
@@ -58,6 +59,11 @@ from ui_qt.bridges.runtime_event_bridge import QtRuntimeBridge
 from ui_qt.views.runtime_view import RuntimeView
 from PySide6.QtCore import QTimer
 import os
+
+
+def apply_app_theme(app: QApplication) -> None:
+    app.setStyle("Fusion")
+    app.setStyleSheet(build_global_stylesheet())
 
 
 class MainWindow(QMainWindow):
@@ -602,8 +608,8 @@ def main():
             print(f"[Main] 警告: Icon 檔案不存在: {icon_path}")
         
         # 設置應用程序樣式（可選）
-        app.setStyle('Fusion')
-        print("[Main] 應用程序樣式設置完成")
+        apply_app_theme(app)
+        print("[Main] Midnight Analyst 樣式設置完成")
         
         # 創建主窗口
         try:
