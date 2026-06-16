@@ -67,7 +67,7 @@
 | [INDUSTRY_INDEX_UPDATE_SUMMARY.md](../03_data/INDUSTRY_INDEX_UPDATE_SUMMARY.md) | 產業指數更新說明。 |
 | [MERGE_AND_MARKET_INDEX_SUMMARY.md](../03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md) | 市場指數與合併說明。 |
 | [SQLITE_STORAGE_GUIDE.md](../03_data/SQLITE_STORAGE_GUIDE.md) | SQLite 儲存與雙軌相容快取架構、一鍵遷移重建指南。 |
-| [FUNDAMENTAL_SOURCE_INVENTORY.md](../03_data/FUNDAMENTAL_SOURCE_INVENTORY.md) | Month 5 Fundamental Layer preflight 資料來源盤點，列出月營收、財報、估值、公告日 / available_date 缺口、月營收 mapping dry-run 驗證入口、valuation metrics backfill dry-run，以及 Fundamental SQLite 受控 migration CLI 狀態。 |
+| [FUNDAMENTAL_SOURCE_INVENTORY.md](../03_data/FUNDAMENTAL_SOURCE_INVENTORY.md) | Month 5 Fundamental Layer preflight 資料來源盤點，列出月營收、財報、估值、公告日 / available_date 缺口、月營收 mapping dry-run 驗證入口、official company registry 更新、valuation metrics 正式 apply，以及 Fundamental SQLite 受控 migration CLI 狀態。 |
 | [monthly_revenue_availability.csv](../03_data/templates/monthly_revenue_availability.csv) | 月營收公告日 / available_date mapping 欄位範本；不是正式資料。 |
 
 ---
@@ -278,7 +278,8 @@
 - 2026-06-16：完成 Month 5 月營收 availability mapping dry-run 驗證入口文件同步，記錄 `data_module/fundamental_availability_entrypoint.py` 與 CLI 只讀驗證、拒絕未治理來源且不寫正式資料。
 - 2026-06-16：完成 Fundamental SQLite 受控 migration workflow 與月營收 normalized backfill workflow 文件同步，記錄 working-copy dry-run、apply confirm、backup / restore helper；正式 `twstock.db` 已套用 fundamental schema，但尚未回填 records。
 - 2026-06-16：完成 Fundamental SQLite read provider 文件同步，記錄 provider 只讀 `available_date <= decision_date` 的月營收與估值 records，避免後續服務直接讀 raw CSV。
-- 2026-06-16：新增 valuation metrics backfill workflow 文件同步，記錄 `daily_prices.本益比` dry-run、`companies.csv` 產業 mapping、同產業 percentile、apply confirm 與正式 DB 尚未寫入資料。
+- 2026-06-16：新增 valuation metrics backfill workflow 文件同步，記錄 `daily_prices.本益比` dry-run、`companies.csv` 產業 mapping、同產業 percentile、apply confirm、官方 company registry 更新與正式 DB 已寫入 831 筆 P/E records。
+- 2026-06-16：新增 official company registry workflow 文件同步，記錄 TWSE/TPEX 官方公司基本資料更新 `companies.csv`、備份、`9935` 產業修正與 `3207` TPEX daily price 管線缺口。
 - 2026-06-16：完成 Fundamental factor service 文件同步，記錄服務只串接 provider、adapters 與 FactorGate，輸出 records / diagnostics 但不接 `ScoringEngine`。
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
 

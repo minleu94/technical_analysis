@@ -5,6 +5,7 @@ import sqlite3
 from data_module.fundamental_schema import apply_fundamental_schema
 from data_module.valuation_metrics_backfill import (
     apply_valuation_metrics_backfill,
+    load_industry_by_stock_from_companies,
     plan_valuation_metrics_backfill,
 )
 
@@ -76,6 +77,22 @@ def test_plan_valuation_metrics_backfill_reports_missing_industry(tmp_path) -> N
     assert len(plan.records) == 2
     assert plan.diagnostics[0].code == "valuation_backfill.missing_industry"
     assert plan.ready_for_apply is True
+
+
+def test_load_industry_by_stock_from_companies_prefers_latest_row(tmp_path) -> None:
+    companies_file = tmp_path / "companies.csv"
+    companies_file.write_text(
+        "industry_category,stock_id,stock_name,type,date,download_time\n"
+        "其他,9935,慶豐富,twse,2023-06-30,2024-11-20 15:10:44\n"
+        "居家生活,9935,慶豐富,twse,2024-11-20,2024-11-20 15:10:44\n"
+        "電子零組件業,3207,耀勝,tpex,2024-11-20,2024-11-20 15:10:44\n",
+        encoding="utf-8",
+    )
+
+    mapping = load_industry_by_stock_from_companies(companies_file)
+
+    assert mapping["9935"] == "居家生活"
+    assert mapping["3207"] == "電子零組件業"
 
 
 def test_apply_valuation_metrics_backfill_inserts_records_and_backs_up_db(tmp_path) -> None:

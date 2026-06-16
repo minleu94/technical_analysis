@@ -429,6 +429,24 @@ dry-run 只輸出 plan，不寫入 SQLite。若正式 `DATA_ROOT/meta_data/month
 
 正式 apply 會先備份 DB；缺少 `--confirm apply-monthly-revenue-backfill` 時會拒絕執行。回填工具只寫入 `fundamental_monthly_revenues`，不會修改 raw CSV、availability mapping 或既有核心表。2026-06-16 正式路徑 dry-run 因 mapping 缺檔 fail-closed，尚未寫入任何 fundamental records。
 
+#### 公司清單 / 產業 mapping 更新
+
+`meta_data/companies.csv` 可用官方 TWSE/TPEX 公司基本資料更新。預設 dry-run 不寫檔：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\update_company_registry.py --dry-run
+```
+
+正式寫入必須人工確認：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\update_company_registry.py --apply --confirm apply-company-registry
+```
+
+正式 apply 會先備份既有 `companies.csv`，只更新公司 registry CSV，不修改 SQLite、daily price 或 raw financial CSV。2026-06-16 已以官方 TWSE/TPEX 來源正式更新：輸出 2,326 筆、0 diagnostics、無重複 `stock_id`，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/companies_company_registry_20260616_031111.csv`。抽查 `3207` 耀勝為 `電子零組件業 / tpex`，`9935` 慶豐富為 `居家生活 / twse`。
+
+注意：`companies.csv` 是公司與產業 registry，不代表 `daily_prices` 已具備該股票行情。若 TPEX 股票存在於 `companies.csv` 但缺 daily price，例如 `3207`，原因是目前每日股價管線尚未接入 TPEX daily quotes；需由市場日價資料管線補齊，不應用 company registry 或 fundamental layer 假造價格列。
+
 #### 估值 metrics backfill
 
 正式 DB 已有 `fundamental_valuation_metrics` schema。P/E v1 可由 SQLite `daily_prices.本益比` 與 `meta_data/companies.csv` 產業 mapping 建立受治理 valuation records，並計算同產業整數基點分位。預設只執行 dry-run：
@@ -446,7 +464,7 @@ dry-run 只輸出 plan，不寫入 SQLite。若正式 `DATA_ROOT/meta_data/month
 .\.venv\Scripts\python.exe scripts\backfill_valuation_metrics.py --apply --confirm apply-valuation-metrics-backfill
 ```
 
-正式 apply 會先備份 DB；缺少 `--confirm apply-valuation-metrics-backfill` 時會拒絕執行。此 workflow 只寫入 `fundamental_valuation_metrics`，不會修改 raw CSV、`companies.csv` 或既有核心表。2026-06-16 正式路徑 dry-run 最新 P/E 日為 `2026-06-15`，來源 1,090 筆，812 筆可正規化，278 筆 diagnostics；本次未正式 apply，正式表 count 仍為 0。
+正式 apply 會先備份 DB；缺少 `--confirm apply-valuation-metrics-backfill` 時會拒絕執行。此 workflow 只寫入 `fundamental_valuation_metrics`，不會修改 raw CSV、`companies.csv` 或既有核心表。2026-06-16 更新官方 `companies.csv` 後再次執行正式 apply：最新 P/E 日為 `2026-06-15`，來源 1,090 筆，831 筆可正規化，259 筆 diagnostics；正式表 count 為 831，0 duplicate primary keys，quality 全為 `observed`，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_valuation_metrics_backfill_20260616_031146.db`。
 
 ## 9. Research Lab / 策略回測
 
@@ -707,7 +725,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 ## 14. 更新記錄
 
 - 2026-06-16：新增月營收 normalized backfill 操作說明，記錄 dry-run、正式 apply confirm、備份與缺 availability mapping 時 fail-closed 的行為。
-- 2026-06-16：新增估值 metrics backfill 操作說明，記錄 P/E dry-run、產業 mapping、同產業分位、正式 apply confirm、備份與未正式寫入狀態。
+- 2026-06-16：新增公司清單 / 產業 mapping 更新操作說明，記錄 TWSE/TPEX 官方 registry dry-run、正式 apply confirm、備份、`3207` TPEX daily price 缺口與 `9935` 產業修正。
+- 2026-06-16：更新估值 metrics backfill 操作說明，記錄 P/E dry-run、產業 mapping、同產業分位、正式 apply confirm、備份與 831 筆正式寫入狀態。
 - 2026-06-16：新增月營收 availability mapping 維護說明，記錄 TWSE OpenAPI 候選產生器、validator 流程、正式資料寫入前人工確認要求，以及最新月端點與本機歷史 raw 期間暫無交集的限制。
 - 2026-06-16：更新 SQLite 資料檢視操作說明，補充日期日曆選擇器、清除日期、資料庫端表頭排序、`daily_prices` 繁中欄位 alias 與 `漲跌價差` 正負號顯示規則。
 - 2026-06-15：整理 Daily Decision Desk 顯示密度，將強弱與流動性代碼改為分行摘要並限制單類別顯示數量，避免主視窗被長清單撐寬。

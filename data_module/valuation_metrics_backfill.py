@@ -67,20 +67,27 @@ class ValuationMetricsBackfillApplyResult:
 
 
 def load_industry_by_stock_from_companies(companies_file: Path) -> dict[str, str]:
-    """Load the existing companies.csv stock-to-primary-industry mapping."""
+    """Load the existing companies.csv stock-to-latest-primary-industry mapping."""
     companies_file = Path(companies_file)
     if not companies_file.exists():
         return {}
 
-    mapping: dict[str, str] = {}
+    selected: dict[str, tuple[str, str, str]] = {}
     with companies_file.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
             stock_code = str(row.get("stock_id", "")).strip()
             industry = str(row.get("industry_category", "")).strip()
-            if stock_code and industry and stock_code not in mapping:
-                mapping[stock_code] = industry
-    return mapping
+            if not stock_code or not industry:
+                continue
+            sort_key = (
+                _companies_sort_date(row.get("date", "")),
+                str(row.get("download_time", "")).strip(),
+                industry,
+            )
+            if stock_code not in selected or sort_key > selected[stock_code]:
+                selected[stock_code] = sort_key
+    return {stock_code: industry for stock_code, (_, _, industry) in selected.items()}
 
 
 def plan_valuation_metrics_backfill(
@@ -329,6 +336,18 @@ def _parse_date(value: str) -> date:
     if len(value) == 8 and value.isdigit():
         return datetime.strptime(value, "%Y%m%d").date()
     return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _companies_sort_date(value: str) -> str:
+    value = str(value).strip()
+    if not value:
+        return ""
+    if len(value) == 8 and value.isdigit():
+        return value
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").strftime("%Y%m%d")
+    except ValueError:
+        return value
 
 
 def _timestamp() -> str:
