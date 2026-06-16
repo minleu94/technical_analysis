@@ -101,6 +101,18 @@ CLI 範例：
 
 此 provider 不讀 raw CSV、不補 availability mapping、不寫 SQLite；它只負責讓後續 factor adapters 或服務層能從已治理 SQLite records 讀資料，並在 SQL 層保留 no-look-ahead gate。正式 DB 目前三張 fundamental 表仍為空，因此 provider 會回傳空集合，不應被解讀為無基本面風險或估值中性。
 
+### 3.5 Fundamental factor application service
+
+`app_module/fundamental_factor_service.py` 將 SQLite provider 與既有 factor adapters 串接為服務層 snapshot：
+
+- 從 `FundamentalSQLiteProvider` 讀取 `available_date <= decision_date` 的月營收與估值 observations。
+- 對月營收使用 `build_revenue_factor_pack()` 產生 YoY / MoM / 3M trend / new high factor records。
+- 對估值使用 `build_relative_valuation_factor()` 產生 presentation-only relative valuation band。
+- 所有 records 再經 `FactorGate.validate_for_decision()`；服務本身不接 `ScoringEngine`，不輸出 score，不寫 DB。
+- 正式 DB 空表時回 `fundamental_sqlite.monthly_revenue_missing` diagnostic，不產生中性訊號。
+
+2026-06-16 對正式 DB 執行 service snapshot dry-run 時，`2330` 在 `decision_date=2026-06-16` 回 `records=0`、diagnostic=`fundamental_sqlite.monthly_revenue_missing`，符合尚未回填資料的狀態。
+
 ## 4. Raw CSV 欄位觀察
 
 月營收 CSV 範例欄位：
@@ -255,7 +267,7 @@ CLI 範例：
 2. 正式 SQLite schema migration 已完成；後續不得繞過 loader / validator 直接寫入三張 fundamental 表。
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
-5. 月營收 normalized backfill workflow 已具備 dry-run、confirm、備份與 fail-closed diagnostics；SQLite read provider 已具備 no-look-ahead 讀取邊界；待正式 availability mapping 通過驗證後，仍需人工確認才可 apply。
+5. 月營收 normalized backfill workflow 已具備 dry-run、confirm、備份與 fail-closed diagnostics；SQLite read provider 與 fundamental factor service 已具備 no-look-ahead 讀取 / adapter / gate 邊界；待正式 availability mapping 通過驗證後，仍需人工確認才可 apply。
 6. Abnormal fundamental diagnostics 已能進入 Research metadata 與 Daily Decision Desk risk prompts；後續接正式資料時仍只能作提示，不得改寫財報或自動扣分。
 
 ## 8. 更新記錄
@@ -276,5 +288,6 @@ CLI 範例：
 - 2026-06-16：依使用者確認對正式 `twstock.db` 套用 Fundamental SQLite schema migration，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_fundamental_schema_20260616_022301.db`；正式 DB 僅新增三張 fundamental 空表，未回填資料。
 - 2026-06-16：新增月營收 normalized backfill workflow 與 CLI，預設 dry-run，正式 apply 需 `--confirm apply-monthly-revenue-backfill` 並先備份；正式路徑因缺 availability mapping fail-closed，未寫入 records。
 - 2026-06-16：新增 Fundamental SQLite read provider，可從正式 fundamental tables 讀取 `available_date <= decision_date` 的月營收與估值 observations；正式表目前仍為空，不代表中性訊號。
+- 2026-06-16：新增 Fundamental factor application service，串接 SQLite provider、revenue/valuation adapters 與 FactorGate；正式 DB 空表時只輸出 missing diagnostics，不接 `ScoringEngine`。
 - 2026-06-16：新增 Revenue Factor Pack v1 adapters，從已正規化月營收 records 產生 YoY、MoM、3M trend 與 new high factor records；缺 baseline 只輸出 diagnostics，未來 available_date 由 `FactorGate` skip，不接 `ScoringEngine`。
 - 2026-06-16：新增 Abnormal Fundamental diagnostics policy / application service / Daily Decision Desk prompt bridge；異常基本面只作 Research metadata 與風險提示，不改寫財報、不自動調整分數。

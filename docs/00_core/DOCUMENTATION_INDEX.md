@@ -278,6 +278,7 @@
 - 2026-06-16：完成 Month 5 月營收 availability mapping dry-run 驗證入口文件同步，記錄 `data_module/fundamental_availability_entrypoint.py` 與 CLI 只讀驗證、拒絕未治理來源且不寫正式資料。
 - 2026-06-16：完成 Fundamental SQLite 受控 migration workflow 與月營收 normalized backfill workflow 文件同步，記錄 working-copy dry-run、apply confirm、backup / restore helper；正式 `twstock.db` 已套用 fundamental schema，但尚未回填 records。
 - 2026-06-16：完成 Fundamental SQLite read provider 文件同步，記錄 provider 只讀 `available_date <= decision_date` 的月營收與估值 records，避免後續服務直接讀 raw CSV。
+- 2026-06-16：完成 Fundamental factor service 文件同步，記錄服務只串接 provider、adapters 與 FactorGate，輸出 records / diagnostics 但不接 `ScoringEngine`。
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
 
 
