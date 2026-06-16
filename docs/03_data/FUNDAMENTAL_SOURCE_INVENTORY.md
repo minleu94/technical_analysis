@@ -135,6 +135,17 @@ DATA_ROOT/meta_data/monthly_revenue_availability.csv
 
 repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availability.csv`。正式檔案不存在時，loader 只回傳 `fundamental_availability.mapping_file_missing` diagnostic，不會建立檔案、不會改寫 raw CSV，也不會用 raw 月營收 `date` 自動補值。
 
+### 5.3 估值呈現政策 v1
+
+`decision_module/factors/valuation_policy.py` 定義 `valuation_presentation_policy_v1`。本政策只允許把 P/E、P/B、P/S 或殖利率等估值 metric 呈現為相對估值區間：
+
+- `LOW_RELATIVE`：相對低估值區
+- `MID_RELATIVE`：中性估值區
+- `HIGH_RELATIVE`：相對高估值區
+- `UNAVAILABLE`：資料不足
+
+本政策禁止產生 `fair_value`、`target_price`、`upside_pct`、`buy_signal`、`sell_signal` 或 `recommendation`。缺少 `industry_percentile_bp` 時只能回 `UNAVAILABLE` 或 diagnostics，不得假設為中性估值區。此政策目前不代表任何估值資料來源已正式可用，也不寫入正式 SQLite。
+
 ## 6. Factor Adapter 邊界
 
 允許：
@@ -168,4 +179,5 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - 2026-06-16：新增 schema dry-run report API，可在暫時 SQLite connection 驗證候選 fundamental schema 不修改既有核心表。
 - 2026-06-16：新增正式 DB working copy dry-run API，並以正式 `twstock.db` 複本驗證候選 schema 只新增三張 fundamental 表、不修改既有五張核心表；暫存複本已清理，正式 DB 未寫入。
 - 2026-06-16：新增受治理月營收 availability mapping 契約，支援保留 `announced_date` / `available_date` / `source_version`，並拒絕把 raw 月營收 CSV 日期當成可得日來源。
+- 2026-06-16：新增估值呈現政策 v1 文件化，確認估值只可呈現相對區間與 diagnostics，不輸出目標價、合理價、上漲空間或交易建議。
 - 2026-06-16：新增月營收公告日 mapping CSV loader、`TWStockConfig.monthly_revenue_availability_file` 預設路徑與 docs 範本；缺檔只輸出 diagnostic，不自動補值或寫正式資料。

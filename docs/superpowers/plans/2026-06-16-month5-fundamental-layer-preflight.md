@@ -70,6 +70,8 @@ Before coding new fundamental logic, an agent must confirm:
 
 ### WP-4: First Fundamental Factors
 
+**Status update 2026-06-16:** Valuation presentation policy v1 exists as a presentation-only factor boundary. It preserves raw metric value, available_date, quality, missing policy, source version, diagnostics, and policy_version; it forbids target price, fair value, upside percent, buy/sell signals, and recommendations.
+
 **Candidate v1 factors:**
 
 - Revenue YoY
