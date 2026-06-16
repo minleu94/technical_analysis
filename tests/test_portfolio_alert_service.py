@@ -1,8 +1,9 @@
 from datetime import date
 
-from app_module.decision_desk_dtos import DecisionDeskQuality
+from app_module.decision_desk_dtos import DecisionDeskQuality, PortfolioAlertAttribution, PortfolioAlertSummary
 from app_module.dtos.portfolio_dtos import PositionDTO
 from app_module.portfolio_alert_service import PortfolioAlertService
+
 
 
 class FakePortfolioService:
@@ -221,4 +222,36 @@ def test_portfolio_alert_service_warns_when_chip_lots_are_missing():
     assert snapshot.alert_codes == ()
     assert snapshot.alert_level == "low"
     assert "portfolio_alerts_chip_data_missing:1101" in snapshot.warnings
+
+
+def test_portfolio_alert_summary_serializes_attributions():
+    from datetime import date
+    attribution = PortfolioAlertAttribution(
+        stock_code="2330",
+        source_label="recommendation_result:rec_001",
+        condition_status="warning",
+        chip_risk_level="bearish",
+        severity=80,
+        reasons=("condition:warning", "chip:risk_level:bearish"),
+        data_quality_flags=("chip_estimated",),
+    )
+    summary = PortfolioAlertSummary(
+        as_of_date=date(2026, 6, 15),
+        quality=DecisionDeskQuality.ESTIMATED,
+        warnings=("portfolio_alerts_chip_estimated:2330",),
+        alert_count=1,
+        alert_codes=("2330",),
+        alert_level="high",
+        attributions=(attribution,),
+    )
+
+    payload = summary.to_dict()
+
+    assert payload["attributions"][0]["stock_code"] == "2330"
+    assert payload["attributions"][0]["source_label"] == "recommendation_result:rec_001"
+    assert payload["attributions"][0]["condition_status"] == "warning"
+    assert payload["attributions"][0]["chip_risk_level"] == "bearish"
+    assert payload["attributions"][0]["reasons"] == ["condition:warning", "chip:risk_level:bearish"]
+    assert payload["attributions"][0]["data_quality_flags"] == ["chip_estimated"]
+
 

@@ -185,6 +185,37 @@ class WatchlistTriggerSummary:
 
 
 @dataclass(frozen=True)
+class PortfolioAlertAttribution:
+    stock_code: str
+    source_label: str
+    condition_status: str
+    chip_risk_level: str
+    severity: int
+    reasons: tuple[str, ...] = ()
+    data_quality_flags: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "stock_code", str(self.stock_code))
+        object.__setattr__(self, "source_label", str(self.source_label))
+        object.__setattr__(self, "condition_status", str(self.condition_status))
+        object.__setattr__(self, "chip_risk_level", str(self.chip_risk_level))
+        object.__setattr__(self, "severity", int(self.severity))
+        object.__setattr__(self, "reasons", tuple(str(item) for item in self.reasons))
+        object.__setattr__(self, "data_quality_flags", tuple(str(item) for item in self.data_quality_flags))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stock_code": self.stock_code,
+            "source_label": self.source_label,
+            "condition_status": self.condition_status,
+            "chip_risk_level": self.chip_risk_level,
+            "severity": self.severity,
+            "reasons": list(self.reasons),
+            "data_quality_flags": list(self.data_quality_flags),
+        }
+
+
+@dataclass(frozen=True)
 class PortfolioAlertSummary:
     as_of_date: date | None
     quality: DecisionDeskQuality
@@ -192,10 +223,12 @@ class PortfolioAlertSummary:
     alert_count: int | None = None
     alert_codes: tuple[str, ...] = ()
     alert_level: str | None = None
+    attributions: tuple[PortfolioAlertAttribution, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "warnings", _normalize_warnings(self.warnings))
         object.__setattr__(self, "alert_codes", tuple(str(code) for code in self.alert_codes))
+        object.__setattr__(self, "attributions", tuple(self.attributions))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -205,7 +238,9 @@ class PortfolioAlertSummary:
             "alert_count": self.alert_count,
             "alert_codes": list(self.alert_codes),
             "alert_level": self.alert_level,
+            "attributions": [item.to_dict() for item in self.attributions],
         }
+
 
 
 @dataclass(frozen=True)
