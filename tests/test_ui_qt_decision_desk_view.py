@@ -19,6 +19,7 @@ from app_module.decision_desk_dtos import (
     RelativeStrengthLiquiditySummary,
     DecisionDeskRiskPrompt,
     DecisionDeskRiskPromptSummary,
+    PortfolioAlertAttribution,
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
@@ -222,3 +223,37 @@ def test_decision_desk_view_renders_risk_prompts():
 
     assert "低流動性" in view.risk_prompts_value.text()
     assert "1101" in view.risk_prompts_value.text()
+
+
+def test_decision_desk_view_renders_portfolio_alert_attributions():
+    app()
+    snapshot = _snapshot()
+    snapshot = replace(
+        snapshot,
+        portfolio_alerts=PortfolioAlertSummary(
+            as_of_date=snapshot.as_of_date,
+            quality=DecisionDeskQuality.OBSERVED,
+            warnings=(),
+            alert_count=1,
+            alert_codes=("2330",),
+            alert_level="high",
+            attributions=(
+                PortfolioAlertAttribution(
+                    stock_code="2330",
+                    source_label="recommendation_result:rec_001",
+                    condition_status="warning",
+                    chip_risk_level="bearish",
+                    severity=80,
+                    reasons=("condition:warning", "chip:risk_level:bearish"),
+                    data_quality_flags=(),
+                ),
+            ),
+        ),
+    )
+
+    view = DecisionDeskView(FakeBuilder(snapshot))
+
+    assert "recommendation_result:rec_001" in view.portfolio_alerts_value.text()
+    assert "condition=warning" in view.portfolio_alerts_value.text()
+    assert "chip=bearish" in view.portfolio_alerts_value.text()
+

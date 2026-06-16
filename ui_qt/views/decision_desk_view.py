@@ -170,10 +170,12 @@ class DecisionDeskView(QWidget):
         )
 
         self.portfolio_alerts_status.setText(f"品質：{self._quality_label(snapshot.portfolio_alerts.quality)}")
+        portfolio_attribution_text = self._format_portfolio_attributions(getattr(snapshot.portfolio_alerts, "attributions", ()))
         self.portfolio_alerts_value.setText(
             f"警示數：{snapshot.portfolio_alerts.alert_count or 0}；"
             f"持倉代碼：{', '.join(snapshot.portfolio_alerts.alert_codes) if snapshot.portfolio_alerts.alert_codes else '無'}；"
-            f"等級：{snapshot.portfolio_alerts.alert_level or '無'}"
+            f"等級：{snapshot.portfolio_alerts.alert_level or '無'}；"
+            f"來源歸因：{portfolio_attribution_text}"
         )
 
         self.risk_prompts_status.setText(f"品質：{self._quality_label(snapshot.risk_prompts.quality)}")
@@ -204,6 +206,18 @@ class DecisionDeskView(QWidget):
         for prompt in prompts[:5]:
             code = f"{prompt.code} " if prompt.code else ""
             parts.append(f"[{prompt.severity}] {code}{prompt.title}：{prompt.action_hint}")
+        return "；".join(parts)
+
+    @staticmethod
+    def _format_portfolio_attributions(attributions) -> str:
+        if not attributions:
+            return "無"
+        parts = []
+        for item in attributions[:3]:
+            parts.append(
+                f"{item.stock_code} {item.source_label} "
+                f"condition={item.condition_status} chip={item.chip_risk_level}"
+            )
         return "；".join(parts)
 
     def _display_exception_snapshot(self, error_message: str):
@@ -278,3 +292,5 @@ class _EmptySection:
         self.alert_codes: tuple[str, ...] = ()
         self.alert_level = None
         self.prompts: tuple[object, ...] = ()
+        self.attributions: tuple[object, ...] = ()
+
