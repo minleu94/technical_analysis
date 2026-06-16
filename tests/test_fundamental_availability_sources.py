@@ -1,6 +1,8 @@
 from datetime import date
 
 from data_module.fundamental_availability_sources import (
+    MONTHLY_REVENUE_AVAILABILITY_COLUMNS,
+    load_monthly_revenue_availability_overrides_csv,
     load_monthly_revenue_availability_overrides,
 )
 from decision_module.factors.factor_dtos import FactorQuality
@@ -93,3 +95,43 @@ def test_load_monthly_revenue_availability_overrides_rejects_raw_csv_date_as_sou
 
     assert result.overrides == {}
     assert result.diagnostics[0].code == "fundamental_availability.raw_csv_not_available_source"
+
+
+def test_load_monthly_revenue_availability_overrides_csv_reads_governed_file(tmp_path):
+    mapping_file = tmp_path / "monthly_revenue_availability.csv"
+    mapping_file.write_text(
+        ",".join(MONTHLY_REVENUE_AVAILABILITY_COLUMNS)
+        + "\n"
+        + (
+            "2330,2026-05,2026-05-31,2026-06-10,2026-06-11,"
+            "manual.twse_monthly_revenue_announcement_log,announcement-log-2026-06-16\n"
+        ),
+        encoding="utf-8-sig",
+    )
+
+    result = load_monthly_revenue_availability_overrides_csv(mapping_file)
+
+    override = result.overrides[("2330", "2026-05")]
+    assert override.announced_date == date(2026, 6, 10)
+    assert override.available_date == date(2026, 6, 11)
+    assert override.quality == FactorQuality.OBSERVED
+    assert result.diagnostics == ()
+
+
+def test_load_monthly_revenue_availability_overrides_csv_reports_missing_file(tmp_path):
+    result = load_monthly_revenue_availability_overrides_csv(
+        tmp_path / "missing_monthly_revenue_availability.csv"
+    )
+
+    assert result.overrides == {}
+    assert result.diagnostics[0].code == "fundamental_availability.mapping_file_missing"
+
+
+def test_load_monthly_revenue_availability_overrides_csv_reports_missing_columns(tmp_path):
+    mapping_file = tmp_path / "monthly_revenue_availability.csv"
+    mapping_file.write_text("stock_code,period\n2330,2026-05\n", encoding="utf-8")
+
+    result = load_monthly_revenue_availability_overrides_csv(mapping_file)
+
+    assert result.overrides == {}
+    assert result.diagnostics[0].code == "fundamental_availability.mapping_missing_columns"

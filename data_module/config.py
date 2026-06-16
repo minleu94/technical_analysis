@@ -44,6 +44,7 @@ class TWStockConfig:
     all_stocks_data_file: Path = field(init=False)  # 新增整合性數據文件
     broker_flow_dir: Path = field(init=False)  # 券商分點資料目錄
     broker_branch_registry_file: Path = field(init=False)  # 分點 registry 檔案
+    monthly_revenue_availability_file: Path = field(init=False)
     
     # 數據參數
     default_start_date: str = "2014-01-01"
@@ -81,6 +82,7 @@ class TWStockConfig:
         self.all_stocks_data_file = self.meta_data_dir / 'all_stocks_data.csv'
         self.broker_flow_dir = self.data_dir / 'broker_flow'
         self.broker_branch_registry_file = self.meta_data_dir / 'broker_branch_registry.csv'
+        self.monthly_revenue_availability_file = self.meta_data_dir / 'monthly_revenue_availability.csv'
         
         # 確保所需目錄存在
         self._ensure_directories()

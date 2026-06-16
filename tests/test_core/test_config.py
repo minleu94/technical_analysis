@@ -20,6 +20,10 @@ def test_config_builds_paths_from_injected_roots(tmp_path: Path) -> None:
     assert config.meta_data_dir == data_root / "meta_data"
     assert config.technical_dir == data_root / "technical_analysis"
     assert config.db_file == data_root / "sqlite" / "twstock.db"
+    assert (
+        config.monthly_revenue_availability_file
+        == data_root / "meta_data" / "monthly_revenue_availability.csv"
+    )
 
 
 def test_config_creates_required_directories(tmp_path: Path) -> None:

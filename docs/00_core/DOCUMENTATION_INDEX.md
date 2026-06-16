@@ -68,6 +68,7 @@
 | [MERGE_AND_MARKET_INDEX_SUMMARY.md](../03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md) | 市場指數與合併說明。 |
 | [SQLITE_STORAGE_GUIDE.md](../03_data/SQLITE_STORAGE_GUIDE.md) | SQLite 儲存與雙軌相容快取架構、一鍵遷移重建指南。 |
 | [FUNDAMENTAL_SOURCE_INVENTORY.md](../03_data/FUNDAMENTAL_SOURCE_INVENTORY.md) | Month 5 Fundamental Layer preflight 資料來源盤點，列出月營收、財報、估值與公告日 / available_date 缺口。 |
+| [monthly_revenue_availability.csv](../03_data/templates/monthly_revenue_availability.csv) | 月營收公告日 / available_date mapping 欄位範本；不是正式資料。 |
 
 ---
 

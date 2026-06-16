@@ -40,6 +40,11 @@
   - 盤點月營收、財報、估值與公告日 / available_date 缺口
   - 明確標示既有 `financial_data/` 只可作 raw candidate source，不得直接進決策
 
+- **`templates/monthly_revenue_availability.csv`**
+  - 月營收公告日 / available_date mapping 欄位範本
+  - 正式檔案位置為 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`
+  - 範本不是正式資料，不得直接視為可用公告日來源
+
 ## 🔗 相關目錄
 
 - `../01_architecture/data_collection_architecture.md` - 數據收集架構

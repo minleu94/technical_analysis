@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import Mapping
 
 from data_module.fundamental_availability import (
@@ -14,6 +16,15 @@ from decision_module.factors.factor_dtos import FactorDiagnostic, FactorQuality
 
 
 AvailabilityKey = tuple[str, str]
+MONTHLY_REVENUE_AVAILABILITY_COLUMNS = (
+    "stock_code",
+    "period",
+    "as_of_date",
+    "announced_date",
+    "available_date",
+    "source",
+    "source_version",
+)
 
 
 @dataclass(frozen=True)
@@ -107,6 +118,48 @@ def load_monthly_revenue_availability_overrides(
         overrides=overrides,
         diagnostics=tuple(diagnostics),
     )
+
+
+def load_monthly_revenue_availability_overrides_csv(
+    path: Path,
+) -> FundamentalAvailabilityOverrideLoadResult:
+    path = Path(path)
+    if not path.exists():
+        return FundamentalAvailabilityOverrideLoadResult(
+            overrides={},
+            diagnostics=(
+                FactorDiagnostic(
+                    code="fundamental_availability.mapping_file_missing",
+                    factor_name="fundamental.availability",
+                    stock_code="",
+                    message=f"monthly revenue availability mapping file missing; path={path}",
+                ),
+            ),
+        )
+
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = tuple(reader.fieldnames or ())
+        missing_columns = [
+            column for column in MONTHLY_REVENUE_AVAILABILITY_COLUMNS if column not in fieldnames
+        ]
+        if missing_columns:
+            return FundamentalAvailabilityOverrideLoadResult(
+                overrides={},
+                diagnostics=(
+                    FactorDiagnostic(
+                        code="fundamental_availability.mapping_missing_columns",
+                        factor_name="fundamental.availability",
+                        stock_code="",
+                        message=(
+                            "monthly revenue availability mapping missing required columns; "
+                            f"path={path}; missing={','.join(missing_columns)}"
+                        ),
+                    ),
+                ),
+            )
+
+        return load_monthly_revenue_availability_overrides(list(reader))
 
 
 def _parse_required_date(value: str) -> date:

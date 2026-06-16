@@ -310,7 +310,7 @@ db_file    -> <DATA_ROOT>/sqlite/twstock.db
 
 這些資料表尚未成為正式可用資料源。接入時必須保留 `as_of_date`、`available_date`、資料品質、來源版本與 fallback / migration。
 
-Month 5 preflight 已新增 `data_module/fundamental_availability.py` 集中處理公告日 / available_date 初版政策，並新增 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / available_date mapping 契約；mapping 可保留 `announced_date`、`available_date`、`source`、`source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。`data_module/fundamental_data.py` 則作為 raw 月營收 CSV 的唯讀正規化契約。這些模組不寫 SQLite、不修改正式 raw 檔，也不把 raw `date` 推定為公告日；呼叫端必須提供 explicit `available_date` mapping，否則只回 diagnostics，不產生 normalized record。`data_module/fundamental_schema.py` 只定義候選 SQLite schema dry-run 與 dry-run report API，可在呼叫端提供的暫時 connection 或正式 DB working copy 上驗證 schema；尚未接入 `DBManager.init_database()`，因此不會自動改動正式 `twstock.db`。
+Month 5 preflight 已新增 `data_module/fundamental_availability.py` 集中處理公告日 / available_date 初版政策，並新增 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / available_date mapping 契約；mapping 可保留 `announced_date`、`available_date`、`source`、`source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。正式 mapping 檔案位置由 `TWStockConfig.monthly_revenue_availability_file` 指向 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`；缺檔時只回 diagnostic，不自動補值。`data_module/fundamental_data.py` 則作為 raw 月營收 CSV 的唯讀正規化契約。這些模組不寫 SQLite、不修改正式 raw 檔，也不把 raw `date` 推定為公告日；呼叫端必須提供 explicit `available_date` mapping，否則只回 diagnostics，不產生 normalized record。`data_module/fundamental_schema.py` 只定義候選 SQLite schema dry-run 與 dry-run report API，可在呼叫端提供的暫時 connection 或正式 DB working copy 上驗證 schema；尚未接入 `DBManager.init_database()`，因此不會自動改動正式 `twstock.db`。
 
 ### 資料完整性
 

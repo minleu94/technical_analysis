@@ -127,6 +127,14 @@ available_date <= decision_date
 
 此契約目前解決「資料如何被標記為可得」的工程邊界；它不是公告日資料本身。正式接入前仍需建立可追溯的公告日資料來源或人工維護流程。
 
+預設正式 mapping 檔案位置由 `TWStockConfig.monthly_revenue_availability_file` 定義：
+
+```text
+DATA_ROOT/meta_data/monthly_revenue_availability.csv
+```
+
+repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availability.csv`。正式檔案不存在時，loader 只回傳 `fundamental_availability.mapping_file_missing` diagnostic，不會建立檔案、不會改寫 raw CSV，也不會用 raw 月營收 `date` 自動補值。
+
 ## 6. Factor Adapter 邊界
 
 允許：
@@ -145,7 +153,7 @@ available_date <= decision_date
 
 ## 7. Month 5 下一步
 
-1. 尋找或建立正式公告日來源；目前 governed `available_date` mapping 只是 preflight 邊界，不是長期資料源。
+1. 填入或下載真實月營收公告日資料到 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`；目前 repo 只提供欄位範本，不提供正式資料。
 2. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 3. 擴充 fundamental adapter 測試骨架，不接入 `ScoringEngine`。
 4. 規劃 migration / fallback；任何寫入正式資料前需先備份並取得確認。
@@ -160,3 +168,4 @@ available_date <= decision_date
 - 2026-06-16：新增 schema dry-run report API，可在暫時 SQLite connection 驗證候選 fundamental schema 不修改既有核心表。
 - 2026-06-16：新增正式 DB working copy dry-run API，並以正式 `twstock.db` 複本驗證候選 schema 只新增三張 fundamental 表、不修改既有五張核心表；暫存複本已清理，正式 DB 未寫入。
 - 2026-06-16：新增受治理月營收 availability mapping 契約，支援保留 `announced_date` / `available_date` / `source_version`，並拒絕把 raw 月營收 CSV 日期當成可得日來源。
+- 2026-06-16：新增月營收公告日 mapping CSV loader、`TWStockConfig.monthly_revenue_availability_file` 預設路徑與 docs 範本；缺檔只輸出 diagnostic，不自動補值或寫正式資料。
