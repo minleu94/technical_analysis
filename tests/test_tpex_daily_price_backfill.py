@@ -1,6 +1,7 @@
 import sqlite3
 
 from data_module.tpex_daily_price_backfill import (
+    apply_tpex_daily_price_backfill,
     build_tpex_daily_price_plan,
     normalize_tpex_daily_price_rows,
 )
@@ -98,3 +99,63 @@ def test_build_tpex_daily_price_plan_skips_existing_rows(tmp_path):
     assert result.ready_for_apply is False
     assert result.existing_count == 1
     assert result.insert_count == 0
+
+
+def test_build_tpex_daily_price_plan_filters_to_requested_date(tmp_path):
+    db_file = tmp_path / "twstock.db"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            'CREATE TABLE daily_prices ("日期" TEXT, "證券代號" TEXT, "收盤價" REAL, PRIMARY KEY ("證券代號", "日期"))'
+        )
+
+    result = build_tpex_daily_price_plan(
+        db_file=db_file,
+        source_rows=[
+            {
+                "Date": "1150615",
+                "SecuritiesCompanyCode": "3207",
+                "CompanyName": "耀勝",
+                "Close": "41.50",
+            },
+            {
+                "Date": "1150616",
+                "SecuritiesCompanyCode": "3207",
+                "CompanyName": "耀勝",
+                "Close": "42.50",
+            },
+        ],
+        fallback_date="2026-06-16",
+    )
+
+    assert result.insert_count == 1
+    assert result.rows[0]["日期"] == "20260616"
+
+
+def test_apply_tpex_daily_price_backfill_inserts_rows_and_backs_up(tmp_path):
+    db_file = tmp_path / "twstock.db"
+    backup_dir = tmp_path / "backup"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            'CREATE TABLE daily_prices ("日期" TEXT, "證券代號" TEXT, "證券名稱" TEXT, "收盤價" REAL, PRIMARY KEY ("證券代號", "日期"))'
+        )
+
+    result = apply_tpex_daily_price_backfill(
+        db_file=db_file,
+        backup_dir=backup_dir,
+        source_rows=[
+            {
+                "Date": "1150616",
+                "SecuritiesCompanyCode": "3207",
+                "CompanyName": "耀勝",
+                "Close": "42.50",
+            }
+        ],
+        fallback_date="2026-06-16",
+    )
+
+    assert result.applied is True
+    assert result.backup_file is not None
+    assert result.backup_file.exists()
+    with sqlite3.connect(db_file) as conn:
+        rows = conn.execute('SELECT "證券代號", "日期", "收盤價" FROM daily_prices').fetchall()
+    assert rows == [("3207", "20260616", 42.5)]

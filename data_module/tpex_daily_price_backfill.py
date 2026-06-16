@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 from typing import Mapping
 
@@ -53,6 +54,14 @@ class TpexDailyPriceBackfillPlan:
                 f"- db_file: {self.db_file}",
             ]
         )
+
+
+@dataclass(frozen=True)
+class TpexDailyPriceBackfillApplyResult:
+    applied: bool
+    inserted_count: int
+    backup_file: Path | None
+    plan: TpexDailyPriceBackfillPlan
 
 
 def normalize_tpex_daily_price_rows(
@@ -125,6 +134,7 @@ def build_tpex_daily_price_plan(
     fallback_date: str,
 ) -> TpexDailyPriceBackfillPlan:
     normalized = normalize_tpex_daily_price_rows(source_rows, fallback_date=fallback_date)
+    target_date = _normalize_date(fallback_date)
     if normalized.diagnostics:
         return TpexDailyPriceBackfillPlan(
             rows=(),
@@ -138,6 +148,8 @@ def build_tpex_daily_price_plan(
     existing_count = 0
     with sqlite3.connect(db_file) as conn:
         for row in normalized.rows:
+            if row["日期"] != target_date:
+                continue
             exists = conn.execute(
                 'SELECT 1 FROM daily_prices WHERE "證券代號" = ? AND "日期" = ? LIMIT 1',
                 (row["證券代號"], row["日期"]),
@@ -153,6 +165,41 @@ def build_tpex_daily_price_plan(
         existing_count=existing_count,
         insert_count=len(rows_to_insert),
         db_file=Path(db_file),
+    )
+
+
+def apply_tpex_daily_price_backfill(
+    *,
+    db_file: Path,
+    backup_dir: Path,
+    source_rows: list[Mapping[str, object]],
+    fallback_date: str,
+) -> TpexDailyPriceBackfillApplyResult:
+    db_file = Path(db_file)
+    plan = build_tpex_daily_price_plan(
+        db_file=db_file,
+        source_rows=source_rows,
+        fallback_date=fallback_date,
+    )
+    if not plan.ready_for_apply:
+        return TpexDailyPriceBackfillApplyResult(
+            applied=False,
+            inserted_count=0,
+            backup_file=None,
+            plan=plan,
+        )
+
+    backup_file = _backup_db(db_file, Path(backup_dir))
+    try:
+        inserted_count = _insert_daily_price_rows(db_file, plan.rows)
+    except Exception:
+        shutil.copy2(backup_file, db_file)
+        raise
+    return TpexDailyPriceBackfillApplyResult(
+        applied=True,
+        inserted_count=inserted_count,
+        backup_file=backup_file,
+        plan=plan,
     )
 
 
@@ -212,3 +259,51 @@ def _split_change(value: str) -> tuple[str | None, str | None]:
         sign = text[0]
         text = text[1:]
     return sign or None, _decimal_text(text)
+
+
+def _backup_db(db_file: Path, backup_dir: Path) -> Path:
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_file = backup_dir / f"{db_file.stem}_tpex_daily_price_backfill_{_timestamp()}{db_file.suffix}"
+    shutil.copy2(db_file, backup_file)
+    return backup_file
+
+
+def _insert_daily_price_rows(db_file: Path, rows: tuple[dict[str, object], ...]) -> int:
+    if not rows:
+        return 0
+    with sqlite3.connect(db_file) as conn:
+        table_columns = tuple(row[1] for row in conn.execute("PRAGMA table_info(daily_prices)").fetchall())
+        available_columns = set(table_columns)
+        prepared_rows = tuple(_prepare_row_for_table(row, available_columns) for row in rows)
+        columns = tuple(column for column in prepared_rows[0].keys() if column in available_columns)
+        required_columns = {"證券代號", "日期"}
+        if not required_columns.issubset(columns):
+            missing = ", ".join(sorted(required_columns.difference(columns)))
+            raise ValueError(f"daily_prices table is missing required columns: {missing}")
+        quoted_columns = ", ".join(f'"{column}"' for column in columns)
+        placeholders = ", ".join("?" for _ in columns)
+        update_columns = tuple(column for column in columns if column not in required_columns)
+        conflict_clause = 'ON CONFLICT("證券代號", "日期") DO NOTHING'
+        if update_columns:
+            update_clause = ", ".join(f'"{column}" = excluded."{column}"' for column in update_columns)
+            conflict_clause = f'ON CONFLICT("證券代號", "日期") DO UPDATE SET {update_clause}'
+        sql = f"INSERT INTO daily_prices ({quoted_columns}) VALUES ({placeholders}) {conflict_clause}"
+        values = [tuple(row.get(column) for column in columns) for row in prepared_rows]
+        conn.executemany(sql, values)
+        conn.commit()
+    return len(rows)
+
+
+def _prepare_row_for_table(row: dict[str, object], available_columns: set[str]) -> dict[str, object]:
+    prepared = dict(row)
+    change_sign = prepared.get("漲跌")
+    if change_sign is not None:
+        if "涨跌" in available_columns:
+            prepared["涨跌"] = change_sign
+        if "漲跌(+/-)" in available_columns:
+            prepared["漲跌(+/-)"] = change_sign
+    return prepared
+
+
+def _timestamp() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
