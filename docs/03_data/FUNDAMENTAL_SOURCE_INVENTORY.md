@@ -185,6 +185,7 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - raw fundamental CSV 先進 migration / loader 邊界。
 - migration 產生具 `available_date`、`quality`、`source_version` 的 normalized records。
 - adapter 只輸出 `FactorRecord` 或等價 DTO。
+- `decision_module/factors/fundamental_adapters.py` 可由已正規化月營收 records 產生 `fundamental.revenue_yoy`、`fundamental.revenue_mom`、`fundamental.revenue_3m_trend`、`fundamental.revenue_new_high`，但只保留 factor metadata / diagnostics，不產生 score。
 - `FactorGate` 集中執行 `available_date <= decision_date`。
 
 禁止：
@@ -199,7 +200,7 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 1. 填入或下載真實月營收公告日資料到 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`；目前 repo 只提供欄位範本與 dry-run 驗證入口，不提供正式資料。
 2. 在通過驗證入口後，才可用 `scripts/migrate_fundamental_schema.py --apply --confirm apply-fundamental-schema` 進入受控 SQLite migration；正式執行前仍需人工確認目標 DB、備份位置與 dry-run report。
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
-4. 擴充 fundamental adapter 測試骨架，不接入 `ScoringEngine`。
+4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
 5. 任何寫入正式資料前需先備份並取得確認；目前 migration / fallback 工具已具備，但尚未寫入正式 SQLite。
 6. 正式 schema apply 後才可進一步規劃 normalized fundamental records 的資料寫入；不可把 schema tooling 視為資料已可用。
 
@@ -216,3 +217,4 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - 2026-06-16：新增月營收公告日 mapping CSV loader、`TWStockConfig.monthly_revenue_availability_file` 預設路徑與 docs 範本；缺檔只輸出 diagnostic，不自動補值或寫正式資料。
 - 2026-06-16：新增月營收 availability mapping 正式驗證入口與 CLI dry-run validator，允許治理來源、拒絕 raw CSV available-date 來源，並保持不建立、不改寫正式 mapping 檔或 SQLite。
 - 2026-06-16：新增 Fundamental SQLite 受控 migration service 與 CLI，支援 working-copy dry-run、apply 前備份、失敗 restore 與 `--confirm apply-fundamental-schema` 人工確認；正式 `twstock.db` 尚未套用 migration。
+- 2026-06-16：新增 Revenue Factor Pack v1 adapters，從已正規化月營收 records 產生 YoY、MoM、3M trend 與 new high factor records；缺 baseline 只輸出 diagnostics，未來 available_date 由 `FactorGate` skip，不接 `ScoringEngine`。

@@ -181,13 +181,13 @@ Factor `available_date` 晚於決策日時必須拒絕使用。
 - `decision_module/factors/factor_registry.py`
 - `decision_module/factors/factor_gate.py`
 - `decision_module/factors/factor_adapters.py`
-- `decision_module/factors/fundamental_adapters.py`（Month 5 preflight 最小基本面 adapter contract；目前只建立 `fundamental.revenue_yoy` 的 available_date / diagnostics 邊界，不接 ScoringEngine）
+- `decision_module/factors/fundamental_adapters.py`（Month 5 preflight 基本面 adapter contract；目前可從已正規化月營收 records 產生 `fundamental.revenue_yoy`、`fundamental.revenue_mom`、`fundamental.revenue_3m_trend`、`fundamental.revenue_new_high`，保留 available_date / diagnostics 邊界，不接 ScoringEngine）
 - `decision_module/factors/valuation_policy.py` / `valuation_adapters.py`（Month 5 估值 presentation boundary；只輸出相對估值區間與 factor metadata，不接 ScoringEngine）
 - `app_module/factor_service.py`
 
 Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manifest.factor_contributions` 保存 factor 追溯資料。`ResearchRunService.save_run()` 在 metadata 寫入前可合併 explicit factor metadata，或由 `FactorRecord` 與 decision date 透過 `FactorService` 產生 snapshot 與 contribution summary。推薦組合回放結果會從 replay snapshot recommendations 產生初版 factor manifest；單股回測會從 `BacktestService` 已產生的 signal score 序列建立 `technical.total_score` factor records，並由 `BacktestView` 保存 Research Run 時轉交 `ResearchRunService`；批次回測沿用每檔 `BacktestReportDTO` 內的 factor records，在 legacy run 保存成功後以 `batch-backtest:<legacy_run_id>` 寫入 Research Run Registry。固定組合目前共用批次執行路徑，但 UI 會將 Research Lab mode 傳入 service，Registry metadata 以 `fixed_basket_stock` 區分固定組合 per-stock 保存結果。這些保存路徑都不在 UI 重算分數或重新抓取資料。Cross-run Comparison 只能讀已保存 metadata，不得為比較重新抓取當前資料。
 
-長期 factor 權重可擴充到 chip / fundamental / market / risk，但目前正式 `RecommendationWeightContract` 仍只接受 `pattern`、`technical`、`volume` 三項整數 bp。擴充前必須先完成資料可得日、品質狀態與 missing policy 治理。Month 5 preflight 已確認既有 `financial_data/` 缺公告日與 `available_date`，因此 raw CSV 不得直接進回測、推薦、Daily Decision Desk 或 `ScoringEngine`；缺 `available_date` 的基本面 observation 必須只回 diagnostics，不得被補成期間日期。`decision_module/factors/valuation_policy.py` 與 `valuation_adapters.py` 只建立估值 presentation boundary。它們不得 import 或呼叫 `ScoringEngine`，不得產生 target price / fair value / upside / buy-sell recommendation，且缺少 `industry_percentile_bp` 時不得輸出中性估值區。
+長期 factor 權重可擴充到 chip / fundamental / market / risk，但目前正式 `RecommendationWeightContract` 仍只接受 `pattern`、`technical`、`volume` 三項整數 bp。擴充前必須先完成資料可得日、品質狀態與 missing policy 治理。Month 5 preflight 已確認既有 `financial_data/` 缺公告日與 `available_date`，因此 raw CSV 不得直接進回測、推薦、Daily Decision Desk 或 `ScoringEngine`；缺 `available_date` 的基本面 observation 必須只回 diagnostics，不得被補成期間日期。Revenue Factor Pack v1 也只輸出 factor records / diagnostics：缺 YoY 或 MoM baseline 時不產生該 ratio factor，不補中性分數；future `available_date` 由 `FactorGate` 依 `MissingPolicy.SKIP` 跳過。`decision_module/factors/valuation_policy.py` 與 `valuation_adapters.py` 只建立估值 presentation boundary。它們不得 import 或呼叫 `ScoringEngine`，不得產生 target price / fair value / upside / buy-sell recommendation，且缺少 `industry_percentile_bp` 時不得輸出中性估值區。
 
 ## 6. Backtest Engine
 
