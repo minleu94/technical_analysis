@@ -111,6 +111,7 @@
 | [2026-06-15-decision-desk-risk-prompt-bridge.md](../superpowers/plans/2026-06-15-decision-desk-risk-prompt-bridge.md) | Daily Decision Desk Why Not / 風險提示橋接 v1 實作計畫，將既有 section DTO 的低流動性、弱勢、watchlist risk alert、portfolio alert 與品質缺口整理成可行動提示。 |
 | [2026-06-15-decision-desk-portfolio-alert-attribution.md](../superpowers/plans/2026-06-15-decision-desk-portfolio-alert-attribution.md) | Daily Decision Desk Portfolio Alert Attribution v1 實作計畫，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags。 |
 | [2026-06-16-month4-daily-decision-desk-closure.md](../superpowers/plans/2026-06-16-month4-daily-decision-desk-closure.md) | Month 4 Daily Decision Desk 收尾計畫，定義 reference screen、UI/service 邊界、資料品質驗收、文件關閉與 Month 5 handoff。 |
+| [2026-06-16-month5-fundamental-layer-preflight.md](../superpowers/plans/2026-06-16-month5-fundamental-layer-preflight.md) | Month 5 Fundamental Layer preflight 計畫，定義資料來源盤點、available_date 契約、factor adapter 邊界、no-look-ahead 測試與非目標。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
 | [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |
@@ -261,6 +262,8 @@
 - 2026-06-15：補列 Daily Decision Desk Why Not / 風險提示橋接 v1 實作計畫至 Superpowers plans 索引。
 - 2026-06-15：補列 Daily Decision Desk Portfolio Alert Attribution v1 實作計畫至 Superpowers plans 索引。
 - 2026-06-16：新增 Month 4 Daily Decision Desk 收尾計畫，明確定義 reference screen、UI/service 邊界、資料品質驗收、文件關閉與 Month 5 handoff。
+- 2026-06-16：完成 Month 4 Daily Decision Desk 收尾文件同步，將 Snapshot / Roadmap / Architecture / Manual 轉向 Month 5 Fundamental Layer preflight，並記錄 UI boundary contract test。
+- 2026-06-16：新增 Month 5 Fundamental Layer preflight 計畫，避免在 source inventory、available_date 與 no-look-ahead gate 定義前直接接入基本面資料。
 
 
 

@@ -44,9 +44,9 @@
 - **效能與研究輸出（Phase 5）** ✅ SQLite 檢視器分頁與規格化 Excel 報告匯出已完成 (2026-06-14)
   - 圖表渲染優化 ✅ / 批次回測並行化 ✅ / SQLite 檢視器穩定分頁 ✅ / 規格化 Excel 報告匯出 ✅
 
-- **目標閉環 4：每日決策工作台（Daily Decision Desk）** ✅ 已接上首頁 v1
+- **目標閉環 4：每日決策工作台（Daily Decision Desk）** ✅ Month 4 v1 已收尾
   - 目標：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。
-  - 目前主 UI 已接上「每日決策」工作區，各 section 已具備 snapshot 顯示框架；Market Regime、Market Breadth v1、Sector Rotation v1、Relative Strength / Liquidity Ranking v1、Watchlist Trigger v1 與 Portfolio Alert v1 已接主 UI。Market Breadth v1 由 SQLite `daily_prices` 推導多方 / 空方 / 持平、成交量擴散與新高新低等 metadata；Sector Rotation v1 由 SQLite `industry_indices` 推導領先 / 落後產業、5 / 20 日變化與輪動強度；Relative Strength / Liquidity Ranking v1 由 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性代碼；Watchlist Trigger v1 由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導，可計算出個股強度 score_bp (RSI * 100) 與風險警示 risk_alert (偏離 RSI > 80 / < 20 或跌破 lowerband)。若指定日無資料或歷史不足（如 20 日相對強度未滿 21 個交易觀測值），會採用最近可用交易日或降級（quality 降級為 `DEGRADED`，並輸出 `relative_strength_liquidity_insufficient_history`）。Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，可把條件監控與籌碼風險彙總成每日持倉警示；若籌碼資料缺失、估算或不可用，會透過 `quality / warnings` 降級揭露，不補值。Portfolio Alert Attribution v1 已將每筆持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，使 Daily Decision Desk 能辨識警示來自進場假設失效、籌碼風險或資料品質缺口。Why Not / 風險提示 v1 由 `DecisionDeskRiskPromptService` 從既有 section DTO 的 quality、warnings、低流動性、相對弱勢、watchlist risk alert 與 portfolio alert 推導，不在 UI 層重算 scoring、screening、portfolio 或 liquidity。
+  - 目前主 UI 已接上「每日決策」工作區，各 section 已具備 snapshot 顯示框架；Market Regime、Market Breadth v1、Sector Rotation v1、Relative Strength / Liquidity Ranking v1、Watchlist Trigger v1 與 Portfolio Alert v1 已接主 UI。Market Breadth v1 由 SQLite `daily_prices` 推導多方 / 空方 / 持平、成交量擴散與新高新低等 metadata；Sector Rotation v1 由 SQLite `industry_indices` 推導領先 / 落後產業、5 / 20 日變化與輪動強度；Relative Strength / Liquidity Ranking v1 由 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性代碼；Watchlist Trigger v1 由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導，可計算出個股強度 score_bp (RSI * 100) 與風險警示 risk_alert (偏離 RSI > 80 / < 20 或跌破 lowerband)。若指定日無資料或歷史不足（如 20 日相對強度未滿 21 個交易觀測值），會採用最近可用交易日或降級（quality 降級為 `DEGRADED`，並輸出 `relative_strength_liquidity_insufficient_history`）。Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，可把條件監控與籌碼風險彙總成每日持倉警示；若籌碼資料缺失、估算或不可用，會透過 `quality / warnings` 降級揭露，不補值。Portfolio Alert Attribution v1 已將每筆持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，使 Daily Decision Desk 能辨識警示來自進場假設失效、籌碼風險或資料品質缺口。Why Not / 風險提示 v1 由 `DecisionDeskRiskPromptService` 從既有 section DTO 的 quality、warnings、低流動性、相對弱勢、watchlist risk alert 與 portfolio alert 推導，不在 UI 層重算 scoring、screening、portfolio 或 liquidity。Month 4 收尾已新增 UI boundary contract test，確認 Daily Decision Desk UI 不直接 import domain 計算模組；視覺 polish 仍列為後續設計債，不阻塞 Month 5。
 
 
 - **文件治理與 Manual** ✅ 本輪完成
@@ -70,7 +70,7 @@
 
 1. Month 3 Factor Layer v1 已完成：Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization 與 Research Run 保存流程已落地；推薦回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata。v1 不接營收、法人或估值新資料源。
 2. Month 3 Portfolio Replay 可信度 v1 已完成：推薦組合回放已輸出 `portfolio_credibility`、`unfilled_orders`、`cash_ledger`、`weight_exposure` 與 `gap_risk`；可揭露缺價、流動性限制、現金不足、整股限制、成本、目標 / 實際權重落差與 next-open gap 風險。零股、買賣價差、Gap 實際成交與完整撮合模型列入後續執行模型深化，不再阻塞 Month 3 v1。
-3. Month 4 Daily Decision Desk 已接上主 UI：`DecisionDeskSnapshot` 已進入首頁，Market Regime、Market Breadth v1、Sector Rotation v1、Relative Strength / Liquidity Ranking v1、Watchlist Trigger v1、Portfolio Alert v1 已接真實 service，缺口以 `quality / warnings` 顯示，缺值不補值。
+3. 準備進入 Month 5 Fundamental Layer preflight：先定義營收資料來源、公告日 / available_date 契約、factor adapter 邊界、no-look-ahead 測試、估值呈現政策與 AbnormalFundamentalFlag 規則；Month 4 Daily Decision Desk 已以 `quality / warnings` 降級契約收尾。
 
 ## 高風險區（改動需謹慎）
 

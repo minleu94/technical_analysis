@@ -116,6 +116,8 @@ class DecisionDeskView(QWidget):
         self.risk_prompts_status = QLabel("")
         self.risk_prompts_value = QLabel("")
         self.relative_strength_codes = CompactCodeList()
+        self._section_badges: dict[str, StatusBadge] = {}
+        self._status_badges: dict[QLabel, StatusBadge] = {}
 
         sections_group = SectionPanel("各模組狀態")
         sections_layout = sections_group.layout
@@ -139,12 +141,18 @@ class DecisionDeskView(QWidget):
         row_layout = QVBoxLayout(row)
         row_layout.setContentsMargins(8, 6, 8, 6)
         row_layout.setSpacing(3)
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(8)
         title_label = QLabel(title)
         title_font = QFont()
         title_font.setPointSize(11)
         title_font.setBold(True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
+        quality_badge = StatusBadge("", "observed")
+        self._section_badges[title] = quality_badge
+        self._status_badges[status_label] = quality_badge
         status_label.setWordWrap(True)
         value_label.setWordWrap(True)
         status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -153,18 +161,29 @@ class DecisionDeskView(QWidget):
         value_label.setMinimumWidth(0)
         status_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 10pt;")
         value_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary}; font-size: 10pt; line-height: 130%;")
+        status_label.hide()
         row.setStyleSheet(
             f"#decisionDeskSectionRow {{ background: {MIDNIGHT_ANALYST.surface_1}; "
             f"border-bottom: 1px solid {MIDNIGHT_ANALYST.border}; }}"
         )
 
-        row_layout.addWidget(title_label)
+        header_layout.addWidget(title_label, 1)
+        header_layout.addWidget(quality_badge, 0)
+        row_layout.addLayout(header_layout)
         row_layout.addWidget(status_label)
         row_layout.addWidget(value_label)
         return row
 
     def refresh_snapshot(self):
         self._refresh_snapshot()
+
+    def _set_section_quality(self, status_label: QLabel, quality: DecisionDeskQuality) -> None:
+        label = self._quality_label(quality)
+        status_label.setText(label)
+        badge = self._status_badges.get(status_label)
+        if badge is not None:
+            badge.setText(label)
+            badge.set_quality(self._quality_token(quality))
 
     def _refresh_snapshot(self) -> None:
         try:
@@ -187,35 +206,33 @@ class DecisionDeskView(QWidget):
         warning_lines = list(snapshot.warnings)
         self.warning_list.set_warnings(warning_lines)
 
-        self.market_regime_status.setText(f"品質：{self._quality_label(snapshot.market_regime.quality)}")
+        self._set_section_quality(self.market_regime_status, snapshot.market_regime.quality)
         self.market_regime_value.setText(
             f"市場狀態：{snapshot.market_regime.regime_label or '未定義'}；"
             f"得分：{snapshot.market_regime.regime_score or 0}；"
             f"訊號強度：{snapshot.market_regime.regime_confidence or 0}"
         )
 
-        self.market_breadth_status.setText(f"品質：{self._quality_label(snapshot.market_breadth.quality)}")
+        self._set_section_quality(self.market_breadth_status, snapshot.market_breadth.quality)
         self.market_breadth_value.setText(
             f"多方：{snapshot.market_breadth.advancing or 0}；空方：{snapshot.market_breadth.declining or 0}；"
             f"持平：{snapshot.market_breadth.unchanged or 0}；"
             f"廣度比率BP：{snapshot.market_breadth.breadth_ratio_bp if snapshot.market_breadth.breadth_ratio_bp is not None else 'N/A'}"
         )
 
-        self.sector_rotation_status.setText(f"品質：{self._quality_label(snapshot.sector_rotation.quality)}")
+        self._set_section_quality(self.sector_rotation_status, snapshot.sector_rotation.quality)
         self.sector_rotation_value.setText(
             f"領先產業：{snapshot.sector_rotation.leading_sector or '未定義'}；"
             f"落後產業：{snapshot.sector_rotation.trailing_sector or '未定義'}；"
             f"輪動強度BP：{snapshot.sector_rotation.rotation_intensity_bp if snapshot.sector_rotation.rotation_intensity_bp is not None else 'N/A'}"
         )
 
-        self.relative_strength_liquidity_status.setText(
-            f"品質：{self._quality_label(snapshot.relative_strength_liquidity.quality)}"
+        self._set_section_quality(
+            self.relative_strength_liquidity_status,
+            snapshot.relative_strength_liquidity.quality,
         )
-        self.relative_strength_liquidity_value.setText(
-            "強勢：" + self._format_code_list(snapshot.relative_strength_liquidity.top_strength_codes) + "\n"
-            "弱勢：" + self._format_code_list(snapshot.relative_strength_liquidity.weak_strength_codes) + "\n"
-            "低流動性：" + self._format_code_list(snapshot.relative_strength_liquidity.low_liquidity_codes)
-        )
+        self.relative_strength_liquidity_value.setText("")
+        self.relative_strength_liquidity_value.hide()
         self.relative_strength_codes.set_groups(
             [
                 ("強勢", snapshot.relative_strength_liquidity.top_strength_codes),
@@ -224,14 +241,14 @@ class DecisionDeskView(QWidget):
             ]
         )
 
-        self.watchlist_triggers_status.setText(f"品質：{self._quality_label(snapshot.watchlist_triggers.quality)}")
+        self._set_section_quality(self.watchlist_triggers_status, snapshot.watchlist_triggers.quality)
         self.watchlist_triggers_value.setText(
             f"觸發數：{snapshot.watchlist_triggers.trigger_count or 0}；"
             f"代碼：{', '.join(snapshot.watchlist_triggers.triggered_codes) if snapshot.watchlist_triggers.triggered_codes else '無'}；"
             f"訊號：{snapshot.watchlist_triggers.top_signal or '無'}"
         )
 
-        self.portfolio_alerts_status.setText(f"品質：{self._quality_label(snapshot.portfolio_alerts.quality)}")
+        self._set_section_quality(self.portfolio_alerts_status, snapshot.portfolio_alerts.quality)
         portfolio_attribution_text = self._format_portfolio_attributions(getattr(snapshot.portfolio_alerts, "attributions", ()))
         self.portfolio_alerts_value.setText(
             f"警示數：{snapshot.portfolio_alerts.alert_count or 0}；"
@@ -240,7 +257,7 @@ class DecisionDeskView(QWidget):
             f"來源歸因：{portfolio_attribution_text}"
         )
 
-        self.risk_prompts_status.setText(f"品質：{self._quality_label(snapshot.risk_prompts.quality)}")
+        self._set_section_quality(self.risk_prompts_status, snapshot.risk_prompts.quality)
         self.risk_prompts_value.setText(self._format_risk_prompts(snapshot.risk_prompts.prompts))
 
         for section_text in self._collect_warnings(snapshot):

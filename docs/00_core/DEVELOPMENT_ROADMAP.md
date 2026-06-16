@@ -64,9 +64,9 @@
    - Factor DTO / registry / Look-ahead gate / adapters / FactorService snapshot/contribution serialization 已落地；`ResearchRunService.save_run()` 已接入 `factor_snapshot` / `factor_contributions` 實際寫入流程，推薦組合回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata。
    - 推薦組合回放已具備現金帳、權重、再平衡、未成交、Liquidity、成本、整股 sizing、weight exposure 與 Gap risk labels；更細的零股、價差、完整撮合與 Gap 實際成交模型列為後續深化，不阻塞 Month 4。
 
-3. **P1：Month 4 Daily Decision Desk 前置接線**
-   - Daily Decision Desk 已接上主 UI 首頁，成為 v1 首頁視圖。
-   - 目前以 service snapshot 聚合 `DecisionDeskSnapshot` / `DecisionDeskSnapshotBuilder`，聚焦 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger、Portfolio Alert，品質不足時以 `MISSING / DEGRADED / ESTIMATED / OBSERVED` 呈現。
+3. **P1：Month 5 Fundamental Layer preflight**
+   - Month 4 Daily Decision Desk v1 已以 service-backed daily workflow 收尾，UI 只讀 service snapshot，不重算 scoring、screening、portfolio、broker flow 或 liquidity。
+   - Month 5 第一步不是直接匯入新資料，而是先定義營收資料來源、公告日 / available_date 契約、factor adapter 邊界、no-look-ahead 測試、估值呈現政策與 AbnormalFundamentalFlag 規則。
 
 4. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
@@ -83,7 +83,7 @@
 - **Look-ahead bias**：任何策略、回測、推薦、factor、benchmark、停損停利與標準化改動都必須先自查資料可得日。
 - **金融核心數值邊界**：核心金額、交易成本、倉位、PnL 與風控不可新增裸 `float`；必須使用 `Decimal`、整數單位或明確標示的 analytics / visualization 邊界。
 - **資料因子擴充風險**：營收、財報、三大法人、估值與籌碼因子必須走 factor layer，不得直接污染既有 scoring engine。
-- **Daily Decision Desk 資料接線風險**：Daily Decision Desk v1 已上線首頁，但 Market Breadth、Sector Rotation、Watchlist Trigger、Portfolio Alert 仍可能因 provider 缺值降級為 `MISSING` / `DEGRADED`，不得誤導為完整已用。
+- **Daily Decision Desk 降級顯示風險**：Daily Decision Desk v1 已完成 Month 4 收尾，但各 section 仍可能因 provider 缺值降級為 `MISSING` / `DEGRADED`；文件與 UI 必須持續揭露 quality / warnings，不得誤導為資料永遠完整。
 - **文件權威混淆**：Roadmap Hub 只指向權威文件；不要把完整歷史、架構細節與長期研究筆記重新塞回本文件。
 
 ---
@@ -102,3 +102,4 @@
 - 2026-06-13：將 Roadmap 從單一最高權威文件重構為 Roadmap Hub；引入 Scoped SSOT，新增 6 個月工程 Roadmap，並將舊 Roadmap 完整歸檔。
 - 2026-06-13：新增 Legacy Carryover Matrix，逐項承接舊 Roadmap 未完成事項並設定 Month 3 前結案 Gate。
 - 2026-06-15：依 IDS 願景重排 Roadmap Hub 的短版 Next，將 Month 3 補強為 Factor Layer + Portfolio Replay 可信度，並將 Daily Decision Desk 明確列為 Month 4 v1 首頁，其他 section 逐步接線。
+- 2026-06-16：完成 Month 4 Daily Decision Desk 收尾定位，將短版 Next 轉向 Month 5 Fundamental Layer preflight，並保留 Daily Decision Desk quality / warnings 降級風險。

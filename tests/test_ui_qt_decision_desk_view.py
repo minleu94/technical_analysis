@@ -148,7 +148,8 @@ def test_decision_desk_view_shows_degraded_status():
     view = DecisionDeskView(FakeBuilder(s))
 
     assert "降級" in view.overall_status_label.text()
-    assert "品質：降級" in view.market_breadth_status.text()
+    assert "降級" in view.market_breadth_status.text()
+    assert "降級" in view._status_badges[view.market_breadth_status].text()
 
 
 def test_decision_desk_view_shows_missing_status():
@@ -161,7 +162,8 @@ def test_decision_desk_view_shows_missing_status():
     view = DecisionDeskView(FakeBuilder(s))
 
     assert "缺漏" in view.overall_status_label.text()
-    assert "品質：缺漏" in view.market_regime_status.text()
+    assert "缺漏" in view.market_regime_status.text()
+    assert "缺漏" in view._status_badges[view.market_regime_status].text()
 
 
 def test_decision_desk_view_aggregates_warning_lines_and_refresh_button():
@@ -274,12 +276,48 @@ def test_decision_desk_view_compacts_long_relative_strength_lists():
     )
 
     view = DecisionDeskView(FakeBuilder(snapshot))
-    rendered = view.relative_strength_liquidity_value.text()
+    rendered = view.relative_strength_codes.text()
 
-    assert view.relative_strength_liquidity_value.wordWrap()
+    assert view.relative_strength_liquidity_value.isHidden()
+    assert view.relative_strength_liquidity_value.text() == ""
+    assert view.relative_strength_codes.wordWrap()
     assert "\n" in rendered
     assert "另 12 檔" in rendered
     assert "T019" not in rendered
+
+
+def test_decision_desk_uses_single_relative_strength_presentation():
+    app()
+    snapshot = _snapshot()
+    snapshot = replace(
+        snapshot,
+        relative_strength_liquidity=RelativeStrengthLiquiditySummary(
+            as_of_date=snapshot.as_of_date,
+            quality=DecisionDeskQuality.OBSERVED,
+            warnings=(),
+            top_strength_codes=("2330", "2454"),
+            weak_strength_codes=("1101",),
+            low_liquidity_codes=("9999",),
+        ),
+    )
+
+    view = DecisionDeskView(FakeBuilder(snapshot))
+
+    assert view.relative_strength_liquidity_value.isHidden()
+    assert view.relative_strength_liquidity_value.text() == ""
+    assert "強勢：2330, 2454" in view.relative_strength_codes.text()
+    assert "弱勢：1101" in view.relative_strength_codes.text()
+    assert "低流動性：9999" in view.relative_strength_codes.text()
+
+
+def test_decision_desk_sections_use_quality_badges_in_headers():
+    app()
+    view = DecisionDeskView(FakeBuilder(_snapshot(market_breadth_quality=DecisionDeskQuality.DEGRADED)))
+
+    assert view.market_breadth_status.isHidden()
+    badge = view._status_badges[view.market_breadth_status]
+    assert "降級" in badge.text()
+    assert "#f59e0b" in badge.styleSheet()
 
 
 def test_decision_desk_view_uses_readable_overview_typography():

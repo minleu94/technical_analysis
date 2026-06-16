@@ -35,6 +35,35 @@ The remaining closure work is not a major new engine. It is a quality gate:
 
 ---
 
+## Closure Execution Result
+
+Status: closed as a service-backed Month 4 v1 daily workflow.
+
+Completed closure actions:
+
+- Daily Decision Desk section quality now renders through header badges.
+- Relative Strength / Liquidity uses a single `CompactCodeList` presentation; the old duplicate text field is hidden and kept only for compatibility.
+- Added `tests/test_decision_desk_ui_contract.py` to block UI imports of scoring, screening, backtest, recommendation, and portfolio-core calculation modules.
+- Verified service snapshot, data-quality warnings, and Why Not / risk prompt contracts.
+- Updated Snapshot, 6M Roadmap, Roadmap Hub, Architecture, Manual, design-system spec, and Documentation Index.
+- Added `docs/superpowers/plans/2026-06-16-month5-fundamental-layer-preflight.md` as the Month 5 entry plan.
+
+Verification evidence:
+
+- `tests/test_ui_qt_theme.py tests/test_ui_qt_decision_desk_view.py tests/test_ui_qt_decision_desk_main_integration.py tests/test_decision_desk_ui_contract.py`: 28 passed.
+- `tests/test_decision_desk_service.py tests/test_decision_desk_risk_prompt_service.py`: 13 passed.
+- `tests/test_ui_qt_update_view_workbench.py`: 13 passed.
+- `scripts/qa_validate_update_tab.py`: 21 passed, 0 failed, 4 skipped.
+- `mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime`: success, 175 source files.
+- `py_compile` for changed Python files: pass.
+
+Month 5 handoff:
+
+- Start with Fundamental Layer preflight.
+- Do not ingest or score new fundamental data before source inventory, `available_date` contract, factor adapter boundary, and no-look-ahead tests are defined.
+
+---
+
 ## File Map
 
 ### UI Reference Screen

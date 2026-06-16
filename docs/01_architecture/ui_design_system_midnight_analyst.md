@@ -1,6 +1,6 @@
 # Midnight Analyst UI 設計系統規格
 
-> **狀態**：草案 v0.1（目前實作未被使用者接受為最終美術方向）
+> **狀態**：Month 4 v1 functional closure accepted；視覺 polish 仍列為 Month 5+ 設計債
 > **最後更新**：2026-06-16
 > **權威範圍**：本文件定義 PySide6 UI 深色主題、設計 token、共用元件、效能限制與後續修改規則。
 
@@ -43,9 +43,9 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 
 目前使用者回饋：
 
-- 目前實作仍「不好看」。
-- 未來調整應優先改善視覺層級、空間比例、卡片使用方式與整體精緻度。
-- 本文件應作為修改依據，不應把現有樣式視為完成品。
+- 目前實作已足以支撐 Month 4 service-backed daily workflow 收尾。
+- 使用者仍不滿意整體美術品質；後續調整應優先改善視覺層級、空間比例、卡片使用方式與整體精緻度。
+- 本文件應作為修改依據；現有樣式是 v1 reference screen，不是最終美術完成品。
 
 ---
 
@@ -237,13 +237,13 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 - `CompactCodeList`
 - `WarningList`
 
-目前仍有明顯問題：
+Month 4 closure 後的狀態：
 
-1. 版面仍偏工程拼裝，缺少真正的視覺節奏。
-2. 各 section 仍是垂直文字列，未形成好看的 dashboard grid。
-3. `relative_strength_liquidity_value` 與 `relative_strength_codes` 有資訊重複。
-4. 一些舊測試相容 label 仍保留，造成 view 內同時存在新舊呈現模式。
-5. 卡片、badge、warning 的比例仍需設計審核。
+1. Daily Decision Desk 已可作為 Month 4 v1 reference screen。
+2. section quality 已以 `StatusBadge` 放在 section header，不再以可見長文字重複「品質：」。
+3. 強勢、弱勢與低流動性代碼由 `CompactCodeList` 單一呈現；舊 `relative_strength_liquidity_value` 僅保留為相容欄位且不顯示。
+4. `tests/test_decision_desk_ui_contract.py` 會阻擋 UI 直接 import scoring、screening、backtest、portfolio core 等計算模組。
+5. 視覺 polish 仍是設計債：整體美術品質、dashboard grid、空間比例、卡片比例仍可在 Month 5+ 繼續改善。
 
 後續改善方向：
 
@@ -252,9 +252,9 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
   2. Market Intelligence grid
   3. Watchlist / Portfolio action panel
   4. Why Not / Warning panel
-- 移除新舊重複文字。
-- 把品質狀態統一放在 section header badge，不在每段文字重複「品質：」。
-- 將強弱 / 流動性從純文字改為 compact table 或 chip row。
+- 進一步把市場資訊、Watchlist / Portfolio action、Why Not / Warning 做成更清楚的 dashboard grid。
+- 將強弱 / 流動性從分行文字升級為 compact table 或 chip row。
+- 保留 service snapshot 邊界，不因視覺重做而在 UI 層新增計算。
 
 ---
 
