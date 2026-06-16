@@ -179,7 +179,8 @@
 - Sector Rotation service（v1 已接 SQLite `industry_indices`，輸出領先 / 落後產業、5 / 20 日變化與輪動強度）。
 - Relative Strength / Liquidity Ranking v1 已由 SQLite `daily_prices` 接線，推導強弱與低流動性股。
 - Watchlist Trigger service。
-- Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`；下一步聚焦 Portfolio Alert 後續來源差異歸因。
+- Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`。
+- Why Not / 風險提示 v1 已接 Daily Decision Desk，由既有 section DTO 的 quality、warnings 與屬性欄位推導，提供可行動風險提示，不重算既有邏輯。
 - Manual 與 UI docs 完整描述新首頁入口、參數、結果判讀與限制（含 `OBSERVED`、`ESTIMATED`、`DEGRADED`、`MISSING`）。
 
 驗收標準：
