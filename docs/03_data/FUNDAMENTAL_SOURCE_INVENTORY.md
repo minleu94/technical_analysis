@@ -306,6 +306,7 @@ CLI 範例：
 - `--output <candidate-csv>`；未指定時只輸出 summary，不寫檔
 - `--source-json-dir <dir>` 供測試或人工下載的官方 JSON 檔使用（檔名為 `twse.json` / `tpex.json`）
 - `--mops-html-dir <dir>` 供人工保存的 MOPS 官方歷史 HTML 使用（檔名規則為 `twse_YYYY-MM.html` / `tpex_YYYY-MM.html`）
+- `--mops-static` 透過新版 MOPS `/mops/api/redirectToOld` 取得 `mopsov.twse.com.tw/nas/t21/...` historical static report，僅作 dry-run source validation
 
 目前官方 OpenAPI 驗證結果：
 
@@ -314,9 +315,9 @@ CLI 範例：
 | TWSE 上市公司每月營業收入彙總表 | `https://openapi.twse.com.tw/v1/opendata/t187ap05_L` | swagger 未提供 period query；目前回最新月 | 2026-06-16 查得 1,076 rows；`2330` 與 `9935` 均為 `資料年月=11505`、`出表日期=1150615` |
 | TPEX 上櫃公司每月營業收入彙總表 | `https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O` | swagger 未提供 period query；目前回最新月 | 2026-06-16 查得 889 rows；`3207` 為 `資料年月=11505`、`出表日期=1150616` |
 | data.gov 上市公司每月營業收入彙總表 | `https://data.gov.tw/dataset/18420` | 資料集欄位確認有 `出表日期`；資源指向 TWSE / MOPS 最新資料 | 欄位包含 `出表日期`、`資料年月`、`公司代號`、營收與累計營收欄位 |
-| MOPS 採用 IFRSs 後月營收頁 | `https://mops.twse.com.tw/mops/web/t05st10_ifrs` | 直接 POST historical query 目前回安全性阻擋頁；舊 `nas/t21/...` 靜態路徑目前回 404 | 不能列為穩定自動來源；只可記錄為待人工確認來源 |
+| MOPS 採用 IFRSs 後月營收頁 | `https://mops.twse.com.tw/mops/#/web/t21sc04_ifrs` | 新版 SPA 可用 `/mops/api/redirectToOld` 產生 `mopsov.twse.com.tw/nas/t21/...` historical static report URL；但 HTML 的 `出表日期` 是查詢當日重新出表日，不是原始公告日 | 可作歷史資料內容佐證；不得直接作 historical availability mapping |
 
-2026-06-16 追加 `parse_mops_monthly_revenue_html()`：若人工保存的官方 MOPS HTML 內含頁面層級 `出表日期` 與含 `公司代號` 的表格，builder 會將 `announced_date=出表日期`、`available_date=announced_date+1 calendar day`，source 設為 `mops.monthly_revenue_announcement`，source_version 設為 `mops-t05st10-ifrs-<fetch-date>`。若 HTML 缺 `出表日期`、無可解析公司列，或指定期間檔案不存在，只輸出 diagnostics，不用 raw CSV 日期補值。
+2026-06-16 追加 `parse_mops_monthly_revenue_html()`：若人工保存的官方 MOPS HTML 內含頁面層級 `出表日期` 與含 `公司代號` 的表格，builder 會將 `announced_date=出表日期`、`available_date=announced_date+1 calendar day`，source 設為 `mops.monthly_revenue_announcement`，source_version 設為 `mops-t05st10-ifrs-<fetch-date>`。若 HTML 缺 `出表日期`、無可解析公司列，或指定期間檔案不存在，只輸出 diagnostics，不用 raw CSV 日期補值。2026-06-17 驗證新版 MOPS historical static report 時，`113/04` 上市與上櫃彙總表可抓到 `2330`、`9935`、`3207` rows，但 `出表日期` 為查詢當日 `115/06/17`；builder 與 validator 均新增 `as_of_date + 45 days` 合理揭露窗口，這類重新出表日期會回 `monthly_revenue_availability.available_date_unreasonably_late` / `fundamental_availability.available_date_unreasonably_late`，不產生候選 row。
 
 2026-06-16 對正式 raw 路徑執行：
 
@@ -394,3 +395,4 @@ CLI 範例：
 - 2026-06-16：TPEX official daily close quotes 已接入日常每日股價更新管線；歷史 TPEX 缺漏仍需 dry-run plan 與人工確認，不由 fundamental layer 補值。
 - 2026-06-16：新增 TWSE/TPEX 月營收 historical dry-run builder 與 CLI，支援 `2020-01..2026-05` 期間 summary、單股篩選、候選 CSV 輸出與 diagnostics；真實來源驗證確認 TWSE/TPEX OpenAPI 目前只提供最新月、MOPS historical 自動化查詢仍不可穩定使用，正式 raw 月營收 `2014-04..2024-04` 與最新月來源無交集，因此未產生正式 mapping。
 - 2026-06-16：補上 MOPS 官方 HTML parser 與 `--mops-html-dir` 候選流程；只接受人工保存且含 `出表日期` 的官方 HTML，缺欄位時 fail-closed diagnostics，不由 raw CSV 補 available_date。
+- 2026-06-17：補上新版 MOPS `redirectToOld` / `mopsov` static report fetcher 與 `--mops-static` dry-run；確認 historical static report 的 `出表日期` 是查詢當日重新出表日，已由 45 天合理揭露窗口 gate 擋下，不能直接作 historical available_date mapping。
