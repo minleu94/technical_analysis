@@ -13,6 +13,7 @@ FactorValue = Decimal | int | str | None
 class FactorQuality(str, Enum):
     OBSERVED = "observed"
     ESTIMATED = "estimated"
+    DEGRADED = "degraded"
     MISSING = "missing"
     NEUTRAL = "neutral"
     STALE = "stale"

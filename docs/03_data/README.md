@@ -35,6 +35,11 @@
 - **`MERGE_AND_MARKET_INDEX_SUMMARY.md`**
   - 市場指數更新說明
 
+- **`FUNDAMENTAL_SOURCE_INVENTORY.md`**
+  - Month 5 Fundamental Layer preflight 資料來源盤點
+  - 盤點月營收、財報、估值與公告日 / available_date 缺口
+  - 明確標示既有 `financial_data/` 只可作 raw candidate source，不得直接進決策
+
 ## 🔗 相關目錄
 
 - `../01_architecture/data_collection_architecture.md` - 數據收集架構

@@ -67,6 +67,7 @@
 | [INDUSTRY_INDEX_UPDATE_SUMMARY.md](../03_data/INDUSTRY_INDEX_UPDATE_SUMMARY.md) | 產業指數更新說明。 |
 | [MERGE_AND_MARKET_INDEX_SUMMARY.md](../03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md) | 市場指數與合併說明。 |
 | [SQLITE_STORAGE_GUIDE.md](../03_data/SQLITE_STORAGE_GUIDE.md) | SQLite 儲存與雙軌相容快取架構、一鍵遷移重建指南。 |
+| [FUNDAMENTAL_SOURCE_INVENTORY.md](../03_data/FUNDAMENTAL_SOURCE_INVENTORY.md) | Month 5 Fundamental Layer preflight 資料來源盤點，列出月營收、財報、估值與公告日 / available_date 缺口。 |
 
 ---
 
@@ -264,6 +265,7 @@
 - 2026-06-16：新增 Month 4 Daily Decision Desk 收尾計畫，明確定義 reference screen、UI/service 邊界、資料品質驗收、文件關閉與 Month 5 handoff。
 - 2026-06-16：完成 Month 4 Daily Decision Desk 收尾文件同步，將 Snapshot / Roadmap / Architecture / Manual 轉向 Month 5 Fundamental Layer preflight，並記錄 UI boundary contract test。
 - 2026-06-16：新增 Month 5 Fundamental Layer preflight 計畫，避免在 source inventory、available_date 與 no-look-ahead gate 定義前直接接入基本面資料。
+- 2026-06-16：新增 Month 5 Fundamental Source Inventory，確認既有 `financial_data/` 只可作 raw candidate source，正式 SQLite 尚無 fundamental tables，後續必須先補 available_date contract。
 
 
 

@@ -181,11 +181,12 @@ Factor `available_date` 晚於決策日時必須拒絕使用。
 - `decision_module/factors/factor_registry.py`
 - `decision_module/factors/factor_gate.py`
 - `decision_module/factors/factor_adapters.py`
+- `decision_module/factors/fundamental_adapters.py`（Month 5 preflight 最小基本面 adapter contract；目前只建立 `fundamental.revenue_yoy` 的 available_date / diagnostics 邊界，不接 ScoringEngine）
 - `app_module/factor_service.py`
 
 Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manifest.factor_contributions` 保存 factor 追溯資料。`ResearchRunService.save_run()` 在 metadata 寫入前可合併 explicit factor metadata，或由 `FactorRecord` 與 decision date 透過 `FactorService` 產生 snapshot 與 contribution summary。推薦組合回放結果會從 replay snapshot recommendations 產生初版 factor manifest；單股回測會從 `BacktestService` 已產生的 signal score 序列建立 `technical.total_score` factor records，並由 `BacktestView` 保存 Research Run 時轉交 `ResearchRunService`；批次回測沿用每檔 `BacktestReportDTO` 內的 factor records，在 legacy run 保存成功後以 `batch-backtest:<legacy_run_id>` 寫入 Research Run Registry。固定組合目前共用批次執行路徑，但 UI 會將 Research Lab mode 傳入 service，Registry metadata 以 `fixed_basket_stock` 區分固定組合 per-stock 保存結果。這些保存路徑都不在 UI 重算分數或重新抓取資料。Cross-run Comparison 只能讀已保存 metadata，不得為比較重新抓取當前資料。
 
-長期 factor 權重可擴充到 chip / fundamental / market / risk，但目前正式 `RecommendationWeightContract` 仍只接受 `pattern`、`technical`、`volume` 三項整數 bp。擴充前必須先完成資料可得日、品質狀態與 missing policy 治理。
+長期 factor 權重可擴充到 chip / fundamental / market / risk，但目前正式 `RecommendationWeightContract` 仍只接受 `pattern`、`technical`、`volume` 三項整數 bp。擴充前必須先完成資料可得日、品質狀態與 missing policy 治理。Month 5 preflight 已確認既有 `financial_data/` 缺公告日與 `available_date`，因此 raw CSV 不得直接進回測、推薦、Daily Decision Desk 或 `ScoringEngine`；缺 `available_date` 的基本面 observation 必須只回 diagnostics，不得被補成期間日期。
 
 ## 6. Backtest Engine
 
@@ -308,6 +309,8 @@ db_file    -> <DATA_ROOT>/sqlite/twstock.db
 - Factor registry / values
 
 這些資料表尚未成為正式可用資料源。接入時必須保留 `as_of_date`、`available_date`、資料品質、來源版本與 fallback / migration。
+
+Month 5 preflight 已新增 `data_module/fundamental_availability.py` 集中處理公告日 / available_date 初版政策，並新增 `data_module/fundamental_data.py` 作為 raw 月營收 CSV 的唯讀正規化契約。這些模組不寫 SQLite、不修改正式 raw 檔，也不把 raw `date` 推定為公告日；呼叫端必須提供 explicit `available_date` mapping，否則只回 diagnostics，不產生 normalized record。`data_module/fundamental_schema.py` 只定義候選 SQLite schema dry-run 與 dry-run report API，可在呼叫端提供的暫時 connection 或正式 DB working copy 上驗證 schema；尚未接入 `DBManager.init_database()`，因此不會自動改動正式 `twstock.db`。
 
 ### 資料完整性
 
@@ -473,5 +476,6 @@ UI 修改：
 - 2026-06-15：完成 Daily Decision Desk Why Not / 風險提示 v1 對接，由既有 section DTO 欄位與警告推導，輸出對應之低流動性、相對弱勢、Watchlist 觸發與持倉警示提示，不重複計算。
 - 2026-06-15：補入 IDS 願景與架構權威邊界，更新 Daily Decision Desk v1 已接上主 UI；Market Breadth v1已接 SQLite `daily_prices` provider，Sector Rotation v1 已接 SQLite `industry_indices` provider，Relative Strength / Liquidity Ranking v1 已接 SQLite `daily_prices` provider，Watchlist Trigger v1 已接 `WatchlistService` 與 SQLite `technical_indicators`，Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，其餘 Strategy Drift 與 Post-trade Attribution 仍屬後續工作；同步 Month 3 Portfolio Replay 可信度、固定組合 per-stock factor metadata保存與後續資料因子接入防線。
 - 2026-06-16：完成 Month 4 Daily Decision Desk 收尾架構註記，確認 v1 以 service snapshot 聚合並新增 UI boundary contract test；Month 5 可從 Fundamental Layer preflight 開始，Strategy Drift 與 Post-trade Attribution 仍屬後續工作。
+- 2026-06-16：啟動 Month 5 Fundamental Layer preflight 架構落點，新增公告日 / available_date 初版政策、raw 月營收正規化契約、候選 SQLite schema dry-run / report API 與 fundamental adapter contract，確認 raw fundamental CSV 缺 `available_date` 時不得產生 normalized record / factor record，未來資料仍須經 FactorGate 驗證。
 
 

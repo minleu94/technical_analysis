@@ -239,7 +239,7 @@
 1. Month 4 Daily Decision Desk v1 已以 service-backed daily workflow 收尾；後續視覺 polish 屬設計債，不改變資料與決策合約。
 2. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
 3. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
-4. Month 5 先進入 Fundamental Layer preflight：盤點營收資料來源、公告日 / available_date 契約、factor adapter 邊界、no-look-ahead 測試、估值呈現政策與 AbnormalFundamentalFlag 規則。
+4. Month 5 Fundamental Layer preflight 已啟動：資料來源盤點已完成，既有 `financial_data/` 僅列 raw candidate source；raw 月營收唯讀正規化契約、公告日 / available_date 初版政策、候選 SQLite schema dry-run 模組、暫時 connection / 正式 DB working copy dry-run report API、最小 `fundamental.revenue_yoy` adapter contract 已具備 `available_date` 缺失診斷與 `FactorGate` no-look-ahead 測試。2026-06-16 已在正式 `twstock.db` 複本上驗證候選 schema 只新增三張 fundamental 表、不修改既有五張核心表；下一步是正式公告日來源、估值呈現政策與 AbnormalFundamentalFlag 規則。
 5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 5。
 
 
@@ -266,6 +266,7 @@
 - 2026-06-15：完成 Daily Decision Desk Market Breadth v1 provider 接線，從 SQLite `daily_prices` 產生多方 / 空方 / 持平、成交量擴散與新高新低 metadata；非交易日採最近可用交易日並以 warnings 揭露。
 - 2026-06-15：完成 Daily Decision Desk Sector Rotation v1 provider 接線，從 SQLite `industry_indices` 產生領先 / 落後產業、5 / 20 日變化與輪動強度；非交易日採最近可用交易日並以 warnings 揭露。
 - 2026-06-16：完成 Month 4 Daily Decision Desk 收尾驗收，確認 v1 為 service-backed daily workflow，新增 UI boundary contract test，並將立即待辦轉向 Month 5 Fundamental Layer preflight。
+- 2026-06-16：啟動 Month 5 Fundamental Layer preflight，新增 Fundamental Source Inventory、raw 月營收唯讀正規化契約、公告日 / available_date 初版政策、候選 SQLite schema dry-run 模組、暫時 connection / 正式 DB working copy dry-run report API、最小 revenue YoY adapter contract 測試，確認缺 `available_date` 不產生 normalized record / factor record，未來資料由 FactorGate 跳過；正式 `twstock.db` 複本 dry-run 已確認候選 schema 不修改既有核心表。
 - 2026-06-14：完成 Phase 5 Month 1 的 SQLite 檢視器分頁與規格化 Excel 報告匯出，並更新 6M Roadmap、Snapshot 及 Architecture。
 - 2026-06-13：建立 6 個月可執行工程路線，作為未來方向的 scoped authority。
 - 2026-06-13：加入 Legacy Carryover Gate，明確承接指標參數治理、推薦權重治理、Phase 5 輸出與穩定性驗證。
