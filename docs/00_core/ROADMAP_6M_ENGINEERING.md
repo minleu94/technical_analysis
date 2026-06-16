@@ -236,11 +236,11 @@
 
 ## 5. 立即待辦清單
 
-1. 深化 Month 4 Daily Decision Desk provider 接線：Market Breadth v1 已接 SQLite `daily_prices`，Sector Rotation v1 已接 SQLite `industry_indices`，Relative Strength / Liquidity Ranking v1 已接 SQLite `daily_prices`，Watchlist Trigger v1 已接 `WatchlistService` 與 SQLite `technical_indicators`，Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`；下一步聚焦 Portfolio Alert 後續來源差異歸因，並維持 `quality / warnings` 降級契約。
-2. 補上 Why Not / 風險提示的決策桌面銜接，不在 UI 層重算 scoring、screening 或 portfolio logic。
-3. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
-4. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
-5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 4 / Month 5。
+1. Month 4 Daily Decision Desk v1 已完成主要 provider 接線、Why Not / 風險提示與 Portfolio Alert 來源差異歸因；後續聚焦 UI 密度整理與 Month 5 Fundamental Layer 前置規格。
+2. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
+3. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
+4. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 4 / Month 5。
+
 
 ---
 
@@ -256,7 +256,9 @@
 
 ## 7. 更新記錄
 
+- 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並整合至主 UI 與風險提示。
 - 2026-06-15：完成 Daily Decision Desk Relative Strength / Liquidity Ranking v1，從 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性股，不重算且以 quality / warnings 呈現品質缺口與歷史不足警告。
+
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert v1 籌碼對接，整合 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，使持倉失效/警告與 bearish/extreme/risk 籌碼風險能彙總為持倉警示，並以 quality / warnings 呈現資料品質缺口。
 - 2026-06-15：完成 Daily Decision Desk Watchlist Trigger v1 provider 接線，對接 `WatchlistService` 與 SQLite `technical_indicators` 以產生強度 `score_bp` 與風險 `risk_alert` 統計；非交易日採最近可用交易日並以 warnings 揭露，quality 降級為 `DEGRADED`。
 - 2026-06-15：依 IDS 最終樣貌重排 Month 3 至 Month 6；Month 3 聚焦 Factor Layer 與 Portfolio Replay 可信度，Month 4 改為 Market Intelligence / Daily Decision Desk，Month 5 改為 Fundamental Layer 初版，Month 6 聚焦 Strategy Lifecycle 與 Portfolio Feedback。
