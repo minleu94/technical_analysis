@@ -1,4 +1,6 @@
 import sqlite3
+import subprocess
+import sys
 
 from scripts.migrate_fundamental_schema import main
 
@@ -24,3 +26,15 @@ def test_fundamental_migration_cli_apply_requires_confirm(tmp_path):
         conn.execute("CREATE TABLE daily_prices (id TEXT PRIMARY KEY)")
 
     assert main(["--db-file", str(db_file), "--apply"]) == 2
+
+
+def test_fundamental_migration_cli_direct_script_entrypoint_imports_repo_root():
+    result = subprocess.run(
+        [sys.executable, "scripts/migrate_fundamental_schema.py", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Dry-run or apply fundamental SQLite schema" in result.stdout
