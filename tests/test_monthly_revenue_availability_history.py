@@ -4,6 +4,7 @@ from datetime import date
 
 from data_module.monthly_revenue_availability_history import (
     build_historical_monthly_revenue_availability,
+    parse_mops_monthly_revenue_html,
     parse_announcement_date,
     parse_revenue_period,
 )
@@ -85,3 +86,48 @@ def test_build_history_rows_keeps_twse_and_tpex_sources_distinct() -> None:
     assert result.matched_raw_monthly_revenue_rows == 2
     assert result.missing_availability_count == 0
     assert result.duplicate_mapping_rows == 0
+
+
+def test_parse_mops_html_uses_page_level_announcement_date() -> None:
+    html = """
+    <html><body>
+      <div>出表日期：113/05/10</div>
+      <table>
+        <tr><th>公司代號</th><th>公司名稱</th><th>當月營收</th></tr>
+        <tr><td>2330</td><td>台積電</td><td>236021112</td></tr>
+        <tr><td>9935</td><td>慶豐富</td><td>321000</td></tr>
+      </table>
+    </body></html>
+    """
+
+    rows, diagnostics = parse_mops_monthly_revenue_html(
+        html,
+        market="twse",
+        period="2024-04",
+    )
+
+    assert diagnostics == ()
+    assert rows == [
+        {"資料年月": "2024-04", "公司代號": "2330", "出表日期": "2024-05-10"},
+        {"資料年月": "2024-04", "公司代號": "9935", "出表日期": "2024-05-10"},
+    ]
+
+
+def test_parse_mops_html_reports_missing_announcement_date() -> None:
+    html = """
+    <html><body>
+      <table>
+        <tr><th>公司代號</th><th>公司名稱</th><th>當月營收</th></tr>
+        <tr><td>2330</td><td>台積電</td><td>236021112</td></tr>
+      </table>
+    </body></html>
+    """
+
+    rows, diagnostics = parse_mops_monthly_revenue_html(
+        html,
+        market="twse",
+        period="2024-04",
+    )
+
+    assert rows == []
+    assert diagnostics[0].code == "monthly_revenue_availability.mops_missing_announced_date"

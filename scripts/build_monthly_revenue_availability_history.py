@@ -34,6 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stock-code", default=None)
     parser.add_argument("--raw-dir", type=Path, default=None)
     parser.add_argument("--source-json-dir", type=Path, default=None)
+    parser.add_argument("--mops-html-dir", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--fetch-date", default=date.today().isoformat())
     args = parser.parse_args(argv)
@@ -44,6 +45,9 @@ def main(argv: list[str] | None = None) -> int:
     official_rows_by_market, fetch_diagnostics = load_official_rows_for_markets(
         markets=markets,
         source_json_dir=args.source_json_dir,
+        mops_html_dir=args.mops_html_dir,
+        start_period=args.start_period,
+        end_period=args.end_period,
     )
     raw_periods = load_raw_monthly_revenue_periods(raw_dir)
     result = build_historical_monthly_revenue_availability(

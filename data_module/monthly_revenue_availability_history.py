@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import re
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Mapping
 from urllib.request import Request, urlopen
+
+from bs4 import BeautifulSoup
 
 from data_module.monthly_revenue_availability_builder import (
     MonthlyRevenueAvailabilityRow,
@@ -19,8 +22,10 @@ from decision_module.factors.factor_dtos import FactorDiagnostic
 
 TWSE_HISTORY_SOURCE = "twse.monthly_revenue_announcement"
 TPEX_HISTORY_SOURCE = "tpex.monthly_revenue_announcement"
+MOPS_HISTORY_SOURCE = "mops.monthly_revenue_announcement"
 TWSE_HISTORY_SOURCE_VERSION_PREFIX = "twse-openapi-t187ap05-l"
 TPEX_HISTORY_SOURCE_VERSION_PREFIX = "tpex-openapi-mopsfin-t187ap05-o"
+MOPS_HISTORY_SOURCE_VERSION_PREFIX = "mops-t05st10-ifrs"
 
 OFFICIAL_OPENAPI_URLS = {
     "twse": "https://openapi.twse.com.tw/v1/opendata/t187ap05_L",
@@ -127,9 +132,13 @@ def build_historical_monthly_revenue_availability(
     }
 
     for market in markets:
-        source, source_version_prefix = _market_source(market)
-        source_version = f"{source_version_prefix}-{fetch_date.isoformat()}"
+        default_source, default_source_version_prefix = _market_source(market)
         for official_row in official_rows_by_market.get(market, ()):
+            source = str(official_row.get("__availability_source") or default_source)
+            source_version_prefix = str(
+                official_row.get("__source_version_prefix") or default_source_version_prefix
+            )
+            source_version = f"{source_version_prefix}-{fetch_date.isoformat()}"
             row_stock_code = str(official_row.get("公司代號", "")).strip()
             if stock_code is not None and row_stock_code != stock_code:
                 continue
@@ -218,12 +227,24 @@ def load_official_rows_for_markets(
     *,
     markets: tuple[str, ...],
     source_json_dir: Path | None = None,
+    mops_html_dir: Path | None = None,
+    start_period: str | None = None,
+    end_period: str | None = None,
 ) -> tuple[dict[str, list[dict[str, str]]], tuple[FactorDiagnostic, ...]]:
     rows_by_market: dict[str, list[dict[str, str]]] = {}
     diagnostics: list[FactorDiagnostic] = []
     for market in markets:
         try:
-            if source_json_dir is not None:
+            if mops_html_dir is not None:
+                rows, parse_diagnostics = _load_mops_html_rows(
+                    Path(mops_html_dir),
+                    market=market,
+                    start_period=start_period,
+                    end_period=end_period,
+                )
+                rows_by_market[market] = rows
+                diagnostics.extend(parse_diagnostics)
+            elif source_json_dir is not None:
                 rows_by_market[market] = _load_json_rows(Path(source_json_dir) / f"{market}.json")
             else:
                 rows_by_market[market] = _fetch_openapi_rows(market)
@@ -238,6 +259,65 @@ def load_official_rows_for_markets(
                 )
             )
     return rows_by_market, tuple(diagnostics)
+
+
+def parse_mops_monthly_revenue_html(
+    html: str,
+    *,
+    market: str,
+    period: str,
+) -> tuple[list[dict[str, str]], tuple[FactorDiagnostic, ...]]:
+    soup = BeautifulSoup(html, "html.parser")
+    page_text = soup.get_text(" ", strip=True)
+    announced_date_text = _find_mops_announcement_date(page_text)
+    if announced_date_text is None:
+        return [], (
+            _diagnostic(
+                "monthly_revenue_availability.mops_missing_announced_date",
+                market,
+                "",
+                f"MOPS monthly revenue HTML has no 出表日期; period={period}",
+            ),
+        )
+
+    try:
+        announced_date = parse_announcement_date(announced_date_text)
+    except ValueError:
+        return [], (
+            _diagnostic(
+                "monthly_revenue_availability.mops_invalid_announced_date",
+                market,
+                "",
+                f"MOPS monthly revenue HTML has invalid 出表日期; period={period}",
+            ),
+        )
+
+    rows: list[dict[str, str]] = []
+    for table in soup.find_all("table"):
+        parsed_rows = _parse_mops_table(table)
+        for parsed_row in parsed_rows:
+            stock_code = parsed_row.get("公司代號", "").strip()
+            if not stock_code or not stock_code.isdigit():
+                continue
+            rows.append(
+                {
+                    "資料年月": period,
+                    "公司代號": stock_code,
+                    "出表日期": announced_date.isoformat(),
+                }
+            )
+
+    diagnostics: list[FactorDiagnostic] = []
+    if not rows:
+        diagnostics.append(
+            _diagnostic(
+                "monthly_revenue_availability.mops_no_data_rows",
+                market,
+                "",
+                f"MOPS monthly revenue HTML has no parseable company rows; period={period}",
+            )
+        )
+    return rows, tuple(diagnostics)
 
 
 def parse_revenue_period(value: str) -> str:
@@ -281,6 +361,67 @@ def _fetch_openapi_rows(market: str) -> list[dict[str, str]]:
     with urlopen(request, timeout=30) as response:
         payload = response.read().decode("utf-8-sig")
     return json.loads(payload)
+
+
+def _load_mops_html_rows(
+    directory: Path,
+    *,
+    market: str,
+    start_period: str | None,
+    end_period: str | None,
+) -> tuple[list[dict[str, str]], tuple[FactorDiagnostic, ...]]:
+    periods = tuple(_iter_periods(start_period, end_period)) if start_period and end_period else ()
+    rows: list[dict[str, str]] = []
+    diagnostics: list[FactorDiagnostic] = []
+    for period in periods:
+        path = directory / f"{market}_{period}.html"
+        if not path.exists():
+            diagnostics.append(
+                _diagnostic(
+                    "monthly_revenue_availability.mops_html_missing",
+                    market,
+                    "",
+                    f"MOPS monthly revenue HTML file missing; path={path}",
+                )
+            )
+            continue
+        parsed_rows, parse_diagnostics = parse_mops_monthly_revenue_html(
+            path.read_text(encoding="utf-8-sig"),
+            market=market,
+            period=period,
+        )
+        for row in parsed_rows:
+            row["__availability_source"] = MOPS_HISTORY_SOURCE
+            row["__source_version_prefix"] = MOPS_HISTORY_SOURCE_VERSION_PREFIX
+        rows.extend(parsed_rows)
+        diagnostics.extend(parse_diagnostics)
+    return rows, tuple(diagnostics)
+
+
+def _find_mops_announcement_date(text: str) -> str | None:
+    match = re.search(
+        r"出表日期\s*[:：]?\s*(\d{3,4}[/-]\d{1,2}[/-]\d{1,2}|\d{7,8})",
+        text,
+    )
+    if match is None:
+        return None
+    return match.group(1)
+
+
+def _parse_mops_table(table) -> list[dict[str, str]]:
+    table_rows = table.find_all("tr")
+    if not table_rows:
+        return []
+    headers = [cell.get_text(strip=True) for cell in table_rows[0].find_all(["th", "td"])]
+    if "公司代號" not in headers:
+        return []
+    parsed_rows: list[dict[str, str]] = []
+    for row in table_rows[1:]:
+        cells = [cell.get_text(strip=True) for cell in row.find_all(["th", "td"])]
+        if len(cells) < len(headers):
+            continue
+        parsed_rows.append(dict(zip(headers, cells, strict=False)))
+    return parsed_rows
 
 
 def _iter_periods(start_period: str, end_period: str) -> Iterable[str]:
