@@ -17,7 +17,7 @@
 
 正式 SQLite 尚無月營收、財報、估值或基本面專用表。`DATA_ROOT/financial_data/` 內存在舊 CSV 原始資料，但缺少公告日與 `available_date`，因此只能列為 raw candidate source，不得直接用於回測、推薦、策略分數或 Daily Decision Desk。
 
-Month 5 下一步必須先完成 available-date contract 與 no-look-ahead tests，再考慮正式 migration。2026-06-16 已建立 `data_module/fundamental_data.py` 作為唯讀正規化契約：raw 月營收 row 必須搭配外部 `available_date` mapping 才會產生 normalized record；缺 mapping 時只輸出 diagnostics。同日亦建立 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / `available_date` mapping 契約，允許人工或後續下載來源提供 `announced_date`、`available_date`、`source` 與 `source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。`data_module/fundamental_schema.py` 作為候選 schema dry-run 模組，目前尚未接入 `DBManager.init_database()`，不會自動修改正式 SQLite。該模組提供 `generate_fundamental_schema_dry_run_report()` 與 `generate_fundamental_schema_copy_dry_run_report()`，可在暫時 SQLite connection 或正式 DB working copy 上確認既有核心表不被修改。`data_module/fundamental_availability.py` 則集中公告日 / available_date 策略，避免 parser、adapter 或後續 migration 各自發明時間軸規則。
+Month 5 下一步必須先完成 available-date contract 與 no-look-ahead tests，再考慮正式 migration。2026-06-16 已建立 `data_module/fundamental_data.py` 作為唯讀正規化契約：raw 月營收 row 必須搭配外部 `available_date` mapping 才會產生 normalized record；缺 mapping 時只輸出 diagnostics。同日亦建立 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / `available_date` mapping 契約，允許人工或後續下載來源提供 `announced_date`、`available_date`、`source` 與 `source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。`data_module/fundamental_availability_entrypoint.py` 與 `scripts/validate_monthly_revenue_availability.py` 已建立正式驗證入口，可對使用者提供的 mapping 檔執行 dry-run 驗證、列出 diagnostics、拒絕未治理來源，且不建立、不改寫 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`。`data_module/fundamental_schema.py` 作為候選 schema dry-run 模組，目前尚未接入 `DBManager.init_database()`，不會自動修改正式 SQLite。該模組提供 `generate_fundamental_schema_dry_run_report()` 與 `generate_fundamental_schema_copy_dry_run_report()`，可在暫時 SQLite connection 或正式 DB working copy 上確認既有核心表不被修改。`data_module/fundamental_availability.py` 則集中公告日 / available_date 策略，避免 parser、adapter 或後續 migration 各自發明時間軸規則。
 
 ## 2. 盤點依據
 
@@ -135,6 +135,23 @@ DATA_ROOT/meta_data/monthly_revenue_availability.csv
 
 repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availability.csv`。正式檔案不存在時，loader 只回傳 `fundamental_availability.mapping_file_missing` diagnostic，不會建立檔案、不會改寫 raw CSV，也不會用 raw 月營收 `date` 自動補值。
 
+### 5.2.1 驗證入口
+
+`data_module/fundamental_availability_entrypoint.py` 提供 `validate_monthly_revenue_availability_file(path)`，用來驗證受治理 mapping 檔是否只使用允許的公告日 / available_date 來源。允許來源目前包含：
+
+- `manual.twse_monthly_revenue_announcement_log`
+- `manual.available_date_mapping`
+- `twse.monthly_revenue_announcement`
+- `mops.monthly_revenue_announcement`
+
+若 mapping 檔不存在，驗證結果會回傳 `fundamental_availability.mapping_file_missing`；若使用 `financial_data.monthly_revenue_csv` 或其他未治理來源，驗證結果會保留 diagnostics 並判定 invalid。CLI 入口為：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\validate_monthly_revenue_availability.py --path <mapping-csv>
+```
+
+未提供 `--path` 時，CLI 只讀取 `TWStockConfig.monthly_revenue_availability_file` 指向的位置並輸出 Markdown 摘要；它不會建立正式 mapping 檔、不會改寫 raw CSV，也不會寫入 SQLite。
+
 ### 5.3 估值呈現政策 v1
 
 `decision_module/factors/valuation_policy.py` 定義 `valuation_presentation_policy_v1`。本政策只允許把 P/E、P/B、P/S 或殖利率等估值 metric 呈現為相對估值區間：
@@ -164,11 +181,12 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 
 ## 7. Month 5 下一步
 
-1. 填入或下載真實月營收公告日資料到 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`；目前 repo 只提供欄位範本，不提供正式資料。
-2. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
-3. 擴充 fundamental adapter 測試骨架，不接入 `ScoringEngine`。
-4. 規劃 migration / fallback；任何寫入正式資料前需先備份並取得確認。
-5. 在正式 migration 前補齊備份、回滾方案與人工確認；目前僅完成正式 DB 複本 dry-run，尚未寫入正式 SQLite。
+1. 填入或下載真實月營收公告日資料到 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`；目前 repo 只提供欄位範本與 dry-run 驗證入口，不提供正式資料。
+2. 在通過驗證入口後，才可進入受控 SQLite migration 工作；migration 前仍需備份、回滾方案與人工確認。
+3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
+4. 擴充 fundamental adapter 測試骨架，不接入 `ScoringEngine`。
+5. 規劃 migration / fallback；任何寫入正式資料前需先備份並取得確認。
+6. 在正式 migration 前補齊備份、回滾方案與人工確認；目前僅完成正式 DB 複本 dry-run，尚未寫入正式 SQLite。
 
 ## 8. 更新記錄
 
@@ -181,3 +199,4 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - 2026-06-16：新增受治理月營收 availability mapping 契約，支援保留 `announced_date` / `available_date` / `source_version`，並拒絕把 raw 月營收 CSV 日期當成可得日來源。
 - 2026-06-16：新增估值呈現政策 v1 文件化，確認估值只可呈現相對區間與 diagnostics，不輸出目標價、合理價、上漲空間或交易建議。
 - 2026-06-16：新增月營收公告日 mapping CSV loader、`TWStockConfig.monthly_revenue_availability_file` 預設路徑與 docs 範本；缺檔只輸出 diagnostic，不自動補值或寫正式資料。
+- 2026-06-16：新增月營收 availability mapping 正式驗證入口與 CLI dry-run validator，允許治理來源、拒絕 raw CSV available-date 來源，並保持不建立、不改寫正式 mapping 檔或 SQLite。
