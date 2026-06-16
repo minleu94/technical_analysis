@@ -169,14 +169,16 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 
 ### 5.3 估值呈現政策 v1
 
-`decision_module/factors/valuation_policy.py` 定義 `valuation_presentation_policy_v1`。本政策只允許把 P/E、P/B、P/S 或殖利率等估值 metric 呈現為相對估值區間：
+`data_module/valuation_data.py` 建立 valuation data layer v1，可由已治理 row 建立 `ValuationObservation`，保留 `as_of_date`、`available_date`、raw `metric_value`、`quality`、`source_version` 與選擇性的 `industry_percentile_bp`。`calculate_industry_percentiles_bp()` 只在同產業 universe 內計算整數基點分位；單一樣本或缺少同業比較時回 `None`，交由後續 policy 輸出 diagnostics。此資料層不產生 fair value、target price、upside 或 recommendation。
+
+`decision_module/factors/valuation_policy.py` 定義 `valuation_presentation_policy_v1`，仍是估值輸出的唯一邊界。本政策只允許把 P/E、P/B、P/S 或殖利率等估值 metric 呈現為相對估值區間：
 
 - `LOW_RELATIVE`：相對低估值區
 - `MID_RELATIVE`：中性估值區
 - `HIGH_RELATIVE`：相對高估值區
 - `UNAVAILABLE`：資料不足
 
-本政策禁止產生 `fair_value`、`target_price`、`upside_pct`、`buy_signal`、`sell_signal` 或 `recommendation`。缺少 `industry_percentile_bp` 時只能回 `UNAVAILABLE` 或 diagnostics，不得假設為中性估值區。此政策目前不代表任何估值資料來源已正式可用，也不寫入正式 SQLite。
+本政策禁止產生 `fair_value`、`target_price`、`upside_pct`、`buy_signal`、`sell_signal` 或 `recommendation`。缺少 `industry_percentile_bp` 時只能回 `UNAVAILABLE` 或 diagnostics，不得假設為中性估值區。此政策目前不代表 P/B、P/S 或殖利率來源已正式可用，也不寫入正式 SQLite。
 
 ## 6. Factor Adapter 邊界
 
@@ -214,6 +216,7 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - 2026-06-16：新增正式 DB working copy dry-run API，並以正式 `twstock.db` 複本驗證候選 schema 只新增三張 fundamental 表、不修改既有五張核心表；暫存複本已清理，正式 DB 未寫入。
 - 2026-06-16：新增受治理月營收 availability mapping 契約，支援保留 `announced_date` / `available_date` / `source_version`，並拒絕把 raw 月營收 CSV 日期當成可得日來源。
 - 2026-06-16：新增估值呈現政策 v1 文件化，確認估值只可呈現相對區間與 diagnostics，不輸出目標價、合理價、上漲空間或交易建議。
+- 2026-06-16：新增 valuation data layer v1，建立受治理 `ValuationObservation` 與同產業整數基點分位計算；缺分位仍只經既有 presentation policy 輸出 diagnostics，不產生目標價或建議。
 - 2026-06-16：新增月營收公告日 mapping CSV loader、`TWStockConfig.monthly_revenue_availability_file` 預設路徑與 docs 範本；缺檔只輸出 diagnostic，不自動補值或寫正式資料。
 - 2026-06-16：新增月營收 availability mapping 正式驗證入口與 CLI dry-run validator，允許治理來源、拒絕 raw CSV available-date 來源，並保持不建立、不改寫正式 mapping 檔或 SQLite。
 - 2026-06-16：新增 Fundamental SQLite 受控 migration service 與 CLI，支援 working-copy dry-run、apply 前備份、失敗 restore 與 `--confirm apply-fundamental-schema` 人工確認；正式 `twstock.db` 尚未套用 migration。
