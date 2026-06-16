@@ -4,6 +4,7 @@ from datetime import date
 
 from data_module.monthly_revenue_availability_history import (
     build_historical_monthly_revenue_availability,
+    load_official_rows_for_markets,
     parse_mops_monthly_revenue_html,
     parse_announcement_date,
     parse_revenue_period,
@@ -88,6 +89,27 @@ def test_build_history_rows_keeps_twse_and_tpex_sources_distinct() -> None:
     assert result.duplicate_mapping_rows == 0
 
 
+def test_build_history_rows_rejects_unreasonably_late_availability() -> None:
+    result = build_historical_monthly_revenue_availability(
+        official_rows_by_market={
+            "twse": [
+                {"資料年月": "2024-04", "公司代號": "2330", "出表日期": "2026-06-17"},
+            ],
+        },
+        raw_periods={("2330", "2024-04")},
+        start_period="2024-04",
+        end_period="2024-04",
+        markets=("twse",),
+        fetch_date=date(2026, 6, 17),
+    )
+
+    assert result.rows == []
+    assert result.missing_availability_count == 1
+    assert result.diagnostics[0].code == (
+        "monthly_revenue_availability.available_date_unreasonably_late"
+    )
+
+
 def test_parse_mops_html_uses_page_level_announcement_date() -> None:
     html = """
     <html><body>
@@ -131,3 +153,102 @@ def test_parse_mops_html_reports_missing_announcement_date() -> None:
 
     assert rows == []
     assert diagnostics[0].code == "monthly_revenue_availability.mops_missing_announced_date"
+
+
+def test_parse_mops_html_handles_multi_row_headers() -> None:
+    html = """
+    <html><body>
+      <div>出表日期：115/06/17</div>
+      <table>
+        <tr><th colspan="2">&nbsp;</th><th colspan="5">營業收入</th></tr>
+        <tr>
+          <th>公司<br>代號</th><th>公司名稱</th><th>當月營收</th>
+          <th>上月營收</th><th>去年當月營收</th>
+        </tr>
+        <tr align="right">
+          <td align="center">2330</td><td align="left">台積電</td>
+          <td nowrap>236,021,112</td><td nowrap>195,210,804</td>
+          <td nowrap>147,899,735</td>
+        </tr>
+      </table>
+    </body></html>
+    """
+
+    rows, diagnostics = parse_mops_monthly_revenue_html(
+        html,
+        market="twse",
+        period="2024-04",
+    )
+
+    assert diagnostics == ()
+    assert rows == [
+        {"資料年月": "2024-04", "公司代號": "2330", "出表日期": "2026-06-17"}
+    ]
+
+
+def test_parse_mops_html_deduplicates_nested_company_rows() -> None:
+    html = """
+    <html><body>
+      <div>出表日期：113/05/10</div>
+      <table>
+        <tr><td>
+          <table>
+            <tr><th>公司<br>代號</th><th>公司名稱</th></tr>
+            <tr><td>2330</td><td>台積電</td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </body></html>
+    """
+
+    rows, diagnostics = parse_mops_monthly_revenue_html(
+        html,
+        market="twse",
+        period="2024-04",
+    )
+
+    assert diagnostics == ()
+    assert rows == [
+        {"資料年月": "2024-04", "公司代號": "2330", "出表日期": "2024-05-10"}
+    ]
+
+
+def test_load_official_rows_for_markets_reads_mops_static_reports(monkeypatch) -> None:
+    html = """
+    <html><body>
+      <div>出表日期：113/05/10</div>
+      <table>
+        <tr><th>公司代號</th><th>公司名稱</th><th>當月營收</th></tr>
+        <tr><td>2330</td><td>台積電</td><td>236021112</td></tr>
+      </table>
+    </body></html>
+    """
+
+    def fake_fetch(*, market: str, period: str) -> str:
+        assert market == "twse"
+        assert period == "2024-04"
+        return html
+
+    monkeypatch.setattr(
+        "data_module.monthly_revenue_availability_history."
+        "_fetch_mops_static_monthly_revenue_html",
+        fake_fetch,
+    )
+
+    rows_by_market, diagnostics = load_official_rows_for_markets(
+        markets=("twse",),
+        mops_static=True,
+        start_period="2024-04",
+        end_period="2024-04",
+    )
+
+    assert diagnostics == ()
+    assert rows_by_market["twse"] == [
+        {
+            "資料年月": "2024-04",
+            "公司代號": "2330",
+            "出表日期": "2024-05-10",
+            "__availability_source": "mops.monthly_revenue_announcement",
+            "__source_version_prefix": "mops-t05st10-ifrs",
+        }
+    ]

@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--raw-dir", type=Path, default=None)
     parser.add_argument("--source-json-dir", type=Path, default=None)
     parser.add_argument("--mops-html-dir", type=Path, default=None)
+    parser.add_argument("--mops-static", action="store_true")
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--fetch-date", default=date.today().isoformat())
     args = parser.parse_args(argv)
@@ -46,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         markets=markets,
         source_json_dir=args.source_json_dir,
         mops_html_dir=args.mops_html_dir,
+        mops_static=args.mops_static,
         start_period=args.start_period,
         end_period=args.end_period,
     )

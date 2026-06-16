@@ -151,3 +151,57 @@ def test_history_cli_writes_mops_html_candidate(tmp_path, monkeypatch) -> None:
     assert validation.valid is True
     assert validation.accepted_count == 1
     assert validation.source_versions == ("mops-t05st10-ifrs-2026-06-16",)
+
+
+def test_history_cli_supports_mops_static_source(tmp_path, monkeypatch) -> None:
+    raw_dir = tmp_path / "financial_data"
+    raw_dir.mkdir()
+    (raw_dir / "2330_monthly_revenue.csv").write_text(
+        "date,stock_id,country,revenue,revenue_month,revenue_year\n"
+        "2024-05-01,2330,Taiwan,100,4,2024\n",
+        encoding="utf-8",
+    )
+
+    def fake_fetch(*, market: str, period: str) -> str:
+        assert market == "twse"
+        assert period == "2024-04"
+        return """
+        <html><body>
+          <div>出表日期：113/05/10</div>
+          <table>
+            <tr><th>公司代號</th><th>公司名稱</th><th>當月營收</th></tr>
+            <tr><td>2330</td><td>台積電</td><td>236021112</td></tr>
+          </table>
+        </body></html>
+        """
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        "data_module.monthly_revenue_availability_history."
+        "_fetch_mops_static_monthly_revenue_html",
+        fake_fetch,
+    )
+    output = tmp_path / "candidate.csv"
+
+    exit_code = main(
+        [
+            "--start-period",
+            "2024-04",
+            "--end-period",
+            "2024-04",
+            "--markets",
+            "twse",
+            "--raw-dir",
+            str(raw_dir),
+            "--mops-static",
+            "--output",
+            str(output),
+            "--fetch-date",
+            "2026-06-16",
+        ]
+    )
+
+    assert exit_code == 0
+    validation = validate_monthly_revenue_availability_file(output)
+    assert validation.valid is True
+    assert validation.accepted_count == 1

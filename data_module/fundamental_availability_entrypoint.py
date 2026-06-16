@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from data_module.fundamental_availability_sources import (
@@ -21,6 +22,7 @@ MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES = frozenset(
         "mops.monthly_revenue_announcement",
     }
 )
+MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS = 45
 
 
 @dataclass(frozen=True)
@@ -55,11 +57,17 @@ def validate_monthly_revenue_availability_file(
     for override in load_result.overrides.values():
         if override.source not in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES:
             diagnostics.append(_unsupported_source_diagnostic(override))
+        if override.available_date > override.as_of_date + timedelta(
+            days=MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS
+        ):
+            diagnostics.append(_unreasonably_late_available_date_diagnostic(override))
 
     accepted = tuple(
         override
         for override in load_result.overrides.values()
         if override.source in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES
+        and override.available_date
+        <= override.as_of_date + timedelta(days=MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS)
     )
     return MonthlyRevenueAvailabilityValidationResult(
         valid=bool(accepted) and not diagnostics,
@@ -79,5 +87,21 @@ def _unsupported_source_diagnostic(
         message=(
             "monthly revenue availability source is not in allowed source list; "
             f"period={override.period}; source={override.source}"
+        ),
+    )
+
+
+def _unreasonably_late_available_date_diagnostic(
+    override: FundamentalAvailabilityOverride,
+) -> FactorDiagnostic:
+    return FactorDiagnostic(
+        code="fundamental_availability.available_date_unreasonably_late",
+        factor_name="fundamental.availability",
+        stock_code=override.stock_code,
+        message=(
+            "monthly revenue availability date is outside the allowed disclosure window; "
+            f"period={override.period}; as_of_date={override.as_of_date.isoformat()}; "
+            f"available_date={override.available_date.isoformat()}; "
+            f"max_lag_days={MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS}"
         ),
     )

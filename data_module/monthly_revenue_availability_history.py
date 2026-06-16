@@ -26,10 +26,16 @@ MOPS_HISTORY_SOURCE = "mops.monthly_revenue_announcement"
 TWSE_HISTORY_SOURCE_VERSION_PREFIX = "twse-openapi-t187ap05-l"
 TPEX_HISTORY_SOURCE_VERSION_PREFIX = "tpex-openapi-mopsfin-t187ap05-o"
 MOPS_HISTORY_SOURCE_VERSION_PREFIX = "mops-t05st10-ifrs"
+MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS = 45
 
 OFFICIAL_OPENAPI_URLS = {
     "twse": "https://openapi.twse.com.tw/v1/opendata/t187ap05_L",
     "tpex": "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O",
+}
+MOPS_REDIRECT_API_URL = "https://mops.twse.com.tw/mops/api/redirectToOld"
+MOPS_STATIC_TYPEK = {
+    "twse": "sii0",
+    "tpex": "otc0",
 }
 
 _MARKET_SOURCES = {
@@ -115,6 +121,7 @@ def build_historical_monthly_revenue_availability(
     fetch_date: date,
     stock_code: str | None = None,
     available_lag_days: int = 1,
+    max_available_lag_days: int = MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS,
 ) -> MonthlyRevenueAvailabilityHistoryResult:
     requested_periods = tuple(_iter_periods(start_period, end_period))
     requested_period_set = set(requested_periods)
@@ -191,6 +198,25 @@ def build_historical_monthly_revenue_availability(
             key = (row_stock_code, period)
             if key not in scoped_raw_periods:
                 continue
+            as_of_date = _period_end(period)
+            available_date = announced_date + timedelta(days=available_lag_days)
+            if available_date > as_of_date + timedelta(days=max_available_lag_days):
+                diagnostics.append(
+                    _diagnostic(
+                        "monthly_revenue_availability.available_date_unreasonably_late",
+                        market,
+                        row_stock_code,
+                        (
+                            "monthly revenue availability row is outside the allowed "
+                            f"disclosure window; period={period}; "
+                            f"as_of_date={as_of_date.isoformat()}; "
+                            f"available_date={available_date.isoformat()}; "
+                            f"max_lag_days={max_available_lag_days}"
+                        ),
+                    )
+                )
+                diagnostics_by_source[market] = diagnostics_by_source.get(market, 0) + 1
+                continue
             if key in seen_keys:
                 duplicate_mapping_rows += 1
                 continue
@@ -199,11 +225,9 @@ def build_historical_monthly_revenue_availability(
                 {
                     "stock_code": row_stock_code,
                     "period": period,
-                    "as_of_date": _period_end(period).isoformat(),
+                    "as_of_date": as_of_date.isoformat(),
                     "announced_date": announced_date.isoformat(),
-                    "available_date": (
-                        announced_date + timedelta(days=available_lag_days)
-                    ).isoformat(),
+                    "available_date": available_date.isoformat(),
                     "source": source,
                     "source_version": source_version,
                 }
@@ -228,6 +252,7 @@ def load_official_rows_for_markets(
     markets: tuple[str, ...],
     source_json_dir: Path | None = None,
     mops_html_dir: Path | None = None,
+    mops_static: bool = False,
     start_period: str | None = None,
     end_period: str | None = None,
 ) -> tuple[dict[str, list[dict[str, str]]], tuple[FactorDiagnostic, ...]]:
@@ -238,6 +263,14 @@ def load_official_rows_for_markets(
             if mops_html_dir is not None:
                 rows, parse_diagnostics = _load_mops_html_rows(
                     Path(mops_html_dir),
+                    market=market,
+                    start_period=start_period,
+                    end_period=end_period,
+                )
+                rows_by_market[market] = rows
+                diagnostics.extend(parse_diagnostics)
+            elif mops_static:
+                rows, parse_diagnostics = _load_mops_static_rows(
                     market=market,
                     start_period=start_period,
                     end_period=end_period,
@@ -293,12 +326,16 @@ def parse_mops_monthly_revenue_html(
         )
 
     rows: list[dict[str, str]] = []
+    seen_stock_codes: set[str] = set()
     for table in soup.find_all("table"):
         parsed_rows = _parse_mops_table(table)
         for parsed_row in parsed_rows:
             stock_code = parsed_row.get("公司代號", "").strip()
             if not stock_code or not stock_code.isdigit():
                 continue
+            if stock_code in seen_stock_codes:
+                continue
+            seen_stock_codes.add(stock_code)
             rows.append(
                 {
                     "資料年月": period,
@@ -398,6 +435,103 @@ def _load_mops_html_rows(
     return rows, tuple(diagnostics)
 
 
+def _load_mops_static_rows(
+    *,
+    market: str,
+    start_period: str | None,
+    end_period: str | None,
+) -> tuple[list[dict[str, str]], tuple[FactorDiagnostic, ...]]:
+    periods = tuple(_iter_periods(start_period, end_period)) if start_period and end_period else ()
+    rows: list[dict[str, str]] = []
+    diagnostics: list[FactorDiagnostic] = []
+    for period in periods:
+        try:
+            html = _fetch_mops_static_monthly_revenue_html(market=market, period=period)
+        except Exception as exc:
+            diagnostics.append(
+                _diagnostic(
+                    "monthly_revenue_availability.mops_static_fetch_failed",
+                    market,
+                    "",
+                    f"failed to fetch MOPS static monthly revenue report; period={period}; error={exc}",
+                )
+            )
+            continue
+        parsed_rows, parse_diagnostics = parse_mops_monthly_revenue_html(
+            html,
+            market=market,
+            period=period,
+        )
+        for row in parsed_rows:
+            row["__availability_source"] = MOPS_HISTORY_SOURCE
+            row["__source_version_prefix"] = MOPS_HISTORY_SOURCE_VERSION_PREFIX
+        rows.extend(parsed_rows)
+        diagnostics.extend(parse_diagnostics)
+    return rows, tuple(diagnostics)
+
+
+def _fetch_mops_static_monthly_revenue_html(*, market: str, period: str) -> str:
+    typek = MOPS_STATIC_TYPEK[market]
+    year_text, month_text = period.split("-", maxsplit=1)
+    roc_year = int(year_text) - 1911
+    redirect_payload = json.dumps(
+        {
+            "apiName": "ajax_t21sc04_ifrs",
+            "parameters": {
+                "TYPEK": typek,
+                "year": str(roc_year),
+                "month": month_text,
+                "encodeURIComponent": 1,
+                "firstin": 1,
+                "step": 1,
+                "off": 1,
+            },
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    request = Request(
+        MOPS_REDIRECT_API_URL,
+        data=redirect_payload,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Origin": "https://mops.twse.com.tw",
+            "Referer": "https://mops.twse.com.tw/mops/#/web/t21sc04_ifrs",
+            "User-Agent": "Mozilla/5.0",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=30) as response:
+        redirect_response = json.loads(response.read().decode("utf-8-sig"))
+    report_url = str(redirect_response.get("result", {}).get("url", ""))
+    if not report_url:
+        raise ValueError("MOPS redirect response has no report URL")
+    popup_html = _fetch_text(report_url, encoding="utf-8")
+    static_path = _extract_mops_static_path(popup_html)
+    if static_path is None:
+        raise ValueError("MOPS redirect report has no static nas path")
+    return _fetch_text(f"https://mopsov.twse.com.tw{static_path}", encoding="big5")
+
+
+def _fetch_text(url: str, *, encoding: str) -> str:
+    request = Request(
+        url,
+        headers={
+            "Referer": "https://mops.twse.com.tw/mops/#/web/t21sc04_ifrs",
+            "User-Agent": "Mozilla/5.0",
+        },
+    )
+    with urlopen(request, timeout=30) as response:
+        return response.read().decode(encoding, errors="replace")
+
+
+def _extract_mops_static_path(html: str) -> str | None:
+    match = re.search(r"window\.open\('([^']+)'", html)
+    if match is None:
+        return None
+    return match.group(1)
+
+
 def _find_mops_announcement_date(text: str) -> str | None:
     match = re.search(
         r"出表日期\s*[:：]?\s*(\d{3,4}[/-]\d{1,2}[/-]\d{1,2}|\d{7,8})",
@@ -412,6 +546,14 @@ def _parse_mops_table(table) -> list[dict[str, str]]:
     table_rows = table.find_all("tr")
     if not table_rows:
         return []
+    fallback_rows: list[dict[str, str]] = []
+    for row in table_rows:
+        cells = [cell.get_text(strip=True) for cell in row.find_all(["th", "td"])]
+        if cells and re.fullmatch(r"\d{4,6}", cells[0] or ""):
+            fallback_rows.append({"公司代號": cells[0]})
+    if fallback_rows:
+        return fallback_rows
+
     headers = [cell.get_text(strip=True) for cell in table_rows[0].find_all(["th", "td"])]
     if "公司代號" not in headers:
         return []
