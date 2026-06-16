@@ -112,3 +112,33 @@ def test_risk_prompt_service_uses_portfolio_attribution_reason_text():
     assert "condition:warning" in prompt.reason
     assert "chip:risk_level:bearish" in prompt.reason
 
+
+def test_risk_prompt_includes_fundamental_diagnostics():
+    sample_date = date(2026, 6, 15)
+    service = DecisionDeskRiskPromptService()
+
+    summary = service.build_summary(
+        as_of_date=sample_date,
+        market_regime=MarketRegimeSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        market_breadth=MarketBreadthSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        sector_rotation=SectorRotationSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        relative_strength_liquidity=RelativeStrengthLiquiditySummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        watchlist_triggers=WatchlistTriggerSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        portfolio_alerts=PortfolioAlertSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        fundamental_diagnostics=(
+            {
+                "code": "abnormal_fundamental.revenue_profit_divergence",
+                "factor_name": "fundamental.abnormal_flags",
+                "stock_code": "2330",
+                "message": "revenue_yoy=0.25; operating_profit_yoy=-0.10; target price wording removed",
+            },
+        ),
+    )
+
+    prompt = summary.prompts[0]
+    assert prompt.source == "fundamental"
+    assert prompt.severity == "warning"
+    assert prompt.code == "abnormal_fundamental.revenue_profit_divergence"
+    text = f"{prompt.title} {prompt.reason} {prompt.action_hint}".lower()
+    for forbidden in ("buy", "sell", "target price", "fair value", "recommendation"):
+        assert forbidden not in text

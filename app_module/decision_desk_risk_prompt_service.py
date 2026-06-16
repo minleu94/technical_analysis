@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
+import re
+from typing import Mapping
 
 from app_module.decision_desk_dtos import (
+    DecisionDeskFundamentalDiagnostic,
     DecisionDeskQuality,
     DecisionDeskRiskPrompt,
     DecisionDeskRiskPromptSummary,
@@ -28,6 +31,7 @@ class DecisionDeskRiskPromptService:
         relative_strength_liquidity: RelativeStrengthLiquiditySummary,
         watchlist_triggers: WatchlistTriggerSummary,
         portfolio_alerts: PortfolioAlertSummary,
+        fundamental_diagnostics: tuple[DecisionDeskFundamentalDiagnostic | Mapping[str, str], ...] = (),
     ) -> DecisionDeskRiskPromptSummary:
         prompts: list[DecisionDeskRiskPrompt] = []
         warnings: list[str] = []
@@ -48,6 +52,7 @@ class DecisionDeskRiskPromptService:
         prompts.extend(self._relative_strength_prompts(relative_strength_liquidity))
         prompts.extend(self._watchlist_prompts(watchlist_triggers))
         prompts.extend(self._portfolio_prompts(portfolio_alerts))
+        prompts.extend(self._fundamental_prompts(fundamental_diagnostics))
 
         prompts = self._dedupe(prompts)
         if not prompts:
@@ -174,6 +179,44 @@ class DecisionDeskRiskPromptService:
             )
         return prompts
 
+    @staticmethod
+    def _fundamental_prompts(
+        diagnostics: tuple[DecisionDeskFundamentalDiagnostic | Mapping[str, str], ...],
+    ) -> list[DecisionDeskRiskPrompt]:
+        prompts: list[DecisionDeskRiskPrompt] = []
+        for diagnostic in diagnostics:
+            item = (
+                diagnostic.to_dict()
+                if isinstance(diagnostic, DecisionDeskFundamentalDiagnostic)
+                else dict(diagnostic)
+            )
+            code = str(item.get("code", ""))
+            stock_code = str(item.get("stock_code", ""))
+            message = DecisionDeskRiskPromptService._sanitize_fundamental_message(
+                str(item.get("message", ""))
+            )
+            reason = f"{stock_code}: {message}" if stock_code else message
+            prompts.append(
+                DecisionDeskRiskPrompt(
+                    category="fundamental_diagnostic",
+                    severity="warning",
+                    source="fundamental",
+                    code=code or None,
+                    title="基本面異常提示",
+                    reason=reason or code,
+                    action_hint="檢查公告日、資料品質與一次性項目，作為研究風險提示。",
+                )
+            )
+        return prompts
+
+    @staticmethod
+    def _sanitize_fundamental_message(message: str) -> str:
+        sanitized = message
+        for forbidden in ("target price", "fair value", "recommendation", "buy", "sell"):
+            sanitized = re.sub(re.escape(forbidden), "", sanitized, flags=re.IGNORECASE)
+        sanitized = re.sub(r"\s+", " ", sanitized)
+        sanitized = sanitized.replace(" ;", ";").strip(" ;")
+        return sanitized
 
     @staticmethod
     def _dedupe(prompts: list[DecisionDeskRiskPrompt]) -> list[DecisionDeskRiskPrompt]:

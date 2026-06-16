@@ -242,6 +242,28 @@ class PortfolioAlertSummary:
         }
 
 
+@dataclass(frozen=True)
+class DecisionDeskFundamentalDiagnostic:
+    code: str
+    factor_name: str
+    stock_code: str
+    message: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "code", str(self.code))
+        object.__setattr__(self, "factor_name", str(self.factor_name))
+        object.__setattr__(self, "stock_code", str(self.stock_code))
+        object.__setattr__(self, "message", str(self.message))
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "code": self.code,
+            "factor_name": self.factor_name,
+            "stock_code": self.stock_code,
+            "message": self.message,
+        }
+
+
 
 @dataclass(frozen=True)
 class DecisionDeskRiskPrompt:
@@ -336,4 +358,3 @@ class DecisionDeskSnapshot:
             "portfolio_alerts": self.portfolio_alerts.to_dict(),
             "risk_prompts": self.risk_prompts.to_dict(),
         }
-
