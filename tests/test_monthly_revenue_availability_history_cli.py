@@ -205,3 +205,48 @@ def test_history_cli_supports_mops_static_source(tmp_path, monkeypatch) -> None:
     validation = validate_monthly_revenue_availability_file(output)
     assert validation.valid is True
     assert validation.accepted_count == 1
+
+
+def test_history_cli_writes_pit_csv_candidate(tmp_path, monkeypatch) -> None:
+    raw_dir = tmp_path / "financial_data"
+    raw_dir.mkdir()
+    (raw_dir / "2330_monthly_revenue.csv").write_text(
+        "date,stock_id,country,revenue,revenue_month,revenue_year\n"
+        "2024-05-01,2330,Taiwan,100,4,2024\n",
+        encoding="utf-8",
+    )
+    pit_csv = tmp_path / "tej_pit.csv"
+    pit_csv.write_text(
+        "公司代號,資料年月,公告日\n"
+        "2330,2024-04,2024-05-10\n",
+        encoding="utf-8-sig",
+    )
+    output = tmp_path / "candidate.csv"
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+
+    exit_code = main(
+        [
+            "--start-period",
+            "2024-04",
+            "--end-period",
+            "2024-04",
+            "--markets",
+            "twse",
+            "--raw-dir",
+            str(raw_dir),
+            "--pit-csv",
+            str(pit_csv),
+            "--pit-source-version",
+            "tej-pit-export-2026-06-17",
+            "--output",
+            str(output),
+            "--fetch-date",
+            "2026-06-17",
+        ]
+    )
+
+    assert exit_code == 0
+    validation = validate_monthly_revenue_availability_file(output)
+    assert validation.valid is True
+    assert validation.accepted_count == 1
+    assert validation.source_versions == ("tej-pit-export-2026-06-17",)

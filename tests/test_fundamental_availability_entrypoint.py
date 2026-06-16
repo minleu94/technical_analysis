@@ -69,3 +69,10 @@ def test_validate_monthly_revenue_availability_file_rejects_unreasonably_late_av
 
 def test_allowed_sources_do_not_include_raw_csv_source():
     assert "financial_data.monthly_revenue_csv" not in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES
+
+
+def test_allowed_sources_include_authorized_pit_source():
+    assert (
+        "tej.monthly_revenue_announcement_pit"
+        in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES
+    )

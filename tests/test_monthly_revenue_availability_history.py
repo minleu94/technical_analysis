@@ -4,6 +4,7 @@ from datetime import date
 
 from data_module.monthly_revenue_availability_history import (
     build_historical_monthly_revenue_availability,
+    load_pit_announcement_rows,
     load_official_rows_for_markets,
     parse_mops_monthly_revenue_html,
     parse_announcement_date,
@@ -252,3 +253,54 @@ def test_load_official_rows_for_markets_reads_mops_static_reports(monkeypatch) -
             "__source_version_prefix": "mops-t05st10-ifrs",
         }
     ]
+
+
+def test_load_pit_announcement_rows_accepts_chinese_column_names(tmp_path) -> None:
+    pit_csv = tmp_path / "tej_monthly_revenue_pit.csv"
+    pit_csv.write_text(
+        "公司代號,資料年月,公告日\n"
+        "2330,2024-04,2024-05-10\n"
+        "3207,11304,113/05/10\n",
+        encoding="utf-8-sig",
+    )
+
+    rows, diagnostics = load_pit_announcement_rows(
+        pit_csv,
+        source="tej.monthly_revenue_announcement_pit",
+        source_version="tej-pit-export-2026-06-17",
+    )
+
+    assert diagnostics == ()
+    assert rows == [
+        {
+            "資料年月": "2024-04",
+            "公司代號": "2330",
+            "出表日期": "2024-05-10",
+            "__availability_source": "tej.monthly_revenue_announcement_pit",
+            "__source_version": "tej-pit-export-2026-06-17",
+        },
+        {
+            "資料年月": "2024-04",
+            "公司代號": "3207",
+            "出表日期": "2024-05-10",
+            "__availability_source": "tej.monthly_revenue_announcement_pit",
+            "__source_version": "tej-pit-export-2026-06-17",
+        },
+    ]
+
+
+def test_load_pit_announcement_rows_reports_missing_source_version(tmp_path) -> None:
+    pit_csv = tmp_path / "monthly_revenue_pit.csv"
+    pit_csv.write_text(
+        "stock_code,period,announced_date\n2330,2024-04,2024-05-10\n",
+        encoding="utf-8",
+    )
+
+    rows, diagnostics = load_pit_announcement_rows(
+        pit_csv,
+        source="tej.monthly_revenue_announcement_pit",
+        source_version="",
+    )
+
+    assert rows == []
+    assert diagnostics[0].code == "monthly_revenue_availability.pit_missing_source_version"

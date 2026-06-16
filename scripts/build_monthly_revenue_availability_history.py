@@ -19,8 +19,10 @@ from data_module.monthly_revenue_availability_builder import (
 )
 from data_module.monthly_revenue_availability_history import (
     MonthlyRevenueAvailabilityHistoryResult,
+    TEJ_PIT_HISTORY_SOURCE,
     build_historical_monthly_revenue_availability,
     load_official_rows_for_markets,
+    load_pit_announcement_rows,
 )
 
 
@@ -36,6 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-json-dir", type=Path, default=None)
     parser.add_argument("--mops-html-dir", type=Path, default=None)
     parser.add_argument("--mops-static", action="store_true")
+    parser.add_argument("--pit-csv", type=Path, default=None)
+    parser.add_argument("--pit-source", default=TEJ_PIT_HISTORY_SOURCE)
+    parser.add_argument("--pit-source-version", default="")
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--fetch-date", default=date.today().isoformat())
     args = parser.parse_args(argv)
@@ -43,21 +48,31 @@ def main(argv: list[str] | None = None) -> int:
     markets = tuple(item.strip() for item in args.markets.split(",") if item.strip())
     config = TWStockConfig()
     raw_dir = args.raw_dir or (config.data_root / "financial_data")
-    official_rows_by_market, fetch_diagnostics = load_official_rows_for_markets(
-        markets=markets,
-        source_json_dir=args.source_json_dir,
-        mops_html_dir=args.mops_html_dir,
-        mops_static=args.mops_static,
-        start_period=args.start_period,
-        end_period=args.end_period,
-    )
+    if args.pit_csv is not None:
+        pit_rows, fetch_diagnostics = load_pit_announcement_rows(
+            args.pit_csv,
+            source=args.pit_source,
+            source_version=args.pit_source_version,
+        )
+        build_markets = (markets[0],) if markets else ("twse",)
+        official_rows_by_market = {build_markets[0]: pit_rows}
+    else:
+        official_rows_by_market, fetch_diagnostics = load_official_rows_for_markets(
+            markets=markets,
+            source_json_dir=args.source_json_dir,
+            mops_html_dir=args.mops_html_dir,
+            mops_static=args.mops_static,
+            start_period=args.start_period,
+            end_period=args.end_period,
+        )
+        build_markets = markets
     raw_periods = load_raw_monthly_revenue_periods(raw_dir)
     result = build_historical_monthly_revenue_availability(
         official_rows_by_market=official_rows_by_market,
         raw_periods=raw_periods,
         start_period=args.start_period,
         end_period=args.end_period,
-        markets=markets,
+        markets=build_markets,
         stock_code=args.stock_code,
         fetch_date=date.fromisoformat(args.fetch_date),
     )

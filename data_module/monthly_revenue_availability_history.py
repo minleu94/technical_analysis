@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import re
 from calendar import monthrange
@@ -23,6 +24,7 @@ from decision_module.factors.factor_dtos import FactorDiagnostic
 TWSE_HISTORY_SOURCE = "twse.monthly_revenue_announcement"
 TPEX_HISTORY_SOURCE = "tpex.monthly_revenue_announcement"
 MOPS_HISTORY_SOURCE = "mops.monthly_revenue_announcement"
+TEJ_PIT_HISTORY_SOURCE = "tej.monthly_revenue_announcement_pit"
 TWSE_HISTORY_SOURCE_VERSION_PREFIX = "twse-openapi-t187ap05-l"
 TPEX_HISTORY_SOURCE_VERSION_PREFIX = "tpex-openapi-mopsfin-t187ap05-o"
 MOPS_HISTORY_SOURCE_VERSION_PREFIX = "mops-t05st10-ifrs"
@@ -142,10 +144,15 @@ def build_historical_monthly_revenue_availability(
         default_source, default_source_version_prefix = _market_source(market)
         for official_row in official_rows_by_market.get(market, ()):
             source = str(official_row.get("__availability_source") or default_source)
+            explicit_source_version = str(official_row.get("__source_version") or "").strip()
             source_version_prefix = str(
                 official_row.get("__source_version_prefix") or default_source_version_prefix
             )
-            source_version = f"{source_version_prefix}-{fetch_date.isoformat()}"
+            source_version = (
+                explicit_source_version
+                if explicit_source_version
+                else f"{source_version_prefix}-{fetch_date.isoformat()}"
+            )
             row_stock_code = str(official_row.get("公司代號", "")).strip()
             if stock_code is not None and row_stock_code != stock_code:
                 continue
@@ -357,6 +364,86 @@ def parse_mops_monthly_revenue_html(
     return rows, tuple(diagnostics)
 
 
+def load_pit_announcement_rows(
+    path: Path,
+    *,
+    source: str,
+    source_version: str,
+) -> tuple[list[dict[str, str]], tuple[FactorDiagnostic, ...]]:
+    if not source_version.strip():
+        return [], (
+            _diagnostic(
+                "monthly_revenue_availability.pit_missing_source_version",
+                "pit",
+                "",
+                "PIT monthly revenue announcement export requires a non-empty source_version",
+            ),
+        )
+
+    path = Path(path)
+    if not path.exists():
+        return [], (
+            _diagnostic(
+                "monthly_revenue_availability.pit_file_missing",
+                "pit",
+                "",
+                f"PIT monthly revenue announcement export missing; path={path}",
+            ),
+        )
+
+    rows: list[dict[str, str]] = []
+    diagnostics: list[FactorDiagnostic] = []
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = tuple(reader.fieldnames or ())
+        stock_column = _find_column(fieldnames, ("stock_code", "公司代號", "證券代號", "coid"))
+        period_column = _find_column(fieldnames, ("period", "資料年月", "年月", "revenue_period"))
+        announced_column = _find_column(
+            fieldnames,
+            ("announced_date", "announcement_date", "公告日", "公告日期", "出表日期"),
+        )
+        if not stock_column or not period_column or not announced_column:
+            return [], (
+                _diagnostic(
+                    "monthly_revenue_availability.pit_missing_columns",
+                    "pit",
+                    "",
+                    (
+                        "PIT monthly revenue announcement export missing required columns; "
+                        f"path={path}; columns={','.join(fieldnames)}"
+                    ),
+                ),
+            )
+
+        for source_row in reader:
+            stock_code = str(source_row.get(stock_column, "")).strip()
+            try:
+                period = parse_revenue_period(str(source_row.get(period_column, "")))
+                announced_date = parse_announcement_date(
+                    str(source_row.get(announced_column, ""))
+                )
+            except ValueError:
+                diagnostics.append(
+                    _diagnostic(
+                        "monthly_revenue_availability.pit_invalid_row",
+                        "pit",
+                        stock_code,
+                        f"PIT monthly revenue announcement row has invalid period/date; path={path}",
+                    )
+                )
+                continue
+            rows.append(
+                {
+                    "資料年月": period,
+                    "公司代號": stock_code,
+                    "出表日期": announced_date.isoformat(),
+                    "__availability_source": source,
+                    "__source_version": source_version,
+                }
+            )
+    return rows, tuple(diagnostics)
+
+
 def parse_revenue_period(value: str) -> str:
     cleaned = value.strip().replace("/", "-")
     if len(cleaned) == 5 and cleaned.isdigit():
@@ -564,6 +651,15 @@ def _parse_mops_table(table) -> list[dict[str, str]]:
             continue
         parsed_rows.append(dict(zip(headers, cells, strict=False)))
     return parsed_rows
+
+
+def _find_column(fieldnames: tuple[str, ...], candidates: tuple[str, ...]) -> str | None:
+    normalized = {name.strip().lower(): name for name in fieldnames}
+    for candidate in candidates:
+        matched = normalized.get(candidate.strip().lower())
+        if matched:
+            return matched
+    return None
 
 
 def _iter_periods(start_period: str, end_period: str) -> Iterable[str]:

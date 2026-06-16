@@ -20,6 +20,7 @@ MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES = frozenset(
         "twse.monthly_revenue_announcement",
         "tpex.monthly_revenue_announcement",
         "mops.monthly_revenue_announcement",
+        "tej.monthly_revenue_announcement_pit",
     }
 )
 MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS = 45
