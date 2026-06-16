@@ -74,6 +74,24 @@ financial_data = D:/Min/Python/Project/FA_Data/financial_data
 - 本 workflow 不接入 `DBManager.init_database()`，因此不會在一般啟動、資料更新或測試以外流程中自動修改正式 SQLite。
 - 截至 2026-06-16，本 repo 已完成 migration tooling、測試與正式 `twstock.db` schema apply；備份檔為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_fundamental_schema_20260616_022301.db`。正式 DB 已有三張 fundamental 空表，但尚未寫入月營收、財報或估值 records。
 
+### 3.3 月營收 normalized backfill workflow
+
+`data_module/monthly_revenue_backfill.py` 與 `scripts/backfill_monthly_revenue_fundamentals.py` 提供月營收 raw CSV 到 `fundamental_monthly_revenues` 的受控回填入口。此 workflow 只接受已通過治理契約的 availability mapping；若正式 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 不存在或 mapping loader 回傳 diagnostics，回填計畫會 `ready_for_apply=false`，不讀 raw rows、不產生 normalized records，也不寫 SQLite。
+
+CLI 範例：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_monthly_revenue_fundamentals.py --dry-run
+.\.venv\Scripts\python.exe scripts\backfill_monthly_revenue_fundamentals.py --apply --confirm apply-monthly-revenue-backfill
+```
+
+- 未指定 `--apply` 時只產生 Markdown plan，列出 `ready_for_apply`、raw row count、normalized record count 與 diagnostics。
+- `--apply` 必須搭配 `--confirm apply-monthly-revenue-backfill`；缺少 confirm 時回傳 2，不寫入 DB。
+- 正式 apply 前會先備份 DB 到 `TWStockConfig.backup_dir`，寫入失敗時 restore 備份。
+- 寫入採 `INSERT OR REPLACE`，主鍵仍由 schema 的 `(stock_code, period, source_version)` 控制；不同 source_version 可保留不同回填版本。
+
+2026-06-16 以正式路徑 dry-run 時，因 `D:/Min/Python/Project/FA_Data/meta_data/monthly_revenue_availability.csv` 尚不存在，結果為 `ready_for_apply=false`、`normalized_record_count=0`、diagnostic=`fundamental_availability.mapping_file_missing`。因此尚未對正式 `fundamental_monthly_revenues` 寫入任何 records。
+
 ## 4. Raw CSV 欄位觀察
 
 月營收 CSV 範例欄位：
@@ -228,7 +246,7 @@ CLI 範例：
 2. 正式 SQLite schema migration 已完成；後續不得繞過 loader / validator 直接寫入三張 fundamental 表。
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
-5. 任何回填正式 fundamental records 前需先備份並取得確認；目前 schema 已套用，但正式資料尚未寫入。
+5. 月營收 normalized backfill workflow 已具備 dry-run、confirm、備份與 fail-closed diagnostics；待正式 availability mapping 通過驗證後，仍需人工確認才可 apply。
 6. Abnormal fundamental diagnostics 已能進入 Research metadata 與 Daily Decision Desk risk prompts；後續接正式資料時仍只能作提示，不得改寫財報或自動扣分。
 
 ## 8. 更新記錄
@@ -247,5 +265,6 @@ CLI 範例：
 - 2026-06-16：新增 TWSE OpenAPI 月營收 availability 候選產生器與 CLI，可用官方 `出表日期` / `資料年月` / `公司代號` 產生候選 mapping；真實 dry-run 顯示最新月端點與本機歷史 raw 期間暫無交集，因此未寫入正式 mapping。
 - 2026-06-16：新增 Fundamental SQLite 受控 migration service 與 CLI，支援 working-copy dry-run、apply 前備份、失敗 restore 與 `--confirm apply-fundamental-schema` 人工確認。
 - 2026-06-16：依使用者確認對正式 `twstock.db` 套用 Fundamental SQLite schema migration，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_fundamental_schema_20260616_022301.db`；正式 DB 僅新增三張 fundamental 空表，未回填資料。
+- 2026-06-16：新增月營收 normalized backfill workflow 與 CLI，預設 dry-run，正式 apply 需 `--confirm apply-monthly-revenue-backfill` 並先備份；正式路徑因缺 availability mapping fail-closed，未寫入 records。
 - 2026-06-16：新增 Revenue Factor Pack v1 adapters，從已正規化月營收 records 產生 YoY、MoM、3M trend 與 new high factor records；缺 baseline 只輸出 diagnostics，未來 available_date 由 `FactorGate` skip，不接 `ScoringEngine`。
 - 2026-06-16：新增 Abnormal Fundamental diagnostics policy / application service / Daily Decision Desk prompt bridge；異常基本面只作 Research metadata 與風險提示，不改寫財報、不自動調整分數。
