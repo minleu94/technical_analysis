@@ -219,10 +219,13 @@ def test_portfolio_alert_service_warns_when_chip_lots_are_missing():
     snapshot = service.build_snapshot(date(2026, 6, 15))
 
     assert snapshot.quality == DecisionDeskQuality.ESTIMATED
-    assert snapshot.alert_count == 1
-    assert snapshot.alert_codes == ("1101",)
+    assert snapshot.alert_count == 0
+    assert snapshot.alert_codes == ()
     assert snapshot.alert_level == "low"
     assert "portfolio_alerts_chip_data_missing:1101" in snapshot.warnings
+    assert snapshot.attributions[0].stock_code == "1101"
+    assert snapshot.attributions[0].severity == 0
+    assert "chip_data_missing" in snapshot.attributions[0].data_quality_flags
 
 
 def test_portfolio_alert_summary_serializes_attributions():
@@ -303,6 +306,5 @@ def test_portfolio_alert_service_builds_condition_and_chip_attributions():
     assert "condition:invalid" in by_code["2603"].reasons
     assert "chip_data_missing" in by_code["2603"].data_quality_flags
     assert "chip_unavailable_events" in by_code["2603"].data_quality_flags
-
 
 

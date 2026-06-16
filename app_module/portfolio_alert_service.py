@@ -89,15 +89,16 @@ class PortfolioAlertService:
                 alert_level="low",
             )
 
-        alerts, hard_failures = self._collect_alerts(positions, warnings_for_quality)
-        source_summary = self._build_source_summary(alerts)
+        attribution_items, hard_failures = self._collect_alerts(positions, warnings_for_quality)
+        alert_items = [item for item in attribution_items if item.severity > 0]
+        source_summary = self._build_source_summary(alert_items)
         if source_summary:
             warnings.extend(source_summary)
         warnings.extend(warnings_for_quality)
 
-        attributions = self._build_attributions(alerts)
+        attributions = self._build_attributions(attribution_items)
 
-        if not alerts:
+        if not alert_items:
             quality = (
                 DecisionDeskQuality.DEGRADED
                 if hard_failures > 0
@@ -121,9 +122,9 @@ class PortfolioAlertService:
                 else DecisionDeskQuality.ESTIMATED if warnings_for_quality else DecisionDeskQuality.OBSERVED
             ),
             warnings=tuple(warnings),
-            alert_count=len(alerts),
-            alert_codes=self._top_alert_codes(alerts),
-            alert_level=self._infer_alert_level(alerts),
+            alert_count=len(alert_items),
+            alert_codes=self._top_alert_codes(alert_items),
+            alert_level=self._infer_alert_level(alert_items),
             attributions=attributions,
         )
 
