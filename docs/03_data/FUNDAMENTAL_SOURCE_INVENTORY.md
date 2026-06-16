@@ -188,6 +188,7 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - migration 產生具 `available_date`、`quality`、`source_version` 的 normalized records。
 - adapter 只輸出 `FactorRecord` 或等價 DTO。
 - `decision_module/factors/fundamental_adapters.py` 可由已正規化月營收 records 產生 `fundamental.revenue_yoy`、`fundamental.revenue_mom`、`fundamental.revenue_3m_trend`、`fundamental.revenue_new_high`，但只保留 factor metadata / diagnostics，不產生 score。
+- `decision_module/factors/abnormal_fundamental_flags.py` 可由受治理營收 / 獲利 / 一次性收益與資料品質 warning 產生 abnormal fundamental diagnostics；`app_module/fundamental_diagnostics_service.py` 可將其序列化為 Research Run metadata。
 - `FactorGate` 集中執行 `available_date <= decision_date`。
 
 禁止：
@@ -204,7 +205,7 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
 5. 任何寫入正式資料前需先備份並取得確認；目前 migration / fallback 工具已具備，但尚未寫入正式 SQLite。
-6. 正式 schema apply 後才可進一步規劃 normalized fundamental records 的資料寫入；不可把 schema tooling 視為資料已可用。
+6. Abnormal fundamental diagnostics 已能進入 Research metadata 與 Daily Decision Desk risk prompts；後續接正式資料時仍只能作提示，不得改寫財報或自動扣分。
 
 ## 8. 更新記錄
 
@@ -221,3 +222,4 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - 2026-06-16：新增月營收 availability mapping 正式驗證入口與 CLI dry-run validator，允許治理來源、拒絕 raw CSV available-date 來源，並保持不建立、不改寫正式 mapping 檔或 SQLite。
 - 2026-06-16：新增 Fundamental SQLite 受控 migration service 與 CLI，支援 working-copy dry-run、apply 前備份、失敗 restore 與 `--confirm apply-fundamental-schema` 人工確認；正式 `twstock.db` 尚未套用 migration。
 - 2026-06-16：新增 Revenue Factor Pack v1 adapters，從已正規化月營收 records 產生 YoY、MoM、3M trend 與 new high factor records；缺 baseline 只輸出 diagnostics，未來 available_date 由 `FactorGate` skip，不接 `ScoringEngine`。
+- 2026-06-16：新增 Abnormal Fundamental diagnostics policy / application service / Daily Decision Desk prompt bridge；異常基本面只作 Research metadata 與風險提示，不改寫財報、不自動調整分數。

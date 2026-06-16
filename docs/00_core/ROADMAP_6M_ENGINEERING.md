@@ -201,14 +201,14 @@
 - 月營收資料與公告日欄位。
 - Revenue YoY / MoM / 3M trend / revenue new high factor（v1 adapter 已完成；僅輸出 factor records / diagnostics，不接 `ScoringEngine`）。
 - 第一版估值視圖：P/E、P/B、P/S、產業相對分位（valuation data layer v1 已可建立 governed observations 與同產業整數基點分位；輸出仍只走 presentation policy）。
-- AbnormalFundamentalFlag。
+- AbnormalFundamentalFlag（v1 diagnostics 已完成；只作 Research metadata 與 Daily Decision Desk risk prompts）。
 - Fundamental factor adapters 與 available_date gate。
 
 驗收標準：
 
 - 回測使用營收與估值因子時只讀 `available_date <= decision_date` 的資料。
 - 估值先以相對分位與區間呈現，不輸出未驗證的單點目標價。
-- 異常基本面只標記、降權或提示風險，不自動扣除業外或改寫財報。
+- 異常基本面只標記、降權或提示風險，不自動扣除業外或改寫財報；v1 已先以 diagnostics / risk prompts 呈現，不自動扣分。
 
 ### Month 6：Strategy Lifecycle 與 Portfolio Feedback
 
@@ -239,7 +239,7 @@
 1. Month 4 Daily Decision Desk v1 已以 service-backed daily workflow 收尾；後續視覺 polish 屬設計債，不改變資料與決策合約。
 2. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
 3. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
-4. Month 5 Fundamental Layer preflight 已啟動：資料來源盤點已完成，既有 `financial_data/` 僅列 raw candidate source；raw 月營收唯讀正規化契約、受治理公告日 / available_date mapping 契約、月營收公告日 mapping CSV loader、正式 mapping dry-run 驗證入口與 CLI、公告日 / available_date 初版政策、候選 SQLite schema dry-run 模組、暫時 connection / 正式 DB working copy dry-run report API、Fundamental SQLite 受控 migration service/CLI、Revenue Factor Pack v1 adapters、valuation data layer v1 已具備 `available_date` 缺失診斷與 `FactorGate` no-look-ahead 測試。2026-06-16 已在正式 `twstock.db` 複本上驗證候選 schema 只新增三張 fundamental 表、不修改既有五張核心表；migration CLI 預設只對 working copy dry-run，正式 apply 需 `--confirm apply-fundamental-schema` 並會先備份、失敗 restore，正式 `twstock.db` 尚未套用 migration；Revenue Factor Pack 只輸出 YoY、MoM、3M trend、new high factor records / diagnostics，不產生 score、不接 `ScoringEngine`；valuation data layer 只建立 governed observations 與同產業分位，估值呈現政策 v1 仍採相對分位區間與 forbidden-output regression，缺分位不回中性。下一步是填入或下載真實公告日 mapping 並以驗證入口檢查；通過後才人工確認並執行受控 SQLite migration，並續做 AbnormalFundamentalFlag 規則。
+4. Month 5 Fundamental Layer preflight 已啟動：資料來源盤點已完成，既有 `financial_data/` 僅列 raw candidate source；raw 月營收唯讀正規化契約、受治理公告日 / available_date mapping 契約、月營收公告日 mapping CSV loader、正式 mapping dry-run 驗證入口與 CLI、公告日 / available_date 初版政策、候選 SQLite schema dry-run 模組、暫時 connection / 正式 DB working copy dry-run report API、Fundamental SQLite 受控 migration service/CLI、Revenue Factor Pack v1 adapters、valuation data layer v1、Abnormal Fundamental diagnostics 已具備 `available_date` 缺失診斷與 `FactorGate` no-look-ahead 測試。2026-06-16 已在正式 `twstock.db` 複本上驗證候選 schema 只新增三張 fundamental 表、不修改既有五張核心表；migration CLI 預設只對 working copy dry-run，正式 apply 需 `--confirm apply-fundamental-schema` 並會先備份、失敗 restore，正式 `twstock.db` 尚未套用 migration；Revenue Factor Pack 只輸出 YoY、MoM、3M trend、new high factor records / diagnostics，不產生 score、不接 `ScoringEngine`；valuation data layer 只建立 governed observations 與同產業分位，估值呈現政策 v1 仍採相對分位區間與 forbidden-output regression，缺分位不回中性；Abnormal Fundamental diagnostics 只進 Research metadata 與 Daily Decision Desk risk prompts，不改財報、不自動扣分。下一步是填入或下載真實公告日 mapping 並以驗證入口檢查；通過後才人工確認並執行受控 SQLite migration，再接正式 normalized fundamental data。
 5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 5。
 
 
@@ -269,6 +269,7 @@
 - 2026-06-16：啟動 Month 5 Fundamental Layer preflight，新增 Fundamental Source Inventory、raw 月營收唯讀正規化契約、受治理公告日 / available_date mapping 契約、月營收公告日 mapping CSV loader、正式 mapping dry-run 驗證入口與 CLI、公告日 / available_date 初版政策、候選 SQLite schema dry-run 模組、暫時 connection / 正式 DB working copy dry-run report API、Fundamental SQLite 受控 migration service/CLI、Revenue Factor Pack v1 adapter contract 測試，確認缺 `available_date` 不產生 normalized record / factor record，未來資料由 FactorGate 跳過；正式 `twstock.db` 複本 dry-run 已確認候選 schema 不修改既有核心表，正式 DB 尚未套用 migration，Revenue factors 尚未接入策略評分。
 - 2026-06-16：新增估值呈現政策 v1，採相對分位區間與 forbidden-output regression，缺 `industry_percentile_bp` 時只回 `UNAVAILABLE` 或 diagnostics，不回中性，不輸出目標價或交易建議。
 - 2026-06-16：新增 valuation data layer v1，建立受治理估值 observation 與同產業整數基點分位，並以既有 relative valuation adapter 驗證缺分位時只輸出 diagnostics。
+- 2026-06-16：新增 Abnormal Fundamental diagnostics v1，將營收/獲利背離、一次性收益風險與資料品質缺口序列化為 Research metadata，並接入 Daily Decision Desk fundamental risk prompts。
 - 2026-06-14：完成 Phase 5 Month 1 的 SQLite 檢視器分頁與規格化 Excel 報告匯出，並更新 6M Roadmap、Snapshot 及 Architecture。
 - 2026-06-13：建立 6 個月可執行工程路線，作為未來方向的 scoped authority。
 - 2026-06-13：加入 Legacy Carryover Gate，明確承接指標參數治理、推薦權重治理、Phase 5 輸出與穩定性驗證。
