@@ -187,6 +187,8 @@ Factor `available_date` 晚於決策日時必須拒絕使用。
 - `data_module/valuation_data.py`（Month 5 valuation data layer；建立 governed `ValuationObservation` 與同產業整數基點分位，不產生估值結論）
 - `data_module/company_registry.py` / `scripts/update_company_registry.py`（Month 5 official company registry workflow；以 TWSE/TPEX 官方基本資料更新 `companies.csv`，維持既有 schema 並先 dry-run / backup / confirm）
 - `data_module/monthly_revenue_availability_history.py` / `scripts/build_monthly_revenue_availability_history.py`（Month 5 月營收公告日 historical dry-run builder；讀 TWSE/TPEX 官方 `出表日期`、人工提供 JSON、人工保存的 MOPS 官方 HTML、新版 MOPS redirectToOld / mopsov static report，或授權 PIT 月營收公告日 CSV，輸出候選 mapping / diagnostics，不寫正式 mapping 或 SQLite）
+- `data_module/monthly_revenue_snapshot_harvester.py` / `scripts/fetch_mops_monthly_revenue_snapshot.py`（Month 5 MOPS 月營收完整市場 snapshot 候選抓取器；保存 raw HTML 與營收值 candidate CSV，不產生 availability mapping、不推定 available_date、不寫 SQLite）
+- `data_module/finmind_monthly_revenue_create_time.py` / `scripts/fetch_finmind_monthly_revenue_create_time.py`（Month 5 FinMind 月營收 create_time 候選抓取器；逐檔抓取 `TaiwanStockMonthRevenue`、支援 resume / rate limit / DPAPI token，輸出觀測日分組候選，不寫正式 mapping 或 SQLite）
 - `data_module/tpex_daily_price_source.py`（TPEX daily close quotes 日常 adapter；輸出 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，交由既有 SQLite sync upsert `daily_prices`，不接 company registry 或 fundamental layer）
 - `data_module/tpex_daily_price_history_plan.py` / `scripts/plan_tpex_daily_price_history_backfill.py`（TPEX 歷史日價 dry-run planner；估算來源筆數、既有筆數、新增候選筆數與失敗日期，不寫正式 DB）
 - `data_module/tpex_daily_price_backfill.py` / `scripts/backfill_tpex_daily_prices.py`（TPEX 市場日價受控補寫 workflow；以官方 daily close quotes 補寫 `daily_prices`，預設 dry-run，正式 apply 需 confirm 與備份，不寫 company registry 或 fundamental tables）
@@ -493,6 +495,7 @@ UI 修改：
 - 2026-06-17：補上 MOPS `--mops-static` 架構邊界與 45 天合理揭露窗口；historical static report 的重新出表日會被視為過晚 available_date，不得形成 candidate row。
 - 2026-06-16：補上授權 PIT 月營收公告日 CSV 架構邊界；`--pit-csv` 只接受具 source_version 的 point-in-time 匯出檔並產生候選 mapping，不寫正式 mapping、不回填 SQLite、不接 ScoringEngine。
 - 2026-06-16：補上 GitHub public archive source audit 架構邊界；commit first-seen 可作未來 PIT 候選方法，但目前已檢查 public repos 皆未提供可追溯 daily snapshot，因此不新增 `github.*` allowed source。
+- 2026-06-16：新增 MOPS snapshot / FinMind create_time 候選抓取器架構邊界；兩者只輸出 candidate/raw evidence 到 output 目錄，不推定正式 available_date，不寫 `monthly_revenue_availability.csv` 或 SQLite。
 - 2026-06-16：新增估值呈現政策 / adapter 架構邊界，確認只輸出相對估值區間與 diagnostics，不接 ScoringEngine，不產生目標價、合理價、上漲空間或買賣建議。
 - 2026-06-16：新增 valuation data layer 架構邊界，確認資料層只建立受治理 observation 與同產業分位，估值輸出仍由 presentation policy 控制。
 - 2026-06-16：新增 valuation metrics backfill 架構邊界，確認 `daily_prices.本益比` 需經 dry-run / confirm / backup workflow 才能寫入 `fundamental_valuation_metrics`，且不接 ScoringEngine。

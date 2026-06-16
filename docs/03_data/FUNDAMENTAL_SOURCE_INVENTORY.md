@@ -338,6 +338,19 @@ CLI 範例：
 
 2026-06-16 追加 PIT CSV importer：`load_pit_announcement_rows()` 接受授權匯出的月營收公告日 CSV，欄位可為 `stock_code` / `公司代號`、`period` / `資料年月`、`announced_date` / `公告日` / `出表日期`。匯入時會正規化民國年、`YYYY-MM` period 與 `YYYY-MM-DD` 公告日；只有可解析公告日才產生 mapping。`source_version` 必須非空且原樣保留為 mapping 版本，不以 raw CSV 日期或查詢日期補值。PIT 匯入後的 `available_date` 仍採保守政策 `announced_date + 1 calendar day`，正式寫入 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 前必須先產生 candidate、跑 validator，並由使用者人工確認。
 
+2026-06-16 追加 MOPS snapshot 與 FinMind create_time 候選抓取器：`data_module/monthly_revenue_snapshot_harvester.py` / `scripts/fetch_mops_monthly_revenue_snapshot.py` 可透過新版 MOPS `redirectToOld` 取得 `mopsov.twse.com.tw/nas/t21/...` 歷史月營收彙總表，解析完整市場月營收內容並保存 raw HTML 與 candidate CSV；此輸出是營收值快照，不含、也不得推定 `available_date`。`data_module/finmind_monthly_revenue_create_time.py` / `scripts/fetch_finmind_monthly_revenue_create_time.py` 可用本機 DPAPI 保存的 FinMind token 逐檔抓取 `TaiwanStockMonthRevenue`，保留 `create_time`、候選 `available_date_candidate=create_time+1 calendar day` 與 create_time 分組檔；`create_time` 只能視為 FinMind 觀測 / 入庫日期候選，不等同官方 MOPS 公告日。兩個 CLI 都只寫 `DATA_ROOT/output/...` 候選輸出與 state/raw files，不寫正式 `monthly_revenue_availability.csv`，不寫 SQLite。
+
+今晚全量候選抓取建議分兩步執行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\fetch_mops_monthly_revenue_snapshot.py --start-period 2014-04 --end-period 2026-05 --markets twse,tpex --output-dir D:\Min\Python\Project\FA_Data\output\monthly_revenue_mops_snapshots --fetch-date 2026-06-16 --sleep-seconds 0.5
+.\.venv\Scripts\python.exe scripts\fetch_finmind_monthly_revenue_create_time.py --start-date 2014-04-01 --end-date 2026-05-31 --raw-dir D:\Min\Python\Project\FA_Data\financial_data --output-dir D:\Min\Python\Project\FA_Data\output\monthly_revenue_finmind_create_time --max-requests-per-hour 540 --resume --fetch-date 2026-06-16
+```
+
+第一個命令用 MOPS 抓完整市場月營收內容，主要用來補齊目前 raw CSV 未涵蓋的最新月與保留官方 HTML 追溯證據；第二個命令用 FinMind 分批取得每檔股票的 `create_time`，可將未來更新日分組。以目前本機 raw 月營收約 1,567 檔估算，FinMind `--max-requests-per-hour 540` 約需 3 小時；若中斷，可再次使用相同 `--output-dir` 與 `--resume` 接續。這兩份輸出通過人工檢查後，仍需另行建立正式 `monthly_revenue_availability.csv` candidate、執行 validator，並等待使用者確認後才可寫入正式 mapping。
+
+毛利率來源需獨立處理。MOPS `t163sb06` 屬「財務比率分析 / 毛利率彙總表」類型，頁面以市場別、年度、季別查詢，屬季度財報 / 財務比率資料，不是月營收資料，也不應混入今晚的月營收 snapshot / FinMind create_time 流程。後續若要納入毛利率，應走 `fundamental_statement_items` 或獨立財報比率 pipeline，並建立季度財報的公告日 / `available_date` gate。
+
 2026-06-16 對正式 raw 路徑執行：
 
 ```powershell
@@ -417,3 +430,4 @@ CLI 範例：
 - 2026-06-17：補上新版 MOPS `redirectToOld` / `mopsov` static report fetcher 與 `--mops-static` dry-run；確認 historical static report 的 `出表日期` 是查詢當日重新出表日，已由 45 天合理揭露窗口 gate 擋下，不能直接作 historical available_date mapping。
 - 2026-06-16：新增授權 PIT 月營收公告日 CSV importer 與 `--pit-csv` CLI；目前免費官方來源仍未找到可批次追溯原始歷史公告日的路徑，TEJ PIT 匯出列為治理來源候選，必須附 `source_version` 並通過 validator 後才可人工確認寫入正式 mapping。
 - 2026-06-16：追加 GitHub public archive source audit；確認 commit first-seen 方法可行，但已檢查的 public repos 不是未保存資料、只有最新快照、只有研究 PDF / notebook，就是單次匯入無公告日欄位，尚不能列入 allowed source。
+- 2026-06-16：新增 MOPS 月營收 snapshot 候選抓取器與 FinMind create_time 候選抓取器；兩者只寫 `DATA_ROOT/output/...`，MOPS snapshot 不推定 available_date，FinMind create_time 僅作觀測日候選，正式 mapping 與 SQLite apply 仍需人工 gate。毛利率確認為季度財報 / 財務比率資料，不納入今晚月營收流程。
