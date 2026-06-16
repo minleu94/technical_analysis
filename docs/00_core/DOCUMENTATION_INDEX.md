@@ -67,7 +67,7 @@
 | [INDUSTRY_INDEX_UPDATE_SUMMARY.md](../03_data/INDUSTRY_INDEX_UPDATE_SUMMARY.md) | 產業指數更新說明。 |
 | [MERGE_AND_MARKET_INDEX_SUMMARY.md](../03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md) | 市場指數與合併說明。 |
 | [SQLITE_STORAGE_GUIDE.md](../03_data/SQLITE_STORAGE_GUIDE.md) | SQLite 儲存與雙軌相容快取架構、一鍵遷移重建指南。 |
-| [FUNDAMENTAL_SOURCE_INVENTORY.md](../03_data/FUNDAMENTAL_SOURCE_INVENTORY.md) | Month 5 Fundamental Layer preflight 資料來源盤點，列出月營收、財報、估值、公告日 / available_date 缺口，以及月營收 mapping dry-run 驗證入口。 |
+| [FUNDAMENTAL_SOURCE_INVENTORY.md](../03_data/FUNDAMENTAL_SOURCE_INVENTORY.md) | Month 5 Fundamental Layer preflight 資料來源盤點，列出月營收、財報、估值、公告日 / available_date 缺口、月營收 mapping dry-run 驗證入口，以及 Fundamental SQLite 受控 migration CLI 狀態。 |
 | [monthly_revenue_availability.csv](../03_data/templates/monthly_revenue_availability.csv) | 月營收公告日 / available_date mapping 欄位範本；不是正式資料。 |
 
 ---
@@ -276,6 +276,7 @@
 - 2026-06-16：新增 Month 5 Fundamental Source Inventory，確認既有 `financial_data/` 只可作 raw candidate source，正式 SQLite 尚無 fundamental tables，後續必須先補 available_date contract。
 - 2026-06-16：新增 Month 5 基本面主線 sequencing memo 與五份獨立 superpowers plan，拆分 available_date 資料入口、Fundamental SQLite migration、Revenue Factor Pack、Valuation Data Layer 與 AbnormalFundamentalFlag diagnostics。
 - 2026-06-16：完成 Month 5 月營收 availability mapping dry-run 驗證入口文件同步，記錄 `data_module/fundamental_availability_entrypoint.py` 與 CLI 只讀驗證、拒絕未治理來源且不寫正式資料。
+- 2026-06-16：完成 Fundamental SQLite 受控 migration workflow 文件同步，記錄 working-copy dry-run、apply confirm、backup / restore helper，並保留正式 `twstock.db` 尚未套用 migration 的狀態。
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
 
 

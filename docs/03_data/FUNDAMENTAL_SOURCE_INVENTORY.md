@@ -17,7 +17,7 @@
 
 正式 SQLite 尚無月營收、財報、估值或基本面專用表。`DATA_ROOT/financial_data/` 內存在舊 CSV 原始資料，但缺少公告日與 `available_date`，因此只能列為 raw candidate source，不得直接用於回測、推薦、策略分數或 Daily Decision Desk。
 
-Month 5 下一步必須先完成 available-date contract 與 no-look-ahead tests，再考慮正式 migration。2026-06-16 已建立 `data_module/fundamental_data.py` 作為唯讀正規化契約：raw 月營收 row 必須搭配外部 `available_date` mapping 才會產生 normalized record；缺 mapping 時只輸出 diagnostics。同日亦建立 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / `available_date` mapping 契約，允許人工或後續下載來源提供 `announced_date`、`available_date`、`source` 與 `source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。`data_module/fundamental_availability_entrypoint.py` 與 `scripts/validate_monthly_revenue_availability.py` 已建立正式驗證入口，可對使用者提供的 mapping 檔執行 dry-run 驗證、列出 diagnostics、拒絕未治理來源，且不建立、不改寫 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`。`data_module/fundamental_schema.py` 作為候選 schema dry-run 模組，目前尚未接入 `DBManager.init_database()`，不會自動修改正式 SQLite。該模組提供 `generate_fundamental_schema_dry_run_report()` 與 `generate_fundamental_schema_copy_dry_run_report()`，可在暫時 SQLite connection 或正式 DB working copy 上確認既有核心表不被修改。`data_module/fundamental_availability.py` 則集中公告日 / available_date 策略，避免 parser、adapter 或後續 migration 各自發明時間軸規則。
+Month 5 下一步必須先完成 available-date contract 與 no-look-ahead tests，再將 fundamental 資料升級為正式可用來源。2026-06-16 已建立 `data_module/fundamental_data.py` 作為唯讀正規化契約：raw 月營收 row 必須搭配外部 `available_date` mapping 才會產生 normalized record；缺 mapping 時只輸出 diagnostics。同日亦建立 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / `available_date` mapping 契約，允許人工或後續下載來源提供 `announced_date`、`available_date`、`source` 與 `source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。`data_module/fundamental_availability_entrypoint.py` 與 `scripts/validate_monthly_revenue_availability.py` 已建立正式驗證入口，可對使用者提供的 mapping 檔執行 dry-run 驗證、列出 diagnostics、拒絕未治理來源，且不建立、不改寫 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`。`data_module/fundamental_schema.py` 作為候選 schema dry-run 模組，目前尚未接入 `DBManager.init_database()`，不會自動修改正式 SQLite。該模組提供 `generate_fundamental_schema_dry_run_report()` 與 `generate_fundamental_schema_copy_dry_run_report()`，可在暫時 SQLite connection 或正式 DB working copy 上確認既有核心表不被修改。`data_module/fundamental_migration.py` 與 `scripts/migrate_fundamental_schema.py` 已提供顯式 migration workflow：預設 dry-run 只在 working copy 上執行；正式 `--apply` 必須搭配 `--confirm apply-fundamental-schema`，且 apply 前會建立備份、失敗時可用 `restore_fundamental_schema_backup()` 回復。正式 `twstock.db` 尚未套用 fundamental schema migration。`data_module/fundamental_availability.py` 則集中公告日 / available_date 策略，避免 parser、adapter 或後續 migration 各自發明時間軸規則。
 
 ## 2. 盤點依據
 
@@ -54,7 +54,22 @@ financial_data = D:/Min/Python/Project/FA_Data/financial_data
 | `fundamental_statement_items` | 損益表 / 資產負債表 / 現金流量表長表項目 | `available_date NOT NULL`，保留 `statement_type`、`item_code`、`item_name` |
 | `fundamental_valuation_metrics` | P/E、P/B、P/S 等估值候選 metrics | `available_date NOT NULL`，保留 `industry_percentile_bp` 作相對分位 |
 
-這些表尚未建立於正式 SQLite。2026-06-16 已在正式 `twstock.db` 複本上完成 schema dry-run：既有 `broker_flows`、`daily_prices`、`industry_indices`、`market_indices`、`technical_indicators` preserved，新增候選表為 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`，`modified_existing_tables` 為 none；正式啟用前仍需完成正式 DB 備份、回滾方案與人工確認。
+這些表尚未建立於正式 SQLite。2026-06-16 已在正式 `twstock.db` 複本上完成 schema dry-run：既有 `broker_flows`、`daily_prices`、`industry_indices`、`market_indices`、`technical_indicators` preserved，新增候選表為 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`，`modified_existing_tables` 為 none。正式啟用工具已具備備份、回滾 helper 與人工確認旗標，但尚未對正式 DB 執行 apply。
+
+### 3.2 受控 SQLite Migration Workflow
+
+`scripts/migrate_fundamental_schema.py` 是目前唯一的 fundamental schema migration CLI 入口：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\migrate_fundamental_schema.py --dry-run
+.\.venv\Scripts\python.exe scripts\migrate_fundamental_schema.py --apply --confirm apply-fundamental-schema
+```
+
+- 未指定 `--apply` 時預設執行 dry-run，會複製來源 DB 到 working copy，再於 working copy 套用候選 schema 並輸出 Markdown report。
+- `--apply` 未搭配 `--confirm apply-fundamental-schema` 時會拒絕執行並回傳 2。
+- 正式 apply 由 `data_module.fundamental_migration.apply_fundamental_schema_migration()` 負責，會先在 `TWStockConfig.backup_dir` 建立備份，再套用 schema；發生例外時會 rollback connection 並以備份檔 restore 來源 DB。
+- 本 workflow 不接入 `DBManager.init_database()`，因此不會在一般啟動、資料更新或測試以外流程中自動修改正式 SQLite。
+- 截至 2026-06-16，本 repo 僅完成 migration tooling 與測試；正式 `twstock.db` 尚未套用 fundamental tables。
 
 ## 4. Raw CSV 欄位觀察
 
@@ -182,11 +197,11 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 ## 7. Month 5 下一步
 
 1. 填入或下載真實月營收公告日資料到 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`；目前 repo 只提供欄位範本與 dry-run 驗證入口，不提供正式資料。
-2. 在通過驗證入口後，才可進入受控 SQLite migration 工作；migration 前仍需備份、回滾方案與人工確認。
+2. 在通過驗證入口後，才可用 `scripts/migrate_fundamental_schema.py --apply --confirm apply-fundamental-schema` 進入受控 SQLite migration；正式執行前仍需人工確認目標 DB、備份位置與 dry-run report。
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. 擴充 fundamental adapter 測試骨架，不接入 `ScoringEngine`。
-5. 規劃 migration / fallback；任何寫入正式資料前需先備份並取得確認。
-6. 在正式 migration 前補齊備份、回滾方案與人工確認；目前僅完成正式 DB 複本 dry-run，尚未寫入正式 SQLite。
+5. 任何寫入正式資料前需先備份並取得確認；目前 migration / fallback 工具已具備，但尚未寫入正式 SQLite。
+6. 正式 schema apply 後才可進一步規劃 normalized fundamental records 的資料寫入；不可把 schema tooling 視為資料已可用。
 
 ## 8. 更新記錄
 
@@ -200,3 +215,4 @@ repo 內只提供欄位範本：`docs/03_data/templates/monthly_revenue_availabi
 - 2026-06-16：新增估值呈現政策 v1 文件化，確認估值只可呈現相對區間與 diagnostics，不輸出目標價、合理價、上漲空間或交易建議。
 - 2026-06-16：新增月營收公告日 mapping CSV loader、`TWStockConfig.monthly_revenue_availability_file` 預設路徑與 docs 範本；缺檔只輸出 diagnostic，不自動補值或寫正式資料。
 - 2026-06-16：新增月營收 availability mapping 正式驗證入口與 CLI dry-run validator，允許治理來源、拒絕 raw CSV available-date 來源，並保持不建立、不改寫正式 mapping 檔或 SQLite。
+- 2026-06-16：新增 Fundamental SQLite 受控 migration service 與 CLI，支援 working-copy dry-run、apply 前備份、失敗 restore 與 `--confirm apply-fundamental-schema` 人工確認；正式 `twstock.db` 尚未套用 migration。
