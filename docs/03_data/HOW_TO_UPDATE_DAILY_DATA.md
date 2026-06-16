@@ -17,7 +17,7 @@
 4. 等待底部日誌顯示完成。
 5. 再次檢查狀態，確認每日股價與技術指標日期。
 
-快速更新會下載近期缺失資料並直接同步 SQLite，略過大型歷史 CSV 重寫。
+快速更新會下載近期缺失資料並直接同步 SQLite，略過大型歷史 CSV 重寫。每日股價現在包含 TWSE `MI_INDEX type=ALL` 與 TPEX official daily close quotes；TWSE CSV 會寫到 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX CSV 會寫到 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，最後一併 upsert 到 SQLite `daily_prices`。
 
 ## 3. 完整備份：安全更新
 
@@ -28,6 +28,8 @@
 - 需要人工檢查完整 CSV
 - 確認雙軌資料一致性
 
+安全更新同樣會在每日股價步驟後抓取 TPEX official daily close quotes，並在 SQLite 同步時與 TWSE 日價一起寫入 `daily_prices`。TPEX endpoint 連線 timeout 或暫時失敗時會在完成訊息中以警告顯示，流程仍會繼續同步已成功取得的 TWSE 與其他資料，不會靜默略過。
+
 ## 4. 手動更新單一來源
 
 ### 每日股價
@@ -37,6 +39,8 @@
 3. 點擊「手動下載此資料源」。
 4. 點擊「合併每日股價」。
 5. 到「技術指標」執行增量更新。
+
+左側「每日股價」手動下載仍是 TWSE raw daily price 的單一來源操作；日常 TPEX 更新走一鍵快速 / 安全更新流程。若只手動操作 TWSE，TPEX 不會自動補進該次手動合併。
 
 ### 大盤與產業
 
@@ -49,7 +53,7 @@
 3. 點擊「合併券商分點」。
 4. 確認 `broker_flows` 日期與筆數。
 
-目前 registry 已擴充至 37 個追蹤分點；資料品質使用 observed、estimated、unavailable 三態。
+目前 registry 已擴充至 37 個追蹤分點；資料品質使用 observed、estimated、unavailable 三態。`broker_flows` 的 SQLite 身份鍵包含 `trade_type`，因此同一分點 / 股票 / 日期可以同時保存買超與賣超榜單；舊 DB 若仍是三欄主鍵，下一次同步券商分點時會先備份再受控升級。
 
 ### 技術指標
 
@@ -67,6 +71,8 @@
 - 受控筆數上限
 
 不要把 Inspector 當成資料修改工具。
+
+SQLite Inspector 日期控件預設為單一日期今天、區間本月 1 日至今天；若查詢 `3207` 目前只看到 `20260616`，代表歷史 TPEX 尚未正式回補，不是 registry 或 UI 問題。
 
 ## 6. 匯出 CSV
 
@@ -98,6 +104,16 @@
 .\.venv\Scripts\python.exe scripts\merge_daily_data.py
 ```
 
+### TPEX 歷史回補 dry-run
+
+歷史 TPEX 缺漏不會由日常更新自動大量補寫。先產生 dry-run plan，確認日期範圍、候選新增筆數、既有筆數與失敗日期：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\plan_tpex_daily_price_history_backfill.py --start-date 2026-01-01 --end-date 2026-06-16
+```
+
+此工具只讀資料並輸出報告，不寫正式 DB。正式歷史回補需另行人工確認。
+
 ## 8. 注意事項
 
 1. 日期使用 `YYYY-MM-DD`。
@@ -105,6 +121,7 @@
 3. 手動下載不等於分析資料已可用；仍需合併與計算技術指標。
 4. 不要把強制重建當成日常更新。
 5. 不得刪除正式 raw 原始資料。
+6. `companies.csv` 只是公司 / 產業 / 市場 registry，不代表 `daily_prices` 已有該股票日價；TPEX 日價屬市場資料層，不屬於 fundamental layer。
 
 ## 9. 排錯
 

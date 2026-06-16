@@ -151,6 +151,10 @@ python ui_qt/main.py
 5. 每日股價或券商分點下載後，還要執行對應的「合併」才會寫入分析資料庫。
 6. 手動合併股價後，執行技術指標增量更新。
 
+一鍵「快速更新」與「安全更新」的每日股價流程會同時處理 TWSE 與 TPEX：TWSE raw CSV 寫入 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX official daily close quotes 寫入 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，SQLite 同步時一併 upsert 到 `daily_prices`。左側「每日股價」單一來源手動下載仍是 TWSE 操作；若要日常自動納入 TPEX，使用快速或安全更新。若 TPEX endpoint 發生 timeout 或暫時連線失敗，完成視窗會顯示警告，流程仍會繼續同步已成功取得的 TWSE 與其他資料。
+
+券商分點同步會保存 `trade_type`，同一分點 / 股票 / 日期可同時有買超與賣超 rows。若舊 SQLite `broker_flows` 還是三欄主鍵，下一次同步券商分點時會先備份 DB，再把唯一鍵升級為 `(分點名稱, 證券代號, 日期, trade_type)`。
+
 ### 4.4 技術指標
 
 - 「增量更新」：只處理新資料，日常首選。
@@ -159,7 +163,7 @@ python ui_qt/main.py
 
 ### 4.5 SQLite 資料檢視
 
-1. **選擇與篩選**：選擇資料表，設定每頁限制筆數，填入股票代號、名稱、分點或日期篩選；單一日期與日期區間可用日曆選擇器點選，按「清除」可回到不套用日期條件。
+1. **選擇與篩選**：選擇資料表，設定每頁限制筆數，填入股票代號、名稱、分點或日期篩選；單一日期預設為今天，日期區間預設為本月 1 日至今天，可用日曆選擇器點選調整，按「清除」可回到不套用日期條件。
 2. **載入數據**：點擊「載入數據與結構」按鈕。
 3. **資料分頁控制**：
    - 底部設有分頁控制列，包含「上一頁」、「下一頁」、「跳至第 X 頁碼（輸入頁碼並按跳頁按鈕）」、以及「當前頁數 / 總頁數」與「篩選後總記錄數」。
@@ -168,6 +172,7 @@ python ui_qt/main.py
 4. **欄位結構**：在「欄位結構」Tab 查看欄位 Schema 與型態描述。
 5. **表頭排序**：在「資料預覽」點擊任一欄位表頭可切換升冪 / 降冪。排序由 SQLite 端以白名單欄位 `ORDER BY` 執行，並沿用目前篩選與分頁限制，避免 UI 端載入全表排序。
 6. **漲跌欄位顯示**：`daily_prices` 若遇到舊 schema 的簡體 `涨跌`，畫面會顯示為繁體 `漲跌`；`漲跌價差` 會依 `漲跌(+/-)` 或 `漲跌` 方向顯示正負號，以利顏色與排序判讀。
+7. **重複顯示欄名防護**：若 raw schema 與 alias 造成相同顯示欄名，表格仍以欄位位置取值，不應出現 `PandasTableModel.data` 的 Series ambiguity 錯誤。
 
 此工具是受控唯讀檢視器，不應用來修改或刪除資料。
 
@@ -445,11 +450,21 @@ dry-run 只輸出 plan，不寫入 SQLite。若正式 `DATA_ROOT/meta_data/month
 
 正式 apply 會先備份既有 `companies.csv`，只更新公司 registry CSV，不修改 SQLite、daily price 或 raw financial CSV。2026-06-16 已以官方 TWSE/TPEX 來源正式更新：輸出 2,326 筆、0 diagnostics、無重複 `stock_id`，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/companies_company_registry_20260616_031111.csv`。抽查 `3207` 耀勝為 `電子零組件業 / tpex`，`9935` 慶豐富為 `居家生活 / twse`。
 
-注意：`companies.csv` 是公司與產業 registry，不代表 `daily_prices` 已具備該股票行情。若 TPEX 股票存在於 `companies.csv` 但缺 daily price，原因通常是每日股價管線尚未接入 TPEX daily quotes；需由市場日價資料管線補齊，不應用 company registry 或 fundamental layer 假造價格列。
+注意：`companies.csv` 是公司與產業 registry，不代表 `daily_prices` 已具備該股票行情。TPEX daily price 已納入日常市場日價管線；若歷史 TPEX 股票仍缺舊日價，需由市場日價資料層的 dry-run / 人工確認回補，不應用 company registry 或 fundamental layer 假造價格列。
 
-#### TPEX daily price backfill
+#### TPEX daily price 日常更新與歷史 dry-run
 
-若上櫃股票存在於 `companies.csv` 但缺 `daily_prices`，可使用受控 TPEX 日價補寫工具。預設先 dry-run：
+日常快速 / 安全更新會在 TWSE 每日股價後抓取 TPEX official daily close quotes，保存到 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，並在 SQLite 同步時寫入 `DATA_ROOT/sqlite/twstock.db` 的 `daily_prices`。這是市場資料層更新，不修改 `companies.csv`、raw financial CSV、fundamental tables、技術指標算法或推薦分數。
+
+若上櫃股票存在於 `companies.csv` 但缺歷史 `daily_prices`，先使用歷史 dry-run plan：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\plan_tpex_daily_price_history_backfill.py --start-date 2026-01-01 --end-date 2026-06-16
+```
+
+dry-run plan 只讀官方來源或指定 source JSON、SQLite 既有資料，輸出日期範圍、每日來源筆數、已存在筆數、新增候選筆數、失敗日期與估計耗時，不寫正式 DB。正式歷史回補需另行人工確認。
+
+單日受控補寫工具仍保留給已確認日期使用。預設先 dry-run：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\backfill_tpex_daily_prices.py --date 2026-06-16 --dry-run
@@ -710,6 +725,12 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 確認券商分點已下載、合併並同步至 `broker_flows`。`unavailable` 不應解讀為 0 張。
 
+若快速更新在「同步券商分點至 SQLite」遇到同一分點 / 股票 / 日期的買超與賣超唯一鍵衝突，代表 DB 仍是舊三欄主鍵；更新後的流程會在同步前先備份並升級為含 `trade_type` 的主鍵。
+
+### TPEX 股票只有一筆日價
+
+若在 SQLite Inspector 查 `3207` 只看到 `20260616`，這是目前正式資料狀態：TPEX 日常更新已接上，但歷史 TPEX 尚未正式大量回補。歷史回補需先跑 dry-run plan 並人工確認，不會由日常快速更新自動大量寫入。
+
 ### 回測 0 交易
 
 依序檢查：
@@ -740,6 +761,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 功能行為改動時，必須同步更新本表與對應章節。
 
+完整主 UI 人工 smoke test 母檔維護於 [FULL_APP_HEALTHCHECK_2026_06_16.md](../06_qa/FULL_APP_HEALTHCHECK_2026_06_16.md)。每次修改數據更新、SQLite 檢視、每日決策或跨工作區流程後，除自動化測試外，應依該 healthcheck 做 smoke test。
+
 ## 14. 更新記錄
 
 - 2026-06-16：新增月營收 normalized backfill 操作說明，記錄 dry-run、正式 apply confirm、備份與缺 availability mapping 時 fail-closed 的行為。
@@ -748,6 +771,9 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 2026-06-16：新增 TPEX daily price backfill 操作說明，記錄 TPEX official daily close quotes dry-run、正式 apply confirm、DB 備份、`3207` 日價補齊與 877 筆正式寫入驗證。
 - 2026-06-16：新增月營收 availability mapping 維護說明，記錄 TWSE OpenAPI 候選產生器、validator 流程、正式資料寫入前人工確認要求，以及最新月端點與本機歷史 raw 期間暫無交集的限制。
 - 2026-06-16：更新 SQLite 資料檢視操作說明，補充日期日曆選擇器、清除日期、資料庫端表頭排序、`daily_prices` 繁中欄位 alias 與 `漲跌價差` 正負號顯示規則。
+- 2026-06-16：調整 SQLite 資料檢視日期控件說明，單一日期預設今天，日期區間預設本月 1 日至今天，清除後才不套用日期條件。
+- 2026-06-16：更新每日股價操作說明，確認快速 / 安全更新已納入 TPEX official daily close quotes；TPEX CSV 寫入 `DATA_ROOT/daily_price_tpex/`，SQLite 寫入 `daily_prices`，TPEX endpoint timeout 會以警告呈現且不阻斷其他資料同步，歷史 TPEX 回補仍需 dry-run plan 與人工確認。
+- 2026-06-16：補充 SQLite Inspector 重複欄名防護、券商分點 `broker_flows` 主鍵納入 `trade_type`、TPEX 歷史缺漏判讀，以及 Full App Healthcheck 人工驗證入口。
 - 2026-06-15：整理 Daily Decision Desk 顯示密度，將強弱與流動性代碼改為分行摘要並限制單類別顯示數量，避免主視窗被長清單撐寬。
 - 2026-06-16：完成 Month 4 Daily Decision Desk 收尾說明，確認 section quality 以 header badge 顯示，強弱 / 流動性代碼採單一 compact list 呈現，UI 不重算 service snapshot 以外的 domain logic。
 - 2026-06-15：補充 Portfolio Alert Attribution v1，說明每檔持倉警示的來源標籤、condition 狀態、chip risk level 與原因 token 歸因呈現，用於輔助警示來源之分析與判讀。

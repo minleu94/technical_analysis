@@ -33,7 +33,7 @@
 ### 4. 驗證報告
 - **文件**: `output/qa/update_tab/VALIDATION_REPORT.md`
 - **狀態**: 已生成，顯示：
-  - ✅ 通過: 17 項
+  - ✅ 通過: 21 項
   - ❌ 失敗: 0 項
   - ⏭️ 跳過: 4 項（實際下載/合併測試）
 
@@ -42,7 +42,7 @@
 ## 📊 測試結果
 
 ### 測試摘要
-- ✅ **通過**: 17 項
+- ✅ **通過**: 21 項
 - ❌ **失敗**: 0 項
 - ⏭️ **跳過**: 4 項
 
@@ -64,6 +64,13 @@
    - ✅ 日期格式驗證（YYYY-MM-DD）
    - ✅ 記錄數驗證（非負整數）
    - ✅ 各數據類型狀態驗證
+
+4. **2026-06-16 更新契約**
+   - ✅ 快速 / 安全更新流程納入 TPEX 每日股價步驟。
+   - ✅ TPEX endpoint timeout 會以 warning 呈現，不阻斷已成功的 TWSE 與其他資料同步。
+   - ✅ SQLite Inspector 日期控件預設今天 / 本月，且完整顯示 `YYYY-MM-DD`。
+   - ✅ SQLite Inspector 表格 model 可處理重複顯示欄名，不再出現 Series ambiguity。
+   - ✅ `broker_flows` 可讓同一分點 / 股票 / 日期的 `買超` 與 `賣超` 以 `trade_type` 共存。
 
 ### 跳過的測試項目
 - ⏭️ `update_daily` 實際執行（避免下載大量數據）
@@ -142,6 +149,8 @@ python scripts/qa_validate_update_tab.py
 2. 點擊「檢查數據狀態」按鈕
 3. 查看日誌輸出
 4. 檢查數據狀態顯示
+
+完整人工 smoke test 請見 `FULL_APP_HEALTHCHECK_2026_06_16.md`。
 
 ---
 

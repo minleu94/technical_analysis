@@ -4,7 +4,7 @@
 
 ### 1.1 數據狀態檢查邏輯
 
-**狀態**: ✅ 測試通過（17 項通過，0 項失敗）
+**狀態**: ✅ 測試通過（21 項通過，0 項失敗）
 
 **驗證結果**:
 - `check_data_status()` 返回結構正確
@@ -136,6 +136,7 @@
 - 數據狀態檢查邏輯 ✅
 - 日期格式驗證 ✅
 - 記錄數驗證 ✅
+- TPEX warning flow、SQLite Inspector 日期/欄名防護與 broker `trade_type` 共存契約 ✅
 
 ### ⚠️ 需啟動 Qt 但可自動化（pytest-qt / QTest）
 
@@ -158,7 +159,7 @@
 ## 📊 測試結果總結
 
 ### 測試摘要
-- ✅ **通過**: 17 項
+- ✅ **通過**: 21 項
 - ❌ **失敗**: 0 項
 - ⏭️ **跳過**: 4 項（實際下載/合併測試，避免修改數據）
 
@@ -172,6 +173,10 @@
 7. UI ↔ Service Contract 驗證
 8. 日期格式驗證
 9. 記錄數驗證
+10. TPEX endpoint timeout warning contract
+11. SQLite Inspector 日期預設與完整欄寬
+12. SQLite Inspector 重複顯示欄名防護
+13. `broker_flows` 同日買超 / 賣超 `trade_type` 共存
 
 ### 跳過的測試
 1. `update_daily` 實際執行（避免下載大量數據）

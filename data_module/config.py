@@ -27,6 +27,7 @@ class TWStockConfig:
     # 數據目錄
     data_dir: Path = field(init=False)
     daily_price_dir: Path = field(init=False)
+    tpex_daily_price_dir: Path = field(init=False)
     meta_data_dir: Path = field(init=False)
     technical_dir: Path = field(init=False)
     log_dir: Path = field(init=False)  # 新增日誌目錄
@@ -65,6 +66,7 @@ class TWStockConfig:
         # 設定數據目錄
         self.data_dir = self.data_root
         self.daily_price_dir = self.data_dir / 'daily_price'
+        self.tpex_daily_price_dir = self.data_dir / 'daily_price_tpex'
         self.meta_data_dir = self.data_dir / 'meta_data'
         self.technical_dir = self.data_dir / 'technical_analysis'
         self.log_dir = self.data_dir / 'logs'
@@ -148,6 +150,7 @@ class TWStockConfig:
         directories = [
             self.output_root,
             self.daily_price_dir,
+            self.tpex_daily_price_dir,
             self.meta_data_dir,
             self.technical_dir,
             self.backup_dir,

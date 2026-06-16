@@ -230,21 +230,21 @@ def _normalize_date(value: str) -> str:
 
 
 def _decimal_text(value: str) -> str | None:
-    value = _clean_number_text(value)
-    if value is None:
+    cleaned = _clean_number_text(value)
+    if cleaned is None:
         return None
     try:
-        return str(Decimal(value))
+        return str(Decimal(cleaned))
     except InvalidOperation:
         return None
 
 
 def _int_value(value: str) -> int | None:
-    value = _clean_number_text(value)
-    if value is None:
+    cleaned = _clean_number_text(value)
+    if cleaned is None:
         return None
     try:
-        return int(Decimal(value))
+        return int(Decimal(cleaned))
     except (InvalidOperation, ValueError):
         return None
 

@@ -59,7 +59,7 @@ class PandasTableModel(QAbstractTableModel):
             if col_name not in self._dataframe.columns:
                 return None
             
-            value = self._dataframe.iloc[row, self._dataframe.columns.get_loc(col_name)]
+            value = self._dataframe.iloc[row, col]
             
             if role == Qt.DisplayRole:
                 # 處理列表/數組類型（如 tags）

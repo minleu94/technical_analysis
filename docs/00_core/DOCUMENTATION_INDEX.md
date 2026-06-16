@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-06-15
+> **最後整理**：2026-06-16
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
 
 ---
@@ -145,6 +145,7 @@
 | [QA_RECOMMENDATION_TAB_SUMMARY.md](../06_qa/QA_RECOMMENDATION_TAB_SUMMARY.md) | 推薦分析 Tab QA 總結。 |
 | [QA_UPDATE_TAB_ISSUES.md](../06_qa/QA_UPDATE_TAB_ISSUES.md) | 數據更新 Tab QA 問題。 |
 | [QA_UPDATE_TAB_SUMMARY.md](../06_qa/QA_UPDATE_TAB_SUMMARY.md) | 數據更新 Tab QA 總結。 |
+| [FULL_APP_HEALTHCHECK_2026_06_16.md](../06_qa/FULL_APP_HEALTHCHECK_2026_06_16.md) | 主 UI 人工 smoke test 母檔，涵蓋數據更新、SQLite 檢視、TPEX 日價、券商分點、每日決策、研究與持倉流程。 |
 | [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
 | [DOCUMENT_ENCODING_AUDIT_2026_06_16.md](../06_qa/DOCUMENT_ENCODING_AUDIT_2026_06_16.md) | repo 文件 UTF-8 / mojibake 稽核報告，確認顯示雜訊來自終端編碼而非文件內容損壞。 |
@@ -280,9 +281,10 @@
 - 2026-06-16：完成 Fundamental SQLite 受控 migration workflow 與月營收 normalized backfill workflow 文件同步，記錄 working-copy dry-run、apply confirm、backup / restore helper；正式 `twstock.db` 已套用 fundamental schema，但尚未回填 records。
 - 2026-06-16：完成 Fundamental SQLite read provider 文件同步，記錄 provider 只讀 `available_date <= decision_date` 的月營收與估值 records，避免後續服務直接讀 raw CSV。
 - 2026-06-16：新增 valuation metrics backfill workflow 文件同步，記錄 `daily_prices.本益比` dry-run、`companies.csv` 產業 mapping、同產業 percentile、apply confirm、官方 company registry 更新與正式 DB 已寫入 831 筆 P/E records。
-- 2026-06-16：新增 official company registry workflow 文件同步，記錄 TWSE/TPEX 官方公司基本資料更新 `companies.csv`、備份、`9935` 產業修正與 `3207` TPEX daily price 管線缺口。
+- 2026-06-16：新增 official company registry workflow 文件同步，記錄 TWSE/TPEX 官方公司基本資料更新 `companies.csv`、備份、`9935` 產業修正與 `3207` TPEX daily price 歷史缺口判讀。
 - 2026-06-16：完成 Fundamental factor service 文件同步，記錄服務只串接 provider、adapters 與 FactorGate，輸出 records / diagnostics 但不接 `ScoringEngine`。
 - 2026-06-16：新增 TPEX daily price backfill plan 與文件同步，記錄官方 TPEX daily close quotes 受控寫入 `daily_prices`、DB 備份、`3207` 補價與 877 筆正式寫入驗證。
+- 2026-06-16：更新 Full App Healthcheck，整合 TPEX 日常管線、SQLite Inspector 顯示防護與 `broker_flows.trade_type` 主鍵治理的人工驗證入口。
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
 
 

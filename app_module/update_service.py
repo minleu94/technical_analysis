@@ -106,7 +106,11 @@ class UpdateService:
             from data_module.db_manager import DBManager
 
             db = DBManager(self.config)
-            if replace_table:
+            if table_name == 'broker_flows':
+                db.ensure_broker_flows_trade_type_primary_key()
+            if normalized == 'daily_price_files':
+                success = self._upsert_sqlite_rows(db, table_name, df)
+            elif replace_table:
                 success = self._replace_sqlite_table(db, table_name, df)
             elif delete_date_keys:
                 success = self._replace_sqlite_dates(db, table_name, df)
@@ -138,6 +142,55 @@ class UpdateService:
                 'synced_records': 0,
             }
 
+    def _create_tpex_daily_price_source(self) -> Any:
+        from data_module.tpex_daily_price_source import TpexDailyPriceSource
+
+        return TpexDailyPriceSource(self.config.tpex_daily_price_dir)
+
+    def update_tpex_daily_price(self, target_date: str) -> Dict[str, Any]:
+        """更新指定日期的 TPEX 官方每日收盤行情 CSV。"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            source = self._create_tpex_daily_price_source()
+            result = source.update_for_date(target_date)
+            payload = {
+                'success': result.success,
+                'message': result.message,
+                'updated_dates': [target_date] if result.success else [],
+                'failed_dates': [] if result.success else [target_date],
+                'tpex_rows': int(result.row_count),
+                'skipped_rows': int(result.skipped_count),
+                'diagnostic_count': int(result.diagnostic_count),
+                'source_date': result.source_date,
+                'output_file': str(result.output_file) if result.output_file else None,
+            }
+            if result.success:
+                logger.info(
+                    "[UpdateService] TPEX daily price saved: date=%s rows=%s skipped=%s file=%s",
+                    target_date,
+                    result.row_count,
+                    result.skipped_count,
+                    result.output_file,
+                )
+            else:
+                logger.warning("[UpdateService] TPEX daily price update failed: %s", result.message)
+            return payload
+        except Exception as exc:
+            logger.exception("[UpdateService] TPEX daily price update raised")
+            return {
+                'success': False,
+                'message': f'TPEX daily price update failed: {exc}',
+                'updated_dates': [],
+                'failed_dates': [target_date],
+                'tpex_rows': 0,
+                'skipped_rows': 0,
+                'diagnostic_count': 1,
+                'source_date': None,
+                'output_file': None,
+            }
+
     def _load_csv_for_sqlite(self, path: Path, require_date: bool = False) -> Any:
         import pandas as pd  # type: ignore[import-untyped]
 
@@ -157,25 +210,36 @@ class UpdateService:
     ) -> Any:
         import pandas as pd  # type: ignore[import-untyped]
 
-        daily_dir = getattr(self.config, 'daily_price_dir', None)
-        if daily_dir is None or not Path(daily_dir).exists():
+        configured_dirs = [
+            getattr(self.config, 'daily_price_dir', None),
+            getattr(self.config, 'tpex_daily_price_dir', None),
+        ]
+        daily_dirs: list[Path] = []
+        for configured_dir in configured_dirs:
+            if configured_dir is None:
+                continue
+            daily_dir = Path(configured_dir)
+            if daily_dir.exists():
+                daily_dirs.append(daily_dir)
+        if not daily_dirs:
             return pd.DataFrame()
 
         start_key = self._date_key(start_date) if start_date else None
         end_key = self._date_key(end_date) if end_date else None
         frames = []
-        for path in sorted(Path(daily_dir).glob('*.csv')):
-            date_key = path.stem
-            if start_key and date_key < start_key:
-                continue
-            if end_key and date_key > end_key:
-                continue
-            df = pd.read_csv(path, encoding='utf-8-sig')
-            if df.empty:
-                continue
-            if '日期' not in df.columns:
-                df.insert(0, '日期', date_key)
-            frames.append(df)
+        for daily_dir in daily_dirs:
+            for path in sorted(daily_dir.glob('*.csv')):
+                date_key = path.stem
+                if start_key and date_key < start_key:
+                    continue
+                if end_key and date_key > end_key:
+                    continue
+                df = pd.read_csv(path, encoding='utf-8-sig')
+                if df.empty:
+                    continue
+                if '日期' not in df.columns:
+                    df.insert(0, '日期', date_key)
+                frames.append(df)
 
         if not frames:
             return pd.DataFrame()
@@ -543,6 +607,8 @@ class UpdateService:
             return df
 
         key_cols = ['分點名稱', '證券代號', '日期']
+        if 'trade_type' in df.columns:
+            key_cols.append('trade_type')
         dup_mask = df.duplicated(subset=key_cols, keep=False)
         if not dup_mask.any():
             return df
@@ -596,9 +662,13 @@ class UpdateService:
                 '日期': key_vals[2],
                 '證券名稱': stock_name
             }
+            if 'trade_type' in key_cols:
+                resolved_row['trade_type'] = key_vals[3]
 
             # 1. 識別與合併 metadata 欄位
-            metadata_cols = ['trade_type', 'lots_observed', 'amount_observed', 'lots_rank', 'amount_rank']
+            metadata_cols = ['lots_observed', 'amount_observed', 'lots_rank', 'amount_rank']
+            if 'trade_type' not in key_cols:
+                metadata_cols.insert(0, 'trade_type')
             for m_col in metadata_cols:
                 if m_col in group.columns:
                     vals = group[m_col].dropna()
@@ -716,6 +786,39 @@ class UpdateService:
             logger = logging.getLogger(__name__)
             logger.error(f"[UpdateService] _replace_sqlite_dates 失敗: table={table_name}, 錯誤={e}")
             raise
+
+    def _upsert_sqlite_rows(self, db: Any, table_name: str, df: Any) -> bool:
+        if df.empty:
+            return True
+        if '證券代號' in df.columns and '日期' in df.columns:
+            df = df.drop_duplicates(subset=['證券代號', '日期'], keep='last')
+
+        try:
+            db.ensure_columns(table_name, list(df.columns))
+            with db.connect() as conn:
+                table_columns = tuple(row["name"] for row in conn.execute(f"PRAGMA table_info({table_name});").fetchall())
+                columns = tuple(column for column in df.columns if column in table_columns)
+                required_columns = ("證券代號", "日期")
+                missing = [column for column in required_columns if column not in columns]
+                if missing:
+                    raise ValueError(f"{table_name} upsert 缺少必要欄位: {missing}")
+
+                quoted_columns = ", ".join(f'"{column}"' for column in columns)
+                placeholders = ", ".join("?" for _ in columns)
+                update_columns = tuple(column for column in columns if column not in required_columns)
+                conflict_clause = 'ON CONFLICT("證券代號", "日期") DO NOTHING'
+                if update_columns:
+                    update_clause = ", ".join(f'"{column}" = excluded."{column}"' for column in update_columns)
+                    conflict_clause = f'ON CONFLICT("證券代號", "日期") DO UPDATE SET {update_clause}'
+                sql = f"INSERT INTO {table_name} ({quoted_columns}) VALUES ({placeholders}) {conflict_clause}"
+                values = [tuple(row[column] for column in columns) for row in df[list(columns)].to_dict(orient='records')]
+                conn.executemany(sql, values)
+            return True
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[UpdateService] _upsert_sqlite_rows 失敗: table={table_name}, 錯誤={e}")
+            return False
 
     def _replace_sqlite_table(self, db: Any, table_name: str, df: Any) -> bool:
         if df.empty:

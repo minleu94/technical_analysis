@@ -14,6 +14,20 @@
 
 若遇到失敗，先記錄，不在本檔直接改程式。後續修復任務另開 scope。
 
+## 本輪重點補充（2026-06-16）
+
+本檔是主 UI 人工 smoke test 的單一入口；不要另建平行的 UI 手動驗證清單。專項 QA 報告只記錄特定分頁或特定驗證結論，跨工作區人工走查以本檔為準。
+
+本輪數據更新相關人工驗證請特別確認：
+
+1. 「快速更新（僅 SQLite）」與「安全更新（完整 CSV + SQLite）」會納入 TPEX official daily close quotes。
+2. TPEX 日價成功時，CSV 寫入 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，SQLite 寫入 `daily_prices`；TWSE 仍寫入既有 `DATA_ROOT/daily_price/YYYYMMDD.csv` 與同一張 `daily_prices`。
+3. TPEX endpoint timeout 或連線失敗時，UI 應以 warning 呈現並繼續其他資料同步，不應靜默失敗，也不應阻斷 TWSE、大盤、產業、券商分點與技術指標流程。
+4. `broker_flows` 若仍是舊主鍵，券商分點同步前會先備份 DB，再受控升級為 `(分點名稱, 證券代號, 日期, trade_type)`，讓同一分點 / 股票 / 日期的 `買超` 與 `賣超` 可共存。
+5. SQLite 資料檢視的單一日期預設今天，區間預設本月 1 日至今天，日期文字應完整可見；按「清除」後才不套用日期條件。
+6. 查詢 `daily_prices` 的 `3207` 時，若目前只看到 `20260616` 一筆，代表正式 DB 尚未做歷史 TPEX 回補，這是目前預期狀態；歷史回補必須先跑 dry-run plan 並經人工確認。
+7. 表格不應再出現 `PandasTableModel.data 錯誤: The truth value of a Series is ambiguous`；若舊 schema 或 alias 造成重複欄名，UI 必須能正常顯示。
+
 ## 驗證總覽
 
 | 工作區 | 子功能數 | 狀態 | 備註 |
@@ -32,8 +46,8 @@
 | ID | 分頁 / 區域 | 功能 | 驗證重點 | 狀態 | 使用者回覆 | 證據 / 備註 |
 |---|---|---|---|---|---|---|
 | U-001 | 全部資料 | 檢查數據狀態 | 5 張狀態卡更新最新日期、總筆數與燈號；日誌有檢查結果 | 通過 | 個別功能正常。 |  |
-| U-002 | 全部資料 | 快速更新（僅 SQLite） | 下載近期缺失資料並同步 SQLite；進度條與日誌正常；不重寫大型 CSV | 已修正待驗證 | 點更新後，若在尚未更新完成時切到其他 subtab，更新不會繼續跑。 | 已改為保留多個背景 worker，切換 subtab / 狀態查詢不再取消既有長任務；待使用者重測。 |
-| U-003 | 全部資料 | 安全更新（完整 CSV + SQLite） | 依序下載、合併 / 同步 CSV 與 SQLite、計算技術指標；失敗時可讀 | 已修正待驗證 | 點更新後，若在尚未更新完成時切到其他 subtab，更新不會繼續跑。 | 已改為保留多個背景 worker，切換 subtab / 狀態查詢不再取消既有長任務；待使用者重測。 |
+| U-002 | 全部資料 | 快速更新（僅 SQLite） | 下載近期缺失資料並同步 SQLite；進度條與日誌正常；不重寫大型 CSV；TPEX timeout 以 warning 呈現並繼續流程 | 已修正待驗證 | 點更新後，若在尚未更新完成時切到其他 subtab，更新不會繼續跑；TPEX endpoint timeout 曾造成快速更新失敗。 | 已改為保留多個背景 worker，切換 subtab / 狀態查詢不再取消既有長任務；TPEX 更新失敗改為 warning 並繼續其他同步；待使用者重測。 |
+| U-003 | 全部資料 | 安全更新（完整 CSV + SQLite） | 依序下載、合併 / 同步 CSV 與 SQLite、計算技術指標；失敗時可讀；TWSE + TPEX 日價同步到 `daily_prices` | 已修正待驗證 | 點更新後，若在尚未更新完成時切到其他 subtab，更新不會繼續跑。 | 已改為保留多個背景 worker，切換 subtab / 狀態查詢不再取消既有長任務；TPEX CSV 寫入 `DATA_ROOT/daily_price_tpex/`，TWSE CSV 保持 `DATA_ROOT/daily_price/`；待使用者重測。 |
 | U-004 | 全部資料 | 清除日誌 | 日誌主控台可清空，不影響狀態卡 | 待測 |  |  |
 | U-005 | 每日股價 | 日期範圍設定 | 結束日期與最近範圍可調整，切換分頁後日期同步 | 待測 |  |  |
 | U-006 | 每日股價 | 檢查此資料源狀態 | 只更新每日股價狀態與日誌 | 待測 |  |  |
@@ -54,7 +68,7 @@
 | U-021 | 券商分點 | 手動下載此資料源 | MoneyDJ 分點資料下載成功 | 待測 |  |  |
 | U-022 | 券商分點 | 合併券商分點 | 增量合併並同步到 `broker_flows`；保留 observed / estimated / unavailable 品質 | 已修正待驗證 | 合併券商分點未結束時不能跳其他 tab，否則會卡住。 | 合併 worker 不再被切頁狀態查詢覆蓋；待使用者重測。 |
 | U-023 | 技術指標 | 計算技術指標 | 支援全部 / 單一股票、增量 / 全量；結果同步到 `technical_indicators` | 已修正待驗證 | 計算技術指標尚未結束時，如果點其他 tab，任務會中斷，不會背景繼續。另因 `daily_prices` 漲跌欄位異常，使用者懷疑技術指標是否可能使用錯誤數據計算。 | 技術指標 worker 不再被切頁狀態查詢覆蓋；檢查程式路徑後，技術指標計算使用 OHLC 價格欄位，不直接以 `漲跌價差` 作為指標計算基礎；待使用者重測。 |
-| U-024 | SQLite 資料檢視 | 載入、篩選、分頁、Schema | 唯讀查詢、頁碼控制、篩選重設、stale 結果防護、Schema 顯示正常 | 已修正待驗證 | 單一日期與日期區間只能手打，想要可點選日期 / 日曆；`daily_price` table 的「漲跌」欄位顯示簡體中文，無法接受；漲跌欄位空白，只看到漲跌價差，且漲跌價差整欄都是綠色，因為都是正值；實際漲跌方向似乎在後方 `漲跌(+/-)` column。所有欄位都不能排序。 | 已加入日曆日期 picker、繁中欄位 alias、新建 schema 繁中 `漲跌`、`漲跌價差` 依 `漲跌(+/-)` 顯示正負、表頭 server-side ORDER BY 排序；待使用者重測。 |
+| U-024 | SQLite 資料檢視 | 載入、篩選、分頁、Schema | 唯讀查詢、頁碼控制、篩選重設、stale 結果防護、Schema 顯示正常；日期控件預設今天 / 本月且完整顯示 | 已修正待驗證 | 單一日期與日期區間只能手打，想要可點選日期 / 日曆；日期控件預設 1900 不利查詢；日期欄位顯示不完整；`daily_price` table 的「漲跌」欄位顯示簡體中文，無法接受；漲跌欄位空白，只看到漲跌價差，且漲跌價差整欄都是綠色，因為都是正值；實際漲跌方向似乎在後方 `漲跌(+/-)` column。所有欄位都不能排序；查 `3207` 時出現 PandasTableModel Series ambiguity 錯誤。 | 已加入日曆日期 picker、單一日期預設今天、區間預設本月 1 日至今天、日期欄位寬度固定可讀、繁中欄位 alias、新建 schema 繁中 `漲跌`、`漲跌價差` 依 `漲跌(+/-)` 顯示正負、表頭 server-side ORDER BY 排序；表格以 column position 取值以避免重複欄名造成 Series ambiguity；待使用者重測。 |
 
 ## 市場觀察
 
@@ -260,6 +274,10 @@
 | UPDATE-ISSUE-006 | U-024 | 語言 / 欄位顯示 | SQLite 檢視 `daily_price` / `daily_prices` 顯示簡體中文欄位「漲跌」。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 新建 daily_prices schema 改為繁中 `漲跌`；舊 DB 若仍有 `涨跌`，Inspector 顯示 alias 為 `漲跌`。 |
 | UPDATE-ISSUE-007 | U-024 / U-023 | 資料語意 / 技術指標可信度 | 漲跌欄位空白，漲跌價差全為正且整欄綠色，方向似乎另在 `漲跌(+/-)`；連帶懷疑 technical indicators 是否用錯誤數據計算。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | Inspector 的 `漲跌價差` 依 `漲跌(+/-)` / `漲跌` 方向顯示正負；技術指標計算路徑使用 OHLC 價格欄位，不直接以 `漲跌價差` 作為指標計算基礎。 |
 | UPDATE-ISSUE-008 | U-024 | SQLite 檢視 UX / 效能 | SQLite 檢視所有欄位不能排序。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 表頭點擊會以白名單欄位送出 server-side `ORDER BY`，沿用既有分頁查詢避免 UI 端全量排序。 |
+| UPDATE-ISSUE-009 | U-002 / U-003 | TPEX 更新韌性 | TPEX official endpoint timeout 會讓快速更新顯示失敗。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | TPEX 失敗改為 workflow warning，其他資料源繼續同步；日誌與完成視窗顯示 TPEX 診斷。 |
+| UPDATE-ISSUE-010 | U-024 | SQLite 檢視 UX | SQLite 檢視日期預設為 1900，且欄位寬度不足，需要手動拉大 UI。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 單一日期預設今天、區間預設本月 1 日至今天，日期控件寬度固定到可完整顯示 `YYYY-MM-DD`。 |
+| UPDATE-ISSUE-011 | U-024 | SQLite 表格顯示 | 查詢 `3207` 時，PandasTableModel 因重複欄名 alias 取到 Series，出現 truth value ambiguous 錯誤。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 表格 display data 改以欄位位置取值，避免重複顯示名稱造成 Series ambiguity。 |
+| UPDATE-ISSUE-012 | U-022 | SQLite 同步 / 唯一鍵 | 券商分點同一分點 / 股票 / 日期同時存在 `買超` 與 `賣超` 時，舊唯一鍵造成衝突。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | broker sync 前受控備份並升級 `broker_flows` 主鍵納入 `trade_type`；合併去重鍵也納入 `trade_type`。 |
 
 ### 原始失敗紀錄
 

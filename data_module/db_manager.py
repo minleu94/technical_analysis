@@ -150,13 +150,97 @@ class DBManager:
                     amount_observed INTEGER,
                     lots_rank INTEGER,
                     amount_rank INTEGER,
-                    PRIMARY KEY (分點名稱, 證券代號, 日期)
+                    PRIMARY KEY (分點名稱, 證券代號, 日期, trade_type)
                 );
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broker_flows_date ON broker_flows (日期);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broker_flows_stock ON broker_flows (證券代號);")
             
         self.logger.info("SQLite 資料庫初始化成功！")
+
+    def ensure_broker_flows_trade_type_primary_key(self) -> bool:
+        """Ensure broker_flows can store both buy and sell ranking rows for one branch/date/stock."""
+        with self.connect() as conn:
+            if self._broker_flows_pk_columns(conn) == ["分點名稱", "證券代號", "日期", "trade_type"]:
+                return False
+
+        try:
+            self.config.create_backup(self.db_path)
+        except Exception as exc:
+            self.logger.warning(f"broker_flows schema migration backup failed, continuing: {exc}")
+
+        with self.connect() as conn:
+            self._ensure_broker_flows_trade_type_primary_key(conn)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_broker_flows_date ON broker_flows (日期);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_broker_flows_stock ON broker_flows (證券代號);")
+        return True
+
+    def _broker_flows_pk_columns(self, conn: sqlite3.Connection) -> List[str]:
+        rows = conn.execute("PRAGMA table_info(broker_flows);").fetchall()
+        return [row["name"] for row in sorted((row for row in rows if row["pk"]), key=lambda row: row["pk"])]
+
+    def _ensure_broker_flows_trade_type_primary_key(self, conn: sqlite3.Connection) -> None:
+        """Migrate broker_flows primary key to include trade_type when upgrading older DBs."""
+        rows = conn.execute("PRAGMA table_info(broker_flows);").fetchall()
+        pk_columns = [row["name"] for row in sorted((row for row in rows if row["pk"]), key=lambda row: row["pk"])]
+        desired_pk = ["分點名稱", "證券代號", "日期", "trade_type"]
+        if pk_columns == desired_pk:
+            return
+
+        existing_columns = [row["name"] for row in rows]
+        if not existing_columns:
+            return
+
+        type_by_column = {row["name"]: row["type"] or "TEXT" for row in rows}
+        core_types = {
+            "日期": "TEXT",
+            "分點名稱": "TEXT",
+            "證券代號": "TEXT",
+            "證券名稱": "TEXT",
+            "買進股數": "INTEGER",
+            "賣出股數": "INTEGER",
+            "買賣超股數": "INTEGER",
+            "買進金額千元": "INTEGER",
+            "賣出金額千元": "INTEGER",
+            "買賣超金額千元": "INTEGER",
+            "trade_type": "TEXT",
+            "lots_observed": "INTEGER",
+            "amount_observed": "INTEGER",
+            "lots_rank": "INTEGER",
+            "amount_rank": "INTEGER",
+        }
+        ordered_columns = [column for column in core_types if column in existing_columns]
+        ordered_columns.extend(column for column in existing_columns if column not in ordered_columns)
+        if "trade_type" not in ordered_columns:
+            ordered_columns.insert(min(len(ordered_columns), 10), "trade_type")
+
+        temp_table = "broker_flows_trade_type_pk_migration"
+        conn.execute(f'DROP TABLE IF EXISTS "{temp_table}";')
+        column_defs = []
+        for column in ordered_columns:
+            column_type = core_types.get(column, type_by_column.get(column, "TEXT"))
+            column_defs.append(f'"{column}" {column_type}')
+        column_defs.append('PRIMARY KEY ("分點名稱", "證券代號", "日期", "trade_type")')
+        conn.execute(f'CREATE TABLE "{temp_table}" ({", ".join(column_defs)});')
+
+        insert_columns = ", ".join(f'"{column}"' for column in ordered_columns)
+        select_exprs = []
+        for column in ordered_columns:
+            if column == "trade_type":
+                if column in existing_columns:
+                    select_exprs.append('COALESCE("trade_type", \'\') AS "trade_type"')
+                else:
+                    select_exprs.append('\'\' AS "trade_type"')
+            elif column in existing_columns:
+                select_exprs.append(f'"{column}"')
+            else:
+                select_exprs.append(f'NULL AS "{column}"')
+        conn.execute(
+            f'INSERT OR REPLACE INTO "{temp_table}" ({insert_columns}) '
+            f'SELECT {", ".join(select_exprs)} FROM broker_flows;'
+        )
+        conn.execute('DROP TABLE broker_flows;')
+        conn.execute(f'ALTER TABLE "{temp_table}" RENAME TO broker_flows;')
 
     def get_table_columns(self, table_name: str) -> List[str]:
         """獲取指定 Table 目前擁有的所有欄位名稱"""

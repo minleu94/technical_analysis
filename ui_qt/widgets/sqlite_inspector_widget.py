@@ -132,8 +132,10 @@ class SqliteInspectorWidget(QWidget):
         row2_layout.addWidget(self.broker_branch_input)
 
         row2_layout.addWidget(QLabel("單一日期:"))
-        self.date_input = self._create_optional_date_edit()
-        self.date_input.setMaximumWidth(100)
+        today = QDate.currentDate()
+        current_month_start = QDate(today.year(), today.month(), 1)
+
+        self.date_input = self._create_optional_date_edit(default_date=today)
         self.date_input.setToolTip(
             "【單一日期】\n"
             "點選特定交易日（格式為 YYYY-MM-DD，如 2026-05-29）來精確過濾當日數據。"
@@ -145,16 +147,14 @@ class SqliteInspectorWidget(QWidget):
         row2_layout.addWidget(self.clear_date_btn)
 
         row2_layout.addWidget(QLabel("區間:"))
-        self.start_date_input = self._create_optional_date_edit()
-        self.start_date_input.setMaximumWidth(90)
+        self.start_date_input = self._create_optional_date_edit(default_date=current_month_start)
         self.start_date_input.setToolTip(
             "【開始日期】\n"
             "點選日期區間的起始日（格式為 YYYY-MM-DD，如 2026-05-01），用以做範圍查詢（需與結束日期搭配）。"
         )
         row2_layout.addWidget(self.start_date_input)
         row2_layout.addWidget(QLabel("~"))
-        self.end_date_input = self._create_optional_date_edit()
-        self.end_date_input.setMaximumWidth(90)
+        self.end_date_input = self._create_optional_date_edit(default_date=today)
         self.end_date_input.setToolTip(
             "【結束日期】\n"
             "點選日期區間的截止日（格式為 YYYY-MM-DD，如 2026-05-29），用以做範圍查詢（需與開始日期搭配）。"
@@ -237,14 +237,16 @@ class SqliteInspectorWidget(QWidget):
         main_layout.addWidget(self.tabs, stretch=1)
         self.setLayout(main_layout)
 
-    def _create_optional_date_edit(self) -> QDateEdit:
+    def _create_optional_date_edit(self, default_date: Optional[QDate] = None) -> QDateEdit:
         date_edit = QDateEdit()
         date_edit.setCalendarPopup(True)
         date_edit.setDisplayFormat("yyyy-MM-dd")
         date_edit.setMinimumDate(self._null_date)
         date_edit.setMaximumDate(QDate(2100, 12, 31))
         date_edit.setSpecialValueText("不篩選")
-        date_edit.setDate(self._null_date)
+        date_edit.setMinimumWidth(112)
+        date_edit.setMaximumWidth(128)
+        date_edit.setDate(default_date or self._null_date)
         return date_edit
 
     def _clear_date_edit(self, date_edit: QDateEdit):

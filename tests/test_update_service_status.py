@@ -11,14 +11,17 @@ def _config(tmp_path):
     technical_dir = data_root / "technical_analysis"
     broker_flow_dir = data_root / "broker_flow"
     daily_price_dir = data_root / "daily_price"
+    tpex_daily_price_dir = data_root / "daily_price_tpex"
     meta_dir.mkdir(parents=True)
     technical_dir.mkdir(parents=True)
     broker_flow_dir.mkdir(parents=True)
     daily_price_dir.mkdir(parents=True)
+    tpex_daily_price_dir.mkdir(parents=True)
 
     return SimpleNamespace(
         data_dir=data_root,
         daily_price_dir=daily_price_dir,
+        tpex_daily_price_dir=tpex_daily_price_dir,
         meta_data_dir=meta_dir,
         technical_dir=technical_dir,
         log_dir=data_root / "logs",
@@ -200,6 +203,97 @@ def test_sync_daily_price_files_to_sqlite_upserts_only_csv_dates(tmp_path):
     ]
 
 
+def test_sync_daily_price_files_to_sqlite_includes_tpex_daily_price_dir(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    pd.DataFrame({
+        "日期": ["2026-06-16"],
+        "證券代號": ["2330"],
+        "證券名稱": ["台積電"],
+        "收盤價": [999.0],
+    }).to_csv(config.daily_price_dir / "20260616.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame({
+        "日期": ["20260616"],
+        "證券代號": ["3207"],
+        "證券名稱": ["耀勝"],
+        "收盤價": [42.5],
+    }).to_csv(config.tpex_daily_price_dir / "20260616.csv", index=False, encoding="utf-8-sig")
+
+    result = UpdateService(config).sync_source_to_sqlite("daily_price_files", "2026-06-16", "2026-06-16")
+
+    assert result["success"] is True
+    assert result["synced_records"] == 2
+    synced = db.execute_query("SELECT 日期, 證券代號, 收盤價 FROM daily_prices ORDER BY 證券代號;")
+    assert synced.to_dict(orient="records") == [
+        {"日期": "20260616", "證券代號": "2330", "收盤價": 999.0},
+        {"日期": "20260616", "證券代號": "3207", "收盤價": 42.5},
+    ]
+
+
+def test_update_tpex_daily_price_writes_csv_via_source(tmp_path):
+    config = _sqlite_config(tmp_path)
+
+    service = UpdateService(config)
+    service._create_tpex_daily_price_source = lambda: type(
+        "FakeTpexSource",
+        (),
+        {
+            "update_for_date": lambda self, date: type(
+                "Result",
+                (),
+                {
+                    "success": True,
+                    "message": "ok",
+                    "row_count": 1,
+                    "skipped_count": 2,
+                    "diagnostic_count": 0,
+                    "source_date": date.replace("-", ""),
+                    "output_file": config.tpex_daily_price_dir / f"{date.replace('-', '')}.csv",
+                },
+            )()
+        },
+    )()
+
+    result = service.update_tpex_daily_price("2026-06-16")
+
+    assert result["success"] is True
+    assert result["tpex_rows"] == 1
+    assert result["skipped_rows"] == 2
+    assert result["source_date"] == "20260616"
+
+
+def test_update_tpex_daily_price_reports_source_failure(tmp_path):
+    config = _sqlite_config(tmp_path)
+
+    service = UpdateService(config)
+    service._create_tpex_daily_price_source = lambda: type(
+        "FailingTpexSource",
+        (),
+        {
+            "update_for_date": lambda self, date: type(
+                "Result",
+                (),
+                {
+                    "success": False,
+                    "message": "TPEX endpoint failed",
+                    "row_count": 0,
+                    "skipped_count": 0,
+                    "diagnostic_count": 1,
+                    "source_date": None,
+                    "output_file": None,
+                },
+            )()
+        },
+    )()
+
+    result = service.update_tpex_daily_price("2026-06-16")
+
+    assert result["success"] is False
+    assert "TPEX endpoint failed" in result["message"]
+
+
 def test_sync_market_and_industry_csv_to_sqlite_replaces_tables(tmp_path):
     from data_module.db_manager import DBManager
 
@@ -372,6 +466,49 @@ def test_broker_branch_sqlite_loader_preserves_rank_and_trade_type(tmp_path):
     assert loaded.loc[0, "trade_type"] == "賣超"
     assert pd.isna(loaded.loc[0, "lots_rank"])
     assert loaded.loc[0, "amount_rank"] == 9
+
+
+def test_broker_branch_files_sync_allows_same_key_with_different_trade_type(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    branch_dir = config.broker_flow_dir / "8450_845B"
+    (branch_dir / "daily").mkdir(parents=True)
+    pd.DataFrame([
+        {
+            "date": "2026-06-16",
+            "trade_type": "買超",
+            "branch_system_key": "8450_845B",
+            "branch_display_name": "凱基-信義",
+            "counterparty_broker_code": "2344",
+            "counterparty_broker_name": "華邦電",
+            "buy_lots": 100,
+            "sell_lots": 0,
+            "net_lots": 100,
+        },
+        {
+            "date": "2026-06-16",
+            "trade_type": "賣超",
+            "branch_system_key": "8450_845B",
+            "branch_display_name": "凱基-信義",
+            "counterparty_broker_code": "2344",
+            "counterparty_broker_name": "華邦電",
+            "buy_lots": 0,
+            "sell_lots": 40,
+            "net_lots": -40,
+        },
+    ]).to_csv(branch_dir / "daily" / "20260616.csv", index=False, encoding="utf-8-sig")
+
+    result = UpdateService(config).sync_source_to_sqlite("broker_branch_files", "2026-06-16", "2026-06-16")
+
+    assert result["success"] is True
+    rows = DBManager(config).execute_query(
+        "SELECT 分點名稱, 證券代號, 日期, trade_type FROM broker_flows ORDER BY trade_type"
+    )
+    assert rows[["分點名稱", "證券代號", "日期", "trade_type"]].to_dict(orient="records") == [
+        {"分點名稱": "凱基-信義", "證券代號": "2344", "日期": "20260616", "trade_type": "買超"},
+        {"分點名稱": "凱基-信義", "證券代號": "2344", "日期": "20260616", "trade_type": "賣超"},
+    ]
 
 
 def test_broker_branch_sqlite_loader_infers_missing_metric_ranks(tmp_path):

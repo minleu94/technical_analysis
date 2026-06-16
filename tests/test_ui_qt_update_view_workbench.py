@@ -55,6 +55,16 @@ class FakeUpdateService:
         self.calls.append(("update_daily", start_date, end_date))
         return {"success": True, "message": "daily ok"}
 
+    def update_tpex_daily_price(self, target_date):
+        self.calls.append(("update_tpex_daily_price", target_date))
+        return {
+            "success": True,
+            "message": "tpex ok",
+            "tpex_rows": 1,
+            "skipped_rows": 0,
+            "source_date": target_date.replace("-", ""),
+        }
+
     def update_market(self, start_date, end_date):
         self.calls.append(("update_market", start_date, end_date))
         return {"success": True, "message": "market ok"}
@@ -150,6 +160,7 @@ def test_safe_update_all_runs_conservative_sequence():
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
+        "update_tpex_daily_price",
         "sync_source_to_sqlite",
         "update_market",
         "sync_source_to_sqlite",
@@ -164,6 +175,7 @@ def test_safe_update_all_runs_conservative_sequence():
         "check_data_overview",
     ]
     daily_call = next(call for call in view.update_service.calls if call[0] == "update_daily")
+    assert ("update_tpex_daily_price", daily_call[2]) in view.update_service.calls
     assert ("sync_source_to_sqlite", "daily_price_files", daily_call[1], daily_call[2]) in view.update_service.calls
     assert ("sync_source_to_sqlite", "market_index", None, None) in view.update_service.calls
     assert ("sync_source_to_sqlite", "industry_index", None, None) in view.update_service.calls
@@ -228,8 +240,42 @@ def test_safe_update_all_stops_after_failed_core_step():
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
+        "update_tpex_daily_price",
         "sync_source_to_sqlite",
         "update_market",
+    ]
+
+
+class FailingTpexService(FakeUpdateService):
+    def update_tpex_daily_price(self, target_date):
+        self.calls.append(("update_tpex_daily_price", target_date))
+        return {"success": False, "message": "tpex failed", "tpex_rows": 0}
+
+
+def test_safe_update_all_continues_with_warning_when_tpex_fails_after_twse_success():
+    app()
+    view = _TestableUpdateView(FailingTpexService())
+
+    result = view._run_safe_update_all(progress_callback=lambda message, pct: None)
+
+    assert result["success"] is True
+    assert result["warnings"] == ["TPEX 每日股價更新: tpex failed"]
+    assert [call[0] for call in view.update_service.calls] == [
+        "check_data_overview",
+        "update_daily",
+        "update_tpex_daily_price",
+        "sync_source_to_sqlite",
+        "update_market",
+        "sync_source_to_sqlite",
+        "update_industry",
+        "sync_source_to_sqlite",
+        "update_broker_branch",
+        "merge_daily_data",
+        "sync_source_to_sqlite",
+        "merge_broker_branch_data",
+        "sync_source_to_sqlite",
+        "calculate_technical_indicators",
+        "check_data_overview",
     ]
 
 
@@ -278,6 +324,7 @@ def test_safe_update_all_runs_conservative_sequence_sqlite():
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
+        "update_tpex_daily_price",
         "sync_source_to_sqlite",
         "update_market",
         "sync_source_to_sqlite",
@@ -506,11 +553,46 @@ def test_sqlite_inspector_uses_calendar_date_filters(monkeypatch):
     assert widget.date_input.calendarPopup()
 
     widget._request_page(load_schema=False)
+    assert service.last_query.get("date_str") == QDate.currentDate().toString("yyyy-MM-dd")
+
+    widget._clear_date_edit(widget.date_input)
+    widget._request_page(load_schema=False)
     assert service.last_query.get("date_str") is None
 
     widget.date_input.setDate(QDate(2026, 5, 29))
     widget._request_page(load_schema=False)
     assert service.last_query.get("date_str") == "2026-05-29"
+
+
+def test_sqlite_inspector_date_pickers_default_to_today_and_current_month():
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+
+    service = FakeInspectorService(total=250)
+    widget = SqliteInspectorWidget(service)
+    today = QDate.currentDate()
+
+    assert widget.date_input.date() == today
+    assert widget.start_date_input.date() == QDate(today.year(), today.month(), 1)
+    assert widget.end_date_input.date() == today
+
+    widget._clear_date_edit(widget.date_input)
+    widget._clear_range_dates()
+
+    assert widget._date_filter_value(widget.date_input) == ""
+    assert widget._date_filter_value(widget.start_date_input) == ""
+    assert widget._date_filter_value(widget.end_date_input) == ""
+
+
+def test_sqlite_inspector_date_pickers_have_enough_width_for_full_dates():
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+
+    widget = SqliteInspectorWidget(FakeInspectorService(total=250))
+
+    assert widget.date_input.minimumWidth() >= 112
+    assert widget.start_date_input.minimumWidth() >= 112
+    assert widget.end_date_input.minimumWidth() >= 112
 
 
 def test_sqlite_inspector_header_sort_requests_server_order(monkeypatch):
@@ -535,6 +617,16 @@ def test_sqlite_inspector_header_sort_requests_server_order(monkeypatch):
 
 
 
+
+
+def test_pandas_table_model_handles_duplicate_display_columns_without_series_error():
+    from ui_qt.models.pandas_table_model import PandasTableModel
+
+    df = pd.DataFrame([[1, 2]], columns=["漲跌", "漲跌"])
+    model = PandasTableModel(df)
+
+    assert model.data(model.index(0, 0)) == "1"
+    assert model.data(model.index(0, 1)) == "2"
 
 
 def test_stale_worker_result_is_ignored():

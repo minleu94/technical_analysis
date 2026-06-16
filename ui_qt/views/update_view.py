@@ -1108,6 +1108,7 @@ class UpdateView(QWidget):
         """一鍵更新所有數據流程（支援快速與安全分流）"""
         start_date, end_date = self._get_selected_date_range()
         completed = []
+        warnings = []
 
         def report(message: str, progress: int) -> None:
             if progress_callback:
@@ -1138,6 +1139,7 @@ class UpdateView(QWidget):
         steps = [
             ("檢查資料狀態", 0, lambda: self._get_overview_status()),
             ("每日股價更新", 12, lambda: self.update_service.update_daily(start_date, end_date)),
+            ("TPEX 每日股價更新", 16, lambda: self.update_service.update_tpex_daily_price(end_date)),
             ("同步每日股價至 SQLite", 18, lambda: self.update_service.sync_source_to_sqlite("daily_price_files", start_date, end_date)),
             ("大盤指數更新", 24, lambda: self.update_service.update_market(start_date, end_date)),
             ("同步大盤指數至 SQLite", 30, lambda: self.update_service.sync_source_to_sqlite("market_index")),
@@ -1180,6 +1182,11 @@ class UpdateView(QWidget):
         for name, progress, action in steps:
             result = run_step(name, progress, action)
             if isinstance(result, dict) and not result.get("success", True):
+                if name == "TPEX 每日股價更新":
+                    warning = f"{name}: {result.get('message', f'{name} 失敗')}"
+                    warnings.append(warning)
+                    completed.append({"step": name, "result": result, "warning": True})
+                    continue
                 return {
                     "success": False,
                     "message": result.get("message", f"{name} 失敗"),
@@ -1194,6 +1201,7 @@ class UpdateView(QWidget):
             "success": True,
             "message": final_msg,
             "completed_steps": completed,
+            "warnings": warnings,
         }
 
     def _run_safe_update_all(self, progress_callback=None) -> Dict[str, Any]:
@@ -1260,8 +1268,14 @@ class UpdateView(QWidget):
 
         if result.get("success", False):
             message = result.get("message", f"{mode_name}完成")
-            self._log(message)
-            QMessageBox.information(self, f"{mode_name}完成", message)
+            warnings = result.get("warnings") or []
+            if warnings:
+                warning_text = "\n".join(str(warning) for warning in warnings)
+                self._log(f"{message}；警告：{warning_text}")
+                QMessageBox.warning(self, f"{mode_name}完成但有警告", f"{message}\n\n警告：\n{warning_text}")
+            else:
+                self._log(message)
+                QMessageBox.information(self, f"{mode_name}完成", message)
             self._check_data_status()
             return
 

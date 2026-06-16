@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, cast
 
 from data_module.valuation_data import calculate_industry_percentiles_bp
 from decision_module.factors.factor_dtos import FactorDiagnostic, FactorQuality
@@ -147,7 +147,7 @@ def plan_valuation_metrics_backfill(
             as_of_date=target_date,
         )
 
-    percentile_inputs: list[dict[str, object]] = []
+    percentile_inputs: list[Mapping[str, object]] = []
     for stock_code, pe_value in source_rows:
         industry = str(industry_by_stock.get(stock_code, "")).strip()
         if not industry:
@@ -197,7 +197,7 @@ def plan_valuation_metrics_backfill(
             as_of_date=target_date,
             available_date=target_date,
             metric_name="pe",
-            value=row["metric_value"],
+            value=cast(Decimal, row["metric_value"]),
             industry=str(row["industry"]),
             industry_percentile_bp=percentiles[(str(row["stock_code"]), str(row["industry"]))],
             source="daily_prices.pe",

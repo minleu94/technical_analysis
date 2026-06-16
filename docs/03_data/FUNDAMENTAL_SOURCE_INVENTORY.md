@@ -117,7 +117,7 @@ CLI 範例：
 本次資料排查結論：
 
 - `9935` 慶豐富舊檔同時存在 2023 `其他` 與 2024 `居家生活` 兩列，舊 loader 取第一列，造成產業 mapping 可能落到過時值；已改為依 `date`、`download_time` 選最新列，正式 registry 更新後不再有重複列。
-- `3207` 耀勝存在於 TPEX 公司 registry，但原先 `daily_prices` 無資料，是因既有每日股價下載管線只吃 TWSE `MI_INDEX type=ALL`，尚未接入 TPEX daily quotes；這是市場日價管線缺口，不是 company registry 缺口。2026-06-16 已以受控 TPEX daily price backfill 對正式 DB 寫入 `3207` 當日價格列，仍不由 company registry 或 fundamental layer 假造價格列。
+- `3207` 耀勝存在於 TPEX 公司 registry，但原先 `daily_prices` 無資料，是因舊每日股價下載管線只吃 TWSE `MI_INDEX type=ALL`；這是市場日價管線缺口，不是 company registry 缺口。2026-06-16 已以受控 TPEX daily price backfill 對正式 DB 寫入 `3207` 當日價格列；日常管線現已納入 TPEX official daily close quotes，仍不由 company registry 或 fundamental layer 假造價格列。
 
 ### 3.4.1 TPEX daily price backfill workflow
 
@@ -334,7 +334,7 @@ CLI 範例：
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
 5. 月營收 normalized backfill workflow 已具備 dry-run、confirm、備份與 fail-closed diagnostics；valuation metrics backfill workflow 已具備 dry-run、confirm、備份、產業 mapping 與同產業 percentile，且 2026-06-16 已依使用者確認正式寫入 831 筆 P/E records；SQLite read provider 與 fundamental factor service 已具備 no-look-ahead 讀取 / adapter / gate 邊界。月營收待正式 availability mapping 通過驗證後仍需人工確認才可 apply。
-6. TPEX 公司 registry 已納入 `companies.csv`，且已新增受控 TPEX daily price backfill 補齊 `3207` 這類上櫃股票的 `daily_prices` 當日缺口；長期仍需把 TPEX quotes 整合進日常市場日價更新管線，不得在 fundamental layer 假造價格列。
+6. TPEX 公司 registry 已納入 `companies.csv`，且已新增受控 TPEX daily price backfill 補齊 `3207` 這類上櫃股票的 `daily_prices` 當日缺口；TPEX quotes 已納入日常市場日價更新管線，歷史缺漏仍需 dry-run plan 與人工確認，不得在 fundamental layer 假造價格列。
 7. Abnormal fundamental diagnostics 已能進入 Research metadata 與 Daily Decision Desk risk prompts；後續接正式資料時仍只能作提示，不得改寫財報或自動扣分。
 
 ## 8. 更新記錄
@@ -354,10 +354,11 @@ CLI 範例：
 - 2026-06-16：新增 Fundamental SQLite 受控 migration service 與 CLI，支援 working-copy dry-run、apply 前備份、失敗 restore 與 `--confirm apply-fundamental-schema` 人工確認。
 - 2026-06-16：依使用者確認對正式 `twstock.db` 套用 Fundamental SQLite schema migration，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_fundamental_schema_20260616_022301.db`；正式 DB 新增三張 fundamental 表，後續同日已回填 P/E valuation metrics。
 - 2026-06-16：新增月營收 normalized backfill workflow 與 CLI，預設 dry-run，正式 apply 需 `--confirm apply-monthly-revenue-backfill` 並先備份；正式路徑因缺 availability mapping fail-closed，未寫入 records。
-- 2026-06-16：新增 official company registry workflow 與 CLI，使用 TWSE/TPEX 官方公司基本資料更新 `companies.csv`；正式 apply 後共 2,326 筆、無重複 stock id，修正 `9935` 舊產業列覆蓋問題，並確認 `3207` 缺 daily price 是 TPEX 日價管線尚未接入。
+- 2026-06-16：新增 official company registry workflow 與 CLI，使用 TWSE/TPEX 官方公司基本資料更新 `companies.csv`；正式 apply 後共 2,326 筆、無重複 stock id，修正 `9935` 舊產業列覆蓋問題，並確認 `3207` 缺 daily price 是市場日價層缺口，不是 company registry 或 fundamental layer 問題；日常 TPEX 日價管線已於後續更新接上。
 - 2026-06-16：新增 valuation metrics backfill workflow 與 CLI，可由 `daily_prices.本益比` 與最新 `companies.csv` 產業 mapping 產生 P/E valuation records 與同產業 percentile；正式 apply 後 `fundamental_valuation_metrics` 共 831 筆、0 duplicate primary keys，quality 全為 `observed`。
 - 2026-06-16：新增 Fundamental SQLite read provider，可從正式 fundamental tables 讀取 `available_date <= decision_date` 的月營收與估值 observations；缺資料時回 missing diagnostics，不代表中性訊號。
 - 2026-06-16：新增 Fundamental factor application service，串接 SQLite provider、revenue/valuation adapters 與 FactorGate；正式 DB 月營收缺資料時只輸出 missing diagnostics，不接 `ScoringEngine`。
 - 2026-06-16：新增 Revenue Factor Pack v1 adapters，從已正規化月營收 records 產生 YoY、MoM、3M trend 與 new high factor records；缺 baseline 只輸出 diagnostics，未來 available_date 由 `FactorGate` skip，不接 `ScoringEngine`。
 - 2026-06-16：新增 Abnormal Fundamental diagnostics policy / application service / Daily Decision Desk prompt bridge；異常基本面只作 Research metadata 與風險提示，不改寫財報、不自動調整分數。
 - 2026-06-16：新增 TPEX daily price backfill workflow 與 CLI，對正式 `daily_prices` 補入 `20260616` 上櫃四碼普通股日價 877 筆；正式 apply 前備份 DB，驗證 0 duplicate primary keys，`3207` 日價缺口已補齊。
+- 2026-06-16：TPEX official daily close quotes 已接入日常每日股價更新管線；歷史 TPEX 缺漏仍需 dry-run plan 與人工確認，不由 fundamental layer 補值。
