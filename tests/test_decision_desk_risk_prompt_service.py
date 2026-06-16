@@ -8,6 +8,7 @@ from app_module.decision_desk_dtos import (
     RelativeStrengthLiquiditySummary,
     SectorRotationSummary,
     WatchlistTriggerSummary,
+    PortfolioAlertAttribution,
 )
 from app_module.decision_desk_risk_prompt_service import DecisionDeskRiskPromptService
 
@@ -71,3 +72,43 @@ def test_risk_prompt_service_returns_missing_when_no_prompt_can_be_derived():
     assert summary.quality == DecisionDeskQuality.MISSING
     assert summary.prompts == ()
     assert summary.warnings == ("risk_prompt_missing",)
+
+
+def test_risk_prompt_service_uses_portfolio_attribution_reason_text():
+    sample_date = date(2026, 6, 15)
+    service = DecisionDeskRiskPromptService()
+    portfolio = PortfolioAlertSummary(
+        sample_date,
+        DecisionDeskQuality.OBSERVED,
+        (),
+        alert_count=1,
+        alert_codes=("2330",),
+        alert_level="high",
+        attributions=(
+            PortfolioAlertAttribution(
+                stock_code="2330",
+                source_label="recommendation_result:rec_001",
+                condition_status="warning",
+                chip_risk_level="bearish",
+                severity=80,
+                reasons=("condition:warning", "chip:risk_level:bearish"),
+                data_quality_flags=(),
+            ),
+        ),
+    )
+
+    summary = service.build_summary(
+        as_of_date=sample_date,
+        market_regime=MarketRegimeSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        market_breadth=MarketBreadthSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        sector_rotation=SectorRotationSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        relative_strength_liquidity=RelativeStrengthLiquiditySummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        watchlist_triggers=WatchlistTriggerSummary(sample_date, DecisionDeskQuality.OBSERVED, ()),
+        portfolio_alerts=portfolio,
+    )
+
+    prompt = next(item for item in summary.prompts if item.category == "portfolio_alert")
+    assert "recommendation_result:rec_001" in prompt.reason
+    assert "condition:warning" in prompt.reason
+    assert "chip:risk_level:bearish" in prompt.reason
+

@@ -147,7 +147,20 @@ class DecisionDeskRiskPromptService:
     def _portfolio_prompts(section: PortfolioAlertSummary) -> list[DecisionDeskRiskPrompt]:
         prompts: list[DecisionDeskRiskPrompt] = []
         severity = "critical" if section.alert_level in {"high", "critical", "extreme"} else "warning"
+        
+        attribution_by_code = {item.stock_code: item for item in getattr(section, "attributions", ())}
+        
         for code in section.alert_codes:
+            attribution = attribution_by_code.get(code)
+            if attribution is not None:
+                reason = (
+                    f"{code} 出現在 Portfolio Alert 清單；來源 {attribution.source_label}；"
+                    f"condition={attribution.condition_status}；chip={attribution.chip_risk_level}；"
+                    f"reasons={', '.join(attribution.reasons) if attribution.reasons else '無'}。"
+                )
+            else:
+                reason = f"{code} 出現在 Portfolio Alert 清單。"
+            
             prompts.append(
                 DecisionDeskRiskPrompt(
                     category="portfolio_alert",
@@ -155,11 +168,12 @@ class DecisionDeskRiskPromptService:
                     source="portfolio_alerts",
                     code=code,
                     title="持倉警示",
-                    reason=f"{code} 出現在 Portfolio Alert 清單。",
+                    reason=reason,
                     action_hint="檢查條件監控、籌碼摘要與持倉風險，不直接自動調整部位。",
                 )
             )
         return prompts
+
 
     @staticmethod
     def _dedupe(prompts: list[DecisionDeskRiskPrompt]) -> list[DecisionDeskRiskPrompt]:
