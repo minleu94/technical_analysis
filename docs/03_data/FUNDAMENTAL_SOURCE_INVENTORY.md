@@ -18,7 +18,7 @@
 - `fundamental_statement_items`
 - `fundamental_valuation_metrics`
 
-正式 SQLite 已具備基本面專用 schema；月營收與財報仍未正式回填，P/E 估值 metrics 已在 2026-06-16 依使用者確認受控寫入 `fundamental_valuation_metrics`。`DATA_ROOT/financial_data/` 內存在舊 CSV 原始資料，但缺少公告日與 `available_date`，因此只能列為 raw candidate source，不得直接用於回測、推薦、策略分數或 Daily Decision Desk。
+正式 SQLite 已具備基本面專用 schema；月營收與財報仍未正式回填，P/E 估值 metrics 已在 2026-06-16 依使用者確認受控寫入 `fundamental_valuation_metrics`。同日另建立 TPEX daily price backfill workflow，修正 `3207` 這類上櫃股票存在於公司 registry 但缺 `daily_prices` 的市場日價管線缺口；此 workflow 只寫 `daily_prices`，不寫 fundamental tables。`DATA_ROOT/financial_data/` 內存在舊 CSV 原始資料，但缺少公告日與 `available_date`，因此只能列為 raw candidate source，不得直接用於回測、推薦、策略分數或 Daily Decision Desk。
 
 Month 5 下一步必須先完成 available-date contract 與 no-look-ahead tests，再將 fundamental 資料升級為正式可用來源。2026-06-16 已建立 `data_module/fundamental_data.py` 作為唯讀正規化契約：raw 月營收 row 必須搭配外部 `available_date` mapping 才會產生 normalized record；缺 mapping 時只輸出 diagnostics。同日亦建立 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / `available_date` mapping 契約，允許人工或後續下載來源提供 `announced_date`、`available_date`、`source` 與 `source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。`data_module/fundamental_availability_entrypoint.py` 與 `scripts/validate_monthly_revenue_availability.py` 已建立正式驗證入口，可對使用者提供的 mapping 檔執行 dry-run 驗證、列出 diagnostics、拒絕未治理來源，且不建立、不改寫 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`。`data_module/fundamental_schema.py` 目前尚未接入 `DBManager.init_database()`，不會在一般啟動流程自動修改 SQLite。該模組提供 `generate_fundamental_schema_dry_run_report()` 與 `generate_fundamental_schema_copy_dry_run_report()`，可在暫時 SQLite connection 或正式 DB working copy 上確認既有核心表不被修改。`data_module/fundamental_migration.py` 與 `scripts/migrate_fundamental_schema.py` 已提供顯式 migration workflow：預設 dry-run 只在 working copy 上執行；正式 `--apply` 必須搭配 `--confirm apply-fundamental-schema`，且 apply 前會建立備份、失敗時可用 `restore_fundamental_schema_backup()` 回復。2026-06-16 已依使用者確認對正式 `twstock.db` 套用 fundamental schema migration，備份檔為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_fundamental_schema_20260616_022301.db`。`data_module/company_registry.py` 與 `scripts/update_company_registry.py` 已新增 TWSE/TPEX 官方公司基本資料 registry workflow，正式 `companies.csv` 已更新為 2,326 筆、無重複 stock id，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/companies_company_registry_20260616_031111.csv`。`data_module/valuation_metrics_backfill.py` 與 `scripts/backfill_valuation_metrics.py` 已建立 P/E 估值 metrics 受控回填 workflow，可由 `daily_prices.本益比` 與最新 `companies.csv` 產業 mapping 產生同產業 percentile 的 governed rows；正式 `fundamental_valuation_metrics` 已寫入 831 筆 2026-06-15 P/E records，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_valuation_metrics_backfill_20260616_031146.db`。`data_module/fundamental_availability.py` 則集中公告日 / available_date 策略，避免 parser、adapter 或後續 migration 各自發明時間軸規則。
 
@@ -32,7 +32,7 @@ SQLite = D:/Min/Python/Project/FA_Data/sqlite/twstock.db
 financial_data = D:/Min/Python/Project/FA_Data/financial_data
 ```
 
-本次已完成受控 schema migration，並依使用者確認正式寫入 P/E valuation metrics；未修改 raw financial CSV。月營收與財報仍因缺正式 availability mapping 而未回填。
+本次已完成受控 schema migration，並依使用者確認正式寫入 P/E valuation metrics；另依使用者授權以受控 TPEX daily price backfill 寫入 2026-06-16 上櫃日價 877 筆。未修改 raw financial CSV。月營收與財報仍因缺正式 availability mapping 而未回填。
 
 ## 3. 資料來源清單
 
@@ -117,7 +117,27 @@ CLI 範例：
 本次資料排查結論：
 
 - `9935` 慶豐富舊檔同時存在 2023 `其他` 與 2024 `居家生活` 兩列，舊 loader 取第一列，造成產業 mapping 可能落到過時值；已改為依 `date`、`download_time` 選最新列，正式 registry 更新後不再有重複列。
-- `3207` 耀勝存在於 TPEX 公司 registry，但 `daily_prices` 無資料，是因既有每日股價下載管線只吃 TWSE `MI_INDEX type=ALL`，尚未接入 TPEX daily quotes；這是市場日價管線缺口，不是 company registry 缺口。Month 5 valuation backfill 只能處理既有 `daily_prices` 中已有 P/E 的股票，不會假造 3207 價格列。
+- `3207` 耀勝存在於 TPEX 公司 registry，但原先 `daily_prices` 無資料，是因既有每日股價下載管線只吃 TWSE `MI_INDEX type=ALL`，尚未接入 TPEX daily quotes；這是市場日價管線缺口，不是 company registry 缺口。2026-06-16 已以受控 TPEX daily price backfill 對正式 DB 寫入 `3207` 當日價格列，仍不由 company registry 或 fundamental layer 假造價格列。
+
+### 3.4.1 TPEX daily price backfill workflow
+
+`data_module/tpex_daily_price_backfill.py` 與 `scripts/backfill_tpex_daily_prices.py` 提供 TPEX 上櫃日價的受控補寫入口。資料來源使用官方 OpenAPI：
+
+- TPEX mainboard daily close quotes：`https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes`
+
+CLI 範例：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_tpex_daily_prices.py --date 2026-06-16 --dry-run
+.\.venv\Scripts\python.exe scripts\backfill_tpex_daily_prices.py --date 2026-06-16 --apply --confirm apply-tpex-daily-price-backfill
+```
+
+- dry-run 只讀官方來源與 SQLite，列出 `insert_count`、`existing_count` 與 diagnostics，不寫 DB。
+- 正式 apply 必須搭配 `--confirm apply-tpex-daily-price-backfill`；寫入前會先備份 DB，寫入失敗會以備份還原。
+- workflow 只寫入 `daily_prices`；不修改 `companies.csv`、raw financial CSV、`fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`、技術指標或推薦分數。
+- CLI 批次模式只處理指定 `--date` 的四碼上櫃普通股且收盤價為正數的 rows；債券、權證、ETF 或當日無有效收盤價的 rows 會被跳過，避免污染日價表。
+
+2026-06-16 正式 dry-run 顯示 `ready_for_apply=true`、可新增 877 筆、0 diagnostics；依使用者授權正式 apply 後，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_tpex_daily_price_backfill_20260616_034627.db`。read-only 驗證結果：`daily_prices` 在 `20260616` 有 877 筆四碼上櫃日價、0 duplicate `(證券代號, 日期)` keys；`3207` 已有 `20260616` 日價 `67.0`，成交股數 `2,238,197`，成交金額 `153,210,146`；`9935` 既有日價仍保留，最新為 `20260615`。
 
 ### 3.5 Valuation metrics backfill workflow
 
@@ -314,7 +334,7 @@ CLI 範例：
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
 5. 月營收 normalized backfill workflow 已具備 dry-run、confirm、備份與 fail-closed diagnostics；valuation metrics backfill workflow 已具備 dry-run、confirm、備份、產業 mapping 與同產業 percentile，且 2026-06-16 已依使用者確認正式寫入 831 筆 P/E records；SQLite read provider 與 fundamental factor service 已具備 no-look-ahead 讀取 / adapter / gate 邊界。月營收待正式 availability mapping 通過驗證後仍需人工確認才可 apply。
-6. TPEX 公司 registry 已納入 `companies.csv`，但 TPEX daily price ingestion 尚未接入既有每日股價管線；`3207` 這類上櫃股票若無 `daily_prices`，需另以市場日價管線 milestone 補 TPEX quotes，不得在 fundamental layer 假造價格列。
+6. TPEX 公司 registry 已納入 `companies.csv`，且已新增受控 TPEX daily price backfill 補齊 `3207` 這類上櫃股票的 `daily_prices` 當日缺口；長期仍需把 TPEX quotes 整合進日常市場日價更新管線，不得在 fundamental layer 假造價格列。
 7. Abnormal fundamental diagnostics 已能進入 Research metadata 與 Daily Decision Desk risk prompts；後續接正式資料時仍只能作提示，不得改寫財報或自動扣分。
 
 ## 8. 更新記錄
@@ -340,3 +360,4 @@ CLI 範例：
 - 2026-06-16：新增 Fundamental factor application service，串接 SQLite provider、revenue/valuation adapters 與 FactorGate；正式 DB 月營收缺資料時只輸出 missing diagnostics，不接 `ScoringEngine`。
 - 2026-06-16：新增 Revenue Factor Pack v1 adapters，從已正規化月營收 records 產生 YoY、MoM、3M trend 與 new high factor records；缺 baseline 只輸出 diagnostics，未來 available_date 由 `FactorGate` skip，不接 `ScoringEngine`。
 - 2026-06-16：新增 Abnormal Fundamental diagnostics policy / application service / Daily Decision Desk prompt bridge；異常基本面只作 Research metadata 與風險提示，不改寫財報、不自動調整分數。
+- 2026-06-16：新增 TPEX daily price backfill workflow 與 CLI，對正式 `daily_prices` 補入 `20260616` 上櫃四碼普通股日價 877 筆；正式 apply 前備份 DB，驗證 0 duplicate primary keys，`3207` 日價缺口已補齊。

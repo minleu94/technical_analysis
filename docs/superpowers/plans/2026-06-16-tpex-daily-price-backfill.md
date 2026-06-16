@@ -29,7 +29,7 @@
 - Create: `data_module/tpex_daily_price_backfill.py`
 - Test: `tests/test_tpex_daily_price_backfill.py`
 
-- [ ] **Step 1: Write failing parser tests**
+- [x] **Step 1: Write failing parser tests**
 
 Create `tests/test_tpex_daily_price_backfill.py`:
 
@@ -135,7 +135,7 @@ def test_build_tpex_daily_price_plan_skips_existing_rows(tmp_path):
     assert result.insert_count == 0
 ```
 
-- [ ] **Step 2: Run parser tests to verify they fail**
+- [x] **Step 2: Run parser tests to verify they fail**
 
 Run:
 
@@ -145,7 +145,7 @@ Run:
 
 Expected: collection fails with `ModuleNotFoundError: No module named 'data_module.tpex_daily_price_backfill'`.
 
-- [ ] **Step 3: Implement parser and plan**
+- [x] **Step 3: Implement parser and plan**
 
 Create `data_module/tpex_daily_price_backfill.py` with these public APIs:
 
@@ -185,7 +185,7 @@ Implementation requirements:
 - Split signed change like `+0.50` into `漲跌="+"` and `漲跌價差="0.50"`.
 - Use SQLite to skip rows already present by primary key `(證券代號, 日期)`.
 
-- [ ] **Step 4: Run parser tests**
+- [x] **Step 4: Run parser tests**
 
 Run:
 
@@ -196,7 +196,7 @@ Run:
 
 Expected: all tests pass and py_compile exits 0.
 
-- [ ] **Step 5: Commit parser milestone**
+- [x] **Step 5: Commit parser milestone**
 
 ```powershell
 git add data_module/tpex_daily_price_backfill.py tests/test_tpex_daily_price_backfill.py
@@ -210,7 +210,7 @@ git commit -m "market-data: add tpex daily price backfill planner"
 - Create: `scripts/backfill_tpex_daily_prices.py`
 - Test: `tests/test_tpex_daily_price_backfill_cli.py`
 
-- [ ] **Step 1: Add failing apply and CLI tests**
+- [x] **Step 1: Add failing apply and CLI tests**
 
 Append to `tests/test_tpex_daily_price_backfill.py`:
 
@@ -292,7 +292,7 @@ def test_tpex_daily_price_cli_apply_requires_confirm(tmp_path):
     assert main(["--db-file", str(db_file), "--source-json", str(source_json), "--date", "2026-06-16", "--apply"]) == 2
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\test_tpex_daily_price_backfill.py tests\test_tpex_daily_price_backfill_cli.py -q -o addopts=
@@ -300,7 +300,7 @@ def test_tpex_daily_price_cli_apply_requires_confirm(tmp_path):
 
 Expected: import errors or missing `apply_tpex_daily_price_backfill`.
 
-- [ ] **Step 3: Implement apply and CLI**
+- [x] **Step 3: Implement apply and CLI**
 
 Implement in `data_module/tpex_daily_price_backfill.py`:
 
@@ -407,7 +407,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 4: Run focused tests and py_compile**
+- [x] **Step 4: Run focused tests and py_compile**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\test_tpex_daily_price_backfill.py tests\test_tpex_daily_price_backfill_cli.py -q -o addopts=
@@ -416,7 +416,7 @@ if __name__ == "__main__":
 
 Expected: all tests pass and py_compile exits 0.
 
-- [ ] **Step 5: Commit CLI milestone**
+- [x] **Step 5: Commit CLI milestone**
 
 ```powershell
 git add data_module/tpex_daily_price_backfill.py scripts/backfill_tpex_daily_prices.py tests/test_tpex_daily_price_backfill.py tests/test_tpex_daily_price_backfill_cli.py
@@ -428,7 +428,7 @@ git commit -m "market-data: add guarded tpex daily price backfill cli"
 **Files:**
 - Modify docs listed in File Structure.
 
-- [ ] **Step 1: Run formal dry-run**
+- [x] **Step 1: Run formal dry-run**
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\backfill_tpex_daily_prices.py --date 2026-06-16 --dry-run
@@ -436,7 +436,7 @@ git commit -m "market-data: add guarded tpex daily price backfill cli"
 
 Expected: output includes `ready_for_apply: true` if official endpoint has rows missing from SQLite. If endpoint has no rows or all rows already exist, stop and document the result.
 
-- [ ] **Step 2: Apply with explicit confirmation**
+- [x] **Step 2: Apply with explicit confirmation**
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\backfill_tpex_daily_prices.py --date 2026-06-16 --apply --confirm apply-tpex-daily-price-backfill
@@ -444,7 +444,7 @@ Expected: output includes `ready_for_apply: true` if official endpoint has rows 
 
 Expected: output includes a non-empty `backup_file`, `applied: true`, and `inserted_count > 0`.
 
-- [ ] **Step 3: Verify formal DB integrity**
+- [x] **Step 3: Verify formal DB integrity**
 
 Run a read-only SQLite check confirming:
 
@@ -454,7 +454,7 @@ Run a read-only SQLite check confirming:
 - Latest TPEX date inserted matches the CLI `--date` or normalized official row date.
 - Formal DB backup exists.
 
-- [ ] **Step 4: Update docs**
+- [x] **Step 4: Update docs**
 
 Document:
 
@@ -463,7 +463,7 @@ Document:
 - `3207` root cause and resolution status.
 - Apply backup and verification results.
 
-- [ ] **Step 5: Run final verification**
+- [x] **Step 5: Run final verification**
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\test_tpex_daily_price_backfill.py tests\test_tpex_daily_price_backfill_cli.py tests\test_update_service_status.py -q -o addopts=
@@ -471,7 +471,7 @@ Document:
 git status --short --branch
 ```
 
-- [ ] **Step 6: Commit docs and formal verification**
+- [x] **Step 6: Commit docs and formal verification**
 
 ```powershell
 git add docs/03_data/FUNDAMENTAL_SOURCE_INVENTORY.md docs/07_guides/APPLICATION_MANUAL.md docs/00_core/PROJECT_SNAPSHOT.md docs/00_core/ROADMAP_6M_ENGINEERING.md docs/01_architecture/system_architecture.md
