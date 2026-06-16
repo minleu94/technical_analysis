@@ -288,6 +288,7 @@
 - 2026-06-16：補充 MOPS HTML source-dir 索引，記錄 `--mops-html-dir` 可讀人工保存官方 HTML 產生候選 mapping，缺公告日欄位時 fail-closed。
 - 2026-06-17：補充 MOPS static dry-run 索引，記錄 `--mops-static` 透過新版 MOPS redirectToOld / mopsov static report 驗證歷史 rows，並由 45 天合理揭露窗口拒絕重新出表日期。
 - 2026-06-16：補充授權 PIT 月營收公告日 CSV 索引，記錄 `--pit-csv` / `--pit-source-version` candidate-only 匯入路徑與正式 mapping 人工 gate。
+- 2026-06-16：補充 GitHub public archive source audit 索引，記錄 commit first-seen 方法可行但目前已檢查 public repos 皆不足以列為 allowed source。
 - 2026-06-16：新增 TPEX daily price backfill plan 與文件同步，記錄官方 TPEX daily close quotes 受控寫入 `daily_prices`、DB 備份、`3207` 補價與 877 筆正式寫入驗證。
 - 2026-06-16：更新 Full App Healthcheck，整合 TPEX 日常管線、SQLite Inspector 顯示防護與 `broker_flows.trade_type` 主鍵治理的人工驗證入口。
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。

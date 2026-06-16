@@ -320,6 +320,20 @@ CLI 範例：
 | MOPS 採用 IFRSs 後月營收頁 | `https://mops.twse.com.tw/mops/#/web/t21sc04_ifrs` | 新版 SPA 可用 `/mops/api/redirectToOld` 產生 `mopsov.twse.com.tw/nas/t21/...` historical static report URL；但 HTML 的 `出表日期` 是查詢當日重新出表日，不是原始公告日 | 可作歷史資料內容佐證；不得直接作 historical availability mapping |
 | TEJ Point-in-Time 月營收公告日 | `https://medium.com/tej-can-help/tej-dictionary-use-tej-point-in-time-data-to-explore-the-connotation-of-monthly-revenue-beabe2b51eba` / `https://www.tejwin.com/en/news/monthly-sales/` | TEJ 文件明確描述以 TEJ API 取得月營收公告日 point-in-time data；屬授權 / 商業來源，repo 不內建憑證或下載器 | 可由授權匯出 CSV 經 `--pit-csv` 匯入候選 mapping；source 固定治理為 `tej.monthly_revenue_announcement_pit`，source_version 必須由匯出批次提供 |
 
+2026-06-16 追加 GitHub public archive source audit：使用 GitHub repository search 與 web search 檢查是否存在量化研究者長期提交的 MOPS 月營收 daily snapshot，可用 first-seen commit date 反推 PIT availability。此方法在工程上可行，但目前未找到合格公開來源，因此尚未加入 allowed source。排除紀錄如下：
+
+| GitHub repo / gist | 驗證結果 | PIT 判定 |
+|---|---|---|
+| `Superior16888/monthly-revenue-static` | repo 有 MOPS static site 產生器，但 `.gitignore` 排除 `site/data/` 與 `site/manifest.json`，月營收 JSON 未進 git history | 不可用 |
+| `mickyang12/mops` | 有最新月 `mi.html`，可看到 `2330`、`3207`、`9935` rows，但 repo 只有最新快照 / 少量更新，無每日歷史 first-seen 序列 | 不可用 |
+| `clhuang224/stock-revenue` | 一頁式月營收查詢前端，資料來源為 FinMind API；repo 不保存 raw monthly revenue snapshots | 不可用 |
+| `kenny900803/Rev_YoY_Factor` | repo 只有研究 PDF，無月營收原始資料或歷史快照 | 不可用 |
+| `andrewwang7/findbillion_stocktw` | `data/revenuesmonth.csv` 是 2020-05-23 單次 initial commit 匯入的寬表，欄位只有年度與月營收 / 累計營收，沒有公告日或 sys_date | 可作歷史營收值參考；不可作 PIT mapping |
+| `angel870326/Monthly-Revenue-Forecasting` | notebook 說明 TEJ Company DB 的「月營收盈餘」含 `營收發布日`，且結論為上市櫃公司自 `2013-01` 起有營收公告日；實際 Excel/TEJ raw data 在外部 Google Drive，未 commit | 佐證授權 TEJ PIT 欄位存在；不可直接產生 mapping |
+| `YanHaoChen/tw-financial-report-analysis` | Airflow / MongoDB crawler 程式碼可抓 MOPS `t21sc03_{民國年}_{月}.csv`，但 repo 不保存 MongoDB 結果或每日快照；月營收 parser 也無公告日欄位 | 不可用 |
+
+若未來找到合格 GitHub snapshot repo，納入條件必須同時滿足：資料檔本身進 git history；檔案可解析 `stock_code`、`period` 與月營收 row；commit author/committer date 能代表資料首次公開於該 repo 的日期；source license 可允許本專案使用；能覆蓋目標市場與期間；且不得用 raw 月營收 period/date 充當可得日。若來源只有 first-seen commit date 而無官方公告日，mapping policy 必須另行人工確認，建議以 `announced_date=first_seen_commit_date` 標記為 observed snapshot date、`available_date=first_seen_commit_date+1 calendar day` 作保守 gate，並以 source_version 保留 `owner/repo@commit_sha`。
+
 2026-06-16 追加 `parse_mops_monthly_revenue_html()`：若人工保存的官方 MOPS HTML 內含頁面層級 `出表日期` 與含 `公司代號` 的表格，builder 會將 `announced_date=出表日期`、`available_date=announced_date+1 calendar day`，source 設為 `mops.monthly_revenue_announcement`，source_version 設為 `mops-t05st10-ifrs-<fetch-date>`。若 HTML 缺 `出表日期`、無可解析公司列，或指定期間檔案不存在，只輸出 diagnostics，不用 raw CSV 日期補值。2026-06-17 驗證新版 MOPS historical static report 時，`113/04` 上市與上櫃彙總表可抓到 `2330`、`9935`、`3207` rows，但 `出表日期` 為查詢當日 `115/06/17`；builder 與 validator 均新增 `as_of_date + 45 days` 合理揭露窗口，這類重新出表日期會回 `monthly_revenue_availability.available_date_unreasonably_late` / `fundamental_availability.available_date_unreasonably_late`，不產生候選 row。
 
 2026-06-16 追加 PIT CSV importer：`load_pit_announcement_rows()` 接受授權匯出的月營收公告日 CSV，欄位可為 `stock_code` / `公司代號`、`period` / `資料年月`、`announced_date` / `公告日` / `出表日期`。匯入時會正規化民國年、`YYYY-MM` period 與 `YYYY-MM-DD` 公告日；只有可解析公告日才產生 mapping。`source_version` 必須非空且原樣保留為 mapping 版本，不以 raw CSV 日期或查詢日期補值。PIT 匯入後的 `available_date` 仍採保守政策 `announced_date + 1 calendar day`，正式寫入 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 前必須先產生 candidate、跑 validator，並由使用者人工確認。
@@ -402,3 +416,4 @@ CLI 範例：
 - 2026-06-16：補上 MOPS 官方 HTML parser 與 `--mops-html-dir` 候選流程；只接受人工保存且含 `出表日期` 的官方 HTML，缺欄位時 fail-closed diagnostics，不由 raw CSV 補 available_date。
 - 2026-06-17：補上新版 MOPS `redirectToOld` / `mopsov` static report fetcher 與 `--mops-static` dry-run；確認 historical static report 的 `出表日期` 是查詢當日重新出表日，已由 45 天合理揭露窗口 gate 擋下，不能直接作 historical available_date mapping。
 - 2026-06-16：新增授權 PIT 月營收公告日 CSV importer 與 `--pit-csv` CLI；目前免費官方來源仍未找到可批次追溯原始歷史公告日的路徑，TEJ PIT 匯出列為治理來源候選，必須附 `source_version` 並通過 validator 後才可人工確認寫入正式 mapping。
+- 2026-06-16：追加 GitHub public archive source audit；確認 commit first-seen 方法可行，但已檢查的 public repos 不是未保存資料、只有最新快照、只有研究 PDF / notebook，就是單次匯入無公告日欄位，尚不能列入 allowed source。
