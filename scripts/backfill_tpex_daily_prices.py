@@ -46,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
             backup_dir=backup_dir,
             source_rows=source_rows,
             fallback_date=args.date,
+            strict=False,
         )
         print(result.plan.to_markdown())
         print(f"- applied: {str(result.applied).lower()}")
@@ -57,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         db_file=db_file,
         source_rows=source_rows,
         fallback_date=args.date,
+        strict=False,
     )
     print(plan.to_markdown())
     for diagnostic in plan.diagnostics:

@@ -131,6 +131,44 @@ def test_build_tpex_daily_price_plan_filters_to_requested_date(tmp_path):
     assert result.rows[0]["日期"] == "20260616"
 
 
+def test_build_tpex_daily_price_plan_non_strict_skips_non_common_and_invalid_rows(tmp_path):
+    db_file = tmp_path / "twstock.db"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            'CREATE TABLE daily_prices ("日期" TEXT, "證券代號" TEXT, "收盤價" REAL, PRIMARY KEY ("證券代號", "日期"))'
+        )
+
+    result = build_tpex_daily_price_plan(
+        db_file=db_file,
+        source_rows=[
+            {
+                "Date": "1150616",
+                "SecuritiesCompanyCode": "00720B",
+                "CompanyName": "債券",
+                "Close": "100.00",
+            },
+            {
+                "Date": "1150616",
+                "SecuritiesCompanyCode": "2948",
+                "CompanyName": "停牌股",
+                "Close": "--",
+            },
+            {
+                "Date": "1150616",
+                "SecuritiesCompanyCode": "3207",
+                "CompanyName": "耀勝",
+                "Close": "42.50",
+            },
+        ],
+        fallback_date="2026-06-16",
+        strict=False,
+    )
+
+    assert result.diagnostics == ()
+    assert result.insert_count == 1
+    assert result.rows[0]["證券代號"] == "3207"
+
+
 def test_apply_tpex_daily_price_backfill_inserts_rows_and_backs_up(tmp_path):
     db_file = tmp_path / "twstock.db"
     backup_dir = tmp_path / "backup"

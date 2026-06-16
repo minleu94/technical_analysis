@@ -68,6 +68,7 @@ def normalize_tpex_daily_price_rows(
     source_rows: list[Mapping[str, object]],
     *,
     fallback_date: str,
+    strict: bool = True,
 ) -> TpexDailyPriceNormalizeResult:
     rows: list[dict[str, object]] = []
     diagnostics: list[FactorDiagnostic] = []
@@ -78,24 +79,26 @@ def normalize_tpex_daily_price_rows(
         close = _decimal_text(_first(source_row, "Close", "ClosePrice"))
 
         if not re.fullmatch(r"\d{4}", stock_code):
-            diagnostics.append(
-                FactorDiagnostic(
-                    code="tpex_daily_price.invalid_stock_code",
-                    factor_name="market_data.tpex_daily_price",
-                    stock_code=stock_code,
-                    message="TPEX daily price row is missing a four-digit stock code",
+            if strict:
+                diagnostics.append(
+                    FactorDiagnostic(
+                        code="tpex_daily_price.invalid_stock_code",
+                        factor_name="market_data.tpex_daily_price",
+                        stock_code=stock_code,
+                        message="TPEX daily price row is missing a four-digit stock code",
+                    )
                 )
-            )
             continue
         if close is None or Decimal(close) <= 0:
-            diagnostics.append(
-                FactorDiagnostic(
-                    code="tpex_daily_price.invalid_price",
-                    factor_name="market_data.tpex_daily_price",
-                    stock_code=stock_code,
-                    message="TPEX daily price row has missing or non-positive close price",
+            if strict:
+                diagnostics.append(
+                    FactorDiagnostic(
+                        code="tpex_daily_price.invalid_price",
+                        factor_name="market_data.tpex_daily_price",
+                        stock_code=stock_code,
+                        message="TPEX daily price row has missing or non-positive close price",
+                    )
                 )
-            )
             continue
 
         change_sign, change_value = _split_change(_first(source_row, "Change", "ChangePrice"))
@@ -113,9 +116,9 @@ def normalize_tpex_daily_price_rows(
                 "收盤價": close,
                 "漲跌": change_sign,
                 "漲跌價差": change_value,
-                "最後揭示買價": _decimal_text(_first(source_row, "LastBestBidPrice", "BestBidPrice")),
+                "最後揭示買價": _decimal_text(_first(source_row, "LastBestBidPrice", "LatestBidPrice", "BestBidPrice")),
                 "最後揭示買量": _int_value(_first(source_row, "LastBestBidVolume", "BestBidVolume")),
-                "最後揭示賣價": _decimal_text(_first(source_row, "LastBestAskPrice", "BestAskPrice")),
+                "最後揭示賣價": _decimal_text(_first(source_row, "LastBestAskPrice", "LatesAskPrice", "BestAskPrice")),
                 "最後揭示賣量": _int_value(_first(source_row, "LastBestAskVolume", "BestAskVolume")),
                 "本益比": _decimal_text(_first(source_row, "PERatio", "PE", "P/E")),
             }
@@ -132,8 +135,9 @@ def build_tpex_daily_price_plan(
     db_file: Path,
     source_rows: list[Mapping[str, object]],
     fallback_date: str,
+    strict: bool = True,
 ) -> TpexDailyPriceBackfillPlan:
-    normalized = normalize_tpex_daily_price_rows(source_rows, fallback_date=fallback_date)
+    normalized = normalize_tpex_daily_price_rows(source_rows, fallback_date=fallback_date, strict=strict)
     target_date = _normalize_date(fallback_date)
     if normalized.diagnostics:
         return TpexDailyPriceBackfillPlan(
@@ -174,12 +178,14 @@ def apply_tpex_daily_price_backfill(
     backup_dir: Path,
     source_rows: list[Mapping[str, object]],
     fallback_date: str,
+    strict: bool = True,
 ) -> TpexDailyPriceBackfillApplyResult:
     db_file = Path(db_file)
     plan = build_tpex_daily_price_plan(
         db_file=db_file,
         source_rows=source_rows,
         fallback_date=fallback_date,
+        strict=strict,
     )
     if not plan.ready_for_apply:
         return TpexDailyPriceBackfillApplyResult(
