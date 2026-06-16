@@ -114,6 +114,12 @@
 | [2026-06-15-decision-desk-portfolio-alert-attribution.md](../superpowers/plans/2026-06-15-decision-desk-portfolio-alert-attribution.md) | Daily Decision Desk Portfolio Alert Attribution v1 實作計畫，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags。 |
 | [2026-06-16-month4-daily-decision-desk-closure.md](../superpowers/plans/2026-06-16-month4-daily-decision-desk-closure.md) | Month 4 Daily Decision Desk 收尾計畫，定義 reference screen、UI/service 邊界、資料品質驗收、文件關閉與 Month 5 handoff。 |
 | [2026-06-16-month5-fundamental-layer-preflight.md](../superpowers/plans/2026-06-16-month5-fundamental-layer-preflight.md) | Month 5 Fundamental Layer preflight 計畫，定義資料來源盤點、available_date 契約、factor adapter 邊界、no-look-ahead 測試與非目標。 |
+| [2026-06-16-month5-fundamental-main-sequence.md](../superpowers/plans/2026-06-16-month5-fundamental-main-sequence.md) | Month 5 基本面主線 sequencing memo，定義五份後續 superpowers plan 的執行順序、共用非目標與驗證規範。 |
+| [2026-06-16-month5-availability-data-entrypoint.md](../superpowers/plans/2026-06-16-month5-availability-data-entrypoint.md) | Month 5 真實公告日 / available_date 資料入口 plan，建立月營收可得日 mapping 的正式驗證流程。 |
+| [2026-06-16-month5-fundamental-sqlite-migration-v1.md](../superpowers/plans/2026-06-16-month5-fundamental-sqlite-migration-v1.md) | Month 5 Fundamental SQLite 受控 migration v1 plan，要求 working-copy dry-run、backup、rollback 與 schema preservation tests。 |
+| [2026-06-16-month5-revenue-factor-pack-v1.md](../superpowers/plans/2026-06-16-month5-revenue-factor-pack-v1.md) | Month 5 Revenue Factor Pack v1 plan，實作 Revenue YoY、MoM、3M trend 與 new high factor adapters，並強制 available_date gate。 |
+| [2026-06-16-month5-valuation-data-layer-v1.md](../superpowers/plans/2026-06-16-month5-valuation-data-layer-v1.md) | Month 5 Valuation Data Layer v1 plan，建立估值 metric 的 industry percentile 來源與 adapter，只輸出相對區間與 diagnostics。 |
+| [2026-06-16-month5-abnormal-fundamental-diagnostics.md](../superpowers/plans/2026-06-16-month5-abnormal-fundamental-diagnostics.md) | Month 5 AbnormalFundamentalFlag 與診斷整合 plan，將基本面風險提示接入 Research Run / Daily Decision Desk diagnostics。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
 | [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |
@@ -267,6 +273,7 @@
 - 2026-06-16：完成 Month 4 Daily Decision Desk 收尾文件同步，將 Snapshot / Roadmap / Architecture / Manual 轉向 Month 5 Fundamental Layer preflight，並記錄 UI boundary contract test。
 - 2026-06-16：新增 Month 5 Fundamental Layer preflight 計畫，避免在 source inventory、available_date 與 no-look-ahead gate 定義前直接接入基本面資料。
 - 2026-06-16：新增 Month 5 Fundamental Source Inventory，確認既有 `financial_data/` 只可作 raw candidate source，正式 SQLite 尚無 fundamental tables，後續必須先補 available_date contract。
+- 2026-06-16：新增 Month 5 基本面主線 sequencing memo 與五份獨立 superpowers plan，拆分 available_date 資料入口、Fundamental SQLite migration、Revenue Factor Pack、Valuation Data Layer 與 AbnormalFundamentalFlag diagnostics。
 
 
 
