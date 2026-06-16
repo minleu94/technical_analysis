@@ -57,7 +57,8 @@ def build_valuation_observations(
             metric_value = Decimal(row.get("metric_value", "").strip())
             as_of_date = _parse_date(row.get("as_of_date", ""))
             available_date = _parse_date(row.get("available_date", ""))
-            percentile_raw = row.get("industry_percentile_bp", "").strip()
+            percentile_value = row.get("industry_percentile_bp", "")
+            percentile_raw = str(percentile_value).strip()
             percentile = int(percentile_raw) if percentile_raw else None
             quality = FactorQuality(row.get("quality", "").strip())
         except (InvalidOperation, ValueError):
