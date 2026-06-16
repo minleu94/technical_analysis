@@ -146,6 +146,7 @@
 | [QA_UPDATE_TAB_SUMMARY.md](../06_qa/QA_UPDATE_TAB_SUMMARY.md) | 數據更新 Tab QA 總結。 |
 | [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
+| [DOCUMENT_ENCODING_AUDIT_2026_06_16.md](../06_qa/DOCUMENT_ENCODING_AUDIT_2026_06_16.md) | repo 文件 UTF-8 / mojibake 稽核報告，確認顯示雜訊來自終端編碼而非文件內容損壞。 |
 
 ---
 
@@ -274,6 +275,7 @@
 - 2026-06-16：新增 Month 5 Fundamental Layer preflight 計畫，避免在 source inventory、available_date 與 no-look-ahead gate 定義前直接接入基本面資料。
 - 2026-06-16：新增 Month 5 Fundamental Source Inventory，確認既有 `financial_data/` 只可作 raw candidate source，正式 SQLite 尚無 fundamental tables，後續必須先補 available_date contract。
 - 2026-06-16：新增 Month 5 基本面主線 sequencing memo 與五份獨立 superpowers plan，拆分 available_date 資料入口、Fundamental SQLite migration、Revenue Factor Pack、Valuation Data Layer 與 AbnormalFundamentalFlag diagnostics。
+- 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
 
 
 

@@ -187,6 +187,16 @@ set TWSTOCK_DATA_DIR=your/custom/path
 
 ### 4. 工具腳本
 
+#### `audit_document_encoding.py`
+- **功能**：唯讀掃描文件編碼，確認 repo Markdown 與 `docs/` 下文字型文件是否可 strict UTF-8 解碼，並列出疑似 mojibake 片段。
+- **使用範例**：
+  ```bash
+  python scripts/audit_document_encoding.py
+
+  # 若希望疑似 mojibake 也使指令失敗
+  python scripts/audit_document_encoding.py --fail-on-mojibake
+  ```
+
 #### `market_date_range.py`
 - **功能**：市場日期範圍管理
 - **使用範例**：
@@ -213,6 +223,7 @@ set TWSTOCK_DATA_DIR=your/custom/path
 - `date_specific_indicator_calc.py` - 特定日期指標計算
 
 ### 🛠️ 工具腳本
+- `audit_document_encoding.py` - 文件 UTF-8 / mojibake 稽核
 - `market_date_range.py` - 日期範圍管理
 
 ## 腳本執行順序建議

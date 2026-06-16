@@ -17,6 +17,9 @@
 ### UI Qt Roadmap Audit
 - `UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md` - UI Qt 對照 development roadmap 的完成度稽核報告
 
+### 文件與工具稽核
+- `DOCUMENT_ENCODING_AUDIT_2026_06_16.md` - repo 文件 UTF-8 / mojibake 掃描報告
+
 ## 🔗 相關目錄
 
 - `../02_features/` - 功能文檔
