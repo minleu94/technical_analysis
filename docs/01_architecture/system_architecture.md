@@ -389,7 +389,8 @@ Month 2 M2-C 已新增 Cross-run Comparison service / UI 與 Registry-based Prom
 ### 12.1 SQLite 檢視器穩定分頁
 
 - **分頁機制**：透過 `SqliteInspectorService` 的 count 與 page 查詢共用 filter builder。預覽查詢藉由 `LIMIT ? OFFSET ?` 完成。
-- **排序穩定契約**：依 `日期 DESC, 證券代號 ASC` 加上其他關鍵欄位作為 tie-breaker，最後補上唯一 `rowid ASC`，確保跨頁無重複與遺漏。
+- **排序穩定契約**：預設依 `日期 DESC, 證券代號 ASC` 加上其他關鍵欄位作為 tie-breaker，最後補上唯一 `rowid ASC`，確保跨頁無重複與遺漏；使用者點擊表頭排序時，只能使用 PRAGMA schema 驗證後的白名單欄位或安全顯示 alias，並由 SQLite 端 `ORDER BY` 搭配既有分頁執行。
+- **欄位呈現契約**：SQLite Inspector 可在唯讀查詢層套用使用者可見 alias，例如舊 daily_prices schema 的簡體 `涨跌` 會顯示為繁體 `漲跌`；`漲跌價差` 的預覽值可依 `漲跌(+/-)` / `漲跌` 方向轉為帶正負號的展示值，但不改寫原始資料表。
 - **防禦與 stale 處理**：當重新查詢或變更篩選時，頁碼重設為 1。背景 `TaskWorker` 攜帶單調遞增的 `request_id`，UI 在讀取完畢時會校驗 `request_id` 與當前最新請求是否相符，丟棄過期 (stale) 結果。執行中的 worker 會保留強參考直到執行緒自然結束，不對舊查詢呼叫無參數 `disconnect()` 或提前釋放 `QThread`。
 
 ### 12.2 規格化 Excel 報告匯出

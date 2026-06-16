@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 
 from ui_qt.workers.task_worker import TaskWorker, ProgressTaskWorker
@@ -160,9 +160,28 @@ class UpdateView(QWidget):
 
         # Worker
         self.worker: Optional[TaskWorker] = None
+        self._active_workers: List[TaskWorker] = []
 
         self._setup_ui()
         self._check_data_status()
+
+    def _start_worker(self, worker: TaskWorker) -> TaskWorker:
+        """Keep background tasks alive independently until they finish."""
+        self.worker = worker
+        self._active_workers.append(worker)
+        if hasattr(worker, "cancelled"):
+            worker.cancelled.connect(lambda current_worker=worker: self._release_worker(current_worker))
+        return worker
+
+    def _release_worker(self, worker: TaskWorker):
+        if worker in self._active_workers:
+            self._active_workers.remove(worker)
+        if self.worker is worker:
+            self.worker = self._active_workers[-1] if self._active_workers else None
+
+    def _attach_worker_cleanup(self, worker: TaskWorker):
+        worker.finished.connect(lambda _payload, current_worker=worker: self._release_worker(current_worker))
+        worker.error.connect(lambda _message, current_worker=worker: self._release_worker(current_worker))
 
     def _setup_ui(self):
         """設置 UI"""
@@ -943,11 +962,6 @@ class UpdateView(QWidget):
     def _check_data_status(self):
         """檢查數據狀態"""
         try:
-            # ✅ 取消之前的 Worker（如果存在）
-            if self.worker and self.worker.isRunning():
-                self.worker.cancel()
-                self.worker.wait(3000)  # 等待最多 3 秒
-
             self.check_status_btn.setEnabled(False)
             self.check_status_btn.setText("檢查中...")
 
@@ -955,10 +969,11 @@ class UpdateView(QWidget):
             def check_task():
                 return self._get_overview_status()
 
-            self.worker = TaskWorker(check_task)
-            self.worker.finished.connect(self._on_status_checked)
-            self.worker.error.connect(self._on_status_error)
-            self.worker.start()
+            worker = self._start_worker(TaskWorker(check_task))
+            worker.finished.connect(self._on_status_checked)
+            worker.error.connect(self._on_status_error)
+            self._attach_worker_cleanup(worker)
+            worker.start()
 
         except Exception as e:
             QMessageBox.critical(self, "錯誤", f"檢查數據狀態失敗：\n{str(e)}")
@@ -989,17 +1004,15 @@ class UpdateView(QWidget):
         """背景載入單一資料來源的詳細狀態"""
         if not force and source in self._loaded_detail_sources:
             return
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait(3000)
 
         def check_task():
             return {"source": source, "status": self._get_source_detail(source)}
 
-        self.worker = TaskWorker(check_task)
-        self.worker.finished.connect(self._on_source_detail_checked)
-        self.worker.error.connect(self._on_status_error)
-        self.worker.start()
+        worker = self._start_worker(TaskWorker(check_task))
+        worker.finished.connect(self._on_source_detail_checked)
+        worker.error.connect(self._on_status_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
 
     def _on_source_detail_checked(self, payload: Dict[str, Any]):
         """單一資料來源詳細狀態載入完成"""
@@ -1220,15 +1233,12 @@ class UpdateView(QWidget):
         self.log_text.clear()
         self._log(f"開始{mode_name}所有數據")
 
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait(3000)
-
-        self.worker = ProgressTaskWorker(self._run_update_all, mode=mode)
-        self.worker.progress.connect(self._on_update_all_progress)
-        self.worker.finished.connect(self._on_update_all_finished)
-        self.worker.error.connect(self._on_update_all_error)
-        self.worker.start()
+        worker = self._start_worker(ProgressTaskWorker(self._run_update_all, mode=mode))
+        worker.progress.connect(self._on_update_all_progress)
+        worker.finished.connect(self._on_update_all_finished)
+        worker.error.connect(self._on_update_all_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
 
     def _on_update_all_progress(self, message: str, progress: int):
         """更新更新流程進度"""
@@ -1320,11 +1330,6 @@ class UpdateView(QWidget):
         self._log(f"查找範圍：{start_date} 至 {end_date}（最近 {lookback_days} 天）")
         self._log(f"說明：系統會在該範圍內查找缺失的日期並下載，合併時會合併所有數據")
 
-        # ✅ 取消之前的 Worker（如果存在）
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait(3000)  # 等待最多 3 秒
-
         # 創建 Worker 任務
         def update_task(progress_callback=None):
             import logging
@@ -1354,11 +1359,12 @@ class UpdateView(QWidget):
                 # ✅ 不要 raise，讓 Worker 的異常處理機制處理
                 raise
 
-        self.worker = ProgressTaskWorker(update_task)
-        self.worker.progress.connect(self._on_update_progress)
-        self.worker.finished.connect(self._on_update_finished)
-        self.worker.error.connect(self._on_update_error)
-        self.worker.start()
+        worker = self._start_worker(ProgressTaskWorker(update_task))
+        worker.progress.connect(self._on_update_progress)
+        worker.finished.connect(self._on_update_finished)
+        worker.error.connect(self._on_update_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
 
     def _on_update_progress(self, message: str, percentage: int):
         """更新進度回調"""
@@ -1494,11 +1500,6 @@ class UpdateView(QWidget):
         else:
             self._log("開始合併每日股票數據（增量模式）")
 
-        # ✅ 取消之前的 Worker（如果存在）
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait(3000)  # 等待最多 3 秒
-
         # 創建 Worker 任務
         def merge_task():
             import logging
@@ -1515,10 +1516,11 @@ class UpdateView(QWidget):
                 # ✅ 不要 raise，讓 Worker 的異常處理機制處理
                 raise
 
-        self.worker = TaskWorker(merge_task)
-        self.worker.finished.connect(self._on_merge_finished)
-        self.worker.error.connect(self._on_merge_error)
-        self.worker.start()
+        worker = self._start_worker(TaskWorker(merge_task))
+        worker.finished.connect(self._on_merge_finished)
+        worker.error.connect(self._on_merge_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
 
     def _on_merge_finished(self, result: Dict[str, Any]):
         """合併完成"""
@@ -1613,11 +1615,6 @@ class UpdateView(QWidget):
         self.log_text.clear()
         self._log("開始合併券商分點資料（增量模式）")
 
-        # ✅ 取消之前的 Worker（如果存在）
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait(3000)
-
         # 創建 Worker 任務
         def merge_task():
             import logging
@@ -1633,10 +1630,11 @@ class UpdateView(QWidget):
                 logger.error(f"[UpdateView] {error_msg}")
                 raise
 
-        self.worker = TaskWorker(merge_task)
-        self.worker.finished.connect(self._on_merge_broker_branch_finished)
-        self.worker.error.connect(self._on_merge_broker_branch_error)
-        self.worker.start()
+        worker = self._start_worker(TaskWorker(merge_task))
+        worker.finished.connect(self._on_merge_broker_branch_finished)
+        worker.error.connect(self._on_merge_broker_branch_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
 
     def _on_merge_broker_branch_finished(self, result: Dict[str, Any]):
         """券商分點資料合併完成"""
@@ -1764,11 +1762,6 @@ class UpdateView(QWidget):
         stock_text = f"股票：{target_stock}" if target_stock else "股票：全部"
         self._log(f"開始計算技術指標（{mode_text}，{stock_text}）")
 
-        # ✅ 取消之前的 Worker（如果存在）
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait(3000)
-
         # 創建 Worker 任務（使用 ProgressTaskWorker 支持進度回調）
         def calculate_task(progress_callback=None):
             """技術指標計算任務（支持進度回調）"""
@@ -1790,11 +1783,12 @@ class UpdateView(QWidget):
                 logger.error(f"[UpdateView] {error_msg}")
                 raise
 
-        self.worker = ProgressTaskWorker(calculate_task)
-        self.worker.progress.connect(self._on_tech_progress)
-        self.worker.finished.connect(self._on_tech_calculate_finished)
-        self.worker.error.connect(self._on_tech_calculate_error)
-        self.worker.start()
+        worker = self._start_worker(ProgressTaskWorker(calculate_task))
+        worker.progress.connect(self._on_tech_progress)
+        worker.finished.connect(self._on_tech_calculate_finished)
+        worker.error.connect(self._on_tech_calculate_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
 
     def _on_tech_progress(self, message: str, progress: int):
         """技術指標計算進度更新"""
@@ -1943,10 +1937,6 @@ class UpdateView(QWidget):
         self.progress_label.setText(f"正在匯出 {table_name} 資料至 CSV...")
         self._log(f"開始匯出 {table_name} 資料至 {target_path}")
 
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.worker.wait(3000)
-
         def export_task():
             return self.update_service.export_table_to_csv(
                 table_name=table_name,
@@ -1955,7 +1945,7 @@ class UpdateView(QWidget):
                 end_date=e_date
             )
 
-        self.worker = TaskWorker(export_task)
+        worker = self._start_worker(TaskWorker(export_task))
 
         def on_export_finished(result: Dict[str, Any]):
             self.progress_bar.setVisible(False)
@@ -1975,18 +1965,18 @@ class UpdateView(QWidget):
             self._log(f"匯出出錯：{error_msg}")
             QMessageBox.critical(self, "匯出失敗", f"匯出過程發生錯誤：\n{error_msg}")
 
-        self.worker.finished.connect(on_export_finished)
-        self.worker.error.connect(on_export_error)
-        self.worker.start()
+        worker.finished.connect(on_export_finished)
+        worker.error.connect(on_export_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
 
     def closeEvent(self, event):
         """關閉事件"""
-        # ✅ 取消正在運行的 Worker 並等待完成
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            # 等待線程完成（最多等待 5 秒）
-            if not self.worker.wait(5000):
-                # 如果等待超時，強制終止
-                self.worker.terminate()
-                self.worker.wait(1000)
+        for worker in list(self._active_workers):
+            if worker.isRunning():
+                if hasattr(worker, "cancel"):
+                    worker.cancel()
+                if not worker.wait(5000) and hasattr(worker, "terminate"):
+                    worker.terminate()
+                    worker.wait(1000)
         event.accept()

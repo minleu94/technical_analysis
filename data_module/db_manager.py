@@ -82,7 +82,7 @@ class DBManager:
                     最高價 REAL,
                     最低價 REAL,
                     收盤價 REAL,
-                    涨跌 TEXT,
+                    漲跌 TEXT,
                     漲跌價差 REAL,
                     最後揭示買價 REAL,
                     最後揭示買量 INTEGER,

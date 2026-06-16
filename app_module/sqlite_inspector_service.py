@@ -15,6 +15,7 @@ class SqliteInspectorService:
 
     # 白名單限制的五大核心表
     ALLOWED_TABLES = {'daily_prices', 'technical_indicators', 'market_indices', 'industry_indices', 'broker_flows'}
+    DISPLAY_COLUMN_ALIASES = {'涨跌': '漲跌'}
 
     def __init__(self, config):
         """初始化檢視服務
@@ -25,6 +26,95 @@ class SqliteInspectorService:
         self.config = config
         self.logger = logging.getLogger(__name__)
         self.db_manager = DBManager(config)
+
+    def _validate_table_name(self, table_name: str):
+        if table_name not in self.ALLOWED_TABLES:
+            raise ValueError(f"拒絕訪問非白名單資料表: {table_name}")
+        if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
+            raise ValueError(f"不合法的資料表名稱: {table_name}")
+
+    def _get_raw_columns(self, table_name: str) -> List[str]:
+        self._validate_table_name(table_name)
+        with self.db_manager.connect() as conn:
+            cursor = conn.execute(f"PRAGMA table_info({table_name});")
+            return [row["name"] for row in cursor.fetchall()]
+
+    def _display_column_name(self, raw_column: str) -> str:
+        return self.DISPLAY_COLUMN_ALIASES.get(raw_column, raw_column)
+
+    def _column_lookup(self, raw_columns: List[str]) -> Dict[str, str]:
+        lookup = {col: col for col in raw_columns}
+        for raw_col in raw_columns:
+            lookup[self._display_column_name(raw_col)] = raw_col
+        return lookup
+
+    def _signed_change_expression(self, raw_columns: List[str]) -> Optional[str]:
+        if '漲跌價差' not in raw_columns:
+            return None
+
+        sign_candidates = [col for col in ('漲跌(+/-)', '漲跌', '涨跌') if col in raw_columns]
+        if not sign_candidates:
+            return '"漲跌價差"'
+
+        if len(sign_candidates) == 1:
+            sign_expr = f'"{sign_candidates[0]}"'
+        else:
+            sign_expr = "COALESCE(" + ", ".join(f'"{col}"' for col in sign_candidates) + ")"
+        return (
+            f'CASE '
+            f"WHEN TRIM({sign_expr}) IN ('-', '−', '跌', '▼') THEN -ABS(\"漲跌價差\") "
+            f"WHEN TRIM({sign_expr}) IN ('+', '＋', '漲', '▲') THEN ABS(\"漲跌價差\") "
+            f'ELSE "漲跌價差" END'
+        )
+
+    def _select_expression(self, table_name: str, raw_column: str, raw_columns: List[str]) -> str:
+        display_col = self._display_column_name(raw_column)
+        if table_name == "daily_prices" and raw_column == "漲跌價差":
+            change_expr = self._signed_change_expression(raw_columns)
+            if change_expr:
+                return f'{change_expr} AS "{display_col}"'
+        if display_col != raw_column:
+            return f'"{raw_column}" AS "{display_col}"'
+        return f'"{raw_column}"'
+
+    def _default_order_sql(self, raw_columns: List[str]) -> str:
+        order_clauses = []
+        if '日期' in raw_columns:
+            order_clauses.append('"日期" DESC')
+        if '證券代號' in raw_columns:
+            order_clauses.append('"證券代號" ASC')
+        if '分點名稱' in raw_columns:
+            order_clauses.append('"分點名稱" ASC')
+        order_clauses.append('rowid ASC')
+        return " ORDER BY " + ", ".join(order_clauses)
+
+    def _sort_expression(
+        self,
+        table_name: str,
+        sort_column: Optional[str],
+        sort_order: str,
+        raw_columns: List[str],
+    ) -> str:
+        if not sort_column:
+            return self._default_order_sql(raw_columns)
+
+        raw_column = self._column_lookup(raw_columns).get(sort_column)
+        if not raw_column:
+            return self._default_order_sql(raw_columns)
+
+        direction = "ASC" if str(sort_order).lower() == "asc" else "DESC"
+        if table_name == "daily_prices" and raw_column == "漲跌價差":
+            order_expr = self._signed_change_expression(raw_columns) or '"漲跌價差"'
+        else:
+            order_expr = f'"{raw_column}"'
+
+        stable_ties = []
+        if raw_column != '日期' and '日期' in raw_columns:
+            stable_ties.append('"日期" DESC')
+        if raw_column != '證券代號' and '證券代號' in raw_columns:
+            stable_ties.append('"證券代號" ASC')
+        stable_ties.append('rowid ASC')
+        return " ORDER BY " + ", ".join([f"{order_expr} {direction}", *stable_ties])
 
     def is_enabled(self) -> bool:
         """檢查 SQLite 是否啟用"""
@@ -62,12 +152,7 @@ class SqliteInspectorService:
         if not self.is_enabled():
             return pd.DataFrame()
 
-        if table_name not in self.ALLOWED_TABLES:
-            raise ValueError(f"拒絕訪問非白名單資料表: {table_name}")
-
-        # 防禦：防止 SQL Injection 在 PRAGMA 中，限制 table_name 必須為合法的標識符
-        if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
-            raise ValueError(f"不合法的資料表名稱: {table_name}")
+        self._validate_table_name(table_name)
 
         try:
             # PRAGMA 查詢需要獨立連線
@@ -100,6 +185,8 @@ class SqliteInspectorService:
                     'pk': '主鍵'
                 }
                 df = df.rename(columns=rename_map)
+                if '欄位名稱' in df.columns:
+                    df['欄位名稱'] = df['欄位名稱'].map(self._display_column_name)
                 return df
         except Exception as e:
             self.logger.error(f"[SqliteInspectorService] 獲取資料表 {table_name} Schema 失敗: {e}")
@@ -175,14 +262,14 @@ class SqliteInspectorService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         broker_branch: Optional[str] = None,
+        sort_column: Optional[str] = None,
+        sort_order: str = "desc",
     ) -> tuple[list[str], str, list[Any], str]:
-        """建立篩選條件與排序 SQL，回傳 (valid_columns, WHERE_SQL, params, ORDER_BY_SQL)"""
-        # 1. 取得 Table schema 以驗證欄位白名單
-        schema_df = self.get_table_schema(table_name)
-        if schema_df.empty:
+        """建立篩選條件與排序 SQL，回傳 (raw_columns, WHERE_SQL, params, ORDER_BY_SQL)"""
+        raw_columns = self._get_raw_columns(table_name)
+        if not raw_columns:
             return [], "", [], ""
 
-        valid_columns = schema_df['欄位名稱'].tolist()
         where_clauses = []
         params = []
 
@@ -195,17 +282,17 @@ class SqliteInspectorService:
             return None
 
         # 篩選：證券代號
-        if '證券代號' in valid_columns and stock_code:
+        if '證券代號' in raw_columns and stock_code:
             where_clauses.append('"證券代號" = ?')
             params.append(str(stock_code).strip())
 
         # 篩選：證券名稱 (支援模糊查詢)
-        if '證券名稱' in valid_columns and stock_name:
+        if '證券名稱' in raw_columns and stock_name:
             where_clauses.append('"證券名稱" LIKE ?')
             params.append(f"%{str(stock_name).strip()}%")
 
         # 篩選：日期
-        if '日期' in valid_columns:
+        if '日期' in raw_columns:
             d_val = parse_date(date_str)
             if d_val:
                 where_clauses.append('"日期" = ?')
@@ -221,7 +308,7 @@ class SqliteInspectorService:
                     params.append(e_val)
 
         # 篩選：分點名稱 (支援模糊查詢)
-        if '分點名稱' in valid_columns and broker_branch:
+        if '分點名稱' in raw_columns and broker_branch:
             where_clauses.append('"分點名稱" LIKE ?')
             params.append(f"%{str(broker_branch).strip()}%")
 
@@ -229,23 +316,9 @@ class SqliteInspectorService:
         if where_clauses:
             where_sql = " WHERE " + " AND ".join(where_clauses)
 
-        # 穩定排序規則設計：
-        # - 有 `日期`：`"日期" DESC`
-        # - 有 `證券代號`：再加 `"證券代號" ASC`
-        # - 有其他可能的識別欄位：如分點名稱，加上 `"分點名稱" ASC`
-        # - 最後一律加上 rowid ASC 作為最終的 tie-breaker
-        order_clauses = []
-        if '日期' in valid_columns:
-            order_clauses.append('"日期" DESC')
-        if '證券代號' in valid_columns:
-            order_clauses.append('"證券代號" ASC')
-        if '分點名稱' in valid_columns:
-            order_clauses.append('"分點名稱" ASC')
-            
-        order_clauses.append('rowid ASC')
-        order_by_sql = " ORDER BY " + ", ".join(order_clauses)
+        order_by_sql = self._sort_expression(table_name, sort_column, sort_order, raw_columns)
 
-        return valid_columns, where_sql, params, order_by_sql
+        return raw_columns, where_sql, params, order_by_sql
 
     def query_table_data(
         self,
@@ -257,7 +330,9 @@ class SqliteInspectorService:
         end_date: Optional[str] = None,
         broker_branch: Optional[str] = None,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
+        sort_column: Optional[str] = None,
+        sort_order: str = "desc",
     ) -> pd.DataFrame:
         """受控的表格資料分頁查詢"""
         if not self.is_enabled():
@@ -269,21 +344,26 @@ class SqliteInspectorService:
         limit = max(1, min(limit, 5000))
         offset = max(0, int(offset))
 
-        valid_columns, where_sql, params, order_by_sql = self._build_filtered_query(
+        raw_columns, where_sql, params, order_by_sql = self._build_filtered_query(
             table_name=table_name,
             stock_code=stock_code,
             stock_name=stock_name,
             date_str=date_str,
             start_date=start_date,
             end_date=end_date,
-            broker_branch=broker_branch
+            broker_branch=broker_branch,
+            sort_column=sort_column,
+            sort_order=sort_order,
         )
 
-        if not valid_columns:
+        if not raw_columns:
             return pd.DataFrame()
 
-        escaped_cols = ", ".join([f'"{col}"' for col in valid_columns])
-        sql = f'SELECT {escaped_cols} FROM "{table_name}"' + where_sql + order_by_sql + " LIMIT ? OFFSET ?"
+        select_cols = ", ".join(
+            self._select_expression(table_name, col, raw_columns)
+            for col in raw_columns
+        )
+        sql = f'SELECT {select_cols} FROM "{table_name}"' + where_sql + order_by_sql + " LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         try:

@@ -4,7 +4,8 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget, QMessageBox
+from PySide6.QtCore import QDate, Qt
+from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget, QMessageBox, QDateEdit
 import pandas as pd
 
 from ui_qt.views.update_view import UpdateView
@@ -410,6 +411,23 @@ class DeferredTaskWorker:
         raise AssertionError("running workers must not be disconnected")
 
 
+def test_update_view_detail_refresh_does_not_cancel_running_merge(monkeypatch):
+    from ui_qt.views import update_view
+
+    DeferredTaskWorker.instances = []
+    monkeypatch.setattr(update_view, "TaskWorker", DeferredTaskWorker)
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+
+    view = make_view()
+    view._execute_merge()
+    merge_worker = DeferredTaskWorker.instances[-1]
+
+    view._check_source_detail("market", force=True)
+
+    assert merge_worker.isRunning()
+    assert len(view._active_workers) == 2
+
+
 def test_sqlite_inspector_rapid_requests_keep_running_workers_alive(monkeypatch):
     from ui_qt.widgets import sqlite_inspector_widget
 
@@ -470,6 +488,50 @@ def test_filter_reload_resets_to_first_page(monkeypatch):
     
     assert widget.current_page == 1
 
+
+def test_sqlite_inspector_uses_calendar_date_filters(monkeypatch):
+    from ui_qt.widgets import sqlite_inspector_widget
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(sqlite_inspector_widget, "TaskWorker", SynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+    service = FakeInspectorService(total=250)
+    widget = SqliteInspectorWidget(service)
+    widget._adjust_table_header = lambda *args, **kwargs: None
+    widget.current_table = "daily_prices"
+
+    assert isinstance(widget.date_input, QDateEdit)
+    assert widget.date_input.calendarPopup()
+
+    widget._request_page(load_schema=False)
+    assert service.last_query.get("date_str") is None
+
+    widget.date_input.setDate(QDate(2026, 5, 29))
+    widget._request_page(load_schema=False)
+    assert service.last_query.get("date_str") == "2026-05-29"
+
+
+def test_sqlite_inspector_header_sort_requests_server_order(monkeypatch):
+    from ui_qt.widgets import sqlite_inspector_widget
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(sqlite_inspector_widget, "TaskWorker", SynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+    service = FakeInspectorService(total=250)
+    widget = SqliteInspectorWidget(service)
+    widget._adjust_table_header = lambda *args, **kwargs: None
+    widget.current_table = "daily_prices"
+    widget._request_page(load_schema=False)
+
+    widget._on_preview_header_clicked(0)
+
+    assert service.last_query.get("sort_column") == "日期"
+    assert service.last_query.get("sort_order") == "asc"
+    assert widget.current_page == 1
 
 
 

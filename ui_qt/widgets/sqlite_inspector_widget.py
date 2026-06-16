@@ -9,9 +9,9 @@ import pandas as pd
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox,
     QPushButton, QTabWidget, QTableView, QMessageBox, QGroupBox,
-    QHeaderView, QLineEdit
+    QHeaderView, QLineEdit, QDateEdit
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QDate
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.workers.task_worker import TaskWorker
 from app_module.sqlite_inspector_service import SqliteInspectorService
@@ -46,6 +46,9 @@ class SqliteInspectorWidget(QWidget):
         self._active_request_id = 0
         self._cached_schema_table = ""
         self._cached_schema_df = pd.DataFrame()
+        self.sort_column: Optional[str] = None
+        self.sort_order = "desc"
+        self._null_date = QDate(1900, 1, 1)
         
         self._init_ui()
 
@@ -129,33 +132,38 @@ class SqliteInspectorWidget(QWidget):
         row2_layout.addWidget(self.broker_branch_input)
 
         row2_layout.addWidget(QLabel("單一日期:"))
-        self.date_input = QLineEdit()
-        self.date_input.setPlaceholderText("2026-05-29")
+        self.date_input = self._create_optional_date_edit()
         self.date_input.setMaximumWidth(100)
         self.date_input.setToolTip(
             "【單一日期】\n"
-            "輸入特定交易日（格式為 YYYY-MM-DD，如 2026-05-29）來精確過濾當日數據。"
+            "點選特定交易日（格式為 YYYY-MM-DD，如 2026-05-29）來精確過濾當日數據。"
         )
         row2_layout.addWidget(self.date_input)
+        self.clear_date_btn = QPushButton("清除")
+        self.clear_date_btn.setMaximumWidth(52)
+        self.clear_date_btn.clicked.connect(lambda: self._clear_date_edit(self.date_input))
+        row2_layout.addWidget(self.clear_date_btn)
 
         row2_layout.addWidget(QLabel("區間:"))
-        self.start_date_input = QLineEdit()
-        self.start_date_input.setPlaceholderText("開始日期")
+        self.start_date_input = self._create_optional_date_edit()
         self.start_date_input.setMaximumWidth(90)
         self.start_date_input.setToolTip(
             "【開始日期】\n"
-            "輸入日期區間的起始日（格式為 YYYY-MM-DD，如 2026-05-01），用以做範圍查詢（需與結束日期搭配）。"
+            "點選日期區間的起始日（格式為 YYYY-MM-DD，如 2026-05-01），用以做範圍查詢（需與結束日期搭配）。"
         )
         row2_layout.addWidget(self.start_date_input)
         row2_layout.addWidget(QLabel("~"))
-        self.end_date_input = QLineEdit()
-        self.end_date_input.setPlaceholderText("結束日期")
+        self.end_date_input = self._create_optional_date_edit()
         self.end_date_input.setMaximumWidth(90)
         self.end_date_input.setToolTip(
             "【結束日期】\n"
-            "輸入日期區間的截止日（格式為 YYYY-MM-DD，如 2026-05-29），用以做範圍查詢（需與開始日期搭配）。"
+            "點選日期區間的截止日（格式為 YYYY-MM-DD，如 2026-05-29），用以做範圍查詢（需與開始日期搭配）。"
         )
         row2_layout.addWidget(self.end_date_input)
+        self.clear_range_btn = QPushButton("清除")
+        self.clear_range_btn.setMaximumWidth(52)
+        self.clear_range_btn.clicked.connect(self._clear_range_dates)
+        row2_layout.addWidget(self.clear_range_btn)
 
         row2_layout.addStretch()
         control_main_layout.addLayout(row2_layout)
@@ -177,6 +185,8 @@ class SqliteInspectorWidget(QWidget):
         
         self.preview_table = QTableView()
         self.preview_table.setAlternatingRowColors(True)
+        self.preview_table.horizontalHeader().setSortIndicatorShown(True)
+        self.preview_table.horizontalHeader().sectionClicked.connect(self._on_preview_header_clicked)
         preview_layout.addWidget(self.preview_table)
 
         # 加入分頁控制列
@@ -227,6 +237,28 @@ class SqliteInspectorWidget(QWidget):
         main_layout.addWidget(self.tabs, stretch=1)
         self.setLayout(main_layout)
 
+    def _create_optional_date_edit(self) -> QDateEdit:
+        date_edit = QDateEdit()
+        date_edit.setCalendarPopup(True)
+        date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_edit.setMinimumDate(self._null_date)
+        date_edit.setMaximumDate(QDate(2100, 12, 31))
+        date_edit.setSpecialValueText("不篩選")
+        date_edit.setDate(self._null_date)
+        return date_edit
+
+    def _clear_date_edit(self, date_edit: QDateEdit):
+        date_edit.setDate(self._null_date)
+
+    def _clear_range_dates(self):
+        self._clear_date_edit(self.start_date_input)
+        self._clear_date_edit(self.end_date_input)
+
+    def _date_filter_value(self, date_edit: QDateEdit) -> str:
+        if date_edit.date() == self._null_date:
+            return ""
+        return date_edit.date().toString("yyyy-MM-dd")
+
     def refresh_tables(self):
         """重新獲取資料表列表並刷新下拉選單"""
         if not self.inspector_service.is_enabled():
@@ -251,6 +283,8 @@ class SqliteInspectorWidget(QWidget):
         self.current_page = 1
         self.total_filtered_records = 0
         self.total_pages = 0
+        self.sort_column = None
+        self.sort_order = "desc"
         self._update_pagination_ui()
 
     def _load_current_table_data(self):
@@ -270,9 +304,9 @@ class SqliteInspectorWidget(QWidget):
         stock_code = self.stock_code_input.text().strip()
         stock_name = self.stock_name_input.text().strip()
         broker_branch = self.broker_branch_input.text().strip()
-        date_str = self.date_input.text().strip()
-        start_date = self.start_date_input.text().strip()
-        end_date = self.end_date_input.text().strip()
+        date_str = self._date_filter_value(self.date_input)
+        start_date = self._date_filter_value(self.start_date_input)
+        end_date = self._date_filter_value(self.end_date_input)
 
         request_id = self._active_request_id + 1
         self._active_request_id = request_id
@@ -320,7 +354,9 @@ class SqliteInspectorWidget(QWidget):
                 end_date=end_date if end_date else None,
                 broker_branch=broker_branch if broker_branch else None,
                 limit=limit,
-                offset=offset
+                offset=offset,
+                sort_column=self.sort_column,
+                sort_order=self.sort_order,
             )
             return {
                 'request_id': request_id,
@@ -427,6 +463,25 @@ class SqliteInspectorWidget(QWidget):
             return
 
         self._update_pagination_ui()
+
+    def _on_preview_header_clicked(self, section: int):
+        if self.preview_model is None:
+            return
+        columns = self.preview_model.getVisibleColumns()
+        if section < 0 or section >= len(columns):
+            return
+
+        column_name = columns[section]
+        if self.sort_column == column_name:
+            self.sort_order = "desc" if self.sort_order == "asc" else "asc"
+        else:
+            self.sort_column = column_name
+            self.sort_order = "asc"
+
+        qt_order = Qt.AscendingOrder if self.sort_order == "asc" else Qt.DescendingOrder
+        self.preview_table.horizontalHeader().setSortIndicator(section, qt_order)
+        self.current_page = 1
+        self._request_page(load_schema=False)
 
     def _on_table_data_error(self, error_msg: str):
         """載入出錯"""

@@ -209,3 +209,53 @@ def test_negative_offset_is_clamped_to_zero(test_config):
     pd.testing.assert_frame_equal(actual, expected)
 
 
+def test_daily_price_schema_displays_traditional_change_column(test_config):
+    service = SqliteInspectorService(test_config)
+
+    schema_df = service.get_table_schema("daily_prices")
+    columns = schema_df["欄位名稱"].tolist()
+
+    assert "漲跌" in columns
+    assert "涨跌" not in columns
+
+
+def test_query_table_data_supports_server_side_sorting(test_config):
+    service = SqliteInspectorService(test_config)
+
+    df = service.query_table_data(
+        "daily_prices",
+        sort_column="收盤價",
+        sort_order="asc",
+    )
+
+    assert df.iloc[0]["日期"] == "20260528"
+    assert df.iloc[0]["收盤價"] == 790.0
+
+
+def test_daily_price_change_diff_uses_direction_sign_for_display(test_config):
+    from data_module.db_manager import DBManager
+
+    db = DBManager(test_config)
+    with db.connect() as conn:
+        conn.execute('ALTER TABLE daily_prices ADD COLUMN "漲跌(+/-)" TEXT;')
+        conn.execute(
+            'UPDATE daily_prices SET "漲跌(+/-)" = ?, "漲跌價差" = ? WHERE 日期 = ?;',
+            ("-", 10.0, "20260529"),
+        )
+        conn.execute(
+            'UPDATE daily_prices SET "漲跌(+/-)" = ?, "漲跌價差" = ? WHERE 日期 = ?;',
+            ("+", 5.0, "20260528"),
+        )
+
+    service = SqliteInspectorService(test_config)
+    df = service.query_table_data(
+        "daily_prices",
+        sort_column="漲跌價差",
+        sort_order="asc",
+    )
+
+    assert df.iloc[0]["日期"] == "20260529"
+    assert df.iloc[0]["漲跌價差"] == -10.0
+    assert df.iloc[1]["漲跌價差"] == 5.0
+
+
