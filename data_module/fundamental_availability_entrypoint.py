@@ -17,6 +17,7 @@ MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES = frozenset(
         "manual.twse_monthly_revenue_announcement_log",
         "manual.available_date_mapping",
         "twse.monthly_revenue_announcement",
+        "tpex.monthly_revenue_announcement",
         "mops.monthly_revenue_announcement",
     }
 )
