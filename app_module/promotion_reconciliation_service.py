@@ -12,6 +12,10 @@ from app_module.strategy_lifecycle_service import (
     LifecycleAction,
     StrategyLifecycleService,
 )
+from app_module.strategy_lifecycle_repository import (
+    LifecycleEvidenceRepository,
+    LifecycleEvidenceStatus,
+)
 
 
 class PromotionPreflightError(Exception):
@@ -35,10 +39,12 @@ class PromotionReconciliationService:
         research_repository: ResearchRunRepository,
         strategy_version_service: StrategyVersionService,
         lifecycle_service: StrategyLifecycleService | None = None,
+        lifecycle_evidence_repository: LifecycleEvidenceRepository | None = None,
     ):
         self.research_repository = research_repository
         self.strategy_version_service = strategy_version_service
         self.lifecycle_service = lifecycle_service or StrategyLifecycleService()
+        self.lifecycle_evidence_repository = lifecycle_evidence_repository
 
     def promote_registry_run(
         self,
@@ -85,6 +91,14 @@ class PromotionReconciliationService:
             marked = self.research_repository.mark_promoted(run_id, version_id)
             if not marked:
                 raise RuntimeError(f"registry run 回填失敗: {run_id}")
+            if self.lifecycle_evidence_repository is not None:
+                self.lifecycle_evidence_repository.record_decision(
+                    run=metadata,
+                    version_id=version_id,
+                    status=LifecycleEvidenceStatus.APPLIED,
+                    reason="registry promotion synced",
+                    decision=lifecycle_decision,
+                )
         except Exception:
             deleted = self.strategy_version_service.delete_version_file(version_id)
             if not deleted:
