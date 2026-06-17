@@ -35,27 +35,29 @@ class ValuationSourcePolicyInspection:
 def inspect_valuation_source_policy() -> ValuationSourcePolicyInspection:
     diagnostics = (
         FactorDiagnostic(
-            code="valuation_source_policy.pb_source_pending",
+            code="valuation_source_policy.pb_external_source_required",
             factor_name="valuation.pb",
             stock_code="",
             message=(
-                "P/B is not enabled in Month 5 because governed book-value-per-share "
-                "or equity/share-count source policy is not finalized"
+                "P/B presentation is enabled only for governed external observations "
+                "or explicit future backfill records; the system does not infer book "
+                "value per share from incomplete statement data"
             ),
         ),
         FactorDiagnostic(
-            code="valuation_source_policy.ps_source_pending",
+            code="valuation_source_policy.ps_external_source_required",
             factor_name="valuation.ps",
             stock_code="",
             message=(
-                "P/S is not enabled in Month 5 because governed market-cap and "
-                "TTM-sales calculation policy is not finalized"
+                "P/S presentation is enabled only for governed external observations "
+                "or explicit future backfill records; the system does not infer market "
+                "cap or TTM sales inside ScoringEngine"
             ),
         ),
     )
     return ValuationSourcePolicyInspection(
-        ready_metrics=("pe",),
-        pending_metrics=("pb", "ps"),
+        ready_metrics=("pe", "pb", "ps"),
+        pending_metrics=(),
         diagnostics=diagnostics,
         scoring_engine_connected=False,
     )
