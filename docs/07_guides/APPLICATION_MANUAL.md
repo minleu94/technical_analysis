@@ -686,9 +686,9 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 - 「執行實驗」：開始目前模式。
 - 「取消執行」：合作式取消；已開始的單檔工作可能安全收尾。
 - 「保存結果」：將單股回測、批次回測單檔結果、固定組合 per-stock 結果或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、factor snapshot / contribution metadata、equity curve 與 trades。單股、批次與固定組合 per-stock 結果的 factor metadata 來自該次回測已產生的 score/factor records，不會在保存時重算分數或重新抓取資料。
-- 「升級為策略版本」：新版 Gate 必須讀取 Research Run Registry，不得只靠單次 summary；run 需 committed / valid、未封存、未升級、具備可還原參數合約版本，且通過最低 validation gate 與 Month 6 lifecycle gate。Lifecycle gate 會檢查交易次數、總報酬、Sharpe、最大回撤、勝率、benchmark excess return、factor quality 與 regime compatibility。
+- 「升級為策略版本」：新版 Gate 必須讀取 Research Run Registry，不得只靠單次 summary；run 需 committed / valid、未封存、未升級、具備可還原參數合約版本，且通過最低 validation gate 與 Month 6 lifecycle gate。Lifecycle gate 會檢查交易次數、總報酬、Sharpe、最大回撤、勝率、benchmark excess return、factor quality 與 regime compatibility。成功升級後，若 lifecycle evidence repository 已啟用，系統會保存 applied evidence，包含 decision snapshot、gate reasons 與 version id。
 
-Month 6 lifecycle gate 的預設最低交易數為 20 筆，且缺 benchmark excess return 或 factor snapshot 時會保守降級，不允許只靠單次高報酬升級策略版本。通過 Gate 不代表已完成實盤驗證。
+Month 6 lifecycle gate 的預設最低交易數為 20 筆，且缺 benchmark excess return 或 factor snapshot 時會保守降級，不允許只靠單次高報酬升級策略版本。通過 Gate 不代表已完成實盤驗證。Demote / retire 判斷會先以 proposed evidence 保存，供人工 review；系統不會自動刪除策略版本或改寫歷史 run。
 
 保存安全限制：
 
@@ -892,6 +892,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 與官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 操作說明，補充 Registry-based Promote lifecycle gate、持倉管理「生命週期回顧」分頁、post-trade attribution 與 live-vs-research gap 判讀限制。
+- 2026-06-17：補充 lifecycle evidence 持久化操作語意，說明 promotion applied evidence、demote / retire proposed evidence 與不自動刪除策略版本的安全限制。
 - 2026-06-16：新增月營收 normalized backfill 操作說明，記錄 dry-run、正式 apply confirm、備份與缺 availability mapping 時 fail-closed 的行為。
 - 2026-06-16：新增公司清單 / 產業 mapping 更新操作說明，記錄 TWSE/TPEX 官方 registry dry-run、正式 apply confirm、備份、`3207` TPEX daily price 缺口與 `9935` 產業修正。
 - 2026-06-16：更新估值 metrics backfill 操作說明，記錄 P/E dry-run、產業 mapping、同產業分位、正式 apply confirm、備份與 831 筆正式寫入狀態。

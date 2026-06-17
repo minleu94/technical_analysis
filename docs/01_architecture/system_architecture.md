@@ -108,7 +108,7 @@ Application Services / DTO / Repository
 | 推薦回放 | `recommendation_replay_service.py`、`recommendation_portfolio_backtest_service.py` |
 | 保存與版本 | `backtest_repository.py`、`recommendation_repository.py`、`strategy_version_service.py`、`preset_service.py`、`universe_service.py` |
 | Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py` |
-| Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
+| Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`strategy_lifecycle_repository.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
 | Runtime | `runtime_services/`、`dtos/runtime_dtos.py` |
 
 `app_module` 不依賴 `ui_app`。Legacy Tkinter UI 不是目前 service 架構的一部分。
@@ -401,7 +401,7 @@ Research Run Registry 由 `ResearchRunService` 統一負責保存 owner，metada
 
 既有 `BacktestRunRepository` 與 `RecommendationPortfolioRunRepository` 仍作為 legacy repository 存在；新「保存結果」入口已改由 UI 呼叫 `ResearchRunService.save_run()`。歷史 run 可由 `scripts/backfill_legacy_runs.py --apply` 明確匯入 registry，dry-run 為預設行為，且不刪除舊資料。
 
-Month 2 M2-C 已新增 Cross-run Comparison service / UI 與 Registry-based Promote Gate。Month 6 v1 後，Promotion 以 Registry run 為單一來源，前置檢查要求 committed / valid、未 archive、未 promoted、可還原 parameter contract version，且通過最低 validation gate 與 `StrategyLifecycleService` 的 promote gate。Lifecycle gate 只讀已保存 metadata：交易次數、總報酬、Sharpe、回撤、勝率、benchmark excess return、factor snapshot quality 與 regime breakdown，不重新抓取當前資料、不重跑回測。策略版本 JSON 採 temporary file + atomic replace 寫入；若 Registry 回填 `promoted_version_id` 失敗，系統會刪除已寫入 JSON，刪除失敗時標記 `promotion_reconciliation_status='reconciliation_required'`，不宣稱為 SQLite transaction rollback。Reconciliation service 會掃描 JSON 與 Registry 的 source_run_id / promoted_version_id 不一致狀態，提供受控修復依據。
+Month 2 M2-C 已新增 Cross-run Comparison service / UI 與 Registry-based Promote Gate。Month 6 v1 後，Promotion 以 Registry run 為單一來源，前置檢查要求 committed / valid、未 archive、未 promoted、可還原 parameter contract version，且通過最低 validation gate 與 `StrategyLifecycleService` 的 promote gate。Lifecycle gate 只讀已保存 metadata：交易次數、總報酬、Sharpe、回撤、勝率、benchmark excess return、factor snapshot quality 與 regime breakdown，不重新抓取當前資料、不重跑回測。`LifecycleEvidenceRepository` 以 append-only SQLite table 保存 decision snapshot、gate reasons、version id 與 status，並提供 latest state projection；`LifecycleEvidenceGovernanceService` 可把 demote / retire 判斷保存為 proposed evidence，不刪除或覆寫策略版本。策略版本 JSON 採 temporary file + atomic replace 寫入；若 Registry 回填 `promoted_version_id` 失敗，系統會刪除已寫入 JSON，刪除失敗時標記 `promotion_reconciliation_status='reconciliation_required'`，不宣稱為 SQLite transaction rollback。Promotion 成功且 evidence repository 已注入時，會在 Registry sync 後保存 applied lifecycle evidence。Reconciliation service 會掃描 JSON 與 Registry 的 source_run_id / promoted_version_id 不一致狀態，提供受控修復依據。
 
 ## 12. 報告匯出與分頁資料流
 
@@ -490,6 +490,7 @@ UI 修改：
 
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 架構同步，確認 fundamental tables / provider / adapters / diagnostics 為保守接入邊界，P/B、P/S 與官方歷史 PIT 公告日保留為後續治理 residual；Month 6 Strategy Lifecycle 不得直接污染 ScoringEngine。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 架構同步，新增 lifecycle rule engine、drift detector、portfolio feedback attribution、Portfolio Review snapshot 與 Registry-based Promote lifecycle gate；持倉管理 UI 只讀 service attribution，不重算策略或改寫持倉。
+- 2026-06-17：補上 lifecycle evidence 架構同步，新增 append-only `strategy_lifecycle_repository.py`、latest state projection 與 demote / retire proposed evidence 保存邊界；Promotion 成功後可記錄 applied evidence。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並整合至主 UI 與風險提示，明確定義由 PortfolioAlertService 進行歸因產生的架構職責。
 - 2026-06-15：完成 Daily Decision Desk Why Not / 風險提示 v1 對接，由既有 section DTO 欄位與警告推導，輸出對應之低流動性、相對弱勢、Watchlist 觸發與持倉警示提示，不重複計算。
 - 2026-06-15：補入 IDS 願景與架構權威邊界，更新 Daily Decision Desk v1 已接上主 UI；Market Breadth v1已接 SQLite `daily_prices` provider，Sector Rotation v1 已接 SQLite `industry_indices` provider，Relative Strength / Liquidity Ranking v1 已接 SQLite `daily_prices` provider，Watchlist Trigger v1 已接 `WatchlistService` 與 SQLite `technical_indicators`，Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，其餘 Strategy Drift 與 Post-trade Attribution 仍屬後續工作；同步 Month 3 Portfolio Replay 可信度、固定組合 per-stock factor metadata保存與後續資料因子接入防線。

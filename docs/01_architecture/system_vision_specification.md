@@ -276,7 +276,7 @@ Rolling Risk Metrics
 
 ### 5.6 Portfolio Domain：`portfolio_module/` 與 `app_module/`
 
-目前已具備交易紀錄、平均成本、實現 / 未實現損益、來源追溯、停損停利警示、籌碼監控、策略漂移偵測、post-trade attribution 與 Portfolio Review snapshot。後續深化是 lifecycle 狀態持久化與 demote / retire 歷史證據保存。
+目前已具備交易紀錄、平均成本、實現 / 未實現損益、來源追溯、停損停利警示、籌碼監控、策略漂移偵測、post-trade attribution、Portfolio Review snapshot、append-only lifecycle evidence 與 latest state projection。後續深化是把 lifecycle evidence projection 接到更完整的 review dashboard / 人工審核流程。
 
 ### 5.7 Data Infrastructure：`data_module/`
 
@@ -471,7 +471,7 @@ P/B / P/S pending diagnostics
 
 ### Month 6：Strategy Lifecycle 與 Portfolio Feedback
 
-狀態：v1 已完成第一輪 service / gate / UI 入口；後續深化是 lifecycle 狀態持久化與 demote / retire 證據保存。
+狀態：v1 已完成第一輪 service / gate / UI 入口，且已補 append-only lifecycle evidence、latest state projection 與 demote / retire proposed evidence 保存；後續深化是把 evidence projection 接到更完整的 review dashboard / 人工審核流程。
 
 主要項目：
 

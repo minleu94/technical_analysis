@@ -107,7 +107,7 @@ python ui_qt/main.py
 
 - Strategy & Scoring Governance 增量 A / B 與 10 檔 fixed / quantile OOS 實證已完成；quantile 未優於 fixed，維持 opt-in。
 - Phase 5 圖表渲染、批次並行化、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 報告輸出仍在後續 backlog。
-- Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉。Month 6 Strategy Lifecycle / Portfolio Feedback v1 已落地 lifecycle gate、drift detector、Portfolio feedback attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
+- Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉。Month 6 Strategy Lifecycle / Portfolio Feedback v1 已落地 lifecycle gate、append-only lifecycle evidence、current state projection、drift detector、Portfolio feedback attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
 
 目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；舊 Roadmap 未完成事項是否已承接，以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。
 
@@ -115,4 +115,5 @@ python ui_qt/main.py
 
 - 2026-06-17：同步 Month 5 Fundamental Layer v1 closeout 與 Daily Decision Desk v1 主 UI 狀態，將目前主線轉向 Month 6 Strategy Lifecycle / Portfolio Feedback scope。
 - 2026-06-17：同步 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle gate、post-trade attribution 與持倉管理生命週期回顧入口。
+- 2026-06-17：同步 Month 6 lifecycle residual，新增 append-only evidence、latest state projection 與 demote / retire proposed evidence 保存。
 - 2026-06-15：同步 IDS 願景與新版 6M Roadmap，標示 Daily Decision Desk 為未完成目標閉環，並更新未來主線排序。

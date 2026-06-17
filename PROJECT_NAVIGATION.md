@@ -247,8 +247,9 @@ python ui_qt/main.py
 - `app_module/research_run_repository.py`：Research Run SQLite schema、查詢、archive / promoted guard
 - `app_module/research_run_legacy_adapter.py`：legacy Backtest / Recommendation Portfolio run 匯入 registry 的轉接層
 - `app_module/research_run_comparison_service.py`：Registry run comparability、正規化 equity 交集與 benchmark attribution 比較
-- `app_module/promotion_reconciliation_service.py`：Registry-based promote gate、Month 6 lifecycle gate、JSON Strategy Version 補償交易與 reconciliation 掃描
+- `app_module/promotion_reconciliation_service.py`：Registry-based promote gate、Month 6 lifecycle gate、JSON Strategy Version 補償交易、applied lifecycle evidence 與 reconciliation 掃描
 - `app_module/strategy_lifecycle_service.py`：Promote / hold / demote / retire rule engine、StrategyDriftDetector 與 Regime compatibility
+- `app_module/strategy_lifecycle_repository.py`：append-only lifecycle evidence、current state projection 與 demote / retire proposed evidence 保存
 - `app_module/exceptions.py`：跨服務共用的取消例外
 
 **真正動邏輯的地方**：
@@ -280,7 +281,7 @@ python ui_qt/main.py
 - **Walk-Forward 暖機期**：`app_module/walkforward_service.py` 的 `warmup_days` 參數
 - **Baseline 對比**：`backtest_module/performance_metrics.py` 的 `calculate_baseline_comparison()`
 - **過擬合風險提示**：`backtest_module/performance_metrics.py` 的 `calculate_overfitting_risk()`
-- **Research Run Registry**：保存入口由 `ResearchRunService.save_run()` 負責；Cross-run Comparison 與 Registry-based Promote 已完成 Month 2 M2-C 第一版。Registry save 仍不等同策略升級，promotion 必須通過 registry gate、Month 6 lifecycle gate、Strategy Version JSON 補償交易與 reconciliation 防線。
+- **Research Run Registry**：保存入口由 `ResearchRunService.save_run()` 負責；Cross-run Comparison 與 Registry-based Promote 已完成 Month 2 M2-C 第一版。Registry save 仍不等同策略升級，promotion 必須通過 registry gate、Month 6 lifecycle gate、Strategy Version JSON 補償交易、lifecycle evidence 與 reconciliation 防線。
 
 ---
 

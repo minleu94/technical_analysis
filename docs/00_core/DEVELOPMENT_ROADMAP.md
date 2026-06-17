@@ -70,8 +70,8 @@
    - Month 5 已完成 Fundamental Layer 的保守接入：正式 fundamental tables、月營收 / 季度財報 / P/E records、Fundamental provider/service、Revenue / statement / valuation adapters、available_date gate 與 diagnostics 已落地。P/B、P/S、官方歷史 point-in-time 公告日與更完整 valuation policy 保留為後續 residual。
 
 4. **進行中：Month 6 Strategy Lifecycle 與 Portfolio Feedback v1**
-   - 已完成第一輪資料契約與 service：Promote / demote / retire rule engine、StrategyDriftDetector、Regime compatibility、Portfolio post-trade attribution、Live vs research gap report 與 Portfolio Review snapshot。
-   - Registry-based Promote Gate 已改走 Month 6 lifecycle gate；持倉管理新增「生命週期回顧」分頁。v1 不直接改 scoring、回測績效、Portfolio PnL 或 fundamental factor 權重。
+   - 已完成第一輪資料契約與 service：Promote / demote / retire rule engine、StrategyDriftDetector、Regime compatibility、append-only lifecycle evidence、Portfolio post-trade attribution、Live vs research gap report 與 Portfolio Review snapshot。
+   - Registry-based Promote Gate 已改走 Month 6 lifecycle gate，成功升級後可保存 applied evidence；demote / retire 先保存 proposed evidence；持倉管理新增「生命週期回顧」分頁。v1 不直接改 scoring、回測績效、Portfolio PnL 或 fundamental factor 權重。
 
 5. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
@@ -110,3 +110,4 @@
 - 2026-06-16：完成 Month 4 Daily Decision Desk 收尾定位，將短版 Next 轉向 Month 5 Fundamental Layer preflight，並保留 Daily Decision Desk quality / warnings 降級風險。
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，Roadmap Hub 的短版 Next 進入 Month 6 Strategy Lifecycle 與 Portfolio Feedback。
 - 2026-06-17：啟動並完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle gate、drift detector、post-trade attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
+- 2026-06-17：補上 Month 6 lifecycle residual，新增 append-only lifecycle evidence、latest state projection 與 demote / retire proposed evidence 保存。
