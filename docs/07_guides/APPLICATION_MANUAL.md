@@ -13,8 +13,8 @@
 3. 用 Profile 或進階參數產生推薦候選，查看 Why、Why Not 與分數拆解。
 4. 建立候選池與可重用選股清單。
 5. 執行單股、批次、固定組合、推薦回放與策略研究。
-6. 保存研究結果、比較既有結果，並在符合目前 Gate 時升級策略版本。
-7. 記錄交易、持倉、覆盤日誌、停損停利與籌碼監控。
+6. 保存研究結果、比較既有結果，並在符合 Registry 與 Month 6 lifecycle Gate 時升級策略版本。
+7. 記錄交易、持倉、覆盤日誌、停損停利、籌碼監控與生命週期回顧。
 8. 唯讀觀察 Runtime 狀態、治理健康與事件流。
 
 目前不能保證：
@@ -686,9 +686,9 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 - 「執行實驗」：開始目前模式。
 - 「取消執行」：合作式取消；已開始的單檔工作可能安全收尾。
 - 「保存結果」：將單股回測、批次回測單檔結果、固定組合 per-stock 結果或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、factor snapshot / contribution metadata、equity curve 與 trades。單股、批次與固定組合 per-stock 結果的 factor metadata 來自該次回測已產生的 score/factor records，不會在保存時重算分數或重新抓取資料。
-- 「升級為策略版本」：新版 Gate 必須讀取 Research Run Registry，不得只靠單次 summary；run 需 committed / valid、未封存、未升級、具備可還原參數合約版本，且通過最低 validation gate。
+- 「升級為策略版本」：新版 Gate 必須讀取 Research Run Registry，不得只靠單次 summary；run 需 committed / valid、未封存、未升級、具備可還原參數合約版本，且通過最低 validation gate 與 Month 6 lifecycle gate。Lifecycle gate 會檢查交易次數、總報酬、Sharpe、最大回撤、勝率、benchmark excess return、factor quality 與 regime compatibility。
 
-目前最低樣本 Gate 為 10 筆交易。通過最低 Gate 不代表已完成充分 OOS 驗證。
+Month 6 lifecycle gate 的預設最低交易數為 20 筆，且缺 benchmark excess return 或 factor snapshot 時會保守降級，不允許只靠單次高報酬升級策略版本。通過 Gate 不代表已完成實盤驗證。
 
 保存安全限制：
 
@@ -756,6 +756,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 交易歷史
 - 覆盤日誌
 - 策略與價格監控
+- 生命週期回顧
 - 籌碼監控
 
 交易歷史可用右鍵刪除；刪除後持倉與成本會重新計算。
@@ -778,11 +779,25 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 警示是輔助判讀，不會自動平倉。
 
-### 10.6 籌碼監控
+### 10.6 生命週期回顧
+
+選取持倉後，右側「生命週期回顧」會顯示：
+
+- Thesis 狀態：假設仍成立、證據降級 / 持續觀察、或假設失效 / 需要覆盤。
+- 來源追溯：例如推薦結果、回測 run 或策略版本來源。
+- 執行落差：進場平均成本相對來源快照價格的 basis points gap。
+- 訊號落差：`PortfolioConditionMonitor` 的 valid / warning / invalid 狀態與原因。
+- 市場體制：進場 regime 與目前 regime 是否一致。
+- 資料品質：來源 hash、來源品質與 degraded / estimated flags。
+- 摘要 tokens：source / execution / signal / market / data_quality 的狀態摘要。
+
+此分頁只做 post-trade attribution 與 live-vs-research gap 判讀，不會自動下單、平倉、調整持倉、刪除策略版本或改寫回測結果。若顯示假設失效，使用者應回到 Research Lab、Registry 比較或覆盤日誌確認原因。
+
+### 10.7 籌碼監控
 
 顯示籌碼風險、近期分點買賣明細與資料品質。按「下鑽詳細主力流向」會切換至市場觀察的 Smart Money 並定位目前股票。
 
-### 10.7 清空全體數據
+### 10.8 清空全體數據
 
 此操作會永久清空持倉交易與日誌，需要二次確認。執行前應先確認資料是否已備份。
 
@@ -854,7 +869,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ### Promote 按鈕不能使用
 
-確認結果已保存，且驗證狀態不是 FAIL。樣本不足、無結果、未保存、run 已封存、run 已升級、資料完整性不是 valid、缺少參數合約版本，或最低 validation gate 未通過時，不允許升級。若策略版本 JSON 已寫入但 Registry 回填失敗，系統會執行補償刪除；刪除失敗時標記 reconciliation required，需進入受控修復流程。
+確認結果已保存，且驗證狀態不是 FAIL。樣本不足、無結果、未保存、run 已封存、run 已升級、資料完整性不是 valid、缺少參數合約版本、最低 validation gate 未通過、缺 benchmark excess return、factor snapshot 品質不足、regime compatibility 不足或 Month 6 lifecycle gate 未通過時，不允許升級。若策略版本 JSON 已寫入但 Registry 回填失敗，系統會執行補償刪除；刪除失敗時標記 reconciliation required，需進入受控修復流程。
 
 ## 13. Manual 覆蓋狀態
 
@@ -876,6 +891,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 ## 14. 更新記錄
 
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 與官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
+- 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 操作說明，補充 Registry-based Promote lifecycle gate、持倉管理「生命週期回顧」分頁、post-trade attribution 與 live-vs-research gap 判讀限制。
 - 2026-06-16：新增月營收 normalized backfill 操作說明，記錄 dry-run、正式 apply confirm、備份與缺 availability mapping 時 fail-closed 的行為。
 - 2026-06-16：新增公司清單 / 產業 mapping 更新操作說明，記錄 TWSE/TPEX 官方 registry dry-run、正式 apply confirm、備份、`3207` TPEX daily price 缺口與 `9935` 產業修正。
 - 2026-06-16：更新估值 metrics backfill 操作說明，記錄 P/E dry-run、產業 mapping、同產業分位、正式 apply confirm、備份與 831 筆正式寫入狀態。

@@ -214,18 +214,20 @@
 
 ### Month 6：Strategy Lifecycle 與 Portfolio Feedback
 
+> 2026-06-17 狀態：Month 6 v1 已完成第一輪可用閉環。`StrategyLifecycleService` 已提供 Promote / hold / demote / retire rule engine、`StrategyDriftDetector` 與 Regime compatibility；`PromotionReconciliationService` 的 Registry-based Promote Gate 已改用 Month 6 lifecycle gate；`PortfolioFeedbackService` 已能輸出 post-trade attribution / live-vs-research gap；`PortfolioReviewService` 已能聚合 lifecycle summary、drift reports 與持倉 gap snapshot；持倉管理 UI 已新增「生命週期回顧」分頁。v1 仍不自動刪除、降級或淘汰策略版本，不修改 `ScoringEngine`，不把 fundamental factor 納入推薦權重。
+
 目標：
 
 - 讓策略與持倉進入可監控、可降級、可淘汰的生命週期。
 
 交付物：
 
-- Promote / demote / retire 規則。
-- StrategyDriftDetector。
-- Portfolio post-trade attribution。
-- Regime compatibility。
-- Live vs research gap report。
-- Portfolio Review Dashboard。
+- Promote / demote / retire 規則（v1 rule engine 已完成；自動持久化 demote / retire 狀態仍保留為後續）。
+- StrategyDriftDetector（v1 已完成，讀兩個已保存 run 的 metrics / factor metadata）。
+- Portfolio post-trade attribution（v1 已完成，拆分 source / execution / signal / market / data quality）。
+- Regime compatibility（v1 已完成，以 `regime_breakdown` 與 expected regimes 計算 coverage bp）。
+- Live vs research gap report（v1 已完成，從 Portfolio position / condition monitor / drift report 聚合）。
+- Portfolio Review Dashboard（v1 service snapshot 與持倉管理「生命週期回顧」分頁已完成）。
 - 6 個月成果回顧與下一版 roadmap 草案。
 
 驗收標準：
@@ -238,8 +240,8 @@
 
 ## 5. 立即待辦清單
 
-1. Month 5 Fundamental Layer v1 已關閉；後續 residual 明確保留為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S 仍 pending；免費官方歷史月營收公告日端點仍未找到。
-2. Month 6 開始前先產出 Strategy Lifecycle scope / contract，不直接寫 UI：定義 Promote / demote / retire 規則、StrategyDriftDetector、Portfolio post-trade attribution、Regime compatibility、Live vs research gap report 的資料來源、欄位、quality / diagnostics 與驗收 Gate。
+1. Month 6 v1 已完成可用 contract / service / UI 入口；下一步若要繼續深化，應補「策略版本 lifecycle 狀態持久化」與 demote / retire 歷史證據保存，而不是覆寫或刪除既有策略版本。
+2. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S 仍 pending；免費官方歷史月營收公告日端點仍未找到。
 3. Month 6 任何策略生命週期判斷都必須只讀 Research Run Registry、Portfolio 來源追溯、Factor metadata 與 governed diagnostics；不得重新抓取當前資料替代已保存 run metadata，也不得把 fundamental factor 直接接入 `ScoringEngine`。
 4. 維持 Month 2 / Month 3 / Month 5 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、量化 float boundary 與 no-look-ahead tests。
 5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 6。
@@ -259,7 +261,8 @@
 
 ## 7. 更新記錄
 
-- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，確認 fundamental schema / 月營收 / 季度財報 / P/E valuation / provider / adapters / diagnostics 已達保守接入驗收；立即待辦轉向 Month 6 Strategy Lifecycle 與 Portfolio Feedback 的 scope / contract。
+- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，確認 fundamental schema / 月營收 / 季度財報 / P/E valuation / provider / adapters / diagnostics 已達保守接入驗收；工程主線轉向 Month 6 Strategy Lifecycle 與 Portfolio Feedback。
+- 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle rule engine、drift detector、Portfolio post-trade attribution、Portfolio Review snapshot、Registry-based Promote lifecycle gate 與持倉管理生命週期回顧分頁。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並整合至主 UI 與風險提示。
 - 2026-06-15：完成 Daily Decision Desk Relative Strength / Liquidity Ranking v1，從 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性股，不重算且以 quality / warnings 呈現品質缺口與歷史不足警告。
 

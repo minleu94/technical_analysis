@@ -221,8 +221,8 @@
 ## 目前開發狀態
 
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
-- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1 與 Portfolio Replay 可信度已關閉；Month 5 Fundamental Layer v1 已關閉，月營收、季度財報、P/E valuation、Fundamental provider/service、available_date gate 與 diagnostics 已能輸出 factor records / risk prompts，但不接 `ScoringEngine`。
-- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，Daily Decision Desk v1 已接上主 UI，下一步是 Month 6 Strategy Lifecycle / Portfolio Feedback 的 scope / contract；零股、買賣價差、完整撮合與 Gap 實際成交模型列為執行模型深化。
+- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1、Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉；Month 6 Strategy Lifecycle / Portfolio Feedback v1 已完成第一輪 service / gate / UI 入口。
+- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，Daily Decision Desk v1 已接上主 UI，Month 6 下一步是 lifecycle 狀態持久化、demote / retire 證據保存與更完整 review workflow；零股、買賣價差、完整撮合與 Gap 實際成交模型列為執行模型深化。
 - **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
 ---
@@ -237,7 +237,8 @@
 
 ## 🔄 更新記錄
 
-- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 索引同步，將目前治理狀態轉向 Month 6 Strategy Lifecycle / Portfolio Feedback scope / contract。
+- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 索引同步，將目前治理狀態轉入 Month 6 Strategy Lifecycle / Portfolio Feedback。
+- 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 索引同步，標示 lifecycle gate、post-trade attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁已落地。
 - 2026-06-16：新增 Midnight Analyst UI 設計系統規格索引，作為後續深色主題、共用元件與 UI 統一工作的設計參考入口。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並對接至主 UI 與風險提示服務。
 - 2026-06-03：完成 Phase 2C 實作，新增 SQLite 資料庫視覺化檢視面板 (SqliteInspectorWidget) 與防禦性唯讀查詢服務 (SqliteInspectorService) 整合至數據更新工作台。

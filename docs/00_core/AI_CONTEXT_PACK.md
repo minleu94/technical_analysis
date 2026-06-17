@@ -7,17 +7,17 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具，而是一個「可驗證、可回溯、可演化」的投資決策系統。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：三個已落地產品閉環的基礎與主要深化已完成；Daily Decision Desk v1 已接上主 UI；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 均已關閉。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、system vision 管產品北極星、archive 管歷史。當前主線是 Month 6 Strategy Lifecycle / Portfolio Feedback 的 scope / contract。
+* **Current Phase (目前階段)**：三個已落地產品閉環的基礎與主要深化已完成；Daily Decision Desk v1 已接上主 UI；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 均已關閉。Month 6 Strategy Lifecycle / Portfolio Feedback v1 已完成第一輪 service / gate / UI 入口。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、system vision 管產品北極星、archive 管歷史。
 * **Core Architecture (核心架構)**：分層解耦架構。
   1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
   2. `app_module/`（應用服務層、DTO、Repository 與 use case orchestrator）
   3. Domain / Engine 模組（`decision_module/`、`backtest_module/`、`portfolio_module/`、`analysis_module/`、`data_module/`、`runtime/`）
-* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、Research Run Registry、Factor Layer v1、Fundamental Layer v1、籌碼分析終端、Portfolio 監控、Runtime 子系統、Daily Decision Desk v1。仍沒有正式 `market_module/`；Market Breadth、Sector Rotation、Relative Strength / Liquidity Ranking、Watchlist Trigger、Portfolio Alert 與 Risk Prompt 已有 service / snapshot contract。
+* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、Research Run Registry、Factor Layer v1、Fundamental Layer v1、Strategy Lifecycle v1、Portfolio Feedback v1、籌碼分析終端、Portfolio 監控、Runtime 子系統、Daily Decision Desk v1。仍沒有正式 `market_module/`；Market Breadth、Sector Rotation、Relative Strength / Liquidity Ranking、Watchlist Trigger、Portfolio Alert 與 Risk Prompt 已有 service / snapshot contract。
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 8 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、每日決策、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。Daily Decision Desk v1 已可用，但部分 section 會依 provider 完整度顯示 `MISSING` / `DEGRADED` / `ESTIMATED`。
 * **Current Priorities (目前優先事項)**：
-  1. Month 6 開始前先定義 Strategy Lifecycle / Portfolio Feedback scope：Promote / demote / retire 規則、StrategyDriftDetector、Portfolio post-trade attribution、Regime compatibility、Live vs research gap report 的資料契約。
+  1. Month 6 v1 已完成：Promote / hold / demote / retire rule engine、StrategyDriftDetector、Portfolio post-trade attribution、Regime compatibility、Live vs research gap report、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
   2. 維持 Month 2 / Month 3 / Month 5 governance regression：Research Run Registry integrity、FactorGate `available_date <= decision_date`、fundamental diagnostics 不接 `ScoringEngine`。
-  3. 將零股、買賣價差、完整撮合與 Gap 實際成交模型保留為後續執行模型深化，不阻塞 Month 6 scope / contract。
+  3. 將零股、買賣價差、完整撮合與 Gap 實際成交模型保留為後續執行模型深化，不阻塞 Month 6 v1 後續治理。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
   1. Quantile 的真實 OOS 實證未優於 fixed，因此仍維持 opt-in，不可宣稱更準。
@@ -184,9 +184,9 @@
 
 * **Active Phase (目前階段)**：三個產品閉環已建立，進入 6 個月工程路線執行期。
 * **In Progress (進行中)**：
-  * Month 6 Strategy Lifecycle / Portfolio Feedback scope：Promote / demote / retire、StrategyDriftDetector、post-trade attribution、Regime compatibility、Live vs research gap report。
+  * Month 6 Strategy Lifecycle / Portfolio Feedback v1：Promote / demote / retire rule engine、StrategyDriftDetector、post-trade attribution、Regime compatibility、Live vs research gap report、Portfolio Review snapshot。
   * Month 2 Registry governance gate、Month 3 Factor / Replay credibility 與 Month 5 Fundamental Layer diagnostics 回歸維護。
-* **Planned (計畫中)**：Portfolio post-trade attribution、PDF 研究報告輸出、策略 promote / demote / retire 規則、P/B / P/S valuation policy、三大法人資料因子。
+* **Planned (計畫中)**：策略版本 lifecycle 狀態持久化、demote / retire 證據保存、PDF 研究報告輸出、P/B / P/S valuation policy、三大法人資料因子。
 * **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Smart Money Terminal MVP, AI Runtime MVP。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
 * **Backlog**：零股、買賣價差、完整撮合與 Gap 實際成交模型、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。
