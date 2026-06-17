@@ -102,6 +102,35 @@ def test_lifecycle_evidence_repository_appends_and_round_trips_decision(tmp_path
     assert rows[0].created_at <= rows[1].created_at
 
 
+def test_lifecycle_evidence_repository_projects_latest_state_from_history(tmp_path):
+    config = _config(tmp_path)
+    research_service = ResearchRunService(config)
+    saved = research_service.save_run(_metadata(), _equity(), _trades())
+    repository = LifecycleEvidenceRepository(config)
+    repository.record_decision(
+        run=saved,
+        version_id="version-001",
+        status=LifecycleEvidenceStatus.PROPOSED,
+        reason="initial proposal",
+    )
+    applied = repository.record_decision(
+        run=saved,
+        version_id="version-001",
+        status=LifecycleEvidenceStatus.APPLIED,
+        reason="human accepted",
+    )
+
+    state = repository.get_current_state(saved.run_id)
+
+    assert state is not None
+    assert state.run_id == saved.run_id
+    assert state.strategy_id == "baseline_score"
+    assert state.version_id == "version-001"
+    assert state.action == "promote"
+    assert state.status == LifecycleEvidenceStatus.APPLIED
+    assert state.latest_evidence_id == applied.evidence_id
+
+
 def test_promotion_records_lifecycle_evidence_after_registry_sync(tmp_path):
     config = _config(tmp_path)
     research_service = ResearchRunService(config)

@@ -38,6 +38,17 @@ class LifecycleEvidenceRecord:
     created_at: str
 
 
+@dataclass(frozen=True)
+class LifecycleCurrentState:
+    run_id: str
+    strategy_id: str
+    version_id: str
+    action: str
+    status: LifecycleEvidenceStatus
+    latest_evidence_id: int
+    updated_at: str
+
+
 class LifecycleEvidenceRepository:
     """Persist lifecycle decisions without mutating historical strategy evidence."""
 
@@ -164,6 +175,31 @@ class LifecycleEvidenceRepository:
                 (run_id,),
             ).fetchall()
         return [self._row_to_record(dict(row)) for row in rows]
+
+    def get_current_state(self, run_id: str) -> LifecycleCurrentState | None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT * FROM strategy_lifecycle_evidence
+                WHERE run_id = ?
+                ORDER BY evidence_id DESC
+                LIMIT 1
+                """,
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        record = self._row_to_record(dict(row))
+        return LifecycleCurrentState(
+            run_id=record.run_id,
+            strategy_id=record.strategy_id,
+            version_id=record.version_id,
+            action=record.action,
+            status=record.status,
+            latest_evidence_id=record.evidence_id,
+            updated_at=record.created_at,
+        )
 
     def _decision_to_snapshot(self, decision: LifecycleDecision) -> dict[str, Any]:
         return {
