@@ -8,6 +8,10 @@ from typing import Any
 
 from app_module.research_run_repository import ResearchRunRepository
 from app_module.strategy_version_service import StrategyVersionService
+from app_module.strategy_lifecycle_service import (
+    LifecycleAction,
+    StrategyLifecycleService,
+)
 
 
 class PromotionPreflightError(Exception):
@@ -30,9 +34,11 @@ class PromotionReconciliationService:
         *,
         research_repository: ResearchRunRepository,
         strategy_version_service: StrategyVersionService,
+        lifecycle_service: StrategyLifecycleService | None = None,
     ):
         self.research_repository = research_repository
         self.strategy_version_service = strategy_version_service
+        self.lifecycle_service = lifecycle_service or StrategyLifecycleService()
 
     def promote_registry_run(
         self,
@@ -46,7 +52,7 @@ class PromotionReconciliationService:
         if raw is None or metadata is None:
             raise PromotionPreflightError(f"找不到 registry run: {run_id}")
 
-        self._validate_preflight(raw, metadata)
+        lifecycle_decision = self._validate_preflight(raw, metadata)
 
         version_id = self.strategy_version_service.create_version(
             strategy_id=metadata.strategy_id,
@@ -66,7 +72,9 @@ class PromotionReconciliationService:
             profile_id=profile_id,
             validation_status="pending",
             validation_metrics={
-                "promotion_gate": "registry_m2c",
+                "promotion_gate": "registry_month6_lifecycle",
+                "lifecycle_action": lifecycle_decision.action.value,
+                "lifecycle_reasons": lifecycle_decision.reasons,
                 "data_fingerprint": metadata.data_fingerprint,
                 "benchmark_results": metadata.benchmark_results,
             },
@@ -138,7 +146,7 @@ class PromotionReconciliationService:
                 )
         return issues
 
-    def _validate_preflight(self, raw: dict[str, Any], metadata) -> None:
+    def _validate_preflight(self, raw: dict[str, Any], metadata) -> Any:
         if raw.get("storage_state") != "committed" or raw.get("integrity_status") != "valid":
             raise PromotionPreflightError("registry run 尚未通過 integrity 檢查")
         if metadata.is_archived:
@@ -149,6 +157,13 @@ class PromotionReconciliationService:
             raise PromotionPreflightError("缺少 parameter contract version")
         if not self._passes_validation_gate(metadata.metrics):
             raise PromotionPreflightError("run 未通過 promotion 最低驗證 Gate")
+        lifecycle_decision = self.lifecycle_service.evaluate_run(metadata)
+        if lifecycle_decision.action != LifecycleAction.PROMOTE:
+            reasons = "；".join(lifecycle_decision.reasons)
+            raise PromotionPreflightError(
+                f"run 未通過 Month 6 lifecycle promote gate: {reasons}"
+            )
+        return lifecycle_decision
 
     def _passes_validation_gate(self, metrics: dict[str, Any]) -> bool:
         total_return = Decimal(str(metrics.get("total_return", "0") or "0"))

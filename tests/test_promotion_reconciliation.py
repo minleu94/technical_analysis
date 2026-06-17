@@ -46,9 +46,18 @@ def _metadata(run_id: str = "registry-run-001", **overrides) -> ResearchRunMetad
             "sharpe_ratio": 1.2,
             "max_drawdown": 0.03,
             "win_rate": 0.6,
-            "total_trades": 3,
+            "total_trades": 24,
         },
-        "regime_breakdown": {"trend": {"trades": 3}},
+        "regime_breakdown": {"trend": {"trades": 24}},
+        "benchmark_results": {"taiex": {"excess_return_bp": 300}},
+        "data_manifest": {
+            "factor_snapshot": {
+                "records": [
+                    {"factor_name": "technical.total_score", "quality": "observed"},
+                    {"factor_name": "broker.net_buy", "quality": "observed"},
+                ]
+            }
+        },
         "payload_hash": f"sha256:{run_id}",
         "created_at": "2026-06-14T12:00:00",
     }
@@ -101,7 +110,7 @@ def test_promote_registry_run_creates_json_and_marks_registry(tmp_path):
     "metadata",
     [
         _metadata(parameter_contract_version=""),
-        _metadata(metrics={"total_return": -0.01, "total_trades": 3}),
+        _metadata(metrics={"total_return": -0.01, "total_trades": 24}),
         _metadata(metrics={"total_return": 0.08, "total_trades": 0}),
     ],
 )
@@ -110,6 +119,27 @@ def test_promote_registry_run_rejects_failed_preflight(tmp_path, metadata):
     saved = research_service.save_run(metadata, _equity(), _trades())
 
     with pytest.raises(PromotionPreflightError):
+        reconciliation.promote_registry_run(saved.run_id)
+
+
+def test_promote_registry_run_rejects_month6_lifecycle_gate_failures(tmp_path):
+    research_service, _version_service, reconciliation = _service(tmp_path)
+    saved = research_service.save_run(
+        _metadata(
+            "too-few-trades",
+            metrics={
+                "total_return": 0.08,
+                "sharpe_ratio": 1.2,
+                "max_drawdown": 0.03,
+                "win_rate": 0.6,
+                "total_trades": 3,
+            },
+        ),
+        _equity(),
+        _trades(),
+    )
+
+    with pytest.raises(PromotionPreflightError, match="Month 6 lifecycle promote gate"):
         reconciliation.promote_registry_run(saved.run_id)
 
 
