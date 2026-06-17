@@ -23,7 +23,7 @@
   1. Quantile 的真實 OOS 實證未優於 fixed，因此仍維持 opt-in，不可宣稱更準。
   2. Factor Layer v1 已建立 Research Run 實際保存入口，推薦組合回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata；後續新增 Research Lab 路徑仍需遵守同一保存契約。
   3. Daily Decision Desk v1 已接上主 UI；Strategy Drift 與 Post-trade Attribution 尚未完成，不得描述為目前可用。
-  4. 營收、基本面與 P/E 估值已可作 factor records / diagnostics；P/B、P/S 與三大法人仍未完成。任何後續接入或生命週期判斷都必須保存 `available_date`、quality 與 missing policy。
+  4. 營收、基本面與 P/E 估值已可作 factor records / diagnostics；P/B、P/S 已具 guarded presentation policy，只接受 governed external observations 或 future backfill；三大法人仍未完成。任何後續接入或生命週期判斷都必須保存 `available_date`、quality 與 missing policy。
   5. PDF 研究報告輸出仍是後續 backlog；Excel 報告與 SQLite 穩定分頁已完成。
 
 ---
@@ -186,7 +186,7 @@
 * **In Progress (進行中)**：
   * Month 6 Strategy Lifecycle / Portfolio Feedback v1：Promote / demote / retire rule engine、StrategyDriftDetector、post-trade attribution、Regime compatibility、Live vs research gap report、Portfolio Review snapshot。
   * Month 2 Registry governance gate、Month 3 Factor / Replay credibility 與 Month 5 Fundamental Layer diagnostics 回歸維護。
-* **Planned (計畫中)**：策略版本 lifecycle 狀態持久化、demote / retire 證據保存、PDF 研究報告輸出、P/B / P/S valuation policy、三大法人資料因子。
+* **Planned (計畫中)**：PDF 研究報告輸出、三大法人資料因子、官方歷史 PIT 公告日來源治理、lifecycle evidence projection 的完整人工 review workflow。
 * **Frozen (已凍結/穩定)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Smart Money Terminal MVP, AI Runtime MVP。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
 * **Backlog**：零股、買賣價差、完整撮合與 Gap 實際成交模型、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。

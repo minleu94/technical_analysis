@@ -538,7 +538,7 @@ PB / PS 目前只做來源政策檢查：
 .\.venv\Scripts\python.exe scripts\inspect_valuation_source_policy.py
 ```
 
-Month 5 僅啟用 P/E；P/B 與 P/S 會分別回 `valuation_source_policy.pb_source_pending`、`valuation_source_policy.ps_source_pending`。P/B 需要先決定 book-value-per-share 或 equity/share-count 來源；P/S 需要先決定 market-cap 與 TTM sales 計算政策。
+Month 5 後 P/E、P/B、P/S 都具備 presentation policy。P/B 與 P/S 只接受 governed external observations 或後續明確 backfill records；系統不會在內部用不完整財報推導 book value、share count、market cap 或 TTM sales，也不會把估值指標接進 `ScoringEngine`。
 
 #### Month 5 closeout 判讀
 
@@ -890,7 +890,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ## 14. 更新記錄
 
-- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 與官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
+- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 已補 guarded presentation policy，官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 操作說明，補充 Registry-based Promote lifecycle gate、持倉管理「生命週期回顧」分頁、post-trade attribution 與 live-vs-research gap 判讀限制。
 - 2026-06-17：補充 lifecycle evidence 持久化操作語意，說明 promotion applied evidence、demote / retire proposed evidence 與不自動刪除策略版本的安全限制。
 - 2026-06-16：新增月營收 normalized backfill 操作說明，記錄 dry-run、正式 apply confirm、備份與缺 availability mapping 時 fail-closed 的行為。
@@ -911,7 +911,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 2026-06-16：更新資料更新頁月營收分頁文案，將 MOPS 快照檔、正式可得日對照檔與版本名稱改為完整中文說明；SQLite 資料檢視白名單新增三張 fundamental tables，可直接檢視 `fundamental_monthly_revenues`。
 - 2026-06-16：新增 `scripts/inspect_fundamental_factors.py` 唯讀檢視入口，可確認正式 SQLite 月營收已進 Revenue Factor Pack；目前 2026-05 單月資料可產生 3M trend / new high，YoY / MoM 仍因 baseline 不足只回 diagnostics。
 - 2026-06-16：新增 `scripts/build_monthly_revenue_retroactive_baseline_mapping.py`，可從 MOPS snapshot 產生 retroactive baseline 候選 mapping；此來源只供導入日後決策使用，不作官方歷史公告日或導入日前回測。
-- 2026-06-17：季度財報 baseline 已正式寫入 `fundamental_statement_items`，並新增 EPS、毛利率、營益率、ROE、業外損益 statement factor diagnostics；PB / PS 來源政策以 pending diagnostics 呈現。
+- 2026-06-17：季度財報 baseline 已正式寫入 `fundamental_statement_items`，並新增 EPS、毛利率、營益率、ROE、業外損益 statement factor diagnostics；PB / PS 來源政策改為 guarded external-observation boundary。
 - 2026-06-15：整理 Daily Decision Desk 顯示密度，將強弱與流動性代碼改為分行摘要並限制單類別顯示數量，避免主視窗被長清單撐寬。
 - 2026-06-16：完成 Month 4 Daily Decision Desk 收尾說明，確認 section quality 以 header badge 顯示，強弱 / 流動性代碼採單一 compact list 呈現，UI 不重算 service snapshot 以外的 domain logic。
 - 2026-06-15：補充 Portfolio Alert Attribution v1，說明每檔持倉警示的來源標籤、condition 狀態、chip risk level 與原因 token 歸因呈現，用於輔助警示來源之分析與判讀。

@@ -192,7 +192,7 @@
 
 ### Month 5：Fundamental Layer 初版
 
-> 2026-06-17 狀態：Month 5 v1 已關閉。Fundamental SQLite schema、月營收 baseline、季度財報 items、P/E valuation records、Fundamental provider/service、Revenue / statement / valuation adapters、available_date gate 與 abnormal diagnostics 已落地。v1 只輸出 factor records / diagnostics 與 Daily Decision Desk risk prompts，不接 `ScoringEngine`，不輸出目標價、合理價、上漲空間或交易建議。P/B、P/S、官方歷史 point-in-time 公告日與更完整 valuation policy 轉為 Month 6 以後的治理 residual，不阻塞 Month 6 啟動。
+> 2026-06-17 狀態：Month 5 v1 已關閉。Fundamental SQLite schema、月營收 baseline、季度財報 items、P/E valuation records、Fundamental provider/service、Revenue / statement / valuation adapters、available_date gate 與 abnormal diagnostics 已落地。v1 只輸出 factor records / diagnostics 與 Daily Decision Desk risk prompts，不接 `ScoringEngine`，不輸出目標價、合理價、上漲空間或交易建議。P/B、P/S presentation policy 已改為 guarded ready：只接受 governed external observations 或後續明確 backfill records；官方歷史 point-in-time 公告日仍為治理 residual，不阻塞 Month 6。
 
 目標：
 
@@ -202,7 +202,7 @@
 
 - 月營收資料與公告日欄位。
 - Revenue YoY / MoM / 3M trend / revenue new high factor（v1 adapter 已完成；正式 baseline 可產生 YoY、MoM、3M trend、new high records；僅輸出 factor records / diagnostics，不接 `ScoringEngine`）。
-- 第一版估值視圖：P/E 已 ready；P/B、P/S 保留 pending diagnostics。valuation data layer v1 已可建立 governed observations 與同產業整數基點分位；輸出仍只走 presentation policy。
+- 第一版估值視圖：P/E、P/B、P/S presentation policy 已 ready；P/B / P/S 只接受 governed external observations 或 future backfill records，不在系統內推導 book value、share count、market cap 或 TTM sales。valuation data layer v1 已可建立 governed observations 與同產業整數基點分位；輸出仍只走 presentation policy。
 - AbnormalFundamentalFlag（v1 diagnostics 已完成；只作 Research metadata 與 Daily Decision Desk risk prompts）。
 - Fundamental factor adapters 與 available_date gate（季度財報 EPS、gross margin、operating margin、ROE、non-operating income ratio adapters 已完成）。
 
@@ -241,7 +241,7 @@
 ## 5. 立即待辦清單
 
 1. Month 6 v1 已完成可用 contract / service / UI 入口，且已補「策略版本 lifecycle evidence 持久化」與 demote / retire proposed evidence 保存；下一步若要繼續深化，應把 evidence projection 接到更完整的 review dashboard / 人工審核流程，而不是覆寫或刪除既有策略版本。
-2. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S 仍 pending；免費官方歷史月營收公告日端點仍未找到。
+2. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
 3. Month 6 任何策略生命週期判斷都必須只讀 Research Run Registry、Portfolio 來源追溯、Factor metadata 與 governed diagnostics；不得重新抓取當前資料替代已保存 run metadata，也不得把 fundamental factor 直接接入 `ScoringEngine`。
 4. 維持 Month 2 / Month 3 / Month 5 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、量化 float boundary 與 no-look-ahead tests。
 5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 6。
@@ -264,6 +264,7 @@
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，確認 fundamental schema / 月營收 / 季度財報 / P/E valuation / provider / adapters / diagnostics 已達保守接入驗收；工程主線轉向 Month 6 Strategy Lifecycle 與 Portfolio Feedback。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle rule engine、drift detector、Portfolio post-trade attribution、Portfolio Review snapshot、Registry-based Promote lifecycle gate 與持倉管理生命週期回顧分頁。
 - 2026-06-17：補上 Month 6 lifecycle residual，新增 append-only lifecycle evidence repository、current state projection 與 demote / retire proposed evidence 保存；Promotion 成功後會記錄 applied evidence。
+- 2026-06-17：補上 P/B / P/S valuation policy residual，將 source policy 改為 guarded ready：僅接受 governed external observations 或後續明確 backfill records，不在系統內推導估值分子 / 分母。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並整合至主 UI 與風險提示。
 - 2026-06-15：完成 Daily Decision Desk Relative Strength / Liquidity Ranking v1，從 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性股，不重算且以 quality / warnings 呈現品質缺口與歷史不足警告。
 

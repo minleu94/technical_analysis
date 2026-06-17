@@ -67,7 +67,7 @@
 
 3. **已完成：Month 5 Fundamental Layer v1**
    - Month 4 Daily Decision Desk v1 已以 service-backed daily workflow 收尾，UI 只讀 service snapshot，不重算 scoring、screening、portfolio、broker flow 或 liquidity。
-   - Month 5 已完成 Fundamental Layer 的保守接入：正式 fundamental tables、月營收 / 季度財報 / P/E records、Fundamental provider/service、Revenue / statement / valuation adapters、available_date gate 與 diagnostics 已落地。P/B、P/S、官方歷史 point-in-time 公告日與更完整 valuation policy 保留為後續 residual。
+   - Month 5 已完成 Fundamental Layer 的保守接入：正式 fundamental tables、月營收 / 季度財報 / P/E records、Fundamental provider/service、Revenue / statement / valuation adapters、available_date gate 與 diagnostics 已落地。P/B、P/S presentation policy 已採 guarded ready，只接受 governed external observations 或後續明確 backfill records；官方歷史 point-in-time 公告日仍保留為後續 residual。
 
 4. **進行中：Month 6 Strategy Lifecycle 與 Portfolio Feedback v1**
    - 已完成第一輪資料契約與 service：Promote / demote / retire rule engine、StrategyDriftDetector、Regime compatibility、append-only lifecycle evidence、Portfolio post-trade attribution、Live vs research gap report 與 Portfolio Review snapshot。
@@ -111,3 +111,4 @@
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，Roadmap Hub 的短版 Next 進入 Month 6 Strategy Lifecycle 與 Portfolio Feedback。
 - 2026-06-17：啟動並完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle gate、drift detector、post-trade attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
 - 2026-06-17：補上 Month 6 lifecycle residual，新增 append-only lifecycle evidence、latest state projection 與 demote / retire proposed evidence 保存。
+- 2026-06-17：補上 P/B / P/S valuation policy residual，確認 P/B / P/S 只走 governed external observation / future backfill presentation boundary，不進 ScoringEngine。
