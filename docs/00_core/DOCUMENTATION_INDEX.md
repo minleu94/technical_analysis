@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-06-16
+> **最後整理**：2026-06-17
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
 
 ---
@@ -67,7 +67,7 @@
 | [INDUSTRY_INDEX_UPDATE_SUMMARY.md](../03_data/INDUSTRY_INDEX_UPDATE_SUMMARY.md) | 產業指數更新說明。 |
 | [MERGE_AND_MARKET_INDEX_SUMMARY.md](../03_data/MERGE_AND_MARKET_INDEX_SUMMARY.md) | 市場指數與合併說明。 |
 | [SQLITE_STORAGE_GUIDE.md](../03_data/SQLITE_STORAGE_GUIDE.md) | SQLite 儲存與雙軌相容快取架構、一鍵遷移重建指南。 |
-| [FUNDAMENTAL_SOURCE_INVENTORY.md](../03_data/FUNDAMENTAL_SOURCE_INVENTORY.md) | Month 5 Fundamental Layer preflight 資料來源盤點，列出月營收、財報、估值、公告日 / available_date 缺口、月營收 mapping dry-run 驗證入口、official company registry 更新、valuation metrics 正式 apply、TPEX daily price backfill，以及 Fundamental SQLite 受控 migration CLI 狀態。 |
+| [FUNDAMENTAL_SOURCE_INVENTORY.md](../03_data/FUNDAMENTAL_SOURCE_INVENTORY.md) | Month 5 Fundamental Layer 資料來源盤點，列出月營收、財報、估值、公告日 / available_date 缺口、月營收 mapping dry-run 驗證入口、official company registry 更新、valuation metrics 正式 apply、TPEX daily price backfill，以及 Fundamental SQLite 受控 migration CLI 狀態。Month 5 v1 closeout 後仍作來源與缺口盤點，不作目前狀態權威。 |
 | [monthly_revenue_availability.csv](../03_data/templates/monthly_revenue_availability.csv) | 月營收公告日 / available_date mapping 欄位範本；不是正式資料。 |
 
 ---
@@ -221,8 +221,8 @@
 ## 目前開發狀態
 
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
-- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1 與 Portfolio Replay 可信度已關閉，包含 Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization、Research Run 實際寫入整合、推薦組合回放 / 單股 / 批次 / 固定組合 per-stock factor records 供給、saved factor metadata reader、portfolio credibility manifest、cash ledger、weight exposure 與 gap risk labels。
-- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，Daily Decision Desk v1 已接上主 UI，下一步是 provider 接線深化、Fundamental Layer 初版與 Strategy Lifecycle / Portfolio Feedback；零股、買賣價差、完整撮合與 Gap 實際成交模型列為執行模型深化。
+- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1 與 Portfolio Replay 可信度已關閉；Month 5 Fundamental Layer v1 已關閉，月營收、季度財報、P/E valuation、Fundamental provider/service、available_date gate 與 diagnostics 已能輸出 factor records / risk prompts，但不接 `ScoringEngine`。
+- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，Daily Decision Desk v1 已接上主 UI，下一步是 Month 6 Strategy Lifecycle / Portfolio Feedback 的 scope / contract；零股、買賣價差、完整撮合與 Gap 實際成交模型列為執行模型深化。
 - **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
 ---
@@ -237,6 +237,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 索引同步，將目前治理狀態轉向 Month 6 Strategy Lifecycle / Portfolio Feedback scope / contract。
 - 2026-06-16：新增 Midnight Analyst UI 設計系統規格索引，作為後續深色主題、共用元件與 UI 統一工作的設計參考入口。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並對接至主 UI 與風險提示服務。
 - 2026-06-03：完成 Phase 2C 實作，新增 SQLite 資料庫視覺化檢視面板 (SqliteInspectorWidget) 與防禦性唯讀查詢服務 (SqliteInspectorService) 整合至數據更新工作台。

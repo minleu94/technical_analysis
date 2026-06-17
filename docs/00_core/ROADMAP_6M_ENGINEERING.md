@@ -1,6 +1,6 @@
 # 6 個月可執行工程路線（2026-06 至 2026-12）
 
-> **最後更新**：2026-06-15
+> **最後更新**：2026-06-17
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。當它與短期 Snapshot 衝突時，以 Snapshot 的「本週優先事項」決定今天先做什麼；當它與產品願景文件衝突時，本文件決定可執行交付順序。
 
 ---
@@ -192,6 +192,8 @@
 
 ### Month 5：Fundamental Layer 初版
 
+> 2026-06-17 狀態：Month 5 v1 已關閉。Fundamental SQLite schema、月營收 baseline、季度財報 items、P/E valuation records、Fundamental provider/service、Revenue / statement / valuation adapters、available_date gate 與 abnormal diagnostics 已落地。v1 只輸出 factor records / diagnostics 與 Daily Decision Desk risk prompts，不接 `ScoringEngine`，不輸出目標價、合理價、上漲空間或交易建議。P/B、P/S、官方歷史 point-in-time 公告日與更完整 valuation policy 轉為 Month 6 以後的治理 residual，不阻塞 Month 6 啟動。
+
 目標：
 
 - 加入基本面觀察，但採取保守、可追溯、先標記後清洗的方式。
@@ -199,10 +201,10 @@
 交付物：
 
 - 月營收資料與公告日欄位。
-- Revenue YoY / MoM / 3M trend / revenue new high factor（v1 adapter 已完成；僅輸出 factor records / diagnostics，不接 `ScoringEngine`）。
-- 第一版估值視圖：P/E、P/B、P/S、產業相對分位（valuation data layer v1 已可建立 governed observations 與同產業整數基點分位；輸出仍只走 presentation policy）。
+- Revenue YoY / MoM / 3M trend / revenue new high factor（v1 adapter 已完成；正式 baseline 可產生 YoY、MoM、3M trend、new high records；僅輸出 factor records / diagnostics，不接 `ScoringEngine`）。
+- 第一版估值視圖：P/E 已 ready；P/B、P/S 保留 pending diagnostics。valuation data layer v1 已可建立 governed observations 與同產業整數基點分位；輸出仍只走 presentation policy。
 - AbnormalFundamentalFlag（v1 diagnostics 已完成；只作 Research metadata 與 Daily Decision Desk risk prompts）。
-- Fundamental factor adapters 與 available_date gate。
+- Fundamental factor adapters 與 available_date gate（季度財報 EPS、gross margin、operating margin、ROE、non-operating income ratio adapters 已完成）。
 
 驗收標準：
 
@@ -236,13 +238,11 @@
 
 ## 5. 立即待辦清單
 
-1. Month 4 Daily Decision Desk v1 已以 service-backed daily workflow 收尾；後續視覺 polish 屬設計債，不改變資料與決策合約。
-2. 保持 Factor Contract / Registry / Gate / adapters focused regression 與量化防禦檢查，避免 Month 4 聚合層破壞 Month 3 metadata。
-3. 維持 Month 2 Registry governance gate 的回歸驗證：immutable save、Cross-run comparison、registry-based promote gate、hash integrity 與 reconciliation。
-4. Month 5 Fundamental Layer preflight 已啟動：資料來源盤點已完成，既有 `financial_data/` 僅列 raw candidate source；raw 月營收唯讀正規化契約、受治理公告日 / available_date mapping 契約、月營收公告日 mapping CSV loader、正式 mapping dry-run 驗證入口與 CLI、公告日 / available_date 初版政策、候選 SQLite schema dry-run 模組、暫時 connection / 正式 DB working copy dry-run report API、Fundamental SQLite 受控 migration service/CLI、月營收 normalized backfill workflow、valuation metrics backfill workflow、TPEX daily price backfill workflow、Fundamental SQLite read provider、Fundamental factor service、Revenue Factor Pack v1 adapters、valuation data layer v1、Abnormal Fundamental diagnostics 已具備 `available_date` 缺失診斷與 `FactorGate` no-look-ahead 測試。2026-06-16 已在正式 `twstock.db` 複本上驗證候選 schema 只新增三張 fundamental 表、不修改既有五張核心表；同日依使用者確認正式套用 schema migration，正式 DB 目前已有三張 fundamental 表；月營收與財報仍未回填，`fundamental_valuation_metrics` 已正式寫入 831 筆 P/E records；月營收 backfill CLI 預設 dry-run，正式 apply 需 `--confirm apply-monthly-revenue-backfill` 並會先備份，正式路徑 dry-run 因 availability mapping 缺檔 fail-closed；valuation metrics backfill CLI 可由 `daily_prices.本益比` 與 `companies.csv` 產業 mapping 建立 P/E records，同樣預設 dry-run，正式 apply 需 `--confirm apply-valuation-metrics-backfill` 並先備份，2026-06-16 更新官方 `companies.csv` 後正式 apply，`2026-06-15` 共寫入 831 筆 records、259 筆 diagnostics，quality 全為 observed。TPEX daily price backfill CLI 可由官方 TPEX daily close quotes 對 `daily_prices` 補寫指定日期四碼普通股日價，正式 apply 需 `--confirm apply-tpex-daily-price-backfill` 並先備份；2026-06-16 已正式補入 877 筆 `20260616` 上櫃日價，`3207` 缺價已修正且 0 duplicate primary keys。SQLite read provider 只讀 `available_date <= decision_date` records；Fundamental factor service 串接 provider、adapters 與 FactorGate，但不接 `ScoringEngine`。Revenue Factor Pack 只輸出 YoY、MoM、3M trend、new high factor records / diagnostics，不產生 score、不接 `ScoringEngine`；valuation data layer 只建立 governed observations 與同產業分位，估值呈現政策 v1 仍採相對分位區間與 forbidden-output regression，缺分位不回中性；Abnormal Fundamental diagnostics 只進 Research metadata 與 Daily Decision Desk risk prompts，不改財報、不自動扣分。下一步是填入或下載真實公告日 mapping 並以驗證入口檢查；通過後才人工確認回填正式月營收；TPEX daily close quotes 已納入日常市場日價更新管線，TPEX CSV 寫入 `DATA_ROOT/daily_price_tpex/` 並與 TWSE 一起 upsert `daily_prices`，TPEX timeout 以 warning 呈現且不阻斷其他資料同步；歷史 TPEX 缺漏仍維持 dry-run plan / 人工確認後才正式 apply。SQLite Inspector 已修正日期控件與重複欄名顯示問題；`broker_flows` 會在同步前受控升級唯一鍵至 `(分點名稱, 證券代號, 日期, trade_type)`，以支援同日買超 / 賣超共存。
-5. Month 5 月營收候選資料補強：新增 MOPS 月營收完整市場 snapshot 抓取器與 FinMind create_time 抓取器，供 overnight candidate/raw evidence collection 使用。MOPS snapshot 可補營收值與 raw HTML 追溯，但不得當作 `available_date`；FinMind `create_time` 可做觀測日候選與更新分組，但不等同官方公告日。兩者完成後仍需建立正式 mapping candidate、跑 validator，並由使用者人工確認後才可寫入 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 或回填 SQLite。
-5. Month 5 月營收公告日 mapping 已新增 TWSE/TPEX historical dry-run builder：可讀最新月 OpenAPI、人工官方 JSON、人工保存的 MOPS 官方 HTML，或以 `--mops-static` 透過新版 MOPS redirectToOld / mopsov static report 驗證歷史 rows；支援期間、market、stock-code、`--mops-html-dir`、`--pit-csv` 與候選 CSV output。2026-06-16 真實 dry-run 確認 TWSE/TPEX 最新月有 `出表日期`，但 OpenAPI 未提供歷史 period query；正式 raw 月營收 `2014-04..2024-04` 與最新月來源無交集，因此 `2020-01..2026-05` 候選 rows 為 0。2026-06-17 驗證 MOPS static report 可抓到 `113/04` 的 `2330`、`9935`、`3207` rows，但頁面 `出表日期` 是查詢當日重新出表日，不是原始公告日，已由 `as_of_date + 45 days` 合理揭露窗口 gate 擋下。免費官方來源目前仍未找到可批次追溯原始歷史公告日的端點；TEJ point-in-time 月營收公告日可作授權匯出來源，由 `--pit-csv` 搭配非空 `--pit-source-version` 產生 candidate mapping。MOPS HTML parser 只接受含 `出表日期` 與 `公司代號` 表格的官方 HTML，缺欄位時 fail-closed diagnostics。正式 mapping 寫入與月營收 backfill 仍需人工確認。
-6. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 5。
+1. Month 5 Fundamental Layer v1 已關閉；後續 residual 明確保留為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S 仍 pending；免費官方歷史月營收公告日端點仍未找到。
+2. Month 6 開始前先產出 Strategy Lifecycle scope / contract，不直接寫 UI：定義 Promote / demote / retire 規則、StrategyDriftDetector、Portfolio post-trade attribution、Regime compatibility、Live vs research gap report 的資料來源、欄位、quality / diagnostics 與驗收 Gate。
+3. Month 6 任何策略生命週期判斷都必須只讀 Research Run Registry、Portfolio 來源追溯、Factor metadata 與 governed diagnostics；不得重新抓取當前資料替代已保存 run metadata，也不得把 fundamental factor 直接接入 `ScoringEngine`。
+4. 維持 Month 2 / Month 3 / Month 5 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、量化 float boundary 與 no-look-ahead tests。
+5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 6。
 
 
 ---
@@ -259,6 +259,7 @@
 
 ## 7. 更新記錄
 
+- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，確認 fundamental schema / 月營收 / 季度財報 / P/E valuation / provider / adapters / diagnostics 已達保守接入驗收；立即待辦轉向 Month 6 Strategy Lifecycle 與 Portfolio Feedback 的 scope / contract。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並整合至主 UI 與風險提示。
 - 2026-06-15：完成 Daily Decision Desk Relative Strength / Liquidity Ranking v1，從 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性股，不重算且以 quality / warnings 呈現品質缺口與歷史不足警告。
 

@@ -1,7 +1,7 @@
 # 專案導航文件
 
-**版本**：v1.4.2
-**最後更新**：2026-06-15
+**版本**：v1.4.3
+**最後更新**：2026-06-17
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -12,7 +12,7 @@
 
 系統提供完整的數據更新、市場觀察、股票推薦、策略回測功能，讓策略成為可被描述、被比較、被淘汰的研究對象。這不是單純的策略腳本，而是一個工具型系統。
 
-產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 是 Month 4 目標首頁，目前尚未成為可用頂層工作區；現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
+產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 已是主 UI 的可用頂層工作區；現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
 
 ---
 
@@ -64,16 +64,18 @@
 
 ---
 
-### Planned Market Intelligence Layer（目標 `market_module/`）
+### Market Intelligence / Daily Decision Desk Layer（目前位於 `app_module/`）
 
-**目前狀態**：尚未建立正式 `market_module/`。
+**目前狀態**：Daily Decision Desk v1 已接上主 UI，尚未建立獨立 `market_module/`；目前透過 application services / DTO 聚合既有資料，不在 UI 重算 domain logic。
 
-**目標責任**：
+**目前責任**：
 - Market Breadth
 - Sector Rotation
 - Relative Strength / Liquidity Ranking
 - Watchlist Trigger
 - Daily Decision Desk snapshot
+- Portfolio Alert / Attribution
+- Why Not / Risk Prompt
 
 **目前替代位置**：
 - `decision_module/market_regime_detector.py`
@@ -83,8 +85,13 @@
 - `app_module/regime_service.py`
 - `app_module/screening_service.py`
 - `app_module/broker_flow_service.py`
+- `app_module/market_breadth_service.py`
+- `app_module/sector_rotation_service.py`
+- `app_module/relative_strength_liquidity_service.py`
+- `app_module/decision_desk_service.py`
+- `app_module/decision_desk_risk_prompt_service.py`
 
-新增 Daily Decision Desk 前，必須先定義 service / DTO 邊界，不能在 UI 直接複製上述 domain 計算。
+修改 Daily Decision Desk 時，必須維持 service / DTO 邊界，不能在 UI 直接複製上述 domain 計算。
 
 ---
 
@@ -111,9 +118,7 @@
 python ui_qt/main.py
 ```
 
-**這是什麼**：PySide6 Qt 圖形界面，包含 7 個頂層 Tab：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、策略回測（即 Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory
-
-Daily Decision Desk 尚未加入這 7 個頂層 Tab；它是 6M Roadmap Month 4 目標。
+**這是什麼**：PySide6 Qt 圖形界面，包含 8 個頂層工作區：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、策略回測（即 Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory、Daily Decision Desk。
 
 ---
 

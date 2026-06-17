@@ -1,6 +1,6 @@
 # 專案盤點報告
 
-> **最後整理**：2026-06-15
+> **最後整理**：2026-06-17
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 
 ---
@@ -55,9 +55,10 @@ python ui_qt/main.py
 
 目前 `ui_qt` 近期狀態：
 
-- 7 個頂層 Tab：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、策略回測（Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。
+- 8 個頂層工作區：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、每日決策、策略回測（Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。
 - `ui_qt/views/update_view.py` 已重整為數據更新工作台，包含左側資料來源導覽與「安全更新所有數據」入口。
 - `ui_qt/views/runtime_view.py` 與 `runtime/` 已完成 Runtime Observatory MVP。
+- `ui_qt` 主 UI 已接上 Daily Decision Desk v1，透過 service snapshot 顯示 Market Breadth、Sector Rotation、Relative Strength / Liquidity Ranking、Watchlist Trigger、Portfolio Alert 與 fundamental risk prompts。
 - `ui_qt/views/portfolio_view.py`：Portfolio Tab 已建立，含策略與價格監控、未實現損益、停損停利警示、籌碼監控與 Smart Money 下鑽。
 - 策略回測頁已整理為 Research Lab 多模式實驗室語意。
 
@@ -102,14 +103,15 @@ python ui_qt/main.py
 
 ## 5. 目前開發主線
 
-專案已形成三個已落地產品閉環：資料與市場狀態 ✅、研究驗證 ✅、持倉檢查 ✅；Daily Decision Desk 是尚未完成的第四目標閉環，列入 6M Roadmap Month 4。
+專案已形成三個已落地產品閉環：資料與市場狀態 ✅、研究驗證 ✅、持倉檢查 ✅；Daily Decision Desk v1 已接上主 UI，第四目標閉環具備每日決策入口。
 
 - Strategy & Scoring Governance 增量 A / B 與 10 檔 fixed / quantile OOS 實證已完成；quantile 未優於 fixed，維持 opt-in。
 - Phase 5 圖表渲染、批次並行化、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 報告輸出仍在後續 backlog。
-- Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；6 個月主線下一步轉向 Factor Layer 覆蓋補齊、Portfolio Replay 可信度、Daily Decision Desk、Fundamental Layer 初版與 Strategy Lifecycle / Portfolio 回饋閉環。
+- Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉。6 個月主線下一步轉向 Month 6 Strategy Lifecycle / Portfolio Feedback 的 scope / contract。
 
 目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；舊 Roadmap 未完成事項是否已承接，以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。
 
 ## 6. 更新記錄
 
+- 2026-06-17：同步 Month 5 Fundamental Layer v1 closeout 與 Daily Decision Desk v1 主 UI 狀態，將目前主線轉向 Month 6 Strategy Lifecycle / Portfolio Feedback scope。
 - 2026-06-15：同步 IDS 願景與新版 6M Roadmap，標示 Daily Decision Desk 為未完成目標閉環，並更新未來主線排序。

@@ -1,6 +1,6 @@
 # 台股投資決策系統完整操作手冊
 
-> **最後更新**：2026-06-16
+> **最後更新**：2026-06-17
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前 8 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
@@ -494,7 +494,7 @@ dry-run 只輸出 plan，不寫入 SQLite。若正式 `DATA_ROOT/meta_data/month
 .\.venv\Scripts\python.exe scripts\inspect_fundamental_factors.py --all-monthly-revenue-stocks --decision-date 2026-06-30 --diagnostic-limit 8 --stock-summary-limit 12
 ```
 
-此工具只讀取 `fundamental_monthly_revenues` 與 `fundamental_valuation_metrics`，透過 `FundamentalFactorService` 產生當下可見的 factor records / diagnostics，不寫 SQLite、不修改 CSV，也不接 `ScoringEngine`。2026-06-16 正式 DB 檢查結果為：股票數 1,848、factor records 4,464、diagnostics 3,696；其中月營收已產生 `fundamental.revenue_3m_trend` 1,848 筆與 `fundamental.revenue_new_high` 1,848 筆，YoY / MoM 因目前正式月營收只有 2026-05 單月，全部回 `fundamental_revenue.baseline_missing` diagnostics。這代表 Month 5 已能把 SQLite 月營收送到 Revenue Factor Pack，但還不能把 YoY / MoM 視為可用訊號。
+此工具只讀取 `fundamental_monthly_revenues`、`fundamental_statement_items` 與 `fundamental_valuation_metrics`，透過 `FundamentalFactorService` 產生當下可見的 factor records / diagnostics，不寫 SQLite、不修改 CSV，也不接 `ScoringEngine`。2026-06-16 單月營收初版檢查結果為：股票數 1,848、factor records 4,464、diagnostics 3,696；其中月營收已產生 `fundamental.revenue_3m_trend` 1,848 筆與 `fundamental.revenue_new_high` 1,848 筆。2026-06-17 retroactive baseline 補齊後，Revenue Factor Pack 可產生 YoY 1,843 筆、MoM 1,842 筆、3M trend 1,848 筆與 new high 1,848 筆，剩餘 diagnostics 11 筆。這代表 Month 5 已能把 SQLite 月營收送到 Revenue Factor Pack；但 historical baseline 多數 quality 為 `degraded`，不可解讀為官方歷史 point-in-time 公告日，也不可直接接入 `ScoringEngine`。
 
 #### 月營收歷史 baseline 候選
 
@@ -522,7 +522,7 @@ MOPS snapshot 可以用來補「從導入日之後才可使用」的歷史 basel
 .\.venv\Scripts\python.exe scripts\backfill_fundamental_statement_items.py --dry-run --raw-dir D:\Min\Python\Project\FA_Data\financial_data --availability-file D:\Min\Python\Project\FA_Data\output\statement_availability_candidates\statement_retroactive_baseline_availability_2026-06-17.csv --source-version financial-data-statements-2026-06-17
 ```
 
-2026-06-16 dry-run 結果：statement availability candidate 170,425 筆、validator accepted 170,425 筆、diagnostics 0；statement item backfill normalized 1,645,555 筆、diagnostics 0。依人工確認正式 apply 後，`fundamental_statement_items` 期間為 `2014-Q2..2024-Q1`、股票數 1,567、period 數 40、0 duplicate，quality 全為 `degraded`，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_statement_items_backfill_20260617_004912.db`。此資料可作導入日後 EPS、毛利率、營益率、ROE、業外損益 factor 的 baseline foundation，但尚未接 factor layer 或 ScoringEngine。
+2026-06-16 dry-run 結果：statement availability candidate 170,425 筆、validator accepted 170,425 筆、diagnostics 0；statement item backfill normalized 1,645,555 筆、diagnostics 0。依人工確認正式 apply 後，`fundamental_statement_items` 期間為 `2014-Q2..2024-Q1`、股票數 1,567、period 數 40、0 duplicate，quality 全為 `degraded`，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_statement_items_backfill_20260617_004912.db`。此資料已可作導入日後 EPS、毛利率、營益率、ROE、業外損益 factor 的 baseline foundation；factor layer 只輸出 records / diagnostics，不接 `ScoringEngine`。
 
 季度財報 factor layer 已可用唯讀方式檢查：
 
@@ -539,6 +539,10 @@ PB / PS 目前只做來源政策檢查：
 ```
 
 Month 5 僅啟用 P/E；P/B 與 P/S 會分別回 `valuation_source_policy.pb_source_pending`、`valuation_source_policy.ps_source_pending`。P/B 需要先決定 book-value-per-share 或 equity/share-count 來源；P/S 需要先決定 market-cap 與 TTM sales 計算政策。
+
+#### Month 5 closeout 判讀
+
+Month 5 Fundamental Layer v1 的完成定義是「基本面資料已能以受治理、可診斷、可追溯的方式進入 factor records / diagnostics」，不是把基本面自動納入推薦分數。使用者在 Daily Decision Desk、Research metadata 或 factor inspection 看到 fundamental diagnostics 時，應將其視為研究風險提示與資料品質揭露；系統不會因此自動買賣、調倉、改寫財報或調整 `ScoringEngine` 分數。下一階段 Month 6 才會討論策略生命週期與 Portfolio feedback 如何使用這些 evidence。
 
 #### 公司清單 / 產業 mapping 更新
 
@@ -871,6 +875,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ## 14. 更新記錄
 
+- 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 與官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
 - 2026-06-16：新增月營收 normalized backfill 操作說明，記錄 dry-run、正式 apply confirm、備份與缺 availability mapping 時 fail-closed 的行為。
 - 2026-06-16：新增公司清單 / 產業 mapping 更新操作說明，記錄 TWSE/TPEX 官方 registry dry-run、正式 apply confirm、備份、`3207` TPEX daily price 缺口與 `9935` 產業修正。
 - 2026-06-16：更新估值 metrics backfill 操作說明，記錄 P/E dry-run、產業 mapping、同產業分位、正式 apply confirm、備份與 831 筆正式寫入狀態。

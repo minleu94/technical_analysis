@@ -15,7 +15,7 @@
   - 數據更新工作台、推薦分析、策略參數最佳化、Walk-forward 驗證等
 
 - **`../07_guides/APPLICATION_MANUAL.md`**
-  - 目前 7 個頂層工作區的完整操作手冊
+  - 目前 8 個頂層工作區的完整操作手冊
   - 安裝、操作、參數、結果判讀、安全限制與排錯
 
 - **`BACKTEST_LAB_FEATURES.md`**
