@@ -32,6 +32,7 @@ from portfolio_module import PortfolioValidationError
 from ui_qt.widgets.info_button import InfoButton
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.portfolio_chip_service import PortfolioChipService
+from app_module.portfolio_feedback_service import PortfolioFeedbackService
 
 logger = logging.getLogger(__name__)
 
@@ -278,6 +279,7 @@ class PortfolioView(QWidget):
         self.recommendation_service = recommendation_service
         self.condition_monitor = condition_monitor or PortfolioConditionMonitor()
         self.strategy_version_service = StrategyVersionService(self.portfolio_service.config)
+        self.portfolio_feedback_service = PortfolioFeedbackService()
         self.chip_service = PortfolioChipService(
             self.portfolio_service.config,
             broker_flow_service,
@@ -474,6 +476,46 @@ class PortfolioView(QWidget):
         monitor_layout.addStretch()
 
         right_widget.addTab(monitor_tab, "策略與價格監控")
+
+        # Right Tab 4: 生命週期回顧 (Lifecycle Review)
+        lifecycle_tab = QWidget()
+        lifecycle_layout = QVBoxLayout(lifecycle_tab)
+        lifecycle_layout.setContentsMargins(10, 10, 10, 10)
+        lifecycle_layout.setSpacing(10)
+
+        lifecycle_group = QGroupBox("Post-trade Attribution / Live vs Research Gap")
+        lifecycle_form = QFormLayout(lifecycle_group)
+        lifecycle_form.setSpacing(8)
+
+        self.lbl_lifecycle_status = QLabel("-")
+        self.lbl_lifecycle_source = QLabel("-")
+        self.lbl_lifecycle_execution = QLabel("-")
+        self.lbl_lifecycle_signal = QLabel("-")
+        self.lbl_lifecycle_market = QLabel("-")
+        self.lbl_lifecycle_data_quality = QLabel("-")
+        self.lbl_lifecycle_tokens = QLabel("-")
+        for label in [
+            self.lbl_lifecycle_status,
+            self.lbl_lifecycle_source,
+            self.lbl_lifecycle_execution,
+            self.lbl_lifecycle_signal,
+            self.lbl_lifecycle_market,
+            self.lbl_lifecycle_data_quality,
+            self.lbl_lifecycle_tokens,
+        ]:
+            label.setWordWrap(True)
+
+        lifecycle_form.addRow("Thesis 狀態:", self.lbl_lifecycle_status)
+        lifecycle_form.addRow("來源追溯:", self.lbl_lifecycle_source)
+        lifecycle_form.addRow("執行落差:", self.lbl_lifecycle_execution)
+        lifecycle_form.addRow("訊號落差:", self.lbl_lifecycle_signal)
+        lifecycle_form.addRow("市場體制:", self.lbl_lifecycle_market)
+        lifecycle_form.addRow("資料品質:", self.lbl_lifecycle_data_quality)
+        lifecycle_form.addRow("摘要 tokens:", self.lbl_lifecycle_tokens)
+
+        lifecycle_layout.addWidget(lifecycle_group)
+        lifecycle_layout.addStretch()
+        right_widget.addTab(lifecycle_tab, "生命週期回顧")
 
         # Right Tab 4: 籌碼監控 (Chip Monitor)
         chip_tab = QWidget()
@@ -963,6 +1005,8 @@ class PortfolioView(QWidget):
             self.lbl_strat_params.setText("-")
             self.lbl_strat_perf.setText("-")
 
+            self._clear_lifecycle_labels()
+
             # 清空籌碼監控
             self.lbl_chip_risk_level.setText("-")
             self.lbl_chip_risk_level.setStyleSheet("color: white;")
@@ -979,6 +1023,7 @@ class PortfolioView(QWidget):
             snapshot = self._current_snapshot_for_position(position_dto.stock_code)
             monitor_result = self.condition_monitor.evaluate(position_dto, snapshot)
             details = monitor_result.details
+            self._update_lifecycle_review(position_dto, monitor_result)
 
             # 價格對照
             self.lbl_mon_entry_price.setText(f"TWD {position_dto.average_cost:,.2f}")
@@ -1178,6 +1223,56 @@ class PortfolioView(QWidget):
 
         except Exception as e:
             logger.error("Failed to update monitoring tab UI: %s", e)
+
+    def _clear_lifecycle_labels(self) -> None:
+        self.lbl_lifecycle_status.setText("-")
+        self.lbl_lifecycle_status.setStyleSheet("color: white;")
+        self.lbl_lifecycle_source.setText("-")
+        self.lbl_lifecycle_execution.setText("-")
+        self.lbl_lifecycle_signal.setText("-")
+        self.lbl_lifecycle_market.setText("-")
+        self.lbl_lifecycle_data_quality.setText("-")
+        self.lbl_lifecycle_tokens.setText("-")
+
+    def _update_lifecycle_review(self, position_dto, monitor_result) -> None:
+        try:
+            from app_module.portfolio_feedback_service import FeedbackCategory
+            from app_module.strategy_lifecycle_service import GateStatus
+
+            report = self.portfolio_feedback_service.build_position_feedback(
+                position_dto,
+                condition_result=monitor_result,
+            )
+            if report.thesis_status == GateStatus.FAIL:
+                self.lbl_lifecycle_status.setText("假設失效 / 需要覆盤")
+                self.lbl_lifecycle_status.setStyleSheet("background-color: #742a2a; color: #fff5f5; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+            elif report.thesis_status == GateStatus.DEGRADED:
+                self.lbl_lifecycle_status.setText("證據降級 / 持續觀察")
+                self.lbl_lifecycle_status.setStyleSheet("background-color: #7b341e; color: #fffff0; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+            else:
+                self.lbl_lifecycle_status.setText("假設仍成立")
+                self.lbl_lifecycle_status.setStyleSheet("background-color: #22543d; color: #f0fff4; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+
+            self.lbl_lifecycle_source.setText(report.source_label)
+            self.lbl_lifecycle_execution.setText(self._format_lifecycle_category(report.items, FeedbackCategory.EXECUTION))
+            self.lbl_lifecycle_signal.setText(self._format_lifecycle_category(report.items, FeedbackCategory.SIGNAL))
+            self.lbl_lifecycle_market.setText(self._format_lifecycle_category(report.items, FeedbackCategory.MARKET))
+            self.lbl_lifecycle_data_quality.setText(self._format_lifecycle_category(report.items, FeedbackCategory.DATA_QUALITY))
+            self.lbl_lifecycle_tokens.setText("；".join(report.summary_tokens) if report.summary_tokens else "-")
+        except Exception as exc:
+            logger.error("Failed to update lifecycle review: %s", exc)
+            self.lbl_lifecycle_status.setText("生命週期回顧不可用")
+            self.lbl_lifecycle_status.setStyleSheet("background-color: #7b341e; color: #fffff0; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
+
+    def _format_lifecycle_category(self, items, category) -> str:
+        matched = [item for item in items if item.category == category]
+        if not matched:
+            return "-"
+        parts = []
+        for item in matched:
+            evidence = ", ".join(f"{key}={value}" for key, value in item.evidence.items())
+            parts.append(f"{item.status.value}: {item.reason}" + (f" ({evidence})" if evidence else ""))
+        return "；".join(parts)
 
     def _on_drill_down_chip_clicked(self):
         """下鑽詳細主力流向"""

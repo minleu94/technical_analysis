@@ -45,10 +45,12 @@ class FakePortfolioService:
                 invested_amount=900000,
                 source_type="recommendation_result",
                 source_id="rec_001",
+                source_snapshot_hash="hash-rec-001",
                 source_summary={
                     "profile_id": "aggressive_short",
                     "regime": "trend",
                     "total_score": 85.0,
+                    "close_price": 900,
                 },
                 trade_ids=["trade_001"],
             )
@@ -116,3 +118,21 @@ def test_portfolio_view_accepts_broker_flow_service_dependency():
     )
 
     assert view.chip_service.broker_flow_service is broker_flow_service
+
+
+def test_portfolio_view_updates_lifecycle_review_for_selected_position():
+    app()
+    view = PortfolioView(
+        portfolio_service=FakePortfolioService(),
+        journal_service=FakeJournalService(),
+        condition_monitor=FakeConditionMonitor(),
+    )
+
+    view.selected_stock_code = "2330"
+    view._update_monitoring_tab()
+
+    assert "證據降級" in view.lbl_lifecycle_status.text()
+    assert view.lbl_lifecycle_source.text() == "recommendation_result:rec_001"
+    assert "entry price gap is within policy" in view.lbl_lifecycle_execution.text()
+    assert "condition monitor status:warning" in view.lbl_lifecycle_signal.text()
+    assert "signal:degraded" in view.lbl_lifecycle_tokens.text()
