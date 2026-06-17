@@ -108,6 +108,47 @@ class FakeUpdateService:
         self.calls.append(("sync_source_to_sqlite", source, start_date, end_date))
         return {"success": True, "message": f"{source} sync ok"}
 
+    def dry_run_mops_monthly_revenue_backfill(
+        self,
+        snapshot_file=None,
+        availability_file=None,
+        source_version=None,
+    ):
+        self.calls.append((
+            "dry_run_mops_monthly_revenue_backfill",
+            str(snapshot_file) if snapshot_file else None,
+            str(availability_file) if availability_file else None,
+            source_version,
+        ))
+        return {
+            "success": True,
+            "ready_for_apply": True,
+            "raw_row_count": 1848,
+            "normalized_record_count": 1848,
+            "diagnostic_count": 0,
+            "message": "dry run ok",
+        }
+
+    def apply_mops_monthly_revenue_backfill(
+        self,
+        snapshot_file=None,
+        availability_file=None,
+        source_version=None,
+    ):
+        self.calls.append((
+            "apply_mops_monthly_revenue_backfill",
+            str(snapshot_file) if snapshot_file else None,
+            str(availability_file) if availability_file else None,
+            source_version,
+        ))
+        return {
+            "success": True,
+            "applied": True,
+            "inserted_count": 1848,
+            "backup_file": "backup.db",
+            "message": "apply ok",
+        }
+
 
 def app():
     instance = QApplication.instance()
@@ -126,16 +167,17 @@ def test_update_view_uses_workbench_navigation():
 
     assert isinstance(view.nav_list, QListWidget)
     assert isinstance(view.content_stack, QStackedWidget)
-    assert [view.nav_list.item(i).text() for i in range(view.nav_list.count())] == [
-        "全部資料",
-        "每日股價",
-        "大盤指數",
-        "產業指數",
-        "券商分點",
-        "技術指標",
-        "SQLite 資料檢視",
+    assert [key for key, _label in view._nav_items] == [
+        "all",
+        "daily",
+        "market",
+        "industry",
+        "broker_branch",
+        "technical",
+        "monthly_revenue",
+        "db_inspector",
     ]
-    assert view.content_stack.count() == 7
+    assert view.content_stack.count() == 8
     assert view.nav_list.currentRow() == 0
 
 
@@ -306,10 +348,64 @@ def test_update_view_with_config_instantiates_inspector_widget(tmp_path):
     view = _TestableUpdateView(service)
     
     # 驗證 sqlite_inspector_widget 是否被成功建立
-    assert view.nav_list.count() == 7
+    assert view.nav_list.count() == 8
     # 最後一頁應該是 SqliteInspectorWidget 的實例
-    last_widget = view.content_stack.widget(6)
+    last_widget = view.content_stack.widget(7)
     assert isinstance(last_widget, SqliteInspectorWidget)
+
+
+def test_monthly_revenue_tab_runs_mops_dry_run(monkeypatch):
+    from ui_qt.views import update_view
+
+    monkeypatch.setattr(update_view, "TaskWorker", SynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.Ok)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view = make_view()
+    view.monthly_revenue_snapshot_input.setText("snapshot.csv")
+    view.monthly_revenue_availability_input.setText("availability.csv")
+
+    view._execute_monthly_revenue_backfill(apply=False)
+
+    assert view.update_service.calls[-1] == (
+        "dry_run_mops_monthly_revenue_backfill",
+        "snapshot.csv",
+        "availability.csv",
+        "mops-static-snapshot-monthly-revenue-2026-06-16",
+    )
+
+
+def test_monthly_revenue_tab_uses_user_facing_chinese_labels():
+    view = make_view()
+
+    labels = [label.text() for label in view.content_stack.widget(6).findChildren(QLabel)]
+    buttons = [button.text() for button in view.content_stack.widget(6).findChildren(QPushButton)]
+
+    assert "MOPS 月營收快照檔：" in labels
+    assert "正式可得日對照檔：" in labels
+    assert "本次寫入版本名稱：" in labels
+    assert "先檢查，不寫入" in buttons
+    assert "確認後寫入月營收" in buttons
+    assert all("Dry-run" not in text for text in labels + buttons)
+    assert all("SQLite" not in text for text in labels + buttons)
+    assert all("source_version" not in text for text in labels + buttons)
+
+
+def test_monthly_revenue_tab_requires_confirmation_before_apply(monkeypatch):
+    from ui_qt.views import update_view
+
+    monkeypatch.setattr(update_view, "TaskWorker", SynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.Ok)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view = make_view()
+    view.monthly_revenue_snapshot_input.setText("snapshot.csv")
+    view.monthly_revenue_availability_input.setText("availability.csv")
+
+    view._execute_monthly_revenue_backfill(apply=True)
+
+    assert any(call[0] == "apply_mops_monthly_revenue_backfill" for call in view.update_service.calls)
 
 def test_safe_update_all_runs_conservative_sequence_sqlite():
     view = make_view()

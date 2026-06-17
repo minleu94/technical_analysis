@@ -14,7 +14,16 @@ class SqliteInspectorService:
     """SQLite 資料表檢視與查詢服務"""
 
     # 白名單限制的五大核心表
-    ALLOWED_TABLES = {'daily_prices', 'technical_indicators', 'market_indices', 'industry_indices', 'broker_flows'}
+    ALLOWED_TABLES = {
+        'daily_prices',
+        'technical_indicators',
+        'market_indices',
+        'industry_indices',
+        'broker_flows',
+        'fundamental_monthly_revenues',
+        'fundamental_statement_items',
+        'fundamental_valuation_metrics',
+    }
     DISPLAY_COLUMN_ALIASES = {'涨跌': '漲跌'}
 
     def __init__(self, config):
@@ -81,8 +90,16 @@ class SqliteInspectorService:
         order_clauses = []
         if '日期' in raw_columns:
             order_clauses.append('"日期" DESC')
+        elif 'as_of_date' in raw_columns:
+            order_clauses.append('"as_of_date" DESC')
+        elif 'available_date' in raw_columns:
+            order_clauses.append('"available_date" DESC')
+        elif 'period' in raw_columns:
+            order_clauses.append('"period" DESC')
         if '證券代號' in raw_columns:
             order_clauses.append('"證券代號" ASC')
+        elif 'stock_code' in raw_columns:
+            order_clauses.append('"stock_code" ASC')
         if '分點名稱' in raw_columns:
             order_clauses.append('"分點名稱" ASC')
         order_clauses.append('rowid ASC')
@@ -111,8 +128,16 @@ class SqliteInspectorService:
         stable_ties = []
         if raw_column != '日期' and '日期' in raw_columns:
             stable_ties.append('"日期" DESC')
+        elif raw_column != 'as_of_date' and 'as_of_date' in raw_columns:
+            stable_ties.append('"as_of_date" DESC')
+        elif raw_column != 'available_date' and 'available_date' in raw_columns:
+            stable_ties.append('"available_date" DESC')
+        elif raw_column != 'period' and 'period' in raw_columns:
+            stable_ties.append('"period" DESC')
         if raw_column != '證券代號' and '證券代號' in raw_columns:
             stable_ties.append('"證券代號" ASC')
+        elif raw_column != 'stock_code' and 'stock_code' in raw_columns:
+            stable_ties.append('"stock_code" ASC')
         stable_ties.append('rowid ASC')
         return " ORDER BY " + ", ".join([f"{order_expr} {direction}", *stable_ties])
 
@@ -243,6 +268,22 @@ class SqliteInspectorService:
                     max_d = date_df.iloc[0]['max_date']
                     result['earliest_date'] = self._format_date(min_d)
                     result['latest_date'] = self._format_date(max_d)
+            elif '欄位名稱' in schema_df.columns:
+                schema_columns = set(schema_df['欄位名稱'].tolist())
+                date_column = None
+                for candidate in ('as_of_date', 'available_date', 'period'):
+                    if candidate in schema_columns:
+                        date_column = candidate
+                        break
+                if date_column:
+                    date_df = self.db_manager.execute_query(
+                        f'SELECT MIN("{date_column}") as min_date, MAX("{date_column}") as max_date FROM "{table_name}";'
+                    )
+                    if not date_df.empty:
+                        min_d = date_df.iloc[0]['min_date']
+                        max_d = date_df.iloc[0]['max_date']
+                        result['earliest_date'] = self._format_date(min_d)
+                        result['latest_date'] = self._format_date(max_d)
 
             result['success'] = True
             result['message'] = '獲取資訊成功'
@@ -285,6 +326,9 @@ class SqliteInspectorService:
         if '證券代號' in raw_columns and stock_code:
             where_clauses.append('"證券代號" = ?')
             params.append(str(stock_code).strip())
+        elif 'stock_code' in raw_columns and stock_code:
+            where_clauses.append('"stock_code" = ?')
+            params.append(str(stock_code).strip())
 
         # 篩選：證券名稱 (支援模糊查詢)
         if '證券名稱' in raw_columns and stock_name:
@@ -306,6 +350,26 @@ class SqliteInspectorService:
                 if e_val:
                     where_clauses.append('"日期" <= ?')
                     params.append(e_val)
+        else:
+            date_column = None
+            for candidate in ('as_of_date', 'available_date'):
+                if candidate in raw_columns:
+                    date_column = candidate
+                    break
+            if date_column:
+                date_value = str(date_str).strip() if date_str else ""
+                if date_value:
+                    where_clauses.append(f'"{date_column}" = ?')
+                    params.append(date_value)
+                else:
+                    start_value = str(start_date).strip() if start_date else ""
+                    end_value = str(end_date).strip() if end_date else ""
+                    if start_value:
+                        where_clauses.append(f'"{date_column}" >= ?')
+                        params.append(start_value)
+                    if end_value:
+                        where_clauses.append(f'"{date_column}" <= ?')
+                        params.append(end_value)
 
         # 篩選：分點名稱 (支援模糊查詢)
         if '分點名稱' in raw_columns and broker_branch:

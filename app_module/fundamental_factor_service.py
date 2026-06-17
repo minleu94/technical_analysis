@@ -10,6 +10,7 @@ from data_module.fundamental_sqlite_provider import FundamentalSQLiteProvider
 from decision_module.factors.factor_dtos import FactorDiagnostic, FactorRecord
 from decision_module.factors.factor_gate import FactorGate
 from decision_module.factors.fundamental_adapters import build_revenue_factor_pack
+from decision_module.factors.statement_factor_adapters import build_statement_factor_pack
 from decision_module.factors.valuation_adapters import build_relative_valuation_factor
 
 
@@ -76,6 +77,31 @@ class FundamentalFactorService:
             factor_result = build_relative_valuation_factor(observation)
             records.extend(factor_result.records)
             diagnostics.extend(factor_result.diagnostics)
+
+        statement_items = self.provider.load_statement_items(
+            stock_code=stock_code,
+            decision_date=decision_date,
+        )
+        if statement_items:
+            decision_statement_period = max(item.period for item in statement_items)
+            statement_result = build_statement_factor_pack(
+                statement_items,
+                stock_code=stock_code,
+                decision_period=decision_statement_period,
+            )
+            records.extend(statement_result.records)
+            diagnostics.extend(statement_result.diagnostics)
+        else:
+            diagnostics.append(
+                FactorDiagnostic(
+                    code="fundamental_sqlite.statement_items_missing",
+                    factor_name="fundamental.statement",
+                    stock_code=stock_code,
+                    message=(
+                        "no governed statement item records available by decision_date"
+                    ),
+                )
+            )
 
         gate_result = self.gate.validate_for_decision(
             records,

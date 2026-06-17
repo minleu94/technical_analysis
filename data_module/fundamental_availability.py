@@ -7,6 +7,15 @@ from datetime import date
 
 from decision_module.factors.factor_dtos import FactorDiagnostic, FactorQuality
 
+RETROACTIVE_BASELINE_SOURCE = "manual.retroactive_baseline_mapping"
+RETROACTIVE_STATEMENT_BASELINE_SOURCE = "manual.retroactive_statement_baseline_mapping"
+RETROACTIVE_BASELINE_SOURCES = frozenset(
+    {
+        RETROACTIVE_BASELINE_SOURCE,
+        RETROACTIVE_STATEMENT_BASELINE_SOURCE,
+    }
+)
+
 
 @dataclass(frozen=True)
 class FundamentalAvailabilityInput:
@@ -82,6 +91,13 @@ def resolve_fundamental_availability(
         )
 
     if observation.announced_date is None:
+        if observation.source in RETROACTIVE_BASELINE_SOURCES:
+            return FundamentalAvailabilityResolution(
+                announced_date=None,
+                available_date=available_date,
+                quality=FactorQuality.DEGRADED,
+                diagnostics=(),
+            )
         diagnostics.append(
             _diagnostic(
                 observation,

@@ -59,6 +59,29 @@ def test_load_monthly_revenue_availability_overrides_degrades_missing_announceme
     assert result.diagnostics[0].code == "fundamental_availability.missing_announced_date"
 
 
+def test_load_monthly_revenue_availability_overrides_allows_retroactive_baseline_without_announcement():
+    result = load_monthly_revenue_availability_overrides(
+        [
+            {
+                "stock_code": "2330",
+                "period": "2024-04",
+                "as_of_date": "2024-04-30",
+                "announced_date": "",
+                "available_date": "2026-06-17",
+                "source": "manual.retroactive_baseline_mapping",
+                "source_version": "mops-retroactive-baseline-2026-06-17",
+            }
+        ]
+    )
+
+    override = result.overrides[("2330", "2024-04")]
+
+    assert override.announced_date is None
+    assert override.available_date == date(2026, 6, 17)
+    assert override.quality == FactorQuality.DEGRADED
+    assert result.diagnostics == ()
+
+
 def test_load_monthly_revenue_availability_overrides_rejects_missing_available_date():
     result = load_monthly_revenue_availability_overrides(
         [

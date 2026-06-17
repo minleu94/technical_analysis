@@ -67,6 +67,25 @@ def test_validate_monthly_revenue_availability_file_rejects_unreasonably_late_av
     )
 
 
+def test_validate_monthly_revenue_availability_file_accepts_retroactive_baseline_source(
+    tmp_path,
+):
+    mapping_file = tmp_path / "monthly_revenue_availability.csv"
+    mapping_file.write_text(
+        "stock_code,period,as_of_date,announced_date,available_date,source,source_version\n"
+        "2330,2024-04,2024-04-30,,2026-06-17,"
+        "manual.retroactive_baseline_mapping,mops-retroactive-baseline-2026-06-17\n",
+        encoding="utf-8-sig",
+    )
+
+    result = validate_monthly_revenue_availability_file(mapping_file)
+
+    assert result.valid is True
+    assert result.accepted_count == 1
+    assert result.diagnostics == ()
+    assert result.source_versions == ("mops-retroactive-baseline-2026-06-17",)
+
+
 def test_allowed_sources_do_not_include_raw_csv_source():
     assert "financial_data.monthly_revenue_csv" not in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES
 
@@ -76,3 +95,7 @@ def test_allowed_sources_include_authorized_pit_source():
         "tej.monthly_revenue_announcement_pit"
         in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES
     )
+
+
+def test_allowed_sources_include_retroactive_baseline_source():
+    assert "manual.retroactive_baseline_mapping" in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES

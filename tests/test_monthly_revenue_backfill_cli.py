@@ -27,6 +27,22 @@ def _prepare_files(tmp_path):
     return raw_dir, availability_file, db_file
 
 
+def _write_mops_snapshot_file(tmp_path):
+    snapshot_file = tmp_path / "mops_snapshot.csv"
+    snapshot_file.write_text(
+        "market,period,stock_code,company_name,current_month_revenue,"
+        "previous_month_revenue,previous_year_month_revenue,mom_pct,yoy_pct,"
+        "cumulative_revenue,previous_year_cumulative_revenue,cumulative_yoy_pct,"
+        "note,fetched_at,source,source_version\n"
+        "twse,2026-05,2330,台積電,1000000000,900000000,800000000,"
+        "11.11,25.0,5000000000,4000000000,25.0,,"
+        "2026-06-16T00:00:00Z,mops.monthly_revenue_static_snapshot,"
+        "mops-static-2026-06-16\n",
+        encoding="utf-8-sig",
+    )
+    return snapshot_file
+
+
 def test_monthly_revenue_backfill_cli_dry_run_does_not_write_db(tmp_path, capsys):
     raw_dir, availability_file, db_file = _prepare_files(tmp_path)
 
@@ -44,6 +60,36 @@ def test_monthly_revenue_backfill_cli_dry_run_does_not_write_db(tmp_path, capsys
 
     assert exit_code == 0
     assert "ready_for_apply: true" in capsys.readouterr().out
+    with sqlite3.connect(db_file) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM fundamental_monthly_revenues").fetchone()[0]
+    assert count == 0
+
+
+def test_monthly_revenue_backfill_cli_dry_run_accepts_mops_snapshot_file(
+    tmp_path,
+    capsys,
+):
+    _raw_dir, availability_file, db_file = _prepare_files(tmp_path)
+    snapshot_file = _write_mops_snapshot_file(tmp_path)
+
+    exit_code = main(
+        [
+            "--db-file",
+            str(db_file),
+            "--mops-snapshot-file",
+            str(snapshot_file),
+            "--availability-file",
+            str(availability_file),
+            "--source-version",
+            "mops-static-snapshot-monthly-revenue-2026-06-16",
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "ready_for_apply: true" in output
+    assert "normalized_record_count: 1" in output
     with sqlite3.connect(db_file) as conn:
         count = conn.execute("SELECT COUNT(*) FROM fundamental_monthly_revenues").fetchone()[0]
     assert count == 0

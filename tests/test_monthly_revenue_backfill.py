@@ -6,6 +6,7 @@ from datetime import date
 from data_module.fundamental_schema import apply_fundamental_schema
 from data_module.monthly_revenue_backfill import (
     apply_monthly_revenue_backfill,
+    plan_mops_snapshot_monthly_revenue_backfill,
     plan_monthly_revenue_backfill,
 )
 
@@ -25,6 +26,20 @@ def _write_availability_csv(path) -> None:
         "2330,2026-05,2026-05-31,2026-06-10,2026-06-11,"
         "manual.twse_monthly_revenue_announcement_log,announcement-log-2026-06-16\n",
         encoding="utf-8",
+    )
+
+
+def _write_mops_snapshot_csv(path) -> None:
+    path.write_text(
+        "market,period,stock_code,company_name,current_month_revenue,"
+        "previous_month_revenue,previous_year_month_revenue,mom_pct,yoy_pct,"
+        "cumulative_revenue,previous_year_cumulative_revenue,cumulative_yoy_pct,"
+        "note,fetched_at,source,source_version\n"
+        "twse,2026-05,2330,台積電,320000000000,300000000000,250000000000,"
+        "6.67,28.0,1500000000000,1200000000000,25.0,,"
+        "2026-06-16T00:00:00Z,mops.monthly_revenue_static_snapshot,"
+        "mops-static-2026-06-16\n",
+        encoding="utf-8-sig",
     )
 
 
@@ -64,6 +79,32 @@ def test_plan_monthly_revenue_backfill_builds_records_from_mapping(tmp_path) -> 
     assert record.period == "2026-05"
     assert record.available_date == date(2026, 6, 11)
     assert record.source_version == "financial-data-csv-monthly-revenue-v1"
+    assert plan.diagnostics == ()
+
+
+def test_plan_mops_snapshot_monthly_revenue_backfill_preserves_mops_source(
+    tmp_path,
+) -> None:
+    snapshot_file = tmp_path / "mops_snapshot.csv"
+    _write_mops_snapshot_csv(snapshot_file)
+    availability_file = tmp_path / "monthly_revenue_availability.csv"
+    _write_availability_csv(availability_file)
+
+    plan = plan_mops_snapshot_monthly_revenue_backfill(
+        snapshot_file=snapshot_file,
+        availability_file=availability_file,
+        source_version="mops-static-snapshot-monthly-revenue-2026-06-16",
+    )
+
+    assert plan.ready_for_apply is True
+    assert plan.raw_row_count == 1
+    assert len(plan.records) == 1
+    record = plan.records[0]
+    assert record.stock_code == "2330"
+    assert record.period == "2026-05"
+    assert record.revenue == 320000000000
+    assert record.source == "mops.monthly_revenue_static_snapshot"
+    assert record.source_version == "mops-static-snapshot-monthly-revenue-2026-06-16"
     assert plan.diagnostics == ()
 
 

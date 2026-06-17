@@ -24,6 +24,10 @@ def test_config_builds_paths_from_injected_roots(tmp_path: Path) -> None:
         config.monthly_revenue_availability_file
         == data_root / "meta_data" / "monthly_revenue_availability.csv"
     )
+    assert (
+        config.statement_availability_file
+        == data_root / "meta_data" / "fundamental_statement_availability.csv"
+    )
 
 
 def test_config_creates_required_directories(tmp_path: Path) -> None:

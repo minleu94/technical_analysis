@@ -104,3 +104,40 @@ def test_fundamental_factor_service_builds_relative_valuation_factor(tmp_path):
     assert any(
         record.factor_name == "valuation.pe.relative_band" for record in snapshot.records
     )
+
+
+def test_fundamental_factor_service_builds_statement_factor_pack(tmp_path):
+    db_file = tmp_path / "twstock.db"
+    with sqlite3.connect(db_file) as conn:
+        apply_fundamental_schema(conn)
+        conn.executemany(
+            """
+            INSERT INTO fundamental_statement_items(
+                stock_code, statement_type, period, as_of_date, announced_date,
+                available_date, item_code, item_name, value, source, source_version, quality
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("2330", "income_statement", "2023-Q4", "2023-12-31", None, "2026-06-17", "EPS", "EPS", "9.21", "financial_data.income_statement_csv", "statements-v1", "degraded"),
+                ("2330", "income_statement", "2023-Q4", "2023-12-31", None, "2026-06-17", "Revenue", "Revenue", "1000", "financial_data.income_statement_csv", "statements-v1", "degraded"),
+                ("2330", "income_statement", "2023-Q4", "2023-12-31", None, "2026-06-17", "GrossProfit", "GrossProfit", "400", "financial_data.income_statement_csv", "statements-v1", "degraded"),
+                ("2330", "income_statement", "2023-Q4", "2023-12-31", None, "2026-06-17", "OperatingIncome", "OperatingIncome", "250", "financial_data.income_statement_csv", "statements-v1", "degraded"),
+                ("2330", "income_statement", "2023-Q4", "2023-12-31", None, "2026-06-17", "IncomeBeforeIncomeTax", "IncomeBeforeIncomeTax", "300", "financial_data.income_statement_csv", "statements-v1", "degraded"),
+                ("2330", "income_statement", "2023-Q4", "2023-12-31", None, "2026-06-17", "NetIncome", "NetIncome", "200", "financial_data.income_statement_csv", "statements-v1", "degraded"),
+                ("2330", "balance_sheet", "2023-Q4", "2023-12-31", None, "2026-06-17", "Equity", "Equity", "2000", "financial_data.balance_sheet_csv", "statements-v1", "degraded"),
+            ],
+        )
+
+    snapshot = FundamentalFactorService(db_file).build_snapshot(
+        stock_code="2330",
+        decision_date=date(2026, 6, 30),
+    )
+
+    factor_names = {record.factor_name for record in snapshot.records}
+    assert "fundamental.statement.eps" in factor_names
+    assert "fundamental.statement.gross_margin" in factor_names
+    assert "fundamental.statement.operating_margin" in factor_names
+    assert "fundamental.statement.roe" in factor_names
+    assert "fundamental.statement.non_operating_income_ratio" in factor_names
+    assert not any("ScoringEngine" in str(record.metadata) for record in snapshot.records)

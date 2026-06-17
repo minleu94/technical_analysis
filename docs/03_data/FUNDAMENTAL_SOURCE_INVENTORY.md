@@ -18,7 +18,7 @@
 - `fundamental_statement_items`
 - `fundamental_valuation_metrics`
 
-正式 SQLite 已具備基本面專用 schema；月營收與財報仍未正式回填，P/E 估值 metrics 已在 2026-06-16 依使用者確認受控寫入 `fundamental_valuation_metrics`。同日另建立 TPEX daily price backfill workflow，修正 `3207` 這類上櫃股票存在於公司 registry 但缺 `daily_prices` 的市場日價管線缺口；此 workflow 只寫 `daily_prices`，不寫 fundamental tables。`DATA_ROOT/financial_data/` 內存在舊 CSV 原始資料，但缺少公告日與 `available_date`，因此只能列為 raw candidate source，不得直接用於回測、推薦、策略分數或 Daily Decision Desk。
+正式 SQLite 已具備基本面專用 schema；P/E 估值 metrics 已在 2026-06-16 依使用者確認受控寫入 `fundamental_valuation_metrics`，同日 MOPS first-seen 月營收 mapping 也已正式寫入 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`，並以 MOPS snapshot 回填 `fundamental_monthly_revenues` 1,848 筆 2026-05 records。季度財報仍未正式回填。同日另建立 TPEX daily price backfill workflow，修正 `3207` 這類上櫃股票存在於公司 registry 但缺 `daily_prices` 的市場日價管線缺口；此 workflow 只寫 `daily_prices`，不寫 fundamental tables。`DATA_ROOT/financial_data/` 內存在舊 CSV 原始資料，但缺少公告日與 `available_date`，因此只能列為 raw candidate source，不得直接用於回測、推薦、策略分數或 Daily Decision Desk。
 
 Month 5 下一步必須先完成 available-date contract 與 no-look-ahead tests，再將 fundamental 資料升級為正式可用來源。2026-06-16 已建立 `data_module/fundamental_data.py` 作為唯讀正規化契約：raw 月營收 row 必須搭配外部 `available_date` mapping 才會產生 normalized record；缺 mapping 時只輸出 diagnostics。同日亦建立 `data_module/fundamental_availability_sources.py` 作為受治理的公告日 / `available_date` mapping 契約，允許人工或後續下載來源提供 `announced_date`、`available_date`、`source` 與 `source_version`，但明確拒絕把 raw 月營收 CSV 自身當成可得日來源。`data_module/fundamental_availability_entrypoint.py` 與 `scripts/validate_monthly_revenue_availability.py` 已建立正式驗證入口，可對使用者提供的 mapping 檔執行 dry-run 驗證、列出 diagnostics、拒絕未治理來源，且不建立、不改寫 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`。`data_module/fundamental_schema.py` 目前尚未接入 `DBManager.init_database()`，不會在一般啟動流程自動修改 SQLite。該模組提供 `generate_fundamental_schema_dry_run_report()` 與 `generate_fundamental_schema_copy_dry_run_report()`，可在暫時 SQLite connection 或正式 DB working copy 上確認既有核心表不被修改。`data_module/fundamental_migration.py` 與 `scripts/migrate_fundamental_schema.py` 已提供顯式 migration workflow：預設 dry-run 只在 working copy 上執行；正式 `--apply` 必須搭配 `--confirm apply-fundamental-schema`，且 apply 前會建立備份、失敗時可用 `restore_fundamental_schema_backup()` 回復。2026-06-16 已依使用者確認對正式 `twstock.db` 套用 fundamental schema migration，備份檔為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_fundamental_schema_20260616_022301.db`。`data_module/company_registry.py` 與 `scripts/update_company_registry.py` 已新增 TWSE/TPEX 官方公司基本資料 registry workflow，正式 `companies.csv` 已更新為 2,326 筆、無重複 stock id，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/companies_company_registry_20260616_031111.csv`。`data_module/valuation_metrics_backfill.py` 與 `scripts/backfill_valuation_metrics.py` 已建立 P/E 估值 metrics 受控回填 workflow，可由 `daily_prices.本益比` 與最新 `companies.csv` 產業 mapping 產生同產業 percentile 的 governed rows；正式 `fundamental_valuation_metrics` 已寫入 831 筆 2026-06-15 P/E records，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_valuation_metrics_backfill_20260616_031146.db`。`data_module/fundamental_availability.py` 則集中公告日 / available_date 策略，避免 parser、adapter 或後續 migration 各自發明時間軸規則。
 
@@ -32,7 +32,7 @@ SQLite = D:/Min/Python/Project/FA_Data/sqlite/twstock.db
 financial_data = D:/Min/Python/Project/FA_Data/financial_data
 ```
 
-本次已完成受控 schema migration，並依使用者確認正式寫入 P/E valuation metrics；另依使用者授權以受控 TPEX daily price backfill 寫入 2026-06-16 上櫃日價 877 筆。未修改 raw financial CSV。月營收與財報仍因缺正式 availability mapping 而未回填。
+本次已完成受控 schema migration，並依使用者確認正式寫入 P/E valuation metrics；另依使用者授權以受控 TPEX daily price backfill 寫入 2026-06-16 上櫃日價 877 筆。2026-06-16 追加正式寫入 MOPS first-seen 月營收 availability mapping，並以 MOPS snapshot 回填 `fundamental_monthly_revenues` 1,848 筆。未修改 raw financial CSV。季度財報仍因缺正式 availability mapping 而未回填。
 
 ## 3. 資料來源清單
 
@@ -58,7 +58,7 @@ financial_data = D:/Min/Python/Project/FA_Data/financial_data
 | `fundamental_statement_items` | 損益表 / 資產負債表 / 現金流量表長表項目 | `available_date NOT NULL`，保留 `statement_type`、`item_code`、`item_name` |
 | `fundamental_valuation_metrics` | P/E、P/B、P/S 等估值候選 metrics | `available_date NOT NULL`，保留 `industry_percentile_bp` 作相對分位 |
 
-這些表已於 2026-06-16 依使用者確認建立於正式 SQLite。正式 apply 前已在 `twstock.db` working copy 上完成 schema dry-run：既有 `broker_flows`、`daily_prices`、`industry_indices`、`market_indices`、`technical_indicators` preserved，新增候選表為 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`，`modified_existing_tables` 為 none。正式 apply 後再次查詢 `sqlite_master` 與 `pragma table_info`，確認三張 fundamental 表存在且欄位符合 schema；目前 `fundamental_valuation_metrics` 已正式寫入 831 筆 P/E records，月營收與財報表仍未回填。
+這些表已於 2026-06-16 依使用者確認建立於正式 SQLite。正式 apply 前已在 `twstock.db` working copy 上完成 schema dry-run：既有 `broker_flows`、`daily_prices`、`industry_indices`、`market_indices`、`technical_indicators` preserved，新增候選表為 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`，`modified_existing_tables` 為 none。正式 apply 後再次查詢 `sqlite_master` 與 `pragma table_info`，確認三張 fundamental 表存在且欄位符合 schema；目前 `fundamental_valuation_metrics` 已正式寫入 831 筆 P/E records，`fundamental_monthly_revenues` 已寫入 1,848 筆 2026-05 MOPS records，季度財報表仍未回填。
 
 ### 3.2 受控 SQLite Migration Workflow
 
@@ -77,7 +77,7 @@ financial_data = D:/Min/Python/Project/FA_Data/financial_data
 
 ### 3.3 月營收 normalized backfill workflow
 
-`data_module/monthly_revenue_backfill.py` 與 `scripts/backfill_monthly_revenue_fundamentals.py` 提供月營收 raw CSV 到 `fundamental_monthly_revenues` 的受控回填入口。此 workflow 只接受已通過治理契約的 availability mapping；若正式 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 不存在或 mapping loader 回傳 diagnostics，回填計畫會 `ready_for_apply=false`，不讀 raw rows、不產生 normalized records，也不寫 SQLite。
+`data_module/monthly_revenue_backfill.py` 與 `scripts/backfill_monthly_revenue_fundamentals.py` 提供月營收 raw CSV 或 MOPS snapshot 到 `fundamental_monthly_revenues` 的受控回填入口。此 workflow 只接受已通過治理契約的 availability mapping；若正式 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 不存在或 mapping loader 回傳 diagnostics，回填計畫會 `ready_for_apply=false`，不讀 raw rows、不產生 normalized records，也不寫 SQLite。
 
 CLI 範例：
 
@@ -86,12 +86,18 @@ CLI 範例：
 .\.venv\Scripts\python.exe scripts\backfill_monthly_revenue_fundamentals.py --apply --confirm apply-monthly-revenue-backfill
 ```
 
+MOPS snapshot 作為月營收值主來源時，可使用 `--mops-snapshot-file` 直接 dry-run；此路徑只取 availability mapping 覆蓋的 `(stock_code, period)`，並把 normalized record 的 source 保留為 `mops.monthly_revenue_static_snapshot`：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_monthly_revenue_fundamentals.py --dry-run --mops-snapshot-file D:\Min\Python\Project\FA_Data\output\monthly_revenue_mops_snapshots\mops_monthly_revenue_snapshot_2014-04_2026-05_2026-06-16.csv --availability-file D:\Min\Python\Project\FA_Data\output\monthly_revenue_availability_candidates\mops_first_seen_monthly_revenue_availability_validator_ready_2026-06-16.csv --source-version mops-static-snapshot-monthly-revenue-2026-06-16
+```
+
 - 未指定 `--apply` 時只產生 Markdown plan，列出 `ready_for_apply`、raw row count、normalized record count 與 diagnostics。
 - `--apply` 必須搭配 `--confirm apply-monthly-revenue-backfill`；缺少 confirm 時回傳 2，不寫入 DB。
 - 正式 apply 前會先備份 DB 到 `TWStockConfig.backup_dir`，寫入失敗時 restore 備份。
 - 寫入採 `INSERT OR REPLACE`，主鍵仍由 schema 的 `(stock_code, period, source_version)` 控制；不同 source_version 可保留不同回填版本。
 
-2026-06-16 以正式路徑 dry-run 時，因 `D:/Min/Python/Project/FA_Data/meta_data/monthly_revenue_availability.csv` 尚不存在，結果為 `ready_for_apply=false`、`normalized_record_count=0`、diagnostic=`fundamental_availability.mapping_file_missing`。因此尚未對正式 `fundamental_monthly_revenues` 寫入任何 records。
+2026-06-16 以正式路徑 dry-run 時，因 `D:/Min/Python/Project/FA_Data/meta_data/monthly_revenue_availability.csv` 尚不存在，結果為 `ready_for_apply=false`、`normalized_record_count=0`、diagnostic=`fundamental_availability.mapping_file_missing`。同日改以 MOPS first-seen candidate mapping 與 MOPS snapshot dry-run 時，validator accepted `1,848` 筆 `2026-05` candidates，MOPS snapshot backfill plan 為 `ready_for_apply=true`、`raw_row_count=1,848`、`normalized_record_count=1,848`、`diagnostics=0`；依人工確認後，正式 mapping 已寫入 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`，SQLite `fundamental_monthly_revenues` 已回填 1,848 筆，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_mops_monthly_revenue_backfill_20260616_203031.db`。
 
 ### 3.4 Company registry workflow
 
@@ -166,7 +172,7 @@ CLI 範例：
 - `load_monthly_revenues(stock_code, decision_date)` 只讀 `fundamental_monthly_revenues.available_date <= decision_date` 的 rows，並轉為 `MonthlyRevenueRecord`。
 - `load_valuation_observations(stock_code, decision_date)` 只讀 `fundamental_valuation_metrics.available_date <= decision_date` 的 rows，並轉為 governed `ValuationObservation`。
 
-此 provider 不讀 raw CSV、不補 availability mapping、不寫 SQLite；它只負責讓後續 factor adapters 或服務層能從已治理 SQLite records 讀資料，並在 SQL 層保留 no-look-ahead gate。正式 DB 目前 `fundamental_monthly_revenues` 與 `fundamental_statement_items` 仍未回填；`fundamental_valuation_metrics` 已有 831 筆 P/E records。月營收或財報缺資料時只回 missing diagnostics，不應被解讀為無基本面風險或中性。
+此 provider 不讀 raw CSV、不補 availability mapping、不寫 SQLite；它只負責讓後續 factor adapters 或服務層能從已治理 SQLite records 讀資料，並在 SQL 層保留 no-look-ahead gate。正式 DB 目前 `fundamental_monthly_revenues` 已有 1,848 筆 2026-05 MOPS records，`fundamental_valuation_metrics` 已有 831 筆 P/E records，`fundamental_statement_items` 仍未回填。月營收或財報缺資料時只回 missing diagnostics，不應被解讀為無基本面風險或中性。
 
 ### 3.6 Fundamental factor application service
 
@@ -178,7 +184,15 @@ CLI 範例：
 - 所有 records 再經 `FactorGate.validate_for_decision()`；服務本身不接 `ScoringEngine`，不輸出 score，不寫 DB。
 - 月營收或估值缺資料時回 missing diagnostic，不產生中性訊號。
 
-2026-06-16 對正式 DB 執行 service snapshot dry-run 時，`2330` 在 `decision_date=2026-06-16` 可讀取 1 筆 valuation factor，並同時回 `fundamental_sqlite.monthly_revenue_missing` diagnostic；在 `decision_date=2026-06-14` 不會提前讀取 2026-06-15 才 available 的 valuation row。
+2026-06-16 對正式 DB 執行 service snapshot dry-run 時，`2330` 在 `decision_date=2026-06-16` 可讀取 1 筆 valuation factor，並同時回 `fundamental_sqlite.monthly_revenue_missing` diagnostic；在 `decision_date=2026-06-14` 不會提前讀取 2026-06-15 才 available 的 valuation row。MOPS 2026-05 月營收正式回填後，`scripts/inspect_fundamental_factors.py` 可唯讀掃描正式 SQLite 與 factor service：`decision_date=2026-06-30`、全月營收股票檢查結果為股票數 1,848、factor records 4,464、diagnostics 3,696，並明確輸出 `writes_data=false`、`scoring_engine_connected=false`。目前可產生 `fundamental.revenue_3m_trend` 1,848 筆與 `fundamental.revenue_new_high` 1,848 筆；YoY / MoM 因正式 DB 只有 2026-05 單月月營收，全部回 `fundamental_revenue.baseline_missing` diagnostics，尚不得視為可用訊號。
+
+2026-06-16 追加 retroactive baseline workflow：`scripts/build_monthly_revenue_retroactive_baseline_mapping.py` 可從 MOPS snapshot 產生 `manual.retroactive_baseline_mapping` 候選 mapping。此 source 明確代表「導入日後才可使用的歷史 baseline」，不是官方歷史公告日 mapping；`announced_date` 留空、`available_date` 設為導入可用日，載入後 quality 為 `degraded`，且 validator 僅對此 source 放寬 45 天揭露窗口限制。以 `2014-04..2026-04`、`available_date=2026-06-17` 產生候選時，candidate 242,651 筆、validator accepted 242,651 筆、dry-run normalized 242,651 筆、diagnostics 0。依人工確認正式 apply 後，`fundamental_monthly_revenues` 共有 244,499 筆，期間 `2014-04..2026-05`、股票數 1,848、period 數 146、0 duplicate，quality 為 242,651 筆 `degraded` 與 1,848 筆 `observed`，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_mops_monthly_revenue_backfill_20260616_224147.db`；factor inspection 產生 `fundamental.revenue_yoy` 1,843 筆、`fundamental.revenue_mom` 1,842 筆、`fundamental.revenue_3m_trend` 1,848 筆、`fundamental.revenue_new_high` 1,848 筆，剩餘 diagnostics 11 筆。
+
+2026-06-16 開始季度財報線：新增 `data_module/fundamental_statement_availability_sources.py`、`data_module/fundamental_statement_availability_entrypoint.py`、`data_module/fundamental_statement_data.py`、`data_module/fundamental_statement_backfill.py` 與 CLI `scripts/build_statement_retroactive_baseline_mapping.py`、`scripts/validate_statement_availability.py`、`scripts/backfill_fundamental_statement_items.py`。季度財報 mapping 欄位為 `stock_code`、`statement_type`、`period`、`as_of_date`、`announced_date`、`available_date`、`source`、`source_version`，正式預設路徑為 `DATA_ROOT/meta_data/fundamental_statement_availability.csv`。目前允許 source 為 `manual.statement_available_date_mapping`、`tej.statement_announcement_pit` 與 `manual.retroactive_statement_baseline_mapping`；raw statement CSV source 會被拒絕。以正式 `financial_data` 產生 retroactive baseline candidate 時，raw rows 1,645,555、candidate 170,425、validator accepted 170,425、diagnostics 0；statement item backfill dry-run normalized 1,645,555、diagnostics 0。依人工確認正式 apply 後，`fundamental_statement_items` 為 1,645,555 筆，期間 `2014-Q2..2024-Q1`、股票數 1,567、period 數 40、0 duplicate，quality 全為 `degraded`；分布為 balance sheet 407,990、cash flows 846,020、income statement 391,545，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_statement_items_backfill_20260617_004912.db`。
+
+2026-06-17 完成 Month 5 statement factor adapters：新增 `decision_module/factors/statement_factor_adapters.py`，`FundamentalSQLiteProvider.load_statement_items()` 與 `FundamentalFactorService` 會讀取 `available_date <= decision_date` 的正式 `fundamental_statement_items`，產生 `fundamental.statement.eps`、`fundamental.statement.gross_margin`、`fundamental.statement.operating_margin`、`fundamental.statement.roe`、`fundamental.statement.non_operating_income_ratio`。每個指標使用決策日前最新且必要科目完整的季度；缺科目、分母為 0 或整檔無 statement items 時只輸出 diagnostics，不產生中性訊號、不接 `ScoringEngine`。正式 DB inspection（`decision_date=2026-06-30`）目前 factor records 14,840、diagnostics 812，其中 statement factor counts 為 EPS 1,411、gross margin 1,368、operating margin 1,374、ROE 1,277、non-operating income ratio 1,261。
+
+2026-06-17 補齊 PB / PS Month 5 來源政策：新增 `data_module/valuation_source_policy.py` 與 `scripts/inspect_valuation_source_policy.py`。Month 5 只啟用 P/E；P/B 與 P/S 以 `valuation_source_policy.pb_source_pending`、`valuation_source_policy.ps_source_pending` diagnostics 明確標示 pending。P/B 需先決定 book-value-per-share 或 equity/share-count 來源；P/S 需先決定 market-cap 與 TTM sales 計算政策。兩者不得由既有 P/E 或 daily price 欄位臨時推導，也不接 `ScoringEngine`。
 
 ## 4. Raw CSV 欄位觀察
 
@@ -338,7 +352,7 @@ CLI 範例：
 
 2026-06-16 追加 PIT CSV importer：`load_pit_announcement_rows()` 接受授權匯出的月營收公告日 CSV，欄位可為 `stock_code` / `公司代號`、`period` / `資料年月`、`announced_date` / `公告日` / `出表日期`。匯入時會正規化民國年、`YYYY-MM` period 與 `YYYY-MM-DD` 公告日；只有可解析公告日才產生 mapping。`source_version` 必須非空且原樣保留為 mapping 版本，不以 raw CSV 日期或查詢日期補值。PIT 匯入後的 `available_date` 仍採保守政策 `announced_date + 1 calendar day`，正式寫入 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 前必須先產生 candidate、跑 validator，並由使用者人工確認。
 
-2026-06-16 追加 MOPS snapshot 與 FinMind create_time 候選抓取器：`data_module/monthly_revenue_snapshot_harvester.py` / `scripts/fetch_mops_monthly_revenue_snapshot.py` 可透過新版 MOPS `redirectToOld` 取得 `mopsov.twse.com.tw/nas/t21/...` 歷史月營收彙總表，解析完整市場月營收內容並保存 raw HTML 與 candidate CSV；此輸出是營收值快照，不含、也不得推定 `available_date`。`data_module/finmind_monthly_revenue_create_time.py` / `scripts/fetch_finmind_monthly_revenue_create_time.py` 可用本機 DPAPI 保存的 FinMind token 逐檔抓取 `TaiwanStockMonthRevenue`，保留 `create_time`、候選 `available_date_candidate=create_time+1 calendar day` 與 create_time 分組檔；`create_time` 只能視為 FinMind 觀測 / 入庫日期候選，不等同官方 MOPS 公告日。兩個 CLI 都只寫 `DATA_ROOT/output/...` 候選輸出與 state/raw files，不寫正式 `monthly_revenue_availability.csv`，不寫 SQLite。
+2026-06-16 追加 MOPS snapshot 與 FinMind create_time 候選抓取器：`data_module/monthly_revenue_snapshot_harvester.py` / `scripts/fetch_mops_monthly_revenue_snapshot.py` 可透過新版 MOPS `redirectToOld` 取得 `mopsov.twse.com.tw/nas/t21/...` 歷史月營收彙總表，解析完整市場月營收內容並保存 raw HTML 與 candidate CSV；此輸出是營收值快照，不含官方公告日，也不得用歷史查詢日推定 `available_date`。若自某日開始每日保存 MOPS snapshot，該日可作本機 first-seen observation candidate，並以 `first_seen+1 calendar day` 作保守 candidate mapping。`data_module/finmind_monthly_revenue_create_time.py` / `scripts/fetch_finmind_monthly_revenue_create_time.py` 可用本機 DPAPI 保存的 FinMind token 逐檔抓取 `TaiwanStockMonthRevenue`，保留 `create_time`、候選 `available_date_candidate=create_time+1 calendar day` 與 create_time 分組檔；`create_time` 目前退為備用 / 交叉檢查與未來每月分批更新依據，不作主線 mapping。兩個 CLI 都只寫 `DATA_ROOT/output/...` 候選輸出與 state/raw files，不寫正式 `monthly_revenue_availability.csv`，不寫 SQLite。
 
 今晚全量候選抓取建議分兩步執行：
 
@@ -347,7 +361,7 @@ CLI 範例：
 .\.venv\Scripts\python.exe scripts\fetch_finmind_monthly_revenue_create_time.py --start-date 2014-04-01 --end-date 2026-05-31 --raw-dir D:\Min\Python\Project\FA_Data\financial_data --output-dir D:\Min\Python\Project\FA_Data\output\monthly_revenue_finmind_create_time --max-requests-per-hour 540 --resume --fetch-date 2026-06-16
 ```
 
-第一個命令用 MOPS 抓完整市場月營收內容，主要用來補齊目前 raw CSV 未涵蓋的最新月與保留官方 HTML 追溯證據；第二個命令用 FinMind 分批取得每檔股票的 `create_time`，可將未來更新日分組。以目前本機 raw 月營收約 1,567 檔估算，FinMind `--max-requests-per-hour 540` 約需 3 小時；若中斷，可再次使用相同 `--output-dir` 與 `--resume` 接續。這兩份輸出通過人工檢查後，仍需另行建立正式 `monthly_revenue_availability.csv` candidate、執行 validator，並等待使用者確認後才可寫入正式 mapping。
+第一個命令用 MOPS 抓完整市場月營收內容，主要用來補齊目前 raw CSV 未涵蓋的最新月與保留官方 HTML 追溯證據；第二個命令用 FinMind 分批取得每檔股票的 `create_time`，可將未來更新日分組。以目前本機 raw 月營收約 1,567 檔估算，FinMind `--max-requests-per-hour 540` 約需 3 小時；若中斷，可再次使用相同 `--output-dir` 與 `--resume` 接續。現行政策以 MOPS snapshot / first-seen 作主線候選來源，FinMind 作備用與交叉檢查；正式 mapping 與 SQLite apply 仍需先產生 candidate、執行 validator，並等待使用者確認。
 
 毛利率來源需獨立處理。MOPS `t163sb06` 屬「財務比率分析 / 毛利率彙總表」類型，頁面以市場別、年度、季別查詢，屬季度財報 / 財務比率資料，不是月營收資料，也不應混入今晚的月營收 snapshot / FinMind create_time 流程。後續若要納入毛利率，應走 `fundamental_statement_items` 或獨立財報比率 pipeline，並建立季度財報的公告日 / `available_date` gate。
 
@@ -392,11 +406,11 @@ CLI 範例：
 
 ## 7. Month 5 下一步
 
-1. 填入或下載真實月營收公告日資料到候選 CSV，先以 historical dry-run builder 與 validator 驗證；目前 repo 只提供欄位範本、TWSE/TPEX 最新月 builder 與 dry-run 驗證入口，不提供正式 mapping。正式寫入 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 前必須人工確認。
+1. 月營收 2026-05 MOPS first-seen mapping 已正式寫入並回填 SQLite；下一步是開始每日保存 MOPS snapshot，用 first-seen observation 建立後續月份候選 mapping，並持續用 FinMind create_time 作備用 / 交叉檢查與每月分批更新參考。
 2. 正式 SQLite schema migration 已完成；後續不得繞過 loader / validator 直接寫入三張 fundamental 表。
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
-5. 月營收 normalized backfill workflow 已具備 dry-run、confirm、備份與 fail-closed diagnostics；valuation metrics backfill workflow 已具備 dry-run、confirm、備份、產業 mapping 與同產業 percentile，且 2026-06-16 已依使用者確認正式寫入 831 筆 P/E records；SQLite read provider 與 fundamental factor service 已具備 no-look-ahead 讀取 / adapter / gate 邊界。月營收待正式 availability mapping 通過驗證後仍需人工確認才可 apply。
+5. 月營收 normalized backfill workflow 已具備 dry-run、confirm、備份與 fail-closed diagnostics；`--mops-snapshot-file` 路徑可直接由 MOPS snapshot 產生 source 正確的 normalized records，且 2026-06-16 已依人工確認正式寫入 1,848 筆 2026-05 records。valuation metrics backfill workflow 已具備 dry-run、confirm、備份、產業 mapping 與同產業 percentile，且 2026-06-16 已依使用者確認正式寫入 831 筆 P/E records；SQLite read provider 與 fundamental factor service 已具備 no-look-ahead 讀取 / adapter / gate 邊界。
 6. TPEX 公司 registry 已納入 `companies.csv`，且已新增受控 TPEX daily price backfill 補齊 `3207` 這類上櫃股票的 `daily_prices` 當日缺口；TPEX quotes 已納入日常市場日價更新管線，歷史缺漏仍需 dry-run plan 與人工確認，不得在 fundamental layer 假造價格列。
 7. Abnormal fundamental diagnostics 已能進入 Research metadata 與 Daily Decision Desk risk prompts；後續接正式資料時仍只能作提示，不得改寫財報或自動扣分。
 
@@ -431,3 +445,8 @@ CLI 範例：
 - 2026-06-16：新增授權 PIT 月營收公告日 CSV importer 與 `--pit-csv` CLI；目前免費官方來源仍未找到可批次追溯原始歷史公告日的路徑，TEJ PIT 匯出列為治理來源候選，必須附 `source_version` 並通過 validator 後才可人工確認寫入正式 mapping。
 - 2026-06-16：追加 GitHub public archive source audit；確認 commit first-seen 方法可行，但已檢查的 public repos 不是未保存資料、只有最新快照、只有研究 PDF / notebook，就是單次匯入無公告日欄位，尚不能列入 allowed source。
 - 2026-06-16：新增 MOPS 月營收 snapshot 候選抓取器與 FinMind create_time 候選抓取器；兩者只寫 `DATA_ROOT/output/...`，MOPS snapshot 不推定 available_date，FinMind create_time 僅作觀測日候選，正式 mapping 與 SQLite apply 仍需人工 gate。毛利率確認為季度財報 / 財務比率資料，不納入今晚月營收流程。
+- 2026-06-16：新增 MOPS snapshot 月營收 backfill dry-run 路徑 `--mops-snapshot-file`，使 normalized records 的 source 保留為 `mops.monthly_revenue_static_snapshot`；已用 2026-05 MOPS first-seen candidate dry-run 驗證 1,848 筆 records 可產生且 diagnostics 為 0，正式 mapping / SQLite apply 仍需人工確認。
+- 2026-06-16：依人工確認正式寫入 MOPS first-seen 月營收 availability mapping，並以 MOPS snapshot 回填 `fundamental_monthly_revenues` 1,848 筆 2026-05 records；source 保留 `mops.monthly_revenue_static_snapshot`，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_mops_monthly_revenue_backfill_20260616_203031.db`。
+- 2026-06-16：新增 `scripts/inspect_fundamental_factors.py` 唯讀檢視 CLI，確認正式 `fundamental_monthly_revenues` 已可餵入 Revenue Factor Pack；目前 2026-05 單月資料只足以產生 3M trend / new high，YoY / MoM 仍回 baseline missing diagnostics，且未接 `ScoringEngine`。
+- 2026-06-16：新增 retroactive baseline mapping workflow，允許 MOPS snapshot 歷史月營收以 `manual.retroactive_baseline_mapping` 進入候選 mapping；此來源只可供導入日後決策使用，quality 為 `degraded`，不得當作官方公告日或導入日前回測資料。
+- 2026-06-16：SQLite Inspector 白名單新增 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`，並支援英文欄位表格的 `stock_code` 與 `as_of_date` 篩選 / 排序。

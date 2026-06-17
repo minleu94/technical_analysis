@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
+from data_module.fundamental_availability import RETROACTIVE_BASELINE_SOURCE
 from data_module.fundamental_availability_sources import (
     FundamentalAvailabilityOverride,
     load_monthly_revenue_availability_overrides_csv,
@@ -21,6 +22,7 @@ MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES = frozenset(
         "tpex.monthly_revenue_announcement",
         "mops.monthly_revenue_announcement",
         "tej.monthly_revenue_announcement_pit",
+        RETROACTIVE_BASELINE_SOURCE,
     }
 )
 MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS = 45
@@ -58,8 +60,8 @@ def validate_monthly_revenue_availability_file(
     for override in load_result.overrides.values():
         if override.source not in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES:
             diagnostics.append(_unsupported_source_diagnostic(override))
-        if override.available_date > override.as_of_date + timedelta(
-            days=MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS
+        if _requires_disclosure_window_check(override) and override.available_date > (
+            override.as_of_date + timedelta(days=MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS)
         ):
             diagnostics.append(_unreasonably_late_available_date_diagnostic(override))
 
@@ -67,8 +69,11 @@ def validate_monthly_revenue_availability_file(
         override
         for override in load_result.overrides.values()
         if override.source in MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES
-        and override.available_date
-        <= override.as_of_date + timedelta(days=MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS)
+        and (
+            not _requires_disclosure_window_check(override)
+            or override.available_date
+            <= override.as_of_date + timedelta(days=MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS)
+        )
     )
     return MonthlyRevenueAvailabilityValidationResult(
         valid=bool(accepted) and not diagnostics,
@@ -90,6 +95,12 @@ def _unsupported_source_diagnostic(
             f"period={override.period}; source={override.source}"
         ),
     )
+
+
+def _requires_disclosure_window_check(
+    override: FundamentalAvailabilityOverride,
+) -> bool:
+    return override.source != RETROACTIVE_BASELINE_SOURCE
 
 
 def _unreasonably_late_available_date_diagnostic(

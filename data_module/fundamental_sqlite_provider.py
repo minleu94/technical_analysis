@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from data_module.fundamental_data import MonthlyRevenueRecord
+from data_module.fundamental_statement_data import StatementItemRecord
 from data_module.valuation_data import (
     ValuationObservationBuildResult,
     build_valuation_observations,
@@ -60,6 +61,27 @@ class FundamentalSQLiteProvider:
             ).fetchall()
         return build_valuation_observations([dict(row) for row in rows])
 
+    def load_statement_items(
+        self,
+        *,
+        stock_code: str,
+        decision_date: date,
+    ) -> tuple[StatementItemRecord, ...]:
+        with sqlite3.connect(self.db_file) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT stock_code, statement_type, period, as_of_date, announced_date,
+                       available_date, item_code, item_name, value, source,
+                       source_version, quality
+                FROM fundamental_statement_items
+                WHERE stock_code = ? AND available_date <= ?
+                ORDER BY period ASC, statement_type ASC, item_code ASC, source_version ASC
+                """,
+                (stock_code, decision_date.isoformat()),
+            ).fetchall()
+        return tuple(_statement_item_record(row) for row in rows)
+
 
 def _monthly_revenue_record(row: sqlite3.Row) -> MonthlyRevenueRecord:
     return MonthlyRevenueRecord(
@@ -70,6 +92,23 @@ def _monthly_revenue_record(row: sqlite3.Row) -> MonthlyRevenueRecord:
         announced_date=_parse_optional_date(row["announced_date"]),
         available_date=_parse_date(row["available_date"]),
         revenue=Decimal(row["revenue"]),
+        source=row["source"],
+        source_version=row["source_version"],
+        quality=FactorQuality(row["quality"]),
+    )
+
+
+def _statement_item_record(row: sqlite3.Row) -> StatementItemRecord:
+    return StatementItemRecord(
+        stock_code=row["stock_code"],
+        statement_type=row["statement_type"],
+        period=row["period"],
+        as_of_date=_parse_date(row["as_of_date"]),
+        announced_date=_parse_optional_date(row["announced_date"]),
+        available_date=_parse_date(row["available_date"]),
+        item_code=row["item_code"],
+        item_name=row["item_name"],
+        value=Decimal(row["value"]),
         source=row["source"],
         source_version=row["source_version"],
         quality=FactorQuality(row["quality"]),

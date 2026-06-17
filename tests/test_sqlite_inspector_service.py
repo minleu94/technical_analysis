@@ -53,6 +53,35 @@ def test_config(tmp_path):
             "INSERT INTO industry_indices (日期, 指數名稱, 收盤指數) "
             "VALUES ('20260529', '半導體類指數', 400.0);"
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS fundamental_monthly_revenues (
+                stock_code TEXT NOT NULL,
+                period TEXT NOT NULL,
+                as_of_date TEXT NOT NULL,
+                revenue TEXT NOT NULL,
+                announced_date TEXT NOT NULL,
+                available_date TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                quality TEXT NOT NULL,
+                PRIMARY KEY (stock_code, period, source_version)
+            );
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO fundamental_monthly_revenues (
+                stock_code, period, as_of_date, revenue, announced_date,
+                available_date, source, source_version, quality
+            )
+            VALUES (
+                '2330', '2026-05', '2026-05-31', '416975163', '2026-06-16',
+                '2026-06-17', 'mops.monthly_revenue_static_snapshot',
+                'mops-static-snapshot-monthly-revenue-2026-06-16', 'observed'
+            );
+            """
+        )
     return config
 
 
@@ -63,7 +92,7 @@ def test_sqlite_inspector_service_basic(test_config):
     # 1. 測試獲取 Table 列表 (必須全在白名單中)
     tables = service.get_tables()
     assert isinstance(tables, list)
-    expected_tables = ['daily_prices', 'technical_indicators', 'market_indices', 'industry_indices', 'broker_flows']
+    expected_tables = ['daily_prices', 'technical_indicators', 'market_indices', 'industry_indices', 'broker_flows', 'fundamental_monthly_revenues']
     for t in expected_tables:
         assert t in tables
 
@@ -138,6 +167,25 @@ def test_sqlite_inspector_service_queries(test_config):
     # 7. 非白名單表拒絕查詢
     with pytest.raises(ValueError, match="拒絕訪問非白名單資料表"):
         service.query_table_data('sqlite_master')
+
+
+def test_sqlite_inspector_service_queries_monthly_revenue_table(test_config):
+    service = SqliteInspectorService(test_config)
+
+    info = service.get_table_info("fundamental_monthly_revenues")
+    assert info["success"] is True
+    assert info["total_records"] == 1
+    assert info["latest_date"] == "2026-05-31"
+
+    df = service.query_table_data(
+        "fundamental_monthly_revenues",
+        stock_code="2330",
+        date_str="2026-05-31",
+    )
+
+    assert len(df) == 1
+    assert df.iloc[0]["stock_code"] == "2330"
+    assert df.iloc[0]["period"] == "2026-05"
 
 
 def test_sqlite_inspector_service_limit_clamp(test_config):

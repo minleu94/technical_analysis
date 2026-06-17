@@ -115,3 +115,59 @@ def test_sqlite_provider_loads_valuation_observations_available_by_decision_date
     assert observation.available_date == date(2026, 6, 16)
     assert observation.industry_percentile_bp == 7500
     assert observation.quality == FactorQuality.OBSERVED
+
+
+def test_sqlite_provider_loads_statement_items_available_by_decision_date(tmp_path):
+    db_file = tmp_path / "twstock.db"
+    with sqlite3.connect(db_file) as conn:
+        apply_fundamental_schema(conn)
+        conn.executemany(
+            """
+            INSERT INTO fundamental_statement_items(
+                stock_code, statement_type, period, as_of_date, announced_date,
+                available_date, item_code, item_name, value, source, source_version, quality
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "2330",
+                    "income_statement",
+                    "2023-Q4",
+                    "2023-12-31",
+                    None,
+                    "2026-06-17",
+                    "EPS",
+                    "基本每股盈餘（元）",
+                    "9.21",
+                    "financial_data.income_statement_csv",
+                    "statements-v1",
+                    "degraded",
+                ),
+                (
+                    "2330",
+                    "income_statement",
+                    "2024-Q1",
+                    "2024-03-31",
+                    None,
+                    "2026-07-01",
+                    "EPS",
+                    "基本每股盈餘（元）",
+                    "8.70",
+                    "financial_data.income_statement_csv",
+                    "statements-v1",
+                    "degraded",
+                ),
+            ],
+        )
+
+    records = FundamentalSQLiteProvider(db_file).load_statement_items(
+        stock_code="2330",
+        decision_date=date(2026, 6, 30),
+    )
+
+    assert len(records) == 1
+    assert records[0].period == "2023-Q4"
+    assert records[0].item_code == "EPS"
+    assert records[0].value == Decimal("9.21")
+    assert records[0].quality == FactorQuality.DEGRADED

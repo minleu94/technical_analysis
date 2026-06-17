@@ -11,7 +11,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from data_module.config import TWStockConfig
 from data_module.monthly_revenue_backfill import (
+    apply_mops_snapshot_monthly_revenue_backfill,
     apply_monthly_revenue_backfill,
+    plan_mops_snapshot_monthly_revenue_backfill,
     plan_monthly_revenue_backfill,
 )
 
@@ -22,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--db-file", type=Path, default=None)
     parser.add_argument("--raw-dir", type=Path, default=None)
+    parser.add_argument("--mops-snapshot-file", type=Path, default=None)
     parser.add_argument("--availability-file", type=Path, default=None)
     parser.add_argument("--backup-dir", type=Path, default=None)
     parser.add_argument("--source-version", default=f"financial-data-csv-monthly-revenue-{date.today().isoformat()}")
@@ -43,13 +46,22 @@ def main(argv: list[str] | None = None) -> int:
                 "--confirm apply-monthly-revenue-backfill"
             )
             return 2
-        result = apply_monthly_revenue_backfill(
-            db_file=db_file,
-            backup_dir=backup_dir,
-            raw_dir=raw_dir,
-            availability_file=availability_file,
-            source_version=args.source_version,
-        )
+        if args.mops_snapshot_file is not None:
+            result = apply_mops_snapshot_monthly_revenue_backfill(
+                db_file=db_file,
+                backup_dir=backup_dir,
+                snapshot_file=args.mops_snapshot_file,
+                availability_file=availability_file,
+                source_version=args.source_version,
+            )
+        else:
+            result = apply_monthly_revenue_backfill(
+                db_file=db_file,
+                backup_dir=backup_dir,
+                raw_dir=raw_dir,
+                availability_file=availability_file,
+                source_version=args.source_version,
+            )
         print(result.plan.to_markdown())
         print(f"- applied: {str(result.applied).lower()}")
         print(f"- inserted_count: {result.inserted_count}")
@@ -58,11 +70,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- {diagnostic.code}: {diagnostic.message}")
         return 0 if result.applied else 1
 
-    plan = plan_monthly_revenue_backfill(
-        raw_dir=raw_dir,
-        availability_file=availability_file,
-        source_version=args.source_version,
-    )
+    if args.mops_snapshot_file is not None:
+        plan = plan_mops_snapshot_monthly_revenue_backfill(
+            snapshot_file=args.mops_snapshot_file,
+            availability_file=availability_file,
+            source_version=args.source_version,
+        )
+    else:
+        plan = plan_monthly_revenue_backfill(
+            raw_dir=raw_dir,
+            availability_file=availability_file,
+            source_version=args.source_version,
+        )
     print(plan.to_markdown())
     for diagnostic in plan.diagnostics:
         print(f"- {diagnostic.code}: {diagnostic.message}")

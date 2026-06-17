@@ -23,6 +23,114 @@ class UpdateService:
         self.project_root = Path(__file__).parent.parent
         self.scripts_dir = self.project_root / 'scripts'
         self.status_manifest_file = self.config.meta_data_dir / 'data_status_manifest.json'
+        self.monthly_revenue_source_version = "mops-static-snapshot-monthly-revenue-2026-06-16"
+
+    def dry_run_mops_monthly_revenue_backfill(
+        self,
+        snapshot_file: Optional[Path] = None,
+        availability_file: Optional[Path] = None,
+        source_version: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Plan MOPS snapshot monthly revenue backfill without writing SQLite."""
+        try:
+            from data_module.monthly_revenue_backfill import plan_mops_snapshot_monthly_revenue_backfill
+
+            snapshot_path = self._resolve_monthly_revenue_snapshot_file(snapshot_file)
+            availability_path = Path(availability_file or self.config.monthly_revenue_availability_file)
+            version = source_version or self.monthly_revenue_source_version
+            plan = plan_mops_snapshot_monthly_revenue_backfill(
+                snapshot_file=snapshot_path,
+                availability_file=availability_path,
+                source_version=version,
+            )
+            diagnostic_payloads = [diagnostic.to_dict() for diagnostic in plan.diagnostics]
+            return {
+                'success': plan.ready_for_apply,
+                'ready_for_apply': plan.ready_for_apply,
+                'raw_row_count': plan.raw_row_count,
+                'normalized_record_count': len(plan.records),
+                'diagnostic_count': len(plan.diagnostics),
+                'diagnostics': diagnostic_payloads,
+                'snapshot_file': str(snapshot_path),
+                'availability_file': str(availability_path),
+                'source_version': version,
+                'message': (
+                    f"MOPS 月營收 dry-run 完成：normalized={len(plan.records):,}, diagnostics={len(plan.diagnostics):,}"
+                ),
+            }
+        except Exception as exc:
+            return {
+                'success': False,
+                'ready_for_apply': False,
+                'raw_row_count': 0,
+                'normalized_record_count': 0,
+                'diagnostic_count': 1,
+                'diagnostics': [{'code': 'monthly_revenue.dry_run_error', 'message': str(exc)}],
+                'message': f"MOPS 月營收 dry-run 失敗: {exc}",
+            }
+
+    def apply_mops_monthly_revenue_backfill(
+        self,
+        snapshot_file: Optional[Path] = None,
+        availability_file: Optional[Path] = None,
+        source_version: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Apply MOPS snapshot monthly revenue backfill into SQLite."""
+        try:
+            from data_module.monthly_revenue_backfill import apply_mops_snapshot_monthly_revenue_backfill
+
+            snapshot_path = self._resolve_monthly_revenue_snapshot_file(snapshot_file)
+            availability_path = Path(availability_file or self.config.monthly_revenue_availability_file)
+            version = source_version or self.monthly_revenue_source_version
+            result = apply_mops_snapshot_monthly_revenue_backfill(
+                db_file=self.config.db_file,
+                backup_dir=self.config.meta_data_dir / 'backup',
+                snapshot_file=snapshot_path,
+                availability_file=availability_path,
+                source_version=version,
+            )
+            return {
+                'success': result.applied,
+                'applied': result.applied,
+                'inserted_count': result.inserted_count,
+                'ready_for_apply': result.plan.ready_for_apply,
+                'raw_row_count': result.plan.raw_row_count,
+                'normalized_record_count': len(result.plan.records),
+                'diagnostic_count': len(result.plan.diagnostics),
+                'backup_file': str(result.backup_file) if result.backup_file else None,
+                'snapshot_file': str(snapshot_path),
+                'availability_file': str(availability_path),
+                'source_version': version,
+                'message': (
+                    f"MOPS 月營收已寫入 SQLite：inserted={result.inserted_count:,}"
+                    if result.applied
+                    else f"MOPS 月營收未寫入：diagnostics={len(result.plan.diagnostics):,}"
+                ),
+            }
+        except Exception as exc:
+            return {
+                'success': False,
+                'applied': False,
+                'inserted_count': 0,
+                'message': f"MOPS 月營收寫入失敗: {exc}",
+            }
+
+    def _resolve_monthly_revenue_snapshot_file(self, snapshot_file: Optional[Path]) -> Path:
+        if snapshot_file:
+            path = Path(snapshot_file)
+            if not path.exists():
+                raise FileNotFoundError(f"MOPS snapshot 不存在: {path}")
+            return path
+
+        snapshot_dir = self.config.output_root / 'monthly_revenue_mops_snapshots'
+        candidates = [
+            path
+            for path in snapshot_dir.glob('mops_monthly_revenue_snapshot_*.csv')
+            if '.before_' not in path.name
+        ]
+        if not candidates:
+            raise FileNotFoundError(f"找不到 MOPS 月營收 snapshot CSV: {snapshot_dir}")
+        return max(candidates, key=lambda path: path.stat().st_size)
 
     def sync_source_to_sqlite(
         self,
@@ -1363,6 +1471,43 @@ class UpdateService:
             logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite 獲取表 {table_name} 狀態失敗: {e}")
             return {'latest_date': None, 'total_records': 0, 'status': f'error: {e}'}
 
+    def _monthly_revenue_status_from_sqlite(self) -> Dict[str, Any]:
+        """Read monthly revenue status from the fundamental SQLite table."""
+        try:
+            from data_module.db_manager import DBManager
+
+            db = DBManager(self.config)
+            df = db.execute_query(
+                """
+                SELECT
+                    COUNT(*) AS count,
+                    MIN(period) AS min_period,
+                    MAX(period) AS max_period,
+                    MAX(as_of_date) AS max_as_of_date,
+                    COUNT(DISTINCT stock_code) AS stock_count,
+                    COUNT(DISTINCT period) AS period_count
+                FROM fundamental_monthly_revenues;
+                """
+            )
+            if df.empty:
+                return {'latest_date': None, 'total_records': 0, 'status': 'empty'}
+
+            row = df.iloc[0]
+            count = int(row['count'] or 0)
+            return {
+                'latest_date': row['max_as_of_date'] if count else None,
+                'latest_period': row['max_period'] if count else None,
+                'earliest_date': row['min_period'] if count else None,
+                'total_records': count,
+                'stock_count': int(row['stock_count'] or 0),
+                'period_count': int(row['period_count'] or 0),
+                'status': 'ok' if count > 0 else 'empty',
+            }
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[UpdateService] 從 SQLite 取得月營收狀態失敗: {e}")
+            return {'latest_date': None, 'total_records': 0, 'status': f'error: {e}'}
+
     def _broker_status_from_sqlite(self) -> Dict[str, Any]:
         """從 SQLite 資料庫極速獲取券商分點的狀態"""
         try:
@@ -1489,7 +1634,8 @@ class UpdateService:
                     'market_index': self._status_from_sqlite('market_indices'),
                     'industry_index': self._status_from_sqlite('industry_indices'),
                     'broker_branch': self._broker_status_from_sqlite(),
-                    'technical_indicators': self._technical_status_from_sqlite()
+                    'technical_indicators': self._technical_status_from_sqlite(),
+                    'monthly_revenue': self._monthly_revenue_status_from_sqlite(),
                 }
                 logger.info("[UpdateService] 成功從 SQLite 資料庫極速獲取數據狀態！")
                 return result
@@ -1678,7 +1824,8 @@ class UpdateService:
                     'market_index': self._status_from_sqlite('market_indices'),
                     'industry_index': self._status_from_sqlite('industry_indices'),
                     'broker_branch': self._broker_status_from_sqlite(),
-                    'technical_indicators': self._technical_status_from_sqlite()
+                    'technical_indicators': self._technical_status_from_sqlite(),
+                    'monthly_revenue': self._monthly_revenue_status_from_sqlite(),
                 }
                 for k, v in overview.items():
                     v['is_overview'] = True
@@ -1696,6 +1843,11 @@ class UpdateService:
             'industry_index': self._overview_csv_status('industry_index', self.config.industry_index_file, '日期', sources),
             'broker_branch': self._overview_broker_branch_status(sources),
             'technical_indicators': self._overview_technical_status(sources),
+            'monthly_revenue': sources.get('monthly_revenue', {
+                'latest_date': None,
+                'total_records': 0,
+                'status': 'sqlite only',
+            }),
         }
         return overview
 
@@ -1711,6 +1863,7 @@ class UpdateService:
             'broker_branch': 'broker_branch',
             'technical': 'technical_indicators',
             'technical_indicators': 'technical_indicators',
+            'monthly_revenue': 'monthly_revenue',
         }
         normalized = source_map.get(source)
         if normalized is None:
@@ -1727,8 +1880,10 @@ class UpdateService:
                     detail = self._status_from_sqlite('industry_indices')
                 elif normalized == 'broker_branch':
                     detail = self._broker_status_from_sqlite()
-                else:
+                elif normalized == 'technical_indicators':
                     detail = self._technical_status_from_sqlite()
+                else:
+                    detail = self._monthly_revenue_status_from_sqlite()
                 self._update_data_status_manifest(normalized, detail)
                 return detail
             except Exception as sql_err:
@@ -1743,8 +1898,10 @@ class UpdateService:
             detail = self._status_from_csv_file(self.config.industry_index_file, '日期')
         elif normalized == 'broker_branch':
             detail = self.check_broker_branch_data_status()
-        else:
+        elif normalized == 'technical_indicators':
             detail = self._check_technical_indicator_status()
+        else:
+            detail = {'latest_date': None, 'total_records': 0, 'status': 'sqlite only'}
 
         self._update_data_status_manifest(normalized, detail)
         return detail

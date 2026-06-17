@@ -14,6 +14,7 @@ from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from ui_qt.workers.task_worker import TaskWorker, ProgressTaskWorker
 from app_module.update_service import UpdateService
@@ -256,6 +257,7 @@ class UpdateView(QWidget):
             ("industry", "產業指數"),
             ("broker_branch", "券商分點"),
             ("technical", "技術指標"),
+            ("monthly_revenue", "月營收"),
             ("db_inspector", "SQLite 資料檢視"),
         ]
         for _, label in self._nav_items:
@@ -554,12 +556,108 @@ class UpdateView(QWidget):
             "industry": "檢查與更新產業指數數據，可將各產業分類的歷史指數同步至 industry_indices 表。",
             "broker_branch": "維護 MoneyDJ 的 6 大追蹤分點之買賣超資料，並可執行券商分點合併至 SQLite broker_flows 表。",
             "technical": "增量或全量重新計算個股的技術指標（KD, MACD, RSI 等），並高速批量儲存至資料庫中。",
+            "monthly_revenue": "使用 MOPS 月營收快照檔搭配正式可得日對照檔，先檢查筆數與診斷結果，再受控寫入正式月營收資料表。",
         }
 
         desc_label = QLabel(descriptions.get(key, "檢查此資料來源的更新狀態。"))
         desc_label.setStyleSheet("color: #64748b; font-size: 12px;")
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
+
+        if key == "monthly_revenue":
+            config_group = QGroupBox("MOPS 月營收回填設定")
+            config_group.setStyleSheet("""
+                QGroupBox {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    color: #475569;
+                    font-weight: bold;
+                }
+            """)
+            form_layout = QFormLayout(config_group)
+            form_layout.setSpacing(8)
+
+            self.monthly_revenue_snapshot_input = QLineEdit()
+            self.monthly_revenue_snapshot_input.setObjectName("monthly_revenue_snapshot_input")
+            self.monthly_revenue_snapshot_input.setText(str(self._default_monthly_revenue_snapshot_path()))
+            self.monthly_revenue_snapshot_input.setToolTip(
+                "MOPS 月營收快照檔。系統會從這個檔案讀取各公司每月營收金額；先檢查與正式寫入都使用同一份檔案。"
+            )
+
+            self.monthly_revenue_availability_input = QLineEdit()
+            self.monthly_revenue_availability_input.setObjectName("monthly_revenue_availability_input")
+            self.monthly_revenue_availability_input.setText(str(self._default_monthly_revenue_availability_path()))
+            self.monthly_revenue_availability_input.setToolTip(
+                "正式可得日對照檔。此檔決定每筆月營收從哪一天起可被因子層讀取，用來避免偷看未來資料。"
+            )
+
+            self.monthly_revenue_source_version_input = QLineEdit()
+            self.monthly_revenue_source_version_input.setObjectName("monthly_revenue_source_version_input")
+            default_version = getattr(
+                self.update_service,
+                "monthly_revenue_source_version",
+                "mops-static-snapshot-monthly-revenue-2026-06-16",
+            )
+            self.monthly_revenue_source_version_input.setText(default_version)
+            self.monthly_revenue_source_version_input.setToolTip(
+                "本次寫入版本名稱。用來區分不同批次的月營收資料，未來重跑或比對時可以追溯來源。"
+            )
+
+            form_layout.addRow("MOPS 月營收快照檔：", self.monthly_revenue_snapshot_input)
+            form_layout.addRow("正式可得日對照檔：", self.monthly_revenue_availability_input)
+            form_layout.addRow("本次寫入版本名稱：", self.monthly_revenue_source_version_input)
+            layout.addWidget(config_group)
+
+            op_group = QGroupBox("月營收資料操作")
+            op_group.setStyleSheet("""
+                QGroupBox {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    color: #475569;
+                    font-weight: bold;
+                }
+            """)
+            button_layout = QHBoxLayout(op_group)
+            button_layout.setSpacing(10)
+
+            self.monthly_revenue_dry_run_btn = QPushButton("先檢查，不寫入")
+            self.monthly_revenue_dry_run_btn.setObjectName("monthly_revenue_dry_run_btn")
+            self.monthly_revenue_dry_run_btn.setMinimumHeight(35)
+            self.monthly_revenue_dry_run_btn.setToolTip("只檢查可回填筆數與診斷結果，不寫入正式資料庫。")
+            self.monthly_revenue_dry_run_btn.clicked.connect(
+                lambda _checked=False: self._execute_monthly_revenue_backfill(apply=False)
+            )
+            button_layout.addWidget(self.monthly_revenue_dry_run_btn)
+
+            self.monthly_revenue_apply_btn = QPushButton("確認後寫入月營收")
+            self.monthly_revenue_apply_btn.setObjectName("monthly_revenue_apply_btn")
+            self.monthly_revenue_apply_btn.setMinimumHeight(35)
+            self.monthly_revenue_apply_btn.setToolTip("跳出確認視窗後，使用正式可得日對照檔把 MOPS 月營收寫入正式月營收資料表。")
+            self.monthly_revenue_apply_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    padding: 6px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #059669;
+                }
+            """)
+            self.monthly_revenue_apply_btn.clicked.connect(
+                lambda _checked=False: self._execute_monthly_revenue_backfill(apply=True)
+            )
+            button_layout.addWidget(self.monthly_revenue_apply_btn)
+            button_layout.addStretch()
+            layout.addWidget(op_group)
+            layout.addStretch()
+            return
 
         # 針對需要日期設定的分頁（daily, market, industry, broker_branch）
         if key in {"daily", "market", "industry", "broker_branch"}:
@@ -879,6 +977,105 @@ class UpdateView(QWidget):
 
         layout.addStretch()
 
+    def _default_monthly_revenue_snapshot_path(self) -> Path:
+        config = getattr(self.update_service, "config", None)
+        if config is None:
+            return Path("")
+        snapshot_dir = getattr(config, "output_root", Path("")) / "monthly_revenue_mops_snapshots"
+        candidates = [
+            path
+            for path in snapshot_dir.glob("mops_monthly_revenue_snapshot_*.csv")
+            if ".before_" not in path.name
+        ]
+        if not candidates:
+            return snapshot_dir
+        return max(candidates, key=lambda path: path.stat().st_size)
+
+    def _default_monthly_revenue_availability_path(self) -> Path:
+        config = getattr(self.update_service, "config", None)
+        if config is None:
+            return Path("")
+        return getattr(config, "monthly_revenue_availability_file", Path(""))
+
+    def _set_monthly_revenue_buttons_enabled(self, enabled: bool):
+        for attr in ("monthly_revenue_dry_run_btn", "monthly_revenue_apply_btn"):
+            button = getattr(self, attr, None)
+            if button:
+                button.setEnabled(enabled)
+
+    def _execute_monthly_revenue_backfill(self, apply: bool = False):
+        """Run MOPS monthly revenue dry-run or controlled SQLite apply."""
+        if apply:
+            reply = QMessageBox.question(
+                self,
+                "確認寫入月營收",
+                "確定要正式寫入 fundamental_monthly_revenues 嗎？\n\n"
+                "系統會先建立 SQLite 備份，再用 MOPS snapshot 與正式 availability mapping 回填月營收。",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+        snapshot_text = self.monthly_revenue_snapshot_input.text().strip()
+        availability_text = self.monthly_revenue_availability_input.text().strip()
+        source_version = self.monthly_revenue_source_version_input.text().strip()
+
+        self._set_monthly_revenue_buttons_enabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)
+        self.progress_label.setVisible(True)
+        self.progress_label.setText("正在處理 MOPS 月營收...")
+        self.log_text.clear()
+        mode_text = "正式寫入" if apply else "dry-run"
+        self._log(f"開始 MOPS 月營收 {mode_text}")
+        self._log(f"MOPS snapshot: {snapshot_text}")
+        self._log(f"Availability mapping: {availability_text}")
+
+        def task():
+            kwargs = {
+                "snapshot_file": Path(snapshot_text) if snapshot_text else None,
+                "availability_file": Path(availability_text) if availability_text else None,
+                "source_version": source_version or None,
+            }
+            if apply:
+                return self.update_service.apply_mops_monthly_revenue_backfill(**kwargs)
+            return self.update_service.dry_run_mops_monthly_revenue_backfill(**kwargs)
+
+        worker = self._start_worker(TaskWorker(task))
+        worker.finished.connect(lambda result, apply_mode=apply: self._on_monthly_revenue_finished(result, apply_mode))
+        worker.error.connect(self._on_monthly_revenue_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
+
+    def _on_monthly_revenue_finished(self, result: Dict[str, Any], apply: bool):
+        self._set_monthly_revenue_buttons_enabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+
+        message = result.get("message", "月營收處理完成")
+        self._log(message)
+        self._log(f"raw rows: {result.get('raw_row_count', 0):,}")
+        self._log(f"normalized records: {result.get('normalized_record_count', result.get('inserted_count', 0)):,}")
+        self._log(f"diagnostics: {result.get('diagnostic_count', 0):,}")
+        backup_file = result.get("backup_file")
+        if backup_file:
+            self._log(f"SQLite backup: {backup_file}")
+
+        if result.get("success", False):
+            QMessageBox.information(self, "月營收處理完成", message)
+            if apply:
+                self._check_source_detail("monthly_revenue", force=True)
+        else:
+            QMessageBox.warning(self, "月營收處理失敗", message)
+
+    def _on_monthly_revenue_error(self, error_msg: str):
+        self._set_monthly_revenue_buttons_enabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        self._log(f"錯誤：{error_msg}")
+        QMessageBox.critical(self, "月營收處理失敗", error_msg)
+
     def _sync_dates(self, source_name: str):
         """同步不同分頁的日期範圍元件"""
         try:
@@ -994,6 +1191,7 @@ class UpdateView(QWidget):
             "industry": "industry_index",
             "broker_branch": "broker_branch",
             "technical": "technical_indicators",
+            "monthly_revenue": "monthly_revenue",
         }
         status_key = source_map.get(source, source)
         if hasattr(self.update_service, "check_source_detail"):

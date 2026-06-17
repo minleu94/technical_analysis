@@ -28,11 +28,44 @@
 6. 查詢 `daily_prices` 的 `3207` 時，若目前只看到 `20260616` 一筆，代表正式 DB 尚未做歷史 TPEX 回補，這是目前預期狀態；歷史回補必須先跑 dry-run plan 並經人工確認。
 7. 表格不應再出現 `PandasTableModel.data 錯誤: The truth value of a Series is ambiguous`；若舊 schema 或 alias 造成重複欄名，UI 必須能正常顯示。
 
+## Month 5 基本面資料層補充（2026-06-17）
+
+### 已達成
+
+1. `fundamental_monthly_revenues` 已正式寫入月營收 records：`2014-04..2026-05`、244,499 筆、1,848 檔、0 duplicate；2026-05 為 `observed`，歷史 baseline 為 `degraded`。
+2. `fundamental_statement_items` 已正式寫入季度財報 item records：`2014-Q2..2024-Q1`、1,645,555 筆、1,567 檔、0 duplicate；income statement / balance sheet / cash flows 均可在 SQLite Inspector 檢查。
+3. `fundamental_valuation_metrics` 已正式寫入 P/E records：831 筆，並保留 industry percentile。
+4. `FundamentalSQLiteProvider` 與 `FundamentalFactorService` 已可唯讀產生基本面 factor records / diagnostics；不寫 DB、不接 `ScoringEngine`。
+5. Revenue factors 已可產生 YoY、MoM、3M trend、new high。
+6. Statement factors 已可產生 EPS、毛利率、營益率、ROE、業外損益 ratio。
+7. PB / PS 已有明確 pending diagnostics，不會被 P/E 或 daily price 欄位臨時推導。
+
+### 尚未達成 / 不在 Month 5 接入
+
+1. 基本面 factor 不接 `ScoringEngine`，不影響推薦分數、排名、買賣判斷或回測交易邏輯。
+2. PB / PS 尚未正式計算；P/B 仍需 book value per share 或 equity/share count 政策，P/S 仍需 market cap 與 TTM sales 政策。
+3. 季度財報目前是 retroactive baseline，quality 為 `degraded`；不得用於導入日前的歷史回測假設。
+4. AbnormalFundamentalFlag 目前只具備資料 foundation；是否進風險提示或 scoring 需另開 Month 6/後續政策。
+
+### 新增人工檢查目標
+
+1. SQLite 資料檢視下拉選單應可看到 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`。
+2. 查 `fundamental_monthly_revenues` / `2330` 應可看到 `2014-04..2026-05`；`2026-05` 為 `observed`，歷史月份為 `degraded`。
+3. 查 `fundamental_statement_items` / `2330` / `2023-Q4` 應可看到 `EPS`、`Revenue`、`GrossProfit`、`OperatingIncome`、`Equity` 等 item。
+4. 可執行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_fundamental_factors.py --all-monthly-revenue-stocks --decision-date 2026-06-30 --diagnostic-limit 12 --stock-summary-limit 12
+.\.venv\Scripts\python.exe scripts\inspect_valuation_source_policy.py
+```
+
+第一個命令應顯示 `writes_data: false`、`scoring_engine_connected: false`，並列出 revenue / statement / valuation factor counts；第二個命令應顯示 P/E ready、P/B 與 P/S pending。
+
 ## 驗證總覽
 
 | 工作區 | 子功能數 | 狀態 | 備註 |
 |---|---:|---|---|
-| 數據更新 | 24 | 已修正待驗證 | 使用者已完成第一輪人工驗證；長任務切換分頁中斷 / 卡住、SQLite 檢視日期輸入、簡體中文、漲跌欄位與排序需求已修正，待使用者重新驗證。 |
+| 數據更新 | 27 | 已修正待驗證 | 使用者已完成第一輪人工驗證；長任務切換分頁中斷 / 卡住、SQLite 檢視日期輸入、簡體中文、漲跌欄位與排序需求已修正；Month 5 基本面表與 factor diagnostics 已加入待驗證。 |
 | 市場觀察 | 22 | 待測 |  |
 | 每日決策 | 9 | 待測 |  |
 | 策略回測 / Research Lab | 42 | 待測 |  |
@@ -69,6 +102,9 @@
 | U-022 | 券商分點 | 合併券商分點 | 增量合併並同步到 `broker_flows`；保留 observed / estimated / unavailable 品質 | 已修正待驗證 | 合併券商分點未結束時不能跳其他 tab，否則會卡住。 | 合併 worker 不再被切頁狀態查詢覆蓋；待使用者重測。 |
 | U-023 | 技術指標 | 計算技術指標 | 支援全部 / 單一股票、增量 / 全量；結果同步到 `technical_indicators` | 已修正待驗證 | 計算技術指標尚未結束時，如果點其他 tab，任務會中斷，不會背景繼續。另因 `daily_prices` 漲跌欄位異常，使用者懷疑技術指標是否可能使用錯誤數據計算。 | 技術指標 worker 不再被切頁狀態查詢覆蓋；檢查程式路徑後，技術指標計算使用 OHLC 價格欄位，不直接以 `漲跌價差` 作為指標計算基礎；待使用者重測。 |
 | U-024 | SQLite 資料檢視 | 載入、篩選、分頁、Schema | 唯讀查詢、頁碼控制、篩選重設、stale 結果防護、Schema 顯示正常；日期控件預設今天 / 本月且完整顯示 | 已修正待驗證 | 單一日期與日期區間只能手打，想要可點選日期 / 日曆；日期控件預設 1900 不利查詢；日期欄位顯示不完整；`daily_price` table 的「漲跌」欄位顯示簡體中文，無法接受；漲跌欄位空白，只看到漲跌價差，且漲跌價差整欄都是綠色，因為都是正值；實際漲跌方向似乎在後方 `漲跌(+/-)` column。所有欄位都不能排序；查 `3207` 時出現 PandasTableModel Series ambiguity 錯誤。 | 已加入日曆日期 picker、單一日期預設今天、區間預設本月 1 日至今天、日期欄位寬度固定可讀、繁中欄位 alias、新建 schema 繁中 `漲跌`、`漲跌價差` 依 `漲跌(+/-)` 顯示正負、表頭 server-side ORDER BY 排序；表格以 column position 取值以避免重複欄名造成 Series ambiguity；待使用者重測。 |
+| U-025 | 月營收 | MOPS snapshot 月營收正式資料 | 月營收分頁三個欄位為中文；可先檢查再寫入；正式 DB 已有 `fundamental_monthly_revenues` 244,499 筆 | 已修正待驗證 | Month 5 已正式寫入月營收與歷史 baseline。 | 使用 SQLite Inspector 查 `fundamental_monthly_revenues`，確認 1,848 檔、`2014-04..2026-05`、0 duplicate。 |
+| U-026 | SQLite 資料檢視 | 基本面資料表檢視 | 下拉選單可檢視三張 fundamental tables；股票代號與日期篩選可用 | 已修正待驗證 | 之前 SQLite 資料檢視層看不到新的 table。 | 白名單已加入 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`；待人工檢查。 |
+| U-027 | 基本面 factor diagnostics | Month 5 factor inspection CLI | 可檢查 revenue / statement / valuation factor records；不寫資料、不接 ScoringEngine | 需確認 | Month 5 基本面不接 scoring，但要能檢查 diagnostics。 | 執行 `scripts\inspect_fundamental_factors.py` 與 `scripts\inspect_valuation_source_policy.py`；確認 PB/PS pending diagnostics。 |
 
 ## 市場觀察
 
