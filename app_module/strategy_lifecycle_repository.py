@@ -148,8 +148,13 @@ class LifecycleEvidenceRepository:
                     payload,
                 ),
             )
+            if cursor.lastrowid is None:
+                raise RuntimeError("lifecycle evidence insert did not return row id")
             evidence_id = int(cursor.lastrowid)
-        return self.get_evidence(evidence_id)  # type: ignore[return-value]
+        record = self.get_evidence(evidence_id)
+        if record is None:
+            raise RuntimeError(f"lifecycle evidence not found after insert: {evidence_id}")
+        return record
 
     def get_evidence(self, evidence_id: int) -> LifecycleEvidenceRecord | None:
         with sqlite3.connect(self.db_path) as conn:
