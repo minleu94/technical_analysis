@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-06-17
+> **最後整理**：2026-06-18
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
 
 ---
@@ -18,6 +18,7 @@
 | [DOCUMENTATION_STRUCTURE.md](DOCUMENTATION_STRUCTURE.md) | `docs/` 資料夾歸屬、生命週期、刪除/歸檔規則。 |
 | [DOC_COVERAGE_MAP.md](DOC_COVERAGE_MAP.md) | 變更類型對應需要同步更新的文件。 |
 | [AI_CONTEXT_PACK.md](AI_CONTEXT_PACK.md) | 給外部 AI / Agent 的高密度專案上下文。 |
+| [../../README.md](../../README.md) | repo 根目錄的最短專案入口、目前主線、啟動方式與權威文件導覽。 |
 | [PROJECT_NAVIGATION.md](../../PROJECT_NAVIGATION.md) | repo 根目錄的日常開發導航。 |
 | [PROJECT_INVENTORY.md](../../PROJECT_INVENTORY.md) | repo 根目錄的完整專案盤點。 |
 | [../../AGENTS.md](../../AGENTS.md) | Codex 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/` 完整 Agent 架構。 |
@@ -215,6 +216,7 @@
 - [DEVELOPMENT_ROADMAP_LEGACY_2026_06.md](../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md)：舊完整 Roadmap，包含線性 Phase、歷史 Done 與舊 Roadmap current section，只作追溯用途。
 - [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md)：2026-06-09 下一輪行動計畫（已執行完畢）。
 - [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md)：Phase 3.3b 實施規劃（已執行完畢）。
+- [root_readme_legacy_2025_12.txt](../09_archive/root_readme_legacy_2025_12.txt)：原根目錄 `readme.txt`，內容停留在舊 Phase、舊入口與舊路徑說明，只作歷史追溯。
 
 ---
 
@@ -237,6 +239,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-06-18：整理根目錄 README 入口；將過期 `readme.txt` 移入 `docs/09_archive/root_readme_legacy_2025_12.txt`，並同步 docs 入口、Archive 索引與 Project Inventory。
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 索引同步，將目前治理狀態轉入 Month 6 Strategy Lifecycle / Portfolio Feedback。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 索引同步，標示 lifecycle gate、post-trade attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁已落地。
 - 2026-06-16：新增 Midnight Analyst UI 設計系統規格索引，作為後續深色主題、共用元件與 UI 統一工作的設計參考入口。

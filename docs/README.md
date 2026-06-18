@@ -1,6 +1,6 @@
 # Docs 文檔目錄
 
-> **最後整理**：2026-06-13
+> **最後整理**：2026-06-18
 > **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
@@ -9,7 +9,7 @@
 2. [6 個月工程路線](00_core/ROADMAP_6M_ENGINEERING.md) - 未來 6 個月的可執行工程計畫
 3. [Roadmap Hub](00_core/DEVELOPMENT_ROADMAP.md) - Roadmap 入口與權威文件導覽
 4. [舊 Roadmap 移交矩陣](00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊版未完成事項的新位置與驗收條件
-5. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 7 個工作區、跨頁流程、安全限制與排錯
+5. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 8 個工作區、跨頁流程、安全限制與排錯
 6. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
 7. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
 8. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
@@ -21,9 +21,9 @@
 | 目錄 | 用途 | 狀態 |
 |---|---|---|
 | `00_core/` | snapshot、6 個月 roadmap、Roadmap Hub、索引、coverage 規則 | 必讀 |
-| `01_architecture/` | 系統架構、資料流、Runtime 規範、多 Agent 工作流 | 長期維護 |
+| `01_architecture/` | 系統架構、資料流、Runtime 規範、多 Agent 工作流、UI 設計系統 | 長期維護 |
 | `02_features/` | UI、使用者指南、回測、評分、策略規格 | 使用者與功能說明 |
-| `03_data/` | 每日資料、資料流、重建與故障排除 | 資料更新操作 |
+| `03_data/` | 每日資料、資料流、重建與故障排除、基本面來源盤點 | 資料更新操作 |
 | `04_broker_branch/` | 券商分點資料與 Smart Money 前置資料 | 籌碼資料專區 |
 | `05_phases/` | Phase 設計、Phase 3.5 SOP、Phase 4 Portfolio 設計 | 階段規劃 |
 | `06_qa/` | QA 問題、總結、驗證與審核報告 | 驗證紀錄 |
@@ -41,13 +41,12 @@
 ## 目前狀態摘要
 
 - 三個產品閉環已建立：資料與市場狀態、研究驗證、持倉檢查。
-- Strategy & Scoring Governance 增量 A / B 已完成機制回歸；真實 fixed / quantile walk-forward 實證仍是 P0。
-- AI Runtime Subsystem MVP：已完成。
-- UI Qt Backtest chart rendering：已完成 QtWebEngine + HTML5 Canvas fast renderer，回測圖表保留 Matplotlib fallback。
-- 數據更新工作台：已完成左側導覽維運工作台與快速/安全更新分流。
-- Codex / Agent 指引：根目錄 `AGENTS.md` 已建立，`docs/agents/` 已同步目前 `ui_qt`、資料根目錄與 coverage 路徑規則。
-- Portfolio：已完成來源追溯、策略與價格監控、停損停利警示、籌碼監控與 Smart Money 下鑽。
-- Phase 5：圖表渲染與批次並行化已完成；大表格分頁與 Excel/PDF 報告輸出仍待做。
+- Daily Decision Desk v1 已接上主 UI，形成每日決策入口。
+- Strategy & Scoring Governance、10 檔 fixed / quantile OOS 實證、Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成；quantile 未優於 fixed，維持 opt-in。
+- Phase 5 圖表渲染、批次並行化、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 報告輸出仍在後續 backlog。
+- Month 5 Fundamental Layer v1 已完成，包含 available_date gate、Fundamental SQLite workflow、Revenue / Valuation factor service 與 diagnostics。
+- Month 6 Strategy Lifecycle / Portfolio Feedback v1 已落地，包含 lifecycle gate、append-only evidence、latest state projection、drift detector、post-trade attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
+- UI 已導入 Midnight Analyst 設計系統與全域 QSS；接下來主線是全 UI 健檢與 Month 6.1 lifecycle QA / manual approval / evidence explainability。
 
 詳細狀態以 [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md) 為準；未來方向以 [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md) 為準。
 

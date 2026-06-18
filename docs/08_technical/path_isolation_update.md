@@ -55,7 +55,7 @@ python scripts/update_all_data.py --profile test --data-root ./sandbox_data --ou
 
 ### 文檔檔案
 - `README.md` - 更新快速開始指南和路徑說明
-- `readme.txt` - 更新數據存儲路徑說明
+- `docs/09_archive/root_readme_legacy_2025_12.txt` - 原根目錄 `readme.txt`，2026-06-18 已歸檔；此處僅保留 v1.3.0 歷史追溯
 - `docs/scripts_readme.md` - 更新腳本使用說明
 - `docs/tests_readme.md` - 更新測試文檔
 
