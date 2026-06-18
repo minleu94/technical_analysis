@@ -236,11 +236,31 @@
 - 被淘汰策略保留原因與證據，不刪除歷史。
 - Portfolio 能回答「這筆交易原始假設是否仍成立」與「落差來自訊號、執行、資料或市場」。
 
+#### Month 6.1：人工審核層與可驗證操作流程深化
+
+定位：Month 6 v1 已有底層 service / evidence / UI entry；下一步不是重做 lifecycle engine，而是把它整理成可人工檢查、可解釋、可驗證、可安全批准的工作流。
+
+優先交付：
+
+- 生命週期回顧 UI 完整 QA：逐項驗證策略狀態、gate reason、drift report、regime compatibility、portfolio gap 與 evidence projection 是否能被使用者判讀。
+- Manual Approval Workflow：promote / demote / retire 預設只產生建議與 proposed / applied evidence；任何會改變策略狀態、策略版本可用性或 portfolio 行為的動作都必須經人工確認。
+- Portfolio Review Dashboard 深化：讓使用者能從同一個 review snapshot 回答「原始持倉理由是否仍成立」、「目前落差來自訊號、執行、資料品質或市場 regime」。
+- Strategy Evidence Explainability：每個 promote / hold / demote / retire 判斷都要能列出依據、門檻、資料品質與相關 run / portfolio source trace。
+- Month 6 QA Checklist：建立人工驗證清單，覆蓋 lifecycle service、evidence repository、portfolio feedback、UI 分頁與資料品質降級情境。
+- 下一版 Roadmap 草案：在完成 Month 6 人工審核流程驗證後，再決定後續主線要優先深化 execution model、factor governance、PDF report 或策略研究工廠。
+
+不做與安全邊界：
+
+- 不把 demote / retire 自動套用成策略刪除或策略版本覆寫。
+- 不用目前 live data 取代已保存 Research Run Registry / factor metadata / portfolio source trace。
+- 不因 fundamental diagnostics 存在就直接改變 `ScoringEngine` 或推薦權重。
+- 不把 Portfolio Review Dashboard 的 gap report 解讀為實盤績效宣稱；execution gap、零股、bid-ask spread、完整撮合仍列後續 execution model 深化。
+
 ---
 
 ## 5. 立即待辦清單
 
-1. Month 6 v1 已完成可用 contract / service / UI 入口，且已補「策略版本 lifecycle evidence 持久化」與 demote / retire proposed evidence 保存；下一步若要繼續深化，應把 evidence projection 接到更完整的 review dashboard / 人工審核流程，而不是覆寫或刪除既有策略版本。
+1. Month 6 v1 已完成可用 contract / service / UI 入口，且已補「策略版本 lifecycle evidence 持久化」與 demote / retire proposed evidence 保存；下一步轉入 Month 6.1，重點是人工審核層、Portfolio Review Dashboard 深化、Strategy Evidence Explainability 與完整 QA Checklist，而不是覆寫或刪除既有策略版本。
 2. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
 3. Month 6 任何策略生命週期判斷都必須只讀 Research Run Registry、Portfolio 來源追溯、Factor metadata 與 governed diagnostics；不得重新抓取當前資料替代已保存 run metadata，也不得把 fundamental factor 直接接入 `ScoringEngine`。
 4. 維持 Month 2 / Month 3 / Month 5 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、量化 float boundary 與 no-look-ahead tests。
@@ -264,6 +284,7 @@
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，確認 fundamental schema / 月營收 / 季度財報 / P/E valuation / provider / adapters / diagnostics 已達保守接入驗收；工程主線轉向 Month 6 Strategy Lifecycle 與 Portfolio Feedback。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle rule engine、drift detector、Portfolio post-trade attribution、Portfolio Review snapshot、Registry-based Promote lifecycle gate 與持倉管理生命週期回顧分頁。
 - 2026-06-17：補上 Month 6 lifecycle residual，新增 append-only lifecycle evidence repository、current state projection 與 demote / retire proposed evidence 保存；Promotion 成功後會記錄 applied evidence。
+- 2026-06-17：補上 Month 6.1 深化規劃，將下一步明確定位為人工審核層、Portfolio Review Dashboard、Strategy Evidence Explainability 與 Month 6 QA Checklist；保持 promote / demote / retire 不自動破壞既有策略版本。
 - 2026-06-17：補上 P/B / P/S valuation policy residual，將 source policy 改為 guarded ready：僅接受 governed external observations 或後續明確 backfill records，不在系統內推導估值分子 / 分母。
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert Attribution v1，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，並整合至主 UI 與風險提示。
 - 2026-06-15：完成 Daily Decision Desk Relative Strength / Liquidity Ranking v1，從 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性股，不重算且以 quality / warnings 呈現品質缺口與歷史不足警告。

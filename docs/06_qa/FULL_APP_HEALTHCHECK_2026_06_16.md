@@ -106,6 +106,16 @@
 | U-026 | SQLite 資料檢視 | 基本面資料表檢視 | 下拉選單可檢視三張 fundamental tables；股票代號與日期篩選可用 | 已修正待驗證 | 之前 SQLite 資料檢視層看不到新的 table。 | 白名單已加入 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`；待人工檢查。 |
 | U-027 | 基本面 factor diagnostics | Month 5 factor inspection CLI | 可檢查 revenue / statement / valuation factor records；不寫資料、不接 ScoringEngine | 需確認 | Month 5 基本面不接 scoring，但要能檢查 diagnostics。 | 執行 `scripts\inspect_fundamental_factors.py` 與 `scripts\inspect_valuation_source_policy.py`；確認 PB/PS pending diagnostics。 |
 
+### 數據更新追加 Issue Record（2026-06-17）
+
+| ID | 來源 | 狀態 | 使用者回覆 / 現象 | 證據 / 備註 |
+|---|---|---|---|---|
+| U-I-20260617-001 | 每日股價 / TPEX / SQLite | 已修正待驗證 | `3207` 在 SQLite `daily_prices` 只看到最近兩天，懷疑 TPEX 開始有資料但未補歷史。 | 盤點結果：TWSE CSV 已有 `2014-01-02..2026-06-17`；TPEX CSV 原僅 `2026-06-16..2026-06-17`。SQLite 中 `3207` 原為 2 筆；手動補 `2026-06-15` 後為 3 筆。 |
+| U-I-20260617-002 | 每日股價 / 手動下載此資料源 | 已修正待驗證 | 選 10 天時沒有明顯跑 TPEX，顯示沒有需要更新。 | 根因：舊 TPEX source 使用 OpenAPI latest endpoint，歷史日期參數未有效回傳指定日期；已改用官方 `/www/zh-tw/afterTrading/otc` JSON 歷史查詢 endpoint，並改為只補缺少 CSV。 |
+| U-I-20260617-003 | 全部資料 / 快速更新 | 已修正待驗證 | 快速更新與安全更新差異不清楚，需確認 TWSE + TPEX 是否都跑。 | 快速更新改為 TWSE 每日股價、TPEX 每日股價與券商分點皆只更新結束日前最近 2 天，直接同步 SQLite 並跳過大型合併；安全更新依 UI 日期範圍補齊並執行完整合併。 |
+| U-I-20260617-004 | 背景補齊 TPEX + 技術指標 | 進行中 | 背景流程不應先卡在 TWSE 全量，應先看 SQLite / CSV 缺口再補 TPEX。 | 舊背景流程先跑 TWSE 全量；已改 UI 不再傳 `--twse-update`，背景腳本 TPEX 改為 `force_refresh=False`，目前背景任務 state 顯示 `twse_daily=skipped`、`tpex_daily=running`。 |
+| U-I-20260617-005 | 每日股價 / SQLite sync | 已修正待驗證 | TPEX CSV 有資料但 SQLite sync 可能因欄位名稱混亂失敗。 | 2026-06-15 TPEX CSV 抓取 879 筆；初次 sync 因 mojibake 欄位判斷失敗，已將 `daily_price_files` sync 正規化到 `日期`、`證券代號`，重跑後該日同步 1,969 筆。 |
+
 ## 市場觀察
 
 | ID | 子分頁 | 功能 | 驗證重點 | 狀態 | 使用者回覆 | 證據 / 備註 |
@@ -317,9 +327,12 @@
 
 | UPDATE-ISSUE-013 | U-021 / U-022 | 效能 / 券商分點更新 | 券商分點資訊一次更新約 40 個分點時耗時明顯過長，需評估是否可支援受控並行，例如 5、10 或更高並行數，並確認網頁端是否會阻擋。 | 已記錄 | 未修正 | 待排查 | 中 | 先排查目前券商分點下載 / 合併是否為序列流程、是否已有 rate limit / retry / session 限制；後續若可行，需採受控 concurrency 與保守預設。 |
 | UPDATE-ISSUE-014 | U-023 | 效能 / 技術指標計算 | 技術指標目前疑似 inline / 單核心計算；需評估是否可用 4 core 等多核心並行計算以縮短全市場計算時間。 | 已記錄 | 未修正 | 待排查 | 中 | 先排查目前計算流程是否逐股序列、是否受 SQLite 寫入或 CSV I/O 限制；若要並行，需拆分計算與寫入階段，避免多進程同時寫 DB 或覆寫 CSV。 |
-| UPDATE-ISSUE-015 | U-024 / U-007 / U-008 | TPEX / SQLite 同步缺口 | SQLite 檢視 `3207` 只有近兩天資料，顯示 TPEX 日常資料已開始寫入但尚未補齊 2014 起歷史資料；需確認歷史 TPEX 回補是否未執行。 | 已記錄 | 未修正 | 待排查 | 中 | 目前 `DATA_ROOT/daily_price_tpex` 已有近兩天 CSV，代表日常 TPEX 抓取成功；需確認歷史回補仍需 dry-run plan 與人工 gate，不屬於每日快速更新自動回補。 |
+| UPDATE-ISSUE-015 | U-024 / U-007 / U-008 | TPEX / SQLite 同步缺口 | SQLite 檢視 `3207` 只有近兩天資料，顯示 TPEX 日常資料已開始寫入但尚未補齊 2014 起歷史資料；需確認歷史 TPEX 回補是否未執行。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 已改用 TPEX historical afterTrading endpoint 回補並同步 SQLite；2026-06-17 排查確認 `daily_prices` 中 `3207` 已有 `20140102` 至 `20260617`、共 2907 筆。 |
 | UPDATE-ISSUE-016 | U-007 / U-008 / U-024 | TPEX / 每日股價手動同步 | 點每日股價的手動下載資料源或後續同步後，SQLite 檢視 `daily_prices` 查不到 `3207`，但 TPEX CSV 未消失；疑似手動每日股價路徑未納入 `daily_price_tpex`，或同步時覆蓋了同日 TPEX rows。 | 已記錄 | 未修正 | 待排查 | 高 | 需追每日股價手動下載、合併、SQLite 同步三條路徑是否只讀 TWSE `daily_price`；特別確認是否對同日期先刪除 `daily_prices` 再只寫入 TWSE，導致既有 TPEX rows 被移除。 |
 | UPDATE-ISSUE-017 | U-002 / U-003 | 使用者理解 / 更新模式語意 | 快速更新與完整更新差異不清楚：快速更新後 metadata 的市場 / 產業 CSV、`daily_price` 與 `broker_flow` daily 檔也會更新；完整更新又重跑一次全部，使用者不確定完整更新額外做了哪些檢查或資料重建。 | 已記錄 | 未修正 | 待排查 | 中 | 需排查兩種更新流程的實際步驟差異並回寫文件 / UI 文案；特別釐清快速更新是否仍會寫入 raw daily CSV，但避免大型合併 CSV 重寫，而完整更新是否包含完整 CSV 合併、重建或更完整同步。 |
+| UPDATE-ISSUE-018 | U-023 / U-024 | 技術指標 / SQLite 欄位相容性 | TPEX 歷史 daily 寫入 SQLite 後，全量技術指標背景計算失敗，訊息為「沒有有效的數據可以合併」；`daily_prices` 已有 `3207` 歷史資料，但 `technical_indicators` 原本沒有 `3207`。 | 修正中 | 已修正單檔流程，全量重算中 | 待使用者驗證 | 高 | 根因為技術指標合併與 SQLite 寫入仍檢查舊 mojibake 欄名，且 `daily_prices` 同時存在正確欄名與舊 alias 欄位，rename 後造成 duplicate `日期`；已修正欄位 canonicalization，單檔 `3207` 已重算成功並寫入 `technical_indicators`，全量背景重算狀態見 `meta_data/technical_full_refresh_status.json`。 |
+| UPDATE-ISSUE-019 | U-001 / U-024 | 資料狀態 / SQLite 欄位相容性 | 開啟 App 檢查資料狀態時，`market_indices`、`industry_indices`、`broker_flows`、`technical_indicators` 狀態查詢仍使用舊 mojibake 欄名，也就是 `日期`、`證券代號` 等欄位被錯誤編碼後的版本，導致 no such column error。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | `UpdateService` 的 SQLite status helper 改為依實際 table columns 選擇 canonical 欄位，優先使用 `日期`、`證券代號`、`分點名稱`，必要時才 fallback 舊 alias；避免資料狀態頁因 schema canonicalization 後查錯欄位。 |
+| UPDATE-ISSUE-020 | U-001 / U-024 | 文字編碼 / DB schema 清理 | App log、狀態檔與 `daily_prices` schema 殘留 mojibake 文字，造成使用者看到不可讀訊息，且可能讓後續程式誤用舊欄位。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 已修復 `app_module/update_service.py` 內正式路徑可見亂碼字串與註解，修復 `meta_data` 狀態 JSON 舊訊息；SQLite `daily_prices` 的空白亂碼欄位已在備份 `D:/Min/Python/Project/FA_Data/sqlite/twstock_before_drop_mojibake_col_20260617_235005.db` 後移除，最終 schema 掃描未再發現 mojibake 欄位。 |
 ### 原始失敗紀錄
 
 | ID | 來源功能 ID | 問題摘要 | 重現步驟 | 實際結果 | 預期結果 | 嚴重度 | 是否需要修復任務 |

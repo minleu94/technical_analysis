@@ -15,6 +15,10 @@ from PySide6.QtGui import QFont
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from pathlib import Path
+import json
+import os
+import subprocess
+import sys
 
 from ui_qt.workers.task_worker import TaskWorker, ProgressTaskWorker
 from app_module.update_service import UpdateService
@@ -162,6 +166,13 @@ class UpdateView(QWidget):
         # Worker
         self.worker: Optional[TaskWorker] = None
         self._active_workers: List[TaskWorker] = []
+        meta_data_dir = getattr(
+            self.update_service.config,
+            "meta_data_dir",
+            Path(getattr(self.update_service.config, "data_root", ".")) / "meta_data",
+        )
+        self.tpex_refresh_state_file = Path(meta_data_dir) / "tpex_full_refresh_status.json"
+        self._tpex_background_process: Optional[subprocess.Popen] = None
 
         self._setup_ui()
 
@@ -316,8 +327,8 @@ class UpdateView(QWidget):
         self.quick_update_all_btn.setMinimumHeight(45)
         self.quick_update_all_btn.setToolTip(
             "【⚡ 快速更新 (跳過大型合併)】\n"
-            "速度優先！TWSE 每日股價會依上方日期範圍檢查下載，TPEX 會抓取結束日官方收盤行情。\n"
-            "券商分點為避免 40 家全量補歷史造成嚴重卡頓，快速模式只更新結束日前最近 2 天。\n"
+            "速度優先。TWSE 每日股價、TPEX 每日股價與券商分點都只更新結束日前最近 2 天。\n"
+            "TPEX 使用官方歷史查詢 endpoint，會先跳過本機已有 CSV，只補缺少日期。\n"
             "資料會直接增量同步 SQLite，但跳過 stock_data_whole 與分點 merged.csv 的大型合併重寫。"
         )
         self.quick_update_all_btn.setStyleSheet("""
@@ -347,7 +358,7 @@ class UpdateView(QWidget):
         self.safe_update_all_btn.setMinimumHeight(45)
         self.safe_update_all_btn.setToolTip(
             "【🛡️ 安全更新 (完整 CSV + SQLite)】\n"
-            "備份完整性優先！TWSE 每日股價會依上方日期範圍檢查下載，TPEX 會抓取結束日官方收盤行情。\n"
+            "備份完整性優先。TWSE 每日股價與 TPEX 每日股價會依上方日期範圍檢查並補齊缺少 CSV。\n"
             "券商分點會依上方日期範圍更新目前啟用的 40 家追蹤分點。\n"
             "完成下載後會重建每日股價大表與分點 merged.csv，再同步寫入 SQLite。\n"
             "此流程耗時較長，但能保證 CSV 歷史資料庫的完整備份。"
@@ -552,7 +563,7 @@ class UpdateView(QWidget):
     def _add_source_tab_content(self, layout: QVBoxLayout, key: str):
         """為個別資料源維護分頁建立專屬操作與手動配置界面"""
         descriptions = {
-            "daily": "檢查與維護每日股價原始資料與 SQLite 對應數據。此處支援增量合併與 Danger Zone 強制重新合併。",
+            "daily": "檢查與維護每日股價原始資料（TWSE + TPEX）與 SQLite 對應數據。此處支援增量合併與 Danger Zone 強制重新合併。",
             "market": "檢查與更新加權指數大盤數據。此處會將大盤資料同步儲存至資料庫的 market_indices 表。",
             "industry": "檢查與更新產業指數數據，可將各產業分類的歷史指數同步至 industry_indices 表。",
             "broker_branch": "維護 MoneyDJ 目前啟用的 40 家追蹤分點之買賣超資料，並可執行券商分點合併至 SQLite broker_flows 表。",
@@ -805,9 +816,8 @@ class UpdateView(QWidget):
             update_btn.setToolTip(
                 f"【手動下載此資料源】\n"
                 f"依據上方設定的日期範圍，手動向 API/網頁端發出下載請求，將原始 CSV 檔案下載至本地 raw/ 目錄。\n"
-                f"每日股價手動下載會跑 TWSE 日期範圍，並額外抓取結束日的 TPEX 官方收盤行情。\n"
-                f"注意：手動下載僅會儲存本地 CSV 原始檔，必須再點擊「合併」按鈕或執行一鍵更新，\n"
-                f"資料才會真正寫入 SQLite 資料庫以供策略推薦和回測使用。"
+                f"每日股價手動下載會跑 TWSE 日期範圍，TPEX 則改為區間流程嘗試抓取每個交易日；若 API 只回傳最近交易日，會自動以回應日覆蓋對應檔案。\n"
+                f"提交後會自動同步 daily_price / daily_price_tpex 到 SQLite，並進行增量技術指標計算。"
             )
             update_btn.setStyleSheet("""
                 QPushButton {
@@ -824,6 +834,51 @@ class UpdateView(QWidget):
             """)
             update_btn.clicked.connect(lambda _checked=False, k=key: self._dispatch_update(k))
             button_layout.addWidget(update_btn)
+            if key == "daily":
+                self.tpex_background_btn = QPushButton("🚀 背景補齊 TPEX + 技術指標")
+                self.tpex_background_btn.setMinimumHeight(35)
+                self.tpex_background_btn.setToolTip(
+                    "【🚀 背景補齊 TPEX + 技術指標】\n"
+                    "將以背景方式執行 TPEX 區間抓取（含 fallback / 重複日短路）、同步日價到 SQLite，並立即進行技術指標增量更新。\n"
+                    "任務會寫入背景狀態檔，可用「📡 檢查背景任務狀態」隨時查看最新進度。"
+                )
+                self.tpex_background_btn.setStyleSheet("""
+                    QPushButton {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #f59e0b, stop:1 #d97706);
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        font-weight: bold;
+                        padding: 6px 12px;
+                    }
+                    QPushButton:hover {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #fbbf24, stop:1 #f59e0b);
+                    }
+                """)
+                self.tpex_background_btn.clicked.connect(self._execute_background_tpex_refresh)
+                button_layout.addWidget(self.tpex_background_btn)
+
+                self.tpex_background_status_btn = QPushButton("📡 檢查背景任務狀態")
+                self.tpex_background_status_btn.setMinimumHeight(35)
+                self.tpex_background_status_btn.setToolTip(
+                    "【📡 檢查背景任務狀態】\n"
+                    "讀取背景任務的 JSON 狀態檔，確認目前是 running / done / failed，以及 TPEX、SQLite、技術指標三個步驟結果。"
+                )
+                self.tpex_background_status_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #f8fafc;
+                        color: #334155;
+                        border: 1px solid #cbd5e1;
+                        border-radius: 6px;
+                        font-weight: bold;
+                        padding: 6px 12px;
+                    }
+                    QPushButton:hover {
+                        background-color: #e2e8f0;
+                    }
+                """)
+                self.tpex_background_status_btn.clicked.connect(self._show_tpex_background_status)
+                button_layout.addWidget(self.tpex_background_status_btn)
 
         if key == "daily":
             self.merge_btn = QPushButton("⚙️ 合併每日股價")
@@ -1304,9 +1359,161 @@ class UpdateView(QWidget):
         start_date_obj = end_date_obj - timedelta(days=lookback_days)
         return start_date_obj.strftime("%Y-%m-%d"), end_date
 
+    def _get_tpex_reference_date(self, end_date: str) -> str:
+        """將結束日調整為最近交易日（至少避開週末）。"""
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        for _ in range(7):
+            if end_dt.weekday() < 5:
+                break
+            end_dt = end_dt - timedelta(days=1)
+        return end_dt.strftime("%Y-%m-%d")
+
+    def _update_tpex_daily_prices(self, start_date: str, end_date: str) -> Dict[str, Any]:
+        """更新 TPEX 日價；舊 service 測試替身可退回單日 API。"""
+        update_range = getattr(self.update_service, "update_tpex_daily_price_range", None)
+        if update_range is not None:
+            return update_range(
+                start_date,
+                end_date,
+                delay_seconds=1.0,
+                sync_to_sqlite=False,
+                force_refresh=False,
+                break_on_repeated_source_date=False,
+            )
+        return self.update_service.update_tpex_daily_price(end_date)
+
+    def _write_tpex_background_status(self, payload: Dict[str, Any]) -> None:
+        """寫入背景任務狀態 JSON，供狀態按鈕即時讀取。"""
+        try:
+            self.tpex_refresh_state_file.parent.mkdir(parents=True, exist_ok=True)
+            payload.update({"updated_at": datetime.now().isoformat(timespec="seconds")})
+            self.tpex_refresh_state_file.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
+    def _execute_background_tpex_refresh(self):
+        """以獨立進程背景執行 TPEX + TWSE + 技術指標完整流程。"""
+        if self._tpex_background_process is not None and self._tpex_background_process.poll() is None:
+            QMessageBox.information(
+                self,
+                "背景任務進行中",
+                "TPEX 背景任務尚未結束，請先完成後再啟動下一次。",
+            )
+            return
+
+        start_date, end_date = self._get_selected_date_range()
+        script_path = self.update_service.scripts_dir / "run_tpex_full_refresh_and_technical.py"
+        if not script_path.exists():
+            QMessageBox.critical(self, "背景任務啟動失敗", f"找不到背景腳本：{script_path}")
+            return
+
+        self.tpex_background_btn.setEnabled(False)
+        self.tpex_background_btn.setText("背景補齊中...")
+
+        initial_status = {
+            "status": "running",
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+            "mode": "tpex_full_refresh_and_technical",
+            "start_date": start_date,
+            "end_date": end_date,
+            "steps": {},
+        }
+        self._write_tpex_background_status(initial_status)
+
+        env = os.environ.copy()
+        env["DATA_ROOT"] = str(self.update_service.config.data_root)
+        env["OUTPUT_ROOT"] = str(self.update_service.config.output_root)
+        env["PROFILE"] = str(self.update_service.config.profile)
+
+        cmd = [
+            sys.executable,
+            str(script_path),
+            "--start-date",
+            start_date,
+            "--end-date",
+            end_date,
+            "--state-file",
+            str(self.tpex_refresh_state_file),
+            "--delay-seconds",
+            "1.0",
+            "--sync-sqlite",
+            "--technical-force-all",
+        ]
+        creationflags = 0
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            self._log("開始啟動 TPEX 背景補齊流程（含 TWSE 與技術指標）")
+            self._tpex_background_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=env,
+                creationflags=creationflags,
+            )
+            self._log(
+                f"TPEX 背景任務已啟動，PID={self._tpex_background_process.pid}，可點『📡 檢查背景任務狀態』查看進度。"
+            )
+        except Exception as exc:
+            self.tpex_background_btn.setEnabled(True)
+            self.tpex_background_btn.setText("🚀 背景補齊 TPEX + 技術指標")
+            error_msg = f"背景任務啟動失敗：{exc}"
+            self._write_tpex_background_status({"status": "failed", "message": error_msg})
+            QMessageBox.critical(self, "背景任務啟動失敗", error_msg)
+
+    def _show_tpex_background_status(self):
+        """讀取並顯示背景任務 JSON 狀態。"""
+        if not self.tpex_refresh_state_file.exists():
+            QMessageBox.information(self, "背景任務狀態", "目前尚未啟動 TPEX 背景補齊任務。")
+            return
+
+        try:
+            raw = json.loads(self.tpex_refresh_state_file.read_text(encoding="utf-8"))
+            lines = [
+                f"狀態：{raw.get('status', 'unknown')}",
+                f"啟動時間：{raw.get('started_at', '-')}",
+                f"最後更新：{raw.get('updated_at', '-')}",
+                f"區間：{raw.get('start_date', '-') or '-'} 至 {raw.get('end_date', '-') or '-'}",
+                f"模式：{raw.get('mode', '-')}",
+            ]
+
+            steps = raw.get("steps", {}) or {}
+            twse = steps.get("twse_daily", {})
+            tpex = steps.get("tpex_daily", {})
+            sqlite = steps.get("sqlite", {})
+            tech = steps.get("technical", {})
+
+            def _fmt_step(name: str, payload: Dict[str, Any]) -> str:
+                return (
+                    f"{name}: {payload.get('status', '-')}, "
+                    f"rows={payload.get('rows', '-')}, message={payload.get('message', '-') or '-'}"
+                )
+
+            lines.append("---")
+            lines.append(_fmt_step("TWSE 每日", twse))
+            lines.append(_fmt_step("TPEX 每日", tpex))
+            lines.append(_fmt_step("SQLite", sqlite))
+            lines.append(_fmt_step("技術指標", tech))
+
+            if raw.get("status") == "failed":
+                lines.append(f"錯誤訊息：{raw.get('message', '-')}")
+
+            self._log("\n".join(lines))
+            QMessageBox.information(self, "背景任務狀態", "\n".join(lines))
+
+            if raw.get("status") in {"done", "failed"}:
+                self.tpex_background_btn.setEnabled(True)
+                self.tpex_background_btn.setText("🚀 背景補齊 TPEX + 技術指標")
+        except Exception as exc:
+            QMessageBox.critical(self, "背景任務狀態", f"讀取狀態失敗：{exc}")
     def _run_update_all(self, mode="quick", progress_callback=None) -> Dict[str, Any]:
         """一鍵更新所有數據流程（支援快速與安全分流）"""
         start_date, end_date = self._get_selected_date_range()
+        tpex_reference_date = self._get_tpex_reference_date(end_date)
         completed = []
         warnings = []
 
@@ -1336,11 +1543,17 @@ class UpdateView(QWidget):
         else:
             quick_start_date = start_date
 
+        daily_update_start_date = quick_start_date if is_quick_mode else start_date
+
         steps = [
             ("檢查資料狀態", 0, lambda: self._get_overview_status()),
-            ("每日股價更新", 12, lambda: self.update_service.update_daily(start_date, end_date)),
-            ("TPEX 每日股價更新", 16, lambda: self.update_service.update_tpex_daily_price(end_date)),
-            ("同步每日股價至 SQLite", 18, lambda: self.update_service.sync_source_to_sqlite("daily_price_files", start_date, end_date)),
+            ("每日股價更新", 12, lambda: self.update_service.update_daily(daily_update_start_date, end_date)),
+            (
+                "TPEX 每日股價更新",
+                16,
+                lambda: self._update_tpex_daily_prices(daily_update_start_date, end_date),
+            ),
+            ("同步每日股價至 SQLite", 18, lambda: self.update_service.sync_source_to_sqlite("daily_price_files", daily_update_start_date, end_date)),
             ("大盤指數更新", 24, lambda: self.update_service.update_market(start_date, end_date)),
             ("同步大盤指數至 SQLite", 30, lambda: self.update_service.sync_source_to_sqlite("market_index")),
             ("產業指數更新", 36, lambda: self.update_service.update_industry(start_date, end_date)),
@@ -1382,7 +1595,7 @@ class UpdateView(QWidget):
         for name, progress, action in steps:
             result = run_step(name, progress, action)
             if isinstance(result, dict) and not result.get("success", True):
-                if name == "TPEX 每日股價更新":
+                if name.startswith("TPEX 每日股價更新"):
                     warning = f"{name}: {result.get('message', f'{name} 失敗')}"
                     warnings.append(warning)
                     completed.append({"step": name, "result": result, "warning": True})
@@ -1551,8 +1764,12 @@ class UpdateView(QWidget):
             try:
                 logger.info(f"[UpdateView] 開始執行更新任務: update_type={update_type}")
                 if update_type == 'daily':
+                    if progress_callback:
+                        progress_callback("更新 TWSE 每日股價", 15)
                     result = self.update_service.update_daily(start_date, end_date)
-                    tpex_result = self.update_service.update_tpex_daily_price(end_date)
+                    if progress_callback:
+                        progress_callback("更新 TPEX 每日收盤行情", 30)
+                    tpex_result = self._update_tpex_daily_prices(start_date, end_date)
                     warnings = list(result.get('warnings', []))
                     if tpex_result.get('success', False):
                         result['message'] = (
@@ -1565,6 +1782,35 @@ class UpdateView(QWidget):
                     else:
                         warnings.append(
                             f"TPEX 每日股價更新: {tpex_result.get('message', 'unknown error')}"
+                        )
+
+                    if progress_callback:
+                        progress_callback("同步每日股價到 SQLite", 55)
+                    sqlite_result = self.update_service.sync_source_to_sqlite(
+                        "daily_price_files",
+                        start_date,
+                        end_date,
+                    )
+                    if not sqlite_result.get("success", True):
+                        warnings.append(
+                            f"同步 daily_price_files 到 SQLite 失敗: {sqlite_result.get('message', 'unknown error')}"
+                        )
+                    else:
+                        result["synced_records"] = int(result.get("synced_records", 0)) + int(
+                            sqlite_result.get("synced_records", 0)
+                        )
+
+                    if progress_callback:
+                        progress_callback("更新技術指標（增量）", 85)
+                    indicator_result = self.update_service.calculate_technical_indicators(
+                        target_stock=None,
+                        force_all=False,
+                        start_date=None,
+                        progress_callback=progress_callback,
+                    )
+                    if not indicator_result.get("success", False):
+                        warnings.append(
+                            f"技術指標計算失敗: {indicator_result.get('message', 'unknown error')}"
                         )
                     if warnings:
                         result['warnings'] = warnings

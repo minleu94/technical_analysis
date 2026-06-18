@@ -68,7 +68,7 @@ def apply_app_theme(app: QApplication) -> None:
 
 class MainWindow(QMainWindow):
     """主窗口"""
-    
+
     class _DecisionDeskMarketRegimeProvider:
         """僅供主畫面使用的 market regime provider（決策桌面適配器）。"""
 
@@ -204,27 +204,27 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("台股技術分析系統")
+        self.setWindowTitle("Balder")
         self.setGeometry(100, 100, 1400, 800)
-        
+
         # 設置窗口 icon
         icon_path = Path(__file__).parent / 'app_icon.png'
         if icon_path.exists():
             icon_path_abs = icon_path.resolve()  # 使用絕對路徑
             self.setWindowIcon(QIcon(str(icon_path_abs)))
-        
+
         import logging
         logger = logging.getLogger(__name__)
-        
+
         try:
             # 初始化配置和服務
             self.config = TWStockConfig()
-            
+
             # 共享 IndustryMapper 實例，避免重複載入資料
             # from ui_app.industry_mapper import IndustryMapper
             from decision_module.industry_mapper import IndustryMapper
             shared_industry_mapper = IndustryMapper(self.config)
-            
+
             self.screening_service = ScreeningService(self.config, industry_mapper=shared_industry_mapper)
             self.regime_service = RegimeService(self.config)
             self.recommendation_service = RecommendationService(self.config, industry_mapper=shared_industry_mapper)
@@ -232,13 +232,13 @@ class MainWindow(QMainWindow):
             self.backtest_service = BacktestService(self.config)
             self.broker_flow_service = BrokerFlowService(self.config)
             self.research_session_store = ResearchSessionStore()
-            
+
             # 初始化持倉與日記服務
-            from app_module.portfolio_service import PortfolioService 
+            from app_module.portfolio_service import PortfolioService
             from app_module.journal_service import JournalService
             self.portfolio_service = PortfolioService(self.config)
             self.journal_service = JournalService(self.config)
-            
+
             # 觀察清單服務初始化（可能失敗，需要特別處理）
             try:
                 self.watchlist_service = WatchlistService(self.config)
@@ -247,7 +247,7 @@ class MainWindow(QMainWindow):
                 # 創建一個空的服務實例，避免後續錯誤
                 self.watchlist_service = None
                 print(f"警告：觀察清單服務初始化失敗，將使用空服務: {e}")
-            
+
             # 選股清單服務初始化（用於推薦結果自動創建選股清單）
             try:
                 self.universe_service = UniverseService(self.config)
@@ -255,7 +255,7 @@ class MainWindow(QMainWindow):
                 logger.error(f"初始化選股清單服務失敗: {e}")
                 self.universe_service = None
                 print(f"警告：選股清單服務初始化失敗: {e}")
-            
+
             # 設置 UI
             self._setup_ui()
         except Exception as e:
@@ -263,15 +263,15 @@ class MainWindow(QMainWindow):
             import traceback
             print(f"錯誤：初始化主窗口失敗\n{str(e)}\n\n詳細信息：\n{traceback.format_exc()}")
             raise
-    
+
     def _setup_ui(self):
         """設置 UI"""
         print("[MainWindow] 開始設置 UI...")
-        
+
         try:
             # 創建標籤頁
             tabs = QTabWidget()
-            
+
             # 數據更新標籤
             print("[MainWindow] 創建數據更新視圖...")
             update_view = UpdateView(
@@ -280,11 +280,11 @@ class MainWindow(QMainWindow):
             )
             tabs.addTab(update_view, "數據更新")
             print("[MainWindow] 數據更新視圖創建成功")
-        
+
             # 市場觀察標籤頁（包含多個子標籤）
             print("[MainWindow] 創建市場觀察視圖...")
             market_tabs = QTabWidget()
-            
+
             # 大盤指數標籤（放在最前面）
             print("[MainWindow] 創建大盤指數視圖...")
             market_regime = MarketRegimeView(
@@ -293,7 +293,7 @@ class MainWindow(QMainWindow):
             )
             market_tabs.addTab(market_regime, "大盤指數")
             print("[MainWindow] 大盤指數視圖創建成功")
-            
+
             # 強勢個股標籤
             print("[MainWindow] 創建強勢個股視圖...")
             strong_stocks = StrongStocksView(
@@ -303,7 +303,7 @@ class MainWindow(QMainWindow):
             )
             market_tabs.addTab(strong_stocks, "強勢個股")
             print("[MainWindow] 強勢個股視圖創建成功")
-            
+
             # 弱勢個股標籤
             print("[MainWindow] 創建弱勢個股視圖...")
             weak_stocks = WeakStocksView(
@@ -313,7 +313,7 @@ class MainWindow(QMainWindow):
             )
             market_tabs.addTab(weak_stocks, "弱勢個股")
             print("[MainWindow] 弱勢個股視圖創建成功")
-            
+
             # 強勢產業標籤
             print("[MainWindow] 創建強勢產業視圖...")
             strong_industries = StrongIndustriesView(
@@ -322,7 +322,7 @@ class MainWindow(QMainWindow):
             )
             market_tabs.addTab(strong_industries, "強勢產業")
             print("[MainWindow] 強勢產業視圖創建成功")
-            
+
             # 弱勢產業標籤
             print("[MainWindow] 創建弱勢產業視圖...")
             weak_industries = WeakIndustriesView(
@@ -331,7 +331,7 @@ class MainWindow(QMainWindow):
             )
             market_tabs.addTab(weak_industries, "弱勢產業")
             print("[MainWindow] 弱勢產業視圖創建成功")
-            
+
             # 主力流向標籤 (Smart Money Flow)
             print("[MainWindow] 創建主力流向視圖...")
             smart_money_flow = SmartMoneyFlowView(
@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
             )
             market_tabs.addTab(smart_money_flow, "主力流向")
             print("[MainWindow] 主力流向視圖創建成功")
-        
+
             # 監聽市場觀察 tab 切換事件
             def on_market_tab_changed(index):
                 """當市場觀察 tab 被點擊時，檢查是否需要載入數據"""
@@ -357,12 +357,12 @@ class MainWindow(QMainWindow):
                     weak_industries.load_data_if_needed()
                 elif index == 5:  # 主力流向
                     smart_money_flow.load_data_if_needed()
-            
+
             market_tabs.currentChanged.connect(on_market_tab_changed)
-            
+
             tabs.addTab(market_tabs, "市場觀察")
             print("[MainWindow] 市場觀察標籤頁創建成功")
-            
+
             # 監聽主 tab 切換事件（當切換到市場觀察時）
             def on_main_tab_changed(index):
                 """當主 tab 切換時"""
@@ -370,7 +370,7 @@ class MainWindow(QMainWindow):
                 if index == 1:  # 市場觀察是第二個 tab（index 0 是數據更新）
                     current_sub_index = market_tabs.currentIndex()
                     on_market_tab_changed(current_sub_index)
-            
+
             tabs.currentChanged.connect(on_main_tab_changed)
 
             # 每日決策分頁（失敗時降級，不影響整體啟動）
@@ -388,7 +388,7 @@ class MainWindow(QMainWindow):
                 fallback_tab = QLabel(f"每日決策初始化失敗，已降級顯示：{e}")
                 fallback_tab.setWordWrap(True)
                 tabs.addTab(fallback_tab, "每日決策")
-            
+
             # 策略回測標籤（先創建，因為推薦分析需要引用它）
             print("[MainWindow] 創建策略回測視圖...")
             backtest = BacktestView(
@@ -399,7 +399,7 @@ class MainWindow(QMainWindow):
             )
             tabs.addTab(backtest, "策略回測")
             print("[MainWindow] 策略回測視圖創建成功")
-            
+
             # 推薦分析標籤
             print("[MainWindow] 創建推薦分析視圖...")
             recommendation = RecommendationView(
@@ -416,7 +416,7 @@ class MainWindow(QMainWindow):
             )
             tabs.addTab(recommendation, "推薦分析")
             print("[MainWindow] 推薦分析視圖創建成功")
-            
+
             # 觀察清單標籤（作為獨立 Tab，方便管理）
             # 只有在 watchlist_service 可用時才創建
             if self.watchlist_service is not None:
@@ -429,13 +429,13 @@ class MainWindow(QMainWindow):
                     )
                     watchlist_tab_index = tabs.addTab(watchlist, "觀察清單")
                     print("[MainWindow] 觀察清單視圖創建成功")
-                    
+
                     # 當切換到觀察清單 Tab 時，自動刷新數據確保同步
                     def on_tab_changed_to_watchlist(index):
                         if index == watchlist_tab_index:
                             if hasattr(watchlist, 'refresh_all'):
                                 watchlist.refresh_all()
-                    
+
                     tabs.currentChanged.connect(on_tab_changed_to_watchlist)
                 except Exception as e:
                     print(f"[MainWindow] 警告：無法創建觀察清單標籤: {e}")
@@ -443,7 +443,7 @@ class MainWindow(QMainWindow):
                     print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             else:
                 print("[MainWindow] 觀察清單服務不可用，跳過觀察清單標籤")
-            
+
             # 持倉管理標籤 (Portfolio MVP)
             try:
                 print("[MainWindow] 創建持倉管理視圖...")
@@ -457,44 +457,44 @@ class MainWindow(QMainWindow):
                 )
                 portfolio_tab_index = tabs.addTab(portfolio_view, "持倉管理")
                 print("[MainWindow] 持倉管理視圖創建成功")
-                
+
                 # 當切換到持倉管理 Tab 時，自動刷新
                 def on_tab_changed_to_portfolio(index):
                     if index == portfolio_tab_index:
                         if hasattr(portfolio_view, 'refresh_all'):
                             portfolio_view.refresh_all()
-                
+
                 tabs.currentChanged.connect(on_tab_changed_to_portfolio)
             except Exception as pe:
                 print(f"[MainWindow] 警告：無法創建持倉管理標籤: {pe}")
                 import traceback
                 print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
-            
+
             self.setCentralWidget(tabs)
             print("[MainWindow] UI 設置完成")
-            
+
             # 保存 tabs 和 backtest 引用（用於一鍵送回測）
             self.tabs = tabs
             self.backtest_view = backtest
             self.smart_money_flow = smart_money_flow
             self.market_tabs = market_tabs
-            
+
             # --- Runtime Observatory MVP Integration ---
             try:
                 print("[MainWindow] 初始化 Runtime Observatory...")
                 project_root_str = str(project_root)
                 self.runtime_controller = RuntimeController(os.path.join(project_root_str, "runtime"))
                 self.runtime_bridge = QtRuntimeBridge(self.runtime_controller.event_bus, self)
-                
+
                 self.runtime_view = RuntimeView(parent=self)
-                
+
                 # Connect bridge signals to view slots
                 self.runtime_bridge.state_updated.connect(self.runtime_view.on_state_updated)
                 self.runtime_bridge.health_updated.connect(self.runtime_view.on_health_updated)
                 self.runtime_bridge.event_received.connect(self.runtime_view.on_event_received)
-                
+
                 tabs.addTab(self.runtime_view, "Runtime Observatory")
-                
+
                 # Setup polling timer
                 self.runtime_timer = QTimer(self)
                 self.runtime_timer.timeout.connect(self.runtime_controller.poll_updates)
@@ -503,7 +503,7 @@ class MainWindow(QMainWindow):
             except Exception as re:
                 print(f"[MainWindow] 警告: Runtime Observatory 初始化失敗: {re}")
             # --------------------------------------------
-            
+
             # 狀態欄
             self.statusBar().showMessage("就緒")
             self.session_context_strip = SessionContextStrip(self.research_session_store, self)
@@ -515,10 +515,10 @@ class MainWindow(QMainWindow):
             import traceback
             print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             raise
-    
+
     def _handle_send_to_backtest(self, backtest_view: BacktestView, config: Dict[str, Any]):
         """處理一鍵送回測請求（Phase 3.3）
-        
+
         Args:
             backtest_view: 回測視圖實例
             config: 回測配置（包含股票清單、策略配置等）
@@ -531,7 +531,7 @@ class MainWindow(QMainWindow):
                     if self.tabs.widget(i) == backtest_view:
                         self.tabs.setCurrentIndex(i)
                         break
-            
+
             # 調用回測視圖的方法來載入配置
             if hasattr(backtest_view, 'load_from_recommendation'):
                 backtest_view.load_from_recommendation(config)
@@ -558,7 +558,7 @@ class MainWindow(QMainWindow):
             import traceback
             print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             raise
-    
+
     def show_smart_money_flow_for_stock(self, stock_code: str):
         """切換至市場觀察 -> 主力流向，並定位至該個股"""
         try:
@@ -590,14 +590,14 @@ class MainWindow(QMainWindow):
 def main():
     """主函數"""
     import traceback
-    
+
     print("[Main] 開始啟動應用程序...")
-    
+
     try:
         print("[Main] 正在創建 QApplication...")
         app = QApplication(sys.argv)
         print("[Main] QApplication 創建成功")
-        
+
         # 設置應用程序 icon（必須在創建窗口之前設置）
         icon_path = Path(__file__).parent / 'app_icon.png'
         if icon_path.exists():
@@ -606,21 +606,21 @@ def main():
             print(f"[Main] 應用程序 icon 設置完成: {icon_path_abs}")
         else:
             print(f"[Main] 警告: Icon 檔案不存在: {icon_path}")
-        
+
         # 設置應用程序樣式（可選）
         apply_app_theme(app)
         print("[Main] Midnight Analyst 樣式設置完成")
-        
+
         # 創建主窗口
         try:
             print("[Main] 正在創建主窗口...")
             window = MainWindow()
             print("[Main] 主窗口創建成功")
-            
+
             print("[Main] 正在顯示主窗口...")
             window.show()
             print("[Main] 主窗口顯示成功")
-            
+
             print("[Main] 應用程序準備就緒，進入事件循環...")
         except Exception as e:
             print(f"[Main] 錯誤：創建主窗口失敗")
@@ -628,7 +628,7 @@ def main():
             print(f"[Main] 錯誤訊息: {str(e)}")
             print(f"[Main] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             return 1
-        
+
         # 運行應用程序
         print("[Main] 開始運行應用程序事件循環...")
         exit_code = app.exec()
@@ -644,5 +644,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-

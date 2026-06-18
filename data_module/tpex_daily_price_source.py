@@ -14,6 +14,7 @@ from data_module.tpex_daily_price_backfill import normalize_tpex_daily_price_row
 
 
 TPEX_DAILY_CLOSE_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+TPEX_AFTER_TRADING_OTC_URL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/otc"
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,7 @@ class TpexDailyPriceSource:
     def __init__(
         self,
         output_dir: Path,
-        fetch_rows: Callable[[], list[Mapping[str, Any]]] | None = None,
+        fetch_rows: Callable[..., list[Mapping[str, Any]]] | None = None,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.fetch_rows = fetch_rows or self._fetch_official_rows
@@ -42,7 +43,10 @@ class TpexDailyPriceSource:
     def update_for_date(self, date_value: str) -> TpexDailyPriceUpdateResult:
         requested_date = _date_key(date_value)
         try:
-            source_rows = self.fetch_rows()
+            try:
+                source_rows = self.fetch_rows(requested_date)
+            except TypeError:
+                source_rows = self.fetch_rows()
             normalized = normalize_tpex_daily_price_rows(
                 source_rows,
                 fallback_date=requested_date,
@@ -95,13 +99,28 @@ class TpexDailyPriceSource:
             output_file=output_file,
         )
 
-    def _fetch_official_rows(self) -> list[Mapping[str, Any]]:
+    def _fetch_official_rows(self, date_value: str | None = None) -> list[Mapping[str, Any]]:
         last_exc: Exception | None = None
+        date_key = _date_key(date_value) if date_value else None
+        params = None
+        url = TPEX_DAILY_CLOSE_URL
+        if date_key:
+            url = TPEX_AFTER_TRADING_OTC_URL
+            params = {
+                "date": f"{date_key[:4]}/{date_key[4:6]}/{date_key[6:8]}",
+                "type": "EW",
+                "response": "json",
+            }
+
         for attempt in range(1, 4):
             try:
                 response = requests.get(
-                    TPEX_DAILY_CLOSE_URL,
-                    headers={"User-Agent": "Mozilla/5.0"},
+                    url,
+                    params=params,
+                    headers={
+                        "User-Agent": "Mozilla/5.0",
+                        "Referer": "https://www.tpex.org.tw/zh-tw/mainboard/trading/info/mi-pricing.html",
+                    },
                     timeout=(10, 90),
                 )
                 response.raise_for_status()
@@ -128,6 +147,8 @@ class TpexDailyPriceSource:
             raise RuntimeError(f"TPEX daily close request failed: {last_exc}")
 
         data = response.json()
+        if date_key and isinstance(data, dict):
+            return _rows_from_after_trading_response(data, fallback_date=date_key)
         if not isinstance(data, list):
             raise ValueError("TPEX daily close response is not a list")
         return data
@@ -142,3 +163,58 @@ def _date_key(value: str) -> str:
         return f"{year:04d}{text[3:5]}{text[5:7]}"
     raise ValueError(f"Unsupported TPEX date format: {value}")
 
+
+def _rows_from_after_trading_response(
+    payload: Mapping[str, Any],
+    *,
+    fallback_date: str,
+) -> list[Mapping[str, Any]]:
+    tables = payload.get("tables")
+    if not isinstance(tables, list) or not tables:
+        raise ValueError("TPEX afterTrading response has no tables")
+
+    table = tables[0]
+    if not isinstance(table, Mapping):
+        raise ValueError("TPEX afterTrading table is invalid")
+
+    fields = table.get("fields")
+    data_rows = table.get("data")
+    if not isinstance(fields, list) or not isinstance(data_rows, list):
+        raise ValueError("TPEX afterTrading table is missing fields/data")
+
+    source_date = _date_key(str(table.get("date") or fallback_date))
+    field_names = [str(field) for field in fields]
+    rows: list[Mapping[str, Any]] = []
+    for values in data_rows:
+        if not isinstance(values, list):
+            continue
+        raw = {field_names[idx]: values[idx] for idx in range(min(len(field_names), len(values)))}
+        rows.append(
+            {
+                "Date": source_date,
+                "SecuritiesCompanyCode": _first_field(raw, "代號"),
+                "CompanyName": _first_field(raw, "名稱"),
+                "Close": _first_field(raw, "收盤"),
+                "Change": _first_field(raw, "漲跌"),
+                "Open": _first_field(raw, "開盤"),
+                "High": _first_field(raw, "最高"),
+                "Low": _first_field(raw, "最低"),
+                "TradingShares": _first_field(raw, "成交股數"),
+                "TransactionAmount": _first_field(raw, "成交金額"),
+                "TransactionNumber": _first_field(raw, "成交筆數"),
+                "LatestBidPrice": _first_field(raw, "最後買價"),
+                "LastBestBidVolume": _first_field(raw, "最後買量"),
+                "LatesAskPrice": _first_field(raw, "最後賣價"),
+                "LastBestAskVolume": _first_field(raw, "最後賣量"),
+                "Capitals": _first_field(raw, "發行股數"),
+            }
+        )
+    return rows
+
+
+def _first_field(row: Mapping[str, Any], text: str) -> Any:
+    for key, value in row.items():
+        normalized_key = str(key).replace(" ", "").replace("<br>", "")
+        if text in normalized_key:
+            return value
+    return ""
