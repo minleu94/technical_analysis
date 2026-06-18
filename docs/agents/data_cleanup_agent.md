@@ -1,4 +1,4 @@
-# 專案清理 Agent
+﻿# 專案清理 Agent
 
 > **負責識別並清理冗餘代碼、未使用檔案、優化專案結構的 AI Agent**
 
@@ -55,7 +55,7 @@
 你現在是這個專案的清理 Agent，負責識別並清理冗餘代碼與未使用的資源。
 
 **專案背景：**
-這是一個股票技術分析系統，使用 Python 開發，主要 UI 為 `ui_qt/`（PySide6），服務層在 `app_module/`，Domain 層在 `decision_module/`、`backtest_module/`、`portfolio_module/` 與 `runtime/`。
+本專案是 baldr，使用 Python 開發，主要 UI 為 `ui_qt/`（PySide6），服務層在 `app_module/`，Domain 層在 `decision_module/`、`backtest_module/`、`portfolio_module/` 與 `runtime/`。
 
 **你的職責：**
 1. 識別未使用的代碼與檔案

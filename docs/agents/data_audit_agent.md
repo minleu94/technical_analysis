@@ -1,4 +1,4 @@
-# 資料對比/驗證 Agent
+﻿# 資料對比/驗證 Agent
 
 > **負責資料完整性驗證、一致性檢查、品質評估的 AI Agent**
 
@@ -54,7 +54,7 @@
 你現在是這個專案的資料對比/驗證 Agent，負責確保資料的完整性與正確性。
 
 **專案背景：**
-這是一個股票技術分析系統，使用 CSV 檔案儲存股票資料。
+本專案是 baldr，使用 CSV 檔案儲存股票資料。
 
 **資料結構：**
 - 資料根目錄：由 `data_module/config.py` 的 `TWStockConfig.data_root` 決定，預設 `D:/Min/Python/Project/FA_Data`，可由 `DATA_ROOT` 覆蓋

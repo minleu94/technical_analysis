@@ -1,10 +1,10 @@
-# PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
+﻿# PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
 > **開場 30 秒內讀完** - 只放今天的狀態與入口，不放完整歷史細節
 
 ## 系統定位（一句話）
 
-這不是每天吐股票的工具，而是一個可驗證、可回溯、可演化的投資決策系統。
+這不是每天吐股票的工具；baldr 是一套可驗證、可回溯、可演化的台股研究與投資決策工作台。
 
 ## 文件權威判讀
 
@@ -115,7 +115,7 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 
 - `DEVELOPMENT_ROADMAP.md` - Roadmap Hub，指向目前狀態、6 個月路線、架構與 archive。
 - `ROADMAP_6M_ENGINEERING.md` - 未來 6 個月可執行工程路線。
-- `../01_architecture/system_vision_specification.md` - IDS 產品北極星、最終樣貌與能力狀態盤點；不作為目前可用功能依據。
+- `../01_architecture/system_vision_specification.md` - baldr 產品北極星、目前邊界、Gap Register 與投資有效性驗證框架；不作為目前可用功能依據。
 - `LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 未完成事項的逐項移交與結案 Gate。
 - `DOCUMENTATION_INDEX.md` - 文檔索引。
 - `DOCUMENTATION_STRUCTURE.md` - docs 資料夾歸屬、生命週期、刪除/歸檔規則。

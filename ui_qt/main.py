@@ -1,4 +1,4 @@
-"""
+﻿"""
 PySide6 主應用程式
 """
 
@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Balder")
+        self.setWindowTitle("baldr")
         self.setGeometry(100, 100, 1400, 800)
 
         # 設置窗口 icon

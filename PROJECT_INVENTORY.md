@@ -1,4 +1,4 @@
-# 專案盤點報告
+﻿# 專案盤點報告
 
 > **最後整理**：2026-06-18
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
@@ -119,4 +119,4 @@
 - 2026-06-17：同步 Month 5 Fundamental Layer v1 closeout 與 Daily Decision Desk v1 主 UI 狀態，將目前主線轉向 Month 6 Strategy Lifecycle / Portfolio Feedback scope。
 - 2026-06-17：同步 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle gate、post-trade attribution 與持倉管理生命週期回顧入口。
 - 2026-06-17：同步 Month 6 lifecycle residual，新增 append-only evidence、latest state projection 與 demote / retire proposed evidence 保存。
-- 2026-06-15：同步 IDS 願景與新版 6M Roadmap，標示 Daily Decision Desk 為未完成目標閉環，並更新未來主線排序。
+- 2026-06-15：同步 baldr 願景與新版 6M Roadmap，標示 Daily Decision Desk 為未完成目標閉環，並更新未來主線排序。

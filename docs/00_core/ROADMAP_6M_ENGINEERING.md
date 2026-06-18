@@ -1,4 +1,4 @@
-# 6 個月可執行工程路線（2026-06 至 2026-12）
+﻿# 6 個月可執行工程路線（2026-06 至 2026-12）
 
 > **最後更新**：2026-06-17
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。當它與短期 Snapshot 衝突時，以 Snapshot 的「本週優先事項」決定今天先做什麼；當它與產品願景文件衝突時，本文件決定可執行交付順序。
@@ -291,7 +291,7 @@
 
 - 2026-06-15：完成 Daily Decision Desk Portfolio Alert v1 籌碼對接，整合 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，使持倉失效/警告與 bearish/extreme/risk 籌碼風險能彙總為持倉警示，並以 quality / warnings 呈現資料品質缺口。
 - 2026-06-15：完成 Daily Decision Desk Watchlist Trigger v1 provider 接線，對接 `WatchlistService` 與 SQLite `technical_indicators` 以產生強度 `score_bp` 與風險 `risk_alert` 統計；非交易日採最近可用交易日並以 warnings 揭露，quality 降級為 `DEGRADED`。
-- 2026-06-15：依 IDS 最終樣貌重排 Month 3 至 Month 6；Month 3 聚焦 Factor Layer 與 Portfolio Replay 可信度，Month 4 改為 Market Intelligence / Daily Decision Desk，Month 5 改為 Fundamental Layer 初版，Month 6 聚焦 Strategy Lifecycle 與 Portfolio Feedback。
+- 2026-06-15：依 baldr 最終樣貌重排 Month 3 至 Month 6；Month 3 聚焦 Factor Layer 與 Portfolio Replay 可信度，Month 4 改為 Market Intelligence / Daily Decision Desk，Month 5 改為 Fundamental Layer 初版，Month 6 聚焦 Strategy Lifecycle 與 Portfolio Feedback。
 - 2026-06-15：完成 Daily Decision Desk Market Breadth v1 provider 接線，從 SQLite `daily_prices` 產生多方 / 空方 / 持平、成交量擴散與新高新低 metadata；非交易日採最近可用交易日並以 warnings 揭露。
 - 2026-06-15：完成 Daily Decision Desk Sector Rotation v1 provider 接線，從 SQLite `industry_indices` 產生領先 / 落後產業、5 / 20 日變化與輪動強度；非交易日採最近可用交易日並以 warnings 揭露。
 - 2026-06-16：完成 Month 4 Daily Decision Desk 收尾驗收，確認 v1 為 service-backed daily workflow，新增 UI boundary contract test，並將立即待辦轉向 Month 5 Fundamental Layer preflight。

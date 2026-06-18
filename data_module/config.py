@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
@@ -318,7 +318,7 @@ class TWStockConfig:
         if args is None:
             args = sys.argv[1:]
             
-        parser = argparse.ArgumentParser(description='台股技術分析系統配置')
+        parser = argparse.ArgumentParser(description='baldr 配置')
         parser.add_argument("--data-root", type=str, help="覆蓋數據根目錄路徑")
         parser.add_argument("--output-root", type=str, help="覆蓋輸出根目錄路徑")
         parser.add_argument("--profile", type=str, default="prod", 

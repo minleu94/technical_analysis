@@ -1,4 +1,4 @@
-# 舊 Roadmap 移交矩陣
+﻿# 舊 Roadmap 移交矩陣
 
 > **最後更新**：2026-06-15
 > **定位**：本文件是舊 Roadmap 未完成事項的結案與移交證據。它不新增平行 Roadmap，而是確保每個舊項目都有唯一處置。
@@ -57,4 +57,4 @@
 
 ## 6. 更新記錄
 
-- 2026-06-15：對齊 IDS 願景與新版 6M Roadmap，明確 PDF 屬研究輸出 backlog，不阻塞 Month 3 / Month 4；Factor / failure attribution 拆為 Month 3 factor contribution / Portfolio Replay 可信度與 Month 6 post-trade attribution。
+- 2026-06-15：對齊 baldr 願景與新版 6M Roadmap，明確 PDF 屬研究輸出 backlog，不阻塞 Month 3 / Month 4；Factor / failure attribution 拆為 Month 3 factor contribution / Portfolio Replay 可信度與 Month 6 post-trade attribution。

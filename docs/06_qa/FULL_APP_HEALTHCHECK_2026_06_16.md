@@ -35,7 +35,7 @@
 1. TPEX 日價改走官方歷史查詢 endpoint，手動每日股價、快速更新與安全更新都應以區間流程補缺少 CSV，並同步 `daily_price/` + `daily_price_tpex/` 至 SQLite。
 2. 每日股價手動下載完成後會自動同步 SQLite 並執行技術指標增量計算；若 TPEX 失敗，應以 warning 呈現，不應阻斷 TWSE 或後續同步。
 3. 每日股價分頁新增「背景補齊 TPEX + 技術指標」與「檢查背景任務狀態」按鈕；背景狀態檔位於 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`，本 repo 內 `meta_data/` 狀態檔與 log 屬本機輸出，不應提交。
-4. 主視窗標題已改為 `Balder`，Application Manual 標題已同步。
+4. 主視窗標題已改為 `baldr`，Application Manual 標題已同步。
 5. 自動驗證已通過：`tests/test_ui_qt_update_view_workbench.py` 25 passed、`scripts/qa_validate_update_tab.py` 23 passed / 0 failed / 4 skipped、mypy 209 files success、changed Python files `py_compile` 通過。
 
 本輪人工健檢建議順序：

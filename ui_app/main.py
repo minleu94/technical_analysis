@@ -1,5 +1,5 @@
 """
-台股技術分析系統 - 主應用程式
+baldr - legacy Tkinter 主應用程式
 提供圖形化界面進行數據更新、策略選擇和回測
 """
 
@@ -56,11 +56,11 @@ except ImportError as e:
     sys.exit(1)
 
 class TradingAnalysisApp:
-    """台股技術分析主應用程式"""
+    """baldr legacy Tkinter 主應用程式"""
     
     def __init__(self, root):
         self.root = root
-        self.root.title("台股技術分析系統")
+        self.root.title("baldr")
         self.root.geometry("1400x800")
         
         # 配置現代化樣式

@@ -1,10 +1,10 @@
-# Balder 台股投資決策系統
+﻿# baldr
 
 > **最後整理**：2026-06-18
 > **目前主線**：Month 6 Strategy Lifecycle / Portfolio Feedback v1 已落地，接續全 UI 健檢與生命週期深化
 > **主要入口**：`ui_qt/main.py`
 
-Balder 是一個台股投資決策系統，目標是把資料更新、市場觀察、推薦分析、策略回測、籌碼監控、基本面因子、每日決策與持倉管理串成可驗證、可回溯、可演化的研究與決策流程。
+baldr 是一套台股研究與投資決策工作台，目標是把資料更新、市場觀察、推薦分析、策略回測、籌碼監控、基本面因子、每日決策與持倉管理串成可驗證、可回溯、可演化的研究與決策流程。
 
 本檔只保留專案最短入口。狀態判讀請以 [docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md) 為準；未來 6 個月工程路線請以 [docs/00_core/ROADMAP_6M_ENGINEERING.md](docs/00_core/ROADMAP_6M_ENGINEERING.md) 為準。
 

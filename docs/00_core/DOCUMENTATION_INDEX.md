@@ -1,4 +1,4 @@
-# 文檔索引
+﻿# 文檔索引
 
 > **最後整理**：2026-06-18
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
@@ -11,7 +11,7 @@
 |---|---|
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與歷史歸檔。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
-| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | IDS 產品北極星、最終樣貌、長期能力圖像與已完成 / 進行中 / 未完成能力盤點；不取代 Snapshot、6M Roadmap 或 Architecture。 |
+| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr 產品北極星、目前邊界、Gap Register、長期能力圖像與投資有效性驗證框架；不取代 Snapshot、6M Roadmap 或 Architecture。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要、本週優先事項與高風險區。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 本文件，文檔導航。 |
@@ -31,7 +31,7 @@
 | 文件 | 用途 |
 |---|---|
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統模組、分層架構、資料流與模組邊界的架構權威。 |
-| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | IDS 產品北極星、四個目標閉環、Daily Decision Desk 目標、完成狀態盤點與 6 個月 Roadmap 對齊。 |
+| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr 產品北極星、Current State 邊界、Evidence Requirement、Daily Decision Desk Contract、Gap Register、投資有效性驗證框架與下一階段 Evidence-Driven baldr 方向。 |
 | [system_flow_end_to_end.md](../01_architecture/system_flow_end_to_end.md) | 端到端流程。 |
 | [data_collection_architecture.md](../01_architecture/data_collection_architecture.md) | 資料收集架構。 |
 | [runtime_observatory_rules.md](../01_architecture/runtime_observatory_rules.md) | Runtime Observatory 架構治理規範。 |
@@ -240,6 +240,9 @@
 ## 🔄 更新記錄
 
 - 2026-06-18：整理根目錄 README 入口；將過期 `readme.txt` 移入 `docs/09_archive/root_readme_legacy_2025_12.txt`，並同步 docs 入口、Archive 索引與 Project Inventory。
+- 2026-06-18：重構 system vision 文件定位，將 baldr 願景說明升級為 North Star / Current State / Evidence Framework，並補上投資有效性驗證框架與 v1 能力證據邊界。
+- 2026-06-18：統一專案品牌命名為小寫 `baldr`，替換所有舊專案命名語彙。
+- 2026-06-18：補強 system vision 的 Gap Register，集中管理主要資料、微結構、執行模型、證據與報告輸出缺口。
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 索引同步，將目前治理狀態轉入 Month 6 Strategy Lifecycle / Portfolio Feedback。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 索引同步，標示 lifecycle gate、post-trade attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁已落地。
 - 2026-06-16：新增 Midnight Analyst UI 設計系統規格索引，作為後續深色主題、共用元件與 UI 統一工作的設計參考入口。
@@ -274,7 +277,7 @@
 - 2026-06-14：完成 Month 2 final registry governance gate 文件收尾，確認 M2-C 不再列為當前待辦，並轉向 Factor Contract / Factor Layer 前置。
 - 2026-06-14：Month 3 Factor Layer v1 進入實作：新增 Factor Contract、Registry、Look-ahead Gate、既有技術 / 量能 / 券商分點 adapters、FactorService snapshot/contribution serialization、Research Run 實際寫入整合與 saved factor metadata reader。
 - 2026-06-15：Month 3 推薦組合回放 factor feed：由 replay snapshot recommendations 產生 `technical.total_score` / `volume.volume_ratio` metadata，並透過既有 Research Run 保存流程落盤。
-- 2026-06-15：依 IDS 願景更新文檔索引，新增 system vision 的產品北極星定位，並同步 6M Roadmap 新主線：Portfolio Replay 可信度、Daily Decision Desk、Fundamental Layer 與 Strategy Lifecycle。
+- 2026-06-15：依 baldr 願景更新文檔索引，新增 system vision 的產品北極星定位，並同步 6M Roadmap 新主線：Portfolio Replay 可信度、Daily Decision Desk、Fundamental Layer 與 Strategy Lifecycle。
 - 2026-06-15：補列 Daily Decision Desk Watchlist Trigger v1 provider 接線計畫至 Superpowers plans 索引。
 - 2026-06-15：補列 Daily Decision Desk Portfolio Alert v1 籌碼對接實作計畫至 Superpowers plans 索引。
 - 2026-06-15：補列 Daily Decision Desk Relative Strength / Liquidity Ranking v1 實作計畫至 Superpowers plans 索引。

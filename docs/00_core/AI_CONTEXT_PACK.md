@@ -1,4 +1,4 @@
-# AI Context Pack (系統分析與治理規範)
+﻿# AI Context Pack (系統分析與治理規範)
 
 > **目的**：提供給外部 AI 助手（如 ChatGPT、Codex、Antigravity）一個高密度、結構化的專案上下文包。幫助 AI 快速理解專案架構、邊界、工作流與多 Agent 協作規則，避免產生幻覺 (hallucination) 或執行破壞性的重構。
 
@@ -6,7 +6,7 @@
 
 ## 1. Project Snapshot (專案快照)
 
-* **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具，而是一個「可驗證、可回溯、可演化」的投資決策系統。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
+* **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具；baldr 是一套「可驗證、可回溯、可演化」的台股研究與投資決策工作台。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
 * **Current Phase (目前階段)**：三個已落地產品閉環的基礎與主要深化已完成；Daily Decision Desk v1 已接上主 UI；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 均已關閉。Month 6 Strategy Lifecycle / Portfolio Feedback v1 已完成第一輪 service / gate / UI 入口。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、system architecture 管架構、system vision 管產品北極星、archive 管歷史。
 * **Core Architecture (核心架構)**：分層解耦架構。
   1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
@@ -137,7 +137,7 @@
 * **`docs/00_core/DEVELOPMENT_ROADMAP.md`**：Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與 archive。
 * **`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`**：舊 Roadmap 未完成事項的唯一移交與驗收矩陣。
 * **`docs/01_architecture/system_architecture.md`**：目前架構、模組邊界與資料流權威。
-* **`docs/01_architecture/system_vision_specification.md`**：IDS 產品北極星、目標閉環與能力狀態盤點；不作為目前可用功能依據。
+* **`docs/01_architecture/system_vision_specification.md`**：baldr 產品北極星、目前邊界、Gap Register 與投資有效性驗證框架；不作為目前可用功能依據。
 * **`docs/07_guides/APPLICATION_MANUAL.md`**：目前 8 個工作區與跨工作區流程的完整操作權威。
 * **`docs/01_architecture/multi_agent_workflow.md`**：規範 AI Agent 應如何分支與合併的協議。
 * **`docs/01_architecture/runtime_observatory_rules.md`**：嚴格的相依性與 DTO 架構治理規則。

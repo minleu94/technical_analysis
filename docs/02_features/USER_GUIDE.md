@@ -1,4 +1,4 @@
-# 使用者指南
+﻿# 使用者指南
 
 > 本文件保留推薦、回測與資料治理的深入教學。
 > 需要從安裝開始，依 8 個頂層工作區逐步操作時，請先閱讀 [完整操作手冊](../07_guides/APPLICATION_MANUAL.md)。
@@ -7,7 +7,7 @@
 
 完整工作區導覽：
 
-- [台股投資決策系統完整操作手冊](../07_guides/APPLICATION_MANUAL.md)
+- [baldr完整操作手冊](../07_guides/APPLICATION_MANUAL.md)
 - 涵蓋數據更新、市場觀察、推薦分析、觀察清單、Research Lab、持倉管理與 Runtime Observatory
 
 進階專題：

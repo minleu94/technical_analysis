@@ -1,4 +1,4 @@
-# 專案導航文件
+﻿# 專案導航文件
 
 **版本**：v1.4.3
 **最後更新**：2026-06-17
@@ -8,7 +8,7 @@
 
 ## 1️⃣ 專案一句話定位
 
-**這是一個「可驗證、可回溯、可演化」的台股投資決策系統。**
+**baldr 是一套「可驗證、可回溯、可演化」的台股研究與投資決策工作台。**
 
 系統提供完整的數據更新、市場觀察、股票推薦、策略回測功能，讓策略成為可被描述、被比較、被淘汰的研究對象。這不是單純的策略腳本，而是一個工具型系統。
 
@@ -438,7 +438,7 @@ python ui_qt/main.py
 
 - **目前狀態快照**：`docs/00_core/PROJECT_SNAPSHOT.md`
 - **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
-- **IDS 產品北極星**：`docs/01_architecture/system_vision_specification.md`
+- **baldr 產品北極星**：`docs/01_architecture/system_vision_specification.md`
 - **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **舊 Roadmap 移交矩陣**：`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
 - **完整操作手冊**：`docs/07_guides/APPLICATION_MANUAL.md`
