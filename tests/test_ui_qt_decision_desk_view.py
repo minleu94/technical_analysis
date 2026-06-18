@@ -22,6 +22,7 @@ from app_module.decision_desk_dtos import (
     PortfolioAlertAttribution,
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.views.decision_desk_view import DecisionDeskView
 
 
@@ -317,7 +318,7 @@ def test_decision_desk_sections_use_quality_badges_in_headers():
     assert view.market_breadth_status.isHidden()
     badge = view._status_badges[view.market_breadth_status]
     assert "降級" in badge.text()
-    assert "#f59e0b" in badge.styleSheet()
+    assert MIDNIGHT_ANALYST.warning in badge.styleSheet()
 
 
 def test_decision_desk_view_uses_readable_overview_typography():

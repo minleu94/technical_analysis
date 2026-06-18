@@ -1,7 +1,7 @@
 # Midnight Analyst UI 設計系統規格
 
 > **狀態**：Month 4 v1 functional closure accepted；視覺 polish 仍列為 Month 5+ 設計債
-> **最後更新**：2026-06-16
+> **最後更新**：2026-06-18
 > **權威範圍**：本文件定義 PySide6 UI 深色主題、設計 token、共用元件、效能限制與後續修改規則。
 
 ---
@@ -55,20 +55,20 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 
 | Token | 值 | 用途 |
 |---|---:|---|
-| `app_bg` | `#08111f` | App 主背景。 |
-| `surface_1` | `#0f1b2d` | 主要面板、GroupBox、SectionPanel。 |
-| `surface_2` | `#14233a` | 次級面板、輸入框、MetricCard。 |
-| `surface_3` | `#1d2f4a` | Hover、選取、按鈕底色。 |
-| `border` | `#263b59` | 邊框與分隔線。 |
-| `text_primary` | `#e5edf7` | 主要文字。 |
-| `text_secondary` | `#9fb0c7` | 輔助文字。 |
-| `text_muted` | `#6f819a` | 低優先文字、disabled。 |
-| `accent` | `#38bdf8` | 主重點色、active tab。 |
-| `accent_hover` | `#0ea5e9` | Hover 重點色。 |
+| `app_bg` | `#070b12` | App 主背景；降低藍色飽和度，讓長時間閱讀更安定。 |
+| `surface_1` | `#101722` | 主要面板、GroupBox、SectionPanel。 |
+| `surface_2` | `#182231` | 次級面板、輸入框、MetricCard。 |
+| `surface_3` | `#223047` | Hover、選取、按鈕底色。 |
+| `border` | `#2a3548` | 邊框與分隔線；比 v1 更收斂，降低框線感。 |
+| `text_primary` | `#eef3f8` | 主要文字。 |
+| `text_secondary` | `#a8b3c2` | 輔助文字。 |
+| `text_muted` | `#788496` | 低優先文字、disabled。 |
+| `accent` | `#4fb7e5` | 主重點色、active tab。 |
+| `accent_hover` | `#75cdf5` | Hover / focus 重點色。 |
 | `success` | `#22c55e` | 正常、觀測、偏多正向。 |
-| `warning` | `#f59e0b` | 降級、警告、需注意。 |
-| `danger` | `#ef4444` | 缺漏、失敗、風險。 |
-| `info` | `#60a5fa` | 估算、資訊提示。 |
+| `warning` | `#f6b44b` | 降級、警告、需注意。 |
+| `danger` | `#f05b5b` | 缺漏、失敗、風險。 |
+| `info` | `#77aef5` | 估算、資訊提示。 |
 
 修改規則：
 
@@ -195,6 +195,14 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 - `QDateEdit`
 - `QScrollArea`
 - vertical `QScrollBar`
+- `QProgressBar`
+
+2026-06-18 polish 補強：
+
+- `QLabel` 預設透明背景，降低深色頁面內文字塊的割裂感。
+- Button / Tab / Input 補上 hover、pressed 與 focus 狀態。
+- Table item 增加一致 padding，header 稍微提高可讀性。
+- ComboBox popup、ProgressBar 與 ScrollBar hover 納入全域語言。
 
 規則：
 
@@ -318,3 +326,4 @@ Month 4 closure 後的狀態：
 ## 12. 更新記錄
 
 - 2026-06-16：建立 Midnight Analyst UI 設計系統規格，記錄目前 theme token、共用元件、效能限制、已知問題與後續 agent 修改流程。
+- 2026-06-18：完成第一輪保守全域 polish，降低主背景藍色飽和度、提高 surface 層級、收斂 border，並補強 Tab / Button / Table / Input / ProgressBar 的全域 QSS 狀態。

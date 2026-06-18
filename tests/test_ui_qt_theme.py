@@ -12,10 +12,11 @@ from ui_qt.main import apply_app_theme
 
 
 def test_midnight_analyst_tokens_expose_required_palette():
-    assert MIDNIGHT_ANALYST.app_bg == "#08111f"
-    assert MIDNIGHT_ANALYST.surface_1 == "#0f1b2d"
-    assert MIDNIGHT_ANALYST.text_primary == "#e5edf7"
-    assert MIDNIGHT_ANALYST.accent == "#38bdf8"
+    assert MIDNIGHT_ANALYST.app_bg == "#070b12"
+    assert MIDNIGHT_ANALYST.surface_1 == "#101722"
+    assert MIDNIGHT_ANALYST.surface_2 == "#182231"
+    assert MIDNIGHT_ANALYST.text_primary == "#eef3f8"
+    assert MIDNIGHT_ANALYST.accent == "#4fb7e5"
 
 
 def test_global_stylesheet_contains_core_qt_selectors():
@@ -23,7 +24,9 @@ def test_global_stylesheet_contains_core_qt_selectors():
     assert "QMainWindow" in qss
     assert "QTabWidget::pane" in qss
     assert "QTableView" in qss
-    assert "#08111f" in qss
+    assert "QProgressBar::chunk" in qss
+    assert "QComboBox QAbstractItemView" in qss
+    assert "#070b12" in qss
 
 
 def _app():
@@ -59,5 +62,5 @@ def test_compact_code_list_limits_each_group():
 def test_apply_app_theme_sets_global_stylesheet():
     app = _app()
     apply_app_theme(app)
-    assert "#08111f" in app.styleSheet()
+    assert "#070b12" in app.styleSheet()
     assert "QTableView" in app.styleSheet()

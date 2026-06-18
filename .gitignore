@@ -112,6 +112,7 @@ backup/
 *apikey*
 *.token
 *.secret
+!ui_qt/theme/tokens.py
 
 # 包含硬編碼 token 的檔案（請移除 token 後再提交）
 # 01_stock_data_collector_enhanced.py  # 包含 FinMind token，請移除後再提交
