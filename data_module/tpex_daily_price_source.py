@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import time
 from typing import Callable, Mapping, Any
 
 import pandas as pd
@@ -95,12 +96,37 @@ class TpexDailyPriceSource:
         )
 
     def _fetch_official_rows(self) -> list[Mapping[str, Any]]:
-        response = requests.get(
-            TPEX_DAILY_CLOSE_URL,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=60,
-        )
-        response.raise_for_status()
+        last_exc: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                response = requests.get(
+                    TPEX_DAILY_CLOSE_URL,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=(10, 90),
+                )
+                response.raise_for_status()
+                break
+            except (
+                requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.HTTPError,
+            ) as exc:
+                last_exc = exc
+                response_status = getattr(getattr(exc, "response", None), "status_code", None)
+                if response_status is None:
+                    response_status = getattr(locals().get("response", None), "status_code", None)
+                transient_http_error = isinstance(exc, requests.exceptions.HTTPError) and (
+                    response_status is None or int(response_status) >= 500
+                )
+                if isinstance(exc, requests.exceptions.HTTPError) and not transient_http_error:
+                    raise
+                if attempt >= 3:
+                    raise
+                time.sleep(1.5 * attempt)
+        else:
+            raise RuntimeError(f"TPEX daily close request failed: {last_exc}")
+
         data = response.json()
         if not isinstance(data, list):
             raise ValueError("TPEX daily close response is not a list")

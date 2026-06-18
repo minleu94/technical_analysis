@@ -1,4 +1,4 @@
-"""
+﻿"""
 數據更新視圖
 提供數據更新功能界面
 """
@@ -164,7 +164,6 @@ class UpdateView(QWidget):
         self._active_workers: List[TaskWorker] = []
 
         self._setup_ui()
-        self._check_data_status()
 
     def _start_worker(self, worker: TaskWorker) -> TaskWorker:
         """Keep background tasks alive independently until they finish."""
@@ -313,12 +312,13 @@ class UpdateView(QWidget):
         # 一鍵更新與輔助按鈕
         actions_layout = QHBoxLayout()
 
-        self.quick_update_all_btn = QPushButton("⚡ 快速更新 (僅 SQLite)")
+        self.quick_update_all_btn = QPushButton("⚡ 快速更新 (跳過大型合併)")
         self.quick_update_all_btn.setMinimumHeight(45)
         self.quick_update_all_btn.setToolTip(
-            "【⚡ 快速更新 (僅 SQLite)】\n"
-            "速度優先！僅下載最新範圍資料並直接同步寫入 SQLite 資料庫，\n"
-            "不重新合併或重寫本地大 CSV 原始檔案。更新時間大幅縮減！"
+            "【⚡ 快速更新 (跳過大型合併)】\n"
+            "速度優先！TWSE 每日股價會依上方日期範圍檢查下載，TPEX 會抓取結束日官方收盤行情。\n"
+            "券商分點為避免 40 家全量補歷史造成嚴重卡頓，快速模式只更新結束日前最近 2 天。\n"
+            "資料會直接增量同步 SQLite，但跳過 stock_data_whole 與分點 merged.csv 的大型合併重寫。"
         )
         self.quick_update_all_btn.setStyleSheet("""
             QPushButton {
@@ -347,8 +347,9 @@ class UpdateView(QWidget):
         self.safe_update_all_btn.setMinimumHeight(45)
         self.safe_update_all_btn.setToolTip(
             "【🛡️ 安全更新 (完整 CSV + SQLite)】\n"
-            "備份完整性優先！下載最新範圍資料後，執行本地完整 CSV 整合表合併重寫\n"
-            "（包括合併每日股價大表與分點合併檔），最後再同步寫入 SQLite 庫。\n"
+            "備份完整性優先！TWSE 每日股價會依上方日期範圍檢查下載，TPEX 會抓取結束日官方收盤行情。\n"
+            "券商分點會依上方日期範圍更新目前啟用的 40 家追蹤分點。\n"
+            "完成下載後會重建每日股價大表與分點 merged.csv，再同步寫入 SQLite。\n"
             "此流程耗時較長，但能保證 CSV 歷史資料庫的完整備份。"
         )
         self.safe_update_all_btn.setStyleSheet("""
@@ -554,7 +555,7 @@ class UpdateView(QWidget):
             "daily": "檢查與維護每日股價原始資料與 SQLite 對應數據。此處支援增量合併與 Danger Zone 強制重新合併。",
             "market": "檢查與更新加權指數大盤數據。此處會將大盤資料同步儲存至資料庫的 market_indices 表。",
             "industry": "檢查與更新產業指數數據，可將各產業分類的歷史指數同步至 industry_indices 表。",
-            "broker_branch": "維護 MoneyDJ 的 6 大追蹤分點之買賣超資料，並可執行券商分點合併至 SQLite broker_flows 表。",
+            "broker_branch": "維護 MoneyDJ 目前啟用的 40 家追蹤分點之買賣超資料，並可執行券商分點合併至 SQLite broker_flows 表。",
             "technical": "增量或全量重新計算個股的技術指標（KD, MACD, RSI 等），並高速批量儲存至資料庫中。",
             "monthly_revenue": "使用 MOPS 月營收快照檔搭配正式可得日對照檔，先檢查筆數與診斷結果，再受控寫入正式月營收資料表。",
         }
@@ -804,7 +805,8 @@ class UpdateView(QWidget):
             update_btn.setToolTip(
                 f"【手動下載此資料源】\n"
                 f"依據上方設定的日期範圍，手動向 API/網頁端發出下載請求，將原始 CSV 檔案下載至本地 raw/ 目錄。\n"
-                f"注意：手動下載僅會儲存本地 CSV 原始檔，必須再點擊「合併」按鈕或執行「安全更新所有數據」，\n"
+                f"每日股價手動下載會跑 TWSE 日期範圍，並額外抓取結束日的 TPEX 官方收盤行情。\n"
+                f"注意：手動下載僅會儲存本地 CSV 原始檔，必須再點擊「合併」按鈕或執行一鍵更新，\n"
                 f"資料才會真正寫入 SQLite 資料庫以供策略推薦和回測使用。"
             )
             update_btn.setStyleSheet("""
@@ -828,7 +830,7 @@ class UpdateView(QWidget):
             self.merge_btn.setMinimumHeight(35)
             self.merge_btn.setToolTip(
                 "【⚙️ 合併每日股價】\n"
-                "將本地 raw/daily_price/ 目錄下下載好的單日股價原始 CSV 檔案，\n"
+                "將本地 daily_price/ 與 daily_price_tpex/ 目錄下下載好的單日股價 CSV 檔案，\n"
                 "增量同步寫入至 SQLite 資料庫的 daily_prices 表中，\n"
                 "以便大盤檢測、策略推薦與回測引擎能夠讀取到最新數據。"
             )
@@ -852,7 +854,7 @@ class UpdateView(QWidget):
             self.merge_broker_branch_btn.setMinimumHeight(35)
             self.merge_broker_branch_btn.setToolTip(
                 "【⚙️ 合併券商分點】\n"
-                "將本地 raw/ 內 6 大追蹤分點的買賣超 CSV 數據進行增量合併，\n"
+                "將本地 broker_flow/ 內目前啟用的 40 家追蹤分點買賣超 CSV 數據進行增量合併，\n"
                 "並同步寫入至 SQLite 資料庫的 broker_flows 表中，供主力流向分析使用。"
             )
             self.merge_broker_branch_btn.setStyleSheet("""
@@ -1349,7 +1351,7 @@ class UpdateView(QWidget):
         is_quick_mode = (mode == "quick" and use_sqlite)
 
         if is_quick_mode:
-            # ⚡ 快速更新 (僅 SQLite)：跳過合併 CSV，直接同步單日檔案至 SQLite
+            # ⚡ 快速更新：跳過大型合併 CSV，直接同步單日檔案至 SQLite
             steps.extend([
                 ("同步券商分點至 SQLite (直接檔案同步)", 65, lambda: self.update_service.sync_source_to_sqlite("broker_branch_files", quick_start_date, end_date)),
             ])
@@ -1457,7 +1459,7 @@ class UpdateView(QWidget):
         """更新流程完成"""
         self.quick_update_all_btn.setEnabled(True)
         self.safe_update_all_btn.setEnabled(True)
-        self.quick_update_all_btn.setText("⚡ 快速更新 (僅 SQLite)")
+        self.quick_update_all_btn.setText("⚡ 快速更新 (跳過大型合併)")
         self.safe_update_all_btn.setText("🛡️ 安全更新 (完整 CSV + SQLite)")
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
@@ -1486,7 +1488,7 @@ class UpdateView(QWidget):
         """更新流程出錯"""
         self.quick_update_all_btn.setEnabled(True)
         self.safe_update_all_btn.setEnabled(True)
-        self.quick_update_all_btn.setText("⚡ 快速更新 (僅 SQLite)")
+        self.quick_update_all_btn.setText("⚡ 快速更新 (跳過大型合併)")
         self.safe_update_all_btn.setText("🛡️ 安全更新 (完整 CSV + SQLite)")
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
@@ -1550,6 +1552,22 @@ class UpdateView(QWidget):
                 logger.info(f"[UpdateView] 開始執行更新任務: update_type={update_type}")
                 if update_type == 'daily':
                     result = self.update_service.update_daily(start_date, end_date)
+                    tpex_result = self.update_service.update_tpex_daily_price(end_date)
+                    warnings = list(result.get('warnings', []))
+                    if tpex_result.get('success', False):
+                        result['message'] = (
+                            f"{result.get('message', '每日股票數據更新完成')}\n"
+                            f"TPEX 每日股價更新: {tpex_result.get('message', '完成')}"
+                        )
+                        result['updated_dates'] = list(result.get('updated_dates', [])) + list(
+                            tpex_result.get('updated_dates', [])
+                        )
+                    else:
+                        warnings.append(
+                            f"TPEX 每日股價更新: {tpex_result.get('message', 'unknown error')}"
+                        )
+                    if warnings:
+                        result['warnings'] = warnings
                 elif update_type == 'market':
                     result = self.update_service.update_market(start_date, end_date)
                 elif update_type == 'industry':
@@ -1606,14 +1624,21 @@ class UpdateView(QWidget):
             message = result.get('message', '更新完成')
             updated_dates = result.get('updated_dates', [])
             failed_dates = result.get('failed_dates', [])
+            warnings = result.get('warnings', [])
 
             self._log(f"更新完成：{message}")
             if updated_dates:
                 self._log(f"成功更新日期：{len(updated_dates)} 個")
             if failed_dates:
                 self._log(f"失敗日期：{len(failed_dates)} 個")
+            for warning in warnings:
+                self._log(f"警告：{warning}")
 
-            QMessageBox.information(self, "更新完成", message)
+            display_message = message
+            if warnings:
+                display_message = f"{message}\n\n警告：\n" + "\n".join(warnings)
+
+            QMessageBox.information(self, "更新完成", display_message)
 
             # 自動刷新數據狀態
             self._check_data_status()

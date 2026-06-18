@@ -1,4 +1,4 @@
-# 全程式功能健檢紀錄
+﻿# 全程式功能健檢紀錄
 
 > 建立日期：2026-06-16
 > 範圍：PySide6 主 UI（`ui_qt/main.py`）目前 8 個頂層工作區與其子分頁 / 主要操作。
@@ -315,6 +315,11 @@
 | UPDATE-ISSUE-011 | U-024 | SQLite 表格顯示 | 查詢 `3207` 時，PandasTableModel 因重複欄名 alias 取到 Series，出現 truth value ambiguous 錯誤。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 表格 display data 改以欄位位置取值，避免重複顯示名稱造成 Series ambiguity。 |
 | UPDATE-ISSUE-012 | U-022 | SQLite 同步 / 唯一鍵 | 券商分點同一分點 / 股票 / 日期同時存在 `買超` 與 `賣超` 時，舊唯一鍵造成衝突。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | broker sync 前受控備份並升級 `broker_flows` 主鍵納入 `trade_type`；合併去重鍵也納入 `trade_type`。 |
 
+| UPDATE-ISSUE-013 | U-021 / U-022 | 效能 / 券商分點更新 | 券商分點資訊一次更新約 40 個分點時耗時明顯過長，需評估是否可支援受控並行，例如 5、10 或更高並行數，並確認網頁端是否會阻擋。 | 已記錄 | 未修正 | 待排查 | 中 | 先排查目前券商分點下載 / 合併是否為序列流程、是否已有 rate limit / retry / session 限制；後續若可行，需採受控 concurrency 與保守預設。 |
+| UPDATE-ISSUE-014 | U-023 | 效能 / 技術指標計算 | 技術指標目前疑似 inline / 單核心計算；需評估是否可用 4 core 等多核心並行計算以縮短全市場計算時間。 | 已記錄 | 未修正 | 待排查 | 中 | 先排查目前計算流程是否逐股序列、是否受 SQLite 寫入或 CSV I/O 限制；若要並行，需拆分計算與寫入階段，避免多進程同時寫 DB 或覆寫 CSV。 |
+| UPDATE-ISSUE-015 | U-024 / U-007 / U-008 | TPEX / SQLite 同步缺口 | SQLite 檢視 `3207` 只有近兩天資料，顯示 TPEX 日常資料已開始寫入但尚未補齊 2014 起歷史資料；需確認歷史 TPEX 回補是否未執行。 | 已記錄 | 未修正 | 待排查 | 中 | 目前 `DATA_ROOT/daily_price_tpex` 已有近兩天 CSV，代表日常 TPEX 抓取成功；需確認歷史回補仍需 dry-run plan 與人工 gate，不屬於每日快速更新自動回補。 |
+| UPDATE-ISSUE-016 | U-007 / U-008 / U-024 | TPEX / 每日股價手動同步 | 點每日股價的手動下載資料源或後續同步後，SQLite 檢視 `daily_prices` 查不到 `3207`，但 TPEX CSV 未消失；疑似手動每日股價路徑未納入 `daily_price_tpex`，或同步時覆蓋了同日 TPEX rows。 | 已記錄 | 未修正 | 待排查 | 高 | 需追每日股價手動下載、合併、SQLite 同步三條路徑是否只讀 TWSE `daily_price`；特別確認是否對同日期先刪除 `daily_prices` 再只寫入 TWSE，導致既有 TPEX rows 被移除。 |
+| UPDATE-ISSUE-017 | U-002 / U-003 | 使用者理解 / 更新模式語意 | 快速更新與完整更新差異不清楚：快速更新後 metadata 的市場 / 產業 CSV、`daily_price` 與 `broker_flow` daily 檔也會更新；完整更新又重跑一次全部，使用者不確定完整更新額外做了哪些檢查或資料重建。 | 已記錄 | 未修正 | 待排查 | 中 | 需排查兩種更新流程的實際步驟差異並回寫文件 / UI 文案；特別釐清快速更新是否仍會寫入 raw daily CSV，但避免大型合併 CSV 重寫，而完整更新是否包含完整 CSV 合併、重建或更完整同步。 |
 ### 原始失敗紀錄
 
 | ID | 來源功能 ID | 問題摘要 | 重現步驟 | 實際結果 | 預期結果 | 嚴重度 | 是否需要修復任務 |

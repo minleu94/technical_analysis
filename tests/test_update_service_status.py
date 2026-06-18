@@ -1,4 +1,4 @@
-from types import SimpleNamespace
+﻿from types import SimpleNamespace
 
 import pandas as pd
 
@@ -232,6 +232,40 @@ def test_sync_daily_price_files_to_sqlite_includes_tpex_daily_price_dir(tmp_path
     ]
 
 
+
+def test_sync_daily_data_to_sqlite_preserves_tpex_rows_from_daily_price_dir(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    date_col = "日期"
+    code_col = "證券代號"
+    name_col = "證券名稱"
+    close_col = "收盤價"
+
+    pd.DataFrame({
+        date_col: ["2026-06-16"],
+        code_col: ["2330"],
+        name_col: ["台積電"],
+        close_col: [999.0],
+    }).to_csv(config.stock_data_file, index=False, encoding="utf-8-sig")
+    pd.DataFrame({
+        date_col: ["20260616"],
+        code_col: ["3207"],
+        name_col: ["耀勝"],
+        close_col: [42.5],
+    }).to_csv(config.tpex_daily_price_dir / "20260616.csv", index=False, encoding="utf-8-sig")
+
+    result = UpdateService(config).sync_source_to_sqlite("daily_data")
+
+    assert result["success"] is True
+    synced = db.execute_query(
+        f'SELECT "{date_col}", "{code_col}", "{close_col}" FROM daily_prices ORDER BY "{code_col}";'
+    )
+    assert synced.to_dict(orient="records") == [
+        {date_col: "20260616", code_col: "2330", close_col: 999.0},
+        {date_col: "20260616", code_col: "3207", close_col: 42.5},
+    ]
 def test_update_tpex_daily_price_writes_csv_via_source(tmp_path):
     config = _sqlite_config(tmp_path)
 
@@ -846,3 +880,4 @@ def test_deduplicate_and_merge_broker_flows_conflict(tmp_path):
 
     with pytest.raises(ValueError, match="唯一鍵衝突"):
         service._deduplicate_and_merge_broker_flows(df)
+

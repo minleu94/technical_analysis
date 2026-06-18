@@ -178,7 +178,7 @@ class UpdateService:
                 replace_table = False
                 delete_date_keys = True
             elif normalized == 'daily_data':
-                df = self._load_csv_for_sqlite(self.config.stock_data_file, require_date=True)
+                df = self._load_daily_data_for_sqlite()
                 table_name = 'daily_prices'
                 replace_table = False
                 delete_date_keys = True
@@ -352,6 +352,42 @@ class UpdateService:
         if not frames:
             return pd.DataFrame()
         return self._normalize_sqlite_dates(pd.concat(frames, ignore_index=True))
+
+    def _load_daily_data_for_sqlite(self) -> Any:
+        import pandas as pd  # type: ignore[import-untyped]
+
+        daily_df = self._load_csv_for_sqlite(self.config.stock_data_file, require_date=True)
+        if daily_df.empty:
+            return daily_df
+
+        date_col = '日期'
+        code_col = '證券代號'
+        frames = [daily_df]
+        date_keys = {
+            str(value).strip()
+            for value in daily_df.get(date_col, pd.Series(dtype=str)).dropna().astype(str)
+            if str(value).strip()
+        }
+
+        tpex_daily_dir = getattr(self.config, 'tpex_daily_price_dir', None)
+        if tpex_daily_dir is not None:
+            tpex_daily_dir = Path(tpex_daily_dir)
+            if tpex_daily_dir.exists() and date_keys:
+                for path in sorted(tpex_daily_dir.glob('*.csv')):
+                    date_key = path.stem
+                    if date_key not in date_keys:
+                        continue
+                    tpex_df = pd.read_csv(path, encoding='utf-8-sig')
+                    if tpex_df.empty:
+                        continue
+                    if date_col not in tpex_df.columns:
+                        tpex_df.insert(0, date_col, date_key)
+                    frames.append(tpex_df)
+
+        combined = self._normalize_sqlite_dates(pd.concat(frames, ignore_index=True))
+        if date_col in combined.columns and code_col in combined.columns:
+            combined = combined.drop_duplicates(subset=[date_col, code_col], keep='last')
+        return combined
 
     def _get_stock_name_to_code_map(self) -> Dict[str, str]:
         """建立證券名稱到證券代號的對照表，合併 SQLite, CSV 與硬編碼對照"""

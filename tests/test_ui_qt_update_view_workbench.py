@@ -162,6 +162,16 @@ def make_view():
     return _TestableUpdateView(FakeUpdateService())
 
 
+def test_update_view_does_not_auto_scan_status_on_open():
+    app()
+    service = FakeUpdateService()
+
+    view = UpdateView(service)
+
+    assert service.calls == []
+    assert view.check_status_btn.isEnabled()
+
+
 def test_update_view_uses_workbench_navigation():
     view = make_view()
 
@@ -185,7 +195,7 @@ def test_all_data_view_has_safe_update_primary_button():
     view = make_view()
 
     assert isinstance(view.quick_update_all_btn, QPushButton)
-    assert view.quick_update_all_btn.text() == "⚡ 快速更新 (僅 SQLite)"
+    assert view.quick_update_all_btn.text() == "⚡ 快速更新 (跳過大型合併)"
     assert isinstance(view.safe_update_all_btn, QPushButton)
     assert view.safe_update_all_btn.text() == "🛡️ 安全更新 (完整 CSV + SQLite)"
 
@@ -319,6 +329,24 @@ def test_safe_update_all_continues_with_warning_when_tpex_fails_after_twse_succe
         "calculate_technical_indicators",
         "check_data_overview",
     ]
+
+
+def test_manual_daily_update_also_fetches_tpex_daily_price(monkeypatch):
+    from ui_qt.views import update_view
+
+    monkeypatch.setattr(update_view, "ProgressTaskWorker", SynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.Ok)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view = make_view()
+    view.daily_radio.setChecked(True)
+    view.end_date.setDate(QDate(2026, 6, 16))
+    view.lookback_days.setValue(10)
+
+    view._execute_update()
+
+    assert ("update_daily", "2026-06-06", "2026-06-16") in view.update_service.calls
+    assert ("update_tpex_daily_price", "2026-06-16") in view.update_service.calls
 
 
 def test_update_view_with_config_instantiates_inspector_widget(tmp_path):

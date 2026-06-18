@@ -1,6 +1,7 @@
 import pandas as pd
+import requests
 
-from data_module.tpex_daily_price_source import TpexDailyPriceSource
+from data_module.tpex_daily_price_source import TPEX_DAILY_CLOSE_URL, TpexDailyPriceSource
 
 
 def test_tpex_daily_price_source_writes_requested_date_csv(tmp_path):
@@ -56,4 +57,77 @@ def test_tpex_daily_price_source_reports_date_mismatch(tmp_path):
     assert result.row_count == 0
     assert "does not contain requested date" in result.message
     assert not (tmp_path / "20260616.csv").exists()
+
+
+def test_tpex_daily_price_source_retries_incomplete_download(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return [
+                {
+                    "Date": "1150616",
+                    "SecuritiesCompanyCode": "3207",
+                    "CompanyName": "耀勝",
+                    "Close": "42.50",
+                }
+            ]
+
+    def fake_get(url, headers=None, timeout=None):
+        calls.append((url, headers, timeout))
+        if len(calls) == 1:
+            raise requests.exceptions.ChunkedEncodingError(
+                "Connection broken: IncompleteRead"
+            )
+        return FakeResponse()
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    rows = TpexDailyPriceSource(output_dir="unused")._fetch_official_rows()
+
+    assert len(calls) == 2
+    assert calls[0][0] == TPEX_DAILY_CLOSE_URL
+    assert rows[0]["SecuritiesCompanyCode"] == "3207"
+
+
+def test_tpex_daily_price_source_retries_transient_server_error(monkeypatch):
+    calls = []
+
+    class ServerErrorResponse:
+        status_code = 520
+
+        def raise_for_status(self):
+            raise requests.exceptions.HTTPError("520 Server Error")
+
+    class OkResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return [
+                {
+                    "Date": "1150616",
+                    "SecuritiesCompanyCode": "3207",
+                    "CompanyName": "耀勝",
+                    "Close": "42.50",
+                }
+            ]
+
+    def fake_get(url, headers=None, timeout=None):
+        calls.append((url, headers, timeout))
+        if len(calls) == 1:
+            return ServerErrorResponse()
+        return OkResponse()
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    rows = TpexDailyPriceSource(output_dir="unused")._fetch_official_rows()
+
+    assert len(calls) == 2
+    assert rows[0]["SecuritiesCompanyCode"] == "3207"
 
