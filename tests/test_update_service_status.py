@@ -232,6 +232,34 @@ def test_sync_daily_price_files_to_sqlite_includes_tpex_daily_price_dir(tmp_path
     ]
 
 
+def test_merge_daily_data_includes_tpex_daily_price_dir(tmp_path):
+    from scripts.merge_daily_data import merge_daily_data
+
+    config = _sqlite_config(tmp_path)
+    pd.DataFrame({
+        "日期": ["20260617"],
+        "證券代號": ["2330"],
+        "證券名稱": ["台積電"],
+        "收盤價": [900.0],
+    }).to_csv(config.stock_data_file, index=False, encoding="utf-8-sig")
+    pd.DataFrame({
+        "證券代號": ["3207"],
+        "證券名稱": ["耀勝"],
+        "收盤價": [42.5],
+    }).to_csv(config.tpex_daily_price_dir / "20260618.csv", index=False, encoding="utf-8-sig")
+
+    merge_daily_data(force_all=False, config=config)
+
+    merged = pd.read_csv(config.stock_data_file, encoding="utf-8-sig", dtype={"日期": str, "證券代號": str})
+    assert merged["日期"].max() == "20260618"
+    assert {
+        "日期": "20260618",
+        "證券代號": "3207",
+        "證券名稱": "耀勝",
+        "收盤價": 42.5,
+    } in merged[["日期", "證券代號", "證券名稱", "收盤價"]].to_dict(orient="records")
+
+
 
 def test_sync_daily_data_to_sqlite_preserves_tpex_rows_from_daily_price_dir(tmp_path):
     from data_module.db_manager import DBManager
@@ -695,6 +723,45 @@ def test_smart_incremental_technical_calculation_replays_warmup_window(tmp_path,
     assert "2026-01-05" in seen_dates
 
 
+def test_smart_incremental_technical_calculation_skips_when_indicator_is_current(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    pd.DataFrame({
+        "日期": ["2026-01-01", "2026-01-02", "2026-01-03"],
+        "證券代號": ["2330"] * 3,
+        "收盤價": [10, 11, 12],
+        "開盤價": [10, 11, 12],
+        "最高價": [11, 12, 13],
+        "最低價": [9, 10, 11],
+        "成交股數": [100] * 3,
+    }).to_csv(config.stock_data_file, index=False, encoding="utf-8-sig")
+    pd.DataFrame({
+        "日期": ["2026-01-01", "2026-01-02", "2026-01-03"],
+        "證券代號": ["2330"] * 3,
+        "RSI": [50, 51, 52],
+    }).to_csv(config.technical_dir / "2330_indicators.csv", index=False, encoding="utf-8-sig")
+
+    class FailIfCalledCalculator:
+        def __init__(self, logger):
+            self.logger = logger
+
+        def calculate_and_store_indicators(self, *args, **kwargs):
+            raise AssertionError("current indicators should be skipped")
+
+    import analysis_module.technical_analysis.technical_indicators as indicators
+
+    monkeypatch.setattr(indicators, "TechnicalIndicatorCalculator", FailIfCalledCalculator)
+
+    result = UpdateService(config).calculate_technical_indicators(
+        force_all=False,
+        start_date=None,
+        incremental_lookback_days=120,
+    )
+
+    assert result["success"] is True
+    assert result["success_count"] == 0
+    assert result["updated_stocks"] == []
+
+
 def test_process_stock_data_batch_requires_explicit_paths(tmp_path):
     from analysis_module.technical_analysis.technical_indicators import (
         TechnicalIndicatorCalculator,
@@ -703,6 +770,76 @@ def test_process_stock_data_batch_requires_explicit_paths(tmp_path):
     calculator = TechnicalIndicatorCalculator()
 
     assert calculator.process_stock_data_batch(stock_data_path=None) is False
+
+
+def test_calculate_and_store_indicators_normalizes_date_before_merging(tmp_path, monkeypatch):
+    from analysis_module.technical_analysis.technical_indicators import (
+        TechnicalIndicatorCalculator,
+    )
+
+    output_dir = tmp_path / "technical_analysis"
+    output_dir.mkdir()
+    pd.DataFrame({
+        "日期": ["2026-01-01", "2026-01-02"],
+        "證券代號": ["2330", "2330"],
+        "RSI": [50, 51],
+    }).to_csv(output_dir / "2330_indicators.csv", index=False, encoding="utf-8-sig")
+
+    calculator = TechnicalIndicatorCalculator()
+
+    def fake_calculate_all_indicators(df, stock_id):
+        return pd.DataFrame({
+            "Date": ["2026-01-02", "2026-01-03"],
+            "證券代號": ["2330", "2330"],
+            "RSI": [61, 62],
+        })
+
+    monkeypatch.setattr(calculator, "calculate_all_indicators", fake_calculate_all_indicators)
+
+    result = calculator.calculate_and_store_indicators(
+        pd.DataFrame({"日期": ["2026-01-02", "2026-01-03"]}),
+        "2330",
+        output_dir=output_dir,
+    )
+
+    assert result is not None
+    saved = pd.read_csv(output_dir / "2330_indicators.csv", encoding="utf-8-sig")
+    assert saved["日期"].tolist() == ["2026-01-01", "2026-01-02", "2026-01-03"]
+    assert saved["RSI"].tolist() == [50, 61, 62]
+
+
+def test_calculate_and_store_indicators_does_not_concat_when_dates_unavailable(tmp_path, monkeypatch):
+    from analysis_module.technical_analysis.technical_indicators import (
+        TechnicalIndicatorCalculator,
+    )
+
+    output_dir = tmp_path / "technical_analysis"
+    output_dir.mkdir()
+    pd.DataFrame({
+        "證券代號": ["2330", "2330"],
+        "RSI": [50, 51],
+    }).to_csv(output_dir / "2330_indicators.csv", index=False, encoding="utf-8-sig")
+
+    calculator = TechnicalIndicatorCalculator()
+
+    def fake_calculate_all_indicators(df, stock_id):
+        return pd.DataFrame({
+            "證券代號": ["2330"],
+            "RSI": [62],
+        })
+
+    monkeypatch.setattr(calculator, "calculate_all_indicators", fake_calculate_all_indicators)
+
+    result = calculator.calculate_and_store_indicators(
+        pd.DataFrame({"證券代號": ["2330"]}),
+        "2330",
+        output_dir=output_dir,
+    )
+
+    assert result is not None
+    saved = pd.read_csv(output_dir / "2330_indicators.csv", encoding="utf-8-sig")
+    assert len(saved) == 1
+    assert saved["RSI"].tolist() == [62]
 
 
 def test_process_stock_data_batch_writes_only_to_explicit_paths(tmp_path):

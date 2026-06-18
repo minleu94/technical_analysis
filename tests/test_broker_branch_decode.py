@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
+from contextlib import contextmanager
 from app_module.broker_branch_update_service import BrokerBranchUpdateService
 from bs4 import BeautifulSoup
 
@@ -233,3 +234,58 @@ def test_headquarters_detection_and_decoding(tmp_path):
     assert b5["branch_code"] == "9A9i"
     # 總部判定不成立（因為 broker_code '0039' != branch_code '9A9i'，且名稱無總公司關鍵字）
     assert b5["is_headquarters"] is False
+
+
+def test_update_broker_branch_data_skips_existing_sqlite_rows_by_display_name(tmp_path, monkeypatch):
+    import sqlite3
+
+    config = DummyConfig(tmp_path)
+    config.meta_data_dir.mkdir(parents=True, exist_ok=True)
+    config.use_sqlite = True
+    config.db_file = tmp_path / "sqlite" / "twstock.db"
+    config.db_file.parent.mkdir(parents=True)
+
+    pd.DataFrame({
+        "branch_system_key": ["8450_845B"],
+        "branch_broker_code": ["8450"],
+        "branch_code": ["845B"],
+        "branch_display_name": ["康和-永和"],
+        "url_param_a": ["8450"],
+        "url_param_b": ["0038003400350042"],
+        "is_active": [True],
+    }).to_csv(config.broker_branch_registry_file, index=False, encoding="utf-8-sig")
+
+    with sqlite3.connect(config.db_file) as conn:
+        conn.execute(
+            """
+            CREATE TABLE broker_flows (
+                日期 TEXT,
+                分點名稱 TEXT,
+                證券代號 TEXT,
+                買進股數 INTEGER,
+                買進金額千元 INTEGER
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO broker_flows (日期, 分點名稱, 證券代號, 買進股數, 買進金額千元) VALUES (?, ?, ?, ?, ?)",
+            ("20260616", "康和-永和", "2330", 1000, 500),
+        )
+
+    service = BrokerBranchUpdateService(config)
+    driver = MagicMock()
+
+    @contextmanager
+    def fake_driver():
+        yield driver
+
+    monkeypatch.setattr(service, "_get_driver", fake_driver)
+    result = service.update_broker_branch_data(
+        "2026-06-16",
+        "2026-06-16",
+        delay_seconds=0,
+    )
+
+    assert result["success"] is True
+    assert result["skipped_dates"] == ["2026-06-16"]
+    driver.get.assert_not_called()

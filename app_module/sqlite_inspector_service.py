@@ -165,6 +165,42 @@ class SqliteInspectorService:
             self.logger.error(f"[SqliteInspectorService] 獲取資料表列表失敗: {e}")
             return []
 
+    def get_distinct_column_values(
+        self,
+        table_name: str,
+        column_name: str,
+        *,
+        limit: int = 500,
+    ) -> List[str]:
+        """Return distinct text values for a whitelisted table column."""
+        if not self.is_enabled():
+            return []
+
+        self._validate_table_name(table_name)
+        raw_columns = self._get_raw_columns(table_name)
+        raw_column = self._column_lookup(raw_columns).get(column_name)
+        if not raw_column:
+            return []
+
+        limit = max(1, min(int(limit), 5000))
+        sql = (
+            f'SELECT DISTINCT "{raw_column}" AS value '
+            f'FROM "{table_name}" '
+            f'WHERE "{raw_column}" IS NOT NULL AND TRIM("{raw_column}") != "" '
+            f'ORDER BY "{raw_column}" ASC '
+            f'LIMIT ?'
+        )
+        try:
+            df = self.db_manager.execute_query(sql, (limit,))
+            if df.empty or "value" not in df.columns:
+                return []
+            return [str(value) for value in df["value"].tolist() if str(value).strip()]
+        except Exception as e:
+            self.logger.error(
+                f"[SqliteInspectorService] get distinct values failed for {table_name}.{column_name}: {e}"
+            )
+            return []
+
     def get_table_schema(self, table_name: str) -> pd.DataFrame:
         """獲取指定資料表的欄位定義 (Schema)
         

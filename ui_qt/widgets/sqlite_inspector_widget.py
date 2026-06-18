@@ -9,12 +9,25 @@ import pandas as pd
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox,
     QPushButton, QTabWidget, QTableView, QMessageBox, QGroupBox,
-    QHeaderView, QLineEdit, QDateEdit
+    QHeaderView, QLineEdit, QDateEdit, QCalendarWidget, QFrame
 )
 from PySide6.QtCore import Qt, QDate
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.workers.task_worker import TaskWorker
 from app_module.sqlite_inspector_service import SqliteInspectorService
+
+
+class OptionalDateEdit(QDateEdit):
+    """QDateEdit that displays blank when its value is the configured null date."""
+
+    def __init__(self, null_date: QDate, parent=None):
+        super().__init__(parent)
+        self._null_date = null_date
+
+    def textFromDate(self, date: QDate) -> str:
+        if date == self._null_date:
+            return ""
+        return super().textFromDate(date)
 
 
 class SqliteInspectorWidget(QWidget):
@@ -122,47 +135,57 @@ class SqliteInspectorWidget(QWidget):
         row2_layout.addWidget(self.stock_name_input)
 
         row2_layout.addWidget(QLabel("券商分點:"))
-        self.broker_branch_input = QLineEdit()
-        self.broker_branch_input.setPlaceholderText("分點名稱 (選填)")
-        self.broker_branch_input.setMaximumWidth(140)
-        self.broker_branch_input.setToolTip(
+        self.broker_branch_combo = QComboBox()
+        self.broker_branch_combo.setEditable(True)
+        self.broker_branch_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.broker_branch_combo.setMinimumWidth(150)
+        self.broker_branch_combo.setMaximumWidth(190)
+        self.broker_branch_combo.setMaxVisibleItems(20)
+        self.broker_branch_combo.addItem("")
+        self.broker_branch_combo.lineEdit().setPlaceholderText("分點名稱 (選填)")
+        self.broker_branch_combo.setToolTip(
             "【券商分點】\n"
-            "輸入分點名稱關鍵字（例如 凱基台北），用以篩選分點買賣超資料（僅適用於 broker_flows 表）。"
+            "選擇或輸入分點名稱關鍵字（例如 凱基台北），用以篩選分點買賣超資料（僅適用於 broker_flows 表）。"
         )
-        row2_layout.addWidget(self.broker_branch_input)
+        row2_layout.addWidget(self.broker_branch_combo)
+        self.broker_branch_dropdown_btn = QPushButton("展開")
+        self.broker_branch_dropdown_btn.setMaximumWidth(52)
+        self.broker_branch_dropdown_btn.setToolTip("展開券商分點清單")
+        self.broker_branch_dropdown_btn.clicked.connect(self.broker_branch_combo.showPopup)
+        row2_layout.addWidget(self.broker_branch_dropdown_btn)
 
         row2_layout.addWidget(QLabel("單一日期:"))
-        today = QDate.currentDate()
-        current_month_start = QDate(today.year(), today.month(), 1)
-
-        self.date_input = self._create_optional_date_edit(default_date=today)
+        self.date_input = self._create_optional_date_edit()
         self.date_input.setToolTip(
             "【單一日期】\n"
             "點選特定交易日（格式為 YYYY-MM-DD，如 2026-05-29）來精確過濾當日數據。"
         )
         row2_layout.addWidget(self.date_input)
-        self.clear_date_btn = QPushButton("清除")
-        self.clear_date_btn.setMaximumWidth(52)
-        self.clear_date_btn.clicked.connect(lambda: self._clear_date_edit(self.date_input))
-        row2_layout.addWidget(self.clear_date_btn)
+        row2_layout.addWidget(self._create_calendar_button(self.date_input))
+        self.today_date_btn = QPushButton("今日")
+        self.today_date_btn.setMaximumWidth(52)
+        self.today_date_btn.clicked.connect(self._set_single_date_today)
+        row2_layout.addWidget(self.today_date_btn)
 
         row2_layout.addWidget(QLabel("區間:"))
-        self.start_date_input = self._create_optional_date_edit(default_date=current_month_start)
+        self.start_date_input = self._create_optional_date_edit()
         self.start_date_input.setToolTip(
             "【開始日期】\n"
             "點選日期區間的起始日（格式為 YYYY-MM-DD，如 2026-05-01），用以做範圍查詢（需與結束日期搭配）。"
         )
         row2_layout.addWidget(self.start_date_input)
+        row2_layout.addWidget(self._create_calendar_button(self.start_date_input))
         row2_layout.addWidget(QLabel("~"))
-        self.end_date_input = self._create_optional_date_edit(default_date=today)
+        self.end_date_input = self._create_optional_date_edit()
         self.end_date_input.setToolTip(
             "【結束日期】\n"
             "點選日期區間的截止日（格式為 YYYY-MM-DD，如 2026-05-29），用以做範圍查詢（需與開始日期搭配）。"
         )
         row2_layout.addWidget(self.end_date_input)
+        row2_layout.addWidget(self._create_calendar_button(self.end_date_input))
         self.clear_range_btn = QPushButton("清除")
         self.clear_range_btn.setMaximumWidth(52)
-        self.clear_range_btn.clicked.connect(self._clear_range_dates)
+        self.clear_range_btn.clicked.connect(self._clear_all_dates)
         row2_layout.addWidget(self.clear_range_btn)
 
         row2_layout.addStretch()
@@ -238,23 +261,124 @@ class SqliteInspectorWidget(QWidget):
         self.setLayout(main_layout)
 
     def _create_optional_date_edit(self, default_date: Optional[QDate] = None) -> QDateEdit:
-        date_edit = QDateEdit()
-        date_edit.setCalendarPopup(True)
+        date_edit = OptionalDateEdit(self._null_date)
+        date_edit.setCalendarPopup(False)
         date_edit.setDisplayFormat("yyyy-MM-dd")
         date_edit.setMinimumDate(self._null_date)
         date_edit.setMaximumDate(QDate(2100, 12, 31))
-        date_edit.setSpecialValueText("不篩選")
-        date_edit.setMinimumWidth(112)
-        date_edit.setMaximumWidth(128)
+        date_edit.setSpecialValueText(" ")
+        date_edit.setMinimumWidth(132)
+        date_edit.setMaximumWidth(150)
         date_edit.setDate(default_date or self._null_date)
+        date_edit.setStyleSheet("""
+            QDateEdit {
+                padding-right: 7px;
+            }
+        """)
         return date_edit
+
+    def _create_calendar_button(self, date_edit: QDateEdit) -> QPushButton:
+        button = QPushButton("日曆")
+        button.setMaximumWidth(52)
+        button.setToolTip("開啟日曆選擇日期")
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #334155;
+                border: 1px solid #94a3b8;
+                border-radius: 5px;
+                padding: 3px 6px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #e0f2fe;
+                border-color: #0284c7;
+            }
+            QPushButton:pressed {
+                background-color: #bae6fd;
+            }
+        """)
+        button.clicked.connect(lambda _checked=False, edit=date_edit, anchor=button: self._show_calendar_popup(edit, anchor))
+        return button
+
+    def _calendar_page_date(self, date_edit: QDateEdit) -> QDate:
+        return QDate.currentDate() if date_edit.date() == self._null_date else date_edit.date()
+
+    def _show_calendar_popup(self, date_edit: QDateEdit, anchor: QPushButton):
+        popup = QFrame(None, Qt.Popup)
+        popup.setFrameShape(QFrame.StyledPanel)
+        popup_layout = QVBoxLayout(popup)
+        popup_layout.setContentsMargins(4, 4, 4, 4)
+        calendar = QCalendarWidget(popup)
+        page_date = self._calendar_page_date(date_edit)
+        calendar.setGridVisible(True)
+        calendar.setMinimumSize(340, 280)
+        calendar.setCurrentPage(page_date.year(), page_date.month())
+        if date_edit.date() != self._null_date:
+            calendar.setSelectedDate(date_edit.date())
+        calendar.setStyleSheet(self._calendar_popup_stylesheet())
+        calendar.clicked.connect(lambda selected_date, edit=date_edit, frame=popup: self._apply_calendar_date(edit, selected_date, frame))
+        popup_layout.addWidget(calendar)
+        popup.move(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+        self._calendar_popup = popup
+        popup.show()
+
+    def _apply_calendar_date(self, date_edit: QDateEdit, selected_date: QDate, popup: QFrame):
+        date_edit.setDate(selected_date)
+        popup.close()
+
+    def _calendar_popup_stylesheet(self) -> str:
+        return """
+            QCalendarWidget QToolButton {
+                min-width: 44px;
+                min-height: 24px;
+                padding: 2px 6px;
+            }
+            QCalendarWidget QAbstractItemView {
+                font-size: 12px;
+                min-width: 300px;
+                min-height: 210px;
+                selection-background-color: #2563eb;
+                selection-color: white;
+            }
+        """
+
+    def _prepare_date_calendar(self, date_edit: QDateEdit):
+        date_edit.update()
 
     def _clear_date_edit(self, date_edit: QDateEdit):
         date_edit.setDate(self._null_date)
+        self._prepare_date_calendar(date_edit)
 
     def _clear_range_dates(self):
         self._clear_date_edit(self.start_date_input)
         self._clear_date_edit(self.end_date_input)
+
+    def _clear_all_dates(self):
+        self._clear_date_edit(self.date_input)
+        self._clear_range_dates()
+
+    def _set_single_date_today(self):
+        self.date_input.setDate(QDate.currentDate())
+
+    def _broker_branch_filter_text(self) -> str:
+        return self.broker_branch_combo.currentText().strip()
+
+    def _refresh_broker_branch_options(self, table_name: str):
+        current = self.broker_branch_combo.currentText().strip()
+        self.broker_branch_combo.blockSignals(True)
+        self.broker_branch_combo.clear()
+        self.broker_branch_combo.addItem("")
+        if table_name == "broker_flows" and hasattr(self.inspector_service, "get_distinct_column_values"):
+            values = self.inspector_service.get_distinct_column_values(
+                "broker_flows",
+                "分點名稱",
+                limit=1000,
+            )
+            self.broker_branch_combo.addItems(values)
+        self.broker_branch_combo.setCurrentText(current)
+        self.broker_branch_combo.blockSignals(False)
 
     def _date_filter_value(self, date_edit: QDateEdit) -> str:
         if date_edit.date() == self._null_date:
@@ -287,6 +411,7 @@ class SqliteInspectorWidget(QWidget):
         self.total_pages = 0
         self.sort_column = None
         self.sort_order = "desc"
+        self._refresh_broker_branch_options(table_name)
         self._update_pagination_ui()
 
     def _load_current_table_data(self):
@@ -305,7 +430,7 @@ class SqliteInspectorWidget(QWidget):
         # 獲取篩選值
         stock_code = self.stock_code_input.text().strip()
         stock_name = self.stock_name_input.text().strip()
-        broker_branch = self.broker_branch_input.text().strip()
+        broker_branch = self._broker_branch_filter_text()
         date_str = self._date_filter_value(self.date_input)
         start_date = self._date_filter_value(self.start_date_input)
         end_date = self._date_filter_value(self.end_date_input)
@@ -538,6 +663,7 @@ class SqliteInspectorWidget(QWidget):
         """設定載入狀態"""
         self.load_btn.setEnabled(not is_loading)
         self.table_selector.setEnabled(not is_loading)
+        self.broker_branch_combo.setEnabled(not is_loading)
         if is_loading:
             self.load_btn.setText("載入中...")
         else:

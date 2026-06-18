@@ -36,6 +36,34 @@ def _step(name: str, ok: bool, message: str, rows: int = 0, warnings: List[str] 
     }
 
 
+def _parse_status_date(value: Any) -> datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _should_skip_technical_indicators(
+    status: Dict[str, Any],
+    *,
+    force_all: bool,
+) -> tuple[bool, str]:
+    if force_all:
+        return False, ""
+
+    daily_latest = _parse_status_date((status.get("daily_data") or {}).get("latest_date"))
+    technical_latest = _parse_status_date((status.get("technical_indicators") or {}).get("latest_date"))
+    if daily_latest and technical_latest and technical_latest >= daily_latest:
+        latest_text = technical_latest.strftime("%Y-%m-%d")
+        return True, f"技術指標已是最新（{latest_text}），跳過增量計算"
+    return False, ""
+
+
 def _run_tpex_parallel(
     service: UpdateService,
     config: TWStockConfig,
@@ -265,25 +293,39 @@ def main() -> int:
             }
             _write_state(state_file, state)
 
-        state["steps"]["technical"] = {"status": "running", "message": "running", "rows": 0, "warnings": []}
-        _write_state(state_file, state)
-        tech_result = service.calculate_technical_indicators(
-            target_stock=None,
+        status = service.check_data_overview() if hasattr(service, "check_data_overview") else service.check_data_status()
+        should_skip_technical, skip_message = _should_skip_technical_indicators(
+            status,
             force_all=args.technical_force_all,
-            start_date=None,
-            progress_callback=None,
-            incremental_lookback_days=250,
         )
-        tech_stocks = tech_result.get("updated_stocks", [])
-        tech_rows = len(tech_stocks) if isinstance(tech_stocks, list) else 0
-        state["steps"]["technical"] = _step(
-            "technical",
-            bool(tech_result.get("success", False)),
-            tech_result.get("message", "技術指標計算完成"),
-            rows=tech_rows,
-        )
-        if not tech_result.get("success", False):
-            all_warnings.append(f"技術指標計算失敗：{tech_result.get('message', 'unknown')}")
+        if should_skip_technical:
+            state["steps"]["technical"] = {
+                "status": "skipped",
+                "message": skip_message,
+                "rows": 0,
+                "warnings": [],
+            }
+            _write_state(state_file, state)
+        else:
+            state["steps"]["technical"] = {"status": "running", "message": "running", "rows": 0, "warnings": []}
+            _write_state(state_file, state)
+            tech_result = service.calculate_technical_indicators(
+                target_stock=None,
+                force_all=args.technical_force_all,
+                start_date=None,
+                progress_callback=None,
+                incremental_lookback_days=120,
+            )
+            tech_stocks = tech_result.get("updated_stocks", [])
+            tech_rows = len(tech_stocks) if isinstance(tech_stocks, list) else 0
+            state["steps"]["technical"] = _step(
+                "technical",
+                bool(tech_result.get("success", False)),
+                tech_result.get("message", "技術指標計算完成"),
+                rows=tech_rows,
+            )
+            if not tech_result.get("success", False):
+                all_warnings.append(f"技術指標計算失敗：{tech_result.get('message', 'unknown')}")
         _write_state(state_file, state)
 
         state["status"] = "done" if not all_warnings else "done_with_warning"

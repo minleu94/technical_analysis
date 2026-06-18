@@ -1954,14 +1954,30 @@ class UpdateService :
             )
             date_sql =self ._quote_sql_identifier (date_column )if date_column else "NULL"
             stock_sql =self ._quote_sql_identifier (stock_column )if stock_column else "NULL"
-            df =db .execute_query (f"""
-                SELECT
-                    COUNT(*) as count,
-                    MAX({date_sql}) as max_date,
-                    COUNT(DISTINCT {stock_sql}) as stock_count,
-                    MIN({date_sql}) as min_date
-                FROM technical_indicators;
-            """)
+            if date_column :
+                valid_date_filter =(
+                f"{date_sql} IS NOT NULL "
+                f"AND lower(CAST({date_sql} AS TEXT)) NOT IN ('', 'nan', 'nat', 'none') "
+                f"AND (CAST({date_sql} AS TEXT) GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' "
+                f"OR CAST({date_sql} AS TEXT) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')"
+                )
+                df =db .execute_query (f"""
+                    SELECT
+                        COUNT(*) as count,
+                        (SELECT MAX({date_sql}) FROM technical_indicators WHERE {valid_date_filter}) as max_date,
+                        COUNT(DISTINCT {stock_sql}) as stock_count,
+                        (SELECT MIN({date_sql}) FROM technical_indicators WHERE {valid_date_filter}) as min_date
+                    FROM technical_indicators;
+                """)
+            else :
+                df =db .execute_query (f"""
+                    SELECT
+                        COUNT(*) as count,
+                        NULL as max_date,
+                        COUNT(DISTINCT {stock_sql}) as stock_count,
+                        NULL as min_date
+                    FROM technical_indicators;
+                """)
             if not df .empty :
                 cnt =int (df .iloc [0 ]['count'])
                 max_d =df .iloc [0 ]['max_date']
@@ -3005,7 +3021,7 @@ class UpdateService :
     start_date :Optional [str ]=None ,
     progress_callback =None ,
     ignore_existing_files :bool =False ,
-    incremental_lookback_days :int =250
+    incremental_lookback_days :int =120
     )->Dict [str ,Any ]:
         """計算技術指標
 
@@ -3191,6 +3207,8 @@ class UpdateService :
                 ('日期','日期'),
                 ('證券代號','證券代號'),
                 ):
+                    if legacy_col ==canonical_col :
+                        continue
                     if legacy_col in group_df .columns and canonical_col in group_df .columns :
                         group_df =group_df .drop (columns =[legacy_col ])
                     elif legacy_col in group_df .columns :

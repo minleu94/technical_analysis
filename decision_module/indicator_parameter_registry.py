@@ -4,7 +4,7 @@
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,8 @@ class InvalidParameterError(ValueError):
 
 class IndicatorParameterRegistry:
     """技術指標參數註冊表與驗證器"""
+
+    _legacy_default_log_keys: Set[Tuple[str, str]] = set()
 
     # 靜態定義所有支援指標的參數 Schema
     SCHEMAS = {
@@ -149,10 +151,16 @@ class IndicatorParameterRegistry:
                 if config_schema_version < 1:
                     # 舊版配置缺失，允許使用 legacy default 備份並記錄原因
                     sanitized[param_name] = default_val
-                    logger.info(
+                    log_key = (indicator_name, param_name)
+                    log_message = (
                         f"[Registry] 舊版配置 {indicator_name} 缺失參數 {param_name}，"
                         f"使用 legacy 預設值: {default_val}。"
                     )
+                    if log_key not in cls._legacy_default_log_keys:
+                        logger.info(log_message)
+                        cls._legacy_default_log_keys.add(log_key)
+                    else:
+                        logger.debug(log_message)
                     continue
                 else:
                     # 新版配置缺失必要參數，一律拋出 Exception (Fail-Closed)

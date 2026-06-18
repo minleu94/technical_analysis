@@ -892,16 +892,24 @@ class BrokerBranchUpdateService:
                                     }.issubset(table_columns)
                                     row = None
                                     if has_dual_schema:
+                                        branch_lookup_names = [
+                                            str(branch_info.get('branch_display_name', '')).strip(),
+                                            str(branch_key).strip(),
+                                        ]
+                                        branch_lookup_names = [
+                                            name for name in dict.fromkeys(branch_lookup_names) if name
+                                        ]
                                         cursor.execute(
-                                            """
+                                            f"""
                                             SELECT 1
                                             FROM broker_flows
-                                            WHERE 日期 = ? AND 分點名稱 = ?
+                                            WHERE 日期 = ?
+                                              AND 分點名稱 IN ({",".join("?" for _ in branch_lookup_names)})
                                               AND 買進股數 IS NOT NULL
                                               AND 買進金額千元 IS NOT NULL
                                             LIMIT 1
                                             """,
-                                            (sqlite_date, branch_key),
+                                            (sqlite_date, *branch_lookup_names),
                                         )
                                         row = cursor.fetchone()
                                     if row is not None:

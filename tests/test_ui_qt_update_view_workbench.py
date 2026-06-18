@@ -21,6 +21,8 @@ class FakeConfig:
     def __init__(self):
         self.use_sqlite = False
         self.data_root = Path(".")
+        self.output_root = Path(".")
+        self.profile = "test"
         self.log_dir = Path(".")
         self.db_file = Path("test.db")
 
@@ -28,6 +30,7 @@ class FakeUpdateService:
     def __init__(self):
         self.calls = []
         self.config = FakeConfig()
+        self.scripts_dir = Path("scripts")
         
     def export_table_to_csv(self, table_name, target_path, start_date=None, end_date=None):
         self.calls.append(("export_table_to_csv", table_name, target_path, start_date, end_date))
@@ -91,7 +94,7 @@ class FakeUpdateService:
         force_all=False,
         start_date=None,
         progress_callback=None,
-        incremental_lookback_days=250,
+        incremental_lookback_days=120,
     ):
         self.calls.append((
             "calculate_technical_indicators",
@@ -162,6 +165,23 @@ def make_view():
     return _TestableUpdateView(FakeUpdateService())
 
 
+class StaleTechnicalUpdateService(FakeUpdateService):
+    def check_data_overview(self):
+        self.calls.append(("check_data_overview",))
+        return {
+            "daily_data": {"latest_date": "2026-05-20", "total_records": 100, "status": "ok"},
+            "market_index": {"latest_date": "2026-05-19", "total_records": 10, "status": "ok"},
+            "industry_index": {"latest_date": "2026-05-19", "total_records": 20, "status": "ok"},
+            "broker_branch": {"latest_date": "2026-05-19", "total_records": 30, "status": "ok"},
+            "technical_indicators": {"latest_date": "2026-05-19", "total_records": 40, "status": "ok"},
+        }
+
+
+def make_view_with_service(service):
+    app()
+    return _TestableUpdateView(service)
+
+
 def test_update_view_does_not_auto_scan_status_on_open():
     app()
     service = FakeUpdateService()
@@ -200,7 +220,7 @@ def test_all_data_view_has_safe_update_primary_button():
     assert view.safe_update_all_btn.text() == "🛡️ 安全更新 (完整 CSV + SQLite)"
 
 
-def test_safe_update_all_runs_conservative_sequence():
+def test_safe_update_all_skips_technical_when_current():
     view = make_view()
     progress = []
 
@@ -223,7 +243,7 @@ def test_safe_update_all_runs_conservative_sequence():
         "sync_source_to_sqlite",
         "merge_broker_branch_data",
         "sync_source_to_sqlite",
-        "calculate_technical_indicators",
+        "check_data_overview",
         "check_data_overview",
     ]
     daily_call = next(call for call in view.update_service.calls if call[0] == "update_daily")
@@ -233,15 +253,25 @@ def test_safe_update_all_runs_conservative_sequence():
     assert ("sync_source_to_sqlite", "industry_index", None, None) in view.update_service.calls
     assert ("sync_source_to_sqlite", "daily_data", None, None) in view.update_service.calls
     assert ("sync_source_to_sqlite", "broker_branch", None, None) in view.update_service.calls
-    assert view.update_service.calls[-2] == (
+    assert not any(call[0] == "calculate_technical_indicators" for call in view.update_service.calls)
+    assert result["completed_steps"][-2]["result"]["skipped"] is True
+    assert progress[0][1] == 0
+    assert progress[-1][1] == 100
+
+
+def test_safe_update_all_calculates_technical_when_stale():
+    view = make_view_with_service(StaleTechnicalUpdateService())
+
+    result = view._run_safe_update_all(progress_callback=lambda message, pct: None)
+
+    assert result["success"] is True
+    assert (
         "calculate_technical_indicators",
         None,
         False,
         None,
-        250,
-    )
-    assert progress[0][1] == 0
-    assert progress[-1][1] == 100
+        120,
+    ) in view.update_service.calls
 
 
 def test_overview_check_uses_lightweight_service_contract():
@@ -273,6 +303,18 @@ def test_source_tabs_have_operational_content():
 
         assert len(labels) >= 2
         assert buttons
+
+
+def test_source_date_controls_use_clear_calendar_buttons():
+    view = make_view()
+
+    for key in ("daily", "market", "industry", "broker_branch"):
+        date_edit = getattr(view, f"{key}_end_date")
+        assert isinstance(date_edit, QDateEdit)
+        assert not date_edit.calendarPopup()
+
+    buttons = [button.text() for button in view.findChildren(QPushButton)]
+    assert buttons.count("日曆") >= 4
 
 
 class FailingMarketService(FakeUpdateService):
@@ -326,7 +368,7 @@ def test_safe_update_all_continues_with_warning_when_tpex_fails_after_twse_succe
         "sync_source_to_sqlite",
         "merge_broker_branch_data",
         "sync_source_to_sqlite",
-        "calculate_technical_indicators",
+        "check_data_overview",
         "check_data_overview",
     ]
 
@@ -380,6 +422,30 @@ def test_update_view_with_config_instantiates_inspector_widget(tmp_path):
     # 最後一頁應該是 SqliteInspectorWidget 的實例
     last_widget = view.content_stack.widget(7)
     assert isinstance(last_widget, SqliteInspectorWidget)
+
+
+def test_background_tpex_refresh_does_not_force_technical_all(monkeypatch):
+    from ui_qt.views import update_view
+
+    captured = {}
+
+    class FakePopen:
+        def __init__(self, cmd, **kwargs):
+            captured["cmd"] = cmd
+            self.pid = 12345
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(update_view.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view = make_view()
+    view._execute_background_tpex_refresh()
+
+    assert "--sync-sqlite" in captured["cmd"]
+    assert "--technical-force-all" not in captured["cmd"]
 
 
 def test_monthly_revenue_tab_runs_mops_dry_run(monkeypatch):
@@ -456,7 +522,7 @@ def test_safe_update_all_runs_conservative_sequence_sqlite():
         "sync_source_to_sqlite",
         "update_broker_branch",
         "sync_source_to_sqlite",  # broker_branch_files 同步
-        "calculate_technical_indicators",
+        "check_data_overview",
         "check_data_overview",
     ]
     # 驗證同步的來源為 broker_branch_files
@@ -474,7 +540,12 @@ class FakeInspectorService:
         return True
         
     def get_tables(self):
-        return ["daily_prices"]
+        return ["daily_prices", "broker_flows"]
+
+    def get_distinct_column_values(self, table_name, column_name, limit=500):
+        if table_name == "broker_flows" and column_name == "分點名稱":
+            return ["凱基台北", "美商高盛"]
+        return []
         
     def get_table_info(self, table_name):
         return {
@@ -674,21 +745,22 @@ def test_sqlite_inspector_uses_calendar_date_filters(monkeypatch):
     widget.current_table = "daily_prices"
 
     assert isinstance(widget.date_input, QDateEdit)
-    assert widget.date_input.calendarPopup()
+    assert not widget.date_input.calendarPopup()
+    assert widget.date_input.text().strip() == ""
 
-    widget._request_page(load_schema=False)
-    assert service.last_query.get("date_str") == QDate.currentDate().toString("yyyy-MM-dd")
-
-    widget._clear_date_edit(widget.date_input)
     widget._request_page(load_schema=False)
     assert service.last_query.get("date_str") is None
+
+    widget._set_single_date_today()
+    widget._request_page(load_schema=False)
+    assert service.last_query.get("date_str") == QDate.currentDate().toString("yyyy-MM-dd")
 
     widget.date_input.setDate(QDate(2026, 5, 29))
     widget._request_page(load_schema=False)
     assert service.last_query.get("date_str") == "2026-05-29"
 
 
-def test_sqlite_inspector_date_pickers_default_to_today_and_current_month():
+def test_sqlite_inspector_date_pickers_default_blank_but_calendar_opens_today():
     app()
     from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
 
@@ -696,12 +768,18 @@ def test_sqlite_inspector_date_pickers_default_to_today_and_current_month():
     widget = SqliteInspectorWidget(service)
     today = QDate.currentDate()
 
-    assert widget.date_input.date() == today
-    assert widget.start_date_input.date() == QDate(today.year(), today.month(), 1)
-    assert widget.end_date_input.date() == today
+    assert widget._date_filter_value(widget.date_input) == ""
+    assert widget._date_filter_value(widget.start_date_input) == ""
+    assert widget._date_filter_value(widget.end_date_input) == ""
+    assert widget.date_input.text().strip() == ""
+    assert widget._calendar_page_date(widget.date_input) == today
+    assert widget._calendar_page_date(widget.start_date_input) == today
+    assert widget._calendar_page_date(widget.end_date_input) == today
 
-    widget._clear_date_edit(widget.date_input)
-    widget._clear_range_dates()
+    widget._set_single_date_today()
+    widget.start_date_input.setDate(QDate(2026, 5, 1))
+    widget.end_date_input.setDate(QDate(2026, 5, 29))
+    widget._clear_all_dates()
 
     assert widget._date_filter_value(widget.date_input) == ""
     assert widget._date_filter_value(widget.start_date_input) == ""
@@ -714,9 +792,34 @@ def test_sqlite_inspector_date_pickers_have_enough_width_for_full_dates():
 
     widget = SqliteInspectorWidget(FakeInspectorService(total=250))
 
-    assert widget.date_input.minimumWidth() >= 112
-    assert widget.start_date_input.minimumWidth() >= 112
-    assert widget.end_date_input.minimumWidth() >= 112
+    assert widget.date_input.minimumWidth() >= 132
+    assert widget.start_date_input.minimumWidth() >= 132
+    assert widget.end_date_input.minimumWidth() >= 132
+    calendar_button_texts = [button.text() for button in widget.findChildren(QPushButton)]
+    assert calendar_button_texts.count("日曆") >= 3
+
+
+def test_sqlite_inspector_broker_branch_filter_uses_dropdown(monkeypatch):
+    from ui_qt.widgets import sqlite_inspector_widget
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(sqlite_inspector_widget, "TaskWorker", SynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+    service = FakeInspectorService(total=250)
+    widget = SqliteInspectorWidget(service)
+    widget._adjust_table_header = lambda *args, **kwargs: None
+
+    widget._on_table_changed("broker_flows")
+    assert widget.broker_branch_combo.findText("凱基台北") >= 0
+    assert widget.broker_branch_combo.maxVisibleItems() >= 20
+    assert widget.broker_branch_dropdown_btn.text() == "展開"
+
+    widget.broker_branch_combo.setCurrentText("凱基台北")
+    widget._request_page(load_schema=False)
+
+    assert service.last_query.get("broker_branch") == "凱基台北"
 
 
 def test_sqlite_inspector_header_sort_requests_server_order(monkeypatch):

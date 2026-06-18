@@ -23,8 +23,9 @@ def merge_daily_data(force_all: bool = False, config=None):
     # 設置路徑
     if config is not None:
         # 使用配置中的路徑
-        base_dir = Path(config.data_root)
+        base_dir = Path(getattr(config, "data_root", getattr(config, "data_dir")))
         daily_price_dir = base_dir / "daily_price"
+        tpex_daily_price_dir = Path(getattr(config, "tpex_daily_price_dir", base_dir / "daily_price_tpex"))
         meta_data_dir = base_dir / "meta_data"
         output_file = config.stock_data_file
         backup_dir = meta_data_dir / "backup"
@@ -33,15 +34,19 @@ def merge_daily_data(force_all: bool = False, config=None):
         # 降級方案：使用硬編碼路徑（向後兼容）
         base_dir = Path("D:/Min/Python/Project/FA_Data")
         daily_price_dir = base_dir / "daily_price"
+        tpex_daily_price_dir = base_dir / "daily_price_tpex"
         meta_data_dir = base_dir / "meta_data"
         output_file = meta_data_dir / "stock_data_whole.csv"
         backup_dir = meta_data_dir / "backup"
         logger.warning(f"未提供 config，使用硬編碼路徑: base_dir={base_dir}")
     
     try:
-        # 確保目錄存在
-        if not daily_price_dir.exists():
-            raise FileNotFoundError(f"找不到目錄：{daily_price_dir}")
+        # 確保至少一個日價來源目錄存在
+        source_dirs = [daily_price_dir]
+        if tpex_daily_price_dir.exists():
+            source_dirs.append(tpex_daily_price_dir)
+        if not any(source_dir.exists() for source_dir in source_dirs):
+            raise FileNotFoundError(f"找不到目錄：{daily_price_dir} 或 {tpex_daily_price_dir}")
         
         backup_dir.mkdir(parents=True, exist_ok=True)
         
@@ -121,10 +126,13 @@ def merge_daily_data(force_all: bool = False, config=None):
             else:
                 logger.info("強制模式：將重新合併所有數據")
         
-        # 獲取所有CSV文件
-        all_csv_files = list(daily_price_dir.glob("*.csv"))
+        # 獲取所有CSV文件（TWSE + TPEX）
+        all_csv_files = []
+        for source_dir in source_dirs:
+            if source_dir.exists():
+                all_csv_files.extend(source_dir.glob("*.csv"))
         if not all_csv_files:
-            raise FileNotFoundError(f"在 {daily_price_dir} 中找不到CSV文件")
+            raise FileNotFoundError(f"在 {daily_price_dir} 或 {tpex_daily_price_dir} 中找不到CSV文件")
         
         # 如果有最後更新日期且非強制模式，只處理新的文件
         if last_date and not force_all:

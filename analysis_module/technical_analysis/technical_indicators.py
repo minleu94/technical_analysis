@@ -727,6 +727,10 @@ class TechnicalIndicatorCalculator:
                 
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 
+                if '日期' not in result_df.columns and 'Date' in result_df.columns:
+                    result_df = result_df.copy()
+                    result_df['日期'] = self._safe_convert_date(result_df['Date'])
+
                 # ✅ 修復：合併現有數據，避免覆蓋（添加數據驗證）
                 if output_path.exists() and not ignore_existing:
                     try:
@@ -778,10 +782,8 @@ class TechnicalIndicatorCalculator:
                                     self.logger.info(f"合併後數據: {len(merged_df)} 筆（原有 {len(existing_df)} 筆，新增 {len(result_df)} 筆）")
                                     result_df = merged_df
                             else:
-                                # 如果沒有日期欄位，直接合併
-                                self.logger.warning(f"警告：指標文件缺少日期欄位，將直接合併數據")
-                                result_df = pd.concat([existing_df, result_df], ignore_index=True)
-                                result_df = result_df.drop_duplicates(keep='last')
+                                # 沒有日期欄位時不能安全判斷增量邊界；直接覆蓋，避免資料倍增。
+                                self.logger.warning(f"指標文件缺少日期欄位，將使用新數據覆蓋，避免直接合併造成重複")
                             
                     except Exception as e:
                         self.logger.warning(f"讀取現有指標文件時發生錯誤，將覆蓋文件: {e}")

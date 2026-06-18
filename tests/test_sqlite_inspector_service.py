@@ -169,6 +169,14 @@ def test_sqlite_inspector_service_queries(test_config):
         service.query_table_data('sqlite_master')
 
 
+def test_sqlite_inspector_service_lists_distinct_broker_branches(test_config):
+    service = SqliteInspectorService(test_config)
+
+    values = service.get_distinct_column_values("broker_flows", "分點名稱")
+
+    assert values == ["美商高盛"]
+
+
 def test_sqlite_inspector_service_queries_monthly_revenue_table(test_config):
     service = SqliteInspectorService(test_config)
 

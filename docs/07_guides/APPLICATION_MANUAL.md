@@ -126,10 +126,10 @@ python ui_qt/main.py
 
 | 模式 | 內容 | 適用情境 |
 |---|---|---|
-| ???????????? | TWSE ??????????????????????TPEX ????????????????????????? 2 ???????? SQLite????? CSV ??? | ????? |
-| ??????? CSV + SQLite? | TWSE ?????????????????????????TPEX ??????????????????????? merged.csv???? SQLite? | ??????????????? |
+| 快速更新（跳過大型合併） | TWSE / TPEX 每日股價與券商分點只補結束日前最近 2 天，並直接增量同步 SQLite；會保留已下載的日檔 CSV，但跳過 `stock_data_whole.csv` 與券商分點 `merged.csv` 的大型重寫。 | 日常盤後更新、只需要讓 SQLite 查詢與技術指標追上最新資料。 |
+| 安全更新（完整 CSV + SQLite） | 依 UI 日期範圍補齊 TWSE / TPEX / 大盤 / 產業 / 券商分點，完成後重建每日股價大表與券商分點 `merged.csv`，再同步 SQLite。 | 資料修復、備份完整性檢查、需要確認 CSV 歷史資料庫也完整時。 |
 
-????????????????????????? CSV ?????????????????? 2 ??????? 40 ?????????????????
+快速更新仍會更新必要的日檔 CSV，因為 SQLite 同步以這些日檔作為可追溯來源；速度優勢主要來自跳過大型合併檔重寫，以及把券商分點限制在最近 2 天。若近期資料已存在，系統會先用 CSV / SQLite 判斷並跳過網頁抓取。
 
 ### 4.3 個別資料來源
 
@@ -145,28 +145,31 @@ python ui_qt/main.py
 
 每日股價、大盤、產業、券商分點操作：
 
-1. 設定「結束日期」。
+1. 設定「結束日期」；可用日曆選取，或按「今日」一鍵帶入今天。
 2. 設定「最近範圍」。
 3. 先按「檢查此資料源狀態」。
 4. 按「手動下載此資料源」會依資料源下載或補齊指定日期範圍的原始資料。
-5. 每日股價手動下載會同時處理 TWSE 與 TPEX：TWSE raw CSV 寫入 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX official daily close quotes 寫入 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，完成後同步 SQLite `daily_prices` 並觸發技術指標增量更新。
+5. 每日股價手動下載會同時處理 TWSE 與 TPEX：TWSE raw CSV 寫入 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX official daily close quotes 寫入 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，完成後同步 SQLite `daily_prices` 並觸發技術指標增量更新。執行「合併每日股價」時，`stock_data_whole.csv` 也會同時納入這兩個日檔目錄。
 6. 券商分點下載後，還要執行對應的「合併」才會寫入分析資料庫。
 
 若 TPEX endpoint timeout 或部分日期失敗，UI 會以 warning 呈現並繼續已成功的 TWSE / SQLite / 技術指標流程；這代表需要重測或補跑缺漏日期，不代表 TWSE 資料也失敗。
 
-每日股價分頁另有「背景補齊 TPEX + 技術指標」與「檢查背景任務狀態」。背景任務不會先強制跑 TWSE 全量，狀態檔位於 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`；若狀態顯示 `running`，請用狀態查詢確認進度，不要重複啟動第二個背景任務。
+每日股價分頁另有「背景補齊 TPEX + 技術指標」與「檢查背景任務狀態」。背景任務不會先強制跑 TWSE 全量，也不會強制全量重算技術指標；同步 SQLite 後會比對每日股價與技術指標最新日期，若技術指標已追上每日股價，狀態會顯示 skipped。狀態檔位於 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`；若狀態顯示 `running`，請用狀態查詢確認進度，不要重複啟動第二個背景任務。
 
 券商分點同步會保存 `trade_type`，同一分點 / 股票 / 日期可同時有買超與賣超 rows。若舊 SQLite `broker_flows` 還是三欄主鍵，下一次同步券商分點時會先備份 DB，再把唯一鍵升級為 `(分點名稱, 證券代號, 日期, trade_type)`。
 
+券商分點下載在 `force_all=false` 時會先檢查日檔 CSV 與 SQLite `broker_flows`。SQLite 檢查會同時比對分點顯示名稱與系統 key，避免 DB 已有資料卻仍啟動 MoneyDJ / Selenium 重新抓取。
+
 ### 4.4 技術指標
 
-- 「增量更新」：只處理新資料，日常首選。
+- 「增量更新」：只處理新資料，日常首選；若單股指標已到最新股價日期會直接跳過，只有落後時才回看 120 個交易日重算重疊區間。
 - 「強制全量更新」：重算所有股票歷史資料，只在指標算法改動或資料損毀時使用。
 - 股票代號留空代表處理全部；輸入例如 `2330` 代表只處理單一股票。
+- 增量寫入單股指標 CSV 時，若舊檔或新結果缺少可辨識日期欄位，會避免直接疊加資料；必要時以新計算結果覆蓋該單股檔，防止同一股票歷史列倍增。
 
 ### 4.5 SQLite 資料檢視
 
-1. **選擇與篩選**：選擇資料表，設定每頁限制筆數，填入股票代號、名稱、分點或日期篩選；單一日期預設為今天，日期區間預設為本月 1 日至今天，可用日曆選擇器點選調整，按「清除」可回到不套用日期條件。
+1. **選擇與篩選**：選擇資料表，設定每頁限制筆數，填入股票代號、名稱、券商分點或日期篩選。券商分點可在 `broker_flows` 時由下拉選單選取，也可手動輸入關鍵字。日期預設空白，不會自動套用條件；打開日曆時會定位到今天。單一日期可按「今日」快速帶入今天，區間旁的「清除」會同時清掉單一日期與區間日期。
 2. **載入數據**：點擊「載入數據與結構」按鈕。
 3. **基本面資料表**：資料表下拉選單會列出 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`。月營收表可用股票代號與日期篩選，日期對應 `as_of_date`，例如 `2026-05-31`。
 4. **資料分頁控制**：
@@ -354,8 +357,9 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 Daily Decision Desk 採用 Midnight Analyst 深色介面：深色背景、section header 狀態 badge、緊湊摘要卡片與分行代碼清單。強勢、弱勢與低流動性代碼每類預設顯示前 8 檔，其餘以剩餘檔數摘要；完整資料仍由 service snapshot 保留，不因 UI 摘要而改變計算結果。
 
 1. 進入主視窗頂層 tab「每日決策」。
-2. 點選「刷新」可重建 Snapshot。
-3. 若初始化或刷新失敗，畫面會保留可閱讀狀態並顯示 fallback 提示，不會中斷整體 App。
+2. 進入頁面時會先顯示「尚未載入 / 載入中」，Snapshot 會在背景執行緒建立，避免主 App 啟動被每日決策查詢阻塞。
+3. 點選「刷新」可在背景重建 Snapshot；載入期間按鈕會暫時停用，完成後自動更新畫面。
+4. 若初始化或刷新失敗，畫面會保留可閱讀狀態並顯示 fallback 提示，不會中斷整體 App。
 
 ### 8.2 結果解讀
 
@@ -894,6 +898,10 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 已補 guarded presentation policy，官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
 - 2026-06-18：更新每日股價與 TPEX 操作說明，確認手動每日股價、快速更新與安全更新皆納入 TPEX 區間補齊、SQLite 同步與技術指標增量；新增背景補齊 TPEX + 技術指標狀態查詢說明，並修正 `3207` 歷史日價缺漏排錯判斷。
+- 2026-06-18：更新每日股價日期選擇與 SQLite 資料檢視操作說明；日期預設空白、日曆定位今天、單一日期可一鍵今日、共用清除會清掉所有日期條件，券商分點篩選可使用下拉選單；背景 TPEX 補齊若技術指標已最新會跳過重算。
+- 2026-06-18：修正每日股價大表合併說明與流程；`stock_data_whole.csv` 合併會同時納入 `daily_price/` 與 `daily_price_tpex/`，避免 TPEX 已有最新日檔但合併後大表最新日期落後。
+- 2026-06-18：修正快速 / 安全更新模式說明亂碼；補充快速更新仍保留可追溯日檔 CSV、跳過大型合併重寫、券商分點會用 CSV / SQLite 先行跳過既有資料；補充技術指標增量合併缺日期時不直接疊加，避免單股指標檔倍增。
+- 2026-06-18：更新 Daily Decision Desk 啟動行為說明，確認每日決策 Snapshot 改為背景載入，主 App 會先顯示工作台再更新每日摘要。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 操作說明，補充 Registry-based Promote lifecycle gate、持倉管理「生命週期回顧」分頁、post-trade attribution 與 live-vs-research gap 判讀限制。
 - 2026-06-17：補充 lifecycle evidence 持久化操作語意，說明 promotion applied evidence、demote / retire proposed evidence 與不自動刪除策略版本的安全限制。
 - 2026-06-16：新增月營收 normalized backfill 操作說明，記錄 dry-run、正式 apply confirm、備份與缺 availability mapping 時 fail-closed 的行為。
@@ -906,7 +914,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 2026-06-17：補充 `--mops-static` 操作方式，記錄新版 MOPS redirectToOld / mopsov historical static report 可驗證歷史 rows，但 `出表日期` 為查詢當日，會被 45 天合理揭露窗口 gate 擋下。
 - 2026-06-16：補充授權 PIT 月營收公告日 CSV 匯入方式，記錄 `--pit-csv`、必填 `--pit-source-version`、支援欄位與 candidate-only / 人工 gate 限制。
 - 2026-06-16：更新 SQLite 資料檢視操作說明，補充日期日曆選擇器、清除日期、資料庫端表頭排序、`daily_prices` 繁中欄位 alias 與 `漲跌價差` 正負號顯示規則。
-- 2026-06-16：調整 SQLite 資料檢視日期控件說明，單一日期預設今天，日期區間預設本月 1 日至今天，清除後才不套用日期條件。
+- 2026-06-16：調整 SQLite 資料檢視日期控件說明，單一日期預設今天，日期區間預設本月 1 日至今天，清除後才不套用日期條件。2026-06-18 已改為預設空白，避免未注意到預填日期而誤套篩選。
 - 2026-06-16：更新每日股價操作說明，確認快速 / 安全更新已納入 TPEX official daily close quotes；TPEX CSV 寫入 `DATA_ROOT/daily_price_tpex/`，SQLite 寫入 `daily_prices`，TPEX endpoint timeout 會以警告呈現且不阻斷其他資料同步。
 - 2026-06-16：補充 SQLite Inspector 重複欄名防護、券商分點 `broker_flows` 主鍵納入 `trade_type`、TPEX 歷史缺漏判讀，以及 Full App Healthcheck 人工驗證入口。
 - 2026-06-16：新增 Month 5 月營收候選資料抓取操作段，記錄今晚要跑的 MOPS snapshot 與 FinMind create_time 兩個 candidate-only CLI、輸出位置、resume / rate limit 與毛利率季度資料邊界。

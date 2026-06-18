@@ -21,6 +21,7 @@ from app_module.decision_desk_dtos import (
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.theme import MIDNIGHT_ANALYST
+from ui_qt.workers.task_worker import TaskWorker
 from ui_qt.widgets.theme_widgets import CompactCodeList, MetricCard, SectionPanel, StatusBadge, WarningList
 
 
@@ -31,15 +32,26 @@ class DecisionDeskView(QWidget):
         self,
         decision_desk_builder: DecisionDeskSnapshotBuilder | None = None,
         as_of_date: date | None = None,
+        auto_refresh: bool = True,
+        async_refresh: bool = True,
         parent=None,
     ):
         super().__init__(parent)
         self.decision_desk_builder = decision_desk_builder or DecisionDeskSnapshotBuilder()
         self.as_of_date = as_of_date or date.today()
+        self.async_refresh = async_refresh
+        self._auto_refresh_pending = auto_refresh
         self._last_snapshot: DecisionDeskSnapshot | None = None
+        self._refresh_worker: TaskWorker | None = None
 
         self._setup_ui()
-        self._refresh_snapshot()
+        self._display_pending_snapshot()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._auto_refresh_pending:
+            self._auto_refresh_pending = False
+            self.refresh_snapshot()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -175,7 +187,80 @@ class DecisionDeskView(QWidget):
         return row
 
     def refresh_snapshot(self):
-        self._refresh_snapshot()
+        if self.async_refresh:
+            self._start_refresh_worker()
+        else:
+            self._refresh_snapshot()
+
+    def _display_pending_snapshot(self) -> None:
+        self.overall_status_label.setText("每日決策尚未載入")
+        self.generated_at_label.setText("生成時間：N/A")
+        self.overall_quality_badge.setText("尚未載入")
+        self.overall_quality_badge.set_quality("missing")
+        self.decision_date_card.value_label.setText(self.as_of_date.isoformat())
+        self.generated_at_card.value_label.setText("N/A")
+        self.warning_list.set_warnings(())
+        self.relative_strength_codes.set_groups(())
+        for status_label, badge in self._status_badges.items():
+            status_label.setText("尚未載入")
+            badge.setText("尚未載入")
+            badge.set_quality("missing")
+        for value_label in (
+            self.market_regime_value,
+            self.market_breadth_value,
+            self.sector_rotation_value,
+            self.relative_strength_liquidity_value,
+            self.watchlist_triggers_value,
+            self.portfolio_alerts_value,
+            self.risk_prompts_value,
+        ):
+            value_label.setText("待背景載入")
+        self.overall_status_label.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            "border-radius: 6px; padding: 8px; font-size: 13pt; font-weight: 700;"
+        )
+
+    def _display_loading_snapshot(self) -> None:
+        self.overall_status_label.setText("每日決策載入中")
+        self.generated_at_label.setText("生成時間：背景載入中")
+        self.generated_at_card.value_label.setText("載入中")
+        self.refresh_btn.setEnabled(False)
+
+    def _start_refresh_worker(self) -> None:
+        if self._refresh_worker is not None and self._refresh_worker.isRunning():
+            return
+        self._display_loading_snapshot()
+        worker = TaskWorker(self.decision_desk_builder.build_snapshot, self.as_of_date)
+        self._refresh_worker = worker
+        worker.finished.connect(self._on_refresh_worker_finished)
+        worker.error.connect(self._on_refresh_worker_error)
+        worker.cancelled.connect(self._on_refresh_worker_cancelled)
+        worker.start()
+
+    def _release_refresh_worker(self) -> None:
+        self.refresh_btn.setEnabled(True)
+        worker = self._refresh_worker
+        self._refresh_worker = None
+        if worker is not None:
+            worker.deleteLater()
+
+    def _on_refresh_worker_finished(self, snapshot: DecisionDeskSnapshot) -> None:
+        self._last_snapshot = snapshot
+        self._render_snapshot(snapshot)
+        self._release_refresh_worker()
+
+    def _on_refresh_worker_error(self, error_message: str) -> None:
+        self._display_exception_snapshot(error_message)
+        self._release_refresh_worker()
+
+    def _on_refresh_worker_cancelled(self) -> None:
+        self._release_refresh_worker()
+
+    def closeEvent(self, event) -> None:
+        if self._refresh_worker is not None and self._refresh_worker.isRunning():
+            self._refresh_worker.cancel(cooperative=True, wait=False)
+        super().closeEvent(event)
 
     def _set_section_quality(self, status_label: QLabel, quality: DecisionDeskQuality) -> None:
         label = self._quality_label(quality)

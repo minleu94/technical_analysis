@@ -96,13 +96,13 @@
 | ID | 分頁 / 區域 | 功能 | 驗證重點 | 狀態 | 使用者回覆 | 證據 / 備註 |
 |---|---|---|---|---|---|---|
 | U-001 | 全部資料 | 檢查數據狀態 | 5 張狀態卡更新最新日期、總筆數與燈號；日誌有檢查結果 | 通過 | 個別功能正常。 |  |
-| U-002 | 全部資料 | 快速更新（僅 SQLite） | 下載近期缺失資料並同步 SQLite；進度條與日誌正常；不重寫大型 CSV；TPEX timeout 以 warning 呈現並繼續流程 | 已修正待驗證 | 點更新後，若在尚未更新完成時切到其他 subtab，更新不會繼續跑；TPEX endpoint timeout 曾造成快速更新失敗。 | 已改為保留多個背景 worker，切換 subtab / 狀態查詢不再取消既有長任務；TPEX 更新失敗改為 warning 並繼續其他同步；待使用者重測。 |
+| U-002 | 全部資料 | 快速更新（僅 SQLite） | 下載近期缺失資料並同步 SQLite；進度條與日誌正常；不重寫大型 CSV；TPEX timeout 以 warning 呈現並繼續流程 | 已修正待驗證 | 檢查狀態、清除日誌、頁面說明正常；使用者追問快速更新是否可不更新大型 CSV 只更新 SQLite。 | 快速更新目前仍保留必要日檔 CSV 作為 SQLite 可追溯來源，但跳過 `stock_data_whole.csv` 與券商分點 `merged.csv` 大型重寫；2026-06-18 補充 Manual 說明。 |
 | U-003 | 全部資料 | 安全更新（完整 CSV + SQLite） | 依序下載、合併 / 同步 CSV 與 SQLite、計算技術指標；失敗時可讀；TWSE + TPEX 日價同步到 `daily_prices` | 已修正待驗證 | 點更新後，若在尚未更新完成時切到其他 subtab，更新不會繼續跑。 | 已改為保留多個背景 worker，切換 subtab / 狀態查詢不再取消既有長任務；TPEX CSV 寫入 `DATA_ROOT/daily_price_tpex/`，TWSE CSV 保持 `DATA_ROOT/daily_price/`；待使用者重測。 |
-| U-004 | 全部資料 | 清除日誌 | 日誌主控台可清空，不影響狀態卡 | 待測 |  |  |
-| U-005 | 每日股價 | 日期範圍設定 | 結束日期與最近範圍可調整，切換分頁後日期同步 | 待測 |  |  |
+| U-004 | 全部資料 | 清除日誌 | 日誌主控台可清空，不影響狀態卡 | 通過 | 清除日誌按鍵正常。 | 2026-06-18 使用者人工驗證。 |
+| U-005 | 每日股價 | 日期範圍設定 | 結束日期與最近範圍可調整，切換分頁後日期同步；結束日期可用日曆選取並可一鍵回到今日 | 已修正待驗證 | 手動下載日期範圍在多個子 tab 共用同步；希望結束日期有日曆與今日功能，日曆打開預設今天，圖示與日期格要清楚。 | 2026-06-18 修正：保留跨資料源日期同步；結束日期新增「今日」按鈕，日曆與下拉按鈕尺寸 / 顏色加強，日期格最小尺寸放大避免顯示 `...`。 |
 | U-006 | 每日股價 | 檢查此資料源狀態 | 只更新每日股價狀態與日誌 | 待測 |  |  |
 | U-007 | 每日股價 | 手動下載此資料源 | 原始資料下載成功；提示需合併才可供分析使用 | 待測 |  |  |
-| U-008 | 每日股價 | 合併每日股價 | 增量合併並同步到 `daily_prices`；確認對話框正常 | 已修正待驗證 | 合併 CSV 尚未完成時切到其他 tab，任務會卡住；即使再執行匯出 CSV 且匯出完成，合併仍一直顯示「合併中」。 | 合併 worker 不再被切頁狀態查詢或 CSV 匯出覆蓋；完成 / error signal 會釋放各自 worker；待使用者重測。 |
+| U-008 | 每日股價 | 合併每日股價 | 增量合併並同步到 `daily_prices`；確認對話框正常；完成訊息最新日期需與實際合併結果一致 | 已修正待驗證 | 合併 CSV 尚未完成時切到其他 tab，任務會卡住；即使再執行匯出 CSV 且匯出完成，合併仍一直顯示「合併中」。2026-06-18 追加：使用者更正為「所有資料最新在 0618，但合併完成提示仍停在 0617」。 | 合併 worker 不再被切頁狀態查詢或 CSV 匯出覆蓋；完成 / error signal 會釋放各自 worker。2026-06-18 修正：`stock_data_whole.csv` 合併腳本同時納入 `daily_price/` 與 `daily_price_tpex/`，避免 TPEX 已有 0618 但大表只掃 TWSE 目錄而停在 0617。 |
 | U-009 | 每日股價 | 匯出 CSV 備案 | 可選最近範圍 / 全部歷史；輸出 UTF-8 BOM CSV | 通過 | 匯出 CSV 可以完成。 | 但在合併卡住期間執行匯出，匯出完成不會解除合併中的錯誤狀態。 |
 | U-010 | 每日股價 | 強制重新合併所有每日股價 | 有高風險確認；僅在明確同意後執行；不可破壞原始資料 | 待測 |  | 高風險，預設不測或只測取消流程 |
 | U-011 | 大盤指數 | 日期範圍設定 | 結束日期與最近範圍可調整並同步 | 通過 | 大盤指數沒問題。 |  |
@@ -117,12 +117,12 @@
 | U-020 | 券商分點 | 檢查此資料源狀態 | 顯示券商分點資料日期、筆數與日誌 | 待測 |  |  |
 | U-021 | 券商分點 | 手動下載此資料源 | MoneyDJ 分點資料下載成功 | 待測 |  |  |
 | U-022 | 券商分點 | 合併券商分點 | 增量合併並同步到 `broker_flows`；保留 observed / estimated / unavailable 品質 | 已修正待驗證 | 合併券商分點未結束時不能跳其他 tab，否則會卡住。 | 合併 worker 不再被切頁狀態查詢覆蓋；待使用者重測。 |
-| U-023 | 技術指標 | 計算技術指標 | 支援全部 / 單一股票、增量 / 全量；結果同步到 `technical_indicators` | 已修正待驗證 | 計算技術指標尚未結束時，如果點其他 tab，任務會中斷，不會背景繼續。另因 `daily_prices` 漲跌欄位異常，使用者懷疑技術指標是否可能使用錯誤數據計算。 | 技術指標 worker 不再被切頁狀態查詢覆蓋；檢查程式路徑後，技術指標計算使用 OHLC 價格欄位，不直接以 `漲跌價差` 作為指標計算基礎；待使用者重測。 |
-| U-024 | SQLite 資料檢視 | 載入、篩選、分頁、Schema | 唯讀查詢、頁碼控制、篩選重設、stale 結果防護、Schema 顯示正常；日期控件預設今天 / 本月且完整顯示 | 已修正待驗證 | 單一日期與日期區間只能手打，想要可點選日期 / 日曆；日期控件預設 1900 不利查詢；日期欄位顯示不完整；`daily_price` table 的「漲跌」欄位顯示簡體中文，無法接受；漲跌欄位空白，只看到漲跌價差，且漲跌價差整欄都是綠色，因為都是正值；實際漲跌方向似乎在後方 `漲跌(+/-)` column。所有欄位都不能排序；查 `3207` 時出現 PandasTableModel Series ambiguity 錯誤。 | 已加入日曆日期 picker、單一日期預設今天、區間預設本月 1 日至今天、日期欄位寬度固定可讀、繁中欄位 alias、新建 schema 繁中 `漲跌`、`漲跌價差` 依 `漲跌(+/-)` 顯示正負、表頭 server-side ORDER BY 排序；表格以 column position 取值以避免重複欄名造成 Series ambiguity；待使用者重測。 |
+| U-023 | 技術指標 | 計算技術指標 | 支援全部 / 單一股票、增量 / 全量；結果同步到 `technical_indicators` | 已修正待驗證 | 計算技術指標時出現大量 `[Registry] 舊版配置 ... 使用 legacy 預設值` 與「指標文件缺少日期欄位，將直接合併數據」訊息；單股檔疑似 3010 筆變 6021 筆。 | 2026-06-18 修正：legacy 預設提示每參數只記錄一次，後續降為 debug；技術指標合併會先把 `Date` 正規化為 `日期`，缺少日期時不再直接 concat；並修正同名欄位 canonicalization 誤刪 `日期` / `證券代號` 的問題。 |
+| U-024 | SQLite 資料檢視 | 載入、篩選、分頁、Schema | 唯讀查詢、頁碼控制、篩選重設、stale 結果防護、Schema 顯示正常；日期預設空白但打開日曆預設今天；券商分點可由下拉選單選取 | 已修正待驗證 | 單一日期與日期區間只能手打，想要可點選日期 / 日曆；日期控件預設 1900 不利查詢；日期欄位顯示不完整；`daily_price` table 的「漲跌」欄位顯示簡體中文，無法接受；漲跌欄位空白，只看到漲跌價差，且漲跌價差整欄都是綠色，因為都是正值；實際漲跌方向似乎在後方 `漲跌(+/-)` column。所有欄位都不能排序；查 `3207` 時出現 PandasTableModel Series ambiguity 錯誤。2026-06-18 追加：日期不要預填；只保留一個清除按鈕並清掉單一日期與區間；單一日期新增今日按鈕；日曆圖示與日期格顯示不清；券商分點需要下拉選單。 | 已加入日曆日期 picker、繁中欄位 alias、新建 schema 繁中 `漲跌`、`漲跌價差` 依 `漲跌(+/-)` 顯示正負、表頭 server-side ORDER BY 排序；表格以 column position 取值以避免重複欄名造成 Series ambiguity。2026-06-18 修正：日期預設空白、日曆定位今天月份、單一日期新增「今日」、區間旁單一「清除」會清掉所有日期，日曆 / 下拉樣式放大加強，`broker_flows` 券商分點改為可輸入可選擇的下拉。 |
 | U-025 | 月營收 | MOPS snapshot 月營收正式資料 | 月營收分頁三個欄位為中文；可先檢查再寫入；正式 DB 已有 `fundamental_monthly_revenues` 244,499 筆 | 已修正待驗證 | Month 5 已正式寫入月營收與歷史 baseline。 | 使用 SQLite Inspector 查 `fundamental_monthly_revenues`，確認 1,848 檔、`2014-04..2026-05`、0 duplicate。 |
 | U-026 | SQLite 資料檢視 | 基本面資料表檢視 | 下拉選單可檢視三張 fundamental tables；股票代號與日期篩選可用 | 已修正待驗證 | 之前 SQLite 資料檢視層看不到新的 table。 | 白名單已加入 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`；待人工檢查。 |
 | U-027 | 基本面 factor diagnostics | Month 5 factor inspection CLI | 可檢查 revenue / statement / valuation factor records；不寫資料、不接 ScoringEngine | 需確認 | Month 5 基本面不接 scoring，但要能檢查 diagnostics。 | 執行 `scripts\inspect_fundamental_factors.py` 與 `scripts\inspect_valuation_source_policy.py`；確認 PB/PS pending diagnostics。 |
-| U-028 | 每日股價 | 背景補齊 TPEX + 技術指標 | 點擊後 UI 不阻塞；不重複啟動第二個背景任務；狀態檔寫入 running / done / failed；不先強制跑 TWSE 全量 | 已修正待驗證 | 背景任務曾先卡在 TWSE 全量，需改為先補 TPEX / SQLite / 技術指標。 | UI 已新增背景按鈕；背景腳本預設不傳 `--twse-update`，TPEX `force_refresh=False`，狀態檔不提交。 |
+| U-028 | 每日股價 | 背景補齊 TPEX + 技術指標 | 點擊後 UI 不阻塞；不重複啟動第二個背景任務；狀態檔寫入 running / done / failed；不先強制跑 TWSE 全量；技術指標若已與每日股價同日則跳過 | 已修正待驗證 | 背景任務曾先卡在 TWSE 全量，需改為先補 TPEX / SQLite / 技術指標。2026-06-18 追加：狀態顯示 technical running，但資料似乎已存在，懷疑背景任務未先檢查就重算。 | UI 已新增背景按鈕；背景腳本預設不傳 `--twse-update`，TPEX `force_refresh=False`，狀態檔不提交。2026-06-18 修正：移除 UI 背景任務的 `--technical-force-all`，背景腳本先比對 `daily_data.latest_date` 與 `technical_indicators.latest_date`，已最新時直接 skipped；落後時使用 120 天 warmup。 |
 | U-029 | 每日股價 | 檢查背景任務狀態 | 可讀取 `tpex_full_refresh_status.json` 並顯示 TWSE / TPEX / SQLite / 技術指標四步狀態；done / failed 後按鈕恢復 | 已修正待驗證 | 需要能確認背景任務是否真的還在跑、成功或失敗。 | 點「檢查背景任務狀態」應在 console 與訊息框顯示狀態、rows 與 message；若無狀態檔，顯示尚未啟動。 |
 
 ### 數據更新追加 Issue Record（2026-06-17）
@@ -353,6 +353,15 @@
 | UPDATE-ISSUE-018 | U-023 / U-024 | 技術指標 / SQLite 欄位相容性 | TPEX 歷史 daily 寫入 SQLite 後，全量技術指標背景計算失敗，訊息為「沒有有效的數據可以合併」；`daily_prices` 已有 `3207` 歷史資料，但 `technical_indicators` 原本沒有 `3207`。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 根因為技術指標合併與 SQLite 寫入仍檢查舊 mojibake 欄名，且 `daily_prices` 同時存在正確欄名與舊 alias 欄位，rename 後造成 duplicate `日期`；已修正欄位 canonicalization，正式狀態檢查顯示 `technical_indicators` 最新日期 `2026-06-17`、總筆數 5,126,249。 |
 | UPDATE-ISSUE-019 | U-001 / U-024 | 資料狀態 / SQLite 欄位相容性 | 開啟 App 檢查資料狀態時，`market_indices`、`industry_indices`、`broker_flows`、`technical_indicators` 狀態查詢仍使用舊 mojibake 欄名，也就是 `日期`、`證券代號` 等欄位被錯誤編碼後的版本，導致 no such column error。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | `UpdateService` 的 SQLite status helper 改為依實際 table columns 選擇 canonical 欄位，優先使用 `日期`、`證券代號`、`分點名稱`，必要時才 fallback 舊 alias；避免資料狀態頁因 schema canonicalization 後查錯欄位。 |
 | UPDATE-ISSUE-020 | U-001 / U-024 | 文字編碼 / DB schema 清理 | App log、狀態檔與 `daily_prices` schema 殘留 mojibake 文字，造成使用者看到不可讀訊息，且可能讓後續程式誤用舊欄位。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 已修復 `app_module/update_service.py` 內正式路徑可見亂碼字串與註解，修復 `meta_data` 狀態 JSON 舊訊息；SQLite `daily_prices` 的空白亂碼欄位已在備份 `D:/Min/Python/Project/FA_Data/sqlite/twstock_before_drop_mojibake_col_20260617_235005.db` 後移除，最終 schema 掃描未再發現 mojibake 欄位。 |
+| UPDATE-ISSUE-021 | U-021 / U-022 | 效能 / 券商分點跳過判斷 | 快速更新券商分點約 5 分鐘，明明近兩天才更新過，不應重新抓取所有既有資料。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 根因之一是 SQLite 既有資料檢查用 `分點名稱 = branch_system_key`，但 DB 實際常存顯示名稱；已改為同時比對分點顯示名稱與 system key，已有資料時不啟動 MoneyDJ 頁面抓取。受控並行仍列在 UPDATE-ISSUE-013 待排查。 |
+| UPDATE-ISSUE-022 | U-023 | 技術指標 / CSV 增量合併 | 技術指標計算日誌出現大量「缺少日期欄位，將直接合併數據」，多個單股指標檔筆數倍增。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | `calculate_and_store_indicators()` 會先將新結果 `Date` 正規化為 `日期`；若舊檔或新結果仍缺少可辨識日期，改為覆蓋新結果而非直接 concat。`UpdateService.calculate_technical_indicators()` 也修正同名欄位 canonicalization 誤刪 `日期` / `證券代號`。 |
+| UPDATE-ISSUE-023 | U-001 / U-025 | 全部資料看板 / 月營收狀態 | 「全部資料」看板目前沒有月營收狀態卡，使用者看不到月營收最新日期、筆數與狀態。 | 已記錄 | 未修正 | 待處理 | 中 | 2026-06-18 使用者人工驗證發現；後續應評估在全部資料看板新增月營收卡片，或在狀態卡區加入基本面 / 月營收 summary。 |
+| UPDATE-ISSUE-024 | U-005 | 每日股價日期 UX | 手動下載日期範圍在多個子 tab 同步，但結束日期的日曆圖示不清楚，缺少一鍵今日，日曆開啟時需預設今天且日期格不能顯示成 `...`。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 保留全資料源共用日期設定；補強 QDateEdit 寬度、日曆尺寸、下拉按鈕樣式與「今日」快捷。 |
+| UPDATE-ISSUE-025 | U-028 / U-029 | 背景補齊 / 技術指標跳過判斷 | 背景 TPEX 補齊狀態顯示 `技術指標: running`，但每日股價與技術指標已同日，應先檢查並跳過，不應強制全量或 250 天回看。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | UI 背景任務移除 `--technical-force-all`；腳本先比對 latest date，已最新時寫入 skipped，落後時才用 120 天 warmup。 |
+| UPDATE-ISSUE-026 | U-024 | SQLite 檢視 / 券商分點篩選 | `broker_flows` 的券商分點名稱難記，純文字輸入不利驗證。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 改成可輸入也可選擇的下拉選單，切到 `broker_flows` 時載入 distinct 分點名稱。 |
+| UPDATE-ISSUE-027 | U-024 | SQLite 檢視 / 日期篩選 UX | 日期預設不應先填；日曆打開需跳今天；清除按鈕過多；單一日期要有今日按鈕；區間旁一個清除要同時清掉單一與區間；日曆圖示與日期格顯示不清。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 日期元件預設空白，今日按鈕只填單一日期，共用清除清掉三個日期欄位，強化日曆最小尺寸與 drop-down 可視性。 |
+| UPDATE-ISSUE-028 | U-008 | 每日股價合併訊息 / TPEX 大表合併 | `daily_price_tpex/` 已有 0618 日檔，但合併 `stock_data_whole.csv` 完成提示仍停在 0617；根因是合併腳本只掃 `daily_price/`，未納入 TPEX 日檔目錄。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | `scripts/merge_daily_data.py` 改為同時掃 `daily_price/` 與 `daily_price_tpex/`；新增回歸測試覆蓋「既有大表 0617、TPEX 0618」時合併後最新日期應為 0618。 |
+
 ### 原始失敗紀錄
 
 | ID | 來源功能 ID | 問題摘要 | 重現步驟 | 實際結果 | 預期結果 | 嚴重度 | 是否需要修復任務 |

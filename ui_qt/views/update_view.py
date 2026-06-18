@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QGroupBox, QProgressBar,
     QTextEdit, QRadioButton, QButtonGroup,
     QDateEdit, QMessageBox, QFormLayout, QSpinBox, QLineEdit,
-    QListWidget, QStackedWidget, QFrame
+    QListWidget, QStackedWidget, QFrame, QCalendarWidget
 )
 from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont
@@ -224,6 +224,7 @@ class UpdateView(QWidget):
         # 2. 隱藏的全域日期變數（使底層一鍵更新/單項更新抓取 UI 輸入的邏輯直接生效）
         self.end_date = QDateEdit()
         self.end_date.setDate(QDate.currentDate())
+        self._configure_date_edit(self.end_date)
         self.lookback_days = QSpinBox()
         self.lookback_days.setRange(1, 365)
         self.lookback_days.setValue(10)
@@ -689,13 +690,16 @@ class UpdateView(QWidget):
 
             end_date_edit = QDateEdit()
             end_date_edit.setDate(QDate.currentDate())
-            end_date_edit.setCalendarPopup(True)
-            end_date_edit.setDisplayFormat("yyyy-MM-dd")
+            self._configure_date_edit(end_date_edit)
             end_date_edit.setToolTip(
                 "【結束日期】\n"
                 "設定下載或更新資料的截止日期。\n"
                 "當您在任何一個分頁修改此日期，其他分頁的結束日期將同步聯動更新。"
             )
+            today_btn = QPushButton("今日")
+            today_btn.setMaximumWidth(52)
+            today_btn.setToolTip("將結束日期設定為今天。")
+            today_btn.clicked.connect(lambda _checked=False, k=key: self._set_shared_end_date_today(k))
 
             lookback_spin = QSpinBox()
             lookback_spin.setRange(1, 365)
@@ -707,7 +711,12 @@ class UpdateView(QWidget):
                 "例如設定 10 天，代表下載或檢查結束日期前 10 天內的所有交易日資料。"
             )
 
-            date_layout.addRow("結束日期:", end_date_edit)
+            end_date_row = QHBoxLayout()
+            end_date_row.addWidget(end_date_edit)
+            end_date_row.addWidget(self._create_calendar_button(end_date_edit))
+            end_date_row.addWidget(today_btn)
+            end_date_row.addStretch()
+            date_layout.addRow("結束日期:", end_date_row)
             date_layout.addRow("最近範圍:", lookback_spin)
             layout.addWidget(date_group)
 
@@ -1133,6 +1142,83 @@ class UpdateView(QWidget):
         self._log(f"錯誤：{error_msg}")
         QMessageBox.critical(self, "月營收處理失敗", error_msg)
 
+    def _configure_date_edit(self, date_edit: QDateEdit):
+        date_edit.setCalendarPopup(False)
+        date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_edit.setMinimumWidth(132)
+        date_edit.setMaximumWidth(150)
+        date_edit.setStyleSheet("""
+            QDateEdit {
+                padding-right: 7px;
+            }
+        """)
+
+    def _create_calendar_button(self, date_edit: QDateEdit) -> QPushButton:
+        button = QPushButton("日曆")
+        button.setMaximumWidth(52)
+        button.setToolTip("開啟日曆選擇日期")
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #334155;
+                border: 1px solid #94a3b8;
+                border-radius: 5px;
+                padding: 3px 6px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #e0f2fe;
+                border-color: #0284c7;
+            }
+            QPushButton:pressed {
+                background-color: #bae6fd;
+            }
+        """)
+        button.clicked.connect(lambda _checked=False, edit=date_edit, anchor=button: self._show_calendar_popup(edit, anchor))
+        return button
+
+    def _show_calendar_popup(self, date_edit: QDateEdit, anchor: QPushButton):
+        popup = QFrame(None, Qt.Popup)
+        popup.setFrameShape(QFrame.StyledPanel)
+        popup_layout = QVBoxLayout(popup)
+        popup_layout.setContentsMargins(4, 4, 4, 4)
+        calendar = QCalendarWidget(popup)
+        selected_date = date_edit.date()
+        calendar.setGridVisible(True)
+        calendar.setMinimumSize(340, 280)
+        calendar.setCurrentPage(selected_date.year(), selected_date.month())
+        calendar.setSelectedDate(selected_date)
+        calendar.setStyleSheet("""
+            QCalendarWidget QToolButton {
+                min-width: 44px;
+                min-height: 24px;
+                padding: 2px 6px;
+            }
+            QCalendarWidget QAbstractItemView {
+                font-size: 12px;
+                min-width: 300px;
+                min-height: 210px;
+                selection-background-color: #2563eb;
+                selection-color: white;
+            }
+        """)
+        calendar.clicked.connect(lambda selected, edit=date_edit, frame=popup: self._apply_calendar_date(edit, selected, frame))
+        popup_layout.addWidget(calendar)
+        popup.move(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+        self._calendar_popup = popup
+        popup.show()
+
+    def _apply_calendar_date(self, date_edit: QDateEdit, selected_date: QDate, popup: QFrame):
+        date_edit.setDate(selected_date)
+        popup.close()
+
+    def _set_shared_end_date_today(self, source_name: str):
+        end_date_widget = getattr(self, f"{source_name}_end_date", None)
+        if end_date_widget:
+            end_date_widget.setDate(QDate.currentDate())
+            self._sync_dates(source_name)
+
     def _sync_dates(self, source_name: str):
         """同步不同分頁的日期範圍元件"""
         try:
@@ -1440,14 +1526,13 @@ class UpdateView(QWidget):
             "--delay-seconds",
             "1.0",
             "--sync-sqlite",
-            "--technical-force-all",
         ]
         creationflags = 0
         if hasattr(subprocess, "CREATE_NO_WINDOW"):
             creationflags = subprocess.CREATE_NO_WINDOW
 
         try:
-            self._log("開始啟動 TPEX 背景補齊流程（含 TWSE 與技術指標）")
+            self._log("開始啟動 TPEX 背景補齊流程（含 SQLite 同步與技術指標增量檢查）")
             self._tpex_background_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
@@ -1579,15 +1664,9 @@ class UpdateView(QWidget):
 
         steps.extend([
             (
-                "增量計算技術指標",
+                "檢查並增量計算技術指標",
                 88,
-                lambda: self.update_service.calculate_technical_indicators(
-                    target_stock=None,
-                    force_all=False,
-                    start_date=None,
-                    progress_callback=progress_callback,
-                    incremental_lookback_days=250,
-                ),
+                lambda: self._run_incremental_technical_if_needed(progress_callback),
             ),
             ("刷新資料狀態", 100, lambda: self._get_overview_status()),
         ])
@@ -1616,6 +1695,56 @@ class UpdateView(QWidget):
             "completed_steps": completed,
             "warnings": warnings,
         }
+
+    def _run_incremental_technical_if_needed(self, progress_callback=None) -> Dict[str, Any]:
+        """Skip technical indicator calculation when the overview already shows it is current."""
+        status = self._get_overview_status()
+        daily_latest = self._parse_status_date(status.get("daily_data", {}).get("latest_date"))
+        technical_latest = self._parse_status_date(status.get("technical_indicators", {}).get("latest_date"))
+
+        if daily_latest is not None and technical_latest is not None and technical_latest >= daily_latest:
+            message = (
+                f"技術指標已是最新（{technical_latest.strftime('%Y-%m-%d')}），"
+                "跳過增量計算"
+            )
+            if progress_callback:
+                progress_callback(message, 88)
+            self._log(message)
+            return {
+                "success": True,
+                "message": message,
+                "skipped": True,
+                "skip_reason": "technical_indicators_current",
+                "daily_latest": daily_latest.strftime("%Y-%m-%d"),
+                "technical_latest": technical_latest.strftime("%Y-%m-%d"),
+                "total_stocks": 0,
+                "success_count": 0,
+                "fail_count": 0,
+                "updated_stocks": [],
+                "failed_stocks": [],
+            }
+
+        return self.update_service.calculate_technical_indicators(
+            target_stock=None,
+            force_all=False,
+            start_date=None,
+            progress_callback=progress_callback,
+            incremental_lookback_days=120,
+        )
+
+    @staticmethod
+    def _parse_status_date(value: Any) -> Optional[datetime]:
+        if value is None:
+            return None
+        value_str = str(value).strip()
+        if not value_str or value_str.lower() in {"nan", "nat", "none"}:
+            return None
+        for fmt in ("%Y-%m-%d", "%Y%m%d"):
+            try:
+                return datetime.strptime(value_str[:10] if fmt == "%Y-%m-%d" else value_str[:8], fmt)
+            except ValueError:
+                continue
+        return None
 
     def _run_safe_update_all(self, progress_callback=None) -> Dict[str, Any]:
         """執行保守的一鍵安全更新流程，供 UI worker 與測試共用，保持向後相容"""

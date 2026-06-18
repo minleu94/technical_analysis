@@ -127,12 +127,46 @@ def app():
     return instance
 
 
+def rendered_view(builder, *, as_of_date: date | None = None) -> DecisionDeskView:
+    view = DecisionDeskView(builder, as_of_date=as_of_date, auto_refresh=False, async_refresh=False)
+    view.refresh_snapshot()
+    return view
+
+
+def test_decision_desk_view_initialization_does_not_call_builder():
+    app()
+    builder = FakeBuilder(_snapshot())
+
+    view = DecisionDeskView(builder)
+
+    assert builder.calls == []
+    assert "尚未載入" in view.overall_status_label.text()
+
+
+def test_decision_desk_view_auto_refreshes_when_first_shown():
+    app_instance = app()
+    builder = FakeBuilder(_snapshot())
+    target_date = date(2026, 6, 15)
+    view = DecisionDeskView(
+        builder,
+        as_of_date=target_date,
+        auto_refresh=True,
+        async_refresh=False,
+    )
+
+    view.show()
+    app_instance.processEvents()
+
+    assert builder.calls == [target_date]
+    view.close()
+
+
 def test_decision_desk_view_refresh_calls_builder_and_renders_snapshot():
     app()
     s = _snapshot()
     builder = FakeBuilder(s)
     target_date = date(2026, 6, 15)
-    view = DecisionDeskView(builder, as_of_date=target_date)
+    view = rendered_view(builder, as_of_date=target_date)
 
     assert builder.calls == [target_date]
     assert "整體品質" in view.overall_status_label.text()
@@ -146,7 +180,7 @@ def test_decision_desk_view_shows_degraded_status():
         market_breadth_quality=DecisionDeskQuality.DEGRADED,
         market_breadth_warnings=("market_breadth_fetch_error:timeout",),
     )
-    view = DecisionDeskView(FakeBuilder(s))
+    view = rendered_view(FakeBuilder(s))
 
     assert "降級" in view.overall_status_label.text()
     assert "降級" in view.market_breadth_status.text()
@@ -160,7 +194,7 @@ def test_decision_desk_view_shows_missing_status():
         market_regime_quality=DecisionDeskQuality.MISSING,
         market_regime_warnings=("no_data",),
     )
-    view = DecisionDeskView(FakeBuilder(s))
+    view = rendered_view(FakeBuilder(s))
 
     assert "缺漏" in view.overall_status_label.text()
     assert "缺漏" in view.market_regime_status.text()
@@ -178,7 +212,7 @@ def test_decision_desk_view_aggregates_warning_lines_and_refresh_button():
         sector_rotation_warnings=("sector_missing",),
     )
     builder = FakeBuilder(s)
-    view = DecisionDeskView(builder)
+    view = rendered_view(builder)
     view.refresh_btn.click()
 
     assert builder.calls
@@ -195,7 +229,7 @@ class FailingBuilder:
 
 def test_decision_desk_view_fallback_to_degraded_if_builder_exception():
     app()
-    view = DecisionDeskView(FailingBuilder())
+    view = rendered_view(FailingBuilder())
 
     assert "降級" in view.overall_status_label.text()
     assert "snapshot_error" in view.overall_warn_label.toPlainText()
@@ -222,7 +256,7 @@ def test_decision_desk_view_renders_risk_prompts():
             prompts=(prompt,),
         ),
     )
-    view = DecisionDeskView(FakeBuilder(s))
+    view = rendered_view(FakeBuilder(s))
 
     assert "低流動性" in view.risk_prompts_value.text()
     assert "1101" in view.risk_prompts_value.text()
@@ -254,7 +288,7 @@ def test_decision_desk_view_renders_portfolio_alert_attributions():
         ),
     )
 
-    view = DecisionDeskView(FakeBuilder(snapshot))
+    view = rendered_view(FakeBuilder(snapshot))
 
     assert "recommendation_result:rec_001" in view.portfolio_alerts_value.text()
     assert "condition=warning" in view.portfolio_alerts_value.text()
@@ -276,7 +310,7 @@ def test_decision_desk_view_compacts_long_relative_strength_lists():
         ),
     )
 
-    view = DecisionDeskView(FakeBuilder(snapshot))
+    view = rendered_view(FakeBuilder(snapshot))
     rendered = view.relative_strength_codes.text()
 
     assert view.relative_strength_liquidity_value.isHidden()
@@ -302,7 +336,7 @@ def test_decision_desk_uses_single_relative_strength_presentation():
         ),
     )
 
-    view = DecisionDeskView(FakeBuilder(snapshot))
+    view = rendered_view(FakeBuilder(snapshot))
 
     assert view.relative_strength_liquidity_value.isHidden()
     assert view.relative_strength_liquidity_value.text() == ""
@@ -313,7 +347,7 @@ def test_decision_desk_uses_single_relative_strength_presentation():
 
 def test_decision_desk_sections_use_quality_badges_in_headers():
     app()
-    view = DecisionDeskView(FakeBuilder(_snapshot(market_breadth_quality=DecisionDeskQuality.DEGRADED)))
+    view = rendered_view(FakeBuilder(_snapshot(market_breadth_quality=DecisionDeskQuality.DEGRADED)))
 
     assert view.market_breadth_status.isHidden()
     badge = view._status_badges[view.market_breadth_status]
@@ -323,7 +357,7 @@ def test_decision_desk_sections_use_quality_badges_in_headers():
 
 def test_decision_desk_view_uses_readable_overview_typography():
     app()
-    view = DecisionDeskView(FakeBuilder(_snapshot()))
+    view = rendered_view(FakeBuilder(_snapshot()))
 
     assert view.overall_status_label.font().pointSize() >= 12
     assert view.generated_at_label.font().pointSize() >= 10
@@ -332,7 +366,7 @@ def test_decision_desk_view_uses_readable_overview_typography():
 
 def test_decision_desk_view_uses_midnight_reference_widgets():
     app()
-    view = DecisionDeskView(FakeBuilder(_snapshot()))
+    view = rendered_view(FakeBuilder(_snapshot()))
 
     assert hasattr(view, "overall_quality_badge")
     assert hasattr(view, "relative_strength_codes")
@@ -356,7 +390,7 @@ def test_decision_desk_view_renders_compact_code_widget_from_snapshot():
         ),
     )
 
-    view = DecisionDeskView(FakeBuilder(snapshot))
+    view = rendered_view(FakeBuilder(snapshot))
     text = view.relative_strength_codes.text()
 
     assert "強勢：T000, T001, T002, T003, T004, T005, T006, T007（另 2 檔）" in text
