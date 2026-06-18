@@ -33,6 +33,7 @@ coverage.xml
 # Agent 本機任務狀態（不提交）
 docs/agents/shared_state/active_task.yaml
 docs/agents/shared_state/handoff_log.md
+/meta_data/
 
 # 虛擬環境
 venv/
