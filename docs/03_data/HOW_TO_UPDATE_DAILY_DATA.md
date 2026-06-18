@@ -40,7 +40,9 @@
 4. 點擊「合併每日股價」。
 5. 到「技術指標」執行增量更新。
 
-左側「每日股價」手動下載仍是 TWSE raw daily price 的單一來源操作；日常 TPEX 更新走一鍵快速 / 安全更新流程。若只手動操作 TWSE，TPEX 不會自動補進該次手動合併。
+左側「每日股價」手動下載現在會同時補齊 TWSE 與 TPEX 指定日期範圍：TWSE 寫入 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX 寫入 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，完成後同步 SQLite `daily_prices` 並執行技術指標增量更新。若 TPEX 暫時 timeout，UI 會顯示 warning 並保留已成功的 TWSE / SQLite 流程，之後可補跑缺漏日期。
+
+若需要長期間補齊 TPEX 與技術指標，可在每日股價頁使用「背景補齊 TPEX + 技術指標」；進度由 `DATA_ROOT/meta_data/tpex_full_refresh_status.json` 記錄，並可用「檢查背景任務狀態」讀取。
 
 ### 大盤與產業
 
@@ -72,7 +74,7 @@
 
 不要把 Inspector 當成資料修改工具。
 
-SQLite Inspector 日期控件預設為單一日期今天、區間本月 1 日至今天；若查詢 `3207` 目前只看到 `20260616`，代表歷史 TPEX 尚未正式回補，不是 registry 或 UI 問題。
+SQLite Inspector 日期控件預設為單一日期今天、區間本月 1 日至今天；若查詢 `3207` 只看到近一兩日，代表 TPEX 歷史補齊或 SQLite 同步未完成。2026-06-17 排查後的正式狀態應覆蓋 `20140102..20260617`、共 2,907 筆。
 
 ## 6. 匯出 CSV
 
@@ -104,15 +106,15 @@ SQLite Inspector 日期控件預設為單一日期今天、區間本月 1 日至
 .\.venv\Scripts\python.exe scripts\merge_daily_data.py
 ```
 
-### TPEX 歷史回補 dry-run
+### TPEX 歷史缺口檢查
 
-歷史 TPEX 缺漏不會由日常更新自動大量補寫。先產生 dry-run plan，確認日期範圍、候選新增筆數、既有筆數與失敗日期：
+日常每日股價、快速更新、安全更新與背景補齊流程都會補缺少的 TPEX CSV 並同步 SQLite。若需要先盤點缺口，可產生 dry-run plan，確認日期範圍、候選新增筆數、既有筆數與失敗日期：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\plan_tpex_daily_price_history_backfill.py --start-date 2026-01-01 --end-date 2026-06-16
 ```
 
-此工具只讀資料並輸出報告，不寫正式 DB。正式歷史回補需另行人工確認。
+此工具只讀資料並輸出報告，不寫正式 DB；實際補齊優先使用 UI 每日股價區間更新或背景補齊流程。
 
 ## 8. 注意事項
 

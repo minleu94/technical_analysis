@@ -411,7 +411,7 @@ CLI 範例：
 3. 補足 no-look-ahead tests：`available_date > decision_date` 必須拒絕、轉中性或跳過。
 4. Revenue factor pack 已有 adapter 與 no-look-ahead gate regression；後續仍需接上正式 normalized 資料來源與 Research Run diagnostics，不接入 `ScoringEngine`。
 5. 月營收 normalized backfill workflow 已具備 dry-run、confirm、備份與 fail-closed diagnostics；`--mops-snapshot-file` 路徑可直接由 MOPS snapshot 產生 source 正確的 normalized records，且 2026-06-16 已依人工確認正式寫入 1,848 筆 2026-05 records。valuation metrics backfill workflow 已具備 dry-run、confirm、備份、產業 mapping 與同產業 percentile，且 2026-06-16 已依使用者確認正式寫入 831 筆 P/E records；SQLite read provider 與 fundamental factor service 已具備 no-look-ahead 讀取 / adapter / gate 邊界。
-6. TPEX 公司 registry 已納入 `companies.csv`，且已新增受控 TPEX daily price backfill 補齊 `3207` 這類上櫃股票的 `daily_prices` 當日缺口；TPEX quotes 已納入日常市場日價更新管線，歷史缺漏仍需 dry-run plan 與人工確認，不得在 fundamental layer 假造價格列。
+6. TPEX 公司 registry 已納入 `companies.csv`，且 TPEX daily price 已改由官方 afterTrading historical endpoint 補齊缺少日期；手動每日股價、快速 / 安全更新與背景補齊流程會寫入 `daily_price_tpex` 並同步 `daily_prices`，不得在 fundamental layer 假造價格列。
 7. Abnormal fundamental diagnostics 已能進入 Research metadata 與 Daily Decision Desk risk prompts；後續接正式資料時仍只能作提示，不得改寫財報或自動扣分。
 
 ## 8. 更新記錄
@@ -438,7 +438,7 @@ CLI 範例：
 - 2026-06-16：新增 Revenue Factor Pack v1 adapters，從已正規化月營收 records 產生 YoY、MoM、3M trend 與 new high factor records；缺 baseline 只輸出 diagnostics，未來 available_date 由 `FactorGate` skip，不接 `ScoringEngine`。
 - 2026-06-16：新增 Abnormal Fundamental diagnostics policy / application service / Daily Decision Desk prompt bridge；異常基本面只作 Research metadata 與風險提示，不改寫財報、不自動調整分數。
 - 2026-06-16：新增 TPEX daily price backfill workflow 與 CLI，對正式 `daily_prices` 補入 `20260616` 上櫃四碼普通股日價 877 筆；正式 apply 前備份 DB，驗證 0 duplicate primary keys，`3207` 日價缺口已補齊。
-- 2026-06-16：TPEX official daily close quotes 已接入日常每日股價更新管線；歷史 TPEX 缺漏仍需 dry-run plan 與人工確認，不由 fundamental layer 補值。
+- 2026-06-18：TPEX official daily close quotes 改走 afterTrading historical endpoint；日常每日股價、手動每日股價、快速 / 安全更新與背景補齊流程可補缺少的 TPEX CSV 並同步 SQLite，不由 fundamental layer 補值。
 - 2026-06-16：新增 TWSE/TPEX 月營收 historical dry-run builder 與 CLI，支援 `2020-01..2026-05` 期間 summary、單股篩選、候選 CSV 輸出與 diagnostics；真實來源驗證確認 TWSE/TPEX OpenAPI 目前只提供最新月、MOPS historical 自動化查詢仍不可穩定使用，正式 raw 月營收 `2014-04..2024-04` 與最新月來源無交集，因此未產生正式 mapping。
 - 2026-06-16：補上 MOPS 官方 HTML parser 與 `--mops-html-dir` 候選流程；只接受人工保存且含 `出表日期` 的官方 HTML，缺欄位時 fail-closed diagnostics，不由 raw CSV 補 available_date。
 - 2026-06-17：補上新版 MOPS `redirectToOld` / `mopsov` static report fetcher 與 `--mops-static` dry-run；確認 historical static report 的 `出表日期` 是查詢當日重新出表日，已由 45 天合理揭露窗口 gate 擋下，不能直接作 historical available_date mapping。

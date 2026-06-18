@@ -16,7 +16,7 @@
 日常每日股價管線現在包含兩個市場來源：
 
 - TWSE：`MI_INDEX type=ALL`，輸出到 `DATA_ROOT/daily_price/YYYYMMDD.csv`。
-- TPEX：official daily close quotes OpenAPI，輸出到 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`。
+- TPEX：official afterTrading historical daily close quotes endpoint，輸出到 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`。
 
 SQLite 同步階段會讀取上述兩個目錄，依 `(證券代號, 日期)` upsert 到 `daily_prices`。TPEX 日價是市場資料層，只補市場行情，不修改 `companies.csv`、fundamental tables、技術指標計算邏輯或推薦分數。
 
@@ -113,13 +113,13 @@ df.to_csv(daily_price_file, index=False, encoding='utf-8-sig')
 
 TPEX 日常來源由 `data_module/tpex_daily_price_source.py` 處理：
 
-1. 呼叫 official daily close quotes endpoint。
-2. 指定更新日期，並把民國日期 / `YYYY-MM-DD` / `YYYYMMDD` 正規化成 `YYYYMMDD`。
+1. 呼叫 official afterTrading historical daily close quotes endpoint。
+2. 指定更新日期或日期範圍，並把民國日期 / `YYYY-MM-DD` / `YYYYMMDD` 正規化成 `YYYYMMDD`。
 3. 重用 `data_module/tpex_daily_price_backfill.py` 的 normalize 邏輯，只保留四碼普通股、有效正收盤價與日價欄位。
 4. 跳過 ETF、債券、權證、停牌無價或無效代號 rows，並在結果 summary 中回報 skipped / diagnostics。
 5. 輸出 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`。
 
-官方 OpenAPI 日常入口目前回傳最新日報價；歷史 TPEX 缺漏需走 dry-run plan 與人工確認，不由日常更新大量自動補寫。
+日常每日股價、快速更新、安全更新與背景補齊流程都會使用此 adapter 補缺少的 TPEX CSV，並由 SQLite sync 與 TWSE 一併 upsert 到 `daily_prices`。TPEX endpoint timeout 時應回報 warning，不應阻斷已成功的 TWSE 或其他同步步驟。
 
 ## 與舊邏輯的差異
 

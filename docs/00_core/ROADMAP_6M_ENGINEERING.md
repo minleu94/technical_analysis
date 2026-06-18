@@ -301,7 +301,7 @@
 - 2026-06-16：新增 valuation metrics backfill workflow，將 `daily_prices.本益比` 轉為可 dry-run / confirm / backup 的 P/E governed records；更新官方 company registry 後已正式 apply 寫入 831 筆 records。
 - 2026-06-16：新增 Abnormal Fundamental diagnostics v1，將營收/獲利背離、一次性收益風險與資料品質缺口序列化為 Research metadata，並接入 Daily Decision Desk fundamental risk prompts。
 - 2026-06-16：新增 TPEX daily price backfill workflow，將官方 TPEX daily close quotes 以 dry-run / confirm / backup 流程補入 `daily_prices`；正式 DB 已寫入 `20260616` 上櫃四碼普通股日價 877 筆並補齊 `3207`。
-- 2026-06-16：將 TPEX official daily close quotes 納入日常每日股價更新管線；TPEX CSV 寫入 `DATA_ROOT/daily_price_tpex/`，SQLite 與 TWSE 一併 upsert `daily_prices`，歷史 TPEX 回補仍需 dry-run plan 與人工確認。
+- 2026-06-18：TPEX official daily close quotes 已改走 afterTrading historical endpoint；日常每日股價、手動每日股價、快速 / 安全更新與背景補齊流程皆可補缺少的 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，再與 TWSE 一併 upsert SQLite `daily_prices` 並接續技術指標增量。2026-06-17 排查確認 `3207` 已補至 `20140102..20260617`、共 2,907 筆。
 - 2026-06-16：新增 TWSE/TPEX 月營收 historical dry-run builder，支援 `2020-01..2026-05` summary、單股篩選、候選 CSV 與 diagnostics；真實 dry-run 確認 OpenAPI 最新月與正式 raw 歷史期間無交集，未寫入正式 monthly revenue availability mapping。
 - 2026-06-16：補上 MOPS 官方 HTML parser 與 `--mops-html-dir` source-dir workflow；可由人工保存的官方 HTML 產生候選 mapping，缺 `出表日期` 或公司列時只輸出 diagnostics。
 - 2026-06-17：新增 MOPS `--mops-static` dry-run source 與 45 天合理揭露窗口 gate；確認 historical static report 的 `出表日期` 為查詢當日，不能直接作原始公告日 mapping。

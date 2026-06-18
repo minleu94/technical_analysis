@@ -148,11 +148,13 @@ python ui_qt/main.py
 1. 設定「結束日期」。
 2. 設定「最近範圍」。
 3. 先按「檢查此資料源狀態」。
-4. 按「手動下載此資料源」只會下載原始資料。
-5. 每日股價或券商分點下載後，還要執行對應的「合併」才會寫入分析資料庫。
-6. 手動合併股價後，執行技術指標增量更新。
+4. 按「手動下載此資料源」會依資料源下載或補齊指定日期範圍的原始資料。
+5. 每日股價手動下載會同時處理 TWSE 與 TPEX：TWSE raw CSV 寫入 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX official daily close quotes 寫入 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，完成後同步 SQLite `daily_prices` 並觸發技術指標增量更新。
+6. 券商分點下載後，還要執行對應的「合併」才會寫入分析資料庫。
 
-??????????????????????????? TWSE ? TPEX?TWSE raw CSV ?? `DATA_ROOT/daily_price/YYYYMMDD.csv`?TPEX official daily close quotes ?? `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`?SQLite ????? upsert ? `daily_prices`???????????????????? TWSE ???????????? TPEX ???????? TPEX endpoint ?? timeout ???????????????????????????????? TWSE ??????
+若 TPEX endpoint timeout 或部分日期失敗，UI 會以 warning 呈現並繼續已成功的 TWSE / SQLite / 技術指標流程；這代表需要重測或補跑缺漏日期，不代表 TWSE 資料也失敗。
+
+每日股價分頁另有「背景補齊 TPEX + 技術指標」與「檢查背景任務狀態」。背景任務不會先強制跑 TWSE 全量，狀態檔位於 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`；若狀態顯示 `running`，請用狀態查詢確認進度，不要重複啟動第二個背景任務。
 
 券商分點同步會保存 `trade_type`，同一分點 / 股票 / 日期可同時有買超與賣超 rows。若舊 SQLite `broker_flows` 還是三欄主鍵，下一次同步券商分點時會先備份 DB，再把唯一鍵升級為 `(分點名稱, 證券代號, 日期, trade_type)`。
 
@@ -560,7 +562,7 @@ Month 5 Fundamental Layer v1 的完成定義是「基本面資料已能以受治
 
 正式 apply 會先備份既有 `companies.csv`，只更新公司 registry CSV，不修改 SQLite、daily price 或 raw financial CSV。2026-06-16 已以官方 TWSE/TPEX 來源正式更新：輸出 2,326 筆、0 diagnostics、無重複 `stock_id`，備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/companies_company_registry_20260616_031111.csv`。抽查 `3207` 耀勝為 `電子零組件業 / tpex`，`9935` 慶豐富為 `居家生活 / twse`。
 
-注意：`companies.csv` 是公司與產業 registry，不代表 `daily_prices` 已具備該股票行情。TPEX daily price 已納入日常市場日價管線；若歷史 TPEX 股票仍缺舊日價，需由市場日價資料層的 dry-run / 人工確認回補，不應用 company registry 或 fundamental layer 假造價格列。
+注意：`companies.csv` 是公司與產業 registry，不代表 `daily_prices` 已具備該股票行情。TPEX daily price 已納入日常市場日價管線；若歷史 TPEX 股票缺舊日價，需由每日股價區間補齊、快速 / 安全更新或背景補齊流程處理，不應用 company registry 或 fundamental layer 假造價格列。
 
 #### TPEX daily price 日常更新與歷史 dry-run
 
@@ -852,9 +854,9 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 若快速更新在「同步券商分點至 SQLite」遇到同一分點 / 股票 / 日期的買超與賣超唯一鍵衝突，代表 DB 仍是舊三欄主鍵；更新後的流程會在同步前先備份並升級為含 `trade_type` 的主鍵。
 
-### TPEX 股票只有一筆日價
+### TPEX 股票日價缺漏
 
-若在 SQLite Inspector 查 `3207` 只看到 `20260616`，這是目前正式資料狀態：TPEX 日常更新已接上，但歷史 TPEX 尚未正式大量回補。歷史回補需先跑 dry-run plan 並人工確認，不會由日常快速更新自動大量寫入。
+若在 SQLite Inspector 查 `3207` 只看到近一兩日，代表 TPEX 歷史補齊或 SQLite 同步未完成。2026-06-17 排查後的正式狀態應可看到 `3207` 覆蓋 `20140102..20260617`、共 2,907 筆。請先檢查 `DATA_ROOT/daily_price_tpex/` 是否有對應日期 CSV，再使用每日股價手動下載、快速/安全更新，或「背景補齊 TPEX + 技術指標」補齊並同步。
 
 ### 回測 0 交易
 
@@ -891,6 +893,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 ## 14. 更新記錄
 
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 已補 guarded presentation policy，官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
+- 2026-06-18：更新每日股價與 TPEX 操作說明，確認手動每日股價、快速更新與安全更新皆納入 TPEX 區間補齊、SQLite 同步與技術指標增量；新增背景補齊 TPEX + 技術指標狀態查詢說明，並修正 `3207` 歷史日價缺漏排錯判斷。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 操作說明，補充 Registry-based Promote lifecycle gate、持倉管理「生命週期回顧」分頁、post-trade attribution 與 live-vs-research gap 判讀限制。
 - 2026-06-17：補充 lifecycle evidence 持久化操作語意，說明 promotion applied evidence、demote / retire proposed evidence 與不自動刪除策略版本的安全限制。
 - 2026-06-16：新增月營收 normalized backfill 操作說明，記錄 dry-run、正式 apply confirm、備份與缺 availability mapping 時 fail-closed 的行為。
@@ -904,7 +907,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 2026-06-16：補充授權 PIT 月營收公告日 CSV 匯入方式，記錄 `--pit-csv`、必填 `--pit-source-version`、支援欄位與 candidate-only / 人工 gate 限制。
 - 2026-06-16：更新 SQLite 資料檢視操作說明，補充日期日曆選擇器、清除日期、資料庫端表頭排序、`daily_prices` 繁中欄位 alias 與 `漲跌價差` 正負號顯示規則。
 - 2026-06-16：調整 SQLite 資料檢視日期控件說明，單一日期預設今天，日期區間預設本月 1 日至今天，清除後才不套用日期條件。
-- 2026-06-16：更新每日股價操作說明，確認快速 / 安全更新已納入 TPEX official daily close quotes；TPEX CSV 寫入 `DATA_ROOT/daily_price_tpex/`，SQLite 寫入 `daily_prices`，TPEX endpoint timeout 會以警告呈現且不阻斷其他資料同步，歷史 TPEX 回補仍需 dry-run plan 與人工確認。
+- 2026-06-16：更新每日股價操作說明，確認快速 / 安全更新已納入 TPEX official daily close quotes；TPEX CSV 寫入 `DATA_ROOT/daily_price_tpex/`，SQLite 寫入 `daily_prices`，TPEX endpoint timeout 會以警告呈現且不阻斷其他資料同步。
 - 2026-06-16：補充 SQLite Inspector 重複欄名防護、券商分點 `broker_flows` 主鍵納入 `trade_type`、TPEX 歷史缺漏判讀，以及 Full App Healthcheck 人工驗證入口。
 - 2026-06-16：新增 Month 5 月營收候選資料抓取操作段，記錄今晚要跑的 MOPS snapshot 與 FinMind create_time 兩個 candidate-only CLI、輸出位置、resume / rate limit 與毛利率季度資料邊界。
 - 2026-06-16：補充 MOPS first-seen 作為月營收主線候選來源、FinMind 退為備用 / 交叉檢查來源，並新增 `--mops-snapshot-file` 月營收 backfill dry-run 說明；正式 mapping 與 SQLite apply 仍需人工 gate。
