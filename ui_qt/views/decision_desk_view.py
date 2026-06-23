@@ -1,7 +1,7 @@
 """每日決策工作台 View."""
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -34,12 +34,14 @@ class DecisionDeskView(QWidget):
         as_of_date: date | None = None,
         auto_refresh: bool = True,
         async_refresh: bool = True,
+        navigate_to_smart_money_callback: Callable[[str], None] | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.decision_desk_builder = decision_desk_builder or DecisionDeskSnapshotBuilder()
         self.as_of_date = as_of_date or date.today()
         self.async_refresh = async_refresh
+        self.navigate_to_smart_money_callback = navigate_to_smart_money_callback
         self._auto_refresh_pending = auto_refresh
         self._last_snapshot: DecisionDeskSnapshot | None = None
         self._refresh_worker: TaskWorker | None = None
@@ -112,6 +114,42 @@ class DecisionDeskView(QWidget):
         info_layout.addWidget(self.generated_at_label)
         info_layout.addWidget(self.warning_list)
         content_layout.addWidget(info_group)
+
+        self.action_headline_label = QLabel("今日主結論：尚未載入")
+        self.action_headline_label.setWordWrap(True)
+        action_font = QFont()
+        action_font.setPointSize(14)
+        action_font.setBold(True)
+        self.action_headline_label.setFont(action_font)
+        self.action_note_label = QLabel("研究模式：以下為市場與籌碼輔助判讀，不是交易建議。")
+        self.action_note_label.setWordWrap(True)
+        self.action_note_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+        conclusion_group = SectionPanel("今日主結論")
+        conclusion_group.layout.addWidget(self.action_headline_label)
+        conclusion_group.layout.addWidget(self.action_note_label)
+        content_layout.addWidget(conclusion_group)
+
+        self.priority_sector_label = QLabel("優先產業：尚未載入")
+        self.risk_sector_label = QLabel("避開產業 / 風險區：尚未載入")
+        self.priority_stock_label = QLabel("優先研究股票：尚未載入")
+        self.risk_stock_label = QLabel("風險股票：尚未載入")
+        self.stock_focus_buttons: list[QPushButton] = []
+        focus_group = SectionPanel("市場焦點")
+        for label in (
+            self.priority_sector_label,
+            self.risk_sector_label,
+            self.priority_stock_label,
+            self.risk_stock_label,
+        ):
+            label.setWordWrap(True)
+            label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary}; font-size: 10pt;")
+            focus_group.layout.addWidget(label)
+        self.stock_focus_button_container = QWidget()
+        self.stock_focus_button_layout = QHBoxLayout(self.stock_focus_button_container)
+        self.stock_focus_button_layout.setContentsMargins(0, 4, 0, 0)
+        self.stock_focus_button_layout.setSpacing(6)
+        focus_group.layout.addWidget(self.stock_focus_button_container)
+        content_layout.addWidget(focus_group)
 
         self.market_regime_status = QLabel("")
         self.market_regime_value = QLabel("")
@@ -201,6 +239,13 @@ class DecisionDeskView(QWidget):
         self.generated_at_card.value_label.setText("N/A")
         self.warning_list.set_warnings(())
         self.relative_strength_codes.set_groups(())
+        self.action_headline_label.setText("今日主結論：尚未載入")
+        self.action_note_label.setText("研究模式：以下為市場與籌碼輔助判讀，不是交易建議。")
+        self.priority_sector_label.setText("優先產業：尚未載入")
+        self.risk_sector_label.setText("避開產業 / 風險區：尚未載入")
+        self.priority_stock_label.setText("優先研究股票：尚未載入")
+        self.risk_stock_label.setText("風險股票：尚未載入")
+        self._set_stock_focus_buttons(())
         for status_label, badge in self._status_badges.items():
             status_label.setText("尚未載入")
             badge.setText("尚未載入")
@@ -281,6 +326,7 @@ class DecisionDeskView(QWidget):
         self._render_snapshot(snapshot)
 
     def _render_snapshot(self, snapshot: DecisionDeskSnapshot) -> None:
+        self._render_answer_first_dashboard(snapshot)
         self.overall_status_label.setText(f"整體品質：{self._quality_label(snapshot.overall_quality)}")
         self.generated_at_label.setText(f"生成時間：{snapshot.generated_at.isoformat()}（決策日 {snapshot.as_of_date.isoformat()}）")
         self.overall_quality_badge.setText(self._quality_label(snapshot.overall_quality))
@@ -374,6 +420,70 @@ class DecisionDeskView(QWidget):
                 f"border: 1px solid {MIDNIGHT_ANALYST.success}; "
                 "border-radius: 6px; padding: 8px; font-size: 13pt; font-weight: 700;"
             )
+
+    def _render_answer_first_dashboard(self, snapshot: DecisionDeskSnapshot) -> None:
+        action = getattr(snapshot, "action_summary", None)
+        if action is None:
+            self.action_headline_label.setText("今日主結論：尚未產生")
+            self.action_note_label.setText("研究模式：以下為市場與籌碼輔助判讀，不是交易建議。")
+        else:
+            self.action_headline_label.setText(action.headline)
+            self.action_note_label.setText(action.research_mode_note)
+
+        sector_focus = getattr(snapshot, "sector_focus", None)
+        if sector_focus is None:
+            self.priority_sector_label.setText("優先產業：尚未產生")
+            self.risk_sector_label.setText("避開產業 / 風險區：尚未產生")
+        else:
+            self.priority_sector_label.setText(
+                "優先產業：" + self._format_sector_cards(sector_focus.priority_sectors)
+            )
+            self.risk_sector_label.setText(
+                "避開產業 / 風險區：" + self._format_sector_cards(sector_focus.risk_sectors)
+            )
+
+        stock_focus = getattr(snapshot, "stock_focus", None)
+        if stock_focus is None:
+            self.priority_stock_label.setText("優先研究股票：尚未產生")
+            self.risk_stock_label.setText("風險股票：尚未產生")
+            self._set_stock_focus_buttons(())
+        else:
+            self.priority_stock_label.setText(
+                "優先研究股票：" + self._format_stock_cards(stock_focus.priority_stocks)
+            )
+            self.risk_stock_label.setText("風險股票：" + self._format_stock_cards(stock_focus.risk_stocks))
+            self._set_stock_focus_buttons(tuple(stock_focus.priority_stocks) + tuple(stock_focus.risk_stocks))
+
+    @staticmethod
+    def _format_sector_cards(cards) -> str:
+        if not cards:
+            return "無"
+        return "；".join(f"{card.sector_name}（{card.reason}）" for card in cards[:5])
+
+    @staticmethod
+    def _format_stock_cards(cards) -> str:
+        if not cards:
+            return "無"
+        return "；".join(f"{card.stock_code} {card.reason}" for card in cards[:5])
+
+    def _set_stock_focus_buttons(self, cards) -> None:
+        while self.stock_focus_button_layout.count():
+            item = self.stock_focus_button_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.stock_focus_buttons = []
+        for card in cards[:6]:
+            button = QPushButton(str(card.stock_code))
+            button.setToolTip(f"開啟主力流向：{card.stock_code} {card.reason}")
+            button.clicked.connect(lambda checked=False, code=str(card.stock_code): self._navigate_to_smart_money(code))
+            self.stock_focus_button_layout.addWidget(button)
+            self.stock_focus_buttons.append(button)
+        self.stock_focus_button_layout.addStretch()
+
+    def _navigate_to_smart_money(self, stock_code: str) -> None:
+        if self.navigate_to_smart_money_callback is not None:
+            self.navigate_to_smart_money_callback(str(stock_code))
 
     @staticmethod
     def _format_risk_prompts(prompts) -> str:

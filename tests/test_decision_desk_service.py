@@ -197,8 +197,12 @@ def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
         "watchlist_triggers",
         "portfolio_alerts",
         "risk_prompts",
+        "action_summary",
+        "sector_focus",
+        "stock_focus",
     }
     assert payload["portfolio_alerts"]["alert_level"] == "low"
+    assert payload["action_summary"]["action_level"] in {"積極研究", "正常研究", "保守觀察", "暫停新進場"}
 
 
 def test_decision_desk_snapshot_overall_quality_is_observed_when_all_sections_observed():
@@ -256,6 +260,41 @@ class FakeSectionService:
         if self.fail is not None:
             raise self.fail
         return self.payload
+
+
+class FakeSmartMoneyDashboardService:
+    def __init__(self):
+        self.calls = []
+
+    def build_dashboard_summary(self, decision_date: date, stock_codes: tuple[str, ...] = ()):
+        from app_module.dtos.smart_money_semantic_dtos import SmartMoneyDashboardSummary, SmartMoneySemanticSummary
+
+        self.calls.append((decision_date, stock_codes))
+        return SmartMoneyDashboardSummary(
+            decision_date=decision_date,
+            as_of_date=decision_date,
+            priority_summaries=(
+                SmartMoneySemanticSummary(
+                    stock_code="9999",
+                    stock_name="Smart Priority",
+                    decision_date=decision_date,
+                    primary_state="初轉買",
+                    quality="observed",
+                ),
+            ),
+            risk_summaries=(
+                SmartMoneySemanticSummary(
+                    stock_code="8888",
+                    stock_name="Smart Risk",
+                    decision_date=decision_date,
+                    primary_state="賣超延續",
+                    semantic_flags=("高檔出貨疑慮",),
+                    quality="degraded",
+                ),
+            ),
+            quality="degraded",
+            warnings=("smart_money_warning",),
+        )
 
 
 def test_decision_desk_builder_uses_injected_section_services():
@@ -321,6 +360,32 @@ def test_decision_desk_builder_uses_injected_section_services():
     assert snapshot.watchlist_triggers.quality == DecisionDeskQuality.OBSERVED
     assert snapshot.portfolio_alerts.quality == DecisionDeskQuality.OBSERVED
     assert snapshot.overall_quality == DecisionDeskQuality.DEGRADED
+
+
+def test_decision_desk_builder_injects_smart_money_dashboard_summary_into_focus_cards():
+    sample_date = date(2026, 6, 15)
+    smart_money_service = FakeSmartMoneyDashboardService()
+    builder = DecisionDeskSnapshotBuilder(
+        AllObservedDecisionDeskProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=sample_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+                top_strength_codes=("2330",),
+                weak_strength_codes=("1101",),
+            ),
+        ),
+        smart_money_service=smart_money_service,
+    )
+
+    snapshot = builder.build_snapshot(sample_date)
+
+    assert smart_money_service.calls == [(sample_date, ("2330", "1101", "AAPL"))]
+    assert snapshot.stock_focus is not None
+    assert any(card.stock_code == "9999" and card.source == "smart_money" for card in snapshot.stock_focus.priority_stocks)
+    assert any(card.stock_code == "8888" and card.source == "smart_money" for card in snapshot.stock_focus.risk_stocks)
 
 
 def test_decision_desk_builder_degrades_only_failed_section():
@@ -515,6 +580,31 @@ def test_decision_desk_snapshot_serializes_relative_strength_liquidity_section()
     assert payload["relative_strength_liquidity"]["meta"]["ranking"][0]["stock_code"] == "2330"
 
 
+def test_decision_desk_builder_adds_answer_first_dashboard_fields():
+    sample_date = date(2026, 6, 15)
+    builder = DecisionDeskSnapshotBuilder(
+        AllObservedDecisionDeskProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=sample_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+                top_strength_codes=("2330", "2454"),
+                weak_strength_codes=("1101",),
+            ),
+        ),
+    )
+
+    snapshot = builder.build_snapshot(sample_date)
+
+    assert snapshot.action_summary is not None
+    assert "今日主結論" in snapshot.action_summary.headline
+    assert snapshot.sector_focus is not None
+    assert snapshot.stock_focus is not None
+    assert [card.stock_code for card in snapshot.stock_focus.priority_stocks] == ["2330", "2454"]
+
+
 def test_decision_desk_builder_derives_risk_prompts_from_existing_sections():
     sample_date = date(2026, 6, 15)
     provider = AllObservedDecisionDeskProvider()
@@ -599,5 +689,3 @@ def test_decision_desk_snapshot_serializes_risk_prompts_section():
     assert payload["risk_prompts"]["quality"] == "observed"
     assert payload["risk_prompts"]["prompts"][0]["category"] == "liquidity"
     assert payload["risk_prompts"]["prompts"][0]["code"] == "1101"
-
-

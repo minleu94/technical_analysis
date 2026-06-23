@@ -7,6 +7,7 @@ def test_decision_desk_view_does_not_import_domain_calculation_modules():
         "decision_module.scoring_engine",
         "decision_module.stock_screener",
         "decision_module.flow_signal_engine",
+        "data_module.db_manager",
         "backtest_module",
         "app_module.recommendation_service",
         "app_module.recommendation_replay_service",

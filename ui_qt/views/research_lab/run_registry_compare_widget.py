@@ -30,6 +30,18 @@ from app_module.research_run_dtos import ResearchRunMetadataDTO
 from ui_qt.models.pandas_table_model import PandasTableModel
 
 
+RUN_TYPE_LABELS = {
+    "single_backtest": "單股回測",
+    "recommendation_portfolio": "推薦回放",
+}
+
+COMPARABILITY_LABELS = {
+    ComparabilityStatus.COMPARABLE: "可直接比較",
+    ComparabilityStatus.CAUTION: "需謹慎比較",
+    ComparabilityStatus.INCOMPATIBLE: "不可直接比較",
+}
+
+
 class RunRegistryCompareWidget(QWidget):
     """顯示 Research Run Registry 的比較入口。"""
 
@@ -46,6 +58,7 @@ class RunRegistryCompareWidget(QWidget):
         self.comparison_service = comparison_service or ResearchRunComparisonService()
         self.page_size = page_size
         self.current_page = 1
+        self._loaded_once = False
         self._request_id = 0
         self._all_runs: list[ResearchRunMetadataDTO] = []
         self._filtered_runs: list[ResearchRunMetadataDTO] = []
@@ -57,19 +70,24 @@ class RunRegistryCompareWidget(QWidget):
         layout.setSpacing(8)
 
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("run type"))
+        filter_row.addWidget(QLabel("類型"))
         self.run_type_filter = QComboBox()
-        self.run_type_filter.addItems(["全部", "single_backtest", "recommendation_portfolio"])
+        self.run_type_filter.addItem("全部", "")
+        self.run_type_filter.addItem(RUN_TYPE_LABELS["single_backtest"], "single_backtest")
+        self.run_type_filter.addItem(
+            RUN_TYPE_LABELS["recommendation_portfolio"],
+            "recommendation_portfolio",
+        )
         self.run_type_filter.currentTextChanged.connect(self.refresh_runs)
         filter_row.addWidget(self.run_type_filter)
 
-        filter_row.addWidget(QLabel("strategy"))
+        filter_row.addWidget(QLabel("策略"))
         self.strategy_filter = QLineEdit()
         self.strategy_filter.setPlaceholderText("strategy_id")
         self.strategy_filter.textChanged.connect(self.refresh_runs)
         filter_row.addWidget(self.strategy_filter)
 
-        filter_row.addWidget(QLabel("tag"))
+        filter_row.addWidget(QLabel("標籤"))
         self.tag_filter = QLineEdit()
         self.tag_filter.setPlaceholderText("tag")
         self.tag_filter.textChanged.connect(self.refresh_runs)
@@ -80,7 +98,7 @@ class RunRegistryCompareWidget(QWidget):
         filter_row.addWidget(self.refresh_button)
         layout.addLayout(filter_row)
 
-        list_group = QGroupBox("Research Runs")
+        list_group = QGroupBox("Research Runs 清單")
         list_layout = QVBoxLayout(list_group)
         self.run_list = QListWidget()
         self.run_list.setSelectionMode(QListWidget.ExtendedSelection)
@@ -116,13 +134,27 @@ class RunRegistryCompareWidget(QWidget):
         self.regime_table = self._new_table()
         self.benchmark_table = self._new_table()
         tables_row.addWidget(self._wrap_table("參數差異", self.params_diff_table))
-        tables_row.addWidget(self._wrap_table("Metrics", self.metrics_table))
-        tables_row.addWidget(self._wrap_table("Regime", self.regime_table))
-        tables_row.addWidget(self._wrap_table("Benchmark", self.benchmark_table))
+        tables_row.addWidget(self._wrap_table("指標", self.metrics_table))
+        tables_row.addWidget(self._wrap_table("市場 Regime", self.regime_table))
+        tables_row.addWidget(self._wrap_table("Benchmark 基準", self.benchmark_table))
         layout.addLayout(tables_row, stretch=2)
 
         self.normalized_equity_table = self._new_table()
-        layout.addWidget(self._wrap_table("Normalized Equity", self.normalized_equity_table), stretch=2)
+        normalized_group = QGroupBox("標準化權益")
+        normalized_layout = QVBoxLayout(normalized_group)
+        self.normalized_equity_empty_label = QLabel("尚未比較；選擇 2 至 5 筆 run 後可檢視共同日期標準化權益。")
+        self.normalized_equity_empty_label.setWordWrap(True)
+        normalized_layout.addWidget(self.normalized_equity_empty_label)
+        normalized_layout.addWidget(self.normalized_equity_table)
+        layout.addWidget(normalized_group, stretch=2)
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if event is not None:
+            super().showEvent(event)
+        if self._loaded_once:
+            return
+        self._loaded_once = True
+        self.refresh_runs()
 
     def refresh_runs(self) -> None:
         request_id = self.begin_run_list_request()
@@ -179,19 +211,28 @@ class RunRegistryCompareWidget(QWidget):
         normalized = self.comparison_service.build_normalized_equity(
             {item.metadata.run_id: item.equity for item in run_data}
         )
+        normalized_frame = self._normalized_equity_frame(normalized.normalized)
+        if normalized_frame.empty:
+            self.normalized_equity_empty_label.setText(
+                "沒有共同日期可標準化比較；請確認日期區間、資料版本與 equity 欄位是否一致。"
+            )
+        else:
+            self.normalized_equity_empty_label.setText(
+                "標準化權益以共同日期第一筆淨值 = 10000 呈現，只用已儲存 run 結果，不重新計算績效。"
+            )
         self._set_table_model(
             self.normalized_equity_table,
-            self._normalized_equity_frame(normalized.normalized),
+            normalized_frame,
         )
 
     def _apply_filters_and_render(self) -> None:
-        run_type = self.run_type_filter.currentText()
+        run_type = str(self.run_type_filter.currentData() or "")
         strategy = self.strategy_filter.text().strip().lower()
         tag = self.tag_filter.text().strip().lower()
 
         filtered: list[ResearchRunMetadataDTO] = []
         for run in self._all_runs:
-            if run_type != "全部" and run.run_type != run_type:
+            if run_type and run.run_type != run_type:
                 continue
             if strategy and strategy not in run.strategy_id.lower():
                 continue
@@ -210,9 +251,13 @@ class RunRegistryCompareWidget(QWidget):
         end = start + self.page_size
 
         for run in self._filtered_runs[start:end]:
-            text = f"{run.run_name} | {run.run_type} | {run.strategy_id} | {run.created_at[:16]}"
+            text = (
+                f"{run.run_name} | {self._run_type_label(run.run_type)} | "
+                f"{run.strategy_id} | {run.created_at[:16]}"
+            )
             item = QListWidgetItem(text)
             item.setData(Qt.ItemDataRole.UserRole, run.run_id)
+            item.setToolTip(f"run_id: {run.run_id}\nrun_type: {run.run_type}")
             self.run_list.addItem(item)
 
         self.page_label.setText(f"第 {self.current_page} / {total_pages} 頁")
@@ -235,11 +280,16 @@ class RunRegistryCompareWidget(QWidget):
             return " ".join(str(tag).lower() for tag in tags)
         return str(tags).lower()
 
+    def _run_type_label(self, run_type: str) -> str:
+        return RUN_TYPE_LABELS.get(run_type, run_type)
+
     def _render_comparability_badge(
         self, status: ComparabilityStatus, reasons: list[str]
     ) -> None:
         reason_text = "" if not reasons else " | " + ", ".join(reasons)
-        self.comparability_badge.setText(f"{status.value}{reason_text}")
+        self.comparability_badge.setText(
+            f"{COMPARABILITY_LABELS.get(status, status.value)}{reason_text}"
+        )
         colors = {
             ComparabilityStatus.COMPARABLE: "#DFF3E3",
             ComparabilityStatus.CAUTION: "#FFF4D6",

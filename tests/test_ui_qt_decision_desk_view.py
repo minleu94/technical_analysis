@@ -20,6 +20,11 @@ from app_module.decision_desk_dtos import (
     DecisionDeskRiskPrompt,
     DecisionDeskRiskPromptSummary,
     PortfolioAlertAttribution,
+    DecisionDeskActionSummary,
+    DecisionDeskSectorCard,
+    DecisionDeskSectorFocus,
+    DecisionDeskStockCard,
+    DecisionDeskStockFocus,
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.theme import MIDNIGHT_ANALYST
@@ -116,6 +121,28 @@ def _snapshot(
             warnings=risk_prompts_warnings,
             prompts=(),
         ),
+        action_summary=DecisionDeskActionSummary(
+            action_level="積極研究",
+            headline="今日主結論：積極研究，市場廣度偏強",
+            research_mode_note="研究模式：以下為市場與籌碼輔助判讀，不是交易建議。",
+            reasons=("市場狀態：風險中性",),
+        ),
+        sector_focus=DecisionDeskSectorFocus(
+            priority_sectors=(
+                DecisionDeskSectorCard("半導體", "priority", "產業輪動領先", DecisionDeskQuality.OBSERVED, "強勢產業"),
+            ),
+            risk_sectors=(
+                DecisionDeskSectorCard("金融", "risk", "產業輪動落後", DecisionDeskQuality.OBSERVED, "弱勢產業"),
+            ),
+        ),
+        stock_focus=DecisionDeskStockFocus(
+            priority_stocks=(
+                DecisionDeskStockCard("2330", "2330", "priority", "相對強勢名單", "relative_strength"),
+            ),
+            risk_stocks=(
+                DecisionDeskStockCard("2603", "2603", "risk", "持倉或觀察清單風險提示", "portfolio_watchlist"),
+            ),
+        ),
         warnings=overall_warnings,
     )
 
@@ -171,6 +198,35 @@ def test_decision_desk_view_refresh_calls_builder_and_renders_snapshot():
     assert builder.calls == [target_date]
     assert "整體品質" in view.overall_status_label.text()
     assert "觀察到" in view.overall_status_label.text()
+
+
+def test_decision_desk_view_renders_answer_first_dashboard():
+    app()
+    view = rendered_view(FakeBuilder(_snapshot()))
+
+    assert "今日主結論" in view.action_headline_label.text()
+    assert "不是交易建議" in view.action_note_label.text()
+    assert "半導體" in view.priority_sector_label.text()
+    assert "金融" in view.risk_sector_label.text()
+    assert "2330" in view.priority_stock_label.text()
+    assert "2603" in view.risk_stock_label.text()
+
+
+def test_decision_desk_view_stock_focus_buttons_drill_down_to_smart_money():
+    app()
+    called: list[str] = []
+    view = DecisionDeskView(
+        FakeBuilder(_snapshot()),
+        auto_refresh=False,
+        async_refresh=False,
+        navigate_to_smart_money_callback=lambda code: called.append(code),
+    )
+    view.refresh_snapshot()
+
+    view._navigate_to_smart_money("2330")
+
+    assert called == ["2330"]
+    assert any(button.text() == "2330" for button in view.stock_focus_buttons)
 
 
 def test_decision_desk_view_shows_degraded_status():

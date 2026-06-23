@@ -15,6 +15,30 @@ from ui_qt.widgets.info_button import InfoButton
 from ui_qt.views.backtest.helpers import RESEARCH_LAB_MODES
 
 
+RESEARCH_LAB_MODE_HINTS = {
+    "single_stock": {
+        "use_case": "檢查單一標的套用指定策略後的交易表現與交易明細",
+        "input_source": "股票代號、策略參數、日期區間",
+    },
+    "batch_stock": {
+        "use_case": "比較同一策略在多檔候選股票上的差異，找出穩定標的",
+        "input_source": "候選池或選股清單、策略參數、日期區間",
+    },
+    "fixed_basket": {
+        "use_case": "重播固定股票組合在指定期間內的整體表現",
+        "input_source": "固定股票清單、配置與風控參數、日期區間",
+    },
+    "recommendation_replay": {
+        "use_case": "把推薦結果送入 Research Lab，驗證推薦邏輯的歷史表現",
+        "input_source": "推薦 Profile、推薦結果與回放設定",
+    },
+    "strategy_research": {
+        "use_case": "比較策略模板、參數最佳化與 Walk-forward 驗證結果，整理可追溯的升級證據",
+        "input_source": "策略模板、參數集、研究 run、最佳化結果或 Walk-forward 結果",
+    },
+}
+
+
 class BacktestConfigPanel(QWidget):
     """回測配置面板 (左側控制面板)"""
 
@@ -422,7 +446,29 @@ class BacktestConfigPanel(QWidget):
             objective_row.addWidget(self.objective_combo)
             optimization_layout.addLayout(objective_row)
 
+            worker_row = QHBoxLayout()
+            worker_row.addWidget(QLabel("工作線程數:"))
+            self.optimizer_worker_count = QSpinBox()
+            self.optimizer_worker_count.setRange(1, 8)
+            default_workers = min(max(1, getattr(self.parent_view.optimizer_service, "max_workers", 1)), 8)
+            self.optimizer_worker_count.setValue(default_workers)
+            self.optimizer_worker_count.setToolTip(
+                "參數最佳化使用 ThreadPoolExecutor，保守限制 1 到 8 個工作線程。"
+            )
+            worker_row.addWidget(self.optimizer_worker_count)
+            worker_row.addStretch()
+            optimization_layout.addLayout(worker_row)
+
+            self.optimizer_runtime_hint = QLabel(
+                "最佳化會先預載單股資料；SQLite 啟用時優先讀 SQLite，缺資料或讀取失敗才 fallback CSV。"
+                "目前使用 ThreadPool，不是 ProcessPool；大型範圍執行前會先顯示組合數與取消提示。"
+            )
+            self.optimizer_runtime_hint.setWordWrap(True)
+            self.optimizer_runtime_hint.setStyleSheet("color: #666; font-size: 10px;")
+            optimization_layout.addWidget(self.optimizer_runtime_hint)
+
             self.optimization_params_widget = QWidget()
+            self.optimization_params_widget.setMinimumWidth(420)
             self.optimization_params_layout = QFormLayout(self.optimization_params_widget)
             optimization_layout.addWidget(self.optimization_params_widget)
 
@@ -441,6 +487,8 @@ class BacktestConfigPanel(QWidget):
         else:
             self.optimization_group = None
             self.objective_combo = None
+            self.optimizer_worker_count = None
+            self.optimizer_runtime_hint = None
             self.optimization_params_widget = None
             self.optimization_params_layout = None
             self.optimize_btn = None
@@ -524,6 +572,7 @@ class BacktestConfigPanel(QWidget):
 
         # ========== 推薦回放設定 ==========
         self.recommendation_portfolio_group = QGroupBox("推薦回放設定")
+        self.recommendation_portfolio_group.setMinimumWidth(420)
         self.recommendation_portfolio_group.setCheckable(True)
         self.recommendation_portfolio_group.setChecked(False)
         recommendation_portfolio_layout = QVBoxLayout()
@@ -596,6 +645,7 @@ class BacktestConfigPanel(QWidget):
             portfolio_history_row = QHBoxLayout()
             portfolio_history_row.addWidget(QLabel("歷史記錄:"))
             self.portfolio_history_combo = QComboBox()
+            self.portfolio_history_combo.setMinimumWidth(240)
             self.portfolio_history_combo.currentIndexChanged.connect(lambda idx: self.parent_view._on_portfolio_history_changed(idx))
             portfolio_history_row.addWidget(self.portfolio_history_combo)
             recommendation_portfolio_layout.addLayout(portfolio_history_row)
@@ -684,7 +734,10 @@ class BacktestConfigPanel(QWidget):
         if index < 0 or index >= len(RESEARCH_LAB_MODES):
             return ""
         mode = RESEARCH_LAB_MODES[index]
-        return f"{mode['description']}｜主要輸入：{mode['primary_input']}"
+        hint = RESEARCH_LAB_MODE_HINTS.get(mode["id"], {})
+        use_case = hint.get("use_case", mode["description"])
+        input_source = hint.get("input_source", mode["primary_input"])
+        return f"適合：{use_case}｜輸入來源：{input_source}"
 
     def _on_research_lab_mode_changed(self, index: int):
         """更新 Research Lab 模式提示並調整 UI 狀態。"""

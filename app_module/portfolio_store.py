@@ -1,8 +1,21 @@
 """Append-only JSONL storage for the Phase 4.1 Portfolio MVP."""
 
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 class PortfolioJsonlStore:
@@ -31,7 +44,7 @@ class PortfolioJsonlStore:
         self.trades_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.trades_file, "w", encoding="utf-8") as handle:
             for item in trades:
-                handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True))
+                handle.write(json.dumps(_json_safe(item), ensure_ascii=False, sort_keys=True))
                 handle.write("\n")
 
     def overwrite_journal_entries(self, entries: List[Dict[str, Any]]) -> None:
@@ -39,13 +52,13 @@ class PortfolioJsonlStore:
         self.journal_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.journal_file, "w", encoding="utf-8") as handle:
             for item in entries:
-                handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True))
+                handle.write(json.dumps(_json_safe(item), ensure_ascii=False, sort_keys=True))
                 handle.write("\n")
 
     def _append_jsonl(self, path: Path, item: Dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True))
+            handle.write(json.dumps(_json_safe(item), ensure_ascii=False, sort_keys=True))
             handle.write("\n")
 
     def _read_jsonl(self, path: Path) -> Iterable[Dict[str, Any]]:

@@ -125,6 +125,14 @@
 | [2026-06-16-month5-valuation-data-layer-v1.md](../superpowers/plans/2026-06-16-month5-valuation-data-layer-v1.md) | Month 5 Valuation Data Layer v1 plan，建立估值 metric 的 industry percentile 來源與 adapter，只輸出相對區間與 diagnostics。 |
 | [2026-06-16-month5-abnormal-fundamental-diagnostics.md](../superpowers/plans/2026-06-16-month5-abnormal-fundamental-diagnostics.md) | Month 5 AbnormalFundamentalFlag 與診斷整合 plan，將基本面風險提示接入 Research Run / Daily Decision Desk diagnostics。 |
 | [2026-06-16-tpex-daily-price-backfill.md](../superpowers/plans/2026-06-16-tpex-daily-price-backfill.md) | TPEX daily price backfill plan，定義官方 TPEX daily close quotes 進入 `daily_prices` 的 dry-run、confirm、backup 與驗證流程。 |
+| [2026-06-23-healthcheck-issue-resolution-design.md](../superpowers/specs/2026-06-23-healthcheck-issue-resolution-design.md) | Full App Healthcheck issue resolution 設計，將 2026-06-16 healthcheck 問題拆分為 Batch 1 至 Batch 5 的修復與排查路線。 |
+| [2026-06-23-healthcheck-batch1-direct-fixes.md](../superpowers/plans/2026-06-23-healthcheck-batch1-direct-fixes.md) | Healthcheck Batch 1 direct fixes 實作計畫，涵蓋 UpdateView、Portfolio、Runtime Observatory 與 Research Lab 第一批 UX 問題。 |
+| [2026-06-23-healthcheck-batch2-daily-dashboard-smart-money.md](../superpowers/plans/2026-06-23-healthcheck-batch2-daily-dashboard-smart-money.md) | Healthcheck Batch 2 實作計畫，規劃 Daily Decision Desk answer-first dashboard 與 Smart Money 5 / 20 / 60 日語意診斷。 |
+| [2026-06-23-non-destructive-release-healthcheck-runner.md](../superpowers/plans/2026-06-23-non-destructive-release-healthcheck-runner.md) | 非破壞式 release healthcheck runner 計畫，規劃在不改寫正式資料與不清理使用者變更的前提下執行健康檢查。 |
+| [2026-06-23-healthcheck-batch3-recommendation-profile-regime.md](../superpowers/plans/2026-06-23-healthcheck-batch3-recommendation-profile-regime.md) | Healthcheck Batch 3 實作計畫，規劃推薦分析 Profile lifecycle、策略版本 gate 與 Regime match / mismatch 揭露。 |
+| [2026-06-23-healthcheck-batch4-research-lab-results.md](../superpowers/plans/2026-06-23-healthcheck-batch4-research-lab-results.md) | Healthcheck Batch 4 實作計畫，規劃 Research Lab 推薦回放結果頁、Registry 比較頁、批次比較判讀與 Train-Test / Walk-forward 樣本可靠度提示。 |
+| [2026-06-23-healthcheck-batch5-performance-operations.md](../superpowers/plans/2026-06-23-healthcheck-batch5-performance-operations.md) | Healthcheck Batch 5 實作計畫，規劃參數最佳化大型掃描預估、worker 設定、bounded cancellation、Market Watch SQLite-first 排查與 Update 長任務邊界。 |
+| [2026-06-23-healthcheck-batch6-closeout-regime-researchlab.md](../superpowers/plans/2026-06-23-healthcheck-batch6-closeout-regime-researchlab.md) | Healthcheck Batch 6 實作計畫，規劃 Research Lab 首次載入與升級導引收尾、healthcheck 狀態一致化，以及 Regime confidence / 子分數排查。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
 | [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |
@@ -239,6 +247,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-06-23：新增 Healthcheck Batch 3 Recommendation Profile / Regime plan 與 non-destructive release healthcheck runner plan 索引，記錄推薦分析 Profile lifecycle、Regime match / mismatch 揭露與自訂 Profile JSON 精度治理入口。
 - 2026-06-18：整理根目錄 README 入口；將過期 `readme.txt` 移入 `docs/09_archive/root_readme_legacy_2025_12.txt`，並同步 docs 入口、Archive 索引與 Project Inventory。
 - 2026-06-18：重構 system vision 文件定位，將 baldr 願景說明升級為 North Star / Current State / Evidence Framework，並補上投資有效性驗證框架與 v1 能力證據邊界。
 - 2026-06-18：統一專案品牌命名為小寫 `baldr`，替換所有舊專案命名語彙。

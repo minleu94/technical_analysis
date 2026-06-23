@@ -15,6 +15,7 @@ from app_module.decision_desk_dtos import (
     SectorRotationSummary,
     WatchlistTriggerSummary,
     RelativeStrengthLiquiditySummary,
+    DecisionDeskRiskPromptSummary,
 )
 
 import ui_qt.main as main_module
@@ -46,10 +47,17 @@ class _DummyRecommendationView(_DummyView):
 
 
 class _RecordedDecisionDeskView(_DummyView):
-    def __init__(self, decision_desk_builder, as_of_date=None, parent=None):
+    def __init__(self, decision_desk_builder, as_of_date=None, navigate_to_smart_money_callback=None, parent=None):
         self.decision_desk_builder = decision_desk_builder
         self.as_of_date = as_of_date
+        self.navigate_to_smart_money_callback = navigate_to_smart_money_callback
         super().__init__(parent=parent)
+
+
+class _RecordedSmartMoneyFlowView(_DummyView):
+    def __init__(self, *args, **kwargs):
+        self.smart_money_semantic_service = kwargs.get("smart_money_semantic_service")
+        super().__init__(*args, **kwargs)
 
 
 def _snapshot() -> DecisionDeskSnapshot:
@@ -65,6 +73,7 @@ def _snapshot() -> DecisionDeskSnapshot:
         relative_strength_liquidity=RelativeStrengthLiquiditySummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("relative_strength_liquidity_missing",)),
         watchlist_triggers=WatchlistTriggerSummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("watchlist_triggers_missing",), trigger_count=0),
         portfolio_alerts=PortfolioAlertSummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("portfolio_alerts_missing",), alert_count=0),
+        risk_prompts=DecisionDeskRiskPromptSummary(as_of_date=sample_date, quality=DecisionDeskQuality.MISSING, warnings=("risk_prompts_missing",)),
         warnings=(),
     )
 
@@ -144,7 +153,7 @@ def _install_fake_dependencies(monkeypatch, decision_desk_builder_cls):
         "RecommendationView": _DummyRecommendationView,
         "BacktestView": _DummyView,
         "WatchlistView": _DummyView,
-        "SmartMoneyFlowView": _DummyView,
+        "SmartMoneyFlowView": _RecordedSmartMoneyFlowView,
         "DecisionDeskView": _RecordedDecisionDeskView,
         "SessionContextStrip": _SessionContextStrip,
         "RuntimeController": _RuntimeController,
@@ -195,6 +204,7 @@ def test_main_window_adds_daily_decision_tab(monkeypatch):
     assert "每日決策" in _get_tab_names(target_window)
     decision_idx = _get_tab_names(target_window).index("每日決策")
     assert isinstance(target_window.tabs.widget(decision_idx), _RecordedDecisionDeskView)
+    assert target_window.tabs.widget(decision_idx).navigate_to_smart_money_callback == target_window.show_smart_money_flow_for_stock
     assert _TrackingDecisionDeskBuilder.instances
     builder = _TrackingDecisionDeskBuilder.instances[-1]
     assert builder.provider is not None
@@ -340,4 +350,15 @@ def test_relative_strength_liquidity_service_is_injected_into_decision_desk_buil
     assert callable(getattr(builder.kwargs["relative_strength_liquidity_service"], "build_snapshot", None))
 
 
+def test_smart_money_semantic_service_is_shared_by_market_and_decision_tabs(monkeypatch):
+    app()
+    _TrackingDecisionDeskBuilder.instances = []
+    _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
 
+    target_window = _build_main_window()
+    target_window.config = types.SimpleNamespace(db_file="C:/tmp/not-used.db")
+    target_window._setup_ui()
+
+    assert target_window.smart_money_flow.smart_money_semantic_service is not None
+    builder = _TrackingDecisionDeskBuilder.instances[-1]
+    assert builder.kwargs["smart_money_service"] is target_window.smart_money_flow.smart_money_semantic_service

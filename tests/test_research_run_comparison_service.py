@@ -71,9 +71,9 @@ def test_comparability_marks_period_universe_or_cost_differences_caution():
 
     assert result.status == ComparabilityStatus.CAUTION
     assert result.reasons == [
-        "universe differs",
-        "date range differs",
-        "cost model differs",
+        "Universe 股票池不同",
+        "日期區間不同",
+        "交易成本模型不同",
     ]
 
 
@@ -94,9 +94,9 @@ def test_comparability_marks_data_execution_or_sizing_differences_incompatible()
 
     assert result.status == ComparabilityStatus.INCOMPATIBLE
     assert result.reasons == [
-        "data fingerprint differs",
-        "execution price differs",
-        "sizing mode differs",
+        "資料指紋不同",
+        "成交假設不同",
+        "部位 sizing 模式不同",
     ]
 
 

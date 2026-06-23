@@ -17,6 +17,8 @@ from ui_qt.views.recommendation_view import RecommendationView
 from ui_qt.views.watchlist_view import WatchlistView
 from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.dtos import BacktestReportDTO, RecommendationDTO, RecommendationResultDTO
+from app_module.optimizer_service import ParamRange
+from data_module.config import TWStockConfig
 
 
 def app():
@@ -305,6 +307,160 @@ def test_backtest_view_uses_optimization_fixed_values_when_enabled(qt_app):
     assert params["sell_score"] == 40
 
 
+def test_optimization_panel_exposes_worker_control_and_source_hint(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    assert hasattr(view.config_panel, "optimizer_worker_count")
+    assert view.config_panel.optimizer_worker_count.minimum() == 1
+    assert view.config_panel.optimizer_worker_count.maximum() == 8
+    assert view.config_panel.optimizer_worker_count.value() == min(view.optimizer_service.max_workers, 8)
+
+    hint_text = view.config_panel.optimizer_runtime_hint.text()
+    assert "ThreadPool" in hint_text
+    assert "SQLite" in hint_text
+    assert "CSV" in hint_text
+
+
+def test_optimization_preflight_message_explains_large_scan_boundary(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+    view.config_panel.optimizer_worker_count.setValue(4)
+    param_ranges = {
+        "param": ParamRange("param", "int", [], min=1, max=80001, step=1),
+    }
+
+    message = view._build_optimization_preflight_message(param_ranges)
+
+    assert "80,001" in message
+    assert "4" in message
+    assert "ThreadPool" in message
+    assert "SQLite" in message
+    assert "CSV" in message
+    assert "取消" in message
+
+
+def test_optimization_range_rows_have_stable_width_for_large_ranges(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    strategy_index = view.strategy_combo.findData("momentum_aggressive_v1")
+    assert strategy_index >= 0
+    view.strategy_combo.setCurrentIndex(strategy_index)
+    view.optimization_group.setChecked(True)
+    view._on_optimization_toggled(True)
+    view._update_optimization_params_form()
+
+    buy_score_widgets = view.optimization_param_widgets["buy_score"]
+    buy_score_widgets["mode"].setCurrentText("範圍")
+
+    assert buy_score_widgets["row_widget"].minimumWidth() >= 420
+    assert buy_score_widgets["range"].minimumWidth() >= 300
+
+
+def test_research_lab_mode_hint_explains_use_case_and_input_source(qt_app):
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+
+    for index in range(view.research_lab_mode_combo.count()):
+        view.research_lab_mode_combo.setCurrentIndex(index)
+        hint = view.config_panel.research_lab_mode_hint.text()
+        assert "適合" in hint
+        assert "輸入來源" in hint
+
+
+def test_strategy_research_mode_hint_explains_validation_and_upgrade_evidence(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    strategy_research_index = view.research_lab_mode_combo.findData("strategy_research")
+    assert strategy_research_index >= 0
+    view.research_lab_mode_combo.setCurrentIndex(strategy_research_index)
+
+    hint = view.config_panel.research_lab_mode_hint.text()
+    assert "策略模板" in hint
+    assert "參數最佳化" in hint
+    assert "Walk-forward" in hint
+    assert "升級證據" in hint
+
+
+def test_recommendation_replay_group_has_stable_width(qt_app, tmp_path):
+    config = TWStockConfig(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+    )
+    view = BacktestView(backtest_service=MagicMock(), config=config)
+
+    assert view.config_panel.recommendation_portfolio_group.minimumWidth() >= 420
+    assert view.config_panel.portfolio_history_combo is not None
+    assert view.config_panel.portfolio_history_combo.minimumWidth() >= 240
+
+
+def test_portfolio_promotion_success_message_points_to_follow_up_entrypoint(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    message = view._build_portfolio_promotion_success_message("version-001", "run-001")
+
+    assert "version-001" in message
+    assert "run-001" in message
+    assert "推薦分析" in message
+    assert "Profile" in message
+    assert "策略版本" in message
+
+
+def test_research_lab_date_edits_use_calendar_popup_and_expected_defaults(qt_app):
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+
+    today = QDate.currentDate()
+
+    assert view.start_date.calendarPopup()
+    assert view.end_date.calendarPopup()
+    assert view.end_date.date() == today
+    assert 360 <= view.start_date.date().daysTo(today) <= 371
+
+
+def test_research_registry_refreshes_after_save_delete_and_promote(qt_app):
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+    view._refresh_research_registry = MagicMock()
+
+    view._on_research_run_saved("run-test-001")
+    assert view._refresh_research_registry.call_count == 1
+    assert not view.progress_label.isHidden()
+    assert "已保存" in view.progress_label.text()
+    assert "run-test-001" in view.progress_label.text()
+
+    view._on_research_run_deleted("run-test-001")
+    assert view._refresh_research_registry.call_count == 2
+    assert "已刪除" in view.progress_label.text()
+
+    view._on_strategy_version_promoted("version-test-001")
+    assert view._refresh_research_registry.call_count == 3
+    assert "已升級" in view.progress_label.text()
+    assert "version-test-001" in view.progress_label.text()
+
+
+def test_result_tabs_first_entry_refreshes_history_and_chart_once(qt_app, tmp_path):
+    config = TWStockConfig(data_root=tmp_path / "data", output_root=tmp_path / "output")
+    view = BacktestView(backtest_service=MagicMock(), config=config)
+    view._refresh_history = MagicMock()
+    view._update_chart_run_combo = MagicMock()
+
+    history_idx = next(
+        i for i in range(view.result_tabs.count())
+        if "歷史" in view.result_tabs.tabText(i)
+    )
+    chart_idx = next(
+        i for i in range(view.result_tabs.count())
+        if "圖表" in view.result_tabs.tabText(i)
+    )
+
+    view._on_result_tab_changed(history_idx)
+    view._on_result_tab_changed(history_idx)
+    view._on_result_tab_changed(chart_idx)
+    view._on_result_tab_changed(chart_idx)
+
+    assert view._refresh_history.call_count == 1
+    assert view._update_chart_run_combo.call_count == 1
+
+
 def test_recommendation_view_preserves_provenance_on_portfolio_recording(qt_app):
     """驗證推薦結果記錄到 Portfolio 時，會保留推薦來源、分數、理由、Profile 等 metadata"""
     mock_rec_service = MagicMock()
@@ -506,6 +662,86 @@ def test_backtest_view_recommendation_portfolio_summary_warns_about_same_day_clo
     assert "交易假設提醒" in summary_text
     assert "同日收盤成交" in summary_text
     assert "gap_risk" in summary_text
+
+
+def test_batch_result_tab_explains_comparison_purpose(qt_app):
+    """批次結果頁需說明排行榜與整體統計的判讀目的。"""
+    view = BacktestView(
+        backtest_service=MagicMock(),
+        batch_backtest_service=MagicMock(),
+        config=None,
+    )
+
+    text = view.result_panel.batch_interpretation_label.text()
+
+    assert "比較目的" in text
+    assert "排行榜" in text
+    assert "正式策略判斷" in text
+
+
+def test_train_test_summary_warns_when_oos_sample_is_low(qt_app):
+    """Train-Test 結果需揭露 OOS 交易數不足時的可靠度限制。"""
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+    result_data = {
+        "mode": "split",
+        "train_report": SimpleNamespace(
+            total_return=0.12,
+            annual_return=0.18,
+            sharpe_ratio=1.4,
+            max_drawdown=-0.16,
+            win_rate=0.58,
+            total_trades=18,
+        ),
+        "test_report": SimpleNamespace(
+            total_return=0.08,
+            annual_return=0.16,
+            sharpe_ratio=1.1,
+            max_drawdown=-0.7729,
+            win_rate=1.0,
+            total_trades=3,
+        ),
+    }
+
+    with patch("ui_qt.views.backtest_view.QMessageBox.information"):
+        view._on_walkforward_finished(result_data)
+
+    summary_text = view.summary_text.toPlainText()
+    assert "【樣本可靠度】" in summary_text
+    assert "OOS 交易數: 3" in summary_text
+    assert "樣本不足" in summary_text
+    assert "100.00%" in summary_text
+
+
+def test_walkforward_summary_warns_when_fold_sample_is_low(qt_app):
+    """Walk-forward 結果需揭露 fold 與 OOS 樣本不足。"""
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+    fold = SimpleNamespace(
+        train_period=("2026-01-02", "2026-03-31"),
+        test_period=("2026-04-01", "2026-04-30"),
+        train_metrics={"sharpe_ratio": 1.5},
+        test_metrics={"sharpe_ratio": 1.2, "total_return": 0.04, "total_trades": 4},
+        degradation=0.2,
+    )
+    result_data = {
+        "mode": "walkforward",
+        "results": [fold, fold],
+        "summary": {
+            "total_folds": 2,
+            "avg_train_sharpe": 1.5,
+            "avg_test_sharpe": 1.2,
+            "avg_degradation": 0.2,
+            "consistency": 1.0,
+        },
+    }
+
+    with patch("ui_qt.views.backtest_view.QMessageBox.information"):
+        view._on_walkforward_finished(result_data)
+
+    summary_text = view.summary_text.toPlainText()
+    assert "【Walk-forward 樣本可靠度】" in summary_text
+    assert "Fold 數: 2" in summary_text
+    assert "OOS 交易數: 8" in summary_text
+    assert "樣本不足" in summary_text
 
 
 def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):

@@ -252,6 +252,10 @@ class BrokerFlowService:
         self.logger.info(f"成功載入 {len(events)} 筆分點交易事件")
         return events
 
+    def get_events(self, force_reload: bool = False) -> List[BrokerFlowEvent]:
+        """回傳分點事件快照，供唯讀語意層與 dashboard 使用。"""
+        return list(self._load_data(force_reload=force_reload))
+
     def _filter_events_by_period(self, events: List[BrokerFlowEvent], period: str) -> List[BrokerFlowEvent]:
         """過濾特定時間範圍的事件"""
         if not events:

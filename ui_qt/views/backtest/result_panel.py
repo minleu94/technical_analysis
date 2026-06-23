@@ -217,6 +217,17 @@ class BacktestResultPanel(QWidget):
             batch_result_layout = QVBoxLayout(batch_result_tab)
             batch_result_layout.setSpacing(10)
             batch_result_layout.setContentsMargins(5, 5, 5, 5)
+
+            self.batch_interpretation_label = QLabel(
+                "比較目的：排行榜用來快速找出同一批次內相對值得複核的股票；"
+                "整體統計用來觀察樣本分布與成功率。此頁只整理已完成的批次回測結果，"
+                "不代表正式策略判斷、交易建議或持倉調整。"
+            )
+            self.batch_interpretation_label.setWordWrap(True)
+            self.batch_interpretation_label.setStyleSheet(
+                "padding: 6px; background: #F6F8FA; border: 1px solid #D0D7DE;"
+            )
+            batch_result_layout.addWidget(self.batch_interpretation_label)
             
             sort_row = QHBoxLayout()
             sort_row.addWidget(QLabel("排序方式:"))
@@ -286,12 +297,18 @@ class BacktestResultPanel(QWidget):
         portfolio_btn_row.addWidget(self.export_portfolio_report_btn)
         recommendation_portfolio_layout.addLayout(portfolio_btn_row)
         
+        self.portfolio_detail_tabs = QTabWidget()
+
+        chart_container = QWidget()
+        chart_layout = QVBoxLayout(chart_container)
+        chart_layout.setContentsMargins(0, 0, 0, 0)
         self.portfolio_chart_tabs = QTabWidget()
         self.portfolio_equity_chart = create_equity_curve_widget()
         self.portfolio_drawdown_chart = create_drawdown_curve_widget()
-        self.portfolio_chart_tabs.addTab(self.portfolio_equity_chart, "Portfolio Value")
-        self.portfolio_chart_tabs.addTab(self.portfolio_drawdown_chart, "Drawdown")
-        recommendation_portfolio_layout.addWidget(self.portfolio_chart_tabs, stretch=3)
+        self.portfolio_chart_tabs.addTab(self.portfolio_equity_chart, "組合價值")
+        self.portfolio_chart_tabs.addTab(self.portfolio_drawdown_chart, "回撤")
+        chart_layout.addWidget(self.portfolio_chart_tabs)
+        self.portfolio_detail_tabs.addTab(chart_container, "圖表")
         
         self.portfolio_period_table = QTableView()
         self.portfolio_stock_table = QTableView()
@@ -309,12 +326,25 @@ class BacktestResultPanel(QWidget):
             table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
             table.setFont(QFont("Consolas", 9))
             
-        recommendation_portfolio_layout.addWidget(QLabel("期間明細"))
-        recommendation_portfolio_layout.addWidget(self.portfolio_period_table, stretch=3)
-        recommendation_portfolio_layout.addWidget(QLabel("個股貢獻"))
-        recommendation_portfolio_layout.addWidget(self.portfolio_stock_table, stretch=2)
-        recommendation_portfolio_layout.addWidget(QLabel("交易紀錄"))
-        recommendation_portfolio_layout.addWidget(self.portfolio_trades_table, stretch=2)
+        period_tab = QWidget()
+        period_layout = QVBoxLayout(period_tab)
+        period_layout.setContentsMargins(0, 0, 0, 0)
+        period_layout.addWidget(self.portfolio_period_table)
+        self.portfolio_detail_tabs.addTab(period_tab, "期間明細")
+
+        stock_tab = QWidget()
+        stock_layout = QVBoxLayout(stock_tab)
+        stock_layout.setContentsMargins(0, 0, 0, 0)
+        stock_layout.addWidget(self.portfolio_stock_table)
+        self.portfolio_detail_tabs.addTab(stock_tab, "個股貢獻")
+
+        trades_tab = QWidget()
+        trades_layout = QVBoxLayout(trades_tab)
+        trades_layout.setContentsMargins(0, 0, 0, 0)
+        trades_layout.addWidget(self.portfolio_trades_table)
+        self.portfolio_detail_tabs.addTab(trades_tab, "交易紀錄")
+
+        recommendation_portfolio_layout.addWidget(self.portfolio_detail_tabs, stretch=5)
         
         self.result_tabs.addTab(recommendation_portfolio_tab, "推薦回放")
         

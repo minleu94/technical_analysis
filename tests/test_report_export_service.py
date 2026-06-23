@@ -106,6 +106,8 @@ def test_export_single_backtest_missing_metadata(tmp_path, exporter):
     assert "資料完整性" in text
     assert "缺失欄位" in text
     assert "data_as_of_date" in text
+    assert "資料截止日期（data_as_of_date）" in text
+    assert "市場 Regime（regime）" in text
 
 
 def test_export_batch_backtest(tmp_path, exporter, sample_metadata):

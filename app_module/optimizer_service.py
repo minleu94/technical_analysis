@@ -7,9 +7,10 @@ import itertools
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 import pandas as pd
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from concurrent.futures import CancelledError, ThreadPoolExecutor, wait, FIRST_COMPLETED
 from app_module.exceptions import BacktestCancelledError
 import logging
 
@@ -56,6 +57,56 @@ class OptimizerService:
         logger.info(f"[OptimizerService] 初始化，最大並行線程數: {self.max_workers}")
         self.run_repository = run_repository
 
+    def param_values_for_range(self, param_range: ParamRange) -> List[Any]:
+        """
+        依 ParamRange 產生單一參數的候選值清單。
+
+        這個 helper 讓組合數預估與實際 grid 生成共用同一套規則，避免 UI
+        預估和實際執行量不一致。
+        """
+        if param_range.type == 'list':
+            return list(param_range.values)
+
+        if param_range.type == 'int':
+            if param_range.min is not None and param_range.max is not None:
+                step = int(param_range.step or 1)
+                if step <= 0:
+                    raise ValueError(f"參數 {param_range.name} 的步長必須大於 0")
+                if int(param_range.max) < int(param_range.min):
+                    return []
+                return list(
+                    range(int(param_range.min), int(param_range.max) + 1, step)
+                )
+            return list(param_range.values)
+
+        if param_range.type == 'float':
+            if param_range.min is not None and param_range.max is not None:
+                float_step = Decimal(str(param_range.step or 1))
+                if float_step <= 0:
+                    raise ValueError(f"參數 {param_range.name} 的步長必須大於 0")
+                current = Decimal(str(param_range.min))
+                max_value = Decimal(str(param_range.max))
+                if max_value < current:
+                    return []
+                values = []
+                while current <= max_value:
+                    values.append(float(current.quantize(Decimal("0.01"))))
+                    current += float_step
+                return values
+            return list(param_range.values)
+
+        return list(param_range.values)
+
+    def estimate_param_grid_size(self, param_ranges: Dict[str, ParamRange]) -> int:
+        """估算參數組合數，不 materialize 每一組參數字典。"""
+        if not param_ranges:
+            return 1
+
+        total = 1
+        for param_range in param_ranges.values():
+            total *= len(self.param_values_for_range(param_range))
+        return total
+
     def generate_param_grid(self, param_ranges: Dict[str, ParamRange]) -> List[Dict[str, Any]]:
         """
         生成參數網格
@@ -66,45 +117,19 @@ class OptimizerService:
         Returns:
             參數組合列表
         """
-        param_combinations = []
-
         # 為每個參數生成值列表
         param_value_lists = {}
         for param_name, param_range in param_ranges.items():
-            if param_range.type == 'list':
-                # 直接使用提供的值列表
-                param_value_lists[param_name] = param_range.values
-            elif param_range.type == 'int':
-                # 整數範圍
-                if param_range.min is not None and param_range.max is not None:
-                    step = param_range.step or 1
-                    param_value_lists[param_name] = list(
-                        range(int(param_range.min), int(param_range.max) + 1, int(step))
-                    )
-                else:
-                    param_value_lists[param_name] = param_range.values
-            elif param_range.type == 'float':
-                # 浮點數範圍
-                if param_range.min is not None and param_range.max is not None:
-                    step = param_range.step or 1.0
-                    values = []
-                    current = param_range.min
-                    while current <= param_range.max:
-                        values.append(round(current, 2))
-                        current += step
-                    param_value_lists[param_name] = values
-                else:
-                    param_value_lists[param_name] = param_range.values
+            param_value_lists[param_name] = self.param_values_for_range(param_range)
 
         # 生成所有組合
         param_names = list(param_value_lists.keys())
         param_values = [param_value_lists[name] for name in param_names]
 
-        for combination in itertools.product(*param_values):
-            param_dict = dict(zip(param_names, combination))
-            param_combinations.append(param_dict)
-
-        return param_combinations
+        return [
+            dict(zip(param_names, combination))
+            for combination in itertools.product(*param_values)
+        ]
 
     def grid_search(
         self,
@@ -255,24 +280,54 @@ class OptimizerService:
         # 使用線程池並行執行，手動初始化以利安全軟取消
         executor = ThreadPoolExecutor(max_workers=self.max_workers)
 
-        # 提交所有任務
-        future_to_idx = {
-            executor.submit(run_single_backtest, param_combo, idx): idx
-            for idx, param_combo in enumerate(param_combinations)
-        }
-
-        pending = set(future_to_idx.keys())
+        future_to_idx = {}
+        pending: set[Any] = set()
+        next_submit_idx = 0
+        max_in_flight = max(1, self.max_workers * 2)
         completed_results = {}
         cancellation_requested = False
 
+        def request_cancel(message: Optional[str] = None):
+            nonlocal cancellation_requested
+            if cancellation_requested:
+                return
+            cancellation_requested = True
+            for fut in pending:
+                fut.cancel()
+            if progress_callback:
+                progress_callback(
+                    completed_count,
+                    total_combinations,
+                    message or f"取消已送出，正在清理已啟動的 {len(pending)} 個子任務..."
+                )
+            executor.shutdown(wait=False, cancel_futures=True)
+
+        def submit_next_batch():
+            nonlocal next_submit_idx
+            while (
+                next_submit_idx < total_combinations
+                and len(pending) < max_in_flight
+                and not cancellation_requested
+            ):
+                if check_cancel and check_cancel():
+                    remaining = total_combinations - completed_count
+                    request_cancel(f"取消已送出，剩餘 {remaining} 組參數將不再提交，正在清理已啟動子任務...")
+                    return
+
+                param_combo = param_combinations[next_submit_idx]
+                future = executor.submit(run_single_backtest, param_combo, next_submit_idx)
+                future_to_idx[future] = next_submit_idx
+                pending.add(future)
+                next_submit_idx += 1
+
         try:
+            submit_next_batch()
+
             while pending:
                 # 輪詢檢查取消旗標
                 if not cancellation_requested and check_cancel and check_cancel():
-                    cancellation_requested = True
-                    for fut in pending:
-                        fut.cancel()
-                    executor.shutdown(wait=False, cancel_futures=True)
+                    remaining = total_combinations - completed_count
+                    request_cancel(f"取消已送出，剩餘 {remaining} 組參數將不再提交，正在清理已啟動子任務...")
 
                 done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
 
@@ -291,8 +346,16 @@ class OptimizerService:
                                     total_combinations,
                                     f"已完成 {completed_count}/{total_combinations} ({completed_count/total_combinations*100:.1f}%)"
                                 )
+                    except CancelledError:
+                        if not cancellation_requested:
+                            logger.error(f"最佳化子任務 {idx} 被取消")
                     except Exception as e:
+                        if cancellation_requested and not str(e):
+                            continue
                         logger.error(f"最佳化子任務 {idx} 異常: {e}")
+
+                if not cancellation_requested:
+                    submit_next_batch()
 
             if cancellation_requested:
                 raise BacktestCancelledError("參數最佳化任務已被使用者取消")

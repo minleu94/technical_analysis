@@ -990,6 +990,26 @@ class UpdateView(QWidget):
         button_layout.addStretch()
         layout.addWidget(op_group)
 
+        if key in {"daily", "broker_branch"}:
+            detail_status = QLabel("尚未檢查此資料源狀態")
+            detail_status.setWordWrap(True)
+            detail_status.setStyleSheet("""
+                QLabel {
+                    background-color: #f8fafc;
+                    color: #334155;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    padding: 8px 10px;
+                    font-size: 12px;
+                    line-height: 1.4;
+                }
+            """)
+            if key == "daily":
+                self.daily_detail_status_label = detail_status
+            else:
+                self.broker_branch_detail_status_label = detail_status
+            layout.addWidget(detail_status)
+
         if key == "daily":
             danger_group = QGroupBox("⚠️ 高風險操作區 (Danger Zone)")
             danger_group.setStyleSheet("""
@@ -1365,6 +1385,58 @@ class UpdateView(QWidget):
         if source:
             self._loaded_detail_sources.add(source)
         self._on_status_checked(status)
+        self._render_source_detail_status(str(source or ""), status)
+
+    def _format_status_token(self, status: Any) -> str:
+        mapping = {
+            "ok": "正常",
+            "warning": "需注意",
+            "error": "異常",
+            "missing": "缺漏",
+            "unknown": "未知",
+        }
+        return mapping.get(str(status).lower(), str(status or "未知"))
+
+    def _format_source_detail_summary(self, source: str, detail: Dict[str, Any]) -> str:
+        latest_date = detail.get("latest_date") or "未知"
+        total_records = int(detail.get("total_records") or 0)
+        lines = [
+            f"最新日期：{latest_date}",
+            f"SQLite 筆數：{total_records:,}",
+            f"狀態：{self._format_status_token(detail.get('status'))}",
+        ]
+        if source == "daily":
+            csv_count = detail.get("csv_file_count") or detail.get("file_count")
+            if csv_count is not None:
+                lines.append(f"CSV 日檔數：{int(csv_count):,}")
+            missing_dates = detail.get("missing_dates") or []
+            if missing_dates:
+                lines.append("缺漏日期：" + "、".join(str(date) for date in missing_dates[:8]))
+        elif source == "broker_branch":
+            lines.append(f"實際天數：{int(detail.get('date_count') or 0):,}")
+            lines.append(f"雙榜紀錄：{int(detail.get('dual_count') or 0):,}")
+            lines.append(f"張數榜專屬：{int(detail.get('e_only_count') or 0):,}")
+            lines.append(f"金額榜專屬：{int(detail.get('b_only_count') or 0):,}")
+        warnings = detail.get("warnings") or detail.get("quality_warnings") or []
+        if warnings:
+            lines.append("提醒：" + "；".join(str(item) for item in warnings[:3]))
+        return "\n".join(lines)
+
+    def _render_source_detail_status(self, source: str, status: Dict[str, Any]) -> None:
+        source_to_key = {
+            "daily": "daily_data",
+            "broker_branch": "broker_branch",
+        }
+        source_to_label = {
+            "daily": getattr(self, "daily_detail_status_label", None),
+            "broker_branch": getattr(self, "broker_branch_detail_status_label", None),
+        }
+        key = source_to_key.get(source)
+        label = source_to_label.get(source)
+        if not key or label is None:
+            return
+        detail = status.get(key) or {}
+        label.setText(self._format_source_detail_summary(source, detail))
 
     def _on_status_checked(self, status: Dict[str, Any]):
         """數據狀態檢查完成"""
@@ -2076,21 +2148,22 @@ class UpdateView(QWidget):
 
     def _execute_force_merge(self):
         """執行強制重新合併所有數據"""
-        # 警告對話框
-        reply = QMessageBox.warning(
-            self,
-            "警告：強制重新合併",
-            "確定要強制重新合併所有數據嗎？\n\n"
-            "⚠️ 這將：\n"
-            "• 忽略現有的 stock_data_whole.csv\n"
-            "• 重新合併 daily_price/ 目錄中的所有 CSV 文件\n"
-            "• 可能需要較長時間\n\n"
-            "建議：只有在需要完全重建數據時才使用此功能",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+        data_root = getattr(getattr(self, "config", None), "data_root", None) or "{DATA_ROOT}"
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setWindowTitle("確認強制合併")
+        msg_box.setText("強制重新合併所有每日股價會重建 SQLite 匯入與索引。")
+        msg_box.setInformativeText(
+            "此操作會重新讀取 CSV 並重建每日股價相關 SQLite 資料，可能需要較長時間。"
+            f"\n\n強制合併是針對 SQLite 資料庫重新進行 CSV 匯入與索引建立，"
+            f"不應亦不會修改或刪除 {data_root} 底下的 raw CSV 原始檔案，以保障資料安全性。"
+            "\n\n建議在執行前確認近期備份狀態；若只是測試取消流程，請按「取消」。"
         )
-
-        if reply != QMessageBox.Yes:
+        cancel_button = msg_box.addButton("取消", QMessageBox.RejectRole)
+        confirm_button = msg_box.addButton("確認強制合併", QMessageBox.DestructiveRole)
+        msg_box.setDefaultButton(cancel_button)
+        msg_box.exec()
+        if msg_box.clickedButton() is not confirm_button:
             return
 
         self._do_merge(force_all=True)

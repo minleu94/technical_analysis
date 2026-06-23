@@ -1,10 +1,11 @@
 import os
 import sys
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QGroupBox
 
 from app_module.research_run_dtos import ResearchRunMetadataDTO
 from ui_qt.views.backtest_view import BacktestView
@@ -102,10 +103,13 @@ def test_registry_compare_widget_filters_paginates_and_limits_selection(qt_app):
     assert widget.run_list.count() == 1
     assert "第 2 / 2 頁" in widget.page_label.text()
 
-    widget.run_type_filter.setCurrentText("single_backtest")
+    assert widget.run_type_filter.itemText(1) == "單股回測"
+    assert widget.run_type_filter.itemData(1) == "single_backtest"
+
+    widget.run_type_filter.setCurrentText("單股回測")
     widget.refresh_runs()
     assert widget.run_list.count() == 2
-    assert all("single_backtest" in widget.run_list.item(i).text() for i in range(2))
+    assert all("單股回測" in widget.run_list.item(i).text() for i in range(2))
 
     widget.run_list.selectAll()
     assert widget.selected_run_ids() == ["run-a", "run-b"]
@@ -119,12 +123,18 @@ def test_registry_compare_widget_renders_badge_diff_metrics_and_saved_benchmark(
 
     widget.compare_selected_runs()
 
-    assert "Comparable" in widget.comparability_badge.text()
+    assert "可直接比較" in widget.comparability_badge.text()
     assert widget.params_diff_table.model().rowCount() >= 1
     assert widget.metrics_table.model().rowCount() == 2
     assert widget.regime_table.model().rowCount() == 2
     assert widget.benchmark_table.model().rowCount() == 2
     assert widget.normalized_equity_table.model().rowCount() == 4
+
+    group_titles = {group.title() for group in widget.findChildren(QGroupBox)}
+    assert "指標" in group_titles
+    assert "市場 Regime" in group_titles
+    assert "Benchmark 基準" in group_titles
+    assert "標準化權益" in group_titles
 
 
 def test_registry_compare_widget_discards_stale_run_list_response(qt_app):
@@ -137,3 +147,28 @@ def test_registry_compare_widget_discards_stale_run_list_response(qt_app):
 
     assert widget.run_list.count() == 1
     assert "fresh" in widget.run_list.item(0).text()
+
+
+def test_registry_compare_widget_shows_empty_normalized_equity_message(qt_app):
+    service = FakeResearchRunService()
+    service.data["run-b"] = pd.DataFrame(
+        {"日期": ["2026-02-02"], "portfolio_value": [2100]}
+    )
+    widget = RunRegistryCompareWidget(service, page_size=10)
+
+    widget.refresh_runs()
+    widget.run_list.item(0).setSelected(True)
+    widget.run_list.item(1).setSelected(True)
+    widget.compare_selected_runs()
+
+    assert "沒有共同日期可標準化比較" in widget.normalized_equity_empty_label.text()
+
+
+def test_registry_compare_widget_refreshes_on_first_show(qt_app):
+    widget = RunRegistryCompareWidget(FakeResearchRunService(), page_size=10)
+    widget.refresh_runs = MagicMock()
+
+    widget.showEvent(None)
+    widget.showEvent(None)
+
+    assert widget.refresh_runs.call_count == 1

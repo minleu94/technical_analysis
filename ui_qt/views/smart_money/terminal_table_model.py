@@ -16,13 +16,14 @@ ROLE_BADGES = Qt.UserRole + 3
 ROLE_SCORE = Qt.UserRole + 4
 
 class TerminalTableModel(QAbstractTableModel):
-    def __init__(self, signals: List[FlowSignalDTO], parent=None):
+    def __init__(self, signals: List[FlowSignalDTO], parent=None, semantics_by_code=None):
         super().__init__(parent)
         self.signals = signals
+        self.semantics_by_code = semantics_by_code or {}
 
         # 定義欄位 (Column) 映射
         self.headers = [
-            "分數", "股票", "淨量", "集中度", "信號 (Badges)", "近期趨勢 (Trend)"
+            "分數", "股票", "淨量", "集中度", "語意狀態", "5/20/60 日診斷", "信號 (Badges)", "近期趨勢 (Trend)"
         ]
 
     def rowCount(self, parent=QModelIndex()) -> int:
@@ -41,6 +42,7 @@ class TerminalTableModel(QAbstractTableModel):
 
         signal = self.signals[index.row()]
         col = index.column()
+        semantic = self.semantics_by_code.get(signal.stock_code)
 
         # -- 傳遞給 Delegate 的自定義 Role 資料 --
         if role == ROLE_INTENSITY:
@@ -65,8 +67,18 @@ class TerminalTableModel(QAbstractTableModel):
             elif col == 3:
                 return f"{signal.branch_concentration:.0%}"
             elif col == 4:
-                return "" # 由 Delegate 繪製 Badges，不顯示字串
+                return semantic.primary_state if semantic is not None else "未計算"
             elif col == 5:
+                if semantic is None or semantic.window_5 is None or semantic.window_20 is None or semantic.window_60 is None:
+                    return "無語意診斷"
+                return (
+                    f"5日 {semantic.window_5.net_qty:+,}｜"
+                    f"20日 {semantic.window_20.net_qty:+,}｜"
+                    f"60日 {semantic.window_60.net_qty:+,}"
+                )
+            elif col == 6:
+                return "" # 由 Delegate 繪製 Badges，不顯示字串
+            elif col == 7:
                 return "" # 由 Delegate 繪製 Sparkline，不顯示字串
 
         # -- 文字對齊 --
@@ -78,6 +90,24 @@ class TerminalTableModel(QAbstractTableModel):
         # -- 滑鼠懸浮提示 (ToolTip) --
         if role == Qt.ToolTipRole:
             tooltip_lines = []
+            if semantic is not None:
+                tooltip_lines.append(f"語意狀態：{semantic.primary_state}")
+                flags = "、".join(semantic.semantic_flags) if semantic.semantic_flags else "無"
+                tooltip_lines.append(f"旗標：{flags}")
+                if semantic.window_5 is not None:
+                    concentration = semantic.window_5.top_concentration_bp
+                    tooltip_lines.append(
+                        f"5日 Top {semantic.window_5.top_n} quantity 集中度："
+                        f"{concentration if concentration is not None else 'N/A'} bp"
+                    )
+                    tooltip_lines.append(
+                        "資料品質："
+                        f"observed={semantic.window_5.observed_count} "
+                        f"estimated={semantic.window_5.estimated_count} "
+                        f"unavailable={semantic.window_5.unavailable_count}"
+                    )
+                tooltip_lines.extend(str(line) for line in getattr(semantic, "evidence_lines", ())[:6])
+                tooltip_lines.append("-" * 35)
 
             # 計算並顯示資料品質覆蓋率
             obs_cnt = getattr(signal, 'observed_event_count', 0)
@@ -137,6 +167,11 @@ class TerminalTableModel(QAbstractTableModel):
             self.signals.sort(key=lambda x: x.aggregation.total_net_qty, reverse=reverse)
         elif column == 3:  # 集中度
             self.signals.sort(key=lambda x: x.branch_concentration, reverse=reverse)
+        elif column == 4:
+            self.signals.sort(
+                key=lambda x: getattr(self.semantics_by_code.get(x.stock_code), "primary_state", ""),
+                reverse=reverse,
+            )
 
         self.layoutChanged.emit()
 

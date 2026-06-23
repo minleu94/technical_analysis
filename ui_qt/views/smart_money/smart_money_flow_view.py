@@ -6,6 +6,7 @@ Smart Money Flow - Terminal Style Scanner 主視圖
 
 import pandas as pd
 import traceback
+from datetime import date
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTableView, QMessageBox,
@@ -26,10 +27,17 @@ from ui_qt.models.pandas_table_model import PandasTableModel # 給 Detail Table 
 class SmartMoneyFlowView(QWidget):
     """Terminal Style Smart Money Scanner 主視圖"""
 
-    def __init__(self, broker_flow_service: BrokerFlowService, watchlist_service: WatchlistService = None, parent=None):
+    def __init__(
+        self,
+        broker_flow_service: BrokerFlowService,
+        watchlist_service: WatchlistService = None,
+        smart_money_semantic_service=None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.flow_service = broker_flow_service
         self.watchlist_service = watchlist_service
+        self.smart_money_semantic_service = smart_money_semantic_service
         self._data_loaded = False
         self._all_scanner_signals = []
 
@@ -394,15 +402,28 @@ class SmartMoneyFlowView(QWidget):
 
     def _apply_scanner_signals(self, signals):
         filtered_signals = self._filter_scanner_signals(signals)
-        self.scanner_model = TerminalTableModel(filtered_signals)
+        semantics_by_code = {}
+        if self.smart_money_semantic_service is not None:
+            decision_date = date.today()
+            for signal in filtered_signals:
+                try:
+                    semantics_by_code[signal.stock_code] = self.smart_money_semantic_service.build_stock_semantics(
+                        signal.stock_code,
+                        decision_date,
+                    )
+                except Exception:
+                    continue
+        self.scanner_model = TerminalTableModel(filtered_signals, semantics_by_code=semantics_by_code)
         self.scanner_table.setModel(self.scanner_model)
 
         self.scanner_table.setColumnWidth(0, 65)
         self.scanner_table.setColumnWidth(1, 160)
         self.scanner_table.setColumnWidth(2, 90)
         self.scanner_table.setColumnWidth(3, 80)
-        self.scanner_table.setColumnWidth(4, 250)
-        self.scanner_table.setColumnWidth(5, 140)
+        self.scanner_table.setColumnWidth(4, 120)
+        self.scanner_table.setColumnWidth(5, 180)
+        self.scanner_table.setColumnWidth(6, 250)
+        self.scanner_table.setColumnWidth(7, 140)
 
         sel_model = self.scanner_table.selectionModel()
         if sel_model:
