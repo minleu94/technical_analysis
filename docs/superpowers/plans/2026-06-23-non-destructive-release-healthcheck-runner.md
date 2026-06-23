@@ -40,6 +40,7 @@
 1. **每個功能有沒有被驗到？**
    - 對應 `FULL_APP_HEALTHCHECK_2026_06_16.md` 的 healthcheck ID 或人工段落。
    - 每個項目標記為 `automated`、`existing-test-bridged`、`manual-only`、`blocked`、`not-yet-automated` 或 `retired`。
+   - 同時保留人工 healthcheck 狀態，例如 `通過`、`已修正待驗證`、`需確認`、`後續設計`，避免自動化狀態覆蓋人工驗證狀態。
    - 報告列出缺口，不讓「還沒自動化」被誤看成「已通過」。
 
 2. **每個流程閉環有沒有走通？**
@@ -56,6 +57,37 @@
    - 每次輸出 structured JSON，保存 commit hash、manifest version、模式、viewport、既有測試橋接結果、coverage matrix、flow diagnostics。
    - 後續版本可比較兩次結果，知道新增/修復/退步/仍未覆蓋項目。
    - quick mode 用於日常快速防退化，full mode 用於 release 前完整巡檢，high-risk-dry-run 用於高風險流程防呆驗證。
+
+## Batch 1-6 Closeout Baseline
+
+本計畫在 2026-06-23 Batch 6 完成後調整。runner 第一版的 coverage matrix 不應再把 `docs/06_qa/FULL_APP_HEALTHCHECK_2026_06_16.md` 當成未整理的原始人工清單，而應把 Batch 1-6 closeout 後的 healthcheck 狀態當作起始基準。
+
+基準規則如下：
+
+1. `通過`
+   - 代表使用者已人工確認過。
+   - 自動化狀態仍需獨立標示；若還沒有 runner 或既有 test 覆蓋，automation status 應為 `not-yet-automated`，manual status 保留 `通過`。
+
+2. `已修正待驗證`
+   - 是第一版 runner 的主要 coverage target。
+   - 若項目只需要 UI 載入、文案、tooltip、下一步導引、layout 或唯讀資料顯示，優先列為 `automated` 或 `existing-test-bridged`。
+   - 若項目需要正式寫入、資料重建、刪除或長任務實跑，保持 `manual-only` 或 `blocked`，只能測防呆、dry-run、取消或唯讀狀態。
+
+3. `需確認`
+   - 保留在 coverage matrix，預設為 `not-yet-automated`。
+   - 只有確認非破壞可測後才轉入 manifest；不要因為 runner 可開頁面就宣稱該人工項目已通過。
+
+4. `後續設計`、`未修正`、`已排查，未平行化`
+   - 不進入第一版自動化 pass/fail gate。
+   - coverage matrix 應標示為 `blocked` 或 `manual-only`，並在報告中保留原因。
+
+Batch 6 對 runner 的具體影響：
+
+- Existing test bridge 必須納入 `tests/test_ui_qt_market_regime_view.py` 與 `tests/test_ui_qt_run_registry_compare.py`。
+- Research Lab 驗收不只檢查 tab 可開，還要檢查歷史 / 圖表 / Registry 首次進入可自動 refresh。
+- Market Regime 驗收不只檢查數字存在，還要檢查使用者可見文案為「規則匹配度」或「趨勢規則分」，tooltip 說明其不是勝率或未來成功率。
+- 推薦回放驗收不只檢查保存 / 升級不 crash，還要檢查升級完成訊息包含版本 ID、來源 run 與後續查看入口。
+- Layout / resize 驗收要把推薦回放設定區與歷史紀錄下拉列為第一批重點。
 
 ## File Map
 
@@ -83,6 +115,9 @@
 - Create: `qa/full_app_healthcheck/coverage_matrix.py`
   - 將人工 healthcheck 段落、manifest step、既有測試橋接結果對應成覆蓋矩陣，標示 automated / existing-test-bridged / manual-only / blocked / not-yet-automated / retired。
 
+- Create: `qa/full_app_healthcheck/batch_closeout_baseline.py`
+  - 明確宣告 Batch 1-6 closeout 後第一版 coverage matrix 的起始項目，不直接解析 Markdown 表格，也不改人工 healthcheck 狀態。
+
 - Create: `qa/full_app_healthcheck/flow_diagnostics.py`
   - 彙整每個流程閉環的入口、步驟、證據、缺口與不合理處，讓報告能指出流程問題而不只是測試失敗。
 
@@ -109,6 +144,9 @@
 
 - Create: `tests/test_full_app_healthcheck_coverage_matrix.py`
   - 測人工 healthcheck ID 與 manifest / existing tests 的覆蓋狀態彙整。
+
+- Create: `tests/test_full_app_healthcheck_batch_closeout_baseline.py`
+  - 測 Batch 1-6 closeout baseline 保留 manual status、automation status 與阻擋原因。
 
 - Create: `tests/test_full_app_healthcheck_flow_diagnostics.py`
   - 測閉環診斷能辨識缺步驟、缺證據、無下一步導向等流程問題。
@@ -331,6 +369,16 @@ def test_default_manifest_contains_all_release_modes():
     assert manifest.steps_for_mode(HealthcheckMode.QUICK)
     assert manifest.steps_for_mode(HealthcheckMode.FULL)
     assert manifest.steps_for_mode(HealthcheckMode.HIGH_RISK_DRY_RUN)
+
+
+def test_default_manifest_includes_batch6_closeout_regression_checks():
+    manifest = build_default_manifest()
+    step_ids = {step.id for step in manifest.steps}
+
+    assert "BATCH6-RESEARCH-FIRST-LOAD" in step_ids
+    assert "BATCH6-MARKET-REGIME-SEMANTICS" in step_ids
+    assert "BATCH6-REPLAY-PROMOTION-GUIDANCE" in step_ids
+    assert "BATCH6-REPLAY-RESIZE" in step_ids
 ```
 
 - [ ] **Step 2: Run failing tests**
@@ -412,6 +460,46 @@ def build_default_manifest() -> HealthcheckManifest:
                 action="assert_viewport_1366x768_layout",
                 risk=RiskLevel.UI_ONLY,
                 expected="頂層 tab、狀態列、主要按鈕可見。",
+                evidence_kind="screenshot",
+            ),
+            HealthcheckStep(
+                id="BATCH6-RESEARCH-FIRST-LOAD",
+                title="Batch 6 Research Lab：歷史、圖表與 Registry 首次進入自動載入",
+                mode=HealthcheckMode.FULL,
+                workspace="策略回測 / Research Lab",
+                action="assert_research_lab_first_load_refresh",
+                risk=RiskLevel.READ_ONLY,
+                expected="首次切到歷史與比較、圖表、Registry 比較時會載入既有資料或顯示可讀空狀態，不需要手動先按重新整理。",
+                evidence_kind="screenshot",
+            ),
+            HealthcheckStep(
+                id="BATCH6-MARKET-REGIME-SEMANTICS",
+                title="Batch 6 市場狀態：規則匹配度語意與 tooltip",
+                mode=HealthcheckMode.FULL,
+                workspace="市場觀察 / 大盤指數",
+                action="assert_market_regime_rule_match_copy",
+                risk=RiskLevel.READ_ONLY,
+                expected="第一層顯示使用規則匹配度語意；技術細節使用趨勢規則分；tooltip 說明 100% 不是勝率或未來成功率。",
+                evidence_kind="text",
+            ),
+            HealthcheckStep(
+                id="BATCH6-REPLAY-PROMOTION-GUIDANCE",
+                title="Batch 6 推薦回放：升級策略版本後有下一步導引",
+                mode=HealthcheckMode.FULL,
+                workspace="策略回測 / Research Lab",
+                action="assert_replay_promotion_guidance_copy",
+                risk=RiskLevel.UI_ONLY,
+                expected="升級完成訊息包含版本 ID、來源 run，並提示可到推薦分析 Profile / 策略版本入口查看。",
+                evidence_kind="text",
+            ),
+            HealthcheckStep(
+                id="BATCH6-REPLAY-RESIZE",
+                title="Batch 6 推薦回放：設定區與歷史紀錄下拉縮放不被吃掉",
+                mode=HealthcheckMode.FULL,
+                workspace="策略回測 / Research Lab",
+                action="assert_replay_settings_resize",
+                risk=RiskLevel.UI_ONLY,
+                expected="推薦回放設定群組與歷史紀錄下拉在 1366x768 可見，右側內容不被裁切。",
                 evidence_kind="screenshot",
             ),
             HealthcheckStep(
@@ -1052,6 +1140,10 @@ def test_action_registry_contains_default_manifest_actions():
 
     assert "assert_data_market_loop_readonly" in actions
     assert "assert_force_merge_cancel_dialog" in actions
+    assert "assert_research_lab_first_load_refresh" in actions
+    assert "assert_market_regime_rule_match_copy" in actions
+    assert "assert_replay_promotion_guidance_copy" in actions
+    assert "assert_replay_settings_resize" in actions
 ```
 
 - [ ] **Step 2: Implement action registry with real minimum checks**
@@ -1118,6 +1210,110 @@ def assert_viewport_1366x768_layout(context, step):
     return {"screenshot": str(screenshot), "message": "1366x768 視窗截圖已保存"}
 
 
+def _find_backtest_view(window):
+    return _find_widget_by_class(window, "BacktestView")
+
+
+def _find_widget_by_class(window, class_name: str):
+    from PySide6.QtWidgets import QWidget
+
+    for widget in window.findChildren(QWidget):
+        if widget.__class__.__name__ == class_name:
+            return widget
+    raise AssertionError(f"找不到 {class_name}")
+
+
+def _collect_widget_text(widget):
+    from PySide6.QtWidgets import QWidget
+
+    texts = []
+    for child in widget.findChildren(QWidget):
+        for attr_name in ("text", "title", "toolTip", "placeholderText"):
+            attr = getattr(child, attr_name, None)
+            if callable(attr):
+                try:
+                    value = attr()
+                except TypeError:
+                    continue
+                if value:
+                    texts.append(str(value))
+    return "\n".join(texts)
+
+
+def assert_research_lab_first_load_refresh(context, step):
+    from qa.full_app_healthcheck.actions import switch_tab_by_text
+    from qa.full_app_healthcheck.oracles import assert_child_text_contains
+
+    window = _require_window(context)
+    switch_tab_by_text(window.tabs, "策略回測")
+    backtest_view = _find_backtest_view(window)
+
+    tab_texts = [
+        backtest_view.result_tabs.tabText(index)
+        for index in range(backtest_view.result_tabs.count())
+    ]
+    tab_indexes = {text: index for index, text in enumerate(tab_texts)}
+    assert any("歷史" in text or "比較" in text for text in tab_texts)
+    assert any("圖表" in text for text in tab_texts)
+    assert any("Registry" in text for text in tab_texts)
+    for text, index in tab_indexes.items():
+        if any(marker in text for marker in ("歷史", "圖表", "Registry")):
+            backtest_view._on_result_tab_changed(index)
+    assert_child_text_contains(backtest_view, "Registry")
+    return {"message": "Research Lab 歷史 / 圖表 / Registry 子頁入口存在，可作首次載入驗收"}
+
+
+def assert_market_regime_rule_match_copy(context, step):
+    from qa.full_app_healthcheck.actions import switch_tab_by_text
+    from qa.full_app_healthcheck.oracles import assert_child_text_contains
+
+    window = _require_window(context)
+    switch_tab_by_text(window.tabs, "市場觀察")
+    market_regime_view = _find_widget_by_class(window, "MarketRegimeView")
+    if hasattr(market_regime_view, "_detect_regime"):
+        market_regime_view._detect_regime()
+    combined = _collect_widget_text(market_regime_view)
+    for expected in ("規則匹配度", "趨勢規則分", "不是未來勝率"):
+        if expected not in combined:
+            raise AssertionError(f"市場狀態文案缺少：{expected}")
+    return {"message": "市場狀態顯示使用規則匹配度 / 趨勢規則分語意"}
+
+
+def assert_replay_promotion_guidance_copy(context, step):
+    from qa.full_app_healthcheck.actions import switch_tab_by_text
+
+    window = _require_window(context)
+    switch_tab_by_text(window.tabs, "策略回測")
+    backtest_view = _find_backtest_view(window)
+    builder = getattr(backtest_view, "_build_portfolio_promotion_success_message", None)
+    if builder is None:
+        raise AssertionError("BacktestView 缺少推薦回放升級成功訊息 builder")
+    message = builder("version-healthcheck", "run-healthcheck")
+    for expected in ("version-healthcheck", "run-healthcheck", "推薦分析 Profile", "策略版本"):
+        if expected not in message:
+            raise AssertionError(f"推薦回放升級完成訊息缺少：{expected}")
+    return {"message": "推薦回放升級完成訊息含版本 ID、來源 run 與後續入口"}
+
+
+def assert_replay_settings_resize(context, step):
+    from qa.full_app_healthcheck.actions import grab_widget_screenshot, switch_tab_by_text
+    from qa.full_app_healthcheck.oracles import assert_no_visible_widget_overflows
+
+    window = _require_window(context)
+    switch_tab_by_text(window.tabs, "策略回測")
+    window.resize(1366, 768)
+    context["app"].processEvents()
+    backtest_view = _find_backtest_view(window)
+    combo = getattr(getattr(backtest_view, "config_panel", None), "portfolio_history_combo", None)
+    if combo is None:
+        raise AssertionError("找不到推薦回放歷史紀錄下拉")
+    if combo.minimumWidth() < 240:
+        raise AssertionError("推薦回放歷史紀錄下拉最小寬度低於 Batch 6 baseline")
+    assert_no_visible_widget_overflows(backtest_view)
+    screenshot = grab_widget_screenshot(backtest_view, context["output_dir"] / f"{step.id}.png")
+    return {"screenshot": str(screenshot), "message": "推薦回放設定區縮放截圖已保存"}
+
+
 def assert_force_merge_cancel_dialog(context, step):
     return {
         "message": "此 step 必須在 Task 10 以 dialog interception 驗證取消流程；在完成 Task 10 前不可把 high-risk-dry-run 當 release gate。",
@@ -1132,6 +1328,10 @@ def build_action_registry():
         "assert_portfolio_loop_readonly": assert_portfolio_loop_readonly,
         "assert_decision_desk_snapshot_readonly": assert_decision_desk_snapshot_readonly,
         "assert_viewport_1366x768_layout": assert_viewport_1366x768_layout,
+        "assert_research_lab_first_load_refresh": assert_research_lab_first_load_refresh,
+        "assert_market_regime_rule_match_copy": assert_market_regime_rule_match_copy,
+        "assert_replay_promotion_guidance_copy": assert_replay_promotion_guidance_copy,
+        "assert_replay_settings_resize": assert_replay_settings_resize,
         "assert_force_merge_cancel_dialog": assert_force_merge_cancel_dialog,
     }
 ```
@@ -1199,7 +1399,7 @@ def ensure_qapplication() -> QApplication:
     return instance
 ```
 
-- [ ] **Step 3: Add real read-only UI action later in same file**
+- [ ] **Step 3: Wire the CLI to create a real read-only MainWindow context**
 
 Implement context creation in `scripts/run_full_app_healthcheck.py`:
 
@@ -1306,6 +1506,8 @@ def test_existing_suite_registry_reuses_current_ui_and_qa_tests():
     assert "ui-update-workbench" in ids
     assert "ui-decision-desk" in ids
     assert "ui-research-workflow" in ids
+    assert "ui-market-regime-view" in ids
+    assert "ui-run-registry-compare" in ids
     assert "qa-update-tab" in ids
 
 
@@ -1323,8 +1525,27 @@ def test_full_mode_includes_broader_existing_ui_contract_tests():
     commands = [" ".join(suite.command) for suite in suites]
 
     assert any("tests/test_ui_qt_research_workflow.py" in command for command in commands)
+    assert any("tests/test_ui_qt_market_regime_view.py" in command for command in commands)
+    assert any("tests/test_ui_qt_run_registry_compare.py" in command for command in commands)
     assert any("tests/test_ui_qt_smart_money_flow_view.py" in command for command in commands)
     assert all(suite.non_destructive for suite in suites)
+
+
+def test_existing_suites_expose_covered_healthcheck_ids_and_flow_ids():
+    suites = build_existing_suite_registry()
+    coverage_ids = {
+        coverage_id
+        for suite in suites
+        for coverage_id in suite.covered_healthcheck_ids
+    }
+    flow_ids = {flow_id for suite in suites for flow_id in suite.covered_flow_ids}
+
+    assert "M-001" in coverage_ids
+    assert "M-002" in coverage_ids
+    assert "B-038" in coverage_ids
+    assert "B-039" in coverage_ids
+    assert "B-041" in coverage_ids
+    assert "research-validation-loop" in flow_ids
 
 
 def test_existing_suite_command_is_explicit_and_not_shell_joined():
@@ -1372,6 +1593,8 @@ class ExistingSuite:
     modes: tuple[HealthcheckMode, ...]
     command: tuple[str, ...]
     non_destructive: bool
+    covered_healthcheck_ids: tuple[str, ...] = ()
+    covered_flow_ids: tuple[str, ...] = ()
 
 
 def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
@@ -1396,6 +1619,26 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             modes=(HealthcheckMode.FULL,),
             command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_research_workflow.py", "-q", "-o", "addopts="),
             non_destructive=True,
+            covered_healthcheck_ids=("B-004", "B-005", "B-038", "B-039", "B-041", "X-004"),
+            covered_flow_ids=("research-validation-loop",),
+        ),
+        ExistingSuite(
+            id="ui-market-regime-view",
+            title="既有 Market Regime 規則匹配度 / tooltip UI 測試",
+            modes=(HealthcheckMode.FULL,),
+            command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_market_regime_view.py", "-q", "-o", "addopts="),
+            non_destructive=True,
+            covered_healthcheck_ids=("M-001", "M-002", "MARKET-ISSUE-002"),
+            covered_flow_ids=("data-market-state-loop",),
+        ),
+        ExistingSuite(
+            id="ui-run-registry-compare",
+            title="既有 Research Registry 比較頁 UI 測試",
+            modes=(HealthcheckMode.FULL,),
+            command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_run_registry_compare.py", "-q", "-o", "addopts="),
+            non_destructive=True,
+            covered_healthcheck_ids=("B-039", "B-041", "BACKTEST-ISSUE-021"),
+            covered_flow_ids=("research-validation-loop",),
         ),
         ExistingSuite(
             id="ui-smart-money-flow",
@@ -1403,6 +1646,8 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             modes=(HealthcheckMode.FULL,),
             command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_smart_money_flow_view.py", "-q", "-o", "addopts="),
             non_destructive=True,
+            covered_healthcheck_ids=("M-017", "M-019", "M-022", "MARKET-ISSUE-004", "MARKET-ISSUE-005"),
+            covered_flow_ids=("data-market-state-loop", "portfolio-check-loop"),
         ),
         ExistingSuite(
             id="qa-update-tab",
@@ -1410,6 +1655,8 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             modes=(HealthcheckMode.FULL,),
             command=(PYTHON, "scripts\\qa_validate_update_tab.py"),
             non_destructive=True,
+            covered_healthcheck_ids=("U-001", "U-006", "U-020", "UPDATE-ISSUE-030", "UPDATE-ISSUE-031"),
+            covered_flow_ids=("data-market-state-loop",),
         ),
     )
 
@@ -1448,12 +1695,12 @@ HealthcheckStep(
 ),
 HealthcheckStep(
     id="EXISTING-FULL-UI",
-    title="呼叫既有完整 UI / QA 測試：Research workflow、Smart Money、Update QA",
+    title="呼叫既有完整 UI / QA 測試：Research workflow、Market Regime、Registry Compare、Smart Money、Update QA",
     mode=HealthcheckMode.FULL,
     workspace="既有測試",
     action="run_existing_suites_for_mode",
     risk=RiskLevel.READ_ONLY,
-    expected="重用既有完整 UI 與 QA scripts，避免重複測試檔案。",
+    expected="重用 Batch 1-6 後既有完整 UI 與 QA scripts，避免重複測試檔案。",
 ),
 ```
 
@@ -1525,6 +1772,8 @@ Release 前可先執行非破壞式 Full App Healthcheck Runner：
 此 runner 只作自動化輔助，不取代人工驗證。第一版不執行快速更新、安全更新、強制合併、正式資料寫入、刪除或清空；高風險流程只驗證防呆與取消。
 
 Runner 會優先呼叫既有非破壞式 pytest / QA scripts，例如 UpdateView、Daily Decision Desk、Research workflow 與 Smart Money UI 測試；只有既有測試沒有覆蓋的跨頁導覽、截圖、視窗縮放與高風險取消流程，才新增 runner 專屬測項。
+
+Batch 1-6 完成後，本檔中的 `已修正待驗證`、`需確認`、`通過` 與 `後續設計` 會作為 coverage matrix 的人工狀態來源。runner 可以標示自動化覆蓋與自動化通過，但不得自動把人工狀態改成 `通過`。
 ```
 
 - [ ] **Step 2: Add manual section**
@@ -1545,6 +1794,8 @@ Add to `docs/07_guides/APPLICATION_MANUAL.md` under validation or QA section:
 輸出位於 `output/qa/full_app_healthcheck/`。報告中的 `passed` 代表自動化步驟通過，不等同人工 healthcheck 已驗證通過。
 
 Runner 會重用既有非破壞式測試；新增驗收項目前，先確認是否能登錄既有 pytest 或 QA script，避免重複維護同一行為。
+
+Batch 1-6 closeout 後，報告會同時顯示人工 healthcheck 狀態與自動化覆蓋狀態。`已修正待驗證` 代表程式已修但仍待人工重測；自動化通過只代表 runner 覆蓋到該檢查，不會自動改寫人工驗證結論。
 ```
 
 - [ ] **Step 3: Do not update Snapshot unless the runner becomes a release gate**
@@ -1555,9 +1806,11 @@ For the first plan execution, this is a QA helper. Update `PROJECT_SNAPSHOT.md` 
 
 **Files:**
 - Create: `qa/full_app_healthcheck/coverage_matrix.py`
+- Create: `qa/full_app_healthcheck/batch_closeout_baseline.py`
 - Create: `qa/full_app_healthcheck/flow_diagnostics.py`
 - Modify: `qa/full_app_healthcheck/reporting.py`
 - Test: `tests/test_full_app_healthcheck_coverage_matrix.py`
+- Test: `tests/test_full_app_healthcheck_batch_closeout_baseline.py`
 - Test: `tests/test_full_app_healthcheck_flow_diagnostics.py`
 
 - [ ] **Step 1: Write failing tests for healthcheck coverage status**
@@ -1568,6 +1821,7 @@ Create `tests/test_full_app_healthcheck_coverage_matrix.py`:
 from qa.full_app_healthcheck.coverage_matrix import (
     CoverageStatus,
     HealthcheckCoverageItem,
+    ManualHealthcheckStatus,
     detect_coverage_gaps,
 )
 
@@ -1578,18 +1832,21 @@ def test_detect_coverage_gaps_keeps_manual_and_missing_visible():
             healthcheck_id="UPDATE-001",
             title="數據更新頁可載入",
             status=CoverageStatus.AUTOMATED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
             evidence="manifest:LOOP-1",
         ),
         HealthcheckCoverageItem(
             healthcheck_id="UPDATE-009",
             title="快速更新實際寫入",
             status=CoverageStatus.MANUAL_ONLY,
+            manual_status=ManualHealthcheckStatus.NEEDS_CONFIRMATION,
             evidence="非破壞模式不執行正式寫入",
         ),
         HealthcheckCoverageItem(
             healthcheck_id="PORTFOLIO-004",
             title="持倉刪除流程",
             status=CoverageStatus.NOT_YET_AUTOMATED,
+            manual_status=ManualHealthcheckStatus.NEEDS_CONFIRMATION,
             evidence="尚未建立高風險取消測項",
         ),
     )
@@ -1598,6 +1855,21 @@ def test_detect_coverage_gaps_keeps_manual_and_missing_visible():
 
     assert [gap.healthcheck_id for gap in gaps] == ["UPDATE-009", "PORTFOLIO-004"]
     assert gaps[0].status is CoverageStatus.MANUAL_ONLY
+
+
+def test_coverage_item_preserves_manual_status_separately_from_automation_status():
+    item = HealthcheckCoverageItem(
+        healthcheck_id="M-001",
+        title="大盤指數規則匹配度顯示",
+        status=CoverageStatus.EXISTING_TEST_BRIDGED,
+        manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+        evidence="tests/test_ui_qt_market_regime_view.py",
+        source_batch="Batch 6",
+    )
+
+    assert item.status is CoverageStatus.EXISTING_TEST_BRIDGED
+    assert item.manual_status is ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION
+    assert item.source_batch == "Batch 6"
 ```
 
 - [ ] **Step 2: Implement coverage matrix dataclasses**
@@ -1620,6 +1892,16 @@ class CoverageStatus(str, Enum):
     RETIRED = "retired"
 
 
+class ManualHealthcheckStatus(str, Enum):
+    PASSED = "通過"
+    FIXED_PENDING_VERIFICATION = "已修正待驗證"
+    NEEDS_CONFIRMATION = "需確認"
+    LATER_DESIGN = "後續設計"
+    NOT_FIXED = "未修正"
+    INVESTIGATED_NOT_PARALLELIZED = "已排查，未平行化"
+    UNKNOWN = "unknown"
+
+
 GAP_STATUSES = {
     CoverageStatus.MANUAL_ONLY,
     CoverageStatus.BLOCKED,
@@ -1632,9 +1914,12 @@ class HealthcheckCoverageItem:
     healthcheck_id: str
     title: str
     status: CoverageStatus
+    manual_status: ManualHealthcheckStatus = ManualHealthcheckStatus.UNKNOWN
     evidence: str = ""
     owner: str = ""
     notes: str = ""
+    source_batch: str = ""
+    blocked_reason: str = ""
 
 
 def detect_coverage_gaps(
@@ -1643,7 +1928,144 @@ def detect_coverage_gaps(
     return tuple(item for item in items if item.status in GAP_STATUSES)
 ```
 
-- [ ] **Step 3: Write failing tests for flow diagnostics**
+- [ ] **Step 3: Write failing tests for Batch 1-6 closeout baseline**
+
+Create `tests/test_full_app_healthcheck_batch_closeout_baseline.py`:
+
+```python
+from qa.full_app_healthcheck.batch_closeout_baseline import (
+    build_batch_closeout_baseline,
+)
+from qa.full_app_healthcheck.coverage_matrix import (
+    CoverageStatus,
+    ManualHealthcheckStatus,
+)
+
+
+def test_batch_closeout_baseline_keeps_batch6_items_and_manual_status():
+    items = build_batch_closeout_baseline()
+    by_id = {item.healthcheck_id: item for item in items}
+
+    assert by_id["M-001"].manual_status is ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION
+    assert by_id["M-001"].status is CoverageStatus.EXISTING_TEST_BRIDGED
+    assert by_id["M-001"].source_batch == "Batch 6"
+
+    assert by_id["B-039"].status is CoverageStatus.EXISTING_TEST_BRIDGED
+    assert by_id["B-041"].status is CoverageStatus.EXISTING_TEST_BRIDGED
+    assert by_id["BACKTEST-ISSUE-021"].source_batch == "Batch 6"
+
+
+def test_batch_closeout_baseline_blocks_deferred_high_risk_or_design_items():
+    items = build_batch_closeout_baseline()
+    by_id = {item.healthcheck_id: item for item in items}
+
+    assert by_id["UPDATE-ISSUE-013"].status is CoverageStatus.BLOCKED
+    assert by_id["UPDATE-ISSUE-014"].status is CoverageStatus.BLOCKED
+    assert "受控並行" in by_id["UPDATE-ISSUE-013"].blocked_reason
+    assert "多核心" in by_id["UPDATE-ISSUE-014"].blocked_reason
+```
+
+- [ ] **Step 4: Implement Batch 1-6 closeout baseline**
+
+Create `qa/full_app_healthcheck/batch_closeout_baseline.py`:
+
+```python
+from __future__ import annotations
+
+from qa.full_app_healthcheck.coverage_matrix import (
+    CoverageStatus,
+    HealthcheckCoverageItem,
+    ManualHealthcheckStatus,
+)
+
+
+def build_batch_closeout_baseline() -> tuple[HealthcheckCoverageItem, ...]:
+    return (
+        HealthcheckCoverageItem(
+            healthcheck_id="M-001",
+            title="大盤指數規則匹配度顯示",
+            status=CoverageStatus.EXISTING_TEST_BRIDGED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+            evidence="tests/test_ui_qt_market_regime_view.py",
+            source_batch="Batch 6",
+            notes="自動測試只能驗證文案與 tooltip；人工狀態仍保持待驗證。",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="M-002",
+            title="大盤指數技術細節趨勢規則分說明",
+            status=CoverageStatus.EXISTING_TEST_BRIDGED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+            evidence="tests/test_ui_qt_market_regime_view.py",
+            source_batch="Batch 6",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="MARKET-ISSUE-002",
+            title="Regime confidence / subscore 不是勝率的使用者可理解揭露",
+            status=CoverageStatus.EXISTING_TEST_BRIDGED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+            evidence="tests/test_ui_qt_market_regime_view.py",
+            source_batch="Batch 6",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="B-038",
+            title="Research Lab 圖表頁既有 run 首次載入",
+            status=CoverageStatus.EXISTING_TEST_BRIDGED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+            evidence="tests/test_ui_qt_research_workflow.py",
+            source_batch="Batch 6",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="B-039",
+            title="Research Lab 歷史與比較首次載入",
+            status=CoverageStatus.EXISTING_TEST_BRIDGED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+            evidence="tests/test_ui_qt_research_workflow.py; tests/test_ui_qt_run_registry_compare.py",
+            source_batch="Batch 6",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="B-041",
+            title="推薦回放保存 / 升級後導引",
+            status=CoverageStatus.EXISTING_TEST_BRIDGED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+            evidence="tests/test_ui_qt_research_workflow.py",
+            source_batch="Batch 6",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="BACKTEST-ISSUE-021",
+            title="歷史、圖表、Registry 比較首次進入自動 refresh",
+            status=CoverageStatus.EXISTING_TEST_BRIDGED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+            evidence="tests/test_ui_qt_research_workflow.py; tests/test_ui_qt_run_registry_compare.py",
+            source_batch="Batch 6",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="BACKTEST-ISSUE-023",
+            title="策略版本升級後知道去哪裡看",
+            status=CoverageStatus.EXISTING_TEST_BRIDGED,
+            manual_status=ManualHealthcheckStatus.FIXED_PENDING_VERIFICATION,
+            evidence="tests/test_ui_qt_research_workflow.py",
+            source_batch="Batch 6",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="UPDATE-ISSUE-013",
+            title="券商分點受控並行",
+            status=CoverageStatus.BLOCKED,
+            manual_status=ManualHealthcheckStatus.INVESTIGATED_NOT_PARALLELIZED,
+            source_batch="Batch 5",
+            blocked_reason="受控並行牽涉 MoneyDJ / Selenium / retry / rate limit，不屬第一版非破壞 runner。",
+        ),
+        HealthcheckCoverageItem(
+            healthcheck_id="UPDATE-ISSUE-014",
+            title="技術指標多核心計算",
+            status=CoverageStatus.BLOCKED,
+            manual_status=ManualHealthcheckStatus.INVESTIGATED_NOT_PARALLELIZED,
+            source_batch="Batch 5",
+            blocked_reason="多核心 compute 與單 writer 寫入需要獨立設計，避免 SQLite / CSV 寫入競爭。",
+        ),
+    )
+```
+
+- [ ] **Step 5: Write failing tests for flow diagnostics**
 
 Create `tests/test_full_app_healthcheck_flow_diagnostics.py`:
 
@@ -1679,9 +2101,30 @@ def test_diagnose_flow_flags_missing_evidence_and_next_step():
     assert diagnostic.status == "needs-attention"
     assert "缺少證據" in diagnostic.issues
     assert "缺少下一步導向" in diagnostic.issues
+
+
+def test_diagnose_flow_flags_user_understandability_regressions():
+    diagnostic = diagnose_flow(
+        flow_id="data-market-state-loop",
+        title="資料與市場狀態閉環",
+        steps=(
+            FlowStepObservation(
+                id="market-regime-copy",
+                title="市場狀態規則匹配度文案",
+                observed=True,
+                evidence="tests/test_ui_qt_market_regime_view.py",
+                next_step="檢查 Research Lab regime mismatch",
+                user_understandable=False,
+                notes="顯示信心度 100%，未說明不是勝率。",
+            ),
+        ),
+    )
+
+    assert diagnostic.status == "needs-attention"
+    assert "文案不可理解" in diagnostic.issues
 ```
 
-- [ ] **Step 4: Implement flow diagnostics**
+- [ ] **Step 6: Implement flow diagnostics**
 
 Create `qa/full_app_healthcheck/flow_diagnostics.py`:
 
@@ -1698,6 +2141,7 @@ class FlowStepObservation:
     observed: bool
     evidence: str = ""
     next_step: str = ""
+    user_understandable: bool = True
     notes: str = ""
 
 
@@ -1722,6 +2166,8 @@ def diagnose_flow(
         issues.append("缺少證據")
     if any(step.observed and not step.next_step for step in steps[:-1]):
         issues.append("缺少下一步導向")
+    if any(step.observed and not step.user_understandable for step in steps):
+        issues.append("文案不可理解")
 
     return FlowDiagnostic(
         flow_id=flow_id,
@@ -1732,15 +2178,15 @@ def diagnose_flow(
     )
 ```
 
-- [ ] **Step 5: Add coverage and diagnostics sections to reports**
+- [ ] **Step 7: Add coverage and diagnostics sections to reports**
 
 Modify `qa/full_app_healthcheck/reporting.py` so Markdown reports include:
 
 ```markdown
 ## Coverage Summary
 
-| Healthcheck ID | Title | Status | Evidence | Notes |
-|---|---|---|---|---|
+| Healthcheck ID | Title | Automation Status | Manual Status | Source Batch | Evidence | Blocked Reason | Notes |
+|---|---|---|---|---|---|---|---|
 
 ## Flow Diagnostics
 
@@ -1755,7 +2201,7 @@ If no coverage matrix or flow diagnostics are passed to the reporter yet, render
 尚未產生 flow diagnostics。
 ```
 
-- [ ] **Step 6: Connect existing test bridge to coverage statuses**
+- [ ] **Step 8: Connect existing test bridge to coverage statuses**
 
 When `test_suite_bridge.py` registers an existing pytest or QA script, it should expose the healthcheck IDs or flow IDs it covers. The coverage matrix should mark those as `existing-test-bridged` instead of requiring duplicate runner steps.
 
@@ -1765,7 +2211,7 @@ Implementation rule:
 同一個 UI 行為只能有一個主要測試來源。若既有測試已覆蓋，runner 只橋接並記錄 coverage，不重寫一份相同測試。
 ```
 
-- [ ] **Step 7: Use coverage matrix as the expansion path for `FULL_APP_HEALTHCHECK_2026_06_16.md`**
+- [ ] **Step 9: Use coverage matrix as the expansion path for `FULL_APP_HEALTHCHECK_2026_06_16.md`**
 
 Do not attempt to fully automate the whole healthcheck mother file in one PR. Instead:
 
@@ -1773,6 +2219,7 @@ Do not attempt to fully automate the whole healthcheck mother file in one PR. In
 2. Mark non-destructive-safe items as `automated` or `existing-test-bridged`.
 3. Mark write/destructive/data-changing items as `manual-only` or `blocked` until a safe dry-run path exists.
 4. Keep `not-yet-automated` visible in every report so future work naturally burns the list down.
+5. Preserve `manual_status` separately, especially `已修正待驗證`; runner output must not auto-promote it to `通過`.
 
 ### Task 14: Verification
 
@@ -1782,7 +2229,7 @@ Do not attempt to fully automate the whole healthcheck mother file in one PR. In
 - [ ] **Step 1: Run focused tests**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_manifest.py tests/test_full_app_healthcheck_runner.py tests/test_full_app_healthcheck_reporting.py tests/test_full_app_healthcheck_test_suite_bridge.py tests/test_full_app_healthcheck_coverage_matrix.py tests/test_full_app_healthcheck_flow_diagnostics.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_manifest.py tests/test_full_app_healthcheck_runner.py tests/test_full_app_healthcheck_reporting.py tests/test_full_app_healthcheck_test_suite_bridge.py tests/test_full_app_healthcheck_coverage_matrix.py tests/test_full_app_healthcheck_batch_closeout_baseline.py tests/test_full_app_healthcheck_flow_diagnostics.py -q -o addopts=
 ```
 
 Expected: all passed.
@@ -1790,7 +2237,7 @@ Expected: all passed.
 - [ ] **Step 2: Run existing UI smoke tests**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py tests/test_ui_qt_decision_desk_view.py tests/test_ui_qt_research_workflow.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py tests/test_ui_qt_decision_desk_view.py tests/test_ui_qt_research_workflow.py tests/test_ui_qt_market_regime_view.py tests/test_ui_qt_run_registry_compare.py -q -o addopts=
 ```
 
 Expected: all passed or document pre-existing failures.
@@ -1806,7 +2253,7 @@ Expected: non-zero only if a real UI check fails. No formal data files are modif
 - [ ] **Step 4: Run syntax checks**
 
 ```powershell
-.\.venv\Scripts\python.exe -m py_compile qa\full_app_healthcheck\__init__.py qa\full_app_healthcheck\manifest.py qa\full_app_healthcheck\default_manifest.py qa\full_app_healthcheck\runner.py qa\full_app_healthcheck\actions.py qa\full_app_healthcheck\oracles.py qa\full_app_healthcheck\reporting.py qa\full_app_healthcheck\safety.py qa\full_app_healthcheck\test_suite_bridge.py qa\full_app_healthcheck\coverage_matrix.py qa\full_app_healthcheck\flow_diagnostics.py qa\full_app_healthcheck\app_context.py scripts\run_full_app_healthcheck.py
+.\.venv\Scripts\python.exe -m py_compile qa\full_app_healthcheck\__init__.py qa\full_app_healthcheck\manifest.py qa\full_app_healthcheck\default_manifest.py qa\full_app_healthcheck\runner.py qa\full_app_healthcheck\actions.py qa\full_app_healthcheck\oracles.py qa\full_app_healthcheck\reporting.py qa\full_app_healthcheck\safety.py qa\full_app_healthcheck\test_suite_bridge.py qa\full_app_healthcheck\coverage_matrix.py qa\full_app_healthcheck\batch_closeout_baseline.py qa\full_app_healthcheck\flow_diagnostics.py qa\full_app_healthcheck\app_context.py scripts\run_full_app_healthcheck.py
 ```
 
 Expected: no output and exit code 0.
@@ -1818,12 +2265,13 @@ Expected: no output and exit code 0.
 1. **Infrastructure only**：Task 1 到 Task 7。先有 manifest、safety、report、CLI；此批不宣稱具備 UI 驗收能力。
 2. **Read-only real UI checks**：Task 8 到 Task 9。補主視窗導覽、tab、截圖、layout overflow。
 3. **High-risk dry-run checks**：Task 10。只驗證取消流程。
-4. **Oracle expansion**：補 SQLite read-only、table row count、widget geometry、text truncation 掃描。
-5. **Healthcheck coverage matrix expansion**：把 `FULL_APP_HEALTHCHECK_2026_06_16.md` 的各工作區 ID 逐步搬進 coverage matrix，標記 automated、existing-test-bridged、manual-only、blocked、not-yet-automated 或 retired。
-6. **Manifest expansion**：把已確認可非破壞驗證的 coverage items 逐步搬進 manifest；不能安全自動化的項目留在 coverage matrix，不硬做。
-7. **Flow diagnostics expansion**：針對四大流程閉環補入口、步驟、證據、下一步導向與流程問題判讀，讓 runner 能指出「流程不合理」而不只是「測試失敗」。
-8. **Version comparison**：新增 JSON 結果比較工具，比較兩次 run 或兩個 commit 的新增覆蓋、修復、退步、仍未覆蓋項目。
-9. **Release gate decision**：當 runner 穩定後，再決定是否把 `quick` 模式列為正式 release gate。
+4. **Batch 1-6 closeout baseline**：先落地 `batch_closeout_baseline.py`，讓已修正待驗證、通過、需確認、後續設計與 blocked 原因同時出現在報告。
+5. **Oracle expansion**：補 SQLite read-only、table row count、widget geometry、text truncation、tooltip / hint / next-step copy 掃描。
+6. **Healthcheck coverage matrix expansion**：把 `FULL_APP_HEALTHCHECK_2026_06_16.md` 的各工作區 ID 逐步搬進 coverage matrix，標記 automated、existing-test-bridged、manual-only、blocked、not-yet-automated 或 retired。
+7. **Manifest expansion**：把已確認可非破壞驗證的 coverage items 逐步搬進 manifest；不能安全自動化的項目留在 coverage matrix，不硬做。
+8. **Flow diagnostics expansion**：針對四大流程閉環補入口、步驟、證據、下一步導向與「文案是否看得懂」判讀，讓 runner 能指出「流程不合理」而不只是「測試失敗」。
+9. **Version comparison**：新增 JSON 結果比較工具，比較兩次 run 或兩個 commit 的新增覆蓋、修復、退步、仍未覆蓋項目。
+10. **Release gate decision**：當 runner 穩定後，再決定是否把 `quick` 模式列為正式 release gate。
 
 ## Open Questions For Future Execution
 
