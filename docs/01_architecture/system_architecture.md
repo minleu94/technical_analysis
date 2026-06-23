@@ -101,7 +101,7 @@ Application Services / DTO / Repository
 
 | 領域 | 主要元件 |
 |---|---|
-| 推薦與市場 | `recommendation_service.py`、`screening_service.py`、`regime_service.py` |
+| 推薦與市場 | `recommendation_service.py`、`screening_service.py`、`regime_service.py`、`recommendation_profile_service.py` |
 | 數據更新 | `update_service.py`、`broker_branch_update_service.py`、`sqlite_inspector_service.py` |
 | 籌碼 | `broker_flow_service.py`、`portfolio_chip_service.py` |
 | 回測 | `backtest_service.py`、`batch_backtest_service.py`、`optimizer_service.py`、`walkforward_service.py` |
@@ -116,6 +116,8 @@ Application Services / DTO / Repository
 Daily Decision Desk 後續應以 application service / DTO 聚合既有市場、推薦、watchlist 與 portfolio 結果，不得在 UI 層重算 scoring、screening、broker flow 或 portfolio logic. Market Breadth v1 由 `app_module.market_breadth_service.MarketBreadthService` 與 `SQLiteDailyPriceMarketBreadthProvider` 自 SQLite `daily_prices` 唯讀推導多方 / 空方 / 持平、成交量擴散與新高新低 metadata，並在指定日無資料時以最近可用交易日降級顯示。Sector Rotation v1 由 `app_module.sector_rotation_service.SectorRotationService` 與 `SQLiteIndustryIndexSectorRotationProvider` 自 SQLite `industry_indices` 唯讀推導領先 / 落後產業、5 / 20 日變化與輪動強度，同樣以 warnings 揭露 fallback 日期。Relative Strength / Liquidity Ranking v1 由 `RelativeStrengthLiquidityService` 與 `SQLiteDailyPriceRelativeStrengthLiquidityProvider` 自 SQLite `daily_prices` 唯讀推導 5 / 20 日相對強度與平均成交金額，輸出強勢、弱勢與低流動性代碼，不在 UI 層重算；歷史不足 21 天時降級為 DEGRADED 並警告。Watchlist Trigger v1 由 `WatchlistServiceWatchlistProvider` 與 `SQLiteRankingProvider` 結合，唯讀查詢 `technical_indicators` 產生個股強度 `score_bp` 與風險 `risk_alert`，並支援日期 fallback 降級警告（quality 改為 `DEGRADED`，在 `warnings` 中標註 `watchlist_trigger_as_of_fallback:<date>`）。Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，可把條件監控與籌碼風險彙總成每日持倉警示；若籌碼資料缺失、估算或不可用，會透過 `quality / warnings` 降級揭露，不補值。Portfolio Alert Attribution v1 屬於 `PortfolioAlertService` 的輸出責任，因為只有該 service 同時看得到 position source、condition monitor 結果與 chip summary。UI 與 Risk Prompt service 只能讀取 `PortfolioAlertSummary.attributions`，不得重新查詢或重算。Why Not / 風險提示 v1 由 `DecisionDeskRiskPromptService` 從既有 section DTO 的 quality、warnings、低流動性、相對弱勢、watchlist risk alert、portfolio alert 與 application service 提供的 fundamental diagnostics 推導，提供可行動風險提示，不重算既有邏輯。Fundamental diagnostics 來源是 `FundamentalDiagnosticsService` 序列化後的 metadata；Risk Prompt service 只轉成 `source="fundamental"` 的提示並清理禁用行動語句，不 import abnormal flag policy 或 raw data。Month 4 收尾新增 `tests/test_decision_desk_ui_contract.py`，以靜態契約阻擋 Daily Decision Desk UI 直接 import scoring、screening、backtest、portfolio core 等計算模組。
 
 Healthcheck Batch 2 新增 `DecisionDeskDashboardComposer` 與 `SmartMoneySemanticService`。`DecisionDeskDashboardComposer` 只組合既有 section DTO 與可選 Smart Money summary，產生 action summary、sector focus 與 stock focus；它不重新計算 ranking、scoring 或 portfolio logic。`SmartMoneySemanticService` 位於 app layer，從 `BrokerFlowService.get_events()` 的唯讀事件快照與可選 `SQLiteSmartMoneyPriceProvider` 產生 5 / 20 / 60 日語意診斷、quantity-based 集中度、價格位置風險與資料品質 counts；Qt UI 只讀 DTO 欄位與 tooltip，不直接查 SQLite 或重算籌碼語意。
+
+Healthcheck Batch 3 新增 `RecommendationProfileService`。該 service 是推薦分析 Profile lifecycle 邊界，負責把內建 Profile、自訂 Profile 與 Strategy Registry 中通過 gate 的策略版本 Profile 組成 UI 可選清單；自訂 Profile 保存於 output root 下的 `recommendation/profiles/custom_profiles.json`，標示「自訂，未經回測驗證」，並以 Decimal 字串與整數 bp 保存數值權威。策略版本 Profile 只讀 `StrategyVersionService.list_versions()`，僅顯示通過 gate 且未停用的版本，不刪除歷史策略版本 JSON。Qt UI 只呈現來源 label、保存自訂設定與 Profile-Regime match / mismatch 說明，不在 UI 層重算 scoring，也不把 mismatch 當成自動排除或交易建議。
 
 ## 5. Decision Domain
 
@@ -493,6 +495,7 @@ UI 修改：
 ## 16. 更新記錄
 
 - 2026-06-23：完成 Healthcheck Batch 2 架構同步，新增 `DecisionDeskDashboardComposer` 與 `SmartMoneySemanticService` 邊界；Daily Decision Desk answer-first dashboard 與 Smart Money 5 / 20 / 60 日語意診斷皆由 app service / DTO 提供，Qt UI 不重算籌碼或市場邏輯。
+- 2026-06-23：完成 Healthcheck Batch 3 架構同步，新增 `RecommendationProfileService` 作為推薦分析 Profile lifecycle 邊界，支援內建 / 自訂 / gate-passed 策略版本 Profile，並明確規範 Profile-Regime mismatch 只作解釋與分數揭露。
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 架構同步，確認 fundamental tables / provider / adapters / diagnostics 為保守接入邊界；P/B、P/S 已補 guarded presentation policy，官方歷史 PIT 公告日保留為後續治理 residual；Month 6 Strategy Lifecycle 不得直接污染 ScoringEngine。
 - 2026-06-17：補上 P/B / P/S valuation policy 架構同步，確認 P/B / P/S 僅接受 governed external observations 或 future backfill records，不在系統內推導估值分子 / 分母。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1 架構同步，新增 lifecycle rule engine、drift detector、portfolio feedback attribution、Portfolio Review snapshot 與 Registry-based Promote lifecycle gate；持倉管理 UI 只讀 service attribution，不重算策略或改寫持倉。

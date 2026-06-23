@@ -8,11 +8,12 @@ from PySide6.QtWidgets import (
     QPushButton, QTableView, QGroupBox, QProgressBar,
     QTextEdit, QHeaderView, QCheckBox, QSpinBox, QDoubleSpinBox,
     QComboBox, QMessageBox, QSplitter, QScrollArea,
-    QMenu, QDialog
+    QMenu, QDialog, QInputDialog
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 import pandas as pd
+from copy import deepcopy
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,11 @@ from app_module.recommendation_repository import RecommendationRepository
 from app_module.universe_service import UniverseService
 from app_module.dtos import RecommendationDTO, RecommendationResultDTO
 from app_module.portfolio_source_adapter import build_recommendation_trade_source
+from app_module.recommendation_profile_service import (
+    RecommendationProfile,
+    RecommendationProfileService,
+)
+from app_module.strategy_version_service import StrategyVersionService
 from data_module.config import TWStockConfig
 from ui_qt.widgets.info_button import InfoButton
 
@@ -65,7 +71,8 @@ class RecommendationView(QWidget):
         watchlist_service: WatchlistService = None,
         config: Optional[TWStockConfig] = None,
         universe_service: Optional[UniverseService] = None,
-        parent=None
+        parent=None,
+        profile_service: Optional[RecommendationProfileService] = None
     ):
         """初始化推薦視圖
         
@@ -120,6 +127,8 @@ class RecommendationView(QWidget):
         
         # 初始化 Profiles
         self._init_profiles()
+        self.profile_service = profile_service or self._create_profile_service(config)
+        self._refresh_profile_options()
         
         self._setup_ui()
         self._load_current_regime()
@@ -577,6 +586,53 @@ class RecommendationView(QWidget):
             }
         }
     
+    def _create_profile_service(
+        self,
+        config: Optional[TWStockConfig],
+    ) -> RecommendationProfileService:
+        strategy_version_service = None
+        if config is not None:
+            try:
+                strategy_version_service = StrategyVersionService(config)
+            except Exception:
+                strategy_version_service = None
+        return RecommendationProfileService(
+            config,
+            builtin_profiles=self.profiles,
+            strategy_version_service=strategy_version_service,
+        )
+
+    def _refresh_profile_options(self) -> None:
+        self.profile_options: List[RecommendationProfile] = self.profile_service.list_profiles()
+        self._profile_options_by_id = {
+            profile.profile_id: profile
+            for profile in self.profile_options
+        }
+        self.profiles = {
+            profile.profile_id: profile.to_legacy_dict()
+            for profile in self.profile_options
+        }
+
+    def _populate_profile_combo(self, selected_profile_id: Optional[str] = None) -> None:
+        if not hasattr(self, "profile_combo"):
+            return
+        current_id = selected_profile_id or self.profile_combo.currentData()
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        self.profile_combo.addItem("請選擇 Profile...", None)
+        for profile in self.profile_options:
+            self.profile_combo.addItem(profile.display_label, profile.profile_id)
+        if current_id is not None:
+            index = self.profile_combo.findData(current_id)
+            if index >= 0:
+                self.profile_combo.setCurrentIndex(index)
+        self.profile_combo.blockSignals(False)
+
+    def _get_profile_option(self, profile_id: Optional[str]) -> Optional[RecommendationProfile]:
+        if profile_id is None:
+            return None
+        return self._profile_options_by_id.get(str(profile_id))
+
     def _get_default_config(self) -> Dict[str, Any]:
         """獲取預設策略配置"""
         return {
@@ -765,11 +821,13 @@ class RecommendationView(QWidget):
         self.profile_group = QGroupBox("選擇策略風格（Profile）")
         profile_layout = QVBoxLayout()
         self.profile_combo = QComboBox()
-        self.profile_combo.addItem("請選擇 Profile...", None)
-        for profile_id, profile_data in self.profiles.items():
-            self.profile_combo.addItem(profile_data['name'], profile_id)
+        self._populate_profile_combo()
         self.profile_combo.currentIndexChanged.connect(self._on_profile_selected)
         profile_layout.addWidget(self.profile_combo)
+
+        self.save_custom_profile_btn = QPushButton("保存目前設定為自訂 Profile")
+        self.save_custom_profile_btn.clicked.connect(self._on_save_custom_profile_clicked)
+        profile_layout.addWidget(self.save_custom_profile_btn)
         
         # Profile 說明
         self.profile_desc_label = QLabel("")
@@ -789,7 +847,7 @@ class RecommendationView(QWidget):
         layout.addWidget(self.profile_group)
         
         # 策略傾向提示區（新增）
-        self.strategy_tendency_group = QGroupBox("策略傾向")
+        self.strategy_tendency_group = QGroupBox("目前策略傾向摘要")
         strategy_tendency_layout = QVBoxLayout()
         self.strategy_tendency_label = QLabel("請選擇技術指標和圖形模式")
         self.strategy_tendency_label.setWordWrap(True)
@@ -1277,24 +1335,44 @@ class RecommendationView(QWidget):
         """載入當前市場狀態"""
         try:
             regime_result = self.regime_service.detect_regime()
-            regime_text = f"市場狀態：{regime_result.regime_name_cn}\n"
-            regime_text += f"信心度：{regime_result.confidence:.0%}"
+            details = getattr(regime_result, "details", {}) or {}
+            regime_code = getattr(regime_result, "regime", "未知")
+            if not isinstance(regime_code, str):
+                raise ValueError("RegimeService 未回傳有效 regime code")
+            regime_name = getattr(regime_result, "regime_name_cn", regime_code)
+            if not isinstance(regime_name, str):
+                regime_name = regime_code
+            confidence_value = self._numeric_for_qt(getattr(regime_result, "confidence", None), 0.0)
+            source = details.get("source") or details.get("data_source") or "RegimeService"
+            as_of_date = details.get("as_of_date") or details.get("date") or details.get("detected_at") or "未標示"
+            regime_score = details.get("score") or details.get("regime_score") or "未標示"
+            regime_text = (
+                f"市場狀態：{regime_name} ({regime_code})\n"
+                f"信心度：{confidence_value:.0%}\n"
+                f"Regime score：{regime_score}\n"
+                f"資料日期 / 來源：{as_of_date} / {source}"
+            )
             self.regime_label.setText(regime_text)
             
             # 更新策略配置中的 regime
-            self.strategy_config['regime'] = regime_result.regime
-            self.current_regime = regime_result.regime
+            self.strategy_config['regime'] = regime_code
+            self.current_regime = regime_code
             
             # 根據 Regime 建議 Profile（Phase 3.2）
-            self._suggest_profile_for_regime(regime_result.regime, regime_result.confidence)
+            self._suggest_profile_for_regime(regime_code, confidence_value)
             
             # 根據 Regime 自動調整策略配置（如果用戶沒有選擇 Profile）
             if not self.current_profile:
-                auto_config = self.regime_service.get_strategy_config(regime_result.regime)
+                auto_config = self.regime_service.get_strategy_config(regime_code)
                 if auto_config:
                     # 合併自動配置（保留用戶設置的篩選條件）
                     self.strategy_config.update(auto_config)
                     self._update_ui_from_config()
+            elif hasattr(self, "profile_desc_label"):
+                profile_option = self._get_profile_option(self.current_profile)
+                profile = self.profiles.get(self.current_profile)
+                if profile:
+                    self.profile_desc_label.setText(self._build_profile_description(profile_option, profile))
         except Exception as e:
             self.regime_label.setText(f"檢測失敗：{str(e)}")
     
@@ -1489,44 +1567,123 @@ class RecommendationView(QWidget):
         profile_id = self.profile_combo.itemData(index)
         if profile_id is None:
             self.profile_desc_label.setText("")
+            self.current_profile = None
             return
         
+        profile_option = self._get_profile_option(profile_id)
         profile = self.profiles.get(profile_id)
         if not profile:
             return
         
-        # 顯示 Profile 說明（包含風險提示）
-        desc_text = f"<b>{profile['name']}</b> (v{profile.get('version', '1.0.0')})<br/>"
-        desc_text += f"{profile['description']}<br/><br/>"
-        
-        # 適用市場狀態
-        regime_names = {
-            'Trend': '趨勢追蹤',
-            'Reversion': '均值回歸',
-            'Breakout': '突破準備'
-        }
-        suitable_regimes = [regime_names.get(r, r) for r in profile.get('regime', [])]
-        desc_text += f"<b>✓ 適用市場狀態：</b>{'、'.join(suitable_regimes)}<br/>"
-        
-        # 不適用市場狀態
-        not_suitable_regimes = profile.get('regime_not_suitable', [])
-        if not_suitable_regimes:
-            not_suitable_names = [regime_names.get(r, r) for r in not_suitable_regimes]
-            desc_text += f"<b>✗ 不適用市場狀態：</b>{'、'.join(not_suitable_names)}<br/>"
-        
-        # 風險提示
-        risk_warning = profile.get('risk_warning', {})
-        if risk_warning:
-            desc_text += f"<br/><b>風險提示：</b><br/>"
-            desc_text += f"  • 預期最大回撤：{risk_warning.get('max_drawdown_expected', '未知')}<br/>"
-            desc_text += f"  • 波動性：{risk_warning.get('volatility', '未知')}<br/>"
-            desc_text += f"  • 建議持有期間：{risk_warning.get('holding_period', '未知')}<br/>"
-            desc_text += f"  • 適合：{risk_warning.get('suitable_for', '未知')}<br/>"
-        
+        self.current_profile = str(profile_id)
+        desc_text = self._build_profile_description(profile_option, profile)
         self.profile_desc_label.setText(desc_text)
         
         # 套用 Profile 配置
         self._apply_profile_config(profile)
+
+    def _build_profile_description(
+        self,
+        profile_option: Optional[RecommendationProfile],
+        profile: Dict[str, Any],
+    ) -> str:
+        name = profile_option.name if profile_option else profile.get("name", "Profile")
+        version = profile_option.version if profile_option else profile.get("version", "1.0.0")
+        description = profile_option.description if profile_option else profile.get("description", "")
+        validation_label = profile_option.validation_label if profile_option else profile.get("validation_label", "")
+        applicable_regimes = (
+            profile_option.applicable_regimes if profile_option else profile.get("regime", [])
+        )
+        not_suitable_regimes = (
+            profile_option.not_suitable_regimes if profile_option else profile.get("regime_not_suitable", [])
+        )
+
+        desc_text = f"<b>{name}</b> (v{version})<br/>"
+        if validation_label:
+            desc_text += f"<b>來源狀態：</b>{validation_label}<br/>"
+        desc_text += f"{description}<br/><br/>"
+        desc_text += f"<b>對應進階設定：</b>{self._profile_advanced_summary(profile.get('config', {}))}<br/>"
+        desc_text += f"<b>適用 Regime：</b>{self._format_regime_names(applicable_regimes)}<br/>"
+        if not_suitable_regimes:
+            desc_text += f"<b>不適用 Regime：</b>{self._format_regime_names(not_suitable_regimes)}<br/>"
+
+        if profile_option:
+            compatibility = self.profile_service.evaluate_regime_compatibility(
+                profile_option,
+                self.current_regime,
+            )
+            desc_text += "<br/>"
+            desc_text += f"<b>目前 Regime：</b>{self._format_regime_names([self.current_regime])}<br/>"
+            desc_text += f"<b>Profile-Regime 狀態：</b>{compatibility.status}<br/>"
+            desc_text += f"<b>分數影響：</b>{compatibility.score_effect}<br/>"
+            desc_text += f"<span>{compatibility.explanation}</span><br/>"
+
+        risk_warning = profile.get("risk_warning", {})
+        if risk_warning:
+            desc_text += "<br/><b>風險提示：</b><br/>"
+            desc_text += f"  • 預期最大回撤：{risk_warning.get('max_drawdown_expected', '未知')}<br/>"
+            desc_text += f"  • 波動性：{risk_warning.get('volatility', '未知')}<br/>"
+            desc_text += f"  • 建議持有期間：{risk_warning.get('holding_period', '未知')}<br/>"
+            desc_text += f"  • 適合：{risk_warning.get('suitable_for', '未知')}<br/>"
+
+        return desc_text
+
+    def _format_regime_names(self, regimes: List[Optional[str]]) -> str:
+        regime_names = {
+            "Trend": "Trend / 趨勢追蹤",
+            "Reversion": "Reversion / 均值回歸",
+            "Breakout": "Breakout / 突破準備",
+        }
+        names = [regime_names.get(regime, regime or "未知") for regime in regimes if regime]
+        return "、".join(names) if names else "未指定"
+
+    def _profile_advanced_summary(self, config: Dict[str, Any]) -> str:
+        signals = config.get("signals", {})
+        weights = signals.get("weights", {})
+        indicators = signals.get("technical_indicators", [])
+        patterns = config.get("patterns", {}).get("selected", [])
+        weight_text = (
+            f"型態 {weights.get('pattern', 'N/A')} / "
+            f"技術 {weights.get('technical', 'N/A')} / "
+            f"量能 {weights.get('volume', 'N/A')}"
+        )
+        indicator_text = "、".join(indicators) if indicators else "未指定"
+        return f"權重 {weight_text}；技術分類 {indicator_text}；型態數 {len(patterns)}"
+
+    def _on_save_custom_profile_clicked(self) -> None:
+        name, accepted = QInputDialog.getText(
+            self,
+            "保存自訂 Profile",
+            "Profile 名稱：",
+        )
+        if not accepted or not name.strip():
+            return
+        try:
+            saved = self.save_custom_profile_from_current_config(name.strip())
+            QMessageBox.information(
+                self,
+                "已保存",
+                f"已保存自訂 Profile：{saved.name}\n此 Profile 標示為「自訂，未經回測驗證」。",
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "保存失敗", f"無法保存自訂 Profile：{exc}")
+
+    def save_custom_profile_from_current_config(self, name: str) -> RecommendationProfile:
+        config = self._collect_config()
+        current_regime = self.current_regime or self.strategy_config.get("regime")
+        saved = self.profile_service.save_custom_profile(
+            name=name,
+            description="由推薦分析目前設定保存的自訂 Profile。",
+            config=config,
+            applicable_regimes=[current_regime] if current_regime else [],
+        )
+        self._refresh_profile_options()
+        self._populate_profile_combo(selected_profile_id=saved.profile_id)
+        self.current_profile = saved.profile_id
+        self.profile_desc_label.setText(
+            self._build_profile_description(saved, self.profiles[saved.profile_id])
+        )
+        return saved
     
     def _apply_profile_config(self, profile: Dict[str, Any]):
         """套用 Profile 配置到 UI"""
@@ -1564,11 +1721,17 @@ class RecommendationView(QWidget):
         
         # 更新篩選條件
         filters = config.get('filters', {})
-        self.price_change_min.setValue(filters.get('price_change_min', 0.0))
-        self.volume_ratio_min.setValue(filters.get('volume_ratio_min', 1.0))
+        self.price_change_min.setValue(self._numeric_for_qt(filters.get('price_change_min'), 0.0))
+        self.volume_ratio_min.setValue(self._numeric_for_qt(filters.get('volume_ratio_min'), 1.0))
         
         # 更新策略傾向
         self._update_strategy_tendency()
+
+    def _numeric_for_qt(self, value: Any, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
     
     def _update_strategy_tendency(self):
         """根據當前選擇的指標/圖形，動態更新策略傾向提示"""
@@ -1646,7 +1809,7 @@ class RecommendationView(QWidget):
             elif (volatility_count >= 1 and consolidation_count >= 1) or consolidation_count >= 2:
                 tendency_text = "目前選擇偏向：📊 盤整 / 區間策略"
                 tendency_icon = "📊"
-                tendency_color = "#7c3aed"
+                tendency_color = "#6d28d9"
             # 延續策略：Continuation 為主
             elif continuation_count >= 1 and trend_count >= 1:
                 tendency_text = "目前選擇偏向：📈 趨勢延續策略"
@@ -1677,7 +1840,7 @@ class RecommendationView(QWidget):
         if self.is_beginner_mode and self.current_profile:
             profile = self.profiles.get(self.current_profile)
             if profile:
-                config = profile['config'].copy()
+                config = self._config_for_runtime(deepcopy(profile['config']))
                 # 添加 Regime 信息
                 config['regime'] = self.strategy_config.get('regime')
                 config['recommendation_ranking'] = {'threshold_mode': 'fixed'}
@@ -1780,8 +1943,22 @@ class RecommendationView(QWidget):
             'recommendation_ranking': ranking_config,
             'regime': self.strategy_config.get('regime')
         }
-        
         return config
+
+    def _config_for_runtime(self, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: self._config_for_runtime(child)
+                for key, child in value.items()
+            }
+        if isinstance(value, list):
+            return [self._config_for_runtime(child) for child in value]
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return value
+        return value
     
     def _execute_recommendation(self):
         """執行推薦分析"""
