@@ -18,6 +18,7 @@ from ui_qt.views.watchlist_view import WatchlistView
 from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.dtos import BacktestReportDTO, RecommendationDTO, RecommendationResultDTO
 from app_module.optimizer_service import ParamRange
+from data_module.config import TWStockConfig
 
 
 def app():
@@ -365,6 +366,44 @@ def test_research_lab_mode_hint_explains_use_case_and_input_source(qt_app):
         assert "輸入來源" in hint
 
 
+def test_strategy_research_mode_hint_explains_validation_and_upgrade_evidence(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    strategy_research_index = view.research_lab_mode_combo.findData("strategy_research")
+    assert strategy_research_index >= 0
+    view.research_lab_mode_combo.setCurrentIndex(strategy_research_index)
+
+    hint = view.config_panel.research_lab_mode_hint.text()
+    assert "策略模板" in hint
+    assert "參數最佳化" in hint
+    assert "Walk-forward" in hint
+    assert "升級證據" in hint
+
+
+def test_recommendation_replay_group_has_stable_width(qt_app, tmp_path):
+    config = TWStockConfig(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+    )
+    view = BacktestView(backtest_service=MagicMock(), config=config)
+
+    assert view.config_panel.recommendation_portfolio_group.minimumWidth() >= 420
+    assert view.config_panel.portfolio_history_combo is not None
+    assert view.config_panel.portfolio_history_combo.minimumWidth() >= 240
+
+
+def test_portfolio_promotion_success_message_points_to_follow_up_entrypoint(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    message = view._build_portfolio_promotion_success_message("version-001", "run-001")
+
+    assert "version-001" in message
+    assert "run-001" in message
+    assert "推薦分析" in message
+    assert "Profile" in message
+    assert "策略版本" in message
+
+
 def test_research_lab_date_edits_use_calendar_popup_and_expected_defaults(qt_app):
     mock_backtest_service = MagicMock()
     view = BacktestView(backtest_service=mock_backtest_service, config=None)
@@ -396,6 +435,30 @@ def test_research_registry_refreshes_after_save_delete_and_promote(qt_app):
     assert view._refresh_research_registry.call_count == 3
     assert "已升級" in view.progress_label.text()
     assert "version-test-001" in view.progress_label.text()
+
+
+def test_result_tabs_first_entry_refreshes_history_and_chart_once(qt_app, tmp_path):
+    config = TWStockConfig(data_root=tmp_path / "data", output_root=tmp_path / "output")
+    view = BacktestView(backtest_service=MagicMock(), config=config)
+    view._refresh_history = MagicMock()
+    view._update_chart_run_combo = MagicMock()
+
+    history_idx = next(
+        i for i in range(view.result_tabs.count())
+        if "歷史" in view.result_tabs.tabText(i)
+    )
+    chart_idx = next(
+        i for i in range(view.result_tabs.count())
+        if "圖表" in view.result_tabs.tabText(i)
+    )
+
+    view._on_result_tab_changed(history_idx)
+    view._on_result_tab_changed(history_idx)
+    view._on_result_tab_changed(chart_idx)
+    view._on_result_tab_changed(chart_idx)
+
+    assert view._refresh_history.call_count == 1
+    assert view._update_chart_run_combo.call_count == 1
 
 
 def test_recommendation_view_preserves_provenance_on_portfolio_recording(qt_app):

@@ -33,8 +33,8 @@ RESEARCH_LAB_MODE_HINTS = {
         "input_source": "推薦 Profile、推薦結果與回放設定",
     },
     "strategy_research": {
-        "use_case": "比較策略模板、參數版本與最佳化結果，作為升級策略版本依據",
-        "input_source": "策略模板、參數集、研究 run 或最佳化結果",
+        "use_case": "比較策略模板、參數最佳化與 Walk-forward 驗證結果，整理可追溯的升級證據",
+        "input_source": "策略模板、參數集、研究 run、最佳化結果或 Walk-forward 結果",
     },
 }
 
@@ -572,6 +572,7 @@ class BacktestConfigPanel(QWidget):
 
         # ========== 推薦回放設定 ==========
         self.recommendation_portfolio_group = QGroupBox("推薦回放設定")
+        self.recommendation_portfolio_group.setMinimumWidth(420)
         self.recommendation_portfolio_group.setCheckable(True)
         self.recommendation_portfolio_group.setChecked(False)
         recommendation_portfolio_layout = QVBoxLayout()
@@ -644,6 +645,7 @@ class BacktestConfigPanel(QWidget):
             portfolio_history_row = QHBoxLayout()
             portfolio_history_row.addWidget(QLabel("歷史記錄:"))
             self.portfolio_history_combo = QComboBox()
+            self.portfolio_history_combo.setMinimumWidth(240)
             self.portfolio_history_combo.currentIndexChanged.connect(lambda idx: self.parent_view._on_portfolio_history_changed(idx))
             portfolio_history_row.addWidget(self.portfolio_history_combo)
             recommendation_portfolio_layout.addLayout(portfolio_history_row)

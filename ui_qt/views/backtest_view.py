@@ -193,6 +193,9 @@ class BacktestView(QWidget):
         self._init_parameter_descriptions()
 
         self._setup_ui()
+        self._result_tab_first_load_done: set[str] = set()
+        if hasattr(self, "result_tabs"):
+            self.result_tabs.currentChanged.connect(self._on_result_tab_changed)
         if self.portfolio_run_repository and hasattr(self, "portfolio_history_combo"):
             self._refresh_portfolio_history_combo()
 
@@ -1470,7 +1473,11 @@ class BacktestView(QWidget):
             QMessageBox.warning(self, "無法升級", "此推薦組合回測未達最低升級條件，或紀錄已不存在。")
             return
 
-        QMessageBox.information(self, "升級完成", f"已升級為策略版本：{version_id}")
+        QMessageBox.information(
+            self,
+            "升級完成",
+            self._build_portfolio_promotion_success_message(version_id, run_id),
+        )
         self.promote_portfolio_result_btn.setEnabled(False)
         self._on_strategy_version_promoted(version_id)
         index = self.portfolio_history_combo.findData(run_id)
@@ -1478,6 +1485,16 @@ class BacktestView(QWidget):
             self.portfolio_history_combo.blockSignals(True)
             self.portfolio_history_combo.setCurrentIndex(index)
             self.portfolio_history_combo.blockSignals(False)
+
+    def _build_portfolio_promotion_success_message(self, version_id: str, run_id: str) -> str:
+        """建立推薦回放升級完成後的下一步提示。"""
+        return (
+            "推薦回放已升級為策略版本。\n\n"
+            f"版本 ID: {version_id}\n"
+            f"來源 run: {run_id}\n\n"
+            "後續可到推薦分析的 Profile / 策略版本來源查看；"
+            "若清單尚未更新，請重新整理或重新開啟推薦分析頁。"
+        )
 
     def _init_parameter_descriptions(self):
         """初始化參數說明資料結構（集中管理）"""
@@ -2555,6 +2572,29 @@ class BacktestView(QWidget):
         compare_widget = getattr(self, "run_registry_compare_widget", None)
         if compare_widget is not None and hasattr(compare_widget, "refresh_runs"):
             compare_widget.refresh_runs()
+
+    def _on_result_tab_changed(self, index: int) -> None:
+        """首次進入結果子頁時自動載入可用的歷史資料與圖表來源。"""
+        if index < 0 or not hasattr(self, "result_tabs"):
+            return
+
+        tab_text = self.result_tabs.tabText(index)
+        if "歷史" in tab_text:
+            if "history" not in self._result_tab_first_load_done:
+                self._result_tab_first_load_done.add("history")
+                if getattr(self, "run_repository", None):
+                    self._refresh_history()
+        elif "圖表" in tab_text:
+            if "charts" not in self._result_tab_first_load_done:
+                self._result_tab_first_load_done.add("charts")
+                if hasattr(self, "chart_run_combo") and getattr(self, "chart_data_service", None):
+                    self._update_chart_run_combo()
+        elif "Registry" in tab_text:
+            if "registry_compare" not in self._result_tab_first_load_done:
+                self._result_tab_first_load_done.add("registry_compare")
+                compare_widget = getattr(self, "run_registry_compare_widget", None)
+                if compare_widget is not None and hasattr(compare_widget, "refresh_runs"):
+                    compare_widget.refresh_runs()
 
     def _show_research_registry_progress(self, message: str) -> None:
         if hasattr(self, "progress_label"):

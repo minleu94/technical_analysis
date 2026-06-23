@@ -152,6 +152,9 @@ class MarketRegimeView(QWidget):
         confidence_font.setBold(False)  # 不加粗，降低視覺權重
         self.layer1_confidence.setFont(confidence_font)
         self.layer1_confidence.setStyleSheet("padding: 2px 0 0 0; margin: 0;")  # 緊貼上方
+        self.layer1_confidence.setToolTip(
+            "規則匹配度是 detector 對目前資料符合規則的程度，不是未來勝率或成功機率。"
+        )
         layer1_layout.addWidget(self.layer1_confidence)
         
         # 簡短描述（視覺降級，作為輔助資訊）
@@ -399,12 +402,12 @@ class MarketRegimeView(QWidget):
             conf_color = COLOR_CONF_LOW
             conf_level = "低"
         
-        # 信心度顯示：緊貼市場狀態，作為修飾語存在
-        # 格式：(資料日期：2026-05-12 | 信心度 82% 高) - 視覺上服從市場狀態名稱
+        # 規則匹配度顯示：緊貼市場狀態，避免被誤讀為未來勝率。
+        # 格式：(資料日期：2026-05-12 | 規則匹配度 82% 高)
         date_str = regime_result.details.get('date', '未知日期')
         confidence_text = (
             f"<span style='color: {conf_color};'>"
-            f"（資料日期：{date_str} | 信心度 {confidence_pct:.0f}% {conf_level}）</span>"
+            f"（資料日期：{date_str} | 規則匹配度 {confidence_pct:.0f}% {conf_level}）</span>"
         )
         self.layer1_confidence.setText(confidence_text)
         
@@ -533,7 +536,7 @@ class MarketRegimeView(QWidget):
             'distance_contribution': '距離貢獻度',
             'structure_score': '結構分',
             'strength_score': '強度分',
-            'trend_confidence': '趨勢信心度',
+            'trend_confidence': '趨勢規則分',
             'bb_bandwidth': '布林帶寬度',
             'rsi': 'RSI',
             'reversion_score': '回歸分數',
@@ -612,7 +615,7 @@ class MarketRegimeView(QWidget):
         score_group = QGroupBox("評分與貢獻")
         score_group.setStyleSheet(groupbox_style)
         score_group.setMinimumWidth(150)
-        score_help = "結構分、強度分與趨勢信心度是 0~1 的規則化分數；1 代表達到目前規則上限，不等於 100% 機率。"
+        score_help = "結構分、強度分與趨勢規則分是 0~1 的規則化分數；1 代表達到目前規則上限，不等於 100% 機率或未來勝率。"
         score_group.setToolTip(score_help)
         score_layout = QVBoxLayout()
         score_layout.setContentsMargins(8, 8, 8, 8)

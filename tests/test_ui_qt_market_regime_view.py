@@ -33,6 +33,26 @@ class FakeRegimeService:
         return {"technical": {}, "patterns": {}, "signals": {}}
 
 
+class FullMatchRegimeService:
+    def detect_regime(self):
+        return RegimeResultDTO(
+            regime="Breakout",
+            confidence=1.0,
+            regime_name_cn="突破準備",
+            details={
+                "date": "2026-06-19",
+                "breakout_score": 1.0,
+                "bandwidth_compressed": True,
+                "price_in_range": True,
+                "adx_low": True,
+                "volume_expanding": True,
+            },
+        )
+
+    def get_strategy_config(self, regime):
+        return {"technical": {}, "patterns": {}, "signals": {}}
+
+
 def app():
     instance = QApplication.instance()
     if instance is None:
@@ -65,3 +85,15 @@ def test_market_regime_detection_shows_technical_details():
     assert "ADX 衡量趨勢強度" in combined
     assert "+DI 高於 -DI" in combined
     assert "0~1 的規則化分數" in combined
+
+
+def test_market_regime_full_match_is_not_labeled_as_probability_confidence():
+    app()
+    view = MarketRegimeView(FullMatchRegimeService())
+
+    view._detect_regime()
+
+    confidence_text = view.layer1_confidence.text()
+    assert "規則匹配度 100%" in confidence_text
+    assert "信心度 100%" not in confidence_text
+    assert "不是未來勝率" in view.layer1_confidence.toolTip()

@@ -132,6 +132,7 @@
 | [2026-06-23-healthcheck-batch3-recommendation-profile-regime.md](../superpowers/plans/2026-06-23-healthcheck-batch3-recommendation-profile-regime.md) | Healthcheck Batch 3 實作計畫，規劃推薦分析 Profile lifecycle、策略版本 gate 與 Regime match / mismatch 揭露。 |
 | [2026-06-23-healthcheck-batch4-research-lab-results.md](../superpowers/plans/2026-06-23-healthcheck-batch4-research-lab-results.md) | Healthcheck Batch 4 實作計畫，規劃 Research Lab 推薦回放結果頁、Registry 比較頁、批次比較判讀與 Train-Test / Walk-forward 樣本可靠度提示。 |
 | [2026-06-23-healthcheck-batch5-performance-operations.md](../superpowers/plans/2026-06-23-healthcheck-batch5-performance-operations.md) | Healthcheck Batch 5 實作計畫，規劃參數最佳化大型掃描預估、worker 設定、bounded cancellation、Market Watch SQLite-first 排查與 Update 長任務邊界。 |
+| [2026-06-23-healthcheck-batch6-closeout-regime-researchlab.md](../superpowers/plans/2026-06-23-healthcheck-batch6-closeout-regime-researchlab.md) | Healthcheck Batch 6 實作計畫，規劃 Research Lab 首次載入與升級導引收尾、healthcheck 狀態一致化，以及 Regime confidence / 子分數排查。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
 | [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |
