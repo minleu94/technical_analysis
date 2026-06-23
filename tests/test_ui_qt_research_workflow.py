@@ -17,6 +17,7 @@ from ui_qt.views.recommendation_view import RecommendationView
 from ui_qt.views.watchlist_view import WatchlistView
 from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.dtos import BacktestReportDTO, RecommendationDTO, RecommendationResultDTO
+from app_module.optimizer_service import ParamRange
 
 
 def app():
@@ -303,6 +304,54 @@ def test_backtest_view_uses_optimization_fixed_values_when_enabled(qt_app):
 
     assert params["buy_score"] == 50
     assert params["sell_score"] == 40
+
+
+def test_optimization_panel_exposes_worker_control_and_source_hint(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    assert hasattr(view.config_panel, "optimizer_worker_count")
+    assert view.config_panel.optimizer_worker_count.minimum() == 1
+    assert view.config_panel.optimizer_worker_count.maximum() == 8
+    assert view.config_panel.optimizer_worker_count.value() == min(view.optimizer_service.max_workers, 8)
+
+    hint_text = view.config_panel.optimizer_runtime_hint.text()
+    assert "ThreadPool" in hint_text
+    assert "SQLite" in hint_text
+    assert "CSV" in hint_text
+
+
+def test_optimization_preflight_message_explains_large_scan_boundary(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+    view.config_panel.optimizer_worker_count.setValue(4)
+    param_ranges = {
+        "param": ParamRange("param", "int", [], min=1, max=80001, step=1),
+    }
+
+    message = view._build_optimization_preflight_message(param_ranges)
+
+    assert "80,001" in message
+    assert "4" in message
+    assert "ThreadPool" in message
+    assert "SQLite" in message
+    assert "CSV" in message
+    assert "取消" in message
+
+
+def test_optimization_range_rows_have_stable_width_for_large_ranges(qt_app):
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    strategy_index = view.strategy_combo.findData("momentum_aggressive_v1")
+    assert strategy_index >= 0
+    view.strategy_combo.setCurrentIndex(strategy_index)
+    view.optimization_group.setChecked(True)
+    view._on_optimization_toggled(True)
+    view._update_optimization_params_form()
+
+    buy_score_widgets = view.optimization_param_widgets["buy_score"]
+    buy_score_widgets["mode"].setCurrentText("範圍")
+
+    assert buy_score_widgets["row_widget"].minimumWidth() >= 420
+    assert buy_score_widgets["range"].minimumWidth() >= 300
 
 
 def test_research_lab_mode_hint_explains_use_case_and_input_source(qt_app):

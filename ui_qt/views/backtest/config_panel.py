@@ -446,7 +446,29 @@ class BacktestConfigPanel(QWidget):
             objective_row.addWidget(self.objective_combo)
             optimization_layout.addLayout(objective_row)
 
+            worker_row = QHBoxLayout()
+            worker_row.addWidget(QLabel("工作線程數:"))
+            self.optimizer_worker_count = QSpinBox()
+            self.optimizer_worker_count.setRange(1, 8)
+            default_workers = min(max(1, getattr(self.parent_view.optimizer_service, "max_workers", 1)), 8)
+            self.optimizer_worker_count.setValue(default_workers)
+            self.optimizer_worker_count.setToolTip(
+                "參數最佳化使用 ThreadPoolExecutor，保守限制 1 到 8 個工作線程。"
+            )
+            worker_row.addWidget(self.optimizer_worker_count)
+            worker_row.addStretch()
+            optimization_layout.addLayout(worker_row)
+
+            self.optimizer_runtime_hint = QLabel(
+                "最佳化會先預載單股資料；SQLite 啟用時優先讀 SQLite，缺資料或讀取失敗才 fallback CSV。"
+                "目前使用 ThreadPool，不是 ProcessPool；大型範圍執行前會先顯示組合數與取消提示。"
+            )
+            self.optimizer_runtime_hint.setWordWrap(True)
+            self.optimizer_runtime_hint.setStyleSheet("color: #666; font-size: 10px;")
+            optimization_layout.addWidget(self.optimizer_runtime_hint)
+
             self.optimization_params_widget = QWidget()
+            self.optimization_params_widget.setMinimumWidth(420)
             self.optimization_params_layout = QFormLayout(self.optimization_params_widget)
             optimization_layout.addWidget(self.optimization_params_widget)
 
@@ -465,6 +487,8 @@ class BacktestConfigPanel(QWidget):
         else:
             self.optimization_group = None
             self.objective_combo = None
+            self.optimizer_worker_count = None
+            self.optimizer_runtime_hint = None
             self.optimization_params_widget = None
             self.optimization_params_layout = None
             self.optimize_btn = None

@@ -3174,6 +3174,7 @@ class BacktestView(QWidget):
 
                 # 創建行容器 widget，以便於整行顯示/隱藏
                 row_widget = QWidget()
+                row_widget.setMinimumWidth(420)
                 range_row = QHBoxLayout(row_widget)
                 range_row.setContentsMargins(0, 0, 0, 0)
 
@@ -3223,6 +3224,7 @@ class BacktestView(QWidget):
 
                 # 範圍輸入（初始隱藏）
                 range_widget = QWidget()
+                range_widget.setMinimumWidth(300)
                 range_layout = QHBoxLayout(range_widget)
                 range_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -3324,7 +3326,8 @@ class BacktestView(QWidget):
                     'max': max_widget,
                     'step': step_widget,
                     'type': param_type,
-                    'row_widget': row_widget
+                    'row_widget': row_widget,
+                    'range': range_widget
                 }
 
             # 如果沒有參數，顯示提示
@@ -3341,6 +3344,41 @@ class BacktestView(QWidget):
             import traceback
             logger.info("[BacktestView] 更新最佳化參數表單失敗: {e}")
             logger.error(traceback.format_exc())
+
+    def _get_optimizer_worker_count(self) -> int:
+        """取得 UI 指定的最佳化工作線程數，限制在 1..8。"""
+        spinbox = getattr(self.config_panel, "optimizer_worker_count", None)
+        if spinbox is None:
+            return min(max(1, getattr(self.optimizer_service, "max_workers", 1)), 8)
+        return min(max(1, int(spinbox.value())), 8)
+
+    def _build_optimization_preflight_message(self, param_ranges) -> str:
+        """建立參數最佳化執行前的組合數與執行邊界說明。"""
+        total = self.optimizer_service.estimate_param_grid_size(param_ranges)
+        worker_count = self._get_optimizer_worker_count()
+        return (
+            f"本次參數最佳化預估會掃描 {total:,} 組參數。\n\n"
+            f"工作線程數：{worker_count}（ThreadPool，保守上限 8，不是 ProcessPool 多進程）。\n"
+            "資料載入：單股資料會在執行前預載一次；SQLite 啟用時優先讀 SQLite，"
+            "缺資料或讀取失敗才 fallback CSV。\n\n"
+            "大型掃描可能需要較長時間。取消後系統會停止提交新組合，並清理已啟動的子任務；"
+            "清理期間 UI 會顯示取消狀態。"
+        )
+
+    def _confirm_optimization_preflight(self, param_ranges) -> bool:
+        """大型參數掃描前要求使用者確認。"""
+        total = self.optimizer_service.estimate_param_grid_size(param_ranges)
+        if total < 5000:
+            return True
+
+        reply = QMessageBox.question(
+            self,
+            "確認執行大型參數掃描",
+            self._build_optimization_preflight_message(param_ranges),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        return reply == QMessageBox.StandardButton.Yes
 
     def _on_optimization_threshold_mode_changed(self):
         """當最佳化面板中的門檻模式改變時，動態隱藏/顯示對應的最佳化參數"""
@@ -3451,6 +3489,10 @@ class BacktestView(QWidget):
                 "4. 設定最小、最大、步長值\n"
                 "5. 再次點擊「執行參數掃描」"
             )
+            return
+
+        self.optimizer_service.max_workers = self._get_optimizer_worker_count()
+        if not self._confirm_optimization_preflight(param_ranges):
             return
 
         # 獲取目標指標
@@ -4245,8 +4287,8 @@ class BacktestView(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             if hasattr(self.config_panel, 'cancel_btn') and self.config_panel.cancel_btn:
                 self.config_panel.cancel_btn.setEnabled(False)
-                self.config_panel.cancel_btn.setText("正在取消...")
-            self.progress_label.setText("正在取消中，請稍候...")
+                self.config_panel.cancel_btn.setText("已送出取消")
+            self.progress_label.setText("已送出取消，正在清理已啟動子任務，請稍候...")
             self.worker.cancel(cooperative=True, wait=False)
 
     def _update_batch_leaderboard(self, batch_result):
