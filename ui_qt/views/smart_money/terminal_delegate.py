@@ -51,12 +51,12 @@ class TerminalScannerDelegate(QStyledItemDelegate):
         self._draw_background(painter, rect, intensity, option.state & QStyle.State_Selected, col)
         
         # 3. 分欄繪製
-        if col == 4:
+        if col == 6:
             # Badges Column
             badges = index.data(ROLE_BADGES)
             if badges:
                 self._draw_badges(painter, rect, badges)
-        elif col == 5:
+        elif col == 7:
             # Sparkline Column
             sparkline_data = index.data(ROLE_SPARKLINE)
             if sparkline_data:

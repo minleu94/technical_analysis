@@ -313,6 +313,122 @@ class DecisionDeskRiskPromptSummary:
 
 
 @dataclass(frozen=True)
+class DecisionDeskActionSummary:
+    action_level: str
+    headline: str
+    research_mode_note: str
+    reasons: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "action_level", str(self.action_level))
+        object.__setattr__(self, "headline", str(self.headline))
+        object.__setattr__(self, "research_mode_note", str(self.research_mode_note))
+        object.__setattr__(self, "reasons", tuple(str(item) for item in self.reasons))
+        object.__setattr__(self, "warnings", _normalize_warnings(self.warnings))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "action_level": self.action_level,
+            "headline": self.headline,
+            "research_mode_note": self.research_mode_note,
+            "reasons": list(self.reasons),
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True)
+class DecisionDeskSectorCard:
+    sector_name: str
+    role: str
+    reason: str
+    quality: DecisionDeskQuality
+    target_tab: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "sector_name", str(self.sector_name))
+        object.__setattr__(self, "role", str(self.role))
+        object.__setattr__(self, "reason", str(self.reason))
+        if self.quality is None:
+            raise ValueError("quality must not be None")
+        if self.target_tab is not None:
+            object.__setattr__(self, "target_tab", str(self.target_tab))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sector_name": self.sector_name,
+            "role": self.role,
+            "reason": self.reason,
+            "quality": self.quality.value,
+            "target_tab": self.target_tab,
+        }
+
+
+@dataclass(frozen=True)
+class DecisionDeskSectorFocus:
+    priority_sectors: tuple[DecisionDeskSectorCard, ...] = ()
+    risk_sectors: tuple[DecisionDeskSectorCard, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "priority_sectors", tuple(self.priority_sectors))
+        object.__setattr__(self, "risk_sectors", tuple(self.risk_sectors))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "priority_sectors": [item.to_dict() for item in self.priority_sectors],
+            "risk_sectors": [item.to_dict() for item in self.risk_sectors],
+        }
+
+
+@dataclass(frozen=True)
+class DecisionDeskStockCard:
+    stock_code: str
+    stock_name: str
+    role: str
+    reason: str
+    source: str
+    drilldown_target: str = "smart_money"
+    quality: DecisionDeskQuality = DecisionDeskQuality.OBSERVED
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "stock_code", str(self.stock_code))
+        object.__setattr__(self, "stock_name", str(self.stock_name))
+        object.__setattr__(self, "role", str(self.role))
+        object.__setattr__(self, "reason", str(self.reason))
+        object.__setattr__(self, "source", str(self.source))
+        object.__setattr__(self, "drilldown_target", str(self.drilldown_target))
+        if self.quality is None:
+            raise ValueError("quality must not be None")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stock_code": self.stock_code,
+            "stock_name": self.stock_name,
+            "role": self.role,
+            "reason": self.reason,
+            "source": self.source,
+            "drilldown_target": self.drilldown_target,
+            "quality": self.quality.value,
+        }
+
+
+@dataclass(frozen=True)
+class DecisionDeskStockFocus:
+    priority_stocks: tuple[DecisionDeskStockCard, ...] = ()
+    risk_stocks: tuple[DecisionDeskStockCard, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "priority_stocks", tuple(self.priority_stocks))
+        object.__setattr__(self, "risk_stocks", tuple(self.risk_stocks))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "priority_stocks": [item.to_dict() for item in self.priority_stocks],
+            "risk_stocks": [item.to_dict() for item in self.risk_stocks],
+        }
+
+
+@dataclass(frozen=True)
 class DecisionDeskSnapshot:
     as_of_date: date
     generated_at: datetime
@@ -325,6 +441,9 @@ class DecisionDeskSnapshot:
     watchlist_triggers: WatchlistTriggerSummary
     portfolio_alerts: PortfolioAlertSummary
     risk_prompts: DecisionDeskRiskPromptSummary
+    action_summary: DecisionDeskActionSummary | None = None
+    sector_focus: DecisionDeskSectorFocus | None = None
+    stock_focus: DecisionDeskStockFocus | None = None
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -357,4 +476,7 @@ class DecisionDeskSnapshot:
             "watchlist_triggers": self.watchlist_triggers.to_dict(),
             "portfolio_alerts": self.portfolio_alerts.to_dict(),
             "risk_prompts": self.risk_prompts.to_dict(),
+            "action_summary": self.action_summary.to_dict() if self.action_summary is not None else None,
+            "sector_focus": self.sector_focus.to_dict() if self.sector_focus is not None else None,
+            "stock_focus": self.stock_focus.to_dict() if self.stock_focus is not None else None,
         }

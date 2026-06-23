@@ -49,6 +49,7 @@ from ui_qt.views.watchlist_view import WatchlistView
 from ui_qt.widgets.session_context_strip import SessionContextStrip
 from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
 from app_module.broker_flow_service import BrokerFlowService
+from app_module.smart_money_semantic_service import SmartMoneySemanticService, SQLiteSmartMoneyPriceProvider
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from ui_qt.theme import build_global_stylesheet
@@ -200,6 +201,7 @@ class MainWindow(QMainWindow):
             relative_strength_liquidity_service=relative_strength_liquidity_service,
             watchlist_trigger_service=watchlist_trigger_service,
             portfolio_alert_service=portfolio_alert_service,
+            smart_money_service=getattr(self, "smart_money_semantic_service", None),
         )
 
     def __init__(self):
@@ -334,9 +336,18 @@ class MainWindow(QMainWindow):
 
             # 主力流向標籤 (Smart Money Flow)
             print("[MainWindow] 創建主力流向視圖...")
+            self.smart_money_semantic_service = None
+            try:
+                self.smart_money_semantic_service = SmartMoneySemanticService(
+                    self.broker_flow_service,
+                    price_provider=SQLiteSmartMoneyPriceProvider(self.config.db_file),
+                )
+            except Exception as exc:
+                print(f"[MainWindow] 決策桌面 SmartMoneySemanticService 初始化失敗：{exc}")
             smart_money_flow = SmartMoneyFlowView(
                 broker_flow_service=self.broker_flow_service,
                 watchlist_service=self.watchlist_service,
+                smart_money_semantic_service=self.smart_money_semantic_service,
                 parent=self
             )
             market_tabs.addTab(smart_money_flow, "主力流向")
@@ -379,6 +390,7 @@ class MainWindow(QMainWindow):
                 self.decision_desk_builder = self._create_decision_desk_builder()
                 decision_desk_view = DecisionDeskView(
                     decision_desk_builder=self.decision_desk_builder,
+                    navigate_to_smart_money_callback=self.show_smart_money_flow_for_stock,
                     parent=self,
                 )
                 tabs.addTab(decision_desk_view, "每日決策")

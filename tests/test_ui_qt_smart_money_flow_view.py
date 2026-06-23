@@ -4,6 +4,7 @@ from decimal import Decimal
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 import pandas as pd
 
@@ -40,6 +41,41 @@ class FakeSmartMoneyService:
 
     def get_stock_detail_by_branches(self, stock_code, period):
         return []
+
+
+class FakeSemanticService:
+    def build_stock_semantics(self, stock_code, decision_date):
+        from app_module.dtos.smart_money_semantic_dtos import SmartMoneySemanticSummary, SmartMoneyWindowStats
+
+        window = SmartMoneyWindowStats(
+            window_days=5,
+            net_qty=500,
+            buy_qty=700,
+            sell_qty=200,
+            direction="buy",
+            continuous_buy_days=2,
+            continuous_sell_days=0,
+            top_n=3,
+            top_concentration_bp=7000,
+            observed_count=3,
+            estimated_count=0,
+            unavailable_count=0,
+            usable_coverage_bp=10000,
+        )
+        return SmartMoneySemanticSummary(
+            stock_code=stock_code,
+            stock_name=f"股票{stock_code}",
+            decision_date=decision_date,
+            primary_state="初轉買",
+            semantic_flags=("分點集中異常",),
+            confidence_bp=10000,
+            quality="observed",
+            warnings=(),
+            evidence_lines=("5 日轉為買超",),
+            window_5=window,
+            window_20=window,
+            window_60=window,
+        )
 
 
 def _signal(code: str, score: float, net_qty: int) -> FlowSignalDTO:
@@ -98,3 +134,23 @@ def test_smart_money_flow_detail_double_click_switches_to_branch_tracker():
 
     assert view.tab_widget.currentIndex() == 1
     assert view.branch_combo.currentText() == "富邦-仁愛"
+
+
+def test_smart_money_table_model_renders_semantic_state_and_diagnostics():
+    app()
+    signal = _signal("2330", 88, 500)
+    view = SmartMoneyFlowView(
+        FakeSmartMoneyService(),
+        smart_money_semantic_service=FakeSemanticService(),
+    )
+
+    view._apply_scanner_signals([signal])
+
+    model = view.scanner_table.model()
+    headers = [model.headerData(i, Qt.Horizontal) for i in range(model.columnCount())]
+    assert "語意狀態" in headers
+    assert "5/20/60 日診斷" in headers
+    semantic_col = headers.index("語意狀態")
+    diagnostic_col = headers.index("5/20/60 日診斷")
+    assert "初轉買" in model.data(model.index(0, semantic_col), Qt.DisplayRole)
+    assert "5日" in model.data(model.index(0, diagnostic_col), Qt.DisplayRole)

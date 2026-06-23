@@ -14,6 +14,7 @@ from app_module.decision_desk_dtos import (
     RelativeStrengthLiquiditySummary,
     DecisionDeskRiskPromptSummary,
 )
+from app_module.decision_desk_dashboard_service import DecisionDeskDashboardComposer
 from app_module.decision_desk_risk_prompt_service import DecisionDeskRiskPromptService
 
 
@@ -49,6 +50,10 @@ class RelativeStrengthLiquiditySectionService(Protocol):
     def build_snapshot(self, as_of_date: date) -> RelativeStrengthLiquiditySummary: ...
 
 
+class SmartMoneyDashboardService(Protocol):
+    def build_dashboard_summary(self, decision_date: date, stock_codes: tuple[str, ...] = ()): ...
+
+
 
 class DecisionDeskSnapshotBuilder:
     """Builder for Daily Decision Desk snapshot."""
@@ -65,6 +70,8 @@ class DecisionDeskSnapshotBuilder:
         watchlist_trigger_service: WatchlistTriggerSectionService | None = None,
         portfolio_alert_service: PortfolioAlertSectionService | None = None,
         risk_prompt_service: DecisionDeskRiskPromptService | None = None,
+        dashboard_composer: DecisionDeskDashboardComposer | None = None,
+        smart_money_service: SmartMoneyDashboardService | None = None,
     ):
         self.provider = provider
         self.schema_version = schema_version
@@ -75,6 +82,8 @@ class DecisionDeskSnapshotBuilder:
         self.watchlist_trigger_service = watchlist_trigger_service
         self.portfolio_alert_service = portfolio_alert_service
         self.risk_prompt_service = risk_prompt_service or DecisionDeskRiskPromptService()
+        self.dashboard_composer = dashboard_composer or DecisionDeskDashboardComposer()
+        self.smart_money_service = smart_money_service
 
     def build_snapshot(self, as_of_date: date) -> DecisionDeskSnapshot:
         market_regime = self._build_market_regime(as_of_date)
@@ -104,6 +113,39 @@ class DecisionDeskSnapshotBuilder:
         generated_at = self.clock()
         overall_quality = self._compute_overall_quality(sections)
         warnings = self._collect_snapshot_warnings(sections)
+        smart_money_summary = None
+        if self.smart_money_service is not None:
+            try:
+                smart_money_summary = self.smart_money_service.build_dashboard_summary(
+                    as_of_date,
+                    stock_codes=self._collect_smart_money_candidate_codes(
+                        relative_strength_liquidity,
+                        watchlist_triggers,
+                        portfolio_alerts,
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                warnings = tuple(warnings) + (f"smart_money_dashboard_error:{exc}",)
+                overall_quality = DecisionDeskQuality.DEGRADED
+        action_summary = None
+        sector_focus = None
+        stock_focus = None
+        try:
+            dashboard = self.dashboard_composer.compose(
+                market_regime=market_regime,
+                market_breadth=market_breadth,
+                sector_rotation=sector_rotation,
+                relative_strength_liquidity=relative_strength_liquidity,
+                watchlist_triggers=watchlist_triggers,
+                portfolio_alerts=portfolio_alerts,
+                smart_money_summary=smart_money_summary,
+            )
+            action_summary = dashboard.action_summary
+            sector_focus = dashboard.sector_focus
+            stock_focus = dashboard.stock_focus
+        except Exception as exc:  # noqa: BLE001
+            warnings = tuple(warnings) + (f"dashboard_composer_error:{exc}",)
+            overall_quality = DecisionDeskQuality.DEGRADED
 
         return DecisionDeskSnapshot(
             as_of_date=as_of_date,
@@ -118,6 +160,9 @@ class DecisionDeskSnapshotBuilder:
             watchlist_triggers=watchlist_triggers,
             portfolio_alerts=portfolio_alerts,
             risk_prompts=risk_prompts,
+            action_summary=action_summary,
+            sector_focus=sector_focus,
+            stock_focus=stock_focus,
         )
 
     def _build_market_regime(self, as_of_date: date) -> MarketRegimeSummary:
@@ -373,3 +418,24 @@ class DecisionDeskSnapshotBuilder:
             for warning in section_warning:
                 warnings.append(f"{section_name}:{warning}")
         return tuple(warnings)
+
+    @staticmethod
+    def _collect_smart_money_candidate_codes(
+        relative_strength_liquidity: RelativeStrengthLiquiditySummary,
+        watchlist_triggers: WatchlistTriggerSummary,
+        portfolio_alerts: PortfolioAlertSummary,
+    ) -> tuple[str, ...]:
+        codes: list[str] = []
+        seen: set[str] = set()
+        for raw_code in (
+            tuple(relative_strength_liquidity.top_strength_codes)
+            + tuple(relative_strength_liquidity.weak_strength_codes)
+            + tuple(relative_strength_liquidity.low_liquidity_codes)
+            + tuple(watchlist_triggers.triggered_codes)
+            + tuple(portfolio_alerts.alert_codes)
+        ):
+            code = str(raw_code).strip()
+            if code and code not in seen:
+                seen.add(code)
+                codes.append(code)
+        return tuple(codes[:20])

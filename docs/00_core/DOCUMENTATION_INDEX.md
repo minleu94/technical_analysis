@@ -125,6 +125,9 @@
 | [2026-06-16-month5-valuation-data-layer-v1.md](../superpowers/plans/2026-06-16-month5-valuation-data-layer-v1.md) | Month 5 Valuation Data Layer v1 plan，建立估值 metric 的 industry percentile 來源與 adapter，只輸出相對區間與 diagnostics。 |
 | [2026-06-16-month5-abnormal-fundamental-diagnostics.md](../superpowers/plans/2026-06-16-month5-abnormal-fundamental-diagnostics.md) | Month 5 AbnormalFundamentalFlag 與診斷整合 plan，將基本面風險提示接入 Research Run / Daily Decision Desk diagnostics。 |
 | [2026-06-16-tpex-daily-price-backfill.md](../superpowers/plans/2026-06-16-tpex-daily-price-backfill.md) | TPEX daily price backfill plan，定義官方 TPEX daily close quotes 進入 `daily_prices` 的 dry-run、confirm、backup 與驗證流程。 |
+| [2026-06-23-healthcheck-issue-resolution-design.md](../superpowers/specs/2026-06-23-healthcheck-issue-resolution-design.md) | Full App Healthcheck issue resolution 設計，將 2026-06-16 healthcheck 問題拆分為 Batch 1 至 Batch 5 的修復與排查路線。 |
+| [2026-06-23-healthcheck-batch1-direct-fixes.md](../superpowers/plans/2026-06-23-healthcheck-batch1-direct-fixes.md) | Healthcheck Batch 1 direct fixes 實作計畫，涵蓋 UpdateView、Portfolio、Runtime Observatory 與 Research Lab 第一批 UX 問題。 |
+| [2026-06-23-healthcheck-batch2-daily-dashboard-smart-money.md](../superpowers/plans/2026-06-23-healthcheck-batch2-daily-dashboard-smart-money.md) | Healthcheck Batch 2 實作計畫，規劃 Daily Decision Desk answer-first dashboard 與 Smart Money 5 / 20 / 60 日語意診斷。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
 | [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |

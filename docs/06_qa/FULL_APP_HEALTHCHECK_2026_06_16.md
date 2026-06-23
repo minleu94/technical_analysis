@@ -57,14 +57,13 @@
 4. Research Lab 補最大持倉數 `0=無限制`、允許 `1` 檔、整股限制、Preset 載入回饋、固定門檻 / 百分位排名中文化與 tooltip、推薦回放保存 / 升級按鈕 tooltip、同日收盤成交假設 UI 提醒、快速圖表中文化。
 5. 推薦分析補篩選單位 / tooltip、排名方法「最近名次法」、推薦詳情門檻中文化、保存結果成功訊息與「加入觀察清單」文案一致性。
 6. 觀察清單手動新增會查正式股票名稱並阻擋不存在代號；「送 Research Lab 批次回測」可直接帶入目前觀察清單。
+7. Daily Decision Desk 新增 answer-first dashboard、研究模式註記、市場焦點與股票下鑽；Smart Money 新增 5 / 20 / 60 日語意診斷、quantity-based 集中度與資料品質揭露。
 
 仍需討論或另排大型設計 / 工程項目：
 
-1. Daily Decision / 市場觀察是否要合併成 answer-first dashboard，以及卡片優先順序與 drill-down 行為。
-2. Smart Money 中長線籌碼語意：5 / 20 / 60 日累積、連續買賣、分點集中度、價格位置聯動應如何設計。
-3. 強弱股 / 強弱產業 SQLite-first 與載入效能、券商分點受控並行、技術指標多核心計算。
-4. Recommendation Profile 生命週期、自訂 Profile、Research Lab 升級策略是否進推薦分析，以及 regime match / mismatch 規則。
-5. Research Lab 大型 UX：最佳化版面與取消流程、推薦回放結果重排、Registry 比較中文化 / 自動刷新、Train-Test / Walk-forward 判讀與資料完整性說明。
+1. 強弱股 / 強弱產業 SQLite-first 與載入效能、券商分點受控並行、技術指標多核心計算。
+2. Recommendation Profile 生命週期、自訂 Profile、Research Lab 升級策略是否進推薦分析，以及 regime match / mismatch 規則。
+3. Research Lab 大型 UX：最佳化版面與取消流程、推薦回放結果重排、Registry 比較中文化 / 自動刷新、Train-Test / Walk-forward 判讀與資料完整性說明。
 
 ## Month 5 基本面資料層補充（2026-06-17）
 
@@ -193,8 +192,8 @@
 | MARKET-ISSUE-003 | M-003 / M-004 / M-005 / M-007 / M-008 / M-009 / M-011 / M-012 / M-013 / M-014 / M-015 / M-016 | 效能 / SQLite-first | 強 / 弱勢個股與強 / 弱勢產業功能可用，但進入或載入時有明顯卡頓，使用者懷疑仍在讀 CSV，希望評估改用 SQL。 | 已記錄 | 未修正 | 待排查 | 高 | 盤點 `ScreeningService` / `StockScreener` / `IndustryMapper` 是否仍讀大型 CSV，評估改為 SQLite-first、快取或背景載入；需維持現有排序與欄位語意一致。 |
 | MARKET-ISSUE-004 | M-017 / M-019 | 主力流向 / 顯示範圍 | 主力流向預設週線且一次顯示全部股票，資訊量過大；使用者只需要 Top 50 與 Bottom 50。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 主表新增顯示範圍下拉，預設 Top / Bottom 50，並提供 Top 50、Bottom 50、全部切換；summary 統計仍使用全市場掃描結果。 |
 | MARKET-ISSUE-005 | M-019 / M-022 | 主力流向 / Drill-down | 個股資金流向右側會顯示買賣超分點，但無法雙擊分點跳到「分點進出追蹤」查看該分點買賣狀況。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 右側分點明細已支援雙擊分點後切換至 Branch Tracker 並選中該分點；若分點不在目前下拉清單，會顯示可讀提示。 |
-| MARKET-ISSUE-006 | M-018 / M-022 | 視覺化 / 版面 | 個股資金流向與分點進出追蹤的近期趨勢小圖不清楚、不美觀；第一個直方圖會撞到右側看板而被截掉，折線與面積圖也沒有改善。 | 已記錄 | 未修正 | 待設計 | 高 | 重新評估 sparkline / micro chart 是否適合；可改為更清楚的 30 日買超 / 賣超累積、連續買賣天數、近 5 / 20 / 60 日淨買賣摘要或其他更高訊息密度的呈現。實作前需先定義要回答的判讀問題。 |
-| MARKET-ISSUE-007 | M-019 / M-020 / M-022 | 主力流向 / 籌碼語意 | 近五日 / 近五周呈現不足以判斷主力是剛開始買入、已買一段時間、正在出貨，或中長線已累積大量買超 / 賣超；操作方向不明朗。 | 已記錄 | 未修正 | 待討論 | 高 | 和使用者討論更有效的籌碼摘要：例如 5 / 20 / 60 日累積淨買賣、連續買賣天數、分點集中度變化、首次轉買 / 轉賣、累積分位、與價格位置聯動；避免只放短期 sparkline。 |
+| MARKET-ISSUE-006 | M-018 / M-022 | 視覺化 / 版面 | 個股資金流向與分點進出追蹤的近期趨勢小圖不清楚、不美觀；第一個直方圖會撞到右側看板而被截掉，折線與面積圖也沒有改善。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | Smart Money 已新增 5 / 20 / 60 日語意診斷欄，降低對短期 sparkline 的依賴；tooltip 揭露 quantity concentration、observed / estimated / unavailable 品質與排除資訊。 |
+| MARKET-ISSUE-007 | M-019 / M-020 / M-022 | 主力流向 / 籌碼語意 | 近五日 / 近五周呈現不足以判斷主力是剛開始買入、已買一段時間、正在出貨，或中長線已累積大量買超 / 賣超；操作方向不明朗。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | Smart Money 已新增 `初轉買`、`買超延續`、`初轉賣`、`賣超延續`、`高檔出貨疑慮`、`分點集中異常` 等語意狀態；5 / 20 / 60 日視窗只使用 decision_date 前事件，集中度以 quantity 計算。 |
 
 ## 每日決策
 
@@ -215,8 +214,8 @@
 | Issue ID | 來源功能 ID | 問題分類 | 問題摘要 | 目前狀態 | 修正狀態 | 驗證狀態 | 優先級 | 後續處理 |
 |---|---|---|---|---|---|---|---|---|
 | DECISION-ISSUE-001 | D-003 / D-007 / D-008 | UX / Warning 中文化 | 每日決策 warnings 直接顯示工程代碼，例如 `relative_strength_liquidity_skipped_symbols`、`watchlist_trigger_data_insufficient`，使用者看不懂。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 已建立主要 warning token 到繁體中文文案的 mapping，說明模組、缺口原因與影響範圍；原始 token 保留在括號中供 debug / 追溯。 |
-| DECISION-ISSUE-002 | D-004 / D-005 / D-006 / D-007 / D-009 | UI / 資訊架構 | 每日決策頁面載入後資訊很多但缺少視覺層級與主結論，使用者覺得畫面醜且不知道要看什麼。 | 已記錄 | 未修正 | 待設計 | 高 | 重新設計 Daily Decision Desk 的 answer-first layout：先給今日主結論、品質狀態、最重要 3-5 個行動/觀察，再把模組細節放到次層；避免只用長清單堆疊資訊。 |
-| DECISION-ISSUE-003 | D-004 / D-005 / D-006 / D-007 | 產品設計 / 市場觀察整合 | 使用者希望未來把每日決策與市場觀察整合，形成漂亮 dashboard：顯示大盤指數、強弱個股、強弱產業快照，並能點擊卡片跳轉到市場觀察 tab 看細節。 | 已記錄 | 未修正 | 待討論 | 高 | 評估把 Daily Decision Desk 定位為 Market Watch dashboard 首頁：卡片顯示市場狀態、廣度、強弱個股、強弱產業、主力流向摘要；卡片支援 drill-down 到「市場觀察」對應子 tab。需先定義資料來源、跳轉參數與卡片優先順序。 |
+| DECISION-ISSUE-002 | D-004 / D-005 / D-006 / D-007 / D-009 | UI / 資訊架構 | 每日決策頁面載入後資訊很多但缺少視覺層級與主結論，使用者覺得畫面醜且不知道要看什麼。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | Daily Decision Desk 已新增 answer-first 主結論、研究模式註記、優先 / 風險產業與股票焦點；既有模組細節保留在次層狀態區。 |
+| DECISION-ISSUE-003 | D-004 / D-005 / D-006 / D-007 | 產品設計 / 市場觀察整合 | 使用者希望未來把每日決策與市場觀察整合，形成漂亮 dashboard：顯示大盤指數、強弱個股、強弱產業快照，並能點擊卡片跳轉到市場觀察 tab 看細節。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | Daily Decision Desk 已新增市場焦點區與股票下鑽按鈕；點擊股票焦點會切到「市場觀察 > 主力流向」並定位該股票。 |
 
 ## 策略回測 / Research Lab
 
