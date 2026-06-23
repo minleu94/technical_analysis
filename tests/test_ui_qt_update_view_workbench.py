@@ -166,6 +166,101 @@ def make_view():
     return _TestableUpdateView(FakeUpdateService())
 
 
+def test_source_detail_check_renders_daily_status_inside_source_page():
+    view = make_view()
+
+    view._on_source_detail_checked({
+        "source": "daily",
+        "status": {
+            "daily_data": {
+                "latest_date": "2026-06-22",
+                "total_records": 123456,
+                "status": "ok",
+                "csv_file_count": 2890,
+                "missing_dates": ["2026-06-18"],
+                "warnings": ["TWSE 休市日已略過"],
+            }
+        },
+    })
+
+    text = view.daily_detail_status_label.text()
+    assert "最新日期：2026-06-22" in text
+    assert "SQLite 筆數：123,456" in text
+    assert "CSV 日檔數：2,890" in text
+    assert "缺漏日期：2026-06-18" in text
+
+
+def test_source_detail_check_renders_broker_branch_status_inside_source_page():
+    view = make_view()
+
+    view._on_source_detail_checked({
+        "source": "broker_branch",
+        "status": {
+            "broker_branch": {
+                "latest_date": "2026-06-22",
+                "total_records": 98765,
+                "date_count": 120,
+                "dual_count": 55,
+                "e_only_count": 10,
+                "b_only_count": 5,
+                "status": "warning",
+            }
+        },
+    })
+
+    text = view.broker_branch_detail_status_label.text()
+    assert "最新日期：2026-06-22" in text
+    assert "SQLite 筆數：98,765" in text
+    assert "實際天數：120" in text
+    assert "雙榜紀錄：55" in text
+
+
+def test_force_merge_confirmation_uses_explicit_buttons_and_raw_csv_safety_copy(monkeypatch):
+    view = make_view()
+    captured = {}
+
+    class CapturingMessageBox(QMessageBox):
+        def exec(self):
+            captured["text"] = self.text()
+            captured["informative"] = self.informativeText()
+            captured["buttons"] = [button.text() for button in self.buttons()]
+            self._clicked_button = next(button for button in self.buttons() if "取消" in button.text())
+            return QMessageBox.Cancel
+
+        def clickedButton(self):
+            return self._clicked_button
+
+    monkeypatch.setattr("ui_qt.views.update_view.QMessageBox", CapturingMessageBox)
+
+    view._execute_force_merge()
+
+    assert "確認強制合併" in captured["buttons"]
+    assert "取消" in captured["buttons"]
+    assert "不會修改或刪除" in captured["informative"]
+    assert "raw CSV 原始檔案" in captured["informative"]
+    assert ("merge_daily_data", True) not in view.update_service.calls
+
+
+def test_force_merge_confirmation_runs_merge_only_after_explicit_confirm(monkeypatch):
+    view = make_view()
+    calls = []
+    monkeypatch.setattr(view, "_do_merge", lambda force_all=False: calls.append(force_all))
+
+    class ConfirmingMessageBox(QMessageBox):
+        def exec(self):
+            self._clicked_button = next(button for button in self.buttons() if "確認強制合併" in button.text())
+            return QMessageBox.Accepted
+
+        def clickedButton(self):
+            return self._clicked_button
+
+    monkeypatch.setattr("ui_qt.views.update_view.QMessageBox", ConfirmingMessageBox)
+
+    view._execute_force_merge()
+
+    assert calls == [True]
+
+
 class StaleTechnicalUpdateService(FakeUpdateService):
     def check_data_overview(self):
         self.calls.append(("check_data_overview",))

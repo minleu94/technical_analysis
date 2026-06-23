@@ -1391,8 +1391,7 @@ class BacktestView(QWidget):
                     "下一步可在歷史推薦回測下拉選單載入、匯出報告，或進行後續策略升級檢查。"
                 )
 
-                # 重新載入下拉選單
-                self._refresh_portfolio_history_combo()
+                self._on_research_run_saved(run_id)
 
                 # 選中剛保存的結果
                 index = self.portfolio_history_combo.findData(run_id)
@@ -1431,8 +1430,7 @@ class BacktestView(QWidget):
                     self.current_portfolio_run_id = None
                     self.current_recommendation_portfolio_result = None
 
-                    # 重新載入下拉選單
-                    self._refresh_portfolio_history_combo()
+                    self._on_research_run_deleted(run_id)
 
                     # 清除 UI 上的結果顯示
                     self.portfolio_summary_text.clear()
@@ -1509,7 +1507,7 @@ class BacktestView(QWidget):
 
         QMessageBox.information(self, "升級完成", f"已升級為策略版本：{version_id}")
         self.promote_portfolio_result_btn.setEnabled(False)
-        self._refresh_portfolio_history_combo()
+        self._on_strategy_version_promoted(version_id)
         index = self.portfolio_history_combo.findData(run_id)
         if index >= 0:
             self.portfolio_history_combo.blockSignals(True)
@@ -2581,6 +2579,41 @@ class BacktestView(QWidget):
         self.current_portfolio_run_id = metadata.run_id
         return metadata.run_id
 
+    def _refresh_research_registry(self) -> None:
+        """刷新 Research Run 相關列表、圖表選單與比較面板。"""
+        if getattr(self, "run_repository", None):
+            self._refresh_history()
+        if hasattr(self, "chart_run_combo"):
+            self._update_chart_run_combo()
+        if hasattr(self, "_refresh_portfolio_history_combo"):
+            self._refresh_portfolio_history_combo()
+        compare_widget = getattr(self, "run_registry_compare_widget", None)
+        if compare_widget is not None and hasattr(compare_widget, "refresh_runs"):
+            compare_widget.refresh_runs()
+
+    def _show_research_registry_progress(self, message: str) -> None:
+        if hasattr(self, "progress_label"):
+            self.progress_label.setVisible(True)
+            self.progress_label.setText(message)
+
+    def _on_research_run_saved(self, run_id: str) -> None:
+        self._refresh_research_registry()
+        self._show_research_registry_progress(
+            f"Research Run 已保存：{run_id}。已刷新歷史列表、圖表選單與比較面板。"
+        )
+
+    def _on_research_run_deleted(self, run_id: str) -> None:
+        self._refresh_research_registry()
+        self._show_research_registry_progress(
+            f"Research Run 已刪除：{run_id}。已刷新歷史列表、圖表選單與比較面板。"
+        )
+
+    def _on_strategy_version_promoted(self, version_id: str) -> None:
+        self._refresh_research_registry()
+        self._show_research_registry_progress(
+            f"策略版本已升級：{version_id}。已刷新 Research Registry 狀態。"
+        )
+
     def _factor_save_kwargs(self, details: dict[str, Any]) -> dict[str, Any]:
         factor_records = details.get("factor_records")
         factor_decision_date = details.get("factor_decision_date")
@@ -2676,8 +2709,7 @@ class BacktestView(QWidget):
                     f"結果已保存: {run_name}\nRegistry run：{run_id}\n\n"
                     "若驗證狀態允許，現在可按「升級為策略版本」進入升級條件檢查。",
                 )
-                self._refresh_history()
-                self._update_chart_run_combo()
+                self._on_research_run_saved(run_id)
                 # 自動選中剛保存的結果
                 index = self.chart_run_combo.findData(run_id)
                 if index >= 0:
@@ -2781,6 +2813,7 @@ class BacktestView(QWidget):
                         "成功",
                         f"回測結果已升級為策略版本\n\n版本 ID: {version_id}\n回測 ID: {run_id}"
                     )
+                    self._on_strategy_version_promoted(version_id)
                 else:
                     QMessageBox.warning(
                         self,
@@ -2909,6 +2942,7 @@ class BacktestView(QWidget):
 
         # 執行刪除
         deleted_count = 0
+        deleted_run_ids = []
         failed_count = 0
         failed_names = []
 
@@ -2924,6 +2958,7 @@ class BacktestView(QWidget):
             try:
                 if self.run_repository.delete_run(run_id):
                     deleted_count += 1
+                    deleted_run_ids.append(run_id)
                 else:
                     failed_count += 1
                     failed_names.append(run_name)
@@ -2948,10 +2983,8 @@ class BacktestView(QWidget):
                     msg += f":\n" + "\n".join(failed_names[:5]) + f"\n... 還有 {len(failed_names) - 5} 個"
             QMessageBox.warning(self, "部分成功", msg)
 
-        # 刷新列表和圖表下拉選單
-        self._refresh_history()
-        if hasattr(self, 'chart_run_combo'):
-            self._update_chart_run_combo()
+        if deleted_run_ids:
+            self._on_research_run_deleted(", ".join(deleted_run_ids))
 
     def _compare_runs(self):
         """比較選中的回測結果"""

@@ -305,6 +305,50 @@ def test_backtest_view_uses_optimization_fixed_values_when_enabled(qt_app):
     assert params["sell_score"] == 40
 
 
+def test_research_lab_mode_hint_explains_use_case_and_input_source(qt_app):
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+
+    for index in range(view.research_lab_mode_combo.count()):
+        view.research_lab_mode_combo.setCurrentIndex(index)
+        hint = view.config_panel.research_lab_mode_hint.text()
+        assert "適合" in hint
+        assert "輸入來源" in hint
+
+
+def test_research_lab_date_edits_use_calendar_popup_and_expected_defaults(qt_app):
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+
+    today = QDate.currentDate()
+
+    assert view.start_date.calendarPopup()
+    assert view.end_date.calendarPopup()
+    assert view.end_date.date() == today
+    assert 360 <= view.start_date.date().daysTo(today) <= 371
+
+
+def test_research_registry_refreshes_after_save_delete_and_promote(qt_app):
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+    view._refresh_research_registry = MagicMock()
+
+    view._on_research_run_saved("run-test-001")
+    assert view._refresh_research_registry.call_count == 1
+    assert not view.progress_label.isHidden()
+    assert "已保存" in view.progress_label.text()
+    assert "run-test-001" in view.progress_label.text()
+
+    view._on_research_run_deleted("run-test-001")
+    assert view._refresh_research_registry.call_count == 2
+    assert "已刪除" in view.progress_label.text()
+
+    view._on_strategy_version_promoted("version-test-001")
+    assert view._refresh_research_registry.call_count == 3
+    assert "已升級" in view.progress_label.text()
+    assert "version-test-001" in view.progress_label.text()
+
+
 def test_recommendation_view_preserves_provenance_on_portfolio_recording(qt_app):
     """驗證推薦結果記錄到 Portfolio 時，會保留推薦來源、分數、理由、Profile 等 metadata"""
     mock_rec_service = MagicMock()

@@ -33,6 +33,16 @@ class NormalizedEquityResult:
     excluded_dates: dict[str, list[str]]
 
 
+COMPARABILITY_REASON_LABELS = {
+    "data fingerprint differs": "資料指紋不同",
+    "execution price differs": "成交假設不同",
+    "sizing mode differs": "部位 sizing 模式不同",
+    "universe differs": "Universe 股票池不同",
+    "date range differs": "日期區間不同",
+    "cost model differs": "交易成本模型不同",
+}
+
+
 class ResearchRunComparisonService:
     """比較已保存 Research Run 的 metadata 與展示用 equity curve。"""
 
@@ -163,7 +173,7 @@ class ResearchRunComparisonService:
         reasons: list[str] = []
         for reason, predicate in checks:
             if any(predicate(run) for run in runs):
-                reasons.append(reason)
+                reasons.append(COMPARABILITY_REASON_LABELS.get(reason, reason))
         return reasons
 
     def _prepare_equity_frame(self, equity: pd.DataFrame) -> pd.DataFrame:

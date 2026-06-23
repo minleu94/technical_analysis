@@ -155,6 +155,10 @@ python ui_qt/main.py
 5. 每日股價手動下載會同時處理 TWSE 與 TPEX：TWSE raw CSV 寫入 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX official daily close quotes 寫入 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，完成後同步 SQLite `daily_prices` 並觸發技術指標增量更新。執行「合併每日股價」時，`stock_data_whole.csv` 也會同時納入這兩個日檔目錄。
 6. 券商分點下載後，還要執行對應的「合併」才會寫入分析資料庫。
 
+每日股價與券商分點按「檢查此資料源狀態」後，結果會顯示在該資料源頁面內的摘要列，包含最新日期、筆數、SQLite / CSV 狀態與缺漏提示；下方日誌只保留細節，不是唯一判讀入口。
+
+每日股價的「強制重新合併所有每日股價」屬高風險維護操作。系統會先顯示二次確認對話框，按「取消」不會執行，只有按「確認強制合併」才會重建衍生合併資料；此流程不應亦不會修改或刪除 `DATA_ROOT` 底下的 raw CSV 原始檔。
+
 若 TPEX endpoint timeout 或部分日期失敗，UI 會以 warning 呈現並繼續已成功的 TWSE / SQLite / 技術指標流程；這代表需要重測或補跑缺漏日期，不代表 TWSE 資料也失敗。
 
 每日股價分頁另有「背景補齊 TPEX + 技術指標」與「檢查背景任務狀態」。背景任務不會先強制跑 TWSE 全量，也不會強制全量重算技術指標；同步 SQLite 後會比對每日股價與技術指標最新日期，若技術指標已追上每日股價，狀態會顯示 skipped。狀態檔位於 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`；若狀態顯示 `running`，請用狀態查詢確認進度，不要重複啟動第二個背景任務。
@@ -629,6 +633,8 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 | 推薦系統回放 | 回放推薦配置與名單。 |
 | 策略研究 | 比較策略模板、參數、最佳化與驗證結果。 |
 
+模式下方會用「適合 / 輸入來源」說明目前模式該用在哪種研究情境，以及主要輸入來自股票代號、候選池、固定清單、推薦結果或策略模板。
+
 ### 9.2 基本設定
 
 1. 選擇策略來源或載入 Preset。
@@ -636,6 +642,8 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 3. 設定開始與結束日期。
 4. 設定初始資金、手續費與滑價。
 5. 執行價格建議使用 `next_open`；`close` 是同根 K 收盤成交假設，必須清楚揭露。
+
+開始日期與結束日期可開啟日曆選取；開始日期預設為今天往前一年，結束日期預設為今天，日曆開啟時會定位在目前欄位日期。
 
 ### 9.3 停損、停利與部位
 
@@ -700,6 +708,8 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 
 「保存結果」與「升級為策略版本」按鈕會依目前是否已有可保存結果、是否已保存、validation 是否允許而啟用；停用時 tooltip 會說明原因。保存成功訊息會顯示 Registry run ID 與下一步。
 
+保存、刪除或升級成功後，Research Lab 會刷新歷史列表、圖表選單與 Registry 比較面板，並在進度文字顯示剛保存的 run ID 或升級後的策略版本 ID。
+
 Month 6 lifecycle gate 的預設最低交易數為 20 筆，且缺 benchmark excess return 或 factor snapshot 時會保守降級，不允許只靠單次高報酬升級策略版本。通過 Gate 不代表已完成實盤驗證。Demote / retire 判斷會先以 proposed evidence 保存，供人工 review；系統不會自動刪除策略版本或改寫歷史 run。
 
 保存安全限制：
@@ -723,9 +733,9 @@ Month 6 lifecycle gate 的預設最低交易數為 20 筆，且缺 benchmark exc
 - 在「實驗摘要」設有「匯出 Excel 報告」按鈕（僅在單股回測成功後啟用）。
 - 在「批次結果」設有「匯出批次 Excel」按鈕（僅在批次回測成功後啟用）。
 - 在「推薦回放」設有「匯出回放 Excel」按鈕（僅在推薦組合回測成功後啟用）。
-- **安全設計**：所有匯出皆在背景線程（`TaskWorker`）執行，防止 UI 卡死，並採用臨時檔寫入後 `os.replace` 原子替換；替換失敗時既有報告保持不變。報告使用執行結果與參數快照，不重跑策略或摘要績效；equity curve 可接受 `日期`、`date` 或日期 index。若元數據缺失，會在「資料完整性」警示中標示 `N/A`，不以目前 UI 值或預設常數代填。
+- **安全設計**：所有匯出皆在背景線程（`TaskWorker`）執行，防止 UI 卡死，並採用臨時檔寫入後 `os.replace` 原子替換；替換失敗時既有報告保持不變。報告使用執行結果與參數快照，不重跑策略或摘要績效；equity curve 可接受 `日期`、`date` 或日期 index。若元數據缺失，會在「資料完整性」警示中顯示中文欄位名並保留原始代號，例如「資料截止日期（data_as_of_date）」；系統不以目前 UI 值或預設常數代填。
 
-Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為 Incompatible；期間、Universe 或成本不同時標示為 Caution，不應直接做優劣排名。Registry-based Promote 會先做 Registry Gate，通過後才建立策略版本。
+Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為 Incompatible，並以中文原因顯示如「資料指紋不同」「成交假設不同」「部位 sizing 模式不同」；期間、Universe 或成本不同時會標示為 Caution，並以「日期區間不同」「Universe 股票池不同」「交易成本模型不同」等原因提醒，不應直接做優劣排名。Registry-based Promote 會先做 Registry Gate，通過後才建立策略版本。
 
 固定組合目前的 Registry 保存粒度是每檔股票的 per-stock run，metadata 會標記為 `fixed_basket_stock` 以保留固定組合來源，並沿用該檔回測產生的 factor records 生成 `factor_snapshot` / `factor_contributions`。完整固定組合層級的現金帳、再平衡、未成交、Liquidity / Gap 風險揭露仍未建成，不應把 per-stock 保存結果解讀為完整可成交的固定組合績效；Month 3 v1 的完整 portfolio credibility 揭露集中在推薦組合回放。
 
@@ -752,6 +762,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 3. 可選擇策略來源並填寫備註。
 4. 保存後系統重算持倉與平均成本。
 
+輸入股票代號後，系統會嘗試從 stock master / SQLite 自動補證券名稱；找不到正式代號時會提示。手續費與證交稅會依台股預設值自動估算，使用者仍可手動覆寫。
+
 賣出數量不得超過目前可用持倉。
 
 ### 10.2 從推薦或回測建立來源追溯
@@ -760,6 +772,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 回測交易明細右鍵記錄交易。
 
 這些入口會保存推薦結果、回測 run 或策略版本來源。它們仍是手動記錄，不會送出券商委託。
+
+目前不要把批次回測排行榜理解成已提供直接加入持倉入口；可記錄到持倉的主要入口是推薦結果表與回測交易明細。
 
 ### 10.3 持倉與交易歷史
 
@@ -772,6 +786,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 籌碼監控
 
 交易歷史可用右鍵刪除；刪除後持倉與成本會重新計算。
+
+從持倉篩選交易歷史時，交易歷史區會顯示目前篩選狀態，並提供「清除篩選」回到全部交易。
 
 ### 10.4 覆盤日誌
 
@@ -788,6 +804,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 停損與停利門檻
 - 監控狀態與原因
 - 策略、推薦或回測來源
+
+目前價格會一併顯示價格日期。手動建立持倉會顯示為「手動建立，無推薦 / 回測來源」，避免誤解為資料缺失。
 
 警示是輔助判讀，不會自動平倉。
 
@@ -807,7 +825,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ### 10.7 籌碼監控
 
-顯示籌碼風險、近期分點買賣明細與資料品質。按「下鑽詳細主力流向」會切換至市場觀察的 Smart Money 並定位目前股票。
+顯示籌碼風險、近期分點買賣明細與資料品質。風險等級與品質狀態會以繁體中文顯示，原始 key 保留在 tooltip 供除錯。按「下鑽詳細主力流向」會切換至市場觀察的 Smart Money 並定位目前股票。
 
 ### 10.8 清空全體數據
 
@@ -817,15 +835,17 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 這是唯讀工程治理頁，不是選股工具。
 
+Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或受治理流程，不監控資料更新、回測或推薦分析的背景任務。資料更新、回測與推薦的進度仍應回到各自功能頁查看。
+
 欄位：
 
-- Objective：目前 Runtime 任務目標。
-- Task Workflow Status：FSM 狀態。
+- Objective：目前 Runtime 任務目標；沒有任務時會顯示「尚未指派治理任務」。
+- Task Workflow Status：任務流程狀態；IDLE 會顯示為「閒置」，平常閒置屬正常。
 - Active Files：目前上下文檔案。
-- Overall System State：整體治理狀態。
+- Overall System State：整體治理狀態，例如「已暫停 / 治理暫停」。
 - Rejection Rate：治理拒絕率、趨勢與連續失敗數。
-- Last Critical Violation：最近一次重大違規。
-- Append-only Event Stream：時間、嚴重度、actor、事件類型與訊息。
+- Last Critical Violation：最近一次重大違規，例如「治理規則違反」。
+- Append-only Event Stream：時間、嚴重度、actor、繁中事件摘要與訊息；raw event type 與 payload 保留在 tooltip。
 
 當狀態為 ERROR 或 HALTED：
 
@@ -907,6 +927,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 ## 14. 更新記錄
 
 - 2026-06-23：同步 Full App Healthcheck 修正後的操作說明；新增全部資料月營收狀態卡、Smart Money Top / Bottom 50 預設與分點雙擊跳轉、推薦分析「加入觀察清單」文案、Watchlist 直接送 Research Lab、Daily Decision warnings 中文化、Research Lab 最大持倉 0=無限制、固定門檻 / 百分位排名 tooltip 與推薦回放保存 / 成交假設提醒。
+- 2026-06-23：補充 Healthcheck Batch 1 direct fixes：資料源檢查摘要與強制合併確認、Research Lab 模式 / 日期 / Registry 刷新 / 報告缺欄位診斷、持倉管理交易表單與監控中文化，以及 Runtime Observatory 監控範圍。
 - 2026-06-23：修正每日股價手動下載 / 快速更新的日期邊界說明；開始日期會納入缺漏檢查，並補充 TWSE 股票日價缺漏排錯方式。
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 已補 guarded presentation policy，官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
 - 2026-06-18：更新每日股價與 TPEX 操作說明，確認手動每日股價、快速更新與安全更新皆納入 TPEX 區間補齊、SQLite 同步與技術指標增量；新增背景補齊 TPEX + 技術指標狀態查詢說明，並修正 `3207` 歷史日價缺漏排錯判斷。

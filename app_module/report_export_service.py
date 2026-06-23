@@ -19,6 +19,17 @@ from app_module.report_export_dtos import (
 )
 
 
+MISSING_FIELD_LABELS = {
+    "data_as_of_date": "資料截止日期",
+    "data_version": "資料版本",
+    "strategy_id": "策略代號",
+    "strategy_version": "策略版本",
+    "regime": "市場 Regime",
+    "benchmark": "對比基準",
+    "execution_assumption": "交易執行假設",
+}
+
+
 class ReportExportService:
     """報告匯出服務 (Excel Exporter)
     提供規格化的報告匯出至 Excel 格式，具備專業樣式、凍結窗格、自動欄寬與原子寫入。
@@ -194,7 +205,11 @@ class ReportExportService:
             ws.cell(row=next_row + 1, column=1).fill = self.integrity_fill
             ws.cell(row=next_row + 1, column=1).border = self.thin_border
             
-            cell_missing = ws.cell(row=next_row + 1, column=2, value=", ".join(missing))
+            missing_labels = "；".join(
+                f"{MISSING_FIELD_LABELS.get(field, field)}（{field}）"
+                for field in missing
+            )
+            cell_missing = ws.cell(row=next_row + 1, column=2, value=missing_labels)
             cell_missing.font = Font(name="Consolas", size=10, bold=True, color="9C27B0")
             cell_missing.fill = self.integrity_fill
             cell_missing.border = self.thin_border

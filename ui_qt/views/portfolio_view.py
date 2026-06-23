@@ -5,6 +5,7 @@
 
 import logging
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 import pandas as pd
 from uuid import uuid4
@@ -99,6 +100,11 @@ class AddTradeDialog(QDialog):
         self.code_input.textChanged.connect(self._auto_query_stock_name)
         form_layout.addRow("證券代號 *:", self.code_input)
 
+        self.code_error_label = QLabel("")
+        self.code_error_label.setStyleSheet("color: #f56565;")
+        self.code_error_label.setWordWrap(True)
+        form_layout.addRow("", self.code_error_label)
+
         # 證券名稱
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("自動查詢或手動輸入")
@@ -143,6 +149,15 @@ class AddTradeDialog(QDialog):
         self.taxes_input.setValue(0.0)
         form_layout.addRow("交易稅金 (賣出時):", self.taxes_input)
 
+        self._fees_manually_edited = False
+        self._taxes_manually_edited = False
+        self.qty_input.valueChanged.connect(self._refresh_default_costs)
+        self.price_input.valueChanged.connect(self._refresh_default_costs)
+        self.side_combo.currentIndexChanged.connect(self._refresh_default_costs)
+        self.fees_input.valueChanged.connect(lambda _value: setattr(self, "_fees_manually_edited", True))
+        self.taxes_input.valueChanged.connect(lambda _value: setattr(self, "_taxes_manually_edited", True))
+        self._refresh_default_costs()
+
         # 策略關聯
         self.strategy_combo = QComboBox()
         self.strategy_combo.addItem("無關聯 / 手動交易", "")
@@ -166,6 +181,7 @@ class AddTradeDialog(QDialog):
     def _auto_query_stock_name(self):
         """輸入證券代號時，若有 recommendation_service，嘗試解析或帶入股名"""
         code = self.code_input.text().strip()
+        self.code_error_label.setText("")
         if not code or not self.recommendation_service:
             return
 
@@ -177,12 +193,35 @@ class AddTradeDialog(QDialog):
                 name = mapper.get_stock_name(code)
                 if name and name != code:
                     self.name_input.setText(name)
+                    self.code_error_label.setText("")
+                elif len(code) >= 4:
+                    self.code_error_label.setText("找不到正式股票代號，請確認代號或手動補入名稱。")
         except Exception as e:
             logger.debug("Auto query stock name failed: %s", e)
+
+    def _money_to_spin_value(self, value: Decimal) -> float:
+        rounded = value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return float(rounded)  # numeric-boundary: presentation
+
+    def _refresh_default_costs(self):
+        notional = Decimal(str(self.qty_input.value())) * Decimal(str(self.price_input.value()))
+        fee = notional * Decimal("0.001425")
+        tax = notional * Decimal("0.003") if self.side_combo.currentData() == "sell" else Decimal("0")
+        if not self._fees_manually_edited:
+            self.fees_input.blockSignals(True)
+            self.fees_input.setValue(self._money_to_spin_value(fee))
+            self.fees_input.blockSignals(False)
+        if not self._taxes_manually_edited:
+            self.taxes_input.blockSignals(True)
+            self.taxes_input.setValue(self._money_to_spin_value(tax))
+            self.taxes_input.blockSignals(False)
 
     def _validate_and_accept(self):
         if not self.code_input.text().strip():
             QMessageBox.warning(self, "驗證失敗", "請輸入證券代號")
+            return
+        if self.code_error_label.text() and not self.name_input.text().strip():
+            QMessageBox.warning(self, "驗證失敗", self.code_error_label.text())
             return
         if not self.name_input.text().strip():
             QMessageBox.warning(self, "驗證失敗", "請輸入證券名稱")
@@ -340,6 +379,14 @@ class PortfolioView(QWidget):
         dashboard_layout.addWidget(self.card_positions)
         main_layout.addLayout(dashboard_layout)
 
+        self.active_positions_summary_label = QLabel("活躍持倉：0 檔")
+        self.active_positions_summary_label.setWordWrap(True)
+        self.active_positions_summary_label.setStyleSheet(
+            "color: #e2e8f0; background-color: #1a202c; border: 1px solid #2d3748; "
+            "border-radius: 6px; padding: 6px 10px;"
+        )
+        main_layout.addWidget(self.active_positions_summary_label)
+
         # ========== 2. 中部核心分割區 (Splitter) ==========
         main_splitter = QSplitter(Qt.Horizontal)
 
@@ -404,6 +451,16 @@ class PortfolioView(QWidget):
         history_tab = QWidget()
         history_layout = QVBoxLayout(history_tab)
         history_layout.setContentsMargins(6, 6, 6, 6)
+
+        history_filter_layout = QHBoxLayout()
+        self.trade_filter_status_label = QLabel("顯示全部交易歷史")
+        self.trade_filter_status_label.setStyleSheet("color: #e2e8f0;")
+        self.clear_trade_filter_button = QPushButton("清除篩選 / 顯示全部交易歷史")
+        self.clear_trade_filter_button.clicked.connect(self._clear_trade_history_filter)
+        history_filter_layout.addWidget(self.trade_filter_status_label)
+        history_filter_layout.addStretch()
+        history_filter_layout.addWidget(self.clear_trade_filter_button)
+        history_layout.addLayout(history_filter_layout)
 
         self.trades_table = QTableView()
         self.trades_table.setAlternatingRowColors(True)
@@ -613,6 +670,14 @@ class PortfolioView(QWidget):
                 self.card_pnl.card_pnl_style = "color: #f56565;"  # 紅色
 
             self.card_positions.update_value(f"{active_count} 檔")
+            active_positions = [position for position in getattr(portfolio, "positions", []) if position.is_holding]
+            top_symbols = "、".join(
+                f"{position.stock_code} {position.stock_name}" for position in active_positions[:5]
+            )
+            suffix = f"｜{top_symbols}" if top_symbols else ""
+            if len(active_positions) > 5:
+                suffix += f" 等 {len(active_positions)} 檔"
+            self.active_positions_summary_label.setText(f"活躍持倉：{active_count} 檔{suffix}")
         except Exception as e:
             logger.error("Failed to load portfolio summary: %s", e)
 
@@ -751,8 +816,19 @@ class PortfolioView(QWidget):
                 self.trades_model.setVisibleColumns([col for col in df.columns if col != "_trade_id"])
             self.trades_table.setModel(self.trades_model)
             self.trades_table.resizeColumnsToContents()
+            if self.selected_stock_code:
+                self.trade_filter_status_label.setText(f"目前只顯示：{self.selected_stock_code}")
+                self.clear_trade_filter_button.setEnabled(True)
+            else:
+                self.trade_filter_status_label.setText("顯示全部交易歷史")
+                self.clear_trade_filter_button.setEnabled(False)
         except Exception as e:
             logger.error("Failed to load trades history: %s", e)
+
+    def _clear_trade_history_filter(self):
+        self.selected_stock_code = ""
+        self._load_trades_history()
+        self._load_journal_entries()
 
     def _load_journal_entries(self):
         """加載交易日記列表"""
@@ -831,9 +907,7 @@ class PortfolioView(QWidget):
             self._load_trades_history()
             self._load_journal_entries()
         elif action == action_clear_filter:
-            self.selected_stock_code = ""
-            self._load_trades_history()
-            self._load_journal_entries()
+            self._clear_trade_history_filter()
 
     def _show_record_trade_dialog(self):
         """顯示手動記錄交易對話框"""
@@ -1028,7 +1102,11 @@ class PortfolioView(QWidget):
             # 價格對照
             self.lbl_mon_entry_price.setText(f"TWD {position_dto.average_cost:,.2f}")
             if position_dto.current_price is not None:
-                self.lbl_mon_current_price.setText(f"TWD {position_dto.current_price:,.2f}")
+                price_text = f"TWD {position_dto.current_price:,.2f}"
+                price_date = self._position_price_date(position_dto)
+                if price_date:
+                    price_text += f"（價格日期：{price_date}）"
+                self.lbl_mon_current_price.setText(price_text)
             else:
                 self.lbl_mon_current_price.setText("-")
 
@@ -1153,8 +1231,8 @@ class PortfolioView(QWidget):
                 self.lbl_strat_params.setText(f"進場分數: {position_dto.source_summary.get('total_score', '-')}")
                 self.lbl_strat_perf.setText(f"適用市場體制 (Regime): {position_dto.source_summary.get('regime', '未指定')}")
             else:
-                self.lbl_strat_id.setText("手動建立 / 其他來源")
-                self.lbl_strat_version.setText(f"來源類型: {source_type or '未知'}")
+                self.lbl_strat_id.setText("手動建立，無推薦 / 回測來源")
+                self.lbl_strat_version.setText(f"來源類型: {source_type or '手動交易'}")
                 if source_id:
                     self.lbl_strat_version.setText(self.lbl_strat_version.text() + f" (ID: {source_id})")
 
@@ -1164,7 +1242,8 @@ class PortfolioView(QWidget):
                 
                 # 籌碼評級
                 risk_level = chip_summary.get('risk_level', 'neutral')
-                self.lbl_chip_risk_level.setText(risk_level.upper())
+                self.lbl_chip_risk_level.setText(self._chip_risk_label(risk_level))
+                self.lbl_chip_risk_level.setToolTip(f"raw risk_level: {risk_level}")
                 if risk_level == 'bearish':
                     self.lbl_chip_risk_level.setStyleSheet("background-color: #742a2a; color: #fff5f5; padding: 2px 6px; border-radius: 3px; font-weight: bold;")
                 elif risk_level == 'bullish':
@@ -1197,7 +1276,17 @@ class PortfolioView(QWidget):
 
                 # 集中度
                 concentration = chip_summary.get('concentration', 0.0)
-                self.lbl_chip_concentration.setText(f"{concentration:.2%}")
+                if chip_summary.get("concentration_status") == "unavailable":
+                    self.lbl_chip_concentration.setText("資料不足")
+                else:
+                    self.lbl_chip_concentration.setText(f"{concentration:.2%}")
+                quality = chip_summary.get("quality_counts") or {}
+                self.lbl_chip_concentration.setToolTip(
+                    "集中度以張數 / 股數等價 quantity 計算；不直接使用千元金額。"
+                    f"\nobserved: {quality.get('observed', 0)}"
+                    f"\nestimated: {quality.get('estimated', 0)}"
+                    f"\nunavailable: {quality.get('unavailable', 0)}"
+                )
 
                 # 警示原因
                 reasons = chip_summary.get('risk_reasons', [])
@@ -1223,6 +1312,26 @@ class PortfolioView(QWidget):
 
         except Exception as e:
             logger.error("Failed to update monitoring tab UI: %s", e)
+
+    def _position_price_date(self, position_dto) -> str:
+        summary = getattr(position_dto, "source_summary", {}) or {}
+        for key in ("current_price_date", "price_as_of_date", "latest_price_date", "as_of_date"):
+            value = summary.get(key)
+            if value:
+                return str(value)
+        return str(getattr(position_dto, "last_trade_date", "") or "")
+
+    def _chip_risk_label(self, raw_risk: Any) -> str:
+        mapping = {
+            "bearish": "偏空",
+            "bullish": "偏多",
+            "neutral": "中性",
+            "low": "低",
+            "medium": "中",
+            "high": "高",
+            "extreme": "極高",
+        }
+        return mapping.get(str(raw_risk).lower(), str(raw_risk))
 
     def _clear_lifecycle_labels(self) -> None:
         self.lbl_lifecycle_status.setText("-")

@@ -270,10 +270,10 @@
 | Issue ID | 關聯項目 | 嚴重度 | 狀態 | 使用者觀察 | 初步處理方向 |
 |---|---|---|---|---|---|
 | BACKTEST-ISSUE-001 | B-002 / B-020 | 中 | 已修正待驗證 | 「最大持有部位數」語意不清；畫面可選「無限制」到 50，但使用者不知道它代表什麼。 | 已補 hover / 說明文字，並確認 UI 使用 0 代表無限制、1 代表最多 1 檔、上限 50；待使用者重測。 |
-| BACKTEST-ISSUE-002 | B-003 | 中 | 新增 | 批次股票回測與固定組合回測差異不清楚；使用者只明顯看到多核心選項差異。 | 在模式說明區補上目的差異、輸入來源、結果粒度與目前限制；批次偏向「多股票逐檔比較」，固定組合偏向「指定股票池 / 組合來源」，但若目前仍是 per-stock 保存，也要明確揭露。 |
+| BACKTEST-ISSUE-002 | B-003 | 中 | 新增 | 批次股票回測與固定組合回測差異不清楚；使用者只明顯看到多核心選項差異。 | 已修正待驗證：Research Lab 模式提示已改為「適合 / 輸入來源」格式，說明單股、批次、固定組合、推薦回放與策略研究的使用情境。 |
 | BACKTEST-ISSUE-003 | B-004 / B-031 / B-032 / B-041 | 中 | 新增 | 推薦系統回放功能看起來正常，但設定區寬度太寬，右側被吃掉一點。 | 檢查 Research Lab 右側面板、scroll area 與推薦回放設定區的最小寬度 / resize policy，避免內容超出可視範圍。 |
 | BACKTEST-ISSUE-004 | B-005 / B-027 / B-030 | 中 | 新增 | 策略研究模式不知道應該看什麼，也不清楚它和一般回測的差異。 | 補強策略研究模式的資訊架構：明確顯示策略來源、輸入來源、參數最佳化與 Walk-forward 驗證區塊，並用繁中說明此模式用於比較策略模板、參數與驗證結果。 |
-| BACKTEST-ISSUE-005 | B-009 | 中 | 新增 | 單一股票模式功能正常，但日期輸入希望加入日曆選項；開始日期預設一年前，點開日曆也定位一年前；結束日期預設今天，點開日曆也定位今天。 | 將開始 / 結束日期改為可開啟日曆的日期控制項或補上日曆 popup；初始化與 calendar popup 顯示日期需一致，開始日期預設 `today - 1 year`，結束日期預設 `today`。 |
+| BACKTEST-ISSUE-005 | B-009 | 中 | 新增 | 單一股票模式功能正常，但日期輸入希望加入日曆選項；開始日期預設一年前，點開日曆也定位一年前；結束日期預設今天，點開日曆也定位今天。 | 已修正待驗證：開始 / 結束日期已使用 calendar popup，開始日期預設 `today - 1 year`，結束日期預設 `today`，並加入 UI 測試覆蓋。 |
 | BACKTEST-ISSUE-006 | B-012 / B-017 | 中 | 已修正待驗證 | 使用者不清楚「整股限制提示」代表什麼；初始資金不足時為何可能沒有交易不直覺。 | 已在初始資金 tooltip 補明確提示：台股整股以 1000 股為一張，買進會向下取整為 1000 股倍數；若初始資金或單筆配置不足以買一張，回測可能拒絕交易或出現 0 交易。 |
 | BACKTEST-ISSUE-007 | B-020 | 中 | 已修正待驗證 | 最大持倉數預設顯示「無限制」，上限 50，但最小實際可選值變成 2；使用者不確定是否正常。 | `max_positions_input` 已改為最小 0、預設 0、special text「無限制」，並允許設定 1 檔持倉；待使用者重測。 |
 | BACKTEST-ISSUE-008 | B-006 / B-007 | 高 | 已修正待驗證 | Preset 儲存正常，但載入時按下按鈕完全沒有任何變動；選到 `-- 選擇預設 --` 也沒有跳回預設或提示；使用者也不清楚 Preset 保存範圍是否包含股票代號、初始資金、手續費等執行設定。 | 已修正載入按鈕與空選項處理；選到空項目會提示，成功載入會顯示策略 / Preset / 參數數量摘要。Preset 保存範圍是否要擴成完整實驗模板仍可後續討論。 |
@@ -287,12 +287,12 @@
 | BACKTEST-ISSUE-016 | B-033 / B-041 | 中 | 已修正待驗證 | 推薦組合回測會在 terminal 顯示同日收盤訊號同日收盤成交的理想化假設 warning，但 UI 是否清楚揭露此限制仍需確認。 | 已將同日收盤成交假設、實盤時間差限制、gap / liquidity / cash / lot-size 風險加入 UI 摘要，不再只依賴 terminal `UserWarning`。 |
 | BACKTEST-ISSUE-017 | B-035 | 高 | 已修正待驗證 | 推薦回放成功跑出結果後，「保存結果」仍無法點擊；使用者不知道保存按鈕啟用條件。 | 已確認推薦回放成功後保存按鈕會啟用，並補 tooltip 與保存成功訊息，顯示 Registry run ID、Profile、股票檔數與下一步。 |
 | BACKTEST-ISSUE-018 | B-036 | 高 | 已修正待驗證 | 「升級為策略版本」點擊後沒有反應；使用者不知道是否因未保存、Gate 未通過或功能失效。 | 已補保存前 / 保存後 promote 按鈕 tooltip，說明需先保存、validation 不得 FAIL 或需載入歷史 run；更完整 gate result 展示仍可列為後續 UX 強化。 |
-| BACKTEST-ISSUE-019 | B-037 | 中 | 新增 | 單股 Excel 報告可匯出，但 Traceability 顯示缺失欄位 `data_as_of_date`, `data_version`, `regime`, `benchmark`；使用者不確定這是否符合目前設計。 | 補強匯出報告的資料完整性說明：缺失欄位應顯示中文原因、影響範圍與是否阻擋保存 / 升級；若欄位在目前架構可取得，應補齊 data as-of、data version、regime 與 benchmark。 |
+| BACKTEST-ISSUE-019 | B-037 | 中 | 新增 | 單股 Excel 報告可匯出，但 Traceability 顯示缺失欄位 `data_as_of_date`, `data_version`, `regime`, `benchmark`；使用者不確定這是否符合目前設計。 | 已修正待驗證：Excel「資料完整性」區塊已將缺失欄位顯示為中文名稱並保留原始欄位代號，例如「資料截止日期（data_as_of_date）」與「市場 Regime（regime）」。 |
 | BACKTEST-ISSUE-020 | B-038 | 中 | 已修正待驗證 | 報酬分布與持有天數圖可顯示，但標題 / 軸 / legend 仍有英文，且使用者不知道如何判讀或是否正常。 | fast renderer 的圖表標題、軸、legend、Mean / Median marker 已中文化；更完整判讀說明與圖型設計仍可後續補強。 |
-| BACKTEST-ISSUE-021 | B-038 / B-039 / B-042 | 中 | 需更多修改 | 歷史與比較、Registry 比較都需要手動點「重新整理」才讀取既有紀錄；圖表區也要先跑過任何一種測試後，才會出現以前的策略圖表。使用者點進 tab 時不知道是否有既有資料或舊圖表可看。 | 2026-06-23 程式碼核對：`_update_chart_run_combo()`、`_refresh_history()` 與 `RunRegistryCompareWidget.refresh_runs()` 已存在，且保存 / 跑完後部分會呼叫；但未見 BacktestView 初始化或結果 tab 進入時自動載入圖表下拉、歷史列表或 Registry runs。仍需補首次進入自動載入、保存 / 刪除 / 升級 / 新增 run 後一致刷新，手動刷新僅作輔助。 |
+| BACKTEST-ISSUE-021 | B-038 / B-039 / B-042 | 中 | 需更多修改 | 歷史與比較、Registry 比較都需要手動點「重新整理」才讀取既有紀錄；圖表區也要先跑過任何一種測試後，才會出現以前的策略圖表。使用者點進 tab 時不知道是否有既有資料或舊圖表可看。 | 部分修正待驗證：保存、刪除、升級後已集中刷新歷史列表、圖表選單與 Registry 比較面板；首次進入自動載入與圖表舊資料載入仍屬後續 batch。 |
 | BACKTEST-ISSUE-022 | B-040 / B-042 | 中 | 新增 | 批次結果與比較功能可操作，但使用者不清楚比較的意義，不知道應該比出什麼。 | 在批次結果與比較頁補「比較目的」與中文判讀：比較策略/參數/run 之間的報酬、風險、交易數、回撤、資料版本、成本、Universe 是否可比；不可比時用清楚中文 badge 解釋原因。 |
-| BACKTEST-ISSUE-023 | B-041 / B-036 | 中 | 新增 | 推薦回放可成功保存並升級策略版本，但使用者不知道升級成策略後要去哪裡看、代表什麼。 | 升級成功後顯示策略版本 ID、來源 run、用途與下一步入口；提供「前往策略版本 / 歷史與比較 / Registry 比較」按鈕或連結，並在 Manual 補說明升級策略版本的含義與限制。 |
-| BACKTEST-ISSUE-024 | B-042 | 高 | 新增 | Registry 比較頁不直觀且未中文化：run type、參數差異、Metrics、Regime、Benchmark 多為英文或內部代碼；表格內容被吃掉，Normalized Equity 空白不知如何使用；區塊間有白色框線不美觀。 | 大幅重設 Registry 比較 UI：存檔維持英文 key，但 UI 顯示中文 alias；run type 顯示「單股回測 / 推薦組合回放 / 批次股票回測」等；參數差異與 metrics 以中文欄名、可讀格式、可展開 detail 呈現；Normalized Equity 無資料時顯示中文空狀態與原因；修正表格寬度、白色框線與整體 layout。 |
+| BACKTEST-ISSUE-023 | B-041 / B-036 | 中 | 新增 | 推薦回放可成功保存並升級策略版本，但使用者不知道升級成策略後要去哪裡看、代表什麼。 | 部分修正待驗證：保存 / 刪除 / 升級成功後會顯示中文狀態提示並刷新相關 Registry 區塊；「前往策略版本」等深層導引按鈕仍屬後續 batch。 |
+| BACKTEST-ISSUE-024 | B-042 | 高 | 新增 | Registry 比較頁不直觀且未中文化：run type、參數差異、Metrics、Regime、Benchmark 多為英文或內部代碼；表格內容被吃掉，Normalized Equity 空白不知如何使用；區塊間有白色框線不美觀。 | 部分修正待驗證：comparability reason 已中文化，例如「資料指紋不同」「成交假設不同」「Universe 股票池不同」；run type、表格排版、Normalized Equity 空狀態與整體 layout 重設仍屬後續 batch。 |
 
 ## 推薦分析
 
@@ -385,15 +385,15 @@
 
 | Issue ID | 關聯項目 | 嚴重度 | 狀態 | 使用者觀察 | 初步處理方向 |
 |---|---|---|---|---|---|
-| PORTFOLIO-ISSUE-001 | P-001 | 中 | 新增 | 手動記錄交易時希望自動帶入台股預設手續費與證交稅，需要時再由使用者手動修改；證券名稱沒有自動查詢，仍需自行輸入。 | 手動交易表單應依台股預設值帶入手續費率與證交稅率，並清楚標示可覆寫；輸入股票代號後查 stock master / SQLite 自動補證券名稱，不存在代號應提示。 |
-| PORTFOLIO-ISSUE-002 | P-005 | 中 | 新增 | 活躍持倉摘要卡顯示有 2 檔，但沒有顯示是哪幾檔；上方四大卡片字體太小，視覺設計不佳。 | 釐清摘要卡與活躍持倉列表的關係；摘要卡可顯示持倉檔數與前幾大持倉名稱 / 代號，或提供 hover / 點擊展開。重新調整四大卡片字級、間距、對比與資訊層級。 |
-| PORTFOLIO-ISSUE-003 | P-008 | 中 | 新增 | 在「當前持倉部位 (Position)」依股票過濾交易歷史後，沒有「顯示全部交易歷史」入口可清除過濾。 | 補上清除過濾入口，例如右鍵「顯示全部交易歷史」或交易歷史區明顯的「清除篩選」按鈕；過濾狀態需有可見提示。 |
-| PORTFOLIO-ISSUE-004 | P-013 | 中 | 新增 | 策略與價格監控顯示最新價格，但沒有顯示價格日期，使用者不知道該價格是哪一天。 | 最新價格旁顯示資料日期 / as-of date；若價格非最新交易日或資料 fallback，需顯示 warning 或品質狀態。 |
-| PORTFOLIO-ISSUE-005 | P-014 | 低 | 新增 | 手動建立持倉時，推薦及版本細節顯示未知大致合理，但使用者需要明確知道這是因為來源為手動建立，而非資料缺失。 | 將手動持倉來源顯示為「手動建立，無推薦 / 回測來源」，不要只顯示未知；若有來源 metadata，再顯示推薦 run / backtest run / strategy version。 |
-| PORTFOLIO-ISSUE-006 | P-015 | 低 | 新增 | 籌碼監控功能可顯示籌碼風險、連續買賣超與追蹤分點近五日明細，但風險評級仍顯示英文。 | 將籌碼風險等級與品質狀態完整中文化，例如 low / medium / high 顯示為「低 / 中 / 高」，並保留原始 key 到 tooltip 或 debug metadata。 |
-| PORTFOLIO-ISSUE-007 | P-016 | 中 | 新增 | 籌碼監控可跳轉到市場觀察 > 主力流向，但沒有定位到目前持倉股票。 | 下鑽時需帶入目前股票代號並讓市場觀察主力流向定位 / 篩選該股票；若主力流向無該股票資料，應顯示清楚空狀態。 |
-| PORTFOLIO-ISSUE-008 | P-017 | 高 | 新增 | 推薦分析右鍵「記錄到持倉管理」失敗，錯誤為 `Object of type Decimal is not JSON serializable`。 | 檢查推薦分析到持倉管理的 metadata / domain event 序列化路徑；寫入 JSON 前需將 Decimal 轉為字串、整數基點或其他可序列化格式，且不得破壞金額 / 股數精度。 |
-| PORTFOLIO-ISSUE-009 | P-017 | 中 | 新增 | Healthcheck 中「Research Lab 結果頁」入口語意不清；使用者在批次結果頁找不到加入持倉選項。 | 明確定義哪些 Research Lab 結果可記錄到持倉：單股回測交易、推薦回放交易、或批次結果個股；若批次結果不支援記錄到持倉，UI / Manual / healthcheck 應改寫，不要讓使用者期待有此入口。 |
+| PORTFOLIO-ISSUE-001 | P-001 | 中 | 已修正待驗證 | 手動記錄交易時希望自動帶入台股預設手續費與證交稅，需要時再由使用者手動修改；證券名稱沒有自動查詢，仍需自行輸入。 | 手動交易表單已依台股預設手續費率與證交稅率自動估算，仍可手動覆寫；輸入股票代號後會查詢 stock master / SQLite 自動補證券名稱，不存在代號會提示。 |
+| PORTFOLIO-ISSUE-002 | P-005 | 中 | 已修正待驗證 | 活躍持倉摘要卡顯示有 2 檔，但沒有顯示是哪幾檔；上方四大卡片字體太小，視覺設計不佳。 | 活躍持倉區已新增摘要列，顯示持倉檔數與前幾大持倉代號 / 名稱；四大卡片整體視覺優化留待後續 batch。 |
+| PORTFOLIO-ISSUE-003 | P-008 | 中 | 已修正待驗證 | 在「當前持倉部位 (Position)」依股票過濾交易歷史後，沒有「顯示全部交易歷史」入口可清除過濾。 | 交易歷史區已新增過濾狀態提示與「清除篩選」入口，可回到全部交易歷史。 |
+| PORTFOLIO-ISSUE-004 | P-013 | 中 | 已修正待驗證 | 策略與價格監控顯示最新價格，但沒有顯示價格日期，使用者不知道該價格是哪一天。 | 最新價格旁已顯示價格日期 / as-of date；資料品質 warning 的更完整呈現留待後續 batch。 |
+| PORTFOLIO-ISSUE-005 | P-014 | 低 | 已修正待驗證 | 手動建立持倉時，推薦及版本細節顯示未知大致合理，但使用者需要明確知道這是因為來源為手動建立，而非資料缺失。 | 手動持倉來源已顯示為「手動建立，無推薦 / 回測來源」，避免把手動建立誤解為資料缺失。 |
+| PORTFOLIO-ISSUE-006 | P-015 | 低 | 已修正待驗證 | 籌碼監控功能可顯示籌碼風險、連續買賣超與追蹤分點近五日明細，但風險評級仍顯示英文。 | 籌碼風險等級與品質狀態已中文化，並在 tooltip 保留 raw key 供除錯。 |
+| PORTFOLIO-ISSUE-007 | P-016 | 中 | 已修正待驗證 | 籌碼監控可跳轉到市場觀察 > 主力流向，但沒有定位到目前持倉股票。 | 籌碼監控下鑽時已將目前股票代號傳給主視窗，供市場觀察主力流向定位 / 篩選。 |
+| PORTFOLIO-ISSUE-008 | P-017 | 高 | 已修正待驗證 | 推薦分析右鍵「記錄到持倉管理」失敗，錯誤為 `Object of type Decimal is not JSON serializable`。 | Portfolio JSONL 寫入已新增遞迴 Decimal sanitizer，Decimal 以字串保存，避免破壞金額 / 股數精度。 |
+| PORTFOLIO-ISSUE-009 | P-017 | 中 | 已修正待驗證 | Healthcheck 中「Research Lab 結果頁」入口語意不清；使用者在批次結果頁找不到加入持倉選項。 | Manual 已補充目前可記錄到持倉的入口以單股回測交易與推薦 / 回測來源交易為主；批次結果頁不應被描述為已提供直接加入持倉入口。 |
 
 ## Runtime Observatory
 
@@ -410,10 +410,10 @@
 
 | Issue ID | 關聯項目 | 嚴重度 | 狀態 | 使用者觀察 | 初步處理方向 |
 |---|---|---|---|---|---|
-| RUNTIME-ISSUE-001 | RT-002 / RT-003 | 中 | 新增 | FSM State Machine 中 Objective 顯示 `No task assigned`、Task Workflow Status 顯示 `IDLE`，且使用者不理解 FSM / Objective 何時被觸發。 | 將 FSM 區塊中文化，例如「任務狀態機」、「目前目標：尚未指派任務」、「任務流程狀態：閒置」；補 tooltip / info panel 說明只有 Runtime/Governance 任務、agent workflow 或受治理流程執行時才會更新，平常閒置屬正常。 |
-| RUNTIME-ISSUE-002 | RT-004 / RT-005 | 高 | 新增 | Governance Health 顯示 `HALTED`、`Rejection Rate 80.0%`、`Consecutive Fails: 4`、`GovernanceViolation`，使用者不知道意義或觸發條件。 | 中文化 Governance Health：HALTED 顯示為「已暫停 / 治理暫停」，Rejection Rate 顯示為「驗證拒絕率」，Consecutive Fails 顯示為「連續失敗次數」，GovernanceViolation 顯示為「治理規則違反」；補說明何時會進入 HALTED、是否影響主 app 功能、使用者是否需要處理。 |
-| RUNTIME-ISSUE-003 | RT-006 | 中 | 新增 | Append-only Event Stream 可顯示事件，但 event type 與錯誤原因多為英文工程代碼，使用者難以判讀。 | 事件流保留 raw event type 作為 debug metadata，但主要顯示應有繁中摘要，例如「測試開始」、「收到 agent 輸出」、「驗證通過」、「驗證拒絕：JSON 格式錯誤 / Schema 違規 / 治理規則違反」；必要時提供展開原始事件。 |
-| RUNTIME-ISSUE-004 | RT-002 / RT-003 / RT-004 | 中 | 新增 | 使用者在資料更新的券商分點下載執行中查看 Runtime Observatory，但頁面仍顯示 `IDLE` / `No task assigned`；使用者不確定 Runtime Observatory 是否應監控資料更新任務。 | 明確定義 Runtime Observatory 範圍：若它只監控治理 / agent workflow，需在 UI 說明「不監控數據更新背景任務」；若希望監控資料更新，需串接 UpdateView worker 狀態、目前任務、進度與事件流。 |
+| RUNTIME-ISSUE-001 | RT-002 / RT-003 | 中 | 已修正待驗證 | FSM State Machine 中 Objective 顯示 `No task assigned`、Task Workflow Status 顯示 `IDLE`，且使用者不理解 FSM / Objective 何時被觸發。 | Runtime Observatory 已將目標與流程狀態中文化，並補充其只反映 Runtime / Governance 任務，平常閒置屬正常。 |
+| RUNTIME-ISSUE-002 | RT-004 / RT-005 | 高 | 已修正待驗證 | Governance Health 顯示 `HALTED`、`Rejection Rate 80.0%`、`Consecutive Fails: 4`、`GovernanceViolation`，使用者不知道意義或觸發條件。 | Governance Health 已中文化 HALTED、驗證拒絕率、連續失敗次數與重大違規，並補充治理暫停不等同主 app 全域故障。 |
+| RUNTIME-ISSUE-003 | RT-006 | 中 | 已修正待驗證 | Append-only Event Stream 可顯示事件，但 event type 與錯誤原因多為英文工程代碼，使用者難以判讀。 | 事件流已顯示繁中摘要與嚴重度，raw event type / payload 保留在 tooltip 供除錯。 |
+| RUNTIME-ISSUE-004 | RT-002 / RT-003 / RT-004 | 中 | 已修正待驗證 | 使用者在資料更新的券商分點下載執行中查看 Runtime Observatory，但頁面仍顯示 `IDLE` / `No task assigned`；使用者不確定 Runtime Observatory 是否應監控資料更新任務。 | UI 已明確標示 Runtime Observatory 不監控資料更新背景任務；資料更新、回測與推薦長任務仍由各自頁面顯示狀態。 |
 
 ## 全域與跨工作區流程
 
@@ -476,8 +476,8 @@
 | UPDATE-ISSUE-027 | U-024 | SQLite 檢視 / 日期篩選 UX | 日期預設不應先填；日曆打開需跳今天；清除按鈕過多；單一日期要有今日按鈕；區間旁一個清除要同時清掉單一與區間；日曆圖示與日期格顯示不清。 | 通過 | 已修正 | 使用者已驗證 | 中 | 2026-06-18 人工驗證：SQLite 三個日期欄位預設空白，日期按「日曆」會跳到今天月份。 |
 | UPDATE-ISSUE-028 | U-008 | 每日股價合併訊息 / TPEX 大表合併 | `daily_price_tpex/` 已有 0618 日檔，但合併 `stock_data_whole.csv` 完成提示仍停在 0617；根因是合併腳本只掃 `daily_price/`，未納入 TPEX 日檔目錄。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | `scripts/merge_daily_data.py` 改為同時掃 `daily_price/` 與 `daily_price_tpex/`；新增回歸測試覆蓋「既有大表 0617、TPEX 0618」時合併後最新日期應為 0618。 |
 | UPDATE-ISSUE-029 | U-001 / U-024 | 資料狀態 / SQLite 同步缺口 | 快速更新後檢查數據狀態顯示最新日期為 0622，但 SQLite 檢視 `daily_price` / `daily_prices` 查 `2330` 只有到 0617；手動下載最近十天後新增 0622，但仍缺 0618；`3207` 則正常。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 根因：TWSE `daily_price/20260618.csv` 不存在，而 TPEX `daily_price_tpex/20260618.csv` 存在；`UpdateService.update_daily()` 與 `scripts/batch_update_daily_data.py` 都從 `start_date + 1` 開始檢查 / 下載，導致第一個缺漏日 0618 被跳過。已改為包含開始日期，並新增回歸測試。06/19 為 TWSE 端午節休市，缺資料屬正常。 |
-| UPDATE-ISSUE-030 | U-006 / U-020 | 狀態檢查 UX | 每日股價與券商分點點「檢查此資料源狀態」後只看到完成訊息，使用者不知道狀態結果在哪裡、該看哪個日期 / 筆數 / 燈號。 | 已記錄 | 未修正 | 待處理 | 中 | 檢查完成後應在資料源頁面顯示明確狀態卡或摘要列，例如最新日期、筆數、SQLite 最新日期、CSV 日檔數、缺漏日期與品質；日誌可保留細節，但不應是唯一入口。 |
-| UPDATE-ISSUE-031 | U-010 | 高風險操作 UX | 每日股價「強制重新合併所有每日股價」沒有清楚取消按鈕或取消流程；使用者不理解如何只測取消流程。 | 已記錄 | 未修正 | 待處理 | 高 | 高風險操作應使用明確二次確認對話框，包含「取消」與「確認強制合併」兩個清楚按鈕，並描述會重建哪些資料、是否影響 raw CSV、預估耗時與建議備份。 |
+| UPDATE-ISSUE-030 | U-006 / U-020 | 狀態檢查 UX | 每日股價與券商分點點「檢查此資料源狀態」後只看到完成訊息，使用者不知道狀態結果在哪裡、該看哪個日期 / 筆數 / 燈號。 | 已記錄 | 已修正待驗證 | 待驗證 | 中 | 每日股價與券商分點資料源頁面已新增檢查摘要列，顯示最新日期、筆數、SQLite / CSV 狀態與缺漏提示；日誌保留細節。 |
+| UPDATE-ISSUE-031 | U-010 | 高風險操作 UX | 每日股價「強制重新合併所有每日股價」沒有清楚取消按鈕或取消流程；使用者不理解如何只測取消流程。 | 已記錄 | 已修正待驗證 | 待驗證 | 高 | 高風險操作已改為明確二次確認對話框，包含「取消」與「確認強制合併」，並說明會重建衍生資料、不應亦不會修改或刪除 raw CSV 原始檔。 |
 
 ### 數據更新 Tab 收斂狀態
 

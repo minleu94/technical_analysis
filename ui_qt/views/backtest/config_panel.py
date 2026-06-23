@@ -15,6 +15,30 @@ from ui_qt.widgets.info_button import InfoButton
 from ui_qt.views.backtest.helpers import RESEARCH_LAB_MODES
 
 
+RESEARCH_LAB_MODE_HINTS = {
+    "single_stock": {
+        "use_case": "檢查單一標的套用指定策略後的交易表現與交易明細",
+        "input_source": "股票代號、策略參數、日期區間",
+    },
+    "batch_stock": {
+        "use_case": "比較同一策略在多檔候選股票上的差異，找出穩定標的",
+        "input_source": "候選池或選股清單、策略參數、日期區間",
+    },
+    "fixed_basket": {
+        "use_case": "重播固定股票組合在指定期間內的整體表現",
+        "input_source": "固定股票清單、配置與風控參數、日期區間",
+    },
+    "recommendation_replay": {
+        "use_case": "把推薦結果送入 Research Lab，驗證推薦邏輯的歷史表現",
+        "input_source": "推薦 Profile、推薦結果與回放設定",
+    },
+    "strategy_research": {
+        "use_case": "比較策略模板、參數版本與最佳化結果，作為升級策略版本依據",
+        "input_source": "策略模板、參數集、研究 run 或最佳化結果",
+    },
+}
+
+
 class BacktestConfigPanel(QWidget):
     """回測配置面板 (左側控制面板)"""
 
@@ -684,7 +708,10 @@ class BacktestConfigPanel(QWidget):
         if index < 0 or index >= len(RESEARCH_LAB_MODES):
             return ""
         mode = RESEARCH_LAB_MODES[index]
-        return f"{mode['description']}｜主要輸入：{mode['primary_input']}"
+        hint = RESEARCH_LAB_MODE_HINTS.get(mode["id"], {})
+        use_case = hint.get("use_case", mode["description"])
+        input_source = hint.get("input_source", mode["primary_input"])
+        return f"適合：{use_case}｜輸入來源：{input_source}"
 
     def _on_research_lab_mode_changed(self, index: int):
         """更新 Research Lab 模式提示並調整 UI 狀態。"""
