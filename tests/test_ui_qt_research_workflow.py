@@ -552,6 +552,86 @@ def test_backtest_view_recommendation_portfolio_summary_warns_about_same_day_clo
     assert "gap_risk" in summary_text
 
 
+def test_batch_result_tab_explains_comparison_purpose(qt_app):
+    """批次結果頁需說明排行榜與整體統計的判讀目的。"""
+    view = BacktestView(
+        backtest_service=MagicMock(),
+        batch_backtest_service=MagicMock(),
+        config=None,
+    )
+
+    text = view.result_panel.batch_interpretation_label.text()
+
+    assert "比較目的" in text
+    assert "排行榜" in text
+    assert "正式策略判斷" in text
+
+
+def test_train_test_summary_warns_when_oos_sample_is_low(qt_app):
+    """Train-Test 結果需揭露 OOS 交易數不足時的可靠度限制。"""
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+    result_data = {
+        "mode": "split",
+        "train_report": SimpleNamespace(
+            total_return=0.12,
+            annual_return=0.18,
+            sharpe_ratio=1.4,
+            max_drawdown=-0.16,
+            win_rate=0.58,
+            total_trades=18,
+        ),
+        "test_report": SimpleNamespace(
+            total_return=0.08,
+            annual_return=0.16,
+            sharpe_ratio=1.1,
+            max_drawdown=-0.7729,
+            win_rate=1.0,
+            total_trades=3,
+        ),
+    }
+
+    with patch("ui_qt.views.backtest_view.QMessageBox.information"):
+        view._on_walkforward_finished(result_data)
+
+    summary_text = view.summary_text.toPlainText()
+    assert "【樣本可靠度】" in summary_text
+    assert "OOS 交易數: 3" in summary_text
+    assert "樣本不足" in summary_text
+    assert "100.00%" in summary_text
+
+
+def test_walkforward_summary_warns_when_fold_sample_is_low(qt_app):
+    """Walk-forward 結果需揭露 fold 與 OOS 樣本不足。"""
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+    fold = SimpleNamespace(
+        train_period=("2026-01-02", "2026-03-31"),
+        test_period=("2026-04-01", "2026-04-30"),
+        train_metrics={"sharpe_ratio": 1.5},
+        test_metrics={"sharpe_ratio": 1.2, "total_return": 0.04, "total_trades": 4},
+        degradation=0.2,
+    )
+    result_data = {
+        "mode": "walkforward",
+        "results": [fold, fold],
+        "summary": {
+            "total_folds": 2,
+            "avg_train_sharpe": 1.5,
+            "avg_test_sharpe": 1.2,
+            "avg_degradation": 0.2,
+            "consistency": 1.0,
+        },
+    }
+
+    with patch("ui_qt.views.backtest_view.QMessageBox.information"):
+        view._on_walkforward_finished(result_data)
+
+    summary_text = view.summary_text.toPlainText()
+    assert "【Walk-forward 樣本可靠度】" in summary_text
+    assert "Fold 數: 2" in summary_text
+    assert "OOS 交易數: 8" in summary_text
+    assert "樣本不足" in summary_text
+
+
 def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
     """驗證門檻模式下拉選單的載入、正常參數面板與最佳化面板的動態顯示/隱藏"""
     mock_backtest_service = MagicMock()

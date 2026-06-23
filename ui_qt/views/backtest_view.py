@@ -54,6 +54,11 @@ from app_module.optimizer_service import OptimizerService
 from app_module.recommendation_dataframe_provider import RecommendationDataFrameProvider
 from app_module.recommendation_portfolio_backtest_service import RecommendationPortfolioBacktestService
 from app_module.recommendation_portfolio_dates import parse_stock_dates
+from app_module.research_result_presentation import (
+    build_recommendation_replay_sections,
+    build_train_test_reliability_notice,
+    build_walkforward_reliability_notice,
+)
 from app_module.portfolio_source_adapter import build_backtest_trade_source
 from ui_qt.widgets.fast_chart_widget import (
     create_drawdown_curve_widget,
@@ -1028,49 +1033,9 @@ class BacktestView(QWidget):
             self.portfolio_trades_table.setModel(self.portfolio_trades_model)
             self.portfolio_trades_table.resizeColumnsToContents()
         if hasattr(self, "portfolio_summary_text"):
-            summary = result.summary
             self.portfolio_summary_text.setPlainText(
-                "\n".join(
-                    [
-                        f"總報酬率: {summary.get('total_return', 0.0) * 100:.2f}%",
-                        f"最大回撤: {summary.get('max_drawdown', 0.0) * 100:.2f}%",
-                        f"交易檔數: {summary.get('total_trades', 0)}",
-                        f"平均持有天數: {summary.get('avg_holding_days', 0.0):.1f}",
-                        f"資金使用: {summary.get('capital_used', 0.0):,.0f}",
-                        f"出場統計: 停損 {summary.get('stop_loss_exits', 0)} / "
-                        f"停利 {summary.get('take_profit_exits', 0)} / "
-                        f"持有到期 {summary.get('holding_period_exits', 0)}",
-                        f"虧損交易占比: {summary.get('loss_trade_ratio', 0.0) * 100:.1f}%",
-                        f"最拖累股票: {summary.get('worst_stock_code', '')} "
-                        f"{summary.get('worst_stock_name', '')} "
-                        f"({summary.get('worst_stock_pnl', 0.0):,.0f})",
-                        "",
-                        "交易假設提醒: 推薦回放仍以同日收盤成交為主要假設；若有 gap_risk、"
-                        "liquidity_limited、cash_limited 或 lot_size_limited，請先查看下方 credibility / "
-                        "unfilled orders / cash ledger 後再判讀績效。",
-                    ]
-                )
+                "\n".join(build_recommendation_replay_sections(result))
             )
-
-        if hasattr(self, "portfolio_summary_text"):
-            summary = result.summary
-            self.portfolio_summary_text.append(
-                "\n".join(
-                    [
-                        f"Sharpe Ratio: {summary.get('sharpe_ratio', 0.0):.2f}",
-                        f"Sortino Ratio: {summary.get('sortino_ratio', 0.0):.2f}",
-                        f"Monte Carlo P05/P50/P95: "
-                        f"{summary.get('monte_carlo_p05_return', 0.0) * 100:.2f}% / "
-                        f"{summary.get('monte_carlo_p50_return', 0.0) * 100:.2f}% / "
-                        f"{summary.get('monte_carlo_p95_return', 0.0) * 100:.2f}%",
-                    ]
-                )
-            )
-
-        if hasattr(self, "portfolio_summary_text") and getattr(result, "improvement_hints", None):
-            self.portfolio_summary_text.append("\n=== 💡 策略改善建議 ===")
-            for hint in result.improvement_hints:
-                self.portfolio_summary_text.append(hint)
 
         self._plot_recommendation_portfolio_charts(result)
 
@@ -3819,6 +3784,12 @@ class BacktestView(QWidget):
             else:
                 summary_lines.append("✗ 策略可能過擬合（退化 > 50%）")
 
+            reliability_notice = build_train_test_reliability_notice(
+                train_report,
+                test_report,
+            )
+            summary_lines.extend(["", reliability_notice.message])
+
             self.summary_text.setPlainText("\n".join(summary_lines))
 
         else:  # walkforward
@@ -3855,6 +3826,12 @@ class BacktestView(QWidget):
                 "",
                 "詳細結果請查看交易明細表格"
             ]
+
+            reliability_notice = build_walkforward_reliability_notice(
+                results,
+                summary,
+            )
+            summary_lines.extend(["", reliability_notice.message])
 
             self.summary_text.setPlainText("\n".join(summary_lines))
 
