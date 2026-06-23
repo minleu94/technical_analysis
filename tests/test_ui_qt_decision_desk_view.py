@@ -218,8 +218,29 @@ def test_decision_desk_view_aggregates_warning_lines_and_refresh_button():
     assert builder.calls
     combined_text = view.overall_warn_label.toPlainText()
     assert "global_warning" in combined_text
-    assert "Watchlist:watchlist_stale" in combined_text
-    assert "產業輪動:sector_missing" in combined_text
+    assert "Watchlist" in combined_text
+    assert "watchlist_stale" in combined_text
+    assert "產業輪動" in combined_text
+    assert "sector_missing" in combined_text
+
+
+def test_decision_desk_view_humanizes_warning_tokens():
+    app()
+    s = _snapshot(
+        overall_quality=DecisionDeskQuality.DEGRADED,
+        overall_warnings=(
+            "relative_strength_liquidity_skipped_symbols:1162",
+            "watchlist_trigger_data_insufficient:2884",
+        ),
+    )
+    view = rendered_view(FakeBuilder(s))
+
+    combined_text = view.overall_warn_label.toPlainText()
+    assert "強弱與流動性" in combined_text
+    assert "跳過 1162 檔股票" in combined_text
+    assert "Watchlist 提示" in combined_text
+    assert "2884 資料不足" in combined_text
+    assert "relative_strength_liquidity_skipped_symbols:1162" in combined_text
 
 
 class FailingBuilder:

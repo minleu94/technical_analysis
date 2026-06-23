@@ -128,8 +128,8 @@ def test_build_histogram_chart_payload_bins_values_and_summary_lines():
     assert payload["bins"][0]["color"] == "#ef4444"
     assert payload["bins"][-1]["color"] == "#22c55e"
     assert payload["markers"] == [
-        {"label": "Mean", "value": 0.0, "color": "#38bdf8"},
-        {"label": "Median", "value": 0.0, "color": "#f59e0b"},
+        {"label": "平均", "value": 0.0, "color": "#38bdf8"},
+        {"label": "中位數", "value": 0.0, "color": "#f59e0b"},
         {"label": "95% VaR", "value": -8.0, "color": "#ef4444"},
     ]
 
@@ -140,20 +140,20 @@ def test_build_trade_return_histogram_payload_uses_symmetric_zero_centered_bins(
         {"mean": -0.4, "median": 1.0, "var_95": -10.4},
     )
 
-    assert payload["title"] == "Trade Return Distribution"
-    assert payload["subtitle"] == "Losses left of zero, wins right of zero"
+    assert payload["title"] == "交易報酬分布"
+    assert payload["subtitle"] == "零軸左側為虧損，右側為獲利"
     assert payload["zeroLine"] == 0.0
     assert payload["bins"][0]["start"] == -12.0
     assert payload["bins"][-1]["end"] == 12.0
-    assert any(item["label"] == "Loss" and item["color"] == "#ef4444" for item in payload["legend"])
-    assert any(item["label"] == "Win" and item["color"] == "#22c55e" for item in payload["legend"])
+    assert any(item["label"] == "虧損" and item["color"] == "#ef4444" for item in payload["legend"])
+    assert any(item["label"] == "獲利" and item["color"] == "#22c55e" for item in payload["legend"])
 
 
 def test_build_holding_days_histogram_payload_groups_days_into_readable_buckets():
     payload = build_holding_days_histogram_payload([1, 3, 9, 18, 35, 80])
 
-    assert payload["title"] == "Holding Period Distribution"
-    assert payload["xLabel"] == "Holding Period Bucket"
+    assert payload["title"] == "持有天數分布"
+    assert payload["xLabel"] == "持有天數區間"
     assert payload["bins"] == [
         {"label": "1-5d", "start": 1.0, "end": 5.0, "center": 3.0, "count": 2, "color": "#38bdf8"},
         {"label": "6-20d", "start": 6.0, "end": 20.0, "center": 13.0, "count": 2, "color": "#22c55e"},
@@ -161,6 +161,6 @@ def test_build_holding_days_histogram_payload_groups_days_into_readable_buckets(
         {"label": "61d+", "start": 61.0, "end": 80.0, "center": 70.5, "count": 1, "color": "#a78bfa"},
     ]
     assert payload["markers"] == [
-        {"label": "Mean", "value": 24.33, "color": "#38bdf8"},
-        {"label": "Median", "value": 13.5, "color": "#f59e0b"},
+        {"label": "平均", "value": 24.33, "color": "#38bdf8"},
+        {"label": "中位數", "value": 13.5, "color": "#f59e0b"},
     ]

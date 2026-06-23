@@ -41,7 +41,7 @@ def get_trading_days(start_date: str, end_date: str = None) -> list:
     end = datetime.strptime(end_date, '%Y-%m-%d')
     
     trading_days = []
-    current = start + timedelta(days=1)  # 從 start_date 的第二天開始
+    current = start
     
     while current <= end:
         if is_trading_day(current):
@@ -76,7 +76,7 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
         logger.info("=" * 60)
         return
     
-    logger.info(f"準備更新從 {start_date} 之後到 {end_date or '今天'} 的股票數據")
+    logger.info(f"準備更新從 {start_date} 到 {end_date or '今天'} 的股票數據")
     logger.info(f"共 {len(trading_days)} 個交易日需要更新")
     logger.info(f"延遲時間: {delay_min} 秒/次（固定）")
     logger.info("=" * 60)
@@ -149,7 +149,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用範例:
-  # 更新從 2025-08-28 之後到今天的所有交易日
+  # 更新從 2025-08-28 到今天的所有交易日
   python scripts/batch_update_daily_data.py --start-date 2025-08-28
   
   # 更新指定日期範圍
@@ -164,7 +164,7 @@ def main():
         '--start-date', 
         type=str, 
         required=True,
-        help='開始日期 (YYYY-MM-DD格式)，會從這個日期的第二天開始更新'
+        help='開始日期 (YYYY-MM-DD格式)，會從這個日期開始更新'
     )
     parser.add_argument(
         '--end-date', 

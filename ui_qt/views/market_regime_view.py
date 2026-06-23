@@ -590,11 +590,19 @@ class MarketRegimeView(QWidget):
         trend_group = QGroupBox("趨勢指標")
         trend_group.setStyleSheet(groupbox_style)
         trend_group.setMinimumWidth(150)
+        trend_help = "ADX 衡量趨勢強度，不代表方向；+DI 高於 -DI 表示上行力量較強，反之偏弱。單一指標不可作為買賣訊號。"
+        trend_group.setToolTip(trend_help)
         trend_layout = QVBoxLayout()
         trend_layout.setContentsMargins(8, 8, 8, 8)
+        trend_help_label = QLabel(trend_help)
+        trend_help_label.setWordWrap(True)
+        trend_help_label.setToolTip(trend_help)
+        trend_help_label.setStyleSheet(f"color: {COLOR_TEXT_TERTIARY}; font-size: 11px;")
+        trend_layout.addWidget(trend_help_label)
         for key in ['adx', 'adx_value', 'adx_contribution', 'plus_di', 'minus_di', 'atr']:
             if key in details:
                 label = QLabel(f"{indicator_map.get(key, key)}: {self._format_value(details[key])}")
+                label.setToolTip(trend_help)
                 label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
                 trend_layout.addWidget(label)
         trend_group.setLayout(trend_layout)
@@ -604,12 +612,20 @@ class MarketRegimeView(QWidget):
         score_group = QGroupBox("評分與貢獻")
         score_group.setStyleSheet(groupbox_style)
         score_group.setMinimumWidth(150)
+        score_help = "結構分、強度分與趨勢信心度是 0~1 的規則化分數；1 代表達到目前規則上限，不等於 100% 機率。"
+        score_group.setToolTip(score_help)
         score_layout = QVBoxLayout()
         score_layout.setContentsMargins(8, 8, 8, 8)
+        score_help_label = QLabel(score_help)
+        score_help_label.setWordWrap(True)
+        score_help_label.setToolTip(score_help)
+        score_help_label.setStyleSheet(f"color: {COLOR_TEXT_TERTIARY}; font-size: 11px;")
+        score_layout.addWidget(score_help_label)
         for key in ['structure_score', 'strength_score', 'trend_confidence', 
                     'trend_distance', 'distance_contribution', 'reversion_score', 'breakout_score']:
             if key in details:
                 label = QLabel(f"{indicator_map.get(key, key)}: {self._format_value(details[key])}")
+                label.setToolTip(score_help)
                 label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
                 score_layout.addWidget(label)
         score_group.setLayout(score_layout)

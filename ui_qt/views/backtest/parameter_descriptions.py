@@ -141,7 +141,7 @@ PARAMETER_DESCRIPTIONS = {
             '最多同時持有的部位數量。',
             '當達到此數量時，即使有新訊號也不會進場。',
             '系統角色：部位管理限制，不產生交易訊號。',
-            '設定為 1 表示無限制。'
+            '設定為 0 表示無限制；設定為 1 表示最多同時持有 1 檔。'
         ]
     },
     'position_sizing': {
@@ -197,6 +197,42 @@ PARAMETER_DESCRIPTIONS = {
             '可能導致「訊號存在但交易被跳過」。'
         ]
     },
+    # 分數門檻
+    'threshold_mode': {
+        'tooltip_lines': [
+            '固定門檻會使用 buy_score / sell_score 這類絕對分數判斷訊號。',
+            '百分位排名會用決策日前可見的歷史分數分布產生動態門檻，避免偷看未來資料。',
+            '百分位排名不一定比較容易交易；若暖機資料不足，系統會等待足夠觀測數。'
+        ]
+    },
+    'buy_quantile_bp': {
+        'tooltip_lines': [
+            '百分位排名模式下的買進門檻，單位為基點。',
+            '8000 代表約第 80 百分位：分數需高於多數歷史觀測才會進場。',
+            '數值越高通常越嚴格，交易次數可能越少。'
+        ]
+    },
+    'sell_quantile_bp': {
+        'tooltip_lines': [
+            '百分位排名模式下的賣出門檻，單位為基點。',
+            '4000 代表約第 40 百分位：分數轉弱到此區間時可能出場。',
+            '需搭配停損、停利與持有天數一起判讀。'
+        ]
+    },
+    'quantile_warmup_observations': {
+        'tooltip_lines': [
+            '百分位門檻開始計算前需要累積的歷史觀測數。',
+            '目前固定為 60 個交易日，避免用太短樣本產生不穩定門檻。',
+            '暖機期間即使分數看似達標，也可能不產生交易。'
+        ]
+    },
+    'quantile_method': {
+        'tooltip_lines': [
+            '百分位門檻的計算方式。',
+            '最近名次法會直接使用排序後最接近的歷史觀測值，較容易追溯。',
+            '此參數只影響動態門檻計算，不會自行產生買賣訊號。'
+        ]
+    },
     # Optimization / Walk-forward
     'optimization_objective': {
         'tooltip_lines': [
@@ -220,7 +256,8 @@ PARAMETER_DESCRIPTIONS = {
         'tooltip_lines': [
             '回測初始資金。',
             '用於計算報酬率、最大回撤等績效指標。',
-            '系統角色：回測計算的基準資金。'
+            '系統角色：回測計算的基準資金。',
+            '台股整股限制：買進股數會向下取整為 1000 股倍數；若資金不足以買一張，該筆交易可能被拒絕並導致 0 交易。'
         ]
     },
     'fee_bps': {
@@ -248,6 +285,11 @@ PARAMETER_DISPLAY_NAMES = {
     'confirm_days': '買入確認天數',
     'buy_score': '買入分數門檻',
     'sell_score': '賣出分數門檻',
+    'threshold_mode': '門檻模式',
+    'buy_quantile_bp': '買進百分位基點',
+    'sell_quantile_bp': '賣出百分位基點',
+    'quantile_warmup_observations': '百分位暖機觀測數',
+    'quantile_method': '百分位計算方法',
     'buy_confirm_days': '買入確認天數',
     'sell_confirm_days': '賣出確認天數',
     'cooldown_days': '交易冷卻天數',

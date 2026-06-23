@@ -1047,21 +1047,29 @@ class RecommendationView(QWidget):
         
         # 最小漲幅
         price_layout = QHBoxLayout()
-        price_layout.addWidget(QLabel("最小漲幅%:"))
+        price_label = QLabel("最小漲幅:")
+        price_label.setToolTip("只保留近期漲幅達到此百分比以上的股票；0% 表示不套用此條件。")
+        price_layout.addWidget(price_label)
         self.price_change_min = QDoubleSpinBox()
         self.price_change_min.setRange(0.0, 100.0)
         self.price_change_min.setValue(0.0)
         self.price_change_min.setDecimals(1)
+        self.price_change_min.setSuffix("%")
+        self.price_change_min.setToolTip(price_label.toolTip())
         price_layout.addWidget(self.price_change_min)
         filter_layout.addLayout(price_layout)
         
         # 最小成交量比率
         volume_layout = QHBoxLayout()
-        volume_layout.addWidget(QLabel("最小成交量比率:"))
+        volume_label = QLabel("最小成交量比率:")
+        volume_label.setToolTip("以目前成交量相對近期平均量衡量；1.0 倍表示不要求放量，高於 1.0 代表需放量。")
+        volume_layout.addWidget(volume_label)
         self.volume_ratio_min = QDoubleSpinBox()
         self.volume_ratio_min.setRange(0.1, 10.0)
         self.volume_ratio_min.setValue(1.0)
         self.volume_ratio_min.setDecimals(1)
+        self.volume_ratio_min.setSuffix(" 倍")
+        self.volume_ratio_min.setToolTip(volume_label.toolTip())
         volume_layout.addWidget(self.volume_ratio_min)
         filter_layout.addLayout(volume_layout)
         
@@ -1095,6 +1103,7 @@ class RecommendationView(QWidget):
         self.threshold_mode_combo = QComboBox()
         self.threshold_mode_combo.addItem("固定門檻", "fixed")
         self.threshold_mode_combo.addItem("百分位排名", "quantile")
+        self.threshold_mode_combo.setToolTip("固定門檻使用絕對分數；百分位排名會依當次合格母體排序後取前段股票。")
         mode_layout.addWidget(self.threshold_mode_combo)
         ranking_layout.addLayout(mode_layout)
         
@@ -1107,6 +1116,7 @@ class RecommendationView(QWidget):
         self.min_percentile_bp_spin.setValue(80.0)
         self.min_percentile_bp_spin.setDecimals(1)
         self.min_percentile_bp_spin.setSuffix("%")
+        self.min_percentile_bp_spin.setToolTip("百分位排名模式下，保留達到此百分位以上的股票。80% 約代表前 20%。")
         percentile_layout.addWidget(self.min_percentile_bp_spin)
         self.percentile_container = QWidget()
         self.percentile_container_layout = QHBoxLayout(self.percentile_container)
@@ -1121,6 +1131,7 @@ class RecommendationView(QWidget):
         self.min_universe_size_spin = QSpinBox()
         self.min_universe_size_spin.setRange(2, 1000)
         self.min_universe_size_spin.setValue(20)
+        self.min_universe_size_spin.setToolTip("百分位排名至少需要的合格股票母體數；不足時會拒絕執行，避免排名失真。")
         universe_layout.addWidget(self.min_universe_size_spin)
         self.universe_container = QWidget()
         self.universe_container_layout = QHBoxLayout(self.universe_container)
@@ -1133,7 +1144,8 @@ class RecommendationView(QWidget):
         self.method_label = QLabel("排名方法:")
         method_layout.addWidget(self.method_label)
         self.ranking_method_combo = QComboBox()
-        self.ranking_method_combo.addItem("Nearest Rank", "nearest_rank")
+        self.ranking_method_combo.addItem("最近名次法", "nearest_rank")
+        self.ranking_method_combo.setToolTip("最近名次法會依排序名次決定百分位門檻，適合小到中型股票池。")
         method_layout.addWidget(self.ranking_method_combo)
         self.method_container = QWidget()
         self.method_container_layout = QHBoxLayout(self.method_container)
@@ -1197,8 +1209,8 @@ class RecommendationView(QWidget):
         if self.recommendation_repository:
             title_layout.addWidget(self.save_result_btn)
         
-        # 加入候選池按鈕
-        self.add_to_watchlist_btn = QPushButton("加入候選池")
+        # 加入觀察清單按鈕
+        self.add_to_watchlist_btn = QPushButton("加入觀察清單")
         self.add_to_watchlist_btn.setVisible(False)  # 初始隱藏
         self.add_to_watchlist_btn.clicked.connect(self._add_selected_to_watchlist)
         if self.watchlist_service:
@@ -1975,8 +1987,8 @@ class RecommendationView(QWidget):
         # 準備回測配置
         backtest_config = {
             'stock_list': selected_stocks,
-            'profile_id': self.current_profile,
-            'profile_name': None,
+            'profile_id': self.current_profile or 'advanced',
+            'profile_name': '推薦分析',
             'strategy_config': self.current_config,
             'regime': self.current_regime,
             'regime_snapshot': None
@@ -1985,7 +1997,7 @@ class RecommendationView(QWidget):
         # 如果有 Profile，添加 Profile 信息
         if self.current_profile and self.current_profile in self.profiles:
             profile = self.profiles[self.current_profile]
-            backtest_config['profile_name'] = profile.get('name', '')
+            backtest_config['profile_name'] = profile.get('name') or '推薦分析'
             backtest_config['profile_version'] = profile.get('version', '1.0.0')
         
         # 創建 Regime snapshot
@@ -2045,13 +2057,13 @@ class RecommendationView(QWidget):
         )
     
     def _add_selected_to_watchlist(self):
-        """將選中的股票加入候選池"""
+        """將選中的股票加入觀察清單"""
         if not self.watchlist_service or not self.recommendations_model:
             return
         
         selection = self.results_table.selectionModel().selectedRows()
         if not selection:
-            QMessageBox.warning(self, "提示", "請先選擇要加入候選池的股票")
+            QMessageBox.warning(self, "提示", "請先選擇要加入觀察清單的股票")
             return
         
         # 取得選中的股票
@@ -2084,11 +2096,11 @@ class RecommendationView(QWidget):
                 
                 added_count = self.watchlist_service.add_stocks(stocks, source='recommendation')
                 if added_count > 0:
-                    QMessageBox.information(self, "成功", f"已將 {added_count} 檔股票加入候選池\n{notes}")
+                    QMessageBox.information(self, "成功", f"已將 {added_count} 檔股票加入觀察清單\n{notes}")
                 else:
-                    QMessageBox.warning(self, "提示", "選中的股票已在候選池中")
+                    QMessageBox.warning(self, "提示", "選中的股票已在觀察清單中")
             except Exception as e:
-                QMessageBox.critical(self, "錯誤", f"加入候選池失敗：\n{str(e)}")
+                QMessageBox.critical(self, "錯誤", f"加入觀察清單失敗：\n{str(e)}")
     
     def _build_current_result_snapshot(self) -> RecommendationResultDTO:
         """建立未保存推薦結果快照，僅供 Portfolio 來源追溯使用。"""
@@ -2228,9 +2240,19 @@ class RecommendationView(QWidget):
                     print(f"[RecommendationView] 創建選股清單失敗: {e}")
             
             # 顯示成功訊息
-            success_msg = f"推薦結果已保存！\n結果ID: {result_id}\n股票數量: {len(self.current_recommendations)}"
+            profile_label = "進階模式"
+            if self.current_profile and self.current_profile in self.profiles:
+                profile_label = self.profiles[self.current_profile].get("name") or self.current_profile
+            success_msg = (
+                f"推薦結果已保存！\n"
+                f"結果ID: {result_id}\n"
+                f"Profile: {profile_label}\n"
+                f"Regime: {self.current_regime or '未知'}\n"
+                f"股票數量: {len(self.current_recommendations)}\n\n"
+                "下一步：可從本頁送 Research Lab 批次回測或推薦回放，也可在結果表右鍵記錄到持倉管理。"
+            )
             if watchlist_id:
-                success_msg += f"\n\n已自動創建選股清單：{watchlist_name}\n可在「策略回測」Tab 的選股清單中查看"
+                success_msg += f"\n\n已自動創建選股清單：{watchlist_name}\n可在「策略回測」Tab 的選股清單中查看。"
             
             QMessageBox.information(
                 self,
@@ -2669,6 +2691,17 @@ class RecommendationView(QWidget):
         """
         
         html_text += "</table>"
+
+        html_text += "<p style='margin: 10px 0 5px 0;'><b>排名門檻：</b></p>"
+        html_text += "<ul style='margin: 5px 0; padding-left: 20px;'>"
+        html_text += f"<li>門檻模式：{self._ranking_value_label('threshold_mode', recommendation.threshold_mode)}</li>"
+        if recommendation.ranking_method:
+            html_text += f"<li>排名方法：{self._ranking_value_label('ranking_method', recommendation.ranking_method)}</li>"
+        if recommendation.score_percentile_bp is not None:
+            html_text += f"<li>分數百分位：{recommendation.score_percentile_bp / 100:.1f}%</li>"
+        if recommendation.eligible_universe_size is not None:
+            html_text += f"<li>合格母體數：{recommendation.eligible_universe_size} 檔</li>"
+        html_text += "</ul>"
         
         # 風險點提示
         html_text += "<p style='margin: 10px 0 5px 0;'><b>⚠️ 風險點：</b></p>"
@@ -2710,6 +2743,20 @@ class RecommendationView(QWidget):
         html_text += "</div>"
         
         return html_text
+
+    @staticmethod
+    def _ranking_value_label(kind: str, value: Any) -> str:
+        text = str(value or "")
+        mappings = {
+            "threshold_mode": {
+                "fixed": "固定門檻",
+                "quantile": "百分位排名",
+            },
+            "ranking_method": {
+                "nearest_rank": "最近名次法",
+            },
+        }
+        return mappings.get(kind, {}).get(text, text or "未設定")
         
     def _show_results_table_context_menu(self, pos):
         """顯示推薦結果表格的右鍵選單"""
@@ -2736,7 +2783,7 @@ class RecommendationView(QWidget):
 
         menu = QMenu(self)
         action_add_portfolio = menu.addAction("記錄到持倉管理（保留推薦來源）...")
-        action_add_watchlist = menu.addAction("加入候選池")
+        action_add_watchlist = menu.addAction("加入觀察清單")
 
         action = menu.exec(self.cursor().pos())
 
@@ -2828,7 +2875,10 @@ class RecommendationView(QWidget):
         run_params = {
             "推薦模式": "Beginner" if self.is_beginner_mode else "Advanced",
             "當前配置 Profile": str(self.current_profile or "Default"),
-            "篩選門檻模式": config.get("signals", {}).get("threshold_mode", "fixed"),
+            "篩選門檻模式": self._ranking_value_label(
+                "threshold_mode",
+                config.get("signals", {}).get("threshold_mode", "fixed"),
+            ),
         }
 
         regime_snapshot = None

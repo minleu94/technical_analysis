@@ -288,7 +288,7 @@ class DecisionDeskView(QWidget):
         self.decision_date_card.value_label.setText(snapshot.as_of_date.isoformat())
         self.generated_at_card.value_label.setText(snapshot.generated_at.strftime("%H:%M:%S"))
 
-        warning_lines = list(snapshot.warnings)
+        warning_lines = [self._humanize_warning_token(item) for item in snapshot.warnings]
         self.warning_list.set_warnings(warning_lines)
 
         self._set_section_quality(self.market_regime_status, snapshot.market_regime.quality)
@@ -346,8 +346,9 @@ class DecisionDeskView(QWidget):
         self.risk_prompts_value.setText(self._format_risk_prompts(snapshot.risk_prompts.prompts))
 
         for section_text in self._collect_warnings(snapshot):
-            if section_text not in warning_lines:
-                warning_lines.append(section_text)
+            humanized = self._humanize_warning_token(section_text)
+            if humanized not in warning_lines:
+                warning_lines.append(humanized)
 
         if warning_lines:
             warning_lines = [str(item) for item in warning_lines]
@@ -453,6 +454,66 @@ class DecisionDeskView(QWidget):
             for warning in section_warnings:
                 lines.append(f"{section_name}:{warning}")
         return lines
+
+    @staticmethod
+    def _humanize_warning_token(warning: object) -> str:
+        token = str(warning)
+        if not token:
+            return token
+
+        section = ""
+        raw_code = token
+        known_sections = (
+            "市場情勢",
+            "市場廣度",
+            "產業輪動",
+            "強弱與流動性",
+            "Watchlist",
+            "持倉警示",
+            "Why Not / 風險提示",
+        )
+        for section_name in known_sections:
+            prefix = f"{section_name}:"
+            if token.startswith(prefix):
+                section = section_name
+                raw_code = token[len(prefix):]
+                break
+
+        def with_section(message: str) -> str:
+            if section and not message.startswith(section):
+                return f"{section}：{message}（{raw_code}）"
+            return f"{message}（{raw_code}）"
+
+        parts = raw_code.split(":")
+        code = parts[0]
+        value = parts[1] if len(parts) > 1 else ""
+        extra = parts[2:] if len(parts) > 2 else []
+
+        if code == "relative_strength_liquidity_skipped_symbols" and value:
+            return with_section(f"強弱與流動性：因流動性或資料條件不足跳過 {value} 檔股票")
+        if code == "watchlist_trigger_data_insufficient" and value:
+            return with_section(f"Watchlist 提示：{value} 資料不足，暫無法判斷觸發狀態")
+        if code == "watchlist_stale":
+            return with_section("Watchlist 資料可能不是最新狀態")
+        if code == "sector_missing":
+            return with_section("產業輪動資料缺漏")
+        if code == "market_breadth_fetch_error":
+            reason = value or "未知原因"
+            return with_section(f"市場廣度資料取得失敗：{reason}")
+        if code == "risk_prompt_source_quality" and len(parts) >= 3:
+            source = value
+            quality = extra[0]
+            return with_section(f"風險提示來源 {source} 品質為 {quality}")
+        if code == "watchlist_trigger_risk_alert" and value:
+            return with_section(f"Watchlist 觸發風險提示：{value}")
+        if code.endswith("_missing"):
+            return with_section(f"{code[:-8]} 資料缺漏")
+        if code.endswith("_provider_error"):
+            return with_section(f"{code[:-15]} 資料提供者發生錯誤")
+        if code.endswith("_as_of_fallback"):
+            return with_section(f"{code[:-15]} 使用備援決策日")
+
+        return token
 
 
 class _EmptySection:

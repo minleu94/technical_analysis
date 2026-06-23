@@ -972,10 +972,12 @@ class BacktestView(QWidget):
         if save_btn is not None:
             if self.research_run_service and self.current_report and self.current_run_params:
                 save_btn.setEnabled(True)
+                save_btn.setToolTip("保存此回測結果為 Registry run，供歷史比較與升級檢查使用。")
                 logger.info("[BacktestView] 保存按鈕已啟用 (research_run_service={self.research_run_service is not None}, report={self.current_report is not None}, params={self.current_run_params is not None})")
             else:
                 # 如果沒有 registry service，禁用按鈕並顯示提示
                 save_btn.setEnabled(False)
+                save_btn.setToolTip("需要完成回測且 ResearchRunService 可用後才能保存結果。")
                 if not self.research_run_service:
                     logger.warning("[BacktestView] 警告: research_run_service 未初始化，無法保存結果")
                 if not self.current_report:
@@ -999,8 +1001,10 @@ class BacktestView(QWidget):
 
             if can_promote_basic and can_promote_sop:
                 promote_btn.setEnabled(True)
+                promote_btn.setToolTip("目前回測結果已保存且驗證狀態允許，可進入升級條件檢查。")
             else:
                 promote_btn.setEnabled(False)
+                promote_btn.setToolTip("先保存回測結果，且驗證狀態不得為 FAIL，才能升級為策略版本。")
                 # 如果因為 SOP 護欄無法 Promote，顯示提示
                 if can_promote_basic and not can_promote_sop:
                     logger.warning("[BacktestView] ⚠️ SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
@@ -1040,6 +1044,10 @@ class BacktestView(QWidget):
                         f"最拖累股票: {summary.get('worst_stock_code', '')} "
                         f"{summary.get('worst_stock_name', '')} "
                         f"({summary.get('worst_stock_pnl', 0.0):,.0f})",
+                        "",
+                        "交易假設提醒: 推薦回放仍以同日收盤成交為主要假設；若有 gap_risk、"
+                        "liquidity_limited、cash_limited 或 lot_size_limited，請先查看下方 credibility / "
+                        "unfilled orders / cash ledger 後再判讀績效。",
                     ]
                 )
             )
@@ -1275,10 +1283,12 @@ class BacktestView(QWidget):
 
         if hasattr(self, "save_portfolio_result_btn"):
             self.save_portfolio_result_btn.setEnabled(True)
+            self.save_portfolio_result_btn.setToolTip("推薦回放已完成，可保存到 Research Run Registry。")
         if hasattr(self, "delete_portfolio_result_btn"):
             self.delete_portfolio_result_btn.setEnabled(False)
         if hasattr(self, "promote_portfolio_result_btn"):
             self.promote_portfolio_result_btn.setEnabled(False)
+            self.promote_portfolio_result_btn.setToolTip("先保存推薦回放結果後，再載入歷史 run 進行 legacy 升級流程。")
         if hasattr(self, "export_portfolio_report_btn"):
             self.export_portfolio_report_btn.setEnabled(True)
         self.current_portfolio_run_id = None
@@ -1370,7 +1380,16 @@ class BacktestView(QWidget):
                 run_params.setdefault("holding_days", self.recommendation_portfolio_holding_days.value())
                 self.current_recommendation_portfolio_run_params = run_params
                 run_id = self._save_recommendation_portfolio_to_research_registry(run_name, notes)
-                QMessageBox.information(self, "成功", f"推薦組合回測結果已保存: {run_name}")
+                QMessageBox.information(
+                    self,
+                    "成功",
+                    "推薦組合回測結果已保存到 Research Run Registry。\n\n"
+                    f"Run ID: {run_id}\n"
+                    f"Run 名稱: {run_name}\n"
+                    f"Profile: {config.get('profile_name') or config.get('profile_id') or '進階模式'}\n"
+                    f"股票檔數: {len(getattr(result, 'stock_results', []) or [])}\n\n"
+                    "下一步可在歷史推薦回測下拉選單載入、匯出報告，或進行後續策略升級檢查。"
+                )
 
                 # 重新載入下拉選單
                 self._refresh_portfolio_history_combo()
@@ -1385,6 +1404,7 @@ class BacktestView(QWidget):
                 # 啟用刪除按鈕
                 self.delete_portfolio_result_btn.setEnabled(True)
                 self.promote_portfolio_result_btn.setEnabled(False)
+                self.promote_portfolio_result_btn.setToolTip("已保存；如需升級，請從歷史推薦回測載入該 run 後執行升級流程。")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"保存失敗: {str(e)}")
 
@@ -1774,6 +1794,41 @@ class BacktestView(QWidget):
             self.strategy_desc.setText(f"載入策略資訊失敗: {str(e)}")
             self._update_params_form({})
 
+    @staticmethod
+    def _choice_display_text(param_name: str, value: Any) -> str:
+        value_text = str(value)
+        display_map = {
+            "threshold_mode": {
+                "fixed": "固定門檻",
+                "quantile": "百分位排名",
+            },
+            "quantile_method": {
+                "nearest_rank": "最近名次法",
+            },
+        }
+        return display_map.get(param_name, {}).get(value_text, value_text)
+
+    def _add_choice_items(self, combo: QComboBox, param_name: str, choices: list[Any]) -> None:
+        for choice in choices:
+            combo.addItem(self._choice_display_text(param_name, choice), str(choice))
+
+    @staticmethod
+    def _combo_raw_value(combo: QComboBox) -> str:
+        data = combo.currentData()
+        if data is not None:
+            return str(data)
+        return combo.currentText()
+
+    @staticmethod
+    def _set_combo_raw_value(combo: QComboBox, value: Any) -> bool:
+        idx = combo.findData(str(value))
+        if idx < 0:
+            idx = combo.findText(str(value))
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+            return True
+        return False
+
     def _update_params_form(self, params: Dict):
         """更新參數表單"""
         # 清除舊的參數控件
@@ -1826,10 +1881,8 @@ class BacktestView(QWidget):
             # 創建輸入控件
             if param_type == 'choice':
                 widget = QComboBox()
-                widget.addItems(choices)
-                idx = widget.findText(str(default_value))
-                if idx >= 0:
-                    widget.setCurrentIndex(idx)
+                self._add_choice_items(widget, param_name, choices)
+                self._set_combo_raw_value(widget, default_value)
                 if param_name == 'threshold_mode':
                     widget.currentIndexChanged.connect(self._on_threshold_mode_changed)
             elif param_type == 'int':
@@ -1870,7 +1923,7 @@ class BacktestView(QWidget):
         if not threshold_mode_widget or not isinstance(threshold_mode_widget, QComboBox):
             return
 
-        mode = threshold_mode_widget.currentText()
+        mode = self._combo_raw_value(threshold_mode_widget)
         is_fixed = (mode == 'fixed')
 
         # 固定分數參數
@@ -1897,14 +1950,14 @@ class BacktestView(QWidget):
             elif isinstance(widget, QDoubleSpinBox):
                 params[param_name] = widget.value()
             elif isinstance(widget, QComboBox):
-                params[param_name] = widget.currentText()
+                params[param_name] = self._combo_raw_value(widget)
         if getattr(self, 'optimization_group', None) is not None and self.optimization_group.isChecked():
             for param_name, widgets in getattr(self, 'optimization_param_widgets', {}).items():
                 fixed_widget = widgets.get('fixed') if isinstance(widgets, dict) else None
                 if isinstance(fixed_widget, (QSpinBox, QDoubleSpinBox)):
                     params[param_name] = fixed_widget.value()
                 elif isinstance(fixed_widget, QComboBox):
-                    params[param_name] = fixed_widget.currentText()
+                    params[param_name] = self._combo_raw_value(fixed_widget)
         return params
 
     # ========== 策略預設相關方法 ==========
@@ -1976,10 +2029,12 @@ class BacktestView(QWidget):
     def _load_preset(self):
         """載入策略預設"""
         if not self.preset_service:
+            QMessageBox.warning(self, "錯誤", "預設服務未初始化")
             return
 
         preset_id = self.preset_combo.currentData()
         if not preset_id:
+            QMessageBox.warning(self, "提示", "請先選擇要載入的預設")
             return
 
         preset = self.preset_service.load_preset(preset_id)
@@ -1999,9 +2054,13 @@ class BacktestView(QWidget):
                 if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
                     widget.setValue(value)
                 elif isinstance(widget, QComboBox):
-                    idx = widget.findText(str(value))
-                    if idx >= 0:
-                        widget.setCurrentIndex(idx)
+                    self._set_combo_raw_value(widget, value)
+
+        QMessageBox.information(
+            self,
+            "預設已載入",
+            f"已載入預設：{preset.name}\n策略：{preset.strategy_id}\n參數數量：{len(preset.params)}",
+        )
 
     def _delete_preset(self):
         """刪除策略預設"""
@@ -2286,14 +2345,15 @@ class BacktestView(QWidget):
 
             # 創建臨時選股清單（如果 universe_service 可用）
             if self.universe_service:
-                profile_name = config.get('profile_name', '推薦結果')
+                profile_name = config.get('profile_name') or config.get('profile_id') or '推薦結果'
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 watchlist_name = f"{profile_name}_{timestamp}"
+                source = config.get("source") or "recommendation"
                 watchlist_id = self.universe_service.save_watchlist(
                     name=watchlist_name,
                     codes=stock_list,
-                    source="recommendation",
-                    description=f"來自推薦分析：Profile={config.get('profile_id', 'N/A')}, Regime={config.get('regime', 'N/A')}"
+                    source=source,
+                    description=f"來自{profile_name}：Profile={config.get('profile_id', 'N/A')}, Regime={config.get('regime', 'N/A')}"
                 )
 
                 # 選擇剛創建的清單
@@ -2610,7 +2670,12 @@ class BacktestView(QWidget):
 
             try:
                 run_id = self._save_single_backtest_to_research_registry(run_name, notes)
-                QMessageBox.information(self, "成功", f"結果已保存: {run_name}")
+                QMessageBox.information(
+                    self,
+                    "成功",
+                    f"結果已保存: {run_name}\nRegistry run：{run_id}\n\n"
+                    "若驗證狀態允許，現在可按「升級為策略版本」進入升級條件檢查。",
+                )
                 self._refresh_history()
                 self._update_chart_run_combo()
                 # 自動選中剛保存的結果
@@ -2619,8 +2684,19 @@ class BacktestView(QWidget):
                     self.chart_run_combo.setCurrentIndex(index)
                 # ========== Phase 3.5 SOP 護欄：啟用 Promote 按鈕（需檢查驗證狀態） ==========
                 if hasattr(self, 'promote_btn'):
-                    self.promote_btn.setEnabled(False)
-                    logger.info("[BacktestView] Registry run 已保存，Promote 將於 Registry-based Gate 完成後啟用")
+                    self.current_run_id = run_id
+                    validation_status = getattr(getattr(self.current_report, "validation_status", None), "value", None)
+                    if validation_status is None:
+                        validation_status = str(getattr(self.current_report, "validation_status", ""))
+                    can_promote = validation_status != "FAIL"
+                    self.promote_btn.setEnabled(can_promote)
+                    if can_promote:
+                        self.promote_btn.setToolTip(
+                            f"已保存為 Registry run：{run_id}\n可進入升級條件檢查。"
+                        )
+                    else:
+                        self.promote_btn.setToolTip("驗證狀態為 FAIL，需先修正樣本或資料問題後才能升級。")
+                    logger.info("[BacktestView] Registry run 已保存: %s, promote_enabled=%s", run_id, can_promote)
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"保存失敗: {str(e)}")
 
@@ -3126,12 +3202,12 @@ class BacktestView(QWidget):
                 # 固定值輸入
                 if param_type == 'choice':
                     fixed_widget = QComboBox()
-                    fixed_widget.addItems(choices)
-                    idx = fixed_widget.findText(str(default_value))
-                    if idx >= 0:
-                        fixed_widget.setCurrentIndex(idx)
+                    self._add_choice_items(fixed_widget, param_name, choices)
+                    self._set_combo_raw_value(fixed_widget, default_value)
                     if param_name == 'threshold_mode':
-                        fixed_widget.currentTextChanged.connect(self._on_optimization_threshold_mode_changed)
+                        fixed_widget.currentIndexChanged.connect(
+                            lambda _idx=False: self._on_optimization_threshold_mode_changed()
+                        )
                 elif param_type == 'int':
                     fixed_widget = QSpinBox()
                     if param_name in {'buy_quantile_bp', 'sell_quantile_bp'}:
@@ -3280,7 +3356,7 @@ class BacktestView(QWidget):
             if not threshold_mode_widget or not isinstance(threshold_mode_widget, QComboBox):
                 return
 
-            mode = threshold_mode_widget.currentText()
+            mode = self._combo_raw_value(threshold_mode_widget)
             is_fixed = (mode == 'fixed')
 
             # 固定分數參數
@@ -3334,7 +3410,7 @@ class BacktestView(QWidget):
                 if isinstance(widgets['fixed'], QSpinBox):
                     base_params[param_name] = widgets['fixed'].value()
                 elif isinstance(widgets['fixed'], QComboBox):
-                    base_params[param_name] = widgets['fixed'].currentText()
+                    base_params[param_name] = self._combo_raw_value(widgets['fixed'])
                 else:
                     base_params[param_name] = widgets['fixed'].value()
             else:

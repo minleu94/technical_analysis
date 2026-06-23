@@ -29,6 +29,7 @@ class WatchlistView(QWidget):
     
     # 信號：當觀察清單更新時發出
     watchlistUpdated = Signal()
+    sendToBacktestRequested = Signal(dict)
     
     def __init__(self, watchlist_service: WatchlistService, config=None, parent=None):
         """初始化觀察清單視圖
@@ -181,7 +182,8 @@ class WatchlistView(QWidget):
         
         self.send_to_research_lab_btn = QPushButton("送 Research Lab 批次回測")
         self.send_to_research_lab_btn.setEnabled(False)
-        self.send_to_research_lab_btn.setToolTip("此入口將在 Research Lab 批次回測整合時啟用。")
+        self.send_to_research_lab_btn.setToolTip("候選池目前沒有股票，加入股票後即可送 Research Lab 批次回測。")
+        self.send_to_research_lab_btn.clicked.connect(self._send_to_research_lab)
         watchlist_ops_layout.addWidget(self.send_to_research_lab_btn)
 
         # 保存為選股清單按鈕
@@ -320,6 +322,7 @@ class WatchlistView(QWidget):
             
             # 更新統計
             self.stats_label.setText(f"共 {len(stocks)} 檔股票")
+            self._update_research_lab_button_state(len(stocks))
             logger.info("[WatchlistView._load_watchlist] 載入完成")
             
         except Exception as e:
@@ -342,9 +345,44 @@ class WatchlistView(QWidget):
                 self.stocks_model = PandasTableModel(df)
                 self.stocks_table.setModel(self.stocks_model)
                 self.stats_label.setText("共 0 檔股票（載入失敗）")
+                self._update_research_lab_button_state(0)
                 logger.error("[WatchlistView._load_watchlist] 已顯示錯誤提示")
             except Exception as e2:
                 logger.error(f"[WatchlistView._load_watchlist] 顯示錯誤提示時也失敗: {e2}")
+
+    def _update_research_lab_button_state(self, stock_count: int) -> None:
+        """依候選池內容啟用或停用 Research Lab 批次回測入口。"""
+        enabled = stock_count > 0
+        self.send_to_research_lab_btn.setEnabled(enabled)
+        if enabled:
+            self.send_to_research_lab_btn.setToolTip("將目前候選池送到策略回測的批次模式。")
+        else:
+            self.send_to_research_lab_btn.setToolTip("候選池目前沒有股票，加入股票後即可送 Research Lab 批次回測。")
+
+    def _send_to_research_lab(self) -> None:
+        """將目前觀察清單送到策略回測的批次模式。"""
+        stock_codes = [str(code).strip() for code in self.watchlist_service.get_stock_codes() if str(code).strip()]
+        if not stock_codes:
+            QMessageBox.warning(self, "提示", "候選池目前沒有股票，無法送 Research Lab 批次回測。")
+            self._update_research_lab_button_state(0)
+            return
+
+        config = {
+            "stock_list": stock_codes,
+            "profile_id": "watchlist",
+            "profile_name": "觀察清單",
+            "strategy_config": {},
+            "regime": None,
+            "regime_snapshot": None,
+            "source": "watchlist",
+        }
+        self.sendToBacktestRequested.emit(config)
+        QMessageBox.information(
+            self,
+            "已送出",
+            f"已將 {len(stock_codes)} 檔候選池股票送到 Research Lab 批次回測。\n\n"
+            "請切換到「策略回測 / Research Lab」確認期間、策略與資金設定後執行。",
+        )
     
     def _show_add_dialog(self):
         """顯示新增股票對話框"""
@@ -391,10 +429,17 @@ class WatchlistView(QWidget):
             if not stock_code:
                 QMessageBox.warning(self, "錯誤", "請輸入股票代號")
                 return
-            
-            # 如果沒有輸入名稱，使用代號作為名稱
-            if not stock_name:
-                stock_name = stock_code
+
+            resolved = self._resolve_manual_stock(stock_code, stock_name)
+            if resolved is None:
+                QMessageBox.warning(
+                    self,
+                    "股票代號不存在",
+                    f"找不到股票代號 {stock_code} 的正式資料，請確認代號是否正確。\n\n"
+                    "目前手動新增只允許加入資料源中存在的股票，避免自訂代號混入正式候選池。",
+                )
+                return
+            stock_code, stock_name = resolved
             
             # 新增股票
             try:
@@ -415,6 +460,19 @@ class WatchlistView(QWidget):
                     QMessageBox.warning(self, "提示", "該股票已在候選池中")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"新增股票失敗：\n{str(e)}")
+
+    def _resolve_manual_stock(self, stock_code: str, stock_name: str) -> Optional[tuple[str, str]]:
+        """驗證手動輸入股票代號，並在名稱空白時自動補正式名稱。"""
+        code = str(stock_code).strip()
+        name = str(stock_name).strip()
+        if not code:
+            return None
+
+        name_map = self._query_stock_names([code])
+        resolved_name = name_map.get(code)
+        if not resolved_name:
+            return None
+        return code, name or resolved_name
     
     def _remove_selected(self):
         """移除選中的股票"""

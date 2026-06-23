@@ -1292,7 +1292,7 @@ class UpdateService :
             loader =DataLoader (self .config )
             start_dt =datetime .strptime (start_date ,'%Y-%m-%d')
             end_dt =datetime .strptime (end_date ,'%Y-%m-%d')
-            current_dt =start_dt +timedelta (days =1 )
+            current_dt =start_dt
             while current_dt <=end_dt :
                 if current_dt .weekday ()<5 :
                     trade_date =current_dt .strftime ('%Y-%m-%d')

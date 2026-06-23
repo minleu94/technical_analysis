@@ -48,6 +48,7 @@ class FakeUpdateService:
             "industry_index": {"latest_date": "2026-05-19", "total_records": 20, "status": "ok"},
             "broker_branch": {"latest_date": "2026-05-19", "total_records": 30, "status": "ok"},
             "technical_indicators": {"latest_date": "2026-05-19", "total_records": 40, "status": "ok"},
+            "monthly_revenue": {"latest_date": "2026-05", "total_records": 244499, "status": "ok"},
         }
 
     def check_source_detail(self, source):
@@ -174,6 +175,7 @@ class StaleTechnicalUpdateService(FakeUpdateService):
             "industry_index": {"latest_date": "2026-05-19", "total_records": 20, "status": "ok"},
             "broker_branch": {"latest_date": "2026-05-19", "total_records": 30, "status": "ok"},
             "technical_indicators": {"latest_date": "2026-05-19", "total_records": 40, "status": "ok"},
+            "monthly_revenue": {"latest_date": "2026-05", "total_records": 244499, "status": "ok"},
         }
 
 
@@ -218,6 +220,23 @@ def test_all_data_view_has_safe_update_primary_button():
     assert view.quick_update_all_btn.text() == "⚡ 快速更新 (跳過大型合併)"
     assert isinstance(view.safe_update_all_btn, QPushButton)
     assert view.safe_update_all_btn.text() == "🛡️ 安全更新 (完整 CSV + SQLite)"
+
+
+def test_all_data_view_has_monthly_revenue_status_card():
+    view = make_view()
+
+    assert hasattr(view, "monthly_revenue_status_text")
+
+    view._on_status_checked({
+        "monthly_revenue": {
+            "latest_date": "2026-05",
+            "total_records": 244499,
+            "status": "ok",
+        }
+    })
+
+    assert "2026-05" in view.monthly_revenue_status_text.toPlainText()
+    assert "244,499" in view.monthly_revenue_status_text.toPlainText()
 
 
 def test_safe_update_all_skips_technical_when_current():
@@ -792,11 +811,26 @@ def test_sqlite_inspector_date_pickers_have_enough_width_for_full_dates():
 
     widget = SqliteInspectorWidget(FakeInspectorService(total=250))
 
-    assert widget.date_input.minimumWidth() >= 132
-    assert widget.start_date_input.minimumWidth() >= 132
-    assert widget.end_date_input.minimumWidth() >= 132
+    assert widget.date_input.minimumWidth() >= 122
+    assert widget.start_date_input.minimumWidth() >= 122
+    assert widget.end_date_input.minimumWidth() >= 122
+    assert widget.date_input.maximumWidth() <= 132
+    assert widget.start_date_input.maximumWidth() <= 132
+    assert widget.end_date_input.maximumWidth() <= 132
     calendar_button_texts = [button.text() for button in widget.findChildren(QPushButton)]
     assert calendar_button_texts.count("日曆") >= 3
+
+
+def test_sqlite_inspector_stock_filters_are_wide_enough_for_placeholders():
+    app()
+    from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
+
+    widget = SqliteInspectorWidget(FakeInspectorService(total=250))
+
+    assert widget.stock_code_input.minimumWidth() >= 112
+    assert widget.stock_code_input.maximumWidth() >= 112
+    assert widget.stock_name_input.minimumWidth() >= 145
+    assert widget.stock_name_input.maximumWidth() >= 145
 
 
 def test_sqlite_inspector_broker_branch_filter_uses_dropdown(monkeypatch):
@@ -815,6 +849,8 @@ def test_sqlite_inspector_broker_branch_filter_uses_dropdown(monkeypatch):
     assert widget.broker_branch_combo.findText("凱基台北") >= 0
     assert widget.broker_branch_combo.maxVisibleItems() >= 20
     assert widget.broker_branch_dropdown_btn.text() == "展開"
+    assert "#f8fafc" in widget.broker_branch_dropdown_btn.styleSheet()
+    assert widget.broker_branch_dropdown_btn.minimumHeight() >= 26
 
     widget.broker_branch_combo.setCurrentText("凱基台北")
     widget._request_page(load_schema=False)

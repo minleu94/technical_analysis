@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 # 設定為 offscreen 以免開啟實際 GUI 視窗
@@ -408,16 +409,103 @@ def test_recommendation_view_preserves_provenance_on_portfolio_recording(qt_app)
 
 
 def test_watchlist_view_batch_backtest_button_state(qt_app):
-    """驗證候選池（Watchlist）之「送 Research Lab 批次回測」按鈕存在且預設為 disabled 提示"""
+    """驗證觀察清單可以直接送 Research Lab 批次回測，且空清單時保持 disabled。"""
     mock_watchlist_service = MagicMock()
-    mock_watchlist_service.get_watchlist.return_value = pd.DataFrame(columns=['證券代號', '證券名稱', '加入時間', '來源', '備註'])
-    
+    mock_watchlist_service.get_stocks.return_value = [
+        {
+            "stock_code": "2330",
+            "stock_name": "台積電",
+            "added_at": "2026-06-22 09:00:00",
+            "source": "manual",
+            "notes": "",
+        }
+    ]
+    mock_watchlist_service.get_stock_codes.return_value = ["2330"]
+
     view = WatchlistView(watchlist_service=mock_watchlist_service, config=None)
-    
+    emitted_configs = []
+    view.sendToBacktestRequested.connect(lambda config: emitted_configs.append(config))
+
     assert hasattr(view, "send_to_research_lab_btn")
     assert view.send_to_research_lab_btn.text() == "送 Research Lab 批次回測"
+    assert view.send_to_research_lab_btn.isEnabled() is True
+    assert "將目前候選池送到策略回測的批次模式" in view.send_to_research_lab_btn.toolTip()
+
+    with patch("ui_qt.views.watchlist_view.QMessageBox.information"):
+        view.send_to_research_lab_btn.click()
+
+    assert emitted_configs
+    assert emitted_configs[0]["stock_list"] == ["2330"]
+    assert emitted_configs[0]["profile_name"] == "觀察清單"
+    assert emitted_configs[0]["source"] == "watchlist"
+
+    mock_watchlist_service.get_stocks.return_value = []
+    mock_watchlist_service.get_stock_codes.return_value = []
+    view._load_watchlist()
+
     assert view.send_to_research_lab_btn.isEnabled() is False
-    assert "此入口將在 Research Lab 批次回測整合時啟用。" in view.send_to_research_lab_btn.toolTip()
+    assert "候選池目前沒有股票" in view.send_to_research_lab_btn.toolTip()
+
+
+def test_watchlist_view_manual_add_resolves_stock_name_and_rejects_unknown(qt_app):
+    """手動新增時，空白名稱會自動查正式股票名稱；查不到時阻擋加入。"""
+    mock_watchlist_service = MagicMock()
+    mock_watchlist_service.get_stocks.return_value = []
+    view = WatchlistView(watchlist_service=mock_watchlist_service, config=None)
+    view._query_stock_names = MagicMock(return_value={"2330": "台積電"})
+
+    assert view._resolve_manual_stock("2330", "") == ("2330", "台積電")
+    assert view._resolve_manual_stock("2330", "  台積電自訂  ") == ("2330", "台積電自訂")
+    assert view._resolve_manual_stock("999999", "") is None
+
+
+def test_backtest_view_max_positions_uses_zero_as_unlimited(qt_app):
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+
+    assert view.max_positions_input.minimum() == 0
+    assert view.max_positions_input.value() == 0
+    assert view.max_positions_input.specialValueText() == "無限制"
+
+    view.max_positions_input.setValue(1)
+    assert view.max_positions_input.value() == 1
+
+
+def test_backtest_view_recommendation_portfolio_summary_warns_about_same_day_close(qt_app):
+    """推薦回放摘要需明確揭露同日收盤成交與可成交性假設。"""
+    mock_backtest_service = MagicMock()
+    view = BacktestView(backtest_service=mock_backtest_service, config=None)
+
+    result = SimpleNamespace(
+        summary={
+            "total_return": 0.0,
+            "max_drawdown": 0.0,
+            "total_trades": 0,
+            "avg_holding_days": 0.0,
+            "capital_used": 0.0,
+            "stop_loss_exits": 0,
+            "take_profit_exits": 0,
+            "holding_period_exits": 0,
+            "loss_trade_ratio": 0.0,
+            "sharpe_ratio": 0.0,
+            "sortino_ratio": 0.0,
+            "monte_carlo_p05_return": 0.0,
+            "monte_carlo_p50_return": 0.0,
+            "monte_carlo_p95_return": 0.0,
+        },
+        trades=pd.DataFrame(),
+        equity_curve=pd.DataFrame(),
+        improvement_hints=[],
+        period_holdings_dataframe=lambda: pd.DataFrame(),
+        stock_contribution_dataframe=lambda: pd.DataFrame(),
+    )
+
+    view._show_recommendation_portfolio_result(result)
+
+    summary_text = view.portfolio_summary_text.toPlainText()
+    assert "交易假設提醒" in summary_text
+    assert "同日收盤成交" in summary_text
+    assert "gap_risk" in summary_text
 
 
 def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
@@ -435,7 +523,9 @@ def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
     assert "threshold_mode" in view.param_widgets
     threshold_mode_widget = view.param_widgets["threshold_mode"]
     assert isinstance(threshold_mode_widget, QComboBox)
-    assert threshold_mode_widget.currentText() == "fixed"
+    assert threshold_mode_widget.currentText() == "固定門檻"
+    assert threshold_mode_widget.currentData() == "fixed"
+    assert "百分位排名會用決策日前可見的歷史分數分布" in threshold_mode_widget.toolTip()
 
     # 3. 驗證 fixed 模式下，分數門檻顯示，分位數門檻隱藏
     assert view.param_widgets["buy_score"].isHidden() is False
@@ -444,7 +534,7 @@ def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
     assert view.param_widgets["sell_quantile_bp"].isHidden() is True
 
     # 4. 切換為 quantile 模式，驗證顯示狀態反轉
-    threshold_mode_widget.setCurrentText("quantile")
+    threshold_mode_widget.setCurrentText("百分位排名")
     assert view.param_widgets["buy_score"].isHidden() is True
     assert view.param_widgets["sell_score"].isHidden() is True
     assert view.param_widgets["buy_quantile_bp"].isHidden() is False
@@ -453,6 +543,7 @@ def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
     assert view.param_widgets["sell_quantile_bp"].maximum() == 10000
     assert view.param_widgets["quantile_warmup_observations"].minimum() == 60
     assert view.param_widgets["quantile_warmup_observations"].maximum() == 60
+    assert "60 個交易日" in view.param_widgets["quantile_warmup_observations"].toolTip()
 
     # 5. 驗證最佳化面板
     view.optimization_group.setChecked(True)
@@ -465,14 +556,15 @@ def test_backtest_view_threshold_mode_combobox_loading_and_toggling(qt_app):
     assert opt_widgets["mode"].currentText() == "固定值"
     assert opt_widgets["mode"].isEnabled() is False  # Choice 不支援範圍最佳化
     assert isinstance(opt_widgets["fixed"], QComboBox)
-    assert opt_widgets["fixed"].currentText() == "fixed"  # 預設為 fixed
+    assert opt_widgets["fixed"].currentText() == "固定門檻"  # 預設為 fixed
+    assert opt_widgets["fixed"].currentData() == "fixed"
 
     # 驗證最佳化面板的行隱藏顯示
     assert view.optimization_param_widgets["buy_score"]["row_widget"].isHidden() is False
     assert view.optimization_param_widgets["buy_quantile_bp"]["row_widget"].isHidden() is True
 
     # 切換最佳化面板的 threshold_mode 固定值至 quantile
-    opt_widgets["fixed"].setCurrentText("quantile")
+    opt_widgets["fixed"].setCurrentText("百分位排名")
     assert view.optimization_param_widgets["buy_score"]["row_widget"].isHidden() is True
     assert view.optimization_param_widgets["buy_quantile_bp"]["row_widget"].isHidden() is False
     assert view.optimization_param_widgets["buy_quantile_bp"]["fixed"].maximum() == 10000
@@ -501,6 +593,7 @@ def test_recommendation_view_threshold_mode_combobox_loading_and_toggling(qt_app
     assert hasattr(view, "min_percentile_bp_spin")
     assert hasattr(view, "min_universe_size_spin")
     assert hasattr(view, "ranking_method_combo")
+    assert view.ranking_method_combo.currentText() == "最近名次法"
     
     # 2. 預設 fixed 模式下，百分位、母體與排名方法隱藏
     assert view.threshold_mode_combo.currentText() == "固定門檻"

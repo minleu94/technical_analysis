@@ -1,6 +1,6 @@
 ﻿# baldr 完整操作手冊
 
-> **最後更新**：2026-06-17
+> **最後更新**：2026-06-23
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前 8 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
@@ -11,7 +11,7 @@
 1. 更新每日股價、大盤、產業、券商分點與技術指標。
 2. 用市場 Regime、強弱個股、強弱產業與 Smart Money 觀察市場。
 3. 用 Profile 或進階參數產生推薦候選，查看 Why、Why Not 與分數拆解。
-4. 建立候選池與可重用選股清單。
+4. 建立觀察清單（候選池）與可重用選股清單。
 5. 執行單股、批次、固定組合、推薦回放與策略研究。
 6. 保存研究結果、比較既有結果，並在符合 Registry 與 Month 6 lifecycle Gate 時升級策略版本。
 7. 記錄交易、持倉、覆盤日誌、停損停利、籌碼監控與生命週期回顧。
@@ -89,10 +89,10 @@ python ui_qt/main.py
 
 ### 快速研究流程
 
-1. ??????????????????????
+1. 數據更新：先檢查資料狀態，必要時執行快速更新。
 2. 市場觀察：檢測 Regime，查看強弱與主力流向。
 3. 推薦分析：選 Profile，執行推薦並閱讀 Why / Why Not。
-4. 加入候選池：保存要研究的股票。
+4. 加入觀察清單：保存要研究的股票。
 5. Research Lab：使用單股或批次回測驗證。
 6. 保存結果；只有符合 Gate 的結果才升級策略版本。
 7. 需要追蹤交易時記錄到持倉管理，後續寫覆盤日誌。
@@ -112,6 +112,9 @@ python ui_qt/main.py
 - 產業指數數據
 - 券商分點數據
 - 技術指標數據
+- 月營收資料
+
+月營收卡片會顯示 `fundamental_monthly_revenues` 的最新資料年月、筆數與狀態，用來確認正式 SQLite 基本面資料是否已進入目前資料庫。
 
 狀態意義：
 
@@ -146,7 +149,7 @@ python ui_qt/main.py
 每日股價、大盤、產業、券商分點操作：
 
 1. 設定「結束日期」；可用日曆選取，或按「今日」一鍵帶入今天。
-2. 設定「最近範圍」。
+2. 設定「最近範圍」；系統換算出的開始日期會納入下載與缺漏檢查範圍。
 3. 先按「檢查此資料源狀態」。
 4. 按「手動下載此資料源」會依資料源下載或補齊指定日期範圍的原始資料。
 5. 每日股價手動下載會同時處理 TWSE 與 TPEX：TWSE raw CSV 寫入 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX official daily close quotes 寫入 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，完成後同步 SQLite `daily_prices` 並觸發技術指標增量更新。執行「合併每日股價」時，`stock_data_whole.csv` 也會同時納入這兩個日檔目錄。
@@ -241,10 +244,12 @@ Regime 是對當下市場環境的分類，不是未來預測。
 
 1. 選擇日線、週線或月線。
 2. 選擇直方、折線或面積趨勢圖。
-3. 點擊「開始掃描」。
-4. 點選主表股票，右側顯示分數、集中度、訊號原因與分點明細。
-5. 表格標頭可排序。
-6. 有 Watchlist service 時，可按「+ 觀察清單」。
+3. 選擇顯示範圍；預設為「Top / Bottom 50」，主表只顯示買超前 50 與賣超後 50，摘要統計仍使用全市場掃描結果。
+4. 點擊「開始掃描」。
+5. 點選主表股票，右側顯示分數、集中度、訊號原因與分點明細。
+6. 表格標頭可排序。
+7. 有 Watchlist service 時，可按「+ 觀察清單」。
+8. 在右側分點明細雙擊分點名稱，會切到「分點進出追蹤」並選中該分點。
 
 「分點進出追蹤」操作：
 
@@ -299,7 +304,7 @@ Regime 是對當下市場環境的分類，不是未來預測。
 
 - 最低百分位：例如 80% 代表保留當日母體中較高排名區間。
 - 最小母體數：避免用太少股票產生不穩定百分位。
-- 排名方法：目前為 Nearest Rank。
+- 排名方法：目前為「最近名次法」，使用排序後最接近的觀測值作為百分位門檻，方便追溯。
 
 若出現 eligible universe too small：
 
@@ -319,8 +324,8 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 ### 6.5 結果後續操作
 
-- 「保存結果」：保存推薦配置、Profile、Regime 與推薦名單。
-- 「加入候選池」：把選取股票加入 Watchlist。
+- 「保存結果」：保存推薦配置、Profile、Regime 與推薦名單；成功訊息會顯示保存 ID、保存範圍與下一步入口。
+- 「加入觀察清單」：把選取股票加入 Watchlist。
 - 「送 Research Lab 批次回測」：用推薦名單建立批次研究輸入。
 - 「送 Research Lab 推薦回放」：使用推薦配置進行歷史回放。
 - 表格右鍵「記錄到持倉管理」：建立帶推薦來源 metadata 的交易。
@@ -330,7 +335,7 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 ### 7.1 候選池操作
 
-- 「新增股票」：手動輸入股票。
+- 「新增股票」：手動輸入股票代號；系統會先用正式股票資料查找名稱，查不到的代號會被阻擋，不會混入正式觀察清單。
 - 「移除選中」：刪除選取列。
 - 「清空候選池」：刪除全部候選，無法復原。
 - 「刷新」：重新載入資料。
@@ -343,18 +348,15 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 - 「載入到候選池」：把既有 Universe 載入目前候選池。
 - 「新增 / 編輯 / 刪除」：管理 Universe 名稱、說明與股票內容。
 
-目前「送 Research Lab 批次回測」按鈕仍停用。實際流程是：
-
-1. 保存為選股清單。
-2. 開啟「策略回測」。
-3. 選擇「批次股票回測」。
-4. 從選股清單下拉載入。
+「送 Research Lab 批次回測」可直接把目前觀察清單送到 Research Lab，並切到批次股票回測模式。若清單為空，按鈕會停用並在 tooltip 顯示原因；若要保存成可重用 Universe，仍可使用「保存為選股清單」。
 
 ## 8. 每日決策（Daily Decision Desk）
 
 ### 8.1 進入與刷新
 
 Daily Decision Desk 採用 Midnight Analyst 深色介面：深色背景、section header 狀態 badge、緊湊摘要卡片與分行代碼清單。強勢、弱勢與低流動性代碼每類預設顯示前 8 檔，其餘以剩餘檔數摘要；完整資料仍由 service snapshot 保留，不因 UI 摘要而改變計算結果。
+
+warnings 會以繁體中文說明主要原因與影響範圍，並保留原始 token 供除錯追溯；看到 warnings 時先判斷是資料覆蓋率、歷史不足或服務降級，不應只看工程代碼做決策。
 
 1. 進入主視窗頂層 tab「每日決策」。
 2. 進入頁面時會先顯示「尚未載入 / 載入中」，Snapshot 會在背景執行緒建立，避免主 App 啟動被每日決策查詢阻塞。
@@ -647,6 +649,8 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 
 台股整股模擬以 1000 股為單位。高價股若資金不足一張，可能產生 0 交易。
 
+最大持倉數設為 `0` 代表無限制；設為 `1` 代表最多同時只持有 1 檔。這是部位數量限制，不是買賣訊號來源。
+
 ### 9.4 市場限制
 
 - 漲跌停限制
@@ -655,10 +659,10 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 
 如果訊號很多但交易為 0，先檢查資金、整股限制、成交量與參與率，不要直接判定策略沒有訊號。
 
-### 9.5 fixed 與 quantile
+### 9.5 固定門檻與百分位排名
 
-- fixed 使用固定買賣分數。
-- quantile 使用 T-1 以前的 expanding 歷史分布，暖機需要 60 個有效觀測值。
+- 「固定門檻」使用固定買賣分數。
+- 「百分位排名」使用 T-1 以前的 expanding 歷史分布，暖機需要 60 個有效觀測值。
 - 暖機完成前不應產生 quantile 交易訊號。
 - 比較兩模式時必須使用相同資料、成本、成交假設與期間。
 
@@ -693,6 +697,8 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 - 「取消執行」：合作式取消；已開始的單檔工作可能安全收尾。
 - 「保存結果」：將單股回測、批次回測單檔結果、固定組合 per-stock 結果或推薦回放結果保存到 Research Run Registry；系統會保存參數快照、資料 fingerprint、成本、成交假設、績效摘要、factor snapshot / contribution metadata、equity curve 與 trades。單股、批次與固定組合 per-stock 結果的 factor metadata 來自該次回測已產生的 score/factor records，不會在保存時重算分數或重新抓取資料。
 - 「升級為策略版本」：新版 Gate 必須讀取 Research Run Registry，不得只靠單次 summary；run 需 committed / valid、未封存、未升級、具備可還原參數合約版本，且通過最低 validation gate 與 Month 6 lifecycle gate。Lifecycle gate 會檢查交易次數、總報酬、Sharpe、最大回撤、勝率、benchmark excess return、factor quality 與 regime compatibility。成功升級後，若 lifecycle evidence repository 已啟用，系統會保存 applied evidence，包含 decision snapshot、gate reasons 與 version id。
+
+「保存結果」與「升級為策略版本」按鈕會依目前是否已有可保存結果、是否已保存、validation 是否允許而啟用；停用時 tooltip 會說明原因。保存成功訊息會顯示 Registry run ID 與下一步。
 
 Month 6 lifecycle gate 的預設最低交易數為 20 筆，且缺 benchmark excess return 或 factor snapshot 時會保守降級，不允許只靠單次高報酬升級策略版本。通過 Gate 不代表已完成實盤驗證。Demote / retire 判斷會先以 proposed evidence 保存，供人工 review；系統不會自動刪除策略版本或改寫歷史 run。
 
@@ -732,8 +738,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 每次推薦檔數
 - 每期候選上限
 - 持有天數
-- 每週重播或只跑一次
-- 等權或分數加權
+- 每週重播或只跑一次：每週重播會在回放期間定期重新產生推薦名單，只跑一次則只用起始日名單。
+- 等權或分數加權：等權配置平均分配資金，分數加權會讓高分股票取得較高權重。
 
 執行後可保存到 Research Run Registry。歷史載入、刪除與 legacy Promote 能力仍保留在舊 repository 邊界；新版 Cross-run Comparison 與 Registry-based Promote Gate 以 Registry run 為準。結果 details 會包含 `portfolio_credibility`、`unfilled_orders`、`cash_ledger`、`weight_exposure` 與 `gap_risk`：若推薦股票在回放視窗內沒有可用價格列，會以 `missing_price_rows` 記錄為未成交，而不是靜默跳過；若呼叫端提供 `max_participation_rate`，系統會用進場日成交股數與收盤價估算可參與金額，配置金額超過時以 `liquidity_limited` 記錄為未成交。回放現在會在建立 holding 前檢查可用現金，現金不足時以 `cash_limited` 記錄為未成交；`cash_ledger` 由這個現金 gate 流程產生買進、賣出與 `ending_cash`。若呼叫端提供 fee / tax / slippage bps，成本會套用到買賣現金流、ledger breakdown 與 `total_transaction_cost`；未提供時維持無成本回放。若呼叫端提供 `lot_size`，配置金額會依進場價向下取整為可成交整股股數，買不起最小交易單位時以 `lot_size_limited` 記錄為未成交。期間持倉的 `allocation_weight` 代表推薦配置的目標權重，`actual_allocation_weight` 代表整股 sizing 與 cash gate 後的實際可成交權重；`weight_exposure` 會依每個再平衡日彙總目標權重、實際權重、未成交權重與殘餘現金權重。若歷史資料含「開盤價」，`gap_risk.records` 會列出每筆 holding 的 `entry_close_price`、下一個可用交易日 `next_open_price`、`gap_pct`、`gap_direction` 與 `severity`，用來揭露同日收盤成交假設在隔日開盤可能遇到的跳空風險。`portfolio_credibility` 仍會揭露同日收盤成交、再平衡現金重用限制、成交量 / Liquidity 與 Gap 限制；目前仍未建零股、委託簿撮合、買賣價差或 gap 實際成交模型，`gap_risk` 只做風險標籤，不會改變 PnL、成交價、cash ledger 或 sizing。這些 warning 應先讀完，再判讀回放績效。結果仍依成交與推薦回放假設，不等同實盤。
 
@@ -862,6 +868,10 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 若在 SQLite Inspector 查 `3207` 只看到近一兩日，代表 TPEX 歷史補齊或 SQLite 同步未完成。2026-06-17 排查後的正式狀態應可看到 `3207` 覆蓋 `20140102..20260617`、共 2,907 筆。請先檢查 `DATA_ROOT/daily_price_tpex/` 是否有對應日期 CSV，再使用每日股價手動下載、快速/安全更新，或「背景補齊 TPEX + 技術指標」補齊並同步。
 
+### TWSE 股票日價缺漏
+
+若 SQLite Inspector 查 TWSE 股票（例如 `2330`）缺少某個交易日，先檢查 `DATA_ROOT/daily_price/YYYYMMDD.csv` 是否存在；若日檔不存在，代表 TWSE 日檔未下載成功或曾被跳過，需用每日股價手動下載或安全更新補齊該日期範圍後再同步 SQLite。若缺少日期是交易所休市日則屬正常，例如 2026-06-19 為端午節休市。
+
 ### 回測 0 交易
 
 依序檢查：
@@ -896,6 +906,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ## 14. 更新記錄
 
+- 2026-06-23：同步 Full App Healthcheck 修正後的操作說明；新增全部資料月營收狀態卡、Smart Money Top / Bottom 50 預設與分點雙擊跳轉、推薦分析「加入觀察清單」文案、Watchlist 直接送 Research Lab、Daily Decision warnings 中文化、Research Lab 最大持倉 0=無限制、固定門檻 / 百分位排名 tooltip 與推薦回放保存 / 成交假設提醒。
+- 2026-06-23：修正每日股價手動下載 / 快速更新的日期邊界說明；開始日期會納入缺漏檢查，並補充 TWSE 股票日價缺漏排錯方式。
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout 說明，確認月營收、季度財報與 P/E 估值已進 factor records / diagnostics；P/B、P/S 已補 guarded presentation policy，官方歷史 PIT 公告日保留為後續治理 residual，基本面仍不接 `ScoringEngine`。
 - 2026-06-18：更新每日股價與 TPEX 操作說明，確認手動每日股價、快速更新與安全更新皆納入 TPEX 區間補齊、SQLite 同步與技術指標增量；新增背景補齊 TPEX + 技術指標狀態查詢說明，並修正 `3207` 歷史日價缺漏排錯判斷。
 - 2026-06-18：更新每日股價日期選擇與 SQLite 資料檢視操作說明；日期預設空白、日曆定位今天、單一日期可一鍵今日、共用清除會清掉所有日期條件，券商分點篩選可使用下拉選單；背景 TPEX 補齊若技術指標已最新會跳過重算。

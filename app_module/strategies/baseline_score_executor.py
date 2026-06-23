@@ -34,7 +34,7 @@ class BaselineScoreExecutor(StrategyExecutor):
         """獲取策略元數據"""
         return {
             'strategy_id': 'baseline_score_threshold',
-            'name': 'Baseline Score Threshold',
+            'name': '基準分數門檻策略',
             'version': '1.0',
             'description': '總分閾值策略（帶 cooldown 防護），用於回歸測試',
             'category': 'baseline',

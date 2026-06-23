@@ -428,6 +428,9 @@ class MainWindow(QMainWindow):
                         parent=self
                     )
                     watchlist_tab_index = tabs.addTab(watchlist, "觀察清單")
+                    watchlist.sendToBacktestRequested.connect(
+                        lambda config: self._handle_send_to_backtest(backtest, config)
+                    )
                     print("[MainWindow] 觀察清單視圖創建成功")
 
                     # 當切換到觀察清單 Tab 時，自動刷新數據確保同步

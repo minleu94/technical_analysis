@@ -131,8 +131,8 @@ def build_trade_return_histogram_payload(
     clean_values = [_optional_float(value) for value in returns]
     clean_values = [value for value in clean_values if value is not None]
     if not clean_values:
-        payload = build_histogram_chart_payload([], "Trade Return Distribution", "Return (%)")
-        payload["subtitle"] = "Losses left of zero, wins right of zero"
+        payload = build_histogram_chart_payload([], "交易報酬分布", "報酬率 (%)")
+        payload["subtitle"] = "零軸左側為虧損，右側為獲利"
         payload["zeroLine"] = 0.0
         payload["legend"] = _return_legend()
         return payload
@@ -167,9 +167,9 @@ def build_trade_return_histogram_payload(
 
     return {
         "kind": "histogram",
-        "title": "Trade Return Distribution",
-        "subtitle": "Losses left of zero, wins right of zero",
-        "xLabel": "Return (%)",
+        "title": "交易報酬分布",
+        "subtitle": "零軸左側為虧損，右側為獲利",
+        "xLabel": "報酬率 (%)",
         "bins": bins,
         "markers": _histogram_markers(stats),
         "zeroLine": 0.0,
@@ -183,8 +183,8 @@ def build_holding_days_histogram_payload(holding_days: Iterable[Any]) -> Dict[st
     if not clean_values:
         return {
             "kind": "histogram",
-            "title": "Holding Period Distribution",
-            "xLabel": "Holding Period Bucket",
+            "title": "持有天數分布",
+            "xLabel": "持有天數區間",
             "bins": [],
             "markers": [],
             "legend": [],
@@ -217,14 +217,14 @@ def build_holding_days_histogram_payload(holding_days: Iterable[Any]) -> Dict[st
 
     series = pd.Series(clean_values, dtype=float)
     markers = [
-        {"label": "Mean", "value": round(float(series.mean()), 2), "color": "#38bdf8"},
-        {"label": "Median", "value": round(float(series.median()), 2), "color": "#f59e0b"},
+        {"label": "平均", "value": round(float(series.mean()), 2), "color": "#38bdf8"},
+        {"label": "中位數", "value": round(float(series.median()), 2), "color": "#f59e0b"},
     ]
     return {
         "kind": "histogram",
-        "title": "Holding Period Distribution",
-        "subtitle": "Trades grouped by practical holding horizon",
-        "xLabel": "Holding Period Bucket",
+        "title": "持有天數分布",
+        "subtitle": "依實際持倉週期分組",
+        "xLabel": "持有天數區間",
         "bins": bins,
         "markers": markers,
         "legend": [{"label": item["label"], "color": item["color"]} for item in bins],
@@ -342,8 +342,8 @@ def _histogram_markers(stats: Optional[Dict[str, float]]) -> List[Dict[str, Any]
 
     markers = []
     marker_defs = [
-        ("mean", "Mean", "#38bdf8"),
-        ("median", "Median", "#f59e0b"),
+        ("mean", "平均", "#38bdf8"),
+        ("median", "中位數", "#f59e0b"),
         ("var_95", "95% VaR", "#ef4444"),
     ]
     for key, label, color in marker_defs:
@@ -355,8 +355,8 @@ def _histogram_markers(stats: Optional[Dict[str, float]]) -> List[Dict[str, Any]
 
 def _return_legend() -> List[Dict[str, str]]:
     return [
-        {"label": "Loss", "color": "#ef4444"},
-        {"label": "Win", "color": "#22c55e"},
+        {"label": "虧損", "color": "#ef4444"},
+        {"label": "獲利", "color": "#22c55e"},
     ]
 
 

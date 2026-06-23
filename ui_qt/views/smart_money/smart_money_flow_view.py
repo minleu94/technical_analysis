@@ -31,6 +31,7 @@ class SmartMoneyFlowView(QWidget):
         self.flow_service = broker_flow_service
         self.watchlist_service = watchlist_service
         self._data_loaded = False
+        self._all_scanner_signals = []
 
         # 色彩設定 (更為精緻的深藍黑背景)
         palette = self.palette()
@@ -97,6 +98,17 @@ class SmartMoneyFlowView(QWidget):
         self.period_combo.setCurrentIndex(1)
         self.period_combo.currentIndexChanged.connect(self._on_period_changed)
         control_layout.addWidget(self.period_combo)
+
+        # 顯示範圍
+        control_layout.addWidget(QLabel(" 顯示範圍:", styleSheet="color: #94a3b8; font-weight: bold; margin-right: 4px;"))
+        self.scope_combo = QComboBox()
+        self.scope_combo.addItem("Top / Bottom 50", "top_bottom_50")
+        self.scope_combo.addItem("Top 50 買超", "top50")
+        self.scope_combo.addItem("Bottom 50 賣超", "bottom50")
+        self.scope_combo.addItem("全部", "all")
+        self.scope_combo.setToolTip("主表預設顯示買超前 50 與賣超前 50；Summary Strip 仍以全市場訊號為統計母體。")
+        self.scope_combo.currentIndexChanged.connect(lambda _idx=False: self._on_scope_changed())
+        control_layout.addWidget(self.scope_combo)
 
         # Sparkline 圖表類型
         control_layout.addWidget(QLabel(" 趨勢圖樣:", styleSheet="color: #94a3b8; font-weight: bold; margin-right: 4px;"))
@@ -282,6 +294,7 @@ class SmartMoneyFlowView(QWidget):
 
         self.detail_delegate = DetailTableDelegate(self.detail_table)
         self.detail_table.setItemDelegate(self.detail_delegate)
+        self.detail_table.doubleClicked.connect(self._drill_down_branch_from_detail)
 
         detail_layout.addWidget(self.detail_table)
         self.splitter.addWidget(detail_widget)
@@ -349,38 +362,93 @@ class SmartMoneyFlowView(QWidget):
         self.scanner_table.viewport().update()
         self.branch_table.viewport().update()
 
+    def _on_scope_changed(self):
+        if self._data_loaded or self._all_scanner_signals:
+            self._apply_scanner_signals(self._all_scanner_signals)
+
+    def _filter_scanner_signals(self, signals):
+        mode = self.scope_combo.currentData() if hasattr(self, "scope_combo") else "top_bottom_50"
+        signals = list(signals or [])
+        if mode == "all":
+            return signals
+
+        positive = [s for s in signals if s.aggregation.total_net_qty > 0]
+        negative = [s for s in signals if s.aggregation.total_net_qty < 0]
+
+        top = sorted(positive, key=lambda s: s.smart_money_score, reverse=True)[:50]
+        bottom = sorted(negative, key=lambda s: s.aggregation.total_net_qty)[:50]
+
+        if mode == "top50":
+            return top
+        if mode == "bottom50":
+            return bottom
+
+        filtered = []
+        seen_codes = set()
+        for signal in [*top, *bottom]:
+            if signal.stock_code in seen_codes:
+                continue
+            filtered.append(signal)
+            seen_codes.add(signal.stock_code)
+        return filtered
+
+    def _apply_scanner_signals(self, signals):
+        filtered_signals = self._filter_scanner_signals(signals)
+        self.scanner_model = TerminalTableModel(filtered_signals)
+        self.scanner_table.setModel(self.scanner_model)
+
+        self.scanner_table.setColumnWidth(0, 65)
+        self.scanner_table.setColumnWidth(1, 160)
+        self.scanner_table.setColumnWidth(2, 90)
+        self.scanner_table.setColumnWidth(3, 80)
+        self.scanner_table.setColumnWidth(4, 250)
+        self.scanner_table.setColumnWidth(5, 140)
+
+        sel_model = self.scanner_table.selectionModel()
+        if sel_model:
+            sel_model.selectionChanged.connect(self._on_scanner_selection_changed)
+
+        self.sub_card_title.setText("未選取股票")
+        self.sub_card_stats.setText("請從左側表格點選股票以查看主力分點進出明細與原因")
+        self.detail_table.setModel(PandasTableModel(pd.DataFrame(columns=['分點名稱', '買進張數', '賣出張數', '淨買賣超'])))
+
+    def _drill_down_branch_from_detail(self, index):
+        if not index.isValid() or self.detail_table.model() is None:
+            return
+        model = self.detail_table.model()
+        if not hasattr(model, "getDataFrame"):
+            return
+        df = model.getDataFrame()
+        if index.row() >= len(df) or "分點名稱" not in df.columns:
+            return
+
+        branch_name = str(df.iloc[index.row()].get("分點名稱", "")).strip()
+        if not branch_name:
+            return
+
+        match_idx = self.branch_combo.findText(branch_name)
+        if match_idx < 0:
+            QMessageBox.warning(self, "找不到分點", f"分點追蹤清單中找不到「{branch_name}」。")
+            return
+
+        self.tab_widget.setCurrentIndex(1)
+        self.branch_combo.setCurrentIndex(match_idx)
+        self._on_branch_changed()
+
     def _refresh_data(self):
         try:
             period = self._get_current_period_val()
 
             # 1. 取得信號資料
             signals = self.flow_service.get_stock_flow_signals(period=period)
+            self._all_scanner_signals = list(signals or [])
 
             # 2. 更新 Summary Strip
             summary = self.flow_service.get_market_flow_summary(signals=signals, period=period)
             self.summary_strip.update_summary(summary)
 
             # 3. 更新 Scanner Table (使用自定義 Model)
-            self.scanner_model = TerminalTableModel(signals)
-            self.scanner_table.setModel(self.scanner_model)
-
-            # 調整欄寬 (給 Sparkline 跟 Badges 更多空間)
-            self.scanner_table.setColumnWidth(0, 65)  # 分數
-            self.scanner_table.setColumnWidth(1, 160) # 股票
-            self.scanner_table.setColumnWidth(2, 90)  # 淨量
-            self.scanner_table.setColumnWidth(3, 80)  # 集中度
-            self.scanner_table.setColumnWidth(4, 250) # Badges
-            self.scanner_table.setColumnWidth(5, 140) # Sparkline
-
-            # 重新綁定事件
-            sel_model = self.scanner_table.selectionModel()
-            if sel_model:
-                sel_model.selectionChanged.connect(self._on_scanner_selection_changed)
-
-            # 清空 Detail
-            self.sub_card_title.setText("未選取股票")
-            self.sub_card_stats.setText("請從左側表格點選股票以查看主力分點進出明細與原因")
-            self.detail_table.setModel(PandasTableModel(pd.DataFrame(columns=['分點名稱', '買進張數', '賣出張數', '淨買賣超'])))
+            self._apply_scanner_signals(self._all_scanner_signals)
 
             # 4. 更新 Branch Tracker 分點選單
             branches = self.flow_service.get_tracked_branches()

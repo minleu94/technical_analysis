@@ -304,8 +304,8 @@ class BacktestConfigPanel(QWidget):
         position_mgmt_form = QFormLayout()
 
         self.max_positions_input = QSpinBox()
-        self.max_positions_input.setRange(1, 50)
-        self.max_positions_input.setValue(1)
+        self.max_positions_input.setRange(0, 50)
+        self.max_positions_input.setValue(0)
         self.max_positions_input.setSpecialValueText("無限制")
         if 'max_positions' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['max_positions']['tooltip_lines'])
@@ -554,10 +554,18 @@ class BacktestConfigPanel(QWidget):
 
         self.recommendation_portfolio_rebalance = QComboBox()
         self.recommendation_portfolio_rebalance.addItems(["每週重播", "只跑一次"])
+        self.recommendation_portfolio_rebalance.setToolTip(
+            "每週重播：在回測期間依週期重新執行推薦並調整持股。\n"
+            "只跑一次：只在起始日建立一次推薦組合，後續不再重播推薦。"
+        )
         recommendation_portfolio_form.addRow("重播頻率:", self.recommendation_portfolio_rebalance)
 
         self.recommendation_portfolio_allocation = QComboBox()
         self.recommendation_portfolio_allocation.addItems(["等權配置", "分數加權"])
+        self.recommendation_portfolio_allocation.setToolTip(
+            "等權配置：入選股票平均分配資金。\n"
+            "分數加權：依推薦分數提高高分股票權重，會讓資金更集中。"
+        )
         recommendation_portfolio_form.addRow("資金配置:", self.recommendation_portfolio_allocation)
         recommendation_portfolio_layout.addLayout(recommendation_portfolio_form)
 
@@ -613,6 +621,7 @@ class BacktestConfigPanel(QWidget):
             self.save_result_btn = QPushButton("保存結果")
             self.save_result_btn.setMaximumWidth(100)
             self.save_result_btn.setEnabled(False)
+            self.save_result_btn.setToolTip("完成單股回測後可保存成 Registry run。")
             self.save_result_btn.clicked.connect(lambda: self.parent_view._save_backtest_result())
             execute_row.addWidget(self.save_result_btn)
         else:
@@ -623,6 +632,7 @@ class BacktestConfigPanel(QWidget):
             self.promote_btn = QPushButton("升級為策略版本")
             self.promote_btn.setMaximumWidth(120)
             self.promote_btn.setEnabled(False)
+            self.promote_btn.setToolTip("先保存回測結果後，才能進入策略版本升級條件檢查。")
             self.promote_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
             self.promote_btn.clicked.connect(lambda: self.parent_view._promote_backtest_result())
             execute_row.addWidget(self.promote_btn)

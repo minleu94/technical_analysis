@@ -117,7 +117,8 @@ class SqliteInspectorWidget(QWidget):
         row2_layout.addWidget(QLabel("股票代號:"))
         self.stock_code_input = QLineEdit()
         self.stock_code_input.setPlaceholderText("2330 (選填)")
-        self.stock_code_input.setMaximumWidth(100)
+        self.stock_code_input.setMinimumWidth(112)
+        self.stock_code_input.setMaximumWidth(118)
         self.stock_code_input.setToolTip(
             "【股票代號】\n"
             "輸入 4 碼股票代號（例如 2330），用以篩選該個股的資料（對應表需含有 stock_id 或相關代號欄位）。"
@@ -127,7 +128,8 @@ class SqliteInspectorWidget(QWidget):
         row2_layout.addWidget(QLabel("股票名稱:"))
         self.stock_name_input = QLineEdit()
         self.stock_name_input.setPlaceholderText("台積電 (選填)")
-        self.stock_name_input.setMaximumWidth(120)
+        self.stock_name_input.setMinimumWidth(145)
+        self.stock_name_input.setMaximumWidth(155)
         self.stock_name_input.setToolTip(
             "【股票名稱】\n"
             "輸入股票中文名稱或關鍵字（例如 台積電），用以模糊篩選該個股資料。"
@@ -149,8 +151,11 @@ class SqliteInspectorWidget(QWidget):
         )
         row2_layout.addWidget(self.broker_branch_combo)
         self.broker_branch_dropdown_btn = QPushButton("展開")
-        self.broker_branch_dropdown_btn.setMaximumWidth(52)
+        self.broker_branch_dropdown_btn.setMinimumHeight(26)
+        self.broker_branch_dropdown_btn.setMinimumWidth(52)
+        self.broker_branch_dropdown_btn.setMaximumWidth(58)
         self.broker_branch_dropdown_btn.setToolTip("展開券商分點清單")
+        self.broker_branch_dropdown_btn.setStyleSheet(self._compact_filter_button_stylesheet())
         self.broker_branch_dropdown_btn.clicked.connect(self.broker_branch_combo.showPopup)
         row2_layout.addWidget(self.broker_branch_dropdown_btn)
 
@@ -267,8 +272,8 @@ class SqliteInspectorWidget(QWidget):
         date_edit.setMinimumDate(self._null_date)
         date_edit.setMaximumDate(QDate(2100, 12, 31))
         date_edit.setSpecialValueText(" ")
-        date_edit.setMinimumWidth(132)
-        date_edit.setMaximumWidth(150)
+        date_edit.setMinimumWidth(122)
+        date_edit.setMaximumWidth(132)
         date_edit.setDate(default_date or self._null_date)
         date_edit.setStyleSheet("""
             QDateEdit {
@@ -281,7 +286,12 @@ class SqliteInspectorWidget(QWidget):
         button = QPushButton("日曆")
         button.setMaximumWidth(52)
         button.setToolTip("開啟日曆選擇日期")
-        button.setStyleSheet("""
+        button.setStyleSheet(self._compact_filter_button_stylesheet())
+        button.clicked.connect(lambda _checked=False, edit=date_edit, anchor=button: self._show_calendar_popup(edit, anchor))
+        return button
+
+    def _compact_filter_button_stylesheet(self) -> str:
+        return """
             QPushButton {
                 background-color: #f8fafc;
                 color: #334155;
@@ -298,9 +308,7 @@ class SqliteInspectorWidget(QWidget):
             QPushButton:pressed {
                 background-color: #bae6fd;
             }
-        """)
-        button.clicked.connect(lambda _checked=False, edit=date_edit, anchor=button: self._show_calendar_popup(edit, anchor))
-        return button
+        """
 
     def _calendar_page_date(self, date_edit: QDateEdit) -> QDate:
         return QDate.currentDate() if date_edit.date() == self._null_date else date_edit.date()

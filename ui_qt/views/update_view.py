@@ -303,13 +303,14 @@ class UpdateView(QWidget):
         desc_label.setWordWrap(True)
         all_layout.addWidget(desc_label)
 
-        # 數據狀態卡片網格（精美 StatusCard 呈現，取代原先 status_group 內 5 個 TextEdit）
+        # 數據狀態卡片網格（精美 StatusCard 呈現，取代原先 status_group 內多個 TextEdit）
         # 我們將它們宣告為 class member，使底層 _on_status_checked 能直接使用
         self.daily_status_text = StatusCard("每日股票數據", "📊", self)
         self.market_status_text = StatusCard("大盤指數數據", "🧭", self)
         self.industry_status_text = StatusCard("產業指數數據", "🏢", self)
         self.broker_branch_status_text = StatusCard("券商分點數據", "🤝", self)
         self.technical_status_text = StatusCard("技術指標數據", "📈", self)
+        self.monthly_revenue_status_text = StatusCard("月營收資料", "月", self)
 
         # 卡片佈局
         cards_layout = QHBoxLayout()
@@ -319,6 +320,7 @@ class UpdateView(QWidget):
         cards_layout.addWidget(self.industry_status_text)
         cards_layout.addWidget(self.broker_branch_status_text)
         cards_layout.addWidget(self.technical_status_text)
+        cards_layout.addWidget(self.monthly_revenue_status_text)
         all_layout.addLayout(cards_layout)
 
         # 一鍵更新與輔助按鈕
@@ -392,7 +394,7 @@ class UpdateView(QWidget):
         self.check_status_btn.setToolTip(
             "【🔍 檢查數據狀態】\n"
             "查詢並重新偵測 SQLite 資料庫與本地 Raw 原始檔案的最新交易日與總記錄數，\n"
-            "並更新上方 5 張狀態卡片的狀態燈號（🟢最新/🟡待更新/🔴異常/⚪未檢查）。\n"
+            "並更新上方 6 張狀態卡片的狀態燈號（🟢最新/🟡待更新/🔴異常/⚪未檢查）。\n"
             "檢查結果會同步呈現在頂部卡片與下方日誌主控台中。"
         )
         self.check_status_btn.setStyleSheet("""
@@ -552,12 +554,13 @@ class UpdateView(QWidget):
         log_group.setMaximumHeight(180)  # 固定主控台高度
         main_layout.addWidget(log_group)
 
-        # 初始化四個區塊的顯示 (卡片)
+        # 初始化各資料區塊的顯示 (卡片)
         self.daily_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.market_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.industry_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.broker_branch_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.technical_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
+        self.monthly_revenue_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
 
         self.nav_list.setCurrentRow(0)
 
@@ -1368,12 +1371,13 @@ class UpdateView(QWidget):
         self.check_status_btn.setEnabled(True)
         self.check_status_btn.setText("檢查數據狀態")
 
-        # 分別更新四個區塊
+        # 分別更新各資料區塊
         daily_text = self.daily_status_text.toPlainText()
         market_text = self.market_status_text.toPlainText()
         industry_text = self.industry_status_text.toPlainText()
         broker_branch_text = self.broker_branch_status_text.toPlainText()
         technical_text = self.technical_status_text.toPlainText()
+        monthly_revenue_text = self.monthly_revenue_status_text.toPlainText()
 
         for key, value in status.items():
             latest_date = value.get('latest_date', '未知')
@@ -1410,6 +1414,8 @@ class UpdateView(QWidget):
                 if file_count is not None:
                     status_display += f"\n指標檔數：{file_count:,}"
                 technical_text = status_display
+            elif key == 'monthly_revenue':
+                monthly_revenue_text = status_display
 
         # 如果沒有數據，顯示提示
         if not daily_text:
@@ -1422,12 +1428,15 @@ class UpdateView(QWidget):
             broker_branch_text = "尚未檢查"
         if not technical_text:
             technical_text = "尚未檢查"
+        if not monthly_revenue_text:
+            monthly_revenue_text = "尚未檢查"
 
         self.daily_status_text.setPlainText(daily_text)
         self.market_status_text.setPlainText(market_text)
         self.industry_status_text.setPlainText(industry_text)
         self.broker_branch_status_text.setPlainText(broker_branch_text)
         self.technical_status_text.setPlainText(technical_text)
+        self.monthly_revenue_status_text.setPlainText(monthly_revenue_text)
         self._log(f"數據狀態檢查完成")
 
     def _on_status_error(self, error_msg: str):

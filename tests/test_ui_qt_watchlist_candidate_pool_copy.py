@@ -14,4 +14,4 @@ def test_watchlist_view_exposes_research_lab_batch_handoff_copy():
 
     assert 'QPushButton("送 Research Lab 批次回測")' in source
     assert "將目前候選池作為批次股票回測的輸入。" in source
-    assert "此入口將在 Research Lab 批次回測整合時啟用。" in source
+    assert "將目前候選池送到策略回測的批次模式。" in source

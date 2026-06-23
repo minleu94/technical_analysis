@@ -3,7 +3,7 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 from app_module.dtos import RegimeResultDTO
 from ui_qt.views.market_regime_view import MarketRegimeView
@@ -50,3 +50,18 @@ def test_market_regime_detection_shows_technical_details():
     assert view.layer3_content.isHidden() is False
     assert "已展開" in view.layer3_group.title()
     assert view.layer3_layout.count() > 1
+
+    layer3_text = []
+    for index in range(view.layer3_layout.count()):
+        item = view.layer3_layout.itemAt(index)
+        widget = item.widget()
+        if widget:
+            layer3_text.append(widget.toolTip())
+            for child in widget.findChildren(QLabel):
+                layer3_text.append(child.text())
+                layer3_text.append(child.toolTip())
+
+    combined = "\n".join(layer3_text)
+    assert "ADX 衡量趨勢強度" in combined
+    assert "+DI 高於 -DI" in combined
+    assert "0~1 的規則化分數" in combined
