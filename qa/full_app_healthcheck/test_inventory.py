@@ -34,6 +34,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_full_app_healthcheck_run_history_compare.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_quick_mode_release_gate_proposal.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_full_mode_release_checklist.py": "healthcheck-runner-owned",
+    "tests/test_full_app_healthcheck_report_sections.py": "healthcheck-runner-owned",
 
     # ui-healthcheck-direct-bridge
     "tests/test_ui_qt_decision_desk_view.py": "ui-healthcheck-direct-bridge",
