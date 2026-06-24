@@ -119,7 +119,7 @@
 .\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=
 ```
 
-目前：`962 tests collected`（A-3.3 / A-3.4 / A-4 後）。
+目前：`966 tests collected`（A-3.3 / A-3.4 / A-4 / B-2 後）。
 
 ## 5. 下一階段路線總覽
 
@@ -138,7 +138,7 @@
 目的：避免重複寫測試，把現有零碎測試變成 runner 可調度資源。
 
 - B-1：Direct bridge 穩定化。已完成。
-- B-2：Candidate bridge promote policy，逐一把 `ui-healthcheck-candidate-bridge` 升級為 full mode 或保留 manual gap。
+- B-2：Candidate bridge promote policy，逐一把 `ui-healthcheck-candidate-bridge` 升級為 full mode 或保留 manual gap。已完成。
 - B-3：Service oracle metadata，讓 service-oracle 測試可作功能證據，但不直接當 UI flow step。
 - B-4：Coverage burn-down report，讓 `manual-only`、`blocked`、`not-yet-automated` 不被隱藏。
 
@@ -175,7 +175,7 @@
 
 ## 6. 推薦下一個實作批次
 
-下一個批次建議做 B-2 candidate bridge promote policy，不要直接進 D-2。
+下一個批次建議做 B-3 service oracle metadata，不要直接進 D-2。
 
 理由：
 
@@ -183,7 +183,8 @@
 - A-3.3 已建立 known issue matcher，可將錯誤對上已知 manual gap / blocked / likely owner。
 - A-3.4 已建立 handoff recommendation contract，可把 `likely_owner`、evidence、recommended_next_steps 統一成可交接格式。
 - A-4 已可把功能名稱轉成應跑命令、模式、風險與預期報告，讓 QA Agent 更容易安全執行。
-- 下一步 B-2 應先建立 candidate bridge promote policy，避免直接把候選 UI 測試放進 runner。
+- B-2 已建立 candidate bridge promote policy，避免直接把候選 UI 測試放進 runner。
+- 下一步 B-3 應整理 service oracle metadata，讓 service-oracle 測試可作功能證據，但不直接當 UI flow step。
 - D-2 會啟動 MainWindow，風險與 token 成本較高，應等 interpretation pipeline 更完整再進。
 
 ### Task A-3.3：Known Issue Matcher
@@ -337,7 +338,7 @@ Expected:
 你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線，請先不要進 D-2 / MainWindow。
 
 工作目標：
-延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 是否已完成並驗證，然後只做下一個安全批次 B-2 candidate bridge promote policy。不要啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
+延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 是否已完成並驗證，然後只做下一個安全批次 B-3 service oracle metadata。不要啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
 
 必讀文件：
 1. `AGENTS.md`
@@ -364,17 +365,17 @@ Expected:
 
 請先做：
 1. `git status --short`，不要覆寫其他 agent 或使用者未提交變更。
-2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`tests/test_full_app_healthcheck_result_interpreter.py`、`tests/test_full_app_healthcheck_known_issue_matcher.py`、`tests/test_full_app_healthcheck_handoff_contract.py`、`tests/test_full_app_healthcheck_command_advisor.py`、`qa/full_app_healthcheck/feature_router.py`。
+2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`tests/test_full_app_healthcheck_result_interpreter.py`、`tests/test_full_app_healthcheck_known_issue_matcher.py`、`tests/test_full_app_healthcheck_handoff_contract.py`、`tests/test_full_app_healthcheck_command_advisor.py`、`tests/test_full_app_healthcheck_candidate_bridge_policy.py`、`qa/full_app_healthcheck/feature_router.py`。
 3. 跑：
-   `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+   `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 4. 跑：
    `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
-5. 若都通過，開始 B-2：以 TDD 設計 candidate bridge promote policy，先輸出政策與風險判斷，不要直接把候選測試加入 runner bridge。
+5. 若都通過，開始 B-3：以 TDD 設計 service oracle metadata，讓 service-oracle 測試可作功能證據，但不直接當 UI flow step。
 6. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
 7. 完成後只回報檢查與修正結果，不要直接進 D-2。
 
 驗收命令：
-`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 `.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=`
 `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
 `git diff --check`

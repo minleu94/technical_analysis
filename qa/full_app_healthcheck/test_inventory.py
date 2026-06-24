@@ -15,6 +15,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_full_app_healthcheck_test_suite_bridge.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_test_inventory.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_actions.py": "healthcheck-runner-owned",
+    "tests/test_full_app_healthcheck_candidate_bridge_policy.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_command_advisor.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_feature_router.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_handoff_contract.py": "healthcheck-runner-owned",

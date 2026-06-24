@@ -4,11 +4,11 @@
 
 ## 結論
 
-目前有效測試區 Python 檔共 193 個，不含 `__pycache__` 與 `.pytest_cache`。分類結果如下：
+目前有效測試區 Python 檔共 194 個，不含 `__pycache__` 與 `.pytest_cache`。分類結果如下：
 
 | 分類 | 數量 | Runner 使用方式 |
 |---|---:|---|
-| `healthcheck-runner-owned` | 13 | Runner 自身單元測試，不由 runner 呼叫。 |
+| `healthcheck-runner-owned` | 14 | Runner 自身單元測試，不由 runner 呼叫。 |
 | `ui-healthcheck-direct-bridge` | 6 | 可直接登錄到 `test_suite_bridge.py`。 |
 | `ui-healthcheck-candidate-bridge` | 15 | 可逐步評估納入 full mode 或特定 flow diagnostics。 |
 | `service-oracle-data-market` | 37 | 可作資料 / 市場狀態 oracle，不直接當 UI flow step。 |
@@ -28,8 +28,8 @@
 
 | 狀態 | 數量 | 判讀 |
 |---|---:|---|
-| 預設 pytest gate 會收集 | 162 files / 962 tests | 仍屬現行自動化測試；沒有逐名出現在文件中也不代表 unused。 |
-| 目前已由 healthcheck runner bridge 呼叫 | 6 files | direct bridge UI 測試；另有 `scripts/qa_validate_update_tab.py` 作為 QA script bridge，不屬 `tests/` 193 files。 |
+| 預設 pytest gate 會收集 | 163 files / 966 tests | 仍屬現行自動化測試；沒有逐名出現在文件中也不代表 unused。 |
+| 目前已由 healthcheck runner bridge 呼叫 | 6 files | direct bridge UI 測試；另有 `scripts/qa_validate_update_tab.py` 作為 QA script bridge，不屬 `tests/` 194 files。 |
 | pytest support file | 1 | `tests/conftest.py` 不產生測項，但仍被 pytest fixture 系統使用。 |
 | manual legacy 已隔離 | 16 | `tests/manual/` 底下歷史探索腳本，已在 legacy/manual 區，不進預設 pytest。 |
 | manual script 已隔離 | 5 | `tests/scripts/` 底下真實來源 / 外部站台 / 人工整合檢查，不進預設 pytest，也不可進 runner quick/full。 |
@@ -81,6 +81,7 @@
 - `tests/test_full_app_healthcheck_test_suite_bridge.py`
 - `tests/test_full_app_healthcheck_test_inventory.py`
 - `tests/test_full_app_healthcheck_actions.py`
+- `tests/test_full_app_healthcheck_candidate_bridge_policy.py`
 - `tests/test_full_app_healthcheck_command_advisor.py`
 - `tests/test_full_app_healthcheck_feature_router.py`
 - `tests/test_full_app_healthcheck_handoff_contract.py`
