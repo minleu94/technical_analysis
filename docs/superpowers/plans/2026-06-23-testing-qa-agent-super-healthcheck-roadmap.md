@@ -42,7 +42,7 @@
 
 ## 3. 非目標與安全邊界
 
-- 不在目前階段啟動 D-2 MainWindow 真實 UI 導覽，除非該階段被明確啟動。
+- 不在目前階段啟動 D-3 viewport / resize 真實 UI 證據收集，除非該階段被明確啟動。
 - 不執行正式資料更新、migration、backfill apply、資料刪除、清空或強制重建。
 - 不把 runner 自動測試通過等同人工 healthcheck `通過`。
 - 不讓 Testing / QA Agent 修 code；修 code 是 Execution Agent 工作。
@@ -160,7 +160,7 @@
 目的：逐步接近使用者真的打開 app 操作的樣子。
 
 - [x] D-1：Offscreen widget-level UI checks，僅測 widget 可見、文案、layout、QTest 安全點擊。
-- D-2：MainWindow non-destructive smoke，首次允許受控啟動完整主視窗，但仍禁止資料寫入。
+- [x] D-2：MainWindow non-destructive smoke，首次允許受控啟動完整主視窗，但仍禁止資料寫入。
 - D-3：Viewport / resize evidence，輸出 1366x768、1440x900、1920x1080 等截圖與 layout bounds。
 - D-4：High-risk dry-run dialogs，只測 confirmation dialog、取消流程、mock service 未被呼叫。
 - D-5：Visible / interactive mode，日後需要人工旁看時再開，不作第一批必要項。
@@ -176,7 +176,7 @@
 
 ## 6. 推薦下一個實作批次
 
-下一個批次是 D-2 MainWindow non-destructive smoke，但必須先由使用者明確確認後才可進入。
+下一個批次是 D-3 Viewport / resize evidence plan，但必須先由使用者明確確認後才可進入。
 
 理由：
 
@@ -191,14 +191,15 @@
 - C-2 已把 flow model 轉成診斷報告，列出每條閉環的目前覆蓋、缺口、可執行命令建議與交接方向。
 - C-3 已把人工 healthcheck 中的「看不懂、找不到、被遮住、下一步不明」轉成可追蹤 UX gap metadata，並讓 C-2 diagnostics 可以引用。
 - D-1 已建立 offscreen widget-level UI checks，只描述 widget 可見、文案、layout 與安全 QTest 動作，不啟動完整 MainWindow。
-- 下一步 D-2 會啟動完整 MainWindow，風險與 token 成本較高，必須由使用者在新任務中明確確認後才可進。
+- D-2 已建立 MainWindow non-destructive smoke plan metadata，仍不在 unit tests 或 quick/full runner 中啟動 MainWindow。
+- 下一步 D-3 會開始規劃 viewport / resize evidence，接近截圖、視窗尺寸與 layout bounds 驗證，必須由使用者在新任務中明確確認後才可進。
 
-### Task D-2：MainWindow Non-destructive Smoke
+### Task D-3：Viewport / Resize Evidence Plan
 
 **Files:**
 
-- Create: `qa/full_app_healthcheck/mainwindow_smoke_plan.py`
-- Test: `tests/test_full_app_healthcheck_mainwindow_smoke_plan.py`
+- Create: `qa/full_app_healthcheck/viewport_resize_evidence_plan.py`
+- Test: `tests/test_full_app_healthcheck_viewport_resize_evidence_plan.py`
 - Modify: `qa/full_app_healthcheck/test_inventory.py`
 - Modify: `tests/test_full_app_healthcheck_test_inventory.py`
 - Modify: `docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md`
@@ -206,32 +207,32 @@
 
 - [ ] **Step 0: Confirm authorization**
 
-Do not begin D-2 unless the user explicitly confirms that starting full `MainWindow` non-destructive smoke planning is allowed.
+Do not begin D-3 unless the user explicitly confirms that starting viewport / resize evidence planning is allowed.
 
-- [ ] **Step 1: Inspect existing UI entrypoint and D-1 metadata**
+- [ ] **Step 1: Inspect existing D-1 / D-2 metadata**
 
 Run:
 
 ```powershell
-Get-Content -Raw -Encoding UTF8 ui_qt\main.py
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\feature_router.py
-Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\test_suite_bridge.py
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\offscreen_widget_checks.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\mainwindow_smoke_plan.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\ux_gap_mapping.py
 ```
 
-Expected: understand MainWindow entrypoint, existing direct bridge suites, and D-1 offscreen coverage before defining D-2 boundaries.
+Expected: understand which features need viewport evidence, and keep D-3 as metadata until a later explicitly approved executor exists.
 
-- [ ] **Step 2: Write non-destructive smoke plan tests before implementation**
+- [ ] **Step 2: Write viewport evidence plan tests before implementation**
 
-Create `tests/test_full_app_healthcheck_mainwindow_smoke_plan.py` with cases for:
+Create `tests/test_full_app_healthcheck_viewport_resize_evidence_plan.py` with cases for:
 
-- D-2 plan exists but does not execute MainWindow during tests.
-- Every planned smoke step is non-destructive.
-- Every planned smoke step forbids data writes, migration, backfill apply, external fetch, and high-risk dry-run.
-- Planned steps only describe startup, tab presence, read-only visibility, and immediate close behavior.
-- Plan remains metadata until a separate execution runner is explicitly approved.
+- D-3 plan exists but does not launch MainWindow, create screenshots, or resize real widgets during tests.
+- Viewport sizes are explicit and limited to known desktop dimensions such as 1366x768, 1440x900, and 1920x1080.
+- Each evidence item references an existing `FEATURE_ROUTES` feature id.
+- Every evidence item is non-destructive and requires explicit user confirmation before execution.
+- Forbidden actions include data writes, migration, backfill apply, external fetch, high-risk dry-run, and automatic quick/full bridge execution.
 
-- [ ] **Step 3: Implement `mainwindow_smoke_plan.py`**
+- [ ] **Step 3: Implement `viewport_resize_evidence_plan.py`**
 
 Suggested public API:
 
@@ -242,10 +243,11 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class MainWindowSmokePlanStep:
-    step_id: str
+class ViewportResizeEvidencePlan:
+    evidence_id: str
     feature_id: str
     purpose: str
+    viewport_sizes: tuple[str, ...]
     allowed_observations: tuple[str, ...]
     forbidden_actions: tuple[str, ...]
     non_destructive: bool
@@ -254,12 +256,12 @@ class MainWindowSmokePlanStep:
 
 Required helpers:
 
-- `get_mainwindow_smoke_plan() -> tuple[MainWindowSmokePlanStep, ...]`
-- `render_mainwindow_smoke_plan_markdown(steps: Sequence[MainWindowSmokePlanStep]) -> str`
+- `get_viewport_resize_evidence_plan() -> tuple[ViewportResizeEvidencePlan, ...]`
+- `render_viewport_resize_evidence_plan_markdown(plans: Sequence[ViewportResizeEvidencePlan]) -> str`
 
-- [ ] **Step 4: Keep D-2 as a plan unless explicitly approved**
+- [ ] **Step 4: Keep D-3 as a plan unless explicitly approved**
 
-Do not execute MainWindow from unit tests. Do not add D-2 to quick/full runner bridge automatically.
+Do not execute MainWindow, create screenshots, resize real widgets, or add D-3 to quick/full runner bridge automatically.
 
 - [ ] **Step 5: Update inventory and docs count**
 
@@ -280,7 +282,7 @@ Update:
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_viewport_resize_evidence_plan.py tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
 .\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 git diff --check
@@ -298,10 +300,10 @@ Expected:
 複製以下 prompt 到新 Codex 或 Gemini 對話：
 
 ```markdown
-你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 D-2，但 D-2 涉及完整 `MainWindow`，必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
+你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 D-3，但 D-3 涉及 viewport / resize evidence 與後續截圖驗證設計，必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
 
 工作目標：
-延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 是否已完成並驗證。若使用者明確授權進入 D-2，才做 D-2 MainWindow non-destructive smoke plan 的 metadata 與測試；此階段仍不要在單元測試或 runner 中啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
+延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 / D-2 是否已完成並驗證。若使用者明確授權進入 D-3，才做 D-3 Viewport / resize evidence plan 的 metadata 與測試；此階段仍不要在單元測試或 runner 中啟動真實 MainWindow、產生截圖、resize 真實 widget、跑資料寫入、migration 或 high-risk dry-run 實作。
 
 必讀文件：
 1. `AGENTS.md`
@@ -328,18 +330,18 @@ Expected:
 
 請先做：
 1. `git status --short`，不要覆寫其他 agent 或使用者未提交變更。
-2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`qa/full_app_healthcheck/flow_model.py`、`qa/full_app_healthcheck/flow_diagnostics.py`、`qa/full_app_healthcheck/ux_gap_mapping.py`、`qa/full_app_healthcheck/offscreen_widget_checks.py`、`qa/full_app_healthcheck/feature_router.py`、`qa/full_app_healthcheck/test_suite_bridge.py`、`ui_qt/main.py` 與對應測試檔。
+2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`qa/full_app_healthcheck/flow_model.py`、`qa/full_app_healthcheck/flow_diagnostics.py`、`qa/full_app_healthcheck/ux_gap_mapping.py`、`qa/full_app_healthcheck/offscreen_widget_checks.py`、`qa/full_app_healthcheck/mainwindow_smoke_plan.py`、`qa/full_app_healthcheck/feature_router.py` 與對應測試檔。
 3. 跑：
    `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 4. 跑：
    `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
-5. 若都通過，確認使用者是否已明確授權進入 D-2；沒有授權就停止並回報「D-2 需要授權」。
-6. 若已授權，開始 D-2：以 TDD 建立 `qa/full_app_healthcheck/mainwindow_smoke_plan.py` metadata，只描述 MainWindow non-destructive smoke plan，不在測試或 runner 中真正啟動 MainWindow。
+5. 若都通過，確認使用者是否已明確授權進入 D-3；沒有授權就停止並回報「D-3 需要授權」。
+6. 若已授權，開始 D-3：以 TDD 建立 `qa/full_app_healthcheck/viewport_resize_evidence_plan.py` metadata，只描述 viewport / resize evidence plan，不在測試或 runner 中真正啟動 MainWindow、截圖或 resize widget。
 7. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
-8. 完成後只回報檢查與修正結果；不要把 D-2 plan 自動接入 quick/full runner bridge。
+8. 完成後只回報檢查與修正結果；不要把 D-3 plan 自動接入 quick/full runner bridge。
 
 驗收命令：
-`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_viewport_resize_evidence_plan.py tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 `.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=`
 `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
 `git diff --check`
@@ -353,4 +355,4 @@ Expected:
 - [ ] 沒有把 write-risk / manual-only 測試放入 quick 或 full bridge。
 - [ ] 新增測試檔後，test inventory 與文件測試數同步。
 - [ ] quick runner 仍通過。
-- [ ] 若要進 D-2，必須先由使用者明確確認。
+- [ ] 若要進 D-3，必須先由使用者明確確認。
