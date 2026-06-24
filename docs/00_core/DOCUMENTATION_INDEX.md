@@ -158,6 +158,9 @@
 | [QA_UPDATE_TAB_ISSUES.md](../06_qa/QA_UPDATE_TAB_ISSUES.md) | 數據更新 Tab QA 問題。 |
 | [QA_UPDATE_TAB_SUMMARY.md](../06_qa/QA_UPDATE_TAB_SUMMARY.md) | 數據更新 Tab QA 總結。 |
 | [FULL_APP_HEALTHCHECK_2026_06_16.md](../06_qa/FULL_APP_HEALTHCHECK_2026_06_16.md) | 主 UI 人工 smoke test 母檔，涵蓋數據更新、SQLite 檢視、TPEX 日價、券商分點、每日決策、研究與持倉流程。 |
+| [FULL_APP_HEALTHCHECK_COVERAGE_MAPPING_2026_06_24.md](../06_qa/FULL_APP_HEALTHCHECK_COVERAGE_MAPPING_2026_06_24.md) | Full App Healthcheck 母檔逐列 coverage mapping，對照 direct bridge、candidate、service oracle、report-only、manual-only 與 write-risk manual 狀態。 |
+| [FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md](../06_qa/FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md) | Testing / QA Agent + Full App Healthcheck Runner Track A-E closeout，說明 metadata / report-only 工具鏈狀態與安全邊界。 |
+| [TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md](../06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md) | 測試 inventory 分類，標示 direct bridge、candidate bridge、service oracle、write-risk、manual-only 與預設 pytest 收集狀態。 |
 | [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
 | [DOCUMENT_ENCODING_AUDIT_2026_06_16.md](../06_qa/DOCUMENT_ENCODING_AUDIT_2026_06_16.md) | repo 文件 UTF-8 / mojibake 稽核報告，確認顯示雜訊來自終端編碼而非文件內容損壞。 |
