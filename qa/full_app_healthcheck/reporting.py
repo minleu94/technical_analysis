@@ -6,6 +6,7 @@ import json
 from typing import Any, Sequence
 
 from qa.full_app_healthcheck.manifest import HealthcheckMode
+from qa.full_app_healthcheck.report_sections import ReportSection, render_report_sections_markdown
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ def write_reports(
     result: HealthcheckResult,
     output_dir: Path,
     coverage_items: Sequence[Any] | None = None,
+    report_sections: Sequence[ReportSection] | None = None,
 ) -> ReportFiles:
     output_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = output_dir / "REPORT.md"
@@ -43,6 +45,8 @@ def write_reports(
     payload = asdict(result)
     if coverage_items is not None:
         payload["coverage_items"] = [asdict(item) for item in coverage_items]
+    if report_sections:
+        payload["report_sections"] = [asdict(section) for section in report_sections]
 
     json_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, default=str),
@@ -50,11 +54,18 @@ def write_reports(
     )
 
     # Render and save Markdown report
-    markdown_path.write_text(_render_markdown(result, coverage_items), encoding="utf-8")
+    markdown_path.write_text(
+        _render_markdown(result, coverage_items, report_sections),
+        encoding="utf-8",
+    )
     return ReportFiles(markdown=markdown_path, json=json_path)
 
 
-def _render_markdown(result: HealthcheckResult, coverage_items: Sequence[Any] | None = None) -> str:
+def _render_markdown(
+    result: HealthcheckResult,
+    coverage_items: Sequence[Any] | None = None,
+    report_sections: Sequence[ReportSection] | None = None,
+) -> str:
     lines = [
         "# Full App Healthcheck Report",
         "",
@@ -90,5 +101,9 @@ def _render_markdown(result: HealthcheckResult, coverage_items: Sequence[Any] | 
     else:
         lines.append("尚未產生 coverage matrix。")
     lines.append("")
+
+    if report_sections:
+        lines.append(render_report_sections_markdown(report_sections))
+        lines.append("")
 
     return "\n".join(lines)
