@@ -159,7 +159,7 @@
 
 目的：逐步接近使用者真的打開 app 操作的樣子。
 
-- D-1：Offscreen widget-level UI checks，僅測 widget 可見、文案、layout、QTest 安全點擊。
+- [x] D-1：Offscreen widget-level UI checks，僅測 widget 可見、文案、layout、QTest 安全點擊。
 - D-2：MainWindow non-destructive smoke，首次允許受控啟動完整主視窗，但仍禁止資料寫入。
 - D-3：Viewport / resize evidence，輸出 1366x768、1440x900、1920x1080 等截圖與 layout bounds。
 - D-4：High-risk dry-run dialogs，只測 confirmation dialog、取消流程、mock service 未被呼叫。
@@ -176,7 +176,7 @@
 
 ## 6. 推薦下一個實作批次
 
-下一個批次建議做 D-1 offscreen widget-level UI checks，不要直接進 D-2。
+下一個批次是 D-2 MainWindow non-destructive smoke，但必須先由使用者明確確認後才可進入。
 
 理由：
 
@@ -190,45 +190,48 @@
 - C-1 已建立四大 closed-loop flow model，把入口、步驟、證據、下一步導向與 manual gap 變成資料模型。
 - C-2 已把 flow model 轉成診斷報告，列出每條閉環的目前覆蓋、缺口、可執行命令建議與交接方向。
 - C-3 已把人工 healthcheck 中的「看不懂、找不到、被遮住、下一步不明」轉成可追蹤 UX gap metadata，並讓 C-2 diagnostics 可以引用。
-- 下一步 D-1 應只做 offscreen widget-level UI checks，驗證 widget 可見、文案、layout 與 QTest 安全點擊，不啟動完整 MainWindow。
-- D-2 會啟動 MainWindow，風險與 token 成本較高，必須等 D-1 完成且使用者明確確認後再進。
+- D-1 已建立 offscreen widget-level UI checks，只描述 widget 可見、文案、layout 與安全 QTest 動作，不啟動完整 MainWindow。
+- 下一步 D-2 會啟動完整 MainWindow，風險與 token 成本較高，必須由使用者在新任務中明確確認後才可進。
 
-### Task D-1：Offscreen Widget-level UI Checks
+### Task D-2：MainWindow Non-destructive Smoke
 
 **Files:**
 
-- Create: `qa/full_app_healthcheck/offscreen_widget_checks.py`
-- Test: `tests/test_full_app_healthcheck_offscreen_widget_checks.py`
+- Create: `qa/full_app_healthcheck/mainwindow_smoke_plan.py`
+- Test: `tests/test_full_app_healthcheck_mainwindow_smoke_plan.py`
 - Modify: `qa/full_app_healthcheck/test_inventory.py`
 - Modify: `tests/test_full_app_healthcheck_test_inventory.py`
 - Modify: `docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md`
 - Modify: `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`
 
-- [ ] **Step 1: Inspect existing direct bridge widget tests and safety boundaries**
+- [ ] **Step 0: Confirm authorization**
+
+Do not begin D-2 unless the user explicitly confirms that starting full `MainWindow` non-destructive smoke planning is allowed.
+
+- [ ] **Step 1: Inspect existing UI entrypoint and D-1 metadata**
 
 Run:
 
 ```powershell
+Get-Content -Raw -Encoding UTF8 ui_qt\main.py
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\feature_router.py
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\test_suite_bridge.py
-Get-Content -Raw -Encoding UTF8 tests\test_ui_qt_update_view_workbench.py
-Get-Content -Raw -Encoding UTF8 tests\test_ui_qt_decision_desk_view.py
-Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\ux_gap_mapping.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\offscreen_widget_checks.py
 ```
 
-Expected: understand which checks are safe offscreen widget checks and which must remain outside D-1.
+Expected: understand MainWindow entrypoint, existing direct bridge suites, and D-1 offscreen coverage before defining D-2 boundaries.
 
-- [ ] **Step 2: Write offscreen widget check tests before implementation**
+- [ ] **Step 2: Write non-destructive smoke plan tests before implementation**
 
-Create `tests/test_full_app_healthcheck_offscreen_widget_checks.py` with cases for:
+Create `tests/test_full_app_healthcheck_mainwindow_smoke_plan.py` with cases for:
 
-- A registry exists for offscreen-safe widget checks.
-- Checks reference feature ids from `FEATURE_ROUTES`.
-- Checks are marked non-destructive and do not require `MainWindow`.
-- Checks have expected labels/text/layout assertions or safe QTest actions.
-- D-1 registry does not include write-risk, migration, backfill, external data fetch, or high-risk dry-run actions.
+- D-2 plan exists but does not execute MainWindow during tests.
+- Every planned smoke step is non-destructive.
+- Every planned smoke step forbids data writes, migration, backfill apply, external fetch, and high-risk dry-run.
+- Planned steps only describe startup, tab presence, read-only visibility, and immediate close behavior.
+- Plan remains metadata until a separate execution runner is explicitly approved.
 
-- [ ] **Step 3: Implement `offscreen_widget_checks.py`**
+- [ ] **Step 3: Implement `mainwindow_smoke_plan.py`**
 
 Suggested public API:
 
@@ -239,27 +242,24 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class OffscreenWidgetCheck:
-    check_id: str
+class MainWindowSmokePlanStep:
+    step_id: str
     feature_id: str
-    target_widget: str
     purpose: str
-    assertion_scope: tuple[str, ...]
-    safe_qtest_actions: tuple[str, ...]
-    evidence_sources: tuple[str, ...]
+    allowed_observations: tuple[str, ...]
+    forbidden_actions: tuple[str, ...]
     non_destructive: bool
-    requires_main_window: bool = False
+    requires_explicit_user_confirmation: bool = True
 ```
 
 Required helpers:
 
-- `get_all_offscreen_widget_checks() -> tuple[OffscreenWidgetCheck, ...]`
-- `get_offscreen_widget_checks_for_feature(feature_id: str) -> tuple[OffscreenWidgetCheck, ...]`
-- `render_offscreen_widget_checks_markdown(checks: Sequence[OffscreenWidgetCheck]) -> str`
+- `get_mainwindow_smoke_plan() -> tuple[MainWindowSmokePlanStep, ...]`
+- `render_mainwindow_smoke_plan_markdown(steps: Sequence[MainWindowSmokePlanStep]) -> str`
 
-- [ ] **Step 4: Keep D-1 separate from runner execution**
+- [ ] **Step 4: Keep D-2 as a plan unless explicitly approved**
 
-Do not add these checks to quick/full runner bridge automatically. They are metadata and test guidance until explicitly promoted by bridge policy.
+Do not execute MainWindow from unit tests. Do not add D-2 to quick/full runner bridge automatically.
 
 - [ ] **Step 5: Update inventory and docs count**
 
@@ -280,7 +280,7 @@ Update:
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
 .\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 git diff --check
@@ -298,10 +298,10 @@ Expected:
 複製以下 prompt 到新 Codex 或 Gemini 對話：
 
 ```markdown
-你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線，請先不要進 D-2 / MainWindow。
+你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 D-2，但 D-2 涉及完整 `MainWindow`，必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
 
 工作目標：
-延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 是否已完成並驗證，然後只做下一個安全批次 D-1 offscreen widget-level UI checks。不要啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
+延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 是否已完成並驗證。若使用者明確授權進入 D-2，才做 D-2 MainWindow non-destructive smoke plan 的 metadata 與測試；此階段仍不要在單元測試或 runner 中啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
 
 必讀文件：
 1. `AGENTS.md`
@@ -328,17 +328,18 @@ Expected:
 
 請先做：
 1. `git status --short`，不要覆寫其他 agent 或使用者未提交變更。
-2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`qa/full_app_healthcheck/flow_model.py`、`qa/full_app_healthcheck/flow_diagnostics.py`、`qa/full_app_healthcheck/ux_gap_mapping.py`、`tests/test_full_app_healthcheck_result_interpreter.py`、`tests/test_full_app_healthcheck_known_issue_matcher.py`、`tests/test_full_app_healthcheck_handoff_contract.py`、`tests/test_full_app_healthcheck_command_advisor.py`、`tests/test_full_app_healthcheck_candidate_bridge_policy.py`、`tests/test_full_app_healthcheck_service_oracle_metadata.py`、`tests/test_full_app_healthcheck_coverage_burndown.py`、`tests/test_full_app_healthcheck_flow_model.py`、`tests/test_full_app_healthcheck_flow_diagnostics.py`、`tests/test_full_app_healthcheck_ux_gap_mapping.py`、`qa/full_app_healthcheck/feature_router.py`。
+2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`qa/full_app_healthcheck/flow_model.py`、`qa/full_app_healthcheck/flow_diagnostics.py`、`qa/full_app_healthcheck/ux_gap_mapping.py`、`qa/full_app_healthcheck/offscreen_widget_checks.py`、`qa/full_app_healthcheck/feature_router.py`、`qa/full_app_healthcheck/test_suite_bridge.py`、`ui_qt/main.py` 與對應測試檔。
 3. 跑：
-   `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+   `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 4. 跑：
    `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
-5. 若都通過，開始 D-1：以 TDD 設計 offscreen widget-level UI checks metadata，只描述 widget 可見、文案、layout 與安全 QTest 動作，不啟動完整 MainWindow。
-6. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
-7. 完成後只回報檢查與修正結果，不要直接進 D-2。
+5. 若都通過，確認使用者是否已明確授權進入 D-2；沒有授權就停止並回報「D-2 需要授權」。
+6. 若已授權，開始 D-2：以 TDD 建立 `qa/full_app_healthcheck/mainwindow_smoke_plan.py` metadata，只描述 MainWindow non-destructive smoke plan，不在測試或 runner 中真正啟動 MainWindow。
+7. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
+8. 完成後只回報檢查與修正結果；不要把 D-2 plan 自動接入 quick/full runner bridge。
 
 驗收命令：
-`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 `.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=`
 `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
 `git diff --check`

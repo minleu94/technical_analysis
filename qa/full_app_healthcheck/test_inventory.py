@@ -26,8 +26,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_full_app_healthcheck_flow_model.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_flow_diagnostics.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_ux_gap_mapping.py": "healthcheck-runner-owned",
-
-
+    "tests/test_full_app_healthcheck_offscreen_widget_checks.py": "healthcheck-runner-owned",
 
     # ui-healthcheck-direct-bridge
     "tests/test_ui_qt_decision_desk_view.py": "ui-healthcheck-direct-bridge",
