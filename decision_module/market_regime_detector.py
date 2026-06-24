@@ -567,7 +567,18 @@ class MarketRegimeDetector:
     ):
         """分類市場狀態（改進版）"""
         latest_close = close.iloc[-1]
-        details = {}
+        base_details = {
+            'close': latest_close,
+            'ma20': ma20,
+            'ma60': ma60,
+            'ma20_slope': ma20_slope,
+            'adx': adx_value,
+            'plus_di': plus_di,
+            'minus_di': minus_di,
+            'bb_bandwidth': latest_bb_bandwidth,
+        }
+        if rsi_value is not None:
+            base_details['rsi'] = rsi_value
         
         # 1. Trend（趨勢追蹤）- 結構分 + 強度分設計
         trend_conditions = {}
@@ -642,16 +653,10 @@ class MarketRegimeDetector:
         trend_condition = (structure_score >= 0.67) and (trend_confidence >= 0.70)
         
         if trend_condition:
-            details.update({
-                'close': latest_close,
-                'ma20': ma20,
-                'ma60': ma60,
-                'ma20_slope': ma20_slope,
-                'adx': adx_value,
-                'plus_di': plus_di,
-                'minus_di': minus_di,
+            details = {
+                **base_details,
                 **trend_conditions
-            })
+            }
             
             final_regime = self._apply_regime_hysteresis('Trend', date)
             return {
@@ -706,14 +711,11 @@ class MarketRegimeDetector:
         breakout_condition = breakout_confidence >= 0.5  # 至少 50% 的條件滿足
         
         if breakout_condition:
-            details.update({
-                'close': latest_close,
-                'ma20': ma20,
-                'bb_bandwidth': latest_bb_bandwidth,
-                'adx': adx_value,
+            details = {
+                **base_details,
                 'breakout_score': breakout_score,
                 **breakout_conditions
-            })
+            }
             
             final_regime = self._apply_regime_hysteresis('Breakout', date)
             return {
@@ -774,15 +776,11 @@ class MarketRegimeDetector:
         reversion_condition = reversion_confidence >= 0.5  # 至少 50% 的條件滿足
         
         if reversion_condition:
-            details.update({
-                'close': latest_close,
-                'ma20': ma20,
-                'ma60': ma60,
-                'adx': adx_value,
-                'rsi': rsi_value,
+            details = {
+                **base_details,
                 'reversion_score': reversion_score,
                 **reversion_conditions
-            })
+            }
             
             final_regime = self._apply_regime_hysteresis('Reversion', date)
             return {
@@ -793,10 +791,7 @@ class MarketRegimeDetector:
         
         # 預設返回 Reversion（但 confidence 較低）
         details = {
-            'close': latest_close,
-            'ma20': ma20,
-            'ma60': ma60,
-            'adx': adx_value,
+            **base_details,
             'default': True
         }
         

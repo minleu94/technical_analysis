@@ -210,6 +210,8 @@ class SqliteInspectorWidget(QWidget):
         # Tab 1: 資料數據預覽
         self.preview_tab = QWidget()
         preview_layout = QVBoxLayout(self.preview_tab)
+        preview_layout.setContentsMargins(6, 4, 6, 2)
+        preview_layout.setSpacing(2)
         
         self.preview_table = QTableView()
         self.preview_table.setAlternatingRowColors(True)
@@ -218,40 +220,77 @@ class SqliteInspectorWidget(QWidget):
         preview_layout.addWidget(self.preview_table)
 
         # 加入分頁控制列
-        pagination_layout = QHBoxLayout()
+        pagination_bar = QWidget()
+        pagination_bar.setFixedHeight(30)
+        pagination_bar.setStyleSheet("""
+            QPushButton#paginationButton {
+                min-height: 0px;
+                max-height: 24px;
+                padding: 0px 8px;
+                border-radius: 5px;
+            }
+            QSpinBox#paginationSpin {
+                min-height: 0px;
+                max-height: 24px;
+                padding: 0px 4px;
+            }
+            QLabel#paginationText {
+                color: #cbd5e1;
+                font-weight: 600;
+            }
+            QLabel#paginationMuted {
+                color: #64748b;
+                font-weight: 600;
+            }
+        """)
+        pagination_layout = QHBoxLayout(pagination_bar)
+        pagination_layout.setContentsMargins(0, 0, 0, 0)
+        pagination_layout.setSpacing(6)
         self.prev_btn = QPushButton("上一頁")
+        self.prev_btn.setObjectName("paginationButton")
+        self.prev_btn.setFixedSize(56, 24)
         self.prev_btn.setEnabled(False)
         self.prev_btn.clicked.connect(self._on_prev_page)
         pagination_layout.addWidget(self.prev_btn)
 
         self.page_label = QLabel("第 0 / 0 頁")
+        self.page_label.setObjectName("paginationText")
         self.page_label.setAlignment(Qt.AlignCenter)
-        self.page_label.setMinimumWidth(80)
+        self.page_label.setFixedHeight(24)
+        self.page_label.setMinimumWidth(74)
         pagination_layout.addWidget(self.page_label)
 
         self.next_btn = QPushButton("下一頁")
+        self.next_btn.setObjectName("paginationButton")
+        self.next_btn.setFixedSize(56, 24)
         self.next_btn.setEnabled(False)
         self.next_btn.clicked.connect(self._on_next_page)
         pagination_layout.addWidget(self.next_btn)
 
-        pagination_layout.addSpacing(20)
-        pagination_layout.addWidget(QLabel("跳至:"))
+        jump_label = QLabel("跳至:")
+        jump_label.setObjectName("paginationText")
+        jump_label.setFixedHeight(24)
+        pagination_layout.addWidget(jump_label)
         self.jump_spin = QSpinBox()
+        self.jump_spin.setObjectName("paginationSpin")
         self.jump_spin.setRange(1, 1)
-        self.jump_spin.setMinimumWidth(60)
+        self.jump_spin.setFixedSize(52, 24)
         pagination_layout.addWidget(self.jump_spin)
 
         self.jump_btn = QPushButton("跳頁")
+        self.jump_btn.setObjectName("paginationButton")
+        self.jump_btn.setFixedSize(46, 24)
         self.jump_btn.setEnabled(False)
         self.jump_btn.clicked.connect(self._on_jump_page)
         pagination_layout.addWidget(self.jump_btn)
 
         pagination_layout.addStretch()
         self.records_label = QLabel("共 0 筆")
-        self.records_label.setStyleSheet("color: #666; font-weight: bold;")
+        self.records_label.setObjectName("paginationMuted")
+        self.records_label.setFixedHeight(24)
         pagination_layout.addWidget(self.records_label)
 
-        preview_layout.addLayout(pagination_layout)
+        preview_layout.addWidget(pagination_bar)
         self.tabs.addTab(self.preview_tab, "📊 數據預覽")
 
         # Tab 2: 欄位 Schema 結構

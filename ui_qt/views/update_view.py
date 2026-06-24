@@ -473,8 +473,6 @@ class UpdateView(QWidget):
         main_layout.addLayout(workbench_layout)
 
         # 4. 底部全域共享的進度條與日誌 console
-        main_layout.addWidget(QLabel("")) # 微小間隔
-
         # 進度文字與進度條
         self.progress_label = QLabel("")
         self.progress_label.setStyleSheet("color: #475569; font-size: 12px;")
@@ -506,7 +504,7 @@ class UpdateView(QWidget):
             QGroupBox {
                 border: 1px solid #cbd5e1;
                 border-radius: 8px;
-                margin-top: 15px;
+                margin-top: 8px;
                 font-weight: bold;
                 color: #475569;
             }
@@ -517,26 +515,8 @@ class UpdateView(QWidget):
             }
         """)
         log_layout = QVBoxLayout(log_group)
-        log_layout.setContentsMargins(10, 15, 10, 10)
-
-        # 日誌輔助工具列 (如清除日誌)
-        log_toolbar = QHBoxLayout()
-        log_toolbar.addStretch()
-        clear_log_btn = QPushButton("🧹 清除日誌")
-        clear_log_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #64748b;
-                border: none;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                color: #ef4444;
-            }
-        """)
-        clear_log_btn.clicked.connect(lambda: self.log_text.clear())
-        log_toolbar.addWidget(clear_log_btn)
-        log_layout.addLayout(log_toolbar)
+        log_layout.setContentsMargins(10, 2, 10, 6)
+        log_layout.setSpacing(4)
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
@@ -551,7 +531,32 @@ class UpdateView(QWidget):
             }
         """)
         log_layout.addWidget(self.log_text)
-        log_group.setMaximumHeight(180)  # 固定主控台高度
+
+        # 日誌輔助工具列放在底部，避免標題下方出現整條空白列
+        log_toolbar = QHBoxLayout()
+        log_toolbar.setContentsMargins(0, 0, 0, 0)
+        log_toolbar.setSpacing(0)
+        log_toolbar.addStretch()
+        clear_log_btn = QPushButton("🧹 清除日誌")
+        clear_log_btn.setFixedHeight(16)
+        clear_log_btn.setStyleSheet("""
+            QPushButton {
+                min-height: 0px;
+                padding: 0px 4px;
+                background-color: transparent;
+                color: #64748b;
+                border: none;
+                font-size: 10px;
+            }
+            QPushButton:hover {
+                color: #ef4444;
+            }
+        """)
+        clear_log_btn.clicked.connect(lambda: self.log_text.clear())
+        log_toolbar.addWidget(clear_log_btn)
+        log_layout.addLayout(log_toolbar)
+
+        log_group.setMaximumHeight(118)  # 緊湊主控台高度，保留更多空間給上方表格
         main_layout.addWidget(log_group)
 
         # 初始化各資料區塊的顯示 (卡片)

@@ -240,15 +240,15 @@ class MarketRegimeView(QWidget):
             }}
         """)
         layer3_layout = QVBoxLayout()
-        layer3_layout.setContentsMargins(15, 25, 15, 15)  # 增加 top margin，避免標題貼邊
-        layer3_layout.setSpacing(8)
+        layer3_layout.setContentsMargins(15, 12, 15, 12)
+        layer3_layout.setSpacing(6)
         
         # 不使用 ScrollArea，直接使用 Widget（內容不多，可以並排顯示）
         self.layer3_content = QWidget()
         # 改用 QHBoxLayout 來並排顯示 GroupBox
         self.layer3_layout = QHBoxLayout()
         self.layer3_layout.setContentsMargins(0, 0, 0, 0)
-        self.layer3_layout.setSpacing(10)  # GroupBox 之間的間距
+        self.layer3_layout.setSpacing(8)  # GroupBox 之間的間距
         self.layer3_content.setLayout(self.layer3_layout)
         
         layer3_layout.addWidget(self.layer3_content)
@@ -563,8 +563,8 @@ class MarketRegimeView(QWidget):
                 background-color: {COLOR_BG_DARK};
                 border: 1px solid {COLOR_BORDER};
                 border-radius: 3px;
-                margin-top: 8px;
-                padding-top: 12px;
+                margin-top: 6px;
+                padding-top: 8px;
             }}
             QGroupBox::title {{
                 color: {COLOR_TEXT_TITLE};
@@ -573,6 +573,15 @@ class MarketRegimeView(QWidget):
                 padding: 0 5px;
             }}
         """
+
+        def make_detail_label(text: str, tooltip: Optional[str] = None) -> QLabel:
+            label = QLabel(text)
+            label.setWordWrap(True)
+            label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+            if tooltip:
+                label.setToolTip(tooltip)
+            label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
+            return label
         
         # 分類顯示（並排顯示，使用 stretch factor 讓寬度平均分配）
         # 1. 價格與均線
@@ -580,12 +589,13 @@ class MarketRegimeView(QWidget):
         price_group.setStyleSheet(groupbox_style)
         price_group.setMinimumWidth(150)  # 設置最小寬度
         price_layout = QVBoxLayout()
-        price_layout.setContentsMargins(8, 8, 8, 8)
+        price_layout.setContentsMargins(8, 6, 8, 6)
+        price_layout.setSpacing(4)
         for key in ['close', 'ma20', 'ma60', 'ma20_slope']:
             if key in details:
-                label = QLabel(f"{indicator_map.get(key, key)}: {self._format_value(details[key])}")
-                label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
-                price_layout.addWidget(label)
+                price_layout.addWidget(
+                    make_detail_label(f"{indicator_map.get(key, key)}: {self._format_value(details[key])}")
+                )
         price_group.setLayout(price_layout)
         self.layer3_layout.addWidget(price_group, 1)  # stretch factor = 1
         
@@ -596,18 +606,16 @@ class MarketRegimeView(QWidget):
         trend_help = "ADX 衡量趨勢強度，不代表方向；+DI 高於 -DI 表示上行力量較強，反之偏弱。單一指標不可作為買賣訊號。"
         trend_group.setToolTip(trend_help)
         trend_layout = QVBoxLayout()
-        trend_layout.setContentsMargins(8, 8, 8, 8)
-        trend_help_label = QLabel(trend_help)
-        trend_help_label.setWordWrap(True)
-        trend_help_label.setToolTip(trend_help)
-        trend_help_label.setStyleSheet(f"color: {COLOR_TEXT_TERTIARY}; font-size: 11px;")
-        trend_layout.addWidget(trend_help_label)
+        trend_layout.setContentsMargins(8, 6, 8, 6)
+        trend_layout.setSpacing(4)
         for key in ['adx', 'adx_value', 'adx_contribution', 'plus_di', 'minus_di', 'atr']:
             if key in details:
-                label = QLabel(f"{indicator_map.get(key, key)}: {self._format_value(details[key])}")
-                label.setToolTip(trend_help)
-                label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
-                trend_layout.addWidget(label)
+                trend_layout.addWidget(
+                    make_detail_label(
+                        f"{indicator_map.get(key, key)}: {self._format_value(details[key])}",
+                        trend_help,
+                    )
+                )
         trend_group.setLayout(trend_layout)
         self.layer3_layout.addWidget(trend_group, 1)
         
@@ -618,19 +626,17 @@ class MarketRegimeView(QWidget):
         score_help = "結構分、強度分與趨勢規則分是 0~1 的規則化分數；1 代表達到目前規則上限，不等於 100% 機率或未來勝率。"
         score_group.setToolTip(score_help)
         score_layout = QVBoxLayout()
-        score_layout.setContentsMargins(8, 8, 8, 8)
-        score_help_label = QLabel(score_help)
-        score_help_label.setWordWrap(True)
-        score_help_label.setToolTip(score_help)
-        score_help_label.setStyleSheet(f"color: {COLOR_TEXT_TERTIARY}; font-size: 11px;")
-        score_layout.addWidget(score_help_label)
+        score_layout.setContentsMargins(8, 6, 8, 6)
+        score_layout.setSpacing(4)
         for key in ['structure_score', 'strength_score', 'trend_confidence', 
                     'trend_distance', 'distance_contribution', 'reversion_score', 'breakout_score']:
             if key in details:
-                label = QLabel(f"{indicator_map.get(key, key)}: {self._format_value(details[key])}")
-                label.setToolTip(score_help)
-                label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
-                score_layout.addWidget(label)
+                score_layout.addWidget(
+                    make_detail_label(
+                        f"{indicator_map.get(key, key)}: {self._format_value(details[key])}",
+                        score_help,
+                    )
+                )
         score_group.setLayout(score_layout)
         self.layer3_layout.addWidget(score_group, 1)
         
@@ -639,13 +645,14 @@ class MarketRegimeView(QWidget):
         other_group.setStyleSheet(groupbox_style)
         other_group.setMinimumWidth(150)
         other_layout = QVBoxLayout()
-        other_layout.setContentsMargins(8, 8, 8, 8)
+        other_layout.setContentsMargins(8, 6, 8, 6)
+        other_layout.setSpacing(4)
         has_other_indicators = False
         for key in ['bb_bandwidth', 'rsi']:
             if key in details and details[key] is not None:
-                label = QLabel(f"{indicator_map.get(key, key)}: {self._format_value(details[key])}")
-                label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
-                other_layout.addWidget(label)
+                other_layout.addWidget(
+                    make_detail_label(f"{indicator_map.get(key, key)}: {self._format_value(details[key])}")
+                )
                 has_other_indicators = True
         
         # 如果沒有其他指標，顯示提示訊息
@@ -662,7 +669,8 @@ class MarketRegimeView(QWidget):
         condition_group.setStyleSheet(groupbox_style)
         condition_group.setMinimumWidth(180)  # 判斷條件文字較長，設置稍大的最小寬度
         condition_layout = QVBoxLayout()
-        condition_layout.setContentsMargins(8, 8, 8, 8)
+        condition_layout.setContentsMargins(8, 6, 8, 6)
+        condition_layout.setSpacing(4)
         has_conditions = False
         for key, value in details.items():
             if isinstance(value, bool) and key in condition_map:
@@ -670,6 +678,8 @@ class MarketRegimeView(QWidget):
                 status_color = COLOR_CONF_HIGH if value else COLOR_TEXT_TERTIARY
                 label = QLabel(f"<span style='color: {status_color};'>{status}</span> {condition_map.get(key, key)}")
                 label.setTextFormat(Qt.RichText)
+                label.setWordWrap(True)
+                label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
                 label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
                 condition_layout.addWidget(label)
                 has_conditions = True
@@ -692,11 +702,10 @@ class MarketRegimeView(QWidget):
             raw_group.setStyleSheet(groupbox_style)
             raw_group.setMinimumWidth(150)
             raw_layout = QVBoxLayout()
-            raw_layout.setContentsMargins(8, 8, 8, 8)
+            raw_layout.setContentsMargins(8, 6, 8, 6)
+            raw_layout.setSpacing(4)
             for key in raw_keys:
-                label = QLabel(f"{key}: {self._format_value(details[key])}")
-                label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
-                raw_layout.addWidget(label)
+                raw_layout.addWidget(make_detail_label(f"{key}: {self._format_value(details[key])}"))
             raw_group.setLayout(raw_layout)
             self.layer3_layout.addWidget(raw_group, 1)
         
