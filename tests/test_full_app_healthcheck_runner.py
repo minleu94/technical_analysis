@@ -1,11 +1,17 @@
 import json
+from dataclasses import asdict
 
 import pytest
 
 from qa.full_app_healthcheck.manifest import HealthcheckManifest, HealthcheckMode, HealthcheckStep, RiskLevel
 from qa.full_app_healthcheck.report_sections import ReportSection
 from qa.full_app_healthcheck.runner import HealthcheckRunner
-from scripts.run_full_app_healthcheck import parse_args
+from qa.full_app_healthcheck.run_history_manifest import (
+    FeatureRunRecord,
+    SuiteRunRecord,
+    build_run_history_manifest,
+)
+from scripts.run_full_app_healthcheck import build_cli_report_sections, parse_args
 
 
 def test_runner_dispatches_registered_action(tmp_path):
@@ -106,3 +112,68 @@ def test_full_app_healthcheck_cli_parse_report_sections():
     )
 
     assert args.report_sections == ["coverage-burndown", "flow-diagnostics"]
+
+
+def test_full_app_healthcheck_cli_parse_run_history_comparison_manifests():
+    args = parse_args(
+        [
+            "--mode",
+            "quick",
+            "--compare-baseline-manifest",
+            "baseline.json",
+            "--compare-candidate-manifest",
+            "candidate.json",
+        ]
+    )
+
+    assert args.compare_baseline_manifest == "baseline.json"
+    assert args.compare_candidate_manifest == "candidate.json"
+
+
+def test_build_cli_report_sections_appends_run_history_comparison(tmp_path):
+    baseline = build_run_history_manifest(
+        run_id="baseline",
+        commit="base",
+        mode="quick",
+        viewport=None,
+        suite_results=(SuiteRunRecord("suite_fixed", "failed", "pytest fixed", 1.0, None),),
+        feature_results=(FeatureRunRecord("update_view", "manual-gap", "quick", "baseline gap"),),
+        manual_gaps=("old gap",),
+        generated_at="2026-06-24T00:00:00Z",
+    )
+    candidate = build_run_history_manifest(
+        run_id="candidate",
+        commit="candidate",
+        mode="quick",
+        viewport=None,
+        suite_results=(SuiteRunRecord("suite_fixed", "passed", "pytest fixed", 1.0, None),),
+        feature_results=(FeatureRunRecord("update_view", "passed", "quick", "candidate ok"),),
+        manual_gaps=(),
+        generated_at="2026-06-24T00:05:00Z",
+    )
+    baseline_path = tmp_path / "baseline.json"
+    candidate_path = tmp_path / "candidate.json"
+    baseline_path.write_text(json.dumps(asdict(baseline)), encoding="utf-8-sig")
+    candidate_path.write_text(json.dumps(asdict(candidate)), encoding="utf-8-sig")
+
+    args = parse_args(
+        [
+            "--mode",
+            "quick",
+            "--report-section",
+            "quick-gate-proposal",
+            "--compare-baseline-manifest",
+            str(baseline_path),
+            "--compare-candidate-manifest",
+            str(candidate_path),
+        ]
+    )
+
+    sections = build_cli_report_sections(args)
+
+    assert tuple(section.section_id for section in sections) == (
+        "quick-gate-proposal",
+        "run-history-comparison",
+    )
+    assert sections[-1].payload["baseline_run_id"] == "baseline"
+    assert sections[-1].payload["fixed_suite_count"] == 1

@@ -21,8 +21,8 @@
 - 不執行 migration、backfill apply 或正式資料寫入。
 - 不把 service oracle tests 當成 UI flow steps。
 - 不把 manual gap 當成 pass evidence。
-- 第一版只納入不需要額外輸入的 sections：`coverage-burndown`、`flow-diagnostics`、`quick-gate-proposal`、`full-release-checklist`。
-- `run_history_compare` 需要 baseline / candidate manifest input，留到後續獨立批次。
+- 靜態 sections 透過 `--report-section` 明確 opt-in：`coverage-burndown`、`flow-diagnostics`、`quick-gate-proposal`、`full-release-checklist`。
+- `run-history-comparison` 需要 baseline / candidate manifest input，透過 `--compare-baseline-manifest` 與 `--compare-candidate-manifest` 明確 opt-in。
 
 ## 檔案結構
 
@@ -632,7 +632,7 @@ assert len(get_files_by_category("healthcheck-runner-owned")) == 28
 在 `docs/06_qa/FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md` 的「建議下一步」段落確認保留：
 
 ```markdown
-補充：選項 2 的第一版實作計畫已建立於 `docs/superpowers/plans/2026-06-23-report-only-healthcheck-sections.md`。該計畫只納入不需要額外輸入的靜態 QA sections：coverage burn-down、flow diagnostics、quick gate proposal 與 full release checklist。Run history comparison 需要 baseline / candidate manifest input，應在後續獨立小批次處理。
+補充：選項 2 已完成為 opt-in report-only sections，可透過 `--report-section` 加入 coverage burn-down、flow diagnostics、quick gate proposal 與 full release checklist；也可透過 `--compare-baseline-manifest` 與 `--compare-candidate-manifest` 加入 run-history-comparison。未傳上述參數時預設 healthcheck output 與 runner bridge 行為不變。
 ```
 
 - [ ] **Step 6：最終驗證**

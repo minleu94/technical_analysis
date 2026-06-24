@@ -70,7 +70,7 @@
 
 最安全的下一個工程方向是選項 2，但必須維持 report-only，且需要先核准新的實作計畫。
 
-補充：選項 2 的第一版實作已完成為 opt-in report-only sections，可透過 `--report-section` 將 coverage burn-down、flow diagnostics、quick gate proposal 與 full release checklist 加入 `REPORT.md` / `result.json`。未傳 `--report-section` 時預設 healthcheck output 與 runner bridge 行為不變。Run history comparison 需要 baseline / candidate manifest input，應在後續獨立小批次處理。
+補充：選項 2 已完成為 opt-in report-only sections，可透過 `--report-section` 將 coverage burn-down、flow diagnostics、quick gate proposal 與 full release checklist 加入 `REPORT.md` / `result.json`。未傳 `--report-section` 時預設 healthcheck output 與 runner bridge 行為不變。Run history comparison 也已支援，但必須明確提供 `--compare-baseline-manifest` 與 `--compare-candidate-manifest` 兩個 manifest JSON 路徑，才會附加 `run-history-comparison` section。
 
 ## 驗證快照
 

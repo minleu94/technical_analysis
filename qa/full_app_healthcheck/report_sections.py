@@ -19,6 +19,11 @@ from qa.full_app_healthcheck.quick_mode_release_gate_proposal import (
     generate_quick_mode_release_gate_proposal,
     render_quick_mode_release_gate_proposal_markdown,
 )
+from qa.full_app_healthcheck.run_history_compare import (
+    compare_run_history_manifests,
+    render_run_history_comparison_markdown,
+)
+from qa.full_app_healthcheck.run_history_manifest import RunHistoryManifest
 
 
 ALLOWED_REPORT_SECTION_IDS = frozenset(
@@ -77,6 +82,30 @@ def render_report_sections_markdown(sections: Sequence[ReportSection]) -> str:
             ]
         )
     return "\n".join(lines).rstrip()
+
+
+def build_run_history_comparison_report_section(
+    baseline: RunHistoryManifest,
+    candidate: RunHistoryManifest,
+) -> ReportSection:
+    comparison = compare_run_history_manifests(baseline, candidate)
+    return ReportSection(
+        section_id="run-history-comparison",
+        title="Run History Comparison",
+        markdown=render_run_history_comparison_markdown(comparison),
+        payload={
+            "report_only": True,
+            "baseline_run_id": comparison.baseline_run_id,
+            "candidate_run_id": comparison.candidate_run_id,
+            "added_suite_count": len(comparison.added_suite_ids),
+            "removed_suite_count": len(comparison.removed_suite_ids),
+            "fixed_suite_count": len(comparison.fixed_suite_ids),
+            "regressed_suite_count": len(comparison.regressed_suite_ids),
+            "new_manual_gap_count": len(comparison.new_manual_gaps),
+            "resolved_manual_gap_count": len(comparison.resolved_manual_gaps),
+            "feature_status_change_count": len(comparison.feature_status_changes),
+        },
+    )
 
 
 def _section_builders() -> dict[str, Callable[[], ReportSection]]:

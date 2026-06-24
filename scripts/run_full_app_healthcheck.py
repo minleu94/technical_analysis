@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -13,8 +14,17 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from qa.full_app_healthcheck.default_manifest import build_default_manifest
 from qa.full_app_healthcheck.manifest import HealthcheckMode
-from qa.full_app_healthcheck.report_sections import ALLOWED_REPORT_SECTION_IDS, build_report_sections
+from qa.full_app_healthcheck.report_sections import (
+    ALLOWED_REPORT_SECTION_IDS,
+    build_report_sections,
+    build_run_history_comparison_report_section,
+)
 from qa.full_app_healthcheck.runner import HealthcheckRunner
+from qa.full_app_healthcheck.run_history_manifest import (
+    FeatureRunRecord,
+    RunHistoryManifest,
+    SuiteRunRecord,
+)
 
 
 def run_existing_suites_for_mode(context, step):
@@ -73,14 +83,65 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         help="Append an opt-in, report-only QA metadata section to REPORT.md and result.json.",
     )
+    parser.add_argument("--compare-baseline-manifest", default=None)
+    parser.add_argument("--compare-candidate-manifest", default=None)
     return parser.parse_args(argv)
+
+
+def build_cli_report_sections(args: argparse.Namespace):
+    sections = list(build_report_sections(args.report_sections))
+    baseline_path = args.compare_baseline_manifest
+    candidate_path = args.compare_candidate_manifest
+    if bool(baseline_path) != bool(candidate_path):
+        raise ValueError(
+            "--compare-baseline-manifest and --compare-candidate-manifest must be provided together."
+        )
+    if baseline_path and candidate_path:
+        sections.append(
+            build_run_history_comparison_report_section(
+                _load_run_history_manifest(Path(baseline_path)),
+                _load_run_history_manifest(Path(candidate_path)),
+            )
+        )
+    return tuple(sections)
+
+
+def _load_run_history_manifest(path: Path) -> RunHistoryManifest:
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    return RunHistoryManifest(
+        run_id=payload["run_id"],
+        commit=payload["commit"],
+        mode=payload["mode"],
+        viewport=payload.get("viewport"),
+        suite_results=tuple(
+            SuiteRunRecord(
+                suite_id=item["suite_id"],
+                status=item["status"],
+                command=item["command"],
+                duration_seconds=item.get("duration_seconds"),
+                evidence_path=item.get("evidence_path"),
+            )
+            for item in payload.get("suite_results", ())
+        ),
+        feature_results=tuple(
+            FeatureRunRecord(
+                feature_id=item["feature_id"],
+                status=item["status"],
+                route_mode=item["route_mode"],
+                evidence_summary=item["evidence_summary"],
+            )
+            for item in payload.get("feature_results", ())
+        ),
+        manual_gaps=tuple(payload.get("manual_gaps", ())),
+        generated_at=payload["generated_at"],
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     mode = HealthcheckMode(args.mode)
     manifest = build_default_manifest()
-    report_sections = build_report_sections(args.report_sections)
+    report_sections = build_cli_report_sections(args)
 
     # We will build the coverage baseline here in Batch C and pass it to runner
     coverage_items = None
