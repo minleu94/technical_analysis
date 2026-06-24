@@ -162,7 +162,7 @@
 - [x] D-1：Offscreen widget-level UI checks，僅測 widget 可見、文案、layout、QTest 安全點擊。
 - [x] D-2：MainWindow non-destructive smoke，首次允許受控啟動完整主視窗，但仍禁止資料寫入。
 - [x] D-3：Viewport / resize evidence，輸出 1366x768、1440x900、1920x1080 等截圖與 layout bounds。
-- D-4：High-risk dry-run dialogs，只測 confirmation dialog、取消流程、mock service 未被呼叫。
+- [x] D-4：High-risk dry-run dialogs，只測 confirmation dialog、取消流程、mock service 未被呼叫。
 - D-5：Visible / interactive mode，日後需要人工旁看時再開，不作第一批必要項。
 
 ### Track E：Release Gate 與版本比較
@@ -176,7 +176,7 @@
 
 ## 6. 推薦下一個實作批次
 
-下一個批次是 D-4 High-risk dry-run dialogs，但必須先由使用者明確確認後才可進入。
+下一個批次是 E-1 Run history manifest，但必須先由使用者明確確認後才可進入。
 
 理由：
 
@@ -193,14 +193,15 @@
 - D-1 已建立 offscreen widget-level UI checks，只描述 widget 可見、文案、layout 與安全 QTest 動作，不啟動完整 MainWindow。
 - D-2 已建立 MainWindow non-destructive smoke plan metadata，仍不在 unit tests 或 quick/full runner 中啟動 MainWindow。
 - D-3 已建立 Viewport / resize evidence plan metadata，仍不在 unit tests 或 quick/full runner 中啟動 MainWindow、截圖或 resize widget。
-- 下一步 D-4 會開始規劃 high-risk dry-run dialogs 驗證，必須由使用者在新任務中明確確認後才可進。
+- D-4 已建立 High-risk dry-run dialog plan metadata，仍不在 unit tests 或 quick/full runner 中啟動 MainWindow、執行 dialog、或呼叫真實 service。
+- 下一步 E-1 會開始規劃 run history manifest 保存，以供未來版本升級比較。
 
-### Task D-4：High-risk Dry-run Dialog Plan
+### Task E-1：Run History Manifest
 
 **Files:**
 
-- Create: `qa/full_app_healthcheck/high_risk_dry_run_dialog_plan.py`
-- Test: `tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py`
+- Create: `qa/full_app_healthcheck/run_history_manifest.py`
+- Test: `tests/test_full_app_healthcheck_run_history_manifest.py`
 - Modify: `qa/full_app_healthcheck/test_inventory.py`
 - Modify: `tests/test_full_app_healthcheck_test_inventory.py`
 - Modify: `docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md`
@@ -208,33 +209,34 @@
 
 - [ ] **Step 0: Confirm authorization**
 
-Do not begin D-4 unless the user explicitly confirms that starting high-risk dry-run dialog planning is allowed.
+Do not begin E-1 unless the user explicitly confirms that starting run history manifest planning is allowed.
 
-- [ ] **Step 1: Inspect existing D-1 / D-2 / D-3 metadata**
+- [ ] **Step 1: Inspect existing runner and D-track metadata**
 
 Run:
 
 ```powershell
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\runner.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\reporting.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\manifest.py
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\feature_router.py
-Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\offscreen_widget_checks.py
-Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\mainwindow_smoke_plan.py
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\viewport_resize_evidence_plan.py
-Get-Content -Raw -Encoding UTF8 tests\test_ui_qt_update_view_workbench.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\high_risk_dry_run_dialog_plan.py
 ```
 
-Expected: understand high-risk dialog boundaries while keeping D-4 as metadata until a later explicitly approved executor exists.
+Expected: understand current run/report structures and keep E-1 as metadata/schema helpers unless a later executor explicitly writes manifests.
 
-- [ ] **Step 2: Write high-risk dry-run dialog plan tests before implementation**
+- [ ] **Step 2: Write run history manifest tests before implementation**
 
-Create `tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py` with cases for:
+Create `tests/test_full_app_healthcheck_run_history_manifest.py` with cases for:
 
-- D-4 plan exists but does not execute dialogs, click confirm buttons, invoke services, or start MainWindow during tests.
-- Each dialog plan references an existing `FEATURE_ROUTES` feature id.
-- Every dialog plan is non-destructive and requires explicit user confirmation before any later executor can use it.
-- Allowed observations are limited to confirmation-copy expectations, cancel-path expectations, and mock-service-not-called evidence.
-- Forbidden actions include confirm/apply clicks, data writes, migration, backfill apply, external fetch, high-risk dry-run execution, and automatic quick/full bridge execution.
+- Run history manifest dataclass can store run_id, commit, mode, viewport, suite results, feature results, manual gaps, and generated_at.
+- Manifest creation is pure in memory and does not write files.
+- Mode values are constrained to known healthcheck modes.
+- Feature ids in feature results must exist in `FEATURE_ROUTES`.
+- Markdown rendering summarizes mode, commit, suites, features, and manual gaps.
 
-- [ ] **Step 3: Implement `high_risk_dry_run_dialog_plan.py`**
+- [ ] **Step 3: Implement `run_history_manifest.py`**
 
 Suggested public API:
 
@@ -245,26 +247,25 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class HighRiskDryRunDialogPlan:
-    dialog_id: str
-    feature_id: str
-    purpose: str
-    allowed_observations: tuple[str, ...]
-    required_cancel_path: str
-    mock_service_not_called: bool
-    forbidden_actions: tuple[str, ...]
-    non_destructive: bool
-    requires_explicit_user_confirmation: bool = True
+class RunHistoryManifest:
+    run_id: str
+    commit: str
+    mode: str
+    viewport: str | None
+    suite_results: tuple[SuiteRunRecord, ...]
+    feature_results: tuple[FeatureRunRecord, ...]
+    manual_gaps: tuple[str, ...]
+    generated_at: str
 ```
 
 Required helpers:
 
-- `get_high_risk_dry_run_dialog_plan() -> tuple[HighRiskDryRunDialogPlan, ...]`
-- `render_high_risk_dry_run_dialog_plan_markdown(plans: Sequence[HighRiskDryRunDialogPlan]) -> str`
+- `build_run_history_manifest(...) -> RunHistoryManifest`
+- `render_run_history_manifest_markdown(manifest: RunHistoryManifest) -> str`
 
-- [ ] **Step 4: Keep D-4 as a plan unless explicitly approved**
+- [ ] **Step 4: Keep E-1 pure unless explicitly approved**
 
-Do not execute dialogs, click confirm buttons, call services, start MainWindow, or add D-4 to quick/full runner bridge automatically.
+Do not write output files, mutate run output directories, start MainWindow, execute dialogs, or add E-1 to quick/full runner bridge automatically.
 
 - [ ] **Step 5: Update inventory and docs count**
 
@@ -285,7 +286,7 @@ Update:
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py tests/test_full_app_healthcheck_viewport_resize_evidence_plan.py tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_run_history_manifest.py tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py tests/test_full_app_healthcheck_viewport_resize_evidence_plan.py tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
 .\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 git diff --check
@@ -303,10 +304,10 @@ Expected:
 複製以下 prompt 到新 Codex 或 Gemini 對話：
 
 ```markdown
-你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 D-4，但 D-4 涉及 high-risk dry-run dialog 驗證設計，必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
+你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 E-1 Run history manifest，但必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
 
 工作目標：
-延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 / D-2 / D-3 是否已完成並驗證。若使用者明確授權進入 D-4，才做 D-4 High-risk dry-run dialog plan 的 metadata 與測試；此階段仍不要在單元測試或 runner 中啟動真實 MainWindow、執行 dialog、點擊確認、呼叫 service、跑資料寫入、migration、backfill apply 或 high-risk dry-run 實作。
+延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 / D-2 / D-3 / D-4 是否已完成並驗證。若使用者明確授權進入 E-1，才做 E-1 Run history manifest 的純 metadata/schema helper 與測試；此階段不要寫 output 檔、不要啟動 MainWindow、不要執行 dialog、不要呼叫 service、不要資料寫入、migration、backfill apply 或 high-risk dry-run 實作。
 
 必讀文件：
 1. `AGENTS.md`
@@ -333,18 +334,18 @@ Expected:
 
 請先做：
 1. `git status --short`，不要覆寫其他 agent 或使用者未提交變更。
-2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`qa/full_app_healthcheck/flow_model.py`、`qa/full_app_healthcheck/flow_diagnostics.py`、`qa/full_app_healthcheck/ux_gap_mapping.py`、`qa/full_app_healthcheck/offscreen_widget_checks.py`、`qa/full_app_healthcheck/mainwindow_smoke_plan.py`、`qa/full_app_healthcheck/viewport_resize_evidence_plan.py`、`qa/full_app_healthcheck/feature_router.py` 與對應測試檔。
+2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`qa/full_app_healthcheck/flow_model.py`、`qa/full_app_healthcheck/flow_diagnostics.py`、`qa/full_app_healthcheck/ux_gap_mapping.py`、`qa/full_app_healthcheck/offscreen_widget_checks.py`、`qa/full_app_healthcheck/mainwindow_smoke_plan.py`、`qa/full_app_healthcheck/viewport_resize_evidence_plan.py`、`qa/full_app_healthcheck/high_risk_dry_run_dialog_plan.py`、`qa/full_app_healthcheck/runner.py`、`qa/full_app_healthcheck/reporting.py`、`qa/full_app_healthcheck/manifest.py`、`qa/full_app_healthcheck/feature_router.py` 與對應測試檔。
 3. 跑：
    `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 4. 跑：
    `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
-5. 若都通過，確認使用者是否已明確授權進入 D-4；沒有授權就停止並回報「D-4 需要授權」。
-6. 若已授權，開始 D-4：以 TDD 建立 `qa/full_app_healthcheck/high_risk_dry_run_dialog_plan.py` metadata，只描述 high-risk dry-run dialog plan，不在測試或 runner 中真正啟動 MainWindow、執行 dialog、點擊確認或呼叫 service。
+5. 若都通過，確認使用者是否已明確授權進入 E-1；沒有授權就停止並回報「E-1 需要授權」。
+6. 若已授權，開始 E-1：以 TDD 建立 `qa/full_app_healthcheck/run_history_manifest.py`，只做純 metadata/schema helper，不寫入 output 檔案、不接 runner execution。
 7. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
-8. 完成後只回報檢查與修正結果；不要把 D-4 plan 自動接入 quick/full runner bridge。
+8. 完成後只回報檢查與修正結果；不要把 E-1 自動接入 quick/full runner bridge。
 
 驗收命令：
-`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py tests/test_full_app_healthcheck_viewport_resize_evidence_plan.py tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_run_history_manifest.py tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py tests/test_full_app_healthcheck_viewport_resize_evidence_plan.py tests/test_full_app_healthcheck_mainwindow_smoke_plan.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 `.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=`
 `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
 `git diff --check`
@@ -358,4 +359,4 @@ Expected:
 - [ ] 沒有把 write-risk / manual-only 測試放入 quick 或 full bridge。
 - [ ] 新增測試檔後，test inventory 與文件測試數同步。
 - [ ] quick runner 仍通過。
-- [ ] 若要進 D-4，必須先由使用者明確確認。
+- [ ] 若要進 E-1，必須先由使用者明確確認。
