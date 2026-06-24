@@ -152,7 +152,7 @@
   - 研究驗證閉環。
   - 持倉檢查閉環。
   - 每日決策閉環。
-- C-2：Flow diagnostics renderer，列出入口、步驟、證據、下一步導向、manual gap。
+- [x] C-2：Flow diagnostics renderer，列出入口、步驟、證據、下一步導向、manual gap。
 - C-3：Known UX gap mapping，把人工 healthcheck 中的「看不懂、找不到、被遮住、下一步不明」轉成可追蹤項目。
 
 ### Track D：近似使用者行為的 UI 驗收
@@ -176,7 +176,7 @@
 
 ## 6. 推薦下一個實作批次
 
-下一個批次建議做 C-2 flow diagnostics renderer，不要直接進 D-2。
+下一個批次建議做 C-3 known UX gap mapping，不要直接進 D-2。
 
 理由：
 
@@ -188,45 +188,47 @@
 - B-3 已整理 service oracle metadata，讓 service-oracle 測試可作功能證據，但不直接當 UI flow step。
 - B-4 已輸出 coverage burn-down report，讓 `manual-only`、`blocked`、`not-yet-automated` 與 known gaps 不被隱藏。
 - C-1 已建立四大 closed-loop flow model，把入口、步驟、證據、下一步導向與 manual gap 變成資料模型。
-- 下一步 C-2 應把 flow model 轉成診斷報告，列出每條閉環的目前覆蓋、缺口、可執行命令建議與交接方向。
-- D-2 會啟動 MainWindow，風險與 token 成本較高，應等 C-1 / C-2 flow diagnostics 更完整再進。
+- C-2 已把 flow model 轉成診斷報告，列出每條閉環的目前覆蓋、缺口、可執行命令建議與交接方向。
+- 下一步 C-3 應把人工 healthcheck 中的「看不懂、找不到、被遮住、下一步不明」轉成可追蹤 UX gap metadata，並讓 C-2 diagnostics 可以引用。
+- D-2 會啟動 MainWindow，風險與 token 成本較高，應等 C-3 UX gap mapping 完成再進。
 
-### Task C-2：Flow Diagnostics Renderer
+### Task C-3：Known UX Gap Mapping
 
 **Files:**
 
-- Create: `qa/full_app_healthcheck/flow_diagnostics.py`
-- Test: `tests/test_full_app_healthcheck_flow_diagnostics.py`
+- Create: `qa/full_app_healthcheck/ux_gap_mapping.py`
+- Test: `tests/test_full_app_healthcheck_ux_gap_mapping.py`
+- Modify: `qa/full_app_healthcheck/flow_diagnostics.py`
+- Modify: `tests/test_full_app_healthcheck_flow_diagnostics.py`
 - Modify: `qa/full_app_healthcheck/test_inventory.py`
 - Modify: `tests/test_full_app_healthcheck_test_inventory.py`
 - Modify: `docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md`
 - Modify: `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`
 
-- [ ] **Step 1: Inspect existing flow model and QA advisors**
+- [ ] **Step 1: Inspect existing flow diagnostics and gap sources**
 
 Run:
 
 ```powershell
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\flow_model.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\flow_diagnostics.py
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\feature_router.py
 Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\coverage_burndown.py
-Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\command_advisor.py
-Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\handoff_contract.py
 ```
 
-Expected: understand how flows map to feature routes, evidence, command recommendations, and handoff fields.
+Expected: understand current flow ids, feature route known gaps, manual gaps, and diagnostics Markdown output.
 
-- [ ] **Step 2: Write diagnostics tests before implementation**
+- [ ] **Step 2: Write UX gap mapping tests before implementation**
 
-Create `tests/test_full_app_healthcheck_flow_diagnostics.py` with cases for:
+Create `tests/test_full_app_healthcheck_ux_gap_mapping.py` with cases for:
 
-- Diagnostics are generated for all four C-1 flows.
-- Each diagnostic includes flow id, entrypoint, ordered feature ids, evidence sources, manual gaps, command recommendation, and likely handoff owner.
-- Quick-ineligible features are reported as `full_or_manual_required`, not as failed.
-- Service oracle evidence remains evidence-only and is never rendered as an executable UI step.
-- Markdown output names manual gaps, recommended command scope, and next-step handoff destinations.
+- Known UX categories exist for `unclear_copy`, `missing_entrypoint`, `layout_occlusion`, and `unclear_next_step`.
+- Each UX gap has id, category, title, feature id, optional flow id, likely owner, evidence, and recommended next step.
+- All referenced feature ids exist in `FEATURE_ROUTES`.
+- All referenced flow ids exist in C-1 `FLOWS`.
+- Flow diagnostics can include mapped UX gaps without changing runner execution behavior.
 
-- [ ] **Step 3: Implement `flow_diagnostics.py`**
+- [ ] **Step 3: Implement `ux_gap_mapping.py`**
 
 Suggested public API:
 
@@ -237,37 +239,34 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class FlowDiagnostic:
-    flow_id: str
-    display_name: str
-    entrypoint: str
-    ordered_feature_ids: tuple[str, ...]
-    coverage_status: str
-    evidence_sources: tuple[str, ...]
-    manual_gaps: tuple[str, ...]
-    recommended_commands: tuple[str, ...]
+class KnownUXGap:
+    gap_id: str
+    category: str
+    title: str
+    feature_id: str
+    flow_id: str | None
     likely_owner: str
-    next_steps: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class FlowDiagnosticsReport:
-    diagnostics: tuple[FlowDiagnostic, ...]
-    summary: str
+    evidence_sources: tuple[str, ...]
+    recommended_next_step: str
 ```
 
-- [ ] **Step 4: Add Markdown renderer**
+Required helpers:
 
-Add `render_flow_diagnostics_markdown(report)` that lists:
+- `get_all_ux_gaps() -> tuple[KnownUXGap, ...]`
+- `get_ux_gaps_for_feature(feature_id: str) -> tuple[KnownUXGap, ...]`
+- `get_ux_gaps_for_flow(flow_id: str) -> tuple[KnownUXGap, ...]`
+- `render_ux_gap_mapping_markdown(gaps: Sequence[KnownUXGap]) -> str`
 
-- flow id and display name
-- entrypoint
-- ordered feature ids
-- evidence sources
-- manual / UX gaps
-- recommended command scope
-- likely owner / handoff destination
-- next steps
+Allowed categories:
+
+- `unclear_copy`
+- `missing_entrypoint`
+- `layout_occlusion`
+- `unclear_next_step`
+
+- [ ] **Step 4: Integrate UX gaps into flow diagnostics**
+
+Update `flow_diagnostics.py` so each diagnostic can surface related UX gaps in Markdown. Do not make UX gaps executable steps. Do not add runner actions.
 
 - [ ] **Step 5: Update inventory and docs count**
 
@@ -288,7 +287,7 @@ Update:
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
 .\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 git diff --check
@@ -309,7 +308,7 @@ Expected:
 你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線，請先不要進 D-2 / MainWindow。
 
 工作目標：
-延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 是否已完成並驗證，然後只做下一個安全批次 C-2 flow diagnostics renderer。不要啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
+延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 是否已完成並驗證，然後只做下一個安全批次 C-3 known UX gap mapping。不要啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
 
 必讀文件：
 1. `AGENTS.md`
@@ -336,17 +335,17 @@ Expected:
 
 請先做：
 1. `git status --short`，不要覆寫其他 agent 或使用者未提交變更。
-2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`qa/full_app_healthcheck/flow_model.py`、`tests/test_full_app_healthcheck_result_interpreter.py`、`tests/test_full_app_healthcheck_known_issue_matcher.py`、`tests/test_full_app_healthcheck_handoff_contract.py`、`tests/test_full_app_healthcheck_command_advisor.py`、`tests/test_full_app_healthcheck_candidate_bridge_policy.py`、`tests/test_full_app_healthcheck_service_oracle_metadata.py`、`tests/test_full_app_healthcheck_coverage_burndown.py`、`tests/test_full_app_healthcheck_flow_model.py`、`qa/full_app_healthcheck/feature_router.py`。
+2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`qa/full_app_healthcheck/flow_model.py`、`qa/full_app_healthcheck/flow_diagnostics.py`、`tests/test_full_app_healthcheck_result_interpreter.py`、`tests/test_full_app_healthcheck_known_issue_matcher.py`、`tests/test_full_app_healthcheck_handoff_contract.py`、`tests/test_full_app_healthcheck_command_advisor.py`、`tests/test_full_app_healthcheck_candidate_bridge_policy.py`、`tests/test_full_app_healthcheck_service_oracle_metadata.py`、`tests/test_full_app_healthcheck_coverage_burndown.py`、`tests/test_full_app_healthcheck_flow_model.py`、`tests/test_full_app_healthcheck_flow_diagnostics.py`、`qa/full_app_healthcheck/feature_router.py`。
 3. 跑：
-   `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+   `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 4. 跑：
    `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
-5. 若都通過，開始 C-2：以 TDD 設計 flow diagnostics renderer，將 C-1 四大 flow 轉成可讀診斷報告，列出 coverage status、manual gaps、evidence、recommended commands 與 handoff owner，不啟動 MainWindow。
+5. 若都通過，開始 C-3：以 TDD 設計 known UX gap mapping，把「看不懂、找不到、被遮住、下一步不明」轉成可追蹤 metadata，並讓 flow diagnostics Markdown 可以引用，不啟動 MainWindow。
 6. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
 7. 完成後只回報檢查與修正結果，不要直接進 D-2。
 
 驗收命令：
-`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 `.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=`
 `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
 `git diff --check`
