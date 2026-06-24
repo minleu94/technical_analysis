@@ -30,6 +30,7 @@
    - 文檔同步：`docs/agents/documentation_agent.md`
    - 資料驗證：`docs/agents/data_audit_agent.md`
    - 清理整理：`docs/agents/data_cleanup_agent.md`
+   - 測試驗證：`docs/agents/testing_qa_agent.md`
 
 ## 3. 權威 Agent 與協作流程
 
@@ -38,8 +39,9 @@
 | 團隊分流、交接、角色選擇 | `docs/agents/skills/team.md` | Task Intake、Role Routing、Handoff Pack |
 | 量化合規檢查（Float / 未來函數） | `docs/agents/skills/quant_defense_guard.md` | 量化精度防禦與未來函數審查技能 |
 | 架構判斷、風險雷達、是否該做 | `docs/agents/tech_lead.md` | Tech Lead 權威角色 |
-| 明確 scope 實作、bugfix | `docs/agents/execution_agent.md` | Execution 權威角色 |
-| 完成前驗證、測試矩陣、回歸確認 | `docs/agents/execution_agent.md` + `docs/agents/shared_context.md` | 依專案驗證規則執行 |
+| 明確 scope 的實作或 bugfix | `docs/agents/execution_agent.md` | Execution 權威角色 |
+| 測試路由、功能驗證、測試矩陣與 healthcheck 結果解讀 | `docs/agents/testing_qa_agent.md` | Testing / QA 權威角色，負責測試路由與結果解讀 |
+| 實作完成後實際執行驗證命令、git safety、交付前檢查 | `docs/agents/execution_agent.md` + `docs/agents/shared_context.md` | 依專案驗證與安全規則執行交付 |
 | 文檔 coverage、索引、Snapshot / Roadmap Hub / 6M Roadmap / Carryover / Architecture / Manual 同步 | `docs/agents/documentation_agent.md` | Documentation 權威角色 |
 | 資料完整性、SQLite / CSV 一致性 | `docs/agents/data_audit_agent.md` | Data Audit 權威角色 |
 | 清理、移除、死碼、依賴精簡 | `docs/agents/data_cleanup_agent.md` | Cleanup 權威角色 |
@@ -76,7 +78,7 @@
 嚴格流程：
 
 1. 載入 `docs/agents/skills/team.md`。
-2. 依任務載入對應權威 Agent 文件，例如 `docs/agents/tech_lead.md`、`docs/agents/data_audit_agent.md`、`docs/agents/execution_agent.md` 或 `docs/agents/documentation_agent.md`。
+2. 依任務載入對應權威 Agent 文件，例如 `docs/agents/tech_lead.md`、`docs/agents/data_audit_agent.md`、`docs/agents/execution_agent.md`、`docs/agents/documentation_agent.md` 或 `docs/agents/testing_qa_agent.md`。
 3. 寫入 `docs/agents/shared_state/active_task.yaml`。
 4. 交接時追加 `docs/agents/shared_state/handoff_log.md`。
 5. 完成前必須執行驗證與風險檢查。
@@ -129,3 +131,4 @@
 - 2026-06-13：更新固定必讀與文件同步描述，對齊 Snapshot / Roadmap Hub / 6M Roadmap / Architecture 的 Scoped SSOT。
 - 2026-06-13：補入 Legacy Carryover 與 Application Manual 的條件式必讀及權威範圍。
 - 2026-06-14：新增量化防禦技能 `quant_defense_guard.md` 與本地輔助 MCP 伺服器說明。
+- 2026-06-23：新增 Testing / QA Agent 至權威與協作流程，指向 `docs/agents/testing_qa_agent.md`。

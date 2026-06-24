@@ -11,7 +11,7 @@
 
 - 新任務開始前的任務分流。
 - 判斷應啟用哪個 Agent 角色。
-- 判斷是否需要 Tech Lead、Data Audit、QA Gate 或 Documentation。
+- 判斷是否需要 Tech Lead、Data Audit、Testing / QA、Execution 或 Documentation。
 - Codex 與 Antigravity 之間的交接。
 - 中大型任務與高風險任務的狀態管理。
 
@@ -42,6 +42,7 @@
 - `docs/agents/documentation_agent.md`
 - `docs/agents/data_audit_agent.md`
 - `docs/agents/data_cleanup_agent.md`
+- `docs/agents/testing_qa_agent.md`
 
 ## 3. 協作原則
 
@@ -57,7 +58,10 @@
 
 ### 適用場景
 
-用於任務開始時，判斷任務類型、風險等級、應啟用的 Agent 角色與後續技能分冊。
+用於任務開始時，判斷任務類型、風險等級、應啟用的 Agent 角色與後續技能分冊。也包括判斷是否適用於：
+- 測試路由、功能驗證、feature-to-test matrix 判讀。
+- Full App Healthcheck / healthcheck runner 結果解讀。
+- 為 Tech Lead 準備測試證據。
 
 ### 硬性約束
 
@@ -117,13 +121,14 @@
 ### 角色選擇規則
 
 | 任務特徵 | 建議角色 | 權威文件 |
-|---|---|
+|---|---|---|
 | 是否該做、架構選型、風險判斷 | Tech Lead | `docs/agents/tech_lead.md` |
 | 明確 scope 的實作或 bugfix | Execution | `docs/agents/execution_agent.md` |
 | 文檔 coverage、索引、Snapshot / Roadmap Hub / 6M Roadmap / Architecture 同步 | Documentation | `docs/agents/documentation_agent.md` |
 | 資料完整性、資料對比、SQLite / CSV 一致性 | Data Audit | `docs/agents/data_audit_agent.md` |
 | 清理、移除、死碼、依賴精簡 | Cleanup | `docs/agents/data_cleanup_agent.md` |
-| 完成前驗證、測試矩陣、git safety | QA Gate | `docs/agents/execution_agent.md` 與 `docs/agents/shared_context.md` |
+| 測試路由、功能驗證、QA healthcheck 結果解讀、feature-to-test matrix 判讀 | Testing / QA | `docs/agents/testing_qa_agent.md` |
+| 實作完成後實際執行驗證命令、git safety、交付前檢查 | Execution | `docs/agents/execution_agent.md` 與 `docs/agents/shared_context.md` |
 | Codex / Antigravity 交接 | Orchestrator | `docs/agents/skills/team.md` |
 
 ### 風險分級規則
@@ -291,7 +296,7 @@ High：
 - AI → Human，需要人類決策。
 - 高風險任務進入下一階段。
 - 任務暫停但尚未完成。
-- 完成前需要 QA Gate 或 Reviewer 接手。
+- 完成前需要 Testing / QA Agent、Reviewer 或交付前驗證接手。
 
 ## 7. 與權威 Agent 文件的銜接
 
@@ -302,6 +307,7 @@ Team 分冊只負責分流與交接。後續應依任務載入既有權威 Agent
 - 文檔同步：`docs/agents/documentation_agent.md`
 - 資料驗證與 SQLite / CSV 一致性：`docs/agents/data_audit_agent.md`
 - 清理整理：`docs/agents/data_cleanup_agent.md`
+- 測試路由、功能驗證、healthcheck 結果解讀：`docs/agents/testing_qa_agent.md`
 
 `docs/agents/skills/` 不得建立第二套 Tech Lead、Execution、Documentation、Data Audit 或 Cleanup 規則。若需要額外輕量指南，只能以調用卡形式指回上述權威文件。
 
@@ -310,8 +316,8 @@ Team 分冊只負責分流與交接。後續應依任務載入既有權威 Agent
 1. 高風險安全檢查
 2. Tech Lead 風險判斷
 3. Data / Quant 稽核
-4. Execution
-5. QA Gate
+4. Testing / QA Agent 測試路由與結果解讀
+5. Execution
 6. Documentation
 7. Handoff
 
@@ -319,3 +325,4 @@ Team 分冊只負責分流與交接。後續應依任務載入既有權威 Agent
 
 - 2026-06-09：建立 Team Skills 分冊草案，定義 Task Intake、Role Routing、Handoff Pack 與 shared state 分級規則。
 - 2026-06-09：調整為既有 Agent 單一權威制，Team 分冊只負責分流與交接，後續一律指回 `docs/agents/*.md` 權威角色文件。
+- 2026-06-23：新增 Testing / QA Agent 任務分流、分工與交接規則，確立其測試路由與結果解讀之單一權威。

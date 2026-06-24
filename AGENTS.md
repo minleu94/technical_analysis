@@ -22,6 +22,7 @@
    - 清理、移除、整理：`docs/agents/data_cleanup_agent.md`
    - 受控實作：`docs/agents/execution_agent.md`
    - 文檔同步：`docs/agents/documentation_agent.md`
+   - 測試路由、QA healthcheck、功能驗證：`docs/agents/testing_qa_agent.md`
 
 ## Codex 載入規則
 

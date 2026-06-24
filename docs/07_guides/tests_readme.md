@@ -39,7 +39,21 @@ repo 根目錄的 `pytest.ini` 定義正式收集範圍：
 - `tests/test_backtest/` 及根目錄 backtest 測試：回測、時間軸與風險。
 - `tests/e2e/`：路徑隔離等跨元件契約。
 - `tests/manual/`：已棄用或需人工改寫後才能恢復的歷史情境。
+- `tests/manual/legacy_diagnostics/`：保存 7 個 Relocated Legacy 診斷腳本（本期僅做此 7 個檔案的搬移以利清冊治理，不做全量 tests 目錄重整）。
 - `tests/scripts/`：真實來源或人工操作檢查。
+
+### 未來測試目錄整理規劃 (Proposal Only)
+為了進一步提升測試目錄的整潔度，未來可規劃將現有散落在 `tests/` 根目錄的單元測試，依照職責歸類到對應的子目錄中（如：將 `test_fundamental_*.py` 移入 `tests/test_fundamental/`）。**本期僅作為規劃，不執行此大搬遷，以避免路徑引用混亂。**
+
+## Healthcheck Runner 分類
+
+非破壞式 release healthcheck runner 不直接掃描整個 `tests/` 目錄。測試橋接依
+`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的分類執行：
+
+- `ui-healthcheck-direct-bridge` 可優先登錄到 `qa/full_app_healthcheck/test_suite_bridge.py`。
+- `ui-healthcheck-candidate-bridge` 與 service oracle 類測試需逐項確認模式、速度、資料隔離與 coverage ID 後才能納入 full mode。
+- `write-risk-dry-run-required`、`manual-only`、`tests/manual/` 與 `tests/scripts/` 預設不得由 runner 直接執行；除非測項明確證明只跑 dry-run、tmp path 或 mock service。
+- 新增 runner 測項前，先查分類表與既有測試，優先橋接既有測試，避免複製同一個 UI 行為。
 
 ## 執行方式
 
