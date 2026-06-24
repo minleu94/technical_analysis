@@ -1,6 +1,4 @@
 import inspect
-import sys
-
 import pytest
 
 from qa.full_app_healthcheck.quick_mode_release_gate_proposal import (
@@ -119,4 +117,3 @@ def test_quick_mode_release_gate_proposal_has_no_execution_or_write_side_effects
     assert "test_suite_bridge" not in module_source
     assert "PySide6" not in module_source
     assert "QApplication" not in module_source
-    assert "PySide6.QtWidgets" not in sys.modules

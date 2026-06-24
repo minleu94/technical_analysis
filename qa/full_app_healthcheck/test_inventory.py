@@ -83,6 +83,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_fundamental_statement_availability_sources.py": "service-oracle-data-market",
     "tests/test_fundamental_statement_data.py": "service-oracle-data-market",
     "tests/test_market_breadth_service.py": "service-oracle-data-market",
+    "tests/test_market_regime_detector_details.py": "service-oracle-data-market",
     "tests/test_monthly_revenue_availability_builder.py": "service-oracle-data-market",
     "tests/test_monthly_revenue_availability_history.py": "service-oracle-data-market",
     "tests/test_relative_strength_liquidity_service.py": "service-oracle-data-market",

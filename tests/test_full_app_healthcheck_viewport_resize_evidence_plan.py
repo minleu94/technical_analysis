@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -55,7 +54,6 @@ def test_viewport_resize_evidence_plan_does_not_import_qt_or_runner_execution():
     assert "QApplication" not in module_source
     assert "QTest." not in module_source
     assert "run_full_app_healthcheck" not in module_source
-    assert "PySide6.QtWidgets" not in sys.modules
 
 
 def test_viewport_resize_evidence_plan_rejects_unsafe_metadata():

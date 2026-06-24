@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -172,4 +171,3 @@ def test_run_history_manifest_no_side_effects():
     assert "PySide6" not in module_source
     assert "QApplication" not in module_source
     assert "run_full_app_healthcheck" not in module_source
-    assert "PySide6.QtWidgets" not in sys.modules

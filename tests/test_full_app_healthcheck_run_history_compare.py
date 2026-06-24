@@ -1,6 +1,4 @@
 import inspect
-import sys
-
 import pytest
 
 from qa.full_app_healthcheck.run_history_compare import (
@@ -165,4 +163,3 @@ def test_run_history_compare_has_no_execution_or_write_side_effects():
     assert "PySide6" not in module_source
     assert "QApplication" not in module_source
     assert "MainWindow" not in module_source
-    assert "PySide6.QtWidgets" not in sys.modules

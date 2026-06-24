@@ -111,7 +111,7 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
 
 
 def test_inventory_exposes_pytest_collection_statuses():
-    assert len(PYTEST_COLLECTED_FILES) == 177
+    assert len(PYTEST_COLLECTED_FILES) == 178
     assert len(PYTEST_SUPPORT_FILES) == 1
     assert len(PYTEST_NOT_COLLECTED_FILES) == 30
 
