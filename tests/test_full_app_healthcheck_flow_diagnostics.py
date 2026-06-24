@@ -26,6 +26,7 @@ def test_flow_diagnostics_generation():
     assert data_market.handoff_owner == data_market.likely_owner
     assert data_market.ordered_feature_ids == ("update_view", "market_regime", "smart_money")
     assert any("run_full_app_healthcheck.py --mode full" in cmd for cmd in data_market.recommended_commands)
+    assert len(data_market.ux_gaps) > 0
 
     portfolio = details_by_id["portfolio_review_loop"]
     assert portfolio.coverage_status == "partially_covered"
@@ -68,3 +69,5 @@ def test_flow_diagnostics_markdown_renderer():
     assert "**Handoff Owner**: `data_audit`" in markdown
     assert "Recommended Commands" in markdown
     assert "pytest tests/test_ui_qt_smart_money_flow_view.py" in markdown
+    assert "UX Gaps" in markdown
+    assert "TWSE/TPEX real API fetch progress bar indication" in markdown

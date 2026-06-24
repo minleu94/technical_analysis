@@ -8,6 +8,7 @@ from qa.full_app_healthcheck.feature_router import FEATURE_ROUTES, FeatureRoute
 from qa.full_app_healthcheck.flow_model import HealthcheckFlow, get_all_flows
 from qa.full_app_healthcheck.manifest import HealthcheckMode
 from qa.full_app_healthcheck.test_inventory import get_category
+from qa.full_app_healthcheck.ux_gap_mapping import KnownUXGap, get_ux_gaps_for_flow
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class FlowDiagnostic:
     recommended_commands: tuple[str, ...]
     likely_owner: str
     next_steps: tuple[str, ...]
+    ux_gaps: tuple[KnownUXGap, ...]
 
     @property
     def handoff_owner(self) -> str:
@@ -102,6 +104,14 @@ def render_flow_diagnostics_markdown(report: FlowDiagnosticsReport) -> str:
             lines.append("- (None)")
         lines.append("")
 
+        lines.append("#### UX Gaps")
+        if item.ux_gaps:
+            for gap in item.ux_gaps:
+                lines.append(f"- `[{gap.category}]` {gap.title} -> Recommended Next Step: {gap.recommended_next_step}")
+        else:
+            lines.append("- (None)")
+        lines.append("")
+
         lines.append("#### Recommended Commands")
         if item.recommended_commands:
             lines.append("```powershell")
@@ -122,6 +132,7 @@ def _diagnostic_for_flow(flow: HealthcheckFlow) -> FlowDiagnostic:
     next_steps = tuple(step.expected_next_step for step in flow.steps)
     coverage_status = _coverage_status(flow, routes)
     likely_owner = _likely_owner(routes, manual_gaps)
+    ux_gaps = get_ux_gaps_for_flow(flow.flow_id)
 
     return FlowDiagnostic(
         flow_id=flow.flow_id,
@@ -134,6 +145,7 @@ def _diagnostic_for_flow(flow: HealthcheckFlow) -> FlowDiagnostic:
         recommended_commands=_recommended_commands(flow, routes, coverage_status),
         likely_owner=likely_owner,
         next_steps=next_steps,
+        ux_gaps=ux_gaps,
     )
 
 
