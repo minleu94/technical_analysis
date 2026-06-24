@@ -32,6 +32,10 @@
    - 識別所有需要更新的文件（包括容易被忽略的）
    - 檢查 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index 一致性
 
+6. **[Testing / QA Agent](./testing_qa_agent.md)** (`testing_qa_agent.md`)
+   - 負責系統功能的驗證、測試路由的調配與執行結果的解讀。
+   - 根據 [FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md](../06_qa/FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md) 判定測試範疇與執行模式。
+
 ### 共用資源
 
 - **[共用上下文](./shared_context.md)** (`shared_context.md`)
@@ -198,4 +202,5 @@ Antigravity 的 repo 根目錄入口是 `GEMINI.md`，輔助規則放在 `.agent
 - 2026-06-13：補入 Legacy Carryover 與 Application Manual 的條件式必讀及權威範圍
 - 2026-06-14：新增量化防禦技能與一鍵檢測工具，整合 Python 版本地 MCP 伺服器並更新文檔結構說明。
 - 2026-06-14：治理工具 review 後補強 fail-closed、SQLite 強制唯讀、Git 輸出上限與 MCP 雙端註冊；設定異動後需重啟 Agent 應用。
+- 2026-06-23：新增 Testing / QA Agent 權威角色文件，並進行 QA 文件架構重組清理。
 

@@ -1,4 +1,4 @@
-﻿# 文檔索引
+# 文檔索引
 
 > **最後整理**：2026-06-30
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
@@ -130,6 +130,7 @@
 | [2026-06-23-healthcheck-batch1-direct-fixes.md](../superpowers/plans/2026-06-23-healthcheck-batch1-direct-fixes.md) | Healthcheck Batch 1 direct fixes 實作計畫，涵蓋 UpdateView、Portfolio、Runtime Observatory 與 Research Lab 第一批 UX 問題。 |
 | [2026-06-23-healthcheck-batch2-daily-dashboard-smart-money.md](../superpowers/plans/2026-06-23-healthcheck-batch2-daily-dashboard-smart-money.md) | Healthcheck Batch 2 實作計畫，規劃 Daily Decision Desk answer-first dashboard 與 Smart Money 5 / 20 / 60 日語意診斷。 |
 | [2026-06-23-non-destructive-release-healthcheck-runner.md](../superpowers/plans/2026-06-23-non-destructive-release-healthcheck-runner.md) | 非破壞式 release healthcheck runner 計畫，規劃在不改寫正式資料與不清理使用者變更的前提下執行健康檢查。 |
+| [2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md](../superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md) | Testing / QA Agent 與非破壞式超級 healthcheck runner 的總控 Roadmap，收斂 runner、feature routing、result interpreter、known issue matcher 與 D-2 UI smoke 的分階段路線。 |
 | [2026-06-23-healthcheck-batch3-recommendation-profile-regime.md](../superpowers/plans/2026-06-23-healthcheck-batch3-recommendation-profile-regime.md) | Healthcheck Batch 3 實作計畫，規劃推薦分析 Profile lifecycle、策略版本 gate 與 Regime match / mismatch 揭露。 |
 | [2026-06-23-healthcheck-batch4-research-lab-results.md](../superpowers/plans/2026-06-23-healthcheck-batch4-research-lab-results.md) | Healthcheck Batch 4 實作計畫，規劃 Research Lab 推薦回放結果頁、Registry 比較頁、批次比較判讀與 Train-Test / Walk-forward 樣本可靠度提示。 |
 | [2026-06-23-healthcheck-batch5-performance-operations.md](../superpowers/plans/2026-06-23-healthcheck-batch5-performance-operations.md) | Healthcheck Batch 5 實作計畫，規劃參數最佳化大型掃描預估、worker 設定、bounded cancellation、Market Watch SQLite-first 排查與 Update 長任務邊界。 |
@@ -165,6 +166,8 @@
 | [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
 | [DOCUMENT_ENCODING_AUDIT_2026_06_16.md](../06_qa/DOCUMENT_ENCODING_AUDIT_2026_06_16.md) | repo 文件 UTF-8 / mojibake 稽核報告，確認顯示雜訊來自終端編碼而非文件內容損壞。 |
+| [FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md](../06_qa/FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md) | Testing QA Agent 使用的 feature-to-test 測試路由與決策矩陣（測試知識庫），不包含 Agent 角色定義。 |
+
 
 ---
 
@@ -205,6 +208,7 @@
 | [agents/documentation_agent.md](../agents/documentation_agent.md) | Documentation Agent。 |
 | [agents/data_audit_agent.md](../agents/data_audit_agent.md) | Data Audit Agent。 |
 | [agents/data_cleanup_agent.md](../agents/data_cleanup_agent.md) | Data Cleanup Agent。 |
+| [agents/testing_qa_agent.md](../agents/testing_qa_agent.md) | Testing / QA Agent 權威角色，負責測試路由與結果解讀。 |
 | [agents/skills_registry.md](../agents/skills_registry.md) | Codex / Antigravity 共用的角色選擇、流程導引與 shared context 入口。 |
 | [agents/skills/team.md](../agents/skills/team.md) | Codex / Antigravity 任務分流與交接流程。 |
 | [agents/skills/quant_defense_guard.md](../agents/skills/quant_defense_guard.md) | 量化精度防禦與未來函數審查技能及一鍵式檢測工具。 |
@@ -257,6 +261,8 @@
 
 - 2026-06-30：將根目錄 `README.md` 定位更新為使用者入口，新增 `AGENT_CONTEXT.md` 索引；將 `docs/00_core/note.txt` 歸檔為 `docs/09_archive/dev_progress_note_legacy_2026_01.txt`，並配合 main 清理移除 raw output 追蹤。
 - 2026-06-24：將 `docs/00_core/ARCH_*` 早期架構治理備忘移入 archive，補上歸檔索引；目前架構權威仍為 `docs/01_architecture/system_architecture.md`。
+- 2026-06-23：新增 Testing / QA Agent Super Healthcheck Roadmap 總控計畫索引，收斂非破壞式 runner、QA Agent 調度、結果解讀與後續 D-2 UI smoke 路線。
+- 2026-06-23：新增 Testing / QA Agent 權威文件與 FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md 測試路由矩陣索引。
 - 2026-06-23：新增 Healthcheck Batch 3 Recommendation Profile / Regime plan 與 non-destructive release healthcheck runner plan 索引，記錄推薦分析 Profile lifecycle、Regime match / mismatch 揭露與自訂 Profile JSON 精度治理入口。
 - 2026-06-18：整理根目錄 README 入口；將過期 `readme.txt` 移入 `docs/09_archive/root_readme_legacy_2025_12.txt`，並同步 docs 入口、Archive 索引與 Project Inventory。
 - 2026-06-18：重構 system vision 文件定位，將 baldr 願景說明升級為 North Star / Current State / Evidence Framework，並補上投資有效性驗證框架與 v1 能力證據邊界。

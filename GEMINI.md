@@ -27,6 +27,7 @@
    - 文檔同步 / Coverage：`docs/agents/documentation_agent.md`
    - 資料驗證 / 對比：`docs/agents/data_audit_agent.md`
    - 清理 / 移除 / 整理：`docs/agents/data_cleanup_agent.md`
+   - 測試路由 / QA healthcheck / 功能驗證 / healthcheck 結果解讀：`docs/agents/testing_qa_agent.md`
 
 ## 工作規範
 

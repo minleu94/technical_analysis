@@ -4,6 +4,11 @@
 
 使用者要求實作功能、修 Bug、調整 UI、補測試或修改程式碼時套用。
 
+> [!NOTE]
+> **職責分工與角色邊界**：
+> - 「補測試檔 / 修改程式碼」屬於 Execution 職責。
+> - 若任務是決定應跑哪些測試、解讀 healthcheck / pytest 結果、準備測試證據，應先使用 Testing / QA Agent，而不是 Execution Agent。
+
 ## 執行前
 
 1. 讀 `docs/agents/antigravity/execution_agent.md`。

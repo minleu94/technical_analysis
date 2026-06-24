@@ -27,6 +27,7 @@ Antigravity 開工前依序閱讀：
 | 文檔 Coverage、索引與 Snapshot / Roadmap Hub / 6M Roadmap / Carryover / Architecture / Manual 同步 | `documentation_agent.md` | `docs/agents/documentation_agent.md` |
 | 資料完整性、資料對比、資料品質 | `data_audit_agent.md` | `docs/agents/data_audit_agent.md` |
 | 清理、移除、整理、未使用檔案判斷 | `data_cleanup_agent.md` | `docs/agents/data_cleanup_agent.md` |
+| 測試路由、功能驗證、QA healthcheck 結果解讀、feature-to-test matrix 判讀 | - (無適配層，直接使用權威文件) | `docs/agents/testing_qa_agent.md` |
 
 ## 使用方式
 
@@ -34,7 +35,7 @@ Antigravity 開工前依序閱讀：
 
 ```text
 請依照 GEMINI.md 與 docs/agents/antigravity/README.md 工作。
-本次任務類型是：[Tech Lead / Execution / Documentation / Data Audit / Cleanup]。
+本次任務類型是：[Tech Lead / Execution / Documentation / Data Audit / Cleanup / Testing QA]。
 請先閱讀必讀文件，再執行任務。
 ```
 
