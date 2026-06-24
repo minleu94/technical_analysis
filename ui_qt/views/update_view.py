@@ -470,7 +470,7 @@ class UpdateView(QWidget):
 
         workbench_layout.addWidget(self.nav_list)
         workbench_layout.addWidget(self.content_stack, stretch=1)
-        main_layout.addLayout(workbench_layout)
+        main_layout.addLayout(workbench_layout, stretch=1)
 
         # 4. 底部全域共享的進度條與日誌 console
         # 進度文字與進度條

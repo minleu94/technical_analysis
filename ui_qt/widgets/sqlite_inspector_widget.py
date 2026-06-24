@@ -68,7 +68,7 @@ class SqliteInspectorWidget(QWidget):
     def _init_ui(self):
         """初始化 UI 布局與控制項"""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(10, 10, 10, 0)
         main_layout.setSpacing(10)
 
         # 1. 頂部控制與篩選面板
@@ -199,13 +199,15 @@ class SqliteInspectorWidget(QWidget):
         control_group.setLayout(control_main_layout)
         main_layout.addWidget(control_group)
 
-        # 2. 表狀態摘要 Label
-        self.summary_label = QLabel("資料庫狀態：尚未載入")
-        self.summary_label.setStyleSheet("color: #555; font-weight: bold; font-size: 13px;")
-        main_layout.addWidget(self.summary_label)
-
-        # 3. 中央 TabWidget 頁面展示
+        # 2. 中央 TabWidget 頁面展示
         self.tabs = QTabWidget()
+        self.summary_label = QLabel("資料庫狀態：尚未載入")
+        self.summary_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.summary_label.setMinimumWidth(520)
+        self.summary_label.setStyleSheet(
+            "color: #64748b; font-weight: 600; font-size: 12px; padding-right: 8px;"
+        )
+        self.tabs.setCornerWidget(self.summary_label, Qt.TopRightCorner)
         
         # Tab 1: 資料數據預覽
         self.preview_tab = QWidget()
