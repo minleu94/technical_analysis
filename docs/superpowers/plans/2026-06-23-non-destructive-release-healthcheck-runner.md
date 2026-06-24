@@ -674,7 +674,7 @@ Expected: passed.
 - Create: `qa/full_app_healthcheck/actions.py`
 - Test: `tests/test_full_app_healthcheck_runner.py`
 
-- [ ] **Step 1: Write failing action tests**
+- [x] **Step 1: Write failing action tests**
 
 Create `tests/test_full_app_healthcheck_runner.py`:
 
@@ -724,7 +724,7 @@ def test_find_and_click_button_by_text():
     assert clicked == [True]
 ```
 
-- [ ] **Step 2: Run failing action tests**
+- [x] **Step 2: Run failing action tests**
 
 Run:
 
@@ -734,7 +734,7 @@ Run:
 
 Expected: fail with missing `actions`.
 
-- [ ] **Step 3: Implement actions**
+- [x] **Step 3: Implement actions**
 
 Create `qa/full_app_healthcheck/actions.py`:
 
@@ -774,7 +774,7 @@ def grab_widget_screenshot(widget: QWidget, path: Path) -> Path:
     return path
 ```
 
-- [ ] **Step 4: Run action tests**
+- [x] **Step 4: Run action tests**
 
 Run:
 

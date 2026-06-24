@@ -13,14 +13,14 @@ def run_tests():
     """運行所有測試"""
     # 創建測試套件
     suite = unittest.TestLoader().loadTestsFromTestCase(TestDataModule)
-    
+
     # 運行測試
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
-    
+
     # 返回測試結果
     return result.wasSuccessful()
 
 if __name__ == '__main__':
     success = run_tests()
-    sys.exit(0 if success else 1) 
+    sys.exit(0 if success else 1)

@@ -13,7 +13,7 @@ try:
         col_repr = repr(col)
         col_type = type(col).__name__
         print(f"{i}. '{col}' (類型: {col_type}, 表示: {col_repr})")
-    
+
     # 檢查是否有重複的欄位名稱
     duplicates = df.columns.duplicated()
     if any(duplicates):
@@ -21,10 +21,10 @@ try:
         for i, (col, is_dup) in enumerate(zip(df.columns, duplicates), 1):
             if is_dup:
                 print(f"{i}. '{col}' (重複)")
-    
+
     # 顯示前5行數據的前幾個欄位
     print("\n前5行數據的前幾個欄位:")
     print(df.iloc[:5, :5])
-    
+
 except Exception as e:
-    print(f"讀取數據時出錯: {str(e)}") 
+    print(f"讀取數據時出錯: {str(e)}")
