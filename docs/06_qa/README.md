@@ -16,6 +16,7 @@
 
 ### 全程式人工 Health Check 與測試路由
 - `FULL_APP_HEALTHCHECK_2026_06_16.md` - 主 UI 人工 smoke test 母檔，包含數據更新、SQLite 檢視、TPEX 日價、券商分點、每日決策與跨工作區流程
+- `FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md` - Testing / QA Agent + Full App Healthcheck Runner A-E 完成後的收束報告、可用邊界與下一階段選項。
 - `TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` - `tests/` 全量測試分類，定義哪些測試可直接橋接到非破壞式 release healthcheck runner、哪些只能作 oracle、哪些需保留 manual / dry-run。
 - `FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md` - Testing QA Agent 使用的 feature-to-test 測試路由與決策矩陣（測試知識庫），不包含 Agent 角色定義。
 
