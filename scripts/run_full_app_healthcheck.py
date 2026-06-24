@@ -13,6 +13,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from qa.full_app_healthcheck.default_manifest import build_default_manifest
 from qa.full_app_healthcheck.manifest import HealthcheckMode
+from qa.full_app_healthcheck.report_sections import ALLOWED_REPORT_SECTION_IDS, build_report_sections
 from qa.full_app_healthcheck.runner import HealthcheckRunner
 
 
@@ -64,6 +65,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "output" / "qa" / "full_app_healthcheck"))
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--viewport", default="1366x768")
+    parser.add_argument(
+        "--report-section",
+        dest="report_sections",
+        action="append",
+        choices=sorted(ALLOWED_REPORT_SECTION_IDS),
+        default=[],
+        help="Append an opt-in, report-only QA metadata section to REPORT.md and result.json.",
+    )
     return parser.parse_args(argv)
 
 
@@ -71,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     mode = HealthcheckMode(args.mode)
     manifest = build_default_manifest()
+    report_sections = build_report_sections(args.report_sections)
 
     # We will build the coverage baseline here in Batch C and pass it to runner
     coverage_items = None
@@ -87,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=Path(args.output_dir),
         fail_fast=args.fail_fast,
         coverage_items=coverage_items,
+        report_sections=report_sections,
     )
     result = runner.run(mode)
     print(f"Healthcheck {result.status}: {result.run_id}")

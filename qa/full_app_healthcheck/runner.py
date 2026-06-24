@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from qa.full_app_healthcheck.manifest import HealthcheckManifest, HealthcheckMode, HealthcheckStep
+from qa.full_app_healthcheck.report_sections import ReportSection
 from qa.full_app_healthcheck.reporting import HealthcheckResult, StepResult, write_reports
 from qa.full_app_healthcheck.safety import validate_non_destructive_manifest
 
@@ -22,6 +23,7 @@ class HealthcheckRunner:
         output_dir: Path,
         fail_fast: bool = False,
         coverage_items: tuple[Any, ...] | None = None,
+        report_sections: tuple[ReportSection, ...] | None = None,
     ) -> None:
         self.manifest = manifest
         self.actions = actions
@@ -29,6 +31,7 @@ class HealthcheckRunner:
         self.output_dir = output_dir
         self.fail_fast = fail_fast
         self.coverage_items = coverage_items
+        self.report_sections = report_sections
 
     def run(self, mode: HealthcheckMode) -> HealthcheckResult:
         validate_non_destructive_manifest(self.manifest)
@@ -70,5 +73,10 @@ class HealthcheckRunner:
             status=status,
             steps=tuple(step_results),
         )
-        write_reports(result, self.output_dir / result.run_id, self.coverage_items)
+        write_reports(
+            result,
+            self.output_dir / result.run_id,
+            self.coverage_items,
+            self.report_sections,
+        )
         return result
