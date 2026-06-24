@@ -70,6 +70,8 @@
 
 最安全的下一個工程方向是選項 2，但必須維持 report-only，且需要先核准新的實作計畫。
 
+補充：選項 2 的第一版實作計畫已建立於 `docs/superpowers/plans/2026-06-23-report-only-healthcheck-sections.md`。該計畫只納入不需要額外輸入的靜態 QA sections：coverage burn-down、flow diagnostics、quick gate proposal 與 full release checklist。Run history comparison 需要 baseline / candidate manifest input，應在後續獨立小批次處理。
+
 ## 驗證快照
 
 本收束報告前，E-4 最新驗證如下：
