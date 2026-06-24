@@ -140,7 +140,7 @@
 - B-1：Direct bridge 穩定化。已完成。
 - B-2：Candidate bridge promote policy，逐一把 `ui-healthcheck-candidate-bridge` 升級為 full mode 或保留 manual gap。已完成。
 - B-3：Service oracle metadata，讓 service-oracle 測試可作功能證據，但不直接當 UI flow step。已完成。
-- B-4：Coverage burn-down report，讓 `manual-only`、`blocked`、`not-yet-automated` 不被隱藏。
+- B-4：Coverage burn-down report，讓 manual-only、blocked、not-yet-automated 不被隱藏。已完成。
 
 ### Track C：流程閉環診斷
 
@@ -175,7 +175,7 @@
 
 ## 6. 推薦下一個實作批次
 
-下一個批次建議做 B-4 coverage burn-down report，不要直接進 D-2。
+下一個批次建議做 C-1 closed-loop flow model，不要直接進 D-2。
 
 理由：
 
@@ -185,125 +185,102 @@
 - A-4 已可把功能名稱轉成應跑命令、模式、風險與預期報告，讓 QA Agent 更容易安全執行。
 - B-2 已建立 candidate bridge promote policy，避免直接把候選 UI 測試放進 runner。
 - B-3 已整理 service oracle metadata，讓 service-oracle 測試可作功能證據，但不直接當 UI flow step。
-- 下一步 B-4 應輸出 coverage burn-down report，讓 `manual-only`、`blocked`、`not-yet-automated` 不被隱藏。
-- D-2 會啟動 MainWindow，風險與 token 成本較高，應等 interpretation pipeline 更完整再進。
+- B-4 已輸出 coverage burn-down report，讓 `manual-only`、`blocked`、`not-yet-automated` 與 known gaps 不被隱藏。
+- 下一步 C-1 應建立四大 closed-loop flow model，先把入口、步驟、證據、下一步導向與 manual gap 變成資料模型，不啟動 MainWindow。
+- D-2 會啟動 MainWindow，風險與 token 成本較高，應等 C-1 / C-2 flow diagnostics 更完整再進。
 
-### Task A-3.3：Known Issue Matcher
+### Task C-1：Closed-loop Flow Model
 
 **Files:**
 
-- Create: `qa/full_app_healthcheck/known_issue_matcher.py`
-- Modify: `qa/full_app_healthcheck/result_interpreter.py`
-- Test: `tests/test_full_app_healthcheck_known_issue_matcher.py`
+- Create: `qa/full_app_healthcheck/flow_model.py`
+- Test: `tests/test_full_app_healthcheck_flow_model.py`
 - Modify: `qa/full_app_healthcheck/test_inventory.py`
+- Modify: `tests/test_full_app_healthcheck_test_inventory.py`
 - Modify: `docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md`
+- Modify: `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`
 
-- [ ] **Step 1: Inspect current result interpreter and known issue sources**
+- [ ] **Step 1: Inspect existing route and burn-down inputs**
 
 Run:
 
 ```powershell
-Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\result_interpreter.py
-Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\batch_closeout_baseline.py
-Get-Content -Raw -Encoding UTF8 docs\06_qa\FULL_APP_HEALTHCHECK_2026_06_16.md
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\feature_router.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\coverage_burndown.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\service_oracle_metadata.py
+Get-Content -Raw -Encoding UTF8 qa\full_app_healthcheck\candidate_bridge_policy.py
 ```
 
-Expected: understand existing statuses, manual gaps, blocked reasons, and failure keyword handling.
+Expected: understand current feature ids, direct bridge suites, candidate tests, service oracle evidence, and known gaps.
 
-- [ ] **Step 2: Write matcher tests before implementation**
+- [ ] **Step 2: Write flow model tests before implementation**
 
-Create `tests/test_full_app_healthcheck_known_issue_matcher.py` with cases for:
+Create `tests/test_full_app_healthcheck_flow_model.py` with cases for:
 
-- stderr mentioning `daily_prices` maps to data audit issue.
-- stderr mentioning hidden widget / layout maps to execution issue.
-- message matching known manual gap stays `known_manual_gap` and does not become `passed`.
-- unknown text returns no match.
+- Four required flow ids exist: `data_market_loop`, `research_validation_loop`, `portfolio_review_loop`, `daily_decision_loop`.
+- Each flow has entrypoint, ordered feature ids, evidence sources, next-step outputs, and manual gaps.
+- Each referenced feature id exists in `FEATURE_ROUTES`.
+- Service oracle evidence is included as evidence only, not as executable UI flow steps.
+- Markdown or summary output names manual gaps and next-step handoff destinations.
 
-- [ ] **Step 3: Implement `known_issue_matcher.py`**
+- [ ] **Step 3: Implement `flow_model.py`**
 
-Required public API and minimal starting implementation:
+Suggested public API:
 
 ```python
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
 
 
 @dataclass(frozen=True)
-class KnownIssueMatch:
-    issue_id: str
-    title: str
-    category: str
+class FlowStep:
+    step_id: str
+    feature_id: str
+    purpose: str
+    evidence_sources: tuple[str, ...]
+    expected_next_step: str
+    manual_gaps: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class HealthcheckFlow:
+    flow_id: str
+    display_name: str
+    entrypoint: str
+    steps: tuple[FlowStep, ...]
     likely_owner: str
-    recommendation: str
-    confidence: str
+    safety_notes: str
 
 
-def match_known_issues(text: str) -> Sequence[KnownIssueMatch]:
-    normalized = text.lower()
-    matches: list[KnownIssueMatch] = []
-
-    if any(token in normalized for token in ("sqlite", "daily_prices", "available_date", "schema")):
-        matches.append(
-            KnownIssueMatch(
-                issue_id="DATA-AUDIT-001",
-                title="資料或 SQLite schema 相關錯誤",
-                category="data_audit",
-                likely_owner="data_audit",
-                recommendation="交接給 Data Audit Agent 檢查資料新鮮度、SQLite schema 與 available_date。",
-                confidence="medium",
-            )
-        )
-
-    if any(token in normalized for token in ("widget", "layout", "visible", "button", "tab")):
-        matches.append(
-            KnownIssueMatch(
-                issue_id="UI-EXECUTION-001",
-                title="UI 元件可見性或排版錯誤",
-                category="ui_execution",
-                likely_owner="execution",
-                recommendation="交接給 Execution Agent 檢查 UI layout、widget binding 與可見性。",
-                confidence="medium",
-            )
-        )
-
-    if "unmatched suite id" in normalized:
-        matches.append(
-            KnownIssueMatch(
-                issue_id="RUNNER-ROUTING-001",
-                title="Runner bridge 或 feature route 未註冊測試套件",
-                category="runner_routing",
-                likely_owner="testing_qa",
-                recommendation="檢查 test_suite_bridge.py、feature_router.py 與 TEST_INVENTORY 分類是否一致。",
-                confidence="high",
-            )
-        )
-
-    return tuple(matches)
+@dataclass(frozen=True)
+class FlowModelReport:
+    flows: tuple[HealthcheckFlow, ...]
+    summary: str
 ```
 
-Allowed `category` values:
+Required flow coverage:
 
-- `data_audit`
-- `ui_execution`
-- `known_manual_gap`
-- `runner_routing`
-- `tech_lead_review`
+- `data_market_loop`：UpdateView → Market Regime → Smart Money。
+- `research_validation_loop`：Research Lab → Run Registry Compare → Recommendation / portfolio handoff gap if not routed yet。
+- `portfolio_review_loop`：Portfolio / Watchlist candidate gaps → Smart Money → Decision Desk。
+- `daily_decision_loop`：Decision Desk → Market Regime → UpdateView freshness evidence。
 
-- [ ] **Step 4: Integrate matcher into result interpretation**
+- [ ] **Step 4: Add renderer or summary helper**
 
-`interpret_healthcheck_result()` should still work without matches. When matches exist:
+Add a lightweight Markdown renderer such as `render_flow_model_markdown(report)` that lists:
 
-- Preserve existing feature status logic.
-- Add matched issue summaries to evidence or recommended next steps.
-- Do not auto-promote manual gaps to pass.
-- Prefer `data_audit` owner if the match category is `data_audit`.
-- Prefer `execution` owner if the match category is `ui_execution`.
+- flow id and display name
+- entrypoint
+- ordered steps
+- evidence sources
+- next-step outputs
+- manual / UX gaps
+- safety notes
 
 - [ ] **Step 5: Update inventory and docs count**
 
-After adding a new test file, run collect-only and update counts:
+After adding the new test file, run collect-only and update counts:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=
@@ -320,7 +297,8 @@ Update:
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 git diff --check
 ```
@@ -328,8 +306,9 @@ git diff --check
 Expected:
 
 - Focused tests pass.
+- Collect-only count is updated in inventory docs.
 - Quick runner passes.
-- `git diff --check` has no whitespace errors; CRLF warnings in unrelated existing files may appear.
+- `git diff --check` has no whitespace errors.
 
 ## 7. 新對話接手 Prompt
 
@@ -339,7 +318,7 @@ Expected:
 你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線，請先不要進 D-2 / MainWindow。
 
 工作目標：
-延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 是否已完成並驗證，然後只做下一個安全批次 B-4 coverage burn-down report。不要啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
+延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 是否已完成並驗證，然後只做下一個安全批次 C-1 closed-loop flow model。不要啟動真實 MainWindow，不要跑資料寫入，不要 migration，不要進 high-risk dry-run 實作。
 
 必讀文件：
 1. `AGENTS.md`
@@ -366,17 +345,17 @@ Expected:
 
 請先做：
 1. `git status --short`，不要覆寫其他 agent 或使用者未提交變更。
-2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`tests/test_full_app_healthcheck_result_interpreter.py`、`tests/test_full_app_healthcheck_known_issue_matcher.py`、`tests/test_full_app_healthcheck_handoff_contract.py`、`tests/test_full_app_healthcheck_command_advisor.py`、`tests/test_full_app_healthcheck_candidate_bridge_policy.py`、`tests/test_full_app_healthcheck_service_oracle_metadata.py`、`qa/full_app_healthcheck/feature_router.py`。
+2. 檢查 `qa/full_app_healthcheck/result_interpreter.py`、`qa/full_app_healthcheck/known_issue_matcher.py`、`qa/full_app_healthcheck/handoff_contract.py`、`qa/full_app_healthcheck/command_advisor.py`、`qa/full_app_healthcheck/candidate_bridge_policy.py`、`qa/full_app_healthcheck/service_oracle_metadata.py`、`qa/full_app_healthcheck/coverage_burndown.py`、`tests/test_full_app_healthcheck_result_interpreter.py`、`tests/test_full_app_healthcheck_known_issue_matcher.py`、`tests/test_full_app_healthcheck_handoff_contract.py`、`tests/test_full_app_healthcheck_command_advisor.py`、`tests/test_full_app_healthcheck_candidate_bridge_policy.py`、`tests/test_full_app_healthcheck_service_oracle_metadata.py`、`tests/test_full_app_healthcheck_coverage_burndown.py`、`qa/full_app_healthcheck/feature_router.py`。
 3. 跑：
-   `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+   `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 4. 跑：
    `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
-5. 若都通過，開始 B-4：以 TDD 設計 coverage burn-down report，讓 `manual-only`、`blocked`、`not-yet-automated` 不被隱藏。
+5. 若都通過，開始 C-1：以 TDD 設計 closed-loop flow model，建立 `data_market_loop`、`research_validation_loop`、`portfolio_review_loop`、`daily_decision_loop` 四大 flow，只輸出資料模型與 Markdown summary，不啟動 MainWindow。
 6. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
 7. 完成後只回報檢查與修正結果，不要直接進 D-2。
 
 驗收命令：
-`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 `.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=`
 `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
 `git diff --check`
