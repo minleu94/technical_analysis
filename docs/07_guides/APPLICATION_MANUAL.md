@@ -167,7 +167,7 @@ python ui_qt/main.py
 
 券商分點下載在 `force_all=false` 時會先檢查日檔 CSV 與 SQLite `broker_flows`。SQLite 檢查會同時比對分點顯示名稱與系統 key，避免 DB 已有資料卻仍啟動 MoneyDJ / Selenium 重新抓取。
 
-券商分點下載仍採保守序列流程。若一次更新約 40 個分點耗時較長，先確認是否已有 CSV / SQLite 既有資料可跳過；本版尚未支援 5 或 10 worker 並行，避免 MoneyDJ / Selenium session、rate limit 與站方阻擋風險。
+券商分點下載仍採保守序列流程，但進入 MoneyDJ 前會先用每日股價日檔或 SQLite `daily_prices` 檢查目標日期是否有行情證據；無行情證據的日期會整天跳過，不會讓每個分點各自重試。MoneyDJ 正常頁面會優先使用 HTTP fast path 直接抓取 Big5 HTML，只有 HTTP 失敗或解析不到資料時才退回 Selenium fallback。預設請求間隔為 0.5 秒；若一次更新約 40 個分點耗時較長，先確認是否已有 CSV / SQLite 既有資料可跳過。本版尚未支援 5 或 10 worker 並行，避免對 MoneyDJ 造成過高併發與站方阻擋風險。
 
 ### 4.4 技術指標
 

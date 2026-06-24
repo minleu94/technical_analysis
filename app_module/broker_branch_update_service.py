@@ -5,11 +5,12 @@
 
 import logging
 import re
+import requests
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Callable
+from typing import Dict, Any, List, Optional, Tuple, Callable, Set
 
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -37,6 +38,14 @@ class BrokerBranchUpdateService:
         "buy_amount_k_twd",
         "sell_amount_k_twd",
         "net_amount_k_twd",
+    }
+    MONEYDJ_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/149.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://www.google.com/",
     }
 
     def __init__(self, config):
@@ -672,6 +681,58 @@ class BrokerBranchUpdateService:
             f"{branch_info.get('branch_system_key')}/{date_str}"
         ) from last_error
 
+    def _fetch_metric_records_http(
+        self,
+        branch_info: Dict[str, Any],
+        date_str: str,
+        metric: str,
+        retries: int = 3,
+        timeout: int = 30,
+    ) -> List[Dict[str, Any]]:
+        """使用 HTTP 直接抓取 MoneyDJ 指標頁，避免 Selenium 額外等待。"""
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        prev_date = (date_obj - timedelta(days=1)).strftime("%Y-%m-%d")
+        url = self._build_branch_url(branch_info, prev_date, date_str, metric=metric)
+        last_error: Optional[Exception] = None
+
+        for attempt in range(retries):
+            try:
+                response = requests.get(
+                    url,
+                    headers=self.MONEYDJ_HEADERS,
+                    timeout=timeout,
+                )
+                response.raise_for_status()
+                html = response.content.decode("big5", errors="replace")
+                soup = BeautifulSoup(html, "html.parser")
+                records = self._parse_metric_tables(
+                    soup.find_all("table"),
+                    branch_info,
+                    date_str,
+                    metric,
+                )
+                if records:
+                    return records
+                raise RuntimeError(f"MoneyDJ {metric} 頁面未解析到交易資料")
+            except Exception as exc:
+                last_error = exc
+                self.logger.warning(
+                    "HTTP 抓取 %s/%s 指標 %s 失敗 (%s/%s): %s",
+                    branch_info.get("branch_system_key"),
+                    date_str,
+                    metric,
+                    attempt + 1,
+                    retries,
+                    exc,
+                )
+                if attempt + 1 < retries:
+                    time.sleep(2)
+
+        raise RuntimeError(
+            f"MoneyDJ {metric} HTTP 指標抓取失敗: "
+            f"{branch_info.get('branch_system_key')}/{date_str}; {last_error}"
+        ) from last_error
+
     def _parse_counterparty_broker_name(self, text: str) -> Tuple[str, str]:
         """
         解析表格內的「對手券商」名稱
@@ -743,12 +804,85 @@ class BrokerBranchUpdateService:
         self.logger.debug(f"無法解析對手券商名稱: {text}（已嘗試所有模式）")
         return ('UNKNOWN', text)
 
+    def _filter_trade_dates_for_broker_update(
+        self,
+        dates: List[str],
+    ) -> Tuple[List[str], List[str]]:
+        """用每日股價日檔或 SQLite 行情證據過濾券商分點更新日期。"""
+        if not dates:
+            return [], []
+
+        evidence_dates: Set[str] = set()
+        evidence_available = False
+        date_key_to_iso = {
+            datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y%m%d"): date_str
+            for date_str in dates
+        }
+        iso_dates = set(dates)
+
+        for dir_attr in ("daily_price_dir", "tpex_daily_price_dir"):
+            daily_dir = getattr(self.config, dir_attr, None)
+            if not daily_dir or not Path(daily_dir).exists():
+                continue
+            daily_dir = Path(daily_dir)
+            has_csv = any(daily_dir.glob("*.csv"))
+            evidence_available = evidence_available or has_csv
+            for date_key, iso_date in date_key_to_iso.items():
+                if (
+                    (daily_dir / f"{date_key}.csv").exists()
+                    or (daily_dir / f"{iso_date}.csv").exists()
+                ):
+                    evidence_dates.add(iso_date)
+
+        db_file = getattr(self.config, "db_file", None)
+        if db_file and Path(db_file).exists():
+            try:
+                import sqlite3
+
+                with sqlite3.connect(str(db_file)) as conn:
+                    cursor = conn.cursor()
+                    table_exists = cursor.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='daily_prices'"
+                    ).fetchone()
+                    if table_exists:
+                        has_rows = cursor.execute(
+                            "SELECT 1 FROM daily_prices LIMIT 1"
+                        ).fetchone()
+                        evidence_available = evidence_available or has_rows is not None
+                        lookup_values = list(date_key_to_iso.keys()) + dates
+                        placeholders = ",".join("?" for _ in lookup_values)
+                        rows = cursor.execute(
+                            f"SELECT DISTINCT 日期 FROM daily_prices WHERE 日期 IN ({placeholders})",
+                            lookup_values,
+                        ).fetchall()
+                        for (raw_date,) in rows:
+                            value = str(raw_date).strip()
+                            if value in date_key_to_iso:
+                                evidence_dates.add(date_key_to_iso[value])
+                            elif value in iso_dates:
+                                evidence_dates.add(value)
+            except Exception as exc:
+                self.logger.warning("券商分點交易日 SQLite 預檢失敗，改用 CSV 證據: %s", exc)
+
+        if not evidence_available:
+            self.logger.info("找不到每日行情日曆證據，券商分點更新維持原日期範圍")
+            return dates, []
+
+        trade_dates = [date_str for date_str in dates if date_str in evidence_dates]
+        non_trading_dates = [date_str for date_str in dates if date_str not in evidence_dates]
+        if non_trading_dates:
+            self.logger.info(
+                "券商分點更新跳過無每日行情證據日期: %s",
+                ", ".join(non_trading_dates),
+            )
+        return trade_dates, non_trading_dates
+
     def update_broker_branch_data(
         self,
         start_date: str,
         end_date: str,
         branch_system_keys: Optional[List[str]] = None,
-        delay_seconds: float = 4.0,
+        delay_seconds: float = 0.5,
         force_all: bool = False,
         progress_callback: Optional[Callable[[str, int], None]] = None
     ) -> Dict[str, Any]:
@@ -814,6 +948,8 @@ class BrokerBranchUpdateService:
                     dates.append(current.strftime('%Y-%m-%d'))
                 current += timedelta(days=1)
 
+            dates, non_trading_dates = self._filter_trade_dates_for_broker_update(dates)
+
             # 初始化結果統計
             updated_dates = []
             failed_dates = []
@@ -825,405 +961,195 @@ class BrokerBranchUpdateService:
             total_tasks = len(branches) * len(dates)
             completed_tasks = 0
 
-            # 使用共用的 driver
-            with self._get_driver() as driver:
-                # 對每個分點
-                for branch_idx, branch_info in enumerate(branches):
-                    branch_key = branch_info['branch_system_key']
-                    branch_name = branch_info['branch_display_name']
+            if not dates:
+                message = "券商分點更新完成：目標日期皆無交易日行情，已跳過 MoneyDJ 抓取"
+                if progress_callback:
+                    progress_callback(message, 100)
+                return {
+                    'success': True,
+                    'message': message,
+                    'updated_dates': [],
+                    'failed_dates': [],
+                    'skipped_dates': non_trading_dates,
+                    'non_trading_dates': non_trading_dates,
+                    'updated_branches': [],
+                    'failed_branches': [],
+                    'total_processed': 0,
+                    'total_records': 0,
+                }
+
+            # 對每個分點
+            for branch_idx, branch_info in enumerate(branches):
+                branch_key = branch_info['branch_system_key']
+                branch_name = branch_info['branch_display_name']
+
+                if progress_callback:
+                    progress_callback(
+                        f"處理分點 {branch_name} ({branch_idx+1}/{len(branches)})...",
+                        int((completed_tasks / total_tasks) * 100)
+                    )
+
+                # 確保分點目錄存在
+                branch_dir = self.config.broker_flow_dir / branch_key
+                daily_dir = branch_dir / 'daily'
+                daily_dir.mkdir(parents=True, exist_ok=True)
+
+                branch_success = True
+                branch_records = 0
+
+                # 對每個日期
+                for date_idx, date_str in enumerate(dates):
+                    completed_tasks += 1
 
                     if progress_callback:
                         progress_callback(
-                            f"處理分點 {branch_name} ({branch_idx+1}/{len(branches)})...",
+                            f"處理 {branch_name} - {date_str} ({completed_tasks}/{total_tasks})...",
                             int((completed_tasks / total_tasks) * 100)
                         )
 
-                    # 確保分點目錄存在
-                    branch_dir = self.config.broker_flow_dir / branch_key
-                    daily_dir = branch_dir / 'daily'
-                    daily_dir.mkdir(parents=True, exist_ok=True)
+                    # 檢查檔案是否已存在 (CSV)
+                    daily_file = daily_dir / f"{date_str}.csv"
+                    if (
+                        daily_file.exists()
+                        and not force_all
+                        and self._csv_has_dual_metrics(daily_file)
+                    ):
+                        skipped_dates.append(date_str)
+                        self.logger.debug(f"跳過已存在檔案(CSV): {branch_key}/{date_str}")
+                        continue
 
-                    branch_success = True
-                    branch_records = 0
-
-                    # 對每個日期
-                    for date_idx, date_str in enumerate(dates):
-                        completed_tasks += 1
-
-                        if progress_callback:
-                            progress_callback(
-                                f"處理 {branch_name} - {date_str} ({completed_tasks}/{total_tasks})...",
-                                int((completed_tasks / total_tasks) * 100)
-                            )
-
-                        # 檢查檔案是否已存在 (CSV)
-                        daily_file = daily_dir / f"{date_str}.csv"
-                        if (
-                            daily_file.exists()
-                            and not force_all
-                            and self._csv_has_dual_metrics(daily_file)
-                        ):
-                            skipped_dates.append(date_str)
-                            self.logger.debug(f"跳過已存在檔案(CSV): {branch_key}/{date_str}")
-                            continue
-
-                        # 檢查 SQLite 資料庫中是否已存在該日期與分點名稱的資料 (僅在 force_all=False 時)
-                        use_sqlite = getattr(self.config, "use_sqlite", False)
-                        db_file = getattr(self.config, "db_file", None)
-                        if use_sqlite and db_file and db_file.exists() and not force_all:
-                            try:
-                                import sqlite3
-                                # 日期格式轉換: "2026-06-01" -> "20260601"
-                                sqlite_date = date_str.replace("-", "")
-
-                                # 連線 SQLite 檢查
-                                with sqlite3.connect(str(db_file)) as conn:
-                                    cursor = conn.cursor()
-                                    # 檢查是否有該分點在該日期的任何交易紀錄
-                                    table_columns = {
-                                        row[1]
-                                        for row in cursor.execute(
-                                            "PRAGMA table_info(broker_flows)"
-                                        ).fetchall()
-                                    }
-                                    has_dual_schema = {
-                                        "買進股數",
-                                        "買進金額千元",
-                                    }.issubset(table_columns)
-                                    row = None
-                                    if has_dual_schema:
-                                        branch_lookup_names = [
-                                            str(branch_info.get('branch_display_name', '')).strip(),
-                                            str(branch_key).strip(),
-                                        ]
-                                        branch_lookup_names = [
-                                            name for name in dict.fromkeys(branch_lookup_names) if name
-                                        ]
-                                        cursor.execute(
-                                            f"""
-                                            SELECT 1
-                                            FROM broker_flows
-                                            WHERE 日期 = ?
-                                              AND 分點名稱 IN ({",".join("?" for _ in branch_lookup_names)})
-                                              AND 買進股數 IS NOT NULL
-                                              AND 買進金額千元 IS NOT NULL
-                                            LIMIT 1
-                                            """,
-                                            (sqlite_date, *branch_lookup_names),
-                                        )
-                                        row = cursor.fetchone()
-                                    if row is not None:
-                                        skipped_dates.append(date_str)
-                                        self.logger.debug(f"跳過已存在 SQLite 記錄: {branch_key}/{date_str}")
-                                        continue
-                            except Exception as sqlite_err:
-                                self.logger.warning(f"檢查 SQLite 記錄失敗: {str(sqlite_err)}")
-
-                        # 重試機制
-                        max_retries = 3
-                        retry_count = 0
-                        success = False
-                        tables = None
-
-                        while retry_count < max_retries and not success:
-                            try:
-                                # 每次重試前都檢查 driver 是否還活著
-                                if not self._is_driver_alive(driver):
-                                    self.logger.warning(f"Driver 已崩潰，重新創建... (重試 {retry_count + 1}/{max_retries})")
-                                    try:
-                                        self._recreate_driver()
-                                        driver = self._driver  # 更新引用
-                                        time.sleep(2)  # 等待 driver 完全初始化
-                                    except Exception as recreate_error:
-                                        self.logger.error(f"重新創建 driver 失敗: {str(recreate_error)}")
-                                        retry_count = max_retries
-                                        break
-
-                                # 構建 URL（參考 Crawler.ipynb 和用戶範例）
-                                # 要抓取某一天的資料，需要設置日期範圍為前一天到當天
-                                # 例如：抓 2025-12-29 的資料，設置 e=2025-12-28&f=2025-12-29
-                                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                                prev_date = (date_obj - timedelta(days=1)).strftime('%Y-%m-%d')
-                                url = self._build_branch_url(branch_info, prev_date, date_str)
-
-                                # 抓取資料（設置超時時間）
-                                try:
-                                    # 設置頁面載入超時（45秒）
-                                    driver.set_page_load_timeout(45)
-                                    # 設置腳本執行超時（30秒）
-                                    driver.set_script_timeout(30)
-                                except Exception as timeout_set_error:
-                                    self.logger.warning(f"設置超時時間失敗: {str(timeout_set_error)}")
-                                    # 繼續嘗試，使用默認超時
-
-                                self.logger.info(f"正在訪問 URL: {url} (重試 {retry_count + 1}/{max_retries})")
-
-                                # 使用 try-except 包裹 get，避免卡住
-                                try:
-                                    # 記錄開始時間
-                                    import time as time_module
-                                    start_time = time_module.time()
-                                    driver.get(url)
-                                    elapsed = time_module.time() - start_time
-                                    self.logger.debug(f"頁面載入完成，耗時 {elapsed:.2f} 秒")
-                                except Exception as get_error:
-                                    error_str = str(get_error)
-                                    error_type = type(get_error).__name__
-                                    # 如果是超時錯誤，記錄並重新創建 driver
-                                    if 'timeout' in error_str.lower() or 'TimeoutException' in error_type:
-                                        self.logger.warning(f"頁面載入超時: {error_str[:200]}")
-                                        # 嘗試停止頁面載入
-                                        try:
-                                            driver.execute_script("window.stop();")
-                                        except:
-                                            pass
-                                        raise  # 讓外層處理
-                                    else:
-                                        self.logger.warning(f"頁面載入錯誤: {error_type}: {error_str[:200]}")
-                                        raise  # 其他錯誤也拋出
-
-                                # 等待表格載入（使用更靈活的方式）
-                                self.logger.debug(f"等待頁面載入...")
-
-                                # 先等待頁面基本載入（檢查 body 標籤）
-                                try:
-                                    wait_body = WebDriverWait(driver, 15)
-                                    wait_body.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-                                    self.logger.debug(f"頁面 body 已載入")
-                                except Exception as body_error:
-                                    self.logger.warning(f"等待 body 載入超時: {str(body_error)[:100]}")
-
-                                # 額外等待一下，讓 JavaScript 執行
-                                time.sleep(2)
-
-                                # 檢查頁面內容
-                                try:
-                                    page_source = driver.page_source
-                                    if not page_source or len(page_source) < 500:
-                                        raise Exception("頁面內容過少，可能未正確載入")
-
-                                    # 獲取頁面標題和 URL 用於診斷
-                                    page_title = driver.title if hasattr(driver, 'title') else 'N/A'
-                                    current_url = driver.current_url if hasattr(driver, 'current_url') else url
-
-                                    # 更精確的錯誤檢測：檢查常見的錯誤頁面特徵
-                                    has_real_error = False
-                                    error_details = []
-
-                                    # 檢查頁面標題是否包含錯誤關鍵詞
-                                    if page_title and any(keyword in page_title.lower() for keyword in ['error', '404', 'not found', '錯誤', '找不到']):
-                                        has_real_error = True
-                                        error_details.append(f"頁面標題包含錯誤關鍵詞: {page_title}")
-
-                                    # 檢查頁面內容中是否有明顯的錯誤訊息（排除正常內容）
-                                    # 檢查常見的錯誤頁面模式
-                                    error_patterns = [
-                                        r'404\s+not\s+found',
-                                        r'page\s+not\s+found',
-                                        r'找不到.*頁面',
-                                        r'系統錯誤',
-                                        r'伺服器錯誤',
-                                        r'server\s+error',
-                                        r'access\s+denied',
-                                        r'拒絕存取',
-                                    ]
-
-                                    page_lower = page_source.lower()
-                                    for pattern in error_patterns:
-                                        if re.search(pattern, page_lower, re.IGNORECASE):
-                                            has_real_error = True
-                                            error_details.append(f"頁面內容匹配錯誤模式: {pattern}")
-                                            break
-
-                                    # 檢查頁面是否過短（可能是錯誤頁面）
-                                    if len(page_source) < 2000:
-                                        # 如果頁面很短且包含錯誤關鍵詞，可能是錯誤頁面
-                                        if any(keyword in page_lower for keyword in ['error', '404', '錯誤', 'not found']):
-                                            has_real_error = True
-                                            error_details.append("頁面內容過短且包含錯誤關鍵詞")
-
-                                    # 如果檢測到真實錯誤，記錄詳細信息
-                                    if has_real_error:
-                                        self.logger.warning(
-                                            f"檢測到頁面錯誤: {branch_key}/{date_str}\n"
-                                            f"  URL: {current_url}\n"
-                                            f"  標題: {page_title}\n"
-                                            f"  錯誤詳情: {', '.join(error_details)}\n"
-                                            f"  頁面長度: {len(page_source)} 字符"
-                                        )
-                                    else:
-                                        # 如果只是包含 "error" 等關鍵詞但沒有明顯錯誤，只記錄 debug
-                                        if 'error' in page_lower or '錯誤' in page_source:
-                                            self.logger.debug(
-                                                f"頁面包含 'error' 關鍵詞但未檢測到真實錯誤: {branch_key}/{date_str} "
-                                                f"(可能是正常內容，如 'error handling')"
-                                            )
-
-                                    # 嘗試等待表格（但不要因為沒有表格就失敗）
-                                    try:
-                                        wait_table = WebDriverWait(driver, 10)
-                                        wait_table.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-                                        self.logger.debug(f"表格已載入: {branch_key}/{date_str}")
-                                    except Exception:
-                                        # 如果沒有表格，記錄警告但繼續
-                                        self.logger.warning(f"頁面已載入但未找到表格，嘗試直接解析: {branch_key}/{date_str}")
-
-                                except Exception as check_error:
-                                    raise Exception(f"無法獲取頁面內容: {str(check_error)}")
-
-                                # 額外等待一下確保頁面完全載入（減少到1秒）
-                                time.sleep(1)
-
-                                html = driver.page_source
-                                soup = BeautifulSoup(html, 'html.parser')
-                                tables = soup.find_all('table')
-
-                                if len(tables) < 15:
-                                    self.logger.warning(f"找不到足夠的表格: {branch_key}/{date_str} (表格數: {len(tables)})")
-                                    if retry_count < max_retries - 1:
-                                        retry_count += 1
-                                        time.sleep(delay_seconds * 2)  # 重試時延遲更長
-                                        continue
-                                    else:
-                                        failed_dates.append(date_str)
-                                        branch_success = False
-                                        time.sleep(delay_seconds)
-                                        break
-
-                                success = True
-
-                            except Exception as fetch_error:
-                                error_msg = str(fetch_error)
-                                error_type = type(fetch_error).__name__
-
-                                # 檢查是否為 driver 相關錯誤（擴展關鍵字列表）
-                                is_driver_error = (
-                                    any(keyword in error_msg.lower() for keyword in [
-                                        'session', 'chrome', 'driver', 'crash', 'disconnected',
-                                        'timeout', 'stacktrace', 'symbols not available',
-                                        'unresolved backtrace', 'webdriver', 'selenium',
-                                        'timeoutexception', 'page load', 'navigation timeout'
-                                    ]) or
-                                    'Message:' in error_msg or
-                                    'Stacktrace:' in error_msg or
-                                    error_type in ['WebDriverException', 'SessionNotCreatedException',
-                                                   'TimeoutException', 'InvalidSessionIdException',
-                                                   'Timeout', 'WebDriverException']
-                                )
-
-                                # TimeoutException 特別處理：可能是頁面載入超時或 driver 崩潰
-                                if error_type == 'TimeoutException':
-                                    is_driver_error = True
-                                    self.logger.warning("檢測到 TimeoutException，將重新創建 driver")
-
-                                self.logger.warning(
-                                    f"抓取 {branch_key}/{date_str} 時發生錯誤 (重試 {retry_count + 1}/{max_retries}): {error_type}: {error_msg[:200]}"
-                                )
-
-                                # 如果是 driver 錯誤，強制檢查並重新創建
-                                if is_driver_error:
-                                    if retry_count < max_retries - 1:
-                                        retry_count += 1
-                                        try:
-                                            # 強制檢查 driver 狀態
-                                            if not self._is_driver_alive(driver):
-                                                self.logger.warning("Driver 已確認崩潰，重新創建...")
-                                            else:
-                                                self.logger.warning("檢測到 driver 錯誤，預防性重新創建...")
-
-                                            self._recreate_driver()
-                                            driver = self._driver  # 更新引用
-                                            # 重試前等待更長時間
-                                            time.sleep(delay_seconds * 3)
-                                        except Exception as recreate_error:
-                                            self.logger.error(f"重新創建 driver 失敗: {str(recreate_error)}")
-                                            retry_count = max_retries  # 強制退出重試
-                                    else:
-                                        retry_count += 1
-                                else:
-                                    # 非 driver 錯誤，直接重試
-                                    if retry_count < max_retries - 1:
-                                        retry_count += 1
-                                        time.sleep(delay_seconds * 2)
-                                    else:
-                                        retry_count += 1
-
-                        if not success or tables is None:
-                            self.logger.error(f"處理 {branch_key}/{date_str} 失敗，已重試 {max_retries} 次")
-                            failed_dates.append(date_str)
-                            branch_success = False
-                            time.sleep(delay_seconds)
-                            continue
-
+                    # 檢查 SQLite 資料庫中是否已存在該日期與分點名稱的資料 (僅在 force_all=False 時)
+                    use_sqlite = getattr(self.config, "use_sqlite", False)
+                    db_file = getattr(self.config, "db_file", None)
+                    if use_sqlite and db_file and db_file.exists() and not force_all:
                         try:
-                            lot_data = self._parse_metric_tables(
-                                tables,
+                            import sqlite3
+                            sqlite_date = date_str.replace("-", "")
+
+                            with sqlite3.connect(str(db_file)) as conn:
+                                cursor = conn.cursor()
+                                table_columns = {
+                                    row[1]
+                                    for row in cursor.execute(
+                                        "PRAGMA table_info(broker_flows)"
+                                    ).fetchall()
+                                }
+                                has_dual_schema = {
+                                    "買進股數",
+                                    "買進金額千元",
+                                }.issubset(table_columns)
+                                row = None
+                                if has_dual_schema:
+                                    branch_lookup_names = [
+                                        str(branch_info.get('branch_display_name', '')).strip(),
+                                        str(branch_key).strip(),
+                                    ]
+                                    branch_lookup_names = [
+                                        name for name in dict.fromkeys(branch_lookup_names) if name
+                                    ]
+                                    cursor.execute(
+                                        f"""
+                                        SELECT 1
+                                        FROM broker_flows
+                                        WHERE 日期 = ?
+                                          AND 分點名稱 IN ({",".join("?" for _ in branch_lookup_names)})
+                                          AND 買進股數 IS NOT NULL
+                                          AND 買進金額千元 IS NOT NULL
+                                        LIMIT 1
+                                        """,
+                                        (sqlite_date, *branch_lookup_names),
+                                    )
+                                    row = cursor.fetchone()
+                                if row is not None:
+                                    skipped_dates.append(date_str)
+                                    self.logger.debug(f"跳過已存在 SQLite 記錄: {branch_key}/{date_str}")
+                                    continue
+                        except Exception as sqlite_err:
+                            self.logger.warning(f"檢查 SQLite 記錄失敗: {str(sqlite_err)}")
+
+                    max_retries = 3
+
+                    try:
+                        try:
+                            lot_data = self._fetch_metric_records_http(
                                 branch_info,
                                 date_str,
                                 "lots",
+                                retries=max_retries,
                             )
-                            amount_data = self._fetch_metric_records(
-                                driver,
+                            amount_data = self._fetch_metric_records_http(
                                 branch_info,
                                 date_str,
                                 "amount",
+                                retries=max_retries,
                             )
-                            all_data = self._merge_metric_records(lot_data, amount_data)
-
-                            if not lot_data or not amount_data:
-                                raise ValueError("MoneyDJ E/B 雙指標資料不完整")
-
-                            if all_data:
-                                # 保存到 CSV
-                                df = pd.DataFrame(all_data)
-                                df.to_csv(daily_file, index=False, encoding='utf-8-sig')
-
-                                updated_dates.append(date_str)
-                                branch_records += len(all_data)
-                                total_records += len(all_data)
-
-                                self.logger.info(
-                                    f"成功更新: {branch_key}/{date_str}, "
-                                    f"記錄數: {len(all_data)}"
+                        except Exception as http_error:
+                            self.logger.warning(
+                                "MoneyDJ HTTP fast path 失敗，改用 Selenium fallback: %s/%s: %s",
+                                branch_key,
+                                date_str,
+                                http_error,
+                            )
+                            with self._get_driver() as driver:
+                                lot_data = self._fetch_metric_records(
+                                    driver,
+                                    branch_info,
+                                    date_str,
+                                    "lots",
+                                    retries=max_retries,
                                 )
-                            else:
-                                self.logger.info(f"日期 {date_str} 沒有交易數據: {branch_key}，建立空標記檔案")
-                                # 建立只含 Header 的空 CSV，避免未來重複下載
-                                df = pd.DataFrame(columns=[
-                                    'date', 'trade_type', 'branch_system_key', 'branch_broker_code',
-                                    'branch_code', 'branch_display_name', 'counterparty_broker_code',
-                                    'counterparty_broker_name',
-                                    'buy_lots', 'sell_lots', 'net_lots',
-                                    'buy_amount_k_twd', 'sell_amount_k_twd', 'net_amount_k_twd',
-                                    'lots_observed', 'amount_observed',
-                                    'lots_rank', 'amount_rank'
-                                ])
-                                df.to_csv(daily_file, index=False, encoding='utf-8-sig')
-                                updated_dates.append(date_str)
+                                amount_data = self._fetch_metric_records(
+                                    driver,
+                                    branch_info,
+                                    date_str,
+                                    "amount",
+                                    retries=max_retries,
+                                )
 
-                            # 延遲
-                            time.sleep(delay_seconds)
+                        if not lot_data or not amount_data:
+                            raise ValueError("MoneyDJ E/B 雙指標資料不完整")
 
-                        except Exception as e:
-                            self.logger.error(f"處理 {branch_key}/{date_str} 時發生錯誤: {str(e)}")
-                            failed_dates.append(date_str)
-                            branch_success = False
-                            time.sleep(delay_seconds)
+                        all_data = self._merge_metric_records(lot_data, amount_data)
+                        if not all_data:
+                            raise ValueError("MoneyDJ E/B 雙指標合併後無資料")
 
-                    # 記錄分點處理結果
-                    if branch_success:
-                        updated_branches.append(branch_key)
-                    else:
-                        failed_branches.append(branch_key)
+                        # 保存到 CSV
+                        df = pd.DataFrame(all_data)
+                        df.to_csv(daily_file, index=False, encoding='utf-8-sig')
 
-            # 清理 driver
+                        updated_dates.append(date_str)
+                        branch_records += len(all_data)
+                        total_records += len(all_data)
+
+                        self.logger.info(
+                            f"成功更新: {branch_key}/{date_str}, "
+                            f"記錄數: {len(all_data)}"
+                        )
+
+                        # 延遲
+                        time.sleep(delay_seconds)
+
+                    except Exception as e:
+                        self.logger.error(f"處理 {branch_key}/{date_str} 時發生錯誤: {str(e)}")
+                        failed_dates.append(date_str)
+                        branch_success = False
+                        time.sleep(delay_seconds)
+
+                # 記錄分點處理結果
+                if branch_success:
+                    updated_branches.append(branch_key)
+                else:
+                    failed_branches.append(branch_key)
+
+            # 清理 driver（只有 Selenium fallback 建立過時才會有作用）
             self._cleanup_driver()
 
             # 生成結果訊息
             message = (
                 f"更新完成：成功 {len(updated_branches)} 個分點，失敗 {len(failed_branches)} 個分點；"
                 f"成功 {len(updated_dates)} 個日期，失敗 {len(failed_dates)} 個日期，"
-                f"跳過 {len(skipped_dates)} 個日期；總記錄數: {total_records}"
+                f"跳過 {len(skipped_dates) + len(non_trading_dates)} 個日期"
+                f"（無交易行情 {len(non_trading_dates)} 個）；總記錄數: {total_records}"
             )
 
             if progress_callback:
@@ -1234,7 +1160,8 @@ class BrokerBranchUpdateService:
                 'message': message,
                 'updated_dates': list(set(updated_dates)),
                 'failed_dates': list(set(failed_dates)),
-                'skipped_dates': list(set(skipped_dates)),
+                'skipped_dates': list(set(skipped_dates + non_trading_dates)),
+                'non_trading_dates': non_trading_dates,
                 'updated_branches': updated_branches,
                 'failed_branches': failed_branches,
                 'total_processed': len(dates),

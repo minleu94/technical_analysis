@@ -162,6 +162,255 @@ def test_parse_metric_tables_reads_genlink2stk_script_rows(tmp_path):
     assert records[0]["metric_rank"] == 1
 
 
+def test_fetch_metric_records_http_decodes_moneydj_big5_and_parses_rows(tmp_path, monkeypatch):
+    service = BrokerBranchUpdateService(DummyConfig(tmp_path))
+    branch = {
+        "branch_system_key": "8450_845B",
+        "branch_broker_code": "8450",
+        "branch_code": "845B",
+        "branch_display_name": "康和-永和",
+        "url_param_a": "8450",
+        "url_param_b": "845B",
+    }
+    html = """
+    <html><body>
+      <table>
+        <tbody>
+          <tr><td colspan="4">買超</td></tr>
+          <tr><td>股票</td><td>買進張數</td><td>賣出張數</td><td>差額</td></tr>
+          <tr><td><script>GenLink2stk('AS3296','勝德');</script></td><td>163</td><td>0</td><td>163</td></tr>
+        </tbody>
+      </table>
+    </body></html>
+    """
+
+    class FakeResponse:
+        status_code = 200
+        content = html.encode("big5")
+
+        def raise_for_status(self):
+            return None
+
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return FakeResponse()
+
+    monkeypatch.setattr("app_module.broker_branch_update_service.requests.get", fake_get)
+
+    records = service._fetch_metric_records_http(branch, "2026-06-11", "lots", retries=1)
+
+    assert "c=E" in captured["url"]
+    assert captured["kwargs"]["timeout"] == 30
+    assert len(records) == 1
+    assert records[0]["counterparty_broker_code"] == "3296"
+    assert records[0]["net_lots"] == 163
+
+
+def test_fetch_metric_records_http_marks_valid_empty_moneydj_page_as_no_data(tmp_path, monkeypatch):
+    service = BrokerBranchUpdateService(DummyConfig(tmp_path))
+    branch = {
+        "branch_system_key": "8450_845B",
+        "branch_broker_code": "8450",
+        "branch_code": "845B",
+        "branch_display_name": "康和-永和",
+        "url_param_a": "8450",
+        "url_param_b": "845B",
+    }
+    html = """
+    <html><body>
+      <table><tr><td>券商進出排行</td></tr></table>
+      <table><tr><td>資料日期：</td></tr></table>
+    </body></html>
+    """
+
+    class FakeResponse:
+        status_code = 200
+        content = html.encode("big5")
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(
+        "app_module.broker_branch_update_service.requests.get",
+        lambda *args, **kwargs: FakeResponse(),
+    )
+
+    with pytest.raises(RuntimeError, match="MoneyDJ lots 頁面未解析到交易資料"):
+        service._fetch_metric_records_http(branch, "2026-04-06", "lots", retries=1)
+
+
+def test_update_broker_branch_data_uses_http_fast_path_without_driver(tmp_path, monkeypatch):
+    config = DummyConfig(tmp_path)
+    config.meta_data_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "branch_system_key": ["8450_845B"],
+        "branch_broker_code": ["8450"],
+        "branch_code": ["845B"],
+        "branch_display_name": ["康和-永和"],
+        "url_param_a": ["8450"],
+        "url_param_b": ["0038003400350042"],
+        "is_active": [True],
+    }).to_csv(config.broker_branch_registry_file, index=False, encoding="utf-8-sig")
+
+    service = BrokerBranchUpdateService(config)
+
+    def fake_http(branch_info, date_str, metric, retries=3, timeout=30):
+        common = {
+            "date": date_str,
+            "trade_type": "買超",
+            "branch_system_key": branch_info["branch_system_key"],
+            "branch_broker_code": branch_info["branch_broker_code"],
+            "branch_code": branch_info["branch_code"],
+            "branch_display_name": branch_info["branch_display_name"],
+            "counterparty_broker_code": "2330",
+            "counterparty_broker_name": "台積電",
+            "metric_rank": 1,
+        }
+        if metric == "lots":
+            return [{**common, "metric_source": "lots", "buy_lots": 10, "sell_lots": 2, "net_lots": 8}]
+        return [{
+            **common,
+            "metric_source": "amount",
+            "buy_amount_k_twd": 1000,
+            "sell_amount_k_twd": 200,
+            "net_amount_k_twd": 800,
+        }]
+
+    monkeypatch.setattr(service, "_fetch_metric_records_http", fake_http)
+
+    def fail_driver():
+        raise AssertionError("HTTP fast path should not create Selenium driver")
+
+    monkeypatch.setattr(service, "_get_driver", fail_driver)
+
+    result = service.update_broker_branch_data("2026-06-11", "2026-06-11", delay_seconds=0)
+
+    assert result["success"] is True
+    assert result["total_records"] == 1
+    daily_file = config.broker_flow_dir / "8450_845B" / "daily" / "2026-06-11.csv"
+    saved = pd.read_csv(daily_file, encoding="utf-8-sig")
+    assert saved.loc[0, "buy_lots"] == 10
+    assert saved.loc[0, "buy_amount_k_twd"] == 1000
+    assert bool(saved.loc[0, "lots_observed"]) is True
+    assert bool(saved.loc[0, "amount_observed"]) is True
+
+
+def test_update_broker_branch_data_skips_dates_without_daily_price_evidence(tmp_path, monkeypatch):
+    config = DummyConfig(tmp_path)
+    config.daily_price_dir = tmp_path / "daily_price"
+    config.tpex_daily_price_dir = tmp_path / "daily_price_tpex"
+    config.db_file = tmp_path / "stock_data.db"
+    config.use_sqlite = False
+    config.meta_data_dir.mkdir(parents=True, exist_ok=True)
+    config.daily_price_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "branch_system_key": ["8450_845B"],
+        "branch_broker_code": ["8450"],
+        "branch_code": ["845B"],
+        "branch_display_name": ["康和-永和"],
+        "url_param_a": ["8450"],
+        "url_param_b": ["0038003400350042"],
+        "is_active": [True],
+    }).to_csv(config.broker_branch_registry_file, index=False, encoding="utf-8-sig")
+    pd.DataFrame([{"日期": "20260407", "證券代號": "2330"}]).to_csv(
+        config.daily_price_dir / "20260407.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    service = BrokerBranchUpdateService(config)
+    requested_dates = []
+
+    def fake_http(branch_info, date_str, metric, retries=3, timeout=30):
+        requested_dates.append((date_str, metric))
+        common = {
+            "date": date_str,
+            "trade_type": "買超",
+            "branch_system_key": branch_info["branch_system_key"],
+            "branch_broker_code": branch_info["branch_broker_code"],
+            "branch_code": branch_info["branch_code"],
+            "branch_display_name": branch_info["branch_display_name"],
+            "counterparty_broker_code": "2330",
+            "counterparty_broker_name": "台積電",
+            "metric_rank": 1,
+        }
+        if metric == "lots":
+            return [{**common, "metric_source": "lots", "buy_lots": 10, "sell_lots": 2, "net_lots": 8}]
+        return [{
+            **common,
+            "metric_source": "amount",
+            "buy_amount_k_twd": 1000,
+            "sell_amount_k_twd": 200,
+            "net_amount_k_twd": 800,
+        }]
+
+    monkeypatch.setattr(service, "_fetch_metric_records_http", fake_http)
+    monkeypatch.setattr(
+        service,
+        "_get_driver",
+        lambda: (_ for _ in ()).throw(AssertionError("非交易日不應進入 Selenium fallback")),
+    )
+
+    result = service.update_broker_branch_data(
+        "2026-04-06",
+        "2026-04-07",
+        delay_seconds=0,
+        force_all=True,
+    )
+
+    assert result["success"] is True
+    assert result["non_trading_dates"] == ["2026-04-06"]
+    assert requested_dates == [("2026-04-07", "lots"), ("2026-04-07", "amount")]
+    assert not (config.broker_flow_dir / "8450_845B" / "daily" / "2026-04-06.csv").exists()
+    assert (config.broker_flow_dir / "8450_845B" / "daily" / "2026-04-07.csv").exists()
+
+
+def test_update_broker_branch_data_returns_success_when_all_dates_are_non_trading(tmp_path, monkeypatch):
+    config = DummyConfig(tmp_path)
+    config.daily_price_dir = tmp_path / "daily_price"
+    config.tpex_daily_price_dir = tmp_path / "daily_price_tpex"
+    config.db_file = tmp_path / "stock_data.db"
+    config.use_sqlite = False
+    config.meta_data_dir.mkdir(parents=True, exist_ok=True)
+    config.daily_price_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "branch_system_key": ["8450_845B"],
+        "branch_broker_code": ["8450"],
+        "branch_code": ["845B"],
+        "branch_display_name": ["康和-永和"],
+        "url_param_a": ["8450"],
+        "url_param_b": ["0038003400350042"],
+        "is_active": [True],
+    }).to_csv(config.broker_branch_registry_file, index=False, encoding="utf-8-sig")
+    pd.DataFrame([{"日期": "20260407", "證券代號": "2330"}]).to_csv(
+        config.daily_price_dir / "20260407.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    service = BrokerBranchUpdateService(config)
+    monkeypatch.setattr(
+        service,
+        "_fetch_metric_records_http",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("非交易日不應抓 MoneyDJ")),
+    )
+
+    result = service.update_broker_branch_data(
+        "2026-04-06",
+        "2026-04-06",
+        delay_seconds=0,
+        force_all=True,
+    )
+
+    assert result["success"] is True
+    assert result["message"] == "券商分點更新完成：目標日期皆無交易日行情，已跳過 MoneyDJ 抓取"
+    assert result["non_trading_dates"] == ["2026-04-06"]
+    assert result["total_processed"] == 0
+
+
 def test_infer_metric_ranks_for_legacy_daily_rows(tmp_path):
     service = BrokerBranchUpdateService(DummyConfig(tmp_path))
     df = pd.DataFrame([

@@ -276,6 +276,13 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 - Smart Money 與 Portfolio Chip Monitor 使用 observed / estimated / unavailable 三態，單筆不可用不再污染同股票其他事件。
 - 正式 `broker_flows` 已由既有 daily 檔無破壞重建為 104,986 筆、158 天，rank 範圍 1 至 50，唯一鍵與 NULL 契約檢查均通過。
 
+## 2026-06-24 券商分點 MoneyDJ HTTP fast path
+
+- MoneyDJ 券商分點更新改為先使用 HTTP fast path 抓取 Big5 HTML，正常頁面不再先啟動 Selenium；HTTP 失敗或解析不到資料時才退回 Selenium fallback。
+- 預設請求間隔由 4.0 秒調整為 0.5 秒，仍維持序列更新，暫不啟用多 worker 併發。
+- 更新日期會先以每日股價日檔或 SQLite `daily_prices` 作交易日預檢；沒有行情證據的日期會整天跳過 MoneyDJ，避免 40 個分點各自重試非交易日。
+- 小樣本 live 驗證：`1440_1440` / `2026-05-29` 在暫存資料根目錄中不啟動 Selenium，約 1.62 秒寫出 141 筆 daily CSV。
+
 
 ## 2026-06-12 批次回測並行化與安全軟取消成果
 

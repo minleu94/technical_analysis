@@ -2836,7 +2836,7 @@ class UpdateService :
     start_date :str ,
     end_date :str ,
     branch_system_keys :Optional [List [str ]]=None ,
-    delay_seconds :float =4.0 ,
+    delay_seconds :float =0.5 ,
     force_all :bool =False ,
     progress_callback =None
     )->Dict [str ,Any ]:
@@ -2889,6 +2889,7 @@ class UpdateService :
             'updated_dates':[],
             'failed_dates':[],
             'skipped_dates':[],
+            'non_trading_dates':[],
             'updated_branches':[],
             'failed_branches':[],
             'total_processed':0 ,

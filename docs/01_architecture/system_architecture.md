@@ -350,6 +350,8 @@ MoneyDJ 張數榜 `c=E` 與金額榜 `c=B` 是各自獨立的 Top 50：
 - 資料層使用 union 保存。
 - 榜外欄位使用 NULL，不可當成 0。
 - 保存方向、rank 與品質狀態。
+- 進入 MoneyDJ 前先以每日股價日檔或 SQLite `daily_prices` 作交易日預檢；沒有行情證據的日期視為不需抓取的 broker-flow 日期，整天跳過。
+- 更新流程優先以 HTTP fast path 直接抓取 MoneyDJ Big5 HTML；只有 HTTP 失敗或解析不到資料時才使用 Selenium fallback。流程仍採序列更新，不以多 worker 併發打 MoneyDJ。
 
 品質三態：
 
