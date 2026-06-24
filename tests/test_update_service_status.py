@@ -261,6 +261,47 @@ def test_sync_daily_price_files_to_sqlite_includes_tpex_daily_price_dir(tmp_path
     ]
 
 
+def test_sync_daily_price_files_to_sqlite_preserves_zero_padded_stock_codes(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    pd.DataFrame({
+        "證券代號": ["0050"],
+        "證券名稱": ["元大台灣50"],
+        "收盤價": [107.15],
+    }).to_csv(config.daily_price_dir / "20260624.csv", index=False, encoding="utf-8-sig")
+
+    result = UpdateService(config).sync_source_to_sqlite("daily_price_files", "2026-06-24", "2026-06-24")
+
+    assert result["success"] is True
+    synced = db.execute_query('SELECT "日期", "證券代號", "證券名稱", "收盤價" FROM daily_prices;')
+    assert synced.to_dict(orient="records") == [
+        {"日期": "20260624", "證券代號": "0050", "證券名稱": "元大台灣50", "收盤價": 107.15},
+    ]
+
+
+def test_sync_daily_data_to_sqlite_preserves_zero_padded_stock_codes(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    pd.DataFrame({
+        "日期": ["20260624"],
+        "證券代號": ["0050"],
+        "證券名稱": ["元大台灣50"],
+        "收盤價": [107.15],
+    }).to_csv(config.stock_data_file, index=False, encoding="utf-8-sig")
+
+    result = UpdateService(config).sync_source_to_sqlite("daily_data")
+
+    assert result["success"] is True
+    synced = db.execute_query('SELECT "日期", "證券代號", "證券名稱", "收盤價" FROM daily_prices;')
+    assert synced.to_dict(orient="records") == [
+        {"日期": "20260624", "證券代號": "0050", "證券名稱": "元大台灣50", "收盤價": 107.15},
+    ]
+
+
 def test_merge_daily_data_includes_tpex_daily_price_dir(tmp_path):
     from scripts.merge_daily_data import merge_daily_data
 

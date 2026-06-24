@@ -36,10 +36,18 @@
 - **`root_readme_legacy_2025_12.txt`**
   - 原根目錄 `readme.txt`，內容停留在舊 Phase、舊入口與舊路徑說明；2026-06-18 已移入歸檔，只作歷史追溯，不作目前狀態依據。
 
+- **`ARCH_GOVERNANCE_CHECKLIST.md`**
+  - 早期架構治理自檢清單；2026-06-24 自 `docs/00_core/` 歸檔。目前架構權威以 `docs/01_architecture/system_architecture.md` 為準。
+
+- **`ARCH_GOVERNANCE_LIFECYCLE.md`**
+  - 早期架構治理生命週期備忘；2026-06-24 自 `docs/00_core/` 歸檔。目前文件治理以 `docs/00_core/DOC_COVERAGE_MAP.md` 與 `docs/00_core/DOCUMENTATION_STRUCTURE.md` 為準。
+
+- **`ARCH_VIOLATION_RESPONSE_POLICY.md`**
+  - 早期架構違規處理政策備忘；2026-06-24 自 `docs/00_core/` 歸檔。目前架構邊界與高風險契約以 `docs/01_architecture/system_architecture.md` 為準。
+
 ## ⚠️ 注意
 
 這些文檔主要用於記錄歷史，日常使用時請參考：
 - `../00_core/DOCUMENTATION_INDEX.md` - 文檔索引
 - `../00_core/PROJECT_SNAPSHOT.md` - 專案快照
 - `../00_core/ROADMAP_6M_ENGINEERING.md` - 未來 6 個月工程路線
-

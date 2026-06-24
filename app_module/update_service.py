@@ -547,7 +547,7 @@ class UpdateService :
 
         if not path .exists ():
             return pd .DataFrame ()
-        df =pd .read_csv (path ,encoding ='utf-8-sig')
+        df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
         if df .empty :
             return df
         if require_date and '日期'not in df .columns and '日期'not in df .columns :
@@ -585,7 +585,7 @@ class UpdateService :
                     continue
                 if end_key and date_key >end_key :
                     continue
-                df =pd .read_csv (path ,encoding ='utf-8-sig')
+                df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
                 if df .empty :
                     continue
                 if '日期'not in df .columns and '日期'not in df .columns :
@@ -620,7 +620,7 @@ class UpdateService :
                     date_key =path .stem
                     if date_key not in date_keys :
                         continue
-                    tpex_df =pd .read_csv (path ,encoding ='utf-8-sig')
+                    tpex_df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
                     if tpex_df .empty :
                         continue
                     if date_col not in tpex_df .columns :
@@ -992,7 +992,33 @@ class UpdateService :
         if '證券名稱'in normalized .columns and '證券名稱'not in normalized .columns :
             normalized =normalized .rename (columns ={'證券名稱':'證券名稱'})
         normalized ['日期']=normalized ['日期'].map (lambda value :self ._date_key (value ))
+        if '證券代號'in normalized .columns :
+            normalized ['證券代號']=normalized ['證券代號'].map (self ._stock_code_key )
         return normalized
+
+    @staticmethod
+    def _sqlite_csv_dtype ()->Dict [str ,Any ]:
+        return {
+        '日期':str ,
+        '證券代號':str ,
+        '股票代號':str ,
+        'stock_code':str ,
+        'stock_id':str ,
+        'date':str ,
+        }
+
+    @staticmethod
+    def _stock_code_key (value :Any )->str :
+        if value is None :
+            return ''
+        text =str (value ).strip ()
+        if not text or text .lower ()=='nan':
+            return ''
+        if text .endswith ('.0')and text [:-2 ].isdigit ():
+            text =text [:-2 ]
+        if text .isdigit ()and len (text )<=4 :
+            return text .zfill (4 )
+        return text
 
     def _deduplicate_and_merge_broker_flows (self ,df :Any )->Any :
         import pandas as pd # type: ignore[import-untyped]
