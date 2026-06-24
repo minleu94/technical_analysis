@@ -170,13 +170,13 @@
 目的：讓未來版本升級真的更有效，而不是每次重測都從零開始。
 
 - [x] E-1：Run history manifest，保存 run_id、commit、mode、viewport、suite results、feature results、manual gaps。
-- E-2：Compare two healthcheck runs，輸出新增覆蓋、修復、退步、仍未覆蓋。
+- [x] E-2：Compare two healthcheck runs，輸出新增覆蓋、修復、退步、仍未覆蓋。
 - E-3：Quick mode release gate proposal，等 quick 穩定後再決定是否變成正式 gate。
 - E-4：Full mode release checklist，release 前人工與機器共同使用。
 
 ## 6. 推薦下一個實作批次
 
-下一個批次是 E-2 Compare two healthcheck runs，但必須先由使用者明確確認後才可進入。
+下一個批次是 E-3 Quick mode release gate proposal，但必須先由使用者明確確認後才可進入。
 
 理由：
 
@@ -195,7 +195,8 @@
 - D-3 已建立 Viewport / resize evidence plan metadata，仍不在 unit tests 或 quick/full runner 中啟動 MainWindow、截圖或 resize widget。
 - D-4 已建立 High-risk dry-run dialog plan metadata，仍不在 unit tests 或 quick/full runner 中啟動 MainWindow、執行 dialog、或呼叫真實 service。
 - E-1 已建立 Run history manifest 記憶體內元資料與 Markdown 渲染器，不寫檔，不影響執行器。
-- 下一步 E-2 會開始規劃 Compare two healthcheck runs，以輸出新舊測試執行比對。
+- E-2 已建立 Compare two healthcheck runs 的純記憶體比對器與 Markdown 渲染器，可輸出新舊測試執行差異。
+- 下一步 E-3 會開始規劃 Quick mode release gate proposal，但仍只做 proposal / metadata，不直接把 quick mode 升級成正式 gate。
 
 ### Task E-2：Compare Two Healthcheck Runs
 
@@ -208,11 +209,11 @@
 - Modify: `docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md`
 - Modify: `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`
 
-- [ ] **Step 0: Confirm authorization**
+- [x] **Step 0: Confirm authorization**
 
 Do not begin E-2 unless the user explicitly confirms that starting run history comparison planning is allowed.
 
-- [ ] **Step 1: Inspect E-1 manifest schema**
+- [x] **Step 1: Inspect E-1 manifest schema**
 
 Run:
 
@@ -223,7 +224,7 @@ Get-Content -Raw -Encoding UTF8 tests\test_full_app_healthcheck_run_history_mani
 
 Expected: understand the in-memory manifest schema before comparing two runs. Keep E-2 pure unless a later executor explicitly writes comparison output.
 
-- [ ] **Step 2: Write run history comparison tests before implementation**
+- [x] **Step 2: Write run history comparison tests before implementation**
 
 Create `tests/test_full_app_healthcheck_run_history_compare.py` with cases for:
 
@@ -232,7 +233,7 @@ Create `tests/test_full_app_healthcheck_run_history_compare.py` with cases for:
 - Inputs are two `RunHistoryManifest` instances.
 - Markdown rendering summarizes baseline run, candidate run, fixes, regressions, coverage changes, and manual gap changes.
 
-- [ ] **Step 3: Implement `run_history_compare.py`**
+- [x] **Step 3: Implement `run_history_compare.py`**
 
 Suggested public API:
 
@@ -261,11 +262,11 @@ Required helpers:
 - `compare_run_history_manifests(baseline: RunHistoryManifest, candidate: RunHistoryManifest) -> RunHistoryComparison`
 - `render_run_history_comparison_markdown(comparison: RunHistoryComparison) -> str`
 
-- [ ] **Step 4: Keep E-2 pure unless explicitly approved**
+- [x] **Step 4: Keep E-2 pure unless explicitly approved**
 
 Do not write output files, mutate run output directories, start MainWindow, execute dialogs, or add E-2 to quick/full runner bridge automatically.
 
-- [ ] **Step 5: Update inventory and docs count**
+- [x] **Step 5: Update inventory and docs count**
 
 After adding the new test file, run collect-only and update counts:
 
@@ -279,7 +280,7 @@ Update:
 - `tests/test_full_app_healthcheck_test_inventory.py`
 - `docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md`
 
-- [ ] **Step 6: Verify**
+- [x] **Step 6: Verify**
 
 Run:
 
@@ -302,10 +303,10 @@ Expected:
 複製以下 prompt 到新 Codex 或 Gemini 對話：
 
 ```markdown
-你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 E-2 Compare two healthcheck runs，但必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
+你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 E-3 Quick mode release gate proposal，但必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
 
 工作目標：
-延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 / D-2 / D-3 / D-4 / E-1 是否已完成並驗證。若使用者明確授權進入 E-2，才做 E-2 Compare two healthcheck runs 的純 metadata/schema helper 與測試；此階段不要寫 output 檔、不要啟動 MainWindow、不要執行 dialog、不要呼叫 service、不要資料寫入、migration、backfill apply 或 high-risk dry-run 實作。
+延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 / D-2 / D-3 / D-4 / E-1 / E-2 是否已完成並驗證。若使用者明確授權進入 E-3，才做 E-3 Quick mode release gate proposal 的純 metadata/proposal helper 與測試；此階段不要把 quick mode 升級成正式 gate、不要寫 output 檔、不要啟動 MainWindow、不要執行 dialog、不要呼叫 service、不要資料寫入、migration、backfill apply 或 high-risk dry-run 實作。
 
 必讀文件：
 1. `AGENTS.md`
@@ -332,15 +333,15 @@ Expected:
 
 請先做：
 1. `git status --short`，不要覆寫其他 agent 或使用者未提交變更。
-2. 檢查 `qa/full_app_healthcheck/run_history_manifest.py`、`tests/test_full_app_healthcheck_run_history_manifest.py`、`qa/full_app_healthcheck/high_risk_dry_run_dialog_plan.py`、`qa/full_app_healthcheck/feature_router.py` 與對應測試檔。
+2. 檢查 `qa/full_app_healthcheck/run_history_manifest.py`、`qa/full_app_healthcheck/run_history_compare.py`、`tests/test_full_app_healthcheck_run_history_manifest.py`、`tests/test_full_app_healthcheck_run_history_compare.py`、`qa/full_app_healthcheck/high_risk_dry_run_dialog_plan.py`、`qa/full_app_healthcheck/feature_router.py` 與對應測試檔。
 3. 跑：
    `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 4. 跑：
    `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
-5. 若都通過，確認使用者是否已明確授權進入 E-2；沒有授權就停止並回報「E-2 需要授權」。
-6. 若已授權，開始 E-2：以 TDD 建立 `qa/full_app_healthcheck/run_history_compare.py`，只做純 in-memory comparison helper，不寫入 output 檔案、不接 runner execution。
+5. 若都通過，確認使用者是否已明確授權進入 E-3；沒有授權就停止並回報「E-3 需要授權」。
+6. 若已授權，開始 E-3：以 TDD 建立 quick mode release gate proposal 的純 metadata/proposal helper，只描述 release gate 候選條件、必要證據與人工確認點，不把 quick mode 接成正式 gate。
 7. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
-8. 完成後只回報檢查與修正結果；不要把 E-2 自動接入 quick/full runner bridge。
+8. 完成後只回報檢查與修正結果；不要把 E-3 自動接入 quick/full runner bridge 或 CI gate。
 
 驗收命令：
 `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_run_history_compare.py tests/test_full_app_healthcheck_run_history_manifest.py tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
@@ -357,4 +358,4 @@ Expected:
 - [ ] 沒有把 write-risk / manual-only 測試放入 quick 或 full bridge。
 - [ ] 新增測試檔後，test inventory 與文件測試數同步。
 - [ ] quick runner 仍通過。
-- [ ] 若要進 E-2，必須先由使用者明確確認。
+- [ ] 若要進 E-3，必須先由使用者明確確認。
