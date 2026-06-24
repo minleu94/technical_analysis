@@ -111,7 +111,7 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
 
 
 def test_inventory_exposes_pytest_collection_statuses():
-    assert len(PYTEST_COLLECTED_FILES) == 165
+    assert len(PYTEST_COLLECTED_FILES) == 166
     assert len(PYTEST_SUPPORT_FILES) == 1
     assert len(PYTEST_NOT_COLLECTED_FILES) == 30
 
@@ -123,8 +123,9 @@ def test_inventory_exposes_pytest_collection_statuses():
 
 
 def test_inventory_can_query_category_groups():
-    assert len(get_files_by_category("healthcheck-runner-owned")) == 16
+    assert len(get_files_by_category("healthcheck-runner-owned")) == 17
     assert len(get_files_by_category("legacy-or-low-priority")) == 9
+
 
 
     assert "tests/test_pattern_analysis/test_flag_pattern_robustness.py" in get_files_by_category(
