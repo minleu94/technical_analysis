@@ -171,12 +171,12 @@
 
 - [x] E-1：Run history manifest，保存 run_id、commit、mode、viewport、suite results、feature results、manual gaps。
 - [x] E-2：Compare two healthcheck runs，輸出新增覆蓋、修復、退步、仍未覆蓋。
-- E-3：Quick mode release gate proposal，等 quick 穩定後再決定是否變成正式 gate。
+- [x] E-3：Quick mode release gate proposal，等 quick 穩定後再決定是否變成正式 gate。
 - E-4：Full mode release checklist，release 前人工與機器共同使用。
 
 ## 6. 推薦下一個實作批次
 
-下一個批次是 E-3 Quick mode release gate proposal，但必須先由使用者明確確認後才可進入。
+下一個批次是 E-4 Full mode release checklist，但必須先由使用者明確確認後才可進入。
 
 理由：
 
@@ -196,7 +196,8 @@
 - D-4 已建立 High-risk dry-run dialog plan metadata，仍不在 unit tests 或 quick/full runner 中啟動 MainWindow、執行 dialog、或呼叫真實 service。
 - E-1 已建立 Run history manifest 記憶體內元資料與 Markdown 渲染器，不寫檔，不影響執行器。
 - E-2 已建立 Compare two healthcheck runs 的純記憶體比對器與 Markdown 渲染器，可輸出新舊測試執行差異。
-- 下一步 E-3 會開始規劃 Quick mode release gate proposal，但仍只做 proposal / metadata，不直接把 quick mode 升級成正式 gate。
+- E-3 已建立 Quick mode release gate proposal metadata，明確標示 proposal-only、不啟用 CI gate、不修改 runner bridge。
+- 下一步 E-4 會開始規劃 Full mode release checklist，作為 release 前人工與機器共同使用的檢查清單。
 
 ### Task E-2：Compare Two Healthcheck Runs
 
@@ -298,15 +299,66 @@ Expected:
 - Quick runner passes.
 - `git diff --check` has no whitespace errors.
 
+### Task E-3：Quick Mode Release Gate Proposal
+
+**Files:**
+
+- Create: `qa/full_app_healthcheck/quick_mode_release_gate_proposal.py`
+- Test: `tests/test_full_app_healthcheck_quick_mode_release_gate_proposal.py`
+- Modify: `qa/full_app_healthcheck/test_inventory.py`
+- Modify: `tests/test_full_app_healthcheck_test_inventory.py`
+- Modify: `docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md`
+- Modify: `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`
+
+- [x] **Step 0: Confirm authorization**
+
+Do not begin E-3 unless the user explicitly confirms that starting quick mode release gate proposal planning is allowed.
+
+- [x] **Step 1: Keep E-3 proposal-only**
+
+E-3 must not activate CI / release gate behavior, mutate runner bridge behavior, write output files, start UI, execute dialogs, call services, or perform data writes.
+
+- [x] **Step 2: Define proposal metadata**
+
+Create a frozen metadata model that records:
+
+- Proposal id and status.
+- Candidate mode (`quick`).
+- Proposal-only guardrails.
+- Required criteria.
+- Blocker notes.
+- Manual confirmation points.
+- Rollback notes.
+- Next review step.
+
+- [x] **Step 3: Render Markdown**
+
+Add a Markdown renderer that makes the proposal status, required evidence, manual confirmations, blockers, rollback notes, and next review step readable for a future release review.
+
+- [x] **Step 4: Test defensive boundaries**
+
+Tests must verify proposal-only flags, no gate activation, no bridge mutation, required criteria coverage, readable Markdown, inventory registration, and no write / UI execution side effects.
+
+- [x] **Step 5: Verify**
+
+Run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_quick_mode_release_gate_proposal.py tests/test_full_app_healthcheck_run_history_compare.py tests/test_full_app_healthcheck_run_history_manifest.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=
+.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
+git diff --check
+```
+
 ## 7. 新對話接手 Prompt
 
 複製以下 prompt 到新 Codex 或 Gemini 對話：
 
 ```markdown
-你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 E-3 Quick mode release gate proposal，但必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
+你要接手 technical_analysis 專案的 Testing / QA Agent + Full App Healthcheck Runner 路線。下一步是 E-4 Full mode release checklist，但必須先取得使用者明確確認；若使用者尚未明確授權，請只做檢查與回報，不要開始實作。
 
 工作目標：
-延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 / D-2 / D-3 / D-4 / E-1 / E-2 是否已完成並驗證。若使用者明確授權進入 E-3，才做 E-3 Quick mode release gate proposal 的純 metadata/proposal helper 與測試；此階段不要把 quick mode 升級成正式 gate、不要寫 output 檔、不要啟動 MainWindow、不要執行 dialog、不要呼叫 service、不要資料寫入、migration、backfill apply 或 high-risk dry-run 實作。
+延續 `docs/superpowers/plans/2026-06-23-testing-qa-agent-super-healthcheck-roadmap.md`，先檢查目前 A-3.1 / A-3.2 / A-3.3 / A-3.4 / A-4 / B-2 / B-3 / B-4 / C-1 / C-2 / C-3 / D-1 / D-2 / D-3 / D-4 / E-1 / E-2 / E-3 是否已完成並驗證。若使用者明確授權進入 E-4，才做 E-4 Full mode release checklist 的純 metadata/checklist helper 與測試；此階段不要把 full mode 升級成正式 release gate、不要寫 output 檔、不要啟動 MainWindow、不要執行 dialog、不要呼叫 service、不要資料寫入、migration、backfill apply 或 high-risk dry-run 實作。
 
 必讀文件：
 1. `AGENTS.md`
@@ -333,18 +385,18 @@ Expected:
 
 請先做：
 1. `git status --short`，不要覆寫其他 agent 或使用者未提交變更。
-2. 檢查 `qa/full_app_healthcheck/run_history_manifest.py`、`qa/full_app_healthcheck/run_history_compare.py`、`tests/test_full_app_healthcheck_run_history_manifest.py`、`tests/test_full_app_healthcheck_run_history_compare.py`、`qa/full_app_healthcheck/high_risk_dry_run_dialog_plan.py`、`qa/full_app_healthcheck/feature_router.py` 與對應測試檔。
+2. 檢查 `qa/full_app_healthcheck/run_history_manifest.py`、`qa/full_app_healthcheck/run_history_compare.py`、`qa/full_app_healthcheck/quick_mode_release_gate_proposal.py`、`tests/test_full_app_healthcheck_run_history_manifest.py`、`tests/test_full_app_healthcheck_run_history_compare.py`、`tests/test_full_app_healthcheck_quick_mode_release_gate_proposal.py`、`qa/full_app_healthcheck/high_risk_dry_run_dialog_plan.py`、`qa/full_app_healthcheck/feature_router.py` 與對應測試檔。
 3. 跑：
    `.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_offscreen_widget_checks.py tests/test_full_app_healthcheck_ux_gap_mapping.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_flow_model.py tests/test_full_app_healthcheck_coverage_burndown.py tests/test_full_app_healthcheck_service_oracle_metadata.py tests/test_full_app_healthcheck_candidate_bridge_policy.py tests/test_full_app_healthcheck_command_advisor.py tests/test_full_app_healthcheck_handoff_contract.py tests/test_full_app_healthcheck_known_issue_matcher.py tests/test_full_app_healthcheck_result_interpreter.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 4. 跑：
    `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
-5. 若都通過，確認使用者是否已明確授權進入 E-3；沒有授權就停止並回報「E-3 需要授權」。
-6. 若已授權，開始 E-3：以 TDD 建立 quick mode release gate proposal 的純 metadata/proposal helper，只描述 release gate 候選條件、必要證據與人工確認點，不把 quick mode 接成正式 gate。
+5. 若都通過，確認使用者是否已明確授權進入 E-4；沒有授權就停止並回報「E-4 需要授權」。
+6. 若已授權，開始 E-4：以 TDD 建立 full mode release checklist 的純 metadata/checklist helper，只描述 release 前人工與機器共同使用的檢查項目、必要證據、manual-only 缺口與交接點，不把 full mode 接成正式 release gate。
 7. 新增測試後同步 `test_inventory.py`、`tests/test_full_app_healthcheck_test_inventory.py`、`docs/06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` 的測試數量。
-8. 完成後只回報檢查與修正結果；不要把 E-3 自動接入 quick/full runner bridge 或 CI gate。
+8. 完成後只回報檢查與修正結果；不要把 E-4 自動接入 quick/full runner bridge 或 CI gate。
 
 驗收命令：
-`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_run_history_compare.py tests/test_full_app_healthcheck_run_history_manifest.py tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
+`.\.venv\Scripts\python.exe -m pytest tests/test_full_app_healthcheck_quick_mode_release_gate_proposal.py tests/test_full_app_healthcheck_run_history_compare.py tests/test_full_app_healthcheck_run_history_manifest.py tests/test_full_app_healthcheck_high_risk_dry_run_dialog_plan.py tests/test_full_app_healthcheck_flow_diagnostics.py tests/test_full_app_healthcheck_feature_router.py tests/test_full_app_healthcheck_test_inventory.py -q -o addopts=`
 `.\.venv\Scripts\python.exe -m pytest --collect-only -q -o addopts=`
 `.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast`
 `git diff --check`
@@ -358,4 +410,4 @@ Expected:
 - [ ] 沒有把 write-risk / manual-only 測試放入 quick 或 full bridge。
 - [ ] 新增測試檔後，test inventory 與文件測試數同步。
 - [ ] quick runner 仍通過。
-- [ ] 若要進 E-3，必須先由使用者明確確認。
+- [ ] 若要進 E-4，必須先由使用者明確確認。
