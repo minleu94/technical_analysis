@@ -21,6 +21,8 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_full_app_healthcheck_handoff_contract.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_known_issue_matcher.py": "healthcheck-runner-owned",
     "tests/test_full_app_healthcheck_result_interpreter.py": "healthcheck-runner-owned",
+    "tests/test_full_app_healthcheck_service_oracle_metadata.py": "healthcheck-runner-owned",
+
 
 
     # ui-healthcheck-direct-bridge
