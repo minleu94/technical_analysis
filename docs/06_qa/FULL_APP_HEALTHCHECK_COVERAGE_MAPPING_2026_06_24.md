@@ -30,11 +30,11 @@
 | 市場觀察 | 22 | Regime 與 Smart Money 部分已有 full direct bridge；強弱股 / 產業排行、圖表美觀與效能仍需人工或後續 candidate。 |
 | 每日決策 | 9 | quick direct bridge 與 service oracle 已覆蓋 snapshot / dashboard / warning contract；實際資料品質與互動判讀仍需人工。 |
 | Research Lab / 回測 | 42 | full direct bridge 覆蓋多數 Research workflow、Registry 比較與推薦回放；匯出、最佳化重任務與部分高風險操作仍不可當 release gate。 |
-| 推薦分析 | 20 | 多數已有 candidate / service oracle；部分跨頁送 Research Lab 已由 full direct bridge 覆蓋。 |
-| 觀察清單 | 13 | 跨頁 handoff 與部分候選池操作已有 full direct bridge / candidate；清單 CRUD 仍以人工驗證為主。 |
-| 持倉管理 | 17 | 目前以 candidate UI tests 與 service oracle 為主；寫入 / 刪除 / 清空資料屬 write-risk manual。 |
-| Runtime Observatory | 6 | 已有 candidate UI test，尚未納入 runner bridge；仍需人工判讀狀態語意。 |
-| 全域與跨工作區流程 | 7 | MainWindow 啟動與 Tab 順序仍 manual-only；推薦到回測已有 full direct bridge；持倉與主力下鑽仍需 candidate / manual。 |
+| 推薦分析 | 20 | Profile / Regime lifecycle 與下一步導引已升級為 full direct bridge，可用 `--tab recommendation` 分頁驗證；匯出與持倉寫入仍需 tmp path / manual。 |
+| 觀察清單 | 13 | 候選池刷新、送 Research Lab 與跨頁同步已升級為 full direct bridge，可用 `--tab watchlist` 分頁驗證；清單 CRUD 寫入仍以人工或 tmp state 驗證為主。 |
+| 持倉管理 | 17 | fake-service UI、列表、損益、來源追溯、籌碼監控與下鑽已納入 full direct bridge，可用 `--tab portfolio` 分頁驗證；真實交易寫入 / 刪除 / 清空資料仍屬 write-risk manual。 |
+| Runtime Observatory | 6 | Runtime 中文化、idle / halted / event stream contract 已升級為 full direct bridge，可用 `--tab runtime` 分頁驗證；治理語意仍需人工判讀。 |
+| 全域與跨工作區流程 | 7 | MainWindow 啟動與 Tab 順序已有 opt-in smoke evidence helper skeleton，但未進預設 runner；推薦到回測 / 候選池 / 持倉下鑽已有 full direct bridge 輔助。 |
 
 ## 數據更新 / UpdateView
 
@@ -169,9 +169,9 @@
 | ID | 功能 | 母檔狀態 | Coverage | 目前證據 | 後續動作 |
 |---|---|---|---|---|---|
 | R-001 | 新手 / 進階模式切換 | 通過 | `candidate` | recommendation UI candidate tests。 | 評估 candidate promotion。 |
-| R-002 | Regime 顯示 / 自動偵測 | 已修正待驗證 | `candidate` + `oracle` | recommendation profile / regime tests + market regime oracle。 | 人工確認目前資料。 |
-| R-003 | 一鍵套用建議 Profile | 已修正待驗證 | `candidate` | profile combo candidate tests。 | 評估 candidate promotion。 |
-| R-004 | 選擇策略風格 | 已修正待驗證 | `candidate` | `tests/test_ui_qt_recommendation_profiles.py`。 | 評估 promotion。 |
+| R-002 | Regime 顯示 / 自動偵測 | 已修正待驗證 | `direct-full` + `oracle` | `ui-recommendation-profiles` + market regime oracle。 | 人工確認目前資料語意。 |
+| R-003 | 一鍵套用建議 Profile | 已修正待驗證 | `direct-full` | `ui-recommendation-profiles` 覆蓋 profile combo lifecycle。 | 保留 full bridge。 |
+| R-004 | 選擇策略風格 | 已修正待驗證 | `direct-full` | `ui-recommendation-profiles`。 | 保留 full bridge。 |
 | R-005 | 策略傾向偏好設定 | 已修正待驗證 | `candidate` + `oracle` | recommendation service / profile tests。 | 需確定偏好語意。 |
 | R-006 | 技術指標勾選 / 參數 | 通過 | `oracle` | recommendation service fail-closed tests。 | UI direct 未納入。 |
 | R-007 | 圖形模式勾選 / 參數 | 通過 | `oracle` | pattern / no-look-ahead tests。 | UI direct 未納入。 |
@@ -183,21 +183,21 @@
 | R-013 | 執行推薦分析 | 通過 | `oracle` + `manual-only` | service tests；真實背景執行需人工。 | 不放 full runner heavy task。 |
 | R-014 | 推薦理由詳情 | 已修正待驗證 | `candidate` + `oracle` | reason / next steps copy tests。 | 人工看文案可讀性。 |
 | R-015 | 保存結果 | 已修正待驗證 | `oracle` + `write-risk-manual` | service snapshot tests；實際保存寫入。 | 僅 tmp path 可自動化。 |
-| R-016 | 加入候選池 | 已修正待驗證 | `candidate` | recommendation next steps / watchlist candidate tests。 | 評估 promotion。 |
+| R-016 | 加入候選池 | 已修正待驗證 | `direct-full` | `ui-recommendation-next-steps` 覆蓋候選池導引。 | 保留 full bridge。 |
 | R-017 | 送 Research Lab 批次回測 | 已修正待驗證 | `direct-full` | `ui-research-workflow` 覆蓋 `X-004` 相關 handoff。 | 保留 full bridge。 |
 | R-018 | 送 Research Lab 推薦回放 | 通過 | `direct-full` | Research workflow replay handoff tests。 | 保留 full bridge。 |
 | R-019 | 匯出 Excel | 通過 | `candidate` | `tests/test_ui_qt_report_export.py`。 | 可評估 tmp output promotion。 |
-| R-020 | 右鍵記錄到持倉 / 加入候選池 | 已修正待驗證 | `candidate` + `write-risk-manual` | recommendation portfolio result tests；持倉寫入高風險。 | 記錄持倉仍人工 / tmp path。 |
+| R-020 | 右鍵記錄到持倉 / 加入候選池 | 已修正待驗證 | `direct-full` + `write-risk-manual` | `ui-recommendation-next-steps` 覆蓋導引文案；持倉寫入高風險。 | 記錄持倉仍人工 / tmp path。 |
 
 ## 觀察清單
 
 | ID | 功能 | 母檔狀態 | Coverage | 目前證據 | 後續動作 |
 |---|---|---|---|---|---|
-| W-001 | 候選池刷新 | 通過 | `candidate` | watchlist candidate pool copy tests。 | 評估 promotion。 |
+| W-001 | 候選池刷新 | 通過 | `direct-full` | `ui-watchlist-candidate-pool` 覆蓋候選池刷新文案 / 狀態。 | 保留 full bridge。 |
 | W-002 | 新增股票 | 已修正待驗證 | `direct-full` | `test_watchlist_view_manual_add_resolves_stock_name_and_rejects_unknown`。 | 保留 full bridge。 |
 | W-003 | 移除選中 | 通過 | `candidate` | watchlist candidate tests 可輔助。 | 需 tmp state。 |
 | W-004 | 清空候選池 | 通過 | `write-risk-manual` | 有不可逆確認。 | 只測取消 / tmp path。 |
-| W-005 | 送 Research Lab 批次回測 | 已修正待驗證 | `direct-full` | `test_watchlist_view_batch_backtest_button_state`。 | 保留 full bridge。 |
+| W-005 | 送 Research Lab 批次回測 | 已修正待驗證 | `direct-full` | `test_watchlist_view_batch_backtest_button_state` + `ui-watchlist-candidate-pool`。 | 保留 full bridge。 |
 | W-006 | 保存為選股清單 | 通過 | `write-risk-manual` | 寫入 universe。 | tmp path 自動化候選。 |
 | W-007 | 右鍵移除選取 | 通過 | `candidate` | watchlist candidate tests。 | 需 promotion。 |
 | W-008 | 選股清單刷新 | 通過 | `manual-only` | 未納入 bridge。 | 候選 UI test。 |
@@ -205,57 +205,57 @@
 | W-010 | 新增選股清單 | 通過 | `write-risk-manual` | Universe 寫入。 | tmp path 測試。 |
 | W-011 | 編輯選股清單 | 通過 | `write-risk-manual` | Universe 寫入。 | tmp path 測試。 |
 | W-012 | 刪除選股清單 | 通過 | `write-risk-manual` | Universe 刪除。 | 只測取消 / tmp path。 |
-| W-013 | 跨頁同步 | 通過 | `direct-full` + `candidate` | `ui-research-workflow` watchlist handoff。 | 保留 full bridge。 |
+| W-013 | 跨頁同步 | 通過 | `direct-full` | `ui-research-workflow` watchlist handoff + `ui-watchlist-candidate-pool`。 | 保留 full bridge。 |
 
 ## 持倉管理
 
 | ID | 功能 | 母檔狀態 | Coverage | 目前證據 | 後續動作 |
 |---|---|---|---|---|---|
-| P-001 | 手動記錄交易 | 需確認 | `candidate` + `write-risk-manual` | `tests/test_ui_qt_portfolio_view.py` 是 candidate；實際交易記錄寫入。 | 不進 runner；tmp path promotion 後再評估。 |
+| P-001 | 手動記錄交易 | 需確認 | `direct-full` + `write-risk-manual` | `ui-portfolio-view` 以 fake service 覆蓋 UI contract；實際交易記錄寫入仍高風險。 | 真實寫入仍人工 / tmp path。 |
 | P-002 | 新增日記 | 通過 | `write-risk-manual` | 寫入 journal。 | 只可 tmp path。 |
 | P-003 | 整理刷新 | 通過 | `candidate` | portfolio view candidate tests。 | 評估 promotion。 |
 | P-004 | 清空全體數據 | 通過 | `write-risk-manual` | 高風險刪除。 | 只測取消流程。 |
-| P-005 | 持倉列表 | 需確認 | `candidate` + `oracle` | portfolio active summary tests。 | 評估 promotion。 |
+| P-005 | 持倉列表 | 需確認 | `direct-full` + `oracle` | `ui-portfolio-view` + portfolio active summary tests。 | 保留 full bridge。 |
 | P-006 | 為此部位寫日記 | 通過 | `write-risk-manual` | 寫入 journal。 | tmp path。 |
 | P-007 | 只查看此股交易歷史 | 通過 | `candidate` | trade history filter tests。 | 評估 promotion。 |
-| P-008 | 顯示全部交易歷史 | 未通過 | `candidate` | trade history clear filter test exists。 | 母檔狀態需重驗後更新。 |
+| P-008 | 顯示全部交易歷史 | 未通過 | `direct-full` | `ui-portfolio-view` 覆蓋 trade history clear filter contract。 | 母檔狀態需重驗後更新。 |
 | P-009 | 檢視交易明細 | 通過 | `candidate` | portfolio view tests。 | 評估 promotion。 |
 | P-010 | 刪除此交易紀錄 | 通過 | `write-risk-manual` | 刪除交易記錄。 | 只測取消 / tmp path。 |
 | P-011 | 檢視日誌 | 通過 | `candidate` | portfolio view tests。 | 評估 promotion。 |
 | P-012 | 刪除此篇日記筆記 | 通過 | `write-risk-manual` | 刪除 journal。 | 只測取消 / tmp path。 |
-| P-013 | 目前價格 / 未實現損益 | 需確認 | `candidate` + `oracle` | portfolio monitoring tests。 | Data freshness 人工確認。 |
-| P-014 | 來源追溯 | 需確認 | `candidate` + `oracle` | provenance / lifecycle review tests。 | 保留 candidate。 |
-| P-015 | 籌碼風險與分點明細 | 需確認 | `candidate` + `oracle` | portfolio condition / broker flow oracle。 | 真實資料品質人工。 |
-| P-016 | 下鑽詳細主力流向 | 需確認 | `direct-full` + `candidate` | `ui-smart-money-flow` + portfolio drill-down candidate。 | 可評估 candidate promotion。 |
+| P-013 | 目前價格 / 未實現損益 | 需確認 | `direct-full` + `oracle` | `ui-portfolio-view` + portfolio monitoring tests。 | Data freshness 人工確認。 |
+| P-014 | 來源追溯 | 需確認 | `direct-full` + `oracle` | `ui-portfolio-view` + provenance / lifecycle review tests。 | 真實來源品質仍人工判讀。 |
+| P-015 | 籌碼風險與分點明細 | 需確認 | `direct-full` + `oracle` | `ui-portfolio-view` + portfolio condition / broker flow oracle。 | 真實資料品質人工。 |
+| P-016 | 下鑽詳細主力流向 | 需確認 | `direct-full` | `ui-smart-money-flow` + `ui-portfolio-view` drill-down contract。 | 保留 full bridge。 |
 | P-017 | 推薦 / 回測記錄到持倉 | 未通過 | `candidate` + `write-risk-manual` | recommendation / research provenance tests；持倉寫入高風險。 | 母檔需重驗 Decimal sanitizer 後更新。 |
 
 ## Runtime Observatory
 
 | ID | 功能 | 母檔狀態 | Coverage | 目前證據 | 後續動作 |
 |---|---|---|---|---|---|
-| RT-001 | 分頁載入 | 通過 | `candidate` | `tests/test_ui_qt_runtime_view.py`。 | 評估 promotion。 |
-| RT-002 | Objective | 需確認 | `candidate` | runtime view Chinese labels tests。 | 人工確認語意。 |
-| RT-003 | Task Workflow Status | 需確認 | `candidate` | runtime idle / halted rendering tests。 | 人工確認 FSM 說明。 |
-| RT-004 | Overall System State / Health | 需確認 | `candidate` | runtime health tests。 | 人工確認治理指標可讀。 |
-| RT-005 | Last Critical Violation | 需確認 | `candidate` | runtime event / empty state tests。 | 人工確認事件語意。 |
-| RT-006 | Append-only Event Stream | 需確認 | `candidate` | runtime event stream tests。 | 評估 promotion。 |
+| RT-001 | 分頁載入 | 通過 | `direct-full` | `ui-runtime-view`。 | 保留 full bridge。 |
+| RT-002 | Objective | 需確認 | `direct-full` | `ui-runtime-view` Chinese labels tests。 | 人工確認語意。 |
+| RT-003 | Task Workflow Status | 需確認 | `direct-full` | `ui-runtime-view` idle / halted rendering tests。 | 人工確認 FSM 說明。 |
+| RT-004 | Overall System State / Health | 需確認 | `direct-full` | `ui-runtime-view` health tests。 | 人工確認治理指標可讀。 |
+| RT-005 | Last Critical Violation | 需確認 | `direct-full` | `ui-runtime-view` event / empty state tests。 | 人工確認事件語意。 |
+| RT-006 | Append-only Event Stream | 需確認 | `direct-full` | `ui-runtime-view` event stream tests。 | 保留 full bridge。 |
 
 ## 全域與跨工作區流程
 
 | ID | 功能 | 母檔狀態 | Coverage | 目前證據 | 後續動作 |
 |---|---|---|---|---|---|
-| X-001 | 啟動主程式 | 通過 | `manual-only` + `report-only` | D-2 MainWindow smoke plan 只是 metadata，未執行。 | 需明確授權才可做受控 MainWindow smoke。 |
-| X-002 | Tab 順序 | 通過 | `manual-only` | 需完整 MainWindow。 | 可成為 D-2 後續執行項。 |
+| X-001 | 啟動主程式 | 通過 | `manual-only` + `report-only` | MainWindow smoke evidence helper skeleton 已存在，但未進預設 runner。 | 受控 opt-in 後才可啟動 MainWindow smoke。 |
+| X-002 | Tab 順序 | 通過 | `manual-only` + `report-only` | MainWindow smoke helper 可收集 tab label evidence；尚未等同真人操作驗證。 | 視覺與互動仍需人工 / 後續 Qt 操作層。 |
 | X-003 | 市場觀察自動載入 | 需確認 | `manual-only` + `oracle` | 資料與 service evidence 可輔助，實際切頁載入需 MainWindow。 | 後續受控 smoke。 |
 | X-004 | 推薦到回測 | 通過 | `direct-full` | `ui-research-workflow` 覆蓋 `X-004`。 | 保留 full bridge。 |
-| X-005 | 推薦 / 回測到持倉 | 未通過 | `candidate` + `write-risk-manual` | portfolio / recommendation provenance candidate tests。 | 母檔需重驗後更新。 |
-| X-006 | 持倉到主力流向 | 需確認 | `direct-full` + `candidate` | smart money direct bridge + portfolio candidate。 | 可評估 promotion。 |
+| X-005 | 推薦 / 回測到持倉 | 未通過 | `direct-full` + `write-risk-manual` | `ui-recommendation-next-steps` / portfolio provenance tests 覆蓋導引；持倉寫入仍高風險。 | 母檔需重驗後更新。 |
+| X-006 | 持倉到主力流向 | 需確認 | `direct-full` | smart money direct bridge + `ui-portfolio-view` drill-down contract。 | 真實資料品質仍人工。 |
 | X-007 | Session context strip | 通過 | `manual-only` | 需要 MainWindow / viewport 視覺判讀。 | D-3 viewport plan 後續。 |
 
 ## 下一步建議
 
 1. 不要把本 mapping 當作 release gate；它只是逐列覆蓋視圖。
-2. 優先把 `candidate` 且非 write-risk 的項目分批評估是否能升級到 full direct bridge。
+2. 下一批可優先評估剩餘 `candidate` 且非 write-risk 的項目；已完成第一批升級後，可用 `scripts/run_full_app_healthcheck.py --mode full --tab <update|research|recommendation|watchlist|portfolio|runtime>` 分頁驗證，不必每次跑完整 UI healthcheck。
 3. `write-risk-manual` 項目只能走 tmp path / mock / explicit dry-run，且不得自動 confirm。
 4. 對 `manual-only` 且涉及畫面可讀性的項目，下一步應是受控 D-2 / D-3 設計，而不是直接接入 quick/full runner。
 5. `FULL_APP_HEALTHCHECK_2026_06_16.md` 的 pass/fail 狀態仍以人工重驗為準；本文件只描述目前自動化與證據覆蓋程度。

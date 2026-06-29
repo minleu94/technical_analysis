@@ -44,7 +44,9 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 目前已核准 bridge 範圍：
 
 - Quick mode：`ui-update-workbench`、`ui-decision-desk`。
-- Full mode：Quick mode 兩項，加上 `ui-research-workflow`、`ui-market-regime-view`、`ui-run-registry-compare`、`ui-smart-money-flow`、`qa-update-tab`。
+- Full mode：Quick mode 兩項，加上 `ui-research-workflow`、`ui-market-regime-view`、`ui-run-registry-compare`、`ui-smart-money-flow`、`ui-recommendation-profiles`、`ui-recommendation-next-steps`、`ui-watchlist-candidate-pool`、`ui-portfolio-view`、`ui-runtime-view`、`qa-update-tab`。
+- Tab filter：`--tab update|market|decision|research|recommendation|watchlist|portfolio|runtime|cross-flow` 可分頁執行 full mode 的安全 direct bridge，不必每次跑完整 UI 測試。
+- MainWindow smoke：已具備 opt-in evidence helper skeleton，可收集 tab labels / current index evidence；未登錄到預設 runner，不等同完整真人 UI 操作。
 
 ## 不能誤用或誤判什麼
 
@@ -89,7 +91,7 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 2. 使用 [`FULL_APP_HEALTHCHECK_COVERAGE_MAPPING_2026_06_24.md`](FULL_APP_HEALTHCHECK_COVERAGE_MAPPING_2026_06_24.md) 維護逐列 coverage mapping，標記每個人工測項目前是 direct bridge、candidate bridge、service oracle evidence、report-only 還是 manual-only。
 3. 另開真正 release gate roadmap。
 
-逐列 coverage mapping 已建立。下一個最安全的工程方向，是從 mapping 中挑選 `candidate` 且非 write-risk 的小批次，逐一評估是否能升級為 full direct bridge；這仍不應啟動 MainWindow、不應執行 dialog，也不應碰正式資料寫入。
+逐列 coverage mapping 已建立。2026-06-29 已完成第一批 `candidate` 且非 write-risk 的升級：Recommendation Profile / next steps、Watchlist candidate pool、Portfolio fake-service UI 與 Runtime Observatory 進入 full direct bridge，並可透過 `--tab` 分頁驗證。下一批仍應採小批次、先測試再升級；不應把真實資料寫入、dialog 執行或完整 MainWindow 真人操作混入預設 runner。
 
 補充：選項 2 已完成為 opt-in report-only sections，可透過 `--report-section` 將 coverage burn-down、flow diagnostics、quick gate proposal 與 full release checklist 加入 `REPORT.md` / `result.json`。未傳 `--report-section` 時預設 healthcheck output 與 runner bridge 行為不變。Run history comparison 也已支援，但必須明確提供 `--compare-baseline-manifest` 與 `--compare-candidate-manifest` 兩個 manifest JSON 路徑，才會附加 `run-history-comparison` section。
 
@@ -97,6 +99,8 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
+
+.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode full --tab recommendation --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast --report-section coverage-burndown --report-section flow-diagnostics --report-section quick-gate-proposal --report-section full-release-checklist
 ```
@@ -119,6 +123,13 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 - `ui-healthcheck-direct-bridge`：`6` files。
 - `ui-healthcheck-candidate-bridge`：`15` files。
 - Runner bridge 另接 `scripts/qa_validate_update_tab.py` 作為 QA script bridge，不屬 `tests/` 208 files。
+
+2026-06-29 補充盤點：
+
+- `ui-healthcheck-direct-bridge`：`11` files。
+- `ui-healthcheck-candidate-bridge`：`10` files。
+- Runner 支援 `--tab` 分頁篩選；`update`、`research`、`recommendation`、`watchlist`、`portfolio`、`runtime` 可各自跑 full direct bridge 子集。
+- MainWindow smoke helper skeleton 已加入，但維持 opt-in / non-default；完整真人 UI 操作測試仍未宣告完成。
 
 ## 交接規則
 
