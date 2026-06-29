@@ -80,10 +80,15 @@ def test_direct_bridge_only_allows_the_six_ui_tests():
     allowed_ui_tests = {
         "tests/test_ui_qt_decision_desk_view.py",
         "tests/test_ui_qt_market_regime_view.py",
+        "tests/test_ui_qt_portfolio_view.py",
+        "tests/test_ui_qt_recommendation_next_steps_copy.py",
+        "tests/test_ui_qt_recommendation_profiles.py",
         "tests/test_ui_qt_research_workflow.py",
         "tests/test_ui_qt_run_registry_compare.py",
+        "tests/test_ui_qt_runtime_view.py",
         "tests/test_ui_qt_smart_money_flow_view.py",
         "tests/test_ui_qt_update_view_workbench.py",
+        "tests/test_ui_qt_watchlist_candidate_pool_copy.py",
     }
 
     # Verify allowed ones
@@ -100,12 +105,17 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
     assert get_direct_bridge_files() == {
         "tests/test_ui_qt_decision_desk_view.py",
         "tests/test_ui_qt_market_regime_view.py",
+        "tests/test_ui_qt_portfolio_view.py",
+        "tests/test_ui_qt_recommendation_next_steps_copy.py",
+        "tests/test_ui_qt_recommendation_profiles.py",
         "tests/test_ui_qt_research_workflow.py",
         "tests/test_ui_qt_run_registry_compare.py",
+        "tests/test_ui_qt_runtime_view.py",
         "tests/test_ui_qt_smart_money_flow_view.py",
         "tests/test_ui_qt_update_view_workbench.py",
+        "tests/test_ui_qt_watchlist_candidate_pool_copy.py",
     }
-    assert "tests/test_ui_qt_portfolio_view.py" in get_candidate_bridge_files()
+    assert "tests/test_ui_qt_recommendation_portfolio_results.py" in get_candidate_bridge_files()
     assert "tests/manual/legacy_diagnostics/run_tests.py" in get_bridge_rejected_files()
     assert "write-risk-dry-run-required" in BRIDGE_REJECTED_CATEGORIES
 

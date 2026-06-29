@@ -93,3 +93,19 @@ def test_no_tab_filter_preserves_existing_mode_registry():
     legacy = suites_for_mode(HealthcheckMode.FULL)
 
     assert tuple(suite.id for suite in unfiltered) == tuple(suite.id for suite in legacy)
+
+
+def test_safe_candidate_tabs_have_dedicated_full_suites():
+    cases = {
+        "recommendation": {"ui-recommendation-profiles", "ui-recommendation-next-steps"},
+        "watchlist": {"ui-watchlist-candidate-pool"},
+        "portfolio": {"ui-portfolio-view"},
+        "runtime": {"ui-runtime-view"},
+    }
+
+    for tab, expected_suite_ids in cases.items():
+        suite_ids = {
+            suite.id
+            for suite in suites_for_mode_and_tabs(HealthcheckMode.FULL, (tab,))
+        }
+        assert expected_suite_ids.issubset(suite_ids)
