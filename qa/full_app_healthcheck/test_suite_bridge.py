@@ -18,6 +18,7 @@ class ExistingSuite:
     command: tuple[str, ...]
     non_destructive: bool
     path: str = ""  # Path relative to project root. Empty for non-test scripts.
+    tabs: tuple[str, ...] = ()
     covered_healthcheck_ids: tuple[str, ...] = ()
     covered_flow_ids: tuple[str, ...] = ()
 
@@ -31,6 +32,7 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_update_view_workbench.py", "-q", "-o", "addopts="),
             non_destructive=True,
             path="tests/test_ui_qt_update_view_workbench.py",
+            tabs=("update",),
         ),
         ExistingSuite(
             id="ui-decision-desk",
@@ -39,6 +41,7 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_decision_desk_view.py", "-q", "-o", "addopts="),
             non_destructive=True,
             path="tests/test_ui_qt_decision_desk_view.py",
+            tabs=("decision",),
         ),
         ExistingSuite(
             id="ui-research-workflow",
@@ -47,6 +50,7 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_research_workflow.py", "-q", "-o", "addopts="),
             non_destructive=True,
             path="tests/test_ui_qt_research_workflow.py",
+            tabs=("research", "recommendation", "watchlist", "cross-flow"),
             covered_healthcheck_ids=("B-004", "B-005", "B-038", "B-039", "B-041", "X-004"),
             covered_flow_ids=("research-validation-loop",),
         ),
@@ -57,6 +61,7 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_market_regime_view.py", "-q", "-o", "addopts="),
             non_destructive=True,
             path="tests/test_ui_qt_market_regime_view.py",
+            tabs=("market", "decision"),
             covered_healthcheck_ids=("M-001", "M-002", "MARKET-ISSUE-002"),
             covered_flow_ids=("data-market-state-loop",),
         ),
@@ -67,6 +72,7 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_run_registry_compare.py", "-q", "-o", "addopts="),
             non_destructive=True,
             path="tests/test_ui_qt_run_registry_compare.py",
+            tabs=("research",),
             covered_healthcheck_ids=("B-039", "B-041", "BACKTEST-ISSUE-021"),
             covered_flow_ids=("research-validation-loop",),
         ),
@@ -77,6 +83,7 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             command=(PYTHON, "-m", "pytest", "tests/test_ui_qt_smart_money_flow_view.py", "-q", "-o", "addopts="),
             non_destructive=True,
             path="tests/test_ui_qt_smart_money_flow_view.py",
+            tabs=("market", "portfolio", "cross-flow"),
             covered_healthcheck_ids=("M-017", "M-019", "M-022", "MARKET-ISSUE-004", "MARKET-ISSUE-005"),
             covered_flow_ids=("data-market-state-loop", "portfolio-check-loop"),
         ),
@@ -87,6 +94,7 @@ def build_existing_suite_registry() -> tuple[ExistingSuite, ...]:
             command=(PYTHON, "scripts\\qa_validate_update_tab.py"),
             non_destructive=True,
             path="",  # QA script, not part of test inventory.
+            tabs=("update",),
             covered_healthcheck_ids=("U-001", "U-006", "U-020", "UPDATE-ISSUE-030", "UPDATE-ISSUE-031"),
             covered_flow_ids=("data-market-state-loop",),
         ),
@@ -107,3 +115,18 @@ def suites_for_mode(mode: HealthcheckMode) -> tuple[ExistingSuite, ...]:
     if unsafe:
         raise ValueError(f"非破壞 runner 不可呼叫會寫資料的既有測試: {', '.join(unsafe)}")
     return suites
+
+
+def suites_for_mode_and_tabs(
+    mode: HealthcheckMode,
+    tabs: tuple[str, ...] = (),
+) -> tuple[ExistingSuite, ...]:
+    suites = suites_for_mode(mode)
+    if not tabs:
+        return suites
+    selected_tabs = set(tabs)
+    return tuple(
+        suite
+        for suite in suites
+        if selected_tabs.intersection(suite.tabs)
+    )

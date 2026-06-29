@@ -3,6 +3,7 @@ from qa.full_app_healthcheck.test_suite_bridge import (
     ExistingSuite,
     build_existing_suite_registry,
     suites_for_mode,
+    suites_for_mode_and_tabs,
 )
 
 
@@ -67,3 +68,28 @@ def test_existing_suite_command_is_explicit_and_not_shell_joined():
 
     assert suite.command[0].endswith("python.exe")
     assert "&&" not in suite.command
+
+
+def test_suites_can_be_filtered_to_update_tab_only():
+    suites = suites_for_mode_and_tabs(HealthcheckMode.FULL, ("update",))
+    suite_ids = {suite.id for suite in suites}
+
+    assert "ui-update-workbench" in suite_ids
+    assert "qa-update-tab" in suite_ids
+    assert "ui-research-workflow" not in suite_ids
+
+
+def test_suites_can_be_filtered_to_research_tab_only():
+    suites = suites_for_mode_and_tabs(HealthcheckMode.FULL, ("research",))
+    suite_ids = {suite.id for suite in suites}
+
+    assert "ui-research-workflow" in suite_ids
+    assert "ui-run-registry-compare" in suite_ids
+    assert "ui-update-workbench" not in suite_ids
+
+
+def test_no_tab_filter_preserves_existing_mode_registry():
+    unfiltered = suites_for_mode_and_tabs(HealthcheckMode.FULL, ())
+    legacy = suites_for_mode(HealthcheckMode.FULL)
+
+    assert tuple(suite.id for suite in unfiltered) == tuple(suite.id for suite in legacy)
