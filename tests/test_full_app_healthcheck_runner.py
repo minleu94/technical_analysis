@@ -1,4 +1,5 @@
 import json
+import subprocess
 from dataclasses import asdict
 
 import pytest
@@ -11,7 +12,11 @@ from qa.full_app_healthcheck.run_history_manifest import (
     SuiteRunRecord,
     build_run_history_manifest,
 )
-from scripts.run_full_app_healthcheck import build_cli_report_sections, parse_args
+from scripts.run_full_app_healthcheck import (
+    build_cli_report_sections,
+    parse_args,
+    run_existing_suites_for_mode,
+)
 
 
 def test_runner_dispatches_registered_action(tmp_path):
@@ -56,6 +61,33 @@ def test_full_app_healthcheck_cli_parse_mode_and_output():
     assert args.mode == "full"
     assert args.output_dir == "out"
     assert args.fail_fast is True
+
+
+def test_full_app_healthcheck_cli_parse_repeated_tab_filters():
+    args = parse_args(["--mode", "full", "--tab", "update", "--tab", "research"])
+
+    assert args.tabs == ["update", "research"]
+
+
+def test_run_existing_suites_filters_by_selected_tabs(monkeypatch):
+    commands: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        commands.append(tuple(command))
+        return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    evidence = run_existing_suites_for_mode(
+        {"mode": HealthcheckMode.FULL, "tabs": ("research",)},
+        None,
+    )
+
+    suite_ids = {suite["id"] for suite in evidence["suites"]}
+    assert "ui-research-workflow" in suite_ids
+    assert "ui-run-registry-compare" in suite_ids
+    assert "ui-update-workbench" not in suite_ids
+    assert all("test_ui_qt_update_view_workbench.py" not in " ".join(command) for command in commands)
 
 
 def test_runner_writes_optional_report_sections(tmp_path):

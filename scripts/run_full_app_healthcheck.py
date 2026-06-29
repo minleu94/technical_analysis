@@ -26,13 +26,26 @@ from qa.full_app_healthcheck.run_history_manifest import (
     SuiteRunRecord,
 )
 
+TAB_CHOICES = (
+    "update",
+    "market",
+    "decision",
+    "research",
+    "recommendation",
+    "watchlist",
+    "portfolio",
+    "runtime",
+    "cross-flow",
+)
+
 
 def run_existing_suites_for_mode(context, step):
-    from qa.full_app_healthcheck.test_suite_bridge import suites_for_mode
+    from qa.full_app_healthcheck.test_suite_bridge import suites_for_mode_and_tabs
 
     mode = context["mode"]
+    tabs = tuple(context.get("tabs") or ())
     outputs = []
-    for suite in suites_for_mode(mode):
+    for suite in suites_for_mode_and_tabs(mode, tabs):
         completed = subprocess.run(
             suite.command,
             cwd=str(PROJECT_ROOT),
@@ -50,7 +63,7 @@ def run_existing_suites_for_mode(context, step):
         })
         if completed.returncode != 0:
             raise AssertionError(f"既有測試失敗：{suite.id}")
-    return {"suites": outputs}
+    return {"tabs": tabs, "suites": outputs}
 
 
 def build_action_registry():
@@ -75,6 +88,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "output" / "qa" / "full_app_healthcheck"))
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--viewport", default="1366x768")
+    parser.add_argument(
+        "--tab",
+        dest="tabs",
+        action="append",
+        choices=TAB_CHOICES,
+        default=[],
+        help="Only run suites mapped to the selected UI tab/workspace. Can be provided multiple times.",
+    )
     parser.add_argument(
         "--report-section",
         dest="report_sections",
@@ -154,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     runner = HealthcheckRunner(
         manifest=manifest,
         actions=build_action_registry(),
-        context={"viewport": args.viewport, "mode": mode},
+        context={"viewport": args.viewport, "mode": mode, "tabs": tuple(args.tabs)},
         output_dir=Path(args.output_dir),
         fail_fast=args.fail_fast,
         coverage_items=coverage_items,

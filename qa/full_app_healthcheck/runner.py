@@ -72,6 +72,7 @@ class HealthcheckRunner:
             mode=mode,
             status=status,
             steps=tuple(step_results),
+            tabs=tuple(self.context.get("tabs") or ()),
         )
         write_reports(
             result,
