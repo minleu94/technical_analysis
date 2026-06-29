@@ -72,6 +72,7 @@ def build_action_registry():
         assert_tab_exists,
         assert_text_contains,
         assert_viewport_declared,
+        collect_mainwindow_smoke_evidence,
     )
     return {
         "run_existing_suites_for_mode": run_existing_suites_for_mode,
@@ -79,6 +80,7 @@ def build_action_registry():
         "assert_tab_exists": assert_tab_exists,
         "assert_text_contains": assert_text_contains,
         "assert_viewport_declared": assert_viewport_declared,
+        "collect_mainwindow_smoke_evidence": collect_mainwindow_smoke_evidence,
     }
 
 

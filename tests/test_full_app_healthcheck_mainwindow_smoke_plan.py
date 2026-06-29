@@ -12,6 +12,10 @@ from qa.full_app_healthcheck.mainwindow_smoke_plan import (
     get_mainwindow_smoke_plan_for_feature,
     render_mainwindow_smoke_plan_markdown,
 )
+from qa.full_app_healthcheck.mainwindow_smoke import (
+    EXPECTED_MAINWINDOW_TAB_LABELS,
+    collect_mainwindow_smoke_evidence,
+)
 from qa.full_app_healthcheck.test_suite_bridge import build_existing_suite_registry
 
 
@@ -116,3 +120,51 @@ def test_render_mainwindow_smoke_plan_markdown():
     assert "mainwindow_startup_shell_observation" in markdown
 
     assert render_mainwindow_smoke_plan_markdown([]) == "- (None)"
+
+
+class FakeTabWidget:
+    def __init__(self, labels):
+        self.labels = list(labels)
+        self.current_index = 0
+
+    def count(self):
+        return len(self.labels)
+
+    def tabText(self, index):
+        return self.labels[index]
+
+    def setCurrentIndex(self, index):
+        self.current_index = index
+
+
+class FakeMainWindow:
+    def __init__(self, tab_widget):
+        self.tab_widget = tab_widget
+
+    def windowTitle(self):
+        return "baldr"
+
+    def findChildren(self, widget_type):
+        return [self.tab_widget]
+
+
+def test_collect_mainwindow_smoke_evidence_with_injected_window():
+    window = FakeMainWindow(FakeTabWidget(EXPECTED_MAINWINDOW_TAB_LABELS))
+
+    evidence = collect_mainwindow_smoke_evidence(window, switch_tabs=True)
+
+    assert evidence["window_title"] == "baldr"
+    assert evidence["tab_labels"] == list(EXPECTED_MAINWINDOW_TAB_LABELS)
+    assert evidence["missing_tabs"] == []
+    assert evidence["switched_tabs"] == list(EXPECTED_MAINWINDOW_TAB_LABELS)
+    assert evidence["forbidden_actions_invoked"] == []
+
+
+def test_collect_mainwindow_smoke_evidence_reports_missing_tabs():
+    labels = tuple(label for label in EXPECTED_MAINWINDOW_TAB_LABELS if label != "持倉管理")
+    window = FakeMainWindow(FakeTabWidget(labels))
+
+    evidence = collect_mainwindow_smoke_evidence(window, switch_tabs=False)
+
+    assert evidence["missing_tabs"] == ["持倉管理"]
+    assert evidence["switched_tabs"] == []
