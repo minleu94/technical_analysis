@@ -110,10 +110,8 @@ result = service.detect_regime()
 
 以 [ROADMAP_6M_ENGINEERING.md](../docs/00_core/ROADMAP_6M_ENGINEERING.md) 為準：
 
-- Research Run Registry
-- Indicator Parameter Registry
-- Recommendation Weight Contract
-- Factor DTO / registry / scoring adapter
-- Cross-run Comparison
-- 策略生命週期與 Portfolio attribution
+- 全 UI 健檢與 release healthcheck runner 收斂。
+- Month 6.1 Strategy Lifecycle QA、manual approval workflow、Review Dashboard 與 Evidence Explainability。
+- Portfolio feedback attribution 與 lifecycle review workflow 的證據保存、可解釋性與操作風險提示深化。
+- PDF 研究報告輸出仍屬後續 backlog；Excel 規格化匯出已完成。
 

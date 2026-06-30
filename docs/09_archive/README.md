@@ -36,6 +36,9 @@
 - **`root_readme_legacy_2025_12.txt`**
   - 原根目錄 `readme.txt`，內容停留在舊 Phase、舊入口與舊路徑說明；2026-06-18 已移入歸檔，只作歷史追溯，不作目前狀態依據。
 
+- **`dev_progress_note_legacy_2026_01.txt`**
+  - 原 `docs/00_core/note.txt` 歷史開發進度筆記；2026-06-30 自核心目錄歸檔，只作追溯，不作目前狀態依據。
+
 - **`ARCH_GOVERNANCE_CHECKLIST.md`**
   - 早期架構治理自檢清單；2026-06-24 自 `docs/00_core/` 歸檔。目前架構權威以 `docs/01_architecture/system_architecture.md` 為準。
 

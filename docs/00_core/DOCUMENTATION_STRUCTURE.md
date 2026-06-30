@@ -1,6 +1,6 @@
 # 文檔結構與維護規則
 
-> **最後更新**：2026-06-13
+> **最後更新**：2026-06-30
 > **用途**：定義 `docs/` 內每個資料夾的歸屬、文件生命週期、刪除/歸檔規則。
 
 ---
@@ -103,8 +103,10 @@
 - `DEVELOPMENT_ROADMAP.md` 是 Roadmap Hub，不再是完整歷史或唯一最高權威。
 - 舊完整 Roadmap 已歸檔為 `docs/09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md`。
 - `PROJECT_NAVIGATION.md`、`PROJECT_INVENTORY.md` 位於 repo 根目錄，仍屬專案級導航文件；索引需用正確相對路徑指向它們。
+- 根目錄 `README.md` 保持使用者導向，說明專案目的、啟動方式與乾淨 `main` 使用方式；Agent / 開發者上下文放在 `AGENT_CONTEXT.md`。
 - `ui_qt/README.md` 不屬於 `docs/`，但若 `docs` 索引引用它，需標註它可能落後於 roadmap。
 - `09_archive/` 保留歷史文件，但 Active 文件不應依賴 archive 內容判斷目前狀態。
+- `output/`、`output/qa/` 與根目錄臨時資料樣本屬於本機執行產物，不應作為 Active 文件或乾淨 `main` 內容；需要保存結論時整理為 `docs/06_qa/` 摘要。
 - 一次性 QA debug / patch 文件可刪除，保留 summary / issues / audit 類文件即可。
 
 ---

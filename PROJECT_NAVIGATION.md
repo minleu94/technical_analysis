@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
-**版本**：v1.4.3
-**最後更新**：2026-06-17
+**版本**：v1.4.4
+**最後更新**：2026-06-30
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -289,6 +289,8 @@ python ui_qt/main.py
 
 **Codex 自動讀取入口**：`AGENTS.md`
 
+**Agent / 開發者快速上下文**：`AGENT_CONTEXT.md`
+
 **Antigravity 自動讀取入口**：`GEMINI.md`
 
 **Antigravity 輔助規則**：`.agent/rules/`
@@ -297,6 +299,7 @@ python ui_qt/main.py
 
 **使用規則**：
 - Codex 會讀取 repo 根目錄 `AGENTS.md`。
+- `AGENT_CONTEXT.md` 補充分支策略、文件權威與開發導覽；它不是強制規則，強制規則仍以 `AGENTS.md` 與 `docs/agents/` 為準。
 - Antigravity 會讀取 repo 根目錄 `GEMINI.md`，並可搭配 `.agent/rules/` 的任務規則。
 - `docs/agents/` 保存完整 Agent 職責、Prompt 與共用上下文，但不會單靠檔名自動成為 Codex 指令入口。
 - 資料路徑請以 `data_module/config.py` 的 `TWStockConfig` 與 `DATA_ROOT` 為準，不要假設 repo 內一定存在正式 `data/` 目錄。
@@ -407,7 +410,7 @@ python ui_qt/main.py
 **狀態**：
 - 業務邏輯已遷移到 `decision_module/`
 - 僅保留 Tkinter UI 相關代碼
-- 不保證 Legacy UI 與目前 7 個工作區、資料契約或使用手冊同步
+- 不保證 Legacy UI 與目前 8 個工作區、資料契約或使用手冊同步
 
 **使用建議**：新功能不應再引用 `ui_app/` 中的業務邏輯檔案（如 `strategy_configurator.py`、`stock_screener.py` 等），這些檔案已不存在或已遷移。
 

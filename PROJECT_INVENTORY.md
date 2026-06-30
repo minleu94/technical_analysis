@@ -1,6 +1,6 @@
 ﻿# 專案盤點報告
 
-> **最後整理**：2026-06-18
+> **最後整理**：2026-06-30
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 
 ---
@@ -9,10 +9,12 @@
 
 | 文件 | 角色 | 狀態 |
 |---|---|---|
-| `README.md` | 專案最短入口、啟動方式、目前主線 | Active |
+| `README.md` | 使用者導向專案入口、啟動方式、功能概覽與分支策略 | Active |
+| `AGENT_CONTEXT.md` | Agent / 開發者快速上下文，補充文件權威、分支策略與接手導覽 | Active |
 | `PROJECT_NAVIGATION.md` | 開發者導航，回答「我要改 X 要去哪裡」 | Active |
 | `PROJECT_INVENTORY.md` | 本文件，專案結構盤點摘要 | Active |
 | `AGENTS.md` | Codex 自動讀取的 repo 指令入口，導向 `docs/agents/` 完整 Agent 架構 | Active |
+| `GEMINI.md` | Antigravity 自動讀取的 repo 指令入口，導向 `docs/agents/antigravity/` 與 `.agent/rules/` | Active |
 | `requirements.txt` | Python 依賴 | Active |
 
 已移出或刪除：
@@ -23,6 +25,8 @@
 - `01_stock_data_collector_enhanced.py`：舊 notebook 匯出參考腳本，已刪除；正式資料處理請看 `data_module/` 與 `scripts/update_all_data.py`。
 - `tests/test_finmind_integration.py`：只測舊參考腳本且依賴外部 FinMind token，已刪除。
 - `readme.txt`：原根目錄長版舊 README，內容停留在舊 Phase、舊入口與舊路徑說明；2026-06-18 已移至 `docs/09_archive/root_readme_legacy_2025_12.txt`。
+- `docs/00_core/note.txt`：歷史開發進度筆記，已於 2026-06-30 移至 `docs/09_archive/dev_progress_note_legacy_2026_01.txt`，不再作為核心權威文件。
+- `output/` 與根目錄 `test.parquet`：本機 QA / 驗證 / 測試產物，已從乾淨 `main` 移出 Git 追蹤；可分享結論請整理到 `docs/06_qa/`。
 
 ---
 
@@ -92,6 +96,8 @@
 文件入口：
 
 - `docs/README.md`
+- `README.md`
+- `AGENT_CONTEXT.md`
 - `docs/00_core/DEVELOPMENT_ROADMAP.md`
 - `docs/00_core/ROADMAP_6M_ENGINEERING.md`
 - `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
@@ -115,6 +121,7 @@
 
 ## 6. 更新記錄
 
+- 2026-06-30：將根目錄 `README.md` 改為使用者導向入口，新增 `AGENT_CONTEXT.md` 承接 Agent / 開發者上下文；將歷史 `docs/00_core/note.txt` 歸檔，並將 `output/` raw output 從乾淨 `main` 移出追蹤。
 - 2026-06-18：整理根目錄 README 入口，將過期 `readme.txt` 移入 `docs/09_archive/root_readme_legacy_2025_12.txt`，並同步 docs 索引。
 - 2026-06-17：同步 Month 5 Fundamental Layer v1 closeout 與 Daily Decision Desk v1 主 UI 狀態，將目前主線轉向 Month 6 Strategy Lifecycle / Portfolio Feedback scope。
 - 2026-06-17：同步 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle gate、post-trade attribution 與持倉管理生命週期回顧入口。

@@ -16,16 +16,19 @@
 - `venv/`、`env/`、`ENV/`：本機虛擬環境。
 - `.env*`：本機環境變數與密鑰設定；`.env.example` 例外，可提交。
 - `*.db`、`*.sqlite*`：本機資料庫輸出。
+- `output/`：QA、驗證、報告匯出與本機執行輸出；2026-06-30 起不應再追蹤於乾淨 `main`。
+- `/test.parquet`：根目錄臨時資料樣本 / 測試產物，不應提交。
 - `downloads/`、`temp_downloads/`、`tmp/`、`temp/`：下載與暫存檔。
 
-## 目前 tracked 但屬於易變輸出
+## 已從乾淨 main 移出的易變輸出
 
-以下檔案目前仍在 Git 追蹤中，因此 `.gitignore` 無法阻止它們顯示為 modified。除非任務明確要求更新 QA 報告或驗證輸出，否則不要 stage：
+以下檔案類型曾經被 Git 追蹤，但屬於本機驗證輸出；2026-06-30 清理後，乾淨 `main` 不應再包含這些產物。若它們在本機重新生成，應維持 ignored，不要 stage：
 
-- `output/qa/update_tab/RUN_LOG.txt`
-- `output/qa/update_tab/VALIDATION_REPORT.md`
+- `output/**`
+- `output/qa/**`
+- `test.parquet`
 
-如果未來要正式讓這些 QA output 不再被 Git 追蹤，需另開清理任務，評估是否保留範例報告、移到 archive，或用 `git rm --cached` 搭配 `.gitignore`。不要在一般功能開發中順手處理。
+若任務需要保存可分享的 QA 結論，請寫入 `docs/06_qa/` 的摘要 / audit / issue 文件，而不是提交 `output/` 底下的 raw output。
 
 ## Agent 操作規則
 

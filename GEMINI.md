@@ -36,6 +36,7 @@
 - 修改功能時同步檢查文檔更新需求；新增或刪除 Markdown 時必須更新 `docs/00_core/DOCUMENTATION_INDEX.md`。
 - 修改使用者可見流程、參數、結果判讀或安全限制時，必須同步更新 `docs/07_guides/APPLICATION_MANUAL.md`。
 - 文件判讀採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月方向看 `ROADMAP_6M_ENGINEERING.md`，舊工作承接看 `LEGACY_ROADMAP_CARRYOVER.md`，架構看 `system_architecture.md`，操作看 `APPLICATION_MANUAL.md`，歷史看 `docs/09_archive/`。
+- `AGENT_CONTEXT.md` 是給 Codex、Antigravity 與開發者快速理解專案入口、分支策略與文件權威的輔助導覽；強制規則仍以本檔、`AGENTS.md` 與 `docs/agents/` 為準。
 - Stage / commit 前先看 `docs/agents/git_exclusions.md`，不要把本機暫存、工具輸出或非本任務 QA output 順手提交。
 - 不要覆寫使用者、Codex 或其他 Agent 的未提交變更。
 - 執行高風險操作、資料重建、分支清理、刪除檔案前，先明確確認。
