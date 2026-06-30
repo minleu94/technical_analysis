@@ -206,7 +206,7 @@ def test_collect_mainwindow_smoke_evidence():
     assert evidence["forbidden_actions_invoked"] == []
 
 
-def test_run_mainwindow_ui_smoke_builds_options_from_context(monkeypatch, tmp_path):
+def test_run_mainwindow_ui_smoke(monkeypatch, tmp_path):
     captured = {}
 
     def fake_run_mainwindow_smoke_in_subprocess(options):
