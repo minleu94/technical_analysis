@@ -176,7 +176,7 @@ KNOWN_UX_GAPS: tuple[KnownUXGap, ...] = (
         feature_id="smart_money",
         flow_id="portfolio_review_loop",
         likely_owner="testing_qa",
-        evidence_sources=("tests/test_ui_qt_watchlist_candidate_pool_copy.py",),
+        evidence_sources=("tests/test_ui_qt_watchlist_candidate_pool_copy_text.py",),
         recommended_next_step="Promote watchlist candidate pool to direct healthcheck.",
     ),
 )

@@ -86,7 +86,7 @@
 
 ### 4.1 測試腳本
 
-**檔案**：`scripts/test_counterparty_parsing.py`
+**檔案**：`tests/scripts/test_counterparty_parsing.py`
 
 **測試案例**：18 個測試案例，涵蓋所有支援的格式
 
@@ -123,7 +123,7 @@ python scripts/analyze_unknown_counterparties.py
 使用測試腳本驗證解析邏輯：
 
 ```bash
-python scripts/test_counterparty_parsing.py
+python tests/scripts/test_counterparty_parsing.py
 ```
 
 **輸出**：
@@ -162,7 +162,7 @@ python scripts/test_counterparty_parsing.py
 ### 7.1 核心檔案
 
 - `app_module/broker_branch_update_service.py`：解析邏輯實作
-- `scripts/test_counterparty_parsing.py`：測試腳本
+- `tests/scripts/test_counterparty_parsing.py`：測試腳本
 - `scripts/analyze_unknown_counterparties.py`：分析腳本
 
 ### 7.2 相關文檔

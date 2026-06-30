@@ -148,7 +148,7 @@ FLOWS: dict[str, HealthcheckFlow] = {
                 "交給主力流向頁確認籌碼與分點訊號。",
                 extra_evidence=(
                     "tests/test_ui_qt_portfolio_view.py",
-                    "tests/test_ui_qt_watchlist_candidate_pool_copy.py",
+                    "tests/test_ui_qt_watchlist_candidate_pool_copy_text.py",
                 ),
                 extra_manual_gaps=(
                     "Portfolio view is still candidate bridge, not direct healthcheck flow.",

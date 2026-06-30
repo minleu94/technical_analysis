@@ -59,8 +59,8 @@
 - `tests/test_ui_qt_run_registry_compare.py`
 - `tests/test_ui_qt_smart_money_flow_view.py`
 - `tests/test_ui_qt_recommendation_profiles.py`
-- `tests/test_ui_qt_recommendation_next_steps_copy.py`
-- `tests/test_ui_qt_watchlist_candidate_pool_copy.py`
+- `tests/test_ui_qt_recommendation_next_steps_copy_text.py`
+- `tests/test_ui_qt_watchlist_candidate_pool_copy_text.py`
 - `tests/test_ui_qt_portfolio_view.py`
 - `tests/test_ui_qt_runtime_view.py`
 
@@ -113,14 +113,14 @@
 - `tests/test_ui_qt_decision_desk_view.py`
 - `tests/test_ui_qt_market_regime_view.py`
 - `tests/test_ui_qt_portfolio_view.py`
-- `tests/test_ui_qt_recommendation_next_steps_copy.py`
+- `tests/test_ui_qt_recommendation_next_steps_copy_text.py`
 - `tests/test_ui_qt_recommendation_profiles.py`
 - `tests/test_ui_qt_research_workflow.py`
 - `tests/test_ui_qt_run_registry_compare.py`
 - `tests/test_ui_qt_runtime_view.py`
 - `tests/test_ui_qt_smart_money_flow_view.py`
 - `tests/test_ui_qt_update_view_workbench.py`
-- `tests/test_ui_qt_watchlist_candidate_pool_copy.py`
+- `tests/test_ui_qt_watchlist_candidate_pool_copy_text.py`
 
 ### ui-healthcheck-candidate-bridge
 
@@ -131,7 +131,7 @@
 - `tests/test_ui_qt_recommendation_portfolio_results.py`
 - `tests/test_ui_qt_report_export.py`
 - `tests/test_ui_qt_research_lab_mode_driven_ui.py`
-- `tests/test_ui_qt_research_lab_workbench_copy.py`
+- `tests/test_ui_qt_research_lab_workbench_copy_text.py`
 - `tests/test_ui_qt_research_run_save.py`
 - `tests/test_ui_qt_theme.py`
 

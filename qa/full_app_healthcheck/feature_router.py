@@ -57,7 +57,7 @@ FEATURE_ROUTES: dict[str, FeatureRoute] = {
         direct_bridge_suite_ids=("ui-research-workflow", "ui-run-registry-compare"),
         candidate_test_paths=(
             "tests/test_ui_qt_research_lab_mode_driven_ui.py",
-            "tests/test_ui_qt_research_lab_workbench_copy.py",
+            "tests/test_ui_qt_research_lab_workbench_copy_text.py",
             "tests/test_ui_qt_research_run_save.py",
         ),
         service_oracle_test_paths=(
