@@ -37,7 +37,7 @@
 | 文件 whitespace | 通過 | `git diff --check` 報錯 | `git diff --check` |
 | Quick healthcheck | 通過 | quick mode 失敗且無已知 non-blocking 解釋 | `scripts/run_full_app_healthcheck.py --mode quick` |
 | Tab full bridge | 通過 | direct bridge 分頁失敗且屬 release-critical flow | 逐 tab `--mode full --tab <tab>` |
-| MainWindow UI smoke | 待使用者 opt-in | 主視窗無法啟動、8 個頂層 tab 無法切換、cancel-only dialog 無法安全關閉 | opt-in `--ui-smoke` |
+| MainWindow UI smoke | 通過 | 主視窗無法啟動、8 個頂層 tab 無法切換、cancel-only dialog 無法安全關閉 | opt-in `--ui-smoke` |
 | 人工 UI smoke | 待人工驗證 | 使用者無法完成核心工作流，或 UI 有明顯阻斷操作的錯誤 | 本文件第 5 節 |
 | 文件一致性 | 待人工 review | README / Manual / Snapshot / Roadmap / Vision 對 v1 邊界互相矛盾 | 人工 review |
 | Tag 前確認 | 待 main release review | `main` 未包含 release-critical 修正或仍需回滾 | release lead review |
@@ -177,3 +177,4 @@ py -m venv .venv
 | 2026-06-30 | `dev` | `run_full_app_healthcheck.py --mode full --tab recommendation --output-dir output\qa\v1_release_candidate\full_recommendation --fail-fast` | 通過 | `Healthcheck passed: 20260630_144016`。 |
 | 2026-06-30 | `dev` | `run_full_app_healthcheck.py --mode full --tab watchlist --output-dir output\qa\v1_release_candidate\full_watchlist --fail-fast` | 通過 | `Healthcheck passed: 20260630_144014`。 |
 | 2026-06-30 | `dev` | `run_full_app_healthcheck.py --mode full --tab portfolio --output-dir output\qa\v1_release_candidate\full_portfolio --fail-fast` | 通過 | `Healthcheck passed: 20260630_144014`。 |
+| 2026-06-30 | `dev` | `run_full_app_healthcheck.py --mode full --ui-smoke --ui-smoke-switch-tabs --ui-smoke-screenshot --ui-smoke-resize 1366x768 --ui-smoke-resize 390x844 --ui-smoke-dialog-cancel --output-dir output\qa\v1_release_candidate\ui_smoke --fail-fast` | 通過 | `Healthcheck passed: 20260630_151530`；主視窗標題 `baldr`，8 個頂層工作區皆可切換，`update_force_merge_daily_price` dialog 可取消且未呼叫 destructive action。窄 viewport 受最小寬度限制，依第 6 節列為已知 non-blocking 限制。 |
