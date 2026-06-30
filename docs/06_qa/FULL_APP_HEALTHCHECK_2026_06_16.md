@@ -65,6 +65,44 @@
 2. Recommendation Profile 生命週期、自訂 Profile、Research Lab 升級策略是否進推薦分析，以及 regime match / mismatch 規則。
 3. Research Lab 大型 UX：最佳化版面與取消流程、推薦回放結果重排、Registry 比較中文化 / 自動刷新、Train-Test / Walk-forward 判讀與資料完整性說明。
 
+## 自動化真人式 UI 預驗證節點（2026-06-29｜Codex）
+
+本節記錄一個新的低風險測試方法，名稱為 **Baldr Human-Lite UI Sweep**。它不是取代使用者人工驗證，而是先用自動化方式模擬接近真人的 UI 操作：啟動完整 `MainWindow`、逐一切換頂層 tab、擷取畫面、驗證 resize evidence、測試高風險 dialog 的 cancel path，並搭配分 tab healthcheck 逐步排除問題。所有通過項目目前只代表 `Codex 自動化證據通過 / 待使用者人工複核`，不得直接改為 `驗證通過`。
+
+本次已完成的 1 小時內低風險批次：
+
+1. `quick` healthcheck：通過。
+2. 分 tab healthcheck：`decision`、`recommendation`、`watchlist`、`runtime`、`portfolio` 皆通過。
+3. `MainWindow` opt-in smoke：通過；可啟動主 UI、切換 8 個頂層 tab、產生 startup / resize screenshot、執行 `update_force_merge_daily_price` dialog cancel probe，且未觸發 destructive action。
+4. 主要證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_1h_mainwindow\20260629_180401\result.json`。
+
+本批次發現並已排入修正 / 複測的問題：
+
+1. `QT_QPA_PLATFORM=offscreen` 子程序內 `QFontDatabase.families()` 為空，導致 screenshot 內中文顯示成方框。已新增 Qt 中文字型註冊流程，讓 `apply_app_theme()` 在需要時載入 Windows 常見繁中字型（例如 Microsoft JhengHei / Noto Sans TC / MingLiU）。Codex 自動化重測已確認 startup screenshot 中文可讀；狀態：Codex 自動化證據通過，待使用者人工複核。
+2. 要求 `1366x768` 時，實際視窗尺寸被現有 UI minimum width 限制，修正後重測實際為 `1673x768`。本輪不強行壓縮 UI 版面，以免破壞既有操作；已補強 smoke evidence，新增 `resize_status`，將 `matched` 與 `constrained_by_minimum` 明確分開。後續自動化若要驗證窄 viewport，需另開 UI responsive / minimum width 改善任務；狀態：已記錄，待使用者決定是否作為 UI 改版項目。
+
+修正後重測結果：
+
+1. Focused pytest：`tests/test_ui_qt_theme.py`、`tests/test_full_app_healthcheck_mainwindow_smoke_runner.py`、`tests/test_full_app_healthcheck_actions.py`，19 passed。
+2. `py_compile`：`ui_qt/theme/fonts.py`、`ui_qt/main.py`、`qa/full_app_healthcheck/mainwindow_smoke_runner.py` 與相關測試檔通過。
+3. Baldr Human-Lite UI Sweep 重跑：`20260629_181537` 通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_after_font_fix2\20260629_181537\result.json`。
+4. 重跑 screenshot：`C:\Users\archi\AppData\Local\Temp\baldr_hc_after_font_fix2\mainwindow_ui_smoke\screenshots\startup.png` 中文可讀。
+5. Resize evidence：`1366x768` 為 `constrained_by_minimum`；`1726x768` 與 `1920x1080` 為 `matched`。
+
+已完成的下一個 2 小時自動化排除批次：
+
+1. `update` tab：`20260629_181259` 通過。
+2. `market` tab：`20260629_181309` 通過。
+3. `research` tab：`20260629_181321` 通過。
+4. `cross-flow`：`20260629_181336` 通過。
+5. 本批僅代表 safe 自動化橋接通過；高風險資料操作仍只允許 cancel-only / dry-run 驗證，正式資料重建需另開任務並先備份。
+
+下一步建議：
+
+1. 使用者人工複核上述 screenshot 與 result path，確認畫面可讀、tab 切換與 dialog cancel 符合預期。
+2. 若要讓 `1366x768` 真正 matched，另開 UI responsive / minimum width 任務；否則後續自動化將以 `1726x768` / `1920x1080` 作為可匹配 desktop viewport，`1366x768` 只作為 constrained evidence。
+3. 下一批可繼續針對 `已修正待驗證` / `需確認` 但已有自動化橋接的項目，補 run history manifest 與 coverage report，縮小需要人工點擊的清單。
+
 ## Month 5 基本面資料層補充（2026-06-17）
 
 ### 已達成

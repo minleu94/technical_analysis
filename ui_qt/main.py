@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 from PySide6.QtWidgets import QApplication, QMainWindow, QStatusBar, QTabWidget, QMessageBox, QLabel
 from typing import Dict, Any
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QFont, QIcon
 
 from data_module.config import TWStockConfig
 from app_module.screening_service import ScreeningService
@@ -53,6 +53,7 @@ from app_module.smart_money_semantic_service import SmartMoneySemanticService, S
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from ui_qt.theme import build_global_stylesheet
+from ui_qt.theme.fonts import preferred_qt_chinese_font_family, register_qt_chinese_fonts
 
 # Runtime Observatory Imports
 from app_module.runtime_services.runtime_controller import RuntimeController
@@ -64,6 +65,11 @@ import os
 
 def apply_app_theme(app: QApplication) -> None:
     app.setStyle("Fusion")
+    loaded_families = register_qt_chinese_fonts()
+    preferred_family = preferred_qt_chinese_font_family(loaded_families)
+    if preferred_family:
+        font = QFont(preferred_family, app.font().pointSize())
+        app.setFont(font)
     app.setStyleSheet(build_global_stylesheet())
 
 

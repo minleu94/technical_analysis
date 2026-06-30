@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ui_qt.theme import MIDNIGHT_ANALYST, build_global_stylesheet
 
 import os
@@ -64,3 +66,63 @@ def test_apply_app_theme_sets_global_stylesheet():
     apply_app_theme(app)
     assert "#070b12" in app.styleSheet()
     assert "QTableView" in app.styleSheet()
+
+
+def test_register_qt_chinese_fonts_registers_candidates_when_no_families(monkeypatch):
+    from ui_qt.theme.fonts import register_qt_chinese_fonts
+
+    calls = []
+
+    class FakeFontDatabase:
+        @staticmethod
+        def families():
+            return []
+
+        @staticmethod
+        def addApplicationFont(path):
+            calls.append(path)
+            return len(calls) - 1
+
+        @staticmethod
+        def applicationFontFamilies(font_id):
+            return (f"Loaded Family {font_id}",)
+
+    monkeypatch.setattr(Path, "exists", lambda self: True)
+
+    loaded = register_qt_chinese_fonts(
+        qfont_database=FakeFontDatabase,
+        font_paths=(Path("C:/Windows/Fonts/msjh.ttc"), Path("C:/Windows/Fonts/NotoSansTC-VF.ttf")),
+    )
+
+    assert loaded == ("Loaded Family 0", "Loaded Family 1")
+    assert calls == ["C:\\Windows\\Fonts\\msjh.ttc", "C:\\Windows\\Fonts\\NotoSansTC-VF.ttf"]
+
+
+def test_register_qt_chinese_fonts_registers_candidates_when_only_latin_families_exist(monkeypatch):
+    from ui_qt.theme.fonts import register_qt_chinese_fonts
+
+    calls = []
+
+    class FakeFontDatabase:
+        @staticmethod
+        def families():
+            return ["Arial", "Segoe UI"]
+
+        @staticmethod
+        def addApplicationFont(path):
+            calls.append(path)
+            return len(calls) - 1
+
+        @staticmethod
+        def applicationFontFamilies(font_id):
+            return (f"Chinese Family {font_id}",)
+
+    monkeypatch.setattr(Path, "exists", lambda self: True)
+
+    loaded = register_qt_chinese_fonts(
+        qfont_database=FakeFontDatabase,
+        font_paths=(Path("C:/Windows/Fonts/msjh.ttc"),),
+    )
+
+    assert loaded == ("Chinese Family 0",)
+    assert calls == ["C:\\Windows\\Fonts\\msjh.ttc"]
