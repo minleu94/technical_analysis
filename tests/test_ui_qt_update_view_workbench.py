@@ -69,6 +69,32 @@ class FakeUpdateService:
             "source_date": target_date.replace("-", ""),
         }
 
+    def update_tpex_daily_price_range(
+        self,
+        start_date,
+        end_date,
+        delay_seconds=1.0,
+        sync_to_sqlite=False,
+        force_refresh=False,
+        break_on_repeated_source_date=False,
+    ):
+        self.calls.append((
+            "update_tpex_daily_price_range",
+            start_date,
+            end_date,
+            delay_seconds,
+            sync_to_sqlite,
+            force_refresh,
+            break_on_repeated_source_date,
+        ))
+        return {
+            "success": True,
+            "message": "tpex range ok",
+            "tpex_rows": 1,
+            "skipped_rows": 0,
+            "source_date": end_date.replace("-", ""),
+        }
+
     def update_market(self, start_date, end_date):
         self.calls.append(("update_market", start_date, end_date))
         return {"success": True, "message": "market ok"}
@@ -334,6 +360,53 @@ def test_all_data_view_has_monthly_revenue_status_card():
     assert "244,499" in view.monthly_revenue_status_text.toPlainText()
 
 
+def test_selected_date_range_uses_recent_ten_business_days_for_auto_updates():
+    view = make_view()
+    view.end_date.setDate(QDate(2026, 6, 30))
+    view.lookback_days.setValue(10)
+
+    assert view._get_selected_date_range() == ("2026-06-17", "2026-06-30")
+
+
+def test_quick_update_all_uses_ten_business_day_window_for_daily_tpex_and_broker():
+    view = make_view()
+    view.update_service.config.use_sqlite = True
+    view.end_date.setDate(QDate(2026, 6, 30))
+    view.lookback_days.setValue(10)
+
+    result = view._run_update_all(mode="quick", progress_callback=lambda message, pct: None)
+
+    assert result["success"] is True
+    assert ("update_daily", "2026-06-17", "2026-06-30") in view.update_service.calls
+    assert any(
+        call[:3] == ("update_tpex_daily_price_range", "2026-06-17", "2026-06-30")
+        for call in view.update_service.calls
+    )
+    assert ("sync_source_to_sqlite", "daily_price_files", "2026-06-17", "2026-06-30") in view.update_service.calls
+    assert ("update_broker_branch", "2026-06-17", "2026-06-30") in view.update_service.calls
+    assert (
+        "sync_source_to_sqlite",
+        "broker_branch_files",
+        "2026-06-17",
+        "2026-06-30",
+    ) in view.update_service.calls
+
+
+def test_safe_update_all_uses_ten_business_day_window_for_core_sources():
+    view = make_view()
+    view.update_service.config.use_sqlite = True
+    view.end_date.setDate(QDate(2026, 6, 30))
+    view.lookback_days.setValue(10)
+
+    result = view._run_update_all(mode="safe", progress_callback=lambda message, pct: None)
+
+    assert result["success"] is True
+    assert ("update_daily", "2026-06-17", "2026-06-30") in view.update_service.calls
+    assert ("update_market", "2026-06-17", "2026-06-30") in view.update_service.calls
+    assert ("update_industry", "2026-06-17", "2026-06-30") in view.update_service.calls
+    assert ("update_broker_branch", "2026-06-17", "2026-06-30") in view.update_service.calls
+
+
 def test_safe_update_all_skips_technical_when_current():
     view = make_view()
     progress = []
@@ -346,7 +419,7 @@ def test_safe_update_all_skips_technical_when_current():
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
-        "update_tpex_daily_price",
+        "update_tpex_daily_price_range",
         "sync_source_to_sqlite",
         "update_market",
         "sync_source_to_sqlite",
@@ -361,7 +434,10 @@ def test_safe_update_all_skips_technical_when_current():
         "check_data_overview",
     ]
     daily_call = next(call for call in view.update_service.calls if call[0] == "update_daily")
-    assert ("update_tpex_daily_price", daily_call[2]) in view.update_service.calls
+    assert any(
+        call[:3] == ("update_tpex_daily_price_range", daily_call[1], daily_call[2])
+        for call in view.update_service.calls
+    )
     assert ("sync_source_to_sqlite", "daily_price_files", daily_call[1], daily_call[2]) in view.update_service.calls
     assert ("sync_source_to_sqlite", "market_index", None, None) in view.update_service.calls
     assert ("sync_source_to_sqlite", "industry_index", None, None) in view.update_service.calls
@@ -448,7 +524,7 @@ def test_safe_update_all_stops_after_failed_core_step():
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
-        "update_tpex_daily_price",
+        "update_tpex_daily_price_range",
         "sync_source_to_sqlite",
         "update_market",
     ]
@@ -457,6 +533,26 @@ def test_safe_update_all_stops_after_failed_core_step():
 class FailingTpexService(FakeUpdateService):
     def update_tpex_daily_price(self, target_date):
         self.calls.append(("update_tpex_daily_price", target_date))
+        return {"success": False, "message": "tpex failed", "tpex_rows": 0}
+
+    def update_tpex_daily_price_range(
+        self,
+        start_date,
+        end_date,
+        delay_seconds=1.0,
+        sync_to_sqlite=False,
+        force_refresh=False,
+        break_on_repeated_source_date=False,
+    ):
+        self.calls.append((
+            "update_tpex_daily_price_range",
+            start_date,
+            end_date,
+            delay_seconds,
+            sync_to_sqlite,
+            force_refresh,
+            break_on_repeated_source_date,
+        ))
         return {"success": False, "message": "tpex failed", "tpex_rows": 0}
 
 
@@ -471,7 +567,7 @@ def test_safe_update_all_continues_with_warning_when_tpex_fails_after_twse_succe
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
-        "update_tpex_daily_price",
+        "update_tpex_daily_price_range",
         "sync_source_to_sqlite",
         "update_market",
         "sync_source_to_sqlite",
@@ -502,7 +598,10 @@ def test_manual_daily_update_also_fetches_tpex_daily_price(monkeypatch):
     view._execute_update()
 
     assert ("update_daily", "2026-06-06", "2026-06-16") in view.update_service.calls
-    assert ("update_tpex_daily_price", "2026-06-16") in view.update_service.calls
+    assert any(
+        call[:3] == ("update_tpex_daily_price_range", "2026-06-06", "2026-06-16")
+        for call in view.update_service.calls
+    )
 
 
 def test_update_view_with_config_instantiates_inspector_widget(tmp_path):
@@ -628,7 +727,7 @@ def test_safe_update_all_runs_conservative_sequence_sqlite():
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",
         "update_daily",
-        "update_tpex_daily_price",
+        "update_tpex_daily_price_range",
         "sync_source_to_sqlite",
         "update_market",
         "sync_source_to_sqlite",

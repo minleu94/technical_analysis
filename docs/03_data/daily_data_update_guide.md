@@ -103,7 +103,7 @@ python scripts/merge_daily_data.py
 
 ### UI 安全更新（推薦）
 
-日常維護建議優先使用 Qt UI 的「數據更新」Tab →「安全更新所有數據」。此流程會保留既有 CSV 輸出，同時在成功步驟後補做 SQLite 同步：
+日常維護建議優先使用 Qt UI 的「數據更新」Tab →「安全更新所有數據」。此流程預設補結束日前最近 10 個工作日，會保留既有 CSV 輸出，同時在成功步驟後補做 SQLite 同步：
 
 1. 更新 `daily_price/YYYYMMDD.csv` 後，同步到 `daily_prices`。
 2. 更新 `market_index.csv` / `industry_index.csv` 後，同步到 `market_indices` / `industry_indices`。
