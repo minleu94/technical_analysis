@@ -80,10 +80,15 @@ def test_direct_bridge_only_allows_the_six_ui_tests():
     allowed_ui_tests = {
         "tests/test_ui_qt_decision_desk_view.py",
         "tests/test_ui_qt_market_regime_view.py",
+        "tests/test_ui_qt_portfolio_view.py",
+        "tests/test_ui_qt_recommendation_next_steps_copy_text.py",
+        "tests/test_ui_qt_recommendation_profiles.py",
         "tests/test_ui_qt_research_workflow.py",
         "tests/test_ui_qt_run_registry_compare.py",
+        "tests/test_ui_qt_runtime_view.py",
         "tests/test_ui_qt_smart_money_flow_view.py",
         "tests/test_ui_qt_update_view_workbench.py",
+        "tests/test_ui_qt_watchlist_candidate_pool_copy_text.py",
     }
 
     # Verify allowed ones
@@ -100,20 +105,25 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
     assert get_direct_bridge_files() == {
         "tests/test_ui_qt_decision_desk_view.py",
         "tests/test_ui_qt_market_regime_view.py",
+        "tests/test_ui_qt_portfolio_view.py",
+        "tests/test_ui_qt_recommendation_next_steps_copy_text.py",
+        "tests/test_ui_qt_recommendation_profiles.py",
         "tests/test_ui_qt_research_workflow.py",
         "tests/test_ui_qt_run_registry_compare.py",
+        "tests/test_ui_qt_runtime_view.py",
         "tests/test_ui_qt_smart_money_flow_view.py",
         "tests/test_ui_qt_update_view_workbench.py",
+        "tests/test_ui_qt_watchlist_candidate_pool_copy_text.py",
     }
-    assert "tests/test_ui_qt_portfolio_view.py" in get_candidate_bridge_files()
+    assert "tests/test_ui_qt_recommendation_portfolio_results.py" in get_candidate_bridge_files()
     assert "tests/manual/legacy_diagnostics/run_tests.py" in get_bridge_rejected_files()
     assert "write-risk-dry-run-required" in BRIDGE_REJECTED_CATEGORIES
 
 
 def test_inventory_exposes_pytest_collection_statuses():
-    assert len(PYTEST_COLLECTED_FILES) == 178
+    assert len(PYTEST_COLLECTED_FILES) == 179
     assert len(PYTEST_SUPPORT_FILES) == 1
-    assert len(PYTEST_NOT_COLLECTED_FILES) == 30
+    assert len(PYTEST_NOT_COLLECTED_FILES) == 31
 
     assert is_collected_by_default_pytest("tests/test_full_app_healthcheck_test_inventory.py")
     assert get_pytest_collection_status("tests/test_full_app_healthcheck_test_inventory.py") == "collected"
@@ -123,8 +133,8 @@ def test_inventory_exposes_pytest_collection_statuses():
 
 
 def test_inventory_can_query_category_groups():
-    assert len(get_files_by_category("healthcheck-runner-owned")) == 28
-    assert len(get_files_by_category("legacy-or-low-priority")) == 9
+    assert len(get_files_by_category("healthcheck-runner-owned")) == 29
+    assert len(get_files_by_category("legacy-or-low-priority")) == 10
 
     assert "tests/test_pattern_analysis/test_flag_pattern_robustness.py" in get_files_by_category(
         "service-oracle-research-backtest"

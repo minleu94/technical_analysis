@@ -65,6 +65,92 @@
 2. Recommendation Profile 生命週期、自訂 Profile、Research Lab 升級策略是否進推薦分析，以及 regime match / mismatch 規則。
 3. Research Lab 大型 UX：最佳化版面與取消流程、推薦回放結果重排、Registry 比較中文化 / 自動刷新、Train-Test / Walk-forward 判讀與資料完整性說明。
 
+## 自動化真人式 UI 預驗證節點（2026-06-29｜Codex）
+
+本節記錄一個新的低風險測試方法，名稱為 **Baldr Human-Lite UI Sweep**。它不是取代使用者人工驗證，而是先用自動化方式模擬接近真人的 UI 操作：啟動完整 `MainWindow`、逐一切換頂層 tab、擷取畫面、驗證 resize evidence、測試高風險 dialog 的 cancel path，並搭配分 tab healthcheck 逐步排除問題。所有通過項目目前只代表 `Codex 自動化證據通過 / 待使用者人工複核`，不得直接改為 `驗證通過`。
+
+本次已完成的 1 小時內低風險批次：
+
+1. `quick` healthcheck：通過。
+2. 分 tab healthcheck：`decision`、`recommendation`、`watchlist`、`runtime`、`portfolio` 皆通過。
+3. `MainWindow` opt-in smoke：通過；可啟動主 UI、切換 8 個頂層 tab、產生 startup / resize screenshot、執行 `update_force_merge_daily_price` dialog cancel probe，且未觸發 destructive action。
+4. 主要證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_1h_mainwindow\20260629_180401\result.json`。
+
+本批次發現並已排入修正 / 複測的問題：
+
+1. `QT_QPA_PLATFORM=offscreen` 子程序內 `QFontDatabase.families()` 為空，導致 screenshot 內中文顯示成方框。已新增 Qt 中文字型註冊流程，讓 `apply_app_theme()` 在需要時載入 Windows 常見繁中字型（例如 Microsoft JhengHei / Noto Sans TC / MingLiU）。Codex 自動化重測已確認 startup screenshot 中文可讀；狀態：Codex 自動化證據通過，待使用者人工複核。
+2. 要求 `1366x768` 時，實際視窗尺寸被現有 UI minimum width 限制，修正後重測實際為 `1673x768`。本輪不強行壓縮 UI 版面，以免破壞既有操作；已補強 smoke evidence，新增 `resize_status`，將 `matched` 與 `constrained_by_minimum` 明確分開。後續自動化若要驗證窄 viewport，需另開 UI responsive / minimum width 改善任務；狀態：已記錄，待使用者決定是否作為 UI 改版項目。
+
+修正後重測結果：
+
+1. Focused pytest：`tests/test_ui_qt_theme.py`、`tests/test_full_app_healthcheck_mainwindow_smoke_runner.py`、`tests/test_full_app_healthcheck_actions.py`，19 passed。
+2. `py_compile`：`ui_qt/theme/fonts.py`、`ui_qt/main.py`、`qa/full_app_healthcheck/mainwindow_smoke_runner.py` 與相關測試檔通過。
+3. Baldr Human-Lite UI Sweep 重跑：`20260629_181537` 通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_after_font_fix2\20260629_181537\result.json`。
+4. 重跑 screenshot：`C:\Users\archi\AppData\Local\Temp\baldr_hc_after_font_fix2\mainwindow_ui_smoke\screenshots\startup.png` 中文可讀。
+5. Resize evidence：`1366x768` 為 `constrained_by_minimum`；`1726x768` 與 `1920x1080` 為 `matched`。
+
+已完成的下一個 2 小時自動化排除批次：
+
+1. `update` tab：`20260629_181259` 通過。
+2. `market` tab：`20260629_181309` 通過。
+3. `research` tab：`20260629_181321` 通過。
+4. `cross-flow`：`20260629_181336` 通過。
+5. 本批僅代表 safe 自動化橋接通過；高風險資料操作仍只允許 cancel-only / dry-run 驗證，正式資料重建需另開任務並先備份。
+
+下一步建議：
+
+1. 使用者人工複核上述 screenshot 與 result path，確認畫面可讀、tab 切換與 dialog cancel 符合預期。
+2. 若要讓 `1366x768` 真正 matched，另開 UI responsive / minimum width 任務；否則後續自動化將以 `1726x768` / `1920x1080` 作為可匹配 desktop viewport，`1366x768` 只作為 constrained evidence。
+3. 下一批可繼續針對 `已修正待驗證` / `需確認` 但已有自動化橋接的項目，補 run history manifest 與 coverage report，縮小需要人工點擊的清單。
+
+### 不干擾使用者前景操作的完整自動化批次（2026-06-29｜Codex）
+
+本批次依使用者要求，只執行不搶前景、不操作滑鼠鍵盤、不開真桌面視窗的測試。期間使用者可正常使用瀏覽器或觀看影片；本批次避開真正前景真人點擊測試、正式資料重建與破壞性資料操作。
+
+已完成：
+
+1. `quick` gate：`20260629_191624`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_safe_all_quick\20260629_191624\result.json`。
+2. `full` mode + `coverage-burndown` / `flow-diagnostics` / `full-release-checklist`：`20260629_191946`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_safe_all_full_after_flow_fix\20260629_191946\result.json`。
+3. `high-risk-dry-run`：`20260629_191707`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_safe_all_high_risk_dry_run\20260629_191707\result.json`。注意：本次 manifest 未產生實際 step，僅代表 dry-run mode 入口可執行且未失敗，不代表已實測所有高風險 dialog。
+4. `MainWindow` offscreen smoke：`20260629_191745`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_safe_all_mainwindow\20260629_191745\result.json`。
+5. Healthcheck runner-owned pytest：161 passed。
+
+本批次期間發現並修正：
+
+1. `flow_diagnostics` 測試仍期待 portfolio / watchlist 為 candidate bridge，但 `test_inventory` 已將相關測試升級為 direct bridge；已同步 flow model 與測試期待，狀態改為 full/manual required，而非 partially covered。
+2. 修正後重跑 `tests/test_full_app_healthcheck_flow_diagnostics.py`：4 passed；重跑所有 `tests/test_full_app_healthcheck_*.py`：161 passed；重跑 full report mode：通過。
+
+仍需使用者人工 / 前景真人測試：
+
+1. 需要真正看畫面與判讀 UX 的項目，例如圖表是否美觀、資訊層級是否直覺、dialog 文案是否符合使用者期待。
+2. 需要真桌面焦點、滑鼠點擊、實際 resize 拖拉、或前景 screenshot 的測試。
+3. 需要正式資料重建、強制全量、刪除、清空、長時間下載或寫入正式資料的項目。
+
+### 前景 / 剩餘自動化批次（2026-06-29｜Codex）
+
+本批次依使用者要求，在可接受短暫前景干擾的前提下，補跑剩餘可自動化項目。正式資料重建、強制全量、刪除 / 清空等高風險資料操作仍未實際執行；相關項目只以 dry-run、temp `DATA_ROOT` 或 dialog cancel path 驗證。
+
+已完成：
+
+1. Windows 前景 `MainWindow` smoke：`20260629_195829`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_foreground_mainwindow_after_resize_status\20260629_195829\result.json`。
+2. 前景 `direct bridge` UI pytest：106 passed。
+3. 前景 `candidate UI` pytest：48 passed。
+4. 非破壞已登錄 pytest 批次：995 passed，19 warnings。
+5. `write-risk-dry-run-required` 類在 temp `DATA_ROOT` 下執行：69 passed。
+6. `slow-e2e-or-environment` 類在 temp `DATA_ROOT` 下執行：12 passed。
+7. 最終完整 `pytest tests`（temp `DATA_ROOT`、offscreen）：1077 passed，19 warnings。
+
+本批次期間發現並修正：
+
+1. `tests/test_tpex_daily_price_source.py` 內的 `requests.get` fake 尚未接受正式程式新增的 `params=` 參數；已同步測試替身，TPEX source tests 通過。
+2. Windows 前景平台會將 `1726x768` 回報為 `1726x769`，原本 resize evidence 會誤標為 `constrained_by_minimum`。已新增 `platform_adjusted` 狀態：`1366x768` 仍為 constrained；`1726x768` 為 platform-adjusted；`1920x1080` 為 matched。
+
+仍保留給使用者人工判讀：
+
+1. 視覺品質：圖表是否美觀、資訊層級是否清楚、文案是否直覺。
+2. 真正手動操作路徑：使用者自己拖拉 resize、逐頁觀看、確認前景 screenshot 和實際使用感。
+3. 真正會改正式資料的流程：強制全量、正式回補、刪除 / 清空 / 重建，需另開資料任務並先備份。
+
 ## Month 5 基本面資料層補充（2026-06-17）
 
 ### 已達成
@@ -151,7 +237,7 @@
 |---|---|---|---|---|
 | U-I-20260617-001 | 每日股價 / TPEX / SQLite | 已修正待驗證 | `3207` 在 SQLite `daily_prices` 只看到最近兩天，懷疑 TPEX 開始有資料但未補歷史。 | 盤點結果：TWSE CSV 已有 `2014-01-02..2026-06-17`；TPEX CSV 原僅 `2026-06-16..2026-06-17`。SQLite 中 `3207` 原為 2 筆；手動補 `2026-06-15` 後為 3 筆。 |
 | U-I-20260617-002 | 每日股價 / 手動下載此資料源 | 已修正待驗證 | 選 10 天時沒有明顯跑 TPEX，顯示沒有需要更新。 | 根因：舊 TPEX source 使用 OpenAPI latest endpoint，歷史日期參數未有效回傳指定日期；已改用官方 `/www/zh-tw/afterTrading/otc` JSON 歷史查詢 endpoint，並改為只補缺少 CSV。 |
-| U-I-20260617-003 | 全部資料 / 快速更新 | 已修正待驗證 | 快速更新與安全更新差異不清楚，需確認 TWSE + TPEX 是否都跑。 | 快速更新改為 TWSE 每日股價、TPEX 每日股價與券商分點皆只更新結束日前最近 2 天，直接同步 SQLite 並跳過大型合併；安全更新依 UI 日期範圍補齊並執行完整合併。 |
+| U-I-20260617-003 | 全部資料 / 快速更新 | 已修正待驗證 | 快速更新與安全更新差異不清楚，需確認 TWSE + TPEX 是否都跑。 | 快速更新改為 TWSE 每日股價、TPEX 每日股價與券商分點皆更新結束日前最近 10 個工作日，直接同步 SQLite 並跳過大型合併；安全更新使用同一最近工作日窗口並執行完整合併。2026-06-30 已補 UI workbench 回歸測試覆蓋此日期窗口。 |
 | U-I-20260617-004 | 背景補齊 TPEX + 技術指標 | 已修正待驗證 | 背景流程不應先卡在 TWSE 全量，應先看 SQLite / CSV 缺口再補 TPEX。 | UI 啟動背景腳本時不再傳 `--twse-update`；背景腳本 TPEX 改為 `force_refresh=False`，並以狀態檔回報 TWSE skipped / TPEX / SQLite / technical steps。 |
 | U-I-20260617-005 | 每日股價 / SQLite sync | 已修正待驗證 | TPEX CSV 有資料但 SQLite sync 可能因欄位名稱混亂失敗。 | 2026-06-15 TPEX CSV 抓取 879 筆；初次 sync 因 mojibake 欄位判斷失敗，已將 `daily_price_files` sync 正規化到 `日期`、`證券代號`，重跑後該日同步 1,969 筆。 |
 | U-I-20260618-001 | Git / QA 母檔接續 | 已記錄 | 接下來要開始繼續全 UI 健檢，需要明確接續點。 | 已補本輪 2026-06-18 重點、建議健檢順序、驗證證據與本機 `meta_data/` 排除提醒。 |
@@ -462,7 +548,7 @@
 | UPDATE-ISSUE-014 | U-023 | 效能 / 技術指標計算 | 技術指標目前疑似 inline / 單核心計算；需評估是否可用 4 core 等多核心並行計算以縮短全市場計算時間。 | 已排查，未平行化 | 未修正 | 後續設計 | 中 | 2026-06-23 Batch 5 已界定最小邊界：技術指標目前 SQLite-first 載入價格資料，寫入 SQLite / CSV 仍需單點治理；後續若平行化，必須拆成多核心 compute-only 與單 writer 寫入，避免 DB lock 與 CSV 覆寫競爭。 |
 | UPDATE-ISSUE-015 | U-024 / U-007 / U-008 | TPEX / SQLite 同步缺口 | SQLite 檢視 `3207` 只有近兩天資料，顯示 TPEX 日常資料已開始寫入但尚未補齊 2014 起歷史資料；需確認歷史 TPEX 回補是否未執行。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | 已改用 TPEX historical afterTrading endpoint 回補並同步 SQLite；2026-06-17 排查確認 `daily_prices` 中 `3207` 已有 `20140102` 至 `20260617`、共 2907 筆。 |
 | UPDATE-ISSUE-016 | U-007 / U-008 / U-024 | TPEX / 每日股價手動同步 | 點每日股價的手動下載資料源或後續同步後，SQLite 檢視 `daily_prices` 查不到 `3207`，但 TPEX CSV 未消失；疑似手動每日股價路徑未納入 `daily_price_tpex`，或同步時覆蓋了同日 TPEX rows。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 每日股價手動下載改為 TWSE + TPEX 區間流程，完成後同步 `daily_price_files` 到 SQLite 並執行技術指標增量；測試替身保留舊單日 API fallback。 |
-| UPDATE-ISSUE-017 | U-002 / U-003 | 使用者理解 / 更新模式語意 | 快速更新與完整更新差異不清楚：快速更新後 metadata 的市場 / 產業 CSV、`daily_price` 與 `broker_flow` daily 檔也會更新；完整更新又重跑一次全部，使用者不確定完整更新額外做了哪些檢查或資料重建。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | UI tooltip 與 Manual 已更新：快速更新只跑結束日前最近 2 天並跳過大型合併；安全更新依 UI 日期範圍補齊並重建完整 CSV + SQLite。 |
+| UPDATE-ISSUE-017 | U-002 / U-003 | 使用者理解 / 更新模式語意 | 快速更新與完整更新差異不清楚：快速更新後 metadata 的市場 / 產業 CSV、`daily_price` 與 `broker_flow` daily 檔也會更新；完整更新又重跑一次全部，使用者不確定完整更新額外做了哪些檢查或資料重建。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 中 | UI tooltip 與 Manual 已更新：快速更新跑結束日前最近 10 個工作日並跳過大型合併；安全更新使用同一最近工作日窗口並重建完整 CSV + SQLite。 |
 | UPDATE-ISSUE-018 | U-023 / U-024 | 技術指標 / SQLite 欄位相容性 | TPEX 歷史 daily 寫入 SQLite 後，全量技術指標背景計算失敗，訊息為「沒有有效的數據可以合併」；`daily_prices` 已有 `3207` 歷史資料，但 `technical_indicators` 原本沒有 `3207`。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 根因為技術指標合併與 SQLite 寫入仍檢查舊 mojibake 欄名，且 `daily_prices` 同時存在正確欄名與舊 alias 欄位，rename 後造成 duplicate `日期`；已修正欄位 canonicalization，正式狀態檢查顯示 `technical_indicators` 最新日期 `2026-06-17`、總筆數 5,126,249。 |
 | UPDATE-ISSUE-019 | U-001 / U-024 | 資料狀態 / SQLite 欄位相容性 | 開啟 App 檢查資料狀態時，`market_indices`、`industry_indices`、`broker_flows`、`technical_indicators` 狀態查詢仍使用舊 mojibake 欄名，也就是 `日期`、`證券代號` 等欄位被錯誤編碼後的版本，導致 no such column error。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | `UpdateService` 的 SQLite status helper 改為依實際 table columns 選擇 canonical 欄位，優先使用 `日期`、`證券代號`、`分點名稱`，必要時才 fallback 舊 alias；避免資料狀態頁因 schema canonicalization 後查錯欄位。 |
 | UPDATE-ISSUE-020 | U-001 / U-024 | 文字編碼 / DB schema 清理 | App log、狀態檔與 `daily_prices` schema 殘留 mojibake 文字，造成使用者看到不可讀訊息，且可能讓後續程式誤用舊欄位。 | 已修正待驗證 | 已修正 | 待使用者驗證 | 高 | 已修復 `app_module/update_service.py` 內正式路徑可見亂碼字串與註解，修復 `meta_data` 狀態 JSON 舊訊息；SQLite `daily_prices` 的空白亂碼欄位已在備份 `D:/Min/Python/Project/FA_Data/sqlite/twstock_before_drop_mojibake_col_20260617_235005.db` 後移除，最終 schema 掃描未再發現 mojibake 欄位。 |

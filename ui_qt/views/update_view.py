@@ -330,7 +330,7 @@ class UpdateView(QWidget):
         self.quick_update_all_btn.setMinimumHeight(45)
         self.quick_update_all_btn.setToolTip(
             "【⚡ 快速更新 (跳過大型合併)】\n"
-            "速度優先。TWSE 每日股價、TPEX 每日股價與券商分點都只更新結束日前最近 2 天。\n"
+            "速度優先。TWSE 每日股價、TPEX 每日股價與券商分點都更新結束日前最近 10 個工作日。\n"
             "TPEX 使用官方歷史查詢 endpoint，會先跳過本機已有 CSV，只補缺少日期。\n"
             "資料會直接增量同步 SQLite，但跳過 stock_data_whole 與分點 merged.csv 的大型合併重寫。"
         )
@@ -1527,8 +1527,20 @@ class UpdateView(QWidget):
         """取得目前 UI 選定的查找日期範圍"""
         end_date = self.end_date.date().toString("yyyy-MM-dd")
         lookback_days = self.lookback_days.value()
+        return self._get_recent_business_day_range(end_date, lookback_days)
+
+    @staticmethod
+    def _get_recent_business_day_range(end_date: str, business_days: int) -> tuple[str, str]:
+        """以週一至週五計算最近 N 個工作日，結束日仍保留使用者選定日期。"""
         end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
-        start_date_obj = end_date_obj - timedelta(days=lookback_days)
+        remaining_days = max(1, int(business_days))
+        cursor = end_date_obj
+        start_date_obj = end_date_obj
+        while remaining_days > 0:
+            if cursor.weekday() < 5:
+                start_date_obj = cursor
+                remaining_days -= 1
+            cursor = cursor - timedelta(days=1)
         return start_date_obj.strftime("%Y-%m-%d"), end_date
 
     def _get_tpex_reference_date(self, end_date: str) -> str:
@@ -1703,16 +1715,8 @@ class UpdateView(QWidget):
         use_sqlite = getattr(self.update_service.config, "use_sqlite", False)
         is_quick_mode = (mode == "quick" and use_sqlite)
 
-        # 在快速更新模式下，限制券商分點僅更新最近 2 天，避免大量全新分點補歷史資料造成的嚴重卡頓
-        if is_quick_mode:
-            from datetime import datetime, timedelta
-            try:
-                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-                quick_start_date = (end_dt - timedelta(days=2)).strftime("%Y-%m-%d")
-            except Exception:
-                quick_start_date = start_date
-        else:
-            quick_start_date = start_date
+        # 快速更新仍跳過大型合併，但資料補齊窗口與安全更新一致使用最近工作日範圍。
+        quick_start_date = start_date
 
         daily_update_start_date = quick_start_date if is_quick_mode else start_date
 

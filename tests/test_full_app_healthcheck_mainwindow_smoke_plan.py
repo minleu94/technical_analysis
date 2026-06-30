@@ -12,6 +12,13 @@ from qa.full_app_healthcheck.mainwindow_smoke_plan import (
     get_mainwindow_smoke_plan_for_feature,
     render_mainwindow_smoke_plan_markdown,
 )
+from qa.full_app_healthcheck.mainwindow_smoke import (
+    EXPECTED_MAINWINDOW_TAB_LABELS,
+    ViewportSize,
+    build_mainwindow_smoke_evidence,
+    collect_mainwindow_smoke_evidence,
+    parse_viewport_spec,
+)
 from qa.full_app_healthcheck.test_suite_bridge import build_existing_suite_registry
 
 
@@ -116,3 +123,85 @@ def test_render_mainwindow_smoke_plan_markdown():
     assert "mainwindow_startup_shell_observation" in markdown
 
     assert render_mainwindow_smoke_plan_markdown([]) == "- (None)"
+
+
+class FakeTabWidget:
+    def __init__(self, labels):
+        self.labels = list(labels)
+        self.current_index = 0
+
+    def count(self):
+        return len(self.labels)
+
+    def tabText(self, index):
+        return self.labels[index]
+
+    def setCurrentIndex(self, index):
+        self.current_index = index
+
+
+class FakeMainWindow:
+    def __init__(self, tab_widget):
+        self.tab_widget = tab_widget
+
+    def windowTitle(self):
+        return "baldr"
+
+    def findChildren(self, widget_type):
+        return [self.tab_widget]
+
+
+def test_collect_mainwindow_smoke_evidence_with_injected_window():
+    window = FakeMainWindow(FakeTabWidget(EXPECTED_MAINWINDOW_TAB_LABELS))
+
+    evidence = collect_mainwindow_smoke_evidence(window, switch_tabs=True)
+
+    assert evidence["window_title"] == "baldr"
+    assert evidence["tab_labels"] == list(EXPECTED_MAINWINDOW_TAB_LABELS)
+    assert evidence["missing_tabs"] == []
+    assert evidence["switched_tabs"] == list(EXPECTED_MAINWINDOW_TAB_LABELS)
+    assert evidence["forbidden_actions_invoked"] == []
+
+
+def test_collect_mainwindow_smoke_evidence_reports_missing_tabs():
+    labels = tuple(label for label in EXPECTED_MAINWINDOW_TAB_LABELS if label != "持倉管理")
+    window = FakeMainWindow(FakeTabWidget(labels))
+
+    evidence = collect_mainwindow_smoke_evidence(window, switch_tabs=False)
+
+    assert evidence["missing_tabs"] == ["持倉管理"]
+    assert evidence["switched_tabs"] == []
+
+
+def test_parse_viewport_spec_accepts_width_by_height():
+    viewport = parse_viewport_spec("390x844")
+
+    assert viewport == ViewportSize(width=390, height=844)
+    assert viewport.label == "390x844"
+
+
+def test_parse_viewport_spec_rejects_invalid_values():
+    invalid_specs = ("", "390", "390*844", "0x844", "390x0", "abcx844")
+
+    for spec in invalid_specs:
+        with pytest.raises(ValueError):
+            parse_viewport_spec(spec)
+
+
+def test_build_mainwindow_smoke_evidence_preserves_operation_sections():
+    evidence = build_mainwindow_smoke_evidence(
+        window_title="baldr",
+        tab_labels=list(EXPECTED_MAINWINDOW_TAB_LABELS),
+        missing_tabs=[],
+        switched_tabs=list(EXPECTED_MAINWINDOW_TAB_LABELS),
+        screenshots=[{"label": "startup", "path": "screenshots/startup.png"}],
+        resize_evidence=[{"viewport": "390x844", "actual_size": "390x844"}],
+        dialog_cancel_evidence=[{"dialog": "force_merge_daily_price", "cancelled": True}],
+        forbidden_actions_invoked=[],
+    )
+
+    assert evidence["window_title"] == "baldr"
+    assert evidence["screenshots"][0]["label"] == "startup"
+    assert evidence["resize_evidence"][0]["viewport"] == "390x844"
+    assert evidence["dialog_cancel_evidence"][0]["cancelled"] is True
+    assert evidence["forbidden_actions_invoked"] == []

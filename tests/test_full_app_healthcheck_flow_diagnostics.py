@@ -29,9 +29,9 @@ def test_flow_diagnostics_generation():
     assert len(data_market.ux_gaps) > 0
 
     portfolio = details_by_id["portfolio_review_loop"]
-    assert portfolio.coverage_status == "partially_covered"
+    assert portfolio.coverage_status == "full_or_manual_required"
     assert "tests/test_ui_qt_portfolio_view.py" in portfolio.evidence_sources
-    assert any("Portfolio view is still candidate bridge" in gap for gap in portfolio.manual_gaps)
+    assert any("Portfolio view has direct bridge evidence" in gap for gap in portfolio.manual_gaps)
 
     daily_decision = details_by_id["daily_decision_loop"]
     assert daily_decision.coverage_status == "full_or_manual_required"
@@ -65,7 +65,6 @@ def test_flow_diagnostics_markdown_renderer():
     assert "data_market_loop" in markdown
     assert "portfolio_review_loop" in markdown
     assert "**Coverage Status**: `full_or_manual_required`" in markdown
-    assert "**Coverage Status**: `partially_covered`" in markdown
     assert "**Handoff Owner**: `data_audit`" in markdown
     assert "Recommended Commands" in markdown
     assert "pytest tests/test_ui_qt_smart_money_flow_view.py" in markdown

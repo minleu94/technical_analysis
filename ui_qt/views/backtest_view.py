@@ -2,7 +2,7 @@
 回測視圖
 提供回測配置界面和結果顯示
 
-# 測試相容性區塊 (用於 test_ui_qt_research_lab_workbench_copy.py)
+# 測試相容性區塊 (用於 test_ui_qt_research_lab_workbench_copy_text.py)
 # 實驗模式, 輸入來源, 策略與風控, 執行實驗, 主要輸入
 # 實驗摘要, 交易明細, 批次結果, 推薦回放, 歷史與比較
 # 參數最佳化, Walk-forward 驗證, 升級為策略版本

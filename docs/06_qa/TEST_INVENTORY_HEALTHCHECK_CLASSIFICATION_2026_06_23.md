@@ -9,8 +9,8 @@
 | 分類 | 數量 | Runner 使用方式 |
 |---|---:|---|
 | `healthcheck-runner-owned` | 28 | Runner 自身單元測試，不由 runner 呼叫。 |
-| `ui-healthcheck-direct-bridge` | 6 | 可直接登錄到 `test_suite_bridge.py`。 |
-| `ui-healthcheck-candidate-bridge` | 15 | 可逐步評估納入 full mode 或特定 flow diagnostics。 |
+| `ui-healthcheck-direct-bridge` | 11 | 可直接登錄到 `test_suite_bridge.py`，並可由 runner 依 `--tab` 分頁篩選。 |
+| `ui-healthcheck-candidate-bridge` | 10 | 可逐步評估納入 full mode 或特定 flow diagnostics。 |
 | `service-oracle-data-market` | 37 | 可作資料 / 市場狀態 oracle，不直接當 UI flow step。 |
 | `service-oracle-research-backtest` | 31 | 可作 Research Lab / backtest / strategy oracle，需注意金融數值與 look-ahead 邊界。 |
 | `service-oracle-recommendation` | 9 | 可作推薦分析與 profile lifecycle oracle。 |
@@ -29,7 +29,7 @@
 | 狀態 | 數量 | 判讀 |
 |---|---:|---|
 | 預設 pytest gate 會收集 | 177 files / 1051 tests | 仍屬現行自動化測試；沒有逐名出現在文件中也不代表 unused。 |
-| 目前已由 healthcheck runner bridge 呼叫 | 6 files | direct bridge UI 測試；另有 `scripts/qa_validate_update_tab.py` 作為 QA script bridge，不屬 `tests/` 208 files。 |
+| 目前已由 healthcheck runner bridge 呼叫 | 11 files | direct bridge UI 測試；另有 `scripts/qa_validate_update_tab.py` 作為 QA script bridge，不屬 `tests/` 208 files。 |
 | pytest support file | 1 | `tests/conftest.py` 不產生測項，但仍被 pytest fixture 系統使用。 |
 | manual legacy 已隔離 | 16 | `tests/manual/` 底下歷史探索腳本，已在 legacy/manual 區，不進預設 pytest。 |
 | manual script 已隔離 | 5 | `tests/scripts/` 底下真實來源 / 外部站台 / 人工整合檢查，不進預設 pytest，也不可進 runner quick/full。 |
@@ -58,8 +58,13 @@
 - `tests/test_ui_qt_market_regime_view.py`
 - `tests/test_ui_qt_run_registry_compare.py`
 - `tests/test_ui_qt_smart_money_flow_view.py`
+- `tests/test_ui_qt_recommendation_profiles.py`
+- `tests/test_ui_qt_recommendation_next_steps_copy_text.py`
+- `tests/test_ui_qt_watchlist_candidate_pool_copy_text.py`
+- `tests/test_ui_qt_portfolio_view.py`
+- `tests/test_ui_qt_runtime_view.py`
 
-其中 quick mode 只能先跑 UpdateView 與 Daily Decision Desk；Research / Market Regime / Registry Compare / Smart Money 保留 full mode，並由 `test_inventory.py` 的 direct bridge allowlist 防止其他類別誤入 runner。
+其中 quick mode 只能先跑 UpdateView 與 Daily Decision Desk；Research / Market Regime / Registry Compare / Smart Money / Recommendation / Watchlist / Portfolio / Runtime 保留 full mode，並由 `test_inventory.py` 的 direct bridge allowlist 防止其他類別誤入 runner。`scripts/run_full_app_healthcheck.py --mode full --tab <tab>` 可依 `update`、`research`、`recommendation`、`watchlist`、`portfolio`、`runtime` 等 tab 分批驗證，不必每次跑完整 full mode。
 
 ## Runner 規則
 
@@ -107,10 +112,15 @@
 
 - `tests/test_ui_qt_decision_desk_view.py`
 - `tests/test_ui_qt_market_regime_view.py`
+- `tests/test_ui_qt_portfolio_view.py`
+- `tests/test_ui_qt_recommendation_next_steps_copy_text.py`
+- `tests/test_ui_qt_recommendation_profiles.py`
 - `tests/test_ui_qt_research_workflow.py`
 - `tests/test_ui_qt_run_registry_compare.py`
+- `tests/test_ui_qt_runtime_view.py`
 - `tests/test_ui_qt_smart_money_flow_view.py`
 - `tests/test_ui_qt_update_view_workbench.py`
+- `tests/test_ui_qt_watchlist_candidate_pool_copy_text.py`
 
 ### ui-healthcheck-candidate-bridge
 
@@ -118,17 +128,12 @@
 - `tests/test_ui_qt_chart_widget_factory.py`
 - `tests/test_ui_qt_decision_desk_main_integration.py`
 - `tests/test_ui_qt_portfolio_condition_monitor.py`
-- `tests/test_ui_qt_portfolio_view.py`
-- `tests/test_ui_qt_recommendation_next_steps_copy.py`
 - `tests/test_ui_qt_recommendation_portfolio_results.py`
-- `tests/test_ui_qt_recommendation_profiles.py`
 - `tests/test_ui_qt_report_export.py`
 - `tests/test_ui_qt_research_lab_mode_driven_ui.py`
-- `tests/test_ui_qt_research_lab_workbench_copy.py`
+- `tests/test_ui_qt_research_lab_workbench_copy_text.py`
 - `tests/test_ui_qt_research_run_save.py`
-- `tests/test_ui_qt_runtime_view.py`
 - `tests/test_ui_qt_theme.py`
-- `tests/test_ui_qt_watchlist_candidate_pool_copy.py`
 
 ### service-oracle-data-market
 

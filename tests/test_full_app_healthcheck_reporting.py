@@ -78,3 +78,20 @@ def test_write_reports_includes_optional_report_sections(tmp_path):
     assert "quick-gate-proposal" in markdown
     assert payload["report_sections"][0]["section_id"] == "quick-gate-proposal"
     assert payload["report_sections"][0]["payload"]["report_only"] is True
+
+
+def test_write_reports_includes_selected_tabs_when_present(tmp_path):
+    result = HealthcheckResult(
+        run_id="run-tabs",
+        mode=HealthcheckMode.FULL,
+        status="passed",
+        steps=(),
+        tabs=("update", "research"),
+    )
+
+    files = write_reports(result, tmp_path)
+
+    markdown = files.markdown.read_text(encoding="utf-8")
+    payload = json.loads(files.json.read_text(encoding="utf-8"))
+    assert "- Tabs: `update, research`" in markdown
+    assert payload["tabs"] == ["update", "research"]

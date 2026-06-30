@@ -13,7 +13,7 @@ if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8') if hasattr(sys.stdout, 'reconfigure') else None
 
 # 添加項目根目錄到路徑
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parents[2]
 sys.path.insert(0, str(project_root))
 
 from data_module.config import TWStockConfig

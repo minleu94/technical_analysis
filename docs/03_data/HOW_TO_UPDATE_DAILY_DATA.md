@@ -17,7 +17,7 @@
 4. 等待底部日誌顯示完成。
 5. 再次檢查狀態，確認每日股價與技術指標日期。
 
-快速更新會下載近期缺失資料並直接同步 SQLite，略過大型歷史 CSV 重寫。每日股價現在包含 TWSE `MI_INDEX type=ALL` 與 TPEX official daily close quotes；TWSE CSV 會寫到 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX CSV 會寫到 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，最後一併 upsert 到 SQLite `daily_prices`。
+快速更新預設會下載結束日前最近 10 個工作日的缺失資料並直接同步 SQLite，略過大型歷史 CSV 重寫。每日股價現在包含 TWSE `MI_INDEX type=ALL` 與 TPEX official daily close quotes；TWSE CSV 會寫到 `DATA_ROOT/daily_price/YYYYMMDD.csv`，TPEX CSV 會寫到 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv`，最後一併 upsert 到 SQLite `daily_prices`。
 
 ## 3. 完整備份：安全更新
 
@@ -28,7 +28,7 @@
 - 需要人工檢查完整 CSV
 - 確認雙軌資料一致性
 
-安全更新同樣會在每日股價步驟後抓取 TPEX official daily close quotes，並在 SQLite 同步時與 TWSE 日價一起寫入 `daily_prices`。TPEX endpoint 連線 timeout 或暫時失敗時會在完成訊息中以警告顯示，流程仍會繼續同步已成功取得的 TWSE 與其他資料，不會靜默略過。
+安全更新同樣預設使用最近 10 個工作日窗口，並會在每日股價步驟後抓取 TPEX official daily close quotes，在 SQLite 同步時與 TWSE 日價一起寫入 `daily_prices`。TPEX endpoint 連線 timeout 或暫時失敗時會在完成訊息中以警告顯示，流程仍會繼續同步已成功取得的 TWSE 與其他資料，不會靜默略過。
 
 ## 4. 手動更新單一來源
 

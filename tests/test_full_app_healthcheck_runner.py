@@ -1,4 +1,5 @@
 import json
+import subprocess
 from dataclasses import asdict
 
 import pytest
@@ -11,7 +12,13 @@ from qa.full_app_healthcheck.run_history_manifest import (
     SuiteRunRecord,
     build_run_history_manifest,
 )
-from scripts.run_full_app_healthcheck import build_cli_report_sections, parse_args
+from scripts.run_full_app_healthcheck import (
+    build_effective_manifest,
+    build_cli_report_sections,
+    configure_utf8_stdio,
+    parse_args,
+    run_existing_suites_for_mode,
+)
 
 
 def test_runner_dispatches_registered_action(tmp_path):
@@ -56,6 +63,92 @@ def test_full_app_healthcheck_cli_parse_mode_and_output():
     assert args.mode == "full"
     assert args.output_dir == "out"
     assert args.fail_fast is True
+
+
+def test_configure_utf8_stdio_reconfigures_text_streams():
+    class FakeStream:
+        def __init__(self):
+            self.calls = []
+
+        def reconfigure(self, **kwargs):
+            self.calls.append(kwargs)
+
+    stdout = FakeStream()
+    stderr = FakeStream()
+
+    configure_utf8_stdio(stdout=stdout, stderr=stderr)
+
+    assert stdout.calls == [{"encoding": "utf-8", "errors": "backslashreplace"}]
+    assert stderr.calls == [{"encoding": "utf-8", "errors": "backslashreplace"}]
+
+
+def test_full_app_healthcheck_cli_parse_repeated_tab_filters():
+    args = parse_args(["--mode", "full", "--tab", "update", "--tab", "research"])
+
+    assert args.tabs == ["update", "research"]
+
+
+def test_full_app_healthcheck_cli_parse_ui_smoke_options():
+    args = parse_args(
+        [
+            "--mode",
+            "full",
+            "--ui-smoke",
+            "--ui-smoke-switch-tabs",
+            "--ui-smoke-screenshot",
+            "--ui-smoke-resize",
+            "1366x768",
+            "--ui-smoke-resize",
+            "390x844",
+            "--ui-smoke-dialog-cancel",
+        ]
+    )
+
+    assert args.ui_smoke is True
+    assert args.ui_smoke_switch_tabs is True
+    assert args.ui_smoke_screenshot is True
+    assert args.ui_smoke_resize == ["1366x768", "390x844"]
+    assert args.ui_smoke_dialog_cancel is True
+
+
+def test_effective_manifest_adds_mainwindow_smoke_only_when_opted_in():
+    default_args = parse_args(["--mode", "full"])
+    default_manifest = build_effective_manifest(default_args)
+
+    assert "MAINWINDOW-UI-SMOKE" not in {step.id for step in default_manifest.steps}
+
+    smoke_args = parse_args(["--mode", "full", "--ui-smoke"])
+    smoke_manifest = build_effective_manifest(smoke_args)
+
+    smoke_steps = [step for step in smoke_manifest.steps if step.id == "MAINWINDOW-UI-SMOKE"]
+    assert len(smoke_steps) == 1
+    assert smoke_steps[0].action == "run_mainwindow_ui_smoke"
+    assert smoke_steps[0].mode is HealthcheckMode.FULL
+
+
+def test_run_existing_suites_filters_by_selected_tabs(monkeypatch):
+    commands: list[tuple[str, ...]] = []
+    run_kwargs: list[dict] = []
+
+    def fake_run(command, **kwargs):
+        commands.append(tuple(command))
+        run_kwargs.append(kwargs)
+        return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    evidence = run_existing_suites_for_mode(
+        {"mode": HealthcheckMode.FULL, "tabs": ("research",)},
+        None,
+    )
+
+    suite_ids = {suite["id"] for suite in evidence["suites"]}
+    assert "ui-research-workflow" in suite_ids
+    assert "ui-run-registry-compare" in suite_ids
+    assert "ui-update-workbench" not in suite_ids
+    assert all("test_ui_qt_update_view_workbench.py" not in " ".join(command) for command in commands)
+    assert all(kwargs["encoding"] == "utf-8" for kwargs in run_kwargs)
+    assert all(kwargs["errors"] == "backslashreplace" for kwargs in run_kwargs)
 
 
 def test_runner_writes_optional_report_sections(tmp_path):

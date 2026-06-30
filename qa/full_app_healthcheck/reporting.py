@@ -23,6 +23,7 @@ class HealthcheckResult:
     mode: HealthcheckMode
     status: str
     steps: tuple[StepResult, ...]
+    tabs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -72,10 +73,10 @@ def _render_markdown(
         f"- Run ID: `{result.run_id}`",
         f"- Mode: `{result.mode.value}`",
         f"- Status: `{result.status}`",
-        "",
-        "## Steps",
-        "",
     ]
+    if result.tabs:
+        lines.append(f"- Tabs: `{', '.join(result.tabs)}`")
+    lines.extend(["", "## Steps", ""])
     for step in result.steps:
         lines.append(f"### {step.id} - {step.title}")
         lines.append(f"- Status: `{step.status}`")
