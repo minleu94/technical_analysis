@@ -45,6 +45,7 @@ class FakeTabWidget:
     def __init__(self, labels):
         self.labels = list(labels)
         self.current_index = 0
+        self.widgets = [FakeUpdateView()] + [object() for _ in labels[1:]]
 
     def count(self):
         return len(self.labels)
@@ -54,6 +55,20 @@ class FakeTabWidget:
 
     def setCurrentIndex(self, index):
         self.current_index = index
+
+    def widget(self, index):
+        return self.widgets[index]
+
+
+class FakeUpdateView:
+    def __init__(self):
+        self.force_merge_executed = False
+
+    def _execute_force_merge(self):
+        return None
+
+    def _do_merge(self, force_all=False):
+        self.force_merge_executed = True
 
 
 class FakeMainWindow:
@@ -135,3 +150,30 @@ def test_run_mainwindow_smoke_can_skip_optional_operations(tmp_path):
     assert evidence["screenshots"] == []
     assert evidence["resize_evidence"] == []
     assert window.resize_calls == []
+
+
+def test_run_mainwindow_smoke_records_dialog_cancel_probe(tmp_path):
+    window = FakeMainWindow()
+    options = MainWindowSmokeOptions(
+        output_dir=tmp_path,
+        switch_tabs=False,
+        capture_screenshots=False,
+        resize_viewports=(),
+        dialog_cancel=True,
+    )
+
+    evidence = run_mainwindow_smoke(
+        options,
+        app_factory=FakeApp,
+        window_factory=lambda: window,
+    )
+
+    assert evidence["dialog_cancel_evidence"] == [
+        {
+            "dialog": "update_force_merge_daily_price",
+            "available": True,
+            "cancelled": True,
+            "destructive_action_called": False,
+        }
+    ]
+    assert evidence["forbidden_actions_invoked"] == []

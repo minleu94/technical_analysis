@@ -55,6 +55,16 @@ def run_mainwindow_smoke(
             if options.capture_screenshots:
                 screenshots.append(_capture_screenshot(window, options.output_dir, f"resize_{viewport.label}"))
 
+        dialog_cancel_evidence: list[dict[str, Any]] = []
+        forbidden_actions_invoked: list[str] = []
+        if options.dialog_cancel:
+            dialog_cancel_evidence.append(_probe_update_force_merge_cancel(window))
+            if dialog_cancel_evidence[-1].get("destructive_action_called"):
+                forbidden_actions_invoked.append("update_force_merge_daily_price")
+
+        if forbidden_actions_invoked:
+            raise AssertionError(f"Forbidden UI smoke actions invoked: {forbidden_actions_invoked}")
+
         return build_mainwindow_smoke_evidence(
             window_title=evidence["window_title"],
             tab_labels=evidence["tab_labels"],
@@ -62,8 +72,8 @@ def run_mainwindow_smoke(
             switched_tabs=evidence["switched_tabs"],
             screenshots=screenshots,
             resize_evidence=resize_evidence,
-            dialog_cancel_evidence=[],
-            forbidden_actions_invoked=[],
+            dialog_cancel_evidence=dialog_cancel_evidence,
+            forbidden_actions_invoked=forbidden_actions_invoked,
         )
     finally:
         close = getattr(window, "close", None)
@@ -113,3 +123,76 @@ def _capture_screenshot(window: Any, output_dir: Path, label: str) -> dict[str, 
 def _window_size_label(window: Any) -> str:
     size = window.size()
     return f"{int(size.width())}x{int(size.height())}"
+
+
+def _probe_update_force_merge_cancel(window: Any) -> dict[str, Any]:
+    update_view = _find_update_view(window)
+    if update_view is None or not callable(getattr(update_view, "_execute_force_merge", None)):
+        return {
+            "dialog": "update_force_merge_daily_price",
+            "available": False,
+            "cancelled": False,
+            "destructive_action_called": False,
+        }
+
+    destructive_action_called = False
+    original_do_merge = getattr(update_view, "_do_merge", None)
+
+    def blocking_do_merge(*args: Any, **kwargs: Any) -> None:
+        nonlocal destructive_action_called
+        destructive_action_called = True
+
+    if callable(original_do_merge):
+        setattr(update_view, "_do_merge", blocking_do_merge)
+
+    update_view_module = None
+    original_message_box = None
+    try:
+        import ui_qt.views.update_view as update_view_module  # type: ignore[no-redef]
+
+        original_message_box = update_view_module.QMessageBox
+        update_view_module.QMessageBox = _build_cancel_message_box(original_message_box)
+        update_view._execute_force_merge()
+    finally:
+        if callable(original_do_merge):
+            setattr(update_view, "_do_merge", original_do_merge)
+        if update_view_module is not None and original_message_box is not None:
+            update_view_module.QMessageBox = original_message_box
+
+    return {
+        "dialog": "update_force_merge_daily_price",
+        "available": True,
+        "cancelled": not destructive_action_called,
+        "destructive_action_called": destructive_action_called,
+    }
+
+
+def _find_update_view(window: Any) -> Any | None:
+    direct = getattr(window, "update_view", None)
+    if direct is not None:
+        return direct
+    for attr_name in ("tabs", "tab_widget"):
+        tabs = getattr(window, attr_name, None)
+        widget = getattr(tabs, "widget", None)
+        if callable(widget):
+            try:
+                return widget(0)
+            except Exception:
+                continue
+    return None
+
+
+def _build_cancel_message_box(base_message_box: Any) -> type:
+    class CancelMessageBox(base_message_box):  # type: ignore[misc, valid-type]
+        def exec(self) -> Any:
+            self._clicked_button = None
+            for button in self.buttons():
+                if "取消" in button.text():
+                    self._clicked_button = button
+                    break
+            return getattr(base_message_box, "Cancel", 0)
+
+        def clickedButton(self) -> Any:
+            return getattr(self, "_clicked_button", None)
+
+    return CancelMessageBox
