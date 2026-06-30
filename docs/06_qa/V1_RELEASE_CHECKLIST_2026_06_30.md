@@ -38,7 +38,7 @@
 | Quick healthcheck | 通過 | quick mode 失敗且無已知 non-blocking 解釋 | `scripts/run_full_app_healthcheck.py --mode quick` |
 | Tab full bridge | 通過 | direct bridge 分頁失敗且屬 release-critical flow | 逐 tab `--mode full --tab <tab>` |
 | MainWindow UI smoke | 通過 | 主視窗無法啟動、8 個頂層 tab 無法切換、cancel-only dialog 無法安全關閉 | opt-in `--ui-smoke` |
-| 人工 UI smoke | 待人工驗證 | 使用者無法完成核心工作流，或 UI 有明顯阻斷操作的錯誤 | 本文件第 5 節 |
+| 人工 UI smoke | 通過 | 使用者無法完成核心工作流，或 UI 有明顯阻斷操作的錯誤 | 本文件第 5 節 |
 | 文件一致性 | 待人工 review | README / Manual / Snapshot / Roadmap / Vision 對 v1 邊界互相矛盾 | 人工 review |
 | Tag 前確認 | 待 main release review | `main` 未包含 release-critical 修正或仍需回滾 | release lead review |
 
@@ -117,14 +117,14 @@ py -m venv .venv
 
 | 工作區 | 必看項目 | Blocking 條件 | 狀態 |
 |---|---|---|---|
-| 數據更新 | 主要頁面、資料狀態、SQLite Inspector、危險操作 cancel path | 開頁崩潰、危險操作無 cancel / warning、資料狀態無法判讀 | 待驗證 |
-| 市場觀察 | Regime、強弱股、強弱產業、Smart Money 子頁 | 表格或圖表空白且無 warning、下鑽失效 | 待驗證 |
-| 每日決策 | answer-first dashboard、Market Breadth、Sector Rotation、Watchlist Trigger、Portfolio Alert | 主要摘要不可讀、資料缺口無 quality / warning | 待驗證 |
-| 策略回測 / Research Lab | 單股 / 批次 / 推薦回放入口、Registry / compare / promote 邊界 | 可誤觸高風險 promote、結果頁崩潰、限制未揭露 | 待驗證 |
-| 推薦分析 | Profile、Regime match / mismatch、Why / Why Not、next steps | 推薦結果無資料品質、原因欄位不可讀 | 待驗證 |
-| 觀察清單 | candidate pool、Universe CRUD 的安全操作、Research Lab 輸入 | 候選池無法加入 / 移除，或流程無法銜接 | 待驗證 |
-| 持倉管理 | 持倉、交易歷史、策略與價格監控、生命週期回顧 | lifecycle / gap 判讀不可讀，或誤導為自動交易 | 待驗證 |
-| Runtime Observatory | FSM、治理健康、event stream | 無法開啟、錯誤被包裝成成功 | 待驗證 |
+| 數據更新 | 主要頁面、資料狀態、SQLite Inspector、危險操作 cancel path | 開頁崩潰、危險操作無 cancel / warning、資料狀態無法判讀 | 通過 |
+| 市場觀察 | Regime、強弱股、強弱產業、Smart Money 子頁 | 表格或圖表空白且無 warning、下鑽失效 | 通過 |
+| 每日決策 | answer-first dashboard、Market Breadth、Sector Rotation、Watchlist Trigger、Portfolio Alert | 主要摘要不可讀、資料缺口無 quality / warning | 通過 |
+| 策略回測 / Research Lab | 單股 / 批次 / 推薦回放入口、Registry / compare / promote 邊界 | 可誤觸高風險 promote、結果頁崩潰、限制未揭露 | 通過 |
+| 推薦分析 | Profile、Regime match / mismatch、Why / Why Not、next steps | 推薦結果無資料品質、原因欄位不可讀 | 通過 |
+| 觀察清單 | candidate pool、Universe CRUD 的安全操作、Research Lab 輸入 | 候選池無法加入 / 移除，或流程無法銜接 | 通過 |
+| 持倉管理 | 持倉、交易歷史、策略與價格監控、生命週期回顧 | lifecycle / gap 判讀不可讀，或誤導為自動交易 | 通過 |
+| Runtime Observatory | FSM、治理健康、event stream | 無法開啟、錯誤被包裝成成功 | 通過 |
 
 ---
 
@@ -178,3 +178,4 @@ py -m venv .venv
 | 2026-06-30 | `dev` | `run_full_app_healthcheck.py --mode full --tab watchlist --output-dir output\qa\v1_release_candidate\full_watchlist --fail-fast` | 通過 | `Healthcheck passed: 20260630_144014`。 |
 | 2026-06-30 | `dev` | `run_full_app_healthcheck.py --mode full --tab portfolio --output-dir output\qa\v1_release_candidate\full_portfolio --fail-fast` | 通過 | `Healthcheck passed: 20260630_144014`。 |
 | 2026-06-30 | `dev` | `run_full_app_healthcheck.py --mode full --ui-smoke --ui-smoke-switch-tabs --ui-smoke-screenshot --ui-smoke-resize 1366x768 --ui-smoke-resize 390x844 --ui-smoke-dialog-cancel --output-dir output\qa\v1_release_candidate\ui_smoke --fail-fast` | 通過 | `Healthcheck passed: 20260630_151530`；主視窗標題 `baldr`，8 個頂層工作區皆可切換，`update_force_merge_daily_price` dialog 可取消且未呼叫 destructive action。窄 viewport 受最小寬度限制，依第 6 節列為已知 non-blocking 限制。 |
+| 2026-06-30 | `dev` | 人工 UI smoke：8 個頂層工作區 | 通過 | 使用者回報數據更新、市場觀察、每日決策、策略回測 / Research Lab、推薦分析、觀察清單、持倉管理、Runtime Observatory 皆 OK；無回報 blocking issue。 |
