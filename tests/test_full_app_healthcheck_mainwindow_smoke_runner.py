@@ -112,6 +112,13 @@ class FakeConstrainedMainWindow(FakeMainWindow):
         self._height = height
 
 
+class FakePlatformAdjustedMainWindow(FakeMainWindow):
+    def resize(self, width, height):
+        self.resize_calls.append((width, height))
+        self._width = width
+        self._height = height + 1
+
+
 def test_run_mainwindow_smoke_switches_tabs_captures_screenshots_and_resizes(tmp_path):
     app = FakeApp()
     window = FakeMainWindow()
@@ -165,6 +172,28 @@ def test_run_mainwindow_smoke_records_constrained_resize_status(tmp_path):
     assert evidence["resize_evidence"][0]["resize_status"] == "constrained_by_minimum"
     assert evidence["resize_evidence"][1]["actual_size"] == "1920x1080"
     assert evidence["resize_evidence"][1]["resize_status"] == "matched"
+
+
+def test_run_mainwindow_smoke_records_platform_adjusted_resize_status(tmp_path):
+    window = FakePlatformAdjustedMainWindow()
+    options = MainWindowSmokeOptions(
+        output_dir=tmp_path,
+        switch_tabs=False,
+        capture_screenshots=False,
+        resize_viewports=("1726x768",),
+        dialog_cancel=False,
+    )
+
+    evidence = run_mainwindow_smoke(
+        options,
+        app_factory=FakeApp,
+        window_factory=lambda: window,
+    )
+
+    assert evidence["resize_evidence"][0]["actual_size"] == "1726x769"
+    assert evidence["resize_evidence"][0]["matches_requested"] is False
+    assert evidence["resize_evidence"][0]["constrained_by_minimum"] is False
+    assert evidence["resize_evidence"][0]["resize_status"] == "platform_adjusted"
 
 
 def test_run_mainwindow_smoke_can_skip_optional_operations(tmp_path):

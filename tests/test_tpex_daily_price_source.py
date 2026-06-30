@@ -76,8 +76,8 @@ def test_tpex_daily_price_source_retries_incomplete_download(monkeypatch):
                 }
             ]
 
-    def fake_get(url, headers=None, timeout=None):
-        calls.append((url, headers, timeout))
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append((url, params, headers, timeout))
         if len(calls) == 1:
             raise requests.exceptions.ChunkedEncodingError(
                 "Connection broken: IncompleteRead"
@@ -90,6 +90,7 @@ def test_tpex_daily_price_source_retries_incomplete_download(monkeypatch):
 
     assert len(calls) == 2
     assert calls[0][0] == TPEX_DAILY_CLOSE_URL
+    assert calls[0][1] is None
     assert rows[0]["SecuritiesCompanyCode"] == "3207"
 
 
@@ -118,8 +119,8 @@ def test_tpex_daily_price_source_retries_transient_server_error(monkeypatch):
                 }
             ]
 
-    def fake_get(url, headers=None, timeout=None):
-        calls.append((url, headers, timeout))
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append((url, params, headers, timeout))
         if len(calls) == 1:
             return ServerErrorResponse()
         return OkResponse()

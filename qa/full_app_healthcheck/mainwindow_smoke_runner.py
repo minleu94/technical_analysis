@@ -103,15 +103,21 @@ def run_mainwindow_smoke(
             viewport = parse_viewport_spec(viewport_spec)
             window.resize(viewport.width, viewport.height)
             _process_events(app)
-            actual_label = _window_size_label(window)
+            actual_width, actual_height = _window_size(window)
+            actual_label = f"{actual_width}x{actual_height}"
             matches_requested = actual_label == viewport.label
-            resize_status = "matched" if matches_requested else "constrained_by_minimum"
+            resize_status = _resize_status(
+                requested_width=viewport.width,
+                requested_height=viewport.height,
+                actual_width=actual_width,
+                actual_height=actual_height,
+            )
             resize_evidence.append({
                 "viewport": viewport.label,
                 "requested_size": viewport.label,
                 "actual_size": actual_label,
                 "matches_requested": matches_requested,
-                "constrained_by_minimum": not matches_requested,
+                "constrained_by_minimum": resize_status == "constrained_by_minimum",
                 "resize_status": resize_status,
             })
             if options.capture_screenshots:
@@ -190,9 +196,25 @@ def _capture_screenshot(window: Any, output_dir: Path, label: str) -> dict[str, 
     return {"label": label, "path": str(path)}
 
 
-def _window_size_label(window: Any) -> str:
+def _window_size(window: Any) -> tuple[int, int]:
     size = window.size()
-    return f"{int(size.width())}x{int(size.height())}"
+    return int(size.width()), int(size.height())
+
+
+def _resize_status(
+    *,
+    requested_width: int,
+    requested_height: int,
+    actual_width: int,
+    actual_height: int,
+) -> str:
+    width_delta = actual_width - requested_width
+    height_delta = actual_height - requested_height
+    if width_delta == 0 and height_delta == 0:
+        return "matched"
+    if abs(width_delta) <= 1 and abs(height_delta) <= 1:
+        return "platform_adjusted"
+    return "constrained_by_minimum"
 
 
 def _probe_update_force_merge_cancel(window: Any) -> dict[str, Any]:

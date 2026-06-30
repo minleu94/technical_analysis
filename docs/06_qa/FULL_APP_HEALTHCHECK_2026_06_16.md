@@ -126,6 +126,31 @@
 2. 需要真桌面焦點、滑鼠點擊、實際 resize 拖拉、或前景 screenshot 的測試。
 3. 需要正式資料重建、強制全量、刪除、清空、長時間下載或寫入正式資料的項目。
 
+### 前景 / 剩餘自動化批次（2026-06-29｜Codex）
+
+本批次依使用者要求，在可接受短暫前景干擾的前提下，補跑剩餘可自動化項目。正式資料重建、強制全量、刪除 / 清空等高風險資料操作仍未實際執行；相關項目只以 dry-run、temp `DATA_ROOT` 或 dialog cancel path 驗證。
+
+已完成：
+
+1. Windows 前景 `MainWindow` smoke：`20260629_195829`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_foreground_mainwindow_after_resize_status\20260629_195829\result.json`。
+2. 前景 `direct bridge` UI pytest：106 passed。
+3. 前景 `candidate UI` pytest：48 passed。
+4. 非破壞已登錄 pytest 批次：995 passed，19 warnings。
+5. `write-risk-dry-run-required` 類在 temp `DATA_ROOT` 下執行：69 passed。
+6. `slow-e2e-or-environment` 類在 temp `DATA_ROOT` 下執行：12 passed。
+7. 最終完整 `pytest tests`（temp `DATA_ROOT`、offscreen）：1077 passed，19 warnings。
+
+本批次期間發現並修正：
+
+1. `tests/test_tpex_daily_price_source.py` 內的 `requests.get` fake 尚未接受正式程式新增的 `params=` 參數；已同步測試替身，TPEX source tests 通過。
+2. Windows 前景平台會將 `1726x768` 回報為 `1726x769`，原本 resize evidence 會誤標為 `constrained_by_minimum`。已新增 `platform_adjusted` 狀態：`1366x768` 仍為 constrained；`1726x768` 為 platform-adjusted；`1920x1080` 為 matched。
+
+仍保留給使用者人工判讀：
+
+1. 視覺品質：圖表是否美觀、資訊層級是否清楚、文案是否直覺。
+2. 真正手動操作路徑：使用者自己拖拉 resize、逐頁觀看、確認前景 screenshot 和實際使用感。
+3. 真正會改正式資料的流程：強制全量、正式回補、刪除 / 清空 / 重建，需另開資料任務並先備份。
+
 ## Month 5 基本面資料層補充（2026-06-17）
 
 ### 已達成
