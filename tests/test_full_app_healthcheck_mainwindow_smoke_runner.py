@@ -124,6 +124,9 @@ def test_run_mainwindow_smoke_switches_tabs_captures_screenshots_and_resizes(tmp
     assert evidence["missing_tabs"] == []
     assert evidence["switched_tabs"] == list(EXPECTED_MAINWINDOW_TAB_LABELS)
     assert [item["viewport"] for item in evidence["resize_evidence"]] == ["800x600", "390x844"]
+    assert [item["requested_size"] for item in evidence["resize_evidence"]] == ["800x600", "390x844"]
+    assert all(item["matches_requested"] is True for item in evidence["resize_evidence"])
+    assert all(item["constrained_by_minimum"] is False for item in evidence["resize_evidence"])
     assert window.resize_calls == [(800, 600), (390, 844)]
     assert evidence["screenshots"]
     for screenshot in evidence["screenshots"]:

@@ -15,6 +15,7 @@ from qa.full_app_healthcheck.run_history_manifest import (
 from scripts.run_full_app_healthcheck import (
     build_effective_manifest,
     build_cli_report_sections,
+    configure_utf8_stdio,
     parse_args,
     run_existing_suites_for_mode,
 )
@@ -62,6 +63,23 @@ def test_full_app_healthcheck_cli_parse_mode_and_output():
     assert args.mode == "full"
     assert args.output_dir == "out"
     assert args.fail_fast is True
+
+
+def test_configure_utf8_stdio_reconfigures_text_streams():
+    class FakeStream:
+        def __init__(self):
+            self.calls = []
+
+        def reconfigure(self, **kwargs):
+            self.calls.append(kwargs)
+
+    stdout = FakeStream()
+    stderr = FakeStream()
+
+    configure_utf8_stdio(stdout=stdout, stderr=stderr)
+
+    assert stdout.calls == [{"encoding": "utf-8", "errors": "backslashreplace"}]
+    assert stderr.calls == [{"encoding": "utf-8", "errors": "backslashreplace"}]
 
 
 def test_full_app_healthcheck_cli_parse_repeated_tab_filters():

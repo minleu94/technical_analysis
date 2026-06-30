@@ -48,9 +48,13 @@ def run_mainwindow_smoke(
             window.resize(viewport.width, viewport.height)
             _process_events(app)
             actual_label = _window_size_label(window)
+            matches_requested = actual_label == viewport.label
             resize_evidence.append({
                 "viewport": viewport.label,
+                "requested_size": viewport.label,
                 "actual_size": actual_label,
+                "matches_requested": matches_requested,
+                "constrained_by_minimum": not matches_requested,
             })
             if options.capture_screenshots:
                 screenshots.append(_capture_screenshot(window, options.output_dir, f"resize_{viewport.label}"))

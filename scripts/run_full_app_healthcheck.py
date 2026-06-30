@@ -31,6 +31,16 @@ from qa.full_app_healthcheck.run_history_manifest import (
     SuiteRunRecord,
 )
 
+
+def configure_utf8_stdio(*, stdout=None, stderr=None) -> None:
+    stdout = sys.stdout if stdout is None else stdout
+    stderr = sys.stderr if stderr is None else stderr
+    for stream in (stdout, stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 TAB_CHOICES = (
     "update",
     "market",
@@ -216,6 +226,7 @@ def _load_run_history_manifest(path: Path) -> RunHistoryManifest:
 
 
 def main(argv: list[str] | None = None) -> int:
+    configure_utf8_stdio()
     args = parse_args(argv)
     mode = HealthcheckMode(args.mode)
     manifest = build_effective_manifest(args)
