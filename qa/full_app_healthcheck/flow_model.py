@@ -151,8 +151,8 @@ FLOWS: dict[str, HealthcheckFlow] = {
                     "tests/test_ui_qt_watchlist_candidate_pool_copy_text.py",
                 ),
                 extra_manual_gaps=(
-                    "Portfolio view is still candidate bridge, not direct healthcheck flow.",
-                    "Watchlist candidate pool is still candidate bridge, not direct healthcheck flow.",
+                    "Portfolio view has direct bridge evidence, but full portfolio review still requires manual screenshot review.",
+                    "Watchlist candidate pool has direct bridge evidence, but full candidate-to-portfolio flow still requires manual screenshot review.",
                 ),
             ),
             _step(
@@ -169,7 +169,7 @@ FLOWS: dict[str, HealthcheckFlow] = {
             ),
         ),
         likely_owner="testing_qa",
-        safety_notes="Portfolio and watchlist UI tests remain candidate evidence until bridge promotion policy approves them.",
+        safety_notes="Portfolio and watchlist UI bridge tests are direct evidence; end-to-end portfolio decisions still require manual review.",
     ),
     "daily_decision_loop": HealthcheckFlow(
         flow_id="daily_decision_loop",

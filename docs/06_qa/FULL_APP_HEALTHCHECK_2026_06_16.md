@@ -103,6 +103,29 @@
 2. 若要讓 `1366x768` 真正 matched，另開 UI responsive / minimum width 任務；否則後續自動化將以 `1726x768` / `1920x1080` 作為可匹配 desktop viewport，`1366x768` 只作為 constrained evidence。
 3. 下一批可繼續針對 `已修正待驗證` / `需確認` 但已有自動化橋接的項目，補 run history manifest 與 coverage report，縮小需要人工點擊的清單。
 
+### 不干擾使用者前景操作的完整自動化批次（2026-06-29｜Codex）
+
+本批次依使用者要求，只執行不搶前景、不操作滑鼠鍵盤、不開真桌面視窗的測試。期間使用者可正常使用瀏覽器或觀看影片；本批次避開真正前景真人點擊測試、正式資料重建與破壞性資料操作。
+
+已完成：
+
+1. `quick` gate：`20260629_191624`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_safe_all_quick\20260629_191624\result.json`。
+2. `full` mode + `coverage-burndown` / `flow-diagnostics` / `full-release-checklist`：`20260629_191946`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_safe_all_full_after_flow_fix\20260629_191946\result.json`。
+3. `high-risk-dry-run`：`20260629_191707`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_safe_all_high_risk_dry_run\20260629_191707\result.json`。注意：本次 manifest 未產生實際 step，僅代表 dry-run mode 入口可執行且未失敗，不代表已實測所有高風險 dialog。
+4. `MainWindow` offscreen smoke：`20260629_191745`，通過；證據：`C:\Users\archi\AppData\Local\Temp\baldr_hc_safe_all_mainwindow\20260629_191745\result.json`。
+5. Healthcheck runner-owned pytest：161 passed。
+
+本批次期間發現並修正：
+
+1. `flow_diagnostics` 測試仍期待 portfolio / watchlist 為 candidate bridge，但 `test_inventory` 已將相關測試升級為 direct bridge；已同步 flow model 與測試期待，狀態改為 full/manual required，而非 partially covered。
+2. 修正後重跑 `tests/test_full_app_healthcheck_flow_diagnostics.py`：4 passed；重跑所有 `tests/test_full_app_healthcheck_*.py`：161 passed；重跑 full report mode：通過。
+
+仍需使用者人工 / 前景真人測試：
+
+1. 需要真正看畫面與判讀 UX 的項目，例如圖表是否美觀、資訊層級是否直覺、dialog 文案是否符合使用者期待。
+2. 需要真桌面焦點、滑鼠點擊、實際 resize 拖拉、或前景 screenshot 的測試。
+3. 需要正式資料重建、強制全量、刪除、清空、長時間下載或寫入正式資料的項目。
+
 ## Month 5 基本面資料層補充（2026-06-17）
 
 ### 已達成
