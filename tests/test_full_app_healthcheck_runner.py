@@ -13,6 +13,7 @@ from qa.full_app_healthcheck.run_history_manifest import (
     build_run_history_manifest,
 )
 from scripts.run_full_app_healthcheck import (
+    build_effective_manifest,
     build_cli_report_sections,
     parse_args,
     run_existing_suites_for_mode,
@@ -67,6 +68,44 @@ def test_full_app_healthcheck_cli_parse_repeated_tab_filters():
     args = parse_args(["--mode", "full", "--tab", "update", "--tab", "research"])
 
     assert args.tabs == ["update", "research"]
+
+
+def test_full_app_healthcheck_cli_parse_ui_smoke_options():
+    args = parse_args(
+        [
+            "--mode",
+            "full",
+            "--ui-smoke",
+            "--ui-smoke-switch-tabs",
+            "--ui-smoke-screenshot",
+            "--ui-smoke-resize",
+            "1366x768",
+            "--ui-smoke-resize",
+            "390x844",
+            "--ui-smoke-dialog-cancel",
+        ]
+    )
+
+    assert args.ui_smoke is True
+    assert args.ui_smoke_switch_tabs is True
+    assert args.ui_smoke_screenshot is True
+    assert args.ui_smoke_resize == ["1366x768", "390x844"]
+    assert args.ui_smoke_dialog_cancel is True
+
+
+def test_effective_manifest_adds_mainwindow_smoke_only_when_opted_in():
+    default_args = parse_args(["--mode", "full"])
+    default_manifest = build_effective_manifest(default_args)
+
+    assert "MAINWINDOW-UI-SMOKE" not in {step.id for step in default_manifest.steps}
+
+    smoke_args = parse_args(["--mode", "full", "--ui-smoke"])
+    smoke_manifest = build_effective_manifest(smoke_args)
+
+    smoke_steps = [step for step in smoke_manifest.steps if step.id == "MAINWINDOW-UI-SMOKE"]
+    assert len(smoke_steps) == 1
+    assert smoke_steps[0].action == "run_mainwindow_ui_smoke"
+    assert smoke_steps[0].mode is HealthcheckMode.FULL
 
 
 def test_run_existing_suites_filters_by_selected_tabs(monkeypatch):

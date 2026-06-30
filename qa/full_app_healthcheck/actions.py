@@ -9,6 +9,10 @@ from qa.full_app_healthcheck.manifest import HealthcheckStep
 from qa.full_app_healthcheck.mainwindow_smoke import (
     collect_mainwindow_smoke_evidence as collect_mainwindow_smoke_window_evidence,
 )
+from qa.full_app_healthcheck.mainwindow_smoke_runner import (
+    MainWindowSmokeOptions,
+    run_mainwindow_smoke,
+)
 
 
 def switch_tab_by_text(tabs: QTabWidget, tab_text: str) -> None:
@@ -127,3 +131,18 @@ def collect_mainwindow_smoke_evidence(
         raise AssertionError("缺少 MainWindow context；此 action 只能在明確 opt-in smoke runner 使用")
     switch_tabs = bool(context.get("switch_mainwindow_tabs", False))
     return collect_mainwindow_smoke_window_evidence(window, switch_tabs=switch_tabs)
+
+
+def run_mainwindow_ui_smoke(
+    context: dict[str, Any],
+    step: HealthcheckStep,
+) -> dict[str, Any]:
+    output_dir = Path(context["mainwindow_smoke_output_dir"])
+    options = MainWindowSmokeOptions(
+        output_dir=output_dir,
+        switch_tabs=bool(context.get("ui_smoke_switch_tabs", False)),
+        capture_screenshots=bool(context.get("ui_smoke_screenshot", False)),
+        resize_viewports=tuple(context.get("ui_smoke_resize") or ()),
+        dialog_cancel=bool(context.get("ui_smoke_dialog_cancel", False)),
+    )
+    return run_mainwindow_smoke(options)

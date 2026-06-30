@@ -14,6 +14,7 @@ from qa.full_app_healthcheck.actions import (
     assert_tab_exists,
     assert_text_contains,
     assert_viewport_declared,
+    run_mainwindow_ui_smoke,
 )
 from qa.full_app_healthcheck.mainwindow_smoke import EXPECTED_MAINWINDOW_TAB_LABELS
 
@@ -203,6 +204,43 @@ def test_collect_mainwindow_smoke_evidence():
     assert evidence["missing_tabs"] == []
     assert evidence["switched_tabs"] == list(EXPECTED_MAINWINDOW_TAB_LABELS)
     assert evidence["forbidden_actions_invoked"] == []
+
+
+def test_run_mainwindow_ui_smoke_builds_options_from_context(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run_mainwindow_smoke(options):
+        captured["options"] = options
+        return {"window_title": "baldr", "missing_tabs": []}
+
+    monkeypatch.setattr(
+        "qa.full_app_healthcheck.actions.run_mainwindow_smoke",
+        fake_run_mainwindow_smoke,
+    )
+    step = HealthcheckStep(
+        id="MAINWINDOW-UI-SMOKE",
+        title="MainWindow UI smoke",
+        mode=HealthcheckMode.FULL,
+        workspace="MainWindow",
+        action="run_mainwindow_ui_smoke",
+        risk=RiskLevel.UI_ONLY,
+    )
+    context = {
+        "mainwindow_smoke_output_dir": tmp_path,
+        "ui_smoke_switch_tabs": True,
+        "ui_smoke_screenshot": True,
+        "ui_smoke_resize": ("1366x768", "390x844"),
+        "ui_smoke_dialog_cancel": True,
+    }
+
+    evidence = run_mainwindow_ui_smoke(context, step)
+
+    assert evidence["window_title"] == "baldr"
+    assert captured["options"].output_dir == tmp_path
+    assert captured["options"].switch_tabs is True
+    assert captured["options"].capture_screenshots is True
+    assert captured["options"].resize_viewports == ("1366x768", "390x844")
+    assert captured["options"].dialog_cancel is True
 
 
 def test_run_existing_suites_for_mode():
