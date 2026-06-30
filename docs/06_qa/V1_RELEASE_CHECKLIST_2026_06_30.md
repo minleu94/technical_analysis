@@ -11,19 +11,19 @@
 
 ### 可標 `v1.0.0-rc.1`
 
-- [ ] `main` 可乾淨 clone、安裝、啟動。
-- [ ] `dev` 的 release-critical healthcheck / UI smoke 內容已判斷是否需要合入 `main`。
-- [ ] 自動化驗證與非破壞式 healthcheck 通過，或失敗項已歸類為 non-blocking 並有明確原因。
-- [ ] 人工 UI smoke 完成，且沒有阻擋使用者完成主要工作流的 P0 / P1 問題。
-- [ ] README、Application Manual、Snapshot、Roadmap、Vision 對 v1 邊界沒有互相矛盾。
+- [x] `main` 可乾淨 clone、安裝、啟動。
+- [x] `dev` 的 release-critical healthcheck / UI smoke 內容已判斷並合入 `main`。
+- [x] 自動化驗證與非破壞式 healthcheck 通過，或失敗項已歸類為 non-blocking 並有明確原因。
+- [x] 人工 UI smoke 完成，且沒有阻擋使用者完成主要工作流的 P0 / P1 問題。
+- [x] README、Application Manual、Snapshot、Roadmap、Vision 對 v1 邊界沒有互相矛盾。
 
 ### 可標正式 `v1.0.0`
 
-- [ ] `v1.0.0-rc.1` 的 blocking issue 全部關閉。
-- [ ] 使用者可依 `README.md` 完成第一次啟動。
-- [ ] 8 個頂層工作區人工檢查完成。
-- [ ] 高風險資料寫入、migration、backfill apply、真實資料重建沒有在 release gate 中被誤觸發。
-- [ ] 若保留已知限制，已在 Manual / README / release note 清楚揭露。
+- [x] `v1.0.0-rc.1` 的 blocking issue 全部關閉。
+- [x] 使用者可依 `README.md` 完成第一次啟動。
+- [x] 8 個頂層工作區人工檢查完成。
+- [x] 高風險資料寫入、migration、backfill apply、真實資料重建沒有在 release gate 中被誤觸發。
+- [x] 若保留已知限制，已在 Manual / README / release note 清楚揭露。
 
 ---
 
@@ -32,7 +32,7 @@
 | Gate | 狀態 | Blocking 條件 | 驗證方式 |
 |---|---|---|---|
 | Git 狀態 | 通過 | 有未提交變更、local 與 remote 不一致 | `git status --short --branch` |
-| 乾淨 main | dev 初驗通過；main 待複驗 | `main` 追蹤 `output/`、暫存、DB、raw QA artifact | `git ls-files output test.parquet` |
+| 乾淨 main | 通過 | `main` 追蹤 `output/`、暫存、DB、raw QA artifact | `git ls-files output test.parquet` |
 | 文件編碼 | 通過 | 文件編碼測試失敗或 mojibake 實際存在於檔案內容 | `pytest tests/test_audit_document_encoding.py` |
 | 文件 whitespace | 通過 | `git diff --check` 報錯 | `git diff --check` |
 | Quick healthcheck | 通過 | quick mode 失敗且無已知 non-blocking 解釋 | `scripts/run_full_app_healthcheck.py --mode quick` |
@@ -40,7 +40,7 @@
 | MainWindow UI smoke | 通過 | 主視窗無法啟動、8 個頂層 tab 無法切換、cancel-only dialog 無法安全關閉 | opt-in `--ui-smoke` |
 | 人工 UI smoke | 通過 | 使用者無法完成核心工作流，或 UI 有明顯阻斷操作的錯誤 | 本文件第 5 節 |
 | 文件一致性 | 通過 | README / Manual / Snapshot / Roadmap / Vision 對 v1 邊界互相矛盾 | 人工 review |
-| Tag 前確認 | 待 main release review | `main` 未包含 release-critical 修正或仍需回滾 | release lead review |
+| Tag 前確認 | 通過 | `main` 未包含 release-critical 修正或仍需回滾 | release lead review |
 
 ---
 
@@ -181,3 +181,6 @@ py -m venv .venv
 | 2026-06-30 | `dev` | 人工 UI smoke：8 個頂層工作區 | 通過 | 使用者回報數據更新、市場觀察、每日決策、策略回測 / Research Lab、推薦分析、觀察清單、持倉管理、Runtime Observatory 皆 OK；無回報 blocking issue。 |
 | 2026-06-30 | `dev` | 文件一致性 review | 通過 | README、Application Manual、Project Snapshot、Roadmap Hub、Vision 對 v1 邊界一致：v1 是工程可用與 release readiness，不代表投資有效性或買賣建議；已知缺口與 non-blocking 限制已揭露。 |
 | 2026-06-30 | `dev` | release final quick gate：`git diff --check` / `git ls-files output test.parquet` / `pytest tests\test_audit_document_encoding.py -q -o addopts=` / `run_full_app_healthcheck.py --mode quick --output-dir output\qa\v1_release_candidate\dev_final_quick --fail-fast` | 通過 | `git diff --check` 無 error；`git ls-files output test.parquet` 無輸出；文件編碼測試 `4 passed in 0.05s`；quick healthcheck `Healthcheck passed: 20260630_164228`。 |
+| 2026-06-30 | `main` | merge `dev` into `main` | 通過 | `dev` 的 release tooling、MainWindow smoke、相關 UI / 測試 / 文件已合入 `main`。 |
+| 2026-06-30 | `main` | release gate after merge：`git diff --check` / `git ls-files output test.parquet` / `pytest tests\test_audit_document_encoding.py -q -o addopts=` / quick healthcheck / MainWindow UI smoke | 通過 | `git diff --check` 無 error；`git ls-files output test.parquet` 無輸出；文件編碼測試 `4 passed in 0.05s`；quick healthcheck `Healthcheck passed: 20260630_164353`；MainWindow UI smoke `Healthcheck passed: 20260630_164421`。 |
+| 2026-06-30 | `main` | clean clone/install gate | 初次失敗後修正並通過 | 初次 clean clone 暴露 `requirements.txt` 未列 pytest，已以 `fix: include release qa test dependencies` 補上 `pytest` / `pytest-qt`；重新 clone 至 `%TEMP%`、建立全新 `.venv`、安裝 requirements、文件編碼測試 `4 passed in 0.09s`、quick healthcheck `Healthcheck passed: 20260630_165053`、MainWindow UI smoke `Healthcheck passed: 20260630_165141`。 |
