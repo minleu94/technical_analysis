@@ -66,6 +66,8 @@ def run_existing_suites_for_mode(context, step):
             cwd=str(PROJECT_ROOT),
             text=True,
             capture_output=True,
+            encoding="utf-8",
+            errors="backslashreplace",
             timeout=900,
             check=False,
         )

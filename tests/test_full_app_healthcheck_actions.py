@@ -209,13 +209,13 @@ def test_collect_mainwindow_smoke_evidence():
 def test_run_mainwindow_ui_smoke_builds_options_from_context(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_run_mainwindow_smoke(options):
+    def fake_run_mainwindow_smoke_in_subprocess(options):
         captured["options"] = options
         return {"window_title": "baldr", "missing_tabs": []}
 
     monkeypatch.setattr(
-        "qa.full_app_healthcheck.actions.run_mainwindow_smoke",
-        fake_run_mainwindow_smoke,
+        "qa.full_app_healthcheck.actions.run_mainwindow_smoke_in_subprocess",
+        fake_run_mainwindow_smoke_in_subprocess,
     )
     step = HealthcheckStep(
         id="MAINWINDOW-UI-SMOKE",

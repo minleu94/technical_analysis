@@ -12,9 +12,13 @@ from qa.full_app_healthcheck.mainwindow_smoke_runner import (
 class FakeApp:
     def __init__(self):
         self.process_events_count = 0
+        self.quit_count = 0
 
     def processEvents(self):
         self.process_events_count += 1
+
+    def quit(self):
+        self.quit_count += 1
 
 
 class FakeSize:
@@ -120,6 +124,7 @@ def test_run_mainwindow_smoke_switches_tabs_captures_screenshots_and_resizes(tmp
 
     assert window.shown is True
     assert window.closed is True
+    assert app.quit_count == 1
     assert app.process_events_count >= 1
     assert evidence["missing_tabs"] == []
     assert evidence["switched_tabs"] == list(EXPECTED_MAINWINDOW_TAB_LABELS)

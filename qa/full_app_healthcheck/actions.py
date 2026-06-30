@@ -11,7 +11,7 @@ from qa.full_app_healthcheck.mainwindow_smoke import (
 )
 from qa.full_app_healthcheck.mainwindow_smoke_runner import (
     MainWindowSmokeOptions,
-    run_mainwindow_smoke,
+    run_mainwindow_smoke_in_subprocess,
 )
 
 
@@ -145,4 +145,4 @@ def run_mainwindow_ui_smoke(
         resize_viewports=tuple(context.get("ui_smoke_resize") or ()),
         dialog_cancel=bool(context.get("ui_smoke_dialog_cancel", False)),
     )
-    return run_mainwindow_smoke(options)
+    return run_mainwindow_smoke_in_subprocess(options)

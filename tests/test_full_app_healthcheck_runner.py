@@ -128,9 +128,11 @@ def test_effective_manifest_adds_mainwindow_smoke_only_when_opted_in():
 
 def test_run_existing_suites_filters_by_selected_tabs(monkeypatch):
     commands: list[tuple[str, ...]] = []
+    run_kwargs: list[dict] = []
 
     def fake_run(command, **kwargs):
         commands.append(tuple(command))
+        run_kwargs.append(kwargs)
         return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -145,6 +147,8 @@ def test_run_existing_suites_filters_by_selected_tabs(monkeypatch):
     assert "ui-run-registry-compare" in suite_ids
     assert "ui-update-workbench" not in suite_ids
     assert all("test_ui_qt_update_view_workbench.py" not in " ".join(command) for command in commands)
+    assert all(kwargs["encoding"] == "utf-8" for kwargs in run_kwargs)
+    assert all(kwargs["errors"] == "backslashreplace" for kwargs in run_kwargs)
 
 
 def test_runner_writes_optional_report_sections(tmp_path):

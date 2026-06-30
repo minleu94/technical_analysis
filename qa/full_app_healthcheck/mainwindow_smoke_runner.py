@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 from typing import Any
 
 from qa.full_app_healthcheck.mainwindow_smoke import (
@@ -19,6 +23,58 @@ class MainWindowSmokeOptions:
     capture_screenshots: bool = False
     resize_viewports: tuple[str, ...] = ()
     dialog_cancel: bool = False
+
+
+def run_mainwindow_smoke_in_subprocess(
+    options: MainWindowSmokeOptions,
+    *,
+    python_executable: str | None = None,
+    cwd: Path | None = None,
+    timeout_seconds: int = 600,
+) -> dict[str, Any]:
+    output_dir = Path(options.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    evidence_path = output_dir / "evidence.json"
+    project_root = cwd or Path(__file__).resolve().parents[2]
+    command = [
+        python_executable or sys.executable,
+        "-m",
+        "qa.full_app_healthcheck.mainwindow_smoke_child",
+        "--output-dir",
+        str(output_dir),
+    ]
+    if options.switch_tabs:
+        command.append("--switch-tabs")
+    if options.capture_screenshots:
+        command.append("--screenshot")
+    for viewport in options.resize_viewports:
+        command.extend(("--resize", viewport))
+    if options.dialog_cancel:
+        command.append("--dialog-cancel")
+
+    env = os.environ.copy()
+    env.setdefault("QT_QPA_PLATFORM", "offscreen")
+    env["PYTHONIOENCODING"] = "utf-8"
+    completed = subprocess.run(
+        command,
+        cwd=str(project_root),
+        env=env,
+        text=True,
+        capture_output=True,
+        encoding="utf-8",
+        errors="backslashreplace",
+        timeout=timeout_seconds,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(
+            "MainWindow UI smoke subprocess failed "
+            f"(returncode={completed.returncode}). stdout_tail={completed.stdout[-2000:]!r} "
+            f"stderr_tail={completed.stderr[-2000:]!r}"
+        )
+    if not evidence_path.exists():
+        raise AssertionError(f"MainWindow UI smoke subprocess did not write evidence: {evidence_path}")
+    return json.loads(evidence_path.read_text(encoding="utf-8"))
 
 
 def run_mainwindow_smoke(
@@ -84,6 +140,8 @@ def run_mainwindow_smoke(
         if callable(close):
             close()
         _process_events(app)
+        _quit_app(app)
+        _process_events(app)
 
 
 def _ensure_qapplication() -> Any:
@@ -109,6 +167,12 @@ def _process_events(app: Any) -> None:
     process_events = getattr(app, "processEvents", None)
     if callable(process_events):
         process_events()
+
+
+def _quit_app(app: Any) -> None:
+    quit_app = getattr(app, "quit", None)
+    if callable(quit_app):
+        quit_app()
 
 
 def _capture_screenshot(window: Any, output_dir: Path, label: str) -> dict[str, Any]:
