@@ -39,7 +39,7 @@
   - 專案規範與約定
   - 不可違背的規則
 - **[Git 排除與不應提交清單](./git_exclusions.md)** (`git_exclusions.md`)
-  - 說明哪些本機輸出、暫存目錄與 tracked QA output 不應被順手 stage
+  - 說明哪些本機輸出、暫存目錄與 QA raw output 不應被順手 stage
 - **[Shared AI Skills Registry](./skills_registry.md)** (`skills_registry.md`)
   - Codex 與 Antigravity 共用的角色選擇、流程導引與 shared context 入口
   - 僅指向既有 Agent 權威文件，不重新定義角色規則

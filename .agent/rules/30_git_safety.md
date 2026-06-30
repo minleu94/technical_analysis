@@ -19,10 +19,11 @@ git status --short
 - `.pytest_cache/`
 - `.coverage`
 - `htmlcov/`
-- `output/qa/update_tab/RUN_LOG.txt`
-- `output/qa/update_tab/VALIDATION_REPORT.md`
+- `output/`
+- `output/qa/`
+- `test.parquet`
 
-除非任務明確要求更新 QA 報告，否則 tracked QA output 不得 stage。
+除非任務明確要求保存可分享的 QA 結論，否則 raw QA output 不得 stage；需要留存時整理到 `docs/06_qa/`。
 
 ## 多 Agent 協作
 

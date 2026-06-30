@@ -27,7 +27,7 @@
 ### 4.1 Git 暫存與排除規範
 - Stage 或 commit 前必須先查看 `docs/agents/git_exclusions.md`。
 - `.superpowers/`、`docs/.tmp.driveupload/` 與一般快取/測試輸出不得提交。
-- `output/qa/update_tab/RUN_LOG.txt` 與 `output/qa/update_tab/VALIDATION_REPORT.md` 目前是 tracked 易變輸出；除非任務明確要求更新 QA 報告，否則不要 stage。
+- `output/`、`output/qa/` 與根目錄臨時資料樣本（例如 `test.parquet`）屬於本機產出；若任務需要可分享的 QA 結論，請整理到 `docs/06_qa/`，不要提交 raw output。
 - 不得為了讓 working tree 乾淨而 revert、刪除或覆寫其他 agent / 使用者留下的未提交變更。
 
 ### 4.2 股票/量化防禦條款（高優先級）
@@ -295,4 +295,5 @@ docs/                # 專案文檔
 - 2026-05-29：新增股票/量化防禦條款，並將 UI 修改後 QA script 與型態檢查列為強制驗證流程
 - 2026-06-13：更新文件治理規範為 Scoped SSOT，補充 factor layer 資料可得日與品質治理要求
 - 2026-06-13：補入 Legacy Carryover 與 Application Manual 的權威範圍及同步要求
+- 2026-06-30：更新 Git 暫存與排除規範，將 `output/` 與根目錄臨時資料樣本視為不應提交的本機產出。
 

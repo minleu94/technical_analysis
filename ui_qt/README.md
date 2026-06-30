@@ -40,30 +40,35 @@ UI 層不應直接承擔：
    - 強勢/弱勢產業
    - Smart Money 個股與分點追蹤
 
-3. 策略回測
+3. 每日決策
+   - Market Breadth、Sector Rotation、Relative Strength / Liquidity Ranking
+   - Watchlist Trigger、Portfolio Alert 與 fundamental risk prompts
+   - answer-first dashboard 與資料品質 / warning 揭露
+
+4. 策略回測
    - 單股、批次、固定組合、推薦回放、策略研究
    - 參數最佳化與 Walk-forward
    - fixed / quantile 雙模式
    - 保存、比較、Promote 與 Portfolio 來源追溯
 
-4. 推薦分析
+5. 推薦分析
    - 新手/進階模式
    - Profile、Regime 建議、Why / Why Not / Explain
    - fixed / eligible-universe 百分位排名
    - 候選池、批次回測、推薦回放與 Portfolio 入口
 
-5. 觀察清單
+6. 觀察清單
    - 候選池
    - 選股清單 Universe CRUD
    - Research Lab 輸入準備
 
-6. 持倉管理
+7. 持倉管理
    - 手動交易與來源追溯
    - 持倉、交易歷史與覆盤日誌
    - 策略/價格、停損停利與籌碼監控
    - Smart Money 下鑽
 
-7. Runtime Observatory
+8. Runtime Observatory
    - FSM 狀態
    - 治理健康
    - append-only event stream
@@ -82,6 +87,7 @@ ui_qt/
 │   ├── strong_industries_view.py
 │   ├── weak_industries_view.py
 │   ├── recommendation_view.py
+│   ├── decision_desk_view.py
 │   ├── watchlist_view.py
 │   ├── backtest_view.py
 │   ├── backtest/
@@ -101,21 +107,20 @@ ui_qt/
 - Portfolio Phase 4.1 與籌碼下鑽能力
 - Runtime Observatory MVP
 - Smart Money Terminal MVP
+- Daily Decision Desk v1 主 UI 入口
 - SQLite DB-first 與 CSV fallback
 - fast chart renderer 與 Matplotlib fallback
 - 批次回測並行化與合作式取消
 - Strategy & Scoring Governance 機制回歸
+- Research Run Registry、Cross-run Comparison、Indicator Parameter Registry、Recommendation Weight Contract 與 Month 6 lifecycle / Portfolio feedback 入口
 
 ## 目前 Backlog
 
 以 [ROADMAP_6M_ENGINEERING.md](../docs/00_core/ROADMAP_6M_ENGINEERING.md) 為準，近期包括：
 
-- fixed / quantile 真實股票池 walk-forward 實證
-- 大表格分頁或虛擬捲動
-- Excel / PDF 規格化研究報告
-- Indicator Parameter Registry
-- Recommendation Weight Contract
-- Research Run Registry 與 Cross-run Comparison
+- 全 UI 健檢與 release healthcheck runner 收斂
+- Month 6.1 lifecycle QA、manual approval workflow、Review Dashboard 與 Evidence Explainability
+- PDF 規格化研究報告輸出
 
 ## UI 修改驗證
 

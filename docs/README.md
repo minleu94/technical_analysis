@@ -1,6 +1,6 @@
 # Docs 文檔目錄
 
-> **最後整理**：2026-06-18
+> **最後整理**：2026-06-30
 > **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
@@ -81,8 +81,9 @@
 
 1. [DOC_COVERAGE_MAP.md](00_core/DOC_COVERAGE_MAP.md)
 2. [DOCUMENTATION_STRUCTURE.md](00_core/DOCUMENTATION_STRUCTURE.md)
-3. [PROJECT_NAVIGATION.md](../PROJECT_NAVIGATION.md)
-4. [PROJECT_INVENTORY.md](../PROJECT_INVENTORY.md)
+3. [AGENT_CONTEXT.md](../AGENT_CONTEXT.md)
+4. [PROJECT_NAVIGATION.md](../PROJECT_NAVIGATION.md)
+5. [PROJECT_INVENTORY.md](../PROJECT_INVENTORY.md)
 
 ---
 
@@ -90,5 +91,6 @@
 
 - 不確定狀態時，先判斷主題：現在看 Snapshot，未來路線看 6M Roadmap，架構看 system architecture。
 - 新增、刪除或搬移文件後，必須更新 `00_core/DOCUMENTATION_INDEX.md`。
+- 根目錄 `README.md` 保持使用者導向；Agent / 開發者上下文放在 `../AGENT_CONTEXT.md` 與 `agents/`。
 - 會影響使用者操作、參數、結果判讀或安全限制的變更，必須同步 `07_guides/APPLICATION_MANUAL.md`；專題教學或功能說明再同步 `02_features/USER_GUIDE.md`、`02_features/UI_FEATURES_DOCUMENTATION.md`。
 - 過期但仍有歷史價值的文件放入 `09_archive/`；沒有引用、沒有歷史價值、且內容已被新文件取代的文件可以刪除。

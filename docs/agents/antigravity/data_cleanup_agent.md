@@ -29,4 +29,4 @@
 
 - 不得刪除正式資料根目錄內的原始資料。
 - 不得為了讓 working tree 乾淨而清掉其他 Agent / 使用者留下的變更。
-- 不得順手處理 `output/qa/update_tab/RUN_LOG.txt` 或 `output/qa/update_tab/VALIDATION_REPORT.md`，除非任務明確要求。
+- 不得順手 stage `output/`、`output/qa/` 或根目錄臨時資料樣本；除非任務明確要求保存可分享的 QA 結論，否則 raw output 應維持 ignored。

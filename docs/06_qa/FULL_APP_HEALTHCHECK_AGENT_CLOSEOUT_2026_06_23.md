@@ -123,7 +123,7 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 ## 交接規則
 
 - 每個新批次先執行 `git status --short --branch`。
-- 除非任務明確要求更新 QA 報告，否則不要 stage `output/qa/update_tab/` 底下 tracked 易變輸出。
+- 除非任務明確要求保存可分享的 QA 結論，否則不要 stage `output/qa/update_tab/` 或其他 `output/` 底下的 raw output；需要留存時整理到 `docs/06_qa/`。
 - 除非後續任務明確授權受控 UI 執行，否則不要啟動 MainWindow。
 - 不要從本 roadmap 直接執行 migration、backfill apply、真實資料寫入或 high-risk dry-run implementation。
 - 若失敗涉及 SQLite / CSV 新鮮度、schema、available date 或資料完整性，交接給 Data Audit Agent。

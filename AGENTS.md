@@ -29,6 +29,7 @@
 - 本檔位於 repo 根目錄，作用範圍是整個 repository。
 - `docs/agents/*.md` 是專案 Agent 知識庫，不是 Codex 會自動載入的檔名；本檔負責把 Codex 指向那些文件。
 - `docs/agents/skills_registry.md` 是 Codex 與 Antigravity 共用的協作入口，只負責角色選擇、流程導引與 shared context，不重新定義 Agent。
+- `AGENT_CONTEXT.md` 是給 Codex、Antigravity 與開發者快速理解專案入口、分支策略與文件權威的輔助導覽；強制規則仍以本檔與 `docs/agents/` 為準。
 - 若未來某個子目錄需要更細規則，可在該子目錄新增自己的 `AGENTS.md`，其規則只作用於該子目錄樹。
 
 ## 工作規範

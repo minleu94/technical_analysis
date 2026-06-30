@@ -1,6 +1,6 @@
 ﻿# 文檔索引
 
-> **最後整理**：2026-06-24
+> **最後整理**：2026-06-30
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
 
 ---
@@ -18,7 +18,8 @@
 | [DOCUMENTATION_STRUCTURE.md](DOCUMENTATION_STRUCTURE.md) | `docs/` 資料夾歸屬、生命週期、刪除/歸檔規則。 |
 | [DOC_COVERAGE_MAP.md](DOC_COVERAGE_MAP.md) | 變更類型對應需要同步更新的文件。 |
 | [AI_CONTEXT_PACK.md](AI_CONTEXT_PACK.md) | 給外部 AI / Agent 的高密度專案上下文。 |
-| [../../README.md](../../README.md) | repo 根目錄的最短專案入口、目前主線、啟動方式與權威文件導覽。 |
+| [../../README.md](../../README.md) | repo 根目錄的使用者導向入口、功能概覽、啟動方式與分支策略。 |
+| [../../AGENT_CONTEXT.md](../../AGENT_CONTEXT.md) | Agent / 開發者快速上下文，補充文件權威、分支策略與接手導覽。 |
 | [PROJECT_NAVIGATION.md](../../PROJECT_NAVIGATION.md) | repo 根目錄的日常開發導航。 |
 | [PROJECT_INVENTORY.md](../../PROJECT_INVENTORY.md) | repo 根目錄的完整專案盤點。 |
 | [../../AGENTS.md](../../AGENTS.md) | Codex 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/` 完整 Agent 架構。 |
@@ -228,6 +229,7 @@
 - [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md)：2026-06-09 下一輪行動計畫（已執行完畢）。
 - [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md)：Phase 3.3b 實施規劃（已執行完畢）。
 - [root_readme_legacy_2025_12.txt](../09_archive/root_readme_legacy_2025_12.txt)：原根目錄 `readme.txt`，內容停留在舊 Phase、舊入口與舊路徑說明，只作歷史追溯。
+- [dev_progress_note_legacy_2026_01.txt](../09_archive/dev_progress_note_legacy_2026_01.txt)：原 `docs/00_core/note.txt` 歷史開發進度筆記，只作追溯，不作目前狀態權威。
 - [ARCH_GOVERNANCE_CHECKLIST.md](../09_archive/ARCH_GOVERNANCE_CHECKLIST.md)：早期架構治理自檢清單，已自 `00_core/` 歸檔；目前架構權威以 `docs/01_architecture/system_architecture.md` 為準。
 - [ARCH_GOVERNANCE_LIFECYCLE.md](../09_archive/ARCH_GOVERNANCE_LIFECYCLE.md)：早期架構治理生命週期備忘，已自 `00_core/` 歸檔；目前文件治理以 Coverage Map 與 Documentation Structure 為準。
 - [ARCH_VIOLATION_RESPONSE_POLICY.md](../09_archive/ARCH_VIOLATION_RESPONSE_POLICY.md)：早期架構違規處理政策備忘，已自 `00_core/` 歸檔；目前架構邊界與高風險契約以 system architecture 為準。
@@ -253,6 +255,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-06-30：將根目錄 `README.md` 定位更新為使用者入口，新增 `AGENT_CONTEXT.md` 索引；將 `docs/00_core/note.txt` 歸檔為 `docs/09_archive/dev_progress_note_legacy_2026_01.txt`，並配合 main 清理移除 raw output 追蹤。
 - 2026-06-24：將 `docs/00_core/ARCH_*` 早期架構治理備忘移入 archive，補上歸檔索引；目前架構權威仍為 `docs/01_architecture/system_architecture.md`。
 - 2026-06-23：新增 Healthcheck Batch 3 Recommendation Profile / Regime plan 與 non-destructive release healthcheck runner plan 索引，記錄推薦分析 Profile lifecycle、Regime match / mismatch 揭露與自訂 Profile JSON 精度治理入口。
 - 2026-06-18：整理根目錄 README 入口；將過期 `readme.txt` 移入 `docs/09_archive/root_readme_legacy_2025_12.txt`，並同步 docs 入口、Archive 索引與 Project Inventory。

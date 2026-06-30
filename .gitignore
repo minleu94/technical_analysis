@@ -147,6 +147,9 @@ temp_downloads/
 # QA Outputs
 output/
 
+# 本機臨時資料樣本 / 測試產物
+/test.parquet
+
 # 效能分析與臨時日誌檔
 pattern_profile_times.txt
 scratch_logs.txt

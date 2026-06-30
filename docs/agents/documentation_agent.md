@@ -45,7 +45,7 @@
 - **`docs/00_core/DEVELOPMENT_ROADMAP.md`** - Roadmap Hub（權威文件入口）
 - **`docs/00_core/DOCUMENTATION_INDEX.md`** - 文檔索引（文檔位置的 scoped authority）
 - **`docs/01_architecture/system_architecture.md`** - 系統架構（架構與模組邊界的 scoped authority）
-- **`docs/07_guides/APPLICATION_MANUAL.md`** - 目前 7 個工作區與跨工作區操作的使用者權威
+- **`docs/07_guides/APPLICATION_MANUAL.md`** - 目前 8 個工作區與跨工作區操作的使用者權威
 - **`PROJECT_NAVIGATION.md`** - 專案導航（開發者功能導航）
 
 ### 容易被忽略但必須更新的文件
