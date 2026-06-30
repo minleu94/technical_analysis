@@ -34,7 +34,7 @@
 | 觀察清單 | 13 | 候選池刷新、送 Research Lab 與跨頁同步已升級為 full direct bridge，可用 `--tab watchlist` 分頁驗證；清單 CRUD 寫入仍以人工或 tmp state 驗證為主。 |
 | 持倉管理 | 17 | fake-service UI、列表、損益、來源追溯、籌碼監控與下鑽已納入 full direct bridge，可用 `--tab portfolio` 分頁驗證；真實交易寫入 / 刪除 / 清空資料仍屬 write-risk manual。 |
 | Runtime Observatory | 6 | Runtime 中文化、idle / halted / event stream contract 已升級為 full direct bridge，可用 `--tab runtime` 分頁驗證；治理語意仍需人工判讀。 |
-| 全域與跨工作區流程 | 7 | MainWindow 啟動與 Tab 順序已有 opt-in smoke evidence helper skeleton，但未進預設 runner；推薦到回測 / 候選池 / 持倉下鑽已有 full direct bridge 輔助。 |
+| 全域與跨工作區流程 | 7 | MainWindow 啟動、頂層 Tab 切換、screenshot、viewport resize evidence 與 Update 強制合併 cancel dialog 已有 executable opt-in `--ui-smoke`；預設 runner 不啟動 MainWindow。 |
 
 ## 數據更新 / UpdateView
 
@@ -244,13 +244,13 @@
 
 | ID | 功能 | 母檔狀態 | Coverage | 目前證據 | 後續動作 |
 |---|---|---|---|---|---|
-| X-001 | 啟動主程式 | 通過 | `manual-only` + `report-only` | MainWindow smoke evidence helper skeleton 已存在，但未進預設 runner。 | 受控 opt-in 後才可啟動 MainWindow smoke。 |
-| X-002 | Tab 順序 | 通過 | `manual-only` + `report-only` | MainWindow smoke helper 可收集 tab label evidence；尚未等同真人操作驗證。 | 視覺與互動仍需人工 / 後續 Qt 操作層。 |
-| X-003 | 市場觀察自動載入 | 需確認 | `manual-only` + `oracle` | 資料與 service evidence 可輔助，實際切頁載入需 MainWindow。 | 後續受控 smoke。 |
+| X-001 | 啟動主程式 | 通過 | `direct-full` + `manual-only` | `--ui-smoke` 會在隔離子程序啟動真實 MainWindow 並寫 evidence；預設 runner 不啟動。 | 人工仍需看 screenshot / terminal 對 UX 做判讀。 |
+| X-002 | Tab 順序 | 通過 | `direct-full` + `manual-only` | `--ui-smoke-switch-tabs` 已切過 8 個頂層 tab 並驗證 tab labels。 | 視覺與互動手感仍需人工判讀。 |
+| X-003 | 市場觀察自動載入 | 需確認 | `direct-full` + `oracle` + `manual-only` | `--ui-smoke` 實際切入市場觀察；資料與 service evidence 可輔助。 | 真實載入內容 / 效能仍需人工。 |
 | X-004 | 推薦到回測 | 通過 | `direct-full` | `ui-research-workflow` 覆蓋 `X-004`。 | 保留 full bridge。 |
 | X-005 | 推薦 / 回測到持倉 | 未通過 | `direct-full` + `write-risk-manual` | `ui-recommendation-next-steps` / portfolio provenance tests 覆蓋導引；持倉寫入仍高風險。 | 母檔需重驗後更新。 |
 | X-006 | 持倉到主力流向 | 需確認 | `direct-full` | smart money direct bridge + `ui-portfolio-view` drill-down contract。 | 真實資料品質仍人工。 |
-| X-007 | Session context strip | 通過 | `manual-only` | 需要 MainWindow / viewport 視覺判讀。 | D-3 viewport plan 後續。 |
+| X-007 | Session context strip | 通過 | `direct-full` + `manual-only` | `--ui-smoke-screenshot --ui-smoke-resize` 會留下 startup / resize screenshots；目前 evidence 顯示 MainWindow 最小寬度會限制窄 viewport。 | 需要人工開圖判讀視覺可讀性。 |
 
 ## 下一步建議
 

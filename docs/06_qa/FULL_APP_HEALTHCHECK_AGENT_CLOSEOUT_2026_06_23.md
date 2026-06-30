@@ -16,7 +16,7 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 
 - 已完成：測試 inventory、direct bridge allowlist、candidate bridge policy、service oracle metadata、coverage / flow diagnostics、run history comparison，以及 opt-in report sections。
 - 已完成：quick / full runner 仍只呼叫已核准的非破壞 direct bridge suites 與 QA script。
-- 未啟用：正式 release gate、CI blocking、MainWindow 自動 smoke 執行、viewport screenshot / resize 實作、高風險 dialog dry-run 實作、資料寫入、migration 或 backfill apply。
+- 未啟用：正式 release gate、CI blocking、預設 MainWindow 自動 smoke、資料寫入、migration 或 backfill apply。MainWindow 啟動 / tab 切換 / screenshot / resize / cancel-only dialog 已有 explicit opt-in `--ui-smoke` 執行層。
 - 仍需人工：`docs/06_qa/FULL_APP_HEALTHCHECK_2026_06_16.md` 內的完整 UI smoke test、manual UX gaps、write-risk paths 與跨工作區可用性判讀。
 
 換句話說，本文件是「Testing / QA Agent 工具鏈收束」；`FULL_APP_HEALTHCHECK_2026_06_16.md` 仍是完整人工 UI healthcheck 的母檔。
@@ -46,14 +46,14 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 - Quick mode：`ui-update-workbench`、`ui-decision-desk`。
 - Full mode：Quick mode 兩項，加上 `ui-research-workflow`、`ui-market-regime-view`、`ui-run-registry-compare`、`ui-smart-money-flow`、`ui-recommendation-profiles`、`ui-recommendation-next-steps`、`ui-watchlist-candidate-pool`、`ui-portfolio-view`、`ui-runtime-view`、`qa-update-tab`。
 - Tab filter：`--tab update|market|decision|research|recommendation|watchlist|portfolio|runtime|cross-flow` 可分頁執行 full mode 的安全 direct bridge，不必每次跑完整 UI 測試。
-- MainWindow smoke：已具備 opt-in evidence helper skeleton，可收集 tab labels / current index evidence；未登錄到預設 runner，不等同完整真人 UI 操作。
+- MainWindow smoke：已具備 executable opt-in `--ui-smoke`；會用隔離子程序啟動真實 MainWindow、切換頂層 tab、擷取 screenshot、測 viewport resize evidence，並執行 Update 強制合併 cancel-only dialog probe。未傳 `--ui-smoke` 時預設 runner 不啟動 MainWindow。
 
 ## 不能誤用或誤判什麼
 
 - Quick mode 不是正式 release gate。
 - Full mode 不是正式 release gate。
 - E-3 與 E-4 只是 proposal / checklist metadata；它們不啟用 CI、不修改 runner bridge，也不阻擋 release。
-- MainWindow smoke、viewport resize 與 high-risk dialog 仍是 plan / metadata；除非後續有明確授權批次，否則不實作受控執行。
+- MainWindow smoke、viewport resize 與 Update 強制合併 cancel-only dialog 已可受控執行；其他 high-risk dialog 仍需逐項加入 cancel-only probe，且不得自動 confirm。
 - Manual UX gaps、manual-only tests、write-risk tests 與 high-risk dry-run paths 不會因 quick 或 full mode 通過而自動被認證。
 - Service oracle tests 是證據，不是 UI flow step。
 
@@ -102,6 +102,8 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode full --tab recommendation --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 
+.\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode full --ui-smoke --ui-smoke-switch-tabs --ui-smoke-screenshot --ui-smoke-resize 1366x768 --ui-smoke-resize 390x844 --ui-smoke-dialog-cancel --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
+
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode quick --output-dir output\qa\full_app_healthcheck_tmp --fail-fast --report-section coverage-burndown --report-section flow-diagnostics --report-section quick-gate-proposal --report-section full-release-checklist
 ```
 
@@ -129,13 +131,18 @@ Track A-E 的 metadata 路線已於 commit `7a8db37` 完成到 E-4。後續 repo
 - `ui-healthcheck-direct-bridge`：`11` files。
 - `ui-healthcheck-candidate-bridge`：`10` files。
 - Runner 支援 `--tab` 分頁篩選；`update`、`research`、`recommendation`、`watchlist`、`portfolio`、`runtime` 可各自跑 full direct bridge 子集。
-- MainWindow smoke helper skeleton 已加入，但維持 opt-in / non-default；完整真人 UI 操作測試仍未宣告完成。
+- MainWindow smoke 已升級為 executable opt-in / non-default；驗證過可產生 8 個頂層 tab 切換、startup / resize screenshots、viewport resize evidence 與 Update 強制合併 cancel dialog evidence。窄 viewport 目前會被 MainWindow 最小寬度限制，report 會以 `constrained_by_minimum` 呈現。
+
+2026-06-30 補充盤點：
+
+- `--ui-smoke` 由父 runner 呼叫隔離子程序執行，避免 PySide6 / Qt native teardown 影響 healthcheck exit code。
+- `--ui-smoke-dialog-cancel` 目前只覆蓋 UpdateView 強制重新合併 cancel path；其他 dialog 仍需逐項加入。
 
 ## 交接規則
 
 - 每個新批次先執行 `git status --short --branch`。
 - 除非任務明確要求更新 QA 報告，否則不要 stage `output/qa/update_tab/` 底下 tracked 易變輸出。
-- 除非後續任務明確授權受控 UI 執行，否則不要啟動 MainWindow。
+- 除非後續任務明確傳入 `--ui-smoke`，否則不要啟動 MainWindow。
 - 不要從本 roadmap 直接執行 migration、backfill apply、真實資料寫入或 high-risk dry-run implementation。
 - 若失敗涉及 SQLite / CSV 新鮮度、schema、available date 或資料完整性，交接給 Data Audit Agent。
 - 若下一步會改 runner 行為或 release blocking，先建立新的明確計畫，再編輯程式碼。

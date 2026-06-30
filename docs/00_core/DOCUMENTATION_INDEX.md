@@ -135,6 +135,8 @@
 | [2026-06-23-healthcheck-batch6-closeout-regime-researchlab.md](../superpowers/plans/2026-06-23-healthcheck-batch6-closeout-regime-researchlab.md) | Healthcheck Batch 6 實作計畫，規劃 Research Lab 首次載入與升級導引收尾、healthcheck 狀態一致化，以及 Regime confidence / 子分數排查。 |
 | [2026-06-29-full-app-healthcheck-ui-smoke-design.md](../superpowers/specs/2026-06-29-full-app-healthcheck-ui-smoke-design.md) | Full App Healthcheck 接近真人 UI 操作測試設計，規劃 rollback 節點、分 tab runner、候選 bridge 升級與 MainWindow smoke 邊界。 |
 | [2026-06-29-full-app-healthcheck-ui-smoke.md](../superpowers/plans/2026-06-29-full-app-healthcheck-ui-smoke.md) | Full App Healthcheck 分批實作計畫，拆分 tab filter、report context、opt-in MainWindow skeleton、safe candidate promotion、文檔與驗證節點。 |
+| [2026-06-30-mainwindow-ui-smoke-operation-design.md](../superpowers/specs/2026-06-30-mainwindow-ui-smoke-operation-design.md) | MainWindow UI smoke 操作層設計，規劃 opt-in 啟動、tab 切換、screenshot、resize evidence、cancel-only dialog 與子程序隔離。 |
+| [2026-06-30-mainwindow-ui-smoke-operation.md](../superpowers/plans/2026-06-30-mainwindow-ui-smoke-operation.md) | MainWindow UI smoke 操作層實作計畫，拆分 evidence schema、真實 Qt runner、CLI manifest opt-in、dialog cancel path、文件與驗證。 |
 | [2026-06-13-strategy-scoring-governance-a-backtest.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-a-backtest.md) | 增量 A：回測 fixed / quantile 雙模式門檻實作計畫。 |
 | [2026-06-13-strategy-scoring-governance-b-recommendation.md](../superpowers/plans/2026-06-13-strategy-scoring-governance-b-recommendation.md) | 增量 B：推薦 eligible universe 橫斷面排名實作計畫。 |
 | [2026-06-14-legacy-test-governance-design.md](../superpowers/specs/2026-06-14-legacy-test-governance-design.md) | 舊測試分類、現行模組責任與 pytest 收集邊界設計。 |
@@ -161,7 +163,7 @@
 | [QA_UPDATE_TAB_SUMMARY.md](../06_qa/QA_UPDATE_TAB_SUMMARY.md) | 數據更新 Tab QA 總結。 |
 | [FULL_APP_HEALTHCHECK_2026_06_16.md](../06_qa/FULL_APP_HEALTHCHECK_2026_06_16.md) | 主 UI 人工 smoke test 母檔，涵蓋數據更新、SQLite 檢視、TPEX 日價、券商分點、每日決策、研究與持倉流程。 |
 | [FULL_APP_HEALTHCHECK_COVERAGE_MAPPING_2026_06_24.md](../06_qa/FULL_APP_HEALTHCHECK_COVERAGE_MAPPING_2026_06_24.md) | Full App Healthcheck 母檔逐列 coverage mapping，對照 direct bridge、candidate、service oracle、report-only、manual-only、write-risk manual 與 `--tab` 分頁驗證狀態。 |
-| [FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md](../06_qa/FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md) | Testing / QA Agent + Full App Healthcheck Runner closeout，說明 metadata / report-only 工具鏈、安全邊界、`--tab` runner 與 opt-in MainWindow smoke skeleton 狀態。 |
+| [FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md](../06_qa/FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md) | Testing / QA Agent + Full App Healthcheck Runner closeout，說明 metadata / report-only 工具鏈、安全邊界、`--tab` runner 與 executable opt-in MainWindow UI smoke 狀態。 |
 | [TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md](../06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md) | 測試 inventory 分類，標示 direct bridge、candidate bridge、service oracle、write-risk、manual-only、預設 pytest 收集與 runner bridge 分頁狀態。 |
 | [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
@@ -255,6 +257,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。
 - 2026-06-24：將 `docs/00_core/ARCH_*` 早期架構治理備忘移入 archive，補上歸檔索引；目前架構權威仍為 `docs/01_architecture/system_architecture.md`。
 - 2026-06-23：新增 Healthcheck Batch 3 Recommendation Profile / Regime plan 與 non-destructive release healthcheck runner plan 索引，記錄推薦分析 Profile lifecycle、Regime match / mismatch 揭露與自訂 Profile JSON 精度治理入口。
