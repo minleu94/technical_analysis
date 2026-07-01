@@ -643,7 +643,7 @@ Priority 代表目前對決策可信度的影響，不等同實作順序；Owner
 | Forward Performance Dashboard / Evidence Pipeline Runner | 證據缺口 | P1 | Research / App | 資料底座、importer v1、E2E smoke、dashboard read model v1、durable DDD snapshot source、Research Lab read-only UI v1、manual dry-run runner v1、working-copy smoke v1 與 approval checklist 已完成；scheduler readiness 最高只到 `ready_for_manual_confirm`，不是 production-ready | 仍無法證明 Watchlist Trigger、Recommendation、Why Not、Liquidity Gate 或 Portfolio Alert 是否有效。 | 累積事件後 5 / 10 / 20 / 60 日 forward return、benchmark excess return、industry / concept excess return、誤報率與樣本數；正式 scheduler 前需 working-copy confirm、人工批准、rollback / recovery 檢查與多次 dry-run 穩定紀錄。 |
 | Live vs Research Gap Dashboard | 證據缺口 | P1 | Portfolio / Research | linkage v1 已完成，可保存 portfolio source trace、Research Run / strategy version id、Evidence Event / Outcome 與 gap attribution；read-only UI 與完整實帳歸因尚未完成 | 目前只能檢查 research / simulated gap；沒有真實交易與人工 override 記錄時，不得宣稱完整歸因。 | 建立 read-only UI；補人工 override / real trade linkage；比較回測、推薦回放與實際 / 模擬持倉三層差距，並保留資料品質與 matching confidence。 |
 | Signal Decay Monitor | 策略生命週期缺口 | P2 | Research / Strategy Lifecycle | v1 已完成 observation / CLI / proposed payload；read-only UI 與 factor scope 尚未完成 | 舊訊號失效後可能仍被使用，策略退化無法及時進入人工審核。 | 追蹤近期分層 evidence、hit rate proxy、MAE、live gap 與 quality degraded ratio；只產生 hold / watch / demote_candidate / retire_candidate proposed payload，不自動套用 lifecycle action。 |
-| Decision Quality Review | 管理流程缺口 | P2 | Portfolio / Manual Review | 未完成 | 系統可能產出資料，但無法證明使用者少犯錯或決策流程改善。 | 建立週 / 月覆盤紀錄，追蹤錯誤交易、未遵守系統建議、手動 override、錯過訊號與事後歸因。 |
+| Decision Quality Review | 管理流程缺口 | P2 | Portfolio / Manual Review | v1 已完成 repository / service / CLI / review item / process score；read-only UI 尚未完成 | 系統可建立流程 evidence，但仍不能證明使用者少犯錯或投資結果改善。 | 建立 Decision Quality Dashboard read-only UI；持續追蹤 source trace、journal linkage、manual override、large gap 與 signal decay review coverage，並保留非責備語氣。 |
 | PDF / polished report | 輸出缺口 | P3 | Reporting / UI | 未完成，Excel 已完成 | 對外溝通與長週期研究封存仍依賴人工整理。 | 在 Excel payload 穩定後補 PDF 報告；報告須保留資料版本、參數、限制、缺失資料與 no-look-ahead 聲明。 |
 
 ---
@@ -656,7 +656,7 @@ Priority 代表目前對決策可信度的影響，不等同實作順序；Owner
 
 追蹤 Watchlist Trigger、Recommendation、Why Not、Liquidity Gate、Portfolio Alert 的後續表現。
 
-2026-07-01 第一增量已先完成 Evidence Event Store v1 / Forward Outcome Calculator v1，可保存 events 與 close-to-close forward outcomes。2026-07-02 第二增量已完成 Evidence Importers / Capture Pipeline v1：Recommendation 可讀 persisted result，Watchlist Trigger / Portfolio Alert / Risk Prompt 可讀注入式 DTO provider；CLI 預設 dry-run，只有 `--confirm` 寫入。2026-07-03 第三增量已完成 E2E smoke 與 Forward Performance Read Model v1，可依 event_type、event_family、source_type、regime、sector、profile_id、score_percentile_bucket、liquidity_state、data_quality 唯讀彙總 ready / pending / missing、return / excess return、quality 與 warnings。2026-07-04 第四增量已完成 durable Daily Decision Desk snapshot repository / capture CLI / inspect CLI、capture evidence durable provider wiring、Recommendation exclusion payload optional fields 與 source coverage CLI；Why Not / Liquidity payload 為 partial，缺 payload 時只 diagnostic。2026-07-05 第五增量已完成 Research Lab `Forward Evidence` read-only UI v1，可檢查 summary cards、filters、group table、detail panel、empty / degraded states。2026-07-06 第六增量已完成 Evidence Pipeline Runner dry-run v1，可手動串接 source coverage、snapshot capture、event capture、outcome calculation、summary 與 diagnostics report。2026-07-07 第七增量已完成 working-copy DB smoke v1、scheduler readiness evaluator 與 production scheduler approval checklist，可在 working-copy DB 重複 confirm 檢查 idempotency，並固定 `production_scheduler_allowed=false`。2026-07-08 第八增量已完成 Live vs Research Gap linkage v1，可保存 source trace / evidence link / attribution / portfolio mode / matching confidence。2026-07-09 第九增量已完成 Signal Decay Monitor v1，可用已保存 forward evidence 與 live gap observation 產生 signal scope decay observation 與 lifecycle proposed payload；scheduler not ready for production schedule，最高只能到 `ready_for_manual_confirm`；目前不能用來宣稱 alpha、完整實帳歸因、任何事件類型有效或任一策略確定失效。
+2026-07-01 第一增量已先完成 Evidence Event Store v1 / Forward Outcome Calculator v1，可保存 events 與 close-to-close forward outcomes。2026-07-02 第二增量已完成 Evidence Importers / Capture Pipeline v1：Recommendation 可讀 persisted result，Watchlist Trigger / Portfolio Alert / Risk Prompt 可讀注入式 DTO provider；CLI 預設 dry-run，只有 `--confirm` 寫入。2026-07-03 第三增量已完成 E2E smoke 與 Forward Performance Read Model v1，可依 event_type、event_family、source_type、regime、sector、profile_id、score_percentile_bucket、liquidity_state、data_quality 唯讀彙總 ready / pending / missing、return / excess return、quality 與 warnings。2026-07-04 第四增量已完成 durable Daily Decision Desk snapshot repository / capture CLI / inspect CLI、capture evidence durable provider wiring、Recommendation exclusion payload optional fields 與 source coverage CLI；Why Not / Liquidity payload 為 partial，缺 payload 時只 diagnostic。2026-07-05 第五增量已完成 Research Lab `Forward Evidence` read-only UI v1，可檢查 summary cards、filters、group table、detail panel、empty / degraded states。2026-07-06 第六增量已完成 Evidence Pipeline Runner dry-run v1，可手動串接 source coverage、snapshot capture、event capture、outcome calculation、summary 與 diagnostics report。2026-07-07 第七增量已完成 working-copy DB smoke v1、scheduler readiness evaluator 與 production scheduler approval checklist，可在 working-copy DB 重複 confirm 檢查 idempotency，並固定 `production_scheduler_allowed=false`。2026-07-08 第八增量已完成 Live vs Research Gap linkage v1，可保存 source trace / evidence link / attribution / portfolio mode / matching confidence。2026-07-09 第九增量已完成 Signal Decay Monitor v1，可用已保存 forward evidence 與 live gap observation 產生 signal scope decay observation 與 lifecycle proposed payload。2026-07-10 第十增量已完成 Decision Quality Review v1，可保存週 / 月 / custom 流程覆盤、review items、action items 與 process quality bp；scheduler not ready for production schedule，最高只能到 `ready_for_manual_confirm`；目前不能用來宣稱 alpha、完整實帳歸因、任何事件類型有效、任一策略確定失效或使用者決策錯誤。
 
 最低欄位：
 
@@ -678,11 +678,13 @@ Priority 代表目前對決策可信度的影響，不等同實作順序；Owner
 
 ### Priority 3：Signal Decay Monitor
 
-Signal Decay Monitor v1 已可追蹤 event_type、event_family、strategy_version、profile 的近期 evidence 是否相對長窗轉弱，並輸出 `stable` / `watch` / `decaying` / `severe_decay` 與 `hold` / `watch` / `demote_candidate` / `retire_candidate` proposed payload。它仍只是人工審核 evidence，不會自動改策略生命週期；read-only UI、factor scope 與 Decision Quality Review 仍待後續。
+Signal Decay Monitor v1 已可追蹤 event_type、event_family、strategy_version、profile 的近期 evidence 是否相對長窗轉弱，並輸出 `stable` / `watch` / `decaying` / `severe_decay` 與 `hold` / `watch` / `demote_candidate` / `retire_candidate` proposed payload。它仍只是人工審核 evidence，不會自動改策略生命週期；read-only UI、factor scope 與 dashboard polish 仍待後續。
 
 ### Priority 4：Decision Quality Review
 
 建立每週 / 每月決策覆盤，檢查系統是否真的幫助使用者少犯錯。
+
+Decision Quality Review v1 已建立 append-only review repository、review item、status history、action item、dry-run / confirm capture CLI 與 read-only inspect CLI。v1 檢查 source trace、journal linkage、manual override、portfolio alert、large live gap、signal decay candidate 與資料品質使用狀態；它是流程 evidence，不是交易建議、投資能力分數或 hindsight blame。下一步是 read-only dashboard UI 與人工 review workflow。
 
 ### Priority 5：台股微結構治理
 
@@ -749,6 +751,12 @@ baldr 的成功分為四層。
 ---
 
 ## 17. 更新記錄
+
+### 2026-07-10
+
+- 完成 Post-V1 Decision Quality Review v1 的願景文件同步：標示 review repository / service / CLI 已可保存週 / 月 / custom 流程覆盤。
+- 明確標示 Decision Quality score 是流程品質，不是投資能力或責備判斷。
+- 保留限制：未建立 Decision Quality Dashboard UI，未啟用 production scheduler，也不證明任何訊號有效或決策改善。
 
 ### 2026-07-07
 
