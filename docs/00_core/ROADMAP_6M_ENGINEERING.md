@@ -1,6 +1,6 @@
 ﻿# 6 個月可執行工程路線（2026-06 至 2026-12）
 
-> **最後更新**：2026-07-01
+> **最後更新**：2026-07-02
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。當它與短期 Snapshot 衝突時，以 Snapshot 的「本週優先事項」決定今天先做什麼；當它與產品願景文件衝突時，本文件決定可執行交付順序。
 
 ---
@@ -24,6 +24,7 @@ V1 closeout baseline（2026-06-30）：
 - Strategy Lifecycle / Portfolio Feedback v1 已補上 lifecycle gate、append-only evidence、post-trade attribution 與持倉管理生命週期回顧入口。
 - Full App Healthcheck / MainWindow UI smoke / clean clone gate 已形成 release QA 閉環；這是工程交付證據，不是投資有效性證明。
 - 下一階段主線轉向 Evidence-Driven baldr：Forward Performance、Live vs Research Gap、Signal Decay、Decision Quality Review 與台股微結構治理。
+- Post-V1 第一批 evidence 增量已完成 Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1；這是 forward evidence 的資料底座與 source capture 起點，不是 Forward Performance Dashboard 完成，也不是投資有效性證明。
 
 ---
 
@@ -92,7 +93,7 @@ V1 已完成交付：
 
 後續交付：
 
-- Forward Performance Dashboard：追蹤 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 後續 5 / 10 / 20 / 60 日表現。
+- Forward Performance Dashboard：Evidence Importers v1 已可將 persisted Recommendation result 與注入式 Daily Decision Desk DTO source 轉為 events；下一步追蹤 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 後續 5 / 10 / 20 / 60 日表現。
 - Concept Basket / 題材籃子，補官方產業分類無法捕捉台股題材輪動的限制。
 - Decision Desk 的 evidence summary：每個提示能回到樣本數、forward evidence、資料品質與適用限制。
 
@@ -290,7 +291,7 @@ V1 已完成交付：
 
 優先交付：
 
-- Forward Performance Dashboard：保存 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 事件，追蹤 5 / 10 / 20 / 60 日 forward return、benchmark excess return、industry / concept excess return、樣本數與資料品質。
+- Forward Performance Dashboard：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 已完成資料底座與 capture pipeline；後續需接 dashboard read model 與更完整的 Daily Decision Desk durable snapshot source，追蹤 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 事件後 5 / 10 / 20 / 60 日 forward return、benchmark excess return、industry / concept excess return、樣本數與資料品質。
 - Live vs Research Gap Dashboard：比較回測、推薦回放與實際 / 模擬持倉落差，歸因滑價、未成交、跳空、流動性、Regime 改變、策略衰退與使用者行為偏差。
 - Signal Decay Monitor：追蹤策略、因子與提示近期是否失效，提供 hold / demote / retire 的 evidence，但不自動刪除或覆寫策略版本。
 - Decision Quality Review：建立週 / 月覆盤紀錄，追蹤錯誤交易、未遵守系統建議、手動 override、錯過訊號與事後歸因。
@@ -306,7 +307,7 @@ V1 已完成交付：
 
 ## 5. 立即待辦清單
 
-1. V1 release baseline 已完成；下一步轉入 Post-V1 Evidence-Driven baldr，優先補 Forward Performance Dashboard 與 Live vs Research Gap Dashboard 的事件模型、資料版本、benchmark 與 quality 契約。
+1. V1 release baseline 已完成；Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 已落地。下一步優先建立 Forward Performance Dashboard read model，並補 Daily Decision Desk durable snapshot source；Live vs Research Gap Dashboard 仍是下一個 evidence 主線。
 2. Month 6.1 仍保留為 lifecycle / feedback 的人工審核深化：Manual Approval Workflow、Strategy Evidence Explainability、Portfolio Review Dashboard 深化與 QA checklist。
 3. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
 4. 維持 Month 2 / Month 3 / Month 5 / Month 6 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、append-only lifecycle evidence、量化 float boundary 與 no-look-ahead tests。
@@ -323,12 +324,15 @@ V1 已完成交付：
 - 資料 schema：必須提供 migration / fallback / 資料品質驗證，且不得破壞正式資料。
 - Daily Decision Desk：必須以 service snapshot 聚合，不得在 UI 層複製 scoring、screening、portfolio 或 broker flow 計算。
 - Post-V1 evidence dashboard：必須保存事件日期、決策日可得資料、資料版本、benchmark 定義、quality / warnings 與 forward window，不得把觀察結果包裝成交易建議。
+- Evidence Event Store / Forward Outcome Calculator：schema migration 必須 dry-run / backup safe；forward return 一律標示 close-to-close research basis，不得稱為可執行績效。
 - Release / healthcheck：Full App Healthcheck、MainWindow UI smoke 與 clean clone gate 只能證明工程交付可用，不得作為投資有效性證據。
 
 ---
 
 ## 7. 更新記錄
 
+- 2026-07-02：完成 Post-V1 Evidence Importers / Capture Pipeline v1，新增 recommendation persisted importer、watchlist / portfolio alert / risk prompt DTO importers、dry-run / confirm CLI、duplicate summary 與 unsupported-source diagnostics；仍未完成 dashboard read model 或投資有效性驗證。
+- 2026-07-01：完成 Post-V1 第一增量 Evidence Event Store v1 / Forward Outcome Calculator v1，新增 append-only events、forward outcomes、migration safety、inspection CLI 與 focused tests；Forward Performance Dashboard、source importer 與投資有效性驗證仍未完成。
 - 2026-07-01：更新 V1 closeout baseline，確認四個產品閉環、Strategy Lifecycle / Portfolio Feedback v1 與 release QA 閉環已完成；Roadmap 下一階段轉向 Evidence-Driven baldr，優先 Forward Performance、Live vs Research Gap、Signal Decay、Decision Quality Review 與台股微結構治理。
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，確認 fundamental schema / 月營收 / 季度財報 / P/E valuation / provider / adapters / diagnostics 已達保守接入驗收；工程主線轉向 Month 6 Strategy Lifecycle 與 Portfolio Feedback。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle rule engine、drift detector、Portfolio post-trade attribution、Portfolio Review snapshot、Registry-based Promote lifecycle gate 與持倉管理生命週期回顧分頁。

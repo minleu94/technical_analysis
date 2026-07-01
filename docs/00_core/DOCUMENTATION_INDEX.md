@@ -105,8 +105,12 @@
 | [2026-06-11-financial-float-boundary-governance-design.md](../superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md) | 金融核心白名單的 AST float 邊界掃描、逐行分類標記與 pytest 防回歸設計。 |
 | [2026-06-13-strategy-scoring-governance-design.md](../superpowers/specs/2026-06-13-strategy-scoring-governance-design.md) | fixed / quantile 雙模式、回測 Expanding T-1 與推薦 eligible universe 橫斷面百分位設計。 |
 | [2026-06-14-month-3-factor-layer-design.md](../superpowers/specs/2026-06-14-month-3-factor-layer-design.md) | Month 3 Factor Layer v1 設計，定義 Factor Contract、Registry、Look-ahead Gate 與既有技術 / 量能 / 券商分點 adapter 範圍。 |
+| [2026-07-01-post-v1-evidence-event-store-design.md](../superpowers/specs/2026-07-01-post-v1-evidence-event-store-design.md) | Post-V1 Evidence Event Store / Forward Outcome Calculator v1 設計，定義 event/outcome schema、no-look-ahead、benchmark、quality、idempotency 與 migration safety。 |
+| [2026-07-02-post-v1-evidence-importers-design.md](../superpowers/specs/2026-07-02-post-v1-evidence-importers-design.md) | Post-V1 Evidence Importers / Capture Pipeline v1 設計，定義 source importer、dry-run / confirm、diagnostics、unsupported source 與 DTO/repository-only 邊界。 |
 | [2026-06-13-strategy-scoring-governance.md](../superpowers/plans/2026-06-13-strategy-scoring-governance.md) | 策略分數治理總控計畫與增量 Gate。 |
 | [2026-06-14-month-3-factor-layer.md](../superpowers/plans/2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫，拆分 Factor Contract、Registry、Look-ahead Gate、v1 adapters 與 Research Run 追溯保存。 |
+| [2026-07-01-post-v1-evidence-event-store.md](../superpowers/plans/2026-07-01-post-v1-evidence-event-store.md) | Post-V1 Evidence Event Store / Forward Outcome Calculator v1 實作計畫，拆分 DTO、repository、service、calculator、CLI、tests 與 QA 文件。 |
+| [2026-07-02-post-v1-evidence-importers.md](../superpowers/plans/2026-07-02-post-v1-evidence-importers.md) | Post-V1 Evidence Importers / Capture Pipeline v1 實作計畫，拆分 importer DTO、Recommendation / DDD DTO importers、capture service、CLI、tests 與 QA。 |
 | [2026-06-14-month-3-factor-run-integration.md](../superpowers/plans/2026-06-14-month-3-factor-run-integration.md) | Month 3 Factor Run Integration 計畫，將 factor snapshot / contribution summary 接入 Research Run 實際保存流程。 |
 | [2026-06-15-month-3-recommendation-factor-feed.md](../superpowers/plans/2026-06-15-month-3-recommendation-factor-feed.md) | Month 3 Recommendation Factor Feed 計畫，讓推薦組合回放產生並保存 factor snapshot / contribution metadata。 |
 | [2026-06-15-decision-desk-watchlist-trigger.md](../superpowers/plans/2026-06-15-decision-desk-watchlist-trigger.md) | Daily Decision Desk Watchlist Trigger v1 接線計畫，對接 `WatchlistService` 與 SQLite `technical_indicators`，並定義日期 fallback、quality 與 warnings 契約。 |
@@ -172,6 +176,8 @@
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
 | [DOCUMENT_ENCODING_AUDIT_2026_06_16.md](../06_qa/DOCUMENT_ENCODING_AUDIT_2026_06_16.md) | repo 文件 UTF-8 / mojibake 稽核報告，確認顯示雜訊來自終端編碼而非文件內容損壞。 |
 | [FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md](../06_qa/FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md) | Testing QA Agent 使用的 feature-to-test 測試路由與決策矩陣（測試知識庫），不包含 Agent 角色定義。 |
+| [POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md](../06_qa/POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md) | Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 QA 紀錄，包含 schema safety、focused tests、限制與下一增量。 |
+| [POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md](../06_qa/POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md) | Post-V1 Evidence Importers / Capture Pipeline v1 QA 紀錄，包含 importer 支援邊界、CLI dry-run / confirm、unsupported source 與限制。 |
 
 
 ---
@@ -264,6 +270,8 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-01：新增 Post-V1 Evidence Event Store design / plan 與 QA 索引，標示 Evidence Event Store v1 / Forward Outcome Calculator v1 是 forward evidence 資料底座，不是 dashboard 或投資有效性證明。
+- 2026-07-02：新增 Post-V1 Evidence Importers design / plan 與 QA 索引，標示 capture pipeline v1 可累積 persisted Recommendation 與 DTO-based DDD evidence，但仍不是 dashboard 或投資有效性證明。
 - 2026-06-30：新增 v1 release checklist 索引，將 `v1.0.0-rc.1` / `v1.0.0` 發布前的自動化、非破壞 healthcheck、MainWindow UI smoke、全新 clone 與人工 UI 驗證 gate 集中管理。
 - 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。
