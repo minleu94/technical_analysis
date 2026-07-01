@@ -601,8 +601,8 @@ class BacktestView(QWidget):
         # 左側：配置面板（使用 ScrollArea 支援滾動）
         config_scroll = QScrollArea()
         config_scroll.setWidgetResizable(True)
-        config_scroll.setMinimumWidth(400)
-        config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        config_scroll.setMinimumWidth(560)
+        config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         config_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         self.config_panel = BacktestConfigPanel(self)
@@ -613,9 +613,12 @@ class BacktestView(QWidget):
         self.result_panel = BacktestResultPanel(self)
         splitter.addWidget(self.result_panel)
 
-        # 設置 Splitter 比例（讓右側結果區域更大，且可隨窗口調整）
-        splitter.setStretchFactor(0, 1)  # 左側配置區域
-        splitter.setStretchFactor(1, 3)  # 右側結果區域
+        # 設置 Splitter 比例：左側預設吃下完整設定表單，額外空間優先給結果區。
+        splitter.setCollapsible(0, False)
+        splitter.setCollapsible(1, False)
+        splitter.setSizes([560, 780])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
 
         main_layout.addWidget(splitter)
 
@@ -3217,10 +3220,11 @@ class BacktestView(QWidget):
                 row_widget.setMinimumWidth(420)
                 range_row = QHBoxLayout(row_widget)
                 range_row.setContentsMargins(0, 0, 0, 0)
+                range_row.setSpacing(6)
 
                 # 參數名稱標籤
                 label = QLabel(description + ":")
-                label.setMinimumWidth(120)
+                label.setFixedWidth(104)
                 range_row.addWidget(label)
 
                 # 模式選擇（固定值/範圍）

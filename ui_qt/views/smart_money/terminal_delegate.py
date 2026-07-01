@@ -41,6 +41,7 @@ class TerminalScannerDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.Antialiasing, True)
         
         rect = option.rect
+        painter.setClipRect(rect)
         
         # 1. 取得自定義資料
         intensity = index.data(ROLE_INTENSITY) or 0
@@ -119,7 +120,8 @@ class TerminalScannerDelegate(QStyledItemDelegate):
         
         # 留白邊距 10px
         text_rect = rect.adjusted(10, 0, -10, 0)
-        painter.drawText(text_rect, alignment, text)
+        elided_text = painter.fontMetrics().elidedText(text, Qt.ElideRight, text_rect.width())
+        painter.drawText(text_rect, alignment, elided_text)
 
     def _draw_badges(self, painter: QPainter, rect: QRect, badges: list):
         if not badges: return
@@ -186,8 +188,8 @@ class TerminalScannerDelegate(QStyledItemDelegate):
         if not data or len(data) < 2:
             return
             
-        # 在保留 Padding 的區域內繪圖
-        draw_rect = rect.adjusted(10, 8, -10, -8)
+        # 在欄位內用固定最大繪圖寬度，避免 5 根 bar 隨欄寬被拉太開。
+        draw_rect = rect.adjusted(14, 8, -10, -8)
         
         max_val = max(data)
         min_val = min(data)
@@ -201,9 +203,12 @@ class TerminalScannerDelegate(QStyledItemDelegate):
             painter.setPen(QPen(self.color_border_line, 1, Qt.DashLine))
             painter.drawLine(draw_rect.left(), int(y_zero), draw_rect.right(), int(y_zero))
         
-        # 計算點位
+        # 計算點位。bar chart 使用緊湊繪圖區，line/area 仍使用可用寬度。
         points = []
-        x_step = draw_rect.width() / max(1, len(data) - 1)
+        chart_width = draw_rect.width()
+        if self.chart_type == 'bar':
+            chart_width = min(draw_rect.width(), max(84.0, (len(data) - 1) * 30.0))
+        x_step = chart_width / max(1, len(data) - 1)
         for i, val in enumerate(data):
             x = draw_rect.left() + i * x_step
             normalized = (val - min_val) / val_range
@@ -220,7 +225,7 @@ class TerminalScannerDelegate(QStyledItemDelegate):
         if self.chart_type == 'bar':
             # Bar Chart (Histogram)
             painter.setPen(Qt.NoPen)
-            bar_width = max(2.5, x_step * 0.7)
+            bar_width = min(14.0, max(2.0, x_step * 0.48))
             
             for x, y, val in points:
                 color = self.color_sparkline_pos if val > 0 else self.color_sparkline_neg if val < 0 else self.color_sparkline_base

@@ -26,6 +26,35 @@ class TerminalTableModel(QAbstractTableModel):
             "分數", "股票", "淨量", "集中度", "語意狀態", "5/20/60 日診斷", "信號 (Badges)", "近期趨勢 (Trend)"
         ]
 
+    @staticmethod
+    def _format_compact_qty(value: int | float | None) -> str:
+        if value is None:
+            return "N/A"
+
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return "N/A"
+
+        sign = "+" if numeric_value > 0 else "-" if numeric_value < 0 else ""
+        magnitude = abs(numeric_value)
+        if magnitude >= 10000:
+            return f"{sign}{magnitude / 10000:.1f}萬"
+        return f"{sign}{int(round(magnitude)):,}"
+
+    def _format_window_diagnostics(self, semantic) -> str:
+        windows = (
+            ("5D", semantic.window_5),
+            ("20D", semantic.window_20),
+            ("60D", semantic.window_60),
+        )
+        if any(window is None for _, window in windows):
+            return "無語意診斷"
+        return "｜".join(
+            f"{label} {self._format_compact_qty(window.net_qty)}"
+            for label, window in windows
+        )
+
     def rowCount(self, parent=QModelIndex()) -> int:
         if parent.isValid():
             return 0
@@ -69,13 +98,9 @@ class TerminalTableModel(QAbstractTableModel):
             elif col == 4:
                 return semantic.primary_state if semantic is not None else "未計算"
             elif col == 5:
-                if semantic is None or semantic.window_5 is None or semantic.window_20 is None or semantic.window_60 is None:
+                if semantic is None:
                     return "無語意診斷"
-                return (
-                    f"5日 {semantic.window_5.net_qty:+,}｜"
-                    f"20日 {semantic.window_20.net_qty:+,}｜"
-                    f"60日 {semantic.window_60.net_qty:+,}"
-                )
+                return self._format_window_diagnostics(semantic)
             elif col == 6:
                 return "" # 由 Delegate 繪製 Badges，不顯示字串
             elif col == 7:
@@ -94,17 +119,24 @@ class TerminalTableModel(QAbstractTableModel):
                 tooltip_lines.append(f"語意狀態：{semantic.primary_state}")
                 flags = "、".join(semantic.semantic_flags) if semantic.semantic_flags else "無"
                 tooltip_lines.append(f"旗標：{flags}")
-                if semantic.window_5 is not None:
-                    concentration = semantic.window_5.top_concentration_bp
+                for label, window in (
+                    ("5日", semantic.window_5),
+                    ("20日", semantic.window_20),
+                    ("60日", semantic.window_60),
+                ):
+                    if window is None:
+                        continue
+                    concentration = window.top_concentration_bp
                     tooltip_lines.append(
-                        f"5日 Top {semantic.window_5.top_n} quantity 集中度："
+                        f"{label} 淨量：{window.net_qty:+,} 張｜"
+                        f"Top {window.top_n} quantity 集中度："
                         f"{concentration if concentration is not None else 'N/A'} bp"
                     )
                     tooltip_lines.append(
-                        "資料品質："
-                        f"observed={semantic.window_5.observed_count} "
-                        f"estimated={semantic.window_5.estimated_count} "
-                        f"unavailable={semantic.window_5.unavailable_count}"
+                        f"{label} 資料品質："
+                        f"observed={window.observed_count} "
+                        f"estimated={window.estimated_count} "
+                        f"unavailable={window.unavailable_count}"
                     )
                 tooltip_lines.extend(str(line) for line in getattr(semantic, "evidence_lines", ())[:6])
                 tooltip_lines.append("-" * 35)

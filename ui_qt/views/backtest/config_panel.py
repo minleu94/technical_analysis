@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QGroupBox, QProgressBar,
     QLineEdit, QDoubleSpinBox, QDateEdit, QComboBox,
-    QFormLayout, QSpinBox, QCheckBox
+    QFormLayout, QSpinBox, QCheckBox, QSizePolicy
 )
 from PySide6.QtCore import Qt, QDate, QTimer
 from PySide6.QtGui import QFont
@@ -42,6 +42,8 @@ RESEARCH_LAB_MODE_HINTS = {
 class BacktestConfigPanel(QWidget):
     """回測配置面板 (左側控制面板)"""
 
+    CONTROL_MIN_WIDTH = 320
+
     def __init__(self, parent_view, parent=None):
         """初始化配置面板
 
@@ -57,7 +59,16 @@ class BacktestConfigPanel(QWidget):
 
         self._setup_ui()
 
+    def _stabilize_combo_width(self, combo: QComboBox, minimum_width: int | None = None) -> None:
+        """讓長文字下拉欄位在左側設定面板內有穩定寬度。"""
+        combo.setMinimumWidth(minimum_width or self.CONTROL_MIN_WIDTH)
+        combo.setMinimumContentsLength(18)
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+
     def _setup_ui(self):
+        self.setMinimumWidth(520)
+        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred)
+
         config_layout = QVBoxLayout(self)
         config_layout.setSpacing(10)
         config_layout.setContentsMargins(10, 10, 10, 10)
@@ -68,6 +79,7 @@ class BacktestConfigPanel(QWidget):
         self.research_lab_mode_combo = QComboBox()
         for mode in RESEARCH_LAB_MODES:
             self.research_lab_mode_combo.addItem(mode["label"], mode["id"])
+        self._stabilize_combo_width(self.research_lab_mode_combo)
         self.research_lab_mode_hint = QLabel(self._research_lab_mode_hint_text(0))
         self.research_lab_mode_hint.setWordWrap(True)
         self.research_lab_mode_hint.setStyleSheet("color: #666;")
@@ -85,6 +97,7 @@ class BacktestConfigPanel(QWidget):
             preset_row = QHBoxLayout()
             self.preset_combo = QComboBox()
             self.preset_combo.setEditable(False)
+            self._stabilize_combo_width(self.preset_combo)
             preset_row.addWidget(self.preset_combo)
 
             preset_btn_row = QHBoxLayout()
@@ -131,6 +144,7 @@ class BacktestConfigPanel(QWidget):
         self.stock_mode_combo = QComboBox()
         self.stock_mode_combo.addItems(["單一股票", "選股清單"])
         self.stock_mode_combo.currentTextChanged.connect(self._on_stock_mode_changed)
+        self._stabilize_combo_width(self.stock_mode_combo)
         stock_mode_row.addWidget(QLabel("模式:"))
         stock_mode_row.addWidget(self.stock_mode_combo)
         stock_selection_layout.addRow(stock_mode_row)
@@ -146,6 +160,7 @@ class BacktestConfigPanel(QWidget):
         watchlist_row = QHBoxLayout()
         self.watchlist_combo = QComboBox()
         self.watchlist_combo.setEditable(False)
+        self._stabilize_combo_width(self.watchlist_combo)
         watchlist_row.addWidget(QLabel("清單:"))
         watchlist_row.addWidget(self.watchlist_combo)
         watchlist_btn = QPushButton("管理")
@@ -218,6 +233,7 @@ class BacktestConfigPanel(QWidget):
         self.execution_price_combo = QComboBox()
         self.execution_price_combo.addItems(["下一根K開盤價 (next_open)", "當根K收盤價 (close)"])
         self.execution_price_combo.setCurrentIndex(0)
+        self._stabilize_combo_width(self.execution_price_combo)
         if 'execution_price' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['execution_price']['tooltip_lines'])
             self.execution_price_combo.setToolTip(tooltip_text)
@@ -228,6 +244,7 @@ class BacktestConfigPanel(QWidget):
         self.stop_profit_mode_combo.addItems(["百分比模式", "ATR 倍數模式"])
         self.stop_profit_mode_combo.setCurrentIndex(0)
         self.stop_profit_mode_combo.currentTextChanged.connect(self._on_stop_profit_mode_changed)
+        self._stabilize_combo_width(self.stop_profit_mode_combo)
         if 'stop_profit_mode' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['stop_profit_mode']['tooltip_lines'])
             self.stop_profit_mode_combo.setToolTip(tooltip_text)
@@ -293,6 +310,7 @@ class BacktestConfigPanel(QWidget):
         self.sizing_mode_combo = QComboBox()
         self.sizing_mode_combo.addItems(["全倉", "固定金額", "風險百分比"])
         self.sizing_mode_combo.currentTextChanged.connect(self._on_sizing_mode_changed)
+        self._stabilize_combo_width(self.sizing_mode_combo)
         if 'sizing_mode' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['sizing_mode']['tooltip_lines'])
             self.sizing_mode_combo.setToolTip(tooltip_text)
@@ -339,6 +357,7 @@ class BacktestConfigPanel(QWidget):
         self.position_sizing_combo = QComboBox()
         self.position_sizing_combo.addItems(["等權重", "分數加權", "波動調整"])
         self.position_sizing_combo.setCurrentIndex(0)
+        self._stabilize_combo_width(self.position_sizing_combo)
         if 'position_sizing' in self.parameter_descriptions:
             tooltip_text = '\n'.join(self.parameter_descriptions['position_sizing']['tooltip_lines'])
             self.position_sizing_combo.setToolTip(tooltip_text)
@@ -408,6 +427,7 @@ class BacktestConfigPanel(QWidget):
 
         strategy_layout.addWidget(QLabel("策略:"))
         self.strategy_combo = QComboBox()
+        self._stabilize_combo_width(self.strategy_combo)
         strategy_layout.addWidget(self.strategy_combo)
 
         self.params_widget = QWidget()
@@ -440,6 +460,7 @@ class BacktestConfigPanel(QWidget):
             objective_row.addWidget(QLabel("目標指標:"))
             self.objective_combo = QComboBox()
             self.objective_combo.addItems(["夏普比率", "年化報酬率", "CAGR-MDD權衡"])
+            self._stabilize_combo_width(self.objective_combo)
             if 'optimization_objective' in self.parameter_descriptions:
                 tooltip_text = '\n'.join(self.parameter_descriptions['optimization_objective']['tooltip_lines'])
                 self.objective_combo.setToolTip(tooltip_text)
@@ -505,6 +526,7 @@ class BacktestConfigPanel(QWidget):
             wf_mode_row.addWidget(QLabel("模式:"))
             self.wf_mode_combo = QComboBox()
             self.wf_mode_combo.addItems(["Train-Test Split", "Walk-forward"])
+            self._stabilize_combo_width(self.wf_mode_combo)
             if 'walkforward_mode' in self.parameter_descriptions:
                 tooltip_text = '\n'.join(self.parameter_descriptions['walkforward_mode']['tooltip_lines'])
                 self.wf_mode_combo.setToolTip(tooltip_text)
@@ -603,6 +625,7 @@ class BacktestConfigPanel(QWidget):
 
         self.recommendation_portfolio_rebalance = QComboBox()
         self.recommendation_portfolio_rebalance.addItems(["每週重播", "只跑一次"])
+        self._stabilize_combo_width(self.recommendation_portfolio_rebalance)
         self.recommendation_portfolio_rebalance.setToolTip(
             "每週重播：在回測期間依週期重新執行推薦並調整持股。\n"
             "只跑一次：只在起始日建立一次推薦組合，後續不再重播推薦。"
@@ -611,6 +634,7 @@ class BacktestConfigPanel(QWidget):
 
         self.recommendation_portfolio_allocation = QComboBox()
         self.recommendation_portfolio_allocation.addItems(["等權配置", "分數加權"])
+        self._stabilize_combo_width(self.recommendation_portfolio_allocation)
         self.recommendation_portfolio_allocation.setToolTip(
             "等權配置：入選股票平均分配資金。\n"
             "分數加權：依推薦分數提高高分股票權重，會讓資金更集中。"
@@ -645,7 +669,7 @@ class BacktestConfigPanel(QWidget):
             portfolio_history_row = QHBoxLayout()
             portfolio_history_row.addWidget(QLabel("歷史記錄:"))
             self.portfolio_history_combo = QComboBox()
-            self.portfolio_history_combo.setMinimumWidth(240)
+            self._stabilize_combo_width(self.portfolio_history_combo)
             self.portfolio_history_combo.currentIndexChanged.connect(lambda idx: self.parent_view._on_portfolio_history_changed(idx))
             portfolio_history_row.addWidget(self.portfolio_history_combo)
             recommendation_portfolio_layout.addLayout(portfolio_history_row)

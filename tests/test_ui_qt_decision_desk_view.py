@@ -275,9 +275,9 @@ def test_decision_desk_view_aggregates_warning_lines_and_refresh_button():
     combined_text = view.overall_warn_label.toPlainText()
     assert "global_warning" in combined_text
     assert "Watchlist" in combined_text
-    assert "watchlist_stale" in combined_text
+    assert "資料可能不是最新" in combined_text
     assert "產業輪動" in combined_text
-    assert "sector_missing" in combined_text
+    assert "資料缺漏" in combined_text
 
 
 def test_decision_desk_view_humanizes_warning_tokens():
@@ -296,7 +296,7 @@ def test_decision_desk_view_humanizes_warning_tokens():
     assert "跳過 1162 檔股票" in combined_text
     assert "Watchlist 提示" in combined_text
     assert "2884 資料不足" in combined_text
-    assert "relative_strength_liquidity_skipped_symbols:1162" in combined_text
+    assert "relative_strength_liquidity_skipped_symbols:1162" not in combined_text
 
 
 class FailingBuilder:
@@ -310,6 +310,32 @@ def test_decision_desk_view_fallback_to_degraded_if_builder_exception():
 
     assert "降級" in view.overall_status_label.text()
     assert "snapshot_error" in view.overall_warn_label.toPlainText()
+
+
+def test_decision_desk_view_localizes_machine_warning_tokens():
+    app()
+    s = _snapshot(
+        overall_quality=DecisionDeskQuality.DEGRADED,
+        overall_warnings=(
+            "relative_strength_liquidity:relative_strength_liquidity_skipped_symbols:24",
+            "portfolio_alerts:portfolio_alert_top_source:manual:3",
+            "portfolio_alerts:portfolio_alerts_chip_estimated:2330",
+            "portfolio_alerts:portfolio_alerts_chip_estimated:2382",
+            "risk_prompts:risk_prompt_source_quality:relative_strength_liquidity:degraded",
+            "risk_prompts:risk_prompt_source_quality:portfolio_alerts:estimated",
+        ),
+    )
+    view = rendered_view(FakeBuilder(s))
+
+    combined_text = view.overall_warn_label.toPlainText()
+    assert "跳過 24 檔股票" in combined_text
+    assert "持倉警示主要來源為「手動來源」，共 3 筆" in combined_text
+    assert "2330 籌碼張數使用估算資料" in combined_text
+    assert "風險提示來源「強弱與流動性」目前為降級資料" in combined_text
+    assert "風險提示來源「持倉警示」目前為估算資料" in combined_text
+    assert "relative_strength_liquidity_skipped_symbols" not in combined_text
+    assert "portfolio_alert_top_source" not in combined_text
+    assert "risk_prompt_source_quality" not in combined_text
 
 
 def test_decision_desk_view_renders_risk_prompts():
@@ -367,9 +393,9 @@ def test_decision_desk_view_renders_portfolio_alert_attributions():
 
     view = rendered_view(FakeBuilder(snapshot))
 
-    assert "recommendation_result:rec_001" in view.portfolio_alerts_value.text()
-    assert "condition=warning" in view.portfolio_alerts_value.text()
-    assert "chip=bearish" in view.portfolio_alerts_value.text()
+    assert "推薦結果 rec_001" in view.portfolio_alerts_value.text()
+    assert "條件：警示" in view.portfolio_alerts_value.text()
+    assert "籌碼：偏空" in view.portfolio_alerts_value.text()
 
 
 def test_decision_desk_view_compacts_long_relative_strength_lists():

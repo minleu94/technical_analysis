@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
+import sqlite3
 import logging
 import warnings
 
@@ -35,6 +36,350 @@ class StockScreener:
         self.volume_lookback = volume_lookback
         self.min_price = min_price
         self.min_liquidity = min_liquidity
+
+    def _sqlite_readonly_connection(self):
+        db_file = Path(getattr(self.config, 'db_file', ''))
+        if not db_file.exists():
+            return None
+
+        conn = sqlite3.connect(f"{db_file.resolve().as_uri()}?mode=ro", uri=True)
+        conn.execute("PRAGMA query_only=ON")
+        return conn
+
+    def _sqlite_recent_date_values(self, conn, table_name, date_column, limit):
+        sql = f"""
+            SELECT DISTINCT {date_column} AS date_value
+            FROM {table_name}
+            WHERE {date_column} IS NOT NULL
+            ORDER BY {date_column} DESC
+            LIMIT ?
+        """
+        rows = conn.execute(sql, (limit,)).fetchall()
+        return [row[0] for row in rows if row and row[0]]
+
+    def _load_sqlite_recent_stock_prices(self, period):
+        if not getattr(self.config, 'use_sqlite', False):
+            return None
+
+        lookback_limit = max(self.volume_lookback + 8, 32 if period == 'day' else 48)
+        try:
+            conn = self._sqlite_readonly_connection()
+            if conn is None:
+                return None
+
+            with conn:
+                date_values = self._sqlite_recent_date_values(
+                    conn, "daily_prices", "日期", lookback_limit
+                )
+                if not date_values:
+                    return None
+
+                placeholders = ",".join("?" for _ in date_values)
+                sql = f"""
+                    SELECT
+                        日期,
+                        證券代號,
+                        證券名稱,
+                        收盤價,
+                        開盤價,
+                        最高價,
+                        最低價,
+                        成交股數,
+                        成交金額
+                    FROM daily_prices
+                    WHERE 日期 IN ({placeholders})
+                    ORDER BY 日期 ASC, 證券代號 ASC
+                """
+                return pd.read_sql_query(sql, conn, params=date_values)
+        except Exception as sql_err:
+            logger.warning(f"SQLite 快速載入強弱勢個股資料失敗: {sql_err}，將降級為既有路徑")
+            return None
+
+    def _load_sqlite_recent_industry_indices(self, period):
+        if not getattr(self.config, 'use_sqlite', False):
+            return None
+
+        lookback_limit = 45 if period == 'day' else 90
+        try:
+            conn = self._sqlite_readonly_connection()
+            if conn is None:
+                return None
+
+            with conn:
+                date_values = self._sqlite_recent_date_values(
+                    conn, "industry_indices", "日期", lookback_limit
+                )
+                if not date_values:
+                    return None
+
+                placeholders = ",".join("?" for _ in date_values)
+                sql = f"""
+                    SELECT 日期, 指數名稱, 收盤指數
+                    FROM industry_indices
+                    WHERE 日期 IN ({placeholders})
+                    ORDER BY 日期 ASC, 指數名稱 ASC
+                """
+                return pd.read_sql_query(sql, conn, params=date_values)
+        except Exception as sql_err:
+            logger.warning(f"SQLite 快速載入強弱勢產業資料失敗: {sql_err}，將降級為 CSV")
+            return None
+
+    def _try_get_sqlite_stock_screen(self, period, top_n, min_volume, direction):
+        df = self._load_sqlite_recent_stock_prices(period)
+        if df is None:
+            return None
+
+        result = self._build_stock_screen_from_frame(df, period, top_n, min_volume, direction)
+        logger.info(
+            "[StockScreener] SQLite 快速路徑完成: direction=%s, period=%s, rows=%s",
+            direction,
+            period,
+            len(df),
+        )
+        return result
+
+    def _build_stock_screen_from_frame(self, df, period, top_n, min_volume, direction):
+        if len(df) == 0 or '日期' not in df.columns or '證券代號' not in df.columns:
+            return pd.DataFrame(), 0
+
+        df = df.copy()
+        df['日期'] = pd.to_datetime(
+            df['日期'].astype(str).str.replace("-", "", regex=False).str.replace("/", "", regex=False),
+            format='%Y%m%d',
+            errors='coerce',
+        )
+        df = df[df['日期'].notna()]
+        if len(df) == 0:
+            return pd.DataFrame(), 0
+
+        df['證券代號'] = df['證券代號'].astype(str).str.strip()
+        numeric_cols = ['收盤價', '開盤價', '最高價', '最低價', '成交股數', '成交金額']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        all_stocks_data = []
+        processed_count = 0
+        skipped_count = 0
+
+        for stock_code, stock_df in df.groupby('證券代號'):
+            try:
+                if not (len(stock_code) == 4 and stock_code.isdigit()):
+                    continue
+
+                stock_df = stock_df.sort_values('日期')
+                if period == 'day':
+                    if len(stock_df) < 2:
+                        skipped_count += 1
+                        continue
+                    compare_row = stock_df.iloc[-2]
+                else:
+                    if len(stock_df) >= 6:
+                        compare_row = stock_df.iloc[-6]
+                    elif len(stock_df) >= 3:
+                        compare_row = stock_df.iloc[-3]
+                    else:
+                        skipped_count += 1
+                        continue
+
+                latest_row = stock_df.iloc[-1]
+                latest_price = latest_row.get('收盤價')
+                compare_price = compare_row.get('收盤價')
+                if pd.isna(latest_price) or pd.isna(compare_price) or compare_price == 0:
+                    skipped_count += 1
+                    continue
+
+                if latest_price < self.min_price:
+                    skipped_count += 1
+                    continue
+
+                volume = latest_row.get('成交股數', 0)
+                if min_volume and volume < min_volume:
+                    continue
+
+                if self.min_liquidity is not None:
+                    turnover = latest_row.get('成交金額', 0)
+                    if pd.isna(turnover) or turnover < self.min_liquidity:
+                        skipped_count += 1
+                        continue
+
+                price_change = (latest_price - compare_price) / compare_price * 100
+                volume_change = 0
+                volume_ratio = 1.0
+                if '成交股數' in stock_df.columns:
+                    latest_volume = latest_row.get('成交股數', 0)
+                    if len(stock_df) >= 21:
+                        volume_ma = stock_df['成交股數'].iloc[-21:-1].mean()
+                    elif len(stock_df) >= 6:
+                        volume_ma = stock_df['成交股數'].iloc[-6:-1].mean()
+                    elif len(stock_df) >= 2:
+                        volume_ma = stock_df['成交股數'].iloc[:-1].mean()
+                    else:
+                        volume_ma = 0
+
+                    if volume_ma > 0:
+                        volume_ratio = latest_volume / volume_ma
+                        with np.errstate(divide='ignore', invalid='ignore'):
+                            volume_change = np.log1p(max(0, volume_ratio - 1)) * 100
+
+                vol_factor = np.log1p(max(0, volume_ratio - 1))
+                score = price_change * 0.6 + vol_factor * 100 * 0.4
+                stock_name = latest_row.get('證券名稱', stock_code)
+                if pd.isna(stock_name):
+                    stock_name = stock_code
+
+                if direction == "strong":
+                    reasons = self._generate_strong_stock_reasons(
+                        stock_df, latest_row, price_change, volume_ratio, period, stock_code
+                    )
+                else:
+                    reasons = self._generate_weak_stock_reasons(
+                        stock_df, latest_row, price_change, volume_ratio, period, stock_code
+                    )
+
+                all_stocks_data.append({
+                    '證券代號': stock_code,
+                    '證券名稱': stock_name,
+                    '收盤價': latest_price,
+                    '漲幅%': price_change,
+                    '成交量變化率%': volume_change,
+                    '評分': score,
+                    '推薦理由': reasons
+                })
+                processed_count += 1
+            except Exception as err:
+                skipped_count += 1
+                logger.debug(f"[StockScreener] SQLite 快速路徑跳過 {stock_code}: {err}")
+
+        logger.info(
+            "[StockScreener] SQLite 快速路徑處理完成: 成功=%s, 跳過=%s",
+            processed_count,
+            skipped_count,
+        )
+        return self._format_stock_screen_result(all_stocks_data, top_n, direction)
+
+    def _format_stock_screen_result(self, all_stocks_data, top_n, direction):
+        if len(all_stocks_data) == 0:
+            return pd.DataFrame(), 0
+
+        result_df = pd.DataFrame(all_stocks_data)
+        if len(result_df) > 1:
+            price_mean = result_df['漲幅%'].mean()
+            price_std = result_df['漲幅%'].std()
+            vol_mean = result_df['成交量變化率%'].mean()
+            vol_std = result_df['成交量變化率%'].std()
+
+            price_z = (
+                (result_df['漲幅%'] - price_mean) / price_std
+                if price_std > 0
+                else pd.Series(0, index=result_df.index)
+            )
+            vol_z = (
+                (result_df['成交量變化率%'] - vol_mean) / vol_std
+                if vol_std > 0
+                else pd.Series(0, index=result_df.index)
+            )
+            result_df['評分'] = price_z * 0.6 + vol_z * 0.4
+
+        total_stocks = len(result_df)
+        if total_stocks > 1:
+            score_values = result_df['評分'].copy()
+            ascending = direction == "weak"
+            sorted_scores = score_values.sort_values(ascending=ascending).values
+            percentile_labels = []
+            for score in score_values:
+                if direction == "weak":
+                    percentile = (sorted_scores <= score).sum() / total_stocks * 100
+                    prefix = "Bottom"
+                else:
+                    better_or_equal = (sorted_scores >= score).sum()
+                    percentile = (total_stocks - better_or_equal + 1) / total_stocks * 100
+                    prefix = "Top"
+
+                if percentile <= 1.0:
+                    percentile_labels.append(f"{prefix} 1%")
+                elif percentile <= 3.0:
+                    percentile_labels.append(f"{prefix} 3%")
+                elif percentile <= 5.0:
+                    percentile_labels.append(f"{prefix} 5%")
+                elif percentile <= 10.0:
+                    percentile_labels.append(f"{prefix} 10%")
+                elif percentile <= 20.0:
+                    percentile_labels.append(f"{prefix} 20%")
+                elif percentile <= 50.0:
+                    percentile_labels.append(f"{prefix} 50%")
+                else:
+                    percentile_labels.append(f"{prefix} {int(percentile)}%")
+            result_df['評分'] = percentile_labels
+            result_df = result_df.iloc[score_values.sort_values(ascending=ascending).index].copy()
+        else:
+            result_df['評分'] = "Bottom 1%" if direction == "weak" else "Top 1%"
+
+        result_df = result_df.head(top_n).copy()
+        result_df['排名'] = range(1, len(result_df) + 1)
+        return (
+            result_df[['排名', '證券代號', '證券名稱', '收盤價', '漲幅%', '成交量變化率%', '評分', '推薦理由']],
+            total_stocks,
+        )
+
+    def _try_get_sqlite_industry_screen(self, period, top_n, direction):
+        df = self._load_sqlite_recent_industry_indices(period)
+        if df is None:
+            return None
+
+        result = self._build_industry_screen_from_frame(df, top_n, direction)
+        logger.info(
+            "[StockScreener] SQLite 快速路徑完成: industry_direction=%s, period=%s, rows=%s",
+            direction,
+            period,
+            len(df),
+        )
+        return result
+
+    def _build_industry_screen_from_frame(self, df, top_n, direction):
+        if len(df) == 0 or '日期' not in df.columns:
+            return pd.DataFrame()
+
+        df = df.copy()
+        df['日期'] = pd.to_datetime(
+            df['日期'].astype(str).str.replace("-", "", regex=False).str.replace("/", "", regex=False),
+            format='%Y%m%d',
+            errors='coerce',
+        )
+        df['收盤指數'] = pd.to_numeric(df.get('收盤指數'), errors='coerce')
+        df = df[df['日期'].notna()]
+        if len(df) == 0:
+            return pd.DataFrame()
+
+        latest_date = df['日期'].max()
+        oldest_date = df['日期'].min()
+        latest_df = df[df['日期'] == latest_date].copy()
+        oldest_df = df[df['日期'] == oldest_date].copy()
+        merged = latest_df.merge(
+            oldest_df[['指數名稱', '收盤指數']],
+            on='指數名稱',
+            suffixes=('_latest', '_oldest'),
+            how='left'
+        )
+        merged['漲幅%'] = (
+            (merged['收盤指數_latest'] - merged['收盤指數_oldest']) /
+            merged['收盤指數_oldest'] * 100
+        )
+        merged = merged.dropna(subset=['收盤指數_oldest', '收盤指數_latest'])
+        merged = merged[merged['收盤指數_oldest'] != 0]
+
+        if direction == "weak":
+            result = merged.nsmallest(top_n, '漲幅%')[
+                ['指數名稱', '收盤指數_latest', '漲幅%']
+            ].copy()
+        else:
+            result = merged.nlargest(top_n, '漲幅%')[
+                ['指數名稱', '收盤指數_latest', '漲幅%']
+            ].copy()
+
+        result.columns = ['指數名稱', '收盤指數', '漲幅%']
+        result['排名'] = range(1, len(result) + 1)
+        return result[['排名', '指數名稱', '收盤指數', '漲幅%']]
     
     def get_strong_stocks(self, period='day', top_n=20, min_volume=None):
         """獲取強勢股
@@ -51,6 +396,10 @@ class StockScreener:
                 - DataFrame: 強勢股列表，包含評分和排名
                 - universe_count: Universe 股票數量（有效數據的股票數）
         """
+        sqlite_result = self._try_get_sqlite_stock_screen(period, top_n, min_volume, "strong")
+        if sqlite_result is not None:
+            return sqlite_result
+
         today = datetime.now()
         if period == 'day':
             days_back = 30
@@ -456,6 +805,10 @@ class StockScreener:
                 - DataFrame: 弱勢股列表，包含評分和排名
                 - universe_count: Universe 股票數量（有效數據的股票數）
         """
+        sqlite_result = self._try_get_sqlite_stock_screen(period, top_n, min_volume, "weak")
+        if sqlite_result is not None:
+            return sqlite_result
+
         today = datetime.now()
         if period == 'day':
             days_back = 30
@@ -1150,6 +1503,10 @@ class StockScreener:
         Returns:
             DataFrame: 強勢產業列表
         """
+        sqlite_result = self._try_get_sqlite_industry_screen(period, top_n, "strong")
+        if sqlite_result is not None:
+            return sqlite_result
+
         df = None
         if getattr(self.config, 'use_sqlite', False):
             try:
@@ -1305,6 +1662,10 @@ class StockScreener:
         Returns:
             DataFrame: 弱勢產業列表
         """
+        sqlite_result = self._try_get_sqlite_industry_screen(period, top_n, "weak")
+        if sqlite_result is not None:
+            return sqlite_result
+
         df = None
         if getattr(self.config, 'use_sqlite', False):
             try:

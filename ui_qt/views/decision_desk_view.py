@@ -501,9 +501,11 @@ class DecisionDeskView(QWidget):
             return "無"
         parts = []
         for item in attributions[:3]:
+            source = DecisionDeskView._display_source_label(item.source_label)
+            condition = DecisionDeskView._display_condition_label(item.condition_status)
+            chip = DecisionDeskView._display_chip_label(item.chip_risk_level)
             parts.append(
-                f"{item.stock_code} {item.source_label} "
-                f"condition={item.condition_status} chip={item.chip_risk_level}"
+                f"{item.stock_code} 來源：{source}；條件：{condition}；籌碼：{chip}"
             )
         return "；".join(parts)
 
@@ -541,8 +543,8 @@ class DecisionDeskView(QWidget):
         if quality == DecisionDeskQuality.ESTIMATED:
             return "估算"
         if quality == DecisionDeskQuality.MISSING:
-            return "缺漏 (missing)"
-        return "降級 (degraded)"
+            return "缺漏"
+        return "降級"
 
     @staticmethod
     def _quality_token(quality: DecisionDeskQuality) -> str:
@@ -573,6 +575,21 @@ class DecisionDeskView(QWidget):
 
         section = ""
         raw_code = token
+        english_sections = {
+            "market_regime": "市場情勢",
+            "market_breadth": "市場廣度",
+            "sector_rotation": "產業輪動",
+            "relative_strength_liquidity": "強弱與流動性",
+            "watchlist_triggers": "Watchlist",
+            "portfolio_alerts": "持倉警示",
+            "risk_prompts": "Why Not / 風險提示",
+        }
+        for raw_section, display_section in english_sections.items():
+            prefix = f"{raw_section}:"
+            if token.startswith(prefix):
+                section = display_section
+                raw_code = token[len(prefix):]
+                break
         known_sections = (
             "市場情勢",
             "市場廣度",
@@ -582,25 +599,33 @@ class DecisionDeskView(QWidget):
             "持倉警示",
             "Why Not / 風險提示",
         )
-        for section_name in known_sections:
-            prefix = f"{section_name}:"
-            if token.startswith(prefix):
-                section = section_name
-                raw_code = token[len(prefix):]
-                break
+        if not section:
+            for section_name in known_sections:
+                prefix = f"{section_name}:"
+                if token.startswith(prefix):
+                    section = section_name
+                    raw_code = token[len(prefix):]
+                    break
 
         def with_section(message: str) -> str:
             if section and not message.startswith(section):
-                return f"{section}：{message}（{raw_code}）"
-            return f"{message}（{raw_code}）"
+                return f"{section}：{message}"
+            return message
 
         parts = raw_code.split(":")
         code = parts[0]
         value = parts[1] if len(parts) > 1 else ""
         extra = parts[2:] if len(parts) > 2 else []
+        source_label = DecisionDeskView._display_source_label(value)
 
         if code == "relative_strength_liquidity_skipped_symbols" and value:
             return with_section(f"強弱與流動性：因流動性或資料條件不足跳過 {value} 檔股票")
+        if code == "relative_strength_liquidity_missing":
+            return with_section("強弱與流動性資料缺漏")
+        if code == "relative_strength_liquidity_insufficient_history":
+            return with_section("強弱與流動性歷史資料不足，無法完成排序")
+        if code == "relative_strength_liquidity_missing_required_columns":
+            return with_section("強弱與流動性缺少必要欄位")
         if code == "watchlist_trigger_data_insufficient" and value:
             return with_section(f"Watchlist 提示：{value} 資料不足，暫無法判斷觸發狀態")
         if code == "watchlist_stale":
@@ -611,19 +636,97 @@ class DecisionDeskView(QWidget):
             reason = value or "未知原因"
             return with_section(f"市場廣度資料取得失敗：{reason}")
         if code == "risk_prompt_source_quality" and len(parts) >= 3:
-            source = value
-            quality = extra[0]
-            return with_section(f"風險提示來源 {source} 品質為 {quality}")
+            quality = DecisionDeskView._display_quality_value(extra[0])
+            return with_section(f"風險提示來源「{source_label}」目前為{quality}資料")
         if code == "watchlist_trigger_risk_alert" and value:
             return with_section(f"Watchlist 觸發風險提示：{value}")
+        if code == "portfolio_alert_top_source" and len(parts) >= 3:
+            count = extra[0]
+            return with_section(f"持倉警示主要來源為「{source_label}」，共 {count} 筆")
+        if code == "portfolio_alerts_chip_estimated" and value:
+            return with_section(f"{value} 籌碼張數使用估算資料")
+        if code == "portfolio_alerts_chip_unavailable_events" and len(parts) >= 3:
+            count = extra[0]
+            return with_section(f"{value} 有 {count} 筆籌碼事件缺少可用張數")
+        if code == "portfolio_alerts_chip_data_missing" and value:
+            return with_section(f"{value} 籌碼資料缺漏")
+        if code == "portfolio_alerts_chip_summary_invalid" and value:
+            return with_section(f"{value} 籌碼摘要無法判讀")
+        if code == "portfolio_alerts_no_active_position":
+            return with_section("目前沒有可檢查的啟用持倉")
+        if code == "portfolio_alerts_condition_monitor_error" and len(parts) >= 3:
+            return with_section(f"{value} 持倉條件檢查失敗：{':'.join(extra)}")
+        if code == "portfolio_alerts_portfolio_service_error" and value:
+            return with_section(f"持倉資料服務發生錯誤：{value}")
         if code.endswith("_missing"):
-            return with_section(f"{code[:-8]} 資料缺漏")
+            name = DecisionDeskView._display_source_label(code[:-8])
+            return with_section(f"{name}資料缺漏")
         if code.endswith("_provider_error"):
-            return with_section(f"{code[:-15]} 資料提供者發生錯誤")
+            name = DecisionDeskView._display_source_label(code[:-15])
+            return with_section(f"{name}資料提供者發生錯誤")
         if code.endswith("_as_of_fallback"):
-            return with_section(f"{code[:-15]} 使用備援決策日")
+            name = DecisionDeskView._display_source_label(code[:-15])
+            return with_section(f"{name}使用備援決策日")
 
         return token
+
+    @staticmethod
+    def _display_source_label(source: object) -> str:
+        text = str(source or "")
+        labels = {
+            "relative_strength_liquidity": "強弱與流動性",
+            "relative_strength_liquidity_service": "強弱與流動性",
+            "portfolio_alerts": "持倉警示",
+            "portfolio_alert": "持倉警示",
+            "watchlist_triggers": "觀察清單觸發",
+            "watchlist": "觀察清單",
+            "market_breadth": "市場廣度",
+            "sector_rotation": "產業輪動",
+            "market_regime": "市場情勢",
+            "risk_prompts": "風險提示",
+            "manual": "手動來源",
+            "recommendation_result": "推薦結果",
+            "fundamental": "基本面診斷",
+        }
+        if text.startswith("recommendation_result:"):
+            return "推薦結果 " + text.split(":", 1)[1]
+        return labels.get(text, text)
+
+    @staticmethod
+    def _display_quality_value(value: object) -> str:
+        text = str(value or "").lower()
+        labels = {
+            "observed": "觀察到",
+            "estimated": "估算",
+            "degraded": "降級",
+            "missing": "缺漏",
+            "unavailable": "不可用",
+        }
+        return labels.get(text, str(value or "未知"))
+
+    @staticmethod
+    def _display_condition_label(value: object) -> str:
+        text = str(value or "").lower()
+        labels = {
+            "valid": "正常",
+            "warning": "警示",
+            "invalid": "失效",
+            "unknown": "未知",
+        }
+        return labels.get(text, str(value or "未知"))
+
+    @staticmethod
+    def _display_chip_label(value: object) -> str:
+        text = str(value or "").lower()
+        labels = {
+            "bullish": "偏多",
+            "bearish": "偏空",
+            "neutral": "中性",
+            "risk": "風險",
+            "extreme": "極端風險",
+            "unknown": "未知",
+        }
+        return labels.get(text, str(value or "未知"))
 
 
 class _EmptySection:

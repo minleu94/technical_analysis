@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 # 設定為 offscreen 以免開啟實際 GUI 視窗
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 import pytest
 
 from ui_qt.views.backtest_view import BacktestView, RESEARCH_LAB_MODES
@@ -99,3 +99,36 @@ def test_research_lab_mode_driven_ui_visibility(qt_app):
     view.optimization_group.setChecked.assert_called_with(True)
     view.wf_group.setVisible.assert_called_with(True)
     view.wf_group.setChecked.assert_called_with(True)
+
+
+def test_research_lab_config_panel_default_width_prevents_horizontal_squeeze(qt_app):
+    """策略回測左側控制面板預設寬度應足以容納長下拉欄位。"""
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+
+    assert view.config_panel.minimumWidth() >= 520
+    assert view.execution_price_combo.minimumWidth() >= 320
+
+
+def test_research_lab_optimization_param_labels_are_compact(qt_app):
+    """參數最佳化列的 label 不應把控制項往右推太遠。"""
+    view = BacktestView(backtest_service=MagicMock(), config=None)
+    view.optimization_group.setChecked(True)
+    view._update_optimization_params_form()
+
+    compact_labels = {
+        "門檻模式:",
+        "買入分數門檻:",
+        "賣出分數門檻:",
+        "買入確認天數:",
+        "賣出確認天數:",
+        "交易冷卻天數:",
+    }
+    labels = [
+        label
+        for label in view.optimization_params_widget.findChildren(QLabel)
+        if label.text() in compact_labels
+    ]
+
+    assert labels
+    assert all(label.minimumWidth() == 104 for label in labels)
+    assert all(label.maximumWidth() == 104 for label in labels)

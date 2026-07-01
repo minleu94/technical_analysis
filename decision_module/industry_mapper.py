@@ -6,7 +6,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 class IndustryMapper:
     """產業映射器"""
@@ -22,11 +22,14 @@ class IndustryMapper:
         self.industry_index_df = None
         self.stock_to_industries = {}  # 股票代號 -> 產業類別列表
         self.industry_normalization = {}  # 產業類別標準化映射
+        self._latest_industry_performance_by_index_name = {}
+        self._industry_performance_cache = {}
         
         # 載入數據
         self._load_companies()
         self._load_industry_index()
         self._build_mappings()
+        self._build_latest_industry_performance_cache()
     
     def _load_companies(self):
         """載入 companies.csv"""
@@ -126,6 +129,37 @@ class IndustryMapper:
                     # 去除後綴
                     normalized = str(index_name).replace('類指數', '').replace('類報酬指數', '').replace('類', '')
                     self.industry_normalization[normalized] = index_name
+
+    def _build_latest_industry_performance_cache(self):
+        """預先快取每個產業指數最新表現，避免個股篩選時逐檔掃 DataFrame。"""
+        self._latest_industry_performance_by_index_name = {}
+        self._industry_performance_cache = {}
+
+        if self.industry_index_df is None or '指數名稱' not in self.industry_index_df.columns:
+            return
+
+        df = self.industry_index_df.dropna(subset=['指數名稱']).copy()
+        if len(df) == 0:
+            return
+
+        if '日期' in df.columns:
+            df = df.sort_values('日期')
+
+        latest_rows = df.groupby('指數名稱', sort=False).tail(1)
+        for _, latest in latest_rows.iterrows():
+            index_name = str(latest['指數名稱'])
+            self._latest_industry_performance_by_index_name[index_name] = self._row_to_performance(latest)
+
+    @staticmethod
+    def _row_to_performance(row) -> Dict:
+        return {
+            '指數名稱': row['指數名稱'],
+            '收盤指數': row.get('收盤指數', 0),
+            '漲跌': row.get('漲跌', ''),
+            '漲跌點數': row.get('漲跌點數', 0),
+            '漲跌百分比': row.get('漲跌百分比', 0),
+            '日期': row.get('日期')
+        }
     
     def get_stock_industries(self, stock_id: str) -> List[str]:
         """獲取股票所屬的產業類別列表
@@ -190,11 +224,22 @@ class IndustryMapper:
         """
         if self.industry_index_df is None:
             return None
+
+        cache_key: Tuple[str, Optional[str]] = (str(industry_category), date)
+        if cache_key in self._industry_performance_cache:
+            cached = self._industry_performance_cache[cache_key]
+            return dict(cached) if cached is not None else None
         
         # 獲取對應的指數名稱
         index_name = self.get_industry_index_name(industry_category)
         if index_name is None:
+            self._industry_performance_cache[cache_key] = None
             return None
+
+        if date is None and index_name in self._latest_industry_performance_by_index_name:
+            performance = dict(self._latest_industry_performance_by_index_name[index_name])
+            self._industry_performance_cache[cache_key] = performance
+            return dict(performance)
         
         # 篩選數據
         df = self.industry_index_df[
@@ -202,6 +247,7 @@ class IndustryMapper:
         ].copy()
         
         if len(df) == 0:
+            self._industry_performance_cache[cache_key] = None
             return None
         
         # 如果指定日期，篩選該日期；否則使用最新日期
@@ -210,19 +256,14 @@ class IndustryMapper:
             df = df[df['日期'] <= target_date]
         
         if len(df) == 0:
+            self._industry_performance_cache[cache_key] = None
             return None
         
         # 獲取最新一筆
         latest = df.iloc[-1]
-        
-        return {
-            '指數名稱': latest['指數名稱'],
-            '收盤指數': latest.get('收盤指數', 0),
-            '漲跌': latest.get('漲跌', ''),
-            '漲跌點數': latest.get('漲跌點數', 0),
-            '漲跌百分比': latest.get('漲跌百分比', 0),
-            '日期': latest['日期']
-        }
+        performance = self._row_to_performance(latest)
+        self._industry_performance_cache[cache_key] = performance
+        return dict(performance)
     
     def get_all_industries(self) -> List[str]:
         """獲取所有產業類別列表

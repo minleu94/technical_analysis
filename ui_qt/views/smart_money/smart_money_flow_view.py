@@ -19,7 +19,11 @@ from ui_qt.widgets.info_button import InfoButton
 from app_module.broker_flow_service import BrokerFlowService
 from app_module.watchlist_service import WatchlistService
 from ui_qt.views.smart_money.summary_strip import SummaryStrip
-from ui_qt.views.smart_money.terminal_table_model import TerminalTableModel, BranchTrackerTableModel
+from ui_qt.views.smart_money.terminal_table_model import (
+    ROLE_BADGES,
+    TerminalTableModel,
+    BranchTrackerTableModel,
+)
 from ui_qt.views.smart_money.terminal_delegate import TerminalScannerDelegate
 from ui_qt.views.smart_money.detail_table_delegate import DetailTableDelegate
 from ui_qt.models.pandas_table_model import PandasTableModel # 給 Detail Table 用
@@ -192,7 +196,8 @@ class SmartMoneyFlowView(QWidget):
         self.scanner_table = QTableView()
         self.scanner_table.setSelectionBehavior(QTableView.SelectRows)
         self.scanner_table.setSortingEnabled(True)
-        self.scanner_table.horizontalHeader().setStretchLastSection(True)
+        self.scanner_table.setMinimumWidth(900)
+        self.scanner_table.horizontalHeader().setStretchLastSection(False)
         self.scanner_table.verticalHeader().setVisible(False)
         self.scanner_table.setShowGrid(False)
         self.scanner_table.setStyleSheet("""
@@ -228,6 +233,7 @@ class SmartMoneyFlowView(QWidget):
         # Detail: Drill-down Card Panel (高質感卡片化與左右排版)
         detail_widget = QFrame()
         detail_widget.setObjectName("DetailCardFrame")
+        detail_widget.setMinimumWidth(240)
         detail_widget.setStyleSheet("""
             QFrame#DetailCardFrame {
                 background-color: #0f172a;
@@ -277,6 +283,8 @@ class SmartMoneyFlowView(QWidget):
         self.detail_table.setSelectionBehavior(QTableView.SelectRows)
         self.detail_table.setSortingEnabled(True)
         self.detail_table.setShowGrid(False)
+        self.detail_table.horizontalHeader().setStretchLastSection(False)
+        self.detail_table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.detail_table.verticalHeader().setVisible(False)
         self.detail_table.verticalHeader().setDefaultSectionSize(38)
         self.detail_table.setStyleSheet("""
@@ -307,8 +315,12 @@ class SmartMoneyFlowView(QWidget):
         detail_layout.addWidget(self.detail_table)
         self.splitter.addWidget(detail_widget)
 
-        # 設定比例：左側主表佔 65%，右側明細佔 35%
-        self.splitter.setSizes([900, 500])
+        # 設定比例：主表依內容貼合寬度，右側明細保留較大的預設閱讀空間。
+        self.splitter.setCollapsible(0, False)
+        self.splitter.setCollapsible(1, False)
+        self.splitter.setSizes([980, 360])
+        self.splitter.setStretchFactor(0, 2)
+        self.splitter.setStretchFactor(1, 1)
         tab1_layout.addWidget(self.splitter)
         self.tab_widget.addTab(tab1, "個股資金流向 (STOCK OVERVIEW)")
 
@@ -333,7 +345,7 @@ class SmartMoneyFlowView(QWidget):
         self.branch_table = QTableView()
         self.branch_table.setSelectionBehavior(QTableView.SelectRows)
         self.branch_table.setSortingEnabled(True)
-        self.branch_table.horizontalHeader().setStretchLastSection(True)
+        self.branch_table.horizontalHeader().setStretchLastSection(False)
         self.branch_table.verticalHeader().setVisible(False)
         self.branch_table.setShowGrid(False)
         self.branch_table.setStyleSheet(self.scanner_table.styleSheet())
@@ -416,14 +428,23 @@ class SmartMoneyFlowView(QWidget):
         self.scanner_model = TerminalTableModel(filtered_signals, semantics_by_code=semantics_by_code)
         self.scanner_table.setModel(self.scanner_model)
 
-        self.scanner_table.setColumnWidth(0, 65)
-        self.scanner_table.setColumnWidth(1, 160)
-        self.scanner_table.setColumnWidth(2, 90)
-        self.scanner_table.setColumnWidth(3, 80)
-        self.scanner_table.setColumnWidth(4, 120)
-        self.scanner_table.setColumnWidth(5, 180)
-        self.scanner_table.setColumnWidth(6, 250)
-        self.scanner_table.setColumnWidth(7, 140)
+        scanner_header = self.scanner_table.horizontalHeader()
+        scanner_header.setStretchLastSection(False)
+        scanner_header.setSectionResizeMode(QHeaderView.Interactive)
+        scanner_widths = {
+            0: 64,   # 分數
+            1: 180,  # 股票
+            2: 82,   # 淨量
+            3: 68,   # 集中度
+            4: 78,   # 語意狀態
+            6: 150,  # Badges
+            7: 190,  # Trend
+        }
+        for col, width in scanner_widths.items():
+            scanner_header.setSectionResizeMode(col, QHeaderView.Interactive)
+            self.scanner_table.setColumnWidth(col, width)
+        scanner_header.setSectionResizeMode(5, QHeaderView.Interactive)
+        self._fit_scanner_diagnostic_column()
 
         sel_model = self.scanner_table.selectionModel()
         if sel_model:
@@ -432,6 +453,83 @@ class SmartMoneyFlowView(QWidget):
         self.sub_card_title.setText("未選取股票")
         self.sub_card_stats.setText("請從左側表格點選股票以查看主力分點進出明細與原因")
         self.detail_table.setModel(PandasTableModel(pd.DataFrame(columns=['分點名稱', '買進張數', '賣出張數', '淨買賣超'])))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "scanner_table") and self.scanner_table.model() is not None:
+            self._fit_scanner_diagnostic_column()
+        if hasattr(self, "detail_table") and self.detail_table.model() is not None:
+            self._fit_detail_table_columns()
+
+    def _fit_scanner_diagnostic_column(self):
+        model = self.scanner_table.model()
+        if model is None:
+            return
+
+        concentration_col = 3
+        semantic_col = 4
+        diagnostic_col = 5
+        badges_col = 6
+        trend_col = 7
+
+        font_metrics = self.scanner_table.fontMetrics()
+
+        concentration_width = self._fit_text_column_width(model, concentration_col, minimum=54, maximum=70, padding=18)
+        semantic_width = self._fit_text_column_width(model, semantic_col, minimum=66, maximum=86, padding=18)
+        badges_width = self._fit_badges_column_width(model, badges_col, font_metrics)
+        trend_width = 190
+        self.scanner_table.setColumnWidth(concentration_col, concentration_width)
+        self.scanner_table.setColumnWidth(semantic_col, semantic_width)
+        self.scanner_table.setColumnWidth(badges_col, badges_width)
+        self.scanner_table.setColumnWidth(trend_col, trend_width)
+
+        diagnostic_content_width = self._fit_text_column_width(
+            model,
+            diagnostic_col,
+            minimum=250,
+            maximum=420,
+            padding=34,
+        )
+
+        left_and_middle_width = sum(
+            self.scanner_table.columnWidth(col)
+            for col in range(model.columnCount())
+            if col != diagnostic_col
+        )
+        viewport_width = max(0, self.scanner_table.viewport().width() - 18)
+        diagnostic_available_width = max(220, viewport_width - left_and_middle_width)
+        diagnostic_width = min(diagnostic_content_width, diagnostic_available_width)
+        self.scanner_table.setColumnWidth(diagnostic_col, diagnostic_width)
+
+        total_column_width = sum(
+            self.scanner_table.columnWidth(col)
+            for col in range(model.columnCount())
+        )
+        preferred_table_width = total_column_width + 24
+        self.scanner_table.setMaximumWidth(max(920, preferred_table_width))
+
+    def _fit_text_column_width(self, model, column: int, minimum: int, maximum: int, padding: int) -> int:
+        font_metrics = self.scanner_table.fontMetrics()
+        header_text = str(model.headerData(column, Qt.Horizontal) or "")
+        content_width = font_metrics.horizontalAdvance(header_text) + padding
+        for row in range(model.rowCount()):
+            text = str(model.data(model.index(row, column), Qt.DisplayRole) or "")
+            content_width = max(content_width, font_metrics.horizontalAdvance(text) + padding)
+        return min(max(content_width, minimum), maximum)
+
+    def _fit_badges_column_width(self, model, column: int, font_metrics) -> int:
+        header_text = str(model.headerData(column, Qt.Horizontal) or "")
+        content_width = font_metrics.horizontalAdvance(header_text) + 24
+        for row in range(model.rowCount()):
+            badges = model.data(model.index(row, column), ROLE_BADGES) or []
+            if not badges:
+                continue
+            badge_width = 20
+            for badge in badges:
+                badge_width += font_metrics.horizontalAdvance(str(badge)) + 22
+            badge_width += max(0, len(badges) - 1) * 4
+            content_width = max(content_width, badge_width)
+        return min(max(content_width, 128), 280)
 
     def _drill_down_branch_from_detail(self, index):
         if not index.isValid() or self.detail_table.model() is None:
@@ -556,13 +654,57 @@ class SmartMoneyFlowView(QWidget):
 
         df_detail = pd.DataFrame(data) if data else pd.DataFrame(columns=['分點名稱', '買進張數', '賣出張數', '淨買賣超'])
         self.detail_table.setModel(PandasTableModel(df_detail))
-        self.detail_table.resizeColumnsToContents()
+        self._fit_detail_table_columns()
 
-        # 保證淨買賣超那一欄有足夠寬度顯示 Bar
-        self.detail_table.setColumnWidth(0, 130) # 分點名稱
-        self.detail_table.setColumnWidth(1, 80)  # 買進
-        self.detail_table.setColumnWidth(2, 80)  # 賣出
-        self.detail_table.setColumnWidth(3, 160) # 淨買賣超 (Bar 欄位，留出充裕空間)
+    def _fit_detail_table_columns(self):
+        model = self.detail_table.model()
+        if model is None or model.columnCount() == 0:
+            return
+
+        header = self.detail_table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(QHeaderView.Interactive)
+
+        viewport_width = max(0, self.detail_table.viewport().width() - 18)
+        if viewport_width <= 0:
+            return
+
+        column_count = min(model.columnCount(), 4)
+        font_metrics = self.detail_table.fontMetrics()
+        minimums = [98, 68, 68, 128]
+        paddings = [24, 20, 20, 86]
+        desired_widths = []
+        for col in range(column_count):
+            header_text = str(model.headerData(col, Qt.Horizontal) or "")
+            content_width = font_metrics.horizontalAdvance(header_text) + paddings[col]
+            for row in range(model.rowCount()):
+                text = str(model.data(model.index(row, col), Qt.DisplayRole) or "")
+                content_width = max(content_width, font_metrics.horizontalAdvance(text) + paddings[col])
+            desired_widths.append(max(minimums[col], content_width))
+
+        total_desired = sum(desired_widths)
+        if total_desired < viewport_width:
+            extra = viewport_width - total_desired
+            weights = [2, 1, 1, 3]
+            total_weight = sum(weights[:column_count])
+            widths = [
+                desired_widths[col] + int(extra * weights[col] / total_weight)
+                for col in range(column_count)
+            ]
+            widths[-1] += viewport_width - sum(widths)
+        else:
+            widths = desired_widths
+            overflow = total_desired - viewport_width
+            for col in (0, 1, 2, 3):
+                if col >= column_count or overflow <= 0:
+                    break
+                reducible = max(0, widths[col] - minimums[col])
+                reduction = min(reducible, overflow)
+                widths[col] -= reduction
+                overflow -= reduction
+
+        for col, width in enumerate(widths):
+            self.detail_table.setColumnWidth(col, max(48, width))
 
     def _on_branch_changed(self):
         branch_key = self.branch_combo.currentData()
@@ -579,6 +721,9 @@ class SmartMoneyFlowView(QWidget):
         self.branch_table.setModel(self.branch_model)
 
         # 調整欄寬
+        branch_header = self.branch_table.horizontalHeader()
+        branch_header.setStretchLastSection(False)
+        branch_header.setSectionResizeMode(QHeaderView.Interactive)
         self.branch_table.setColumnWidth(0, 110) # 淨量分數
         self.branch_table.setColumnWidth(1, 160) # 股票
         self.branch_table.setColumnWidth(2, 90)  # 買進
