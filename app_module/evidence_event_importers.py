@@ -91,6 +91,27 @@ class UnsupportedEvidenceImporter:
         )
 
 
+class MissingSnapshotEvidenceImporter:
+    def __init__(self, source_name: str, reason: str = "durable decision desk snapshot not found") -> None:
+        self.source_name = source_name
+        self.reason = reason
+
+    def collect(self, request: EvidenceCaptureRequest) -> EvidenceImportResult:
+        return EvidenceImportResult(
+            source_name=self.source_name,
+            decision_date=request.decision_date_text,
+            diagnostics=(
+                EvidenceImportDiagnostic(
+                    code="source_missing_snapshot",
+                    message=self.reason,
+                    source_name=self.source_name,
+                    severity="warning",
+                    metadata={"suggested_command": "python scripts/capture_decision_desk_snapshot.py --decision-date <YYYY-MM-DD> --confirm"},
+                ),
+            ),
+        )
+
+
 class RecommendationEvidenceImporter:
     source_name = "recommendation"
 
@@ -117,13 +138,7 @@ class RecommendationEvidenceImporter:
         profile_id = str(config.get("profile_id") or config.get("selected_profile") or "")
         profile_version = str(config.get("profile_version") or "")
         payloads: list[dict[str, Any]] = []
-        diagnostics = [
-            EvidenceImportDiagnostic(
-                code="source_missing_exclusion_payload",
-                message="RecommendationResultDTO does not persist why-not/liquidity exclusion payloads",
-                source_name=self.source_name,
-            )
-        ]
+        diagnostics: list[EvidenceImportDiagnostic] = []
 
         for index, rec in enumerate(getattr(result, "recommendations", ())):
             symbol = str(getattr(rec, "stock_code", "")).strip()
@@ -181,12 +196,128 @@ class RecommendationEvidenceImporter:
             if request.limit is not None and len(payloads) >= request.limit:
                 break
 
+        exclusion_payloads = self._exclusion_payloads(result, request, decision_date)
+        if exclusion_payloads:
+            for payload in exclusion_payloads:
+                if request.limit is not None and len(payloads) >= request.limit:
+                    break
+                payloads.append(payload)
+        else:
+            diagnostics.append(
+                EvidenceImportDiagnostic(
+                    code="source_missing_exclusion_payload",
+                    message="RecommendationResultDTO does not persist why-not/liquidity exclusion payloads",
+                    source_name=self.source_name,
+                )
+            )
+
         return EvidenceImportResult(
             source_name=self.source_name,
             decision_date=decision_date,
             event_payloads=tuple(payloads),
             diagnostics=tuple(diagnostics),
         )
+
+    def _exclusion_payloads(
+        self,
+        result: Any,
+        request: EvidenceCaptureRequest,
+        decision_date: str,
+    ) -> list[dict[str, Any]]:
+        payloads: list[dict[str, Any]] = []
+        result_warnings = _tuple(getattr(result, "exclusion_warnings_json", ()) or ())
+        default_quality = str(getattr(result, "exclusion_quality", None) or EvidenceDataQuality.DEGRADED.value)
+        for row in self._payload_rows(getattr(result, "why_not_payload_json", ())):
+            payload = self._exclusion_payload(
+                result=result,
+                row=row,
+                request=request,
+                decision_date=decision_date,
+                event_type=EvidenceEventType.WHY_NOT_EXCLUDED,
+                payload_kind="why_not",
+                default_quality=default_quality,
+                result_warnings=result_warnings,
+            )
+            if payload is not None:
+                payloads.append(payload)
+        for row in self._payload_rows(getattr(result, "liquidity_gate_payload_json", ())):
+            payload = self._exclusion_payload(
+                result=result,
+                row=row,
+                request=request,
+                decision_date=decision_date,
+                event_type=EvidenceEventType.LIQUIDITY_GATE_EXCLUDED,
+                payload_kind="liquidity_gate",
+                default_quality=default_quality,
+                result_warnings=result_warnings,
+            )
+            if payload is not None:
+                payloads.append(payload)
+        return payloads
+
+    def _payload_rows(self, value: Any) -> tuple[Mapping[str, Any], ...]:
+        if value is None:
+            return ()
+        if isinstance(value, Mapping):
+            rows = value.get("items") or value.get("excluded_candidates") or value.get("rows") or []
+            if isinstance(rows, Mapping):
+                return (rows,)
+            return tuple(row for row in rows if isinstance(row, Mapping))
+        return tuple(row for row in value if isinstance(row, Mapping))
+
+    def _exclusion_payload(
+        self,
+        *,
+        result: Any,
+        row: Mapping[str, Any],
+        request: EvidenceCaptureRequest,
+        decision_date: str,
+        event_type: EvidenceEventType,
+        payload_kind: str,
+        default_quality: str,
+        result_warnings: tuple[str, ...],
+    ) -> dict[str, Any] | None:
+        symbol = str(row.get("stock_code") or row.get("symbol") or row.get("code") or "").strip()
+        if request.symbol and symbol != str(request.symbol).strip():
+            return None
+        if not symbol:
+            return None
+        reason_codes = _tuple(row.get("exclusion_reason_codes") or row.get("reason_codes") or row.get("reasons"))
+        warnings = tuple(result_warnings) + _tuple(row.get("warnings"))
+        quality = str(row.get("quality") or default_quality or EvidenceDataQuality.DEGRADED.value)
+        threshold_name = row.get("threshold_name")
+        observed_value = row.get("observed_value")
+        required_value = row.get("required_value")
+        why_not_codes = reason_codes if event_type == EvidenceEventType.WHY_NOT_EXCLUDED else ()
+        risk_codes = reason_codes if event_type == EvidenceEventType.LIQUIDITY_GATE_EXCLUDED else ()
+        return {
+            "event_date": decision_date,
+            "decision_date": decision_date,
+            "symbol": symbol,
+            "event_type": event_type,
+            "event_family": "recommendation_exclusion",
+            "source_type": f"recommendation_result_{payload_kind}",
+            "source_id": str(getattr(result, "result_id", "")),
+            "source_snapshot_id": str(getattr(result, "result_id", "")),
+            "reason_codes": reason_codes,
+            "why_not_codes": why_not_codes,
+            "risk_codes": risk_codes,
+            "data_quality": _quality(quality),
+            "warnings": warnings,
+            "as_of_date": decision_date,
+            "available_date": decision_date,
+            "source_version": "recommendation_exclusion_importer_v1",
+            "metadata": {
+                "exclusion_reason_codes": list(reason_codes),
+                "threshold_name": threshold_name,
+                "observed_value": observed_value,
+                "required_value": required_value,
+                "quality": quality,
+                "warnings": list(warnings),
+                "source_result_id": str(getattr(result, "result_id", "")),
+                "exclusion_payload_kind": payload_kind,
+            },
+        }
 
     def _load_result(self, request: EvidenceCaptureRequest) -> Any | None:
         if request.result_id:
@@ -233,6 +364,8 @@ class WatchlistTriggerEvidenceImporter:
         *,
         fallback: bool = False,
     ) -> dict[str, Any]:
+        source_snapshot_id = str(getattr(self.snapshot_provider, "snapshot_id", "") or f"watchlist-trigger:{as_of}")
+        source_metadata = dict(getattr(self.snapshot_provider, "metadata", {}) or {})
         return {
             "event_date": as_of,
             "decision_date": decision_date,
@@ -241,7 +374,7 @@ class WatchlistTriggerEvidenceImporter:
             "event_family": "watchlist",
             "source_type": "daily_decision_desk_watchlist_trigger",
             "source_id": f"watchlist-trigger:{as_of}",
-            "source_snapshot_id": f"watchlist-trigger:{as_of}",
+            "source_snapshot_id": source_snapshot_id,
             "reason_codes": (event_type.value,),
             "risk_codes": ("watchlist_risk_alert",) if event_type == EvidenceEventType.WATCHLIST_TRIGGER_RISK_ALERT else (),
             "data_quality": _quality(summary.quality),
@@ -253,6 +386,7 @@ class WatchlistTriggerEvidenceImporter:
                 "top_signal": summary.top_signal,
                 "trigger_count": summary.trigger_count,
                 "fallback_signal_type": fallback,
+                **source_metadata,
             },
         }
 
@@ -302,6 +436,8 @@ class PortfolioAlertEvidenceImporter:
 
     def _payload(self, summary: PortfolioAlertSummary, attribution: Any, decision_date: str, as_of: str) -> dict[str, Any]:
         event_type = self._event_type(attribution)
+        source_snapshot_id = str(getattr(self.snapshot_provider, "snapshot_id", "") or f"portfolio-alert:{as_of}")
+        source_metadata = dict(getattr(self.snapshot_provider, "metadata", {}) or {})
         return {
             "event_date": as_of,
             "decision_date": decision_date,
@@ -310,7 +446,7 @@ class PortfolioAlertEvidenceImporter:
             "event_family": "portfolio",
             "source_type": "daily_decision_desk_portfolio_alert",
             "source_id": f"portfolio-alert:{as_of}",
-            "source_snapshot_id": f"portfolio-alert:{as_of}",
+            "source_snapshot_id": source_snapshot_id,
             "reason_codes": tuple(attribution.reasons),
             "risk_codes": (event_type.value,),
             "data_quality": _quality(summary.quality),
@@ -325,6 +461,7 @@ class PortfolioAlertEvidenceImporter:
                 "severity": attribution.severity,
                 "data_quality_flags": list(attribution.data_quality_flags),
                 "alert_level": summary.alert_level,
+                **source_metadata,
             },
         }
 
@@ -350,6 +487,8 @@ class RiskPromptEvidenceImporter:
         decision_date = request.decision_date_text or date.today().isoformat()
         summary: DecisionDeskRiskPromptSummary = self.snapshot_provider.build_snapshot(datetime.fromisoformat(decision_date).date())
         as_of = _date_text(summary.as_of_date, decision_date)
+        source_snapshot_id = str(getattr(self.snapshot_provider, "snapshot_id", "") or f"risk-prompt:{as_of}")
+        source_metadata = dict(getattr(self.snapshot_provider, "metadata", {}) or {})
         payloads = []
         for prompt in summary.prompts:
             symbol = str(prompt.code or "").strip() or "MARKET"
@@ -364,7 +503,7 @@ class RiskPromptEvidenceImporter:
                     "event_family": "risk_prompt",
                     "source_type": "daily_decision_desk_risk_prompt",
                     "source_id": f"risk-prompt:{as_of}",
-                    "source_snapshot_id": f"risk-prompt:{as_of}",
+                    "source_snapshot_id": source_snapshot_id,
                     "reason_codes": (prompt.category, prompt.source),
                     "risk_codes": (prompt.severity,),
                     "data_quality": _quality(summary.quality),
@@ -378,6 +517,7 @@ class RiskPromptEvidenceImporter:
                         "action_hint": prompt.action_hint,
                         "source": prompt.source,
                         "category": prompt.category,
+                        **source_metadata,
                     },
                 }
             )
@@ -391,4 +531,3 @@ class RiskPromptEvidenceImporter:
         if category == "fundamental_diagnostic":
             return EvidenceEventType.RISK_PROMPT_FUNDAMENTAL_DIAGNOSTIC
         return EvidenceEventType.RISK_PROMPT_DATA_QUALITY
-

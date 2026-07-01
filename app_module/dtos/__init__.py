@@ -147,7 +147,13 @@ class RecommendationResultDTO:
     regime: Optional[str] = None  # 市場狀態
     created_at: Optional[str] = None  # 創建時間
     notes: str = ""  # 備註
-    
+
+    excluded_candidates_json: List[Dict[str, Any]] = field(default_factory=list)
+    why_not_payload_json: List[Dict[str, Any]] = field(default_factory=list)
+    liquidity_gate_payload_json: List[Dict[str, Any]] = field(default_factory=list)
+    exclusion_quality: Optional[str] = None
+    exclusion_warnings_json: List[str] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         """轉換為字典"""
         return {
@@ -157,7 +163,12 @@ class RecommendationResultDTO:
             'recommendations': [rec.to_dict() for rec in self.recommendations],
             'regime': self.regime,
             'created_at': self.created_at,
-            'notes': self.notes
+            'notes': self.notes,
+            'excluded_candidates_json': self.excluded_candidates_json,
+            'why_not_payload_json': self.why_not_payload_json,
+            'liquidity_gate_payload_json': self.liquidity_gate_payload_json,
+            'exclusion_quality': self.exclusion_quality,
+            'exclusion_warnings_json': self.exclusion_warnings_json
         }
     
     @classmethod
@@ -174,7 +185,12 @@ class RecommendationResultDTO:
             recommendations=recommendations,
             regime=data.get('regime'),
             created_at=data.get('created_at'),
-            notes=data.get('notes', '')
+            notes=data.get('notes', ''),
+            excluded_candidates_json=list(data.get('excluded_candidates_json') or []),
+            why_not_payload_json=list(data.get('why_not_payload_json') or []),
+            liquidity_gate_payload_json=list(data.get('liquidity_gate_payload_json') or []),
+            exclusion_quality=data.get('exclusion_quality'),
+            exclusion_warnings_json=[str(item) for item in (data.get('exclusion_warnings_json') or [])]
         )
 
 

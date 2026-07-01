@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import json
 from pathlib import Path
 import sys
@@ -12,6 +13,7 @@ if str(ROOT) not in sys.path:
 from app_module.evidence_capture_service import EvidenceCaptureService
 from app_module.evidence_event_importer_dtos import EvidenceCaptureRequest
 from app_module.evidence_event_importers import (
+    MissingSnapshotEvidenceImporter,
     PortfolioAlertEvidenceImporter,
     RecommendationEvidenceImporter,
     RiskPromptEvidenceImporter,
@@ -19,6 +21,7 @@ from app_module.evidence_event_importers import (
 )
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.evidence_event_service import EvidenceEventService
+from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRepository
 from app_module.recommendation_repository import RecommendationRepository
 from data_module.config import TWStockConfig
 
@@ -58,6 +61,57 @@ def _config_from_args(args: argparse.Namespace) -> TWStockConfig:
     return config
 
 
+class _DecisionDeskSnapshotSectionProvider:
+    def __init__(self, stored_snapshot, section_name: str) -> None:
+        self.stored_snapshot = stored_snapshot
+        self.section_name = section_name
+        self.snapshot_id = stored_snapshot.snapshot_id
+        self.metadata = {
+            "decision_desk_snapshot_id": stored_snapshot.snapshot_id,
+            "decision_desk_snapshot_hash": stored_snapshot.snapshot_hash,
+            "decision_desk_snapshot_source": "durable_snapshot",
+        }
+
+    def build_snapshot(self, as_of_date):
+        snapshot = self.stored_snapshot.to_decision_desk_snapshot()
+        if self.section_name == "watchlist-trigger":
+            return snapshot.watchlist_triggers
+        if self.section_name == "portfolio-alert":
+            return snapshot.portfolio_alerts
+        if self.section_name == "risk-prompt":
+            return snapshot.risk_prompts
+        raise ValueError(f"unsupported decision desk snapshot section: {self.section_name}")
+
+
+def _decision_date_for_snapshot(args: argparse.Namespace) -> str:
+    if args.decision_date:
+        return str(args.decision_date)[:10]
+    return date.today().isoformat()
+
+
+def _decision_desk_importers(config: TWStockConfig, decision_date: str):
+    repository = DecisionDeskSnapshotRepository(config)
+    stored = repository.latest_before_or_on(decision_date) if decision_date else None
+    if stored is None:
+        reason = "durable decision desk snapshot not found; run capture_decision_desk_snapshot.py first"
+        return {
+            "watchlist-trigger": MissingSnapshotEvidenceImporter("watchlist-trigger", reason),
+            "portfolio-alert": MissingSnapshotEvidenceImporter("portfolio-alert", reason),
+            "risk-prompt": MissingSnapshotEvidenceImporter("risk-prompt", reason),
+        }
+    return {
+        "watchlist-trigger": WatchlistTriggerEvidenceImporter(
+            _DecisionDeskSnapshotSectionProvider(stored, "watchlist-trigger")
+        ),
+        "portfolio-alert": PortfolioAlertEvidenceImporter(
+            _DecisionDeskSnapshotSectionProvider(stored, "portfolio-alert")
+        ),
+        "risk-prompt": RiskPromptEvidenceImporter(
+            _DecisionDeskSnapshotSectionProvider(stored, "risk-prompt")
+        ),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -66,13 +120,12 @@ def main(argv: list[str] | None = None) -> int:
     repository = EvidenceEventRepository(config)
     event_service = EvidenceEventService(repository)
     recommendation_repository = RecommendationRepository(config)
+    ddd_importers = _decision_desk_importers(config, _decision_date_for_snapshot(args))
     capture_service = EvidenceCaptureService(
         event_service,
         {
             "recommendation": RecommendationEvidenceImporter(recommendation_repository),
-            "watchlist-trigger": WatchlistTriggerEvidenceImporter(),
-            "portfolio-alert": PortfolioAlertEvidenceImporter(),
-            "risk-prompt": RiskPromptEvidenceImporter(),
+            **ddd_importers,
         },
     )
     request = EvidenceCaptureRequest(

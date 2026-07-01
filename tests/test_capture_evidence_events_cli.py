@@ -100,7 +100,7 @@ def test_capture_evidence_events_cli_defaults_to_dry_run(tmp_path):
     assert EvidenceEventRepository(config).list_events() == []
 
 
-def test_capture_evidence_events_cli_confirm_writes_and_source_all_skips_unsupported(tmp_path):
+def test_capture_evidence_events_cli_confirm_writes_and_source_all_reports_missing_snapshot(tmp_path):
     config = _config(tmp_path)
     result_id = _seed_recommendation(config)
 
@@ -117,7 +117,7 @@ def test_capture_evidence_events_cli_confirm_writes_and_source_all_skips_unsuppo
     payload = json.loads(result.stdout)
     assert payload["dry_run"] is False
     assert payload["events_inserted"] == 1
-    assert payload["diagnostics_by_code"]["source_unsupported"] >= 1
+    assert payload["diagnostics_by_code"]["source_missing_snapshot"] >= 1
     assert len(EvidenceEventRepository(config).list_events()) == 1
 
     inspected = _run_inspect(config, "--event-type", "recommendation_included")
