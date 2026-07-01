@@ -17,6 +17,8 @@ from ui_qt.widgets.fast_chart_widget import (
     create_trade_return_histogram_widget,
 )
 from ui_qt.views.research_lab.run_registry_compare_widget import RunRegistryCompareWidget
+from app_module.forward_performance_dashboard_service import create_forward_performance_dashboard_service
+from ui_qt.views.forward_performance_view import ForwardPerformanceView
 
 
 class BacktestResultPanel(QWidget):
@@ -350,6 +352,8 @@ class BacktestResultPanel(QWidget):
         
         layout.addWidget(self.result_tabs)
 
+        if getattr(self.parent_view, "config", None):
+            self.add_forward_performance_tab()
         if getattr(self.parent_view, "research_run_service", None):
             self.add_registry_compare_tab()
 
@@ -366,3 +370,18 @@ class BacktestResultPanel(QWidget):
         self.run_registry_compare_widget = RunRegistryCompareWidget(service)
         self.result_tabs.addTab(self.run_registry_compare_widget, "Registry 比較")
         return self.run_registry_compare_widget
+
+    def add_forward_performance_tab(self):
+        """Mount the read-only Forward Performance evidence page in Research Lab."""
+        existing = getattr(self, "forward_performance_widget", None)
+        if existing is not None:
+            return existing
+
+        config = getattr(self.parent_view, "config", None)
+        if config is None:
+            return None
+
+        service = create_forward_performance_dashboard_service(config)
+        self.forward_performance_widget = ForwardPerformanceView(service, auto_refresh=False)
+        self.result_tabs.addTab(self.forward_performance_widget, "Forward Evidence")
+        return self.forward_performance_widget
