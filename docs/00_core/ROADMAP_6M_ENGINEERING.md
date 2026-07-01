@@ -24,7 +24,7 @@ V1 closeout baseline（2026-06-30）：
 - Strategy Lifecycle / Portfolio Feedback v1 已補上 lifecycle gate、append-only evidence、post-trade attribution 與持倉管理生命週期回顧入口。
 - Full App Healthcheck / MainWindow UI smoke / clean clone gate 已形成 release QA 閉環；這是工程交付證據，不是投資有效性證明。
 - 下一階段主線轉向 Evidence-Driven baldr：Forward Performance、Live vs Research Gap、Signal Decay、Decision Quality Review 與台股微結構治理。
-- Post-V1 第一批 evidence 增量已完成 Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Evidence Source Persistence v1 / Forward Performance Dashboard read-only UI v1；這是 forward evidence 的資料底座、source capture 起點、durable Daily Decision Desk snapshot source、唯讀彙總層與 Research Lab evidence inspection layer，不是 scheduler 完成，也不是投資有效性證明。
+- Post-V1 第一批 evidence 增量已完成 Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Evidence Source Persistence v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1；這是 forward evidence 的資料底座、source capture 起點、durable Daily Decision Desk snapshot source、唯讀彙總層、Research Lab evidence inspection layer 與手動 dry-run orchestration，不是 production scheduler 完成，也不是投資有效性證明。
 
 ---
 
@@ -93,7 +93,7 @@ V1 已完成交付：
 
 後續交付：
 
-- Forward Performance Dashboard：Evidence Importers v1 已可將 persisted Recommendation result 與 durable Daily Decision Desk snapshot source 轉為 events；Forward Performance Read Model v1 已可唯讀彙總 ready / pending / missing outcomes、return / excess return、quality 與 warnings。Daily Decision Desk snapshot repository / capture CLI / source coverage inspection v1 已完成；Why Not / Liquidity exclusion payload 為 optional / partial。Research Lab 已新增 `Forward Evidence` read-only UI v1，可檢查 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 後續 5 / 10 / 20 / 60 日 close-to-close research outcome、benchmark / industry 缺口與資料品質；下一步是 scheduler dry-run design。
+- Forward Performance Dashboard：Evidence Importers v1 已可將 persisted Recommendation result 與 durable Daily Decision Desk snapshot source 轉為 events；Forward Performance Read Model v1 已可唯讀彙總 ready / pending / missing outcomes、return / excess return、quality 與 warnings。Daily Decision Desk snapshot repository / capture CLI / source coverage inspection v1 已完成；Why Not / Liquidity exclusion payload 為 optional / partial。Research Lab 已新增 `Forward Evidence` read-only UI v1，可檢查 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 後續 5 / 10 / 20 / 60 日 close-to-close research outcome、benchmark / industry 缺口與資料品質；`scripts/run_evidence_pipeline.py` 已可手動執行 scheduler dry-run runner，串接 source coverage、snapshot capture、event capture、outcome calculation、summary 與 diagnostics report，預設 dry-run，confirm 只允許 explicit working-copy DB。
 - Concept Basket / 題材籃子，補官方產業分類無法捕捉台股題材輪動的限制。
 - Decision Desk 的 evidence summary：每個提示能回到樣本數、forward evidence、資料品質與適用限制。
 
@@ -291,7 +291,7 @@ V1 已完成交付：
 
 優先交付：
 
-- Forward Performance Dashboard：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / Forward Performance Read Model v1 / Evidence Source Persistence v1 / Forward Performance Dashboard read-only UI v1 已完成資料底座、capture pipeline、durable Daily Decision Desk snapshot source、唯讀彙總與 Research Lab evidence inspection layer；後續需做 scheduler dry-run design，持續追蹤 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 事件後 5 / 10 / 20 / 60 日 forward return、benchmark excess return、industry / concept excess return、樣本數與資料品質。
+- Forward Performance Dashboard：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / Forward Performance Read Model v1 / Evidence Source Persistence v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 已完成資料底座、capture pipeline、durable Daily Decision Desk snapshot source、唯讀彙總、Research Lab evidence inspection layer 與手動 dry-run orchestration；後續需用 working-copy DB 做多次 dry-run / confirm smoke，持續追蹤 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 事件後 5 / 10 / 20 / 60 日 forward return、benchmark excess return、industry / concept excess return、樣本數與資料品質。
 - Live vs Research Gap Dashboard：比較回測、推薦回放與實際 / 模擬持倉落差，歸因滑價、未成交、跳空、流動性、Regime 改變、策略衰退與使用者行為偏差。
 - Signal Decay Monitor：追蹤策略、因子與提示近期是否失效，提供 hold / demote / retire 的 evidence，但不自動刪除或覆寫策略版本。
 - Decision Quality Review：建立週 / 月覆盤紀錄，追蹤錯誤交易、未遵守系統建議、手動 override、錯過訊號與事後歸因。
@@ -307,7 +307,7 @@ V1 已完成交付：
 
 ## 5. 立即待辦清單
 
-1. V1 release baseline 已完成；Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Evidence Source Persistence v1 / Forward Performance Dashboard read-only UI v1 已落地。下一步優先建立 scheduler dry-run design；Live vs Research Gap Dashboard 仍是下一個 evidence 主線。
+1. V1 release baseline 已完成；Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Evidence Source Persistence v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 已落地。下一步優先用 working-copy DB 跑多次 dry-run / confirm smoke；Live vs Research Gap Dashboard 仍是下一個 evidence 主線。
 2. Month 6.1 仍保留為 lifecycle / feedback 的人工審核深化：Manual Approval Workflow、Strategy Evidence Explainability、Portfolio Review Dashboard 深化與 QA checklist。
 3. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
 4. 維持 Month 2 / Month 3 / Month 5 / Month 6 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、append-only lifecycle evidence、量化 float boundary 與 no-look-ahead tests。
@@ -325,7 +325,7 @@ V1 已完成交付：
 - Daily Decision Desk：必須以 service snapshot 聚合，不得在 UI 層複製 scoring、screening、portfolio 或 broker flow 計算。
 - Post-V1 evidence dashboard：必須保存事件日期、決策日可得資料、資料版本、benchmark 定義、quality / warnings 與 forward window，不得把觀察結果包裝成交易建議。
 - Evidence Event Store / Forward Outcome Calculator：schema migration 必須 dry-run / backup safe；forward return 一律標示 close-to-close research basis，不得稱為可執行績效。
-- Forward Performance Read Model：只可唯讀彙總已保存 events / outcomes；ready sample 才能計入 return metric，pending / missing 只能進覆蓋率、品質與 warning；scheduler not ready for production schedule，正式排程前需另做 dry-run scheduler design。
+- Forward Performance Read Model / Evidence Pipeline Runner：read model 只可唯讀彙總已保存 events / outcomes；ready sample 才能計入 return metric，pending / missing 只能進覆蓋率、品質與 warning。Runner 預設 dry-run，`--confirm` 必須指定 working-copy DB；scheduler readiness 最高只到 `ready_for_manual_confirm`，正式 production schedule 仍需人工批准與多次 dry-run 穩定紀錄。
 - Evidence Source Persistence：Daily Decision Desk snapshot capture 預設 dry-run、`--confirm` 才寫入；缺 durable snapshot 時 capture CLI 必須 diagnostic，不得 fallback UI 或偽造 event；Why Not / Liquidity exclusion 只可消費已保存 payload，不可重算。
 - Release / healthcheck：Full App Healthcheck、MainWindow UI smoke 與 clean clone gate 只能證明工程交付可用，不得作為投資有效性證據。
 
@@ -334,6 +334,7 @@ V1 已完成交付：
 ## 7. 更新記錄
 
 - 2026-07-05：完成 Forward Performance Dashboard read-only UI v1，新增 Research Lab `Forward Evidence` 分頁、dashboard service / DTO / Qt table model 與禁用交易語氣測試；Dashboard 只檢查已保存 evidence outcomes，不寫 evidence、不做 scheduler、不宣稱 alpha。
+- 2026-07-06：完成 Evidence Pipeline Runner dry-run v1，新增 manual runner service / DTO / CLI、diagnostics Markdown/JSON report、confirm gate、production-like DB guard 與 readiness summary；scheduler 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
 - 2026-07-04：完成 Post-V1 Evidence Source Persistence v1，新增 durable Daily Decision Desk snapshot repository / capture CLI / inspect CLI、capture evidence durable provider wiring、Recommendation exclusion payload optional fields 與 source coverage CLI；Why Not / Liquidity payload 為 partial，scheduler 仍只到 `ready_for_design`，不具 production readiness。
 - 2026-07-03：完成 Post-V1 E2E smoke 與 Forward Performance Read Model v1，新增 smoke CLI、read-only aggregate service、summary CLI、score percentile bucket、summary status 與 focused QA；仍未完成 dashboard UI、durable DDD snapshot source、scheduler 或投資有效性驗證。
 - 2026-07-02：完成 Post-V1 Evidence Importers / Capture Pipeline v1，新增 recommendation persisted importer、watchlist / portfolio alert / risk prompt DTO importers、dry-run / confirm CLI、duplicate summary 與 unsupported-source diagnostics；當時仍未完成 dashboard read model 或投資有效性驗證。

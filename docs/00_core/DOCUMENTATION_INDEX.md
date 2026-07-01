@@ -110,6 +110,7 @@
 | [2026-07-03-post-v1-forward-performance-read-model-design.md](../superpowers/specs/2026-07-03-post-v1-forward-performance-read-model-design.md) | Post-V1 E2E smoke / Forward Performance Read Model v1 設計，定義 tmp DB smoke、read-only aggregation、summary status、score bucket、CLI 與 scheduler not-ready 邊界。 |
 | [2026-07-04-post-v1-evidence-source-persistence-design.md](../superpowers/specs/2026-07-04-post-v1-evidence-source-persistence-design.md) | Post-V1 Evidence Source Persistence 設計，定義 durable Daily Decision Desk snapshot repository、capture provider wiring、Recommendation exclusion payload partial 與 source coverage inspection。 |
 | [2026-07-05-post-v1-forward-performance-dashboard-design.md](../superpowers/specs/2026-07-05-post-v1-forward-performance-dashboard-design.md) | Post-V1 Forward Performance Dashboard read-only UI 設計，定義 Research Lab placement、dashboard service / DTO、filters、summary cards、table、detail panel 與 read-only 邊界。 |
+| [2026-07-06-post-v1-evidence-scheduler-dry-run-design.md](../superpowers/specs/2026-07-06-post-v1-evidence-scheduler-dry-run-design.md) | Post-V1 Evidence Scheduler Dry-run 設計，定義 manual pipeline runner、dry-run / confirm gate、diagnostics report、readiness 上限與 production scheduler 門檻。 |
 | [2026-06-13-strategy-scoring-governance.md](../superpowers/plans/2026-06-13-strategy-scoring-governance.md) | 策略分數治理總控計畫與增量 Gate。 |
 | [2026-06-14-month-3-factor-layer.md](../superpowers/plans/2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫，拆分 Factor Contract、Registry、Look-ahead Gate、v1 adapters 與 Research Run 追溯保存。 |
 | [2026-07-01-post-v1-evidence-event-store.md](../superpowers/plans/2026-07-01-post-v1-evidence-event-store.md) | Post-V1 Evidence Event Store / Forward Outcome Calculator v1 實作計畫，拆分 DTO、repository、service、calculator、CLI、tests 與 QA 文件。 |
@@ -117,6 +118,7 @@
 | [2026-07-03-post-v1-forward-performance-read-model.md](../superpowers/plans/2026-07-03-post-v1-forward-performance-read-model.md) | Post-V1 E2E smoke / Forward Performance Read Model v1 實作計畫，拆分 smoke CLI、read model service、summary CLI、tests、docs 與 QA。 |
 | [2026-07-04-post-v1-evidence-source-persistence.md](../superpowers/plans/2026-07-04-post-v1-evidence-source-persistence.md) | Post-V1 Evidence Source Persistence 實作計畫，拆分 snapshot repository、capture CLI、durable importer provider、exclusion payload 與 coverage CLI。 |
 | [2026-07-05-post-v1-forward-performance-dashboard.md](../superpowers/plans/2026-07-05-post-v1-forward-performance-dashboard.md) | Post-V1 Forward Performance Dashboard read-only UI 實作計畫，拆分 dashboard service、Qt view、table model、Research Lab 掛載、tests 與 QA。 |
+| [2026-07-06-post-v1-evidence-scheduler-dry-run.md](../superpowers/plans/2026-07-06-post-v1-evidence-scheduler-dry-run.md) | Post-V1 Evidence Pipeline Runner dry-run 實作計畫，拆分 runner DTO、service、CLI、report、tests 與 QA 文件。 |
 | [2026-06-14-month-3-factor-run-integration.md](../superpowers/plans/2026-06-14-month-3-factor-run-integration.md) | Month 3 Factor Run Integration 計畫，將 factor snapshot / contribution summary 接入 Research Run 實際保存流程。 |
 | [2026-06-15-month-3-recommendation-factor-feed.md](../superpowers/plans/2026-06-15-month-3-recommendation-factor-feed.md) | Month 3 Recommendation Factor Feed 計畫，讓推薦組合回放產生並保存 factor snapshot / contribution metadata。 |
 | [2026-06-15-decision-desk-watchlist-trigger.md](../superpowers/plans/2026-06-15-decision-desk-watchlist-trigger.md) | Daily Decision Desk Watchlist Trigger v1 接線計畫，對接 `WatchlistService` 與 SQLite `technical_indicators`，並定義日期 fallback、quality 與 warnings 契約。 |
@@ -186,6 +188,7 @@
 | [POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md](../06_qa/POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md) | Post-V1 Evidence Importers / Capture Pipeline v1 QA 紀錄，包含 importer 支援邊界、CLI dry-run / confirm、unsupported source 與限制。 |
 | [POST_V1_EVIDENCE_SOURCE_PERSISTENCE_QA_2026_07_04.md](../06_qa/POST_V1_EVIDENCE_SOURCE_PERSISTENCE_QA_2026_07_04.md) | Post-V1 Evidence Source Persistence QA 紀錄，包含 durable DDD snapshot repository、source coverage CLI、Recommendation exclusion payload partial 與 scheduler readiness 邊界。 |
 | [POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md](../06_qa/POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md) | Post-V1 Forward Performance Dashboard read-only UI QA 紀錄，包含 UI placement、read-only guarantee、filter coverage、禁用交易語氣檢查與 scheduler readiness 邊界。 |
+| [POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md) | Post-V1 Evidence Pipeline Runner dry-run QA 紀錄，包含 dry-run / confirm 行為、report、readiness、blocking gaps 與 production scheduler 未啟用邊界。 |
 
 
 ---
@@ -283,6 +286,7 @@
 - 2026-07-03：新增 Post-V1 E2E smoke / Forward Performance Read Model design / plan 與 QA 索引，標示 read model v1 可唯讀彙總 outcomes，但 Dashboard UI、production scheduler 與投資有效性證明仍未完成。
 - 2026-07-04：新增 Post-V1 Evidence Source Persistence design / plan 與 QA 索引，標示 durable Daily Decision Desk snapshot source 與 source coverage inspection v1 已完成；Why Not / Liquidity exclusion payload 為 optional / partial，scheduler 仍不得視為 production-ready。
 - 2026-07-05：新增 Post-V1 Forward Performance Dashboard read-only UI design / plan 與 QA 索引，標示 Research Lab `Forward Evidence` 已完成；scheduler 仍只到 ready_for_design，不得宣稱投資有效性。
+- 2026-07-06：新增 Post-V1 Evidence Scheduler Dry-run design / plan 與 QA 索引，標示 manual pipeline runner 已完成；readiness 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
 - 2026-06-30：新增 v1 release checklist 索引，將 `v1.0.0-rc.1` / `v1.0.0` 發布前的自動化、非破壞 healthcheck、MainWindow UI smoke、全新 clone 與人工 UI 驗證 gate 集中管理。
 - 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。
