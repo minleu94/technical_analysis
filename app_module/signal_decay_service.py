@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid5, NAMESPACE_URL
 
-from app_module.evidence_event_dtos import EvidenceEvent, EvidenceOutcome, EvidenceOutcomeStatus
+from app_module.evidence_event_dtos import (
+    EvidenceEvent,
+    EvidenceOutcome,
+    EvidenceOutcomeStatus,
+    normalize_data_quality,
+    normalize_event_type,
+)
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.live_research_gap_repository import LiveResearchGapRepository
 from app_module.live_research_gap_service import is_production_like_db
@@ -354,19 +360,35 @@ class SignalDecayService:
 
     @staticmethod
     def _metrics(rows: list[tuple[EvidenceEvent, EvidenceOutcome]], gaps: list[Any]) -> dict[str, int | None]:
-        benchmark_values = [outcome.benchmark_excess_bp for _, outcome in rows if outcome.benchmark_excess_bp is not None]
-        industry_values = [outcome.industry_excess_bp for _, outcome in rows if outcome.industry_excess_bp is not None]
-        mae_values = [outcome.max_adverse_excursion_bp for _, outcome in rows if outcome.max_adverse_excursion_bp is not None]
-        live_forward_values = [row.gap_vs_forward_evidence_bp for row in gaps if row.gap_vs_forward_evidence_bp is not None]
-        live_benchmark_values = [row.gap_vs_benchmark_bp for row in gaps if row.gap_vs_benchmark_bp is not None]
+        benchmark_values: list[int | None] = [
+            outcome.benchmark_excess_bp for _, outcome in rows if outcome.benchmark_excess_bp is not None
+        ]
+        industry_values: list[int | None] = [
+            outcome.industry_excess_bp for _, outcome in rows if outcome.industry_excess_bp is not None
+        ]
+        mae_values: list[int | None] = [
+            outcome.max_adverse_excursion_bp for _, outcome in rows if outcome.max_adverse_excursion_bp is not None
+        ]
+        live_forward_values: list[int | None] = [
+            row.gap_vs_forward_evidence_bp for row in gaps if row.gap_vs_forward_evidence_bp is not None
+        ]
+        live_benchmark_values: list[int | None] = [
+            row.gap_vs_benchmark_bp for row in gaps if row.gap_vs_benchmark_bp is not None
+        ]
         degraded_count = 0
         for event, outcome in rows:
-            if event.data_quality.value in {"missing", "degraded"} or outcome.data_quality.value in {"missing", "degraded"}:
+            if (
+                normalize_data_quality(event.data_quality).value in {"missing", "degraded"}
+                or normalize_data_quality(outcome.data_quality).value in {"missing", "degraded"}
+            ):
                 degraded_count += 1
         return {
             "mean_benchmark_excess_bp": _mean_int(benchmark_values),
             "median_benchmark_excess_bp": _median_int(benchmark_values),
-            "win_vs_benchmark_rate_bp": _rate_bp(sum(1 for value in benchmark_values if value > 0), len(benchmark_values)),
+            "win_vs_benchmark_rate_bp": _rate_bp(
+                sum(1 for value in benchmark_values if value is not None and value > 0),
+                len(benchmark_values),
+            ),
             "mean_industry_excess_bp": _mean_int(industry_values),
             "mean_mae_bp": _mean_int(mae_values),
             "mean_live_gap_vs_forward_bp": _mean_int(live_forward_values),
@@ -554,7 +576,7 @@ class SignalDecayService:
     @staticmethod
     def _scope_value(event: EvidenceEvent, scope_type: str) -> str:
         if scope_type == "event_type":
-            return event.event_type.value
+            return normalize_event_type(event.event_type).value
         if scope_type == "event_family":
             return event.event_family
         if scope_type == "strategy_version":

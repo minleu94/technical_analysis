@@ -5,7 +5,13 @@ from dataclasses import asdict, dataclass, field
 from statistics import median
 from typing import Any, Iterable
 
-from app_module.evidence_event_dtos import EvidenceEvent, EvidenceOutcome, EvidenceOutcomeStatus
+from app_module.evidence_event_dtos import (
+    EvidenceEvent,
+    EvidenceOutcome,
+    EvidenceOutcomeStatus,
+    normalize_data_quality,
+    normalize_event_type,
+)
 from app_module.evidence_event_repository import EvidenceEventRepository
 
 
@@ -140,8 +146,8 @@ class ForwardPerformanceReadModel:
         pending_count = sum(1 for _, outcome in rows if outcome.outcome_status == EvidenceOutcomeStatus.INSUFFICIENT_FUTURE_DATA)
         missing_count = sum(1 for _, outcome in rows if outcome.outcome_status == EvidenceOutcomeStatus.MISSING_PRICE)
         dates = sorted(event.event_date for event, _ in rows)
-        quality_counts = Counter(event.data_quality.value for event, _ in rows)
-        quality_counts.update(outcome.data_quality.value for _, outcome in rows)
+        quality_counts = Counter(normalize_data_quality(event.data_quality).value for event, _ in rows)
+        quality_counts.update(normalize_data_quality(outcome.data_quality).value for _, outcome in rows)
         warning_counts: Counter[str] = Counter()
         for event, outcome in rows:
             warning_counts.update(event.warnings)
@@ -218,9 +224,9 @@ class ForwardPerformanceReadModel:
     @staticmethod
     def _group_key(event: EvidenceEvent, group_by: str) -> str:
         if group_by == "event_type":
-            return event.event_type.value
+            return normalize_event_type(event.event_type).value
         if group_by == "data_quality":
-            return event.data_quality.value
+            return normalize_data_quality(event.data_quality).value
         if group_by == "score_percentile_bucket":
             return score_percentile_bucket(event.score_percentile_bp)
         value = getattr(event, group_by)

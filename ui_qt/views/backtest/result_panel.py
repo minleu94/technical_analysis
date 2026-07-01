@@ -17,7 +17,11 @@ from ui_qt.widgets.fast_chart_widget import (
     create_trade_return_histogram_widget,
 )
 from ui_qt.views.research_lab.run_registry_compare_widget import RunRegistryCompareWidget
+from app_module.decision_quality_dashboard_service import create_decision_quality_dashboard_service
 from app_module.forward_performance_dashboard_service import create_forward_performance_dashboard_service
+from app_module.live_research_gap_dashboard_service import create_live_research_gap_dashboard_service
+from app_module.signal_decay_dashboard_service import create_signal_decay_dashboard_service
+from ui_qt.views.evidence_review_view import EvidenceReviewView
 from ui_qt.views.forward_performance_view import ForwardPerformanceView
 
 
@@ -372,7 +376,7 @@ class BacktestResultPanel(QWidget):
         return self.run_registry_compare_widget
 
     def add_forward_performance_tab(self):
-        """Mount the read-only Forward Performance evidence page in Research Lab."""
+        """Mount the read-only evidence review pages in Research Lab."""
         existing = getattr(self, "forward_performance_widget", None)
         if existing is not None:
             return existing
@@ -383,5 +387,11 @@ class BacktestResultPanel(QWidget):
 
         service = create_forward_performance_dashboard_service(config)
         self.forward_performance_widget = ForwardPerformanceView(service, auto_refresh=False)
-        self.result_tabs.addTab(self.forward_performance_widget, "Forward Evidence")
+        self.evidence_review_widget = EvidenceReviewView(
+            forward_performance_widget=self.forward_performance_widget,
+            live_gap_service=create_live_research_gap_dashboard_service(config),
+            signal_decay_service=create_signal_decay_dashboard_service(config),
+            decision_quality_service=create_decision_quality_dashboard_service(config),
+        )
+        self.result_tabs.addTab(self.evidence_review_widget, "Evidence Review")
         return self.forward_performance_widget

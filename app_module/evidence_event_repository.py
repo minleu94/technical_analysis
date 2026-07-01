@@ -7,7 +7,14 @@ import sqlite3
 from typing import Any
 from uuid import uuid4
 
-from app_module.evidence_event_dtos import EvidenceEvent, EvidenceEventType, EvidenceOutcome, normalize_event_type
+from app_module.evidence_event_dtos import (
+    EvidenceEvent,
+    EvidenceEventType,
+    EvidenceOutcome,
+    normalize_data_quality,
+    normalize_event_type,
+    normalize_outcome_status,
+)
 from app_module.research_run_dtos import canonical_json
 from data_module.evidence_event_migration import apply_evidence_event_schema
 
@@ -168,7 +175,7 @@ class EvidenceEventRepository:
             "event_date": event.event_date,
             "decision_date": event.decision_date,
             "symbol": event.symbol,
-            "event_type": event.event_type.value,
+            "event_type": normalize_event_type(event.event_type).value,
             "event_family": event.event_family,
             "source_type": event.source_type,
             "source_id": event.source_id,
@@ -185,7 +192,7 @@ class EvidenceEventRepository:
             "sector": event.sector,
             "concept_basket": event.concept_basket,
             "liquidity_state": event.liquidity_state,
-            "data_quality": event.data_quality.value,
+            "data_quality": normalize_data_quality(event.data_quality).value,
             "warnings_json": canonical_json(list(event.warnings)),
             "as_of_date": event.as_of_date,
             "available_date": event.available_date,
@@ -254,8 +261,8 @@ class EvidenceEventRepository:
             "limit_up_down_flag": None if outcome.limit_up_down_flag is None else int(outcome.limit_up_down_flag),
             "suspended_flag": None if outcome.suspended_flag is None else int(outcome.suspended_flag),
             "liquidity_cost_bp": outcome.liquidity_cost_bp,
-            "outcome_status": outcome.outcome_status.value,
-            "data_quality": outcome.data_quality.value,
+            "outcome_status": normalize_outcome_status(outcome.outcome_status).value,
+            "data_quality": normalize_data_quality(outcome.data_quality).value,
             "warnings_json": canonical_json(list(outcome.warnings)),
             "data_as_of_date": outcome.data_as_of_date,
             "metadata_json": canonical_json(outcome.metadata),

@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from app_module.dtos.portfolio_dtos import PositionDTO
-from app_module.evidence_event_dtos import EvidenceDataQuality, EvidenceEvent, EvidenceOutcome, EvidenceOutcomeStatus
+from app_module.evidence_event_dtos import (
+    EvidenceDataQuality,
+    EvidenceEvent,
+    EvidenceOutcome,
+    EvidenceOutcomeStatus,
+    normalize_data_quality,
+    normalize_event_type,
+)
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.live_research_gap_dtos import (
     LiveResearchGapAttribution,
@@ -82,7 +89,7 @@ class LiveResearchGapService:
             match_metadata=match_metadata,
         )
         warnings.extend(self._warnings_from_attributions(attributions))
-        observation_payload = {
+        observation_payload: dict[str, Any] = {
             "observation_date": observation_date,
             "position_id": position.position_id,
             "symbol": position.stock_code,
@@ -120,7 +127,7 @@ class LiveResearchGapService:
             "attribution_json": [item.to_dict() for item in attributions],
             "metadata_json": {
                 **match_metadata,
-                "event_type": event.event_type.value if event is not None else "",
+                "event_type": normalize_event_type(event.event_type).value if event is not None else "",
                 "return_basis": outcome.return_basis if outcome is not None else "",
                 "research_gap_observation": True,
             },
@@ -352,8 +359,8 @@ class LiveResearchGapService:
     ) -> str:
         quality_values = [
             str(source_summary.get("data_quality") or source_summary.get("quality") or "").lower(),
-            event.data_quality.value if event is not None else "",
-            outcome.data_quality.value if outcome is not None else "",
+            normalize_data_quality(event.data_quality).value if event is not None else "",
+            normalize_data_quality(outcome.data_quality).value if outcome is not None else "",
         ]
         if any(value == EvidenceDataQuality.MISSING.value for value in quality_values) or not event or not outcome:
             return "missing"

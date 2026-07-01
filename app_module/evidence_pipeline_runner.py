@@ -460,7 +460,7 @@ class EvidencePipelineRunner:
         )
 
     def _build_importers(self, request: EvidencePipelineRunRequest) -> dict[str, Any]:
-        importers = {
+        importers: dict[str, Any] = {
             "recommendation": RecommendationEvidenceImporter(RecommendationRepository(self.config)),
         }
         snapshot_repository = DecisionDeskSnapshotRepository(self.config, db_path=self.db_path)

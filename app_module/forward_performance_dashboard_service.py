@@ -188,7 +188,7 @@ def _row_from_summary(summary: ForwardPerformanceGroupSummary) -> ForwardPerform
 
 def _build_cards(rows: tuple[ForwardPerformanceDashboardRow, ...]) -> ForwardPerformanceDashboardCardSummary:
     statuses = Counter(row.summary_status for row in rows)
-    warnings = Counter()
+    warnings: Counter[str] = Counter()
     for row in rows:
         warnings.update(row.warning_counts)
 

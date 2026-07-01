@@ -213,6 +213,9 @@ class DecisionQualityService:
     def list_reviews(self, **kwargs: Any) -> list[DecisionQualityReview]:
         return self.repository.list_reviews(**kwargs)
 
+    def list_items(self, **kwargs: Any) -> list[DecisionQualityItem]:
+        return self.repository.list_items(**kwargs)
+
     def get_review(self, review_id: str) -> DecisionQualityReview | None:
         return self.repository.get_review(review_id)
 
