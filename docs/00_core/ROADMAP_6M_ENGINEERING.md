@@ -1,13 +1,13 @@
 ﻿# 6 個月可執行工程路線（2026-06 至 2026-12）
 
-> **最後更新**：2026-06-17
+> **最後更新**：2026-07-01
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。當它與短期 Snapshot 衝突時，以 Snapshot 的「本週優先事項」決定今天先做什麼；當它與產品願景文件衝突時，本文件決定可執行交付順序。
 
 ---
 
 ## 1. 目標
 
-6 個月內把系統從「功能已形成研究與持倉閉環」推進到「每天能產生可驗證、可回溯、可解釋的投資決策摘要」。
+6 個月內把系統從「功能已形成研究與持倉閉環」推進到「每天能產生可驗證、可回溯、可解釋的投資決策摘要」，並在 V1 release 後進一步驗證這些摘要、警示與策略生命週期判斷是否真的改善決策品質。
 
 核心成果：
 
@@ -17,6 +17,13 @@
 4. 建立 Daily Decision Desk，讓市場狀態、候選股票、持倉警示與研究輸入在同一個每日決策入口收斂。
 5. 將營收、基本面與估值納入可插拔 factor layer，採取先標記、降權與提示風險的保守策略。
 6. 建立 promote / demote / retire 與 Portfolio post-trade attribution，讓策略能被系統性升級、降級或淘汰。
+
+V1 closeout baseline（2026-06-30）：
+
+- 四個產品閉環已形成可操作 V1：資料與市場狀態、研究驗證、持倉檢查、每日決策。
+- Strategy Lifecycle / Portfolio Feedback v1 已補上 lifecycle gate、append-only evidence、post-trade attribution 與持倉管理生命週期回顧入口。
+- Full App Healthcheck / MainWindow UI smoke / clean clone gate 已形成 release QA 閉環；這是工程交付證據，不是投資有效性證明。
+- 下一階段主線轉向 Evidence-Driven baldr：Forward Performance、Live vs Research Gap、Signal Decay、Decision Quality Review 與台股微結構治理。
 
 ---
 
@@ -28,6 +35,7 @@
 - 不導入黑箱 ML 作為主線；若未建立資料版本、OOS、因子歸因與漂移監控，ML 只會增加不可解釋風險。
 - 不重建或破壞正式資料；所有資料新增必須非破壞性、可回溯、可降級。
 - Daily Decision Desk 已接上主 UI v1 首頁；Market Breadth v1 已由 SQLite `daily_prices` provider 接線，Sector Rotation v1 已由 SQLite `industry_indices` provider 接線，Relative Strength / Liquidity Ranking v1 已由 SQLite `daily_prices` provider 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導接線，Portfolio Alert v1 已由 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService` 共同接線。
+- 不把 V1 release readiness、healthcheck 通過或 UI smoke 通過解讀為策略有效、警示有效或推薦具備正向期望值；V1 後必須以 forward evidence 與 live-vs-research evidence 驗證。
 
 ---
 
@@ -41,12 +49,13 @@
 
 - fixed / quantile walk-forward 比較報告。
 - Research Run Registry 的 metadata、Parquet 明細、hash integrity、comparison 與 Promote Gate。
+- 推薦組合 / 固定組合回放 credibility v1，含現金帳、權重、未成交、Liquidity、成本、整股 sizing、weight exposure 與 gap risk labels。
 
 後續交付：
 
-- Portfolio Replay credibility：現金帳、再平衡、買不到 / 賣不掉、流動性限制與 gap 風險揭露。
+- Portfolio Replay execution model 深化：零股、買賣價差、完整撮合、跳空成交限制、成交率與未成交原因。
 - rolling risk metrics：Rolling Sharpe / Sortino、VaR / CVaR、drawdown duration、turnover。
-- benchmark-relative attribution 與 factor attribution 的保存後讀取。
+- benchmark-relative attribution、factor attribution 與 forward performance 的保存後讀取與儀表化。
 
 ### Track B：Factor Layer 與資料治理
 
@@ -57,19 +66,20 @@
 - Factor contract：`factor_name`、`as_of_date`、`available_date`、`value`、`score_bp`、`quality`、`missing_policy`、`source_version`。
 - Factor registry / gate / adapters：技術、量能、券商分點 v1。
 - Research Run 保存 `factor_snapshot` / `factor_contributions` 的基礎流程。
+- Fundamental Layer v1：月營收、季度財報、P/E valuation records、Fundamental provider/service、Revenue / statement / valuation adapters、available_date gate 與 diagnostics；不接 `ScoringEngine`。
 
 後續交付：
 
-- 固定組合與更多 Research Lab 路徑 factor records 供給。
-- Fundamental / valuation adapters。
-- Missing / neutral / stale / skip 的 UI diagnostics。
+- P/B / P/S governed external observations 或明確 backfill records；不得在系統內推導 book value、share count、market cap 或 TTM sales。
+- Missing / neutral / stale / skip 的 UI diagnostics 持續深化。
+- 三大法人、信用交易與處置股等新資料因子接入前，必須先補 source、available_date、quality 與 missing policy。
 - 所有 factor 都必須通過 `available_date <= decision_date` 或依政策 fail-closed / neutralize / skip。
 
 ### Track C：Market Intelligence 與 Daily Decision Desk
 
 目的：把既有市場觀察、推薦、持倉監控與研究輸入整合成每日決策入口。
 
-交付物：
+V1 已完成交付：
 
 - Daily Decision Desk 首頁。
 - Market Regime Summary。
@@ -78,29 +88,47 @@
 - Relative Strength 與 Liquidity Ranking。
 - Watchlist Trigger：新進候選、移除候選、強度提升 / 下降、量能 / 籌碼 / 風險條件。
 - Portfolio Alert 初版：把價格、策略條件與籌碼警示整理到每日摘要。
+- Why Not / 風險提示與 fundamental diagnostics prompts。
+
+後續交付：
+
+- Forward Performance Dashboard：追蹤 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 後續 5 / 10 / 20 / 60 日表現。
+- Concept Basket / 題材籃子，補官方產業分類無法捕捉台股題材輪動的限制。
+- Decision Desk 的 evidence summary：每個提示能回到樣本數、forward evidence、資料品質與適用限制。
 
 ### Track D：資料擴充與保守基本面
 
 目的：建立能支援基本面與估值研究的資料底座，但不做過度自信的自動財報修正。
 
-交付物：
+V1 已完成交付：
 
 - 月營收資料表：MoM、YoY、累計營收、資料公告日。
 - 基本面資料表：EPS、ROE、毛利率、營益率、負債比、現金流、股本。
 - 估值資料表或視圖：P/E、P/B、P/S、殖利率、產業相對估值分位。
 - AbnormalFundamentalFlag：標記營收與獲利背離、業外損益異常、匯兌或投資收益影響。
+
+後續交付：
+
+- 官方歷史 point-in-time 公告日或授權 PIT 匯出來源補強；retroactive baseline / statement baseline 仍須揭露 degraded 邊界。
+- P/B / P/S 僅以 governed external observations 或明確 backfill records 呈現。
 - 後續三大法人資料可接入為籌碼因子，但必須保留資料品質、單位與可得日。
 
 ### Track E：Portfolio 回饋與策略生命週期
 
 目的：讓實際交易 / 模擬持倉能反饋研究，而不只是持倉監控。
 
-交付物：
+V1 已完成交付：
 
 - 持倉原因與現況差異歸因：Regime、Score、Factor、籌碼、估值。
 - 實際交易 vs 回測預期落差：進場價差、滑價、出場原因、持有天數、最大不利走勢。
 - Promote / demote / retire 規則：以 OOS、持倉後驗、風險與資料品質決定策略生命週期。
 - Portfolio Review Dashboard。
+
+後續交付：
+
+- Live vs Research Gap Dashboard：比較研究預期、推薦回放與實際 / 模擬持倉落差。
+- Signal Decay Monitor：追蹤策略與訊號近期是否失效，支援 hold / demote / retire 判斷。
+- Manual Approval Workflow 與 Evidence Explainability：任何改變策略狀態、策略版本可用性或 portfolio 行為的動作都需人工確認與證據摘要。
 
 ---
 
@@ -256,15 +284,33 @@
 - 不因 fundamental diagnostics 存在就直接改變 `ScoringEngine` 或推薦權重。
 - 不把 Portfolio Review Dashboard 的 gap report 解讀為實盤績效宣稱；execution gap、零股、bid-ask spread、完整撮合仍列後續 execution model 深化。
 
+#### Post-V1：Evidence-Driven baldr
+
+定位：V1 已完成工程閉環與 release readiness；下一階段的成功標準不是增加更多入口，而是證明既有訊號、警示、排除規則與策略生命週期判斷是否真的改善決策品質。
+
+優先交付：
+
+- Forward Performance Dashboard：保存 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 事件，追蹤 5 / 10 / 20 / 60 日 forward return、benchmark excess return、industry / concept excess return、樣本數與資料品質。
+- Live vs Research Gap Dashboard：比較回測、推薦回放與實際 / 模擬持倉落差，歸因滑價、未成交、跳空、流動性、Regime 改變、策略衰退與使用者行為偏差。
+- Signal Decay Monitor：追蹤策略、因子與提示近期是否失效，提供 hold / demote / retire 的 evidence，但不自動刪除或覆寫策略版本。
+- Decision Quality Review：建立週 / 月覆盤紀錄，追蹤錯誤交易、未遵守系統建議、手動 override、錯過訊號與事後歸因。
+- 台股微結構治理：處置股、分盤、全額交割、跳空鎖死、除權息 / 還原價時間軸、三大法人與信用交易資料接入。
+
+驗收標準：
+
+- 任一 dashboard 或 review 只保存可追溯事件、結果與 evidence，不把統計觀察包裝成買賣建議。
+- 所有 forward / live-vs-research 分析都保留當時資料版本、訊號來源、quality / warnings 與 benchmark 定義。
+- 若 evidence 顯示某訊號、警示或 gate 無效，必須能回到 Research Lab / lifecycle review 調整或降權，而不是只增加更多提示。
+
 ---
 
 ## 5. 立即待辦清單
 
-1. Month 6 v1 已完成可用 contract / service / UI 入口，且已補「策略版本 lifecycle evidence 持久化」與 demote / retire proposed evidence 保存；下一步轉入 Month 6.1，重點是人工審核層、Portfolio Review Dashboard 深化、Strategy Evidence Explainability 與完整 QA Checklist，而不是覆寫或刪除既有策略版本。
-2. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
-3. Month 6 任何策略生命週期判斷都必須只讀 Research Run Registry、Portfolio 來源追溯、Factor metadata 與 governed diagnostics；不得重新抓取當前資料替代已保存 run metadata，也不得把 fundamental factor 直接接入 `ScoringEngine`。
-4. 維持 Month 2 / Month 3 / Month 5 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、量化 float boundary 與 no-look-ahead tests。
-5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型列入後續執行模型深化；PDF 報告輸出仍在研究輸出 backlog，不阻塞 Month 6。
+1. V1 release baseline 已完成；下一步轉入 Post-V1 Evidence-Driven baldr，優先補 Forward Performance Dashboard 與 Live vs Research Gap Dashboard 的事件模型、資料版本、benchmark 與 quality 契約。
+2. Month 6.1 仍保留為 lifecycle / feedback 的人工審核深化：Manual Approval Workflow、Strategy Evidence Explainability、Portfolio Review Dashboard 深化與 QA checklist。
+3. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
+4. 維持 Month 2 / Month 3 / Month 5 / Month 6 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、append-only lifecycle evidence、量化 float boundary 與 no-look-ahead tests。
+5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型、處置股 / 分盤 / 全額交割、三大法人與信用交易資料列入後續執行模型與資料治理深化；PDF 報告輸出仍在研究輸出 backlog。
 
 
 ---
@@ -276,11 +322,14 @@
 - 金融核心數值：必須通過 `scripts/check_financial_float_boundaries.py` 與對應 pytest gate。
 - 資料 schema：必須提供 migration / fallback / 資料品質驗證，且不得破壞正式資料。
 - Daily Decision Desk：必須以 service snapshot 聚合，不得在 UI 層複製 scoring、screening、portfolio 或 broker flow 計算。
+- Post-V1 evidence dashboard：必須保存事件日期、決策日可得資料、資料版本、benchmark 定義、quality / warnings 與 forward window，不得把觀察結果包裝成交易建議。
+- Release / healthcheck：Full App Healthcheck、MainWindow UI smoke 與 clean clone gate 只能證明工程交付可用，不得作為投資有效性證據。
 
 ---
 
 ## 7. 更新記錄
 
+- 2026-07-01：更新 V1 closeout baseline，確認四個產品閉環、Strategy Lifecycle / Portfolio Feedback v1 與 release QA 閉環已完成；Roadmap 下一階段轉向 Evidence-Driven baldr，優先 Forward Performance、Live vs Research Gap、Signal Decay、Decision Quality Review 與台股微結構治理。
 - 2026-06-17：完成 Month 5 Fundamental Layer v1 closeout，確認 fundamental schema / 月營收 / 季度財報 / P/E valuation / provider / adapters / diagnostics 已達保守接入驗收；工程主線轉向 Month 6 Strategy Lifecycle 與 Portfolio Feedback。
 - 2026-06-17：完成 Month 6 Strategy Lifecycle / Portfolio Feedback v1，新增 lifecycle rule engine、drift detector、Portfolio post-trade attribution、Portfolio Review snapshot、Registry-based Promote lifecycle gate 與持倉管理生命週期回顧分頁。
 - 2026-06-17：補上 Month 6 lifecycle residual，新增 append-only lifecycle evidence repository、current state projection 與 demote / retire proposed evidence 保存；Promotion 成功後會記錄 applied evidence。

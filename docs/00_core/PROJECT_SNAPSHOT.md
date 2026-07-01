@@ -22,21 +22,21 @@
 
 ## 當前狀態
 
-專案已超出早期線性 Phase 規劃，實際產品主線已形成三個已落地閉環，並新增一個後續目標閉環：
+專案已超出早期線性 Phase 規劃；截至 V1 release readiness closeout，實際產品主線已形成四個可操作產品閉環，並補上 Strategy Lifecycle / Portfolio Feedback 與 release QA 的治理閉環。V1 完成只代表工程入口、資料契約、操作流程與 release gate 已可用，不代表任何推薦、警示或策略已被證明具備投資有效性。
 
-- **閉環 1：資料與市場狀態閉環** ✅ 基礎已建立
+- **閉環 1：資料與市場狀態閉環** ✅ V1 已建立
   - Update → SQLite 狀態 → Market Watch / Smart Money（市場觀察子 Tab）→ 候選池
   - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 快速/安全更新分流 ✅ / Phase 2A/2B/2C SQLite DB-first ✅ / Phase 3 CSV 手動匯出 ✅
-  - 數據更新工作台（Dashboard + 快速/安全更新分流）✅ / SQLite 儲存升級 ✅ / Smart Money Terminal MVP ✅ / 券商分點長碼解密與總公司判定 ✅
+  - 數據更新工作台（Dashboard + 快速/安全更新分流）✅ / SQLite 儲存升級 ✅ / Smart Money Terminal MVP ✅ / 券商分點長碼解密與總公司判定 ✅ / MoneyDJ HTTP fast path 與交易日預檢 ✅ / Full App Healthcheck flow model 覆蓋 ✅
 
-- **閉環 2：研究驗證閉環** ✅ 基礎與治理已建立
+- **閉環 2：研究驗證閉環** ✅ V1 已建立
   - Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Research Run Registry → Promote
   - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3a ✅ / Phase 3.3b ✅ / Strategy Scoring Governance (增量 A & B) ✅
-  - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest MVP ✅ / Backtest chart fast renderer ✅ / Research Run Registry M2-B 基礎保存 ✅ / Registry Cross-run 比較子頁 C2 ✅ / Registry-based Promote Gate C3 ✅
+  - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest credibility v1 ✅ / Backtest chart fast renderer ✅ / Research Run Registry M2-B 基礎保存 ✅ / Registry Cross-run 比較子頁 C2 ✅ / Registry-based Promote Gate C3 ✅
   - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅ / 回測 fixed-quantile 雙模式與 Expanding T-1 歷史門檻 ✅ / 推薦 eligible universe 橫斷面百分位排名與門檻限制 ✅
 
-- **閉環 3：持倉檢查閉環** ✅ 基礎與深化與下鑽已完成
-  - Recommendation / Backtest → Portfolio → Condition Monitor → Journal → 回到研究
+- **閉環 3：持倉檢查閉環** ✅ V1 已建立
+  - Recommendation / Backtest → Portfolio → Condition Monitor / Chip Monitor → Journal / Lifecycle Review → 回到研究
   - Phase 4.1 Portfolio MVP 與深化 ✅：domain/service/test、Portfolio Tab、來源追溯 metadata、ConditionMonitor 複合警告與停損停利已實作
   - 策略版本與推薦來源追蹤視圖、目前價格對比、未實現損益計算已深化完成，且已修正 float 邊界合規漏洞與三層防禦策略版本串接 (2026-06-11)
   - Phase 4.2 Portfolio 籌碼監控與下鑽 ✅：新增籌碼監控 Tab 與追蹤分點表格，依淨買賣、集中度及連續天數評估風險（bullish/neutral/bearish），並實作🔍 下鑽主力流向按鈕與自動高亮定位功能 (2026-06-11)
@@ -44,9 +44,17 @@
 - **效能與研究輸出（Phase 5）** ✅ SQLite 檢視器分頁與規格化 Excel 報告匯出已完成 (2026-06-14)
   - 圖表渲染優化 ✅ / 批次回測並行化 ✅ / SQLite 檢視器穩定分頁 ✅ / 規格化 Excel 報告匯出 ✅
 
-- **目標閉環 4：每日決策工作台（Daily Decision Desk）** ✅ Month 4 v1 已收尾
-  - 目標：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。
+- **閉環 4：每日決策工作台（Daily Decision Desk）** ✅ V1 已建立
+  - Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。
   - 目前主 UI 已接上「每日決策」工作區，各 section 已具備 snapshot 顯示框架；Market Regime、Market Breadth v1、Sector Rotation v1、Relative Strength / Liquidity Ranking v1、Watchlist Trigger v1 與 Portfolio Alert v1 已接主 UI。Market Breadth v1 由 SQLite `daily_prices` 推導多方 / 空方 / 持平、成交量擴散與新高新低等 metadata；Sector Rotation v1 由 SQLite `industry_indices` 推導領先 / 落後產業、5 / 20 日變化與輪動強度；Relative Strength / Liquidity Ranking v1 由 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性代碼；Watchlist Trigger v1 由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導，可計算出個股強度 score_bp (RSI * 100) 與風險警示 risk_alert (偏離 RSI > 80 / < 20 或跌破 lowerband)。若指定日無資料或歷史不足（如 20 日相對強度未滿 21 個交易觀測值），會採用最近可用交易日或降級（quality 降級為 `DEGRADED`，並輸出 `relative_strength_liquidity_insufficient_history`）。Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，可把條件監控與籌碼風險彙總成每日持倉警示；若籌碼資料缺失、估算或不可用，會透過 `quality / warnings` 降級揭露，不補值。Portfolio Alert Attribution v1 已將每筆持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，使 Daily Decision Desk 能辨識警示來自進場假設失效、籌碼風險或資料品質缺口。Why Not / 風險提示 v1 由 `DecisionDeskRiskPromptService` 從既有 section DTO 的 quality、warnings、低流動性、相對弱勢、watchlist risk alert 與 portfolio alert 推導，不在 UI 層重算 scoring、screening、portfolio 或 liquidity。Month 4 收尾已新增 UI boundary contract test，確認 Daily Decision Desk UI 不直接 import domain 計算模組；視覺 polish 仍列為後續設計債，不阻塞 Month 5。
+
+- **治理閉環：Strategy Lifecycle / Portfolio Feedback** ✅ Month 6 v1 已建立
+  - Research Run Registry → Month 6 lifecycle gate → promote / hold / demote / retire evidence → Portfolio Feedback → Portfolio Review → 回到 Research。
+  - 已建立 `StrategyLifecycleService`、`LifecycleEvidenceRepository`、`PortfolioFeedbackService` 與 `PortfolioReviewService`；promotion 成功後保存 applied evidence，demote / retire 先保存 proposed evidence；持倉管理「生命週期回顧」可判讀 thesis 狀態、來源追溯、執行落差、訊號 / 市場 / 資料品質歸因。
+
+- **交付治理閉環：V1 Release / Full App Healthcheck** ✅ V1 release gate 已通過
+  - Full App Healthcheck → flow diagnostics → tab full bridge → MainWindow UI smoke → 人工 UI smoke → V1 checklist → `main` / clean clone gate。
+  - `docs/06_qa/V1_RELEASE_CHECKLIST_2026_06_30.md` 已記錄 quick healthcheck、逐 tab full bridge、MainWindow UI smoke、人工 8 工作區 smoke、文件一致性、`main` 合入後 release gate 與 clean clone / install gate 均通過。此閉環屬工程交付信心，不代表投資訊號有效性。
 
 
 - **文件治理與 Manual** ✅ 本輪完成
@@ -56,10 +64,11 @@
 
 ## 現在的工作模式（你每天要用的流程）
 
-1. Update 使用「⚡ 快速更新 (僅 SQLite)」或「🛡️ 安全更新 (完整 CSV + SQLite)」或左側資料來源頁更新資料
-2. Market Watch 看 Regime + 強弱
-3. Recommendation 用 Profile 出名單 + 看 Why/WhyNot → 加入候選池，或送 Research Lab 批次回測 / 推薦回放
-4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；成功結果可保存到 Research Run Registry，必要時把明確交易記錄到 Portfolio 並保留來源追溯
+1. Update 使用「⚡ 快速更新（跳過大型合併）」或「🛡️ 安全更新（完整 CSV + SQLite）」補齊資料，必要時用 SQLite Inspector 唯讀確認 freshness。
+2. 每日先看 Daily Decision Desk 的主結論、資料品質、Watchlist Trigger 與 Portfolio Alert，再下鑽 Market Watch / Smart Money。
+3. Recommendation 用 Profile 出名單 + 看 Why / Why Not → 加入候選池，或送 Research Lab 批次回測 / 推薦回放。
+4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；成功結果可保存到 Research Run Registry，只有通過 Registry 與 Month 6 lifecycle gate 才能升級策略版本。
+5. Portfolio 用來追蹤實際或模擬持倉來源、條件監控、籌碼風險與生命週期回顧；警示與失效原因應回到 Research Lab / Registry 比較 / 覆盤日誌確認。
 
 ## Tech Lead 的預設任務（開場要先做什麼）
 
@@ -68,15 +77,17 @@
 
 ## 本週優先事項（只列 3 個）
 
-1. Month 5 Fundamental Layer v1 已完成 closeout：正式 SQLite 已具備 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics` 三張表；月營收 baseline 已回填至 244,499 筆、季度財報 items 已回填 1,645,555 筆、P/E valuation records 已正式寫入 831 筆。`FundamentalSQLiteProvider` 與 `FundamentalFactorService` 已能在 `available_date <= decision_date` gate 下輸出月營收、季度財報、P/E valuation factor records / diagnostics，且仍不接 `ScoringEngine`、不產生目標價、合理價、上漲空間或交易建議。
-2. Month 5 residuals 已明確移交為後續治理限制：retroactive baseline 與 statement baseline 多數 quality 為 `degraded`，只代表導入日後可使用的歷史 baseline，不是官方歷史 point-in-time 公告日；P/B、P/S presentation policy 已採保守外部 observation / future backfill 邊界，不在系統內用不完整財報推導 book value、share count、market cap 或 TTM sales；免費官方來源仍未找到可批次追溯原始歷史月營收公告日的端點，TEJ / PIT 匯出仍是候選來源。
-3. Month 6 Strategy Lifecycle / Portfolio Feedback v1 已完成第一輪可用閉環，且已補上 lifecycle evidence 持久化：新增 `StrategyLifecycleService`、`LifecycleEvidenceRepository`、`PortfolioFeedbackService`、`PortfolioReviewService`，Registry-based Promote Gate 已改走 Month 6 lifecycle gate 並在成功升級後保存 evidence，持倉管理右側新增「生命週期回顧」分頁，可顯示 thesis 狀態、來源追溯、執行落差、訊號 / 市場 / 資料品質歸因。此 v1 仍不修改 `ScoringEngine`、不重算回測績效、不自動刪除既有策略版本，也不把 fundamental factor 直接納入推薦分數。
+1. **V1 release baseline 已完成**：四個產品閉環、Month 6 Strategy Lifecycle / Portfolio Feedback v1、Full App Healthcheck / MainWindow UI smoke / clean clone gate 已形成可交付基準。下一步不是宣稱投資有效，而是進入 evidence-driven 驗證。
+2. **下一階段主線：Evidence-Driven baldr**：優先建立 Forward Performance Dashboard、Live vs Research Gap Dashboard、Signal Decay Monitor 與 Decision Quality Review，追蹤 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 與 Strategy Lifecycle 判斷是否真的改善決策。
+3. **維持 V1 安全邊界與資料治理**：Month 5 retroactive baseline / statement baseline 多數仍為 `degraded`，P/B / P/S 仍只接受 governed external observations 或後續明確 backfill records；策略、回測、推薦、factor 與 portfolio 改動仍需 no-look-ahead、Decimal / 整數單位與 release healthcheck 防線。
 
 ## 高風險區（改動需謹慎）
 
 Month 6 v1 狀態（2026-06-17）：策略生命週期判斷只讀 Research Run Registry metadata、benchmark results、factor snapshot / contribution、regime breakdown 與 Portfolio 來源追溯。Promotion 不能只靠單次正報酬；run 必須通過交易次數、總報酬、Sharpe、回撤、勝率、benchmark excess return、factor quality 與 regime compatibility gate。Lifecycle evidence 採 append-only SQLite table 保存 decision snapshot / gate reasons / version id，可投影 latest state；demote / retire 會先形成 proposed evidence，不會自動刪除策略版本。Portfolio feedback 只輸出 post-trade attribution / live-vs-research gap，不會自動下單、平倉、改寫持倉或刪除歷史策略證據。
 
-Month 5 Revenue Factor Pack 最新覆寫註記（2026-06-16）：正式 `fundamental_monthly_revenues` 已回填 1,848 筆 2026-05 MOPS records，不再是缺月營收狀態。新增 `scripts/inspect_fundamental_factors.py` 唯讀檢視入口後，以 `decision_date=2026-06-30` 掃描全月營收股票得到股票數 1,848、factor records 4,464、diagnostics 3,696；月營收可產生 `fundamental.revenue_3m_trend` 1,848 筆與 `fundamental.revenue_new_high` 1,848 筆，YoY / MoM 因正式 DB 目前只有 2026-05 單月而回 `fundamental_revenue.baseline_missing` diagnostics。此流程不寫資料、不接 `ScoringEngine`；下一步仍是補更多月份的 governed monthly revenue baseline，Month 6 前不應把 YoY / MoM 視為可用訊號。
+V1 release 狀態（2026-06-30）：`main` 已通過 release gate、quick healthcheck、MainWindow UI smoke 與 clean clone / install gate。這只代表 repo 可乾淨 clone、安裝、啟動、切換 8 個頂層工作區並完成主要非破壞式驗證；不得解讀為推薦、警示、策略或基本面 diagnostics 已通過投資有效性驗證。
+
+Month 5 Revenue Factor Pack 最新覆寫註記（2026-06-16）：正式 `fundamental_monthly_revenues` 已回填 1,848 筆 2026-05 MOPS records，不再是缺月營收狀態。新增 `scripts/inspect_fundamental_factors.py` 唯讀檢視入口後，以 `decision_date=2026-06-30` 掃描全月營收股票得到股票數 1,848、factor records 4,464、diagnostics 3,696；月營收可產生 `fundamental.revenue_3m_trend` 1,848 筆與 `fundamental.revenue_new_high` 1,848 筆，YoY / MoM 因正式 DB 目前只有 2026-05 單月而回 `fundamental_revenue.baseline_missing` diagnostics。此流程不寫資料、不接 `ScoringEngine`；後續仍須補更多月份的 governed monthly revenue baseline，不應把不足資料期間的 YoY / MoM 視為可用高信心訊號。
 
 Month 5 retroactive baseline 最新補充（2026-06-16）：新增 `scripts/build_monthly_revenue_retroactive_baseline_mapping.py`，可從 MOPS snapshot 產生 `manual.retroactive_baseline_mapping` 候選 mapping；此 source 只代表「導入日後可使用的歷史 baseline」，不是官方歷史公告日，quality 為 `degraded`，不得用於導入日前回測。以 `2014-04..2026-04`、`available_date=2026-06-17` 產生候選時，candidate / validator accepted / dry-run normalized 均為 242,651 筆、diagnostics 0。依人工確認正式 apply 後，`fundamental_monthly_revenues` 為 244,499 筆、期間 `2014-04..2026-05`、股票數 1,848、period 數 146、0 duplicate，quality 分布為 242,651 筆 `degraded` 與 1,848 筆 `observed`，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_mops_monthly_revenue_backfill_20260616_224147.db`；Revenue Factor Pack 可產生 YoY 1,843、MoM 1,842、3M trend 1,848、new high 1,848，剩餘 diagnostics 11 筆。
 
