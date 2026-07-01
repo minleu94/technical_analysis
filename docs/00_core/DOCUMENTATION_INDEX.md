@@ -113,6 +113,7 @@
 | [2026-07-06-post-v1-evidence-scheduler-dry-run-design.md](../superpowers/specs/2026-07-06-post-v1-evidence-scheduler-dry-run-design.md) | Post-V1 Evidence Scheduler Dry-run 設計，定義 manual pipeline runner、dry-run / confirm gate、diagnostics report、readiness 上限與 production scheduler 門檻。 |
 | [2026-07-07-post-v1-production-scheduler-approval-design.md](../superpowers/specs/2026-07-07-post-v1-production-scheduler-approval-design.md) | Post-V1 Production Scheduler Approval 設計，定義 working-copy DB smoke、scheduler readiness evaluator、人工核准清單與 production scheduler 仍未啟用邊界。 |
 | [2026-07-08-post-v1-live-research-gap-linkage-design.md](../superpowers/specs/2026-07-08-post-v1-live-research-gap-linkage-design.md) | Post-V1 Live vs Research Gap linkage 設計，定義 portfolio source trace、Evidence Event / Outcome linkage、保守 matching、attribution 與 portfolio mode 邊界。 |
+| [2026-07-09-post-v1-signal-decay-monitor-design.md](../superpowers/specs/2026-07-09-post-v1-signal-decay-monitor-design.md) | Post-V1 Signal Decay Monitor 設計，定義 decay observation、scope、window policy、rule-based score、lifecycle proposed payload 與不自動套用 action 邊界。 |
 | [2026-06-13-strategy-scoring-governance.md](../superpowers/plans/2026-06-13-strategy-scoring-governance.md) | 策略分數治理總控計畫與增量 Gate。 |
 | [2026-06-14-month-3-factor-layer.md](../superpowers/plans/2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫，拆分 Factor Contract、Registry、Look-ahead Gate、v1 adapters 與 Research Run 追溯保存。 |
 | [2026-07-01-post-v1-evidence-event-store.md](../superpowers/plans/2026-07-01-post-v1-evidence-event-store.md) | Post-V1 Evidence Event Store / Forward Outcome Calculator v1 實作計畫，拆分 DTO、repository、service、calculator、CLI、tests 與 QA 文件。 |
@@ -123,6 +124,7 @@
 | [2026-07-06-post-v1-evidence-scheduler-dry-run.md](../superpowers/plans/2026-07-06-post-v1-evidence-scheduler-dry-run.md) | Post-V1 Evidence Pipeline Runner dry-run 實作計畫，拆分 runner DTO、service、CLI、report、tests 與 QA 文件。 |
 | [2026-07-07-post-v1-production-scheduler-approval.md](../superpowers/plans/2026-07-07-post-v1-production-scheduler-approval.md) | Post-V1 Production Scheduler Approval 實作計畫，拆分 working-copy smoke script、readiness evaluator、approval checklist、tests 與文件同步。 |
 | [2026-07-08-post-v1-live-research-gap-linkage.md](../superpowers/plans/2026-07-08-post-v1-live-research-gap-linkage.md) | Post-V1 Live vs Research Gap linkage 實作計畫，拆分 DTO、repository、service、CLI、matching tests、安全邊界與文件同步。 |
+| [2026-07-09-post-v1-signal-decay-monitor.md](../superpowers/plans/2026-07-09-post-v1-signal-decay-monitor.md) | Post-V1 Signal Decay Monitor 實作計畫，拆分 DTO、repository、service、CLI、lifecycle payload、tests 與文件同步。 |
 | [2026-06-14-month-3-factor-run-integration.md](../superpowers/plans/2026-06-14-month-3-factor-run-integration.md) | Month 3 Factor Run Integration 計畫，將 factor snapshot / contribution summary 接入 Research Run 實際保存流程。 |
 | [2026-06-15-month-3-recommendation-factor-feed.md](../superpowers/plans/2026-06-15-month-3-recommendation-factor-feed.md) | Month 3 Recommendation Factor Feed 計畫，讓推薦組合回放產生並保存 factor snapshot / contribution metadata。 |
 | [2026-06-15-decision-desk-watchlist-trigger.md](../superpowers/plans/2026-06-15-decision-desk-watchlist-trigger.md) | Daily Decision Desk Watchlist Trigger v1 接線計畫，對接 `WatchlistService` 與 SQLite `technical_indicators`，並定義日期 fallback、quality 與 warnings 契約。 |
@@ -195,6 +197,7 @@
 | [POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md) | Post-V1 Evidence Pipeline Runner dry-run QA 紀錄，包含 dry-run / confirm 行為、report、readiness、blocking gaps 與 production scheduler 未啟用邊界。 |
 | [POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md](../06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md) | Post-V1 Evidence Production Scheduler Approval checklist，集中管理 working-copy smoke、人工核准、rollback / recovery 與正式排程未啟用邊界。 |
 | [POST_V1_LIVE_RESEARCH_GAP_LINKAGE_QA_2026_07_08.md](../06_qa/POST_V1_LIVE_RESEARCH_GAP_LINKAGE_QA_2026_07_08.md) | Post-V1 Live vs Research Gap linkage QA，包含 source trace coverage、matching policy、attribution policy、portfolio mode policy、CLI examples 與安全邊界。 |
+| [POST_V1_SIGNAL_DECAY_MONITOR_QA_2026_07_09.md](../06_qa/POST_V1_SIGNAL_DECAY_MONITOR_QA_2026_07_09.md) | Post-V1 Signal Decay Monitor QA，包含 decay repository、service policy、CLI examples、lifecycle proposed payload 與安全邊界。 |
 
 
 ---
@@ -295,6 +298,7 @@
 - 2026-07-06：新增 Post-V1 Evidence Scheduler Dry-run design / plan 與 QA 索引，標示 manual pipeline runner 已完成；readiness 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
 - 2026-07-07：新增 Post-V1 Production Scheduler Approval design / plan 與 approval checklist 索引，標示 working-copy smoke 與 readiness evaluator 已建立；production scheduler 仍未啟用，需人工核准與 rollback / recovery 檢查。
 - 2026-07-08：新增 Post-V1 Live vs Research Gap linkage design / plan 與 QA 索引，標示 gap observation repository / service / CLI 已建立；此為 evidence observation，不是完整實帳歸因或 lifecycle action。
+- 2026-07-09：新增 Post-V1 Signal Decay Monitor design / plan 與 QA 索引，標示 decay observation repository / service / CLI 已建立；lifecycle proposed payload 只供人工審核，不自動套用 action。
 - 2026-06-30：新增 v1 release checklist 索引，將 `v1.0.0-rc.1` / `v1.0.0` 發布前的自動化、非破壞 healthcheck、MainWindow UI smoke、全新 clone 與人工 UI 驗證 gate 集中管理。
 - 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。
