@@ -39,8 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--db-path", required=True)
-    parser.add_argument("--status-path", required=True)
-    parser.add_argument("--log-path", required=True)
+    parser.add_argument("--status-path")
+    parser.add_argument("--log-path")
     parser.add_argument("--stale-days", type=int, default=7)
     return parser
 
@@ -50,8 +50,10 @@ def main(argv: list[str] | None = None) -> int:
     data_root = Path(args.data_root)
     output_root = Path(args.output_root)
     db_path = Path(args.db_path)
-    status_path = Path(args.status_path)
-    log_path = Path(args.log_path)
+    run_root = output_root / "scheduled" / "data_freshness"
+    today_key = date.today().isoformat().replace("-", "")
+    status_path = Path(args.status_path) if args.status_path else run_root / "latest_status.json"
+    log_path = Path(args.log_path) if args.log_path else run_root / f"{today_key}_data_freshness.log"
     status_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 

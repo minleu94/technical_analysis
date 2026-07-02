@@ -17,7 +17,7 @@ if "%DATA_ROOT%"=="" set "DATA_ROOT=D:\Min\Python\Project\FA_Data"
 if "%OUTPUT_ROOT%"=="" set "OUTPUT_ROOT=%DATA_ROOT%\output"
 
 if "%~3"=="" (
-  for /f %%I in ('"%PYTHON%" -c "from datetime import date; print(date.today().strftime('%%Y-%%m-%%d'))"') do set "DECISION_DATE=%%I"
+  for /f %%I in ('"%PYTHON%" -c "from datetime import date; print(date.today().isoformat())"') do set "DECISION_DATE=%%I"
 ) else (
   set "DECISION_DATE=%~3"
 )
@@ -27,7 +27,7 @@ if "%~4"=="" (
   set "REPEAT=%~4"
 )
 
-for /f %%I in ('"%PYTHON%" -c "from datetime import date; print(date.today().strftime('%%Y%%m%%d'))"') do set "TODAY=%%I"
+for /f %%I in ('"%PYTHON%" -c "from datetime import date; print(date.today().isoformat().replace('-',''))"') do set "TODAY=%%I"
 
 set "RUN_ROOT=%OUTPUT_ROOT%\scheduled\evidence_working_copy_smoke"
 set "REPORT_ROOT=%RUN_ROOT%\reports"
