@@ -99,3 +99,9 @@ The daily automation runs only:
 It does not run production evidence confirm, does not write the production evidence DB, does not update production data, does not run the UI, does not read UI state, does not change portfolio state, does not change `ScoringEngine`, does not change recommendation weights, does not promote / demote / retire strategies, and does not automate trading.
 
 The generated evidence reports are for human review only. They do not prove alpha and must not be converted into trading advice.
+
+## Codex Morning Summary
+
+The Codex app automation `baldr scheduled evidence morning report` runs separately at about local time 05:30. It only reads Windows Task Scheduler status, `latest_status.json`, the latest evidence dry-run report, and relevant log warning / error sections, then writes a Traditional Chinese summary to the user.
+
+It must not rerun data freshness, rerun the evidence pipeline, enter confirm write mode, create or modify Windows Task Scheduler tasks, write the production evidence DB, change portfolio / scoring / recommendation weights, apply lifecycle actions, push, or produce trading advice.

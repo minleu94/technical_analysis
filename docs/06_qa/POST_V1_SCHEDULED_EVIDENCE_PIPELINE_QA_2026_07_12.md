@@ -22,6 +22,8 @@
 | `baldr-evidence-pipeline-dry-run-daily` | Daily local time 05:15 | `cmd.exe /c "<repo>\scripts\scheduled\run_evidence_pipeline_dry_run.cmd"` | 只寫 report/status/log，不寫 evidence DB |
 | `baldr-evidence-working-copy-smoke-manual` | Manual only | script only | 不建立每日自動 task |
 
+Codex app 另有 `baldr scheduled evidence morning report` automation，每日本機時間約 05:30 執行 read-only 摘要。它只查詢 Windows Task Scheduler、`latest_status.json`、最新 evidence dry-run report 與必要 log 區段，不重新執行 freshness / evidence pipeline，也不建立或修改 Windows Task Scheduler task。
+
 ## Wrapper Behavior
 
 ### Data Freshness
@@ -100,6 +102,7 @@ git diff --check
 - 沒有自動 lifecycle action。
 - 沒有 portfolio、ScoringEngine 或推薦權重變更。
 - Evidence dry-run report 只供人工 review，不宣稱 alpha、不產生買賣建議。
+- Codex morning summary 只讀取既有 task/status/report/log，不使用 `--confirm`，不寫 production evidence DB。
 
 ## Known Limitations
 

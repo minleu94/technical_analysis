@@ -19,6 +19,7 @@ schtasks /Query /TN baldr-evidence-pipeline-dry-run-daily /V /FO LIST
 - `baldr-data-freshness-check-daily`：每天本機時間 05:00，執行 `scripts\scheduled\run_daily_data_freshness_check.cmd`。
 - `baldr-evidence-pipeline-dry-run-daily`：每天本機時間 05:15，執行 `scripts\scheduled\run_evidence_pipeline_dry_run.cmd`。
 - `baldr-evidence-working-copy-smoke-manual`：manual-only；目前不建立每日自動 task。
+- Codex app `baldr scheduled evidence morning report`：每天約 05:30，只讀查詢上述 task、status、report 與必要 log，產生繁體中文摘要；它不是 Windows Task Scheduler task，也不重新執行 pipeline。
 
 若前兩個 task 沒有出現，先執行：
 
@@ -109,5 +110,6 @@ scripts\scheduled\unregister_baldr_scheduled_tasks.cmd unregister
 - portfolio / scoring / recommendation weights 修改。
 - promote / demote / retire。
 - 自動交易。
+- Codex app 摘要 automation 不會建立或修改 Windows Task Scheduler task，也不會重新執行 freshness / evidence pipeline。
 
 Production confirm 仍未啟用，未來仍需人工核准、working-copy smoke、多日 dry-run record 與 rollback / recovery 檢查。
