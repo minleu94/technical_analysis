@@ -6,12 +6,13 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QGroupBox, QProgressBar,
-    QLineEdit, QDoubleSpinBox, QDateEdit, QComboBox,
+    QLineEdit, QDoubleSpinBox, QComboBox,
     QFormLayout, QSpinBox, QCheckBox, QSizePolicy
 )
 from PySide6.QtCore import Qt, QDate, QTimer
 from PySide6.QtGui import QFont
 from ui_qt.widgets.info_button import InfoButton
+from ui_qt.widgets.date_filter_edit import TodayAnchoredDateEdit
 from ui_qt.views.backtest.helpers import RESEARCH_LAB_MODES
 
 
@@ -177,13 +178,13 @@ class BacktestConfigPanel(QWidget):
         self.parent_view._populate_watchlist_combo()
 
         # 日期範圍
-        self.start_date = QDateEdit()
+        self.start_date = TodayAnchoredDateEdit()
         self.start_date.setDate(QDate.currentDate().addYears(-1))
         self.start_date.setCalendarPopup(True)
         self.start_date.setDisplayFormat("yyyy-MM-dd")
         config_form.addRow("開始日期:", self.start_date)
 
-        self.end_date = QDateEdit()
+        self.end_date = TodayAnchoredDateEdit()
         self.end_date.setDate(QDate.currentDate())
         self.end_date.setCalendarPopup(True)
         self.end_date.setDisplayFormat("yyyy-MM-dd")

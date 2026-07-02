@@ -414,6 +414,8 @@ def test_research_lab_date_edits_use_calendar_popup_and_expected_defaults(qt_app
     assert view.end_date.calendarPopup()
     assert view.end_date.date() == today
     assert 360 <= view.start_date.date().daysTo(today) <= 371
+    assert view.start_date._calendar_page_date() == today
+    assert view.end_date._calendar_page_date() == today
 
 
 def test_research_registry_refreshes_after_save_delete_and_promote(qt_app):

@@ -153,14 +153,18 @@ def test_forward_performance_date_filters_do_not_display_or_submit_sentinel() ->
     app()
     service = FakeDashboardService(_result(()))
     view = ForwardPerformanceView(service, auto_refresh=False, async_refresh=False)
+    today = QDate.currentDate()
 
     assert "1900" not in view.start_date_input.text()
     assert "1900" not in view.end_date_input.text()
     assert date_filter_value(view.start_date_input) is None
     assert date_filter_value(view.end_date_input) is None
+    assert view.start_date_input._calendar_page_date() == today
+    assert view.end_date_input._calendar_page_date() == today
 
     view.start_date_input.setDate(QDate(2026, 6, 30))
     assert date_filter_value(view.start_date_input) == "2026-06-30"
+    assert view.start_date_input._calendar_page_date() == QDate(2026, 6, 30)
 
     view.start_date_input.clear()
     view.refresh_dashboard()
