@@ -20,24 +20,24 @@ BP_COLUMNS = {
 
 
 COLUMNS = (
-    ("signal_scope_type", "Scope Type"),
-    ("signal_scope_id", "Scope ID"),
-    ("sample_size_short", "Short Sample"),
-    ("sample_size_long", "Long Sample"),
-    ("forward_excess_short_bp", "Short Excess"),
-    ("forward_excess_long_bp", "Long Excess"),
-    ("win_rate_short_bp", "Short Rate"),
-    ("win_rate_long_bp", "Long Rate"),
-    ("mae_short_bp", "Short MAE"),
-    ("mae_long_bp", "Long MAE"),
-    ("live_gap_short_bp", "Short Gap"),
-    ("live_gap_long_bp", "Long Gap"),
-    ("decay_score_bp", "Decay Score"),
-    ("decay_status", "Status"),
-    ("suggested_lifecycle_action", "Lifecycle Candidate"),
-    ("confidence", "Confidence"),
-    ("quality", "Quality"),
-    ("warnings", "Warnings"),
+    ("signal_scope_type", "範圍類型"),
+    ("signal_scope_id", "範圍 ID"),
+    ("sample_size_short", "短窗樣本"),
+    ("sample_size_long", "長窗樣本"),
+    ("forward_excess_short_bp", "短窗超額"),
+    ("forward_excess_long_bp", "長窗超額"),
+    ("win_rate_short_bp", "短窗勝率"),
+    ("win_rate_long_bp", "長窗勝率"),
+    ("mae_short_bp", "短窗 MAE"),
+    ("mae_long_bp", "長窗 MAE"),
+    ("live_gap_short_bp", "短窗落差"),
+    ("live_gap_long_bp", "長窗落差"),
+    ("decay_score_bp", "衰退分數"),
+    ("decay_status", "狀態"),
+    ("suggested_lifecycle_action", "生命週期候選"),
+    ("confidence", "信心"),
+    ("quality", "品質"),
+    ("warnings", "警告"),
 )
 
 
@@ -99,9 +99,9 @@ class SignalDecayTableModel(QAbstractTableModel):
 
     def _display_value(self, field_name: str, value) -> str:
         if value is None:
-            return "N/A"
+            return "無資料"
         if field_name in BP_COLUMNS:
             return format_bp_as_percent(value)
         if isinstance(value, tuple):
-            return ", ".join(str(item) for item in value) or "None"
+            return ", ".join(str(item) for item in value) or "無"
         return str(value)

@@ -17,27 +17,27 @@ BP_COLUMNS = {
 
 
 COLUMNS = (
-    ("symbol", "Symbol"),
-    ("portfolio_mode", "Mode"),
-    ("source_type", "Source"),
-    ("source_id", "Source ID"),
-    ("strategy_version_id", "Strategy"),
-    ("entry_date", "Entry Date"),
-    ("holding_days", "Holding Days"),
-    ("portfolio_return_bp", "Portfolio Return"),
-    ("forward_evidence_return_bp", "Forward Evidence"),
-    ("benchmark_excess_bp", "Benchmark Excess"),
-    ("gap_vs_research_bp", "Gap vs Research"),
-    ("gap_vs_forward_evidence_bp", "Gap vs Forward"),
-    ("gap_vs_benchmark_bp", "Gap vs Benchmark"),
-    ("condition_status", "Condition"),
-    ("chip_risk_level", "Chip Risk"),
-    ("regime_at_entry", "Entry Regime"),
-    ("regime_current", "Current Regime"),
-    ("attribution_categories", "Attribution"),
-    ("match_confidence", "Match"),
-    ("quality", "Quality"),
-    ("warnings", "Warnings"),
+    ("symbol", "股票"),
+    ("portfolio_mode", "模式"),
+    ("source_type", "來源"),
+    ("source_id", "來源 ID"),
+    ("strategy_version_id", "策略版本"),
+    ("entry_date", "進場日"),
+    ("holding_days", "持有天數"),
+    ("portfolio_return_bp", "持倉報酬"),
+    ("forward_evidence_return_bp", "前瞻證據"),
+    ("benchmark_excess_bp", "大盤超額"),
+    ("gap_vs_research_bp", "對研究落差"),
+    ("gap_vs_forward_evidence_bp", "對前瞻落差"),
+    ("gap_vs_benchmark_bp", "對大盤落差"),
+    ("condition_status", "條件狀態"),
+    ("chip_risk_level", "籌碼風險"),
+    ("regime_at_entry", "進場狀態"),
+    ("regime_current", "目前狀態"),
+    ("attribution_categories", "歸因"),
+    ("match_confidence", "連結信心"),
+    ("quality", "品質"),
+    ("warnings", "警告"),
 )
 
 
@@ -91,9 +91,9 @@ class LiveResearchGapTableModel(QAbstractTableModel):
 
     def _display_value(self, field_name: str, value) -> str:
         if value is None:
-            return "N/A"
+            return "無資料"
         if field_name in BP_COLUMNS:
             return format_bp_as_percent(value)
         if isinstance(value, tuple):
-            return ", ".join(str(item) for item in value) or "None"
+            return ", ".join(str(item) for item in value) or "無"
         return str(value)

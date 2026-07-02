@@ -392,6 +392,7 @@ class BacktestResultPanel(QWidget):
             live_gap_service=create_live_research_gap_dashboard_service(config),
             signal_decay_service=create_signal_decay_dashboard_service(config),
             decision_quality_service=create_decision_quality_dashboard_service(config),
+            evidence_db_path=str(getattr(config, "db_file", "")),
         )
-        self.result_tabs.addTab(self.evidence_review_widget, "Evidence Review")
+        self.result_tabs.addTab(self.evidence_review_widget, "證據覆盤")
         return self.forward_performance_widget

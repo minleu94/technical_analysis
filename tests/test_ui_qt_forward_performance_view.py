@@ -5,7 +5,8 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QDate, Qt
+from PySide6.QtWidgets import QApplication, QDateEdit
 
 from app_module.forward_performance_dashboard_dtos import (
     ForwardPerformanceDashboardCardSummary,
@@ -20,6 +21,7 @@ from app_module.forward_performance_read_model import (
 )
 from ui_qt.models.forward_performance_table_model import ForwardPerformanceTableModel
 from ui_qt.views.forward_performance_view import ForwardPerformanceView
+from ui_qt.widgets.date_filter_edit import date_filter_value
 
 
 def app():
@@ -123,19 +125,57 @@ def test_forward_performance_view_renders_filters_cards_table_and_details() -> N
     service = FakeDashboardService(_result((_row(),)))
     view = ForwardPerformanceView(service, auto_refresh=False, async_refresh=False)
 
+    assert isinstance(view.start_date_input, QDateEdit)
+    assert isinstance(view.end_date_input, QDateEdit)
+    assert view.start_date_input.calendarPopup()
+    assert view.end_date_input.calendarPopup()
+    view.start_date_input.setDate(QDate(2026, 6, 1))
+    view.end_date_input.setDate(QDate(2026, 6, 30))
     view.symbol_input.setText("2330")
-    view.group_by_combo.setCurrentText("regime")
+    view.group_by_combo.setCurrentIndex(view.group_by_combo.findData("regime"))
     view.window_days_input.setValue(20)
     view.min_sample_size_input.setValue(10)
     view.refresh_dashboard()
 
+    assert service.calls[-1].start_date == "2026-06-01"
+    assert service.calls[-1].end_date == "2026-06-30"
     assert service.calls[-1].symbol == "2330"
     assert service.calls[-1].group_by == "regime"
+    assert "事件總數" in view.total_events_card.text()
     assert "15" in view.total_events_card.text()
     assert view.table_model.rowCount() == 1
     assert "recommendation_included" in view.detail_panel.toPlainText()
     assert "Close-to-close" in view.detail_panel.toPlainText()
     assert "不是買賣建議" in view.boundary_label.text()
+
+
+def test_forward_performance_date_filters_do_not_display_or_submit_sentinel() -> None:
+    app()
+    service = FakeDashboardService(_result(()))
+    view = ForwardPerformanceView(service, auto_refresh=False, async_refresh=False)
+
+    assert "1900" not in view.start_date_input.text()
+    assert "1900" not in view.end_date_input.text()
+    assert date_filter_value(view.start_date_input) is None
+    assert date_filter_value(view.end_date_input) is None
+
+    view.start_date_input.setDate(QDate(2026, 6, 30))
+    assert date_filter_value(view.start_date_input) == "2026-06-30"
+
+    view.start_date_input.clear()
+    view.refresh_dashboard()
+
+    assert "1900" not in view.start_date_input.text()
+    assert service.calls[-1].start_date is None
+
+
+def test_forward_performance_table_headers_are_chinese() -> None:
+    app()
+    model = ForwardPerformanceTableModel()
+
+    assert model.headerData(model.column_index("group_key"), Qt.Horizontal) == "群組"
+    assert model.headerData(model.column_index("mean_forward_return_bp"), Qt.Horizontal) == "平均前瞻報酬"
+    assert model.headerData(model.column_index("summary_status"), Qt.Horizontal) == "狀態"
 
 
 def test_forward_performance_view_empty_and_degraded_states() -> None:

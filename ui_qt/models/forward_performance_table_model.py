@@ -22,27 +22,27 @@ BP_COLUMNS = {
 
 
 COLUMNS = (
-    ("group_key", "Group"),
-    ("window_days", "Window"),
-    ("sample_size", "Sample"),
-    ("pending_count", "Pending"),
-    ("missing_count", "Missing"),
-    ("mean_forward_return_bp", "Mean Forward"),
-    ("median_forward_return_bp", "Median Forward"),
-    ("mean_benchmark_excess_bp", "Mean Benchmark Excess"),
-    ("median_benchmark_excess_bp", "Median Benchmark Excess"),
-    ("mean_industry_excess_bp", "Mean Industry Excess"),
-    ("median_industry_excess_bp", "Median Industry Excess"),
-    ("positive_rate_bp", "Positive Rate"),
-    ("win_vs_benchmark_rate_bp", "Win vs Benchmark"),
-    ("win_vs_industry_rate_bp", "Win vs Industry"),
-    ("mean_mae_bp", "Mean MAE"),
-    ("mean_mfe_bp", "Mean MFE"),
-    ("summary_status", "Status"),
-    ("first_event_date", "First Event"),
-    ("last_event_date", "Last Event"),
-    ("quality_counts", "Quality"),
-    ("warning_counts", "Warnings"),
+    ("group_key", "群組"),
+    ("window_days", "觀察天數"),
+    ("sample_size", "樣本數"),
+    ("pending_count", "等待中"),
+    ("missing_count", "缺失"),
+    ("mean_forward_return_bp", "平均前瞻報酬"),
+    ("median_forward_return_bp", "中位前瞻報酬"),
+    ("mean_benchmark_excess_bp", "平均大盤超額"),
+    ("median_benchmark_excess_bp", "中位大盤超額"),
+    ("mean_industry_excess_bp", "平均產業超額"),
+    ("median_industry_excess_bp", "中位產業超額"),
+    ("positive_rate_bp", "正報酬率"),
+    ("win_vs_benchmark_rate_bp", "勝大盤率"),
+    ("win_vs_industry_rate_bp", "勝產業率"),
+    ("mean_mae_bp", "平均 MAE"),
+    ("mean_mfe_bp", "平均 MFE"),
+    ("summary_status", "狀態"),
+    ("first_event_date", "首筆事件日"),
+    ("last_event_date", "末筆事件日"),
+    ("quality_counts", "資料品質"),
+    ("warning_counts", "警告"),
 )
 
 
@@ -100,9 +100,9 @@ class ForwardPerformanceTableModel(QAbstractTableModel):
 
     def _display_value(self, field_name: str, value) -> str:
         if value is None:
-            return "N/A"
+            return "無資料"
         if field_name in BP_COLUMNS:
             return format_bp_as_percent(value)
         if isinstance(value, dict):
-            return ", ".join(f"{key}:{value[key]}" for key in sorted(value)) or "None"
+            return ", ".join(f"{key}:{value[key]}" for key in sorted(value)) or "無"
         return str(value)

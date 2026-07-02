@@ -20,7 +20,34 @@ from PySide6.QtWidgets import (
 from app_module.live_research_gap_dashboard_dtos import LiveResearchGapDashboardRequest, LiveResearchGapDashboardResult
 from ui_qt.models.live_research_gap_table_model import LiveResearchGapTableModel
 from ui_qt.theme import MIDNIGHT_ANALYST
+from ui_qt.widgets.date_filter_edit import OptionalDateFilterEdit, date_filter_value
 from ui_qt.workers.task_worker import TaskWorker
+
+
+PORTFOLIO_MODE_ITEMS = (
+    ("", ""),
+    ("模擬", "simulated"),
+    ("未知", "unknown"),
+    ("實際", "real"),
+)
+DATA_QUALITY_ITEMS = (
+    ("", ""),
+    ("已觀測", "observed"),
+    ("降級", "degraded"),
+    ("缺失", "missing"),
+)
+CARD_TITLES = {
+    "positions_seen": "持倉筆數",
+    "positions_linked": "已連結",
+    "missing_source_trace": "缺來源追蹤",
+    "missing_research_run": "缺研究 Run",
+    "missing_evidence_event": "缺事件",
+    "missing_evidence_outcome": "缺結果",
+    "simulated_count": "模擬",
+    "unknown_count": "未知",
+    "large_gap_count": "大落差",
+    "warnings_count": "警告",
+}
 
 
 class LiveResearchGapView(QWidget):
@@ -40,27 +67,29 @@ class LiveResearchGapView(QWidget):
         body = QSplitter(Qt.Horizontal)
         root.addWidget(body, stretch=1)
 
-        filter_box = QGroupBox("Live Gap Filters")
+        filter_box = QGroupBox("研究落差篩選")
         form = QFormLayout(filter_box)
-        self.observation_date_input = QLineEdit()
+        self.observation_date_input = OptionalDateFilterEdit()
         self.symbol_input = QLineEdit()
         self.portfolio_id_input = QLineEdit()
         self.source_type_input = QLineEdit()
         self.strategy_version_id_input = QLineEdit()
         self.portfolio_mode_combo = QComboBox()
-        self.portfolio_mode_combo.addItems(["", "simulated", "unknown", "real"])
+        for label, value in PORTFOLIO_MODE_ITEMS:
+            self.portfolio_mode_combo.addItem(label, value)
         self.attribution_category_input = QLineEdit()
         self.data_quality_combo = QComboBox()
-        self.data_quality_combo.addItems(["", "observed", "degraded", "missing"])
+        for label, value in DATA_QUALITY_ITEMS:
+            self.data_quality_combo.addItem(label, value)
         for label, widget in (
-            ("observation_date", self.observation_date_input),
-            ("symbol", self.symbol_input),
-            ("portfolio_id", self.portfolio_id_input),
-            ("source_type", self.source_type_input),
-            ("strategy_version_id", self.strategy_version_id_input),
-            ("portfolio_mode", self.portfolio_mode_combo),
-            ("attribution_category", self.attribution_category_input),
-            ("data_quality", self.data_quality_combo),
+            ("觀測日期", self.observation_date_input),
+            ("股票代號", self.symbol_input),
+            ("Portfolio ID", self.portfolio_id_input),
+            ("來源類型", self.source_type_input),
+            ("策略版本", self.strategy_version_id_input),
+            ("持倉模式", self.portfolio_mode_combo),
+            ("歸因類別", self.attribution_category_input),
+            ("資料品質", self.data_quality_combo),
         ):
             form.addRow(label, widget)
         self.refresh_button = QPushButton("重新整理")
@@ -72,16 +101,16 @@ class LiveResearchGapView(QWidget):
         layout = QVBoxLayout(right)
         grid = QGridLayout()
         self.cards = {
-            "positions_seen": self._make_card("Positions"),
-            "positions_linked": self._make_card("Linked"),
-            "missing_source_trace": self._make_card("Missing Source"),
-            "missing_research_run": self._make_card("Missing Research"),
-            "missing_evidence_event": self._make_card("Missing Event"),
-            "missing_evidence_outcome": self._make_card("Missing Outcome"),
-            "simulated_count": self._make_card("Simulated"),
-            "unknown_count": self._make_card("Unknown"),
-            "large_gap_count": self._make_card("Large Gap"),
-            "warnings_count": self._make_card("Warnings"),
+            "positions_seen": self._make_card(CARD_TITLES["positions_seen"]),
+            "positions_linked": self._make_card(CARD_TITLES["positions_linked"]),
+            "missing_source_trace": self._make_card(CARD_TITLES["missing_source_trace"]),
+            "missing_research_run": self._make_card(CARD_TITLES["missing_research_run"]),
+            "missing_evidence_event": self._make_card(CARD_TITLES["missing_evidence_event"]),
+            "missing_evidence_outcome": self._make_card(CARD_TITLES["missing_evidence_outcome"]),
+            "simulated_count": self._make_card(CARD_TITLES["simulated_count"]),
+            "unknown_count": self._make_card(CARD_TITLES["unknown_count"]),
+            "large_gap_count": self._make_card(CARD_TITLES["large_gap_count"]),
+            "warnings_count": self._make_card(CARD_TITLES["warnings_count"]),
         }
         for index, widget in enumerate(self.cards.values()):
             grid.addWidget(widget, index // 5, index % 5)
@@ -129,7 +158,7 @@ class LiveResearchGapView(QWidget):
 
     def _request_from_controls(self) -> LiveResearchGapDashboardRequest:
         return LiveResearchGapDashboardRequest(
-            observation_date=_text_or_none(self.observation_date_input),
+            observation_date=date_filter_value(self.observation_date_input),
             symbol=_text_or_none(self.symbol_input),
             portfolio_id=_text_or_none(self.portfolio_id_input),
             source_type=_text_or_none(self.source_type_input),
@@ -159,7 +188,7 @@ class LiveResearchGapView(QWidget):
             return
         self.refresh_button.setEnabled(True)
         self.table_model.set_rows(())
-        self.empty_state_label.setText(f"Live research gap evidence 載入失敗：{message.splitlines()[0]}")
+        self.empty_state_label.setText(f"研究落差證據載入失敗：{message.splitlines()[0]}")
         self.detail_panel.setPlainText("")
 
     def _on_table_row_clicked(self, index) -> None:
@@ -171,14 +200,14 @@ class LiveResearchGapView(QWidget):
         self.detail_panel.setPlainText(
             "\n".join(
                 [
-                    f"symbol/mode: {row.symbol} / {row.portfolio_mode}",
-                    f"source: {row.source_type or 'missing'} / {row.source_id or 'missing'}",
-                    f"strategy_version_id: {row.strategy_version_id or 'None'}",
-                    f"match_confidence: {row.match_confidence}",
-                    f"attribution: {', '.join(row.attribution_categories) or 'None'}",
-                    f"quality: {row.quality}",
-                    f"warnings: {', '.join(row.warnings) or 'None'}",
-                    "limitations: " + " ".join(result.limitations),
+                    f"股票 / 模式: {row.symbol} / {row.portfolio_mode}",
+                    f"來源: {row.source_type or '缺失'} / {row.source_id or '缺失'}",
+                    f"策略版本: {row.strategy_version_id or '無'}",
+                    f"連結信心: {row.match_confidence}",
+                    f"歸因: {', '.join(row.attribution_categories) or '無'}",
+                    f"資料品質: {row.quality}",
+                    f"警告: {', '.join(row.warnings) or '無'}",
+                    "限制: " + " ".join(result.limitations),
                 ]
             )
         )
@@ -208,5 +237,6 @@ def _text_or_none(widget: QLineEdit) -> str | None:
 
 
 def _combo_or_none(widget: QComboBox) -> str | None:
-    text = widget.currentText().strip()
+    data = widget.currentData()
+    text = str(data).strip() if data is not None else widget.currentText().strip()
     return text or None

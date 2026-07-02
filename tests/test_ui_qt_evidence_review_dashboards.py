@@ -5,7 +5,7 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QTabWidget
+from PySide6.QtWidgets import QApplication, QDateEdit, QTabWidget
 
 from app_module.decision_quality_dashboard_dtos import (
     DecisionQualityDashboardCards,
@@ -81,8 +81,51 @@ def test_evidence_review_view_contains_four_read_only_tabs() -> None:
     )
 
     labels = [view.tabs.tabText(index) for index in range(view.tabs.count())]
-    assert labels == ["Forward Evidence", "Live vs Research Gap", "Signal Decay", "Decision Quality"]
+    assert labels == ["前瞻證據", "研究落差", "訊號衰退", "決策品質"]
     assert "不是買賣建議" in view.boundary_banner.text()
+
+
+def test_evidence_review_view_shows_current_evidence_database_path() -> None:
+    app()
+    db_path = r"D:\Min\Python\Project\FA_Data\output\evidence_ui_smoke\data_root\sqlite\twstock.db"
+    view = EvidenceReviewView(
+        forward_performance_widget=QTabWidget(),
+        live_gap_service=FakeDashboard(LiveResearchGapDashboardResult(LiveResearchGapDashboardRequest(), LiveResearchGapDashboardCards())),
+        signal_decay_service=FakeDashboard(SignalDecayDashboardResult(SignalDecayDashboardRequest(), SignalDecayDashboardCards())),
+        decision_quality_service=FakeDashboard(DecisionQualityDashboardResult(DecisionQualityDashboardRequest(), DecisionQualityDashboardCards())),
+        evidence_db_path=db_path,
+    )
+
+    assert "目前資料庫" in view.evidence_db_path_label.text()
+    assert db_path in view.evidence_db_path_label.text()
+
+
+def test_evidence_review_dashboard_date_filters_use_calendar_inputs() -> None:
+    app()
+    gap_view = LiveResearchGapView(
+        FakeDashboard(LiveResearchGapDashboardResult(LiveResearchGapDashboardRequest(), LiveResearchGapDashboardCards())),
+        auto_refresh=False,
+        async_refresh=False,
+    )
+    decay_view = SignalDecayView(
+        FakeDashboard(SignalDecayDashboardResult(SignalDecayDashboardRequest(), SignalDecayDashboardCards())),
+        auto_refresh=False,
+        async_refresh=False,
+    )
+    quality_view = DecisionQualityView(
+        FakeDashboard(DecisionQualityDashboardResult(DecisionQualityDashboardRequest(), DecisionQualityDashboardCards())),
+        auto_refresh=False,
+        async_refresh=False,
+    )
+
+    for widget in (
+        gap_view.observation_date_input,
+        decay_view.observation_date_input,
+        quality_view.start_date_input,
+        quality_view.end_date_input,
+    ):
+        assert isinstance(widget, QDateEdit)
+        assert widget.calendarPopup()
 
 
 def test_dashboard_views_render_empty_states_and_ignore_stale_results() -> None:

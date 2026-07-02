@@ -21,7 +21,50 @@ from PySide6.QtWidgets import (
 from app_module.signal_decay_dashboard_dtos import SignalDecayDashboardRequest, SignalDecayDashboardResult
 from ui_qt.models.signal_decay_table_model import SignalDecayTableModel
 from ui_qt.theme import MIDNIGHT_ANALYST
+from ui_qt.widgets.date_filter_edit import OptionalDateFilterEdit, date_filter_value
 from ui_qt.workers.task_worker import TaskWorker
+
+
+SCOPE_TYPE_ITEMS = (
+    ("", ""),
+    ("事件類型", "event_type"),
+    ("事件家族", "event_family"),
+    ("策略版本", "strategy_version"),
+    ("Profile", "profile"),
+)
+DECAY_STATUS_ITEMS = (
+    ("", ""),
+    ("穩定", "stable"),
+    ("觀察", "watch"),
+    ("衰退", "decaying"),
+    ("嚴重衰退", "severe_decay"),
+    ("樣本不足", "insufficient_sample"),
+)
+LIFECYCLE_ITEMS = (
+    ("", ""),
+    ("無", "none"),
+    ("觀察", "watch"),
+    ("降級候選", "demote_candidate"),
+    ("退場候選", "retire_candidate"),
+)
+CONFIDENCE_ITEMS = (
+    ("", ""),
+    ("低", "low"),
+    ("中", "medium"),
+    ("高", "high"),
+)
+CARD_TITLES = {
+    "scopes_evaluated": "已評估範圍",
+    "stable_count": "穩定",
+    "watch_count": "觀察",
+    "decaying_count": "衰退",
+    "severe_decay_count": "嚴重",
+    "demote_candidate_count": "降級候選",
+    "retire_candidate_count": "退場候選",
+    "insufficient_sample_count": "樣本不足",
+    "low_confidence_count": "低信心",
+    "warnings_count": "警告",
+}
 
 
 class SignalDecayView(QWidget):
@@ -41,37 +84,41 @@ class SignalDecayView(QWidget):
         body = QSplitter(Qt.Horizontal)
         root.addWidget(body, stretch=1)
 
-        filter_box = QGroupBox("Signal Decay Filters")
+        filter_box = QGroupBox("訊號衰退篩選")
         form = QFormLayout(filter_box)
-        self.observation_date_input = QLineEdit()
+        self.observation_date_input = OptionalDateFilterEdit()
         self.scope_type_combo = QComboBox()
-        self.scope_type_combo.addItems(["", "event_type", "event_family", "strategy_version", "profile"])
+        for label, value in SCOPE_TYPE_ITEMS:
+            self.scope_type_combo.addItem(label, value)
         self.scope_id_input = QLineEdit()
         self.event_type_input = QLineEdit()
         self.event_family_input = QLineEdit()
         self.strategy_version_id_input = QLineEdit()
         self.profile_id_input = QLineEdit()
         self.decay_status_combo = QComboBox()
-        self.decay_status_combo.addItems(["", "stable", "watch", "decaying", "severe_decay", "insufficient_sample"])
+        for label, value in DECAY_STATUS_ITEMS:
+            self.decay_status_combo.addItem(label, value)
         self.lifecycle_combo = QComboBox()
-        self.lifecycle_combo.addItems(["", "none", "watch", "demote_candidate", "retire_candidate"])
+        for label, value in LIFECYCLE_ITEMS:
+            self.lifecycle_combo.addItem(label, value)
         self.confidence_combo = QComboBox()
-        self.confidence_combo.addItems(["", "low", "medium", "high"])
+        for label, value in CONFIDENCE_ITEMS:
+            self.confidence_combo.addItem(label, value)
         self.min_sample_size_input = QSpinBox()
         self.min_sample_size_input.setRange(1, 100000)
         self.min_sample_size_input.setValue(10)
         for label, widget in (
-            ("observation_date", self.observation_date_input),
-            ("scope_type", self.scope_type_combo),
-            ("scope_id", self.scope_id_input),
-            ("event_type", self.event_type_input),
-            ("event_family", self.event_family_input),
-            ("strategy_version_id", self.strategy_version_id_input),
-            ("profile_id", self.profile_id_input),
-            ("decay_status", self.decay_status_combo),
-            ("lifecycle_candidate", self.lifecycle_combo),
-            ("confidence", self.confidence_combo),
-            ("min_sample_size", self.min_sample_size_input),
+            ("觀測日期", self.observation_date_input),
+            ("範圍類型", self.scope_type_combo),
+            ("範圍 ID", self.scope_id_input),
+            ("事件類型", self.event_type_input),
+            ("事件家族", self.event_family_input),
+            ("策略版本", self.strategy_version_id_input),
+            ("Profile", self.profile_id_input),
+            ("衰退狀態", self.decay_status_combo),
+            ("生命週期候選", self.lifecycle_combo),
+            ("信心", self.confidence_combo),
+            ("最小樣本數", self.min_sample_size_input),
         ):
             form.addRow(label, widget)
         self.refresh_button = QPushButton("重新整理")
@@ -83,16 +130,16 @@ class SignalDecayView(QWidget):
         layout = QVBoxLayout(right)
         grid = QGridLayout()
         self.cards = {
-            "scopes_evaluated": self._make_card("Scopes"),
-            "stable_count": self._make_card("Stable"),
-            "watch_count": self._make_card("Watch"),
-            "decaying_count": self._make_card("Decaying"),
-            "severe_decay_count": self._make_card("Severe"),
-            "demote_candidate_count": self._make_card("Demote Candidate"),
-            "retire_candidate_count": self._make_card("Retire Candidate"),
-            "insufficient_sample_count": self._make_card("Insufficient"),
-            "low_confidence_count": self._make_card("Low Confidence"),
-            "warnings_count": self._make_card("Warnings"),
+            "scopes_evaluated": self._make_card(CARD_TITLES["scopes_evaluated"]),
+            "stable_count": self._make_card(CARD_TITLES["stable_count"]),
+            "watch_count": self._make_card(CARD_TITLES["watch_count"]),
+            "decaying_count": self._make_card(CARD_TITLES["decaying_count"]),
+            "severe_decay_count": self._make_card(CARD_TITLES["severe_decay_count"]),
+            "demote_candidate_count": self._make_card(CARD_TITLES["demote_candidate_count"]),
+            "retire_candidate_count": self._make_card(CARD_TITLES["retire_candidate_count"]),
+            "insufficient_sample_count": self._make_card(CARD_TITLES["insufficient_sample_count"]),
+            "low_confidence_count": self._make_card(CARD_TITLES["low_confidence_count"]),
+            "warnings_count": self._make_card(CARD_TITLES["warnings_count"]),
         }
         for index, widget in enumerate(self.cards.values()):
             grid.addWidget(widget, index // 5, index % 5)
@@ -140,7 +187,7 @@ class SignalDecayView(QWidget):
 
     def _request_from_controls(self) -> SignalDecayDashboardRequest:
         return SignalDecayDashboardRequest(
-            observation_date=_text_or_none(self.observation_date_input),
+            observation_date=date_filter_value(self.observation_date_input),
             scope_type=_combo_or_none(self.scope_type_combo),
             scope_id=_text_or_none(self.scope_id_input),
             event_type=_text_or_none(self.event_type_input),
@@ -173,7 +220,7 @@ class SignalDecayView(QWidget):
             return
         self.refresh_button.setEnabled(True)
         self.table_model.set_rows(())
-        self.empty_state_label.setText(f"Signal decay evidence 載入失敗：{message.splitlines()[0]}")
+        self.empty_state_label.setText(f"訊號衰退證據載入失敗：{message.splitlines()[0]}")
         self.detail_panel.setPlainText("")
 
     def _on_table_row_clicked(self, index) -> None:
@@ -185,12 +232,12 @@ class SignalDecayView(QWidget):
         self.detail_panel.setPlainText(
             "\n".join(
                 [
-                    f"scope: {row.signal_scope_type} = {row.signal_scope_id}",
-                    f"sample short/long: {row.sample_size_short} / {row.sample_size_long}",
-                    f"status/candidate/confidence: {row.decay_status} / {row.suggested_lifecycle_action} / {row.confidence}",
-                    f"quality: {row.quality}",
-                    f"warnings: {', '.join(row.warnings) or 'None'}",
-                    "limitations: " + " ".join(result.limitations),
+                    f"範圍: {row.signal_scope_type} = {row.signal_scope_id}",
+                    f"短窗 / 長窗樣本: {row.sample_size_short} / {row.sample_size_long}",
+                    f"狀態 / 候選 / 信心: {row.decay_status} / {row.suggested_lifecycle_action} / {row.confidence}",
+                    f"資料品質: {row.quality}",
+                    f"警告: {', '.join(row.warnings) or '無'}",
+                    "限制: " + " ".join(result.limitations),
                 ]
             )
         )
@@ -220,5 +267,6 @@ def _text_or_none(widget: QLineEdit) -> str | None:
 
 
 def _combo_or_none(widget: QComboBox) -> str | None:
-    text = widget.currentText().strip()
+    data = widget.currentData()
+    text = str(data).strip() if data is not None else widget.currentText().strip()
     return text or None

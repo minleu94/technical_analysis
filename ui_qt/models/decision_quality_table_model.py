@@ -6,18 +6,18 @@ from app_module.decision_quality_dashboard_dtos import DecisionQualityDashboardR
 
 
 COLUMNS = (
-    ("item_type", "Item Type"),
-    ("symbol", "Symbol"),
-    ("event_date", "Event Date"),
-    ("source_type", "Source"),
-    ("severity", "Severity"),
-    ("status", "Status"),
-    ("suggested_review_question", "Review Question"),
-    ("reason_codes", "Reasons"),
-    ("related_gap_id", "Gap ID"),
-    ("related_decay_id", "Decay ID"),
-    ("quality", "Quality"),
-    ("warnings", "Warnings"),
+    ("item_type", "項目類型"),
+    ("symbol", "股票"),
+    ("event_date", "事件日"),
+    ("source_type", "來源"),
+    ("severity", "嚴重度"),
+    ("status", "狀態"),
+    ("suggested_review_question", "覆盤問題"),
+    ("reason_codes", "原因"),
+    ("related_gap_id", "落差 ID"),
+    ("related_decay_id", "衰退 ID"),
+    ("quality", "品質"),
+    ("warnings", "警告"),
 )
 
 
@@ -70,5 +70,7 @@ class DecisionQualityTableModel(QAbstractTableModel):
 
 def _display_value(value) -> str:
     if isinstance(value, tuple):
-        return ", ".join(str(item) for item in value) or "None"
+        return ", ".join(str(item) for item in value) or "無"
+    if value is None:
+        return "無資料"
     return str(value)

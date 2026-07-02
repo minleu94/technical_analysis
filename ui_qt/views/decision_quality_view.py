@@ -20,7 +20,33 @@ from PySide6.QtWidgets import (
 from app_module.decision_quality_dashboard_dtos import DecisionQualityDashboardRequest, DecisionQualityDashboardResult
 from ui_qt.models.decision_quality_table_model import DecisionQualityTableModel
 from ui_qt.theme import MIDNIGHT_ANALYST
+from ui_qt.widgets.date_filter_edit import OptionalDateFilterEdit, date_filter_value
 from ui_qt.workers.task_worker import TaskWorker
+
+
+SEVERITY_ITEMS = (
+    ("", ""),
+    ("低", "low"),
+    ("中", "medium"),
+    ("高", "high"),
+)
+STATUS_ITEMS = (
+    ("", ""),
+    ("待處理", "open"),
+    ("已覆盤", "reviewed"),
+    ("已略過", "dismissed"),
+)
+CARD_TITLES = {
+    "decision_quality_score": "決策品質",
+    "process_adherence_score": "流程遵循",
+    "evidence_usage_score": "證據使用",
+    "risk_discipline_score": "風險紀律",
+    "review_completeness_score": "覆盤完整度",
+    "open_items": "待處理",
+    "reviewed_items": "已覆盤",
+    "dismissed_items": "已略過",
+    "warnings_count": "警告",
+}
 
 
 class DecisionQualityView(QWidget):
@@ -50,30 +76,32 @@ class DecisionQualityView(QWidget):
         body = QSplitter(Qt.Horizontal)
         root.addWidget(body, stretch=1)
 
-        filter_box = QGroupBox("Decision Quality Filters")
+        filter_box = QGroupBox("決策品質篩選")
         filter_layout = QFormLayout(filter_box)
         self.review_type_input = QLineEdit()
-        self.start_date_input = QLineEdit()
-        self.end_date_input = QLineEdit()
+        self.start_date_input = OptionalDateFilterEdit()
+        self.end_date_input = OptionalDateFilterEdit()
         self.symbol_input = QLineEdit()
         self.portfolio_id_input = QLineEdit()
         self.item_type_input = QLineEdit()
         self.severity_combo = QComboBox()
-        self.severity_combo.addItems(["", "low", "medium", "high"])
+        for label, value in SEVERITY_ITEMS:
+            self.severity_combo.addItem(label, value)
         self.status_combo = QComboBox()
-        self.status_combo.addItems(["", "open", "reviewed", "dismissed"])
+        for label, value in STATUS_ITEMS:
+            self.status_combo.addItem(label, value)
         self.min_score_input = QLineEdit()
         self.min_score_input.setPlaceholderText("0-10000")
         for label, widget in (
-            ("review_type", self.review_type_input),
-            ("start_date", self.start_date_input),
-            ("end_date", self.end_date_input),
-            ("symbol", self.symbol_input),
-            ("portfolio_id", self.portfolio_id_input),
-            ("item_type", self.item_type_input),
-            ("severity", self.severity_combo),
-            ("status", self.status_combo),
-            ("min_score", self.min_score_input),
+            ("覆盤類型", self.review_type_input),
+            ("開始日期", self.start_date_input),
+            ("結束日期", self.end_date_input),
+            ("股票代號", self.symbol_input),
+            ("Portfolio ID", self.portfolio_id_input),
+            ("項目類型", self.item_type_input),
+            ("嚴重度", self.severity_combo),
+            ("狀態", self.status_combo),
+            ("最低分數", self.min_score_input),
         ):
             filter_layout.addRow(label, widget)
         self.refresh_button = QPushButton("重新整理")
@@ -85,15 +113,15 @@ class DecisionQualityView(QWidget):
         right_layout = QVBoxLayout(right)
         cards = QGridLayout()
         self.cards = {
-            "decision_quality_score": self._make_card("Decision Quality"),
-            "process_adherence_score": self._make_card("Process"),
-            "evidence_usage_score": self._make_card("Evidence Usage"),
-            "risk_discipline_score": self._make_card("Risk Discipline"),
-            "review_completeness_score": self._make_card("Completeness"),
-            "open_items": self._make_card("Open"),
-            "reviewed_items": self._make_card("Reviewed"),
-            "dismissed_items": self._make_card("Dismissed"),
-            "warnings_count": self._make_card("Warnings"),
+            "decision_quality_score": self._make_card(CARD_TITLES["decision_quality_score"]),
+            "process_adherence_score": self._make_card(CARD_TITLES["process_adherence_score"]),
+            "evidence_usage_score": self._make_card(CARD_TITLES["evidence_usage_score"]),
+            "risk_discipline_score": self._make_card(CARD_TITLES["risk_discipline_score"]),
+            "review_completeness_score": self._make_card(CARD_TITLES["review_completeness_score"]),
+            "open_items": self._make_card(CARD_TITLES["open_items"]),
+            "reviewed_items": self._make_card(CARD_TITLES["reviewed_items"]),
+            "dismissed_items": self._make_card(CARD_TITLES["dismissed_items"]),
+            "warnings_count": self._make_card(CARD_TITLES["warnings_count"]),
         }
         for index, widget in enumerate(self.cards.values()):
             cards.addWidget(widget, index // 5, index % 5)
@@ -142,8 +170,8 @@ class DecisionQualityView(QWidget):
     def _request_from_controls(self) -> DecisionQualityDashboardRequest:
         return DecisionQualityDashboardRequest(
             review_type=_text_or_none(self.review_type_input),
-            start_date=_text_or_none(self.start_date_input),
-            end_date=_text_or_none(self.end_date_input),
+            start_date=date_filter_value(self.start_date_input),
+            end_date=date_filter_value(self.end_date_input),
             symbol=_text_or_none(self.symbol_input),
             portfolio_id=_text_or_none(self.portfolio_id_input),
             item_type=_text_or_none(self.item_type_input),
@@ -172,7 +200,7 @@ class DecisionQualityView(QWidget):
             return
         self.refresh_button.setEnabled(True)
         self.table_model.set_rows(())
-        self.empty_state_label.setText(f"Decision quality evidence 載入失敗：{message.splitlines()[0]}")
+        self.empty_state_label.setText(f"決策品質證據載入失敗：{message.splitlines()[0]}")
         self.detail_panel.setPlainText("")
 
     def _on_table_row_clicked(self, index) -> None:
@@ -184,16 +212,16 @@ class DecisionQualityView(QWidget):
         self.detail_panel.setPlainText(
             "\n".join(
                 [
-                    f"item_type: {row.item_type}",
-                    f"symbol/source: {row.symbol or 'Any'} / {row.source_type or 'unknown'}",
-                    f"severity/status: {row.severity} / {row.status}",
-                    f"reason_codes: {', '.join(row.reason_codes) or 'None'}",
-                    f"related_gap_id: {row.related_gap_id or 'None'}",
-                    f"related_decay_id: {row.related_decay_id or 'None'}",
-                    f"quality: {row.quality}",
-                    f"warnings: {', '.join(row.warnings) or 'None'}",
-                    f"question: {row.suggested_review_question}",
-                    "limitations: " + " ".join(result.limitations),
+                    f"項目類型: {row.item_type}",
+                    f"股票 / 來源: {row.symbol or '全部'} / {row.source_type or '未知'}",
+                    f"嚴重度 / 狀態: {row.severity} / {row.status}",
+                    f"原因代碼: {', '.join(row.reason_codes) or '無'}",
+                    f"相關落差 ID: {row.related_gap_id or '無'}",
+                    f"相關衰退 ID: {row.related_decay_id or '無'}",
+                    f"資料品質: {row.quality}",
+                    f"警告: {', '.join(row.warnings) or '無'}",
+                    f"覆盤問題: {row.suggested_review_question}",
+                    "限制: " + " ".join(result.limitations),
                 ]
             )
         )
@@ -223,7 +251,8 @@ def _text_or_none(widget: QLineEdit) -> str | None:
 
 
 def _combo_or_none(widget: QComboBox) -> str | None:
-    text = widget.currentText().strip()
+    data = widget.currentData()
+    text = str(data).strip() if data is not None else widget.currentText().strip()
     return text or None
 
 
