@@ -120,6 +120,28 @@ def test_selected_profile_explains_regime_compatibility_and_custom_validation(tm
     assert "bonus" in text
 
 
+def test_builtin_profile_description_shows_weights_filters_and_patterns(tmp_path):
+    _app()
+    view = RecommendationView(
+        recommendation_service=FakeRecommendationService(),
+        regime_service=FakeRegimeService(),
+        config=None,
+    )
+
+    index = view.profile_combo.findData("momentum")
+    assert index >= 0
+    view.profile_combo.setCurrentIndex(index)
+
+    text = view.profile_desc_label.text()
+    assert "型態" in text
+    assert "技術" in text
+    assert "量能" in text
+    assert "主要篩選" in text
+    assert "漲幅" in text
+    assert "成交量" in text
+    assert "旗形" in text
+
+
 def test_view_can_save_current_settings_as_custom_profile(tmp_path):
     _app()
     profile_service = RecommendationProfileService(FakeConfig(tmp_path), builtin_profiles=None)

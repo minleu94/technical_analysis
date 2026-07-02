@@ -1646,13 +1646,62 @@ class RecommendationView(QWidget):
         weights = signals.get("weights", {})
         indicators = signals.get("technical_indicators", [])
         patterns = config.get("patterns", {}).get("selected", [])
+        filters = config.get("filters", {})
         weight_text = (
-            f"型態 {weights.get('pattern', 'N/A')} / "
-            f"技術 {weights.get('technical', 'N/A')} / "
-            f"量能 {weights.get('volume', 'N/A')}"
+            f"型態 {self._format_profile_weight(weights.get('pattern'))} / "
+            f"技術 {self._format_profile_weight(weights.get('technical'))} / "
+            f"量能 {self._format_profile_weight(weights.get('volume'))}"
         )
         indicator_text = "、".join(indicators) if indicators else "未指定"
-        return f"權重 {weight_text}；技術分類 {indicator_text}；型態數 {len(patterns)}"
+        pattern_preview = "、".join(str(pattern) for pattern in patterns[:5])
+        if len(patterns) > 5:
+            pattern_preview += f" 等 {len(patterns)} 種"
+        elif pattern_preview:
+            pattern_preview += f"（共 {len(patterns)} 種）"
+        else:
+            pattern_preview = "未指定"
+        filter_text = self._profile_filter_summary(filters)
+        return (
+            f"權重 {weight_text}；"
+            f"技術分類 {indicator_text}；"
+            f"型態 {pattern_preview}；"
+            f"主要篩選 {filter_text}"
+        )
+
+    def _format_profile_weight(self, value: Any) -> str:
+        if value is None:
+            return "N/A"
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if numeric <= 1:
+            return f"{numeric * 100:.0f}%"
+        if numeric <= 100:
+            return f"{numeric:.0f}"
+        return f"{int(numeric)}bp"
+
+    def _profile_filter_summary(self, filters: Dict[str, Any]) -> str:
+        parts: List[str] = []
+        if "price_change_min" in filters or "price_change_max" in filters:
+            min_value = filters.get("price_change_min", "N/A")
+            max_value = filters.get("price_change_max", "N/A")
+            parts.append(
+                f"漲幅 {self._format_profile_filter_value(min_value)}% ~ "
+                f"{self._format_profile_filter_value(max_value)}%"
+            )
+        if "volume_ratio_min" in filters:
+            parts.append(f"成交量 >= {self._format_profile_filter_value(filters.get('volume_ratio_min'))} 倍")
+        if filters.get("industry"):
+            parts.append(f"產業 {filters.get('industry')}")
+        return "、".join(parts) if parts else "未指定"
+
+    def _format_profile_filter_value(self, value: Any) -> str:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        return f"{numeric:g}"
 
     def _on_save_custom_profile_clicked(self) -> None:
         name, accepted = QInputDialog.getText(
