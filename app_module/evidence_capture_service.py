@@ -127,7 +127,7 @@ class EvidenceCaptureService:
             event_date=str(payload.get("event_date") or ""),
             decision_date=str(payload.get("decision_date") or ""),
             symbol=payload.get("symbol"),
-            event_type=str(payload.get("event_type") or ""),
+            event_type=self._event_type_value(payload.get("event_type")),
             source_type=str(payload.get("source_type") or ""),
             source_id=str(payload.get("source_id") or ""),
             source_snapshot_id=str(payload.get("source_snapshot_id") or ""),
