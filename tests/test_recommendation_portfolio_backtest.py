@@ -7,7 +7,10 @@ from app_module.recommendation_portfolio_dtos import (
     StockContributionDTO,
 )
 from app_module.recommendation_portfolio_dates import parse_stock_dates
-from app_module.recommendation_portfolio_metrics import calculate_robustness_metrics
+from app_module.recommendation_portfolio_metrics import (
+    calculate_robustness_metrics,
+    calculate_rolling_risk_metrics,
+)
 from app_module.recommendation_portfolio_backtest_service import (
     RecommendationPortfolioBacktestService,
 )
@@ -770,6 +773,77 @@ def test_recommendation_portfolio_robustness_metrics_are_deterministic():
     assert abs(metrics["monte_carlo_p05_return"] - metrics["monte_carlo_p95_return"]) < 1e-12
 
 
+def test_recommendation_portfolio_rolling_risk_metrics_are_source_backed():
+    equity_curve = pd.DataFrame(
+        [
+            {"date": "2026-01-02", "equity": 1000000.0},
+            {"date": "2026-01-03", "equity": 1030000.0},
+            {"date": "2026-01-04", "equity": 1000000.0},
+            {"date": "2026-01-05", "equity": 980000.0},
+            {"date": "2026-01-06", "equity": 990000.0},
+            {"date": "2026-01-07", "equity": 1040000.0},
+        ]
+    )
+    holdings = [
+        PeriodHoldingDTO(
+            rebalance_date="2026-01-02",
+            stock_code="2330",
+            stock_name="台積電",
+            rank=1,
+            total_score=90.0,
+            factor_scores={},
+            allocation_amount=500000.0,
+            allocation_weight=0.5,
+            actual_allocation_weight=0.48,
+            entry_date="2026-01-02",
+            entry_price=100.0,
+            planned_exit_date="2026-01-06",
+            actual_exit_date="2026-01-06",
+            actual_exit_price=110.0,
+            exit_reason="holding_period",
+            holding_days=4,
+            return_pct=0.10,
+        ),
+        PeriodHoldingDTO(
+            rebalance_date="2026-01-05",
+            stock_code="2317",
+            stock_name="鴻海",
+            rank=1,
+            total_score=80.0,
+            factor_scores={},
+            allocation_amount=300000.0,
+            allocation_weight=0.3,
+            actual_allocation_weight=0.27,
+            entry_date="2026-01-05",
+            entry_price=50.0,
+            planned_exit_date="2026-01-07",
+            actual_exit_date="2026-01-07",
+            actual_exit_price=48.0,
+            exit_reason="holding_period",
+            holding_days=2,
+            return_pct=-0.04,
+        ),
+    ]
+
+    metrics = calculate_rolling_risk_metrics(
+        equity_curve=equity_curve,
+        period_holdings=holdings,
+        window_observations=3,
+    )
+
+    assert metrics["schema_version"] == 1
+    assert metrics["window_observations"] == 3
+    assert metrics["return_observation_count"] == 5
+    assert metrics["rolling_sharpe_last"] is not None
+    assert metrics["rolling_sortino_min"] is not None
+    assert metrics["var_95_return"] < 0
+    assert metrics["cvar_95_return"] <= metrics["var_95_return"]
+    assert metrics["max_drawdown_duration_observations"] == 3
+    assert metrics["turnover"]["policy"] == "actual_allocation_weight_sum_by_rebalance_date"
+    assert metrics["turnover"]["rebalance_count"] == 2
+    assert metrics["turnover"]["average_period_turnover"] == 0.375
+
+
 def test_portfolio_backtest_summary_includes_robustness_metrics():
     date_col = "\u65e5\u671f"
     code_col = "\u8b49\u5238\u4ee3\u865f"
@@ -807,6 +881,42 @@ def test_portfolio_backtest_summary_includes_robustness_metrics():
     assert "sharpe_ratio" in result.summary
     assert "sortino_ratio" in result.summary
     assert "monte_carlo_p50_return" in result.summary
+
+
+def test_portfolio_backtest_details_include_rolling_risk_metrics():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-05", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 102},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 98},
+            {"日期": "2026-01-07", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 105},
+            {"日期": "2026-01-08", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 108},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-08",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=6,
+    )
+
+    rolling = result.details["rolling_risk_metrics"]
+
+    assert rolling["schema_version"] == 1
+    assert rolling["max_drawdown_duration_observations"] >= 1
+    assert rolling["turnover"]["total_turnover"] == 1.0
+    assert result.summary["rolling_risk_status"] == rolling["status"]
 
 
 def test_portfolio_backtest_can_replay_weekly_recommendations():

@@ -29,11 +29,63 @@ def calculate_robustness_metrics(
     }
 
 
+def calculate_rolling_risk_metrics(
+    equity_curve: pd.DataFrame,
+    period_holdings: Iterable[Any] | None = None,
+    window_observations: int = 20,
+    var_confidence: float = 0.05,
+) -> Dict[str, Any]:
+    """Calculate V1.2 rolling risk diagnostics from completed replay outputs.
+
+    這是 analysis / presentation 邊界：只讀 equity curve 與已建立持倉，不改成交價、
+    PnL、現金帳、推薦排序或策略生命週期狀態。
+    """
+    returns = _equity_returns(equity_curve)
+    window = max(2, int(window_observations))
+    rolling_sharpe = _rolling_ratio_series(returns, window, ratio="sharpe")
+    rolling_sortino = _rolling_ratio_series(returns, window, ratio="sortino")
+    var_95, cvar_95 = _calculate_var_cvar(returns, var_confidence)
+    turnover = _calculate_turnover(period_holdings or ())
+    status = "observed" if len(returns) >= window else "insufficient_observations"
+
+    return {
+        "schema_version": 1,
+        "status": status,
+        "policy": "equity_curve_close_to_close_research_basis",
+        "window_observations": window,
+        "return_observation_count": int(len(returns)),
+        "rolling_sharpe_last": _last_or_none(rolling_sharpe),
+        "rolling_sharpe_min": _min_or_none(rolling_sharpe),
+        "rolling_sortino_last": _last_or_none(rolling_sortino),
+        "rolling_sortino_min": _min_or_none(rolling_sortino),
+        "var_95_return": var_95,
+        "cvar_95_return": cvar_95,
+        "max_drawdown_duration_observations": _max_drawdown_duration_observations(equity_curve),
+        "turnover": turnover,
+    }
+
+
 def _equity_returns(equity_curve: pd.DataFrame) -> pd.Series:
     if equity_curve is None or equity_curve.empty or "equity" not in equity_curve.columns:
         return pd.Series(dtype=float)
     equity = pd.to_numeric(equity_curve["equity"], errors="coerce").dropna()
     return equity.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+
+
+def _rolling_ratio_series(returns: pd.Series, window: int, *, ratio: str) -> pd.Series:
+    if returns.empty or len(returns) < window:
+        return pd.Series(dtype=float)
+    values = []
+    indexes = []
+    for end_index in range(window, len(returns) + 1):
+        window_returns = returns.iloc[end_index - window:end_index]
+        if ratio == "sortino":
+            value = _calculate_sortino_ratio(window_returns)
+        else:
+            value = _calculate_sharpe_ratio(window_returns)
+        values.append(value)
+        indexes.append(returns.index[end_index - 1])
+    return pd.Series(values, index=indexes, dtype=float)
 
 
 def _calculate_sharpe_ratio(returns: pd.Series) -> float:
@@ -56,6 +108,73 @@ def _calculate_sortino_ratio(returns: pd.Series) -> float:
         return 0.0
     annualized_return = float(returns.mean() * 252)
     return annualized_return / downside_deviation
+
+
+def _calculate_var_cvar(returns: pd.Series, confidence: float) -> tuple[float | None, float | None]:
+    if returns.empty:
+        return None, None
+    clipped_confidence = min(max(float(confidence), 0.001), 0.5)  # numeric-boundary: analytics
+    var_value = float(np.percentile(returns.to_numpy(dtype=float), clipped_confidence * 100))  # numeric-boundary: analytics
+    tail = returns[returns <= var_value]
+    cvar_value = float(tail.mean()) if not tail.empty else var_value  # numeric-boundary: analytics
+    return var_value, cvar_value
+
+
+def _max_drawdown_duration_observations(equity_curve: pd.DataFrame) -> int:
+    if equity_curve is None or equity_curve.empty or "equity" not in equity_curve.columns:
+        return 0
+    equity = pd.to_numeric(equity_curve["equity"], errors="coerce").dropna()
+    if equity.empty:
+        return 0
+    running_peak = equity.cummax()
+    max_duration = 0
+    current_duration = 0
+    for value, peak in zip(equity, running_peak):
+        if value < peak:
+            current_duration += 1
+            max_duration = max(max_duration, current_duration)
+        else:
+            current_duration = 0
+    return int(max_duration)
+
+
+def _calculate_turnover(period_holdings: Iterable[Any]) -> Dict[str, Any]:
+    turnover_by_rebalance: Dict[str, float] = {}
+    for holding in period_holdings:
+        rebalance_date = str(getattr(holding, "rebalance_date", ""))
+        if not rebalance_date:
+            continue
+        weight = getattr(holding, "actual_allocation_weight", None)
+        if weight is None:
+            weight = getattr(holding, "allocation_weight", 0.0)
+        weight_value = 0.0 if weight is None else float(weight)  # numeric-boundary: analytics
+        turnover_by_rebalance[rebalance_date] = (
+            turnover_by_rebalance.get(rebalance_date, 0.0) + abs(weight_value)
+        )
+    total_turnover = float(sum(turnover_by_rebalance.values()))  # numeric-boundary: analytics
+    rebalance_count = len(turnover_by_rebalance)
+    average_period_turnover = total_turnover / rebalance_count if rebalance_count else 0.0
+    return {
+        "policy": "actual_allocation_weight_sum_by_rebalance_date",
+        "rebalance_count": rebalance_count,
+        "total_turnover": round(total_turnover, 6),
+        "average_period_turnover": round(float(average_period_turnover), 6),  # numeric-boundary: dto
+        "by_rebalance_date": {
+            key: round(value, 6) for key, value in sorted(turnover_by_rebalance.items())
+        },
+    }
+
+
+def _last_or_none(values: pd.Series) -> float | None:
+    if values.empty:
+        return None
+    return float(values.iloc[-1])  # numeric-boundary: dto
+
+
+def _min_or_none(values: pd.Series) -> float | None:
+    if values.empty:
+        return None
+    return float(values.min())  # numeric-boundary: dto
 
 
 def _calculate_monte_carlo_returns(

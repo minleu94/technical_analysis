@@ -13,7 +13,11 @@ from app_module.recommendation_portfolio_dtos import (
     StockContributionDTO,
 )
 from app_module.recommendation_portfolio_dates import parse_stock_dates
-from app_module.recommendation_portfolio_metrics import calculate_robustness_metrics, generate_improvement_hints
+from app_module.recommendation_portfolio_metrics import (
+    calculate_robustness_metrics,
+    calculate_rolling_risk_metrics,
+    generate_improvement_hints,
+)
 from app_module.recommendation_replay_service import RecommendationReplayService
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from decision_module.factors.factor_dtos import FactorQuality, FactorRecord, MissingPolicy
@@ -262,6 +266,10 @@ class RecommendationPortfolioBacktestService:
                 unfilled_orders=unfilled_orders,
             )
             gap_risk = self._build_gap_risk_manifest(period_holdings, data)
+            rolling_risk_metrics = calculate_rolling_risk_metrics(
+                equity_curve=equity_curve,
+                period_holdings=period_holdings,
+            )
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
                 "portfolio_credibility": credibility_manifest,
@@ -269,6 +277,7 @@ class RecommendationPortfolioBacktestService:
                 "cash_ledger": cash_ledger,
                 "weight_exposure": weight_exposure,
                 "gap_risk": gap_risk,
+                "rolling_risk_metrics": rolling_risk_metrics,
             }
             return RecommendationPortfolioBacktestResultDTO(
                 summary={
@@ -281,6 +290,7 @@ class RecommendationPortfolioBacktestService:
                     "unfilled_order_count": len(unfilled_orders),
                     "ending_cash": ending_cash,
                     "total_transaction_cost": total_transaction_cost_float,
+                    "rolling_risk_status": rolling_risk_metrics["status"],
                 },
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
@@ -325,6 +335,11 @@ class RecommendationPortfolioBacktestService:
             unfilled_orders=unfilled_orders,
         )
         gap_risk = self._build_gap_risk_manifest(period_holdings, data)
+        rolling_risk_metrics = calculate_rolling_risk_metrics(
+            equity_curve=equity_curve,
+            period_holdings=period_holdings,
+        )
+        summary["rolling_risk_status"] = rolling_risk_metrics["status"]
         details = {
             "data_manifest": self._build_factor_manifest(snapshots),
             "portfolio_credibility": credibility_manifest,
@@ -332,6 +347,7 @@ class RecommendationPortfolioBacktestService:
             "cash_ledger": cash_ledger,
             "weight_exposure": weight_exposure,
             "gap_risk": gap_risk,
+            "rolling_risk_metrics": rolling_risk_metrics,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
