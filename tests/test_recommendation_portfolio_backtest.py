@@ -919,6 +919,96 @@ def test_portfolio_backtest_details_include_rolling_risk_metrics():
     assert result.summary["rolling_risk_status"] == rolling["status"]
 
 
+def test_portfolio_backtest_microstructure_preflight_flags_optional_risks():
+    history = pd.DataFrame(
+        [
+            {
+                "日期": "2026-01-02",
+                "證券代號": "2330",
+                "證券名稱": "台積電",
+                "收盤價": 100,
+                "處置股": True,
+                "分盤交易": "Y",
+                "全額交割": False,
+                "除權息": "除息",
+            },
+            {
+                "日期": "2026-01-06",
+                "證券代號": "2330",
+                "證券名稱": "台積電",
+                "收盤價": 110,
+                "處置股": False,
+                "分盤交易": False,
+                "全額交割": False,
+                "除權息": False,
+            },
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    preflight = result.details["microstructure_preflight"]
+
+    assert preflight["schema_version"] == 1
+    assert preflight["status"] == "risk_observed"
+    assert preflight["risk_count"] == 3
+    assert {item["risk_type"] for item in preflight["risks"]} == {
+        "disposition_stock",
+        "periodic_call_auction",
+        "ex_dividend_timeline",
+    }
+    assert "microstructure:2330:disposition_stock" in result.selection_diagnostics
+    assert result.summary["microstructure_risk_count"] == 3
+
+
+def test_portfolio_backtest_microstructure_preflight_discloses_missing_optional_sources():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    preflight = result.details["microstructure_preflight"]
+
+    assert preflight["status"] == "missing_optional_sources"
+    assert "disposition_stock" in preflight["missing_sources"]
+    assert "limit_lock" in preflight["missing_sources"]
+    assert result.summary["microstructure_risk_count"] == 0
+
+
 def test_portfolio_backtest_can_replay_weekly_recommendations():
     history = pd.DataFrame(
         [

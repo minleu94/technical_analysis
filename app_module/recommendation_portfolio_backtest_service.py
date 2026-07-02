@@ -270,6 +270,7 @@ class RecommendationPortfolioBacktestService:
                 equity_curve=equity_curve,
                 period_holdings=period_holdings,
             )
+            microstructure_preflight = self._build_microstructure_preflight(snapshots, data)
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
                 "portfolio_credibility": credibility_manifest,
@@ -278,6 +279,7 @@ class RecommendationPortfolioBacktestService:
                 "weight_exposure": weight_exposure,
                 "gap_risk": gap_risk,
                 "rolling_risk_metrics": rolling_risk_metrics,
+                "microstructure_preflight": microstructure_preflight,
             }
             return RecommendationPortfolioBacktestResultDTO(
                 summary={
@@ -291,13 +293,18 @@ class RecommendationPortfolioBacktestService:
                     "ending_cash": ending_cash,
                     "total_transaction_cost": total_transaction_cost_float,
                     "rolling_risk_status": rolling_risk_metrics["status"],
+                    "microstructure_risk_count": microstructure_preflight["risk_count"],
                 },
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
                 snapshots=snapshots,
                 period_holdings=[],
                 stock_contribution=[],
-                selection_diagnostics=["no_recommendations"] + self._unfilled_order_diagnostics(unfilled_orders),
+                selection_diagnostics=(
+                    ["no_recommendations"]
+                    + self._unfilled_order_diagnostics(unfilled_orders)
+                    + self._microstructure_preflight_diagnostics(microstructure_preflight)
+                ),
                 details=details,
             )
 
@@ -339,7 +346,9 @@ class RecommendationPortfolioBacktestService:
             equity_curve=equity_curve,
             period_holdings=period_holdings,
         )
+        microstructure_preflight = self._build_microstructure_preflight(snapshots, data)
         summary["rolling_risk_status"] = rolling_risk_metrics["status"]
+        summary["microstructure_risk_count"] = microstructure_preflight["risk_count"]
         details = {
             "data_manifest": self._build_factor_manifest(snapshots),
             "portfolio_credibility": credibility_manifest,
@@ -348,6 +357,7 @@ class RecommendationPortfolioBacktestService:
             "weight_exposure": weight_exposure,
             "gap_risk": gap_risk,
             "rolling_risk_metrics": rolling_risk_metrics,
+            "microstructure_preflight": microstructure_preflight,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -359,7 +369,9 @@ class RecommendationPortfolioBacktestService:
             stock_contribution=stock_contribution,
             selection_diagnostics=[
                 item for snapshot in snapshots for item in snapshot.diagnostics
-            ] + self._unfilled_order_diagnostics(unfilled_orders),
+            ]
+            + self._unfilled_order_diagnostics(unfilled_orders)
+            + self._microstructure_preflight_diagnostics(microstructure_preflight),
             improvement_hints=improvement_hints,
             details=details,
         )
@@ -884,6 +896,106 @@ class RecommendationPortfolioBacktestService:
             "max_abs_gap_pct": float(max_abs_gap.quantize(Decimal("0.000001"))),  # numeric-boundary: dto
             "records": records,
         }
+
+    def _build_microstructure_preflight(
+        self,
+        snapshots: List[RecommendationSnapshotDTO],
+        data: pd.DataFrame,
+    ) -> Dict[str, Any]:
+        source_groups = {
+            "disposition_stock": ("處置股", "disposition_stock", "disposition_flag"),
+            "periodic_call_auction": ("分盤交易", "分盤", "periodic_call_auction"),
+            "full_delivery": ("全額交割", "full_delivery", "full_delivery_flag"),
+            "limit_lock": ("漲跌停鎖死", "漲停鎖死", "跌停鎖死", "limit_lock", "limit_up_down_flag"),
+            "ex_dividend_timeline": ("除權息", "除權息日", "ex_dividend", "ex_rights", "adjustment_event"),
+        }
+        source_columns = {
+            risk_type: [column for column in columns if column in data.columns]
+            for risk_type, columns in source_groups.items()
+        }
+        missing_sources = sorted(
+            risk_type for risk_type, columns in source_columns.items() if not columns
+        )
+        risks: List[Dict[str, Any]] = []
+        if data.empty or "日期" not in data.columns or "證券代號" not in data.columns:
+            return {
+                "schema_version": 1,
+                "status": "missing_required_price_context",
+                "policy": "decision_date_optional_microstructure_columns_only",
+                "source_columns": source_columns,
+                "missing_sources": missing_sources,
+                "risk_count": 0,
+                "risks": [],
+            }
+
+        keyed = data.copy()
+        keyed["__date_key"] = pd.to_datetime(keyed["日期"], errors="coerce").dt.strftime("%Y-%m-%d")
+        keyed["__code_key"] = keyed["證券代號"].astype(str)
+
+        for snapshot in snapshots:
+            as_of_date = str(snapshot.as_of_date)
+            for recommendation in snapshot.recommendations:
+                stock_code = str(recommendation.get("stock_code", ""))
+                if not stock_code:
+                    continue
+                rows = keyed[(keyed["__date_key"] == as_of_date) & (keyed["__code_key"] == stock_code)]
+                if rows.empty:
+                    continue
+                row = rows.iloc[0]
+                for risk_type, columns in source_columns.items():
+                    for column in columns:
+                        value = row.get(column)
+                        if self._is_microstructure_flagged(value):
+                            risks.append(
+                                {
+                                    "as_of_date": as_of_date,
+                                    "stock_code": stock_code,
+                                    "stock_name": str(recommendation.get("stock_name", "")),
+                                    "risk_type": risk_type,
+                                    "severity": self._microstructure_severity(risk_type),
+                                    "source_column": column,
+                                    "source_value": str(value),
+                                    "policy": "review_execution_assumption_before_using_replay_result",
+                                }
+                            )
+                            break
+
+        status = "risk_observed" if risks else "observed"
+        if not risks and missing_sources:
+            status = "missing_optional_sources"
+        return {
+            "schema_version": 1,
+            "status": status,
+            "policy": "decision_date_optional_microstructure_columns_only",
+            "source_columns": source_columns,
+            "missing_sources": missing_sources,
+            "risk_count": len(risks),
+            "risks": risks,
+        }
+
+    @staticmethod
+    def _is_microstructure_flagged(value: Any) -> bool:
+        if value is None or pd.isna(value):
+            return False
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        if text in {"", "0", "false", "n", "no", "none", "nan", "-", "無", "否", "正常"}:
+            return False
+        return True
+
+    @staticmethod
+    def _microstructure_severity(risk_type: str) -> str:
+        if risk_type in {"disposition_stock", "full_delivery", "limit_lock"}:
+            return "high"
+        return "medium"
+
+    @staticmethod
+    def _microstructure_preflight_diagnostics(preflight: Dict[str, Any]) -> List[str]:
+        return [
+            f"microstructure:{risk['stock_code']}:{risk['risk_type']}"
+            for risk in preflight.get("risks", [])
+        ]
 
     def _quantize_ratio(self, value: Decimal) -> float:
         return float(value.quantize(Decimal("0.000001")))  # numeric-boundary: dto
