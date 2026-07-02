@@ -24,7 +24,7 @@ FORBIDDEN_PHRASES = (
 def test_scheduled_scripts_do_not_use_trading_language() -> None:
     offenders: list[tuple[str, str]] = []
     for path in SCHEDULED_DIR.glob("*"):
-        if path.suffix.lower() not in {".ps1", ".md"}:
+        if path.suffix.lower() not in {".ps1", ".cmd", ".md", ".py"}:
             continue
         text = path.read_text(encoding="utf-8").lower()
         for phrase in FORBIDDEN_PHRASES:

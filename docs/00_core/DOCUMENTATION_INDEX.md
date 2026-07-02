@@ -207,7 +207,8 @@
 | [POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md) | Post-V1 Evidence Review UI 人工 smoke checklist，覆蓋四個 dashboard、boundary banner、empty/degraded states、read-only guarantee 與人工結果表。 |
 | [POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md](../06_qa/POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md) | Evidence Pipeline 多日 dry-run 記錄模板，用於正式 scheduler 前穩定性觀察，不代表 production scheduler 已啟用。 |
 | [POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md) | Evidence scheduler approval SOP，定義 manual run、multi-day dry-run、working-copy smoke、dashboard review、manual approval 與 explicit approval 後才 implementation 的 stage。 |
-| [POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md) | Evidence safe scheduled wrapper QA，記錄 read-only freshness check、evidence dry-run、manual working-copy smoke、register/unregister 與 production write-mode 未啟用邊界。 |
+| [POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md) | Evidence safe scheduled wrapper 歷史 QA，記錄 PowerShell `.ps1` 註冊被 local execution policy 擋住。 |
+| [POST_V1_SCHEDULED_EVIDENCE_PIPELINE_QA_2026_07_12.md](../06_qa/POST_V1_SCHEDULED_EVIDENCE_PIPELINE_QA_2026_07_12.md) | CMD wrapper + `schtasks.exe` QA，記錄 05:00 read-only freshness、05:15 evidence dry-run、manual-only working-copy smoke 與 production write-mode 未啟用邊界。 |
 
 
 ---
@@ -217,7 +218,7 @@
 | 文件 | 用途 |
 |---|---|
 | [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md) | 目前 8 個頂層工作區的完整操作手冊，包含安裝、參數、結果判讀、安全限制與排錯。 |
-| [EVIDENCE_SCHEDULED_MORNING_CHECK.md](../07_guides/EVIDENCE_SCHEDULED_MORNING_CHECK.md) | Evidence scheduled dry-run 的每日早晨人工檢查步驟，包含 Task Scheduler、freshness status、dry-run report 與停用方式。 |
+| [EVIDENCE_SCHEDULED_MORNING_CHECK.md](../07_guides/EVIDENCE_SCHEDULED_MORNING_CHECK.md) | Evidence scheduled dry-run 的每日早晨人工檢查步驟，包含 CMD + `schtasks.exe` 查詢、freshness status、dry-run report 與停用方式。 |
 | [QUICK_START.md](../07_guides/QUICK_START.md) | 快速開始。 |
 | [QUICK_REFERENCE.md](../07_guides/QUICK_REFERENCE.md) | 常用命令與快速查找。 |
 | [INSTALL_GUIDE.md](../07_guides/INSTALL_GUIDE.md) | 安裝與環境設置。 |
@@ -314,6 +315,7 @@
 - 2026-07-11：新增 Post-V1 Evidence Review Dashboards design / plan 與 QA 索引，標示 Research Lab `Evidence Review` read-only UI pack 已建立；dashboard 只讀 evidence / observation / review，不寫 evidence、不建立 scheduler、不自動 lifecycle action。
 - 2026-07-12：新增 Evidence Review UI smoke checklist、Evidence Pipeline multi-day dry-run record 與 scheduler approval SOP 索引；標示這些是 production scheduler 前的人工 QA scaffold，不啟用 scheduler、不宣稱 alpha。
 - 2026-07-12：新增 Evidence scheduled dry-run wrapper QA 與 morning check guide 索引；標示每日自動任務只做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
+- 2026-07-12：新增 CMD wrapper + `schtasks.exe` QA 索引；標示 PowerShell `.ps1` 被 execution policy 擋住後改用 CMD 註冊，時間為每日本機 05:00 / 05:15，production confirm 仍未啟用。
 - 2026-06-30：新增 v1 release checklist 索引，將 `v1.0.0-rc.1` / `v1.0.0` 發布前的自動化、非破壞 healthcheck、MainWindow UI smoke、全新 clone 與人工 UI 驗證 gate 集中管理。
 - 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。

@@ -1,41 +1,101 @@
 # baldr Scheduled Evidence Dry-run Wrappers
 
-These scripts are intentionally conservative. They do not run the UI, do not mutate portfolio state, do not change scoring, and do not create an automated write-mode evidence task.
+These wrappers are intentionally conservative. They use CMD files and Windows built-in `schtasks.exe` because the previous PowerShell `.ps1` registration path was blocked by local execution policy. Do not use `Set-ExecutionPolicy`, do not bypass local policy, and do not create a production evidence confirm schedule.
 
 ## Tasks
 
-| Task | Default state | Trigger | Behavior |
+| Task | State | Trigger | Behavior |
 |---|---:|---|---|
-| `baldr-data-freshness-check-daily` | enabled | daily 07:30 | Read-only SQLite / `DATA_ROOT` freshness check. Writes only status and logs under `OUTPUT_ROOT/scheduled/data_freshness/`. |
-| `baldr-evidence-pipeline-dry-run-daily` | enabled | daily 07:45 | Runs `scripts/run_evidence_pipeline.py` with `--dry-run`. Reads freshness status first and marks the report degraded if freshness is not passed. |
-| `baldr-evidence-working-copy-smoke-manual` | disabled | disabled manual task | Manual-only smoke against a working-copy DB. It requires explicit source and working-copy DB paths. |
+| `baldr-data-freshness-check-daily` | enabled after register | daily local time 05:00 | Read-only SQLite / `DATA_ROOT` freshness check. Writes only status and logs under `OUTPUT_ROOT/scheduled/data_freshness/`. |
+| `baldr-evidence-pipeline-dry-run-daily` | enabled after register | daily local time 05:15 | Runs `scripts/run_evidence_pipeline.py` with `--dry-run`. Writes only report, status, and logs under `OUTPUT_ROOT/scheduled/evidence_pipeline_dry_run/`. |
+| `baldr-evidence-working-copy-smoke-manual` | manual-only | no daily schedule | Manual smoke against a working-copy DB. This repo keeps the script only; `register_baldr_scheduled_tasks.cmd` does not create a daily task for it. |
 
 ## Register
 
-```powershell
-.\scripts\scheduled\register_baldr_scheduled_tasks.ps1 -Mode DryRun
-.\scripts\scheduled\register_baldr_scheduled_tasks.ps1 -Mode Register
+Preview:
+
+```cmd
+scripts\scheduled\register_baldr_scheduled_tasks.cmd dryrun
 ```
 
-If Windows blocks registration through permissions or execution policy, do not bypass local security policy. Record the error in the QA note and use Task Scheduler UI to create the two enabled daily tasks manually.
+Create or replace the two daily tasks:
 
-Manual Task Scheduler fields:
+```cmd
+scripts\scheduled\register_baldr_scheduled_tasks.cmd register
+```
 
-| Task | Trigger | Program | Arguments |
-|---|---|---|---|
-| `baldr-data-freshness-check-daily` | Daily 07:30 | `powershell.exe` | `-NoProfile -File "<repo>\scripts\scheduled\run_daily_data_freshness_check.ps1"` |
-| `baldr-evidence-pipeline-dry-run-daily` | Daily 07:45 | `powershell.exe` | `-NoProfile -File "<repo>\scripts\scheduled\run_evidence_pipeline_dry_run.ps1"` |
-| `baldr-evidence-working-copy-smoke-manual` | Disabled/manual | `powershell.exe` | `-NoProfile -File "<repo>\scripts\scheduled\run_evidence_working_copy_smoke.ps1" -SourceDbPath "<source-db>" -WorkingCopyDbPath "<working-copy-db>"` |
+The register script creates:
 
-Set "Start in" to the repository root. Keep the working-copy smoke task disabled unless you are deliberately running a working-copy smoke.
+```text
+baldr-data-freshness-check-daily
+  DAILY 05:00
+  cmd.exe /c "<repo>\scripts\scheduled\run_daily_data_freshness_check.cmd"
+
+baldr-evidence-pipeline-dry-run-daily
+  DAILY 05:15
+  cmd.exe /c "<repo>\scripts\scheduled\run_evidence_pipeline_dry_run.cmd"
+```
+
+It does not create or enable `baldr-evidence-working-copy-smoke-manual` as a daily task.
+
+## Query
+
+```cmd
+scripts\scheduled\query_baldr_scheduled_tasks.cmd
+schtasks /Query /TN baldr-data-freshness-check-daily /V /FO LIST
+schtasks /Query /TN baldr-evidence-pipeline-dry-run-daily /V /FO LIST
+```
+
+Missing tasks are reported as friendly `Task not found` messages by the query wrapper.
 
 ## Unregister
 
-```powershell
-.\scripts\scheduled\unregister_baldr_scheduled_tasks.ps1 -Mode DryRun
-.\scripts\scheduled\unregister_baldr_scheduled_tasks.ps1 -Mode Unregister
+Preview:
+
+```cmd
+scripts\scheduled\unregister_baldr_scheduled_tasks.cmd dryrun
 ```
+
+Remove the scheduled tasks:
+
+```cmd
+scripts\scheduled\unregister_baldr_scheduled_tasks.cmd unregister
+```
+
+You can also open Windows Task Scheduler and disable or delete the two daily tasks manually.
+
+## Logs And Reports
+
+Data freshness:
+
+```text
+<OUTPUT_ROOT>/scheduled/data_freshness/latest_status.json
+<OUTPUT_ROOT>/scheduled/data_freshness/YYYYMMDD_data_freshness.log
+```
+
+Evidence dry-run:
+
+```text
+<OUTPUT_ROOT>/scheduled/evidence_pipeline_dry_run/latest_status.json
+<OUTPUT_ROOT>/scheduled/evidence_pipeline_dry_run/YYYYMMDD_evidence_pipeline_dry_run.log
+<OUTPUT_ROOT>/scheduled/evidence_pipeline_dry_run/reports/YYYYMMDD_evidence_pipeline_dry_run.md
+```
+
+Working-copy smoke manual script:
+
+```cmd
+scripts\scheduled\run_evidence_working_copy_smoke.cmd <source-db-path> <working-copy-db-path> [YYYY-MM-DD] [repeat]
+```
+
+If the DB paths are missing, the wrapper prints usage and exits. Repeat defaults to 2.
 
 ## Evidence Boundary
 
-The automated daily evidence task is dry-run only. It creates logs and reports for human review. It cannot prove that any event type is useful, and it cannot approve lifecycle changes.
+The daily automation runs only:
+
+- read-only data freshness checks;
+- evidence pipeline dry-run reports.
+
+It does not run production evidence confirm, does not write the production evidence DB, does not update production data, does not run the UI, does not read UI state, does not change portfolio state, does not change `ScoringEngine`, does not change recommendation weights, does not promote / demote / retire strategies, and does not automate trading.
+
+The generated evidence reports are for human review only. They do not prove alpha and must not be converted into trading advice.
