@@ -338,9 +338,9 @@ def test_all_data_view_has_safe_update_primary_button():
     view = make_view()
 
     assert isinstance(view.quick_update_all_btn, QPushButton)
-    assert view.quick_update_all_btn.text() == "⚡ 快速更新 (跳過大型合併)"
+    assert view.quick_update_all_btn.text() == "快速更新 (跳過大型合併)"
     assert isinstance(view.safe_update_all_btn, QPushButton)
-    assert view.safe_update_all_btn.text() == "🛡️ 安全更新 (完整 CSV + SQLite)"
+    assert view.safe_update_all_btn.text() == "安全更新 (完整 CSV + SQLite)"
 
 
 def test_all_data_view_has_monthly_revenue_status_card():

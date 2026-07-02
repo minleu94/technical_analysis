@@ -605,7 +605,7 @@ class SmartMoneyFlowView(QWidget):
 
         warning_html = ""
         if getattr(signal, 'has_estimated_lots', False):
-            warning_html = "<div style='color:#f97316; font-weight:bold; margin-bottom:6px;'>⚠️ 本訊號包含歷史金額與股價折算之估計張數資料</div>"
+            warning_html = "<div style='color:#f97316; font-weight:bold; margin-bottom:6px;'>注意：本訊號包含歷史金額與股價折算之估計張數資料</div>"
 
         stats_html = warning_html + (
             f"<span style='color:#94a3b8;'>主力分數：</span><b><font color='#ffffff'>{signal.smart_money_score:.1f}</font></b>"
@@ -613,7 +613,7 @@ class SmartMoneyFlowView(QWidget):
             f"<span style='color:#94a3b8;'>籌碼集中度：</span><b><font color='#ffffff'>{signal.branch_concentration:.0%}</font></b><br/>"
         )
         if signal.explainable_reasons:
-            stats_html += "<br/><b><span style='color:#3b82f6;'>🔍 訊號解析原因：</span></b><br/>"
+            stats_html += "<br/><b><span style='color:#3b82f6;'>訊號解析原因：</span></b><br/>"
             for reason in signal.explainable_reasons:
                 stats_html += f"• {reason}<br/>"
         self.sub_card_stats.setText(stats_html)

@@ -151,9 +151,9 @@ class TerminalTableModel(QAbstractTableModel):
                 obs_pct = (obs_cnt / total_cnt) * 100.0
                 est_pct = (est_cnt / total_cnt) * 100.0
                 unavail_pct = (unavail_cnt / total_cnt) * 100.0
-                tooltip_lines.append(f"📊 資料品質：真實 {obs_pct:.0f}%｜估算 {est_pct:.0f}%｜不可用 {unavail_pct:.0f}%")
+                tooltip_lines.append(f"資料品質：真實 {obs_pct:.0f}%｜估算 {est_pct:.0f}%｜不可用 {unavail_pct:.0f}%")
             else:
-                tooltip_lines.append("📊 資料品質：真實 100%｜估算 0%｜不可用 0%")
+                tooltip_lines.append("資料品質：真實 100%｜估算 0%｜不可用 0%")
 
             tooltip_lines.append("💡 MoneyDJ 榜單特性說明：")
             tooltip_lines.append("• MoneyDJ 分點買賣包含張數榜 (c=E) 與金額榜 (c=B)，均僅取前 50 名。")
@@ -163,7 +163,7 @@ class TerminalTableModel(QAbstractTableModel):
             tooltip_lines.append("-" * 35)
 
             if getattr(signal, 'has_estimated_lots', False):
-                tooltip_lines.append("⚠️ 注意：此期間包含歷史金額與股價折算之估計張數資料。")
+                tooltip_lines.append("注意：此期間包含歷史金額與股價折算之估計張數資料。")
 
             if hasattr(signal, 'sparkline_details') and signal.sparkline_details:
                 tooltip_lines.append("近期每日主力淨進出明細 (不分週期)：")
@@ -305,9 +305,9 @@ class BranchTrackerTableModel(QAbstractTableModel):
                 obs_pct = (obs_cnt / total_cnt) * 100.0
                 est_pct = (est_cnt / total_cnt) * 100.0
                 unavail_pct = (unavail_cnt / total_cnt) * 100.0
-                tooltip_lines.append(f"📊 資料品質：真實 {obs_pct:.0f}%｜估算 {est_pct:.0f}%｜不可用 {unavail_pct:.0f}%")
+                tooltip_lines.append(f"資料品質：真實 {obs_pct:.0f}%｜估算 {est_pct:.0f}%｜不可用 {unavail_pct:.0f}%")
             else:
-                tooltip_lines.append("📊 資料品質：真實 100%｜估算 0%｜不可用 0%")
+                tooltip_lines.append("資料品質：真實 100%｜估算 0%｜不可用 0%")
 
             tooltip_lines.append("💡 MoneyDJ 榜單特性說明：")
             tooltip_lines.append("• MoneyDJ 分點買賣包含張數榜 (c=E) 與金額榜 (c=B)，均僅取前 50 名。")
@@ -317,7 +317,7 @@ class BranchTrackerTableModel(QAbstractTableModel):
             tooltip_lines.append("-" * 35)
 
             if getattr(agg, 'has_estimated_lots', False):
-                tooltip_lines.append("⚠️ 注意：此期間包含歷史金額與股價折算之估計張數資料。")
+                tooltip_lines.append("注意：此期間包含歷史金額與股價折算之估計張數資料。")
 
             if hasattr(agg, 'sparkline_details') and agg.sparkline_details:
                 tooltip_lines.append("近期每日分點淨進出明細 (不分週期)：")

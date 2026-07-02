@@ -34,6 +34,8 @@ from app_module.recommendation_profile_service import (
 from app_module.strategy_version_service import StrategyVersionService
 from data_module.config import TWStockConfig
 from ui_qt.widgets.info_button import InfoButton
+from ui_qt.widgets.table_style import apply_financial_table_style
+from ui_qt.widgets.text_sanitizer import remove_symbol_icons
 
 
 def build_recommendation_portfolio_backtest_config(
@@ -745,7 +747,7 @@ class RecommendationView(QWidget):
         checkbox.setChecked(checked)
         
         # 組合 tooltip（使用換行符）
-        tooltip_text = '\n'.join(tooltip_lines)
+        tooltip_text = remove_symbol_icons('\n'.join(tooltip_lines))
         checkbox.setToolTip(tooltip_text)
         
         # 保存 desc_key 供後續使用
@@ -868,7 +870,7 @@ class RecommendationView(QWidget):
         tech_layout = QVBoxLayout()
         
         # 趨勢類
-        trend_label = QLabel("📈 趨勢 (Trend)")
+        trend_label = QLabel("趨勢 (Trend)")
         trend_font = QFont()
         trend_font.setBold(True)
         trend_label.setFont(trend_font)
@@ -902,7 +904,7 @@ class RecommendationView(QWidget):
         self.macd_check.toggled.connect(self._update_strategy_tendency)
         
         # 動能類
-        momentum_label = QLabel("⚡ 動能 (Momentum)")
+        momentum_label = QLabel("動能 (Momentum)")
         momentum_font = QFont()
         momentum_font.setBold(True)
         momentum_label.setFont(momentum_font)
@@ -927,7 +929,7 @@ class RecommendationView(QWidget):
         self.kd_check.toggled.connect(self._update_strategy_tendency)
         
         # 波動/風險類
-        volatility_label = QLabel("📊 波動 / 風險 (Volatility)")
+        volatility_label = QLabel("波動 / 風險 (Volatility)")
         volatility_font = QFont()
         volatility_font.setBold(True)
         volatility_label.setFont(volatility_font)
@@ -960,7 +962,7 @@ class RecommendationView(QWidget):
         pattern_layout = QVBoxLayout()
         
         # 反轉類（看漲反轉）
-        reversal_label = QLabel("🔄 反轉 (Bullish Reversal)")
+        reversal_label = QLabel("反轉 (Bullish Reversal)")
         reversal_font = QFont()
         reversal_font.setBold(True)
         reversal_label.setFont(reversal_font)
@@ -1012,7 +1014,7 @@ class RecommendationView(QWidget):
         self.pattern_rounding_bottom.toggled.connect(self._update_strategy_tendency)
         
         # 上漲延續類
-        continuation_label = QLabel("📈 上漲延續 (Bullish Continuation)")
+        continuation_label = QLabel("上漲延續 (Bullish Continuation)")
         continuation_font = QFont()
         continuation_font.setBold(True)
         continuation_label.setFont(continuation_font)
@@ -1037,7 +1039,7 @@ class RecommendationView(QWidget):
         self.pattern_wedge.toggled.connect(self._update_strategy_tendency)
         
         # 盤整/區間類
-        consolidation_label = QLabel("📊 盤整 / 區間 (Consolidation)")
+        consolidation_label = QLabel("盤整 / 區間 (Consolidation)")
         consolidation_font = QFont()
         consolidation_font.setBold(True)
         consolidation_label.setFont(consolidation_font)
@@ -1062,7 +1064,7 @@ class RecommendationView(QWidget):
         self.pattern_triangle.toggled.connect(self._update_strategy_tendency)
         
         # 下跌訊號類（用於反向篩選）
-        bearish_label = QLabel("⚠️ 下跌訊號 (Bearish Signal)")
+        bearish_label = QLabel("下跌訊號 (Bearish Signal)")
         bearish_font = QFont()
         bearish_font.setBold(True)
         bearish_label.setFont(bearish_font)
@@ -1222,6 +1224,7 @@ class RecommendationView(QWidget):
         # 執行按鈕
         self.execute_btn = QPushButton("執行推薦分析")
         self.execute_btn.setMinimumHeight(40)
+        self.execute_btn.setProperty("variant", "primary")
         self.execute_btn.clicked.connect(self._execute_recommendation)
         layout.addWidget(self.execute_btn)
         
@@ -1288,7 +1291,7 @@ class RecommendationView(QWidget):
         title_layout.addWidget(self.send_profile_to_portfolio_backtest_btn)
         
         # 📊 匯出 Excel 按鈕
-        self.export_report_btn = QPushButton("📊 匯出 Excel")
+        self.export_report_btn = QPushButton("匯出 Excel")
         self.export_report_btn.setVisible(False)
         self.export_report_btn.clicked.connect(self._export_current_recommendation)
         title_layout.addWidget(self.export_report_btn)
@@ -1300,9 +1303,9 @@ class RecommendationView(QWidget):
         
         # 結果表格
         self.results_table = QTableView()
+        apply_financial_table_style(self.results_table)
         self.results_table.setSortingEnabled(True)
         self.results_table.horizontalHeader().setStretchLastSection(True)
-        self.results_table.setAlternatingRowColors(True)
         # 設置選擇模式為單行選擇
         self.results_table.setSelectionBehavior(QTableView.SelectRows)
         self.results_table.setSelectionMode(QTableView.SingleSelection)
@@ -1318,6 +1321,7 @@ class RecommendationView(QWidget):
         detail_layout = QVBoxLayout()
         self.detail_text = QTextEdit()
         self.detail_text.setReadOnly(True)
+        self.detail_text.setPlaceholderText("選取推薦結果後，這裡會顯示分數拆解、策略傾向與風險提示。")
         detail_layout.addWidget(self.detail_text)
         detail_group.setLayout(detail_layout)
         result_splitter.addWidget(detail_group)
@@ -1797,28 +1801,28 @@ class RecommendationView(QWidget):
             # 判斷策略傾向
             # 趨勢策略：Trend 類指標權重較高
             if trend_count >= 2 and (momentum_count + volatility_count) <= 2:
-                tendency_text = "目前選擇偏向：📈 趨勢追蹤策略"
-                tendency_icon = "📈"
+                tendency_text = "目前選擇偏向：趨勢追蹤策略"
+                tendency_icon = ""
                 tendency_color = "#16a34a"
             # 反轉策略：Momentum + Reversal 類為主
             elif (momentum_count >= 1 and reversal_count >= 2) or (reversal_count >= 3):
-                tendency_text = "目前選擇偏向：🔄 反轉策略"
-                tendency_icon = "🔄"
+                tendency_text = "目前選擇偏向：反轉策略"
+                tendency_icon = ""
                 tendency_color = "#2563eb"
             # 盤整策略：Volatility / Consolidation 為主
             elif (volatility_count >= 1 and consolidation_count >= 1) or consolidation_count >= 2:
-                tendency_text = "目前選擇偏向：📊 盤整 / 區間策略"
-                tendency_icon = "📊"
+                tendency_text = "目前選擇偏向：盤整 / 區間策略"
+                tendency_icon = ""
                 tendency_color = "#6d28d9"
             # 延續策略：Continuation 為主
             elif continuation_count >= 1 and trend_count >= 1:
-                tendency_text = "目前選擇偏向：📈 趨勢延續策略"
-                tendency_icon = "📈"
+                tendency_text = "目前選擇偏向：趨勢延續策略"
+                tendency_icon = ""
                 tendency_color = "#16a34a"
             # 混合策略
             else:
-                tendency_text = "目前選擇偏向：⚠️ 混合策略（可能不穩定）"
-                tendency_icon = "⚠️"
+                tendency_text = "目前選擇偏向：混合策略（可能不穩定）"
+                tendency_icon = ""
                 tendency_color = "#dc2626"
         
         # 更新標籤
@@ -2558,7 +2562,7 @@ class RecommendationView(QWidget):
             return "<div style='line-height: 1.6;'><p style='color: #16a34a;'><b>✓ 所有條件均符合，分數表現優秀</b></p></div>"
         
         html_text = "<div style='line-height: 1.6;'>"
-        html_text += "<p style='margin: 5px 0;'><b>⚠️ 可能影響排名的因素：</b></p>"
+        html_text += "<p style='margin: 5px 0;'><b>可能影響排名的因素：</b></p>"
         html_text += "<ul style='margin: 5px 0; padding-left: 20px;'>"
         
         for item in why_not_items:
@@ -2612,7 +2616,7 @@ class RecommendationView(QWidget):
             }
             for name in name_map.get(key, []):
                 technical_keywords[name] = {
-                    'display': f'📊 <b style="color: #2563eb;">{name}</b>',
+                    'display': f'<b style="color: #2563eb;">{name}</b>',
                     'category': desc.get('category', ''),
                     'tags': desc.get('tags', [])
                 }
@@ -2638,20 +2642,20 @@ class RecommendationView(QWidget):
             for name in name_map.get(key, []):
                 category = desc.get('category', '')
                 if category == 'Reversal':
-                    icon = '🔄'
+                    icon = ''
                     color = '#16a34a'
                 elif category == 'Continuation':
-                    icon = '📈'
+                    icon = ''
                     color = '#16a34a'
                 elif category == 'Consolidation':
-                    icon = '📊'
+                    icon = ''
                     color = '#7c3aed'
                 else:  # Bearish
-                    icon = '⚠️'
+                    icon = ''
                     color = '#dc2626'
                 
                 pattern_keywords[name] = {
-                    'display': f'{icon} <b style="color: {color};">{name}</b>',
+                    'display': f'<b style="color: {color};">{name}</b>',
                     'category': category,
                     'tags': desc.get('tags', [])
                 }
@@ -2668,19 +2672,19 @@ class RecommendationView(QWidget):
         
         # 其他標籤映射
         other_tags = {
-            '趨勢': '📈 <b style="color: #2563eb;">趨勢</b>',
-            '動能': '⚡ <b style="color: #2563eb;">動能</b>',
-            '波動': '📊 <b style="color: #2563eb;">波動</b>',
-            '反轉': '🔄 <b style="color: #16a34a;">反轉</b>',
-            '延續': '📈 <b style="color: #16a34a;">延續</b>',
-            '盤整': '📊 <b style="color: #16a34a;">盤整</b>',
+            '趨勢': '<b style="color: #2563eb;">趨勢</b>',
+            '動能': '<b style="color: #2563eb;">動能</b>',
+            '波動': '<b style="color: #2563eb;">波動</b>',
+            '反轉': '<b style="color: #16a34a;">反轉</b>',
+            '延續': '<b style="color: #16a34a;">延續</b>',
+            '盤整': '<b style="color: #16a34a;">盤整</b>',
             '超買': '<span style="color: #dc2626;">超買</span>',
             '超賣': '<span style="color: #16a34a;">超賣</span>',
             '金叉': '<span style="color: #16a34a;">金叉</span>',
             '死叉': '<span style="color: #dc2626;">死叉</span>',
             '多頭': '<span style="color: #16a34a;">多頭</span>',
             '空頭': '<span style="color: #dc2626;">空頭</span>',
-            '成交量': '📊 <b style="color: #2563eb;">成交量</b>',
+            '成交量': '<b style="color: #2563eb;">成交量</b>',
         }
         
         for keyword, replacement in other_tags.items():
@@ -2723,12 +2727,12 @@ class RecommendationView(QWidget):
                 html_text += "<p style='margin: 5px 0; font-size: 0.9em; color: #666;'><b>觸發來源：</b>"
                 if triggered_indicators:
                     indicators_display = '、'.join([all_keywords[k]['display'] for k in triggered_indicators if k in all_keywords])
-                    html_text += f"📊 技術指標：{indicators_display}"
+                    html_text += f"技術指標：{indicators_display}"
                 if triggered_patterns:
                     if triggered_indicators:
                         html_text += " | "
                     patterns_display = '、'.join([all_keywords[k]['display'] for k in triggered_patterns if k in all_keywords])
-                    html_text += f"🔺 圖形訊號：{patterns_display}"
+                    html_text += f"圖形訊號：{patterns_display}"
                 html_text += "</p>"
             
             html_text += "<ul style='margin: 5px 0; padding-left: 20px;'>"
@@ -2798,7 +2802,7 @@ class RecommendationView(QWidget):
                 html_content += why_not
             
             if html_content:
-                self.detail_text.setHtml(html_content)
+                self.detail_text.setHtml(remove_symbol_icons(html_content))
             else:
                 self.detail_text.setPlainText("無詳細信息")
         else:
@@ -2814,7 +2818,7 @@ class RecommendationView(QWidget):
             str: Explain 面板 HTML 內容
         """
         html_text = "<div style='line-height: 1.6;'>"
-        html_text += "<p style='margin: 5px 0;'><b>📊 分數拆解：</b></p>"
+        html_text += "<p style='margin: 5px 0;'><b>分數拆解：</b></p>"
         html_text += "<table style='width: 100%; border-collapse: collapse; margin: 5px 0;'>"
         
         # 總分
@@ -2838,7 +2842,7 @@ class RecommendationView(QWidget):
         indicator_color = '#16a34a' if indicator_score >= 60 else '#f59e0b' if indicator_score >= 50 else '#dc2626'
         html_text += f"""
         <tr style='background-color: #1e1e1e;'>
-            <td style='padding: 5px; border: 1px solid #444;'>📈 技術指標分數</td>
+            <td style='padding: 5px; border: 1px solid #444;'>技術指標分數</td>
             <td style='padding: 5px; border: 1px solid #444; text-align: right;'>
                 <span style='color: {indicator_color};'>{indicator_score:.1f}</span>
             </td>
@@ -2849,7 +2853,7 @@ class RecommendationView(QWidget):
         pattern_color = '#16a34a' if pattern_score >= 60 else '#f59e0b' if pattern_score >= 50 else '#dc2626'
         html_text += f"""
         <tr style='background-color: #1e1e1e;'>
-            <td style='padding: 5px; border: 1px solid #444;'>🔺 圖形模式分數</td>
+            <td style='padding: 5px; border: 1px solid #444;'>圖形模式分數</td>
             <td style='padding: 5px; border: 1px solid #444; text-align: right;'>
                 <span style='color: {pattern_color};'>{pattern_score:.1f}</span>
             </td>
@@ -2860,7 +2864,7 @@ class RecommendationView(QWidget):
         volume_color = '#16a34a' if volume_score >= 60 else '#f59e0b' if volume_score >= 50 else '#dc2626'
         html_text += f"""
         <tr style='background-color: #1e1e1e;'>
-            <td style='padding: 5px; border: 1px solid #444;'>📊 成交量分數</td>
+            <td style='padding: 5px; border: 1px solid #444;'>成交量分數</td>
             <td style='padding: 5px; border: 1px solid #444; text-align: right;'>
                 <span style='color: {volume_color};'>{volume_score:.1f}</span>
             </td>
@@ -2881,7 +2885,7 @@ class RecommendationView(QWidget):
         html_text += "</ul>"
         
         # 風險點提示
-        html_text += "<p style='margin: 10px 0 5px 0;'><b>⚠️ 風險點：</b></p>"
+        html_text += "<p style='margin: 10px 0 5px 0;'><b>風險點：</b></p>"
         html_text += "<ul style='margin: 5px 0; padding-left: 20px;'>"
         
         risk_points = []
@@ -3117,12 +3121,12 @@ class RecommendationView(QWidget):
 
     def _on_excel_export_finished(self, path):
         self.export_report_btn.setEnabled(True)
-        self.export_report_btn.setText("📊 匯出 Excel")
+        self.export_report_btn.setText("匯出 Excel")
         QMessageBox.information(self, "匯出成功", f"報告已成功匯出至：\n{path}")
 
     def _on_excel_export_error(self, message):
         self.export_report_btn.setEnabled(True)
-        self.export_report_btn.setText("📊 匯出 Excel")
+        self.export_report_btn.setText("匯出 Excel")
         from loguru import logger
         logger.error(f"Excel 匯出失敗：{message}")
         short_msg = message.split("\n")[0]
@@ -3130,7 +3134,7 @@ class RecommendationView(QWidget):
 
     def _on_excel_export_cancelled(self):
         self.export_report_btn.setEnabled(True)
-        self.export_report_btn.setText("📊 匯出 Excel")
+        self.export_report_btn.setText("匯出 Excel")
         QMessageBox.information(self, "取消", "匯出已被取消")
 
     def closeEvent(self, event):

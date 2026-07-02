@@ -5,6 +5,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from ui_qt.widgets.info_button import InfoButton
+from ui_qt.widgets.theme_widgets import EmptyStatePanel
 from app_module.dtos.runtime_dtos import RuntimeStateSnapshotDTO, RuntimeHealthSnapshotDTO, RuntimeEventDTO
 
 STATE_LABELS = {
@@ -93,6 +94,7 @@ class RuntimeView(QWidget):
         ctx_layout = QVBoxLayout(self.context_group)
         self.context_text = QTextEdit()
         self.context_text.setReadOnly(True)
+        self.context_text.setPlaceholderText("尚無 Runtime context。治理任務啟動後，這裡會顯示目前載入的上下文檔案。")
         ctx_layout.addWidget(self.context_text)
 
         left_layout.addWidget(self.state_group)
@@ -122,6 +124,11 @@ class RuntimeView(QWidget):
 
         self.events_group = QGroupBox("事件流")
         events_layout = QVBoxLayout(self.events_group)
+        self.event_empty_state = EmptyStatePanel(
+            "尚無 Runtime 事件",
+            "當治理 workflow 產生事件時，會依時間順序顯示在下方。"
+        )
+        events_layout.addWidget(self.event_empty_state)
         self.event_list = QListWidget()
         events_layout.addWidget(self.event_list)
 
@@ -177,6 +184,7 @@ class RuntimeView(QWidget):
 
     def on_event_received(self, dto: RuntimeEventDTO) -> None:
         """Pure rendering slot for appending event logs"""
+        self.event_empty_state.hide()
         time_str = dto.timestamp.strftime("%H:%M:%S")
         severity_label = SEVERITY_LABELS.get(dto.severity.value, dto.severity.value)
         event_label = EVENT_LABELS.get(dto.event_type, dto.event_type)

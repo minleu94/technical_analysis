@@ -15,6 +15,7 @@ from typing import Optional
 from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.screening_service import ScreeningService
 from ui_qt.widgets.info_button import InfoButton
+from ui_qt.widgets.table_style import apply_financial_table_style
 
 
 class StrongIndustriesView(QWidget):
@@ -81,7 +82,7 @@ class StrongIndustriesView(QWidget):
         
         # 載入數據按鈕（首次載入或強制重新計算）
         self.load_btn = QPushButton("載入數據")
-        self.load_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        self.load_btn.setProperty("variant", "primary")
         self.load_btn.clicked.connect(lambda: self._refresh_industries(use_cache=False))
         control_layout.addWidget(self.load_btn)
         
@@ -95,7 +96,7 @@ class StrongIndustriesView(QWidget):
         
         # 表格
         self.industries_table = QTableView()
-        self.industries_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.industries_table)
         self.industries_table.setSelectionBehavior(QTableView.SelectRows)
         self.industries_table.setSortingEnabled(True)
         self.industries_table.horizontalHeader().setStretchLastSection(True)

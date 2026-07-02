@@ -1018,7 +1018,7 @@ class BacktestView(QWidget):
                 promote_btn.setToolTip("先保存回測結果，且驗證狀態不得為 FAIL，才能升級為策略版本。")
                 # 如果因為 SOP 護欄無法 Promote，顯示提示
                 if can_promote_basic and not can_promote_sop:
-                    logger.warning("[BacktestView] ⚠️ SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
+                    logger.warning("[BacktestView] SOP 護欄：驗證狀態為 {report.validation_status.value}，無法 Promote")
 
         if hasattr(self, 'export_report_btn'):
             self.export_report_btn.setEnabled(True)
@@ -1521,7 +1521,7 @@ class BacktestView(QWidget):
 
         # 如果日期被調整，顯示提示
         if details.get('date_adjusted'):
-            summary_lines.append(f"⚠️ 注意: 請求範圍 {requested_start}~{requested_end} 已調整為實際數據範圍")
+            summary_lines.append(f"注意: 請求範圍 {requested_start}~{requested_end} 已調整為實際數據範圍")
 
         # 策略分數診斷
         score_diag = details.get('score_diagnostics')
@@ -1564,11 +1564,11 @@ class BacktestView(QWidget):
         # 驗證狀態
         from app_module.dtos import ValidationStatus
         status_emoji = {
-            ValidationStatus.PASS: "✅",
-            ValidationStatus.WARNING: "⚠️",
-            ValidationStatus.FAIL: "❌"
+            ValidationStatus.PASS: "[PASS]",
+            ValidationStatus.WARNING: "[WARN]",
+            ValidationStatus.FAIL: "[FAIL]"
         }
-        status_text = status_emoji.get(report.validation_status, "❓")
+        status_text = status_emoji.get(report.validation_status, "[UNKNOWN]")
         summary_lines.append(f"驗證狀態: {status_text} {report.validation_status.value}")
 
         # 驗證訊息
@@ -1593,7 +1593,7 @@ class BacktestView(QWidget):
             summary_lines.append("")
             summary_lines.append("--- Baseline 對比 ---")
             is_better = report.baseline_comparison.get('is_better', False)
-            better_text = "✅ 優於 Buy & Hold" if is_better else "❌ 不如 Buy & Hold"
+            better_text = "[PASS] 優於 Buy & Hold" if is_better else "[FAIL] 不如 Buy & Hold"
             summary_lines.append(f"策略表現: {better_text}")
 
             if 'excess_return' in report.baseline_comparison:
@@ -1605,7 +1605,7 @@ class BacktestView(QWidget):
             summary_lines.append("")
             summary_lines.append("--- 穩健性（過擬合風險） ---")
             risk_level = report.overfitting_risk.get('risk_level', 'unknown')
-            risk_emoji = {'low': '✅', 'medium': '⚠️', 'high': '❌'}.get(risk_level, '❓')
+            risk_emoji = {'low': '[LOW]', 'medium': '[MEDIUM]', 'high': '[HIGH]'}.get(risk_level, '[UNKNOWN]')
             summary_lines.append(f"過擬合風險等級: {risk_emoji} {risk_level.upper()}")
 
             if 'degradation' in report.overfitting_risk:
@@ -2754,7 +2754,7 @@ class BacktestView(QWidget):
                 QMessageBox.critical(
                     self,
                     "無法 Promote",
-                    f"❌ 驗證狀態為 FAIL，無法升級為策略版本\n\n{fail_messages}\n\n請先解決樣本不足問題。"
+                    f"驗證狀態為 FAIL，無法升級為策略版本\n\n{fail_messages}\n\n請先解決樣本不足問題。"
                 )
                 return
 
@@ -4974,7 +4974,7 @@ class BacktestView(QWidget):
             self.report_export_service.export_single_backtest,
             payload,
             self.export_report_btn,
-            "📊 匯出 Excel 報告"
+            "匯出 Excel 報告"
         )
 
     def _export_batch_backtest(self):
@@ -5001,7 +5001,7 @@ class BacktestView(QWidget):
             self.report_export_service.export_batch_backtest,
             payload,
             self.export_batch_report_btn,
-            "📊 匯出批次 Excel"
+            "匯出批次 Excel"
         )
 
     def _export_recommendation_replay(self):
@@ -5028,7 +5028,7 @@ class BacktestView(QWidget):
             self.report_export_service.export_recommendation_replay,
             payload,
             self.export_portfolio_report_btn,
-            "📊 匯出回放 Excel"
+            "匯出回放 Excel"
         )
 
     def closeEvent(self, event):

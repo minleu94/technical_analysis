@@ -16,6 +16,7 @@ from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.screening_service import ScreeningService
 from app_module.regime_service import RegimeService
 from app_module.dtos import RegimeResultDTO
+from ui_qt.widgets.table_style import apply_financial_table_style
 
 
 class DashboardView(QWidget):
@@ -92,7 +93,7 @@ class DashboardView(QWidget):
         
         # 表格
         self.stocks_table = QTableView()
-        self.stocks_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.stocks_table)
         self.stocks_table.setSelectionBehavior(QTableView.SelectRows)
         self.stocks_table.setSortingEnabled(True)
         self.stocks_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -152,7 +153,7 @@ class DashboardView(QWidget):
         
         # 表格
         self.industries_table = QTableView()
-        self.industries_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.industries_table)
         self.industries_table.setSelectionBehavior(QTableView.SelectRows)
         self.industries_table.setSortingEnabled(True)
         self.industries_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)

@@ -23,6 +23,7 @@ from app_module.live_research_gap_dashboard_service import create_live_research_
 from app_module.signal_decay_dashboard_service import create_signal_decay_dashboard_service
 from ui_qt.views.evidence_review_view import EvidenceReviewView
 from ui_qt.views.forward_performance_view import ForwardPerformanceView
+from ui_qt.widgets.table_style import apply_financial_table_style
 
 
 class BacktestResultPanel(QWidget):
@@ -75,7 +76,7 @@ class BacktestResultPanel(QWidget):
         
         # 單股回測 Excel 匯出按鈕
         btn_layout = QHBoxLayout()
-        self.export_report_btn = QPushButton("📊 匯出 Excel 報告")
+        self.export_report_btn = QPushButton("匯出 Excel 報告")
         self.export_report_btn.setEnabled(False)
         self.export_report_btn.setToolTip("匯出目前單股回測的詳細研究報告（報告僅輸出目前結果，不重新計算績效）")
         self.export_report_btn.clicked.connect(self.parent_view._export_single_backtest)
@@ -91,7 +92,7 @@ class BacktestResultPanel(QWidget):
         trades_layout = QVBoxLayout()
         
         self.trades_table = QTableView()
-        self.trades_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.trades_table)
         self.trades_table.setSelectionBehavior(QTableView.SelectRows)
         self.trades_table.setSortingEnabled(True)
         self.trades_table.horizontalHeader().setStretchLastSection(True)
@@ -149,7 +150,7 @@ class BacktestResultPanel(QWidget):
             optimization_result_layout_inner = QVBoxLayout()
             
             self.optimization_table = QTableView()
-            self.optimization_table.setAlternatingRowColors(True)
+            apply_financial_table_style(self.optimization_table)
             self.optimization_table.setSelectionBehavior(QTableView.SelectRows)
             self.optimization_table.setSortingEnabled(True)
             self.optimization_table.horizontalHeader().setStretchLastSection(True)
@@ -182,7 +183,7 @@ class BacktestResultPanel(QWidget):
             history_btn_row.addWidget(self.refresh_history_btn)
             
             self.delete_history_btn = QPushButton("刪除選中")
-            self.delete_history_btn.setStyleSheet("background-color: #F44336; color: white;")
+            self.delete_history_btn.setProperty("variant", "danger")
             self.delete_history_btn.clicked.connect(self.parent_view._delete_history_runs)
             history_btn_row.addWidget(self.delete_history_btn)
             
@@ -205,7 +206,7 @@ class BacktestResultPanel(QWidget):
             compare_result_layout = QVBoxLayout()
             
             self.compare_table = QTableView()
-            self.compare_table.setAlternatingRowColors(True)
+            apply_financial_table_style(self.compare_table)
             self.compare_table.setSortingEnabled(True)
             self.compare_table.horizontalHeader().setStretchLastSection(True)
             self.compare_table.setSelectionBehavior(QTableView.SelectRows)
@@ -243,7 +244,7 @@ class BacktestResultPanel(QWidget):
             sort_row.addWidget(self.batch_sort_combo)
             sort_row.addStretch()
             
-            self.export_batch_report_btn = QPushButton("📊 匯出批次 Excel")
+            self.export_batch_report_btn = QPushButton("匯出批次 Excel")
             self.export_batch_report_btn.setEnabled(False)
             self.export_batch_report_btn.setToolTip("匯出目前批次操作的排行榜與統計報告")
             self.export_batch_report_btn.clicked.connect(self.parent_view._export_batch_backtest)
@@ -255,7 +256,7 @@ class BacktestResultPanel(QWidget):
             batch_leaderboard_layout = QVBoxLayout()
             
             self.batch_leaderboard_table = QTableView()
-            self.batch_leaderboard_table.setAlternatingRowColors(True)
+            apply_financial_table_style(self.batch_leaderboard_table)
             self.batch_leaderboard_table.setSelectionBehavior(QTableView.SelectRows)
             self.batch_leaderboard_table.setSortingEnabled(False)
             self.batch_leaderboard_table.horizontalHeader().setStretchLastSection(True)
@@ -296,7 +297,7 @@ class BacktestResultPanel(QWidget):
         # 推薦回放 Excel 匯出按鈕列
         portfolio_btn_row = QHBoxLayout()
         portfolio_btn_row.addStretch()
-        self.export_portfolio_report_btn = QPushButton("📊 匯出回放 Excel")
+        self.export_portfolio_report_btn = QPushButton("匯出回放 Excel")
         self.export_portfolio_report_btn.setEnabled(False)
         self.export_portfolio_report_btn.setToolTip("匯出推薦回放的組合持倉與個股貢獻報告")
         self.export_portfolio_report_btn.clicked.connect(self.parent_view._export_recommendation_replay)
@@ -325,7 +326,7 @@ class BacktestResultPanel(QWidget):
             self.portfolio_stock_table,
             self.portfolio_trades_table
         ]:
-            table.setAlternatingRowColors(True)
+            apply_financial_table_style(table)
             table.setSelectionBehavior(QTableView.SelectRows)
             table.setSortingEnabled(True)
             table.horizontalHeader().setStretchLastSection(True)

@@ -48,7 +48,7 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
 
 - **閉環 4：每日決策工作台（Daily Decision Desk）** ✅ V1 已建立
   - Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。
-  - 目前主 UI 已接上「每日決策」工作區，各 section 已具備 snapshot 顯示框架；Market Regime、Market Breadth v1、Sector Rotation v1、Relative Strength / Liquidity Ranking v1、Watchlist Trigger v1 與 Portfolio Alert v1 已接主 UI。Market Breadth v1 由 SQLite `daily_prices` 推導多方 / 空方 / 持平、成交量擴散與新高新低等 metadata；Sector Rotation v1 由 SQLite `industry_indices` 推導領先 / 落後產業、5 / 20 日變化與輪動強度；Relative Strength / Liquidity Ranking v1 由 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性代碼；Watchlist Trigger v1 由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導，可計算出個股強度 score_bp (RSI * 100) 與風險警示 risk_alert (偏離 RSI > 80 / < 20 或跌破 lowerband)。若指定日無資料或歷史不足（如 20 日相對強度未滿 21 個交易觀測值），會採用最近可用交易日或降級（quality 降級為 `DEGRADED`，並輸出 `relative_strength_liquidity_insufficient_history`）。Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，可把條件監控與籌碼風險彙總成每日持倉警示；若籌碼資料缺失、估算或不可用，會透過 `quality / warnings` 降級揭露，不補值。Portfolio Alert Attribution v1 已將每筆持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，使 Daily Decision Desk 能辨識警示來自進場假設失效、籌碼風險或資料品質缺口。Why Not / 風險提示 v1 由 `DecisionDeskRiskPromptService` 從既有 section DTO 的 quality、warnings、低流動性、相對弱勢、watchlist risk alert 與 portfolio alert 推導，不在 UI 層重算 scoring、screening、portfolio 或 liquidity。Month 4 收尾已新增 UI boundary contract test，確認 Daily Decision Desk UI 不直接 import domain 計算模組；視覺 polish 仍列為後續設計債，不阻塞 Month 5。
+  - 目前主 UI 已接上「每日決策」工作區，各 section 已具備 snapshot 顯示框架；Market Regime、Market Breadth v1、Sector Rotation v1、Relative Strength / Liquidity Ranking v1、Watchlist Trigger v1 與 Portfolio Alert v1 已接主 UI。Market Breadth v1 由 SQLite `daily_prices` 推導多方 / 空方 / 持平、成交量擴散與新高新低等 metadata；Sector Rotation v1 由 SQLite `industry_indices` 推導領先 / 落後產業、5 / 20 日變化與輪動強度；Relative Strength / Liquidity Ranking v1 由 SQLite `daily_prices` 推導 5 / 20 日相對強度與平均成交金額，並揭露低流動性代碼；Watchlist Trigger v1 由 `WatchlistService` 與 SQLite `technical_indicators` 共同推導，可計算出個股強度 score_bp (RSI * 100) 與風險警示 risk_alert (偏離 RSI > 80 / < 20 或跌破 lowerband)。若指定日無資料或歷史不足（如 20 日相對強度未滿 21 個交易觀測值），會採用最近可用交易日或降級（quality 降級為 `DEGRADED`，並輸出 `relative_strength_liquidity_insufficient_history`）。Portfolio Alert v1 已接 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService`，可把條件監控與籌碼風險彙總成每日持倉警示；若籌碼資料缺失、估算或不可用，會透過 `quality / warnings` 降級揭露，不補值。Portfolio Alert Attribution v1 已將每筆持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags，使 Daily Decision Desk 能辨識警示來自進場假設失效、籌碼風險或資料品質缺口。Why Not / 風險提示 v1 由 `DecisionDeskRiskPromptService` 從既有 section DTO 的 quality、warnings、低流動性、相對弱勢、watchlist risk alert 與 portfolio alert 推導，不在 UI 層重算 scoring、screening、portfolio 或 liquidity。Month 4 收尾已新增 UI boundary contract test，確認 Daily Decision Desk UI 不直接 import domain 計算模組；2026-07-02 已完成第一輪 Midnight Analyst 全 UI 低風險視覺 polish，修缺字 icon、統一 token / 表格 / 按鈕 / 空狀態，且不改資料抓取、推薦、回測、每日決策 snapshot 或持倉計算語意。
 
 - **治理閉環：Strategy Lifecycle / Portfolio Feedback** ✅ Month 6 v1 已建立
   - Research Run Registry → Month 6 lifecycle gate → promote / hold / demote / retire evidence → Portfolio Feedback → Portfolio Review → 回到 Research。
@@ -66,7 +66,7 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
 
 ## 現在的工作模式（你每天要用的流程）
 
-1. Update 使用「⚡ 快速更新（跳過大型合併）」或「🛡️ 安全更新（完整 CSV + SQLite）」補齊資料，必要時用 SQLite Inspector 唯讀確認 freshness。
+1. Update 使用「快速更新（跳過大型合併）」或「安全更新（完整 CSV + SQLite）」補齊資料，必要時用 SQLite Inspector 唯讀確認 freshness。
 2. 每日先看 Daily Decision Desk 的主結論、資料品質、Watchlist Trigger 與 Portfolio Alert，再下鑽 Market Watch / Smart Money。
 3. Recommendation 用 Profile 出名單 + 看 Why / Why Not → 加入候選池，或送 Research Lab 批次回測 / 推薦回放。
 4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；成功結果可保存到 Research Run Registry，只有通過 Registry 與 Month 6 lifecycle gate 才能升級策略版本。
@@ -202,7 +202,7 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 ## 2026-06-11 券商分點擴充與數據更新流程分流成果
 
 - **券商分點擴充、長碼解密與總公司判定**：在 `BrokerBranchUpdateService` 中實作 Unicode 長碼解密 `_decode_unicode_hex` 與總公司判定邏輯，自動在載入 registry 時將 16 進位 Unicode hex 長碼（如 `003800380038004b`）解密為真實短碼（如 `888K`），並在符合條件時動態判定為總部。已完成 37 個分點的擴充。
-- **資料更新流程分流 (⚡ 快速更新 vs 🛡️ 安全更新)**：將 `UpdateView` 一鍵更新按鈕重構分拆為「⚡ 快速更新 (僅 SQLite)」與「🛡️ 安全更新 (完整 CSV + SQLite)」。當 SQLite 啟用時，快速更新僅直查同步單日資料並寫入 SQLite，略過大 CSV 合併重寫以實現數十倍提速，安全更新則強制執行 CSV 合併以備份資料庫。
+- **資料更新流程分流（快速更新 vs 安全更新）**：將 `UpdateView` 一鍵更新按鈕重構分拆為「快速更新（跳過大型合併）」與「安全更新（完整 CSV + SQLite）」。當 SQLite 啟用時，快速更新會略過大 CSV 合併重寫以提升日常更新速度，安全更新則強制執行 CSV 合併以備份資料庫。
 - **測試與驗證 100% 綠燈**：新增單元測試 `tests/test_broker_branch_decode.py` 覆蓋解密與總部判定。單元測試、mypy 型態檢查、py_compile 與 QA 驗證腳本皆順利通過。
 
 ## 2026-06-11 持倉管理籌碼面監控與下鑽 (Phase 4.2 Portfolio Chip Monitor & Drill Down) 成果

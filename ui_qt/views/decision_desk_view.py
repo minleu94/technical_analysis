@@ -79,6 +79,7 @@ class DecisionDeskView(QWidget):
         title_layout.addStretch()
 
         self.refresh_btn = QPushButton("更新決策摘要")
+        self.refresh_btn.setProperty("variant", "primary")
         self.refresh_btn.clicked.connect(self.refresh_snapshot)
         title_layout.addWidget(self.refresh_btn)
         content_layout.addLayout(title_layout)
@@ -93,7 +94,7 @@ class DecisionDeskView(QWidget):
         generated_font = QFont()
         generated_font.setPointSize(10)
         self.generated_at_label.setFont(generated_font)
-        self.generated_at_label.setStyleSheet("color: #4b5563;")
+        self.generated_at_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_muted};")
         self.overall_quality_badge = StatusBadge("", "observed")
         self.warning_list = WarningList()
         self.warning_list.setMaximumHeight(120)

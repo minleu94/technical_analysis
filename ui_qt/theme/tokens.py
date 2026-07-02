@@ -17,6 +17,13 @@ class ThemeTokens:
     warning: str
     danger: str
     info: str
+    accent_warm: str = "#d97706"
+    data_positive: str = "#22c55e"
+    data_negative: str = "#ef4444"
+    data_neutral: str = "#a8b3c2"
+    table_hover: str = "#20334a"
+    table_selected: str = "#1d4f6b"
+    border_subtle: str = "#1f2937"
     radius_panel: int = 6
     radius_badge: int = 4
     font_family: str = "'Microsoft JhengHei UI', 'Segoe UI', Arial"
@@ -38,4 +45,11 @@ MIDNIGHT_ANALYST = ThemeTokens(
     warning="#f6b44b",
     danger="#f05b5b",
     info="#77aef5",
+    accent_warm="#d97706",
+    data_positive="#22c55e",
+    data_negative="#ef4444",
+    data_neutral="#a8b3c2",
+    table_hover="#20334a",
+    table_selected="#1d4f6b",
+    border_subtle="#1f2937",
 )

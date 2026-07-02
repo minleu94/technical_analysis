@@ -30,6 +30,7 @@ from app_module.forward_performance_dashboard_dtos import (
 from ui_qt.models.forward_performance_table_model import ForwardPerformanceTableModel
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.date_filter_edit import OptionalDateFilterEdit, date_filter_value
+from ui_qt.widgets.table_style import apply_financial_table_style
 from ui_qt.workers.task_worker import TaskWorker
 
 
@@ -144,6 +145,7 @@ class ForwardPerformanceView(QWidget):
         filter_layout.addRow("最小樣本數", self.min_sample_size_input)
 
         self.refresh_button = QPushButton("重新整理")
+        self.refresh_button.setProperty("variant", "primary")
         self.refresh_button.clicked.connect(self.refresh_dashboard)
         filter_layout.addRow(self.refresh_button)
         body.addWidget(filter_box)
@@ -189,7 +191,7 @@ class ForwardPerformanceView(QWidget):
         self.table_model = ForwardPerformanceTableModel()
         self.summary_table = QTableView()
         self.summary_table.setModel(self.table_model)
-        self.summary_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.summary_table)
         self.summary_table.setSortingEnabled(False)
         self.summary_table.setSelectionBehavior(QTableView.SelectRows)
         self.summary_table.horizontalHeader().setStretchLastSection(True)

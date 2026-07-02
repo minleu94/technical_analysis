@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDate
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.workers.task_worker import TaskWorker
+from ui_qt.widgets.table_style import apply_financial_table_style
 from app_module.sqlite_inspector_service import SqliteInspectorService
 
 
@@ -216,7 +217,7 @@ class SqliteInspectorWidget(QWidget):
         preview_layout.setSpacing(2)
         
         self.preview_table = QTableView()
-        self.preview_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.preview_table)
         self.preview_table.horizontalHeader().setSortIndicatorShown(True)
         self.preview_table.horizontalHeader().sectionClicked.connect(self._on_preview_header_clicked)
         preview_layout.addWidget(self.preview_table)
@@ -293,15 +294,15 @@ class SqliteInspectorWidget(QWidget):
         pagination_layout.addWidget(self.records_label)
 
         preview_layout.addWidget(pagination_bar)
-        self.tabs.addTab(self.preview_tab, "📊 數據預覽")
+        self.tabs.addTab(self.preview_tab, "數據預覽")
 
         # Tab 2: 欄位 Schema 結構
         self.schema_tab = QWidget()
         schema_layout = QVBoxLayout(self.schema_tab)
         self.schema_table = QTableView()
-        self.schema_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.schema_table)
         schema_layout.addWidget(self.schema_table)
-        self.tabs.addTab(self.schema_tab, "🧭 欄位結構 (Schema)")
+        self.tabs.addTab(self.schema_tab, "欄位結構 (Schema)")
 
         main_layout.addWidget(self.tabs, stretch=1)
         self.setLayout(main_layout)

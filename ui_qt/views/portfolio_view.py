@@ -30,7 +30,9 @@ from app_module.portfolio_condition_monitor import (
     PortfolioCurrentSnapshot,
 )
 from portfolio_module import PortfolioValidationError
+from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.info_button import InfoButton
+from ui_qt.widgets.table_style import apply_financial_table_style
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.portfolio_chip_service import PortfolioChipService
 from app_module.portfolio_feedback_service import PortfolioFeedbackService
@@ -43,15 +45,18 @@ class GradientCard(QFrame):
 
     def __init__(self, title: str, value: str, gradient_style: str, parent=None):
         super().__init__(parent)
+        self.setObjectName("portfolioMetricCard")
         self.setFrameShape(QFrame.StyledPanel)
         self.setFrameShadow(QFrame.Raised)
+        self.setMinimumHeight(86)
+        self.setMaximumHeight(96)
 
         # 設置漸層樣式與圓角、陰影
         self.setStyleSheet(f"""
-            GradientCard {{
+            QFrame#portfolioMetricCard {{
                 background: {gradient_style};
-                border-radius: 8px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: {MIDNIGHT_ANALYST.radius_panel}px;
+                border: 1px solid {MIDNIGHT_ANALYST.border};
             }}
         """)
 
@@ -61,18 +66,18 @@ class GradientCard(QFrame):
 
         # 標題
         self.title_label = QLabel(title)
-        title_font = QFont("Inter", 9)
+        title_font = QFont(MIDNIGHT_ANALYST.font_family, 9)
         title_font.setBold(True)
         self.title_label.setFont(title_font)
-        self.title_label.setStyleSheet("color: rgba(255, 255, 255, 0.7);")
+        self.title_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
         layout.addWidget(self.title_label)
 
         # 數值
         self.value_label = QLabel(value)
-        value_font = QFont("Outfit", 18)
+        value_font = QFont(MIDNIGHT_ANALYST.mono_family, 18)
         value_font.setBold(True)
         self.value_label.setFont(value_font)
-        self.value_label.setStyleSheet("color: white;")
+        self.value_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
         layout.addWidget(self.value_label)
 
     def update_value(self, new_value: str):
@@ -381,9 +386,11 @@ class PortfolioView(QWidget):
 
         self.active_positions_summary_label = QLabel("活躍持倉：0 檔")
         self.active_positions_summary_label.setWordWrap(True)
+        self.active_positions_summary_label.setMaximumHeight(58)
         self.active_positions_summary_label.setStyleSheet(
-            "color: #e2e8f0; background-color: #1a202c; border: 1px solid #2d3748; "
-            "border-radius: 6px; padding: 6px 10px;"
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; background-color: {MIDNIGHT_ANALYST.surface_1}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 7px 10px;"
         )
         main_layout.addWidget(self.active_positions_summary_label)
 
@@ -403,7 +410,7 @@ class PortfolioView(QWidget):
         left_layout.addWidget(left_title)
 
         self.positions_table = QTableView()
-        self.positions_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.positions_table)
         self.positions_table.setSelectionBehavior(QTableView.SelectRows)
         self.positions_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.positions_table.setSortingEnabled(True)
@@ -421,7 +428,7 @@ class PortfolioView(QWidget):
         # 左側底部操作按鈕
         btn_layout = QHBoxLayout()
         self.btn_record_trade = QPushButton("手動記錄交易")
-        self.btn_record_trade.setStyleSheet("background-color: #2b6cb0; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px;")
+        self.btn_record_trade.setProperty("variant", "primary")
         self.btn_record_trade.clicked.connect(self._show_record_trade_dialog)
         btn_layout.addWidget(self.btn_record_trade)
 
@@ -434,8 +441,8 @@ class PortfolioView(QWidget):
         btn_layout.addWidget(self.btn_refresh)
 
         # 🗑️ 清空全體數據按鈕
-        self.btn_clear_all = QPushButton("🗑️ 清空全體數據")
-        self.btn_clear_all.setStyleSheet("background-color: #e53e3e; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px;")
+        self.btn_clear_all = QPushButton("清空全體數據")
+        self.btn_clear_all.setProperty("variant", "danger")
         self.btn_clear_all.clicked.connect(self._show_clear_all_dialog)
         btn_layout.addWidget(self.btn_clear_all)
 
@@ -454,8 +461,9 @@ class PortfolioView(QWidget):
 
         history_filter_layout = QHBoxLayout()
         self.trade_filter_status_label = QLabel("顯示全部交易歷史")
-        self.trade_filter_status_label.setStyleSheet("color: #e2e8f0;")
+        self.trade_filter_status_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
         self.clear_trade_filter_button = QPushButton("清除篩選 / 顯示全部交易歷史")
+        self.clear_trade_filter_button.setProperty("variant", "ghost")
         self.clear_trade_filter_button.clicked.connect(self._clear_trade_history_filter)
         history_filter_layout.addWidget(self.trade_filter_status_label)
         history_filter_layout.addStretch()
@@ -463,7 +471,7 @@ class PortfolioView(QWidget):
         history_layout.addLayout(history_filter_layout)
 
         self.trades_table = QTableView()
-        self.trades_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.trades_table)
         self.trades_table.setSelectionBehavior(QTableView.SelectRows)
         self.trades_table.horizontalHeader().setStretchLastSection(True)
         # 啟用右鍵選單
@@ -606,7 +614,7 @@ class PortfolioView(QWidget):
         chip_detail_layout.setContentsMargins(6, 6, 6, 6)
 
         self.chip_detail_table = QTableView()
-        self.chip_detail_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.chip_detail_table)
         self.chip_detail_table.setSelectionBehavior(QTableView.SelectRows)
         self.chip_detail_table.horizontalHeader().setStretchLastSection(True)
         chip_detail_layout.addWidget(self.chip_detail_table)
@@ -614,19 +622,8 @@ class PortfolioView(QWidget):
         chip_layout.addWidget(chip_detail_group)
 
         # 3. 下鑽詳細主力流向按鈕
-        self.btn_drill_down_chip = QPushButton("🔍 下鑽詳細主力流向")
-        self.btn_drill_down_chip.setStyleSheet("""
-            QPushButton {
-                background-color: #2b6cb0;
-                color: white;
-                font-weight: bold;
-                padding: 6px 12px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #3182ce;
-            }
-        """)
+        self.btn_drill_down_chip = QPushButton("下鑽詳細主力流向")
+        self.btn_drill_down_chip.setProperty("variant", "primary")
         self.btn_drill_down_chip.clicked.connect(self._on_drill_down_chip_clicked)
         chip_layout.addWidget(self.btn_drill_down_chip)
 
@@ -973,7 +970,7 @@ class PortfolioView(QWidget):
         price = df.iloc[row]["單價"]
 
         menu = QMenu(self)
-        action_delete = menu.addAction("❌ 刪除此交易紀錄")
+        action_delete = menu.addAction("刪除此交易紀錄")
 
         action = menu.exec(self.trades_table.viewport().mapToGlobal(pos))
         if action == action_delete:
@@ -1004,7 +1001,7 @@ class PortfolioView(QWidget):
             return
 
         menu = QMenu(self)
-        action_delete = menu.addAction("❌ 刪除此篇日記筆記")
+        action_delete = menu.addAction("刪除此篇日記筆記")
 
         action = menu.exec(self.journal_list.viewport().mapToGlobal(pos))
         if action == action_delete:
@@ -1025,7 +1022,7 @@ class PortfolioView(QWidget):
         """一鍵重置清空持倉與日記數據"""
         # 第一層確認
         confirm1 = QMessageBox.warning(
-            self, "⚠️ 極度危險警告 ⚠️",
+            self, "極度危險警告",
             "【注意】這將會永久清空您所有的手動交易紀錄與覆盤日記！\n此操作無法還原，您確定要清空嗎？",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )

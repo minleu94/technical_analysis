@@ -2,7 +2,7 @@ from collections.abc import Iterable, Sequence
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout
 
 from ui_qt.theme import MIDNIGHT_ANALYST
 
@@ -72,6 +72,36 @@ class MetricCard(QFrame):
         )
         layout.addWidget(self.title_label)
         layout.addWidget(self.value_label)
+
+
+class EmptyStatePanel(QFrame):
+    def __init__(self, title: str, body: str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("midnightEmptyState")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.setStyleSheet(
+            f"#midnightEmptyState {{ background: {MIDNIGHT_ANALYST.surface_1}; "
+            f"border: 1px dashed {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; }}"
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(4)
+
+        self.title_label = QLabel(title)
+        title_font = QFont()
+        title_font.setPointSize(11)
+        title_font.setBold(True)
+        self.title_label.setFont(title_font)
+        self.title_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
+
+        self.body_label = QLabel(body)
+        self.body_label.setWordWrap(True)
+        self.body_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.body_label)
 
 
 class CompactCodeList(QLabel):

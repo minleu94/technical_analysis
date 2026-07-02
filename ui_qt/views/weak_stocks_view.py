@@ -16,6 +16,7 @@ from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.screening_service import ScreeningService
 from app_module.watchlist_service import WatchlistService
 from ui_qt.widgets.info_button import InfoButton
+from ui_qt.widgets.table_style import apply_financial_table_style
 
 
 class WeakStocksView(QWidget):
@@ -96,7 +97,7 @@ class WeakStocksView(QWidget):
         
         # 載入數據按鈕（首次載入或強制重新計算）
         self.load_btn = QPushButton("載入數據")
-        self.load_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        self.load_btn.setProperty("variant", "primary")
         self.load_btn.clicked.connect(lambda: self._refresh_stocks(use_cache=False))
         control_layout.addWidget(self.load_btn)
         
@@ -110,7 +111,7 @@ class WeakStocksView(QWidget):
         
         # 表格
         self.stocks_table = QTableView()
-        self.stocks_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.stocks_table)
         self.stocks_table.setSelectionBehavior(QTableView.SelectRows)
         self.stocks_table.setSortingEnabled(True)
         self.stocks_table.horizontalHeader().setStretchLastSection(True)

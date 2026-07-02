@@ -23,6 +23,7 @@ import sys
 from ui_qt.workers.task_worker import TaskWorker, ProgressTaskWorker
 from app_module.update_service import UpdateService
 from ui_qt.widgets.info_button import InfoButton
+from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 
 
 
@@ -30,10 +31,10 @@ from ui_qt.widgets.info_button import InfoButton
 
 class StatusCard(QFrame):
     """自訂美化數據狀態卡片，與 QTextEdit 介面相容 (Sci-Fi 暗色風格)"""
-    def __init__(self, title: str, icon_str: str = "📊", parent=None):
+    def __init__(self, title: str, icon_str: str = "", parent=None):
         super().__init__(parent)
         self.title = title
-        self.icon_str = icon_str
+        self.icon_str = strip_leading_symbol_icon(icon_str).strip()
         self._raw_text = ""
 
         self.setObjectName("CardFrame")
@@ -66,8 +67,9 @@ class StatusCard(QFrame):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(6)
 
-        self.title_label = QLabel(f"<span style='font-size:12px; font-weight:bold; color:#cbd5e1;'>{icon_str} {title}</span>")
-        self.indicator_label = QLabel("<span style='font-size:13px; color:#94a3b8;'>⚪</span>")
+        title_prefix = f"{self.icon_str} " if self.icon_str else ""
+        self.title_label = QLabel(f"<span style='font-size:12px; font-weight:bold; color:#cbd5e1;'>{title_prefix}{title}</span>")
+        self.indicator_label = QLabel("<span style='font-size:11px; color:#94a3b8;'>未檢查</span>")
 
         header_layout.addWidget(self.title_label)
         header_layout.addStretch()
@@ -121,13 +123,13 @@ class StatusCard(QFrame):
 
         # 燈號判定
         if "點擊" in text or "尚未檢查" in text:
-            self.indicator_label.setText("<span style='font-size:13px; color:#94a3b8;'>⚪</span>") # 未檢查
+            self.indicator_label.setText("<span style='font-size:11px; color:#94a3b8;'>未檢查</span>")
         elif "錯誤" in text or "失敗" in text or "異常" in text:
-            self.indicator_label.setText("<span style='font-size:13px; color:#ef4444;'>🔴</span>") # 異常
+            self.indicator_label.setText("<span style='font-size:11px; color:#ef4444;'>異常</span>")
         elif "success" in status_str or "正常" in status_str or "最新" in text:
-            self.indicator_label.setText("<span style='font-size:13px; color:#22c55e;'>🟢</span>") # 正常/最新
+            self.indicator_label.setText("<span style='font-size:11px; color:#22c55e;'>最新</span>")
         else:
-            self.indicator_label.setText("<span style='font-size:13px; color:#eab308;'>🟡</span>") # 待更新
+            self.indicator_label.setText("<span style='font-size:11px; color:#eab308;'>待更新</span>")
 
     def toPlainText(self) -> str:
         """相容 QTextEdit.toPlainText"""
@@ -146,7 +148,7 @@ class StatusCard(QFrame):
         self.date_label.setText("最新日期：--")
         self.records_label.setText("總記錄數：--")
         self.extra_label.setVisible(False)
-        self.indicator_label.setText("⚪")
+        self.indicator_label.setText("未檢查")
 
 
 class UpdateView(QWidget):
@@ -305,11 +307,11 @@ class UpdateView(QWidget):
 
         # 數據狀態卡片網格（精美 StatusCard 呈現，取代原先 status_group 內多個 TextEdit）
         # 我們將它們宣告為 class member，使底層 _on_status_checked 能直接使用
-        self.daily_status_text = StatusCard("每日股票數據", "📊", self)
-        self.market_status_text = StatusCard("大盤指數數據", "🧭", self)
-        self.industry_status_text = StatusCard("產業指數數據", "🏢", self)
-        self.broker_branch_status_text = StatusCard("券商分點數據", "🤝", self)
-        self.technical_status_text = StatusCard("技術指標數據", "📈", self)
+        self.daily_status_text = StatusCard("每日股票數據", "", self)
+        self.market_status_text = StatusCard("大盤指數數據", "", self)
+        self.industry_status_text = StatusCard("產業指數數據", "", self)
+        self.broker_branch_status_text = StatusCard("券商分點數據", "", self)
+        self.technical_status_text = StatusCard("技術指標數據", "", self)
         self.monthly_revenue_status_text = StatusCard("月營收資料", "月", self)
 
         # 卡片佈局
@@ -326,10 +328,11 @@ class UpdateView(QWidget):
         # 一鍵更新與輔助按鈕
         actions_layout = QHBoxLayout()
 
-        self.quick_update_all_btn = QPushButton("⚡ 快速更新 (跳過大型合併)")
+        self.quick_update_all_btn = QPushButton("快速更新 (跳過大型合併)")
         self.quick_update_all_btn.setMinimumHeight(45)
+        self.quick_update_all_btn.setProperty("variant", "primary")
         self.quick_update_all_btn.setToolTip(
-            "【⚡ 快速更新 (跳過大型合併)】\n"
+            "【快速更新 (跳過大型合併)】\n"
             "速度優先。TWSE 每日股價、TPEX 每日股價與券商分點都更新結束日前最近 10 個工作日。\n"
             "TPEX 使用官方歷史查詢 endpoint，會先跳過本機已有 CSV，只補缺少日期。\n"
             "資料會直接增量同步 SQLite，但跳過 stock_data_whole 與分點 merged.csv 的大型合併重寫。"
@@ -357,10 +360,11 @@ class UpdateView(QWidget):
         """)
         self.quick_update_all_btn.clicked.connect(self._execute_quick_update_all)
 
-        self.safe_update_all_btn = QPushButton("🛡️ 安全更新 (完整 CSV + SQLite)")
+        self.safe_update_all_btn = QPushButton("安全更新 (完整 CSV + SQLite)")
         self.safe_update_all_btn.setMinimumHeight(45)
+        self.safe_update_all_btn.setProperty("variant", "primary")
         self.safe_update_all_btn.setToolTip(
-            "【🛡️ 安全更新 (完整 CSV + SQLite)】\n"
+            "【安全更新 (完整 CSV + SQLite)】\n"
             "備份完整性優先。TWSE 每日股價與 TPEX 每日股價會依上方日期範圍檢查並補齊缺少 CSV。\n"
             "券商分點會依上方日期範圍更新目前啟用的 40 家追蹤分點。\n"
             "完成下載後會重建每日股價大表與分點 merged.csv，再同步寫入 SQLite。\n"
@@ -389,12 +393,13 @@ class UpdateView(QWidget):
         """)
         self.safe_update_all_btn.clicked.connect(self._execute_safe_update_all)
 
-        self.check_status_btn = QPushButton("🔍 檢查數據狀態")
+        self.check_status_btn = QPushButton("檢查數據狀態")
         self.check_status_btn.setMinimumHeight(45)
+        self.check_status_btn.setProperty("variant", "ghost")
         self.check_status_btn.setToolTip(
-            "【🔍 檢查數據狀態】\n"
+            "【檢查數據狀態】\n"
             "查詢並重新偵測 SQLite 資料庫與本地 Raw 原始檔案的最新交易日與總記錄數，\n"
-            "並更新上方 6 張狀態卡片的狀態燈號（🟢最新/🟡待更新/🔴異常/⚪未檢查）。\n"
+            "並更新上方 6 張狀態卡片的狀態文字（最新 / 待更新 / 異常 / 未檢查）。\n"
             "檢查結果會同步呈現在頂部卡片與下方日誌主控台中。"
         )
         self.check_status_btn.setStyleSheet("""
@@ -537,7 +542,7 @@ class UpdateView(QWidget):
         log_toolbar.setContentsMargins(0, 0, 0, 0)
         log_toolbar.setSpacing(0)
         log_toolbar.addStretch()
-        clear_log_btn = QPushButton("🧹 清除日誌")
+        clear_log_btn = QPushButton("清除日誌")
         clear_log_btn.setFixedHeight(16)
         clear_log_btn.setStyleSheet("""
             QPushButton {
@@ -804,7 +809,7 @@ class UpdateView(QWidget):
         button_layout = QHBoxLayout(op_group)
         button_layout.setSpacing(10)
 
-        check_btn = QPushButton("🔍 檢查此資料源狀態")
+        check_btn = QPushButton("檢查此資料源狀態")
         check_btn.setMinimumHeight(35)
         check_btn.setToolTip(
             "【檢查此資料源狀態】\n"
@@ -827,7 +832,7 @@ class UpdateView(QWidget):
         button_layout.addWidget(check_btn)
 
         if key in {"daily", "market", "industry", "broker_branch"}:
-            update_btn = QPushButton("📥 手動下載此資料源")
+            update_btn = QPushButton("手動下載此資料源")
             setattr(self, f"{key}_update_btn", update_btn)
             update_btn.setMinimumHeight(35)
             update_btn.setToolTip(
@@ -852,12 +857,12 @@ class UpdateView(QWidget):
             update_btn.clicked.connect(lambda _checked=False, k=key: self._dispatch_update(k))
             button_layout.addWidget(update_btn)
             if key == "daily":
-                self.tpex_background_btn = QPushButton("🚀 背景補齊 TPEX + 技術指標")
+                self.tpex_background_btn = QPushButton("背景補齊 TPEX + 技術指標")
                 self.tpex_background_btn.setMinimumHeight(35)
                 self.tpex_background_btn.setToolTip(
-                    "【🚀 背景補齊 TPEX + 技術指標】\n"
+                    "【背景補齊 TPEX + 技術指標】\n"
                     "將以背景方式執行 TPEX 區間抓取（含 fallback / 重複日短路）、同步日價到 SQLite，並立即進行技術指標增量更新。\n"
-                    "任務會寫入背景狀態檔，可用「📡 檢查背景任務狀態」隨時查看最新進度。"
+                    "任務會寫入背景狀態檔，可用「檢查背景任務狀態」隨時查看最新進度。"
                 )
                 self.tpex_background_btn.setStyleSheet("""
                     QPushButton {
@@ -875,10 +880,10 @@ class UpdateView(QWidget):
                 self.tpex_background_btn.clicked.connect(self._execute_background_tpex_refresh)
                 button_layout.addWidget(self.tpex_background_btn)
 
-                self.tpex_background_status_btn = QPushButton("📡 檢查背景任務狀態")
+                self.tpex_background_status_btn = QPushButton("檢查背景任務狀態")
                 self.tpex_background_status_btn.setMinimumHeight(35)
                 self.tpex_background_status_btn.setToolTip(
-                    "【📡 檢查背景任務狀態】\n"
+                    "【檢查背景任務狀態】\n"
                     "讀取背景任務的 JSON 狀態檔，確認目前是 running / done / failed，以及 TPEX、SQLite、技術指標三個步驟結果。"
                 )
                 self.tpex_background_status_btn.setStyleSheet("""
@@ -898,10 +903,10 @@ class UpdateView(QWidget):
                 button_layout.addWidget(self.tpex_background_status_btn)
 
         if key == "daily":
-            self.merge_btn = QPushButton("⚙️ 合併每日股價")
+            self.merge_btn = QPushButton("合併每日股價")
             self.merge_btn.setMinimumHeight(35)
             self.merge_btn.setToolTip(
-                "【⚙️ 合併每日股價】\n"
+                "【合併每日股價】\n"
                 "將本地 daily_price/ 與 daily_price_tpex/ 目錄下下載好的單日股價 CSV 檔案，\n"
                 "增量同步寫入至 SQLite 資料庫的 daily_prices 表中，\n"
                 "以便大盤檢測、策略推薦與回測引擎能夠讀取到最新數據。"
@@ -922,10 +927,10 @@ class UpdateView(QWidget):
             self.merge_btn.clicked.connect(self._execute_merge)
             button_layout.addWidget(self.merge_btn)
         elif key == "broker_branch":
-            self.merge_broker_branch_btn = QPushButton("⚙️ 合併券商分點")
+            self.merge_broker_branch_btn = QPushButton("合併券商分點")
             self.merge_broker_branch_btn.setMinimumHeight(35)
             self.merge_broker_branch_btn.setToolTip(
-                "【⚙️ 合併券商分點】\n"
+                "【合併券商分點】\n"
                 "將本地 broker_flow/ 內目前啟用的 40 家追蹤分點買賣超 CSV 數據進行增量合併，\n"
                 "並同步寫入至 SQLite 資料庫的 broker_flows 表中，供主力流向分析使用。"
             )
@@ -945,10 +950,10 @@ class UpdateView(QWidget):
             self.merge_broker_branch_btn.clicked.connect(self._execute_merge_broker_branch)
             button_layout.addWidget(self.merge_broker_branch_btn)
         elif key == "technical":
-            self.calculate_tech_btn = QPushButton("🚀 計算技術指標")
+            self.calculate_tech_btn = QPushButton("計算技術指標")
             self.calculate_tech_btn.setMinimumHeight(35)
             self.calculate_tech_btn.setToolTip(
-                "【🚀 計算技術指標】\n"
+                "【計算技術指標】\n"
                 "依據上方的指標配置，計算個股的 KD, MACD, RSI, ADX 與均線等技術指標，\n"
                 "並將計算結果高速儲存至 SQLite 資料庫中。推薦與回測引擎非常依賴此指標，\n"
                 "因此手動合併完股價後，務必要點擊此處計算技術指標，系統功能才能正常運作。"
@@ -969,10 +974,10 @@ class UpdateView(QWidget):
             self.calculate_tech_btn.clicked.connect(self._execute_calculate_technical_indicators)
             button_layout.addWidget(self.calculate_tech_btn)
 
-        export_btn = QPushButton("📤 匯出 CSV 備案")
+        export_btn = QPushButton("匯出 CSV 備案")
         export_btn.setMinimumHeight(35)
         export_btn.setToolTip(
-            "【📤 匯出 CSV 備案】\n"
+            "【匯出 CSV 備案】\n"
             "將 SQLite 資料庫中此資料來源所屬的資料表，匯出為 Excel 可直接開啟的\n"
             "UTF-8 with BOM 編碼的 CSV 檔案。您可以選擇匯出「最近範圍」或「全部歷史」。\n"
             "這屬於離線備份與人工調研的輔助備案功能，日常更新不需要使用。"
@@ -1016,7 +1021,7 @@ class UpdateView(QWidget):
             layout.addWidget(detail_status)
 
         if key == "daily":
-            danger_group = QGroupBox("⚠️ 高風險操作區 (Danger Zone)")
+            danger_group = QGroupBox("高風險操作區 (Danger Zone)")
             danger_group.setStyleSheet("""
                 QGroupBox {
                     border: 1px solid #ef4444;
@@ -1039,11 +1044,11 @@ class UpdateView(QWidget):
             danger_desc.setStyleSheet("color: #64748b; font-size: 11px;")
             danger_desc.setWordWrap(True)
 
-            self.force_merge_btn = QPushButton("⚠️ 強制重新合併所有每日股價")
+            self.force_merge_btn = QPushButton("強制重新合併所有每日股價")
             self.force_merge_btn.setMinimumHeight(35)
             self.force_merge_btn.setToolTip(
-                "【⚠️ 強制重新合併所有每日股價】\n"
-                "⚠️ 高風險操作！忽略資料庫中已有的合併狀態，全量掃描並重新將\n"
+                "【強制重新合併所有每日股價】\n"
+                "高風險操作！忽略資料庫中已有的合併狀態，全量掃描並重新將\n"
                 "raw/daily_price/ 底下的所有歷史股價 CSV 檔案重新寫入資料庫的 daily_prices 表。\n"
                 "可能需要非常長的時間，通常僅在資料庫損毀或需要完全修復重整數據時使用。"
             )
@@ -1639,11 +1644,11 @@ class UpdateView(QWidget):
                 creationflags=creationflags,
             )
             self._log(
-                f"TPEX 背景任務已啟動，PID={self._tpex_background_process.pid}，可點『📡 檢查背景任務狀態』查看進度。"
+                f"TPEX 背景任務已啟動，PID={self._tpex_background_process.pid}，可點『檢查背景任務狀態』查看進度。"
             )
         except Exception as exc:
             self.tpex_background_btn.setEnabled(True)
-            self.tpex_background_btn.setText("🚀 背景補齊 TPEX + 技術指標")
+            self.tpex_background_btn.setText("背景補齊 TPEX + 技術指標")
             error_msg = f"背景任務啟動失敗：{exc}"
             self._write_tpex_background_status({"status": "failed", "message": error_msg})
             QMessageBox.critical(self, "背景任務啟動失敗", error_msg)
@@ -1690,7 +1695,7 @@ class UpdateView(QWidget):
 
             if raw.get("status") in {"done", "failed"}:
                 self.tpex_background_btn.setEnabled(True)
-                self.tpex_background_btn.setText("🚀 背景補齊 TPEX + 技術指標")
+                self.tpex_background_btn.setText("背景補齊 TPEX + 技術指標")
         except Exception as exc:
             QMessageBox.critical(self, "背景任務狀態", f"讀取狀態失敗：{exc}")
     def _run_update_all(self, mode="quick", progress_callback=None) -> Dict[str, Any]:
@@ -1891,8 +1896,8 @@ class UpdateView(QWidget):
         """更新流程完成"""
         self.quick_update_all_btn.setEnabled(True)
         self.safe_update_all_btn.setEnabled(True)
-        self.quick_update_all_btn.setText("⚡ 快速更新 (跳過大型合併)")
-        self.safe_update_all_btn.setText("🛡️ 安全更新 (完整 CSV + SQLite)")
+        self.quick_update_all_btn.setText("快速更新 (跳過大型合併)")
+        self.safe_update_all_btn.setText("安全更新 (完整 CSV + SQLite)")
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
 
@@ -1920,8 +1925,8 @@ class UpdateView(QWidget):
         """更新流程出錯"""
         self.quick_update_all_btn.setEnabled(True)
         self.safe_update_all_btn.setEnabled(True)
-        self.quick_update_all_btn.setText("⚡ 快速更新 (跳過大型合併)")
-        self.safe_update_all_btn.setText("🛡️ 安全更新 (完整 CSV + SQLite)")
+        self.quick_update_all_btn.setText("快速更新 (跳過大型合併)")
+        self.safe_update_all_btn.setText("安全更新 (完整 CSV + SQLite)")
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
 
@@ -2078,7 +2083,7 @@ class UpdateView(QWidget):
         current_update_btn = getattr(self, f"{active_type}_update_btn", None)
         if current_update_btn:
             current_update_btn.setEnabled(True)
-            current_update_btn.setText("📥 手動下載此資料源")
+            current_update_btn.setText("手動下載此資料源")
 
         # 隱藏進度條
         self.progress_bar.setVisible(False)
@@ -2119,7 +2124,7 @@ class UpdateView(QWidget):
         current_update_btn = getattr(self, f"{active_type}_update_btn", None)
         if current_update_btn:
             current_update_btn.setEnabled(True)
-            current_update_btn.setText("📥 手動下載此資料源")
+            current_update_btn.setText("手動下載此資料源")
 
         # 隱藏進度條
         self.progress_bar.setVisible(False)
@@ -2429,7 +2434,7 @@ class UpdateView(QWidget):
                 self,
                 "確認計算",
                 "確定要強制全量更新技術指標嗎？\n\n"
-                "⚠️ 這將重新計算所有股票的技術指標，可能需要較長時間。\n\n"
+                "這將重新計算所有股票的技術指標，可能需要較長時間。\n\n"
                 "建議：只有在需要完全重建指標時才使用此功能。",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No

@@ -28,6 +28,7 @@ from app_module.research_run_comparison_service import (
 )
 from app_module.research_run_dtos import ResearchRunMetadataDTO
 from ui_qt.models.pandas_table_model import PandasTableModel
+from ui_qt.widgets.table_style import apply_financial_table_style
 
 
 RUN_TYPE_LABELS = {
@@ -358,7 +359,7 @@ class RunRegistryCompareWidget(QWidget):
 
     def _new_table(self) -> QTableView:
         table = QTableView()
-        table.setAlternatingRowColors(True)
+        apply_financial_table_style(table)
         table.setSortingEnabled(True)
         table.setSelectionBehavior(QTableView.SelectRows)
         table.horizontalHeader().setStretchLastSection(True)

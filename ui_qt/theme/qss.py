@@ -15,6 +15,13 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
     QLabel {{
         background: transparent;
     }}
+    QToolTip {{
+        background: {tokens.surface_1};
+        color: {tokens.text_primary};
+        border: 1px solid {tokens.border};
+        padding: 6px 8px;
+        border-radius: {tokens.radius_badge}px;
+    }}
     QTabWidget::pane {{
         border: 1px solid {tokens.border};
         background: {tokens.surface_1};
@@ -42,7 +49,7 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
         color: {tokens.text_primary};
         border: 1px solid {tokens.border};
         border-radius: {tokens.radius_panel}px;
-        padding: 6px 10px;
+        padding: 7px 12px;
         min-height: 28px;
     }}
     QPushButton:hover {{
@@ -59,6 +66,27 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
     QPushButton:disabled {{
         color: {tokens.text_muted};
         background: {tokens.surface_1};
+    }}
+    QPushButton[variant="primary"] {{
+        background: {tokens.accent};
+        color: {tokens.app_bg};
+        border-color: {tokens.accent};
+        font-weight: 700;
+    }}
+    QPushButton[variant="primary"]:hover {{
+        background: {tokens.accent_hover};
+        border-color: {tokens.accent_hover};
+    }}
+    QPushButton[variant="danger"] {{
+        background: {tokens.danger};
+        color: {tokens.text_primary};
+        border-color: {tokens.danger};
+        font-weight: 700;
+    }}
+    QPushButton[variant="ghost"] {{
+        background: transparent;
+        color: {tokens.text_secondary};
+        border-color: {tokens.border_subtle};
     }}
     QGroupBox {{
         background: {tokens.surface_1};
@@ -78,16 +106,25 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
         background: {tokens.surface_1};
         alternate-background-color: {tokens.surface_2};
         color: {tokens.text_primary};
-        gridline-color: {tokens.border};
-        selection-background-color: {tokens.surface_3};
+        gridline-color: {tokens.border_subtle};
+        selection-background-color: {tokens.table_selected};
         selection-color: {tokens.text_primary};
         border: 1px solid {tokens.border};
+        border-radius: {tokens.radius_panel}px;
+        font-family: {tokens.font_family};
     }}
     QTableView::item {{
-        padding: 3px 6px;
+        padding: 5px 8px;
+        border: 0;
     }}
     QTableView::item:hover {{
-        background: {tokens.surface_3};
+        background: {tokens.table_hover};
+    }}
+    QTableCornerButton::section {{
+        background: {tokens.surface_2};
+        border: 0;
+        border-right: 1px solid {tokens.border};
+        border-bottom: 1px solid {tokens.border};
     }}
     QHeaderView::section {{
         background: {tokens.surface_2};
@@ -97,6 +134,19 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
         border-right: 1px solid {tokens.border};
         border-bottom: 1px solid {tokens.border};
         font-weight: 700;
+    }}
+    QListWidget {{
+        background: {tokens.surface_1};
+        color: {tokens.text_primary};
+        border: 1px solid {tokens.border};
+        border-radius: {tokens.radius_panel}px;
+        alternate-background-color: {tokens.surface_2};
+    }}
+    QListWidget::item {{
+        padding: 6px 8px;
+    }}
+    QListWidget::item:selected {{
+        background: {tokens.table_selected};
     }}
     QTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit {{
         background: {tokens.surface_2};
@@ -124,6 +174,12 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
         border: 0;
         background: transparent;
     }}
+    QSplitter::handle {{
+        background: {tokens.border_subtle};
+    }}
+    QSplitter::handle:hover {{
+        background: {tokens.border};
+    }}
     QScrollBar:vertical {{
         background: {tokens.app_bg};
         width: 10px;
@@ -136,6 +192,22 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
     QScrollBar::handle:vertical:hover {{
         background: {tokens.accent};
     }}
+    QScrollBar:horizontal {{
+        background: {tokens.app_bg};
+        height: 10px;
+    }}
+    QScrollBar::handle:horizontal {{
+        background: {tokens.surface_3};
+        border-radius: 5px;
+        min-width: 24px;
+    }}
+    QScrollBar::handle:horizontal:hover {{
+        background: {tokens.accent};
+    }}
+    QScrollBar::add-line, QScrollBar::sub-line {{
+        width: 0;
+        height: 0;
+    }}
     QProgressBar {{
         background: {tokens.surface_2};
         border: 1px solid {tokens.border};
@@ -145,6 +217,11 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
     }}
     QProgressBar::chunk {{
         background: {tokens.accent};
+        border-radius: {tokens.radius_panel}px;
+    }}
+    QFrame#midnightEmptyState {{
+        background: {tokens.surface_1};
+        border: 1px dashed {tokens.border};
         border-radius: {tokens.radius_panel}px;
     }}
     """

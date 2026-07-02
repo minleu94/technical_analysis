@@ -22,6 +22,7 @@ from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.watchlist_service import WatchlistService
 from app_module.universe_service import UniverseService
 from ui_qt.widgets.info_button import InfoButton
+from ui_qt.widgets.table_style import apply_financial_table_style
 
 
 class WatchlistView(QWidget):
@@ -128,7 +129,7 @@ class WatchlistView(QWidget):
         
         # 表格（主要內容，佔用大部分空間）
         self.stocks_table = QTableView()
-        self.stocks_table.setAlternatingRowColors(True)
+        apply_financial_table_style(self.stocks_table)
         self.stocks_table.setSelectionBehavior(QTableView.SelectRows)
         self.stocks_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.stocks_table.setSortingEnabled(True)
@@ -167,6 +168,7 @@ class WatchlistView(QWidget):
         watchlist_ops_layout.addWidget(self.refresh_btn)
         
         self.add_btn = QPushButton("新增股票")
+        self.add_btn.setProperty("variant", "primary")
         self.add_btn.clicked.connect(self._show_add_dialog)
         watchlist_ops_layout.addWidget(self.add_btn)
         
@@ -175,12 +177,14 @@ class WatchlistView(QWidget):
         watchlist_ops_layout.addWidget(self.remove_btn)
         
         self.clear_btn = QPushButton("清空候選池")
+        self.clear_btn.setProperty("variant", "danger")
         self.clear_btn.clicked.connect(self._clear_watchlist)
         watchlist_ops_layout.addWidget(self.clear_btn)
         
         watchlist_ops_layout.addStretch()
         
         self.send_to_research_lab_btn = QPushButton("送 Research Lab 批次回測")
+        self.send_to_research_lab_btn.setProperty("variant", "primary")
         self.send_to_research_lab_btn.setEnabled(False)
         self.send_to_research_lab_btn.setToolTip("候選池目前沒有股票，加入股票後即可送 Research Lab 批次回測。")
         self.send_to_research_lab_btn.clicked.connect(self._send_to_research_lab)
@@ -234,6 +238,7 @@ class WatchlistView(QWidget):
             universe_manage_layout.addWidget(self.edit_universe_btn)
             
             self.delete_universe_btn = QPushButton("刪除")
+            self.delete_universe_btn.setProperty("variant", "danger")
             self.delete_universe_btn.clicked.connect(self._delete_universe)
             universe_manage_layout.addWidget(self.delete_universe_btn)
             

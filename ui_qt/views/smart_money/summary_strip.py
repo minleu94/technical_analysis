@@ -46,7 +46,7 @@ class SummaryStrip(QWidget):
         layout.setSpacing(15)
         
         # 建立卡片元件 (中文化標題且精簡字詞)
-        self.lbl_regime = self._create_card("📊", "市場趨勢")
+        self.lbl_regime = self._create_card("", "市場趨勢")
         self.lbl_heat = self._create_card("🔥", "熱度")
         self.lbl_bull_bear = self._create_card("⚔️", "多空個股數")
         self.lbl_abnormal = self._create_card("🚨", "異常警示")

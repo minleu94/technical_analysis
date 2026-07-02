@@ -54,6 +54,7 @@ from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from ui_qt.theme import build_global_stylesheet
 from ui_qt.theme.fonts import preferred_qt_chinese_font_family, register_qt_chinese_fonts
+from ui_qt.widgets.text_sanitizer import sanitize_button_texts
 
 # Runtime Observatory Imports
 from app_module.runtime_services.runtime_controller import RuntimeController
@@ -524,6 +525,8 @@ class MainWindow(QMainWindow):
             except Exception as re:
                 print(f"[MainWindow] 警告: Runtime Observatory 初始化失敗: {re}")
             # --------------------------------------------
+
+            sanitize_button_texts(self)
 
             # 狀態欄
             self.statusBar().showMessage("就緒")
