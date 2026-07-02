@@ -36,6 +36,7 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
   - Phase 3.1 ✅ / Phase 3.2 ✅ / Phase 3.3a ✅ / Phase 3.3b ✅ / Strategy Scoring Governance (增量 A & B) ✅
   - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest credibility v1 ✅ / Backtest chart fast renderer ✅ / Research Run Registry M2-B 基礎保存 ✅ / Registry Cross-run 比較子頁 C2 ✅ / Registry-based Promote Gate C3 ✅
   - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅ / 回測 fixed-quantile 雙模式與 Expanding T-1 歷史門檻 ✅ / 推薦 eligible universe 橫斷面百分位排名與門檻限制 ✅
+  - V1.1 workflow bridge v1 ✅：推薦分析已揭露 Profile 權重 / 技術分類 / 型態預覽 / 主要篩選條件；推薦回放文案明確區分「今日名單批次回測」與「Profile / Config 歷史重播」；`ProfileReplayComparisonService` 可在相同 replay 假設下比較多個 Profile 並輸出 promote / hold / demote_candidate / retire_candidate 候選標籤。這些標籤只作 Research Run / Evidence 後的人工 lifecycle 判讀，不會自動降級、退休或刪除策略版本。
 
 - **閉環 3：持倉檢查閉環** ✅ V1 已建立
   - Recommendation / Backtest → Portfolio → Condition Monitor / Chip Monitor → Journal / Lifecycle Review → 回到研究
@@ -68,7 +69,7 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
 
 1. Update 使用「快速更新（跳過大型合併）」或「安全更新（完整 CSV + SQLite）」補齊資料，必要時用 SQLite Inspector 唯讀確認 freshness。
 2. 每日先看 Daily Decision Desk 的主結論、資料品質、Watchlist Trigger 與 Portfolio Alert，再下鑽 Market Watch / Smart Money。
-3. Recommendation 用 Profile 出名單 + 看 Why / Why Not → 加入候選池，或送 Research Lab 批次回測 / 推薦回放。
+3. Recommendation 用 Profile 出名單 + 看 Why / Why Not / Profile 進階摘要 → 加入候選池，或送 Research Lab 批次回測 / 推薦回放；批次回測是測今日名單，推薦回放是重播 Profile / Config。
 4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；成功結果可保存到 Research Run Registry，只有通過 Registry 與 Month 6 lifecycle gate 才能升級策略版本。
 5. Portfolio 用來追蹤實際或模擬持倉來源、條件監控、籌碼風險與生命週期回顧；警示與失效原因應回到 Research Lab / Registry 比較 / 覆盤日誌確認。
 
@@ -80,7 +81,7 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
 ## 本週優先事項（只列 3 個）
 
 1. **V1 release baseline 已完成**：四個產品閉環、Month 6 Strategy Lifecycle / Portfolio Feedback v1、Full App Healthcheck / MainWindow UI smoke / clean clone gate 已形成可交付基準。下一步不是宣稱投資有效，而是進入 evidence-driven 驗證。
-2. **下一階段主線：Evidence-Driven baldr + V1.1 workflow bridge**：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Daily Decision Desk durable snapshot source / source coverage inspection v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / scheduler approval checklist v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled CMD wrappers 已建立；每日 05:30 Codex read-only 摘要、Evidence Review UI smoke 與 multi-day dry-run evidence 持續背景累積，不阻塞 V1.1 非破壞式 workflow bridge。V1.1 下一步是讓 Daily Decision Desk 作為入口、Market Watch / Smart Money 作為下鑽 evidence panel，先補 navigation、empty state、evidence summary 與 QA gate；完整合併為 Unified Decision Workbench 留待 V2.0 評估。Production scheduler implementation 仍需 blocking gaps 修正、人工 approval 與明確設計後才可進行。
+2. **下一階段主線：Evidence-Driven baldr + V1.1 workflow bridge v1 已完成**：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Daily Decision Desk durable snapshot source / source coverage inspection v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / scheduler approval checklist v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled CMD wrappers 已建立；每日 05:30 Codex read-only 摘要、Evidence Review UI smoke 與 multi-day dry-run evidence 持續背景累積。V1.1 已補推薦 Profile 可見性、推薦回放語意與 Profile replay comparison service；完整 Daily Decision / Market Watch 合併仍留待 V2.0 評估。下一步轉向 V1.2 replay credibility / execution model 與 V1.3 manual lifecycle 操作節奏。Production scheduler implementation 仍需 blocking gaps 修正、人工 approval 與明確設計後才可進行。
 3. **維持 V1 安全邊界與資料治理**：Month 5 retroactive baseline / statement baseline 多數仍為 `degraded`，P/B / P/S 仍只接受 governed external observations 或後續明確 backfill records；策略、回測、推薦、factor 與 portfolio 改動仍需 no-look-ahead、Decimal / 整數單位與 release healthcheck 防線。
 
 ## 高風險區（改動需謹慎）
@@ -174,6 +175,13 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 - Blockers / Risks 新增回測時間軸未定義、金融核心裸 float、文檔不一致三項。
 - 高風險區新增 `portfolio_module/core.py` 與 `app_module/portfolio_condition_monitor.py`。
 - 指定權威文件新增 `NEXT_ACTION_PLAN.md`。
+
+## 2026-07-02 V1.1 workflow bridge v1 成果
+
+- **推薦 Profile 可見性補齊**：推薦分析的 Profile 說明區已揭露權重、技術分類、型態預覽與主要篩選條件，明確指出三個內建 Profile 不只是 buy / sell score 門檻不同。
+- **推薦回放語意補齊**：推薦頁後續操作文案與 tooltip 已區分「送 Research Lab 批次回測」測今日名單，以及「送 Research Lab 推薦回放」重播 Profile / Config 歷史決策。
+- **Profile replay comparison service**：新增 `ProfileReplayComparisonService` / DTO，可在共用 replay 假設下比較多個 Profile 結果並輸出 lifecycle candidate label；service 只消費注入 runner 的結果，不重算策略、不寫 DB、不自動升降級。
+- **驗證**：已通過 focused pytest、UI update workbench pytest、Update Tab QA、py_compile 與 mypy。此成果只完成 V1.1 workflow bridge v1，不代表推薦、Profile 或策略具備投資有效性。
 
 ## 2026-06-13 Strategy & Scoring Governance (增量 B：推薦橫斷面排名) 成果
 

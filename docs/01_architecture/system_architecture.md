@@ -101,11 +101,11 @@ Application Services / DTO / Repository
 
 | 領域 | 主要元件 |
 |---|---|
-| 推薦與市場 | `recommendation_service.py`、`screening_service.py`、`regime_service.py`、`recommendation_profile_service.py` |
+| 推薦與市場 | `recommendation_service.py`、`screening_service.py`、`regime_service.py`、`recommendation_profile_service.py`、`profile_replay_comparison_service.py` |
 | 數據更新 | `update_service.py`、`broker_branch_update_service.py`、`sqlite_inspector_service.py` |
 | 籌碼 | `broker_flow_service.py`、`portfolio_chip_service.py` |
 | 回測 | `backtest_service.py`、`batch_backtest_service.py`、`optimizer_service.py`、`walkforward_service.py`、`research_result_presentation.py` |
-| 推薦回放 | `recommendation_replay_service.py`、`recommendation_portfolio_backtest_service.py` |
+| 推薦回放 | `recommendation_replay_service.py`、`recommendation_portfolio_backtest_service.py`、`profile_replay_comparison_service.py` |
 | 保存與版本 | `backtest_repository.py`、`recommendation_repository.py`、`strategy_version_service.py`、`preset_service.py`、`universe_service.py` |
 | Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py` |
 | Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`strategy_lifecycle_repository.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
@@ -119,6 +119,8 @@ Daily Decision Desk 後續應以 application service / DTO 聚合既有市場、
 Healthcheck Batch 2 新增 `DecisionDeskDashboardComposer` 與 `SmartMoneySemanticService`。`DecisionDeskDashboardComposer` 只組合既有 section DTO 與可選 Smart Money summary，產生 action summary、sector focus 與 stock focus；它不重新計算 ranking、scoring 或 portfolio logic。`SmartMoneySemanticService` 位於 app layer，從 `BrokerFlowService.get_events()` 的唯讀事件快照與可選 `SQLiteSmartMoneyPriceProvider` 產生 5 / 20 / 60 日語意診斷、quantity-based 集中度、價格位置風險與資料品質 counts；Qt UI 只讀 DTO 欄位與 tooltip，不直接查 SQLite 或重算籌碼語意。
 
 Healthcheck Batch 3 新增 `RecommendationProfileService`。該 service 是推薦分析 Profile lifecycle 邊界，負責把內建 Profile、自訂 Profile 與 Strategy Registry 中通過 gate 的策略版本 Profile 組成 UI 可選清單；自訂 Profile 保存於 output root 下的 `recommendation/profiles/custom_profiles.json`，標示「自訂，未經回測驗證」，並以 Decimal 字串與整數 bp 保存數值權威。策略版本 Profile 只讀 `StrategyVersionService.list_versions()`，僅顯示通過 gate 且未停用的版本，不刪除歷史策略版本 JSON。Qt UI 只呈現來源 label、保存自訂設定與 Profile-Regime match / mismatch 說明，不在 UI 層重算 scoring，也不把 mismatch 當成自動排除或交易建議。
+
+V1.1 workflow bridge v1 新增 `ProfileReplayComparisonService` 與 `profile_replay_comparison_dtos.py`。該 service 位於 application layer，接收多個 Profile 與共用 replay request，透過注入的 runner 取得既有推薦回放結果，彙整 total return、benchmark excess、drawdown、trade count、quality 與 warnings，並輸出 promote / hold / demote_candidate / retire_candidate / insufficient_evidence 等人工 lifecycle candidate label。它不重跑 scoring、不直接讀寫 SQLite、不保存 Research Run、不建立或修改策略版本，也不自動 demote / retire；正式升降級仍需 Registry / lifecycle gate 與人工審核。
 
 Healthcheck Batch 4 新增 `research_result_presentation.py` 作為 Research Lab 結果頁呈現邊界。它只把已產生的推薦回放 summary、Train-Test report、Walk-forward fold summary 轉成 UI 文案與可靠度提示，不重跑回測、不重新抓取目前資料、不改變交易或績效計算。Train-Test / Walk-forward 樣本可靠度提示只讀交易數、Fold 數、OOS 與 consistency 等已存在結果 metadata；Registry 比較仍只讀已保存 metadata、equity curve 與 benchmark_results。Qt UI 可使用這些 helper 顯示「樣本不足，不宜作正式策略判斷」、資金使用與 Monte Carlo 語意，但不得把提示升級成交易建議、自動下單或持倉調整。
 
@@ -230,6 +232,7 @@ Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manife
 - 最佳化：`app_module/optimizer_service.py`
 - Walk-forward：`app_module/walkforward_service.py`
 - 推薦回放：`app_module/recommendation_portfolio_backtest_service.py`
+- Profile replay 比較：`app_module/profile_replay_comparison_service.py`
 
 ### 時間軸防線
 
@@ -503,6 +506,7 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-07-02：完成 V1.1 workflow bridge v1 架構同步，新增 `ProfileReplayComparisonService` / DTO application boundary；Profile replay 比較只讀注入 runner 結果並輸出人工 lifecycle candidate，不寫 DB、不重算推薦、不自動升降級。
 - 2026-06-23：完成 Healthcheck Batch 2 架構同步，新增 `DecisionDeskDashboardComposer` 與 `SmartMoneySemanticService` 邊界；Daily Decision Desk answer-first dashboard 與 Smart Money 5 / 20 / 60 日語意診斷皆由 app service / DTO 提供，Qt UI 不重算籌碼或市場邏輯。
 - 2026-07-01：新增 Post-V1 evidence layer 架構邊界，確認 Evidence Event Store / Forward Outcome Calculator 只保存事件與 close-to-close research outcomes，不改 scoring、推薦權重、portfolio 或 UI。
 - 2026-07-11：新增 Evidence Review Dashboards read-only UI pack 架構邊界，Research Lab `Evidence Review` 只透過 dashboard service 讀取 Forward Evidence、Live vs Research Gap、Signal Decay 與 Decision Quality；UI 不直接讀 SQLite / repository，不改 scoring、portfolio、Research Run 或 Strategy Lifecycle，也不建立 scheduler。

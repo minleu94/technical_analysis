@@ -26,7 +26,7 @@
 
 | 版本 | 主題 | 核心問題 | 預期結果 |
 |---|---|---|---|
-| V1.1 | Decision Workflow Integration | 每日決策與市場觀察已可用，但使用流程還像多個分散工具 | Daily Decision Desk 成為起點，Market Watch / Smart Money 成為可下鑽的證據面板 |
+| V1.1 | Decision Workflow Integration | 每日決策、推薦、研究回放與 lifecycle 判讀仍需要更清楚的 workflow bridge | 已完成 v1：推薦 Profile 可見、推薦回放語意清楚、Profile replay comparison 可產生人工 lifecycle candidate |
 | V1.2 | Research Credibility & Execution Model | 研究回測已有治理，但成交假設、微結構與 attribution 還不夠像真實決策 | 回測 / replay / forward evidence 更能解釋「為什麼可相信或不可相信」 |
 | V1.3 | Evidence Operations & Manual Lifecycle | Evidence dashboard 已建立，但樣本、覆盤、人工核准流程還未形成日常節奏 | 形成每週覆盤、manual approval、signal decay 與 action item 的操作閉環 |
 | V2.0 | Unified Decision Workbench | V1.x 驗證後，Daily Decision / Market Watch / Evidence / Portfolio Review 的邊界可以重整 | 形成單一決策工作台，舊 Tab 轉為 drill-down 或專家模式 |
@@ -37,6 +37,8 @@
 
 建議定位：V1.1 不是大改版，而是把已完成的 V1 能力變成每天可順手使用的流程。
 
+狀態：2026-07-02 v1 closeout 已完成。實作範圍聚焦在推薦分析到 Research Lab / lifecycle 的 workflow bridge；Daily Decision Desk 與 Market Watch 的完整資訊架構合併仍留待 V2.0 評估。
+
 核心交付：
 
 1. Daily Decision Desk 保持為每日入口，優先顯示今日 market regime、breadth、sector rotation、watchlist trigger、portfolio alert、risk prompt 與資料品質。
@@ -44,6 +46,14 @@
 3. Research Lab / Evidence Review 只讀 evidence dashboard 保留在 Research Lab，但 Daily Decision 可以顯示 evidence summary 入口與「目前樣本仍不足 / pending / missing」狀態。
 4. 觀察清單、推薦、研究、持倉警示之間補齊 cross-flow 文案與 navigation affordance，讓下一步動作更清楚。
 5. Empty state 要誠實：正式 DB 沒 evidence rows 時，畫面要說明「目前還沒有可覆盤樣本」，而不是看起來像壞掉。
+
+本次 v1 closeout 已交付：
+
+1. 建立 V1.1 spec / plan，明確界定先做非破壞式 workflow bridge，不直接合併主要 Tab。
+2. 新增 `ProfileReplayComparisonService` / DTO，以注入 runner 的 replay 結果比較多個 Profile，輸出 promote / hold / demote_candidate / retire_candidate / insufficient_evidence 候選標籤。
+3. 推薦分析 Profile 說明區揭露權重、技術分類、型態預覽與主要篩選條件，讓內建 Profile 差異可被檢查。
+4. 推薦頁後續操作明確區分「批次回測今日名單」與「推薦回放重播 Profile / Config」。
+5. 升降級仍需保存 Research Run / Evidence 後人工審核；V1.1 不新增自動降級、退休或刪除策略版本。
 
 Daily Decision 與 Market Watch 是否整合：
 
@@ -125,10 +135,10 @@ V2.0 啟動條件：
 
 後續長線任務建議按以下批次推進，均先在 `dev` 或 `codex/*` 分支完成，不直接推 `main`：
 
-1. 文件與版本對齊：版本路線圖、6M Roadmap、Snapshot、Manual boundary。
-2. V1.1 spec / plan：Daily Decision 與 Market Watch cross-flow 設計、UI scope、測試清單。
-3. V1.1 implementation batch A：navigation / drill-down / empty state / evidence summary。
-4. V1.1 implementation batch B：workflow QA、Manual 更新、Full App smoke。
+1. 文件與版本對齊：版本路線圖、6M Roadmap、Snapshot、Manual boundary。✅ V1.1 closeout 已完成
+2. V1.1 spec / plan：推薦 workflow bridge、UI scope、測試清單。✅ 已完成
+3. V1.1 implementation batch A：Profile replay comparison service 與 Profile 進階摘要。✅ 已完成
+4. V1.1 implementation batch B：推薦回放 workflow 文案、QA、Manual / Snapshot / Roadmap 更新。✅ 已完成
 5. V1.2 credibility batch：execution model / microstructure / attribution，各自獨立 gate。
 6. V1.3 operations batch：manual approval、weekly review、action item loop。
 7. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
@@ -137,11 +147,9 @@ V2.0 啟動條件：
 
 ## 8. 目前最合理的下一步
 
-下一步應先做 V1.1 spec / plan，而不是直接合併 Tab：
+V1.1 已收尾，下一步不應直接宣稱 Profile 有效，也不應把降級做成自動按鈕。比較穩的順序是：
 
-- 先盤點 Daily Decision Desk 目前有哪些 section 可以安全下鑽到 Market Watch / Smart Money / Research Lab / Portfolio。
-- 再定義每個下鑽只讀什麼 service snapshot，不讓 UI 偷算 domain logic。
-- 接著做一小批 UI 串接與 empty state，讓你現在就能每天用，同時讓 dry-run 繼續累積。
-- 等你實際用幾天後，再決定 V2.0 的 Unified Decision Workbench 要收斂哪些 Tab。
-
-這樣的節奏可行，因為它把「你現在想繼續推進」和「資料可信度還在驗證」拆開：V1.1 可以改善操作流程；資料有效性則由 evidence dry-run、forward outcome 與 manual review 繼續回答。
+- V1.2 先補 Profile / replay 的獨立驗證：用訓練期間提出權重或門檻候選，再用獨立驗證期間或 walk-forward 檢查凍結邏輯，避免同一段資料同時調參與宣稱有效。
+- V1.2 同步深化 execution / microstructure / benchmark / industry attribution，讓推薦回放更接近可判讀的研究證據。
+- V1.3 再把 promote / hold / demote_candidate / retire_candidate 變成可審核的人工 lifecycle 操作節奏，而不是自動升降級。
+- V2.0 才評估 Unified Decision Workbench 是否要整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
