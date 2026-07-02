@@ -55,8 +55,13 @@ class FakeProfileService:
 
 
 class FakeReplayRunner:
-    def __init__(self, results: dict[str, FakeReplayResult]) -> None:
+    def __init__(
+        self,
+        results: dict[str, FakeReplayResult],
+        period_results: dict[tuple[str, str, str], FakeReplayResult] | None = None,
+    ) -> None:
         self.results = results
+        self.period_results = period_results or {}
         self.calls: list[tuple[RecommendationProfile, ProfileReplayComparisonRequest]] = []
 
     def run_profile_replay(
@@ -65,6 +70,9 @@ class FakeReplayRunner:
         request: ProfileReplayComparisonRequest,
     ) -> FakeReplayResult:
         self.calls.append((profile, request))
+        period_key = (profile.profile_id, request.start_date, request.end_date)
+        if period_key in self.period_results:
+            return self.period_results[period_key]
         return self.results[profile.profile_id]
 
 
@@ -138,3 +146,64 @@ def test_compare_profiles_marks_demote_and_retire_candidates_from_saved_metrics(
     assert by_profile["stable"].lifecycle_candidate == "retire_candidate"
     assert by_profile["long_term"].lifecycle_candidate == "hold"
     assert "quality_degraded" in by_profile["long_term"].warnings
+
+
+def test_compare_profiles_uses_independent_validation_period_for_candidate() -> None:
+    runner = FakeReplayRunner(
+        results={},
+        period_results={
+            ("momentum", "2025-01-01", "2025-06-30"): FakeReplayResult(2600, 1800, 1000, 28),
+            ("momentum", "2025-07-01", "2025-12-31"): FakeReplayResult(-500, -300, 4200, 24),
+            ("stable", "2025-01-01", "2025-06-30"): FakeReplayResult(400, 200, 1200, 24),
+            ("stable", "2025-07-01", "2025-12-31"): FakeReplayResult(900, 500, 1800, 24),
+            ("long_term", "2025-01-01", "2025-06-30"): FakeReplayResult(100, 50, 800, 24),
+            ("long_term", "2025-07-01", "2025-12-31"): FakeReplayResult(150, None, 700, 24),
+        },
+    )
+    service = ProfileReplayComparisonService(
+        profile_service=FakeProfileService(),
+        replay_runner=runner,
+    )
+
+    result = service.compare_profiles(
+        ProfileReplayComparisonRequest(
+            start_date="2025-01-01",
+            end_date="2025-06-30",
+            validation_start_date="2025-07-01",
+            validation_end_date="2025-12-31",
+        )
+    )
+
+    by_profile = {row.profile_id: row for row in result.rows}
+    assert [row.profile_id for row in result.rows] == ["stable", "momentum", "long_term"]
+    assert by_profile["momentum"].benchmark_excess_bp == -300
+    assert by_profile["momentum"].training_benchmark_excess_bp == 1800
+    assert by_profile["momentum"].validation_benchmark_excess_bp == -300
+    assert by_profile["momentum"].validation_gap_benchmark_excess_bp == -2100
+    assert by_profile["momentum"].lifecycle_candidate == "demote_candidate"
+    assert by_profile["stable"].lifecycle_candidate == "promote_candidate"
+    assert by_profile["long_term"].lifecycle_candidate == "insufficient_evidence"
+    assert "validation_period_used" in by_profile["stable"].warnings
+    assert "validation_benchmark_excess_missing" in by_profile["long_term"].warnings
+    assert len(runner.calls) == 6
+
+
+def test_compare_profiles_rejects_overlapping_validation_period() -> None:
+    service = ProfileReplayComparisonService(
+        profile_service=FakeProfileService(),
+        replay_runner=FakeReplayRunner({}),
+    )
+
+    try:
+        service.compare_profiles(
+            ProfileReplayComparisonRequest(
+                start_date="2025-01-01",
+                end_date="2025-07-01",
+                validation_start_date="2025-07-01",
+                validation_end_date="2025-12-31",
+            )
+        )
+    except ValueError as exc:
+        assert "validation_start_date must be after end_date" in str(exc)
+    else:
+        raise AssertionError("Expected overlapping validation period to be rejected")

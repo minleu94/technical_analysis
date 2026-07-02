@@ -17,6 +17,8 @@ class ProfileReplayComparisonRequest:
     holding_days: int = 20
     top_n: int = 10
     benchmark_id: str = "taiex"
+    validation_start_date: str | None = None
+    validation_end_date: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -35,6 +37,15 @@ class ProfileReplayComparisonRow:
     quality: str
     warnings: tuple[str, ...] = ()
     lifecycle_candidate: str = "hold"
+    training_total_return_bp: int | None = None
+    training_benchmark_excess_bp: int | None = None
+    training_max_drawdown_bp: int | None = None
+    training_trade_count: int | None = None
+    validation_total_return_bp: int | None = None
+    validation_benchmark_excess_bp: int | None = None
+    validation_max_drawdown_bp: int | None = None
+    validation_trade_count: int | None = None
+    validation_gap_benchmark_excess_bp: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
