@@ -130,12 +130,13 @@ TPEX 日常來源由 `data_module/tpex_daily_price_source.py` 處理：
 3. **數據處理：** 手動構建字典列表，然後轉換為 DataFrame
 4. **欄位名稱：** 使用不同的欄位名稱（如 '股票代號' vs '證券代號'）
 
-### 新邏輯（update_20250828.py）
+### 目前邏輯（data_loader.py）
 
-1. **API 參數：** 使用 `type=ALL`
-2. **數據提取：** 直接從 `data['tables'][8]` 取得數據
-3. **數據處理：** 使用 DataFrame 的 `data` 和 `fields` 直接創建
-4. **欄位名稱：** 保持原始欄位名稱（與 notebook 一致）
+1. **API 參數：** 先使用 `type=ALL`；若 TWSE 回傳錯誤狀態、HTTP 307 或查無資料，fallback 到 `type=ALLBUT0999`。
+2. **數據提取：** 不再硬編碼 `data['tables'][8]`，而是尋找同時包含 `證券代號` 與 `收盤價` 欄位的個股交易表。
+3. **數據處理：** 使用 DataFrame 的 `data` 和 `fields` 直接創建，後續仍只保留四碼普通股並正規化數值欄位。
+4. **失敗處理：** 每日股價 batch 若回報 failed dates，`UpdateService.update_daily()` 會回傳 `success=false`，避免快速 / 安全更新在個股日價缺漏時誤顯示完成。
+5. **欄位名稱：** 保持原始欄位名稱（與 notebook 一致）。
 
 ## 更新到主模組
 

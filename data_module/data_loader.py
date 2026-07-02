@@ -405,13 +405,8 @@ class DataLoader:
             self.logger.debug(f"等待 {delay_time:.1f} 秒後發送請求...")
             time.sleep(delay_time)
             
-            # 構建 API URL - 使用 type=ALL（與 notebook 相同）
+            # 構建 API URL - 先使用 type=ALL，失敗時 fallback 到 ALLBUT0999。
             url = "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
-            params = {
-                "date": formatted_date,
-                "type": "ALL",  # 使用 ALL（與 notebook 和 update_20250828.py 相同）
-                "response": "json"
-            }
             
             # 添加請求頭（模擬真實瀏覽器）
             headers = {
@@ -422,31 +417,53 @@ class DataLoader:
                 'Connection': 'keep-alive'
             }
             
-            # 發送請求（使用 session 和 headers）
-            self.logger.info(f"正在從 MI_INDEX API 獲取 {formatted_date} 的數據...")
-            response = session.get(url, params=params, headers=headers, timeout=self.config.request_timeout)
-            
-            if response.status_code != 200:
-                self.logger.warning(f"無法獲取 {formatted_date} 的數據: HTTP {response.status_code}")
-                if response.status_code == 307:
-                    self.logger.warning("遇到 307 重定向，可能需要使用增強版腳本（支援 Selenium）")
+            data = None
+            for request_type in ("ALL", "ALLBUT0999"):
+                params = {
+                    "date": formatted_date,
+                    "type": request_type,
+                    "response": "json",
+                }
+
+                # 發送請求（使用 session 和 headers）
+                self.logger.info(f"正在從 MI_INDEX API 獲取 {formatted_date} 的數據，type={request_type}...")
+                response = session.get(url, params=params, headers=headers, timeout=self.config.request_timeout)
+
+                if response.status_code != 200:
+                    self.logger.warning(
+                        f"無法獲取 {formatted_date} 的數據: HTTP {response.status_code}, type={request_type}"
+                    )
+                    if response.status_code == 307:
+                        self.logger.warning("遇到 307 重定向，將嘗試備用 type")
+                    continue
+
+                # 解析 JSON 響應
+                candidate = response.json()
+
+                # 檢查響應狀態
+                if candidate.get('stat') == 'OK':
+                    data = candidate
+                    break
+                self.logger.warning(f"API返回錯誤狀態: {candidate.get('stat')}, type={request_type}")
+
+            if data is None:
                 return None
             
-            # 解析 JSON 響應
-            data = response.json()
-            
-            # 檢查響應狀態
-            if data.get('stat') != 'OK':
-                self.logger.warning(f"API返回錯誤狀態: {data.get('stat')}")
+            # 檢查是否有資料表
+            if 'tables' not in data:
+                self.logger.warning("API響應中沒有資料表")
                 return None
             
-            # 檢查是否有資料表（按照 notebook 的方式，需要至少9個表格）
-            if 'tables' not in data or len(data['tables']) < 9:
-                self.logger.warning("API響應中沒有足夠的資料表")
+            stock_data = None
+            for table in data['tables']:
+                fields = table.get('fields') if isinstance(table, dict) else None
+                if fields and '證券代號' in fields and '收盤價' in fields:
+                    stock_data = table
+                    break
+
+            if stock_data is None:
+                self.logger.warning("API響應中找不到個股交易資料表")
                 return None
-            
-            # 取得股票交易資料（第9個table，索引為8，與 notebook 相同）
-            stock_data = data['tables'][8]
             
             if not stock_data.get('data'):
                 self.logger.warning("股票交易資料為空")

@@ -75,6 +75,24 @@ def test_update_daily_checks_selected_start_date_when_file_missing(tmp_path, mon
     assert captured["args"][start_index] == "2026-06-18"
 
 
+def test_update_daily_returns_failure_when_batch_reports_failed_dates(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    config.log_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_run(args, stdout=None, stderr=None, text=None, encoding=None):
+        if stdout is not None:
+            stdout.write("2026-07-02 更新失敗：無法獲取數據\n")
+            stdout.write("[UPDATE_SUMMARY] SUCCESS: 0 days, FAILED: 1 days\n")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    result = UpdateService(config).update_daily("2026-07-02", "2026-07-02", delay_seconds=0)
+
+    assert result["success"] is False
+    assert result["failed_dates"]
+
+
 def test_check_data_status_includes_broker_branch_and_technical_summary(tmp_path):
     config = _config(tmp_path)
     pd.DataFrame({

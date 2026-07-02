@@ -1484,6 +1484,21 @@ class UpdateService :
                 else :
                     message =f'更新完成：成功 {final_success_count} 天，失敗 {final_fail_count} 天'
 
+                if final_fail_count >0 :
+                    if not failed_dates :
+                        failed_dates =[f"失敗_{i+1}"for i in range (final_fail_count )]
+                    logger .warning (
+                    f"[UpdateService] 每日股價更新有失敗日期: "
+                    f"成功 {final_success_count} 天（跳過 {len(skipped_dates)} 天）, 失敗 {final_fail_count} 天"
+                    )
+                    return {
+                    'success':False ,
+                    'message':message ,
+                    'updated_dates':updated_dates if updated_dates else [],
+                    'failed_dates':failed_dates ,
+                    'skipped_dates':skipped_dates
+                    }
+
                 logger .info (
                 f"[UpdateService] 更新完成: "
                 f"成功 {final_success_count} 天（跳過 {len(skipped_dates)} 天）, 失敗 {final_fail_count} 天"
