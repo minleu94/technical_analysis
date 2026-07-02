@@ -204,6 +204,9 @@
 | [POST_V1_SIGNAL_DECAY_MONITOR_QA_2026_07_09.md](../06_qa/POST_V1_SIGNAL_DECAY_MONITOR_QA_2026_07_09.md) | Post-V1 Signal Decay Monitor QA，包含 decay repository、service policy、CLI examples、lifecycle proposed payload 與安全邊界。 |
 | [POST_V1_DECISION_QUALITY_REVIEW_QA_2026_07_10.md](../06_qa/POST_V1_DECISION_QUALITY_REVIEW_QA_2026_07_10.md) | Post-V1 Decision Quality Review QA，包含 review repository、service policy、CLI examples、review item coverage 與安全邊界。 |
 | [POST_V1_EVIDENCE_REVIEW_DASHBOARDS_QA_2026_07_11.md](../06_qa/POST_V1_EVIDENCE_REVIEW_DASHBOARDS_QA_2026_07_11.md) | Post-V1 Evidence Review Dashboards QA，包含 UI placement、dashboard coverage、read-only guarantee、forbidden language check、test commands 與 not-done 邊界。 |
+| [POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md) | Post-V1 Evidence Review UI 人工 smoke checklist，覆蓋四個 dashboard、boundary banner、empty/degraded states、read-only guarantee 與人工結果表。 |
+| [POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md](../06_qa/POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md) | Evidence Pipeline 多日 dry-run 記錄模板，用於正式 scheduler 前穩定性觀察，不代表 production scheduler 已啟用。 |
+| [POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md) | Evidence scheduler approval SOP，定義 manual run、multi-day dry-run、working-copy smoke、dashboard review、manual approval 與 explicit approval 後才 implementation 的 stage。 |
 
 
 ---
@@ -307,6 +310,7 @@
 - 2026-07-09：新增 Post-V1 Signal Decay Monitor design / plan 與 QA 索引，標示 decay observation repository / service / CLI 已建立；lifecycle proposed payload 只供人工審核，不自動套用 action。
 - 2026-07-10：新增 Post-V1 Decision Quality Review design / plan 與 QA 索引，標示 review repository / service / CLI 已建立；process quality score 只供流程覆盤，不是投資能力或責備判斷。
 - 2026-07-11：新增 Post-V1 Evidence Review Dashboards design / plan 與 QA 索引，標示 Research Lab `Evidence Review` read-only UI pack 已建立；dashboard 只讀 evidence / observation / review，不寫 evidence、不建立 scheduler、不自動 lifecycle action。
+- 2026-07-12：新增 Evidence Review UI smoke checklist、Evidence Pipeline multi-day dry-run record 與 scheduler approval SOP 索引；標示這些是 production scheduler 前的人工 QA scaffold，不啟用 scheduler、不宣稱 alpha。
 - 2026-06-30：新增 v1 release checklist 索引，將 `v1.0.0-rc.1` / `v1.0.0` 發布前的自動化、非破壞 healthcheck、MainWindow UI smoke、全新 clone 與人工 UI 驗證 gate 集中管理。
 - 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。
