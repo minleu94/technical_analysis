@@ -80,7 +80,7 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
 ## 本週優先事項（只列 3 個）
 
 1. **V1 release baseline 已完成**：四個產品閉環、Month 6 Strategy Lifecycle / Portfolio Feedback v1、Full App Healthcheck / MainWindow UI smoke / clean clone gate 已形成可交付基準。下一步不是宣稱投資有效，而是進入 evidence-driven 驗證。
-2. **下一階段主線：Evidence-Driven baldr**：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Daily Decision Desk durable snapshot source / source coverage inspection v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / scheduler approval checklist v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled CMD wrappers 已建立；下一步優先閱讀每日 05:30 Codex read-only 摘要、人工執行 Evidence Review UI smoke、累積 3-5 個交易日 multi-day dry-run evidence、修 blocking gaps，之後才考慮 production scheduler implementation，追蹤 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert、Strategy Lifecycle 與人工覆盤流程是否真的改善決策。
+2. **下一階段主線：Evidence-Driven baldr + V1.1 workflow bridge**：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Daily Decision Desk durable snapshot source / source coverage inspection v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / scheduler approval checklist v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled CMD wrappers 已建立；每日 05:30 Codex read-only 摘要、Evidence Review UI smoke 與 multi-day dry-run evidence 持續背景累積，不阻塞 V1.1 非破壞式 workflow bridge。V1.1 下一步是讓 Daily Decision Desk 作為入口、Market Watch / Smart Money 作為下鑽 evidence panel，先補 navigation、empty state、evidence summary 與 QA gate；完整合併為 Unified Decision Workbench 留待 V2.0 評估。Production scheduler implementation 仍需 blocking gaps 修正、人工 approval 與明確設計後才可進行。
 3. **維持 V1 安全邊界與資料治理**：Month 5 retroactive baseline / statement baseline 多數仍為 `degraded`，P/B / P/S 仍只接受 governed external observations 或後續明確 backfill records；策略、回測、推薦、factor 與 portfolio 改動仍需 no-look-ahead、Decimal / 整數單位與 release healthcheck 防線。
 
 ## 高風險區（改動需謹慎）
@@ -134,6 +134,7 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 
 - `DEVELOPMENT_ROADMAP.md` - Roadmap Hub，指向目前狀態、6 個月路線、架構與 archive。
 - `ROADMAP_6M_ENGINEERING.md` - 未來 6 個月可執行工程路線。
+- `VERSION_ROADMAP_V1_1_TO_V2_0.md` - V1 release 後至 V2.0 的版本化交付節奏，說明 V1.1 workflow bridge 與 V2.0 Unified Decision Workbench 邊界。
 - `../01_architecture/system_vision_specification.md` - baldr 產品北極星、目前邊界、Gap Register 與投資有效性驗證框架；不作為目前可用功能依據。
 - `LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 未完成事項的逐項移交與結案 Gate。
 - `DOCUMENTATION_INDEX.md` - 文檔索引。

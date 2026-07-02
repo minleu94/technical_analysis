@@ -26,6 +26,15 @@ V1 closeout baseline（2026-06-30）：
 - 下一階段主線轉向 Evidence-Driven baldr：Forward Performance、Live vs Research Gap、Signal Decay、Decision Quality Review 與台股微結構治理。
 - Post-V1 第一批 evidence 增量已完成 Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Evidence Source Persistence v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled dry-run wrappers；safe scheduled path 已改採 CMD wrapper + Windows `schtasks.exe`，每日本機時間 05:00 做 read-only freshness check、05:15 做 evidence dry-run report，不使用 PowerShell execution policy bypass；Codex app 另有 05:30 read-only morning report automation，只彙總既有 task / status / report，不重新執行 pipeline。這是 forward evidence 的資料底座、source capture 起點、durable Daily Decision Desk snapshot source、唯讀彙總層、Research Lab evidence inspection layer、手動 dry-run orchestration、read-only freshness check、daily evidence dry-run report、gap observation linkage、decay observation、流程覆盤資料底座、人工檢查 UI 與 QA closeout scaffold，不是 production write-mode scheduler 完成，也不是投資有效性證明。
 
+Post-V1 版本節奏：
+
+- V1.1：Decision Workflow Integration。Daily Decision Desk 維持每日入口，Market Watch / Smart Money 維持獨立 Tab，但補上 drill-down、evidence summary、empty state 與跨 workflow 導引；不等待 3-5 個交易日 dry-run 才能開始，但不得因 UI 串接寫 production evidence DB。
+- V1.2：Research Credibility & Execution Model。深化 replay execution model、台股微結構 preflight、rolling risk metrics 與 benchmark / industry / concept attribution。
+- V1.3：Evidence Operations & Manual Lifecycle。把 Evidence Review、Decision Quality、Signal Decay 與 manual approval 轉成每週覆盤節奏；production scheduler 仍需 explicit approval。
+- V2.0：Unified Decision Workbench。只有在 V1.1 至 V1.3 的使用與 evidence 證明資訊架構應收斂後，才評估完整整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
+
+版本化交付細節見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)。
+
 ---
 
 ## 2. 不做什麼
@@ -93,6 +102,7 @@ V1 已完成交付：
 
 後續交付：
 
+- V1.1 Decision Workflow Integration：Daily Decision Desk 作為起點，Market Watch / Smart Money 作為 drill-down evidence panel；先補跨 Tab 導引、summary、empty state 與資料品質揭露，不在 V1.1 做完整 Tab 合併。
 - Forward Performance Dashboard：Evidence Importers v1 已可將 persisted Recommendation result 與 durable Daily Decision Desk snapshot source 轉為 events；Forward Performance Read Model v1 已可唯讀彙總 ready / pending / missing outcomes、return / excess return、quality 與 warnings。Daily Decision Desk snapshot repository / capture CLI / source coverage inspection v1 已完成；Why Not / Liquidity exclusion payload 為 optional / partial。Research Lab 已新增 `Evidence Review` read-only UI pack，內含 `Forward Evidence`、`Live vs Research Gap`、`Signal Decay` 與 `Decision Quality` 子頁；Forward Evidence 可檢查 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 後續 5 / 10 / 20 / 60 日 close-to-close research outcome、benchmark / industry 缺口與資料品質；其他子頁可唯讀檢查 gap observation、decay observation 與 process review items；`scripts/run_evidence_pipeline.py` 已可手動執行 scheduler dry-run runner，串接 source coverage、snapshot capture、event capture、outcome calculation、summary 與 diagnostics report，預設 dry-run，confirm 只允許 explicit working-copy DB。
 - Concept Basket / 題材籃子，補官方產業分類無法捕捉台股題材輪動的限制。
 - Decision Desk 的 evidence summary：每個提示能回到樣本數、forward evidence、資料品質與適用限制。
@@ -307,11 +317,12 @@ V1 已完成交付：
 
 ## 5. 立即待辦清單
 
-1. V1 release baseline 已完成；Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Evidence Source Persistence v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / scheduler approval checklist v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled dry-run wrappers 已落地。下一步優先人工執行 Evidence Review UI smoke、跑 3-5 個交易日 multi-day dry-run record、修 blocking gaps，之後才考慮 production write-mode scheduler implementation。
-2. Month 6.1 仍保留為 lifecycle / feedback 的人工審核深化：Manual Approval Workflow、Strategy Evidence Explainability、Portfolio Review Dashboard 深化與 QA checklist。
-3. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
-4. 維持 Month 2 / Month 3 / Month 5 / Month 6 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、append-only lifecycle evidence、量化 float boundary 與 no-look-ahead tests。
-5. 將零股、買賣價差、完整撮合與 Gap 實際成交模型、處置股 / 分盤 / 全額交割、三大法人與信用交易資料列入後續執行模型與資料治理深化；PDF 報告輸出仍在研究輸出 backlog。
+1. V1 release baseline 已完成；Evidence dry-run / 05:30 read-only 摘要 / Evidence Review UI smoke / multi-day dry-run record 繼續背景執行，用來累積資料可信度與 blocking gaps，不阻塞 V1.1 的非破壞式 workflow 規劃。
+2. 立即啟動 V1.1 Decision Workflow Integration spec / plan：Daily Decision Desk 作為入口，Market Watch / Smart Money 作為下鑽 evidence panel；先設計跨 Tab navigation、empty state、evidence summary 與 QA gate，不做完整 Tab 合併。
+3. Month 6.1 仍保留為 lifecycle / feedback 的人工審核深化：Manual Approval Workflow、Strategy Evidence Explainability、Portfolio Review Dashboard 深化與 QA checklist。
+4. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
+5. 維持 Month 2 / Month 3 / Month 5 / Month 6 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、append-only lifecycle evidence、量化 float boundary 與 no-look-ahead tests。
+6. 將零股、買賣價差、完整撮合與 Gap 實際成交模型、處置股 / 分盤 / 全額交割、三大法人與信用交易資料列入 V1.2 後續執行模型與資料治理深化；PDF 報告輸出仍在研究輸出 backlog。
 
 
 ---
@@ -337,6 +348,7 @@ V1 已完成交付：
 
 ## 7. 更新記錄
 
+- 2026-07-02：新增 Post-V1 版本節奏，確認 V1.1 可在 evidence dry-run 背景持續時先推進 Decision Workflow Integration；Daily Decision / Market Watch 在 V1.1 只做 bridge 與 drill-down，完整 Unified Decision Workbench 留待 V2.0 評估。
 - 2026-07-05：完成 Forward Performance Dashboard read-only UI v1，新增 Research Lab `Forward Evidence` 分頁、dashboard service / DTO / Qt table model 與禁用交易語氣測試；Dashboard 只檢查已保存 evidence outcomes，不寫 evidence、不做 scheduler、不宣稱 alpha。
 - 2026-07-06：完成 Evidence Pipeline Runner dry-run v1，新增 manual runner service / DTO / CLI、diagnostics Markdown/JSON report、confirm gate、production-like DB guard 與 readiness summary；scheduler 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
 - 2026-07-07：完成 working-copy DB smoke v1、scheduler readiness evaluator 與 production scheduler approval checklist；可在 working-copy DB 重複 confirm 檢查 idempotency，readiness evaluator 固定 `production_scheduler_allowed=false`，正式 scheduler 仍未啟用。
