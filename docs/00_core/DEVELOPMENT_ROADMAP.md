@@ -13,6 +13,7 @@
 |---|---|
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 目前狀態、當前工作模式、本週優先事項與高風險區。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
+| [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；作為 6M Roadmap 的 companion，不取代其權威。 |
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統架構、模組邊界、資料流與高風險技術邊界。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 文檔導航與文件所在位置，不作為功能或狀態事實來源。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與結案 Gate。 |
@@ -52,6 +53,7 @@
 ## 4. 下一步 Next
 
 未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
+V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1 先做 Daily Decision 與 Market Watch 的 workflow bridge，V2.0 才評估完整 Unified Decision Workbench。
 
 目前立即執行優先順序：
 
@@ -114,3 +116,4 @@
 - 2026-06-17：補上 Month 6 lifecycle residual，新增 append-only lifecycle evidence、latest state projection 與 demote / retire proposed evidence 保存。
 - 2026-06-17：將 Roadmap Hub 的 Month 6 Next 改為 v1 已完成後的深化路線，聚焦人工審核流程、Review Dashboard、Evidence Explainability 與 QA Checklist。
 - 2026-06-17：補上 P/B / P/S valuation policy residual，確認 P/B / P/S 只走 governed external observation / future backfill presentation boundary，不進 ScoringEngine。
+- 2026-07-02：新增 V1.1 至 V2.0 版本路線圖入口，將 Post-V1 主線拆為 V1.1 workflow bridge、V1.2 research credibility、V1.3 evidence operations 與 V2.0 Unified Decision Workbench 評估。

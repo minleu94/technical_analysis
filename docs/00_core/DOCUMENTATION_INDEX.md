@@ -11,6 +11,7 @@
 |---|---|
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與歷史歸檔。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
+| [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；說明 V1.1 workflow bridge、V1.2 credibility、V1.3 operations 與 V2.0 workbench 邊界。 |
 | [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr 產品北極星、目前邊界、Gap Register、長期能力圖像與投資有效性驗證框架；不取代 Snapshot、6M Roadmap 或 Architecture。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要、本週優先事項與高風險區。 |
