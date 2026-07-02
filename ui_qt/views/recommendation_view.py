@@ -1279,11 +1279,16 @@ class RecommendationView(QWidget):
         
         # 送 Research Lab 批次回測按鈕（Phase 3.3）
         self.send_to_backtest_btn = QPushButton("送 Research Lab 批次回測")
+        self.send_to_backtest_btn.setToolTip("使用目前推薦名單建立批次研究輸入；這是回測今日名單，不是重播推薦邏輯。")
         self.send_to_backtest_btn.setVisible(False)  # 初始隱藏
         self.send_to_backtest_btn.clicked.connect(self._send_to_backtest)
         title_layout.addWidget(self.send_to_backtest_btn)
 
         self.send_profile_to_portfolio_backtest_btn = QPushButton("送 Research Lab 推薦回放")
+        self.send_profile_to_portfolio_backtest_btn.setToolTip(
+            "重播整套 Profile/Config，在歷史日期重新產生推薦；不是只回測今日名單。"
+            "升降級判讀需保存 Research Run / Evidence 後人工審核。"
+        )
         self.send_profile_to_portfolio_backtest_btn.setVisible(False)
         self.send_profile_to_portfolio_backtest_btn.clicked.connect(
             self._send_profile_to_portfolio_backtest
@@ -2479,7 +2484,9 @@ class RecommendationView(QWidget):
                 f"Profile: {profile_label}\n"
                 f"Regime: {self.current_regime or '未知'}\n"
                 f"股票數量: {len(self.current_recommendations)}\n\n"
-                "下一步：可從本頁送 Research Lab 批次回測或推薦回放，也可在結果表右鍵記錄到持倉管理。"
+                "下一步：可從本頁送 Research Lab 批次回測目前名單，或送 Research Lab 推薦回放以"
+                "重播整套 Profile/Config；推薦回放不是只回測今日名單。"
+                "升降級判讀需保存 Research Run / Evidence 後人工審核，也可在結果表右鍵記錄到持倉管理。"
             )
             if watchlist_id:
                 success_msg += f"\n\n已自動創建選股清單：{watchlist_name}\n可在「策略回測」Tab 的選股清單中查看。"
