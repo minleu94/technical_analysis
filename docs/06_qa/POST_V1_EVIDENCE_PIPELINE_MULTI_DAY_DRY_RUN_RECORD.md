@@ -28,6 +28,7 @@
 
 | Date | Data update status | Source coverage status | Dry-run pipeline status | Working-copy confirm smoke status | Events seen | Events inserted in working copy | Outcomes created in working copy | Summary groups | Warnings count | Blocking gaps | Dashboard review completed | Human reviewer notes | Decision |
 |---|---|---|---|---|---:|---:|---:|---:|---:|---|---|---|---|
+| 2026-07-02 | passed | degraded | passed | N/A | 7 | 0 | 0 | 0 | 23 | decision_desk_snapshot_missing; why_not_exclusion_payload_missing; liquidity_gate_payload_missing | N/A | Windows Task Scheduler 05:00 / 05:15 manual trigger 成功，Last Result = 0；dry-run 為 read-only，confirm = false，未寫 production evidence DB。 | continue dry-run |
 | YYYY-MM-DD |  |  |  |  |  |  |  |  |  |  |  |  | continue dry-run / fix gaps / approve next stage |
 | YYYY-MM-DD |  |  |  |  |  |  |  |  |  |  |  |  | continue dry-run / fix gaps / approve next stage |
 | YYYY-MM-DD |  |  |  |  |  |  |  |  |  |  |  |  | continue dry-run / fix gaps / approve next stage |
