@@ -271,6 +271,7 @@ class RecommendationPortfolioBacktestService:
                 period_holdings=period_holdings,
             )
             microstructure_preflight = self._build_microstructure_preflight(snapshots, data)
+            relative_attribution = self._build_relative_attribution(equity_curve, data)
             details = {
                 "data_manifest": self._build_factor_manifest(snapshots),
                 "portfolio_credibility": credibility_manifest,
@@ -280,6 +281,7 @@ class RecommendationPortfolioBacktestService:
                 "gap_risk": gap_risk,
                 "rolling_risk_metrics": rolling_risk_metrics,
                 "microstructure_preflight": microstructure_preflight,
+                "relative_attribution": relative_attribution,
             }
             return RecommendationPortfolioBacktestResultDTO(
                 summary={
@@ -294,6 +296,8 @@ class RecommendationPortfolioBacktestService:
                     "total_transaction_cost": total_transaction_cost_float,
                     "rolling_risk_status": rolling_risk_metrics["status"],
                     "microstructure_risk_count": microstructure_preflight["risk_count"],
+                    "relative_attribution_status": relative_attribution["status"],
+                    "benchmark_excess_return_bp": self._benchmark_excess_return_bp(relative_attribution),
                 },
                 equity_curve=equity_curve,
                 trades=pd.DataFrame(),
@@ -347,8 +351,11 @@ class RecommendationPortfolioBacktestService:
             period_holdings=period_holdings,
         )
         microstructure_preflight = self._build_microstructure_preflight(snapshots, data)
+        relative_attribution = self._build_relative_attribution(equity_curve, data)
         summary["rolling_risk_status"] = rolling_risk_metrics["status"]
         summary["microstructure_risk_count"] = microstructure_preflight["risk_count"]
+        summary["relative_attribution_status"] = relative_attribution["status"]
+        summary["benchmark_excess_return_bp"] = self._benchmark_excess_return_bp(relative_attribution)
         details = {
             "data_manifest": self._build_factor_manifest(snapshots),
             "portfolio_credibility": credibility_manifest,
@@ -358,6 +365,7 @@ class RecommendationPortfolioBacktestService:
             "gap_risk": gap_risk,
             "rolling_risk_metrics": rolling_risk_metrics,
             "microstructure_preflight": microstructure_preflight,
+            "relative_attribution": relative_attribution,
         }
 
         return RecommendationPortfolioBacktestResultDTO(
@@ -996,6 +1004,90 @@ class RecommendationPortfolioBacktestService:
             f"microstructure:{risk['stock_code']}:{risk['risk_type']}"
             for risk in preflight.get("risks", [])
         ]
+
+    def _build_relative_attribution(
+        self,
+        equity_curve: pd.DataFrame,
+        data: pd.DataFrame,
+    ) -> Dict[str, Any]:
+        source_groups = {
+            "benchmark": ("大盤收盤價", "benchmark_close", "market_index_close", "加權指數"),
+            "industry": ("產業指數收盤價", "industry_close", "industry_index_close"),
+            "concept": ("題材指數收盤價", "concept_close", "concept_index_close"),
+        }
+        source_columns = {
+            source_type: next((column for column in columns if column in data.columns), None)
+            for source_type, columns in source_groups.items()
+        }
+        missing_sources = sorted(
+            source_type for source_type, column in source_columns.items() if column is None
+        )
+        portfolio_return_bp = self._return_bp_from_equity_curve(equity_curve)
+        benchmarks: Dict[str, Dict[str, Any]] = {}
+        for source_type, column in source_columns.items():
+            if column is None:
+                continue
+            return_bp = self._return_bp_from_reference_column(data, column)
+            if return_bp is None:
+                benchmarks[source_type] = {
+                    "status": "insufficient_reference_observations",
+                    "source_column": column,
+                    "return_bp": None,
+                    "excess_return_bp": None,
+                }
+                continue
+            benchmarks[source_type] = {
+                "status": "observed",
+                "source_column": column,
+                "return_bp": return_bp,
+                "excess_return_bp": None if portfolio_return_bp is None else portfolio_return_bp - return_bp,
+            }
+
+        status = "observed" if benchmarks and not missing_sources else "missing_optional_sources"
+        if benchmarks and missing_sources:
+            status = "partial"
+        if not benchmarks and not missing_sources:
+            status = "insufficient_reference_observations"
+        return {
+            "schema_version": 1,
+            "status": status,
+            "policy": "same_replay_period_optional_reference_columns",
+            "portfolio_return_bp": portfolio_return_bp,
+            "source_columns": source_columns,
+            "missing_sources": missing_sources,
+            "benchmarks": benchmarks,
+        }
+
+    def _return_bp_from_equity_curve(self, equity_curve: pd.DataFrame) -> int | None:
+        if equity_curve is None or equity_curve.empty or "equity" not in equity_curve.columns:
+            return None
+        values = pd.to_numeric(equity_curve["equity"], errors="coerce").dropna()
+        return self._return_bp_from_values(values)
+
+    def _return_bp_from_reference_column(self, data: pd.DataFrame, column: str) -> int | None:
+        if data.empty or "日期" not in data.columns or column not in data.columns:
+            return None
+        references = data[["日期", column]].copy()
+        references["日期"] = pd.to_datetime(references["日期"], errors="coerce")
+        references[column] = pd.to_numeric(references[column], errors="coerce")
+        references = references.dropna(subset=["日期", column]).sort_values("日期")
+        references = references.drop_duplicates(subset=["日期"], keep="first")
+        return self._return_bp_from_values(references[column])
+
+    def _return_bp_from_values(self, values: pd.Series) -> int | None:
+        if len(values) < 2:
+            return None
+        first = to_decimal(values.iloc[0])
+        last = to_decimal(values.iloc[-1])
+        if first <= 0:
+            return None
+        return int((((last / first) - Decimal("1")) * Decimal("10000")).to_integral_value(rounding=ROUND_HALF_UP))
+
+    @staticmethod
+    def _benchmark_excess_return_bp(relative_attribution: Dict[str, Any]) -> int | None:
+        benchmark = relative_attribution.get("benchmarks", {}).get("benchmark", {})
+        value = benchmark.get("excess_return_bp")
+        return None if value is None else int(value)
 
     def _quantize_ratio(self, value: Decimal) -> float:
         return float(value.quantize(Decimal("0.000001")))  # numeric-boundary: dto

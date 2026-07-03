@@ -1009,6 +1009,95 @@ def test_portfolio_backtest_microstructure_preflight_discloses_missing_optional_
     assert result.summary["microstructure_risk_count"] == 0
 
 
+def test_portfolio_backtest_relative_attribution_uses_optional_reference_columns():
+    history = pd.DataFrame(
+        [
+            {
+                "日期": "2026-01-02",
+                "證券代號": "2330",
+                "證券名稱": "台積電",
+                "收盤價": 100,
+                "大盤收盤價": 10000,
+                "產業指數收盤價": 200,
+                "題材指數收盤價": 50,
+            },
+            {
+                "日期": "2026-01-06",
+                "證券代號": "2330",
+                "證券名稱": "台積電",
+                "收盤價": 110,
+                "大盤收盤價": 10200,
+                "產業指數收盤價": 210,
+                "題材指數收盤價": 55,
+            },
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    attribution = result.details["relative_attribution"]
+
+    assert attribution["schema_version"] == 1
+    assert attribution["status"] == "observed"
+    assert attribution["portfolio_return_bp"] == 1000
+    assert attribution["benchmarks"]["benchmark"]["return_bp"] == 200
+    assert attribution["benchmarks"]["benchmark"]["excess_return_bp"] == 800
+    assert attribution["benchmarks"]["industry"]["return_bp"] == 500
+    assert attribution["benchmarks"]["industry"]["excess_return_bp"] == 500
+    assert attribution["benchmarks"]["concept"]["return_bp"] == 1000
+    assert attribution["benchmarks"]["concept"]["excess_return_bp"] == 0
+    assert result.summary["relative_attribution_status"] == "observed"
+    assert result.summary["benchmark_excess_return_bp"] == 800
+
+
+def test_portfolio_backtest_relative_attribution_discloses_missing_reference_columns():
+    history = pd.DataFrame(
+        [
+            {"日期": "2026-01-02", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 100},
+            {"日期": "2026-01-06", "證券代號": "2330", "證券名稱": "台積電", "收盤價": 110},
+        ]
+    )
+    history["日期"] = pd.to_datetime(history["日期"])
+
+    def provider(as_of_data, config, top_n):
+        return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
+
+    result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+        start_date="2026-01-02",
+        end_date="2026-01-06",
+        profile_id="momentum",
+        recommendation_config={"regime": "Trend"},
+        history=history,
+        initial_capital=1000000.0,
+        rebalance_frequency="once",
+        top_n=1,
+        allocation_method="equal_weight",
+        holding_days=4,
+    )
+
+    attribution = result.details["relative_attribution"]
+
+    assert attribution["status"] == "missing_optional_sources"
+    assert attribution["missing_sources"] == ["benchmark", "concept", "industry"]
+    assert result.summary["relative_attribution_status"] == "missing_optional_sources"
+    assert result.summary["benchmark_excess_return_bp"] is None
+
+
 def test_portfolio_backtest_can_replay_weekly_recommendations():
     history = pd.DataFrame(
         [
