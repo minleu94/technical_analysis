@@ -213,6 +213,7 @@
 | [POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md) | Post-V1 Evidence Review UI 人工 smoke checklist，覆蓋四個 dashboard、boundary banner、empty/degraded states、read-only guarantee 與人工結果表。 |
 | [POST_V1_V1_3_EVIDENCE_OPERATIONS_QA_2026_07_03.md](../06_qa/POST_V1_V1_3_EVIDENCE_OPERATIONS_QA_2026_07_03.md) | V1.3 Evidence Operations QA，記錄 weekly review CLI、manual approval package、action item planning、測試命令與 production scheduler disabled 邊界。 |
 | [POST_V1_V1_4_EVIDENCE_REVIEW_HISTORY_QA_2026_07_03.md](../06_qa/POST_V1_V1_4_EVIDENCE_REVIEW_HISTORY_QA_2026_07_03.md) | V1.4 Evidence Review History QA，記錄 weekly review history repository、CLI save/list、Research Lab 覆盤歷史子頁、測試命令與 production scheduler disabled 邊界。 |
+| [POST_V1_EVIDENCE_OPERATIONS_WEEKLY_HISTORY_RUN_2026_07_03.md](../06_qa/POST_V1_EVIDENCE_OPERATIONS_WEEKLY_HISTORY_RUN_2026_07_03.md) | 第一個 weekly evidence operations + history working-copy run 紀錄，狀態為 `coverage_only`，確認 history idempotency 與 production scheduler disabled 邊界。 |
 | [POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md](../06_qa/POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md) | Evidence Pipeline 多日 dry-run 記錄模板，用於正式 scheduler 前穩定性觀察，不代表 production scheduler 已啟用。 |
 | [POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md) | Evidence scheduler approval SOP，定義 manual run、multi-day dry-run、working-copy smoke、dashboard review、manual approval 與 explicit approval 後才 implementation 的 stage。 |
 | [POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md) | Evidence safe scheduled wrapper 歷史 QA，記錄 PowerShell `.ps1` 註冊被 local execution policy 擋住。 |
@@ -328,6 +329,7 @@
 - 2026-07-12：補充 Codex app read-only morning report automation 索引；標示 05:30 只彙總既有 Windows Task Scheduler / status / report，不重新執行 pipeline。
 - 2026-07-03：新增 V1.3 Evidence Operations design / plan 與 QA 索引，標示 weekly review、manual approval package、signal decay manual lifecycle candidates 與 action item planning 已建立；production scheduler 仍未啟用。
 - 2026-07-03：新增 V1.4 Evidence Review History QA 索引，標示 weekly review history repository、CLI save/list 與 Research Lab 覆盤歷史子頁已建立；history 只保存人工覆盤快照，不啟用 scheduler。
+- 2026-07-03：新增 weekly evidence operations + history working-copy run 紀錄索引，確認第一個 operating-cycle 仍為 `coverage_only`，需繼續累積 evidence 並修 blocking gaps。
 - 2026-06-30：新增 v1 release checklist 索引，將 `v1.0.0-rc.1` / `v1.0.0` 發布前的自動化、非破壞 healthcheck、MainWindow UI smoke、全新 clone 與人工 UI 驗證 gate 集中管理。
 - 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。

@@ -79,7 +79,8 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 
 5. **已完成：Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1**
    - V1.1 補 workflow bridge；V1.2 補 research credibility 與 execution diagnostics；V1.3 補 weekly evidence operations 與 manual lifecycle package；V1.4 補 weekly review history 與 Research Lab 覆盤歷史子頁。
-   - 目前下一步是實際使用 weekly evidence operations + history 累積多週覆盤證據；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
+   - 2026-07-03 已完成第一個 weekly evidence operations + history working-copy operating-cycle，結果仍為 `coverage_only`，blocking gaps 尚未關閉。
+   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並修正 `decision_desk_snapshot_missing`、`recommendation_persisted_missing` 與 working-copy confirm smoke 缺口；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
 
 6. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
@@ -126,3 +127,4 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 - 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1，Roadmap Hub 下一步轉為實際使用 weekly evidence operations 累積覆盤證據。
 - 2026-07-03：完成 V1.4 Evidence Review History v1，Roadmap Hub 下一步轉為實際使用 weekly evidence operations + history 累積多週覆盤證據。
 - 2026-07-03：整理 roadmap / docs / phase 判讀邊界，確認 `docs/05_phases/` 保留為 Historical / Reference，不作目前 roadmap。
+- 2026-07-03：完成第一個 weekly evidence operations + history working-copy run，確認 history idempotency；結果仍為 `coverage_only`，production scheduler 維持未啟用。
