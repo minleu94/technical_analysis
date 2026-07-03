@@ -28,7 +28,7 @@
 |---|---|---|---|
 | V1.1 | Decision Workflow Integration | 每日決策、推薦、研究回放與 lifecycle 判讀仍需要更清楚的 workflow bridge | 已完成 v1：推薦 Profile 可見、推薦回放語意清楚、Profile replay comparison 可產生人工 lifecycle candidate |
 | V1.2 | Research Credibility & Execution Model | 研究回測已有治理，但成交假設、微結構與 attribution 還不夠像真實決策 | 已完成 v1：replay 訓練 / 驗證分離、rolling risk、microstructure preflight、relative attribution |
-| V1.3 | Evidence Operations & Manual Lifecycle | Evidence dashboard 已建立，但樣本、覆盤、人工核准流程還未形成日常節奏 | 下一步：形成每週覆盤、manual approval、signal decay 與 action item 的操作閉環 |
+| V1.3 | Evidence Operations & Manual Lifecycle | Evidence dashboard 已建立，但樣本、覆盤、人工核准流程還未形成日常節奏 | 已完成 v1：weekly evidence operations package、manual approval summary、signal decay candidate 與 action item planning |
 | V2.0 | Unified Decision Workbench | V1.x 驗證後，Daily Decision / Market Watch / Evidence / Portfolio Review 的邊界可以重整 | 形成單一決策工作台，舊 Tab 轉為 drill-down 或專家模式 |
 
 ---
@@ -100,7 +100,7 @@ V1.2 驗收 Gate：
 
 ## 5. V1.3：Evidence Operations & Manual Lifecycle
 
-建議定位：把 evidence 從「看得到」推到「每週真的用來修正決策流程」。
+狀態：2026-07-03 v1 closeout 已完成。V1.3 把 evidence 從「看得到」推到「每週可彙總、可建立人工 action item、可形成 manual approval package」；production scheduler 仍未啟用。
 
 核心交付：
 
@@ -110,11 +110,20 @@ V1.2 驗收 Gate：
 4. Signal Decay 與 Decision Quality 的 action item 開始回流到 Research Lab / Strategy Lifecycle，但不自動改策略版本。
 5. 建立「決策覆盤週報」最小格式：本週觸發事件、完成 outcome、missing source、最大 gap、下週 action。
 
+本次 v1 closeout 已交付：
+
+1. 新增 `EvidenceOperationsService` / DTO，彙總 scheduler readiness、Decision Quality、Signal Decay 與 action item。
+2. 新增 `scripts/build_evidence_operations_weekly_review.py`，可輸出 JSON / Markdown weekly review。
+3. Action item planning 預設 dry-run；`--confirm-action-items` 才 append-only 寫入 explicit DB。
+4. Signal Decay demote / retire candidate 只列為人工審核清單，`apply_action=false`。
+5. 樣本不足時 status 為 `coverage_only`，只輸出覆蓋率與資料品質缺口。
+
 V1.3 驗收 Gate：
 
 - Production scheduler 仍預設未啟用，除非通過 explicit approval。
 - Evidence 樣本不足時只能輸出覆蓋率與品質缺口，不能包裝成策略結論。
 - Decision Quality 是流程 evidence，不是績效或責備分數。
+- Action item planning 不得跳過人工 review，也不得套用 lifecycle action。
 
 ---
 
@@ -157,7 +166,11 @@ V2.0 啟動條件：
 
 V1.1 與 V1.2 v1 已收尾，下一步不應直接宣稱 Profile 有效，也不應把降級做成自動按鈕。比較穩的順序是：
 
-- V1.3 先把 promote / hold / demote_candidate / retire_candidate 變成可審核的人工 lifecycle 操作節奏，而不是自動升降級。
-- V1.3 同步建立 weekly evidence review、manual approval、signal decay action item 與 decision quality follow-up。
+- V1.3 已把 promote / hold / demote_candidate / retire_candidate 相關 evidence 轉成可審核 weekly package 與 action item planning，而不是自動升降級。
+- 下一步是用 V1.3 weekly review 實際跑數週，觀察哪些 dashboard 與 action item 真的有用。
 - V1.2 residual 只在 source / execution model 契約明確時繼續深化，不要用未治理資料補漂亮圖表。
 - V2.0 才評估 Unified Decision Workbench 是否要整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
+
+## 9. 更新記錄
+
+- 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1，新增 weekly evidence operations package、manual approval summary、signal decay manual lifecycle candidates 與 append-only action item planning；production scheduler 仍未啟用。

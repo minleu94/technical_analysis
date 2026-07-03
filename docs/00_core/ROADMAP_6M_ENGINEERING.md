@@ -30,7 +30,7 @@ Post-V1 版本節奏：
 
 - V1.1：Decision Workflow Integration v1 已完成。Daily Decision Desk / Market Watch 的完整合併仍留待 V2.0；本次先補推薦 Profile 可見性、推薦回放語意、Profile replay comparison service 與升降級候選判讀邊界，不因 UI 串接寫 production evidence DB。
 - V1.2：Research Credibility & Execution Model v1 已完成。已補 replay 訓練 / 獨立驗證分離、台股微結構 preflight、rolling risk metrics 與 benchmark / industry / concept attribution；完整撮合、買賣價差與正式微結構資料源仍是 residual。
-- V1.3：Evidence Operations & Manual Lifecycle。下一步把 Evidence Review、Decision Quality、Signal Decay 與 manual approval 轉成每週覆盤節奏；production scheduler 仍需 explicit approval。
+- V1.3：Evidence Operations & Manual Lifecycle v1 已完成。Evidence Review、Decision Quality、Signal Decay 與 manual approval 已可透過 weekly evidence operations package 形成每週覆盤節奏；production scheduler 仍需 explicit approval。
 - V2.0：Unified Decision Workbench。只有在 V1.1 至 V1.3 的使用與 evidence 證明資訊架構應收斂後，才評估完整整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
 
 版本化交付細節見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)。
@@ -319,7 +319,7 @@ V1 已完成交付：
 ## 5. 立即待辦清單
 
 1. V1 release baseline、V1.1 workflow bridge v1 與 V1.2 Research Credibility & Execution Model v1 已完成；Evidence dry-run / 05:30 read-only 摘要 / Evidence Review UI smoke / multi-day dry-run record 繼續背景執行，用來累積資料可信度與 blocking gaps。
-2. 下一個工程焦點轉向 V1.3 Evidence Operations & Manual Lifecycle：Manual Approval Workflow、weekly review、signal decay action item loop、demote / retire manual review、Portfolio Review Dashboard 深化與 QA checklist。
+2. V1.3 Evidence Operations & Manual Lifecycle v1 已完成：Manual Approval package、weekly review CLI、signal decay action item loop、demote / retire manual review candidate 與 QA checklist 已建立；接下來以數週實際覆盤累積使用證據，不啟用 production scheduler。
 3. V1.2 residual 保留為後續執行模型與資料治理深化：零股、買賣價差、完整撮合、Gap 實際成交模型、正式處置股 / 分盤 / 全額交割資料源與更完整 factor attribution。
 4. Month 5 residual 仍為治理限制：retroactive baseline / statement baseline 多數為 `degraded`，不可被誤解為官方歷史公告日；P/B、P/S policy 已關閉為 guarded external-observation 邊界；免費官方歷史月營收公告日端點仍未找到。
 5. 維持 Month 2 / Month 3 / Month 5 / Month 6 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、append-only lifecycle evidence、量化 float boundary 與 no-look-ahead tests。
@@ -350,6 +350,7 @@ V1 已完成交付：
 ## 7. 更新記錄
 
 - 2026-07-02：完成 V1.2 Research Credibility & Execution Model v1，新增 Profile replay 訓練 / 獨立驗證分離、推薦回放 rolling risk metrics、microstructure preflight 與 benchmark / industry / concept relative attribution；下一步轉向 V1.3 manual lifecycle 操作節奏。
+- 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1，新增 weekly evidence operations service / CLI、manual approval package、signal decay manual lifecycle candidates 與 append-only action item planning；production scheduler 仍未啟用。
 - 2026-07-02：新增 Post-V1 版本節奏，確認 V1.1 可在 evidence dry-run 背景持續時先推進 Decision Workflow Integration；Daily Decision / Market Watch 在 V1.1 只做 bridge 與 drill-down，完整 Unified Decision Workbench 留待 V2.0 評估。
 - 2026-07-02：完成 V1.1 workflow bridge v1，新增 Profile replay comparison service、推薦 Profile 進階摘要與推薦回放語意補齊；升降級仍為 Research Run / Evidence 後的人工 lifecycle candidate 判讀，不自動套用。
 - 2026-07-05：完成 Forward Performance Dashboard read-only UI v1，新增 Research Lab `Forward Evidence` 分頁、dashboard service / DTO / Qt table model 與禁用交易語氣測試；Dashboard 只檢查已保存 evidence outcomes，不寫 evidence、不做 scheduler、不宣稱 alpha。

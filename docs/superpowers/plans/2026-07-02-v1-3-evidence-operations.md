@@ -48,8 +48,8 @@
 - Modify: `docs/01_architecture/system_architecture.md`
 - Modify: `docs/00_core/DOCUMENTATION_INDEX.md`
 
-- [ ] Add V1.3 QA checklist and validation evidence.
-- [ ] Update Manual with weekly review CLI and safety interpretation.
-- [ ] Update scoped authority docs after V1.3 completion only.
+- [x] Add V1.3 QA checklist and validation evidence.
+- [x] Update Manual with weekly review CLI and safety interpretation.
+- [x] Update scoped authority docs after V1.3 completion only.
 - [ ] Run focused tests, py_compile, and relevant evidence tests.
 - [ ] Commit and push branch.

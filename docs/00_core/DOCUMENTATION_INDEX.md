@@ -117,6 +117,7 @@
 | [2026-07-09-post-v1-signal-decay-monitor-design.md](../superpowers/specs/2026-07-09-post-v1-signal-decay-monitor-design.md) | Post-V1 Signal Decay Monitor 設計，定義 decay observation、scope、window policy、rule-based score、lifecycle proposed payload 與不自動套用 action 邊界。 |
 | [2026-07-10-post-v1-decision-quality-review-design.md](../superpowers/specs/2026-07-10-post-v1-decision-quality-review-design.md) | Post-V1 Decision Quality Review 設計，定義 review repository、review item、process score、CLI 與非責備流程覆盤邊界。 |
 | [2026-07-11-post-v1-evidence-review-dashboards-design.md](../superpowers/specs/2026-07-11-post-v1-evidence-review-dashboards-design.md) | Post-V1 Evidence Review Dashboards read-only UI pack 設計，定義 Research Lab Evidence Review placement、Decision Quality / Signal Decay / Live Gap dashboard、共用 boundary banner 與 read-only UI 邊界。 |
+| [2026-07-02-v1-3-evidence-operations-design.md](../superpowers/specs/2026-07-02-v1-3-evidence-operations-design.md) | V1.3 Evidence Operations & Manual Lifecycle 設計，定義 weekly review、manual approval package、action item loop 與 production scheduler disabled 邊界。 |
 | [2026-06-13-strategy-scoring-governance.md](../superpowers/plans/2026-06-13-strategy-scoring-governance.md) | 策略分數治理總控計畫與增量 Gate。 |
 | [2026-06-14-month-3-factor-layer.md](../superpowers/plans/2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫，拆分 Factor Contract、Registry、Look-ahead Gate、v1 adapters 與 Research Run 追溯保存。 |
 | [2026-07-01-post-v1-evidence-event-store.md](../superpowers/plans/2026-07-01-post-v1-evidence-event-store.md) | Post-V1 Evidence Event Store / Forward Outcome Calculator v1 實作計畫，拆分 DTO、repository、service、calculator、CLI、tests 與 QA 文件。 |
@@ -130,6 +131,7 @@
 | [2026-07-09-post-v1-signal-decay-monitor.md](../superpowers/plans/2026-07-09-post-v1-signal-decay-monitor.md) | Post-V1 Signal Decay Monitor 實作計畫，拆分 DTO、repository、service、CLI、lifecycle payload、tests 與文件同步。 |
 | [2026-07-10-post-v1-decision-quality-review.md](../superpowers/plans/2026-07-10-post-v1-decision-quality-review.md) | Post-V1 Decision Quality Review 實作計畫，拆分 DTO、repository、service、CLI、review item tests、安全邊界與文件同步。 |
 | [2026-07-11-post-v1-evidence-review-dashboards.md](../superpowers/plans/2026-07-11-post-v1-evidence-review-dashboards.md) | Post-V1 Evidence Review Dashboards read-only UI pack 實作計畫，拆分 dashboard DTO / service、Qt model / view、Research Lab 掛載、tests 與 QA。 |
+| [2026-07-02-v1-3-evidence-operations.md](../superpowers/plans/2026-07-02-v1-3-evidence-operations.md) | V1.3 Evidence Operations 實作計畫，拆分 weekly package、action item loop、QA 與文件 closeout。 |
 | [2026-06-14-month-3-factor-run-integration.md](../superpowers/plans/2026-06-14-month-3-factor-run-integration.md) | Month 3 Factor Run Integration 計畫，將 factor snapshot / contribution summary 接入 Research Run 實際保存流程。 |
 | [2026-06-15-month-3-recommendation-factor-feed.md](../superpowers/plans/2026-06-15-month-3-recommendation-factor-feed.md) | Month 3 Recommendation Factor Feed 計畫，讓推薦組合回放產生並保存 factor snapshot / contribution metadata。 |
 | [2026-06-15-decision-desk-watchlist-trigger.md](../superpowers/plans/2026-06-15-decision-desk-watchlist-trigger.md) | Daily Decision Desk Watchlist Trigger v1 接線計畫，對接 `WatchlistService` 與 SQLite `technical_indicators`，並定義日期 fallback、quality 與 warnings 契約。 |
@@ -206,6 +208,7 @@
 | [POST_V1_DECISION_QUALITY_REVIEW_QA_2026_07_10.md](../06_qa/POST_V1_DECISION_QUALITY_REVIEW_QA_2026_07_10.md) | Post-V1 Decision Quality Review QA，包含 review repository、service policy、CLI examples、review item coverage 與安全邊界。 |
 | [POST_V1_EVIDENCE_REVIEW_DASHBOARDS_QA_2026_07_11.md](../06_qa/POST_V1_EVIDENCE_REVIEW_DASHBOARDS_QA_2026_07_11.md) | Post-V1 Evidence Review Dashboards QA，包含 UI placement、dashboard coverage、read-only guarantee、forbidden language check、test commands 與 not-done 邊界。 |
 | [POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md) | Post-V1 Evidence Review UI 人工 smoke checklist，覆蓋四個 dashboard、boundary banner、empty/degraded states、read-only guarantee 與人工結果表。 |
+| [POST_V1_V1_3_EVIDENCE_OPERATIONS_QA_2026_07_03.md](../06_qa/POST_V1_V1_3_EVIDENCE_OPERATIONS_QA_2026_07_03.md) | V1.3 Evidence Operations QA，記錄 weekly review CLI、manual approval package、action item planning、測試命令與 production scheduler disabled 邊界。 |
 | [POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md](../06_qa/POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md) | Evidence Pipeline 多日 dry-run 記錄模板，用於正式 scheduler 前穩定性觀察，不代表 production scheduler 已啟用。 |
 | [POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md) | Evidence scheduler approval SOP，定義 manual run、multi-day dry-run、working-copy smoke、dashboard review、manual approval 與 explicit approval 後才 implementation 的 stage。 |
 | [POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md) | Evidence safe scheduled wrapper 歷史 QA，記錄 PowerShell `.ps1` 註冊被 local execution policy 擋住。 |
@@ -318,6 +321,7 @@
 - 2026-07-12：新增 Evidence scheduled dry-run wrapper QA 與 morning check guide 索引；標示每日自動任務只做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
 - 2026-07-12：新增 CMD wrapper + `schtasks.exe` QA 索引；標示 PowerShell `.ps1` 被 execution policy 擋住後改用 CMD 註冊，時間為每日本機 05:00 / 05:15，production confirm 仍未啟用。
 - 2026-07-12：補充 Codex app read-only morning report automation 索引；標示 05:30 只彙總既有 Windows Task Scheduler / status / report，不重新執行 pipeline。
+- 2026-07-03：新增 V1.3 Evidence Operations design / plan 與 QA 索引，標示 weekly review、manual approval package、signal decay manual lifecycle candidates 與 action item planning 已建立；production scheduler 仍未啟用。
 - 2026-06-30：新增 v1 release checklist 索引，將 `v1.0.0-rc.1` / `v1.0.0` 發布前的自動化、非破壞 healthcheck、MainWindow UI smoke、全新 clone 與人工 UI 驗證 gate 集中管理。
 - 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。

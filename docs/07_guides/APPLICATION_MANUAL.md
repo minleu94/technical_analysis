@@ -856,6 +856,16 @@ Decision Quality Review CLI 用來建立週 / 月 / custom 流程覆盤。它只
 
 `capture_decision_quality_review.py` 預設 dry-run；`--confirm` 必須指定 explicit `--db-path`，疑似正式 DB 仍需額外 `--allow-production-like-db`。缺 journal、缺 source trace 或 sample size 不足都只代表 review gap / warning，需要人工判讀。
 
+V1.3 Evidence Operations weekly review CLI 用來把 scheduler readiness、Decision Quality、Signal Decay 與 action item 彙總成每週人工覆盤包。它預設只讀並輸出 JSON 或 Markdown；`production_scheduler_allowed` 仍固定為 `false`。樣本不足時 status 會是 `coverage_only`，只能要求繼續累積 evidence，不可解讀成策略結論。Signal Decay 的 `demote_candidate` / `retire_candidate` 只會列為 `manual_lifecycle_candidates`，每筆 `apply_action=false`，不會自動修改策略版本。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --json-output
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --plan-action-items --json-output
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --confirm-action-items --action-owner human --json-output
+```
+
+`--plan-action-items` 只預覽 open Decision Quality item 會形成哪些 action item，不寫入 DB。`--confirm-action-items` 才會 append-only 寫入指定 DB，且必須提供 explicit `--db-path`；疑似正式 DB 仍需額外 `--allow-production-like-db`。一般覆盤應先在 working-copy DB 執行。
+
 Report evidence boundary 固定為：This report is research evidence only. Close-to-close forward return is not executable live performance. No trading recommendation is produced.
 
 ### 9.9.2 Evidence Review Manual Smoke / Multi-day Dry-run
@@ -1132,6 +1142,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-12：證據覆盤頁新增「目前資料庫」資訊列與複製路徑按鈕，協助人工 smoke 時確認 UI 實際讀取的 SQLite DB。
 - 2026-07-12：新增 safe scheduled wrappers 操作說明與 morning check guide；每日 task 僅做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
 - 2026-07-12：更新 safe scheduled 操作說明為 CMD wrapper + `schtasks.exe` 現況，記錄 05:00 / 05:15 Windows Task Scheduler task 與 05:30 Codex app read-only 摘要 automation；production confirm 仍未啟用。
+- 2026-07-03：新增 V1.3 Evidence Operations weekly review CLI 操作說明，標示 manual approval package、action item planning、production scheduler disabled 與 signal decay candidate 不自動套用 lifecycle action。
 - 2026-07-02：完成 V1.1 workflow bridge v1 操作說明，補充推薦 Profile 進階摘要、buy / sell score 與權重差異、推薦回放是 Profile / Config 歷史重播，以及升降級判讀需經 Research Run / Evidence 與人工 lifecycle gate。
 - 2026-06-23：完成 Healthcheck Batch 2 計畫範圍實作後的操作說明：Daily Decision Desk answer-first dashboard、Smart Money 5 / 20 / 60 日語意診斷、quantity concentration 與股票焦點下鑽。
 - 2026-06-23：完成 Healthcheck Batch 4 Research Lab 結果頁操作說明：推薦回放結果頁重排、Registry 比較中文化與空狀態、批次結果比較目的、Train-Test / Walk-forward 樣本可靠度提示。

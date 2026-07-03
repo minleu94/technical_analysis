@@ -124,6 +124,8 @@ V1.1 workflow bridge v1 新增 `ProfileReplayComparisonService` 與 `profile_rep
 
 V1.2 Research Credibility & Execution Model v1 在同一 application boundary 內補強 replay 可信度揭露。`ProfileReplayComparisonService` 支援 training period 與 validation period 分離，且 validation start 必須晚於 training end；comparison row 同時保留 training / validation metrics，lifecycle candidate 以 validation metrics 主導，避免同一段資料同時調參與宣稱有效。`RecommendationPortfolioBacktestService` 在既有推薦組合 replay details 中新增 `rolling_risk_metrics`、`microstructure_preflight` 與 `relative_attribution`：rolling risk 只讀已產生 equity curve / holdings，microstructure preflight 只檢查 history 中可選的處置股、分盤、全額交割、漲跌停鎖死與除權息欄位，relative attribution 只讀 replay 期間 history 中可選 benchmark / industry / concept reference columns。這些 diagnostics 不改 PnL、成交價、sizing、cash ledger、Research Run 或 Strategy Lifecycle。
 
+V1.3 Evidence Operations & Manual Lifecycle v1 新增 `EvidenceOperationsService`、`evidence_operations_dtos.py` 與 `scripts/build_evidence_operations_weekly_review.py`。該 service 位於 application layer，只彙總 `evaluate_evidence_scheduler_readiness()`、`DecisionQualityService` 與 `SignalDecayService` 的既有輸出，產生 weekly review、manual approval package、manual lifecycle candidates 與 action item planning。它不直接讀 UI state、不建立 scheduler、不改 Strategy Lifecycle state、不改 portfolio、不改 scoring；`production_scheduler_allowed` 固定為 false，Signal Decay candidate 只輸出 `apply_action=false` 的人工審核項目。Action item planning 預設 dry-run，只有 explicit confirm 才透過 Decision Quality repository append-only 建立 action item。
+
 Healthcheck Batch 4 新增 `research_result_presentation.py` 作為 Research Lab 結果頁呈現邊界。它只把已產生的推薦回放 summary、Train-Test report、Walk-forward fold summary 轉成 UI 文案與可靠度提示，不重跑回測、不重新抓取目前資料、不改變交易或績效計算。Train-Test / Walk-forward 樣本可靠度提示只讀交易數、Fold 數、OOS 與 consistency 等已存在結果 metadata；Registry 比較仍只讀已保存 metadata、equity curve 與 benchmark_results。Qt UI 可使用這些 helper 顯示「樣本不足，不宜作正式策略判斷」、資金使用與 Monte Carlo 語意，但不得把提示升級成交易建議、自動下單或持倉調整。
 
 Healthcheck Batch 5 將 `OptimizerService` 的參數掃描邊界明確化：單股最佳化仍只使用 `BacktestService._load_stock_data()` 預載一次資料，並沿用 SQLite-first、缺資料 fallback CSV 的資料來源策略；並行模型仍是 ThreadPoolExecutor，UI 允許 1 到 8 workers，但不宣稱 ProcessPool 或多進程。`grid_search()` 採 bounded in-flight futures，只提交少量已啟動子任務，取消時停止提交新組合並將 `CancelledError` 視為正常取消狀態。這個變更只影響任務排程、可預期性與 UI 回饋，不改策略訊號、撮合、績效、資金或推薦計算。
@@ -509,6 +511,7 @@ UI 修改：
 ## 16. 更新記錄
 
 - 2026-07-02：完成 V1.2 Research Credibility & Execution Model v1 架構同步，確認 Profile replay 訓練 / 驗證分離、推薦回放 rolling risk、microstructure preflight 與 relative attribution 都位於 application diagnostics boundary，不改交易、PnL、cash ledger 或策略生命週期。
+- 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1 架構同步，新增 weekly evidence operations service / CLI；manual approval package 與 action item planning 只供人工覆盤，不啟用 scheduler、不自動套用 lifecycle action。
 - 2026-07-02：完成 V1.1 workflow bridge v1 架構同步，新增 `ProfileReplayComparisonService` / DTO application boundary；Profile replay 比較只讀注入 runner 結果並輸出人工 lifecycle candidate，不寫 DB、不重算推薦、不自動升降級。
 - 2026-06-23：完成 Healthcheck Batch 2 架構同步，新增 `DecisionDeskDashboardComposer` 與 `SmartMoneySemanticService` 邊界；Daily Decision Desk answer-first dashboard 與 Smart Money 5 / 20 / 60 日語意診斷皆由 app service / DTO 提供，Qt UI 不重算籌碼或市場邏輯。
 - 2026-07-01：新增 Post-V1 evidence layer 架構邊界，確認 Evidence Event Store / Forward Outcome Calculator 只保存事件與 close-to-close research outcomes，不改 scoring、推薦權重、portfolio 或 UI。
