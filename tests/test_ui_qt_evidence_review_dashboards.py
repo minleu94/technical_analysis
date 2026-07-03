@@ -22,6 +22,13 @@ from app_module.live_research_gap_dashboard_dtos import (
     LiveResearchGapDashboardRequest,
     LiveResearchGapDashboardResult,
 )
+from app_module.evidence_operations_history_dashboard_dtos import (
+    EvidenceOperationsHistoryDashboardCards,
+    EvidenceOperationsHistoryDashboardRequest,
+    EvidenceOperationsHistoryDashboardResult,
+    EvidenceOperationsHistoryDashboardRow,
+)
+from ui_qt.models.evidence_operations_history_table_model import EvidenceOperationsHistoryTableModel
 from ui_qt.models.signal_decay_table_model import SignalDecayTableModel
 from ui_qt.views.decision_quality_view import DecisionQualityView
 from ui_qt.views.evidence_review_view import EvidenceReviewView
@@ -78,10 +85,11 @@ def test_evidence_review_view_contains_four_read_only_tabs() -> None:
         live_gap_service=FakeDashboard(LiveResearchGapDashboardResult(LiveResearchGapDashboardRequest(), LiveResearchGapDashboardCards())),
         signal_decay_service=FakeDashboard(SignalDecayDashboardResult(SignalDecayDashboardRequest(), SignalDecayDashboardCards())),
         decision_quality_service=FakeDashboard(DecisionQualityDashboardResult(DecisionQualityDashboardRequest(), DecisionQualityDashboardCards())),
+        evidence_history_service=FakeDashboard(EvidenceOperationsHistoryDashboardResult(EvidenceOperationsHistoryDashboardRequest(), EvidenceOperationsHistoryDashboardCards())),
     )
 
     labels = [view.tabs.tabText(index) for index in range(view.tabs.count())]
-    assert labels == ["前瞻證據", "研究落差", "訊號衰退", "決策品質"]
+    assert labels == ["前瞻證據", "研究落差", "訊號衰退", "決策品質", "覆盤歷史"]
     assert "不是買賣建議" in view.boundary_banner.text()
 
 
@@ -93,11 +101,33 @@ def test_evidence_review_view_shows_current_evidence_database_path() -> None:
         live_gap_service=FakeDashboard(LiveResearchGapDashboardResult(LiveResearchGapDashboardRequest(), LiveResearchGapDashboardCards())),
         signal_decay_service=FakeDashboard(SignalDecayDashboardResult(SignalDecayDashboardRequest(), SignalDecayDashboardCards())),
         decision_quality_service=FakeDashboard(DecisionQualityDashboardResult(DecisionQualityDashboardRequest(), DecisionQualityDashboardCards())),
+        evidence_history_service=FakeDashboard(EvidenceOperationsHistoryDashboardResult(EvidenceOperationsHistoryDashboardRequest(), EvidenceOperationsHistoryDashboardCards())),
         evidence_db_path=db_path,
     )
 
     assert "目前資料庫" in view.evidence_db_path_label.text()
     assert db_path in view.evidence_db_path_label.text()
+
+
+def test_evidence_operations_history_table_model_formats_scheduler_boundary() -> None:
+    app()
+    row = EvidenceOperationsHistoryDashboardRow(
+        period_start="2026-07-06",
+        period_end="2026-07-12",
+        review_status="coverage_only",
+        scheduler_readiness="ready_for_manual_confirm",
+        production_scheduler_allowed=False,
+        decision_quality_reviews_count=1,
+        signal_decay_observations_count=2,
+        manual_lifecycle_candidate_count=0,
+        warnings_count=1,
+        review_id="eor_123",
+    )
+    model = EvidenceOperationsHistoryTableModel((row,))
+
+    col = model.column_index("production_scheduler_allowed")
+    assert model.data(model.index(0, col)) == "否"
+    assert model.raw_value(0, "production_scheduler_allowed") is False
 
 
 def test_evidence_review_dashboard_date_filters_use_calendar_inputs() -> None:

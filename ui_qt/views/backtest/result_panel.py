@@ -18,6 +18,7 @@ from ui_qt.widgets.fast_chart_widget import (
 )
 from ui_qt.views.research_lab.run_registry_compare_widget import RunRegistryCompareWidget
 from app_module.decision_quality_dashboard_service import create_decision_quality_dashboard_service
+from app_module.evidence_operations_history_dashboard_service import create_evidence_operations_history_dashboard_service
 from app_module.forward_performance_dashboard_service import create_forward_performance_dashboard_service
 from app_module.live_research_gap_dashboard_service import create_live_research_gap_dashboard_service
 from app_module.signal_decay_dashboard_service import create_signal_decay_dashboard_service
@@ -393,6 +394,7 @@ class BacktestResultPanel(QWidget):
             live_gap_service=create_live_research_gap_dashboard_service(config),
             signal_decay_service=create_signal_decay_dashboard_service(config),
             decision_quality_service=create_decision_quality_dashboard_service(config),
+            evidence_history_service=create_evidence_operations_history_dashboard_service(config),
             evidence_db_path=str(getattr(config, "db_file", "")),
         )
         self.result_tabs.addTab(self.evidence_review_widget, "證據覆盤")

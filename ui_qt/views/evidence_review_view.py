@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QTabWidget, QVBoxLayout, QWidget
 
 from ui_qt.views.decision_quality_view import DecisionQualityView
+from ui_qt.views.evidence_operations_history_view import EvidenceOperationsHistoryView
 from ui_qt.views.live_research_gap_view import LiveResearchGapView
 from ui_qt.views.signal_decay_view import SignalDecayView
 from ui_qt.widgets.evidence_boundary_banner import EvidenceBoundaryBanner
@@ -17,6 +18,7 @@ class EvidenceReviewView(QWidget):
         live_gap_service,
         signal_decay_service,
         decision_quality_service,
+        evidence_history_service=None,
         evidence_db_path: str | None = None,
         parent=None,
     ) -> None:
@@ -33,6 +35,8 @@ class EvidenceReviewView(QWidget):
         self.tabs.addTab(LiveResearchGapView(live_gap_service, auto_refresh=False), "研究落差")
         self.tabs.addTab(SignalDecayView(signal_decay_service, auto_refresh=False), "訊號衰退")
         self.tabs.addTab(DecisionQualityView(decision_quality_service, auto_refresh=False), "決策品質")
+        if evidence_history_service is not None:
+            self.tabs.addTab(EvidenceOperationsHistoryView(evidence_history_service, auto_refresh=False), "覆盤歷史")
         layout.addWidget(self.tabs, stretch=1)
 
     def _add_database_path_row(self, layout: QVBoxLayout) -> None:
