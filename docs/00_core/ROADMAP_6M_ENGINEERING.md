@@ -32,7 +32,7 @@ Post-V1 版本節奏：
 - V1.2：Research Credibility & Execution Model v1 已完成。已補 replay 訓練 / 獨立驗證分離、台股微結構 preflight、rolling risk metrics 與 benchmark / industry / concept attribution；完整撮合、買賣價差與正式微結構資料源仍是 residual。
 - V1.3：Evidence Operations & Manual Lifecycle v1 已完成。Evidence Review、Decision Quality、Signal Decay 與 manual approval 已可透過 weekly evidence operations package 形成每週覆盤節奏；production scheduler 仍需 explicit approval。
 - V1.4：Evidence Review History v1 已完成。Weekly review 可 append-only 保存為 history，CLI 可 save/list，Research Lab `Evidence Review -> 覆盤歷史` 可唯讀檢查每週 status、scheduler readiness、Decision Quality / Signal Decay 數量、manual lifecycle candidate 與 warnings；history 只保存人工覆盤快照，不啟用 scheduler、不自動 lifecycle action。
-- 2026-07-03 follow-up：batch / CLI Daily Decision Desk snapshot 已改用 non-UI service-backed builder，並補上 numpy scalar JSON 正規化；working-copy confirm smoke 可保存 risk-prompt evidence 且 idempotency passed。Production scheduler 仍因 Recommendation / watchlist / portfolio source gaps 維持 disabled。
+- 2026-07-03 follow-up：batch / CLI Daily Decision Desk snapshot 已改用 non-UI service-backed builder，並補上 numpy scalar JSON 正規化；working-copy confirm smoke 可保存 risk-prompt evidence 且 idempotency passed。受控 tmp run 已保存 working-copy Recommendation result 並驗證 requested sources idempotency；Production scheduler 仍因 exclusion payload / watchlist / portfolio source gaps 維持 disabled。
 - V2.0：Unified Decision Workbench。只有在 V1.1 至 V1.4 的使用與 evidence 證明資訊架構應收斂後，才評估完整整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
 
 版本化交付細節見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)。

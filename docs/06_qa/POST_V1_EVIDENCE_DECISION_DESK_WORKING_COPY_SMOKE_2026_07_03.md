@@ -55,14 +55,35 @@
 | duplicate events | `false` |
 | idempotency | `passed` |
 | readiness after smoke | `not_ready` |
+| persisted recommendation follow-up | `20` recommendations saved to ignored output root |
+| recommendation + risk-prompt requested run | run 1 inserted `20` recommendation events / `80` outcomes; run 2 inserted `0` events |
+| final working-copy evidence events | `915` |
+| final working-copy outcomes | `3660` |
 
 Working-copy smoke 第一次寫入 `895` 筆 `risk_prompt` events 與 `3580` 筆 outcomes；第二次重跑時 events 沒有膨脹，`events_skipped_duplicate=895`，outcomes 維持 `3580` 筆並以 update 路徑處理。
 
+後續同日使用既有 `RecommendationService` 與 `RecommendationRepository`，在 `output_root=tmp/evidence_ops_continue_20260703/output` 保存 working-copy Recommendation result：`rec_working_copy_20260703_regime_default`，共 `20` 筆 recommendation，可讀回。這不是 production recommendation repository，也不是交易建議。
+
+再以 `scripts/run_evidence_pipeline.py --sources recommendation,risk-prompt --result-id rec_working_copy_20260703_regime_default --confirm` 對同一份 ignored working-copy DB 跑兩次：
+
+- run 1：`events_inserted=20`，`events_skipped_duplicate=895`，`outcomes_created=80`，`outcomes_updated=3580`。
+- run 2：`events_inserted=0`，`events_skipped_duplicate=915`，`outcomes_created=0`，`outcomes_updated=3660`。
+- final DB count：`recommendation_included=20`、`risk_prompt_low_liquidity=885`、`risk_prompt_relative_weakness=10`；`evidence_events=915`、`evidence_outcomes=3660`。
+
+Requested sources (`recommendation,risk-prompt`) 的 runner summary 可達 `ready_for_manual_confirm`，但整體 source coverage 仍因 watchlist / portfolio / exclusion payload 缺口維持 `not_ready`。
+
 ## 剩餘 gaps
 
-Source coverage follow-up 結果：
+Daily Decision Desk follow-up 後的 source coverage 曾顯示：
 
 - `recommendation_persisted_missing`
+- `watchlist_trigger_snapshot_section_missing`
+- `portfolio_alert_snapshot_section_missing`
+- `why_not_exclusion_payload_missing`
+- `liquidity_gate_payload_missing`
+
+保存 working-copy Recommendation result 後，final source coverage 收斂為：
+
 - `watchlist_trigger_snapshot_section_missing`
 - `portfolio_alert_snapshot_section_missing`
 - `why_not_exclusion_payload_missing`
@@ -79,7 +100,8 @@ Working-copy smoke 對 requested Daily Decision Desk sources 的 blocking gaps �
 - `risk_prompt_capture_ready` 已變為 `true`，且可在 working-copy confirm smoke 中寫入事件與 outcomes。
 - `watchlist_trigger` 仍 missing，原因是目前 output root 的 default watchlist 沒有項目；不應用測試資料偽造 ready。
 - `portfolio_alert` 仍 missing，原因是目前 portfolio 沒有 active positions；不應用測試持倉偽造 ready。
-- `recommendation_persisted_missing` 與 why-not / liquidity payload 缺口仍需由實際 Recommendation result persistence 或後續 recommendation workflow 補齊。
+- `recommendation_persisted_missing` 已在這份 working-copy 中解除；但此操作仍屬人工受控 tmp run，尚未代表 production scheduler 可用。
+- why-not / liquidity payload 仍缺，因目前 Recommendation result 保存路徑不會產生 exclusion payload；需後續明確設計或 workflow 補齊。
 
 ## 邊界
 
@@ -92,6 +114,6 @@ Working-copy smoke 對 requested Daily Decision Desk sources 的 blocking gaps �
 
 ## 下一步
 
-1. 先用真實工作流產生 persisted Recommendation result，確認 why-not / liquidity optional payload 是否可用。
+1. 補齊 Recommendation why-not / liquidity exclusion payload 的正式產生與保存路徑；不得由 evidence importer 重算或偽造。
 2. 以人工建立的實際 watchlist 與實際 / 模擬持倉資料重跑 Decision Desk snapshot，確認 `watchlist_trigger` 與 `portfolio_alert` 是否由 `missing` 轉為 `observed` / `degraded`。
 3. 在上述 source gaps 解除前，production scheduler 維持 disabled。

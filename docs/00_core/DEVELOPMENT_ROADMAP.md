@@ -80,8 +80,8 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 5. **已完成：Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1**
    - V1.1 補 workflow bridge；V1.2 補 research credibility 與 execution diagnostics；V1.3 補 weekly evidence operations 與 manual lifecycle package；V1.4 補 weekly review history 與 Research Lab 覆盤歷史子頁。
    - 2026-07-03 已完成第一個 weekly evidence operations + history working-copy operating-cycle，結果仍為 `coverage_only`，blocking gaps 尚未關閉。
-   - 同日 follow-up 已修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 `risk_prompt` evidence 且 repeat=2 idempotency passed。`decision_desk_snapshot_missing` 與 `working_copy_confirm_smoke_missing_or_failed` 已收斂為真實 source gaps。
-   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 修正 `recommendation_persisted_missing`、why-not / liquidity payload、watchlist 無項目與 portfolio 無 active positions；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
+   - 同日 follow-up 已修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 `risk_prompt` evidence 且 repeat=2 idempotency passed。受控 tmp run 也已保存 working-copy Recommendation result，並驗證 `recommendation,risk-prompt` requested sources 可 idempotent confirm。`decision_desk_snapshot_missing`、`recommendation_persisted_missing` 與 `working_copy_confirm_smoke_missing_or_failed` 已收斂為真實 source gaps。
+   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 why-not / liquidity payload、watchlist 無項目與 portfolio 無 active positions；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
 
 6. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
@@ -129,4 +129,4 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 - 2026-07-03：完成 V1.4 Evidence Review History v1，Roadmap Hub 下一步轉為實際使用 weekly evidence operations + history 累積多週覆盤證據。
 - 2026-07-03：整理 roadmap / docs / phase 判讀邊界，確認 `docs/05_phases/` 保留為 Historical / Reference，不作目前 roadmap。
 - 2026-07-03：完成第一個 weekly evidence operations + history working-copy run，確認 history idempotency；結果仍為 `coverage_only`，production scheduler 維持未啟用。
-- 2026-07-03：修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 risk-prompt evidence 且 repeat=2 idempotency passed，剩餘 blockers 收斂為 Recommendation / watchlist / portfolio source gaps。
+- 2026-07-03：修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 risk-prompt evidence 且 repeat=2 idempotency passed；受控 tmp run 已保存 working-copy Recommendation result，剩餘 blockers 收斂為 exclusion payload / watchlist / portfolio source gaps。
