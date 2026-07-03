@@ -1,6 +1,6 @@
 ﻿# 6 個月可執行工程路線（2026-06 至 2026-12）
 
-> **最後更新**：2026-07-04
+> **最後更新**：2026-07-03
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。當它與短期 Snapshot 衝突時，以 Snapshot 的「本週優先事項」決定今天先做什麼；當它與產品願景文件衝突時，本文件決定可執行交付順序。
 
 ---
@@ -32,6 +32,7 @@ Post-V1 版本節奏：
 - V1.2：Research Credibility & Execution Model v1 已完成。已補 replay 訓練 / 獨立驗證分離、台股微結構 preflight、rolling risk metrics 與 benchmark / industry / concept attribution；完整撮合、買賣價差與正式微結構資料源仍是 residual。
 - V1.3：Evidence Operations & Manual Lifecycle v1 已完成。Evidence Review、Decision Quality、Signal Decay 與 manual approval 已可透過 weekly evidence operations package 形成每週覆盤節奏；production scheduler 仍需 explicit approval。
 - V1.4：Evidence Review History v1 已完成。Weekly review 可 append-only 保存為 history，CLI 可 save/list，Research Lab `Evidence Review -> 覆盤歷史` 可唯讀檢查每週 status、scheduler readiness、Decision Quality / Signal Decay 數量、manual lifecycle candidate 與 warnings；history 只保存人工覆盤快照，不啟用 scheduler、不自動 lifecycle action。
+- 2026-07-03 follow-up：batch / CLI Daily Decision Desk snapshot 已改用 non-UI service-backed builder，並補上 numpy scalar JSON 正規化；working-copy confirm smoke 可保存 risk-prompt evidence 且 idempotency passed。Production scheduler 仍因 Recommendation / watchlist / portfolio source gaps 維持 disabled。
 - V2.0：Unified Decision Workbench。只有在 V1.1 至 V1.4 的使用與 evidence 證明資訊架構應收斂後，才評估完整整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
 
 版本化交付細節見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)。
@@ -105,7 +106,7 @@ V1 已完成交付：
 後續交付：
 
 - V1.1 Decision Workflow Integration v1：已先完成推薦 Profile / 推薦回放 / lifecycle candidate 判讀的 workflow bridge；Daily Decision Desk 仍作為每日起點，Market Watch / Smart Money 仍保留 drill-down evidence panel 邊界，不在 V1.1 做完整 Tab 合併。
-- Forward Performance Dashboard：Evidence Importers v1 已可將 persisted Recommendation result 與 durable Daily Decision Desk snapshot source 轉為 events；Forward Performance Read Model v1 已可唯讀彙總 ready / pending / missing outcomes、return / excess return、quality 與 warnings。Daily Decision Desk snapshot repository / capture CLI / source coverage inspection v1 已完成；Why Not / Liquidity exclusion payload 為 optional / partial。Research Lab 已新增 `Evidence Review` read-only UI pack，內含 `Forward Evidence`、`Live vs Research Gap`、`Signal Decay` 與 `Decision Quality` 子頁；Forward Evidence 可檢查 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 後續 5 / 10 / 20 / 60 日 close-to-close research outcome、benchmark / industry 缺口與資料品質；其他子頁可唯讀檢查 gap observation、decay observation 與 process review items；`scripts/run_evidence_pipeline.py` 已可手動執行 scheduler dry-run runner，串接 source coverage、snapshot capture、event capture、outcome calculation、summary 與 diagnostics report，預設 dry-run，confirm 只允許 explicit working-copy DB。
+- Forward Performance Dashboard：Evidence Importers v1 已可將 persisted Recommendation result 與 durable Daily Decision Desk snapshot source 轉為 events；Forward Performance Read Model v1 已可唯讀彙總 ready / pending / missing outcomes、return / excess return、quality 與 warnings。Daily Decision Desk snapshot repository / capture CLI / source coverage inspection v1 已完成；batch / CLI snapshot capture 已改用 non-UI service-backed builder，避免 durable snapshot 在非 UI 路徑全 section missing；Why Not / Liquidity exclusion payload 為 optional / partial。Research Lab 已新增 `Evidence Review` read-only UI pack，內含 `Forward Evidence`、`Live vs Research Gap`、`Signal Decay` 與 `Decision Quality` 子頁；Forward Evidence 可檢查 Watchlist Trigger、Recommendation、Why Not / Liquidity Gate、Portfolio Alert 後續 5 / 10 / 20 / 60 日 close-to-close research outcome、benchmark / industry 缺口與資料品質；其他子頁可唯讀檢查 gap observation、decay observation 與 process review items；`scripts/run_evidence_pipeline.py` 已可手動執行 scheduler dry-run runner，串接 source coverage、snapshot capture、event capture、outcome calculation、summary 與 diagnostics report，預設 dry-run，confirm 只允許 explicit working-copy DB。
 - Concept Basket / 題材籃子，補官方產業分類無法捕捉台股題材輪動的限制。
 - Decision Desk 的 evidence summary：每個提示能回到樣本數、forward evidence、資料品質與適用限制。
 

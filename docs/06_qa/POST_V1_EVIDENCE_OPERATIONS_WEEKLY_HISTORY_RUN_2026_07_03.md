@@ -66,3 +66,9 @@ Next actions：
 - 未完成多週真實覆盤樣本累積。
 - 未產生或套用任何 lifecycle action。
 - 未產生買賣建議。
+
+## 同日 follow-up
+
+2026-07-03 後續追查確認 `decision_desk_snapshot_missing` 與 `working_copy_confirm_smoke_missing_or_failed` 主要來自 batch / CLI 路徑未使用 service-backed `DecisionDeskSnapshotBuilder`。已新增 non-UI builder factory，並補上 numpy scalar JSON 正規化。
+
+後續 working-copy 驗證記錄見 `POST_V1_EVIDENCE_DECISION_DESK_WORKING_COPY_SMOKE_2026_07_03.md`。結果顯示 durable snapshot 已可看到 `market_regime`、`market_breadth`、`sector_rotation`、`relative_strength_liquidity` 與 `risk_prompt`；`risk_prompt_capture_ready=true`，working-copy confirm smoke 重跑 idempotency passed。剩餘 scheduler blockers 仍為真實 source 缺口：Recommendation result / why-not / liquidity payload 尚未持久化，default watchlist 無項目，portfolio 無 active positions。
