@@ -40,3 +40,31 @@ def test_weekly_review_cli_outputs_json_without_enabling_scheduler(tmp_path: Pat
     assert payload["status"] in {"coverage_only", "needs_manual_review", "ready_for_weekly_closeout"}
     assert payload["write_performed"] is False
 
+
+def test_weekly_review_cli_action_item_plan_dry_run_does_not_write(tmp_path: Path) -> None:
+    db_path = tmp_path / "evidence-ops-cli.db"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_evidence_operations_weekly_review.py",
+            "--start-date",
+            "2026-06-24",
+            "--end-date",
+            "2026-06-30",
+            "--db-path",
+            str(db_path),
+            "--plan-action-items",
+            "--json-output",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["action_item_plan"]["dry_run"] is True
+    assert payload["action_item_plan"]["action_items_created"] == 0
+    assert payload["write_performed"] is False

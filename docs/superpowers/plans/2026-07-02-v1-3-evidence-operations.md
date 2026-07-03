@@ -23,7 +23,7 @@
 - [x] Implement DTOs and service.
 - [x] Add CLI with JSON / Markdown output.
 - [x] Verify focused tests pass.
-- [ ] Commit checkpoint.
+- [x] Commit checkpoint.
 
 ### Task 2: Action Item Loop
 
@@ -32,9 +32,9 @@
 - Modify: `app_module/decision_quality_service.py`
 - Test: `tests/test_evidence_operations_service.py`
 
-- [ ] Add tests for planning action items from open Decision Quality items without duplicate descriptions.
-- [ ] Implement append-only action item planning via `DecisionQualityService`.
-- [ ] Verify no lifecycle action is applied and scheduler remains disabled.
+- [x] Add tests for planning action items from open Decision Quality items without duplicate descriptions.
+- [x] Implement append-only action item planning via `DecisionQualityService`.
+- [x] Verify no lifecycle action is applied and scheduler remains disabled.
 - [ ] Commit checkpoint.
 
 ### Task 3: QA And Documentation Closeout
@@ -53,4 +53,3 @@
 - [ ] Update scoped authority docs after V1.3 completion only.
 - [ ] Run focused tests, py_compile, and relevant evidence tests.
 - [ ] Commit and push branch.
-

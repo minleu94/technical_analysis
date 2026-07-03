@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from app_module.decision_quality_service import DecisionQualityService
 from app_module.evidence_operations_dtos import (
+    EvidenceOperationsActionItemPlan,
     EvidenceOperationsDecisionQuality,
     EvidenceOperationsManualApproval,
     EvidenceOperationsSignalDecay,
@@ -77,6 +78,55 @@ class EvidenceOperationsService:
             write_performed=False,
         )
 
+    def plan_action_items(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        owner: str = "human",
+        confirm: bool = False,
+    ) -> EvidenceOperationsActionItemPlan:
+        reviews = self.decision_quality_service.list_reviews(start_date=start_date, end_date=end_date)
+        review_ids = {review.review_id for review in reviews}
+        open_items = [
+            item for item in self.decision_quality_service.list_items(status="open") if item.review_id in review_ids
+        ]
+        existing_item_ids: set[str] = set()
+        for review_id in sorted(review_ids):
+            for action in self.decision_quality_service.list_action_items(review_id=review_id):
+                if action.item_id:
+                    existing_item_ids.add(action.item_id)
+
+        planned: list[dict[str, Any]] = []
+        created = 0
+        skipped = 0
+        for item in open_items:
+            if item.item_id in existing_item_ids:
+                skipped += 1
+                continue
+            payload = self._action_payload(item, owner=owner)
+            planned.append(payload)
+            if confirm:
+                self.decision_quality_service.create_action_item(
+                    review_id=item.review_id,
+                    item_id=item.item_id,
+                    description=payload["description"],
+                    owner=owner,
+                    metadata_json=payload["metadata_json"],
+                )
+                created += 1
+        return EvidenceOperationsActionItemPlan(
+            start_date=start_date,
+            end_date=end_date,
+            dry_run=not confirm,
+            open_items_seen=len(open_items),
+            action_items_planned=len(planned),
+            action_items_created=created,
+            action_items_skipped_existing=skipped,
+            planned_action_items=tuple(planned),
+            write_performed=bool(confirm and created),
+        )
+
     def render_markdown(self, report: EvidenceOperationsWeeklyReview) -> str:
         rows = [
             f"# V1.3 Evidence Operations Weekly Review ({report.start_date} 至 {report.end_date})",
@@ -93,6 +143,24 @@ class EvidenceOperationsService:
         rows.extend(f"- `{action}`" for action in report.next_actions)
         rows.extend(["", "## Safety Boundary", "- 本報告只供人工覆盤，不啟用 production scheduler，不自動套用 lifecycle action。"])
         return "\n".join(rows) + "\n"
+
+    @staticmethod
+    def _action_payload(item: Any, *, owner: str) -> dict[str, Any]:
+        source = item.source_id or item.related_decay_id or item.related_evidence_event_id or item.item_id
+        description = f"人工覆盤 {item.item_type}: {source}".strip()
+        return {
+            "review_id": item.review_id,
+            "item_id": item.item_id,
+            "description": description,
+            "owner": owner,
+            "metadata_json": {
+                "source": "v1_3_evidence_operations",
+                "item_type": item.item_type,
+                "related_decay_id": item.related_decay_id,
+                "related_evidence_event_id": item.related_evidence_event_id,
+                "apply_lifecycle_action": False,
+            },
+        }
 
     @staticmethod
     def _manual_approval(payload: dict[str, Any]) -> EvidenceOperationsManualApproval:
@@ -202,4 +270,3 @@ class EvidenceOperationsService:
             actions.append("prepare_weekly_closeout_note")
         actions.append("keep_production_scheduler_disabled")
         return tuple(dict.fromkeys(actions))
-

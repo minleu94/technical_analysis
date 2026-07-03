@@ -127,3 +127,42 @@ def test_weekly_review_with_insufficient_evidence_stays_coverage_only(tmp_path: 
     assert "collect_more_evidence" in report.next_actions
     assert "strategy_conclusion" not in " ".join(report.next_actions)
 
+
+def test_action_item_planning_is_dry_run_until_confirmed_and_skips_existing(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    decision_repo = DecisionQualityRepository(config)
+    decision_repo.save_review(_review(), items=[_item()])
+    service = EvidenceOperationsService(config, readiness_evaluator=_readiness)
+
+    dry_run = service.plan_action_items(
+        start_date="2026-06-24",
+        end_date="2026-06-30",
+        owner="human",
+        confirm=False,
+    )
+    assert dry_run.dry_run is True
+    assert dry_run.action_items_created == 0
+    assert decision_repo.list_action_items(review_id="dqr-weekly") == []
+
+    confirmed = service.plan_action_items(
+        start_date="2026-06-24",
+        end_date="2026-06-30",
+        owner="human",
+        confirm=True,
+    )
+    duplicate = service.plan_action_items(
+        start_date="2026-06-24",
+        end_date="2026-06-30",
+        owner="human",
+        confirm=True,
+    )
+
+    assert confirmed.dry_run is False
+    assert confirmed.action_items_created == 1
+    assert confirmed.action_items_skipped_existing == 0
+    assert duplicate.action_items_created == 0
+    assert duplicate.action_items_skipped_existing == 1
+    actions = decision_repo.list_action_items(review_id="dqr-weekly")
+    assert len(actions) == 1
+    assert actions[0].metadata_json["source"] == "v1_3_evidence_operations"
+    assert actions[0].metadata_json["apply_lifecycle_action"] is False

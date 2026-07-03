@@ -131,3 +131,37 @@ class EvidenceOperationsWeeklyReview:
             "write_performed": self.write_performed,
         }
 
+
+@dataclass(frozen=True)
+class EvidenceOperationsActionItemPlan:
+    start_date: str
+    end_date: str
+    dry_run: bool = True
+    open_items_seen: int = 0
+    action_items_planned: int = 0
+    action_items_created: int = 0
+    action_items_skipped_existing: int = 0
+    planned_action_items: tuple[dict[str, Any], ...] = ()
+    write_performed: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "dry_run", bool(self.dry_run))
+        object.__setattr__(self, "open_items_seen", int(self.open_items_seen))
+        object.__setattr__(self, "action_items_planned", int(self.action_items_planned))
+        object.__setattr__(self, "action_items_created", int(self.action_items_created))
+        object.__setattr__(self, "action_items_skipped_existing", int(self.action_items_skipped_existing))
+        object.__setattr__(self, "planned_action_items", tuple(_dict(item) for item in _tuple(self.planned_action_items)))
+        object.__setattr__(self, "write_performed", bool(self.write_performed))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "dry_run": self.dry_run,
+            "open_items_seen": self.open_items_seen,
+            "action_items_planned": self.action_items_planned,
+            "action_items_created": self.action_items_created,
+            "action_items_skipped_existing": self.action_items_skipped_existing,
+            "planned_action_items": [dict(item) for item in self.planned_action_items],
+            "write_performed": self.write_performed,
+        }
