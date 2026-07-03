@@ -243,6 +243,9 @@ class DecisionQualityService:
     def create_action_item(self, **kwargs: Any) -> Any:
         return self.repository.create_action_item(**kwargs)
 
+    def list_action_items(self, **kwargs: Any) -> Any:
+        return self.repository.list_action_items(**kwargs)
+
     def _trade_source_items(self, review_id: str, trades: list[Any], journal_links: set[str]) -> list[DecisionQualityItem]:
         items: list[DecisionQualityItem] = []
         for trade in trades:
