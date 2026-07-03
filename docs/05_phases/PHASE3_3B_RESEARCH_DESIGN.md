@@ -1,5 +1,7 @@
 # Phase 3.3b 研究設計規格：策略與回測強化
 
+> **歷史判讀**：本文件保留為 Phase 3.3b 研究設計追溯，不作為目前 roadmap、目前完成狀態或下一步優先順序依據。目前狀態請看 `../00_core/PROJECT_SNAPSHOT.md`；未來路線請看 `../00_core/ROADMAP_6M_ENGINEERING.md`；Post-V1 版本節奏請看 `../00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`。
+
 ## 目標
 
 完成真正的閉環：**推薦 → 回測 → 最佳化 → Promote 成策略版本 → 回到推薦**

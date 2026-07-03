@@ -1,5 +1,7 @@
 # Phase 2A：盤點讀取來源報告（已完成）
 
+> **歷史判讀**：本文件保留為 CSV-first 到 DB-first 過渡期盤點追溯，不作為目前 roadmap、目前完成狀態或下一步優先順序依據。目前資料架構請看 `../01_architecture/system_architecture.md` 與 `../03_data/`；目前狀態請看 `../00_core/PROJECT_SNAPSHOT.md`。
+
 > **建立日期**：2026-06-03  
 > **系統定位**：自 CSV-first 邁向 DB-first 的過渡期盤點  
 > **當前狀態**：已完成。本報告中盤點的所有「主讀 CSV 數據的代碼區塊」均已於 2026-06-03 當天藉由 **Phase 2B DB-first 讀取改造** 與 **Phase 2C SQLite 視覺查詢面板** 實作完畢，系統已全面升級為 SQLite 優先、CSV 為備用降級（DB-first）的高效能架構。

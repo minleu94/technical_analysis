@@ -1,5 +1,7 @@
 # Phase 3.5 研究 SOP 文檔
 
+> **歷史判讀**：本目錄保留為 Phase 3.5 研究 SOP 追溯，不作為目前 roadmap、目前完成狀態或下一步優先順序依據。目前操作請看 `../../07_guides/APPLICATION_MANUAL.md`；目前狀態請看 `../../00_core/PROJECT_SNAPSHOT.md`；Post-V1 版本節奏請看 `../../00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`。
+
 ## 概述
 
 Phase 3.5（Readiness）的目標是將已完成的 Phase 3 研究閉環轉化為可穩定實際使用的操作流程與判讀標準，作為進入 Phase 4（持倉管理）的前置 Gate。

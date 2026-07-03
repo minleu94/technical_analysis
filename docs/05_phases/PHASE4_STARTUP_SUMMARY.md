@@ -1,5 +1,7 @@
 # Phase 4 啟動總結
 
+> **歷史判讀**：本文件保留為 Phase 4 啟動摘要追溯，不作為目前 roadmap、目前完成狀態或下一步優先順序依據。目前狀態請看 `../00_core/PROJECT_SNAPSHOT.md`；目前 Portfolio / lifecycle 架構請看 `../01_architecture/system_architecture.md`；Post-V1 版本節奏請看 `../00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`。
+
 ## 概述
 
 Phase 4 的最小可用骨架已建立，提供 **Read-only / Decision-support** 的 Position/Portfolio Layer，用於觀察、理解與管理既有策略/股票的部位狀態。

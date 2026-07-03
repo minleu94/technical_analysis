@@ -1,5 +1,7 @@
 # 指標判讀優先順序
 
+> **歷史判讀**：本文件保留為 Phase 3.5 研究 SOP 追溯，不作為目前 roadmap、目前完成狀態或下一步優先順序依據。目前操作請看 `../../07_guides/APPLICATION_MANUAL.md`；目前狀態請看 `../../00_core/PROJECT_SNAPSHOT.md`；Post-V1 版本節奏請看 `../../00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`。
+
 ## 概述
 
 本文檔定義了回測指標的**優先順序**和**判讀標準**，幫助使用者在固定時間內快速判斷回測結果的合理性。
