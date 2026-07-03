@@ -1,6 +1,6 @@
 ﻿# DEVELOPMENT_ROADMAP（Roadmap Hub）
 
-> **最後更新**：2026-07-02
+> **最後更新**：2026-07-03
 > **定位**：本文件是 Roadmap Hub，不再保存完整歷史長文。它負責指向目前狀態、6 個月工程路線、系統架構與歷史歸檔。
 
 ---
@@ -72,17 +72,21 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
    - Month 4 Daily Decision Desk v1 已以 service-backed daily workflow 收尾，UI 只讀 service snapshot，不重算 scoring、screening、portfolio、broker flow 或 liquidity。
    - Month 5 已完成 Fundamental Layer 的保守接入：正式 fundamental tables、月營收 / 季度財報 / P/E records、Fundamental provider/service、Revenue / statement / valuation adapters、available_date gate 與 diagnostics 已落地。P/B、P/S presentation policy 已採 guarded ready，只接受 governed external observations 或後續明確 backfill records；官方歷史 point-in-time 公告日仍保留為後續 residual。
 
-4. **已完成 v1，轉入深化：Month 6 Strategy Lifecycle 與 Portfolio Feedback**
+4. **已完成：Month 6 Strategy Lifecycle 與 Portfolio Feedback v1**
    - 已完成第一輪資料契約與 service：Promote / demote / retire rule engine、StrategyDriftDetector、Regime compatibility、append-only lifecycle evidence、Portfolio post-trade attribution、Live vs research gap report 與 Portfolio Review snapshot。
    - Registry-based Promote Gate 已改走 Month 6 lifecycle gate，成功升級後可保存 applied evidence；demote / retire 先保存 proposed evidence；持倉管理新增「生命週期回顧」分頁。v1 不直接改 scoring、回測績效、Portfolio PnL 或 fundamental factor 權重。
-   - 下一步轉入 Month 6.1：生命週期回顧 UI 完整 QA、Manual Approval Workflow、Portfolio Review Dashboard 深化、Strategy Evidence Explainability 與 Month 6 QA Checklist。
+   - Month 6.1 相關人工審核、Review Dashboard 與 evidence explainability 後續，已被 Post-V1 V1.3 / V1.4 evidence operations 與 history 節奏承接。
 
-5. **P2：Phase 5 研究輸出後續**
+5. **已完成：Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1**
+   - V1.1 補 workflow bridge；V1.2 補 research credibility 與 execution diagnostics；V1.3 補 weekly evidence operations 與 manual lifecycle package；V1.4 補 weekly review history 與 Research Lab 覆盤歷史子頁。
+   - 目前下一步是實際使用 weekly evidence operations + history 累積多週覆盤證據；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
+
+6. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
 
-6. **P3：文件治理持續檢查**
+7. **P3：文件治理持續檢查**
    - Snapshot、6M Roadmap、Architecture、Index、Agent 指引已採 Scoped SSOT；後續功能變更需依 Coverage Map 同步更新入口摘要。
-   - 清理仍引用舊 Phase / 舊 UI 路徑的 Active 文件，並維持 Manual completeness Gate。
+   - `docs/05_phases/` 已降格為 Historical / Reference；後續若要搬移或刪除，需先修正引用並保留回滾路徑。
 
 ---
 
@@ -103,6 +107,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 - 舊 Roadmap 未完成事項的唯一處置見 [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md)。
 - 已執行完畢的短期行動計畫見 [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md)。
 - 文檔重組與刪除規則見 [DOCUMENTATION_STRUCTURE.md](DOCUMENTATION_STRUCTURE.md)。
+- `docs/05_phases/` 目前保留為 Historical / Reference 區，用於追溯 Phase 2 / Phase 3.3b / Phase 3.5 / Phase 4 的設計與 SOP；其中的「下一步」「進行中」「Phase Gate」不作目前 roadmap 或優先順序依據。
 
 ---
 
@@ -120,3 +125,4 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 - 2026-07-02：新增 V1.1 至 V2.0 版本路線圖入口，將 Post-V1 主線拆為 V1.1 workflow bridge、V1.2 research credibility、V1.3 evidence operations 與 V2.0 Unified Decision Workbench 評估。
 - 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1，Roadmap Hub 下一步轉為實際使用 weekly evidence operations 累積覆盤證據。
 - 2026-07-03：完成 V1.4 Evidence Review History v1，Roadmap Hub 下一步轉為實際使用 weekly evidence operations + history 累積多週覆盤證據。
+- 2026-07-03：整理 roadmap / docs / phase 判讀邊界，確認 `docs/05_phases/` 保留為 Historical / Reference，不作目前 roadmap。

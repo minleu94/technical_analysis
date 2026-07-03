@@ -1,6 +1,6 @@
 # Docs 文檔目錄
 
-> **最後整理**：2026-06-30
+> **最後整理**：2026-07-03
 > **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
@@ -8,11 +8,12 @@
 1. [專案快照](00_core/PROJECT_SNAPSHOT.md) - 30 秒讀完的目前狀態、本週優先事項與高風險區
 2. [6 個月工程路線](00_core/ROADMAP_6M_ENGINEERING.md) - 未來 6 個月的可執行工程計畫
 3. [Roadmap Hub](00_core/DEVELOPMENT_ROADMAP.md) - Roadmap 入口與權威文件導覽
-4. [舊 Roadmap 移交矩陣](00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊版未完成事項的新位置與驗收條件
-5. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 8 個工作區、跨頁流程、安全限制與排錯
-6. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
-7. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
-8. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
+4. [V1.1 至 V2.0 版本路線圖](00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md) - V1 release 後的版本化交付節奏
+5. [舊 Roadmap 移交矩陣](00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊版未完成事項的新位置與驗收條件
+6. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 8 個工作區、跨頁流程、安全限制與排錯
+7. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
+8. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
+9. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
 
 ---
 
@@ -25,7 +26,7 @@
 | `02_features/` | UI、使用者指南、回測、評分、策略規格 | 使用者與功能說明 |
 | `03_data/` | 每日資料、資料流、重建與故障排除、基本面來源盤點 | 資料更新操作 |
 | `04_broker_branch/` | 券商分點資料與 Smart Money 前置資料 | 籌碼資料專區 |
-| `05_phases/` | Phase 設計、Phase 3.5 SOP、Phase 4 Portfolio 設計 | 階段規劃 |
+| `05_phases/` | 歷史 Phase 設計、Phase 3.5 SOP 與 Phase 4 Portfolio 設計追溯 | Historical / Reference，不作目前 roadmap |
 | `06_qa/` | QA 問題、總結、驗證與審核報告 | 驗證紀錄 |
 | `07_guides/` | 快速開始、安裝、命令、腳本與測試說明 | 操作手冊 |
 | `08_technical/` | 技術優化、參數設計、路徑/環境說明 | 技術備忘 |
@@ -40,13 +41,11 @@
 
 ## 目前狀態摘要
 
-- 三個產品閉環已建立：資料與市場狀態、研究驗證、持倉檢查。
-- Daily Decision Desk v1 已接上主 UI，形成每日決策入口。
-- Strategy & Scoring Governance、10 檔 fixed / quantile OOS 實證、Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成；quantile 未優於 fixed，維持 opt-in。
-- Phase 5 圖表渲染、批次並行化、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 報告輸出仍在後續 backlog。
-- Month 5 Fundamental Layer v1 已完成，包含 available_date gate、Fundamental SQLite workflow、Revenue / Valuation factor service 與 diagnostics。
-- Month 6 Strategy Lifecycle / Portfolio Feedback v1 已落地，包含 lifecycle gate、append-only evidence、latest state projection、drift detector、post-trade attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
-- UI 已導入 Midnight Analyst 設計系統與全域 QSS；接下來主線是全 UI 健檢與 Month 6.1 lifecycle QA / manual approval / evidence explainability。
+- V1 release baseline 已完成：資料與市場狀態、研究驗證、持倉檢查、每日決策四個產品閉環已形成可操作基準。
+- Post-V1 evidence-driven 主線已建立：Evidence Event Store、Forward Outcome、Evidence Importers、Forward Performance read model / dashboard、pipeline dry-run、Live vs Research Gap、Signal Decay、Decision Quality、Evidence Review dashboards、V1.3 weekly evidence operations 與 V1.4 weekly review history 都已具備 v1。
+- V1.1 / V1.2 / V1.3 / V1.4 v1 已完成；下一步是用 weekly evidence operations 與 history 實際累積多週覆盤證據，再評估 V2.0 Unified Decision Workbench。
+- Production scheduler 仍未啟用；目前 safe scheduled path 只允許 read-only freshness check、evidence dry-run 與 Codex read-only morning report，不可解讀為 production write-mode scheduler。
+- `docs/05_phases/` 保留歷史設計與研究 SOP 脈絡，但不再作目前 roadmap 或完成狀態依據。
 
 詳細狀態以 [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md) 為準；未來方向以 [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md) 為準。
 
@@ -59,8 +58,9 @@
 1. [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md)
 2. [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md)
 3. [DEVELOPMENT_ROADMAP.md](00_core/DEVELOPMENT_ROADMAP.md)
-4. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
-5. [system_architecture.md](01_architecture/system_architecture.md)
+4. [VERSION_ROADMAP_V1_1_TO_V2_0.md](00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md)
+5. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
+6. [system_architecture.md](01_architecture/system_architecture.md)
 
 ### 要查策略回測
 

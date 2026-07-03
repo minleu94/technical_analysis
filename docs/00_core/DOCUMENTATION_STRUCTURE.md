@@ -1,6 +1,6 @@
 # 文檔結構與維護規則
 
-> **最後更新**：2026-06-30
+> **最後更新**：2026-07-03
 > **用途**：定義 `docs/` 內每個資料夾的歸屬、文件生命週期、刪除/歸檔規則。
 
 ---
@@ -54,7 +54,7 @@
 | `02_features/` | 使用者可見功能、UI、策略、回測、評分說明 | Phase 規劃草案 |
 | `03_data/` | 資料更新、資料流、資料重建、資料故障排除 | 券商分點專屬細節 |
 | `04_broker_branch/` | 券商分點資料、分點解析、籌碼資料更新 | 一般每日資料更新 |
-| `05_phases/` | Phase 設計、Phase 3.5 SOP、Phase 4 設計 | 日常操作指南 |
+| `05_phases/` | 歷史 Phase 設計、Phase 3.5 SOP、Phase 4 設計追溯 | 目前 roadmap、目前完成狀態、日常操作指南 |
 | `06_qa/` | QA 問題、總結、驗證、審核報告 | 長期架構設計 |
 | `07_guides/` | 快速開始、安裝、腳本、測試操作 | 系統權威狀態 |
 | `08_technical/` | 技術優化、環境、參數設計備忘 | 使用者導向流程 |
@@ -108,6 +108,8 @@
 - `09_archive/` 保留歷史文件，但 Active 文件不應依賴 archive 內容判斷目前狀態。
 - `output/`、`output/qa/` 與根目錄臨時資料樣本屬於本機執行產物，不應作為 Active 文件或乾淨 `main` 內容；需要保存結論時整理為 `docs/06_qa/` 摘要。
 - 一次性 QA debug / patch 文件可刪除，保留 summary / issues / audit 類文件即可。
+- `docs/05_phases/` 維持原位置作為歷史 Phase / 設計追溯區，不整包搬入 archive，原因是仍有 Active 專項文件引用其設計脈絡；但每個入口必須明確標示 Historical / Reference，不得把其中的「下一步」「進行中」「Phase Gate」當作目前 roadmap。
+- 若未來要進一步整理 `docs/05_phases/`，優先做「分批搬移 + redirect README + Index 修正」，不要直接刪除；Phase 3.5 SOP 若仍有操作價值，應先改寫到 `docs/02_features/` 或 `docs/07_guides/`，再把原文件歸檔。
 
 ---
 
@@ -118,3 +120,7 @@
 3. Broken relative links。
 4. Snapshot / 6M Roadmap / Roadmap Hub / Architecture / Index 狀態是否一致。
 5. 是否有明顯過期的「待開始 / 進行中」描述。
+
+## 六、更新記錄
+
+- 2026-07-03：將 `docs/05_phases/` 明確降格為 Historical / Reference 區，保留歷史設計與研究 SOP 脈絡，但不作目前 roadmap、目前完成狀態或日常操作權威。

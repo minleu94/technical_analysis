@@ -177,7 +177,7 @@ V2.0 啟動條件：
 3. V1.1 implementation batch A：Profile replay comparison service 與 Profile 進階摘要。✅ 已完成
 4. V1.1 implementation batch B：推薦回放 workflow 文案、QA、Manual / Snapshot / Roadmap 更新。✅ 已完成
 5. V1.2 credibility batch：execution model / microstructure / attribution，各自獨立 gate。✅ 已完成 v1
-6. V1.3 operations batch：manual approval、weekly review、action item loop。
+6. V1.3 operations batch：manual approval、weekly review、action item loop。✅ 已完成 v1
 7. V1.4 history batch：weekly review history repository、CLI save/list、Evidence Review history dashboard。✅ 已完成 v1
 8. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
 

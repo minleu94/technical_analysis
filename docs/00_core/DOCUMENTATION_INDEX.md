@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-06-30
+> **最後整理**：2026-07-03
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
 
 ---
@@ -87,20 +87,22 @@
 
 ---
 
-## 5. Phase 設計與研究 SOP
+## 5. 歷史 Phase / 設計追溯與研究 SOP
+
+> 本區文件保留為 Historical / Reference。它們說明 Phase 時期的設計、驗收與研究 SOP 脈絡，但不作目前 roadmap、目前完成狀態或下一步優先順序依據。目前狀態請看 `PROJECT_SNAPSHOT.md`，未來路線請看 `ROADMAP_6M_ENGINEERING.md`，Post-V1 版本節奏請看 `VERSION_ROADMAP_V1_1_TO_V2_0.md`。
 
 | 文件 | 用途 |
 |---|---|
-| [PHASE2_ARCHITECTURE.md](../05_phases/PHASE2_ARCHITECTURE.md) | Phase 2 策略架構設計。 |
-| [PHASE2_STRATEGY_LIBRARY.md](../05_phases/PHASE2_STRATEGY_LIBRARY.md) | Phase 2 策略資料庫設計。 |
-| [PHASE_2A_DATA_SOURCES_AUDIT.md](../05_phases/PHASE_2A_DATA_SOURCES_AUDIT.md) | Phase 2A 數據讀取來源盤點與改造規劃。 |
-| [PHASE2_5_COMPLETION_STATUS.md](../05_phases/PHASE2_5_COMPLETION_STATUS.md) | Phase 2.5 完成狀態與剩餘優化。 |
-| [PHASE3_3B_RESEARCH_DESIGN.md](../05_phases/PHASE3_3B_RESEARCH_DESIGN.md) | Phase 3.3b 研究設計規格。 |
+| [PHASE2_ARCHITECTURE.md](../05_phases/PHASE2_ARCHITECTURE.md) | [歷史] Phase 2 策略架構設計追溯。 |
+| [PHASE2_STRATEGY_LIBRARY.md](../05_phases/PHASE2_STRATEGY_LIBRARY.md) | [歷史] Phase 2 策略資料庫設計追溯。 |
+| [PHASE_2A_DATA_SOURCES_AUDIT.md](../05_phases/PHASE_2A_DATA_SOURCES_AUDIT.md) | [歷史] Phase 2A CSV-first 到 DB-first 過渡盤點。 |
+| [PHASE2_5_COMPLETION_STATUS.md](../05_phases/PHASE2_5_COMPLETION_STATUS.md) | [歷史] Phase 2.5 完成狀態追溯；fixed / quantile 現況以 Snapshot / 6M Roadmap / QA 報告為準。 |
+| [PHASE3_3B_RESEARCH_DESIGN.md](../05_phases/PHASE3_3B_RESEARCH_DESIGN.md) | [歷史] Phase 3.3b 研究設計規格追溯。 |
 | [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md) | [已歸檔] Phase 3.3b 實施規劃，現作歷史與追溯用途。 |
-| [EPIC2_MVP2_ARCHITECTURE_DESIGN.md](../05_phases/EPIC2_MVP2_ARCHITECTURE_DESIGN.md) | 過擬合風險提示架構設計。 |
-| [EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md](../05_phases/EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md) | 過擬合風險提示實作檢查清單。 |
-| [PHASE4_PORTFOLIO_DESIGN.md](../05_phases/PHASE4_PORTFOLIO_DESIGN.md) | Phase 4 Portfolio MVP 設計。 |
-| [PHASE4_STARTUP_SUMMARY.md](../05_phases/PHASE4_STARTUP_SUMMARY.md) | Phase 4 骨架啟動總結。 |
+| [EPIC2_MVP2_ARCHITECTURE_DESIGN.md](../05_phases/EPIC2_MVP2_ARCHITECTURE_DESIGN.md) | [歷史] 過擬合風險提示架構設計追溯。 |
+| [EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md](../05_phases/EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md) | [歷史] 過擬合風險提示實作 checklist 追溯。 |
+| [PHASE4_PORTFOLIO_DESIGN.md](../05_phases/PHASE4_PORTFOLIO_DESIGN.md) | [歷史] Phase 4 Portfolio MVP 初始設計追溯。 |
+| [PHASE4_STARTUP_SUMMARY.md](../05_phases/PHASE4_STARTUP_SUMMARY.md) | [歷史] Phase 4 骨架啟動總結追溯。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/specs/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 多模式實驗室、候選池與 Phase 3 → Portfolio 來源追溯設計。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/plans/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 工作流重整第一階段實作計畫。 |
 | [2026-06-11-financial-float-boundary-governance-design.md](../superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md) | 金融核心白名單的 AST float 邊界掃描、逐行分類標記與 pytest 防回歸設計。 |
@@ -172,11 +174,11 @@
 | [2026-06-11-financial-float-boundary-governance.md](../superpowers/plans/2026-06-11-financial-float-boundary-governance.md) | 金融 float 邊界 AST 掃描、逐行標記與 pytest gate 實作計畫。 |
 | [2026-06-11-broker-flow-sqlite-and-ui-recovery.md](../superpowers/plans/2026-06-11-broker-flow-sqlite-and-ui-recovery.md) | 券商分點 SQLite 唯一鍵、ETF 代號與 UI 復原計畫。 |
 | [2026-06-12-broker-flow-ranked-metric-reconciliation.md](../superpowers/plans/2026-06-12-broker-flow-ranked-metric-reconciliation.md) | MoneyDJ E/B 獨立榜單 union、三態品質與覆蓋率治理計畫。 |
-| [phase3_5_research/README.md](../05_phases/phase3_5_research/README.md) | Phase 3.5 研究 SOP 入口。 |
-| [phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md](../05_phases/phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md) | 研究循環 playbook。 |
-| [phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md](../05_phases/phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md) | 指標判讀優先順序。 |
-| [phase3_5_research/BENCHMARK_PRESENTATION.md](../05_phases/phase3_5_research/BENCHMARK_PRESENTATION.md) | Benchmark 顯示與解讀規範。 |
-| [phase3_5_research/PHASE4_ENTRY_CRITERIA.md](../05_phases/phase3_5_research/PHASE4_ENTRY_CRITERIA.md) | Phase 4 進入條件。 |
+| [phase3_5_research/README.md](../05_phases/phase3_5_research/README.md) | [歷史 SOP] Phase 3.5 研究 SOP 入口。 |
+| [phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md](../05_phases/phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md) | [歷史 SOP] 研究循環 playbook。 |
+| [phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md](../05_phases/phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md) | [歷史 SOP] 指標判讀優先順序。 |
+| [phase3_5_research/BENCHMARK_PRESENTATION.md](../05_phases/phase3_5_research/BENCHMARK_PRESENTATION.md) | [歷史 SOP] Benchmark 顯示與解讀規範。 |
+| [phase3_5_research/PHASE4_ENTRY_CRITERIA.md](../05_phases/phase3_5_research/PHASE4_ENTRY_CRITERIA.md) | [歷史 SOP] Phase 4 進入條件追溯。 |
 
 ---
 
@@ -196,6 +198,7 @@
 | [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
 | [DOCUMENT_ENCODING_AUDIT_2026_06_16.md](../06_qa/DOCUMENT_ENCODING_AUDIT_2026_06_16.md) | repo 文件 UTF-8 / mojibake 稽核報告，確認顯示雜訊來自終端編碼而非文件內容損壞。 |
+| [DOCUMENTATION_ROADMAP_REBASELINE_AUDIT_2026_07_03.md](../06_qa/DOCUMENTATION_ROADMAP_REBASELINE_AUDIT_2026_07_03.md) | Roadmap / docs / phase 目錄整理稽核，記錄 `docs/05_phases/` 降格為 Historical / Reference、入口文件同步與後續歸檔準則。 |
 | [FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md](../06_qa/FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md) | Testing QA Agent 使用的 feature-to-test 測試路由與決策矩陣（測試知識庫），不包含 Agent 角色定義。 |
 | [POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md](../06_qa/POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md) | Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 QA 紀錄，包含 schema safety、focused tests、限制與下一增量。 |
 | [POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md](../06_qa/POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md) | Post-V1 Evidence Importers / Capture Pipeline v1 QA 紀錄，包含 importer 支援邊界、CLI dry-run / confirm、unsupported source 與限制。 |
@@ -301,12 +304,13 @@
 
 - 新增或刪除任何 Markdown 後，更新本索引。
 - 狀態文字若與 Snapshot、6M Roadmap 或 Architecture 衝突，以對應範圍的權威文件為準並修正本索引。
-- 不確定文件是否該刪除時，先移入 `09_archive/` 或在 `DOCUMENTATION_STRUCTURE.md` 記錄決策。
+- 不確定文件是否該刪除時，先在 `DOCUMENTATION_STRUCTURE.md` 記錄生命週期決策；仍有引用或歷史脈絡價值時，優先標示 Historical / Reference，再評估是否分批搬入 `09_archive/`。
 
 ---
 
 ## 🔄 更新記錄
 
+- 2026-07-03：整理 Roadmap / docs / phase 判讀入口，將 `docs/05_phases/` 明確標示為 Historical / Reference，新增文件整理稽核索引，避免 Phase 文件被誤判為目前 roadmap。
 - 2026-07-01：新增 Post-V1 Evidence Event Store design / plan 與 QA 索引，標示 Evidence Event Store v1 / Forward Outcome Calculator v1 是 forward evidence 資料底座，不是 dashboard 或投資有效性證明。
 - 2026-07-02：新增 Post-V1 Evidence Importers design / plan 與 QA 索引，標示 capture pipeline v1 可累積 persisted Recommendation 與 DTO-based DDD evidence，但仍不是 dashboard 或投資有效性證明。
 - 2026-07-03：新增 Post-V1 E2E smoke / Forward Performance Read Model design / plan 與 QA 索引，標示 read model v1 可唯讀彙總 outcomes，但 Dashboard UI、production scheduler 與投資有效性證明仍未完成。

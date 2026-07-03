@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
-**版本**：v1.4.4
-**最後更新**：2026-06-30
+**版本**：v1.4.5
+**最後更新**：2026-07-03
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -13,6 +13,8 @@
 系統提供完整的數據更新、市場觀察、股票推薦、策略回測功能，讓策略成為可被描述、被比較、被淘汰的研究對象。這不是單純的策略腳本，而是一個工具型系統。
 
 產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 已是主 UI 的可用頂層工作區；現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
+
+目前 roadmap 判讀已從舊線性 Phase 轉為 Scoped SSOT + Post-V1 版本節奏：目前狀態看 `docs/00_core/PROJECT_SNAPSHOT.md`，未來工程路線看 `docs/00_core/ROADMAP_6M_ENGINEERING.md`，V1.1 至 V2.0 節奏看 `docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`。`docs/05_phases/` 僅保留為歷史 Phase / 設計追溯，不作目前 roadmap。
 
 ---
 
@@ -363,7 +365,7 @@ python ui_qt/main.py
 **如果我要改 Runtime 邏輯**：
 - 改 DTO 或 FSM 狀態 → `app_module/dtos/runtime_dtos.py`
 - 改指標計算 → `app_module/runtime_services/health_service.py`
-- 改架構規範 → 查閱 `docs/architecture/runtime_observatory_rules.md`
+- 改架構規範 → 查閱 `docs/01_architecture/runtime_observatory_rules.md`
 
 ---
 
@@ -441,12 +443,14 @@ python ui_qt/main.py
 
 - **目前狀態快照**：`docs/00_core/PROJECT_SNAPSHOT.md`
 - **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- **V1.1 至 V2.0 版本節奏**：`docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`
 - **baldr 產品北極星**：`docs/01_architecture/system_vision_specification.md`
 - **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **舊 Roadmap 移交矩陣**：`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
 - **完整操作手冊**：`docs/07_guides/APPLICATION_MANUAL.md`
 - **專案盤點報告**：`PROJECT_INVENTORY.md`（完整的專案結構盤點，與本文檔同層）
 - **文檔索引**：`docs/00_core/DOCUMENTATION_INDEX.md`（所有文檔的索引）
+- **歷史 Phase 設計追溯**：`docs/05_phases/README.md`（Historical / Reference，不作目前 roadmap）
 
 ---
 
