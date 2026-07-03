@@ -29,6 +29,8 @@ def _as_dict(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, date):
         return value.isoformat()
+    if value.__class__.__module__.startswith("numpy") and hasattr(value, "item"):
+        return _as_dict(value.item())
     if isinstance(value, tuple):
         return [item for item in value]
     if isinstance(value, dict):

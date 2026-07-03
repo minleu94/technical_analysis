@@ -22,7 +22,7 @@ from app_module.decision_desk_dtos import (
     DecisionDeskRiskPromptSummary,
     WatchlistTriggerSummary,
 )
-from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from app_module.decision_desk_builder_factory import build_service_backed_decision_desk_snapshot_builder
 from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRepository
 from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot
 from data_module.config import TWStockConfig
@@ -153,7 +153,10 @@ def main(argv: list[str] | None = None) -> int:
     decision_date = _parse_date(args.decision_date)
     dry_run = bool(args.dry_run or not args.confirm)
 
-    builder = DecisionDeskSnapshotBuilder(clock=lambda: datetime.combine(decision_date, datetime.min.time()))
+    builder = build_service_backed_decision_desk_snapshot_builder(
+        config,
+        clock=lambda: datetime.combine(decision_date, datetime.min.time()),
+    )
     snapshot = builder.build_snapshot(decision_date)
     snapshot = _limit_snapshot(snapshot, _limited_sections(args.limit_sections))
     stored = build_stored_decision_desk_snapshot(snapshot, decision_date=decision_date)

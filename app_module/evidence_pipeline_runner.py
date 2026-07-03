@@ -10,7 +10,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from app_module.decision_desk_builder_factory import build_service_backed_decision_desk_snapshot_builder
 from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRepository
 from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot, section_is_ready
 from app_module.evidence_capture_service import EvidenceCaptureService
@@ -369,7 +369,10 @@ class EvidencePipelineRunner:
         timer = _Timer()
         diagnostics: list[EvidencePipelineDiagnostic] = []
         try:
-            snapshot = DecisionDeskSnapshotBuilder().build_snapshot(date.fromisoformat(request.decision_date[:10]))
+            snapshot = build_service_backed_decision_desk_snapshot_builder(
+                self.config,
+                clock=self.clock,
+            ).build_snapshot(date.fromisoformat(request.decision_date[:10]))
             stored = build_stored_decision_desk_snapshot(snapshot, decision_date=request.decision_date[:10])
             created = 0
             skipped = 1
