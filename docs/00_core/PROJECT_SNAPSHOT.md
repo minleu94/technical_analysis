@@ -37,6 +37,7 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
   - Research Lab 多模式實驗室 ✅ / Recommendation Portfolio Backtest credibility v1 ✅ / Backtest chart fast renderer ✅ / Research Run Registry M2-B 基礎保存 ✅ / Registry Cross-run 比較子頁 C2 ✅ / Registry-based Promote Gate C3 ✅
   - AI Runtime Subsystem MVP ✅ / Codex / Antigravity Agent 指引 ✅ / 回測 fixed-quantile 雙模式與 Expanding T-1 歷史門檻 ✅ / 推薦 eligible universe 橫斷面百分位排名與門檻限制 ✅
   - V1.1 workflow bridge v1 ✅：推薦分析已揭露 Profile 權重 / 技術分類 / 型態預覽 / 主要篩選條件；推薦回放文案明確區分「今日名單批次回測」與「Profile / Config 歷史重播」；`ProfileReplayComparisonService` 可在相同 replay 假設下比較多個 Profile 並輸出 promote / hold / demote_candidate / retire_candidate 候選標籤。這些標籤只作 Research Run / Evidence 後的人工 lifecycle 判讀，不會自動降級、退休或刪除策略版本。
+  - V1.2 Research Credibility & Execution Model v1 ✅：`ProfileReplayComparisonService` 支援訓練 / 獨立驗證期間，驗證期結果主導 lifecycle candidate；推薦組合 replay 已補 rolling Sharpe / Sortino、VaR / CVaR、drawdown duration、turnover approximation、台股微結構 preflight 與 benchmark / industry / concept relative attribution。這些結果只用來揭露研究可信度與缺口，不會改交易、PnL、cash ledger、策略權重或自動升降級。
 
 - **閉環 3：持倉檢查閉環** ✅ V1 已建立
   - Recommendation / Backtest → Portfolio → Condition Monitor / Chip Monitor → Journal / Lifecycle Review → 回到研究
@@ -69,8 +70,8 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
 
 1. Update 使用「快速更新（跳過大型合併）」或「安全更新（完整 CSV + SQLite）」補齊資料，必要時用 SQLite Inspector 唯讀確認 freshness。
 2. 每日先看 Daily Decision Desk 的主結論、資料品質、Watchlist Trigger 與 Portfolio Alert，再下鑽 Market Watch / Smart Money。
-3. Recommendation 用 Profile 出名單 + 看 Why / Why Not / Profile 進階摘要 → 加入候選池，或送 Research Lab 批次回測 / 推薦回放；批次回測是測今日名單，推薦回放是重播 Profile / Config。
-4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；成功結果可保存到 Research Run Registry，只有通過 Registry 與 Month 6 lifecycle gate 才能升級策略版本。
+3. Recommendation 用 Profile 出名單 + 看 Why / Why Not / Profile 進階摘要 → 加入候選池，或送 Research Lab 批次回測 / 推薦回放；批次回測是測今日名單，推薦回放是重播 Profile / Config，Profile 比較應用訓練期提出候選，再看獨立驗證期結果。
+4. Research Lab / Backtest 可跑單股、候選池批次、固定組合或推薦回放；推薦回放結果需同時讀 rolling risk、microstructure preflight 與 relative attribution，成功結果可保存到 Research Run Registry，只有通過 Registry 與 Month 6 lifecycle gate 才能升級策略版本。
 5. Portfolio 用來追蹤實際或模擬持倉來源、條件監控、籌碼風險與生命週期回顧；警示與失效原因應回到 Research Lab / Registry 比較 / 覆盤日誌確認。
 
 ## Tech Lead 的預設任務（開場要先做什麼）
@@ -81,7 +82,7 @@ Post-V1 evidence-driven 增量已建立 Evidence Event Store v1、Forward Outcom
 ## 本週優先事項（只列 3 個）
 
 1. **V1 release baseline 已完成**：四個產品閉環、Month 6 Strategy Lifecycle / Portfolio Feedback v1、Full App Healthcheck / MainWindow UI smoke / clean clone gate 已形成可交付基準。下一步不是宣稱投資有效，而是進入 evidence-driven 驗證。
-2. **下一階段主線：Evidence-Driven baldr + V1.1 workflow bridge v1 已完成**：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Daily Decision Desk durable snapshot source / source coverage inspection v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / scheduler approval checklist v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled CMD wrappers 已建立；每日 05:30 Codex read-only 摘要、Evidence Review UI smoke 與 multi-day dry-run evidence 持續背景累積。V1.1 已補推薦 Profile 可見性、推薦回放語意與 Profile replay comparison service；完整 Daily Decision / Market Watch 合併仍留待 V2.0 評估。下一步轉向 V1.2 replay credibility / execution model 與 V1.3 manual lifecycle 操作節奏。Production scheduler implementation 仍需 blocking gaps 修正、人工 approval 與明確設計後才可進行。
+2. **下一階段主線：Evidence-Driven baldr + V1.1 / V1.2 v1 已完成**：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Daily Decision Desk durable snapshot source / source coverage inspection v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / scheduler approval checklist v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled CMD wrappers 已建立；每日 05:30 Codex read-only 摘要、Evidence Review UI smoke 與 multi-day dry-run evidence 持續背景累積。V1.1 已補推薦 Profile 可見性、推薦回放語意與 Profile replay comparison service；V1.2 已補 replay 訓練 / 驗證分離、rolling risk、microstructure preflight 與 relative attribution。完整 Daily Decision / Market Watch 合併仍留待 V2.0 評估；下一步轉向 V1.3 manual lifecycle 操作節奏。Production scheduler implementation 仍需 blocking gaps 修正、人工 approval 與明確設計後才可進行。
 3. **維持 V1 安全邊界與資料治理**：Month 5 retroactive baseline / statement baseline 多數仍為 `degraded`，P/B / P/S 仍只接受 governed external observations 或後續明確 backfill records；策略、回測、推薦、factor 與 portfolio 改動仍需 no-look-ahead、Decimal / 整數單位與 release healthcheck 防線。
 
 ## 高風險區（改動需謹慎）
@@ -115,7 +116,7 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 - `decision_module/factors/*`（Factor Contract、available_date gate、fundamental adapter 邊界）
 - `app_module/strategies/*`（fixed / quantile 門檻、確認天數與 Look-ahead 契約）
 - `app_module/recommendation_replay_service.py` / `app_module/recommendation_portfolio_backtest_service.py`
-- 推薦 / 固定組合回放的現金帳、再平衡、Liquidity / Gap 標記（Month 3 v1 已完成；後續執行模型深化仍屬高風險）
+- 推薦 / 固定組合回放的現金帳、再平衡、Liquidity / Gap 標記、rolling risk、微結構 preflight 與 relative attribution（Month 3 / V1.2 v1 已完成；零股、買賣價差、完整撮合與 Gap 實際成交模型仍屬高風險 residual）
 - `app_module/research_run_service.py` / `app_module/research_run_repository.py`（Research Run Registry metadata、Parquet hash、archive / promoted guard）
 - Strategy registry / preset / promotion 相關服務
 - UI ↔ service contract（DTO）
@@ -183,6 +184,14 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 - **Profile replay comparison service**：新增 `ProfileReplayComparisonService` / DTO，可在共用 replay 假設下比較多個 Profile 結果並輸出 lifecycle candidate label；service 只消費注入 runner 的結果，不重算策略、不寫 DB、不自動升降級。
 - **驗證**：已通過 focused pytest、UI update workbench pytest、Update Tab QA、py_compile 與 mypy。此成果只完成 V1.1 workflow bridge v1，不代表推薦、Profile 或策略具備投資有效性。
 
+## 2026-07-02 V1.2 Research Credibility & Execution Model v1 成果
+
+- **Profile replay 訓練 / 驗證分離**：`ProfileReplayComparisonRequest` 支援 `validation_start_date` / `validation_end_date`，且驗證期必須晚於訓練期；比較列保留 training / validation metrics，lifecycle candidate 以獨立驗證期為主，不用同一段資料同時調參與宣稱有效。
+- **推薦組合 rolling risk 指標**：`RecommendationPortfolioBacktestService` 會在 result details 輸出 `rolling_risk_metrics`，包含 rolling Sharpe / Sortino、VaR / CVaR、max drawdown duration observations 與 turnover approximation；這些指標只讀已產生的 equity curve / holdings，不改交易、現金帳或 PnL。
+- **台股微結構 preflight**：推薦回放會檢查歷史資料中可選的處置股、分盤交易、全額交割、漲跌停鎖死與除權息欄位；缺欄位時以 `missing_optional_sources` 揭露，不偽造、不補值、不寫資料。
+- **Relative attribution v1**：推薦回放會在 `relative_attribution` 中揭露 benchmark / industry / concept 的相對歸因與缺失來源；僅使用 replay 期間 history 中可選參考欄位，不重抓目前資料。
+- **驗證與邊界**：已通過推薦組合回放與 Profile replay comparison focused pytest、py_compile、targeted mypy、金融 float boundary 掃描與 diff check。V1.2 v1 仍不是實盤撮合模型；零股、買賣價差、完整委託簿撮合、Gap 實際成交價格調整與正式處置股 / 分盤 / 全額交割資料源接入仍是 residual。
+
 ## 2026-06-13 Strategy & Scoring Governance (增量 B：推薦橫斷面排名) 成果
 
 - **橫斷面百分位排名元件實作**：實作 `calculate_score_percentiles` 函式，採用 empirical CDF 計算公式，並以 `bisect_right` 保證同分時取得相同百分位，徹底鎖定排名演算法之統計一致性與輸入順序無涉。
@@ -237,7 +246,7 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 
 ## 2026-05-27 補充狀態
 
-- Recommendation Portfolio Backtest 已開始補強穩健性分析：目前已加入 Sharpe Ratio、Sortino Ratio 與 Monte Carlo P05/P50/P95 模擬報酬，並顯示在 Backtest 的「推薦組合」總覽。後續若要再深化，下一步是做 rolling Sharpe/Sortino、VaR/CVaR 或更完整的 metric/factor layer。
+- Recommendation Portfolio Backtest 已開始補強穩健性分析：早期已加入 Sharpe Ratio、Sortino Ratio 與 Monte Carlo P05/P50/P95 模擬報酬；V1.2 v1 已進一步補上 rolling Sharpe / Sortino、VaR / CVaR、drawdown duration、turnover approximation、microstructure preflight 與 relative attribution。這些仍屬 research credibility diagnostics，不代表可成交實盤績效。
 - Recommendation Portfolio Backtest 的 portfolio value 已改為每日 mark-to-market，Backtest「推薦組合」結果頁新增 Portfolio Value / Drawdown 圖表，並會嘗試載入大盤基準線做比較；目前停損/停利與策略學習閉環尚未納入推薦組合路徑。
 - Recommendation Portfolio Backtest 已接入停損 (%) / 停利 (%) 提前出場，並在結果總覽顯示出場原因統計、虧損交易占比與最拖累股票；策略版本儲存與自動學習閉環仍待下一步。
 - Recommendation Portfolio Backtest 已新增獨立 research run 保存庫，可保存/載入/刪除推薦組合回測結果，產生 rule-based 改善建議，並可將通過最低條件的推薦組合 run 升級為策略版本；此保存模型與一般單股 BacktestRunRepository 分離。

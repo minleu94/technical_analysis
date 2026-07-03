@@ -27,8 +27,8 @@
 | 版本 | 主題 | 核心問題 | 預期結果 |
 |---|---|---|---|
 | V1.1 | Decision Workflow Integration | 每日決策、推薦、研究回放與 lifecycle 判讀仍需要更清楚的 workflow bridge | 已完成 v1：推薦 Profile 可見、推薦回放語意清楚、Profile replay comparison 可產生人工 lifecycle candidate |
-| V1.2 | Research Credibility & Execution Model | 研究回測已有治理，但成交假設、微結構與 attribution 還不夠像真實決策 | 回測 / replay / forward evidence 更能解釋「為什麼可相信或不可相信」 |
-| V1.3 | Evidence Operations & Manual Lifecycle | Evidence dashboard 已建立，但樣本、覆盤、人工核准流程還未形成日常節奏 | 形成每週覆盤、manual approval、signal decay 與 action item 的操作閉環 |
+| V1.2 | Research Credibility & Execution Model | 研究回測已有治理，但成交假設、微結構與 attribution 還不夠像真實決策 | 已完成 v1：replay 訓練 / 驗證分離、rolling risk、microstructure preflight、relative attribution |
+| V1.3 | Evidence Operations & Manual Lifecycle | Evidence dashboard 已建立，但樣本、覆盤、人工核准流程還未形成日常節奏 | 下一步：形成每週覆盤、manual approval、signal decay 與 action item 的操作閉環 |
 | V2.0 | Unified Decision Workbench | V1.x 驗證後，Daily Decision / Market Watch / Evidence / Portfolio Review 的邊界可以重整 | 形成單一決策工作台，舊 Tab 轉為 drill-down 或專家模式 |
 
 ---
@@ -74,19 +74,27 @@ V1.1 驗收 Gate：
 
 建議定位：補強「研究結果是否可信」而不是追求更多策略。
 
+狀態：2026-07-02 v1 closeout 已完成。V1.2 先把 replay / Profile 比較結果的可信度揭露補齊，不宣稱推薦或策略具備投資有效性，也不把任何 lifecycle candidate 變成自動操作。
+
 核心交付：
 
-1. Portfolio replay execution model 深化：零股、買賣價差、完整撮合、跳空成交限制、成交率與未成交原因。
-2. 台股微結構 preflight：處置股、分盤、全額交割、跳空鎖死、除權息 / 還原價時間軸。
-3. rolling risk metrics：Rolling Sharpe / Sortino、VaR / CVaR、drawdown duration、turnover。
-4. benchmark / industry / concept relative attribution：讓 forward evidence 不只看絕對報酬，也能看大盤、產業與題材背景。
+1. Profile / replay 獨立驗證：已完成 `validation_start_date` / `validation_end_date`，驗證期必須晚於訓練期，lifecycle candidate 以 validation metrics 主導。
+2. 台股微結構 preflight：已完成可選欄位檢查，涵蓋處置股、分盤、全額交割、漲跌停鎖死、除權息；缺 source 時揭露 `missing_optional_sources`。
+3. rolling risk metrics：已完成 Rolling Sharpe / Sortino、VaR / CVaR、drawdown duration、turnover approximation。
+4. benchmark / industry / concept relative attribution：已完成 replay 期間相對歸因與 missing source 揭露。
 5. 報告輸出深化：Excel 已完成，PDF 仍維持研究輸出 backlog；若要做，先以 evidence / attribution 可追溯為主。
+
+Residual：
+
+- 零股、買賣價差、完整委託簿撮合、Gap 實際成交價格調整尚未完成。
+- 正式處置股、分盤、全額交割、漲跌停鎖死與除權息資料源尚未接入 governed source / available_date / quality / missing policy。
+- factor attribution 與 forward performance 的保存後讀取、儀表化與報告化仍留待後續。
 
 V1.2 驗收 Gate：
 
-- 所有成交假設在 UI、報告與 metadata 中可追溯。
-- 不因新增微結構資料而破壞既有回測或推薦核心。
-- 策略 / 回測修改必須附 no-look-ahead 自查與測試。
+- 已完成項目的成交假設、optional source 與 missing source 會在 metadata / details 中可追溯。
+- 不因新增微結構資料而破壞既有回測或推薦核心；V1.2 preflight 只讀已提供 history，不改 PnL、成交價、cash ledger 或 sizing。
+- 策略 / 回測修改已附 no-look-ahead 自查與 focused tests；金融 float boundary 掃描維持通過。
 
 ---
 
@@ -139,7 +147,7 @@ V2.0 啟動條件：
 2. V1.1 spec / plan：推薦 workflow bridge、UI scope、測試清單。✅ 已完成
 3. V1.1 implementation batch A：Profile replay comparison service 與 Profile 進階摘要。✅ 已完成
 4. V1.1 implementation batch B：推薦回放 workflow 文案、QA、Manual / Snapshot / Roadmap 更新。✅ 已完成
-5. V1.2 credibility batch：execution model / microstructure / attribution，各自獨立 gate。
+5. V1.2 credibility batch：execution model / microstructure / attribution，各自獨立 gate。✅ 已完成 v1
 6. V1.3 operations batch：manual approval、weekly review、action item loop。
 7. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
 
@@ -147,9 +155,9 @@ V2.0 啟動條件：
 
 ## 8. 目前最合理的下一步
 
-V1.1 已收尾，下一步不應直接宣稱 Profile 有效，也不應把降級做成自動按鈕。比較穩的順序是：
+V1.1 與 V1.2 v1 已收尾，下一步不應直接宣稱 Profile 有效，也不應把降級做成自動按鈕。比較穩的順序是：
 
-- V1.2 先補 Profile / replay 的獨立驗證：用訓練期間提出權重或門檻候選，再用獨立驗證期間或 walk-forward 檢查凍結邏輯，避免同一段資料同時調參與宣稱有效。
-- V1.2 同步深化 execution / microstructure / benchmark / industry attribution，讓推薦回放更接近可判讀的研究證據。
-- V1.3 再把 promote / hold / demote_candidate / retire_candidate 變成可審核的人工 lifecycle 操作節奏，而不是自動升降級。
+- V1.3 先把 promote / hold / demote_candidate / retire_candidate 變成可審核的人工 lifecycle 操作節奏，而不是自動升降級。
+- V1.3 同步建立 weekly evidence review、manual approval、signal decay action item 與 decision quality follow-up。
+- V1.2 residual 只在 source / execution model 契約明確時繼續深化，不要用未治理資料補漂亮圖表。
 - V2.0 才評估 Unified Decision Workbench 是否要整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
