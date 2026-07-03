@@ -11,7 +11,7 @@
 |---|---|
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與歷史歸檔。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
-| [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；說明 V1.1 workflow bridge、V1.2 credibility、V1.3 operations 與 V2.0 workbench 邊界。 |
+| [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；說明 V1.1 workflow bridge、V1.2 credibility、V1.3 operations、V1.4 history 與 V2.0 workbench 邊界。 |
 | [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr 產品北極星、目前邊界、Gap Register、長期能力圖像與投資有效性驗證框架；不取代 Snapshot、6M Roadmap 或 Architecture。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要、本週優先事項與高風險區。 |
@@ -209,6 +209,7 @@
 | [POST_V1_EVIDENCE_REVIEW_DASHBOARDS_QA_2026_07_11.md](../06_qa/POST_V1_EVIDENCE_REVIEW_DASHBOARDS_QA_2026_07_11.md) | Post-V1 Evidence Review Dashboards QA，包含 UI placement、dashboard coverage、read-only guarantee、forbidden language check、test commands 與 not-done 邊界。 |
 | [POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_REVIEW_UI_SMOKE_CHECKLIST_2026_07_12.md) | Post-V1 Evidence Review UI 人工 smoke checklist，覆蓋四個 dashboard、boundary banner、empty/degraded states、read-only guarantee 與人工結果表。 |
 | [POST_V1_V1_3_EVIDENCE_OPERATIONS_QA_2026_07_03.md](../06_qa/POST_V1_V1_3_EVIDENCE_OPERATIONS_QA_2026_07_03.md) | V1.3 Evidence Operations QA，記錄 weekly review CLI、manual approval package、action item planning、測試命令與 production scheduler disabled 邊界。 |
+| [POST_V1_V1_4_EVIDENCE_REVIEW_HISTORY_QA_2026_07_03.md](../06_qa/POST_V1_V1_4_EVIDENCE_REVIEW_HISTORY_QA_2026_07_03.md) | V1.4 Evidence Review History QA，記錄 weekly review history repository、CLI save/list、Research Lab 覆盤歷史子頁、測試命令與 production scheduler disabled 邊界。 |
 | [POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md](../06_qa/POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md) | Evidence Pipeline 多日 dry-run 記錄模板，用於正式 scheduler 前穩定性觀察，不代表 production scheduler 已啟用。 |
 | [POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md) | Evidence scheduler approval SOP，定義 manual run、multi-day dry-run、working-copy smoke、dashboard review、manual approval 與 explicit approval 後才 implementation 的 stage。 |
 | [POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md](../06_qa/POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md) | Evidence safe scheduled wrapper 歷史 QA，記錄 PowerShell `.ps1` 註冊被 local execution policy 擋住。 |
@@ -322,6 +323,7 @@
 - 2026-07-12：新增 CMD wrapper + `schtasks.exe` QA 索引；標示 PowerShell `.ps1` 被 execution policy 擋住後改用 CMD 註冊，時間為每日本機 05:00 / 05:15，production confirm 仍未啟用。
 - 2026-07-12：補充 Codex app read-only morning report automation 索引；標示 05:30 只彙總既有 Windows Task Scheduler / status / report，不重新執行 pipeline。
 - 2026-07-03：新增 V1.3 Evidence Operations design / plan 與 QA 索引，標示 weekly review、manual approval package、signal decay manual lifecycle candidates 與 action item planning 已建立；production scheduler 仍未啟用。
+- 2026-07-03：新增 V1.4 Evidence Review History QA 索引，標示 weekly review history repository、CLI save/list 與 Research Lab 覆盤歷史子頁已建立；history 只保存人工覆盤快照，不啟用 scheduler。
 - 2026-06-30：新增 v1 release checklist 索引，將 `v1.0.0-rc.1` / `v1.0.0` 發布前的自動化、非破壞 healthcheck、MainWindow UI smoke、全新 clone 與人工 UI 驗證 gate 集中管理。
 - 2026-06-30：新增 MainWindow UI smoke 操作層 design / plan 索引，並同步 QA 文件對 `--ui-smoke`、screenshot / resize evidence、Update cancel-only dialog 與子程序隔離執行的狀態描述。
 - 2026-06-29：新增 Full App Healthcheck 接近真人 UI smoke design / plan 索引，並同步 QA 文件對 `--tab` 分頁 runner、11 個 direct bridge、10 個 candidate bridge 與 opt-in MainWindow smoke skeleton 的狀態描述。

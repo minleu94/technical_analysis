@@ -54,7 +54,7 @@
 ## 4. 下一步 Next
 
 未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
-V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2 與 V1.3 v1 已完成；下一步是用 V1.3 weekly evidence operations 實際累積覆盤證據，V2.0 才評估完整 Unified Decision Workbench。
+V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3 與 V1.4 v1 已完成；下一步是用 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，V2.0 才評估完整 Unified Decision Workbench。
 
 目前立即執行優先順序：
 
@@ -119,3 +119,4 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 - 2026-06-17：補上 P/B / P/S valuation policy residual，確認 P/B / P/S 只走 governed external observation / future backfill presentation boundary，不進 ScoringEngine。
 - 2026-07-02：新增 V1.1 至 V2.0 版本路線圖入口，將 Post-V1 主線拆為 V1.1 workflow bridge、V1.2 research credibility、V1.3 evidence operations 與 V2.0 Unified Decision Workbench 評估。
 - 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1，Roadmap Hub 下一步轉為實際使用 weekly evidence operations 累積覆盤證據。
+- 2026-07-03：完成 V1.4 Evidence Review History v1，Roadmap Hub 下一步轉為實際使用 weekly evidence operations + history 累積多週覆盤證據。

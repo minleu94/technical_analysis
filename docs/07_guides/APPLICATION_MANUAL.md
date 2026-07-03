@@ -856,15 +856,19 @@ Decision Quality Review CLI 用來建立週 / 月 / custom 流程覆盤。它只
 
 `capture_decision_quality_review.py` 預設 dry-run；`--confirm` 必須指定 explicit `--db-path`，疑似正式 DB 仍需額外 `--allow-production-like-db`。缺 journal、缺 source trace 或 sample size 不足都只代表 review gap / warning，需要人工判讀。
 
-V1.3 Evidence Operations weekly review CLI 用來把 scheduler readiness、Decision Quality、Signal Decay 與 action item 彙總成每週人工覆盤包。它預設只讀並輸出 JSON 或 Markdown；`production_scheduler_allowed` 仍固定為 `false`。樣本不足時 status 會是 `coverage_only`，只能要求繼續累積 evidence，不可解讀成策略結論。Signal Decay 的 `demote_candidate` / `retire_candidate` 只會列為 `manual_lifecycle_candidates`，每筆 `apply_action=false`，不會自動修改策略版本。
+V1.3 / V1.4 Evidence Operations weekly review CLI 用來把 scheduler readiness、Decision Quality、Signal Decay 與 action item 彙總成每週人工覆盤包，並可在 V1.4 以 append-only weekly review history 保存人工覆盤快照。它預設只讀並輸出 JSON 或 Markdown；`production_scheduler_allowed` 仍固定為 `false`。樣本不足時 status 會是 `coverage_only`，只能要求繼續累積 evidence，不可解讀成策略結論。Signal Decay 的 `demote_candidate` / `retire_candidate` 只會列為 `manual_lifecycle_candidates`，每筆 `apply_action=false`，不會自動修改策略版本。
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --json-output
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --plan-action-items --json-output
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --confirm-action-items --action-owner human --json-output
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-07-06 --end-date 2026-07-12 --db-path <working-copy-db> --save-history --json-output
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-07-01 --end-date 2026-07-31 --db-path <working-copy-db> --list-history --json-output
 ```
 
-`--plan-action-items` 只預覽 open Decision Quality item 會形成哪些 action item，不寫入 DB。`--confirm-action-items` 才會 append-only 寫入指定 DB，且必須提供 explicit `--db-path`；疑似正式 DB 仍需額外 `--allow-production-like-db`。一般覆盤應先在 working-copy DB 執行。
+`--plan-action-items` 只預覽 open Decision Quality item 會形成哪些 action item，不寫入 DB。`--confirm-action-items` 才會 append-only 寫入指定 DB，且必須提供 explicit `--db-path`；疑似正式 DB 仍需額外 `--allow-production-like-db`。`--save-history` 會把當次 weekly review payload、hash、status、scheduler readiness 與 production scheduler disabled 邊界保存到 `evidence_operations_weekly_reviews`，同樣必須指定 explicit `--db-path`；`--list-history` 只讀取已保存歷史。一般覆盤應先在 working-copy DB 執行。
+
+Research Lab `Evidence Review` 分頁在 V1.4 新增「覆盤歷史」子頁，用來唯讀檢查已保存 weekly review history 的週期、status、scheduler readiness、Decision Quality / Signal Decay 數量、manual lifecycle candidate 數量與 warnings。此子頁只讀 dashboard service，不建立週報、不寫 action item、不啟用 scheduler，也不自動套用任何 lifecycle action。
 
 Report evidence boundary 固定為：This report is research evidence only. Close-to-close forward return is not executable live performance. No trading recommendation is produced.
 
@@ -1136,6 +1140,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-08：新增 Live vs Research Gap linkage CLI 操作說明，標示 gap observation 是 evidence，不是 action；沒有真實交易與人工 override 時只能解讀為 research / simulated gap。
 - 2026-07-09：新增 Signal Decay Monitor CLI 操作說明，標示 decay observation 與 lifecycle proposed payload 只是人工審核 evidence，不自動套用策略生命週期動作。
 - 2026-07-10：新增 Decision Quality Review CLI 操作說明，標示 review item 與 process quality score 只作流程覆盤，不是投資能力、交易建議或責備判斷。
+- 2026-07-03：新增 V1.4 Evidence Operations weekly review history 操作說明與 Research Lab `Evidence Review -> 覆盤歷史` 子頁說明；history 只保存人工覆盤快照，不啟用 scheduler、不自動 lifecycle action。
 - 2026-07-11：新增 Research Lab `Evidence Review` 分頁操作說明，標示 Forward Evidence、Live vs Research Gap、Signal Decay 與 Decision Quality dashboard 只讀已保存 evidence / observation / review，不寫 evidence、不建立 scheduler、不自動 lifecycle action。
 - 2026-07-12：新增 Evidence Review manual smoke、multi-day dry-run record 與 scheduler approval SOP 操作說明，標示這些是 production scheduler 前的人工 QA scaffold，不代表 scheduler 已啟用。
 - 2026-07-12：Evidence Review UI 介面中文化，Research Lab 結果分頁顯示為「證據覆盤」，四個子頁顯示為「前瞻證據 / 研究落差 / 訊號衰退 / 決策品質」，日期篩選改用日曆選擇器。

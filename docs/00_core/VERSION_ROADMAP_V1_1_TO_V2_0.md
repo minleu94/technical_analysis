@@ -29,6 +29,7 @@
 | V1.1 | Decision Workflow Integration | 每日決策、推薦、研究回放與 lifecycle 判讀仍需要更清楚的 workflow bridge | 已完成 v1：推薦 Profile 可見、推薦回放語意清楚、Profile replay comparison 可產生人工 lifecycle candidate |
 | V1.2 | Research Credibility & Execution Model | 研究回測已有治理，但成交假設、微結構與 attribution 還不夠像真實決策 | 已完成 v1：replay 訓練 / 驗證分離、rolling risk、microstructure preflight、relative attribution |
 | V1.3 | Evidence Operations & Manual Lifecycle | Evidence dashboard 已建立，但樣本、覆盤、人工核准流程還未形成日常節奏 | 已完成 v1：weekly evidence operations package、manual approval summary、signal decay candidate 與 action item planning |
+| V1.4 | Evidence Review History | weekly review 可產生，但缺少 append-only history 與 UI 查閱入口 | 已完成 v1：weekly review history repository、CLI save/list、Research Lab `Evidence Review -> 覆盤歷史` 唯讀子頁 |
 | V2.0 | Unified Decision Workbench | V1.x 驗證後，Daily Decision / Market Watch / Evidence / Portfolio Review 的邊界可以重整 | 形成單一決策工作台，舊 Tab 轉為 drill-down 或專家模式 |
 
 ---
@@ -127,7 +128,26 @@ V1.3 驗收 Gate：
 
 ---
 
-## 6. V2.0：Unified Decision Workbench
+## 6. V1.4：Evidence Review History
+
+狀態：2026-07-03 v1 closeout 已完成。V1.4 把 V1.3 每週覆盤包從「一次性輸出」推進到「可封存、可回看、可由 UI 檢查的覆盤歷史」，讓後續數週 evidence operations 可以比較週期、status、blocking gaps 與 manual lifecycle candidate 數量，而不需要重新解讀散落的 CLI output。
+
+本次 v1 closeout 已交付：
+
+1. 新增 `EvidenceOperationsHistoryRepository` / DTO，將 weekly review payload 以穩定 hash append-only 保存到 `evidence_operations_weekly_reviews`。
+2. `scripts/build_evidence_operations_weekly_review.py` 新增 `--save-history` 與 `--list-history`；保存 history 必須指定 explicit `--db-path`，疑似正式 DB 仍需額外 `--allow-production-like-db`。
+3. 新增 `EvidenceOperationsHistoryDashboardService`、Qt table model 與 Research Lab `Evidence Review -> 覆盤歷史` 唯讀子頁。
+4. history row 明確保存 `production_scheduler_allowed=false`，不建立 scheduler、不寫 action item、不改 Strategy Lifecycle state、不改 portfolio。
+
+V1.4 驗收 Gate：
+
+- History 保存採 append-only / idempotent hash，重複保存同一份 weekly review 不新增重複列。
+- UI 只能讀 dashboard service，不直接讀寫 SQLite repository、不啟用 scheduler、不自動 lifecycle action。
+- History 只代表人工覆盤封存，不代表 alpha、策略、推薦或警示有效。
+
+---
+
+## 7. V2.0：Unified Decision Workbench
 
 建議定位：V2.0 是資訊架構重整，不是單純增加功能。
 
@@ -148,7 +168,7 @@ V2.0 啟動條件：
 
 ---
 
-## 7. 分批 Commit / Push 建議
+## 8. 分批 Commit / Push 建議
 
 後續長線任務建議按以下批次推進，均先在 `dev` 或 `codex/*` 分支完成，不直接推 `main`：
 
@@ -158,19 +178,21 @@ V2.0 啟動條件：
 4. V1.1 implementation batch B：推薦回放 workflow 文案、QA、Manual / Snapshot / Roadmap 更新。✅ 已完成
 5. V1.2 credibility batch：execution model / microstructure / attribution，各自獨立 gate。✅ 已完成 v1
 6. V1.3 operations batch：manual approval、weekly review、action item loop。
-7. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
+7. V1.4 history batch：weekly review history repository、CLI save/list、Evidence Review history dashboard。✅ 已完成 v1
+8. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
 
 ---
 
-## 8. 目前最合理的下一步
+## 9. 目前最合理的下一步
 
-V1.1 與 V1.2 v1 已收尾，下一步不應直接宣稱 Profile 有效，也不應把降級做成自動按鈕。比較穩的順序是：
+V1.1 至 V1.4 v1 已收尾，下一步不應直接宣稱 Profile 有效，也不應把降級做成自動按鈕。比較穩的順序是：
 
 - V1.3 已把 promote / hold / demote_candidate / retire_candidate 相關 evidence 轉成可審核 weekly package 與 action item planning，而不是自動升降級。
-- 下一步是用 V1.3 weekly review 實際跑數週，觀察哪些 dashboard 與 action item 真的有用。
+- V1.4 已把 weekly review 封存為可回看的 history；下一步是用 V1.3/V1.4 weekly review 實際跑數週，觀察哪些 dashboard、blocking gaps 與 action item 真的有用。
 - V1.2 residual 只在 source / execution model 契約明確時繼續深化，不要用未治理資料補漂亮圖表。
 - V2.0 才評估 Unified Decision Workbench 是否要整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
 
-## 9. 更新記錄
+## 10. 更新記錄
 
+- 2026-07-03：完成 V1.4 Evidence Review History v1，新增 weekly review history repository、CLI save/list 與 Research Lab `Evidence Review -> 覆盤歷史` 唯讀子頁；history 只保存人工覆盤快照，不啟用 production scheduler、不自動 lifecycle action。
 - 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1，新增 weekly evidence operations package、manual approval summary、signal decay manual lifecycle candidates 與 append-only action item planning；production scheduler 仍未啟用。
