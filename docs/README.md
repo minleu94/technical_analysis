@@ -1,7 +1,7 @@
 # Docs 文檔目錄
 
-> **最後整理**：2026-07-03
-> **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
+> **最後整理**：2026-07-04
+> **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，外部參考與 V1.5-V2.0 版本形狀看 `00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
 
@@ -9,11 +9,12 @@
 2. [6 個月工程路線](00_core/ROADMAP_6M_ENGINEERING.md) - 未來 6 個月的可執行工程計畫
 3. [Roadmap Hub](00_core/DEVELOPMENT_ROADMAP.md) - Roadmap 入口與權威文件導覽
 4. [V1.1 至 V2.0 版本路線圖](00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md) - V1 release 後的版本化交付節奏
-5. [舊 Roadmap 移交矩陣](00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊版未完成事項的新位置與驗收條件
-6. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 8 個工作區、跨頁流程、安全限制與排錯
-7. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
-8. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
-9. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
+5. [外部參考與未來版本藍圖](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) - 外部開源專案參考、資料源優先序與 V1.5-V2.0 版本形狀
+6. [舊 Roadmap 移交矩陣](00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊版未完成事項的新位置與驗收條件
+7. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 8 個工作區、跨頁流程、安全限制與排錯
+8. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
+9. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
+10. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
 
 ---
 
@@ -43,11 +44,11 @@
 
 - V1 release baseline 已完成：資料與市場狀態、研究驗證、持倉檢查、每日決策四個產品閉環已形成可操作基準。
 - Post-V1 evidence-driven 主線已建立：Evidence Event Store、Forward Outcome、Evidence Importers、Forward Performance read model / dashboard、pipeline dry-run、Live vs Research Gap、Signal Decay、Decision Quality、Evidence Review dashboards、V1.3 weekly evidence operations 與 V1.4 weekly review history 都已具備 v1。
-- V1.1 / V1.2 / V1.3 / V1.4 v1 已完成；下一步是用 weekly evidence operations 與 history 實際累積多週覆盤證據，再評估 V2.0 Unified Decision Workbench。
+- V1.1 / V1.2 / V1.3 / V1.4 v1 已完成；下一步是用 weekly evidence operations 與 history 實際累積多週覆盤證據，並依外部參考 companion 準備 V1.5 Data Credibility、V1.6 Factor Pipeline、V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；V2.0 Unified Decision Workbench 需等中繼版本成熟後再評估。
 - Production scheduler 仍未啟用；目前 safe scheduled path 只允許 read-only freshness check、evidence dry-run 與 Codex read-only morning report，不可解讀為 production write-mode scheduler。
 - `docs/05_phases/` 保留歷史設計與研究 SOP 脈絡，但不再作目前 roadmap 或完成狀態依據。
 
-詳細狀態以 [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md) 為準；未來方向以 [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md) 為準。
+詳細狀態以 [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md) 為準；未來方向以 [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md) 為準；外部專案參考與 V1.5-V2.0 版本形狀以 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) 為準。
 
 ---
 
@@ -59,8 +60,9 @@
 2. [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md)
 3. [DEVELOPMENT_ROADMAP.md](00_core/DEVELOPMENT_ROADMAP.md)
 4. [VERSION_ROADMAP_V1_1_TO_V2_0.md](00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md)
-5. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
-6. [system_architecture.md](01_architecture/system_architecture.md)
+5. [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)
+6. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
+7. [system_architecture.md](01_architecture/system_architecture.md)
 
 ### 要查策略回測
 

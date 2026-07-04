@@ -7,7 +7,7 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具；baldr 是一套「可驗證、可回溯、可演化」的台股研究與投資決策工作台。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：V1 release baseline 已完成，四個產品閉環（資料與市場狀態、研究驗證、持倉檢查、每日決策）已形成可操作基準。Post-V1 evidence-driven 主線的 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations 與 evidence review history。下一步不是新增舊式 Phase，而是用 weekly review + history 實際累積多週覆盤證據，再評估 V2.0 Unified Decision Workbench。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、version roadmap 管 V1.1 至 V2.0 節奏、system architecture 管架構、system vision 管產品北極星、archive / phase docs 管歷史。
+* **Current Phase (目前階段)**：V1 release baseline 已完成，四個產品閉環（資料與市場狀態、研究驗證、持倉檢查、每日決策）已形成可操作基準。Post-V1 evidence-driven 主線的 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations 與 evidence review history。下一步不是新增舊式 Phase，而是用 weekly review + history 實際累積多週覆盤證據，並依外部參考 companion 準備 V1.5 Data Credibility、V1.6 Cross-sectional Factor Pipeline、V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；V2.0 Unified Decision Workbench 需等中繼版本成熟後再評估。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、version roadmap 管 V1.1 至 V2.0 節奏、external reference blueprint 管外部專案參考與 V1.5-V2.0 版本形狀、system architecture 管架構、system vision 管產品北極星、archive / phase docs 管歷史。
 * **Core Architecture (核心架構)**：分層解耦架構。
   1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
   2. `app_module/`（應用服務層、DTO、Repository 與 use case orchestrator）
@@ -17,7 +17,8 @@
 * **Current Priorities (目前優先事項)**：
   1. 用 V1.3 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，觀察 dashboard、blocking gaps、manual lifecycle candidate 與 action item 是否真的有用。
   2. 維持 Post-V1 evidence 安全邊界：production scheduler 仍未啟用；readiness 最高只到 manual confirm / approval design；所有 evidence dashboard 只讀，不自動套用 lifecycle action。
-  3. 維持 Month 2 / Month 3 / Month 5 / Month 6 governance regression：Research Run Registry integrity、FactorGate `available_date <= decision_date`、fundamental diagnostics 不接 `ScoringEngine`、append-only lifecycle / evidence history、no-look-ahead 與金融數值邊界。
+  3. 準備 V1.5-V1.9 但不搶跑：先資料可信度與 source capability，再 factor pipeline，再 negative evidence，再 portfolio sandbox，再 read-only AI；`cuFOLIO`、RL、自動下單與 SQLite split / async 仍是 deferred。
+  4. 維持 Month 2 / Month 3 / Month 5 / Month 6 governance regression：Research Run Registry integrity、FactorGate `available_date <= decision_date`、fundamental diagnostics 不接 `ScoringEngine`、append-only lifecycle / evidence history、no-look-ahead 與金融數值邊界。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
   1. Quantile 的真實 OOS 實證未優於 fixed，因此仍維持 opt-in，不可宣稱更準。
@@ -136,6 +137,7 @@
 * **`docs/00_core/PROJECT_SNAPSHOT.md`**：開場 30 秒必讀的目前狀態、本週優先事項與高風險區。
 * **`docs/00_core/ROADMAP_6M_ENGINEERING.md`**：未來 6 個月可執行工程路線。
 * **`docs/00_core/DEVELOPMENT_ROADMAP.md`**：Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與 archive。
+* **`docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`**：外部開源專案參考、資料源補強優先序、V1.5 至 V2.0 版本形狀與 deferred 技術邊界；不取代 Vision 或 6M Roadmap。
 * **`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`**：舊 Roadmap 未完成事項的唯一移交與驗收矩陣。
 * **`docs/01_architecture/system_architecture.md`**：目前架構、模組邊界與資料流權威。
 * **`docs/01_architecture/system_vision_specification.md`**：baldr 產品北極星、目前邊界、Gap Register 與投資有效性驗證框架；不作為目前可用功能依據。
@@ -188,7 +190,7 @@
   * weekly evidence operations + history 的多週實際使用與覆盤證據累積。
   * Evidence Review UI smoke、multi-day dry-run record、scheduler approval checklist 與 blocking gaps 觀察。
   * Month 2 / Month 3 / Month 5 / Month 6 governance regression 維護。
-* **Planned (計畫中)**：V2.0 Unified Decision Workbench design spike（需等 V1.1 至 V1.4 evidence / 使用節奏證明後再啟動）、V1.2 execution model residual、三大法人資料因子、官方歷史 PIT 公告日來源治理、PDF 研究報告輸出。
+* **Planned (計畫中)**：V1.5 Data Credibility & Corporate Action Gate、V1.6 Cross-sectional Factor Pipeline & Sector Rotation v2、V1.7 Screening Matrix & Negative Evidence、V1.8 Portfolio Construction & Execution Trace Sandbox、V1.9 Read-only Agent / MCP Evidence Access；V2.0 Unified Decision Workbench design spike 需等中繼版本的資料、因子、evidence、portfolio sandbox 與 AI 邊界成熟後再啟動。V1.2 execution model residual、三大法人資料因子、官方歷史 PIT 公告日來源治理與 PDF 研究報告輸出仍在 backlog / future tracks。
 * **Frozen / Historical (已凍結 / 歷史)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Phase 3.5 SOP, Phase 4 Portfolio MVP, Smart Money Terminal MVP, AI Runtime MVP。`docs/05_phases/` 僅作追溯。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
 * **Backlog**：零股、買賣價差、完整撮合與 Gap 實際成交模型、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。

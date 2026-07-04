@@ -22,9 +22,10 @@
 4. `docs/00_core/PROJECT_SNAPSHOT.md`
 5. `docs/00_core/DEVELOPMENT_ROADMAP.md`
 6. `docs/00_core/ROADMAP_6M_ENGINEERING.md`（涉及方向、優先順序或大型規劃時）
-7. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`（涉及舊工作承接或 Phase Gate 時）
-8. `docs/07_guides/APPLICATION_MANUAL.md`（涉及 UI、使用流程、參數、結果判讀或安全限制時）
-9. 與任務對應的 Agent 權威文件：
+7. `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`（涉及外部專案參考、資料源擴充或 V1.5-V2.0 版本規劃時）
+8. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`（涉及舊工作承接或 Phase Gate 時）
+9. `docs/07_guides/APPLICATION_MANUAL.md`（涉及 UI、使用流程、參數、結果判讀或安全限制時）
+10. 與任務對應的 Agent 權威文件：
    - 架構判斷：`docs/agents/tech_lead.md`
    - 受控實作：`docs/agents/execution_agent.md`
    - 文檔同步：`docs/agents/documentation_agent.md`
@@ -132,3 +133,4 @@
 - 2026-06-13：補入 Legacy Carryover 與 Application Manual 的條件式必讀及權威範圍。
 - 2026-06-14：新增量化防禦技能 `quant_defense_guard.md` 與本地輔助 MCP 伺服器說明。
 - 2026-06-23：新增 Testing / QA Agent 至權威與協作流程，指向 `docs/agents/testing_qa_agent.md`。
+- 2026-07-04：新增 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 的條件式必讀規則，用於外部參考、資料源擴充與 V1.5-V2.0 版本規劃任務。

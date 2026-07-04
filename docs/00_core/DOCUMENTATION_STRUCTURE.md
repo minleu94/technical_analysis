@@ -1,6 +1,6 @@
 # 文檔結構與維護規則
 
-> **最後更新**：2026-07-03
+> **最後更新**：2026-07-04
 > **用途**：定義 `docs/` 內每個資料夾的歸屬、文件生命週期、刪除/歸檔規則。
 
 ---
@@ -19,27 +19,31 @@
    - `docs/00_core/DEVELOPMENT_ROADMAP.md`
    - 只放系統定位、短版 Next、風險摘要與權威文件入口，不保存完整歷史。
 
-4. **舊 Roadmap 移交權威**
+4. **外部參考與版本形狀 companion**
+   - `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`
+   - 保存外部開源專案參考、資料源補強優先序、V1.5 至 V2.0 版本形狀與 deferred 技術邊界；不取代 Vision 或 6M Roadmap。
+
+5. **舊 Roadmap 移交權威**
    - `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
    - 保存舊 Roadmap 未完成事項的唯一處置、目標月份、交付物與驗收 Gate。
 
-5. **目前操作手冊**
+6. **目前操作手冊**
    - `docs/07_guides/APPLICATION_MANUAL.md`
    - 保存目前 8 個工作區的完整操作、結果判讀、安全限制與排錯方式。
 
-6. **架構權威**
+7. **架構權威**
    - `docs/01_architecture/system_architecture.md`
    - 定義目前架構、模組邊界、資料流與高風險技術邊界。
 
-7. **索引與維護規則**
+8. **索引與維護規則**
    - `docs/00_core/DOCUMENTATION_INDEX.md`
    - `docs/00_core/DOC_COVERAGE_MAP.md`
    - `docs/00_core/DOCUMENTATION_STRUCTURE.md`
 
-8. **專項文件**
+9. **專項文件**
    - 架構、功能、資料、Phase、QA、指南、技術、Agent、策略文件。
 
-9. **Archive**
+10. **Archive**
    - `docs/09_archive/`
    - 僅作歷史追溯，不作目前狀態依據。
 
@@ -99,7 +103,7 @@
 
 ## 四、目前已確認的整理決策
 
-- `PROJECT_SNAPSHOT.md`、`ROADMAP_6M_ENGINEERING.md`、`DEVELOPMENT_ROADMAP.md`、`DOCUMENTATION_INDEX.md` 保持為核心入口。
+- `PROJECT_SNAPSHOT.md`、`ROADMAP_6M_ENGINEERING.md`、`DEVELOPMENT_ROADMAP.md`、`EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`、`DOCUMENTATION_INDEX.md` 保持為核心入口。
 - `DEVELOPMENT_ROADMAP.md` 是 Roadmap Hub，不再是完整歷史或唯一最高權威。
 - 舊完整 Roadmap 已歸檔為 `docs/09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md`。
 - `PROJECT_NAVIGATION.md`、`PROJECT_INVENTORY.md` 位於 repo 根目錄，仍屬專案級導航文件；索引需用正確相對路徑指向它們。
@@ -123,4 +127,5 @@
 
 ## 六、更新記錄
 
+- 2026-07-04：新增 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 作為外部參考與 V1.5-V2.0 版本形狀 companion，納入核心入口與文件權威層級。
 - 2026-07-03：將 `docs/05_phases/` 明確降格為 Historical / Reference 區，保留歷史設計與研究 SOP 脈絡，但不作目前 roadmap、目前完成狀態或日常操作權威。

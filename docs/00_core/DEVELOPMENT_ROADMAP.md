@@ -14,6 +14,7 @@
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 目前狀態、當前工作模式、本週優先事項與高風險區。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
 | [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；作為 6M Roadmap 的 companion，不取代其權威。 |
+| [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) | 外部開源專案參考、資料源補強優先序與 V1.5 至 V2.0 版本形狀；作為 6M Roadmap / Version Roadmap companion，不取代 Vision。 |
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統架構、模組邊界、資料流與高風險技術邊界。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 文檔導航與文件所在位置，不作為功能或狀態事實來源。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與結案 Gate。 |
@@ -55,6 +56,7 @@
 
 未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
 V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3 與 V1.4 v1 已完成；下一步是用 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，V2.0 才評估完整 Unified Decision Workbench。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
+外部開源專案對照、資料源補強優先序與 V1.5 至 V2.0 的中繼版本形狀見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)；該文件只作參考 companion，不取代 6M Roadmap 的執行順序。
 
 目前立即執行優先順序：
 
@@ -83,10 +85,15 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
    - 同日 follow-up 已修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 `risk_prompt` evidence 且 repeat=2 idempotency passed。受控 tmp run 也已保存 working-copy Recommendation result，並驗證 `recommendation,risk-prompt` requested sources 可 idempotent confirm。`decision_desk_snapshot_missing`、`recommendation_persisted_missing` 與 `working_copy_confirm_smoke_missing_or_failed` 已收斂為真實 source gaps。
    - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 why-not / liquidity payload、watchlist 無項目與 portfolio 無 active positions；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
 
-6. **P2：Phase 5 研究輸出後續**
+6. **P1：V1.5-V1.9 版本化準備**
+   - V1.5 優先補 Data Credibility & Corporate Action Gate：除權息 / 還原價政策、處置股 / 分盤 / 全額交割 source、evidence source gap 與 Data Source Capability Registry。
+   - V1.6 再補 Cross-sectional Factor Pipeline & Sector Rotation v2；V1.7 補 Screening Matrix & Negative Evidence；V1.8 補 research-only Portfolio Construction / Execution Trace Sandbox；V1.9 才評估 read-only MCP / Agent evidence access。
+   - `cuFOLIO`、強化學習、券商自動下單與 SQLite async / split DB 暫不納入近期 Roadmap，除非有量測證據顯示現有計算或寫入模式成為真實瓶頸。
+
+7. **P2：Phase 5 研究輸出後續**
    - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
 
-7. **P3：文件治理持續檢查**
+8. **P3：文件治理持續檢查**
    - Snapshot、6M Roadmap、Architecture、Index、Agent 指引已採 Scoped SSOT；後續功能變更需依 Coverage Map 同步更新入口摘要。
    - `docs/05_phases/` 已降格為 Historical / Reference；後續若要搬移或刪除，需先修正引用並保留回滾路徑。
 
@@ -115,6 +122,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 
 ## 7. 更新記錄
 
+- 2026-07-04：新增外部專案參考與未來版本藍圖 companion 入口，確認 Vision 不大幅改寫；Roadmap Hub 只保留連結與短版 V1.5-V1.9 方向，完整外部專案對照與 deferred 技術邊界移至 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。
 - 2026-06-13：將 Roadmap 從單一最高權威文件重構為 Roadmap Hub；引入 Scoped SSOT，新增 6 個月工程 Roadmap，並將舊 Roadmap 完整歸檔。
 - 2026-06-13：新增 Legacy Carryover Matrix，逐項承接舊 Roadmap 未完成事項並設定 Month 3 前結案 Gate。
 - 2026-06-15：依 baldr 願景重排 Roadmap Hub 的短版 Next，將 Month 3 補強為 Factor Layer + Portfolio Replay 可信度，並將 Daily Decision Desk 明確列為 Month 4 v1 首頁，其他 section 逐步接線。

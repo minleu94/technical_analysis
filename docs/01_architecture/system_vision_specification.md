@@ -4,6 +4,7 @@
 > **文件性質**：本文件描述 baldr 的長期北極星、目前邊界與投資有效性驗證架構。
 > **核心原則**：本系統不以自動交易、不以 AI 報牌、不以預測明日漲跌為目標；本系統的目標是建立一套可驗證、可回溯、可解釋、可持續改進的台股投資研究與決策工作台。
 > **權威邊界**：本文件提供產品願景、現況邊界與證據要求，不取代 Scoped SSOT。當前實作狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月工程路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；目前模組邊界以 `docs/01_architecture/system_architecture.md` 為準；操作方式以 `docs/07_guides/APPLICATION_MANUAL.md` 為準。
+> **外部參考邊界**：GitHub 開源專案對照、資料源補強優先序與 V1.5 至 V2.0 版本形狀，統一維護於 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`；本 Vision 不保存外部專案清單，避免把產品北極星混成研究筆記。
 
 ---
 
@@ -785,6 +786,10 @@ baldr 的成功分為四層。
 - 完成 Post-V1 Forward Performance Dashboard read-only UI v1 的願景文件同步：標示 Research Lab `Forward Evidence` 分頁已可唯讀檢查 evidence summary、quality、warnings、benchmark / industry 缺口。
 - 明確標示 Dashboard 只是 evidence inspection layer；close-to-close forward return 不是實盤可執行績效，scheduler 仍不得視為 production-ready，也不得宣稱 alpha 或任何事件類型有效。
 - 完成 Post-V1 Evidence Pipeline Runner dry-run v1 的願景文件同步：標示 manual runner 可輸出 diagnostics report、readiness 最高只到 `ready_for_manual_confirm`，正式 scheduler 仍需人工批准與多次 dry-run 穩定紀錄。
+
+### 2026-07-04
+
+- 新增外部參考邊界：開源專案對照、資料源補強優先序與 V1.5-V2.0 版本形狀移至 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`，Vision 保持 North Star / Current State / Evidence Requirement，不大幅改寫為外部專案 catalog。
 
 ### 2026-07-04
 

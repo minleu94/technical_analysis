@@ -1,7 +1,7 @@
 # V1.1 至 V2.0 版本路線圖
 
 > **最後更新**：2026-07-04
-> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 的版本化交付 companion。6M Roadmap 仍是未來 6 個月工程主線權威；本文件負責把「V1 已完成、main 可運行、資料可信度仍在驗證中」之後的工作拆成可討論、可 commit、可驗收的 V1.1 至 V2.0 節奏。
+> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 的版本化交付 companion。6M Roadmap 仍是未來 6 個月工程主線權威；本文件負責把「V1 已完成、main 可運行、資料可信度仍在驗證中」之後的工作拆成可討論、可 commit、可驗收的 V1.1 至 V2.0 節奏。外部開源專案對照與資料源優先序見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)。
 
 ---
 
@@ -31,7 +31,12 @@
 | V1.2 | Research Credibility & Execution Model | 研究回測已有治理，但成交假設、微結構與 attribution 還不夠像真實決策 | 已完成 v1：replay 訓練 / 驗證分離、rolling risk、microstructure preflight、relative attribution |
 | V1.3 | Evidence Operations & Manual Lifecycle | Evidence dashboard 已建立，但樣本、覆盤、人工核准流程還未形成日常節奏 | 已完成 v1：weekly evidence operations package、manual approval summary、signal decay candidate 與 action item planning |
 | V1.4 | Evidence Review History | weekly review 可產生，但缺少 append-only history 與 UI 查閱入口 | 已完成 v1：weekly review history repository、CLI save/list、Research Lab `Evidence Review -> 覆盤歷史` 唯讀子頁 |
-| V2.0 | Unified Decision Workbench | V1.x 驗證後，Daily Decision / Market Watch / Evidence / Portfolio Review 的邊界可以重整 | 形成單一決策工作台，舊 Tab 轉為 drill-down 或專家模式 |
+| V1.5 | Data Credibility & Corporate Action Gate | 外部參考校準後，最先缺的是資料可信度與 corporate action / 微結構治理 | 除權息 / 還原價政策、Data Source Capability Registry、處置股 / 分盤 / 全額交割 source 與 evidence source gaps 修補 |
+| V1.6 | Cross-sectional Factor Pipeline & Sector Rotation v2 | Factor、產業、題材與流動性需要可追溯 pipeline，而不是直接進 scoring | daily factor snapshot、concept basket、sector rotation v2、factor rank / quantile 保存 |
+| V1.7 | Screening Matrix & Negative Evidence | 推薦、排除、低流動性與資料降級需要同等 evidence 地位 | pass / fail / degraded / skipped / missing matrix、Why Not / Liquidity payload 持久化、negative evidence forward outcome |
+| V1.8 | Portfolio Construction & Execution Trace Sandbox | 組合配置與執行落差需要研究 sandbox，但不能自動交易 | research-only allocation / constraints、virtual order lifecycle、execution residual 深化 |
+| V1.9 | Read-only Agent / MCP Evidence Access | AI 可以協助查 evidence 與覆盤，但不能繞過治理 | read-only MCP / tool surface、Evidence / Research Run / Portfolio Review 查詢 schema、agent permission model |
+| V2.0 | Unified Decision Workbench | V1.5-V1.9 讓資料、因子、負面 evidence、portfolio sandbox 與 AI 邊界成熟後，資訊架構可以重整 | 形成單一決策工作台，舊 Tab 轉為 drill-down 或專家模式 |
 
 ---
 
@@ -148,7 +153,78 @@ V1.4 驗收 Gate：
 
 ---
 
-## 7. V2.0：Unified Decision Workbench
+## 7. V1.5 至 V1.9：外部參考後的中繼版本
+
+V1.1 至 V1.4 已完成 workflow、credibility、weekly operations 與 history 的第一版。外部專案對照後，V2.0 不應立刻提前；中間需要把資料可信度、橫斷面因子、負面 evidence、portfolio sandbox 與 read-only AI 邊界補厚。
+
+### V1.5：Data Credibility & Corporate Action Gate
+
+目標：先補資料可信度，避免 forward outcome、長期回測與技術指標建立在不清楚的價格政策上。
+
+核心範圍：
+
+1. Data Source Capability Registry v1。
+2. 除權息 / 還原價 / corporate action policy 與資料表候選設計。
+3. 處置股 / 分盤 / 全額交割 / 漲跌停鎖死 governed source preflight。
+4. why-not / liquidity exclusion payload、watchlist / portfolio source coverage gap 修補。
+
+V1.5 不改 `ScoringEngine`，不啟用 production evidence write-mode scheduler，也不導入新模型。
+
+### V1.6：Cross-sectional Factor Pipeline & Sector Rotation v2
+
+目標：參考 Qlib / Zipline 的 pipeline 思路，把每日市場、產業、題材、強弱、流動性、籌碼與 fundamental diagnostics 保存為可追溯 factor snapshot。
+
+核心範圍：
+
+1. Daily factor snapshot pipeline。
+2. Sector Rotation v2：官方產業 + concept basket。
+3. factor quantile / rank 保存到 SQLite，並可連到 Research Run Registry / Evidence Event Store。
+4. 初版 factor attribution summary。
+
+V1.6 不把新 factor 直接塞進 `ScoringEngine`；所有 factor 仍要通過 available_date / quality / missing policy。
+
+### V1.7：Screening Matrix & Negative Evidence
+
+目標：把推薦與排除原因放在同一個研究治理框架中，避免只保存「入選」而看不到「為何不選」。
+
+核心範圍：
+
+1. Screening Matrix：pass / fail / degraded / skipped / missing。
+2. Why Not / Liquidity exclusion payload 完整持久化。
+3. Negative evidence 進 forward outcome。
+4. Growth / fundamental screener 只以 diagnostics / gate 呈現，不改核心 score。
+
+V1.7 不自動降級策略版本；negative evidence 只是人工覆盤與研究驗證材料。
+
+### V1.8：Portfolio Construction & Execution Trace Sandbox
+
+目標：在研究層比較配置、限制與執行落差，但仍不串 broker 自動下單。
+
+核心範圍：
+
+1. research-only portfolio construction：等權、分數權重、risk parity / constrained allocation 候選。
+2. PyPortfolioOpt-style constraints / risk model adapter。
+3. virtual order event lifecycle：Created / Submitted / Partially Filled / Filled / Cancelled / Rejected。
+4. Portfolio replay residual：零股、買賣價差、完整撮合、gap actual execution model、未成交原因。
+
+V1.8 不導入 Nautilus / vn.py 完整交易引擎，不串 production broker API。`cuFOLIO` 只有在 portfolio optimization bottleneck 被量測證明後才重新評估。
+
+### V1.9：Read-only Agent / MCP Evidence Access
+
+目標：讓 AI 查詢 baldr evidence、資料品質與覆盤歷史，協助摘要與提出審核問題，但不能替代治理。
+
+核心範圍：
+
+1. 本地 read-only MCP server 或等價 tool surface。
+2. Evidence / Research Run / Portfolio Review 查詢 schema。
+3. Agent permission model：只能 read，不得 write DB、不得改策略、不得下單、不得 lifecycle action。
+4. AI report template：必須引用 evidence rows、quality、warnings 與 source trace。
+
+V1.9 不讓 LLM 直接輸出買賣指令，也不把 AI-generated thesis 視為 evidence。
+
+---
+
+## 8. V2.0：Unified Decision Workbench
 
 建議定位：V2.0 是資訊架構重整，不是單純增加功能。
 
@@ -169,7 +245,7 @@ V2.0 啟動條件：
 
 ---
 
-## 8. 分批 Commit / Push 建議
+## 9. 分批 Commit / Push 建議
 
 後續長線任務建議按以下批次推進，均先在 `dev` 或 `codex/*` 分支完成，不直接推 `main`：
 
@@ -180,20 +256,26 @@ V2.0 啟動條件：
 5. V1.2 credibility batch：execution model / microstructure / attribution，各自獨立 gate。✅ 已完成 v1
 6. V1.3 operations batch：manual approval、weekly review、action item loop。✅ 已完成 v1
 7. V1.4 history batch：weekly review history repository、CLI save/list、Evidence Review history dashboard。✅ 已完成 v1
-8. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
+8. V1.5 data credibility batch：Data Source Capability Registry、corporate action policy、microstructure source 與 evidence source gap 修補。
+9. V1.6 / V1.7 factor + negative evidence batch：cross-sectional factor pipeline、concept basket、screening matrix 與 Why Not / Liquidity payload。
+10. V1.8 / V1.9 sandbox batch：portfolio construction sandbox、virtual execution trace、read-only MCP / Agent evidence access。
+11. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
 
 ---
 
-## 9. 目前最合理的下一步
+## 10. 目前最合理的下一步
 
-V1.1 至 V1.4 v1 已收尾，下一步不應直接宣稱 Profile 有效，也不應把降級做成自動按鈕。比較穩的順序是：
+V1.1 至 V1.4 v1 已收尾，下一步不應直接宣稱 Profile 有效，也不應把降級做成自動按鈕。外部專案對照後，比較穩的順序是：
 
 - V1.3 已把 promote / hold / demote_candidate / retire_candidate 相關 evidence 轉成可審核 weekly package 與 action item planning，而不是自動升降級。
 - V1.4 已把 weekly review 封存為可回看的 history；下一步是用 V1.3/V1.4 weekly review 實際跑數週，觀察哪些 dashboard、blocking gaps 與 action item 真的有用。
-- V1.2 residual 只在 source / execution model 契約明確時繼續深化，不要用未治理資料補漂亮圖表。
+- V1.5 先補資料可信度與 source capability，不要先做看起來很炫的 AI / GPU / RL。
+- V1.6 / V1.7 再把 factor pipeline 與 negative evidence 做成可追溯治理層，不直接改 `ScoringEngine`。
+- V1.8 / V1.9 只在 research-only 與 read-only 邊界內處理 portfolio sandbox 與 AI evidence access。
 - V2.0 才評估 Unified Decision Workbench 是否要整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
 
-## 10. 更新記錄
+## 11. 更新記錄
 
+- 2026-07-04：依外部專案參考新增 V1.5 至 V1.9 中繼版本：Data Credibility、Cross-sectional Factor Pipeline、Negative Evidence、Portfolio Construction Sandbox 與 Read-only Agent / MCP；確認 `cuFOLIO`、RL、自動下單與 SQLite split / async 不進近期主線。
 - 2026-07-03：完成 V1.4 Evidence Review History v1，新增 weekly review history repository、CLI save/list 與 Research Lab `Evidence Review -> 覆盤歷史` 唯讀子頁；history 只保存人工覆盤快照，不啟用 production scheduler、不自動 lifecycle action。
 - 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1，新增 weekly evidence operations package、manual approval summary、signal decay manual lifecycle candidates 與 append-only action item planning；production scheduler 仍未啟用。

@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
 **版本**：v1.4.5
-**最後更新**：2026-07-03
+**最後更新**：2026-07-04
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -14,7 +14,7 @@
 
 產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 已是主 UI 的可用頂層工作區；現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
 
-目前 roadmap 判讀已從舊線性 Phase 轉為 Scoped SSOT + Post-V1 版本節奏：目前狀態看 `docs/00_core/PROJECT_SNAPSHOT.md`，未來工程路線看 `docs/00_core/ROADMAP_6M_ENGINEERING.md`，V1.1 至 V2.0 節奏看 `docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`。`docs/05_phases/` 僅保留為歷史 Phase / 設計追溯，不作目前 roadmap。
+目前 roadmap 判讀已從舊線性 Phase 轉為 Scoped SSOT + Post-V1 版本節奏：目前狀態看 `docs/00_core/PROJECT_SNAPSHOT.md`，未來工程路線看 `docs/00_core/ROADMAP_6M_ENGINEERING.md`，V1.1 至 V2.0 節奏看 `docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`，外部專案參考、資料源優先序與 V1.5-V2.0 版本形狀看 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。`docs/05_phases/` 僅保留為歷史 Phase / 設計追溯，不作目前 roadmap。
 
 ---
 

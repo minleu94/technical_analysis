@@ -1,6 +1,6 @@
 ﻿# 專案盤點報告
 
-> **最後整理**：2026-07-03
+> **最後整理**：2026-07-04
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 
 ---
@@ -100,6 +100,7 @@
 - `AGENT_CONTEXT.md`
 - `docs/00_core/DEVELOPMENT_ROADMAP.md`
 - `docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`
 - `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
 - `docs/00_core/PROJECT_SNAPSHOT.md`
 - `docs/00_core/DOCUMENTATION_INDEX.md`
@@ -116,7 +117,7 @@
 - Phase 5 圖表渲染、批次並行化、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 報告輸出仍在後續 backlog。
 - Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉。Month 6 Strategy Lifecycle / Portfolio Feedback v1 已落地 lifecycle gate、append-only lifecycle evidence、current state projection、drift detector、Portfolio feedback attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
 - Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations 與 evidence review history。
-- 接續主線是用 weekly evidence operations + history 實際累積多週覆盤證據；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 V1.x 使用與 evidence 證明資訊架構值得收斂後再評估。
+- 接續主線是用 weekly evidence operations + history 實際累積多週覆盤證據，並依 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 逐步準備 V1.5 Data Credibility、V1.6 Cross-sectional Factor Pipeline、V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等中繼版本的資料、因子、evidence 與使用節奏成熟後再評估。
 - `docs/05_phases/` 保留為 Historical / Reference；Phase 文件內的下一步或 Gate 不作目前 roadmap 判斷。
 
 目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；舊 Roadmap 未完成事項是否已承接，以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。
