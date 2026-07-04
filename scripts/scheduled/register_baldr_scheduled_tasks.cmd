@@ -8,15 +8,21 @@ if /I not "%MODE%"=="dryrun" if /I not "%MODE%"=="register" goto usage
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..") do set "REPO_ROOT=%%~fI"
 
+set "UPDATE_TASK=baldr-data-update-quick-daily"
 set "FRESH_TASK=baldr-data-freshness-check-daily"
 set "EVIDENCE_TASK=baldr-evidence-pipeline-dry-run-daily"
 set "SMOKE_TASK=baldr-evidence-working-copy-smoke-manual"
+set "UPDATE_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_daily_data_update_quick.cmd"
 set "FRESH_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_daily_data_freshness_check.cmd"
 set "EVIDENCE_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_evidence_pipeline_dry_run.cmd"
+set "UPDATE_ACTION=cmd.exe /c ""%UPDATE_SCRIPT%"""
 set "FRESH_ACTION=cmd.exe /c ""%FRESH_SCRIPT%"""
 set "EVIDENCE_ACTION=cmd.exe /c ""%EVIDENCE_SCRIPT%"""
 
 echo Mode: %MODE%
+echo Task: %UPDATE_TASK%
+echo   Schedule: DAILY 04:20
+echo   Action: %UPDATE_ACTION%
 echo Task: %FRESH_TASK%
 echo   Schedule: DAILY 05:00
 echo   Action: %FRESH_ACTION%
@@ -31,6 +37,9 @@ if /I "%MODE%"=="dryrun" (
   exit /b 0
 )
 
+schtasks.exe /Create /TN "%UPDATE_TASK%" /SC DAILY /ST 04:20 /TR "%UPDATE_ACTION%" /F
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 schtasks.exe /Create /TN "%FRESH_TASK%" /SC DAILY /ST 05:00 /TR "%FRESH_ACTION%" /F
 if errorlevel 1 exit /b %ERRORLEVEL%
 
@@ -39,6 +48,8 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 
 echo.
 echo Registered tasks:
+schtasks.exe /Query /TN "%UPDATE_TASK%" /V /FO LIST
+if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%FRESH_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%EVIDENCE_TASK%" /V /FO LIST

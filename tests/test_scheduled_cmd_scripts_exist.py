@@ -8,6 +8,8 @@ SCHEDULED_DIR = ROOT / "scripts" / "scheduled"
 
 
 REQUIRED_CMD_FILES = (
+    "run_daily_data_update_quick.cmd",
+    "run_daily_data_update_quick.py",
     "run_daily_data_freshness_check.cmd",
     "run_evidence_pipeline_dry_run.cmd",
     "run_evidence_working_copy_smoke.cmd",

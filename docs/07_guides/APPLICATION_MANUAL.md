@@ -880,7 +880,7 @@ Evidence Review UI 完成後，正式 scheduler 前仍需要人工 closeout：
 - `docs/06_qa/POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md`：記錄 3-5 個交易日的 data update status、source coverage、dry-run pipeline、working-copy confirm smoke、events / outcomes / summary / warnings / blocking gaps、dashboard review 與人工 decision。
 - `docs/06_qa/POST_V1_EVIDENCE_SCHEDULER_APPROVAL_SOP.md`：描述 Manual run → Multi-day dry-run → Working-copy confirm smoke → Dashboard review → Manual approval checklist → Production scheduler design → explicit approval 後才 implementation。
 
-這些文件是 production scheduler 前的 QA scaffold；目前只允許 read-only / dry-run 範圍。現有 Windows Task Scheduler 只負責 data freshness check 與 evidence pipeline dry-run，不是 production confirm scheduler。任何 production confirm 未來都需要 backup、rollback、diagnostics 與 explicit human approval；scheduler 不得自動 lifecycle action，也不得自動交易。
+這些文件是 production scheduler 前的 QA scaffold；目前只允許受控 market data quick update、read-only freshness 與 evidence dry-run 範圍。現有 Windows Task Scheduler 會先執行非 UI 快速資料更新，再跑 data freshness check 與 evidence pipeline dry-run，不是 production confirm scheduler。任何 production confirm 未來都需要 backup、rollback、diagnostics 與 explicit human approval；scheduler 不得自動 lifecycle action，也不得自動交易。
 
 ### 9.9.3 Evidence Scheduled Dry-run Wrappers
 
@@ -895,15 +895,16 @@ scripts\scheduled\unregister_baldr_scheduled_tasks.cmd unregister
 
 目前 Windows Task Scheduler task：
 
+- `baldr-data-update-quick-daily`：每日本機時間 04:20，走非 UI 快速更新路徑，補最近工作日窗口的 TWSE / TPEX 每日股價、大盤、產業、券商分點、SQLite 同步與必要的技術指標增量；輸出位於 `<OUTPUT_ROOT>/scheduled/data_update_quick/`。
 - `baldr-data-freshness-check-daily`：每日本機時間 05:00，唯讀檢查 SQLite / `DATA_ROOT` freshness，只寫 `<OUTPUT_ROOT>/scheduled/data_freshness/latest_status.json` 與 logs。
 - `baldr-evidence-pipeline-dry-run-daily`：每日本機時間 05:15，只執行 evidence pipeline `--dry-run`；若 freshness status 不是 `passed`，report status 會標為 degraded / failed。輸出位於 `<OUTPUT_ROOT>/scheduled/evidence_pipeline_dry_run/`。
 - `baldr-evidence-working-copy-smoke-manual`：不建立每日 task；只保留 manual-only script，必須人工指定 source DB 與 working-copy DB，且不得寫 source DB 或 default `DATA_ROOT/sqlite/twstock.db`。
 
-Codex app 另外有一個 read-only daily automation：`baldr scheduled evidence morning report`。它每日本機時間約 05:30 只查詢 Task Scheduler 狀態、`latest_status.json`、最新 evidence dry-run report 與必要 log 區段，並產生繁體中文摘要；它不重新執行 freshness / evidence pipeline、不建立或修改 Windows Task Scheduler task。
+Codex app 另外有一個 read-only daily automation：`baldr scheduled evidence morning report`。它每日本機時間約 05:30 只查詢 Task Scheduler 狀態、`latest_status.json`、最新 data update / freshness / evidence dry-run report 與必要 log 區段，並產生繁體中文摘要；它不重新執行 data update / freshness / evidence pipeline、不建立或修改 Windows Task Scheduler task。
 
 明早檢查步驟見 `docs/07_guides/EVIDENCE_SCHEDULED_MORNING_CHECK.md`。Scheduler QA 紀錄見 `docs/06_qa/POST_V1_SCHEDULED_EVIDENCE_PIPELINE_QA_2026_07_12.md`；舊 PowerShell execution policy block 歷史見 `docs/06_qa/POST_V1_EVIDENCE_SCHEDULED_DRY_RUN_QA_2026_07_12.md`。
 
-這些 wrappers 與 Codex read-only 摘要不更新資料、不寫 production evidence DB、不跑 UI、不讀 UI state、不做 portfolio / lifecycle action，也不代表任何訊號或事件類型已被證明有效。
+這些 wrappers 中只有 `baldr-data-update-quick-daily` 會寫 market data CSV / SQLite；evidence dry-run 與 Codex read-only 摘要不寫 production evidence DB、不跑 UI、不讀 UI state、不做 portfolio / lifecycle action，也不代表任何訊號或事件類型已被證明有效。
 
 **報告匯出按鈕**：
 - 在「實驗摘要」設有「匯出 Excel 報告」按鈕（僅在單股回測成功後啟用）。

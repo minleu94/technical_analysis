@@ -10,12 +10,14 @@
 
 ```cmd
 scripts\scheduled\query_baldr_scheduled_tasks.cmd
+schtasks /Query /TN baldr-data-update-quick-daily /V /FO LIST
 schtasks /Query /TN baldr-data-freshness-check-daily /V /FO LIST
 schtasks /Query /TN baldr-evidence-pipeline-dry-run-daily /V /FO LIST
 ```
 
 預期：
 
+- `baldr-data-update-quick-daily`：每天本機時間 04:20，執行 `scripts\scheduled\run_daily_data_update_quick.cmd`。這會走非 UI 快速更新路徑，補最近工作日窗口的 TWSE / TPEX 每日股價、大盤、產業、券商分點、SQLite 同步與必要的技術指標增量。
 - `baldr-data-freshness-check-daily`：每天本機時間 05:00，執行 `scripts\scheduled\run_daily_data_freshness_check.cmd`。
 - `baldr-evidence-pipeline-dry-run-daily`：每天本機時間 05:15，執行 `scripts\scheduled\run_evidence_pipeline_dry_run.cmd`。
 - `baldr-evidence-working-copy-smoke-manual`：manual-only；目前不建立每日自動 task。
@@ -40,12 +42,16 @@ scripts\scheduled\register_baldr_scheduled_tasks.cmd register
 預設位置：
 
 ```text
+<OUTPUT_ROOT>/scheduled/data_update_quick/latest_status.json
+<OUTPUT_ROOT>/scheduled/data_update_quick/YYYYMMDD_data_update_quick.log
 <OUTPUT_ROOT>/scheduled/data_freshness/latest_status.json
 <OUTPUT_ROOT>/scheduled/data_freshness/YYYYMMDD_data_freshness.log
 ```
 
 檢查項目：
 
+- `baldr-data-update-quick-daily` 應先於 freshness 成功或清楚列出 failed step。
+- `data_update_quick/latest_status.json` 若為 `passed_with_warnings`，先看 warnings 是否只來自 TPEX 暫時缺資料；若核心步驟失敗，當天 freshness / evidence 只能視為 degraded 或 failed。
 - `status` 應為 `passed`，或是可解讀的 `degraded`。
 - `read_only` 必須為 `true`。
 - `daily_prices_latest_date` 與 `technical_indicators_latest_date` 應符合人工預期。
@@ -98,6 +104,7 @@ scripts\scheduled\unregister_baldr_scheduled_tasks.cmd unregister
 
 目前會自動跑：
 
+- 非 UI 快速資料更新。
 - read-only data freshness check。
 - evidence pipeline dry-run。
 

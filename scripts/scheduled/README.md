@@ -6,6 +6,7 @@ These wrappers are intentionally conservative. They use CMD files and Windows bu
 
 | Task | State | Trigger | Behavior |
 |---|---:|---|---|
+| `baldr-data-update-quick-daily` | enabled after register | daily local time 04:20 | Runs the non-UI quick data update path for the recent weekday window. Writes market data CSV / SQLite updates plus status and logs under `OUTPUT_ROOT/scheduled/data_update_quick/`. |
 | `baldr-data-freshness-check-daily` | enabled after register | daily local time 05:00 | Read-only SQLite / `DATA_ROOT` freshness check. Writes only status and logs under `OUTPUT_ROOT/scheduled/data_freshness/`. |
 | `baldr-evidence-pipeline-dry-run-daily` | enabled after register | daily local time 05:15 | Runs `scripts/run_evidence_pipeline.py` with `--dry-run`. Writes only report, status, and logs under `OUTPUT_ROOT/scheduled/evidence_pipeline_dry_run/`. |
 | `baldr-evidence-working-copy-smoke-manual` | manual-only | no daily schedule | Manual smoke against a working-copy DB. This repo keeps the script only; `register_baldr_scheduled_tasks.cmd` does not create a daily task for it. |
@@ -27,6 +28,10 @@ scripts\scheduled\register_baldr_scheduled_tasks.cmd register
 The register script creates:
 
 ```text
+baldr-data-update-quick-daily
+  DAILY 04:20
+  cmd.exe /c "<repo>\scripts\scheduled\run_daily_data_update_quick.cmd"
+
 baldr-data-freshness-check-daily
   DAILY 05:00
   cmd.exe /c "<repo>\scripts\scheduled\run_daily_data_freshness_check.cmd"
@@ -69,6 +74,8 @@ You can also open Windows Task Scheduler and disable or delete the two daily tas
 Data freshness:
 
 ```text
+<OUTPUT_ROOT>/scheduled/data_update_quick/latest_status.json
+<OUTPUT_ROOT>/scheduled/data_update_quick/YYYYMMDD_data_update_quick.log
 <OUTPUT_ROOT>/scheduled/data_freshness/latest_status.json
 <OUTPUT_ROOT>/scheduled/data_freshness/YYYYMMDD_data_freshness.log
 ```
@@ -93,15 +100,16 @@ If the DB paths are missing, the wrapper prints usage and exits. Repeat defaults
 
 The daily automation runs only:
 
+- non-UI quick market data updates for the recent weekday window;
 - read-only data freshness checks;
 - evidence pipeline dry-run reports.
 
-It does not run production evidence confirm, does not write the production evidence DB, does not update production data, does not run the UI, does not read UI state, does not change portfolio state, does not change `ScoringEngine`, does not change recommendation weights, does not promote / demote / retire strategies, and does not automate trading.
+It does not run production evidence confirm, does not write the production evidence DB, does not run the UI, does not read UI state, does not change portfolio state, does not change `ScoringEngine`, does not change recommendation weights, does not promote / demote / retire strategies, and does not automate trading.
 
 The generated evidence reports are for human review only. They do not prove alpha and must not be converted into trading advice.
 
 ## Codex Morning Summary
 
-The Codex app automation `baldr scheduled evidence morning report` runs separately at about local time 05:30. It only reads Windows Task Scheduler status, `latest_status.json`, the latest evidence dry-run report, and relevant log warning / error sections, then writes a Traditional Chinese summary to the user.
+The Codex app automation `baldr scheduled evidence morning report` runs separately at about local time 05:30. It only reads Windows Task Scheduler status, `latest_status.json`, the latest data update status, the latest evidence dry-run report, and relevant log warning / error sections, then writes a Traditional Chinese summary to the user.
 
-It must not rerun data freshness, rerun the evidence pipeline, enter confirm write mode, create or modify Windows Task Scheduler tasks, write the production evidence DB, change portfolio / scoring / recommendation weights, apply lifecycle actions, push, or produce trading advice.
+It must not rerun data update, rerun data freshness, rerun the evidence pipeline, enter confirm write mode, create or modify Windows Task Scheduler tasks, write the production evidence DB, change portfolio / scoring / recommendation weights, apply lifecycle actions, push, or produce trading advice.

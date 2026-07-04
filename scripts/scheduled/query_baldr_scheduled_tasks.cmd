@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 
-set TASKS=baldr-data-freshness-check-daily baldr-evidence-pipeline-dry-run-daily baldr-evidence-working-copy-smoke-manual
+set TASKS=baldr-data-update-quick-daily baldr-data-freshness-check-daily baldr-evidence-pipeline-dry-run-daily baldr-evidence-working-copy-smoke-manual
 
 for %%T in (%TASKS%) do (
   echo.

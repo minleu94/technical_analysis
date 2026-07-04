@@ -29,6 +29,17 @@ def test_daily_evidence_cmd_wrapper_does_not_confirm() -> None:
     assert "--allow-production-db-confirm" not in text
 
 
+def test_daily_data_update_wrapper_does_not_confirm_or_trade() -> None:
+    cmd_text = (SCHEDULED_DIR / "run_daily_data_update_quick.cmd").read_text(encoding="utf-8").lower()
+    py_text = (SCHEDULED_DIR / "run_daily_data_update_quick.py").read_text(encoding="utf-8").lower()
+    text = cmd_text + "\n" + py_text
+
+    assert "data_update_quick" in text
+    assert "--confirm" not in text
+    assert "--allow-production-db-confirm" not in text
+    assert "production evidence" not in text
+
+
 def test_readme_explicitly_blocks_production_confirm() -> None:
     text = (SCHEDULED_DIR / "README.md").read_text(encoding="utf-8").lower()
 
