@@ -19,6 +19,7 @@ from app_module.recommendation_portfolio_metrics import (
     generate_improvement_hints,
 )
 from app_module.recommendation_replay_service import RecommendationReplayService
+from data_module.microstructure_source_preflight import build_microstructure_source_preflight
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from decision_module.factors.factor_dtos import FactorQuality, FactorRecord, MissingPolicy
 from financial_module.units import bps_to_rate, calculate_fee, quantize_money, to_decimal
@@ -910,27 +911,17 @@ class RecommendationPortfolioBacktestService:
         snapshots: List[RecommendationSnapshotDTO],
         data: pd.DataFrame,
     ) -> Dict[str, Any]:
-        source_groups = {
-            "disposition_stock": ("處置股", "disposition_stock", "disposition_flag"),
-            "periodic_call_auction": ("分盤交易", "分盤", "periodic_call_auction"),
-            "full_delivery": ("全額交割", "full_delivery", "full_delivery_flag"),
-            "limit_lock": ("漲跌停鎖死", "漲停鎖死", "跌停鎖死", "limit_lock", "limit_up_down_flag"),
-            "ex_dividend_timeline": ("除權息", "除權息日", "ex_dividend", "ex_rights", "adjustment_event"),
-        }
-        source_columns = {
-            risk_type: [column for column in columns if column in data.columns]
-            for risk_type, columns in source_groups.items()
-        }
-        missing_sources = sorted(
-            risk_type for risk_type, columns in source_columns.items() if not columns
-        )
+        source_preflight = build_microstructure_source_preflight(data.columns)
+        source_metadata = source_preflight.to_dict()
+        source_columns = source_preflight.source_columns
+        missing_sources = sorted(source_preflight.missing_sources)
         risks: List[Dict[str, Any]] = []
         if data.empty or "日期" not in data.columns or "證券代號" not in data.columns:
             return {
                 "schema_version": 1,
                 "status": "missing_required_price_context",
                 "policy": "decision_date_optional_microstructure_columns_only",
-                "source_columns": source_columns,
+                **source_metadata,
                 "missing_sources": missing_sources,
                 "risk_count": 0,
                 "risks": [],
@@ -975,7 +966,7 @@ class RecommendationPortfolioBacktestService:
             "schema_version": 1,
             "status": status,
             "policy": "decision_date_optional_microstructure_columns_only",
-            "source_columns": source_columns,
+            **source_metadata,
             "missing_sources": missing_sources,
             "risk_count": len(risks),
             "risks": risks,

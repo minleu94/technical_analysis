@@ -967,6 +967,8 @@ def test_portfolio_backtest_microstructure_preflight_flags_optional_risks():
     assert preflight["schema_version"] == 1
     assert preflight["status"] == "risk_observed"
     assert preflight["risk_count"] == 3
+    assert preflight["governed_sources"]["disposition_stock"]["status"] == "planned"
+    assert preflight["source_capability_status"]["disposition_stock"] == "planned"
     assert {item["risk_type"] for item in preflight["risks"]} == {
         "disposition_stock",
         "periodic_call_auction",
@@ -1006,6 +1008,8 @@ def test_portfolio_backtest_microstructure_preflight_discloses_missing_optional_
     assert preflight["status"] == "missing_optional_sources"
     assert "disposition_stock" in preflight["missing_sources"]
     assert "limit_lock" in preflight["missing_sources"]
+    assert preflight["governed_sources"]["limit_lock"]["missing_policy"] == "degrade_preflight_and_warn"
+    assert preflight["source_capability_status"]["limit_lock"] == "planned"
     assert result.summary["microstructure_risk_count"] == 0
 
 
