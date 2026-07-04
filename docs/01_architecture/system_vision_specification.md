@@ -656,7 +656,9 @@ Priority 代表目前對決策可信度的影響，不等同實作順序；Owner
 
 追蹤 Watchlist Trigger、Recommendation、Why Not、Liquidity Gate、Portfolio Alert 的後續表現。
 
-2026-07-01 第一增量已先完成 Evidence Event Store v1 / Forward Outcome Calculator v1，可保存 events 與 close-to-close forward outcomes。2026-07-02 第二增量已完成 Evidence Importers / Capture Pipeline v1：Recommendation 可讀 persisted result，Watchlist Trigger / Portfolio Alert / Risk Prompt 可讀注入式 DTO provider；CLI 預設 dry-run，只有 `--confirm` 寫入。2026-07-03 第三增量已完成 E2E smoke 與 Forward Performance Read Model v1，可依 event_type、event_family、source_type、regime、sector、profile_id、score_percentile_bucket、liquidity_state、data_quality 唯讀彙總 ready / pending / missing、return / excess return、quality 與 warnings。2026-07-04 第四增量已完成 durable Daily Decision Desk snapshot repository / capture CLI / inspect CLI、capture evidence durable provider wiring、Recommendation exclusion payload optional fields 與 source coverage CLI；Why Not / Liquidity payload 為 partial，缺 payload 時只 diagnostic。2026-07-05 第五增量已完成 Research Lab `Forward Evidence` read-only UI v1，可檢查 summary cards、filters、group table、detail panel、empty / degraded states。2026-07-06 第六增量已完成 Evidence Pipeline Runner dry-run v1，可手動串接 source coverage、snapshot capture、event capture、outcome calculation、summary 與 diagnostics report。2026-07-07 第七增量已完成 working-copy DB smoke v1、scheduler readiness evaluator 與 production scheduler approval checklist，可在 working-copy DB 重複 confirm 檢查 idempotency，並固定 `production_scheduler_allowed=false`。2026-07-08 第八增量已完成 Live vs Research Gap linkage v1，可保存 source trace / evidence link / attribution / portfolio mode / matching confidence。2026-07-09 第九增量已完成 Signal Decay Monitor v1，可用已保存 forward evidence 與 live gap observation 產生 signal scope decay observation 與 lifecycle proposed payload。2026-07-10 第十增量已完成 Decision Quality Review v1，可保存週 / 月 / custom 流程覆盤、review items、action items 與 process quality bp。2026-07-11 第十一增量已完成 Research Lab `Evidence Review` read-only UI pack v1，整合 Forward Evidence、Live vs Research Gap、Signal Decay 與 Decision Quality 子頁；scheduler not ready for production schedule，最高只能到 `ready_for_manual_confirm`；目前不能用來宣稱 alpha、完整實帳歸因、任何事件類型有效、任一策略確定失效或使用者決策錯誤。
+2026-07-01 第一批增量已完成 Evidence Event Store v1 / Forward Outcome Calculator v1、Forward Performance Dashboard read-only UI v1、Evidence Pipeline Runner dry-run v1、working-copy DB smoke v1、Live vs Research Gap linkage v1、Signal Decay Monitor v1、Decision Quality Review v1 與 Research Lab `Evidence Review` read-only UI pack v1；可保存 events / outcomes / gap observation / decay observation / process review，並唯讀檢查 Forward Evidence、Live vs Research Gap、Signal Decay 與 Decision Quality。2026-07-02 第二批增量完成 Evidence Importers / Capture Pipeline v1、Evidence Review UI 中文化、manual smoke / multi-day dry-run / scheduler approval scaffold、safe scheduled dry-run wrappers 與 05:30 read-only morning report automation。2026-07-03 完成 E2E smoke / Forward Performance Read Model v1、V1.3 weekly evidence operations、V1.4 weekly review history 與第一個 working-copy weekly operating-cycle。2026-07-04 完成 durable Daily Decision Desk snapshot repository / capture CLI / inspect CLI、capture evidence durable provider wiring、Recommendation exclusion payload optional fields、source coverage CLI 與每日 04:20 非 UI 快速資料更新排程 wrapper。scheduler not ready for production schedule，最高只能到 `ready_for_manual_confirm`；目前不能用來宣稱 alpha、完整實帳歸因、任何事件類型有效、任一策略確定失效或使用者決策錯誤。
+
+Post-V1 部分 design / QA 檔名保留 2026-07-05 至 2026-07-12 的里程碑命名；交付判讀以前述 2026-07-04 closeout 為準。
 
 最低欄位：
 
@@ -754,31 +756,31 @@ baldr 的成功分為四層。
 
 ## 17. 更新記錄
 
-### 2026-07-10
+### 2026-07-01
 
 - 完成 Post-V1 Decision Quality Review v1 的願景文件同步：標示 review repository / service / CLI 已可保存週 / 月 / custom 流程覆盤。
 - 明確標示 Decision Quality score 是流程品質，不是投資能力或責備判斷。
-- 保留限制：未建立 Decision Quality Dashboard UI，未啟用 production scheduler，也不證明任何訊號有效或決策改善。
+- 保留限制：Decision Quality dashboard 僅作為 Evidence Review read-only UI pack 的一部分，不啟用 production scheduler，也不證明任何訊號有效或決策改善。
 
-### 2026-07-07
+### 2026-07-01
 
 - 完成 Post-V1 working-copy DB smoke v1 的願景文件同步：標示 source DB read-only、working-copy confirm、repeat idempotency check 與 diagnostics report review 才是正式排程前的核准材料。
 - 新增 scheduler readiness evaluator / approval checklist 狀態：readiness 最高只到 `ready_for_manual_confirm`，`production_scheduler_allowed=false`，production scheduler 仍未啟用。
 - 明確保留 evidence 邊界：working-copy smoke 只證明 pipeline 可重複執行與診斷，不證明任一訊號有效。
 
-### 2026-07-08
+### 2026-07-01
 
 - 完成 Post-V1 Live vs Research Gap linkage v1 的願景文件同步：標示 gap repository / service / CLI 已可保存 source trace、evidence link、portfolio mode 與 attribution。
 - 明確標示 symbol/date fuzzy match 只能是 low-confidence candidate；gap observation 是 evidence，不是 action。
-- 保留限制：未建立 read-only UI，未完成完整實帳歸因，未啟用 production scheduler，也不做 lifecycle action。
+- 保留限制：Live vs Research Gap dashboard 僅作為 Evidence Review read-only UI pack 的一部分，仍未完成完整實帳歸因，未啟用 production scheduler，也不做 lifecycle action。
 
-### 2026-07-09
+### 2026-07-01
 
 - 完成 Post-V1 Signal Decay Monitor v1 的願景文件同步：標示 decay repository / service / CLI 已可保存 signal scope decay observation。
 - 明確標示 lifecycle proposed payload 只供人工審核，不自動套用 demote / retire。
-- 保留限制：未建立 Signal Decay Dashboard UI，未完成 Decision Quality Review，未啟用 production scheduler，也不證明任一訊號有效或失效。
+- 保留限制：Signal Decay dashboard 僅作為 Evidence Review read-only UI pack 的一部分，未啟用 production scheduler，也不證明任一訊號有效或失效。
 
-### 2026-07-05
+### 2026-07-01
 
 - 完成 Post-V1 Forward Performance Dashboard read-only UI v1 的願景文件同步：標示 Research Lab `Forward Evidence` 分頁已可唯讀檢查 evidence summary、quality、warnings、benchmark / industry 缺口。
 - 明確標示 Dashboard 只是 evidence inspection layer；close-to-close forward return 不是實盤可執行績效，scheduler 仍不得視為 production-ready，也不得宣稱 alpha 或任何事件類型有效。

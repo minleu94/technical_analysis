@@ -66,9 +66,9 @@ v1 attribution 是保守 rule-based observation，不是決策建議。
 ## CLI Examples
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\inspect_live_research_gap.py --observation-date 2026-07-08 --json-output
-.\.venv\Scripts\python.exe scripts\capture_live_research_gap.py --observation-date 2026-07-08 --dry-run --json-output
-.\.venv\Scripts\python.exe scripts\capture_live_research_gap.py --observation-date 2026-07-08 --confirm --db-path <working-copy-db> --json-output
+.\.venv\Scripts\python.exe scripts\inspect_live_research_gap.py --observation-date 2026-07-03 --json-output
+.\.venv\Scripts\python.exe scripts\capture_live_research_gap.py --observation-date 2026-07-03 --dry-run --json-output
+.\.venv\Scripts\python.exe scripts\capture_live_research_gap.py --observation-date 2026-07-03 --confirm --db-path <working-copy-db> --json-output
 ```
 
 ## Test Commands

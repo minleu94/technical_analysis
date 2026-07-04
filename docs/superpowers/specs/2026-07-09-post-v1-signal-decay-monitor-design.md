@@ -107,9 +107,9 @@ pending / missing outcome 不進平均數。缺 benchmark 或 live gap 時保留
 ## CLI
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\inspect_signal_decay.py --observation-date 2026-07-09 --json-output
-.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-09 --dry-run --json-output
-.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-09 --confirm --db-path <working-copy-db> --json-output
+.\.venv\Scripts\python.exe scripts\inspect_signal_decay.py --observation-date 2026-07-03 --json-output
+.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-03 --dry-run --json-output
+.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-03 --confirm --db-path <working-copy-db> --json-output
 ```
 
 `capture_signal_decay.py` 預設 dry-run。`--confirm` 必須搭配 explicit `--db-path`；疑似正式 DB 仍需要 `--allow-production-db-confirm`，測試不得寫正式 DB。
@@ -127,4 +127,3 @@ pending / missing outcome 不進平均數。缺 benchmark 或 live gap 時保留
 - 不把 close-to-close forward return 說成實盤績效。
 - 不把 decay observation 包裝成買賣建議。
 - 小樣本近期轉弱只能標示 `insufficient_sample`，不能當作策略失敗。
-

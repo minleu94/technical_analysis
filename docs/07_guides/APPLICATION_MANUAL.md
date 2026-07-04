@@ -1,6 +1,6 @@
 ﻿# baldr 完整操作手冊
 
-> **最後更新**：2026-06-30
+> **最後更新**：2026-07-04
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前 8 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
@@ -831,17 +831,17 @@ Working-copy smoke 會先確認 source DB 與 working-copy DB 不是同一路徑
 Live vs Research Gap linkage CLI 用來把 portfolio position source trace、Evidence Event / Outcome 與 saved source metadata 串成 gap observation。這是 evidence，不是 action；不修改持倉、不修改 Research Run、不做 lifecycle action，也不是完整實帳歸因。沒有真實交易與人工 override 記錄時，只能解讀為 research / simulated gap。Symbol / date fuzzy match 只會列為 low-confidence candidate，不會當作 confirmed evidence link。
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\inspect_live_research_gap.py --observation-date 2026-07-08 --json-output
-.\.venv\Scripts\python.exe scripts\capture_live_research_gap.py --observation-date 2026-07-08 --dry-run --json-output
-.\.venv\Scripts\python.exe scripts\capture_live_research_gap.py --observation-date 2026-07-08 --confirm --db-path <working-copy-db> --json-output
+.\.venv\Scripts\python.exe scripts\inspect_live_research_gap.py --observation-date 2026-07-03 --json-output
+.\.venv\Scripts\python.exe scripts\capture_live_research_gap.py --observation-date 2026-07-03 --dry-run --json-output
+.\.venv\Scripts\python.exe scripts\capture_live_research_gap.py --observation-date 2026-07-03 --confirm --db-path <working-copy-db> --json-output
 ```
 
 Signal Decay Monitor CLI 用來檢查已保存 forward evidence 與 live gap observation 是否在近期相對長窗轉弱。v1 支援 `event_type`、`event_family`、`strategy_version`、`profile` scope；`factor_name` scope 尚未完成。Research Lab `Evidence Review` 已提供唯讀 Signal Decay 子頁。輸出的 `demote_candidate` / `retire_candidate` 只是 lifecycle proposed payload，不會自動修改策略狀態、策略版本或持倉。樣本不足時只會標示 `insufficient_sample`，不能解讀為策略失敗；缺 benchmark 或 live gap evidence 時會降低 confidence。
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\inspect_signal_decay.py --observation-date 2026-07-09 --json-output
-.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-09 --scope event_type --scope-id recommendation_included --dry-run --json-output
-.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-09 --scope all --confirm --db-path <working-copy-db> --json-output
+.\.venv\Scripts\python.exe scripts\inspect_signal_decay.py --observation-date 2026-07-03 --json-output
+.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-03 --scope event_type --scope-id recommendation_included --dry-run --json-output
+.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-03 --scope all --confirm --db-path <working-copy-db> --json-output
 ```
 
 `capture_signal_decay.py` 預設 dry-run；`--confirm` 必須指定 explicit `--db-path`，疑似正式 DB 仍需額外 `--allow-production-db-confirm`。一般 QA 與人工審核應使用 working-copy DB。
@@ -862,8 +862,8 @@ V1.3 / V1.4 Evidence Operations weekly review CLI 用來把 scheduler readiness�
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --json-output
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --plan-action-items --json-output
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --confirm-action-items --action-owner human --json-output
-.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-07-06 --end-date 2026-07-12 --db-path <working-copy-db> --save-history --json-output
-.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-07-01 --end-date 2026-07-31 --db-path <working-copy-db> --list-history --json-output
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-29 --end-date 2026-07-03 --db-path <working-copy-db> --save-history --json-output
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-07-01 --end-date 2026-07-04 --db-path <working-copy-db> --list-history --json-output
 ```
 
 `--plan-action-items` 只預覽 open Decision Quality item 會形成哪些 action item，不寫入 DB。`--confirm-action-items` 才會 append-only 寫入指定 DB，且必須提供 explicit `--db-path`；疑似正式 DB 仍需額外 `--allow-production-like-db`。`--save-history` 會把當次 weekly review payload、hash、status、scheduler readiness 與 production scheduler disabled 邊界保存到 `evidence_operations_weekly_reviews`，同樣必須指定 explicit `--db-path`；`--list-history` 只讀取已保存歷史。一般覆盤應先在 working-copy DB 執行。
@@ -1135,19 +1135,19 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-06-30：快速更新與安全更新的預設補齊窗口改為結束日前最近 10 個工作日；快速更新仍跳過大型合併但不再只限最近 2 天，降低兩週才開啟程式時漏抓資料的風險。
 - 2026-06-30：新增 executable opt-in MainWindow UI smoke 說明；可啟動真實 MainWindow、切換 tab、截圖、測 resize evidence 與 Update 強制合併 cancel dialog，且預設 healthcheck 不會啟動 MainWindow。
 - 2026-06-29：補充 Full App Healthcheck Runner 分頁驗證方式；`--tab` 可分別驗證 Update、Market、Decision、Research、Recommendation、Watchlist、Portfolio、Runtime 與 cross-flow 的安全 direct bridge，完整真人 UI smoke test 仍以母檔人工確認為準。
-- 2026-07-05：新增 Research Lab `Forward Evidence` 分頁操作說明，標示 Forward Performance Dashboard read-only UI v1 只檢查已保存 evidence summary，不重算策略、不寫 evidence、不建立 scheduler，且 close-to-close forward return 不是實盤可執行績效。
-- 2026-07-06：新增 Evidence Pipeline Runner 手動 dry-run CLI 操作說明，標示 runner 預設 dry-run、confirm 只允許 working-copy DB、readiness 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
-- 2026-07-07：新增 working-copy DB smoke 與 scheduler readiness evaluator 操作說明，標示 source DB read-only、repeat confirm idempotency check、`production_scheduler_allowed=false` 與正式排程前人工核准 checklist。
-- 2026-07-08：新增 Live vs Research Gap linkage CLI 操作說明，標示 gap observation 是 evidence，不是 action；沒有真實交易與人工 override 時只能解讀為 research / simulated gap。
-- 2026-07-09：新增 Signal Decay Monitor CLI 操作說明，標示 decay observation 與 lifecycle proposed payload 只是人工審核 evidence，不自動套用策略生命週期動作。
-- 2026-07-10：新增 Decision Quality Review CLI 操作說明，標示 review item 與 process quality score 只作流程覆盤，不是投資能力、交易建議或責備判斷。
+- 2026-07-01：新增 Research Lab `Forward Evidence` 分頁操作說明，標示 Forward Performance Dashboard read-only UI v1 只檢查已保存 evidence summary，不重算策略、不寫 evidence、不建立 scheduler，且 close-to-close forward return 不是實盤可執行績效。
+- 2026-07-01：新增 Evidence Pipeline Runner 手動 dry-run CLI 操作說明，標示 runner 預設 dry-run、confirm 只允許 working-copy DB、readiness 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
+- 2026-07-01：新增 working-copy DB smoke 與 scheduler readiness evaluator 操作說明，標示 source DB read-only、repeat confirm idempotency check、`production_scheduler_allowed=false` 與正式排程前人工核准 checklist。
+- 2026-07-01：新增 Live vs Research Gap linkage CLI 操作說明，標示 gap observation 是 evidence，不是 action；沒有真實交易與人工 override 時只能解讀為 research / simulated gap。
+- 2026-07-01：新增 Signal Decay Monitor CLI 操作說明，標示 decay observation 與 lifecycle proposed payload 只是人工審核 evidence，不自動套用策略生命週期動作。
+- 2026-07-01：新增 Decision Quality Review CLI 操作說明，標示 review item 與 process quality score 只作流程覆盤，不是投資能力、交易建議或責備判斷。
 - 2026-07-03：新增 V1.4 Evidence Operations weekly review history 操作說明與 Research Lab `Evidence Review -> 覆盤歷史` 子頁說明；history 只保存人工覆盤快照，不啟用 scheduler、不自動 lifecycle action。
-- 2026-07-11：新增 Research Lab `Evidence Review` 分頁操作說明，標示 Forward Evidence、Live vs Research Gap、Signal Decay 與 Decision Quality dashboard 只讀已保存 evidence / observation / review，不寫 evidence、不建立 scheduler、不自動 lifecycle action。
-- 2026-07-12：新增 Evidence Review manual smoke、multi-day dry-run record 與 scheduler approval SOP 操作說明，標示這些是 production scheduler 前的人工 QA scaffold，不代表 scheduler 已啟用。
-- 2026-07-12：Evidence Review UI 介面中文化，Research Lab 結果分頁顯示為「證據覆盤」，四個子頁顯示為「前瞻證據 / 研究落差 / 訊號衰退 / 決策品質」，日期篩選改用日曆選擇器。
-- 2026-07-12：證據覆盤頁新增「目前資料庫」資訊列與複製路徑按鈕，協助人工 smoke 時確認 UI 實際讀取的 SQLite DB。
-- 2026-07-12：新增 safe scheduled wrappers 操作說明與 morning check guide；每日 task 僅做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
-- 2026-07-12：更新 safe scheduled 操作說明為 CMD wrapper + `schtasks.exe` 現況，記錄 05:00 / 05:15 Windows Task Scheduler task 與 05:30 Codex app read-only 摘要 automation；production confirm 仍未啟用。
+- 2026-07-01：新增 Research Lab `Evidence Review` 分頁操作說明，標示 Forward Evidence、Live vs Research Gap、Signal Decay 與 Decision Quality dashboard 只讀已保存 evidence / observation / review，不寫 evidence、不建立 scheduler、不自動 lifecycle action。
+- 2026-07-02：新增 Evidence Review manual smoke、multi-day dry-run record 與 scheduler approval SOP 操作說明，標示這些是 production scheduler 前的人工 QA scaffold，不代表 scheduler 已啟用。
+- 2026-07-02：Evidence Review UI 介面中文化，Research Lab 結果分頁顯示為「證據覆盤」，四個子頁顯示為「前瞻證據 / 研究落差 / 訊號衰退 / 決策品質」，日期篩選改用日曆選擇器。
+- 2026-07-02：證據覆盤頁新增「目前資料庫」資訊列與複製路徑按鈕，協助人工 smoke 時確認 UI 實際讀取的 SQLite DB。
+- 2026-07-02：新增 safe scheduled wrappers 操作說明與 morning check guide；每日 task 僅做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
+- 2026-07-04：更新 safe scheduled 操作說明為 CMD wrapper + `schtasks.exe` 現況，記錄 04:20 非 UI 快速資料更新、05:00 / 05:15 Windows Task Scheduler task 與 05:30 Codex app read-only 摘要 automation；production confirm 仍未啟用。
 - 2026-07-03：新增 V1.3 Evidence Operations weekly review CLI 操作說明，標示 manual approval package、action item planning、production scheduler disabled 與 signal decay candidate 不自動套用 lifecycle action。
 - 2026-07-02：完成 V1.1 workflow bridge v1 操作說明，補充推薦 Profile 進階摘要、buy / sell score 與權重差異、推薦回放是 Profile / Config 歷史重播，以及升降級判讀需經 Research Run / Evidence 與人工 lifecycle gate。
 - 2026-06-23：完成 Healthcheck Batch 2 計畫範圍實作後的操作說明：Daily Decision Desk answer-first dashboard、Smart Money 5 / 20 / 60 日語意診斷、quantity concentration 與股票焦點下鑽。

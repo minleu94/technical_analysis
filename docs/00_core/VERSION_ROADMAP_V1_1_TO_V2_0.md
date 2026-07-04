@@ -1,6 +1,6 @@
 # V1.1 至 V2.0 版本路線圖
 
-> **最後更新**：2026-07-02
+> **最後更新**：2026-07-04
 > **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 的版本化交付 companion。6M Roadmap 仍是未來 6 個月工程主線權威；本文件負責把「V1 已完成、main 可運行、資料可信度仍在驗證中」之後的工作拆成可討論、可 commit、可驗收的 V1.1 至 V2.0 節奏。
 
 ---
@@ -19,6 +19,7 @@
 - V1.x：不大改資訊架構，不移除既有主要 Tab；優先把 workflow 串順、把 evidence 看得見、把可信度 gate 補強。
 - V2.0：等 V1.x 的真實使用與 evidence 證明使用者每天怎麼決策後，再重整資訊架構與主要工作台。
 - 任何策略、回測、推薦、factor、portfolio 或績效改動，都維持 no-look-ahead、Decimal / 整數單位與資料可得日防線。
+- 文件判讀採 Scoped SSOT：部分 Post-V1 design / QA 檔名沿用後續里程碑日期，完成狀態與本週優先事項仍以 `PROJECT_SNAPSHOT.md`、`ROADMAP_6M_ENGINEERING.md` 與本文件的狀態段落為準。
 
 ---
 

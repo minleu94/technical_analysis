@@ -114,9 +114,9 @@ suggestion：
 ## CLI Examples
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\inspect_signal_decay.py --observation-date 2026-07-09 --json-output
-.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-09 --scope event_type --scope-id recommendation_included --dry-run --json-output
-.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-09 --scope all --confirm --db-path <working-copy-db> --json-output
+.\.venv\Scripts\python.exe scripts\inspect_signal_decay.py --observation-date 2026-07-03 --json-output
+.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-03 --scope event_type --scope-id recommendation_included --dry-run --json-output
+.\.venv\Scripts\python.exe scripts\capture_signal_decay.py --observation-date 2026-07-03 --scope all --confirm --db-path <working-copy-db> --json-output
 ```
 
 `--confirm` 必須搭配 explicit `--db-path`；疑似正式 DB 需要額外 `--allow-production-db-confirm`。

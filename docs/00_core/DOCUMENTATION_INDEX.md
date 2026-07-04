@@ -90,6 +90,8 @@
 ## 5. 歷史 Phase / 設計追溯與研究 SOP
 
 > 本區文件保留為 Historical / Reference。它們說明 Phase 時期的設計、驗收與研究 SOP 脈絡，但不作目前 roadmap、目前完成狀態或下一步優先順序依據。目前狀態請看 `PROJECT_SNAPSHOT.md`，未來路線請看 `ROADMAP_6M_ENGINEERING.md`，Post-V1 版本節奏請看 `VERSION_ROADMAP_V1_1_TO_V2_0.md`。
+>
+> Post-V1 部分 design / plan / QA 檔名保留 2026-07-05 至 2026-07-12 的里程碑命名；實際時間與交付判讀仍以 Snapshot、6M Roadmap 與 Git closeout 為準，不能只憑檔名推論。
 
 | 文件 | 用途 |
 |---|---|
@@ -317,17 +319,18 @@
 - 2026-07-02：新增 Post-V1 Evidence Importers design / plan 與 QA 索引，標示 capture pipeline v1 可累積 persisted Recommendation 與 DTO-based DDD evidence，但仍不是 dashboard 或投資有效性證明。
 - 2026-07-03：新增 Post-V1 E2E smoke / Forward Performance Read Model design / plan 與 QA 索引，標示 read model v1 可唯讀彙總 outcomes，但 Dashboard UI、production scheduler 與投資有效性證明仍未完成。
 - 2026-07-04：新增 Post-V1 Evidence Source Persistence design / plan 與 QA 索引，標示 durable Daily Decision Desk snapshot source 與 source coverage inspection v1 已完成；Why Not / Liquidity exclusion payload 為 optional / partial，scheduler 仍不得視為 production-ready。
-- 2026-07-05：新增 Post-V1 Forward Performance Dashboard read-only UI design / plan 與 QA 索引，標示 Research Lab `Forward Evidence` 已完成；scheduler 仍只到 ready_for_design，不得宣稱投資有效性。
-- 2026-07-06：新增 Post-V1 Evidence Scheduler Dry-run design / plan 與 QA 索引，標示 manual pipeline runner 已完成；readiness 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
-- 2026-07-07：新增 Post-V1 Production Scheduler Approval design / plan 與 approval checklist 索引，標示 working-copy smoke 與 readiness evaluator 已建立；production scheduler 仍未啟用，需人工核准與 rollback / recovery 檢查。
-- 2026-07-08：新增 Post-V1 Live vs Research Gap linkage design / plan 與 QA 索引，標示 gap observation repository / service / CLI 已建立；此為 evidence observation，不是完整實帳歸因或 lifecycle action。
-- 2026-07-09：新增 Post-V1 Signal Decay Monitor design / plan 與 QA 索引，標示 decay observation repository / service / CLI 已建立；lifecycle proposed payload 只供人工審核，不自動套用 action。
-- 2026-07-10：新增 Post-V1 Decision Quality Review design / plan 與 QA 索引，標示 review repository / service / CLI 已建立；process quality score 只供流程覆盤，不是投資能力或責備判斷。
-- 2026-07-11：新增 Post-V1 Evidence Review Dashboards design / plan 與 QA 索引，標示 Research Lab `Evidence Review` read-only UI pack 已建立；dashboard 只讀 evidence / observation / review，不寫 evidence、不建立 scheduler、不自動 lifecycle action。
-- 2026-07-12：新增 Evidence Review UI smoke checklist、Evidence Pipeline multi-day dry-run record 與 scheduler approval SOP 索引；標示這些是 production scheduler 前的人工 QA scaffold，不啟用 scheduler、不宣稱 alpha。
-- 2026-07-12：新增 Evidence scheduled dry-run wrapper QA 與 morning check guide 索引；標示每日自動任務只做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
-- 2026-07-12：新增 CMD wrapper + `schtasks.exe` QA 索引；標示 PowerShell `.ps1` 被 execution policy 擋住後改用 CMD 註冊，時間為每日本機 05:00 / 05:15，production confirm 仍未啟用。
-- 2026-07-12：補充 Codex app read-only morning report automation 索引；標示 05:30 只彙總既有 Windows Task Scheduler / status / report，不重新執行 pipeline。
+- 2026-07-01：新增 Post-V1 Forward Performance Dashboard read-only UI design / plan 與 QA 索引，標示 Research Lab `Forward Evidence` 已完成；scheduler 仍只到 ready_for_design，不得宣稱投資有效性。
+- 2026-07-01：新增 Post-V1 Evidence Scheduler Dry-run design / plan 與 QA 索引，標示 manual pipeline runner 已完成；readiness 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
+- 2026-07-01：新增 Post-V1 Production Scheduler Approval design / plan 與 approval checklist 索引，標示 working-copy smoke 與 readiness evaluator 已建立；production scheduler 仍未啟用，需人工核准與 rollback / recovery 檢查。
+- 2026-07-01：新增 Post-V1 Live vs Research Gap linkage design / plan 與 QA 索引，標示 gap observation repository / service / CLI 已建立；此為 evidence observation，不是完整實帳歸因或 lifecycle action。
+- 2026-07-01：新增 Post-V1 Signal Decay Monitor design / plan 與 QA 索引，標示 decay observation repository / service / CLI 已建立；lifecycle proposed payload 只供人工審核，不自動套用 action。
+- 2026-07-01：新增 Post-V1 Decision Quality Review design / plan 與 QA 索引，標示 review repository / service / CLI 已建立；process quality score 只供流程覆盤，不是投資能力或責備判斷。
+- 2026-07-01：新增 Post-V1 Evidence Review Dashboards design / plan 與 QA 索引，標示 Research Lab `Evidence Review` read-only UI pack 已建立；dashboard 只讀 evidence / observation / review，不寫 evidence、不建立 scheduler、不自動 lifecycle action。
+- 2026-07-02：新增 Evidence Review UI smoke checklist、Evidence Pipeline multi-day dry-run record 與 scheduler approval SOP 索引；標示這些是 production scheduler 前的人工 QA scaffold，不啟用 scheduler、不宣稱 alpha。
+- 2026-07-02：新增 Evidence scheduled dry-run wrapper QA 與 morning check guide 索引；標示每日自動任務只做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
+- 2026-07-02：新增 CMD wrapper + `schtasks.exe` QA 索引；標示 PowerShell `.ps1` 被 execution policy 擋住後改用 CMD 註冊，時間為每日本機 05:00 / 05:15，production confirm 仍未啟用。
+- 2026-07-02：補充 Codex app read-only morning report automation 索引；標示 05:30 只彙總既有 Windows Task Scheduler / status / report，不重新執行 pipeline。
+- 2026-07-04：補充 Post-V1 檔名日期判讀規則；部分里程碑檔名不作目前完成狀態權威。
 - 2026-07-03：新增 V1.3 Evidence Operations design / plan 與 QA 索引，標示 weekly review、manual approval package、signal decay manual lifecycle candidates 與 action item planning 已建立；production scheduler 仍未啟用。
 - 2026-07-03：新增 Decision Desk working-copy smoke follow-up QA 索引，標示 batch snapshot service-backed builder 修補後 risk-prompt / recommendation evidence 可在 working-copy confirm smoke 中保存且 idempotency passed；production scheduler 仍未啟用。
 - 2026-07-03：新增 V1.4 Evidence Review History QA 索引，標示 weekly review history repository、CLI save/list 與 Research Lab 覆盤歷史子頁已建立；history 只保存人工覆盤快照，不啟用 scheduler。
