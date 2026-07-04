@@ -34,7 +34,7 @@ Post-V1 版本節奏：
 - V1.3：Evidence Operations & Manual Lifecycle v1 已完成。Evidence Review、Decision Quality、Signal Decay 與 manual approval 已可透過 weekly evidence operations package 形成每週覆盤節奏；production scheduler 仍需 explicit approval。
 - V1.4：Evidence Review History v1 已完成。Weekly review 可 append-only 保存為 history，CLI 可 save/list，Research Lab `Evidence Review -> 覆盤歷史` 可唯讀檢查每週 status、scheduler readiness、Decision Quality / Signal Decay 數量、manual lifecycle candidate 與 warnings；history 只保存人工覆盤快照，不啟用 scheduler、不自動 lifecycle action。
 - 2026-07-03 follow-up：batch / CLI Daily Decision Desk snapshot 已改用 non-UI service-backed builder，並補上 numpy scalar JSON 正規化；working-copy confirm smoke 可保存 risk-prompt evidence 且 idempotency passed。受控 tmp run 已保存 working-copy Recommendation result 並驗證 requested sources idempotency；Production scheduler 仍因 exclusion payload / watchlist / portfolio source gaps 維持 disabled。
-- V1.5：Data Credibility & Corporate Action Gate。外部專案對照後，下一個中繼版本應先補除權息 / 還原價政策、處置股 / 分盤 / 全額交割 source、evidence source gaps 與 Data Source Capability Registry。
+- V1.5：Data Credibility & Corporate Action Gate v1 已完成。已補 Data Source Capability Registry、corporate action / adjusted price policy inspection、governed microstructure source metadata 與 centralized Evidence Source Coverage Service；此版本不抓外部資料、不改 `ScoringEngine`、不啟用 production scheduler。
 - V1.6：Cross-sectional Factor Pipeline & Sector Rotation v2。參考 Qlib / Zipline 的 pipeline 思路，把 market / sector / concept / liquidity / smart money / fundamental diagnostics 寫成可追溯 factor snapshot，不直接改 `ScoringEngine`。
 - V1.7：Screening Matrix & Negative Evidence。把 pass / fail / degraded / skipped / missing、Why Not、Liquidity exclusion 與負面 evidence 持久化到與 recommendation 同等的 evidence layer。
 - V1.8：Portfolio Construction & Execution Trace Sandbox。只做 research-only allocation / constraints / virtual order lifecycle，不自動下單。
@@ -329,8 +329,8 @@ V1 已完成交付：
 
 1. V1 release baseline、V1.1 workflow bridge v1 與 V1.2 Research Credibility & Execution Model v1 已完成；Evidence dry-run / 05:30 read-only 摘要 / Evidence Review UI smoke / multi-day dry-run record 繼續背景執行，用來累積資料可信度與 blocking gaps。
 2. V1.3 Evidence Operations & Manual Lifecycle v1 與 V1.4 Evidence Review History v1 已完成：Manual Approval package、weekly review CLI、signal decay action item loop、demote / retire manual review candidate、QA checklist、weekly review history repository、CLI save/list 與 Research Lab history dashboard 已建立；接下來以數週實際覆盤累積使用證據，不啟用 production scheduler。
-3. V1.5 準備：Data Source Capability Registry、除權息 / 還原價 policy、處置股 / 分盤 / 全額交割 source、why-not / liquidity payload、watchlist / portfolio source coverage，先修資料可信度再擴功能。
-4. V1.6 / V1.7 準備：Cross-sectional Factor Pipeline、Sector Rotation v2、Concept Basket、Screening Matrix 與 Negative Evidence；三大法人、信用交易與 TDCC 只能在 source / available_date / quality / missing policy 完整後接入。
+3. V1.5 Data Credibility & Corporate Action Gate v1 已完成：Data Source Capability Registry、除權息 / 還原價 policy、governed microstructure source metadata 與 source coverage warning / blocking 分級已落地；外部資料 ingestion、正式 adjusted price series 與完整 negative evidence 不在 V1.5。
+4. V1.6 / V1.7 準備：Cross-sectional Factor Pipeline、Sector Rotation v2、Concept Basket、Screening Matrix 與 Negative Evidence；why-not / liquidity payload 持久化從 V1.5 warning 邊界移交至 V1.7，三大法人、信用交易與 TDCC 只能在 source / available_date / quality / missing policy 完整後接入。
 5. V1.8 / V1.9 保持研究邊界：Portfolio construction、execution trace 與 read-only AI / MCP 只做 research / evidence access，不自動交易、不自動 lifecycle action；`cuFOLIO` 與 RL 暫列 deferred。
 6. 維持 Month 2 / Month 3 / Month 5 / Month 6 的防線回歸：immutable registry save、hash integrity、registry-based promote gate、FactorGate `available_date <= decision_date`、append-only lifecycle evidence、量化 float boundary 與 no-look-ahead tests。
 
@@ -360,6 +360,7 @@ V1 已完成交付：
 ## 7. 更新記錄
 
 - 2026-07-04：依外部開源專案參考重新校準 Post-V1 中繼版本，新增 V1.5 Data Credibility、V1.6 Cross-sectional Factor Pipeline、V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；`cuFOLIO`、強化學習、券商自動下單與 SQLite split / async 仍列 deferred。
+- 2026-07-04：完成 V1.5 Data Credibility & Corporate Action Gate v1，新增 read-only Data Source Capability Registry、corporate action / adjusted price policy inspection、governed microstructure preflight metadata 與 centralized Evidence Source Coverage Service；payload partial 改列 warnings，production scheduler 仍未啟用。
 - 2026-07-02：完成 V1.2 Research Credibility & Execution Model v1，新增 Profile replay 訓練 / 獨立驗證分離、推薦回放 rolling risk metrics、microstructure preflight 與 benchmark / industry / concept relative attribution；下一步轉向 V1.3 manual lifecycle 操作節奏。
 - 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1，新增 weekly evidence operations service / CLI、manual approval package、signal decay manual lifecycle candidates 與 append-only action item planning；production scheduler 仍未啟用。
 - 2026-07-03：完成 V1.4 Evidence Review History v1，新增 weekly review history repository、CLI save/list 與 Research Lab `Evidence Review -> 覆盤歷史` 唯讀子頁；history 只保存人工覆盤快照，不啟用 scheduler、不自動 lifecycle action。

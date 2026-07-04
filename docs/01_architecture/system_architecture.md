@@ -109,7 +109,7 @@ Application Services / DTO / Repository
 | 保存與版本 | `backtest_repository.py`、`recommendation_repository.py`、`strategy_version_service.py`、`preset_service.py`、`universe_service.py` |
 | Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py` |
 | Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`strategy_lifecycle_repository.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
-| Post-V1 evidence | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py` |
+| Post-V1 evidence | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py` |
 | Runtime | `runtime_services/`、`dtos/runtime_dtos.py` |
 
 `app_module` 不依賴 `ui_app`。Legacy Tkinter UI 不是目前 service 架構的一部分。
@@ -127,6 +127,8 @@ V1.2 Research Credibility & Execution Model v1 在同一 application boundary �
 V1.3 Evidence Operations & Manual Lifecycle v1 新增 `EvidenceOperationsService`、`evidence_operations_dtos.py` 與 `scripts/build_evidence_operations_weekly_review.py`。該 service 位於 application layer，只彙總 `evaluate_evidence_scheduler_readiness()`、`DecisionQualityService` 與 `SignalDecayService` 的既有輸出，產生 weekly review、manual approval package、manual lifecycle candidates 與 action item planning。它不直接讀 UI state、不建立 scheduler、不改 Strategy Lifecycle state、不改 portfolio、不改 scoring；`production_scheduler_allowed` 固定為 false，Signal Decay candidate 只輸出 `apply_action=false` 的人工審核項目。Action item planning 預設 dry-run，只有 explicit confirm 才透過 Decision Quality repository append-only 建立 action item。
 
 V1.4 Evidence Review History v1 新增 `EvidenceOperationsHistoryRepository`、`evidence_operations_history_dtos.py`、`EvidenceOperationsHistoryDashboardService` 與 `ui_qt/views/evidence_operations_history_view.py`。Repository 只以 append-only / hash-idempotent 方式保存 weekly review payload snapshot，不保存投資結論；CLI 的 `--save-history` 必須指定 explicit DB，且 production-like DB 仍需額外 gate。Dashboard service 位於 application layer，將已保存 weekly review history 轉成 cards / rows / empty state；Research Lab `Evidence Review -> 覆盤歷史` 只讀 dashboard service，不直接讀 SQLite、不建立 scheduler、不寫 action item、不自動套用 lifecycle action。
+
+V1.5 Data Credibility & Corporate Action Gate v1 新增 `data_module/data_source_capability_registry.py`、`data_module/corporate_action_policy.py`、`data_module/microstructure_source_preflight.py` 與 `app_module/evidence_source_coverage_service.py`。Registry 與 policy inspection 是 read-only governance layer，只輸出 source capability、price policy、available-date / missing-policy 邊界，不寫 formal data、不建立 migration。Microstructure preflight helper 只把處置股、分盤、全額交割、漲跌停鎖死與除權息 candidate source 轉成 diagnostics metadata，不改推薦組合 replay 的 PnL、成交價、cash ledger 或 sizing。Evidence source coverage service 位於 application layer，讓 CLI、pipeline runner 與 scheduler readiness evaluator 共用 blocking gap / warning 分級；optional why-not / liquidity payload 缺口是 warning，durable persisted recommendation / DDD snapshot section 缺口才是 blocking。此層不得輸出 production-ready，不啟用 scheduler。
 
 Healthcheck Batch 4 新增 `research_result_presentation.py` 作為 Research Lab 結果頁呈現邊界。它只把已產生的推薦回放 summary、Train-Test report、Walk-forward fold summary 轉成 UI 文案與可靠度提示，不重跑回測、不重新抓取目前資料、不改變交易或績效計算。Train-Test / Walk-forward 樣本可靠度提示只讀交易數、Fold 數、OOS 與 consistency 等已存在結果 metadata；Registry 比較仍只讀已保存 metadata、equity curve 與 benchmark_results。Qt UI 可使用這些 helper 顯示「樣本不足，不宜作正式策略判斷」、資金使用與 Monte Carlo 語意，但不得把提示升級成交易建議、自動下單或持倉調整。
 
@@ -410,7 +412,7 @@ runtime/ core
 
 Research Run Registry 由 `ResearchRunService` 統一負責保存 owner，metadata 寫入 SQLite，equity curve 與 trades 寫入 Parquet。保存流程採 staging → files_ready → committed 狀態轉移，並以 payload / file hash 做完整性檢查；失敗或中斷時可透過 reconciliation 標記不完整 run，不把部分資料冒充為成功結果。
 
-Post-V1 evidence layer 由 `EvidenceEventService` / `EvidenceEventRepository` 保存 append-only `evidence_events`，並由 `ForwardPerformanceService` 計算 `evidence_outcomes`。v1 outcome 使用 SQLite `daily_prices` 的 close-to-close forward return，並嘗試從 `market_indices` / `industry_indices` 產生 benchmark / industry excess；缺資料時保留 NULL 與 warnings，不中斷整批。此層只輸出 research evidence，不改 `ScoringEngine`、推薦權重、策略版本或 portfolio position。
+Post-V1 evidence layer 由 `EvidenceEventService` / `EvidenceEventRepository` 保存 append-only `evidence_events`，並由 `ForwardPerformanceService` 計算 `evidence_outcomes`。v1 outcome 使用 SQLite `daily_prices` 的 close-to-close forward return，並嘗試從 `market_indices` / `industry_indices` 產生 benchmark / industry excess；缺資料時保留 NULL 與 warnings，不中斷整批。`EvidenceSourceCoverageService` 統一檢查 persisted recommendation、durable Daily Decision Desk snapshot sections 與 optional exclusion payload 的 coverage，避免 CLI、runner、readiness evaluator 各自分級。此層只輸出 research evidence 與 source diagnostics，不改 `ScoringEngine`、推薦權重、策略版本或 portfolio position。
 
 目前 registry 已保存：
 
@@ -514,6 +516,7 @@ UI 修改：
 ## 16. 更新記錄
 
 - 2026-07-04：文件架構補上 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`，作為外部開源專案參考、資料源補強優先序與 V1.5-V2.0 版本形狀 companion；本文件仍只維護目前模組邊界與資料流。
+- 2026-07-04：完成 V1.5 Data Credibility & Corporate Action Gate v1 架構同步，新增 read-only source capability registry、corporate action policy、microstructure governed metadata 與 shared evidence source coverage service；不寫正式資料、不改 scoring、不啟用 scheduler。
 - 2026-07-02：完成 V1.2 Research Credibility & Execution Model v1 架構同步，確認 Profile replay 訓練 / 驗證分離、推薦回放 rolling risk、microstructure preflight 與 relative attribution 都位於 application diagnostics boundary，不改交易、PnL、cash ledger 或策略生命週期。
 - 2026-07-03：完成 V1.3 Evidence Operations & Manual Lifecycle v1 架構同步，新增 weekly evidence operations service / CLI；manual approval package 與 action item planning 只供人工覆盤，不啟用 scheduler、不自動套用 lifecycle action。
 - 2026-07-03：完成 V1.4 Evidence Review History v1 架構同步，新增 weekly review history repository、dashboard service 與 Research Lab `Evidence Review -> 覆盤歷史` 唯讀子頁；history 只保存人工覆盤快照，不啟用 scheduler、不自動 lifecycle action。

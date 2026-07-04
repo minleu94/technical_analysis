@@ -97,6 +97,23 @@
 
 ---
 
+### Evidence / Data Credibility Layer（`app_module/` + `data_module/`）
+
+**目前狀態**：Post-V1 evidence layer 與 V1.5 data credibility gate 已建立；這一層只保存 / 檢查 research evidence、source coverage 與資料政策，不產生投資結論、不啟用 production scheduler。
+
+**主要檔案**：
+- `app_module/evidence_event_*`、`app_module/evidence_capture_service.py`、`app_module/evidence_event_importers.py`
+- `app_module/forward_performance_service.py`、`app_module/forward_performance_read_model.py`
+- `app_module/evidence_pipeline_runner.py`、`app_module/evidence_scheduler_readiness.py`
+- `app_module/evidence_source_coverage_service.py`
+- `data_module/data_source_capability_registry.py`
+- `data_module/corporate_action_policy.py`
+- `data_module/microstructure_source_preflight.py`
+
+**如果我要改 evidence source coverage / data credibility**：先看 `docs/00_core/PROJECT_SNAPSHOT.md`、`docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md` 與 `docs/01_architecture/system_architecture.md`；程式改動優先從 `EvidenceSourceCoverageService` 或 `data_module/*policy/*registry` 切入，不要在 CLI、runner 或 UI 各自複製分級邏輯。
+
+---
+
 ### AI Runtime Subsystem (`runtime/`)
 
 **這一層負責什麼**：

@@ -809,8 +809,11 @@ Evidence Pipeline Runner 是手動 CLI，用來模擬每日 evidence pipeline；
 .\.venv\Scripts\python.exe scripts\run_evidence_pipeline.py --decision-date 2026-06-30 --dry-run --json-output
 .\.venv\Scripts\python.exe scripts\run_evidence_pipeline.py --decision-date 2026-06-30 --dry-run --sources recommendation,watchlist-trigger,portfolio-alert,risk-prompt --report-output output\evidence_pipeline\reports\evidence_pipeline_2026-06-30.md
 .\.venv\Scripts\python.exe scripts\run_evidence_pipeline.py --decision-date 2026-06-30 --confirm --db-path <working-copy-db>
+.\.venv\Scripts\python.exe scripts\inspect_evidence_source_coverage.py --db-path <working-copy-db> --decision-date 2026-06-30 --json-output
 .\.venv\Scripts\python.exe scripts\smoke_evidence_pipeline_working_copy.py --source-db-path <source-db> --working-copy-db-path <working-copy-db> --decision-date 2026-06-30 --repeat 2 --json-output
 .\.venv\Scripts\python.exe scripts\evaluate_evidence_scheduler_readiness.py --db-path <working-copy-db> --json-output
+.\.venv\Scripts\python.exe scripts\inspect_data_source_capabilities.py --json-output
+.\.venv\Scripts\python.exe scripts\inspect_corporate_action_policy.py --json-output
 ```
 
 支援參數包含 `--decision-date`、`--start-date`、`--end-date`、`--db-path`、`--sources`、`--windows`、`--group-by`、`--window`、`--min-sample-size`、`--limit`、`--dry-run`、`--confirm`、`--skip-snapshot`、`--skip-capture`、`--skip-outcomes`、`--skip-summary`、`--json-output`、`--report-output`。`--dry-run` 與 `--confirm` 互斥；`--confirm` 必須指定 `--db-path`。若 DB path 看起來是正式 DB，還需要額外 `--allow-production-db-confirm`，但一般 QA 不應使用正式 DB。
@@ -824,7 +827,9 @@ Runner steps：
 5. `summarize_forward_performance`
 6. `write_diagnostics_report`
 
-輸出 summary 會包含 events_seen、events_inserted、events_skipped_duplicate、outcomes_attempted、outcomes_created、outcomes_updated、outcomes_pending、summary_groups、groups_ready、groups_insufficient_sample、groups_degraded、warnings_count、errors_count、blocking_gaps 與 scheduler_readiness。Readiness 最高只到 `ready_for_manual_confirm`，不代表 production scheduler 已批准。
+輸出 summary 會包含 events_seen、events_inserted、events_skipped_duplicate、outcomes_attempted、outcomes_created、outcomes_updated、outcomes_pending、summary_groups、groups_ready、groups_insufficient_sample、groups_degraded、warnings_count、errors_count、blocking_gaps、warnings 與 scheduler_readiness。Readiness 最高只到 `ready_for_manual_confirm`，不代表 production scheduler 已批准。
+
+V1.5 後，source coverage 由 `EvidenceSourceCoverageService` 統一判讀。`recommendation_persisted_missing`、`decision_desk_snapshot_missing`、`watchlist_trigger_snapshot_section_missing`、`portfolio_alert_snapshot_section_missing`、`risk_prompt_snapshot_section_missing` 是 durable source blocking gaps；`why_not_payload_missing` 與 `liquidity_gate_payload_missing` 是 optional payload warnings，會使整體 readiness 維持 `dry_run_only`，但不等於 durable source missing。若使用 `--sources why-not` 或 `--sources liquidity-gate` 明確要求 exclusion source，runner 仍會在該請求層級阻擋缺 payload 的 capture。`inspect_data_source_capabilities.py` 只檢查 source registry，不抓外部資料；`inspect_corporate_action_policy.py` 只輸出價格政策與資料表候選，不建立 adjusted price、不寫正式 DB。
 
 Working-copy smoke 會先確認 source DB 與 working-copy DB 不是同一路徑；若 working-copy DB 不存在，會以 `shutil.copy2` 從 source DB 複製一份，再只對 working-copy DB 執行 confirm smoke。預設 repeat 至少 2 次，用 event / outcome counts 檢查 idempotency；source DB 應維持 read-only。readiness evaluator 只彙總 source coverage、smoke report 與 dashboard availability，輸出的 `production_scheduler_allowed` 固定為 `false`。正式排程前仍需人工 review `docs/06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md` 的 source coverage、diagnostics report、backup path、rollback path 與 manual approval steps。
 
@@ -1137,6 +1142,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-06-29：補充 Full App Healthcheck Runner 分頁驗證方式；`--tab` 可分別驗證 Update、Market、Decision、Research、Recommendation、Watchlist、Portfolio、Runtime 與 cross-flow 的安全 direct bridge，完整真人 UI smoke test 仍以母檔人工確認為準。
 - 2026-07-01：新增 Research Lab `Forward Evidence` 分頁操作說明，標示 Forward Performance Dashboard read-only UI v1 只檢查已保存 evidence summary，不重算策略、不寫 evidence、不建立 scheduler，且 close-to-close forward return 不是實盤可執行績效。
 - 2026-07-01：新增 Evidence Pipeline Runner 手動 dry-run CLI 操作說明，標示 runner 預設 dry-run、confirm 只允許 working-copy DB、readiness 最高只到 `ready_for_manual_confirm`，production scheduler 仍未啟用。
+- 2026-07-04：補充 V1.5 data credibility CLI 操作說明，新增 source capability registry、corporate action policy 與 evidence source coverage 分級；payload partial 為 warning / `dry_run_only`，durable source missing 才是 blocking gap。
 - 2026-07-01：新增 working-copy DB smoke 與 scheduler readiness evaluator 操作說明，標示 source DB read-only、repeat confirm idempotency check、`production_scheduler_allowed=false` 與正式排程前人工核准 checklist。
 - 2026-07-01：新增 Live vs Research Gap linkage CLI 操作說明，標示 gap observation 是 evidence，不是 action；沒有真實交易與人工 override 時只能解讀為 research / simulated gap。
 - 2026-07-01：新增 Signal Decay Monitor CLI 操作說明，標示 decay observation 與 lifecycle proposed payload 只是人工審核 evidence，不自動套用策略生命週期動作。

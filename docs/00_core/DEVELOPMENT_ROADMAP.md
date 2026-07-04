@@ -47,6 +47,7 @@
 - Month 2 M2-A / M2-B / M2-C 與 final registry governance gate 已完成：參數與權重契約、Research Run Registry 基礎保存、Comparability Service、Registry 比較子頁、Registry-based Promote Gate、補償 / reconciliation 防線與文件收尾均已落地。
 - Portfolio 已具備策略/價格監控、停損停利警示、籌碼監控與 Smart Money 下鑽。
 - Month 5 Fundamental Layer v1 已完成 closeout：月營收、季度財報、P/E valuation、Fundamental provider/service、available_date gate 與 abnormal diagnostics 已落地；只輸出 factor records / diagnostics 與風險提示，不接 `ScoringEngine`。
+- Post-V1 V1.5 Data Credibility & Corporate Action Gate v1 已完成：source capability registry、corporate action policy、governed microstructure metadata 與 shared evidence source coverage service 已落地；不抓外部資料、不改 `ScoringEngine`、不啟用 production scheduler。
 - Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成：推薦 Profile / 回放 workflow bridge、Profile replay comparison、訓練 / 獨立驗證期間、推薦回放 rolling risk、microstructure preflight、relative attribution、weekly evidence operations、manual approval package、action item planning、weekly review history 與 Research Lab 覆盤歷史子頁已落地；這些仍是 research credibility / evidence operations diagnostics，不代表投資有效性。
 - 後續要提升「準確度」必須先建立實證比較、factor attribution、資料因子層與實驗治理，不應直接把新資料硬塞進 scoring engine。
 
@@ -55,7 +56,7 @@
 ## 4. 下一步 Next
 
 未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
-V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3 與 V1.4 v1 已完成；下一步是用 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，V2.0 才評估完整 Unified Decision Workbench。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
+V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3、V1.4 與 V1.5 v1 已完成；下一步是用 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，同時準備 V1.6 factor pipeline / V1.7 negative evidence，V2.0 才評估完整 Unified Decision Workbench。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
 外部開源專案對照、資料源補強優先序與 V1.5 至 V2.0 的中繼版本形狀見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)；該文件只作參考 companion，不取代 6M Roadmap 的執行順序。
 
 目前立即執行優先順序：
@@ -85,9 +86,9 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
    - 同日 follow-up 已修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 `risk_prompt` evidence 且 repeat=2 idempotency passed。受控 tmp run 也已保存 working-copy Recommendation result，並驗證 `recommendation,risk-prompt` requested sources 可 idempotent confirm。`decision_desk_snapshot_missing`、`recommendation_persisted_missing` 與 `working_copy_confirm_smoke_missing_or_failed` 已收斂為真實 source gaps。
    - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 why-not / liquidity payload、watchlist 無項目與 portfolio 無 active positions；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
 
-6. **P1：V1.5-V1.9 版本化準備**
-   - V1.5 優先補 Data Credibility & Corporate Action Gate：除權息 / 還原價政策、處置股 / 分盤 / 全額交割 source、evidence source gap 與 Data Source Capability Registry。
-   - V1.6 再補 Cross-sectional Factor Pipeline & Sector Rotation v2；V1.7 補 Screening Matrix & Negative Evidence；V1.8 補 research-only Portfolio Construction / Execution Trace Sandbox；V1.9 才評估 read-only MCP / Agent evidence access。
+6. **P1：V1.6-V1.9 版本化準備**
+   - V1.5 Data Credibility & Corporate Action Gate v1 已完成，交付 read-only source capability registry、corporate action / adjusted price policy、governed microstructure metadata 與 centralized evidence source coverage。
+   - V1.6 再補 Cross-sectional Factor Pipeline & Sector Rotation v2；V1.7 補 Screening Matrix & Negative Evidence，承接 why-not / liquidity optional payload warning；V1.8 補 research-only Portfolio Construction / Execution Trace Sandbox；V1.9 才評估 read-only MCP / Agent evidence access。
    - `cuFOLIO`、強化學習、券商自動下單與 SQLite async / split DB 暫不納入近期 Roadmap，除非有量測證據顯示現有計算或寫入模式成為真實瓶頸。
 
 7. **P2：Phase 5 研究輸出後續**
@@ -123,6 +124,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 ## 7. 更新記錄
 
 - 2026-07-04：新增外部專案參考與未來版本藍圖 companion 入口，確認 Vision 不大幅改寫；Roadmap Hub 只保留連結與短版 V1.5-V1.9 方向，完整外部專案對照與 deferred 技術邊界移至 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。
+- 2026-07-04：完成 V1.5 Data Credibility & Corporate Action Gate v1，Roadmap Hub 下一步改為 evidence accumulation + V1.6/V1.7 準備；production scheduler、外部資料 ingestion 與投資有效性結論仍未啟用。
 - 2026-06-13：將 Roadmap 從單一最高權威文件重構為 Roadmap Hub；引入 Scoped SSOT，新增 6 個月工程 Roadmap，並將舊 Roadmap 完整歸檔。
 - 2026-06-13：新增 Legacy Carryover Matrix，逐項承接舊 Roadmap 未完成事項並設定 Month 3 前結案 Gate。
 - 2026-06-15：依 baldr 願景重排 Roadmap Hub 的短版 Next，將 Month 3 補強為 Factor Layer + Portfolio Replay 可信度，並將 Daily Decision Desk 明確列為 Month 4 v1 首頁，其他 section 逐步接線。

@@ -123,6 +123,7 @@
 | [2026-07-10-post-v1-decision-quality-review-design.md](../superpowers/specs/2026-07-10-post-v1-decision-quality-review-design.md) | Post-V1 Decision Quality Review 設計，定義 review repository、review item、process score、CLI 與非責備流程覆盤邊界。 |
 | [2026-07-11-post-v1-evidence-review-dashboards-design.md](../superpowers/specs/2026-07-11-post-v1-evidence-review-dashboards-design.md) | Post-V1 Evidence Review Dashboards read-only UI pack 設計，定義 Research Lab Evidence Review placement、Decision Quality / Signal Decay / Live Gap dashboard、共用 boundary banner 與 read-only UI 邊界。 |
 | [2026-07-02-v1-3-evidence-operations-design.md](../superpowers/specs/2026-07-02-v1-3-evidence-operations-design.md) | V1.3 Evidence Operations & Manual Lifecycle 設計，定義 weekly review、manual approval package、action item loop 與 production scheduler disabled 邊界。 |
+| [2026-07-04-v1-5-data-credibility-design.md](../superpowers/specs/2026-07-04-v1-5-data-credibility-design.md) | V1.5 Data Credibility & Corporate Action Gate 設計，定義 source capability registry、corporate action policy、governed microstructure metadata 與 evidence source coverage 分級。 |
 | [2026-06-13-strategy-scoring-governance.md](../superpowers/plans/2026-06-13-strategy-scoring-governance.md) | 策略分數治理總控計畫與增量 Gate。 |
 | [2026-06-14-month-3-factor-layer.md](../superpowers/plans/2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫，拆分 Factor Contract、Registry、Look-ahead Gate、v1 adapters 與 Research Run 追溯保存。 |
 | [2026-07-01-post-v1-evidence-event-store.md](../superpowers/plans/2026-07-01-post-v1-evidence-event-store.md) | Post-V1 Evidence Event Store / Forward Outcome Calculator v1 實作計畫，拆分 DTO、repository、service、calculator、CLI、tests 與 QA 文件。 |
@@ -137,6 +138,7 @@
 | [2026-07-10-post-v1-decision-quality-review.md](../superpowers/plans/2026-07-10-post-v1-decision-quality-review.md) | Post-V1 Decision Quality Review 實作計畫，拆分 DTO、repository、service、CLI、review item tests、安全邊界與文件同步。 |
 | [2026-07-11-post-v1-evidence-review-dashboards.md](../superpowers/plans/2026-07-11-post-v1-evidence-review-dashboards.md) | Post-V1 Evidence Review Dashboards read-only UI pack 實作計畫，拆分 dashboard DTO / service、Qt model / view、Research Lab 掛載、tests 與 QA。 |
 | [2026-07-02-v1-3-evidence-operations.md](../superpowers/plans/2026-07-02-v1-3-evidence-operations.md) | V1.3 Evidence Operations 實作計畫，拆分 weekly package、action item loop、QA 與文件 closeout。 |
+| [2026-07-04-v1-5-data-credibility.md](../superpowers/plans/2026-07-04-v1-5-data-credibility.md) | V1.5 Data Credibility & Corporate Action Gate 實作計畫，拆分 registry、corporate action policy、microstructure metadata、source coverage service、文件與 QA。 |
 | [2026-06-14-month-3-factor-run-integration.md](../superpowers/plans/2026-06-14-month-3-factor-run-integration.md) | Month 3 Factor Run Integration 計畫，將 factor snapshot / contribution summary 接入 Research Run 實際保存流程。 |
 | [2026-06-15-month-3-recommendation-factor-feed.md](../superpowers/plans/2026-06-15-month-3-recommendation-factor-feed.md) | Month 3 Recommendation Factor Feed 計畫，讓推薦組合回放產生並保存 factor snapshot / contribution metadata。 |
 | [2026-06-15-decision-desk-watchlist-trigger.md](../superpowers/plans/2026-06-15-decision-desk-watchlist-trigger.md) | Daily Decision Desk Watchlist Trigger v1 接線計畫，對接 `WatchlistService` 與 SQLite `technical_indicators`，並定義日期 fallback、quality 與 warnings 契約。 |
@@ -206,6 +208,7 @@
 | [POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md](../06_qa/POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md) | Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 QA 紀錄，包含 schema safety、focused tests、限制與下一增量。 |
 | [POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md](../06_qa/POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md) | Post-V1 Evidence Importers / Capture Pipeline v1 QA 紀錄，包含 importer 支援邊界、CLI dry-run / confirm、unsupported source 與限制。 |
 | [POST_V1_EVIDENCE_SOURCE_PERSISTENCE_QA_2026_07_04.md](../06_qa/POST_V1_EVIDENCE_SOURCE_PERSISTENCE_QA_2026_07_04.md) | Post-V1 Evidence Source Persistence QA 紀錄，包含 durable DDD snapshot repository、source coverage CLI、Recommendation exclusion payload partial 與 scheduler readiness 邊界。 |
+| [V1_5_DATA_CREDIBILITY_CLOSEOUT_2026_07_04.md](../06_qa/V1_5_DATA_CREDIBILITY_CLOSEOUT_2026_07_04.md) | V1.5 Data Credibility & Corporate Action Gate closeout，記錄 source capability registry、corporate action policy、governed microstructure metadata、source coverage service 與驗證結果。 |
 | [POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md](../06_qa/POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md) | Post-V1 Forward Performance Dashboard read-only UI QA 紀錄，包含 UI placement、read-only guarantee、filter coverage、禁用交易語氣檢查與 scheduler readiness 邊界。 |
 | [POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md) | Post-V1 Evidence Pipeline Runner dry-run QA 紀錄，包含 dry-run / confirm 行為、report、readiness、blocking gaps 與 production scheduler 未啟用邊界。 |
 | [POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md](../06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md) | Post-V1 Evidence Production Scheduler Approval checklist，集中管理 working-copy smoke、人工核准、rollback / recovery 與正式排程未啟用邊界。 |
@@ -316,6 +319,7 @@
 ## 🔄 更新記錄
 
 - 2026-07-04：新增外部專案參考與未來版本藍圖索引，將 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 定位為 6M Roadmap / Version Roadmap companion，用來承接 GitHub 專案對照、資料源補強優先序與 V1.5-V2.0 版本形狀，避免 Vision 被外部參考清單污染。
+- 2026-07-04：新增 V1.5 Data Credibility design / plan / QA closeout 索引，標示 source capability registry、corporate action policy、microstructure metadata 與 shared source coverage service 已完成 v1；production scheduler 與外部資料 ingestion 仍未啟用。
 - 2026-07-03：整理 Roadmap / docs / phase 判讀入口，將 `docs/05_phases/` 明確標示為 Historical / Reference，新增文件整理稽核索引，避免 Phase 文件被誤判為目前 roadmap。
 - 2026-07-01：新增 Post-V1 Evidence Event Store design / plan 與 QA 索引，標示 Evidence Event Store v1 / Forward Outcome Calculator v1 是 forward evidence 資料底座，不是 dashboard 或投資有效性證明。
 - 2026-07-02：新增 Post-V1 Evidence Importers design / plan 與 QA 索引，標示 capture pipeline v1 可累積 persisted Recommendation 與 DTO-based DDD evidence，但仍不是 dashboard 或投資有效性證明。

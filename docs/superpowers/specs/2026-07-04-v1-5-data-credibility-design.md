@@ -2,7 +2,7 @@
 
 > 日期：2026-07-04  
 > 範圍：Data Source Capability Registry、corporate action / adjusted price policy、microstructure governed source preflight、evidence source coverage 分級  
-> 狀態：設計稿，供本輪 V1.5 closeout 實作使用
+> 狀態：已完成 v1 closeout；供後續 V1.6 / V1.7 承接資料源與 negative evidence 邊界
 
 ## 目標
 

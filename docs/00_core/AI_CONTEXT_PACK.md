@@ -7,17 +7,17 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具；baldr 是一套「可驗證、可回溯、可演化」的台股研究與投資決策工作台。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：V1 release baseline 已完成，四個產品閉環（資料與市場狀態、研究驗證、持倉檢查、每日決策）已形成可操作基準。Post-V1 evidence-driven 主線的 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations 與 evidence review history。下一步不是新增舊式 Phase，而是用 weekly review + history 實際累積多週覆盤證據，並依外部參考 companion 準備 V1.5 Data Credibility、V1.6 Cross-sectional Factor Pipeline、V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；V2.0 Unified Decision Workbench 需等中繼版本成熟後再評估。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、version roadmap 管 V1.1 至 V2.0 節奏、external reference blueprint 管外部專案參考與 V1.5-V2.0 版本形狀、system architecture 管架構、system vision 管產品北極星、archive / phase docs 管歷史。
+* **Current Phase (目前階段)**：V1 release baseline 已完成，四個產品閉環（資料與市場狀態、研究驗證、持倉檢查、每日決策）已形成可操作基準。Post-V1 evidence-driven 主線的 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations、evidence review history 與 data credibility gate。下一步不是新增舊式 Phase，而是用 weekly review + history 實際累積多週覆盤證據，並依外部參考 companion 準備 V1.6 Cross-sectional Factor Pipeline、V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；V2.0 Unified Decision Workbench 需等中繼版本成熟後再評估。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、version roadmap 管 V1.1 至 V2.0 節奏、external reference blueprint 管外部專案參考與 V1.5-V2.0 版本形狀、system architecture 管架構、system vision 管產品北極星、archive / phase docs 管歷史。
 * **Core Architecture (核心架構)**：分層解耦架構。
   1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
   2. `app_module/`（應用服務層、DTO、Repository 與 use case orchestrator）
   3. Domain / Engine 模組（`decision_module/`、`backtest_module/`、`portfolio_module/`、`analysis_module/`、`data_module/`、`runtime/`）
-* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、Research Run Registry、Factor Layer v1、Fundamental Layer v1、Strategy Lifecycle v1、Portfolio Feedback v1、Post-V1 evidence layer、Evidence Review dashboards、籌碼分析終端、Portfolio 監控、Runtime 子系統、Daily Decision Desk v1。仍沒有正式 `market_module/`；Market Breadth、Sector Rotation、Relative Strength / Liquidity Ranking、Watchlist Trigger、Portfolio Alert 與 Risk Prompt 已有 service / snapshot contract。
+* **Major Modules (主要模組)**：資料更新工作台、市場觀察儀、推薦引擎、Research Lab、Research Run Registry、Factor Layer v1、Fundamental Layer v1、Strategy Lifecycle v1、Portfolio Feedback v1、Post-V1 evidence layer、Evidence Review dashboards、Data Source Capability Registry、Corporate Action Policy、Evidence Source Coverage Service、籌碼分析終端、Portfolio 監控、Runtime 子系統、Daily Decision Desk v1。仍沒有正式 `market_module/`；Market Breadth、Sector Rotation、Relative Strength / Liquidity Ranking、Watchlist Trigger、Portfolio Alert 與 Risk Prompt 已有 service / snapshot contract。
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 8 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、每日決策、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。Daily Decision Desk v1 已可用，但部分 section 會依 provider 完整度顯示 `MISSING` / `DEGRADED` / `ESTIMATED`。
 * **Current Priorities (目前優先事項)**：
   1. 用 V1.3 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，觀察 dashboard、blocking gaps、manual lifecycle candidate 與 action item 是否真的有用。
-  2. 維持 Post-V1 evidence 安全邊界：production scheduler 仍未啟用；readiness 最高只到 manual confirm / approval design；所有 evidence dashboard 只讀，不自動套用 lifecycle action。
-  3. 準備 V1.5-V1.9 但不搶跑：先資料可信度與 source capability，再 factor pipeline，再 negative evidence，再 portfolio sandbox，再 read-only AI；`cuFOLIO`、RL、自動下單與 SQLite split / async 仍是 deferred。
+  2. 維持 Post-V1 evidence 安全邊界：production scheduler 仍未啟用；readiness 最高只到 manual confirm / approval design；所有 evidence dashboard 只讀，不自動套用 lifecycle action。V1.5 後 optional why-not / liquidity payload missing 是 warning / `dry_run_only`，durable source missing 才是 blocking gap。
+  3. 準備 V1.6-V1.9 但不搶跑：先 factor pipeline，再 negative evidence，再 portfolio sandbox，再 read-only AI；`cuFOLIO`、RL、自動下單與 SQLite split / async 仍是 deferred。
   4. 維持 Month 2 / Month 3 / Month 5 / Month 6 governance regression：Research Run Registry integrity、FactorGate `available_date <= decision_date`、fundamental diagnostics 不接 `ScoringEngine`、append-only lifecycle / evidence history、no-look-ahead 與金融數值邊界。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：
@@ -185,12 +185,12 @@
 
 ## 7. Current Active Roadmap (目前活躍開發路線)
 
-* **Active Phase (目前階段)**：V1 release baseline 與 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成；目前進入 Post-V1 evidence accumulation / weekly review operating period。
+* **Active Phase (目前階段)**：V1 release baseline 與 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 v1 已完成；目前進入 Post-V1 evidence accumulation / weekly review operating period，並準備 V1.6 / V1.7。
 * **In Progress (進行中)**：
   * weekly evidence operations + history 的多週實際使用與覆盤證據累積。
   * Evidence Review UI smoke、multi-day dry-run record、scheduler approval checklist 與 blocking gaps 觀察。
   * Month 2 / Month 3 / Month 5 / Month 6 governance regression 維護。
-* **Planned (計畫中)**：V1.5 Data Credibility & Corporate Action Gate、V1.6 Cross-sectional Factor Pipeline & Sector Rotation v2、V1.7 Screening Matrix & Negative Evidence、V1.8 Portfolio Construction & Execution Trace Sandbox、V1.9 Read-only Agent / MCP Evidence Access；V2.0 Unified Decision Workbench design spike 需等中繼版本的資料、因子、evidence、portfolio sandbox 與 AI 邊界成熟後再啟動。V1.2 execution model residual、三大法人資料因子、官方歷史 PIT 公告日來源治理與 PDF 研究報告輸出仍在 backlog / future tracks。
+* **Planned (計畫中)**：V1.6 Cross-sectional Factor Pipeline & Sector Rotation v2、V1.7 Screening Matrix & Negative Evidence、V1.8 Portfolio Construction & Execution Trace Sandbox、V1.9 Read-only Agent / MCP Evidence Access；V2.0 Unified Decision Workbench design spike 需等中繼版本的資料、因子、evidence、portfolio sandbox 與 AI 邊界成熟後再啟動。V1.2 execution model residual、正式 corporate action / microstructure ingestion、三大法人資料因子、官方歷史 PIT 公告日來源治理與 PDF 研究報告輸出仍在 backlog / future tracks。
 * **Frozen / Historical (已凍結 / 歷史)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Phase 3.5 SOP, Phase 4 Portfolio MVP, Smart Money Terminal MVP, AI Runtime MVP。`docs/05_phases/` 僅作追溯。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
 * **Backlog**：零股、買賣價差、完整撮合與 Gap 實際成交模型、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。

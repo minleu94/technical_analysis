@@ -17,7 +17,7 @@
 - Create: `scripts/inspect_data_source_capabilities.py`
 - Create: `tests/test_data_source_capability_registry.py`
 
-- [ ] **Step 1: Write failing registry tests**
+- [x] **Step 1: Write failing registry tests**
 
 ```python
 def test_registry_contains_v1_5_p0_sources():
@@ -30,20 +30,20 @@ def test_registry_contains_v1_5_p0_sources():
 Run: `.\.venv\Scripts\python.exe -m pytest tests/test_data_source_capability_registry.py -q -o addopts=`
 Expected: FAIL because module does not exist.
 
-- [ ] **Step 2: Implement registry DTO and default sources**
+- [x] **Step 2: Implement registry DTO and default sources**
 
 Create immutable dataclasses for `DataSourceField`, `DataSourceCapability`, `DataSourceCapabilityInspection`, and a small registry wrapper with `require`, `get`, `list_by_status`, `to_dict`.
 
-- [ ] **Step 3: Add CLI inspection**
+- [x] **Step 3: Add CLI inspection**
 
 `scripts/inspect_data_source_capabilities.py` should output JSON by default and Markdown when `--markdown` is passed.
 
-- [ ] **Step 4: Verify Task 1**
+- [x] **Step 4: Verify Task 1**
 
 Run: `.\.venv\Scripts\python.exe -m pytest tests/test_data_source_capability_registry.py -q -o addopts=`
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```powershell
 git add data_module/data_source_capability_registry.py scripts/inspect_data_source_capabilities.py tests/test_data_source_capability_registry.py
@@ -57,7 +57,7 @@ git commit -m "feat: add data source capability registry"
 - Create: `scripts/inspect_corporate_action_policy.py`
 - Create: `tests/test_corporate_action_policy.py`
 
-- [ ] **Step 1: Write failing corporate action policy tests**
+- [x] **Step 1: Write failing corporate action policy tests**
 
 ```python
 def test_policy_forbids_hindsight_adjusted_prices_for_decisions():
@@ -70,20 +70,20 @@ def test_policy_forbids_hindsight_adjusted_prices_for_decisions():
 Run: `.\.venv\Scripts\python.exe -m pytest tests/test_corporate_action_policy.py -q -o addopts=`
 Expected: FAIL because module does not exist.
 
-- [ ] **Step 2: Implement policy DTO and inspection**
+- [x] **Step 2: Implement policy DTO and inspection**
 
 Define raw price, decision-date adjusted candidate, and full hindsight adjusted price policies. Include table candidate fields for corporate action events without creating a migration.
 
-- [ ] **Step 3: Add CLI inspection**
+- [x] **Step 3: Add CLI inspection**
 
 CLI supports `--json-output` and `--markdown`.
 
-- [ ] **Step 4: Verify Task 2**
+- [x] **Step 4: Verify Task 2**
 
 Run: `.\.venv\Scripts\python.exe -m pytest tests/test_corporate_action_policy.py -q -o addopts=`
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```powershell
 git add data_module/corporate_action_policy.py scripts/inspect_corporate_action_policy.py tests/test_corporate_action_policy.py
@@ -97,7 +97,7 @@ git commit -m "feat: document corporate action price policy"
 - Modify: `app_module/recommendation_portfolio_backtest_service.py`
 - Modify: `tests/test_recommendation_portfolio_backtest.py`
 
-- [ ] **Step 1: Write failing metadata regression**
+- [x] **Step 1: Write failing metadata regression**
 
 Add assertions to existing microstructure tests:
 
@@ -109,16 +109,16 @@ assert preflight["source_capability_status"]["disposition_stock"] == "planned"
 Run: `.\.venv\Scripts\python.exe -m pytest tests/test_recommendation_portfolio_backtest.py -q -o addopts=`
 Expected: FAIL because metadata keys are absent.
 
-- [ ] **Step 2: Implement helper and integrate service**
+- [x] **Step 2: Implement helper and integrate service**
 
 `build_microstructure_source_preflight(data_columns)` should map risk type to candidate columns, source capability status, available date policy, missing policy, and warnings. Existing risk detection remains unchanged.
 
-- [ ] **Step 3: Verify Task 3**
+- [x] **Step 3: Verify Task 3**
 
 Run: `.\.venv\Scripts\python.exe -m pytest tests/test_recommendation_portfolio_backtest.py -q -o addopts=`
 Expected: PASS.
 
-- [ ] **Step 4: Commit Task 3**
+- [x] **Step 4: Commit Task 3**
 
 ```powershell
 git add data_module/microstructure_source_preflight.py app_module/recommendation_portfolio_backtest_service.py tests/test_recommendation_portfolio_backtest.py
@@ -135,19 +135,19 @@ git commit -m "feat: add governed microstructure preflight metadata"
 - Modify: `tests/test_evidence_source_coverage_cli.py`
 - Create: `tests/test_evidence_source_coverage_service.py`
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Test that missing recommendation payloads are warnings when recommendation and durable snapshot sources are otherwise present, while missing durable snapshot sections remain blocking gaps.
 
-- [ ] **Step 2: Implement shared service**
+- [x] **Step 2: Implement shared service**
 
 Move current source coverage logic to `EvidenceSourceCoverageService.inspect(...)`. Include capability metadata and keep scheduler readiness limited to existing non-production values.
 
-- [ ] **Step 3: Wire CLI, runner, readiness evaluator**
+- [x] **Step 3: Wire CLI, runner, readiness evaluator**
 
 Replace duplicate coverage logic with the shared service. Keep CLI JSON keys backward compatible.
 
-- [ ] **Step 4: Verify Task 4**
+- [x] **Step 4: Verify Task 4**
 
 Run:
 
@@ -157,7 +157,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 4**
+- [x] **Step 5: Commit Task 4**
 
 ```powershell
 git add app_module/evidence_source_coverage_service.py scripts/inspect_evidence_source_coverage.py app_module/evidence_scheduler_readiness.py app_module/evidence_pipeline_runner.py tests/test_evidence_source_coverage_service.py tests/test_evidence_source_coverage_cli.py
@@ -176,11 +176,11 @@ git commit -m "feat: centralize evidence source coverage"
 - Modify: `docs/00_core/DOCUMENTATION_INDEX.md`
 - Create: `docs/06_qa/V1_5_DATA_CREDIBILITY_CLOSEOUT_2026_07_04.md`
 
-- [ ] **Step 1: Update docs**
+- [x] **Step 1: Update docs**
 
 Mark V1.5 v1 complete only for registry / policy / governed metadata / coverage service. Keep external data ingestion, full negative evidence, production scheduler, and investment validity out of scope.
 
-- [ ] **Step 2: Run verification**
+- [x] **Step 2: Run verification**
 
 Run:
 
