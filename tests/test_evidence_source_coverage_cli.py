@@ -36,6 +36,7 @@ def _inspect(config):
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     return json.loads(completed.stdout)
 
@@ -90,3 +91,40 @@ def test_coverage_cli_marks_design_ready_only_when_sources_are_durable(tmp_path)
     assert summary["liquidity_gate_capture_ready"] is True
     assert summary["scheduler_readiness"] == "ready_for_design"
     assert summary["scheduler_readiness"] != "production_ready"
+
+
+def test_coverage_cli_treats_payload_gaps_as_warnings(tmp_path):
+    config = _config(tmp_path)
+    DecisionDeskSnapshotRepository(config).save_snapshot(
+        build_stored_decision_desk_snapshot(_snapshot(date(2026, 6, 30)))
+    )
+    RecommendationRepository(config).save_result(
+        RecommendationResultDTO(
+            result_id="rec-payload-partial",
+            result_name="Payload partial fixture",
+            config={},
+            recommendations=[
+                RecommendationDTO(
+                    stock_code="2330",
+                    stock_name="TSMC",
+                    close_price=100.0,
+                    price_change=1.0,
+                    total_score=80.0,
+                    indicator_score=30.0,
+                    pattern_score=30.0,
+                    volume_score=20.0,
+                    recommendation_reasons="rank_top",
+                    industry="Semi",
+                    regime_match=True,
+                )
+            ],
+        )
+    )
+
+    summary = _inspect(config)
+
+    assert summary["scheduler_readiness"] == "dry_run_only"
+    assert summary["blocking_gaps"] == []
+    assert summary["warnings"] == ["why_not_payload_missing", "liquidity_gate_payload_missing"]
+    assert "why_not_exclusion_payload_missing" not in summary["blocking_gaps"]
+    assert "liquidity_gate_payload_missing" not in summary["blocking_gaps"]

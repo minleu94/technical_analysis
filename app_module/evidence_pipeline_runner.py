@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from app_module.decision_desk_builder_factory import build_service_backed_decision_desk_snapshot_builder
 from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRepository
-from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot, section_is_ready
+from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot
 from app_module.evidence_capture_service import EvidenceCaptureService
 from app_module.evidence_event_importer_dtos import EvidenceCaptureRequest
 from app_module.evidence_event_importers import (
@@ -29,15 +29,14 @@ from app_module.evidence_pipeline_runner_dtos import (
     EvidencePipelineRunRequest,
     EvidencePipelineRunSummary,
     EvidencePipelineStepSummary,
-    READINESS_DRY_RUN_ONLY,
     READINESS_NOT_READY,
-    READINESS_READY_FOR_DESIGN,
     STEP_DEGRADED,
     STEP_FAILED,
     STEP_READY,
     STEP_SKIPPED,
     scheduler_readiness_after_run,
 )
+from app_module.evidence_source_coverage_service import EvidenceSourceCoverageService
 from app_module.forward_performance_read_model import (
     ForwardPerformanceFilter,
     ForwardPerformanceReadModel,
@@ -290,63 +289,10 @@ class EvidencePipelineRunner:
         )
 
     def _source_coverage(self, request: EvidencePipelineRunRequest) -> dict[str, Any]:
-        recommendation_repository = RecommendationRepository(self.config)
-        snapshot_repository = DecisionDeskSnapshotRepository(self.config, db_path=self.db_path)
-        recommendation = self._latest_recommendation(recommendation_repository, request.result_id)
-        snapshots = snapshot_repository.list_snapshots()
-        latest_snapshot = snapshot_repository.latest_before_or_on(request.decision_date) if request.decision_date else None
-        recommendation_available = recommendation is not None
-        why_not_ready = _has_payload(getattr(recommendation, "why_not_payload_json", None)) if recommendation else False
-        liquidity_ready = (
-            _has_payload(getattr(recommendation, "liquidity_gate_payload_json", None)) if recommendation else False
-        )
-        watchlist_ready = latest_snapshot is not None and section_is_ready(latest_snapshot.watchlist_trigger_json)
-        portfolio_ready = latest_snapshot is not None and section_is_ready(latest_snapshot.portfolio_alert_json)
-        risk_ready = latest_snapshot is not None and section_is_ready(latest_snapshot.risk_prompt_json)
-        all_gaps: list[str] = []
-        if not recommendation_available:
-            all_gaps.append("recommendation_persisted_missing")
-        if latest_snapshot is None:
-            all_gaps.append("decision_desk_snapshot_missing")
-        if latest_snapshot is not None and not watchlist_ready:
-            all_gaps.append("watchlist_trigger_snapshot_section_missing")
-        if latest_snapshot is not None and not portfolio_ready:
-            all_gaps.append("portfolio_alert_snapshot_section_missing")
-        if latest_snapshot is not None and not risk_ready:
-            all_gaps.append("risk_prompt_snapshot_section_missing")
-        if not why_not_ready:
-            all_gaps.append("why_not_exclusion_payload_missing")
-        if not liquidity_ready:
-            all_gaps.append("liquidity_gate_payload_missing")
-        snapshot_ready = latest_snapshot is not None and watchlist_ready and portfolio_ready and risk_ready
-        if not recommendation_available or not snapshot_ready:
-            readiness = READINESS_NOT_READY
-        elif not (why_not_ready and liquidity_ready):
-            readiness = READINESS_DRY_RUN_ONLY
-        else:
-            readiness = READINESS_READY_FOR_DESIGN
-        return {
-            "recommendation_persisted_available": recommendation_available,
-            "recommendation_exclusion_payload_available": why_not_ready and liquidity_ready,
-            "decision_desk_snapshots_count": len(snapshots),
-            "latest_decision_desk_snapshot_date": latest_snapshot.decision_date if latest_snapshot is not None else None,
-            "watchlist_trigger_capture_ready": watchlist_ready,
-            "portfolio_alert_capture_ready": portfolio_ready,
-            "risk_prompt_capture_ready": risk_ready,
-            "why_not_capture_ready": why_not_ready,
-            "liquidity_gate_capture_ready": liquidity_ready,
-            "scheduler_readiness": readiness,
-            "blocking_gaps": all_gaps,
-        }
-
-    def _latest_recommendation(self, repository: RecommendationRepository, result_id: str | None) -> Any | None:
-        if result_id:
-            return repository.load_result(result_id)
-        rows = repository.list_results()
-        if not rows:
-            return None
-        latest = sorted(rows, key=lambda item: str(item.get("created_at") or ""), reverse=True)[0]
-        return repository.load_result(str(latest.get("result_id") or ""))
+        return EvidenceSourceCoverageService(self.config, db_path=self.db_path).inspect(
+            decision_date=request.decision_date,
+            result_id=request.result_id,
+        ).to_dict()
 
     def _blocking_gaps_for_request(self, coverage: dict[str, Any], request: EvidencePipelineRunRequest) -> list[str]:
         requested = set(self._expanded_sources(request.sources))
@@ -628,14 +574,6 @@ class _CombinedCaptureSummary:
         self.events_skipped_duplicate = sum(int(item.events_skipped_duplicate) for item in summaries)
         self.events_failed = sum(int(item.events_failed) for item in summaries)
         self.warnings_count = sum(int(item.warnings_count) for item in summaries)
-
-
-def _has_payload(value: Any) -> bool:
-    if value is None:
-        return False
-    if isinstance(value, dict):
-        return bool(value)
-    return bool(list(value))
 
 
 def write_pipeline_report(summary: EvidencePipelineRunSummary, path: Path) -> None:

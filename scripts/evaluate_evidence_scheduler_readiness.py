@@ -13,6 +13,12 @@ from app_module.evidence_scheduler_readiness import evaluate_evidence_scheduler_
 from data_module.config import TWStockConfig
 
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate manual evidence scheduler readiness.")
     parser.add_argument("--db-path", required=True)
