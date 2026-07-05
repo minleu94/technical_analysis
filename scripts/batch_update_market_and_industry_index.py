@@ -1,15 +1,19 @@
 """批量更新大盤指數和產業指數數據 - 使用主模組"""
 import sys
-import io
 from pathlib import Path
 
 # 設置 UTF-8 編碼以支持中文輸出
-if sys.platform == 'win32':
-    try:
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-    except:
-        pass  # 如果已經設置過，忽略錯誤
+def configure_console_encoding():
+    """Configure CLI console encoding without replacing process streams."""
+    if sys.platform != 'win32':
+        return
+    for stream_name in ('stdout', 'stderr'):
+        stream = getattr(sys, stream_name, None)
+        if hasattr(stream, 'reconfigure'):
+            try:
+                stream.reconfigure(encoding='utf-8')
+            except Exception:
+                pass
 
 # 添加項目根目錄到系統路徑
 project_root = Path(__file__).parent.parent
@@ -343,6 +347,7 @@ def batch_update_industry_index(start_date: str, end_date: str = None,
 
 def main():
     """主函數"""
+    configure_console_encoding()
     parser = argparse.ArgumentParser(
         description='批量更新大盤指數和產業指數數據（使用主模組）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
