@@ -27,10 +27,11 @@ class CrossSectionalFactorSnapshotConflictError(ValueError):
 
 
 class CrossSectionalFactorRepository:
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, *, ensure_schema: bool = True) -> None:
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.ensure_schema()
+        if ensure_schema:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self.ensure_schema()
 
     def ensure_schema(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
