@@ -212,6 +212,7 @@ def test_runner_missing_snapshot_reports_diagnostic_without_fabricated_events(tm
             decision_date="2026-07-01",
             sources=("watchlist-trigger", "portfolio-alert", "risk-prompt"),
             windows=(5,),
+            skip_snapshot=True,
         )
     )
 
@@ -219,6 +220,64 @@ def test_runner_missing_snapshot_reports_diagnostic_without_fabricated_events(tm
     assert summary.events_inserted == 0
     assert "source_missing_snapshot" in summary.diagnostic_codes
     assert summary.scheduler_readiness_after in {"not_ready", "dry_run_only", "ready_for_design"}
+
+
+def test_runner_dry_run_reuses_transient_snapshot_for_decision_desk_capture(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_market_db(config)
+
+    summary = EvidencePipelineRunner(config, db_path=config.db_file).run(
+        EvidencePipelineRunRequest(
+            decision_date="2026-07-01",
+            sources=("watchlist-trigger", "portfolio-alert", "risk-prompt"),
+            db_path=str(config.db_file),
+            windows=(5,),
+        )
+    )
+
+    assert summary.dry_run is True
+    assert summary.events_inserted == 0
+    assert "source_missing_snapshot" not in summary.diagnostic_codes
+    assert EvidenceEventRepository(config).list_events() == []
+
+
+def test_runner_default_all_does_not_block_on_optional_exclusion_payloads(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_market_db(config)
+    _seed_recommendation(config)
+
+    summary = EvidencePipelineRunner(config, db_path=config.db_file).run(
+        EvidencePipelineRunRequest(
+            decision_date="2026-07-01",
+            sources=("all",),
+            db_path=str(config.db_file),
+            windows=(5,),
+        )
+    )
+
+    assert "why_not_payload_missing" in summary.source_coverage["warnings"]
+    assert "liquidity_gate_payload_missing" in summary.source_coverage["warnings"]
+    assert "source_missing_exclusion_payload" not in summary.diagnostic_codes
+    assert "why_not_exclusion_payload_missing" not in summary.blocking_gaps
+    assert "liquidity_gate_payload_missing" not in summary.blocking_gaps
+
+
+def test_runner_explicit_exclusion_sources_still_block_without_payloads(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_recommendation(config)
+
+    summary = EvidencePipelineRunner(config, db_path=config.db_file).run(
+        EvidencePipelineRunRequest(
+            decision_date="2026-07-01",
+            sources=("why-not", "liquidity-gate"),
+            db_path=str(config.db_file),
+            windows=(5,),
+        )
+    )
+
+    assert "why_not_exclusion_payload_missing" in summary.blocking_gaps
+    assert "liquidity_gate_payload_missing" in summary.blocking_gaps
+    assert "source_missing_exclusion_payload" in summary.diagnostic_codes
 
 
 def test_runner_and_cli_do_not_import_forbidden_boundaries() -> None:

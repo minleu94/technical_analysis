@@ -53,6 +53,7 @@ class EvidenceCaptureRequest:
     limit: int | None = None
     dry_run: bool = True
     confirm: bool = False
+    capture_exclusion_payloads: bool = True
 
     @property
     def decision_date_text(self) -> str | None:
@@ -121,4 +122,3 @@ class EvidenceCaptureSummary:
             "diagnostics": [item.to_dict() for item in self.diagnostics],
             "sample_events": [dict(item) for item in self.sample_events],
         }
-

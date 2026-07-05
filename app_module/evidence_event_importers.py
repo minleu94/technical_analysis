@@ -196,20 +196,21 @@ class RecommendationEvidenceImporter:
             if request.limit is not None and len(payloads) >= request.limit:
                 break
 
-        exclusion_payloads = self._exclusion_payloads(result, request, decision_date)
-        if exclusion_payloads:
-            for payload in exclusion_payloads:
-                if request.limit is not None and len(payloads) >= request.limit:
-                    break
-                payloads.append(payload)
-        else:
-            diagnostics.append(
-                EvidenceImportDiagnostic(
-                    code="source_missing_exclusion_payload",
-                    message="RecommendationResultDTO does not persist why-not/liquidity exclusion payloads",
-                    source_name=self.source_name,
+        if request.capture_exclusion_payloads:
+            exclusion_payloads = self._exclusion_payloads(result, request, decision_date)
+            if exclusion_payloads:
+                for payload in exclusion_payloads:
+                    if request.limit is not None and len(payloads) >= request.limit:
+                        break
+                    payloads.append(payload)
+            else:
+                diagnostics.append(
+                    EvidenceImportDiagnostic(
+                        code="source_missing_exclusion_payload",
+                        message="RecommendationResultDTO does not persist why-not/liquidity exclusion payloads",
+                        source_name=self.source_name,
+                    )
                 )
-            )
 
         return EvidenceImportResult(
             source_name=self.source_name,

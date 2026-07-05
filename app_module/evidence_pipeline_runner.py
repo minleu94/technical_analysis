@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from app_module.decision_desk_builder_factory import build_service_backed_decision_desk_snapshot_builder
 from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRepository
-from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot
+from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot, section_is_ready
 from app_module.evidence_capture_service import EvidenceCaptureService
 from app_module.evidence_event_importer_dtos import EvidenceCaptureRequest
 from app_module.evidence_event_importers import (
@@ -108,6 +108,7 @@ class EvidencePipelineRunner:
         self._validate_request(request)
         effective_dry_run = bool(request.dry_run or not request.confirm)
         self.db_path = self._active_db_path(request, effective_dry_run)
+        self._transient_decision_desk_snapshot = None
         started_at = self.clock().isoformat()
         run_id = self.run_id_factory()
         steps: list[EvidencePipelineStepSummary] = []
@@ -296,18 +297,31 @@ class EvidencePipelineRunner:
 
     def _blocking_gaps_for_request(self, coverage: dict[str, Any], request: EvidencePipelineRunRequest) -> list[str]:
         requested = set(self._expanded_sources(request.sources))
+        explicit = set(self._clean_sources(request.sources))
         gaps: list[str] = []
         if "recommendation" in requested and not coverage.get("recommendation_persisted_available"):
             gaps.append("recommendation_persisted_missing")
-        if "watchlist-trigger" in requested and not coverage.get("watchlist_trigger_capture_ready"):
+        if (
+            "watchlist-trigger" in requested
+            and not coverage.get("watchlist_trigger_capture_ready")
+            and not self._transient_section_ready(request, "watchlist-trigger")
+        ):
             gaps.append("watchlist_trigger_not_ready")
-        if "portfolio-alert" in requested and not coverage.get("portfolio_alert_capture_ready"):
+        if (
+            "portfolio-alert" in requested
+            and not coverage.get("portfolio_alert_capture_ready")
+            and not self._transient_section_ready(request, "portfolio-alert")
+        ):
             gaps.append("portfolio_alert_not_ready")
-        if "risk-prompt" in requested and not coverage.get("risk_prompt_capture_ready"):
+        if (
+            "risk-prompt" in requested
+            and not coverage.get("risk_prompt_capture_ready")
+            and not self._transient_section_ready(request, "risk-prompt")
+        ):
             gaps.append("risk_prompt_not_ready")
-        if "why-not" in requested and not coverage.get("why_not_capture_ready"):
+        if "why-not" in explicit and not coverage.get("why_not_capture_ready"):
             gaps.append("why_not_exclusion_payload_missing")
-        if "liquidity-gate" in requested and not coverage.get("liquidity_gate_capture_ready"):
+        if "liquidity-gate" in explicit and not coverage.get("liquidity_gate_capture_ready"):
             gaps.append("liquidity_gate_payload_missing")
         return gaps
 
@@ -320,6 +334,7 @@ class EvidencePipelineRunner:
                 clock=self.clock,
             ).build_snapshot(date.fromisoformat(request.decision_date[:10]))
             stored = build_stored_decision_desk_snapshot(snapshot, decision_date=request.decision_date[:10])
+            self._transient_decision_desk_snapshot = stored
             created = 0
             skipped = 1
             if not dry_run:
@@ -376,6 +391,7 @@ class EvidencePipelineRunner:
                     limit=request.limit,
                     dry_run=dry_run,
                     confirm=not dry_run,
+                    capture_exclusion_payloads=self._explicit_exclusion_requested(request),
                 )
             )
             summaries.append(summary)
@@ -415,6 +431,8 @@ class EvidencePipelineRunner:
         snapshot_repository = DecisionDeskSnapshotRepository(self.config, db_path=self.db_path)
         stored = snapshot_repository.latest_before_or_on(request.decision_date)
         if stored is None:
+            stored = self._transient_snapshot_for_request(request)
+        if stored is None:
             reason = "durable decision desk snapshot not found; run capture_decision_desk_snapshot.py first"
             importers.update(
                 {
@@ -439,6 +457,32 @@ class EvidencePipelineRunner:
             )
         return importers
 
+    def _transient_snapshot_for_request(self, request: EvidencePipelineRunRequest) -> Any | None:
+        stored = getattr(self, "_transient_decision_desk_snapshot", None)
+        if stored is None:
+            return None
+        if str(getattr(stored, "decision_date", "")) != request.decision_date[:10]:
+            return None
+        return stored
+
+    def _transient_section_ready(self, request: EvidencePipelineRunRequest, section_name: str) -> bool:
+        stored = self._transient_snapshot_for_request(request)
+        if stored is None:
+            return False
+        if section_name == "watchlist-trigger":
+            return section_is_ready(stored.watchlist_trigger_json)
+        if section_name == "portfolio-alert":
+            return section_is_ready(stored.portfolio_alert_json)
+        if section_name == "risk-prompt":
+            return section_is_ready(stored.risk_prompt_json)
+        return False
+
+    def _clean_sources(self, sources: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(source.strip() for source in sources if source.strip())
+
+    def _explicit_exclusion_requested(self, request: EvidencePipelineRunRequest) -> bool:
+        return bool(set(self._clean_sources(request.sources)) & EXCLUSION_SOURCE_ALIASES)
+
     def _capture_sources(self, sources: tuple[str, ...]) -> tuple[str, ...]:
         expanded = self._expanded_sources(sources)
         capture_sources: list[str] = []
@@ -450,7 +494,7 @@ class EvidencePipelineRunner:
         return tuple(dict.fromkeys(capture_sources))
 
     def _expanded_sources(self, sources: tuple[str, ...]) -> tuple[str, ...]:
-        clean = tuple(source.strip() for source in sources if source.strip())
+        clean = self._clean_sources(sources)
         if not clean or "all" in clean:
             return (*CAPTURE_SOURCE_ORDER, "why-not", "liquidity-gate")
         return clean
