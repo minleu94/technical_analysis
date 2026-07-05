@@ -116,14 +116,15 @@
 - Strategy & Scoring Governance 增量 A / B 與 10 檔 fixed / quantile OOS 實證已完成；quantile 未優於 fixed，維持 opt-in。
 - Phase 5 圖表渲染、批次並行化、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 報告輸出仍在後續 backlog。
 - Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉。Month 6 Strategy Lifecycle / Portfolio Feedback v1 已落地 lifecycle gate、append-only lifecycle evidence、current state projection、drift detector、Portfolio feedback attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
-- Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations 與 evidence review history。
-- 接續主線是用 weekly evidence operations + history 實際累積多週覆盤證據，並依 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 逐步準備 V1.5 Data Credibility、V1.6 Cross-sectional Factor Pipeline、V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等中繼版本的資料、因子、evidence 與使用節奏成熟後再評估。
+- Post-V1 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations、evidence review history、data credibility gate 與 cross-sectional factor snapshot / attribution pipeline。
+- 接續主線是用 weekly evidence operations + history + factor attribution 實際累積多週覆盤證據，並依 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 逐步準備 V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等中繼版本的資料、因子、evidence 與使用節奏成熟後再評估。
 - `docs/05_phases/` 保留為 Historical / Reference；Phase 文件內的下一步或 Gate 不作目前 roadmap 判斷。
 
 目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；舊 Roadmap 未完成事項是否已承接，以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。
 
 ## 6. 更新記錄
 
+- 2026-07-05：同步 Post-V1 V1.5 / V1.6 v1 完成狀態，新增 data credibility gate 與 cross-sectional factor pipeline closeout，下一步改為 V1.7 Negative Evidence。
 - 2026-07-03：同步 Post-V1 V1.1 至 V1.4 v1 完成狀態，並將 `docs/05_phases/` 定位改為 Historical / Reference。
 - 2026-06-30：將根目錄 `README.md` 改為使用者導向入口，新增 `AGENT_CONTEXT.md` 承接 Agent / 開發者上下文；將歷史 `docs/00_core/note.txt` 歸檔，並將 `output/` raw output 從乾淨 `main` 移出追蹤。
 - 2026-06-18：整理根目錄 README 入口，將過期 `readme.txt` 移入 `docs/09_archive/root_readme_legacy_2025_12.txt`，並同步 docs 索引。

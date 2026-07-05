@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
-**版本**：v1.4.5
-**最後更新**：2026-07-04
+**版本**：v1.4.6
+**最後更新**：2026-07-05
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -99,18 +99,26 @@
 
 ### Evidence / Data Credibility Layer（`app_module/` + `data_module/`）
 
-**目前狀態**：Post-V1 evidence layer 與 V1.5 data credibility gate 已建立；這一層只保存 / 檢查 research evidence、source coverage 與資料政策，不產生投資結論、不啟用 production scheduler。
+**目前狀態**：Post-V1 evidence layer、V1.5 data credibility gate 與 V1.6 cross-sectional factor pipeline 已建立；這一層只保存 / 檢查 research evidence、source coverage、factor attribution 與資料政策，不產生投資結論、不啟用 production scheduler。
 
 **主要檔案**：
 - `app_module/evidence_event_*`、`app_module/evidence_capture_service.py`、`app_module/evidence_event_importers.py`
 - `app_module/forward_performance_service.py`、`app_module/forward_performance_read_model.py`
 - `app_module/evidence_pipeline_runner.py`、`app_module/evidence_scheduler_readiness.py`
 - `app_module/evidence_source_coverage_service.py`
+- `app_module/cross_sectional_factor_dtos.py`
+- `app_module/cross_sectional_factor_repository.py`
+- `app_module/cross_sectional_factor_pipeline.py`
+- `app_module/cross_sectional_factor_attribution.py`
 - `data_module/data_source_capability_registry.py`
 - `data_module/corporate_action_policy.py`
 - `data_module/microstructure_source_preflight.py`
+- `data_module/cross_sectional_factor_migration.py`
+- `scripts/inspect_cross_sectional_factor_snapshot.py`
 
 **如果我要改 evidence source coverage / data credibility**：先看 `docs/00_core/PROJECT_SNAPSHOT.md`、`docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md` 與 `docs/01_architecture/system_architecture.md`；程式改動優先從 `EvidenceSourceCoverageService` 或 `data_module/*policy/*registry` 切入，不要在 CLI、runner 或 UI 各自複製分級邏輯。
+
+**如果我要改 V1.6 factor snapshots / attribution**：先看 `CrossSectionalFactorPipeline`、`CrossSectionalFactorRepository` 與 `scripts/inspect_cross_sectional_factor_snapshot.py`；新增 factor 或 concept metadata 仍必須先經 `FactorGate`、`available_date <= decision_date` 與 missing policy，不要直接改 `ScoringEngine`。
 
 ---
 

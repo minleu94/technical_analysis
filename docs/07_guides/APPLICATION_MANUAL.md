@@ -1,6 +1,6 @@
 ﻿# baldr 完整操作手冊
 
-> **最後更新**：2026-07-04
+> **最後更新**：2026-07-05
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前 8 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
@@ -831,6 +831,15 @@ Runner steps：
 
 V1.5 後，source coverage 由 `EvidenceSourceCoverageService` 統一判讀。`recommendation_persisted_missing`、`decision_desk_snapshot_missing`、`watchlist_trigger_snapshot_section_missing`、`portfolio_alert_snapshot_section_missing`、`risk_prompt_snapshot_section_missing` 是 durable source blocking gaps；`why_not_payload_missing` 與 `liquidity_gate_payload_missing` 是 optional payload warnings，會使整體 readiness 維持 `dry_run_only`，但不等於 durable source missing。若使用 `--sources why-not` 或 `--sources liquidity-gate` 明確要求 exclusion source，runner 仍會在該請求層級阻擋缺 payload 的 capture。`inspect_data_source_capabilities.py` 只檢查 source registry，不抓外部資料；`inspect_corporate_action_policy.py` 只輸出價格政策與資料表候選，不建立 adjusted price、不寫正式 DB。
 
+V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已保存的 daily factor snapshot。這個 CLI 不建立 DB、不寫 snapshot、不重算 scoring；若指定的 DB 不存在會以錯誤結束。snapshot 只會在其他受控 workflow 明確呼叫 `CrossSectionalFactorPipeline` / `CrossSectionalFactorRepository` 保存後才存在。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_cross_sectional_factor_snapshot.py --db-path <working-copy-db> --latest --json
+.\.venv\Scripts\python.exe scripts\inspect_cross_sectional_factor_snapshot.py --db-path <working-copy-db> --snapshot-id <snapshot-id> --markdown
+```
+
+輸出會包含 snapshot metadata、row count、factor / quality / rank bucket 分布、sector / concept basket counts 與 diagnostics counts。rank / quantile 只代表當日橫斷面 factor 排序與研究 attribution，不是推薦名單、不代表買賣訊號，也不會改 `ScoringEngine`。Concept basket 只有在定義的 `available_date <= decision_date` 時才會進入 row；未到可得日只會出現在 diagnostics。
+
 Working-copy smoke 會先確認 source DB 與 working-copy DB 不是同一路徑；若 working-copy DB 不存在，會以 `shutil.copy2` 從 source DB 複製一份，再只對 working-copy DB 執行 confirm smoke。預設 repeat 至少 2 次，用 event / outcome counts 檢查 idempotency；source DB 應維持 read-only。readiness evaluator 只彙總 source coverage、smoke report 與 dashboard availability，輸出的 `production_scheduler_allowed` 固定為 `false`。正式排程前仍需人工 review `docs/06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md` 的 source coverage、diagnostics report、backup path、rollback path 與 manual approval steps。
 
 Live vs Research Gap linkage CLI 用來把 portfolio position source trace、Evidence Event / Outcome 與 saved source metadata 串成 gap observation。這是 evidence，不是 action；不修改持倉、不修改 Research Run、不做 lifecycle action，也不是完整實帳歸因。沒有真實交易與人工 override 記錄時，只能解讀為 research / simulated gap。Symbol / date fuzzy match 只會列為 low-confidence candidate，不會當作 confirmed evidence link。
@@ -1129,6 +1138,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 
 ## 14. 更新記錄
 
+- 2026-07-05：新增 V1.6 cross-sectional factor snapshot inspection CLI 操作說明，標示 rank / quantile 僅供研究 attribution，不是推薦、不改 `ScoringEngine`、不建立 DB、不啟用 scheduler。
 - 2026-07-02：完成 V1.2 Research Credibility & Execution Model v1 操作說明，補充 Profile replay 訓練 / 驗證分離、推薦回放 rolling risk metrics、microstructure preflight、relative attribution 與仍未完成的實盤撮合 residual。
 - 2026-07-02：完成主 PySide6 UI 金融研究工作台視覺整理；統一設計 token、表格樣式、按鈕 variant、空狀態與缺字 icon 清理，並明確維持資料抓取、推薦、回測、每日決策與持倉計算邊界不變。
 - 2026-07-02：Research Lab 策略回測日期欄與證據覆盤日期篩選改用受控日曆 popup；開啟時定位今天，未設定日期不再讓日曆停在 sentinel 年份。
