@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = run_working_copy_smoke(args)
     except ValueError as exc:
         parser.error(str(exc))
-    print(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2))
+    print(json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2))
     return 0
 
 

@@ -87,9 +87,10 @@ def main(argv: list[str] | None = None) -> int:
         "exit_code": completed.returncode,
         "checked_at": datetime.now().isoformat(timespec="seconds"),
     }
-    text = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
-    status_path.write_text(text + "\n", encoding="utf-8")
-    print(text)
+    status_text = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
+    stdout_text = json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2)
+    status_path.write_text(status_text + "\n", encoding="utf-8")
+    print(stdout_text)
     return completed.returncode
 
 

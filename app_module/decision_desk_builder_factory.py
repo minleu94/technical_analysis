@@ -136,19 +136,21 @@ def build_service_backed_decision_desk_snapshot_builder(
             SQLiteRankingProvider(config.db_file),
         ),
     )
-    portfolio_alert_service = _try_create(
-        "PortfolioAlertService",
-        lambda: PortfolioAlertService(
-            portfolio_service=active_portfolio_service,
-            condition_monitor=PortfolioConditionMonitor(),
-            chip_summary_provider=_try_create(
-                "PortfolioChipService",
-                lambda: PortfolioChipService(config, broker_flow_service=active_broker_flow_service),
+    portfolio_alert_service = None
+    if active_portfolio_service is not None:
+        portfolio_alert_service = _try_create(
+            "PortfolioAlertService",
+            lambda: PortfolioAlertService(
+                portfolio_service=active_portfolio_service,
+                condition_monitor=PortfolioConditionMonitor(),
+                chip_summary_provider=_try_create(
+                    "PortfolioChipService",
+                    lambda: PortfolioChipService(config, broker_flow_service=active_broker_flow_service),
+                ),
             ),
-        ),
-    )
+        )
     active_smart_money_service = smart_money_service
-    if active_smart_money_service is None:
+    if active_smart_money_service is None and active_broker_flow_service is not None:
         active_smart_money_service = _try_create(
             "SmartMoneySemanticService",
             lambda: SmartMoneySemanticService(

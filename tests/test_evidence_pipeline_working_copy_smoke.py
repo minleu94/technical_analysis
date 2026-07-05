@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 import sqlite3
@@ -10,6 +11,7 @@ from app_module.dtos import RecommendationDTO, RecommendationResultDTO
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.recommendation_repository import RecommendationRepository
 from data_module.config import TWStockConfig
+from scripts import smoke_evidence_pipeline_working_copy
 from tests.test_evidence_pipeline_smoke import _seed_market_db
 
 
@@ -142,6 +144,34 @@ def test_working_copy_smoke_missing_durable_source_becomes_blocking_gap(tmp_path
     assert payload["readiness_after_smoke"] in {"not_ready", "dry_run_only", "ready_for_design"}
     assert "watchlist_trigger_not_ready" in payload["blocking_gaps"]
     assert payload["event_count_after_run_2"] == 0
+
+
+def test_working_copy_smoke_stdout_survives_cp1252_console_with_chinese_payload(monkeypatch) -> None:
+    def fake_run(args: object) -> dict[str, object]:
+        return {"blocking_gaps": ["持倉警示"], "repeat_count": 2}
+
+    output_buffer = io.BytesIO()
+    stdout = io.TextIOWrapper(output_buffer, encoding="cp1252", errors="strict")
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(smoke_evidence_pipeline_working_copy, "run_working_copy_smoke", fake_run)
+
+    exit_code = smoke_evidence_pipeline_working_copy.main(
+        [
+            "--source-db-path",
+            "source.db",
+            "--working-copy-db-path",
+            "working.db",
+            "--decision-date",
+            "2026-07-01",
+        ]
+    )
+
+    stdout.flush()
+    raw_output = output_buffer.getvalue().decode("cp1252")
+    payload = json.loads(raw_output)
+    assert exit_code == 0
+    assert payload["blocking_gaps"] == ["持倉警示"]
+    assert "\\u6301\\u5009\\u8b66\\u793a" in raw_output
 
 
 def test_working_copy_smoke_rejects_same_source_and_working_copy_path(tmp_path: Path) -> None:
