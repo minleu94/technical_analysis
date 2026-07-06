@@ -57,4 +57,4 @@
 - [x] Run focused pytest files.
 - [x] Run `py_compile` on changed Python files.
 - [x] Run quant guard if financial/evidence boundary touched.
-- [ ] Inspect `git status --short` and final commit history.
+- [x] Inspect `git status --short` and final commit history.
