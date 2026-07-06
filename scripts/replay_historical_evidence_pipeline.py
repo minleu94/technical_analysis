@@ -29,6 +29,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--window", type=int, default=20)
     parser.add_argument("--min-sample-size", type=int, default=10)
     parser.add_argument("--limit", type=int)
+    parser.add_argument(
+        "--outcome-mode",
+        choices=("final", "daily"),
+        default="final",
+        help="final calculates forward outcomes once at replay end; daily recalculates with each replay day.",
+    )
     parser.add_argument("--confirm", action="store_true")
     parser.add_argument("--overwrite-replay-db", action="store_true")
     parser.add_argument("--json-output", action="store_true")
@@ -80,8 +86,11 @@ def render_replay_report(report: HistoricalEvidenceReplayReport) -> str:
         f"- source_label: `{report.source_label}`\n"
         f"- dry_run: `{str(report.dry_run).lower()}`\n"
         f"- confirm: `{str(report.confirm).lower()}`\n"
+        f"- outcome_mode: `{report.outcome_mode}`\n"
         f"- source_db_path: `{report.source_db_path}`\n"
         f"- replay_db_path: `{report.replay_db_path}`\n\n"
+        "## Final Outcome Summary\n\n"
+        f"```json\n{json.dumps(report.final_outcome_summary or {}, ensure_ascii=False, indent=2, sort_keys=True)}\n```\n\n"
         "## Daily Summary\n\n"
         "| Decision date | Recommendation result | Events seen | Events inserted | Outcomes pending | Diagnostics |\n"
         "|---|---|---:|---:|---:|---|\n"
@@ -106,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         window=args.window,
         min_sample_size=args.min_sample_size,
         limit=args.limit,
+        outcome_mode=args.outcome_mode,
         confirm=bool(args.confirm),
         overwrite_replay_db=bool(args.overwrite_replay_db),
     )

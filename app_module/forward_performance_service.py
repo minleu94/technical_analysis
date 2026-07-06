@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
@@ -46,6 +47,8 @@ class ForwardPerformanceService:
         self.config = config
         self.repository = repository or EvidenceEventRepository(config)
         self.db_path = Path(config.db_file)
+        self._daily_price_cache: dict[str, tuple[tuple[str, ...], tuple[tuple[str, Decimal], ...]]] = {}
+        self._index_return_cache: dict[tuple[str, str | None, str, str], int | None] = {}
 
     def calculate(
         self,
@@ -203,40 +206,14 @@ class ForwardPerformanceService:
     ) -> tuple[str, Decimal] | None:
         target = self._date_key(event_date)
         as_of = self._date_key(data_as_of_date) if data_as_of_date else None
-        with sqlite3.connect(self.db_path) as conn:
-            if as_of:
-                row = conn.execute(
-                    """
-                    SELECT 日期, 收盤價
-                    FROM daily_prices
-                    WHERE 證券代號 = ?
-                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') >= ?
-                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
-                      AND 收盤價 IS NOT NULL
-                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
-                    LIMIT 1
-                    """,
-                    (symbol, target, as_of),
-                ).fetchone()
-            else:
-                row = conn.execute(
-                    """
-                    SELECT 日期, 收盤價
-                    FROM daily_prices
-                    WHERE 證券代號 = ?
-                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') >= ?
-                      AND 收盤價 IS NOT NULL
-                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
-                    LIMIT 1
-                    """,
-                    (symbol, target),
-                ).fetchone()
-        if row is None:
+        keys, values = self._daily_price_series(symbol)
+        index = bisect_left(keys, target)
+        if index >= len(values):
             return None
-        close_value = self._to_decimal(row[1])
-        if close_value is None:
+        date_key, close_value = values[index]
+        if as_of and date_key > as_of:
             return None
-        return (self._date_iso(row[0]), close_value)
+        return (self._date_iso(date_key), close_value)
 
     def _find_outcome_price(
         self,
@@ -248,41 +225,15 @@ class ForwardPerformanceService:
     ) -> tuple[str, Decimal] | None:
         target = self._date_key(event_price_date)
         as_of = self._date_key(data_as_of_date) if data_as_of_date else None
-        with sqlite3.connect(self.db_path) as conn:
-            if as_of:
-                rows = conn.execute(
-                    """
-                    SELECT 日期, 收盤價
-                    FROM daily_prices
-                    WHERE 證券代號 = ?
-                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') > ?
-                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
-                      AND 收盤價 IS NOT NULL
-                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
-                    LIMIT ?
-                    """,
-                    (symbol, target, as_of, int(window_days)),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """
-                    SELECT 日期, 收盤價
-                    FROM daily_prices
-                    WHERE 證券代號 = ?
-                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') > ?
-                      AND 收盤價 IS NOT NULL
-                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
-                    LIMIT ?
-                    """,
-                    (symbol, target, int(window_days)),
-                ).fetchall()
-        if len(rows) < window_days:
+        keys, values = self._daily_price_series(symbol)
+        start_index = bisect_right(keys, target)
+        outcome_index = start_index + int(window_days) - 1
+        if outcome_index >= len(values):
             return None
-        row = rows[window_days - 1]
-        close_value = self._to_decimal(row[1])
-        if close_value is None:
+        date_key, close_value = values[outcome_index]
+        if as_of and date_key > as_of:
             return None
-        return (self._date_iso(row[0]), close_value)
+        return (self._date_iso(date_key), close_value)
 
     def _index_return_bp(
         self,
@@ -293,6 +244,9 @@ class ForwardPerformanceService:
     ) -> int | None:
         if not index_name:
             return None
+        cache_key = (table_name, index_name, self._date_key(event_price_date), self._date_key(outcome_price_date))
+        if cache_key in self._index_return_cache:
+            return self._index_return_cache[cache_key]
         column = "收盤指數"
         with sqlite3.connect(self.db_path) as conn:
             start = conn.execute(
@@ -318,8 +272,36 @@ class ForwardPerformanceService:
         start_value = self._to_decimal(start[0])
         end_value = self._to_decimal(end[0])
         if start_value is None or end_value is None or start_value <= 0:
+            self._index_return_cache[cache_key] = None
             return None
-        return self._return_bp(end_value, start_value)
+        result = self._return_bp(end_value, start_value)
+        self._index_return_cache[cache_key] = result
+        return result
+
+    def _daily_price_series(self, symbol: str) -> tuple[tuple[str, ...], tuple[tuple[str, Decimal], ...]]:
+        if symbol in self._daily_price_cache:
+            return self._daily_price_cache[symbol]
+        rows: list[tuple[str, Decimal]] = []
+        with sqlite3.connect(self.db_path) as conn:
+            fetched = conn.execute(
+                """
+                SELECT 日期, 收盤價
+                FROM daily_prices
+                WHERE 證券代號 = ?
+                  AND 收盤價 IS NOT NULL
+                ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
+                """,
+                (symbol,),
+            ).fetchall()
+        for raw_date, raw_close in fetched:
+            close_value = self._to_decimal(raw_close)
+            if close_value is None:
+                continue
+            rows.append((self._date_key(raw_date), close_value))
+        values = tuple(rows)
+        keys = tuple(row[0] for row in values)
+        self._daily_price_cache[symbol] = (keys, values)
+        return keys, values
 
     @staticmethod
     def _return_bp(current: Decimal, base: Decimal) -> int:

@@ -50,6 +50,8 @@ def test_replay_cli_defaults_to_dry_run_and_outputs_json(tmp_path: Path) -> None
     assert payload["dry_run"] is True
     assert payload["replay_mode"] == "historical_replay"
     assert payload["source_label"] == "simulated_scheduler"
+    assert payload["outcome_mode"] == "final"
+    assert payload["final_outcome_summary"]["dry_run"] is True
     assert payload["totals"]["days"] == 2
     assert payload["days"][0]["selected_recommendation_result_id"] == "cli-rec"
 

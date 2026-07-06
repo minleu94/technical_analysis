@@ -18,6 +18,9 @@ from data_module.config import TWStockConfig
 
 REPLAY_MODE_HISTORICAL = "historical_replay"
 SOURCE_LABEL_SIMULATED_SCHEDULER = "simulated_scheduler"
+OUTCOME_MODE_DAILY = "daily"
+OUTCOME_MODE_FINAL = "final"
+ALLOWED_OUTCOME_MODES = {OUTCOME_MODE_DAILY, OUTCOME_MODE_FINAL}
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,7 @@ class HistoricalEvidenceReplayRequest:
     limit: int | None = None
     confirm: bool = False
     overwrite_replay_db: bool = False
+    outcome_mode: str = OUTCOME_MODE_FINAL
     replay_mode: str = REPLAY_MODE_HISTORICAL
     source_label: str = SOURCE_LABEL_SIMULATED_SCHEDULER
     replay_run_id: str = field(default_factory=lambda: f"hre_{uuid4().hex[:12]}")
@@ -71,8 +75,10 @@ class HistoricalEvidenceReplayReport:
     replay_db_path: str
     dry_run: bool
     confirm: bool
+    outcome_mode: str
     days: tuple[HistoricalEvidenceReplayDay, ...]
     limitations: tuple[str, ...]
+    final_outcome_summary: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,14 +91,20 @@ class HistoricalEvidenceReplayReport:
             "replay_db_path": self.replay_db_path,
             "dry_run": self.dry_run,
             "confirm": self.confirm,
+            "outcome_mode": self.outcome_mode,
             "days": [day.to_dict() for day in self.days],
             "limitations": list(self.limitations),
+            "final_outcome_summary": self.final_outcome_summary,
             "totals": {
                 "days": len(self.days),
                 "events_seen": sum(day.events_seen for day in self.days),
                 "events_inserted": sum(day.events_inserted for day in self.days),
-                "outcomes_created": sum(day.outcomes_created for day in self.days),
-                "outcomes_pending": sum(day.outcomes_pending for day in self.days),
+                "outcomes_created": sum(day.outcomes_created for day in self.days)
+                + int((self.final_outcome_summary or {}).get("outcomes_created") or 0),
+                "outcomes_updated": sum(day.outcomes_updated for day in self.days)
+                + int((self.final_outcome_summary or {}).get("outcomes_updated") or 0),
+                "outcomes_pending": sum(day.outcomes_pending for day in self.days)
+                + int((self.final_outcome_summary or {}).get("pending_insufficient_future_data") or 0),
             },
         }
 
@@ -106,6 +118,9 @@ class HistoricalEvidenceReplayService:
     def run(self, request: HistoricalEvidenceReplayRequest) -> HistoricalEvidenceReplayReport:
         source_db = Path(request.source_db_path)
         replay_db = Path(request.replay_db_path)
+        outcome_mode = str(request.outcome_mode or "").strip().lower()
+        if outcome_mode not in ALLOWED_OUTCOME_MODES:
+            raise ValueError(f"outcome_mode must be one of: {', '.join(sorted(ALLOWED_OUTCOME_MODES))}")
         self._validate_paths(source_db, replay_db)
         self._prepare_replay_db(source_db, replay_db, overwrite=request.overwrite_replay_db)
         replay_config = self._replay_config(replay_db)
@@ -117,6 +132,10 @@ class HistoricalEvidenceReplayService:
 
         dry_run = not request.confirm
         days: list[HistoricalEvidenceReplayDay] = []
+        outcome_service = ForwardPerformanceService(
+            replay_config,
+            EvidenceEventRepository(replay_config, db_path=replay_db),
+        )
         for decision_date in trading_dates:
             selected_result_id = self._select_recommendation_result_id(decision_date)
             sources, diagnostics = self._sources_for_day(request.sources, selected_result_id)
@@ -145,16 +164,17 @@ class HistoricalEvidenceReplayService:
                     },
                 )
             )
-            outcome_summary = ForwardPerformanceService(
-                replay_config,
-                EvidenceEventRepository(replay_config, db_path=replay_db),
-            ).calculate(
-                windows=request.windows,
-                dry_run=dry_run,
-                start_date=request.start_date,
-                end_date=decision_date,
-                limit=request.limit,
-                data_as_of_date=decision_date,
+            outcome_summary = (
+                outcome_service.calculate(
+                    windows=request.windows,
+                    dry_run=dry_run,
+                    start_date=request.start_date,
+                    end_date=decision_date,
+                    limit=request.limit,
+                    data_as_of_date=decision_date,
+                )
+                if outcome_mode == OUTCOME_MODE_DAILY
+                else None
             )
             days.append(
                 HistoricalEvidenceReplayDay(
@@ -163,9 +183,9 @@ class HistoricalEvidenceReplayService:
                     sources=sources,
                     events_seen=runner_summary.events_seen,
                     events_inserted=runner_summary.events_inserted,
-                    outcomes_created=outcome_summary.outcomes_created if request.confirm else 0,
-                    outcomes_updated=outcome_summary.outcomes_updated if request.confirm else 0,
-                    outcomes_pending=outcome_summary.pending_insufficient_future_data,
+                    outcomes_created=outcome_summary.outcomes_created if outcome_summary and request.confirm else 0,
+                    outcomes_updated=outcome_summary.outcomes_updated if outcome_summary and request.confirm else 0,
+                    outcomes_pending=outcome_summary.pending_insufficient_future_data if outcome_summary else 0,
                     blocking_gaps=tuple(runner_summary.blocking_gaps),
                     diagnostics=tuple(
                         dict.fromkeys(
@@ -177,6 +197,16 @@ class HistoricalEvidenceReplayService:
                     ),
                 )
             )
+        final_outcome_summary = None
+        if outcome_mode == OUTCOME_MODE_FINAL and trading_dates:
+            final_outcome_summary = outcome_service.calculate(
+                windows=request.windows,
+                dry_run=dry_run,
+                start_date=request.start_date,
+                end_date=trading_dates[-1],
+                limit=request.limit,
+                data_as_of_date=trading_dates[-1],
+            ).to_dict()
 
         return HistoricalEvidenceReplayReport(
             replay_run_id=request.replay_run_id,
@@ -188,7 +218,9 @@ class HistoricalEvidenceReplayService:
             replay_db_path=str(replay_db),
             dry_run=dry_run,
             confirm=request.confirm,
+            outcome_mode=outcome_mode,
             days=tuple(days),
+            final_outcome_summary=final_outcome_summary,
             limitations=(
                 "Historical replay is research evidence only and does not replace real weekly or multi-day scheduler gates.",
                 "Recommendation source uses only persisted results with created_at date not after the replay decision date.",

@@ -841,7 +841,7 @@ Historical Evidence Replay 用來把 Evidence Pipeline 放到半年前或指定�
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\replay_historical_evidence_pipeline.py --start-date 2026-01-06 --end-date 2026-07-06 --source-db-path <source-db> --replay-db-path tmp\historical_replay\evidence_replay_2026h1.db --json-output --report-output output\evidence_pipeline\historical_replay_2026h1.md
-.\.venv\Scripts\python.exe scripts\replay_historical_evidence_pipeline.py --start-date 2026-01-06 --end-date 2026-07-06 --source-db-path <source-db> --replay-db-path tmp\historical_replay\evidence_replay_2026h1.db --confirm --overwrite-replay-db --sources all --windows 5,10,20,60 --json-output
+.\.venv\Scripts\python.exe scripts\replay_historical_evidence_pipeline.py --start-date 2026-01-06 --end-date 2026-07-06 --source-db-path <source-db> --replay-db-path tmp\historical_replay\evidence_replay_2026h1.db --confirm --overwrite-replay-db --sources all --windows 5,10,20,60 --outcome-mode final --json-output
 ```
 
 主要參數：
@@ -850,6 +850,7 @@ Historical Evidence Replay 用來把 Evidence Pipeline 放到半年前或指定�
 - `--source-db-path`：原始 SQLite DB，只用來複製與查交易日；不可與 replay DB 同一路徑。
 - `--replay-db-path`：重放用 working-copy DB。若不存在會由 source DB 複製；若已存在，只有加 `--overwrite-replay-db` 才會重建。
 - `--confirm`：預設不寫 business rows；加上後才會對 replay DB 寫入 evidence events / outcomes。正式 evidence DB 不應拿來當 replay DB。
+- `--outcome-mode final|daily`：預設 `final`，逐日 capture 完成後只在 replay end date 做一次 forward outcome 計算，適合半年 replay；`daily` 會每天用當日 `data_as_of_date` 重新計算 outcome maturity，語意更細但大型 DB 會明顯變慢。
 - `--sources`、`--windows`、`--group-by`、`--window`、`--min-sample-size`、`--limit`：沿用 Evidence Pipeline Runner / forward summary 的控制語意。
 - `--report-output`：輸出 Markdown replay report；JSON summary 會固定印到 stdout。
 
@@ -857,7 +858,7 @@ No-look-ahead 邊界：
 
 - Recommendation 類來源只會選 `created_at` 日期不晚於當日 decision date 的 persisted result；若沒有當日以前 result，會記錄 `recommendation_asof_result_missing`，並略過 `recommendation` / `why-not` / `liquidity-gate` 類來源，不用未來 result 補值。
 - Event metadata 會帶入 `replay_mode=historical_replay`、`source_label=simulated_scheduler`、`replay_run_id`、`replay_decision_date` 與 `replay_data_as_of_date`，方便和真實 scheduled dry-run 分開查。
-- Forward outcome 計算會以 `data_as_of_date` 限制價格可見日；在 replay date 尚未成熟的 5 / 10 / 20 / 60 日 window 仍會維持 pending，不會提前看未來價格。
+- Forward outcome 計算會以 `data_as_of_date` 限制價格可見日；`final` 模式以 replay 最後一個交易日作上限，`daily` 模式以每日 replay date 作上限。在可見日尚未成熟的 5 / 10 / 20 / 60 日 window 仍會維持 pending，不會提前看未來價格。
 - Replay report 只能用來看 source gap、payload gap、decision workflow 與 V2.0 workbench 設計方向；不計入 weekly history `0/3`、multi-day dry-run `1/3`、manual approval 或 production scheduler gate，也不是投資有效性證明。
 
 V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已保存的 daily factor snapshot。這個 CLI 不建立 DB、不寫 snapshot、不重算 scoring；若指定的 DB 不存在會以錯誤結束。snapshot 只會在其他受控 workflow 明確呼叫 `CrossSectionalFactorPipeline` / `CrossSectionalFactorRepository` 保存後才存在。

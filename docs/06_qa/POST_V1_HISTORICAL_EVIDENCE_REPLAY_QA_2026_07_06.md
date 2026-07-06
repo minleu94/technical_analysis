@@ -39,10 +39,11 @@
 - CLI 預設 dry-run；只有 `--confirm` 才會對 replay DB 寫入 evidence events / outcomes。
 - Source DB 與 replay DB 必須不同路徑。
 - Replay DB 不存在時會由 source DB 複製；已存在時必須加 `--overwrite-replay-db` 才會重建。
+- `--outcome-mode final` 為 CLI 預設，逐日 capture 完成後只在 replay end date 計算一次 forward outcomes，適合半年 replay；`--outcome-mode daily` 保留逐日 maturity 語意，但大型 DB 會慢很多。
 - 每日 replay 只選 `created_at <= decision_date` 的 persisted Recommendation result。
 - 缺 as-of Recommendation result 時只記錄 `recommendation_asof_result_missing`，不使用未來 result 補值。
 - `EvidenceCaptureService` 會將 `replay_mode`、`source_label`、`replay_run_id`、`replay_decision_date` 與 `replay_data_as_of_date` 寫入 event metadata。
-- `ForwardPerformanceService.calculate(data_as_of_date=...)` 會限制 event price / outcome price search，不提前讀未來價格。
+- `ForwardPerformanceService.calculate(data_as_of_date=...)` 會限制 event price / outcome price search，不提前讀未來價格；service 也會 cache symbol daily price series 與 index return，避免半年 replay 重複查詢同一批價格。
 
 ## Test Commands
 
