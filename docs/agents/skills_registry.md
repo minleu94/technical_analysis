@@ -119,6 +119,7 @@
 - **`twstock-context`** (`mcp_servers/project_context_server.py`)：提供專案啟動上下文與 `TWStockConfig` 配置快照。
 - **`twstock-sqlite-inspector`** (`mcp_servers/sqlite_server.py`)：提供強制唯讀 SQLite 查詢、執行計劃審查與 Schema 檢索；最多回傳 1000 列。它可協助診斷索引與查詢計劃，但不保證消除 database lock。
 - **`twstock-git-assistant`** (`mcp_servers/git_server.py`)：提供 Git 工作區狀態、Diff 與 Log 輔助；Git 失敗會明確拋錯，Diff 輸出設有安全上限。
+- **`twstock-evidence-access`** (`mcp_servers/evidence_access_server.py`)：提供 V1.9 read-only Evidence / Research Run / Portfolio Review saved evidence 查詢、Agent permission model 與 AI report template；只回 evidence rows、quality、warnings、source trace 與 diagnostics，不寫 DB、不改策略、不下單、不套用 lifecycle action。
 
 本機註冊位置：
 
@@ -134,3 +135,4 @@
 - 2026-06-14：新增量化防禦技能 `quant_defense_guard.md` 與本地輔助 MCP 伺服器說明。
 - 2026-06-23：新增 Testing / QA Agent 至權威與協作流程，指向 `docs/agents/testing_qa_agent.md`。
 - 2026-07-04：新增 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 的條件式必讀規則，用於外部參考、資料源擴充與 V1.5-V2.0 版本規劃任務。
+- 2026-07-06：新增 V1.9 `twstock-evidence-access` 本地 MCP 說明，限定 read-only evidence access 與 report template 邊界。

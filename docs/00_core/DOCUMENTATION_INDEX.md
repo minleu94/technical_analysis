@@ -11,7 +11,7 @@
 |---|---|
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與歷史歸檔。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
-| [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；說明 V1.1 workflow bridge、V1.2 credibility、V1.3 operations、V1.4 history、V1.5 data credibility、V1.6 factor pipeline、V1.7 negative evidence、V1.8 portfolio sandbox 與 V2.0 workbench 邊界。 |
+| [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；說明 V1.1 workflow bridge、V1.2 credibility、V1.3 operations、V1.4 history、V1.5 data credibility、V1.6 factor pipeline、V1.7 negative evidence、V1.8 portfolio sandbox、V1.9 read-only Agent MCP 與 V2.0 workbench 邊界。 |
 | [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) | 外部開源專案參考、資料源補強優先序、V1.5 至 V2.0 版本形狀與 deferred 技術邊界；作為 6M Roadmap / Version Roadmap companion，不取代 Vision。 |
 | [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr 產品北極星、目前邊界、Gap Register、長期能力圖像與投資有效性驗證框架；不取代 Snapshot、6M Roadmap 或 Architecture。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
@@ -126,6 +126,7 @@
 | [2026-07-04-v1-5-data-credibility-design.md](../superpowers/specs/2026-07-04-v1-5-data-credibility-design.md) | V1.5 Data Credibility & Corporate Action Gate 設計，定義 source capability registry、corporate action policy、governed microstructure metadata 與 evidence source coverage 分級。 |
 | [2026-07-05-v1-6-cross-sectional-factor-pipeline-design.md](../superpowers/specs/2026-07-05-v1-6-cross-sectional-factor-pipeline-design.md) | V1.6 Cross-sectional Factor Pipeline 設計，定義 daily factor snapshot storage、FactorGate-backed pipeline、concept basket available-date gate、rank / quantile persistence 與 attribution summary 邊界。 |
 | [2026-07-05-v1-8-portfolio-sandbox-design.md](../superpowers/specs/2026-07-05-v1-8-portfolio-sandbox-design.md) | V1.8 Portfolio Construction & Execution Trace Sandbox 設計，定義 research-only allocation、constraints、virtual order lifecycle、Decimal / integer bp 邊界與 broker-disabled 範圍。 |
+| [2026-07-06-v1-9-read-only-agent-mcp-design.md](../superpowers/specs/2026-07-06-v1-9-read-only-agent-mcp-design.md) | V1.9 Read-only Agent / MCP Evidence Access 設計，定義 evidence / research run / portfolio review saved evidence 查詢、permission model、AI report template 與 read-only 邊界。 |
 | [2026-06-13-strategy-scoring-governance.md](../superpowers/plans/2026-06-13-strategy-scoring-governance.md) | 策略分數治理總控計畫與增量 Gate。 |
 | [2026-06-14-month-3-factor-layer.md](../superpowers/plans/2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫，拆分 Factor Contract、Registry、Look-ahead Gate、v1 adapters 與 Research Run 追溯保存。 |
 | [2026-07-01-post-v1-evidence-event-store.md](../superpowers/plans/2026-07-01-post-v1-evidence-event-store.md) | Post-V1 Evidence Event Store / Forward Outcome Calculator v1 實作計畫，拆分 DTO、repository、service、calculator、CLI、tests 與 QA 文件。 |
@@ -143,6 +144,7 @@
 | [2026-07-04-v1-5-data-credibility.md](../superpowers/plans/2026-07-04-v1-5-data-credibility.md) | V1.5 Data Credibility & Corporate Action Gate 實作計畫，拆分 registry、corporate action policy、microstructure metadata、source coverage service、文件與 QA。 |
 | [2026-07-05-v1-6-cross-sectional-factor-pipeline.md](../superpowers/plans/2026-07-05-v1-6-cross-sectional-factor-pipeline.md) | V1.6 Cross-sectional Factor Pipeline 實作計畫，拆分 snapshot DTO / repository / migration、pipeline、attribution CLI、tests、文件與 QA。 |
 | [2026-07-05-v1-8-portfolio-sandbox.md](../superpowers/plans/2026-07-05-v1-8-portfolio-sandbox.md) | V1.8 Portfolio Sandbox 實作計畫，拆分 construction DTO/service、virtual execution trace、sample CLI、tests、文件與 QA。 |
+| [2026-07-06-v1-9-read-only-agent-mcp.md](../superpowers/plans/2026-07-06-v1-9-read-only-agent-mcp.md) | V1.9 Read-only Agent / MCP Evidence Access 實作計畫，拆分 app-layer service、MCP wrapper、tests、文件與 QA closeout。 |
 | [2026-06-14-month-3-factor-run-integration.md](../superpowers/plans/2026-06-14-month-3-factor-run-integration.md) | Month 3 Factor Run Integration 計畫，將 factor snapshot / contribution summary 接入 Research Run 實際保存流程。 |
 | [2026-06-15-month-3-recommendation-factor-feed.md](../superpowers/plans/2026-06-15-month-3-recommendation-factor-feed.md) | Month 3 Recommendation Factor Feed 計畫，讓推薦組合回放產生並保存 factor snapshot / contribution metadata。 |
 | [2026-06-15-decision-desk-watchlist-trigger.md](../superpowers/plans/2026-06-15-decision-desk-watchlist-trigger.md) | Daily Decision Desk Watchlist Trigger v1 接線計畫，對接 `WatchlistService` 與 SQLite `technical_indicators`，並定義日期 fallback、quality 與 warnings 契約。 |
@@ -216,6 +218,7 @@
 | [V1_6_CROSS_SECTIONAL_FACTOR_PIPELINE_CLOSEOUT_2026_07_05.md](../06_qa/V1_6_CROSS_SECTIONAL_FACTOR_PIPELINE_CLOSEOUT_2026_07_05.md) | V1.6 Cross-sectional Factor Pipeline closeout，記錄 factor snapshot storage、FactorGate-backed pipeline、concept available-date gate、attribution CLI、驗證命令與不改 scoring / scheduler 邊界。 |
 | [V1_7_NEGATIVE_EVIDENCE_CLOSEOUT_2026_07_05.md](../06_qa/V1_7_NEGATIVE_EVIDENCE_CLOSEOUT_2026_07_05.md) | V1.7 Screening Matrix & Negative Evidence closeout，記錄 recommendation screening matrix、Why Not / Liquidity payload、screening matrix events、source coverage warning、驗證命令與不回補 / 不重算邊界。 |
 | [V1_8_PORTFOLIO_SANDBOX_CLOSEOUT_2026_07_05.md](../06_qa/V1_8_PORTFOLIO_SANDBOX_CLOSEOUT_2026_07_05.md) | V1.8 Portfolio Construction & Execution Trace Sandbox closeout，記錄 research-only allocation、virtual execution trace、sample CLI、驗證命令與不下單 / 不寫正式資料邊界。 |
+| [V1_9_READ_ONLY_AGENT_MCP_CLOSEOUT_2026_07_06.md](../06_qa/V1_9_READ_ONLY_AGENT_MCP_CLOSEOUT_2026_07_06.md) | V1.9 Read-only Agent / MCP Evidence Access closeout，記錄 app-layer service、MCP server、permission model、report template、驗證命令與不寫 DB / 不改策略 / 不下單邊界。 |
 | [POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md](../06_qa/POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md) | Post-V1 Forward Performance Dashboard read-only UI QA 紀錄，包含 UI placement、read-only guarantee、filter coverage、禁用交易語氣檢查與 scheduler readiness 邊界。 |
 | [POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md) | Post-V1 Evidence Pipeline Runner dry-run QA 紀錄，包含 dry-run / confirm 行為、report、readiness、blocking gaps 與 production scheduler 未啟用邊界。 |
 | [POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md](../06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md) | Post-V1 Evidence Production Scheduler Approval checklist，集中管理 working-copy smoke、人工核准、rollback / recovery 與正式排程未啟用邊界。 |
@@ -327,6 +330,7 @@
 
 - 2026-07-05：新增 V1.6 Cross-sectional Factor Pipeline design / plan / QA closeout 索引，標示 daily factor snapshot storage、FactorGate-backed pipeline、concept available-date gate、rank / quantile persistence 與 attribution summary CLI 已完成 v1；不改 scoring、不啟用 scheduler。
 - 2026-07-05：新增 V1.7 Negative Evidence QA closeout 索引，標示 recommendation screening matrix、Why Not / Liquidity payload、screening matrix evidence events 與 source coverage warning 已完成 v1；舊結果不回補、不重算，不改 scoring、不啟用 scheduler。
+- 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access design / plan / QA closeout 索引，標示 read-only evidence service、MCP wrapper、permission model 與 AI report template 已完成 v1；不寫 DB、不改策略、不下單、不套用 lifecycle action。
 - 2026-07-04：新增外部專案參考與未來版本藍圖索引，將 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 定位為 6M Roadmap / Version Roadmap companion，用來承接 GitHub 專案對照、資料源補強優先序與 V1.5-V2.0 版本形狀，避免 Vision 被外部參考清單污染。
 - 2026-07-04：新增 V1.5 Data Credibility design / plan / QA closeout 索引，標示 source capability registry、corporate action policy、microstructure metadata 與 shared source coverage service 已完成 v1；production scheduler 與外部資料 ingestion 仍未啟用。
 - 2026-07-03：整理 Roadmap / docs / phase 判讀入口，將 `docs/05_phases/` 明確標示為 Historical / Reference，新增文件整理稽核索引，避免 Phase 文件被誤判為目前 roadmap。

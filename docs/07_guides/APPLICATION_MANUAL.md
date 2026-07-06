@@ -851,6 +851,28 @@ V1.8 後，可用 Portfolio Sandbox inspection CLI 檢查研究用 allocation / 
 
 目前支援的 allocation method 為 `equal_weight`、`score_weight` 與 `inverse_volatility`。`max_position_weight_bp` 只會限制單一部位上限，不會自動把超出的權重重新分配到其他股票；買不起最小 lot 或套用上限後的現金差額會留在 `residual_cash` 與 diagnostics。Virtual trace 支援 `created`、`submitted`、`partially_filled`、`filled`、`rejected`；`cancelled`、零股、買賣價差、完整撮合與 gap actual execution model 仍是後續 execution-model residual。
 
+V1.9 後，可用本地 MCP server `twstock-evidence-access` 讓支援 MCP 的 Agent 查詢 evidence。這個 server 只包裝 `AgentEvidenceAccessService`，使用 read-only SQLite URI / `PRAGMA query_only=ON` 與既有 read-only repository；它不建立 schema、不寫 DB、不修改策略、不下單、不套用 lifecycle action。若 DB 或 table 不存在，輸出會在 `diagnostics` 回報，檔案不會被建立。
+
+```powershell
+.\.venv\Scripts\python.exe mcp_servers\evidence_access_server.py
+```
+
+MCP tools：
+
+- `get_agent_permission_model`：回傳 read-only role、allowed / denied actions、DB policy 與 lifecycle policy。
+- `get_ai_report_template`：回傳 evidence-only report template，要求引用 evidence rows、quality、warnings、source trace 與 limitations。
+- `query_evidence_events`：查 evidence events，必要時包含 forward outcomes；支援 symbol、event type、decision date / date range、limit、window days。
+- `summarize_forward_evidence`：依 event type / family / source / regime / sector / profile / score bucket / liquidity / data quality 彙總 forward outcomes。
+- `query_research_runs`：唯讀查 Research Run Registry metadata，可依 run id、run type、strategy id 過濾。
+- `query_portfolio_review_evidence`：查已保存 live research gap observation 與 lifecycle evidence rows；Portfolio Review snapshot 本身不是 V1.9 的持久化查詢物件。
+
+輸出判讀：
+
+- `access_boundary.mode` 應固定為 `read_only`，`writes_allowed=false`。
+- `limitations` 必須與 report 一起保留；結果不是買賣建議，不是策略變更，也不是 lifecycle action。
+- `diagnostics` 有值時代表資料源、table 或查詢條件不足；不得用空結果推論策略有效或失效。
+- AI report 只能把查到的 evidence rows 整理成摘要與審核問題；LLM thesis 不是 primary evidence。
+
 Working-copy smoke 會先確認 source DB 與 working-copy DB 不是同一路徑；若 working-copy DB 不存在，會以 `shutil.copy2` 從 source DB 複製一份，再只對 working-copy DB 執行 confirm smoke。預設 repeat 至少 2 次，用 event / outcome counts 檢查 idempotency；source DB 應維持 read-only。readiness evaluator 只彙總 source coverage、smoke report 與 dashboard availability，輸出的 `production_scheduler_allowed` 固定為 `false`。正式排程前仍需人工 review `docs/06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md` 的 source coverage、diagnostics report、backup path、rollback path 與 manual approval steps。
 
 Live vs Research Gap linkage CLI 用來把 portfolio position source trace、Evidence Event / Outcome 與 saved source metadata 串成 gap observation。這是 evidence，不是 action；不修改持倉、不修改 Research Run、不做 lifecycle action，也不是完整實帳歸因。沒有真實交易與人工 override 記錄時，只能解讀為 research / simulated gap。Symbol / date fuzzy match 只會列為 low-confidence candidate，不會當作 confirmed evidence link。
@@ -1176,6 +1198,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-02：新增 safe scheduled wrappers 操作說明與 morning check guide；每日 task 僅做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
 - 2026-07-04：更新 safe scheduled 操作說明為 CMD wrapper + `schtasks.exe` 現況，記錄 04:20 非 UI 快速資料更新、05:00 / 05:15 Windows Task Scheduler task 與 05:30 Codex app read-only 摘要 automation；production confirm 仍未啟用。
 - 2026-07-05：新增 V1.8 Portfolio Construction & Execution Trace Sandbox 操作說明，標示 sample CLI 只輸出 research-only allocation / virtual trace，不讀正式資料、不建立持倉、不下單。
+- 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access 操作說明，標示 `twstock-evidence-access` 只讀 evidence / source trace / quality / warnings，不寫 DB、不改策略、不下單、不套用 lifecycle action。
 - 2026-07-03：新增 V1.3 Evidence Operations weekly review CLI 操作說明，標示 manual approval package、action item planning、production scheduler disabled 與 signal decay candidate 不自動套用 lifecycle action。
 - 2026-07-02：完成 V1.1 workflow bridge v1 操作說明，補充推薦 Profile 進階摘要、buy / sell score 與權重差異、推薦回放是 Profile / Config 歷史重播，以及升降級判讀需經 Research Run / Evidence 與人工 lifecycle gate。
 - 2026-06-23：完成 Healthcheck Batch 2 計畫範圍實作後的操作說明：Daily Decision Desk answer-first dashboard、Smart Money 5 / 20 / 60 日語意診斷、quantity concentration 與股票焦點下鑽。

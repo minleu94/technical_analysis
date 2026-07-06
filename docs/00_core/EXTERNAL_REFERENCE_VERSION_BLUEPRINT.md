@@ -213,10 +213,13 @@ baldr 目前不是從零開始追外部 repo，已經有幾個核心能力與成
 
 目的：讓 AI 能查詢 baldr evidence、資料品質與覆盤歷史，協助摘要與提出審核問題，但不取代治理。
 
-交付方向：
+狀態：2026-07-06 v1 已完成，範圍限定 read-only app-layer service 與 MCP wrapper。
 
-1. 本地 read-only MCP server 或等價 tool surface。
-2. Evidence / Research Run / Portfolio Review 查詢 schema。
+已交付：
+
+1. 本地 read-only MCP server：`mcp_servers/evidence_access_server.py` / `twstock-evidence-access`。
+2. App-layer read-only service：`app_module/agent_evidence_access_service.py`。
+3. Evidence / Research Run / Portfolio Review saved evidence 查詢 schema。
 3. Agent permission model：read-only；不得 write DB、不得改策略、不得下單、不得 lifecycle action。
 4. AI report template：只引用 evidence rows、quality、warnings、source trace。
 
@@ -228,7 +231,7 @@ baldr 目前不是從零開始追外部 repo，已經有幾個核心能力與成
 
 ### V2.0：Unified Decision Workbench
 
-目的：當 V1.5 至 V1.9 的資料可信度、factor pipeline、negative evidence、portfolio sandbox 與 read-only AI 都有足夠 governance 後，再重整資訊架構。
+目的：當 V1.5 至 V1.9 的資料可信度、factor pipeline、negative evidence、portfolio sandbox 與 read-only AI 都完成第一版，且有足夠實際 evidence accumulation / smoke / dry-run 證據後，再重整資訊架構。
 
 V2.0 應長成：
 
@@ -259,20 +262,21 @@ V2.0 應長成：
 
 ### 6M Roadmap
 
-主線仍合理：Evidence-Driven baldr、資料治理、Factor Layer、Daily Decision、Portfolio Feedback。外部參考校準後不需要改方向；V1.8 portfolio sandbox 已完成，後續維持 V1.9 read-only AI、V2.0 Unified Decision Workbench 的順序。
+主線仍合理：Evidence-Driven baldr、資料治理、Factor Layer、Daily Decision、Portfolio Feedback。外部參考校準後不需要改方向；V1.8 portfolio sandbox 與 V1.9 read-only AI 已完成 v1，後續維持先補 evidence accumulation / manual smoke / multi-day dry-run，再評估 V2.0 Unified Decision Workbench 的順序。
 
 ### Version Roadmap
 
-V1.1 至 V1.8 已完成的定位不變。後續 V1.9 需更明確保持 read-only 邊界；已完成的 portfolio sandbox 不等於自動配置建議，read-only AI 不等於 AI 決策。
+V1.1 至 V1.9 已完成的定位不變。已完成的 portfolio sandbox 不等於自動配置建議，read-only AI 不等於 AI 決策。V2.0 前必須先用實際週期證據驗證哪些 evidence summary / dashboard / action item 真正有用。
 
 ### Roadmap Hub
 
-Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並在 Next 保持「累積 evidence、準備 V1.9、V2.0 等 evidence 和使用節奏成熟後再評估」。
+Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並在 Next 保持「累積 evidence、補 V2.0 前置驗證、V2.0 等 evidence 和使用節奏成熟後再評估」。
 
 ---
 
 ## 11. 更新記錄
 
 - 2026-07-05：重新整理外部專案採用規則與分級；確認只保留公開可讀且 README / docs 足以理解用途與操作方法的專案；`x-qa/stock-screener-service` 因 404 移出 active reference；`PyPortfolioOpt` 改用目前 canonical `PyPortfolio/PyPortfolioOpt`；`OpenBB agents` 降級為 experimental playground 參考。
+- 2026-07-06：標記 V1.9 Read-only Agent / MCP Evidence Access v1 已完成；V2.0 前置條件改為 evidence accumulation、manual smoke、multi-day dry-run 與真實 workflow 樣本成熟。
 - 2026-07-05：補上 Blueprint 衝突檢查，明確寫入 SQLite 不拆檔、不做 async / split DB 改造、暫不導入 GPU / cuFOLIO、不自動交易、不讓 AI 決策。
 - 2026-07-04：新增外部專案參考與 V1.5-V2.0 版本藍圖；確認 Vision 不大幅改寫，外部參考由本 companion 承接。
