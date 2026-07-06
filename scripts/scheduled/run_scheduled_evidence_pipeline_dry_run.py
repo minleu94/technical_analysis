@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+from json import JSONDecodeError
 import subprocess
 import sys
 from datetime import date, datetime
+from typing import Any
 from pathlib import Path
 
 
@@ -16,6 +18,51 @@ def _read_status(path: Path) -> str:
     except Exception:  # noqa: BLE001
         return "unreadable"
     return str(payload.get("status", "unknown"))
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    end = text.rfind("}")
+    if end < 0:
+        return None
+    for start, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            payload = json.loads(text[start : end + 1])
+        except JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
+def _pipeline_status_fields(summary: dict[str, Any] | None) -> dict[str, Any]:
+    if not summary:
+        return {"pipeline_summary_available": False}
+    source_coverage = summary.get("source_coverage")
+    if not isinstance(source_coverage, dict):
+        source_coverage = {}
+    return {
+        "pipeline_summary_available": True,
+        "pipeline_warnings_count": int(summary.get("warnings_count") or 0),
+        "pipeline_errors_count": int(summary.get("errors_count") or 0),
+        "pipeline_blocking_gaps": list(summary.get("blocking_gaps") or []),
+        "pipeline_diagnostic_codes": list(summary.get("diagnostic_codes") or []),
+        "scheduler_readiness_before": summary.get("scheduler_readiness_before"),
+        "scheduler_readiness_after": summary.get("scheduler_readiness_after"),
+        "source_coverage_warnings": list(source_coverage.get("warnings") or []),
+        "source_coverage_blocking_gaps": list(source_coverage.get("blocking_gaps") or []),
+        "source_coverage_basis": source_coverage.get("source_coverage_basis"),
+        "recommendation_screening_matrix_available": bool(
+            source_coverage.get("recommendation_screening_matrix_available")
+        ),
+        "recommendation_exclusion_payload_available": bool(
+            source_coverage.get("recommendation_exclusion_payload_available")
+        ),
+        "why_not_capture_ready": bool(source_coverage.get("why_not_capture_ready")),
+        "liquidity_gate_capture_ready": bool(source_coverage.get("liquidity_gate_capture_ready")),
+        "screening_matrix_capture_ready": bool(source_coverage.get("screening_matrix_capture_ready")),
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         stderr=subprocess.STDOUT,
     )
     log_path.write_text(completed.stdout, encoding="utf-8")
+    pipeline_summary = _extract_json_object(completed.stdout)
 
     freshness_status = _read_status(freshness_status_path)
     status = "passed" if completed.returncode == 0 else "failed"
@@ -87,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         "exit_code": completed.returncode,
         "checked_at": datetime.now().isoformat(timespec="seconds"),
     }
+    payload.update(_pipeline_status_fields(pipeline_summary))
     status_text = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
     stdout_text = json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2)
     status_path.write_text(status_text + "\n", encoding="utf-8")

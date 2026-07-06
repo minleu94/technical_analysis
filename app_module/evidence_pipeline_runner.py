@@ -33,7 +33,9 @@ from app_module.evidence_pipeline_runner_dtos import (
     EvidencePipelineRunRequest,
     EvidencePipelineRunSummary,
     EvidencePipelineStepSummary,
+    READINESS_DRY_RUN_ONLY,
     READINESS_NOT_READY,
+    READINESS_READY_FOR_DESIGN,
     STEP_DEGRADED,
     STEP_FAILED,
     STEP_READY,
@@ -123,7 +125,10 @@ class EvidencePipelineRunner:
         if request.skip_snapshot:
             steps.append(self._skipped_step("capture_decision_desk_snapshot", effective_dry_run))
         else:
-            steps.append(self._snapshot_step(request, effective_dry_run))
+            snapshot_step = self._snapshot_step(request, effective_dry_run)
+            steps.append(snapshot_step)
+            source_coverage = self._reconciled_source_coverage(source_coverage, request)
+            steps[0] = self._reconciled_source_step(steps[0], source_coverage, request)
 
         if request.skip_capture:
             capture_step = self._skipped_step("capture_evidence_events", effective_dry_run)
@@ -299,6 +304,70 @@ class EvidencePipelineRunner:
             decision_date=request.decision_date,
             result_id=request.result_id,
         ).to_dict()
+
+    def _reconciled_source_coverage(
+        self,
+        coverage: dict[str, Any],
+        request: EvidencePipelineRunRequest,
+    ) -> dict[str, Any]:
+        stored = self._transient_snapshot_for_request(request)
+        if stored is None:
+            return coverage
+
+        reconciled = dict(coverage)
+        watchlist_ready = section_is_ready(stored.watchlist_trigger_json)
+        portfolio_ready = section_is_ready(stored.portfolio_alert_json)
+        risk_ready = section_is_ready(stored.risk_prompt_json)
+        reconciled.update(
+            {
+                "decision_desk_snapshots_count": max(int(reconciled.get("decision_desk_snapshots_count") or 0), 1),
+                "latest_decision_desk_snapshot_date": stored.decision_date,
+                "watchlist_trigger_capture_ready": watchlist_ready,
+                "portfolio_alert_capture_ready": portfolio_ready,
+                "risk_prompt_capture_ready": risk_ready,
+                "source_coverage_basis": "dry_run_transient_decision_desk_snapshot",
+            }
+        )
+        gaps = [
+            str(gap)
+            for gap in reconciled.get("blocking_gaps", [])
+            if str(gap)
+            not in {
+                "decision_desk_snapshot_missing",
+                "watchlist_trigger_snapshot_section_missing",
+                "portfolio_alert_snapshot_section_missing",
+                "risk_prompt_snapshot_section_missing",
+            }
+        ]
+        if not watchlist_ready:
+            gaps.append("watchlist_trigger_snapshot_section_missing")
+        if not portfolio_ready:
+            gaps.append("portfolio_alert_snapshot_section_missing")
+        if not risk_ready:
+            gaps.append("risk_prompt_snapshot_section_missing")
+        reconciled["blocking_gaps"] = gaps
+
+        snapshot_ready = watchlist_ready and portfolio_ready and risk_ready
+        if not reconciled.get("recommendation_persisted_available") or not snapshot_ready:
+            reconciled["scheduler_readiness"] = READINESS_NOT_READY
+        elif reconciled.get("warnings"):
+            reconciled["scheduler_readiness"] = READINESS_DRY_RUN_ONLY
+        else:
+            reconciled["scheduler_readiness"] = READINESS_READY_FOR_DESIGN
+        return reconciled
+
+    def _reconciled_source_step(
+        self,
+        step: EvidencePipelineStepSummary,
+        coverage: dict[str, Any],
+        request: EvidencePipelineRunRequest,
+    ) -> EvidencePipelineStepSummary:
+        blocking_gaps = self._blocking_gaps_for_request(coverage, request)
+        return replace(
+            step,
+            status=STEP_DEGRADED if blocking_gaps else STEP_READY,
+            warnings_count=len(blocking_gaps),
+        )
 
     def _blocking_gaps_for_request(self, coverage: dict[str, Any], request: EvidencePipelineRunRequest) -> list[str]:
         requested = set(self._expanded_sources(request.sources))

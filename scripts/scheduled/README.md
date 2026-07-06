@@ -108,6 +108,10 @@ It does not run production evidence confirm, does not write the production evide
 
 The generated evidence reports are for human review only. They do not prove alpha and must not be converted into trading advice.
 
+During dry-run, the runner may build a transient Daily Decision Desk snapshot for the same run. Reports mark this as `source_coverage_basis=dry_run_transient_decision_desk_snapshot`; this reconciles diagnostics only and does not persist the snapshot.
+
+The evidence dry-run `latest_status.json` also includes selected pipeline summary fields from the same run, including `pipeline_diagnostic_codes`, `source_coverage_warnings`, `recommendation_screening_matrix_available`, `recommendation_exclusion_payload_available`, and `source_coverage_basis`. These fields are copied from the dry-run stdout only; the wrapper does not rerun the pipeline.
+
 ## Codex Morning Summary
 
 The Codex app automation `baldr scheduled evidence morning report` runs separately at about local time 05:30. It only reads Windows Task Scheduler status, `latest_status.json`, the latest data update status, the latest evidence dry-run report, and relevant log warning / error sections, then writes a Traditional Chinese summary to the user.

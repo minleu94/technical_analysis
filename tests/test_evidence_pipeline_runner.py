@@ -237,6 +237,9 @@ def test_runner_dry_run_reuses_transient_snapshot_for_decision_desk_capture(tmp_
 
     assert summary.dry_run is True
     assert summary.events_inserted == 0
+    assert "decision_desk_snapshot_missing" not in summary.source_coverage["blocking_gaps"]
+    assert summary.source_coverage["latest_decision_desk_snapshot_date"] == "2026-07-01"
+    assert summary.source_coverage["source_coverage_basis"] == "dry_run_transient_decision_desk_snapshot"
     assert "source_missing_snapshot" not in summary.diagnostic_codes
     assert EvidenceEventRepository(config).list_events() == []
 
