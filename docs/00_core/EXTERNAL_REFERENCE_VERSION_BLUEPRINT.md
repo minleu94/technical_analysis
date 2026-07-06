@@ -1,294 +1,278 @@
 # 外部專案參考與未來版本藍圖
 
-> **最後更新**：2026-07-04
-> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 與 `VERSION_ROADMAP_V1_1_TO_V2_0.md` 的參考 companion。它負責保存外部開源專案對照、可借鏡做法、資料源優先序與 V1.5 至 V2.0 版本形狀；不取代 Vision、Snapshot、6M Roadmap 或 Architecture。
+> **最後更新**：2026-07-05
+> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 與 `VERSION_ROADMAP_V1_1_TO_V2_0.md` 的參考 companion。它負責保存外部開源專案對照、資料源補強優先序、可借鑑設計、Blueprint 衝突檢查與 V1.8 至 V2.0 版本形狀；不取代 Vision、Snapshot、6M Roadmap 或 Architecture。
 
 ---
 
 ## 1. 文件邊界
 
-這些外部專案建議不應大幅塞進 Vision。Vision 的責任是北極星、Current State、Evidence Requirement 與 Gap Register；若把 20 多個 GitHub 專案、資料源與技術選型全部寫進 Vision，會讓 Vision 變成研究筆記，反而降低權威性。
+外部專案研究不應大幅寫進 Vision。Vision 負責 North Star、Evidence Requirement、Gap Register 與非目標；外部 repo 清單、資料源對照與技術選型放在本文件，避免 Vision 變成研究筆記。
 
-因此採用下列邊界：
+採用下列 Scoped SSOT：
 
-- **Vision**：只保留長期產品方向與證據要求，新增本文件連結即可。
-- **6M Roadmap**：決定未來 6 個月可執行順序。
-- **Version Roadmap**：把 V1.1 至 V2.0 拆成可驗收版本。
-- **本文件**：保存外部參考、資料源補強順序、可借鏡設計與未來版本藍圖。
-
-外部專案的 stars、license、活躍度與描述屬於時間敏感資訊；本文只保存 2026-07-04 查核後的方向性結論，不把 stars 數當 roadmap 依據。Gemini 回傳內容中有部分 license、stars 或活躍度與 GitHub metadata 不完全一致，本文採「架構可借鏡性」而非人氣排序。
-
----
-
-## 2. 高階結論
-
-baldr 目前最值得補強的不是更早導入強化學習、GPU 或自動交易，而是：
-
-1. **資料可信度**：V1.5 已補 source capability registry、corporate action / adjusted price policy、governed microstructure metadata 與 source coverage 分級；正式除權息 / 處置股資料 ingestion、三大法人與信用交易仍待後續。
-2. **跨橫截面因子管線**：把每日市場、產業、題材、強弱、流動性與籌碼特徵寫成可追溯 factor snapshot，而不是直接塞進 `ScoringEngine`。
-3. **負面證據與 Why Not**：把排除原因、低流動性、樣本不足、資料降級與策略不適用，提升到與推薦事件同等重要的 evidence。
-4. **Portfolio construction sandbox**：研究層的配置、限制與事件生命週期可以先補，但仍不做自動下單。
-5. **Read-only AI / MCP**：AI 可以查詢 evidence、生成摘要與提出覆盤問題，但不能繞過 no-look-ahead、資料可得日與人工核准。
-
-NVIDIA `cuFOLIO` 目前不需要排入近期實作。baldr 現階段瓶頸主要是資料治理、source gaps、SQLite 寫入節奏、UI workflow 與 evidence 樣本，而不是大型 GPU portfolio optimization。只有當系統進入大量 portfolio construction、上萬參數組合、Monte Carlo / covariance / efficient frontier 批次優化，且 CPU / NumPy / vectorized pandas / Numba 都已證明不夠時，才重新評估 GPU。
+| 文件 | 權威範圍 |
+|---|---|
+| `PROJECT_SNAPSHOT.md` | 目前狀態、本週優先事項、高風險區。 |
+| `ROADMAP_6M_ENGINEERING.md` | 未來 6 個月工程執行順序。 |
+| `VERSION_ROADMAP_V1_1_TO_V2_0.md` | V1.1 至 V2.0 的版本化交付節奏。 |
+| `system_vision_specification.md` | 長期產品願景、Evidence Requirement、Gap Register。 |
+| 本文件 | 外部專案參考、資料源優先序、衝突檢查、版本形狀補充。 |
 
 ---
 
-## 3. 外部專案分組與可借鏡做法
+## 2. 外部參考採用規則
 
-### 3.1 台股資料與本地生態
+本文件只把「真的找得到內容，且能理解專案狀態與操作方式」的外部專案列為參考。採用門檻如下：
 
-| 專案 | 主要做什麼 | 可參考做法 | baldr 現況對比 |
-|---|---|---|---|
-| [FinMind/FinMind](https://github.com/FinMind/FinMind) | 台股與金融資料 API / dataset 封裝 | 資料表命名、FinMind dataset catalog、重試與標準化流程 | baldr 已有 SQLite-first 與 governed factor layer；可參考其資料廣度，但不應依賴免費 API 作唯一來源。 |
-| [FinMind/FinMind-MCP](https://github.com/FinMind/FinMind-MCP) | 把 FinMind 資料封裝成 MCP server | LLM tool schema、dataset 查詢邊界、read-only AI access | baldr 可在 V1.9 建本地 read-only MCP / evidence query，不讓 AI 直接改 DB 或策略。 |
-| [mlouielu/twstock](https://github.com/mlouielu/twstock) | TWSE / TPEX 抓取與台股工具 | 交易日、簡單過濾器、錯誤處理概念 | baldr 已有更完整 SQLite / evidence / no-look-ahead；twstock 僅適合作為歷史參考與輕量 filter 靈感。 |
-| [wirelessr/three-gate-screener](https://github.com/wirelessr/three-gate-screener) | 台股三關篩選、TDCC / FinMind、OOS 與失敗教訓 | 負面結果文件、嚴格 OOS、邊緣效應檢查 | baldr 已有 Evidence Review；應吸收「Why Not / negative evidence first」精神。 |
-| [benhuang36/kanpan](https://github.com/benhuang36/kanpan) | Tauri / React 台股看盤與 AI 分析 | 桌面 UI、即時看盤資料流、圖表互動 | baldr 目前 PySide6 研究工作台已成形；可參考 UI 資料流，不應轉向看盤軟體。 |
-| [Sinotrade/rshioaji](https://github.com/Sinotrade/rshioaji) / [fugle-dev/fugle-trade-python](https://github.com/fugle-dev/fugle-trade-python) | 券商 API、行情、下單、帳務 | order lifecycle、broker API adapter、低延遲服務邊界 | baldr 短期不自動交易；V1.8 可只借鏡 event sourcing 與虛擬帳務同步。 |
+1. GitHub repo 必須公開可讀，或官方文件能穩定開啟。
+2. README / docs 必須足以判斷用途、資料來源、安裝或操作方法。
+3. 專案做法必須能映射到 baldr 的現有邊界：SQLite-first、本地資料治理、no-look-ahead、Decimal / integer financial boundary、read-only AI、非自動交易。
+4. 若 repo 可讀但用途與 baldr 主線衝突，僅能列為「限縮參考」或「長期觀察」，不得變成 Roadmap 交付項。
+5. 若 repo 404、內容不足、或無法理解操作方式，列入「不採用 / 待補證據」，不得當作版本規劃依據。
 
-### 3.2 因子研究、回測可信度與研究治理
+2026-07-05 查核結果：
 
-| 專案 | 主要做什麼 | 可參考做法 | baldr 現況對比 |
-|---|---|---|---|
-| [microsoft/qlib](https://github.com/microsoft/qlib) | AI / quant research platform、dataset / model / recorder 解耦 | Research run registry、dataset handler、factor / label pipeline、模型生命週期 | baldr 已有 Research Run Registry、FactorGate、Evidence Event Store；V1.6 應參考其 pipeline / recorder 思路，而不是直接套 Qlib。 |
-| [stefan-jansen/zipline-reloaded](https://github.com/stefan-jansen/zipline-reloaded) | 嚴謹回測與 Pipeline API | point-in-time pipeline、corporate actions、cross-sectional ranking | baldr V1.5 要先補 corporate action / adjusted price policy；V1.6 再做 cross-sectional factor pipeline。 |
-| [freqtrade/freqtrade](https://github.com/freqtrade/freqtrade) | Crypto bot、SQLite、Web UI、lookahead-analysis | lookahead 檢查工具、策略 CLI、SQLite workflow、推播 | baldr 已有 no-look-ahead 契約與 SQLite-first；可參考其自動化檢查與告警節奏，不採 crypto 高頻假設。 |
-| [jesse-ai/jesse](https://github.com/jesse-ai/jesse) | trading research dashboard、walk-forward / optimization | 參數最佳化報告、CLI / dashboard 分離 | baldr 已有 Research Lab、Registry、Profile comparison；可補更清楚的 optimization report，但要避免 overfit。 |
-| [polakowo/vectorbt](https://github.com/polakowo/vectorbt) | NumPy / Numba 向量化高速回測 | 大量參數掃描、forward outcome 批次計算 | baldr 可在 evidence outcome 或 factor pipeline 過慢時局部採 vectorized/Numba；不先重寫引擎。 |
-
-### 3.3 Portfolio、execution model 與數值治理
-
-| 專案 | 主要做什麼 | 可參考做法 | baldr 現況對比 |
-|---|---|---|---|
-| [PyPortfolioOpt](https://github.com/robertmartin8/PyPortfolioOpt) | portfolio optimization、efficient frontier、risk models | constraints、risk model、allocation API | baldr 可在 V1.8 做 research-only portfolio construction sandbox；不能把 optimizer 輸出當交易建議。 |
-| [nautechsystems/nautilus_trader](https://github.com/nautechsystems/nautilus_trader) | Rust / Python event-driven trading engine | event engine、Decimal / precision、order lifecycle、execution state | baldr 已有 Decimal / lifecycle governance；可借鏡 event-sourcing 形狀，不導入完整交易引擎。 |
-| [vnpy/vnpy](https://github.com/vnpy/vnpy) | Python 量化交易平台與 PyQt UI | EventEngine、交易 UI、Portfolio / account 模型 | baldr PySide6 可參考事件驅動 UI 綁定，但目前主線仍是研究與決策，不是交易終端。 |
-| [NVIDIA-AI-Blueprints/cuFOLIO](https://github.com/NVIDIA-AI-Blueprints/cuFOLIO) | GPU portfolio optimization toolkit | 大規模 covariance / optimization / Monte Carlo 加速 | 近期不需要；只有 V1.8+ portfolio optimization 壓力明確超過 CPU / vectorized path 時再評估。 |
-
-### 3.4 AI / Agent / Research terminal
-
-| 專案 | 主要做什麼 | 可參考做法 | baldr 現況對比 |
-|---|---|---|---|
-| [OpenBB-finance/OpenBB](https://github.com/OpenBB-finance/OpenBB) | 金融資料平台、Research terminal、API / UI | 多資料源 provider、command -> API -> UI 組織 | baldr 可參考 provider catalog / command surface，但台股本地治理與 evidence layer 是 baldr 自己的優勢。 |
-| [OpenBB-finance/openbb-agents](https://github.com/OpenBB-finance/openbb-agents) | LLM agents 調用金融工具 | tool index、agent 權限、報告生成 | baldr V1.9 可做 read-only analyst agent，限制工具權限與輸出語氣。 |
-| [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) | multi-agent investment demo | analyst / risk / portfolio manager 角色拆分 | 可借鏡角色分工與解釋流程；不可讓 LLM 決策直接進 strategy lifecycle 或 portfolio action。 |
-| [D11225687/taiwan-stock-advisor](https://github.com/D11225687/taiwan-stock-advisor) | 台股 multi-agent / FastAPI / React / ML | 多 agent 分工、Web app 架構 | baldr 目前更強在 no-look-ahead 與 evidence governance；不建議短期引入 17-agent 複雜度。 |
-| [AI4Finance-Foundation/FinRL](https://github.com/AI4Finance-Foundation/FinRL) | 強化學習、Gym-style market environment | market state / action / reward 抽象 | 近期不採 RL。可把 Market Regime 當 state 的概念留作長期研究，不進 V1.5-V2.0 主線。 |
-
-### 3.5 Screener 類小型專案
-
-| 專案 | 主要做什麼 | 可參考做法 | baldr 現況對比 |
-|---|---|---|---|
-| [xang1234/stock-screener](https://github.com/xang1234/stock-screener) | 基本篩選器 / watchlist 類工具 | 簡潔條件式 screener 與使用者輸入流程 | baldr 已有推薦、Watchlist、Why Not 與 evidence；可參考條件矩陣 UI，不需降級成單純 screener。 |
-| [starboi-63/growth-stock-screener](https://github.com/starboi-63/growth-stock-screener) | 成長股篩選與財務條件 | growth metrics、基本面條件篩選 | baldr Fundamental Layer 已能保守輸出 diagnostics；V1.7 可以把基本面條件納入 screening matrix，但仍不進 `ScoringEngine`。 |
-| `x-qa/stock-screener-service` | 無法穩定確認公開可用內容 | 暫不採用 | 不作 roadmap 依據；若未來提供 repo 內容再重新審查。 |
+- `x-qa/stock-screener-service` 目前 GitHub API 回傳 404，移出 active reference，只保留在不採用清單。
+- `robertmartin8/PyPortfolioOpt` 解析至目前 repo `PyPortfolio/PyPortfolioOpt`，文件內改用目前可驗證 canonical repo。
+- `OpenBB-finance/openbb-agents` 解析至 `OpenBB-finance/experimental-openbb-platform-agent`，只能作 agent / tool permission playground 參考，不列為穩定產品架構依據。
+- 其他保留專案皆已確認公開、README 存在，且至少能判斷用途與操作邊界；但不是每個都適合進主 Roadmap。
 
 ---
 
-## 4. baldr 已經與外部專案相同或更嚴謹的部分
+## 3. 高階結論
 
-baldr 目前已經具備下列能力，不需要從零重做：
+baldr 目前最值得補強的不是更早導入 GPU、強化學習、券商自動下單或 SQLite 分檔，而是：
 
-- **SQLite-first 本地資料底座**：與 Freqtrade / OpenBB 的本地資料思想類似，但更聚焦台股資料與 UI workflow。
-- **Research Run Registry**：方向接近 Qlib recorder / research workflow，已能保存 metadata、hash、Parquet 明細、比較與 promote gate。
-- **No-look-ahead governance**：已建立 FactorGate `available_date <= decision_date`、fixed / quantile Expanding T-1 與推薦 eligible universe boundary。
-- **Evidence Event Store**：已能保存 Recommendation、Watchlist、Portfolio Alert、Risk Prompt、Why Not / Liquidity 類 evidence event 與 forward outcome。
-- **Manual lifecycle boundary**：已能產出 promote / hold / demote_candidate / retire_candidate，但不自動改策略或刪除歷史版本。
-- **Portfolio feedback**：已有來源追溯、condition monitor、chip monitor、lifecycle review 與 live-vs-research gap linkage v1。
-- **資料品質語彙**：`OBSERVED` / `ESTIMATED` / `DEGRADED` / `MISSING` 已貫穿 Daily Decision、Smart Money、Portfolio Alert 與 Evidence Review。
+1. **資料可信度**：corporate action、adjusted price policy、microstructure metadata、source coverage、資料可得日與 missing policy。
+2. **橫截面 factor pipeline**：把市場、產業、題材、流動性、籌碼、基本面 diagnostics 寫成可追溯 snapshot。
+3. **Negative evidence**：Why Not、Liquidity exclusion、資料降級、樣本不足、策略不適用要與推薦 evidence 同等重要。
+4. **Portfolio sandbox**：只做 research-only allocation、constraints、virtual order lifecycle 與 execution trace，不自動下單。
+5. **Read-only AI / MCP**：AI 只查 evidence、source trace、quality、warnings 與覆盤歷史，不寫 DB、不改策略、不產生 lifecycle action。
 
-因此下一步不是「學一個大神 repo 然後重寫 baldr」，而是把外部專案成熟的治理模式吸收到現有 scoped architecture 中。
+明確邊界：
+
+- **SQLite 不拆檔**：近期仍維持單一主 SQLite DB 與現有資料治理。SQLite 的 single writer 是每個 DB file 的寫入鎖限制；拆成多個 DB 可以分散寫入鎖，但會提高一致性、查詢、備份、migration 與 transaction 複雜度。baldr 現階段瓶頸不在必須拆 DB，後續只在真實 lock / throughput 量測證明需要時重開設計。
+- **暫不導入 GPU / cuFOLIO**：`cuFOLIO` 是大型 portfolio optimization / scenario generation 的 GPU 加速範例；baldr 目前瓶頸是資料治理、evidence 樣本、UI workflow 與 source gaps，不是大規模 covariance / CVaR / Monte Carlo 最佳化。
+- **不自動交易**：券商 API、Nautilus、vn.py 只能借鑑 event lifecycle、adapter boundary、帳務 / 虛擬執行模型，不進 production broker order。
+- **不讓 AI 決策**：Agent repo 只參考 tool permission、報告生成與角色分工；LLM 輸出不得當成 evidence。
 
 ---
 
-## 5. 資料源補強優先序
+## 4. 採用分級
 
-### P0：先補，直接影響可信度
+### 4.1 Primary references：可直接影響 V1.8-V2.0 設計
 
-1. **除權息 / 還原價 / corporate action timeline**
-   - 目的：避免長期技術指標、forward return 與回測因事後還原價產生偏差。
-   - V1.5 狀態：已建立 raw / decision-date adjusted candidate / full hindsight adjusted policy inspection；尚未 ingest 正式 corporate action timeline 或建立 adjusted price series。
-   - Done：每個價格序列可標示 raw / adjusted policy；任何 adjusted series 都有 decision-date 可得性聲明。
+| 專案 | 可借鑑內容 | baldr 採用方式 |
+|---|---|---|
+| [FinMind/FinMind](https://github.com/FinMind/FinMind) | 台股資料 catalog、SDK / API、三大法人、融資券、財報、除權息等資料範圍。 | 作為資料源 inventory / capability registry 參考；不得依賴免費 API 作唯一正式來源，需自建 SQLite cache 與 source quality。 |
+| [FinMind/FinMind-MCP](https://github.com/FinMind/FinMind-MCP) | 把金融資料封裝給 LLM / MCP 查詢的 schema 與 read-only tool surface。 | V1.9 可參考本地 MCP / evidence query 設計；僅 read-only，不允許 AI 寫 DB。 |
+| [microsoft/qlib](https://github.com/microsoft/qlib) | Dataset / model / recorder 解耦、research run 管理、factor / label pipeline。 | 已對應到 Research Run Registry、FactorGate、factor snapshot；後續繼續借鑑 pipeline / recorder，不直接套 Qlib。 |
+| [stefan-jansen/zipline-reloaded](https://github.com/stefan-jansen/zipline-reloaded) | Point-in-time pipeline、corporate actions、cross-sectional ranking。 | 用於校準 Sector Rotation / factor pipeline 的 no-look-ahead 與 adjusted price policy。 |
+| [freqtrade/freqtrade](https://github.com/freqtrade/freqtrade) | SQLite workflow、CLI、lookahead-analysis、推播與 scheduler discipline。 | 參考檢查工具與操作節奏；不採 crypto 高頻假設，也不啟用 production write scheduler。 |
+| [wirelessr/three-gate-screener](https://github.com/wirelessr/three-gate-screener) | 台股免費資料 pipeline、SQLite cache、TDCC / FinMind / twsthr、walk-forward、明確記錄策略沒有 edge。 | 很適合補 baldr 的 negative evidence / Why Not 精神；資料源可作 P1 候選，但要逐一登錄 source policy。 |
+| [xang1234/stock-screener](https://github.com/xang1234/stock-screener) | 多市場 screener、80+ filters、market breadth、group ranking、theme discovery、operations console、Docker 操作說明。 | 參考 Screening Matrix / Operations Console / Market Breadth UI；不把 baldr 轉成多市場 server stack，也不採其 LLM research 為 evidence。 |
+| [PyPortfolio/PyPortfolioOpt](https://github.com/PyPortfolio/PyPortfolioOpt) | Efficient frontier、risk model、constraints、Black-Litterman、HRP。 | V1.8 research-only portfolio construction sandbox 可借鑑 API 形狀；輸出只標示 research basis，不作交易建議。 |
+| [OpenBB-finance/OpenBB](https://github.com/OpenBB-finance/OpenBB) | Provider catalog、金融資料平台、command / API / UI 組織方式。 | 參考 provider registry 與研究工具 surface；台股資料治理、evidence layer 仍由 baldr 自己控制。 |
 
-2. **處置股 / 分盤 / 全額交割 / 漲跌停鎖死**
-   - 目的：讓 microstructure preflight 從 optional source 變成 governed source。
-   - V1.5 狀態：已在推薦組合 replay preflight 輸出 governed source metadata、status 與 missing policy；尚未接正式外部 source。
-   - Done：source、available_date、quality、missing policy 完整，並能進 Why Not / Portfolio Alert。
+### 4.2 Constrained references：可借鑑，但必須限縮
 
-3. **Evidence source gap 修補**
-   - 目的：why-not / liquidity exclusion payload、watchlist 實際事件、portfolio active positions 能穩定進 evidence pipeline。
-   - V1.5 狀態：centralized `EvidenceSourceCoverageService` 已將 durable source 缺口列為 blocking gaps，why-not / liquidity optional payload 缺口列為 warnings / `dry_run_only`；完整 negative evidence 仍待 V1.7。
-   - Done：source coverage 不再把 optional payload 缺口列為 blocking gaps；仍需樣本累積後才判斷有效性。
+| 專案 | 限縮原因 | 可用部分 |
+|---|---|---|
+| [mlouielu/twstock](https://github.com/mlouielu/twstock) | 經典台股抓取工具，但不提供 baldr 需要的完整 governance / backtest evidence。 | 交易日、簡單台股 filter、錯誤處理概念；不作核心 ingestion 唯一依據。 |
+| [benhuang36/kanpan](https://github.com/benhuang36/kanpan) | Tauri / React 看盤工具，主軸是展示與即時 UI。 | K 線、內外盤、法人 / 融資券資料流與桌面 UI 互動；baldr 不轉為看盤軟體。 |
+| [Sinotrade/rshioaji](https://github.com/Sinotrade/rshioaji) | 券商 API / 行情 / 下單能力會誘發自動交易邊界風險。 | 僅參考 adapter / service boundary、行情與 virtual execution trace。 |
+| [fugle-dev/fugle-trade-python](https://github.com/fugle-dev/fugle-trade-python) | 富果生態綁定，且偏 order / account API。 | 只參考 order object、整股 / 零股狀態與帳務同步語意。 |
+| [nautechsystems/nautilus_trader](https://github.com/nautechsystems/nautilus_trader) | 完整交易引擎過重，導入成本與系統目標不符。 | 參考 event-driven state machine、Decimal / precision、order lifecycle。 |
+| [vnpy/vnpy](https://github.com/vnpy/vnpy) | 交易平台與 PyQt UI 很完整，但對研究型 baldr 過重。 | 參考 EventEngine 與 PySide / PyQt UI event binding，不導入交易終端邏輯。 |
+| [jesse-ai/jesse](https://github.com/jesse-ai/jesse) | Crypto trading bot，單商品 / 高頻假設與台股橫截面不同。 | 參考 optimization report、dashboard / CLI 分離、walk-forward 操作節奏。 |
+| [polakowo/vectorbt](https://github.com/polakowo/vectorbt) | 高度向量化 / Numba，可讀性與治理成本高。 | 只在 forward outcome 或 factor sweep 量測過慢時局部借鑑，不重寫引擎。 |
+| [OpenBB-finance/experimental-openbb-platform-agent](https://github.com/OpenBB-finance/experimental-openbb-platform-agent) | experimental playground，不列為穩定架構來源。 | 只參考 agent tool index、報告生成、權限分層概念。 |
+| [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) | 多 Agent investment demo，決策隨機性與實盤邊界風險高。 | 參考 analyst / risk / portfolio manager 角色分工；LLM 不能產生 lifecycle action。 |
+| [D11225687/taiwan-stock-advisor](https://github.com/D11225687/taiwan-stock-advisor) | 17-agent / FastAPI / React / ML 架構較大，短期維護成本高。 | 參考多 agent 分工與 Web app 組織；不複製 agent 數量與複雜度。 |
+| [starboi-63/growth-stock-screener](https://github.com/starboi-63/growth-stock-screener) | 成長股 screener 可讀，但較像條件掃描，不是完整治理框架。 | 參考 growth metrics / 基本面條件矩陣；只能進 diagnostics / gate，不進 `ScoringEngine`。 |
 
-4. **Data Source Capability Registry**
-   - 目的：先記錄每個資料源能提供什麼、延遲多久、可不可信，再決定是否進 factor。
-   - V1.5 狀態：已建立 read-only registry 與 inspection CLI，涵蓋 price、evidence、corporate action candidate 與 microstructure candidate sources。
-   - Done：每個新 source 都有 source id、欄位、可得日、延遲、授權 / rate limit、missing policy、可回溯程度。
+### 4.3 Long-term watch：暫不進 V1.8-V2.0 主線
 
-### P1：下一輪補強，支援更好的市場判讀
+| 專案 | 判斷 |
+|---|---|
+| [AI4Finance-Foundation/FinRL](https://github.com/AI4Finance-Foundation/FinRL) | 可借鑑 market state / action / reward 抽象，但 RL 在台股容易過擬合；不進 V1.8-V2.0 主線。 |
+| [NVIDIA-AI-Blueprints/cuFOLIO](https://github.com/NVIDIA-AI-Blueprints/cuFOLIO) | GPU portfolio optimization 工具可作長期觀察；只有在 V1.8+ portfolio sandbox 出現可量測 CPU bottleneck 後才重評估。 |
 
-1. **三大法人**
-   - 補 Smart Money / Chip Flow 的外資、投信、自營商維度。
-   - 不得直接把單日法人買超變成買進理由。
+### 4.4 不採用 / 待補證據
+
+| 專案 | 原因 |
+|---|---|
+| `x-qa/stock-screener-service` | 2026-07-05 查核時 GitHub repo 404，無法確認內容、狀態或操作方法；不得作 roadmap 依據。 |
+
+---
+
+## 5. Blueprint 衝突檢查
+
+| 潛在衝突 | 風險 | 本次決議 |
+|---|---|---|
+| 外部 repo 很多，容易把 roadmap 變成技術堆疊清單。 | 失去 baldr 現有 evidence-first 主線。 | 分為 Primary / Constrained / Watch / Excluded；只有 Primary 可影響近中期設計。 |
+| FinMind / twstock / three-gate 等資料源看起來可直接接。 | API rate limit、資料授權、資料可得日與歷史追溯不一定符合 no-look-ahead。 | 先進 Data Source Capability Registry；正式 ingestion 需 source id、available_date、quality、missing policy。 |
+| 券商 API repo 可能導向自動下單。 | 破壞目前 manual lifecycle boundary。 | 只參考 virtual order lifecycle、帳務語意與 event sourcing；不串 production broker order。 |
+| PyPortfolioOpt / cuFOLIO 可能讓 V1.8 被誤解為投資組合自動建議。 | Optimizer 輸出被誤當交易指令。 | V1.8 只做 research-only sandbox；cuFOLIO 不導入，PyPortfolioOpt-style adapter 也只輸出 research basis。 |
+| OpenBB / AI agent repo 可能讓 LLM 直接參與決策。 | AI hallucination、權限越界、evidence 污染。 | V1.9 只做 read-only evidence access；AI-generated thesis 不算 evidence。 |
+| SQLite single writer 被誤解成必須拆 DB。 | 過早拆 DB 造成 migration / transaction / backup / cross-db query 複雜化。 | 不拆檔、不做 async / split DB 改造；只在量測證明 lock / throughput 成為真瓶頸後重開。 |
+| vectorbt / Numba / GPU 加速被提前導入。 | 增加可讀性與治理成本，問題根源未必是計算。 | 先用 pandas / NumPy / SQL batch / single-writer discipline；只有局部量測過慢才局部最佳化。 |
+
+目前 blueprint 沒有需要推翻的方向；需要的是把「限縮參考」與「暫不採用」寫清楚，避免外部專案反過來拉歪 V1.8-V2.0。
+
+---
+
+## 6. 資料源補強優先序
+
+### P0：直接影響可信度，優先補
+
+1. **Corporate action / adjusted price timeline**
+   - 目的：避免除權息、分割、還原價造成 forward return、技術指標、回測與 portfolio replay 失真。
+   - 來源候選：FinMind、TWSE / TPEX / MOPS 官方資料、後續授權 PIT 匯出。
+   - Gate：任何 adjusted series 都要標示 raw / adjusted policy、available_date、source_version。
+
+2. **台股微結構治理資料**
+   - 內容：處置股、分盤、全額交割、漲跌停鎖死、交易限制。
+   - 來源候選：TWSE / TPEX 官方公告、FinMind 或其他可追溯來源。
+   - Gate：必須能進 Why Not / Portfolio Alert；缺資料時 fail-closed、degraded 或 skip。
+
+3. **Evidence source gaps**
+   - 內容：Why Not / Liquidity payload、watchlist 實際事件、portfolio active positions、risk prompt source。
+   - Gate：舊 result 缺 payload 只診斷，不回補、不重算；新 result 必須在 decision-time 保存。
+
+### P1：支援更好的市場判讀，但不得直接進 score
+
+1. **三大法人 / 外資 / 投信 / 自營商**
+   - 用途：Smart Money、Chip Flow、Risk Prompt、Screening Matrix。
+   - 禁止：不得把單日法人買超直接解釋成買進理由。
 
 2. **信用交易**
-   - 補融資 / 融券、擁擠度、斷頭與軋空風險。
-   - 優先放 Why Not / Risk Prompt，而不是 scoring。
+   - 用途：融資融券、擁擠度、斷頭 / 軋空風險。
+   - 優先放 Why Not / Risk Prompt，不進核心 score。
 
 3. **TDCC / 集保持股分散**
-   - 補籌碼集中、散戶 / 大戶結構與變化。
-   - 適合放 V1.6/V1.7 的 factor pipeline 與 screening matrix。
+   - 用途：籌碼集中度、散戶 / 大戶結構、週頻變化。
+   - 參考：`three-gate-screener` 的 TDCC / archive / twsthr 取捨，但 baldr 必須自行定義授權與 source policy。
 
 4. **Concept Basket / 題材籃子**
-   - 補官方產業分類不能捕捉台股題材輪動的限制。
-   - 需保存成分股版本與有效日期。
+   - 用途：補官方產業分類無法捕捉台股題材輪動的限制。
+   - Gate：成分股版本、有効日期、available_date 必須保存。
 
 5. **P/B、P/S governed observations**
-   - 只能由 governed external observations 或明確 backfill records 進入，不能在系統內臨時推導分子 / 分母。
+   - 用途：fundamental diagnostics / valuation presentation。
+   - Gate：只接受 governed external observation 或明確 backfill record；不在系統內臨時計算分子 / 分母。
 
 ### P2：長期研究，不進近期主線
 
-- Broker real-time / order API：先只作 virtual account / event sourcing 參考，不自動交易。
-- News / text / LLM theme extraction：需先有 source governance 與 hallucination boundary。
-- Options / futures / ETF flows：除非 Daily Decision 明確需要，否則先不擴張。
-- Reinforcement learning / FinRL：過擬合風險高，待 evidence layer 與 dataset registry 成熟後再做研究 sandbox。
-- GPU / cuFOLIO：只在 portfolio optimization 批次規模與 CPU bottleneck 被量測證明後才評估。
+- Broker real-time / order API：只作 virtual execution trace 與帳務語意參考。
+- News / text / theme extraction：先有 source governance 與 hallucination boundary 再談。
+- Options / futures / ETF flows：除非 Daily Decision 明確需要，否則不擴張。
+- FinRL / RL：只留 sandbox 概念，不進 V1.8-V2.0 主線。
+- cuFOLIO / GPU：只在 portfolio optimization 量測成為真瓶頸後重評估。
 
 ---
 
-## 6. V1.5 至 V2.0 版本形狀
+## 7. baldr 已經具備或更嚴謹的部分
 
-### V1.5：Data Credibility & Corporate Action Gate
+baldr 目前不是從零開始追外部 repo，已經有幾個核心能力與成熟專案方向一致：
 
-目的：讓 forward outcome、長期回測、技術指標與 Portfolio replay 的價格基礎更可信。
+- **SQLite-first 本地資料底座**：類似 Freqtrade / screener 類專案的本地資料思路，但更聚焦台股與 evidence governance。
+- **Research Run Registry**：方向接近 Qlib recorder / research workflow，已能保存 metadata、hash、Parquet 明細、比較與 promote gate。
+- **No-look-ahead governance**：已建立 FactorGate `available_date <= decision_date`、fixed / quantile Expanding T-1、eligible universe boundary。
+- **Evidence Event Store**：已保存 Recommendation、Watchlist、Portfolio Alert、Risk Prompt、Why Not / Liquidity 類 events 與 forward outcomes。
+- **Negative evidence v1**：已保存 screening matrix、Why Not / Liquidity payload 與 capture events；舊資料只診斷，不回補。
+- **Manual lifecycle boundary**：promote / hold / demote_candidate / retire_candidate 仍需人工批准，不自動改策略。
+- **資料品質語彙**：`OBSERVED` / `ESTIMATED` / `DEGRADED` / `MISSING` 已貫穿 Daily Decision、Smart Money、Portfolio Alert 與 Evidence Review。
 
-核心交付：
+因此下一步不是重寫 baldr，而是把外部成熟做法吸收進既有 scoped architecture。
 
-1. Data Source Capability Registry v1。
-2. corporate action / adjusted price policy 文件與資料表候選設計。
-3. microstructure governed source preflight：處置股、分盤、全額交割、漲跌停鎖死。
-4. evidence source gaps 修補：why-not / liquidity payload、watchlist / portfolio source coverage。
+---
 
-2026-07-04 v1 closeout：上述 governance layer 已完成第一版，包括 read-only registry / CLI、corporate action policy / CLI、microstructure governed metadata 與 shared source coverage service。尚未接入正式外部資料、未建立 adjusted price series，也未把 optional payload 升級為完整 negative evidence。
-
-不做：
-
-- 不改 `ScoringEngine`。
-- 不導入新黑箱模型。
-- 不啟用 production evidence write-mode scheduler。
-
-### V1.6：Cross-sectional Factor Pipeline & Sector Rotation v2
-
-目的：參考 Qlib / Zipline，把每日橫斷面特徵、產業 / 題材輪動與資料品質寫成可追溯 pipeline。
-
-核心交付：
-
-1. Daily factor snapshot pipeline：market, sector, concept, liquidity, smart money, fundamental diagnostics。
-2. Sector Rotation v2：官方產業 + concept basket，支援成分版本與 available_date。
-3. Factor quantile / rank 保存到 SQLite，與 Research Run Registry / Evidence Event Store 可串接。
-4. 初版 factor attribution dashboard 或 CLI summary。
-
-不做：
-
-- 不把三大法人 / 信用 / 基本面直接硬塞進 scoring。
-- 不把 factor rank 直接當推薦結果。
-
-### V1.7：Screening Matrix & Negative Evidence
-
-目的：把推薦、排除、低流動性、資料品質、watchlist trigger、portfolio alert 的判斷做成同一套可檢查矩陣。
-
-核心交付：
-
-1. Screening Matrix：pass / fail / degraded / skipped / missing。
-2. Why Not / Liquidity exclusion payload 持久化完成。
-3. Negative evidence 與 recommendation evidence 同等地位，能進 forward outcome。
-4. Growth / fundamental screener 只以 diagnostics / gate 形式呈現，不進核心 score。
-
-不做：
-
-- 不自動降低策略版本。
-- 不把「被排除」解釋成一定會下跌。
+## 8. V1.8 至 V2.0 版本形狀
 
 ### V1.8：Portfolio Construction & Execution Trace Sandbox
 
-目的：讓研究層可以比較配置、限制、交易生命週期與 execution gap，但仍維持不自動下單。
+目的：讓研究層能比較配置、限制、交易生命週期與 execution gap，但仍不自動下單。
 
-核心交付：
+交付方向：
 
-1. research-only portfolio construction sandbox：等權、分數權重、risk parity / constrained allocation 候選。
+1. Research-only allocation：等權、分數權重、risk parity / constrained allocation 候選。
 2. PyPortfolioOpt-style constraints / risk model adapter，所有輸出標示為 research basis。
-3. Event sourcing model：Order Created -> Submitted -> Partially Filled -> Filled / Cancelled / Rejected 的虛擬事件生命週期。
+3. Virtual event sourcing：Order Created -> Submitted -> Partially Filled -> Filled / Cancelled / Rejected。
 4. Portfolio replay residual：零股、買賣價差、完整撮合、gap actual execution model、未成交原因。
 
 不做：
 
 - 不串 production broker 下單。
 - 不導入 Nautilus / vn.py 完整交易引擎。
-- 不導入 cuFOLIO，除非 portfolio optimization bottleneck 被量測證明。
+- 不拆 SQLite DB。
+- 不導入 cuFOLIO，除非 optimization bottleneck 被量測證明。
 
 ### V1.9：Read-only Agent / MCP Evidence Access
 
-目的：讓 AI 能查詢 baldr evidence、資料品質與覆盤歷史，協助產生摘要與問題清單，但不能代替治理。
+目的：讓 AI 能查詢 baldr evidence、資料品質與覆盤歷史，協助摘要與提出審核問題，但不取代治理。
 
-核心交付：
+交付方向：
 
 1. 本地 read-only MCP server 或等價 tool surface。
 2. Evidence / Research Run / Portfolio Review 查詢 schema。
-3. Agent permission model：只能 read，不得 write DB、不得改策略、不得下單、不得自動 lifecycle action。
-4. AI report template：只引用 evidence rows、quality、warnings 與 source trace。
+3. Agent permission model：read-only；不得 write DB、不得改策略、不得下單、不得 lifecycle action。
+4. AI report template：只引用 evidence rows、quality、warnings、source trace。
 
 不做：
 
-- 不讓 LLM 直接輸出買賣指令。
+- 不讓 LLM 輸出買賣指令。
 - 不把 AI-generated thesis 當成 evidence。
+- 不用 experimental agent repo 當穩定架構來源。
 
 ### V2.0：Unified Decision Workbench
 
-目的：當 V1.5-V1.9 讓資料、因子、負面證據、portfolio sandbox 與 read-only AI 都有足夠 governance 後，再重整資訊架構。
+目的：當 V1.5 至 V1.9 的資料可信度、factor pipeline、negative evidence、portfolio sandbox 與 read-only AI 都有足夠 governance 後，再重整資訊架構。
 
 V2.0 應長成：
 
 1. 第一畫面是「今日決策任務」，不是功能分頁清單。
-2. Daily Decision、Market Watch、Evidence Review、Portfolio Review 成為同一個工作流。
-3. 每個候選股票都能看到：Why、Why Not、Risk、Evidence、Forward outcome、Live gap、Data quality。
-4. 每個策略都能看到：有效範圍、失效範圍、近期 decay、manual lifecycle candidates。
-5. 舊 Tab 保留為 drill-down / expert mode，避免資訊架構重整破壞既有研究能力。
+2. Daily Decision、Market Watch、Evidence Review、Portfolio Review 成為同一工作流。
+3. 每個候選股票都能看到 Why、Why Not、Risk、Evidence、Forward outcome、Live gap、Data quality。
+4. 每個策略都能看到有效範圍、失效範圍、近期 decay、manual lifecycle candidates。
+5. 舊 Tab 保留為 drill-down / expert mode，避免破壞既有研究能力。
 
 ---
 
-## 7. 明確不納入近期 Roadmap 的項目
+## 9. 明確不納入近期 Roadmap
 
-- **SQLite async / split DB 改造**：使用者已指示先不動。後續只有在真實寫入 lock / throughput bottleneck 被量測證明後，才重開設計。
+- **SQLite async / split DB 改造**：先不動。後續只有在真實 lock / throughput bottleneck 被量測證明後，才重開設計。
 - **Production auto trading**：不做。券商 API 只可作行情、帳務或 virtual execution trace 參考。
-- **強化學習主線**：不進 V1.5-V2.0。可留長期 sandbox，但需 dataset registry、walk-forward 與 overfit guard。
-- **GPU-first portfolio optimization**：不做。先用向量化、NumPy / pandas / Numba、合理批次與單 writer 寫入治理。
-- **AI 自動升降級**：不做。LLM 只能生成摘要與審核問題，lifecycle action 仍需人工核准。
+- **強化學習主線**：不進 V1.8-V2.0。可留長期 sandbox，但需 dataset registry、walk-forward、overfit guard。
+- **GPU-first portfolio optimization**：不做。先用 SQL batch、pandas / NumPy、必要時局部 vectorized / Numba。
+- **AI 自動升降級**：不做。LLM 只能產生摘要與審核問題，lifecycle action 仍需人工核准。
+- **不可驗證外部 repo**：不做 roadmap 依據；`x-qa/stock-screener-service` 目前屬此類。
 
 ---
 
-## 8. 對現有 Roadmap 的審查結論
+## 10. 對現有 Roadmap 的審查結論
 
 ### Vision
 
-不建議大幅改寫。Vision 已正確保存 North Star、Evidence Requirement、Gap Register 與非目標。這輪只需補上本文件連結，避免外部專案清單污染願景層。
-
-### V1.1 至 V2.0 版本路線
-
-原文件已準確標示 V1.1 至 V1.4 完成。2026-07-05 已完成 V1.5 data credibility、V1.6 factor pipeline 與 V1.7 negative evidence；V1.8 至 V1.9 仍是 V2.0 前的中繼版本，而不是把 V2.0 直接提前。
+不建議大幅改寫。Vision 應保持 North Star、Evidence Requirement、Gap Register 與非目標；外部專案清單由本文件承接。
 
 ### 6M Roadmap
 
-6M Roadmap 的主線仍合理：Evidence-Driven baldr、資料治理、Factor Layer、Daily Decision、Portfolio Feedback。外部參考校準後的版本化重排已完成 V1.5 資料可信度治理層、V1.6 因子管線與 V1.7 negative evidence；後續順序仍是 V1.8 portfolio sandbox、V1.9 read-only AI。
+主線仍合理：Evidence-Driven baldr、資料治理、Factor Layer、Daily Decision、Portfolio Feedback。外部參考校準後不需要改方向，只需要維持 V1.8 portfolio sandbox、V1.9 read-only AI、V2.0 Unified Decision Workbench 的順序。
+
+### Version Roadmap
+
+V1.1 至 V1.7 已完成的定位不變。後續 V1.8 / V1.9 需更明確保持研究邊界：portfolio sandbox 不等於自動配置建議，read-only AI 不等於 AI 決策。
 
 ### Roadmap Hub
 
-Roadmap Hub 不應保存完整外部分析。V1.7 v1 已完成後，它只需保留本文件為 companion，並把 Next 的短版維持在「累積 evidence，同時準備 V1.8-V1.9 的版本化路線」。
+Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並在 Next 保持「累積 evidence、準備 V1.8 / V1.9、V2.0 等 evidence 和使用節奏成熟後再評估」。
 
 ---
 
-## 9. 更新記錄
+## 11. 更新記錄
 
-- 2026-07-04：新增外部專案參考與 V1.5-V2.0 版本藍圖；確認 Vision 不大幅改寫，外部參考由本 companion 承接；將 cuFOLIO / RL / broker API / SQLite split 等高成本方向列為 deferred，短中期聚焦資料可信度、cross-sectional factor pipeline、negative evidence、portfolio sandbox 與 read-only AI。
-- 2026-07-04：完成 V1.5 Data Credibility & Corporate Action Gate v1 的治理層 closeout，標記 registry、policy、microstructure metadata 與 source coverage service 已落地；正式資料 ingestion、adjusted price series 與完整 negative evidence 仍移交後續版本。
-- 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline 與 V1.7 Negative Evidence 後，將後續版本化重點收斂為 V1.8 portfolio sandbox 與 V1.9 read-only AI；仍不提前 V2.0 或 broker automation。
+- 2026-07-05：重新整理外部專案採用規則與分級；確認只保留公開可讀且 README / docs 足以理解用途與操作方法的專案；`x-qa/stock-screener-service` 因 404 移出 active reference；`PyPortfolioOpt` 改用目前 canonical `PyPortfolio/PyPortfolioOpt`；`OpenBB agents` 降級為 experimental playground 參考。
+- 2026-07-05：補上 Blueprint 衝突檢查，明確寫入 SQLite 不拆檔、不做 async / split DB 改造、暫不導入 GPU / cuFOLIO、不自動交易、不讓 AI 決策。
+- 2026-07-04：新增外部專案參考與 V1.5-V2.0 版本藍圖；確認 Vision 不大幅改寫，外部參考由本 companion 承接。
