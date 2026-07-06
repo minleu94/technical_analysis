@@ -79,6 +79,7 @@ class EvidencePipelineRunRequest:
     skip_summary: bool = False
     report_output: str | None = None
     allow_production_db_confirm: bool = False
+    replay_context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

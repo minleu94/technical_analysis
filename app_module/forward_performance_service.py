@@ -58,6 +58,7 @@ class ForwardPerformanceService:
         event_type: EvidenceEventType | str | None = None,
         symbol: str | None = None,
         limit: int | None = None,
+        data_as_of_date: str | None = None,
     ) -> ForwardOutcomeSummary:
         events = self.repository.list_events(
             symbol=symbol,
@@ -86,7 +87,7 @@ class ForwardPerformanceService:
             counters["events_ready"] += 1
             for window in tuple(int(item) for item in windows):
                 existing = self.repository.get_outcome(event.event_id, window)
-                outcome = self._build_outcome(event, window)
+                outcome = self._build_outcome(event, window, data_as_of_date=data_as_of_date)
                 counters["warnings_count"] += len(outcome.warnings)
                 if outcome.outcome_status == EvidenceOutcomeStatus.INSUFFICIENT_FUTURE_DATA:
                     counters["pending_insufficient_future_data"] += 1
@@ -107,9 +108,15 @@ class ForwardPerformanceService:
 
         return ForwardOutcomeSummary(dry_run=dry_run, **counters)
 
-    def _build_outcome(self, event: EvidenceEvent, window_days: int) -> EvidenceOutcome:
+    def _build_outcome(
+        self,
+        event: EvidenceEvent,
+        window_days: int,
+        *,
+        data_as_of_date: str | None = None,
+    ) -> EvidenceOutcome:
         warnings: list[str] = []
-        event_price = self._find_event_price(str(event.symbol), event.event_date)
+        event_price = self._find_event_price(str(event.symbol), event.event_date, data_as_of_date=data_as_of_date)
         if event_price is None:
             return EvidenceOutcome(
                 outcome_id=f"out_{uuid4().hex}",
@@ -122,7 +129,12 @@ class ForwardPerformanceService:
             )
 
         event_price_date, event_close = event_price
-        outcome_price = self._find_outcome_price(str(event.symbol), event_price_date, window_days)
+        outcome_price = self._find_outcome_price(
+            str(event.symbol),
+            event_price_date,
+            window_days,
+            data_as_of_date=data_as_of_date,
+        )
         if outcome_price is None:
             return EvidenceOutcome(
                 outcome_id=f"out_{uuid4().hex}",
@@ -182,21 +194,43 @@ class ForwardPerformanceService:
             metadata={"return_basis": "close_to_close_event_date"},
         )
 
-    def _find_event_price(self, symbol: str, event_date: str) -> tuple[str, Decimal] | None:
+    def _find_event_price(
+        self,
+        symbol: str,
+        event_date: str,
+        *,
+        data_as_of_date: str | None = None,
+    ) -> tuple[str, Decimal] | None:
         target = self._date_key(event_date)
+        as_of = self._date_key(data_as_of_date) if data_as_of_date else None
         with sqlite3.connect(self.db_path) as conn:
-            row = conn.execute(
-                """
-                SELECT 日期, 收盤價
-                FROM daily_prices
-                WHERE 證券代號 = ?
-                  AND REPLACE(REPLACE(日期, '-', ''), '/', '') >= ?
-                  AND 收盤價 IS NOT NULL
-                ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
-                LIMIT 1
-                """,
-                (symbol, target),
-            ).fetchone()
+            if as_of:
+                row = conn.execute(
+                    """
+                    SELECT 日期, 收盤價
+                    FROM daily_prices
+                    WHERE 證券代號 = ?
+                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') >= ?
+                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
+                      AND 收盤價 IS NOT NULL
+                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
+                    LIMIT 1
+                    """,
+                    (symbol, target, as_of),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """
+                    SELECT 日期, 收盤價
+                    FROM daily_prices
+                    WHERE 證券代號 = ?
+                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') >= ?
+                      AND 收盤價 IS NOT NULL
+                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
+                    LIMIT 1
+                    """,
+                    (symbol, target),
+                ).fetchone()
         if row is None:
             return None
         close_value = self._to_decimal(row[1])
@@ -209,21 +243,39 @@ class ForwardPerformanceService:
         symbol: str,
         event_price_date: str,
         window_days: int,
+        *,
+        data_as_of_date: str | None = None,
     ) -> tuple[str, Decimal] | None:
         target = self._date_key(event_price_date)
+        as_of = self._date_key(data_as_of_date) if data_as_of_date else None
         with sqlite3.connect(self.db_path) as conn:
-            rows = conn.execute(
-                """
-                SELECT 日期, 收盤價
-                FROM daily_prices
-                WHERE 證券代號 = ?
-                  AND REPLACE(REPLACE(日期, '-', ''), '/', '') > ?
-                  AND 收盤價 IS NOT NULL
-                ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
-                LIMIT ?
-                """,
-                (symbol, target, int(window_days)),
-            ).fetchall()
+            if as_of:
+                rows = conn.execute(
+                    """
+                    SELECT 日期, 收盤價
+                    FROM daily_prices
+                    WHERE 證券代號 = ?
+                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') > ?
+                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
+                      AND 收盤價 IS NOT NULL
+                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
+                    LIMIT ?
+                    """,
+                    (symbol, target, as_of, int(window_days)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT 日期, 收盤價
+                    FROM daily_prices
+                    WHERE 證券代號 = ?
+                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') > ?
+                      AND 收盤價 IS NOT NULL
+                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
+                    LIMIT ?
+                    """,
+                    (symbol, target, int(window_days)),
+                ).fetchall()
         if len(rows) < window_days:
             return None
         row = rows[window_days - 1]

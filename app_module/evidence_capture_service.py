@@ -64,6 +64,7 @@ class EvidenceCaptureService:
                 continue
             diagnostics.extend(import_result.diagnostics)
             payloads.extend(import_result.event_payloads)
+        payloads = [self._with_replay_context(payload, request.replay_context) for payload in payloads]
 
         event_type_counts = Counter(self._event_type_value(payload.get("event_type")) for payload in payloads)
         quality_counts = Counter(self._quality_value(payload.get("data_quality")) for payload in payloads)
@@ -147,6 +148,15 @@ class EvidenceCaptureService:
             "symbol": payload.get("symbol"),
             "source_id": payload.get("source_id"),
         }
+
+    def _with_replay_context(self, payload: Mapping[str, Any], replay_context: Mapping[str, Any]) -> dict[str, Any]:
+        if not replay_context:
+            return dict(payload)
+        enriched = dict(payload)
+        metadata = dict(enriched.get("metadata") or {})
+        metadata.update({str(key): value for key, value in replay_context.items()})
+        enriched["metadata"] = metadata
+        return enriched
 
     def _event_type_value(self, value: Any) -> str:
         if isinstance(value, EvidenceEventType):

@@ -54,6 +54,7 @@ class EvidenceCaptureRequest:
     dry_run: bool = True
     confirm: bool = False
     capture_exclusion_payloads: bool = True
+    replay_context: dict[str, Any] = field(default_factory=dict)
 
     @property
     def decision_date_text(self) -> str | None:

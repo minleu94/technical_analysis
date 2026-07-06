@@ -1,0 +1,182 @@
+from __future__ import annotations
+
+from pathlib import Path
+import sqlite3
+
+import pytest
+
+from app_module.dtos import RecommendationDTO, RecommendationResultDTO
+from app_module.evidence_event_repository import EvidenceEventRepository
+from app_module.evidence_event_service import EvidenceEventService
+from app_module.forward_performance_service import ForwardPerformanceService
+from app_module.historical_evidence_replay import (
+    HistoricalEvidenceReplayRequest,
+    HistoricalEvidenceReplayService,
+)
+from app_module.recommendation_repository import RecommendationRepository
+from data_module.config import TWStockConfig
+from tests.test_evidence_pipeline_smoke import _seed_market_db
+
+
+def _config(tmp_path: Path) -> TWStockConfig:
+    config = TWStockConfig(data_root=tmp_path / "data", output_root=tmp_path / "output")
+    config.db_file = tmp_path / "data" / "sqlite" / "twstock.db"
+    config.db_file.parent.mkdir(parents=True, exist_ok=True)
+    return config
+
+
+def _seed_result(config: TWStockConfig, *, result_id: str, created_at: str) -> str:
+    result = RecommendationResultDTO(
+        result_id=result_id,
+        result_name=f"Replay fixture {result_id}",
+        config={"profile_id": "balanced", "profile_version": "1.0"},
+        recommendations=[
+            RecommendationDTO(
+                stock_code="2330",
+                stock_name="台積電",
+                close_price=100.0,
+                price_change=1.0,
+                total_score=90.0,
+                indicator_score=30.0,
+                pattern_score=30.0,
+                volume_score=30.0,
+                recommendation_reasons="rank_top",
+                industry="半導體",
+                regime_match=True,
+                score_percentile_bp=9500,
+            )
+        ],
+        regime="Trend",
+        created_at=created_at,
+        screening_matrix_json=[
+            {"stock_code": "2330", "status": "pass", "quality": "observed", "reason_codes": ["recommendation_selected"]}
+        ],
+        why_not_payload_json=[],
+        liquidity_gate_payload_json=[],
+    )
+    return RecommendationRepository(config).save_result(result)
+
+
+def test_replay_rejects_same_source_and_replay_db(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_market_db(config)
+
+    with pytest.raises(ValueError, match="replay DB must be separate"):
+        HistoricalEvidenceReplayService(config).run(
+            HistoricalEvidenceReplayRequest(
+                start_date="2026-07-01",
+                end_date="2026-07-02",
+                source_db_path=config.db_file,
+                replay_db_path=config.db_file,
+            )
+        )
+
+
+def test_replay_uses_only_recommendation_results_available_on_decision_date(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_market_db(config, days=6)
+    _seed_result(config, result_id="past-rec", created_at="2026-07-01T06:00:00")
+    _seed_result(config, result_id="future-rec", created_at="2026-07-04T06:00:00")
+    replay_db = tmp_path / "replay" / "historical.db"
+
+    report = HistoricalEvidenceReplayService(config).run(
+        HistoricalEvidenceReplayRequest(
+            start_date="2026-07-01",
+            end_date="2026-07-02",
+            source_db_path=config.db_file,
+            replay_db_path=replay_db,
+            sources=("recommendation",),
+            windows=(2,),
+            confirm=True,
+        )
+    )
+
+    assert report.replay_mode == "historical_replay"
+    assert report.source_label == "simulated_scheduler"
+    assert [day.selected_recommendation_result_id for day in report.days] == ["past-rec", "past-rec"]
+    events = EvidenceEventRepository(config, db_path=replay_db).list_events()
+    assert events
+    assert {event.source_id for event in events} == {"past-rec"}
+    assert all(event.metadata["replay_mode"] == "historical_replay" for event in events)
+    assert all(event.metadata["source_label"] == "simulated_scheduler" for event in events)
+
+
+def test_replay_does_not_fabricate_recommendation_when_no_asof_result_exists(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_market_db(config, days=3)
+    _seed_result(config, result_id="future-rec", created_at="2026-07-03T06:00:00")
+    replay_db = tmp_path / "replay" / "historical.db"
+
+    report = HistoricalEvidenceReplayService(config).run(
+        HistoricalEvidenceReplayRequest(
+            start_date="2026-07-01",
+            end_date="2026-07-01",
+            source_db_path=config.db_file,
+            replay_db_path=replay_db,
+            sources=("recommendation",),
+            windows=(1,),
+            confirm=True,
+        )
+    )
+
+    assert report.days[0].selected_recommendation_result_id is None
+    assert "recommendation_asof_result_missing" in report.days[0].diagnostics
+    assert EvidenceEventRepository(config, db_path=replay_db).list_events() == []
+
+
+def test_forward_outcome_respects_data_as_of_date(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_market_db(config, days=4)
+    repository = EvidenceEventRepository(config)
+    event = EvidenceEventService(repository).record_event(
+        event_date="2026-07-01",
+        decision_date="2026-07-01",
+        symbol="2330",
+        event_type="recommendation_included",
+        event_family="recommendation",
+        source_type="recommendation_result",
+        source_id="rec",
+        source_snapshot_id="rec",
+        data_quality="observed",
+        as_of_date="2026-07-01",
+        available_date="2026-07-01",
+        metadata={"fixture": True},
+    )
+
+    early = ForwardPerformanceService(config, repository).calculate(
+        windows=(2,),
+        decision_date="2026-07-01",
+        data_as_of_date="2026-07-02",
+        dry_run=True,
+    )
+    late = ForwardPerformanceService(config, repository).calculate(
+        windows=(2,),
+        decision_date="2026-07-01",
+        data_as_of_date="2026-07-03",
+        dry_run=False,
+    )
+
+    assert event.event_id
+    assert early.pending_insufficient_future_data == 1
+    assert early.outcomes_created == 1
+    assert late.outcomes_created == 1
+    outcome = repository.get_outcome(event.event_id, 2)
+    assert outcome is not None
+    assert outcome.outcome_status.value == "ready"
+    assert outcome.outcome_price_date == "2026-07-03"
+    assert outcome.data_as_of_date == "2026-07-03"
+
+
+def test_replay_discovers_trading_dates_from_source_db(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_market_db(config, days=3)
+    with sqlite3.connect(config.db_file) as conn:
+        conn.execute("DELETE FROM daily_prices WHERE 日期 = '20260702'")
+
+    dates = HistoricalEvidenceReplayService(config).discover_trading_dates(
+        source_db_path=config.db_file,
+        start_date="2026-07-01",
+        end_date="2026-07-03",
+    )
+
+    assert dates == ("2026-07-01", "2026-07-03")

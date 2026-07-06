@@ -397,6 +397,7 @@ class EvidencePipelineRunner:
                     dry_run=dry_run,
                     confirm=not dry_run,
                     capture_exclusion_payloads=self._explicit_exclusion_requested(request),
+                    replay_context=dict(request.replay_context),
                 )
             )
             summaries.append(summary)
