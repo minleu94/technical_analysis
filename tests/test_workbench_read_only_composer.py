@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pathlib import Path
 
 from app_module.decision_desk_dtos import (
     DecisionDeskActionSummary,
@@ -262,3 +263,38 @@ def test_composer_handles_missing_decision_snapshot_without_fabricating_ui_state
     assert dashboard.market_context["source_status"] == "missing"
     assert dashboard.portfolio_watchlist_summary["source_status"] == "missing"
     assert any(item.item_id == "decision_snapshot" for item in dashboard.status_strip)
+
+
+def test_workbench_phase1_modules_do_not_import_write_or_trading_surfaces() -> None:
+    forbidden = (
+        "ScoringEngine",
+        "screening_service",
+        "broker",
+        "place_order",
+        "portfolio_module",
+        "backtest_module",
+        "strategy_lifecycle",
+        "scheduler_registration",
+    )
+    files = (
+        Path("app_module/workbench_dtos.py"),
+        Path("app_module/workbench_read_only_composer.py"),
+    )
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in files)
+
+    for token in forbidden:
+        assert token not in combined
+
+
+def test_workbench_payload_does_not_present_buy_sell_recommendations() -> None:
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=_decision_snapshot(),
+        readiness_report=_readiness_report(),
+        agent_report_sample=_agent_report_sample(),
+    )
+
+    rendered = str(dashboard.to_dict())
+
+    assert "買進" not in rendered
+    assert "賣出" not in rendered
+    assert "不是交易建議" in rendered
