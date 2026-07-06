@@ -275,15 +275,15 @@ V2.0 應長成：
 
 ### V1.1 至 V2.0 版本路線
 
-原文件已準確標示 V1.1 至 V1.4 完成。2026-07-04 已完成 V1.5 v1 的資料可信度治理層；V1.6 至 V1.9 仍是 V2.0 前的中繼版本，而不是把 V2.0 直接提前。
+原文件已準確標示 V1.1 至 V1.4 完成。2026-07-05 已完成 V1.5 data credibility、V1.6 factor pipeline 與 V1.7 negative evidence；V1.8 至 V1.9 仍是 V2.0 前的中繼版本，而不是把 V2.0 直接提前。
 
 ### 6M Roadmap
 
-6M Roadmap 的主線仍合理：Evidence-Driven baldr、資料治理、Factor Layer、Daily Decision、Portfolio Feedback。外部參考校準後的版本化重排已完成 V1.5 資料可信度治理層；後續順序仍是 V1.6 因子管線、V1.7 negative evidence、V1.8 portfolio sandbox、V1.9 read-only AI。
+6M Roadmap 的主線仍合理：Evidence-Driven baldr、資料治理、Factor Layer、Daily Decision、Portfolio Feedback。外部參考校準後的版本化重排已完成 V1.5 資料可信度治理層、V1.6 因子管線與 V1.7 negative evidence；後續順序仍是 V1.8 portfolio sandbox、V1.9 read-only AI。
 
 ### Roadmap Hub
 
-Roadmap Hub 不應保存完整外部分析。V1.5 v1 已完成後，它只需保留本文件為 companion，並把 Next 的短版維持在「累積 evidence，同時準備 V1.6-V1.9 的版本化路線」。
+Roadmap Hub 不應保存完整外部分析。V1.7 v1 已完成後，它只需保留本文件為 companion，並把 Next 的短版維持在「累積 evidence，同時準備 V1.8-V1.9 的版本化路線」。
 
 ---
 
@@ -291,3 +291,4 @@ Roadmap Hub 不應保存完整外部分析。V1.5 v1 已完成後，它只需保
 
 - 2026-07-04：新增外部專案參考與 V1.5-V2.0 版本藍圖；確認 Vision 不大幅改寫，外部參考由本 companion 承接；將 cuFOLIO / RL / broker API / SQLite split 等高成本方向列為 deferred，短中期聚焦資料可信度、cross-sectional factor pipeline、negative evidence、portfolio sandbox 與 read-only AI。
 - 2026-07-04：完成 V1.5 Data Credibility & Corporate Action Gate v1 的治理層 closeout，標記 registry、policy、microstructure metadata 與 source coverage service 已落地；正式資料 ingestion、adjusted price series 與完整 negative evidence 仍移交後續版本。
+- 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline 與 V1.7 Negative Evidence 後，將後續版本化重點收斂為 V1.8 portfolio sandbox 與 V1.9 read-only AI；仍不提前 V2.0 或 broker automation。

@@ -99,13 +99,14 @@
 
 ### Evidence / Data Credibility Layer（`app_module/` + `data_module/`）
 
-**目前狀態**：Post-V1 evidence layer、V1.5 data credibility gate 與 V1.6 cross-sectional factor pipeline 已建立；這一層只保存 / 檢查 research evidence、source coverage、factor attribution 與資料政策，不產生投資結論、不啟用 production scheduler。
+**目前狀態**：Post-V1 evidence layer、V1.5 data credibility gate、V1.6 cross-sectional factor pipeline 與 V1.7 screening matrix / negative evidence 已建立；這一層只保存 / 檢查 research evidence、source coverage、factor attribution、negative evidence 與資料政策，不產生投資結論、不啟用 production scheduler。
 
 **主要檔案**：
 - `app_module/evidence_event_*`、`app_module/evidence_capture_service.py`、`app_module/evidence_event_importers.py`
 - `app_module/forward_performance_service.py`、`app_module/forward_performance_read_model.py`
 - `app_module/evidence_pipeline_runner.py`、`app_module/evidence_scheduler_readiness.py`
 - `app_module/evidence_source_coverage_service.py`
+- `app_module/recommendation_service.py`、`app_module/dtos/__init__.py`（Recommendation result screening matrix / payload 保存邊界）
 - `app_module/cross_sectional_factor_dtos.py`
 - `app_module/cross_sectional_factor_repository.py`
 - `app_module/cross_sectional_factor_pipeline.py`
@@ -119,6 +120,8 @@
 **如果我要改 evidence source coverage / data credibility**：先看 `docs/00_core/PROJECT_SNAPSHOT.md`、`docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md` 與 `docs/01_architecture/system_architecture.md`；程式改動優先從 `EvidenceSourceCoverageService` 或 `data_module/*policy/*registry` 切入，不要在 CLI、runner 或 UI 各自複製分級邏輯。
 
 **如果我要改 V1.6 factor snapshots / attribution**：先看 `CrossSectionalFactorPipeline`、`CrossSectionalFactorRepository` 與 `scripts/inspect_cross_sectional_factor_snapshot.py`；新增 factor 或 concept metadata 仍必須先經 `FactorGate`、`available_date <= decision_date` 與 missing policy，不要直接改 `ScoringEngine`。
+
+**如果我要改 V1.7 screening matrix / negative evidence**：先看 `RecommendationService`、`RecommendationResultDTO`、`RecommendationEvidenceImporter` 與 `EvidenceSourceCoverageService`；screening matrix 必須來自推薦當下保存的 payload，importer 不可事後重算或回補舊 result，也不可把 fail / degraded 變成自動 lifecycle action。
 
 ---
 

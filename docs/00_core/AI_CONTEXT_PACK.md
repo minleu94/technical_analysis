@@ -7,7 +7,7 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具；baldr 是一套「可驗證、可回溯、可演化」的台股研究與投資決策工作台。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：V1 release baseline 已完成，四個產品閉環（資料與市場狀態、研究驗證、持倉檢查、每日決策）已形成可操作基準。Post-V1 evidence-driven 主線的 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations、evidence review history 與 data credibility gate。下一步不是新增舊式 Phase，而是用 weekly review + history 實際累積多週覆盤證據，並依外部參考 companion 準備 V1.6 Cross-sectional Factor Pipeline、V1.7 Negative Evidence、V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；V2.0 Unified Decision Workbench 需等中繼版本成熟後再評估。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、version roadmap 管 V1.1 至 V2.0 節奏、external reference blueprint 管外部專案參考與 V1.5-V2.0 版本形狀、system architecture 管架構、system vision 管產品北極星、archive / phase docs 管歷史。
+* **Current Phase (目前階段)**：V1 release baseline 已完成，四個產品閉環（資料與市場狀態、研究驗證、持倉檢查、每日決策）已形成可操作基準。Post-V1 evidence-driven 主線的 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations、evidence review history、data credibility gate、cross-sectional factor pipeline 與 screening matrix / negative evidence。下一步不是新增舊式 Phase，而是用 weekly review + history 實際累積多週覆盤證據，並依外部參考 companion 準備 V1.8 Portfolio Sandbox 與 V1.9 Read-only Agent / MCP；V2.0 Unified Decision Workbench 需等中繼版本成熟後再評估。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、version roadmap 管 V1.1 至 V2.0 節奏、external reference blueprint 管外部專案參考與 V1.5-V2.0 版本形狀、system architecture 管架構、system vision 管產品北極星、archive / phase docs 管歷史。
 * **Core Architecture (核心架構)**：分層解耦架構。
   1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
   2. `app_module/`（應用服務層、DTO、Repository 與 use case orchestrator）
@@ -16,8 +16,8 @@
 * **UI Structure (UI 結構)**：基於 PySide6 (Qt) 建構。目前有 8 個頂層 Tab：數據更新、市場觀察（含主力流向子 Tab）、每日決策、策略回測（Research Lab 多模式實驗室語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。Daily Decision Desk v1 已可用，但部分 section 會依 provider 完整度顯示 `MISSING` / `DEGRADED` / `ESTIMATED`。
 * **Current Priorities (目前優先事項)**：
   1. 用 V1.3 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，觀察 dashboard、blocking gaps、manual lifecycle candidate 與 action item 是否真的有用。
-  2. 維持 Post-V1 evidence 安全邊界：production scheduler 仍未啟用；readiness 最高只到 manual confirm / approval design；所有 evidence dashboard 只讀，不自動套用 lifecycle action。V1.5 後 optional why-not / liquidity payload missing 是 warning / `dry_run_only`，durable source missing 才是 blocking gap。
-  3. 準備 V1.6-V1.9 但不搶跑：先 factor pipeline，再 negative evidence，再 portfolio sandbox，再 read-only AI；`cuFOLIO`、RL、自動下單與 SQLite split / async 仍是 deferred。
+  2. 維持 Post-V1 evidence 安全邊界：production scheduler 仍未啟用；readiness 最高只到 manual confirm / approval design；所有 evidence dashboard 只讀，不自動套用 lifecycle action。V1.7 後 screening matrix / why-not / liquidity payload missing 是 warning / `dry_run_only`，durable source missing 才是 blocking gap；舊 result 不回補、不重算。
+  3. 準備 V1.8-V1.9 但不搶跑：先 portfolio sandbox，再 read-only AI；`cuFOLIO`、RL、自動下單與 SQLite split / async 仍是 deferred。
   4. 維持 Month 2 / Month 3 / Month 5 / Month 6 governance regression：Research Run Registry integrity、FactorGate `available_date <= decision_date`、fundamental diagnostics 不接 `ScoringEngine`、append-only lifecycle / evidence history、no-look-ahead 與金融數值邊界。
 * **Technical Stack (技術棧)**：Python 3, PySide6 (Qt), Pandas, SQLite, Parquet, Selenium（用於券商分點爬蟲）。
 * **Known Pain Points (已知痛點)**：

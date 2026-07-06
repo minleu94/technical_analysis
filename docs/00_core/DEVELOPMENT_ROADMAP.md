@@ -49,6 +49,7 @@
 - Month 5 Fundamental Layer v1 已完成 closeout：月營收、季度財報、P/E valuation、Fundamental provider/service、available_date gate 與 abnormal diagnostics 已落地；只輸出 factor records / diagnostics 與風險提示，不接 `ScoringEngine`。
 - Post-V1 V1.5 Data Credibility & Corporate Action Gate v1 已完成：source capability registry、corporate action policy、governed microstructure metadata 與 shared evidence source coverage service 已落地；不抓外部資料、不改 `ScoringEngine`、不啟用 production scheduler。
 - Post-V1 V1.6 Cross-sectional Factor Pipeline v1 已完成：daily factor snapshot DTO / repository / migration、FactorGate-backed pipeline、integer rank / quantile、concept basket available-date gate 與 read-only attribution summary CLI 已落地；不把 factor rank 當推薦、不改 `ScoringEngine`、不啟用 production scheduler。
+- Post-V1 V1.7 Screening Matrix & Negative Evidence v1 已完成：Recommendation result 保存 `screening_matrix_json`、pass / fail / degraded / skipped / missing matrix、Why Not / Liquidity payload 與 screening matrix evidence events；舊 recommendation 缺 matrix / payload 時只回 diagnostic，不回補、不重算。
 - Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成：推薦 Profile / 回放 workflow bridge、Profile replay comparison、訓練 / 獨立驗證期間、推薦回放 rolling risk、microstructure preflight、relative attribution、weekly evidence operations、manual approval package、action item planning、weekly review history 與 Research Lab 覆盤歷史子頁已落地；這些仍是 research credibility / evidence operations diagnostics，不代表投資有效性。
 - 後續要提升「準確度」必須先建立實證比較、factor attribution、資料因子層與實驗治理，不應直接把新資料硬塞進 scoring engine。
 
@@ -57,7 +58,7 @@
 ## 4. 下一步 Next
 
 未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
-V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3、V1.4、V1.5 與 V1.6 v1 已完成；下一步是用 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，同時準備 V1.7 negative evidence、V1.8 portfolio sandbox 與 V1.9 read-only agent / MCP，V2.0 才評估完整 Unified Decision Workbench。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
+V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3、V1.4、V1.5、V1.6 與 V1.7 v1 已完成；下一步是用 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，同時準備 V1.8 portfolio sandbox 與 V1.9 read-only agent / MCP，V2.0 才評估完整 Unified Decision Workbench。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
 外部開源專案對照、資料源補強優先序與 V1.5 至 V2.0 的中繼版本形狀見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)；該文件只作參考 companion，不取代 6M Roadmap 的執行順序。
 
 目前立即執行優先順序：
@@ -81,15 +82,15 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
    - Registry-based Promote Gate 已改走 Month 6 lifecycle gate，成功升級後可保存 applied evidence；demote / retire 先保存 proposed evidence；持倉管理新增「生命週期回顧」分頁。v1 不直接改 scoring、回測績效、Portfolio PnL 或 fundamental factor 權重。
    - Month 6.1 相關人工審核、Review Dashboard 與 evidence explainability 後續，已被 Post-V1 V1.3 / V1.4 evidence operations 與 history 節奏承接。
 
-5. **已完成：Post-V1 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 v1**
-   - V1.1 補 workflow bridge；V1.2 補 research credibility 與 execution diagnostics；V1.3 補 weekly evidence operations 與 manual lifecycle package；V1.4 補 weekly review history 與 Research Lab 覆盤歷史子頁；V1.5 補 data credibility gate；V1.6 補 cross-sectional factor snapshot / attribution pipeline。
+5. **已完成：Post-V1 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 v1**
+   - V1.1 補 workflow bridge；V1.2 補 research credibility 與 execution diagnostics；V1.3 補 weekly evidence operations 與 manual lifecycle package；V1.4 補 weekly review history 與 Research Lab 覆盤歷史子頁；V1.5 補 data credibility gate；V1.6 補 cross-sectional factor snapshot / attribution pipeline；V1.7 補 screening matrix、Why Not / Liquidity payload 與 negative evidence capture。
    - 2026-07-03 已完成第一個 weekly evidence operations + history working-copy operating-cycle，結果仍為 `coverage_only`，blocking gaps 尚未關閉。
    - 同日 follow-up 已修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 `risk_prompt` evidence 且 repeat=2 idempotency passed。受控 tmp run 也已保存 working-copy Recommendation result，並驗證 `recommendation,risk-prompt` requested sources 可 idempotent confirm。`decision_desk_snapshot_missing`、`recommendation_persisted_missing` 與 `working_copy_confirm_smoke_missing_or_failed` 已收斂為真實 source gaps。
-   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 why-not / liquidity payload、watchlist 無項目與 portfolio 無 active positions；production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
+   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 watchlist 無項目與 portfolio 無 active positions；舊 recommendation 缺 screening matrix / exclusion payload 時仍只診斷、不回補、不重算。production scheduler 仍未啟用，V2.0 Unified Decision Workbench 需等 evidence 與使用節奏證明後再評估。
 
-6. **P1：V1.7-V1.9 版本化準備**
+6. **P1：V1.8-V1.9 版本化準備**
    - V1.5 Data Credibility & Corporate Action Gate v1 已完成，交付 read-only source capability registry、corporate action / adjusted price policy、governed microstructure metadata 與 centralized evidence source coverage。
-   - V1.6 Cross-sectional Factor Pipeline & Sector Rotation v2 已完成，交付 daily factor snapshot repository、FactorGate-backed pipeline、concept available-date gate、rank / quantile persistence 與 attribution CLI；V1.7 補 Screening Matrix & Negative Evidence，承接 why-not / liquidity optional payload warning；V1.8 補 research-only Portfolio Construction / Execution Trace Sandbox；V1.9 才評估 read-only MCP / Agent evidence access。
+   - V1.6 Cross-sectional Factor Pipeline & Sector Rotation v2 已完成，交付 daily factor snapshot repository、FactorGate-backed pipeline、concept available-date gate、rank / quantile persistence 與 attribution CLI；V1.7 Screening Matrix & Negative Evidence 已完成，交付 pass / fail / degraded / skipped / missing matrix、Why Not / Liquidity payload 保存與 capture events；V1.8 補 research-only Portfolio Construction / Execution Trace Sandbox；V1.9 才評估 read-only MCP / Agent evidence access。
    - `cuFOLIO`、強化學習、券商自動下單與 SQLite async / split DB 暫不納入近期 Roadmap，除非有量測證據顯示現有計算或寫入模式成為真實瓶頸。
 
 7. **P2：Phase 5 研究輸出後續**
@@ -124,9 +125,10 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 
 ## 7. 更新記錄
 
-- 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline v1，Roadmap Hub 下一步改為 evidence accumulation + V1.7 Negative Evidence 準備；factor rank / quantile 只作研究 attribution，不改 `ScoringEngine`、不啟用 scheduler。
+- 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline v1，factor rank / quantile 只作研究 attribution，不改 `ScoringEngine`、不啟用 scheduler；後續由 V1.7 Negative Evidence 承接。
+- 2026-07-05：完成 V1.7 Screening Matrix & Negative Evidence v1，Roadmap Hub 下一步改為 evidence accumulation + V1.8 / V1.9 準備；screening matrix 與 Why Not / Liquidity payload 只作研究追溯，不改 `ScoringEngine`、不回補舊結果、不啟用 scheduler。
 - 2026-07-04：新增外部專案參考與未來版本藍圖 companion 入口，確認 Vision 不大幅改寫；Roadmap Hub 只保留連結與短版 V1.5-V1.9 方向，完整外部專案對照與 deferred 技術邊界移至 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。
-- 2026-07-04：完成 V1.5 Data Credibility & Corporate Action Gate v1，Roadmap Hub 下一步改為 evidence accumulation + V1.6/V1.7 準備；production scheduler、外部資料 ingestion 與投資有效性結論仍未啟用。
+- 2026-07-04：完成 V1.5 Data Credibility & Corporate Action Gate v1，當時 Roadmap Hub 下一步改為 evidence accumulation + V1.6/V1.7 準備；production scheduler、外部資料 ingestion 與投資有效性結論仍未啟用。
 - 2026-06-13：將 Roadmap 從單一最高權威文件重構為 Roadmap Hub；引入 Scoped SSOT，新增 6 個月工程 Roadmap，並將舊 Roadmap 完整歸檔。
 - 2026-06-13：新增 Legacy Carryover Matrix，逐項承接舊 Roadmap 未完成事項並設定 Month 3 前結案 Gate。
 - 2026-06-15：依 baldr 願景重排 Roadmap Hub 的短版 Next，將 Month 3 補強為 Factor Layer + Portfolio Replay 可信度，並將 Daily Decision Desk 明確列為 Month 4 v1 首頁，其他 section 逐步接線。
