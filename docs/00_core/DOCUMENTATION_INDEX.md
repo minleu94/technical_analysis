@@ -299,6 +299,7 @@
 
 [09_archive/](../09_archive/README.md) 只放歷史文件、已執行提案、舊調查與不再作為日常依據的內容。Active 文件不應依賴 archive 來判斷目前狀態。
 主要封存文檔：
+- [ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md](../09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md)：原 6M Roadmap 於 V1 (Month 1-6) 的詳細完工紀錄與更新流水帳。
 - [DEVELOPMENT_ROADMAP_LEGACY_2026_06.md](../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md)：舊完整 Roadmap，包含線性 Phase、歷史 Done 與舊 Roadmap current section，只作追溯用途。
 - [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md)：2026-06-09 下一輪行動計畫（已執行完畢）。
 - [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md)：Phase 3.3b 實施規劃（已執行完畢）。
@@ -428,6 +429,7 @@
 - 2026-06-16：新增 TPEX daily price backfill plan 與文件同步，記錄官方 TPEX daily close quotes 受控寫入 `daily_prices`、DB 備份、`3207` 補價與 877 筆正式寫入驗證。
 - 2026-06-16：更新 Full App Healthcheck，整合 TPEX 日常管線、SQLite Inspector 顯示防護與 `broker_flows.trade_type` 主鍵治理的人工驗證入口。
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
+- 2026-07-06：新增 `ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md` 封存索引，對齊 6M Roadmap Gate-Based Active Roadmap 重構。
 
 
 
