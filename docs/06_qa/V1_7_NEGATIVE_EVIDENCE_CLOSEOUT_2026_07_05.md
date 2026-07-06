@@ -11,6 +11,7 @@ V1.7 將推薦流程中的入選與未入選候選保存到同一個 evidence la
 - Qt 推薦結果保存：一併保存 screening matrix、Why Not payload、Liquidity payload、quality 與 warnings。
 - Evidence importer：新增 `screening_matrix_pass`、`screening_matrix_fail`、`screening_matrix_degraded`、`screening_matrix_skipped`、`screening_matrix_missing` events，並持續支援 `why_not_excluded` / `liquidity_gate_excluded`。
 - Source coverage / capability registry：新增 `recommendation.screening_matrix` 與 `screening_matrix_missing` warning；舊 result 缺 matrix 時只降為 `dry_run_only` warning。
+- 2026-07-06 follow-up：`RecommendationService` 會將 `min_volume_ratio` / `volume_ratio_min` 成交量門檻造成的 empty strategy result 標記為 `liquidity_volume_ratio_below_min`，並寫入 Liquidity payload；語意沿用 `StrategyConfigurator` 的量比轉百分比規則，不改 scoring、不回補舊 result。
 
 ## Not Done
 

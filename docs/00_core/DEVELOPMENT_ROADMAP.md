@@ -94,7 +94,8 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 6. **P1：V2.0 前置補強**
    - V1.5 Data Credibility & Corporate Action Gate、V1.6 Cross-sectional Factor Pipeline、V1.7 Screening Matrix & Negative Evidence、V1.8 Portfolio Construction / Execution Trace Sandbox 與 V1.9 Read-only Agent / MCP Evidence Access 已完成 v1。
    - 2026-07-06 已補 `scripts/inspect_pre_v2_readiness.py` / `PreV2ReadinessService`，可唯讀彙總 weekly history、multi-day record、source gaps 與 read-only Agent report sample；它只把非排程前置條件變成可重跑檢查，不解除多週 / 多日 / manual smoke / true workflow sample 門檻。
-   - 進入 V2.0 前必須補齊：多週 weekly evidence operations + history 實際紀錄、Evidence Review 人工 UI smoke closeout、multi-day dry-run record、真實 watchlist / portfolio workflow 樣本、persisted recommendation / Daily Decision Desk snapshot source gaps 收斂、read-only Agent report 樣本審核，以及 production scheduler 若要前進時的 explicit design / approval / rollback 文件。
+   - 2026-07-06 follow-up 已完成非時間型 closeout：Git unreachable loose objects 清為 0、Recommendation liquidity payload gap 修正、working-copy all-source source coverage `blocking_gaps=[]`、working-copy confirm smoke repeat=2 idempotency passed、Evidence Review UI smoke passed、read-only Agent report sample ready。正式 evidence DB 未寫入；驗證只在 working-copy DB 與 ignored output mirror 內完成。
+   - 進入 V2.0 前仍需真實時間累積：多週 weekly evidence operations + history 實際紀錄目前 `0/3`，multi-day dry-run record 目前 `1/3`。若要推 production scheduler，仍需 explicit design / approval / rollback 文件；目前 `production_scheduler_allowed=false`。
    - `cuFOLIO`、強化學習、券商自動下單與 SQLite async / split DB 暫不納入近期 Roadmap，除非有量測證據顯示現有計算或寫入模式成為真實瓶頸。
 
 7. **P2：Phase 5 研究輸出後續**
@@ -129,7 +130,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 
 ## 7. 更新記錄
 
-- 2026-07-06：新增 Pre-V2 非排程 readiness inspector，將 weekly history、multi-day record、source gaps 與 read-only Agent report sample 彙總成可重跑檢查；多週 / 多日 / manual smoke / scheduler approval 門檻仍未解除。
+- 2026-07-06：完成 Pre-V2 非時間型 closeout：readiness inspector、source gap working-copy all-source smoke、Evidence Review UI smoke 與 read-only Agent report sample 已可重跑驗證；多週 / 多日 / scheduler approval 門檻仍未解除。
 - 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline v1，factor rank / quantile 只作研究 attribution，不改 `ScoringEngine`、不啟用 scheduler；後續由 V1.7 Negative Evidence 承接。
 - 2026-07-05：完成 V1.7 Screening Matrix & Negative Evidence v1，當時 Roadmap Hub 下一步改為 evidence accumulation + V1.8 / V1.9 準備；screening matrix 與 Why Not / Liquidity payload 只作研究追溯，不改 `ScoringEngine`、不回補舊結果、不啟用 scheduler。
 - 2026-07-05：完成 V1.8 Portfolio Construction & Execution Trace Sandbox v1，Roadmap Hub 下一步改為 evidence accumulation + V1.9 準備；portfolio sandbox 只作研究配置與虛擬 execution trace，不串 broker、不寫正式資料、不啟用 scheduler。

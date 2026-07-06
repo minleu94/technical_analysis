@@ -219,7 +219,7 @@
 | [V1_7_NEGATIVE_EVIDENCE_CLOSEOUT_2026_07_05.md](../06_qa/V1_7_NEGATIVE_EVIDENCE_CLOSEOUT_2026_07_05.md) | V1.7 Screening Matrix & Negative Evidence closeout，記錄 recommendation screening matrix、Why Not / Liquidity payload、screening matrix events、source coverage warning、驗證命令與不回補 / 不重算邊界。 |
 | [V1_8_PORTFOLIO_SANDBOX_CLOSEOUT_2026_07_05.md](../06_qa/V1_8_PORTFOLIO_SANDBOX_CLOSEOUT_2026_07_05.md) | V1.8 Portfolio Construction & Execution Trace Sandbox closeout，記錄 research-only allocation、virtual execution trace、sample CLI、驗證命令與不下單 / 不寫正式資料邊界。 |
 | [V1_9_READ_ONLY_AGENT_MCP_CLOSEOUT_2026_07_06.md](../06_qa/V1_9_READ_ONLY_AGENT_MCP_CLOSEOUT_2026_07_06.md) | V1.9 Read-only Agent / MCP Evidence Access closeout，記錄 app-layer service、MCP server、permission model、report template、驗證命令與不寫 DB / 不改策略 / 不下單邊界。 |
-| [PRE_V2_NON_SCHEDULE_READINESS_CLOSEOUT_2026_07_06.md](../06_qa/PRE_V2_NON_SCHEDULE_READINESS_CLOSEOUT_2026_07_06.md) | V2.0 前非排程 readiness closeout，記錄 read-only Pre-V2 inspector、CLI、Agent report sample / source gap 檢查、測試命令與仍需多週 / 多日累積的時間門檻。 |
+| [PRE_V2_NON_SCHEDULE_READINESS_CLOSEOUT_2026_07_06.md](../06_qa/PRE_V2_NON_SCHEDULE_READINESS_CLOSEOUT_2026_07_06.md) | V2.0 前非時間型 readiness closeout，記錄 Git unreachable loose objects 清理、read-only Pre-V2 inspector、source gap working-copy all-source smoke、Evidence Review UI smoke、Agent report sample、測試命令與仍需多週 / 多日累積的時間門檻。 |
 | [POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md](../06_qa/POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md) | Post-V1 Forward Performance Dashboard read-only UI QA 紀錄，包含 UI placement、read-only guarantee、filter coverage、禁用交易語氣檢查與 scheduler readiness 邊界。 |
 | [POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md) | Post-V1 Evidence Pipeline Runner dry-run QA 紀錄，包含 dry-run / confirm 行為、report、readiness、blocking gaps 與 production scheduler 未啟用邊界。 |
 | [POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md](../06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md) | Post-V1 Evidence Production Scheduler Approval checklist，集中管理 working-copy smoke、人工核准、rollback / recovery 與正式排程未啟用邊界。 |
@@ -329,7 +329,7 @@
 
 ## 🔄 更新記錄
 
-- 2026-07-06：新增 Pre-V2 非排程 readiness closeout 索引，標示 readiness inspector / CLI 已完成；多週 history、multi-day dry-run 與 production scheduler approval 仍需真實時間與人工核准。
+- 2026-07-06：更新 Pre-V2 非時間型 readiness closeout 索引，標示 Git loose objects、source gaps、Evidence Review UI smoke 與 Agent sample 已收斂；多週 history、multi-day dry-run 與 production scheduler approval 仍需真實時間與人工核准。
 - 2026-07-05：新增 V1.6 Cross-sectional Factor Pipeline design / plan / QA closeout 索引，標示 daily factor snapshot storage、FactorGate-backed pipeline、concept available-date gate、rank / quantile persistence 與 attribution summary CLI 已完成 v1；不改 scoring、不啟用 scheduler。
 - 2026-07-05：新增 V1.7 Negative Evidence QA closeout 索引，標示 recommendation screening matrix、Why Not / Liquidity payload、screening matrix evidence events 與 source coverage warning 已完成 v1；舊結果不回補、不重算，不改 scoring、不啟用 scheduler。
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access design / plan / QA closeout 索引，標示 read-only evidence service、MCP wrapper、permission model 與 AI report template 已完成 v1；不寫 DB、不改策略、不下單、不套用 lifecycle action。
