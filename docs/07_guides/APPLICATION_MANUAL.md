@@ -842,6 +842,15 @@ V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已
 
 輸出會包含 snapshot metadata、row count、factor / quality / rank bucket 分布、sector / concept basket counts 與 diagnostics counts。rank / quantile 只代表當日橫斷面 factor 排序與研究 attribution，不是推薦名單、不代表買賣訊號，也不會改 `ScoringEngine`。Concept basket 只有在定義的 `available_date <= decision_date` 時才會進入 row；未到可得日只會出現在 diagnostics。
 
+V1.8 後，可用 Portfolio Sandbox inspection CLI 檢查研究用 allocation / virtual execution trace 的樣本輸出。這個 CLI 目前只支援 `--sample`，不讀正式 DB、不寫 output、不建立持倉、不產生 broker order；輸出全部標示為 research-only。Allocation 結果使用整數 bp 權重、`Decimal` 金額字串、整數股數與 lot sizing；trace event 只表示虛擬 lifecycle，不代表實際委託或成交。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format json
+.\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format markdown
+```
+
+目前支援的 allocation method 為 `equal_weight`、`score_weight` 與 `inverse_volatility`。`max_position_weight_bp` 只會限制單一部位上限，不會自動把超出的權重重新分配到其他股票；買不起最小 lot 或套用上限後的現金差額會留在 `residual_cash` 與 diagnostics。Virtual trace 支援 `created`、`submitted`、`partially_filled`、`filled`、`rejected`；`cancelled`、零股、買賣價差、完整撮合與 gap actual execution model 仍是後續 execution-model residual。
+
 Working-copy smoke 會先確認 source DB 與 working-copy DB 不是同一路徑；若 working-copy DB 不存在，會以 `shutil.copy2` 從 source DB 複製一份，再只對 working-copy DB 執行 confirm smoke。預設 repeat 至少 2 次，用 event / outcome counts 檢查 idempotency；source DB 應維持 read-only。readiness evaluator 只彙總 source coverage、smoke report 與 dashboard availability，輸出的 `production_scheduler_allowed` 固定為 `false`。正式排程前仍需人工 review `docs/06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md` 的 source coverage、diagnostics report、backup path、rollback path 與 manual approval steps。
 
 Live vs Research Gap linkage CLI 用來把 portfolio position source trace、Evidence Event / Outcome 與 saved source metadata 串成 gap observation。這是 evidence，不是 action；不修改持倉、不修改 Research Run、不做 lifecycle action，也不是完整實帳歸因。沒有真實交易與人工 override 記錄時，只能解讀為 research / simulated gap。Symbol / date fuzzy match 只會列為 low-confidence candidate，不會當作 confirmed evidence link。
@@ -1166,6 +1175,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-02：證據覆盤頁新增「目前資料庫」資訊列與複製路徑按鈕，協助人工 smoke 時確認 UI 實際讀取的 SQLite DB。
 - 2026-07-02：新增 safe scheduled wrappers 操作說明與 morning check guide；每日 task 僅做 read-only freshness check 與 evidence dry-run，working-copy smoke 預設 disabled / manual-only。
 - 2026-07-04：更新 safe scheduled 操作說明為 CMD wrapper + `schtasks.exe` 現況，記錄 04:20 非 UI 快速資料更新、05:00 / 05:15 Windows Task Scheduler task 與 05:30 Codex app read-only 摘要 automation；production confirm 仍未啟用。
+- 2026-07-05：新增 V1.8 Portfolio Construction & Execution Trace Sandbox 操作說明，標示 sample CLI 只輸出 research-only allocation / virtual trace，不讀正式資料、不建立持倉、不下單。
 - 2026-07-03：新增 V1.3 Evidence Operations weekly review CLI 操作說明，標示 manual approval package、action item planning、production scheduler disabled 與 signal decay candidate 不自動套用 lifecycle action。
 - 2026-07-02：完成 V1.1 workflow bridge v1 操作說明，補充推薦 Profile 進階摘要、buy / sell score 與權重差異、推薦回放是 Profile / Config 歷史重播，以及升降級判讀需經 Research Run / Evidence 與人工 lifecycle gate。
 - 2026-06-23：完成 Healthcheck Batch 2 計畫範圍實作後的操作說明：Daily Decision Desk answer-first dashboard、Smart Money 5 / 20 / 60 日語意診斷、quantity concentration 與股票焦點下鑽。

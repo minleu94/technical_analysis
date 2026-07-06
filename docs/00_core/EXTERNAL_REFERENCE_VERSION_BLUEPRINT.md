@@ -259,15 +259,15 @@ V2.0 應長成：
 
 ### 6M Roadmap
 
-主線仍合理：Evidence-Driven baldr、資料治理、Factor Layer、Daily Decision、Portfolio Feedback。外部參考校準後不需要改方向，只需要維持 V1.8 portfolio sandbox、V1.9 read-only AI、V2.0 Unified Decision Workbench 的順序。
+主線仍合理：Evidence-Driven baldr、資料治理、Factor Layer、Daily Decision、Portfolio Feedback。外部參考校準後不需要改方向；V1.8 portfolio sandbox 已完成，後續維持 V1.9 read-only AI、V2.0 Unified Decision Workbench 的順序。
 
 ### Version Roadmap
 
-V1.1 至 V1.7 已完成的定位不變。後續 V1.8 / V1.9 需更明確保持研究邊界：portfolio sandbox 不等於自動配置建議，read-only AI 不等於 AI 決策。
+V1.1 至 V1.8 已完成的定位不變。後續 V1.9 需更明確保持 read-only 邊界；已完成的 portfolio sandbox 不等於自動配置建議，read-only AI 不等於 AI 決策。
 
 ### Roadmap Hub
 
-Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並在 Next 保持「累積 evidence、準備 V1.8 / V1.9、V2.0 等 evidence 和使用節奏成熟後再評估」。
+Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並在 Next 保持「累積 evidence、準備 V1.9、V2.0 等 evidence 和使用節奏成熟後再評估」。
 
 ---
 

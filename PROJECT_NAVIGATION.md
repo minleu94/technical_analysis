@@ -338,7 +338,7 @@ python ui_qt/main.py
 
 ### 📌 Portfolio（持倉管理）
 
-**目前狀態**：Portfolio 閉環已建立且完成主要深化：Portfolio Tab、domain/service/test、Recommendation/Backtest 來源追溯 metadata、策略與價格監控、生命週期回顧、目前價格對照、未實現損益、停損停利警示、籌碼監控與 Smart Money 下鑽皆已完成。
+**目前狀態**：Portfolio 閉環已建立且完成主要深化：Portfolio Tab、domain/service/test、Recommendation/Backtest 來源追溯 metadata、策略與價格監控、生命週期回顧、目前價格對照、未實現損益、停損停利警示、籌碼監控與 Smart Money 下鑽皆已完成。V1.8 另新增 research-only portfolio construction / virtual execution trace sandbox；它只做研究配置與虛擬事件，不是正式持倉帳務或下單入口。
 
 **從哪個 UI 進**：`ui_qt/views/portfolio_view.py`（持倉管理 Tab）
 
@@ -348,6 +348,8 @@ python ui_qt/main.py
 - `app_module/portfolio_chip_service.py`：持倉層籌碼監控與分點資料彙整
 - `app_module/portfolio_feedback_service.py`：持倉 post-trade attribution / live-vs-research gap
 - `app_module/portfolio_review_service.py`：Portfolio Review dashboard snapshot
+- `app_module/portfolio_construction_service.py`：V1.8 research-only allocation / constraints / lot sizing sandbox
+- `app_module/portfolio_execution_trace_service.py`：V1.8 virtual order lifecycle trace（created / submitted / partially_filled / filled / rejected）
 - `app_module/journal_service.py`：交易/決策紀錄服務
 
 **真正動邏輯的地方**：
@@ -358,6 +360,7 @@ python ui_qt/main.py
 - 改服務編排 → `app_module/portfolio_service.py`
 - 改條件監控 → `app_module/portfolio_condition_monitor.py`
 - 改生命週期回顧 / post-trade attribution → `app_module/portfolio_feedback_service.py` / `app_module/portfolio_review_service.py`
+- 改研究配置 sandbox → `app_module/portfolio_construction_service.py` / `app_module/portfolio_execution_trace_service.py`
 - 改 UI → `ui_qt/views/portfolio_view.py`
 
 ---
