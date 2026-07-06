@@ -77,6 +77,11 @@ def test_coverage_cli_marks_design_ready_only_when_sources_are_durable(tmp_path)
             ],
             why_not_payload_json=[{"stock_code": "1101", "exclusion_reason_codes": ["weak_relative_strength"]}],
             liquidity_gate_payload_json=[{"stock_code": "2201", "exclusion_reason_codes": ["low_liquidity"]}],
+            screening_matrix_json=[
+                {"stock_code": "2330", "status": "pass", "quality": "observed"},
+                {"stock_code": "1101", "status": "fail", "quality": "observed"},
+                {"stock_code": "2201", "status": "fail", "quality": "degraded"},
+            ],
         )
     )
 
@@ -89,6 +94,7 @@ def test_coverage_cli_marks_design_ready_only_when_sources_are_durable(tmp_path)
     assert summary["risk_prompt_capture_ready"] is True
     assert summary["why_not_capture_ready"] is True
     assert summary["liquidity_gate_capture_ready"] is True
+    assert summary["screening_matrix_capture_ready"] is True
     assert summary["scheduler_readiness"] == "ready_for_design"
     assert summary["scheduler_readiness"] != "production_ready"
 
@@ -125,6 +131,6 @@ def test_coverage_cli_treats_payload_gaps_as_warnings(tmp_path):
 
     assert summary["scheduler_readiness"] == "dry_run_only"
     assert summary["blocking_gaps"] == []
-    assert summary["warnings"] == ["why_not_payload_missing", "liquidity_gate_payload_missing"]
+    assert summary["warnings"] == ["why_not_payload_missing", "liquidity_gate_payload_missing", "screening_matrix_missing"]
     assert "why_not_exclusion_payload_missing" not in summary["blocking_gaps"]
     assert "liquidity_gate_payload_missing" not in summary["blocking_gaps"]

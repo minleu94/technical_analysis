@@ -20,6 +20,7 @@ from data_module.data_source_capability_registry import build_default_data_sourc
 class EvidenceSourceCoverageInspection:
     recommendation_persisted_available: bool
     recommendation_exclusion_payload_available: bool
+    recommendation_screening_matrix_available: bool
     decision_desk_snapshots_count: int
     latest_decision_desk_snapshot_date: str | None
     watchlist_trigger_capture_ready: bool
@@ -27,6 +28,7 @@ class EvidenceSourceCoverageInspection:
     risk_prompt_capture_ready: bool
     why_not_capture_ready: bool
     liquidity_gate_capture_ready: bool
+    screening_matrix_capture_ready: bool
     scheduler_readiness: str
     blocking_gaps: tuple[str, ...]
     warnings: tuple[str, ...]
@@ -37,6 +39,7 @@ class EvidenceSourceCoverageInspection:
         return {
             "recommendation_persisted_available": self.recommendation_persisted_available,
             "recommendation_exclusion_payload_available": self.recommendation_exclusion_payload_available,
+            "recommendation_screening_matrix_available": self.recommendation_screening_matrix_available,
             "decision_desk_snapshots_count": self.decision_desk_snapshots_count,
             "latest_decision_desk_snapshot_date": self.latest_decision_desk_snapshot_date,
             "watchlist_trigger_capture_ready": self.watchlist_trigger_capture_ready,
@@ -44,6 +47,7 @@ class EvidenceSourceCoverageInspection:
             "risk_prompt_capture_ready": self.risk_prompt_capture_ready,
             "why_not_capture_ready": self.why_not_capture_ready,
             "liquidity_gate_capture_ready": self.liquidity_gate_capture_ready,
+            "screening_matrix_capture_ready": self.screening_matrix_capture_ready,
             "scheduler_readiness": self.scheduler_readiness,
             "blocking_gaps": list(self.blocking_gaps),
             "warnings": list(self.warnings),
@@ -82,6 +86,9 @@ class EvidenceSourceCoverageService:
         liquidity_ready = (
             _has_payload(getattr(recommendation, "liquidity_gate_payload_json", None)) if recommendation else False
         )
+        screening_matrix_ready = (
+            _has_payload(getattr(recommendation, "screening_matrix_json", None)) if recommendation else False
+        )
         watchlist_ready = latest_snapshot is not None and section_is_ready(latest_snapshot.watchlist_trigger_json)
         portfolio_ready = latest_snapshot is not None and section_is_ready(latest_snapshot.portfolio_alert_json)
         risk_ready = latest_snapshot is not None and section_is_ready(latest_snapshot.risk_prompt_json)
@@ -92,7 +99,11 @@ class EvidenceSourceCoverageService:
             portfolio_ready=portfolio_ready,
             risk_ready=risk_ready,
         )
-        warnings = self._warnings(why_not_ready=why_not_ready, liquidity_ready=liquidity_ready)
+        warnings = self._warnings(
+            why_not_ready=why_not_ready,
+            liquidity_ready=liquidity_ready,
+            screening_matrix_ready=screening_matrix_ready,
+        )
         snapshot_ready = latest_snapshot is not None and watchlist_ready and portfolio_ready and risk_ready
         if not recommendation_available or not snapshot_ready:
             readiness = READINESS_NOT_READY
@@ -105,6 +116,7 @@ class EvidenceSourceCoverageService:
         return EvidenceSourceCoverageInspection(
             recommendation_persisted_available=recommendation_available,
             recommendation_exclusion_payload_available=why_not_ready and liquidity_ready,
+            recommendation_screening_matrix_available=screening_matrix_ready,
             decision_desk_snapshots_count=len(snapshots),
             latest_decision_desk_snapshot_date=latest_snapshot.decision_date if latest_snapshot is not None else None,
             watchlist_trigger_capture_ready=watchlist_ready,
@@ -112,6 +124,7 @@ class EvidenceSourceCoverageService:
             risk_prompt_capture_ready=risk_ready,
             why_not_capture_ready=why_not_ready,
             liquidity_gate_capture_ready=liquidity_ready,
+            screening_matrix_capture_ready=screening_matrix_ready,
             scheduler_readiness=readiness,
             blocking_gaps=tuple(blocking_gaps),
             warnings=tuple(warnings),
@@ -153,12 +166,20 @@ class EvidenceSourceCoverageService:
             gaps.append("risk_prompt_snapshot_section_missing")
         return gaps
 
-    def _warnings(self, *, why_not_ready: bool, liquidity_ready: bool) -> list[str]:
+    def _warnings(
+        self,
+        *,
+        why_not_ready: bool,
+        liquidity_ready: bool,
+        screening_matrix_ready: bool,
+    ) -> list[str]:
         warnings: list[str] = []
         if not why_not_ready:
             warnings.append("why_not_payload_missing")
         if not liquidity_ready:
             warnings.append("liquidity_gate_payload_missing")
+        if not screening_matrix_ready:
+            warnings.append("screening_matrix_missing")
         return warnings
 
 
@@ -166,6 +187,7 @@ def _source_capabilities() -> dict[str, dict[str, Any]]:
     registry = build_default_data_source_capability_registry()
     source_ids = (
         "recommendation.persisted_result",
+        "recommendation.screening_matrix",
         "recommendation.exclusion.why_not_payload",
         "recommendation.exclusion.liquidity_gate_payload",
         "decision_desk.snapshot.watchlist_trigger",

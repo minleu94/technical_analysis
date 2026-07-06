@@ -12,7 +12,11 @@ from uuid import uuid4
 
 from app_module.decision_desk_builder_factory import build_service_backed_decision_desk_snapshot_builder
 from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRepository
-from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot, section_is_ready
+from app_module.decision_desk_snapshot_storage_dtos import (
+    StoredDecisionDeskSnapshot,
+    build_stored_decision_desk_snapshot,
+    section_is_ready,
+)
 from app_module.evidence_capture_service import EvidenceCaptureService
 from app_module.evidence_event_importer_dtos import EvidenceCaptureRequest
 from app_module.evidence_event_importers import (
@@ -103,6 +107,7 @@ class EvidencePipelineRunner:
         self.db_path = Path(db_path) if db_path is not None else Path(config.db_file)
         self.clock = clock or (lambda: datetime.utcnow().replace(microsecond=0))
         self.run_id_factory = run_id_factory or (lambda: f"epr_{uuid4().hex[:12]}")
+        self._transient_decision_desk_snapshot: StoredDecisionDeskSnapshot | None = None
 
     def run(self, request: EvidencePipelineRunRequest) -> EvidencePipelineRunSummary:
         self._validate_request(request)

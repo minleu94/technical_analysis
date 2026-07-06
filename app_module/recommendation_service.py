@@ -47,6 +47,85 @@ class RecommendationService:
         else:
             self.industry_mapper = industry_mapper
         self.regime_detector = MarketRegimeDetector(config)
+        self.last_screening_matrix: List[Dict[str, Any]] = []
+        self.last_excluded_candidates_json: List[Dict[str, Any]] = []
+        self.last_why_not_payload_json: List[Dict[str, Any]] = []
+        self.last_liquidity_gate_payload_json: List[Dict[str, Any]] = []
+        self.last_exclusion_quality: str = "observed"
+        self.last_exclusion_warnings_json: List[str] = []
+
+    def _reset_negative_evidence_buffers(self) -> None:
+        self.last_screening_matrix = []
+        self.last_excluded_candidates_json = []
+        self.last_why_not_payload_json = []
+        self.last_liquidity_gate_payload_json = []
+        self.last_exclusion_quality = "observed"
+        self.last_exclusion_warnings_json = []
+
+    def _matrix_row(
+        self,
+        *,
+        stock_code: str,
+        stock_name: str = "",
+        status: str,
+        reason_codes: List[str],
+        quality: str,
+        stage: str,
+        threshold_name: str = "",
+        observed_value: Any = None,
+        required_value: Any = None,
+        total_score: Any = None,
+        score_bp: Optional[int] = None,
+        score_percentile_bp: Optional[int] = None,
+        eligible_universe_size: Optional[int] = None,
+        threshold_mode: str = "fixed",
+        warnings: Optional[List[str]] = None,
+        industry: str = "",
+    ) -> Dict[str, Any]:
+        return {
+            "stock_code": str(stock_code),
+            "stock_name": str(stock_name or stock_code),
+            "status": status,
+            "reason_codes": list(reason_codes),
+            "quality": quality,
+            "stage": stage,
+            "threshold_name": threshold_name,
+            "observed_value": "" if observed_value is None else str(observed_value),
+            "required_value": "" if required_value is None else str(required_value),
+            "total_score": "" if total_score is None else str(total_score),
+            "score_bp": score_bp,
+            "score_percentile_bp": score_percentile_bp,
+            "eligible_universe_size": eligible_universe_size,
+            "threshold_mode": threshold_mode,
+            "warnings": list(warnings or []),
+            "industry": industry,
+        }
+
+    def _finalize_negative_evidence_buffers(self) -> None:
+        negative_rows = [
+            dict(row)
+            for row in self.last_screening_matrix
+            if str(row.get("status")) in {"fail", "degraded", "skipped", "missing"}
+        ]
+        self.last_excluded_candidates_json = [
+            {
+                "stock_code": row["stock_code"],
+                "stock_name": row.get("stock_name", ""),
+                "status": row.get("status", ""),
+                "reason_codes": list(row.get("reason_codes") or []),
+                "quality": row.get("quality", "degraded"),
+            }
+            for row in negative_rows
+        ]
+        self.last_why_not_payload_json = negative_rows
+        self.last_liquidity_gate_payload_json = [
+            row
+            for row in negative_rows
+            if "liquidity" in " ".join(str(code) for code in row.get("reason_codes", [])).lower()
+            or "liquidity" in str(row.get("threshold_name", "")).lower()
+        ]
+        self.last_exclusion_quality = "observed" if negative_rows else "observed"
+        self.last_exclusion_warnings_json = ["screening_matrix_persisted_v1"]
 
     @staticmethod
     def _validate_ranking_config(config: Dict[str, Any]) -> tuple[Dict[str, Any], str]:
@@ -104,6 +183,7 @@ class RecommendationService:
         import logging
         logger = logging.getLogger(__name__)
         ranking_config, threshold_mode = self._validate_ranking_config(config)
+        self._reset_negative_evidence_buffers()
         
         # ✅ 記錄輸入參數
         logger.info(
@@ -314,6 +394,7 @@ class RecommendationService:
         
         # 對每支股票執行策略分析
         all_recommendations = []
+        matrix_rows_by_stock: Dict[str, Dict[str, Any]] = {}
         
         # 調試統計
         stats = {
@@ -328,10 +409,28 @@ class RecommendationService:
         for idx, stock_code in enumerate(stocks):
             stock_df = df[df[stock_col] == stock_code].copy()
             stock_df = stock_df.sort_values('日期').reset_index(drop=True)
+            stock_code_text = str(stock_code)
+            stock_name_text = stock_code_text
+            if len(stock_df) > 0 and '證券名稱' in stock_df.columns:
+                stock_name_text = str(stock_df.iloc[-1].get('證券名稱', stock_code_text))
             
             # 確保至少有20筆數據才能計算技術指標
             if len(stock_df) < 20:
                 stats['skipped_insufficient_data'] += 1
+                row = self._matrix_row(
+                    stock_code=stock_code_text,
+                    stock_name=stock_name_text,
+                    status="missing",
+                    reason_codes=["insufficient_history"],
+                    quality="missing",
+                    stage="pre_evaluation",
+                    threshold_name="minimum_history_rows",
+                    observed_value=len(stock_df),
+                    required_value=20,
+                    threshold_mode=threshold_mode,
+                )
+                self.last_screening_matrix.append(row)
+                matrix_rows_by_stock[stock_code_text] = row
                 continue
             
             try:
@@ -350,6 +449,20 @@ class RecommendationService:
                             f"日期範圍={stock_df['日期'].min() if '日期' in stock_df.columns else 'N/A'} ~ "
                             f"{stock_df['日期'].max() if '日期' in stock_df.columns else 'N/A'}"
                         )
+                    row = self._matrix_row(
+                        stock_code=stock_code_text,
+                        stock_name=stock_name_text,
+                        status="skipped",
+                        reason_codes=["strategy_filter_no_signal"],
+                        quality="degraded",
+                        stage="strategy_evaluation",
+                        threshold_name="strategy_configurator_result",
+                        observed_value="empty",
+                        required_value="non_empty",
+                        threshold_mode=threshold_mode,
+                    )
+                    self.last_screening_matrix.append(row)
+                    matrix_rows_by_stock[stock_code_text] = row
                 
                 if len(result_df) > 0:
                     latest_row = result_df.iloc[-1]
@@ -450,7 +563,7 @@ class RecommendationService:
                     
                     # 創建 DTO
                     recommendation = RecommendationDTO(
-                        stock_code=str(stock_code),
+                        stock_code=stock_code_text,
                         stock_name=latest_row.get('證券名稱', stock_df.iloc[-1].get('證券名稱', stock_code)),
                         close_price=latest_row.get(close_col, stock_df.iloc[-1].get(close_col, 0)) if close_col else 0,
                         price_change=price_change,
@@ -464,6 +577,19 @@ class RecommendationService:
                     )
                     
                     all_recommendations.append(recommendation)
+                    row = self._matrix_row(
+                        stock_code=stock_code_text,
+                        stock_name=str(recommendation.stock_name),
+                        status="fail",
+                        reason_codes=["pending_final_selection"],
+                        quality="observed",
+                        stage="candidate_scored",
+                        total_score=final_score,
+                        threshold_mode=threshold_mode,
+                        industry=industry_display,
+                    )
+                    self.last_screening_matrix.append(row)
+                    matrix_rows_by_stock[stock_code_text] = row
                     stats['success'] += 1
                 else:
                     stats['skipped_no_result'] += 1
@@ -471,6 +597,21 @@ class RecommendationService:
             except Exception as e:
                 # 跳過處理失敗的股票
                 stats['skipped_exception'] += 1
+                row = self._matrix_row(
+                    stock_code=stock_code_text,
+                    stock_name=stock_name_text,
+                    status="degraded",
+                    reason_codes=["screening_exception"],
+                    quality="degraded",
+                    stage="strategy_evaluation",
+                    threshold_name=type(e).__name__,
+                    observed_value=str(e),
+                    required_value="successful_evaluation",
+                    threshold_mode=threshold_mode,
+                    warnings=[f"screening_exception:{type(e).__name__}"],
+                )
+                self.last_screening_matrix.append(row)
+                matrix_rows_by_stock[stock_code_text] = row
                 # 記錄前3個異常的詳細信息（避免日誌過多）
                 if stats['skipped_exception'] <= 3:
                     import logging
@@ -549,6 +690,14 @@ class RecommendationService:
             filtered_recs = []
             for rec in all_recommendations:
                 pct_bp = percentiles.get(rec.stock_code, 0)
+                matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
+                if matrix_row_for_rec is not None:
+                    matrix_row_for_rec["score_percentile_bp"] = pct_bp
+                    matrix_row_for_rec["eligible_universe_size"] = actual_size
+                    matrix_row_for_rec["threshold_name"] = "recommendation_min_percentile_bp"
+                    matrix_row_for_rec["observed_value"] = str(pct_bp)
+                    matrix_row_for_rec["required_value"] = str(min_percentile_bp)
+                    matrix_row_for_rec["threshold_mode"] = "quantile"
                 if pct_bp >= min_percentile_bp:
                     rec.score_percentile_bp = pct_bp
                     rec.eligible_universe_size = actual_size
@@ -556,19 +705,61 @@ class RecommendationService:
                     rec.ranking_method = ranking_method
                     rec.threshold_mode = "quantile"
                     filtered_recs.append(rec)
+                elif matrix_row_for_rec is not None:
+                    matrix_row_for_rec["status"] = "fail"
+                    matrix_row_for_rec["reason_codes"] = ["recommendation_percentile_below_min"]
+                    matrix_row_for_rec["quality"] = "observed"
+                    matrix_row_for_rec["stage"] = "threshold_gate"
             
             # 5. 穩定排序 (total_score 降序, stock_code 升序)
             filtered_recs.sort(key=lambda x: x.stock_code)
             filtered_recs.sort(key=lambda x: x.total_score, reverse=True)
             
-            all_recommendations = filtered_recs
+            selected_recs = filtered_recs[:top_n]
+            selected_codes = {rec.stock_code for rec in selected_recs}
+            for rec in filtered_recs:
+                matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
+                if matrix_row_for_rec is None:
+                    continue
+                if rec.stock_code in selected_codes:
+                    matrix_row_for_rec["status"] = "pass"
+                    matrix_row_for_rec["reason_codes"] = ["recommendation_selected"]
+                    matrix_row_for_rec["stage"] = "final_selection"
+                else:
+                    matrix_row_for_rec["status"] = "fail"
+                    matrix_row_for_rec["reason_codes"] = ["recommendation_outside_top_n"]
+                    matrix_row_for_rec["stage"] = "top_n_gate"
+                    matrix_row_for_rec["threshold_name"] = "top_n"
+                    matrix_row_for_rec["observed_value"] = str(filtered_recs.index(rec) + 1)
+                    matrix_row_for_rec["required_value"] = str(top_n)
+            all_recommendations = selected_recs
         else:
             # fixed 模式：設定 DTO 門檻模式，並依原行為排序
             for rec in all_recommendations:
                 rec.threshold_mode = "fixed"
             all_recommendations.sort(key=lambda x: x.total_score, reverse=True)
-            
-        return all_recommendations[:top_n]
+            selected_recs = all_recommendations[:top_n]
+            selected_codes = {rec.stock_code for rec in selected_recs}
+            for index, rec in enumerate(all_recommendations, start=1):
+                matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
+                if matrix_row_for_rec is None:
+                    continue
+                matrix_row_for_rec["threshold_mode"] = "fixed"
+                if rec.stock_code in selected_codes:
+                    matrix_row_for_rec["status"] = "pass"
+                    matrix_row_for_rec["reason_codes"] = ["recommendation_selected"]
+                    matrix_row_for_rec["stage"] = "final_selection"
+                else:
+                    matrix_row_for_rec["status"] = "fail"
+                    matrix_row_for_rec["reason_codes"] = ["recommendation_outside_top_n"]
+                    matrix_row_for_rec["stage"] = "top_n_gate"
+                    matrix_row_for_rec["threshold_name"] = "top_n"
+                    matrix_row_for_rec["observed_value"] = str(index)
+                    matrix_row_for_rec["required_value"] = str(top_n)
+            all_recommendations = selected_recs
+
+        self._finalize_negative_evidence_buffers()
+        return all_recommendations
     
     def detect_regime(self) -> Dict[str, Any]:
         """檢測市場狀態

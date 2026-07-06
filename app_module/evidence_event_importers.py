@@ -26,6 +26,14 @@ class EvidenceImporter(Protocol):
 
 def _quality(value: Any) -> EvidenceDataQuality:
     raw = value.value if hasattr(value, "value") else value
+    if raw == EvidenceDataQuality.OBSERVED.value:
+        return EvidenceDataQuality.OBSERVED
+    if raw == EvidenceDataQuality.ESTIMATED.value:
+        return EvidenceDataQuality.ESTIMATED
+    if raw == EvidenceDataQuality.DEGRADED.value:
+        return EvidenceDataQuality.DEGRADED
+    if raw == EvidenceDataQuality.MISSING.value:
+        return EvidenceDataQuality.MISSING
     if raw == DecisionDeskQuality.OBSERVED.value:
         return EvidenceDataQuality.OBSERVED
     if raw == DecisionDeskQuality.ESTIMATED.value:
@@ -196,6 +204,21 @@ class RecommendationEvidenceImporter:
             if request.limit is not None and len(payloads) >= request.limit:
                 break
 
+        matrix_payloads = self._screening_matrix_payloads(result, request, decision_date)
+        if matrix_payloads:
+            for payload in matrix_payloads:
+                if request.limit is not None and len(payloads) >= request.limit:
+                    break
+                payloads.append(payload)
+        else:
+            diagnostics.append(
+                EvidenceImportDiagnostic(
+                    code="source_missing_screening_matrix",
+                    message="RecommendationResultDTO does not persist V1.7 screening matrix payload",
+                    source_name=self.source_name,
+                )
+            )
+
         if request.capture_exclusion_payloads:
             exclusion_payloads = self._exclusion_payloads(result, request, decision_date)
             if exclusion_payloads:
@@ -218,6 +241,97 @@ class RecommendationEvidenceImporter:
             event_payloads=tuple(payloads),
             diagnostics=tuple(diagnostics),
         )
+
+    def _screening_matrix_payloads(
+        self,
+        result: Any,
+        request: EvidenceCaptureRequest,
+        decision_date: str,
+    ) -> list[dict[str, Any]]:
+        payloads: list[dict[str, Any]] = []
+        for row in self._payload_rows(getattr(result, "screening_matrix_json", ())):
+            payload = self._screening_matrix_payload(
+                result=result,
+                row=row,
+                request=request,
+                decision_date=decision_date,
+            )
+            if payload is not None:
+                payloads.append(payload)
+        return payloads
+
+    def _screening_matrix_payload(
+        self,
+        *,
+        result: Any,
+        row: Mapping[str, Any],
+        request: EvidenceCaptureRequest,
+        decision_date: str,
+    ) -> dict[str, Any] | None:
+        symbol = str(row.get("stock_code") or row.get("symbol") or row.get("code") or "").strip()
+        if request.symbol and symbol != str(request.symbol).strip():
+            return None
+        if not symbol:
+            return None
+        status = str(row.get("status") or "missing").strip().lower()
+        event_type = self._screening_event_type(status)
+        reason_codes = _tuple(row.get("reason_codes") or row.get("exclusion_reason_codes") or row.get("reasons"))
+        warnings = _tuple(row.get("warnings"))
+        quality = str(row.get("quality") or self._quality_for_screening_status(status))
+        metadata = {
+            "screening_status": status,
+            "stage": row.get("stage"),
+            "stock_name": row.get("stock_name"),
+            "threshold_name": row.get("threshold_name"),
+            "observed_value": row.get("observed_value"),
+            "required_value": row.get("required_value"),
+            "total_score": row.get("total_score"),
+            "score_percentile_bp": row.get("score_percentile_bp"),
+            "eligible_universe_size": row.get("eligible_universe_size"),
+            "threshold_mode": row.get("threshold_mode"),
+            "source_result_id": str(getattr(result, "result_id", "")),
+        }
+        return {
+            "event_date": decision_date,
+            "decision_date": decision_date,
+            "symbol": symbol,
+            "event_type": event_type,
+            "event_family": "screening_matrix",
+            "source_type": "recommendation_result_screening_matrix",
+            "source_id": str(getattr(result, "result_id", "")),
+            "source_snapshot_id": str(getattr(result, "result_id", "")),
+            "reason_codes": reason_codes or (status,),
+            "why_not_codes": reason_codes if status in {"fail", "degraded", "skipped", "missing"} else (),
+            "risk_codes": reason_codes if status in {"degraded", "missing"} else (),
+            "score_bp": row.get("score_bp"),
+            "score_percentile_bp": row.get("score_percentile_bp"),
+            "regime": getattr(result, "regime", None),
+            "sector": row.get("sector") or row.get("industry"),
+            "liquidity_state": row.get("liquidity_state"),
+            "data_quality": _quality(quality),
+            "warnings": warnings,
+            "as_of_date": decision_date,
+            "available_date": decision_date,
+            "source_version": "recommendation_screening_matrix_importer_v1",
+            "metadata": metadata,
+        }
+
+    def _screening_event_type(self, status: str) -> EvidenceEventType:
+        mapping = {
+            "pass": EvidenceEventType.SCREENING_MATRIX_PASS,
+            "fail": EvidenceEventType.SCREENING_MATRIX_FAIL,
+            "degraded": EvidenceEventType.SCREENING_MATRIX_DEGRADED,
+            "skipped": EvidenceEventType.SCREENING_MATRIX_SKIPPED,
+            "missing": EvidenceEventType.SCREENING_MATRIX_MISSING,
+        }
+        return mapping.get(status, EvidenceEventType.SCREENING_MATRIX_MISSING)
+
+    def _quality_for_screening_status(self, status: str) -> str:
+        if status == "pass" or status == "fail":
+            return EvidenceDataQuality.OBSERVED.value
+        if status == "missing":
+            return EvidenceDataQuality.MISSING.value
+        return EvidenceDataQuality.DEGRADED.value
 
     def _exclusion_payloads(
         self,

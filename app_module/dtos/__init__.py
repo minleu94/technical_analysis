@@ -149,6 +149,7 @@ class RecommendationResultDTO:
     notes: str = ""  # 備註
 
     excluded_candidates_json: List[Dict[str, Any]] = field(default_factory=list)
+    screening_matrix_json: List[Dict[str, Any]] = field(default_factory=list)
     why_not_payload_json: List[Dict[str, Any]] = field(default_factory=list)
     liquidity_gate_payload_json: List[Dict[str, Any]] = field(default_factory=list)
     exclusion_quality: Optional[str] = None
@@ -165,6 +166,7 @@ class RecommendationResultDTO:
             'created_at': self.created_at,
             'notes': self.notes,
             'excluded_candidates_json': self.excluded_candidates_json,
+            'screening_matrix_json': self.screening_matrix_json,
             'why_not_payload_json': self.why_not_payload_json,
             'liquidity_gate_payload_json': self.liquidity_gate_payload_json,
             'exclusion_quality': self.exclusion_quality,
@@ -187,6 +189,7 @@ class RecommendationResultDTO:
             created_at=data.get('created_at'),
             notes=data.get('notes', ''),
             excluded_candidates_json=list(data.get('excluded_candidates_json') or []),
+            screening_matrix_json=list(data.get('screening_matrix_json') or []),
             why_not_payload_json=list(data.get('why_not_payload_json') or []),
             liquidity_gate_payload_json=list(data.get('liquidity_gate_payload_json') or []),
             exclusion_quality=data.get('exclusion_quality'),

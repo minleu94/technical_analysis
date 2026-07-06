@@ -2358,6 +2358,12 @@ class RecommendationView(QWidget):
             regime=self.current_regime,
             created_at=self._current_recommendation_source_created_at(),
             notes="Portfolio 來源追溯快照",
+            excluded_candidates_json=list(getattr(self.recommendation_service, "last_excluded_candidates_json", [])),
+            screening_matrix_json=list(getattr(self.recommendation_service, "last_screening_matrix", [])),
+            why_not_payload_json=list(getattr(self.recommendation_service, "last_why_not_payload_json", [])),
+            liquidity_gate_payload_json=list(getattr(self.recommendation_service, "last_liquidity_gate_payload_json", [])),
+            exclusion_quality=str(getattr(self.recommendation_service, "last_exclusion_quality", "observed")),
+            exclusion_warnings_json=list(getattr(self.recommendation_service, "last_exclusion_warnings_json", [])),
         )
 
     def _current_recommendation_source_created_at(self) -> str:
@@ -2435,7 +2441,13 @@ class RecommendationView(QWidget):
                 recommendations=self.current_recommendations,
                 regime=self.current_regime,
                 created_at=datetime.now().isoformat(),
-                notes=f"Profile: {self.current_profile or '進階模式'}, Regime: {self.current_regime or '未知'}"
+                notes=f"Profile: {self.current_profile or '進階模式'}, Regime: {self.current_regime or '未知'}",
+                excluded_candidates_json=list(getattr(self.recommendation_service, "last_excluded_candidates_json", [])),
+                screening_matrix_json=list(getattr(self.recommendation_service, "last_screening_matrix", [])),
+                why_not_payload_json=list(getattr(self.recommendation_service, "last_why_not_payload_json", [])),
+                liquidity_gate_payload_json=list(getattr(self.recommendation_service, "last_liquidity_gate_payload_json", [])),
+                exclusion_quality=str(getattr(self.recommendation_service, "last_exclusion_quality", "observed")),
+                exclusion_warnings_json=list(getattr(self.recommendation_service, "last_exclusion_warnings_json", [])),
             )
             
             # 將 regime_snapshot 添加到 config 中（因為 RecommendationResultDTO 沒有專門的字段）

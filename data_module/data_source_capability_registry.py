@@ -171,6 +171,16 @@ def build_default_data_source_capability_registry() -> DataSourceCapabilityRegis
                 ("result_id", "推薦結果 ID"), ("stock_code", "證券代號"),
             ),
             _capability(
+                "recommendation.screening_matrix",
+                "Recommendation screening matrix payload",
+                "evidence_source",
+                CAPABILITY_READY,
+                "RecommendationResultDTO 保存後的 pass / fail / degraded / skipped / missing matrix",
+                "created_at / result save time is the evidence available date; historical results are not backfilled",
+                ("stock_code", "候選股票代號"), ("status", "pass/fail/degraded/skipped/missing"),
+                warnings=("historical_results_are_not_backfilled",),
+            ),
+            _capability(
                 "recommendation.exclusion.why_not_payload",
                 "Recommendation why-not exclusion payload",
                 "evidence_source",

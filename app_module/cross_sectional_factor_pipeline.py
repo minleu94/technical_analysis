@@ -108,7 +108,7 @@ class CrossSectionalFactorPipeline:
             factor_records = sorted(
                 grouped[factor_name],
                 key=lambda item: (
-                    -1 if item.get("score_bp") is None else -int(item.get("score_bp")),
+                    -1 if (score_bp := item.get("score_bp")) is None else -int(score_bp),
                     str(item.get("stock_code", "")),
                 ),
             )
