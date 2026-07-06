@@ -1,6 +1,6 @@
 # Backup Retention Audit 2026-07-06
 
-> 本文件記錄 2026-07-06 對 repo 與 `D:/Min/Python/Project/FA_Data` 備份檔的盤點結果。此盤點沒有刪除任何正式資料或既有備份；任何清理既有大檔都必須由使用者另行確認。
+> 本文件記錄 2026-07-06 對 repo 與 `D:/Min/Python/Project/FA_Data` 備份檔的盤點結果。初次盤點沒有刪除任何正式資料或既有備份；同日後續依使用者明確指示，已清理 repo / Temp 內可重建的 working-copy 與 QA raw output，正式 `FA_Data/sqlite/twstock.db` 未被修改。
 
 ## 結論
 
@@ -9,6 +9,8 @@
 - 2026-07-06 已新增 `data_module.backup_retention.create_retained_backup()`，並把正式 backfill / migration / registry / 大型 merge / 手動修復入口接到相同 retention 規則。
 - `TWStockConfig.create_backup()` 的 cleanup prefix 已收窄：一般 `twstock_YYYYMMDD_HHMMSS.db` 不會清掉 `twstock_fundamental_schema_YYYYMMDD_HHMMSS.db` 或其他帶 label 的 DB 備份。
 - 既有歷史備份不會被本次程式變更自動刪除；只有下一次產生同 prefix 新備份時，才會清理該 prefix 的舊版本。
+- `_reference_fix` historical replay 仍有 V2.0 evidence quality 參考價值，已移到 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`；Workbench 只應讀取其中 JSON summary，不直接讀 replay DB。
+- 已完成 closeout 且可重建的 repo `tmp/pre_v2_source_gap_smoke/`、`tmp/evidence_ops_continue_20260703/`、`output/qa/statement_items_backfill/` 與 6/30 Temp clone 已刪除。
 
 ## Retention 規則
 
@@ -73,25 +75,37 @@ Prefix 例子：
 - `D:/Min/Python/Project/FA_Data/backup/industry_index_cleanup_20260624_015508/twstock.db.bak`，約 3.16 GB；一次性 industry index cleanup 備份。
 - `D:/Min/Python/Project/FA_Data/sqlite/backups/twstock_before_8_branch_add_20260706_150817.db`，約 3.16 GB；branch / schema 前備份。
 
-## 既有大檔清理建議
+## 既有大檔清理與處置
 
-本次沒有刪除檔案。若要釋放空間，建議另開一次明確清理任務，先產出 move / delete 清單並確認 rollback 路徑。
+初次盤點沒有刪除檔案；2026-07-06 後續依使用者明確授權完成以下清理與移動：
+
+| 原位置 | 處置 | 理由 / 回滾方式 |
+|---|---|---|
+| `tmp/historical_replay/evidence_replay_2026-01-06_2026-07-06_reference_fix.db*` | 移到 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/` | 可保留作研究層 event / outcome 深入分析；如需回滾，可搬回原 `tmp/historical_replay/` |
+| `output/evidence_pipeline/historical_replay_2026-01-06_2026-07-06_reference_fix.{json,md,log}` | 移到同一個 D 槽 archive | V2.0 Workbench 只讀 JSON summary；文件與 CLI 範例已改指向 archive |
+| `tmp/pre_v2_source_gap_smoke/` | 刪除 | 已完成 Pre-V2 closeout；正式 DB 未寫入。需要時可依 QA 文件命令從 formal DB 重建 working copy |
+| `tmp/evidence_ops_continue_20260703/` | 刪除 | 已被後續 Pre-V2 all-source closeout 取代；需要時可依 2026-07-03 QA 文件重跑 |
+| `output/qa/statement_items_backfill/` | 刪除 | 正式 `fundamental_statement_items` 已在 `D:/Min/Python/Project/FA_Data/sqlite/twstock.db`；repo 內只是 QA raw DB / backup |
+| `C:/Users/archi/AppData/Local/Temp/technical_analysis_v1_main_20260630_164819`、`...164434` | 刪除 | 6/30 clean-clone / inspect 暫存 clone；需要時重新跑 clean-clone 驗證 |
+
+尚未處理的既有大型備份仍需個別確認，不得因本次 cleanup 而自動刪除：
 
 | 候選 | 建議 |
 |---|---|
 | `D:/Min/Python/Project/FA_Data/meta_data/backup/technical_restore_*` | 若對應修復已驗證且不再需要 rollback，可移到外部冷 archive 或刪除 |
 | `D:/Min/Python/Project/FA_Data/backup/industry_index_cleanup_*` | 若 cleanup 已驗證完成，可移到外部冷 archive 或刪除 |
 | `D:/Min/Python/Project/FA_Data/sqlite/backups/twstock_before_8_branch_add_*.db` | 若 branch/schema 已合併且當前 DB healthcheck 通過，可刪或移出資料根 |
-| repo `output/qa/**/backup` | 屬 raw QA output，確認不需重跑證據後可清理；不應 stage |
+| repo `output/qa/**/backup` | 屬 raw QA output，確認不需重跑證據後可清理；不應 stage。本次已清理 `output/qa/statement_items_backfill/` |
 | `meta_data/backup/*_backfill_*.db` | 至少保留最近一次可 rollback 版本；較舊版本需依對應 migration/backfill closeout 確認 |
 
 ## 後續原則
 
 - 新增任何正式 DB / CSV 備份入口時，優先使用 `TWStockConfig.create_backup()` 或 `create_retained_backup()`。
 - 直接 `shutil.copy2()` 只能用於 restore、working copy、使用者顯式指定的 QA/replay DB，不應用來產生無限累積的正式備份。
-- 大型 replay / smoke / QA DB 應放在 ignored output 位置，不要放在 `DATA_ROOT/meta_data/backup/`。
+- 大型 replay / smoke / QA DB 應放在 ignored output 位置或 `OUTPUT_ROOT/evidence_pipeline/<research_archive>/`，不要放在 `DATA_ROOT/meta_data/backup/` 或 repo C 槽長期堆積。
 - 清理歷史備份前必須先列出來源、大小、風險、回滾方式與目標路徑，並取得明確確認。
 
 ## 更新記錄
 
 - 2026-07-06：建立備份盤點與 retention 規則文件，記錄既有大檔來源、已納入 retention 的程式入口與需人工確認的清理候選。
+- 2026-07-06：依使用者明確指示執行 C 槽 cleanup；移動 `_reference_fix` replay artifact 至 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`，並刪除已文件化且可重建的 repo working-copy / QA raw output 與 6/30 Temp clone。

@@ -868,7 +868,7 @@ No-look-ahead 邊界：
 
 - 2026-07-06 reference return fix 後，若 event 沒有 `benchmark_id`，forward outcome 會以 `TAIEX` 作為市場 benchmark default；`market_indices` 可使用未命名市場序列，並在 `收盤指數` 缺值時 fallback 到 `收盤價`。
 - Industry return / excess 不會推估未知產業；只有 event 有 `industry_benchmark_id` 或 `sector` 且可保守映射到 `industry_indices` 時才會填入。缺值會保留 `NULL` 與 `missing_industry_benchmark` warning，不會填 0。
-- `_reference_fix` replay 產物中，ready benchmark return / excess 已可用；industry 大量 `DEGRADED` 代表舊 recommendation payload 缺 sector / industry，不代表 raw forward return 或 benchmark excess 壞掉。
+- `_reference_fix` replay 產物中，ready benchmark return / excess 已可用；industry 大量 `DEGRADED` 代表舊 recommendation payload 缺 sector / industry，不代表 raw forward return 或 benchmark excess 壞掉。cleanup 後保留位置為 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`；Workbench CLI 只應讀其中 JSON summary。
 - `source_missing_screening_matrix` 代表舊 recommendation result 沒有當時的 screening matrix payload；系統不回補、不重算舊結果。
 
 V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已保存的 daily factor snapshot。這個 CLI 不建立 DB、不寫 snapshot、不重算 scoring；若指定的 DB 不存在會以錯誤結束。snapshot 只會在其他受控 workflow 明確呼叫 `CrossSectionalFactorPipeline` / `CrossSectionalFactorRepository` 保存後才存在。
@@ -925,9 +925,9 @@ V2.0 Phase 1 / Phase 1.5 可用 `scripts\inspect_v2_workbench_prototype.py` 檢�
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --format json
 .\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --format markdown
-.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --replay-summary-json output\evidence_pipeline\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
+.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --replay-summary-json D:\Min\Python\Project\FA_Data\output\evidence_pipeline\historical_replay_reference_fix_20260706\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
 .\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --db-path <working-copy-db> --decision-date 2026-07-06 --multi-day-record-path docs\06_qa\POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md --format json
-.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --db-path <working-copy-db> --decision-date 2026-07-06 --replay-summary-json output\evidence_pipeline\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
+.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --db-path <working-copy-db> --decision-date 2026-07-06 --replay-summary-json D:\Min\Python\Project\FA_Data\output\evidence_pipeline\historical_replay_reference_fix_20260706\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
 ```
 
 輸出會包含：
@@ -1273,6 +1273,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-06：修正 TPEX 每日股價缺日判讀；手動 / 一鍵更新會在 TPEX 缺日期時標示未完整，Windows data update quick task 會輸出 `passed_with_warnings`，freshness probe 會檢查 TWSE / TPEX 原始日檔並在 TPEX 缺檔時標示 `degraded`；技術指標 skip 判斷也新增最新日 eligible 股票覆蓋檢查，避免 TPEX 後補時漏算。
 - 2026-07-06：新增 Historical Evidence Replay 操作說明，標示 replay 只在 working-copy / replay DB 逐日重放 evidence，事件會標示 `historical_replay` / `simulated_scheduler`，不取代真實 scheduled dry-run、weekly history、多日 dry-run 或 production scheduler approval。
 - 2026-07-06：補充 Historical Replay reference return fix 結果判讀，說明 TAIEX benchmark fallback、market `收盤價` fallback、industry payload gap 與 `source_missing_screening_matrix` 限制。
+- 2026-07-06：補充 `_reference_fix` replay artifact cleanup 後位置；JSON / report / replay DB 已移至 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`，Workbench CLI 範例改讀 D 槽 JSON summary。
 - 2026-07-06：修正 Evidence Pipeline Runner dry-run report 的 source coverage 判讀；同輪 transient Daily Decision Desk snapshot 會解除 stale durable snapshot missing 並標示 coverage basis，仍不寫 durable snapshot 或 production evidence DB。
 - 2026-07-06：scheduled evidence dry-run `latest_status.json` 新增 pipeline summary / source coverage 摘要欄位，讓 morning report 可直接辨識 V1.7 payload readiness 與 diagnostics，而不需只解析完整 markdown report。
 - 2026-07-03：新增 V1.3 Evidence Operations weekly review CLI 操作說明，標示 manual approval package、action item planning、production scheduler disabled 與 signal decay candidate 不自動套用 lifecycle action。

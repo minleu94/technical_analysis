@@ -32,7 +32,7 @@
 - Phase 1 delivers a read-only prototype artifact and composer contract.
 - Phase 1 does not add a Qt tab, top-level production navigation, scheduler button, approval workflow, DB migration, write repository, trading action, order API, position adjustment, strategy score change, backtest result change or external data ingestion.
 - Phase 1 may use sample data in the CLI, but the sample must clearly mark itself as `sample_only`.
-- Phase 1 may read `output/evidence_pipeline/historical_replay_2026-01-06_2026-07-06_reference_fix.json` or another explicit replay JSON summary path. It must label this input as `historical_replay` / `simulated_scheduler`, preserve `DEGRADED` outcome quality, and state that it does not satisfy Phase 0 weekly / multi-day gates.
+- Phase 1 may read `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/historical_replay_2026-01-06_2026-07-06_reference_fix.json` or another explicit replay JSON summary path. It must label this input as `historical_replay` / `simulated_scheduler`, preserve `DEGRADED` outcome quality, and state that it does not satisfy Phase 0 weekly / multi-day gates.
 - Phase 1 must not read or scan the 3GB replay DB unless a later explicit performance-aware adapter task is approved.
 - If a later worker chooses to expose this inside Qt, that becomes an explicit scope change and must run the UI gates listed in this plan.
 
@@ -828,7 +828,7 @@ Expected: no whitespace errors; diff includes only Phase 1 prototype, tests, doc
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --format markdown
-.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --replay-summary-json output\evidence_pipeline\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
+.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --replay-summary-json D:\Min\Python\Project\FA_Data\output\evidence_pipeline\historical_replay_reference_fix_20260706\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
 ```
 
 Expected output includes `# V2.0 Unified Decision Workbench Prototype`, `production_scheduler_allowed: false`, `writes_allowed: false`, `今日待判讀`, `Evidence mode` and `不是交易建議`.

@@ -66,7 +66,7 @@
 |---|---|
 | [HOW_TO_UPDATE_DAILY_DATA.md](../03_data/HOW_TO_UPDATE_DAILY_DATA.md) | 每日資料更新快速指南。 |
 | [daily_data_update_guide.md](../03_data/daily_data_update_guide.md) | 每日資料更新詳細指南。 |
-| [BACKUP_RETENTION_AUDIT_2026_07_06.md](../03_data/BACKUP_RETENTION_AUDIT_2026_07_06.md) | 2026-07-06 備份檔來源與 retention 盤點，記錄 repo / `FA_Data` 大型 DB、CSV、`.bak` 備份來源、已納入保留策略的程式入口與需人工確認的清理候選。 |
+| [BACKUP_RETENTION_AUDIT_2026_07_06.md](../03_data/BACKUP_RETENTION_AUDIT_2026_07_06.md) | 2026-07-06 備份檔來源與 retention 盤點，記錄 repo / `FA_Data` 大型 DB、CSV、`.bak` 備份來源、已納入保留策略的程式入口、`_reference_fix` replay archive 位置與已清理的 C 槽 working-copy / QA raw output。 |
 | [DATA_FETCHING_LOGIC.md](../03_data/DATA_FETCHING_LOGIC.md) | 資料抓取邏輯。 |
 | [DATA_FLOW_LOGIC.md](../03_data/DATA_FLOW_LOGIC.md) | 推薦分析資料流程。 |
 | [DATA_REBUILD_GUIDE.md](../03_data/DATA_REBUILD_GUIDE.md) | 從 daily price 重建衍生資料。 |
@@ -454,6 +454,7 @@
 - 2026-06-16：更新 Full App Healthcheck，整合 TPEX 日常管線、SQLite Inspector 顯示防護與 `broker_flows.trade_type` 主鍵治理的人工驗證入口。
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
 - 2026-07-06：新增 `ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md` 封存索引，對齊 6M Roadmap Gate-Based Active Roadmap 重構。
+- 2026-07-06：更新備份 retention audit 索引，補上 `_reference_fix` replay archive 位置與 C 槽 working-copy / QA raw output cleanup 狀態。
 
 
 

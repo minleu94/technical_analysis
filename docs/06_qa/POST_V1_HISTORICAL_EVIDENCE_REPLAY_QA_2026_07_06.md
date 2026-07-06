@@ -144,10 +144,13 @@ git diff --check
 
 修正後以新隔離 DB 重跑，不寫正式 evidence DB：
 
-- DB：`tmp/historical_replay/evidence_replay_2026-01-06_2026-07-06_reference_fix.db`
-- Report：`output/evidence_pipeline/historical_replay_2026-01-06_2026-07-06_reference_fix.md`
-- JSON：`output/evidence_pipeline/historical_replay_2026-01-06_2026-07-06_reference_fix.json`
-- Log：`output/evidence_pipeline/historical_replay_2026-01-06_2026-07-06_reference_fix.log`
+- Archive：`D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`
+- DB：`D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/evidence_replay_2026-01-06_2026-07-06_reference_fix.db`
+- Report：`D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/historical_replay_2026-01-06_2026-07-06_reference_fix.md`
+- JSON：`D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/historical_replay_2026-01-06_2026-07-06_reference_fix.json`
+- Log：`D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/historical_replay_2026-01-06_2026-07-06_reference_fix.log`
+
+2026-07-06 cleanup 後，repo 內原 `tmp/historical_replay/` 與 `output/evidence_pipeline/` 位置已清空；保留於 D 槽 archive 的 JSON summary 是 V2.0 Workbench 可讀輸入，replay DB 只作研究層深入分析，不得視為正式 evidence DB。
 
 本次 source DB 已包含 `2026-07-06` 交易資料，因此 rerun 為 118 trading days；舊 artifact 為 117 days，最後交易日是 `2026-07-03`。
 
@@ -181,3 +184,7 @@ Replay outcome 仍只使用決策日後、且不超過 replay data-as-of 的價�
 - industry reference 仍高度缺失，因為 118,056 events 中只有 719 events 有 sector，`benchmark_id` 與 `industry_benchmark_id` 仍都是 source payload 內的 `NULL`。本次只在既有 sector 可映射時填 industry return。
 - `source_missing_screening_matrix` 仍是每日 recommendation payload gap；此修正沒有也不應該回填舊 screening matrix。
 - replay 是 `historical_replay` / `simulated_scheduler` research artifact，不代表 production scheduler approval。
+
+## 更新記錄
+
+- 2026-07-06：cleanup 後更新 artifact 位置；`_reference_fix` replay DB、JSON、Markdown report 與 log 已移至 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`。

@@ -26,7 +26,7 @@
 參考檔：
 
 ```text
-output/evidence_pipeline/historical_replay_2026-01-06_2026-07-06_reference_fix.json
+D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/historical_replay_2026-01-06_2026-07-06_reference_fix.json
 ```
 
 prototype 可揭露：
@@ -55,7 +55,7 @@ prototype 可揭露：
 .\.venv\Scripts\python.exe -m mypy app_module\workbench_dtos.py app_module\workbench_read_only_composer.py app_module\workbench_replay_summary.py scripts\inspect_v2_workbench_prototype.py
 .\.venv\Scripts\python.exe scripts\quant_guard_linter.py app_module\workbench_dtos.py app_module\workbench_read_only_composer.py app_module\workbench_replay_summary.py scripts\inspect_v2_workbench_prototype.py
 .\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --format markdown
-.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --replay-summary-json output\evidence_pipeline\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
+.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --replay-summary-json D:\Min\Python\Project\FA_Data\output\evidence_pipeline\historical_replay_reference_fix_20260706\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
 ```
 
 結果：
@@ -65,6 +65,8 @@ prototype 可揭露：
 - quant guard：financial float boundary 與 look-ahead bias checks 皆通過。
 - sample CLI smoke：輸出 `source_mode=sample_only`、`production_scheduler_allowed=false`、`writes_allowed=false`、「今日待判讀」、Evidence Mode 與「不是交易建議」。
 - replay CLI smoke：輸出 `source_mode=sample_plus_historical_replay`、`simulated_scheduler`、`Historical replay simulated evidence`、`missing_industry_benchmark` 與「不是交易建議」。
+
+2026-07-06 cleanup 後，`_reference_fix` replay summary JSON 已移到 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`；repo `output/evidence_pipeline/` 不再保留該 raw output。
 
 Repo-wide mypy 另有既有失敗：
 

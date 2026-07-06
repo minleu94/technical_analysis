@@ -4,6 +4,8 @@
 
 本紀錄保存 2026-07-03 針對 Daily Decision Desk durable snapshot 與 Evidence Pipeline working-copy confirm smoke 的 follow-up 結果。這是程式路徑與 working-copy 寫入驗證，不是 production scheduler 啟用紀錄，也不是投資有效性結論。
 
+> 2026-07-06 cleanup：原始 ignored working-copy 目錄 `tmp/evidence_ops_continue_20260703/` 已刪除；本文件保留當時結論、指標與重跑命令。後續 Pre-V2 all-source closeout 已取代此舊 smoke 作為最新非時間型驗證依據。
+
 ## 背景
 
 同日第一個 weekly evidence operations + history run 顯示：
@@ -71,6 +73,8 @@ Working-copy smoke 第一次寫入 `895` 筆 `risk_prompt` events 與 `3580` 筆
 - final DB count：`recommendation_included=20`、`risk_prompt_low_liquidity=885`、`risk_prompt_relative_weakness=10`；`evidence_events=915`、`evidence_outcomes=3660`。
 
 Requested sources (`recommendation,risk-prompt`) 的 runner summary 可達 `ready_for_manual_confirm`，但整體 source coverage 仍因 watchlist / portfolio / exclusion payload 缺口維持 `not_ready`。
+
+2026-07-06 cleanup 後，上述 raw output 已不存在；若要復查此舊 follow-up，請從 `D:/Min/Python/Project/FA_Data/sqlite/twstock.db` 重新建立 working-copy DB，並依本文件命令重跑。
 
 ## 剩餘 gaps
 

@@ -42,7 +42,7 @@
 ### Phase 0A：Historical Replay Evidence Quality Audit
 **狀態**：2026-07-06 已完成 reference return blocker closeout，可作為 V2.0 Phase 1 的 simulated evidence input。
 - **已驗證產品**：
-  - `historical_replay_2026-01-06_2026-07-06_reference_fix.json` / `.md` / replay DB 已產生。
+  - `historical_replay_2026-01-06_2026-07-06_reference_fix.json` / `.md` / replay DB 已產生，cleanup 後封存於 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`。
   - rerun 範圍為 2026-01-06 至 2026-07-06，共 118 個交易日。
   - replay events `118,056`，outcomes `472,224`。
   - ready outcomes `380,520`；benchmark return / excess 已補齊 `380,520 / 380,520`。

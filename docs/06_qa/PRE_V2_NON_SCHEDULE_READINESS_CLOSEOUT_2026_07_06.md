@@ -10,7 +10,7 @@
 - 清理前發現 10 個 unreachable commits，已先保留到 `refs/recovery/unreachable-*`，再執行 `git gc --prune=now`；沒有直接丟棄可疑 commit。
 - 新增 `app_module/pre_v2_readiness_service.py` 與 `scripts/inspect_pre_v2_readiness.py`，可唯讀彙總 weekly history、multi-day dry-run record、source gaps 與 read-only Agent report sample。
 - 補齊 RecommendationService 的 liquidity evidence：當策略結果因 `min_volume_ratio` / `volume_ratio_min` 成交量門檻而為空時，screening matrix 會標記 `liquidity_volume_ratio_below_min`，並保存 Liquidity payload。此判斷使用 `Decimal`，且沿用既有 `StrategyConfigurator` 的量比轉百分比語意。
-- 在 ignored `tmp/pre_v2_source_gap_smoke/` 建立 formal DB working copy 與 output-root mirror；正式 `D:/Min/Python/Project/FA_Data/sqlite/twstock.db` 只作來源複製，不寫入正式 evidence DB。
+- 在 ignored `tmp/pre_v2_source_gap_smoke/` 建立 formal DB working copy 與 output-root mirror；正式 `D:/Min/Python/Project/FA_Data/sqlite/twstock.db` 只作來源複製，不寫入正式 evidence DB。2026-07-06 cleanup 後，該 ignored raw working-copy 目錄已刪除；本文件保留結論與可重跑命令。
 - 使用 2026-07-03 真實 watchlist / portfolio 輸出副本與 working-copy Recommendation result 驗證 all-source source coverage：recommendation、screening matrix、why-not、liquidity、watchlist trigger、portfolio alert、risk prompt 全部 capture-ready，`blocking_gaps=[]`。
 - all-source working-copy confirm smoke repeat=2 通過 idempotency：第二輪 event / outcome count 穩定，`readiness_after_smoke=ready_for_manual_confirm`。
 - Evidence Review UI smoke closeout 完成：Research tab workflow suite 通過，MainWindow 可啟動、切換 8 個 top-level tabs、截圖 resize evidence、high-risk dialog cancel-only probe 未觸發 destructive action。
@@ -25,6 +25,8 @@
 - smoke output-root：`tmp/pre_v2_source_gap_smoke/output`
 - copied formal output inputs：`watchlist/default.json`、`portfolio/trades.jsonl`
 - smoke-only recommendation result id：`pre_v2_real_recommendation_20260703_v17_payload`
+
+上述 working-copy DB / output-root 是當時 QA 執行位置；2026-07-06 cleanup 已刪除 raw artifact。若需要重新檢查，請用下方命令從 formal DB 重建 working copy，不要把舊路徑解讀為仍存在的資料源。
 
 關鍵結果：
 
@@ -126,3 +128,7 @@ git diff --check
 - production scheduler：仍需 explicit design、backup、rollback、diagnostics 與人工 approval 文件；本 closeout 不啟用 scheduler。
 - formal evidence DB confirm：本次只在 working-copy DB 驗證 all-source confirm smoke；正式 DB 寫入需另行明確批准。
 - forward outcome / alpha：目前多數 2026-07-03 事件仍是 `INSUFFICIENT_SAMPLE`，不能推論投資有效性。
+
+## 更新記錄
+
+- 2026-07-06：cleanup 後補註 `tmp/pre_v2_source_gap_smoke/` raw working-copy DB / output-root 已刪除；正式 DB 未被修改，closeout 結論與重跑命令保留。
