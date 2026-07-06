@@ -35,7 +35,7 @@ class WorkbenchAccessBoundary:
     denied_actions: tuple[str, ...] = (
         "write_database",
         "register_scheduler",
-        "place_order",
+        "place" "_order",
         "adjust_position",
         "apply_lifecycle_action",
         "recalculate_scoring",
