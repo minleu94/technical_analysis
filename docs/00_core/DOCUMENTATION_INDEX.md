@@ -213,6 +213,7 @@
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
 | [DOCUMENT_ENCODING_AUDIT_2026_06_16.md](../06_qa/DOCUMENT_ENCODING_AUDIT_2026_06_16.md) | repo 文件 UTF-8 / mojibake 稽核報告，確認顯示雜訊來自終端編碼而非文件內容損壞。 |
 | [DOCUMENTATION_ROADMAP_REBASELINE_AUDIT_2026_07_03.md](../06_qa/DOCUMENTATION_ROADMAP_REBASELINE_AUDIT_2026_07_03.md) | Roadmap / docs / phase 目錄整理稽核，記錄 `docs/05_phases/` 降格為 Historical / Reference、入口文件同步與後續歸檔準則。 |
+| [SUPERPOWERS_PLAN_SPEC_DATE_AUDIT_2026_07_06.md](../06_qa/SUPERPOWERS_PLAN_SPEC_DATE_AUDIT_2026_07_06.md) | `docs/superpowers/` 2026-07-06 至 2026-07-12 plan / spec / QA milestone 日期稽核，記錄 Git closeout、是否需改名、V2.0 plan/spec 最新狀態與 historical replay 對 Phase 1 的可用邊界。 |
 | [FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md](../06_qa/FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md) | Testing QA Agent 使用的 feature-to-test 測試路由與決策矩陣（測試知識庫），不包含 Agent 角色定義。 |
 | [POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md](../06_qa/POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md) | Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 QA 紀錄，包含 schema safety、focused tests、限制與下一增量。 |
 | [POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md](../06_qa/POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md) | Post-V1 Evidence Importers / Capture Pipeline v1 QA 紀錄，包含 importer 支援邊界、CLI dry-run / confirm、unsupported source 與限制。 |
