@@ -1,6 +1,6 @@
 # V1.1 至 V2.0 版本路線圖
 
-> **最後更新**：2026-07-05
+> **最後更新**：2026-07-06
 > **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 的版本化交付 companion。6M Roadmap 仍是未來 6 個月工程主線權威；本文件負責把「V1 已完成、main 可運行、資料可信度仍在驗證中」之後的工作拆成可討論、可 commit、可驗收的 V1.1 至 V2.0 節奏。外部開源專案對照與資料源優先序見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)。
 
 ---
@@ -36,6 +36,7 @@
 | V1.7 | Screening Matrix & Negative Evidence | 推薦、排除、低流動性與資料降級需要同等 evidence 地位 | 已完成 v1：pass / fail / degraded / skipped / missing matrix、Why Not / Liquidity payload 保存、screening matrix events、source coverage warning |
 | V1.8 | Portfolio Construction & Execution Trace Sandbox | 組合配置與執行落差需要研究 sandbox，但不能自動交易 | 已完成 v1：research-only allocation / constraints、整數 bp / Decimal / lot sizing、virtual order lifecycle 與 sample inspection CLI |
 | V1.9 | Read-only Agent / MCP Evidence Access | AI 可以協助查 evidence 與覆盤，但不能繞過治理 | 已完成 v1：read-only service、`twstock-evidence-access` MCP、Evidence / Research Run / Portfolio Review saved evidence 查詢、permission model、AI report template |
+| Pre-V2.0A | Historical Replay Evidence Quality Audit | 半年度 replay 可提前提供 V2.0 input，但 reference return 品質必須先驗證 | 已完成：benchmark return / excess 已在 `_reference_fix` replay 的 ready outcomes 全部補齊；industry 大量缺值保留為 payload gap |
 | V2.0 | Unified Decision Workbench | V1.5-V1.9 讓資料、因子、負面 evidence、portfolio sandbox 與 AI 邊界成熟後，資訊架構可以重整 | 形成單一決策工作台，舊 Tab 轉為 drill-down 或專家模式 |
 
 ---
@@ -278,6 +279,34 @@ V1.9 不讓 LLM 直接輸出買賣指令，也不把 AI-generated thesis 視為 
 
 ---
 
+## 7.1 Pre-V2.0A：Historical Replay Evidence Quality Audit
+
+狀態：2026-07-06 已完成。此階段不是新策略版本，也不是 V2.0 UI implementation；它只處理半年度 historical replay 產物能否作為 V2.0 Phase 1 read-only Workbench 的可信輸入。
+
+本次 closeout 結論：
+
+1. 初版 replay 的 ready outcomes 全部缺 `benchmark_return_bp` / `benchmark_excess_bp` / `industry_return_bp` / `industry_excess_bp`，根因是 replay events 沒有 `benchmark_id` / `industry_benchmark_id`，且 `market_indices` 實際 close 位於 `收盤價`，不是原 lookup 期待的 named `指數名稱` + `收盤指數`。
+2. `ForwardPerformanceService` 已修正 reference lookup：missing benchmark 預設 `TAIEX`，market index 支援未命名市場序列與 `收盤價` fallback，industry index 支援保守 sector alias mapping。
+3. 新 `_reference_fix` replay 涵蓋 118 trading days、118,056 events、472,224 outcomes；ready outcomes `380,520` 全部已有 benchmark return / excess。
+4. industry return / excess 只有 `2,029` 個 ready outcomes 可用，因為舊 recommendation payload 大多沒有 sector / industry；其餘保持 `DEGRADED` + `missing_industry_benchmark`，不得填 0 或回補舊 payload。
+5. `source_missing_screening_matrix` 仍為 118/118 days，作為 V2.0 Workbench 必須揭露的 payload gap。
+
+可用於 V2.0 Phase 1 的內容：
+
+- source gap / payload gap summary。
+- event family 與 outcome maturity distribution。
+- raw forward return 與 benchmark excess 的 quality-aware summary。
+- industry gap、screening matrix gap 與 simulated scheduler boundary。
+
+不可用於：
+
+- 宣稱策略、推薦或 Profile 有投資有效性。
+- 關閉 Phase 0 的 weekly history / multi-day dry-run 真實時間 gate。
+- 啟用 production scheduler。
+- 自動 lifecycle action、portfolio action 或 broker order。
+
+---
+
 ## 8. V2.0：Unified Decision Workbench
 
 建議定位：V2.0 是資訊架構重整，不是單純增加功能。
@@ -296,6 +325,7 @@ V2.0 啟動條件：
 - V1.2 至少完成 execution / microstructure 的核心 credibility gate，避免 Workbench 把不可信回測包裝得太漂亮。
 - V1.3 已有足夠 evidence operations 節奏，知道哪些 dashboard 真的有用、哪些只是噪音。
 - V1.5 至 V1.9 已完成第一版，但進入 V2.0 前仍需多週 weekly review history、人工 Evidence Review UI smoke closeout、multi-day dry-run record、真實 watchlist / portfolio workflow 樣本與 read-only Agent report 樣本。
+- Pre-V2.0A Historical Replay Evidence Quality Audit 已完成，`_reference_fix` replay 可作 Phase 1 read-only prototype 的 quality-aware input；Workbench 必須標示 `historical_replay` / `simulated_scheduler`、benchmark 已可用、industry / screening matrix 仍為 payload gap。
 - persisted recommendation、Daily Decision Desk snapshot、watchlist / portfolio evidence source gaps 必須收斂到可解釋狀態；production scheduler 若要進入 V2.0 設計，需先有 explicit approval / backup / rollback。
 - 有 migration / rollback 計畫，保留舊 Tab 或專家模式，不讓資訊架構重整破壞既有研究能力。
 
@@ -316,7 +346,8 @@ V2.0 啟動條件：
 9. V1.6 factor batch：cross-sectional factor snapshot repository、FactorGate-backed pipeline、concept basket available-date gate 與 attribution summary CLI。✅ 已完成 v1
 10. V1.7 negative evidence batch：screening matrix、Why Not / Liquidity payload 完整持久化與 negative evidence forward outcome。✅ 已完成 v1
 11. V1.8 / V1.9 sandbox batch：portfolio construction sandbox、virtual execution trace 與 read-only MCP / Agent evidence access 已完成 v1。
-12. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
+12. Pre-V2.0A replay evidence quality audit：benchmark reference return blocker 已解除，industry / screening matrix payload gap 保留為 V2.0 設計輸入。✅ 已完成
+13. V2.0 design spike：只做資訊架構 prototype / spec，不急著改主 UI。
 
 ---
 
@@ -325,11 +356,13 @@ V2.0 啟動條件：
 V1.1 至 V1.9 v1 已收尾，下一步不應直接宣稱 Profile、factor rank、negative evidence、portfolio sandbox 或 AI evidence summary 有效，也不應把降級、配置或 AI 結論做成自動按鈕。外部專案對照後，比較穩的順序是：
 
 - V1.3 已把 promote / hold / demote_candidate / retire_candidate 相關 evidence 轉成可審核 weekly package 與 action item planning，而不是自動升降級。
-- V1.4 已把 weekly review 封存為可回看的 history；V1.5 已補資料可信度與 source capability；V1.6 已把 cross-sectional factor snapshot 做成可追溯治理層；V1.7 已把 why-not / liquidity optional payload warning 轉成完整 negative evidence 與 screening matrix；V1.8 已把 portfolio construction / execution trace 收斂在 research-only sandbox，而不是直接改 `ScoringEngine`、Portfolio position 或 broker order；V1.9 已把 AI evidence access 收斂在 read-only service / MCP 與 report template，而不是 AI 決策。下一步是用 V1.3/V1.4 weekly review 實際跑數週，觀察哪些 dashboard、blocking gaps、factor attribution、negative evidence、portfolio diagnostics、read-only AI summary 與 action item 真的有用。
-- V2.0 才評估 Unified Decision Workbench 是否要整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
+- V1.4 已把 weekly review 封存為可回看的 history；V1.5 已補資料可信度與 source capability；V1.6 已把 cross-sectional factor snapshot 做成可追溯治理層；V1.7 已把 why-not / liquidity optional payload warning 轉成完整 negative evidence 與 screening matrix；V1.8 已把 portfolio construction / execution trace 收斂在 research-only sandbox，而不是直接改 `ScoringEngine`、Portfolio position 或 broker order；V1.9 已把 AI evidence access 收斂在 read-only service / MCP 與 report template，而不是 AI 決策。Pre-V2.0A 已把 historical replay 的 benchmark reference return blocker 拆掉，剩下 industry / screening matrix 屬 payload gap。
+- 現在可開始 V2.0 Phase 1 read-only Unified Decision Workbench design spike：第一屏採 Daily Decision task view，Evidence Review 作 drill-down Evidence mode，safe dry-run / daily flow 作 checklist。Phase 1 可讀 `_reference_fix` replay summary，但只呈現 source gap、payload gap、event family、outcome maturity 與 quality boundary，不做績效結論。
+- V1.3/V1.4 weekly review、multi-day dry-run、真實 watchlist / portfolio workflow 樣本仍需背景累積；這些 gate 不被 replay 取代。
 
 ## 11. 更新記錄
 
+- 2026-07-06：完成 Pre-V2.0A Historical Replay Evidence Quality Audit；reference return 修正後 `_reference_fix` replay 的 ready benchmark return / excess 已補齊，industry 大量缺值確認為 recommendation payload gap。V2.0 Phase 1 read-only design spike 可開始，但 production scheduler 與投資有效性 gate 不變。
 - 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline v1 closeout，標記 snapshot storage、FactorGate-backed pipeline、concept basket available-date gate、rank / quantile persistence 與 attribution summary CLI 已完成；後續由 V1.7 Negative Evidence 承接。
 - 2026-07-05：完成 V1.7 Screening Matrix & Negative Evidence v1 closeout，標記 `screening_matrix_json`、pass / fail / degraded / skipped / missing matrix、Why Not / Liquidity payload、screening matrix events 與 source coverage warning 已完成；當時下一步改為 V1.8 / V1.9 research-only / read-only 邊界準備。
 - 2026-07-05：完成 V1.8 Portfolio Construction & Execution Trace Sandbox v1 closeout，標記 research-only allocation、整數 bp / Decimal / lot sizing、virtual execution trace 與 sample CLI 已完成；下一步改為 V1.9 read-only AI evidence access 準備。

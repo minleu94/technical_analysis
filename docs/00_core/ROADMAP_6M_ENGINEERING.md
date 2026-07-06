@@ -37,11 +37,26 @@
 - **輔助工具**：Historical Evidence Replay 可用 working-copy / replay DB 從歷史交易日逐日重放 Evidence Pipeline，並把事件 metadata 標成 `historical_replay` / `simulated_scheduler`；它只能幫助找 source gap、payload gap 與 V2.0 設計問題，不計入 weekly history 或 multi-day dry-run 的真實時間門檻。
 - **限制**：Production scheduler 繼續維持 `false`，不寫入正式資料，不進行自動交易。
 
+### Phase 0A：Historical Replay Evidence Quality Audit
+**狀態**：2026-07-06 已完成 reference return blocker closeout，可作為 V2.0 Phase 1 的 simulated evidence input。
+- **已驗證產品**：
+  - `historical_replay_2026-01-06_2026-07-06_reference_fix.json` / `.md` / replay DB 已產生。
+  - rerun 範圍為 2026-01-06 至 2026-07-06，共 118 個交易日。
+  - replay events `118,056`，outcomes `472,224`。
+  - ready outcomes `380,520`；benchmark return / excess 已補齊 `380,520 / 380,520`。
+  - industry return / excess 只有 `2,029 / 2,029`，其餘 ready outcomes 保持 `DEGRADED` + `missing_industry_benchmark`，原因是舊 recommendation payload 大多沒有 sector / industry。
+  - `source_missing_screening_matrix` 仍為 `118/118` days；這是舊推薦 payload 真缺口，不回補、不重算。
+- **結論**：
+  - benchmark 全缺已解除，raw forward return 與 benchmark excess 可作 V2.0 evidence quality / maturity 參考。
+  - industry excess 只能在 sector 可映射樣本中使用；Workbench 必須清楚揭露 missing industry payload。
+  - 此 closeout 不代表策略有效、不代表 Phase 0 真實時間 gate 完成、不代表 production scheduler 可啟用。
+
 ### Phase 1：V2.0 Unified Decision Workbench Design Spike
 **目標**：在不改動主 UI 且不新增交易能力的前提下，探索 V2.0 資訊架構。
 - **工作範圍**：
   - 只做資訊架構 (Information Architecture) 與 Read-only Prototype。
   - 梳理決策畫面動線，確認 Daily Decision、Evidence Review 與 Market Watch 合併後的呈現。
+  - 可讀取 Phase 0A 的 `_reference_fix` replay summary 作為 source gap、payload gap、event family、outcome maturity 與 data quality 的參考輸入；不得把 replay 包裝成 production readiness 或策略績效結論。
 - **限制**：不新增交易能力，不改動生產環境 UI。
 
 ### Phase 2：V2.0 Workbench MVP
@@ -84,5 +99,6 @@
 
 ## 4. 更新記錄
 
+- 2026-07-06：完成 Phase 0A Historical Replay Evidence Quality Audit closeout；`ForwardPerformanceService` reference lookup 已修正 missing benchmark 預設 TAIEX、market index `收盤價` fallback 與保守 industry sector mapping。新 `_reference_fix` replay 產物確認 benchmark return / excess 全部填入 ready outcomes，industry 大量缺值保留為 payload gap；V2.0 Phase 1 read-only design spike 可開始，但 Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
 - 2026-07-06：新增 Historical Evidence Replay v1 作為 Phase 0 的 research-only simulated scheduler 輔助工具；可在 working-copy / replay DB 逐日重放歷史 evidence，但不取代 weekly history `0/3`、multi-day dry-run `1/3`、manual approval 或 Phase 5 production scheduler gate。
 - 2026-07-06：重構為 Gate-Based Active Roadmap，將 V1 / Month 1-6 / V1.1-V1.9 的詳細完工紀錄封存至 `docs/09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md`；目前主線改為 Phase 0 evidence accumulation、Phase 1 V2.0 read-only design spike、Phase 2 Workbench MVP、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate。

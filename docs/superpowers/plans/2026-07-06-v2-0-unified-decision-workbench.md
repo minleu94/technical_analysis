@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 完成 V2.0 Unified Decision Workbench Phase 1 read-only prototype：建立 Workbench DTO、唯讀 composer 與 standalone prototype artifact，讓第一屏呈現「今日任務中控台」，Evidence 作為 drill-down mode，Daily Checklist 作為每日流程檢查，不改 production UI、不寫正式 DB、不啟用 scheduler。
+**Goal:** 完成 V2.0 Unified Decision Workbench Phase 1 read-only prototype：建立 Workbench DTO、唯讀 composer 與 standalone prototype artifact，讓第一屏呈現「今日任務中控台」，Evidence 作為 drill-down mode，Daily Checklist 作為每日流程檢查，不改 production UI、不寫正式 DB、不啟用 scheduler。Phase 1 可選擇讀取 `_reference_fix` historical replay JSON summary，作為 source gap、payload gap、outcome maturity 與 quality boundary 的參考輸入。
 
-**Architecture:** 新增 app-layer read-only presentation boundary。`WorkbenchReadOnlyComposer` 只接收既有 DTO / report / sample payload 並轉成 `WorkbenchDashboardDTO`；CLI prototype 只產出 JSON / Markdown artifact。所有資料寫入、scheduler registration、broker/order API、ScoringEngine、推薦重算與 portfolio lifecycle action 都留在 Phase 1 scope 外。
+**Architecture:** 新增 app-layer read-only presentation boundary。`WorkbenchReadOnlyComposer` 只接收既有 DTO / report / sample payload / historical replay summary 並轉成 `WorkbenchDashboardDTO`；CLI prototype 只產出 JSON / Markdown artifact。Historical replay input 先讀 JSON summary，不直接全表掃描 replay DB。所有資料寫入、scheduler registration、broker/order API、ScoringEngine、推薦重算與 portfolio lifecycle action 都留在 Phase 1 scope 外。
 
 **Tech Stack:** Python dataclasses / pytest / argparse / json / 現有 `DecisionDeskSnapshot` 與 `PreV2ReadinessReport`。
 
@@ -14,8 +14,10 @@
 
 - Create: `app_module/workbench_dtos.py`
 - Create: `app_module/workbench_read_only_composer.py`
+- Create: `app_module/workbench_replay_summary.py`
 - Create: `scripts/inspect_v2_workbench_prototype.py`
 - Create: `tests/test_workbench_read_only_composer.py`
+- Create: `tests/test_workbench_replay_summary.py`
 - Create: `tests/test_v2_workbench_prototype_cli.py`
 - Modify: `docs/00_core/PROJECT_SNAPSHOT.md`
 - Modify: `docs/00_core/DEVELOPMENT_ROADMAP.md`
@@ -30,6 +32,8 @@
 - Phase 1 delivers a read-only prototype artifact and composer contract.
 - Phase 1 does not add a Qt tab, top-level production navigation, scheduler button, approval workflow, DB migration, write repository, trading action, order API, position adjustment, strategy score change, backtest result change or external data ingestion.
 - Phase 1 may use sample data in the CLI, but the sample must clearly mark itself as `sample_only`.
+- Phase 1 may read `output/evidence_pipeline/historical_replay_2026-01-06_2026-07-06_reference_fix.json` or another explicit replay JSON summary path. It must label this input as `historical_replay` / `simulated_scheduler`, preserve `DEGRADED` outcome quality, and state that it does not satisfy Phase 0 weekly / multi-day gates.
+- Phase 1 must not read or scan the 3GB replay DB unless a later explicit performance-aware adapter task is approved.
 - If a later worker chooses to expose this inside Qt, that becomes an explicit scope change and must run the UI gates listed in this plan.
 
 ## Task 1: DTO Contract Tests
@@ -358,6 +362,7 @@ def compose(
     decision_snapshot: DecisionDeskSnapshot | None,
     readiness_report: PreV2ReadinessReport,
     agent_report_sample: dict[str, Any] | None = None,
+    historical_replay_summary: dict[str, Any] | None = None,
     source_mode: str = "read_only",
 ) -> WorkbenchDashboardDTO:
 ```
@@ -385,6 +390,7 @@ def compose(
   - research mode limitation
   - readiness limitations
   - agent report warnings
+  - historical replay limitations when `historical_replay_summary` is supplied
   - explicit sentence: `waiting_for_time 不能用單次 smoke 取代`
 - [ ] Keep severity mapping deterministic:
   - `critical` stays `critical`
@@ -482,11 +488,86 @@ git add tests/test_workbench_read_only_composer.py
 git commit -m "test: guard v2 workbench read-only boundary"
 ```
 
+## Task 5A: Historical Replay Summary Adapter
+
+- [ ] Create `tests/test_workbench_replay_summary.py`.
+- [ ] Add tests for loading the `_reference_fix` replay JSON summary without opening the replay DB.
+
+Required test snippets:
+
+```python
+import json
+from pathlib import Path
+
+from app_module.workbench_replay_summary import load_historical_replay_summary
+
+
+def test_load_historical_replay_summary_marks_simulated_and_degraded(tmp_path: Path) -> None:
+    path = tmp_path / "replay.json"
+    path.write_text(
+        json.dumps(
+            {
+                "replay_mode": "historical_replay",
+                "source_label": "simulated_scheduler",
+                "start_date": "2026-01-06",
+                "end_date": "2026-07-06",
+                "totals": {
+                    "days": 118,
+                    "events_seen": 118056,
+                    "outcomes_created": 472224,
+                },
+                "final_outcome_summary": {
+                    "pending_insufficient_future_data": 91488,
+                    "missing_benchmark": 0,
+                    "missing_industry_benchmark": 378491,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = load_historical_replay_summary(path)
+
+    assert summary["replay_mode"] == "historical_replay"
+    assert summary["source_label"] == "simulated_scheduler"
+    assert summary["does_not_satisfy_phase0_gate"] is True
+    assert summary["production_scheduler_allowed"] is False
+    assert "missing_industry_benchmark" in summary["warnings"]
+```
+
+- [ ] Implement `app_module/workbench_replay_summary.py`.
+- [ ] Adapter rules:
+  - read JSON only;
+  - do not open `.db` files;
+  - preserve replay mode, source label, date range, totals and final outcome summary;
+  - expose `does_not_satisfy_phase0_gate=True`;
+  - expose `production_scheduler_allowed=False`;
+  - mark `missing_industry_benchmark`, `source_missing_screening_matrix`, `simulated_scheduler` and `not_production_readiness` warnings when present.
+- [ ] Extend `WorkbenchReadOnlyComposer.compose(..., historical_replay_summary=...)` so Evidence summary can show:
+  - replay days / event count / outcome count;
+  - benchmark reference returns available when `missing_benchmark == 0`;
+  - industry gap when `missing_industry_benchmark > 0`;
+  - explicit `historical_replay` and `simulated_scheduler` labels.
+
+Run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_workbench_replay_summary.py tests/test_workbench_read_only_composer.py -q -o addopts=
+```
+
+Commit:
+
+```powershell
+git add app_module/workbench_replay_summary.py tests/test_workbench_replay_summary.py app_module/workbench_read_only_composer.py tests/test_workbench_read_only_composer.py
+git commit -m "feat: add v2 workbench replay summary input"
+```
+
 ## Task 6: Prototype CLI Tests
 
 - [ ] Create `tests/test_v2_workbench_prototype_cli.py`.
 - [ ] Test JSON sample output.
 - [ ] Test Markdown sample output.
+- [ ] Test optional `--replay-summary-json` reads `_reference_fix` JSON summary and labels it as simulated historical replay.
 - [ ] Test optional `--output` writes only the requested artifact path and does not touch evidence DB paths.
 
 Required test snippets:
@@ -582,9 +663,11 @@ Expected: fails with missing script.
   - `--sample`: required for Phase 1 execution.
   - `--format json|markdown`: default `json`.
   - `--output PATH`: optional artifact destination.
+  - `--replay-summary-json PATH`: optional `_reference_fix` historical replay JSON summary input; allowed only as read-only JSON, not as replay DB path.
 - [ ] Reject non-sample execution with exit code `2` and message explaining that Phase 1 has no production DB reader.
 - [ ] Build sample `DecisionDeskSnapshot`, `PreV2ReadinessReport` and agent report payload inside the script.
-- [ ] Use `WorkbenchReadOnlyComposer().compose()` with the sample snapshot, readiness report and agent report payload created in the script; pass `source_mode="sample_only"`.
+- [ ] If `--replay-summary-json` is supplied, call `load_historical_replay_summary()` and pass it into `WorkbenchReadOnlyComposer().compose(..., historical_replay_summary=...)`.
+- [ ] Use `WorkbenchReadOnlyComposer().compose()` with the sample snapshot, readiness report, optional replay summary and agent report payload created in the script; pass `source_mode="sample_only"` unless a replay summary path is supplied, in which case use `source_mode="sample_plus_historical_replay"`.
 - [ ] JSON output should be `json.dumps(payload, ensure_ascii=False, indent=2)`.
 - [ ] Markdown output should include:
   - title
@@ -646,10 +729,11 @@ git commit -m "feat: add v2 workbench prototype cli"
 
 - [ ] Update `docs/01_architecture/system_architecture.md`:
   - Add Workbench Phase 1 read-only presentation boundary.
-  - Document data flow from existing DTO/report to composer to prototype artifact.
+  - Document data flow from existing DTO/report/replay summary to composer to prototype artifact.
   - State no reverse call into writable repositories, scheduler or broker/order APIs.
 - [ ] Update `docs/07_guides/APPLICATION_MANUAL.md`:
   - Add a developer/prototype section for `scripts/inspect_v2_workbench_prototype.py --sample`.
+  - Explain optional `--replay-summary-json` and its historical / simulated / non-production boundary.
   - State JSON/Markdown output interpretation.
   - State safety limits: sample-only, read-only, scheduler off, no trading recommendation.
 - [ ] Update `docs/00_core/PROJECT_SNAPSHOT.md`:
@@ -682,7 +766,7 @@ git commit -m "docs: close out v2 workbench phase 1 prototype"
 - [ ] Run focused tests:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_workbench_read_only_composer.py tests/test_v2_workbench_prototype_cli.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_workbench_read_only_composer.py tests/test_workbench_replay_summary.py tests/test_v2_workbench_prototype_cli.py -q -o addopts=
 ```
 
 Expected: all tests pass.
@@ -690,7 +774,7 @@ Expected: all tests pass.
 - [ ] Run syntax checks:
 
 ```powershell
-.\.venv\Scripts\python.exe -m py_compile app_module\workbench_dtos.py app_module\workbench_read_only_composer.py scripts\inspect_v2_workbench_prototype.py
+.\.venv\Scripts\python.exe -m py_compile app_module\workbench_dtos.py app_module\workbench_read_only_composer.py app_module\workbench_replay_summary.py scripts\inspect_v2_workbench_prototype.py
 ```
 
 Expected: command exits with code 0.
@@ -744,6 +828,7 @@ Expected: no whitespace errors; diff includes only Phase 1 prototype, tests, doc
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --format markdown
+.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --replay-summary-json output\evidence_pipeline\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
 ```
 
 Expected output includes `# V2.0 Unified Decision Workbench Prototype`, `production_scheduler_allowed: false`, `writes_allowed: false`, `今日待判讀`, `Evidence mode` and `不是交易建議`.

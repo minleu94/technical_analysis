@@ -14,6 +14,7 @@ V2.0 Phase 1 建立 Unified Decision Workbench 的唯讀設計原型，先驗證
 - 「今日任務中控台」作為 V2.0 第一屏。
 - Evidence mode 作為 drill-down，承接現有 Evidence Review、Forward Evidence、Live vs Research Gap、Signal Decay、Decision Quality 與覆盤歷史。
 - Daily Checklist 作為每日流程檢查區，承接 freshness check、evidence dry-run、manual review note 與 scheduler-off 狀態揭露。
+- Historical Replay `_reference_fix` JSON summary 可作 Phase 1 的 evidence quality input，用來呈現 source gap、payload gap、event family、outcome maturity、benchmark availability 與 industry gap。
 - Prototype 可使用 mock data、read-only adapter 或既有 DTO snapshot，不寫正式 DB。
 - 設計文件需可直接轉成 Phase 1 read-only prototype implementation plan。
 
@@ -103,6 +104,7 @@ Workbench 只能讀取下列已存在或可唯讀提供的資料：
 - Evidence Review read models。
 - Evidence Operations weekly review history。
 - Pre-V2 readiness summary。
+- Historical Replay `_reference_fix` JSON summary；只能讀 JSON summary，不直接掃 replay DB。
 - Portfolio alert summary / attribution。
 - Watchlist trigger summary。
 - Read-only Agent report sample。
@@ -130,6 +132,9 @@ Read-only prototype UI / design artifact
 - 缺 Daily Decision snapshot：標示 source missing，不讀 UI state 偽造。
 - evidence sample 不足：顯示 insufficient sample，不解讀為策略成功或失敗。
 - `waiting_for_time`：明確說明需要真實週期累積，不可用 fixture 或手動改表替代。
+- Historical replay input：必須標示 `historical_replay` / `simulated_scheduler`，並清楚揭露它不滿足 Phase 0 weekly / multi-day gate。
+- Benchmark reference return：`_reference_fix` replay 中 benchmark return / excess 可呈現為可用，但不得轉成投資有效性結論。
+- Industry reference return：大量缺值時顯示 `missing_industry_benchmark` / `DEGRADED`，說明原因是舊 recommendation payload 缺 sector / industry，不填 0。
 - 舊 recommendation 缺 screening matrix / payload：只列 warning / diagnostic，不回補、不重算。
 - scheduler 狀態：在 Phase 5 approval 前固定顯示 production write-mode off。
 
@@ -155,6 +160,7 @@ Phase 1 設計驗收：
 ## Phase 1 決策
 
 - Prototype 先採 standalone artifact / read-only composer 設計，不掛入正式主 UI navigation。
+- Phase 1 可讀取 `_reference_fix` replay summary 輔助設計 Evidence mode，但第一屏仍以「今日決策任務」為產品重心；replay 只提供 simulated evidence maturity 與 gap context。
 - Phase 2 MVP 預設評估「漸進改造現有 Daily Decision Desk」優先於新增第 9 個頂層工作區，避免工作區數量繼續膨脹；最終仍需 Phase 0 gate 後再定案。
 - Phase 1 不新增 append-only manual note repository；review item 先只在 prototype DTO / mock state 呈現 open / done / blocked。
 

@@ -861,6 +861,13 @@ No-look-ahead 邊界：
 - Forward outcome 計算會以 `data_as_of_date` 限制價格可見日；`final` 模式以 replay 最後一個交易日作上限，`daily` 模式以每日 replay date 作上限。在可見日尚未成熟的 5 / 10 / 20 / 60 日 window 仍會維持 pending，不會提前看未來價格。
 - Replay report 只能用來看 source gap、payload gap、decision workflow 與 V2.0 workbench 設計方向；不計入 weekly history `0/3`、multi-day dry-run `1/3`、manual approval 或 production scheduler gate，也不是投資有效性證明。
 
+結果判讀：
+
+- 2026-07-06 reference return fix 後，若 event 沒有 `benchmark_id`，forward outcome 會以 `TAIEX` 作為市場 benchmark default；`market_indices` 可使用未命名市場序列，並在 `收盤指數` 缺值時 fallback 到 `收盤價`。
+- Industry return / excess 不會推估未知產業；只有 event 有 `industry_benchmark_id` 或 `sector` 且可保守映射到 `industry_indices` 時才會填入。缺值會保留 `NULL` 與 `missing_industry_benchmark` warning，不會填 0。
+- `_reference_fix` replay 產物中，ready benchmark return / excess 已可用；industry 大量 `DEGRADED` 代表舊 recommendation payload 缺 sector / industry，不代表 raw forward return 或 benchmark excess 壞掉。
+- `source_missing_screening_matrix` 代表舊 recommendation result 沒有當時的 screening matrix payload；系統不回補、不重算舊結果。
+
 V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已保存的 daily factor snapshot。這個 CLI 不建立 DB、不寫 snapshot、不重算 scoring；若指定的 DB 不存在會以錯誤結束。snapshot 只會在其他受控 workflow 明確呼叫 `CrossSectionalFactorPipeline` / `CrossSectionalFactorRepository` 保存後才存在。
 
 ```powershell
@@ -1240,6 +1247,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access 操作說明，標示 `twstock-evidence-access` 只讀 evidence / source trace / quality / warnings，不寫 DB、不改策略、不下單、不套用 lifecycle action。
 - 2026-07-06：新增 Pre-V2 readiness inspection CLI 操作說明，標示它只做 read-only 非排程前置檢查，不取代多週 history / multi-day dry-run / scheduler approval。
 - 2026-07-06：新增 Historical Evidence Replay 操作說明，標示 replay 只在 working-copy / replay DB 逐日重放 evidence，事件會標示 `historical_replay` / `simulated_scheduler`，不取代真實 scheduled dry-run、weekly history、多日 dry-run 或 production scheduler approval。
+- 2026-07-06：補充 Historical Replay reference return fix 結果判讀，說明 TAIEX benchmark fallback、market `收盤價` fallback、industry payload gap 與 `source_missing_screening_matrix` 限制。
 - 2026-07-03：新增 V1.3 Evidence Operations weekly review CLI 操作說明，標示 manual approval package、action item planning、production scheduler disabled 與 signal decay candidate 不自動套用 lifecycle action。
 - 2026-07-02：完成 V1.1 workflow bridge v1 操作說明，補充推薦 Profile 進階摘要、buy / sell score 與權重差異、推薦回放是 Profile / Config 歷史重播，以及升降級判讀需經 Research Run / Evidence 與人工 lifecycle gate。
 - 2026-06-23：完成 Healthcheck Batch 2 計畫範圍實作後的操作說明：Daily Decision Desk answer-first dashboard、Smart Money 5 / 20 / 60 日語意診斷、quantity concentration 與股票焦點下鑽。
