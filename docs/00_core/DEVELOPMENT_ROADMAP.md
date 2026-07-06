@@ -52,6 +52,7 @@
 - Post-V1 V1.7 Screening Matrix & Negative Evidence v1 已完成：Recommendation result 保存 `screening_matrix_json`、pass / fail / degraded / skipped / missing matrix、Why Not / Liquidity payload 與 screening matrix evidence events；舊 recommendation 缺 matrix / payload 時只回 diagnostic，不回補、不重算。
 - Post-V1 V1.8 Portfolio Construction & Execution Trace Sandbox v1 已完成：research-only allocation service 支援等權、分數權重、inverse-volatility、max position cap、整數 bp 權重、Decimal 金額與 lot sizing；virtual trace service 產生 created / submitted / partially_filled / filled / rejected 事件；不串 broker、不寫正式資料、不啟用 scheduler。
 - Post-V1 V1.9 Read-only Agent / MCP Evidence Access v1 已完成：新增 app-layer read-only evidence access service 與 `twstock-evidence-access` MCP server，可查 Evidence events/outcomes、forward summary、Research Run metadata、Portfolio Review saved evidence、permission model 與 AI report template；缺 DB / table 只回 diagnostics，不建 schema、不寫 DB、不改策略、不下單、不套用 lifecycle action。
+- Pre-V2 非排程 readiness inspector 已完成：新增 read-only service / CLI 彙總 weekly history、multi-day dry-run record、source gaps 與 Agent report sample；時間型 gate 不足時維持 `waiting_for_time`，`production_scheduler_allowed=false`。
 - Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成：推薦 Profile / 回放 workflow bridge、Profile replay comparison、訓練 / 獨立驗證期間、推薦回放 rolling risk、microstructure preflight、relative attribution、weekly evidence operations、manual approval package、action item planning、weekly review history 與 Research Lab 覆盤歷史子頁已落地；這些仍是 research credibility / evidence operations diagnostics，不代表投資有效性。
 - 後續要提升「準確度」必須先建立實證比較、factor attribution、資料因子層與實驗治理，不應直接把新資料硬塞進 scoring engine。
 
@@ -92,6 +93,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 
 6. **P1：V2.0 前置補強**
    - V1.5 Data Credibility & Corporate Action Gate、V1.6 Cross-sectional Factor Pipeline、V1.7 Screening Matrix & Negative Evidence、V1.8 Portfolio Construction / Execution Trace Sandbox 與 V1.9 Read-only Agent / MCP Evidence Access 已完成 v1。
+   - 2026-07-06 已補 `scripts/inspect_pre_v2_readiness.py` / `PreV2ReadinessService`，可唯讀彙總 weekly history、multi-day record、source gaps 與 read-only Agent report sample；它只把非排程前置條件變成可重跑檢查，不解除多週 / 多日 / manual smoke / true workflow sample 門檻。
    - 進入 V2.0 前必須補齊：多週 weekly evidence operations + history 實際紀錄、Evidence Review 人工 UI smoke closeout、multi-day dry-run record、真實 watchlist / portfolio workflow 樣本、persisted recommendation / Daily Decision Desk snapshot source gaps 收斂、read-only Agent report 樣本審核，以及 production scheduler 若要前進時的 explicit design / approval / rollback 文件。
    - `cuFOLIO`、強化學習、券商自動下單與 SQLite async / split DB 暫不納入近期 Roadmap，除非有量測證據顯示現有計算或寫入模式成為真實瓶頸。
 
@@ -127,6 +129,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 
 ## 7. 更新記錄
 
+- 2026-07-06：新增 Pre-V2 非排程 readiness inspector，將 weekly history、multi-day record、source gaps 與 read-only Agent report sample 彙總成可重跑檢查；多週 / 多日 / manual smoke / scheduler approval 門檻仍未解除。
 - 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline v1，factor rank / quantile 只作研究 attribution，不改 `ScoringEngine`、不啟用 scheduler；後續由 V1.7 Negative Evidence 承接。
 - 2026-07-05：完成 V1.7 Screening Matrix & Negative Evidence v1，當時 Roadmap Hub 下一步改為 evidence accumulation + V1.8 / V1.9 準備；screening matrix 與 Why Not / Liquidity payload 只作研究追溯，不改 `ScoringEngine`、不回補舊結果、不啟用 scheduler。
 - 2026-07-05：完成 V1.8 Portfolio Construction & Execution Trace Sandbox v1，Roadmap Hub 下一步改為 evidence accumulation + V1.9 準備；portfolio sandbox 只作研究配置與虛擬 execution trace，不串 broker、不寫正式資料、不啟用 scheduler。

@@ -1,6 +1,6 @@
 ﻿# 系統架構
 
-> **最後更新**：2026-07-05
+> **最後更新**：2026-07-06
 > **定位**：本文件是目前模組邊界、依賴方向、資料流與高風險技術契約的架構權威。歷史遷移過程不在本文件維護。
 
 ## 1. 系統定位
@@ -109,7 +109,7 @@ Application Services / DTO / Repository
 | 保存與版本 | `backtest_repository.py`、`recommendation_repository.py`、`strategy_version_service.py`、`preset_service.py`、`universe_service.py` |
 | Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py`、`portfolio_construction_service.py`、`portfolio_execution_trace_service.py` |
 | Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`strategy_lifecycle_repository.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
-| Post-V1 evidence | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
+| Post-V1 evidence | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`agent_evidence_access_service.py`、`pre_v2_readiness_service.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
 | Runtime | `runtime_services/`、`dtos/runtime_dtos.py` |
 
 `app_module` 不依賴 `ui_app`。Legacy Tkinter UI 不是目前 service 架構的一部分。
@@ -137,6 +137,8 @@ V1.7 Screening Matrix & Negative Evidence v1 延伸既有 Recommendation result 
 V1.8 Portfolio Construction & Execution Trace Sandbox v1 新增 `portfolio_construction_dtos.py`、`PortfolioConstructionService`、`PortfolioExecutionTraceService` 與 `scripts/inspect_portfolio_sandbox.py`。Construction service 位於 application layer，接收研究候選與資金參數，輸出 research-only allocation result；權重使用整數 bp，金額使用 `Decimal`，股數與 lot sizing 使用整數，不在 service 內新增 broker order、正式持倉或 scheduler。支援 `equal_weight`、`score_weight` 與 `inverse_volatility` 候選形狀，並以 diagnostics 揭露 max position cap、missing volatility、lot sizing residual cash。Execution trace service 只把 allocation result 轉成 `created`、`submitted`、`partially_filled`、`filled`、`rejected` 虛擬事件，事件固定 `research_only=true`、`source_type=portfolio_sandbox`；它不依賴 `portfolio_module` 帳務、不寫 SQLite、不接券商 API，也不代表實際成交。
 
 V1.9 Read-only Agent / MCP Evidence Access v1 新增 `app_module/agent_evidence_access_service.py` 與 `mcp_servers/evidence_access_server.py`。`AgentEvidenceAccessService` 是 app-layer 唯讀查詢面，查 Evidence events/outcomes、Forward Performance summary、Research Run metadata、Live Research Gap observations 與 Strategy Lifecycle evidence；Evidence store 走既有 `ReadOnlyEvidenceEventRepository`，Research Run / Portfolio Review saved evidence 走 SQLite `mode=ro` 與 `PRAGMA query_only=ON`。缺 DB 或缺 table 時只回 diagnostics，不建立 schema、不呼叫 writable repository migration。MCP server 只包裝 service 與 permission/report template，不直接操作 SQLite；AI summary 必須引用 evidence rows、quality、warnings 與 source trace，不得寫回 DB、修改策略、下單或套用 lifecycle action。
+
+Pre-V2 readiness inspector 新增 `app_module/pre_v2_readiness_service.py` 與 `scripts/inspect_pre_v2_readiness.py`，作為 V2.0 設計前的 app-layer 唯讀檢查面。Service 以 read-only SQLite URI / `PRAGMA query_only=ON` 直接檢查 weekly review history、Daily Decision Desk durable snapshot 與 persisted recommendation payload，以 markdown parser 檢查 multi-day dry-run record，並透過 `AgentEvidenceAccessService` 產出 read-only Agent report sample。它不建立 schema、不呼叫 writable repository migration、不寫 evidence、不觸發 pipeline confirm、不建立 scheduler；`production_scheduler_allowed` 固定為 false，時間型 gate 不足時只輸出 `waiting_for_time`。
 
 Healthcheck Batch 4 新增 `research_result_presentation.py` 作為 Research Lab 結果頁呈現邊界。它只把已產生的推薦回放 summary、Train-Test report、Walk-forward fold summary 轉成 UI 文案與可靠度提示，不重跑回測、不重新抓取目前資料、不改變交易或績效計算。Train-Test / Walk-forward 樣本可靠度提示只讀交易數、Fold 數、OOS 與 consistency 等已存在結果 metadata；Registry 比較仍只讀已保存 metadata、equity curve 與 benchmark_results。Qt UI 可使用這些 helper 顯示「樣本不足，不宜作正式策略判斷」、資金使用與 Monte Carlo 語意，但不得把提示升級成交易建議、自動下單或持倉調整。
 
@@ -523,6 +525,7 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-07-06：新增 Pre-V2 readiness inspector 架構同步，確認 `PreV2ReadinessService` 只做 weekly history / multi-day record / source gaps / Agent report sample 唯讀檢查，不建立 schema、不寫 evidence、不啟用 scheduler。
 - 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline v1 架構同步，新增 snapshot DTO / repository / migration、FactorGate-backed pipeline、concept basket available-date gate、rank / quantile persistence 與 read-only attribution summary CLI；保持 application governance layer，不改 scoring、不啟用 scheduler。
 - 2026-07-05：完成 V1.7 Screening Matrix & Negative Evidence v1 架構同步，新增 Recommendation result screening matrix、negative evidence payload capture、screening matrix events 與 source coverage warning；只消費已保存 payload，不回補、不重算、不改 scoring、不啟用 scheduler。
 - 2026-07-04：文件架構補上 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`，作為外部開源專案參考、資料源補強優先序與 V1.5-V2.0 版本形狀 companion；本文件仍只維護目前模組邊界與資料流。
