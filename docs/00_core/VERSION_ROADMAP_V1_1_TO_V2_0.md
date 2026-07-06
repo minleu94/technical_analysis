@@ -347,7 +347,7 @@ V2.0 啟動條件：
 10. V1.7 negative evidence batch：screening matrix、Why Not / Liquidity payload 完整持久化與 negative evidence forward outcome。✅ 已完成 v1
 11. V1.8 / V1.9 sandbox batch：portfolio construction sandbox、virtual execution trace 與 read-only MCP / Agent evidence access 已完成 v1。
 12. Pre-V2.0A replay evidence quality audit：benchmark reference return blocker 已解除，industry / screening matrix payload gap 保留為 V2.0 設計輸入。✅ 已完成
-13. V2.0 Phase 1 design spike / read-only prototype：資訊架構 prototype / spec 與 sample CLI 已完成；不急著改主 UI。
+13. V2.0 Phase 1 design spike / read-only prototype：資訊架構 prototype / spec、sample CLI 與 formal read-only source adapter 已完成；不急著改主 UI。
 
 ---
 
@@ -357,13 +357,14 @@ V1.1 至 V1.9 v1 已收尾，下一步不應直接宣稱 Profile、factor rank�
 
 - V1.3 已把 promote / hold / demote_candidate / retire_candidate 相關 evidence 轉成可審核 weekly package 與 action item planning，而不是自動升降級。
 - V1.4 已把 weekly review 封存為可回看的 history；V1.5 已補資料可信度與 source capability；V1.6 已把 cross-sectional factor snapshot 做成可追溯治理層；V1.7 已把 why-not / liquidity optional payload warning 轉成完整 negative evidence 與 screening matrix；V1.8 已把 portfolio construction / execution trace 收斂在 research-only sandbox，而不是直接改 `ScoringEngine`、Portfolio position 或 broker order；V1.9 已把 AI evidence access 收斂在 read-only service / MCP 與 report template，而不是 AI 決策。Pre-V2.0A 已把 historical replay 的 benchmark reference return blocker 拆掉，剩下 industry / screening matrix 屬 payload gap。
-- V2.0 Phase 1 read-only Unified Decision Workbench prototype slice 已完成：第一屏採 Daily Decision task view，Evidence Review 作 drill-down Evidence mode，safe dry-run / daily flow 作 checklist；sample CLI 可讀 `_reference_fix` replay JSON summary，但只呈現 source gap、payload gap、event family、outcome maturity 與 quality boundary，不做績效結論。
-- 下一步是 Phase 2 前的 background evidence / formal read-only source 設計，讓 prototype 從 `--sample` 推進到可控資料來源；主 UI 整合、正式 DB reader、scheduler approval 與 lifecycle action 仍不得直接跳過 gate。
+- V2.0 Phase 1 read-only Unified Decision Workbench prototype slice 與 formal read-only source adapter 已完成：第一屏採 Daily Decision task view，Evidence Review 作 drill-down Evidence mode，safe dry-run / daily flow 作 checklist；CLI 保留 `--sample`，也可用受控 `--db-path` / `--decision-date` 讀 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與 `_reference_fix` replay JSON summary，只呈現 source gap、payload gap、event family、outcome maturity 與 quality boundary，不做績效結論。
+- 下一步是 Phase 2 MVP 的主 UI / background evidence feed 設計；scheduler approval、lifecycle action 與 production write-mode 仍不得直接跳過 gate。
 - V1.3/V1.4 weekly review、multi-day dry-run、真實 watchlist / portfolio workflow 樣本仍需背景累積；這些 gate 不被 replay 取代。
 
 ## 11. 更新記錄
 
-- 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；sample CLI 可輸出 JSON / Markdown 並讀取 `_reference_fix` replay JSON summary，但不讀正式 DB、不寫 evidence、不啟用 scheduler、不產生交易建議。
+- 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；當時 sample CLI 可輸出 JSON / Markdown 並讀取 `_reference_fix` replay JSON summary，不寫 evidence、不啟用 scheduler、不產生交易建議。
+- 2026-07-06：完成 V2.0 Workbench formal read-only source adapter；CLI 從 `--sample` 擴充到受控 `--db-path` / `--decision-date`，讀取 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與 optional replay JSON；missing DB / table 只回 diagnostics，不寫 DB、不解除 weekly history `0/3`、multi-day dry-run `1/3` 或 scheduler gate。
 - 2026-07-06：完成 Pre-V2.0A Historical Replay Evidence Quality Audit；reference return 修正後 `_reference_fix` replay 的 ready benchmark return / excess 已補齊，industry 大量缺值確認為 recommendation payload gap。此項解除 V2.0 Phase 1 read-only design spike 的 replay input blocker，但 production scheduler 與投資有效性 gate 不變。
 - 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline v1 closeout，標記 snapshot storage、FactorGate-backed pipeline、concept basket available-date gate、rank / quantile persistence 與 attribution summary CLI 已完成；後續由 V1.7 Negative Evidence 承接。
 - 2026-07-05：完成 V1.7 Screening Matrix & Negative Evidence v1 closeout，標記 `screening_matrix_json`、pass / fail / degraded / skipped / missing matrix、Why Not / Liquidity payload、screening matrix events 與 source coverage warning 已完成；當時下一步改為 V1.8 / V1.9 research-only / read-only 邊界準備。

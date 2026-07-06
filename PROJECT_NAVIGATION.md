@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
-**版本**：v1.4.6
-**最後更新**：2026-07-05
+**版本**：v1.4.7
+**最後更新**：2026-07-06
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -99,13 +99,18 @@
 
 ### Evidence / Data Credibility Layer（`app_module/` + `data_module/`）
 
-**目前狀態**：Post-V1 evidence layer、V1.5 data credibility gate、V1.6 cross-sectional factor pipeline、V1.7 screening matrix / negative evidence 與 Historical Evidence Replay 已建立；這一層只保存 / 檢查 research evidence、source coverage、factor attribution、negative evidence、historical replay metadata 與資料政策，不產生投資結論、不啟用 production scheduler。
+**目前狀態**：Post-V1 evidence layer、V1.5 data credibility gate、V1.6 cross-sectional factor pipeline、V1.7 screening matrix / negative evidence、Historical Evidence Replay 與 V2.0 Workbench formal read-only source adapter 已建立；這一層只保存 / 檢查 research evidence、source coverage、factor attribution、negative evidence、historical replay metadata、Workbench read-only source summary 與資料政策，不產生投資結論、不啟用 production scheduler。
 
 **主要檔案**：
 - `app_module/evidence_event_*`、`app_module/evidence_capture_service.py`、`app_module/evidence_event_importers.py`
 - `app_module/forward_performance_service.py`、`app_module/forward_performance_read_model.py`
 - `app_module/evidence_pipeline_runner.py`、`app_module/evidence_scheduler_readiness.py`
 - `app_module/historical_evidence_replay.py`
+- `app_module/pre_v2_readiness_service.py`
+- `app_module/agent_evidence_access_service.py`
+- `app_module/workbench_source_service.py`
+- `app_module/workbench_read_only_composer.py`
+- `app_module/workbench_replay_summary.py`
 - `app_module/evidence_source_coverage_service.py`
 - `app_module/recommendation_service.py`、`app_module/dtos/__init__.py`（Recommendation result screening matrix / payload 保存邊界）
 - `app_module/cross_sectional_factor_dtos.py`
@@ -117,7 +122,9 @@
 - `data_module/microstructure_source_preflight.py`
 - `data_module/cross_sectional_factor_migration.py`
 - `scripts/inspect_cross_sectional_factor_snapshot.py`
+- `scripts/inspect_pre_v2_readiness.py`
 - `scripts/replay_historical_evidence_pipeline.py`
+- `scripts/inspect_v2_workbench_prototype.py`
 
 **如果我要改 evidence source coverage / data credibility**：先看 `docs/00_core/PROJECT_SNAPSHOT.md`、`docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md` 與 `docs/01_architecture/system_architecture.md`；程式改動優先從 `EvidenceSourceCoverageService` 或 `data_module/*policy/*registry` 切入，不要在 CLI、runner 或 UI 各自複製分級邏輯。
 
@@ -126,6 +133,8 @@
 **如果我要改 V1.7 screening matrix / negative evidence**：先看 `RecommendationService`、`RecommendationResultDTO`、`RecommendationEvidenceImporter` 與 `EvidenceSourceCoverageService`；screening matrix 必須來自推薦當下保存的 payload，importer 不可事後重算或回補舊 result，也不可把 fail / degraded 變成自動 lifecycle action。
 
 **如果我要改 Historical Evidence Replay**：先看 `HistoricalEvidenceReplayService`、`EvidencePipelineRunner`、`EvidenceCaptureService` 與 `ForwardPerformanceService`；replay DB 必須與 source DB 分離，recommendation result 必須受 `created_at <= decision_date` 限制，outcome price search 必須受 `data_as_of_date` 限制，replay metadata 必須保留 `historical_replay` / `simulated_scheduler`，且 replay 不得計入 production scheduler approval。
+
+**如果我要改 V2.0 Workbench read-only source adapter**：先看 `WorkbenchSourceService`、`WorkbenchReadOnlyComposer`、`PreV2ReadinessService` 與 `AgentEvidenceAccessService`；adapter 只能讀受控 DB path / replay JSON summary，missing DB / table 要變成 diagnostics，不得建立 schema、寫 DB、讀 UI state、重算 scoring / portfolio / backtest、啟用 scheduler 或產生交易建議。
 
 ---
 

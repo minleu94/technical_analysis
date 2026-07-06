@@ -30,8 +30,9 @@ class WorkbenchReadOnlyComposer:
         agent_report_sample: dict[str, Any] | None = None,
         historical_replay_summary: dict[str, Any] | None = None,
         source_mode: str = "read_only",
+        source_diagnostics: tuple[str, ...] = (),
     ) -> WorkbenchDashboardDTO:
-        warnings = self._warnings(readiness_report, agent_report_sample, historical_replay_summary)
+        warnings = self._warnings(readiness_report, agent_report_sample, historical_replay_summary, source_diagnostics)
         return WorkbenchDashboardDTO(
             as_of_date=decision_snapshot.as_of_date if decision_snapshot is not None else date.today(),
             generated_at=datetime.utcnow().replace(microsecond=0),
@@ -249,11 +250,13 @@ class WorkbenchReadOnlyComposer:
         readiness_report: PreV2ReadinessReport,
         agent_report_sample: dict[str, Any] | None,
         historical_replay_summary: dict[str, Any] | None,
+        source_diagnostics: tuple[str, ...] = (),
     ) -> list[str]:
         warnings = [
             "Phase 1 prototype 為 research/read-only 模式，不是交易建議。",
             "waiting_for_time 不能用單次 smoke 取代。",
             *readiness_report.limitations,
+            *source_diagnostics,
         ]
         if agent_report_sample:
             warnings.extend(str(item) for item in agent_report_sample.get("warnings", ()))

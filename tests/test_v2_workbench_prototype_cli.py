@@ -109,3 +109,65 @@ def test_workbench_prototype_cli_writes_requested_output_only(tmp_path: Path) ->
 
     assert output_path.exists()
     assert not untouched_db.exists()
+
+
+def test_workbench_prototype_cli_reads_controlled_db_path_without_sample(tmp_path: Path) -> None:
+    missing_db = tmp_path / "missing" / "evidence.db"
+    record_path = tmp_path / "multi-day.md"
+    record_path.write_text(
+        "\n".join(
+            [
+                "| Date | Data update status | Source coverage status | Dry-run pipeline status | Working-copy confirm smoke status | Events seen | Events inserted in working copy | Outcomes created in working copy | Summary groups | Warnings count | Blocking gaps | Dashboard review completed | Human reviewer notes | Decision |",
+                "|---|---|---|---|---|---:|---:|---:|---:|---:|---|---|---|---|",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/inspect_v2_workbench_prototype.py",
+            "--db-path",
+            str(missing_db),
+            "--data-root",
+            str(tmp_path / "data"),
+            "--output-root",
+            str(tmp_path / "output"),
+            "--decision-date",
+            "2026-07-06",
+            "--multi-day-record-path",
+            str(record_path),
+            "--format",
+            "json",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["source_mode"] == "read_only_sources"
+    assert payload["access_boundary"]["writes_allowed"] is False
+    assert payload["access_boundary"]["production_scheduler_allowed"] is False
+    assert any("decision_desk_snapshot_db_missing" in warning for warning in payload["warnings"])
+    assert not missing_db.exists()
+
+
+def test_workbench_prototype_cli_requires_sample_or_db_path() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/inspect_v2_workbench_prototype.py",
+            "--format",
+            "json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 2
+    assert "--db-path" in result.stderr

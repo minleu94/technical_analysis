@@ -55,7 +55,7 @@
 - Pre-V2 非排程 readiness inspector 已完成：新增 read-only service / CLI 彙總 weekly history、multi-day dry-run record、source gaps 與 Agent report sample；時間型 gate 不足時維持 `waiting_for_time`，`production_scheduler_allowed=false`。
 - Historical Evidence Replay v1 已完成：新增 working-copy / replay DB 專用 simulated scheduler，可依歷史交易日逐日重放 evidence pipeline，事件 metadata 標示 `historical_replay` / `simulated_scheduler`，且 recommendation result 與 forward outcome 都以 replay decision date / data-as-of date 限制；此結果只作 research evidence，不取代真實 weekly history、多日 dry-run 或 production scheduler approval。
 - Phase 0A Historical Replay Evidence Quality Audit 已完成：`6eb7f8e` 修正 replay reference return lookup 後，118 trading days `_reference_fix` replay 中 ready outcomes 已全部具備 benchmark return / excess；industry return / excess 只在 2,029 個具 sector mapping 的 ready outcomes 可用，其餘保留 `DEGRADED` + `missing_industry_benchmark`。此結果可作 V2.0 Phase 1 read-only Workbench 的 evidence quality input，但不構成 production scheduler 或投資有效性 gate。
-- V2.0 Phase 1 read-only Workbench prototype slice 已完成：新增 `WorkbenchDashboardDTO`、read-only composer、Historical Replay JSON summary adapter 與 `scripts/inspect_v2_workbench_prototype.py --sample` prototype CLI；目前只輸出 sample / replay-summary driven 的 JSON 或 Markdown，不掛主 UI、不讀正式 DB、不寫 evidence、不建立 scheduler、不下單、不套用 lifecycle action。
+- V2.0 Phase 1 read-only Workbench prototype slice 與 Phase 1.5 / Phase 2 前置 formal read-only source adapter 已完成：新增 `WorkbenchDashboardDTO`、read-only composer、Historical Replay JSON summary adapter、`WorkbenchSourceService` 與 `scripts/inspect_v2_workbench_prototype.py` prototype CLI；CLI 保留 `--sample`，也可用受控 `--db-path` / `--decision-date` 讀取 existing read-only sources，不掛主 UI、不寫 evidence、不建立 scheduler、不下單、不套用 lifecycle action。
 - Post-V1 V1.1 / V1.2 / V1.3 / V1.4 v1 已完成：推薦 Profile / 回放 workflow bridge、Profile replay comparison、訓練 / 獨立驗證期間、推薦回放 rolling risk、microstructure preflight、relative attribution、weekly evidence operations、manual approval package、action item planning、weekly review history 與 Research Lab 覆盤歷史子頁已落地；這些仍是 research credibility / evidence operations diagnostics，不代表投資有效性。
 - 後續要提升「準確度」必須先建立實證比較、factor attribution、資料因子層與實驗治理，不應直接把新資料硬塞進 scoring engine。
 
@@ -64,7 +64,7 @@
 ## 4. 下一步 Next
 
 未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
-V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3、V1.4、V1.5、V1.6、V1.7、V1.8、V1.9 v1 與 V2.0 Phase 1 read-only prototype slice 已完成；下一步不是直接重做 UI 或啟用 production scheduler，而是把 prototype 接到 background evidence / formal read-only source 的 Phase 2 前置設計，同時繼續用 weekly evidence operations 與 V1.4 history 實際累積多週覆盤證據，補齊人工 UI smoke、多日 dry-run、真實 watchlist / portfolio workflow 樣本與 source gaps。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
+V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3、V1.4、V1.5、V1.6、V1.7、V1.8、V1.9 v1、V2.0 Phase 1 read-only prototype slice 與 Workbench formal read-only source adapter 已完成；下一步不是直接重做 UI 或啟用 production scheduler，而是繼續累積 Phase 0 weekly / multi-day evidence，並在 adapter 上設計 Phase 2 MVP 的主 UI 整合 gate。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
 外部開源專案對照、資料源補強優先序與 V1.5 至 V2.0 的中繼版本形狀見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)；該文件只作參考 companion，不取代 6M Roadmap 的執行順序。
 
 目前立即執行優先順序：
@@ -92,7 +92,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
    - V1.1 補 workflow bridge；V1.2 補 research credibility 與 execution diagnostics；V1.3 補 weekly evidence operations 與 manual lifecycle package；V1.4 補 weekly review history 與 Research Lab 覆盤歷史子頁；V1.5 補 data credibility gate；V1.6 補 cross-sectional factor snapshot / attribution pipeline；V1.7 補 screening matrix、Why Not / Liquidity payload 與 negative evidence capture；V1.8 補 research-only portfolio construction 與 virtual execution trace sandbox；V1.9 補 read-only Agent / MCP evidence access。
    - 2026-07-03 已完成第一個 weekly evidence operations + history working-copy operating-cycle，結果仍為 `coverage_only`，blocking gaps 尚未關閉。
    - 同日 follow-up 已修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 `risk_prompt` evidence 且 repeat=2 idempotency passed。受控 tmp run 也已保存 working-copy Recommendation result，並驗證 `recommendation,risk-prompt` requested sources 可 idempotent confirm。`decision_desk_snapshot_missing`、`recommendation_persisted_missing` 與 `working_copy_confirm_smoke_missing_or_failed` 已收斂為真實 source gaps。
-   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 watchlist 無項目與 portfolio 無 active positions；舊 recommendation 缺 screening matrix / exclusion payload 時仍只診斷、不回補、不重算。production scheduler 仍未啟用；V2.0 Workbench 已有 Phase 1 read-only prototype slice，但 Phase 2 主 UI / formal source 整合仍需受控設計與 gate。
+   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 watchlist 無項目與 portfolio 無 active positions；舊 recommendation 缺 screening matrix / exclusion payload 時仍只診斷、不回補、不重算。production scheduler 仍未啟用；V2.0 Workbench 已有 Phase 1 read-only prototype slice 與 formal read-only source adapter，但 Phase 2 主 UI 整合仍需受控設計與 gate。
 
 6. **P1：V2.0 前置補強**
    - V1.5 Data Credibility & Corporate Action Gate、V1.6 Cross-sectional Factor Pipeline、V1.7 Screening Matrix & Negative Evidence、V1.8 Portfolio Construction / Execution Trace Sandbox 與 V1.9 Read-only Agent / MCP Evidence Access 已完成 v1。
@@ -100,7 +100,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
    - 2026-07-06 follow-up 已完成非時間型 closeout：Git unreachable loose objects 清為 0、Recommendation liquidity payload gap 修正、working-copy all-source source coverage `blocking_gaps=[]`、working-copy confirm smoke repeat=2 idempotency passed、Evidence Review UI smoke passed、read-only Agent report sample ready。正式 evidence DB 未寫入；驗證只在 working-copy DB 與 ignored output mirror 內完成。
    - 2026-07-06 Historical Evidence Replay v1 已補 `scripts/replay_historical_evidence_pipeline.py` 與 `HistoricalEvidenceReplayService`，可把 source DB 複製成 replay DB 後逐交易日重放 runner；缺 as-of recommendation result 時只記錄 diagnostic 並略過 recommendation 類來源，不用未來 result 補值。
    - 2026-07-06 Phase 0A replay quality audit 已完成，benchmark 全缺已解除；V2.0 Phase 1 read-only Workbench prototype slice 已可用 `_reference_fix` replay JSON summary 顯示 source gap、payload gap、event family、outcome maturity 與 quality boundary，不顯示成策略績效結論。
-   - 下一個可立即推進的 2.0 任務是 Phase 2 前的 background evidence / formal read-only source 設計，將 prototype 從 `--sample` 推進到可控資料來源；正式主 UI 整合、DB reader 與 scheduler 仍需後續 gate。
+   - Phase 2 前的 background evidence / formal read-only source adapter 已完成第一版：`WorkbenchSourceService` 可讀受控 `--db-path` 的 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與可選 replay JSON summary；正式主 UI 整合、background feed 與 scheduler 仍需後續 gate。
    - 進入 V2.0 前仍需真實時間累積：多週 weekly evidence operations + history 實際紀錄目前 `0/3`，multi-day dry-run record 目前 `1/3`。若要推 production scheduler，仍需 explicit design / approval / rollback 文件；目前 `production_scheduler_allowed=false`。
    - `cuFOLIO`、強化學習、券商自動下單與 SQLite async / split DB 暫不納入近期 Roadmap，除非有量測證據顯示現有計算或寫入模式成為真實瓶頸。
 
@@ -136,7 +136,8 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 
 ## 7. 更新記錄
 
-- 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；新增 DTO、composer、historical replay summary adapter、sample CLI 與 QA closeout，邊界仍是不讀正式 DB、不寫 evidence、不啟用 scheduler、不產生交易建議。
+- 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；當時新增 DTO、composer、historical replay summary adapter、sample CLI 與 QA closeout，邊界是不寫 evidence、不啟用 scheduler、不產生交易建議。
+- 2026-07-06：完成 V2.0 Workbench formal read-only source adapter；`inspect_v2_workbench_prototype.py` 可由 `--sample` 擴充到受控 `--db-path` / `--decision-date`，讀取 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與可選 replay JSON summary；missing DB / table 只回 diagnostics，不寫 DB、不解除 Phase 0 / Phase 5 gate。
 - 2026-07-06：新增 Historical Evidence Replay v1，定位為 research-only simulated scheduler；可輔助 Phase 0 source gap / V2.0 設計觀察，但不替代真實時間 gate 或 production scheduler approval。
 - 2026-07-06：完成 Phase 0A Historical Replay Evidence Quality Audit，修正 replay benchmark reference return 全缺；`_reference_fix` replay 可作 V2.0 Phase 1 Workbench 參考輸入，industry / screening matrix 仍是 payload gap，production scheduler gate 不變。
 - 2026-07-06：完成 Pre-V2 非時間型 closeout：readiness inspector、source gap working-copy all-source smoke、Evidence Review UI smoke 與 read-only Agent report sample 已可重跑驗證；多週 / 多日 / scheduler approval 門檻仍未解除。

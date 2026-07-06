@@ -22,7 +22,7 @@
   - V1.8: Portfolio Construction & Execution Trace Sandbox
   - V1.9: Read-only Agent / MCP Evidence Access
   - Historical Evidence Replay v1: research-only simulated scheduler replay
-  - V2.0 Phase 1 read-only Workbench prototype slice: DTO / composer / replay summary adapter / sample CLI
+  - V2.0 Phase 1 read-only Workbench prototype slice: DTO / composer / replay summary adapter / sample CLI / formal read-only source adapter
 
 ---
 
@@ -53,14 +53,14 @@
   - 此 closeout 不代表策略有效、不代表 Phase 0 真實時間 gate 完成、不代表 production scheduler 可啟用。
 
 ### Phase 1：V2.0 Unified Decision Workbench Design Spike
-**狀態**：2026-07-06 已完成 read-only prototype slice；仍未進入 Phase 2 主 UI 整合。
+**狀態**：2026-07-06 已完成 read-only prototype slice 與 formal read-only source adapter；仍未進入 Phase 2 主 UI 整合。
 **目標**：在不改動主 UI 且不新增交易能力的前提下，探索 V2.0 資訊架構。
 - **工作範圍**：
   - 只做資訊架構 (Information Architecture) 與 Read-only Prototype。
   - 梳理決策畫面動線，確認 Daily Decision、Evidence Review 與 Market Watch 合併後的呈現。
   - 可讀取 Phase 0A 的 `_reference_fix` replay summary 作為 source gap、payload gap、event family、outcome maturity 與 data quality 的參考輸入；不得把 replay 包裝成 production readiness 或策略績效結論。
-  - 已落地 `WorkbenchDashboardDTO`、read-only composer、replay JSON summary adapter 與 `scripts/inspect_v2_workbench_prototype.py --sample`，輸出 JSON / Markdown 的今日待判讀、Evidence mode、Daily Checklist 與 read-only access boundary。
-- **限制**：不新增交易能力，不改動生產環境 UI；目前 prototype 只支援 sample / replay JSON summary，不讀正式 DB、不寫 evidence、不建立 scheduler、不套用 lifecycle action。
+  - 已落地 `WorkbenchDashboardDTO`、read-only composer、replay JSON summary adapter、`WorkbenchSourceService` 與 `scripts/inspect_v2_workbench_prototype.py`；CLI 保留 `--sample`，並可用受控 `--db-path` / `--decision-date` 讀取 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與可選 replay JSON summary，輸出 JSON / Markdown 的今日待判讀、Evidence mode、Daily Checklist 與 read-only access boundary。
+- **限制**：不新增交易能力，不改動生產環境 UI；adapter 只讀 existing sources，missing DB / missing table / degraded source 只回 diagnostics，不建立 schema、不寫 evidence、不建立 scheduler、不套用 lifecycle action。
 
 ### Phase 2：V2.0 Workbench MVP
 **目標**：建立單一決策入口。
@@ -102,7 +102,8 @@
 
 ## 4. 更新記錄
 
-- 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；已落地 DTO、composer、replay JSON summary adapter、sample CLI 與 focused tests，Phase 2 主 UI / formal source 整合、Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
+- 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；已落地 DTO、composer、replay JSON summary adapter、sample CLI 與 focused tests，Phase 2 主 UI、Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
+- 2026-07-06：完成 Workbench formal read-only source adapter；CLI 可從 `--sample` 擴充到受控 `--db-path` / `--decision-date`，只讀既有 evidence / readiness / Agent summary / optional replay JSON，不寫 DB；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
 - 2026-07-06：完成 Phase 0A Historical Replay Evidence Quality Audit closeout；`ForwardPerformanceService` reference lookup 已修正 missing benchmark 預設 TAIEX、market index `收盤價` fallback 與保守 industry sector mapping。新 `_reference_fix` replay 產物確認 benchmark return / excess 全部填入 ready outcomes，industry 大量缺值保留為 payload gap；此項解除 V2.0 Phase 1 read-only design spike 的 replay input blocker，但 Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
 - 2026-07-06：新增 Historical Evidence Replay v1 作為 Phase 0 的 research-only simulated scheduler 輔助工具；可在 working-copy / replay DB 逐日重放歷史 evidence，但不取代 weekly history `0/3`、multi-day dry-run `1/3`、manual approval 或 Phase 5 production scheduler gate。
 - 2026-07-06：重構為 Gate-Based Active Roadmap，將 V1 / Month 1-6 / V1.1-V1.9 的詳細完工紀錄封存至 `docs/09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md`；目前主線改為 Phase 0 evidence accumulation、Phase 1 V2.0 read-only design spike、Phase 2 Workbench MVP、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate。
