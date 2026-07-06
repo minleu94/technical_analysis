@@ -444,6 +444,43 @@ def test_update_tpex_daily_price_reports_source_failure(tmp_path):
     assert "TPEX endpoint failed" in result["message"]
 
 
+def test_update_tpex_daily_price_range_fails_when_current_tpex_date_is_missing(tmp_path):
+    config = _sqlite_config(tmp_path)
+    (config.tpex_daily_price_dir / "20260703.csv").write_text(
+        "日期,證券代號,證券名稱,收盤價\n20260703,3207,耀勝,42.5\n",
+        encoding="utf-8-sig",
+    )
+
+    class FailingTpexSource:
+        def update_for_date(self, date):
+            assert date == "20260706"
+            return SimpleNamespace(
+                success=False,
+                message="remote disconnected",
+                row_count=0,
+                skipped_count=0,
+                diagnostic_count=1,
+                source_date=None,
+                output_file=None,
+            )
+
+    service = UpdateService(config)
+    service._create_tpex_daily_price_source = lambda: FailingTpexSource()
+
+    result = service.update_tpex_daily_price_range(
+        "2026-07-03",
+        "2026-07-06",
+        force_refresh=False,
+        sync_to_sqlite=False,
+        break_on_repeated_source_date=False,
+    )
+
+    assert result["success"] is False
+    assert result["skipped_dates"] == ["20260703"]
+    assert result["failed_dates"] == ["20260706"]
+    assert result["warnings"] == ["TPEX 每日股價缺少日期：20260706"]
+
+
 def test_sync_market_and_industry_csv_to_sqlite_replaces_tables(tmp_path):
     from data_module.db_manager import DBManager
 
@@ -848,6 +885,45 @@ def test_smart_incremental_technical_calculation_skips_when_indicator_is_current
     assert result["success"] is True
     assert result["success_count"] == 0
     assert result["updated_stocks"] == []
+
+
+def test_technical_latest_coverage_detects_missing_latest_stock_indicators(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe("daily_prices", pd.DataFrame({
+        "日期": ["20260705", "20260706", "20260705", "20260706"],
+        "證券代號": ["2330", "2330", "3207", "3207"],
+        "證券名稱": ["台積電", "台積電", "耀勝", "耀勝"],
+        "收盤價": [900.0, 901.0, 63.5, 63.7],
+    }), if_exists="append")
+    db.write_dataframe("technical_indicators", pd.DataFrame({
+        "日期": ["20260706"],
+        "證券代號": ["2330"],
+        "RSI": [55.0],
+    }), if_exists="append")
+
+    service = UpdateService(config)
+    lagging = service.check_technical_indicator_latest_coverage()
+
+    assert lagging["success"] is True
+    assert lagging["is_current"] is False
+    assert lagging["eligible_stock_count"] == 2
+    assert lagging["covered_stock_count"] == 1
+    assert lagging["missing_stock_count"] == 1
+
+    db.write_dataframe("technical_indicators", pd.DataFrame({
+        "日期": ["20260706"],
+        "證券代號": ["3207"],
+        "RSI": [44.0],
+    }), if_exists="append")
+
+    current = service.check_technical_indicator_latest_coverage()
+
+    assert current["is_current"] is True
+    assert current["eligible_stock_count"] == 2
+    assert current["covered_stock_count"] == 2
 
 
 def test_process_stock_data_batch_requires_explicit_paths(tmp_path):

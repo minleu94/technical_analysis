@@ -17,8 +17,8 @@ schtasks /Query /TN baldr-evidence-pipeline-dry-run-daily /V /FO LIST
 
 預期：
 
-- `baldr-data-update-quick-daily`：每天本機時間 04:20，執行 `scripts\scheduled\run_daily_data_update_quick.cmd`。這會走非 UI 快速更新路徑，補最近工作日窗口的 TWSE / TPEX 每日股價、大盤、產業、券商分點、SQLite 同步與必要的技術指標增量。
-- `baldr-data-freshness-check-daily`：每天本機時間 05:00，執行 `scripts\scheduled\run_daily_data_freshness_check.cmd`。
+- `baldr-data-update-quick-daily`：每天本機時間 04:20，執行 `scripts\scheduled\run_daily_data_update_quick.cmd`。這會走非 UI 快速更新路徑，補最近工作日窗口的 TWSE / TPEX 每日股價、大盤、產業、券商分點、SQLite 同步與必要的技術指標增量；若 TPEX 缺日，status 會是 `passed_with_warnings` 並列出缺少日期。
+- `baldr-data-freshness-check-daily`：每天本機時間 05:00，執行 `scripts\scheduled\run_daily_data_freshness_check.cmd`；若 SQLite 最新但 TWSE / TPEX 最新日原始 CSV 缺失，status 會是 `degraded`。
 - `baldr-evidence-pipeline-dry-run-daily`：每天本機時間 05:15，執行 `scripts\scheduled\run_evidence_pipeline_dry_run.cmd`。
 - `baldr-evidence-working-copy-smoke-manual`：manual-only；目前不建立每日自動 task。
 - Codex app `baldr scheduled evidence morning report`：每天約 05:30，只讀查詢上述 task、status、report 與必要 log，產生繁體中文摘要；它不是 Windows Task Scheduler task，也不重新執行 pipeline。

@@ -556,13 +556,14 @@ class FailingTpexService(FakeUpdateService):
         return {"success": False, "message": "tpex failed", "tpex_rows": 0}
 
 
-def test_safe_update_all_continues_with_warning_when_tpex_fails_after_twse_success():
+def test_safe_update_all_continues_but_reports_failure_when_tpex_fails_after_twse_success():
     app()
     view = _TestableUpdateView(FailingTpexService())
 
     result = view._run_safe_update_all(progress_callback=lambda message, pct: None)
 
-    assert result["success"] is True
+    assert result["success"] is False
+    assert result["failed_step"] == "TPEX 每日股價更新"
     assert result["warnings"] == ["TPEX 每日股價更新: tpex failed"]
     assert [call[0] for call in view.update_service.calls] == [
         "check_data_overview",

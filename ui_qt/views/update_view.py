@@ -1704,6 +1704,7 @@ class UpdateView(QWidget):
         tpex_reference_date = self._get_tpex_reference_date(end_date)
         completed = []
         warnings = []
+        soft_failures = []
 
         def report(message: str, progress: int) -> None:
             if progress_callback:
@@ -1768,12 +1769,22 @@ class UpdateView(QWidget):
 
         for name, progress, action in steps:
             result = run_step(name, progress, action)
-            if isinstance(result, dict) and not result.get("success", True):
-                if name.startswith("TPEX 每日股價更新"):
-                    warning = f"{name}: {result.get('message', f'{name} 失敗')}"
-                    warnings.append(warning)
-                    completed.append({"step": name, "result": result, "warning": True})
+            if name.startswith("TPEX 每日股價更新") and isinstance(result, dict):
+                tpex_warnings = [
+                    f"{name}: {warning}"
+                    for warning in self._tpex_warning_messages(result)
+                ]
+                if not result.get("success", True) and not tpex_warnings:
+                    tpex_warnings.append(f"{name}: {result.get('message', f'{name} 失敗')}")
+                if tpex_warnings:
+                    warnings.extend(tpex_warnings)
+                    soft_failures.append({"step": name, "result": result, "warnings": tpex_warnings})
+                    if not result.get("success", True):
+                        completed.append({"step": name, "result": result, "warning": True})
+                    elif completed and completed[-1].get("step") == name:
+                        completed[-1]["warning"] = True
                     continue
+            if isinstance(result, dict) and not result.get("success", True):
                 return {
                     "success": False,
                     "message": result.get("message", f"{name} 失敗"),
@@ -1784,11 +1795,21 @@ class UpdateView(QWidget):
 
         final_msg = "快速更新所有數據完成" if is_quick_mode else "安全更新所有數據完成"
         report(final_msg, 100)
+        if soft_failures:
+            return {
+                "success": False,
+                "message": f"{final_msg}，但 TPEX 每日股價未完整更新",
+                "failed_step": soft_failures[0]["step"],
+                "completed_steps": completed,
+                "warnings": list(dict.fromkeys(warnings)),
+                "step_result": soft_failures[0]["result"],
+                "soft_failures": soft_failures,
+            }
         return {
             "success": True,
             "message": final_msg,
             "completed_steps": completed,
-            "warnings": warnings,
+            "warnings": list(dict.fromkeys(warnings)),
         }
 
     def _run_incremental_technical_if_needed(self, progress_callback=None) -> Dict[str, Any]:
@@ -1796,8 +1817,18 @@ class UpdateView(QWidget):
         status = self._get_overview_status()
         daily_latest = self._parse_status_date(status.get("daily_data", {}).get("latest_date"))
         technical_latest = self._parse_status_date(status.get("technical_indicators", {}).get("latest_date"))
+        coverage_check = getattr(self.update_service, "check_technical_indicator_latest_coverage", None)
+        coverage = coverage_check() if callable(coverage_check) else None
 
-        if daily_latest is not None and technical_latest is not None and technical_latest >= daily_latest:
+        if isinstance(coverage, dict) and coverage.get("success") and not coverage.get("is_current", True):
+            message = (
+                "技術指標最新日覆蓋不足，執行增量計算："
+                f"{coverage.get('covered_stock_count', 0)}/{coverage.get('eligible_stock_count', 0)}"
+            )
+            if progress_callback:
+                progress_callback(message, 88)
+            self._log(message)
+        elif daily_latest is not None and technical_latest is not None and technical_latest >= daily_latest:
             message = (
                 f"技術指標已是最新（{technical_latest.strftime('%Y-%m-%d')}），"
                 "跳過增量計算"
@@ -1840,6 +1871,14 @@ class UpdateView(QWidget):
             except ValueError:
                 continue
         return None
+
+    @staticmethod
+    def _tpex_warning_messages(result: Dict[str, Any]) -> list[str]:
+        warnings = [str(item) for item in result.get("warnings", []) if str(item).strip()]
+        failed_dates = sorted({str(item) for item in result.get("failed_dates", []) if str(item).strip()})
+        if failed_dates:
+            warnings.append(f"TPEX 每日股價缺少日期：{', '.join(failed_dates)}")
+        return list(dict.fromkeys(warnings))
 
     def _run_safe_update_all(self, progress_callback=None) -> Dict[str, Any]:
         """執行保守的一鍵安全更新流程，供 UI worker 與測試共用，保持向後相容"""
@@ -1918,8 +1957,12 @@ class UpdateView(QWidget):
 
         failed_step = result.get("failed_step", "未知步驟")
         message = result.get("message", f"{mode_name}失敗")
+        warnings = result.get("warnings") or []
+        display_message = message
+        if warnings:
+            display_message = f"{message}\n\n警告：\n" + "\n".join(str(warning) for warning in warnings)
         self._log(f"{mode_name}失敗：{failed_step} - {message}")
-        QMessageBox.warning(self, f"{mode_name}未完成", f"{failed_step} 失敗：\n{message}")
+        QMessageBox.warning(self, f"{mode_name}未完成", f"{failed_step} 失敗：\n{display_message}")
 
     def _on_update_all_error(self, error_msg: str):
         """更新流程出錯"""
@@ -1995,7 +2038,8 @@ class UpdateView(QWidget):
                         progress_callback("更新 TPEX 每日收盤行情", 30)
                     tpex_result = self._update_tpex_daily_prices(start_date, end_date)
                     warnings = list(result.get('warnings', []))
-                    if tpex_result.get('success', False):
+                    tpex_warnings = self._tpex_warning_messages(tpex_result)
+                    if tpex_result.get('success', False) and not tpex_warnings:
                         result['message'] = (
                             f"{result.get('message', '每日股票數據更新完成')}\n"
                             f"TPEX 每日股價更新: {tpex_result.get('message', '完成')}"
@@ -2004,8 +2048,16 @@ class UpdateView(QWidget):
                             tpex_result.get('updated_dates', [])
                         )
                     else:
-                        warnings.append(
-                            f"TPEX 每日股價更新: {tpex_result.get('message', 'unknown error')}"
+                        result['success'] = False
+                        if tpex_warnings:
+                            warnings.extend(f"TPEX 每日股價更新: {warning}" for warning in tpex_warnings)
+                        else:
+                            warnings.append(
+                                f"TPEX 每日股價更新: {tpex_result.get('message', 'unknown error')}"
+                            )
+                        result['message'] = (
+                            f"{result.get('message', '每日股票數據更新完成')}\n"
+                            f"TPEX 每日股價更新未完整：{tpex_result.get('message', 'unknown error')}"
                         )
 
                     if progress_callback:
@@ -2016,6 +2068,7 @@ class UpdateView(QWidget):
                         end_date,
                     )
                     if not sqlite_result.get("success", True):
+                        result['success'] = False
                         warnings.append(
                             f"同步 daily_price_files 到 SQLite 失敗: {sqlite_result.get('message', 'unknown error')}"
                         )
@@ -2033,11 +2086,12 @@ class UpdateView(QWidget):
                         progress_callback=progress_callback,
                     )
                     if not indicator_result.get("success", False):
+                        result['success'] = False
                         warnings.append(
                             f"技術指標計算失敗: {indicator_result.get('message', 'unknown error')}"
                         )
                     if warnings:
-                        result['warnings'] = warnings
+                        result['warnings'] = list(dict.fromkeys(warnings))
                 elif update_type == 'market':
                     result = self.update_service.update_market(start_date, end_date)
                 elif update_type == 'industry':
@@ -2114,8 +2168,11 @@ class UpdateView(QWidget):
             self._check_data_status()
         else:
             message = result.get('message', '更新失敗')
+            warnings = result.get('warnings', [])
+            if warnings:
+                message = f"{message}\n\n警告：\n" + "\n".join(str(warning) for warning in warnings)
             self._log(f"更新失敗：{message}")
-            QMessageBox.warning(self, "更新失敗", message)
+            QMessageBox.warning(self, "更新未完整", message)
 
     def _on_update_error(self, error_msg: str):
         """更新出錯"""

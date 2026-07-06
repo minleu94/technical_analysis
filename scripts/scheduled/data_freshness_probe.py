@@ -34,6 +34,16 @@ def _latest_date(conn: sqlite3.Connection, table: str) -> str | None:
     return str(row[0]) if row and row[0] is not None else None
 
 
+def _date_key(value: object) -> str | None:
+    parsed = _parse_date(value)
+    if parsed is not None:
+        return parsed.strftime("%Y%m%d")
+    if value is None:
+        return None
+    text = str(value).strip().replace("-", "")
+    return text if len(text) == 8 and text.isdigit() else None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Read-only baldr data freshness probe.")
     parser.add_argument("--data-root", required=True)
@@ -85,6 +95,22 @@ def main(argv: list[str] | None = None) -> int:
                     checks[f"{table}_age_days"] = age_days
                     if age_days > args.stale_days:
                         warnings.append(f"{table}_stale")
+
+                daily_latest_key = _date_key(checks.get("daily_prices_latest_date"))
+                if daily_latest_key:
+                    twse_file = data_root / "daily_price" / f"{daily_latest_key}.csv"
+                    tpex_file = data_root / "daily_price_tpex" / f"{daily_latest_key}.csv"
+                    twse_exists = twse_file.exists()
+                    tpex_exists = tpex_file.exists()
+                    checks["daily_price_latest_date_key"] = daily_latest_key
+                    checks["twse_daily_price_file"] = str(twse_file)
+                    checks["tpex_daily_price_file"] = str(tpex_file)
+                    checks["twse_daily_price_file_exists_for_latest_date"] = twse_exists
+                    checks["tpex_daily_price_file_exists_for_latest_date"] = tpex_exists
+                    if not twse_exists:
+                        warnings.append(f"twse_daily_price_file_missing:{daily_latest_key}")
+                    if not tpex_exists:
+                        warnings.append(f"tpex_daily_price_file_missing:{daily_latest_key}")
         except Exception as exc:  # noqa: BLE001
             errors.append("sqlite_read_failed")
             checks["sqlite_error"] = str(exc)

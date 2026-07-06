@@ -6,8 +6,8 @@ These wrappers are intentionally conservative. They use CMD files and Windows bu
 
 | Task | State | Trigger | Behavior |
 |---|---:|---|---|
-| `baldr-data-update-quick-daily` | enabled after register | daily local time 04:20 | Runs the non-UI quick data update path for the recent weekday window. Writes market data CSV / SQLite updates plus status and logs under `OUTPUT_ROOT/scheduled/data_update_quick/`. |
-| `baldr-data-freshness-check-daily` | enabled after register | daily local time 05:00 | Read-only SQLite / `DATA_ROOT` freshness check. Writes only status and logs under `OUTPUT_ROOT/scheduled/data_freshness/`. |
+| `baldr-data-update-quick-daily` | enabled after register | daily local time 04:20 | Runs the non-UI quick data update path for the recent weekday window. Writes market data CSV / SQLite updates plus status and logs under `OUTPUT_ROOT/scheduled/data_update_quick/`. If TPEX has failed dates, the task continues later steps and writes `passed_with_warnings`. |
+| `baldr-data-freshness-check-daily` | enabled after register | daily local time 05:00 | Read-only SQLite / `DATA_ROOT` freshness check. Also verifies raw TWSE / TPEX daily price files for the latest SQLite daily date. Writes only status and logs under `OUTPUT_ROOT/scheduled/data_freshness/`. |
 | `baldr-evidence-pipeline-dry-run-daily` | enabled after register | daily local time 05:15 | Runs `scripts/run_evidence_pipeline.py` with `--dry-run`. Writes only report, status, and logs under `OUTPUT_ROOT/scheduled/evidence_pipeline_dry_run/`. |
 | `baldr-evidence-working-copy-smoke-manual` | manual-only | no daily schedule | Manual smoke against a working-copy DB. This repo keeps the script only; `register_baldr_scheduled_tasks.cmd` does not create a daily task for it. |
 
@@ -79,6 +79,8 @@ Data freshness:
 <OUTPUT_ROOT>/scheduled/data_freshness/latest_status.json
 <OUTPUT_ROOT>/scheduled/data_freshness/YYYYMMDD_data_freshness.log
 ```
+
+`data_update_quick/latest_status.json` uses `passed_with_warnings` when TPEX failed dates remain, for example `TPEX 每日股價缺少日期：20260706`. `data_freshness/latest_status.json` uses `degraded` when SQLite is current but either `daily_price/YYYYMMDD.csv` or `daily_price_tpex/YYYYMMDD.csv` is missing for that latest daily date.
 
 Evidence dry-run:
 

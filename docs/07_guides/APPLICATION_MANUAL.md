@@ -164,7 +164,7 @@ python ui_qt/main.py
 
 每日股價的「強制重新合併所有每日股價」屬高風險維護操作。系統會先顯示二次確認對話框，按「取消」不會執行，只有按「確認強制合併」才會重建衍生合併資料；此流程不應亦不會修改或刪除 `DATA_ROOT` 底下的 raw CSV 原始檔。
 
-若 TWSE 每日股價 batch 回報任何 failed dates，該每日股價步驟會視為失敗並停止後續流程，避免 UI 顯示完成但實際缺個股日價。若 TPEX endpoint timeout、Cloudflare/HTTP 阻擋或部分日期失敗，UI 會以 warning 呈現並繼續已成功的 TWSE / SQLite 流程；這代表需要重測或補跑缺漏日期，不代表 TWSE 資料也失敗。若只有 TWSE 成功，`daily_prices` 當日可能只含上市股票，技術指標與全市場判讀應等 TPEX 缺口補齊後再視為完整。
+若 TWSE 每日股價 batch 回報任何 failed dates，該每日股價步驟會視為失敗並停止後續流程，避免 UI 顯示完成但實際缺個股日價。若 TPEX endpoint timeout、Cloudflare/HTTP 阻擋或部分日期失敗，UI 會繼續已成功的 TWSE / SQLite / 技術指標流程，但最後會標示「未完整」並列出 `TPEX 每日股價缺少日期：YYYYMMDD`；這代表需要重測或補跑缺漏日期，不代表 TWSE 資料也失敗。若只有 TWSE 成功，`daily_prices` 當日可能只含上市股票，技術指標與全市場判讀應等 TPEX 缺口補齊後再視為完整。
 
 每日股價分頁另有「背景補齊 TPEX + 技術指標」與「檢查背景任務狀態」。背景任務不會先強制跑 TWSE 全量，也不會強制全量重算技術指標；同步 SQLite 後會比對每日股價與技術指標最新日期，若技術指標已追上每日股價，狀態會顯示 skipped。狀態檔位於 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`；若狀態顯示 `running`，請用狀態查詢確認進度，不要重複啟動第二個背景任務。
 
@@ -180,6 +180,7 @@ python ui_qt/main.py
 - 「強制全量更新」：重算所有股票歷史資料，只在指標算法改動或資料損毀時使用。
 - 股票代號留空代表處理全部；輸入例如 `2330` 代表只處理單一股票。
 - 增量寫入單股指標 CSV 時，若舊檔或新結果缺少可辨識日期欄位，會避免直接疊加資料；必要時以新計算結果覆蓋該單股檔，防止同一股票歷史列倍增。
+- 一鍵更新與排程判斷技術指標是否可跳過時，除了比較 `daily_prices` / `technical_indicators` 最新日期，也會檢查最新日 eligible 股票覆蓋數；若 TWSE 先完成、TPEX 後補進來，系統會再跑增量計算，不會因全表最新日期相同而漏掉 TPEX 股票。
 - 技術指標計算目前仍以既有單流程治理 SQLite / CSV 寫入；即使後續加入多核心，也必須拆成 compute-only 平行與單 writer 寫入，避免 SQLite lock 或 CSV 覆寫競爭。本版不提供技術指標 worker 數設定。
 
 ### 4.5 SQLite 資料檢視
@@ -988,8 +989,8 @@ scripts\scheduled\unregister_baldr_scheduled_tasks.cmd unregister
 
 目前 Windows Task Scheduler task：
 
-- `baldr-data-update-quick-daily`：每日本機時間 04:20，走非 UI 快速更新路徑，補最近工作日窗口的 TWSE / TPEX 每日股價、大盤、產業、券商分點、SQLite 同步與必要的技術指標增量；輸出位於 `<OUTPUT_ROOT>/scheduled/data_update_quick/`。
-- `baldr-data-freshness-check-daily`：每日本機時間 05:00，唯讀檢查 SQLite / `DATA_ROOT` freshness，只寫 `<OUTPUT_ROOT>/scheduled/data_freshness/latest_status.json` 與 logs。
+- `baldr-data-update-quick-daily`：每日本機時間 04:20，走非 UI 快速更新路徑，補最近工作日窗口的 TWSE / TPEX 每日股價、大盤、產業、券商分點、SQLite 同步與必要的技術指標增量；輸出位於 `<OUTPUT_ROOT>/scheduled/data_update_quick/`。若 TPEX 當日或窗口內日期抓取失敗，task 會繼續可完成步驟並以 `passed_with_warnings` 保存 `TPEX 每日股價缺少日期：YYYYMMDD`，不再把只有既有 skipped CSV 的情況誤判為完整成功。
+- `baldr-data-freshness-check-daily`：每日本機時間 05:00，唯讀檢查 SQLite / `DATA_ROOT` freshness，只寫 `<OUTPUT_ROOT>/scheduled/data_freshness/latest_status.json` 與 logs。除了 SQLite `daily_prices` / `technical_indicators` 最新日期，也會反查同一最新日的 `daily_price/YYYYMMDD.csv` 與 `daily_price_tpex/YYYYMMDD.csv`；若 SQLite 最新但 TPEX 原始日檔缺失，狀態會是 `degraded`。
 - `baldr-evidence-pipeline-dry-run-daily`：每日本機時間 05:15，只執行 evidence pipeline `--dry-run`；若 freshness status 不是 `passed`，report status 會標為 degraded / failed。輸出位於 `<OUTPUT_ROOT>/scheduled/evidence_pipeline_dry_run/`。2026-07-06 後，`latest_status.json` 會另外保存 pipeline summary 摘要欄位，例如 `pipeline_diagnostic_codes`、`source_coverage_warnings`、`recommendation_screening_matrix_available`、`recommendation_exclusion_payload_available` 與 `source_coverage_basis`，方便 read-only morning report 直接判讀 V1.7 payload readiness；這些欄位只來自同次 dry-run stdout，不額外重跑 pipeline。
 - `baldr-evidence-working-copy-smoke-manual`：不建立每日 task；只保留 manual-only script，必須人工指定 source DB 與 working-copy DB，且不得寫 source DB 或 default `DATA_ROOT/sqlite/twstock.db`。
 
@@ -1160,7 +1161,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 
 ### TPEX 股票日價缺漏
 
-若在 SQLite Inspector 查 `3207` 只看到近一兩日，代表 TPEX 歷史補齊或 SQLite 同步未完成。2026-06-17 排查後的正式狀態應可看到 `3207` 覆蓋 `20140102..20260617`、共 2,907 筆。請先檢查 `DATA_ROOT/daily_price_tpex/` 是否有對應日期 CSV，再使用每日股價手動下載、快速/安全更新，或「背景補齊 TPEX + 技術指標」補齊並同步。
+若在 SQLite Inspector 查 `3207` 缺少某個交易日，先檢查 `DATA_ROOT/daily_price_tpex/YYYYMMDD.csv` 是否存在；若不存在，代表 TPEX 官方日價未抓到或被站方阻擋，不應用 TWSE 當日已存在來判定完整。2026-06-17 排查後的正式歷史狀態應可看到 `3207` 覆蓋 `20140102..20260617`、共 2,907 筆；後續每日若 TPEX 當日失敗，UI / scheduled status 會列出缺少日期。請使用每日股價手動下載、快速/安全更新，或「背景補齊 TPEX + 技術指標」重試缺漏日期並同步。
 
 ### TWSE 股票日價缺漏
 
@@ -1246,6 +1247,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-05：新增 V1.8 Portfolio Construction & Execution Trace Sandbox 操作說明，標示 sample CLI 只輸出 research-only allocation / virtual trace，不讀正式資料、不建立持倉、不下單。
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access 操作說明，標示 `twstock-evidence-access` 只讀 evidence / source trace / quality / warnings，不寫 DB、不改策略、不下單、不套用 lifecycle action。
 - 2026-07-06：新增 Pre-V2 readiness inspection CLI 操作說明，標示它只做 read-only 非排程前置檢查，不取代多週 history / multi-day dry-run / scheduler approval。
+- 2026-07-06：修正 TPEX 每日股價缺日判讀；手動 / 一鍵更新會在 TPEX 缺日期時標示未完整，Windows data update quick task 會輸出 `passed_with_warnings`，freshness probe 會檢查 TWSE / TPEX 原始日檔並在 TPEX 缺檔時標示 `degraded`；技術指標 skip 判斷也新增最新日 eligible 股票覆蓋檢查，避免 TPEX 後補時漏算。
 - 2026-07-06：新增 Historical Evidence Replay 操作說明，標示 replay 只在 working-copy / replay DB 逐日重放 evidence，事件會標示 `historical_replay` / `simulated_scheduler`，不取代真實 scheduled dry-run、weekly history、多日 dry-run 或 production scheduler approval。
 - 2026-07-06：補充 Historical Replay reference return fix 結果判讀，說明 TAIEX benchmark fallback、market `收盤價` fallback、industry payload gap 與 `source_missing_screening_matrix` 限制。
 - 2026-07-06：修正 Evidence Pipeline Runner dry-run report 的 source coverage 判讀；同輪 transient Daily Decision Desk snapshot 會解除 stale durable snapshot missing 並標示 coverage basis，仍不寫 durable snapshot 或 production evidence DB。

@@ -76,6 +76,14 @@ def _step_payload(name: str, result: dict[str, Any], warning: bool = False) -> d
     }
 
 
+def _tpex_warning_messages(result: dict[str, Any]) -> list[str]:
+    messages = [str(item) for item in result.get("warnings", []) if str(item).strip()]
+    failed_dates = sorted({str(item) for item in result.get("failed_dates", []) if str(item).strip()})
+    if failed_dates:
+        messages.append(f"TPEX 每日股價缺少日期：{', '.join(failed_dates)}")
+    return list(dict.fromkeys(messages))
+
+
 def _run_step(
     *,
     steps: list[dict[str, Any]],
@@ -98,7 +106,16 @@ def _run_step(
     return None
 
 
-def _technical_is_current(status: dict[str, Any]) -> tuple[bool, str]:
+def _technical_is_current(
+    status: dict[str, Any],
+    coverage: dict[str, Any] | None = None,
+) -> tuple[bool, str]:
+    if coverage and coverage.get("success") and not coverage.get("is_current", True):
+        covered = coverage.get("covered_stock_count", 0)
+        eligible = coverage.get("eligible_stock_count", 0)
+        latest = coverage.get("daily_latest_date") or "latest daily date"
+        return False, f"technical coverage lagging at {latest}: {covered}/{eligible}"
+
     daily_latest = _parse_date((status.get("daily_data") or {}).get("latest_date"))
     technical_latest = _parse_date((status.get("technical_indicators") or {}).get("latest_date"))
     if daily_latest is not None and technical_latest is not None and technical_latest >= daily_latest:
@@ -194,7 +211,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if failed is None:
         status = service.check_data_overview()
-        current, message = _technical_is_current(status)
+        coverage = service.check_technical_indicator_latest_coverage()
+        current, message = _technical_is_current(status, coverage)
         if current:
             steps.append(
                 {
@@ -220,7 +238,14 @@ def main(argv: list[str] | None = None) -> int:
     if failed is None:
         failed = _run_step(steps=steps, name="check_overview_after", action=service.check_data_overview)
 
-    warnings.extend(step["message"] for step in steps if step.get("status") == "warning")
+    for step in steps:
+        if step.get("status") == "warning" and step.get("message"):
+            warnings.append(str(step["message"]))
+        if step.get("name") == "update_tpex_daily_prices":
+            result = step.get("result")
+            if isinstance(result, dict):
+                warnings.extend(_tpex_warning_messages(result))
+    warnings = list(dict.fromkeys(warnings))
     status = "failed" if failed is not None else "passed_with_warnings" if warnings else "passed"
     payload = {
         "task": "baldr-data-update-quick-daily",

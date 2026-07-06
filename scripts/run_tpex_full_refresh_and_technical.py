@@ -36,6 +36,14 @@ def _step(name: str, ok: bool, message: str, rows: int = 0, warnings: List[str] 
     }
 
 
+def _tpex_warning_messages(result: Dict[str, Any]) -> List[str]:
+    messages = [str(item) for item in result.get("warnings", []) if str(item).strip()]
+    failed_dates = sorted({str(item) for item in result.get("failed_dates", []) if str(item).strip()})
+    if failed_dates:
+        messages.append(f"TPEX 每日股價缺少日期：{', '.join(failed_dates)}")
+    return list(dict.fromkeys(messages))
+
+
 def _parse_status_date(value: Any) -> datetime | None:
     if not value:
         return None
@@ -52,9 +60,16 @@ def _should_skip_technical_indicators(
     status: Dict[str, Any],
     *,
     force_all: bool,
+    technical_coverage: Dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     if force_all:
         return False, ""
+
+    if technical_coverage and technical_coverage.get("success") and not technical_coverage.get("is_current", True):
+        covered = technical_coverage.get("covered_stock_count", 0)
+        eligible = technical_coverage.get("eligible_stock_count", 0)
+        latest = technical_coverage.get("daily_latest_date") or "latest daily date"
+        return False, f"技術指標最新日覆蓋不足（{latest}：{covered}/{eligible}），執行增量計算"
 
     daily_latest = _parse_status_date((status.get("daily_data") or {}).get("latest_date"))
     technical_latest = _parse_status_date((status.get("technical_indicators") or {}).get("latest_date"))
@@ -158,14 +173,24 @@ def _run_tpex_parallel(
                 _write_state(state_file, state)
 
     unique_updated_dates = sorted(set(updated_dates))
+    unique_failed_dates = sorted(set(failed_dates))
+    warnings = _tpex_warning_messages({"failed_dates": unique_failed_dates})
+    has_any_local_data = bool(unique_updated_dates or skipped_dates)
     return {
-        "success": bool(unique_updated_dates or skipped_dates),
-        "message": "TPEX 每日股價區間更新完成" if unique_updated_dates or skipped_dates else "TPEX 每日股價區間更新失敗：無可寫入日期",
+        "success": has_any_local_data and not unique_failed_dates,
+        "message": (
+            f"TPEX 每日股價區間更新未完整：缺少日期 {', '.join(unique_failed_dates)}"
+            if unique_failed_dates
+            else "TPEX 每日股價區間更新完成"
+            if has_any_local_data
+            else "TPEX 每日股價區間更新失敗：無可寫入日期"
+        ),
         "requested_dates": date_keys,
         "updated_dates": unique_updated_dates,
         "fallback_dates": sorted(set(fallback_dates)),
         "skipped_dates": sorted(set(skipped_dates)),
-        "failed_dates": sorted(set(failed_dates)),
+        "failed_dates": unique_failed_dates,
+        "warnings": warnings,
         "tpex_rows": total_rows,
         "skipped_rows": total_skipped_rows,
         "diagnostic_count": 0,
@@ -263,6 +288,7 @@ def main() -> int:
             rows=len(tpex_result.get("updated_dates", [])),
             warnings=(list(tpex_result.get("warnings", [])) if tpex_result.get("warnings") else []),
         )
+        all_warnings.extend(_tpex_warning_messages(tpex_result))
         if not tpex_result.get("success", False):
             all_warnings.append(f"TPEX 每日股價更新失敗：{tpex_result.get('message', 'unknown')}")
         state["tpex_updated_dates"] = tpex_result.get("updated_dates", [])
@@ -294,9 +320,11 @@ def main() -> int:
             _write_state(state_file, state)
 
         status = service.check_data_overview() if hasattr(service, "check_data_overview") else service.check_data_status()
+        technical_coverage = service.check_technical_indicator_latest_coverage()
         should_skip_technical, skip_message = _should_skip_technical_indicators(
             status,
             force_all=args.technical_force_all,
+            technical_coverage=technical_coverage,
         )
         if should_skip_technical:
             state["steps"]["technical"] = {
@@ -328,6 +356,7 @@ def main() -> int:
                 all_warnings.append(f"技術指標計算失敗：{tech_result.get('message', 'unknown')}")
         _write_state(state_file, state)
 
+        all_warnings = list(dict.fromkeys(all_warnings))
         state["status"] = "done" if not all_warnings else "done_with_warning"
         state["warnings"] = all_warnings
         state["sqlite_synced_rows"] = sync_rows

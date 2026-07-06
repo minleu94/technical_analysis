@@ -491,18 +491,29 @@ class UpdateService :
                 }
 
             updated =len (unique_updated_dates )>0
+            unique_failed_dates =sorted (set (failed_dates ))
+            warnings =(
+            [f"TPEX 每日股價缺少日期：{', '.join(unique_failed_dates)}"]
+            if unique_failed_dates
+            else []
+            )
+            has_any_local_data =updated or len (skipped_dates )>0
             return {
-            'success':updated or len (skipped_dates )>0 ,
+            'success':has_any_local_data and not unique_failed_dates ,
             'message':(
+            f"TPEX 每日股價區間更新未完整：缺少日期 {', '.join(unique_failed_dates)}"
+            if unique_failed_dates
+            else
             'TPEX 每日股價區間更新完成'
-            if updated or len (skipped_dates )>0
+            if has_any_local_data
             else 'TPEX 每日股價區間更新失敗：無可寫入日期'
             ),
             'requested_dates':date_keys ,
             'updated_dates':unique_updated_dates ,
             'fallback_dates':sorted (set (fallback_dates )),
             'skipped_dates':sorted (set (skipped_dates )),
-            'failed_dates':sorted (set (failed_dates )),
+            'failed_dates':unique_failed_dates ,
+            'warnings':warnings ,
             'tpex_rows':total_rows ,
             'skipped_rows':total_skipped_rows ,
             'diagnostic_count':0 ,
@@ -519,6 +530,7 @@ class UpdateService :
             'fallback_dates':[],
             'skipped_dates':[],
             'failed_dates':[self ._date_key (start_date )],
+            'warnings':[f"TPEX 每日股價缺少日期：{self ._date_key (start_date )}"],
             'tpex_rows':0 ,
             'skipped_rows':0 ,
             'diagnostic_count':1 ,
@@ -2042,6 +2054,67 @@ class UpdateService :
             import logging
             logging .getLogger (__name__ ).warning (f"[UpdateService] 從 SQLite 獲取技術指標狀態失敗: {e}")
             return {'latest_date':None ,'total_records':0 ,'file_count':0 ,'status':f'error: {e}'}
+
+    def check_technical_indicator_latest_coverage (self )->Dict [str ,Any ]:
+        """Check whether the latest daily price date has matching technical coverage."""
+        if not getattr (self .config ,'use_sqlite',False ):
+            return {'success':False ,'status':'unavailable','message':'SQLite disabled'}
+        try :
+            from data_module .db_manager import DBManager
+            db =DBManager (self .config )
+            min_days =int (getattr (self .config ,'min_data_days',30 )or 30 )
+            query ="""
+                WITH latest AS (
+                    SELECT MAX("日期") AS latest_date FROM daily_prices
+                ),
+                eligible(stock_code) AS (
+                    SELECT p."證券代號"
+                    FROM daily_prices p
+                    GROUP BY p."證券代號"
+                    HAVING COUNT(*) >= ?
+                       AND MAX(p."日期") = (SELECT latest_date FROM latest)
+                ),
+                covered(stock_code) AS (
+                    SELECT DISTINCT t."證券代號"
+                    FROM technical_indicators t
+                    WHERE t."日期" = (SELECT latest_date FROM latest)
+                )
+                SELECT
+                    (SELECT latest_date FROM latest) AS daily_latest_date,
+                    (SELECT MAX("日期") FROM technical_indicators) AS technical_latest_date,
+                    (SELECT COUNT(*) FROM daily_prices WHERE "日期" = (SELECT latest_date FROM latest)) AS daily_latest_rows,
+                    (SELECT COUNT(*) FROM eligible) AS eligible_stock_count,
+                    (SELECT COUNT(*) FROM eligible e JOIN covered c ON c.stock_code = e.stock_code) AS covered_stock_count;
+            """
+            df =db .execute_query (query ,params =(min_days ,))
+            if df .empty :
+                return {'success':False ,'status':'empty','message':'technical coverage query returned no rows'}
+            row =df .iloc [0 ]
+            daily_latest =row ['daily_latest_date']
+            technical_latest =row ['technical_latest_date']
+            eligible_count =int (row ['eligible_stock_count']or 0 )
+            covered_count =int (row ['covered_stock_count']or 0 )
+            is_current =bool (
+            daily_latest
+            and technical_latest
+            and str (technical_latest )>=str (daily_latest )
+            and covered_count >=eligible_count
+            )
+            return {
+            'success':True ,
+            'status':'ok'if is_current else 'lagging',
+            'is_current':is_current ,
+            'daily_latest_date':daily_latest ,
+            'technical_latest_date':technical_latest ,
+            'daily_latest_rows':int (row ['daily_latest_rows']or 0 ),
+            'eligible_stock_count':eligible_count ,
+            'covered_stock_count':covered_count ,
+            'missing_stock_count':max (eligible_count -covered_count ,0 ),
+            }
+        except Exception as e :
+            import logging
+            logging .getLogger (__name__ ).warning (f"[UpdateService] 技術指標最新日覆蓋檢查失敗: {e}")
+            return {'success':False ,'status':f'error: {e}','message':str (e )}
 
     def check_data_status (self )->Dict [str ,Any ]:
         """檢查數據狀態"""
