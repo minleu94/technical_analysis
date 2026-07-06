@@ -114,6 +114,55 @@ def test_recommendation_service_records_full_screening_matrix_statuses(mock_read
     assert any(row["status"] == "fail" for row in service.last_why_not_payload_json)
 
 
+@patch("pandas.read_csv")
+def test_recommendation_service_marks_empty_result_from_volume_filter_as_liquidity_payload(mock_read_csv) -> None:
+    config = MagicMock()
+    config.use_sqlite = False
+    config.stock_data_file.exists.return_value = True
+    config.stock_data_file.stat.return_value.st_size = 1024
+    config.all_stocks_data_file.exists.return_value = False
+    mock_read_csv.return_value = _stock_frame()
+    service = RecommendationService(config, industry_mapper=MagicMock())
+
+    def side_effect(stock_df: pd.DataFrame, _config: dict[str, object]) -> pd.DataFrame:
+        stock_code = str(stock_df["證券代號"].iloc[0])
+        if stock_code == "SKIP":
+            return pd.DataFrame()
+        if stock_code == "DEGRADED":
+            raise RuntimeError("fixture failure")
+        scores = {"PASS": 90.0, "FAIL": 40.0}
+        return pd.DataFrame(
+            {
+                "TotalScore": [scores[stock_code]],
+                "FinalScore": [scores[stock_code]],
+                "收盤價": [100.0],
+                "成交股數": [1000],
+            }
+        )
+
+    service.strategy_configurator.generate_recommendations = side_effect
+
+    service.run_recommendation(
+        config={
+            "filters": {"volume_ratio_min": 2.0},
+            "recommendation_ranking": {
+                "threshold_mode": "quantile",
+                "recommendation_min_percentile_bp": 8000,
+                "recommendation_min_universe_size": 2,
+                "recommendation_ranking_method": "nearest_rank",
+            },
+        },
+        max_stocks=5,
+        top_n=1,
+    )
+
+    skip_row = next(row for row in service.last_screening_matrix if row["stock_code"] == "SKIP")
+    assert skip_row["reason_codes"] == ["liquidity_volume_ratio_below_min"]
+    assert skip_row["threshold_name"] == "liquidity.volume_ratio_min"
+    assert service.last_liquidity_gate_payload_json
+    assert any(row["stock_code"] == "SKIP" for row in service.last_liquidity_gate_payload_json)
+
+
 def test_recommendation_importer_maps_screening_matrix_events() -> None:
     result = RecommendationResultDTO(
         result_id="rec-v17",

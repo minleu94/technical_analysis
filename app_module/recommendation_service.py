@@ -8,6 +8,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 
 # 確保 pd.isna 可用（pandas 兼容性）
 if not hasattr(pd, 'isna'):
@@ -126,6 +127,60 @@ class RecommendationService:
         ]
         self.last_exclusion_quality = "observed" if negative_rows else "observed"
         self.last_exclusion_warnings_json = ["screening_matrix_persisted_v1"]
+
+    @staticmethod
+    def _configured_volume_change_min_percent(config: Dict[str, Any]) -> Decimal | None:
+        filters = config.get("filters", {})
+        key = ""
+        if "min_volume_ratio" in filters:
+            key = "min_volume_ratio"
+        elif "volume_ratio_min" in filters:
+            key = "volume_ratio_min"
+        if not key:
+            return None
+
+        try:
+            value = to_decimal(filters[key])
+        except (InvalidOperation, ValueError, TypeError):
+            return None
+        if value.is_nan():
+            return None
+
+        if key == "min_volume_ratio" or Decimal("-50") <= value <= Decimal("10"):
+            return (value - Decimal("1")) * Decimal("100")
+        return value
+
+    @staticmethod
+    def _observed_volume_change_percent(stock_df: pd.DataFrame) -> Decimal | None:
+        if "成交股數" not in stock_df.columns or len(stock_df) < 2:
+            return None
+
+        volumes = pd.to_numeric(stock_df["成交股數"], errors="coerce")
+        latest_volume_raw = volumes.iloc[-1]
+        if pd.isna(latest_volume_raw):
+            return None
+
+        history = volumes.iloc[-21:-1] if len(volumes) >= 21 else volumes.iloc[:-1]
+        history_values: list[Decimal] = []
+        for value in history:
+            if pd.isna(value):
+                continue
+            try:
+                history_values.append(to_decimal(value))
+            except (InvalidOperation, ValueError, TypeError):
+                continue
+        if not history_values:
+            return None
+
+        latest_volume = to_decimal(latest_volume_raw)
+        volume_ma = sum(history_values, Decimal("0")) / Decimal(len(history_values))
+        if volume_ma <= Decimal("0"):
+            return None
+        return (latest_volume / volume_ma - Decimal("1")) * Decimal("100")
+
+    @staticmethod
+    def _format_decimal_for_payload(value: Decimal) -> str:
+        return format(value.normalize(), "f")
 
     @staticmethod
     def _validate_ranking_config(config: Dict[str, Any]) -> tuple[Dict[str, Any], str]:
@@ -449,16 +504,31 @@ class RecommendationService:
                             f"日期範圍={stock_df['日期'].min() if '日期' in stock_df.columns else 'N/A'} ~ "
                             f"{stock_df['日期'].max() if '日期' in stock_df.columns else 'N/A'}"
                         )
+                    reason_codes = ["strategy_filter_no_signal"]
+                    threshold_name = "strategy_configurator_result"
+                    observed_value: Any = "empty"
+                    required_value: Any = "non_empty"
+                    volume_min = self._configured_volume_change_min_percent(config)
+                    observed_volume_change = self._observed_volume_change_percent(stock_df)
+                    if (
+                        volume_min is not None
+                        and observed_volume_change is not None
+                        and observed_volume_change < volume_min
+                    ):
+                        reason_codes = ["liquidity_volume_ratio_below_min"]
+                        threshold_name = "liquidity.volume_ratio_min"
+                        observed_value = self._format_decimal_for_payload(observed_volume_change)
+                        required_value = self._format_decimal_for_payload(volume_min)
                     row = self._matrix_row(
                         stock_code=stock_code_text,
                         stock_name=stock_name_text,
                         status="skipped",
-                        reason_codes=["strategy_filter_no_signal"],
+                        reason_codes=reason_codes,
                         quality="degraded",
                         stage="strategy_evaluation",
-                        threshold_name="strategy_configurator_result",
-                        observed_value="empty",
-                        required_value="non_empty",
+                        threshold_name=threshold_name,
+                        observed_value=observed_value,
+                        required_value=required_value,
                         threshold_mode=threshold_mode,
                     )
                     self.last_screening_matrix.append(row)
