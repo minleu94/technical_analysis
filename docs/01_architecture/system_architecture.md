@@ -109,7 +109,7 @@ Application Services / DTO / Repository
 | 保存與版本 | `backtest_repository.py`、`recommendation_repository.py`、`strategy_version_service.py`、`preset_service.py`、`universe_service.py` |
 | Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py`、`portfolio_construction_service.py`、`portfolio_execution_trace_service.py` |
 | Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`strategy_lifecycle_repository.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
-| Post-V1 evidence | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`historical_evidence_replay.py`、`agent_evidence_access_service.py`、`pre_v2_readiness_service.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
+| Post-V1 evidence / V2.0 workbench prototype | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`historical_evidence_replay.py`、`agent_evidence_access_service.py`、`pre_v2_readiness_service.py`、`workbench_dtos.py`、`workbench_read_only_composer.py`、`workbench_replay_summary.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
 | Runtime | `runtime_services/`、`dtos/runtime_dtos.py` |
 
 `app_module` 不依賴 `ui_app`。Legacy Tkinter UI 不是目前 service 架構的一部分。
@@ -147,6 +147,8 @@ Pre-V2 readiness inspector 新增 `app_module/pre_v2_readiness_service.py` 與 `
 Historical Evidence Replay v1 新增 `app_module/historical_evidence_replay.py` 與 `scripts/replay_historical_evidence_pipeline.py`，作為 app-layer orchestration，不取代 `EvidencePipelineRunner`、importer 或 repository。Replay service 先確認 source DB 與 replay DB 不是同一路徑，再以 `shutil.copy2` 建立 working-copy / replay DB；每日重放只選 `created_at <= decision_date` 的 persisted Recommendation result，並透過 `EvidencePipelineRunRequest.replay_context` / `EvidenceCaptureRequest.replay_context` 將 `replay_mode=historical_replay`、`source_label=simulated_scheduler`、`replay_run_id`、`replay_decision_date` 與 `replay_data_as_of_date` 注入 event metadata。`ForwardPerformanceService.calculate(data_as_of_date=...)` 只允許讀到 replay 當日以前的價格，因此 replay 中尚未成熟的 window 仍保持 pending。此 service 不建立 Windows Task Scheduler、不改 existing scheduled dry-run、不寫 formal evidence DB、不把 replay 結果升級為 production readiness。
 
 Phase 0A reference return fix 後，`ForwardPerformanceService` 的 market benchmark lookup 採保守 fallback：event 沒有 `benchmark_id` 時使用 `TAIEX`，`market_indices` 支援 named aliases、未命名市場序列與 `收盤指數` 缺值時的 `收盤價` fallback。Industry lookup 不推估未知產業，只在 event 有 `industry_benchmark_id` 或 `sector` 且可映射至 `industry_indices` 時填入；缺 reference 時保留 `NULL` 與 `missing_industry_benchmark` warning，不填 0。這是 evidence outcome reference lookup，不改 `ScoringEngine`、推薦分數、Portfolio 或 scheduler。
+
+V2.0 Phase 1 read-only Workbench prototype 新增 `app_module/workbench_dtos.py`、`app_module/workbench_read_only_composer.py`、`app_module/workbench_replay_summary.py` 與 `scripts/inspect_v2_workbench_prototype.py`。這一層只把既有 Daily Decision Desk snapshot、Pre-V2 readiness report、read-only Agent sample 與可選 Historical Replay JSON summary 組成 `WorkbenchDashboardDTO`，輸出今日待判讀、Evidence mode、market context、portfolio/watchlist summary、Daily Checklist、warnings 與固定 read-only access boundary。Prototype CLI 只支援 `--sample`；可讀 `_reference_fix` replay JSON summary，但拒絕 replay DB 或其他 artifact。Composer 不讀 UI state、不寫 SQLite、不建立 scheduler、不重算 scoring / portfolio / lifecycle / backtest，也不輸出買賣建議。Phase 2 主 UI 整合、正式 DB reader、background evidence feed 與 production scheduler gate 都尚未完成。
 
 Healthcheck Batch 4 新增 `research_result_presentation.py` 作為 Research Lab 結果頁呈現邊界。它只把已產生的推薦回放 summary、Train-Test report、Walk-forward fold summary 轉成 UI 文案與可靠度提示，不重跑回測、不重新抓取目前資料、不改變交易或績效計算。Train-Test / Walk-forward 樣本可靠度提示只讀交易數、Fold 數、OOS 與 consistency 等已存在結果 metadata；Registry 比較仍只讀已保存 metadata、equity curve 與 benchmark_results。Qt UI 可使用這些 helper 顯示「樣本不足，不宜作正式策略判斷」、資金使用與 Monte Carlo 語意，但不得把提示升級成交易建議、自動下單或持倉調整。
 
@@ -533,6 +535,7 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-07-06：新增 V2.0 Phase 1 read-only Workbench prototype 架構同步，確認 DTO / composer / replay summary adapter / CLI 只組合唯讀樣本與 replay JSON summary，不寫 DB、不掛主 UI、不重算策略、不啟用 scheduler。
 - 2026-07-06：新增 Historical Evidence Replay 架構同步，確認 replay service 只做 working-copy / replay DB orchestration，recommendation result 受 `created_at <= decision_date` 限制，forward outcome 受 `data_as_of_date` 限制，不改 scheduled dry-run、不寫 formal DB、不啟用 production scheduler。
 - 2026-07-06：補充 Phase 0A reference return fix 架構契約，確認 missing benchmark fallback 到 TAIEX、market index `收盤價` fallback 與保守 industry sector mapping 只影響 evidence outcome reference lookup，不改 scoring、portfolio 或 scheduler。
 - 2026-07-06：新增 Pre-V2 readiness inspector 架構同步，確認 `PreV2ReadinessService` 只做 weekly history / multi-day record / source gaps / Agent report sample 唯讀檢查，不建立 schema、不寫 evidence、不啟用 scheduler。

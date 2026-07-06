@@ -36,9 +36,12 @@ from app_module.workbench_replay_summary import load_historical_replay_summary
 
 
 def main(argv: list[str] | None = None) -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
+    stdout_reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(stdout_reconfigure):
+        stdout_reconfigure(encoding="utf-8")
+    stderr_reconfigure = getattr(sys.stderr, "reconfigure", None)
+    if callable(stderr_reconfigure):
+        stderr_reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Inspect V2.0 Workbench Phase 1 read-only prototype.")
     parser.add_argument("--sample", action="store_true", help="Use built-in sample payloads.")
     parser.add_argument("--format", choices=("json", "markdown"), default="json")

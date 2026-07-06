@@ -918,6 +918,23 @@ V2.0 前可用 `scripts\inspect_pre_v2_readiness.py` 做非排程 readiness 檢�
 
 `waiting_for_time` 代表仍需真實多週 / 多日累積，不可用 fixture、單次 smoke 或手動改表替代。`ready` 只代表該項可進入 V2.0 design discussion，不代表 scheduler approval、production readiness、投資有效性或交易建議。
 
+V2.0 Phase 1 可用 `scripts\inspect_v2_workbench_prototype.py` 檢查 read-only Workbench prototype 輸出。這個 CLI 目前只支援 `--sample`，不讀正式 DB、不寫 evidence、不掛主 UI、不建立 scheduler、不下單、不套用 lifecycle action，也不重算 scoring、portfolio、backtest 或 lifecycle 狀態。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --format json
+.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --format markdown
+.\.venv\Scripts\python.exe scripts\inspect_v2_workbench_prototype.py --sample --replay-summary-json output\evidence_pipeline\historical_replay_2026-01-06_2026-07-06_reference_fix.json --format markdown
+```
+
+輸出會包含：
+
+- `access_boundary.mode=read_only`、`writes_allowed=false`、`production_scheduler_allowed=false`。
+- `source_mode=sample_only` 或 `sample_plus_historical_replay`。
+- 「今日待判讀」、Evidence mode、market context、portfolio / watchlist summary、Daily Checklist、warnings。
+- 若讀取 `_reference_fix` replay JSON summary，會揭露 simulated scheduler、source gap、payload gap、outcome maturity、missing industry benchmark 與 pending future-data 限制。
+
+Replay summary 只能使用 JSON summary；不得把 replay DB 直接交給 prototype CLI。這個 prototype 是 V2.0 資訊架構與 read-only contract 檢查，不是正式 UI、不代表 production scheduler approval，也不是交易建議。
+
 2026-07-06 closeout 的參考結果：在 ignored working-copy DB 與 output-root mirror 中，source gaps 為 `ready`、read-only Agent report sample 為 `ready`、Evidence Review UI smoke passed、all-source working-copy confirm smoke repeat=2 idempotency passed；整體仍為 `waiting_for_time`，因 weekly history `0/3`、multi-day dry-run `1/3`。這個結果不代表正式 DB 已 confirm，也不代表 production scheduler 可啟用。
 
 Working-copy smoke 會先確認 source DB 與 working-copy DB 不是同一路徑；若 working-copy DB 不存在，會以 `shutil.copy2` 從 source DB 複製一份，再只對 working-copy DB 執行 confirm smoke。預設 repeat 至少 2 次，用 event / outcome counts 檢查 idempotency；source DB 應維持 read-only。readiness evaluator 只彙總 source coverage、smoke report 與 dashboard availability，輸出的 `production_scheduler_allowed` 固定為 `false`。正式排程前仍需人工 review `docs/06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md` 的 source coverage、diagnostics report、backup path、rollback path 與 manual approval steps。
@@ -1218,6 +1235,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 
 ## 14. 更新記錄
 
+- 2026-07-06：新增 V2.0 Phase 1 read-only Workbench prototype CLI 操作說明，標示 sample / replay JSON summary 輸入、JSON / Markdown 輸出、read-only access boundary 與不讀正式 DB / 不啟用 scheduler / 不產生交易建議限制。
 - 2026-07-05：新增 V1.6 cross-sectional factor snapshot inspection CLI 操作說明，標示 rank / quantile 僅供研究 attribution，不是推薦、不改 `ScoringEngine`、不建立 DB、不啟用 scheduler。
 - 2026-07-02：完成 V1.2 Research Credibility & Execution Model v1 操作說明，補充 Profile replay 訓練 / 驗證分離、推薦回放 rolling risk metrics、microstructure preflight、relative attribution 與仍未完成的實盤撮合 residual。
 - 2026-07-02：完成主 PySide6 UI 金融研究工作台視覺整理；統一設計 token、表格樣式、按鈕 variant、空狀態與缺字 icon 清理，並明確維持資料抓取、推薦、回測、每日決策與持倉計算邊界不變。
