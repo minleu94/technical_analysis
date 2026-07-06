@@ -366,7 +366,7 @@ class UpdateView(QWidget):
         self.safe_update_all_btn.setToolTip(
             "【安全更新 (完整 CSV + SQLite)】\n"
             "備份完整性優先。TWSE 每日股價與 TPEX 每日股價會依上方日期範圍檢查並補齊缺少 CSV。\n"
-            "券商分點會依上方日期範圍更新目前啟用的 40 家追蹤分點。\n"
+            "券商分點會依上方日期範圍更新目前啟用的追蹤分點。\n"
             "完成下載後會重建每日股價大表與分點 merged.csv，再同步寫入 SQLite。\n"
             "此流程耗時較長，但能保證 CSV 歷史資料庫的完整備份。"
         )
@@ -580,7 +580,7 @@ class UpdateView(QWidget):
             "daily": "檢查與維護每日股價原始資料（TWSE + TPEX）與 SQLite 對應數據。此處支援增量合併與 Danger Zone 強制重新合併。",
             "market": "檢查與更新加權指數大盤數據。此處會將大盤資料同步儲存至資料庫的 market_indices 表。",
             "industry": "檢查與更新產業指數數據，可將各產業分類的歷史指數同步至 industry_indices 表。",
-            "broker_branch": "維護 MoneyDJ 目前啟用的 40 家追蹤分點之買賣超資料，並可執行券商分點合併至 SQLite broker_flows 表。",
+            "broker_branch": "維護 MoneyDJ 目前啟用的追蹤分點之買賣超資料，並可執行券商分點合併至 SQLite broker_flows 表。",
             "technical": "增量或全量重新計算個股的技術指標（KD, MACD, RSI 等），並高速批量儲存至資料庫中。",
             "monthly_revenue": "使用 MOPS 月營收快照檔搭配正式可得日對照檔，先檢查筆數與診斷結果，再受控寫入正式月營收資料表。",
         }
@@ -931,7 +931,7 @@ class UpdateView(QWidget):
             self.merge_broker_branch_btn.setMinimumHeight(35)
             self.merge_broker_branch_btn.setToolTip(
                 "【合併券商分點】\n"
-                "將本地 broker_flow/ 內目前啟用的 40 家追蹤分點買賣超 CSV 數據進行增量合併，\n"
+                "將本地 broker_flow/ 內目前啟用的追蹤分點買賣超 CSV 數據進行增量合併，\n"
                 "並同步寫入至 SQLite 資料庫的 broker_flows 表中，供主力流向分析使用。"
             )
             self.merge_broker_branch_btn.setStyleSheet("""

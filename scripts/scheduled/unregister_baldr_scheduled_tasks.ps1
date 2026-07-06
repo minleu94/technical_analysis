@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $taskNames = @(
+    "baldr-data-update-quick-daily",
     "baldr-data-freshness-check-daily",
     "baldr-evidence-pipeline-dry-run-daily",
     "baldr-evidence-working-copy-smoke-manual"
