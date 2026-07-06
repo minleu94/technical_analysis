@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from pathlib import Path
+
+from app_module.evidence_event_dtos import (
+    EvidenceDataQuality,
+    EvidenceEvent,
+    EvidenceEventType,
+    EvidenceOutcome,
+    EvidenceOutcomeStatus,
+)
+from app_module.evidence_event_repository import EvidenceEventRepository
+from app_module.pre_v2_readiness_service import (
+    PreV2ReadinessService,
+    STATUS_ACTION_REQUIRED,
+    STATUS_READY,
+    STATUS_WAITING_FOR_TIME,
+    render_pre_v2_readiness_markdown,
+)
+from data_module.config import TWStockConfig
+
+
+def _config(tmp_path: Path) -> TWStockConfig:
+    config = TWStockConfig(data_root=tmp_path / "data", output_root=tmp_path / "output")
+    config.db_file = tmp_path / "evidence.db"
+    config.use_sqlite = True
+    return config
+
+
+def _seed_evidence_event(config: TWStockConfig) -> None:
+    repo = EvidenceEventRepository(config)
+    event = repo.insert_event(
+        EvidenceEvent(
+            event_id="evt-pre-v2",
+            event_hash="sha256:evt-pre-v2",
+            event_date="2026-07-06",
+            decision_date="2026-07-06",
+            symbol="2330",
+            event_type=EvidenceEventType.RECOMMENDATION_INCLUDED,
+            event_family="recommendation",
+            source_type="recommendation_result",
+            source_id="rec-ready",
+            data_quality=EvidenceDataQuality.OBSERVED,
+            as_of_date="2026-07-06",
+            available_date="2026-07-06",
+        )
+    )
+    repo.upsert_outcome(
+        EvidenceOutcome(
+            outcome_id="out-pre-v2",
+            event_id=event.event_id,
+            window_days=5,
+            forward_return_bp=120,
+            outcome_status=EvidenceOutcomeStatus.READY,
+            data_quality=EvidenceDataQuality.OBSERVED,
+        )
+    )
+
+
+def _seed_weekly_history(db_path: Path, count: int) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE evidence_operations_weekly_reviews (
+                review_id TEXT PRIMARY KEY,
+                review_hash TEXT NOT NULL UNIQUE,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                review_status TEXT NOT NULL,
+                scheduler_readiness TEXT NOT NULL,
+                production_scheduler_allowed INTEGER NOT NULL DEFAULT 0,
+                decision_quality_reviews_count INTEGER NOT NULL DEFAULT 0,
+                signal_decay_observations_count INTEGER NOT NULL DEFAULT 0,
+                manual_lifecycle_candidate_count INTEGER NOT NULL DEFAULT 0,
+                warnings_count INTEGER NOT NULL DEFAULT 0,
+                generated_by TEXT NOT NULL DEFAULT '',
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        for index in range(count):
+            conn.execute(
+                """
+                INSERT INTO evidence_operations_weekly_reviews (
+                    review_id,
+                    review_hash,
+                    period_start,
+                    period_end,
+                    review_status,
+                    scheduler_readiness,
+                    production_scheduler_allowed,
+                    payload_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 0, '{}')
+                """,
+                (
+                    f"eor-{index}",
+                    f"sha256:{index}",
+                    f"2026-07-{1 + index:02d}",
+                    f"2026-07-{5 + index:02d}",
+                    "coverage_only",
+                    "not_ready",
+                ),
+            )
+
+
+def _seed_recommendation(config: TWStockConfig, *, with_payloads: bool) -> None:
+    runs_dir = Path(config.output_root) / "recommendation" / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "result_id": "rec-ready",
+        "why_not_payload_json": [{"stock_code": "1101", "reason_codes": ["weak_rs"]}]
+        if with_payloads
+        else [],
+        "liquidity_gate_payload_json": [{"stock_code": "2201", "reason_codes": ["low_liquidity"]}]
+        if with_payloads
+        else [],
+        "screening_matrix_json": [{"stock_code": "2330", "status": "pass", "quality": "observed"}]
+        if with_payloads
+        else [],
+    }
+    data_path = runs_dir / "rec-ready.json"
+    data_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    with sqlite3.connect(runs_dir / "recommendation_runs.db") as conn:
+        conn.execute(
+            """
+            CREATE TABLE runs (
+                result_id TEXT PRIMARY KEY,
+                result_name TEXT NOT NULL,
+                regime TEXT,
+                stock_count INTEGER,
+                config TEXT,
+                notes TEXT,
+                created_at TEXT,
+                data_path TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO runs (
+                result_id,
+                result_name,
+                regime,
+                stock_count,
+                config,
+                notes,
+                created_at,
+                data_path
+            )
+            VALUES ('rec-ready', 'Ready recommendation', 'trend', 1, '{}', '', '2026-07-06T12:00:00', ?)
+            """,
+            (str(data_path),),
+        )
+
+
+def _seed_decision_desk_snapshot(db_path: Path) -> None:
+    section = {"quality": "observed", "as_of_date": "2026-07-06"}
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE decision_desk_snapshots (
+                snapshot_id TEXT PRIMARY KEY,
+                snapshot_hash TEXT NOT NULL UNIQUE,
+                decision_date TEXT NOT NULL,
+                as_of_date TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                builder_version TEXT NOT NULL,
+                data_quality TEXT NOT NULL,
+                warnings_json TEXT NOT NULL,
+                market_regime_json TEXT NOT NULL,
+                market_breadth_json TEXT NOT NULL,
+                sector_rotation_json TEXT NOT NULL,
+                relative_strength_liquidity_json TEXT NOT NULL,
+                watchlist_trigger_json TEXT NOT NULL,
+                portfolio_alert_json TEXT NOT NULL,
+                risk_prompt_json TEXT NOT NULL,
+                fundamental_diagnostics_json TEXT NOT NULL,
+                metadata_json TEXT NOT NULL,
+                snapshot_status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO decision_desk_snapshots (
+                snapshot_id,
+                snapshot_hash,
+                decision_date,
+                as_of_date,
+                source_version,
+                builder_version,
+                data_quality,
+                warnings_json,
+                market_regime_json,
+                market_breadth_json,
+                sector_rotation_json,
+                relative_strength_liquidity_json,
+                watchlist_trigger_json,
+                portfolio_alert_json,
+                risk_prompt_json,
+                fundamental_diagnostics_json,
+                metadata_json,
+                snapshot_status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+            """,
+            (
+                "dds-ready",
+                "sha256:dds-ready",
+                "2026-07-06",
+                "2026-07-06",
+                "test",
+                "test",
+                "observed",
+                "[]",
+                json.dumps(section),
+                json.dumps(section),
+                json.dumps(section),
+                json.dumps(section),
+                json.dumps(section),
+                json.dumps(section),
+                json.dumps(section),
+                "{}",
+                "{}",
+            ),
+        )
+
+
+def _multi_day_record(path: Path, rows: int) -> None:
+    lines = [
+        "| Date | Data update status | Source coverage status | Dry-run pipeline status | Working-copy confirm smoke status | Events seen | Events inserted in working copy | Outcomes created in working copy | Summary groups | Warnings count | Blocking gaps | Dashboard review completed | Human reviewer notes | Decision |",
+        "|---|---|---|---|---|---:|---:|---:|---:|---:|---|---|---|---|",
+    ]
+    for index in range(rows):
+        lines.append(
+            f"| 2026-07-{2 + index:02d} | passed | ready | passed | passed | 10 | 10 | 10 | 1 | 0 |  | yes | ok | continue dry-run |"
+        )
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def test_pre_v2_readiness_reports_parallel_ready_and_time_waiting_items(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_evidence_event(config)
+    _seed_weekly_history(config.db_file, 1)
+    _seed_recommendation(config, with_payloads=True)
+    _seed_decision_desk_snapshot(config.db_file)
+    record_path = tmp_path / "multi-day.md"
+    _multi_day_record(record_path, rows=1)
+
+    report = PreV2ReadinessService(config, evidence_db_path=config.db_file).inspect(
+        decision_date="2026-07-06",
+        multi_day_record_path=record_path,
+    )
+    items = {item.item_id: item for item in report.items}
+
+    assert report.overall_status == STATUS_WAITING_FOR_TIME
+    assert items["weekly_history"].status == STATUS_WAITING_FOR_TIME
+    assert items["multi_day_dry_run"].status == STATUS_WAITING_FOR_TIME
+    assert items["source_gaps"].status == STATUS_READY
+    assert items["read_only_agent_report_sample"].status == STATUS_READY
+    assert report.production_scheduler_allowed is False
+    assert "V2.0" in render_pre_v2_readiness_markdown(report)
+
+
+def test_pre_v2_readiness_flags_source_and_report_gaps_without_creating_missing_db(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    missing_db = tmp_path / "missing" / "evidence.db"
+    record_path = tmp_path / "multi-day.md"
+    _multi_day_record(record_path, rows=0)
+
+    report = PreV2ReadinessService(config, evidence_db_path=missing_db).inspect(
+        decision_date="2026-07-06",
+        multi_day_record_path=record_path,
+    )
+    items = {item.item_id: item for item in report.items}
+
+    assert report.overall_status == STATUS_ACTION_REQUIRED
+    assert items["weekly_history"].status == STATUS_ACTION_REQUIRED
+    assert items["source_gaps"].status == STATUS_ACTION_REQUIRED
+    assert items["read_only_agent_report_sample"].status == STATUS_ACTION_REQUIRED
+    assert not missing_db.exists()
