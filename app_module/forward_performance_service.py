@@ -18,6 +18,19 @@ from app_module.evidence_event_dtos import (
 from app_module.evidence_event_repository import EvidenceEventRepository
 
 
+DEFAULT_MARKET_BENCHMARK_ID = "TAIEX"
+INDEX_TABLES = {"market_indices", "industry_indices"}
+INDEX_DATE_COLUMNS = ("日期", "Date", "date")
+INDEX_NAME_COLUMNS = ("指數名稱", "index_name", "name")
+INDEX_CLOSE_COLUMNS = ("收盤指數", "收盤價", "Close", "close")
+MARKET_BENCHMARK_ALIASES = (
+    DEFAULT_MARKET_BENCHMARK_ID,
+    "發行量加權股價指數",
+    "加權指數",
+    "TAIEX Total Index",
+)
+
+
 @dataclass(frozen=True)
 class ForwardOutcomeSummary:
     events_scanned: int = 0
@@ -49,6 +62,7 @@ class ForwardPerformanceService:
         self.db_path = Path(config.db_file)
         self._daily_price_cache: dict[str, tuple[tuple[str, ...], tuple[tuple[str, Decimal], ...]]] = {}
         self._index_return_cache: dict[tuple[str, str | None, str, str], int | None] = {}
+        self._index_table_columns_cache: dict[str, tuple[str, ...]] = {}
 
     def calculate(
         self,
@@ -155,7 +169,7 @@ class ForwardPerformanceService:
         forward_return_bp = self._return_bp(outcome_close, event_close)
         benchmark_return_bp = self._index_return_bp(
             "market_indices",
-            event.benchmark_id,
+            event.benchmark_id or DEFAULT_MARKET_BENCHMARK_ID,
             event_price_date,
             outcome_price_date,
         )
@@ -242,41 +256,178 @@ class ForwardPerformanceService:
         event_price_date: str,
         outcome_price_date: str,
     ) -> int | None:
-        if not index_name:
+        if table_name not in INDEX_TABLES:
             return None
-        cache_key = (table_name, index_name, self._date_key(event_price_date), self._date_key(outcome_price_date))
+        index_candidates = self._index_name_candidates(table_name, index_name)
+        if not index_candidates:
+            return None
+
+        start_key = self._date_key(event_price_date)
+        end_key = self._date_key(outcome_price_date)
+        cache_key = (table_name, str(index_name or ""), start_key, end_key)
         if cache_key in self._index_return_cache:
             return self._index_return_cache[cache_key]
-        column = "收盤指數"
         with sqlite3.connect(self.db_path) as conn:
-            start = conn.execute(
+            columns = self._index_table_columns(conn, table_name)
+            date_column = self._first_existing_column(columns, INDEX_DATE_COLUMNS)
+            close_columns = self._existing_columns(columns, INDEX_CLOSE_COLUMNS)
+            name_column = self._first_existing_column(columns, INDEX_NAME_COLUMNS)
+            if date_column is not None and close_columns:
+                for candidate in index_candidates:
+                    for close_column in close_columns:
+                        start = self._index_value(
+                            conn,
+                            table_name=table_name,
+                            date_column=date_column,
+                            name_column=name_column,
+                            close_column=close_column,
+                            index_name=candidate,
+                            date_key=start_key,
+                        )
+                        end = self._index_value(
+                            conn,
+                            table_name=table_name,
+                            date_column=date_column,
+                            name_column=name_column,
+                            close_column=close_column,
+                            index_name=candidate,
+                            date_key=end_key,
+                        )
+                        start_value = self._to_decimal(start)
+                        end_value = self._to_decimal(end)
+                        if start_value is None or end_value is None or start_value <= 0:
+                            continue
+                        result = self._return_bp(end_value, start_value)
+                        self._index_return_cache[cache_key] = result
+                        return result
+
+        self._index_return_cache[cache_key] = None
+        return None
+
+    def _index_table_columns(self, conn: sqlite3.Connection, table_name: str) -> tuple[str, ...]:
+        if table_name not in self._index_table_columns_cache:
+            rows = conn.execute(f"PRAGMA table_info({self._quote_identifier(table_name)})").fetchall()
+            self._index_table_columns_cache[table_name] = tuple(str(row[1]) for row in rows)
+        return self._index_table_columns_cache[table_name]
+
+    def _index_value(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        table_name: str,
+        date_column: str,
+        name_column: str | None,
+        close_column: str,
+        index_name: str | None,
+        date_key: str,
+    ) -> Any:
+        table_sql = self._quote_identifier(table_name)
+        date_sql = self._quote_identifier(date_column)
+        close_sql = self._quote_identifier(close_column)
+        if index_name is None:
+            if name_column is None:
+                row = conn.execute(
+                    f"""
+                    SELECT {close_sql}
+                    FROM {table_sql}
+                    WHERE REPLACE(REPLACE(CAST({date_sql} AS TEXT), '-', ''), '/', '') = ?
+                      AND {close_sql} IS NOT NULL
+                    LIMIT 1
+                    """,
+                    (date_key,),
+                ).fetchone()
+                return None if row is None else row[0]
+            name_sql = self._quote_identifier(name_column)
+            row = conn.execute(
                 f"""
-                SELECT {column}
-                FROM {table_name}
-                WHERE 指數名稱 = ?
-                  AND REPLACE(REPLACE(日期, '-', ''), '/', '') = ?
+                SELECT {close_sql}
+                FROM {table_sql}
+                WHERE ({name_sql} IS NULL OR TRIM(CAST({name_sql} AS TEXT)) = '')
+                  AND REPLACE(REPLACE(CAST({date_sql} AS TEXT), '-', ''), '/', '') = ?
+                  AND {close_sql} IS NOT NULL
+                LIMIT 1
                 """,
-                (index_name, self._date_key(event_price_date)),
+                (date_key,),
             ).fetchone()
-            end = conn.execute(
-                f"""
-                SELECT {column}
-                FROM {table_name}
-                WHERE 指數名稱 = ?
-                  AND REPLACE(REPLACE(日期, '-', ''), '/', '') = ?
-                """,
-                (index_name, self._date_key(outcome_price_date)),
-            ).fetchone()
-        if start is None or end is None:
+            return None if row is None else row[0]
+
+        if name_column is None:
             return None
-        start_value = self._to_decimal(start[0])
-        end_value = self._to_decimal(end[0])
-        if start_value is None or end_value is None or start_value <= 0:
-            self._index_return_cache[cache_key] = None
-            return None
-        result = self._return_bp(end_value, start_value)
-        self._index_return_cache[cache_key] = result
-        return result
+        name_sql = self._quote_identifier(name_column)
+        row = conn.execute(
+            f"""
+            SELECT {close_sql}
+            FROM {table_sql}
+            WHERE {name_sql} = ?
+              AND REPLACE(REPLACE(CAST({date_sql} AS TEXT), '-', ''), '/', '') = ?
+              AND {close_sql} IS NOT NULL
+            LIMIT 1
+            """,
+            (index_name, date_key),
+        ).fetchone()
+        return None if row is None else row[0]
+
+    @classmethod
+    def _index_name_candidates(cls, table_name: str, index_name: str | None) -> tuple[str | None, ...]:
+        raw = str(index_name or "").strip()
+        if table_name == "market_indices":
+            candidates: list[str | None] = []
+            if raw:
+                cls._append_unique(candidates, raw)
+            if not raw or raw.upper() == DEFAULT_MARKET_BENCHMARK_ID:
+                for alias in MARKET_BENCHMARK_ALIASES:
+                    cls._append_unique(candidates, alias)
+                cls._append_unique(candidates, None)
+            return tuple(candidates)
+
+        if not raw:
+            return ()
+        candidates = []
+        for token in cls._split_index_name_tokens(raw):
+            for base in cls._industry_base_names(token):
+                cls._append_unique(candidates, base)
+                cls._append_unique(candidates, f"{base}類指數")
+                cls._append_unique(candidates, f"{base}類報酬指數")
+        return tuple(candidates)
+
+    @staticmethod
+    def _split_index_name_tokens(value: str) -> tuple[str, ...]:
+        normalized = value.replace("、", ",").replace("/", ",")
+        return tuple(token.strip() for token in normalized.split(",") if token.strip())
+
+    @classmethod
+    def _industry_base_names(cls, value: str) -> tuple[str, ...]:
+        bases: list[str] = []
+        cls._append_unique(bases, value)
+        for suffix in ("類報酬指數", "類指數", "報酬指數", "指數"):
+            if value.endswith(suffix):
+                cls._append_unique(bases, value[: -len(suffix)])
+
+        for base in tuple(bases):
+            for suffix in ("工業", "產業", "業"):
+                if base.endswith(suffix) and len(base) > len(suffix):
+                    cls._append_unique(bases, base[: -len(suffix)])
+        return tuple(bases)
+
+    @staticmethod
+    def _append_unique(values: list[Any], value: Any) -> None:
+        if value not in values:
+            values.append(value)
+
+    @staticmethod
+    def _first_existing_column(columns: tuple[str, ...], candidates: tuple[str, ...]) -> str | None:
+        for candidate in candidates:
+            if candidate in columns:
+                return candidate
+        return None
+
+    @staticmethod
+    def _existing_columns(columns: tuple[str, ...], candidates: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(candidate for candidate in candidates if candidate in columns)
+
+    @staticmethod
+    def _quote_identifier(value: str) -> str:
+        return '"' + value.replace('"', '""') + '"'
 
     def _daily_price_series(self, symbol: str) -> tuple[tuple[str, ...], tuple[tuple[str, Decimal], ...]]:
         if symbol in self._daily_price_cache:

@@ -60,7 +60,13 @@ def _seed_prices(db_path: Path) -> None:
             )
 
 
-def _record_event(config: TWStockConfig, *, benchmark_id: str | None = "TAIEX", industry_id: str | None = "半導體類指數"):
+def _record_event(
+    config: TWStockConfig,
+    *,
+    benchmark_id: str | None = "TAIEX",
+    industry_id: str | None = "半導體類指數",
+    sector: str | None = None,
+):
     service = EvidenceEventService(EvidenceEventRepository(config))
     return service.record_event(
         event_date="2026-06-01",
@@ -76,9 +82,50 @@ def _record_event(config: TWStockConfig, *, benchmark_id: str | None = "TAIEX", 
         as_of_date="2026-06-01",
         available_date="2026-06-01",
         source_version="test",
+        sector=sector,
         benchmark_id=benchmark_id,
         industry_benchmark_id=industry_id,
     )
+
+
+def _seed_unnamed_market_index_with_close_price(db_path: Path) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE daily_prices (
+                日期 TEXT,
+                證券代號 TEXT,
+                收盤價 REAL,
+                PRIMARY KEY (證券代號, 日期)
+            );
+            CREATE TABLE market_indices (
+                日期 TEXT,
+                指數名稱 TEXT,
+                收盤指數 REAL,
+                收盤價 REAL
+            );
+            CREATE TABLE industry_indices (
+                日期 TEXT,
+                指數名稱 TEXT,
+                收盤指數 REAL,
+                PRIMARY KEY (指數名稱, 日期)
+            );
+            """
+        )
+        for index in range(0, 8):
+            day = f"202606{index + 1:02d}"
+            conn.execute(
+                "INSERT INTO daily_prices VALUES (?, ?, ?)",
+                (day, "2330", 100 + index * 2),
+            )
+            conn.execute(
+                "INSERT INTO market_indices VALUES (?, ?, ?, ?)",
+                (day, None, None, 10000 + index * 10),
+            )
+            conn.execute(
+                "INSERT INTO industry_indices VALUES (?, ?, ?)",
+                (day, "半導體類指數", 500 + index * 5),
+            )
 
 
 def test_forward_outcome_uses_trading_day_window_not_calendar_days(tmp_path):
@@ -98,6 +145,47 @@ def test_forward_outcome_uses_trading_day_window_not_calendar_days(tmp_path):
     assert outcome.forward_return_bp == 1000
     assert outcome.return_basis == "close_to_close_event_date"
     assert outcome.window_type == "trading_days"
+
+
+def test_forward_outcome_uses_unnamed_market_index_when_event_benchmark_missing(tmp_path):
+    config = _config(tmp_path)
+    _seed_unnamed_market_index_with_close_price(config.db_file)
+    event = _record_event(config, benchmark_id=None)
+    forward = ForwardPerformanceService(config, EvidenceEventRepository(config))
+
+    summary = forward.calculate(windows=(5,), dry_run=False)
+    outcome = forward.repository.list_outcomes(event_id=event.event_id)[0]
+
+    assert summary.missing_benchmark == 0
+    assert outcome.benchmark_return_bp == 50
+    assert outcome.benchmark_excess_bp == 950
+    assert "missing_benchmark" not in outcome.warnings
+
+
+def test_forward_outcome_maps_event_sector_to_industry_index_name(tmp_path):
+    config = _config(tmp_path)
+    _seed_prices(config.db_file)
+    event = _record_event(
+        config,
+        industry_id=None,
+        sector="電子零組件業",
+    )
+    with sqlite3.connect(config.db_file) as conn:
+        for index in range(0, 8):
+            day = f"202606{index + 1:02d}"
+            conn.execute(
+                "INSERT INTO industry_indices VALUES (?, ?, ?)",
+                (day, "電子零組件類指數", 1000 + index * 10),
+            )
+    forward = ForwardPerformanceService(config, EvidenceEventRepository(config))
+
+    summary = forward.calculate(windows=(5,), dry_run=False)
+    outcome = forward.repository.list_outcomes(event_id=event.event_id)[0]
+
+    assert summary.missing_industry_benchmark == 0
+    assert outcome.industry_return_bp == 500
+    assert outcome.industry_excess_bp == 500
+    assert "missing_industry_benchmark" not in outcome.warnings
 
 
 def test_forward_outcome_marks_insufficient_future_data_without_failing_batch(tmp_path):
