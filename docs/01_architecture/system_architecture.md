@@ -109,7 +109,7 @@ Application Services / DTO / Repository
 | 保存與版本 | `backtest_repository.py`、`recommendation_repository.py`、`strategy_version_service.py`、`preset_service.py`、`universe_service.py` |
 | Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py`、`portfolio_construction_service.py`、`portfolio_execution_trace_service.py` |
 | Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`strategy_lifecycle_repository.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
-| Post-V1 evidence | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`agent_evidence_access_service.py`、`pre_v2_readiness_service.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
+| Post-V1 evidence | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`historical_evidence_replay.py`、`agent_evidence_access_service.py`、`pre_v2_readiness_service.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
 | Runtime | `runtime_services/`、`dtos/runtime_dtos.py` |
 
 `app_module` 不依賴 `ui_app`。Legacy Tkinter UI 不是目前 service 架構的一部分。
@@ -143,6 +143,8 @@ V1.9 Read-only Agent / MCP Evidence Access v1 新增 `app_module/agent_evidence_
 Pre-V2 readiness inspector 新增 `app_module/pre_v2_readiness_service.py` 與 `scripts/inspect_pre_v2_readiness.py`，作為 V2.0 設計前的 app-layer 唯讀檢查面。Service 以 read-only SQLite URI / `PRAGMA query_only=ON` 直接檢查 weekly review history、Daily Decision Desk durable snapshot 與 persisted recommendation payload，以 markdown parser 檢查 multi-day dry-run record，並透過 `AgentEvidenceAccessService` 產出 read-only Agent report sample。它不建立 schema、不呼叫 writable repository migration、不寫 evidence、不觸發 pipeline confirm、不建立 scheduler；`production_scheduler_allowed` 固定為 false，時間型 gate 不足時只輸出 `waiting_for_time`。
 
 2026-07-06 Pre-V2 closeout 驗證採 working-copy DB + ignored output mirror：source coverage 可達 `blocking_gaps=[]`，all-source confirm smoke repeat=2 idempotent，Evidence Review UI smoke passed，read-only Agent report sample ready。此驗證不寫 formal evidence DB；weekly history / multi-day dry-run 不足時整體 readiness 仍停在 `waiting_for_time`。
+
+Historical Evidence Replay v1 新增 `app_module/historical_evidence_replay.py` 與 `scripts/replay_historical_evidence_pipeline.py`，作為 app-layer orchestration，不取代 `EvidencePipelineRunner`、importer 或 repository。Replay service 先確認 source DB 與 replay DB 不是同一路徑，再以 `shutil.copy2` 建立 working-copy / replay DB；每日重放只選 `created_at <= decision_date` 的 persisted Recommendation result，並透過 `EvidencePipelineRunRequest.replay_context` / `EvidenceCaptureRequest.replay_context` 將 `replay_mode=historical_replay`、`source_label=simulated_scheduler`、`replay_run_id`、`replay_decision_date` 與 `replay_data_as_of_date` 注入 event metadata。`ForwardPerformanceService.calculate(data_as_of_date=...)` 只允許讀到 replay 當日以前的價格，因此 replay 中尚未成熟的 window 仍保持 pending。此 service 不建立 Windows Task Scheduler、不改 existing scheduled dry-run、不寫 formal evidence DB、不把 replay 結果升級為 production readiness。
 
 Healthcheck Batch 4 新增 `research_result_presentation.py` 作為 Research Lab 結果頁呈現邊界。它只把已產生的推薦回放 summary、Train-Test report、Walk-forward fold summary 轉成 UI 文案與可靠度提示，不重跑回測、不重新抓取目前資料、不改變交易或績效計算。Train-Test / Walk-forward 樣本可靠度提示只讀交易數、Fold 數、OOS 與 consistency 等已存在結果 metadata；Registry 比較仍只讀已保存 metadata、equity curve 與 benchmark_results。Qt UI 可使用這些 helper 顯示「樣本不足，不宜作正式策略判斷」、資金使用與 Monte Carlo 語意，但不得把提示升級成交易建議、自動下單或持倉調整。
 
@@ -529,6 +531,7 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-07-06：新增 Historical Evidence Replay 架構同步，確認 replay service 只做 working-copy / replay DB orchestration，recommendation result 受 `created_at <= decision_date` 限制，forward outcome 受 `data_as_of_date` 限制，不改 scheduled dry-run、不寫 formal DB、不啟用 production scheduler。
 - 2026-07-06：新增 Pre-V2 readiness inspector 架構同步，確認 `PreV2ReadinessService` 只做 weekly history / multi-day record / source gaps / Agent report sample 唯讀檢查，不建立 schema、不寫 evidence、不啟用 scheduler。
 - 2026-07-06：補充 Pre-V2 非時間型 closeout 與 Recommendation liquidity payload follow-up，確認 working-copy source gaps / UI smoke / Agent sample 已收斂，但 formal DB write、weekly / multi-day 時間 gate 與 production scheduler approval 仍未完成。
 - 2026-07-05：完成 V1.6 Cross-sectional Factor Pipeline v1 架構同步，新增 snapshot DTO / repository / migration、FactorGate-backed pipeline、concept basket available-date gate、rank / quantile persistence 與 read-only attribution summary CLI；保持 application governance layer，不改 scoring、不啟用 scheduler。

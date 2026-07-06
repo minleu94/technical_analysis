@@ -833,6 +833,33 @@ Runner steps：
 
 V1.5 後，source coverage 由 `EvidenceSourceCoverageService` 統一判讀。`recommendation_persisted_missing`、`decision_desk_snapshot_missing`、`watchlist_trigger_snapshot_section_missing`、`portfolio_alert_snapshot_section_missing`、`risk_prompt_snapshot_section_missing` 是 durable source blocking gaps；`screening_matrix_missing`、`why_not_payload_missing` 與 `liquidity_gate_payload_missing` 是 payload warnings，會使整體 readiness 維持 `dry_run_only`，但不等於 durable source missing。V1.7 後新保存的推薦結果會包含 screening matrix、Why Not 與 Liquidity payload；舊推薦結果若缺 payload，只會列 warning / diagnostic，不回補、不重算。2026-07-06 後，成交量門檻造成的 empty strategy result 會被保存為 Liquidity payload，而非一般 `strategy_filter_no_signal`。若使用 `--sources why-not` 或 `--sources liquidity-gate` 明確要求 exclusion source，runner 仍會在該請求層級阻擋缺 payload 的 capture。`inspect_data_source_capabilities.py` 只檢查 source registry，不抓外部資料；`inspect_corporate_action_policy.py` 只輸出價格政策與資料表候選，不建立 adjusted price、不寫正式 DB。
 
+### 9.9.2 Historical Evidence Replay（歷史排程重放）
+
+Historical Evidence Replay 用來把 Evidence Pipeline 放到半年前或指定歷史期間逐交易日重放。它會先把 source SQLite DB 複製成 replay DB，再每天只使用當日可見的資料跑 source coverage、snapshot capture、recommendation evidence capture 與 forward outcome maturity。這是 `historical_replay` / `simulated_scheduler`，不是既有 Windows Task Scheduler，也不會取代每天 05:15 的 scheduled dry-run report。
+
+常用命令：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\replay_historical_evidence_pipeline.py --start-date 2026-01-06 --end-date 2026-07-06 --source-db-path <source-db> --replay-db-path tmp\historical_replay\evidence_replay_2026h1.db --json-output --report-output output\evidence_pipeline\historical_replay_2026h1.md
+.\.venv\Scripts\python.exe scripts\replay_historical_evidence_pipeline.py --start-date 2026-01-06 --end-date 2026-07-06 --source-db-path <source-db> --replay-db-path tmp\historical_replay\evidence_replay_2026h1.db --confirm --overwrite-replay-db --sources all --windows 5,10,20,60 --json-output
+```
+
+主要參數：
+
+- `--start-date` / `--end-date`：要重放的歷史日期區間；實際執行日會從 source DB 的 `daily_prices` 交易日中挑出。
+- `--source-db-path`：原始 SQLite DB，只用來複製與查交易日；不可與 replay DB 同一路徑。
+- `--replay-db-path`：重放用 working-copy DB。若不存在會由 source DB 複製；若已存在，只有加 `--overwrite-replay-db` 才會重建。
+- `--confirm`：預設不寫 business rows；加上後才會對 replay DB 寫入 evidence events / outcomes。正式 evidence DB 不應拿來當 replay DB。
+- `--sources`、`--windows`、`--group-by`、`--window`、`--min-sample-size`、`--limit`：沿用 Evidence Pipeline Runner / forward summary 的控制語意。
+- `--report-output`：輸出 Markdown replay report；JSON summary 會固定印到 stdout。
+
+No-look-ahead 邊界：
+
+- Recommendation 類來源只會選 `created_at` 日期不晚於當日 decision date 的 persisted result；若沒有當日以前 result，會記錄 `recommendation_asof_result_missing`，並略過 `recommendation` / `why-not` / `liquidity-gate` 類來源，不用未來 result 補值。
+- Event metadata 會帶入 `replay_mode=historical_replay`、`source_label=simulated_scheduler`、`replay_run_id`、`replay_decision_date` 與 `replay_data_as_of_date`，方便和真實 scheduled dry-run 分開查。
+- Forward outcome 計算會以 `data_as_of_date` 限制價格可見日；在 replay date 尚未成熟的 5 / 10 / 20 / 60 日 window 仍會維持 pending，不會提前看未來價格。
+- Replay report 只能用來看 source gap、payload gap、decision workflow 與 V2.0 workbench 設計方向；不計入 weekly history `0/3`、multi-day dry-run `1/3`、manual approval 或 production scheduler gate，也不是投資有效性證明。
+
 V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已保存的 daily factor snapshot。這個 CLI 不建立 DB、不寫 snapshot、不重算 scoring；若指定的 DB 不存在會以錯誤結束。snapshot 只會在其他受控 workflow 明確呼叫 `CrossSectionalFactorPipeline` / `CrossSectionalFactorRepository` 保存後才存在。
 
 ```powershell
@@ -1211,6 +1238,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-05：新增 V1.8 Portfolio Construction & Execution Trace Sandbox 操作說明，標示 sample CLI 只輸出 research-only allocation / virtual trace，不讀正式資料、不建立持倉、不下單。
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access 操作說明，標示 `twstock-evidence-access` 只讀 evidence / source trace / quality / warnings，不寫 DB、不改策略、不下單、不套用 lifecycle action。
 - 2026-07-06：新增 Pre-V2 readiness inspection CLI 操作說明，標示它只做 read-only 非排程前置檢查，不取代多週 history / multi-day dry-run / scheduler approval。
+- 2026-07-06：新增 Historical Evidence Replay 操作說明，標示 replay 只在 working-copy / replay DB 逐日重放 evidence，事件會標示 `historical_replay` / `simulated_scheduler`，不取代真實 scheduled dry-run、weekly history、多日 dry-run 或 production scheduler approval。
 - 2026-07-03：新增 V1.3 Evidence Operations weekly review CLI 操作說明，標示 manual approval package、action item planning、production scheduler disabled 與 signal decay candidate 不自動套用 lifecycle action。
 - 2026-07-02：完成 V1.1 workflow bridge v1 操作說明，補充推薦 Profile 進階摘要、buy / sell score 與權重差異、推薦回放是 Profile / Config 歷史重播，以及升降級判讀需經 Research Run / Evidence 與人工 lifecycle gate。
 - 2026-06-23：完成 Healthcheck Batch 2 計畫範圍實作後的操作說明：Daily Decision Desk answer-first dashboard、Smart Money 5 / 20 / 60 日語意診斷、quantity concentration 與股票焦點下鑽。

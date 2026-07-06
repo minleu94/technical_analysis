@@ -21,6 +21,7 @@
   - V1.7: Screening Matrix & Negative Evidence
   - V1.8: Portfolio Construction & Execution Trace Sandbox
   - V1.9: Read-only Agent / MCP Evidence Access
+  - Historical Evidence Replay v1: research-only simulated scheduler replay
 
 ---
 
@@ -33,6 +34,7 @@
 - **門檻要求**：
   - weekly history 必須達到至少 3 次（目前 `0/3`）。
   - multi-day dry-run 必須累積紀錄（目前 `1/3`）。
+- **輔助工具**：Historical Evidence Replay 可用 working-copy / replay DB 從歷史交易日逐日重放 Evidence Pipeline，並把事件 metadata 標成 `historical_replay` / `simulated_scheduler`；它只能幫助找 source gap、payload gap 與 V2.0 設計問題，不計入 weekly history 或 multi-day dry-run 的真實時間門檻。
 - **限制**：Production scheduler 繼續維持 `false`，不寫入正式資料，不進行自動交易。
 
 ### Phase 1：V2.0 Unified Decision Workbench Design Spike
@@ -82,4 +84,5 @@
 
 ## 4. 更新記錄
 
+- 2026-07-06：新增 Historical Evidence Replay v1 作為 Phase 0 的 research-only simulated scheduler 輔助工具；可在 working-copy / replay DB 逐日重放歷史 evidence，但不取代 weekly history `0/3`、multi-day dry-run `1/3`、manual approval 或 Phase 5 production scheduler gate。
 - 2026-07-06：重構為 Gate-Based Active Roadmap，將 V1 / Month 1-6 / V1.1-V1.9 的詳細完工紀錄封存至 `docs/09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md`；目前主線改為 Phase 0 evidence accumulation、Phase 1 V2.0 read-only design spike、Phase 2 Workbench MVP、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate。

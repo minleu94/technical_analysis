@@ -135,6 +135,7 @@
 | [2026-07-04-post-v1-evidence-source-persistence.md](../superpowers/plans/2026-07-04-post-v1-evidence-source-persistence.md) | Post-V1 Evidence Source Persistence 實作計畫，拆分 snapshot repository、capture CLI、durable importer provider、exclusion payload 與 coverage CLI。 |
 | [2026-07-05-post-v1-forward-performance-dashboard.md](../superpowers/plans/2026-07-05-post-v1-forward-performance-dashboard.md) | Post-V1 Forward Performance Dashboard read-only UI 實作計畫，拆分 dashboard service、Qt view、table model、Research Lab 掛載、tests 與 QA。 |
 | [2026-07-06-post-v1-evidence-scheduler-dry-run.md](../superpowers/plans/2026-07-06-post-v1-evidence-scheduler-dry-run.md) | Post-V1 Evidence Pipeline Runner dry-run 實作計畫，拆分 runner DTO、service、CLI、report、tests 與 QA 文件。 |
+| [2026-07-06-historical-evidence-replay.md](../superpowers/plans/2026-07-06-historical-evidence-replay.md) | Historical Evidence Replay 實作計畫，拆分 app-layer replay service、replay context metadata、data-as-of outcome gate、CLI、tests 與文件同步。 |
 | [2026-07-07-post-v1-production-scheduler-approval.md](../superpowers/plans/2026-07-07-post-v1-production-scheduler-approval.md) | Post-V1 Production Scheduler Approval 實作計畫，拆分 working-copy smoke script、readiness evaluator、approval checklist、tests 與文件同步。 |
 | [2026-07-08-post-v1-live-research-gap-linkage.md](../superpowers/plans/2026-07-08-post-v1-live-research-gap-linkage.md) | Post-V1 Live vs Research Gap linkage 實作計畫，拆分 DTO、repository、service、CLI、matching tests、安全邊界與文件同步。 |
 | [2026-07-09-post-v1-signal-decay-monitor.md](../superpowers/plans/2026-07-09-post-v1-signal-decay-monitor.md) | Post-V1 Signal Decay Monitor 實作計畫，拆分 DTO、repository、service、CLI、lifecycle payload、tests 與文件同步。 |
@@ -222,6 +223,7 @@
 | [PRE_V2_NON_SCHEDULE_READINESS_CLOSEOUT_2026_07_06.md](../06_qa/PRE_V2_NON_SCHEDULE_READINESS_CLOSEOUT_2026_07_06.md) | V2.0 前非時間型 readiness closeout，記錄 Git unreachable loose objects 清理、read-only Pre-V2 inspector、source gap working-copy all-source smoke、Evidence Review UI smoke、Agent report sample、測試命令與仍需多週 / 多日累積的時間門檻。 |
 | [POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md](../06_qa/POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md) | Post-V1 Forward Performance Dashboard read-only UI QA 紀錄，包含 UI placement、read-only guarantee、filter coverage、禁用交易語氣檢查與 scheduler readiness 邊界。 |
 | [POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md) | Post-V1 Evidence Pipeline Runner dry-run QA 紀錄，包含 dry-run / confirm 行為、report、readiness、blocking gaps 與 production scheduler 未啟用邊界。 |
+| [POST_V1_HISTORICAL_EVIDENCE_REPLAY_QA_2026_07_06.md](../06_qa/POST_V1_HISTORICAL_EVIDENCE_REPLAY_QA_2026_07_06.md) | Post-V1 Historical Evidence Replay QA 紀錄，包含 working-copy replay DB、安全路徑、as-of recommendation selection、data-as-of outcome gate、測試命令與不取代 scheduler gate 邊界。 |
 | [POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md](../06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md) | Post-V1 Evidence Production Scheduler Approval checklist，集中管理 working-copy smoke、人工核准、rollback / recovery 與正式排程未啟用邊界。 |
 | [POST_V1_LIVE_RESEARCH_GAP_LINKAGE_QA_2026_07_08.md](../06_qa/POST_V1_LIVE_RESEARCH_GAP_LINKAGE_QA_2026_07_08.md) | Post-V1 Live vs Research Gap linkage QA，包含 source trace coverage、matching policy、attribution policy、portfolio mode policy、CLI examples 與安全邊界。 |
 | [POST_V1_SIGNAL_DECAY_MONITOR_QA_2026_07_09.md](../06_qa/POST_V1_SIGNAL_DECAY_MONITOR_QA_2026_07_09.md) | Post-V1 Signal Decay Monitor QA，包含 decay repository、service policy、CLI examples、lifecycle proposed payload 與安全邊界。 |
@@ -331,6 +333,8 @@
 ## 🔄 更新記錄
 
 - 2026-07-06：更新 Pre-V2 非時間型 readiness closeout 索引，標示 Git loose objects、source gaps、Evidence Review UI smoke 與 Agent sample 已收斂；多週 history、multi-day dry-run 與 production scheduler approval 仍需真實時間與人工核准。
+- 2026-07-06：新增 Historical Evidence Replay plan 索引，標示 replay 只作 working-copy / simulated scheduler research evidence，不取代真實 weekly history、多日 dry-run 或 production scheduler approval。
+- 2026-07-06：新增 Historical Evidence Replay QA closeout 索引，記錄 as-of recommendation selection、data-as-of outcome gate、focused tests、py_compile、quant guard 與 scheduler gate 邊界。
 - 2026-07-05：新增 V1.6 Cross-sectional Factor Pipeline design / plan / QA closeout 索引，標示 daily factor snapshot storage、FactorGate-backed pipeline、concept available-date gate、rank / quantile persistence 與 attribution summary CLI 已完成 v1；不改 scoring、不啟用 scheduler。
 - 2026-07-05：新增 V1.7 Negative Evidence QA closeout 索引，標示 recommendation screening matrix、Why Not / Liquidity payload、screening matrix evidence events 與 source coverage warning 已完成 v1；舊結果不回補、不重算，不改 scoring、不啟用 scheduler。
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access design / plan / QA closeout 索引，標示 read-only evidence service、MCP wrapper、permission model 與 AI report template 已完成 v1；不寫 DB、不改策略、不下單、不套用 lifecycle action。

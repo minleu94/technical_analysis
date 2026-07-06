@@ -33,9 +33,9 @@
 - Create: `scripts/replay_historical_evidence_pipeline.py`
 - Test: `tests/test_replay_historical_evidence_pipeline_cli.py`
 
-- [ ] Write failing CLI tests for dry-run JSON output and source/replay DB path safety.
-- [ ] Implement CLI parser and JSON/Markdown output.
-- [ ] Run focused CLI tests and commit.
+- [x] Write failing CLI tests for dry-run JSON output and source/replay DB path safety.
+- [x] Implement CLI parser and JSON/Markdown output.
+- [x] Run focused CLI tests and commit.
 
 ### Task 3: Documentation
 
@@ -45,16 +45,16 @@
 - Modify: `docs/01_architecture/system_architecture.md`
 - Modify: `docs/07_guides/APPLICATION_MANUAL.md`
 
-- [ ] Document Historical Evidence Replay as a research-only, working-copy flow.
-- [ ] Explicitly state it does not replace weekly / multi-day real-time gates or production scheduler approval.
-- [ ] Run relevant checks and commit.
+- [x] Document Historical Evidence Replay as a research-only, working-copy flow.
+- [x] Explicitly state it does not replace weekly / multi-day real-time gates or production scheduler approval.
+- [x] Run relevant checks and commit.
 
 ### Task 4: Verification
 
 **Files:**
 - No new files.
 
-- [ ] Run focused pytest files.
-- [ ] Run `py_compile` on changed Python files.
-- [ ] Run quant guard if financial/evidence boundary touched.
+- [x] Run focused pytest files.
+- [x] Run `py_compile` on changed Python files.
+- [x] Run quant guard if financial/evidence boundary touched.
 - [ ] Inspect `git status --short` and final commit history.
