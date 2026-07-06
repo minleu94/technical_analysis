@@ -7,7 +7,7 @@
 ## 1. Project Snapshot (專案快照)
 
 * **Project Purpose (專案目標)**：這不是一個簡單的每日報明牌工具；baldr 是一套「可驗證、可回溯、可演化」的台股研究與投資決策工作台。核心精神在於：「看懂市場 -> 嘗試策略 -> 驗證策略 -> 管理持倉」。
-* **Current Phase (目前階段)**：V1 release baseline 已完成，四個產品閉環（資料與市場狀態、研究驗證、持倉檢查、每日決策）已形成可操作基準。Post-V1 evidence-driven 主線的 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 / V1.8 / V1.9 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations、evidence review history、data credibility gate、cross-sectional factor pipeline、screening matrix / negative evidence、research-only portfolio construction / virtual execution trace sandbox 與 read-only Agent / MCP evidence access。下一步不是新增舊式 Phase，也不是直接重整 UI，而是用 weekly review + history 實際累積多週覆盤證據，補人工 UI smoke、多日 dry-run、真實 watchlist / portfolio workflow 樣本與 source gaps 後，再評估 V2.0 Unified Decision Workbench。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、version roadmap 管 V1.1 至 V2.0 節奏、external reference blueprint 管外部專案參考與 V1.5-V2.0 版本形狀、system architecture 管架構、system vision 管產品北極星、archive / phase docs 管歷史。
+* **Current Phase (目前階段)**：V1 release baseline 已完成，四個產品閉環（資料與市場狀態、研究驗證、持倉檢查、每日決策）已形成可操作基準。Post-V1 evidence-driven 主線的 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 / V1.8 / V1.9 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations、evidence review history、data credibility gate、cross-sectional factor pipeline、screening matrix / negative evidence、research-only portfolio construction / virtual execution trace sandbox 與 read-only Agent / MCP evidence access。V2.0 Phase 1 read-only source adapter preflight 已完成；下一步是 V2.0 Phase 2 Unified Decision Workbench UI / dashboard 整合，之後才依 V2.1-V4.0 長期版本階梯評估 evidence operating loop、資料源 dry-run、execution realism、production evidence scheduler approval、decision effectiveness 與 investment effectiveness maturity。Roadmap 已從單一最高權威重構為 Scoped SSOT：Snapshot 管現在、6M Roadmap 管未來工程路線、version roadmap 管 V1.1 至 V2.0 節奏、V2.1-V4.0 roadmap 管 V2.0 之後長期版號階梯、external reference blueprint 管外部專案參考與 V1.5-V2.0 版本形狀、system architecture 管架構、system vision 管產品北極星、archive / phase docs 管歷史。
 * **Core Architecture (核心架構)**：分層解耦架構。
   1. `ui_qt/`（PySide6 UI / Observatory / 渲染層）
   2. `app_module/`（應用服務層、DTO、Repository 與 use case orchestrator）
@@ -136,7 +136,9 @@
 ### Canonical Docs (權威文檔 - Scoped Source-of-Truth)
 * **`docs/00_core/PROJECT_SNAPSHOT.md`**：開場 30 秒必讀的目前狀態、本週優先事項與高風險區。
 * **`docs/00_core/ROADMAP_6M_ENGINEERING.md`**：未來 6 個月可執行工程路線。
-* **`docs/00_core/DEVELOPMENT_ROADMAP.md`**：Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與 archive。
+* **`docs/00_core/DEVELOPMENT_ROADMAP.md`**：Roadmap Hub，指向 Snapshot、6M Roadmap、長期版本階梯、Architecture 與 archive。
+* **`docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`**：V1 release 後至 V2.0 的版本化交付節奏。
+* **`docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`**：V2.0 之後的長期版號階梯；V3 / V4 是 maturity milestone，不代表已排入近期工程或投資績效保證。
 * **`docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`**：外部開源專案參考、資料源補強優先序、V1.5 至 V2.0 版本形狀與 deferred 技術邊界；不取代 Vision 或 6M Roadmap。
 * **`docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`**：舊 Roadmap 未完成事項的唯一移交與驗收矩陣。
 * **`docs/01_architecture/system_architecture.md`**：目前架構、模組邊界與資料流權威。
@@ -152,7 +154,7 @@
 
 ### Outdated / Deprecated Docs (過時與冗餘文檔)
 * 舊版 `ui_app/README.md` (Tkinter) 相較於新的 `ui_qt` 堆疊已屬舊版遺產。
-* 舊 Roadmap 中歷史 Phase 的 Exit criteria 屬於歷史紀錄；理解當前狀態請看 `PROJECT_SNAPSHOT.md`，理解未來方向請看 `ROADMAP_6M_ENGINEERING.md`。
+* 舊 Roadmap 中歷史 Phase 的 Exit criteria 屬於歷史紀錄；理解當前狀態請看 `PROJECT_SNAPSHOT.md`，理解未來 6 個月方向請看 `ROADMAP_6M_ENGINEERING.md`，理解 V2.0 之後長期版號請看 `VERSION_ROADMAP_V2_1_TO_V4_0.md`。
 * （已清理：重複的 `docs/architecture/` 與空的 `docs/governance/` 資料夾已被移除，統一收斂至 `01_architecture/`）。
 * `docs/agents/archive/CURSOR_SKILLS_DEFINITIONS.md` 是舊 Cursor Skills 歷史定義，僅保留作為遷移參考；Codex / Antigravity 日常協作請使用 `docs/agents/skills_registry.md` 與 `docs/agents/*.md`。
 * `docs/09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` 是舊完整 Roadmap，只作追溯，不作目前狀態或未來工程路線依據。
@@ -185,12 +187,12 @@
 
 ## 7. Current Active Roadmap (目前活躍開發路線)
 
-* **Active Phase (目前階段)**：V1 release baseline 與 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 / V1.8 / V1.9 v1 已完成；目前進入 Post-V1 evidence accumulation / weekly review operating period，並補 V2.0 前置驗證。
+* **Active Phase (目前階段)**：V1 release baseline 與 V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 / V1.8 / V1.9 v1 已完成；V2.0 Phase 1 read-only source adapter preflight 已完成，目前進入 V2.0 Phase 2 Unified Decision Workbench UI / dashboard 整合準備。
 * **In Progress (進行中)**：
   * weekly evidence operations + history 的多週實際使用與覆盤證據累積。
-  * Evidence Review UI smoke、multi-day dry-run record、scheduler approval checklist 與 blocking gaps 觀察。
+  * Evidence Review UI smoke、multi-day dry-run record、scheduler approval checklist、blocking gaps 觀察與 V2.0 Workbench UI / dashboard 整合。
   * Month 2 / Month 3 / Month 5 / Month 6 governance regression 維護。
-* **Planned (計畫中)**：V2.0 Unified Decision Workbench design spike 需等中繼版本的資料、因子、evidence、portfolio sandbox、read-only AI 邊界與實際使用節奏成熟後再啟動。V1.2 execution model residual、正式 corporate action / microstructure ingestion、三大法人資料因子、官方歷史 PIT 公告日來源治理與 PDF 研究報告輸出仍在 backlog / future tracks。
+* **Planned (計畫中)**：V2.1-V2.5 依序聚焦 Workbench MVP、Evidence Operating Loop、P0 Data Source Candidate Dry-run、Execution Model Realism 與 Production Evidence Scheduler Approval；V3.x / V4.0 是 evidence-validated decision system 與 investment effectiveness maturity 的長期 maturity milestone，不等於自動交易、AI 決策或投資績效保證。V1.2 execution model residual、正式 corporate action / microstructure ingestion、三大法人資料因子、官方歷史 PIT 公告日來源治理與 PDF 研究報告輸出仍在 backlog / future tracks。
 * **Frozen / Historical (已凍結 / 歷史)**：Phase 1 (市場觀察), Phase 2 (策略資料庫), Phase 2.5 (參數標準化), Phase 3.3b (研究閉環), Phase 3.5 SOP, Phase 4 Portfolio MVP, Smart Money Terminal MVP, AI Runtime MVP。`docs/05_phases/` 僅作追溯。
 * **Deprecated (已棄用)**：不具備 DTO 抽象層的 Monolithic UI 元件。
 * **Backlog**：零股、買賣價差、完整撮合與 Gap 實際成交模型、估值相對分位、法人籌碼交叉驗證、PDF 報告輸出。

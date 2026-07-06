@@ -684,7 +684,7 @@ git commit -m "test: enforce financial float boundary annotations"
 在 `DOCUMENTATION_INDEX.md` 加入：
 
 ```markdown
-| [2026-06-11-financial-float-boundary-governance.md](../superpowers/plans/2026-06-11-financial-float-boundary-governance.md) | 金融 float 邊界 AST 掃描與 pytest gate 實作計畫。 |
+| [2026-06-11-financial-float-boundary-governance.md](./2026-06-11-financial-float-boundary-governance.md) | 金融 float 邊界 AST 掃描與 pytest gate 實作計畫。 |
 ```
 
 更新 `active_task.yaml`：

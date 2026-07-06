@@ -23,9 +23,10 @@
 5. `docs/00_core/DEVELOPMENT_ROADMAP.md`
 6. `docs/00_core/ROADMAP_6M_ENGINEERING.md`（涉及方向、優先順序或大型規劃時）
 7. `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`（涉及外部專案參考、資料源擴充或 V1.5-V2.0 版本規劃時）
-8. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`（涉及舊工作承接或 Phase Gate 時）
-9. `docs/07_guides/APPLICATION_MANUAL.md`（涉及 UI、使用流程、參數、結果判讀或安全限制時）
-10. 與任務對應的 Agent 權威文件：
+8. `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時）
+9. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`（涉及舊工作承接或 Phase Gate 時）
+10. `docs/07_guides/APPLICATION_MANUAL.md`（涉及 UI、使用流程、參數、結果判讀或安全限制時）
+11. 與任務對應的 Agent 權威文件：
    - 架構判斷：`docs/agents/tech_lead.md`
    - 受控實作：`docs/agents/execution_agent.md`
    - 文檔同步：`docs/agents/documentation_agent.md`
@@ -43,7 +44,7 @@
 | 明確 scope 的實作或 bugfix | `docs/agents/execution_agent.md` | Execution 權威角色 |
 | 測試路由、功能驗證、測試矩陣與 healthcheck 結果解讀 | `docs/agents/testing_qa_agent.md` | Testing / QA 權威角色，負責測試路由與結果解讀 |
 | 實作完成後實際執行驗證命令、git safety、交付前檢查 | `docs/agents/execution_agent.md` + `docs/agents/shared_context.md` | 依專案驗證與安全規則執行交付 |
-| 文檔 coverage、索引、Snapshot / Roadmap Hub / 6M Roadmap / Carryover / Architecture / Manual 同步 | `docs/agents/documentation_agent.md` | Documentation 權威角色 |
+| 文檔 coverage、索引、Snapshot / Roadmap Hub / 6M Roadmap / V2.1-V4.0 Roadmap / Carryover / Architecture / Manual 同步 | `docs/agents/documentation_agent.md` | Documentation 權威角色 |
 | 資料完整性、SQLite / CSV 一致性 | `docs/agents/data_audit_agent.md` | Data Audit 權威角色 |
 | 清理、移除、死碼、依賴精簡 | `docs/agents/data_cleanup_agent.md` | Cleanup 權威角色 |
 
@@ -94,7 +95,7 @@
 - 不得覆寫使用者、Codex、Antigravity 或其他 Agent 的未提交變更。
 - 不得擴張未被要求的 scope。
 - 修改功能時必須檢查文檔同步需求。
-- 文件判讀採 Scoped SSOT：目前狀態看 Snapshot，未來工程路線看 6M Roadmap，舊工作承接看 Legacy Carryover，架構看 system architecture，操作看 Application Manual，歷史看 archive。
+- 文件判讀採 Scoped SSOT：目前狀態看 Snapshot，未來工程路線看 6M Roadmap，V2.0 之後長期版號看 V2.1-V4.0 Roadmap，舊工作承接看 Legacy Carryover，架構看 system architecture，操作看 Application Manual，歷史看 archive。
 - 使用者可見流程、參數、結果判讀或安全限制改變時，必須同步 Application Manual。
 - Stage / commit 前必須先讀 `docs/agents/git_exclusions.md`。
 - 涉及量化核心計算時，嚴禁新增裸 `float`。
@@ -135,4 +136,5 @@
 - 2026-06-14：新增量化防禦技能 `quant_defense_guard.md` 與本地輔助 MCP 伺服器說明。
 - 2026-06-23：新增 Testing / QA Agent 至權威與協作流程，指向 `docs/agents/testing_qa_agent.md`。
 - 2026-07-04：新增 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 的條件式必讀規則，用於外部參考、資料源擴充與 V1.5-V2.0 版本規劃任務。
+- 2026-07-06：新增 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的條件式必讀規則，用於 V2.1+ 版號、長期成熟度與 V3/V4 規劃任務。
 - 2026-07-06：新增 V1.9 `twstock-evidence-access` 本地 MCP 說明，限定 read-only evidence access 與 report template 邊界。

@@ -11,6 +11,7 @@
 | 目前狀態、本週優先事項、高風險區 | `docs/00_core/PROJECT_SNAPSHOT.md` | 開場與日常工作先看 Snapshot。 |
 | 未來 6 個月工程路線 | `docs/00_core/ROADMAP_6M_ENGINEERING.md` | 里程碑、交付物與驗收標準以 6M Roadmap 為準。 |
 | 外部專案參考、資料源優先序、V1.5-V2.0 版本形狀 | `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` | 作為 6M Roadmap / Version Roadmap companion；不取代 Vision 或目前狀態權威。 |
+| V2.0 之後長期版本階梯 | `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` | 作為 6M Roadmap Phase 與 Vision Level 的版本 companion；不取代 6M Roadmap、Vision 或目前狀態權威。 |
 | Roadmap 入口與權威導覽 | `docs/00_core/DEVELOPMENT_ROADMAP.md` | Roadmap Hub 只保存入口與短版 Next，不保存完整歷史。 |
 | 舊 Roadmap 未完成事項移交 | `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` | 每個 Legacy 項目必須有唯一處置、月份與驗收定義。 |
 | 系統架構、模組邊界、資料流 | `docs/01_architecture/system_architecture.md` | 架構描述衝突時，以系統架構文件為準。 |
@@ -347,7 +348,7 @@
 3. **執行 Patch Pass 時**：
    - 僅更新已確認的 Coverage 清單中的文件
    - 確保所有 Must 優先級的文件已更新
-   - **特別確保 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index 已更新並一致**
+   - **特別確保 Snapshot / Roadmap Hub / 6M Roadmap / V2.1-V4.0 Roadmap / Architecture / Index 已更新並一致**
 
 4. **完成後驗證**：
    - 執行「一致性檢查清單」
@@ -356,5 +357,9 @@
 
 ---
 
-**最後更新**：2026-06-13
+**最後更新**：2026-07-06
+
+## 更新記錄
+
+- 2026-07-06：新增 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的 scoped authority 邊界，定位為 V2.0 之後長期版本階梯 companion。
 

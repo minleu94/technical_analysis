@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 import shutil
 import sqlite3
 
+from data_module.backup_retention import create_retained_backup
 from data_module.fundamental_schema import (
     FundamentalSchemaDryRunReport,
     apply_fundamental_schema,
@@ -41,9 +41,18 @@ def apply_fundamental_schema_migration(
             diagnostics=("source_db_missing",),
         )
 
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_file = backup_dir / f"{db_file.stem}_fundamental_schema_{_timestamp()}{db_file.suffix}"
-    shutil.copy2(db_file, backup_file)
+    backup_file = create_retained_backup(
+        db_file,
+        backup_dir,
+        label="fundamental_schema",
+    )
+    if backup_file is None:
+        return FundamentalSchemaMigrationResult(
+            applied=False,
+            backup_file=None,
+            report=None,
+            diagnostics=("source_db_missing",),
+        )
 
     conn = sqlite3.connect(db_file)
     try:
@@ -74,7 +83,3 @@ def apply_fundamental_schema_migration(
 
 def restore_fundamental_schema_backup(backup_file: Path, db_file: Path) -> None:
     shutil.copy2(Path(backup_file), Path(db_file))
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -1,8 +1,10 @@
 # 歸檔文檔目錄
 
 > **歷史記錄和總結文檔（歸檔）**
+> **最後整理**：2026-07-06
 
 本目錄包含歷史記錄、總結報告等歸檔文檔。這些文檔主要用於記錄歷史，不影響日常使用。
+歸檔文件中的狀態、下一步、Phase 或完成度描述，若與 Snapshot、6M Roadmap、版本 Roadmap 或 Architecture 衝突，一律以 active authority 為準。
 
 ## 📄 文檔列表
 
@@ -20,6 +22,12 @@
 
 - **`API_INVESTIGATION_REPORT.md`**
   - API 調查報告（歷史記錄）
+
+- **`ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md`**
+  - 原 6M Roadmap 中 V1 / Month 1-6 / V1.1-V1.9 的詳細完工紀錄與更新流水帳；只作歷史追溯。
+
+- **`UI_QT_DEVELOPMENT_ROADMAP_AUDIT_2026_05_19.md`**
+  - 2026-05-19 `ui_qt` 對照舊 roadmap 的歷史審核報表；部分狀態已被後續 UI / Portfolio / Workbench 進度取代。
 
 - **`PHASE_3_3B_IMPLEMENTATION_PLAN.md`**
   - Phase 3.3b 實施規劃（已執行，歷史歸檔）

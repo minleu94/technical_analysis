@@ -16,6 +16,7 @@
 - [ ] `docs/00_core/PROJECT_SNAPSHOT.md`
 - [ ] `docs/00_core/DEVELOPMENT_ROADMAP.md`（Roadmap Hub）
 - [ ] `docs/00_core/ROADMAP_6M_ENGINEERING.md`（涉及方向 / 中高風險時）
+- [ ] `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時）
 - [ ] `docs/01_architecture/system_architecture.md`（涉及架構 / 資料流時）
 - [ ] 任務對應角色文件：
 

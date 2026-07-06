@@ -841,7 +841,7 @@ Update the “目前不能保證” Daily Decision Desk bullet so it no longer l
 Add this row near the other 2026-06-15 Daily Decision Desk plans:
 
 ```markdown
-| [2026-06-15-decision-desk-relative-strength-liquidity-ranking.md](../superpowers/plans/2026-06-15-decision-desk-relative-strength-liquidity-ranking.md) | Daily Decision Desk Relative Strength / Liquidity Ranking v1 實作計畫，從 SQLite `daily_prices` 推導強弱排名、低流動性代碼與 quality / warnings 降級契約。 |
+| [2026-06-15-decision-desk-relative-strength-liquidity-ranking.md](./2026-06-15-decision-desk-relative-strength-liquidity-ranking.md) | Daily Decision Desk Relative Strength / Liquidity Ranking v1 實作計畫，從 SQLite `daily_prices` 推導強弱排名、低流動性代碼與 quality / warnings 降級契約。 |
 ```
 
 Add an update record:

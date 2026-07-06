@@ -1,7 +1,7 @@
 # Docs 文檔目錄
 
 > **最後整理**：2026-07-06
-> **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，外部參考與 V1.5-V2.0 版本形狀看 `00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
+> **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，V2.0 之後長期版號階梯看 `00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`，外部參考與 V1.5-V2.0 版本形狀看 `00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
 
@@ -9,12 +9,13 @@
 2. [6 個月工程路線](00_core/ROADMAP_6M_ENGINEERING.md) - 未來 6 個月的可執行工程計畫
 3. [Roadmap Hub](00_core/DEVELOPMENT_ROADMAP.md) - Roadmap 入口與權威文件導覽
 4. [V1.1 至 V2.0 版本路線圖](00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md) - V1 release 後的版本化交付節奏
-5. [外部參考與未來版本藍圖](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) - 外部開源專案參考、資料源優先序與 V1.5-V2.0 版本形狀
-6. [舊 Roadmap 移交矩陣](00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊版未完成事項的新位置與驗收條件
-7. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 8 個工作區、跨頁流程、安全限制與排錯
-8. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
-9. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
-10. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
+5. [V2.1 至 V4.0 版本路線圖](00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md) - V2.0 之後的長期版號階梯與成熟度邊界
+6. [外部參考與未來版本藍圖](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) - 外部開源專案參考、資料源優先序與 V1.5-V2.0 版本形狀
+7. [舊 Roadmap 移交矩陣](00_core/LEGACY_ROADMAP_CARRYOVER.md) - 舊版未完成事項的新位置與驗收條件
+8. [完整操作手冊](07_guides/APPLICATION_MANUAL.md) - 8 個工作區、跨頁流程、安全限制與排錯
+9. [文檔索引](00_core/DOCUMENTATION_INDEX.md) - 所有保留文檔的導航
+10. [文檔結構與維護規則](00_core/DOCUMENTATION_STRUCTURE.md) - 資料夾歸屬、刪除與歸檔規則
+11. [文檔覆蓋矩陣](00_core/DOC_COVERAGE_MAP.md) - 文件更新時要同步哪些文檔
 
 ---
 
@@ -22,7 +23,7 @@
 
 | 目錄 | 用途 | 狀態 |
 |---|---|---|
-| `00_core/` | snapshot、6 個月 roadmap、Roadmap Hub、索引、coverage 規則 | 必讀 |
+| `00_core/` | snapshot、6 個月 roadmap、長期版本階梯、Roadmap Hub、索引、coverage 規則 | 必讀 |
 | `01_architecture/` | 系統架構、資料流、Runtime 規範、多 Agent 工作流、UI 設計系統 | 長期維護 |
 | `02_features/` | UI、使用者指南、回測、評分、策略規格 | 使用者與功能說明 |
 | `03_data/` | 每日資料、資料流、重建與故障排除、基本面來源盤點 | 資料更新操作 |
@@ -35,6 +36,7 @@
 | `agents/` | Agent 職責、協作規範、上下文 | Agent 工作文件 |
 | `governance/` | 預留給流程治理、決策紀錄或政策文件 | 目前無 Markdown 文件 |
 | `strategies/` | 策略說明文件 | StrategyRegistry / 使用者理解 |
+| `superpowers/` | Superpowers specs / plans 與 execution artifacts | Historical / Implementation Trace，不作目前 roadmap |
 
 > Codex 自動讀取入口位於 repo 根目錄 `AGENTS.md`。`docs/agents/` 保留完整 Agent 架構與 Prompt 文件。
 
@@ -44,11 +46,11 @@
 
 - V1 release baseline 已完成：資料與市場狀態、研究驗證、持倉檢查、每日決策四個產品閉環已形成可操作基準。
 - Post-V1 evidence-driven 主線已建立：Evidence Event Store、Forward Outcome、Evidence Importers、Forward Performance read model / dashboard、pipeline dry-run、Live vs Research Gap、Signal Decay、Decision Quality、Evidence Review dashboards、V1.3 weekly evidence operations 與 V1.4 weekly review history 都已具備 v1。
-- V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 / V1.8 / V1.9 v1 已完成；下一步是用 weekly evidence operations、history、factor attribution、negative evidence、portfolio diagnostics 與 read-only Agent report 實際累積多週覆盤證據，補人工 UI smoke、多日 dry-run、真實 workflow 樣本與 source gaps 後，再評估 V2.0 Unified Decision Workbench。
+- V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 / V1.8 / V1.9 v1 已完成；V2.0 Phase 1 read-only source adapter preflight 已完成，下一步是 V2.0 Phase 2 Unified Decision Workbench UI / dashboard 整合，再依 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 逐步評估 V2.1-V2.5、V3.x 與 V4.0。
 - Production scheduler 仍未啟用；目前 safe scheduled path 只允許 read-only freshness check、evidence dry-run 與 Codex read-only morning report，不可解讀為 production write-mode scheduler。
 - `docs/05_phases/` 保留歷史設計與研究 SOP 脈絡，但不再作目前 roadmap 或完成狀態依據。
 
-詳細狀態以 [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md) 為準；未來方向以 [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md) 為準；外部專案參考與 V1.5-V2.0 版本形狀以 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) 為準。
+詳細狀態以 [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md) 為準；未來 6 個月方向以 [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md) 為準；V2.0 之後長期版號階梯以 [VERSION_ROADMAP_V2_1_TO_V4_0.md](00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md) 為準；外部專案參考與 V1.5-V2.0 版本形狀以 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) 為準。
 
 ---
 
@@ -60,9 +62,10 @@
 2. [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md)
 3. [DEVELOPMENT_ROADMAP.md](00_core/DEVELOPMENT_ROADMAP.md)
 4. [VERSION_ROADMAP_V1_1_TO_V2_0.md](00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md)
-5. [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)
-6. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
-7. [system_architecture.md](01_architecture/system_architecture.md)
+5. [VERSION_ROADMAP_V2_1_TO_V4_0.md](00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md)
+6. [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)
+7. [DOCUMENTATION_INDEX.md](00_core/DOCUMENTATION_INDEX.md)
+8. [system_architecture.md](01_architecture/system_architecture.md)
 
 ### 要查策略回測
 
@@ -91,7 +94,7 @@
 
 ## 維護原則
 
-- 不確定狀態時，先判斷主題：現在看 Snapshot，未來路線看 6M Roadmap，架構看 system architecture。
+- 不確定狀態時，先判斷主題：現在看 Snapshot，未來 6 個月路線看 6M Roadmap，V2.0 之後長期版號看 V2.1-V4.0 roadmap，架構看 system architecture。
 - 新增、刪除或搬移文件後，必須更新 `00_core/DOCUMENTATION_INDEX.md`。
 - 根目錄 `README.md` 保持使用者導向；Agent / 開發者上下文放在 `../AGENT_CONTEXT.md` 與 `agents/`。
 - 會影響使用者操作、參數、結果判讀或安全限制的變更，必須同步 `07_guides/APPLICATION_MANUAL.md`；專題教學或功能說明再同步 `02_features/USER_GUIDE.md`、`02_features/UI_FEATURES_DOCUMENTATION.md`。

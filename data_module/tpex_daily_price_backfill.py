@@ -11,6 +11,7 @@ import shutil
 import sqlite3
 from typing import Mapping
 
+from data_module.backup_retention import create_retained_backup
 from decision_module.factors.factor_dtos import FactorDiagnostic
 
 
@@ -268,9 +269,13 @@ def _split_change(value: str) -> tuple[str | None, str | None]:
 
 
 def _backup_db(db_file: Path, backup_dir: Path) -> Path:
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_file = backup_dir / f"{db_file.stem}_tpex_daily_price_backfill_{_timestamp()}{db_file.suffix}"
-    shutil.copy2(db_file, backup_file)
+    backup_file = create_retained_backup(
+        db_file,
+        backup_dir,
+        label="tpex_daily_price_backfill",
+    )
+    if backup_file is None:
+        raise FileNotFoundError(db_file)
     return backup_file
 
 
@@ -309,7 +314,3 @@ def _prepare_row_for_table(row: dict[str, object], available_columns: set[str]) 
         if "漲跌(+/-)" in available_columns:
             prepared["漲跌(+/-)"] = change_sign
     return prepared
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")

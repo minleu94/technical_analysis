@@ -1142,7 +1142,7 @@ app_module/factor_service.py
 Add this implementation plan link if not present:
 
 ```markdown
-| [2026-06-14-month-3-factor-layer.md](../superpowers/plans/2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫。 |
+| [2026-06-14-month-3-factor-layer.md](./2026-06-14-month-3-factor-layer.md) | Month 3 Factor Layer v1 實作計畫。 |
 ```
 
 - [x] **Step 5: Verify docs**

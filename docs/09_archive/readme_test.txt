@@ -3,10 +3,10 @@
 > ⚠️ **注意**：本文檔為歷史測試文檔，部分內容可能已過時。
 > 
 > **推薦閱讀**：
-> - [docs/tests_readme.md](docs/tests_readme.md) ⭐ - tests/ 目錄結構說明（最新）
-> - [README.md](../README.md) - 系統概述和快速開始
-> - [docs/system_architecture.md](docs/system_architecture.md) - 系統架構文檔
-> - [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md) - 開發路線圖（最新狀態）
+> - [tests_readme.md](../07_guides/tests_readme.md) - tests/ 目錄結構說明
+> - [README.md](../../README.md) - 系統概述和快速開始
+> - [system_architecture.md](../01_architecture/system_architecture.md) - 系統架構文檔
+> - [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md) - Roadmap Hub
 > 
 > **最後更新**：2026-01-03（標記為歷史文檔）
 
@@ -73,7 +73,7 @@ Date,Open,High,Low,Close,Volume
 
 ## 測試模塊
 
-**📁 詳細的測試檔案結構和說明請參考 [docs/tests_readme.md](docs/tests_readme.md)**
+**📁 詳細的測試檔案結構和說明請參考 [tests_readme.md](../07_guides/tests_readme.md)**
 
 ### 1. 數據模塊測試
 - 數據加載測試
@@ -1863,4 +1863,4 @@ v1.0.0 (2024-03-20)
 4. 發起 Pull Request
 
 授權：
-本項目採用 MIT 授權協議 
+本項目採用 MIT 授權協議

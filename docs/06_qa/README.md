@@ -21,13 +21,19 @@
 - `TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md` - `tests/` 全量測試分類，定義哪些測試可直接橋接到非破壞式 release healthcheck runner、哪些只能作 oracle、哪些需保留 manual / dry-run。
 - `FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md` - Testing QA Agent 使用的 feature-to-test 測試路由與決策矩陣（測試知識庫），不包含 Agent 角色定義。
 
-### UI Qt Roadmap Audit
-- `UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md` - UI Qt 對照 development roadmap 的完成度稽核報告
+### Post-V1 Evidence QA
+- `POST_V1_FORWARD_PERFORMANCE_READ_MODEL_QA_2026_07_03.md` - Forward Performance Read Model 與 importer-to-outcome smoke QA 紀錄
 
 ### 文件與工具稽核
 - `DOCUMENT_ENCODING_AUDIT_2026_06_16.md` - repo 文件 UTF-8 / mojibake 掃描報告
+- `DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md` - push 前 docs 全目錄位置、索引、archive 候選、版本治理與相對連結稽核
+- `SUPERPOWERS_PLAN_SPEC_DATE_AUDIT_2026_07_06.md` - Superpowers plan / spec 日期與完成狀態稽核
+
+### 已歸檔 QA
+- `../09_archive/UI_QT_DEVELOPMENT_ROADMAP_AUDIT_2026_05_19.md` - 2026-05-19 UI Qt 對照舊 roadmap 的歷史審核報表；不作目前完成狀態依據
 
 ## 🔗 相關目錄
 
 - `../02_features/` - 功能文檔
 - `../03_data/` - 數據相關文檔
+- `../09_archive/` - 已過時但仍有追溯價值的歷史文檔

@@ -54,8 +54,9 @@
 **Tech Lead 補充必讀：**
 5. docs/00_core/DEVELOPMENT_ROADMAP.md（Roadmap Hub，了解文件權威入口）
 6. docs/00_core/ROADMAP_6M_ENGINEERING.md（涉及方向、優先順序或大型規劃時必讀）
-7. docs/01_architecture/system_architecture.md（涉及架構、模組邊界或資料流時必讀）
-8. docs/00_core/DOCUMENTATION_INDEX.md（只用來定位文件入口，不作為事實來源）
+7. docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時必讀）
+8. docs/01_architecture/system_architecture.md（涉及架構、模組邊界或資料流時必讀）
+9. docs/00_core/DOCUMENTATION_INDEX.md（只用來定位文件入口，不作為事實來源）
 
 任務：
 1) 用 5 點以內摘要「專案目前在哪」
@@ -238,6 +239,7 @@
 - **系統架構文檔**：`docs/01_architecture/system_architecture.md`
 - **目前狀態**：`docs/00_core/PROJECT_SNAPSHOT.md`
 - **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- **V2.0 之後長期版本階梯**：`docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`
 - **Roadmap Hub**：`docs/00_core/DEVELOPMENT_ROADMAP.md`
 - **專案清單**：`PROJECT_INVENTORY.md`
 - **目前 UI 入口**：`ui_qt/main.py`
@@ -286,4 +288,5 @@
 
 - 2026-01-03：初始建立技術總管 Agent 文檔
 - 2026-05-20：更新技術棧描述為 PySide6 / `ui_qt`，補上資料路徑設定參考
+- 2026-07-06：補上 V2.0 之後長期版本階梯 companion 的 Tech Lead 讀取入口。
 

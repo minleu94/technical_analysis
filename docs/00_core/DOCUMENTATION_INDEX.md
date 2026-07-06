@@ -1,7 +1,7 @@
 # 文檔索引
 
 > **最後整理**：2026-07-06
-> **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，架構看 `system_architecture.md`。
+> **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，V2.0 之後長期版號階梯看 `VERSION_ROADMAP_V2_1_TO_V4_0.md`，架構看 `system_architecture.md`。
 
 ---
 
@@ -12,6 +12,7 @@
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與歷史歸檔。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
 | [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；說明 V1.1 workflow bridge、V1.2 credibility、V1.3 operations、V1.4 history、V1.5 data credibility、V1.6 factor pipeline、V1.7 negative evidence、V1.8 portfolio sandbox、V1.9 read-only Agent MCP、Pre-V2.0A replay quality audit 與 V2.0 workbench 邊界。 |
+| [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md) | V2.0 之後的長期版本階梯；將 6M Roadmap Phase 2-5 與 Vision Level 1-4 映射為 V2.1-V4.0 companion，不取代 6M Roadmap 或 Vision。 |
 | [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) | 外部開源專案參考、資料源補強優先序、V1.5 至 V2.0 版本形狀與 deferred 技術邊界；作為 6M Roadmap / Version Roadmap companion，不取代 Vision。 |
 | [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr 產品北極星、目前邊界、Gap Register、長期能力圖像與投資有效性驗證框架；不取代 Snapshot、6M Roadmap 或 Architecture。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
@@ -55,6 +56,7 @@
 | [BACKTEST_LAB_FAQ.md](../02_features/BACKTEST_LAB_FAQ.md) | 策略回測常見問題與使用細節。 |
 | [SCORE_EXPLANATION.md](../02_features/SCORE_EXPLANATION.md) | 評分系統與 buy/sell score 說明。 |
 | [STRATEGY_DESIGN_SPECIFICATION.md](../02_features/STRATEGY_DESIGN_SPECIFICATION.md) | Baseline Score Threshold 策略設計規格。 |
+| [RESEARCH_RUN_REGISTRY_SPEC.md](../02_features/RESEARCH_RUN_REGISTRY_SPEC.md) | Research Run Registry 的 schema、metadata、Parquet/SQLite 混合儲存與 Cross-run 比較設計規格。 |
 
 ---
 
@@ -64,6 +66,7 @@
 |---|---|
 | [HOW_TO_UPDATE_DAILY_DATA.md](../03_data/HOW_TO_UPDATE_DAILY_DATA.md) | 每日資料更新快速指南。 |
 | [daily_data_update_guide.md](../03_data/daily_data_update_guide.md) | 每日資料更新詳細指南。 |
+| [BACKUP_RETENTION_AUDIT_2026_07_06.md](../03_data/BACKUP_RETENTION_AUDIT_2026_07_06.md) | 2026-07-06 備份檔來源與 retention 盤點，記錄 repo / `FA_Data` 大型 DB、CSV、`.bak` 備份來源、已納入保留策略的程式入口與需人工確認的清理候選。 |
 | [DATA_FETCHING_LOGIC.md](../03_data/DATA_FETCHING_LOGIC.md) | 資料抓取邏輯。 |
 | [DATA_FLOW_LOGIC.md](../03_data/DATA_FLOW_LOGIC.md) | 推薦分析資料流程。 |
 | [DATA_REBUILD_GUIDE.md](../03_data/DATA_REBUILD_GUIDE.md) | 從 daily price 重建衍生資料。 |
@@ -90,7 +93,7 @@
 
 ## 5. 歷史 Phase / 設計追溯與研究 SOP
 
-> 本區文件保留為 Historical / Reference。它們說明 Phase 時期的設計、驗收與研究 SOP 脈絡，但不作目前 roadmap、目前完成狀態或下一步優先順序依據。目前狀態請看 `PROJECT_SNAPSHOT.md`，未來路線請看 `ROADMAP_6M_ENGINEERING.md`，Post-V1 版本節奏請看 `VERSION_ROADMAP_V1_1_TO_V2_0.md`。
+> 本區文件保留為 Historical / Reference。它們說明 Phase 時期的設計、驗收與研究 SOP 脈絡，但不作目前 roadmap、目前完成狀態或下一步優先順序依據。目前狀態請看 `PROJECT_SNAPSHOT.md`，未來 6 個月路線請看 `ROADMAP_6M_ENGINEERING.md`，Post-V1 至 V2.0 版本節奏請看 `VERSION_ROADMAP_V1_1_TO_V2_0.md`，V2.0 之後長期版號階梯請看 `VERSION_ROADMAP_V2_1_TO_V4_0.md`。
 >
 > Post-V1 部分 design / plan / QA 檔名保留 2026-07-05 至 2026-07-12 的里程碑命名；實際時間與交付判讀仍以 Snapshot、6M Roadmap 與 Git closeout 為準，不能只憑檔名推論。
 
@@ -106,6 +109,7 @@
 | [EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md](../05_phases/EPIC2_MVP2_IMPLEMENTATION_CHECKLIST.md) | [歷史] 過擬合風險提示實作 checklist 追溯。 |
 | [PHASE4_PORTFOLIO_DESIGN.md](../05_phases/PHASE4_PORTFOLIO_DESIGN.md) | [歷史] Phase 4 Portfolio MVP 初始設計追溯。 |
 | [PHASE4_STARTUP_SUMMARY.md](../05_phases/PHASE4_STARTUP_SUMMARY.md) | [歷史] Phase 4 骨架啟動總結追溯。 |
+| [superpowers/README.md](../superpowers/README.md) | [歷史/實作軌跡] Superpowers specs / plans 目錄邊界，說明 spec / plan 不取代 Snapshot、6M Roadmap 或版本 roadmap。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/specs/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 多模式實驗室、候選池與 Phase 3 → Portfolio 來源追溯設計。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/plans/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 工作流重整第一階段實作計畫。 |
 | [2026-06-11-financial-float-boundary-governance-design.md](../superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md) | 金融核心白名單的 AST float 邊界掃描、逐行分類標記與 pytest 防回歸設計。 |
@@ -209,14 +213,15 @@
 | [FULL_APP_HEALTHCHECK_COVERAGE_MAPPING_2026_06_24.md](../06_qa/FULL_APP_HEALTHCHECK_COVERAGE_MAPPING_2026_06_24.md) | Full App Healthcheck 母檔逐列 coverage mapping，對照 direct bridge、candidate、service oracle、report-only、manual-only、write-risk manual 與 `--tab` 分頁驗證狀態。 |
 | [FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md](../06_qa/FULL_APP_HEALTHCHECK_AGENT_CLOSEOUT_2026_06_23.md) | Testing / QA Agent + Full App Healthcheck Runner closeout，說明 metadata / report-only 工具鏈、安全邊界、`--tab` runner 與 executable opt-in MainWindow UI smoke 狀態。 |
 | [TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md](../06_qa/TEST_INVENTORY_HEALTHCHECK_CLASSIFICATION_2026_06_23.md) | 測試 inventory 分類，標示 direct bridge、candidate bridge、service oracle、write-risk、manual-only、預設 pytest 收集與 runner bridge 分頁狀態。 |
-| [UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md](../06_qa/UI_QT_DEVELOPMENT_ROADMAP_AUDIT.md) | `ui_qt` 對照 roadmap 的逐項審核報表。 |
 | [WALK_FORWARD_COMPARISON_REPORT.md](../06_qa/WALK_FORWARD_COMPARISON_REPORT.md) | Fixed vs Quantile 機制、時間軸回歸、10 檔 OOS 實證與 100% Regime coverage Gate 證據。 |
 | [DOCUMENT_ENCODING_AUDIT_2026_06_16.md](../06_qa/DOCUMENT_ENCODING_AUDIT_2026_06_16.md) | repo 文件 UTF-8 / mojibake 稽核報告，確認顯示雜訊來自終端編碼而非文件內容損壞。 |
 | [DOCUMENTATION_ROADMAP_REBASELINE_AUDIT_2026_07_03.md](../06_qa/DOCUMENTATION_ROADMAP_REBASELINE_AUDIT_2026_07_03.md) | Roadmap / docs / phase 目錄整理稽核，記錄 `docs/05_phases/` 降格為 Historical / Reference、入口文件同步與後續歸檔準則。 |
+| [DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md](../06_qa/DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md) | 本輪 push 前 docs 全目錄位置、索引、archive 候選、版本治理與相對連結稽核。 |
 | [SUPERPOWERS_PLAN_SPEC_DATE_AUDIT_2026_07_06.md](../06_qa/SUPERPOWERS_PLAN_SPEC_DATE_AUDIT_2026_07_06.md) | `docs/superpowers/` 2026-07-06 至 2026-07-12 plan / spec / QA milestone 日期稽核，記錄 Git closeout、是否需改名、V2.0 plan/spec 最新狀態與 historical replay 對 Phase 1 的可用邊界。 |
 | [FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md](../06_qa/FEATURE_TEST_ROUTING_MATRIX_2026_06_23.md) | Testing QA Agent 使用的 feature-to-test 測試路由與決策矩陣（測試知識庫），不包含 Agent 角色定義。 |
 | [POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md](../06_qa/POST_V1_EVIDENCE_EVENT_STORE_QA_2026_07_01.md) | Post-V1 Evidence Event Store v1 / Forward Outcome Calculator v1 QA 紀錄，包含 schema safety、focused tests、限制與下一增量。 |
 | [POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md](../06_qa/POST_V1_EVIDENCE_IMPORTERS_QA_2026_07_02.md) | Post-V1 Evidence Importers / Capture Pipeline v1 QA 紀錄，包含 importer 支援邊界、CLI dry-run / confirm、unsupported source 與限制。 |
+| [POST_V1_FORWARD_PERFORMANCE_READ_MODEL_QA_2026_07_03.md](../06_qa/POST_V1_FORWARD_PERFORMANCE_READ_MODEL_QA_2026_07_03.md) | Post-V1 Forward Performance Read Model QA 紀錄，包含 importer-to-outcome smoke、read model filters / group by / metrics、summary CLI 與非目標邊界。 |
 | [POST_V1_EVIDENCE_SOURCE_PERSISTENCE_QA_2026_07_04.md](../06_qa/POST_V1_EVIDENCE_SOURCE_PERSISTENCE_QA_2026_07_04.md) | Post-V1 Evidence Source Persistence QA 紀錄，包含 durable DDD snapshot repository、source coverage CLI、Recommendation exclusion payload partial 與 scheduler readiness 邊界。 |
 | [V1_5_DATA_CREDIBILITY_CLOSEOUT_2026_07_04.md](../06_qa/V1_5_DATA_CREDIBILITY_CLOSEOUT_2026_07_04.md) | V1.5 Data Credibility & Corporate Action Gate closeout，記錄 source capability registry、corporate action policy、governed microstructure metadata、source coverage service 與驗證結果。 |
 | [V1_6_CROSS_SECTIONAL_FACTOR_PIPELINE_CLOSEOUT_2026_07_05.md](../06_qa/V1_6_CROSS_SECTIONAL_FACTOR_PIPELINE_CLOSEOUT_2026_07_05.md) | V1.6 Cross-sectional Factor Pipeline closeout，記錄 factor snapshot storage、FactorGate-backed pipeline、concept available-date gate、attribution CLI、驗證命令與不改 scoring / scheduler 邊界。 |
@@ -270,6 +275,7 @@
 | [UI_QT_CHART_RENDERING.md](../08_technical/UI_QT_CHART_RENDERING.md) | Qt Backtest 圖表 fast Canvas renderer、payload layer 與 Matplotlib fallback 架構。 |
 | [path_isolation_update.md](../08_technical/path_isolation_update.md) | 路徑隔離與測試環境分離記錄。 |
 | [RUN_WITHOUT_VENV.md](../08_technical/RUN_WITHOUT_VENV.md) | 不使用 venv 的執行說明。 |
+| [MCP_YFINANCE_OPENMARKETS_PATCH_MEMO.md](../08_technical/MCP_YFINANCE_OPENMARKETS_PATCH_MEMO.md) | openmarkets / yahoo-finance MCP 相容性修補備忘，保存 `.venv` 重建後的本機 patch 與驗證方式。 |
 
 ---
 
@@ -297,6 +303,7 @@
 | [agents/antigravity/data_cleanup_agent.md](../agents/antigravity/data_cleanup_agent.md) | Antigravity Data Cleanup Agent。 |
 | [agents/antigravity/handoff_template.md](../agents/antigravity/handoff_template.md) | Antigravity 任務交接模板。 |
 | [agents/archive/CURSOR_SKILLS_DEFINITIONS.md](../agents/archive/CURSOR_SKILLS_DEFINITIONS.md) | 舊 Cursor skills 定義封存，僅保留作為遷移參考。 |
+| [strategies/README.md](../strategies/README.md) | 策略說明文件目錄與維護規則；策略實作仍以 registry 與 `app_module/strategies/` 為準。 |
 | [strategies/momentum_aggressive_v1.md](../strategies/momentum_aggressive_v1.md) | 暴衝策略說明。 |
 | [strategies/stable_conservative_v1.md](../strategies/stable_conservative_v1.md) | 穩健策略說明。 |
 
@@ -307,6 +314,7 @@
 [09_archive/](../09_archive/README.md) 只放歷史文件、已執行提案、舊調查與不再作為日常依據的內容。Active 文件不應依賴 archive 來判斷目前狀態。
 主要封存文檔：
 - [ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md](../09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md)：原 6M Roadmap 於 V1 (Month 1-6) 的詳細完工紀錄與更新流水帳。
+- [UI_QT_DEVELOPMENT_ROADMAP_AUDIT_2026_05_19.md](../09_archive/UI_QT_DEVELOPMENT_ROADMAP_AUDIT_2026_05_19.md)：2026-05-19 `ui_qt` 對照舊 roadmap 的歷史審核報表；因其中部分狀態已過時，改放 archive。
 - [DEVELOPMENT_ROADMAP_LEGACY_2026_06.md](../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md)：舊完整 Roadmap，包含線性 Phase、歷史 Done 與舊 Roadmap current section，只作追溯用途。
 - [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md)：2026-06-09 下一輪行動計畫（已執行完畢）。
 - [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md)：Phase 3.3b 實施規劃（已執行完畢）。
@@ -322,7 +330,7 @@
 
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
 - **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1、Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉；Month 6 Strategy Lifecycle / Portfolio Feedback v1 已完成第一輪 service / gate / UI 入口。
-- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，Daily Decision Desk v1 已接上主 UI，Month 6 下一步是 lifecycle 狀態持久化、demote / retire 證據保存與更完整 review workflow；零股、買賣價差、完整撮合與 Gap 實際成交模型列為執行模型深化。
+- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，目前主線已轉為 Phase 0 evidence accumulation、V2.0 Phase 1 read-only Workbench 後的 Phase 2 主 UI設計、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate；長期版號對照見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
 - **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
 ---
@@ -337,6 +345,8 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-06：完成 push 前 docs 結構稽核索引同步，新增 `DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md`、`superpowers/README.md`、`strategies/README.md`，將過時 UI Qt roadmap audit 歸檔，並把 MCP patch memo 移至技術文件。
+- 2026-07-06：新增 V2.1 至 V4.0 長期版本路線圖索引，標示其為 6M Roadmap Phase 與 Vision 成功標準的版本 companion，不作目前狀態或工程順序權威。
 - 2026-07-06：新增 V2.0 Workbench Phase 1 read-only prototype QA closeout 索引，標示當時 DTO / composer / replay summary adapter / sample CLI 已完成；formal source adapter 另見後續 closeout，Phase 2 UI / scheduler gate 仍未完成。
 - 2026-07-06：新增 V2.0 Workbench formal read-only source adapter QA closeout 索引，標示 prototype CLI 已從 `--sample` 擴充到受控 `--db-path` / `--decision-date`，可讀 Pre-V2 readiness、DDD durable snapshot、AgentEvidenceAccess summary 與 optional replay JSON；Phase 0 / scheduler gate 不變。
 - 2026-07-06：更新 Pre-V2 非時間型 readiness closeout 索引，標示 Git loose objects、source gaps、Evidence Review UI smoke 與 Agent sample 已收斂；多週 history、multi-day dry-run 與 production scheduler approval 仍需真實時間與人工核准。
@@ -347,6 +357,7 @@
 - 2026-07-05：新增 V1.6 Cross-sectional Factor Pipeline design / plan / QA closeout 索引，標示 daily factor snapshot storage、FactorGate-backed pipeline、concept available-date gate、rank / quantile persistence 與 attribution summary CLI 已完成 v1；不改 scoring、不啟用 scheduler。
 - 2026-07-05：新增 V1.7 Negative Evidence QA closeout 索引，標示 recommendation screening matrix、Why Not / Liquidity payload、screening matrix evidence events 與 source coverage warning 已完成 v1；舊結果不回補、不重算，不改 scoring、不啟用 scheduler。
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access design / plan / QA closeout 索引，標示 read-only evidence service、MCP wrapper、permission model 與 AI report template 已完成 v1；不寫 DB、不改策略、不下單、不套用 lifecycle action。
+- 2026-07-06：新增備份檔來源與 retention 盤點索引，記錄 `FA_Data` 大型 DB/CSV 備份堆積來源、已納入保留策略的 migration/backfill/repair 入口，以及既有大檔清理需人工確認的邊界。
 - 2026-07-04：新增外部專案參考與未來版本藍圖索引，將 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 定位為 6M Roadmap / Version Roadmap companion，用來承接 GitHub 專案對照、資料源補強優先序與 V1.5-V2.0 版本形狀，避免 Vision 被外部參考清單污染。
 - 2026-07-04：新增 V1.5 Data Credibility design / plan / QA closeout 索引，標示 source capability registry、corporate action policy、microstructure metadata 與 shared source coverage service 已完成 v1；production scheduler 與外部資料 ingestion 仍未啟用。
 - 2026-07-03：整理 Roadmap / docs / phase 判讀入口，將 `docs/05_phases/` 明確標示為 Historical / Reference，新增文件整理稽核索引，避免 Phase 文件被誤判為目前 roadmap。

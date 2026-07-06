@@ -22,6 +22,10 @@
 - **`RUN_WITHOUT_VENV.md`**
   - 不使用虛擬環境運行指南
 
+- **`MCP_YFINANCE_OPENMARKETS_PATCH_MEMO.md`**
+  - openmarkets / yahoo-finance MCP 相容性修補備忘
+  - 保存 `.venv` 重建後的本機 patch 與驗證方式
+
 ## 🔗 相關目錄
 
 - `../00_core/` - 核心文檔

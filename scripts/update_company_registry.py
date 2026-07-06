@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +18,7 @@ from data_module.company_registry import (
     build_company_registry_rows,
     write_company_registry_csv,
 )
+from data_module.backup_retention import create_retained_backup
 from data_module.config import TWStockConfig
 
 TWSE_LISTED_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
@@ -120,11 +120,7 @@ def _backup_existing(output: Path, backup_dir: Path) -> Path | None:
     output = Path(output)
     if not output.exists():
         return None
-    backup_dir = Path(backup_dir)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_file = backup_dir / f"{output.stem}_company_registry_{datetime.now().strftime('%Y%m%d_%H%M%S')}{output.suffix}"
-    shutil.copy2(output, backup_file)
-    return backup_file
+    return create_retained_backup(output, Path(backup_dir), label="company_registry")
 
 
 if __name__ == "__main__":

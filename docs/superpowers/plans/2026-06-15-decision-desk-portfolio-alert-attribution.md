@@ -700,7 +700,7 @@ Portfolio Alert 的來源歸因會顯示每檔警示持倉的來源標籤、cond
 Add row:
 
 ```markdown
-| [2026-06-15-decision-desk-portfolio-alert-attribution.md](../superpowers/plans/2026-06-15-decision-desk-portfolio-alert-attribution.md) | Daily Decision Desk Portfolio Alert Attribution v1 實作計畫，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags。 |
+| [2026-06-15-decision-desk-portfolio-alert-attribution.md](./2026-06-15-decision-desk-portfolio-alert-attribution.md) | Daily Decision Desk Portfolio Alert Attribution v1 實作計畫，將持倉警示拆為來源標籤、condition status、chip risk level、reason tokens 與 data quality flags。 |
 ```
 
 Add changelog:

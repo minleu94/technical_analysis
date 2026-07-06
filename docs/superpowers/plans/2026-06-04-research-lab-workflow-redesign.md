@@ -948,8 +948,8 @@ In `docs/00_core/DEVELOPMENT_ROADMAP.md`, add under current Living Section updat
 In `docs/00_core/DOCUMENTATION_INDEX.md`, add this spec and plan under the Phase or core workflow section:
 
 ```markdown
-| [2026-06-04-research-lab-workflow-redesign.md](../superpowers/specs/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 多模式實驗室、候選池與 Phase 3 → Portfolio 來源追溯設計。 |
-| [2026-06-04-research-lab-workflow-redesign.md](../superpowers/plans/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 工作流重整第一階段實作計畫。 |
+| [2026-06-04-research-lab-workflow-redesign.md](../specs/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 多模式實驗室、候選池與 Phase 3 → Portfolio 來源追溯設計。 |
+| [2026-06-04-research-lab-workflow-redesign.md](./2026-06-04-research-lab-workflow-redesign.md) | Research Lab 工作流重整第一階段實作計畫。 |
 ```
 
 - [ ] **Step 4: Update UI features doc**

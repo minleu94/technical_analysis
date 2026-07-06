@@ -6,11 +6,11 @@ import csv
 import shutil
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
 from dataclasses import replace
 from pathlib import Path
 from typing import Iterable
 
+from data_module.backup_retention import create_retained_backup
 from data_module.fundamental_availability_sources import (
     load_monthly_revenue_availability_overrides_csv,
 )
@@ -151,10 +151,13 @@ def apply_monthly_revenue_backfill(
         )
 
     db_file = Path(db_file)
-    backup_dir = Path(backup_dir)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_file = backup_dir / f"{db_file.stem}_monthly_revenue_backfill_{_timestamp()}{db_file.suffix}"
-    shutil.copy2(db_file, backup_file)
+    backup_file = create_retained_backup(
+        db_file,
+        Path(backup_dir),
+        label="monthly_revenue_backfill",
+    )
+    if backup_file is None:
+        raise FileNotFoundError(db_file)
 
     conn = sqlite3.connect(db_file)
     try:
@@ -201,10 +204,13 @@ def apply_mops_snapshot_monthly_revenue_backfill(
         )
 
     db_file = Path(db_file)
-    backup_dir = Path(backup_dir)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_file = backup_dir / f"{db_file.stem}_mops_monthly_revenue_backfill_{_timestamp()}{db_file.suffix}"
-    shutil.copy2(db_file, backup_file)
+    backup_file = create_retained_backup(
+        db_file,
+        Path(backup_dir),
+        label="mops_monthly_revenue_backfill",
+    )
+    if backup_file is None:
+        raise FileNotFoundError(db_file)
 
     conn = sqlite3.connect(db_file)
     try:
@@ -287,10 +293,6 @@ def _insert_monthly_revenue_records(
         ],
     )
     return len(records)
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def _raw_date_from_period(period: str) -> str:

@@ -2,6 +2,7 @@
 
 > **最後更新**：2026-07-06
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。本文件已重構為 Gate-based 結構，不再保留完成流水帳。
+> **版本 companion**：V2.0 之後若需要版號判讀，請看 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。該文件只把本 Roadmap 的 Phase gate 映射為 V2.1-V4.0 產品階梯，不取代本文件的工程順序與驗收標準。
 > **歷史紀錄**：V1 (Month 1-6 與 V1.1-V1.9) 的詳細完工細節已封存至 [ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md](../09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md)。
 
 ---
@@ -91,6 +92,22 @@
 
 ---
 
+## 2.1 Phase 與長期版號對照
+
+本節只作版本 companion 對照；工程執行仍以本文件 Phase gate 為準。
+
+| 6M Phase | 候選版號 | 對應產品意義 |
+|---|---|---|
+| Phase 1 | V2.0 | Unified Decision Workbench read-only prototype 與 source adapter。 |
+| Phase 2 | V2.1 | Workbench 主 UI MVP，整合 Daily Decision、Evidence Review、Portfolio Review 與 Action Items。 |
+| Phase 0 + Phase 2 | V2.2 | Evidence Operating Loop，讓 weekly review、multi-day dry-run、manual review 與 action item 形成可重複節奏。 |
+| Phase 3 | V2.3 | P0 Data Source Candidate Dry-run，先候選測試 microstructure、corporate action 與 PIT release date，不直接進 `ScoringEngine`。 |
+| Phase 4 | V2.4 | Execution Model Realism，在 research-only sandbox 驗證買賣價差、零股、跳空與未成交原因。 |
+| Phase 5 | V2.5 | Production Evidence Scheduler Approval，只開 evidence write-mode scheduler，不代表自動交易。 |
+| Phase 0-5 之後 | V3.0 / V4.0 | 需依 Vision 的 Level 2-4 evidence 標準評估，不屬目前 6M 直接交付承諾。 |
+
+---
+
 ## 3. 驗證規則
 
 - **文件同步**：所有功能或政策修改，必須依據 `DOC_COVERAGE_MAP.md` 同步更新相關手冊。
@@ -102,6 +119,7 @@
 
 ## 4. 更新記錄
 
+- 2026-07-06：補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 作為 V2.0 之後的版本 companion，並新增 Phase-to-version 對照；本文件仍保留 gate-based 工程權威。
 - 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；已落地 DTO、composer、replay JSON summary adapter、sample CLI 與 focused tests，Phase 2 主 UI、Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
 - 2026-07-06：完成 Workbench formal read-only source adapter；CLI 可從 `--sample` 擴充到受控 `--db-path` / `--decision-date`，只讀既有 evidence / readiness / Agent summary / optional replay JSON，不寫 DB；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
 - 2026-07-06：完成 Phase 0A Historical Replay Evidence Quality Audit closeout；`ForwardPerformanceService` reference lookup 已修正 missing benchmark 預設 TAIEX、market index `收盤價` fallback 與保守 industry sector mapping。新 `_reference_fix` replay 產物確認 benchmark return / excess 全部填入 ready outcomes，industry 大量缺值保留為 payload gap；此項解除 V2.0 Phase 1 read-only design spike 的 replay input blocker，但 Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。

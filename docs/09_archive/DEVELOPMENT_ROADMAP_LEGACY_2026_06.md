@@ -1,4 +1,4 @@
-﻿# DEVELOPMENT_ROADMAP
+# DEVELOPMENT_ROADMAP
 
 ## 系統定位（System Vision）
 
@@ -641,7 +641,7 @@ Recommendation / Backtest → Portfolio → Condition Monitor → Journal → �
   - **測試與驗證**：新增 `tests/test_broker_branch_decode.py` 驗證解密與總部判定。更新 `test_ui_qt_update_view_workbench.py` 確保對應按鈕與文字正確並保持向後相容。mypy 零型態錯誤、py_compile 成功，UI QA 驗證腳本全綠通過。
 
 * ✅ **Phase 4.2 持倉層籌碼面風險提示與下鑽整合** (2026-06-11)：
-  * **籌碼監控服務**：實作 `PortfolioChipService`（[portfolio_chip_service.py](file:///c:/Projects/PythonProjects/technical_analysis/app_module/portfolio_chip_service.py)），在 SQLite 啟用時使用 SQL 直查（`broker_flows`）提供毫秒級統計，並支援 CSV 備用降級。計算主力近 5/20 日累計淨買賣、主力集中度與連續天數，依結構化風險規則評估風險級別（`bullish`/`neutral`/`bearish`）。
+  * **籌碼監控服務**：實作 `PortfolioChipService`（[portfolio_chip_service.py](../../app_module/portfolio_chip_service.py)），在 SQLite 啟用時使用 SQL 直查（`broker_flows`）提供毫秒級統計，並支援 CSV 備用降級。計算主力近 5/20 日累計淨買賣、主力集中度與連續天數，依結構化風險規則評估風險級別（`bullish`/`neutral`/`bearish`）。
   * **持倉監控 UI 面板**：在右側面板新增「籌碼監控」分頁，呈現風險評估、連續天數警示與追蹤分點近 5 日買賣明細表格。
   * **雙向下鑽連動**：新增「🔍 下鑽詳細主力流向」按鈕，觸發時切換 MainWindow 至「市場觀察 -> 主力流向」Tab；且在主力流向 View 中實作 `select_stock` 函數，自動定位高亮個股並載入其詳情。
   * **測試與驗證**：新增 `tests/test_portfolio_chip_monitor.py` 完整覆蓋空值處理、買賣超判定、連續出貨判定與雙軌降級，mypy、編譯及 QA 驗證均順利綠燈通過。
@@ -679,7 +679,7 @@ Recommendation / Backtest → Portfolio → Condition Monitor → Journal → �
 
 * ✅ **SQLite DB-first 讀取改造與視覺化 Table 檢視 (Phase 2A, 2B & 2C) 成果** (2026-06-03)：
   * **SQLite 視覺查詢資料表 (Phase 2C)**：新增了 `SqliteInspectorService` 與 `SqliteInspectorWidget`，並在 `UpdateView` 的左側導覽中整合「SQLite 資料檢視」分頁。支援 Preview 表格、PRAGMA table_info Schema 檢視與自訂 SELECT SQL 執行，並提供 Limit 限額與唯讀指令安全過濾。
-  * 重構了強勢股篩選 ([stock_screener.py](file:///c:/Projects/PythonProjects/technical_analysis/decision_module/stock_screener.py))、市場狀態偵測 ([market_regime_detector.py](file:///c:/Projects/PythonProjects/technical_analysis/decision_module/market_regime_detector.py))、產業映射器 ([industry_mapper.py](file:///c:/Projects/PythonProjects/technical_analysis/decision_module/industry_mapper.py)) 及推薦服務 ([recommendation_service.py](file:///c:/Projects/PythonProjects/technical_analysis/app_module/recommendation_service.py)) 的 SQLite 優先讀取改造，全數實現 SQLite 優先與 CSV 備用降級，徹底消除遍歷磁碟小 CSV 的 I/O 毒瘤。
+  * 重構了強勢股篩選 ([stock_screener.py](../../decision_module/stock_screener.py))、市場狀態偵測 ([market_regime_detector.py](../../decision_module/market_regime_detector.py))、產業映射器 ([industry_mapper.py](../../decision_module/industry_mapper.py)) 及推薦服務 ([recommendation_service.py](../../app_module/recommendation_service.py)) 的 SQLite 優先讀取改造，全數實現 SQLite 優先與 CSV 備用降級，徹底消除遍歷磁碟小 CSV 的 I/O 毒瘤。
   * **一鍵安全更新效能 Hotfix**：修復並優化了 `_date_key` 日期格式解析，避免逐行呼叫 `pd.to_datetime`。產業指數日期 map 轉換耗時由 13.19 秒降至 **0.136 秒** (提速 100 倍)，286 萬筆每日股價同步寫入 SQLite 僅需 **59.35 秒**。
   * 驗證：單元測試 `test_ui_qt_update_view_workbench.py` (7 passed) 與更新頁 QA `qa_validate_update_tab.py` (通過 21，失敗 0) 100% 通過。
 
@@ -733,7 +733,7 @@ Recommendation / Backtest → Portfolio → Condition Monitor → Journal → �
   * ✅ 優先級 1：強勢/弱勢分數標準化、Pattern ATR-based、Scoring Contract 統一
   * ✅ 優先級 2：回測參數改進、停損停利 ATR 模式、部位管理
   * ✅ **功能驗證**：18/18 功能通過（100% 通過率）
-    * 驗證報告：[output/qa/phase2_5_validation/VALIDATION_REPORT.md](../../output/qa/phase2_5_validation/VALIDATION_REPORT.md)
+    * 驗證報告：`output/qa/phase2_5_validation/VALIDATION_REPORT.md`（歷史本機輸出路徑，未作為目前 repo 文檔入口）
     * 驗證腳本：`scripts/qa_validate_phase2_5.py`
   * 詳細計劃：[docs/08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md](../08_technical/PARAMETER_DESIGN_IMPROVEMENTS.md)
 

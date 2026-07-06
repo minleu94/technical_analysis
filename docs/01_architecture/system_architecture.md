@@ -483,6 +483,7 @@ Current Result DTO / Run Metadata
 |---|---|
 | 目前狀態 | `docs/00_core/PROJECT_SNAPSHOT.md` |
 | 未來 6 個月 | `docs/00_core/ROADMAP_6M_ENGINEERING.md` |
+| V2.0 之後長期版本階梯 | `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` |
 | 外部參考與 V1.5-V2.0 版本形狀 | `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` |
 | 舊 Roadmap 移交 | `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` |
 | 架構 | 本文件 |
@@ -535,6 +536,7 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-07-06：文件架構補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md`，定位為 V2.0 之後長期版號 companion；本文件仍只維護目前架構、模組邊界與資料流。
 - 2026-07-06：新增 V2.0 Phase 1 read-only Workbench prototype 架構同步，確認 DTO / composer / replay summary adapter / CLI 只組合唯讀樣本與 replay JSON summary，不寫 DB、不掛主 UI、不重算策略、不啟用 scheduler。
 - 2026-07-06：新增 Workbench formal read-only source adapter 架構同步，確認 `WorkbenchSourceService` 只用 SQLite `mode=ro` / `query_only` 讀受控 DB path 的 DDD snapshot，並組合 Pre-V2 readiness、Agent summary 與可選 replay JSON；missing DB / table 只回 diagnostics，不建立 schema、不寫 DB、不解除 Phase 0 / scheduler gate。
 - 2026-07-06：新增 Historical Evidence Replay 架構同步，確認 replay service 只做 working-copy / replay DB orchestration，recommendation result 受 `created_at <= decision_date` 限制，forward outcome 受 `data_as_of_date` 限制，不改 scheduled dry-run、不寫 formal DB、不啟用 production scheduler。

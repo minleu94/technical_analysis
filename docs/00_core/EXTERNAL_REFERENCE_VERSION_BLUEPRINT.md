@@ -1,7 +1,7 @@
 # 外部專案參考與未來版本藍圖
 
-> **最後更新**：2026-07-05
-> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 與 `VERSION_ROADMAP_V1_1_TO_V2_0.md` 的參考 companion。它負責保存外部開源專案對照、資料源補強優先序、可借鑑設計、Blueprint 衝突檢查與 V1.8 至 V2.0 版本形狀；不取代 Vision、Snapshot、6M Roadmap 或 Architecture。
+> **最後更新**：2026-07-06
+> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md`、`VERSION_ROADMAP_V1_1_TO_V2_0.md` 與 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的參考 companion。它負責保存外部開源專案對照、資料源補強優先序、可借鑑設計、Blueprint 衝突檢查與 V1.8 至 V2.0 版本形狀；不取代 Vision、Snapshot、6M Roadmap、長期版本階梯或 Architecture。
 
 ---
 
@@ -16,6 +16,7 @@
 | `PROJECT_SNAPSHOT.md` | 目前狀態、本週優先事項、高風險區。 |
 | `ROADMAP_6M_ENGINEERING.md` | 未來 6 個月工程執行順序。 |
 | `VERSION_ROADMAP_V1_1_TO_V2_0.md` | V1.1 至 V2.0 的版本化交付節奏。 |
+| `VERSION_ROADMAP_V2_1_TO_V4_0.md` | V2.0 之後長期版號階梯與 maturity milestone 邊界。 |
 | `system_vision_specification.md` | 長期產品願景、Evidence Requirement、Gap Register。 |
 | 本文件 | 外部專案參考、資料源優先序、衝突檢查、版本形狀補充。 |
 
@@ -267,6 +268,7 @@ V2.0 應長成：
 ### Version Roadmap
 
 V1.1 至 V1.9 已完成的定位不變。已完成的 portfolio sandbox 不等於自動配置建議，read-only AI 不等於 AI 決策。V2.0 前必須先用實際週期證據驗證哪些 evidence summary / dashboard / action item 真正有用。
+V2.0 之後的 V2.1-V4.0 只在 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 中維護 maturity milestone，不由本文件直接承諾外部資料源導入或投資有效性。
 
 ### Roadmap Hub
 
@@ -276,6 +278,7 @@ Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並�
 
 ## 11. 更新記錄
 
+- 2026-07-06：補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的 scoped authority 對照，明確本文件不直接承諾 V2.1-V4.0 外部資料源導入或投資有效性。
 - 2026-07-05：重新整理外部專案採用規則與分級；確認只保留公開可讀且 README / docs 足以理解用途與操作方法的專案；`x-qa/stock-screener-service` 因 404 移出 active reference；`PyPortfolioOpt` 改用目前 canonical `PyPortfolio/PyPortfolioOpt`；`OpenBB agents` 降級為 experimental playground 參考。
 - 2026-07-06：標記 Workbench formal read-only source adapter 已完成；V2.0 主 UI 仍等待 Phase 0 weekly history / multi-day dry-run / manual workflow evidence，不因 adapter 或 replay 提前解除 gate。
 - 2026-07-06：標記 V1.9 Read-only Agent / MCP Evidence Access v1 已完成；V2.0 前置條件改為 evidence accumulation、manual smoke、multi-day dry-run 與真實 workflow 樣本成熟。

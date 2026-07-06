@@ -11,6 +11,12 @@ import shutil
 from typing import Optional, List, Dict
 import sys
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from data_module.backup_retention import cleanup_backup_series, create_retained_backup
+
 # 設置日誌
 logging.basicConfig(
     level=logging.INFO,
@@ -43,9 +49,9 @@ class MarketIndexFixer:
     def create_backup(self):
         """創建數據文件的備份"""
         if self.market_index_file.exists():
-            backup_time = datetime.now().strftime('%Y%m%d_%H%M%S')
-            backup_file = self.backup_dir / f"market_index_{backup_time}.csv"
-            shutil.copy2(self.market_index_file, backup_file)
+            backup_file = create_retained_backup(self.market_index_file, self.backup_dir)
+            if backup_file is None:
+                raise FileNotFoundError(self.market_index_file)
             logger.info(f"已創建備份文件: {backup_file}")
     
     def get_index_data(self, start_date: datetime, end_date: datetime) -> Optional[pd.DataFrame]:
@@ -193,6 +199,10 @@ class MarketIndexFixer:
                             backup_time = datetime.now().strftime('%Y%m%d_%H%M%S')
                             backup_file = self.backup_dir / f"market_index_before_save_{backup_time}.csv"
                             existing_df.to_csv(backup_file, index=False, encoding='utf-8-sig')
+                            cleanup_backup_series(
+                                self.backup_dir,
+                                prefix="market_index_before_save",
+                            )
                             logger.info(f"已創建更新前的備份文件: {backup_file}")
                             
                             # 保存
@@ -219,4 +229,4 @@ def main():
     fixer.fix_market_index()
 
 if __name__ == "__main__":
-    main() 
+    main()

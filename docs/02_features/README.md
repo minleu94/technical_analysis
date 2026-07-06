@@ -35,6 +35,10 @@
   - 策略設計規格書
   - Baseline Score Threshold Strategy 的完整設計規格
 
+- **`RESEARCH_RUN_REGISTRY_SPEC.md`**
+  - Research Run Registry 設計規格
+  - 說明 run metadata、資料指紋、SQLite / Parquet 儲存與 Cross-run 比較基礎
+
 ## 🔗 相關目錄
 
 - `../00_core/` - 核心文檔

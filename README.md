@@ -55,6 +55,7 @@ $env:OUTPUT_ROOT = "D:\your\data\root\output"
 | 使用系統 | [docs/07_guides/APPLICATION_MANUAL.md](docs/07_guides/APPLICATION_MANUAL.md) |
 | 了解目前狀態 | [docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md) |
 | 了解未來 6 個月工程路線 | [docs/00_core/ROADMAP_6M_ENGINEERING.md](docs/00_core/ROADMAP_6M_ENGINEERING.md) |
+| 了解 V2.0 之後長期版本階梯 | [docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md](docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md) |
 | 了解 V1.5-V2.0 版本形狀與外部專案參考 | [docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) |
 | 了解架構與模組邊界 | [docs/01_architecture/system_architecture.md](docs/01_architecture/system_architecture.md) |
 | 找所有文件 | [docs/00_core/DOCUMENTATION_INDEX.md](docs/00_core/DOCUMENTATION_INDEX.md) |
@@ -96,5 +97,6 @@ $env:OUTPUT_ROOT = "D:\your\data\root\output"
 
 ## 更新記錄
 
+- 2026-07-06：新增 V2.0 之後長期版本階梯入口，指向 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`。
 - 2026-07-04：新增外部專案參考與 V1.5-V2.0 版本形狀入口，指向 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。
 - 2026-06-30：重整根目錄 README 為使用者導向入口；開發者與 Agent 上下文移至 `AGENT_CONTEXT.md`；明確化 `main` / `dev` 分支策略。

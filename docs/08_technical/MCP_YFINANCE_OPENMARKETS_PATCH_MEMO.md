@@ -1,4 +1,4 @@
-# PATCH_MEMO
+# MCP Yahoo Finance / openmarkets Patch Memo
 
 > openmarkets / yahoo-finance MCP 相容性修補備忘錄。若未來重建 `.venv`，請依本檔重新套用。
 

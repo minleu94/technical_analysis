@@ -6,10 +6,10 @@ import csv
 import shutil
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
+from data_module.backup_retention import create_retained_backup
 from data_module.fundamental_statement_availability_sources import (
     load_statement_availability_overrides_csv,
 )
@@ -123,10 +123,13 @@ def apply_statement_items_backfill(
         )
 
     db_file = Path(db_file)
-    backup_dir = Path(backup_dir)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_file = backup_dir / f"{db_file.stem}_statement_items_backfill_{_timestamp()}{db_file.suffix}"
-    shutil.copy2(db_file, backup_file)
+    backup_file = create_retained_backup(
+        db_file,
+        Path(backup_dir),
+        label="statement_items_backfill",
+    )
+    if backup_file is None:
+        raise FileNotFoundError(db_file)
 
     conn = sqlite3.connect(db_file)
     try:
@@ -190,7 +193,3 @@ def _insert_statement_item_records(
         ],
     )
     return len(records)
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")

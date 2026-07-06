@@ -40,7 +40,7 @@ Post-V1 版本節奏：
 - V1.9：Read-only Agent / MCP Evidence Access v1 已完成。只讓 AI 查 evidence、source trace、quality 與 warnings；不得寫 DB、不得改策略、不得產生 lifecycle action。
 - V2.0：Unified Decision Workbench。只有在 V1.5 至 V1.9 的資料可信度、因子管線、負面證據、portfolio sandbox 與 read-only AI 邊界成熟後，才評估完整整合 Daily Decision、Market Watch、Evidence Review 與 Portfolio Review。
 
-版本化交付細節見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)。外部開源專案參考、資料源補強優先序、`cuFOLIO` / RL / broker API / SQLite split 的 deferred 邊界，見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)。
+版本化交付細節見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](../00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md)。外部開源專案參考、資料源補強優先序、`cuFOLIO` / RL / broker API / SQLite split 的 deferred 邊界，見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](../00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)。
 
 ---
 

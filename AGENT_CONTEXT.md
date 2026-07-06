@@ -25,10 +25,11 @@ baldr 是一套可驗證、可回溯、可演化的台股研究與投資決策�
 5. [docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md) - 目前狀態、高風險區與工作模式。
 6. [docs/00_core/DEVELOPMENT_ROADMAP.md](docs/00_core/DEVELOPMENT_ROADMAP.md) - Roadmap Hub。
 7. [docs/00_core/ROADMAP_6M_ENGINEERING.md](docs/00_core/ROADMAP_6M_ENGINEERING.md) - 未來 6 個月工程路線。
-8. [docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) - 外部專案參考、資料源優先序與 V1.5-V2.0 版本形狀（涉及方向或版本規劃時）。
-9. [docs/01_architecture/system_architecture.md](docs/01_architecture/system_architecture.md) - 架構與模組邊界。
-10. [docs/07_guides/APPLICATION_MANUAL.md](docs/07_guides/APPLICATION_MANUAL.md) - 使用者操作權威。
-11. 與任務對應的 Agent 文件，例如 `execution_agent.md`、`documentation_agent.md`、`data_cleanup_agent.md`。
+8. [docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md](docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md) - V2.0 之後長期版本階梯（涉及 V2 之後版本命名或長期成熟度時）。
+9. [docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) - 外部專案參考、資料源優先序與 V1.5-V2.0 版本形狀（涉及方向或版本規劃時）。
+10. [docs/01_architecture/system_architecture.md](docs/01_architecture/system_architecture.md) - 架構與模組邊界。
+11. [docs/07_guides/APPLICATION_MANUAL.md](docs/07_guides/APPLICATION_MANUAL.md) - 使用者操作權威。
+12. 與任務對應的 Agent 文件，例如 `execution_agent.md`、`documentation_agent.md`、`data_cleanup_agent.md`。
 
 ## Scoped SSOT
 
@@ -36,6 +37,7 @@ baldr 是一套可驗證、可回溯、可演化的台股研究與投資決策�
 |---|---|
 | 目前狀態 / 高風險區 | `docs/00_core/PROJECT_SNAPSHOT.md` |
 | 未來 6 個月工程路線 | `docs/00_core/ROADMAP_6M_ENGINEERING.md` |
+| V2.0 之後長期版本階梯 | `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` |
 | 外部參考 / V1.5-V2.0 版本形狀 | `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` |
 | Roadmap 入口 | `docs/00_core/DEVELOPMENT_ROADMAP.md` |
 | 舊 Roadmap 移交 | `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` |
@@ -79,5 +81,6 @@ baldr 是一套可驗證、可回溯、可演化的台股研究與投資決策�
 
 ## 更新記錄
 
+- 2026-07-06：補上 V2.0 之後長期版本階梯 companion 入口，供 Agent 在 V2.1-V4.0 規劃時定位 `VERSION_ROADMAP_V2_1_TO_V4_0.md`。
 - 2026-07-04：補上外部專案參考與 V1.5-V2.0 版本形狀 companion 入口，供 Agent 在方向規劃時定位 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。
 - 2026-06-30：從根目錄 README 拆出 Agent / Developer 上下文，使 `README.md` 可作為乾淨使用者入口。

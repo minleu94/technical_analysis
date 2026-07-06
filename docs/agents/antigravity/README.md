@@ -13,10 +13,11 @@ Antigravity 開工前依序閱讀：
 5. `docs/00_core/PROJECT_SNAPSHOT.md`
 6. `docs/00_core/DEVELOPMENT_ROADMAP.md`（Roadmap Hub）
 7. 任務涉及方向、架構或中高風險時讀 `docs/00_core/ROADMAP_6M_ENGINEERING.md`
-8. 任務涉及舊工作承接、Phase Gate 或優先順序時讀 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
-9. 任務涉及架構、資料流或模組邊界時讀 `docs/01_architecture/system_architecture.md`
-10. 任務涉及 UI、使用流程、參數、結果判讀或安全限制時讀 `docs/07_guides/APPLICATION_MANUAL.md`
-11. 本目錄中與任務對應的角色文件
+8. 任務涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時讀 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`
+9. 任務涉及舊工作承接、Phase Gate 或優先順序時讀 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
+10. 任務涉及架構、資料流或模組邊界時讀 `docs/01_architecture/system_architecture.md`
+11. 任務涉及 UI、使用流程、參數、結果判讀或安全限制時讀 `docs/07_guides/APPLICATION_MANUAL.md`
+12. 本目錄中與任務對應的角色文件
 
 ## 角色選擇
 
@@ -24,7 +25,7 @@ Antigravity 開工前依序閱讀：
 |---|---|---|
 | 架構判斷、是否該做、風險評估 | `tech_lead_agent.md` | `docs/agents/tech_lead.md` |
 | 功能實作、Bug 修復、測試補強 | `execution_agent.md` | `docs/agents/execution_agent.md` |
-| 文檔 Coverage、索引與 Snapshot / Roadmap Hub / 6M Roadmap / Carryover / Architecture / Manual 同步 | `documentation_agent.md` | `docs/agents/documentation_agent.md` |
+| 文檔 Coverage、索引與 Snapshot / Roadmap Hub / 6M Roadmap / 長期版本階梯 / Carryover / Architecture / Manual 同步 | `documentation_agent.md` | `docs/agents/documentation_agent.md` |
 | 資料完整性、資料對比、資料品質 | `data_audit_agent.md` | `docs/agents/data_audit_agent.md` |
 | 清理、移除、整理、未使用檔案判斷 | `data_cleanup_agent.md` | `docs/agents/data_cleanup_agent.md` |
 | 測試路由、功能驗證、QA healthcheck 結果解讀、feature-to-test matrix 判讀 | - (無適配層，直接使用權威文件) | `docs/agents/testing_qa_agent.md` |

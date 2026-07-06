@@ -13,9 +13,10 @@
 5. `docs/00_core/PROJECT_SNAPSHOT.md`
 6. `docs/00_core/DEVELOPMENT_ROADMAP.md`（Roadmap Hub）
 7. `docs/00_core/ROADMAP_6M_ENGINEERING.md`
-8. `docs/01_architecture/system_architecture.md`
-9. `docs/00_core/DOCUMENTATION_INDEX.md`
-10. `docs/agents/tech_lead.md`
+8. `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時必讀）
+9. `docs/01_architecture/system_architecture.md`
+10. `docs/00_core/DOCUMENTATION_INDEX.md`
+11. `docs/agents/tech_lead.md`
 
 ## 輸出要求
 
@@ -30,4 +31,4 @@
 - Month 3 Factor Layer 覆蓋補齊：固定組合與更多 Research Lab 路徑的 factor records、Factor Gate 回歸與 no-look-ahead 防線。
 - Month 3 Portfolio Replay 可信度：現金帳、權重、再平衡、未成交、Liquidity / Gap 標記。
 - Month 4 Daily Decision Desk 前置：先定義 snapshot / service 邊界，避免在 UI 層重算市場、推薦或持倉邏輯。
-- 保持 Snapshot / Roadmap Hub / 6M Roadmap / Architecture / Index / Agent docs 一致。
+- 保持 Snapshot / Roadmap Hub / 6M Roadmap / V2.1-V4.0 Roadmap / Architecture / Index / Agent docs 一致。

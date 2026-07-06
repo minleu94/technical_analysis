@@ -18,9 +18,13 @@
   - V1 release 後到 V2.0 的版本化交付節奏
   - 說明 V1.1 workflow bridge、V1.2 credibility、V1.3 operations、V1.4 history 與 V2.0 workbench 邊界
 
+- **`VERSION_ROADMAP_V2_1_TO_V4_0.md`**
+  - V2.0 之後的長期版本階梯
+  - 將 6M Roadmap Phase 與 Vision 成功標準映射為 V2.1-V4.0 companion；不取代 6M Roadmap、Vision 或目前狀態權威
+
 - **`DEVELOPMENT_ROADMAP.md`**
   - Roadmap Hub
-  - 指向 Snapshot、6M Roadmap、系統架構與歷史歸檔
+  - 指向 Snapshot、6M Roadmap、長期版本階梯、系統架構與歷史歸檔
   - 不保存完整歷史 Done，也不作為唯一狀態權威
 
 - **`LEGACY_ROADMAP_CARRYOVER.md`**
@@ -53,9 +57,10 @@
 1. 先讀 `PROJECT_SNAPSHOT.md` 取得目前狀態。
 2. 若要規劃未來 6 個月工程，讀 `ROADMAP_6M_ENGINEERING.md`。
 3. 若要理解 V1.1 / V1.2 / V1.3 / V1.4 / V2.0 版本節奏，讀 `VERSION_ROADMAP_V1_1_TO_V2_0.md`。
-4. 若要確認舊 Roadmap 是否完整承接，讀 `LEGACY_ROADMAP_CARRYOVER.md`。
-5. 若要操作系統，讀 `../07_guides/APPLICATION_MANUAL.md`。
-6. 若要確認架構、模組邊界或資料流，讀 `../01_architecture/system_architecture.md`。
-7. 若要找文件位置，讀 `DOCUMENTATION_INDEX.md`。
-8. 若要追溯舊 Phase 或歷史 Done，讀 `../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` 或 `../05_phases/README.md`；這些只作歷史追溯。
+4. 若要理解 V2.0 之後長期版號階梯，讀 `VERSION_ROADMAP_V2_1_TO_V4_0.md`。
+5. 若要確認舊 Roadmap 是否完整承接，讀 `LEGACY_ROADMAP_CARRYOVER.md`。
+6. 若要操作系統，讀 `../07_guides/APPLICATION_MANUAL.md`。
+7. 若要確認架構、模組邊界或資料流，讀 `../01_architecture/system_architecture.md`。
+8. 若要找文件位置，讀 `DOCUMENTATION_INDEX.md`。
+9. 若要追溯舊 Phase 或歷史 Done，讀 `../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md` 或 `../05_phases/README.md`；這些只作歷史追溯。
 

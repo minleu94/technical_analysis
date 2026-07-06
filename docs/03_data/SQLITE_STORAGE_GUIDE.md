@@ -122,5 +122,5 @@ self.db_file = self.sqlite_dir / "twstock.db"
 
 > [!IMPORTANT]
 > **開發守則**：
-> 1. 修改任何資料庫欄位或追加資料表時，請同步更新 [data_module/db_manager.py](file:///c:/Projects/PythonProjects/technical_analysis/data_module/db_manager.py) 的 schema 宣告。
+> 1. 修改任何資料庫欄位或追加資料表時，請同步更新 [data_module/db_manager.py](../../data_module/db_manager.py) 的 schema 宣告。
 > 2. 請不要手動編輯 `.db` 二進位檔案，所有數據的源頭變更一律以 CSV 更新為準，再同步寫入資料庫。

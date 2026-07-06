@@ -18,6 +18,7 @@
 - **舊 Roadmap 未完成事項移交**：以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。
 - **目前完整操作方式**：以 `docs/07_guides/APPLICATION_MANUAL.md` 為準。
 - **外部專案參考與 V1.5-V2.0 版本形狀**：以 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` 作 companion 參考；它不取代 Vision、6M Roadmap 或 Version Roadmap。
+- **V2.0 之後的長期版本階梯**：以 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` 作 companion 參考；它只把 6M Roadmap Phase 與 Vision 成功標準映射為 V2.1-V4.0，不取代 6M Roadmap 或 Vision。
 
 `docs/00_core/DEVELOPMENT_ROADMAP.md` 現在是 Roadmap Hub，只負責指向上述權威文件，不再保存完整歷史長文。
 
@@ -73,7 +74,7 @@ Historical Evidence Replay v1 新增 `HistoricalEvidenceReplayService` 與 `scri
 
 
 - **文件治理與 Manual** ✅ 本輪完成
-  - Roadmap Hub、6M Roadmap、Legacy Carryover、Architecture、Index 與 Agent 指引已採 Scoped SSOT。
+  - Roadmap Hub、6M Roadmap、V2.1-V4.0 Roadmap、Legacy Carryover、Architecture、Index 與 Agent 指引已採 Scoped SSOT。
   - 已建立 8 個頂層工作區的完整操作手冊。
   - 舊 Roadmap 工程欠項已全部取得「已完成 / Month X 移交 / 被取代」唯一處置；實作進度仍依 6M Roadmap 執行。
 
@@ -161,6 +162,7 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 - `DEVELOPMENT_ROADMAP.md` - Roadmap Hub，指向目前狀態、6 個月路線、架構與 archive。
 - `ROADMAP_6M_ENGINEERING.md` - 未來 6 個月可執行工程路線。
 - `VERSION_ROADMAP_V1_1_TO_V2_0.md` - V1 release 後至 V2.0 的版本化交付節奏，說明 V1.1 workflow bridge 與 V2.0 Unified Decision Workbench 邊界。
+- `VERSION_ROADMAP_V2_1_TO_V4_0.md` - V2.0 之後的長期版本階梯，將 Workbench MVP、Evidence operating loop、資料源 dry-run、execution realism、scheduler approval、evidence-validated decision system 與 investment effectiveness maturity 對應為 V2.1-V4.0 companion。
 - `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` - 外部開源專案參考、資料源補強優先序、V1.5 至 V2.0 版本形狀與 deferred 技術邊界；不取代 Vision 或 6M Roadmap。
 - `../01_architecture/system_vision_specification.md` - baldr 產品北極星、目前邊界、Gap Register 與投資有效性驗證框架；不作為目前可用功能依據。
 - `LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 未完成事項的逐項移交與結案 Gate。

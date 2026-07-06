@@ -9,6 +9,13 @@ from tqdm import tqdm
 from typing import Optional, List, Dict
 import random
 import shutil
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from data_module.backup_retention import create_retained_backup
 
 # 設置日誌
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -134,8 +141,9 @@ def fix_industry_index(default_start_date: str = "2024-11-23"):
         existing_df = None
         if industry_index_file.exists():
             # 創建備份
-            backup_file = backup_path / f'industry_index_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-            shutil.copy2(industry_index_file, backup_file)
+            backup_file = create_retained_backup(industry_index_file, backup_path)
+            if backup_file is None:
+                raise FileNotFoundError(industry_index_file)
             logging.info(f"已創建備份文件: {backup_file}")
             
             # 讀取現有數據
@@ -253,4 +261,4 @@ if __name__ == "__main__":
     try:
         fix_industry_index()
     except Exception as e:
-        logging.error(f"程序執行失敗: {str(e)}") 
+        logging.error(f"程序執行失敗: {str(e)}")

@@ -1,7 +1,7 @@
 # V1.1 至 V2.0 版本路線圖
 
 > **最後更新**：2026-07-06
-> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 的版本化交付 companion。6M Roadmap 仍是未來 6 個月工程主線權威；本文件負責把「V1 已完成、main 可運行、資料可信度仍在驗證中」之後的工作拆成可討論、可 commit、可驗收的 V1.1 至 V2.0 節奏。外部開源專案對照與資料源優先序見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)。
+> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 的版本化交付 companion。6M Roadmap 仍是未來 6 個月工程主線權威；本文件負責把「V1 已完成、main 可運行、資料可信度仍在驗證中」之後的工作拆成可討論、可 commit、可驗收的 V1.1 至 V2.0 節奏。V2.0 之後長期版號階梯見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)；外部開源專案對照與資料源優先序見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)。
 
 ---
 
@@ -18,6 +18,7 @@
 
 - V1.x：不大改資訊架構，不移除既有主要 Tab；優先把 workflow 串順、把 evidence 看得見、把可信度 gate 補強。
 - V2.0：等 V1.x 的真實使用與 evidence 證明使用者每天怎麼決策後，再重整資訊架構與主要工作台。
+- V2.1+：由 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 維護長期版號階梯；V3/V4 是 maturity milestone，不代表已證明投資有效性。
 - 任何策略、回測、推薦、factor、portfolio 或績效改動，都維持 no-look-ahead、Decimal / 整數單位與資料可得日防線。
 - 文件判讀採 Scoped SSOT：部分 Post-V1 design / QA 檔名沿用後續里程碑日期，完成狀態與本週優先事項仍以 `PROJECT_SNAPSHOT.md`、`ROADMAP_6M_ENGINEERING.md` 與本文件的狀態段落為準。
 
@@ -360,9 +361,11 @@ V1.1 至 V1.9 v1 已收尾，下一步不應直接宣稱 Profile、factor rank�
 - V2.0 Phase 1 read-only Unified Decision Workbench prototype slice 與 formal read-only source adapter 已完成：第一屏採 Daily Decision task view，Evidence Review 作 drill-down Evidence mode，safe dry-run / daily flow 作 checklist；CLI 保留 `--sample`，也可用受控 `--db-path` / `--decision-date` 讀 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與 `_reference_fix` replay JSON summary，只呈現 source gap、payload gap、event family、outcome maturity 與 quality boundary，不做績效結論。
 - 下一步是 Phase 2 MVP 的主 UI / background evidence feed 設計；scheduler approval、lifecycle action 與 production write-mode 仍不得直接跳過 gate。
 - V1.3/V1.4 weekly review、multi-day dry-run、真實 watchlist / portfolio workflow 樣本仍需背景累積；這些 gate 不被 replay 取代。
+- V2.0 之後的 V2.1-V4.0 長期版本階梯已交棒給 `VERSION_ROADMAP_V2_1_TO_V4_0.md`；本文件不再承接 V3/V4 maturity 規劃。
 
 ## 11. 更新記錄
 
+- 2026-07-06：補上 V2.0 之後長期版號交棒規則，指向 `VERSION_ROADMAP_V2_1_TO_V4_0.md`；本文件仍只維護 V1.1 至 V2.0 節奏。
 - 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；當時 sample CLI 可輸出 JSON / Markdown 並讀取 `_reference_fix` replay JSON summary，不寫 evidence、不啟用 scheduler、不產生交易建議。
 - 2026-07-06：完成 V2.0 Workbench formal read-only source adapter；CLI 從 `--sample` 擴充到受控 `--db-path` / `--decision-date`，讀取 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與 optional replay JSON；missing DB / table 只回 diagnostics，不寫 DB、不解除 weekly history `0/3`、multi-day dry-run `1/3` 或 scheduler gate。
 - 2026-07-06：完成 Pre-V2.0A Historical Replay Evidence Quality Audit；reference return 修正後 `_reference_fix` replay 的 ready benchmark return / excess 已補齊，industry 大量缺值確認為 recommendation payload gap。此項解除 V2.0 Phase 1 read-only design spike 的 replay input blocker，但 production scheduler 與投資有效性 gate 不變。

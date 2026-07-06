@@ -16,9 +16,10 @@
 8. `docs/00_core/DOCUMENTATION_INDEX.md`
 9. `docs/00_core/DEVELOPMENT_ROADMAP.md`（Roadmap Hub）
 10. `docs/00_core/ROADMAP_6M_ENGINEERING.md`
-11. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
-12. `docs/01_architecture/system_architecture.md`
-13. `docs/07_guides/APPLICATION_MANUAL.md`（涉及 UI / 使用流程時必讀）
+11. `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時必讀）
+12. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`
+13. `docs/01_architecture/system_architecture.md`
+14. `docs/07_guides/APPLICATION_MANUAL.md`（涉及 UI / 使用流程時必讀）
 
 ## 工作流程
 
@@ -30,7 +31,7 @@
 - 需要更新的文件
 - 優先級：Must / Should / Nice-to-have
 - 需要更新的段落
-- Snapshot / Roadmap Hub / 6M Roadmap / Legacy Carryover / Architecture / Application Manual / Index 一致性檢查
+- Snapshot / Roadmap Hub / 6M Roadmap / V2.1-V4.0 Roadmap / Legacy Carryover / Architecture / Application Manual / Index 一致性檢查
 - 需要使用者補充的資訊
 
 Coverage Pass 不直接產出 patch，除非使用者明確要求直接更新。
@@ -44,6 +45,7 @@ Coverage Pass 不直接產出 patch，除非使用者明確要求直接更新。
 - 新增或刪除 Markdown 時，必須更新 `docs/00_core/DOCUMENTATION_INDEX.md`。
 - 目前狀態、Next、Risks 以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準。
 - 未來 6 個月工程路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準。
+- V2.0 之後長期版號階梯以 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` 為準；它不取代 6M Roadmap、Vision 或目前狀態權威。
 - Roadmap 入口與歷史導引由 `docs/00_core/DEVELOPMENT_ROADMAP.md` 負責。
 - 舊 Roadmap 未完成事項的承接與 Gate 由 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 負責。
 - 架構、資料流與模組邊界以 `docs/01_architecture/system_architecture.md` 為準。

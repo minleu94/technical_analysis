@@ -14,6 +14,7 @@
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 目前狀態、當前工作模式、本週優先事項與高風險區。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
 | [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；作為 6M Roadmap 的 companion，不取代其權威。 |
+| [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md) | V2.0 之後的長期版本階梯；將 6M Roadmap Phase 2-5 與 Vision Level 1-4 映射為 V2.1-V4.0 companion，不取代 6M Roadmap 或 Vision。 |
 | [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) | 外部開源專案參考、資料源補強優先序與 V1.5 至 V2.0 版本形狀；作為 6M Roadmap / Version Roadmap companion，不取代 Vision。 |
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統架構、模組邊界、資料流與高風險技術邊界。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 文檔導航與文件所在位置，不作為功能或狀態事實來源。 |
@@ -65,6 +66,7 @@
 
 未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
 V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3、V1.4、V1.5、V1.6、V1.7、V1.8、V1.9 v1、V2.0 Phase 1 read-only prototype slice 與 Workbench formal read-only source adapter 已完成；下一步不是直接重做 UI 或啟用 production scheduler，而是繼續累積 Phase 0 weekly / multi-day evidence，並在 adapter 上設計 Phase 2 MVP 的主 UI 整合 gate。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
+V2.0 之後的版本階梯見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)：V2.1-V2.5 對應 Workbench 主 UI、Evidence operating loop、P0 資料源 dry-run、execution realism 與 scheduler approval gate；V3.0-V4.0 對應 Vision 的 evidence-validated decision system 與投資有效性成熟度。該文件是長期版號 companion，不提前承諾 V3/V4 已具投資有效性。
 外部開源專案對照、資料源補強優先序與 V1.5 至 V2.0 的中繼版本形狀見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)；該文件只作參考 companion，不取代 6M Roadmap 的執行順序。
 
 目前立即執行優先順序：
@@ -108,7 +110,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
    - PDF 規格化報告仍待後續，屬研究輸出 backlog，不阻塞 Month 3 / Month 4。
 
 8. **P3：文件治理持續檢查**
-   - Snapshot、6M Roadmap、Architecture、Index、Agent 指引已採 Scoped SSOT；後續功能變更需依 Coverage Map 同步更新入口摘要。
+   - Snapshot、6M Roadmap、V2.1-V4.0 Roadmap、Architecture、Index、Agent 指引已採 Scoped SSOT；後續功能變更需依 Coverage Map 同步更新入口摘要。
    - `docs/05_phases/` 已降格為 Historical / Reference；後續若要搬移或刪除，需先修正引用並保留回滾路徑。
 
 ---
@@ -136,6 +138,7 @@ V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERS
 
 ## 7. 更新記錄
 
+- 2026-07-06：新增 V2.1 至 V4.0 長期版本路線圖入口，將 V2.0 後 Phase 2-5 與 Vision Level 1-4 對應為 companion 版號階梯；Roadmap Hub 仍只作入口，不改 6M Roadmap 權威。
 - 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；當時新增 DTO、composer、historical replay summary adapter、sample CLI 與 QA closeout，邊界是不寫 evidence、不啟用 scheduler、不產生交易建議。
 - 2026-07-06：完成 V2.0 Workbench formal read-only source adapter；`inspect_v2_workbench_prototype.py` 可由 `--sample` 擴充到受控 `--db-path` / `--decision-date`，讀取 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與可選 replay JSON summary；missing DB / table 只回 diagnostics，不寫 DB、不解除 Phase 0 / Phase 5 gate。
 - 2026-07-06：新增 Historical Evidence Replay v1，定位為 research-only simulated scheduler；可輔助 Phase 0 source gap / V2.0 設計觀察，但不替代真實時間 gate 或 production scheduler approval。

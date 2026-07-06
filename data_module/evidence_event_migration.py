@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 import shutil
 import sqlite3
+
+from data_module.backup_retention import create_retained_backup
 
 
 EVIDENCE_TABLES = ("evidence_events", "evidence_outcomes")
@@ -175,9 +176,18 @@ def apply_evidence_event_schema_migration(
             diagnostics=("source_db_missing",),
         )
 
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_file = backup_dir / f"{db_file.stem}_evidence_event_schema_{_timestamp()}{db_file.suffix}"
-    shutil.copy2(db_file, backup_file)
+    backup_file = create_retained_backup(
+        db_file,
+        backup_dir,
+        label="evidence_event_schema",
+    )
+    if backup_file is None:
+        return EvidenceEventSchemaMigrationResult(
+            applied=False,
+            backup_file=None,
+            report=None,
+            diagnostics=("source_db_missing",),
+        )
 
     conn = sqlite3.connect(db_file)
     try:
@@ -214,7 +224,3 @@ def _table_columns_snapshot(conn: sqlite3.Connection) -> dict[str, tuple[str, ..
         )
         for table_name in table_names
     }
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")

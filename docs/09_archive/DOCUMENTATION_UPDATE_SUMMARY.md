@@ -2,6 +2,8 @@
 
 **更新日期**：2025-12-22
 
+> **歸檔判讀（2026-07-06 補記）**：本文件保留 2025-12 的文檔整理歷史。部分舊文件名稱已在 2026 文件治理後改由 Snapshot、`05_phases/` 或 archive 文件承接；連結已改指向目前仍存在的對應入口，但本文內容不作目前狀態或 roadmap 依據。
+
 ## 更新背景
 
 根據系統演進地圖，當前系統處於 **Phase 1 → Phase 2 交界**，需要更新文檔以反映：
@@ -14,7 +16,7 @@
 
 ## 新增文檔
 
-### 1. [開發演進地圖](DEVELOPMENT_ROADMAP.md) ⭐ **最重要**
+### 1. [開發演進地圖](../00_core/DEVELOPMENT_ROADMAP.md) ⭐ **最重要**
 **系統的完整演進計劃**
 
 **內容**：
@@ -32,7 +34,7 @@
 
 ---
 
-### 2. [當前開發狀態](CURRENT_STATUS.md)
+### 2. [當前開發狀態](../00_core/PROJECT_SNAPSHOT.md)
 **系統當前狀態的詳細說明**
 
 **內容**：
@@ -48,7 +50,7 @@
 
 ---
 
-### 3. [Phase 2 策略資料庫設計](PHASE2_STRATEGY_LIBRARY.md)
+### 3. [Phase 2 策略資料庫設計](../05_phases/PHASE2_STRATEGY_LIBRARY.md)
 **Phase 2 的詳細設計文檔**
 
 **內容**：
@@ -64,7 +66,7 @@
 
 ---
 
-### 4. [文檔索引](DOCUMENTATION_INDEX.md)
+### 4. [文檔索引](../00_core/DOCUMENTATION_INDEX.md)
 **所有文檔的索引和導航**
 
 **內容**：
@@ -81,7 +83,7 @@
 
 ## 更新文檔
 
-### 1. [開發進度記錄](note.txt)
+### 1. [開發進度記錄](dev_progress_note_legacy_2026_01.txt)
 **更新內容**：
 - 在開頭增加系統定位說明
 - 標註當前位置（Phase 1 → Phase 2 交界）
@@ -105,7 +107,7 @@
 
 ---
 
-### 3. [系統架構文檔](system_architecture.md)
+### 3. [系統架構文檔](../01_architecture/system_architecture.md)
 **更新內容**：
 - 在開頭增加系統定位說明
 - 標註當前狀態
@@ -117,7 +119,7 @@
 
 ---
 
-### 4. [UI 應用程式說明](../ui_app/README.md)
+### 4. [UI 應用程式說明](../../ui_app/README.md)
 **更新內容**：
 - 在開頭增加系統定位說明
 - 更新策略配置標籤頁說明（6 個子標籤頁）
@@ -133,72 +135,72 @@
 ## 文檔組織建議
 
 ### 核心文檔（必讀）
-1. [開發演進地圖](DEVELOPMENT_ROADMAP.md) - **最重要**
-2. [當前開發狀態](CURRENT_STATUS.md)
-3. [開發進度記錄](note.txt)
+1. [開發演進地圖](../00_core/DEVELOPMENT_ROADMAP.md) - **最重要**
+2. [當前開發狀態](../00_core/PROJECT_SNAPSHOT.md)
+3. [開發進度記錄](dev_progress_note_legacy_2026_01.txt)
 
 ### 架構文檔
-4. [系統架構文檔](system_architecture.md)
-5. [數據收集架構](data_collection_architecture.md)
+4. [系統架構文檔](../01_architecture/system_architecture.md)
+5. [數據收集架構](../01_architecture/data_collection_architecture.md)
 
 ### 功能文檔
-6. [Phase 2 策略資料庫設計](PHASE2_STRATEGY_LIBRARY.md)
-7. [數據更新指南](daily_data_update_guide.md)
-8. [腳本使用說明](scripts_readme.md)
+6. [Phase 2 策略資料庫設計](../05_phases/PHASE2_STRATEGY_LIBRARY.md)
+7. [數據更新指南](../03_data/daily_data_update_guide.md)
+8. [腳本使用說明](../07_guides/scripts_readme.md)
 
 ### 索引文檔
-9. [文檔索引](DOCUMENTATION_INDEX.md)
+9. [文檔索引](../00_core/DOCUMENTATION_INDEX.md)
 
 ---
 
 ## 文檔更新原則
 
 ### 每次重大功能更新
-- 更新 [開發進度記錄](note.txt)
-- 更新 [當前開發狀態](CURRENT_STATUS.md)
+- 更新 [開發進度記錄](dev_progress_note_legacy_2026_01.txt)
+- 更新 [當前開發狀態](../00_core/PROJECT_SNAPSHOT.md)
 
 ### 每次 Phase 轉換
-- 更新 [開發演進地圖](DEVELOPMENT_ROADMAP.md)
-- 更新 [當前開發狀態](CURRENT_STATUS.md)
+- 更新 [開發演進地圖](../00_core/DEVELOPMENT_ROADMAP.md)
+- 更新 [當前開發狀態](../00_core/PROJECT_SNAPSHOT.md)
 - 更新主 [README.md](../README.md)
 
 ### 每次架構變更
-- 更新 [系統架構文檔](system_architecture.md)
+- 更新 [系統架構文檔](../01_architecture/system_architecture.md)
 
 ### 每次新增功能
 - 更新對應的功能文檔
-- 更新 [開發進度記錄](note.txt)
+- 更新 [開發進度記錄](dev_progress_note_legacy_2026_01.txt)
 
 ---
 
 ## 當前文檔狀態
 
 ### ✅ 已更新
-- [開發演進地圖](DEVELOPMENT_ROADMAP.md) - 新增
-- [當前開發狀態](CURRENT_STATUS.md) - 新增
-- [Phase 2 策略資料庫設計](PHASE2_STRATEGY_LIBRARY.md) - 新增
-- [文檔索引](DOCUMENTATION_INDEX.md) - 新增
-- [開發進度記錄](note.txt) - 已更新
+- [開發演進地圖](../00_core/DEVELOPMENT_ROADMAP.md) - 新增
+- [當前開發狀態](../00_core/PROJECT_SNAPSHOT.md) - 新增
+- [Phase 2 策略資料庫設計](../05_phases/PHASE2_STRATEGY_LIBRARY.md) - 新增
+- [文檔索引](../00_core/DOCUMENTATION_INDEX.md) - 新增
+- [開發進度記錄](dev_progress_note_legacy_2026_01.txt) - 已更新
 - [README.md](../README.md) - 已更新
-- [系統架構文檔](system_architecture.md) - 已更新
-- [UI 應用程式說明](../ui_app/README.md) - 已更新
+- [系統架構文檔](../01_architecture/system_architecture.md) - 已更新
+- [UI 應用程式說明](../../ui_app/README.md) - 已更新
 
 ### 🚧 待更新（可選）
-- [數據收集架構](data_collection_architecture.md) - 可增加 Phase 說明
-- [腳本使用說明](scripts_readme.md) - 可增加 Phase 說明
+- [數據收集架構](../01_architecture/data_collection_architecture.md) - 可增加 Phase 說明
+- [腳本使用說明](../07_guides/scripts_readme.md) - 可增加 Phase 說明
 
 ---
 
 ## 文檔維護建議
 
 ### 定期檢查（每月）
-1. 確認 [開發演進地圖](DEVELOPMENT_ROADMAP.md) 是否反映最新計劃
-2. 確認 [當前開發狀態](CURRENT_STATUS.md) 是否反映最新狀態
-3. 確認 [開發進度記錄](note.txt) 是否及時更新
+1. 確認 [開發演進地圖](../00_core/DEVELOPMENT_ROADMAP.md) 是否反映最新計劃
+2. 確認 [當前開發狀態](../00_core/PROJECT_SNAPSHOT.md) 是否反映最新狀態
+3. 確認 [開發進度記錄](dev_progress_note_legacy_2026_01.txt) 是否及時更新
 
 ### 重大變更時
 1. 更新相關文檔
-2. 更新 [文檔索引](DOCUMENTATION_INDEX.md)
+2. 更新 [文檔索引](../00_core/DOCUMENTATION_INDEX.md)
 3. 檢查文檔間的一致性
 
 ---
@@ -206,16 +208,16 @@
 ## 總結
 
 ### 新增文檔
-- ✅ [開發演進地圖](DEVELOPMENT_ROADMAP.md) - **最重要**
-- ✅ [當前開發狀態](CURRENT_STATUS.md)
-- ✅ [Phase 2 策略資料庫設計](PHASE2_STRATEGY_LIBRARY.md)
-- ✅ [文檔索引](DOCUMENTATION_INDEX.md)
+- ✅ [開發演進地圖](../00_core/DEVELOPMENT_ROADMAP.md) - **最重要**
+- ✅ [當前開發狀態](../00_core/PROJECT_SNAPSHOT.md)
+- ✅ [Phase 2 策略資料庫設計](../05_phases/PHASE2_STRATEGY_LIBRARY.md)
+- ✅ [文檔索引](../00_core/DOCUMENTATION_INDEX.md)
 
 ### 更新文檔
-- ✅ [開發進度記錄](note.txt)
+- ✅ [開發進度記錄](dev_progress_note_legacy_2026_01.txt)
 - ✅ [README.md](../README.md)
-- ✅ [系統架構文檔](system_architecture.md)
-- ✅ [UI 應用程式說明](../ui_app/README.md)
+- ✅ [系統架構文檔](../01_architecture/system_architecture.md)
+- ✅ [UI 應用程式說明](../../ui_app/README.md)
 
 ### 文檔組織
 - ✅ 建立了清晰的文檔結構

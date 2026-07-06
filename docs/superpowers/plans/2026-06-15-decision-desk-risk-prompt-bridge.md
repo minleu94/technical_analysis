@@ -811,7 +811,7 @@ Why Not / 風險提示 v1 會把各 section 已揭露的低流動性、相對弱
 Add this row to `docs/00_core/DOCUMENTATION_INDEX.md`:
 
 ```markdown
-| [2026-06-15-decision-desk-risk-prompt-bridge.md](../superpowers/plans/2026-06-15-decision-desk-risk-prompt-bridge.md) | Daily Decision Desk Why Not / 風險提示橋接 v1 實作計畫，將既有 section DTO 的低流動性、弱勢、watchlist risk alert、portfolio alert 與品質缺口整理成可行動提示。 |
+| [2026-06-15-decision-desk-risk-prompt-bridge.md](./2026-06-15-decision-desk-risk-prompt-bridge.md) | Daily Decision Desk Why Not / 風險提示橋接 v1 實作計畫，將既有 section DTO 的低流動性、弱勢、watchlist risk alert、portfolio alert 與品質缺口整理成可行動提示。 |
 ```
 
 Add changelog entry:

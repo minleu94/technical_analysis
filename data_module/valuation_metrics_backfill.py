@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Mapping, cast
 
+from data_module.backup_retention import create_retained_backup
 from data_module.valuation_data import calculate_industry_percentiles_bp
 from decision_module.factors.factor_dtos import FactorDiagnostic, FactorQuality
 
@@ -242,10 +243,13 @@ def apply_valuation_metrics_backfill(
         )
 
     db_file = Path(db_file)
-    backup_dir = Path(backup_dir)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_file = backup_dir / f"{db_file.stem}_valuation_metrics_backfill_{_timestamp()}{db_file.suffix}"
-    shutil.copy2(db_file, backup_file)
+    backup_file = create_retained_backup(
+        db_file,
+        Path(backup_dir),
+        label="valuation_metrics_backfill",
+    )
+    if backup_file is None:
+        raise FileNotFoundError(db_file)
 
     conn = sqlite3.connect(db_file)
     try:
@@ -348,7 +352,3 @@ def _companies_sort_date(value: str) -> str:
         return datetime.strptime(value, "%Y-%m-%d").strftime("%Y%m%d")
     except ValueError:
         return value
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -1,8 +1,8 @@
 ﻿# 開發進度記錄
 
 > **注意**：本文檔記錄歷史開發進度，最新狀態請參考：
-> - `DEVELOPMENT_ROADMAP.md` - 開發路線圖（Single Source of Truth，同目錄）
-> - `PROJECT_SNAPSHOT.md` - 專案快照（當前狀態，同目錄）
+> - `../00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub
+> - `../00_core/PROJECT_SNAPSHOT.md` - 專案快照（目前狀態）
 
 ## 最新更新 (2026-01-03) - 文檔清理與整理 ✅
 
@@ -216,7 +216,7 @@
 - 策略說明文檔（待實作）
 - 單一策略回測（待實作）
 
-詳細演進地圖請參考：[DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md)
+詳細演進地圖請參考：[DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md)
 
 ---
 

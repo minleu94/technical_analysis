@@ -1,4 +1,6 @@
-﻿# 股票測試模型系統
+# 股票測試模型系統
+
+> **歸檔判讀（2026-07-06 補記）**：本文件是舊根目錄 README 的歷史快照，內容停留在 Phase 2.5 時期。最新狀態請看 `../00_core/PROJECT_SNAPSHOT.md`，未來路線請看 `../00_core/ROADMAP_6M_ENGINEERING.md`。
 
 > 注意：本項目文件和交流使用繁體中文。
 > Note: This project documentation and communication uses Traditional Chinese.
@@ -18,7 +20,7 @@ baldr 提供台股資料收集、處理、分析和回測功能。系統採用�
   - 驗證報告：`output/qa/phase2_5_validation/VALIDATION_REPORT.md`
   - 驗證腳本：`scripts/qa_validate_phase2_5.py`
 
-**詳細開發進度**：請參考 [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md)
+**詳細開發進度**：請參考 [DEVELOPMENT_ROADMAP.md](../00_core/DEVELOPMENT_ROADMAP.md)
 
 ## 快速開始指南
 
@@ -85,13 +87,13 @@ technical_analysis/
 
 為了快速了解系統架構和當前開發進度，請先閱讀以下文件：
 
-1. **[system_architecture.md](docs/system_architecture.md)**：包含系統架構的流程圖和詳細說明，幫助您理解各模組之間的關係和數據流程。
+1. **[system_architecture.md](../01_architecture/system_architecture.md)**：包含系統架構的流程圖和詳細說明，幫助您理解各模組之間的關係和數據流程。
    - 包括數據流程圖
    - 模組結構詳解
    - 數據和輸出流程
    - 輸出文件說明
 
-2. **[note.txt](docs/note.txt)**：包含當前開發進度、已完成的功能和待解決的問題。
+2. **[dev_progress_note_legacy_2026_01.txt](dev_progress_note_legacy_2026_01.txt)**：包含當前開發進度、已完成的功能和待解決的問題。
    - 各模組的開發進度
    - 最新更新內容
    - 輸出文件說明

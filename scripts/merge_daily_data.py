@@ -4,6 +4,13 @@ import logging
 from datetime import datetime
 import shutil
 import argparse
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from data_module.backup_retention import create_retained_backup
 
 # 設置日誌
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -54,8 +61,9 @@ def merge_daily_data(force_all: bool = False, config=None):
         last_date = None
         if output_file.exists():
             # 創建備份
-            backup_file = backup_dir / f'stock_data_whole_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-            shutil.copy2(output_file, backup_file)
+            backup_file = create_retained_backup(output_file, backup_dir)
+            if backup_file is None:
+                raise FileNotFoundError(output_file)
             logger.info(f"已創建備份文件: {backup_file}")
             
             if not force_all:

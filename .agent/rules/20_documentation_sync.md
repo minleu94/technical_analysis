@@ -16,6 +16,7 @@
 - `docs/00_core/PROJECT_SNAPSHOT.md`
 - `docs/00_core/DEVELOPMENT_ROADMAP.md`
 - `docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時）
 - `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md`（涉及舊工作移交或 Gate 時）
 - `docs/01_architecture/system_architecture.md`
 - `docs/00_core/DOCUMENTATION_INDEX.md`
@@ -27,6 +28,7 @@
 
 - 目前狀態、Next、Risks 以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準。
 - 未來 6 個月工程路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準。
+- V2.0 之後長期版號階梯以 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` 為準；它不取代 6M Roadmap、Vision 或目前狀態權威。
 - Roadmap 入口與歷史導引由 `docs/00_core/DEVELOPMENT_ROADMAP.md` 負責。
 - 舊 Roadmap 未完成事項的承接與 Gate 由 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 負責。
 - 架構、資料流與模組邊界以 `docs/01_architecture/system_architecture.md` 為準。

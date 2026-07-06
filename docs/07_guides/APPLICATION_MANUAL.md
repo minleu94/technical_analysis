@@ -106,6 +106,8 @@ python ui_qt/main.py
 
 定期或資料修復後使用「安全更新（完整 CSV + SQLite）」，保留 CSV 歷史備份與 SQLite 同步。
 
+備份檔集中在 `DATA_ROOT/meta_data/backup/`，同一來源同一天只保留最新一份，最多保留最新 5 個日期版本；migration / backfill / registry / 大型 merge 入口也採同一 retention 規則。既有大型備份來源與清理候選見 [BACKUP_RETENTION_AUDIT_2026_07_06.md](../03_data/BACKUP_RETENTION_AUDIT_2026_07_06.md)，清理前必須先由使用者確認。
+
 ## 4. 數據更新
 
 ### 4.1 全部資料看板

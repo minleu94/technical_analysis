@@ -29,10 +29,11 @@
 6. `docs/00_core/DOCUMENTATION_INDEX.md` - 文檔索引（了解文檔結構）
 7. `docs/00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub
 8. `docs/00_core/ROADMAP_6M_ENGINEERING.md` - 6 個月工程路線
-9. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 移交矩陣
-10. `docs/01_architecture/system_architecture.md` - 系統架構
-11. `docs/07_guides/APPLICATION_MANUAL.md` - 完整操作手冊（涉及 UI / 使用流程時必讀）
-12. 本次變更涉及的檔案（由使用者提供，或由 Agent 提出需求）
+9. `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` - V2.0 之後長期版本階梯（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時必讀）
+10. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 移交矩陣
+11. `docs/01_architecture/system_architecture.md` - 系統架構
+12. `docs/07_guides/APPLICATION_MANUAL.md` - 完整操作手冊（涉及 UI / 使用流程時必讀）
+13. 本次變更涉及的檔案（由使用者提供，或由 Agent 提出需求）
 
 **未完成上述閱讀，不得執行任何任務。**
 
@@ -128,9 +129,10 @@
 6. docs/00_core/DOCUMENTATION_INDEX.md
 7. docs/00_core/DEVELOPMENT_ROADMAP.md（Roadmap Hub）
 8. docs/00_core/ROADMAP_6M_ENGINEERING.md（6 個月工程路線）
-9. docs/00_core/LEGACY_ROADMAP_CARRYOVER.md（舊 Roadmap 移交矩陣）
-10. docs/01_architecture/system_architecture.md（系統架構）
-11. docs/07_guides/APPLICATION_MANUAL.md（涉及 UI / 使用流程時必讀）
+9. docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時必讀）
+10. docs/00_core/LEGACY_ROADMAP_CARRYOVER.md（舊 Roadmap 移交矩陣）
+11. docs/01_architecture/system_architecture.md（系統架構）
+12. docs/07_guides/APPLICATION_MANUAL.md（涉及 UI / 使用流程時必讀）
 
 **你的角色定位：**
 - 你不是功能設計者，也不是工程師
@@ -379,3 +381,4 @@
 - 2026-01-03：重構為文檔覆蓋完整性 Agent，加入兩階段工作流程
 - 2026-05-20：修正 DOC_COVERAGE_MAP 路徑為 `docs/00_core/DOC_COVERAGE_MAP.md`
 - 2026-06-13：加入 Legacy Carryover 與 Manual completeness Gate。
+- 2026-07-06：補入 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的條件式必讀規則，供 V2.1+ 長期版號與成熟度規劃任務使用。

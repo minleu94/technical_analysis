@@ -5,6 +5,7 @@
 > **核心原則**：本系統不以自動交易、不以 AI 報牌、不以預測明日漲跌為目標；本系統的目標是建立一套可驗證、可回溯、可解釋、可持續改進的台股投資研究與決策工作台。
 > **權威邊界**：本文件提供產品願景、現況邊界與證據要求，不取代 Scoped SSOT。當前實作狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月工程路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；目前模組邊界以 `docs/01_architecture/system_architecture.md` 為準；操作方式以 `docs/07_guides/APPLICATION_MANUAL.md` 為準。
 > **外部參考邊界**：GitHub 開源專案對照、資料源補強優先序與 V1.5 至 V2.0 版本形狀，統一維護於 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`；本 Vision 不保存外部專案清單，避免把產品北極星混成研究筆記。
+> **長期版號邊界**：V2.0 之後的產品版號階梯維護於 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`；該文件只把本 Vision 的成功標準映射為 V2.1-V4.0 companion，不代表 V3/V4 已承諾或已證明投資有效性。
 
 ---
 
@@ -734,6 +735,18 @@ baldr 的成功分為四層。
 - Live performance 與 Research performance 的落差可被解釋並逐步縮小。
 - Strategy Lifecycle 能辨識訊號衰退，避免失效策略持續被採用。
 
+### 15.1 版本成熟度判讀
+
+長期版號只用來描述成熟度，不得取代上述 evidence 標準：
+
+| 版本階段 | 對應成功標準 | 判讀方式 |
+|---|---|---|
+| V2.x | Level 1 至 Level 2 | 建立單一 Workbench、穩定 evidence operations、資料可信度 dry-run 與 execution realism；仍不宣稱投資有效。 |
+| V3.x | Level 2 至 Level 3 | 用累積 evidence 判斷哪些 signal、alert、gate 與 dashboard 有用，哪些需要降級或移除。 |
+| V4.0 | Level 4 | 只有在長期 forward / live / review evidence 支持決策改善時才成立；不代表保證獲利、自動交易或 AI 報牌。 |
+
+詳細版號階梯見 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`。
+
 ---
 
 ## 16. 非目標
@@ -756,6 +769,11 @@ baldr 的成功分為四層。
 ---
 
 ## 17. 更新記錄
+
+### 2026-07-06
+
+- 新增 V2.0 之後長期版號邊界，指向 `VERSION_ROADMAP_V2_1_TO_V4_0.md`。
+- 在成功標準後補充 V2.x / V3.x / V4.0 的成熟度判讀，明確 V4.0 需由 Level 4 evidence 支持，不能由 UI 或 dashboard 完成狀態提前宣告。
 
 ### 2026-07-01
 

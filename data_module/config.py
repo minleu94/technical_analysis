@@ -205,9 +205,13 @@ class TWStockConfig:
             return match.group("prefix")
         return fallback_prefix
 
-    def _backup_sort_key(self, backup_file: Path) -> tuple[str, str]:
+    def _backup_sort_key(self, backup_file: Path, file_prefix: str | None = None) -> tuple[str, str]:
         """解析備份檔名中的日期與時間；無法解析時回傳空值以避免誤刪。"""
-        match = re.match(r"^.+_(?P<date>\d{8})(?:_(?P<time>\d{6}))?$", backup_file.stem)
+        if file_prefix is None:
+            pattern = r"^.+_(?P<date>\d{8})(?:_(?P<time>\d{6}))?$"
+        else:
+            pattern = rf"^{re.escape(file_prefix)}_(?P<date>\d{{8}})(?:_(?P<time>\d{{6}}))?$"
+        match = re.match(pattern, backup_file.stem)
         if not match:
             return ("", "")
         return (match.group("date"), match.group("time") or "")
@@ -217,7 +221,7 @@ class TWStockConfig:
         backups_by_date: dict[str, list[Path]] = {}
         for backup_file in self.backup_dir.glob(f"{file_prefix}_*"):
             try:
-                date_key, _ = self._backup_sort_key(backup_file)
+                date_key, _ = self._backup_sort_key(backup_file, file_prefix)
                 if not date_key:
                     continue
                 backups_by_date.setdefault(date_key, []).append(backup_file)
@@ -227,7 +231,7 @@ class TWStockConfig:
         for date_key, backup_files in backups_by_date.items():
             sorted_files = sorted(
                 backup_files,
-                key=lambda path: (self._backup_sort_key(path), path.stat().st_mtime),
+                key=lambda path: (self._backup_sort_key(path, file_prefix), path.stat().st_mtime),
                 reverse=True,
             )
             for backup_file in sorted_files[1:]:
