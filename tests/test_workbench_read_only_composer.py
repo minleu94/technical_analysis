@@ -265,6 +265,35 @@ def test_composer_handles_missing_decision_snapshot_without_fabricating_ui_state
     assert any(item.item_id == "decision_snapshot" for item in dashboard.status_strip)
 
 
+def test_composer_surfaces_historical_replay_as_simulated_evidence_input() -> None:
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=_decision_snapshot(),
+        readiness_report=_readiness_report(),
+        agent_report_sample=_agent_report_sample(),
+        historical_replay_summary={
+            "replay_mode": "historical_replay",
+            "source_label": "simulated_scheduler",
+            "totals": {
+                "days": 118,
+                "events_seen": 118056,
+                "outcomes_created": 472224,
+            },
+            "final_outcome_summary": {
+                "missing_benchmark": 0,
+                "missing_industry_benchmark": 378491,
+            },
+            "warnings": ("simulated_scheduler", "missing_industry_benchmark"),
+        },
+    )
+
+    evidence = {item.item_id: item for item in dashboard.evidence_summary}
+
+    assert evidence["historical_replay"].status == "degraded"
+    assert "benchmark reference ready" in evidence["historical_replay"].summary
+    assert "industry gaps 378491" in evidence["historical_replay"].summary
+    assert "historical_replay / simulated_scheduler" in " ".join(dashboard.warnings)
+
+
 def test_workbench_phase1_modules_do_not_import_write_or_trading_surfaces() -> None:
     forbidden = (
         "ScoringEngine",
