@@ -103,7 +103,11 @@ python ui_qt/main.py
 7. 數據更新
 8. Runtime
 
+左側主導覽每個主工作區都有短代碼 icon，協助快速掃描；可用導覽列頂部的收合按鈕切換為 icon-only 模式以釋放橫向空間。收合後仍可用 tooltip 辨識完整工作區名稱，並且只影響畫面空間，不改變任何資料載入、排程、報告或 service 行為。
+
 「每日決策」不再是頂層主工作區，已整併為「決策工作台 > 決策來源」。決策工作台內部子頁包含「總覽」、「決策來源」、「Evidence」、「持倉追蹤」與「操作節奏」；今日待判讀佇列清空時會顯示空狀態，提示可前往「市場探索」研究。這只代表目前 DTO payload 沒有待判讀項目，不代表 Phase gate 已完成，也不是買賣建議。
+
+「總覽」頂部會先顯示一行摘要，包含今日待判讀、人工待處理、Evidence waiting、Warnings 與 Phase 0 gate 狀態，讓使用者先掃描重點再往下看表格。「Evidence」、「持倉追蹤」與「操作節奏」子頁目前是摘要與下鑽入口，也是預留深挖區；完整互動能力仍需等後續功能切片與正式資料累積，不能因位置已預留就標示為已完成。
 
 Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍需正式資料與真實時間累積，不能因 UI 重排、replay summary、fixture 或人工改表而標示為完成。
 
@@ -266,6 +270,8 @@ Regime 是對當下市場環境的分類，不是未來預測。規則匹配度�
 
 強勢排名不等於建議追價；弱勢排名也不等於做空或立即賣出。
 
+弱勢個股頁的 `跌幅%` 會把來源的負漲幅取絕對值顯示，例如來源 `-9.90%` 在畫面顯示為 `9.90`，並以紅色表示下跌語意；欄名已經說明這是跌幅，所以不再用負號重複表意。這只是視覺語意修正，不改變篩選排名或 scoring。
+
 效能邊界：強 / 弱勢個股在 SQLite 啟用時會優先從 SQLite `daily_prices` 只讀近期交易日與必要欄位，不依賴全量 indicator CSV 掃描；產業共振理由會使用 `IndustryMapper` 最新產業表現快取，避免逐檔股票重掃產業指數 DataFrame；讀取失敗才降級為既有 CSV / 舊查詢路徑。若仍感到卡頓，應先量測 SQLite 查詢、DataFrame 分組與 UI thread 更新時間；不要把排名結果解讀成交易指令。
 
 ### 5.3 強勢與弱勢產業
@@ -273,6 +279,8 @@ Regime 是對當下市場環境的分類，不是未來預測。規則匹配度�
 使用本日或本周排名判斷產業相對強弱，再回到個股頁或推薦頁研究產業內股票。
 
 強 / 弱勢產業同樣採 SQLite-first，從 SQLite `industry_indices` 只讀近期交易日與 `日期` / `指數名稱` / `收盤指數` 必要欄位；缺資料或讀取失敗才 fallback CSV。大型資料量下第一次載入仍可能需要等待，但不再需要先載入整張產業指數表。
+
+弱勢產業頁的 `跌幅%` 同樣以正數顯示跌幅大小、以紅色表示下跌語意；不應把紅色正數解讀為上漲。
 
 ### 5.4 主力流向
 
@@ -1199,6 +1207,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或受治理流程，不監控資料更新、回測或推薦分析的背景任務。資料更新、回測與推薦的進度仍應回到各自功能頁查看。
 
+畫面頂部只保留緊湊的 scope note，下方任務狀態、治理健康與事件流會靠近上方顯示，避免中間大片空白誤導使用者以為頁面尚未載入。此版面調整只影響可讀性，不新增監控範圍。
+
 欄位：
 
 - Objective：目前 Runtime 任務目標；沒有任務時會顯示「尚未指派治理任務」。
@@ -1307,6 +1317,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 
 ## 14. 更新記錄
 
+- 2026-07-07：左側主導覽新增短代碼 icon 與 icon-only 收合模式；Runtime Observatory 改為緊湊 scope note，避免大片空白；Workbench 總覽新增 DTO 摘要列，Evidence / 持倉追蹤 / 操作節奏標示為摘要與下鑽入口 / 預留深挖區；市場探索弱勢個股與弱勢產業的 `跌幅%` 以正數顯示並用紅色代表下跌語意。以上只改 UI presentation，不啟用 scheduler、不寫 DB、不補 Phase gate。
 - 2026-07-07：主 UI 改為左側主導覽，預設進入「決策工作台」；「每日決策」整併為「決策工作台 > 決策來源」，「市場觀察」改名為「市場探索」。Workbench 新增今日待判讀空狀態與 session-only 已查看提示；Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍需正式資料累積，不能用 replay 或 UI 狀態補齊。
 - 2026-07-06：更新 V2.0 Phase 1 / Phase 1.5 read-only Workbench prototype CLI 操作說明，標示 sample、受控 `--db-path` / `--decision-date`、Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary、replay JSON summary、degraded source diagnostics 與不寫 DB / 不啟用 scheduler / 不產生交易建議限制。
 - 2026-07-05：新增 V1.6 cross-sectional factor snapshot inspection CLI 操作說明，標示 rank / quantile 僅供研究 attribution，不是推薦、不改 `ScoringEngine`、不建立 DB、不啟用 scheduler。

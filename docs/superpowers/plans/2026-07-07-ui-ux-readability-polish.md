@@ -22,44 +22,43 @@
 
 **Files:** `ui_qt/views/runtime_view.py`, `tests/test_ui_qt_runtime_view.py`
 
-- [ ] Write tests that assert `scope_label` uses compact maximum height and splitter starts immediately after the scope label.
-- [ ] Run `pytest tests/test_ui_qt_runtime_view.py -q -o addopts=` and confirm failure.
-- [ ] Update RuntimeView to style `scope_label` as compact banner, remove vertical stretch, and set sensible splitter minimum.
-- [ ] Re-run test and commit.
+- [x] Write tests that assert `scope_label` uses compact maximum height and splitter starts immediately after the scope label.
+- [x] Run `pytest tests/test_ui_qt_runtime_view.py -q -o addopts=` and confirm failure.
+- [x] Update RuntimeView to style `scope_label` as compact banner, remove vertical stretch, and set sensible splitter minimum.
+- [x] Re-run test and commit.
 
 ### Task 2: Left Navigation Icons and Collapse
 
 **Files:** `ui_qt/widgets/left_navigation.py`, `ui_qt/main.py`, `tests/test_ui_qt_left_navigation.py`, `tests/test_ui_qt_decision_desk_main_integration.py`
 
-- [ ] Add tests for `NavigationItem.icon`, `set_collapsed(True)`, width change, icon-only button text, tooltip, and signal preservation.
-- [ ] Run left nav tests and confirm failure.
-- [ ] Implement icon text, collapse toggle button, `is_collapsed()`, `set_collapsed()`.
-- [ ] Update MainWindow navigation items with icons.
-- [ ] Re-run focused tests and commit.
+- [x] Add tests for `NavigationItem.icon`, `set_collapsed(True)`, width change, icon-only button text, tooltip, and signal preservation.
+- [x] Run left nav tests and confirm failure.
+- [x] Implement icon text, collapse toggle button, `is_collapsed()`, `set_collapsed()`.
+- [x] Update MainWindow navigation items with icons.
+- [x] Re-run focused tests and commit.
 
 ### Task 3: Workbench Readability
 
 **Files:** `ui_qt/views/workbench_view.py`, `tests/test_ui_qt_workbench_view.py`
 
-- [ ] Add tests for top summary cards / `overview_summary_label` and placeholder pages that mention summary-only / future detail lane.
-- [ ] Run Workbench tests and confirm failure.
-- [ ] Implement compact summary panel and clearer placeholder pages.
-- [ ] Re-run Workbench tests and commit.
+- [x] Add tests for top summary cards / `overview_summary_label` and placeholder pages that mention summary-only / future detail lane.
+- [x] Run Workbench tests and confirm failure.
+- [x] Implement compact summary panel and clearer placeholder pages.
+- [x] Re-run Workbench tests and commit.
 
 ### Task 4: Weak Market Semantic Color
 
 **Files:** `ui_qt/views/weak_stocks_view.py`, `ui_qt/views/weak_industries_view.py`, related tests.
 
-- [ ] Add tests that weak stock / industry `跌幅%` displays absolute positive value and uses red foreground.
-- [ ] Run tests and confirm failure.
-- [ ] Implement a semantic table model or role override for `跌幅%`.
-- [ ] Re-run tests and commit.
+- [x] Add tests that weak stock / industry `跌幅%` displays absolute positive value and uses red foreground.
+- [x] Run tests and confirm failure.
+- [x] Implement a semantic table model or role override for `跌幅%`.
+- [x] Re-run tests and commit.
 
 ### Task 5: Docs and QA
 
 **Files:** Manual / Snapshot / UI design system / QA closeout as needed.
 
-- [ ] Update docs to describe Runtime compact layout, left nav collapse, Workbench future lanes, and weak-market color semantics.
-- [ ] Run full focused QA.
-- [ ] Commit docs.
-
+- [x] Update docs to describe Runtime compact layout, left nav collapse, Workbench future lanes, and weak-market color semantics.
+- [x] Run full focused QA.
+- [x] Commit docs.

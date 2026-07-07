@@ -1,7 +1,7 @@
 # Midnight Analyst UI 設計系統規格
 
 > **狀態**：Month 4 v1 functional closure accepted；2026-07-02 完成第一輪全 UI 低風險視覺 polish
-> **最後更新**：2026-07-02
+> **最後更新**：2026-07-07
 > **權威範圍**：本文件定義 PySide6 UI 深色主題、設計 token、共用元件、效能限制與後續修改規則。
 
 ---
@@ -41,7 +41,7 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 2. **資訊密度高但可掃描**：適合表格、排行、風險提示與研究結果。
 3. **效能優先**：避免大量陰影、動畫、透明效果、漸層與 widget-per-cell。
 4. **一致的狀態語言**：`OBSERVED`、`ESTIMATED`、`DEGRADED`、`MISSING` 必須用同一套 badge / 色彩規則呈現。
-5. **用樣板逐步遷移**：Daily Decision Desk 是第一個 reference screen；2026-07-02 後，持倉管理、推薦分析、回測、Watchlist、資料更新與市場觀察相關表格也已開始共用同一套 token / table helper / button variant。2026-07-07 後，主殼層採左側主導覽，Daily Decision Desk 內嵌於 `決策工作台 > 決策來源`，原市場觀察重新定位為 `市場探索`。
+5. **用樣板逐步遷移**：Daily Decision Desk 是第一個 reference screen；2026-07-02 後，持倉管理、推薦分析、回測、Watchlist、資料更新與市場觀察相關表格也已開始共用同一套 token / table helper / button variant。2026-07-07 後，主殼層採左側主導覽，Daily Decision Desk 內嵌於 `決策工作台 > 決策來源`，原市場觀察重新定位為 `市場探索`；左側 rail 可收合為 icon-only，以支援小螢幕筆電的橫向空間。
 
 目前使用者回饋：
 
@@ -85,6 +85,7 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 - 若需要新增語意色，命名要描述用途，例如 `risk_extreme`，不要用 `orange_2` 這類視覺名稱。
 - 多空顏色不可反覆改定義；一旦有「正向 / 負向 / 風險」語意，須全 UI 一致。
 - 表格內的獲利 / 虧損 / 中性數值優先使用 `data_positive`、`data_negative`、`data_neutral`，不要在各 view 內另訂一組綠紅灰。
+- 若欄位名稱本身已帶負向語意，例如 `跌幅%`、風險增加或缺口數，數值即使以正數顯示也應使用負向 / danger 色；不得只依正負號把 `跌幅%` 顯示成綠色。
 
 ---
 
@@ -337,7 +338,9 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 - 全域 QSS：補齊 button variants、tooltip、表格 corner、水平 / 垂直 scrollbar 與空狀態框。
 - 共用 helper：新增 `EmptyStatePanel`、`apply_financial_table_style()` 與 text sanitizer。
 - 門面頁：每日決策與持倉管理已整理為較一致的工作台視覺。
-- 主殼層：`LeftNavigationWidget` 使用 restrained Midnight Analyst left rail，主工作區由 `QStackedWidget` 切換；子工作區仍可使用上方 `QTabWidget`。
+- 主殼層：`LeftNavigationWidget` 使用 restrained Midnight Analyst left rail，主工作區由 `QStackedWidget` 切換；每個主工作區使用短代碼 icon 協助掃描，並可收合為 icon-only 模式；子工作區仍可使用上方 `QTabWidget`。
+- Workbench：總覽頂部新增 DTO 摘要列，先顯示今日待判讀、人工待處理、Evidence waiting、Warnings 與 Phase 0 gate；Evidence / 持倉追蹤 / 操作節奏子頁目前定位為摘要與下鑽入口 / 預留深挖區，不應被文件或 UI 標成完整功能已完成。
+- Runtime Observatory：頂部 scope note 應維持緊湊，讓任務狀態、治理健康與事件流靠近上方，不保留大片空白作為「未載入」式空間。
 - 其他工作區：資料更新、推薦分析、回測、Watchlist、市場探索與 evidence review 相關表格已逐步套用通用表格與按鈕語言。
 
 本輪遷移邊界：
@@ -407,6 +410,7 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 
 ## 13. 更新記錄
 
+- 2026-07-07：補記左側主導覽短代碼 icon / icon-only 收合、Workbench DTO 摘要列與預留深挖區定位、Runtime compact scope note、以及 `跌幅%` 這類正數但負向語意欄位應使用負向色的規則。
 - 2026-07-02：同步全 UI 低風險 polish 狀態；補記新增 token、button variants、表格 helper、EmptyStatePanel、text sanitizer、全域 QSS 補強、遷移狀態與「只改呈現層、不改 service/domain 運算」邊界。
 - 2026-06-16：建立 Midnight Analyst UI 設計系統規格，記錄目前 theme token、共用元件、效能限制、已知問題與後續 agent 修改流程。
 - 2026-06-18：完成第一輪保守全域 polish，降低主背景藍色飽和度、提高 surface 層級、收斂 border，並補強 Tab / Button / Table / Input / ProgressBar 的全域 QSS 狀態。
