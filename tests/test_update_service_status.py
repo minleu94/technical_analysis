@@ -1,6 +1,8 @@
 ﻿from types import SimpleNamespace
+import warnings
 
 import pandas as pd
+from pandas.errors import DtypeWarning
 
 from app_module.update_service import UpdateService
 from scripts.batch_update_daily_data import get_trading_days
@@ -1112,6 +1114,23 @@ def test_etf_code_repair_during_load(tmp_path):
     assert row_0050["買進金額千元"] == 15000
     assert row_0056["買進股數"] == 50000
     assert row_0056["買進金額千元"] == 2000
+
+
+def test_stock_name_to_code_map_ignores_mixed_type_columns_without_dtype_warning(tmp_path):
+    config = _config(tmp_path)
+    row_count = 300_000
+    with config.stock_data_file.open("w", encoding="utf-8-sig", newline="") as handle:
+        handle.write("日期,證券代號,證券名稱,成交股數,混合欄\n")
+        for index in range(row_count):
+            mixed_value = index if index < row_count // 2 else f"註記{index}"
+            handle.write(f"20260706,0050,元大台灣50,100,{mixed_value}\n")
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        mapping = UpdateService(config)._get_stock_name_to_code_map()
+
+    assert not any(isinstance(item.message, DtypeWarning) for item in caught)
+    assert mapping["元大台灣50"] == "0050"
 
 
 def test_deduplicate_and_merge_broker_flows_complementary(tmp_path):

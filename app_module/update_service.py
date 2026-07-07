@@ -662,10 +662,18 @@ class UpdateService :
             stock_data_file =getattr (self .config ,'stock_data_file',None )
             if stock_data_file and stock_data_file .exists ():
                 import pandas as pd
-                df_csv =pd .read_csv (stock_data_file ,encoding ='utf-8-sig')
+                required_cols ={'證券代號','證券名稱'}
+                df_csv =pd .read_csv (
+                stock_data_file ,
+                encoding ='utf-8-sig',
+                usecols =lambda col :col in required_cols ,
+                dtype ={'證券代號':str ,'證券名稱':str },
+                low_memory =False ,
+                )
                 if '證券代號'in df_csv .columns and '證券名稱'in df_csv .columns :
-                    for _ ,row in df_csv .dropna (subset =['證券代號','證券名稱']).iterrows ():
-                        code =str (row ['證券代號']).strip ()
+                    csv_map =df_csv .dropna (subset =['證券代號','證券名稱']).drop_duplicates (subset =['證券名稱'],keep ='last')
+                    for _ ,row in csv_map .iterrows ():
+                        code =self ._stock_code_key (row ['證券代號'])
                         name =str (row ['證券名稱']).strip ()
                         if code and name and code not in ('ETF','UNKNOWN')and name :
                             name_to_code [name ]=code
