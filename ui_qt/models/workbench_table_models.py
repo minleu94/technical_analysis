@@ -109,9 +109,10 @@ class WorkbenchEvidenceFeedTableModel(_WorkbenchTableModel):
 
 class WorkbenchActionItemTableModel(_WorkbenchTableModel):
     COLUMNS = (
+        ("queue_group", "佇列"),
         ("severity", "嚴重度"),
+        ("source_label", "來源"),
         ("title", "待處理事項"),
-        ("source_type", "來源"),
         ("code", "代碼"),
         ("summary", "摘要"),
         ("source_trace", "Source trace"),
@@ -199,8 +200,12 @@ def _display_token(value: str) -> str:
         "watchlist_trigger": "觀察清單觸發",
         "portfolio_alert": "持倉警示",
         "risk_prompt": "風險提示",
-        "evidence_mode": "證據模式",
         "portfolio_review": "持倉覆盤",
+        "daily_review": "每日判讀",
+        "evidence_gate": "證據門檻",
+        "replay_diagnostics": "Replay 診斷",
+        "manual_review": "人工覆盤",
+        "evidence_mode": "證據模式",
         "daily_decision": "每日決策",
         "evidence_review": "證據覆盤",
         "daily_decision_snapshot": "Daily Decision snapshot",

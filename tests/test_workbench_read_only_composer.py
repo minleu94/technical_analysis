@@ -21,6 +21,7 @@ from app_module.pre_v2_readiness_service import (
     STATUS_WAITING_FOR_TIME,
 )
 from app_module.workbench_dtos import (
+    WORKBENCH_LEGACY_DRILLDOWN_TARGETS,
     WorkbenchAccessBoundary,
     WorkbenchChecklistItem,
     WorkbenchDashboardDTO,
@@ -297,6 +298,54 @@ def test_composer_builds_read_only_action_items_with_trace_reason_and_drilldown(
     assert any(item["source_type"] == "pre_v2_readiness" for item in action_items)
     assert not any(item.get("write_intent") for item in action_items)
     assert payload["access_boundary"]["writes_allowed"] is False
+
+
+def test_composer_sorts_and_groups_action_items_for_manual_queue_scan() -> None:
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=_decision_snapshot(),
+        readiness_report=_readiness_report(),
+        agent_report_sample=_agent_report_sample(),
+    )
+
+    items = dashboard.action_items
+    payload_items = dashboard.to_dict()["action_items"]
+
+    assert [item.item_id for item in items[:2]] == [
+        "portfolio_alert_manual_review",
+        "risk_prompt_manual_review_1",
+    ]
+    assert [item.severity for item in items[:2]] == ["warning", "warning"]
+    assert [item.queue_group for item in items] == [
+        "portfolio_review",
+        "daily_review",
+        "daily_review",
+        "evidence_gate",
+        "evidence_gate",
+    ]
+    assert [item.source_label for item in items] == [
+        "持倉警示",
+        "風險提示",
+        "觀察清單觸發",
+        "Pre-V2 準備度",
+        "Pre-V2 準備度",
+    ]
+    assert [item["sort_rank"] for item in payload_items] == sorted(item["sort_rank"] for item in payload_items)
+
+
+def test_composer_action_item_drilldown_targets_match_legacy_pages() -> None:
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=_decision_snapshot(),
+        readiness_report=_readiness_report(),
+        agent_report_sample=_agent_report_sample(),
+    )
+
+    targets = {item.drilldown_target for item in dashboard.action_items}
+
+    assert targets.issubset(WORKBENCH_LEGACY_DRILLDOWN_TARGETS)
+    assert WORKBENCH_LEGACY_DRILLDOWN_TARGETS["daily_decision"] == "daily_decision"
+    assert WORKBENCH_LEGACY_DRILLDOWN_TARGETS["portfolio_review"] == "portfolio"
+    assert WORKBENCH_LEGACY_DRILLDOWN_TARGETS["evidence_review"] == "evidence_review"
+    assert WORKBENCH_LEGACY_DRILLDOWN_TARGETS["evidence_mode"] == "evidence_review"
 
 
 def test_composer_surfaces_waiting_for_time_as_evidence_gate_not_success() -> None:

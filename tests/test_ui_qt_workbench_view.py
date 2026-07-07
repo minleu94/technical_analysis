@@ -163,6 +163,39 @@ def _dashboard_with_replay() -> WorkbenchDashboardDTO:
     )
 
 
+def _empty_dashboard() -> WorkbenchDashboardDTO:
+    return WorkbenchDashboardDTO(
+        as_of_date=date(2026, 7, 6),
+        generated_at=datetime(2026, 7, 6, 12, 0, 0),
+        source_mode="read_only_sources",
+        access_boundary=WorkbenchAccessBoundary(),
+        status_strip=(
+            WorkbenchStatusItem(
+                item_id="scheduler",
+                label="Production Scheduler",
+                value="off",
+                status="blocked",
+                summary="production_scheduler_allowed=false",
+            ),
+        ),
+        review_items=(),
+        evidence_summary=(),
+        market_context={"source_status": "missing"},
+        portfolio_watchlist_summary={"source_status": "missing"},
+        daily_checklist=(
+            WorkbenchChecklistItem(
+                item_id="scheduler_off",
+                label="Scheduler write-mode",
+                status="blocked",
+                summary="Production scheduler remains off.",
+            ),
+        ),
+        warnings=(),
+        background_evidence_feed=(),
+        action_items=(),
+    )
+
+
 class _FakeWorkbenchSourceService:
     def __init__(self, dashboard: WorkbenchDashboardDTO) -> None:
         self.dashboard = dashboard
@@ -247,6 +280,50 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "multi-day dry-run 1/3" in data_quality_text
     assert "replay 不可取代" in data_quality_text
     assert "降級來源" in view.warning_list.toPlainText()
+
+
+def test_unified_workbench_view_displays_empty_and_degraded_queue_state_copy() -> None:
+    app()
+    empty_view = UnifiedDecisionWorkbenchView(
+        dashboard=_empty_dashboard(),
+        auto_refresh=False,
+    )
+
+    assert "沒有背景證據列" in empty_view.evidence_feed_state_label.text()
+    assert "不讀 DB" in empty_view.evidence_feed_state_label.text()
+    assert "沒有人工待處理事項" in empty_view.action_item_state_label.text()
+    assert "不是買賣建議" in empty_view.action_item_state_label.text()
+    assert "不寫 DB" in empty_view.action_item_state_label.text()
+
+    degraded_view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+    )
+
+    assert "降級" in degraded_view.evidence_feed_state_label.text()
+    assert "不補值" in degraded_view.evidence_feed_state_label.text()
+    assert "降級" in degraded_view.action_item_state_label.text()
+    assert "只供人工覆盤排序" in degraded_view.action_item_state_label.text()
+    assert "不是買賣建議" in degraded_view.action_item_state_label.text()
+
+
+def test_unified_workbench_view_routes_action_item_targets_to_legacy_pages() -> None:
+    app()
+    clicked: list[str] = []
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+        navigate_to_daily_decision_callback=lambda: clicked.append("daily"),
+        navigate_to_evidence_review_callback=lambda: clicked.append("evidence"),
+        navigate_to_portfolio_callback=lambda: clicked.append("portfolio"),
+    )
+
+    assert view.navigate_to_drilldown_target("portfolio_review") is True
+    assert view.navigate_to_drilldown_target("daily_decision") is True
+    assert view.navigate_to_drilldown_target("evidence_review") is True
+    assert view.navigate_to_drilldown_target("evidence_mode") is True
+    assert view.navigate_to_drilldown_target("unknown_target") is False
+    assert clicked == ["portfolio", "daily", "evidence", "evidence"]
 
 
 def test_unified_workbench_view_refreshes_only_through_source_service() -> None:

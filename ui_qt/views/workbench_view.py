@@ -18,7 +18,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app_module.workbench_dtos import WorkbenchDashboardDTO, WorkbenchEvidenceSummary
+from app_module.workbench_dtos import (
+    WORKBENCH_LEGACY_DRILLDOWN_TARGETS,
+    WorkbenchDashboardDTO,
+    WorkbenchEvidenceSummary,
+)
 from app_module.workbench_source_service import WorkbenchSourceService
 from ui_qt.models.workbench_table_models import (
     WorkbenchActionItemTableModel,
@@ -151,20 +155,33 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
         review_panel, self.review_section_title = self._panel_with_title("今日待判讀 / Today Review Queue")
         self.review_table = self._make_table(self.review_model)
+        self.review_table.doubleClicked.connect(
+            lambda index: self._navigate_model_row(self.review_model, index.row())
+        )
         review_panel.layout.addWidget(self.review_table)
         content_layout.addWidget(review_panel)
 
         evidence_feed_panel, self.evidence_feed_section_title = self._panel_with_title(
             "背景證據流 / Background Evidence Feed"
         )
+        self.evidence_feed_state_label = self._make_state_label()
         self.evidence_feed_table = self._make_table(self.evidence_feed_model)
+        self.evidence_feed_table.doubleClicked.connect(
+            lambda index: self._navigate_model_row(self.evidence_feed_model, index.row())
+        )
+        evidence_feed_panel.layout.addWidget(self.evidence_feed_state_label)
         evidence_feed_panel.layout.addWidget(self.evidence_feed_table)
         content_layout.addWidget(evidence_feed_panel)
 
         action_item_panel, self.action_item_section_title = self._panel_with_title(
             "只讀 Action Items / Read-only Manual Queue"
         )
+        self.action_item_state_label = self._make_state_label()
         self.action_item_table = self._make_table(self.action_item_model)
+        self.action_item_table.doubleClicked.connect(
+            lambda index: self._navigate_model_row(self.action_item_model, index.row())
+        )
+        action_item_panel.layout.addWidget(self.action_item_state_label)
         action_item_panel.layout.addWidget(self.action_item_table)
         content_layout.addWidget(action_item_panel)
 
@@ -214,6 +231,17 @@ class UnifiedDecisionWorkbenchView(QWidget):
         apply_financial_table_style(table)
         return table
 
+    def _make_state_label(self) -> QLabel:
+        label = QLabel("")
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        label.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 8px;"
+        )
+        return label
+
     def _make_drilldown_button(
         self,
         text: str,
@@ -245,6 +273,26 @@ class UnifiedDecisionWorkbenchView(QWidget):
         finally:
             self.refresh_button.setEnabled(True)
 
+    def navigate_to_drilldown_target(self, target: str) -> bool:
+        legacy_target = WORKBENCH_LEGACY_DRILLDOWN_TARGETS.get(str(target))
+        callbacks: dict[str, Callable[[], None] | None] = {
+            "daily_decision": self.navigate_to_daily_decision_callback,
+            "evidence_review": self.navigate_to_evidence_review_callback,
+            "portfolio": self.navigate_to_portfolio_callback,
+        }
+        callback = callbacks.get(str(legacy_target))
+        if callback is None:
+            return False
+        callback()
+        return True
+
+    def _navigate_model_row(self, model, row: int) -> None:
+        item = model.row_at(row)
+        if item is None:
+            return
+        target = getattr(item, "drilldown_target", "")
+        self.navigate_to_drilldown_target(str(target))
+
     def render_dashboard(self, dashboard: WorkbenchDashboardDTO) -> None:
         self._dashboard = dashboard
         self.refresh_button.setEnabled(self.source_service is not None)
@@ -264,6 +312,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.review_model.set_rows(dashboard.review_items)
         self.evidence_feed_model.set_rows(dashboard.background_evidence_feed)
         self.action_item_model.set_rows(dashboard.action_items)
+        self.evidence_feed_state_label.setText(_evidence_feed_state_text(dashboard))
+        self.action_item_state_label.setText(_action_item_state_text(dashboard))
         self.evidence_model.set_rows(dashboard.evidence_summary)
         self.checklist_model.set_rows(dashboard.daily_checklist)
         self.data_quality_limitations_label.setText(self._format_data_quality_limitations(dashboard))
@@ -279,6 +329,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.data_quality_limitations_label.setText(
             "證據模式等待 WorkbenchDashboardDTO。UI 不直接讀 DB、不啟用 scheduler，也不執行 replay。"
         )
+        self.evidence_feed_state_label.setText(
+            "目前沒有背景證據列：等待 WorkbenchDashboardDTO；UI 不讀 DB、不執行 replay、不補資料。"
+        )
+        self.action_item_state_label.setText(
+            "目前沒有人工待處理事項：等待 WorkbenchDashboardDTO；Workbench 不寫 DB、不標記完成，也不是買賣建議。"
+        )
         self.evidence_feed_model.set_rows(())
         self.action_item_model.set_rows(())
         self.warning_list.set_warnings(())
@@ -290,6 +346,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.meta_label.setText(f"工作台載入失敗：{error_message}")
         self.data_quality_limitations_label.setText(
             "資料品質降級：WorkbenchSourceService 未回傳 dashboard DTO。"
+        )
+        self.evidence_feed_state_label.setText(
+            "背景證據流降級：WorkbenchSourceService 未回傳 DTO；UI 不補值、不讀 DB、不執行 replay。"
+        )
+        self.action_item_state_label.setText(
+            "Action Items 降級：來源不可用；只供人工確認載入問題，不寫 DB，也不是買賣建議。"
         )
         self.evidence_feed_model.set_rows(())
         self.action_item_model.set_rows(())
@@ -327,6 +389,65 @@ def _find_replay_summary(items: tuple[WorkbenchEvidenceSummary, ...]) -> Workben
         if item.item_id == "historical_replay":
             return item
     return None
+
+
+def _evidence_feed_state_text(dashboard: WorkbenchDashboardDTO) -> str:
+    count = len(dashboard.background_evidence_feed)
+    if count == 0:
+        return (
+            "目前沒有背景證據列；這只代表 WorkbenchDashboardDTO payload 為空。"
+            "Workbench 不讀 DB、不執行 replay、不補資料，也不代表 gate 已通過。"
+        )
+    if any(
+        _is_degraded_status(item.status) or _has_degraded_reason(item.degraded_reason)
+        for item in dashboard.background_evidence_feed
+    ):
+        return (
+            f"背景證據流降級：{count} 筆來源中包含 missing / degraded / warning。"
+            "請依 source trace 與 diagnostics 人工檢查；Workbench 不補值、不重跑 pipeline、不讀 replay DB。"
+        )
+    return (
+        f"背景證據流已載入 {count} 筆唯讀來源。"
+        "這是既有 DTO / service payload 的彙整，不是交易建議。"
+    )
+
+
+def _action_item_state_text(dashboard: WorkbenchDashboardDTO) -> str:
+    count = len(dashboard.action_items)
+    if count == 0:
+        return (
+            "目前沒有人工待處理事項；這不代表可以交易或 Phase gate 已通過。"
+            "Workbench 不寫 DB、不標記完成、不套用 lifecycle，也不是買賣建議。"
+        )
+    if any(
+        _is_degraded_status(item.severity) or _has_degraded_reason(item.degraded_reason)
+        for item in dashboard.action_items
+    ):
+        return (
+            f"Action Items 降級：佇列包含 {count} 筆資料缺口、警示或 waiting_for_time 項目。"
+            "只供人工覆盤排序，不是買賣建議；Workbench 不寫 DB、不套用 lifecycle。"
+        )
+    return (
+        f"Action Items 已載入 {count} 筆人工待處理事項。"
+        "佇列只供人工檢查 source trace，不會自動建立 repository 或寫入狀態。"
+    )
+
+
+def _is_degraded_status(status: str) -> bool:
+    return str(status) in {
+        "critical",
+        "warning",
+        "degraded",
+        "missing",
+        "blocked",
+        "action_required",
+        "waiting_for_time",
+    }
+
+
+def _has_degraded_reason(reason: str) -> bool:
+    text = str(reason).strip()
+    return bool(text and text != "none")
 
 
 def _humanize_replay_diagnostic(token: str) -> str:

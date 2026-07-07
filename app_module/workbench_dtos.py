@@ -5,6 +5,14 @@ from datetime import date, datetime
 from typing import Any
 
 
+WORKBENCH_LEGACY_DRILLDOWN_TARGETS: dict[str, str] = {
+    "daily_decision": "daily_decision",
+    "evidence_review": "evidence_review",
+    "evidence_mode": "evidence_review",
+    "portfolio_review": "portfolio",
+}
+
+
 def _normalize_strings(values: tuple[str, ...] | list[str] | set[str] | None) -> tuple[str, ...]:
     if values is None:
         return ()
@@ -130,8 +138,16 @@ class WorkbenchActionItem:
     source_trace: str
     degraded_reason: str
     drilldown_target: str
+    queue_group: str = "manual_review"
+    source_label: str = ""
+    sort_rank: int = 9999
     code: str | None = None
     write_intent: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "queue_group", str(self.queue_group or "manual_review"))
+        object.__setattr__(self, "source_label", str(self.source_label or self.source_type))
+        object.__setattr__(self, "sort_rank", int(self.sort_rank))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -143,6 +159,9 @@ class WorkbenchActionItem:
             "source_trace": self.source_trace,
             "degraded_reason": self.degraded_reason,
             "drilldown_target": self.drilldown_target,
+            "queue_group": self.queue_group,
+            "source_label": self.source_label,
+            "sort_rank": self.sort_rank,
             "code": self.code,
             "write_intent": self.write_intent,
         }

@@ -294,46 +294,64 @@ class WorkbenchReadOnlyComposer:
             watchlist = decision_snapshot.watchlist_triggers
             watchlist_count = portfolio_safe_count(watchlist.trigger_count, watchlist.triggered_codes)
             if watchlist_count > 0:
+                severity = "info"
+                queue_group = "daily_review"
+                source_type = "watchlist_trigger"
                 items.append(
                     WorkbenchActionItem(
                         item_id="watchlist_trigger_manual_review",
                         title="觀察清單觸發人工覆盤",
-                        source_type="watchlist_trigger",
-                        severity="info",
+                        source_type=source_type,
+                        severity=severity,
                         summary=f"既有 snapshot 顯示 {watchlist_count} 筆觀察清單觸發，需人工判讀。",
                         source_trace="DecisionDeskSnapshot.watchlist_triggers",
                         degraded_reason=_reason_or_none(watchlist.warnings, "watchlist_trigger_requires_manual_review"),
                         drilldown_target="daily_decision",
+                        queue_group=queue_group,
+                        source_label="觀察清單觸發",
+                        sort_rank=_action_sort_rank(severity, queue_group, source_type, len(items)),
                         code=", ".join(watchlist.triggered_codes) or None,
                     )
                 )
             portfolio = decision_snapshot.portfolio_alerts
             portfolio_count = portfolio_safe_count(portfolio.alert_count, portfolio.alert_codes)
             if portfolio_count > 0:
+                severity = "warning"
+                queue_group = "portfolio_review"
+                source_type = "portfolio_alert"
                 items.append(
                     WorkbenchActionItem(
                         item_id="portfolio_alert_manual_review",
                         title="持倉警示人工覆盤",
-                        source_type="portfolio_alert",
-                        severity="warning",
+                        source_type=source_type,
+                        severity=severity,
                         summary=f"既有 snapshot 顯示 {portfolio_count} 筆持倉警示，需檢查 thesis 與風險來源。",
                         source_trace="DecisionDeskSnapshot.portfolio_alerts",
                         degraded_reason=_reason_or_none(portfolio.warnings, "portfolio_alert_requires_manual_review"),
                         drilldown_target="portfolio_review",
+                        queue_group=queue_group,
+                        source_label="持倉警示",
+                        sort_rank=_action_sort_rank(severity, queue_group, source_type, len(items)),
                         code=", ".join(portfolio.alert_codes) or None,
                     )
                 )
             for index, prompt in enumerate(decision_snapshot.risk_prompts.prompts, start=1):
+                severity = _severity(prompt.severity)
+                queue_group = "daily_review"
+                source_type = "risk_prompt"
                 items.append(
                     WorkbenchActionItem(
                         item_id=f"risk_prompt_manual_review_{index}",
                         title=prompt.title,
-                        source_type="risk_prompt",
-                        severity=_severity(prompt.severity),
+                        source_type=source_type,
+                        severity=severity,
                         summary=prompt.action_hint,
                         source_trace=f"DecisionDeskSnapshot.risk_prompts[{index}].{prompt.source}",
                         degraded_reason=prompt.reason,
                         drilldown_target="daily_decision",
+                        queue_group=queue_group,
+                        source_label="風險提示",
+                        sort_rank=_action_sort_rank(severity, queue_group, source_type, len(items)),
                         code=prompt.code,
                     )
                 )
@@ -341,12 +359,15 @@ class WorkbenchReadOnlyComposer:
         for readiness_item in readiness_report.items:
             if readiness_item.status not in {STATUS_ACTION_REQUIRED, STATUS_WAITING_FOR_TIME}:
                 continue
+            severity = _status_to_severity(readiness_item.status)
+            queue_group = "evidence_gate"
+            source_type = "pre_v2_readiness"
             items.append(
                 WorkbenchActionItem(
                     item_id=f"readiness_{readiness_item.item_id}",
                     title=readiness_item.label,
-                    source_type="pre_v2_readiness",
-                    severity=_status_to_severity(readiness_item.status),
+                    source_type=source_type,
+                    severity=severity,
                     summary=_readiness_summary(readiness_item.observed_count, readiness_item.required_count),
                     source_trace=f"PreV2ReadinessReport.items.{readiness_item.item_id}",
                     degraded_reason=_reason_or_none(
@@ -354,6 +375,9 @@ class WorkbenchReadOnlyComposer:
                         readiness_item.status,
                     ),
                     drilldown_target="evidence_review",
+                    queue_group=queue_group,
+                    source_label="Pre-V2 準備度",
+                    sort_rank=_action_sort_rank(severity, queue_group, source_type, len(items)),
                 )
             )
 
@@ -364,19 +388,25 @@ class WorkbenchReadOnlyComposer:
                 if item.startswith(("source_gap:", "payload_gap:", "missing_", "pending_", "phase0_gate_not_satisfied:"))
             )
             if diagnostics:
+                severity = "info"
+                queue_group = "replay_diagnostics"
+                source_type = "replay_summary"
                 items.append(
                     WorkbenchActionItem(
                         item_id="replay_summary_manual_review",
                         title="Replay summary gap 人工判讀",
-                        source_type="replay_summary",
-                        severity="info",
+                        source_type=source_type,
+                        severity=severity,
                         summary="Replay summary 只揭露 simulated evidence gap，不解除 Phase 0 gate。",
                         source_trace="HistoricalReplaySummary.quality_disclosures",
                         degraded_reason="; ".join(diagnostics),
                         drilldown_target="evidence_review",
+                        queue_group=queue_group,
+                        source_label="Replay summary",
+                        sort_rank=_action_sort_rank(severity, queue_group, source_type, len(items)),
                     )
                 )
-        return tuple(items)
+        return tuple(sorted(items, key=lambda item: (item.sort_rank, item.item_id)))
 
     def _evidence_summary(
         self,
@@ -579,6 +609,40 @@ def _status_to_severity(status: str) -> str:
     if status == STATUS_WAITING_FOR_TIME:
         return "info"
     return _severity(status)
+
+
+def _action_sort_rank(severity: str, queue_group: str, source_type: str, sequence: int) -> int:
+    severity_order = {
+        "critical": 0,
+        "warning": 1,
+        "degraded": 2,
+        "missing": 3,
+        "blocked": 4,
+        "info": 5,
+        "waiting_for_time": 6,
+        "observed": 7,
+        "ready": 8,
+    }
+    group_order = {
+        "portfolio_review": 0,
+        "daily_review": 1,
+        "evidence_gate": 2,
+        "replay_diagnostics": 3,
+        "manual_review": 9,
+    }
+    source_order = {
+        "portfolio_alert": 0,
+        "risk_prompt": 1,
+        "watchlist_trigger": 2,
+        "pre_v2_readiness": 3,
+        "replay_summary": 4,
+    }
+    return (
+        severity_order.get(severity, 9) * 1000
+        + group_order.get(queue_group, 9) * 100
+        + source_order.get(source_type, 9) * 10
+        + sequence
+    )
 
 
 def _severity(value: str) -> str:
