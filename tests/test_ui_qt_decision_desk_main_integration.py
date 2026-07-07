@@ -214,7 +214,7 @@ def _build_main_window(*, regime_service=None, portfolio_service=None, config=No
 
 def _get_nav_labels(main_window) -> list[str]:
     return [
-        main_window.left_navigation.button_for_key(key).text().split("  ")[0]
+        main_window.left_navigation.label_for_key(key)
         for key in main_window.left_navigation.item_keys()
     ]
 

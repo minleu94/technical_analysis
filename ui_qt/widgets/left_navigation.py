@@ -13,6 +13,7 @@ from ui_qt.theme import MIDNIGHT_ANALYST
 class NavigationItem:
     key: str
     label: str
+    icon: str = ""
     badge: str = ""
     tooltip: str = ""
 
@@ -27,9 +28,11 @@ class LeftNavigationWidget(QWidget):
         self._items = tuple(items)
         self._buttons: dict[str, QPushButton] = {}
         self._current_key: str | None = None
+        self._collapsed = False
 
         self.setObjectName("leftWorkspaceNavigation")
         self.setFixedWidth(184)
+        self.setMaximumWidth(184)
         self.setStyleSheet(
             f"#leftWorkspaceNavigation {{ background: {MIDNIGHT_ANALYST.surface_1}; "
             f"border-right: 1px solid {MIDNIGHT_ANALYST.border}; }}"
@@ -39,13 +42,20 @@ class LeftNavigationWidget(QWidget):
         layout.setContentsMargins(10, 12, 10, 12)
         layout.setSpacing(6)
 
+        self.collapse_button = QPushButton("‹")
+        self.collapse_button.setObjectName("leftNavCollapseButton")
+        self.collapse_button.setToolTip("收合左側導覽")
+        self.collapse_button.setMinimumHeight(30)
+        self.collapse_button.clicked.connect(lambda _checked=False: self.set_collapsed(not self._collapsed))
+        layout.addWidget(self.collapse_button)
+
         for item in self._items:
             button = QPushButton(self._button_text(item))
             button.setObjectName(f"leftNavButton_{item.key}")
             button.setCheckable(True)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             button.setMinimumHeight(34)
-            button.setToolTip(item.tooltip)
+            button.setToolTip(item.tooltip or item.label)
             button.clicked.connect(lambda _checked=False, key=item.key: self._select_from_click(key))
             self._buttons[item.key] = button
             layout.addWidget(button)
@@ -61,6 +71,27 @@ class LeftNavigationWidget(QWidget):
 
     def current_key(self) -> str | None:
         return self._current_key
+
+    def label_for_key(self, key: str) -> str | None:
+        for item in self._items:
+            if item.key == key:
+                return item.label
+        return None
+
+    def is_collapsed(self) -> bool:
+        return self._collapsed
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        self._collapsed = bool(collapsed)
+        width = 58 if self._collapsed else 184
+        self.setFixedWidth(width)
+        self.setMaximumWidth(width)
+        self.collapse_button.setText("›" if self._collapsed else "‹")
+        self.collapse_button.setToolTip("展開左側導覽" if self._collapsed else "收合左側導覽")
+        for item in self._items:
+            button = self._buttons[item.key]
+            button.setText(self._button_text(item))
+            button.setToolTip(item.tooltip or item.label)
 
     def set_current_key(self, key: str) -> None:
         if key not in self._buttons:
@@ -78,9 +109,15 @@ class LeftNavigationWidget(QWidget):
         self.workspaceSelected.emit(key)
 
     def _button_text(self, item: NavigationItem) -> str:
+        if self._collapsed:
+            return item.icon or item.label[:1]
+        pieces = []
+        if item.icon:
+            pieces.append(item.icon)
+        pieces.append(item.label)
         if item.badge:
-            return f"{item.label}  {item.badge}"
-        return item.label
+            pieces.append(item.badge)
+        return "  ".join(pieces)
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(
@@ -97,6 +134,11 @@ class LeftNavigationWidget(QWidget):
                 padding: 7px 9px;
                 text-align: left;
                 font-weight: 600;
+            }}
+            #leftNavCollapseButton {{
+                color: {MIDNIGHT_ANALYST.text_muted};
+                text-align: center;
+                font-weight: 700;
             }}
             QPushButton:hover {{
                 background: {MIDNIGHT_ANALYST.surface_2};

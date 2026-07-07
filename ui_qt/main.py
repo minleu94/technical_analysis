@@ -690,14 +690,14 @@ class MainWindow(QMainWindow):
             add_workspace("runtime", runtime_widget)
 
             workspace_items = (
-                NavigationItem("workbench", "決策工作台"),
-                NavigationItem("market_explore", "市場探索"),
-                NavigationItem("recommendation", "推薦分析"),
-                NavigationItem("backtest", "策略回測"),
-                NavigationItem("watchlist", "觀察清單"),
-                NavigationItem("portfolio", "持倉管理"),
-                NavigationItem("update", "數據更新"),
-                NavigationItem("runtime", "Runtime"),
+                NavigationItem("workbench", "決策工作台", icon="WB"),
+                NavigationItem("market_explore", "市場探索", icon="MX"),
+                NavigationItem("recommendation", "推薦分析", icon="RC"),
+                NavigationItem("backtest", "策略回測", icon="BT"),
+                NavigationItem("watchlist", "觀察清單", icon="WL"),
+                NavigationItem("portfolio", "持倉管理", icon="PF"),
+                NavigationItem("update", "數據更新", icon="UD"),
+                NavigationItem("runtime", "Runtime", icon="RT"),
             )
             self.left_navigation = LeftNavigationWidget(workspace_items, parent=self)
             self.left_navigation.workspaceSelected.connect(self._select_main_workspace)
