@@ -240,6 +240,65 @@ def test_composer_builds_today_review_items_from_watchlist_portfolio_and_risk() 
     assert any(item["drilldown_target"] == "evidence_mode" for item in payload["review_items"])
 
 
+def test_composer_builds_background_evidence_feed_from_existing_payloads_only() -> None:
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=_decision_snapshot(),
+        readiness_report=_readiness_report(),
+        agent_report_sample=_agent_report_sample(),
+        historical_replay_summary={
+            "replay_mode": "historical_replay",
+            "source_label": "simulated_scheduler",
+            "totals": {
+                "days": 118,
+                "events_seen": 118056,
+                "outcomes_created": 472224,
+            },
+            "final_outcome_summary": {
+                "ready": 380736,
+                "pending_insufficient_future_data": 91488,
+                "missing_benchmark": 0,
+                "missing_industry_benchmark": 378491,
+            },
+            "warnings": ("simulated_scheduler", "missing_industry_benchmark"),
+        },
+    )
+
+    feed = {item.item_id: item for item in dashboard.background_evidence_feed}
+
+    assert set(feed) == {
+        "daily_decision_snapshot",
+        "evidence_review_readiness",
+        "portfolio_alerts",
+        "replay_summary_diagnostics",
+    }
+    assert feed["daily_decision_snapshot"].source_trace == "DecisionDeskSnapshot"
+    assert feed["evidence_review_readiness"].source_trace == "PreV2ReadinessReport"
+    assert feed["portfolio_alerts"].source_trace == "DecisionDeskSnapshot.portfolio_alerts"
+    assert feed["replay_summary_diagnostics"].source_trace == "HistoricalReplaySummary"
+    assert feed["replay_summary_diagnostics"].status == "degraded"
+    assert "simulated_scheduler" in " ".join(feed["replay_summary_diagnostics"].diagnostics)
+
+
+def test_composer_builds_read_only_action_items_with_trace_reason_and_drilldown() -> None:
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=_decision_snapshot(),
+        readiness_report=_readiness_report(),
+        agent_report_sample=_agent_report_sample(),
+    )
+
+    payload = dashboard.to_dict()
+    action_items = payload["action_items"]
+
+    assert action_items
+    assert all(item["source_trace"] for item in action_items)
+    assert all(item["degraded_reason"] for item in action_items)
+    assert all(item["drilldown_target"] for item in action_items)
+    assert any(item["source_type"] == "portfolio_alert" for item in action_items)
+    assert any(item["source_type"] == "pre_v2_readiness" for item in action_items)
+    assert not any(item.get("write_intent") for item in action_items)
+    assert payload["access_boundary"]["writes_allowed"] is False
+
+
 def test_composer_surfaces_waiting_for_time_as_evidence_gate_not_success() -> None:
     dashboard = WorkbenchReadOnlyComposer().compose(
         decision_snapshot=_decision_snapshot(),

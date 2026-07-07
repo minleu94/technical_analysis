@@ -11,8 +11,10 @@ from app_module.pre_v2_readiness_service import (
 )
 from app_module.workbench_dtos import (
     WorkbenchAccessBoundary,
+    WorkbenchActionItem,
     WorkbenchChecklistItem,
     WorkbenchDashboardDTO,
+    WorkbenchEvidenceFeedItem,
     WorkbenchEvidenceSummary,
     WorkbenchReviewItem,
     WorkbenchStatusItem,
@@ -45,6 +47,12 @@ class WorkbenchReadOnlyComposer:
             portfolio_watchlist_summary=self._portfolio_watchlist_summary(decision_snapshot),
             daily_checklist=self._daily_checklist(decision_snapshot, readiness_report),
             warnings=tuple(warnings),
+            background_evidence_feed=self._background_evidence_feed(
+                decision_snapshot,
+                readiness_report,
+                historical_replay_summary,
+            ),
+            action_items=self._action_items(decision_snapshot, readiness_report, historical_replay_summary),
         )
 
     def _status_strip(
@@ -146,6 +154,226 @@ class WorkbenchReadOnlyComposer:
                         source="pre_v2_readiness",
                         summary=_readiness_summary(item.observed_count, item.required_count),
                         drilldown_target="evidence_mode",
+                    )
+                )
+        return tuple(items)
+
+    def _background_evidence_feed(
+        self,
+        decision_snapshot: DecisionDeskSnapshot | None,
+        readiness_report: PreV2ReadinessReport,
+        historical_replay_summary: dict[str, Any] | None,
+    ) -> tuple[WorkbenchEvidenceFeedItem, ...]:
+        items: list[WorkbenchEvidenceFeedItem] = []
+        if decision_snapshot is None:
+            items.append(
+                WorkbenchEvidenceFeedItem(
+                    item_id="daily_decision_snapshot",
+                    label="Daily Decision snapshot",
+                    status="missing",
+                    summary="缺 Daily Decision durable snapshot；Workbench 不讀 UI state 補值。",
+                    source_trace="DecisionDeskSnapshot",
+                    degraded_reason="decision_desk_snapshot_missing",
+                    drilldown_target="daily_decision",
+                )
+            )
+            items.append(
+                WorkbenchEvidenceFeedItem(
+                    item_id="portfolio_alerts",
+                    label="Portfolio alerts",
+                    status="missing",
+                    summary="缺 Daily Decision snapshot，因此沒有既有 portfolio alert payload 可呈現。",
+                    source_trace="DecisionDeskSnapshot.portfolio_alerts",
+                    degraded_reason="decision_desk_snapshot_missing",
+                    drilldown_target="portfolio_review",
+                )
+            )
+        else:
+            portfolio = decision_snapshot.portfolio_alerts
+            risk_prompt_count = len(decision_snapshot.risk_prompts.prompts)
+            items.append(
+                WorkbenchEvidenceFeedItem(
+                    item_id="daily_decision_snapshot",
+                    label="Daily Decision snapshot",
+                    status=decision_snapshot.overall_quality.value,
+                    summary=(
+                        f"as_of={decision_snapshot.as_of_date.isoformat()}；"
+                        f"watchlist={portfolio_safe_count(decision_snapshot.watchlist_triggers.trigger_count, decision_snapshot.watchlist_triggers.triggered_codes)}；"
+                        f"portfolio_alerts={portfolio_safe_count(portfolio.alert_count, portfolio.alert_codes)}；"
+                        f"risk_prompts={risk_prompt_count}。"
+                    ),
+                    source_trace="DecisionDeskSnapshot",
+                    degraded_reason=_reason_or_none(decision_snapshot.warnings),
+                    drilldown_target="daily_decision",
+                    diagnostics=decision_snapshot.warnings,
+                )
+            )
+            portfolio_diagnostics = (
+                *portfolio.warnings,
+                *(flag for attribution in portfolio.attributions for flag in attribution.data_quality_flags),
+            )
+            items.append(
+                WorkbenchEvidenceFeedItem(
+                    item_id="portfolio_alerts",
+                    label="Portfolio alerts",
+                    status=portfolio.quality.value,
+                    summary=(
+                        f"{portfolio_safe_count(portfolio.alert_count, portfolio.alert_codes)} alert rows；"
+                        f"level={portfolio.alert_level or 'n/a'}。"
+                    ),
+                    source_trace="DecisionDeskSnapshot.portfolio_alerts",
+                    degraded_reason=_reason_or_none(portfolio_diagnostics),
+                    drilldown_target="portfolio_review",
+                    diagnostics=tuple(str(item) for item in portfolio_diagnostics),
+                )
+            )
+
+        items.append(
+            WorkbenchEvidenceFeedItem(
+                item_id="evidence_review_readiness",
+                label="Evidence Review readiness",
+                status=readiness_report.overall_status,
+                summary=_readiness_feed_summary(readiness_report),
+                source_trace="PreV2ReadinessReport",
+                degraded_reason=_readiness_reason(readiness_report),
+                drilldown_target="evidence_review",
+                diagnostics=tuple(
+                    reason
+                    for item in readiness_report.items
+                    for reason in (*item.blocking_reasons, *item.diagnostics)
+                ),
+            )
+        )
+
+        if historical_replay_summary:
+            diagnostics = _replay_diagnostics(historical_replay_summary)
+            final = historical_replay_summary.get("final_outcome_summary", {})
+            missing_industry = _int(final.get("missing_industry_benchmark"))
+            pending_future = _int(final.get("pending_insufficient_future_data"))
+            source_gap_count = sum(1 for item in diagnostics if item.startswith("source_gap:"))
+            items.append(
+                WorkbenchEvidenceFeedItem(
+                    item_id="replay_summary_diagnostics",
+                    label="Replay summary diagnostics",
+                    status="degraded" if missing_industry or pending_future or source_gap_count else "ready",
+                    summary=(
+                        "Historical replay JSON summary 已揭露 "
+                        f"source_gaps={source_gap_count}；missing_industry={missing_industry}；"
+                        f"pending_future_data={pending_future}。"
+                    ),
+                    source_trace="HistoricalReplaySummary",
+                    degraded_reason=_reason_or_none(
+                        tuple(item for item in diagnostics if item.startswith(("source_gap:", "payload_gap:", "missing_", "pending_")))
+                    ),
+                    drilldown_target="evidence_review",
+                    diagnostics=tuple(diagnostics),
+                )
+            )
+        else:
+            items.append(
+                WorkbenchEvidenceFeedItem(
+                    item_id="replay_summary_diagnostics",
+                    label="Replay summary diagnostics",
+                    status="missing",
+                    summary="未提供 replay JSON summary；Workbench 不讀 replay DB、不執行 replay。",
+                    source_trace="HistoricalReplaySummary",
+                    degraded_reason="replay_summary_not_supplied",
+                    drilldown_target="evidence_review",
+                )
+            )
+        return tuple(items)
+
+    def _action_items(
+        self,
+        decision_snapshot: DecisionDeskSnapshot | None,
+        readiness_report: PreV2ReadinessReport,
+        historical_replay_summary: dict[str, Any] | None,
+    ) -> tuple[WorkbenchActionItem, ...]:
+        items: list[WorkbenchActionItem] = []
+        if decision_snapshot is not None:
+            watchlist = decision_snapshot.watchlist_triggers
+            watchlist_count = portfolio_safe_count(watchlist.trigger_count, watchlist.triggered_codes)
+            if watchlist_count > 0:
+                items.append(
+                    WorkbenchActionItem(
+                        item_id="watchlist_trigger_manual_review",
+                        title="觀察清單觸發人工覆盤",
+                        source_type="watchlist_trigger",
+                        severity="info",
+                        summary=f"既有 snapshot 顯示 {watchlist_count} 筆觀察清單觸發，需人工判讀。",
+                        source_trace="DecisionDeskSnapshot.watchlist_triggers",
+                        degraded_reason=_reason_or_none(watchlist.warnings, "watchlist_trigger_requires_manual_review"),
+                        drilldown_target="daily_decision",
+                        code=", ".join(watchlist.triggered_codes) or None,
+                    )
+                )
+            portfolio = decision_snapshot.portfolio_alerts
+            portfolio_count = portfolio_safe_count(portfolio.alert_count, portfolio.alert_codes)
+            if portfolio_count > 0:
+                items.append(
+                    WorkbenchActionItem(
+                        item_id="portfolio_alert_manual_review",
+                        title="持倉警示人工覆盤",
+                        source_type="portfolio_alert",
+                        severity="warning",
+                        summary=f"既有 snapshot 顯示 {portfolio_count} 筆持倉警示，需檢查 thesis 與風險來源。",
+                        source_trace="DecisionDeskSnapshot.portfolio_alerts",
+                        degraded_reason=_reason_or_none(portfolio.warnings, "portfolio_alert_requires_manual_review"),
+                        drilldown_target="portfolio_review",
+                        code=", ".join(portfolio.alert_codes) or None,
+                    )
+                )
+            for index, prompt in enumerate(decision_snapshot.risk_prompts.prompts, start=1):
+                items.append(
+                    WorkbenchActionItem(
+                        item_id=f"risk_prompt_manual_review_{index}",
+                        title=prompt.title,
+                        source_type="risk_prompt",
+                        severity=_severity(prompt.severity),
+                        summary=prompt.action_hint,
+                        source_trace=f"DecisionDeskSnapshot.risk_prompts[{index}].{prompt.source}",
+                        degraded_reason=prompt.reason,
+                        drilldown_target="daily_decision",
+                        code=prompt.code,
+                    )
+                )
+
+        for readiness_item in readiness_report.items:
+            if readiness_item.status not in {STATUS_ACTION_REQUIRED, STATUS_WAITING_FOR_TIME}:
+                continue
+            items.append(
+                WorkbenchActionItem(
+                    item_id=f"readiness_{readiness_item.item_id}",
+                    title=readiness_item.label,
+                    source_type="pre_v2_readiness",
+                    severity=_status_to_severity(readiness_item.status),
+                    summary=_readiness_summary(readiness_item.observed_count, readiness_item.required_count),
+                    source_trace=f"PreV2ReadinessReport.items.{readiness_item.item_id}",
+                    degraded_reason=_reason_or_none(
+                        (*readiness_item.blocking_reasons, *readiness_item.diagnostics, *readiness_item.next_actions),
+                        readiness_item.status,
+                    ),
+                    drilldown_target="evidence_review",
+                )
+            )
+
+        if historical_replay_summary:
+            diagnostics = tuple(
+                item
+                for item in _replay_diagnostics(historical_replay_summary)
+                if item.startswith(("source_gap:", "payload_gap:", "missing_", "pending_", "phase0_gate_not_satisfied:"))
+            )
+            if diagnostics:
+                items.append(
+                    WorkbenchActionItem(
+                        item_id="replay_summary_manual_review",
+                        title="Replay summary gap 人工判讀",
+                        source_type="replay_summary",
+                        severity="info",
+                        summary="Replay summary 只揭露 simulated evidence gap，不解除 Phase 0 gate。",
+                        source_trace="HistoricalReplaySummary.quality_disclosures",
+                        degraded_reason="; ".join(diagnostics),
+                        drilldown_target="evidence_review",
                     )
                 )
         return tuple(items)
@@ -280,6 +508,54 @@ class WorkbenchReadOnlyComposer:
             )
             warnings.extend(str(item) for item in historical_replay_summary.get("warnings", ()))
         return _dedupe(warnings)
+
+
+def portfolio_safe_count(count: int | None, codes: tuple[str, ...]) -> int:
+    return int(count if count is not None else len(codes))
+
+
+def _readiness_feed_summary(readiness_report: PreV2ReadinessReport) -> str:
+    parts = [f"overall={readiness_report.overall_status}"]
+    for item in readiness_report.items:
+        if item.required_count is not None:
+            parts.append(f"{item.item_id}={item.observed_count or 0}/{item.required_count}")
+        else:
+            parts.append(f"{item.item_id}={item.status}")
+    return "；".join(parts) + "。"
+
+
+def _readiness_reason(readiness_report: PreV2ReadinessReport) -> str:
+    reasons = tuple(
+        reason
+        for item in readiness_report.items
+        if item.status in {STATUS_ACTION_REQUIRED, STATUS_WAITING_FOR_TIME}
+        for reason in (*item.blocking_reasons, *item.diagnostics)
+    )
+    return _reason_or_none(reasons, readiness_report.overall_status)
+
+
+def _replay_diagnostics(historical_replay_summary: dict[str, Any]) -> list[str]:
+    return _dedupe(
+        [
+            *(str(item) for item in historical_replay_summary.get("quality_disclosures", ())),
+            *(str(item) for item in historical_replay_summary.get("warnings", ())),
+            *(str(item) for item in historical_replay_summary.get("limitations", ())),
+        ]
+    )
+
+
+def _reason_or_none(values: tuple[str, ...] | list[str] | set[str], fallback: str = "none") -> str:
+    clean = tuple(str(item) for item in values if str(item))
+    if clean:
+        return "; ".join(clean)
+    return fallback
+
+
+def _int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _find_status(readiness_report: PreV2ReadinessReport, item_id: str) -> str:

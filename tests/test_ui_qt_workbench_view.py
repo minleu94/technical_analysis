@@ -10,13 +10,15 @@ from PySide6.QtWidgets import QApplication
 
 from app_module.workbench_dtos import (
     WorkbenchAccessBoundary,
+    WorkbenchActionItem,
     WorkbenchChecklistItem,
     WorkbenchDashboardDTO,
+    WorkbenchEvidenceFeedItem,
     WorkbenchEvidenceSummary,
     WorkbenchReviewItem,
     WorkbenchStatusItem,
 )
-from ui_qt.models.workbench_table_models import WorkbenchEvidenceTableModel
+from ui_qt.models.workbench_table_models import WorkbenchActionItemTableModel, WorkbenchEvidenceTableModel
 from ui_qt.views.workbench_view import UnifiedDecisionWorkbenchView
 
 
@@ -124,6 +126,40 @@ def _dashboard_with_replay() -> WorkbenchDashboardDTO:
             "replay does not satisfy Phase 0 weekly or multi-day gates.",
             "degraded_source:decision_desk_snapshot_db_missing",
         ),
+        background_evidence_feed=(
+            WorkbenchEvidenceFeedItem(
+                item_id="daily_decision_snapshot",
+                label="Daily Decision snapshot",
+                status="observed",
+                summary="Snapshot payload already supplied by WorkbenchDashboardDTO.",
+                source_trace="DecisionDeskSnapshot",
+                degraded_reason="none",
+                drilldown_target="daily_decision",
+            ),
+            WorkbenchEvidenceFeedItem(
+                item_id="replay_summary_diagnostics",
+                label="Replay summary diagnostics",
+                status="degraded",
+                summary="Replay summary exposes simulated scheduler and payload gaps.",
+                source_trace="HistoricalReplaySummary",
+                degraded_reason="missing_industry_benchmark",
+                drilldown_target="evidence_review",
+                diagnostics=("simulated_scheduler", "missing_industry_benchmark"),
+            ),
+        ),
+        action_items=(
+            WorkbenchActionItem(
+                item_id="portfolio_alert_2330",
+                title="Portfolio alert manual review",
+                source_type="portfolio_alert",
+                severity="warning",
+                summary="Human review required; no action is applied.",
+                source_trace="DecisionDeskSnapshot.portfolio_alerts",
+                degraded_reason="portfolio_alert_requires_manual_review",
+                drilldown_target="portfolio_review",
+                code="2330",
+            ),
+        ),
     )
 
 
@@ -150,6 +186,18 @@ def test_workbench_evidence_table_model_exposes_replay_diagnostics() -> None:
     assert model.raw_value(0, "diagnostics") == replay.diagnostics
 
 
+def test_workbench_action_item_table_model_exposes_trace_reason_and_drilldown() -> None:
+    app()
+    action = _dashboard_with_replay().action_items[0]
+    model = WorkbenchActionItemTableModel((action,))
+
+    assert model.rowCount() == 1
+    assert model.headerData(model.column_index("source_trace"), Qt.Horizontal, Qt.DisplayRole) == "Source trace"
+    assert model.data(model.index(0, model.column_index("degraded_reason"))) == "portfolio_alert_requires_manual_review"
+    assert model.data(model.index(0, model.column_index("drilldown_target"))) == "持倉覆盤"
+    assert model.raw_value(0, "source_trace") == "DecisionDeskSnapshot.portfolio_alerts"
+
+
 def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() -> None:
     app()
     clicked: list[str] = []
@@ -163,6 +211,8 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
 
     assert view.status_model.rowCount() == 3
     assert view.review_model.rowCount() == 1
+    assert view.evidence_feed_model.rowCount() == 2
+    assert view.action_item_model.rowCount() == 1
     assert view.evidence_model.rowCount() == 2
     assert view.checklist_model.rowCount() == 3
     assert "唯讀邊界" in view.boundary_banner.text()
@@ -170,6 +220,8 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "不重算 scoring" in view.boundary_banner.text()
     assert "狀態列" in view.status_section_title.text()
     assert "今日待判讀" in view.review_section_title.text()
+    assert "背景證據流" in view.evidence_feed_section_title.text()
+    assert "只讀 Action Items" in view.action_item_section_title.text()
     assert "證據與品質" in view.evidence_section_title.text()
     assert "每日檢查清單" in view.checklist_section_title.text()
     assert view.daily_decision_button.text() == "開啟每日決策"

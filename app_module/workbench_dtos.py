@@ -94,6 +94,61 @@ class WorkbenchReviewItem:
 
 
 @dataclass(frozen=True)
+class WorkbenchEvidenceFeedItem:
+    item_id: str
+    label: str
+    status: str
+    summary: str
+    source_trace: str
+    degraded_reason: str
+    drilldown_target: str
+    diagnostics: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "diagnostics", _normalize_strings(self.diagnostics))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "item_id": self.item_id,
+            "label": self.label,
+            "status": self.status,
+            "summary": self.summary,
+            "source_trace": self.source_trace,
+            "degraded_reason": self.degraded_reason,
+            "drilldown_target": self.drilldown_target,
+            "diagnostics": list(self.diagnostics),
+        }
+
+
+@dataclass(frozen=True)
+class WorkbenchActionItem:
+    item_id: str
+    title: str
+    source_type: str
+    severity: str
+    summary: str
+    source_trace: str
+    degraded_reason: str
+    drilldown_target: str
+    code: str | None = None
+    write_intent: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "item_id": self.item_id,
+            "title": self.title,
+            "source_type": self.source_type,
+            "severity": self.severity,
+            "summary": self.summary,
+            "source_trace": self.source_trace,
+            "degraded_reason": self.degraded_reason,
+            "drilldown_target": self.drilldown_target,
+            "code": self.code,
+            "write_intent": self.write_intent,
+        }
+
+
+@dataclass(frozen=True)
 class WorkbenchEvidenceSummary:
     item_id: str
     label: str
@@ -143,6 +198,8 @@ class WorkbenchDashboardDTO:
     portfolio_watchlist_summary: dict[str, Any]
     daily_checklist: tuple[WorkbenchChecklistItem, ...]
     warnings: tuple[str, ...] = ()
+    background_evidence_feed: tuple[WorkbenchEvidenceFeedItem, ...] = ()
+    action_items: tuple[WorkbenchActionItem, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "status_strip", tuple(self.status_strip))
@@ -150,6 +207,8 @@ class WorkbenchDashboardDTO:
         object.__setattr__(self, "evidence_summary", tuple(self.evidence_summary))
         object.__setattr__(self, "daily_checklist", tuple(self.daily_checklist))
         object.__setattr__(self, "warnings", _normalize_strings(self.warnings))
+        object.__setattr__(self, "background_evidence_feed", tuple(self.background_evidence_feed))
+        object.__setattr__(self, "action_items", tuple(self.action_items))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -164,4 +223,6 @@ class WorkbenchDashboardDTO:
             "portfolio_watchlist_summary": _as_dict(self.portfolio_watchlist_summary),
             "daily_checklist": [item.to_dict() for item in self.daily_checklist],
             "warnings": list(self.warnings),
+            "background_evidence_feed": [item.to_dict() for item in self.background_evidence_feed],
+            "action_items": [item.to_dict() for item in self.action_items],
         }

@@ -82,7 +82,7 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 
 ### V2.0：Unified Decision Workbench 基準
 
-狀態：Phase 1 read-only prototype 與 formal read-only source adapter 已完成；2026-07-07 已完成 Phase 2 read-only MVP shell。
+狀態：Phase 1 read-only prototype 與 formal read-only source adapter 已完成；2026-07-07 已完成 Phase 2 read-only MVP shell 與 background evidence feed / read-only Action Items MVP。
 
 已交付基準：
 
@@ -95,14 +95,15 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 已完成第一版：
 
 - PySide6 頂層 `決策工作台` shell。
-- Status strip、今日待判讀、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
+- Status strip、今日待判讀、背景證據流、只讀 Action Items、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
+- Background evidence feed 只彙整 Daily Decision snapshot、Evidence Review readiness、Portfolio alerts 與 replay summary diagnostics。
+- Read-only Action Items 只顯示人工待處理事項，保留 source trace、degraded reason、drill-down target 與 `write_intent=false`，不建立 repository、不寫 DB、不套用 lifecycle。
 - Qt view/model/service contract 測試，確認 UI 只讀 `WorkbenchDashboardDTO` 或呼叫 `WorkbenchSourceService`。
 - Replay JSON summary 限制揭露：`simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark、pending future-data。
 
 仍未完成：
 
-- 完整 Workbench operating loop 與舊 Tab drill-down。
-- background evidence feed。
+- 完整 Workbench operating loop。
 - Phase 0 真實 weekly / multi-day gate。
 - Phase 5 production scheduler approval。
 
@@ -293,4 +294,5 @@ V4.0 仍不代表：
 ## 10. 更新記錄
 
 - 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；完整 operating loop、舊 Tab drill-down、Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
+- 2026-07-07：補充 V2.1 background evidence feed / read-only Action Items MVP；Action Items 只列人工待處理事項並帶 source trace、degraded reason、drill-down target，不建立 repository、不寫 DB、不套用 lifecycle。
 - 2026-07-06：初版建立 V2.1 至 V4.0 版本階梯，將 6M Roadmap Phase 2-5 與 Vision Level 1-4 映射為長期產品版號；保持 production scheduler、自動交易、AI 決策與投資有效性結論在 gate 之外。

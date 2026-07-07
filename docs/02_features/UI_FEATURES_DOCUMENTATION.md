@@ -90,15 +90,17 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 主要能力：
 
 - Phase 2 Unified Decision Workbench MVP shell，頂層分頁名稱為「決策工作台」。
-- 第一版呈現 status strip、今日待判讀、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
+- 第一版已從中文 read-only shell 推進到 background evidence feed / read-only Action Items MVP：呈現 status strip、今日待判讀、背景證據流、只讀 Action Items、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
 - 只透過 `WorkbenchSourceService` 取得 `WorkbenchDashboardDTO`，或直接呈現呼叫端提供的 DTO；UI 不直接讀 SQLite、不讀 replay DB、不寫 DB、不啟用 scheduler。
+- 背景證據流只彙整既有 DTO / service payload：Daily Decision snapshot、Evidence Review readiness、Portfolio alerts 與可選 replay summary diagnostics；不在 UI 端重算任何 source gap、portfolio、scoring、backtest 或 lifecycle。
+- 只讀 Action Items 只列人工待處理事項；每列必須帶 `source_trace`、`degraded_reason` 與 `drilldown_target`，且 `write_intent=false`。Workbench 不建立 action item repository、不 append DB、不自動標記完成。
 - Optional Historical Replay JSON summary 只作 simulated evidence input；若 DTO 帶 replay summary，data quality 區塊必須揭露 `simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data。
 
 防線：
 
 - 不重算 scoring、recommendation、portfolio、backtest 或 lifecycle。
 - 不產生買賣建議、不下單、不套用 lifecycle action。
-- Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 只能繼續真實時間累積，不能用 fixture 或 replay 取代。
+- Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 只能繼續真實時間累積，不能用 fixture、手動改表或 replay 取代。
 
 ### 3. 策略回測
 

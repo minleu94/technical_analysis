@@ -260,6 +260,17 @@ def test_workbench_source_service_reads_real_read_only_sources(tmp_path: Path) -
     assert payload["access_boundary"]["writes_allowed"] is False
     assert payload["access_boundary"]["production_scheduler_allowed"] is False
     assert any(item["source"] == "risk_prompt" for item in payload["review_items"])
+    assert {item["item_id"] for item in payload["background_evidence_feed"]} == {
+        "daily_decision_snapshot",
+        "evidence_review_readiness",
+        "portfolio_alerts",
+        "replay_summary_diagnostics",
+    }
+    assert payload["action_items"]
+    assert all(item["source_trace"] for item in payload["action_items"])
+    assert all(item["degraded_reason"] for item in payload["action_items"])
+    assert all(item["drilldown_target"] for item in payload["action_items"])
+    assert not any(item["write_intent"] for item in payload["action_items"])
 
 
 def test_workbench_source_service_missing_db_does_not_create_file(tmp_path: Path) -> None:
@@ -279,6 +290,7 @@ def test_workbench_source_service_missing_db_does_not_create_file(tmp_path: Path
     assert status_items["decision_snapshot"]["value"] == "missing"
     assert any("decision_desk_snapshot_db_missing" in warning for warning in payload["warnings"])
     assert payload["access_boundary"]["production_scheduler_allowed"] is False
+    assert not any(item["write_intent"] for item in payload["action_items"])
 
 
 def test_workbench_source_service_missing_snapshot_table_is_degraded_source(tmp_path: Path) -> None:

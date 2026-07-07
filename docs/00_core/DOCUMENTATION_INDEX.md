@@ -330,7 +330,7 @@
 
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
 - **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1、Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉；Month 6 Strategy Lifecycle / Portfolio Feedback v1 已完成第一輪 service / gate / UI 入口。
-- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，目前主線已轉為 Phase 0 evidence accumulation、V2.0 Phase 1 read-only Workbench 後的 Phase 2 主 UI設計、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate；長期版號對照見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
+- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，目前主線已轉為 Phase 0 evidence accumulation、V2.0 Phase 1 read-only Workbench 後的 Phase 2 Workbench MVP / background evidence feed / read-only Action Items operating loop、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate；長期版號對照見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
 - **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
 
 ---
@@ -354,6 +354,7 @@
 - 2026-07-06：新增 Historical Evidence Replay QA closeout 索引，記錄 as-of recommendation selection、data-as-of outcome gate、focused tests、py_compile、quant guard 與 scheduler gate 邊界。
 - 2026-07-06：補充 Phase 0A / Pre-V2.0A replay quality audit 索引，標示 benchmark reference return blocker 已解除，industry / screening matrix payload gap 保留為 V2.0 Phase 1 設計輸入。
 - 2026-07-06：新增 V2.0 Unified Decision Workbench Phase 1 design / plan 索引，標示第一屏、Evidence mode、Daily Checklist 與 historical replay summary adapter 邊界。
+- 2026-07-07：更新 Workbench Phase 2 索引摘要，補入 background evidence feed / read-only Action Items MVP 現況；Action Items 仍只顯示人工待處理事項，不寫 DB、不套用 lifecycle。
 - 2026-07-05：新增 V1.6 Cross-sectional Factor Pipeline design / plan / QA closeout 索引，標示 daily factor snapshot storage、FactorGate-backed pipeline、concept available-date gate、rank / quantile persistence 與 attribution summary CLI 已完成 v1；不改 scoring、不啟用 scheduler。
 - 2026-07-05：新增 V1.7 Negative Evidence QA closeout 索引，標示 recommendation screening matrix、Why Not / Liquidity payload、screening matrix evidence events 與 source coverage warning 已完成 v1；舊結果不回補、不重算，不改 scoring、不啟用 scheduler。
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access design / plan / QA closeout 索引，標示 read-only evidence service、MCP wrapper、permission model 與 AI report template 已完成 v1；不寫 DB、不改策略、不下單、不套用 lifecycle action。

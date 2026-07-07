@@ -6,7 +6,9 @@ from typing import Any
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 
 from app_module.workbench_dtos import (
+    WorkbenchActionItem,
     WorkbenchChecklistItem,
+    WorkbenchEvidenceFeedItem,
     WorkbenchEvidenceSummary,
     WorkbenchReviewItem,
     WorkbenchStatusItem,
@@ -90,6 +92,37 @@ class WorkbenchReviewQueueTableModel(_WorkbenchTableModel):
         super().__init__(rows, parent)
 
 
+class WorkbenchEvidenceFeedTableModel(_WorkbenchTableModel):
+    COLUMNS = (
+        ("label", "證據來源"),
+        ("status", "狀態"),
+        ("summary", "摘要"),
+        ("source_trace", "Source trace"),
+        ("degraded_reason", "降級原因"),
+        ("drilldown_target", "下鑽"),
+        ("diagnostics", "診斷"),
+    )
+
+    def __init__(self, rows: Sequence[WorkbenchEvidenceFeedItem] = (), parent=None) -> None:
+        super().__init__(rows, parent)
+
+
+class WorkbenchActionItemTableModel(_WorkbenchTableModel):
+    COLUMNS = (
+        ("severity", "嚴重度"),
+        ("title", "待處理事項"),
+        ("source_type", "來源"),
+        ("code", "代碼"),
+        ("summary", "摘要"),
+        ("source_trace", "Source trace"),
+        ("degraded_reason", "降級原因"),
+        ("drilldown_target", "下鑽"),
+    )
+
+    def __init__(self, rows: Sequence[WorkbenchActionItem] = (), parent=None) -> None:
+        super().__init__(rows, parent)
+
+
 class WorkbenchEvidenceTableModel(_WorkbenchTableModel):
     COLUMNS = (
         ("label", "證據"),
@@ -168,6 +201,19 @@ def _display_token(value: str) -> str:
         "risk_prompt": "風險提示",
         "evidence_mode": "證據模式",
         "portfolio_review": "持倉覆盤",
+        "daily_decision": "每日決策",
+        "evidence_review": "證據覆盤",
+        "daily_decision_snapshot": "Daily Decision snapshot",
+        "evidence_review_readiness": "Evidence Review readiness",
+        "portfolio_alerts": "Portfolio alerts",
+        "replay_summary_diagnostics": "Replay summary diagnostics",
+        "DecisionDeskSnapshot": "DecisionDeskSnapshot",
+        "DecisionDeskSnapshot.portfolio_alerts": "DecisionDeskSnapshot.portfolio_alerts",
+        "PreV2ReadinessReport": "PreV2ReadinessReport",
+        "HistoricalReplaySummary": "HistoricalReplaySummary",
+        "portfolio_alert_requires_manual_review": "portfolio_alert_requires_manual_review",
+        "watchlist_trigger_requires_manual_review": "watchlist_trigger_requires_manual_review",
+        "replay_summary_not_supplied": "未提供 replay summary",
         "decision_desk_snapshot_missing": "缺 Daily Decision snapshot",
         "why_not_payload_missing": "缺 Why Not payload",
         "liquidity_gate_payload_missing": "缺 liquidity gate payload",

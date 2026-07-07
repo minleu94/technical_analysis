@@ -21,7 +21,9 @@ from PySide6.QtWidgets import (
 from app_module.workbench_dtos import WorkbenchDashboardDTO, WorkbenchEvidenceSummary
 from app_module.workbench_source_service import WorkbenchSourceService
 from ui_qt.models.workbench_table_models import (
+    WorkbenchActionItemTableModel,
     WorkbenchChecklistTableModel,
+    WorkbenchEvidenceFeedTableModel,
     WorkbenchEvidenceTableModel,
     WorkbenchReviewQueueTableModel,
     WorkbenchStatusStripTableModel,
@@ -59,6 +61,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
         self.status_model = WorkbenchStatusStripTableModel()
         self.review_model = WorkbenchReviewQueueTableModel()
+        self.evidence_feed_model = WorkbenchEvidenceFeedTableModel()
+        self.action_item_model = WorkbenchActionItemTableModel()
         self.evidence_model = WorkbenchEvidenceTableModel()
         self.checklist_model = WorkbenchChecklistTableModel()
 
@@ -149,6 +153,20 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.review_table = self._make_table(self.review_model)
         review_panel.layout.addWidget(self.review_table)
         content_layout.addWidget(review_panel)
+
+        evidence_feed_panel, self.evidence_feed_section_title = self._panel_with_title(
+            "背景證據流 / Background Evidence Feed"
+        )
+        self.evidence_feed_table = self._make_table(self.evidence_feed_model)
+        evidence_feed_panel.layout.addWidget(self.evidence_feed_table)
+        content_layout.addWidget(evidence_feed_panel)
+
+        action_item_panel, self.action_item_section_title = self._panel_with_title(
+            "只讀 Action Items / Read-only Manual Queue"
+        )
+        self.action_item_table = self._make_table(self.action_item_model)
+        action_item_panel.layout.addWidget(self.action_item_table)
+        content_layout.addWidget(action_item_panel)
 
         evidence_panel, self.evidence_section_title = self._panel_with_title("證據與品質 / Evidence Mode")
         self.data_quality_limitations_label = QLabel("")
@@ -244,6 +262,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         self.status_model.set_rows(dashboard.status_strip)
         self.review_model.set_rows(dashboard.review_items)
+        self.evidence_feed_model.set_rows(dashboard.background_evidence_feed)
+        self.action_item_model.set_rows(dashboard.action_items)
         self.evidence_model.set_rows(dashboard.evidence_summary)
         self.checklist_model.set_rows(dashboard.daily_checklist)
         self.data_quality_limitations_label.setText(self._format_data_quality_limitations(dashboard))
@@ -259,6 +279,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.data_quality_limitations_label.setText(
             "證據模式等待 WorkbenchDashboardDTO。UI 不直接讀 DB、不啟用 scheduler，也不執行 replay。"
         )
+        self.evidence_feed_model.set_rows(())
+        self.action_item_model.set_rows(())
         self.warning_list.set_warnings(())
 
     def _display_exception_dashboard(self, error_message: str) -> None:
@@ -269,10 +291,19 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.data_quality_limitations_label.setText(
             "資料品質降級：WorkbenchSourceService 未回傳 dashboard DTO。"
         )
+        self.evidence_feed_model.set_rows(())
+        self.action_item_model.set_rows(())
         self.warning_list.set_warnings((f"workbench_source_degraded:{error_message}",))
 
     def _resize_tables(self) -> None:
-        for table in (self.status_table, self.review_table, self.evidence_table, self.checklist_table):
+        for table in (
+            self.status_table,
+            self.review_table,
+            self.evidence_feed_table,
+            self.action_item_table,
+            self.evidence_table,
+            self.checklist_table,
+        ):
             table.resizeColumnsToContents()
             table.resizeRowsToContents()
 

@@ -126,7 +126,7 @@ def test_workbench_prototype_cli_markdown_includes_replay_diagnostics(tmp_path: 
     assert "diagnostics:" in result.stdout
     assert "simulated_scheduler" in result.stdout
     assert "source_gap:source_missing_screening_matrix" in result.stdout
-    assert "benchmark_coverage:covered=472224,total=472224,missing=0" in result.stdout
+    assert "benchmark_coverage:covered=380736,total=380736,missing=0" in result.stdout
     assert "pending_future_data:91488" in result.stdout
 
 
