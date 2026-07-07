@@ -299,3 +299,28 @@ DecisionDeskSnapshotBuilder / existing providers
 - Workbench 第一屏採指揮中心式：status strip + 今日待判讀 + drill-down + compressed snapshots。
 
 此設計通過使用者視覺 mockup 確認，下一步才進入 implementation plan。
+
+## Implementation Result（2026-07-07）
+
+已落地：
+
+- 主 UI 由上方主 tab 改為左側主導覽。
+- 預設主工作區為 `決策工作台`。
+- 主工作區順序為 `決策工作台`、`市場探索`、`推薦分析`、`策略回測`、`觀察清單`、`持倉管理`、`數據更新`、`Runtime`。
+- `每日決策` 已從頂層主工作區移除，嵌入 `決策工作台 > 決策來源`。
+- `市場觀察` 已改名並重新定位為 `市場探索`，原有市場子頁保留。
+- Workbench 內部子頁已新增 `總覽`、`決策來源`、`Evidence`、`持倉追蹤`、`操作節奏`。
+- `今日待判讀` 佇列為空時顯示空狀態，提示可前往市場探索研究。
+- Queue row drill-down 後只在本次 UI session 顯示已查看計數；不寫 DB、不標記完成、不改 lifecycle。
+- 本次未修改 scheduled wrappers、scheduled output schema、morning report、Pre-V2 readiness 或 simulated phase progress contract。
+
+仍需等待正式資料 / 未標示完成：
+
+- Phase 0 weekly history `0/3` 仍需真實 weekly review history 累積。
+- Multi-day dry-run `1/3` 仍需真實時間下的 scheduled/manual dry-run record 累積。
+- Replay summary 可用於揭露 source gap、payload gap、benchmark / industry coverage 與 UI 設計檢查，但不能取代上述 gate。
+
+Future slice：
+
+- 左側導覽可再新增 collapsed icon-only mode；badge 仍需保留在 icon 右上角。
+- Workbench 第一屏可再把大型表格壓縮成更高密度摘要卡與 drill-down details，但仍必須維持 read-only DTO 邊界。

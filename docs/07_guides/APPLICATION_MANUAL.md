@@ -1,8 +1,8 @@
 ﻿# baldr 完整操作手冊
 
-> **最後更新**：2026-07-06
+> **最後更新**：2026-07-07
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
-> **範圍**：本手冊涵蓋目前 8 個頂層工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
+> **範圍**：本手冊涵蓋目前左側主導覽的 8 個主工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
 ## 1. 系統能做什麼
 
@@ -23,7 +23,7 @@
 - quantile 一定優於 fixed；2026-06-14 的 10 檔 OOS 實證未顯示 quantile 優於 fixed，因此仍為 opt-in。
 - 推薦回放等同可成交的實盤績效；V1.2 新增的 rolling risk、microstructure preflight 與 relative attribution 只是可信度診斷，不會把 replay 變成實盤撮合。
 - Forward Evidence / Forward Performance 的 close-to-close forward return 等同實盤可執行績效，或能證明任一訊號有效。
-- Daily Decision Desk 已接上主 UI「每日決策」頁籤，並新增 answer-first dashboard：先顯示今日主結論、研究模式註記、優先 / 風險產業與股票焦點，再保留各模組細節；股票焦點可下鑽至「市場觀察 > 主力流向」。Market Breadth v1 已由 SQLite `daily_prices` 接線，Sector Rotation v1 已由 SQLite `industry_indices` 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 接線，Portfolio Alert v1 已由 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService` 接線，Relative Strength / Liquidity Ranking v1 已由 SQLite `daily_prices` 接線，Why Not / 風險提示 v1 已由 `DecisionDeskRiskPromptService` 對接，並可呈現 fundamental diagnostics 來源的基本面風險提示。缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
+- Daily Decision Desk 已整併到主 UI「決策工作台 > 決策來源」子頁，並保留 answer-first dashboard：先顯示今日主結論、研究模式註記、優先 / 風險產業與股票焦點，再保留各模組細節；股票焦點可下鑽至「市場探索 > 主力流向」。Market Breadth v1 已由 SQLite `daily_prices` 接線，Sector Rotation v1 已由 SQLite `industry_indices` 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 接線，Portfolio Alert v1 已由 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService` 接線，Relative Strength / Liquidity Ranking v1 已由 SQLite `daily_prices` 接線，Why Not / 風險提示 v1 已由 `DecisionDeskRiskPromptService` 對接，並可呈現 fundamental diagnostics 來源的基本面風險提示。缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
 - Runtime Observatory 會自動修復問題或自動下單。
 - 觀察清單等同實際投資組合。
 
@@ -80,22 +80,39 @@ python ui_qt/main.py
 
 ### 2.4 第一次啟動檢查
 
-1. 開啟「數據更新」。
+1. 左側主導覽預設停在「決策工作台」；若是第一次啟動或要先檢查資料，切到「數據更新」。
 2. 點擊「檢查數據狀態」。
 3. 確認每日股價、大盤、產業、券商分點與技術指標有日期與筆數。
 4. 若顯示待更新，依需求執行快速或安全更新。
-5. 完成後再進入市場觀察、推薦與回測。
+5. 完成後回到「決策工作台」查看今日待判讀；需要研究時再進入「市場探索」、推薦與回測。
 
 ### 2.5 介面呈現一致性
 
 主 PySide6 UI 採用金融研究工作台風格：深色背景、緊湊表格、狀態色、清楚的主要 / 危險 / 次要按鈕，以及無資料時的空狀態提示。這些設計 token、表格樣式與缺字 icon 清理只影響畫面呈現與操作可讀性，不改變資料抓取、SQLite 同步、推薦、回測、每日決策 snapshot、持倉計算或任何 service / domain 運算語意。
+
+### 2.6 左側主導覽與決策工作台
+
+主視窗目前使用左側主導覽切換 8 個主工作區，預設第一屏為「決策工作台」：
+
+1. 決策工作台
+2. 市場探索
+3. 推薦分析
+4. 策略回測
+5. 觀察清單
+6. 持倉管理
+7. 數據更新
+8. Runtime
+
+「每日決策」不再是頂層主工作區，已整併為「決策工作台 > 決策來源」。決策工作台內部子頁包含「總覽」、「決策來源」、「Evidence」、「持倉追蹤」與「操作節奏」；今日待判讀佇列清空時會顯示空狀態，提示可前往「市場探索」研究。這只代表目前 DTO payload 沒有待判讀項目，不代表 Phase gate 已完成，也不是買賣建議。
+
+Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍需正式資料與真實時間累積，不能因 UI 重排、replay summary、fixture 或人工改表而標示為完成。
 
 ## 3. 每日建議流程
 
 ### 快速研究流程
 
 1. 數據更新：先檢查資料狀態，必要時執行快速更新。
-2. 市場觀察：檢測 Regime，查看強弱與主力流向。
+2. 市場探索：檢測 Regime，查看強弱與主力流向。
 3. 推薦分析：選 Profile，執行推薦並閱讀 Why / Why Not。
 4. 加入觀察清單：保存要研究的股票。
 5. Research Lab：使用單股或批次回測驗證。
@@ -229,7 +246,7 @@ python ui_qt/main.py
 
 毛利率不是月營收資料。MOPS `t163sb06` 是季度財務比率 / 毛利率彙總表，查詢維度是年度與季別；後續若要納入，應走季度財報 / 財務比率 pipeline，另建公告日與 `available_date` gate，不要混進今晚的月營收 snapshot 或 FinMind create_time 流程。
 
-## 5. 市場觀察
+## 5. 市場探索
 
 ### 5.1 大盤指數
 
@@ -414,13 +431,13 @@ Daily Decision Desk 採用 Midnight Analyst 深色介面：深色背景、sectio
 - `研究模式註記`：提醒本頁是市場與籌碼輔助判讀，不是交易建議。
 - `優先產業` / `避開產業 / 風險區`：由產業輪動摘要產生，幫助先決定研究方向。
 - `優先研究股票` / `風險股票`：整合相對強弱、Watchlist、持倉警示與 Smart Money 語意摘要。
-- 股票焦點按鈕可下鑽到「市場觀察 > 主力流向」並定位該股票。
+- 股票焦點按鈕可下鑽到「市場探索 > 主力流向」並定位該股票。
 
 Watchlist、持倉或單一股票風險不會直接降低整體市場行動等級；它們只影響股票焦點、風險清單與提示文字。整體行動等級主要由 Market Regime、Market Breadth 與資料品質決定。
 
 warnings 在 UI 會以繁體中文說明主要原因與影響範圍；原始 token 保留在底層 snapshot / log 供除錯追溯，不直接作為一般畫面文字。看到 warnings 時先判斷是資料覆蓋率、歷史不足或服務降級，不應只看工程代碼做決策。
 
-1. 進入主視窗頂層 tab「每日決策」。
+1. 進入左側主導覽「決策工作台」，再切到上方子頁「決策來源」。
 2. 進入頁面時會先顯示「尚未載入 / 載入中」，Snapshot 會在背景執行緒建立，避免主 App 啟動被每日決策查詢阻塞。
 3. 點選「刷新」可在背景重建 Snapshot；載入期間按鈕會暫時停用，完成後自動更新畫面。
 4. 若初始化或刷新失敗，畫面會保留可閱讀狀態並顯示 fallback 提示，不會中斷整體 App。
@@ -1170,7 +1187,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ### 10.7 籌碼監控
 
-顯示籌碼風險、近期分點買賣明細與資料品質。風險等級與品質狀態會以繁體中文顯示，原始 key 保留在 tooltip 供除錯。按「下鑽詳細主力流向」會切換至市場觀察的 Smart Money 並定位目前股票。
+顯示籌碼風險、近期分點買賣明細與資料品質。風險等級與品質狀態會以繁體中文顯示，原始 key 保留在 tooltip 供除錯。按「下鑽詳細主力流向」會切換至「市場探索 > 主力流向」並定位目前股票。
 
 ### 10.8 清空全體數據
 
@@ -1259,10 +1276,10 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 | 工作區 | 啟動/入口 | 操作 | 參數 | 結果解讀 | 安全/排錯 |
 |---|---:|---:|---:|---:|---:|
 | 數據更新 | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 市場觀察 | 完成 | 完成 | 完成 | 完成 | 完成 |
+| 市場探索 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 推薦分析 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 觀察清單 | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 每日決策 | 完成（answer-first dashboard） | 完成 | 完成 | 主結論 / 行動等級、焦點卡、quality / warnings 判讀；Market Breadth v1 / Sector Rotation v1 / Relative Strength / Liquidity Ranking v1 / Watchlist Trigger v1 / Portfolio Alert v1 / Smart Money semantics / Why Not v1 / fundamental diagnostics prompts 已接線 | 完成 |
+| 決策工作台 / 決策來源 | 完成（左側主導覽預設首頁；每日決策已內嵌） | 完成 | 完成 | 今日待判讀、空狀態、session-only 已查看提示、主結論 / 行動等級、焦點卡、quality / warnings 判讀；Market Breadth v1 / Sector Rotation v1 / Relative Strength / Liquidity Ranking v1 / Watchlist Trigger v1 / Portfolio Alert v1 / Smart Money semantics / Why Not v1 / fundamental diagnostics prompts 已接線 | 完成；Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍待正式資料累積 |
 | Research Lab | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 持倉管理 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
@@ -1286,10 +1303,11 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode full --ui-smoke --ui-smoke-switch-tabs --ui-smoke-screenshot --ui-smoke-resize 1366x768 --ui-smoke-resize 390x844 --ui-smoke-dialog-cancel --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 ```
 
-這會在隔離子程序啟動真實 PySide6 MainWindow、逐一切換 8 個頂層 tab、保存 startup / resize screenshots、記錄 requested / actual viewport size，並測試 UpdateView 強制重新合併 dialog 的取消路徑。`--ui-smoke-dialog-cancel` 只會按取消，不會按確認；若 destructive action 被呼叫，healthcheck 會失敗。窄 viewport 可能被主視窗最小寬度限制，report 會以 `constrained_by_minimum` 呈現，仍需人工開圖判讀視覺可讀性。
+這會在隔離子程序啟動真實 PySide6 MainWindow、逐一切換左側主導覽的 8 個主工作區、保存 startup / resize screenshots、記錄 requested / actual viewport size，並測試 UpdateView 強制重新合併 dialog 的取消路徑。`--ui-smoke-dialog-cancel` 只會按取消，不會按確認；若 destructive action 被呼叫，healthcheck 會失敗。窄 viewport 可能被主視窗最小寬度限制，report 會以 `constrained_by_minimum` 呈現，仍需人工開圖判讀視覺可讀性。
 
 ## 14. 更新記錄
 
+- 2026-07-07：主 UI 改為左側主導覽，預設進入「決策工作台」；「每日決策」整併為「決策工作台 > 決策來源」，「市場觀察」改名為「市場探索」。Workbench 新增今日待判讀空狀態與 session-only 已查看提示；Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍需正式資料累積，不能用 replay 或 UI 狀態補齊。
 - 2026-07-06：更新 V2.0 Phase 1 / Phase 1.5 read-only Workbench prototype CLI 操作說明，標示 sample、受控 `--db-path` / `--decision-date`、Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary、replay JSON summary、degraded source diagnostics 與不寫 DB / 不啟用 scheduler / 不產生交易建議限制。
 - 2026-07-05：新增 V1.6 cross-sectional factor snapshot inspection CLI 操作說明，標示 rank / quantile 僅供研究 attribution，不是推薦、不改 `ScoringEngine`、不建立 DB、不啟用 scheduler。
 - 2026-07-02：完成 V1.2 Research Credibility & Execution Model v1 操作說明，補充 Profile replay 訓練 / 驗證分離、推薦回放 rolling risk metrics、microstructure preflight、relative attribution 與仍未完成的實盤撮合 residual。

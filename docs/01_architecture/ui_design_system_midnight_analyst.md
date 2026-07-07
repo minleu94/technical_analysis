@@ -41,7 +41,7 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 2. **資訊密度高但可掃描**：適合表格、排行、風險提示與研究結果。
 3. **效能優先**：避免大量陰影、動畫、透明效果、漸層與 widget-per-cell。
 4. **一致的狀態語言**：`OBSERVED`、`ESTIMATED`、`DEGRADED`、`MISSING` 必須用同一套 badge / 色彩規則呈現。
-5. **用樣板逐步遷移**：Daily Decision Desk 是第一個 reference screen；2026-07-02 後，持倉管理、推薦分析、回測、Watchlist、資料更新與市場觀察相關表格也已開始共用同一套 token / table helper / button variant。
+5. **用樣板逐步遷移**：Daily Decision Desk 是第一個 reference screen；2026-07-02 後，持倉管理、推薦分析、回測、Watchlist、資料更新與市場觀察相關表格也已開始共用同一套 token / table helper / button variant。2026-07-07 後，主殼層採左側主導覽，Daily Decision Desk 內嵌於 `決策工作台 > 決策來源`，原市場觀察重新定位為 `市場探索`。
 
 目前使用者回饋：
 
@@ -65,7 +65,7 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 | `text_primary` | `#eef3f8` | 主要文字。 |
 | `text_secondary` | `#a8b3c2` | 輔助文字。 |
 | `text_muted` | `#788496` | 低優先文字、disabled。 |
-| `accent` | `#4fb7e5` | 主重點色、active tab。 |
+| `accent` | `#4fb7e5` | 主重點色、active left-nav / tab。 |
 | `accent_hover` | `#75cdf5` | Hover / focus 重點色。 |
 | `accent_warm` | `#f0b35a` | 溫和提示、次要重點與需要被注意但非危險的狀態。 |
 | `success` | `#22c55e` | 正常、觀測、偏多正向。 |
@@ -216,7 +216,7 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 
 規則：
 
-- 主流程按鈕、danger action、tab label、context menu action 應使用清楚文字與 button variant，不依賴 emoji 表達語意。
+- 主流程按鈕、danger action、left-nav label、tab label、context menu action 應使用清楚文字與 button variant，不依賴 emoji 表達語意。
 - 若既有資料文字仍含 emoji / symbol，顯示前可在 UI 邊界清理；不要改寫底層 DTO、snapshot 或歷史保存資料。
 
 ---
@@ -232,6 +232,7 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 - `QDialog`
 - `QTabWidget::pane`
 - `QTabBar::tab`
+- `LeftNavigationWidget`
 - `QPushButton`
 - `QGroupBox`
 - `QTableView`
@@ -336,7 +337,8 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 - 全域 QSS：補齊 button variants、tooltip、表格 corner、水平 / 垂直 scrollbar 與空狀態框。
 - 共用 helper：新增 `EmptyStatePanel`、`apply_financial_table_style()` 與 text sanitizer。
 - 門面頁：每日決策與持倉管理已整理為較一致的工作台視覺。
-- 其他工作區：資料更新、推薦分析、回測、Watchlist、市場觀察與 evidence review 相關表格已逐步套用通用表格與按鈕語言。
+- 主殼層：`LeftNavigationWidget` 使用 restrained Midnight Analyst left rail，主工作區由 `QStackedWidget` 切換；子工作區仍可使用上方 `QTabWidget`。
+- 其他工作區：資料更新、推薦分析、回測、Watchlist、市場探索與 evidence review 相關表格已逐步套用通用表格與按鈕語言。
 
 本輪遷移邊界：
 
@@ -374,7 +376,7 @@ Midnight Analyst 的原始目標是建立一套深色、專業、效能友善的
 1. Daily Decision Desk：已是 reference screen，後續可再改善 dashboard grid 與 action panel。
 2. 持倉管理：已完成第一輪門面整理，後續可再統一風險 badge、籌碼警示與生命週期回顧細節。
 3. 資料更新：已清理主要缺字 icon 與狀態卡，後續可再抽離更多 inline QSS。
-4. 市場觀察：表格與按鈕已開始共用 helper，後續可整理 Smart Money domain-specific 樣式。
+4. 市場探索：表格與按鈕已開始共用 helper，後續可整理 Smart Money domain-specific 樣式。
 5. 推薦分析：已統一主要按鈕、表格與 detail 空狀態，後續可整理 Why / Why Not / Explain 區塊。
 6. Research Lab：重點仍是高密度表單、結果頁與 Evidence Review 子頁的一致性。
 7. Runtime Observatory：可維持工程監控風格，但應使用相同 token 與空狀態語言。
