@@ -176,7 +176,7 @@ class WeakStocksView(QWidget):
             df = df[available_columns]
         
         # 更新模型
-        self.stocks_model = PandasTableModel(df)
+        self.stocks_model = PandasTableModel(df, red_positive_columns={'跌幅%'})
         self.stocks_table.setModel(self.stocks_model)
         
         # 連接選擇事件
@@ -252,7 +252,7 @@ class WeakStocksView(QWidget):
             error_msg = f"刷新弱勢股失敗：\n{str(e)}\n\n{traceback.format_exc()}"
             QMessageBox.critical(self, "錯誤", error_msg)
             df = pd.DataFrame(columns=['排名', '證券代號', '證券名稱', '收盤價', '跌幅%', '評分', '弱勢理由'])
-            self.stocks_model = PandasTableModel(df)
+            self.stocks_model = PandasTableModel(df, red_positive_columns={'跌幅%'})
             self.stocks_table.setModel(self.stocks_model)
     
     def _add_selected_to_watchlist(self):
@@ -323,7 +323,7 @@ class WeakStocksView(QWidget):
         """顯示空狀態（提示用戶載入數據）"""
         df = pd.DataFrame(columns=['排名', '證券代號', '證券名稱', '收盤價', '跌幅%', '評分', '弱勢理由'])
         df.loc[0] = ['-', '-', '請點擊「載入數據」按鈕開始計算', 0, 0, 0, '']
-        self.stocks_model = PandasTableModel(df)
+        self.stocks_model = PandasTableModel(df, red_positive_columns={'跌幅%'})
         self.stocks_table.setModel(self.stocks_model)
         self.stocks_table.resizeColumnsToContents()
     

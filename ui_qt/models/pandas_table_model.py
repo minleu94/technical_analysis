@@ -16,12 +16,13 @@ class PandasTableModel(QAbstractTableModel):
     # 自定義信號
     dataChanged = Signal(QModelIndex, QModelIndex)  # 數據改變信號
     
-    def __init__(self, dataframe: pd.DataFrame, parent=None):
+    def __init__(self, dataframe: pd.DataFrame, parent=None, red_positive_columns: Optional[set[str]] = None):
         """初始化 Model
         
         Args:
             dataframe: 要顯示的 DataFrame
             parent: 父對象
+            red_positive_columns: 數值為正但語意代表跌幅 / 風險時，需用紅色顯示的欄位
         """
         super().__init__(parent)
         self._dataframe = dataframe.copy()
@@ -29,6 +30,7 @@ class PandasTableModel(QAbstractTableModel):
         self._sort_column = -1
         self._sort_order = Qt.AscendingOrder
         self._visible_columns = list(dataframe.columns)  # 可見欄位列表
+        self._red_positive_columns = set(red_positive_columns or ())
     
     def rowCount(self, parent=QModelIndex()) -> int:
         """返回行數"""
@@ -106,6 +108,8 @@ class PandasTableModel(QAbstractTableModel):
                 if isinstance(value, (int, float)):
                     try:
                         if not pd.isna(value):
+                            if col_name in self._red_positive_columns and value != 0:
+                                return QColor(255, 68, 68)
                             if value > 0:
                                 return QColor(0, 255, 136)  # 綠色（正數）
                             elif value < 0:

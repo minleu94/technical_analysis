@@ -145,7 +145,7 @@ class WeakIndustriesView(QWidget):
             df = df[available_columns]
         
         # 更新模型
-        self.industries_model = PandasTableModel(df)
+        self.industries_model = PandasTableModel(df, red_positive_columns={'跌幅%'})
         self.industries_table.setModel(self.industries_model)
         
         # 調整列寬
@@ -192,14 +192,14 @@ class WeakIndustriesView(QWidget):
             error_msg = f"刷新弱勢產業失敗：\n{str(e)}\n\n{traceback.format_exc()}"
             QMessageBox.critical(self, "錯誤", error_msg)
             df = pd.DataFrame(columns=['排名', '指數名稱', '收盤指數', '跌幅%'])
-            self.industries_model = PandasTableModel(df)
+            self.industries_model = PandasTableModel(df, red_positive_columns={'跌幅%'})
             self.industries_table.setModel(self.industries_model)
     
     def _show_empty_state(self):
         """顯示空狀態（提示用戶載入數據）"""
         df = pd.DataFrame(columns=['排名', '指數名稱', '收盤指數', '跌幅%'])
         df.loc[0] = ['-', '請點擊「載入數據」按鈕開始計算', 0, 0]
-        self.industries_model = PandasTableModel(df)
+        self.industries_model = PandasTableModel(df, red_positive_columns={'跌幅%'})
         self.industries_table.setModel(self.industries_model)
         self.industries_table.resizeColumnsToContents()
     
