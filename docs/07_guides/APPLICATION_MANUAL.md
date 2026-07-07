@@ -103,11 +103,11 @@ python ui_qt/main.py
 7. 數據更新
 8. Runtime
 
-左側主導覽每個主工作區都有短代碼 icon，協助快速掃描；可用導覽列頂部的收合按鈕切換為 icon-only 模式以釋放橫向空間。收合後仍可用 tooltip 辨識完整工作區名稱，並且只影響畫面空間，不改變任何資料載入、排程、報告或 service 行為。
+左側主導覽每個主工作區都有自製線條 SVG icon，協助快速辨識工作區意義；可用導覽列頂部的收合按鈕切換為 icon-only 模式以釋放橫向空間。收合後仍可用 tooltip 辨識完整工作區名稱，並且只影響畫面空間，不改變任何資料載入、排程、報告或 service 行為。
 
 「每日決策」不再是頂層主工作區，已整併為「決策工作台 > 決策來源」。決策工作台內部子頁包含「總覽」、「決策來源」、「Evidence」、「持倉追蹤」與「操作節奏」；今日待判讀佇列清空時會顯示空狀態，提示可前往「市場探索」研究。這只代表目前 DTO payload 沒有待判讀項目，不代表 Phase gate 已完成，也不是買賣建議。
 
-「總覽」頂部會先顯示一行摘要，包含今日待判讀、人工待處理、Evidence waiting、Warnings 與 Phase 0 gate 狀態，讓使用者先掃描重點再往下看表格。「Evidence」、「持倉追蹤」與「操作節奏」子頁目前是摘要與下鑽入口，也是預留深挖區；完整互動能力仍需等後續功能切片與正式資料累積，不能因位置已預留就標示為已完成。
+「總覽」頂部會先顯示四個指揮台摘要 block：今日待判讀、人工待處理、等待真實時間、Warnings。等待真實時間 block 會明確顯示 weekly history 與 multi-day dry-run 比例，讓使用者先掃描重點再往下看表格。「Evidence」、「持倉追蹤」與「操作節奏」子頁目前是摘要與下鑽入口，也是預留深挖區；完整互動能力仍需等後續功能切片與正式資料累積，不能因位置已預留就標示為已完成。
 
 Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍需正式資料與真實時間累積，不能因 UI 重排、replay summary、fixture 或人工改表而標示為完成。
 
@@ -1317,7 +1317,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 
 ## 14. 更新記錄
 
-- 2026-07-07：左側主導覽新增短代碼 icon 與 icon-only 收合模式；Runtime Observatory 改為緊湊 scope note，避免大片空白；Workbench 總覽新增 DTO 摘要列，Evidence / 持倉追蹤 / 操作節奏標示為摘要與下鑽入口 / 預留深挖區；市場探索弱勢個股與弱勢產業的 `跌幅%` 以正數顯示並用紅色代表下跌語意。以上只改 UI presentation，不啟用 scheduler、不寫 DB、不補 Phase gate。
+- 2026-07-07：左側主導覽從兩字母縮寫升級為自製線條 SVG icon，並保留 icon-only 收合模式；Runtime Observatory 改為緊湊 scope note，避免大片空白；Workbench 總覽新增四個指揮台摘要 block，Evidence / 持倉追蹤 / 操作節奏標示為摘要與下鑽入口 / 預留深挖區；市場探索弱勢個股與弱勢產業的 `跌幅%` 以正數顯示並用紅色代表下跌語意。以上只改 UI presentation，不啟用 scheduler、不寫 DB、不補 Phase gate。
 - 2026-07-07：主 UI 改為左側主導覽，預設進入「決策工作台」；「每日決策」整併為「決策工作台 > 決策來源」，「市場觀察」改名為「市場探索」。Workbench 新增今日待判讀空狀態與 session-only 已查看提示；Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍需正式資料累積，不能用 replay 或 UI 狀態補齊。
 - 2026-07-06：更新 V2.0 Phase 1 / Phase 1.5 read-only Workbench prototype CLI 操作說明，標示 sample、受控 `--db-path` / `--decision-date`、Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary、replay JSON summary、degraded source diagnostics 與不寫 DB / 不啟用 scheduler / 不產生交易建議限制。
 - 2026-07-05：新增 V1.6 cross-sectional factor snapshot inspection CLI 操作說明，標示 rank / quantile 僅供研究 attribution，不是推薦、不改 `ScoringEngine`、不建立 DB、不啟用 scheduler。

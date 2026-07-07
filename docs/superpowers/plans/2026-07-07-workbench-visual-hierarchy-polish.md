@@ -21,24 +21,24 @@
 
 **Files:** `ui_qt/widgets/left_navigation.py`, `ui_qt/main.py`, `tests/test_ui_qt_left_navigation.py`
 
-- [ ] Add tests that nav buttons expose real `QIcon` objects and collapsed text no longer equals the two-letter code.
-- [ ] Run `.\.venv\Scripts\python.exe -m pytest tests\test_ui_qt_left_navigation.py -q -o addopts=` and confirm failure.
-- [ ] Add a small SVG icon registry and render icons with `QIcon` / `QPixmap`; keep text labels only for expanded mode.
-- [ ] Re-run left nav tests and commit.
+- [x] Add tests that nav buttons expose real `QIcon` objects and collapsed text no longer equals the two-letter code.
+- [x] Run `.\.venv\Scripts\python.exe -m pytest tests\test_ui_qt_left_navigation.py -q -o addopts=` and confirm failure.
+- [x] Add a small SVG icon registry and render icons with `QIcon` / `QPixmap`; keep text labels only for expanded mode.
+- [x] Re-run left nav tests and commit.
 
 ### Task 2: Workbench Command Summary Layout
 
 **Files:** `ui_qt/views/workbench_view.py`, `tests/test_ui_qt_workbench_view.py`
 
-- [ ] Add tests for four summary blocks, title pane gutter, and removal of long single-line summary label.
-- [ ] Run `.\.venv\Scripts\python.exe -m pytest tests\test_ui_qt_workbench_view.py -q -o addopts=` and confirm failure.
-- [ ] Implement four summary labels / blocks from `WorkbenchDashboardDTO`, and set consistent content margins around the overview content.
-- [ ] Re-run Workbench tests and commit.
+- [x] Add tests for four summary blocks, title pane gutter, and removal of long single-line summary label.
+- [x] Run `.\.venv\Scripts\python.exe -m pytest tests\test_ui_qt_workbench_view.py -q -o addopts=` and confirm failure.
+- [x] Implement four summary labels / blocks from `WorkbenchDashboardDTO`, and set consistent content margins around the overview content.
+- [x] Re-run Workbench tests and commit.
 
 ### Task 3: Docs and QA
 
 **Files:** Manual / Snapshot / UI design system / QA closeout.
 
-- [ ] Update docs to describe SVG nav icons, Workbench command summary, and unchanged formal data gates.
-- [ ] Run required QA commands.
-- [ ] Commit docs.
+- [x] Update docs to describe SVG nav icons, Workbench command summary, and unchanged formal data gates.
+- [x] Run required QA commands.
+- [x] Commit docs.
