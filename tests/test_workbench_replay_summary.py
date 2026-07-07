@@ -75,11 +75,17 @@ def test_load_historical_replay_summary_builds_quality_disclosures(tmp_path: Pat
 
     assert "simulated_scheduler" in disclosures
     assert "source_gap:source_missing_screening_matrix" in disclosures
+    assert "source_gap_coverage:source_missing_screening_matrix=1/1" in disclosures
     assert "payload_gap:missing_industry_benchmark" in disclosures
     assert "outcome_maturity:ready=380736,pending_future_data=91488" in disclosures
-    assert "benchmark_coverage:covered=472224,total=472224,missing=0" in disclosures
+    assert "benchmark_coverage:covered=380736,total=380736,missing=0" in disclosures
+    assert "industry_benchmark_coverage:covered=2245,total=380736,missing=378491" in disclosures
     assert "missing_industry_benchmark:378491" in disclosures
     assert "pending_future_data:91488" in disclosures
+    assert (
+        "replay_direction_assessment:market_benchmark_ready_but_industry_and_source_gaps_block_production_readiness"
+        in disclosures
+    )
     assert "phase0_gate_not_satisfied:weekly_history_and_multi_day_dry_run_require_real_time_accumulation" in disclosures
 
 

@@ -83,7 +83,7 @@ def _quality_disclosures(payload: dict[str, Any], totals: dict[str, Any], final:
         ),
     )
     if benchmark_total is None:
-        benchmark_total = outcomes_created
+        benchmark_total = ready_outcomes
     benchmark_covered = _first_int(
         final,
         (
@@ -95,18 +95,42 @@ def _quality_disclosures(payload: dict[str, Any], totals: dict[str, Any], final:
     )
     if benchmark_covered is None:
         benchmark_covered = max(0, benchmark_total - missing_benchmark)
+    industry_total = _first_int(
+        final,
+        (
+            "industry_benchmark_total",
+            "industry_benchmark_coverage_total",
+            "outcomes_with_industry_benchmark_total",
+        ),
+    )
+    if industry_total is None:
+        industry_total = ready_outcomes
+    industry_covered = _first_int(
+        final,
+        (
+            "industry_benchmark_covered",
+            "industry_benchmark_ready",
+            "industry_benchmark_coverage_ready",
+            "outcomes_with_industry_benchmark",
+        ),
+    )
+    if industry_covered is None:
+        industry_covered = max(0, industry_total - missing_industry)
 
     disclosures = [
         str(payload.get("source_label") or "simulated_scheduler"),
         f"outcome_maturity:ready={ready_outcomes},pending_future_data={pending_future_data}",
         f"benchmark_coverage:covered={benchmark_covered},total={benchmark_total},missing={missing_benchmark}",
+        f"industry_benchmark_coverage:covered={industry_covered},total={industry_total},missing={missing_industry}",
         "phase0_gate_not_satisfied:weekly_history_and_multi_day_dry_run_require_real_time_accumulation",
     ]
-    source_gaps = _source_gap_tokens(payload)
+    source_gaps, source_gap_counts, day_count = _source_gap_tokens(payload)
     if not source_gaps:
         disclosures.append("source_gap:none_observed")
     for source_gap in source_gaps:
         disclosures.append(f"source_gap:{source_gap}")
+        if day_count > 0:
+            disclosures.append(f"source_gap_coverage:{source_gap}={source_gap_counts.get(source_gap, 0)}/{day_count}")
     payload_gap_added = False
     if missing_benchmark > 0:
         disclosures.append("payload_gap:missing_benchmark")
@@ -122,20 +146,33 @@ def _quality_disclosures(payload: dict[str, Any], totals: dict[str, Any], final:
         payload_gap_added = True
     if not payload_gap_added:
         disclosures.append("payload_gap:none_observed")
+    if missing_benchmark == 0 and (missing_industry > 0 or source_gaps or pending_future_data > 0):
+        disclosures.append(
+            "replay_direction_assessment:"
+            "market_benchmark_ready_but_industry_and_source_gaps_block_production_readiness"
+        )
     return _dedupe(disclosures)
 
 
-def _source_gap_tokens(payload: dict[str, Any]) -> list[str]:
+def _source_gap_tokens(payload: dict[str, Any]) -> tuple[list[str], dict[str, int], int]:
     gaps: list[str] = []
+    counts: dict[str, int] = {}
     explicit_gaps = payload.get("source_gaps", ())
     if isinstance(explicit_gaps, str):
         explicit_gaps = (explicit_gaps,)
     for gap in explicit_gaps:
         if gap:
-            gaps.append(str(gap))
-    for day in payload.get("days", ()):
+            gap_text = str(gap)
+            gaps.append(gap_text)
+            counts.setdefault(gap_text, 0)
+    day_rows = payload.get("days", ())
+    day_count = 0
+    if isinstance(day_rows, dict):
+        day_rows = day_rows.values()
+    for day in day_rows:
         if not isinstance(day, dict):
             continue
+        day_count += 1
         diagnostics = day.get("diagnostics", ())
         if isinstance(diagnostics, str):
             diagnostics = (diagnostics,)
@@ -143,7 +180,8 @@ def _source_gap_tokens(payload: dict[str, Any]) -> list[str]:
             diagnostic_text = str(diagnostic)
             if diagnostic_text.startswith("source_"):
                 gaps.append(diagnostic_text)
-    return _dedupe(gaps)
+                counts[diagnostic_text] = counts.get(diagnostic_text, 0) + 1
+    return _dedupe(gaps), counts, day_count
 
 
 def _first_int(mapping: dict[str, Any], keys: tuple[str, ...]) -> int | None:

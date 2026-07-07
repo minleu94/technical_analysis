@@ -65,14 +65,14 @@
 - **限制**：不新增交易能力，不改動生產環境 UI；adapter 只讀 existing sources，missing DB / missing table / degraded source 只回 diagnostics，不建立 schema、不寫 evidence、不建立 scheduler、不套用 lifecycle action。
 
 ### Phase 2：V2.0 Workbench MVP
-**狀態**：2026-07-07 已完成第一版 read-only MVP shell；完整 Daily Decision / Evidence Review / Portfolio Review / Action Items operating loop 仍待後續 gate。
+**狀態**：2026-07-07 已完成第一版 read-only MVP shell，並補上中文優先顯示、預設 replay JSON summary 分析與舊 Daily Decision / Evidence Review / Portfolio read-only drill-down；完整 background feed / Action Items operating loop 仍待後續 gate。
 **目標**：建立單一決策入口。
 - **工作範圍**：
   - 已落地 PySide6 `決策工作台` 分頁，第一版呈現 status strip、今日待判讀、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
   - UI 只讀 `WorkbenchDashboardDTO`，或透過 `WorkbenchSourceService.inspect()` 取得 payload；UI 不直接讀 SQLite、不讀 replay DB、不寫 DB、不啟用 scheduler。
-  - 若 payload 帶 Historical Replay JSON summary，Evidence mode / data quality 必須揭露 `simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data；replay 不得用來滿足 Phase 0 gate。
-  - 整合 Daily Decision Desk、Evidence Review、Portfolio Review 與 Action Items。
-  - 將舊 Tab 轉為 drill-down 或專家模式。
+  - 若 payload 帶 Historical Replay JSON summary，Evidence mode / data quality 必須揭露 `simulated_scheduler`、source gap / coverage、payload gap、outcome maturity、benchmark coverage、industry benchmark coverage、missing industry benchmark 與 pending future-data；replay 不得用來滿足 Phase 0 gate。
+  - 已將 Daily Decision Desk、Evidence Review、Portfolio Review 轉為 Workbench read-only drill-down，仍只切到既有頁面，不寫 DB、不跑 scheduler。
+  - 後續再整合 Action Items 與 background evidence feed。
 - **限制**：Workbench shell 不重算 scoring / recommendation / portfolio / backtest / lifecycle，不輸出買賣建議，不解除 Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 或 Phase 5 scheduler gate。
 
 ### Phase 3：P0 Data Source Candidate Dry-run
@@ -105,7 +105,7 @@
 | 6M Phase | 候選版號 | 對應產品意義 |
 |---|---|---|
 | Phase 1 | V2.0 | Unified Decision Workbench read-only prototype 與 source adapter。 |
-| Phase 2 | V2.1 | Workbench 主 UI MVP；第一版 read-only shell 已接 Qt，完整 operating loop 與舊 Tab drill-down 仍待後續。 |
+| Phase 2 | V2.1 | Workbench 主 UI MVP；第一版 read-only shell 已接 Qt，中文顯示、replay summary 分析與舊 Tab drill-down 已完成，完整 background feed / Action Items loop 仍待後續。 |
 | Phase 0 + Phase 2 | V2.2 | Evidence Operating Loop，讓 weekly review、multi-day dry-run、manual review 與 action item 形成可重複節奏。 |
 | Phase 3 | V2.3 | P0 Data Source Candidate Dry-run，先候選測試 microstructure、corporate action 與 PIT release date，不直接進 `ScoringEngine`。 |
 | Phase 4 | V2.4 | Execution Model Realism，在 research-only sandbox 驗證買賣價差、零股、跳空與未成交原因。 |

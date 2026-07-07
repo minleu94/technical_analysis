@@ -85,11 +85,14 @@ def _dashboard_with_replay() -> WorkbenchDashboardDTO:
                 diagnostics=(
                     "simulated_scheduler",
                     "source_gap:source_missing_screening_matrix",
+                    "source_gap_coverage:source_missing_screening_matrix=118/118",
                     "payload_gap:missing_industry_benchmark",
                     "outcome_maturity:ready=380736,pending_future_data=91488",
-                    "benchmark_coverage:covered=472224,total=472224,missing=0",
+                    "benchmark_coverage:covered=380736,total=380736,missing=0",
+                    "industry_benchmark_coverage:covered=2245,total=380736,missing=378491",
                     "missing_industry_benchmark:378491",
                     "pending_future_data:91488",
+                    "replay_direction_assessment:market_benchmark_ready_but_industry_and_source_gaps_block_production_readiness",
                     "phase0_gate_not_satisfied:weekly_history_and_multi_day_dry_run_require_real_time_accumulation",
                 ),
             ),
@@ -140,41 +143,58 @@ def test_workbench_evidence_table_model_exposes_replay_diagnostics() -> None:
     model = WorkbenchEvidenceTableModel((replay,))
 
     assert model.rowCount() == 1
-    assert model.headerData(model.column_index("diagnostics"), Qt.Horizontal, Qt.DisplayRole) == "Diagnostics"
+    assert model.headerData(model.column_index("diagnostics"), Qt.Horizontal, Qt.DisplayRole) == "診斷"
     diagnostics = model.data(model.index(0, model.column_index("diagnostics")))
-    assert "simulated_scheduler" in diagnostics
-    assert "pending_future_data:91488" in diagnostics
+    assert "模擬" in diagnostics
+    assert "等待未來資料" in diagnostics
     assert model.raw_value(0, "diagnostics") == replay.diagnostics
 
 
 def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() -> None:
     app()
-    view = UnifiedDecisionWorkbenchView(dashboard=_dashboard_with_replay(), auto_refresh=False)
+    clicked: list[str] = []
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+        navigate_to_daily_decision_callback=lambda: clicked.append("daily"),
+        navigate_to_evidence_review_callback=lambda: clicked.append("evidence"),
+        navigate_to_portfolio_callback=lambda: clicked.append("portfolio"),
+    )
 
     assert view.status_model.rowCount() == 3
     assert view.review_model.rowCount() == 1
     assert view.evidence_model.rowCount() == 2
     assert view.checklist_model.rowCount() == 3
-    assert "read-only" in view.boundary_banner.text()
-    assert "not trading advice" in view.boundary_banner.text()
-    assert "recalculate scoring" in view.boundary_banner.text()
-    assert "status strip" in view.status_section_title.text().lower()
-    assert "today" in view.review_section_title.text().lower()
-    assert "evidence mode" in view.evidence_section_title.text().lower()
-    assert "daily checklist" in view.checklist_section_title.text().lower()
+    assert "唯讀邊界" in view.boundary_banner.text()
+    assert "不是交易建議" in view.boundary_banner.text()
+    assert "不重算 scoring" in view.boundary_banner.text()
+    assert "狀態列" in view.status_section_title.text()
+    assert "今日待判讀" in view.review_section_title.text()
+    assert "證據與品質" in view.evidence_section_title.text()
+    assert "每日檢查清單" in view.checklist_section_title.text()
+    assert view.daily_decision_button.text() == "開啟每日決策"
+    assert view.evidence_review_button.text() == "開啟證據覆盤"
+    assert view.portfolio_button.text() == "開啟持倉管理"
+
+    view.daily_decision_button.click()
+    view.evidence_review_button.click()
+    view.portfolio_button.click()
+    assert clicked == ["daily", "evidence", "portfolio"]
 
     data_quality_text = view.data_quality_limitations_label.text()
-    assert "simulated_scheduler" in data_quality_text
-    assert "source gap" in data_quality_text
-    assert "payload gap" in data_quality_text
-    assert "outcome maturity" in data_quality_text
-    assert "benchmark coverage" in data_quality_text
-    assert "missing industry benchmark" in data_quality_text
-    assert "pending future-data" in data_quality_text
+    assert "模擬 scheduler" in data_quality_text
+    assert "來源缺口" in data_quality_text
+    assert "payload 缺口" in data_quality_text
+    assert "結果成熟度" in data_quality_text
+    assert "市場基準覆蓋" in data_quality_text
+    assert "產業基準覆蓋" in data_quality_text
+    assert "缺產業基準" in data_quality_text
+    assert "等待未來資料" in data_quality_text
+    assert "方向判讀" in data_quality_text
     assert "Phase 0 weekly history 0/3" in data_quality_text
     assert "multi-day dry-run 1/3" in data_quality_text
-    assert "replay cannot replace" in data_quality_text
-    assert "degraded_source" in view.warning_list.toPlainText()
+    assert "replay 不可取代" in data_quality_text
+    assert "降級來源" in view.warning_list.toPlainText()
 
 
 def test_unified_workbench_view_refreshes_only_through_source_service() -> None:

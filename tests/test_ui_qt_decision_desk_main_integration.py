@@ -191,12 +191,12 @@ def _install_fake_dependencies(monkeypatch, decision_desk_builder_cls):
     monkeypatch.setattr(main_module, "WorkbenchSourceService", _TrackingWorkbenchSourceService)
 
 
-def _build_main_window(*, regime_service=None, portfolio_service=None):
+def _build_main_window(*, regime_service=None, portfolio_service=None, config=None):
     main_window = main_module.MainWindow.__new__(main_module.MainWindow)
     from PySide6.QtWidgets import QMainWindow
 
     QMainWindow.__init__(main_window)
-    main_window.config = object()
+    main_window.config = config or object()
     main_window.screening_service = object()
     main_window.regime_service = regime_service or object()
     main_window.recommendation_service = object()
@@ -234,12 +234,21 @@ def test_main_window_adds_daily_decision_tab(monkeypatch):
     assert callable(getattr(builder.provider, "fetch_market_regime", None))
 
 
-def test_main_window_adds_unified_decision_workbench_tab(monkeypatch):
+def test_main_window_adds_unified_decision_workbench_tab(monkeypatch, tmp_path):
     app()
     _TrackingWorkbenchSourceService.instances = []
     _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
+    output_root = tmp_path / "output"
+    replay_summary_path = (
+        output_root
+        / "evidence_pipeline"
+        / "historical_replay_reference_fix_20260706"
+        / "historical_replay_2026-01-06_2026-07-06_reference_fix.json"
+    )
+    replay_summary_path.parent.mkdir(parents=True)
+    replay_summary_path.write_text("{}", encoding="utf-8")
 
-    target_window = _build_main_window()
+    target_window = _build_main_window(config=types.SimpleNamespace(output_root=output_root))
     target_window._setup_ui()
 
     assert "決策工作台" in _get_tab_names(target_window)
@@ -249,6 +258,19 @@ def test_main_window_adds_unified_decision_workbench_tab(monkeypatch):
     assert _TrackingWorkbenchSourceService.instances
     assert workbench_tab.source_service is _TrackingWorkbenchSourceService.instances[-1]
     assert workbench_tab.auto_refresh is True
+    assert workbench_tab.kwargs["replay_summary_json"] == replay_summary_path
+    assert callable(workbench_tab.kwargs["navigate_to_daily_decision_callback"])
+    assert callable(workbench_tab.kwargs["navigate_to_evidence_review_callback"])
+    assert callable(workbench_tab.kwargs["navigate_to_portfolio_callback"])
+
+    workbench_tab.kwargs["navigate_to_daily_decision_callback"]()
+    assert target_window.tabs.tabText(target_window.tabs.currentIndex()) == "每日決策"
+
+    workbench_tab.kwargs["navigate_to_evidence_review_callback"]()
+    assert target_window.tabs.tabText(target_window.tabs.currentIndex()) == "策略回測"
+
+    workbench_tab.kwargs["navigate_to_portfolio_callback"]()
+    assert target_window.tabs.tabText(target_window.tabs.currentIndex()) == "持倉管理"
 
 
 class _FakeRegimeService:

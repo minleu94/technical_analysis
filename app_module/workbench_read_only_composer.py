@@ -55,7 +55,7 @@ class WorkbenchReadOnlyComposer:
         if decision_snapshot is None:
             decision_status = WorkbenchStatusItem(
                 item_id="decision_snapshot",
-                label="Daily Decision snapshot",
+                label="每日決策快照",
                 value="missing",
                 status="warning",
                 summary="缺 Daily Decision durable snapshot；不得讀 UI state 偽造。",
@@ -65,7 +65,7 @@ class WorkbenchReadOnlyComposer:
             quality = decision_snapshot.overall_quality.value
             decision_status = WorkbenchStatusItem(
                 item_id="decision_snapshot",
-                label="Daily Decision snapshot",
+                label="每日決策快照",
                 value=decision_snapshot.as_of_date.isoformat(),
                 status=quality,
                 summary="已讀取 Daily Decision service snapshot。",
@@ -74,19 +74,19 @@ class WorkbenchReadOnlyComposer:
             decision_status,
             WorkbenchStatusItem(
                 item_id="data_quality",
-                label="Data quality",
+                label="資料品質",
                 value=quality,
                 status=quality,
             ),
             WorkbenchStatusItem(
                 item_id="evidence_gate",
-                label="Evidence gate",
+                label="證據門檻",
                 value=readiness_report.overall_status,
                 status=_status_to_severity(readiness_report.overall_status),
             ),
             WorkbenchStatusItem(
                 item_id="scheduler",
-                label="Production Scheduler",
+                label="正式排程器",
                 value="off",
                 status="blocked",
                 summary="Phase 5 approval 前固定維持 write-mode off。",
@@ -105,7 +105,7 @@ class WorkbenchReadOnlyComposer:
                 items.append(
                     WorkbenchReviewItem(
                         item_id="watchlist_trigger",
-                        title="Watchlist trigger review",
+                        title="觀察清單觸發覆盤",
                         severity="info",
                         source="watchlist_trigger",
                         summary=f"候選池觸發 {watchlist.trigger_count or len(watchlist.triggered_codes)} 筆，需要人工判讀。",
@@ -117,7 +117,7 @@ class WorkbenchReadOnlyComposer:
                 items.append(
                     WorkbenchReviewItem(
                         item_id="portfolio_alert",
-                        title="Portfolio alert review",
+                        title="持倉警示覆盤",
                         severity="warning",
                         source="portfolio_alert",
                         summary=f"持倉警示 {portfolio.alert_count or len(portfolio.alert_codes)} 筆，需檢查 thesis 與風險來源。",
@@ -170,7 +170,7 @@ class WorkbenchReadOnlyComposer:
             final = historical_replay_summary.get("final_outcome_summary", {})
             missing_benchmark = int(final.get("missing_benchmark", 0) or 0)
             missing_industry = int(final.get("missing_industry_benchmark", 0) or 0)
-            benchmark_text = "benchmark reference ready" if missing_benchmark == 0 else "benchmark reference gap"
+            benchmark_text = "市場 benchmark 已可用" if missing_benchmark == 0 else "市場 benchmark 有缺口"
             quality_disclosures = tuple(
                 str(item) for item in historical_replay_summary.get("quality_disclosures", ())
             )
@@ -184,12 +184,12 @@ class WorkbenchReadOnlyComposer:
             items.append(
                 WorkbenchEvidenceSummary(
                     item_id="historical_replay",
-                    label="Historical replay simulated evidence",
+                    label="歷史 replay 模擬證據",
                     status="degraded" if missing_industry else "ready",
                     summary=(
-                        f"{totals.get('days', 0)} days / {totals.get('events_seen', 0)} events / "
-                        f"{totals.get('outcomes_created', 0)} outcomes; {benchmark_text}; "
-                        f"industry gaps {missing_industry}."
+                        f"{totals.get('days', 0)} 天 / {totals.get('events_seen', 0)} events / "
+                        f"{totals.get('outcomes_created', 0)} outcomes；{benchmark_text}；"
+                        f"產業基準缺口 {missing_industry}。"
                     ),
                     diagnostics=tuple(diagnostics),
                 )
@@ -225,31 +225,31 @@ class WorkbenchReadOnlyComposer:
         return (
             WorkbenchChecklistItem(
                 item_id="freshness",
-                label="Decision snapshot freshness",
+                label="決策快照新鮮度",
                 status="done" if decision_snapshot is not None else "blocked",
                 summary="已讀取 snapshot。" if decision_snapshot is not None else "缺 snapshot；不可從 UI state 補值。",
             ),
             WorkbenchChecklistItem(
                 item_id="evidence_gate",
-                label="Evidence gate status",
+                label="證據門檻狀態",
                 status=readiness_report.overall_status,
-                summary=f"Pre-V2 readiness: {readiness_report.overall_status}",
+                summary=f"Pre-V2 readiness：{readiness_report.overall_status}",
             ),
             WorkbenchChecklistItem(
                 item_id="multi_day_dry_run",
-                label="Multi-day dry-run",
+                label="多日 dry-run",
                 status=_find_status(readiness_report, "multi_day_dry_run"),
                 summary="真實多日 dry-run 仍需依記錄累積。",
             ),
             WorkbenchChecklistItem(
                 item_id="manual_review_note",
-                label="Manual review note",
+                label="人工覆盤註記",
                 status="manual_required",
                 summary="Phase 1 prototype 不新增 append-only manual note repository。",
             ),
             WorkbenchChecklistItem(
                 item_id="scheduler_off",
-                label="Scheduler write-mode",
+                label="排程器寫入模式",
                 status="blocked",
                 summary="production_scheduler_allowed=false；不是交易建議。",
             ),
@@ -293,7 +293,7 @@ def _readiness_summary(observed_count: int | None, required_count: int | None) -
     if observed_count is None and required_count is None:
         return "readiness item available."
     if required_count is None:
-        return f"{observed_count or 0} records observed."
+        return f"已觀測 {observed_count or 0} 筆。"
     return f"{observed_count or 0}/{required_count} records observed."
 
 

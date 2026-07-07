@@ -275,6 +275,44 @@ class MainWindow(QMainWindow):
             print(f"錯誤：初始化主窗口失敗\n{str(e)}\n\n詳細信息：\n{traceback.format_exc()}")
             raise
 
+    def _default_workbench_replay_summary_path(self) -> Path | None:
+        output_root = getattr(self.config, "output_root", None)
+        if output_root is None:
+            return None
+        candidate = (
+            Path(output_root)
+            / "evidence_pipeline"
+            / "historical_replay_reference_fix_20260706"
+            / "historical_replay_2026-01-06_2026-07-06_reference_fix.json"
+        )
+        return candidate if candidate.exists() else None
+
+    def _select_main_tab(self, tab_name: str) -> None:
+        tabs = getattr(self, "tabs", None)
+        if tabs is None:
+            return
+        for index in range(tabs.count()):
+            if tabs.tabText(index) == tab_name:
+                tabs.setCurrentIndex(index)
+                return
+
+    def _open_workbench_daily_decision(self) -> None:
+        self._select_main_tab("每日決策")
+
+    def _open_workbench_evidence_review(self) -> None:
+        self._select_main_tab("策略回測")
+        backtest_view = getattr(self, "backtest_view", None)
+        result_tabs = getattr(backtest_view, "result_tabs", None)
+        if result_tabs is None:
+            return
+        for index in range(result_tabs.count()):
+            if result_tabs.tabText(index) == "證據覆盤":
+                result_tabs.setCurrentIndex(index)
+                return
+
+    def _open_workbench_portfolio(self) -> None:
+        self._select_main_tab("持倉管理")
+
     def _setup_ui(self):
         """設置 UI"""
         print("[MainWindow] 開始設置 UI...")
@@ -389,9 +427,14 @@ class MainWindow(QMainWindow):
                 self.workbench_source_service = WorkbenchSourceService(self.config)
                 workbench_view = UnifiedDecisionWorkbenchView(
                     source_service=self.workbench_source_service,
+                    replay_summary_json=self._default_workbench_replay_summary_path(),
+                    navigate_to_daily_decision_callback=self._open_workbench_daily_decision,
+                    navigate_to_evidence_review_callback=self._open_workbench_evidence_review,
+                    navigate_to_portfolio_callback=self._open_workbench_portfolio,
                     auto_refresh=True,
                     parent=self,
                 )
+                self.workbench_view = workbench_view
                 tabs.addTab(workbench_view, "決策工作台")
                 print("[MainWindow] 決策工作台分頁建立成功")
             except Exception as e:
@@ -419,6 +462,7 @@ class MainWindow(QMainWindow):
                     navigate_to_smart_money_callback=self.show_smart_money_flow_for_stock,
                     parent=self,
                 )
+                self.decision_desk_view = decision_desk_view
                 tabs.addTab(decision_desk_view, "每日決策")
                 print("[MainWindow] 每日決策分頁建立成功")
             except Exception as e:
@@ -496,6 +540,7 @@ class MainWindow(QMainWindow):
                     broker_flow_service=self.broker_flow_service,
                     parent=self
                 )
+                self.portfolio_view = portfolio_view
                 portfolio_tab_index = tabs.addTab(portfolio_view, "持倉管理")
                 print("[MainWindow] 持倉管理視圖創建成功")
 

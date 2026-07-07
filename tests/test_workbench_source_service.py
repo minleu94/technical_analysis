@@ -347,9 +347,12 @@ def test_workbench_source_service_surfaces_replay_quality_disclosures_without_re
     assert not missing_db.exists()
     assert "simulated_scheduler" in replay_diagnostics
     assert "source_gap:source_missing_screening_matrix" in replay_diagnostics
+    assert "source_gap_coverage:source_missing_screening_matrix=1/1" in replay_diagnostics
     assert "payload_gap:missing_industry_benchmark" in replay_diagnostics
     assert "outcome_maturity:ready=380736,pending_future_data=91488" in replay_diagnostics
-    assert "benchmark_coverage:covered=472224,total=472224,missing=0" in replay_diagnostics
+    assert "benchmark_coverage:covered=380736,total=380736,missing=0" in replay_diagnostics
+    assert "industry_benchmark_coverage:covered=2245,total=380736,missing=378491" in replay_diagnostics
     assert "missing_industry_benchmark:378491" in replay_diagnostics
     assert "pending_future_data:91488" in replay_diagnostics
+    assert "replay_direction_assessment" in replay_diagnostics
     assert "phase0_gate_not_satisfied" in replay_diagnostics

@@ -289,8 +289,8 @@ def test_composer_surfaces_historical_replay_as_simulated_evidence_input() -> No
     evidence = {item.item_id: item for item in dashboard.evidence_summary}
 
     assert evidence["historical_replay"].status == "degraded"
-    assert "benchmark reference ready" in evidence["historical_replay"].summary
-    assert "industry gaps 378491" in evidence["historical_replay"].summary
+    assert "市場 benchmark 已可用" in evidence["historical_replay"].summary
+    assert "產業基準缺口 378491" in evidence["historical_replay"].summary
     assert "historical_replay / simulated_scheduler" in " ".join(dashboard.warnings)
 
 

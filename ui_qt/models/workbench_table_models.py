@@ -66,10 +66,10 @@ class _WorkbenchTableModel(QAbstractTableModel):
 
 class WorkbenchStatusStripTableModel(_WorkbenchTableModel):
     COLUMNS = (
-        ("label", "Label"),
-        ("value", "Value"),
-        ("status", "Status"),
-        ("summary", "Summary"),
+        ("label", "項目"),
+        ("value", "值"),
+        ("status", "狀態"),
+        ("summary", "摘要"),
     )
 
     def __init__(self, rows: Sequence[WorkbenchStatusItem] = (), parent=None) -> None:
@@ -78,12 +78,12 @@ class WorkbenchStatusStripTableModel(_WorkbenchTableModel):
 
 class WorkbenchReviewQueueTableModel(_WorkbenchTableModel):
     COLUMNS = (
-        ("severity", "Severity"),
-        ("title", "Title"),
-        ("source", "Source"),
-        ("code", "Code"),
-        ("summary", "Summary"),
-        ("drilldown_target", "Drilldown"),
+        ("severity", "嚴重度"),
+        ("title", "標題"),
+        ("source", "來源"),
+        ("code", "代碼"),
+        ("summary", "摘要"),
+        ("drilldown_target", "下鑽"),
     )
 
     def __init__(self, rows: Sequence[WorkbenchReviewItem] = (), parent=None) -> None:
@@ -92,10 +92,10 @@ class WorkbenchReviewQueueTableModel(_WorkbenchTableModel):
 
 class WorkbenchEvidenceTableModel(_WorkbenchTableModel):
     COLUMNS = (
-        ("label", "Evidence"),
-        ("status", "Status"),
-        ("summary", "Summary"),
-        ("diagnostics", "Diagnostics"),
+        ("label", "證據"),
+        ("status", "狀態"),
+        ("summary", "摘要"),
+        ("diagnostics", "診斷"),
     )
 
     def __init__(self, rows: Sequence[WorkbenchEvidenceSummary] = (), parent=None) -> None:
@@ -104,9 +104,9 @@ class WorkbenchEvidenceTableModel(_WorkbenchTableModel):
 
 class WorkbenchChecklistTableModel(_WorkbenchTableModel):
     COLUMNS = (
-        ("label", "Checklist"),
-        ("status", "Status"),
-        ("summary", "Summary"),
+        ("label", "檢查項目"),
+        ("status", "狀態"),
+        ("summary", "摘要"),
     )
 
     def __init__(self, rows: Sequence[WorkbenchChecklistItem] = (), parent=None) -> None:
@@ -115,9 +115,125 @@ class WorkbenchChecklistTableModel(_WorkbenchTableModel):
 
 def _display_value(value: object) -> str:
     if isinstance(value, tuple):
-        return "; ".join(str(item) for item in value) or "None"
+        return "；".join(_display_token(str(item)) for item in value) or "無"
     if isinstance(value, list):
-        return "; ".join(str(item) for item in value) or "None"
+        return "；".join(_display_token(str(item)) for item in value) or "無"
     if value is None:
         return ""
-    return str(value)
+    return _display_token(str(value))
+
+
+def display_workbench_value(value: str) -> str:
+    return _display_token(value)
+
+
+def _display_token(value: str) -> str:
+    text = value.strip()
+    if not text:
+        return ""
+
+    token_map = {
+        "Daily Decision snapshot": "每日決策快照",
+        "Data quality": "資料品質",
+        "Evidence gate": "證據門檻",
+        "Production Scheduler": "正式排程器",
+        "Watchlist trigger review": "觀察清單觸發覆盤",
+        "Portfolio alert review": "持倉警示覆盤",
+        "Historical replay simulated evidence": "歷史 replay 模擬證據",
+        "Weekly evidence operations history": "每週 evidence operations 歷史",
+        "Multi-day dry-run": "多日 dry-run",
+        "Source gaps 收斂狀態": "來源缺口收斂狀態",
+        "Read-only Agent report sample": "唯讀 Agent 報告樣本",
+        "Decision snapshot freshness": "決策快照新鮮度",
+        "Evidence gate status": "證據門檻狀態",
+        "Manual review note": "人工覆盤註記",
+        "Scheduler write-mode": "排程器寫入模式",
+        "read_only_sources": "唯讀來源",
+        "read_only_sources_plus_historical_replay": "唯讀來源 + 歷史 replay summary",
+        "missing": "缺漏",
+        "warning": "警告",
+        "info": "資訊",
+        "observed": "已觀測",
+        "ready": "已就緒",
+        "degraded": "降級",
+        "blocked": "封鎖",
+        "done": "完成",
+        "off": "關閉",
+        "action_required": "需要處理",
+        "waiting_for_time": "等待真實時間累積",
+        "manual_required": "需要人工覆盤",
+        "pre_v2_readiness": "Pre-V2 準備度",
+        "watchlist_trigger": "觀察清單觸發",
+        "portfolio_alert": "持倉警示",
+        "risk_prompt": "風險提示",
+        "evidence_mode": "證據模式",
+        "portfolio_review": "持倉覆盤",
+        "decision_desk_snapshot_missing": "缺 Daily Decision snapshot",
+        "why_not_payload_missing": "缺 Why Not payload",
+        "liquidity_gate_payload_missing": "缺 liquidity gate payload",
+        "screening_matrix_missing": "缺 screening matrix",
+        "strategy_lifecycle_evidence_table_missing": "缺 strategy lifecycle evidence table",
+        "insufficient_weekly_history_records": "每週歷史筆數不足",
+        "insufficient_dry_run_days": "多日 dry-run 天數不足",
+        "simulated_scheduler": "模擬 scheduler（simulated_scheduler）",
+        "not_production_readiness": "非 production readiness 證據",
+        "missing_industry_benchmark": "缺產業基準",
+        "pending_insufficient_future_data": "等待未來資料不足",
+    }
+    if text in token_map:
+        return token_map[text]
+
+    if text.startswith("source_gap_coverage:"):
+        payload = text.split(":", 1)[1]
+        source, _, ratio = payload.partition("=")
+        return f"來源缺口覆蓋：{_display_token(source)} {ratio}"
+    if text.startswith("source_gap:"):
+        return f"來源缺口：{_display_token(text.split(':', 1)[1])}"
+    if text.startswith("payload_gap:"):
+        return f"payload 缺口：{_display_token(text.split(':', 1)[1])}"
+    if text.startswith("outcome_maturity:"):
+        values = _key_values(text.split(":", 1)[1])
+        return (
+            f"結果成熟度：已成熟 {_fmt_int(values.get('ready'))}；"
+            f"等待未來資料 {_fmt_int(values.get('pending_future_data'))}"
+        )
+    if text.startswith("benchmark_coverage:"):
+        return _coverage_text("市場基準覆蓋", text)
+    if text.startswith("industry_benchmark_coverage:"):
+        return _coverage_text("產業基準覆蓋", text)
+    if text.startswith("missing_benchmark:"):
+        return f"缺市場基準：{_fmt_int(text.split(':', 1)[1])}"
+    if text.startswith("missing_industry_benchmark:"):
+        return f"缺產業基準：{_fmt_int(text.split(':', 1)[1])}"
+    if text.startswith("pending_future_data:"):
+        return f"等待未來資料限制：{_fmt_int(text.split(':', 1)[1])}"
+    if text.startswith("phase0_gate_not_satisfied:"):
+        return "Phase 0 限制：weekly history 與 multi-day dry-run 必須靠真實時間累積"
+    if text.startswith("replay_direction_assessment:"):
+        return "方向判讀：市場基準已可用，但產業基準、來源缺口或未成熟 outcome 仍阻擋 production readiness"
+
+    return text
+
+
+def _coverage_text(label: str, text: str) -> str:
+    values = _key_values(text.split(":", 1)[1])
+    return (
+        f"{label}：{_fmt_int(values.get('covered'))}/{_fmt_int(values.get('total'))}，"
+        f"缺 {_fmt_int(values.get('missing'))}"
+    )
+
+
+def _key_values(payload: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for part in payload.split(","):
+        key, separator, value = part.partition("=")
+        if separator:
+            values[key.strip()] = value.strip()
+    return values
+
+
+def _fmt_int(value: str | None) -> str:
+    try:
+        return f"{int(value or 0):,}"
+    except ValueError:
+        return str(value or 0)
