@@ -10,6 +10,7 @@ SCHEDULED_DIR = ROOT / "scripts" / "scheduled"
 TASK_NAMES = (
     "baldr-data-update-quick-daily",
     "baldr-data-freshness-check-daily",
+    "baldr-recommendation-snapshot-daily",
     "baldr-evidence-pipeline-dry-run-daily",
     "baldr-evidence-working-copy-smoke-manual",
 )
@@ -22,10 +23,12 @@ def test_register_cmd_contains_task_names_and_times() -> None:
         assert task_name in text
     assert "04:20" in text
     assert "05:00" in text
+    assert "05:10" in text
     assert "05:15" in text
     assert "schtasks.exe /Create" in text
     assert "run_daily_data_update_quick.cmd" in text
     assert "run_daily_data_freshness_check.cmd" in text
+    assert "run_recommendation_snapshot.cmd" in text
     assert "run_evidence_pipeline_dry_run.cmd" in text
 
 

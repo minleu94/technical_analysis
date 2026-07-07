@@ -15,6 +15,7 @@ from app_module.pre_v2_readiness_service import (
 from app_module.workbench_dtos import WorkbenchDashboardDTO
 from app_module.workbench_read_only_composer import WorkbenchReadOnlyComposer
 from app_module.workbench_replay_summary import load_historical_replay_summary
+from app_module.scheduled_evidence_status_service import ScheduledEvidenceStatusService
 
 
 class WorkbenchSourceService:
@@ -38,6 +39,7 @@ class WorkbenchSourceService:
             research_db_path=self.research_db_path,
         )
         self.composer = WorkbenchReadOnlyComposer()
+        self.scheduled_status_service = ScheduledEvidenceStatusService(config)
 
     def inspect(
         self,
@@ -61,11 +63,13 @@ class WorkbenchSourceService:
         historical_replay_summary = (
             load_historical_replay_summary(replay_summary_json) if replay_summary_json is not None else None
         )
+        scheduled_status = self.scheduled_status_service.load_latest()
         source_mode = "read_only_sources_plus_historical_replay" if historical_replay_summary else "read_only_sources"
         return self.composer.compose(
             decision_snapshot=decision_snapshot,
             readiness_report=readiness_report,
             agent_report_sample=agent_report_sample,
+            scheduled_status=scheduled_status,
             historical_replay_summary=historical_replay_summary,
             source_mode=source_mode,
             source_diagnostics=tuple(source_diagnostics),

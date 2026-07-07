@@ -30,6 +30,7 @@ from app_module.workbench_dtos import (
     WorkbenchStatusItem,
 )
 from app_module.workbench_read_only_composer import WorkbenchReadOnlyComposer
+from app_module.scheduled_evidence_status_service import ScheduledEvidenceStatus
 
 
 def _decision_snapshot() -> DecisionDeskSnapshot:
@@ -246,6 +247,18 @@ def test_composer_builds_background_evidence_feed_from_existing_payloads_only() 
         decision_snapshot=_decision_snapshot(),
         readiness_report=_readiness_report(),
         agent_report_sample=_agent_report_sample(),
+        scheduled_status=ScheduledEvidenceStatus(
+            recommendation_status="passed",
+            evidence_status="passed",
+            recommendation_result_id="scheduled_rec_20260707_051001",
+            recommendations_count=12,
+            scheduled_joint_observed_days=2,
+            scheduled_joint_observed_dates=("20260706", "20260707"),
+            writes_recommendation_result=True,
+            writes_evidence_db=False,
+            auto_trading=False,
+            lifecycle_action=False,
+        ),
         historical_replay_summary={
             "replay_mode": "historical_replay",
             "source_label": "simulated_scheduler",
@@ -271,12 +284,15 @@ def test_composer_builds_background_evidence_feed_from_existing_payloads_only() 
         "evidence_review_readiness",
         "portfolio_alerts",
         "replay_summary_diagnostics",
+        "scheduled_morning_pipeline",
     }
     assert feed["daily_decision_snapshot"].source_trace == "DecisionDeskSnapshot"
     assert feed["evidence_review_readiness"].source_trace == "PreV2ReadinessReport"
     assert feed["portfolio_alerts"].source_trace == "DecisionDeskSnapshot.portfolio_alerts"
     assert feed["replay_summary_diagnostics"].source_trace == "HistoricalReplaySummary"
     assert feed["replay_summary_diagnostics"].status == "degraded"
+    assert feed["scheduled_morning_pipeline"].status == "passed"
+    assert "共同觀測 2 天" in feed["scheduled_morning_pipeline"].summary
     assert "simulated_scheduler" in " ".join(feed["replay_summary_diagnostics"].diagnostics)
 
 

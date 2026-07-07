@@ -267,10 +267,10 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _summarize_replay(payload: dict[str, Any], path: str | Path | None) -> dict[str, Any]:
     days = payload.get("days")
     day_payloads = [day for day in days if isinstance(day, dict)] if isinstance(days, list) else []
-    totals = payload.get("totals") if isinstance(payload.get("totals"), dict) else {}
-    final_outcome = payload.get("final_outcome_summary")
-    if not isinstance(final_outcome, dict):
-        final_outcome = {}
+    totals_raw = payload.get("totals")
+    totals: dict[str, Any] = totals_raw if isinstance(totals_raw, dict) else {}
+    final_outcome_raw = payload.get("final_outcome_summary")
+    final_outcome: dict[str, Any] = final_outcome_raw if isinstance(final_outcome_raw, dict) else {}
     blocking_gaps = sorted(
         {
             str(gap)
@@ -347,7 +347,8 @@ def _replay_tags(payload: dict[str, Any]) -> ReplayEvidenceTagSummary:
         for day in day_payloads
         if day.get("replay_data_as_of_date") or day.get("decision_date")
     )
-    final_outcome = payload.get("final_outcome_summary") if isinstance(payload.get("final_outcome_summary"), dict) else {}
+    final_outcome_raw = payload.get("final_outcome_summary")
+    final_outcome: dict[str, Any] = final_outcome_raw if isinstance(final_outcome_raw, dict) else {}
     data_as_of_dates = tuple(
         str(value)
         for value in (final_outcome.get("data_as_of_date"), payload.get("end_date"))

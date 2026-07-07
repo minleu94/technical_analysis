@@ -33,6 +33,7 @@ from ui_qt.models.signal_decay_table_model import SignalDecayTableModel
 from ui_qt.views.decision_quality_view import DecisionQualityView
 from ui_qt.views.evidence_review_view import EvidenceReviewView
 from ui_qt.views.live_research_gap_view import LiveResearchGapView
+from ui_qt.views.scheduled_evidence_status_view import ScheduledEvidenceStatusView
 from ui_qt.views.signal_decay_view import SignalDecayView
 
 
@@ -50,6 +51,32 @@ class FakeDashboard:
 
     def load_dashboard(self, request):
         self.calls.append(request)
+        return self.result
+
+
+class FakeScheduledStatus:
+    def __init__(self):
+        from app_module.scheduled_evidence_status_service import ScheduledEvidenceStatus
+
+        self.result = ScheduledEvidenceStatus(
+            freshness_status="passed",
+            evidence_status="passed",
+            recommendation_status="passed",
+            latest_data_date="20260707",
+            decision_date="2026-07-07",
+            recommendation_result_id="scheduled_rec_20260707_051001",
+            recommendations_count=12,
+            screening_matrix_rows=200,
+            dry_run=True,
+            writes_evidence_db=False,
+            writes_recommendation_result=True,
+            auto_trading=False,
+            lifecycle_action=False,
+            source_coverage_warnings=("screening_matrix_missing",),
+            report_preview="## Run Metadata\n- decision_date: 2026-07-07",
+        )
+
+    def load_latest(self):
         return self.result
 
 
@@ -78,7 +105,7 @@ def test_signal_decay_table_model_formats_bp_without_changing_raw_value() -> Non
     assert model.raw_value(0, "forward_excess_short_bp") == -700
 
 
-def test_evidence_review_view_contains_four_read_only_tabs() -> None:
+def test_evidence_review_view_contains_read_only_tabs_including_scheduled_status() -> None:
     app()
     view = EvidenceReviewView(
         forward_performance_widget=QTabWidget(),
@@ -86,10 +113,11 @@ def test_evidence_review_view_contains_four_read_only_tabs() -> None:
         signal_decay_service=FakeDashboard(SignalDecayDashboardResult(SignalDecayDashboardRequest(), SignalDecayDashboardCards())),
         decision_quality_service=FakeDashboard(DecisionQualityDashboardResult(DecisionQualityDashboardRequest(), DecisionQualityDashboardCards())),
         evidence_history_service=FakeDashboard(EvidenceOperationsHistoryDashboardResult(EvidenceOperationsHistoryDashboardRequest(), EvidenceOperationsHistoryDashboardCards())),
+        scheduled_status_service=FakeScheduledStatus(),
     )
 
     labels = [view.tabs.tabText(index) for index in range(view.tabs.count())]
-    assert labels == ["前瞻證據", "研究落差", "訊號衰退", "決策品質", "覆盤歷史"]
+    assert labels == ["前瞻證據", "研究落差", "訊號衰退", "決策品質", "覆盤歷史", "排程狀態"]
     assert "不是買賣建議" in view.boundary_banner.text()
 
 
@@ -107,6 +135,21 @@ def test_evidence_review_view_shows_current_evidence_database_path() -> None:
 
     assert "目前資料庫" in view.evidence_db_path_label.text()
     assert db_path in view.evidence_db_path_label.text()
+
+
+def test_scheduled_evidence_status_view_shows_latest_scheduled_run() -> None:
+    app()
+    view = ScheduledEvidenceStatusView(FakeScheduledStatus(), auto_refresh=False, async_refresh=False)
+
+    view.refresh_status()
+
+    assert "20260707" in view.freshness_label.text()
+    assert "scheduled_rec_20260707_051001" in view.recommendation_label.text()
+    assert "2026-07-07" in view.evidence_label.text()
+    assert "writes_recommendation_result: true" in view.detail_panel.toPlainText()
+    assert "writes_evidence_db=false" in view.safety_label.text()
+    assert "screening_matrix_missing" in view.detail_panel.toPlainText()
+    assert "Run Metadata" in view.detail_panel.toPlainText()
 
 
 def test_evidence_operations_history_table_model_formats_scheduler_boundary() -> None:

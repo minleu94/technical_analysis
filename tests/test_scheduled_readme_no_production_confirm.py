@@ -30,12 +30,15 @@ def test_scheduled_scripts_do_not_create_production_confirm_schedule() -> None:
 def test_daily_tasks_are_read_only_or_dry_run() -> None:
     register_text = (SCHEDULED_DIR / "register_baldr_scheduled_tasks.cmd").read_text(encoding="utf-8")
     dry_run_text = (SCHEDULED_DIR / "run_evidence_pipeline_dry_run.cmd").read_text(encoding="utf-8")
+    recommendation_text = (SCHEDULED_DIR / "run_recommendation_snapshot.cmd").read_text(encoding="utf-8")
     freshness_probe_text = (SCHEDULED_DIR / "data_freshness_probe.py").read_text(encoding="utf-8")
 
     assert "run_daily_data_freshness_check.cmd" in register_text
+    assert "run_recommendation_snapshot.cmd" in register_text
     assert "run_evidence_pipeline_dry_run.cmd" in register_text
     assert "--dry-run" in dry_run_text
     assert "--confirm" not in dry_run_text.lower()
+    assert "--confirm" not in recommendation_text.lower()
     assert "mode=ro" in freshness_probe_text
     assert "update_daily" not in freshness_probe_text
     assert "sync_source_to_sqlite" not in freshness_probe_text

@@ -242,10 +242,58 @@ def _multi_day_record(path: Path, rows: int) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _scheduled_outputs(config: TWStockConfig) -> None:
+    output_root = Path(config.output_root)
+    recommendation_dir = output_root / "scheduled" / "recommendation_snapshot"
+    evidence_report_dir = output_root / "scheduled" / "evidence_pipeline_dry_run" / "reports"
+    evidence_dir = output_root / "scheduled" / "evidence_pipeline_dry_run"
+    recommendation_dir.mkdir(parents=True, exist_ok=True)
+    evidence_report_dir.mkdir(parents=True, exist_ok=True)
+    (recommendation_dir / "latest_status.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "checked_at": "2026-07-07T05:10:01",
+                "decision_date": "2026-07-07",
+                "result_id": "scheduled_rec_20260707_051001",
+                "recommendations_count": 12,
+                "screening_matrix_rows": 200,
+                "why_not_payload_rows": 188,
+                "liquidity_gate_payload_rows": 9,
+                "writes_recommendation_result": True,
+                "writes_evidence_db": False,
+                "auto_trading": False,
+                "lifecycle_action": False,
+                "confirm": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (evidence_dir / "latest_status.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "checked_at": "2026-07-07T05:15:01",
+                "decision_date": "2026-07-07",
+                "dry_run": True,
+                "writes_evidence_db": False,
+                "confirm": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    runs_dir = output_root / "recommendation" / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    for day in ("20260706", "20260707"):
+        (runs_dir / f"scheduled_rec_{day}_051001.json").write_text("{}", encoding="utf-8")
+        (evidence_report_dir / f"{day}_evidence_pipeline_dry_run.md").write_text("report", encoding="utf-8")
+
+
 def test_workbench_source_service_reads_real_read_only_sources(tmp_path: Path) -> None:
     config = _config(tmp_path)
     record_path = tmp_path / "multi-day.md"
     _seed_ready_sources(config, record_path)
+    _scheduled_outputs(config)
 
     dashboard = WorkbenchSourceService(config, evidence_db_path=config.db_file).inspect(
         decision_date="2026-07-06",
@@ -265,7 +313,16 @@ def test_workbench_source_service_reads_real_read_only_sources(tmp_path: Path) -
         "evidence_review_readiness",
         "portfolio_alerts",
         "replay_summary_diagnostics",
+        "scheduled_morning_pipeline",
     }
+    scheduled_feed = {
+        item["item_id"]: item for item in payload["background_evidence_feed"]
+    }["scheduled_morning_pipeline"]
+    assert scheduled_feed["status"] == "passed"
+    assert "共同觀測 2 天" in scheduled_feed["summary"]
+    evidence = {item["item_id"]: item for item in payload["evidence_summary"]}
+    assert evidence["scheduled_morning_pipeline"]["status"] == "passed"
+    assert "scheduled_rec_20260707_051001" in evidence["scheduled_morning_pipeline"]["summary"]
     assert payload["action_items"]
     assert all(item["source_trace"] for item in payload["action_items"])
     assert all(item["degraded_reason"] for item in payload["action_items"])

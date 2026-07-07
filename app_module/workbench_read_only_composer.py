@@ -10,6 +10,7 @@ from app_module.pre_v2_readiness_service import (
     STATUS_ACTION_REQUIRED,
     STATUS_WAITING_FOR_TIME,
 )
+from app_module.scheduled_evidence_status_service import ScheduledEvidenceStatus
 from app_module.workbench_dtos import (
     WorkbenchAccessBoundary,
     WorkbenchActionItem,
@@ -32,6 +33,7 @@ class WorkbenchReadOnlyComposer:
         decision_snapshot: DecisionDeskSnapshot | None,
         readiness_report: PreV2ReadinessReport,
         agent_report_sample: dict[str, Any] | None = None,
+        scheduled_status: ScheduledEvidenceStatus | None = None,
         historical_replay_summary: dict[str, Any] | None = None,
         source_mode: str = "read_only",
         source_diagnostics: tuple[str, ...] = (),
@@ -42,6 +44,7 @@ class WorkbenchReadOnlyComposer:
         background_evidence_feed = self._background_evidence_feed(
             decision_snapshot,
             readiness_report,
+            scheduled_status,
             historical_replay_summary,
         )
         action_items = self._action_items(decision_snapshot, readiness_report, historical_replay_summary)
@@ -52,7 +55,7 @@ class WorkbenchReadOnlyComposer:
             access_boundary=WorkbenchAccessBoundary(),
             status_strip=self._status_strip(decision_snapshot, readiness_report),
             review_items=review_items,
-            evidence_summary=self._evidence_summary(readiness_report, historical_replay_summary),
+            evidence_summary=self._evidence_summary(readiness_report, scheduled_status, historical_replay_summary),
             market_context=self._market_context(decision_snapshot),
             portfolio_watchlist_summary=self._portfolio_watchlist_summary(decision_snapshot),
             daily_checklist=daily_checklist,
@@ -175,6 +178,7 @@ class WorkbenchReadOnlyComposer:
         self,
         decision_snapshot: DecisionDeskSnapshot | None,
         readiness_report: PreV2ReadinessReport,
+        scheduled_status: ScheduledEvidenceStatus | None,
         historical_replay_summary: dict[str, Any] | None,
     ) -> tuple[WorkbenchEvidenceFeedItem, ...]:
         items: list[WorkbenchEvidenceFeedItem] = []
@@ -257,6 +261,19 @@ class WorkbenchReadOnlyComposer:
                 ),
             )
         )
+        if scheduled_status is not None:
+            items.append(
+                WorkbenchEvidenceFeedItem(
+                    item_id="scheduled_morning_pipeline",
+                    label="Scheduled morning pipeline",
+                    status=_scheduled_status_label(scheduled_status),
+                    summary=_scheduled_status_summary(scheduled_status),
+                    source_trace="ScheduledEvidenceStatusService",
+                    degraded_reason=_reason_or_none(scheduled_status.diagnostics),
+                    drilldown_target="evidence_review",
+                    diagnostics=scheduled_status.diagnostics,
+                )
+            )
 
         if historical_replay_summary:
             diagnostics = _replay_diagnostics(historical_replay_summary)
@@ -424,6 +441,7 @@ class WorkbenchReadOnlyComposer:
     def _evidence_summary(
         self,
         readiness_report: PreV2ReadinessReport,
+        scheduled_status: ScheduledEvidenceStatus | None,
         historical_replay_summary: dict[str, Any] | None,
     ) -> tuple[WorkbenchEvidenceSummary, ...]:
         items = [
@@ -436,6 +454,16 @@ class WorkbenchReadOnlyComposer:
             )
             for item in readiness_report.items
         ]
+        if scheduled_status is not None:
+            items.append(
+                WorkbenchEvidenceSummary(
+                    item_id="scheduled_morning_pipeline",
+                    label="每日排程觀測",
+                    status=_scheduled_status_label(scheduled_status),
+                    summary=_scheduled_status_summary(scheduled_status),
+                    diagnostics=scheduled_status.diagnostics,
+                )
+            )
         if historical_replay_summary:
             totals = historical_replay_summary.get("totals", {})
             final = historical_replay_summary.get("final_outcome_summary", {})
@@ -719,6 +747,30 @@ def _operating_loop_readiness_summary(item: PreV2ReadinessItem | None) -> str:
     return (
         f"{_readiness_summary(item.observed_count, item.required_count)}"
         "；必須靠真實時間累積，不能用 fixture、manual edit 或 replay 補齊。"
+    )
+
+
+def _scheduled_status_label(status: ScheduledEvidenceStatus) -> str:
+    if status.has_production_write_risk:
+        return "blocked"
+    if status.recommendation_status == "passed" and status.evidence_status == "passed":
+        return "passed"
+    if "missing" in {status.recommendation_status, status.evidence_status}:
+        return "missing"
+    if "failed" in {status.recommendation_status, status.evidence_status}:
+        return "warning"
+    return "degraded"
+
+
+def _scheduled_status_summary(status: ScheduledEvidenceStatus) -> str:
+    result_id = status.recommendation_result_id or "尚未保存"
+    rec_count = status.recommendations_count if status.recommendations_count is not None else "未知"
+    return (
+        f"recommendation={status.recommendation_status} / evidence={status.evidence_status}；"
+        f"result_id={result_id}；推薦 {rec_count} 筆；"
+        f"共同觀測 {status.scheduled_joint_observed_days} 天"
+        f"（recommendation {status.recommendation_snapshot_observed_days} 天 / "
+        f"evidence dry-run {status.evidence_dry_run_observed_days} 天）。"
     )
 
 

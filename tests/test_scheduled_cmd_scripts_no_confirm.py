@@ -29,6 +29,19 @@ def test_daily_evidence_cmd_wrapper_does_not_confirm() -> None:
     assert "--allow-production-db-confirm" not in text
 
 
+def test_daily_recommendation_snapshot_wrapper_does_not_confirm_or_trade() -> None:
+    cmd_text = (SCHEDULED_DIR / "run_recommendation_snapshot.cmd").read_text(encoding="utf-8").lower()
+    py_text = (SCHEDULED_DIR / "run_scheduled_recommendation_snapshot.py").read_text(encoding="utf-8").lower()
+    text = cmd_text + "\n" + py_text
+
+    assert "recommendation_snapshot" in text
+    assert "--confirm" not in text
+    assert "--allow-production-db-confirm" not in text
+    assert "writes_evidence_db" in text
+    assert "auto_trading" in text
+    assert "lifecycle_action" in text
+
+
 def test_daily_data_update_wrapper_does_not_confirm_or_trade() -> None:
     cmd_text = (SCHEDULED_DIR / "run_daily_data_update_quick.cmd").read_text(encoding="utf-8").lower()
     py_text = (SCHEDULED_DIR / "run_daily_data_update_quick.py").read_text(encoding="utf-8").lower()

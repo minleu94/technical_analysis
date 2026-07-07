@@ -5,7 +5,7 @@ set "MODE=%~1"
 if "%MODE%"=="" set "MODE=dryrun"
 if /I not "%MODE%"=="dryrun" if /I not "%MODE%"=="unregister" goto usage
 
-set TASKS=baldr-data-update-quick-daily baldr-data-freshness-check-daily baldr-evidence-pipeline-dry-run-daily baldr-evidence-working-copy-smoke-manual
+set TASKS=baldr-data-update-quick-daily baldr-data-freshness-check-daily baldr-recommendation-snapshot-daily baldr-evidence-pipeline-dry-run-daily baldr-evidence-working-copy-smoke-manual
 
 echo Mode: %MODE%
 for %%T in (%TASKS%) do (

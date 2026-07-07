@@ -21,6 +21,7 @@ from app_module.decision_quality_dashboard_service import create_decision_qualit
 from app_module.evidence_operations_history_dashboard_service import create_evidence_operations_history_dashboard_service
 from app_module.forward_performance_dashboard_service import create_forward_performance_dashboard_service
 from app_module.live_research_gap_dashboard_service import create_live_research_gap_dashboard_service
+from app_module.scheduled_evidence_status_service import ScheduledEvidenceStatusService
 from app_module.signal_decay_dashboard_service import create_signal_decay_dashboard_service
 from ui_qt.views.evidence_review_view import EvidenceReviewView
 from ui_qt.views.forward_performance_view import ForwardPerformanceView
@@ -395,6 +396,7 @@ class BacktestResultPanel(QWidget):
             signal_decay_service=create_signal_decay_dashboard_service(config),
             decision_quality_service=create_decision_quality_dashboard_service(config),
             evidence_history_service=create_evidence_operations_history_dashboard_service(config),
+            scheduled_status_service=ScheduledEvidenceStatusService(config),
             evidence_db_path=str(getattr(config, "db_file", "")),
         )
         self.result_tabs.addTab(self.evidence_review_widget, "證據覆盤")
