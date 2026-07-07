@@ -10,6 +10,7 @@ from app_module.workbench_dtos import (
     WorkbenchChecklistItem,
     WorkbenchEvidenceFeedItem,
     WorkbenchEvidenceSummary,
+    WorkbenchOperatingLoopStep,
     WorkbenchReviewItem,
     WorkbenchStatusItem,
 )
@@ -124,6 +125,23 @@ class WorkbenchActionItemTableModel(_WorkbenchTableModel):
         super().__init__(rows, parent)
 
 
+class WorkbenchOperatingLoopTableModel(_WorkbenchTableModel):
+    COLUMNS = (
+        ("label", "步驟"),
+        ("cadence", "節奏"),
+        ("status", "狀態"),
+        ("summary", "摘要"),
+        ("source_trace", "Source trace"),
+        ("linked_item_ids", "連結項目"),
+        ("drilldown_target", "下鑽"),
+        ("guidance", "人工提示"),
+        ("write_intent", "寫入意圖"),
+    )
+
+    def __init__(self, rows: Sequence[WorkbenchOperatingLoopStep] = (), parent=None) -> None:
+        super().__init__(rows, parent)
+
+
 class WorkbenchEvidenceTableModel(_WorkbenchTableModel):
     COLUMNS = (
         ("label", "證據"),
@@ -182,6 +200,13 @@ def _display_token(value: str) -> str:
         "Evidence gate status": "證據門檻狀態",
         "Manual review note": "人工覆盤註記",
         "Scheduler write-mode": "排程器寫入模式",
+        "Weekly review history": "每週覆盤歷史",
+        "Scheduler gate": "排程 Gate",
+        "daily": "每日",
+        "weekly_until_3": "每週直到 3 筆",
+        "daily_until_3": "每日直到 3 筆",
+        "after_manual_review": "人工覆盤後",
+        "phase_gate": "Phase gate",
         "read_only_sources": "唯讀來源",
         "read_only_sources_plus_historical_replay": "唯讀來源 + 歷史 replay summary",
         "missing": "缺漏",

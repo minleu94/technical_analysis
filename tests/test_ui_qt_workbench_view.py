@@ -15,10 +15,15 @@ from app_module.workbench_dtos import (
     WorkbenchDashboardDTO,
     WorkbenchEvidenceFeedItem,
     WorkbenchEvidenceSummary,
+    WorkbenchOperatingLoopStep,
     WorkbenchReviewItem,
     WorkbenchStatusItem,
 )
-from ui_qt.models.workbench_table_models import WorkbenchActionItemTableModel, WorkbenchEvidenceTableModel
+from ui_qt.models.workbench_table_models import (
+    WorkbenchActionItemTableModel,
+    WorkbenchEvidenceTableModel,
+    WorkbenchOperatingLoopTableModel,
+)
 from ui_qt.views.workbench_view import UnifiedDecisionWorkbenchView
 
 
@@ -160,6 +165,52 @@ def _dashboard_with_replay() -> WorkbenchDashboardDTO:
                 code="2330",
             ),
         ),
+        operating_loop_steps=(
+            WorkbenchOperatingLoopStep(
+                step_id="daily_start",
+                label="每日先看",
+                cadence="daily",
+                status="manual_required",
+                summary="今天先看 1 筆 review item；只讀，不寫 DB。",
+                source_trace="WorkbenchDashboardDTO.review_items",
+                linked_item_ids=("watchlist_trigger",),
+                drilldown_target="daily_decision",
+                guidance="先判讀今日待判讀與背景證據流。",
+            ),
+            WorkbenchOperatingLoopStep(
+                step_id="manual_queue",
+                label="人工處理佇列",
+                cadence="daily",
+                status="manual_required",
+                summary="目前有 1 筆 Action Item 需要人工覆盤；不標記完成。",
+                source_trace="WorkbenchDashboardDTO.action_items",
+                linked_item_ids=("portfolio_alert_2330",),
+                drilldown_target="portfolio_review",
+                guidance="只檢查 source trace 與 degraded reason。",
+            ),
+            WorkbenchOperatingLoopStep(
+                step_id="multi_day_dry_run",
+                label="多日 dry-run",
+                cadence="daily_until_3",
+                status="waiting_for_time",
+                summary="1/3；等待真實時間累積，replay 不可補齊。",
+                source_trace="PreV2ReadinessReport.items.multi_day_dry_run",
+                linked_item_ids=("multi_day_dry_run",),
+                drilldown_target="evidence_review",
+                guidance="只確認紀錄節奏，不執行 replay。",
+            ),
+            WorkbenchOperatingLoopStep(
+                step_id="manual_review_note",
+                label="人工覆盤註記",
+                cadence="after_manual_review",
+                status="manual_required",
+                summary="手動在既有流程留下 note；Workbench 不寫 DB、不標記完成。",
+                source_trace="WorkbenchDashboardDTO.daily_checklist.manual_review_note",
+                linked_item_ids=("manual_review_note",),
+                drilldown_target="evidence_review",
+                guidance="需要 note 時下鑽到既有頁面處理。",
+            ),
+        ),
     )
 
 
@@ -231,6 +282,19 @@ def test_workbench_action_item_table_model_exposes_trace_reason_and_drilldown() 
     assert model.raw_value(0, "source_trace") == "DecisionDeskSnapshot.portfolio_alerts"
 
 
+def test_workbench_operating_loop_table_model_exposes_read_only_rhythm() -> None:
+    app()
+    step = _dashboard_with_replay().operating_loop_steps[1]
+    model = WorkbenchOperatingLoopTableModel((step,))
+
+    assert model.rowCount() == 1
+    assert model.headerData(model.column_index("cadence"), Qt.Horizontal, Qt.DisplayRole) == "節奏"
+    assert model.data(model.index(0, model.column_index("status"))) == "需要人工覆盤"
+    assert "portfolio_alert_2330" in model.data(model.index(0, model.column_index("linked_item_ids")))
+    assert model.data(model.index(0, model.column_index("drilldown_target"))) == "持倉覆盤"
+    assert model.raw_value(0, "write_intent") is False
+
+
 def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() -> None:
     app()
     clicked: list[str] = []
@@ -246,6 +310,7 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert view.review_model.rowCount() == 1
     assert view.evidence_feed_model.rowCount() == 2
     assert view.action_item_model.rowCount() == 1
+    assert view.operating_loop_model.rowCount() == 4
     assert view.evidence_model.rowCount() == 2
     assert view.checklist_model.rowCount() == 3
     assert "唯讀邊界" in view.boundary_banner.text()
@@ -255,6 +320,7 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "今日待判讀" in view.review_section_title.text()
     assert "背景證據流" in view.evidence_feed_section_title.text()
     assert "只讀 Action Items" in view.action_item_section_title.text()
+    assert "操作節奏" in view.operating_loop_section_title.text()
     assert "證據與品質" in view.evidence_section_title.text()
     assert "每日檢查清單" in view.checklist_section_title.text()
     assert view.daily_decision_button.text() == "開啟每日決策"
@@ -280,6 +346,12 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "multi-day dry-run 1/3" in data_quality_text
     assert "replay 不可取代" in data_quality_text
     assert "降級來源" in view.warning_list.toPlainText()
+    loop_text = view.operating_loop_state_label.text()
+    assert "今天要看" in loop_text
+    assert "人工處理" in loop_text
+    assert "等待真實時間累積" in loop_text
+    assert "只讀" in loop_text
+    assert "不標記完成" in loop_text
 
 
 def test_unified_workbench_view_displays_empty_and_degraded_queue_state_copy() -> None:

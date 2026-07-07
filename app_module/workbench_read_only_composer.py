@@ -5,6 +5,7 @@ from typing import Any
 
 from app_module.decision_desk_dtos import DecisionDeskSnapshot
 from app_module.pre_v2_readiness_service import (
+    PreV2ReadinessItem,
     PreV2ReadinessReport,
     STATUS_ACTION_REQUIRED,
     STATUS_WAITING_FOR_TIME,
@@ -16,6 +17,7 @@ from app_module.workbench_dtos import (
     WorkbenchDashboardDTO,
     WorkbenchEvidenceFeedItem,
     WorkbenchEvidenceSummary,
+    WorkbenchOperatingLoopStep,
     WorkbenchReviewItem,
     WorkbenchStatusItem,
 )
@@ -35,24 +37,35 @@ class WorkbenchReadOnlyComposer:
         source_diagnostics: tuple[str, ...] = (),
     ) -> WorkbenchDashboardDTO:
         warnings = self._warnings(readiness_report, agent_report_sample, historical_replay_summary, source_diagnostics)
+        review_items = self._review_items(decision_snapshot, readiness_report)
+        daily_checklist = self._daily_checklist(decision_snapshot, readiness_report)
+        background_evidence_feed = self._background_evidence_feed(
+            decision_snapshot,
+            readiness_report,
+            historical_replay_summary,
+        )
+        action_items = self._action_items(decision_snapshot, readiness_report, historical_replay_summary)
         return WorkbenchDashboardDTO(
             as_of_date=decision_snapshot.as_of_date if decision_snapshot is not None else date.today(),
             generated_at=datetime.utcnow().replace(microsecond=0),
             source_mode=str(source_mode),
             access_boundary=WorkbenchAccessBoundary(),
             status_strip=self._status_strip(decision_snapshot, readiness_report),
-            review_items=self._review_items(decision_snapshot, readiness_report),
+            review_items=review_items,
             evidence_summary=self._evidence_summary(readiness_report, historical_replay_summary),
             market_context=self._market_context(decision_snapshot),
             portfolio_watchlist_summary=self._portfolio_watchlist_summary(decision_snapshot),
-            daily_checklist=self._daily_checklist(decision_snapshot, readiness_report),
+            daily_checklist=daily_checklist,
             warnings=tuple(warnings),
-            background_evidence_feed=self._background_evidence_feed(
-                decision_snapshot,
-                readiness_report,
-                historical_replay_summary,
+            background_evidence_feed=background_evidence_feed,
+            action_items=action_items,
+            operating_loop_steps=self._operating_loop_steps(
+                review_items=review_items,
+                background_evidence_feed=background_evidence_feed,
+                action_items=action_items,
+                daily_checklist=daily_checklist,
+                readiness_report=readiness_report,
             ),
-            action_items=self._action_items(decision_snapshot, readiness_report, historical_replay_summary),
         )
 
     def _status_strip(
@@ -454,6 +467,97 @@ class WorkbenchReadOnlyComposer:
             )
         return tuple(items)
 
+    def _operating_loop_steps(
+        self,
+        *,
+        review_items: tuple[WorkbenchReviewItem, ...],
+        background_evidence_feed: tuple[WorkbenchEvidenceFeedItem, ...],
+        action_items: tuple[WorkbenchActionItem, ...],
+        daily_checklist: tuple[WorkbenchChecklistItem, ...],
+        readiness_report: PreV2ReadinessReport,
+    ) -> tuple[WorkbenchOperatingLoopStep, ...]:
+        weekly_history = _find_readiness_item(readiness_report, "weekly_history")
+        multi_day = _find_readiness_item(readiness_report, "multi_day_dry_run")
+        manual_note = _find_checklist_item(daily_checklist, "manual_review_note")
+        first_action_target = action_items[0].drilldown_target if action_items else "evidence_review"
+        return (
+            WorkbenchOperatingLoopStep(
+                step_id="daily_start",
+                label="每日先看",
+                cadence="daily",
+                status="manual_required" if review_items else "observed",
+                summary=(
+                    f"今天要看 {len(review_items)} 筆今日待判讀與 "
+                    f"{len(background_evidence_feed)} 筆背景證據；只讀，不寫 DB。"
+                ),
+                source_trace="WorkbenchDashboardDTO.review_items",
+                linked_item_ids=tuple(item.item_id for item in review_items),
+                drilldown_target="daily_decision" if review_items else "evidence_review",
+                guidance="先掃 status strip、今日待判讀、背景證據流與 warnings；不是買賣建議。",
+            ),
+            WorkbenchOperatingLoopStep(
+                step_id="manual_queue",
+                label="人工處理佇列",
+                cadence="daily",
+                status="manual_required" if action_items else "observed",
+                summary=(
+                    f"目前有 {len(action_items)} 筆 Action Items 要人工處理；"
+                    "只依 source trace / degraded reason 覆盤，不標記完成。"
+                ),
+                source_trace="WorkbenchDashboardDTO.action_items",
+                linked_item_ids=tuple(item.item_id for item in action_items),
+                drilldown_target=first_action_target,
+                guidance="依 severity、queue group 與 source label 掃描；Workbench 不建立 repository。",
+            ),
+            WorkbenchOperatingLoopStep(
+                step_id="weekly_review_history",
+                label="Weekly review history",
+                cadence="weekly_until_3",
+                status=weekly_history.status if weekly_history is not None else "missing",
+                summary=_operating_loop_readiness_summary(weekly_history),
+                source_trace="PreV2ReadinessReport.items.weekly_history",
+                linked_item_ids=("weekly_history",),
+                drilldown_target="evidence_review",
+                guidance="每週 evidence operations + history 必須靠真實週期累積。",
+            ),
+            WorkbenchOperatingLoopStep(
+                step_id="multi_day_dry_run",
+                label="Multi-day dry-run",
+                cadence="daily_until_3",
+                status=multi_day.status if multi_day is not None else "missing",
+                summary=_operating_loop_readiness_summary(multi_day),
+                source_trace="PreV2ReadinessReport.items.multi_day_dry_run",
+                linked_item_ids=("multi_day_dry_run",),
+                drilldown_target="evidence_review",
+                guidance="多日 dry-run 必須靠真實交易日紀錄累積；不執行 replay 補值。",
+            ),
+            WorkbenchOperatingLoopStep(
+                step_id="manual_review_note",
+                label="人工覆盤註記",
+                cadence="after_manual_review",
+                status=manual_note.status if manual_note is not None else "manual_required",
+                summary=(
+                    "人工覆盤後只提示到既有流程留下 note；"
+                    "Workbench 不寫 DB、不標記完成、不套用 lifecycle。"
+                ),
+                source_trace="WorkbenchDashboardDTO.daily_checklist.manual_review_note",
+                linked_item_ids=("manual_review_note",),
+                drilldown_target="evidence_review",
+                guidance="需要紀錄時下鑽到既有 Evidence Review / Daily Decision 流程人工處理。",
+            ),
+            WorkbenchOperatingLoopStep(
+                step_id="scheduler_gate",
+                label="Scheduler gate",
+                cadence="phase_gate",
+                status="blocked",
+                summary="production_scheduler_allowed=false；Phase 0 / Phase 5 gate 前不啟用 scheduler。",
+                source_trace="WorkbenchAccessBoundary.production_scheduler_allowed",
+                linked_item_ids=("scheduler_off",),
+                drilldown_target="evidence_review",
+                guidance="這是 closeout guard，不是啟用排程或交易建議。",
+            ),
+        )
+
     def _market_context(self, decision_snapshot: DecisionDeskSnapshot | None) -> dict[str, Any]:
         if decision_snapshot is None:
             return {"source_status": "missing"}
@@ -593,6 +697,29 @@ def _find_status(readiness_report: PreV2ReadinessReport, item_id: str) -> str:
         if item.item_id == item_id:
             return item.status
     return "missing"
+
+
+def _find_readiness_item(readiness_report: PreV2ReadinessReport, item_id: str) -> PreV2ReadinessItem | None:
+    for item in readiness_report.items:
+        if item.item_id == item_id:
+            return item
+    return None
+
+
+def _find_checklist_item(items: tuple[WorkbenchChecklistItem, ...], item_id: str) -> WorkbenchChecklistItem | None:
+    for item in items:
+        if item.item_id == item_id:
+            return item
+    return None
+
+
+def _operating_loop_readiness_summary(item: PreV2ReadinessItem | None) -> str:
+    if item is None:
+        return "readiness item 缺漏；Workbench 不補值、不讀 DB。"
+    return (
+        f"{_readiness_summary(item.observed_count, item.required_count)}"
+        "；必須靠真實時間累積，不能用 fixture、manual edit 或 replay 補齊。"
+    )
 
 
 def _readiness_summary(observed_count: int | None, required_count: int | None) -> str:

@@ -205,6 +205,41 @@ class WorkbenchChecklistItem:
 
 
 @dataclass(frozen=True)
+class WorkbenchOperatingLoopStep:
+    step_id: str
+    label: str
+    cadence: str
+    status: str
+    summary: str
+    source_trace: str
+    linked_item_ids: tuple[str, ...] = ()
+    drilldown_target: str = "evidence_review"
+    guidance: str = ""
+    write_intent: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "linked_item_ids", _normalize_strings(self.linked_item_ids))
+        object.__setattr__(self, "cadence", str(self.cadence or "manual"))
+        object.__setattr__(self, "status", str(self.status or "missing"))
+        object.__setattr__(self, "guidance", str(self.guidance or ""))
+        object.__setattr__(self, "write_intent", bool(self.write_intent))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "step_id": self.step_id,
+            "label": self.label,
+            "cadence": self.cadence,
+            "status": self.status,
+            "summary": self.summary,
+            "source_trace": self.source_trace,
+            "linked_item_ids": list(self.linked_item_ids),
+            "drilldown_target": self.drilldown_target,
+            "guidance": self.guidance,
+            "write_intent": self.write_intent,
+        }
+
+
+@dataclass(frozen=True)
 class WorkbenchDashboardDTO:
     as_of_date: date
     generated_at: datetime
@@ -219,6 +254,7 @@ class WorkbenchDashboardDTO:
     warnings: tuple[str, ...] = ()
     background_evidence_feed: tuple[WorkbenchEvidenceFeedItem, ...] = ()
     action_items: tuple[WorkbenchActionItem, ...] = ()
+    operating_loop_steps: tuple[WorkbenchOperatingLoopStep, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "status_strip", tuple(self.status_strip))
@@ -228,6 +264,7 @@ class WorkbenchDashboardDTO:
         object.__setattr__(self, "warnings", _normalize_strings(self.warnings))
         object.__setattr__(self, "background_evidence_feed", tuple(self.background_evidence_feed))
         object.__setattr__(self, "action_items", tuple(self.action_items))
+        object.__setattr__(self, "operating_loop_steps", tuple(self.operating_loop_steps))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -244,4 +281,5 @@ class WorkbenchDashboardDTO:
             "warnings": list(self.warnings),
             "background_evidence_feed": [item.to_dict() for item in self.background_evidence_feed],
             "action_items": [item.to_dict() for item in self.action_items],
+            "operating_loop_steps": [item.to_dict() for item in self.operating_loop_steps],
         }

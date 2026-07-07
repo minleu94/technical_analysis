@@ -66,8 +66,8 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 | 版本 | 對應 6M Phase / Vision Level | 定位 | 主要 Gate |
 |---|---|---|---|
 | V2.0 | Phase 1 / Level 1 preflight | Unified Decision Workbench read-only prototype 與 source adapter。 | 已完成 Phase 1；Phase 2 read-only shell 已在 V2.1 段落承接。 |
-| V2.1 | Phase 2 / Level 1 | Workbench 主 UI MVP；read-only shell、background evidence feed 與排序後 Action Items 人工佇列已接 Qt。 | Phase 0 evidence accumulation 不得被 replay 取代；舊 Tab 需保留 expert mode，完整 operating loop 仍待後續。 |
-| V2.2 | Phase 0 + Phase 2 / Level 1-2 | Evidence Operating Loop。 | weekly history、multi-day dry-run、manual review 與 action item 節奏可重複。 |
+| V2.1 | Phase 2 / Level 1 | Workbench 主 UI MVP；read-only shell、background evidence feed、排序後 Action Items 人工佇列與 read-only Operating Loop 已接 Qt。 | Phase 0 evidence accumulation 不得被 replay 取代；舊 Tab 保留 expert mode；UI loop closeout 不等於 scheduler approval。 |
+| V2.2 | Phase 0 + Phase 2 / Level 1-2 | Evidence Operating Loop。 | weekly history、multi-day dry-run、manual review 與 action item 節奏以真實時間紀錄可重複。 |
 | V2.3 | Phase 3 / Level 2 | P0 Data Source Candidate Dry-run。 | 新資料源只作 candidate / dry-run，不進 `ScoringEngine`。 |
 | V2.4 | Phase 4 / Level 2 | Execution Model Realism。 | execution realism 先在 research-only sandbox 驗證，不串 broker。 |
 | V2.5 | Phase 5 / Level 1-2 governance | Production Evidence Scheduler Approval。 | explicit approval、rollback / backup、multi-day record 與 source gaps 全部通過。 |
@@ -82,7 +82,7 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 
 ### V2.0：Unified Decision Workbench 基準
 
-狀態：Phase 1 read-only prototype 與 formal read-only source adapter 已完成；2026-07-07 已完成 Phase 2 read-only MVP shell、background evidence feed / read-only Action Items MVP，以及 Action Items 人工佇列排序 / 分組 / 空降級狀態 follow-up。
+狀態：Phase 1 read-only prototype 與 formal read-only source adapter 已完成；2026-07-07 已完成 Phase 2 read-only MVP shell、background evidence feed / read-only Action Items MVP、Action Items 人工佇列排序 / 分組 / 空降級狀態 follow-up，以及 read-only Operating Loop closeout。
 
 已交付基準：
 
@@ -98,14 +98,15 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 - Status strip、今日待判讀、背景證據流、只讀 Action Items、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
 - Background evidence feed 只彙整 Daily Decision snapshot、Evidence Review readiness、Portfolio alerts 與 replay summary diagnostics。
 - Read-only Action Items 只顯示人工待處理事項，保留 source trace、degraded reason、drill-down target、severity、queue group、source label 與 `write_intent=false`，並依 sort rank 形成可掃描人工佇列，不建立 repository、不寫 DB、不套用 lifecycle。
+- Read-only Operating Loop 只從 `WorkbenchDashboardDTO` 推導每日先看、人工處理佇列、weekly review history、multi-day dry-run、manual review note 與 scheduler gate；所有 step 保留 source trace、linked item ids、drill-down target 與 `write_intent=false`，不標記完成、不寫 DB、不套用 lifecycle。
 - Evidence Feed 與 Action Items 的空狀態 / 降級狀態文案已補上；空狀態不代表 gate 通過，降級狀態只供人工判讀，不補值、不重跑 pipeline。
 - Qt view/model/service contract 測試，確認 UI 只讀 `WorkbenchDashboardDTO` 或呼叫 `WorkbenchSourceService`。
 - Replay JSON summary 限制揭露：`simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark、pending future-data。
 
 仍未完成：
 
-- 完整 Workbench operating loop。
 - Phase 0 真實 weekly / multi-day gate。
+- V2.2 真實 evidence operating loop：weekly history、multi-day dry-run 與 manual review note 仍需真實時間 / 真實流程累積。
 - Phase 5 production scheduler approval。
 
 ### V2.1：Workbench 主 UI MVP
@@ -294,7 +295,8 @@ V4.0 仍不代表：
 
 ## 10. 更新記錄
 
-- 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；完整 operating loop、舊 Tab drill-down、Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
+- 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；後續已由 read-only Operating Loop closeout 補齊 UI 操作節奏，但 Phase 0 真實時間 gate、V2.2 真實 evidence loop 與 Phase 5 scheduler gate 仍未完成。
 - 2026-07-07：補充 V2.1 background evidence feed / read-only Action Items MVP；Action Items 只列人工待處理事項並帶 source trace、degraded reason、drill-down target，不建立 repository、不寫 DB、不套用 lifecycle。
 - 2026-07-07：補充 V2.1 Action Items 人工佇列 follow-up；新增 severity / queue group / source label 顯示、排序、空 / 降級狀態與 drill-down target contract，仍不啟用 scheduler、不寫 DB、不產生交易建議。
+- 2026-07-07：補充 V2.1 / Phase 2 closeout；新增 read-only Operating Loop 操作節奏，把 Evidence Feed、Action Items、Daily Checklist、weekly history、multi-day dry-run、manual review note 與 scheduler gate 串接於 DTO / Qt 邊界內；V2.2 真實 evidence loop 與 Phase 0 時間 gate 仍未完成。
 - 2026-07-06：初版建立 V2.1 至 V4.0 版本階梯，將 6M Roadmap Phase 2-5 與 Vision Level 1-4 映射為長期產品版號；保持 production scheduler、自動交易、AI 決策與投資有效性結論在 gate 之外。

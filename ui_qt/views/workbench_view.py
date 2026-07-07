@@ -29,6 +29,7 @@ from ui_qt.models.workbench_table_models import (
     WorkbenchChecklistTableModel,
     WorkbenchEvidenceFeedTableModel,
     WorkbenchEvidenceTableModel,
+    WorkbenchOperatingLoopTableModel,
     WorkbenchReviewQueueTableModel,
     WorkbenchStatusStripTableModel,
     display_workbench_value,
@@ -67,6 +68,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.review_model = WorkbenchReviewQueueTableModel()
         self.evidence_feed_model = WorkbenchEvidenceFeedTableModel()
         self.action_item_model = WorkbenchActionItemTableModel()
+        self.operating_loop_model = WorkbenchOperatingLoopTableModel()
         self.evidence_model = WorkbenchEvidenceTableModel()
         self.checklist_model = WorkbenchChecklistTableModel()
 
@@ -184,6 +186,18 @@ class UnifiedDecisionWorkbenchView(QWidget):
         action_item_panel.layout.addWidget(self.action_item_state_label)
         action_item_panel.layout.addWidget(self.action_item_table)
         content_layout.addWidget(action_item_panel)
+
+        operating_loop_panel, self.operating_loop_section_title = self._panel_with_title(
+            "操作節奏 / Read-only Operating Loop"
+        )
+        self.operating_loop_state_label = self._make_state_label()
+        self.operating_loop_table = self._make_table(self.operating_loop_model)
+        self.operating_loop_table.doubleClicked.connect(
+            lambda index: self._navigate_model_row(self.operating_loop_model, index.row())
+        )
+        operating_loop_panel.layout.addWidget(self.operating_loop_state_label)
+        operating_loop_panel.layout.addWidget(self.operating_loop_table)
+        content_layout.addWidget(operating_loop_panel)
 
         evidence_panel, self.evidence_section_title = self._panel_with_title("證據與品質 / Evidence Mode")
         self.data_quality_limitations_label = QLabel("")
@@ -312,8 +326,10 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.review_model.set_rows(dashboard.review_items)
         self.evidence_feed_model.set_rows(dashboard.background_evidence_feed)
         self.action_item_model.set_rows(dashboard.action_items)
+        self.operating_loop_model.set_rows(dashboard.operating_loop_steps)
         self.evidence_feed_state_label.setText(_evidence_feed_state_text(dashboard))
         self.action_item_state_label.setText(_action_item_state_text(dashboard))
+        self.operating_loop_state_label.setText(_operating_loop_state_text(dashboard))
         self.evidence_model.set_rows(dashboard.evidence_summary)
         self.checklist_model.set_rows(dashboard.daily_checklist)
         self.data_quality_limitations_label.setText(self._format_data_quality_limitations(dashboard))
@@ -335,8 +351,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.action_item_state_label.setText(
             "目前沒有人工待處理事項：等待 WorkbenchDashboardDTO；Workbench 不寫 DB、不標記完成，也不是買賣建議。"
         )
+        self.operating_loop_state_label.setText(
+            "尚未有操作節奏 payload：等待 WorkbenchDashboardDTO；只讀、不寫 DB、不標記完成。"
+        )
         self.evidence_feed_model.set_rows(())
         self.action_item_model.set_rows(())
+        self.operating_loop_model.set_rows(())
         self.warning_list.set_warnings(())
 
     def _display_exception_dashboard(self, error_message: str) -> None:
@@ -353,8 +373,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.action_item_state_label.setText(
             "Action Items 降級：來源不可用；只供人工確認載入問題，不寫 DB，也不是買賣建議。"
         )
+        self.operating_loop_state_label.setText(
+            "操作節奏降級：WorkbenchSourceService 未回傳 DTO；只供人工檢查載入問題，不寫 DB、不標記完成。"
+        )
         self.evidence_feed_model.set_rows(())
         self.action_item_model.set_rows(())
+        self.operating_loop_model.set_rows(())
         self.warning_list.set_warnings((f"workbench_source_degraded:{error_message}",))
 
     def _resize_tables(self) -> None:
@@ -363,6 +387,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             self.review_table,
             self.evidence_feed_table,
             self.action_item_table,
+            self.operating_loop_table,
             self.evidence_table,
             self.checklist_table,
         ):
@@ -430,6 +455,26 @@ def _action_item_state_text(dashboard: WorkbenchDashboardDTO) -> str:
     return (
         f"Action Items 已載入 {count} 筆人工待處理事項。"
         "佇列只供人工檢查 source trace，不會自動建立 repository 或寫入狀態。"
+    )
+
+
+def _operating_loop_state_text(dashboard: WorkbenchDashboardDTO) -> str:
+    count = len(dashboard.operating_loop_steps)
+    if count == 0:
+        return (
+            "尚未有操作節奏 payload；等待 WorkbenchDashboardDTO。"
+            "Workbench 維持只讀，不寫 DB、不標記完成、不啟用 scheduler。"
+        )
+    manual_count = sum(
+        1
+        for item in dashboard.operating_loop_steps
+        if str(item.status) in {"manual_required", "warning", "action_required"}
+    )
+    waiting_count = sum(1 for item in dashboard.operating_loop_steps if str(item.status) == "waiting_for_time")
+    return (
+        f"操作節奏已載入 {count} 步：今天要看、人工處理與等待真實時間累積已串接；"
+        f"人工處理 {manual_count} 步，等待真實時間累積 {waiting_count} 步。"
+        "Workbench 只讀，不寫 DB、不標記完成、不套用 lifecycle。"
     )
 
 

@@ -46,6 +46,27 @@ def test_workbench_composer_stays_dto_only_without_direct_db_replay_scheduler_or
     )
 
 
+def test_workbench_dtos_stay_pure_payload_without_db_replay_scheduler_or_lifecycle_imports() -> None:
+    _assert_no_forbidden_imports(
+        Path("app_module/workbench_dtos.py"),
+        (
+            "sqlite3",
+            "data_module",
+            "app_module.workbench_source_service",
+            "app_module.historical_evidence_replay",
+            "app_module.evidence_pipeline_runner",
+            "app_module.strategy_lifecycle_service",
+            "app_module.strategy_lifecycle_repository",
+            "app_module.portfolio_service",
+            "app_module.backtest_service",
+            "portfolio_module",
+            "backtest_module",
+            "decision_module",
+            "runtime",
+        ),
+    )
+
+
 def test_workbench_qt_view_and_models_keep_db_replay_scheduler_lifecycle_out_of_ui_boundary() -> None:
     forbidden = (
         "sqlite3",

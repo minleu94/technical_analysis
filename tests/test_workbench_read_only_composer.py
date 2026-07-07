@@ -348,6 +348,44 @@ def test_composer_action_item_drilldown_targets_match_legacy_pages() -> None:
     assert WORKBENCH_LEGACY_DRILLDOWN_TARGETS["evidence_mode"] == "evidence_review"
 
 
+def test_composer_builds_read_only_operating_loop_steps_for_phase2c() -> None:
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=_decision_snapshot(),
+        readiness_report=_readiness_report(),
+        agent_report_sample=_agent_report_sample(),
+    )
+
+    steps = dashboard.operating_loop_steps
+    payload_steps = dashboard.to_dict()["operating_loop_steps"]
+
+    assert [step.step_id for step in steps] == [
+        "daily_start",
+        "manual_queue",
+        "weekly_review_history",
+        "multi_day_dry_run",
+        "manual_review_note",
+        "scheduler_gate",
+    ]
+    assert [step.status for step in steps] == [
+        "manual_required",
+        "manual_required",
+        "waiting_for_time",
+        "waiting_for_time",
+        "manual_required",
+        "blocked",
+    ]
+    assert steps[0].source_trace == "WorkbenchDashboardDTO.review_items"
+    assert "portfolio_alert_manual_review" in steps[1].linked_item_ids
+    assert steps[2].source_trace == "PreV2ReadinessReport.items.weekly_history"
+    assert steps[3].source_trace == "PreV2ReadinessReport.items.multi_day_dry_run"
+    assert steps[4].source_trace == "WorkbenchDashboardDTO.daily_checklist.manual_review_note"
+    assert steps[4].drilldown_target == "evidence_review"
+    assert all(step.write_intent is False for step in steps)
+    assert not any(step["write_intent"] for step in payload_steps)
+    assert "不寫 DB" in steps[4].summary
+    assert "真實時間" in steps[2].summary
+
+
 def test_composer_surfaces_waiting_for_time_as_evidence_gate_not_success() -> None:
     dashboard = WorkbenchReadOnlyComposer().compose(
         decision_snapshot=_decision_snapshot(),
