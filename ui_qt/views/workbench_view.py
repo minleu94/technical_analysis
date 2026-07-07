@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QTabWidget,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -36,7 +37,7 @@ from ui_qt.models.workbench_table_models import (
 )
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.table_style import apply_financial_table_style
-from ui_qt.widgets.theme_widgets import SectionPanel, WarningList
+from ui_qt.widgets.theme_widgets import EmptyStatePanel, SectionPanel, WarningList
 
 
 class UnifiedDecisionWorkbenchView(QWidget):
@@ -50,7 +51,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         decision_date: str | None = None,
         replay_summary_json: str | Path | None = None,
         auto_refresh: bool = True,
+        decision_source_widget: QWidget | None = None,
         navigate_to_daily_decision_callback: Callable[[], None] | None = None,
+        navigate_to_market_explore_callback: Callable[[], None] | None = None,
         navigate_to_evidence_review_callback: Callable[[], None] | None = None,
         navigate_to_portfolio_callback: Callable[[], None] | None = None,
         parent=None,
@@ -59,10 +62,13 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.source_service = source_service
         self.decision_date = decision_date
         self.replay_summary_json = replay_summary_json
+        self.decision_source_widget = decision_source_widget
         self.navigate_to_daily_decision_callback = navigate_to_daily_decision_callback
+        self.navigate_to_market_explore_callback = navigate_to_market_explore_callback
         self.navigate_to_evidence_review_callback = navigate_to_evidence_review_callback
         self.navigate_to_portfolio_callback = navigate_to_portfolio_callback
         self._dashboard: WorkbenchDashboardDTO | None = None
+        self._viewed_review_item_ids: set[str] = set()
 
         self.status_model = WorkbenchStatusStripTableModel()
         self.review_model = WorkbenchReviewQueueTableModel()
@@ -84,6 +90,14 @@ class UnifiedDecisionWorkbenchView(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         layout.setContentsMargins(12, 12, 12, 12)
+
+        self.subtabs = QTabWidget()
+        layout.addWidget(self.subtabs)
+
+        overview_page = QWidget()
+        overview_layout = QVBoxLayout(overview_page)
+        overview_layout.setSpacing(10)
+        overview_layout.setContentsMargins(0, 0, 0, 0)
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -122,9 +136,14 @@ class UnifiedDecisionWorkbenchView(QWidget):
         drilldown_layout.setContentsMargins(0, 0, 0, 0)
         drilldown_layout.setSpacing(8)
         self.daily_decision_button = self._make_drilldown_button(
-            "開啟每日決策",
+            "開啟決策來源",
             self.navigate_to_daily_decision_callback,
-            "切到舊每日決策頁，只讀取既有 service snapshot。",
+            "切到 Workbench 內的決策來源頁，只讀取既有 service snapshot。",
+        )
+        self.market_explore_button = self._make_drilldown_button(
+            "開啟市場探索",
+            self.navigate_to_market_explore_callback,
+            "切到市場探索工作區，供人工研究與比對。",
         )
         self.evidence_review_button = self._make_drilldown_button(
             "開啟證據覆盤",
@@ -137,6 +156,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "切到持倉管理頁做人工覆盤，不產生買賣建議。",
         )
         drilldown_layout.addWidget(self.daily_decision_button)
+        drilldown_layout.addWidget(self.market_explore_button)
         drilldown_layout.addWidget(self.evidence_review_button)
         drilldown_layout.addWidget(self.portfolio_button)
         drilldown_layout.addStretch()
@@ -156,10 +176,17 @@ class UnifiedDecisionWorkbenchView(QWidget):
         content_layout.addWidget(status_panel)
 
         review_panel, self.review_section_title = self._panel_with_title("今日待判讀 / Today Review Queue")
+        self.review_state_label = self._make_state_label()
+        self.review_empty_state = EmptyStatePanel(
+            "今日所有風險已確認",
+            "今日待判讀佇列目前為空；可切到市場探索做研究，或等待下一次正式資料更新。",
+        )
         self.review_table = self._make_table(self.review_model)
         self.review_table.doubleClicked.connect(
             lambda index: self._navigate_model_row(self.review_model, index.row())
         )
+        review_panel.layout.addWidget(self.review_state_label)
+        review_panel.layout.addWidget(self.review_empty_state)
         review_panel.layout.addWidget(self.review_table)
         content_layout.addWidget(review_panel)
 
@@ -226,7 +253,86 @@ class UnifiedDecisionWorkbenchView(QWidget):
         content_layout.addStretch()
 
         scroll_area.setWidget(scroll_content)
-        layout.addWidget(scroll_area)
+        overview_layout.addWidget(scroll_area)
+        self.subtabs.addTab(overview_page, "總覽")
+        self.subtabs.addTab(self._build_decision_source_page(), "決策來源")
+        self.subtabs.addTab(
+            self._build_navigation_page(
+                "Evidence",
+                "證據與品質細節留在總覽的 Evidence 區塊；需深挖時可開啟證據覆盤。",
+                self.evidence_review_button,
+            ),
+            "Evidence",
+        )
+        self.subtabs.addTab(
+            self._build_navigation_page(
+                "持倉追蹤",
+                "持倉與觀察清單摘要留在總覽；需實作檢查時切到持倉管理。",
+                self.portfolio_button,
+            ),
+            "持倉追蹤",
+        )
+        self.subtabs.addTab(
+            self._build_navigation_page(
+                "操作節奏",
+                "操作節奏只呈現 DTO 狀態；不標記完成、不寫 DB、不啟用 scheduler。",
+                None,
+            ),
+            "操作節奏",
+        )
+
+    def _build_decision_source_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        if self.decision_source_widget is None:
+            label = QLabel("決策來源尚未載入；Workbench 仍維持唯讀，不補資料、不讀 DB、不啟用 scheduler。")
+            label.setWordWrap(True)
+            label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+            layout.addWidget(label)
+            layout.addStretch()
+        else:
+            layout.addWidget(self.decision_source_widget)
+        return page
+
+    def _build_navigation_page(
+        self,
+        title: str,
+        body: str,
+        button: QPushButton | None,
+    ) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        panel, _title = self._panel_with_title(title)
+        label = QLabel(body)
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+        panel.layout.addWidget(label)
+        if button is not None:
+            mirror_button = QPushButton(button.text())
+            mirror_button.setProperty("variant", "secondary")
+            mirror_button.setEnabled(button.isEnabled())
+            mirror_button.setToolTip(button.toolTip())
+            if button.isEnabled():
+                mirror_button.clicked.connect(lambda _checked=False, source_button=button: source_button.click())
+            panel.layout.addWidget(mirror_button)
+        layout.addWidget(panel)
+        layout.addStretch()
+        return page
+
+    def select_subtab(self, label: str) -> bool:
+        for index in range(self.subtabs.count()):
+            if self.subtabs.tabText(index) == label:
+                self.subtabs.setCurrentIndex(index)
+                return True
+        return False
+
+    def viewed_review_item_ids(self) -> set[str]:
+        return set(self._viewed_review_item_ids)
 
     def _panel_with_title(self, title: str) -> tuple[SectionPanel, QLabel]:
         panel = SectionPanel(title)
@@ -304,6 +410,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         item = model.row_at(row)
         if item is None:
             return
+        if model is self.review_model and hasattr(item, "item_id"):
+            self._viewed_review_item_ids.add(str(item.item_id))
+            self.review_state_label.setText(self._review_queue_state_text(self._dashboard))
         target = getattr(item, "drilldown_target", "")
         self.navigate_to_drilldown_target(str(target))
 
@@ -324,6 +433,10 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         self.status_model.set_rows(dashboard.status_strip)
         self.review_model.set_rows(dashboard.review_items)
+        self.review_state_label.setText(self._review_queue_state_text(dashboard))
+        has_review_items = bool(dashboard.review_items)
+        self.review_empty_state.setVisible(not has_review_items)
+        self.review_table.setVisible(has_review_items)
         self.evidence_feed_model.set_rows(dashboard.background_evidence_feed)
         self.action_item_model.set_rows(dashboard.action_items)
         self.operating_loop_model.set_rows(dashboard.operating_loop_steps)
@@ -355,6 +468,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "尚未有操作節奏 payload：等待 WorkbenchDashboardDTO；只讀、不寫 DB、不標記完成。"
         )
         self.evidence_feed_model.set_rows(())
+        self.review_model.set_rows(())
+        self.review_state_label.setText(
+            "今日待判讀佇列尚未載入；等待 WorkbenchDashboardDTO。UI 不讀 DB、不執行 replay。"
+        )
+        self.review_empty_state.setVisible(True)
+        self.review_table.setVisible(False)
         self.action_item_model.set_rows(())
         self.operating_loop_model.set_rows(())
         self.warning_list.set_warnings(())
@@ -377,6 +496,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "操作節奏降級：WorkbenchSourceService 未回傳 DTO；只供人工檢查載入問題，不寫 DB、不標記完成。"
         )
         self.evidence_feed_model.set_rows(())
+        self.review_model.set_rows(())
+        self.review_state_label.setText(
+            "今日待判讀佇列載入降級；請先確認 WorkbenchSourceService 問題。UI 不補 gate。"
+        )
+        self.review_empty_state.setVisible(True)
+        self.review_table.setVisible(False)
         self.action_item_model.set_rows(())
         self.operating_loop_model.set_rows(())
         self.warning_list.set_warnings((f"workbench_source_degraded:{error_message}",))
@@ -407,6 +532,22 @@ class UnifiedDecisionWorkbenchView(QWidget):
         else:
             lines.append(_format_phase0_gate_text(dashboard))
         return "\n".join(line for line in lines if line)
+
+    def _review_queue_state_text(self, dashboard: WorkbenchDashboardDTO | None) -> str:
+        if dashboard is None:
+            return "今日待判讀佇列尚未載入；等待 WorkbenchDashboardDTO。"
+        count = len(dashboard.review_items)
+        if count == 0:
+            return (
+                "今日待判讀佇列為空；這只代表目前 DTO 沒有待判讀項目，"
+                "不代表 Phase gate 已完成，也不是買賣建議。"
+            )
+        active_ids = {str(item.item_id) for item in dashboard.review_items}
+        viewed_count = len(self._viewed_review_item_ids & active_ids)
+        return (
+            f"今日待判讀 {count} 筆；已查看 {viewed_count}/{count}。"
+            "已查看只存在本次 UI session，不寫 DB、不標記完成。"
+        )
 
 
 def _find_replay_summary(items: tuple[WorkbenchEvidenceSummary, ...]) -> WorkbenchEvidenceSummary | None:

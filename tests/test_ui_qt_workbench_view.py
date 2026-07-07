@@ -323,7 +323,16 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "操作節奏" in view.operating_loop_section_title.text()
     assert "證據與品質" in view.evidence_section_title.text()
     assert "每日檢查清單" in view.checklist_section_title.text()
-    assert view.daily_decision_button.text() == "開啟每日決策"
+    assert [view.subtabs.tabText(i) for i in range(view.subtabs.count())] == [
+        "總覽",
+        "決策來源",
+        "Evidence",
+        "持倉追蹤",
+        "操作節奏",
+    ]
+    assert view.select_subtab("決策來源") is True
+    assert view.subtabs.tabText(view.subtabs.currentIndex()) == "決策來源"
+    assert view.daily_decision_button.text() == "開啟決策來源"
     assert view.evidence_review_button.text() == "開啟證據覆盤"
     assert view.portfolio_button.text() == "開啟持倉管理"
 
@@ -366,6 +375,10 @@ def test_unified_workbench_view_displays_empty_and_degraded_queue_state_copy() -
     assert "沒有人工待處理事項" in empty_view.action_item_state_label.text()
     assert "不是買賣建議" in empty_view.action_item_state_label.text()
     assert "不寫 DB" in empty_view.action_item_state_label.text()
+    assert "今日所有風險已確認" in empty_view.review_empty_state.title_label.text()
+    assert "市場探索" in empty_view.review_empty_state.body_label.text()
+    assert empty_view.review_empty_state.isHidden() is False
+    assert empty_view.review_table.isHidden() is True
 
     degraded_view = UnifiedDecisionWorkbenchView(
         dashboard=_dashboard_with_replay(),
@@ -396,6 +409,22 @@ def test_unified_workbench_view_routes_action_item_targets_to_legacy_pages() -> 
     assert view.navigate_to_drilldown_target("evidence_mode") is True
     assert view.navigate_to_drilldown_target("unknown_target") is False
     assert clicked == ["portfolio", "daily", "evidence", "evidence"]
+
+
+def test_workbench_review_queue_marks_viewed_in_memory_only() -> None:
+    app()
+    clicked: list[str] = []
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+        navigate_to_evidence_review_callback=lambda: clicked.append("evidence"),
+    )
+
+    view._navigate_model_row(view.review_model, 0)
+
+    assert clicked == ["evidence"]
+    assert view.viewed_review_item_ids() == {"watchlist_trigger"}
+    assert "已查看 1/1" in view.review_state_label.text()
 
 
 def test_unified_workbench_view_refreshes_only_through_source_service() -> None:

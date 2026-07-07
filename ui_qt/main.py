@@ -9,7 +9,17 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QStatusBar, QTabWidget, QMessageBox, QLabel
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QMainWindow,
+    QStatusBar,
+    QStackedWidget,
+    QTabWidget,
+    QMessageBox,
+    QLabel,
+    QWidget,
+)
 from typing import Dict, Any
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QIcon
@@ -18,9 +28,19 @@ from data_module.config import TWStockConfig
 from app_module.screening_service import ScreeningService
 from app_module.regime_service import RegimeService
 from app_module.decision_desk_dtos import DecisionDeskQuality, MarketRegimeSummary
-from app_module.market_breadth_service import MarketBreadthService, SQLiteDailyPriceMarketBreadthProvider
-from app_module.sector_rotation_service import SectorRotationService, SQLiteIndustryIndexSectorRotationProvider
-from app_module.watchlist_trigger_service import WatchlistTriggerService, WatchlistServiceWatchlistProvider, SQLiteRankingProvider
+from app_module.market_breadth_service import (
+    MarketBreadthService,
+    SQLiteDailyPriceMarketBreadthProvider,
+)
+from app_module.sector_rotation_service import (
+    SectorRotationService,
+    SQLiteIndustryIndexSectorRotationProvider,
+)
+from app_module.watchlist_trigger_service import (
+    WatchlistTriggerService,
+    WatchlistServiceWatchlistProvider,
+    SQLiteRankingProvider,
+)
 from app_module.relative_strength_liquidity_service import (
     RelativeStrengthLiquidityService,
     SQLiteDailyPriceRelativeStrengthLiquidityProvider,
@@ -35,6 +55,7 @@ from app_module.batch_backtest_service import BatchBacktestService
 from app_module.watchlist_service import WatchlistService
 from app_module.universe_service import UniverseService
 from app_module.research_session import ResearchSessionStore
+
 # 導入策略模組以觸發註冊
 import app_module.strategies
 from ui_qt.views.strong_stocks_view import StrongStocksView
@@ -49,13 +70,20 @@ from ui_qt.views.watchlist_view import WatchlistView
 from ui_qt.widgets.session_context_strip import SessionContextStrip
 from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
 from app_module.broker_flow_service import BrokerFlowService
-from app_module.smart_money_semantic_service import SmartMoneySemanticService, SQLiteSmartMoneyPriceProvider
+from app_module.smart_money_semantic_service import (
+    SmartMoneySemanticService,
+    SQLiteSmartMoneyPriceProvider,
+)
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from app_module.workbench_source_service import WorkbenchSourceService
 from ui_qt.views.workbench_view import UnifiedDecisionWorkbenchView
 from ui_qt.theme import build_global_stylesheet
-from ui_qt.theme.fonts import preferred_qt_chinese_font_family, register_qt_chinese_fonts
+from ui_qt.theme.fonts import (
+    preferred_qt_chinese_font_family,
+    register_qt_chinese_fonts,
+)
+from ui_qt.widgets.left_navigation import LeftNavigationWidget, NavigationItem
 from ui_qt.widgets.text_sanitizer import sanitize_button_texts
 
 # Runtime Observatory Imports
@@ -104,13 +132,17 @@ class MainWindow(QMainWindow):
             try:
                 as_of_date_str = as_of_date.isoformat()
                 try:
-                    result = self.regime_service.detect_regime(as_of_date=as_of_date_str)
+                    result = self.regime_service.detect_regime(
+                        as_of_date=as_of_date_str
+                    )
                 except TypeError:
                     result = self.regime_service.detect_regime(date=as_of_date_str)
                 except Exception:
                     result = self.regime_service.detect_regime(as_of_date_str)
                 details = dict(getattr(result, "details", {}) or {})
-                confidence_bp = self._to_confidence_bp(getattr(result, "confidence", None))
+                confidence_bp = self._to_confidence_bp(
+                    getattr(result, "confidence", None)
+                )
                 regime_score = details.get("ma20_slope")
                 if regime_score is None:
                     regime_score = details.get("score")
@@ -126,7 +158,8 @@ class MainWindow(QMainWindow):
                     as_of_date=as_of_date,
                     quality=DecisionDeskQuality.OBSERVED,
                     warnings=(),
-                    regime_label=getattr(result, "regime_name_cn", None) or getattr(result, "regime", None),
+                    regime_label=getattr(result, "regime_name_cn", None)
+                    or getattr(result, "regime", None),
                     regime_score=regime_score,
                     regime_confidence=confidence_bp,
                     meta=details,
@@ -185,7 +218,9 @@ class MainWindow(QMainWindow):
 
         watchlist_trigger_service = None
         try:
-            watchlist_provider = WatchlistServiceWatchlistProvider(self.watchlist_service)
+            watchlist_provider = WatchlistServiceWatchlistProvider(
+                self.watchlist_service
+            )
             ranking_provider = SQLiteRankingProvider(self.config.db_file)
             watchlist_trigger_service = WatchlistTriggerService(
                 watchlist_provider=watchlist_provider,
@@ -196,12 +231,16 @@ class MainWindow(QMainWindow):
 
         relative_strength_liquidity_service = None
         try:
-            relative_strength_liquidity_provider = SQLiteDailyPriceRelativeStrengthLiquidityProvider(self.config.db_file)
+            relative_strength_liquidity_provider = (
+                SQLiteDailyPriceRelativeStrengthLiquidityProvider(self.config.db_file)
+            )
             relative_strength_liquidity_service = RelativeStrengthLiquidityService(
                 provider=relative_strength_liquidity_provider
             )
         except Exception as exc:
-            print(f"[MainWindow] 決策桌面 RelativeStrengthLiquidityService 初始化失敗：{exc}")
+            print(
+                f"[MainWindow] 決策桌面 RelativeStrengthLiquidityService 初始化失敗：{exc}"
+            )
 
         return DecisionDeskSnapshotBuilder(
             provider=provider,
@@ -219,12 +258,13 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1400, 800)
 
         # 設置窗口 icon
-        icon_path = Path(__file__).parent / 'app_icon.png'
+        icon_path = Path(__file__).parent / "app_icon.png"
         if icon_path.exists():
             icon_path_abs = icon_path.resolve()  # 使用絕對路徑
             self.setWindowIcon(QIcon(str(icon_path_abs)))
 
         import logging
+
         logger = logging.getLogger(__name__)
 
         try:
@@ -234,11 +274,16 @@ class MainWindow(QMainWindow):
             # 共享 IndustryMapper 實例，避免重複載入資料
             # from ui_app.industry_mapper import IndustryMapper
             from decision_module.industry_mapper import IndustryMapper
+
             shared_industry_mapper = IndustryMapper(self.config)
 
-            self.screening_service = ScreeningService(self.config, industry_mapper=shared_industry_mapper)
+            self.screening_service = ScreeningService(
+                self.config, industry_mapper=shared_industry_mapper
+            )
             self.regime_service = RegimeService(self.config)
-            self.recommendation_service = RecommendationService(self.config, industry_mapper=shared_industry_mapper)
+            self.recommendation_service = RecommendationService(
+                self.config, industry_mapper=shared_industry_mapper
+            )
             self.update_service = UpdateService(self.config)
             self.backtest_service = BacktestService(self.config)
             self.broker_flow_service = BrokerFlowService(self.config)
@@ -247,6 +292,7 @@ class MainWindow(QMainWindow):
             # 初始化持倉與日記服務
             from app_module.portfolio_service import PortfolioService
             from app_module.journal_service import JournalService
+
             self.portfolio_service = PortfolioService(self.config)
             self.journal_service = JournalService(self.config)
 
@@ -272,7 +318,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"初始化主窗口失敗: {e}")
             import traceback
-            print(f"錯誤：初始化主窗口失敗\n{str(e)}\n\n詳細信息：\n{traceback.format_exc()}")
+
+            print(
+                f"錯誤：初始化主窗口失敗\n{str(e)}\n\n詳細信息：\n{traceback.format_exc()}"
+            )
             raise
 
     def _default_workbench_replay_summary_path(self) -> Path | None:
@@ -287,20 +336,48 @@ class MainWindow(QMainWindow):
         )
         return candidate if candidate.exists() else None
 
-    def _select_main_tab(self, tab_name: str) -> None:
-        tabs = getattr(self, "tabs", None)
-        if tabs is None:
+    def _select_main_workspace(self, key_or_label: str) -> None:
+        workspace_stack = getattr(self, "workspace_stack", None)
+        workspace_widgets = getattr(self, "workspace_widgets", {})
+        if workspace_stack is None:
             return
-        for index in range(tabs.count()):
-            if tabs.tabText(index) == tab_name:
-                tabs.setCurrentIndex(index)
-                return
+        label_to_key = {
+            "決策工作台": "workbench",
+            "每日決策": "workbench",
+            "市場探索": "market_explore",
+            "市場觀察": "market_explore",
+            "推薦分析": "recommendation",
+            "策略回測": "backtest",
+            "觀察清單": "watchlist",
+            "持倉管理": "portfolio",
+            "數據更新": "update",
+            "Runtime": "runtime",
+            "Runtime Observatory": "runtime",
+        }
+        key = label_to_key.get(key_or_label, key_or_label)
+        widget = workspace_widgets.get(key)
+        if widget is None:
+            return
+        workspace_stack.setCurrentWidget(widget)
+        left_navigation = getattr(self, "left_navigation", None)
+        if left_navigation is not None:
+            left_navigation.set_current_key(key)
+        self._on_workspace_selected(key)
+
+    def _select_main_tab(self, tab_name: str) -> None:
+        self._select_main_workspace(tab_name)
 
     def _open_workbench_daily_decision(self) -> None:
-        self._select_main_tab("每日決策")
+        self._select_main_workspace("workbench")
+        workbench_view = getattr(self, "workbench_view", None)
+        if hasattr(workbench_view, "select_subtab"):
+            workbench_view.select_subtab("決策來源")
+
+    def _open_workbench_market_explore(self) -> None:
+        self._select_main_workspace("market_explore")
 
     def _open_workbench_evidence_review(self) -> None:
-        self._select_main_tab("策略回測")
+        self._select_main_workspace("backtest")
         backtest_view = getattr(self, "backtest_view", None)
         result_tabs = getattr(backtest_view, "result_tabs", None)
         if result_tabs is None:
@@ -311,34 +388,52 @@ class MainWindow(QMainWindow):
                 return
 
     def _open_workbench_portfolio(self) -> None:
-        self._select_main_tab("持倉管理")
+        self._select_main_workspace("portfolio")
+
+    def _on_workspace_selected(self, key: str) -> None:
+        if key == "market_explore":
+            market_tabs = getattr(self, "market_tabs", None)
+            on_market_tab_changed = getattr(self, "_on_market_tab_changed", None)
+            if market_tabs is not None and on_market_tab_changed is not None:
+                on_market_tab_changed(market_tabs.currentIndex())
+        elif key == "watchlist":
+            watchlist = getattr(self, "watchlist_view", None)
+            if hasattr(watchlist, "refresh_all"):
+                watchlist.refresh_all()
+        elif key == "portfolio":
+            portfolio_view = getattr(self, "portfolio_view", None)
+            if hasattr(portfolio_view, "refresh_all"):
+                portfolio_view.refresh_all()
 
     def _setup_ui(self):
         """設置 UI"""
         print("[MainWindow] 開始設置 UI...")
 
         try:
-            # 創建標籤頁
-            tabs = QTabWidget()
+            shell = QWidget()
+            shell_layout = QHBoxLayout(shell)
+            shell_layout.setContentsMargins(0, 0, 0, 0)
+            shell_layout.setSpacing(0)
+            workspace_stack = QStackedWidget()
+            workspace_widgets: dict[str, QWidget] = {}
+
+            def add_workspace(key: str, widget: QWidget) -> int:
+                workspace_widgets[key] = widget
+                return workspace_stack.addWidget(widget)
 
             # 數據更新標籤
             print("[MainWindow] 創建數據更新視圖...")
-            update_view = UpdateView(
-                update_service=self.update_service,
-                parent=self
-            )
-            tabs.addTab(update_view, "數據更新")
+            update_view = UpdateView(update_service=self.update_service, parent=self)
             print("[MainWindow] 數據更新視圖創建成功")
 
-            # 市場觀察標籤頁（包含多個子標籤）
-            print("[MainWindow] 創建市場觀察視圖...")
+            # 市場探索標籤頁（包含多個子標籤）
+            print("[MainWindow] 創建市場探索視圖...")
             market_tabs = QTabWidget()
 
             # 大盤指數標籤（放在最前面）
             print("[MainWindow] 創建大盤指數視圖...")
             market_regime = MarketRegimeView(
-                regime_service=self.regime_service,
-                parent=self
+                regime_service=self.regime_service, parent=self
             )
             market_tabs.addTab(market_regime, "大盤指數")
             print("[MainWindow] 大盤指數視圖創建成功")
@@ -348,7 +443,7 @@ class MainWindow(QMainWindow):
             strong_stocks = StrongStocksView(
                 screening_service=self.screening_service,
                 watchlist_service=self.watchlist_service,
-                parent=self
+                parent=self,
             )
             market_tabs.addTab(strong_stocks, "強勢個股")
             print("[MainWindow] 強勢個股視圖創建成功")
@@ -358,7 +453,7 @@ class MainWindow(QMainWindow):
             weak_stocks = WeakStocksView(
                 screening_service=self.screening_service,
                 watchlist_service=self.watchlist_service,
-                parent=self
+                parent=self,
             )
             market_tabs.addTab(weak_stocks, "弱勢個股")
             print("[MainWindow] 弱勢個股視圖創建成功")
@@ -366,8 +461,7 @@ class MainWindow(QMainWindow):
             # 強勢產業標籤
             print("[MainWindow] 創建強勢產業視圖...")
             strong_industries = StrongIndustriesView(
-                screening_service=self.screening_service,
-                parent=self
+                screening_service=self.screening_service, parent=self
             )
             market_tabs.addTab(strong_industries, "強勢產業")
             print("[MainWindow] 強勢產業視圖創建成功")
@@ -375,8 +469,7 @@ class MainWindow(QMainWindow):
             # 弱勢產業標籤
             print("[MainWindow] 創建弱勢產業視圖...")
             weak_industries = WeakIndustriesView(
-                screening_service=self.screening_service,
-                parent=self
+                screening_service=self.screening_service, parent=self
             )
             market_tabs.addTab(weak_industries, "弱勢產業")
             print("[MainWindow] 弱勢產業視圖創建成功")
@@ -390,12 +483,14 @@ class MainWindow(QMainWindow):
                     price_provider=SQLiteSmartMoneyPriceProvider(self.config.db_file),
                 )
             except Exception as exc:
-                print(f"[MainWindow] 決策桌面 SmartMoneySemanticService 初始化失敗：{exc}")
+                print(
+                    f"[MainWindow] 決策桌面 SmartMoneySemanticService 初始化失敗：{exc}"
+                )
             smart_money_flow = SmartMoneyFlowView(
                 broker_flow_service=self.broker_flow_service,
                 watchlist_service=self.watchlist_service,
                 smart_money_semantic_service=self.smart_money_semantic_service,
-                parent=self
+                parent=self,
             )
             market_tabs.addTab(smart_money_flow, "主力流向")
             print("[MainWindow] 主力流向視圖創建成功")
@@ -417,44 +512,11 @@ class MainWindow(QMainWindow):
                     smart_money_flow.load_data_if_needed()
 
             market_tabs.currentChanged.connect(on_market_tab_changed)
+            self._on_market_tab_changed = on_market_tab_changed
+            print("[MainWindow] 市場探索標籤頁創建成功")
 
-            tabs.addTab(market_tabs, "市場觀察")
-            print("[MainWindow] 市場觀察標籤頁創建成功")
-
-            # Phase 2 Unified Decision Workbench shell（唯讀 DTO/service 邊界）
-            print("[MainWindow] 開始建立決策工作台分頁...")
-            try:
-                self.workbench_source_service = WorkbenchSourceService(self.config)
-                workbench_view = UnifiedDecisionWorkbenchView(
-                    source_service=self.workbench_source_service,
-                    replay_summary_json=self._default_workbench_replay_summary_path(),
-                    navigate_to_daily_decision_callback=self._open_workbench_daily_decision,
-                    navigate_to_evidence_review_callback=self._open_workbench_evidence_review,
-                    navigate_to_portfolio_callback=self._open_workbench_portfolio,
-                    auto_refresh=True,
-                    parent=self,
-                )
-                self.workbench_view = workbench_view
-                tabs.addTab(workbench_view, "決策工作台")
-                print("[MainWindow] 決策工作台分頁建立成功")
-            except Exception as e:
-                print(f"[MainWindow] 警告：決策工作台分頁初始化失敗：{e}")
-                fallback_tab = QLabel(f"決策工作台初始化失敗，已降級顯示：{e}")
-                fallback_tab.setWordWrap(True)
-                tabs.addTab(fallback_tab, "決策工作台")
-
-            # 監聽主 tab 切換事件（當切換到市場觀察時）
-            def on_main_tab_changed(index):
-                """當主 tab 切換時"""
-                # 如果切換到市場觀察 tab（index=1），觸發子 tab 的載入檢查
-                if index == 1:  # 市場觀察是第二個 tab（index 0 是數據更新）
-                    current_sub_index = market_tabs.currentIndex()
-                    on_market_tab_changed(current_sub_index)
-
-            tabs.currentChanged.connect(on_main_tab_changed)
-
-            # 每日決策分頁（失敗時降級，不影響整體啟動）
-            print("[MainWindow] 開始建立每日決策分頁...")
+            # 每日決策來源（嵌入決策工作台，不再作為主工作區）
+            print("[MainWindow] 開始建立每日決策來源...")
             try:
                 self.decision_desk_builder = self._create_decision_desk_builder()
                 decision_desk_view = DecisionDeskView(
@@ -463,13 +525,35 @@ class MainWindow(QMainWindow):
                     parent=self,
                 )
                 self.decision_desk_view = decision_desk_view
-                tabs.addTab(decision_desk_view, "每日決策")
-                print("[MainWindow] 每日決策分頁建立成功")
+                print("[MainWindow] 每日決策來源建立成功")
             except Exception as e:
-                print(f"[MainWindow] 警告：每日決策分頁初始化失敗：{e}")
-                fallback_tab = QLabel(f"每日決策初始化失敗，已降級顯示：{e}")
-                fallback_tab.setWordWrap(True)
-                tabs.addTab(fallback_tab, "每日決策")
+                print(f"[MainWindow] 警告：每日決策來源初始化失敗：{e}")
+                decision_desk_view = QLabel(f"每日決策初始化失敗，已降級顯示：{e}")
+                decision_desk_view.setWordWrap(True)
+                self.decision_desk_view = decision_desk_view
+
+            # Phase 2 Unified Decision Workbench shell（唯讀 DTO/service 邊界）
+            print("[MainWindow] 開始建立決策工作台...")
+            try:
+                self.workbench_source_service = WorkbenchSourceService(self.config)
+                workbench_view = UnifiedDecisionWorkbenchView(
+                    source_service=self.workbench_source_service,
+                    replay_summary_json=self._default_workbench_replay_summary_path(),
+                    decision_source_widget=decision_desk_view,
+                    navigate_to_daily_decision_callback=self._open_workbench_daily_decision,
+                    navigate_to_market_explore_callback=self._open_workbench_market_explore,
+                    navigate_to_evidence_review_callback=self._open_workbench_evidence_review,
+                    navigate_to_portfolio_callback=self._open_workbench_portfolio,
+                    auto_refresh=True,
+                    parent=self,
+                )
+                self.workbench_view = workbench_view
+                print("[MainWindow] 決策工作台建立成功")
+            except Exception as e:
+                print(f"[MainWindow] 警告：決策工作台初始化失敗：{e}")
+                workbench_view = QLabel(f"決策工作台初始化失敗，已降級顯示：{e}")
+                workbench_view.setWordWrap(True)
+                self.workbench_view = workbench_view
 
             # 策略回測標籤（先創建，因為推薦分析需要引用它）
             print("[MainWindow] 創建策略回測視圖...")
@@ -477,9 +561,9 @@ class MainWindow(QMainWindow):
                 backtest_service=self.backtest_service,
                 config=self.config,
                 watchlist_service=self.watchlist_service,
-                parent=self
+                parent=self,
             )
-            tabs.addTab(backtest, "策略回測")
+            self.backtest_view = backtest
             print("[MainWindow] 策略回測視圖創建成功")
 
             # 推薦分析標籤
@@ -490,121 +574,165 @@ class MainWindow(QMainWindow):
                 watchlist_service=self.watchlist_service,
                 config=self.config,
                 universe_service=self.universe_service,
-                parent=self
+                parent=self,
             )
             # 連接一鍵送回測信號（Phase 3.3）
             recommendation.sendToBacktestRequested.connect(
                 lambda config: self._handle_send_to_backtest(backtest, config)
             )
-            tabs.addTab(recommendation, "推薦分析")
             print("[MainWindow] 推薦分析視圖創建成功")
 
             # 觀察清單標籤（作為獨立 Tab，方便管理）
             # 只有在 watchlist_service 可用時才創建
+            watchlist_widget: QWidget
             if self.watchlist_service is not None:
                 try:
                     print("[MainWindow] 創建觀察清單視圖...")
                     watchlist = WatchlistView(
                         watchlist_service=self.watchlist_service,
                         config=self.config,
-                        parent=self
+                        parent=self,
                     )
-                    watchlist_tab_index = tabs.addTab(watchlist, "觀察清單")
-                    watchlist.sendToBacktestRequested.connect(
-                        lambda config: self._handle_send_to_backtest(backtest, config)
-                    )
+                    if hasattr(watchlist, "sendToBacktestRequested"):
+                        watchlist.sendToBacktestRequested.connect(
+                            lambda config: self._handle_send_to_backtest(backtest, config)
+                        )
+                    self.watchlist_view = watchlist
+                    watchlist_widget = watchlist
                     print("[MainWindow] 觀察清單視圖創建成功")
-
-                    # 當切換到觀察清單 Tab 時，自動刷新數據確保同步
-                    def on_tab_changed_to_watchlist(index):
-                        if index == watchlist_tab_index:
-                            if hasattr(watchlist, 'refresh_all'):
-                                watchlist.refresh_all()
-
-                    tabs.currentChanged.connect(on_tab_changed_to_watchlist)
                 except Exception as e:
                     print(f"[MainWindow] 警告：無法創建觀察清單標籤: {e}")
                     import traceback
+
                     print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
+                    watchlist_widget = QLabel(f"觀察清單初始化失敗，已降級顯示：{e}")
+                    watchlist_widget.setWordWrap(True)
+                    self.watchlist_view = watchlist_widget
             else:
                 print("[MainWindow] 觀察清單服務不可用，跳過觀察清單標籤")
+                watchlist_widget = QLabel("觀察清單服務不可用。")
+                watchlist_widget.setWordWrap(True)
+                self.watchlist_view = watchlist_widget
 
             # 持倉管理標籤 (Portfolio MVP)
+            portfolio_widget: QWidget
             try:
                 print("[MainWindow] 創建持倉管理視圖...")
                 from ui_qt.views.portfolio_view import PortfolioView
+
                 portfolio_view = PortfolioView(
                     portfolio_service=self.portfolio_service,
                     journal_service=self.journal_service,
                     recommendation_service=self.recommendation_service,
                     broker_flow_service=self.broker_flow_service,
-                    parent=self
+                    parent=self,
                 )
                 self.portfolio_view = portfolio_view
-                portfolio_tab_index = tabs.addTab(portfolio_view, "持倉管理")
+                portfolio_widget = portfolio_view
                 print("[MainWindow] 持倉管理視圖創建成功")
-
-                # 當切換到持倉管理 Tab 時，自動刷新
-                def on_tab_changed_to_portfolio(index):
-                    if index == portfolio_tab_index:
-                        if hasattr(portfolio_view, 'refresh_all'):
-                            portfolio_view.refresh_all()
-
-                tabs.currentChanged.connect(on_tab_changed_to_portfolio)
             except Exception as pe:
                 print(f"[MainWindow] 警告：無法創建持倉管理標籤: {pe}")
                 import traceback
+
                 print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
+                portfolio_widget = QLabel(f"持倉管理初始化失敗，已降級顯示：{pe}")
+                portfolio_widget.setWordWrap(True)
+                self.portfolio_view = portfolio_widget
 
-            self.setCentralWidget(tabs)
-            print("[MainWindow] UI 設置完成")
-
-            # 保存 tabs 和 backtest 引用（用於一鍵送回測）
-            self.tabs = tabs
-            self.backtest_view = backtest
             self.smart_money_flow = smart_money_flow
             self.market_tabs = market_tabs
 
             # --- Runtime Observatory MVP Integration ---
+            runtime_widget: QWidget
             try:
                 print("[MainWindow] 初始化 Runtime Observatory...")
                 project_root_str = str(project_root)
-                self.runtime_controller = RuntimeController(os.path.join(project_root_str, "runtime"))
-                self.runtime_bridge = QtRuntimeBridge(self.runtime_controller.event_bus, self)
+                self.runtime_controller = RuntimeController(
+                    os.path.join(project_root_str, "runtime")
+                )
+                self.runtime_bridge = QtRuntimeBridge(
+                    self.runtime_controller.event_bus, self
+                )
 
                 self.runtime_view = RuntimeView(parent=self)
 
                 # Connect bridge signals to view slots
-                self.runtime_bridge.state_updated.connect(self.runtime_view.on_state_updated)
-                self.runtime_bridge.health_updated.connect(self.runtime_view.on_health_updated)
-                self.runtime_bridge.event_received.connect(self.runtime_view.on_event_received)
+                self.runtime_bridge.state_updated.connect(
+                    self.runtime_view.on_state_updated
+                )
+                self.runtime_bridge.health_updated.connect(
+                    self.runtime_view.on_health_updated
+                )
+                self.runtime_bridge.event_received.connect(
+                    self.runtime_view.on_event_received
+                )
 
-                tabs.addTab(self.runtime_view, "Runtime Observatory")
+                runtime_widget = self.runtime_view
 
                 # Setup polling timer
                 self.runtime_timer = QTimer(self)
                 self.runtime_timer.timeout.connect(self.runtime_controller.poll_updates)
-                self.runtime_timer.start(1000) # Poll every 1 second
+                self.runtime_timer.start(1000)  # Poll every 1 second
                 print("[MainWindow] Runtime Observatory 整合完成")
             except Exception as re:
                 print(f"[MainWindow] 警告: Runtime Observatory 初始化失敗: {re}")
+                runtime_widget = QLabel(f"Runtime 初始化失敗，已降級顯示：{re}")
+                runtime_widget.setWordWrap(True)
             # --------------------------------------------
+
+            add_workspace("workbench", workbench_view)
+            add_workspace("market_explore", market_tabs)
+            add_workspace("recommendation", recommendation)
+            add_workspace("backtest", backtest)
+            add_workspace("watchlist", watchlist_widget)
+            add_workspace("portfolio", portfolio_widget)
+            add_workspace("update", update_view)
+            add_workspace("runtime", runtime_widget)
+
+            workspace_items = (
+                NavigationItem("workbench", "決策工作台"),
+                NavigationItem("market_explore", "市場探索"),
+                NavigationItem("recommendation", "推薦分析"),
+                NavigationItem("backtest", "策略回測"),
+                NavigationItem("watchlist", "觀察清單"),
+                NavigationItem("portfolio", "持倉管理"),
+                NavigationItem("update", "數據更新"),
+                NavigationItem("runtime", "Runtime"),
+            )
+            self.left_navigation = LeftNavigationWidget(workspace_items, parent=self)
+            self.left_navigation.workspaceSelected.connect(self._select_main_workspace)
+            shell_layout.addWidget(self.left_navigation)
+            shell_layout.addWidget(workspace_stack, 1)
+
+            self.workspace_stack = workspace_stack
+            self.workspace_widgets = workspace_widgets
+            self.tabs = workspace_stack
+            self.left_navigation.set_current_key("workbench")
+            self.workspace_stack.setCurrentWidget(workspace_widgets["workbench"])
+
+            self.setCentralWidget(shell)
+            print("[MainWindow] UI 設置完成")
 
             sanitize_button_texts(self)
 
             # 狀態欄
             self.statusBar().showMessage("就緒")
-            self.session_context_strip = SessionContextStrip(self.research_session_store, self)
+            self.session_context_strip = SessionContextStrip(
+                self.research_session_store, self
+            )
             self.statusBar().addPermanentWidget(self.session_context_strip, 1)
         except Exception as e:
             print(f"[MainWindow] 錯誤：設置 UI 失敗")
             print(f"[MainWindow] 錯誤類型: {type(e).__name__}")
             print(f"[MainWindow] 錯誤訊息: {str(e)}")
             import traceback
+
             print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             raise
 
-    def _handle_send_to_backtest(self, backtest_view: BacktestView, config: Dict[str, Any]):
+    def _handle_send_to_backtest(
+        self, backtest_view: BacktestView, config: Dict[str, Any]
+    ):
         """處理一鍵送回測請求（Phase 3.3）
 
         Args:
@@ -613,15 +741,10 @@ class MainWindow(QMainWindow):
         """
         try:
             # 切換到回測標籤
-            if hasattr(self, 'tabs'):
-                # 找到回測標籤的索引
-                for i in range(self.tabs.count()):
-                    if self.tabs.widget(i) == backtest_view:
-                        self.tabs.setCurrentIndex(i)
-                        break
+            self._select_main_workspace("backtest")
 
             # 調用回測視圖的方法來載入配置
-            if hasattr(backtest_view, 'load_from_recommendation'):
+            if hasattr(backtest_view, "load_from_recommendation"):
                 backtest_view.load_from_recommendation(config)
             else:
                 # 如果方法不存在，顯示提示
@@ -630,43 +753,40 @@ class MainWindow(QMainWindow):
                     "提示",
                     f"已切換到策略回測標籤\n\n"
                     f"股票清單：{len(config.get('stock_list', []))} 檔\n"
-                    f"請手動配置回測參數。"
+                    f"請手動配置回測參數。",
                 )
         except Exception as e:
             import traceback
+
             QMessageBox.critical(
-                self,
-                "錯誤",
-                f"一鍵送回測失敗：\n{str(e)}\n\n{traceback.format_exc()}"
+                self, "錯誤", f"一鍵送回測失敗：\n{str(e)}\n\n{traceback.format_exc()}"
             )
         except Exception as e:
             print(f"[MainWindow] 錯誤：設置 UI 失敗")
             print(f"[MainWindow] 錯誤類型: {type(e).__name__}")
             print(f"[MainWindow] 錯誤訊息: {str(e)}")
             import traceback
+
             print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             raise
 
     def show_smart_money_flow_for_stock(self, stock_code: str):
-        """切換至市場觀察 -> 主力流向，並定位至該個股"""
+        """切換至市場探索 -> 主力流向，並定位至該個股"""
         try:
-            if hasattr(self, 'tabs') and hasattr(self, 'market_tabs'):
-                for i in range(self.tabs.count()):
-                    if self.tabs.widget(i) == self.market_tabs:
-                        self.tabs.setCurrentIndex(i)
+            self._select_main_workspace("market_explore")
+            if hasattr(self, "market_tabs") and hasattr(self, "smart_money_flow"):
+                for j in range(self.market_tabs.count()):
+                    if self.market_tabs.widget(j) == self.smart_money_flow:
+                        self.market_tabs.setCurrentIndex(j)
                         break
-                if hasattr(self, 'smart_money_flow'):
-                    for j in range(self.market_tabs.count()):
-                        if self.market_tabs.widget(j) == self.smart_money_flow:
-                            self.market_tabs.setCurrentIndex(j)
-                            break
-                    self.smart_money_flow.select_stock(stock_code)
+                self.smart_money_flow.select_stock(stock_code)
         except Exception as e:
             import traceback
+
             QMessageBox.critical(
                 self,
                 "下鑽錯誤",
-                f"無法下鑽主力流向：\n{str(e)}\n\n{traceback.format_exc()}"
+                f"無法下鑽主力流向：\n{str(e)}\n\n{traceback.format_exc()}",
             )
 
     def closeEvent(self, event):
@@ -687,7 +807,7 @@ def main():
         print("[Main] QApplication 創建成功")
 
         # 設置應用程序 icon（必須在創建窗口之前設置）
-        icon_path = Path(__file__).parent / 'app_icon.png'
+        icon_path = Path(__file__).parent / "app_icon.png"
         if icon_path.exists():
             icon_path_abs = icon_path.resolve()  # 使用絕對路徑
             app.setWindowIcon(QIcon(str(icon_path_abs)))
@@ -730,5 +850,5 @@ def main():
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

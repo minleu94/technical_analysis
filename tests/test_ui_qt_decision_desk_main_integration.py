@@ -212,11 +212,14 @@ def _build_main_window(*, regime_service=None, portfolio_service=None, config=No
     return main_window
 
 
-def _get_tab_names(main_window) -> list[str]:
-    return [main_window.tabs.tabText(i) for i in range(main_window.tabs.count())]
+def _get_nav_labels(main_window) -> list[str]:
+    return [
+        main_window.left_navigation.button_for_key(key).text().split("  ")[0]
+        for key in main_window.left_navigation.item_keys()
+    ]
 
 
-def test_main_window_adds_daily_decision_tab(monkeypatch):
+def test_main_window_embeds_daily_decision_in_workbench_source_tab(monkeypatch):
     app()
     _TrackingDecisionDeskBuilder.instances = []
     _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
@@ -224,10 +227,13 @@ def test_main_window_adds_daily_decision_tab(monkeypatch):
     target_window = _build_main_window()
     target_window._setup_ui()
 
-    assert "每日決策" in _get_tab_names(target_window)
-    decision_idx = _get_tab_names(target_window).index("每日決策")
-    assert isinstance(target_window.tabs.widget(decision_idx), _RecordedDecisionDeskView)
-    assert target_window.tabs.widget(decision_idx).navigate_to_smart_money_callback == target_window.show_smart_money_flow_for_stock
+    assert "每日決策" not in _get_nav_labels(target_window)
+    assert isinstance(target_window.decision_desk_view, _RecordedDecisionDeskView)
+    assert (
+        target_window.decision_desk_view.navigate_to_smart_money_callback
+        == target_window.show_smart_money_flow_for_stock
+    )
+    assert target_window.workbench_view.kwargs["decision_source_widget"] is target_window.decision_desk_view
     assert _TrackingDecisionDeskBuilder.instances
     builder = _TrackingDecisionDeskBuilder.instances[-1]
     assert builder.provider is not None
@@ -251,26 +257,39 @@ def test_main_window_adds_unified_decision_workbench_tab(monkeypatch, tmp_path):
     target_window = _build_main_window(config=types.SimpleNamespace(output_root=output_root))
     target_window._setup_ui()
 
-    assert "決策工作台" in _get_tab_names(target_window)
-    workbench_idx = _get_tab_names(target_window).index("決策工作台")
-    workbench_tab = target_window.tabs.widget(workbench_idx)
+    assert _get_nav_labels(target_window) == [
+        "決策工作台",
+        "市場探索",
+        "推薦分析",
+        "策略回測",
+        "觀察清單",
+        "持倉管理",
+        "數據更新",
+        "Runtime",
+    ]
+    assert target_window.left_navigation.current_key() == "workbench"
+    workbench_tab = target_window.workspace_widgets["workbench"]
     assert isinstance(workbench_tab, _RecordedWorkbenchView)
     assert _TrackingWorkbenchSourceService.instances
     assert workbench_tab.source_service is _TrackingWorkbenchSourceService.instances[-1]
     assert workbench_tab.auto_refresh is True
     assert workbench_tab.kwargs["replay_summary_json"] == replay_summary_path
     assert callable(workbench_tab.kwargs["navigate_to_daily_decision_callback"])
+    assert callable(workbench_tab.kwargs["navigate_to_market_explore_callback"])
     assert callable(workbench_tab.kwargs["navigate_to_evidence_review_callback"])
     assert callable(workbench_tab.kwargs["navigate_to_portfolio_callback"])
 
     workbench_tab.kwargs["navigate_to_daily_decision_callback"]()
-    assert target_window.tabs.tabText(target_window.tabs.currentIndex()) == "每日決策"
+    assert target_window.left_navigation.current_key() == "workbench"
+
+    workbench_tab.kwargs["navigate_to_market_explore_callback"]()
+    assert target_window.left_navigation.current_key() == "market_explore"
 
     workbench_tab.kwargs["navigate_to_evidence_review_callback"]()
-    assert target_window.tabs.tabText(target_window.tabs.currentIndex()) == "策略回測"
+    assert target_window.left_navigation.current_key() == "backtest"
 
     workbench_tab.kwargs["navigate_to_portfolio_callback"]()
-    assert target_window.tabs.tabText(target_window.tabs.currentIndex()) == "持倉管理"
+    assert target_window.left_navigation.current_key() == "portfolio"
 
 
 class _FakeRegimeService:
@@ -338,16 +357,15 @@ def test_sector_rotation_service_is_injected_into_decision_desk_builder(monkeypa
     assert callable(getattr(builder.kwargs["sector_rotation_service"], "build_snapshot", None))
 
 
-def test_main_window_degrades_daily_decision_tab_when_builder_fails(monkeypatch):
+def test_main_window_degrades_workbench_decision_source_when_builder_fails(monkeypatch):
     app()
     _install_fake_dependencies(monkeypatch, _FailingDecisionDeskBuilder)
 
     target_window = _build_main_window()
     target_window._setup_ui()
 
-    assert "每日決策" in _get_tab_names(target_window)
-    decision_idx = _get_tab_names(target_window).index("每日決策")
-    widget = target_window.tabs.widget(decision_idx)
+    assert "每日決策" not in _get_nav_labels(target_window)
+    widget = target_window.decision_desk_view
     assert isinstance(widget, QLabel)
     assert "初始化失敗" in widget.text()
 
