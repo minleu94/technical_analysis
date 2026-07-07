@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-07-06
+> **最後整理**：2026-07-07
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，V2.0 之後長期版號階梯看 `VERSION_ROADMAP_V2_1_TO_V4_0.md`，架構看 `system_architecture.md`。
 
 ---
@@ -234,6 +234,7 @@
 | [V2_1_WORKBENCH_PHASE2_CLOSEOUT_2026_07_07.md](../06_qa/V2_1_WORKBENCH_PHASE2_CLOSEOUT_2026_07_07.md) | V2.1 / Phase 2 Workbench read-only Operating Loop closeout，記錄 background evidence feed、Action Items 人工佇列、Operating Loop 操作節奏、drill-down target contract、focused QA 與 Phase 0 真實時間 gate / scheduler gate 未完成邊界。 |
 | [V2_2_EVIDENCE_OPERATING_LOOP_READONLY_CHECK_2026_07_07.md](../06_qa/V2_2_EVIDENCE_OPERATING_LOOP_READONLY_CHECK_2026_07_07.md) | V2.2 Evidence Operating Loop read-only check，記錄正式 DB / scheduled dry-run / Pre-V2 readiness / manual review note / action item rhythm 現況；確認 weekly history `0/3`、multi-day dry-run `1/3` 尚未被 raw scheduled reports 補齊，並列出下一次人工 read-only checklist。 |
 | [V2_2_SIMULATED_PHASE_PROGRESS_QA_2026_07_07.md](../06_qa/V2_2_SIMULATED_PHASE_PROGRESS_QA_2026_07_07.md) | V2.2 simulated phase progress QA，記錄 historical replay reference-fix summary 如何標註為 `historical_replay` / `simulated_scheduler` / `official_gate_credit=false`，以及 simulated Phase 0-5 可演練但 official Phase 0 / Phase 5 gate 不變的 read-only 邊界。 |
+| [V2_2_PHASE5_APPROVAL_REHEARSAL_PACKAGE_2026_07_07.md](../06_qa/V2_2_PHASE5_APPROVAL_REHEARSAL_PACKAGE_2026_07_07.md) | V2.2 Phase 5 approval rehearsal package，整理 simulated Phase 5 審核包預演、official completion waiting list、data source candidate backlog、execution realism backlog、scheduler approval rehearsal checklist 與 UI 資訊架構 follow-up；明確標示哪些項目必須等待正式資料才能標為已完成。 |
 | [POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md](../06_qa/POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md) | Post-V1 Forward Performance Dashboard read-only UI QA 紀錄，包含 UI placement、read-only guarantee、filter coverage、禁用交易語氣檢查與 scheduler readiness 邊界。 |
 | [POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md) | Post-V1 Evidence Pipeline Runner dry-run QA 紀錄，包含 dry-run / confirm 行為、report、readiness、blocking gaps 與 production scheduler 未啟用邊界。 |
 | [POST_V1_HISTORICAL_EVIDENCE_REPLAY_QA_2026_07_06.md](../06_qa/POST_V1_HISTORICAL_EVIDENCE_REPLAY_QA_2026_07_06.md) | Post-V1 Historical Evidence Replay QA 紀錄，包含 working-copy replay DB、安全路徑、as-of recommendation selection、data-as-of outcome gate、reference return fix audit、`_reference_fix` rerun summary、測試命令與不取代 scheduler gate 邊界。 |
@@ -362,6 +363,7 @@
 - 2026-07-07：新增 V2.1 / Phase 2 Workbench read-only Operating Loop closeout 索引；Phase 2 UI / read-only operating loop 可收口，但 Phase 0 weekly history `0/3`、multi-day dry-run `1/3`、V2.2 真實 evidence loop 與 production scheduler gate 仍未完成。
 - 2026-07-07：新增 V2.2 Evidence Operating Loop read-only check 索引；確認 2026-07-02 至 2026-07-06 scheduled dry-run raw reports 不自動計入 Phase 0 gate，weekly history 仍為 `0/3`、multi-day dry-run record 仍為 `1/3`。
 - 2026-07-07：新增 V2.2 simulated phase progress service / CLI / QA 索引；historical replay 可標註為 simulated track 並演練 Phase 0-5，但 `official_gate_credit=false`、`requires_real_world_validation=true`，official Phase 5 仍 blocked。
+- 2026-07-07：新增 V2.2 Phase 5 approval rehearsal package 索引；在 Snapshot / 6M Roadmap / Version Roadmap / Manual 補上 official completion waiting list，避免把 simulated ready 誤標為已完成。
 - 2026-07-05：新增 V1.6 Cross-sectional Factor Pipeline design / plan / QA closeout 索引，標示 daily factor snapshot storage、FactorGate-backed pipeline、concept available-date gate、rank / quantile persistence 與 attribution summary CLI 已完成 v1；不改 scoring、不啟用 scheduler。
 - 2026-07-05：新增 V1.7 Negative Evidence QA closeout 索引，標示 recommendation screening matrix、Why Not / Liquidity payload、screening matrix evidence events 與 source coverage warning 已完成 v1；舊結果不回補、不重算，不改 scoring、不啟用 scheduler。
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access design / plan / QA closeout 索引，標示 read-only evidence service、MCP wrapper、permission model 與 AI report template 已完成 v1；不寫 DB、不改策略、不下單、不套用 lifecycle action。

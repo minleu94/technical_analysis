@@ -38,6 +38,7 @@
   - weekly history 必須達到至少 3 次（目前 `0/3`）。
   - multi-day dry-run 必須累積紀錄（目前 `1/3`）。
 - **輔助工具**：Historical Evidence Replay 可用 working-copy / replay DB 從歷史交易日逐日重放 Evidence Pipeline，並把事件 metadata 標成 `historical_replay` / `simulated_scheduler`；它只能幫助找 source gap、payload gap 與 V2.0 設計問題，不計入 weekly history 或 multi-day dry-run 的真實時間門檻。
+- **輔助工具**：`scripts/inspect_simulated_phase_progress.py` 可把 replay summary 與 scheduled dry-run latest status 彙整成 simulated Phase 0-5 rehearsal；所有 replay-derived evidence 必須保留 `official_gate_credit=false` 與 `requires_real_world_validation=true`，不得標成 official completion。
 - **限制**：Production scheduler 繼續維持 `false`，不寫入正式資料，不進行自動交易。
 
 ### Phase 0A：Historical Replay Evidence Quality Audit
@@ -99,6 +100,7 @@
   - Rollback / backup 機制完備。
   - 取得明確的 Manual Approval。
 - **放行**：進入 write-mode，開啟 Production Scheduler。
+- **目前補充**：2026-07-07 已完成 simulated Phase 5 approval rehearsal package，可先檢查 approval checklist、source candidate backlog、execution realism backlog 與 scheduler risk register 草案；但 official Phase 5 仍 blocked，必須等待 weekly history `3/3`、multi-day dry-run `3/3`、真實 manual review/action item rhythm、backup / rollback / recovery evidence 與 explicit manual approval。
 
 ---
 
@@ -130,6 +132,7 @@
 ## 4. 更新記錄
 
 - 2026-07-07：完成 Phase 2 Workbench MVP shell 並補上 background evidence feed / read-only Action Items MVP；新增 PySide6 read-only `決策工作台` view / table models / main-tab integration，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，Action Items 只列人工待處理事項並保留 source trace / degraded reason / drill-down target，不建立 repository、不寫 DB；Evidence mode / data quality 揭露 replay JSON summary 的 simulated scheduler、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data 限制；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
+- 2026-07-07：新增 V2.2 simulated phase progress 與 Phase 5 approval rehearsal package；historical replay 可演練到 simulated Phase 5，但 official completion 仍需等待 weekly history `3/3`、multi-day dry-run `3/3`、manual review/action item rhythm、source acceptance、execution realism acceptance、backup / rollback / recovery 與 explicit approval。
 - 2026-07-07：推進 Workbench Phase 2 operating-loop queue 體驗；Action Items 新增 severity / queue group / source label 顯示、穩定排序、空 / 降級狀態文案與 drill-down target contract，仍維持 read-only DTO payload、不寫 DB、不啟用 scheduler、不產生買賣建議。
 - 2026-07-07：完成 Workbench Phase 2C/2D read-only operating loop 與 closeout；新增 DTO-derived Operating Loop 操作節奏，串接 Evidence Feed、Action Items、Daily Checklist、weekly history、multi-day dry-run、manual review note 與 scheduler gate，Phase 2 UI 可收口；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 V2.2 evidence operating loop gate 不變。
 - 2026-07-06：補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 作為 V2.0 之後的版本 companion，並新增 Phase-to-version 對照；本文件仍保留 gate-based 工程權威。

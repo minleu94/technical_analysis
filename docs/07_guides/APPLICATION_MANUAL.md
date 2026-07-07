@@ -871,6 +871,36 @@ No-look-ahead 邊界：
 - `_reference_fix` replay 產物中，ready benchmark return / excess 已可用；industry 大量 `DEGRADED` 代表舊 recommendation payload 缺 sector / industry，不代表 raw forward return 或 benchmark excess 壞掉。cleanup 後保留位置為 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`；Workbench CLI 只應讀其中 JSON summary。
 - `source_missing_screening_matrix` 代表舊 recommendation result 沒有當時的 screening matrix payload；系統不回補、不重算舊結果。
 
+### 9.9.3 Simulated Phase Progress 與 Phase 5 Approval Rehearsal
+
+V2.2 後，可用 `scripts\inspect_simulated_phase_progress.py` 將 Historical Evidence Replay summary、scheduled dry-run latest status 與 Pre-V2 readiness 串成 simulated Phase 0-5 判讀。這個 CLI 只讀既有 JSON / Markdown / DB，不執行 replay、不啟用 scheduler、不寫 evidence DB，也不會把 replay 補成 official gate。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_simulated_phase_progress.py --db-path <working-copy-db> --replay-summary-path D:\Min\Python\Project\FA_Data\output\evidence_pipeline\historical_replay_reference_fix_20260706\historical_replay_2026-01-06_2026-07-06_reference_fix.json --scheduled-output-root D:\Min\Python\Project\FA_Data\output\scheduled\evidence_pipeline_dry_run --decision-date <YYYY-MM-DD> --json-output
+.\.venv\Scripts\python.exe scripts\inspect_simulated_phase_progress.py --db-path <working-copy-db> --replay-summary-path D:\Min\Python\Project\FA_Data\output\evidence_pipeline\historical_replay_reference_fix_20260706\historical_replay_2026-01-06_2026-07-06_reference_fix.json --scheduled-output-root D:\Min\Python\Project\FA_Data\output\scheduled\evidence_pipeline_dry_run --decision-date <YYYY-MM-DD> --markdown --report-output output\qa\simulated_phase_progress.md
+```
+
+輸出判讀：
+
+- `simulated_overall_status=simulated_ready` 只代表 approval rehearsal 可演練，不代表 official gate 完成。
+- replay-derived evidence 必須保留 `replay_mode=historical_replay`、`source_label=simulated_scheduler`、`official_gate_credit=false`、`requires_real_world_validation=true`。
+- scheduled dry-run latest status 若為 `dry_run=true`、`confirm=false`、`writes_evidence_db=false`，只代表看見 raw output；`manual_record_credit=false` 時不可計入 multi-day record。
+- `official_phase_5_status=blocked` 與 `production_scheduler_allowed=false` 必須保留，直到正式 Phase 0 / approval gates 通過。
+
+不得標示為已完成、必須等待正式資料的項目：
+
+| 項目 | 完成前必須等到 |
+|---|---|
+| weekly history | 3 筆不同週期、人工確認後保存的 weekly evidence operations history。 |
+| multi-day dry-run | 3 個真實交易日的 freshness、scheduled dry-run、working-copy confirm smoke、dashboard review 與 manual notes。 |
+| manual review note rhythm | 真實操作日可比較的人工覆盤 notes。 |
+| action item rhythm | 真實 review / dismissed / follow-up 節奏；目前 Action Items 只是 read-only queue。 |
+| Phase 3 source acceptance | 每個 candidate source 的 available-date / quality / missing policy 與 dry-run diagnostics。 |
+| Phase 4 execution realism acceptance | spread、odd-lot、locked limit、gap execution、unfilled reason 等 research-only sandbox 驗證。 |
+| Phase 5 scheduler approval | backup / rollback / recovery evidence、source gaps acceptance、working-copy idempotency 與 explicit manual approval。 |
+
+`docs/06_qa/V2_2_PHASE5_APPROVAL_REHEARSAL_PACKAGE_2026_07_07.md` 是目前的審核包預演文件；它可用來準備審核材料，但不改 lifecycle、不開 scheduler、不代表 production readiness。
+
 V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已保存的 daily factor snapshot。這個 CLI 不建立 DB、不寫 snapshot、不重算 scoring；若指定的 DB 不存在會以錯誤結束。snapshot 只會在其他受控 workflow 明確呼叫 `CrossSectionalFactorPipeline` / `CrossSectionalFactorRepository` 保存後才存在。
 
 ```powershell
@@ -1291,6 +1321,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-07：補充 Workbench background evidence feed / read-only Action Items MVP 操作說明；背景證據流只彙整既有 DTO / service payload，Action Items 每列帶 source trace、degraded reason 與 drill-down target，且不建立 repository、不寫 DB、不套用 lifecycle。
 - 2026-07-07：補充 Workbench Action Items 人工佇列操作說明；Action Items 依 severity / queue group / source 排序並顯示來源，row drill-down target 與舊頁導向一致，Evidence Feed / Action Items 空狀態與降級狀態文案維持只讀、非建議、不補值邊界。
 - 2026-07-07：補充 Workbench Phase 2C / 2D 操作節奏 closeout；Operating Loop 只顯示 daily first-look、manual queue、weekly history、multi-day dry-run、manual review note 與 scheduler gate，不寫 DB、不標記完成、不補真實時間 gate。
+- 2026-07-07：新增 Simulated Phase Progress / Phase 5 Approval Rehearsal 操作說明；historical replay 可用於 simulated Phase 0-5 審核包預演，但 weekly history、multi-day dry-run、manual review/action item rhythm、source acceptance、execution realism、backup / rollback / recovery 與 explicit approval 必須等正式資料才能標為 completed。
 - 2026-07-06：修正 TPEX 每日股價缺日判讀；手動 / 一鍵更新會在 TPEX 缺日期時標示未完整，Windows data update quick task 會輸出 `passed_with_warnings`，freshness probe 會檢查 TWSE / TPEX 原始日檔並在 TPEX 缺檔時標示 `degraded`；技術指標 skip 判斷也新增最新日 eligible 股票覆蓋檢查，避免 TPEX 後補時漏算。
 - 2026-07-06：新增 Historical Evidence Replay 操作說明，標示 replay 只在 working-copy / replay DB 逐日重放 evidence，事件會標示 `historical_replay` / `simulated_scheduler`，不取代真實 scheduled dry-run、weekly history、多日 dry-run 或 production scheduler approval。
 - 2026-07-06：補充 Historical Replay reference return fix 結果判讀，說明 TAIEX benchmark fallback、market `收盤價` fallback、industry payload gap 與 `source_missing_screening_matrix` 限制。

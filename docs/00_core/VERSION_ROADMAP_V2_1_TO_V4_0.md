@@ -67,10 +67,10 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 |---|---|---|---|
 | V2.0 | Phase 1 / Level 1 preflight | Unified Decision Workbench read-only prototype 與 source adapter。 | 已完成 Phase 1；Phase 2 read-only shell 已在 V2.1 段落承接。 |
 | V2.1 | Phase 2 / Level 1 | Workbench 主 UI MVP；read-only shell、background evidence feed、排序後 Action Items 人工佇列與 read-only Operating Loop 已接 Qt。 | Phase 0 evidence accumulation 不得被 replay 取代；舊 Tab 保留 expert mode；UI loop closeout 不等於 scheduler approval。 |
-| V2.2 | Phase 0 + Phase 2 / Level 1-2 | Evidence Operating Loop。 | weekly history、multi-day dry-run、manual review 與 action item 節奏以真實時間紀錄可重複。 |
+| V2.2 | Phase 0 + Phase 2 / Level 1-2 | Evidence Operating Loop；simulated phase progress 可用 historical replay 預演 Phase 0-5。 | official closeout 仍必須等 weekly history、multi-day dry-run、manual review 與 action item 節奏以真實時間紀錄可重複。 |
 | V2.3 | Phase 3 / Level 2 | P0 Data Source Candidate Dry-run。 | 新資料源只作 candidate / dry-run，不進 `ScoringEngine`。 |
 | V2.4 | Phase 4 / Level 2 | Execution Model Realism。 | execution realism 先在 research-only sandbox 驗證，不串 broker。 |
-| V2.5 | Phase 5 / Level 1-2 governance | Production Evidence Scheduler Approval。 | explicit approval、rollback / backup、multi-day record 與 source gaps 全部通過。 |
+| V2.5 | Phase 5 / Level 1-2 governance | Production Evidence Scheduler Approval。 | simulated approval rehearsal 可先完成；official approval 必須等 explicit approval、rollback / backup、multi-day record、weekly history 與 source gaps 全部通過。 |
 | V3.0 | Vision Level 2-3 | Evidence-Validated Decision System。 | 事件類型、alert、gate 與 dashboard 有足夠 forward / gap / review evidence 可判讀。 |
 | V3.1 | Vision Level 3 | Risk Control Effectiveness。 | Liquidity Gate、Why Not、Portfolio Alert、Fundamental diagnostics 有效果證據或降級決策。 |
 | V3.2 | Vision Level 3 | Strategy Lifecycle Effectiveness。 | Signal Decay / lifecycle candidate 能降低失效策略續用風險，仍需人工核准。 |
@@ -108,6 +108,7 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 - Phase 0 真實 weekly / multi-day gate。
 - V2.2 真實 evidence operating loop：weekly history、multi-day dry-run 與 manual review note 仍需真實時間 / 真實流程累積。
 - Phase 5 production scheduler approval。
+- V2.2 simulated phase progress / Phase 5 approval rehearsal 已可用作審核包預演，但不得改寫上述未完成項目。
 
 ### V2.1：Workbench 主 UI MVP
 
@@ -137,6 +138,8 @@ Exit Gate：
 ### V2.2：Evidence Operating Loop
 
 目標：讓 evidence operations 變成每週 / 每日可重複流程，而不是一次性報表。
+
+2026-07-07 補充：`scripts/inspect_simulated_phase_progress.py` 與 Phase 5 approval rehearsal package 可用 historical replay / scheduled dry-run status 預演 Phase 0-5。此軌道只允許輸出 `official_gate_credit=false`、`requires_real_world_validation=true` 與 `production_scheduler_allowed=false`；不得用 replay 把 V2.2 official closeout 標為完成。
 
 Scope In：
 
@@ -200,6 +203,7 @@ Gate：
 - rollback / backup / recovery 文件完備。
 - manual approval package 明確簽核。
 - scheduler 開啟後仍不得下單、不得自動 lifecycle action、不得改策略。
+- 2026-07-07 補充：approval rehearsal package 可先完成 checklist / backlog / risk register 草案；official V2.5 closeout 必須等待 weekly history `3/3`、multi-day dry-run `3/3`、真實 manual review/action item rhythm、backup / rollback / recovery evidence 與 explicit manual approval。
 
 ---
 
@@ -296,6 +300,7 @@ V4.0 仍不代表：
 ## 10. 更新記錄
 
 - 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；後續已由 read-only Operating Loop closeout 補齊 UI 操作節奏，但 Phase 0 真實時間 gate、V2.2 真實 evidence loop 與 Phase 5 scheduler gate 仍未完成。
+- 2026-07-07：新增 V2.2 simulated phase progress / Phase 5 approval rehearsal companion 說明；simulated ready 不等於 V2.2 / V2.5 official closeout，完成標示仍需正式時間資料與 explicit approval。
 - 2026-07-07：補充 V2.1 background evidence feed / read-only Action Items MVP；Action Items 只列人工待處理事項並帶 source trace、degraded reason、drill-down target，不建立 repository、不寫 DB、不套用 lifecycle。
 - 2026-07-07：補充 V2.1 Action Items 人工佇列 follow-up；新增 severity / queue group / source label 顯示、排序、空 / 降級狀態與 drill-down target contract，仍不啟用 scheduler、不寫 DB、不產生交易建議。
 - 2026-07-07：補充 V2.1 / Phase 2 closeout；新增 read-only Operating Loop 操作節奏，把 Evidence Feed、Action Items、Daily Checklist、weekly history、multi-day dry-run、manual review note 與 scheduler gate 串接於 DTO / Qt 邊界內；V2.2 真實 evidence loop 與 Phase 0 時間 gate 仍未完成。
