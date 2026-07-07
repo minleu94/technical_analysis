@@ -1,6 +1,6 @@
 # V2.1 至 V4.0 版本路線圖
 
-> **最後更新**：2026-07-06
+> **最後更新**：2026-07-07
 > **定位**：本文件是 V2.0 之後的長期版本化 companion。它把 `ROADMAP_6M_ENGINEERING.md` 的 gate-based Phase 與 `system_vision_specification.md` 的成功標準轉成可討論的產品版號階梯；不取代 6M Roadmap、Snapshot、Vision 或 Architecture。
 
 ---
@@ -65,8 +65,8 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 
 | 版本 | 對應 6M Phase / Vision Level | 定位 | 主要 Gate |
 |---|---|---|---|
-| V2.0 | Phase 1 / Level 1 preflight | Unified Decision Workbench read-only prototype 與 source adapter。 | 已完成 Phase 1；Phase 2 主 UI 未完成。 |
-| V2.1 | Phase 2 / Level 1 | Workbench 主 UI MVP。 | Phase 0 evidence accumulation 不得被 replay 取代；舊 Tab 需保留 expert mode。 |
+| V2.0 | Phase 1 / Level 1 preflight | Unified Decision Workbench read-only prototype 與 source adapter。 | 已完成 Phase 1；Phase 2 read-only shell 已在 V2.1 段落承接。 |
+| V2.1 | Phase 2 / Level 1 | Workbench 主 UI MVP；第一版 read-only shell 已接 Qt。 | Phase 0 evidence accumulation 不得被 replay 取代；舊 Tab 需保留 expert mode，完整 operating loop 仍待後續。 |
 | V2.2 | Phase 0 + Phase 2 / Level 1-2 | Evidence Operating Loop。 | weekly history、multi-day dry-run、manual review 與 action item 節奏可重複。 |
 | V2.3 | Phase 3 / Level 2 | P0 Data Source Candidate Dry-run。 | 新資料源只作 candidate / dry-run，不進 `ScoringEngine`。 |
 | V2.4 | Phase 4 / Level 2 | Execution Model Realism。 | execution realism 先在 research-only sandbox 驗證，不串 broker。 |
@@ -82,7 +82,7 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 
 ### V2.0：Unified Decision Workbench 基準
 
-狀態：Phase 1 read-only prototype 與 formal read-only source adapter 已完成。
+狀態：Phase 1 read-only prototype 與 formal read-only source adapter 已完成；2026-07-07 已完成 Phase 2 read-only MVP shell。
 
 已交付基準：
 
@@ -92,9 +92,16 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 - `_reference_fix` historical replay summary input
 - `scripts/inspect_v2_workbench_prototype.py`
 
+已完成第一版：
+
+- PySide6 頂層 `決策工作台` shell。
+- Status strip、今日待判讀、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
+- Qt view/model/service contract 測試，確認 UI 只讀 `WorkbenchDashboardDTO` 或呼叫 `WorkbenchSourceService`。
+- Replay JSON summary 限制揭露：`simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark、pending future-data。
+
 仍未完成：
 
-- 主 UI MVP。
+- 完整 Workbench operating loop 與舊 Tab drill-down。
 - background evidence feed。
 - Phase 0 真實 weekly / multi-day gate。
 - Phase 5 production scheduler approval。
@@ -120,7 +127,7 @@ Scope Out：
 
 Exit Gate：
 
-- UI contract 測試確認 Workbench view 不直接 import domain 計算模組。
+- UI contract 測試確認 Workbench view 不直接 import domain 計算模組。（第一版 shell 已完成；後續 drill-down 仍需維持。）
 - Manual 同步入口、操作、結果判讀、安全限制與排錯。
 - Phase 0 evidence gate 狀態在畫面上清楚揭露，不用漂亮 dashboard 掩蓋樣本不足。
 
@@ -285,4 +292,5 @@ V4.0 仍不代表：
 
 ## 10. 更新記錄
 
+- 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；完整 operating loop、舊 Tab drill-down、Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
 - 2026-07-06：初版建立 V2.1 至 V4.0 版本階梯，將 6M Roadmap Phase 2-5 與 Vision Level 1-4 映射為長期產品版號；保持 production scheduler、自動交易、AI 決策與投資有效性結論在 gate 之外。

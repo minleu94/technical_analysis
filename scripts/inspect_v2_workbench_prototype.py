@@ -135,6 +135,8 @@ def render_workbench_markdown(dashboard: WorkbenchDashboardDTO) -> str:
     lines.extend(["", "## Evidence Mode", ""])
     for item in payload["evidence_summary"]:
         lines.append(f"- {item['label']}: `{item['status']}` - {item['summary']}")
+        if item.get("diagnostics"):
+            lines.append(f"  - diagnostics: {', '.join(str(diagnostic) for diagnostic in item['diagnostics'])}")
     lines.extend(["", "## Daily Checklist", ""])
     for item in payload["daily_checklist"]:
         lines.append(f"- {item['label']}: `{item['status']}` - {item['summary']}")

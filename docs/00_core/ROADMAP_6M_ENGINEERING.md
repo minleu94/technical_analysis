@@ -1,6 +1,6 @@
 # Active 6M Roadmap v2 (Gate-Based)
 
-> **最後更新**：2026-07-06
+> **最後更新**：2026-07-07
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。本文件已重構為 Gate-based 結構，不再保留完成流水帳。
 > **版本 companion**：V2.0 之後若需要版號判讀，請看 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。該文件只把本 Roadmap 的 Phase gate 映射為 V2.1-V4.0 產品階梯，不取代本文件的工程順序與驗收標準。
 > **歷史紀錄**：V1 (Month 1-6 與 V1.1-V1.9) 的詳細完工細節已封存至 [ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md](../09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md)。
@@ -24,6 +24,7 @@
   - V1.9: Read-only Agent / MCP Evidence Access
   - Historical Evidence Replay v1: research-only simulated scheduler replay
   - V2.0 Phase 1 read-only Workbench prototype slice: DTO / composer / replay summary adapter / sample CLI / formal read-only source adapter
+  - V2.1 / Phase 2 Workbench MVP shell: PySide6 read-only `決策工作台` view / table models / main-tab integration backed only by `WorkbenchSourceService` / `WorkbenchDashboardDTO`
 
 ---
 
@@ -54,7 +55,7 @@
   - 此 closeout 不代表策略有效、不代表 Phase 0 真實時間 gate 完成、不代表 production scheduler 可啟用。
 
 ### Phase 1：V2.0 Unified Decision Workbench Design Spike
-**狀態**：2026-07-06 已完成 read-only prototype slice 與 formal read-only source adapter；仍未進入 Phase 2 主 UI 整合。
+**狀態**：2026-07-06 已完成 read-only prototype slice 與 formal read-only source adapter；2026-07-07 已接入 Phase 2 Qt read-only MVP shell，完整 operating loop 仍待後續。
 **目標**：在不改動主 UI 且不新增交易能力的前提下，探索 V2.0 資訊架構。
 - **工作範圍**：
   - 只做資訊架構 (Information Architecture) 與 Read-only Prototype。
@@ -64,10 +65,15 @@
 - **限制**：不新增交易能力，不改動生產環境 UI；adapter 只讀 existing sources，missing DB / missing table / degraded source 只回 diagnostics，不建立 schema、不寫 evidence、不建立 scheduler、不套用 lifecycle action。
 
 ### Phase 2：V2.0 Workbench MVP
+**狀態**：2026-07-07 已完成第一版 read-only MVP shell；完整 Daily Decision / Evidence Review / Portfolio Review / Action Items operating loop 仍待後續 gate。
 **目標**：建立單一決策入口。
 - **工作範圍**：
+  - 已落地 PySide6 `決策工作台` 分頁，第一版呈現 status strip、今日待判讀、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
+  - UI 只讀 `WorkbenchDashboardDTO`，或透過 `WorkbenchSourceService.inspect()` 取得 payload；UI 不直接讀 SQLite、不讀 replay DB、不寫 DB、不啟用 scheduler。
+  - 若 payload 帶 Historical Replay JSON summary，Evidence mode / data quality 必須揭露 `simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data；replay 不得用來滿足 Phase 0 gate。
   - 整合 Daily Decision Desk、Evidence Review、Portfolio Review 與 Action Items。
   - 將舊 Tab 轉為 drill-down 或專家模式。
+- **限制**：Workbench shell 不重算 scoring / recommendation / portfolio / backtest / lifecycle，不輸出買賣建議，不解除 Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 或 Phase 5 scheduler gate。
 
 ### Phase 3：P0 Data Source Candidate Dry-run
 **目標**：引入使研究更真實的關鍵資料，但初期僅作候選測試。
@@ -99,7 +105,7 @@
 | 6M Phase | 候選版號 | 對應產品意義 |
 |---|---|---|
 | Phase 1 | V2.0 | Unified Decision Workbench read-only prototype 與 source adapter。 |
-| Phase 2 | V2.1 | Workbench 主 UI MVP，整合 Daily Decision、Evidence Review、Portfolio Review 與 Action Items。 |
+| Phase 2 | V2.1 | Workbench 主 UI MVP；第一版 read-only shell 已接 Qt，完整 operating loop 與舊 Tab drill-down 仍待後續。 |
 | Phase 0 + Phase 2 | V2.2 | Evidence Operating Loop，讓 weekly review、multi-day dry-run、manual review 與 action item 形成可重複節奏。 |
 | Phase 3 | V2.3 | P0 Data Source Candidate Dry-run，先候選測試 microstructure、corporate action 與 PIT release date，不直接進 `ScoringEngine`。 |
 | Phase 4 | V2.4 | Execution Model Realism，在 research-only sandbox 驗證買賣價差、零股、跳空與未成交原因。 |
@@ -119,6 +125,7 @@
 
 ## 4. 更新記錄
 
+- 2026-07-07：完成 Phase 2 Workbench MVP shell；新增 PySide6 read-only `決策工作台` view / table models / main-tab integration，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，並在 Evidence mode / data quality 揭露 replay JSON summary 的 simulated scheduler、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data 限制；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
 - 2026-07-06：補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 作為 V2.0 之後的版本 companion，並新增 Phase-to-version 對照；本文件仍保留 gate-based 工程權威。
 - 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；已落地 DTO、composer、replay JSON summary adapter、sample CLI 與 focused tests，Phase 2 主 UI、Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
 - 2026-07-06：完成 Workbench formal read-only source adapter；CLI 可從 `--sample` 擴充到受控 `--db-path` / `--decision-date`，只讀既有 evidence / readiness / Agent summary / optional replay JSON，不寫 DB；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。

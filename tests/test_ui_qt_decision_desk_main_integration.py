@@ -54,6 +54,14 @@ class _RecordedDecisionDeskView(_DummyView):
         super().__init__(parent=parent)
 
 
+class _RecordedWorkbenchView(_DummyView):
+    def __init__(self, source_service=None, auto_refresh=True, parent=None, **kwargs):
+        self.source_service = source_service
+        self.auto_refresh = auto_refresh
+        self.kwargs = kwargs
+        super().__init__(parent=parent)
+
+
 class _RecordedSmartMoneyFlowView(_DummyView):
     def __init__(self, *args, **kwargs):
         self.smart_money_semantic_service = kwargs.get("smart_money_semantic_service")
@@ -90,6 +98,19 @@ class _TrackingDecisionDeskBuilder:
     def build_snapshot(self, as_of_date):
         _snapshot()
         return _snapshot()
+
+
+class _TrackingWorkbenchSourceService:
+    instances: list["_TrackingWorkbenchSourceService"] = []
+
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        _TrackingWorkbenchSourceService.instances.append(self)
+
+    def inspect(self, **kwargs):
+        self.inspect_kwargs = kwargs
+        return None
 
 
 class _FailingDecisionDeskBuilder:
@@ -155,6 +176,7 @@ def _install_fake_dependencies(monkeypatch, decision_desk_builder_cls):
         "WatchlistView": _DummyView,
         "SmartMoneyFlowView": _RecordedSmartMoneyFlowView,
         "DecisionDeskView": _RecordedDecisionDeskView,
+        "UnifiedDecisionWorkbenchView": _RecordedWorkbenchView,
         "SessionContextStrip": _SessionContextStrip,
         "RuntimeController": _RuntimeController,
         "QtRuntimeBridge": _RuntimeBridge,
@@ -166,6 +188,7 @@ def _install_fake_dependencies(monkeypatch, decision_desk_builder_cls):
     fake_portfolio_module.PortfolioView = _DummyView
     monkeypatch.setitem(sys.modules, "ui_qt.views.portfolio_view", fake_portfolio_module)
     monkeypatch.setattr(main_module, "DecisionDeskSnapshotBuilder", decision_desk_builder_cls)
+    monkeypatch.setattr(main_module, "WorkbenchSourceService", _TrackingWorkbenchSourceService)
 
 
 def _build_main_window(*, regime_service=None, portfolio_service=None):
@@ -209,6 +232,23 @@ def test_main_window_adds_daily_decision_tab(monkeypatch):
     builder = _TrackingDecisionDeskBuilder.instances[-1]
     assert builder.provider is not None
     assert callable(getattr(builder.provider, "fetch_market_regime", None))
+
+
+def test_main_window_adds_unified_decision_workbench_tab(monkeypatch):
+    app()
+    _TrackingWorkbenchSourceService.instances = []
+    _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
+
+    target_window = _build_main_window()
+    target_window._setup_ui()
+
+    assert "決策工作台" in _get_tab_names(target_window)
+    workbench_idx = _get_tab_names(target_window).index("決策工作台")
+    workbench_tab = target_window.tabs.widget(workbench_idx)
+    assert isinstance(workbench_tab, _RecordedWorkbenchView)
+    assert _TrackingWorkbenchSourceService.instances
+    assert workbench_tab.source_service is _TrackingWorkbenchSourceService.instances[-1]
+    assert workbench_tab.auto_refresh is True
 
 
 class _FakeRegimeService:

@@ -87,6 +87,49 @@ def test_workbench_prototype_cli_reads_replay_summary_as_simulated_input(tmp_pat
     assert any("simulated_scheduler" in warning for warning in payload["warnings"])
 
 
+def test_workbench_prototype_cli_markdown_includes_replay_diagnostics(tmp_path: Path) -> None:
+    replay_path = tmp_path / "replay.json"
+    replay_path.write_text(
+        json.dumps(
+            {
+                "replay_mode": "historical_replay",
+                "source_label": "simulated_scheduler",
+                "totals": {"days": 118, "events_seen": 118056, "outcomes_created": 472224},
+                "final_outcome_summary": {
+                    "ready": 380736,
+                    "pending_insufficient_future_data": 91488,
+                    "missing_benchmark": 0,
+                    "missing_industry_benchmark": 378491,
+                },
+                "days": [{"diagnostics": ["source_missing_screening_matrix"]}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/inspect_v2_workbench_prototype.py",
+            "--sample",
+            "--format",
+            "markdown",
+            "--replay-summary-json",
+            str(replay_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert "diagnostics:" in result.stdout
+    assert "simulated_scheduler" in result.stdout
+    assert "source_gap:source_missing_screening_matrix" in result.stdout
+    assert "benchmark_coverage:covered=472224,total=472224,missing=0" in result.stdout
+    assert "pending_future_data:91488" in result.stdout
+
+
 def test_workbench_prototype_cli_writes_requested_output_only(tmp_path: Path) -> None:
     output_path = tmp_path / "workbench.json"
     untouched_db = tmp_path / "evidence.db"

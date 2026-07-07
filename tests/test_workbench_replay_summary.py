@@ -41,6 +41,48 @@ def test_load_historical_replay_summary_marks_simulated_and_degraded(tmp_path: P
     assert "not_production_readiness" in summary["warnings"]
 
 
+def test_load_historical_replay_summary_builds_quality_disclosures(tmp_path: Path) -> None:
+    path = tmp_path / "replay.json"
+    path.write_text(
+        json.dumps(
+            {
+                "replay_mode": "historical_replay",
+                "source_label": "simulated_scheduler",
+                "totals": {
+                    "days": 118,
+                    "events_seen": 118056,
+                    "outcomes_created": 472224,
+                },
+                "final_outcome_summary": {
+                    "ready": 380736,
+                    "pending_insufficient_future_data": 91488,
+                    "missing_benchmark": 0,
+                    "missing_industry_benchmark": 378491,
+                },
+                "days": [
+                    {
+                        "date": "2026-01-06",
+                        "diagnostics": ["source_missing_screening_matrix"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = load_historical_replay_summary(path)
+    disclosures = summary["quality_disclosures"]
+
+    assert "simulated_scheduler" in disclosures
+    assert "source_gap:source_missing_screening_matrix" in disclosures
+    assert "payload_gap:missing_industry_benchmark" in disclosures
+    assert "outcome_maturity:ready=380736,pending_future_data=91488" in disclosures
+    assert "benchmark_coverage:covered=472224,total=472224,missing=0" in disclosures
+    assert "missing_industry_benchmark:378491" in disclosures
+    assert "pending_future_data:91488" in disclosures
+    assert "phase0_gate_not_satisfied:weekly_history_and_multi_day_dry_run_require_real_time_accumulation" in disclosures
+
+
 def test_load_historical_replay_summary_rejects_replay_db_path(tmp_path: Path) -> None:
     path = tmp_path / "replay.db"
     path.write_bytes(b"not-json")

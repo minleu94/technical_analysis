@@ -171,6 +171,16 @@ class WorkbenchReadOnlyComposer:
             missing_benchmark = int(final.get("missing_benchmark", 0) or 0)
             missing_industry = int(final.get("missing_industry_benchmark", 0) or 0)
             benchmark_text = "benchmark reference ready" if missing_benchmark == 0 else "benchmark reference gap"
+            quality_disclosures = tuple(
+                str(item) for item in historical_replay_summary.get("quality_disclosures", ())
+            )
+            diagnostics = _dedupe(
+                [
+                    *quality_disclosures,
+                    *(str(item) for item in historical_replay_summary.get("warnings", ())),
+                    *(str(item) for item in historical_replay_summary.get("limitations", ())),
+                ]
+            )
             items.append(
                 WorkbenchEvidenceSummary(
                     item_id="historical_replay",
@@ -181,7 +191,7 @@ class WorkbenchReadOnlyComposer:
                         f"{totals.get('outcomes_created', 0)} outcomes; {benchmark_text}; "
                         f"industry gaps {missing_industry}."
                     ),
-                    diagnostics=tuple(str(item) for item in historical_replay_summary.get("warnings", ())),
+                    diagnostics=tuple(diagnostics),
                 )
             )
         return tuple(items)

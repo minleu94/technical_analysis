@@ -1,6 +1,6 @@
 ﻿# 系統架構
 
-> **最後更新**：2026-07-06
+> **最後更新**：2026-07-07
 > **定位**：本文件是目前模組邊界、依賴方向、資料流與高風險技術契約的架構權威。歷史遷移過程不在本文件維護。
 
 ## 1. 系統定位
@@ -70,16 +70,17 @@ Application Services / DTO / Repository
 - 不在 UI 內複製 application/domain 計算。
 - Runtime UI 不得直接讀寫 Runtime store。
 
-### 目前 8 個頂層工作區
+### 目前 9 個頂層工作區
 
 1. 數據更新
 2. 市場觀察
-3. 策略回測 / Research Lab
-4. 推薦分析
-5. 觀察清單
-6. 持倉管理
-7. Runtime Observatory
-8. Daily Decision Desk（v1 首頁）
+3. 決策工作台（Phase 2 Unified Decision Workbench MVP shell）
+4. Daily Decision Desk（v1 / expert drill-down）
+5. 策略回測 / Research Lab
+6. 推薦分析
+7. 觀察清單
+8. 持倉管理
+9. Runtime Observatory
 
 完整操作見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
 
@@ -109,7 +110,7 @@ Application Services / DTO / Repository
 | 保存與版本 | `backtest_repository.py`、`recommendation_repository.py`、`strategy_version_service.py`、`preset_service.py`、`universe_service.py` |
 | Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py`、`portfolio_construction_service.py`、`portfolio_execution_trace_service.py` |
 | Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`strategy_lifecycle_repository.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
-| Post-V1 evidence / V2.0 workbench prototype | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`historical_evidence_replay.py`、`agent_evidence_access_service.py`、`pre_v2_readiness_service.py`、`workbench_dtos.py`、`workbench_read_only_composer.py`、`workbench_replay_summary.py`、`workbench_source_service.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
+| Post-V1 evidence / V2.0-V2.1 workbench | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`historical_evidence_replay.py`、`agent_evidence_access_service.py`、`pre_v2_readiness_service.py`、`workbench_dtos.py`、`workbench_read_only_composer.py`、`workbench_replay_summary.py`、`workbench_source_service.py`、`ui_qt/views/workbench_view.py`、`ui_qt/models/workbench_table_models.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
 | Runtime | `runtime_services/`、`dtos/runtime_dtos.py` |
 
 `app_module` 不依賴 `ui_app`。Legacy Tkinter UI 不是目前 service 架構的一部分。
@@ -148,7 +149,9 @@ Historical Evidence Replay v1 新增 `app_module/historical_evidence_replay.py` 
 
 Phase 0A reference return fix 後，`ForwardPerformanceService` 的 market benchmark lookup 採保守 fallback：event 沒有 `benchmark_id` 時使用 `TAIEX`，`market_indices` 支援 named aliases、未命名市場序列與 `收盤指數` 缺值時的 `收盤價` fallback。Industry lookup 不推估未知產業，只在 event 有 `industry_benchmark_id` 或 `sector` 且可映射至 `industry_indices` 時填入；缺 reference 時保留 `NULL` 與 `missing_industry_benchmark` warning，不填 0。這是 evidence outcome reference lookup，不改 `ScoringEngine`、推薦分數、Portfolio 或 scheduler。
 
-V2.0 Phase 1 read-only Workbench prototype 新增 `app_module/workbench_dtos.py`、`app_module/workbench_read_only_composer.py`、`app_module/workbench_replay_summary.py`、`app_module/workbench_source_service.py` 與 `scripts/inspect_v2_workbench_prototype.py`。Composer 只把 Daily Decision Desk snapshot、Pre-V2 readiness report、read-only Agent sample 與可選 Historical Replay JSON summary 組成 `WorkbenchDashboardDTO`，輸出今日待判讀、Evidence mode、market context、portfolio/watchlist summary、Daily Checklist、warnings 與固定 read-only access boundary。`WorkbenchSourceService` 是 formal read-only source adapter：以 SQLite `mode=ro` / `PRAGMA query_only=ON` 讀取受控 `--db-path` 的 Daily Decision durable snapshot，並組合 `PreV2ReadinessService` 與 `AgentEvidenceAccessService` summary；missing DB / missing table / degraded source 只轉成 diagnostics / warnings，不建立 schema、不呼叫 writable repository migration、不寫 DB。Prototype CLI 保留 `--sample`，並支援 `--db-path` / `--decision-date` 與可選 `_reference_fix` replay JSON summary；它拒絕 replay DB 直接輸入。Composer / adapter 不讀 UI state、不寫 SQLite、不建立 scheduler、不重算 scoring / portfolio / lifecycle / backtest，也不輸出買賣建議。Phase 2 主 UI 整合、background evidence feed 與 production scheduler gate 都尚未完成。
+V2.0 Phase 1 read-only Workbench prototype 新增 `app_module/workbench_dtos.py`、`app_module/workbench_read_only_composer.py`、`app_module/workbench_replay_summary.py`、`app_module/workbench_source_service.py` 與 `scripts/inspect_v2_workbench_prototype.py`。Composer 只把 Daily Decision Desk snapshot、Pre-V2 readiness report、read-only Agent sample 與可選 Historical Replay JSON summary 組成 `WorkbenchDashboardDTO`，輸出今日待判讀、Evidence mode、market context、portfolio/watchlist summary、Daily Checklist、warnings 與固定 read-only access boundary。`WorkbenchSourceService` 是 formal read-only source adapter：以 SQLite `mode=ro` / `PRAGMA query_only=ON` 讀取受控 `--db-path` 的 Daily Decision durable snapshot，並組合 `PreV2ReadinessService` 與 `AgentEvidenceAccessService` summary；missing DB / missing table / degraded source 只轉成 diagnostics / warnings，不建立 schema、不呼叫 writable repository migration、不寫 DB。Prototype CLI 保留 `--sample`，並支援 `--db-path` / `--decision-date` 與可選 `_reference_fix` replay JSON summary；它拒絕 replay DB 直接輸入。Composer / adapter 不讀 UI state、不寫 SQLite、不建立 scheduler、不重算 scoring / portfolio / lifecycle / backtest，也不輸出買賣建議。
+
+V2.1 / Phase 2 Workbench MVP shell 新增 `ui_qt/views/workbench_view.py` 與 `ui_qt/models/workbench_table_models.py`，並由 `ui_qt/main.py` 以 `WorkbenchSourceService` 注入頂層 `決策工作台` 分頁。Qt view 只接受 `WorkbenchDashboardDTO` 或呼叫 `WorkbenchSourceService.inspect()`，不直接 import SQLite、replay service、scheduler、scoring、recommendation、portfolio、backtest 或 lifecycle 計算模組；table models 只呈現 DTO row 欄位。畫面第一版呈現 status strip、今日待判讀、Evidence mode / data quality、Daily Checklist 與 warnings / degraded source。若 DTO 帶 replay summary，data quality 區塊揭露 `simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data；Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍只能靠真實時間累積，replay 不得替代。完整 background evidence feed、舊 Tab drill-down 與 production scheduler gate 仍尚未完成。
 
 Healthcheck Batch 4 新增 `research_result_presentation.py` 作為 Research Lab 結果頁呈現邊界。它只把已產生的推薦回放 summary、Train-Test report、Walk-forward fold summary 轉成 UI 文案與可靠度提示，不重跑回測、不重新抓取目前資料、不改變交易或績效計算。Train-Test / Walk-forward 樣本可靠度提示只讀交易數、Fold 數、OOS 與 consistency 等已存在結果 metadata；Registry 比較仍只讀已保存 metadata、equity curve 與 benchmark_results。Qt UI 可使用這些 helper 顯示「樣本不足，不宜作正式策略判斷」、資金使用與 Monte Carlo 語意，但不得把提示升級成交易建議、自動下單或持倉調整。
 
@@ -536,6 +539,7 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-07-07：新增 Phase 2 Workbench MVP shell 架構同步；`ui_qt/views/workbench_view.py` 與 `ui_qt/models/workbench_table_models.py` 只呈現 `WorkbenchDashboardDTO`，主 UI 透過 `WorkbenchSourceService` 注入，不直接讀 SQLite / replay DB、不寫 DB、不啟用 scheduler、不重算 scoring / portfolio / backtest / lifecycle。
 - 2026-07-06：文件架構補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md`，定位為 V2.0 之後長期版號 companion；本文件仍只維護目前架構、模組邊界與資料流。
 - 2026-07-06：新增 V2.0 Phase 1 read-only Workbench prototype 架構同步，確認 DTO / composer / replay summary adapter / CLI 只組合唯讀樣本與 replay JSON summary，不寫 DB、不掛主 UI、不重算策略、不啟用 scheduler。
 - 2026-07-06：新增 Workbench formal read-only source adapter 架構同步，確認 `WorkbenchSourceService` 只用 SQLite `mode=ro` / `query_only` 讀受控 DB path 的 DDD snapshot，並組合 Pre-V2 readiness、Agent summary 與可選 replay JSON；missing DB / table 只回 diagnostics，不建立 schema、不寫 DB、不解除 Phase 0 / scheduler gate。

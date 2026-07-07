@@ -299,3 +299,57 @@ def test_workbench_source_service_missing_snapshot_table_is_degraded_source(tmp_
     assert status_items["decision_snapshot"]["status"] == "warning"
     assert any("decision_desk_snapshots_table_missing" in warning for warning in payload["warnings"])
     assert any(item["item_id"] == "readiness_source_gaps" for item in payload["review_items"])
+
+
+def test_workbench_source_service_surfaces_replay_quality_disclosures_without_replay_db(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    missing_db = tmp_path / "missing" / "evidence.db"
+    record_path = tmp_path / "multi-day.md"
+    replay_summary_path = tmp_path / "replay_summary.json"
+    _multi_day_record(record_path, rows=1)
+    replay_summary_path.write_text(
+        json.dumps(
+            {
+                "replay_mode": "historical_replay",
+                "source_label": "simulated_scheduler",
+                "totals": {
+                    "days": 118,
+                    "events_seen": 118056,
+                    "outcomes_created": 472224,
+                },
+                "final_outcome_summary": {
+                    "ready": 380736,
+                    "pending_insufficient_future_data": 91488,
+                    "missing_benchmark": 0,
+                    "missing_industry_benchmark": 378491,
+                },
+                "days": [
+                    {
+                        "date": "2026-01-06",
+                        "diagnostics": ["source_missing_screening_matrix"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    dashboard = WorkbenchSourceService(config, evidence_db_path=missing_db).inspect(
+        decision_date="2026-07-06",
+        multi_day_record_path=record_path,
+        replay_summary_json=replay_summary_path,
+    )
+    payload = dashboard.to_dict()
+    evidence = {item["item_id"]: item for item in payload["evidence_summary"]}
+    replay_diagnostics = " ".join(evidence["historical_replay"]["diagnostics"])
+
+    assert payload["source_mode"] == "read_only_sources_plus_historical_replay"
+    assert not missing_db.exists()
+    assert "simulated_scheduler" in replay_diagnostics
+    assert "source_gap:source_missing_screening_matrix" in replay_diagnostics
+    assert "payload_gap:missing_industry_benchmark" in replay_diagnostics
+    assert "outcome_maturity:ready=380736,pending_future_data=91488" in replay_diagnostics
+    assert "benchmark_coverage:covered=472224,total=472224,missing=0" in replay_diagnostics
+    assert "missing_industry_benchmark:378491" in replay_diagnostics
+    assert "pending_future_data:91488" in replay_diagnostics
+    assert "phase0_gate_not_satisfied" in replay_diagnostics

@@ -1,6 +1,6 @@
 # UI 功能文件（Qt）
 
-> **最後整理**：2026-07-02
+> **最後整理**：2026-07-07
 > **適用範圍**：`ui_qt/` 目前主要使用者介面。
 > **狀態判讀**：目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月工程方向以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；本文件只描述 UI 功能與操作入口。
 > **完整操作**：安裝、逐步操作、參數、結果判讀與排錯見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
@@ -79,6 +79,26 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 
 - 籌碼、分點、資料品質語意改動需同步 `docs/04_broker_branch/`。
 - Regime 或 scoring 輸出語意改動需同步 `docs/02_features/SCORE_EXPLANATION.md`。
+
+### 2.5 決策工作台
+
+主要 view / model：
+
+- `ui_qt/views/workbench_view.py`
+- `ui_qt/models/workbench_table_models.py`
+
+主要能力：
+
+- Phase 2 Unified Decision Workbench MVP shell，頂層分頁名稱為「決策工作台」。
+- 第一版呈現 status strip、今日待判讀、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
+- 只透過 `WorkbenchSourceService` 取得 `WorkbenchDashboardDTO`，或直接呈現呼叫端提供的 DTO；UI 不直接讀 SQLite、不讀 replay DB、不寫 DB、不啟用 scheduler。
+- Optional Historical Replay JSON summary 只作 simulated evidence input；若 DTO 帶 replay summary，data quality 區塊必須揭露 `simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data。
+
+防線：
+
+- 不重算 scoring、recommendation、portfolio、backtest 或 lifecycle。
+- 不產生買賣建議、不下單、不套用 lifecycle action。
+- Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 只能繼續真實時間累積，不能用 fixture 或 replay 取代。
 
 ### 3. 策略回測
 

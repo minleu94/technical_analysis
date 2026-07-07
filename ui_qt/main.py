@@ -52,6 +52,8 @@ from app_module.broker_flow_service import BrokerFlowService
 from app_module.smart_money_semantic_service import SmartMoneySemanticService, SQLiteSmartMoneyPriceProvider
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
+from app_module.workbench_source_service import WorkbenchSourceService
+from ui_qt.views.workbench_view import UnifiedDecisionWorkbenchView
 from ui_qt.theme import build_global_stylesheet
 from ui_qt.theme.fonts import preferred_qt_chinese_font_family, register_qt_chinese_fonts
 from ui_qt.widgets.text_sanitizer import sanitize_button_texts
@@ -380,6 +382,23 @@ class MainWindow(QMainWindow):
 
             tabs.addTab(market_tabs, "市場觀察")
             print("[MainWindow] 市場觀察標籤頁創建成功")
+
+            # Phase 2 Unified Decision Workbench shell（唯讀 DTO/service 邊界）
+            print("[MainWindow] 開始建立決策工作台分頁...")
+            try:
+                self.workbench_source_service = WorkbenchSourceService(self.config)
+                workbench_view = UnifiedDecisionWorkbenchView(
+                    source_service=self.workbench_source_service,
+                    auto_refresh=True,
+                    parent=self,
+                )
+                tabs.addTab(workbench_view, "決策工作台")
+                print("[MainWindow] 決策工作台分頁建立成功")
+            except Exception as e:
+                print(f"[MainWindow] 警告：決策工作台分頁初始化失敗：{e}")
+                fallback_tab = QLabel(f"決策工作台初始化失敗，已降級顯示：{e}")
+                fallback_tab.setWordWrap(True)
+                tabs.addTab(fallback_tab, "決策工作台")
 
             # 監聽主 tab 切換事件（當切換到市場觀察時）
             def on_main_tab_changed(index):
