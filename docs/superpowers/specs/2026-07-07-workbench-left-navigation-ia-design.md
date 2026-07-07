@@ -80,6 +80,19 @@
 3. Evidence / data quality degraded source。
 4. replay / simulated-only 提醒。
 
+Empty state 必須設計成正向但不誤導：
+
+- 當 queue 為空時，中間主區顯示「今日所有風險已確認，市場無重大異常」或同等語氣。
+- Empty state 必須保留 read-only / non-advice 邊界，不得暗示可以交易或 gate 已完成。
+- Empty state 可提供下一步入口，例如 `前往市場探索`、`查看 Evidence gate`、`檢查持倉追蹤`。
+- Empty state 不得自動觸發 refresh、pipeline、replay、scheduler 或 DB write。
+
+Queue drill-down 回饋採 non-persistent first slice：
+
+- 點擊 queue row 進入 drill-down 後，第一版可在本次 UI session 將該列標示為「已查看」或降低視覺權重。
+- 此狀態只存在 UI memory，不寫 DB、不改 DTO、不套用 lifecycle。
+- 若後續需要跨 session 記憶，再另案設計 manual review / action item persistence gate。
+
 ### 3. Drill-down + Compressed Snapshots
 
 右側是深挖入口，不是第二個資訊牆：
@@ -116,6 +129,12 @@
 - `市場探索`：可選，顯示焦點數或不顯示。
 
 Badge 只能是摘要，不可觸發計算或資料刷新。
+
+Collapsible left nav 屬 future slice：
+
+- 第一版先做固定寬度左側導覽，確保資訊架構與測試穩定。
+- 後續可新增收合模式，只顯示 icon / 短碼 / badge，供小螢幕筆電保留橫向空間。
+- 收合狀態只能改呈現，不得改變 workspace routing、資料載入或 refresh 行為。
 
 ### Sub-tabs
 
@@ -166,6 +185,8 @@ Workbench 子 tab 建議：
 ## Implementation Boundary
 
 目前 `ui_qt/main.py` 已有未提交修改；實作前必須先讀取並保護該變更，不得覆寫使用者或其他 agent 的修改。
+
+使用者另有每日 schedule 與 report 產物調整；本次 UI IA 實作不得改動 scheduled wrappers、scheduled output schema、morning report、Pre-V2 readiness 或 simulated phase progress 的資料契約。Workbench 只能透過既有 `WorkbenchSourceService` / DTO 讀取這些資料，不能直接解析或假設 report 欄位固定。
 
 實作應偏向新增小型容器 / helper，而不是在 `main.py` 內繼續堆大量 layout logic。
 
