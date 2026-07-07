@@ -97,7 +97,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         overview_page = QWidget()
         overview_layout = QVBoxLayout(overview_page)
         overview_layout.setSpacing(10)
-        overview_layout.setContentsMargins(0, 0, 0, 0)
+        overview_layout.setContentsMargins(12, 12, 12, 12)
+        self.overview_layout = overview_layout
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -116,8 +117,20 @@ class UnifiedDecisionWorkbenchView(QWidget):
         title.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
         content_layout.addWidget(title)
 
-        self.overview_summary_label = self._make_state_label()
-        content_layout.addWidget(self.overview_summary_label)
+        self.summary_value_labels: dict[str, QLabel] = {}
+        self.summary_detail_labels: dict[str, QLabel] = {}
+        summary_row = QWidget()
+        summary_layout = QHBoxLayout(summary_row)
+        summary_layout.setContentsMargins(0, 0, 0, 0)
+        summary_layout.setSpacing(8)
+        for key, label in (
+            ("review", "今日待判讀"),
+            ("action", "人工待處理"),
+            ("waiting", "等待真實時間"),
+            ("warning", "Warnings"),
+        ):
+            summary_layout.addWidget(self._make_summary_block(key, label), 1)
+        content_layout.addWidget(summary_row)
 
         self.boundary_banner = QLabel("")
         self.boundary_banner.setWordWrap(True)
@@ -368,6 +381,37 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         return label
 
+    def _make_summary_block(self, key: str, title: str) -> QWidget:
+        block = QWidget()
+        block.setObjectName("workbenchSummaryBlock")
+        block.setStyleSheet(
+            f"#workbenchSummaryBlock {{ background: {MIDNIGHT_ANALYST.surface_2}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; }}"
+        )
+        layout = QVBoxLayout(block)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(3)
+
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_muted}; font-size: 10px; font-weight: 600;")
+        value_label = QLabel("-")
+        value_font = QFont()
+        value_font.setPointSize(14)
+        value_font.setBold(True)
+        value_label.setFont(value_font)
+        value_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
+        detail_label = QLabel("")
+        detail_label.setWordWrap(True)
+        detail_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 10px;")
+
+        layout.addWidget(title_label)
+        layout.addWidget(value_label)
+        layout.addWidget(detail_label)
+        self.summary_value_labels[key] = value_label
+        self.summary_detail_labels[key] = detail_label
+        return block
+
     def _make_drilldown_button(
         self,
         text: str,
@@ -430,7 +474,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "不寫 DB、不啟用 production scheduler、不是交易建議；"
             "不重算 scoring / portfolio / backtest / lifecycle。"
         )
-        self.overview_summary_label.setText(self._overview_summary_text(dashboard))
+        self._set_summary_blocks(dashboard)
         self.meta_label.setText(
             f"決策日期={dashboard.as_of_date.isoformat()} | "
             f"產生時間={dashboard.generated_at.isoformat()} | "
@@ -461,10 +505,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.boundary_banner.setText(
             "唯讀邊界：等待 WorkbenchDashboardDTO；不是交易建議；production scheduler 維持關閉。"
         )
-        self.overview_summary_label.setText(
-            "總覽尚未載入：等待 WorkbenchDashboardDTO。\n"
-            "Phase 0 weekly history 與 multi-day dry-run 仍需真實時間紀錄，UI 不補 gate、不執行 replay。"
-        )
+        self._set_summary_placeholder("等待 DTO", "尚未載入 WorkbenchDashboardDTO")
         self.meta_label.setText("工作台尚未載入。")
         self.data_quality_limitations_label.setText(
             "證據模式等待 WorkbenchDashboardDTO。UI 不直接讀 DB、不啟用 scheduler，也不執行 replay。"
@@ -493,10 +534,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.boundary_banner.setText(
             "唯讀邊界：工作台載入降級；不是交易建議；production scheduler 維持關閉。"
         )
-        self.overview_summary_label.setText(
-            "總覽載入降級：請先確認 WorkbenchSourceService。\n"
-            "Phase 0 gate 不因 UI 降級而變更；不寫 DB、不補資料、不套用 lifecycle。"
-        )
+        self._set_summary_placeholder("載入降級", "請先確認 WorkbenchSourceService；Phase gate 不變")
         self.meta_label.setText(f"工作台載入失敗：{error_message}")
         self.data_quality_limitations_label.setText(
             "資料品質降級：WorkbenchSourceService 未回傳 dashboard DTO。"
@@ -548,18 +586,33 @@ class UnifiedDecisionWorkbenchView(QWidget):
             lines.append(_format_phase0_gate_text(dashboard))
         return "\n".join(line for line in lines if line)
 
-    def _overview_summary_text(self, dashboard: WorkbenchDashboardDTO) -> str:
+    def _set_summary_blocks(self, dashboard: WorkbenchDashboardDTO) -> None:
         review_count = len(dashboard.review_items)
         action_count = len(dashboard.action_items)
-        evidence_waiting_count = sum(
-            1 for item in dashboard.evidence_summary if str(item.status) == "waiting_for_time"
+        waiting_count = sum(
+            1 for item in dashboard.daily_checklist if str(item.status) == "waiting_for_time"
         )
         warning_count = len(dashboard.warnings)
-        phase0_text = _format_phase0_gate_text(dashboard)
+        self.summary_value_labels["review"].setText(f"{review_count} 筆")
+        self.summary_detail_labels["review"].setText("今日需人工判讀；已查看只存在本次 UI session")
+        self.summary_value_labels["action"].setText(f"{action_count} 筆")
+        self.summary_detail_labels["action"].setText("只讀人工佇列；不寫 DB、不標記完成")
+        self.summary_value_labels["waiting"].setText(f"{waiting_count} 項")
+        self.summary_detail_labels["waiting"].setText(_format_phase0_ratio_text(dashboard))
+        self.summary_value_labels["warning"].setText(f"{warning_count} 則")
+        self.summary_detail_labels["warning"].setText("降級、缺口與 replay 限制需人工檢查")
+
+    def _set_summary_placeholder(self, value: str, detail: str) -> None:
+        for key in self.summary_value_labels:
+            self.summary_value_labels[key].setText(value)
+            self.summary_detail_labels[key].setText(detail)
+
+    def _overview_summary_text(self, dashboard: WorkbenchDashboardDTO) -> str:
         return (
-            f"今日待判讀 {review_count} 筆｜人工待處理 {action_count} 筆｜"
-            f"Evidence waiting {evidence_waiting_count} 項｜Warnings {warning_count} 則\n"
-            f"{phase0_text}\n"
+            f"今日待判讀 {len(dashboard.review_items)} 筆｜人工待處理 {len(dashboard.action_items)} 筆｜"
+            f"等待真實時間 {sum(1 for item in dashboard.daily_checklist if str(item.status) == 'waiting_for_time')} 項｜"
+            f"Warnings {len(dashboard.warnings)} 則\n"
+            f"{_format_phase0_gate_text(dashboard)}\n"
             "此總覽只彙整 WorkbenchDashboardDTO；不寫 DB、不補 gate、不產生買賣建議。"
         )
 
@@ -700,6 +753,12 @@ def _format_phase0_gate_text(dashboard: WorkbenchDashboardDTO) -> str:
         f"Phase 0 weekly history {weekly} 與 multi-day dry-run {dry_run} 仍是真實時間 gate；"
         "replay 不可取代。"
     )
+
+
+def _format_phase0_ratio_text(dashboard: WorkbenchDashboardDTO) -> str:
+    weekly = _ratio_for_item(dashboard, "weekly_history") or "尚未就緒"
+    dry_run = _ratio_for_item(dashboard, "multi_day_dry_run") or "尚未就緒"
+    return f"weekly history {weekly}｜multi-day dry-run {dry_run}"
 
 
 def _ratio_for_item(dashboard: WorkbenchDashboardDTO, item_id: str) -> str | None:

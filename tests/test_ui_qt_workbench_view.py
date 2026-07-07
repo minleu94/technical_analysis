@@ -316,8 +316,15 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "唯讀邊界" in view.boundary_banner.text()
     assert "不是交易建議" in view.boundary_banner.text()
     assert "不重算 scoring" in view.boundary_banner.text()
-    assert "今日待判讀 1 筆" in view.overview_summary_label.text()
-    assert "Phase 0" in view.overview_summary_label.text()
+    assert view.summary_value_labels["review"].text() == "1 筆"
+    assert view.summary_value_labels["action"].text() == "1 筆"
+    assert view.summary_value_labels["waiting"].text() == "2 項"
+    assert view.summary_value_labels["warning"].text() == "3 則"
+    assert "weekly history 0/3" in view.summary_detail_labels["waiting"].text()
+    assert "multi-day dry-run 1/3" in view.summary_detail_labels["waiting"].text()
+    overview_margins = view.overview_layout.contentsMargins()
+    assert overview_margins.left() >= 12
+    assert overview_margins.top() >= 12
     assert "狀態列" in view.status_section_title.text()
     assert "今日待判讀" in view.review_section_title.text()
     assert "背景證據流" in view.evidence_feed_section_title.text()
