@@ -70,6 +70,15 @@ def test_runtime_view_static_labels_are_chinese_and_scope_is_explicit():
     assert "資料更新、回測與推薦長任務" in view.scope_label.text()
 
 
+def test_runtime_scope_note_is_compact_and_content_starts_near_top():
+    app()
+    view = RuntimeView()
+
+    assert view.scope_label.maximumHeight() <= 48
+    assert hasattr(view, "main_splitter")
+    assert view.main_splitter.minimumHeight() >= 360
+
+
 def test_runtime_state_snapshot_renders_chinese_idle_text():
     app()
     view = RuntimeView()

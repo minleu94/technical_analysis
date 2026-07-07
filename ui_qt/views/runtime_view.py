@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.theme_widgets import EmptyStatePanel
+from ui_qt.theme import MIDNIGHT_ANALYST
 from app_module.dtos.runtime_dtos import RuntimeStateSnapshotDTO, RuntimeHealthSnapshotDTO, RuntimeEventDTO
 
 STATE_LABELS = {
@@ -51,6 +52,8 @@ class RuntimeView(QWidget):
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 8, 10, 10)
+        main_layout.setSpacing(6)
 
         # 標題列（標題 + InfoButton）
         title_layout = QHBoxLayout()
@@ -69,9 +72,17 @@ class RuntimeView(QWidget):
             "Runtime Observatory 不監控資料更新背景任務；資料更新、回測與推薦長任務仍由各自頁面顯示狀態。"
         )
         self.scope_label.setWordWrap(True)
+        self.scope_label.setMaximumHeight(44)
+        self.scope_label.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 6px 8px;"
+        )
         main_layout.addWidget(self.scope_label)
 
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setMinimumHeight(360)
+        self.main_splitter = splitter
 
         # ---------------------------------------------------------
         # Left Panel: FSM State & Context Overview
@@ -143,7 +154,7 @@ class RuntimeView(QWidget):
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 6)
 
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(splitter, 1)
 
     def on_state_updated(self, dto: RuntimeStateSnapshotDTO) -> None:
         """Pure rendering slot for State Snapshot DTO"""
