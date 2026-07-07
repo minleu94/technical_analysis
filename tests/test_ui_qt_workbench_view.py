@@ -316,6 +316,8 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "唯讀邊界" in view.boundary_banner.text()
     assert "不是交易建議" in view.boundary_banner.text()
     assert "不重算 scoring" in view.boundary_banner.text()
+    assert "今日待判讀 1 筆" in view.overview_summary_label.text()
+    assert "Phase 0" in view.overview_summary_label.text()
     assert "狀態列" in view.status_section_title.text()
     assert "今日待判讀" in view.review_section_title.text()
     assert "背景證據流" in view.evidence_feed_section_title.text()
@@ -335,6 +337,11 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert view.daily_decision_button.text() == "開啟決策來源"
     assert view.evidence_review_button.text() == "開啟證據覆盤"
     assert view.portfolio_button.text() == "開啟持倉管理"
+    evidence_page_text = " ".join(
+        label.text() for label in view.subtabs.widget(2).findChildren(type(view.boundary_banner))
+    )
+    assert "摘要與下鑽入口" in evidence_page_text
+    assert "預留深挖區" in evidence_page_text
 
     view.daily_decision_button.click()
     view.evidence_review_button.click()

@@ -116,6 +116,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         title.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
         content_layout.addWidget(title)
 
+        self.overview_summary_label = self._make_state_label()
+        content_layout.addWidget(self.overview_summary_label)
+
         self.boundary_banner = QLabel("")
         self.boundary_banner.setWordWrap(True)
         self.boundary_banner.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -307,7 +310,10 @@ class UnifiedDecisionWorkbenchView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
         panel, _title = self._panel_with_title(title)
-        label = QLabel(body)
+        label = QLabel(
+            f"{body}\n\n"
+            "此頁目前是摘要與下鑽入口，也是預留深挖區；完整資料與互動能力會等後續正式資料來源與功能切片補齊。"
+        )
         label.setWordWrap(True)
         label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
@@ -424,6 +430,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "不寫 DB、不啟用 production scheduler、不是交易建議；"
             "不重算 scoring / portfolio / backtest / lifecycle。"
         )
+        self.overview_summary_label.setText(self._overview_summary_text(dashboard))
         self.meta_label.setText(
             f"決策日期={dashboard.as_of_date.isoformat()} | "
             f"產生時間={dashboard.generated_at.isoformat()} | "
@@ -454,6 +461,10 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.boundary_banner.setText(
             "唯讀邊界：等待 WorkbenchDashboardDTO；不是交易建議；production scheduler 維持關閉。"
         )
+        self.overview_summary_label.setText(
+            "總覽尚未載入：等待 WorkbenchDashboardDTO。\n"
+            "Phase 0 weekly history 與 multi-day dry-run 仍需真實時間紀錄，UI 不補 gate、不執行 replay。"
+        )
         self.meta_label.setText("工作台尚未載入。")
         self.data_quality_limitations_label.setText(
             "證據模式等待 WorkbenchDashboardDTO。UI 不直接讀 DB、不啟用 scheduler，也不執行 replay。"
@@ -481,6 +492,10 @@ class UnifiedDecisionWorkbenchView(QWidget):
     def _display_exception_dashboard(self, error_message: str) -> None:
         self.boundary_banner.setText(
             "唯讀邊界：工作台載入降級；不是交易建議；production scheduler 維持關閉。"
+        )
+        self.overview_summary_label.setText(
+            "總覽載入降級：請先確認 WorkbenchSourceService。\n"
+            "Phase 0 gate 不因 UI 降級而變更；不寫 DB、不補資料、不套用 lifecycle。"
         )
         self.meta_label.setText(f"工作台載入失敗：{error_message}")
         self.data_quality_limitations_label.setText(
@@ -532,6 +547,21 @@ class UnifiedDecisionWorkbenchView(QWidget):
         else:
             lines.append(_format_phase0_gate_text(dashboard))
         return "\n".join(line for line in lines if line)
+
+    def _overview_summary_text(self, dashboard: WorkbenchDashboardDTO) -> str:
+        review_count = len(dashboard.review_items)
+        action_count = len(dashboard.action_items)
+        evidence_waiting_count = sum(
+            1 for item in dashboard.evidence_summary if str(item.status) == "waiting_for_time"
+        )
+        warning_count = len(dashboard.warnings)
+        phase0_text = _format_phase0_gate_text(dashboard)
+        return (
+            f"今日待判讀 {review_count} 筆｜人工待處理 {action_count} 筆｜"
+            f"Evidence waiting {evidence_waiting_count} 項｜Warnings {warning_count} 則\n"
+            f"{phase0_text}\n"
+            "此總覽只彙整 WorkbenchDashboardDTO；不寫 DB、不補 gate、不產生買賣建議。"
+        )
 
     def _review_queue_state_text(self, dashboard: WorkbenchDashboardDTO | None) -> str:
         if dashboard is None:
