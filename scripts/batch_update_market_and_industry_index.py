@@ -50,7 +50,7 @@ def is_trading_day(date: datetime) -> bool:
     # 週一=0, 週日=6
     return date.weekday() < 5  # 週一到週五
 
-def get_trading_days(start_date: str, end_date: str = None) -> list:
+def get_trading_days(start_date: str, end_date: str | None = None) -> list[str]:
     """獲取交易日列表
     
     Args:
@@ -73,7 +73,7 @@ def get_trading_days(start_date: str, end_date: str = None) -> list:
     
     return trading_days
 
-def get_latest_date(file_path: Path) -> str:
+def get_latest_date(file_path: Path) -> str | None:
     """獲取文件中的最新日期"""
     if not file_path.exists():
         return None
@@ -115,7 +115,7 @@ def get_latest_date(file_path: Path) -> str:
     
     return None
 
-def get_existing_dates(file_path: Path) -> set:
+def get_existing_dates(file_path: Path) -> set[str]:
     """獲取文件中已存在的標準化日期集合"""
     if not file_path.exists():
         return set()

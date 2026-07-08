@@ -62,7 +62,7 @@ def get_last_trading_date():
     
     return today.strftime('%Y-%m-%d')
 
-def get_last_local_date(daily_price_dir: Path) -> str:
+def get_last_local_date(daily_price_dir: Path) -> str | None:
     """獲取本地數據的最後日期"""
     try:
         # 獲取所有CSV文件
@@ -217,4 +217,4 @@ if __name__ == "__main__":
     elif args.batch:
         batch_update_stock_data(args.start_date, args.end_date)
     else:
-        update_stock_data(args.date) 
+        update_stock_data(args.date)

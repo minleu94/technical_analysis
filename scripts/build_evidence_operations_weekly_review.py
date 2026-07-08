@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -36,7 +37,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _config(args: argparse.Namespace) -> TWStockConfig:
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if args.data_root is not None:
         kwargs["data_root"] = args.data_root
     if args.output_root is not None:
@@ -70,7 +71,7 @@ def main() -> int:
         return 2
     if args.list_history:
         repo = EvidenceOperationsHistoryRepository(config, db_path=Path(config.db_file))
-        history_payload = {
+        history_payload: dict[str, Any] = {
             "history_records": [
                 record.to_dict()
                 for record in repo.list_weekly_reviews(

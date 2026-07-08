@@ -135,7 +135,7 @@ def merge_daily_data(force_all: bool = False, config=None):
                 logger.info("強制模式：將重新合併所有數據")
         
         # 獲取所有CSV文件（TWSE + TPEX）
-        all_csv_files = []
+        all_csv_files: list[Path] = []
         for source_dir in source_dirs:
             if source_dir.exists():
                 all_csv_files.extend(source_dir.glob("*.csv"))
@@ -236,9 +236,11 @@ def merge_daily_data(force_all: bool = False, config=None):
         logger.error(error_msg)
         logger.error(traceback.format_exc())
         # 如果發生錯誤，嘗試恢復備份
-        if 'backup_file' in locals() and 'output_file' in locals() and backup_file.exists() and output_file.exists():
+        backup_file_obj = locals().get("backup_file")
+        output_file_obj = locals().get("output_file")
+        if isinstance(backup_file_obj, Path) and isinstance(output_file_obj, Path) and backup_file_obj.exists() and output_file_obj.exists():
             try:
-                shutil.copy2(backup_file, output_file)
+                shutil.copy2(backup_file_obj, output_file_obj)
                 logger.info("已恢復備份文件")
             except Exception as restore_error:
                 logger.error(f"恢復備份文件時出錯: {str(restore_error)}")

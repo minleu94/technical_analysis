@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -66,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if plan.ready_for_apply else 1
 
 
-def _load_source_rows(source_json: Path | None) -> list[dict[str, Any]]:
+def _load_source_rows(source_json: Path | None) -> list[Mapping[str, object]]:
     if source_json is not None:
         data = json.loads(Path(source_json).read_text(encoding="utf-8"))
     else:

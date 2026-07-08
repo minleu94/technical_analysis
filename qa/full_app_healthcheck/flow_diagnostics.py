@@ -98,16 +98,16 @@ def render_flow_diagnostics_markdown(report: FlowDiagnosticsReport) -> str:
 
         lines.append("#### Manual Gaps")
         if item.manual_gaps:
-            for gap in item.manual_gaps:
-                lines.append(f"- [ ] {gap}")
+            for manual_gap in item.manual_gaps:
+                lines.append(f"- [ ] {manual_gap}")
         else:
             lines.append("- (None)")
         lines.append("")
 
         lines.append("#### UX Gaps")
         if item.ux_gaps:
-            for gap in item.ux_gaps:
-                lines.append(f"- `[{gap.category}]` {gap.title} -> Recommended Next Step: {gap.recommended_next_step}")
+            for ux_gap in item.ux_gaps:
+                lines.append(f"- `[{ux_gap.category}]` {ux_gap.title} -> Recommended Next Step: {ux_gap.recommended_next_step}")
         else:
             lines.append("- (None)")
         lines.append("")
@@ -189,7 +189,7 @@ def _recommended_commands(
         else HealthcheckMode.FULL
     )
 
-    for feature_id in _dedupe(route.feature_id for route in routes):
+    for feature_id in _dedupe(tuple(route.feature_id for route in routes)):
         advice = advise_feature_commands(feature_id, preferred_mode=preferred_mode)
         for command in advice.commands:
             commands.append(_format_command(command.argv))
