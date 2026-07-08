@@ -8,6 +8,10 @@ from app_module.portfolio_construction_dtos import (
     PortfolioAllocationRow,
     PortfolioConstructionResult,
 )
+from app_module.execution_slippage_model import (
+    ExecutionSlippageModel, 
+    TaiwanStockTickSlippageModel,
+)
 
 
 @dataclass(frozen=True)
@@ -23,6 +27,7 @@ class VirtualOrderEvent:
     filled_quantity: int
     reference_price: Decimal
     reason_code: str
+    fill_price: Decimal | None = None
     source_type: str = "portfolio_sandbox"
     source_id: str = ""
     research_only: bool = True
@@ -39,6 +44,7 @@ class VirtualOrderEvent:
             "quantity": self.quantity,
             "filled_quantity": self.filled_quantity,
             "reference_price": str(self.reference_price),
+            "fill_price": str(self.fill_price) if self.fill_price is not None else None,
             "reason_code": self.reason_code,
             "source_type": self.source_type,
             "source_id": self.source_id,
@@ -53,9 +59,11 @@ class PortfolioExecutionTraceService:
         *,
         partial_fill_bp_by_symbol: Mapping[str, int] | None = None,
         rejected_symbols: Mapping[str, str] | None = None,
+        slippage_model: ExecutionSlippageModel | None = None,
     ) -> tuple[VirtualOrderEvent, ...]:
         partial_fill_bp_by_symbol = partial_fill_bp_by_symbol or {}
         rejected_symbols = rejected_symbols or {}
+        slippage_model = slippage_model or TaiwanStockTickSlippageModel()
         events: list[VirtualOrderEvent] = []
 
         for allocation in construction_result.allocations:
@@ -73,6 +81,7 @@ class PortfolioExecutionTraceService:
                     filled_quantity=0,
                     reason_code="research_order_created",
                     sequence=len(events) + 1,
+                    slippage_model=slippage_model,
                 )
             )
             events.append(
@@ -85,6 +94,7 @@ class PortfolioExecutionTraceService:
                     filled_quantity=0,
                     reason_code="research_order_submitted",
                     sequence=len(events) + 1,
+                    slippage_model=slippage_model,
                 )
             )
             rejection_reason = rejected_symbols.get(allocation.stock_code)
@@ -99,6 +109,7 @@ class PortfolioExecutionTraceService:
                         filled_quantity=0,
                         reason_code=str(rejection_reason),
                         sequence=len(events) + 1,
+                        slippage_model=slippage_model,
                     )
                 )
                 continue
@@ -116,6 +127,7 @@ class PortfolioExecutionTraceService:
                         filled_quantity=partial_quantity,
                         reason_code="research_partial_fill",
                         sequence=len(events) + 1,
+                        slippage_model=slippage_model,
                     )
                 )
 
@@ -129,6 +141,7 @@ class PortfolioExecutionTraceService:
                     filled_quantity=quantity,
                     reason_code="research_full_fill",
                     sequence=len(events) + 1,
+                    slippage_model=slippage_model,
                 )
             )
 
@@ -145,7 +158,16 @@ class PortfolioExecutionTraceService:
         filled_quantity: int,
         reason_code: str,
         sequence: int,
+        slippage_model: ExecutionSlippageModel,
     ) -> VirtualOrderEvent:
+        
+        fill_price = None
+        if event_type in ("partially_filled", "filled"):
+            fill_price = slippage_model.calculate_fill_price(
+                allocation.reference_price, 
+                side="buy"  # 目前 Sandbox 只做買入組合
+            )
+
         return VirtualOrderEvent(
             event_id=f"{parent_order_id}:{sequence:04d}",
             parent_order_id=parent_order_id,
@@ -157,6 +179,7 @@ class PortfolioExecutionTraceService:
             quantity=quantity,
             filled_quantity=filled_quantity,
             reference_price=allocation.reference_price,
+            fill_price=fill_price,
             reason_code=reason_code,
             source_id=f"{construction_result.decision_date}:{construction_result.allocation_method}",
         )
