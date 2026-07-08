@@ -246,10 +246,10 @@ def main(argv: list[str] | None = None) -> int:
             if isinstance(result, dict):
                 warnings.extend(_tpex_warning_messages(result))
     warnings = list(dict.fromkeys(warnings))
-    status = "failed" if failed is not None else "passed_with_warnings" if warnings else "passed"
+    final_status = "failed" if failed is not None else "passed_with_warnings" if warnings else "passed"
     payload = {
         "task": "baldr-data-update-quick-daily",
-        "status": status,
+        "status": final_status,
         "checked_at": datetime.now().isoformat(timespec="seconds"),
         "data_root": str(config.data_root),
         "output_root": str(config.output_root),
@@ -265,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
         "auto_lifecycle_action": False,
     }
     _write_json(status_path, payload)
-    logging.info("Scheduled quick data update finished with status=%s", status)
+    logging.info("Scheduled quick data update finished with status=%s", final_status)
     return 1 if failed is not None else 0
 
 

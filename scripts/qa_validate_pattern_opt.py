@@ -6,7 +6,9 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 # Force stdout to UTF-8
-sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+stdout_reconfigure = getattr(sys.stdout, "reconfigure", None)
+if callable(stdout_reconfigure):
+    stdout_reconfigure(encoding='utf-8', line_buffering=True)
 
 # Add project root to path
 project_root = Path(__file__).resolve().parent.parent

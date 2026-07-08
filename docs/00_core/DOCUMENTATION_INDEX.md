@@ -244,6 +244,7 @@
 | [V2_2_EVIDENCE_OPERATING_LOOP_READONLY_CHECK_2026_07_07.md](../06_qa/V2_2_EVIDENCE_OPERATING_LOOP_READONLY_CHECK_2026_07_07.md) | V2.2 Evidence Operating Loop read-only check，記錄正式 DB / scheduled dry-run / Pre-V2 readiness / manual review note / action item rhythm 現況；確認 weekly history `0/3`、multi-day dry-run `1/3` 尚未被 raw scheduled reports 補齊，並列出下一次人工 read-only checklist。 |
 | [V2_2_SIMULATED_PHASE_PROGRESS_QA_2026_07_07.md](../06_qa/V2_2_SIMULATED_PHASE_PROGRESS_QA_2026_07_07.md) | V2.2 simulated phase progress QA，記錄 historical replay reference-fix summary 如何標註為 `historical_replay` / `simulated_scheduler` / `official_gate_credit=false`，以及 simulated Phase 0-5 可演練但 official Phase 0 / Phase 5 gate 不變的 read-only 邊界。 |
 | [V2_2_PHASE5_APPROVAL_REHEARSAL_PACKAGE_2026_07_07.md](../06_qa/V2_2_PHASE5_APPROVAL_REHEARSAL_PACKAGE_2026_07_07.md) | V2.2 Phase 5 approval rehearsal package，整理 simulated Phase 5 審核包預演、official completion waiting list、data source candidate backlog、execution realism backlog、scheduler approval rehearsal checklist 與 UI 資訊架構 follow-up；明確標示哪些項目必須等待正式資料才能標為已完成。 |
+| [V3_0_ENGINEERING_CANDIDATE_MANUAL_VALIDATION_REPORT_2026_07_08.md](../06_qa/V3_0_ENGINEERING_CANDIDATE_MANUAL_VALIDATION_REPORT_2026_07_08.md) | V3.0 engineering candidate manual validation report，記錄 V3 effectiveness read model、gap classifier、sample sufficiency / confidence disclosure、review scaffold、readiness inspector 與 `PENDING_MANUAL_VALIDATION` 邊界；不宣稱投資有效性、不啟用 scheduler。 |
 | [POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md](../06_qa/POST_V1_FORWARD_PERFORMANCE_DASHBOARD_QA_2026_07_05.md) | Post-V1 Forward Performance Dashboard read-only UI QA 紀錄，包含 UI placement、read-only guarantee、filter coverage、禁用交易語氣檢查與 scheduler readiness 邊界。 |
 | [POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md](../06_qa/POST_V1_EVIDENCE_SCHEDULER_DRY_RUN_QA_2026_07_06.md) | Post-V1 Evidence Pipeline Runner dry-run QA 紀錄，包含 dry-run / confirm 行為、report、readiness、blocking gaps 與 production scheduler 未啟用邊界。 |
 | [POST_V1_HISTORICAL_EVIDENCE_REPLAY_QA_2026_07_06.md](../06_qa/POST_V1_HISTORICAL_EVIDENCE_REPLAY_QA_2026_07_06.md) | Post-V1 Historical Evidence Replay QA 紀錄，包含 working-copy replay DB、安全路徑、as-of recommendation selection、data-as-of outcome gate、reference return fix audit、`_reference_fix` rerun summary、測試命令與不取代 scheduler gate 邊界。 |
@@ -476,6 +477,7 @@
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
 - 2026-07-06：新增 `ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md` 封存索引，對齊 6M Roadmap Gate-Based Active Roadmap 重構。
 - 2026-07-06：更新備份 retention audit 索引，補上 `_reference_fix` replay archive 位置與 C 槽 working-copy / QA raw output cleanup 狀態。
+- 2026-07-08：新增 V3.0 engineering candidate manual validation report 索引，標示 V3 effectiveness read model / gap classifier / review scaffold / readiness inspector 已具工程候選驗證入口，但人工驗證仍為 `PENDING_MANUAL_VALIDATION`，不啟用 scheduler、不宣稱投資有效性。
 
 
 

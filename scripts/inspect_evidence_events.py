@@ -5,6 +5,7 @@ from collections import Counter
 import json
 from pathlib import Path
 import sys
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -12,6 +13,11 @@ if str(ROOT) not in sys.path:
 
 from app_module.evidence_event_repository import EvidenceEventRepository
 from data_module.config import TWStockConfig
+
+
+def _enum_value(value: Any) -> str:
+    raw_value = getattr(value, "value", value)
+    return str(raw_value)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,8 +59,8 @@ def main() -> int:
     payload = {
         "events_count": len(events),
         "outcomes_count": len(outcomes),
-        "event_types": dict(Counter(event.event_type.value for event in events)),
-        "outcome_statuses": dict(Counter(outcome.outcome_status.value for outcome in outcomes)),
+        "event_types": dict(Counter(_enum_value(event.event_type) for event in events)),
+        "outcome_statuses": dict(Counter(_enum_value(outcome.outcome_status) for outcome in outcomes)),
     }
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0

@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -32,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _config_from_args(args: argparse.Namespace) -> TWStockConfig:
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if args.data_root:
         kwargs["data_root"] = Path(args.data_root)
     if args.output_root:

@@ -68,6 +68,7 @@ def _make_request(url: str, max_retries: int = 3) -> Optional[requests.Response]
         else:
             logging.error(f"請求失敗，已達到最大重試次數")
             return None
+    return None
 
 def extract_index_data_for_date(date_str: str) -> Optional[List[Dict]]:
     """擷取特定日期的產業類股指數資料"""
@@ -252,8 +253,9 @@ def fix_industry_index(default_start_date: str = "2024-11-23"):
     except Exception as e:
         logging.error(f"修復industry_index.csv時發生錯誤: {str(e)}")
         # 如果發生錯誤，嘗試恢復備份
-        if 'backup_file' in locals() and backup_file.exists():
-            shutil.copy2(backup_file, industry_index_file)
+        backup_file_obj = locals().get("backup_file")
+        if isinstance(backup_file_obj, Path) and backup_file_obj.exists():
+            shutil.copy2(backup_file_obj, industry_index_file)
             logging.info("已恢復備份文件")
         raise
 

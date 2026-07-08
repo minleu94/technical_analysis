@@ -21,6 +21,11 @@ from app_module.recommendation_repository import RecommendationRepository
 from data_module.config import TWStockConfig
 
 
+def _enum_value(value: Any) -> str:
+    raw_value = getattr(value, "value", value)
+    return str(raw_value)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run an evidence pipeline smoke on an isolated SQLite database.")
     parser.add_argument("--db-path", required=True)
@@ -62,7 +67,7 @@ def _sample_events(repository: EvidenceEventRepository, *, limit: int = 5) -> tu
         {
             "event_id": event.event_id,
             "event_hash": event.event_hash,
-            "event_type": event.event_type.value,
+            "event_type": _enum_value(event.event_type),
             "symbol": event.symbol,
             "source_id": event.source_id,
         }
@@ -76,7 +81,7 @@ def _sample_outcomes(repository: EvidenceEventRepository, *, limit: int = 5) -> 
             "outcome_id": outcome.outcome_id,
             "event_id": outcome.event_id,
             "window_days": outcome.window_days,
-            "outcome_status": outcome.outcome_status.value,
+            "outcome_status": _enum_value(outcome.outcome_status),
             "return_basis": outcome.return_basis,
             "forward_return_bp": outcome.forward_return_bp,
             "benchmark_excess_bp": outcome.benchmark_excess_bp,
@@ -87,8 +92,8 @@ def _sample_outcomes(repository: EvidenceEventRepository, *, limit: int = 5) -> 
 
 
 def _quality_counts(repository: EvidenceEventRepository) -> dict[str, int]:
-    event_counts = Counter(event.data_quality.value for event in repository.list_events())
-    outcome_counts = Counter(outcome.data_quality.value for outcome in repository.list_outcomes())
+    event_counts = Counter(_enum_value(event.data_quality) for event in repository.list_events())
+    outcome_counts = Counter(_enum_value(outcome.data_quality) for outcome in repository.list_outcomes())
     combined = event_counts + outcome_counts
     return dict(sorted(combined.items()))
 
@@ -130,11 +135,11 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     outcomes = repository.list_outcomes()
-    outcome_status_counts = dict(sorted(Counter(item.outcome_status.value for item in outcomes).items()))
+    outcome_status_counts = dict(sorted(Counter(_enum_value(item.outcome_status) for item in outcomes).items()))
     event_type_counts = (
         capture.event_type_counts
         if dry_run
-        else dict(sorted(Counter(event.event_type.value for event in repository.list_events()).items()))
+        else dict(sorted(Counter(_enum_value(event.event_type) for event in repository.list_events()).items()))
     )
     summary = {
         "dry_run": dry_run,

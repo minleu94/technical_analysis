@@ -100,7 +100,7 @@ def generate_coverage_burndown_report(
         features.append(detail)
 
     # 2. 尋找未對映的測試
-    mapped_oracles = set()
+    mapped_oracles: set[str] = set()
     for route in routes.values():
         mapped_oracles.update(route.service_oracle_test_paths)
 

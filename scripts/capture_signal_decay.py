@@ -35,7 +35,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _config(args: argparse.Namespace) -> TWStockConfig:
-    kwargs: dict[str, Path] = {}
+    kwargs: dict[str, Any] = {}
     if args.data_root:
         kwargs["data_root"] = Path(args.data_root)
     if args.output_root:
