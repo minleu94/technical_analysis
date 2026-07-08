@@ -68,9 +68,8 @@ class PortfolioExecutionTraceService:
 
         for allocation in construction_result.allocations:
             quantity = int(allocation.executable_shares or 0)
-            if quantity <= 0:
-                continue
             parent_order_id = self._parent_order_id(construction_result, allocation)
+            
             events.append(
                 self._event(
                     allocation=allocation,
@@ -84,6 +83,28 @@ class PortfolioExecutionTraceService:
                     slippage_model=slippage_model,
                 )
             )
+
+            if quantity <= 0:
+                reason = "rejected_zero_quantity"
+                for diag in allocation.diagnostics:
+                    if diag.startswith("rejected_"):
+                        reason = diag
+                        break
+                events.append(
+                    self._event(
+                        allocation=allocation,
+                        construction_result=construction_result,
+                        parent_order_id=parent_order_id,
+                        event_type="rejected",
+                        quantity=quantity,
+                        filled_quantity=0,
+                        reason_code=reason,
+                        sequence=len(events) + 1,
+                        slippage_model=slippage_model,
+                    )
+                )
+                continue
+
             events.append(
                 self._event(
                     allocation=allocation,

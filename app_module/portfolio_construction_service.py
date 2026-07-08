@@ -37,6 +37,13 @@ class PortfolioConstructionService:
                 constrained_amount=constrained_amount,
                 lot_size=request.lot_size,
             )
+            
+            if candidate.reference_price > 0 and constrained_bp == 0:
+                if request.allocation_method == "inverse_volatility" and (candidate.volatility_bp is None or candidate.volatility_bp <= 0):
+                    row_diagnostics.append("rejected_missing_volatility")
+                else:
+                    row_diagnostics.append("rejected_zero_target")
+                    
             allocations.append(
                 PortfolioAllocationRow(
                     stock_code=candidate.stock_code,
@@ -74,17 +81,20 @@ class PortfolioConstructionService:
     ) -> tuple[tuple[PortfolioConstructionCandidate, ...], list[str]]:
         diagnostics: list[str] = []
         candidates: list[PortfolioConstructionCandidate] = []
+        valid_count = 0
         for candidate in request.candidates:
+            candidates.append(candidate)
             if candidate.reference_price <= 0:
-                diagnostics.append(f"skipped_invalid_reference_price:{candidate.stock_code}")
+                diagnostics.append(f"rejected_invalid_reference_price:{candidate.stock_code}")
                 continue
             if request.allocation_method == "inverse_volatility" and (
                 candidate.volatility_bp is None or candidate.volatility_bp <= 0
             ):
-                diagnostics.append(f"skipped_missing_volatility:{candidate.stock_code}")
+                diagnostics.append(f"rejected_missing_volatility:{candidate.stock_code}")
                 continue
-            candidates.append(candidate)
-        if not candidates:
+            valid_count += 1
+            
+        if valid_count == 0:
             raise ValueError("at least one eligible candidate is required")
         return tuple(candidates), diagnostics
 
@@ -94,18 +104,30 @@ class PortfolioConstructionService:
         candidates: tuple[PortfolioConstructionCandidate, ...],
         diagnostics: list[str],
     ) -> list[int]:
-        if allocation_method == "equal_weight":
-            values = [Decimal("1") for _ in candidates]
-        elif allocation_method == "score_weight":
-            values = [Decimal(max(candidate.score_bp, 0)) for candidate in candidates]
-        elif allocation_method == "inverse_volatility":
-            values = [Decimal("1") / Decimal(candidate.volatility_bp or 1) for candidate in candidates]
-        else:
-            raise ValueError(f"unsupported allocation_method: {allocation_method}")
+        values = []
+        for candidate in candidates:
+            if candidate.reference_price <= 0:
+                values.append(Decimal("0"))
+            elif allocation_method == "equal_weight":
+                values.append(Decimal("1"))
+            elif allocation_method == "score_weight":
+                values.append(Decimal(max(candidate.score_bp, 0)))
+            elif allocation_method == "inverse_volatility":
+                if candidate.volatility_bp is None or candidate.volatility_bp <= 0:
+                    values.append(Decimal("0"))
+                else:
+                    values.append(Decimal("1") / Decimal(candidate.volatility_bp))
+            else:
+                raise ValueError(f"unsupported allocation_method: {allocation_method}")
 
         if sum(values, Decimal("0")) <= 0:
             diagnostics.append(f"{allocation_method}_all_zero_fallback_equal_weight")
-            values = [Decimal("1") for _ in candidates]
+            for i, candidate in enumerate(candidates):
+                if candidate.reference_price > 0:
+                    if allocation_method == "inverse_volatility" and (candidate.volatility_bp is None or candidate.volatility_bp <= 0):
+                        continue
+                    values[i] = Decimal("1")
+                    
         return self._largest_remainder_bp(values)
 
     def _largest_remainder_bp(self, values: list[Decimal]) -> list[int]:
@@ -131,13 +153,19 @@ class PortfolioConstructionService:
         constrained_amount: Decimal,
         lot_size: int | None,
     ) -> tuple[Decimal, int | None, list[str]]:
+        if candidate.reference_price <= 0:
+            return Decimal("0.00"), 0 if lot_size is not None else None, ["rejected_invalid_reference_price"]
+            
         if lot_size is None:
             return constrained_amount, None, []
+            
         raw_shares = int((constrained_amount / candidate.reference_price).to_integral_value(rounding=ROUND_DOWN))
         executable_shares = round_down_to_lot(raw_shares, lot_size=lot_size)
         executable_amount = quantize_money(Decimal(executable_shares) * candidate.reference_price)
         diagnostics: list[str] = []
-        if executable_amount < constrained_amount:
+        if executable_shares == 0 and constrained_amount > 0:
+            diagnostics.append("rejected_below_lot_size")
+        elif executable_amount < constrained_amount:
             diagnostics.append("lot_sizing_floor_applied")
         return executable_amount, executable_shares, diagnostics
 

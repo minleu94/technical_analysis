@@ -103,9 +103,11 @@ def test_inverse_volatility_skips_missing_volatility_without_backfilling() -> No
 
     result = PortfolioConstructionService().construct(request)
 
-    assert [row.stock_code for row in result.allocations] == ["B"]
-    assert result.allocations[0].target_weight_bp == 10000
-    assert "skipped_missing_volatility:A" in result.diagnostics
+    assert [row.stock_code for row in result.allocations] == ["A", "B"]
+    assert result.allocations[0].target_weight_bp == 0
+    assert result.allocations[1].target_weight_bp == 10000
+    assert "rejected_missing_volatility:A" in result.diagnostics
+    assert "rejected_missing_volatility" in result.allocations[0].diagnostics
 
 
 def test_virtual_execution_trace_marks_research_only_lifecycle() -> None:
