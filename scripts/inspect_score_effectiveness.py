@@ -20,6 +20,11 @@ from app_module.evidence_event_dtos import (
 )
 from app_module.score_effectiveness_dtos import ScoreEffectivenessReport
 from app_module.score_effectiveness_read_model import ScoreEffectivenessReadModel
+from app_module.threshold_robustness_read_model import (
+    ThresholdRobustnessReadModel,
+    ThresholdRobustnessReport,
+    sample_threshold_robustness_observations,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format", choices=("json", "markdown"), default="json", help="輸出格式。")
     parser.add_argument("--output", type=Path, help="選填輸出檔案路徑。")
     parser.add_argument("--min-sample-size", type=int, default=1, help="每個 bucket 的最小觀察樣本數。")
+    parser.add_argument("--include-threshold-robustness", action="store_true", help="同時輸出唯讀固定門檻穩健性矩陣。")
     args = parser.parse_args(argv)
 
     if args.sample:
@@ -46,10 +52,17 @@ def main(argv: list[str] | None = None) -> int:
         outcomes=outcomes,
         source_mode=source_mode,
     ).build_report(min_sample_size=args.min_sample_size)
+    threshold_report = None
+    if args.include_threshold_robustness:
+        threshold_report = ThresholdRobustnessReadModel(
+            observations=sample_threshold_robustness_observations() if args.sample else (),
+            min_sample_size=args.min_sample_size,
+            source_mode=source_mode,
+        ).build_report()
     rendered = (
-        json.dumps(report.to_dict(), ensure_ascii=False, indent=2)
+        json.dumps(_build_payload(report, threshold_report), ensure_ascii=False, indent=2)
         if args.format == "json"
-        else render_score_effectiveness_markdown(report)
+        else render_score_effectiveness_markdown(report, threshold_report=threshold_report)
     )
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +71,18 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def render_score_effectiveness_markdown(report: ScoreEffectivenessReport) -> str:
+def _build_payload(report: ScoreEffectivenessReport, threshold_report: ThresholdRobustnessReport | None) -> dict[str, Any]:
+    payload = report.to_dict()
+    if threshold_report is not None:
+        payload["threshold_robustness"] = threshold_report.to_dict()
+    return payload
+
+
+def render_score_effectiveness_markdown(
+    report: ScoreEffectivenessReport,
+    *,
+    threshold_report: ThresholdRobustnessReport | None = None,
+) -> str:
     payload = report.to_dict()
     lines = [
         "# 分數有效性稽核",
@@ -97,6 +121,22 @@ def render_score_effectiveness_markdown(report: ScoreEffectivenessReport) -> str
     if payload["diagnostics"]:
         lines.extend(["", "## 診斷", ""])
         lines.extend(f"- {diagnostic}" for diagnostic in payload["diagnostics"])
+    if threshold_report is not None:
+        lines.extend(["", "## 固定門檻穩健性矩陣", ""])
+        lines.extend(
+            [
+                "- 此矩陣僅供唯讀研究檢查，不 promote threshold，也不改推薦預設參數。",
+                "",
+                "| Buy | Sell | Confirm | Cooldown | Label | Ready | Benchmark excess bp |",
+                "|---:|---:|---:|---:|---|---:|---:|",
+            ]
+        )
+        for row in threshold_report.rows:
+            benchmark_excess_bp = "" if row.benchmark_excess_bp is None else str(row.benchmark_excess_bp)
+            lines.append(
+                f"| {row.buy_score} | {row.sell_score} | {row.confirmation_days} | "
+                f"{row.cooldown_days} | {row.label} | {row.ready_outcome_count} | {benchmark_excess_bp} |"
+            )
     return "\n".join(lines)
 
 

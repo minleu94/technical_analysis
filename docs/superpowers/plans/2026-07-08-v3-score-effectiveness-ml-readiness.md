@@ -116,7 +116,7 @@ Markdown must state that this is score effectiveness research evidence, not a re
 - Extend: `scripts/inspect_score_effectiveness.py`
 - Test: `tests/test_threshold_robustness_read_model.py`
 
-- [ ] Step 1: Write tests for matrix generation.
+- [x] Step 1: Write tests for matrix generation.
 
 Initial matrix:
 
@@ -132,11 +132,11 @@ Required labels:
 - `inconclusive`
 - `harmful_or_noisy`
 
-- [ ] Step 2: Implement read-only evaluator.
+- [x] Step 2: Implement read-only evaluator.
 
 The first implementation may classify sample rows and mark missing historical signal replay inputs as `inconclusive`. Do not promote thresholds or change defaults.
 
-- [ ] Step 3: Verify.
+- [x] Step 3: Verify.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_threshold_robustness_read_model.py tests/test_score_effectiveness_read_model.py -q -o addopts=
@@ -152,7 +152,7 @@ The first implementation may classify sample rows and mark missing historical si
 - Create: `app_module/component_ablation_readiness.py`
 - Test: `tests/test_component_ablation_readiness.py`
 
-- [ ] Step 1: Write tests for component set contract.
+- [x] Step 1: Write tests for component set contract.
 
 Component sets:
 
@@ -169,11 +169,11 @@ Required diagnostic when old evidence lacks components:
 - `component_payload_missing`
 - `new_evidence_metadata_required`
 
-- [ ] Step 2: Implement readiness report.
+- [x] Step 2: Implement readiness report.
 
 Do not backfill old evidence. If adding capture support for future evidence, store only decision-time component scores and include source trace.
 
-- [ ] Step 3: Verify.
+- [x] Step 3: Verify.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_component_ablation_readiness.py -q -o addopts=
@@ -190,7 +190,7 @@ Do not backfill old evidence. If adding capture support for future evidence, sto
 - Create: `scripts/inspect_ml_readiness_contract.py`
 - Test: `tests/test_ml_readiness_contract.py`
 
-- [ ] Step 1: Write tests for allowed ML roles.
+- [x] Step 1: Write tests for allowed ML roles.
 
 Allowed roles:
 
@@ -207,7 +207,7 @@ Forbidden until later approval:
 - auto lifecycle action
 - trading advice
 
-- [ ] Step 2: Implement contract report.
+- [x] Step 2: Implement contract report.
 
 Minimum payload:
 
@@ -218,7 +218,7 @@ Minimum payload:
 - shadow-only boundary
 - required preconditions from Tasks 1-3
 
-- [ ] Step 3: Verify.
+- [x] Step 3: Verify.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_ml_readiness_contract.py -q -o addopts=
@@ -254,4 +254,3 @@ git status --short
 - ML readiness report is shadow-only and lists score audit preconditions.
 - Roadmap / blueprint keep ML after score effectiveness gates.
 - Production scheduler, trading, lifecycle action, and investment-effectiveness claims remain disabled.
-
