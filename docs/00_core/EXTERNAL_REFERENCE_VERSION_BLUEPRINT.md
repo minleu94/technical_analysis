@@ -1,6 +1,6 @@
 # 外部專案參考與未來版本藍圖
 
-> **最後更新**：2026-07-06
+> **最後更新**：2026-07-08
 > **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md`、`VERSION_ROADMAP_V1_1_TO_V2_0.md` 與 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的參考 companion。它負責保存外部開源專案對照、資料源補強優先序、可借鑑設計、Blueprint 衝突檢查與 V1.8 至 V2.0 版本形狀；不取代 Vision、Snapshot、6M Roadmap、長期版本階梯或 Architecture。
 
 ---
@@ -99,6 +99,7 @@ baldr 目前最值得補強的不是更早導入 GPU、強化學習、券商自�
 |---|---|
 | [AI4Finance-Foundation/FinRL](https://github.com/AI4Finance-Foundation/FinRL) | 可借鑑 market state / action / reward 抽象，但 RL 在台股容易過擬合；不進 V1.8-V2.0 主線。 |
 | [NVIDIA-AI-Blueprints/cuFOLIO](https://github.com/NVIDIA-AI-Blueprints/cuFOLIO) | GPU portfolio optimization 工具可作長期觀察；只有在 V1.8+ portfolio sandbox 出現可量測 CPU bottleneck 後才重評估。 |
+| sklearn / XGBoost / LightGBM 類監督式 ML | 可作 V3.3 shadow-only calibration、meta-labeling、ranking 或權重學習候選；必須等 V3.0 score bucket audit、threshold robustness、component ablation 可判讀後再進實驗，不直接替代 rule engine。 |
 
 ### 4.4 不採用 / 待補證據
 
@@ -117,6 +118,7 @@ baldr 目前最值得補強的不是更早導入 GPU、強化學習、券商自�
 | 券商 API repo 可能導向自動下單。 | 破壞目前 manual lifecycle boundary。 | 只參考 virtual order lifecycle、帳務語意與 event sourcing；不串 production broker order。 |
 | PyPortfolioOpt / cuFOLIO 可能讓 V1.8 被誤解為投資組合自動建議。 | Optimizer 輸出被誤當交易指令。 | V1.8 只做 research-only sandbox；cuFOLIO 不導入，PyPortfolioOpt-style adapter 也只輸出 research basis。 |
 | OpenBB / AI agent repo 可能讓 LLM 直接參與決策。 | AI hallucination、權限越界、evidence 污染。 | V1.9 只做 read-only evidence access；AI-generated thesis 不算 evidence。 |
+| ML 看起來可以直接提高推薦品質。 | 若 `TotalScore` 本身、fixed threshold 或 component 貢獻尚未被驗證，模型只會把 overfit 包裝成更難解釋的分數。 | 先完成 V3 score effectiveness audit；ML 只作第二層 shadow diagnostics，包括 calibration、meta-labeling、ranking 或權重學習。 |
 | SQLite single writer 被誤解成必須拆 DB。 | 過早拆 DB 造成 migration / transaction / backup / cross-db query 複雜化。 | 不拆檔、不做 async / split DB 改造；只在量測證明 lock / throughput 成為真瓶頸後重開。 |
 | vectorbt / Numba / GPU 加速被提前導入。 | 增加可讀性與治理成本，問題根源未必是計算。 | 先用 pandas / NumPy / SQL batch / single-writer discipline；只有局部量測過慢才局部最佳化。 |
 
@@ -278,6 +280,7 @@ Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並�
 
 ## 11. 更新記錄
 
+- 2026-07-08：補上 supervised ML 採用邊界；sklearn / XGBoost / LightGBM 只可作 V3.3 shadow-only 候選，必須等 V3 score effectiveness audit 可判讀後才進實驗，不取代 rule engine、不直接改推薦。
 - 2026-07-06：補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的 scoped authority 對照，明確本文件不直接承諾 V2.1-V4.0 外部資料源導入或投資有效性。
 - 2026-07-05：重新整理外部專案採用規則與分級；確認只保留公開可讀且 README / docs 足以理解用途與操作方法的專案；`x-qa/stock-screener-service` 因 404 移出 active reference；`PyPortfolioOpt` 改用目前 canonical `PyPortfolio/PyPortfolioOpt`；`OpenBB agents` 降級為 experimental playground 參考。
 - 2026-07-06：標記 Workbench formal read-only source adapter 已完成；V2.0 主 UI 仍等待 Phase 0 weekly history / multi-day dry-run / manual workflow evidence，不因 adapter 或 replay 提前解除 gate。

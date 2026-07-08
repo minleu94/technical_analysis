@@ -40,6 +40,8 @@ Historical Evidence Replay v1 新增 `HistoricalEvidenceReplayService` 與 `scri
 
 2026-07-07 V2.2 simulated phase progress 與 Phase 5 approval rehearsal package 已完成：`SimulatedPhaseProgressService` 與 `scripts/inspect_simulated_phase_progress.py` 可唯讀讀取 historical replay summary、scheduled dry-run latest status 與 Pre-V2 readiness，將 replay 標註為 `historical_replay` / `simulated_scheduler` / `official_gate_credit=false` / `requires_real_world_validation=true`。Reference-fix replay 可支援 simulated Phase 0-5 到 `simulated_ready`，但 official Phase 5 仍是 `blocked`，`production_scheduler_allowed=false`。不得標為已完成、必須等待正式資料的項目包括：weekly history `3/3`、multi-day dry-run `3/3`、真實 manual review note rhythm、真實 action item rhythm、Phase 3 source candidate acceptance、Phase 4 execution realism acceptance、backup / rollback / recovery evidence 與 explicit manual approval。
 
+2026-07-08 V3.0 engineering candidate 已完成為「工程候選」：V3 effectiveness read model、gap classifier、sample sufficiency / confidence disclosure、review scaffold 與 readiness inspector 已可產生 read-only engineering closeout；人工驗證仍是 `PENDING_MANUAL_VALIDATION`，真實 weekly / multi-day evidence 仍未達 official gate，不代表投資有效性、V4 readiness、production scheduler approval 或自動交易。使用者已批准下一步先做 `V3 score effectiveness audit + ML readiness bridge`：用既有 evidence / forward outcome 先檢查 `TotalScore` raw bucket、fixed threshold robustness 與 technical / pattern / volume component ablation，再把 ML 放成 V3.3 shadow-only calibration / meta-labeling / ranking / 權重學習 contract。若 score effectiveness 不可判讀，ML 只能維持 diagnostics-only。
+
 - **閉環 1：資料與市場狀態閉環** ✅ V1 已建立
   - Update → SQLite 狀態 → Market Watch / Smart Money（市場觀察子 Tab）→ 候選池
   - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 快速/安全更新分流 ✅ / Phase 2A/2B/2C SQLite DB-first ✅ / Phase 3 CSV 手動匯出 ✅

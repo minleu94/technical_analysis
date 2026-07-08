@@ -1,6 +1,6 @@
 # Active 6M Roadmap v2 (Gate-Based)
 
-> **最後更新**：2026-07-07
+> **最後更新**：2026-07-08
 > **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。本文件已重構為 Gate-based 結構，不再保留完成流水帳。
 > **版本 companion**：V2.0 之後若需要版號判讀，請看 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。該文件只把本 Roadmap 的 Phase gate 映射為 V2.1-V4.0 產品階梯，不取代本文件的工程順序與驗收標準。
 > **歷史紀錄**：V1 (Month 1-6 與 V1.1-V1.9) 的詳細完工細節已封存至 [ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md](../09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md)。
@@ -31,6 +31,19 @@
 ## 2. Active Roadmap Phases
 
 目前的開發主線已從「功能補齊」轉向「證據累積與決策驗證」。所有 Phase 的推進必須嚴格遵守 Gate 條件。
+
+### 2026-07-08 Planning Note：Score Effectiveness before ML
+
+V3.0 engineering candidate 已能提供 read-only effectiveness scaffold，但下一步不應直接跳到 ML 或 V4/V5 命名。Phase 0 的資料可信度與 daily evidence 排程，正是為了累積可驗證的真實 evidence；這些 evidence 先要拿來回答 score 是否有效，而不是立即訓練模型。
+
+今晚以 `V3 score effectiveness audit + ML readiness bridge` 作為 active milestone 候選：
+
+- **Score bucket audit**：依 `TotalScore` raw bucket (`0-40`, `40-50`, `50-60`, `60-70`, `70-80`, `80-100`) 檢視 forward return、max drawdown、win rate 與 benchmark / industry excess。
+- **Fixed threshold robustness**：測 buy / sell score、confirmation days、cooldown days 的鄰近矩陣，辨識 stable / fragile / inconclusive，而不是找單一最佳參數。
+- **Component ablation**：拆 technical、pattern、volume 及其組合，判斷哪些元件有貢獻；若舊 evidence 缺 component score，先標示 payload gap。
+- **ML readiness bridge**：只定義 feature / label / split / calibration / meta-labeling / ranking 的 shadow-only contract；不得訓練 production model 或改推薦決策。
+
+Gate：若 score bucket、threshold robustness 或 component ablation 仍不可判讀，ML 只能維持 diagnostics-only，不得進入 production roadmap。
 
 ### Phase 0：Evidence Accumulation Gate
 **目標**：累積真實使用數據與多日穩定紀錄，證明流程無害且有觀察價值。
@@ -120,7 +133,7 @@
 | Phase 3 | V2.3 | P0 Data Source Candidate Dry-run，先候選測試 microstructure、corporate action 與 PIT release date，不直接進 `ScoringEngine`。 |
 | Phase 4 | V2.4 | Execution Model Realism，在 research-only sandbox 驗證買賣價差、零股、跳空與未成交原因。 |
 | Phase 5 | V2.5 | Production Evidence Scheduler Approval，只開 evidence write-mode scheduler，不代表自動交易。 |
-| Phase 0-5 之後 | V3.0 / V4.0 | 需依 Vision 的 Level 2-4 evidence 標準評估，不屬目前 6M 直接交付承諾。 |
+| Phase 0-5 之後 | V3.0 / V3.3 / V4.0 | V3 先驗證 score / signal / alert / gate 是否有用；ML 只可在 V3.0 score effectiveness gate 可判讀後作 V3.3 shadow layer；V4.0 仍需長期 evidence，不屬目前 6M 直接交付承諾。 |
 
 ---
 
@@ -130,11 +143,13 @@
 - **金融邊界**：策略、回測、推薦修改，必須通過 no-look-ahead 自查與 pytest gate。金融核心數值必須維持 `Decimal` 或整數，不得新增裸 `float`。
 - **資料可信度**：Daily Decision 與各儀表板需明確揭示 provider 的 quality (如 `DEGRADED`, `MISSING`)。
 - **排程與自動化**：在通過 Phase 5 Gate 之前，嚴禁啟用 Production Write-mode Scheduler 或自動發送真實交易委託。
+- **ML 邊界**：任何 ML 規劃必須先通過 score effectiveness / threshold robustness / component ablation 的 evidence gate；ML 輸出只能 shadow-only，不得直接改推薦、策略 lifecycle、portfolio 或 scheduler。
 
 ---
 
 ## 4. 更新記錄
 
+- 2026-07-08：新增 `V3 score effectiveness audit + ML readiness bridge` planning note；把 ML 放在 score bucket audit、fixed threshold robustness 與 component ablation 之後，且只允許 shadow-only contract，不改推薦或 production scheduler。
 - 2026-07-07：完成 Phase 3A / Phase 3B Corporate Action & Trading Restriction Candidate Dry-run；新增 `CorporateActionPolicy` 與 `TradingRestrictionPolicy`，將 forward outcome 附加 `gap_detected` warning 並降級為 `DEGRADED`。Sandbox 可透過 policy 將限制轉譯為 `rejected_price_limit_locked` 或 `rejected_trading_restricted`，完善 Phase 4 的 rejected taxonomy。此為 candidate-only 觀察層，不改分數、價格，缺表時安全 fallback 為 `source_not_ingested`。
 - 2026-07-07：完成 Phase 4 Execution Model Realism Extension；在 Portfolio Sandbox 中實作台股跳動單位 (Tick) 滑價模型，並完整閉環零股限制 (Lot Sizing) 與拒絕原因 (Rejected Taxonomy)，現在歷史回放可忠實反映買賣價差摩擦與不可成交訂單。
 - 2026-07-07：完成 Phase 2 Workbench MVP shell 並補上 background evidence feed / read-only Action Items MVP；新增 PySide6 read-only `決策工作台` view / table models / main-tab integration，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，Action Items 只列人工待處理事項並保留 source trace / degraded reason / drill-down target，不建立 repository、不寫 DB；Evidence mode / data quality 揭露 replay JSON summary 的 simulated scheduler、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data 限制；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。

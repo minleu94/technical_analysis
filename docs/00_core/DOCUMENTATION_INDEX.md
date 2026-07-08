@@ -123,6 +123,7 @@
 | [2026-07-06-post-v1-evidence-scheduler-dry-run-design.md](../superpowers/specs/2026-07-06-post-v1-evidence-scheduler-dry-run-design.md) | Post-V1 Evidence Scheduler Dry-run 設計，定義 manual pipeline runner、dry-run / confirm gate、diagnostics report、readiness 上限與 production scheduler 門檻。 |
 | [2026-07-07-post-v1-production-scheduler-approval-design.md](../superpowers/specs/2026-07-07-post-v1-production-scheduler-approval-design.md) | Post-V1 Production Scheduler Approval 設計，定義 working-copy DB smoke、scheduler readiness evaluator、人工核准清單與 production scheduler 仍未啟用邊界。 |
 | [2026-07-08-post-v1-live-research-gap-linkage-design.md](../superpowers/specs/2026-07-08-post-v1-live-research-gap-linkage-design.md) | Post-V1 Live vs Research Gap linkage 設計，定義 portfolio source trace、Evidence Event / Outcome linkage、保守 matching、attribution 與 portfolio mode 邊界。 |
+| [2026-07-08-v3-score-effectiveness-ml-readiness-design.md](../superpowers/specs/2026-07-08-v3-score-effectiveness-ml-readiness-design.md) | V3 Score Effectiveness / ML Readiness 設計，定義 TotalScore 分組、fixed threshold robustness、component ablation 與 ML shadow-only 前置 gate。 |
 | [2026-07-09-post-v1-signal-decay-monitor-design.md](../superpowers/specs/2026-07-09-post-v1-signal-decay-monitor-design.md) | Post-V1 Signal Decay Monitor 設計，定義 decay observation、scope、window policy、rule-based score、lifecycle proposed payload 與不自動套用 action 邊界。 |
 | [2026-07-10-post-v1-decision-quality-review-design.md](../superpowers/specs/2026-07-10-post-v1-decision-quality-review-design.md) | Post-V1 Decision Quality Review 設計，定義 review repository、review item、process score、CLI 與非責備流程覆盤邊界。 |
 | [2026-07-11-post-v1-evidence-review-dashboards-design.md](../superpowers/specs/2026-07-11-post-v1-evidence-review-dashboards-design.md) | Post-V1 Evidence Review Dashboards read-only UI pack 設計，定義 Research Lab Evidence Review placement、Decision Quality / Signal Decay / Live Gap dashboard、共用 boundary banner 與 read-only UI 邊界。 |
@@ -146,6 +147,7 @@
 | [2026-07-06-historical-evidence-replay.md](../superpowers/plans/2026-07-06-historical-evidence-replay.md) | Historical Evidence Replay 實作計畫，拆分 app-layer replay service、replay context metadata、data-as-of outcome gate、CLI、tests 與文件同步。 |
 | [2026-07-07-post-v1-production-scheduler-approval.md](../superpowers/plans/2026-07-07-post-v1-production-scheduler-approval.md) | Post-V1 Production Scheduler Approval 實作計畫，拆分 working-copy smoke script、readiness evaluator、approval checklist、tests 與文件同步。 |
 | [2026-07-08-post-v1-live-research-gap-linkage.md](../superpowers/plans/2026-07-08-post-v1-live-research-gap-linkage.md) | Post-V1 Live vs Research Gap linkage 實作計畫，拆分 DTO、repository、service、CLI、matching tests、安全邊界與文件同步。 |
+| [2026-07-08-v3-score-effectiveness-ml-readiness.md](../superpowers/plans/2026-07-08-v3-score-effectiveness-ml-readiness.md) | V3 Score Effectiveness / ML Readiness 實作計畫，拆分 score bucket audit、threshold robustness、component ablation readiness 與 ML shadow contract。 |
 | [2026-07-09-post-v1-signal-decay-monitor.md](../superpowers/plans/2026-07-09-post-v1-signal-decay-monitor.md) | Post-V1 Signal Decay Monitor 實作計畫，拆分 DTO、repository、service、CLI、lifecycle payload、tests 與文件同步。 |
 | [2026-07-10-post-v1-decision-quality-review.md](../superpowers/plans/2026-07-10-post-v1-decision-quality-review.md) | Post-V1 Decision Quality Review 實作計畫，拆分 DTO、repository、service、CLI、review item tests、安全邊界與文件同步。 |
 | [2026-07-11-post-v1-evidence-review-dashboards.md](../superpowers/plans/2026-07-11-post-v1-evidence-review-dashboards.md) | Post-V1 Evidence Review Dashboards read-only UI pack 實作計畫，拆分 dashboard DTO / service、Qt model / view、Research Lab 掛載、tests 與 QA。 |
@@ -477,6 +479,7 @@
 - 2026-06-16：新增文件編碼稽核工具與 QA 報告，確認 repo Markdown 與 docs 文字型文件皆為 UTF-8，終端亂碼屬顯示層編碼問題。
 - 2026-07-06：新增 `ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md` 封存索引，對齊 6M Roadmap Gate-Based Active Roadmap 重構。
 - 2026-07-06：更新備份 retention audit 索引，補上 `_reference_fix` replay archive 位置與 C 槽 working-copy / QA raw output cleanup 狀態。
+- 2026-07-08：新增 V3 Score Effectiveness / ML Readiness design + plan 索引，將 TotalScore 分組、fixed threshold robustness、component ablation 放在 ML 前置 gate，ML 僅作 shadow-only 第二層。
 - 2026-07-08：新增 V3.0 engineering candidate manual validation report 索引，標示 V3 effectiveness read model / gap classifier / review scaffold / readiness inspector 已具工程候選驗證入口，但人工驗證仍為 `PENDING_MANUAL_VALIDATION`，不啟用 scheduler、不宣稱投資有效性。
 
 

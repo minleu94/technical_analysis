@@ -1,6 +1,6 @@
 # V2.1 至 V4.0 版本路線圖
 
-> **最後更新**：2026-07-07
+> **最後更新**：2026-07-08
 > **定位**：本文件是 V2.0 之後的長期版本化 companion。它把 `ROADMAP_6M_ENGINEERING.md` 的 gate-based Phase 與 `system_vision_specification.md` 的成功標準轉成可討論的產品版號階梯；不取代 6M Roadmap、Snapshot、Vision 或 Architecture。
 
 ---
@@ -71,9 +71,10 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 | V2.3 | Phase 3 / Level 2 | P0 Data Source Candidate Dry-run。 | 新資料源只作 candidate / dry-run，不進 `ScoringEngine`。 |
 | V2.4 | Phase 4 / Level 2 | Execution Model Realism。 | execution realism 先在 research-only sandbox 驗證，不串 broker。 |
 | V2.5 | Phase 5 / Level 1-2 governance | Production Evidence Scheduler Approval。 | simulated approval rehearsal 可先完成；official approval 必須等 explicit approval、rollback / backup、multi-day record、weekly history 與 source gaps 全部通過。 |
-| V3.0 | Vision Level 2-3 | Evidence-Validated Decision System。 | 事件類型、alert、gate 與 dashboard 有足夠 forward / gap / review evidence 可判讀。 |
+| V3.0 | Vision Level 2-3 | Evidence-Validated Decision System。 | 事件類型、alert、gate、dashboard 與 `TotalScore` 有足夠 forward / gap / review evidence 可判讀；score bucket、threshold robustness、component ablation 是 ML 前置 gate。 |
 | V3.1 | Vision Level 3 | Risk Control Effectiveness。 | Liquidity Gate、Why Not、Portfolio Alert、Fundamental diagnostics 有效果證據或降級決策。 |
 | V3.2 | Vision Level 3 | Strategy Lifecycle Effectiveness。 | Signal Decay / lifecycle candidate 能降低失效策略續用風險，仍需人工核准。 |
+| V3.3 | Vision Level 3 | ML Readiness / Shadow ML-Assisted Layer。 | 只能在 V3.0 score effectiveness gate 可判讀後，做 shadow-only calibration、meta-labeling、ranking 或權重學習；不得取代規則式訊號。 |
 | V4.0 | Vision Level 4 | Investment Effectiveness Maturity。 | Watchlist / Recommendation / Portfolio / Lifecycle 能以長期 evidence 支持決策改善。 |
 
 ---
@@ -219,6 +220,10 @@ Gate：
 - dashboard 能顯示樣本數、confidence、regime / sector 分層與 limitations。
 - 不足樣本不被包裝成結論。
 - ineffective / noisy signal 可以被降級為觀察或移出第一屏。
+- `TotalScore` 必須能用 raw bucket (`0-40`, `40-50`, `50-60`, `60-70`, `70-80`, `80-100`) 檢視 1 / 5 / 10 / 20 日 forward return、max drawdown、win rate、benchmark excess 與 industry excess。
+- fixed threshold 需要做鄰近參數穩定性檢查；若只有單一買分 / 賣分 / confirmation / cooldown 設定有效，必須標示為 overfit risk 或 `fragile`。
+- technical / pattern / volume component ablation 要能回答哪個元件真正貢獻 signal；若舊 evidence 缺 component payload，先標示 `component_payload_missing`，不得回補重算舊結論。
+- ML 不屬於 V3.0 的替代決策層；ML 只能在上述 score effectiveness gate 可判讀後進入 V3.3 shadow-only 規劃。
 
 ### V3.1：Risk Control Effectiveness
 
@@ -246,6 +251,31 @@ Scope Out：
 
 - 不讓 AI 自動升降級。
 - 不把單次 decay observation 當成策略失效證明。
+
+### V3.3：ML Readiness / Shadow ML-Assisted Layer
+
+目標：在不取代規則式框架的前提下，讓 ML 只作第二層研究輔助。
+
+前置條件：
+
+- V3.0 score bucket audit 已能顯示 `TotalScore` 分數區間與 forward outcome 的關係。
+- fixed threshold robustness matrix 已能標示 stable / fragile / inconclusive。
+- component ablation 已能區分 technical、pattern、volume 的貢獻或缺資料原因。
+- feature / label snapshot 必須符合 no-look-ahead，並保存 training window、label 定義、feature list、split policy 與 model metadata。
+
+允許：
+
+- 學權重：在不同 market regime 下調整 technical / pattern / volume 權重的 shadow diagnostics。
+- 分數校準：把 `TotalScore` / component score 校準成歷史相似情境的機率估計。
+- meta-labeling：規則式策略先產生候選 signal，ML 只判斷這個 signal 是否值得執行。
+- ranking model：在同日 universe 中做相對排序研究。
+
+不允許：
+
+- 直接用 ML 取代買賣訊號。
+- 讓 model output 改推薦、改權重、改 lifecycle、改 portfolio。
+- 把 ML 機率當成保證勝率。
+- 在沒有 walk-forward / expanding T-1 驗證前進入 production。
 
 ---
 
@@ -299,6 +329,7 @@ V4.0 仍不代表：
 
 ## 10. 更新記錄
 
+- 2026-07-08：補上 V3 score effectiveness gate 與 V3.3 ML Readiness / Shadow ML-Assisted Layer；明確 TotalScore 分組、fixed threshold robustness、component ablation 是 ML 前置條件，ML 只能 shadow-only，不取代規則式推薦或 lifecycle。
 - 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；後續已由 read-only Operating Loop closeout 補齊 UI 操作節奏，但 Phase 0 真實時間 gate、V2.2 真實 evidence loop 與 Phase 5 scheduler gate 仍未完成。
 - 2026-07-07：新增 V2.2 simulated phase progress / Phase 5 approval rehearsal companion 說明；simulated ready 不等於 V2.2 / V2.5 official closeout，完成標示仍需正式時間資料與 explicit approval。
 - 2026-07-07：補充 V2.1 background evidence feed / read-only Action Items MVP；Action Items 只列人工待處理事項並帶 source trace、degraded reason、drill-down target，不建立 repository、不寫 DB、不套用 lifecycle。
