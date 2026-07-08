@@ -765,11 +765,15 @@ def _scheduled_status_label(status: ScheduledEvidenceStatus) -> str:
 def _scheduled_status_summary(status: ScheduledEvidenceStatus) -> str:
     result_id = status.recommendation_result_id or "尚未保存"
     rec_count = status.recommendations_count if status.recommendations_count is not None else "未知"
+    recommendation_source = status.recommendation_source
+    if status.recommendation_status == "manual_observed":
+        recommendation_source = "manual_result（scheduled latest_status missing）"
     return (
         f"recommendation={status.recommendation_status} / evidence={status.evidence_status}；"
-        f"result_id={result_id}；推薦 {rec_count} 筆；"
+        f"source={recommendation_source}；result_id={result_id}；推薦 {rec_count} 筆；"
         f"共同觀測 {status.scheduled_joint_observed_days} 天"
         f"（recommendation {status.recommendation_snapshot_observed_days} 天 / "
+        f"manual recommendation {status.manual_recommendation_observed_days} 天 / "
         f"evidence dry-run {status.evidence_dry_run_observed_days} 天）。"
     )
 

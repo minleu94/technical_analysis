@@ -105,3 +105,76 @@ def test_scheduled_evidence_status_reads_latest_status_and_report(tmp_path: Path
     assert status.writes_evidence_db is False
     assert status.source_coverage_warnings == ("screening_matrix_missing",)
     assert "Run Metadata" in status.report_preview
+
+
+def test_scheduled_evidence_status_uses_same_day_manual_recommendation_when_scheduled_status_missing(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "output"
+    freshness_dir = output_root / "scheduled" / "data_freshness"
+    dry_run_dir = output_root / "scheduled" / "evidence_pipeline_dry_run"
+    runs_dir = output_root / "recommendation" / "runs"
+    freshness_dir.mkdir(parents=True)
+    dry_run_dir.mkdir(parents=True)
+    runs_dir.mkdir(parents=True)
+
+    (freshness_dir / "latest_status.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "checked_at": "2026-07-07T05:00:01",
+                "checks": {"daily_prices_latest_date": "20260707"},
+                "warnings": [],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (dry_run_dir / "latest_status.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "checked_at": "2026-07-07T05:15:39",
+                "decision_date": "2026-07-07",
+                "dry_run": True,
+                "exit_code": 0,
+                "pipeline_blocking_gaps": [],
+                "writes_evidence_db": False,
+                "confirm": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    manual_path = runs_dir / "rec_20260707_113744.json"
+    manual_path.write_text(
+        json.dumps(
+            {
+                "result_id": "rec_20260707_113744",
+                "created_at": "2026-07-07T11:37:44.761292",
+                "recommendations": [{"stock_code": "1409"}, {"stock_code": "1466"}],
+                "screening_matrix_json": [{"stock_code": "1409"}],
+                "why_not_payload_json": [{"stock_code": "2330"}],
+                "liquidity_gate_payload_json": [],
+                "exclusion_quality": "observed",
+                "exclusion_warnings_json": ["screening_matrix_persisted_v1"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    status = ScheduledEvidenceStatusService(_Config(output_root)).load_latest()
+
+    assert status.recommendation_status == "manual_observed"
+    assert status.recommendation_source == "manual_result"
+    assert status.manual_recommendation_result_path == manual_path
+    assert status.recommendation_result_id == "rec_20260707_113744"
+    assert status.recommendation_checked_at == "2026-07-07T11:37:44.761292"
+    assert status.recommendations_count == 2
+    assert status.screening_matrix_rows == 1
+    assert status.why_not_payload_rows == 1
+    assert status.writes_recommendation_result is True
+    assert status.writes_evidence_db is False
+    assert status.confirm is False
+    assert status.recommendation_snapshot_observed_days == 0
+    assert status.manual_recommendation_observed_days == 1
+    assert status.scheduled_joint_observed_days == 0

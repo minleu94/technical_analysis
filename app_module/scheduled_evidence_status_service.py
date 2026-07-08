@@ -10,6 +10,7 @@ from typing import Any
 class ScheduledEvidenceStatus:
     freshness_status: str = "missing"
     recommendation_status: str = "missing"
+    recommendation_source: str = "missing"
     evidence_status: str = "missing"
     latest_data_date: str | None = None
     decision_date: str | None = None
@@ -23,6 +24,7 @@ class ScheduledEvidenceStatus:
     auto_trading: bool | None = None
     lifecycle_action: bool | None = None
     recommendation_snapshot_observed_days: int = 0
+    manual_recommendation_observed_days: int = 0
     evidence_dry_run_observed_days: int = 0
     scheduled_joint_observed_days: int = 0
     scheduled_joint_observed_dates: tuple[str, ...] = ()
@@ -40,6 +42,7 @@ class ScheduledEvidenceStatus:
     pipeline_blocking_gaps: tuple[str, ...] = ()
     report_path: Path | None = None
     log_path: Path | None = None
+    manual_recommendation_result_path: Path | None = None
     report_exists: bool = False
     report_preview: str = ""
     diagnostics: tuple[str, ...] = ()
@@ -80,7 +83,28 @@ class ScheduledEvidenceStatusService:
             or checks.get("daily_price_latest_date_key")
             or checks.get("technical_indicators_latest_date")
         )
+        decision_date_key = _date_key(evidence.get("decision_date")) or _date_key(latest_data_date)
+        manual_recommendation: dict[str, Any] = {}
+        manual_recommendation_path: Path | None = None
+        if not recommendation:
+            manual_recommendation, manual_recommendation_path = _latest_manual_recommendation_result(
+                self.output_root,
+                decision_date_key,
+                diagnostics,
+            )
+        recommendation_payload = recommendation or manual_recommendation
+        recommendation_source = (
+            "scheduled_latest_status"
+            if recommendation
+            else "manual_result"
+            if manual_recommendation
+            else "missing"
+        )
+        recommendation_status = (
+            str(recommendation.get("status") or "missing") if recommendation else "manual_observed" if manual_recommendation else "missing"
+        )
         recommendation_dates = _scheduled_recommendation_dates(self.output_root)
+        manual_recommendation_dates = _manual_recommendation_dates(self.output_root)
         evidence_dates = _scheduled_evidence_report_dates(self.output_root)
         for raw_date in (recommendation.get("decision_date"), evidence.get("decision_date")):
             date_key = _date_key(raw_date)
@@ -92,28 +116,51 @@ class ScheduledEvidenceStatusService:
 
         return ScheduledEvidenceStatus(
             freshness_status=str(freshness.get("status") or "missing"),
-            recommendation_status=str(recommendation.get("status") or "missing"),
+            recommendation_status=recommendation_status,
+            recommendation_source=recommendation_source,
             evidence_status=str(evidence.get("status") or "missing"),
             latest_data_date=str(latest_data_date) if latest_data_date else None,
             decision_date=_str_or_none(evidence.get("decision_date")),
-            recommendation_checked_at=_str_or_none(recommendation.get("checked_at")),
-            recommendation_result_id=_str_or_none(recommendation.get("result_id")),
-            recommendations_count=_int_or_none(recommendation.get("recommendations_count")),
-            screening_matrix_rows=_int_or_none(recommendation.get("screening_matrix_rows")),
-            why_not_payload_rows=_int_or_none(recommendation.get("why_not_payload_rows")),
-            liquidity_gate_payload_rows=_int_or_none(recommendation.get("liquidity_gate_payload_rows")),
-            writes_recommendation_result=_bool_or_none(recommendation.get("writes_recommendation_result")),
-            auto_trading=_bool_or_none(recommendation.get("auto_trading")),
-            lifecycle_action=_bool_or_none(recommendation.get("lifecycle_action")),
+            recommendation_checked_at=_str_or_none(
+                recommendation_payload.get("checked_at") or recommendation_payload.get("created_at")
+            ),
+            recommendation_result_id=_str_or_none(recommendation_payload.get("result_id")),
+            recommendations_count=_count_or_int(
+                recommendation_payload.get("recommendations_count"),
+                recommendation_payload.get("recommendations"),
+            ),
+            screening_matrix_rows=_count_or_int(
+                recommendation_payload.get("screening_matrix_rows"),
+                recommendation_payload.get("screening_matrix_json"),
+            ),
+            why_not_payload_rows=_count_or_int(
+                recommendation_payload.get("why_not_payload_rows"),
+                recommendation_payload.get("why_not_payload_json"),
+            ),
+            liquidity_gate_payload_rows=_count_or_int(
+                recommendation_payload.get("liquidity_gate_payload_rows"),
+                recommendation_payload.get("liquidity_gate_payload_json"),
+            ),
+            writes_recommendation_result=_bool_or_none(
+                recommendation_payload.get("writes_recommendation_result")
+                if recommendation
+                else bool(manual_recommendation)
+            ),
+            auto_trading=_bool_or_none(recommendation_payload.get("auto_trading") if recommendation else False),
+            lifecycle_action=_bool_or_none(recommendation_payload.get("lifecycle_action") if recommendation else False),
             recommendation_snapshot_observed_days=len(recommendation_dates),
+            manual_recommendation_observed_days=len(manual_recommendation_dates),
             evidence_dry_run_observed_days=len(evidence_dates),
             scheduled_joint_observed_days=len(joint_dates),
             scheduled_joint_observed_dates=joint_dates,
             checked_at=_str_or_none(freshness.get("checked_at")),
             evidence_checked_at=_str_or_none(evidence.get("checked_at")),
             dry_run=_bool_or_none(evidence.get("dry_run")),
-            confirm=_merged_bool(evidence.get("confirm"), recommendation.get("confirm")),
-            writes_evidence_db=_merged_bool(evidence.get("writes_evidence_db"), recommendation.get("writes_evidence_db")),
+            confirm=_merged_bool(evidence.get("confirm"), recommendation_payload.get("confirm") if recommendation else False),
+            writes_evidence_db=_merged_bool(
+                evidence.get("writes_evidence_db"),
+                recommendation_payload.get("writes_evidence_db") if recommendation else False,
+            ),
             exit_code=_int_or_none(evidence.get("exit_code")),
             scheduler_readiness_after=_str_or_none(evidence.get("scheduler_readiness_after")),
             freshness_warnings=_tuple_of_str(freshness.get("warnings")),
@@ -123,6 +170,7 @@ class ScheduledEvidenceStatusService:
             pipeline_blocking_gaps=_tuple_of_str(evidence.get("pipeline_blocking_gaps")),
             report_path=report_path,
             log_path=log_path,
+            manual_recommendation_result_path=manual_recommendation_path,
             report_exists=report_exists,
             report_preview=report_preview,
             diagnostics=tuple(diagnostics),
@@ -166,6 +214,37 @@ def _scheduled_recommendation_dates(output_root: Path) -> set[str]:
         if len(parts) >= 3 and len(parts[2]) == 8 and parts[2].isdigit():
             dates.add(parts[2])
     return dates
+
+
+def _manual_recommendation_dates(output_root: Path) -> set[str]:
+    runs_dir = output_root / "recommendation" / "runs"
+    dates: set[str] = set()
+    if not runs_dir.exists():
+        return dates
+    for path in runs_dir.glob("rec_*.json"):
+        parts = path.stem.split("_")
+        if len(parts) >= 3 and len(parts[1]) == 8 and parts[1].isdigit():
+            dates.add(parts[1])
+    return dates
+
+
+def _latest_manual_recommendation_result(
+    output_root: Path,
+    date_key: str | None,
+    diagnostics: list[str],
+) -> tuple[dict[str, Any], Path | None]:
+    if not date_key:
+        return {}, None
+    runs_dir = output_root / "recommendation" / "runs"
+    if not runs_dir.exists():
+        return {}, None
+    candidates = sorted(runs_dir.glob(f"rec_{date_key}_*.json"), key=lambda path: path.name, reverse=True)
+    for path in candidates:
+        payload = _read_json(path, diagnostics)
+        if payload:
+            diagnostics.append(f"manual_recommendation_result_observed:{path}")
+            return payload, path
+    return {}, None
 
 
 def _scheduled_evidence_report_dates(output_root: Path) -> set[str]:
@@ -230,3 +309,12 @@ def _int_or_none(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _count_or_int(value: Any, rows: Any) -> int | None:
+    parsed = _int_or_none(value)
+    if parsed is not None:
+        return parsed
+    if isinstance(rows, (list, tuple)):
+        return len(rows)
+    return None

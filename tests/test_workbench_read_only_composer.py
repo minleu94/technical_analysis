@@ -249,6 +249,7 @@ def test_composer_builds_background_evidence_feed_from_existing_payloads_only() 
         agent_report_sample=_agent_report_sample(),
         scheduled_status=ScheduledEvidenceStatus(
             recommendation_status="passed",
+            recommendation_source="scheduled_latest_status",
             evidence_status="passed",
             recommendation_result_id="scheduled_rec_20260707_051001",
             recommendations_count=12,
@@ -293,7 +294,36 @@ def test_composer_builds_background_evidence_feed_from_existing_payloads_only() 
     assert feed["replay_summary_diagnostics"].status == "degraded"
     assert feed["scheduled_morning_pipeline"].status == "passed"
     assert "共同觀測 2 天" in feed["scheduled_morning_pipeline"].summary
+    assert "source=scheduled_latest_status" in feed["scheduled_morning_pipeline"].summary
     assert "simulated_scheduler" in " ".join(feed["replay_summary_diagnostics"].diagnostics)
+
+
+def test_composer_surfaces_manual_recommendation_observation_without_marking_scheduled_passed() -> None:
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=_decision_snapshot(),
+        readiness_report=_readiness_report(),
+        scheduled_status=ScheduledEvidenceStatus(
+            recommendation_status="manual_observed",
+            recommendation_source="manual_result",
+            evidence_status="passed",
+            recommendation_result_id="rec_20260707_113744",
+            recommendations_count=4,
+            manual_recommendation_observed_days=1,
+            evidence_dry_run_observed_days=1,
+            scheduled_joint_observed_days=0,
+            writes_recommendation_result=True,
+            writes_evidence_db=False,
+            auto_trading=False,
+            lifecycle_action=False,
+        ),
+    )
+
+    feed = {item.item_id: item for item in dashboard.background_evidence_feed}
+
+    assert feed["scheduled_morning_pipeline"].status == "degraded"
+    assert "manual_result（scheduled latest_status missing）" in feed["scheduled_morning_pipeline"].summary
+    assert "共同觀測 0 天" in feed["scheduled_morning_pipeline"].summary
+    assert "manual recommendation 1 天" in feed["scheduled_morning_pipeline"].summary
 
 
 def test_composer_builds_read_only_action_items_with_trace_reason_and_drilldown() -> None:

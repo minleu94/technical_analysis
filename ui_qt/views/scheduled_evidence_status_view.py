@@ -103,7 +103,8 @@ class ScheduledEvidenceStatusView(QWidget):
         )
         self.recommendation_label.setText(
             "Recommendation snapshot\n"
-            f"{status.recommendation_status} / {recommendation_id} / {recommendation_count} 筆"
+            f"{status.recommendation_status} / {status.recommendation_source} / "
+            f"{recommendation_id} / {recommendation_count} 筆"
         )
         self.safety_label.setText(
             "安全邊界\n"
@@ -145,39 +146,39 @@ class ScheduledEvidenceStatusView(QWidget):
 
 
 def _format_details(status: ScheduledEvidenceStatus) -> str:
+    recommendation_id = status.recommendation_result_id or "未知"
+    recommendation_count = status.recommendations_count if status.recommendations_count is not None else "未知"
+    boundary_ok = not status.has_production_write_risk and status.writes_evidence_db is False
+    recommendation_note = _recommendation_note(status)
     lines = [
-        "執行狀態",
-        f"- data freshness: {status.freshness_status}",
-        f"- recommendation snapshot: {status.recommendation_status}",
-        f"- evidence dry-run: {status.evidence_status}",
-        f"- checked_at: {status.checked_at or '未知'}",
-        f"- recommendation_checked_at: {status.recommendation_checked_at or '未知'}",
-        f"- evidence_checked_at: {status.evidence_checked_at or '未知'}",
+        "判讀摘要",
+        f"- data freshness: {status.freshness_status} / 最新資料 {status.latest_data_date or '未知'}",
+        (
+            "- recommendation snapshot: "
+            f"{status.recommendation_status} / {status.recommendation_source} / "
+            f"{recommendation_id} / {recommendation_count} 筆"
+        ),
+        f"- recommendation note: {recommendation_note}",
+        f"- evidence dry-run: {status.evidence_status} / 決策日 {status.decision_date or '未知'}",
+        f"- blocking gaps: {_join(status.pipeline_blocking_gaps)}",
+        f"- read-only boundary: {'ok' if boundary_ok else 'needs review'}",
+        f"- production write risk: {_bool_text(status.has_production_write_risk)}",
         "",
-        "Data freshness",
-        f"- 最新資料日期: {status.latest_data_date or '未知'}",
-        f"- warnings: {_join(status.freshness_warnings)}",
-        f"- errors: {_join(status.freshness_errors)}",
+        "人工要看",
+        f"- scheduled recommendation days: {status.recommendation_snapshot_observed_days}",
+        f"- manual recommendation days: {status.manual_recommendation_observed_days}",
+        f"- scheduler_readiness_after: {status.scheduler_readiness_after or '未知'}",
+        f"- source warnings: {_join(status.source_coverage_warnings)}",
+        f"- diagnostics: {_join(status.diagnostics)}",
         "",
-        "Recommendation snapshot",
-        f"- status: {status.recommendation_status}",
-        f"- result_id: {status.recommendation_result_id or '未知'}",
-        f"- recommendations_count: {status.recommendations_count if status.recommendations_count is not None else '未知'}",
+        "關鍵欄位",
+        f"- checked_at: freshness={status.checked_at or '未知'} / recommendation={status.recommendation_checked_at or '未知'} / evidence={status.evidence_checked_at or '未知'}",
         f"- screening_matrix_rows: {status.screening_matrix_rows if status.screening_matrix_rows is not None else '未知'}",
         f"- why_not_payload_rows: {status.why_not_payload_rows if status.why_not_payload_rows is not None else '未知'}",
         f"- liquidity_gate_payload_rows: {status.liquidity_gate_payload_rows if status.liquidity_gate_payload_rows is not None else '未知'}",
-        f"- writes_recommendation_result: {_bool_text(status.writes_recommendation_result)}",
-        "",
-        "Evidence dry-run",
-        f"- decision_date: {status.decision_date or '未知'}",
-        f"- exit_code: {status.exit_code if status.exit_code is not None else '未知'}",
-        f"- scheduler_readiness_after: {status.scheduler_readiness_after or '未知'}",
-        f"- source_coverage_warnings: {_join(status.source_coverage_warnings)}",
-        f"- pipeline_diagnostic_codes: {_join(status.pipeline_diagnostic_codes)}",
-        f"- pipeline_blocking_gaps: {_join(status.pipeline_blocking_gaps)}",
+        f"- manual_result_path: {status.manual_recommendation_result_path or '無'}",
         f"- report_path: {status.report_path or '未提供'}",
         f"- report_exists: {_bool_text(status.report_exists)}",
-        f"- log_path: {status.log_path or '未提供'}",
         "",
         "安全邊界",
         f"- dry_run: {_bool_text(status.dry_run)}",
@@ -188,12 +189,43 @@ def _format_details(status: ScheduledEvidenceStatus) -> str:
         f"- lifecycle_action: {_bool_text(status.lifecycle_action)}",
         f"- production write risk: {_bool_text(status.has_production_write_risk)}",
         "",
-        "Diagnostics",
-        f"- {_join(status.diagnostics)}",
+        "執行狀態",
+        f"- data freshness: {status.freshness_status}",
+        f"- recommendation snapshot: {status.recommendation_status}",
+        f"- evidence dry-run: {status.evidence_status}",
+        f"- evidence_checked_at: {status.evidence_checked_at or '未知'}",
+        f"- warnings: {_join(status.freshness_warnings)}",
+        f"- errors: {_join(status.freshness_errors)}",
+        f"- exit_code: {status.exit_code if status.exit_code is not None else '未知'}",
+        f"- pipeline_diagnostic_codes: {_join(status.pipeline_diagnostic_codes)}",
+        f"- log_path: {status.log_path or '未提供'}",
     ]
     if status.report_preview:
-        lines.extend(["", "Report preview", status.report_preview])
+        lines.extend(["", "Report preview（trimmed）", _trim_report_preview(status.report_preview)])
     return "\n".join(lines)
+
+
+def _recommendation_note(status: ScheduledEvidenceStatus) -> str:
+    if status.recommendation_status == "manual_observed":
+        return "scheduled latest_status missing；manual result observed"
+    if status.recommendation_status == "passed":
+        return "scheduled latest_status observed"
+    if status.recommendation_status == "missing":
+        return "recommendation snapshot missing"
+    return "review recommendation status"
+
+
+def _trim_report_preview(preview: str, *, max_lines: int = 24) -> str:
+    selected: list[str] = []
+    for line in preview.splitlines():
+        if line.strip() == "## Source Coverage":
+            selected.append("... report preview trimmed before Source Coverage JSON; open report_path for full diagnostics ...")
+            break
+        selected.append(line)
+        if len(selected) >= max_lines:
+            selected.append("... report preview trimmed; open report_path for full diagnostics ...")
+            break
+    return "\n".join(selected)
 
 
 def _join(values: tuple[str, ...]) -> str:

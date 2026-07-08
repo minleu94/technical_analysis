@@ -80,6 +80,56 @@ class FakeScheduledStatus:
         return self.result
 
 
+class FakeManualObservedScheduledStatus:
+    def __init__(self):
+        from pathlib import Path
+
+        from app_module.scheduled_evidence_status_service import ScheduledEvidenceStatus
+
+        self.result = ScheduledEvidenceStatus(
+            freshness_status="passed",
+            evidence_status="passed",
+            recommendation_status="manual_observed",
+            recommendation_source="manual_result",
+            latest_data_date="20260707",
+            decision_date="2026-07-07",
+            recommendation_result_id="rec_20260707_113744",
+            recommendations_count=4,
+            screening_matrix_rows=200,
+            why_not_payload_rows=196,
+            liquidity_gate_payload_rows=169,
+            dry_run=True,
+            confirm=False,
+            writes_evidence_db=False,
+            writes_recommendation_result=True,
+            auto_trading=False,
+            lifecycle_action=False,
+            scheduler_readiness_after="ready_for_manual_confirm",
+            source_coverage_warnings=("screening_matrix_missing",),
+            pipeline_diagnostic_codes=("source_missing_screening_matrix",),
+            pipeline_blocking_gaps=(),
+            diagnostics=(
+                r"status_missing:D:\Min\Python\Project\FA_Data\output\scheduled\recommendation_snapshot\latest_status.json",
+                r"manual_recommendation_result_observed:D:\Min\Python\Project\FA_Data\output\recommendation\runs\rec_20260707_113744.json",
+            ),
+            manual_recommendation_result_path=Path(
+                r"D:\Min\Python\Project\FA_Data\output\recommendation\runs\rec_20260707_113744.json"
+            ),
+            report_preview=(
+                "# Evidence Pipeline Dry-run Report\n\n"
+                "## Run Metadata\n"
+                "- decision_date: 2026-07-07\n\n"
+                "## Source Coverage\n"
+                "```json\n"
+                '{"source_capabilities": {"very": "long"}}\n'
+                "```"
+            ),
+        )
+
+    def load_latest(self):
+        return self.result
+
+
 def test_signal_decay_table_model_formats_bp_without_changing_raw_value() -> None:
     app()
     from app_module.signal_decay_dashboard_dtos import SignalDecayDashboardRow
@@ -150,6 +200,22 @@ def test_scheduled_evidence_status_view_shows_latest_scheduled_run() -> None:
     assert "writes_evidence_db=false" in view.safety_label.text()
     assert "screening_matrix_missing" in view.detail_panel.toPlainText()
     assert "Run Metadata" in view.detail_panel.toPlainText()
+
+
+def test_scheduled_evidence_status_view_prioritizes_manual_observed_summary_over_raw_report() -> None:
+    app()
+    view = ScheduledEvidenceStatusView(FakeManualObservedScheduledStatus(), auto_refresh=False, async_refresh=False)
+
+    view.refresh_status()
+
+    details = view.detail_panel.toPlainText()
+
+    assert "判讀摘要" in details
+    assert "manual_observed / manual_result / rec_20260707_113744 / 4 筆" in details
+    assert "scheduled latest_status missing；manual result observed" in details
+    assert "production write risk: false" in details
+    assert "Report preview（trimmed）" in details
+    assert "source_capabilities" not in details
 
 
 def test_evidence_operations_history_table_model_formats_scheduler_boundary() -> None:
