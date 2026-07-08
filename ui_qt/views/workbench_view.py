@@ -38,8 +38,15 @@ from ui_qt.models.workbench_table_models import (
 )
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.table_style import apply_financial_table_style
-from ui_qt.widgets.theme_widgets import CollapsibleSectionPanel, EmptyStatePanel, SectionPanel, WarningList
-
+from ui_qt.widgets.theme_widgets import (
+    CollapsibleSectionPanel,
+    EmptyStatePanel,
+    SectionPanel,
+    WarningList,
+    TimelineCard,
+    StatusCard,
+    MetricCard,
+)
 
 WORKBENCH_TONES: dict[str, dict[str, str]] = {
     "ready": {"fg": "#22c55e", "bg": "#0d2116", "border": "#166534"},
@@ -154,7 +161,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             ("review", "今日待判讀"),
             ("action", "人工待處理"),
             ("waiting", "等待真實時間"),
-            ("warning", "Warnings"),
+            ("warning", "警告"),
         ):
             summary_layout.addWidget(self._make_summary_block(key, label), 1)
         content_layout.addWidget(summary_row)
@@ -191,7 +198,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.evidence_review_button = self._make_drilldown_button(
             "開啟證據覆盤",
             self.navigate_to_evidence_review_callback,
-            "切到策略回測內的證據覆盤，不啟用 scheduler。",
+            "切到策略回測內的證據覆盤，不啟用排程器。",
         )
         self.portfolio_button = self._make_drilldown_button(
             "開啟持倉管理",
@@ -334,43 +341,54 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.operating_loop_collapsible = operating_loop_panel
         self.operating_loop_section_title = operating_loop_panel.title_label
         self.operating_loop_state_label = self._make_state_label()
-        self.operating_loop_table = self._make_table(self.operating_loop_model)
-        self.operating_loop_table.clicked.connect(
-            lambda index: self._show_model_row_detail(self.operating_loop_model, index.row())
-        )
-        self.operating_loop_table.doubleClicked.connect(
-            lambda index: self._navigate_model_row(self.operating_loop_model, index.row())
-        )
+        self.operating_loop_list = QWidget()
+        self.operating_loop_list_layout = QVBoxLayout(self.operating_loop_list)
+        self.operating_loop_list_layout.setContentsMargins(0, 0, 0, 0)
+        self.operating_loop_list_layout.setSpacing(6)
         operating_loop_panel.content_layout.addWidget(self.operating_loop_state_label)
-        operating_loop_panel.content_layout.addWidget(self.operating_loop_table)
+        operating_loop_panel.content_layout.addWidget(self.operating_loop_list)
         content_layout.addWidget(operating_loop_panel)
 
         evidence_panel = CollapsibleSectionPanel("證據與品質 / Evidence Mode", collapsed=True)
         self.evidence_collapsible = evidence_panel
         self.evidence_section_title = evidence_panel.title_label
-        self.data_quality_limitations_label = QLabel("")
-        self.data_quality_limitations_label.setWordWrap(True)
-        self.data_quality_limitations_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.data_quality_limitations_label.setStyleSheet(
-            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_secondary}; "
-            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
-            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 8px;"
+
+        self.evidence_summary_row = QWidget()
+        evidence_summary_layout = QHBoxLayout(self.evidence_summary_row)
+        evidence_summary_layout.setContentsMargins(0, 0, 0, 0)
+        evidence_summary_layout.setSpacing(10)
+        self.evidence_boundary_card = MetricCard("邊界與 Gate 摘要", "")
+        self.evidence_coverage_card = MetricCard("覆蓋率與缺口", "")
+        self.evidence_boundary_card.value_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 12px; "
+            "font-weight: normal; line-height: 145%;"
         )
+        self.evidence_coverage_card.value_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 12px; "
+            "font-weight: normal; line-height: 145%;"
+        )
+        self.evidence_boundary_card.value_label.setWordWrap(True)
+        self.evidence_coverage_card.value_label.setWordWrap(True)
+        evidence_summary_layout.addWidget(self.evidence_boundary_card, 1)
+        evidence_summary_layout.addWidget(self.evidence_coverage_card, 1)
+
         self.evidence_table = self._make_table(self.evidence_model)
         self.evidence_table.clicked.connect(lambda index: self._show_model_row_detail(self.evidence_model, index.row()))
-        evidence_panel.content_layout.addWidget(self.data_quality_limitations_label)
+        evidence_panel.content_layout.addWidget(self.evidence_summary_row)
         evidence_panel.content_layout.addWidget(self.evidence_table)
         content_layout.addWidget(evidence_panel)
 
         checklist_panel = CollapsibleSectionPanel("每日檢查清單 / Daily Checklist", collapsed=True)
         self.checklist_collapsible = checklist_panel
         self.checklist_section_title = checklist_panel.title_label
-        self.checklist_table = self._make_table(self.checklist_model)
-        self.checklist_table.clicked.connect(lambda index: self._show_model_row_detail(self.checklist_model, index.row()))
-        checklist_panel.content_layout.addWidget(self.checklist_table)
+        self.checklist_list = QWidget()
+        self.checklist_list_layout = QVBoxLayout(self.checklist_list)
+        self.checklist_list_layout.setContentsMargins(0, 0, 0, 0)
+        self.checklist_list_layout.setSpacing(6)
+        checklist_panel.content_layout.addWidget(self.checklist_list)
         content_layout.addWidget(checklist_panel)
 
-        warnings_panel = CollapsibleSectionPanel("警告與降級來源 / Warnings", collapsed=True)
+        warnings_panel = CollapsibleSectionPanel("警告與降級來源", collapsed=True)
         self.warnings_collapsible = warnings_panel
         self.warnings_section_title = warnings_panel.title_label
         self.warning_list = WarningList()
@@ -402,7 +420,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.subtabs.addTab(
             self._build_navigation_page(
                 "操作節奏",
-                "操作節奏只呈現 DTO 狀態；不標記完成、不寫 DB、不啟用 scheduler。",
+                "操作節奏只呈現 DTO 狀態；不標記完成、不寫 DB、不啟用排程器。",
                 None,
             ),
             "操作節奏",
@@ -414,7 +432,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
         if self.decision_source_widget is None:
-            label = QLabel("決策來源尚未載入；Workbench 仍維持唯讀，不補資料、不讀 DB、不啟用 scheduler。")
+            label = QLabel("決策來源尚未載入；Workbench 仍維持唯讀，不補資料、不讀 DB、不啟用排程器。")
             label.setWordWrap(True)
             label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
             layout.addWidget(label)
@@ -595,13 +613,13 @@ class UnifiedDecisionWorkbenchView(QWidget):
     def _show_model_row_detail(self, model, row: int) -> None:
         item = model.row_at(row)
         if item is None:
-            self._set_detail_placeholder("尚未選取項目", "請點選左側任一列查看完整 source trace 與 diagnostics。")
+            self._set_detail_placeholder("尚未選取項目", "請點選左側任一列查看完整來源追蹤與診斷訊號。")
             return
         title = _detail_title(item)
         status = _detail_status(item)
         target = str(getattr(item, "drilldown_target", "") or "")
         self._selected_detail_target = target
-        self.detail_title_label.setText(title)
+        self.detail_title_label.setText(_detail_display_title(title))
         self.detail_status_label.setText(
             f"狀態：{display_workbench_value(status)}"
             + (f" | 下鑽：{display_workbench_value(target)}" if target else "")
@@ -613,7 +631,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
     def _set_detail_placeholder(self, title: str, body: str) -> None:
         self._selected_detail_target = ""
-        self.detail_title_label.setText(title)
+        self.detail_title_label.setText(_detail_display_title(title))
         self.detail_status_label.setText("狀態：等待選取")
         self.detail_status_badge.setText("WAIT")
         self._apply_detail_tone("info")
@@ -633,7 +651,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.refresh_button.setEnabled(self.source_service is not None)
         self.boundary_banner.setText(
             "唯讀邊界：資料只能由 WorkbenchSourceService / WorkbenchDashboardDTO 供應；"
-            "不寫 DB、不啟用 production scheduler、不是交易建議；"
+            "不寫 DB、不啟用正式排程器、不是交易建議；"
             "不重算 scoring / portfolio / backtest / lifecycle。"
         )
         self._set_summary_blocks(dashboard)
@@ -659,7 +677,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.operating_loop_state_label.setText(_operating_loop_state_text(dashboard))
         self.evidence_model.set_rows(dashboard.evidence_summary)
         self.checklist_model.set_rows(dashboard.daily_checklist)
-        self.data_quality_limitations_label.setText(self._format_data_quality_limitations(dashboard))
+        self._update_evidence_summary_cards(dashboard)
+        self._render_operating_loop(dashboard.operating_loop_steps)
+        self._render_checklist(dashboard.daily_checklist)
         self.warning_list.set_warnings(tuple(_humanize_warning(item) for item in dashboard.warnings))
         self._show_initial_detail(dashboard)
         self._resize_tables()
@@ -681,20 +701,19 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "目前沒有可檢視項目",
             (
                 f"決策日期：{dashboard.as_of_date.isoformat()}\n"
-                "Workbench 仍維持 read-only；沒有清單列不代表 Phase gate 完成。"
+                "Workbench 仍維持唯讀；沒有清單列不代表 Phase gate 完成。"
             ),
         )
 
     def _display_pending_dashboard(self) -> None:
         self.refresh_button.setEnabled(self.source_service is not None)
         self.boundary_banner.setText(
-            "唯讀邊界：等待 WorkbenchDashboardDTO；不是交易建議；production scheduler 維持關閉。"
+            "唯讀邊界：等待 WorkbenchDashboardDTO；不是交易建議；正式排程器維持關閉。"
         )
         self._set_summary_placeholder("等待 DTO", "尚未載入 WorkbenchDashboardDTO")
         self.meta_label.setText("工作台尚未載入。")
-        self.data_quality_limitations_label.setText(
-            "證據模式等待 WorkbenchDashboardDTO。UI 不直接讀 DB、不啟用 scheduler，也不執行 replay。"
-        )
+        self.evidence_boundary_card.value_label.setText("等待 WorkbenchDashboardDTO。")
+        self.evidence_coverage_card.value_label.setText("UI 不直接讀 DB、不啟用排程器，也不執行 replay。")
         self.evidence_feed_state_label.setText(
             "目前沒有背景證據列：等待 WorkbenchDashboardDTO；UI 不讀 DB、不執行 replay、不補資料。"
         )
@@ -718,13 +737,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
     def _display_exception_dashboard(self, error_message: str) -> None:
         self.boundary_banner.setText(
-            "唯讀邊界：工作台載入降級；不是交易建議；production scheduler 維持關閉。"
+            "唯讀邊界：工作台載入降級；不是交易建議；正式排程器維持關閉。"
         )
         self._set_summary_placeholder("載入降級", "請先確認 WorkbenchSourceService；Phase gate 不變")
         self.meta_label.setText(f"工作台載入失敗：{error_message}")
-        self.data_quality_limitations_label.setText(
-            "資料品質降級：WorkbenchSourceService 未回傳 dashboard DTO。"
-        )
+        self.evidence_boundary_card.value_label.setText("資料品質降級")
+        self.evidence_coverage_card.value_label.setText("WorkbenchSourceService 未回傳 dashboard DTO。")
         self.evidence_feed_state_label.setText(
             "背景證據流降級：WorkbenchSourceService 未回傳 DTO；UI 不補值、不讀 DB、不執行 replay。"
         )
@@ -752,9 +770,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             self.review_table,
             self.evidence_feed_table,
             self.action_item_table,
-            self.operating_loop_table,
             self.evidence_table,
-            self.checklist_table,
         ):
             table.resizeColumnsToContents()
             table.resizeRowsToContents()
@@ -771,19 +787,81 @@ class UnifiedDecisionWorkbenchView(QWidget):
             table.setColumnWidth(index, width)
         header.setSectionResizeMode(len(fixed_widths), QHeaderView.Stretch)
 
-    def _format_data_quality_limitations(self, dashboard: WorkbenchDashboardDTO) -> str:
-        lines = [
-            f"資料品質來源模式：{display_workbench_value(dashboard.source_mode)}。",
-            "Workbench 維持唯讀：不重算 scoring、portfolio、backtest 或 lifecycle 邏輯。",
+    def _update_evidence_summary_cards(self, dashboard: WorkbenchDashboardDTO) -> None:
+        boundary_lines = [
+            f"資料品質來源模式：{display_workbench_value(dashboard.source_mode)}",
+            "Workbench 維持唯讀：不重算評分、持倉、回測或生命週期",
         ]
+        coverage_lines = []
         replay_summary = _find_replay_summary(dashboard.evidence_summary)
         if replay_summary is not None:
-            lines.append("Historical replay JSON summary 只作模擬證據揭露；UI 不讀 replay DB，也不執行 replay。")
-            lines.extend(_humanize_replay_diagnostic(item) for item in replay_summary.diagnostics)
-            lines.append(_format_phase0_gate_text(dashboard))
+            boundary_lines.append("歷史 replay 摘要只作研究證據揭露")
+            for item in replay_summary.diagnostics:
+                text = _localize_workbench_text(_humanize_replay_diagnostic(item))
+                if "覆蓋" in text or "缺口" in text or "缺" in text:
+                    coverage_lines.append(text)
+                else:
+                    boundary_lines.append(text)
+            boundary_lines.append(_format_phase0_gate_text(dashboard))
         else:
-            lines.append(_format_phase0_gate_text(dashboard))
-        return "\n".join(line for line in lines if line)
+            boundary_lines.append(_format_phase0_gate_text(dashboard))
+            coverage_lines.append("等待 replay 摘要診斷載入。")
+
+        self.evidence_boundary_card.value_label.setText(_format_card_lines(boundary_lines))
+        self.evidence_coverage_card.value_label.setText(
+            _format_card_lines(coverage_lines) if coverage_lines else "• 目前沒有額外覆蓋率缺口。"
+        )
+
+    def _render_operating_loop(self, steps) -> None:
+        while self.operating_loop_list_layout.count():
+            item = self.operating_loop_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        for i, step in enumerate(steps):
+            chips = []
+            linked = getattr(step, "linked_item_ids", ())
+            if linked:
+                for l in linked:
+                    chips.append((_localize_chip_label(str(l)), "info"))
+            if str(getattr(step, "step_id", "")) == "multi_day_dry_run":
+                chips.append(("每週歷史", "info"))
+                chips.append(("來源缺口", "warning"))
+            details = _format_detail_body(step)
+            card = TimelineCard(
+                index=i,
+                step_num=i + 1,
+                title=_localize_workbench_text(str(getattr(step, "label", getattr(step, "step_id", "")))),
+                summary=_localize_workbench_text(str(getattr(step, "summary", ""))),
+                status_text=display_workbench_value(str(getattr(step, "status", ""))),
+                status_tone=str(getattr(step, "status", "")),
+                details_text=details,
+                chips=chips
+            )
+            card.clicked.connect(lambda idx=i: self._show_model_row_detail(self.operating_loop_model, idx))
+            card.doubleClicked.connect(lambda idx=i: self._navigate_model_row(self.operating_loop_model, idx))
+            self.operating_loop_list_layout.addWidget(card)
+
+    def _render_checklist(self, checklist) -> None:
+        while self.checklist_list_layout.count():
+            item = self.checklist_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        for i, item in enumerate(checklist):
+            status = str(getattr(item, "status", ""))
+            status_text = display_workbench_value(status)
+            if status == "waiting_for_time":
+                status_text = f"需要處理 / 需要人工覆盤 / {status_text}"
+            card = StatusCard(
+                index=i,
+                title=_localize_workbench_text(str(getattr(item, "label", ""))),
+                summary=_localize_workbench_text(str(getattr(item, "summary", ""))),
+                status_text=status_text,
+                status_tone=status,
+            )
+            card.clicked.connect(lambda idx=i: self._show_model_row_detail(self.checklist_model, idx))
+            self.checklist_list_layout.addWidget(card)
 
     def _set_summary_blocks(self, dashboard: WorkbenchDashboardDTO) -> None:
         review_count = len(dashboard.review_items)
@@ -832,7 +910,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.priority_banner.setText(
             "今日重點："
             f"待判讀 {review_count} | 人工處理 {action_count} | "
-            f"等待真實時間 {waiting_count} | Warnings {warning_count}。"
+            f"等待真實時間 {waiting_count} | 警告 {warning_count}。"
             "右側 Inspector 只顯示既有 DTO 證據，不寫入、不補 gate。"
         )
         self.priority_banner.setStyleSheet(
@@ -860,21 +938,23 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
     def _set_detail_sections(self, item) -> None:
         title = _detail_title(item)
-        summary = str(getattr(item, "summary", "") or "無摘要。")
-        source_trace = str(getattr(item, "source_trace", getattr(item, "source", "")) or "未提供 source trace")
-        degraded_reason = str(getattr(item, "degraded_reason", "") or "none")
-        target = str(getattr(item, "drilldown_target", "") or "未提供")
+        summary = _localize_workbench_text(str(getattr(item, "summary", "") or "無摘要。"))
+        source_trace = _localize_workbench_text(
+            str(getattr(item, "source_trace", getattr(item, "source", "")) or "未提供來源追蹤")
+        )
+        degraded_reason = _localize_workbench_text(str(getattr(item, "degraded_reason", "") or "無"))
+        target = _localize_workbench_text(str(getattr(item, "drilldown_target", "") or "未提供"))
         diagnostics = getattr(item, "diagnostics", ())
-        diagnostics_text = _format_detail_value(diagnostics) if diagnostics else "無額外 diagnostics。"
+        diagnostics_text = _format_detail_value(diagnostics) if diagnostics else "無額外診斷訊號。"
         self.detail_summary_box.setText(
-            f"重點摘要\n{title}\n{summary}"
+            f"重點摘要\n{_localize_workbench_text(title)}\n{summary}"
         )
         self.detail_source_box.setText(
             "來源與邊界\n"
-            f"source_trace: {source_trace}\n"
-            f"degraded_reason: {degraded_reason}\n"
-            f"drilldown_target: {target}\n"
-            "read-only: 不寫 DB、不標記完成、不啟用 scheduler。"
+            f"來源追蹤：{source_trace}\n"
+            f"降級原因：{degraded_reason}\n"
+            f"下鑽目標：{target}\n"
+            "唯讀邊界：不寫資料庫、不標記完成、不啟用排程器。"
         )
         self.detail_diagnostics_box.setText(
             f"診斷訊號\n{diagnostics_text}"
@@ -896,7 +976,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         return (
             f"今日待判讀 {len(dashboard.review_items)} 筆｜人工待處理 {len(dashboard.action_items)} 筆｜"
             f"等待真實時間 {sum(1 for item in dashboard.daily_checklist if str(item.status) == 'waiting_for_time')} 項｜"
-            f"Warnings {len(dashboard.warnings)} 則\n"
+            f"警告 {len(dashboard.warnings)} 則\n"
             f"{_format_phase0_gate_text(dashboard)}\n"
             "此總覽只彙整 WorkbenchDashboardDTO；不寫 DB、不補 gate、不產生買賣建議。"
         )
@@ -928,6 +1008,12 @@ def _detail_title(item) -> str:
     )
 
 
+def _detail_display_title(title: str) -> str:
+    if title == "Replay summary diagnostics":
+        return "Replay 摘要診斷"
+    return _localize_workbench_text(title)
+
+
 def _workbench_tone(status: str) -> dict[str, str]:
     return WORKBENCH_TONES.get(str(status), WORKBENCH_TONES["neutral"])
 
@@ -936,27 +1022,125 @@ def _detail_status(item) -> str:
     return str(getattr(item, "status", getattr(item, "severity", "")) or "")
 
 
+def _format_card_lines(lines: list[str]) -> str:
+    return "\n".join(f"• {_localize_workbench_text(line)}" for line in lines if str(line).strip())
+
+
+def _localize_chip_label(text: str) -> str:
+    token_map = {
+        "readiness_weekly_history": "每週歷史",
+        "readiness_multi_day_dry_run": "多日 dry-run",
+        "readiness_source_gaps": "來源缺口",
+        "replay_summary_manual_review": "replay 覆盤",
+        "weekly_history": "每週歷史",
+        "multi_day_dry_run": "多日 dry-run",
+        "manual_review_note": "人工註記",
+        "scheduler_off": "排程關閉",
+        "readiness_weekly_history": "每週歷史",
+        "readiness_multi_day_dry_run": "多日 dry-run",
+        "readiness_source_gaps": "來源缺口",
+        "replay_summary_manual_review": "replay 覆盤",
+        "manual_review_note": "人工註記",
+        "watchlist_trigger": "觀察清單觸發",
+        "portfolio_review": "持倉覆盤",
+        "evidence_review": "證據覆盤",
+    }
+    return token_map.get(text, display_workbench_value(text))
+
+
+def _localize_workbench_text(text: str) -> str:
+    replacements = {
+        "manual_required": "需要人工覆盤",
+        "waiting_for_time": "等待真實時間累積",
+        "action_required": "需要處理",
+        "blocked": "封鎖",
+        "manual_observed": "人工已觀測",
+        "passed": "通過",
+        "missing": "缺漏",
+        "degraded": "降級",
+        "records observed": "筆已觀測",
+        "record observed": "筆已觀測",
+        "Weekly review history": "每週覆盤歷史",
+        "Multi-day dry-run": "多日 dry-run",
+        "Multi-day dry-run record": "多日 dry-run 紀錄",
+        "Scheduler write-mode": "排程器寫入模式",
+        "Production scheduler remains off": "正式排程器維持關閉",
+        "must accumulate in real time": "必須靠真實時間累積",
+        "replay cannot replace this gate": "replay 不可取代這個 gate",
+        "review item": "待判讀項目",
+        "Scheduler gate": "排程 Gate",
+        "Replay summary gap": "Replay 摘要缺口",
+        "Replay summary diagnostics": "Replay 摘要診斷",
+        "Replay summary": "Replay 摘要",
+        "diagnostics": "診斷訊號",
+        "Decision snapshot freshness": "決策快照新鮮度",
+        "Evidence gate status": "證據門檻狀態",
+        "Manual review note": "人工覆盤註記",
+        "source trace": "來源追蹤",
+        "degraded reason": "降級原因",
+        "read-only": "唯讀",
+        "Read-only": "唯讀",
+        "scheduler": "排程器",
+        "production scheduler": "正式排程器",
+        "simulated scheduler": "模擬排程器",
+        "scoring": "評分",
+        "portfolio": "持倉",
+        "backtest": "回測",
+        "lifecycle": "生命週期",
+        "Historical replay JSON summary": "歷史 replay 摘要",
+        "research evidence only": "僅供研究證據使用",
+        "does not replace real weekly or multi-day scheduler gates": "不可取代真實每週或多日排程 gate",
+        "Recommendations source uses only persisted results": "推薦來源只使用已保存結果",
+        "Forward outcomes are capped by replay_data_as_of_date": "forward outcome 受 replay_data_as_of_date 限制",
+        "Production scheduler remains separate and is not enabled by this replay": "正式排程器與 replay 分離，且不會被 replay 啟用",
+        "Phase 0 weekly history": "Phase 0 每週歷史",
+        "weekly history": "每週歷史",
+        "multi-day dry-run": "多日 dry-run",
+        "source gaps": "來源缺口",
+        "source gap": "來源缺口",
+        "readiness_weekly_history": "每週歷史",
+        "readiness_multi_day_dry_run": "多日 dry-run",
+        "readiness_source_gaps": "來源缺口",
+        "replay_summary_manual_review": "replay 覆盤",
+        "manual_review_note": "人工註記",
+        "watchlist_trigger": "觀察清單觸發",
+        "portfolio_review": "持倉覆盤",
+        "evidence_review": "證據覆盤",
+        "after_manual_review": "人工覆盤後",
+        "daily_until_3": "每日直到 3 筆",
+        "weekly_until_3": "每週直到 3 筆",
+        "pending_future_data": "等待未來資料",
+        "source_missing_screening_matrix": "缺 screening matrix 來源",
+        "recommendation": "推薦",
+        "evidence": "證據",
+    }
+    localized = str(text)
+    for source, target in sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True):
+        localized = localized.replace(source, target)
+    return localized
+
+
 def _format_detail_body(item) -> str:
     lines = [
-        "read-only：此處只展示 WorkbenchDashboardDTO 既有欄位；不寫 DB、不標記完成、不啟用 scheduler。",
+        "唯讀邊界：此處只展示 WorkbenchDashboardDTO 既有欄位；不寫資料庫、不標記完成、不啟用排程器。",
         "",
     ]
     for label, field_name in (
-        ("item_id", "item_id"),
-        ("step_id", "step_id"),
-        ("summary", "summary"),
-        ("code", "code"),
-        ("source", "source"),
-        ("source_type", "source_type"),
-        ("source_label", "source_label"),
-        ("source_trace", "source_trace"),
-        ("degraded_reason", "degraded_reason"),
-        ("cadence", "cadence"),
-        ("linked_item_ids", "linked_item_ids"),
-        ("guidance", "guidance"),
-        ("drilldown_target", "drilldown_target"),
-        ("write_intent", "write_intent"),
-        ("diagnostics", "diagnostics"),
+        ("項目代號", "item_id"),
+        ("步驟代號", "step_id"),
+        ("摘要", "summary"),
+        ("代碼", "code"),
+        ("來源", "source"),
+        ("來源類型", "source_type"),
+        ("來源名稱", "source_label"),
+        ("來源追蹤", "source_trace"),
+        ("降級原因", "degraded_reason"),
+        ("節奏", "cadence"),
+        ("關聯項目", "linked_item_ids"),
+        ("人工提示", "guidance"),
+        ("下鑽目標", "drilldown_target"),
+        ("寫入意圖", "write_intent"),
+        ("診斷訊號", "diagnostics"),
     ):
         if not hasattr(item, field_name):
             continue
@@ -973,7 +1157,7 @@ def _format_detail_value(value: object) -> str:
     if isinstance(value, list):
         return "；".join(_format_detail_token(item) for item in value) or "無"
     if isinstance(value, bool):
-        return "true" if value else "false"
+        return "是" if value else "否"
     return _format_detail_token(value)
 
 
@@ -981,8 +1165,8 @@ def _format_detail_token(value: object) -> str:
     raw = str(value)
     display = display_workbench_value(raw)
     if raw == display:
-        return raw
-    return f"{raw}（{display}）"
+        return _localize_workbench_text(raw)
+    return _localize_workbench_text(display.replace(f"（{raw}）", ""))
 
 
 def _find_replay_summary(items: tuple[WorkbenchEvidenceSummary, ...]) -> WorkbenchEvidenceSummary | None:
@@ -1005,7 +1189,7 @@ def _evidence_feed_state_text(dashboard: WorkbenchDashboardDTO) -> str:
     ):
         return (
             f"背景證據流降級：{count} 筆來源中包含 missing / degraded / warning。"
-            "請依 source trace 與 diagnostics 人工檢查；Workbench 不補值、不重跑 pipeline、不讀 replay DB。"
+            "請依來源追蹤與診斷訊號人工檢查；Workbench 不補值、不重跑 pipeline、不讀 replay DB。"
         )
     return (
         f"背景證據流已載入 {count} 筆唯讀來源。"
@@ -1025,7 +1209,7 @@ def _action_item_state_text(dashboard: WorkbenchDashboardDTO) -> str:
         for item in dashboard.action_items
     ):
         return (
-            f"Action Items 降級：佇列包含 {count} 筆資料缺口、警示或 waiting_for_time 項目。"
+            f"Action Items 降級：佇列包含 {count} 筆資料缺口、警示或等待真實時間累積項目。"
             "只供人工覆盤排序，不是買賣建議；Workbench 不寫 DB、不套用 lifecycle。"
         )
     return (
@@ -1039,7 +1223,7 @@ def _operating_loop_state_text(dashboard: WorkbenchDashboardDTO) -> str:
     if count == 0:
         return (
             "尚未有操作節奏 payload；等待 WorkbenchDashboardDTO。"
-            "Workbench 維持只讀，不寫 DB、不標記完成、不啟用 scheduler。"
+            "Workbench 維持唯讀，不寫 DB、不標記完成、不啟用排程器。"
         )
     manual_count = sum(
         1
@@ -1074,7 +1258,7 @@ def _has_degraded_reason(reason: str) -> bool:
 def _humanize_replay_diagnostic(token: str) -> str:
     text = str(token)
     if text == "simulated_scheduler":
-        return "模擬 scheduler：replay 來自 simulated scheduler，不是 production scheduler。"
+        return "模擬排程器：replay 來自模擬排程器，不是正式排程器。"
     if text.startswith("source_gap:"):
         return f"來源缺口：{display_workbench_value(text.split(':', 1)[1])}"
     if text.startswith("source_gap_coverage:"):
@@ -1102,7 +1286,7 @@ def _format_phase0_gate_text(dashboard: WorkbenchDashboardDTO) -> str:
     weekly = _ratio_for_item(dashboard, "weekly_history") or "尚未就緒"
     dry_run = _ratio_for_item(dashboard, "multi_day_dry_run") or "尚未就緒"
     return (
-        f"Phase 0 weekly history {weekly} 與 multi-day dry-run {dry_run} 仍是真實時間 gate；"
+        f"Phase 0 每週歷史 {weekly} 與多日 dry-run {dry_run} 仍是真實時間 gate；"
         "replay 不可取代。"
     )
 
@@ -1143,5 +1327,5 @@ def _humanize_warning(token: object) -> str:
         "missing_industry_benchmark",
         "pending_insufficient_future_data",
     }:
-        return display_workbench_value(text)
-    return display_workbench_value(text)
+        return _localize_workbench_text(display_workbench_value(text))
+    return _localize_workbench_text(display_workbench_value(text))

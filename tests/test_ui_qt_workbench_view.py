@@ -259,17 +259,15 @@ class _FakeWorkbenchSourceService:
         return self.dashboard
 
 
-def test_workbench_evidence_table_model_exposes_replay_diagnostics() -> None:
+def test_workbench_evidence_table_model_has_no_diagnostics_column() -> None:
     app()
     replay = _dashboard_with_replay().evidence_summary[1]
     model = WorkbenchEvidenceTableModel((replay,))
 
     assert model.rowCount() == 1
-    assert model.headerData(model.column_index("diagnostics"), Qt.Horizontal, Qt.DisplayRole) == "診斷"
-    diagnostics = model.data(model.index(0, model.column_index("diagnostics")))
-    assert "模擬" in diagnostics
-    assert "等待未來資料" in diagnostics
-    assert model.raw_value(0, "diagnostics") == replay.diagnostics
+    visible_fields = tuple(field for field, _label in model.COLUMNS)
+    assert visible_fields == ("label", "status", "summary")
+
 
 
 def test_workbench_action_item_table_model_is_compact_but_keeps_raw_detail() -> None:
@@ -391,8 +389,11 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     view.portfolio_button.click()
     assert clicked == ["daily", "evidence", "portfolio"]
 
-    data_quality_text = view.data_quality_limitations_label.text()
-    assert "模擬 scheduler" in data_quality_text
+    boundary_text = view.evidence_boundary_card.value_label.text()
+    coverage_text = view.evidence_coverage_card.value_label.text()
+    data_quality_text = boundary_text + "\n" + coverage_text
+
+    assert "模擬排程器" in data_quality_text
     assert "來源缺口" in data_quality_text
     assert "payload 缺口" in data_quality_text
     assert "結果成熟度" in data_quality_text
@@ -401,8 +402,8 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "缺產業基準" in data_quality_text
     assert "等待未來資料" in data_quality_text
     assert "方向判讀" in data_quality_text
-    assert "Phase 0 weekly history 0/3" in data_quality_text
-    assert "multi-day dry-run 1/3" in data_quality_text
+    assert "Phase 0 每週歷史 0/3" in data_quality_text
+    assert "多日 dry-run 1/3" in data_quality_text
     assert "replay 不可取代" in data_quality_text
     assert "降級來源" in view.warning_list.toPlainText()
     loop_text = view.operating_loop_state_label.text()
@@ -411,6 +412,32 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "等待真實時間累積" in loop_text
     assert "只讀" in loop_text
     assert "不標記完成" in loop_text
+    operating_loop_text = " ".join(
+        label.text() for label in view.operating_loop_list.findChildren(type(view.boundary_banner))
+    )
+    assert "需要人工覆盤" in operating_loop_text
+    assert "等待真實時間累積" in operating_loop_text
+    assert "manual_required" not in operating_loop_text
+    assert "waiting_for_time" not in operating_loop_text
+    assert "觀察清單觸發" in operating_loop_text
+    assert "唯讀邊界" in operating_loop_text
+    assert "read-only boundary" not in operating_loop_text
+
+    checklist_text = " ".join(
+        label.text() for label in view.checklist_list.findChildren(type(view.boundary_banner))
+    )
+    assert "封鎖" in checklist_text
+    assert "等待真實時間累積" in checklist_text
+    assert "blocked" not in checklist_text
+    assert "action_required" not in checklist_text
+    assert "waiting_for_time" not in checklist_text
+
+    view.warning_list.set_warnings(("source gap warning", "manual waiting"))
+    warning_text = " ".join(label.text() for label in view.warning_list.findChildren(type(view.boundary_banner)))
+    assert "缺漏來源" in warning_text
+    assert "需要人工覆盤" in warning_text
+    assert "Missing Source" not in warning_text
+    assert "Manual Review Required" not in warning_text
 
 
 def test_unified_workbench_overview_uses_detail_inspector_and_collapsible_sections() -> None:
@@ -429,16 +456,19 @@ def test_unified_workbench_overview_uses_detail_inspector_and_collapsible_sectio
     view._show_model_row_detail(view.evidence_feed_model, 1)
 
     detail_text = view.detail_body_label.text()
-    assert "Replay summary diagnostics" in view.detail_title_label.text()
+    assert "Replay 摘要診斷" in view.detail_title_label.text()
     assert "降級" in view.detail_status_badge.text()
     assert "#f59e0b" in view.detail_status_badge.styleSheet()
     assert "重點摘要" in view.detail_summary_box.text()
     assert "來源與邊界" in view.detail_source_box.text()
     assert "診斷訊號" in view.detail_diagnostics_box.text()
     assert "HistoricalReplaySummary" in detail_text
-    assert "missing_industry_benchmark" in detail_text
-    assert "simulated_scheduler" in detail_text
-    assert "read-only" in detail_text
+    assert "缺產業基準" in detail_text
+    assert "模擬 排程器" in detail_text or "模擬排程器" in detail_text
+    assert "唯讀邊界" in detail_text
+    assert "simulated_scheduler" not in detail_text
+    assert "missing_industry_benchmark" not in detail_text
+    assert "read-only" not in detail_text
     assert view.detail_drilldown_button.isEnabled() is True
 
     view.detail_drilldown_button.click()
@@ -460,7 +490,7 @@ def test_unified_workbench_overview_uses_high_contrast_priority_treatments() -> 
 
     assert "今日重點" in view.priority_banner.text()
     assert "人工處理 1" in view.priority_banner.text()
-    assert "Warnings 3" in view.priority_banner.text()
+    assert "警告 3" in view.priority_banner.text()
     assert "#f59e0b" in view.priority_banner.styleSheet()
     assert "#ef4444" in view.summary_blocks["warning"].styleSheet()
     assert "#38bdf8" in view.summary_blocks["review"].styleSheet()

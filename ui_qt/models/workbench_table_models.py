@@ -151,7 +151,6 @@ class WorkbenchEvidenceTableModel(_WorkbenchTableModel):
         ("label", "證據"),
         ("status", "狀態"),
         ("summary", "摘要"),
-        ("diagnostics", "診斷"),
     )
 
     def __init__(self, rows: Sequence[WorkbenchEvidenceSummary] = (), parent=None) -> None:
