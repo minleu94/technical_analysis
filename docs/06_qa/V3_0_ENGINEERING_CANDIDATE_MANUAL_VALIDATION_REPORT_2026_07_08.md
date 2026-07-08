@@ -121,6 +121,39 @@ Task Scheduler observation from the finish plan: 04:40、05:00、05:15 三個 sc
 - `source_missing_screening_matrix` 舊 payload gap、`missing_industry_benchmark` residual、sample insufficiency 與 1,865 warnings 仍需可見，不得被轉成 pass。
 - Production scheduler remains disabled: `production_scheduler_allowed=false`。
 
+## 2026-07-08 Evening Closeout Handoff
+
+本段給夜間排程使用：今晚目標是把 V3.0 engineering candidate 收成可人工驗證的 closeout package，而不是再開新功能。
+
+### Completed Inputs
+
+- `SCORE_EFFECTIVENESS_AUDIT_ENGINEERING_CANDIDATE_COMPLETE`
+- `PHASE_3C_SOURCE_CANDIDATE_DRY_RUN_COMPLETE`
+- `V3_0_ENGINEERING_CANDIDATE_CLOSEOUT_TARGET_READY_FOR_TONIGHT`
+
+| Area | Implemented artifacts | Boundary |
+|---|---|---|
+| Score bucket audit | `app_module/score_effectiveness_dtos.py`, `app_module/score_effectiveness_read_model.py`, `scripts/inspect_score_effectiveness.py` | Read-only raw bucket / forward outcome audit；不改分數、不改 threshold。 |
+| Threshold robustness | `app_module/threshold_robustness_read_model.py` | 檢查鄰近參數穩定性；不選最佳參數、不 auto-promote。 |
+| Component ablation readiness | `app_module/component_ablation_readiness.py` | 標示 component payload availability；舊 evidence 不回補重算。 |
+| ML readiness contract | `app_module/ml_readiness_contract.py`, `scripts/inspect_ml_readiness_contract.py` | Shadow-only feature / label / split / calibration / meta-label / ranking contract；不訓練 production model。 |
+| Phase 3C source candidates | `app_module/source_candidate_readiness.py`, `scripts/inspect_source_candidate_readiness.py` | 三大法人 / 信用交易 / TDCC candidate-only diagnostics；不正式 ingestion、不接 `ScoringEngine`。 |
+
+### Tonight Closeout Checklist
+
+- Run focused tests for score effectiveness, threshold robustness, component ablation, ML readiness, and source candidate readiness.
+- Run py_compile on changed score/source readiness modules and CLIs.
+- Ensure `docs/00_core/PROJECT_SNAPSHOT.md`, `ROADMAP_6M_ENGINEERING.md`, `VERSION_ROADMAP_V2_1_TO_V4_0.md`, `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`, `DEVELOPMENT_ROADMAP.md`, `DOCUMENTATION_INDEX.md`, this QA report, and the score/ML plan/spec all agree on the closeout target.
+- Final status may be `ready_for_manual_validation` only if safety boundaries remain visible.
+
+### Still Not Allowed
+
+- Do not enable production scheduler.
+- Do not write production evidence DB.
+- Do not connect candidate sources to `ScoringEngine`.
+- Do not change recommendation thresholds, profile weights, portfolio logic, lifecycle state, or broker behavior.
+- Do not claim investment effectiveness, V4 readiness, or production ML readiness.
+
 ### Finish Sprint Status
 
 - Engineering candidate closeout: `ready_for_manual_validation`

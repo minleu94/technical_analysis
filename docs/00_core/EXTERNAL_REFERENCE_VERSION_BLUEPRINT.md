@@ -146,6 +146,8 @@ baldr 目前最值得補強的不是更早導入 GPU、強化學習、券商自�
 
 ### P1：支援更好的市場判讀，但不得直接進 score
 
+2026-07-08 Phase 3C 已先把三大法人、信用交易與 TDCC 做成 source candidate readiness dry-run：只檢查 DB / table / `available_date` / future-data / diagnostics，不正式 ingestion、不接 `ScoringEngine`、不改推薦 threshold、不啟用 scheduler。下列資料源仍需後續 source policy、授權與正式 ingestion gate 才能進入日常流程。
+
 1. **三大法人 / 外資 / 投信 / 自營商**
    - 用途：Smart Money、Chip Flow、Risk Prompt、Screening Matrix。
    - 禁止：不得把單日法人買超直接解釋成買進理由。
@@ -281,6 +283,7 @@ Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並�
 ## 11. 更新記錄
 
 - 2026-07-08：補上 supervised ML 採用邊界；sklearn / XGBoost / LightGBM 只可作 V3.3 shadow-only 候選，必須等 V3 score effectiveness audit 可判讀後才進實驗，不取代 rule engine、不直接改推薦。
+- 2026-07-08：補上 Phase 3C source candidate readiness 現況；三大法人、信用交易與 TDCC 只完成 candidate-only dry-run，不代表正式資料 ingestion、ScoringEngine 接線或 scheduler approval。
 - 2026-07-06：補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的 scoped authority 對照，明確本文件不直接承諾 V2.1-V4.0 外部資料源導入或投資有效性。
 - 2026-07-05：重新整理外部專案採用規則與分級；確認只保留公開可讀且 README / docs 足以理解用途與操作方法的專案；`x-qa/stock-screener-service` 因 404 移出 active reference；`PyPortfolioOpt` 改用目前 canonical `PyPortfolio/PyPortfolioOpt`；`OpenBB agents` 降級為 experimental playground 參考。
 - 2026-07-06：標記 Workbench formal read-only source adapter 已完成；V2.0 主 UI 仍等待 Phase 0 weekly history / multi-day dry-run / manual workflow evidence，不因 adapter 或 replay 提前解除 gate。

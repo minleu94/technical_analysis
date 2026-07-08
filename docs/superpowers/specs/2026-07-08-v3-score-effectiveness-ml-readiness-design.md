@@ -1,8 +1,8 @@
 # V3 Score Effectiveness Audit and ML Readiness Bridge Design
 
 > Date: 2026-07-08
-> Active milestone candidate: `V3 score effectiveness audit + ML readiness bridge`
-> Status: Planning / nightly automation handoff
+> Active milestone candidate: `V3.0 engineering candidate closeout/readiness report`
+> Status: Engineering candidate inputs complete / nightly closeout handoff
 
 ## Purpose
 
@@ -22,14 +22,19 @@ Already available:
 - Recommendation DTOs already expose `total_score`, `indicator_score`, `pattern_score`, and `volume_score` at application boundary.
 - Research Run Registry / FactorGate already provide the governance pattern needed for feature / label snapshots.
 
-Not yet complete:
+Engineering inputs now implemented:
 
 - Raw `TotalScore` buckets such as `0-40`, `40-50`, `50-60`, `60-70`, `70-80`, `80-100`.
-- Forward outcome table/report for 1 / 5 / 10 / 20 day return, max drawdown, win rate, benchmark excess, and industry excess by score bucket.
+- Read-only forward outcome report shape for return, max drawdown, win rate, benchmark excess, and industry excess by score bucket.
 - Fixed-threshold neighborhood robustness around buy/sell thresholds, confirmation days, and cooldown.
-- Component ablation for technical / pattern / volume score combinations.
-- First-class evidence persistence of component scores for new recommendation evidence.
-- Governed ML feature / label contract, calibration contract, meta-labeling contract, or ranking evaluation contract.
+- Component ablation readiness for technical / pattern / volume score combinations.
+- Governed ML feature / label contract, calibration contract, meta-labeling contract, and ranking evaluation contract.
+
+Still not complete:
+
+- Production ML training or model registry.
+- Direct recommendation threshold, profile weight, `ScoringEngine`, portfolio, lifecycle, scheduler, or broker integration.
+- Investment effectiveness conclusion.
 
 ## Design Decision
 
@@ -183,16 +188,15 @@ All ML outputs must remain `shadow_only=true` until manual approval and separate
 
 ## Nightly Automation Handoff
 
-Tonight's automation should choose this as the active milestone before jumping to V4/V5:
+Tonight's automation should not repeat this implementation milestone. It should choose:
 
-`V3 score effectiveness audit + ML readiness bridge`
+`V3.0 engineering candidate closeout/readiness report`
 
-Preferred deliverables for the first sprint:
+Preferred deliverables:
 
-1. Score effectiveness design / roadmap synchronization.
-2. Read-only score bucket audit service and CLI.
-3. Threshold robustness and component ablation readiness diagnostics.
-4. ML readiness contract document or CLI report.
+1. Focused tests and py_compile for score/source readiness modules.
+2. V3.0 closeout / manual validation report consistency.
+3. Roadmap / Snapshot / Blueprint / Manual safety-boundary consistency.
+4. Explicit `SCORE_EFFECTIVENESS_AUDIT_ENGINEERING_CANDIDATE_COMPLETE` and `PHASE_3C_SOURCE_CANDIDATE_DRY_RUN_COMPLETE` evidence in QA / handoff docs.
 
-The sprint must stop at research evidence. It must not train or deploy a production model.
-
+The sprint must stop at research evidence and closeout validation. It must not train or deploy a production model.

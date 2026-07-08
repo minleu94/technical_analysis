@@ -1,6 +1,7 @@
 # V3 Score Effectiveness Audit and ML Readiness Bridge Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Use superpowers:systematic-debugging before changing direction after a failing test.
+> **2026-07-08 closeout status:** `SCORE_EFFECTIVENESS_AUDIT_ENGINEERING_CANDIDATE_COMPLETE`。Task 1 已由 `2bd08f6` 完成；Tasks 2-4 已由 `b5ec05d` 完成。今晚排程應轉為 V3.0 engineering candidate closeout/readiness report，不要重做本 plan 或展開 production ML。
 
 **Goal:** Build the first read-only V3 score effectiveness audit and ML readiness bridge so baldr can decide whether `TotalScore`, fixed thresholds, and score components deserve ML assistance later.
 
@@ -53,7 +54,7 @@ Documentation files already created for this milestone:
 - Create: `scripts/inspect_score_effectiveness.py`
 - Test: `tests/test_score_effectiveness_read_model.py`
 
-- [ ] Step 1: Write tests for bucket policy and no-claim disclosure.
+- [x] Step 1: Write tests for bucket policy and no-claim disclosure.
 
 Required assertions:
 
@@ -66,7 +67,7 @@ Required assertions:
 - empty buckets are present.
 - payload includes `writes_allowed=false`, `production_scheduler_allowed=false`, and `investment_effectiveness_claim=false`.
 
-- [ ] Step 2: Implement DTOs and read model.
+- [x] Step 2: Implement DTOs and read model.
 
 Minimum DTO fields:
 
@@ -85,7 +86,7 @@ Minimum DTO fields:
 
 The first implementation may support `--sample` and read-only row input. If reading SQLite, require an explicit `--db-path` and open read-only.
 
-- [ ] Step 3: Add CLI.
+- [x] Step 3: Add CLI.
 
 CLI options:
 
@@ -99,7 +100,7 @@ CLI options:
 
 Markdown must state that this is score effectiveness research evidence, not a recommendation.
 
-- [ ] Step 4: Verify.
+- [x] Step 4: Verify.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_score_effectiveness_read_model.py -q -o addopts=
@@ -254,3 +255,12 @@ git status --short
 - ML readiness report is shadow-only and lists score audit preconditions.
 - Roadmap / blueprint keep ML after score effectiveness gates.
 - Production scheduler, trading, lifecycle action, and investment-effectiveness claims remain disabled.
+
+## 2026-07-08 Closeout Handoff
+
+本 plan 的實作任務已完成，夜間 automation 不應再把它當成未開始 work item。下一個 active milestone 是 `V3.0 engineering candidate closeout/readiness report`：
+
+- Re-run focused tests and py_compile for score/source readiness modules.
+- Verify QA report contains `SCORE_EFFECTIVENESS_AUDIT_ENGINEERING_CANDIDATE_COMPLETE` and `PHASE_3C_SOURCE_CANDIDATE_DRY_RUN_COMPLETE`.
+- Keep `PENDING_MANUAL_VALIDATION`, `production_scheduler_allowed=false`, `writes_allowed=false`, `scoring_engine_write_allowed=false`, and `investment_effectiveness_claim=false`.
+- Do not train production ML, do not connect candidate sources to scoring, and do not enable scheduler.

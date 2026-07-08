@@ -24,7 +24,7 @@
   1. Quantile 的真實 OOS 實證未優於 fixed，因此仍維持 opt-in，不可宣稱更準。
   2. Factor Layer v1 已建立 Research Run 實際保存入口，推薦組合回放、單股回測、批次回測與固定組合 per-stock 保存都能供給 factor records / metadata；後續新增 Research Lab 路徑仍需遵守同一保存契約。
   3. Forward Evidence、Live vs Research Gap、Signal Decay、Decision Quality 與覆盤歷史目前是 research evidence / process evidence，不是投資有效性結論。
-  4. 營收、基本面與 P/E 估值已可作 factor records / diagnostics；P/B、P/S 已具 guarded presentation policy，只接受 governed external observations 或 future backfill；三大法人仍未完成。任何後續接入或生命週期判斷都必須保存 `available_date`、quality 與 missing policy。
+  4. 營收、基本面與 P/E 估值已可作 factor records / diagnostics；P/B、P/S 已具 guarded presentation policy，只接受 governed external observations 或 future backfill；三大法人 / 信用交易 / TDCC 已有 Phase 3C source candidate readiness dry-run，但尚未正式 ingestion 或接入 score。任何後續接入或生命週期判斷都必須保存 `available_date`、quality 與 missing policy。
   5. PDF 研究報告輸出仍是後續 backlog；Excel 報告與 SQLite 穩定分頁已完成。
   6. `docs/05_phases/` 已降格為 Historical / Reference；不能把 Phase 文件裡的下一步、進行中或 Gate 當作目前 roadmap。
 

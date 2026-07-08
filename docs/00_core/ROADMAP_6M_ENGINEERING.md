@@ -32,18 +32,21 @@
 
 目前的開發主線已從「功能補齊」轉向「證據累積與決策驗證」。所有 Phase 的推進必須嚴格遵守 Gate 條件。
 
-### 2026-07-08 Planning Note：Score Effectiveness before ML
+### 2026-07-08 Closeout Note：V3.0 Score / Source Readiness
 
-V3.0 engineering candidate 已能提供 read-only effectiveness scaffold，但下一步不應直接跳到 ML 或 V4/V5 命名。Phase 0 的資料可信度與 daily evidence 排程，正是為了累積可驗證的真實 evidence；這些 evidence 先要拿來回答 score 是否有效，而不是立即訓練模型。
+V3.0 engineering candidate 已能提供 read-only effectiveness scaffold；使用者提出的 score audit / ML readiness 規劃已先落成工程輸入，而不是直接跳到 ML 或 V4/V5 命名。Phase 0 的資料可信度與 daily evidence 排程，仍是為了累積可驗證的真實 evidence；這些 evidence 先回答 score 是否有用，再決定 ML 是否只作 shadow layer。
 
-今晚以 `V3 score effectiveness audit + ML readiness bridge` 作為 active milestone 候選：
+截至 2026-07-08，已完成的工程輸入如下：
 
-- **Score bucket audit**：依 `TotalScore` raw bucket (`0-40`, `40-50`, `50-60`, `60-70`, `70-80`, `80-100`) 檢視 forward return、max drawdown、win rate 與 benchmark / industry excess。
-- **Fixed threshold robustness**：測 buy / sell score、confirmation days、cooldown days 的鄰近矩陣，辨識 stable / fragile / inconclusive，而不是找單一最佳參數。
-- **Component ablation**：拆 technical、pattern、volume 及其組合，判斷哪些元件有貢獻；若舊 evidence 缺 component score，先標示 payload gap。
-- **ML readiness bridge**：只定義 feature / label / split / calibration / meta-labeling / ranking 的 shadow-only contract；不得訓練 production model 或改推薦決策。
+- **Score bucket audit**：`2bd08f6` 已建立 `TotalScore` raw bucket (`0-40`, `40-50`, `50-60`, `60-70`, `70-80`, `80-100`) read-only audit，檢視 forward return、max drawdown、win rate 與 benchmark / industry excess。
+- **Fixed threshold robustness**：`b5ec05d` 已建立 buy / sell score、confirmation days、cooldown days 鄰近矩陣，辨識 stable / fragile / inconclusive，而不是找單一最佳參數。
+- **Component ablation readiness**：`b5ec05d` 已拆 technical、pattern、volume 及其組合；舊 evidence 缺 component score 時先標示 `component_payload_missing`，不回補重算。
+- **ML readiness bridge**：`b5ec05d` 只定義 feature / label / split / calibration / meta-labeling / ranking 的 shadow-only contract；不得訓練 production model 或改推薦決策。
+- **Phase 3C source candidate readiness**：`d4526c9` 已補三大法人 / 信用交易 / TDCC source candidate dry-run；缺 DB / table / `available_date` fail-closed / degraded，future available date 標示 `future_data_blocked`。
 
-Gate：若 score bucket、threshold robustness 或 component ablation 仍不可判讀，ML 只能維持 diagnostics-only，不得進入 production roadmap。
+今晚 active milestone 應改為 `V3.0 engineering candidate closeout/readiness report`。排程只需收尾驗證、文件一致性、focused tests / py_compile、QA closeout 與 manual validation disclosure；不得展開新 ML production、不得啟用 scheduler、不得把 candidate source 接進 `ScoringEngine`。
+
+Gate：若 score bucket、threshold robustness 或 component ablation 仍不可判讀，ML 只能維持 diagnostics-only；就算 readiness contract 已存在，也不得進入 production roadmap。
 
 ### Phase 0：Evidence Accumulation Gate
 **目標**：累積真實使用數據與多日穩定紀錄，證明流程無害且有觀察價值。
@@ -94,13 +97,12 @@ Gate：若 score bucket、threshold robustness 或 component ablation 仍不可�
 - **限制**：Workbench MVP 不重算 scoring / recommendation / portfolio / backtest / lifecycle，不輸出買賣建議，不解除 Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 或 Phase 5 scheduler gate。
 
 ### Phase 3：P0 Data Source Candidate Dry-run
-
-### Phase 3：P0 Data Source Candidate Dry-run
-**狀態**：2026-07-07 已完成 Phase 3A (Corporate Action) 與 Phase 3B (Trading Restriction) Candidate Dry-run，實作 `CorporateActionPolicy` 與 `TradingRestrictionPolicy`，完善 missing DB 安全降級，並將 forward outcome 降級標記與 Portfolio Sandbox 的 rejected taxonomy (如 `rejected_price_limit_locked`, `rejected_trading_restricted`) 串接。
+**狀態**：2026-07-07 已完成 Phase 3A (Corporate Action) 與 Phase 3B (Trading Restriction) Candidate Dry-run，實作 `CorporateActionPolicy` 與 `TradingRestrictionPolicy`，完善 missing DB 安全降級，並將 forward outcome 降級標記與 Portfolio Sandbox 的 rejected taxonomy (如 `rejected_price_limit_locked`, `rejected_trading_restricted`) 串接。2026-07-08 已完成 Phase 3C (Institutional / Credit / TDCC Source Candidate Readiness Dry-run)，新增 `SourceCandidateReadinessService` 與 `scripts/inspect_source_candidate_readiness.py`，只輸出 readiness / coverage / diagnostics，不正式 ingestion、不改 scoring。
 **目標**：引入使研究更真實的關鍵資料，但初期僅作候選測試。
 - **工作範圍**：
   - 微結構資料（處置股、分盤交易、全額交割、漲跌停鎖死）。
   - Corporate action 與 PIT fundamental release date。
+  - 三大法人、信用交易、TDCC / 集保庫存 source candidate readiness。
 - **限制**：先維持 candidate-only 與 dry-run，不直接覆寫決策特徵 (ScoringEngine)，不重算歷史證據。
 
 ### Phase 4：Execution Model Realism
@@ -130,7 +132,7 @@ Gate：若 score bucket、threshold robustness 或 component ablation 仍不可�
 | Phase 1 | V2.0 | Unified Decision Workbench read-only prototype 與 source adapter。 |
 | Phase 2 | V2.1 | Workbench 主 UI MVP；read-only shell 已接 Qt，中文顯示、replay summary 分析、舊 Tab drill-down、background evidence feed、排序後 read-only Action Items 人工佇列、空 / 降級狀態文案與 read-only Operating Loop 已完成，可 closeout。 |
 | Phase 0 + Phase 2 | V2.2 | Evidence Operating Loop，讓 weekly review、multi-day dry-run、manual review 與 action item 形成可重複節奏。 |
-| Phase 3 | V2.3 | P0 Data Source Candidate Dry-run，先候選測試 microstructure、corporate action 與 PIT release date，不直接進 `ScoringEngine`。 |
+| Phase 3 | V2.3 | P0 Data Source Candidate Dry-run，先候選測試 microstructure、corporate action、PIT release date、三大法人、信用交易與 TDCC readiness，不直接進 `ScoringEngine`。 |
 | Phase 4 | V2.4 | Execution Model Realism，在 research-only sandbox 驗證買賣價差、零股、跳空與未成交原因。 |
 | Phase 5 | V2.5 | Production Evidence Scheduler Approval，只開 evidence write-mode scheduler，不代表自動交易。 |
 | Phase 0-5 之後 | V3.0 / V3.3 / V4.0 | V3 先驗證 score / signal / alert / gate 是否有用；ML 只可在 V3.0 score effectiveness gate 可判讀後作 V3.3 shadow layer；V4.0 仍需長期 evidence，不屬目前 6M 直接交付承諾。 |
@@ -149,6 +151,7 @@ Gate：若 score bucket、threshold robustness 或 component ablation 仍不可�
 
 ## 4. 更新記錄
 
+- 2026-07-08：更新為 `V3.0 engineering candidate closeout/readiness report` 夜間目標；score bucket audit、fixed threshold robustness、component ablation readiness、ML shadow-only contract 與 Phase 3C source candidate readiness dry-run 均已完成工程輸入，今晚只收尾驗證與文件 / QA 一致性，不改推薦或 production scheduler。
 - 2026-07-08：新增 `V3 score effectiveness audit + ML readiness bridge` planning note；把 ML 放在 score bucket audit、fixed threshold robustness 與 component ablation 之後，且只允許 shadow-only contract，不改推薦或 production scheduler。
 - 2026-07-07：完成 Phase 3A / Phase 3B Corporate Action & Trading Restriction Candidate Dry-run；新增 `CorporateActionPolicy` 與 `TradingRestrictionPolicy`，將 forward outcome 附加 `gap_detected` warning 並降級為 `DEGRADED`。Sandbox 可透過 policy 將限制轉譯為 `rejected_price_limit_locked` 或 `rejected_trading_restricted`，完善 Phase 4 的 rejected taxonomy。此為 candidate-only 觀察層，不改分數、價格，缺表時安全 fallback 為 `source_not_ingested`。
 - 2026-07-07：完成 Phase 4 Execution Model Realism Extension；在 Portfolio Sandbox 中實作台股跳動單位 (Tick) 滑價模型，並完整閉環零股限制 (Lot Sizing) 與拒絕原因 (Rejected Taxonomy)，現在歷史回放可忠實反映買賣價差摩擦與不可成交訂單。

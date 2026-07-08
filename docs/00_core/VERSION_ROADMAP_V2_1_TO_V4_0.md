@@ -68,7 +68,7 @@ V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual
 | V2.0 | Phase 1 / Level 1 preflight | Unified Decision Workbench read-only prototype 與 source adapter。 | 已完成 Phase 1；Phase 2 read-only shell 已在 V2.1 段落承接。 |
 | V2.1 | Phase 2 / Level 1 | Workbench 主 UI MVP；read-only shell、background evidence feed、排序後 Action Items 人工佇列與 read-only Operating Loop 已接 Qt。 | Phase 0 evidence accumulation 不得被 replay 取代；舊 Tab 保留 expert mode；UI loop closeout 不等於 scheduler approval。 |
 | V2.2 | Phase 0 + Phase 2 / Level 1-2 | Evidence Operating Loop；simulated phase progress 可用 historical replay 預演 Phase 0-5。 | official closeout 仍必須等 weekly history、multi-day dry-run、manual review 與 action item 節奏以真實時間紀錄可重複。 |
-| V2.3 | Phase 3 / Level 2 | P0 Data Source Candidate Dry-run。 | 新資料源只作 candidate / dry-run，不進 `ScoringEngine`。 |
+| V2.3 | Phase 3 / Level 2 | P0 Data Source Candidate Dry-run。 | 新資料源只作 candidate / dry-run；Corporate Action、Trading Restriction、三大法人、信用交易與 TDCC readiness 已有工程候選，不進 `ScoringEngine`。 |
 | V2.4 | Phase 4 / Level 2 | Execution Model Realism。 | execution realism 先在 research-only sandbox 驗證，不串 broker。 |
 | V2.5 | Phase 5 / Level 1-2 governance | Production Evidence Scheduler Approval。 | simulated approval rehearsal 可先完成；official approval 必須等 explicit approval、rollback / backup、multi-day record、weekly history 與 source gaps 全部通過。 |
 | V3.0 | Vision Level 2-3 | Evidence-Validated Decision System。 | 事件類型、alert、gate、dashboard 與 `TotalScore` 有足夠 forward / gap / review evidence 可判讀；score bucket、threshold robustness、component ablation 是 ML 前置 gate。 |
@@ -166,7 +166,7 @@ Exit Gate：
 - Corporate action / adjusted price timeline。
 - 處置股、分盤、全額交割、漲跌停鎖死。
 - PIT fundamental release date。
-- 三大法人、信用交易、TDCC 與概念籃子可作後續 candidate，但不得直接進核心 score。
+- 三大法人、信用交易、TDCC 已完成 Phase 3C source candidate readiness dry-run；概念籃子仍作後續 candidate。上述資料不得直接進核心 score。
 
 Exit Gate：
 
@@ -224,6 +224,8 @@ Gate：
 - fixed threshold 需要做鄰近參數穩定性檢查；若只有單一買分 / 賣分 / confirmation / cooldown 設定有效，必須標示為 overfit risk 或 `fragile`。
 - technical / pattern / volume component ablation 要能回答哪個元件真正貢獻 signal；若舊 evidence 缺 component payload，先標示 `component_payload_missing`，不得回補重算舊結論。
 - ML 不屬於 V3.0 的替代決策層；ML 只能在上述 score effectiveness gate 可判讀後進入 V3.3 shadow-only 規劃。
+
+2026-07-08 closeout candidate：score bucket audit、fixed threshold robustness、component ablation readiness、ML readiness contract 與 Phase 3C source candidate readiness dry-run 已完成工程輸入。V3.0 仍只可進入 engineering candidate closeout / manual validation，不代表投資有效性、production scheduler approval、V4 maturity 或 ML production readiness。
 
 ### V3.1：Risk Control Effectiveness
 
@@ -329,6 +331,7 @@ V4.0 仍不代表：
 
 ## 10. 更新記錄
 
+- 2026-07-08：更新 V3.0 closeout candidate 狀態；score bucket audit、threshold robustness、component ablation readiness、ML shadow-only contract 與 Phase 3C source candidate readiness dry-run 已完成工程輸入，仍只作 engineering candidate / manual validation，不代表投資有效性或 scheduler approval。
 - 2026-07-08：補上 V3 score effectiveness gate 與 V3.3 ML Readiness / Shadow ML-Assisted Layer；明確 TotalScore 分組、fixed threshold robustness、component ablation 是 ML 前置條件，ML 只能 shadow-only，不取代規則式推薦或 lifecycle。
 - 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；後續已由 read-only Operating Loop closeout 補齊 UI 操作節奏，但 Phase 0 真實時間 gate、V2.2 真實 evidence loop 與 Phase 5 scheduler gate 仍未完成。
 - 2026-07-07：新增 V2.2 simulated phase progress / Phase 5 approval rehearsal companion 說明；simulated ready 不等於 V2.2 / V2.5 official closeout，完成標示仍需正式時間資料與 explicit approval。
