@@ -16,6 +16,7 @@ from app_module.evidence_event_dtos import (
     EvidenceOutcomeStatus,
 )
 from app_module.evidence_event_repository import EvidenceEventRepository
+from app_module.corporate_action_policy import CorporateActionProvider, CorporateActionPolicy
 
 
 DEFAULT_MARKET_BENCHMARK_ID = "TAIEX"
@@ -63,6 +64,7 @@ class ForwardPerformanceService:
         self._daily_price_cache: dict[str, tuple[tuple[str, ...], tuple[tuple[str, Decimal], ...]]] = {}
         self._index_return_cache: dict[tuple[str, str | None, str, str], int | None] = {}
         self._index_table_columns_cache: dict[str, tuple[str, ...]] = {}
+        self._corporate_action_policy = CorporateActionPolicy(CorporateActionProvider(self.db_path))
 
     def calculate(
         self,
@@ -189,6 +191,11 @@ class ForwardPerformanceService:
         if industry_return_bp is None:
             warnings.append("missing_industry_benchmark")
         industry_excess_bp = None if industry_return_bp is None else forward_return_bp - industry_return_bp
+
+        corporate_action_warnings = self._corporate_action_policy.check_corporate_action_gap(
+            str(event.symbol), event_price_date, outcome_price_date
+        )
+        warnings.extend(corporate_action_warnings)
 
         quality = EvidenceDataQuality.OBSERVED if not warnings else EvidenceDataQuality.DEGRADED
         return EvidenceOutcome(

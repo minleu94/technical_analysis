@@ -231,7 +231,7 @@ def build_default_data_source_capability_registry() -> DataSourceCapabilityRegis
                 "corporate_action.ex_dividend_timeline",
                 "Corporate action ex-dividend / ex-right timeline",
                 "corporate_action",
-                CAPABILITY_PLANNED,
+                CAPABILITY_PARTIAL,
                 "除權息 / 還原價時間軸 source candidate",
                 "must preserve event announcement date and decision-date availability before use",
                 ("event_date", "除權息事件日期"), ("available_date", "決策可得日"),

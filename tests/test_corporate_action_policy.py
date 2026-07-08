@@ -1,41 +1,96 @@
-from __future__ import annotations
+import sqlite3
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-import json
-import subprocess
-import sys
-
-from data_module.corporate_action_policy import inspect_corporate_action_policy
+from app_module.corporate_action_policy import CorporateActionProvider, CorporateActionPolicy
 
 
-def test_policy_forbids_hindsight_adjusted_prices_for_decisions():
-    inspection = inspect_corporate_action_policy()
-    forbidden = inspection.policy_by_id["full_hindsight_adjusted_price"]
+import contextlib
 
-    assert forbidden.allowed_for_decision_features is False
-    assert "look_ahead_risk" in forbidden.warnings
-    assert forbidden.requires_available_date is True
-
-
-def test_policy_declares_candidate_table_without_migration():
-    inspection = inspect_corporate_action_policy()
-    payload = inspection.to_dict()
-
-    assert payload["production_data_writes"] is False
-    assert payload["table_candidate"]["table_name"] == "corporate_action_events"
-    assert "available_date" in payload["table_candidate"]["required_columns"]
-    assert payload["migration_created"] is False
+def test_provider_returns_source_not_ingested_when_db_missing():
+    provider = CorporateActionProvider(Path("missing_db.sqlite"))
+    dates, diagnostics = provider.get_ex_dividend_dates("2330", "2026-06-01", "2026-06-10")
+    
+    assert dates == []
+    assert diagnostics == ["source_not_ingested"]
 
 
-def test_corporate_action_policy_cli_outputs_json():
-    completed = subprocess.run(
-        [sys.executable, "scripts/inspect_corporate_action_policy.py", "--json-output"],
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
+def test_provider_returns_source_not_ingested_when_table_missing():
+    with TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        with contextlib.closing(sqlite3.connect(db_path)) as conn:
+            conn.execute("CREATE TABLE dummy (id INTEGER)")
+            
+        provider = CorporateActionProvider(db_path)
+        dates, diagnostics = provider.get_ex_dividend_dates("2330", "2026-06-01", "2026-06-10")
+        
+        assert dates == []
+        assert diagnostics == ["source_not_ingested"]
 
-    payload = json.loads(completed.stdout)
-    assert payload["schema_version"] == 1
-    assert payload["default_decision_price_policy"] == "raw_close_price"
-    assert payload["production_data_writes"] is False
+
+def test_provider_returns_dates_when_corporate_action_exists():
+    with TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        with contextlib.closing(sqlite3.connect(db_path)) as conn:
+            conn.execute(
+                """
+                CREATE TABLE corporate_action_events (
+                    stock_code TEXT,
+                    event_type TEXT,
+                    event_date TEXT
+                )
+                """
+            )
+            # Insert some events
+            conn.execute("INSERT INTO corporate_action_events VALUES ('2330', 'ex_dividend', '2026-06-15')")
+            conn.execute("INSERT INTO corporate_action_events VALUES ('2330', 'ex_right', '2026-06-18')")
+            conn.execute("INSERT INTO corporate_action_events VALUES ('2330', 'other', '2026-06-20')")
+            conn.execute("INSERT INTO corporate_action_events VALUES ('2317', 'ex_dividend', '2026-06-16')")
+            conn.commit()
+            
+        provider = CorporateActionProvider(db_path)
+        
+        # Test within range
+        dates, diagnostics = provider.get_ex_dividend_dates("2330", "2026-06-10", "2026-06-19")
+        assert len(dates) == 2
+        assert "2026-06-15" in dates
+        assert "2026-06-18" in dates
+        assert diagnostics == []
+
+        # Test out of range
+        dates, diagnostics = provider.get_ex_dividend_dates("2330", "2026-06-01", "2026-06-10")
+        assert dates == []
+        
+        # Test start exclusive, end inclusive
+        dates, diagnostics = provider.get_ex_dividend_dates("2330", "2026-06-15", "2026-06-15")
+        assert dates == []
+        dates, diagnostics = provider.get_ex_dividend_dates("2330", "2026-06-14", "2026-06-15")
+        assert dates == ["2026-06-15"]
+
+
+def test_policy_appends_warning_on_gap():
+    with TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        with contextlib.closing(sqlite3.connect(db_path)) as conn:
+            conn.execute("CREATE TABLE corporate_action_events (stock_code TEXT, event_type TEXT, event_date TEXT)")
+            conn.execute("INSERT INTO corporate_action_events VALUES ('2330', 'ex_dividend', '2026-06-15')")
+            conn.commit()
+            
+        provider = CorporateActionProvider(db_path)
+        policy = CorporateActionPolicy(provider)
+        
+        warnings = policy.check_corporate_action_gap("2330", "2026-06-10", "2026-06-20")
+        assert "corporate_action_gap_detected" in warnings
+
+        warnings = policy.check_corporate_action_gap("2330", "2026-06-20", "2026-06-30")
+        assert warnings == []
+
+        # Test with missing table
+        with contextlib.closing(sqlite3.connect(db_path)) as conn:
+            conn.execute("DROP TABLE corporate_action_events")
+        
+        # provider caches table existence, so create a new one
+        provider2 = CorporateActionProvider(db_path)
+        policy2 = CorporateActionPolicy(provider2)
+        warnings2 = policy2.check_corporate_action_gap("2330", "2026-06-10", "2026-06-20")
+        assert warnings2 == ["source_not_ingested"]

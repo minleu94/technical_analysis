@@ -254,3 +254,22 @@ def test_calculator_filters_symbol_event_type_and_decision_date(tmp_path):
     assert selected.events_scanned == 1
     assert selected.events_ready == 1
     assert event.symbol == "2330"
+
+
+def test_forward_outcome_degrades_when_corporate_action_gap_detected(tmp_path):
+    config = _config(tmp_path)
+    _seed_prices(config.db_file)
+    import contextlib
+    with contextlib.closing(sqlite3.connect(config.db_file)) as conn:
+        conn.execute("CREATE TABLE corporate_action_events (stock_code TEXT, event_type TEXT, event_date TEXT)")
+        conn.execute("INSERT INTO corporate_action_events VALUES ('2330', 'ex_dividend', '2026-06-03')")
+        conn.commit()
+
+    event = _record_event(config)
+    forward = ForwardPerformanceService(config, EvidenceEventRepository(config))
+
+    summary = forward.calculate(windows=(5,), dry_run=False)
+    outcome = forward.repository.list_outcomes(event_id=event.event_id)[0]
+
+    assert "corporate_action_gap_detected" in outcome.warnings
+    assert outcome.data_quality == EvidenceDataQuality.DEGRADED
