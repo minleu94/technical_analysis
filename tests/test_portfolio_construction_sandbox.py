@@ -161,3 +161,64 @@ def test_virtual_execution_trace_can_partial_fill_and_reject() -> None:
     assert rejected.reason_code == "price_limit_lock"
     partial = [event for event in events if event.stock_code == "2330" and event.event_type == "partially_filled"][0]
     assert partial.filled_quantity == 500
+
+
+def test_sandbox_integrates_with_trading_restriction_policy() -> None:
+    from app_module.trading_restriction_policy import TradingRestrictionProvider, TradingRestrictionPolicy
+    import sqlite3
+    import contextlib
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "test.db"
+        with contextlib.closing(sqlite3.connect(db_path)) as conn:
+            conn.execute("CREATE TABLE microstructure_restriction_events (stock_code TEXT, restriction_type TEXT, effective_date TEXT)")
+            conn.execute("INSERT INTO microstructure_restriction_events VALUES ('2317', 'disposition', '2026-07-05')")
+            conn.execute("INSERT INTO microstructure_restriction_events VALUES ('2454', 'limit_lock', '2026-07-05')")
+            conn.commit()
+            
+        provider = TradingRestrictionProvider(db_path)
+        policy = TradingRestrictionPolicy(provider)
+        
+        request = PortfolioConstructionRequest(
+            decision_date="2026-07-05",
+            capital_amount=Decimal("3000000"),
+            allocation_method="equal_weight",
+            candidates=(
+                PortfolioConstructionCandidate("2330", "台積電", score_bp=9000, reference_price=Decimal("100")),
+                PortfolioConstructionCandidate("2317", "鴻海", score_bp=7000, reference_price=Decimal("50")),
+                PortfolioConstructionCandidate("2454", "聯發科", score_bp=6000, reference_price=Decimal("500")),
+            ),
+            lot_size=1000,
+        )
+        
+        # In the sandbox script, it would do this for each candidate
+        rejected_symbols = {}
+        for candidate in request.candidates:
+            reasons = policy.check_restrictions(candidate.stock_code, request.decision_date)
+            if reasons:
+                # We can just pick the first reason for the trace
+                rejected_symbols[candidate.stock_code] = reasons[0]
+                
+        assert rejected_symbols == {
+            "2317": "rejected_trading_restricted",
+            "2454": "rejected_price_limit_locked"
+        }
+        
+        result = PortfolioConstructionService().construct(request)
+        events = PortfolioExecutionTraceService().build_trace(
+            result,
+            rejected_symbols=rejected_symbols,
+        )
+        
+        event_types = {(event.stock_code, event.event_type) for event in events}
+        assert ("2317", "rejected") in event_types
+        assert ("2454", "rejected") in event_types
+        assert ("2330", "filled") in event_types
+        
+        rejected_2317 = [e for e in events if e.stock_code == "2317" and e.event_type == "rejected"][0]
+        assert rejected_2317.reason_code == "rejected_trading_restricted"
+        
+        rejected_2454 = [e for e in events if e.stock_code == "2454" and e.event_type == "rejected"][0]
+        assert rejected_2454.reason_code == "rejected_price_limit_locked"

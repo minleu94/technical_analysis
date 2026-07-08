@@ -273,3 +273,21 @@ def test_forward_outcome_degrades_when_corporate_action_gap_detected(tmp_path):
 
     assert "corporate_action_gap_detected" in outcome.warnings
     assert outcome.data_quality == EvidenceDataQuality.DEGRADED
+
+
+def test_forward_outcome_degrades_when_trading_restriction_gap_detected(tmp_path):
+    config = _config(tmp_path)
+    _seed_prices(config.db_file)
+    import contextlib
+    with contextlib.closing(sqlite3.connect(config.db_file)) as conn:
+        conn.execute("CREATE TABLE microstructure_restriction_events (stock_code TEXT, restriction_type TEXT, effective_date TEXT)")
+        conn.execute("INSERT INTO microstructure_restriction_events VALUES ('2330', 'disposition', '2026-06-03')")
+        conn.commit()
+
+    event = _record_event(config)
+    forward = ForwardPerformanceService(config, EvidenceEventRepository(config))
+    summary = forward.calculate(windows=(5,), dry_run=False)
+    outcome = forward.repository.list_outcomes(event_id=event.event_id)[0]
+
+    assert "trading_restriction_gap_detected" in outcome.warnings
+    assert outcome.data_quality == EvidenceDataQuality.DEGRADED

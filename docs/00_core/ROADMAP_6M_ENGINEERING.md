@@ -83,11 +83,12 @@
 ### Phase 3：P0 Data Source Candidate Dry-run
 
 ### Phase 3：P0 Data Source Candidate Dry-run
+**狀態**：2026-07-07 已完成 Phase 3A (Corporate Action) 與 Phase 3B (Trading Restriction) Candidate Dry-run，實作 `CorporateActionPolicy` 與 `TradingRestrictionPolicy`，完善 missing DB 安全降級，並將 forward outcome 降級標記與 Portfolio Sandbox 的 rejected taxonomy (如 `rejected_price_limit_locked`, `rejected_trading_restricted`) 串接。
 **目標**：引入使研究更真實的關鍵資料，但初期僅作候選測試。
 - **工作範圍**：
-  - 微結構資料（處置股、分盤交易）。
+  - 微結構資料（處置股、分盤交易、全額交割、漲跌停鎖死）。
   - Corporate action 與 PIT fundamental release date。
-- **限制**：先維持 candidate-only 與 dry-run，不直接覆寫決策特徵 (ScoringEngine)。
+- **限制**：先維持 candidate-only 與 dry-run，不直接覆寫決策特徵 (ScoringEngine)，不重算歷史證據。
 
 ### Phase 4：Execution Model Realism
 **狀態**：2026-07-07 已完成 research-only sandbox 買賣價差 (Taiwan stock tick slippage) 與零股 / rejected taxonomy 閉環 (Phase 4 Extension)。
@@ -134,6 +135,7 @@
 
 ## 4. 更新記錄
 
+- 2026-07-07：完成 Phase 3A / Phase 3B Corporate Action & Trading Restriction Candidate Dry-run；新增 `CorporateActionPolicy` 與 `TradingRestrictionPolicy`，將 forward outcome 附加 `gap_detected` warning 並降級為 `DEGRADED`。Sandbox 可透過 policy 將限制轉譯為 `rejected_price_limit_locked` 或 `rejected_trading_restricted`，完善 Phase 4 的 rejected taxonomy。此為 candidate-only 觀察層，不改分數、價格，缺表時安全 fallback 為 `source_not_ingested`。
 - 2026-07-07：完成 Phase 4 Execution Model Realism Extension；在 Portfolio Sandbox 中實作台股跳動單位 (Tick) 滑價模型，並完整閉環零股限制 (Lot Sizing) 與拒絕原因 (Rejected Taxonomy)，現在歷史回放可忠實反映買賣價差摩擦與不可成交訂單。
 - 2026-07-07：完成 Phase 2 Workbench MVP shell 並補上 background evidence feed / read-only Action Items MVP；新增 PySide6 read-only `決策工作台` view / table models / main-tab integration，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，Action Items 只列人工待處理事項並保留 source trace / degraded reason / drill-down target，不建立 repository、不寫 DB；Evidence mode / data quality 揭露 replay JSON summary 的 simulated scheduler、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data 限制；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
 - 2026-07-07：新增 V2.2 simulated phase progress 與 Phase 5 approval rehearsal package；historical replay 可演練到 simulated Phase 5，但 official completion 仍需等待 weekly history `3/3`、multi-day dry-run `3/3`、manual review/action item rhythm、source acceptance、execution realism acceptance、backup / rollback / recovery 與 explicit approval。

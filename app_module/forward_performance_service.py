@@ -17,6 +17,7 @@ from app_module.evidence_event_dtos import (
 )
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.corporate_action_policy import CorporateActionProvider, CorporateActionPolicy
+from app_module.trading_restriction_policy import TradingRestrictionProvider, TradingRestrictionPolicy
 
 
 DEFAULT_MARKET_BENCHMARK_ID = "TAIEX"
@@ -65,6 +66,7 @@ class ForwardPerformanceService:
         self._index_return_cache: dict[tuple[str, str | None, str, str], int | None] = {}
         self._index_table_columns_cache: dict[str, tuple[str, ...]] = {}
         self._corporate_action_policy = CorporateActionPolicy(CorporateActionProvider(self.db_path))
+        self._trading_restriction_policy = TradingRestrictionPolicy(TradingRestrictionProvider(self.db_path))
 
     def calculate(
         self,
@@ -196,6 +198,11 @@ class ForwardPerformanceService:
             str(event.symbol), event_price_date, outcome_price_date
         )
         warnings.extend(corporate_action_warnings)
+        
+        trading_restriction_warnings = self._trading_restriction_policy.check_restriction_gap(
+            str(event.symbol), event_price_date, outcome_price_date
+        )
+        warnings.extend(trading_restriction_warnings)
 
         quality = EvidenceDataQuality.OBSERVED if not warnings else EvidenceDataQuality.DEGRADED
         return EvidenceOutcome(
