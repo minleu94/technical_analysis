@@ -81,6 +81,8 @@
 - **限制**：Workbench MVP 不重算 scoring / recommendation / portfolio / backtest / lifecycle，不輸出買賣建議，不解除 Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 或 Phase 5 scheduler gate。
 
 ### Phase 3：P0 Data Source Candidate Dry-run
+
+### Phase 3：P0 Data Source Candidate Dry-run
 **目標**：引入使研究更真實的關鍵資料，但初期僅作候選測試。
 - **工作範圍**：
   - 微結構資料（處置股、分盤交易）。
@@ -88,6 +90,7 @@
 - **限制**：先維持 candidate-only 與 dry-run，不直接覆寫決策特徵 (ScoringEngine)。
 
 ### Phase 4：Execution Model Realism
+**狀態**：2026-07-07 已完成 research-only sandbox 買賣價差 (Taiwan stock tick slippage) 與零股 / rejected taxonomy 閉環 (Phase 4 Extension)。
 **目標**：讓回測與沙盒配置更貼近真實市場限制。
 - **工作範圍**：
   - 導入買賣價差 (Bid-ask spread)、零股限制、跳空實際成交價模型與完整委託簿撮合。
@@ -131,6 +134,7 @@
 
 ## 4. 更新記錄
 
+- 2026-07-07：完成 Phase 4 Execution Model Realism Extension；在 Portfolio Sandbox 中實作台股跳動單位 (Tick) 滑價模型，並完整閉環零股限制 (Lot Sizing) 與拒絕原因 (Rejected Taxonomy)，現在歷史回放可忠實反映買賣價差摩擦與不可成交訂單。
 - 2026-07-07：完成 Phase 2 Workbench MVP shell 並補上 background evidence feed / read-only Action Items MVP；新增 PySide6 read-only `決策工作台` view / table models / main-tab integration，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，Action Items 只列人工待處理事項並保留 source trace / degraded reason / drill-down target，不建立 repository、不寫 DB；Evidence mode / data quality 揭露 replay JSON summary 的 simulated scheduler、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data 限制；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
 - 2026-07-07：新增 V2.2 simulated phase progress 與 Phase 5 approval rehearsal package；historical replay 可演練到 simulated Phase 5，但 official completion 仍需等待 weekly history `3/3`、multi-day dry-run `3/3`、manual review/action item rhythm、source acceptance、execution realism acceptance、backup / rollback / recovery 與 explicit approval。
 - 2026-07-07：推進 Workbench Phase 2 operating-loop queue 體驗；Action Items 新增 severity / queue group / source label 顯示、穩定排序、空 / 降級狀態文案與 drill-down target contract，仍維持 read-only DTO payload、不寫 DB、不啟用 scheduler、不產生買賣建議。
