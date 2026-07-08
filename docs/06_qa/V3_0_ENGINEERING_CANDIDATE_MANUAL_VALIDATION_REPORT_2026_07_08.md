@@ -88,3 +88,44 @@ The scaffold maps candidate evidence families into human review categories:
 - Engineering candidate readiness can be inspected with `scripts/inspect_v3_engineering_candidate_readiness.py --sample --json-output`.
 - If manual validation remains pending, status should stay `ready_for_manual_validation`, not official investment maturity.
 - Phase 0 weekly history, multi-day dry-run, source acceptance, backup / rollback / recovery evidence, and explicit approval remain separate official gates.
+
+## 2026-07-08 06:00 Finish Sprint Disclosure Addendum
+
+V3.0 engineering candidate 的工程面驗證可進入 `ready_for_manual_validation`，但人工驗證仍維持 `PENDING_MANUAL_VALIDATION`。本段只補 06:00 finish sprint 的 closeout 披露，不升級為投資有效性、V3/V4 成熟度、production scheduler approval、write-mode evidence 或 lifecycle action。
+
+### 03:33 QA Checkpoint Summary
+
+- `output/automation/version_loop/20260708-0333-milestone-qa-checkpoint.md/json` 記錄 `ENGINEERING_CANDIDATE_PASS`。
+- Focused V3 tests 通過：effectiveness dashboard/read model/review scaffold/readiness 共 10 passed。
+- Changed Python files py_compile 通過。
+- 金融數值邊界測試通過：43 passed。
+- V3 sample CLI、readiness sample CLI、review scaffold sample CLI、mypy 與 focused healthcheck tests 均通過。
+- P0 缺口不是程式測試失敗，而是 `PENDING_MANUAL_VALIDATION` 與允許路徑下缺少 implementation handoff artifact。
+
+### 04:40 / 05:00 / 05:15 Scheduled Chain Notes
+
+| Time | Source | Result | Closeout interpretation |
+|---|---|---|---|
+| 04:40 | `D:/Min/Python/Project/FA_Data/output/scheduled/data_update_quick/latest_status.json` | `status=passed` | 市場資料更新至 2026-07-08；`writes_market_data_db=true`，`writes_evidence_db=false`，warnings 為空；8 檔仍為 insufficient-data diagnostics。 |
+| 05:00 | `D:/Min/Python/Project/FA_Data/output/scheduled/data_freshness/latest_status.json` | `status=passed` | read-only freshness check 通過；TWSE/TPEX latest daily CSV、SQLite daily prices 與 technical indicators 均到 20260708。 |
+| 05:15 | `D:/Min/Python/Project/FA_Data/output/scheduled/evidence_pipeline_dry_run/latest_status.json` | `status=passed` | evidence pipeline 只做 dry-run；`dry_run=true`、`writes_evidence_db=false`、`pipeline_blocking_gaps=[]`、`source_coverage_blocking_gaps=[]`、`pipeline_warnings_count=1865`、scheduler readiness 只到 `ready_for_manual_confirm`。 |
+
+Task Scheduler observation from the finish plan: 04:40、05:00、05:15 三個 scheduled tasks 均回 `Last Result: 0`。這些結果可作工程 closeout 判讀，但不能折抵 official Phase 0 gate。
+
+### Required Caveats Kept Visible
+
+- Manual validation remains `PENDING_MANUAL_VALIDATION`。
+- 05:30 read-only morning report artifact 在 repo 與 `$CODEX_HOME/automations` 可見位置皆未找到；06:00 closeout 以既有 scheduled status/report files 產生 replacement handoff。
+- `D:/Min/Python/Project/FA_Data/output/scheduled/recommendation_snapshot/latest_status.json` 未存在；若 Workbench 顯示 scheduled recommendation readiness，必須把 scheduled snapshot missing 與人工觀察結果分開揭露。
+- Evidence dry-run 使用 `dry_run_transient_decision_desk_snapshot` 作 source coverage basis；這不是 durable official gate credit。
+- `source_missing_screening_matrix` 舊 payload gap、`missing_industry_benchmark` residual、sample insufficiency 與 1,865 warnings 仍需可見，不得被轉成 pass。
+- Production scheduler remains disabled: `production_scheduler_allowed=false`。
+
+### Finish Sprint Status
+
+- Engineering candidate closeout: `ready_for_manual_validation`
+- Manual validation status: `PENDING_MANUAL_VALIDATION`
+- Official effectiveness readiness: `false`
+- Evidence DB write in this sprint: `false`
+- Production scheduler approval: `false`
+- Auto trading / broker order / lifecycle action: `false`
