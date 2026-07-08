@@ -994,6 +994,16 @@ V2.0 Phase 1 / Phase 1.5 可用 `scripts\inspect_v2_workbench_prototype.py` 檢�
 - 若 `--db-path` 缺檔、缺 `decision_desk_snapshots` table 或找不到指定 decision date snapshot，輸出會保留 read-only dashboard 並在 warnings / review items 揭露 degraded source；CLI 不會建立 DB 或 schema。
 - 若讀取 `_reference_fix` replay JSON summary，會揭露 simulated scheduler、source gap、source gap coverage、payload gap、outcome maturity、benchmark coverage、industry benchmark coverage、missing industry benchmark、pending future-data 與「方向正確但尚未 production-ready」限制。
 
+V3 score effectiveness audit 可用 `scripts\inspect_score_effectiveness.py` 檢查既有 Evidence Event / Forward Outcome 中，`TotalScore` raw bucket 與 forward outcome 的唯讀關係。第一版支援 `--sample`、`--format json|markdown`、`--output`、`--min-sample-size`，也可用明確 `--db-path` 以 SQLite `mode=ro` / `PRAGMA query_only=ON` 讀既有 evidence DB。這個 CLI 只做 read-only aggregation，不寫 production DB、不提供 `--confirm`、不啟用 scheduler、不改 `ScoringEngine`、不改推薦權重、不改 threshold，也不訓練 ML model。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_score_effectiveness.py --sample --format json
+.\.venv\Scripts\python.exe scripts\inspect_score_effectiveness.py --sample --format markdown --output output\qa\score_effectiveness_sample.md
+.\.venv\Scripts\python.exe scripts\inspect_score_effectiveness.py --db-path <working-copy-db> --format json --min-sample-size 10
+```
+
+輸出固定保留 `0-40`、`40-50`、`50-60`、`60-70`、`70-80`、`80-100` 六個分數區間，即使該 bucket 沒有樣本也會顯示 empty bucket。每個 bucket 會列出樣本數、ready / pending / missing outcome、各 horizon 的 forward return bp、benchmark excess bp、industry excess bp、max drawdown bp、win rate bp、warnings 與 limitations。`access_boundary.writes_allowed=false`、`production_scheduler_allowed=false`、`investment_effectiveness_claim=false` 與 `ml_training_allowed=false` 必須保留；結果只能用於研究覆盤，不能解讀為買賣建議、投資有效性證明、threshold promotion 或 ML production readiness。
+
 Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified Decision Workbench MVP shell。2026-07-07 後，這個分頁已從中文 read-only shell + 舊頁 drill-down 推進到 background evidence feed / read-only Action Items MVP，並完成 Phase 2C / 2D read-only Operating Loop closeout。總覽頁已改為「今日重點帶 + 語意色摘要卡 + 緊湊清單 + 右側詳情檢視」：啟動主程式後進入此分頁，第一屏先看到今日重點、status strip、今日待判讀、背景證據流、只讀 Action Items 與 Inspector；操作節奏、Evidence mode / data quality、Daily Checklist 與 warnings / degraded source 改成可收合區塊，需要時再展開。畫面只透過 `WorkbenchSourceService` 取得 `WorkbenchDashboardDTO`，不直接讀 SQLite、不寫 DB、不啟用 scheduler，也不重算 scoring、portfolio、backtest 或 lifecycle。若預設 `_reference_fix` replay JSON summary 存在於 `OUTPUT_ROOT/evidence_pipeline/historical_replay_reference_fix_20260706/`，主 UI 會自動把 JSON summary 傳入 WorkbenchSourceService；這仍只是讀 summary，不會讀 replay DB 或執行 replay。
 
 操作與判讀：
@@ -1355,6 +1365,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access 操作說明，標示 `twstock-evidence-access` 只讀 evidence / source trace / quality / warnings，不寫 DB、不改策略、不下單、不套用 lifecycle action。
 - 2026-07-06：新增 Pre-V2 readiness inspection CLI 操作說明，標示它只做 read-only 非排程前置檢查，不取代多週 history / multi-day dry-run / scheduler approval。
 - 2026-07-07：更新 Qt `決策工作台` Phase 2 Workbench MVP shell 操作說明，標示中文優先顯示、舊 Daily Decision / Evidence Review / Portfolio read-only drill-down、預設 `_reference_fix` replay JSON summary 分析，以及 source gap coverage / benchmark coverage / industry benchmark coverage 限制；UI 只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，不直接讀 SQLite、不寫 DB、不啟用 scheduler、不產生交易建議。
+- 2026-07-08：新增 V3 score effectiveness audit CLI 操作說明；`inspect_score_effectiveness.py` 以 read-only 方式輸出 `TotalScore` raw bucket、forward outcome、benchmark / industry excess、limitations 與安全邊界，不寫 DB、不提供 `--confirm`、不改分數 / threshold，也不訓練 ML model。
 - 2026-07-07：補充 Workbench background evidence feed / read-only Action Items MVP 操作說明；背景證據流只彙整既有 DTO / service payload，Action Items 每列帶 source trace、degraded reason 與 drill-down target，且不建立 repository、不寫 DB、不套用 lifecycle。
 - 2026-07-07：補充 Workbench Action Items 人工佇列操作說明；Action Items 依 severity / queue group / source 排序並顯示來源，row drill-down target 與舊頁導向一致，Evidence Feed / Action Items 空狀態與降級狀態文案維持只讀、非建議、不補值邊界。
 - 2026-07-07：補充 Workbench Phase 2C / 2D 操作節奏 closeout；Operating Loop 只顯示 daily first-look、manual queue、weekly history、multi-day dry-run、manual review note 與 scheduler gate，不寫 DB、不標記完成、不補真實時間 gate。
