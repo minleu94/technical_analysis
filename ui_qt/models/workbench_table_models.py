@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtGui import QBrush, QColor, QFont
 
 from app_module.workbench_dtos import (
     WorkbenchActionItem,
@@ -38,12 +39,23 @@ class _WorkbenchTableModel(QAbstractTableModel):
         return 0 if parent.isValid() else len(self.COLUMNS)
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
-        if role != Qt.DisplayRole:
-            return None
         if not index.isValid() or not (0 <= index.row() < len(self._rows)):
             return None
         field_name = self.COLUMNS[index.column()][0]
-        return _display_value(getattr(self._rows[index.row()], field_name, None))
+        row = self._rows[index.row()]
+        if role == Qt.DisplayRole:
+            return _display_value(getattr(row, field_name, None))
+        status = _row_status(row)
+        tone = _status_tone(status)
+        if role == Qt.ForegroundRole and field_name in {"status", "severity"}:
+            return QBrush(QColor(tone["fg"]))
+        if role == Qt.BackgroundRole and _is_attention_status(status):
+            return QBrush(QColor(tone["bg"]))
+        if role == Qt.FontRole and field_name in {"status", "severity", "title", "label"}:
+            font = QFont()
+            font.setBold(True)
+            return font
+        return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
         if role != Qt.DisplayRole:
@@ -98,10 +110,6 @@ class WorkbenchEvidenceFeedTableModel(_WorkbenchTableModel):
         ("label", "證據來源"),
         ("status", "狀態"),
         ("summary", "摘要"),
-        ("source_trace", "Source trace"),
-        ("degraded_reason", "降級原因"),
-        ("drilldown_target", "下鑽"),
-        ("diagnostics", "診斷"),
     )
 
     def __init__(self, rows: Sequence[WorkbenchEvidenceFeedItem] = (), parent=None) -> None:
@@ -114,11 +122,7 @@ class WorkbenchActionItemTableModel(_WorkbenchTableModel):
         ("severity", "嚴重度"),
         ("source_label", "來源"),
         ("title", "待處理事項"),
-        ("code", "代碼"),
         ("summary", "摘要"),
-        ("source_trace", "Source trace"),
-        ("degraded_reason", "降級原因"),
-        ("drilldown_target", "下鑽"),
     )
 
     def __init__(self, rows: Sequence[WorkbenchActionItem] = (), parent=None) -> None:
@@ -289,6 +293,36 @@ def _display_token(value: str) -> str:
         return "方向判讀：市場基準已可用，但產業基準、來源缺口或未成熟 outcome 仍阻擋 production readiness"
 
     return text
+
+
+def _row_status(row: object) -> str:
+    return str(getattr(row, "status", getattr(row, "severity", "")) or "")
+
+
+def _is_attention_status(status: str) -> bool:
+    return status in {
+        "critical",
+        "warning",
+        "degraded",
+        "missing",
+        "blocked",
+        "action_required",
+        "waiting_for_time",
+        "manual_required",
+    }
+
+
+def _status_tone(status: str) -> dict[str, str]:
+    token = str(status)
+    if token in {"critical", "blocked", "missing"}:
+        return {"fg": "#ef4444", "bg": "#2a1114"}
+    if token in {"warning", "degraded", "action_required", "manual_required", "waiting_for_time"}:
+        return {"fg": "#f59e0b", "bg": "#221a10"}
+    if token in {"observed", "ready", "done", "passed"}:
+        return {"fg": "#22c55e", "bg": "#0d2116"}
+    if token in {"manual_observed", "info"}:
+        return {"fg": "#38bdf8", "bg": "#0b1c27"}
+    return {"fg": "#94a3b8", "bg": "#111827"}
 
 
 def _coverage_text(label: str, text: str) -> str:

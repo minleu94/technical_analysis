@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QPushButton,
     QScrollArea,
@@ -37,7 +38,27 @@ from ui_qt.models.workbench_table_models import (
 )
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.table_style import apply_financial_table_style
-from ui_qt.widgets.theme_widgets import EmptyStatePanel, SectionPanel, WarningList
+from ui_qt.widgets.theme_widgets import CollapsibleSectionPanel, EmptyStatePanel, SectionPanel, WarningList
+
+
+WORKBENCH_TONES: dict[str, dict[str, str]] = {
+    "ready": {"fg": "#22c55e", "bg": "#0d2116", "border": "#166534"},
+    "observed": {"fg": "#22c55e", "bg": "#0d2116", "border": "#166534"},
+    "passed": {"fg": "#22c55e", "bg": "#0d2116", "border": "#166534"},
+    "done": {"fg": "#22c55e", "bg": "#0d2116", "border": "#166534"},
+    "info": {"fg": "#38bdf8", "bg": "#0b1c27", "border": "#075985"},
+    "manual_observed": {"fg": "#38bdf8", "bg": "#0b1c27", "border": "#075985"},
+    "warning": {"fg": "#f59e0b", "bg": "#221a10", "border": "#92400e"},
+    "degraded": {"fg": "#f59e0b", "bg": "#221a10", "border": "#92400e"},
+    "waiting_for_time": {"fg": "#f59e0b", "bg": "#221a10", "border": "#92400e"},
+    "manual_required": {"fg": "#f59e0b", "bg": "#221a10", "border": "#92400e"},
+    "action_required": {"fg": "#f59e0b", "bg": "#221a10", "border": "#92400e"},
+    "critical": {"fg": "#ef4444", "bg": "#2a1114", "border": "#991b1b"},
+    "blocked": {"fg": "#ef4444", "bg": "#2a1114", "border": "#991b1b"},
+    "missing": {"fg": "#ef4444", "bg": "#2a1114", "border": "#991b1b"},
+    "off": {"fg": "#94a3b8", "bg": "#111827", "border": "#334155"},
+    "neutral": {"fg": "#94a3b8", "bg": "#111827", "border": "#334155"},
+}
 
 
 class UnifiedDecisionWorkbenchView(QWidget):
@@ -117,6 +138,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
         title.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
         content_layout.addWidget(title)
 
+        self.priority_banner = QLabel("")
+        self.priority_banner.setWordWrap(True)
+        self.priority_banner.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        content_layout.addWidget(self.priority_banner)
+
+        self.summary_blocks: dict[str, QWidget] = {}
         self.summary_value_labels: dict[str, QLabel] = {}
         self.summary_detail_labels: dict[str, QLabel] = {}
         summary_row = QWidget()
@@ -191,6 +218,15 @@ class UnifiedDecisionWorkbenchView(QWidget):
         status_panel.layout.addWidget(self.status_table)
         content_layout.addWidget(status_panel)
 
+        primary_area = QWidget()
+        primary_layout = QHBoxLayout(primary_area)
+        primary_layout.setContentsMargins(0, 0, 0, 0)
+        primary_layout.setSpacing(10)
+        list_column = QWidget()
+        list_layout = QVBoxLayout(list_column)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(10)
+
         review_panel, self.review_section_title = self._panel_with_title("今日待判讀 / Today Review Queue")
         self.review_state_label = self._make_state_label()
         self.review_empty_state = EmptyStatePanel(
@@ -198,51 +234,120 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "今日待判讀佇列目前為空；可切到市場探索做研究，或等待下一次正式資料更新。",
         )
         self.review_table = self._make_table(self.review_model)
+        self.review_table.clicked.connect(lambda index: self._show_model_row_detail(self.review_model, index.row()))
         self.review_table.doubleClicked.connect(
             lambda index: self._navigate_model_row(self.review_model, index.row())
         )
         review_panel.layout.addWidget(self.review_state_label)
         review_panel.layout.addWidget(self.review_empty_state)
         review_panel.layout.addWidget(self.review_table)
-        content_layout.addWidget(review_panel)
+        list_layout.addWidget(review_panel)
 
         evidence_feed_panel, self.evidence_feed_section_title = self._panel_with_title(
             "背景證據流 / Background Evidence Feed"
         )
         self.evidence_feed_state_label = self._make_state_label()
         self.evidence_feed_table = self._make_table(self.evidence_feed_model)
+        self.evidence_feed_table.clicked.connect(
+            lambda index: self._show_model_row_detail(self.evidence_feed_model, index.row())
+        )
         self.evidence_feed_table.doubleClicked.connect(
             lambda index: self._navigate_model_row(self.evidence_feed_model, index.row())
         )
         evidence_feed_panel.layout.addWidget(self.evidence_feed_state_label)
         evidence_feed_panel.layout.addWidget(self.evidence_feed_table)
-        content_layout.addWidget(evidence_feed_panel)
+        list_layout.addWidget(evidence_feed_panel)
 
         action_item_panel, self.action_item_section_title = self._panel_with_title(
             "只讀 Action Items / Read-only Manual Queue"
         )
         self.action_item_state_label = self._make_state_label()
         self.action_item_table = self._make_table(self.action_item_model)
+        self.action_item_table.clicked.connect(
+            lambda index: self._show_model_row_detail(self.action_item_model, index.row())
+        )
         self.action_item_table.doubleClicked.connect(
             lambda index: self._navigate_model_row(self.action_item_model, index.row())
         )
         action_item_panel.layout.addWidget(self.action_item_state_label)
         action_item_panel.layout.addWidget(self.action_item_table)
-        content_layout.addWidget(action_item_panel)
+        list_layout.addWidget(action_item_panel)
 
-        operating_loop_panel, self.operating_loop_section_title = self._panel_with_title(
-            "操作節奏 / Read-only Operating Loop"
+        detail_panel, self.detail_section_title = self._panel_with_title("詳情檢視 / Inspector")
+        detail_panel.setMinimumWidth(360)
+        self.detail_title_label = QLabel("尚未選取項目")
+        detail_title_font = QFont()
+        detail_title_font.setPointSize(13)
+        detail_title_font.setBold(True)
+        self.detail_title_label.setFont(detail_title_font)
+        self.detail_title_label.setWordWrap(True)
+        self.detail_title_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.detail_title_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
+        self.detail_status_label = QLabel("")
+        self.detail_status_label.setWordWrap(True)
+        self.detail_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.detail_status_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; font-weight: 700;"
         )
+        self.detail_body_label = QLabel("")
+        self.detail_body_label.setWordWrap(True)
+        self.detail_body_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.detail_body_label.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 10px; line-height: 135%;"
+        )
+        self.detail_drilldown_button = QPushButton("開啟下鑽")
+        self.detail_drilldown_button.setProperty("variant", "secondary")
+        self.detail_drilldown_button.clicked.connect(self._open_selected_detail_target)
+        self._selected_detail_target = ""
+        detail_panel.layout.addWidget(self.detail_title_label)
+        detail_header_row = QWidget()
+        detail_header_layout = QHBoxLayout(detail_header_row)
+        detail_header_layout.setContentsMargins(0, 0, 0, 0)
+        detail_header_layout.setSpacing(8)
+        self.detail_status_badge = QLabel("")
+        self.detail_status_badge.setAlignment(Qt.AlignCenter)
+        self.detail_status_badge.setMinimumHeight(26)
+        detail_header_layout.addWidget(self.detail_status_badge, 0)
+        detail_header_layout.addWidget(self.detail_status_label, 1)
+        detail_panel.layout.addWidget(detail_header_row)
+
+        self.detail_summary_box = self._make_detail_box()
+        self.detail_source_box = self._make_detail_box()
+        self.detail_diagnostics_box = self._make_detail_box()
+        detail_panel.layout.addWidget(self.detail_summary_box)
+        detail_panel.layout.addWidget(self.detail_source_box)
+        detail_panel.layout.addWidget(self.detail_diagnostics_box)
+        self.detail_body_label.setVisible(False)
+        detail_panel.layout.addWidget(self.detail_drilldown_button)
+        detail_panel.layout.addStretch()
+
+        primary_layout.addWidget(list_column, 3)
+        primary_layout.addWidget(detail_panel, 2)
+        content_layout.addWidget(primary_area)
+
+        operating_loop_panel = CollapsibleSectionPanel(
+            "操作節奏 / Read-only Operating Loop",
+            collapsed=True,
+        )
+        self.operating_loop_collapsible = operating_loop_panel
+        self.operating_loop_section_title = operating_loop_panel.title_label
         self.operating_loop_state_label = self._make_state_label()
         self.operating_loop_table = self._make_table(self.operating_loop_model)
+        self.operating_loop_table.clicked.connect(
+            lambda index: self._show_model_row_detail(self.operating_loop_model, index.row())
+        )
         self.operating_loop_table.doubleClicked.connect(
             lambda index: self._navigate_model_row(self.operating_loop_model, index.row())
         )
-        operating_loop_panel.layout.addWidget(self.operating_loop_state_label)
-        operating_loop_panel.layout.addWidget(self.operating_loop_table)
+        operating_loop_panel.content_layout.addWidget(self.operating_loop_state_label)
+        operating_loop_panel.content_layout.addWidget(self.operating_loop_table)
         content_layout.addWidget(operating_loop_panel)
 
-        evidence_panel, self.evidence_section_title = self._panel_with_title("證據與品質 / Evidence Mode")
+        evidence_panel = CollapsibleSectionPanel("證據與品質 / Evidence Mode", collapsed=True)
+        self.evidence_collapsible = evidence_panel
+        self.evidence_section_title = evidence_panel.title_label
         self.data_quality_limitations_label = QLabel("")
         self.data_quality_limitations_label.setWordWrap(True)
         self.data_quality_limitations_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -252,19 +357,25 @@ class UnifiedDecisionWorkbenchView(QWidget):
             f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 8px;"
         )
         self.evidence_table = self._make_table(self.evidence_model)
-        evidence_panel.layout.addWidget(self.data_quality_limitations_label)
-        evidence_panel.layout.addWidget(self.evidence_table)
+        self.evidence_table.clicked.connect(lambda index: self._show_model_row_detail(self.evidence_model, index.row()))
+        evidence_panel.content_layout.addWidget(self.data_quality_limitations_label)
+        evidence_panel.content_layout.addWidget(self.evidence_table)
         content_layout.addWidget(evidence_panel)
 
-        checklist_panel, self.checklist_section_title = self._panel_with_title("每日檢查清單 / Daily Checklist")
+        checklist_panel = CollapsibleSectionPanel("每日檢查清單 / Daily Checklist", collapsed=True)
+        self.checklist_collapsible = checklist_panel
+        self.checklist_section_title = checklist_panel.title_label
         self.checklist_table = self._make_table(self.checklist_model)
-        checklist_panel.layout.addWidget(self.checklist_table)
+        self.checklist_table.clicked.connect(lambda index: self._show_model_row_detail(self.checklist_model, index.row()))
+        checklist_panel.content_layout.addWidget(self.checklist_table)
         content_layout.addWidget(checklist_panel)
 
-        warnings_panel, self.warnings_section_title = self._panel_with_title("警告與降級來源 / Warnings")
+        warnings_panel = CollapsibleSectionPanel("警告與降級來源 / Warnings", collapsed=True)
+        self.warnings_collapsible = warnings_panel
+        self.warnings_section_title = warnings_panel.title_label
         self.warning_list = WarningList()
         self.warning_list.setMinimumHeight(90)
-        warnings_panel.layout.addWidget(self.warning_list)
+        warnings_panel.content_layout.addWidget(self.warning_list)
         content_layout.addWidget(warnings_panel)
         content_layout.addStretch()
 
@@ -370,6 +481,19 @@ class UnifiedDecisionWorkbenchView(QWidget):
         apply_financial_table_style(table)
         return table
 
+    def _make_detail_box(self) -> QLabel:
+        label = QLabel("")
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        label.setStyleSheet(
+            f"background: {WORKBENCH_TONES['neutral']['bg']}; "
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {WORKBENCH_TONES['neutral']['border']}; "
+            f"border-left: 4px solid {WORKBENCH_TONES['neutral']['fg']}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 10px; line-height: 140%;"
+        )
+        return label
+
     def _make_state_label(self) -> QLabel:
         label = QLabel("")
         label.setWordWrap(True)
@@ -408,6 +532,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         layout.addWidget(title_label)
         layout.addWidget(value_label)
         layout.addWidget(detail_label)
+        self.summary_blocks[key] = block
         self.summary_value_labels[key] = value_label
         self.summary_detail_labels[key] = detail_label
         return block
@@ -460,11 +585,48 @@ class UnifiedDecisionWorkbenchView(QWidget):
         item = model.row_at(row)
         if item is None:
             return
+        self._show_model_row_detail(model, row)
         if model is self.review_model and hasattr(item, "item_id"):
             self._viewed_review_item_ids.add(str(item.item_id))
             self.review_state_label.setText(self._review_queue_state_text(self._dashboard))
         target = getattr(item, "drilldown_target", "")
         self.navigate_to_drilldown_target(str(target))
+
+    def _show_model_row_detail(self, model, row: int) -> None:
+        item = model.row_at(row)
+        if item is None:
+            self._set_detail_placeholder("尚未選取項目", "請點選左側任一列查看完整 source trace 與 diagnostics。")
+            return
+        title = _detail_title(item)
+        status = _detail_status(item)
+        target = str(getattr(item, "drilldown_target", "") or "")
+        self._selected_detail_target = target
+        self.detail_title_label.setText(title)
+        self.detail_status_label.setText(
+            f"狀態：{display_workbench_value(status)}"
+            + (f" | 下鑽：{display_workbench_value(target)}" if target else "")
+        )
+        self._apply_detail_tone(status)
+        self._set_detail_sections(item)
+        self.detail_body_label.setText(_format_detail_body(item))
+        self.detail_drilldown_button.setEnabled(bool(target))
+
+    def _set_detail_placeholder(self, title: str, body: str) -> None:
+        self._selected_detail_target = ""
+        self.detail_title_label.setText(title)
+        self.detail_status_label.setText("狀態：等待選取")
+        self.detail_status_badge.setText("WAIT")
+        self._apply_detail_tone("info")
+        self.detail_summary_box.setText(f"重點摘要\n{body}")
+        self.detail_source_box.setText("來源與邊界\n等待 WorkbenchDashboardDTO。")
+        self.detail_diagnostics_box.setText("診斷訊號\n尚無可檢視項目。")
+        self.detail_body_label.setText(body)
+        self.detail_drilldown_button.setEnabled(False)
+
+    def _open_selected_detail_target(self) -> None:
+        target = self._selected_detail_target
+        if target:
+            self.navigate_to_drilldown_target(target)
 
     def render_dashboard(self, dashboard: WorkbenchDashboardDTO) -> None:
         self._dashboard = dashboard
@@ -475,6 +637,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "不重算 scoring / portfolio / backtest / lifecycle。"
         )
         self._set_summary_blocks(dashboard)
+        self._set_priority_banner(dashboard)
         self.meta_label.setText(
             f"決策日期={dashboard.as_of_date.isoformat()} | "
             f"產生時間={dashboard.generated_at.isoformat()} | "
@@ -498,7 +661,29 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.checklist_model.set_rows(dashboard.daily_checklist)
         self.data_quality_limitations_label.setText(self._format_data_quality_limitations(dashboard))
         self.warning_list.set_warnings(tuple(_humanize_warning(item) for item in dashboard.warnings))
+        self._show_initial_detail(dashboard)
         self._resize_tables()
+
+    def _show_initial_detail(self, dashboard: WorkbenchDashboardDTO) -> None:
+        if self.evidence_feed_model.rowCount() > 0:
+            self._show_model_row_detail(self.evidence_feed_model, 0)
+            return
+        if self.review_model.rowCount() > 0:
+            self._show_model_row_detail(self.review_model, 0)
+            return
+        if self.action_item_model.rowCount() > 0:
+            self._show_model_row_detail(self.action_item_model, 0)
+            return
+        if self.operating_loop_model.rowCount() > 0:
+            self._show_model_row_detail(self.operating_loop_model, 0)
+            return
+        self._set_detail_placeholder(
+            "目前沒有可檢視項目",
+            (
+                f"決策日期：{dashboard.as_of_date.isoformat()}\n"
+                "Workbench 仍維持 read-only；沒有清單列不代表 Phase gate 完成。"
+            ),
+        )
 
     def _display_pending_dashboard(self) -> None:
         self.refresh_button.setEnabled(self.source_service is not None)
@@ -529,6 +714,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.action_item_model.set_rows(())
         self.operating_loop_model.set_rows(())
         self.warning_list.set_warnings(())
+        self._set_detail_placeholder("等待 DTO", "請先重新載入 WorkbenchDashboardDTO。")
 
     def _display_exception_dashboard(self, error_message: str) -> None:
         self.boundary_banner.setText(
@@ -558,6 +744,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.action_item_model.set_rows(())
         self.operating_loop_model.set_rows(())
         self.warning_list.set_warnings((f"workbench_source_degraded:{error_message}",))
+        self._set_detail_placeholder("載入降級", f"WorkbenchSourceService 未回傳 DTO：{error_message}")
 
     def _resize_tables(self) -> None:
         for table in (
@@ -571,6 +758,18 @@ class UnifiedDecisionWorkbenchView(QWidget):
         ):
             table.resizeColumnsToContents()
             table.resizeRowsToContents()
+        self._fit_summary_table(self.evidence_feed_table, fixed_widths=(190, 92))
+        self._fit_summary_table(self.action_item_table, fixed_widths=(104, 92, 130, 180))
+
+    def _fit_summary_table(self, table: QTableView, *, fixed_widths: tuple[int, ...]) -> None:
+        header = table.horizontalHeader()
+        if table.model() is None or table.model().columnCount() <= len(fixed_widths):
+            return
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        for index, width in enumerate(fixed_widths):
+            header.setSectionResizeMode(index, QHeaderView.Fixed)
+            table.setColumnWidth(index, width)
+        header.setSectionResizeMode(len(fixed_widths), QHeaderView.Stretch)
 
     def _format_data_quality_limitations(self, dashboard: WorkbenchDashboardDTO) -> str:
         lines = [
@@ -601,11 +800,97 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.summary_detail_labels["waiting"].setText(_format_phase0_ratio_text(dashboard))
         self.summary_value_labels["warning"].setText(f"{warning_count} 則")
         self.summary_detail_labels["warning"].setText("降級、缺口與 replay 限制需人工檢查")
+        self._apply_summary_block_style("review", "info" if review_count else "ready")
+        self._apply_summary_block_style("action", "warning" if action_count else "ready")
+        self._apply_summary_block_style("waiting", "warning" if waiting_count else "ready")
+        self._apply_summary_block_style("warning", "critical" if warning_count else "ready")
+
+    def _apply_summary_block_style(self, key: str, status: str) -> None:
+        tone = _workbench_tone(status)
+        block = self.summary_blocks[key]
+        block.setStyleSheet(
+            f"#workbenchSummaryBlock {{ background: {tone['bg']}; "
+            f"border: 1px solid {tone['border']}; border-left: 5px solid {tone['fg']}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; }}"
+        )
+        self.summary_value_labels[key].setStyleSheet(
+            f"color: {tone['fg']}; font-size: 17px; font-weight: 800;"
+        )
+        self.summary_detail_labels[key].setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 11px; line-height: 135%;"
+        )
+
+    def _set_priority_banner(self, dashboard: WorkbenchDashboardDTO) -> None:
+        review_count = len(dashboard.review_items)
+        action_count = len(dashboard.action_items)
+        warning_count = len(dashboard.warnings)
+        waiting_count = sum(
+            1 for item in dashboard.daily_checklist if str(item.status) == "waiting_for_time"
+        )
+        tone_key = "warning" if warning_count or action_count or waiting_count else "ready"
+        tone = _workbench_tone(tone_key)
+        self.priority_banner.setText(
+            "今日重點："
+            f"待判讀 {review_count} | 人工處理 {action_count} | "
+            f"等待真實時間 {waiting_count} | Warnings {warning_count}。"
+            "右側 Inspector 只顯示既有 DTO 證據，不寫入、不補 gate。"
+        )
+        self.priority_banner.setStyleSheet(
+            f"background: {tone['bg']}; color: {MIDNIGHT_ANALYST.text_primary}; "
+            f"border: 1px solid {tone['border']}; border-left: 6px solid {tone['fg']}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 10px 12px; "
+            "font-size: 12px; font-weight: 700; line-height: 140%;"
+        )
 
     def _set_summary_placeholder(self, value: str, detail: str) -> None:
         for key in self.summary_value_labels:
             self.summary_value_labels[key].setText(value)
             self.summary_detail_labels[key].setText(detail)
+            self._apply_summary_block_style(key, "info")
+
+    def _apply_detail_tone(self, status: str) -> None:
+        tone = _workbench_tone(status)
+        self.detail_status_badge.setText(display_workbench_value(status).upper())
+        self.detail_status_badge.setStyleSheet(
+            f"background: {tone['bg']}; color: {tone['fg']}; "
+            f"border: 1px solid {tone['border']}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_badge}px; "
+            "padding: 4px 10px; font-weight: 800;"
+        )
+
+    def _set_detail_sections(self, item) -> None:
+        title = _detail_title(item)
+        summary = str(getattr(item, "summary", "") or "無摘要。")
+        source_trace = str(getattr(item, "source_trace", getattr(item, "source", "")) or "未提供 source trace")
+        degraded_reason = str(getattr(item, "degraded_reason", "") or "none")
+        target = str(getattr(item, "drilldown_target", "") or "未提供")
+        diagnostics = getattr(item, "diagnostics", ())
+        diagnostics_text = _format_detail_value(diagnostics) if diagnostics else "無額外 diagnostics。"
+        self.detail_summary_box.setText(
+            f"重點摘要\n{title}\n{summary}"
+        )
+        self.detail_source_box.setText(
+            "來源與邊界\n"
+            f"source_trace: {source_trace}\n"
+            f"degraded_reason: {degraded_reason}\n"
+            f"drilldown_target: {target}\n"
+            "read-only: 不寫 DB、不標記完成、不啟用 scheduler。"
+        )
+        self.detail_diagnostics_box.setText(
+            f"診斷訊號\n{diagnostics_text}"
+        )
+        self._style_detail_box(self.detail_summary_box, "info")
+        self._style_detail_box(self.detail_source_box, _detail_status(item) or "info")
+        self._style_detail_box(self.detail_diagnostics_box, _detail_status(item) or "info")
+
+    def _style_detail_box(self, label: QLabel, status: str) -> None:
+        tone = _workbench_tone(status)
+        label.setStyleSheet(
+            f"background: {tone['bg']}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {tone['border']}; border-left: 4px solid {tone['fg']}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 10px; "
+            "line-height: 140%; font-size: 11px;"
+        )
 
     def _overview_summary_text(self, dashboard: WorkbenchDashboardDTO) -> str:
         return (
@@ -631,6 +916,73 @@ class UnifiedDecisionWorkbenchView(QWidget):
             f"今日待判讀 {count} 筆；已查看 {viewed_count}/{count}。"
             "已查看只存在本次 UI session，不寫 DB、不標記完成。"
         )
+
+
+def _detail_title(item) -> str:
+    return str(
+        getattr(
+            item,
+            "label",
+            getattr(item, "title", getattr(item, "item_id", getattr(item, "step_id", "Workbench item"))),
+        )
+    )
+
+
+def _workbench_tone(status: str) -> dict[str, str]:
+    return WORKBENCH_TONES.get(str(status), WORKBENCH_TONES["neutral"])
+
+
+def _detail_status(item) -> str:
+    return str(getattr(item, "status", getattr(item, "severity", "")) or "")
+
+
+def _format_detail_body(item) -> str:
+    lines = [
+        "read-only：此處只展示 WorkbenchDashboardDTO 既有欄位；不寫 DB、不標記完成、不啟用 scheduler。",
+        "",
+    ]
+    for label, field_name in (
+        ("item_id", "item_id"),
+        ("step_id", "step_id"),
+        ("summary", "summary"),
+        ("code", "code"),
+        ("source", "source"),
+        ("source_type", "source_type"),
+        ("source_label", "source_label"),
+        ("source_trace", "source_trace"),
+        ("degraded_reason", "degraded_reason"),
+        ("cadence", "cadence"),
+        ("linked_item_ids", "linked_item_ids"),
+        ("guidance", "guidance"),
+        ("drilldown_target", "drilldown_target"),
+        ("write_intent", "write_intent"),
+        ("diagnostics", "diagnostics"),
+    ):
+        if not hasattr(item, field_name):
+            continue
+        value = getattr(item, field_name)
+        if value is None or value == "" or value == ():
+            continue
+        lines.append(f"- {label}: {_format_detail_value(value)}")
+    return "\n".join(lines)
+
+
+def _format_detail_value(value: object) -> str:
+    if isinstance(value, tuple):
+        return "；".join(_format_detail_token(item) for item in value) or "無"
+    if isinstance(value, list):
+        return "；".join(_format_detail_token(item) for item in value) or "無"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return _format_detail_token(value)
+
+
+def _format_detail_token(value: object) -> str:
+    raw = str(value)
+    display = display_workbench_value(raw)
+    if raw == display:
+        return raw
+    return f"{raw}（{display}）"
 
 
 def _find_replay_summary(items: tuple[WorkbenchEvidenceSummary, ...]) -> WorkbenchEvidenceSummary | None:

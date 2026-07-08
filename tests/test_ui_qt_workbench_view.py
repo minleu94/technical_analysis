@@ -6,6 +6,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QApplication
 
 from app_module.workbench_dtos import (
@@ -21,6 +22,7 @@ from app_module.workbench_dtos import (
 )
 from ui_qt.models.workbench_table_models import (
     WorkbenchActionItemTableModel,
+    WorkbenchEvidenceFeedTableModel,
     WorkbenchEvidenceTableModel,
     WorkbenchOperatingLoopTableModel,
 )
@@ -270,16 +272,50 @@ def test_workbench_evidence_table_model_exposes_replay_diagnostics() -> None:
     assert model.raw_value(0, "diagnostics") == replay.diagnostics
 
 
-def test_workbench_action_item_table_model_exposes_trace_reason_and_drilldown() -> None:
+def test_workbench_action_item_table_model_is_compact_but_keeps_raw_detail() -> None:
     app()
     action = _dashboard_with_replay().action_items[0]
     model = WorkbenchActionItemTableModel((action,))
+    visible_fields = tuple(field for field, _label in model.COLUMNS)
 
+    assert visible_fields == ("queue_group", "severity", "source_label", "title", "summary")
     assert model.rowCount() == 1
-    assert model.headerData(model.column_index("source_trace"), Qt.Horizontal, Qt.DisplayRole) == "Source trace"
-    assert model.data(model.index(0, model.column_index("degraded_reason"))) == "portfolio_alert_requires_manual_review"
-    assert model.data(model.index(0, model.column_index("drilldown_target"))) == "持倉覆盤"
+    assert model.data(model.index(0, model.column_index("severity"))) == "警告"
+    assert model.data(model.index(0, model.column_index("title"))) == "Portfolio alert manual review"
     assert model.raw_value(0, "source_trace") == "DecisionDeskSnapshot.portfolio_alerts"
+    assert model.raw_value(0, "degraded_reason") == "portfolio_alert_requires_manual_review"
+    assert model.raw_value(0, "drilldown_target") == "portfolio_review"
+
+
+def test_workbench_evidence_feed_table_model_is_compact_but_keeps_raw_detail() -> None:
+    app()
+    feed_item = _dashboard_with_replay().background_evidence_feed[1]
+    model = WorkbenchEvidenceFeedTableModel((feed_item,))
+    visible_fields = tuple(field for field, _label in model.COLUMNS)
+
+    assert visible_fields == ("label", "status", "summary")
+    assert model.rowCount() == 1
+    assert model.data(model.index(0, model.column_index("status"))) == "降級"
+    assert model.row_at(0).source_trace == "HistoricalReplaySummary"
+    assert model.row_at(0).degraded_reason == "missing_industry_benchmark"
+    assert model.row_at(0).diagnostics == ("simulated_scheduler", "missing_industry_benchmark")
+
+
+def test_workbench_table_models_apply_semantic_status_colors() -> None:
+    app()
+    feed_item = _dashboard_with_replay().background_evidence_feed[1]
+    model = WorkbenchEvidenceFeedTableModel((feed_item,))
+    status_index = model.index(0, model.column_index("status"))
+    summary_index = model.index(0, model.column_index("summary"))
+
+    status_brush = model.data(status_index, Qt.ForegroundRole)
+    row_background = model.data(summary_index, Qt.BackgroundRole)
+
+    assert isinstance(status_brush, QBrush)
+    assert status_brush.color() == QColor("#f59e0b")
+    assert isinstance(row_background, QBrush)
+    assert row_background.color() == QColor("#221a10")
+    assert model.data(status_index, Qt.FontRole).bold() is True
 
 
 def test_workbench_operating_loop_table_model_exposes_read_only_rhythm() -> None:
@@ -375,6 +411,60 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "等待真實時間累積" in loop_text
     assert "只讀" in loop_text
     assert "不標記完成" in loop_text
+
+
+def test_unified_workbench_overview_uses_detail_inspector_and_collapsible_sections() -> None:
+    app()
+    clicked: list[str] = []
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+        navigate_to_evidence_review_callback=lambda: clicked.append("evidence"),
+    )
+
+    assert "詳情檢視" in view.detail_section_title.text()
+    assert "Daily Decision snapshot" in view.detail_title_label.text()
+    assert "DecisionDeskSnapshot" in view.detail_body_label.text()
+
+    view._show_model_row_detail(view.evidence_feed_model, 1)
+
+    detail_text = view.detail_body_label.text()
+    assert "Replay summary diagnostics" in view.detail_title_label.text()
+    assert "降級" in view.detail_status_badge.text()
+    assert "#f59e0b" in view.detail_status_badge.styleSheet()
+    assert "重點摘要" in view.detail_summary_box.text()
+    assert "來源與邊界" in view.detail_source_box.text()
+    assert "診斷訊號" in view.detail_diagnostics_box.text()
+    assert "HistoricalReplaySummary" in detail_text
+    assert "missing_industry_benchmark" in detail_text
+    assert "simulated_scheduler" in detail_text
+    assert "read-only" in detail_text
+    assert view.detail_drilldown_button.isEnabled() is True
+
+    view.detail_drilldown_button.click()
+    assert clicked == ["evidence"]
+
+    assert view.evidence_collapsible.is_collapsed() is True
+    view.evidence_collapsible.toggle_button.click()
+    assert view.evidence_collapsible.is_collapsed() is False
+    view.evidence_collapsible.toggle_button.click()
+    assert view.evidence_collapsible.is_collapsed() is True
+
+
+def test_unified_workbench_overview_uses_high_contrast_priority_treatments() -> None:
+    app()
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+    )
+
+    assert "今日重點" in view.priority_banner.text()
+    assert "人工處理 1" in view.priority_banner.text()
+    assert "Warnings 3" in view.priority_banner.text()
+    assert "#f59e0b" in view.priority_banner.styleSheet()
+    assert "#ef4444" in view.summary_blocks["warning"].styleSheet()
+    assert "#38bdf8" in view.summary_blocks["review"].styleSheet()
+    assert "font-size: 17px" in view.summary_value_labels["warning"].styleSheet()
 
 
 def test_unified_workbench_view_displays_empty_and_degraded_queue_state_copy() -> None:
