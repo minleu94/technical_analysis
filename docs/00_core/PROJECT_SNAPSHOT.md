@@ -42,6 +42,8 @@ Historical Evidence Replay v1 新增 `HistoricalEvidenceReplayService` 與 `scri
 
 2026-07-08 V3.0 engineering candidate 已完成為「工程候選」：V3 effectiveness read model、gap classifier、sample sufficiency / confidence disclosure、review scaffold 與 readiness inspector 已可產生 read-only engineering closeout；人工驗證仍是 `PENDING_MANUAL_VALIDATION`，真實 weekly / multi-day evidence 仍未達 official gate，不代表投資有效性、V4 readiness、production scheduler approval 或自動交易。使用者已批准下一步先做 `V3 score effectiveness audit + ML readiness bridge`：用既有 evidence / forward outcome 先檢查 `TotalScore` raw bucket、fixed threshold robustness 與 technical / pattern / volume component ablation，再把 ML 放成 V3.3 shadow-only calibration / meta-labeling / ranking / 權重學習 contract。若 score effectiveness 不可判讀，ML 只能維持 diagnostics-only。
 
+2026-07-08 Pre-V2 evidence closeout follow-up：`PreV2ReadinessService` 可用同一觀察日 scheduled evidence dry-run `latest_status.json` 作為 source-gap 修正後歷史觀察證據；採信條件固定為 `dry_run=true`、`writes_evidence_db=false`、source coverage / pipeline blocking gaps 皆為空且 `scheduler_readiness_after=ready_for_manual_confirm`。此 fallback 只讀 scheduled output，不寫 formal evidence DB、不觸發 confirm、不啟用 scheduler。實際對正式 DB 跑 `inspect_pre_v2_readiness.py --decision-date 2026-07-08` 時，source gaps 為 `ready`、read-only Agent report sample 為 `ready`，multi-day dry-run record 補入 2026-07-08 後為 `3/3 ready`；weekly evidence operations history 仍為 `0/3 waiting_for_time`，因此 overall 仍是 `waiting_for_time`，`production_scheduler_allowed=false`。
+
 - **閉環 1：資料與市場狀態閉環** ✅ V1 已建立
   - Update → SQLite 狀態 → Market Watch / Smart Money（市場觀察子 Tab）→ 候選池
   - Phase 1 ✅ / Phase 2 ✅ / Phase 2.5 快速/安全更新分流 ✅ / Phase 2A/2B/2C SQLite DB-first ✅ / Phase 3 CSV 手動匯出 ✅

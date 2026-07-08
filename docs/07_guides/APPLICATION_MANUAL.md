@@ -967,14 +967,14 @@ MCP tools：
 - `diagnostics` 有值時代表資料源、table 或查詢條件不足；不得用空結果推論策略有效或失效。
 - AI report 只能把查到的 evidence rows 整理成摘要與審核問題；LLM thesis 不是 primary evidence。
 
-V2.0 前可用 `scripts\inspect_pre_v2_readiness.py` 做非排程 readiness 檢查。此 CLI 只讀既有 evidence DB、Research Run DB 與 multi-day record markdown，不建立 schema、不寫 evidence、不啟用 scheduler；missing DB / table 只會回 diagnostics。它會把 weekly history、multi-day dry-run、source gaps 與 read-only Agent report sample 分成 `ready`、`waiting_for_time`、`action_required`，且 `production_scheduler_allowed` 永遠是 `false`。
+V2.0 前可用 `scripts\inspect_pre_v2_readiness.py` 做非排程 readiness 檢查。此 CLI 只讀既有 evidence DB、Research Run DB、multi-day record markdown 與 scheduled dry-run `latest_status.json`，不建立 schema、不寫 evidence、不啟用 scheduler；missing DB / table 只會回 diagnostics。它會把 weekly history、multi-day dry-run、source gaps 與 read-only Agent report sample 分成 `ready`、`waiting_for_time`、`action_required`，且 `production_scheduler_allowed` 永遠是 `false`。
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_pre_v2_readiness.py --db-path <working-copy-db> --decision-date 2026-07-06 --multi-day-record-path docs\06_qa\POST_V1_EVIDENCE_PIPELINE_MULTI_DAY_DRY_RUN_RECORD.md --json-output
 .\.venv\Scripts\python.exe scripts\inspect_pre_v2_readiness.py --db-path <working-copy-db> --decision-date 2026-07-06 --markdown --report-output output\qa\pre_v2_readiness.md
 ```
 
-`waiting_for_time` 代表仍需真實多週 / 多日累積，不可用 fixture、單次 smoke 或手動改表替代。`ready` 只代表該項可進入 V2.0 design discussion，不代表 scheduler approval、production readiness、投資有效性或交易建議。
+`waiting_for_time` 代表仍需真實多週 / 多日累積，不可用 fixture、單次 smoke 或無證據的手動改表替代。V2 closeout 可接受修正後歷史觀察日，但必須保留同日或指定觀察日的 dry-run report / scheduled `latest_status.json`；source-gap closeout 只會在 `dry_run=true`、`writes_evidence_db=false`、`source_coverage_blocking_gaps=[]`、`pipeline_blocking_gaps=[]` 且 `scheduler_readiness_after=ready_for_manual_confirm` 時採信。此 fallback 只解除 readiness inspector 的 source-gap 紅點，不代表正式 DB 已 confirm、scheduler approval、production readiness、投資有效性或交易建議。
 
 V2.0 Phase 1 / Phase 1.5 可用 `scripts\inspect_v2_workbench_prototype.py` 檢查 read-only Workbench prototype 輸出。這個 CLI 保留 `--sample`，也可用受控 `--db-path` / `--decision-date` 讀 existing read-only sources：Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與可選 Historical Replay JSON summary。它不寫 evidence、不掛主 UI、不建立 scheduler、不下單、不套用 lifecycle action，也不重算 scoring、portfolio、backtest 或 lifecycle 狀態。
 
@@ -1365,6 +1365,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-06：新增 V1.9 Read-only Agent / MCP Evidence Access 操作說明，標示 `twstock-evidence-access` 只讀 evidence / source trace / quality / warnings，不寫 DB、不改策略、不下單、不套用 lifecycle action。
 - 2026-07-06：新增 Pre-V2 readiness inspection CLI 操作說明，標示它只做 read-only 非排程前置檢查，不取代多週 history / multi-day dry-run / scheduler approval。
 - 2026-07-07：更新 Qt `決策工作台` Phase 2 Workbench MVP shell 操作說明，標示中文優先顯示、舊 Daily Decision / Evidence Review / Portfolio read-only drill-down、預設 `_reference_fix` replay JSON summary 分析，以及 source gap coverage / benchmark coverage / industry benchmark coverage 限制；UI 只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，不直接讀 SQLite、不寫 DB、不啟用 scheduler、不產生交易建議。
+- 2026-07-08：補充 Pre-V2 readiness 修正後歷史觀察日規則；source-gap closeout 可採信同日 scheduled dry-run `latest_status.json` 的 read-only 證據，但仍不寫 DB、不啟用 scheduler、不代表 production approval。
 - 2026-07-08：新增 V3 score effectiveness audit CLI 操作說明；`inspect_score_effectiveness.py` 以 read-only 方式輸出 `TotalScore` raw bucket、forward outcome、benchmark / industry excess、limitations 與安全邊界，不寫 DB、不提供 `--confirm`、不改分數 / threshold，也不訓練 ML model。
 - 2026-07-07：補充 Workbench background evidence feed / read-only Action Items MVP 操作說明；背景證據流只彙整既有 DTO / service payload，Action Items 每列帶 source trace、degraded reason 與 drill-down target，且不建立 repository、不寫 DB、不套用 lifecycle。
 - 2026-07-07：補充 Workbench Action Items 人工佇列操作說明；Action Items 依 severity / queue group / source 排序並顯示來源，row drill-down target 與舊頁導向一致，Evidence Feed / Action Items 空狀態與降級狀態文案維持只讀、非建議、不補值邊界。

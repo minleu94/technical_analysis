@@ -49,8 +49,8 @@ Gate：若 score bucket、threshold robustness 或 component ablation 仍不可�
 **目標**：累積真實使用數據與多日穩定紀錄，證明流程無害且有觀察價值。
 - **門檻要求**：
   - weekly history 必須達到至少 3 次（目前 `0/3`）。
-  - multi-day dry-run 必須累積紀錄（目前 `1/3`）。
-- **輔助工具**：Historical Evidence Replay 可用 working-copy / replay DB 從歷史交易日逐日重放 Evidence Pipeline，並把事件 metadata 標成 `historical_replay` / `simulated_scheduler`；它只能幫助找 source gap、payload gap 與 V2.0 設計問題，不計入 weekly history 或 multi-day dry-run 的真實時間門檻。
+  - multi-day dry-run 必須累積紀錄（2026-07-08 補入修正後歷史觀察日後，record 為 `3/3`；仍需保留 report / latest_status 來源與人工判讀註記）。
+- **輔助工具**：Historical Evidence Replay 可用 working-copy / replay DB 從歷史交易日逐日重放 Evidence Pipeline，並把事件 metadata 標成 `historical_replay` / `simulated_scheduler`；它只能幫助找 source gap、payload gap 與 V2.0 設計問題，不計入 weekly history。multi-day dry-run 若採修正後歷史觀察日，必須有同日或指定觀察日 dry-run report / scheduled latest_status 作為 read-only 證據，且不得寫正式 DB。
 - **輔助工具**：`scripts/inspect_simulated_phase_progress.py` 可把 replay summary 與 scheduled dry-run latest status 彙整成 simulated Phase 0-5 rehearsal；所有 replay-derived evidence 必須保留 `official_gate_credit=false` 與 `requires_real_world_validation=true`，不得標成 official completion。
 - **限制**：Production scheduler 繼續維持 `false`，不寫入正式資料，不進行自動交易。
 

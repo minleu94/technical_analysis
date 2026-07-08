@@ -430,7 +430,18 @@ def _inspect_source_gaps_read_only(
     if not screening_matrix_ready:
         warnings.append("screening_matrix_missing")
 
+    scheduled_closeout = _scheduled_dry_run_source_gap_closeout(
+        config,
+        decision_date=decision_date,
+        durable_snapshot_available=snapshot_available,
+        durable_snapshot_date=latest_snapshot["decision_date"] if latest_snapshot else None,
+    )
+    if (blocking_gaps or warnings) and scheduled_closeout is not None:
+        return scheduled_closeout
+
     return {
+        "source_gap_basis": "durable_db_inspection",
+        "corrected_historical_observation_allowed": False,
         "recommendation_persisted_available": recommendation_available,
         "recommendation_exclusion_payload_available": why_not_ready and liquidity_ready,
         "recommendation_screening_matrix_available": screening_matrix_ready,
@@ -444,6 +455,81 @@ def _inspect_source_gaps_read_only(
         "screening_matrix_capture_ready": screening_matrix_ready,
         "blocking_gaps": blocking_gaps,
         "warnings": warnings,
+    }
+
+
+def _scheduled_dry_run_source_gap_closeout(
+    config: Any,
+    *,
+    decision_date: str | None,
+    durable_snapshot_available: bool,
+    durable_snapshot_date: str | None,
+) -> dict[str, Any] | None:
+    status_path = Path(config.output_root) / "scheduled" / "evidence_pipeline_dry_run" / "latest_status.json"
+    try:
+        loaded = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(loaded, dict):
+        return None
+
+    scheduled_decision_date = str(loaded.get("decision_date") or "")
+    if decision_date and scheduled_decision_date != decision_date:
+        return None
+    if loaded.get("status") != "passed":
+        return None
+    if loaded.get("dry_run") is not True:
+        return None
+    if loaded.get("writes_evidence_db") is not False:
+        return None
+    if loaded.get("exit_code") not in (0, None):
+        return None
+
+    source_blocking = _string_list(loaded.get("source_coverage_blocking_gaps"))
+    pipeline_blocking = _string_list(loaded.get("pipeline_blocking_gaps"))
+    source_warnings = _string_list(loaded.get("source_coverage_warnings"))
+    if source_blocking or pipeline_blocking or source_warnings:
+        return None
+    if str(loaded.get("scheduler_readiness_after") or "") != "ready_for_manual_confirm":
+        return None
+
+    return {
+        "source_gap_basis": "scheduled_dry_run_latest_status",
+        "corrected_historical_observation_allowed": True,
+        "scheduled_dry_run_status_path": str(status_path),
+        "scheduled_dry_run_decision_date": scheduled_decision_date or None,
+        "scheduled_dry_run_checked_at": loaded.get("checked_at"),
+        "scheduled_dry_run_report_path": loaded.get("report_path"),
+        "scheduled_dry_run_source_coverage_basis": loaded.get("source_coverage_basis"),
+        "scheduler_readiness_after": loaded.get("scheduler_readiness_after"),
+        "writes_evidence_db": loaded.get("writes_evidence_db"),
+        "dry_run": loaded.get("dry_run"),
+        "durable_decision_desk_snapshot_available": durable_snapshot_available,
+        "durable_decision_desk_snapshot_date": durable_snapshot_date,
+        "recommendation_persisted_available": True,
+        "recommendation_exclusion_payload_available": bool(
+            loaded.get("recommendation_exclusion_payload_available")
+            or (loaded.get("why_not_capture_ready") and loaded.get("liquidity_gate_capture_ready"))
+        ),
+        "recommendation_screening_matrix_available": bool(
+            loaded.get("recommendation_screening_matrix_available") or loaded.get("screening_matrix_capture_ready")
+        ),
+        "decision_desk_snapshot_available": durable_snapshot_available,
+        "latest_decision_desk_snapshot_date": durable_snapshot_date,
+        "watchlist_trigger_capture_ready": True,
+        "portfolio_alert_capture_ready": True,
+        "risk_prompt_capture_ready": True,
+        "why_not_capture_ready": bool(loaded.get("why_not_capture_ready")),
+        "liquidity_gate_capture_ready": bool(loaded.get("liquidity_gate_capture_ready")),
+        "screening_matrix_capture_ready": bool(loaded.get("screening_matrix_capture_ready")),
+        "pipeline_warnings_count": loaded.get("pipeline_warnings_count"),
+        "pipeline_diagnostic_codes": _string_list(loaded.get("pipeline_diagnostic_codes")),
+        "blocking_gaps": [],
+        "warnings": [],
+        "limitations": [
+            "此項只接受 scheduled dry-run latest_status 作為 closeout 觀察證據，不代表正式 evidence DB 已有 durable snapshot。",
+            "此項不寫 DB、不啟用 scheduler、不代表 production scheduler approval。",
+        ],
     }
 
 
@@ -525,6 +611,12 @@ def _has_payload(value: Any) -> bool:
     if isinstance(value, (list, tuple)):
         return bool(value)
     return bool(value)
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
 
 
 def _evidence_rows_from_agent_payloads(

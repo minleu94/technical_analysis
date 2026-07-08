@@ -243,6 +243,35 @@ def _multi_day_record(path: Path, rows: int) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _seed_scheduled_dry_run_status(config: TWStockConfig, *, decision_date: str) -> None:
+    status_dir = Path(config.output_root) / "scheduled" / "evidence_pipeline_dry_run"
+    status_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "checked_at": f"{decision_date}T11:36:05",
+        "decision_date": decision_date,
+        "dry_run": True,
+        "exit_code": 0,
+        "status": "passed",
+        "writes_evidence_db": False,
+        "scheduler_readiness_after": "ready_for_manual_confirm",
+        "source_coverage_basis": "dry_run_transient_decision_desk_snapshot",
+        "source_coverage_blocking_gaps": [],
+        "source_coverage_warnings": [],
+        "pipeline_blocking_gaps": [],
+        "pipeline_diagnostic_codes": [],
+        "recommendation_exclusion_payload_available": True,
+        "recommendation_screening_matrix_available": True,
+        "why_not_capture_ready": True,
+        "liquidity_gate_capture_ready": True,
+        "screening_matrix_capture_ready": True,
+        "report_path": str(status_dir / "reports" / f"{decision_date.replace('-', '')}_evidence_pipeline_dry_run.md"),
+    }
+    (status_dir / "latest_status.json").write_text(
+        json.dumps(payload, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 def test_pre_v2_readiness_reports_parallel_ready_and_time_waiting_items(tmp_path: Path) -> None:
     config = _config(tmp_path)
     _seed_evidence_event(config)
@@ -284,3 +313,47 @@ def test_pre_v2_readiness_flags_source_and_report_gaps_without_creating_missing_
     assert items["source_gaps"].status == STATUS_ACTION_REQUIRED
     assert items["read_only_agent_report_sample"].status == STATUS_ACTION_REQUIRED
     assert not missing_db.exists()
+
+
+def test_pre_v2_readiness_accepts_same_day_scheduled_dry_run_for_corrected_source_gap_closeout(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    missing_formal_db = tmp_path / "formal" / "twstock.db"
+    record_path = tmp_path / "multi-day.md"
+    _multi_day_record(record_path, rows=3)
+    _seed_scheduled_dry_run_status(config, decision_date="2026-07-08")
+
+    report = PreV2ReadinessService(config, evidence_db_path=missing_formal_db).inspect(
+        decision_date="2026-07-08",
+        multi_day_record_path=record_path,
+    )
+    source_gaps = {item.item_id: item for item in report.items}["source_gaps"]
+
+    assert source_gaps.status == STATUS_READY
+    assert source_gaps.blocking_reasons == ()
+    assert source_gaps.evidence["source_gap_basis"] == "scheduled_dry_run_latest_status"
+    assert source_gaps.evidence["corrected_historical_observation_allowed"] is True
+    assert source_gaps.evidence["scheduled_dry_run_decision_date"] == "2026-07-08"
+    assert source_gaps.evidence["writes_evidence_db"] is False
+    assert "decision_desk_snapshot_missing" not in source_gaps.evidence["blocking_gaps"]
+    assert not missing_formal_db.exists()
+
+
+def test_pre_v2_readiness_does_not_use_future_scheduled_status_for_source_gap_closeout(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    missing_formal_db = tmp_path / "formal" / "twstock.db"
+    record_path = tmp_path / "multi-day.md"
+    _multi_day_record(record_path, rows=3)
+    _seed_scheduled_dry_run_status(config, decision_date="2026-07-08")
+
+    report = PreV2ReadinessService(config, evidence_db_path=missing_formal_db).inspect(
+        decision_date="2026-07-07",
+        multi_day_record_path=record_path,
+    )
+    source_gaps = {item.item_id: item for item in report.items}["source_gaps"]
+
+    assert source_gaps.status == STATUS_ACTION_REQUIRED
+    assert "decision_desk_snapshot_missing" in source_gaps.blocking_reasons
