@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 from app_module.dtos import RecommendationDTO
 from scripts.scheduled import run_scheduled_recommendation_snapshot
@@ -131,3 +133,28 @@ def test_scheduled_recommendation_snapshot_saves_result_and_status(
     assert saved.config["research_only"] is True
     assert saved.screening_matrix_json
     assert saved.why_not_payload_json
+
+
+def test_scheduled_default_config_uses_recommendation_service_tokens() -> None:
+    config = run_scheduled_recommendation_snapshot._scheduled_default_config()
+
+    assert config["filters"]["industry"] == "全部"
+    assert config["patterns"]["selected"] == ["旗形", "三角形", "矩形", "V形反轉"]
+
+
+def test_scheduled_recommendation_snapshot_script_help_bootstraps_repo_path() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/scheduled/run_scheduled_recommendation_snapshot.py",
+            "--help",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Scheduled research-only recommendation snapshot wrapper" in result.stdout

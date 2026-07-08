@@ -9,6 +9,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from app_module.dtos import RecommendationResultDTO
 from app_module.recommendation_repository import RecommendationRepository
 from app_module.recommendation_service import RecommendationService
@@ -38,7 +42,7 @@ def _scheduled_default_config() -> dict[str, Any]:
                 "ma": {"enabled": True, "windows": [5, 10, 20, 60]},
             },
         },
-        "patterns": {"selected": ["flag", "triangle", "rectangle", "v_reversal"]},
+        "patterns": {"selected": ["旗形", "三角形", "矩形", "V形反轉"]},
         "signals": {
             "technical_indicators": ["momentum", "trend"],
             "volume_conditions": ["increasing", "spike"],
@@ -50,7 +54,7 @@ def _scheduled_default_config() -> dict[str, Any]:
             "volume_ratio_min": "1.5",
             "rsi_min": 0,
             "rsi_max": 100,
-            "industry": "all",
+            "industry": "全部",
         },
         "recommendation_ranking": {"threshold_mode": "fixed"},
         "regime": None,
