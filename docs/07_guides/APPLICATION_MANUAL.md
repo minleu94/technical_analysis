@@ -927,6 +927,24 @@ V2.2 後，可用 `scripts\inspect_simulated_phase_progress.py` 將 Historical E
 
 `docs/06_qa/V2_2_PHASE5_APPROVAL_REHEARSAL_PACKAGE_2026_07_07.md` 是目前的審核包預演文件；它可用來準備審核材料，但不改 lifecycle、不開 scheduler、不代表 production readiness。
 
+Phase 3C 後，可用 `scripts\inspect_source_candidate_readiness.py` 做三大法人、信用交易與 TDCC / 集保庫存 source candidate dry-run。此 CLI 只檢查 candidate readiness / coverage / diagnostics，不正式接入策略訊號，不寫 production DB，不提供 `--confirm`，不啟用 scheduler，不改 `ScoringEngine`、推薦分數、threshold、profile 權重、portfolio 或 lifecycle。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_source_candidate_readiness.py --sample --format json
+.\.venv\Scripts\python.exe scripts\inspect_source_candidate_readiness.py --sample --format markdown
+.\.venv\Scripts\python.exe scripts\inspect_source_candidate_readiness.py --db-path <working-copy-db> --decision-date <YYYY-MM-DD> --format json
+```
+
+輸出判讀：
+
+- `institutional_flows` 檢查外資、投信、自營商的 buy / sell / net buy-sell 欄位與 source quality / available_date / decision_date 邊界。
+- `credit_transactions` 檢查融資買進、融資餘額、融券賣出、融券餘額；`financing`、`securities_lending` 只有資料存在才列入，缺欄位只回 `missing_optional_source`，不補值。
+- `tdcc_shareholding` 檢查股權分散、持股級距、大戶比例、散戶比例等候選 payload；週資料或公告延遲資料必須保留 explicit `available_date`，缺 available date 不得進 decision-time feature。
+- 缺 DB、缺 table 或尚未 ingestion 時會輸出 `source_not_ingested` / `missing_db` / `missing_table`，不建立 DB 或 table。
+- table 存在但缺 `available_date` 時會輸出 `missing_available_date`，且 `decision_ready=false`。
+- `available_date > decision_date` 會輸出 `future_data_blocked`，不得被使用。
+- `access_boundary` 必須保留 `writes_allowed=false`、`production_scheduler_allowed=false`、`scoring_engine_write_allowed=false`、`investment_effectiveness_claim=false`。
+
 V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已保存的 daily factor snapshot。這個 CLI 不建立 DB、不寫 snapshot、不重算 scoring；若指定的 DB 不存在會以錯誤結束。snapshot 只會在其他受控 workflow 明確呼叫 `CrossSectionalFactorPipeline` / `CrossSectionalFactorRepository` 保存後才存在。
 
 ```powershell
@@ -1331,6 +1349,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 
 ## 14. 更新記錄
 
+- 2026-07-08：新增 Phase 3C 三大法人 / 信用交易 / TDCC source candidate readiness CLI 操作說明；`inspect_source_candidate_readiness.py` 僅做 candidate-only dry-run，輸出 readiness / coverage / diagnostics 與 explicit access boundary，缺 DB / table / available_date 或 future available_date 時 fail-closed / degraded，不寫 DB、不改 ScoringEngine、不改推薦 threshold、不宣稱投資有效性。
 - 2026-07-07：左側主導覽從兩字母縮寫升級為自製線條 SVG icon，並保留 icon-only 收合模式；Runtime Observatory 改為緊湊 scope note，避免大片空白；Workbench 總覽新增四個指揮台摘要 block，Evidence / 持倉追蹤 / 操作節奏標示為摘要與下鑽入口 / 預留深挖區；市場探索弱勢個股與弱勢產業的 `跌幅%` 以正數顯示並用紅色代表下跌語意。以上只改 UI presentation，不啟用 scheduler、不寫 DB、不補 Phase gate。
 - 2026-07-07：主 UI 改為左側主導覽，預設進入「決策工作台」；「每日決策」整併為「決策工作台 > 決策來源」，「市場觀察」改名為「市場探索」。Workbench 新增今日待判讀空狀態與 session-only 已查看提示；Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍需正式資料累積，不能用 replay 或 UI 狀態補齊。
 - 2026-07-06：更新 V2.0 Phase 1 / Phase 1.5 read-only Workbench prototype CLI 操作說明，標示 sample、受控 `--db-path` / `--decision-date`、Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary、replay JSON summary、degraded source diagnostics 與不寫 DB / 不啟用 scheduler / 不產生交易建議限制。
