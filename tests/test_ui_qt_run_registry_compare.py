@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
-from PySide6.QtWidgets import QApplication, QGroupBox
+from PySide6.QtWidgets import QApplication
 
 from app_module.research_run_dtos import ResearchRunMetadataDTO
 from ui_qt.views.backtest_view import BacktestView
@@ -92,6 +92,22 @@ def test_backtest_view_mounts_registry_compare_subtab(qt_app):
     assert widget is view.run_registry_compare_widget
 
 
+def test_backtest_view_can_collapse_config_panel_for_registry_compare_space(qt_app):
+    view = BacktestView(backtest_service=None, config=None)
+
+    view._set_config_panel_collapsed(True)
+
+    assert view.config_scroll.isHidden() is True
+    assert view.config_panel_expand_btn.text() == "展開左側設定"
+    assert view.config_panel_expand_btn.isHidden() is False
+
+    view._set_config_panel_collapsed(False)
+
+    assert view.config_scroll.isHidden() is False
+    assert view.config_panel_expand_btn.isHidden() is True
+    assert view.config_panel_collapse_btn.text() == "收合左側設定"
+
+
 def test_registry_compare_widget_filters_paginates_and_limits_selection(qt_app):
     widget = RunRegistryCompareWidget(FakeResearchRunService(), page_size=2)
 
@@ -110,6 +126,8 @@ def test_registry_compare_widget_filters_paginates_and_limits_selection(qt_app):
     widget.refresh_runs()
     assert widget.run_list.count() == 2
     assert all("單股回測" in widget.run_list.item(i).text() for i in range(2))
+    assert widget.run_list.minimumHeight() >= 180
+    assert "類型：單股回測" in widget.run_list.item(0).text()
 
     widget.run_list.selectAll()
     assert widget.selected_run_ids() == ["run-a", "run-b"]
@@ -130,11 +148,16 @@ def test_registry_compare_widget_renders_badge_diff_metrics_and_saved_benchmark(
     assert widget.benchmark_table.model().rowCount() == 2
     assert widget.normalized_equity_table.model().rowCount() == 4
 
-    group_titles = {group.title() for group in widget.findChildren(QGroupBox)}
-    assert "指標" in group_titles
-    assert "市場 Regime" in group_titles
-    assert "Benchmark 基準" in group_titles
-    assert "標準化權益" in group_titles
+    assert "買進分數" in widget.params_summary_label.text()
+    assert "主要指標對照" in widget.metrics_summary_label.text()
+    assert widget.metrics_summary_table.isHidden() is False
+    assert widget.metrics_summary_table.horizontalHeaderItem(1).text() == "A"
+    assert widget.metrics_summary_table.item(0, 0).text() == "Sharpe 比率"
+    assert widget.metrics_summary_table.item(0, 1).text() == "1.2"
+    assert "趨勢交易數=3" in widget.regime_summary_label.text()
+    assert "相對大盤超額報酬 bp=250" in widget.benchmark_summary_label.text()
+    assert "比較代號：" in widget.selected_runs_label.text()
+    assert "已產生標準化權益" in widget.normalized_equity_empty_label.text()
 
 
 def test_registry_compare_widget_discards_stale_run_list_response(qt_app):

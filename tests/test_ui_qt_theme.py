@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QPushButton, QTableView, QVBoxLayout
 from ui_qt.widgets.theme_widgets import CompactCodeList, EmptyStatePanel, StatusBadge
 from ui_qt.widgets.table_style import apply_financial_table_style
 from ui_qt.widgets.text_sanitizer import remove_symbol_icons, sanitize_button_texts, strip_leading_symbol_icon
+from ui_qt.widgets.info_button import InfoButton
 from ui_qt.main import apply_app_theme
 
 
@@ -33,7 +34,9 @@ def test_global_stylesheet_contains_core_qt_selectors():
     assert "QMainWindow" in qss
     assert "QTabWidget::pane" in qss
     assert "QTableView" in qss
+    assert "QTableView::viewport" in qss
     assert "QTableCornerButton::section" in qss
+    assert "background: #101722" in qss
     assert "QToolTip" in qss
     assert "QFrame#midnightEmptyState" in qss
     assert "QProgressBar::chunk" in qss
@@ -88,6 +91,18 @@ def test_sanitize_button_texts_walks_widget_tree():
     assert keep_button.text() == "+ 觀察清單"
 
 
+def test_sanitize_button_texts_keeps_info_button_label():
+    _app()
+    root = QWidget()
+    layout = QVBoxLayout(root)
+    info_button = InfoButton("backtest")
+    layout.addWidget(info_button)
+
+    sanitize_button_texts(root)
+
+    assert info_button.text() == "i"
+
+
 def test_apply_financial_table_style_sets_dense_research_defaults():
     _app()
     table = QTableView()
@@ -100,6 +115,9 @@ def test_apply_financial_table_style_sets_dense_research_defaults():
     assert table.textElideMode() == Qt.ElideRight
     assert table.verticalHeader().defaultSectionSize() == 30
     assert table.horizontalHeader().minimumSectionSize() == 72
+    assert table.horizontalHeader().stretchLastSection()
+    assert "#101722" in table.styleSheet()
+    assert "#101722" in table.viewport().styleSheet()
 
 
 def test_compact_code_list_limits_each_group():

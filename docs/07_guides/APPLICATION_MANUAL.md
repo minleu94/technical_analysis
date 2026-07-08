@@ -103,7 +103,7 @@ python ui_qt/main.py
 7. 數據更新
 8. Runtime
 
-左側主導覽每個主工作區都有自製線條 SVG icon，協助快速辨識工作區意義；可用導覽列頂部的收合按鈕切換為 icon-only 模式以釋放橫向空間。收合後仍可用 tooltip 辨識完整工作區名稱，並且只影響畫面空間，不改變任何資料載入、排程、報告或 service 行為。
+左側主導覽每個主工作區都有自製線條 SVG icon，協助快速辨識工作區意義；可用導覽列頂部的收合按鈕切換為 icon-only 模式以釋放橫向空間，也可以在目前已選取的主工作區按鈕上再點一次直接收合 / 展開。收合後仍可用 tooltip 辨識完整工作區名稱，並且只影響畫面空間，不改變任何資料載入、排程、報告或 service 行為。
 
 「每日決策」不再是頂層主工作區，已整併為「決策工作台 > 決策來源」。決策工作台內部子頁包含「總覽」、「決策來源」、「Evidence」、「持倉追蹤」與「操作節奏」；今日待判讀佇列清空時會顯示空狀態，提示可前往「市場探索」研究。這只代表目前 DTO payload 沒有待判讀項目，不代表 Phase gate 已完成，也不是買賣建議。
 
@@ -819,7 +819,7 @@ Month 6 lifecycle gate 的預設最低交易數為 20 筆，且缺 benchmark exc
 - 圖表：權益、回撤、報酬分布、持有天數。
 - 最佳化 / 驗證：參數掃描與 Walk-forward。
 - 歷史與比較：載入、刪除與比較 legacy 已保存結果。
-- Registry 比較：列出 Research Run Registry 中的 run，可依類型、strategy、tag 篩選並分頁瀏覽；類型在 UI 顯示為「單股回測」或「推薦回放」，但存檔 metadata 仍保留原始 run type。選取 2 至 5 個 run 後顯示「可直接比較 / 需謹慎比較 / 不可直接比較」、參數差異、指標、市場 Regime、Benchmark 基準與標準化權益。標準化權益沒有共同日期時會顯示空狀態原因。
+- Registry 比較：列出 Research Run Registry 中的 run，可依類型、strategy、tag 篩選並分頁瀏覽；類型在 UI 顯示為「單股回測」或「推薦回放」，但存檔 metadata 仍保留原始 run type。run 清單每列以兩行顯示名稱、類型、策略與時間，方便選取多筆長名稱 run。選取 2 至 5 個 run 後，先以深色語意狀態列顯示「可直接比較 / 需謹慎比較 / 不可直接比較」與中文原因，再把所選 run 映射為 A / B / C / D / E 代號；摘要卡只顯示代號與中文欄位重點，長 run name / run_id 保留在上方對照與 tooltip，不塞進每個差異欄位。指標區會以小型對照表呈現，左欄為中文指標名稱，右欄為 A / B / C 數值，避免長段落混在一起。標準化權益需先按「比較選中」才會觸發，且所選 run 必須都有 equity curve 與共同日期；沒有共同日期或缺欄位時會顯示原因，不會補值或推估。
 - 證據覆盤：唯讀檢查已保存 evidence / observation / review，以及 Windows Task Scheduler 產出的最新 scheduled dry-run 狀態。子頁包含「前瞻證據」、「研究落差」、「訊號衰退」、「決策品質」、「覆盤歷史」與「排程狀態」。頁面上方會顯示目前實際讀取的 SQLite 資料庫路徑，並提供「複製路徑」按鈕，方便確認是否使用 working-copy DB。各子頁日期欄位使用日曆選擇器，未選日期時不套用日期篩選；未選日期的日曆會先定位到今天，不會停在 sentinel 年份。
   - 前瞻證據：檢查已保存 evidence events / outcomes 的 forward summary。可依日期、event type / family、source type、股票、regime、sector、profile、strategy version、window days、group by 與最小樣本數篩選，並查看事件總數、已完成 / 等待中 / 缺失結果、樣本不足、benchmark / industry 缺口、quality 與 warnings。close-to-close forward return 是 research basis，不代表可執行績效。
   - 研究落差：檢查 portfolio source trace、Research Run / strategy version、evidence event / outcome link、portfolio mode、gap metrics、attribution categories、match confidence、quality 與 warnings。沒有真實交易與人工 override 記錄時，只能解讀為 research / simulated gap。
@@ -1105,7 +1105,9 @@ Codex app 另外有一個 read-only daily automation：`baldr scheduled evidence
 - 在「推薦回放」設有「匯出回放 Excel」按鈕（僅在推薦組合回測成功後啟用）。
 - **安全設計**：所有匯出皆在背景線程（`TaskWorker`）執行，防止 UI 卡死，並採用臨時檔寫入後 `os.replace` 原子替換；替換失敗時既有報告保持不變。報告使用執行結果與參數快照，不重跑策略或摘要績效；equity curve 可接受 `日期`、`date` 或日期 index。若元數據缺失，會在「資料完整性」警示中顯示中文欄位名並保留原始代號，例如「資料截止日期（data_as_of_date）」；系統不以目前 UI 值或預設常數代填。
 
-Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為「不可直接比較」，並以中文原因顯示如「資料指紋不同」「成交假設不同」「部位 sizing 模式不同」；期間、Universe 或成本不同時會標示為「需謹慎比較」，並以「日期區間不同」「Universe 股票池不同」「交易成本模型不同」等原因提醒，不應直接做優劣排名。標準化權益只在共同日期交集上把每個 run 的第一筆淨值設為 10000；沒有共同日期時不補值、不推估，也不重新計算回測。Registry-based Promote 會先做 Registry Gate，通過後才建立策略版本。
+Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_results，不重新抓取目前資料。資料 fingerprint、execution 或 sizing 不同時會標示為「不可直接比較」，並以中文原因顯示如「資料指紋不同」「成交假設不同」「部位 sizing 模式不同」；期間、Universe 或成本不同時會標示為「需謹慎比較」，並以「日期區間不同」「Universe 股票池不同」「交易成本模型不同」等原因提醒，不應直接做優劣排名。畫面中的參數、指標、Regime 與 Benchmark 會先以摘要卡顯示重點，並以 A / B / C 代號對應長 run 名稱；完整資料仍來自同一批已保存 run metadata，不重新計算。標準化權益只在共同日期交集上把每個 run 的第一筆淨值設為 10000；沒有共同日期時不補值、不推估，也不重新計算回測。Registry-based Promote 會先做 Registry Gate，通過後才建立策略版本。
+
+策略回測頁左側設定面板頂部有「收合左側設定」按鈕，可暫時隱藏設定面板，讓右側結果分頁、Registry 比較與圖表取得更多橫向空間；收合後標題列會顯示「展開左側設定」作為恢復入口。此操作只改變 UI 空間配置，不改變目前輸入參數、已選 run、回測結果或保存狀態。
 
 固定組合目前的 Registry 保存粒度是每檔股票的 per-stock run，metadata 會標記為 `fixed_basket_stock` 以保留固定組合來源，並沿用該檔回測產生的 factor records 生成 `factor_snapshot` / `factor_contributions`。完整固定組合層級的現金帳、再平衡、未成交、Liquidity / Gap 風險揭露仍未建成，不應把 per-stock 保存結果解讀為完整可成交的固定組合績效；Month 3 v1 的完整 portfolio credibility 揭露集中在推薦組合回放。
 
@@ -1369,6 +1371,9 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 - 2026-07-07：排程狀態明細改為判讀摘要優先，只在 UI 內保留裁切後 report preview；完整 source coverage JSON 與 diagnostics 仍以 `report_path` 原始 markdown 為準，避免人工判讀時被大段 raw payload 淹沒。
 - 2026-07-07：Workbench 總覽降密度改版；背景證據流改為緊湊三欄清單，完整 source trace / degraded reason / diagnostics 改由右側 Inspector 顯示，操作節奏、Evidence mode、Daily Checklist 與 Warnings 改為可收合區塊；僅改 UI presentation，不寫 DB、不啟用 scheduler、不補 Phase gate。
 - 2026-07-07：補充 Workbench 總覽可讀性改版；操作節奏改為 timeline card、Evidence mode 改為雙摘要卡與 Inspector diagnostics、Daily Checklist 改為 status card、Warnings 改為分組與展開顯示；僅改 UI presentation，不寫 DB、不啟用 scheduler、不補 Phase gate。
+- 2026-07-07：更新 Research Lab `Registry 比較` 操作說明；比較狀態改為深色語意列，參數 / 指標 / Regime / Benchmark 改為摘要卡優先，標準化權益空狀態補明觸發方式與共同日期條件；僅改 UI presentation，不改 Research Run Registry 資料或回測計算。
+- 2026-07-07：補充主導覽與 Research Lab 空間操作；目前已選主工作區按鈕可再次點擊收合 / 展開左側主導覽，策略回測頁標題列可收合左側設定面板，Registry 比較以 A / B / C 代號對應長 run 名稱，降低長字串對閱讀的干擾。
+- 2026-07-07：調整 Research Lab 空間與說明互動；左側設定收合按鈕移至設定面板頂部，收合後才在標題列顯示展開入口；Registry 比較的指標區改為 A / B / C 小型對照表；全域按鈕文字清理不再移除 InfoButton 的 `i`。
 - 2026-07-03：新增 V1.3 Evidence Operations weekly review CLI 操作說明，標示 manual approval package、action item planning、production scheduler disabled 與 signal decay candidate 不自動套用 lifecycle action。
 - 2026-07-02：完成 V1.1 workflow bridge v1 操作說明，補充推薦 Profile 進階摘要、buy / sell score 與權重差異、推薦回放是 Profile / Config 歷史重播，以及升降級判讀需經 Research Run / Evidence 與人工 lifecycle gate。
 - 2026-06-23：完成 Healthcheck Batch 2 計畫範圍實作後的操作說明：Daily Decision Desk answer-first dashboard、Smart Money 5 / 20 / 60 日語意診斷、quantity concentration 與股票焦點下鑽。

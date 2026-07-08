@@ -228,6 +228,8 @@ class CollapsibleSectionPanel(QFrame):
         self.layout.setSpacing(6)
 
         header = QWidget()
+        header.setObjectName("midnightCollapsibleHeader")
+        header.setStyleSheet(f"#midnightCollapsibleHeader {{ background: {MIDNIGHT_ANALYST.surface_1}; }}")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(8)
@@ -248,6 +250,8 @@ class CollapsibleSectionPanel(QFrame):
         self.layout.addWidget(header)
 
         self.content_widget = QWidget()
+        self.content_widget.setObjectName("midnightCollapsibleContent")
+        self.content_widget.setStyleSheet(f"#midnightCollapsibleContent {{ background: {MIDNIGHT_ANALYST.surface_1}; }}")
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(6)

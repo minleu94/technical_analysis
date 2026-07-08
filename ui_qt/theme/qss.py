@@ -92,18 +92,22 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
         background: {tokens.surface_1};
         border: 1px solid {tokens.border};
         border-radius: {tokens.radius_panel}px;
-        margin-top: 10px;
-        padding-top: 12px;
+        margin-top: 12px;
+        padding: 14px 10px 10px 10px;
         font-weight: 700;
     }}
     QGroupBox::title {{
         subcontrol-origin: margin;
-        left: 10px;
-        padding: 0 4px;
+        left: 12px;
+        padding: 2px 8px;
+        background: {tokens.surface_1};
         color: {tokens.text_primary};
+        border: 1px solid {tokens.border_subtle};
+        border-radius: {tokens.radius_badge}px;
     }}
     QTableView {{
         background: {tokens.surface_1};
+        background-color: {tokens.surface_1};
         alternate-background-color: {tokens.surface_2};
         color: {tokens.text_primary};
         gridline-color: {tokens.border_subtle};
@@ -112,6 +116,9 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
         border: 1px solid {tokens.border};
         border-radius: {tokens.radius_panel}px;
         font-family: {tokens.font_family};
+    }}
+    QTableView::viewport {{
+        background: {tokens.surface_1};
     }}
     QTableView::item {{
         padding: 5px 8px;
@@ -135,6 +142,9 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
         border-bottom: 1px solid {tokens.border};
         font-weight: 700;
     }}
+    QHeaderView {{
+        background: {tokens.surface_1};
+    }}
     QListWidget {{
         background: {tokens.surface_1};
         color: {tokens.text_primary};
@@ -157,6 +167,9 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
         selection-background-color: {tokens.surface_3};
         selection-color: {tokens.text_primary};
     }}
+    QTextEdit::viewport {{
+        background: {tokens.surface_2};
+    }}
     QTextEdit:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {{
         border-color: {tokens.accent};
     }}
@@ -172,6 +185,9 @@ def build_global_stylesheet(tokens: ThemeTokens = MIDNIGHT_ANALYST) -> str:
     }}
     QScrollArea {{
         border: 0;
+        background: transparent;
+    }}
+    QScrollArea QWidget {{
         background: transparent;
     }}
     QSplitter::handle {{

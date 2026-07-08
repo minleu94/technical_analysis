@@ -5,11 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
+    QFrame,
+    QGridLayout,
     QGroupBox,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -18,6 +21,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QTableView,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -27,6 +32,7 @@ from app_module.research_run_comparison_service import (
     ResearchRunComparisonService,
 )
 from app_module.research_run_dtos import ResearchRunMetadataDTO
+from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.widgets.table_style import apply_financial_table_style
 
@@ -40,6 +46,12 @@ COMPARABILITY_LABELS = {
     ComparabilityStatus.COMPARABLE: "可直接比較",
     ComparabilityStatus.CAUTION: "需謹慎比較",
     ComparabilityStatus.INCOMPATIBLE: "不可直接比較",
+}
+
+COMPARABILITY_TONES = {
+    ComparabilityStatus.COMPARABLE: MIDNIGHT_ANALYST.success,
+    ComparabilityStatus.CAUTION: MIDNIGHT_ANALYST.warning,
+    ComparabilityStatus.INCOMPATIBLE: MIDNIGHT_ANALYST.danger,
 }
 
 
@@ -63,6 +75,8 @@ class RunRegistryCompareWidget(QWidget):
         self._request_id = 0
         self._all_runs: list[ResearchRunMetadataDTO] = []
         self._filtered_runs: list[ResearchRunMetadataDTO] = []
+        self._run_aliases: dict[str, str] = {}
+        self._run_display_names: dict[str, str] = {}
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -103,6 +117,7 @@ class RunRegistryCompareWidget(QWidget):
         list_layout = QVBoxLayout(list_group)
         self.run_list = QListWidget()
         self.run_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.run_list.setMinimumHeight(180)
         self.run_list.itemSelectionChanged.connect(self._update_compare_button_state)
         list_layout.addWidget(self.run_list)
 
@@ -124,30 +139,84 @@ class RunRegistryCompareWidget(QWidget):
         layout.addWidget(list_group, stretch=1)
 
         self.comparability_badge = QLabel("尚未比較")
-        self.comparability_badge.setAlignment(Qt.AlignCenter)
+        self.comparability_badge.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.comparability_badge.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        self.comparability_badge.setStyleSheet("padding: 6px; background: #ECEFF1;")
+        self.comparability_badge.setWordWrap(True)
+        self._style_comparability_badge(MIDNIGHT_ANALYST.text_muted)
         layout.addWidget(self.comparability_badge)
+        self.selected_runs_label = QLabel("尚未選取比較 run。")
+        self.selected_runs_label.setWordWrap(True)
+        self.selected_runs_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.selected_runs_label.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_1}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 8px 10px;"
+        )
+        layout.addWidget(self.selected_runs_label)
 
-        tables_row = QHBoxLayout()
         self.params_diff_table = self._new_table()
         self.metrics_table = self._new_table()
         self.regime_table = self._new_table()
         self.benchmark_table = self._new_table()
-        tables_row.addWidget(self._wrap_table("參數差異", self.params_diff_table))
-        tables_row.addWidget(self._wrap_table("指標", self.metrics_table))
-        tables_row.addWidget(self._wrap_table("市場 Regime", self.regime_table))
-        tables_row.addWidget(self._wrap_table("Benchmark 基準", self.benchmark_table))
-        layout.addLayout(tables_row, stretch=2)
+        for table in (
+            self.params_diff_table,
+            self.metrics_table,
+            self.regime_table,
+            self.benchmark_table,
+        ):
+            table.hide()
+
+        summary_grid = QGridLayout()
+        summary_grid.setSpacing(10)
+        self.params_summary_label = self._new_summary_label("尚未比較。選擇 2 至 5 筆 run 後，這裡會只列出有差異的參數。")
+        self.metrics_summary_label = self._new_summary_label("尚未比較。比較後會以 A / B / C 欄位對照主要績效指標。")
+        self.metrics_summary_table = self._new_summary_table()
+        self.metrics_summary_table.hide()
+        self.regime_summary_label = self._new_summary_label("尚未比較。比較後會摘要各 run 的市場 Regime 分布。")
+        self.benchmark_summary_label = self._new_summary_label("尚未比較。比較後會摘要 Benchmark / excess return 等基準資訊。")
+        summary_grid.addWidget(
+            self._wrap_summary("指標", self.metrics_summary_label, self.metrics_summary_table),
+            0,
+            0,
+            1,
+            2,
+        )
+        summary_grid.addWidget(self._wrap_summary("參數差異", self.params_summary_label), 1, 0)
+        summary_grid.addWidget(self._wrap_summary("Benchmark 基準", self.benchmark_summary_label), 1, 1)
+        summary_grid.addWidget(self._wrap_summary("市場 Regime", self.regime_summary_label), 2, 0, 1, 2)
+        summary_grid.setColumnStretch(0, 1)
+        summary_grid.setColumnStretch(1, 1)
+        layout.addLayout(summary_grid, stretch=2)
+
+        hidden_tables = QWidget()
+        hidden_layout = QHBoxLayout(hidden_tables)
+        hidden_layout.setContentsMargins(0, 0, 0, 0)
+        hidden_layout.setSpacing(0)
+        hidden_layout.addWidget(self.params_diff_table)
+        hidden_layout.addWidget(self.metrics_table)
+        hidden_layout.addWidget(self.regime_table)
+        hidden_layout.addWidget(self.benchmark_table)
+        hidden_tables.hide()
+        layout.addWidget(hidden_tables)
 
         self.normalized_equity_table = self._new_table()
         normalized_group = QGroupBox("標準化權益")
         normalized_layout = QVBoxLayout(normalized_group)
-        self.normalized_equity_empty_label = QLabel("尚未比較；選擇 2 至 5 筆 run 後可檢視共同日期標準化權益。")
+        self.normalized_equity_empty_label = QLabel(
+            "尚未觸發比較。\n"
+            "操作方式：在上方清單選 2 至 5 筆 run，按「比較選中」。\n"
+            "顯示條件：被比較的 run 都要有 equity curve，且日期要有交集；第一個共同日期會標準化為 10000。"
+        )
         self.normalized_equity_empty_label.setWordWrap(True)
+        self.normalized_equity_empty_label.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 10px; line-height: 145%;"
+        )
         normalized_layout.addWidget(self.normalized_equity_empty_label)
         normalized_layout.addWidget(self.normalized_equity_table)
-        layout.addWidget(normalized_group, stretch=2)
+        self.normalized_equity_table.hide()
+        layout.addWidget(normalized_group, stretch=1)
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt override
         if event is not None:
@@ -200,14 +269,26 @@ class RunRegistryCompareWidget(QWidget):
 
         run_data = [self.research_run_service.load_run_data(run_id) for run_id in run_ids]
         metadata = [item.metadata for item in run_data]
+        self._prepare_run_aliases(metadata)
+        self.selected_runs_label.setText(self._selected_runs_summary(metadata))
         comparability = self.comparison_service.evaluate_comparability(metadata)
         self._render_comparability_badge(comparability.status, comparability.reasons)
 
-        self._set_table_model(self.params_diff_table, self._build_params_diff(metadata))
-        self._set_table_model(self.metrics_table, self._flatten_run_dicts(metadata, "metrics"))
-        self._set_table_model(self.regime_table, self._flatten_run_dicts(metadata, "regime_breakdown"))
+        params_diff = self._build_params_diff(metadata)
+        metrics = self._flatten_run_dicts(metadata, "metrics")
+        regime = self._flatten_run_dicts(metadata, "regime_breakdown")
         benchmark = self.comparison_service.collect_benchmark_attribution(metadata)
-        self._set_table_model(self.benchmark_table, self._flatten_mapping_by_run(benchmark))
+        benchmark_frame = self._flatten_mapping_by_run(benchmark)
+        self._set_table_model(self.params_diff_table, params_diff)
+        self._set_table_model(self.metrics_table, metrics)
+        self._set_table_model(self.regime_table, regime)
+        self._set_table_model(self.benchmark_table, benchmark_frame)
+        self.params_summary_label.setText(self._params_summary_text(params_diff))
+        self._render_metrics_summary_table(metrics)
+        self.regime_summary_label.setText(self._run_mapping_summary_text(regime, "尚無 Regime 分布資料"))
+        self.benchmark_summary_label.setText(
+            self._run_mapping_summary_text(benchmark_frame, "尚無 Benchmark 基準資料")
+        )
 
         normalized = self.comparison_service.build_normalized_equity(
             {item.metadata.run_id: item.equity for item in run_data}
@@ -215,12 +296,18 @@ class RunRegistryCompareWidget(QWidget):
         normalized_frame = self._normalized_equity_frame(normalized.normalized)
         if normalized_frame.empty:
             self.normalized_equity_empty_label.setText(
-                "沒有共同日期可標準化比較；請確認日期區間、資料版本與 equity 欄位是否一致。"
+                "無法產生標準化權益。\n"
+                "原因：沒有共同日期可標準化比較，或某些 run 缺少 equity curve / portfolio_value。\n"
+                "判讀：這不是比較功能失效，而是目前資料條件不足；請改選日期重疊的 run。"
             )
+            self.normalized_equity_table.hide()
         else:
             self.normalized_equity_empty_label.setText(
-                "標準化權益以共同日期第一筆淨值 = 10000 呈現，只用已儲存 run 結果，不重新計算績效。"
+                f"已產生標準化權益。\n"
+                f"共同日期：{len(normalized.date_intersection)} 筆；第一個共同日期標準化為 10000。\n"
+                "注意：這只讀取已儲存 run 結果，不重新計算績效。"
             )
+            self.normalized_equity_table.show()
         self._set_table_model(
             self.normalized_equity_table,
             normalized_frame,
@@ -253,12 +340,19 @@ class RunRegistryCompareWidget(QWidget):
 
         for run in self._filtered_runs[start:end]:
             text = (
-                f"{run.run_name} | {self._run_type_label(run.run_type)} | "
-                f"{run.strategy_id} | {run.created_at[:16]}"
+                f"{run.run_name}\n"
+                f"類型：{self._run_type_label(run.run_type)}　策略：{run.strategy_id}　時間：{run.created_at[:16]}"
             )
             item = QListWidgetItem(text)
+            item.setSizeHint(QSize(0, 46))
             item.setData(Qt.ItemDataRole.UserRole, run.run_id)
-            item.setToolTip(f"run_id: {run.run_id}\nrun_type: {run.run_type}")
+            item.setToolTip(
+                f"名稱：{run.run_name}\n"
+                f"run_id：{run.run_id}\n"
+                f"類型：{self._run_type_label(run.run_type)}\n"
+                f"策略：{run.strategy_id}\n"
+                f"建立時間：{run.created_at[:16]}"
+            )
             self.run_list.addItem(item)
 
         self.page_label.setText(f"第 {self.current_page} / {total_pages} 頁")
@@ -287,17 +381,17 @@ class RunRegistryCompareWidget(QWidget):
     def _render_comparability_badge(
         self, status: ComparabilityStatus, reasons: list[str]
     ) -> None:
-        reason_text = "" if not reasons else " | " + ", ".join(reasons)
+        reason_text = "" if not reasons else " | 差異原因：" + "、".join(reasons)
         self.comparability_badge.setText(
-            f"{COMPARABILITY_LABELS.get(status, status.value)}{reason_text}"
+            f"比較狀態：{COMPARABILITY_LABELS.get(status, status.value)}{reason_text}"
         )
-        colors = {
-            ComparabilityStatus.COMPARABLE: "#DFF3E3",
-            ComparabilityStatus.CAUTION: "#FFF4D6",
-            ComparabilityStatus.INCOMPATIBLE: "#FDE2E2",
-        }
+        self._style_comparability_badge(COMPARABILITY_TONES[status])
+
+    def _style_comparability_badge(self, color: str) -> None:
         self.comparability_badge.setStyleSheet(
-            f"padding: 6px; background: {colors[status]};"
+            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_primary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; border-left: 5px solid {color}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 9px 12px;"
         )
 
     def _build_params_diff(self, runs: list[ResearchRunMetadataDTO]) -> pd.DataFrame:
@@ -365,6 +459,70 @@ class RunRegistryCompareWidget(QWidget):
         table.horizontalHeader().setStretchLastSection(True)
         return table
 
+    def _new_summary_label(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 12px; line-height: 145%;"
+        )
+        return label
+
+    def _new_summary_table(self) -> QTableWidget:
+        table = QTableWidget()
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setSelectionMode(QTableWidget.NoSelection)
+        table.setFocusPolicy(Qt.NoFocus)
+        table.verticalHeader().setVisible(False)
+        table.setAlternatingRowColors(True)
+        table.setStyleSheet(
+            f"""
+            QTableWidget {{
+                background: {MIDNIGHT_ANALYST.surface_1};
+                alternate-background-color: {MIDNIGHT_ANALYST.surface_2};
+                color: {MIDNIGHT_ANALYST.text_primary};
+                gridline-color: {MIDNIGHT_ANALYST.border_subtle};
+                border: 1px solid {MIDNIGHT_ANALYST.border};
+                border-radius: {MIDNIGHT_ANALYST.radius_panel}px;
+            }}
+            QHeaderView::section {{
+                background: {MIDNIGHT_ANALYST.surface_2};
+                color: {MIDNIGHT_ANALYST.text_secondary};
+                padding: 5px 7px;
+                border: 0;
+                border-right: 1px solid {MIDNIGHT_ANALYST.border};
+                border-bottom: 1px solid {MIDNIGHT_ANALYST.border};
+                font-weight: 700;
+            }}
+            QTableWidget::item {{
+                padding: 5px 7px;
+            }}
+            """
+        )
+        return table
+
+    def _wrap_summary(self, title: str, label: QLabel, extra_widget: QWidget | None = None) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("registryCompareSummaryCard")
+        frame.setStyleSheet(
+            f"#registryCompareSummaryCard {{ background: {MIDNIGHT_ANALYST.surface_1}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; }}"
+        )
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+        title_label = QLabel(title)
+        title_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_primary}; font-size: 13px; font-weight: 800;"
+        )
+        layout.addWidget(title_label)
+        layout.addWidget(label, 1)
+        if extra_widget is not None:
+            layout.addWidget(extra_widget, 2)
+        return frame
+
     def _wrap_table(self, title: str, table: QTableView) -> QGroupBox:
         group = QGroupBox(title)
         layout = QVBoxLayout(group)
@@ -375,3 +533,166 @@ class RunRegistryCompareWidget(QWidget):
         model = PandasTableModel(frame)
         table.setModel(model)
         table.resizeColumnsToContents()
+
+    def _params_summary_text(self, frame: pd.DataFrame) -> str:
+        if frame.empty:
+            return "沒有參數可比較。"
+        diff_frame = frame[frame["differs"] == True] if "differs" in frame.columns else frame
+        if diff_frame.empty:
+            return "參數一致：目前選取的 run 沒有觀測到參數差異。"
+        lines: list[str] = []
+        run_columns = [col for col in diff_frame.columns if col not in {"parameter", "differs"}]
+        for _, row in diff_frame.head(8).iterrows():
+            values = " / ".join(
+                f"{self._alias_for_run(str(run_id))}={self._format_summary_value(row[run_id])}"
+                for run_id in run_columns
+            )
+            lines.append(f"• {self._label_for_key(str(row['parameter']))}：{values}")
+        remaining = len(diff_frame) - len(lines)
+        if remaining > 0:
+            lines.append(f"• 另有 {remaining} 個差異參數，完整內容保留於資料 model。")
+        return "\n".join(lines)
+
+    def _run_mapping_summary_text(self, frame: pd.DataFrame, empty_text: str) -> str:
+        if frame.empty:
+            return empty_text
+        lines: list[str] = []
+        for run_id, run_frame in frame.groupby("run_id", sort=False):
+            pairs: list[str] = []
+            for _, row in run_frame.head(5).iterrows():
+                key = str(row.get("key", "")).strip()
+                value = self._format_summary_value(row.get("value", ""))
+                if not key and not value:
+                    continue
+                pairs.append(f"{self._label_for_key(key)}={value}" if key else value)
+            summary = "；".join(pairs) if pairs else "沒有可顯示欄位"
+            extra = max(len(run_frame) - 5, 0)
+            suffix = f"；另 {extra} 項" if extra else ""
+            lines.append(f"• {self._alias_for_run(str(run_id))}：{summary}{suffix}")
+        return "\n".join(lines)
+
+    def _render_metrics_summary_table(self, frame: pd.DataFrame) -> None:
+        if frame.empty:
+            self.metrics_summary_table.hide()
+            self.metrics_summary_label.show()
+            self.metrics_summary_label.setText("尚無指標資料。")
+            return
+
+        pivot: dict[str, dict[str, str]] = {}
+        aliases: list[str] = []
+        for run_id, run_frame in frame.groupby("run_id", sort=False):
+            alias = self._alias_for_run(str(run_id))
+            aliases.append(alias)
+            for _, row in run_frame.iterrows():
+                key = str(row.get("key", "")).strip()
+                if not key:
+                    continue
+                label = self._label_for_key(key)
+                pivot.setdefault(label, {})[alias] = self._format_summary_value(row.get("value", ""))
+
+        if not pivot:
+            self.metrics_summary_table.hide()
+            self.metrics_summary_label.show()
+            self.metrics_summary_label.setText("尚無可顯示的指標欄位。")
+            return
+
+        row_labels = list(pivot.keys())[:8]
+        self.metrics_summary_table.setColumnCount(len(aliases) + 1)
+        self.metrics_summary_table.setRowCount(len(row_labels))
+        self.metrics_summary_table.setHorizontalHeaderLabels(["指標", *aliases])
+        for row_index, label in enumerate(row_labels):
+            label_item = QTableWidgetItem(label)
+            label_item.setToolTip(label)
+            self.metrics_summary_table.setItem(row_index, 0, label_item)
+            for column_index, alias in enumerate(aliases, start=1):
+                value = pivot[label].get(alias, "空白")
+                item = QTableWidgetItem(value)
+                item.setToolTip(value)
+                self.metrics_summary_table.setItem(row_index, column_index, item)
+
+        self.metrics_summary_table.resizeColumnsToContents()
+        header = self.metrics_summary_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        for column_index in range(1, self.metrics_summary_table.columnCount()):
+            header.setSectionResizeMode(column_index, QHeaderView.Stretch)
+        self.metrics_summary_table.setMinimumHeight(min(260, 42 + len(row_labels) * 31))
+        self.metrics_summary_label.setText("主要指標對照：")
+        self.metrics_summary_label.show()
+        self.metrics_summary_table.show()
+
+    def _short_run_id(self, run_id: str) -> str:
+        if len(run_id) <= 18:
+            return run_id
+        return f"{run_id[:12]}…{run_id[-4:]}"
+
+    def _prepare_run_aliases(self, runs: list[ResearchRunMetadataDTO]) -> None:
+        labels = ["A", "B", "C", "D", "E"]
+        self._run_aliases = {
+            run.run_id: labels[index] for index, run in enumerate(runs[: len(labels)])
+        }
+        self._run_display_names = {
+            run.run_id: f"{run.run_name}｜{self._run_type_label(run.run_type)}｜{run.strategy_id}"
+            for run in runs
+        }
+
+    def _alias_for_run(self, run_id: str) -> str:
+        return self._run_aliases.get(run_id, self._short_run_id(run_id))
+
+    def _selected_runs_summary(self, runs: list[ResearchRunMetadataDTO]) -> str:
+        if not runs:
+            return "尚未選取比較 run。"
+        lines = ["比較代號："]
+        for run in runs:
+            alias = self._alias_for_run(run.run_id)
+            lines.append(
+                f"{alias}：{run.run_name}｜{self._run_type_label(run.run_type)}｜{run.strategy_id}｜{run.created_at[:16]}"
+            )
+        return "\n".join(lines)
+
+    def _label_for_key(self, key: str) -> str:
+        labels = {
+            "allocation_method": "配置方式",
+            "annual_return": "年化報酬",
+            "avg_holding_days": "平均持有天數",
+            "buy_confirm_days": "買進確認天數",
+            "buy_quantile_bp": "買進百分位門檻",
+            "buy_score": "買進分數",
+            "capital_used": "已用資金",
+            "cooldown_days": "冷卻天數",
+            "credibility_status": "可信度狀態",
+            "credibility_warning_count": "可信度警告數",
+            "end_date": "結束日期",
+            "ending_cash": "期末現金",
+            "expectancy": "期望值",
+            "holding_days": "持有天數",
+            "initial_capital": "初始資金",
+            "max_drawdown": "最大回撤",
+            "profit_factor": "獲利因子",
+            "sharpe_ratio": "Sharpe 比率",
+            "taiex.excess_return_bp": "相對大盤超額報酬 bp",
+            "total_return": "總報酬",
+            "total_trades": "交易次數",
+            "trend.trades": "趨勢交易數",
+            "win_rate": "勝率",
+        }
+        return labels.get(key, key.replace("_", " "))
+
+    def _format_summary_value(self, value: Any) -> str:
+        if value is None:
+            return "空白"
+        text = str(value).strip()
+        if not text:
+            return "空白"
+        try:
+            number = float(text)
+        except ValueError:
+            number = None
+        if number is not None:
+            return f"{number:.4f}".rstrip("0").rstrip(".")
+        if text == "equal_weight":
+            return "等權重"
+        if text == "limited":
+            return "樣本有限"
+        if len(text) > 32:
+            return f"{text[:18]}…{text[-8:]}"
+        return text

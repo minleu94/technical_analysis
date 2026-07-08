@@ -591,6 +591,11 @@ class BacktestView(QWidget):
         title.setFont(title_font)
         title_layout.addWidget(title)
         title_layout.addStretch()
+        self.config_panel_expand_btn = QPushButton("展開左側設定")
+        self.config_panel_expand_btn.setToolTip("展開策略回測左側設定面板。")
+        self.config_panel_expand_btn.clicked.connect(lambda _checked=False: self._set_config_panel_collapsed(False))
+        self.config_panel_expand_btn.hide()
+        title_layout.addWidget(self.config_panel_expand_btn)
         info_btn = InfoButton("backtest", self)
         title_layout.addWidget(info_btn)
         main_layout.addLayout(title_layout)
@@ -605,8 +610,18 @@ class BacktestView(QWidget):
         config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         config_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
+        config_container = QWidget()
+        config_container_layout = QVBoxLayout(config_container)
+        config_container_layout.setContentsMargins(0, 0, 0, 0)
+        config_container_layout.setSpacing(8)
+        self.config_panel_collapse_btn = QPushButton("收合左側設定")
+        self.config_panel_collapse_btn.setToolTip("收合此設定面板，讓右側結果與 Registry 比較取得更多空間。")
+        self.config_panel_collapse_btn.clicked.connect(lambda _checked=False: self._set_config_panel_collapsed(True))
+        config_container_layout.addWidget(self.config_panel_collapse_btn)
         self.config_panel = BacktestConfigPanel(self)
-        config_scroll.setWidget(self.config_panel)
+        config_container_layout.addWidget(self.config_panel)
+        config_scroll.setWidget(config_container)
+        self.config_scroll = config_scroll
         splitter.addWidget(config_scroll)
 
         # 右側：結果面板
@@ -614,7 +629,9 @@ class BacktestView(QWidget):
         splitter.addWidget(self.result_panel)
 
         # 設置 Splitter 比例：左側預設吃下完整設定表單，額外空間優先給結果區。
-        splitter.setCollapsible(0, False)
+        self.backtest_splitter = splitter
+        self._config_panel_collapsed = False
+        splitter.setCollapsible(0, True)
         splitter.setCollapsible(1, False)
         splitter.setSizes([560, 780])
         splitter.setStretchFactor(0, 0)
@@ -624,6 +641,18 @@ class BacktestView(QWidget):
 
         # 初始根據選中的實驗模式更新 UI 狀態
         self._update_ui_state_by_mode(self.research_lab_mode_combo.currentData() or "single_stock")
+
+    def _toggle_config_panel_collapsed(self) -> None:
+        self._set_config_panel_collapsed(not self._config_panel_collapsed)
+
+    def _set_config_panel_collapsed(self, collapsed: bool) -> None:
+        self._config_panel_collapsed = bool(collapsed)
+        self.config_scroll.setVisible(not self._config_panel_collapsed)
+        self.config_panel_expand_btn.setVisible(self._config_panel_collapsed)
+        if self._config_panel_collapsed:
+            self.backtest_splitter.setSizes([0, max(self.backtest_splitter.width(), 1)])
+        else:
+            self.backtest_splitter.setSizes([560, max(self.backtest_splitter.width() - 560, 780)])
 
     def _mark_research_execution_started(self) -> None:
         """標記新一輪研究執行已開始，用於阻擋舊結果保存。"""

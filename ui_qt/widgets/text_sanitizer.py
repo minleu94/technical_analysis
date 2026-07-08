@@ -39,6 +39,8 @@ def remove_symbol_icons(text: str) -> str:
 
 def sanitize_button_texts(root: QWidget) -> None:
     for button in root.findChildren(QPushButton):
+        if button.__class__.__name__ == "InfoButton":
+            continue
         cleaned = strip_leading_symbol_icon(button.text())
         if cleaned != button.text():
             button.setText(cleaned)

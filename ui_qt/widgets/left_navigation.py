@@ -172,6 +172,9 @@ class LeftNavigationWidget(QWidget):
             button.style().polish(button)
 
     def _select_from_click(self, key: str) -> None:
+        if key == self._current_key:
+            self.set_collapsed(not self._collapsed)
+            return
         self.set_current_key(key)
         self.workspaceSelected.emit(key)
 

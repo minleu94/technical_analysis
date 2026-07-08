@@ -14,6 +14,7 @@ from typing import Optional, Dict, Any
 
 from app_module.regime_service import RegimeService
 from app_module.dtos import RegimeResultDTO
+from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.info_button import InfoButton
 
 
@@ -21,28 +22,28 @@ from ui_qt.widgets.info_button import InfoButton
 # 顏色常數定義（集中管理）- 深色主題優化
 # ============================================================================
 # 背景色（深色主題）
-COLOR_BG_DARK = "#1e1e1e"        # 深色背景（主畫面）
-COLOR_BG_DARKER = "#121212"      # 更深背景（可選）
+COLOR_BG_DARK = MIDNIGHT_ANALYST.surface_1
+COLOR_BG_DARKER = MIDNIGHT_ANALYST.app_bg
 
 # 市場狀態分類色（Tag Color）- 僅用於狀態名稱文字
 COLOR_TAG_TREND = "#2e7d32"      # 深綠（趨勢追蹤）
 COLOR_TAG_REVERSION = "#f57c00"  # 橙（均值回歸）
 COLOR_TAG_BREAKOUT = "#1976d2"   # 藍（突破準備）
-COLOR_TAG_DEFAULT = "#888888"    # 淺灰（無法判斷，深色主題下需更亮）
+COLOR_TAG_DEFAULT = MIDNIGHT_ANALYST.text_muted
 
 # 信心度顏色（深色主題下使用接近白色，確保可讀性）
-COLOR_CONF_HIGH = "#ffffff"      # 白色（高信心度，加粗顯示）
-COLOR_CONF_MEDIUM = "#e0e0e0"    # 接近白色（中信心度）
-COLOR_CONF_LOW = "#cccccc"        # 淺灰（低信心度）
+COLOR_CONF_HIGH = MIDNIGHT_ANALYST.text_primary
+COLOR_CONF_MEDIUM = MIDNIGHT_ANALYST.text_secondary
+COLOR_CONF_LOW = MIDNIGHT_ANALYST.text_muted
 
 # 文字顏色（深色主題）
-COLOR_TEXT_PRIMARY = "#ffffff"   # 主要文字（白色）
-COLOR_TEXT_SECONDARY = "#cccccc" # 次要文字（淺灰）
-COLOR_TEXT_TERTIARY = "#999999"  # 第三級文字（中灰）
-COLOR_TEXT_TITLE = "#bbbbbb"     # 標題文字（淺灰）
+COLOR_TEXT_PRIMARY = MIDNIGHT_ANALYST.text_primary
+COLOR_TEXT_SECONDARY = MIDNIGHT_ANALYST.text_secondary
+COLOR_TEXT_TERTIARY = MIDNIGHT_ANALYST.text_muted
+COLOR_TEXT_TITLE = MIDNIGHT_ANALYST.text_secondary
 
 # 分隔線顏色（深色主題）
-COLOR_BORDER = "#444444"         # 分隔線（深灰）
+COLOR_BORDER = MIDNIGHT_ANALYST.border
 
 
 class MarketRegimeView(QWidget):
@@ -101,15 +102,18 @@ class MarketRegimeView(QWidget):
             QGroupBox {{
                 background-color: {COLOR_BG_DARK};
                 border: 1px solid {COLOR_BORDER};
-                border-radius: 5px;
-                margin-top: 8px;
-                padding-top: 10px;
+                border-radius: {MIDNIGHT_ANALYST.radius_panel}px;
+                margin-top: 12px;
+                padding: 14px 10px 10px 10px;
             }}
             QGroupBox::title {{
+                background-color: {COLOR_BG_DARK};
                 color: {COLOR_TEXT_TITLE};
                 subcontrol-origin: margin;
                 left: 15px;
-                padding: 0 8px;
+                padding: 2px 8px;
+                border: 1px solid {MIDNIGHT_ANALYST.border_subtle};
+                border-radius: {MIDNIGHT_ANALYST.radius_badge}px;
             }}
         """)
         status_layout = QVBoxLayout()
@@ -214,15 +218,18 @@ class MarketRegimeView(QWidget):
             QGroupBox {{
                 background-color: {COLOR_BG_DARK};
                 border: 1px solid {COLOR_BORDER};
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 20px;
+                border-radius: {MIDNIGHT_ANALYST.radius_panel}px;
+                margin-top: 12px;
+                padding: 16px 10px 10px 10px;
             }}
             QGroupBox::title {{
+                background-color: {COLOR_BG_DARK};
                 color: {COLOR_TEXT_TITLE};
                 subcontrol-origin: margin;
                 left: 15px;
-                padding: 0 8px;
+                padding: 2px 8px;
+                border: 1px solid {MIDNIGHT_ANALYST.border_subtle};
+                border-radius: {MIDNIGHT_ANALYST.radius_badge}px;
             }}
             QGroupBox::indicator {{
                 width: 16px;
@@ -269,15 +276,18 @@ class MarketRegimeView(QWidget):
             QGroupBox {{
                 background-color: {COLOR_BG_DARK};
                 border: 1px solid {COLOR_BORDER};
-                border-radius: 5px;
-                margin-top: 8px;
-                padding-top: 10px;
+                border-radius: {MIDNIGHT_ANALYST.radius_panel}px;
+                margin-top: 12px;
+                padding: 14px 10px 10px 10px;
             }}
             QGroupBox::title {{
+                background-color: {COLOR_BG_DARK};
                 color: {COLOR_TEXT_TITLE};
                 subcontrol-origin: margin;
                 left: 15px;
-                padding: 0 8px;
+                padding: 2px 8px;
+                border: 1px solid {MIDNIGHT_ANALYST.border_subtle};
+                border-radius: {MIDNIGHT_ANALYST.radius_badge}px;
             }}
         """)
         strategy_layout = QVBoxLayout()
@@ -562,15 +572,18 @@ class MarketRegimeView(QWidget):
             QGroupBox {{
                 background-color: {COLOR_BG_DARK};
                 border: 1px solid {COLOR_BORDER};
-                border-radius: 3px;
-                margin-top: 6px;
-                padding-top: 8px;
+                border-radius: {MIDNIGHT_ANALYST.radius_panel}px;
+                margin-top: 10px;
+                padding: 12px 8px 8px 8px;
             }}
             QGroupBox::title {{
+                background-color: {COLOR_BG_DARK};
                 color: {COLOR_TEXT_TITLE};
                 subcontrol-origin: margin;
                 left: 8px;
-                padding: 0 5px;
+                padding: 2px 7px;
+                border: 1px solid {MIDNIGHT_ANALYST.border_subtle};
+                border-radius: {MIDNIGHT_ANALYST.radius_badge}px;
             }}
         """
 

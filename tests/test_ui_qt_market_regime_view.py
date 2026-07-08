@@ -6,6 +6,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QLabel
 
 from app_module.dtos import RegimeResultDTO
+from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.views.market_regime_view import MarketRegimeView
 
 
@@ -146,3 +147,15 @@ def test_breakout_technical_details_show_base_indicators():
     assert "+DI: 24.50" in combined
     assert "-DI: 18.20" in combined
     assert "突破分數: 0.700" in combined
+
+
+def test_market_regime_uses_midnight_surface_tokens():
+    app()
+    view = MarketRegimeView(FakeRegimeService())
+
+    view._detect_regime()
+
+    assert MIDNIGHT_ANALYST.surface_1 in view.layer1_status.parentWidget().styleSheet()
+    assert MIDNIGHT_ANALYST.surface_1 in view.layer3_group.styleSheet()
+    assert MIDNIGHT_ANALYST.border_subtle in view.layer3_group.styleSheet()
+    assert "#1e1e1e" not in view.layer3_group.styleSheet()

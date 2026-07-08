@@ -80,3 +80,28 @@ def test_left_navigation_collapses_to_icon_only_without_breaking_selection():
     assert selected == ["market_explore"]
     assert nav.current_key() == "market_explore"
     assert nav.button_for_key("market_explore").property("active") is True
+
+
+def test_left_navigation_clicking_active_workspace_toggles_collapse():
+    app()
+    nav = LeftNavigationWidget(
+        (
+            NavigationItem("workbench", "決策工作台", icon="command"),
+            NavigationItem("market_explore", "市場探索", icon="radar"),
+        )
+    )
+    selected: list[str] = []
+    nav.workspaceSelected.connect(selected.append)
+
+    nav.set_current_key("workbench")
+    nav.button_for_key("workbench").click()
+
+    assert selected == []
+    assert nav.is_collapsed() is True
+    assert nav.button_for_key("workbench").text() == ""
+
+    nav.button_for_key("workbench").click()
+
+    assert selected == []
+    assert nav.is_collapsed() is False
+    assert nav.button_for_key("workbench").text() == "決策工作台"
