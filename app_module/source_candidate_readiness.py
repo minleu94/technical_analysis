@@ -171,11 +171,18 @@ class SourceCandidateReadinessService:
     def from_sqlite(cls, db_path: Path | str, *, decision_date: str) -> "SourceCandidateReadinessService":
         path = Path(db_path)
         if not path.exists():
-            missing = {source_id: ("source_not_ingested", "missing_db") for source_id in SOURCE_CANDIDATES}
-            return cls(rows=(), decision_date=decision_date, source_mode="read_only_sqlite", missing_sources=missing)
+            missing_db_sources: dict[str, tuple[str, ...]] = {
+                source_id: ("source_not_ingested", "missing_db") for source_id in SOURCE_CANDIDATES
+            }
+            return cls(
+                rows=(),
+                decision_date=decision_date,
+                source_mode="read_only_sqlite",
+                missing_sources=missing_db_sources,
+            )
 
         rows: list[SourceCandidateRow] = []
-        missing: dict[str, tuple[str, ...]] = {}
+        missing_table_sources: dict[str, tuple[str, ...]] = {}
         uri = f"file:{path.as_posix()}?mode=ro"
         with sqlite3.connect(uri, uri=True) as conn:
             conn.row_factory = sqlite3.Row
@@ -186,14 +193,21 @@ class SourceCandidateReadinessService:
             }
             for source_id in SOURCE_CANDIDATES:
                 if source_id not in table_names:
-                    missing[source_id] = ("source_not_ingested", "missing_table")
+                    missing_table_sources[source_id] = ("source_not_ingested", "missing_table")
                     continue
                 rows.extend(_load_source_rows(conn, source_id, decision_date))
-        return cls(rows=rows, decision_date=decision_date, source_mode="read_only_sqlite", missing_sources=missing)
+        return cls(
+            rows=rows,
+            decision_date=decision_date,
+            source_mode="read_only_sqlite",
+            missing_sources=missing_table_sources,
+        )
 
     def build_report(self) -> SourceCandidateReadinessReport:
         items = tuple(self._build_item(source_id) for source_id in SOURCE_CANDIDATES)
-        diagnostics = tuple(sorted({diagnostic for item in items for diagnostic in item.diagnostics if diagnostic in {"missing_db"}}))
+        report_diagnostics = tuple(
+            sorted({diagnostic for item in items for diagnostic in item.diagnostics if diagnostic in {"missing_db"}})
+        )
         return SourceCandidateReadinessReport(
             generated_at=datetime.now(timezone.utc).isoformat(),
             decision_date=self.decision_date,
@@ -201,7 +215,7 @@ class SourceCandidateReadinessService:
             items=items,
             access_boundary=dict(ACCESS_BOUNDARY),
             limitations=REPORT_LIMITATIONS,
-            diagnostics=diagnostics,
+            diagnostics=report_diagnostics,
         )
 
     def _build_item(self, source_id: str) -> SourceCandidateReadinessItem:
@@ -223,7 +237,7 @@ class SourceCandidateReadinessService:
 
         accepted = 0
         blocked = 0
-        diagnostics: list[str] = list(missing_diagnostics)
+        item_diagnostics: list[str] = list(missing_diagnostics)
         accepted_payload_fields: list[str] = []
 
         for row in rows:
@@ -233,7 +247,7 @@ class SourceCandidateReadinessService:
             else:
                 accepted += 1
                 accepted_payload_fields.extend(str(key) for key, value in row.payload.items() if value is not None)
-            diagnostics.extend(row_diagnostics)
+            item_diagnostics.extend(row_diagnostics)
 
         decision_ready = accepted > 0
         status = "decision_ready_candidate" if decision_ready and blocked == 0 else "degraded"
@@ -245,7 +259,7 @@ class SourceCandidateReadinessService:
             row_count=len(rows),
             accepted_row_count=accepted,
             blocked_row_count=blocked,
-            diagnostics=_unique(diagnostics),
+            diagnostics=_unique(item_diagnostics),
             coverage=_coverage(source_id, accepted_payload_fields),
         )
 
