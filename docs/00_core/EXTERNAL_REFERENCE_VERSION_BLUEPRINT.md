@@ -45,6 +45,8 @@
 
 baldr 目前最值得補強的不是更早導入 GPU、強化學習、券商自動下單或 SQLite 分檔，而是：
 
+2026-07-08 closeout note：今晚目標已轉為 `V3.0 engineering candidate closeout/readiness report`。Score bucket audit、fixed threshold robustness、component ablation readiness、ML shadow-only contract 與 Phase 3C source candidate readiness dry-run 都只作工程候選輸入；本文件仍只保留外部參考與資料源邊界，不把候選來源升級為正式 ingestion、`ScoringEngine` 接線、scheduler approval、V4 readiness 或投資有效性結論。
+
 1. **資料可信度**：corporate action、adjusted price policy、microstructure metadata、source coverage、資料可得日與 missing policy。
 2. **橫截面 factor pipeline**：把市場、產業、題材、流動性、籌碼、基本面 diagnostics 寫成可追溯 snapshot。
 3. **Negative evidence**：Why Not、Liquidity exclusion、資料降級、樣本不足、策略不適用要與推薦 evidence 同等重要。
@@ -282,6 +284,7 @@ Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並�
 
 ## 11. 更新記錄
 
+- 2026-07-08：補上今晚目標已轉為 `V3.0 engineering candidate closeout/readiness report`；score/source readiness 只作工程候選與人工驗證輸入，不代表正式資料 ingestion、ScoringEngine 接線、scheduler approval、V4 readiness 或投資有效性。
 - 2026-07-08：補上 supervised ML 採用邊界；sklearn / XGBoost / LightGBM 只可作 V3.3 shadow-only 候選，必須等 V3 score effectiveness audit 可判讀後才進實驗，不取代 rule engine、不直接改推薦。
 - 2026-07-08：補上 Phase 3C source candidate readiness 現況；三大法人、信用交易與 TDCC 只完成 candidate-only dry-run，不代表正式資料 ingestion、ScoringEngine 接線或 scheduler approval。
 - 2026-07-06：補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的 scoped authority 對照，明確本文件不直接承諾 V2.1-V4.0 外部資料源導入或投資有效性。
