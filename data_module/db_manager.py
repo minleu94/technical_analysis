@@ -8,38 +8,38 @@ from .config import TWStockConfig
 
 class DBManager:
     """台股 SQLite 資料庫管理模組，負責連線、建表、動態 schema 升級與 Transaction 管理"""
-    
+
     def __init__(self, config: TWStockConfig):
         self.config = config
         self._setup_logging()
         self.db_path = self.config.db_file
-        
+
         # 確保資料庫目錄存在（config 應該已建立，但這裡做防禦性確保）
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # 初始化資料庫 Table Schema
         self.init_database()
-        
+
     def _setup_logging(self):
         """設置日誌"""
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         self.logger.propagate = False
-        
+
         if not self.logger.handlers:
             file_handler = logging.FileHandler(
                 self.config.log_dir / "db_manager.log",
                 encoding='utf-8'
             )
             file_handler.setLevel(logging.INFO)
-            
+
             console_handler = logging.StreamHandler()
             console_handler.setLevel(logging.WARNING)
-            
+
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             file_handler.setFormatter(formatter)
             console_handler.setFormatter(formatter)
-            
+
             self.logger.addHandler(file_handler)
             self.logger.addHandler(console_handler)
 
@@ -53,7 +53,7 @@ class DBManager:
             conn.execute("PRAGMA synchronous=NORMAL;")
         except sqlite3.Error as e:
             self.logger.warning(f"設定 PRAGMA 失敗: {str(e)}")
-            
+
         conn.row_factory = sqlite3.Row
         try:
             yield conn
@@ -93,7 +93,7 @@ class DBManager:
                 );
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_daily_prices_date ON daily_prices (日期);")
-            
+
             # 2. 技術指標表 (technical_indicators) - 預設欄位寬表，並會動態升級
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS technical_indicators (
@@ -103,7 +103,7 @@ class DBManager:
                 );
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tech_indicators_date ON technical_indicators (日期);")
-            
+
             # 3. 大盤指數表 (market_indices)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS market_indices (
@@ -117,7 +117,7 @@ class DBManager:
                 );
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_market_indices_date ON market_indices (日期);")
-            
+
             # 4. 產業指數表 (industry_indices)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS industry_indices (
@@ -155,8 +155,71 @@ class DBManager:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broker_flows_date ON broker_flows (日期);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broker_flows_stock ON broker_flows (證券代號);")
-            
+
         self.logger.info("SQLite 資料庫初始化成功！")
+
+    def ensure_phase3c_candidate_tables(self) -> None:
+        """建立 Phase 3C 候選資料的表 (三大法人、信用交易、集保庫存)"""
+        with sqlite3.connect(self.db_path) as conn:
+            # 6. 三大法人 (institutional_flows)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS institutional_flows (
+                    stock_code TEXT,
+                    decision_date TEXT,
+                    available_date TEXT,
+                    source_version TEXT,
+                    quality TEXT,
+                    foreign_investor_buy INTEGER,
+                    foreign_investor_sell INTEGER,
+                    foreign_investor_net INTEGER,
+                    investment_trust_buy INTEGER,
+                    investment_trust_sell INTEGER,
+                    investment_trust_net INTEGER,
+                    dealer_buy INTEGER,
+                    dealer_sell INTEGER,
+                    dealer_net INTEGER,
+                    PRIMARY KEY (stock_code, decision_date)
+                );
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_institutional_flows_date ON institutional_flows (decision_date);")
+
+            # 7. 信用交易 (credit_transactions)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS credit_transactions (
+                    stock_code TEXT,
+                    decision_date TEXT,
+                    available_date TEXT,
+                    source_version TEXT,
+                    quality TEXT,
+                    margin_purchase INTEGER,
+                    margin_balance INTEGER,
+                    short_sale INTEGER,
+                    short_balance INTEGER,
+                    financing INTEGER,
+                    securities_lending INTEGER,
+                    PRIMARY KEY (stock_code, decision_date)
+                );
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_credit_transactions_date ON credit_transactions (decision_date);")
+
+            # 8. 集保庫存 (tdcc_shareholding)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tdcc_shareholding (
+                    stock_code TEXT,
+                    decision_date TEXT,
+                    available_date TEXT,
+                    source_version TEXT,
+                    quality TEXT,
+                    shareholding_tiers TEXT,
+                    large_holder_ratio_bp INTEGER,
+                    retail_holder_ratio_bp INTEGER,
+                    dispersion_index_bp INTEGER,
+                    PRIMARY KEY (stock_code, decision_date)
+                );
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tdcc_shareholding_date ON tdcc_shareholding (decision_date);")
+
+        self.logger.info("Phase 3C 候選表初始化成功！")
 
     def ensure_broker_flows_trade_type_primary_key(self) -> bool:
         """Ensure broker_flows can store both buy and sell ranking rows for one branch/date/stock."""
@@ -253,12 +316,12 @@ class DBManager:
         """動態確保資料表結構 (寬表) 與 DataFrame 欄位對齊。若有缺失欄位，自動執行 ALTER TABLE 新增"""
         existing_cols = set(self.get_table_columns(table_name))
         cols_to_add = [col for col in df_columns if col not in existing_cols]
-        
+
         if not cols_to_add:
             return
-            
+
         self.logger.info(f"發現資料表 {table_name} 缺少欄位 {cols_to_add}，開始動態升級 Schema...")
-        
+
         # 進行動態欄位升級
         # SQLite 僅支援一次 ALTER TABLE 增加一欄，需循環處理
         with self.connect() as conn:
@@ -276,7 +339,7 @@ class DBManager:
                     'lots_observed', 'amount_observed', 'lots_rank', 'amount_rank',
                 ]:
                     col_type = "INTEGER"
-                
+
                 query = f'ALTER TABLE {table_name} ADD COLUMN "{col}" {col_type};'
                 try:
                     conn.execute(query)
@@ -290,11 +353,11 @@ class DBManager:
         if df is None or df.empty:
             self.logger.warning(f"欲寫入 {table_name} 的 DataFrame 為空，略過寫入")
             return False
-            
+
         try:
             # 確保並升級欄位
             self.ensure_columns(table_name, list(df.columns))
-            
+
             # 使用 pd.DataFrame.to_sql 寫入
             # 注意：為確保 Transaction 完整性與 WAL 模式順暢，我們透過 connect 上下文獲取 conn
             with self.connect() as conn:

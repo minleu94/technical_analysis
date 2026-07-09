@@ -1,4 +1,4 @@
-﻿# baldr 完整操作手冊
+# baldr 完整操作手冊
 
 > **最後更新**：2026-07-07
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
@@ -1347,9 +1347,30 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 
 這會在隔離子程序啟動真實 PySide6 MainWindow、逐一切換左側主導覽的 8 個主工作區、保存 startup / resize screenshots、記錄 requested / actual viewport size，並測試 UpdateView 強制重新合併 dialog 的取消路徑。`--ui-smoke-dialog-cancel` 只會按取消，不會按確認；若 destructive action 被呼叫，healthcheck 會失敗。窄 viewport 可能被主視窗最小寬度限制，report 會以 `constrained_by_minimum` 呈現，仍需人工開圖判讀視覺可讀性。
 
+## Phase 3C governed ingestion candidate CLI
+
+Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **manual-only candidate ingestion**，它不屬於 V3.0 engineering closeout gate，不掛載於「一鍵安全更新」，也不由正式排程執行。
+
+執行腳本 `scripts/update_phase3c_candidates.py` 預設為 `--dry-run` 模式，不會建立 DB、不會建立 table，只會在主控台印出 diagnostics。
+
+```powershell
+# Dry-run，不寫入 DB
+.\.venv\Scripts\python.exe scripts\update_phase3c_candidates.py --start-date 2026-07-06 --end-date 2026-07-08
+
+# 實際寫入指定的 DB (需使用 --confirm)
+.\.venv\Scripts\python.exe scripts\update_phase3c_candidates.py --start-date 2026-07-06 --end-date 2026-07-08 --confirm apply-phase3c-candidate-ingestion --db-path output\working_copy.db
+```
+
+輸出會明確包含以下邊界：
+- `access_boundary: writes_allowed=false` (若是 dry-run)
+- `access_boundary: production_scheduler_allowed=false`
+- `access_boundary: scoring_engine_write_allowed=false`
+- `access_boundary: investment_effectiveness_claim=false`
+- `access_boundary: v3_closeout_gate_credit=false`
+
 ## 14. 更新記錄
 
-- 2026-07-08：新增 Phase 3C 三大法人 / 信用交易 / TDCC source candidate readiness CLI 操作說明；`inspect_source_candidate_readiness.py` 僅做 candidate-only dry-run，輸出 readiness / coverage / diagnostics 與 explicit access boundary，缺 DB / table / available_date 或 future available_date 時 fail-closed / degraded，不寫 DB、不改 ScoringEngine、不改推薦 threshold、不宣稱投資有效性。
+- 2026-07-08：Phase 3C governed ingestion candidate 已建立 manual-only dry-run/apply 邊界；不屬於今晚 V3.0 closeout gate。
 - 2026-07-07：左側主導覽從兩字母縮寫升級為自製線條 SVG icon，並保留 icon-only 收合模式；Runtime Observatory 改為緊湊 scope note，避免大片空白；Workbench 總覽新增四個指揮台摘要 block，Evidence / 持倉追蹤 / 操作節奏標示為摘要與下鑽入口 / 預留深挖區；市場探索弱勢個股與弱勢產業的 `跌幅%` 以正數顯示並用紅色代表下跌語意。以上只改 UI presentation，不啟用 scheduler、不寫 DB、不補 Phase gate。
 - 2026-07-07：主 UI 改為左側主導覽，預設進入「決策工作台」；「每日決策」整併為「決策工作台 > 決策來源」，「市場觀察」改名為「市場探索」。Workbench 新增今日待判讀空狀態與 session-only 已查看提示；Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 仍需正式資料累積，不能用 replay 或 UI 狀態補齊。
 - 2026-07-06：更新 V2.0 Phase 1 / Phase 1.5 read-only Workbench prototype CLI 操作說明，標示 sample、受控 `--db-path` / `--decision-date`、Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary、replay JSON summary、degraded source diagnostics 與不寫 DB / 不啟用 scheduler / 不產生交易建議限制。
