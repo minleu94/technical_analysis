@@ -13,7 +13,7 @@ from data_module.data_source_capability_registry import (
 def test_registry_contains_v1_5_p0_sources():
     registry = build_default_data_source_capability_registry()
 
-    assert registry.require("corporate_action.ex_dividend_timeline").status == "planned"
+    assert registry.require("corporate_action.ex_dividend_timeline").status == "partial"
     assert registry.require("microstructure.disposition_stock").available_date_policy
     assert registry.require("recommendation.exclusion.why_not_payload").status == "partial"
     assert registry.require("decision_desk.snapshot.watchlist_trigger").status == "ready"
@@ -30,7 +30,7 @@ def test_registry_serializes_fields_and_warnings():
     )
     assert ex_dividend["fields"][0]["field_name"] == "event_date"
     assert "source_not_ingested" in ex_dividend["warnings"]
-    assert payload["status_counts"]["planned"] >= 1
+    assert payload["status_counts"]["partial"] >= 1
     assert payload["production_data_writes"] is False
 
 
