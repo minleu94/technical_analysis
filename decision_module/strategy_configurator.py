@@ -195,6 +195,57 @@ class StrategyConfigurator:
             f"篩選條件={filters}"
         )
         
+        diagnostic_frame = df.copy()
+        if "price_change_min" in filters or "price_change_max" in filters:
+            if "漲幅%" in diagnostic_frame.columns:
+                before = len(diagnostic_frame)
+                price_filters = {
+                    key: value
+                    for key, value in filters.items()
+                    if key in {"price_change_min", "price_change_max"}
+                }
+                diagnostic_frame = filter_completed_frame(diagnostic_frame, price_filters)
+                after = len(diagnostic_frame)
+                logger.debug(
+                    f"[screen_stocks] 漲幅篩選: {before} -> {after} "
+                    f"(條件: {filters.get('price_change_min', 'N/A')} ~ {filters.get('price_change_max', 'N/A')})"
+                )
+                if before > 0 and after == 0:
+                    sample_value = df.iloc[0]["漲幅%"]
+                    StrategyConfigurator._price_filter_log_count = getattr(
+                        StrategyConfigurator, "_price_filter_log_count", 0
+                    ) + 1
+                    if StrategyConfigurator._price_filter_log_count <= 3:
+                        logger.warning(
+                            f"[漲幅篩選] 要求 >= {filters['price_change_min']}%, "
+                            f"但樣本值={sample_value:.2f}%"
+                        )
+            else:
+                logger.debug("漲幅%欄位不存在，跳過漲幅篩選")
+        if "volume_ratio_min" in filters:
+            if "成交量變化率%" in diagnostic_frame.columns:
+                before = len(diagnostic_frame)
+                diagnostic_frame = filter_completed_frame(
+                    diagnostic_frame, {"volume_ratio_min": filters["volume_ratio_min"]}
+                )
+                after = len(diagnostic_frame)
+                logger.debug(
+                    f"[screen_stocks] 成交量篩選: {before} -> {after} "
+                    f"(條件: >= {filters['volume_ratio_min']:.2f}%)"
+                )
+                if before > 0 and after == 0:
+                    sample_value = df.iloc[0]["成交量變化率%"]
+                    StrategyConfigurator._volume_filter_log_count = getattr(
+                        StrategyConfigurator, "_volume_filter_log_count", 0
+                    ) + 1
+                    if StrategyConfigurator._volume_filter_log_count <= 3:
+                        logger.warning(
+                            f"[成交量篩選] 要求 >= {filters['volume_ratio_min']:.2f}%, "
+                            f"但樣本值={sample_value:.2f}%"
+                        )
+            else:
+                logger.debug("成交量變化率%欄位不存在，跳過成交量篩選")
+
         df_result = filter_completed_frame(df, filters)
         
         # ✅ 記錄最終結果
