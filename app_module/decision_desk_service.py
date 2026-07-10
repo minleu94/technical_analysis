@@ -392,14 +392,6 @@ class DecisionDeskSnapshotBuilder:
         ],
     ) -> DecisionDeskQuality:
         return compute_overall_quality(sections)
-        qualities = [section.quality for section in sections]
-        if DecisionDeskQuality.DEGRADED in qualities:
-            return DecisionDeskQuality.DEGRADED
-        if DecisionDeskQuality.MISSING in qualities:
-            return DecisionDeskQuality.MISSING
-        if DecisionDeskQuality.ESTIMATED in qualities:
-            return DecisionDeskQuality.ESTIMATED
-        return DecisionDeskQuality.OBSERVED
 
     @staticmethod
     def _collect_snapshot_warnings(
@@ -414,21 +406,6 @@ class DecisionDeskSnapshotBuilder:
         ],
     ) -> tuple[str, ...]:
         return collect_snapshot_warnings(sections)
-        warnings: list[str] = []
-        market_regime, market_breadth, sector_rotation, relative_strength_liquidity, watchlist_triggers, portfolio_alerts, risk_prompts = sections
-        section_warnings = (
-            ("market_regime", market_regime.warnings),
-            ("market_breadth", market_breadth.warnings),
-            ("sector_rotation", sector_rotation.warnings),
-            ("relative_strength_liquidity", relative_strength_liquidity.warnings),
-            ("watchlist_triggers", watchlist_triggers.warnings),
-            ("portfolio_alerts", portfolio_alerts.warnings),
-            ("risk_prompts", risk_prompts.warnings),
-        )
-        for section_name, section_warning in section_warnings:
-            for warning in section_warning:
-                warnings.append(f"{section_name}:{warning}")
-        return tuple(warnings)
 
     @staticmethod
     def _collect_smart_money_candidate_codes(
@@ -437,17 +414,3 @@ class DecisionDeskSnapshotBuilder:
         portfolio_alerts: PortfolioAlertSummary,
     ) -> tuple[str, ...]:
         return collect_smart_money_candidate_codes(relative_strength_liquidity, watchlist_triggers, portfolio_alerts)
-        codes: list[str] = []
-        seen: set[str] = set()
-        for raw_code in (
-            tuple(relative_strength_liquidity.top_strength_codes)
-            + tuple(relative_strength_liquidity.weak_strength_codes)
-            + tuple(relative_strength_liquidity.low_liquidity_codes)
-            + tuple(watchlist_triggers.triggered_codes)
-            + tuple(portfolio_alerts.alert_codes)
-        ):
-            code = str(raw_code).strip()
-            if code and code not in seen:
-                seen.add(code)
-                codes.append(code)
-        return tuple(codes[:20])
