@@ -27,6 +27,10 @@ from app_module.dtos import RecommendationDTO
 from app_module.strategy_spec import StrategySpec
 from app_module.preset_service import PresetService
 from app_module.strategy_version_service import StrategyVersionService
+from decision_module.derived_market_features import (
+    enrich_latest_market_features,
+    latest_feature_decimal,
+)
 from financial_module.units import to_decimal
 
 
@@ -149,34 +153,6 @@ class RecommendationService:
         if key == "min_volume_ratio" or Decimal("-50") <= value <= Decimal("10"):
             return (value - Decimal("1")) * Decimal("100")
         return value
-
-    @staticmethod
-    def _observed_volume_change_percent(stock_df: pd.DataFrame) -> Decimal | None:
-        if "成交股數" not in stock_df.columns or len(stock_df) < 2:
-            return None
-
-        volumes = pd.to_numeric(stock_df["成交股數"], errors="coerce")
-        latest_volume_raw = volumes.iloc[-1]
-        if pd.isna(latest_volume_raw):
-            return None
-
-        history = volumes.iloc[-21:-1] if len(volumes) >= 21 else volumes.iloc[:-1]
-        history_values: list[Decimal] = []
-        for value in history:
-            if pd.isna(value):
-                continue
-            try:
-                history_values.append(to_decimal(value))
-            except (InvalidOperation, ValueError, TypeError):
-                continue
-        if not history_values:
-            return None
-
-        latest_volume = to_decimal(latest_volume_raw)
-        volume_ma = sum(history_values, Decimal("0")) / Decimal(len(history_values))
-        if volume_ma <= Decimal("0"):
-            return None
-        return (latest_volume / volume_ma - Decimal("1")) * Decimal("100")
 
     @staticmethod
     def _format_decimal_for_payload(value: Decimal) -> str:
@@ -487,6 +463,8 @@ class RecommendationService:
                 self.last_screening_matrix.append(row)
                 matrix_rows_by_stock[stock_code_text] = row
                 continue
+
+            stock_df = enrich_latest_market_features(stock_df)
             
             try:
                 # 生成推薦（generate_recommendations 內部會處理篩選，這裡不需要額外篩選）
@@ -509,7 +487,10 @@ class RecommendationService:
                     observed_value: Any = "empty"
                     required_value: Any = "non_empty"
                     volume_min = self._configured_volume_change_min_percent(config)
-                    observed_volume_change = self._observed_volume_change_percent(stock_df)
+                    observed_volume_change = latest_feature_decimal(
+                        stock_df,
+                        "成交量變化率%",
+                    )
                     if (
                         volume_min is not None
                         and observed_volume_change is not None
@@ -544,47 +525,19 @@ class RecommendationService:
                             close_col = col
                             break
                     
-                    # 計算漲幅（與前一日比較）
-                    price_change = 0
-                    if len(stock_df) >= 2 and close_col:
-                        # ✅ 修復：確保轉換為數值類型
-                        prev_price = pd.to_numeric(stock_df.iloc[-2].get(close_col, 0), errors='coerce')
-                        curr_price = pd.to_numeric(latest_row.get(close_col, 0), errors='coerce')
-                        # 處理 NaN
-                        if pd.isna(prev_price):
-                            prev_price = 0
-                        if pd.isna(curr_price):
-                            curr_price = 0
-                        
-                        if prev_price > 0:
-                            price_change = (curr_price - prev_price) / prev_price * 100
-                    
-                    # 將漲幅添加到 latest_row（用於篩選）
+                    price_change_value = latest_feature_decimal(stock_df, "漲幅%")
+                    volume_change_value = latest_feature_decimal(
+                        stock_df,
+                        "成交量變化率%",
+                    )
+                    price_change = float(price_change_value or Decimal("0"))
+
+                    # DTO / reason DataFrame 邊界沿用既有數值欄位型態，不重新計算。
                     latest_row = latest_row.copy()
                     latest_row['漲幅%'] = price_change
-                    
-                    # 計算成交量變化率（如果需要的話）
-                    if '成交股數' in stock_df.columns and len(stock_df) >= 21:
-                        # ✅ 修復：確保轉換為數值類型
-                        latest_volume = pd.to_numeric(stock_df['成交股數'].iloc[-1], errors='coerce')
-                        volume_ma20 = pd.to_numeric(stock_df['成交股數'].iloc[-21:-1], errors='coerce').mean()
-                        if pd.isna(latest_volume):
-                            latest_volume = 0
-                        if pd.isna(volume_ma20) or volume_ma20 <= 0:
-                            latest_row['成交量變化率%'] = 0.0
-                        else:
-                            volume_ratio = latest_volume / volume_ma20
-                            latest_row['成交量變化率%'] = (volume_ratio - 1) * 100
-                    elif '成交股數' in stock_df.columns and len(stock_df) >= 2:
-                        latest_volume = stock_df['成交股數'].iloc[-1]
-                        volume_ma = stock_df['成交股數'].iloc[:-1].mean()
-                        if volume_ma > 0:
-                            volume_ratio = latest_volume / volume_ma
-                            latest_row['成交量變化率%'] = (volume_ratio - 1) * 100
-                        else:
-                            latest_row['成交量變化率%'] = 0
-                    else:
-                        latest_row['成交量變化率%'] = 0
+                    latest_row['成交量變化率%'] = float(
+                        volume_change_value or Decimal("0")
+                    )
                     
                     # 獲取股票所屬產業
                     stock_industries = self.industry_mapper.get_stock_industries(stock_code)

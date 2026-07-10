@@ -13,6 +13,8 @@ from analysis_module import (
 )
 from decision_module.scoring_engine import ScoringEngine
 from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+from decision_module.derived_market_features import enrich_latest_market_features
+from decision_module.indicator_reuse import prepare_indicator_reuse
 from decision_module.weight_contract import InvalidWeightError, WeightMigrationError
 
 class StrategyConfigurator:
@@ -64,6 +66,10 @@ class StrategyConfigurator:
                         sub_config['enabled'] = True
                     else:
                         sub_config['enabled'] = False
+
+        reuse_plan = prepare_indicator_reuse(df_result, config_copy, full_config)
+        df_result = reuse_plan.frame
+        config_copy = reuse_plan.technical_config
 
         try:
             # 動量指標 (rsi, macd, kd)
@@ -342,80 +348,11 @@ class StrategyConfigurator:
             # 4. 應用硬門檻篩選（在最新日期上）
             if len(df) == 0:
                 return pd.DataFrame()
+
+            if '漲幅%' not in df.columns or '成交量變化率%' not in df.columns:
+                df = enrich_latest_market_features(df)
             
             latest_df = df.iloc[[-1]].copy()  # 只取最新一筆
-            
-            # 計算漲幅%（如果需要的話，用於篩選）
-            # 注意：latest_df 是 DataFrame，應該檢查 columns 而不是 index
-            if '漲幅%' not in latest_df.columns and len(df) >= 2:
-                close_col = None
-                for col in ['收盤價', 'Close', 'close']:
-                    if col in df.columns:
-                        close_col = col
-                        break
-                
-                if close_col:
-                    # ✅ 修復：確保轉換為數值類型
-                    try:
-                        # 正確獲取前一日價格（直接從 DataFrame 訪問）
-                        prev_price_val = df[close_col].iloc[-2] if len(df) >= 2 else 0
-                        prev_price = pd.to_numeric(prev_price_val, errors='coerce')
-                        
-                        # 正確獲取當前價格（latest_df 只有一行，直接訪問）
-                        if len(latest_df) > 0 and close_col in latest_df.columns:
-                            curr_price_val = latest_df[close_col].iloc[0]
-                            curr_price = pd.to_numeric(curr_price_val, errors='coerce')
-                        else:
-                            curr_price = 0
-                        
-                        # 處理 NaN
-                        if pd.isna(prev_price):
-                            prev_price = 0
-                        if pd.isna(curr_price):
-                            curr_price = 0
-                        
-                        if prev_price > 0:
-                            price_change = (curr_price - prev_price) / prev_price * 100
-                            latest_df.loc[latest_df.index[0], '漲幅%'] = price_change
-                        else:
-                            latest_df.loc[latest_df.index[0], '漲幅%'] = 0.0
-                    except Exception as e:
-                        import logging
-                        logger = logging.getLogger(__name__)
-                        logger.warning(f"計算漲幅%時發生錯誤: {str(e)}, close_col={close_col}")
-                        if len(latest_df) > 0:
-                            latest_df.loc[latest_df.index[0], '漲幅%'] = 0.0
-                        else:
-                            latest_df['漲幅%'] = 0.0
-                else:
-                    latest_df['漲幅%'] = 0.0
-            
-            # 計算成交量變化率%（如果需要的話，用於篩選）
-            # 注意：latest_df 是 DataFrame，應該檢查 columns 而不是 index
-            if '成交量變化率%' not in latest_df.columns and '成交股數' in df.columns:
-                # ✅ 修復：確保轉換為數值類型
-                if len(df) >= 21:
-                    latest_volume = pd.to_numeric(df['成交股數'].iloc[-1], errors='coerce')
-                    volume_ma20 = pd.to_numeric(df['成交股數'].iloc[-21:-1], errors='coerce').mean()
-                    if pd.isna(latest_volume):
-                        latest_volume = 0
-                    if pd.isna(volume_ma20) or volume_ma20 <= 0:
-                        latest_df['成交量變化率%'] = 0.0
-                    else:
-                        volume_ratio = latest_volume / volume_ma20
-                        latest_df['成交量變化率%'] = (volume_ratio - 1) * 100
-                elif len(df) >= 2:
-                    latest_volume = pd.to_numeric(df['成交股數'].iloc[-1], errors='coerce')
-                    volume_ma = pd.to_numeric(df['成交股數'].iloc[:-1], errors='coerce').mean()
-                    if pd.isna(latest_volume):
-                        latest_volume = 0
-                    if pd.isna(volume_ma) or volume_ma <= 0:
-                        latest_df['成交量變化率%'] = 0.0
-                    else:
-                        volume_ratio = latest_volume / volume_ma
-                        latest_df['成交量變化率%'] = (volume_ratio - 1) * 100
-                else:
-                    latest_df['成交量變化率%'] = 0.0
         except (InvalidParameterError, InvalidWeightError, WeightMigrationError) as e:
             raise e
         except Exception as e:
