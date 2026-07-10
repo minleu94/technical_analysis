@@ -6,8 +6,18 @@ import pytest
 
 from app_module.dtos import RecommendationDTO, RecommendationResultDTO
 from app_module.evidence_event_repository import EvidenceEventRepository
-from app_module.evidence_pipeline_runner import EvidencePipelineRunner
-from app_module.evidence_pipeline_runner_dtos import EvidencePipelineRunRequest
+from app_module.evidence_pipeline_runner import (
+    EvidencePipelineRunner,
+    _advisory_count,
+    _split_warning_and_advisory_counts,
+    write_pipeline_report,
+)
+from app_module.evidence_pipeline_runner_dtos import (
+    EvidencePipelineRunRequest,
+    EvidencePipelineRunSummary,
+    EvidencePipelineStepSummary,
+    STEP_READY_WITH_ADVISORIES,
+)
 from app_module.recommendation_repository import RecommendationRepository
 from data_module.config import TWStockConfig
 from tests.test_evidence_pipeline_smoke import _seed_market_db
@@ -20,7 +30,13 @@ def _config(tmp_path: Path) -> TWStockConfig:
     return config
 
 
-def _seed_recommendation(config: TWStockConfig, *, result_id: str = "runner-rec") -> str:
+def _seed_recommendation(
+    config: TWStockConfig,
+    *,
+    result_id: str = "runner-rec",
+    score_percentile_bp: int | None = 9300,
+    threshold_mode: str = "fixed",
+) -> str:
     result = RecommendationResultDTO(
         result_id=result_id,
         result_name="Runner fixture",
@@ -38,7 +54,8 @@ def _seed_recommendation(config: TWStockConfig, *, result_id: str = "runner-rec"
                 recommendation_reasons="rank_top",
                 industry="半導體",
                 regime_match=True,
-                score_percentile_bp=9300,
+                score_percentile_bp=score_percentile_bp,
+                threshold_mode=threshold_mode,
             )
         ],
         regime="Trend",
@@ -70,6 +87,120 @@ def test_runner_defaults_to_dry_run_and_does_not_write_events_or_outcomes(tmp_pa
     assert summary.outcomes_created == 0
     assert repository.list_events() == []
     assert repository.list_outcomes() == []
+
+
+def test_runner_summary_and_report_include_warning_breakdown(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    result_id = _seed_recommendation(
+        config,
+        result_id="runner-warning-rec",
+        score_percentile_bp=None,
+        threshold_mode="cross_sectional",
+    )
+    report_path = tmp_path / "evidence_report.md"
+
+    summary = EvidencePipelineRunner(config).run(
+        EvidencePipelineRunRequest(
+            decision_date="2026-07-01",
+            sources=("recommendation",),
+            result_id=result_id,
+            skip_snapshot=True,
+            skip_outcomes=True,
+            skip_summary=True,
+            report_output=str(report_path),
+        )
+    )
+
+    assert summary.to_dict().get("warning_counts", {}).get("score_percentile_missing") == 1
+    report = report_path.read_text(encoding="utf-8")
+    assert "## Warning Breakdown" in report
+    assert "- score_percentile_missing: 1" in report
+
+
+def test_pipeline_report_separates_warning_occurrences_from_unique_warning_tokens(tmp_path: Path) -> None:
+    report_path = tmp_path / "warning_summary.md"
+    summary = EvidencePipelineRunSummary(
+        run_id="warning-summary",
+        decision_date="2026-07-01",
+        start_date=None,
+        end_date=None,
+        dry_run=True,
+        confirm=False,
+        db_path=None,
+        started_at="2026-07-01T05:15:00",
+        finished_at="2026-07-01T05:15:01",
+        overall_status="degraded",
+        scheduler_readiness_before="ready_for_design",
+        scheduler_readiness_after="ready_for_manual_confirm",
+        source_coverage={},
+        steps=(EvidencePipelineStepSummary(step_name="capture_evidence_events", status="degraded", dry_run=True),),
+        warnings_count=12,
+        warning_counts={"risk_prompt_source_quality:portfolio_alerts:estimated": 10, "score_percentile_missing": 2},
+        advisories_count=3,
+        advisory_counts={"portfolio_alerts_chip_estimated:2330": 1, "portfolio_alerts_chip_estimated:2382": 1},
+        quality_coverage_rows=(
+            {
+                "symbol": "2330",
+                "observed_event_count": 92,
+                "estimated_event_count": 132,
+                "unavailable_event_count": 0,
+            },
+        ),
+    )
+
+    write_pipeline_report(summary, report_path)
+
+    payload = summary.to_dict()
+    report = report_path.read_text(encoding="utf-8")
+    assert payload["warning_unique_count"] == 2
+    assert payload["warning_top_counts"][0] == {
+        "warning": "risk_prompt_source_quality:portfolio_alerts:estimated",
+        "count": 10,
+    }
+    assert "## Warning Summary" in report
+    assert "- warning_occurrence_count: 12" in report
+    assert "- unique_warning_token_count: 2" in report
+    assert "- risk_prompt_source_quality:portfolio_alerts:estimated: 10" in report
+    assert "## Advisories" in report
+    assert "- advisory_occurrence_count: 3" in report
+    assert "- portfolio_alerts_chip_estimated:2330: 1" in report
+    assert "## Source Quality Coverage" in report
+    assert "- 2330: observed=92, estimated=132, unavailable=0" in report
+
+
+def test_runner_returns_ready_with_advisories_without_missing_or_blocking_data(tmp_path: Path) -> None:
+    runner = EvidencePipelineRunner(_config(tmp_path))
+
+    status = runner._overall_status(
+        [
+            EvidencePipelineStepSummary(
+                step_name="capture_decision_desk_snapshot",
+                status=STEP_READY_WITH_ADVISORIES,
+                dry_run=True,
+                advisories_count=1,
+                advisory_counts={"portfolio_alerts_chip_estimated:2330": 1},
+            )
+        ],
+        [],
+    )
+
+    assert status == STEP_READY_WITH_ADVISORIES
+
+
+def test_warning_split_normalizes_stored_estimated_advisory_but_preserves_missing_as_warning() -> None:
+    warnings, advisories = _split_warning_and_advisory_counts(
+        (
+            "portfolio_alerts:portfolio_alerts_chip_estimated:2330",
+            "risk_prompts:risk_prompt_source_quality:portfolio_alerts:missing",
+        )
+    )
+
+    assert advisories == {"portfolio_alerts_chip_estimated:2330": 1}
+    assert warnings == {"risk_prompts:risk_prompt_source_quality:portfolio_alerts:missing": 1}
+
+
+def test_advisory_count_uses_deduplicated_advisory_counts() -> None:
+    assert _advisory_count({"portfolio_alerts_chip_estimated:2330": 1, "portfolio_alerts_chip_estimated:2382": 1}) == 2
 
 
 def test_runner_dry_run_without_db_path_uses_scratch_db_not_default_db(tmp_path: Path) -> None:

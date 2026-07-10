@@ -12,6 +12,7 @@
 scripts\scheduled\query_baldr_scheduled_tasks.cmd
 schtasks /Query /TN baldr-data-update-quick-daily /V /FO LIST
 schtasks /Query /TN baldr-data-freshness-check-daily /V /FO LIST
+schtasks /Query /TN baldr-recommendation-snapshot-daily /V /FO LIST
 schtasks /Query /TN baldr-evidence-pipeline-dry-run-daily /V /FO LIST
 ```
 
@@ -19,6 +20,7 @@ schtasks /Query /TN baldr-evidence-pipeline-dry-run-daily /V /FO LIST
 
 - `baldr-data-update-quick-daily`：每天本機時間 04:20，執行 `scripts\scheduled\run_daily_data_update_quick.cmd`。這會走非 UI 快速更新路徑，補最近工作日窗口的 TWSE / TPEX 每日股價、大盤、產業、券商分點、SQLite 同步與必要的技術指標增量；若 TPEX 缺日，status 會是 `passed_with_warnings` 並列出缺少日期。
 - `baldr-data-freshness-check-daily`：每天本機時間 05:00，執行 `scripts\scheduled\run_daily_data_freshness_check.cmd`；若 SQLite 最新但 TWSE / TPEX 最新日原始 CSV 缺失，status 會是 `degraded`。
+- `baldr-recommendation-snapshot-daily`：每天本機時間 05:10，保存 research-only recommendation result，供 05:15 dry-run 讀取；它會寫推薦結果，但不寫 production evidence DB、不下單、不套用 lifecycle action。
 - `baldr-evidence-pipeline-dry-run-daily`：每天本機時間 05:15，執行 `scripts\scheduled\run_evidence_pipeline_dry_run.cmd`。
 - `baldr-evidence-working-copy-smoke-manual`：manual-only；目前不建立每日自動 task。
 - Codex app `baldr scheduled evidence morning report`：每天約 05:30，只讀查詢上述 task、status、report 與必要 log，產生繁體中文摘要；它不是 Windows Task Scheduler task，也不重新執行 pipeline。
@@ -52,7 +54,7 @@ scripts\scheduled\register_baldr_scheduled_tasks.cmd register
 
 - `baldr-data-update-quick-daily` 應先於 freshness 成功或清楚列出 failed step。
 - `data_update_quick/latest_status.json` 若為 `passed_with_warnings`，先看 warnings 是否只來自 TPEX 暫時缺資料；若核心步驟失敗，當天 freshness / evidence 只能視為 degraded 或 failed。
-- `status` 應為 `passed`，或是可解讀的 `degraded`。
+- `status` 應為 `passed`、`ready_with_advisories`，或是可解讀的 `degraded`；`ready_with_advisories` 表示流程可用但有已揭露的估算來源品質提示。
 - `read_only` 必須為 `true`。
 - `daily_prices_latest_date` 與 `technical_indicators_latest_date` 應符合人工預期。
 - 若出現 `sqlite_db_missing`、`data_root_missing` 或 `sqlite_read_failed`，當天 evidence dry-run 只能視為 degraded / failed。
@@ -72,6 +74,10 @@ scripts\scheduled\register_baldr_scheduled_tasks.cmd register
 - `dry_run` 必須為 `true`。
 - `writes_evidence_db` 必須為 `false`。
 - `freshness_status` 若不是 `passed`，`status` 應標為 `degraded` 或 `failed`。
+- `pipeline_overall_status` 若為 `degraded`，scheduled `status` 也必須為 `degraded`；Task Scheduler `LastTaskResult=0` 只代表 wrapper 正常完成，不代表 report 無 warnings。
+- `pipeline_warnings_count` 是跨 pipeline steps 的 warning occurrences；需搭配 `pipeline_warning_unique_count` 與 `pipeline_warning_top_counts` 判讀，不可把 `pipeline_diagnostic_codes=[]` 誤解成完全沒有 warnings。
+- `pipeline_overall_status=ready_with_advisories` 時，確認 `pipeline_advisories_count`、`pipeline_advisory_top_counts` 與 report 的 `Source Quality Coverage`。MoneyDJ 個股若只在金額榜而未在張數榜，估算股數仍須保留 `estimated`，但完整 observed / estimated 覆蓋不是資料缺失。
+- fixed-threshold recommendation snapshot 未保存比較母體時，`score_percentile_bp` 為不適用；不可從已選推薦股反推百分位。
 - 閱讀 report，確認 blocking gaps、warnings 與 source diagnostics。
 
 ## 4. 人工判讀

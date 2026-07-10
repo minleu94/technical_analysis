@@ -109,6 +109,7 @@ class ScheduledEvidenceStatusView(QWidget):
         self.safety_label.setText(
             "安全邊界\n"
             f"confirm={_bool_text(status.confirm)} / "
+            f"recommendation_result_write={_bool_text(status.writes_recommendation_result)} / "
             f"writes_evidence_db={_bool_text(status.writes_evidence_db)} / "
             f"auto_trading={_bool_text(status.auto_trading)}"
         )
@@ -161,14 +162,22 @@ def _format_details(status: ScheduledEvidenceStatus) -> str:
         f"- recommendation note: {recommendation_note}",
         f"- evidence dry-run: {status.evidence_status} / 決策日 {status.decision_date or '未知'}",
         f"- blocking gaps: {_join(status.pipeline_blocking_gaps)}",
-        f"- read-only boundary: {'ok' if boundary_ok else 'needs review'}",
-        f"- production write risk: {_bool_text(status.has_production_write_risk)}",
+        f"- evidence/trading boundary: {'ok' if boundary_ok else 'needs review'}",
+        (
+            "- recommendation result write: "
+            f"{_bool_text(status.writes_recommendation_result)} / research-only output"
+        ),
+        f"- production evidence/trading write risk: {_bool_text(status.has_production_write_risk)}",
         "",
         "人工要看",
         f"- scheduled recommendation days: {status.recommendation_snapshot_observed_days}",
         f"- manual recommendation days: {status.manual_recommendation_observed_days}",
         f"- scheduler_readiness_after: {status.scheduler_readiness_after or '未知'}",
         f"- source warnings: {_join(status.source_coverage_warnings)}",
+        f"- pipeline warnings: {_pipeline_warning_summary(status)}",
+        f"- pipeline advisories: {_pipeline_advisory_summary(status)}",
+        f"- top pipeline warnings: {_join_warning_top_counts(status.pipeline_warning_top_counts)}",
+        f"- top pipeline advisories: {_join_warning_top_counts(status.pipeline_advisory_top_counts)}",
         f"- diagnostics: {_join(status.diagnostics)}",
         "",
         "關鍵欄位",
@@ -187,14 +196,19 @@ def _format_details(status: ScheduledEvidenceStatus) -> str:
         f"- writes_evidence_db: {_bool_text(status.writes_evidence_db)}",
         f"- auto_trading: {_bool_text(status.auto_trading)}",
         f"- lifecycle_action: {_bool_text(status.lifecycle_action)}",
-        f"- production write risk: {_bool_text(status.has_production_write_risk)}",
+        f"- production evidence/trading write risk: {_bool_text(status.has_production_write_risk)}",
         "",
         "執行狀態",
         f"- data freshness: {status.freshness_status}",
         f"- recommendation snapshot: {status.recommendation_status}",
         f"- evidence dry-run: {status.evidence_status}",
+        f"- pipeline_overall_status: {status.pipeline_overall_status or '未知'}",
         f"- evidence_checked_at: {status.evidence_checked_at or '未知'}",
-        f"- warnings: {_join(status.freshness_warnings)}",
+        f"- freshness warnings: {_join(status.freshness_warnings)}",
+        f"- pipeline warnings: {_pipeline_warning_summary(status)}",
+        f"- pipeline advisories: {_pipeline_advisory_summary(status)}",
+        f"- pipeline_warning_top_counts: {_join_warning_top_counts(status.pipeline_warning_top_counts)}",
+        f"- pipeline_advisory_top_counts: {_join_warning_top_counts(status.pipeline_advisory_top_counts)}",
         f"- errors: {_join(status.freshness_errors)}",
         f"- exit_code: {status.exit_code if status.exit_code is not None else '未知'}",
         f"- pipeline_diagnostic_codes: {_join(status.pipeline_diagnostic_codes)}",
@@ -226,6 +240,30 @@ def _trim_report_preview(preview: str, *, max_lines: int = 24) -> str:
             selected.append("... report preview trimmed; open report_path for full diagnostics ...")
             break
     return "\n".join(selected)
+
+
+def _pipeline_warning_summary(status: ScheduledEvidenceStatus) -> str:
+    warnings_count = status.pipeline_warnings_count
+    unique_count = status.pipeline_warning_unique_count
+    if warnings_count is None and unique_count is None:
+        return "無"
+    warnings_text = str(warnings_count) if warnings_count is not None else "未知"
+    unique_text = str(unique_count) if unique_count is not None else "未知"
+    return f"{warnings_text} warning occurrences / {unique_text} warning types"
+
+
+def _pipeline_advisory_summary(status: ScheduledEvidenceStatus) -> str:
+    advisories_count = status.pipeline_advisories_count
+    unique_count = status.pipeline_advisory_unique_count
+    if advisories_count is None and unique_count is None:
+        return "無"
+    advisories_text = str(advisories_count) if advisories_count is not None else "未知"
+    unique_text = str(unique_count) if unique_count is not None else "未知"
+    return f"{advisories_text} advisory occurrences / {unique_text} advisory types"
+
+
+def _join_warning_top_counts(values: tuple[tuple[str, int], ...]) -> str:
+    return ", ".join(f"{warning}={count}" for warning, count in values) if values else "無"
 
 
 def _join(values: tuple[str, ...]) -> str:

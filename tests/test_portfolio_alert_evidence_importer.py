@@ -33,6 +33,9 @@ class FakePortfolioAlertProvider:
                     severity=100,
                     reasons=("condition:invalid", "chip:risk_level:bearish"),
                     data_quality_flags=("chip_estimated",),
+                    chip_observed_event_count=92,
+                    chip_estimated_event_count=132,
+                    chip_unavailable_event_count=0,
                 ),
             ),
         )
@@ -52,4 +55,8 @@ def test_portfolio_alert_importer_maps_attribution_and_does_not_mutate_provider_
     assert event["symbol"] == "2330"
     assert event["metadata"]["chip_risk_level"] == "bearish"
     assert event["data_quality"].value == "degraded"
-
+    assert event["warnings"] == ()
+    assert result.advisory_tokens == ("portfolio_alerts_chip_estimated:2330",)
+    assert event["metadata"]["chip_observed_event_count"] == 92
+    assert event["metadata"]["chip_estimated_event_count"] == 132
+    assert event["metadata"]["chip_unavailable_event_count"] == 0

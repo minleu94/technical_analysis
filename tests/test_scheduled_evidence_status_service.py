@@ -44,13 +44,25 @@ def test_scheduled_evidence_status_reads_latest_status_and_report(tmp_path: Path
     (dry_run_dir / "latest_status.json").write_text(
         json.dumps(
             {
-                "status": "passed",
+                "status": "degraded",
+                "pipeline_overall_status": "degraded",
                 "checked_at": "2026-07-07T05:15:39",
                 "decision_date": "2026-07-07",
                 "dry_run": True,
                 "exit_code": 0,
                 "report_path": str(report_path),
                 "pipeline_blocking_gaps": [],
+                "pipeline_warnings_count": 7,
+                "pipeline_warning_unique_count": 2,
+                "pipeline_advisories_count": 3,
+                "pipeline_advisory_unique_count": 2,
+                "pipeline_advisory_top_counts": [
+                    {"advisory": "portfolio_alerts_chip_estimated:2330", "count": 1},
+                ],
+                "pipeline_warning_top_counts": [
+                    {"warning": "risk_prompt_source_quality:portfolio_alerts:estimated", "count": 4},
+                    {"warning": "relative_strength_liquidity_skipped_symbols:1", "count": 3},
+                ],
                 "source_coverage_warnings": ["screening_matrix_missing"],
                 "writes_evidence_db": False,
             }
@@ -87,7 +99,8 @@ def test_scheduled_evidence_status_reads_latest_status_and_report(tmp_path: Path
 
     assert status.freshness_status == "passed"
     assert status.latest_data_date == "20260707"
-    assert status.evidence_status == "passed"
+    assert status.evidence_status == "degraded"
+    assert status.pipeline_overall_status == "degraded"
     assert status.recommendation_status == "passed"
     assert status.recommendation_result_id == "scheduled_rec_20260707_051001"
     assert status.recommendations_count == 12
@@ -104,6 +117,17 @@ def test_scheduled_evidence_status_reads_latest_status_and_report(tmp_path: Path
     assert status.report_exists is True
     assert status.writes_evidence_db is False
     assert status.source_coverage_warnings == ("screening_matrix_missing",)
+    assert getattr(status, "pipeline_warnings_count", None) == 7
+    assert getattr(status, "pipeline_warning_unique_count", None) == 2
+    assert getattr(status, "pipeline_advisories_count", None) == 3
+    assert getattr(status, "pipeline_advisory_unique_count", None) == 2
+    assert getattr(status, "pipeline_advisory_top_counts", ()) == (
+        ("portfolio_alerts_chip_estimated:2330", 1),
+    )
+    assert getattr(status, "pipeline_warning_top_counts", ()) == (
+        ("risk_prompt_source_quality:portfolio_alerts:estimated", 4),
+        ("relative_strength_liquidity_skipped_symbols:1", 3),
+    )
     assert "Run Metadata" in status.report_preview
 
 

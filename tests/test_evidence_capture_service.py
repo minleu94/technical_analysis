@@ -6,7 +6,11 @@ from app_module.evidence_capture_service import EvidenceCaptureService
 from app_module.evidence_event_dtos import EvidenceDataQuality, EvidenceEventType
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.evidence_event_service import EvidenceEventService
-from app_module.evidence_event_importer_dtos import EvidenceCaptureRequest, EvidenceImportResult
+from app_module.evidence_event_importer_dtos import (
+    EvidenceCaptureRequest,
+    EvidenceImportDiagnostic,
+    EvidenceImportResult,
+)
 from data_module.config import TWStockConfig
 
 
@@ -45,6 +49,35 @@ class StaticImporter:
 
 class StringEventTypeImporter(StaticImporter):
     event_type = EvidenceEventType.RECOMMENDATION_INCLUDED.value
+
+
+class DiagnosticWarningImporter(StaticImporter):
+    def collect(self, request: EvidenceCaptureRequest) -> EvidenceImportResult:
+        base = super().collect(request)
+        return EvidenceImportResult(
+            source_name=base.source_name,
+            decision_date=base.decision_date,
+            event_payloads=base.event_payloads,
+            diagnostics=(
+                EvidenceImportDiagnostic(
+                    code="source_delayed",
+                    message="source is delayed",
+                    source_name=self.source_name,
+                    severity="warning",
+                ),
+            ),
+        )
+
+
+class AdvisoryImporter(StaticImporter):
+    def collect(self, request: EvidenceCaptureRequest) -> EvidenceImportResult:
+        base = super().collect(request)
+        return EvidenceImportResult(
+            source_name=base.source_name,
+            decision_date=base.decision_date,
+            event_payloads=base.event_payloads,
+            advisory_tokens=("portfolio_alerts_chip_estimated:2330",),
+        )
 
 
 def test_capture_service_dry_run_returns_hash_sample_without_writing(tmp_path):
@@ -109,3 +142,27 @@ def test_capture_service_source_all_keeps_unsupported_diagnostic_and_runs_suppor
     assert summary.source_name == "all"
     assert summary.events_inserted == 1
     assert summary.diagnostics_by_code["source_unsupported"] >= 1
+
+
+def test_capture_service_summarizes_warning_tokens_and_warning_diagnostics(tmp_path):
+    repository = EvidenceEventRepository(_config(tmp_path))
+    service = EvidenceCaptureService(EvidenceEventService(repository), {"static": DiagnosticWarningImporter()})
+
+    summary = service.capture(EvidenceCaptureRequest(source="static", decision_date="2026-07-02"))
+
+    assert summary.warnings_count == 2
+    assert summary.to_dict().get("warning_counts") == {
+        "diagnostic:source_delayed": 1,
+        "source_warning": 1,
+    }
+
+
+def test_capture_service_counts_source_advisory_once_not_per_event(tmp_path):
+    repository = EvidenceEventRepository(_config(tmp_path))
+    service = EvidenceCaptureService(EvidenceEventService(repository), {"static": AdvisoryImporter()})
+
+    summary = service.capture(EvidenceCaptureRequest(source="static", decision_date="2026-07-02"))
+
+    assert summary.warnings_count == 1
+    assert summary.advisories_count == 1
+    assert summary.advisory_counts == {"portfolio_alerts_chip_estimated:2330": 1}

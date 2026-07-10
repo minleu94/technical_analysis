@@ -24,10 +24,12 @@ class RelativeStrengthLiquidityService:
         *,
         top_n: int = 10,
         min_avg_turnover: int = 20_000_000,
+        max_skipped_symbol_ratio_bp: int = 500,
     ) -> None:
         self.provider = provider
         self.top_n = top_n
         self.min_avg_turnover = Decimal(int(min_avg_turnover))
+        self.max_skipped_symbol_ratio_bp = min(10_000, max(0, int(max_skipped_symbol_ratio_bp)))
 
     def build_snapshot(self, as_of_date: date) -> RelativeStrengthLiquiditySummary:
         try:
@@ -111,10 +113,14 @@ class RelativeStrengthLiquidityService:
         if skipped:
             warnings.append(f"relative_strength_liquidity_skipped_symbols:{skipped}")
 
-        # 如果 skipped 包含不滿足 21 天歷史的情形，並不一定是 exception，但如果出現 skipped 代表部分股票沒被算
-        # 如果整個 ranking 為空，我們已經在上面回傳 degraded 並加 warnings。
-        # 依照需求：若有警告，品質降為 DEGRADED；若無，則為 OBSERVED。
-        quality = DecisionDeskQuality.OBSERVED if not warnings else DecisionDeskQuality.DEGRADED
+        ranked_symbol_count = len(ranking)
+        total_symbol_count = ranked_symbol_count + skipped
+        skipped_symbol_ratio_bp = self._ratio_bp(skipped, total_symbol_count)
+        quality = (
+            DecisionDeskQuality.DEGRADED
+            if effective_date != as_of_date or skipped_symbol_ratio_bp > self.max_skipped_symbol_ratio_bp
+            else DecisionDeskQuality.OBSERVED
+        )
         return RelativeStrengthLiquiditySummary(
             as_of_date=effective_date,
             quality=quality,
@@ -125,6 +131,10 @@ class RelativeStrengthLiquidityService:
             meta={
                 "source": "relative_strength_liquidity_service",
                 "min_avg_turnover": int(self.min_avg_turnover),
+                "ranked_symbol_count": ranked_symbol_count,
+                "skipped_symbol_count": skipped,
+                "skipped_symbol_ratio_bp": skipped_symbol_ratio_bp,
+                "max_skipped_symbol_ratio_bp": self.max_skipped_symbol_ratio_bp,
                 "ranking": ranking[: self.top_n],
             },
         )
@@ -188,6 +198,13 @@ class RelativeStrengthLiquidityService:
     @staticmethod
     def _return_bp(current: Decimal, base: Decimal) -> int:
         value = ((current - base) / base) * Decimal("10000")
+        return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+    @staticmethod
+    def _ratio_bp(numerator: int, denominator: int) -> int:
+        if denominator <= 0:
+            return 0
+        value = Decimal(int(numerator)) * Decimal("10000") / Decimal(int(denominator))
         return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
     @staticmethod

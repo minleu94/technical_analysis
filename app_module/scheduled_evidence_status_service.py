@@ -40,6 +40,13 @@ class ScheduledEvidenceStatus:
     source_coverage_warnings: tuple[str, ...] = ()
     pipeline_diagnostic_codes: tuple[str, ...] = ()
     pipeline_blocking_gaps: tuple[str, ...] = ()
+    pipeline_overall_status: str | None = None
+    pipeline_warnings_count: int | None = None
+    pipeline_warning_unique_count: int | None = None
+    pipeline_warning_top_counts: tuple[tuple[str, int], ...] = ()
+    pipeline_advisories_count: int | None = None
+    pipeline_advisory_unique_count: int | None = None
+    pipeline_advisory_top_counts: tuple[tuple[str, int], ...] = ()
     report_path: Path | None = None
     log_path: Path | None = None
     manual_recommendation_result_path: Path | None = None
@@ -168,6 +175,13 @@ class ScheduledEvidenceStatusService:
             source_coverage_warnings=_tuple_of_str(evidence.get("source_coverage_warnings")),
             pipeline_diagnostic_codes=_tuple_of_str(evidence.get("pipeline_diagnostic_codes")),
             pipeline_blocking_gaps=_tuple_of_str(evidence.get("pipeline_blocking_gaps")),
+            pipeline_overall_status=_str_or_none(evidence.get("pipeline_overall_status")),
+            pipeline_warnings_count=_int_or_none(evidence.get("pipeline_warnings_count")),
+            pipeline_warning_unique_count=_int_or_none(evidence.get("pipeline_warning_unique_count")),
+            pipeline_warning_top_counts=_warning_top_counts(evidence.get("pipeline_warning_top_counts")),
+            pipeline_advisories_count=_int_or_none(evidence.get("pipeline_advisories_count")),
+            pipeline_advisory_unique_count=_int_or_none(evidence.get("pipeline_advisory_unique_count")),
+            pipeline_advisory_top_counts=_advisory_top_counts(evidence.get("pipeline_advisory_top_counts")),
             report_path=report_path,
             log_path=log_path,
             manual_recommendation_result_path=manual_recommendation_path,
@@ -275,6 +289,41 @@ def _tuple_of_str(value: Any) -> tuple[str, ...]:
     if isinstance(value, (list, tuple)):
         return tuple(str(item) for item in value)
     return (str(value),)
+
+
+def _warning_top_counts(value: Any) -> tuple[tuple[str, int], ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    rows: list[tuple[str, int]] = []
+    for item in value:
+        warning: str
+        raw_count: Any
+        if isinstance(item, dict):
+            warning = str(item.get("warning") or "").strip()
+            raw_count = item.get("count")
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            warning = str(item[0] or "").strip()
+            raw_count = item[1]
+        else:
+            continue
+        count = _int_or_none(raw_count)
+        if warning and count is not None:
+            rows.append((warning, count))
+    return tuple(rows)
+
+
+def _advisory_top_counts(value: Any) -> tuple[tuple[str, int], ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    rows: list[tuple[str, int]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        advisory = str(item.get("advisory") or "").strip()
+        count = _int_or_none(item.get("count"))
+        if advisory and count is not None and count > 0:
+            rows.append((advisory, count))
+    return tuple(rows)
 
 
 def _str_or_none(value: Any) -> str | None:

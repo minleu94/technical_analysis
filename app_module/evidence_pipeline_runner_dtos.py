@@ -16,9 +16,20 @@ READINESS_VALUES = (
 )
 
 STEP_READY = "ready"
+STEP_READY_WITH_ADVISORIES = "ready_with_advisories"
 STEP_SKIPPED = "skipped"
 STEP_DEGRADED = "degraded"
 STEP_FAILED = "failed"
+
+
+def _top_warning_counts(warning_counts: dict[str, int], *, limit: int = 10) -> list[dict[str, int | str]]:
+    rows = [
+        (str(key), int(value))
+        for key, value in warning_counts.items()
+        if str(key).strip() and int(value) > 0
+    ]
+    sorted_rows = sorted(rows, key=lambda item: (-item[1], item[0]))[:limit]
+    return [{"warning": warning, "count": count} for warning, count in sorted_rows]
 
 
 def scheduler_readiness_after_run(
@@ -92,6 +103,9 @@ class EvidencePipelineStepSummary:
     records_updated: int = 0
     records_skipped: int = 0
     warnings_count: int = 0
+    warning_counts: dict[str, int] = field(default_factory=dict)
+    advisories_count: int = 0
+    advisory_counts: dict[str, int] = field(default_factory=dict)
     errors_count: int = 0
     diagnostics: tuple[EvidencePipelineDiagnostic, ...] = ()
     duration_ms: int = 0
@@ -106,6 +120,9 @@ class EvidencePipelineStepSummary:
             "records_updated": self.records_updated,
             "records_skipped": self.records_skipped,
             "warnings_count": self.warnings_count,
+            "warning_counts": dict(self.warning_counts),
+            "advisories_count": self.advisories_count,
+            "advisory_counts": dict(self.advisory_counts),
             "errors_count": self.errors_count,
             "diagnostics": [item.to_dict() for item in self.diagnostics],
             "duration_ms": self.duration_ms,
@@ -140,6 +157,10 @@ class EvidencePipelineRunSummary:
     groups_insufficient_sample: int = 0
     groups_degraded: int = 0
     warnings_count: int = 0
+    warning_counts: dict[str, int] = field(default_factory=dict)
+    advisories_count: int = 0
+    advisory_counts: dict[str, int] = field(default_factory=dict)
+    quality_coverage_rows: tuple[dict[str, int | str], ...] = ()
     errors_count: int = 0
     blocking_gaps: tuple[str, ...] = ()
     next_recommended_action: str = ""
@@ -159,4 +180,7 @@ class EvidencePipelineRunSummary:
         payload["blocking_gaps"] = list(self.blocking_gaps)
         payload["forward_summary"] = [dict(item) for item in self.forward_summary]
         payload["diagnostic_codes"] = list(self.diagnostic_codes)
+        payload["warning_unique_count"] = len(self.warning_counts)
+        payload["warning_top_counts"] = _top_warning_counts(dict(self.warning_counts))
+        payload["quality_coverage_rows"] = [dict(item) for item in self.quality_coverage_rows]
         return payload

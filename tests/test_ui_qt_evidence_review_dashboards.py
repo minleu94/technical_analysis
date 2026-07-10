@@ -60,7 +60,8 @@ class FakeScheduledStatus:
 
         self.result = ScheduledEvidenceStatus(
             freshness_status="passed",
-            evidence_status="passed",
+            evidence_status="degraded",
+            pipeline_overall_status="degraded",
             recommendation_status="passed",
             latest_data_date="20260707",
             decision_date="2026-07-07",
@@ -73,6 +74,15 @@ class FakeScheduledStatus:
             auto_trading=False,
             lifecycle_action=False,
             source_coverage_warnings=("screening_matrix_missing",),
+            pipeline_warnings_count=7,
+            pipeline_warning_unique_count=2,
+            pipeline_warning_top_counts=(
+                ("risk_prompt_source_quality:portfolio_alerts:estimated", 4),
+                ("relative_strength_liquidity_skipped_symbols:1", 3),
+            ),
+            pipeline_advisories_count=3,
+            pipeline_advisory_unique_count=2,
+            pipeline_advisory_top_counts=(("portfolio_alerts_chip_estimated:2330", 1),),
             report_preview="## Run Metadata\n- decision_date: 2026-07-07",
         )
 
@@ -195,10 +205,16 @@ def test_scheduled_evidence_status_view_shows_latest_scheduled_run() -> None:
 
     assert "20260707" in view.freshness_label.text()
     assert "scheduled_rec_20260707_051001" in view.recommendation_label.text()
-    assert "2026-07-07" in view.evidence_label.text()
+    assert "degraded / 決策日 2026-07-07" in view.evidence_label.text()
     assert "writes_recommendation_result: true" in view.detail_panel.toPlainText()
     assert "writes_evidence_db=false" in view.safety_label.text()
     assert "screening_matrix_missing" in view.detail_panel.toPlainText()
+    assert "pipeline warnings: 7 warning occurrences / 2 warning types" in view.detail_panel.toPlainText()
+    assert "pipeline advisories: 3 advisory occurrences / 2 advisory types" in view.detail_panel.toPlainText()
+    assert "pipeline_overall_status: degraded" in view.detail_panel.toPlainText()
+    assert "recommendation result write: true / research-only output" in view.detail_panel.toPlainText()
+    assert "production evidence/trading write risk: false" in view.detail_panel.toPlainText()
+    assert "risk_prompt_source_quality:portfolio_alerts:estimated=4" in view.detail_panel.toPlainText()
     assert "Run Metadata" in view.detail_panel.toPlainText()
 
 
@@ -213,7 +229,7 @@ def test_scheduled_evidence_status_view_prioritizes_manual_observed_summary_over
     assert "判讀摘要" in details
     assert "manual_observed / manual_result / rec_20260707_113744 / 4 筆" in details
     assert "scheduled latest_status missing；manual result observed" in details
-    assert "production write risk: false" in details
+    assert "production evidence/trading write risk: false" in details
     assert "Report preview（trimmed）" in details
     assert "source_capabilities" not in details
 

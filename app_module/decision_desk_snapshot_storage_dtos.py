@@ -301,6 +301,9 @@ def _portfolio_alert(payload: SnapshotJson) -> PortfolioAlertSummary:
             severity=int(item.get("severity") or 0),
             reasons=tuple(str(reason) for reason in _list(item.get("reasons"))),
             data_quality_flags=tuple(str(flag) for flag in _list(item.get("data_quality_flags"))),
+            chip_observed_event_count=int(item.get("chip_observed_event_count") or 0),
+            chip_estimated_event_count=int(item.get("chip_estimated_event_count") or 0),
+            chip_unavailable_event_count=int(item.get("chip_unavailable_event_count") or 0),
         )
         for item in _list(payload.get("attributions"))
         if isinstance(item, dict)

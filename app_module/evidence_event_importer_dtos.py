@@ -75,6 +75,7 @@ class EvidenceImportResult:
     decision_date: date | str | None
     event_payloads: tuple[dict[str, Any], ...] = ()
     diagnostics: tuple[EvidenceImportDiagnostic, ...] = ()
+    advisory_tokens: tuple[str, ...] = ()
 
     @property
     def events_seen(self) -> int:
@@ -100,6 +101,10 @@ class EvidenceCaptureSummary:
     events_skipped_duplicate: int = 0
     events_failed: int = 0
     warnings_count: int = 0
+    warning_counts: dict[str, int] = field(default_factory=dict)
+    advisories_count: int = 0
+    advisory_counts: dict[str, int] = field(default_factory=dict)
+    quality_coverage_rows: tuple[dict[str, int | str], ...] = ()
     diagnostics_by_code: dict[str, int] = field(default_factory=dict)
     event_type_counts: dict[str, int] = field(default_factory=dict)
     quality_counts: dict[str, int] = field(default_factory=dict)
@@ -117,6 +122,10 @@ class EvidenceCaptureSummary:
             "events_skipped_duplicate": self.events_skipped_duplicate,
             "events_failed": self.events_failed,
             "warnings_count": self.warnings_count,
+            "warning_counts": dict(self.warning_counts),
+            "advisories_count": self.advisories_count,
+            "advisory_counts": dict(self.advisory_counts),
+            "quality_coverage_rows": [dict(item) for item in self.quality_coverage_rows],
             "diagnostics_by_code": dict(self.diagnostics_by_code),
             "event_type_counts": dict(self.event_type_counts),
             "quality_counts": dict(self.quality_counts),

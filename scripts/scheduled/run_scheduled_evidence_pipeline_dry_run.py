@@ -42,9 +42,19 @@ def _pipeline_status_fields(summary: dict[str, Any] | None) -> dict[str, Any]:
     source_coverage = summary.get("source_coverage")
     if not isinstance(source_coverage, dict):
         source_coverage = {}
+    warning_counts = _warning_counts(summary.get("warning_counts"))
+    advisory_counts = _warning_counts(summary.get("advisory_counts"))
     return {
         "pipeline_summary_available": True,
+        "pipeline_overall_status": str(summary.get("overall_status") or "unknown"),
         "pipeline_warnings_count": int(summary.get("warnings_count") or 0),
+        "pipeline_warning_counts": warning_counts,
+        "pipeline_warning_unique_count": _warning_unique_count(summary, warning_counts),
+        "pipeline_warning_top_counts": _top_warning_counts(warning_counts),
+        "pipeline_advisories_count": int(summary.get("advisories_count") or 0),
+        "pipeline_advisory_counts": advisory_counts,
+        "pipeline_advisory_unique_count": _advisory_unique_count(summary, advisory_counts),
+        "pipeline_advisory_top_counts": _top_advisory_counts(advisory_counts),
         "pipeline_errors_count": int(summary.get("errors_count") or 0),
         "pipeline_blocking_gaps": list(summary.get("blocking_gaps") or []),
         "pipeline_diagnostic_codes": list(summary.get("diagnostic_codes") or []),
@@ -63,6 +73,86 @@ def _pipeline_status_fields(summary: dict[str, Any] | None) -> dict[str, Any]:
         "liquidity_gate_capture_ready": bool(source_coverage.get("liquidity_gate_capture_ready")),
         "screening_matrix_capture_ready": bool(source_coverage.get("screening_matrix_capture_ready")),
     }
+
+
+def _warning_counts(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    counts: dict[str, int] = {}
+    for key, raw_count in value.items():
+        token = str(key).strip()
+        if not token:
+            continue
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            counts[token] = count
+    return dict(sorted(counts.items()))
+
+
+def _warning_unique_count(summary: dict[str, Any], warning_counts: dict[str, int]) -> int:
+    try:
+        parsed = int(summary.get("warning_unique_count"))
+    except (TypeError, ValueError):
+        return len(warning_counts)
+    return parsed if parsed >= 0 else len(warning_counts)
+
+
+def _top_warning_counts(warning_counts: dict[str, int], *, limit: int = 10) -> list[dict[str, int | str]]:
+    rows = [
+        {"warning": token, "count": count}
+        for token, count in warning_counts.items()
+        if token and count > 0
+    ]
+    return sorted(rows, key=lambda item: (-int(item["count"]), str(item["warning"])))[:limit]
+
+
+def _advisory_unique_count(summary: dict[str, Any], advisory_counts: dict[str, int]) -> int:
+    try:
+        parsed = int(summary.get("advisory_unique_count"))
+    except (TypeError, ValueError):
+        return len(advisory_counts)
+    return parsed if parsed >= 0 else len(advisory_counts)
+
+
+def _top_advisory_counts(advisory_counts: dict[str, int], *, limit: int = 10) -> list[dict[str, int | str]]:
+    rows = [
+        {"advisory": token, "count": count}
+        for token, count in advisory_counts.items()
+        if token and count > 0
+    ]
+    return sorted(rows, key=lambda item: (-int(item["count"]), str(item["advisory"])))[:limit]
+
+
+def _scheduled_status(
+    *,
+    return_code: int,
+    freshness_status: str,
+    pipeline_summary: dict[str, Any] | None,
+) -> str:
+    if return_code != 0 or freshness_status == "failed":
+        return "failed"
+    if not pipeline_summary:
+        return "degraded"
+
+    pipeline_status = str(pipeline_summary.get("overall_status") or "unknown")
+    errors_count = int(pipeline_summary.get("errors_count") or 0)
+    warnings_count = int(pipeline_summary.get("warnings_count") or 0)
+    blocking_gaps = list(pipeline_summary.get("blocking_gaps") or [])
+    if pipeline_status == "failed" or errors_count > 0:
+        return "failed"
+    if freshness_status == "passed" and pipeline_status == "ready_with_advisories" and not blocking_gaps:
+        return "ready_with_advisories"
+    if (
+        freshness_status != "passed"
+        or pipeline_status != "ready"
+        or warnings_count > 0
+        or blocking_gaps
+    ):
+        return "degraded"
+    return "passed"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -117,9 +207,11 @@ def main(argv: list[str] | None = None) -> int:
     pipeline_summary = _extract_json_object(completed.stdout)
 
     freshness_status = _read_status(freshness_status_path)
-    status = "passed" if completed.returncode == 0 else "failed"
-    if status == "passed" and freshness_status != "passed":
-        status = "degraded"
+    status = _scheduled_status(
+        return_code=completed.returncode,
+        freshness_status=freshness_status,
+        pipeline_summary=pipeline_summary,
+    )
 
     payload = {
         "task": "baldr-evidence-pipeline-dry-run-daily",

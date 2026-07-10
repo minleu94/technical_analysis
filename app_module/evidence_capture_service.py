@@ -37,6 +37,7 @@ class EvidenceCaptureService:
         effective_dry_run = bool(request.dry_run or not request.confirm)
         diagnostics: list[EvidenceImportDiagnostic] = []
         payloads: list[dict[str, Any]] = []
+        advisory_counts: Counter[str] = Counter()
 
         sources = self._sources_for_request(request)
         for source_name in sources:
@@ -64,12 +65,21 @@ class EvidenceCaptureService:
                 continue
             diagnostics.extend(import_result.diagnostics)
             payloads.extend(import_result.event_payloads)
+            advisory_counts.update(_warning_tokens(import_result.advisory_tokens))
         payloads = [self._with_replay_context(payload, request.replay_context) for payload in payloads]
 
         event_type_counts = Counter(self._event_type_value(payload.get("event_type")) for payload in payloads)
         quality_counts = Counter(self._quality_value(payload.get("data_quality")) for payload in payloads)
-        warnings_count = sum(len(tuple(payload.get("warnings") or ())) for payload in payloads)
-        warnings_count += sum(1 for diagnostic in diagnostics if diagnostic.severity == "warning")
+        warning_counts: Counter[str] = Counter()
+        for payload in payloads:
+            warning_counts.update(_warning_tokens(payload.get("warnings")))
+        warning_counts.update(
+            f"diagnostic:{diagnostic.code}"
+            for diagnostic in diagnostics
+            if diagnostic.severity == "warning" and str(diagnostic.code).strip()
+        )
+        warnings_count = sum(warning_counts.values())
+        quality_coverage_rows = _quality_coverage_rows(payloads)
         sample_events = tuple(self._sample_event(payload) for payload in payloads[:10])
 
         events_inserted = 0
@@ -108,6 +118,10 @@ class EvidenceCaptureService:
             events_skipped_duplicate=events_skipped_duplicate,
             events_failed=events_failed,
             warnings_count=warnings_count,
+            warning_counts=dict(sorted(warning_counts.items())),
+            advisories_count=sum(advisory_counts.values()),
+            advisory_counts=dict(sorted(advisory_counts.items())),
+            quality_coverage_rows=quality_coverage_rows,
             diagnostics_by_code=dict(diagnostics_by_code),
             event_type_counts={key: value for key, value in event_type_counts.items() if key},
             quality_counts={key: value for key, value in quality_counts.items() if key},
@@ -169,3 +183,45 @@ class EvidenceCaptureService:
         if hasattr(value, "value"):
             return str(value.value)
         return str(value or "")
+
+
+def _warning_tokens(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value.strip(),) if value.strip() else ()
+    try:
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    except TypeError:
+        text = str(value).strip()
+        return (text,) if text else ()
+
+
+def _quality_coverage_rows(payloads: list[dict[str, Any]]) -> tuple[dict[str, int | str], ...]:
+    rows: list[dict[str, int | str]] = []
+    for payload in payloads:
+        metadata = dict(payload.get("metadata") or {})
+        if not any(key in metadata for key in (
+            "chip_observed_event_count",
+            "chip_estimated_event_count",
+            "chip_unavailable_event_count",
+        )):
+            continue
+        rows.append(
+            {
+                "symbol": str(payload.get("symbol") or ""),
+                "observed_event_count": _non_negative_int(metadata.get("chip_observed_event_count")),
+                "estimated_event_count": _non_negative_int(metadata.get("chip_estimated_event_count")),
+                "unavailable_event_count": _non_negative_int(metadata.get("chip_unavailable_event_count")),
+            }
+        )
+    return tuple(sorted(rows, key=lambda item: str(item["symbol"])))
+
+
+def _non_negative_int(value: Any) -> int:
+    if isinstance(value, bool) or value is None:
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0

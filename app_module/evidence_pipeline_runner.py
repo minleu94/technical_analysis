@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from app_module.decision_desk_builder_factory import build_service_backed_decision_desk_snapshot_builder
@@ -39,6 +39,7 @@ from app_module.evidence_pipeline_runner_dtos import (
     STEP_DEGRADED,
     STEP_FAILED,
     STEP_READY,
+    STEP_READY_WITH_ADVISORIES,
     STEP_SKIPPED,
     scheduler_readiness_after_run,
 )
@@ -152,6 +153,9 @@ class EvidencePipelineRunner:
             steps.append(summary_step)
 
         warnings_count = sum(step.warnings_count for step in steps)
+        warning_counts = _combined_warning_counts(step.warning_counts for step in steps)
+        advisory_counts = _combined_advisory_counts(step.advisory_counts for step in steps)
+        advisories_count = _advisory_count(advisory_counts)
         errors_count = sum(step.errors_count for step in steps)
         blocking_gaps = self._blocking_gaps_for_request(source_coverage, request)
         readiness_before = str(source_coverage.get("scheduler_readiness") or READINESS_NOT_READY)
@@ -207,6 +211,10 @@ class EvidencePipelineRunner:
             groups_insufficient_sample=groups_insufficient,
             groups_degraded=groups_degraded,
             warnings_count=warnings_count,
+            warning_counts=warning_counts,
+            advisories_count=advisories_count,
+            advisory_counts=advisory_counts,
+            quality_coverage_rows=tuple(getattr(capture_summary, "quality_coverage_rows", ()) or ()),
             errors_count=errors_count,
             blocking_gaps=tuple(blocking_gaps),
             next_recommended_action=self._next_action(readiness_after, blocking_gaps, effective_dry_run),
@@ -237,6 +245,7 @@ class EvidencePipelineRunner:
                 summary,
                 steps=tuple(steps),
                 warnings_count=sum(step.warnings_count for step in steps),
+                warning_counts=_combined_warning_counts(step.warning_counts for step in steps),
                 errors_count=sum(step.errors_count for step in steps),
             )
         return summary
@@ -287,13 +296,15 @@ class EvidencePipelineRunner:
                 )
             )
         blocking_gaps = self._blocking_gaps_for_request(coverage, request)
-        warnings = len(blocking_gaps)
+        warning_counts = _warning_counts(blocking_gaps)
+        warnings = sum(warning_counts.values())
         return coverage, EvidencePipelineStepSummary(
             step_name="source_coverage_check",
             status=STEP_DEGRADED if blocking_gaps else STEP_READY,
             dry_run=dry_run,
             records_seen=1,
             warnings_count=warnings,
+            warning_counts=warning_counts,
             errors_count=sum(1 for item in diagnostics if item.severity == "error"),
             diagnostics=tuple(diagnostics),
             duration_ms=timer.elapsed_ms(),
@@ -367,6 +378,7 @@ class EvidencePipelineRunner:
             step,
             status=STEP_DEGRADED if blocking_gaps else STEP_READY,
             warnings_count=len(blocking_gaps),
+            warning_counts=_warning_counts(blocking_gaps),
         )
 
     def _blocking_gaps_for_request(self, coverage: dict[str, Any], request: EvidencePipelineRunRequest) -> list[str]:
@@ -417,8 +429,16 @@ class EvidencePipelineRunner:
                 repository.save_snapshot(stored)
                 created = 1 if before is None else 0
                 skipped = 0 if before is None else 1
-            warnings_count = len(stored.warnings_json)
-            status = STEP_DEGRADED if warnings_count else STEP_READY
+            warning_counts, advisory_counts = _split_warning_and_advisory_counts(stored.warnings_json)
+            warnings_count = sum(warning_counts.values())
+            advisories_count = sum(advisory_counts.values())
+            status = (
+                STEP_DEGRADED
+                if warnings_count
+                else STEP_READY_WITH_ADVISORIES
+                if advisories_count
+                else STEP_READY
+            )
             return EvidencePipelineStepSummary(
                 step_name="capture_decision_desk_snapshot",
                 status=status,
@@ -427,6 +447,9 @@ class EvidencePipelineRunner:
                 records_created=created,
                 records_skipped=skipped,
                 warnings_count=warnings_count,
+                warning_counts=warning_counts,
+                advisories_count=advisories_count,
+                advisory_counts=advisory_counts,
                 duration_ms=timer.elapsed_ms(),
             )
         except Exception as exc:  # noqa: BLE001
@@ -484,8 +507,17 @@ class EvidencePipelineRunner:
             for item in summary.diagnostics
         )
         warning_count = combined.warnings_count
+        advisory_count = combined.advisories_count
         error_count = combined.events_failed + sum(1 for item in diagnostics if item.severity == "error")
-        status = STEP_FAILED if error_count else (STEP_DEGRADED if warning_count else STEP_READY)
+        status = (
+            STEP_FAILED
+            if error_count
+            else STEP_DEGRADED
+            if warning_count
+            else STEP_READY_WITH_ADVISORIES
+            if advisory_count
+            else STEP_READY
+        )
         return combined, EvidencePipelineStepSummary(
             step_name="capture_evidence_events",
             status=status,
@@ -494,6 +526,9 @@ class EvidencePipelineRunner:
             records_created=combined.events_inserted,
             records_skipped=combined.events_skipped_duplicate,
             warnings_count=warning_count,
+            warning_counts=combined.warning_counts,
+            advisories_count=advisory_count,
+            advisory_counts=combined.advisory_counts,
             errors_count=error_count,
             diagnostics=diagnostics,
             duration_ms=timer.elapsed_ms(),
@@ -598,6 +633,7 @@ class EvidencePipelineRunner:
                 records_updated=summary.outcomes_updated if not dry_run else 0,
                 records_skipped=summary.pending_insufficient_future_data,
                 warnings_count=warnings,
+                warning_counts=_forward_outcome_warning_counts(summary),
                 duration_ms=timer.elapsed_ms(),
             )
         except Exception as exc:  # noqa: BLE001
@@ -642,6 +678,7 @@ class EvidencePipelineRunner:
                 dry_run=dry_run,
                 records_seen=len(payloads),
                 warnings_count=degraded,
+                warning_counts=_forward_summary_warning_counts(payloads),
                 duration_ms=timer.elapsed_ms(),
             )
         except Exception as exc:  # noqa: BLE001
@@ -675,6 +712,8 @@ class EvidencePipelineRunner:
             return STEP_FAILED
         if blocking_gaps or any(step.status == STEP_DEGRADED for step in steps):
             return STEP_DEGRADED
+        if any(step.status == STEP_READY_WITH_ADVISORIES for step in steps):
+            return STEP_READY_WITH_ADVISORIES
         return STEP_READY
 
     def _next_action(self, readiness: str, blocking_gaps: list[str], dry_run: bool) -> str:
@@ -693,6 +732,130 @@ class _CombinedCaptureSummary:
         self.events_skipped_duplicate = sum(int(item.events_skipped_duplicate) for item in summaries)
         self.events_failed = sum(int(item.events_failed) for item in summaries)
         self.warnings_count = sum(int(item.warnings_count) for item in summaries)
+        self.warning_counts = _combined_warning_counts(item.warning_counts for item in summaries)
+        self.advisories_count = sum(int(item.advisories_count) for item in summaries)
+        self.advisory_counts = _combined_advisory_counts(item.advisory_counts for item in summaries)
+        self.quality_coverage_rows = tuple(
+            row
+            for summary in summaries
+            for row in getattr(summary, "quality_coverage_rows", ())
+        )
+
+
+def _warning_tokens(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value.strip(),) if value.strip() else ()
+    try:
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    except TypeError:
+        text = str(value).strip()
+        return (text,) if text else ()
+
+
+def _warning_counts(value: Any) -> dict[str, int]:
+    return dict(sorted(Counter(_warning_tokens(value)).items()))
+
+
+def _combined_warning_counts(mappings: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for mapping in mappings:
+        for key, value in dict(mapping or {}).items():
+            token = str(key).strip()
+            if not token:
+                continue
+            try:
+                count = int(value)
+            except (TypeError, ValueError):
+                continue
+            if count > 0:
+                counter[token] += count
+    return dict(sorted(counter.items()))
+
+
+def _combined_advisory_counts(mappings: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for mapping in mappings:
+        for key, value in dict(mapping or {}).items():
+            token = str(key).strip()
+            if not token:
+                continue
+            try:
+                count = int(value)
+            except (TypeError, ValueError):
+                continue
+            if count > counter[token]:
+                counter[token] = count
+    return dict(sorted(counter.items()))
+
+
+def _advisory_count(advisory_counts: Mapping[str, Any]) -> int:
+    return sum(int(value) for value in advisory_counts.values() if int(value) > 0)
+
+
+def _split_warning_and_advisory_counts(value: Any) -> tuple[dict[str, int], dict[str, int]]:
+    warnings: Counter[str] = Counter()
+    advisories: Counter[str] = Counter()
+    for token in _warning_tokens(value):
+        advisory_token = _canonical_advisory_token(token)
+        if advisory_token is not None:
+            advisories[advisory_token] += 1
+        else:
+            warnings[token] += 1
+    return dict(sorted(warnings.items())), dict(sorted(advisories.items()))
+
+
+def _canonical_advisory_token(token: str) -> str | None:
+    normalized = token
+    for prefix in ("portfolio_alerts:", "risk_prompts:", "relative_strength_liquidity:"):
+        if normalized.startswith(prefix):
+            normalized = normalized.removeprefix(prefix)
+            break
+    if normalized.startswith((
+        "portfolio_alert_top_source:",
+        "portfolio_alerts_chip_estimated:",
+        "relative_strength_liquidity_skipped_symbols:",
+    )):
+        return normalized
+    if normalized.startswith("risk_prompt_source_quality:") and normalized.endswith(":estimated"):
+        return normalized
+    return None
+
+
+def _top_warning_counts(warning_counts: Mapping[str, int], *, limit: int = 10) -> dict[str, int]:
+    rows = sorted(
+        ((str(key), int(value)) for key, value in warning_counts.items() if str(key).strip() and int(value) > 0),
+        key=lambda item: (-item[1], item[0]),
+    )
+    return dict(rows[:limit])
+
+
+def _forward_outcome_warning_counts(summary: Any) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for attr, token in (
+        ("pending_insufficient_future_data", "insufficient_future_data"),
+        ("missing_event_price", "missing_event_price"),
+        ("missing_outcome_price", "missing_outcome_price"),
+        ("missing_benchmark", "missing_benchmark"),
+        ("missing_industry_benchmark", "missing_industry_benchmark"),
+    ):
+        count = int(getattr(summary, attr, 0) or 0)
+        if count > 0:
+            counter[token] += count
+    remaining = int(getattr(summary, "warnings_count", 0) or 0) - sum(counter.values())
+    if remaining > 0:
+        counter["forward_outcome_warning_unclassified"] += remaining
+    return dict(sorted(counter.items()))
+
+
+def _forward_summary_warning_counts(payloads: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for payload in payloads:
+        status = str(payload.get("summary_status") or "").strip()
+        if status and status != SUMMARY_STATUS_READY:
+            counter[f"forward_summary_status:{status}"] += 1
+    return dict(sorted(counter.items()))
 
 
 def write_pipeline_report(summary: EvidencePipelineRunSummary, path: Path) -> None:
@@ -713,6 +876,24 @@ def _markdown_report(summary: EvidencePipelineRunSummary) -> str:
     gaps = "\n".join(f"- {gap}" for gap in summary.blocking_gaps) or "- none"
     diagnostics = Counter(summary.diagnostic_codes)
     diagnostic_rows = "\n".join(f"- {code}: {count}" for code, count in sorted(diagnostics.items())) or "- none"
+    top_warning_rows = "\n".join(
+        f"- {code}: {count}" for code, count in _top_warning_counts(summary.warning_counts).items()
+    ) or "- none"
+    warning_rows = "\n".join(
+        f"- {code}: {count}" for code, count in sorted(summary.warning_counts.items())
+    ) or "- none"
+    advisory_rows = "\n".join(
+        f"- {code}: {count}" for code, count in sorted(summary.advisory_counts.items())
+    ) or "- none"
+    quality_coverage_rows = "\n".join(
+        "- {symbol}: observed={observed}, estimated={estimated}, unavailable={unavailable}".format(
+            symbol=row.get("symbol") or "",
+            observed=int(row.get("observed_event_count") or 0),
+            estimated=int(row.get("estimated_event_count") or 0),
+            unavailable=int(row.get("unavailable_event_count") or 0),
+        )
+        for row in summary.quality_coverage_rows
+    ) or "- none"
     return (
         "# Evidence Pipeline Dry-run Report\n\n"
         "## Run Metadata\n"
@@ -742,6 +923,18 @@ def _markdown_report(summary: EvidencePipelineRunSummary) -> str:
         "## Warnings / Degraded Sources\n"
         f"- warnings_count: {summary.warnings_count}\n"
         f"- diagnostics:\n{diagnostic_rows}\n\n"
+        "## Warning Summary\n"
+        f"- warning_occurrence_count: {summary.warnings_count}\n"
+        f"- unique_warning_token_count: {len(summary.warning_counts)}\n"
+        f"- top_warning_tokens:\n{top_warning_rows}\n\n"
+        "## Warning Breakdown\n"
+        f"{warning_rows}\n\n"
+        "## Advisories\n"
+        f"- advisory_occurrence_count: {summary.advisories_count}\n"
+        f"- unique_advisory_token_count: {len(summary.advisory_counts)}\n"
+        f"{advisory_rows}\n\n"
+        "## Source Quality Coverage\n"
+        f"{quality_coverage_rows}\n\n"
         "## Blocking Gaps\n"
         f"{gaps}\n\n"
         "## Evidence Boundary\n"

@@ -24,7 +24,11 @@ class FakeRecommendationRepository:
         ]
 
 
-def _result(score_percentile_bp: int | None = None) -> RecommendationResultDTO:
+def _result(
+    score_percentile_bp: int | None = None,
+    *,
+    threshold_mode: str = "cross_sectional",
+) -> RecommendationResultDTO:
     return RecommendationResultDTO(
         result_id="rec-001",
         result_name="Evidence Import Test",
@@ -43,6 +47,7 @@ def _result(score_percentile_bp: int | None = None) -> RecommendationResultDTO:
                 industry="半導體",
                 regime_match=True,
                 score_percentile_bp=score_percentile_bp,
+                threshold_mode=threshold_mode,
             )
         ],
         regime="Trend",
@@ -65,6 +70,19 @@ def test_recommendation_importer_preserves_missing_percentile_with_warning():
     assert result.diagnostics_by_code["source_missing_exclusion_payload"] == 1
 
 
+def test_fixed_threshold_recommendation_does_not_emit_percentile_missing_warning():
+    importer = RecommendationEvidenceImporter(
+        FakeRecommendationRepository(_result(threshold_mode="fixed"))
+    )
+
+    result = importer.collect(EvidenceCaptureRequest(source="recommendation", result_id="rec-001"))
+
+    event = result.event_payloads[0]
+    assert event["score_percentile_bp"] is None
+    assert "score_percentile_missing" not in event["warnings"]
+    assert event["metadata"]["threshold_mode"] == "fixed"
+
+
 def test_recommendation_importer_uses_requested_decision_date_and_stable_source_id():
     importer = RecommendationEvidenceImporter(FakeRecommendationRepository(_result(score_percentile_bp=9000)))
 
@@ -80,4 +98,3 @@ def test_recommendation_importer_uses_requested_decision_date_and_stable_source_
     assert event["decision_date"] == "2026-07-03"
     assert event["source_id"] == "rec-001"
     assert event["score_percentile_bp"] == 9000
-

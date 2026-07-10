@@ -164,7 +164,8 @@ class RecommendationEvidenceImporter:
 
             warnings = []
             percentile = getattr(rec, "score_percentile_bp", None)
-            if percentile is None:
+            threshold_mode = str(getattr(rec, "threshold_mode", "") or "fixed").strip().lower()
+            if percentile is None and threshold_mode != "fixed":
                 warnings.append("score_percentile_missing")
             payloads.append(
                 {
@@ -192,7 +193,7 @@ class RecommendationEvidenceImporter:
                         "result_name": str(getattr(result, "result_name", "")),
                         "profile_version": profile_version,
                         "stock_name": str(getattr(rec, "stock_name", "")),
-                        "threshold_mode": str(getattr(rec, "threshold_mode", "")),
+                        "threshold_mode": threshold_mode,
                         "eligible_universe_size": getattr(rec, "eligible_universe_size", None),
                         "eligible_universe_date": getattr(rec, "eligible_universe_date", None),
                         "ranking_method": getattr(rec, "ranking_method", None),
@@ -467,7 +468,12 @@ class WatchlistTriggerEvidenceImporter:
                 code = warning.removeprefix(prefix).strip()
                 if code:
                     payloads.append(self._payload(summary, code, EvidenceEventType.WATCHLIST_TRIGGER_RISK_ALERT, decision_date, as_of))
-        return EvidenceImportResult(self.source_name, decision_date, tuple(payloads))
+        return EvidenceImportResult(
+            self.source_name,
+            decision_date,
+            tuple(payloads),
+            advisory_tokens=tuple(summary.warnings),
+        )
 
     def _payload(
         self,
@@ -493,7 +499,7 @@ class WatchlistTriggerEvidenceImporter:
             "reason_codes": (event_type.value,),
             "risk_codes": ("watchlist_risk_alert",) if event_type == EvidenceEventType.WATCHLIST_TRIGGER_RISK_ALERT else (),
             "data_quality": _quality(summary.quality),
-            "warnings": tuple(summary.warnings),
+            "warnings": (),
             "as_of_date": as_of,
             "available_date": decision_date,
             "source_version": "watchlist_trigger_importer_v1",
@@ -547,7 +553,12 @@ class PortfolioAlertEvidenceImporter:
             for attribution in summary.attributions
             if not request.symbol or str(attribution.stock_code) == str(request.symbol)
         ]
-        return EvidenceImportResult(self.source_name, decision_date, tuple(payloads))
+        return EvidenceImportResult(
+            self.source_name,
+            decision_date,
+            tuple(payloads),
+            advisory_tokens=tuple(summary.warnings),
+        )
 
     def _payload(self, summary: PortfolioAlertSummary, attribution: Any, decision_date: str, as_of: str) -> dict[str, Any]:
         event_type = self._event_type(attribution)
@@ -565,7 +576,7 @@ class PortfolioAlertEvidenceImporter:
             "reason_codes": tuple(attribution.reasons),
             "risk_codes": (event_type.value,),
             "data_quality": _quality(summary.quality),
-            "warnings": tuple(summary.warnings),
+            "warnings": (),
             "as_of_date": as_of,
             "available_date": decision_date,
             "source_version": "portfolio_alert_importer_v1",
@@ -575,6 +586,9 @@ class PortfolioAlertEvidenceImporter:
                 "chip_risk_level": attribution.chip_risk_level,
                 "severity": attribution.severity,
                 "data_quality_flags": list(attribution.data_quality_flags),
+                "chip_observed_event_count": attribution.chip_observed_event_count,
+                "chip_estimated_event_count": attribution.chip_estimated_event_count,
+                "chip_unavailable_event_count": attribution.chip_unavailable_event_count,
                 "alert_level": summary.alert_level,
                 **source_metadata,
             },
@@ -622,7 +636,7 @@ class RiskPromptEvidenceImporter:
                     "reason_codes": (prompt.category, prompt.source),
                     "risk_codes": (prompt.severity,),
                     "data_quality": _quality(summary.quality),
-                    "warnings": tuple(summary.warnings),
+                    "warnings": (),
                     "as_of_date": as_of,
                     "available_date": decision_date,
                     "source_version": "risk_prompt_importer_v1",
@@ -636,7 +650,12 @@ class RiskPromptEvidenceImporter:
                     },
                 }
             )
-        return EvidenceImportResult(self.source_name, decision_date, tuple(payloads))
+        return EvidenceImportResult(
+            self.source_name,
+            decision_date,
+            tuple(payloads),
+            advisory_tokens=tuple(summary.warnings),
+        )
 
     def _event_type(self, category: str) -> EvidenceEventType:
         if category == "liquidity":

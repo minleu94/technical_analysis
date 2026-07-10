@@ -195,6 +195,9 @@ class PortfolioAlertAttribution:
     severity: int
     reasons: tuple[str, ...] = ()
     data_quality_flags: tuple[str, ...] = ()
+    chip_observed_event_count: int = 0
+    chip_estimated_event_count: int = 0
+    chip_unavailable_event_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "stock_code", str(self.stock_code))
@@ -204,6 +207,9 @@ class PortfolioAlertAttribution:
         object.__setattr__(self, "severity", int(self.severity))
         object.__setattr__(self, "reasons", tuple(str(item) for item in self.reasons))
         object.__setattr__(self, "data_quality_flags", tuple(str(item) for item in self.data_quality_flags))
+        object.__setattr__(self, "chip_observed_event_count", max(0, int(self.chip_observed_event_count)))
+        object.__setattr__(self, "chip_estimated_event_count", max(0, int(self.chip_estimated_event_count)))
+        object.__setattr__(self, "chip_unavailable_event_count", max(0, int(self.chip_unavailable_event_count)))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -214,6 +220,9 @@ class PortfolioAlertAttribution:
             "severity": self.severity,
             "reasons": list(self.reasons),
             "data_quality_flags": list(self.data_quality_flags),
+            "chip_observed_event_count": self.chip_observed_event_count,
+            "chip_estimated_event_count": self.chip_estimated_event_count,
+            "chip_unavailable_event_count": self.chip_unavailable_event_count,
         }
 
 

@@ -35,6 +35,9 @@ class _AlertItem:
     condition_status: str
     chip_risk_level: str
     data_quality_flags: tuple[str, ...]
+    chip_observed_event_count: int = 0
+    chip_estimated_event_count: int = 0
+    chip_unavailable_event_count: int = 0
 
 
 
@@ -44,6 +47,9 @@ class _ChipRiskResult:
     risk_level: str
     reasons: tuple[str, ...]
     data_quality_flags: tuple[str, ...]
+    observed_event_count: int = 0
+    estimated_event_count: int = 0
+    unavailable_event_count: int = 0
 
 
 class PortfolioAlertService:
@@ -139,6 +145,9 @@ class PortfolioAlertService:
                 severity=item.severity,
                 reasons=item.reasons,
                 data_quality_flags=item.data_quality_flags,
+                chip_observed_event_count=item.chip_observed_event_count,
+                chip_estimated_event_count=item.chip_estimated_event_count,
+                chip_unavailable_event_count=item.chip_unavailable_event_count,
             )
             for item in sorted_alerts
         )
@@ -196,6 +205,9 @@ class PortfolioAlertService:
                         condition_status=status or "unknown",
                         chip_risk_level=chip_result.risk_level,
                         data_quality_flags=chip_result.data_quality_flags,
+                        chip_observed_event_count=chip_result.observed_event_count,
+                        chip_estimated_event_count=chip_result.estimated_event_count,
+                        chip_unavailable_event_count=chip_result.unavailable_event_count,
                     )
                 )
 
@@ -222,6 +234,7 @@ class PortfolioAlertService:
         has_estimated_lots = bool(summary.get("has_estimated_lots", False))
         unavailable_count = self._read_non_negative_int(summary.get("unavailable_event_count"))
         estimated_count = self._read_non_negative_int(summary.get("estimated_event_count"))
+        observed_count = self._read_non_negative_int(summary.get("observed_event_count"))
 
         if not lots_available:
             warnings.append(f"portfolio_alerts_chip_data_missing:{stock_code}")
@@ -239,8 +252,24 @@ class PortfolioAlertService:
         risk_level = str(summary.get("risk_level", "")).lower().strip() or "neutral"
         if risk_level in {"bearish", "extreme", "risk"}:
             reasons.append(f"chip:risk_level:{risk_level}")
-            return _ChipRiskResult(80, risk_level, tuple(reasons), tuple(data_quality_flags))
-        return _ChipRiskResult(0, risk_level, tuple(reasons), tuple(data_quality_flags))
+            return _ChipRiskResult(
+                80,
+                risk_level,
+                tuple(reasons),
+                tuple(data_quality_flags),
+                observed_count,
+                estimated_count,
+                unavailable_count,
+            )
+        return _ChipRiskResult(
+            0,
+            risk_level,
+            tuple(reasons),
+            tuple(data_quality_flags),
+            observed_count,
+            estimated_count,
+            unavailable_count,
+        )
 
 
     def _read_non_negative_int(self, value: Any) -> int:

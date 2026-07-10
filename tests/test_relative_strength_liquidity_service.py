@@ -4,12 +4,27 @@ from app_module.decision_desk_dtos import DecisionDeskQuality
 from app_module.relative_strength_liquidity_service import RelativeStrengthLiquidityService
 
 
+DATE_COL = "\u65e5\u671f"
+CODE_COL = "\u8b49\u5238\u4ee3\u865f"
+CLOSE_COL = "\u6536\u76e4\u50f9"
+VOLUME_COL = "\u6210\u4ea4\u80a1\u6578"
+
+
 class FakeProvider:
     def __init__(self, frame):
         self.frame = frame
 
     def fetch(self, as_of_date: date):
         return self.frame
+
+
+def _row(current_date: date, stock_code: str, close: int, volume: int = 1_000_000) -> dict[str, str]:
+    return {
+        DATE_COL: current_date.strftime("%Y-%m-%d"),
+        CODE_COL: stock_code,
+        CLOSE_COL: str(close),
+        VOLUME_COL: str(volume),
+    }
 
 
 def test_relative_strength_liquidity_service_ranks_strength_and_low_liquidity():
@@ -59,6 +74,48 @@ def test_relative_strength_liquidity_service_ranks_strength_and_low_liquidity():
     # strength_5d_bp: 2330: (121 - 116) / 116 * 10000 = 431 bp
     assert ranking[0]["strength_20d_bp"] > 0
     assert ranking[0]["strength_5d_bp"] > 0
+
+
+def test_relative_strength_liquidity_service_keeps_observed_for_small_partial_skips():
+    base_date = date(2026, 5, 10)
+    target_date = base_date + timedelta(days=21)
+    data = []
+    for symbol_index in range(20):
+        stock_code = f"{1000 + symbol_index}"
+        for day_index in range(22):
+            data.append(_row(base_date + timedelta(days=day_index), stock_code, 100 + symbol_index + day_index))
+    for day_index in range(10):
+        data.append(_row(target_date - timedelta(days=9 - day_index), "9999", 100 + day_index))
+
+    service = RelativeStrengthLiquidityService(FakeProvider(pd.DataFrame(data)), top_n=3)
+
+    snapshot = service.build_snapshot(target_date)
+
+    assert snapshot.quality == DecisionDeskQuality.OBSERVED
+    assert snapshot.warnings == ("relative_strength_liquidity_skipped_symbols:1",)
+    assert snapshot.meta["ranked_symbol_count"] == 20
+    assert snapshot.meta["skipped_symbol_count"] == 1
+    assert snapshot.meta["skipped_symbol_ratio_bp"] <= snapshot.meta["max_skipped_symbol_ratio_bp"]
+
+
+def test_relative_strength_liquidity_service_degrades_when_partial_skips_exceed_tolerance():
+    base_date = date(2026, 5, 10)
+    target_date = base_date + timedelta(days=21)
+    data = []
+    for day_index in range(22):
+        data.append(_row(base_date + timedelta(days=day_index), "2330", 100 + day_index))
+    for day_index in range(10):
+        data.append(_row(target_date - timedelta(days=9 - day_index), "9999", 100 + day_index))
+
+    service = RelativeStrengthLiquidityService(FakeProvider(pd.DataFrame(data)), top_n=3)
+
+    snapshot = service.build_snapshot(target_date)
+
+    assert snapshot.quality == DecisionDeskQuality.DEGRADED
+    assert snapshot.warnings == ("relative_strength_liquidity_skipped_symbols:1",)
+    assert snapshot.meta["ranked_symbol_count"] == 1
+    assert snapshot.meta["skipped_symbol_count"] == 1
+    assert snapshot.meta["skipped_symbol_ratio_bp"] > snapshot.meta["max_skipped_symbol_ratio_bp"]
 
 
 def test_relative_strength_liquidity_service_marks_degraded_when_history_is_insufficient():

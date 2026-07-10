@@ -131,6 +131,9 @@ def test_scheduled_recommendation_snapshot_saves_result_and_status(
     saved = FakeRecommendationRepository.saved_results[0]
     assert saved.config["scheduled_snapshot"] is True
     assert saved.config["research_only"] is True
+    assert saved.recommendations[0].threshold_mode == "fixed"
+    assert saved.recommendations[0].ranking_method == "fixed_threshold"
+    assert saved.recommendations[0].score_percentile_bp is None
     assert saved.screening_matrix_json
     assert saved.why_not_payload_json
 

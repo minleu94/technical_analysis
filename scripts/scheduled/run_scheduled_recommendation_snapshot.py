@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 import json
@@ -78,6 +79,13 @@ def _build_result_id(now: datetime) -> str:
     return f"scheduled_rec_{now.strftime('%Y%m%d_%H%M%S')}"
 
 
+def _with_fixed_threshold_metadata(recommendations: list[Any]) -> list[Any]:
+    return [
+        replace(item, threshold_mode="fixed", ranking_method="fixed_threshold")
+        for item in recommendations
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Scheduled research-only recommendation snapshot wrapper.")
     parser.add_argument("--data-root", required=True)
@@ -141,11 +149,11 @@ def main(argv: list[str] | None = None) -> int:
         recommendation_config = _scheduled_default_config()
         runtime_config = _runtime_config(recommendation_config)
         service = RecommendationService(config)
-        recommendations = service.run_recommendation(
+        recommendations = _with_fixed_threshold_metadata(service.run_recommendation(
             config=runtime_config,
             max_stocks=args.max_stocks,
             top_n=args.top_n,
-        )
+        ))
 
         result_config = deepcopy(recommendation_config)
         result_config.update(

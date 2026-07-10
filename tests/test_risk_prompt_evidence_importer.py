@@ -32,6 +32,17 @@ class FakeRiskPromptProvider:
         )
 
 
+class AdvisoryRiskPromptProvider(FakeRiskPromptProvider):
+    def build_snapshot(self, as_of_date: date) -> DecisionDeskRiskPromptSummary:
+        snapshot = super().build_snapshot(as_of_date)
+        return DecisionDeskRiskPromptSummary(
+            as_of_date=snapshot.as_of_date,
+            quality=snapshot.quality,
+            warnings=("risk_prompt_source_quality:portfolio_alerts:estimated",),
+            prompts=snapshot.prompts,
+        )
+
+
 def test_risk_prompt_importer_maps_liquidity_without_forbidden_language():
     importer = RiskPromptEvidenceImporter(FakeRiskPromptProvider())
 
@@ -45,3 +56,11 @@ def test_risk_prompt_importer_maps_liquidity_without_forbidden_language():
     assert "buy" not in combined
     assert "sell" not in combined
 
+
+def test_risk_prompt_importer_keeps_snapshot_quality_as_one_advisory():
+    importer = RiskPromptEvidenceImporter(AdvisoryRiskPromptProvider())
+
+    result = importer.collect(EvidenceCaptureRequest(source="risk-prompt", decision_date="2026-07-02"))
+
+    assert result.advisory_tokens == ("risk_prompt_source_quality:portfolio_alerts:estimated",)
+    assert result.event_payloads[0]["warnings"] == ()
