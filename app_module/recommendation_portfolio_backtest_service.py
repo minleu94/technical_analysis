@@ -23,6 +23,7 @@ from data_module.microstructure_source_preflight import build_microstructure_sou
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from decision_module.factors.factor_dtos import FactorQuality, FactorRecord, MissingPolicy
 from financial_module.units import bps_to_rate, calculate_fee, quantize_money, to_decimal
+from app_module.recommendation_portfolio_result_support import build_credibility_manifest, build_factor_manifest, build_relative_attribution, build_stock_contribution, return_bp_from_values
 
 
 class RecommendationPortfolioBacktestService:
@@ -1001,6 +1002,7 @@ class RecommendationPortfolioBacktestService:
         equity_curve: pd.DataFrame,
         data: pd.DataFrame,
     ) -> Dict[str, Any]:
+        return build_relative_attribution(equity_curve, data)
         source_groups = {
             "benchmark": ("大盤收盤價", "benchmark_close", "market_index_close", "加權指數"),
             "industry": ("產業指數收盤價", "industry_close", "industry_index_close"),
@@ -1066,6 +1068,7 @@ class RecommendationPortfolioBacktestService:
         return self._return_bp_from_values(references[column])
 
     def _return_bp_from_values(self, values: pd.Series) -> int | None:
+        return return_bp_from_values(values)
         if len(values) < 2:
             return None
         first = to_decimal(values.iloc[0])
@@ -1100,6 +1103,7 @@ class RecommendationPortfolioBacktestService:
         return "low"
 
     def _build_stock_contribution(self, holdings: List[PeriodHoldingDTO]) -> List[StockContributionDTO]:
+        return build_stock_contribution(holdings)
         grouped = defaultdict(list)
         for holding in holdings:
             grouped[(holding.stock_code, holding.stock_name)].append(holding)
@@ -1132,6 +1136,7 @@ class RecommendationPortfolioBacktestService:
         tax_bps: float | None = None,
         lot_size: int | None = None,
     ) -> Dict[str, Any]:
+        return build_credibility_manifest(rebalance_frequency, allocation_method, max_participation_rate, self._has_execution_cost_params(fee_bps, slippage_bps, tax_bps), lot_size, fee_bps, slippage_bps, tax_bps)
         liquidity_supported: bool | str = "partial" if max_participation_rate else False
         liquidity_policy = (
             "entry_day_volume_participation_checked"
@@ -1201,6 +1206,7 @@ class RecommendationPortfolioBacktestService:
         self,
         snapshots: List[RecommendationSnapshotDTO],
     ) -> Dict[str, Any]:
+        return build_factor_manifest(snapshots, self._factor_records_from_snapshot)
         factor_service = FactorService()
         combined_snapshot: Dict[str, Any] = {
             "schema_version": 1,
