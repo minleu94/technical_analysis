@@ -1,16 +1,16 @@
 # Graph Report - technical_analysis  (2026-07-10)
 
 ## Corpus Check
-- 1124 files · ~750,115 words
+- 1122 files · ~749,943 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 15345 nodes · 32987 edges · 1149 communities (684 shown, 465 thin omitted)
+- 15332 nodes · 32955 edges · 1131 communities (667 shown, 464 thin omitted)
 - Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 2913 edges (avg confidence: 0.52)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4b632d76`
+- Built from commit: `ab37b615`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -359,7 +359,6 @@
 - Multi Agent Workflow
 - Negative Evidence Capture
 - Mcp Yfinance Openmarkets
-- Legacy Governance Focused
 - Registry Broker Branch
 - Init Full App
 - Register Baldr Scheduled
@@ -1106,24 +1105,6 @@
 - Runtime Observatory Workspace
 - UI Layer Boundary
 - Watchlist Workspace
-- 14. Next Stage：Evidence-Driven baldr
-- 15. 成功標準
-- 2. 設計第一原則
-- 4. Daily Decision Desk Contract
-- 常見問題
-- 推薦分析 - 結果保存與追溯
-- .calculate_baseline_comparison
-- 10. Portfolio Feedback & Strategy Lifecycle
-- 3. baldr 四大核心閉環
-- 7. Data Governance & No-look-ahead Policy
-- 推薦分析 - 產業篩選
-- 推薦分析 - 推薦理由詳情
-- 持倉管理 - 籌碼面監控與下鑽
-- test_ui_qt_recommendation_portfolio_results.py
-- 9. Explainability Layer
-- 附錄 C：參考文獻與理論依據
-- 策略回測 - Phase 2.5 新參數使用指南
-- Phase 3.3a：研究閉環核心功能 ✅ 已完成
 
 ## God Nodes (most connected - your core abstractions)
 1. `TWStockConfig` - 503 edges
@@ -1140,14 +1121,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `test_research_run_metadata_dto_contract_fields_remain_stable()` --indirect_call--> `ResearchRunMetadataDTO`  [INFERRED]
   tests/test_backtest_research_run_metadata.py → app_module/research_run_dtos.py
+- `test_oos_signal_generation_resets_position_state_at_execution_start()` --indirect_call--> `MomentumAggressiveExecutor`  [INFERRED]
+  tests/test_walkforward_service.py → app_module/strategies/momentum_aggressive_executor.py
 - `test_update_service_wrappers_preserve_overridden_private_normalizers()` --indirect_call--> `UpdateService`  [INFERRED]
   tests/test_update_data_normalization.py → app_module/update_service.py
 - `mock_config()` --indirect_call--> `TWStockConfig`  [INFERRED]
   tests/test_recommendation_ranking_service.py → data_module/config.py
 - `ScoringEngine` --uses--> `PatternAnalyzer`  [INFERRED]
   decision_module/scoring_engine.py → analysis_module/pattern_analysis/pattern_analyzer.py
-- `test_advanced_patterns()` --calls--> `PatternAnalyzer`  [INFERRED]
-  tests/manual/legacy_advanced_patterns_check.py → analysis_module/pattern_analysis/pattern_analyzer.py
 
 ## Import Cycles
 - None detected.
@@ -1159,247 +1140,247 @@
 - **chunk_13_safety_validation_mesh** — docs_superpowers_specs_2026_06_11_financial_float_boundary_governance_design_financial_float_boundary, docs_superpowers_specs_2026_06_14_legacy_test_governance_design_legacy_test_governance_design, docs_superpowers_specs_2026_06_23_healthcheck_issue_resolution_design_healthcheck_issue_resolution_design, docs_superpowers_specs_2026_06_29_full_app_healthcheck_ui_smoke_design_ui_smoke_healthcheck, docs_superpowers_specs_2026_06_30_mainwindow_ui_smoke_operation_design_mainwindow_ui_smoke_operation_design [INFERRED 0.85]
 - **hyperedge:app_icon_identity_summary** — image:C:\Projects\PythonProjects\technical_analysis\ui_qt\app_icon.png, concept:desktop_app_visual_identity, concept:animal_head_icon_motif, rationale:not_ui_screenshot [0.82]
 
-## Communities (1149 total, 465 thin omitted)
+## Communities (1131 total, 464 thin omitted)
 
 ### Community 0 - "Args Watchlist Dataframe"
 Cohesion: 0.10
-Nodes (25): DailyDecisionDeskProvider, DecisionDeskSnapshotBuilder, date, Builder for Daily Decision Desk snapshot., SmartMoneyDashboardSummary, SmartMoneySemanticSummary, AllObservedDecisionDeskProvider, FakeDecisionDeskProvider (+17 more)
+Nodes (49): DecisionDeskDashboardComposer, Compose answer-first Daily Decision dashboard DTOs from section snapshots., MarketBreadthSummary, MarketRegimeSummary, RelativeStrengthLiquiditySummary, SectorRotationSummary, WatchlistTriggerSummary, DecisionDeskRiskPromptService (+41 more)
 
 ### Community 1 - "Init Args Strategy"
-Cohesion: 0.07
-Nodes (42): EvidenceOutcome, Any, ScoreBucketAuditRow, ScoreEffectivenessReport, _BucketAccumulator, Decimal, Read-only TotalScore bucket audit over existing evidence outcomes., ScoreEffectivenessReadModel (+34 more)
+Cohesion: 0.06
+Nodes (62): ComponentAblationReadinessReport, ComponentAblationReadinessRow, ComponentAblationReadinessService, ComponentSetDefinition, _has_components(), _has_int_score(), Any, Inspect whether saved evidence can support component ablation. (+54 more)
 
 ### Community 2 - "Calculate Baseline Buy"
 Cohesion: 0.03
-Nodes (73): DailySignalFrame, DataFrame, Series, DailySignalFrame 統一輸出格式 推薦和回測共用同一條 signal pipeline, 解析理由標籤字符串為列表                  Args:             reason_tags_str: 理由標籤字符串（逗號分隔, 創建 DailySignalFrame                  Args:             df: 原始數據 DataFrame（必須有, 獲取最新的信號（用於推薦）                  Args:             signal_frame: DailySignalFra, 理由標籤系統 將推薦理由轉換為可回測的標籤，用於統計分析 (+65 more)
+Nodes (103): 回測服務 (Backtest Service) 提供回測分析的業務邏輯, DailySignalFrame, DataFrame, Series, DailySignalFrame 統一輸出格式 推薦和回測共用同一條 signal pipeline, 解析理由標籤字符串為列表                  Args:             reason_tags_str: 理由標籤字符串（逗號分隔, 創建 DailySignalFrame                  Args:             df: 原始數據 DataFrame（必須有, 獲取最新的信號（用於推薦）                  Args:             signal_frame: DailySignalFra (+95 more)
 
 ### Community 3 - "Snapshot Build Init"
 Cohesion: 0.02
-Nodes (4): BacktestView, Plot recommendation portfolio value and drawdown charts., 比較表格雙擊事件：載入該回測結果的詳細信息, 標記新一輪研究執行已開始，用於阻擋舊結果保存。
+Nodes (33): 回測沒有完成交易時，摘要要明確告知交易明細不可記錄到 Portfolio。, 驗證無交易時，fixed 模式與 quantile 模式能給出正確的診斷建議文案, 推薦回放摘要需明確揭露同日收盤成交與可成交性假設。, 批次結果頁需說明排行榜與整體統計的判讀目的。, Train-Test 結果需揭露 OOS 交易數不足時的可靠度限制。, Walk-forward 結果需揭露 fold 與 OOS 樣本不足。, 驗證門檻模式下拉選單的載入、正常參數面板與最佳化面板的動態顯示/隱藏, 驗證從回測交易記錄到 Portfolio 時，會保留正確的來源與 metadata (+25 more)
 
 ### Community 4 - "Portfolio Optimization Combo"
-Cohesion: 0.05
-Nodes (76): EvidenceCaptureService, _non_negative_int(), Any, _quality_coverage_rows(), Capture importer payloads through the EvidenceEventService boundary., _warning_tokens(), EvidenceDataQuality, EvidenceEventType (+68 more)
+Cohesion: 0.07
+Nodes (54): EvidenceCaptureService, _non_negative_int(), Any, _quality_coverage_rows(), Capture importer payloads through the EvidenceEventService boundary., _warning_tokens(), EvidenceDataQuality, EvidenceEventType (+46 more)
 
 ### Community 5 - "Backup Config Path"
-Cohesion: 0.11
-Nodes (26): BatchBacktestService, Any, 初始化批次回測服務          Args:             backtest_service: 單檔回測服務             ru, 執行批次回測          Args:             stock_codes: 股票代號列表             start_date, 在子進程中執行單檔回測的 Worker 函數 (Windows spawn 相容), 計算整體統計          Args:             stock_results: 股票結果列表          Returns:, _run_batch_backtest_worker(), create_test_env() (+18 more)
+Cohesion: 0.06
+Nodes (47): BacktestRun, BacktestRunRepository, Any, 回測結果儲存庫 (Backtest Run Repository) 使用 SQLite 儲存回測結果，支援查詢、比較、追溯, 儲存回測結果                  Args:             run_name: 執行名稱             stock_c, 列出回測結果                  Args:             strategy_id: 策略ID篩選（可選）, 載入回測結果                  Args:             run_id: 執行ID                  Ret, 載入回測的完整資料（包含 equity curve 和 trade list）                  Args:             ru (+39 more)
 
 ### Community 6 - "Args Version Preset"
 Cohesion: 0.06
-Nodes (69): _collect_agent_payload_warnings(), _connect_read_only(), _default_multi_day_record_path(), _evidence_rows_from_agent_payloads(), _has_payload(), _inspect_source_gaps_read_only(), _latest_decision_desk_snapshot(), _latest_recommendation_payload() (+61 more)
+Nodes (70): _collect_agent_payload_warnings(), _connect_read_only(), _default_multi_day_record_path(), _evidence_rows_from_agent_payloads(), _has_payload(), _inspect_source_gaps_read_only(), _latest_decision_desk_snapshot(), _latest_recommendation_payload() (+62 more)
 
 ### Community 7 - "Event Evidence Capture"
-Cohesion: 0.12
-Nodes (12): 初始化回測服務                  Args:             config: TWStockConfig 實例, 驗證狀態（Phase 3.5 SOP 護欄）, ValidationStatus, Any, Phase 3.5 SOP 驗證器 強制符合研究 SOP 流程的護欄邏輯, 判斷驗證狀態                  Args:             insufficient_flags: 樣本不足標記, 檢查過擬合風險（根據 Phase 3.5 SOP）                  Args:             overfitting_risk, 檢查 Baseline 對比（根據 Phase 3.5 SOP）                  Args:             baseline_ (+4 more)
+Cohesion: 0.16
+Nodes (9): 初始化回測服務                  Args:             config: TWStockConfig 實例, Any, 判斷驗證狀態                  Args:             insufficient_flags: 樣本不足標記, 檢查過擬合風險（根據 Phase 3.5 SOP）                  Args:             overfitting_risk, 檢查 Baseline 對比（根據 Phase 3.5 SOP）                  Args:             baseline_, 計算行為健康分數（根據 Phase 3.5 SOP）                  Args:             total_trades: 總, 驗證回測結果是否符合 Phase 3.5 SOP                  Args:             total_trades: 總交易, SOPValidator (+1 more)
 
 ### Community 8 - "Run Args Backtest"
-Cohesion: 0.06
-Nodes (59): Factor Layer application service。, _deep_freeze(), _deep_freeze_mapping(), _deep_thaw(), FactorDefinition, FactorGateResult, FactorRecord, MissingPolicy (+51 more)
+Cohesion: 0.08
+Nodes (45): _deep_freeze(), _deep_freeze_mapping(), _deep_thaw(), FactorGateResult, FactorRecord, Any, _to_json_safe(), FactorGate (+37 more)
 
 ### Community 9 - "Gap Dict Research"
 Cohesion: 0.03
-Nodes (64): 應用服務層 (Application Service Layer) 提供統一的業務邏輯接口，供 UI（Tkinter/Qt/Web/CLI）調用, Thin Journal service for Phase 4.1 MVP., 市場狀態服務 (Regime Service) 提供市場狀態檢測的業務邏輯, DataFrame, 篩選服務 (Screening Service) 提供強勢股/產業篩選的業務邏輯, 獲取弱勢產業（與強勢產業同架構，反向排名）                  Args:             period: 'day' 或 'wee, 獲取強勢股                  Args:             period: 'day' 或 'week'，表示本日或本周, 獲取強勢產業                  Args:             period: 'day' 或 'week'，表示本日或本周 (+56 more)
+Nodes (80): 應用服務層 (Application Service Layer) 提供統一的業務邏輯接口，供 UI（Tkinter/Qt/Web/CLI）調用, JournalService, Thin Journal service for Phase 4.1 MVP., Coordinates append-only journal entries., Any, 市場狀態服務 (Regime Service) 提供市場狀態檢測的業務邏輯, 獲取指定市場狀態的策略配置                  Args:             regime: 'Trend' | 'Reversion, RegimeService (+72 more)
 
 ### Community 10 - "Fetch Watchlist Init"
-Cohesion: 0.06
-Nodes (41): ProfileReplayComparisonRequest, ProfileReplayComparisonResult, ProfileReplayComparisonRow, Any, DTOs for V1.1 recommendation profile replay comparison.  本模組只保存已完成推薦回放的比較摘要，不重, ProfileReplayComparisonService, Any, date (+33 more)
+Cohesion: 0.14
+Nodes (18): ProfileReplayComparisonRequest, ProfileReplayComparisonResult, ProfileReplayComparisonRow, Any, DTOs for V1.1 recommendation profile replay comparison.  本模組只保存已完成推薦回放的比較摘要，不重, ProfileReplayComparisonService, Any, date (+10 more)
 
 ### Community 11 - "Date Collect Init"
-Cohesion: 0.06
-Nodes (33): Any, Path, 更新每日股票數據          在指定日期範圍內查找缺失的日期並下載          Args:             start_date:, 將既有 CSV 更新結果同步到 SQLite，保留日常 CSV 輸出行為。, 更新大盤指數數據          Args:             start_date: 開始日期（YYYY-MM-DD）, 更新產業指數數據          Args:             start_date: 開始日期（YYYY-MM-DD）, 從 SQLite 資料庫極速獲取指定資料表的狀態, Read monthly revenue status from the fundamental SQLite table. (+25 more)
+Cohesion: 0.07
+Nodes (23): Any, Path, 將既有 CSV 更新結果同步到 SQLite，保留日常 CSV 輸出行為。, 從 SQLite 資料庫極速獲取指定資料表的狀態, Read monthly revenue status from the fundamental SQLite table., 從 SQLite 資料庫極速獲取券商分點的狀態, 從 SQLite 資料庫極速獲取技術指標的狀態, 取得全部資料頁使用的輕量狀態摘要，不執行深度檢查或自動修復 (+15 more)
 
 ### Community 12 - "Readiness Dict Pre"
 Cohesion: 0.06
 Nodes (49): Any, Read-only V3.0 effectiveness dashboard disclosure service., V3EffectivenessDashboardDTO, V3EffectivenessDashboardRow, V3EffectivenessDashboardService, Any, V3.0 evidence effectiveness read-only DTOs., V3EffectivenessReport (+41 more)
 
 ### Community 13 - "Sqlite Csv Status"
-Cohesion: 0.02
-Nodes (124): BacktestRun, BacktestRunRepository, Any, 回測結果儲存庫 (Backtest Run Repository) 使用 SQLite 儲存回測結果，支援查詢、比較、追溯, 儲存回測結果                  Args:             run_name: 執行名稱             stock_c, 列出回測結果                  Args:             strategy_id: 策略ID篩選（可選）, 載入回測結果                  Args:             run_id: 執行ID                  Ret, 載入回測的完整資料（包含 equity curve 和 trade list）                  Args:             ru (+116 more)
+Cohesion: 0.03
+Nodes (68): PresetService, Any, 策略預設服務 (Strategy Preset Service) 管理策略設定的儲存、載入、刪除, 列出所有預設                  Returns:             預設列表（包含ID、名稱、策略ID等）, 載入預設                  Args:             preset_id: 預設ID                  Re, 刪除預設                  Args:             preset_id: 預設ID                  Re, 匯出預設（用於分享/備份）                  Args:             preset_id: 預設ID, 匯入預設                  Args:             preset_data: 預設資料字典 (+60 more)
 
 ### Community 14 - "Factor Record Rejects"
-Cohesion: 0.09
-Nodes (36): FactorService, Any, date, 收集與序列化 factor snapshot，不修改 scoring 核心。, 同一 run_id 對應到不同 payload hash。, ResearchRunConflictError, InjectedResearchRunFailure, PromotedResearchRunArchiveError (+28 more)
+Cohesion: 0.07
+Nodes (46): Any, Connection, 同一 run_id 對應到不同 payload hash。, 統一研究 run metadata 的 SQLite repository。      B1 只負責 schema 與 metadata round-tri, 執行可重入 schema migration。, ResearchRunConflictError, ResearchRunRepository, InjectedResearchRunFailure (+38 more)
 
 ### Community 15 - "Fundamental Schema Sqlite"
-Cohesion: 0.04
-Nodes (112): BacktestService, 回測服務 (Backtest Service) 提供回測分析的業務邏輯, 創建空報告（用於錯誤情況）                  Args:             error_message: 錯誤訊息, 批次回測服務 (Batch Backtest Service) 支援多檔股票批次回測，生成排行榜和整體統計, BacktestReportDTO, 策略註冊表 管理所有策略執行器的註冊和獲取, StrategyRegistry, Any (+104 more)
+Cohesion: 0.03
+Nodes (111): BacktestService, Any, DataFrame, date, Series, 載入股票數據和技術指標（自動調整日期範圍）                  Args:             stock_code: 股票代號, 載入價格數據                  Args:             stock_code: 股票代號             start, 載入技術指標數據                  Args:             stock_code: 股票代號             sta (+103 more)
 
 ### Community 16 - "Profile Recommendation Config"
 Cohesion: 0.05
-Nodes (18): QCheckBox, 驗證推薦結果記錄到 Portfolio 時，會保留推薦來源、分數、理由、Profile 等 metadata, test_recommendation_view_preserves_provenance_on_portfolio_recording(), Any, Path, QWidget, 根據當前選擇的指標/圖形，動態更新策略傾向提示, 收集策略配置（新手模式使用 Profile 配置，進階模式使用 UI 配置） (+10 more)
+Nodes (18): 驗證推薦結果記錄到 Portfolio 時，會保留推薦來源、分數、理由、Profile 等 metadata, 驗證推薦分析視圖門檻模式選單的載入與進階面板顯示聯動, test_recommendation_view_preserves_provenance_on_portfolio_recording(), test_recommendation_view_threshold_mode_combobox_loading_and_toggling(), Any, Path, QWidget, 根據當前選擇的指標/圖形，動態更新策略傾向提示 (+10 more)
 
 ### Community 17 - "Effectiveness Build Read"
 Cohesion: 0.05
-Nodes (44): BrokerBranchUpdateService, Any, DataFrame, Path, 券商分點資料更新服務 負責從 MoneyDJ 抓取券商分點每日買賣資料, 合併每日原始資料到整合元數據檔案          Args:             branch_system_keys: 要合併的分點列表（None, 重新創建 driver（當 driver 崩潰時）, 檢查券商分點資料狀態          Args:             branch_system_keys: 要檢查的分點列表（None=全部） (+36 more)
+Nodes (46): BrokerBranchUpdateService, Any, DataFrame, Path, 券商分點資料更新服務 負責從 MoneyDJ 抓取券商分點每日買賣資料, 合併每日原始資料到整合元數據檔案          Args:             branch_system_keys: 要合併的分點列表（None, 重新創建 driver（當 driver 崩潰時）, 檢查券商分點資料狀態          Args:             branch_system_keys: 要檢查的分點列表（None=全部） (+38 more)
 
 ### Community 18 - "Manifest Full App"
-Cohesion: 0.13
-Nodes (34): FeedbackCategory, LiveResearchGapReport, PortfolioFeedbackPolicy, PositionFeedbackReport, Enum, str, Month 6 Portfolio feedback attribution service.  此服務只讀 Portfolio position DTO、, PortfolioPositionProvider (+26 more)
+Cohesion: 0.09
+Nodes (46): FeedbackCategory, LiveResearchGapReport, PortfolioAttributionItem, PortfolioFeedbackPolicy, PortfolioFeedbackService, PositionFeedbackReport, Any, Decimal (+38 more)
 
 ### Community 19 - "Portfolio Position Feedback"
 Cohesion: 0.08
-Nodes (58): Action, assert_tab_exists(), assert_text_contains(), assert_viewport_declared(), assert_widget_visible(), click_button_by_text(), collect_mainwindow_smoke_evidence(), find_child_button_by_text() (+50 more)
+Nodes (57): assert_tab_exists(), assert_text_contains(), assert_viewport_declared(), assert_widget_visible(), click_button_by_text(), collect_mainwindow_smoke_evidence(), find_child_button_by_text(), find_child_by_object_name() (+49 more)
 
 ### Community 20 - "Portfolio Backtest Build"
 Cohesion: 0.07
-Nodes (45): JournalService, Coordinates append-only journal entries., PortfolioService, Any, PositionDTO, Trade, Thin orchestration service for the Phase 4.1 Portfolio MVP., Compatibility wrapper for the previous skeleton API. (+37 more)
+Nodes (43): PortfolioService, Any, PositionDTO, Trade, Thin orchestration service for the Phase 4.1 Portfolio MVP., Compatibility wrapper for the previous skeleton API., Coordinates trade storage and derived position views.      Trades are append-o, Append a manual trade record after domain validation. (+35 more)
 
 ### Community 21 - "Branch Broker Metric"
 Cohesion: 0.16
 Nodes (12): Encapsulates raw event logs for secure UI consumption., System health snapshot generated by HealthService., Current FSM and environment snapshot for the UI., RuntimeEventDTO, RuntimeHealthSnapshotDTO, RuntimeStateSnapshotDTO, EventBus, Pure Python Pub/Sub implementation for Runtime Subsystem.     Decoupled from UI (+4 more)
 
 ### Community 22 - "Repository Research Dict"
-Cohesion: 0.14
-Nodes (24): WorkbenchDashboardDTO, display_workbench_value(), _action_item_state_text(), _detail_display_title(), _detail_status(), _detail_title(), _evidence_feed_state_text(), _find_replay_summary() (+16 more)
+Cohesion: 0.08
+Nodes (35): WorkbenchDashboardDTO, display_workbench_value(), _action_item_state_text(), _detail_display_title(), _detail_status(), _detail_title(), _evidence_feed_state_text(), _find_replay_summary() (+27 more)
 
 ### Community 23 - "Index Date Daily"
 Cohesion: 0.06
 Nodes (52): apply_tpex_daily_price_backfill(), _backup_db(), build_tpex_daily_price_plan(), _clean_number_text(), _decimal_text(), _first(), _insert_daily_price_rows(), _int_value() (+44 more)
 
 ### Community 24 - "Update Execute Status"
-Cohesion: 0.09
-Nodes (59): _append_unique(), _bucket_for(), build_handoff_recommendations(), _feature_evidence(), _feature_requires_handoff(), HandoffRecommendation, _owner_sort_key(), Any (+51 more)
+Cohesion: 0.10
+Nodes (46): Action, KnownIssueMatch, match_known_issues(), render_report_sections_markdown(), ReportSection, HealthcheckResult, Any, Path (+38 more)
 
 ### Community 25 - "Args Indicators Dataframe"
-Cohesion: 0.18
+Cohesion: 0.17
 Nodes (31): DecisionDeskDashboard, DecisionDeskActionSummary, DecisionDeskSectorCard, DecisionDeskSectorFocus, DecisionDeskStockCard, DecisionDeskStockFocus, app(), FailingBuilder (+23 more)
 
 ### Community 26 - "Update Uses All"
 Cohesion: 0.09
-Nodes (42): batch_update_daily_data(), get_trading_days(), is_trading_day(), main(), datetime, 獲取交易日列表          Args:         start_date: 開始日期 (YYYY-MM-DD)         end_dat, 批量更新每日股票數據          Args:         start_date: 開始日期 (YYYY-MM-DD)         end_, setup_logging() (+34 more)
+Nodes (42): 更新每日股票數據          在指定日期範圍內查找缺失的日期並下載          Args:             start_date:, 更新大盤指數數據          Args:             start_date: 開始日期（YYYY-MM-DD）, 更新產業指數數據          Args:             start_date: 開始日期（YYYY-MM-DD）, 初始化數據更新服務          Args:             config: TWStockConfig 實例, Check whether the latest daily price date has matching technical coverage., 合併每日股票數據          將 daily_price/ 目錄中的 CSV 文件合併到 stock_data_whole.csv, 計算技術指標          Args:             target_stock: 要處理的特定股票代號，如為None則處理所有股票, UpdateService (+34 more)
 
 ### Community 27 - "Forward Performance Dashboard"
-Cohesion: 0.13
-Nodes (29): FlowModelReport, FlowStep, _format_evidence(), generate_flow_model_report(), get_all_flows(), get_flow(), render_flow_model_markdown(), _step() (+21 more)
+Cohesion: 0.08
+Nodes (55): _candidate_allowed_modes(), CandidateBridgeDecision, CandidateBridgePolicyReport, _decision_for_candidate(), evaluate_candidate_bridge_policy(), render_candidate_bridge_policy_markdown(), _route_for_candidate(), CoverageBurndownReport (+47 more)
 
 ### Community 28 - "Decay Scope Signal"
-Cohesion: 0.11
-Nodes (20): SignalDecayDashboardRow, _blank_to_none(), _build_cards(), create_signal_decay_dashboard_service(), _empty_state_message(), _matches(), _observation_matches(), Any (+12 more)
+Cohesion: 0.10
+Nodes (23): SignalDecayDashboardRequest, SignalDecayDashboardRow, _blank_to_none(), _build_cards(), create_signal_decay_dashboard_service(), _empty_state_message(), _matches(), _observation_matches() (+15 more)
 
 ### Community 29 - "Markdown Handoff Interpret"
 Cohesion: 0.18
 Nodes (7): DecisionQualityActionItem, DecisionQualityReview, DecisionQualitySummary, DecisionQualityRepository, Any, Path, Append-only/idempotent storage for process review evidence.
 
 ### Community 30 - "Portfolio Trade Positions"
-Cohesion: 0.14
+Cohesion: 0.12
 Nodes (22): BatchBacktestExportPayload, CurrentRecommendationExportPayload, 報告匯出資料傳輸對象 (Report Export DTOs) 定義規格化報告匯出所使用的 DTO 與 Payload 契約，確保資料不可變性與防禦性複製。, 報告元數據，保存資料版本、策略版本、市場狀態等可追溯欄位, RecommendationReplayExportPayload, ReportMetadata, SingleBacktestExportPayload, test_missing_traceability_fields_are_explicit() (+14 more)
 
 ### Community 31 - "Snapshot Decision Date"
-Cohesion: 0.06
-Nodes (41): SQLite 資料庫檢視服務 (SQLite Inspector Service) 提供 SQLite 資料表的 metadata 查詢、結構描述、以及受控的, DBManager, Connection, DataFrame, 台股 SQLite 資料庫管理模組，負責連線、建表、動態 schema 升級與 Transaction 管理, 建立 Phase 3C 候選資料的表 (三大法人、信用交易、集保庫存), Ensure broker_flows can store both buy and sell ranking rows for one branch/date, Migrate broker_flows primary key to include trade_type when upgrading older DBs. (+33 more)
+Cohesion: 0.03
+Nodes (89): Path, Portfolio Chip Service 負責持倉個股的券商分點籌碼分析、風險評估與指標計算。, Path, 取得特定日期的價格檔案路徑                  Args:             date: 日期字串，格式為 YYYY-MM-DD 或, 從備份檔名推導清理前綴，讓顯式備份檔名也能共用清理規則。, 解析備份檔名中的日期與時間；無法解析時回傳空值以避免誤刪。, 清理備份檔：同一來源同一天只留最新一份，且最多保留五個日期版本。, TWStockConfig (+81 more)
 
 ### Community 32 - "Forward Performance Cli"
-Cohesion: 0.08
-Nodes (40): DecisionDeskSnapshotRepository, Any, Path, SQLite repository for durable Daily Decision Desk snapshots., build_stored_decision_desk_snapshot(), StoredDecisionDeskSnapshot, build_parser(), _config_from_args() (+32 more)
+Cohesion: 0.10
+Nodes (34): DecisionDeskSnapshotRepository, Any, Path, SQLite repository for durable Daily Decision Desk snapshots., build_stored_decision_desk_snapshot(), StoredDecisionDeskSnapshot, build_parser(), _config_from_args() (+26 more)
 
 ### Community 33 - "Run Compare Registry"
 Cohesion: 0.10
-Nodes (32): _as_dict(), Any, WorkbenchActionItem, WorkbenchChecklistItem, WorkbenchEvidenceFeedItem, WorkbenchEvidenceSummary, WorkbenchOperatingLoopStep, WorkbenchReviewItem (+24 more)
+Nodes (46): _normalize_strings(), WorkbenchAccessBoundary, WorkbenchActionItem, WorkbenchChecklistItem, WorkbenchEvidenceFeedItem, WorkbenchEvidenceSummary, WorkbenchOperatingLoopStep, WorkbenchReviewItem (+38 more)
 
 ### Community 34 - "Score Read Threshold"
-Cohesion: 0.05
-Nodes (29): DataLoader, DataFrame, Path, Response, 發送HTTP請求並處理重試邏輯（使用 Session 與高模擬防爬蟲 Headers）, 將民國年日期轉換為西元年日期                  Args:             date_str: 民國年日期字符串，例如 '111/, 從證交所API下載個股交易資料 - 使用與 notebook 相同的邏輯                  API: MI_INDEX (type=ALL), 轉換日期格式                  支持的格式：         - 113/03/29 -> 20250329 或 113/03/29 (+21 more)
+Cohesion: 0.04
+Nodes (45): DataLoader, DataFrame, Path, Response, 發送HTTP請求並處理重試邏輯（使用 Session 與高模擬防爬蟲 Headers）, 將民國年日期轉換為西元年日期                  Args:             date_str: 民國年日期字符串，例如 '111/, 從證交所API下載個股交易資料 - 使用與 notebook 相同的邏輯                  API: MI_INDEX (type=ALL), 轉換日期格式                  支持的格式：         - 113/03/29 -> 20250329 或 113/03/29 (+37 more)
 
 ### Community 35 - "Args Identify Dataframe"
-Cohesion: 0.11
-Nodes (26): Path, SignalDecayObservation, SignalDecaySummary, Any, Path, Append-only/idempotent SQLite repository for signal decay observations., SignalDecayRepository, Builds proposed lifecycle evidence payloads without applying actions. (+18 more)
+Cohesion: 0.12
+Nodes (26): SignalDecayObservation, SignalDecaySummary, Any, Path, Append-only/idempotent SQLite repository for signal decay observations., SignalDecayRepository, Path, Builds proposed lifecycle evidence payloads without applying actions. (+18 more)
 
 ### Community 36 - "Detail Text Summary"
 Cohesion: 0.05
-Nodes (74): AvailableDateKey, AvailableDateValue, _diagnostic(), MonthlyRevenueAvailabilityValidationResult, 月營收公告日 mapping 的正式驗證入口。, _requires_disclosure_window_check(), _unreasonably_late_available_date_diagnostic(), _unsupported_source_diagnostic() (+66 more)
+Nodes (81): AvailableDateKey, AvailableDateValue, _diagnostic(), MonthlyRevenueAvailabilityValidationResult, 月營收公告日 mapping 的正式驗證入口。, _requires_disclosure_window_check(), _unreasonably_late_available_date_diagnostic(), _unsupported_source_diagnostic() (+73 more)
 
 ### Community 37 - "Decision Desk View"
-Cohesion: 0.20
-Nodes (21): FundamentalFactorSnapshot, date, Application service for governed fundamental factor records., StatementItemRecord, FactorDiagnostic, _append_non_operating_factor(), _append_ratio_factor(), _append_single_item_factor() (+13 more)
+Cohesion: 0.17
+Nodes (24): _monthly_revenue_record(), _parse_date(), _parse_optional_date(), date, SQLite read providers for governed fundamental records., _statement_item_record(), StatementItemRecord, _append_non_operating_factor() (+16 more)
 
 ### Community 38 - "Recommendation Preset Validate"
-Cohesion: 0.06
-Nodes (39): _clear_polyfit_cache(), PatternAnalyzer, 識別V形反轉形態                  V形反轉是一種價格快速下跌後立即快速上漲的形態，形成V形。         這種形態通常表示市場情緒從, 識別圓頂形態                  圓頂是一種價格曲線形成類似倒U型的反轉形態，通常是看跌信號。                  Args, 識別圓底形態                  圓底是一種價格曲線形成類似U型的反轉形態，通常是看漲信號。                  Args:, 識別矩形形態                  矩形是一種價格在兩條平行的水平線之間波動的形態，形成矩形。         價格在上限和下限之間來回反彈，, 清空多項式擬合與 R方 快取，防止記憶體洩漏, 識別楔形形態                  楔形是一種價格在兩條收斂的趨勢線之間波動的形態，形成楔形。         上升楔形通常是看跌信號，下降楔 (+31 more)
+Cohesion: 0.08
+Nodes (30): _clear_polyfit_cache(), PatternAnalyzer, 識別V形反轉形態                  V形反轉是一種價格快速下跌後立即快速上漲的形態，形成V形。         這種形態通常表示市場情緒從, 識別圓頂形態                  圓頂是一種價格曲線形成類似倒U型的反轉形態，通常是看跌信號。                  Args, 識別圓底形態                  圓底是一種價格曲線形成類似U型的反轉形態，通常是看漲信號。                  Args:, 識別矩形形態                  矩形是一種價格在兩條平行的水平線之間波動的形態，形成矩形。         價格在上限和下限之間來回反彈，, 清空多項式擬合與 R方 快取，防止記憶體洩漏, 識別楔形形態                  楔形是一種價格在兩條收斂的趨勢線之間波動的形態，形成楔形。         上升楔形通常是看跌信號，下降楔 (+22 more)
 
 ### Community 39 - "Workbench Init View"
-Cohesion: 0.11
-Nodes (29): 金融核心數值工具的 app_module 相容入口。, BrokerSimulator, DataFrame, Timestamp, 撮合模擬器 模擬交易撮合、成本計算、風控, 執行買入                  Args:             date: 交易日期             price: 價格, 執行賣出                  Args:             date: 交易日期             price: 價格, 初始化撮合模擬器                  Args:             config: 券商配置 (+21 more)
+Cohesion: 0.09
+Nodes (33): 金融核心數值工具的 app_module 相容入口。, Timestamp, 撮合模擬器 模擬交易撮合、成本計算、風控, 執行買入                  Args:             date: 交易日期             price: 價格, 執行賣出                  Args:             date: 交易日期             price: 價格, Trade, PerformanceMetrics, DataFrame (+25 more)
 
 ### Community 40 - "Broker Migrate Csv"
-Cohesion: 0.04
-Nodes (63): DataFrame, Decimal, Series, 將任意 Decimal 權重字典正規化為總和嚴格等於 10000 bp 的整數字典         使用最大餘額法 (Largest Remainder Me, 根據 Regime 調整權重                  Args:             regime: 市場狀態（'Trend' | 'Rev, 檢查股票行為是否匹配市場狀態                  Args:             df: 股票數據DataFrame, 計算總分（含 Regime Match Factor）                  TotalScore = (W_pattern * Pattern, 計算技術指標分數（0-100）                  Args:             df: 股票數據DataFrame (+55 more)
+Cohesion: 0.06
+Nodes (43): Recommendation profile lifecycle service., RegimeCompatibility, InvalidWeightError, LegacyWeightMigrationAdapter, Any, ValueError, 推薦權重契約 (Recommendation Weight Contract) 定義推薦與打分權重的合約規範，限制使用整數基點 (bp) 且總和固定為 100, 使用 Decimal 將舊的浮點數權重無損且嚴格轉換為整數 bp。         若乘積非整數或總和不等於 10000 bp，直接拋出 WeightMigr (+35 more)
 
 ### Community 41 - "Bridge Widget Get"
-Cohesion: 0.08
-Nodes (39): _coverage_status(), _dedupe(), _diagnostic_for_flow(), FlowDiagnostic, FlowDiagnosticsReport, _format_command(), _format_evidence_source(), generate_flow_diagnostics() (+31 more)
+Cohesion: 0.07
+Nodes (52): _coverage_status(), _dedupe(), _diagnostic_for_flow(), FlowDiagnostic, FlowDiagnosticsReport, _format_command(), _format_evidence_source(), generate_flow_diagnostics() (+44 more)
 
 ### Community 42 - "Industry Args Validate"
 Cohesion: 0.11
-Nodes (19): _advisory_count(), _canonical_advisory_token(), _combined_advisory_counts(), _combined_warning_counts(), EvidencePipelineDiagnostic, EvidencePipelineStepSummary, EvidencePipelineRunner, _forward_outcome_warning_counts() (+11 more)
+Nodes (25): _advisory_count(), _canonical_advisory_token(), _combined_advisory_counts(), _combined_warning_counts(), _CombinedCaptureSummary, _DecisionDeskSnapshotSectionProvider, EvidencePipelineDiagnostic, EvidencePipelineRunSummary (+17 more)
 
 ### Community 43 - "Validate Sanitize Schema"
-Cohesion: 0.12
-Nodes (16): LiveResearchGapAttribution, LiveResearchGapSaveResult, LiveResearchGapService, PortfolioPositionProvider, Any, Decimal, PositionDTO, Protocol (+8 more)
+Cohesion: 0.07
+Nodes (32): Any, DataFrame, RecommendationPortfolioBacktestResultDTO, RecommendationSnapshotDTO, StockContributionDTO, Any, 推薦組合 research run 升級服務。  將已保存的 Recommendation Portfolio Backtest run 轉成 Strate, 管理推薦組合 research run 的策略版本升級流程。 (+24 more)
 
 ### Community 44 - "Alert Portfolio Summary"
 Cohesion: 0.10
-Nodes (21): Any, date, Protocol, RankingProvider, Return watchlist payload for the specified date., Return ranking payload keyed by stock code., Return previous ranking snapshot used to detect trend change., Build watchlist trigger summary from external, read-only providers. (+13 more)
+Nodes (23): Any, date, Path, Return watchlist payload for the specified date., Return ranking payload keyed by stock code., Return previous ranking snapshot used to detect trend change., Watchlist provider that loads active watchlist from WatchlistService., Ranking provider that fetches technical indicators from SQLite database. (+15 more)
 
 ### Community 45 - "Step Pipeline Init"
 Cohesion: 0.07
-Nodes (20): QTableWidget, FakeResearchRunService, _metadata(), qt_app(), test_backtest_view_can_collapse_config_panel_for_registry_compare_space(), test_backtest_view_mounts_registry_compare_subtab(), test_registry_compare_widget_discards_stale_run_list_response(), test_registry_compare_widget_filters_paginates_and_limits_selection() (+12 more)
+Nodes (19): QTableWidget, FakeResearchRunService, _metadata(), test_backtest_view_can_collapse_config_panel_for_registry_compare_space(), test_backtest_view_mounts_registry_compare_subtab(), test_registry_compare_widget_discards_stale_run_list_response(), test_registry_compare_widget_filters_paginates_and_limits_selection(), test_registry_compare_widget_refreshes_on_first_show() (+11 more)
 
 ### Community 46 - "Run Portfolio Recommendation"
-Cohesion: 0.05
-Nodes (26): MLAnalyzer, 準備特徵和目標變量                  Args:             df: 數據DataFrame             tar, 訓練分類模型                  Args:             X_train: 訓練特徵             y_train:, 訓練回歸模型                  Args:             X_train: 訓練特徵             y_train:, 使用訓練好的模型進行預測                  Args:             X_test: 測試特徵             mod, 評估分類模型                  Args:             X_test: 測試特徵             y_test: 測, 評估回歸模型                  Args:             X_test: 測試特徵             y_test: 測, 獲取對應的列名，優先使用中文列名，如果不存在則使用英文列名                  Args:             df: 數據DataFr (+18 more)
+Cohesion: 0.03
+Nodes (51): MLAnalyzer, 準備特徵和目標變量                  Args:             df: 數據DataFrame             tar, 訓練分類模型                  Args:             X_train: 訓練特徵             y_train:, 訓練回歸模型                  Args:             X_train: 訓練特徵             y_train:, 使用訓練好的模型進行預測                  Args:             X_test: 測試特徵             mod, 評估分類模型                  Args:             X_test: 測試特徵             y_test: 測, 評估回歸模型                  Args:             X_test: 測試特徵             y_test: 測, 獲取對應的列名，優先使用中文列名，如果不存在則使用英文列名                  Args:             df: 數據DataFr (+43 more)
 
 ### Community 47 - "Fetch Decision Desk"
 Cohesion: 0.07
-Nodes (45): ForwardPerformanceDashboardCardSummary, ForwardPerformanceDashboardRequest, ForwardPerformanceDashboardResult, ForwardPerformanceDashboardRow, _blank_to_none(), _build_cards(), create_forward_performance_dashboard_service(), _empty_state_message() (+37 more)
+Nodes (47): ForwardPerformanceDashboardCardSummary, ForwardPerformanceDashboardRequest, ForwardPerformanceDashboardResult, ForwardPerformanceDashboardRow, _blank_to_none(), _build_cards(), create_forward_performance_dashboard_service(), _empty_state_message() (+39 more)
 
 ### Community 48 - "Semantic Init Recent"
-Cohesion: 0.10
-Nodes (20): MarketBreadthProvider, MarketBreadthService, DataFrame, date, Decimal, Protocol, Series, Compute market breadth summary from injected DataFrame/provider. (+12 more)
+Cohesion: 0.11
+Nodes (22): MarketBreadthProvider, MarketBreadthService, DataFrame, date, Decimal, Protocol, Series, Compute market breadth summary from injected DataFrame/provider. (+14 more)
 
 ### Community 49 - "Flow Gaps Get"
 Cohesion: 0.12
-Nodes (34): build_report_sections(), build_run_history_comparison_report_section(), compare_run_history_manifests(), _feature_by_id(), _feature_status_changes(), FeatureStatusChange, _format_inline_list(), _format_plain_list() (+26 more)
+Nodes (32): build_report_sections(), build_run_history_comparison_report_section(), compare_run_history_manifests(), _feature_by_id(), _feature_status_changes(), FeatureStatusChange, _format_inline_list(), _format_plain_list() (+24 more)
 
 ### Community 50 - "Evidence Workbench Read"
-Cohesion: 0.09
-Nodes (27): BrokerFlowService, Any, Broker Flow Orchestration Service 負責資料讀取、聚合管線 (Pipeline)，以及串接決策模組的 FlowSignalEn, Smart Money Flow 服務編排層, 回傳分點事件快照，供唯讀語意層與 dashboard 使用。, [Overview Mode] 取得以「股票」為中心的 Smart Money 流向信號          Args:             perio, [Branch Tracker Mode] 取得以「分點」為中心的聚合流向          Args:             period: 'day, 取得特定股票的所有分點進出明細 (供 Overview Mode 的 Master-Detail Drill-down 使用) (+19 more)
+Cohesion: 0.07
+Nodes (45): BrokerFlowService, Any, Broker Flow Orchestration Service 負責資料讀取、聚合管線 (Pipeline)，以及串接決策模組的 FlowSignalEn, Smart Money Flow 服務編排層, 回傳分點事件快照，供唯讀語意層與 dashboard 使用。, [Overview Mode] 取得以「股票」為中心的 Smart Money 流向信號          Args:             perio, [Branch Tracker Mode] 取得以「分點」為中心的聚合流向          Args:             period: 'day, 取得特定股票的所有分點進出明細 (供 Overview Mode 的 Master-Detail Drill-down 使用) (+37 more)
 
 ### Community 51 - "Dict Portfolio Stock"
 Cohesion: 0.11
-Nodes (23): DataFrame, date, Decimal, Protocol, Series, Build sector rotation summary from injected industry index data., SectorRotationProvider, SectorRotationService (+15 more)
+Nodes (26): DataFrame, date, Decimal, Path, Protocol, Series, Build sector rotation summary from injected industry index data., Read-only provider that supplies industry index history from SQLite. (+18 more)
 
 ### Community 52 - "Breadth Date Market"
 Cohesion: 0.08
-Nodes (27): Any, DataFrame, 獲取資料庫中所有的使用者資料表列表 (過濾並僅限白名單中且實際存在的表)                  Returns:             Li, Return distinct text values for a whitelisted table column., 獲取指定資料表的欄位定義 (Schema)                  Args:             table_name: 資料表名稱, 獲取指定資料表的基本狀態與資訊 (總筆數、時間跨度等)                  Args:             table_name: 資料, 初始化檢視服務                  Args:             config: TWStockConfig 實例, 建立篩選條件與排序 SQL，回傳 (raw_columns, WHERE_SQL, params, ORDER_BY_SQL) (+19 more)
+Nodes (26): Any, DataFrame, SQLite 資料庫檢視服務 (SQLite Inspector Service) 提供 SQLite 資料表的 metadata 查詢、結構描述、以及受控的, 獲取資料庫中所有的使用者資料表列表 (過濾並僅限白名單中且實際存在的表)                  Returns:             Li, Return distinct text values for a whitelisted table column., 獲取指定資料表的欄位定義 (Schema)                  Args:             table_name: 資料表名稱, 獲取指定資料表的基本狀態與資訊 (總筆數、時間跨度等)                  Args:             table_name: 資料, 初始化檢視服務                  Args:             config: TWStockConfig 實例 (+18 more)
 
 ### Community 53 - "Feature Command Mode"
-Cohesion: 0.11
-Nodes (25): Path, 季度財報 available_date mapping 的正式驗證入口。, _requires_disclosure_window_check(), StatementAvailabilityValidationResult, _unreasonably_late_available_date_diagnostic(), _unsupported_source_diagnostic(), validate_statement_availability_file(), StatementAvailabilityOverride (+17 more)
+Cohesion: 0.13
+Nodes (19): Path, validate_statement_availability_file(), build_statement_retroactive_baseline_mapping(), main(), _parse_iso_date(), date, Path, _quarter_period() (+11 more)
 
 ### Community 54 - "Table Sqlite Inspector"
-Cohesion: 0.15
-Nodes (7): CollapsibleSectionPanel, QLabel, QPushButton, QWidget, SemanticChip, StatusBadge, WarningList
+Cohesion: 0.09
+Nodes (14): test_compact_code_list_limits_each_group(), QLabel, QWidget, ClickableCard, CollapsibleSectionPanel, CompactCodeList, QLabel, QPushButton (+6 more)
 
 ### Community 55 - "Date Calendar Table"
-Cohesion: 0.10
-Nodes (35): IndicatorParameterRegistry, InvalidParameterError, Any, ValueError, 指標參數註冊表 (Indicator Parameter Registry) 定義所有技術指標參數的 Schema、範圍限制與驗證邏輯，實施 Fail-Clo, 從完整配置解析非負整數 schema version；缺失配置視為 legacy v0。, 驗證並清理指定指標的自訂參數。新版（v1+）缺失或任何版本值非法一律拋出 InvalidParameterError (Fail-Closed)。, _columns_are_reusable() (+27 more)
+Cohesion: 0.08
+Nodes (38): IndicatorParameterRegistry, InvalidParameterError, Any, ValueError, 指標參數註冊表 (Indicator Parameter Registry) 定義所有技術指標參數的 Schema、範圍限制與驗證邏輯，實施 Fail-Clo, 從完整配置解析非負整數 schema version；缺失配置視為 legacy v0。, 驗證並清理指定指標的自訂參數。新版（v1+）缺失或任何版本值非法一律拋出 InvalidParameterError (Fail-Closed)。, _columns_are_reusable() (+30 more)
 
 ### Community 56 - "Source Coverage Recommendation"
 Cohesion: 0.12
 Nodes (37): build_historical_monthly_revenue_availability(), _date_from_parts(), _diagnostic(), _extract_mops_static_path(), _fetch_mops_static_monthly_revenue_html(), _fetch_openapi_rows(), _fetch_text(), _find_column() (+29 more)
 
 ### Community 57 - "Portfolio Show Monitor"
-Cohesion: 0.10
-Nodes (13): QLabel, QPushButton, QTableView, QWidget, Read-only Unified Decision Workbench shell backed only by Workbench DTOs., UnifiedDecisionWorkbenchView, ClickableCard, EmptyStatePanel (+5 more)
+Cohesion: 0.08
+Nodes (16): PortfolioConditionResult, app(), FakeBrokerFlowService, FakeConditionMonitor, FakeJournalService, FakePortfolioService, test_portfolio_view_accepts_broker_flow_service_dependency(), test_portfolio_view_displays_condition_monitor_result_in_positions_table() (+8 more)
 
 ### Community 58 - "Check Manual Patterns"
 Cohesion: 0.04
 Nodes (22): Epic 2 MVP-2 過擬合風險提示 - 單元測試  測試範圍： - calculate_walkforward_degradation() 方法, 測試 calculate_consistency() 方法, 測試正常情況：3 個 Fold，Sharpe 分別為 0.5, 0.6, 0.4，計算標準差, 測試完全一致情況：所有 Fold Sharpe 相同，應返回接近 0, 測試 Fold 數量不足：只有 1 個 Fold，應返回 None, 測試所有 Sharpe 為 0 時，使用 total_return 計算, 測試 calculate_overfitting_risk() 整合方法, 測試部分資料：只有 Walk-Forward 結果，沒有最佳化結果 (+14 more)
 
 ### Community 59 - "Evidence Backtest Research"
-Cohesion: 0.08
-Nodes (31): 推薦結果數據傳輸對象（固定欄位，可保存、可追溯）, 從字典還原 RecommendationDTO，支援英文與舊有中文 key，並確保對歷史欄位的相容性, RecommendationDTO, RecommendationResultDTO, _make_json_serializable(), Any, 儲存推薦結果                  Args:             result: RecommendationResultDTO 實例, 載入推薦結果                  Args:             result_id: 結果ID (+23 more)
+Cohesion: 0.05
+Nodes (65): 推薦結果數據傳輸對象（固定欄位，可保存、可追溯）, 從字典還原 RecommendationDTO，支援英文與舊有中文 key，並確保對歷史欄位的相容性, RecommendationDTO, RecommendationResultDTO, build_backtest_trade_source(), build_recommendation_trade_source(), PortfolioTradeSource, Any (+57 more)
 
 ### Community 60 - "Flow Broker Smart"
 Cohesion: 0.12
@@ -1410,16 +1391,16 @@ Cohesion: 0.25
 Nodes (10): bb_strategy(), _get_column_name(), ma_strategy(), macd_strategy(), 交易策略定義模組 包含各種可用的交易策略函數, 布林通道策略          Args:         df: 股票數據DataFrame         window: 移動平均週期，預設20, 移動平均線交叉策略          Args:         df: 股票數據DataFrame         short_window: 短期均, RSI 策略          Args:         df: 股票數據DataFrame         rsi_period: RSI 週期，預 (+2 more)
 
 ### Community 62 - "Returns Args Calculate"
-Cohesion: 0.08
-Nodes (20): ValueError, 橫斷面推薦百分位排名時，合格個股母體數量低於設定最低限制之例外。, RecommendationUniverseTooSmallError, 從 Preset 載入策略配置                  Args:             preset_id: Preset ID, 從策略版本載入策略配置                  Args:             version_id: 策略版本 ID, 從 Preset 載入 StrategySpec                  Args:             preset_id: Preset, 從策略版本載入 StrategySpec                  Args:             version_id: 策略版本 ID, RecommendationService (+12 more)
+Cohesion: 0.07
+Nodes (31): ValueError, 橫斷面推薦百分位排名時，合格個股母體數量低於設定最低限制之例外。, RecommendationUniverseTooSmallError, Any, Decimal, 執行推薦分析                  這是從 ui_app/main.py 的 _execute_strategy_analysis_thread, 檢測市場狀態                  Returns:             dict: {                 'regime, 獲取指定市場狀態的策略配置                  Args:             regime: 'Trend' | 'Reversion (+23 more)
 
 ### Community 63 - "Availability Statement Date"
-Cohesion: 0.15
-Nodes (17): 統一研究 run 的 metadata 快照。      詳細 equity / trades payload 由後續 service 寫入 Parquet, ResearchRunMetadataDTO, LifecycleGateResult, LifecyclePolicy, Any, Decimal, Integer/Decimal based lifecycle thresholds.      `*_bp` fields are basis point, Evaluate strategy lifecycle decisions from saved registry metadata. (+9 more)
+Cohesion: 0.13
+Nodes (18): JsonObject, 統一研究 run 的 metadata 快照。      詳細 equity / trades payload 由後續 service 寫入 Parquet, ResearchRunMetadataDTO, LifecycleGateResult, LifecyclePolicy, Any, Decimal, Integer/Decimal based lifecycle thresholds.      `*_bp` fields are basis point (+10 more)
 
 ### Community 64 - "Availability Monthly Revenue"
-Cohesion: 0.18
-Nodes (11): BrokerFlowEvent, SmartMoneyWindowStats, _bp(), BrokerFlowEventProvider, _decimal_bp(), _parse_event_date(), date, Decimal (+3 more)
+Cohesion: 0.12
+Nodes (19): SmartMoneyDashboardSummary, SmartMoneySemanticSummary, SmartMoneyWindowStats, _bp(), BrokerFlowEventProvider, _decimal_bp(), _parse_event_date(), date (+11 more)
 
 ### Community 65 - "Rows Mops Parse"
 Cohesion: 0.10
@@ -1430,32 +1411,32 @@ Cohesion: 0.09
 Nodes (33): For, run_git_command(), _truncate_output(), _validate_git_args(), create_sqlite_mcp_server(), explain_sqlite(), get_db_path(), get_sqlite_schema() (+25 more)
 
 ### Community 67 - "Sharpe Risk Degradation"
-Cohesion: 0.08
-Nodes (61): _candidate_allowed_modes(), CandidateBridgeDecision, CandidateBridgePolicyReport, _decision_for_candidate(), evaluate_candidate_bridge_policy(), render_candidate_bridge_policy_markdown(), _route_for_candidate(), advise_feature_commands() (+53 more)
+Cohesion: 0.13
+Nodes (34): advise_feature_commands(), _choose_mode(), FeatureCommandAdvice, _format_command(), _mode_compatible_feature_suites(), _normalize_mode(), _quote_arg(), RecommendedQACommand (+26 more)
 
 ### Community 68 - "Date Calendar Popup"
 Cohesion: 0.05
-Nodes (40): 添加趨勢指標                  Args:             df: 股票數據DataFrame             conf, 獲取對應的列名，使用calculator的方法, 添加動量指標                  Args:             df: 股票數據DataFrame             conf, 技術指標分析類，提供高級接口對技術指標進行計算和分析, 添加波動性指標                  Args:             df: 股票數據DataFrame             con, TechnicalAnalyzer, 技術指標計算類別，基於02_technical_calculator.md中的功能, 處理價格數據，包含資料清理和格式轉換                  Args:             df: 原始價格數據DataFrame (+32 more)
+Nodes (45): 技術指標計算類別，基於02_technical_calculator.md中的功能, 處理價格數據，包含資料清理和格式轉換                  Args:             df: 原始價格數據DataFrame, 初始化技術指標計算器                  Args:             logger: 日誌記錄器，如果為None則創建新的記錄器, 資料預處理與驗證                  Args:             df: 原始股票數據DataFrame, 計算移動平均線系列                  Args:             df: 股票數據DataFrame             p, 計算動量指標                  Args:             df: 股票數據DataFrame             rsi_, 計算KD指標                  Args:             df: 股票數據DataFrame             para, 安全地將日期序列轉換為 YYYY-MM-DD 格式的字串，防範 int64/float64 被誤判為 UNIX 奈秒 1970-01-01 (+37 more)
 
 ### Community 69 - "Gate Factor Lifecycle"
-Cohesion: 0.04
-Nodes (64): Enum, 數據傳輸對象 (Data Transfer Objects) 定義服務層的輸入輸出結構, JournalEntryDTO, PortfolioDTO, PositionDTO, Any, DTOs for the Phase 4.1 Portfolio & Journal MVP., TradeDTO (+56 more)
+Cohesion: 0.08
+Nodes (28): Enum, 數據傳輸對象 (Data Transfer Objects) 定義服務層的輸入輸出結構, JournalEntryDTO, PortfolioDTO, PositionDTO, Any, DTOs for the Phase 4.1 Portfolio & Journal MVP., TradeDTO (+20 more)
 
 ### Community 70 - "Profile Compare Profiles"
-Cohesion: 0.09
-Nodes (39): _monthly_revenue_record(), _parse_date(), _parse_optional_date(), date, SQLite read providers for governed fundamental records., _statement_item_record(), build_valuation_observations(), calculate_industry_percentiles_bp() (+31 more)
+Cohesion: 0.11
+Nodes (32): build_valuation_observations(), calculate_industry_percentiles_bp(), _parse_date(), Governed valuation observations for presentation-only valuation factors., _rounded_bp(), ValuationObservationBuildResult, build_relative_valuation_factor(), 估值 factor adapter：只輸出相對估值區間，不輸出交易建議。 (+24 more)
 
 ### Community 71 - "Args Train Check"
-Cohesion: 0.05
-Nodes (24): batch_update_industry_index(), batch_update_market_index(), configure_console_encoding(), get_existing_dates(), get_latest_date(), get_trading_days(), is_trading_day(), main() (+16 more)
+Cohesion: 0.07
+Nodes (8): main(), 獲取信心度說明                  Args:             regime: 市場狀態 ('Trend', 'Reversion', 合併用戶配置和 Regime 配置（用戶配置優先）, 執行策略分析線程（使用 service 層）, 顯示推薦結果（使用統一打分模型的分數，包含產業信息，優化格式，深色主題）, 創建強勢股/產業標籤頁（三列布局，類似專業金融界面）, baldr legacy Tkinter 主應用程式, TradingAnalysisApp
 
 ### Community 72 - "Runner Cli Run"
-Cohesion: 0.10
-Nodes (25): DecisionQualityDashboardRequest, DecisionQualityDashboardRow, _as_sequence(), _blank_to_none(), _cards_from_reviews_and_rows(), create_decision_quality_dashboard_service(), DecisionQualityDashboardService, _empty_state_message() (+17 more)
+Cohesion: 0.11
+Nodes (24): DecisionQualityDashboardRequest, DecisionQualityDashboardRow, _as_sequence(), _blank_to_none(), _cards_from_reviews_and_rows(), create_decision_quality_dashboard_service(), DecisionQualityDashboardService, _empty_state_message() (+16 more)
 
 ### Community 73 - "Money Trade Decimal"
-Cohesion: 0.15
-Nodes (43): EvidencePipelineRunRequest, write_pipeline_report(), Path, test_json_report_is_deterministic_and_keeps_numeric_counts(), test_markdown_report_contains_required_sections_and_boundaries(), _config(), MonkeyPatch, Path (+35 more)
+Cohesion: 0.11
+Nodes (47): section_is_ready(), EvidencePipelineRunRequest, EvidencePipelineRunner, Path, Manual evidence pipeline runner with dry-run as the default., write_pipeline_report(), Path, test_json_report_is_deterministic_and_keeps_numeric_counts() (+39 more)
 
 ### Community 74 - "Forward Outcome Index"
 Cohesion: 0.10
@@ -1463,31 +1444,31 @@ Nodes (18): RegimeResultDTO, 檢測市場狀態                  Args:          
 
 ### Community 75 - "Sector Rotation Date"
 Cohesion: 0.06
-Nodes (42): _dict(), _list(), LiveResearchGapDiagnostic, LiveResearchGapLink, LiveResearchGapObservation, LiveResearchGapSourceTrace, LiveResearchGapSummary, Any (+34 more)
+Nodes (32): _dict(), _list(), LiveResearchGapAttribution, LiveResearchGapDiagnostic, LiveResearchGapLink, LiveResearchGapObservation, LiveResearchGapSaveResult, LiveResearchGapSourceTrace (+24 more)
 
 ### Community 76 - "Float Boundary Scan"
-Cohesion: 0.09
-Nodes (25): EvidenceOperationsHistoryDashboardRequest, EvidenceOperationsHistoryDashboardResult, EvidenceOperationsHistoryDashboardRow, _blank_to_none(), _cards_from_rows(), create_evidence_operations_history_dashboard_service(), _empty_state_message(), EvidenceOperationsHistoryDashboardService (+17 more)
+Cohesion: 0.12
+Nodes (37): DecisionQualityDashboardCards, DecisionQualityDashboardResult, EvidenceOperationsHistoryDashboardCards, EvidenceOperationsHistoryDashboardRequest, EvidenceOperationsHistoryDashboardResult, EvidenceOperationsHistoryDashboardRow, _blank_to_none(), _cards_from_rows() (+29 more)
 
 ### Community 77 - "Git Sqlite Mcp"
-Cohesion: 0.08
-Nodes (21): LiveResearchGapDashboardRow, _blank_to_none(), _build_cards(), create_live_research_gap_dashboard_service(), _empty_state_message(), LiveResearchGapDashboardService, _matches(), _observation_matches() (+13 more)
+Cohesion: 0.09
+Nodes (22): LiveResearchGapDashboardRequest, LiveResearchGapDashboardRow, _blank_to_none(), _build_cards(), create_live_research_gap_dashboard_service(), _empty_state_message(), LiveResearchGapDashboardService, _matches() (+14 more)
 
 ### Community 78 - "Init Set Collapsed"
-Cohesion: 0.14
-Nodes (29): _aggregate(), build_empirical_conclusion(), _build_equal_weight_daily_returns(), _build_report_section(), _calculate_regime_stats(), _dataset_fingerprint(), _format_date(), _get_regime_cache() (+21 more)
+Cohesion: 0.06
+Nodes (47): 初始化市場狀態服務                  Args:             config: TWStockConfig 實例, MarketRegimeDetector, Series, 市場狀態判斷器（Market Regime Detector） 判斷當前市場應該使用哪種策略：Trend、Reversion、Breakout  改進版本, 計算真正的 ADX、PLUS_DI 和 MINUS_DI                  Args:             high: 最高價序列, 計算移動平均線的斜率（使用線性回歸）                  Args:             ma_series: 移動平均線序列, 計算布林帶寬度（用於判斷壓縮）                  Args:             close: 收盤價序列, 檢測市場狀態                  Args:             date: 日期（YYYY-MM-DD格式），如果為None則使用最新 (+39 more)
 
 ### Community 79 - "History Evidence Operations"
-Cohesion: 0.12
-Nodes (20): ComponentAblationReadinessReport, ComponentAblationReadinessRow, ComponentAblationReadinessService, ComponentSetDefinition, _has_components(), _has_int_score(), Any, Inspect whether saved evidence can support component ablation. (+12 more)
+Cohesion: 0.39
+Nodes (7): _config(), main(), _parser(), Any, ArgumentParser, Namespace, run_inspect()
 
 ### Community 80 - "Evidence Query Access"
-Cohesion: 0.10
-Nodes (28): PortfolioAlertAttribution, _AlertItem, _ChipRiskResult, ChipSummaryProviderProtocol, ConditionMonitorProtocol, PortfolioAlertService, PortfolioPositionProvider, Any (+20 more)
+Cohesion: 0.09
+Nodes (31): PortfolioAlertAttribution, PortfolioAlertSummary, _AlertItem, _ChipRiskResult, ChipSummaryProviderProtocol, ConditionMonitorProtocol, PortfolioAlertService, PortfolioPositionProvider (+23 more)
 
 ### Community 81 - "Sop Init Args"
-Cohesion: 0.07
-Nodes (31): SignalDecaySaveResult, Any, Path, Read-only signal decay evaluator over forward evidence and gap observations., SignalDecayService, _worse_by(), _config(), main() (+23 more)
+Cohesion: 0.08
+Nodes (29): Any, Read-only signal decay evaluator over forward evidence and gap observations., SignalDecayService, _worse_by(), _config(), main(), _parser(), Any (+21 more)
 
 ### Community 82 - "Decision Quality Dashboard"
 Cohesion: 0.12
@@ -1501,37 +1482,41 @@ Nodes (4): _config(), main(), parse_args(), Namespace
 Cohesion: 0.11
 Nodes (12): 驗證觀察清單可以直接送 Research Lab 批次回測，且空清單時保持 disabled。, 手動新增時，空白名稱會自動查正式股票名稱；查不到時阻擋加入。, test_watchlist_view_batch_backtest_button_state(), test_watchlist_view_manual_add_resolves_stock_name_and_rejects_unknown(), DataFrame, QWidget, 依候選池內容啟用或停用 Research Lab 批次回測入口。, 初始化觀察清單視圖                  Args:             watchlist_service: 觀察清單服務實例 (+4 more)
 
+### Community 85 - "Create Tab Strategy"
+Cohesion: 0.19
+Nodes (4): QListWidgetItem, 驗證歷史回測載入後，current_run_id 和 current_run_params 是否正確綁定, test_backtest_view_correct_history_run_binding(), 從推薦結果載入回測配置（Phase 3.3：一鍵送回測）          Args:             config: 回測配置（包含 stock
+
 ### Community 86 - "Regime Detect Market"
-Cohesion: 0.04
-Nodes (59): build_service_backed_decision_desk_snapshot_builder(), DecisionDeskMarketRegimeProvider, Any, datetime, Create the Decision Desk builder used by non-UI batch and CLI flows., Non-UI adapter that exposes RegimeService to DecisionDeskSnapshotBuilder., _try_create(), DecisionMarketFrameLoader (+51 more)
+Cohesion: 0.07
+Nodes (31): build_service_backed_decision_desk_snapshot_builder(), DecisionDeskMarketRegimeProvider, Any, datetime, Create the Decision Desk builder used by non-UI batch and CLI flows., Non-UI adapter that exposes RegimeService to DecisionDeskSnapshotBuilder., _try_create(), DecisionMarketFrameLoader (+23 more)
 
 ### Community 87 - "Gap Live Research"
 Cohesion: 0.11
 Nodes (24): Thin research-session state layer.  This package owns short-lived workflow con, Immutable DTOs for research-session context., Current lightweight research workflow context.      This snapshot is intention, ResearchSessionSnapshotDTO, ActiveProfileChanged, ActiveRegimeChanged, ActiveSymbolChanged, CurrentRecommendationRunChanged (+16 more)
 
 ### Community 88 - "Decay Signal Dashboard"
-Cohesion: 0.08
-Nodes (20): PerformanceAnalyzer, 初始化績效分析器                  Args:             portfolio_returns: 投資組合收益率序列, 計算最大回撤                  Args:             returns: 收益率序列，如果為None則使用投資組合收益率, 計算阿爾法和貝塔係數                  Returns:             tuple: (阿爾法, 貝塔), 生成績效報告                  Returns:             績效指標字典, 計算收益率                  Args:             portfolio_values: 投資組合價值序列, 計算累積收益率                  Args:             returns: 收益率序列，如果為None則使用投資組合收益率, 計算年化收益率                  Args:             returns: 收益率序列，如果為None則使用投資組合收益率 (+12 more)
+Cohesion: 0.09
+Nodes (15): PerformanceAnalyzer, 初始化績效分析器                  Args:             portfolio_returns: 投資組合收益率序列, 計算最大回撤                  Args:             returns: 收益率序列，如果為None則使用投資組合收益率, 計算阿爾法和貝塔係數                  Returns:             tuple: (阿爾法, 貝塔), 生成績效報告                  Returns:             績效指標字典, 計算收益率                  Args:             portfolio_values: 投資組合價值序列, 計算累積收益率                  Args:             returns: 收益率序列，如果為None則使用投資組合收益率, 計算年化收益率                  Args:             returns: 收益率序列，如果為None則使用投資組合收益率 (+7 more)
 
 ### Community 90 - "Widget Chart Select"
-Cohesion: 0.26
-Nodes (19): test_select_equity_curve_widget_class_falls_back_when_disabled(), test_select_equity_curve_widget_class_falls_back_without_webengine(), test_select_equity_curve_widget_class_uses_fast_widget_when_available(), test_select_remaining_chart_classes_fall_back_without_webengine(), test_select_remaining_chart_classes_use_fast_widgets_when_available(), DrawdownCurveWidget, create_drawdown_curve_widget(), create_equity_curve_widget() (+11 more)
+Cohesion: 0.17
+Nodes (29): test_select_equity_curve_widget_class_falls_back_when_disabled(), test_select_equity_curve_widget_class_falls_back_without_webengine(), test_select_equity_curve_widget_class_uses_fast_widget_when_available(), test_select_remaining_chart_classes_fall_back_without_webengine(), test_select_remaining_chart_classes_use_fast_widgets_when_available(), DrawdownCurveWidget, HoldingDaysHistogramWidget, QWidget (+21 more)
 
 ### Community 91 - "Replay Evidence Date"
-Cohesion: 0.20
-Nodes (10): 1. 暴衝策略（Momentum）, 2. 穩健策略（Stable）, 3. 長期策略（Long-term）, 三種 Profiles, 使用方法, 功能說明, 推薦分析 - Profiles 策略風格, 注意事項 (+2 more)
+Cohesion: 0.02
+Nodes (104): 1. 價格數據, 1. 暴衝策略（Momentum）, 2. 技術指標數據, 2. 穩健策略（Stable）, 3. 數據合併, 3. 長期策略（Long-term）, Baseline 對比, Q1: 為什麼買進分數達標的天數很多，但總交易次數卻是 0 次？ (+96 more)
 
 ### Community 92 - "Source Candidate Readiness"
 Cohesion: 0.14
 Nodes (28): apply_monthly_revenue_backfill(), apply_mops_snapshot_monthly_revenue_backfill(), _insert_monthly_revenue_records(), _iter_monthly_revenue_rows(), _iter_mops_snapshot_rows(), MonthlyRevenueBackfillApplyResult, MonthlyRevenueBackfillPlan, plan_monthly_revenue_backfill() (+20 more)
 
 ### Community 93 - "Monthly Revenue Availability"
-Cohesion: 0.08
-Nodes (61): DecisionDeskDashboardComposer, Compose answer-first Daily Decision dashboard DTOs from section snapshots., DecisionDeskFundamentalDiagnostic, DecisionDeskRiskPrompt, DecisionDeskRiskPromptSummary, MarketBreadthSummary, MarketRegimeSummary, PortfolioAlertSummary (+53 more)
+Cohesion: 0.07
+Nodes (28): DecisionDeskQuality, Enum, str, _SectorRankingItem, Protocol, RankingProvider, WatchlistProvider, _config() (+20 more)
 
 ### Community 94 - "Evidence Workbench Scheduler"
-Cohesion: 0.17
-Nodes (12): LifecycleCurrentState, LifecycleEvidenceGovernanceService, LifecycleEvidenceRecord, LifecycleEvidenceRepository, LifecycleEvidenceStatus, Any, Enum, str (+4 more)
+Cohesion: 0.20
+Nodes (10): LifecycleCurrentState, LifecycleEvidenceGovernanceService, LifecycleEvidenceRecord, LifecycleEvidenceRepository, Any, Enum, Append-only lifecycle evidence repository., Record demote / retire lifecycle proposals from committed registry runs. (+2 more)
 
 ### Community 95 - "Run History Manifest"
 Cohesion: 0.14
@@ -1546,24 +1531,24 @@ Cohesion: 0.14
 Nodes (27): apply_valuation_metrics_backfill(), _companies_sort_date(), _insert_valuation_metric_records(), _load_daily_pe_rows(), load_industry_by_stock_from_companies(), _parse_date(), plan_valuation_metrics_backfill(), Connection (+19 more)
 
 ### Community 98 - "Lifecycle Evidence Repository"
-Cohesion: 0.10
-Nodes (16): 初始化篩選服務                  Args:             config: TWStockConfig 實例, 生成強勢股推薦理由（改進版：主因 Tag + 差異化摘要）                  Args:             df: 股票歷史數據Da, 生成弱勢股推薦理由（與強勢股相反）                  Args:             df: 股票歷史數據DataFrame, 獲取強勢產業                  Args:             period: 'day' 或 'week', 獲取弱勢產業（與強勢產業同架構，反向排名）                  Args:             period: 'day' 或 'wee, 初始化篩選器                  Args:             config: TWStockConfig 實例, 獲取強勢股                  從 technical_analysis 目錄讀取所有個股技術指標文件, 獲取弱勢股（與強勢股同架構，反向排名）                  從 technical_analysis 目錄讀取所有個股技術指標文件，按評分升序 (+8 more)
+Cohesion: 0.11
+Nodes (15): 生成強勢股推薦理由（改進版：主因 Tag + 差異化摘要）                  Args:             df: 股票歷史數據Da, 生成弱勢股推薦理由（與強勢股相反）                  Args:             df: 股票歷史數據DataFrame, 獲取強勢產業                  Args:             period: 'day' 或 'week', 獲取弱勢產業（與強勢產業同架構，反向排名）                  Args:             period: 'day' 或 'wee, 初始化篩選器                  Args:             config: TWStockConfig 實例, 獲取強勢股                  從 technical_analysis 目錄讀取所有個股技術指標文件, 獲取弱勢股（與強勢股同架構，反向排名）                  從 technical_analysis 目錄讀取所有個股技術指標文件，按評分升序, StockScreener (+7 more)
 
 ### Community 99 - "Weight Contract Recommendation"
 Cohesion: 0.10
 Nodes (3): FakeConfig, FakeUpdateService, StaleTechnicalUpdateService
 
 ### Community 100 - "Daily Sqlite Broker"
-Cohesion: 0.08
-Nodes (13): DecisionDeskQuality, Enum, str, _SectorRankingItem, TypedDict, DecisionDeskView, _EmptySection, date (+5 more)
+Cohesion: 0.11
+Nodes (5): DecisionDeskView, _EmptySection, date, 每日決策工作台：只透過 DecisionDeskSnapshotBuilder 取得快照。, Fallback section with minimal required fields for degraded rendering.
 
 ### Community 101 - "Daily Price Tpex"
-Cohesion: 0.08
-Nodes (31): section_is_ready(), EvidencePipelineRunSummary, Any, scheduler_readiness_after_run(), _top_warning_counts(), _markdown_report(), _top_warning_counts(), EvidenceSourceCoverageInspection (+23 more)
+Cohesion: 0.14
+Nodes (21): EvidenceSourceCoverageInspection, EvidenceSourceCoverageService, _has_payload(), Any, Path, Read-only evidence source coverage inspection for V1.5 source gates., _source_capabilities(), build_parser() (+13 more)
 
 ### Community 102 - "View Backtest Research"
 Cohesion: 0.10
-Nodes (40): _dedupe(), _dict(), _first_int(), _int(), load_historical_replay_summary(), Any, Path, _quality_disclosures() (+32 more)
+Nodes (43): _dedupe(), _dict(), _first_int(), _int(), load_historical_replay_summary(), Any, Path, _quality_disclosures() (+35 more)
 
 ### Community 103 - "Dataframe Args Signals"
 Cohesion: 0.27
@@ -1586,11 +1571,11 @@ Cohesion: 0.18
 Nodes (19): PreV2ReadinessReport, _action_sort_rank(), _dedupe(), _find_checklist_item(), _find_readiness_item(), _find_status(), _int(), _operating_loop_readiness_summary() (+11 more)
 
 ### Community 109 - "Valuation Backfill Metrics"
-Cohesion: 0.17
-Nodes (10): Any, DataFrame, Legacy research run adapters for controlled backfill into Research Run Registry., 將舊 repository run 轉成 ResearchRunMetadataDTO。      Adapter 不偽造缺失 metadata；無法從舊格, ResearchRunLegacyAdapter, _config(), _FakeBacktestRepository, _legacy_backtest_run() (+2 more)
+Cohesion: 0.41
+Nodes (4): Any, DataFrame, 將舊 repository run 轉成 ResearchRunMetadataDTO。      Adapter 不偽造缺失 metadata；無法從舊格, ResearchRunLegacyAdapter
 
 ### Community 110 - "Event Component Ablation"
-Cohesion: 0.20
+Cohesion: 0.19
 Nodes (29): test_build_drawdown_chart_payload_marks_max_drawdown_window(), test_build_equity_chart_payload_drops_non_finite_values_and_sorts_dates(), test_build_equity_chart_payload_normalizes_benchmark_and_trade_markers(), test_build_histogram_chart_payload_bins_values_and_summary_lines(), test_build_holding_days_histogram_payload_groups_days_into_readable_buckets(), test_build_trade_return_histogram_payload_uses_symmetric_zero_centered_bins(), _align_date(), build_drawdown_chart_payload() (+21 more)
 
 ### Community 111 - "Profile Custom Profiles"
@@ -1599,11 +1584,11 @@ Nodes (16): PortfolioDTO, PositionDTO, 持倉資料傳輸對象 (Position Data T
 
 ### Community 112 - "Export Report Payload"
 Cohesion: 0.07
-Nodes (36): Any, DataFrame, Decimal, Series, Timestamp, 執行推薦組合回測。          注意：目前本服務進場點（PeriodHoldingDTO.entry_price）採用 rebalance_ts（訊號, RecommendationPortfolioBacktestService, test_portfolio_backtest_applies_optional_execution_costs_to_cash_ledger() (+28 more)
+Nodes (36): Any, DataFrame, Decimal, Series, Timestamp, 執行推薦組合回測。          注意：目前本服務進場點（PeriodHoldingDTO.entry_price）採用 rebalance_ts（訊號, RecommendationPortfolioBacktestService, PeriodHoldingDTO (+28 more)
 
 ### Community 113 - "Oracle Flow Markdown"
-Cohesion: 0.15
-Nodes (16): Any, DataFrame, date, Decimal, Protocol, Build stock relative strength and liquidity ranking for Daily Decision Desk., RelativeStrengthLiquidityProvider, RelativeStrengthLiquidityService (+8 more)
+Cohesion: 0.17
+Nodes (14): Any, DataFrame, date, Decimal, Build stock relative strength and liquidity ranking for Daily Decision Desk., RelativeStrengthLiquidityService, FakeProvider, date (+6 more)
 
 ### Community 114 - "Items Review Item"
 Cohesion: 0.04
@@ -1614,48 +1599,48 @@ Cohesion: 0.13
 Nodes (22): _backup_prefix(), _backup_sort_key(), cleanup_backup_series(), create_retained_backup(), Path, _unlink_if_exists(), extract_index_data_for_date(), fix_industry_index() (+14 more)
 
 ### Community 116 - "Watchlist Args Stocks"
-Cohesion: 0.06
-Nodes (33): app(), qt_app(), 回測沒有完成交易時，摘要要明確告知交易明細不可記錄到 Portfolio。, 驗證無交易時，fixed 模式與 quantile 模式能給出正確的診斷建議文案, 獲取或建立 QApplication 實例, 推薦回放摘要需明確揭露同日收盤成交與可成交性假設。, 批次結果頁需說明排行榜與整體統計的判讀目的。, Train-Test 結果需揭露 OOS 交易數不足時的可靠度限制。 (+25 more)
+Cohesion: 0.14
+Nodes (14): DataFrame, Series, 檢查股票行為是否匹配市場狀態                  Args:             df: 股票數據DataFrame, 計算總分（含 Regime Match Factor）                  TotalScore = (W_pattern * Pattern, 計算技術指標分數（0-100）                  Args:             df: 股票數據DataFrame, 計算 RSI 分數（0-100），根據 Regime 調整邏輯                  Trend: RSI 50-70 加分（趨勢延續）, 計算 MACD 分數（0-100），根據 Regime 調整邏輯                  Trend: 0軸以上金叉加權最高         R, 計算 KD 分數（0-100）                  K 上穿 D 且位於低檔：加分         高檔鈍化：扣分 (+6 more)
 
 ### Community 117 - "Source Registry Dict"
 Cohesion: 0.12
-Nodes (14): Path, QDate, QDateEdit, QFrame, QPushButton, QVBoxLayout, QWidget, 相容 QTextEdit.setPlainText，用於解析並更新卡片 UI (+6 more)
+Nodes (14): Path, QDate, QDateEdit, QFrame, QPushButton, QVBoxLayout, QWidget, 相容 QTextEdit.setReadOnly (+6 more)
 
 ### Community 118 - "Sqlite Stock Get"
-Cohesion: 0.08
-Nodes (24): 📋 Prompt 模板, SQLite 專項, SQLite 與 CSV 對比 Prompt, 一致性檢查 Prompt, 📚 參考資源, 品質評估 Prompt, 基本 Prompt, 場景 1：驗證每日價格資料 (+16 more)
+Cohesion: 0.04
+Nodes (43): 📋 Prompt 模板, SQLite 專項, SQLite 與 CSV 對比 Prompt, 一致性檢查 Prompt, 📚 參考資源, 品質評估 Prompt, 基本 Prompt, 場景 1：驗證每日價格資料 (+35 more)
 
 ### Community 119 - "Payload Build Chart"
-Cohesion: 0.15
-Nodes (19): BacktestCancelledError, Exception, 應用程式自訂例外 (Application Custom Exceptions), OptimizationResult, OptimizerService, ParamRange, Any, DataFrame (+11 more)
+Cohesion: 0.06
+Nodes (34): BacktestCancelledError, Exception, 應用程式自訂例外 (Application Custom Exceptions), OptimizationResult, OptimizerService, ParamRange, Any, DataFrame (+26 more)
 
 ### Community 120 - "Args Stock Code"
 Cohesion: 0.04
 Nodes (44): 0. 計畫狀態與執行規則, 1. Scope, 2.1 指標參數, 2.2 權重, 2.3 Research Run, 2.4 Promotion, 2. 核心契約, 3. 檔案結構 (+36 more)
 
 ### Community 121 - "Evidence Review View"
-Cohesion: 0.03
-Nodes (57): Any, DataFrame, Use the existing recommendation scoring flow against an in-memory history slice., RecommendationDataFrameProvider, 推薦服務 (Recommendation Service) 提供股票推薦的業務邏輯，供 UI 層調用, 初始化推薦服務                  Args:             config: TWStockConfig 實例, 初始化市場狀態服務                  Args:             config: TWStockConfig 實例, 初始化策略執行器                  Args:             spec: 策略規格 (+49 more)
+Cohesion: 0.08
+Nodes (26): 初始化篩選服務                  Args:             config: TWStockConfig 實例, IndustryMapper, DataFrame, 預先快取每個產業指數最新表現，避免個股篩選時逐檔掃 DataFrame。, 初始化產業映射器                  Args:             config: TWStockConfig 實例, 獲取股票所屬的產業類別列表                  Args:             stock_id: 股票代號, 獲取產業類別對應的指數名稱                  Args:             industry_category: 產業類別（來自 c, 獲取產業指數表現                  Args:             industry_category: 產業類別 (+18 more)
 
 ### Community 122 - "Flow Chip Dataframe"
 Cohesion: 0.15
 Nodes (25): _build_group_rows(), calculate_sleep_seconds(), _candidate_available_date(), decode_dpapi_hex_token(), _default_token_file(), _empty_state(), fetch_finmind_monthly_revenue_rows(), FinMindCreateTimeHarvestResult (+17 more)
 
 ### Community 123 - "Position Args Dict"
-Cohesion: 0.04
-Nodes (49): Path, 取得特定日期的價格檔案路徑                  Args:             date: 日期字串，格式為 YYYY-MM-DD 或, 從備份檔名推導清理前綴，讓顯式備份檔名也能共用清理規則。, 解析備份檔名中的日期與時間；無法解析時回傳空值以避免誤刪。, 清理備份檔：同一來源同一天只留最新一份，且最多保留五個日期版本。, TWStockConfig, analyze_unknown_counterparties(), 分析券商分點資料中的 UNKNOWN 對手券商模式 用於改進解析邏輯 (+41 more)
+Cohesion: 0.10
+Nodes (18): 端到端測試：數據路徑隔離測試 確保測試環境不會寫入到生產環境的D槽路徑, 端到端隔離測試 - 確保整個流程不會觸及D槽, test_end_to_end_isolation(), TestDataPathIsolation, 工具模組（Utilities） 提供通用工具函數, atomic_write_df(), atomic_write_json(), atomic_write_parquet() (+10 more)
 
 ### Community 124 - "Summary Readiness Status"
-Cohesion: 0.13
-Nodes (30): _access_boundary(), AgentEvidenceAccessService, _blank_to_none(), build_agent_permission_model(), build_ai_report_template(), _connect_read_only(), create_agent_evidence_access_service(), _event_to_dict() (+22 more)
+Cohesion: 0.10
+Nodes (37): _access_boundary(), AgentEvidenceAccessService, _blank_to_none(), build_agent_permission_model(), build_ai_report_template(), _connect_read_only(), create_agent_evidence_access_service(), _event_to_dict() (+29 more)
 
 ### Community 125 - "Score Calculate 100"
 Cohesion: 0.05
 Nodes (43): 1.1 測試單一分點（推薦先用這個）, 1.2 測試所有分點（一天）, 1.3 測試多天資料（10 天）, 2.1 URL 參數錯誤, 2.2 Registry 檔案編碼問題（Mojibake）, 2.3 URL 參數前導零丟失, 2.4 ChromeDriver 崩潰, 2.5 頁面載入超時 (+35 more)
 
 ### Community 126 - "Qtextedit Path Calendar"
-Cohesion: 0.13
-Nodes (18): ComparabilityResult, ComparabilityStatus, NormalizedEquityResult, Any, DataFrame, Enum, str, Research Run Registry 跨 run 比較服務。 (+10 more)
+Cohesion: 0.12
+Nodes (19): ComparabilityResult, ComparabilityStatus, NormalizedEquityResult, Any, DataFrame, Enum, str, Research Run Registry 跨 run 比較服務。 (+11 more)
 
 ### Community 127 - "Run Legacy Backfill"
 Cohesion: 0.19
@@ -1666,8 +1651,8 @@ Cohesion: 0.19
 Nodes (25): MonthlyRevenueRecord, _append_ratio_factor(), _base_record(), build_revenue_factor_pack(), build_revenue_yoy_factor(), _factor_metadata(), FundamentalFactorBuildResult, FundamentalObservation (+17 more)
 
 ### Community 129 - "Args Rsi Dataframe"
-Cohesion: 0.11
-Nodes (15): 推薦引擎模組（舊版，已棄用）  ⚠️ 警告：此模組已棄用，請使用 app_module.recommendation_service.Recommendat, 獲取機器學習模型信號                  Args:             df: 股票數據DataFrame, 獲取數學模型信號                  Args:             df: 股票數據DataFrame, 生成綜合建議                  Args:             df: 股票數據DataFrame, 獲取最近幾天的建議                  Args:             df: 股票數據DataFrame             d, 生成詳細分析報告                  Args:             ticker: 股票代碼             df: 數據D, 將信號轉換為文本                  Args:             signal: 信號值, 獲取對應的列名，優先使用中文列名，如果不存在則使用英文列名                  Args:             df: 數據DataFr (+7 more)
+Cohesion: 0.12
+Nodes (11): 獲取機器學習模型信號                  Args:             df: 股票數據DataFrame, 獲取數學模型信號                  Args:             df: 股票數據DataFrame, 生成綜合建議                  Args:             df: 股票數據DataFrame, 獲取最近幾天的建議                  Args:             df: 股票數據DataFrame             d, 生成詳細分析報告                  Args:             ticker: 股票代碼             df: 數據D, 將信號轉換為文本                  Args:             signal: 信號值, 獲取對應的列名，優先使用中文列名，如果不存在則使用英文列名                  Args:             df: 數據DataFr, 生成詳細建議                  Args:             signal: 信號值             rsi: RSI值 (+3 more)
 
 ### Community 130 - "Item Review Row"
 Cohesion: 0.19
@@ -1678,40 +1663,40 @@ Cohesion: 0.09
 Nodes (13): OptionalDateEdit, Any, QDate, QDateEdit, QFrame, QPushButton, QTableView, QWidget (+5 more)
 
 ### Community 132 - "Build Workbook Export"
-Cohesion: 0.09
-Nodes (14): _research_run_row_to_dict(), parse_json_list(), parse_json_object(), Any, JsonObject, Any, Connection, Exception (+6 more)
+Cohesion: 0.37
+Nodes (12): _config(), _event(), Path, _seed_live_gap(), _seed_manual_override(), _seed_portfolio_alert(), _seed_signal_decay(), _seed_trade_without_source() (+4 more)
 
 ### Community 133 - "Run Research Equity"
 Cohesion: 0.05
 Nodes (42): 1. 台股交易撮合與 0 股拒絕交易限制, ✅ 1. 策略預設 (Strategy Preset), 2026-05-27 推薦組合 Portfolio Value 圖表, 2026-05-27 推薦組合 Research Run 保存, 2026-05-27 推薦組合停損停利與失敗診斷, 2026-05-27 推薦組合穩健性指標, 2026-05-28 推薦組合 Research Run Promote, 2. SOP 驗證機制與 Promote 晉升限制 (+34 more)
 
 ### Community 134 - "Update Date Batch"
-Cohesion: 0.18
-Nodes (14): PortfolioAttributionItem, PortfolioFeedbackService, Any, Decimal, PositionDTO, Build post-trade attribution from already-governed evidence., _ConditionResult, _position() (+6 more)
+Cohesion: 0.35
+Nodes (12): build_parser(), _config_from_args(), _enum_value(), main(), _parse_windows(), Any, ArgumentParser, Namespace (+4 more)
 
 ### Community 135 - "Table Decision Validation"
-Cohesion: 0.09
-Nodes (8): QListWidgetItem, 驗證歷史回測載入後，current_run_id 和 current_run_params 是否正確綁定, test_backtest_view_correct_history_run_binding(), 將 Research Run Registry 比較頁掛入既有 Research Lab 結果分頁。, 格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）, 刷新 Research Run 相關列表、圖表選單與比較面板。, 首次進入結果子頁時自動載入可用的歷史資料與圖表來源。, 直接從 BacktestReportDTO 繪製圖表（不需要保存）
+Cohesion: 0.08
+Nodes (5): 將 Research Run Registry 比較頁掛入既有 Research Lab 結果分頁。, 格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）, 刷新 Research Run 相關列表、圖表選單與比較面板。, 首次進入結果子頁時自動載入可用的歷史資料與圖表來源。, 直接從 BacktestReportDTO 繪製圖表（不需要保存）
 
 ### Community 136 - "Grid Param Size"
 Cohesion: 0.14
 Nodes (24): fetch_credit_transactions(), fetch_institutional_flows(), fetch_tdcc_shareholding(), DataFrame, date, Response, 抓取指定日期的信用交易/融資券 (上市 + 上櫃), 安全轉換字串為整數，處理逗號與空值，不依賴 float。 (+16 more)
 
 ### Community 137 - "Factor Statement Build"
-Cohesion: 0.11
-Nodes (29): QApplication, _app(), test_apply_app_theme_sets_global_stylesheet(), test_apply_financial_table_style_sets_dense_research_defaults(), test_button_text_sanitizer_removes_missing_symbol_icons_only_from_prefix(), test_compact_code_list_limits_each_group(), test_empty_state_panel_uses_midnight_style(), test_global_stylesheet_contains_core_qt_selectors() (+21 more)
+Cohesion: 0.12
+Nodes (26): _app(), test_apply_app_theme_sets_global_stylesheet(), test_apply_financial_table_style_sets_dense_research_defaults(), test_button_text_sanitizer_removes_missing_symbol_icons_only_from_prefix(), test_empty_state_panel_uses_midnight_style(), test_global_stylesheet_contains_core_qt_selectors(), test_register_qt_chinese_fonts_registers_candidates_when_no_families(), test_register_qt_chinese_fonts_registers_candidates_when_only_latin_families_exist() (+18 more)
 
 ### Community 138 - "Snapshot Mops Revenue"
-Cohesion: 0.14
-Nodes (14): EquityCurveWidget, Any, DataFrame, DatetimeIndex, Series, Timestamp, 將目標日期對齊到索引中的最近有效交易日                  Args:             target_date: 目標日期, 繪製權益曲線和基準線（單一 Y 軸，基準線歸一化後轉成等值資金）                  Args:             equity_serie (+6 more)
+Cohesion: 0.12
+Nodes (16): EquityCurveWidget, Any, DataFrame, DatetimeIndex, ndarray, Series, Timestamp, 將目標日期對齊到索引中的最近有效交易日                  Args:             target_date: 目標日期 (+8 more)
 
 ### Community 139 - "Phase3c Apply Fetch"
 Cohesion: 0.06
-Nodes (54): build_cross_sectional_factor_attribution_summary(), Any, Counter, _rank_bucket(), Read-only attribution summary for V1.6 factor snapshots., render_cross_sectional_factor_summary_markdown(), _sorted_counter(), ConceptBasketDefinition (+46 more)
+Nodes (56): build_cross_sectional_factor_attribution_summary(), Any, Counter, _rank_bucket(), Read-only attribution summary for V1.6 factor snapshots., render_cross_sectional_factor_summary_markdown(), _sorted_counter(), ConceptBasketDefinition (+48 more)
 
 ### Community 140 - "Agent Antigravity Authority"
-Cohesion: 0.12
-Nodes (16): build_default_data_source_capability_registry(), _capability(), DataSourceCapability, DataSourceCapabilityInspection, DataSourceCapabilityRegistry, DataSourceField, inspect_data_source_capabilities(), Any (+8 more)
+Cohesion: 0.08
+Nodes (32): _dashboard_available(), evaluate_evidence_scheduler_readiness(), _load_smoke_report(), Any, Path, _smoke_passed(), build_default_data_source_capability_registry(), _capability() (+24 more)
 
 ### Community 141 - "Research Single Backtest"
 Cohesion: 0.15
@@ -1730,24 +1715,24 @@ Cohesion: 0.17
 Nodes (12): EvidenceOperationsWeeklyReview, _dict(), EvidenceOperationsHistoryRecord, Any, EvidenceOperationsHistoryRepository, Any, Path, _config() (+4 more)
 
 ### Community 145 - "Strength Liquidity Relative"
-Cohesion: 0.18
-Nodes (19): ForwardPerformanceGroupSummary, ForwardPerformanceReadModel, Any, Read-only aggregate view over evidence events and forward outcomes., _event(), _outcome(), Path, _repo() (+11 more)
+Cohesion: 0.17
+Nodes (18): ForwardPerformanceReadModel, Any, Read-only aggregate view over evidence events and forward outcomes., _event(), _outcome(), Path, _repo(), test_filter_by_window_and_no_ui_import() (+10 more)
 
 ### Community 146 - "Scheduled Evidence Status"
-Cohesion: 0.13
-Nodes (25): _date_key(), HistoricalEvidenceReplayDay, HistoricalEvidenceReplayReport, HistoricalEvidenceReplayRequest, HistoricalEvidenceReplayService, _iso_date(), Any, Path (+17 more)
+Cohesion: 0.09
+Nodes (33): _date_key(), HistoricalEvidenceReplayDay, HistoricalEvidenceReplayReport, HistoricalEvidenceReplayRequest, HistoricalEvidenceReplayService, _iso_date(), Any, Path (+25 more)
 
 ### Community 147 - "Health State Snapshot"
 Cohesion: 0.05
 Nodes (40): 1. 已完成任務的 Agent Prompt 文檔, 1. 重複文檔處理 ✅, 2. 特定日期的更新日誌, 2. 長文檔更新 ✅, 3. 已完成的清理/整理總結, 3. 過時狀態文檔處理 ✅, 4. 重複的設計文檔（舊版本）, 4. 高優先級過時文檔刪除 ✅ (+32 more)
 
 ### Community 148 - "Portfolio Condition Monitor"
-Cohesion: 0.13
-Nodes (16): Any, Connection, Path, Provides trading restriction events from local database., Check restrictions on a specific trade date and map to rejected reason codes., Query restriction events within (start_date, end_date].         Returns:, Query restriction events exactly on target_date.         Returns:, Policy for determining trading restrictions on a candidate. (+8 more)
+Cohesion: 0.07
+Nodes (30): CorporateActionPolicy, CorporateActionProvider, Any, Connection, Path, Query ex-dividend or ex-right events within (start_date, end_date].         Ret, Policy for determining if forward performance is affected by corporate actions., Check if any corporate action gap happened between start_date (exclusive) and en (+22 more)
 
 ### Community 149 - "Run Metadata Research"
-Cohesion: 0.05
-Nodes (28): MarketDateRange, datetime, Response, 初始化數據處理器                  Args:             config: TWStockConfig 實例，如果為 None, TWMarketDataProcessor, MarketDateRange, check_data_status(), main() (+20 more)
+Cohesion: 0.10
+Nodes (6): Response, 初始化數據處理器                  Args:             config: TWStockConfig 實例，如果為 None, TWMarketDataProcessor, MarketDateRange, run_tests(), TestDataModule
 
 ### Community 150 - "Date Restriction Restrictions"
 Cohesion: 0.16
@@ -1762,8 +1747,8 @@ Cohesion: 0.11
 Nodes (4): MockTalib, TA-Lib 兼容性模組 使用 ta 套件來替代 talib 的功能, TA-Lib 兼容性類，使用 ta 套件實現相同的功能, TalibCompatibility
 
 ### Community 153 - "Type Schema Properties"
-Cohesion: 0.05
-Nodes (63): CorporateActionPolicy, CorporateActionProvider, Any, Connection, Path, Query ex-dividend or ex-right events within (start_date, end_date].         Ret, Policy for determining if forward performance is affected by corporate actions., Check if any corporate action gap happened between start_date (exclusive) and en (+55 more)
+Cohesion: 0.07
+Nodes (39): EvidenceEventRepository, Path, SQLite repository for append-only evidence events and forward outcomes., ForwardPerformanceService, Any, Connection, Decimal, Calculate close-to-close forward research outcomes for evidence events. (+31 more)
 
 ### Community 154 - "Talib Adx Atr"
 Cohesion: 0.05
@@ -1774,12 +1759,12 @@ Cohesion: 0.17
 Nodes (17): apply_statement_items_backfill(), _insert_statement_item_records(), _iter_statement_rows(), plan_statement_items_backfill(), Connection, Path, Controlled quarterly statement item backfill into fundamental SQLite tables., StatementItemsBackfillApplyResult (+9 more)
 
 ### Community 156 - "Init Status Evidence"
-Cohesion: 0.13
-Nodes (9): BacktestConfigPanel, QComboBox, QWidget, 初始化配置面板          Args:             parent_view: 父視圖 BacktestView 實例，用於獲取服務和回調, 讓長文字下拉欄位在左側設定面板內有穩定寬度。, 建立 Research Lab 模式提示文字。, 更新 Research Lab 模式提示並調整 UI 狀態。, 根據 Research Lab 模式調整左側配置面板的顯示狀態。 (+1 more)
+Cohesion: 0.11
+Nodes (11): QCheckBox, BacktestConfigPanel, QComboBox, QWidget, 初始化配置面板          Args:             parent_view: 父視圖 BacktestView 實例，用於獲取服務和回調, 讓長文字下拉欄位在左側設定面板內有穩定寬度。, 建立 Research Lab 模式提示文字。, 更新 Research Lab 模式提示並調整 UI 狀態。 (+3 more)
 
 ### Community 157 - "Backup Create Retained"
 Cohesion: 0.06
-Nodes (47): app(), DeferredTaskWorker, FailingMarketService, FailingTpexService, FakeInspectorService, make_view(), make_view_with_service(), SynchronousTaskWorker (+39 more)
+Nodes (46): app(), DeferredTaskWorker, FailingMarketService, FailingTpexService, FakeInspectorService, make_view(), make_view_with_service(), SynchronousTaskWorker (+38 more)
 
 ### Community 158 - "Documentation Update Index"
 Cohesion: 0.05
@@ -1787,15 +1772,15 @@ Nodes (39): Adapter 模式建議, Epic 1：Promote 機制, Epic 1（Promote 機�
 
 ### Community 159 - "Mode Changed Research"
 Cohesion: 0.08
-Nodes (6): Any, QComboBox, QWidget, 取得 UI 指定的最佳化工作線程數，限制在 1..8。, 建立參數最佳化執行前的組合數與執行邊界說明。, 當最佳化面板中的門檻模式改變時，動態隱藏/顯示對應的最佳化參數
+Nodes (6): 列出所有已註冊的策略                  Returns:             策略資訊字典 {strategy_id: {name,, Any, QComboBox, 取得 UI 指定的最佳化工作線程數，限制在 1..8。, 建立參數最佳化執行前的組合數與執行邊界說明。, 當最佳化面板中的門檻模式改變時，動態隱藏/顯示對應的最佳化參數
 
 ### Community 160 - "Run History Registry"
-Cohesion: 0.11
-Nodes (14): BranchFlowAggregation, 以「分點」為主體的聚合結果 (Branch Tracker Mode 使用), app(), _branch_detail(), FakeSemanticService, FakeSmartMoneyService, _signal(), test_smart_money_detail_table_fits_columns_without_horizontal_scroll() (+6 more)
+Cohesion: 0.09
+Nodes (10): DetailTableDelegate, QPainter, QRect, QStyledItemDelegate, Detail Table Delegate 專門用於渲染分點明細表格 (Detail Table) 的 QStyledItemDelegate。 為「淨買賣, QWidget, Terminal Style Smart Money Scanner 主視圖, SmartMoneyFlowView (+2 more)
 
 ### Community 161 - "Runtime Init Store"
-Cohesion: 0.09
-Nodes (17): _combo_or_none(), DecisionQualityView, _int_or_none(), QComboBox, QLabel, QLineEdit, QWidget, _text_or_none() (+9 more)
+Cohesion: 0.14
+Nodes (9): ControlledCalendarDateEdit, date_filter_value(), OptionalDateFilterEdit, QDate, QDateEdit, QFrame, 使用受控日曆 popup，避免內建 popup 落到 sentinel 年份。, 日期值可維持原狀，但 popup 開啟時定位到今天。 (+1 more)
 
 ### Community 162 - "Runtime Event View"
 Cohesion: 0.05
@@ -1806,16 +1791,16 @@ Cohesion: 0.05
 Nodes (37): 1️⃣ Position（單一股票 / 策略）, 2️⃣ Portfolio（整體視圖）, 3️⃣ 與 Phase 3 的關聯（關鍵）, Phase 4：持倉管理設計規格（Portfolio MVP）, Portfolio 儲存, PortfolioConditionMonitor, PortfolioService, PortfolioView (+29 more)
 
 ### Community 164 - "Statement Backfill Items"
-Cohesion: 0.12
-Nodes (9): Any, datetime, 取得單一資料來源詳細狀態並包成 UI 可套用的狀態 dict, 相容 QTextEdit.toPlainText, 將結束日調整為最近交易日（至少避開週末）。, 更新 TPEX 日價；舊 service 測試替身可退回單日 API。, 一鍵更新所有數據流程（支援快速與安全分流）, Skip technical indicator calculation when the overview already shows it is curre (+1 more)
+Cohesion: 0.18
+Nodes (17): PortfolioConditionMonitor, PortfolioCurrentSnapshot, Any, Decimal, PositionDTO, Portfolio condition monitoring for append-only Phase 4.1 positions.  此模組只對照進場來, Evaluate whether a derived position still matches its source thesis., make_position() (+9 more)
 
 ### Community 165 - "Weekday Scheduled Date"
 Cohesion: 0.18
 Nodes (22): build_parser(), main(), _parse_date(), Any, ArgumentParser, date, datetime, Path (+14 more)
 
 ### Community 166 - "Draw Delegate Detail"
-Cohesion: 0.17
-Nodes (19): build_backtest_trade_source(), build_recommendation_trade_source(), PortfolioTradeSource, Any, Build source metadata for Portfolio trades created from research artifacts., Traceable source metadata attached to append-only Portfolio trades., Return a deterministic hash for JSON-compatible metadata., Create trace metadata for a trade recorded from a Recommendation row. (+11 more)
+Cohesion: 0.11
+Nodes (14): ChartDataService, Any, DataFrame, ndarray, Series, 獲取交易明細 DataFrame                  Args:             run_id: 回測執行ID, 獲取交易報酬率陣列                  Args:             run_id: 回測執行ID, 初始化圖表資料服務                  Args:             run_repository: BacktestRunRepos (+6 more)
 
 ### Community 167 - "Args Get Run"
 Cohesion: 0.22
@@ -1834,12 +1819,12 @@ Cohesion: 0.18
 Nodes (11): MainWindowSmokeOptions, FakeApp, FakeConstrainedMainWindow, FakeMainWindow, FakePixmap, FakePlatformAdjustedMainWindow, test_run_mainwindow_smoke_can_skip_optional_operations(), test_run_mainwindow_smoke_records_constrained_resize_status() (+3 more)
 
 ### Community 171 - "Mainwindow Smoke Resize"
-Cohesion: 0.15
-Nodes (11): Any, DataFrame, date, Series, 載入股票數據和技術指標（自動調整日期範圍）                  Args:             stock_code: 股票代號, 載入價格數據                  Args:             stock_code: 股票代號             start, 載入技術指標數據                  Args:             stock_code: 股票代號             sta, 計算過擬合風險                  Args:             analyzer: PerformanceAnalyzer 實例 (+3 more)
+Cohesion: 0.20
+Nodes (8): _combo_or_none(), DecisionQualityView, _int_or_none(), QComboBox, QLabel, QLineEdit, QWidget, _text_or_none()
 
 ### Community 172 - "Dashboard Worker None"
-Cohesion: 0.08
-Nodes (11): Run MOPS monthly revenue dry-run or controlled SQLite apply., 代理各分頁的開始下載更新，並設定對應的 Radio 按鈕與日期, 以週一至週五計算最近 N 個工作日，結束日仍保留使用者選定日期。, 寫入背景任務狀態 JSON，供狀態按鈕即時讀取。, 以獨立進程背景執行 TPEX + TWSE + 技術指標完整流程。, Keep background tasks alive independently until they finish., 執行 CSV 匯出邏輯（支援範圍選擇與非同步處理）, UpdateView (+3 more)
+Cohesion: 0.06
+Nodes (20): Any, datetime, Run MOPS monthly revenue dry-run or controlled SQLite apply., 代理各分頁的開始下載更新，並設定對應的 Radio 按鈕與日期, 相容 QTextEdit.toPlainText, 取得單一資料來源詳細狀態並包成 UI 可套用的狀態 dict, 以週一至週五計算最近 N 個工作日，結束日仍保留使用者選定日期。, 將結束日調整為最近交易日（至少避開週末）。 (+12 more)
 
 ### Community 173 - "Scanner Changed Fit"
 Cohesion: 0.05
@@ -1851,19 +1836,19 @@ Nodes (36): 1. API 端點和參數, 1. HTTP 307 重定向錯誤, 2. API 返回�
 
 ### Community 175 - "Antigravity Documentation Rule"
 Cohesion: 0.06
-Nodes (54): FundamentalFactorService, Path, apply_fundamental_schema_migration(), FundamentalSchemaMigrationResult, Path, Fundamental SQLite schema migration with explicit backup and rollback., restore_fundamental_schema_backup(), apply_fundamental_schema() (+46 more)
+Nodes (57): FundamentalFactorService, FundamentalFactorSnapshot, date, Path, Application service for governed fundamental factor records., apply_fundamental_schema_migration(), FundamentalSchemaMigrationResult, Path (+49 more)
 
 ### Community 176 - "Args Dataframe Calculate"
 Cohesion: 0.06
 Nodes (35): 2026-05-27 補充狀態, 2026-05-30 SQLite 儲存、Bug 修復與全量技術指標重算升級成果, 2026-06-02 安全更新 Phase 1 DB 同步補強, 2026-06-03 CSV 手動匯出與更新流程優化 (Phase 3) 成果, 2026-06-03 SQLite DB-first 讀取改造與視覺化 Table 檢視 (Phase 2A, 2B & 2C) 成果, 2026-06-03 主力流向 (Smart Money Flow) 視覺重構與排版優化成果, 2026-06-03 數據更新工作台 (UpdateView) 視覺重構與架構優化成果, 2026-06-04 Research Lab 工作流重整 (+27 more)
 
 ### Community 177 - "Corporate Action Policy"
-Cohesion: 0.16
+Cohesion: 0.17
 Nodes (17): nearest_rank(), DataFrame, Series, quantize_score_to_basis_points(), ScoreThresholdPolicy, ScoreThresholdResult, _try_quantize_fixed_diagnostic(), quantile_params() (+9 more)
 
 ### Community 178 - "Factor Cross Sectional"
-Cohesion: 0.15
-Nodes (9): 組合不同來源的信號                  Args:             df: 數據DataFrame             pat, 評估信號可靠性                  Args:             df: 數據DataFrame, 回測組合信號策略                  Args:             df: 數據DataFrame，必須包含Combined_Sign, 獲取對應的列名，優先使用中文列名，如果不存在則使用英文列名                  Args:             df: 數據DataFr, 視覺化組合信號                  Args:             df: 數據DataFrame，必須包含Combined_Signa, 分析組合信號                  Args:             df: 數據DataFrame             patter, 信號組合分析器，用於組合不同分析模組的信號並評估綜合信號的可靠性, 分析交易量                  Args:             df: 數據DataFrame             volume_ (+1 more)
+Cohesion: 0.16
+Nodes (7): QMainWindow, main(), MainWindow, Any, Path, 處理一鍵送回測請求（Phase 3.3）          Args:             backtest_view: 回測視圖實例, 切換至市場探索 -> 主力流向，並定位至該個股
 
 ### Community 179 - "Source Trade Build"
 Cohesion: 0.26
@@ -1878,36 +1863,36 @@ Cohesion: 0.15
 Nodes (16): FundamentalDiagnosticsService, Any, date, Decimal, Application boundary for fundamental diagnostics metadata., AbnormalFundamentalFlag, build_abnormal_fundamental_diagnostics(), date (+8 more)
 
 ### Community 182 - "None Dashboard Worker"
-Cohesion: 0.19
+Cohesion: 0.21
 Nodes (8): _json_safe(), PortfolioJsonlStore, Any, Path, Append-only JSONL storage for the Phase 4.1 Portfolio MVP., Small storage adapter kept behind app_module services., test_portfolio_jsonl_store_overwrite_serializes_nested_decimals(), test_portfolio_jsonl_store_serializes_decimal_without_float()
 
 ### Community 183 - "Dict Post Init"
-Cohesion: 0.07
-Nodes (37): parse_stock_dates(), Series, PeriodHoldingDTO, Any, DataFrame, RecommendationPortfolioBacktestResultDTO, RecommendationSnapshotDTO, StockContributionDTO (+29 more)
+Cohesion: 0.08
+Nodes (27): parse_stock_dates(), Series, Any, DataFrame, RecommendationReplayService, BrokerConfig, BrokerSimulator, DataFrame (+19 more)
 
 ### Community 184 - "Fundamental Diagnostics Abnormal"
 Cohesion: 0.06
 Nodes (33): Phase 2：策略資料庫設計文檔, 不適合的市場狀態, 不適合的市場狀態, 不適合的市場狀態, 單一策略回測設計, 回測指標, 回測目標, 實作計劃 (+25 more)
 
 ### Community 185 - "Readiness Evidence Scheduler"
-Cohesion: 0.17
-Nodes (16): 批次處理股票資料                  Args:             stock_data_path: 股票數據檔案路徑，必須由呼叫端明, 主程序                  Returns:             bool: 執行成功返回True，否則返回False, determine_start_date(), format_summary_report(), main(), parse_args(), process_stock_data_batch(), datetime (+8 more)
+Cohesion: 0.15
+Nodes (8): MarketDateRange, datetime, check_data_status(), main(), 檢查各資料檔案的狀態和最新日期，修正日期排序問題, 初始化數據處理器                  Args:             config: TWStockConfig 實例，如果為 None, setup_logging(), TWMarketDataProcessor
 
 ### Community 186 - "Evidence Review Scheduler"
 Cohesion: 0.06
 Nodes (33): 1. 資料完整性優先, 2. 向後相容性, 3. 測試覆蓋, 4.1 Git 暫存與排除規範, 4.2 股票/量化防禦條款（高優先級）, 4. 文檔同步, 5. 語言規範（強制要求）, UI 修改後強制驗證 (+25 more)
 
 ### Community 187 - "Smoke Mainwindow Evidence"
-Cohesion: 0.22
-Nodes (16): _dashboard_available(), evaluate_evidence_scheduler_readiness(), _load_smoke_report(), Any, Path, _smoke_passed(), build_parser(), _config_from_args() (+8 more)
+Cohesion: 0.15
+Nodes (10): create_evidence_operations_history_dashboard_service(), Any, Path, 回測結果面板 包含所有實驗摘要、圖表、最佳化結果、比較與批次/推薦結果呈現分頁, Mount the read-only evidence review pages in Research Lab., EvidenceReviewView, QVBoxLayout, QWidget (+2 more)
 
 ### Community 188 - "Pattern Results Dataframe"
 Cohesion: 0.14
-Nodes (27): _calculate_monte_carlo_returns(), calculate_robustness_metrics(), calculate_rolling_risk_metrics(), _calculate_sharpe_ratio(), _calculate_sortino_ratio(), _calculate_turnover(), _calculate_var_cvar(), _equity_returns() (+19 more)
+Nodes (28): _calculate_monte_carlo_returns(), calculate_robustness_metrics(), calculate_rolling_risk_metrics(), _calculate_sharpe_ratio(), _calculate_sortino_ratio(), _calculate_turnover(), _calculate_var_cvar(), _equity_returns() (+20 more)
 
 ### Community 189 - "Args Dataframe Combined"
-Cohesion: 0.17
-Nodes (22): broker_flow_quality_to_factor_quality(), build_broker_flow_factor(), build_technical_total_score_factor(), build_volume_ratio_factor(), date, Decimal, 既有技術、量能與券商分點資料的 Factor v1 adapter。, _score_to_bp() (+14 more)
+Cohesion: 0.11
+Nodes (27): FactorService, Any, date, Factor Layer application service。, 收集與序列化 factor snapshot，不修改 scoring 核心。, broker_flow_quality_to_factor_quality(), build_broker_flow_factor(), build_technical_total_score_factor() (+19 more)
 
 ### Community 190 - "Jsonl Init Append"
 Cohesion: 0.16
@@ -1918,32 +1903,32 @@ Cohesion: 0.16
 Nodes (8): PatternParameterOptimizer, Any, DataFrame, 對指定的圖形模式進行參數優化                  Args:             df: 包含價格數據的DataFrame, 初始化參數優化器                  Args:             pattern_analyzer: PatternAnalyzer, 繪製優化結果圖表                  Args:             results_df: 包含優化結果的DataFrame, 保存優化結果                  Args:             results_df: 優化結果DataFrame, 圖形模式參數優化器     作為PatternAnalyzer的輔助類，用於優化各種圖形模式的識別參數
 
 ### Community 192 - "Company Registry Rows"
-Cohesion: 0.28
-Nodes (13): DecimalEncoder, generate_report(), main(), DataFrame, Recommendation Analysis Tab QA 驗證腳本 自動檢查與測試推薦分析功能是否正確、穩定、可回歸, 驗證 UI 與 Service 的 Contract, validate_dataframe_quality(), validate_dto_structure() (+5 more)
+Cohesion: 0.15
+Nodes (13): Any, _quality(), RecommendationEvidenceImporter, _score_bp(), _tuple(), FakeRecommendationRepository, _result(), test_fixed_threshold_recommendation_does_not_emit_percentile_missing_warning() (+5 more)
 
 ### Community 193 - "Adapter Factor Volume"
 Cohesion: 0.06
 Nodes (32): 1.1 能夠完成一次完整研究循環, 1.2 能夠識別問題所在層級, 1.3 能夠判斷「可分析」vs「退回調整」, 1. 研究流程熟練度, 2.1 能夠按照優先順序判讀指標, 2.2 能夠正確解讀 Benchmark 對標, 2.3 能夠識別「樣本不足」的情況, 2. 指標判讀能力 (+24 more)
 
 ### Community 194 - "Sqlite Available Date"
-Cohesion: 0.20
-Nodes (16): date_key(), iter_weekday_date_keys(), normalize_sqlite_dates(), Any, UpdateService 使用的無 I/O 資料正規化 helper。, sqlite_csv_dtype(), stock_code_key(), 數據更新服務 (Update Service) 提供數據更新的業務邏輯 (+8 more)
+Cohesion: 0.24
+Nodes (15): date_key(), iter_weekday_date_keys(), normalize_sqlite_dates(), Any, UpdateService 使用的無 I/O 資料正規化 helper。, sqlite_csv_dtype(), stock_code_key(), test_date_key_preserves_current_input_output_matrix() (+7 more)
 
 ### Community 195 - "Fundamental Daily Valuation"
-Cohesion: 0.32
-Nodes (19): PreV2ReadinessItem, Compose the V2.0 Phase 1 workbench payload from read-only inputs., WorkbenchReadOnlyComposer, _sample_readiness_report(), _agent_report_sample(), _decision_snapshot(), _readiness_report(), test_composer_action_item_drilldown_targets_match_legacy_pages() (+11 more)
+Cohesion: 0.37
+Nodes (17): Compose the V2.0 Phase 1 workbench payload from read-only inputs., WorkbenchReadOnlyComposer, _agent_report_sample(), _decision_snapshot(), _readiness_report(), test_composer_action_item_drilldown_targets_match_legacy_pages(), test_composer_builds_background_evidence_feed_from_existing_payloads_only(), test_composer_builds_read_only_action_items_with_trace_reason_and_drilldown() (+9 more)
 
 ### Community 196 - "Factor Snapshot Research"
 Cohesion: 0.13
 Nodes (24): build_company_registry_rows(), CompanyRegistryBuildResult, CompanyRegistryRow, _deduplicate_rows(), _first(), _normalize_company_row(), _normalize_source_date(), Path (+16 more)
 
 ### Community 198 - "Daily Tpex Price"
-Cohesion: 0.13
-Nodes (28): DecisionDeskSnapshot, app(), _build_main_window(), _DummyRecommendationView, _DummySignal, _DummyUpdateView, _DummyView, _FakePortfolioChipService (+20 more)
+Cohesion: 0.10
+Nodes (35): DecisionDeskRiskPromptSummary, DecisionDeskSnapshot, app(), _build_main_window(), _DummyRecommendationView, _DummySignal, _DummyUpdateView, _DummyView (+27 more)
 
 ### Community 199 - "Workbench Open Backtest"
-Cohesion: 0.14
-Nodes (28): DecisionQualityDashboardCards, DecisionQualityDashboardResult, EvidenceOperationsHistoryDashboardCards, LiveResearchGapDashboardCards, LiveResearchGapDashboardRequest, LiveResearchGapDashboardResult, SignalDecayDashboardCards, SignalDecayDashboardRequest (+20 more)
+Cohesion: 0.21
+Nodes (7): _combo_or_none(), LiveResearchGapView, QComboBox, QLabel, QLineEdit, QWidget, _text_or_none()
 
 ### Community 200 - "Audit Encoding Files"
 Cohesion: 0.21
@@ -1958,12 +1943,12 @@ Cohesion: 0.06
 Nodes (31): 📋 Prompt 模板, 代碼重構 Prompt, 任務理解, 功能實現 Prompt, 📚 參考資源, 問題修復 Prompt, 回滾方式說明, 回滾風險說明 (+23 more)
 
 ### Community 203 - "Args Dataframe Signals"
-Cohesion: 0.17
-Nodes (9): Any, 比較版本號                  Returns:             -1 if v1 < v2, 0 if v1 == v2, 1 i, 創建策略版本                  Args:             strategy_id: 策略 ID             str, 以 temporary JSON + atomic replace 寫入策略版本。, 獲取策略版本                  Args:             version_id: 版本 ID, 列出策略版本                  Args:             strategy_id: 策略 ID 篩選（可選）, 更新策略版本                  Args:             version_id: 版本 ID             **kw, 生成版本號                  Args:             strategy_id: 策略 ID             base (+1 more)
+Cohesion: 0.15
+Nodes (9): DecisionDeskFundamentalDiagnostic, DecisionDeskRiskPrompt, date, RiskPromptEvidenceImporter, AdvisoryRiskPromptProvider, FakeRiskPromptProvider, date, test_risk_prompt_importer_keeps_snapshot_quality_as_one_advisory() (+1 more)
 
 ### Community 204 - "Factor Cross Sectional"
 Cohesion: 0.07
-Nodes (33): _dict(), EvidenceOutcomeStatus, normalize_data_quality(), normalize_event_type(), normalize_outcome_status(), Any, Enum, _tuple_of_str() (+25 more)
+Nodes (35): _dict(), normalize_data_quality(), normalize_event_type(), normalize_outcome_status(), Any, _tuple_of_str(), Any, score_percentile_bucket() (+27 more)
 
 ### Community 205 - "Smart Money Flow"
 Cohesion: 0.06
@@ -1978,28 +1963,28 @@ Cohesion: 0.22
 Nodes (15): audit_document_encoding(), AuditResult, EncodingIssue, _format_path(), iter_document_files(), main(), MojibakeWarning, Path (+7 more)
 
 ### Community 208 - "Smoke Working Copy"
-Cohesion: 0.08
-Nodes (21): Any, 取得觀察清單（包含完整 Metadata）                  Args:             watchlist_id: 觀察清單ID, 新增股票到觀察清單                  Args:             stocks: 股票列表，每個項目包含 stock_code 和, 從觀察清單移除股票                  Args:             stock_codes: 要移除的股票代號列表, 從觀察清單移除單一股票（便捷方法）                  Args:             watchlist_id: 觀察清單ID, 清空觀察清單                  Args:             watchlist_id: 觀察清單ID, 取得觀察清單中的股票代號列表                  Args:             watchlist_id: 觀察清單ID, 取得觀察清單中的股票列表（包含詳細資訊）                  Args:             watchlist_id: 觀察清單ID (+13 more)
+Cohesion: 0.23
+Nodes (6): DataFrame, QWidget, 刷新強勢股數據                  Args:             use_cache: 是否使用緩存（True=有緩存就不重新計算，F, 初始化強勢個股視圖                  Args:             screening_service: 篩選服務實例, 如果需要，載入數據（當 tab 被點擊時調用）, StrongStocksView
 
 ### Community 209 - "Snapshot Hash Repository"
-Cohesion: 0.13
-Nodes (11): get_tab_info(), Tab 說明內容配置檔案 集中管理所有 Tab 的說明文字，避免硬編碼在 UI 中  Tab 層級結構： - 主 Tab（5個）：   * updat, 獲取指定 Tab 的說明資訊          Args:         tab_key: Tab 的 key（例如 "update", "recomm, InfoDialog, QDialog, QFrame, QPushButton, 創建一個說明區塊                  Args:             title: 區塊標題             content: (+3 more)
+Cohesion: 0.18
+Nodes (8): InfoDialog, QDialog, QFrame, QPushButton, 創建一個說明區塊                  Args:             title: 區塊標題             content:, 將列表格式化為文字                  Args:             items: 列表項目                  R, 初始化資訊按鈕                  Args:             tab_key: Tab 的 key（例如 "update", "r, 初始化資訊對話框                  Args:             tab_key: Tab 的 key（例如 "update", "
 
 ### Community 210 - "Registry Run Promote"
-Cohesion: 0.29
-Nodes (16): WorkbenchAccessBoundary, app(), _dashboard_with_replay(), _empty_dashboard(), test_unified_workbench_overview_uses_detail_inspector_and_collapsible_sections(), test_unified_workbench_overview_uses_high_contrast_priority_treatments(), test_unified_workbench_view_displays_empty_and_degraded_queue_state_copy(), test_unified_workbench_view_refreshes_only_through_source_service() (+8 more)
+Cohesion: 0.23
+Nodes (6): DataFrame, QWidget, 刷新弱勢股數據                  Args:             use_cache: 是否使用緩存（True=有緩存就不重新計算，F, 初始化弱勢個股視圖                  Args:             screening_service: 篩選服務實例, 如果需要，載入數據（當 tab 被點擊時調用）, WeakStocksView
 
 ### Community 211 - "Recommendation Replay Portfolio"
-Cohesion: 0.29
-Nodes (12): 列出所有已註冊的策略                  Returns:             策略資訊字典 {strategy_id: {name,, convert_numpy_types(), generate_report(), main(), Phase 2.5 功能驗證腳本 驗證除機器學習和資料更新外的所有功能, 轉換 numpy 類型為 Python 原生類型, validate_backtest(), validate_market_watch() (+4 more)
+Cohesion: 0.17
+Nodes (9): 組合不同來源的信號                  Args:             df: 數據DataFrame             pat, 評估信號的可靠性                  Args:             df: 包含信號的DataFrame, 回測組合策略                  Args:             df: 包含信號的DataFrame             str, 獲取對應的列名，優先使用中文列名，如果不存在則使用英文列名                  Args:             df: 數據DataFr, 視覺化信號                  Args:             df: 包含信號的DataFrame             tick, 分析組合信號                  Args:             df: 數據DataFrame             patter, 信號組合分析器，用於組合不同分析模組的信號並評估綜合信號的可靠性, 分析交易量                  Args:             df: 數據DataFrame             volume_ (+1 more)
 
 ### Community 212 - "Replay Summary Load"
-Cohesion: 0.11
-Nodes (16): Strategy & Scoring Governance B: Recommendation Ranking Implementation Plan, Task 1：建立橫斷面排名契約, Task 2：實作排名元件, Task 3：鎖定 RecommendationService 行為, Task 4：接入 RecommendationService, Task 5：DTO 與 Repository round-trip, Task 6：推薦 UI, Task 7：推薦回放與重現性 (+8 more)
+Cohesion: 0.06
+Nodes (28): Strategy & Scoring Governance A: Backtest Thresholds Implementation Plan, Task 10：文件同步, Task 11：Gate A 驗證, Task 1：建立門檻元件契約, Task 2：實作純門檻元件, Task 3：鎖定三個 executor 的相容性, Task 4：接入 Baseline executor, Task 5：接入 Momentum 與 Stable executor (+20 more)
 
 ### Community 213 - "Tpex Daily Price"
-Cohesion: 0.14
-Nodes (18): Any, Decimal, 執行推薦分析                  這是從 ui_app/main.py 的 _execute_strategy_analysis_thread, 檢測市場狀態                  Returns:             dict: {                 'regime, 獲取指定市場狀態的策略配置                  Args:             regime: 'Trend' | 'Reversion, enrich_latest_market_features(), latest_feature_decimal(), _price_change_percent() (+10 more)
+Cohesion: 0.33
+Nodes (13): enrich_latest_market_features(), latest_feature_decimal(), _price_change_percent(), DataFrame, Decimal, 回傳防禦性複製，並只在最新一列加入推薦所需的衍生特徵。, 從已 enrichment 的最新列讀取 Decimal，不重新計算。, _to_valid_decimal() (+5 more)
 
 ### Community 214 - "Read Only Workbench"
 Cohesion: 0.18
@@ -2014,12 +1999,12 @@ Cohesion: 0.28
 Nodes (14): _build_cancel_message_box(), _capture_screenshot(), _create_mainwindow(), _ensure_qapplication(), _find_update_view(), _probe_update_force_merge_cancel(), _process_events(), Any (+6 more)
 
 ### Community 218 - "Policy Corporate Action"
-Cohesion: 0.20
-Nodes (8): DataFrame, Series, Trade, 計算最大回撤                  Args:             equity: 權益序列                  Ret, 分析交易統計                  Args:             trades: 交易列表             initial_c, 創建交易明細 DataFrame                  Args:             trades: 交易列表, 計算 Buy & Hold 策略的報酬率                  Args:             df: 股票價格數據（必須包含 '收盤價', 計算績效指標                  Args:             trades: 交易列表             equity_cu
+Cohesion: 0.30
+Nodes (10): _app(), _combo_labels(), FakeConfig, FakeRecommendationService, FakeRegimeService, FakeStrategyVersionService, test_builtin_profile_description_shows_weights_filters_and_patterns(), test_recommendation_profile_combo_shows_builtin_custom_and_strategy_sources() (+2 more)
 
 ### Community 219 - "Epic Mvp Dailysignalframe"
-Cohesion: 0.32
-Nodes (11): test_format_source_detail_summary_handles_missing_broker_fields(), test_format_source_detail_summary_keeps_daily_display_text(), test_format_status_token_preserves_known_unknown_and_missing_values(), test_get_update_type_name_preserves_known_and_unknown_values(), test_tpex_warning_messages_deduplicates_and_sorts_failed_dates(), format_source_detail_summary(), format_status_token(), get_update_type_name() (+3 more)
+Cohesion: 0.21
+Nodes (16): batch_update_industry_index(), batch_update_market_index(), configure_console_encoding(), get_existing_dates(), get_latest_date(), get_trading_days(), is_trading_day(), main() (+8 more)
 
 ### Community 220 - "Research Only Benchmark"
 Cohesion: 0.29
@@ -2034,8 +2019,8 @@ Cohesion: 0.07
 Nodes (29): API 資訊, UI 安全更新（推薦）, 一鍵更新（自動合併）, 使用方式, 使用方式, 使用方式, 券商分點更新注意事項, 合併數據 (+21 more)
 
 ### Community 223 - "Viewport Resize Evidence"
-Cohesion: 0.36
-Nodes (11): _config(), _event_count(), _outcome_count(), CompletedProcess, Path, _run_smoke(), _seed_recommendation(), test_working_copy_smoke_missing_durable_source_becomes_blocking_gap() (+3 more)
+Cohesion: 0.26
+Nodes (4): DashboardView, QGroupBox, QWidget, 初始化 Dashboard                  Args:             screening_service: 篩選服務實例
 
 ### Community 224 - "Profile Custom Recommendation"
 Cohesion: 0.07
@@ -2046,8 +2031,8 @@ Cohesion: 0.07
 Nodes (29): 1. Breakout Momentum（暴衝型）, 1. 策略可插拔規格, 2. DailySignalFrame（統一輸出格式）, 2. Trend Following（順勢型）, 3. BacktestService MVP, 3. Mean Reversion（均值回歸/穩健型）, 4. Industry Rotation（產業輪動型）, 4. ReasonEngine 升級 (+21 more)
 
 ### Community 227 - "Post Init Decisiondesksectionstatus"
-Cohesion: 0.03
-Nodes (65): 1. 測試路由基本原則, 2.1 UpdateView / 資料更新頁, 2.2 Daily Decision Desk / 每日決策, 2.3 Research Lab / 策略回測, 2.4 Market Regime / 市場觀察, 2.5 Smart Money Flow / 主力流向, 2.6 Run Registry Compare / 策略比較, 2. 六大高頻 UI 功能測試路由矩陣 (+57 more)
+Cohesion: 0.07
+Nodes (28): 📋 Prompt 模板, 代碼清理, 代碼清理 Prompt, 依賴清理, 依賴清理 Prompt, 📚 參考資源, ⚠️ 執行規則（Do / Don't）, 基本 Prompt (+20 more)
 
 ### Community 228 - "Evidence Event Schema"
 Cohesion: 0.26
@@ -2067,15 +2052,15 @@ Nodes (8): CorporateActionPolicyInspection, CorporateActionPricePolicy, Corporat
 
 ### Community 232 - "Create Patterns Optimized"
 Cohesion: 0.05
-Nodes (36): 1. 文件權威邊界, 2. 系統定位, 3. 目前執行狀態, 4. 下一步 Next, 5. Blockers / Risks, 6. 歷史與追溯, 7. 更新記錄, 1. TWStockConfig 類 (+28 more)
+Nodes (33): 1. 文件權威邊界, 2. 系統定位, 3. 目前執行狀態, 4. 下一步 Next, 5. Blockers / Risks, 6. 歷史與追溯, 7. 更新記錄, 1. TWStockConfig 類 (+25 more)
 
 ### Community 234 - "Export Backtest Path"
 Cohesion: 0.33
 Nodes (11): build_batch_closeout_baseline(), CoverageStatus, detect_coverage_gaps(), HealthcheckCoverageItem, ManualHealthcheckStatus, Enum, str, test_batch_closeout_baseline_blocks_deferred_high_risk_or_design_items() (+3 more)
 
 ### Community 235 - "Dashboard Card Evidenceoperationshistoryview"
-Cohesion: 0.14
-Nodes (22): FullModeChecklistItem, FullModeReleaseChecklist, generate_full_mode_release_checklist(), render_full_mode_release_checklist_markdown(), generate_quick_mode_release_gate_proposal(), QuickModeReleaseGateProposal, ReleaseGateCriterion, render_quick_mode_release_gate_proposal_markdown() (+14 more)
+Cohesion: 0.13
+Nodes (23): FullModeChecklistItem, FullModeReleaseChecklist, generate_full_mode_release_checklist(), render_full_mode_release_checklist_markdown(), generate_quick_mode_release_gate_proposal(), QuickModeReleaseGateProposal, ReleaseGateCriterion, render_quick_mode_release_gate_proposal_markdown() (+15 more)
 
 ### Community 236 - "Make Build Page"
 Cohesion: 0.26
@@ -2095,19 +2080,23 @@ Nodes (14): _advisory_unique_count(), build_parser(), _extract_json_object(), ma
 
 ### Community 240 - "Evidence Review Signal"
 Cohesion: 0.09
-Nodes (19): BatchBacktestResultDTO, DataFrame, 創建排行榜 DataFrame          Args:             batch_result: 批次回測結果, StockBacktestResult, app(), backtest_view(), FakeBacktestReport, FakeBatchResult (+11 more)
+Nodes (14): app(), backtest_view(), FakeBacktestReport, FakeBatchResult, FakeRecommendationDTO, FakeRecommendationPortfolioResult, init_app(), recommendation_view() (+6 more)
 
 ### Community 241 - "Snapshot Project Context"
 Cohesion: 0.17
-Nodes (12): Strategy & Scoring Governance A: Backtest Thresholds Implementation Plan, Task 10：文件同步, Task 11：Gate A 驗證, Task 1：建立門檻元件契約, Task 2：實作純門檻元件, Task 3：鎖定三個 executor 的相容性, Task 4：接入 Baseline executor, Task 5：接入 Momentum 與 Stable executor (+4 more)
+Nodes (5): Any, Path, Loads built-in, custom, and gated strategy-version recommendation profiles., RecommendationProfile, RecommendationProfileService
 
 ### Community 242 - "Date Last Range"
-Cohesion: 0.39
-Nodes (10): _config(), CompletedProcess, Path, _run_smoke(), _seed_recommendation(), test_evidence_pipeline_smoke_confirm_is_idempotent_for_duplicate_event(), test_evidence_pipeline_smoke_confirm_writes_event_and_ready_outcome(), test_evidence_pipeline_smoke_dry_run_does_not_write_events_or_outcomes() (+2 more)
+Cohesion: 0.08
+Nodes (16): test_pandas_table_model_handles_duplicate_display_columns_without_series_error(), PandasTableModel, Any, DataFrame, Orientation, QAbstractTableModel, QModelIndex, SortOrder (+8 more)
+
+### Community 243 - "Date Freshness Probe"
+Cohesion: 0.12
+Nodes (7): PortfolioChipService, Any, DataFrame, 聚合籌碼 DataFrame，計算集中度、連續天數與評估風險, 讀取分點註冊表，建立系統 Key 到顯示名稱的對照, 獲取特定個股近 N 天的籌碼統計數據 (SQLite 優先，CSV 降級)          Args:             stock_code:, TestPortfolioChipService
 
 ### Community 244 - "Scheduled Build Config"
-Cohesion: 0.10
-Nodes (19): ScheduledEvidenceStatus, Mount the read-only evidence review pages in Research Lab., EvidenceReviewView, QVBoxLayout, QWidget, _bool_text(), _format_details(), _join() (+11 more)
+Cohesion: 0.17
+Nodes (12): ScheduledEvidenceStatus, _bool_text(), _format_details(), _join(), _join_warning_top_counts(), _pipeline_advisory_summary(), _pipeline_warning_summary(), QLabel (+4 more)
 
 ### Community 246 - "Workspace Decision Migration"
 Cohesion: 0.07
@@ -2122,8 +2111,8 @@ Cohesion: 0.07
 Nodes (26): Batch 0：基線與驗證盤點, Batch 1：直接修復與低風險 UX, Batch 2：Daily Dashboard 與 Smart Money, Batch 3：Recommendation Profile / Regime, Batch 4：Research Lab 結果頁, Batch 5：效能與計算排查, Daily Decision Dashboard v2, Full App Healthcheck Issue Resolution Design (+18 more)
 
 ### Community 250 - "Run Research Build"
-Cohesion: 0.35
-Nodes (7): _event(), FakeBrokerFlowService, FakePriceProvider, test_semantic_service_classifies_initial_buy_without_future_events(), test_semantic_service_classifies_initial_sell_trend(), test_semantic_service_high_position_distribution_is_no_lookahead(), test_semantic_service_uses_quantity_concentration_and_excludes_unavailable()
+Cohesion: 0.29
+Nodes (3): EvidenceOperationsHistoryView, QLabel, QWidget
 
 ### Community 251 - "Dict Any"
 Cohesion: 0.09
@@ -2142,8 +2131,8 @@ Cohesion: 0.26
 Nodes (7): inspect_valuation_source_policy(), Valuation metric source policy for Month 5 fundamental layer., ValuationSourcePolicyInspection, main(), test_valuation_source_policy_cli_reports_guarded_pb_ps(), test_valuation_source_policy_markdown_is_user_auditable(), test_valuation_source_policy_marks_pe_pb_ps_ready_with_guarded_sources()
 
 ### Community 255 - "Active Task Git"
-Cohesion: 0.29
-Nodes (5): QPainter, QRect, QStyledItemDelegate, Terminal Delegate 純 Qt 原生繪圖實作：無 WebView, 無大量元件，極致低 CPU/RAM 佔用。 負責繪製 Row Intens, TerminalScannerDelegate
+Cohesion: 0.38
+Nodes (4): QPainter, QRect, QStyledItemDelegate, TerminalScannerDelegate
 
 ### Community 256 - "Init Merge Faketabwidget"
 Cohesion: 0.38
@@ -2162,8 +2151,8 @@ Cohesion: 0.08
 Nodes (25): 1.1 篩選邏輯問題, 1.2 數據計算問題, 1.3 異常處理問題, 1️⃣ 邏輯錯誤（Machine-checkable）, 2.1 DTO 欄位命名, 2.2 UI 期望欄位, 2️⃣ 不一致的 DTO / 欄位命名, 3.1 DataFrame 結構假設 (+17 more)
 
 ### Community 260 - "Read Current Task"
-Cohesion: 0.13
-Nodes (9): _build_html(), _FastCanvasChartWidget, FastHoldingDaysHistogramWidget, FastTradeReturnHistogramWidget, DataFrame, Series, HTML canvas holding-period distribution chart., Shared QtWebEngine host for compact HTML canvas chart payloads. (+1 more)
+Cohesion: 0.18
+Nodes (3): _build_html(), DataFrame, Series
 
 ### Community 262 - "Check Manual Date"
 Cohesion: 0.32
@@ -2186,7 +2175,7 @@ Cohesion: 0.24
 Nodes (12): app(), _backtest_report(), backtest_view(), _FakePortfolioResult, qt_app(), test_fixed_basket_execution_forwards_research_mode_to_batch_service(), test_recommendation_replay_save_uses_research_run_service(), test_recommendation_replay_updates_current_run_id_only_after_save() (+4 more)
 
 ### Community 268 - "Crosssectionalfactorsnapshot Factorgate Available"
-Cohesion: 0.29
+Cohesion: 0.25
 Nodes (7): PySide6 UI, UI 修改驗證, 主要目錄, 架構邊界, 目前 Backlog, 目前已完成, 頂層工作區
 
 ### Community 269 - "Run Pipeline Status"
@@ -2201,17 +2190,13 @@ Nodes (25): Authority Boundary, CLI, Commit Plan, Documentation, DTOs, Non-goals
 Cohesion: 0.08
 Nodes (25): 10. 更新記錄, 1. 文件邊界, 2. Scoped Authority 對照, 3. 版本命名規則, 4. 版本階梯總覽, 5. V2.x 詳細規劃, 6. V3.x 詳細規劃, 7. V4.0 詳細規劃 (+17 more)
 
-### Community 272 - "Percentiles Recommendation Percentile"
-Cohesion: 0.27
-Nodes (5): 市場主力流向快速摘要 (供 Summary Strip 使用), SmartMoneySummaryDTO, QWidget, Summary Strip 精緻的玻璃擬態卡片式狀態面板，位於 Scanner 上方。 已中文化標題與狀態呈現，並已調大字體以提升易讀性。, SummaryStrip
-
 ### Community 273 - "Inspect Live Research"
 Cohesion: 0.25
 Nodes (10): build_active_task_content(), check_exclusions(), main(), 自動同步 Git 工作區狀態至 active_task.yaml 並檢查 dirty exclusions 檔案。, 以原子替換更新 active_task.yaml 的 git_status 區塊。, 獲取 Git status 輸出的檔案清單。, 比對排除清單，檢查是否有不應被 stage 的檔案被變更或新增。, 建立新的 active_task.yaml 內容，保留 git_status 後方區塊。 (+2 more)
 
 ### Community 274 - "Run Evidence Pipeline"
-Cohesion: 0.32
-Nodes (19): _date_text(), _list(), _market_breadth(), _market_regime(), _parse_date(), _parse_datetime(), _portfolio_alert(), Any (+11 more)
+Cohesion: 0.16
+Nodes (31): _date_text(), _list(), _market_breadth(), _market_regime(), _parse_date(), _parse_datetime(), _portfolio_alert(), Any (+23 more)
 
 ### Community 276 - "Get Check Manual"
 Cohesion: 0.08
@@ -2246,8 +2231,8 @@ Cohesion: 0.51
 Nodes (9): _capture(), _config(), CompletedProcess, Path, _seed(), test_capture_cli_confirm_requires_explicit_db_path(), test_capture_cli_confirm_writes_tmp_db(), test_capture_cli_defaults_to_dry_run_and_does_not_write() (+1 more)
 
 ### Community 284 - "Confirm Cmd Wrapper"
-Cohesion: 0.22
-Nodes (9): app(), qt_app(), 策略回測左側控制面板預設寬度應足以容納長下拉欄位。, 參數最佳化列的 label 不應把控制項往右推太遠。, 獲取或建立 QApplication 實例, 驗證選中不同實驗模式時，左側配置面板是否會動態顯示/隱藏/摺疊對應的 GroupBox, test_research_lab_config_panel_default_width_prevents_horizontal_squeeze(), test_research_lab_mode_driven_ui_visibility() (+1 more)
+Cohesion: 0.12
+Nodes (18): QApplication, _fake_recommendation_replay_result(), qt_app(), test_recommendation_replay_details_are_available_in_inner_tabs(), test_recommendation_replay_summary_is_sectioned_and_not_duplicated(), app(), qt_app(), 策略回測左側控制面板預設寬度應足以容納長下拉欄位。 (+10 more)
 
 ### Community 285 - "Workbench Imports Replay"
 Cohesion: 0.13
@@ -2262,8 +2247,8 @@ Cohesion: 0.33
 Nodes (4): Any, RecommendationPortfolioOptimizerService, FakeBacktestService, test_optimizer_ranks_parameter_sets_by_objective_score()
 
 ### Community 289 - "Evidence Decision Quality"
-Cohesion: 0.20
-Nodes (6): Path, 載入選股清單                  Args:             watchlist_id: 清單ID, 匯出選股清單為CSV                  Args:             watchlist_id: 清單ID, 從CSV匯入選股清單                  Args:             csv_file: CSV檔案路徑, 儲存選股清單                  Args:             name: 清單名稱             codes: 股票代號, Watchlist
+Cohesion: 0.31
+Nodes (9): batch_update_daily_data(), get_trading_days(), is_trading_day(), main(), datetime, 獲取交易日列表          Args:         start_date: 開始日期 (YYYY-MM-DD)         end_dat, 批量更新每日股票數據          Args:         start_date: 開始日期 (YYYY-MM-DD)         end_, setup_logging() (+1 more)
 
 ### Community 290 - "Healthcheck Non Destructive"
 Cohesion: 0.08
@@ -2302,8 +2287,8 @@ Cohesion: 0.39
 Nodes (7): load_test_data(), main(), plot_parameter_results(), Deprecated manual check; see tests/manual/README.md., 繪製參數測試結果圖表          Args:         results: 測試結果列表         output_dir: 輸出目錄, set_chinese_font(), test_parameter_combinations()
 
 ### Community 300 - "Architecture Governance Checklist"
-Cohesion: 0.20
-Nodes (10): 使用建議, 使用方法, 分數拆解說明, 功能說明, 圖形模式分數, 成交量分數, 技術指標分數, 推薦分析 - Explain 面板（分數拆解） (+2 more)
+Cohesion: 0.64
+Nodes (7): _config(), _run_capture(), _seed_position(), test_capture_cli_confirm_requires_explicit_db_path(), test_capture_cli_confirm_writes_tmp_db(), test_capture_cli_defaults_to_dry_run_and_does_not_write(), test_inspect_cli_outputs_summary()
 
 ### Community 301 - "Healthcheck Smoke Legacy"
 Cohesion: 0.61
@@ -2413,10 +2398,6 @@ Nodes (4): Path, test_scheduled_wrapper_persists_pipeline_source_coverage_summar
 Cohesion: 0.10
 Nodes (20): 03:33 QA Checkpoint Summary, 04:40 / 05:00 / 05:15 Scheduled Chain Notes, 2026-07-08 06:00 Finish Sprint Disclosure Addendum, 2026-07-08 Evening Closeout Handoff, Completed Inputs, Engineering Artifacts, Evidence Sources Reviewed, Finish Sprint Status (+12 more)
 
-### Community 346 - "Legacy Governance Focused"
-Cohesion: 0.19
-Nodes (6): HoldingDaysHistogramWidget, ndarray, QWidget, 圖表組件 使用 matplotlib 整合到 PySide6, 繪製交易報酬分佈                  Args:             returns: 報酬率陣列（百分比）             stat, TradeReturnHistogramWidget
-
 ### Community 348 - "Init Full App"
 Cohesion: 0.67
 Nodes (3): Animal Head Icon Motif, Desktop App Visual Identity, Not A UI Screenshot
@@ -2448,10 +2429,6 @@ Nodes (3): fetch_html(), main(), parse_tables()
 ### Community 366 - "Init"
 Cohesion: 0.12
 Nodes (15): 💾 1.1 CSV 冷備份層 (Durability Layer), ⚡ 1.2 SQLite 極速快取層 (Performance Layer), 1. 雙軌相容架儲構 (Dual-Track Architecture), 2.1 Phase 1 同步邊界, 2. 日常更新流程 (Daily Operations), 🛠️ 3.1 重新遷移與重建資料庫, 🔍 3.2 數據狀態自我審計 (Data Auditing), 🧪 3.3 等價性雙向隨機對比驗證 (Equivalence Validation) (+7 more)
-
-### Community 383 - ".__init__"
-Cohesion: 0.22
-Nodes (9): 使用方法, 功能說明, 升級條件, 步驟 1：執行回測並查看結果, 步驟 2：檢查升級條件, 步驟 3：升級為策略版本, 步驟 4：在推薦分析中使用, 注意事項 (+1 more)
 
 ### Community 393 - "Application Service Layer"
 Cohesion: 0.14
@@ -2506,8 +2483,8 @@ Cohesion: 0.07
 Nodes (27): 1. Project Snapshot (專案快照), 2. Agent Inventory (Agent 盤點), 3. Workflow Map (工作流地圖), 4. Architecture Governance (架構治理), 5. Documentation Index (重要文檔索引), 6. AI Task Routing Recommendation (AI 任務路由建議), 7. Current Active Roadmap (目前活躍開發路線), 8. Risk Report (風險雷達與報告) (+19 more)
 
 ### Community 457 - "WeakIndustriesView"
-Cohesion: 0.50
-Nodes (8): _config(), CompletedProcess, Path, _run_script(), _seed_db(), test_calculate_forward_outcomes_cli_dry_run_summary_has_required_fields_and_no_trading_language(), test_calculate_forward_outcomes_cli_writes_when_not_dry_run(), test_inspect_evidence_events_cli_outputs_json_summary()
+Cohesion: 0.19
+Nodes (11): app(), _column_index(), test_pandas_table_model_can_mark_positive_decline_column_red(), test_weak_industries_show_decline_as_positive_value_with_red_semantic_color(), test_weak_stocks_show_decline_as_positive_value_with_red_semantic_color(), DataFrame, QWidget, 刷新弱勢產業數據                  Args:             use_cache: 是否使用緩存（True=有緩存就不重新計算， (+3 more)
 
 ### Community 458 - "券商分點資料更新 - 錯誤檢測改進說明"
 Cohesion: 0.11
@@ -2534,8 +2511,8 @@ Cohesion: 0.40
 Nodes (4): 判讀順序, 📄 文檔列表, 核心文檔目錄, 🔗 相關目錄
 
 ### Community 465 - "build_handoff_recommendations"
-Cohesion: 0.28
-Nodes (5): DetailTableDelegate, QPainter, QRect, QStyledItemDelegate, Detail Table Delegate 專門用於渲染分點明細表格 (Detail Table) 的 QStyledItemDelegate。 為「淨買賣
+Cohesion: 0.26
+Nodes (17): _append_unique(), _bucket_for(), build_handoff_recommendations(), _feature_evidence(), _feature_requires_handoff(), HandoffRecommendation, _owner_sort_key(), Any (+9 more)
 
 ### Community 466 - "V1.1 至 V2.0 版本路線圖"
 Cohesion: 0.11
@@ -2550,8 +2527,8 @@ Cohesion: 0.11
 Nodes (17): Base Branch / Commit 判斷依據, Docs Update Checklist, Execution Summary, File Map, Healthcheck Batch 4 Research Lab Results Implementation Plan, In Scope, Look-ahead / Numeric Self-check, Out of Scope (+9 more)
 
 ### Community 470 - "system_vision_specification.md"
-Cohesion: 0.20
-Nodes (9): 0.1 2026-06-30 現況邊界補充, 0. 文件閱讀規則, 12. 目前能力盤點, 13. Gap Register：目前主要缺口總表, 16. 非目標, 1. 系統核心定位, 5. Current Architecture, 6. Target Architecture (+1 more)
+Cohesion: 0.03
+Nodes (60): 0.1 2026-06-30 現況邊界補充, 0. 文件閱讀規則, 10.1 策略升級, 10.2 Demote / Retire, 10.3 Drift 判斷, 10.4 Live vs Research Gap, 10. Portfolio Feedback & Strategy Lifecycle, 11.1 Watchlist Trigger 驗證 (+52 more)
 
 ### Community 471 - "Midnight Analyst UI 設計系統規格"
 Cohesion: 0.09
@@ -2574,8 +2551,8 @@ Cohesion: 0.05
 Nodes (39): 1️⃣ 專案一句話定位, 2️⃣ 三層架構導航, 3️⃣ 專案主要入口, 4️⃣ 「我要做 X，要去哪裡看？」功能導航, 5️⃣ ⚠️ 高風險核心檔案（Do Not Touch Blindly）, 6️⃣ Legacy / Historical 區塊, 📌 Agent / Codex / Antigravity 指引, 📌 AI Runtime Observatory (狀態機監控站) (+31 more)
 
 ### Community 492 - "FactorDefinition"
-Cohesion: 0.46
-Nodes (6): calculate_score_percentiles(), validate_score_range(), test_empty_universe_returns_empty_dict(), test_input_order_does_not_affect_percentiles(), test_out_of_bound_scores_raise_value_error(), test_percentiles_use_empirical_cdf_and_keep_ties_equal()
+Cohesion: 0.24
+Nodes (11): FactorDefinition, FactorRegistry, UnknownFactorError, test_factor_definition_declares_neutral_score_and_stale_days(), test_factor_definition_rejects_bool_neutral_score_bp(), test_factor_definition_rejects_out_of_range_neutral_score_bp(), test_default_registry_contains_month3_v1_factors(), test_registry_defensively_copies_source_definitions() (+3 more)
 
 ### Community 509 - "研究迭代 SOP（Iteration Playbook）"
 Cohesion: 0.12
@@ -2586,8 +2563,8 @@ Cohesion: 0.12
 Nodes (16): Behavior, Files Changed, Fix Scope, Known Limitations, Look-Ahead Bias Check, Post-V1 Historical Evidence Replay QA, Reference Return Fix Audit, Remaining Limitations (+8 more)
 
 ### Community 511 - "test_full_app_healthcheck_offscreen_widget_checks.py"
-Cohesion: 0.13
-Nodes (28): get_all_offscreen_widget_checks(), get_offscreen_widget_checks_for_feature(), OffscreenWidgetCheck, 取得所有內建的 OffscreenWidgetCheck 指南。, 取得特定 feature_id 的 OffscreenWidgetCheck 列表。, 將 OffscreenWidgetCheck 列表渲染為 Markdown 格式。, render_offscreen_widget_checks_markdown(), get_bridge_rejected_files() (+20 more)
+Cohesion: 0.21
+Nodes (14): get_all_offscreen_widget_checks(), get_offscreen_widget_checks_for_feature(), OffscreenWidgetCheck, 取得所有內建的 OffscreenWidgetCheck 指南。, 取得特定 feature_id 的 OffscreenWidgetCheck 列表。, 將 OffscreenWidgetCheck 列表渲染為 Markdown 格式。, render_offscreen_widget_checks_markdown(), 驗證所有內建 widget check 符合安全與路由限制 (+6 more)
 
 ### Community 512 - "推薦分析 - 一鍵送回測"
 Cohesion: 0.12
@@ -2746,8 +2723,8 @@ Cohesion: 0.15
 Nodes (12): Closeout Rule, Dashboard-Specific Checklist, Decision Quality, Evidence Boundary Check, Forward Evidence, Global Read-only Check, Live vs Research Gap, Manual Result Table (+4 more)
 
 ### Community 551 - "Post-V1 Scheduled Evidence Pipeline QA（2026-07-12）"
-Cohesion: 0.11
-Nodes (16): Historical Result, Post-V1 Evidence Scheduled Dry-run QA（2026-07-12）, Safety Boundary, Data Freshness, Evidence Dry-run, Known Limitations, Morning Check, Post-V1 Scheduled Evidence Pipeline QA（2026-07-12） (+8 more)
+Cohesion: 0.15
+Nodes (13): Data Freshness, Evidence Dry-run, Known Limitations, Morning Check, Post-V1 Scheduled Evidence Pipeline QA（2026-07-12）, Registration Commands, Registration Result, Safety Boundary (+5 more)
 
 ### Community 552 - "V2.2 Evidence Operating Loop Read-only Check"
 Cohesion: 0.15
@@ -2783,7 +2760,7 @@ Nodes (11): 1. 背景與設計目標, 2. 儲存架構, 3.1 `regime_breakdown` JS
 
 ### Community 560 - "策略設計規格書：Baseline Score Threshold Strategy"
 Cohesion: 0.17
-Nodes (12): 1. 研究假設, 8.1 版本控制, 8.2 變更記錄, 8.3 可追溯性要求, 8. 文檔維護規範, B.1 報酬率指標, B.2 風險指標, B.3 回撤指標 (+4 more)
+Nodes (12): 1. 研究假設, B.1 報酬率指標, B.2 風險指標, B.3 回撤指標, C.1 技術分析理論, C.2 量化交易理論, C.3 風險管理理論, 📚 相關文檔 (+4 more)
 
 ### Community 561 - "推薦分析數據流程邏輯說明"
 Cohesion: 0.17
@@ -2878,8 +2855,8 @@ Cohesion: 0.18
 Nodes (10): Data Source Candidate Backlog Draft, Decision, Execution Realism Candidate Backlog Draft, Executive Summary, Official Completion Waiting List, Scheduler Approval Rehearsal Checklist, Simulated Phase Package, True-Data Runbook (+2 more)
 
 ### Community 584 - "Phase 3：推薦產品化 + 研究閉環（你每天會開始「真正在用」的版本）"
-Cohesion: 0.17
-Nodes (12): Phase 3.1：推薦可用化（Daily Usable Recommendation）✅ 已完成, Phase 3.1 驗收標準（Exit Criteria）✅ 已達成, Phase 3.2：Profiles 正式化（Profiles-as-Product）✅ 已完成, Phase 3.2 驗收標準 ✅ 已達成, Phase 3：推薦產品化 + 研究閉環（你每天會開始「真正在用」的版本）, Phase 3 整體驗收標準, 你每天怎麼用（日常流程）, 你每天怎麼用（日常流程） (+4 more)
+Cohesion: 0.18
+Nodes (11): Phase 3.1：推薦可用化（Daily Usable Recommendation）✅ 已完成, Phase 3.1 驗收標準（Exit Criteria）✅ 已達成, Phase 3.3a：研究閉環核心功能 ✅ 已完成, Phase 3.3a 驗收標準（已達成）, Phase 3：推薦產品化 + 研究閉環（你每天會開始「真正在用」的版本）, Phase 3 整體驗收標準, 你每天怎麼用（日常流程）, 已完成功能 (+3 more)
 
 ### Community 585 - "Data Update Workbench Implementation Plan"
 Cohesion: 0.18
@@ -2918,8 +2895,8 @@ Cohesion: 0.18
 Nodes (10): CLI, Data Model, Decay Dimensions, Decay Score, Lifecycle Evidence Policy, Metrics, Post-V1 Signal Decay Monitor Design, Safety Boundary (+2 more)
 
 ### Community 594 - "test_recommendation_profile_service.py"
-Cohesion: 0.25
-Nodes (8): 11.1 Watchlist Trigger 驗證, 11.2 Market Regime 驗證, 11.3 Portfolio Alert 驗證, 11.4 Why Not / Liquidity Gate 驗證, 11.5 Fundamental Diagnostics 驗證, 11.6 Smart Money / Chip Flow 驗證, 11.7 Live vs Research Gap, 11. 投資有效性驗證框架
+Cohesion: 0.31
+Nodes (6): _builtin_profiles(), FakeConfig, FakeStrategyVersionService, test_custom_profile_json_roundtrip_preserves_decimal_and_bp_without_float(), test_profile_options_include_source_labels_and_gate_passed_strategy_versions(), test_regime_compatibility_discloses_effect_without_excluding_results()
 
 ### Community 595 - "文檔結構與維護規則"
 Cohesion: 0.20
@@ -3018,8 +2995,8 @@ Cohesion: 0.22
 Nodes (9): 2026-07-06 掃描摘要, Backup Retention Audit 2026-07-06, Retention 規則, 不屬於自動 retention 的複製產物, 已納入 retention 的來源, 後續原則, 既有大檔清理與處置, 更新記錄 (+1 more)
 
 ### Community 619 - "2. 六大高頻 UI 功能測試路由矩陣"
-Cohesion: 0.25
-Nodes (8): SQLite 資料檢視與 CSV 匯出, 主要區域, 功能說明, 技術指標智慧增量, 數據更新 - 維運工作台, 日常更新模式, 狀態檢查來源, 高風險維護
+Cohesion: 0.22
+Nodes (9): 1. 測試路由基本原則, 2.1 UpdateView / 資料更新頁, 2.2 Daily Decision Desk / 每日決策, 2.3 Research Lab / 策略回測, 2.4 Market Regime / 市場觀察, 2.5 Smart Money Flow / 主力流向, 2.6 Run Registry Compare / 策略比較, 2. 六大高頻 UI 功能測試路由矩陣 (+1 more)
 
 ### Community 620 - "Post-V1 Evidence Operations Weekly History Run（2026-07-03）"
 Cohesion: 0.22
@@ -3462,8 +3439,8 @@ Cohesion: 0.33
 Nodes (5): Antigravity Data Cleanup Agent, 必讀, 清理前輸出, 禁止事項, 角色
 
 ### Community 730 - "Antigravity Agent 入口"
-Cohesion: 0.29
-Nodes (7): 1. 價格數據, 2. 技術指標數據, 3. 數據合併, 回測時使用的數據文件, 技術指標計算, 日期範圍自動調整, 策略回測 - 數據載入說明
+Cohesion: 0.33
+Nodes (5): Antigravity Agent 入口, 使用方式, 先讀什麼, 角色選擇, 跨工具協作原則
 
 ### Community 731 - "Antigravity Tech Lead Agent"
 Cohesion: 0.33
@@ -3546,8 +3523,8 @@ Cohesion: 0.40
 Nodes (5): 5.1 大盤指數, 5.2 強勢與弱勢個股, 5.3 強勢與弱勢產業, 5.4 主力流向, 5. 市場探索
 
 ### Community 751 - "Phase 3.2：Profiles 正式化（Profiles-as-Product）✅ 已完成"
-Cohesion: 0.29
-Nodes (7): Why Not 內容說明, 使用建議, 使用方法, 分數偏差, 功能說明, 推薦分析 - Why Not（反向解釋）, 未達到的篩選條件
+Cohesion: 0.40
+Nodes (5): Phase 3.2：Profiles 正式化（Profiles-as-Product）✅ 已完成, Phase 3.2 驗收標準 ✅ 已達成, 你每天怎麼用（日常流程）, 必做功能, 目標
 
 ### Community 752 - "新增文檔"
 Cohesion: 0.40
@@ -3578,8 +3555,8 @@ Cohesion: 0.40
 Nodes (4): Legacy Test Governance Design, 目標, 設計決策, 驗收
 
 ### Community 759 - "數據檢查和修復"
-Cohesion: 0.29
-Nodes (7): 使用建議, 使用方法, 切換模式, 功能說明, 推薦分析 - 新手/進階模式切換, 新手模式, 進階模式
+Cohesion: 0.50
+Nodes (4): 1. 數據檢查功能, 2. 數據修復功能, 3. 數據合併功能, 數據檢查和修復
 
 ### Community 760 - "架構文檔目錄"
 Cohesion: 0.50
@@ -3602,8 +3579,8 @@ Cohesion: 0.50
 Nodes (3): 功能文檔目錄, 📄 文檔列表, 🔗 相關目錄
 
 ### Community 765 - "8. 文檔維護規範"
-Cohesion: 0.29
-Nodes (7): 使用建議, 兩種驗證模式, 功能說明, 模式 1：Train-Test Split（訓練-測試分割）, 模式 2：Walk-forward（滾動窗口）, 注意事項, 策略回測 - Walk-forward 驗證
+Cohesion: 0.50
+Nodes (4): 8.1 版本控制, 8.2 變更記錄, 8.3 可追溯性要求, 8. 文檔維護規範
 
 ### Community 766 - "附錄 D：Promote 機制使用指南"
 Cohesion: 0.50
@@ -3626,8 +3603,8 @@ Cohesion: 0.50
 Nodes (4): 5. 優先級判斷, 可以延後（Phase 3.3b 增強）, 建議實作順序, 必須先做（Phase 3.3b 核心）
 
 ### Community 771 - "Phase 3.5 研究 SOP 文檔"
-Cohesion: 0.21
-Nodes (7): Phase 3.5 研究 SOP 文檔, 使用指南, 文檔結構, 概述, 文件列表, 策略說明文件目錄, 維護規則
+Cohesion: 0.50
+Nodes (4): Phase 3.5 研究 SOP 文檔, 使用指南, 文檔結構, 概述
 
 ### Community 772 - "指南文檔目錄"
 Cohesion: 0.50
@@ -3654,8 +3631,12 @@ Cohesion: 0.50
 Nodes (3): 📄 文檔列表, 歸檔文檔目錄, ⚠️ 注意
 
 ### Community 778 - "Git 排除與不應提交清單"
-Cohesion: 0.29
-Nodes (6): 1. 根目錄應保留文件, 2. 核心模組, 3. UI 與入口, 4. 文件系統, 5. 目前開發主線, 6. 更新記錄
+Cohesion: 0.50
+Nodes (4): Agent 操作規則, Git 排除與不應提交清單, 已從乾淨 main 移出的易變輸出, 已由 `.gitignore` 排除
+
+### Community 779 - "策略說明文件目錄"
+Cohesion: 0.50
+Nodes (3): 文件列表, 策略說明文件目錄, 維護規則
 
 ### Community 780 - "示例程式"
 Cohesion: 0.50
@@ -3665,91 +3646,19 @@ Nodes (3): 文件說明, 注意, 示例程式
 Cohesion: 0.50
 Nodes (3): 子目錄說明, 棄用與隔離原因, 歷史手動驗證腳本
 
-### Community 1131 - "14. Next Stage：Evidence-Driven baldr"
-Cohesion: 0.33
-Nodes (6): 14. Next Stage：Evidence-Driven baldr, Priority 1：Forward Performance Dashboard, Priority 2：Live vs Research Gap Dashboard, Priority 3：Signal Decay Monitor, Priority 4：Decision Quality Review, Priority 5：台股微結構治理
-
-### Community 1132 - "15. 成功標準"
-Cohesion: 0.33
-Nodes (6): 15.1 版本成熟度判讀, 15. 成功標準, Level 1：決策可用性, Level 2：研究可信度, Level 3：風險控制有效性, Level 4：投資有效性
-
-### Community 1133 - "2. 設計第一原則"
-Cohesion: 0.33
-Nodes (6): 2.1 Decision First, 2.2 可驗證, 2.3 可回溯, 2.4 可解釋, 2.5 防止未來函數, 2. 設計第一原則
-
-### Community 1134 - "4. Daily Decision Desk Contract"
-Cohesion: 0.33
-Nodes (6): 4.1 輸入, 4.2 輸出, 4.3 最低可用標準, 4.4 禁止事項, 4.5 現況邊界, 4. Daily Decision Desk Contract
-
-### Community 1135 - "常見問題"
-Cohesion: 0.33
-Nodes (6): Q: Walk-forward 驗證很慢？, Q: 參數最佳化很慢？, Q: 參數最佳化時顯示「找不到技術指標數據」？, Q: 參數最佳化沒有顯示參數？, Q: 產業列表為空？, 常見問題
-
-### Community 1136 - "推薦分析 - 結果保存與追溯"
-Cohesion: 0.33
-Nodes (6): 使用建議, 使用方法, 保存內容, 保存推薦結果, 功能說明, 推薦分析 - 結果保存與追溯
-
-### Community 1137 - ".calculate_baseline_comparison"
-Cohesion: 0.40
-Nodes (3): Any, 計算策略相對於 Baseline 的對比結果                  Args:             strategy_returns: 策, 計算過擬合風險                  整合多個風險指標，計算整體過擬合風險等級、風險分數，並生成警告與建議。
-
-### Community 1138 - "10. Portfolio Feedback & Strategy Lifecycle"
-Cohesion: 0.40
-Nodes (5): 10.1 策略升級, 10.2 Demote / Retire, 10.3 Drift 判斷, 10.4 Live vs Research Gap, 10. Portfolio Feedback & Strategy Lifecycle
-
-### Community 1139 - "3. baldr 四大核心閉環"
-Cohesion: 0.40
-Nodes (5): 3.1 閉環 1：Data & Market State, 3.2 閉環 2：Decision Desk, 3.3 閉環 3：Research Validation, 3.4 閉環 4：Portfolio Feedback, 3. baldr 四大核心閉環
-
-### Community 1140 - "7. Data Governance & No-look-ahead Policy"
-Cohesion: 0.40
-Nodes (5): 7.1 資料可得日, 7.2 還原股價與權息風險, 7.3 基本面資料保守政策, 7.4 籌碼資料保守政策, 7. Data Governance & No-look-ahead Policy
-
-### Community 1141 - "推薦分析 - 產業篩選"
-Cohesion: 0.40
-Nodes (5): 使用方法, 問題, 推薦分析 - 產業篩選, 注意事項, 解決方案
-
-### Community 1142 - "推薦分析 - 推薦理由詳情"
-Cohesion: 0.40
-Nodes (5): 使用方法, 功能說明, 推薦分析 - 推薦理由詳情, 推薦理由內容, 注意事項
-
-### Community 1143 - "持倉管理 - 籌碼面監控與下鑽"
-Cohesion: 0.40
-Nodes (5): 功能介紹, 持倉管理 - 籌碼面監控與下鑽, 智能風險評級, 籌碼評估指標, 雙向下鑽定位操作指南
-
-### Community 1144 - "test_ui_qt_recommendation_portfolio_results.py"
-Cohesion: 0.60
-Nodes (4): _fake_recommendation_replay_result(), qt_app(), test_recommendation_replay_details_are_available_in_inner_tabs(), test_recommendation_replay_summary_is_sectioned_and_not_duplicated()
-
-### Community 1145 - "9. Explainability Layer"
-Cohesion: 0.50
-Nodes (4): 9.1 股票層級解釋, 9.2 策略層級解釋, 9.3 持倉層級解釋, 9. Explainability Layer
-
-### Community 1146 - "附錄 C：參考文獻與理論依據"
-Cohesion: 0.50
-Nodes (4): C.1 技術分析理論, C.2 量化交易理論, C.3 風險管理理論, 附錄 C：參考文獻與理論依據
-
-### Community 1147 - "策略回測 - Phase 2.5 新參數使用指南"
-Cohesion: 0.50
-Nodes (4): 停損停利模式切換, 執行價格選擇, 策略回測 - Phase 2.5 新參數使用指南, 部位管理參數
-
-### Community 1148 - "Phase 3.3a：研究閉環核心功能 ✅ 已完成"
-Cohesion: 0.50
-Nodes (4): Phase 3.3a：研究閉環核心功能 ✅ 已完成, Phase 3.3a 驗收標準（已達成）, 已完成功能, 目標
-
 ## Knowledge Gaps
 - **4261 isolated node(s):** `EvidenceImportSource`, `$schema`, `title`, `description`, `type` (+4256 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **465 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **464 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TWStockConfig` connect `Position Args Dict` to `Init Args Strategy`, `Calculate Baseline Buy`, `Portfolio Optimization Combo`, `Backup Config Path`, `build_monthly_revenue_availability_history.py`, `Args Version Preset`, `Gap Dict Research`, `Sqlite Csv Status`, `Factor Record Rejects`, `Fundamental Schema Sqlite`, `Profile Recommendation Config`, `Effectiveness Build Read`, `Portfolio Backtest Build`, `Index Date Daily`, `Update Uses All`, `Snapshot Decision Date`, `Forward Performance Cli`, `Score Read Threshold`, `Args Identify Dataframe`, `Industry Args Validate`, `Validate Sanitize Schema`, `Run Portfolio Recommendation`, `run_scheduled_recommendation_snapshot.py`, `Breadth Date Market`, `Feature Command Mode`, `Evidence Backtest Research`, `Flow Broker Smart`, `Returns Args Calculate`, `Release Mode Full`, `Date Calendar Popup`, `Gate Factor Lifecycle`, `Args Train Check`, `Money Trade Decimal`, `Sector Rotation Date`, `Float Boundary Scan`, `Init Set Collapsed`, `History Evidence Operations`, `Sop Init Args`, `Valuation Relative Factor`, `Regime Detect Market`, `Source Candidate Readiness`, `Monthly Revenue Availability`, `Run History Manifest`, `Display Refresh Snapshot`, `Weight Contract Recommendation`, `Daily Price Tpex`, `View Backtest Research`, `test_evidence_operations_service.py`, `Valuation Backfill Metrics`, `Profile Custom Profiles`, `Dict Init Post`, `Watchlist Args Stocks`, `Evidence Review View`, `Flow Chip Dataframe`, `Summary Readiness Status`, `Item Review Row`, `update_stock_data.py`, `Grid Param Size`, `Research Single Backtest`, `History Evidence Operations`, `Strength Liquidity Relative`, `Scheduled Evidence Status`, `Run Metadata Research`, `Type Schema Properties`, `Portfolio Weight Volatility`, `Backup Create Retained`, `test_decision_quality_repository.py`, `Weekday Scheduled Date`, `Pipeline Factor Cross`, `Antigravity Documentation Rule`, `None Dashboard Worker`, `Readiness Evidence Scheduler`, `Smoke Mainwindow Evidence`, `Company Registry Rows`, `Factor Snapshot Research`, `Factor Cross Sectional`, `Recommendation Replay Portfolio`, `Research Only Benchmark`, `Batch Baseline Coverage`, `Viewport Resize Evidence`, `Date Last Range`, `Date Freshness Probe`, `Current Task Append`, `Init Merge Faketabwidget`, `Check Manual Date`, `Research Lab Mode`, `Portfolio Optimizer Recommendation`, `Cli Pre Readiness`, `Backtestresultpanel Init Setup`, `Icon App Animal`, `Healthcheck Feature Routing`, `Cmd Scheduled Scripts`, `WeakIndustriesView`?**
+- **Why does `TWStockConfig` connect `Snapshot Decision Date` to `Init Args Strategy`, `Calculate Baseline Buy`, `Snapshot Build Init`, `Portfolio Optimization Combo`, `Backup Config Path`, `build_monthly_revenue_availability_history.py`, `Args Version Preset`, `Gap Dict Research`, `Sqlite Csv Status`, `Factor Record Rejects`, `Fundamental Schema Sqlite`, `Profile Recommendation Config`, `Effectiveness Build Read`, `Portfolio Backtest Build`, `Index Date Daily`, `Update Uses All`, `Forward Performance Cli`, `Score Read Threshold`, `Args Identify Dataframe`, `Industry Args Validate`, `Run Portfolio Recommendation`, `run_scheduled_recommendation_snapshot.py`, `Evidence Workbench Read`, `Breadth Date Market`, `Feature Command Mode`, `Portfolio Show Monitor`, `Evidence Backtest Research`, `Flow Broker Smart`, `Returns Args Calculate`, `Release Mode Full`, `Date Calendar Popup`, `Args Train Check`, `Money Trade Decimal`, `Sector Rotation Date`, `Float Boundary Scan`, `Init Set Collapsed`, `History Evidence Operations`, `Sop Init Args`, `Valuation Relative Factor`, `Regime Detect Market`, `Source Candidate Readiness`, `Monthly Revenue Availability`, `Run History Manifest`, `Display Refresh Snapshot`, `Weight Contract Recommendation`, `Daily Price Tpex`, `View Backtest Research`, `test_evidence_operations_service.py`, `Profile Custom Profiles`, `Dict Init Post`, `Evidence Review View`, `Flow Chip Dataframe`, `Position Args Dict`, `Summary Readiness Status`, `Item Review Row`, `update_stock_data.py`, `Build Workbook Export`, `Update Date Batch`, `Grid Param Size`, `Agent Antigravity Authority`, `Research Single Backtest`, `History Evidence Operations`, `Strength Liquidity Relative`, `Scheduled Evidence Status`, `Run Metadata Research`, `Type Schema Properties`, `Portfolio Weight Volatility`, `Backup Create Retained`, `test_decision_quality_repository.py`, `Weekday Scheduled Date`, `Statement Backfill Items`, `Pipeline Factor Cross`, `Antigravity Documentation Rule`, `Factor Cross Sectional`, `None Dashboard Worker`, `Readiness Evidence Scheduler`, `Factor Snapshot Research`, `Factor Cross Sectional`, `Epic Mvp Dailysignalframe`, `Research Only Benchmark`, `Batch Baseline Coverage`, `Date Freshness Probe`, `Current Task Append`, `Init Merge Faketabwidget`, `Check Manual Date`, `Research Lab Mode`, `Portfolio Optimizer Recommendation`, `Run Evidence Pipeline`, `Cli Pre Readiness`, `Evidence Decision Quality`, `Backtestresultpanel Init Setup`, `Architecture Governance Checklist`, `Icon App Animal`, `Healthcheck Feature Routing`, `Cmd Scheduled Scripts`?**
   _High betweenness centrality (0.144) - this node is a cross-community bridge._
-- **Why does `MainWindow` connect `Regime Detect Market` to `Args Watchlist Dataframe`, `Snapshot Build Init`, `Backup Config Path`, `RuntimeController`, `Factor Statement Build`, `Gap Dict Research`, `Date Collect Init`, `Sqlite Csv Status`, `Universe Watchlist Stock`, `Fundamental Schema Sqlite`, `Profile Recommendation Config`, `Portfolio Backtest Build`, `Branch Broker Metric`, `Date Restriction Restrictions`, `Run History Registry`, `Alert Portfolio Summary`, `Dashboard Worker None`, `Semantic Init Recent`, `Evidence Workbench Read`, `Dict Portfolio Stock`, `Portfolio Show Monitor`, `Returns Args Calculate`, `Availability Monthly Revenue`, `Gate Factor Lifecycle`, `Forward Outcome Index`, `Evidence Query Access`, `Smoke Working Copy`, `Portfolio Replay Decision`, `Gap Live Research`, `Args Trades Trade`, `Monthly Revenue Availability`, `Daily Sqlite Broker`, `View Backtest Research`, `Oracle Flow Markdown`, `Evidence Review View`, `Position Args Dict`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
-- **Why does `BacktestService` connect `Fundamental Schema Sqlite` to `Calculate Baseline Buy`, `Snapshot Build Init`, `Backup Config Path`, `Workbench Init View`, `Event Evidence Capture`, `Run Args Backtest`, `Gap Dict Research`, `Mainwindow Smoke Resize`, `Sqlite Csv Status`, `Init Set Collapsed`, `Evidence Review Signal`, `Recommendation Replay Portfolio`, `Regime Detect Market`, `Position Args Dict`, `Returns Args Calculate`, `Snapshot Decision Date`?**
+- **Why does `MainWindow` connect `Factor Cross Sectional` to `Args Watchlist Dataframe`, `Snapshot Build Init`, `Backup Config Path`, `RuntimeController`, `Gap Dict Research`, `Universe Watchlist Stock`, `Fundamental Schema Sqlite`, `Profile Recommendation Config`, `Portfolio Backtest Build`, `Branch Broker Metric`, `Repository Research Dict`, `Date Restriction Restrictions`, `Update Uses All`, `Snapshot Decision Date`, `Run History Registry`, `Statement Backfill Items`, `Alert Portfolio Summary`, `Dashboard Worker None`, `Semantic Init Recent`, `Evidence Workbench Read`, `Dict Portfolio Stock`, `Portfolio Show Monitor`, `Returns Args Calculate`, `Availability Monthly Revenue`, `WeakIndustriesView`, `Forward Outcome Index`, `Evidence Query Access`, `Smoke Working Copy`, `Registry Run Promote`, `Portfolio Replay Decision`, `Regime Detect Market`, `Gap Live Research`, `Args Trades Trade`, `Monthly Revenue Availability`, `Daily Sqlite Broker`, `View Backtest Research`, `Oracle Flow Markdown`, `Date Last Range`, `Date Freshness Probe`, `Evidence Review View`?**
+  _High betweenness centrality (0.051) - this node is a cross-community bridge._
+- **Why does `BacktestService` connect `Fundamental Schema Sqlite` to `Calculate Baseline Buy`, `Snapshot Build Init`, `Backup Config Path`, `Event Evidence Capture`, `Run Args Backtest`, `Gap Dict Research`, `Sqlite Csv Status`, `Init Set Collapsed`, `Factor Cross Sectional`, `Payload Build Chart`, `Dict Post Init`, `Snapshot Decision Date`?**
   _High betweenness centrality (0.023) - this node is a cross-community bridge._
 - **Are the 75 inferred relationships involving `TWStockConfig` (e.g. with `TechnicalIndicatorCalculator` and `DecisionDeskMarketRegimeProvider`) actually correct?**
   _`TWStockConfig` has 75 INFERRED edges - model-reasoned connections that need verification._
