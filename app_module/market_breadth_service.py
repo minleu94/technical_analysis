@@ -10,6 +10,7 @@ from typing import Protocol
 import pandas as pd
 
 from app_module.decision_desk_dtos import DecisionDeskQuality, MarketBreadthSummary
+from app_module.decision_market_frame import DecisionMarketFrameLoader
 
 
 class MarketBreadthProvider(Protocol):
@@ -244,15 +245,37 @@ class MarketBreadthService:
 class SQLiteDailyPriceMarketBreadthProvider:
     """Read-only provider that derives market breadth from SQLite daily_prices."""
 
-    def __init__(self, db_path: str | Path, *, lookback_days: int = 60):
+    def __init__(
+        self,
+        db_path: str | Path,
+        *,
+        lookback_days: int = 60,
+        market_frame_loader: DecisionMarketFrameLoader | None = None,
+    ):
         self.db_path = Path(db_path)
         self.lookback_days = lookback_days
+        self.market_frame_loader = market_frame_loader
 
     def fetch(self, as_of_date: date) -> pd.DataFrame:
         if not self.db_path.exists():
             return pd.DataFrame()
 
         target_key = as_of_date.strftime("%Y%m%d")
+        if self.market_frame_loader is not None:
+            prices = self.market_frame_loader.load(as_of_date, self.lookback_days + 1)
+            if prices.empty:
+                return pd.DataFrame()
+            normalized_dates = [
+                self._normalize_date_key(value)
+                for value in prices["日期"].tolist()
+            ]
+            available_keys = [
+                key for key in normalized_dates if key is not None and key <= target_key
+            ]
+            if not available_keys:
+                return pd.DataFrame()
+            return self._build_breadth_frame(prices, max(available_keys), target_key)
+
         with sqlite3.connect(self.db_path) as conn:
             date_rows = pd.read_sql_query(
                 """

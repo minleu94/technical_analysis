@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from app_module.broker_flow_service import BrokerFlowService
 from app_module.decision_desk_dtos import DecisionDeskQuality, MarketRegimeSummary
+from app_module.decision_market_frame import DecisionMarketFrameLoader
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from app_module.market_breadth_service import MarketBreadthService, SQLiteDailyPriceMarketBreadthProvider
 from app_module.portfolio_alert_service import PortfolioAlertService
@@ -116,10 +117,16 @@ def build_service_backed_decision_desk_snapshot_builder(
     active_portfolio_service = portfolio_service or _try_create("PortfolioService", lambda: PortfolioService(config))
     active_watchlist_service = watchlist_service or _try_create("WatchlistService", lambda: WatchlistService(config))
     active_broker_flow_service = broker_flow_service or _try_create("BrokerFlowService", lambda: BrokerFlowService(config))
+    market_frame_loader = DecisionMarketFrameLoader(config.db_file)
 
     market_breadth_service = _try_create(
         "MarketBreadthService",
-        lambda: MarketBreadthService(SQLiteDailyPriceMarketBreadthProvider(config.db_file)),
+        lambda: MarketBreadthService(
+            SQLiteDailyPriceMarketBreadthProvider(
+                config.db_file,
+                market_frame_loader=market_frame_loader,
+            )
+        ),
     )
     sector_rotation_service = _try_create(
         "SectorRotationService",
@@ -127,7 +134,12 @@ def build_service_backed_decision_desk_snapshot_builder(
     )
     relative_strength_liquidity_service = _try_create(
         "RelativeStrengthLiquidityService",
-        lambda: RelativeStrengthLiquidityService(SQLiteDailyPriceRelativeStrengthLiquidityProvider(config.db_file)),
+        lambda: RelativeStrengthLiquidityService(
+            SQLiteDailyPriceRelativeStrengthLiquidityProvider(
+                config.db_file,
+                market_frame_loader=market_frame_loader,
+            )
+        ),
     )
     watchlist_trigger_service = _try_create(
         "WatchlistTriggerService",
@@ -155,7 +167,10 @@ def build_service_backed_decision_desk_snapshot_builder(
             "SmartMoneySemanticService",
             lambda: SmartMoneySemanticService(
                 active_broker_flow_service,
-                price_provider=SQLiteSmartMoneyPriceProvider(config.db_file),
+                price_provider=SQLiteSmartMoneyPriceProvider(
+                    config.db_file,
+                    market_frame_loader=market_frame_loader,
+                ),
             ),
         )
 
@@ -168,6 +183,7 @@ def build_service_backed_decision_desk_snapshot_builder(
         watchlist_trigger_service=watchlist_trigger_service,
         portfolio_alert_service=portfolio_alert_service,
         smart_money_service=active_smart_money_service,
+        market_frame_loader=market_frame_loader,
     )
 
 

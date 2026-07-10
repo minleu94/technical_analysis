@@ -9,6 +9,7 @@ from typing import Any, Mapping, Protocol
 import pandas as pd
 
 from app_module.decision_desk_dtos import DecisionDeskQuality, RelativeStrengthLiquiditySummary
+from app_module.decision_market_frame import DecisionMarketFrameLoader
 
 
 class RelativeStrengthLiquidityProvider(Protocol):
@@ -233,13 +234,22 @@ class RelativeStrengthLiquidityService:
 class SQLiteDailyPriceRelativeStrengthLiquidityProvider:
     """Read-only provider that supplies price and volume history from SQLite daily_prices."""
 
-    def __init__(self, db_path: str | Path, *, lookback_days: int = 40) -> None:
+    def __init__(
+        self,
+        db_path: str | Path,
+        *,
+        lookback_days: int = 40,
+        market_frame_loader: DecisionMarketFrameLoader | None = None,
+    ) -> None:
         self.db_path = Path(db_path)
         self.lookback_days = lookback_days
+        self.market_frame_loader = market_frame_loader
 
     def fetch(self, as_of_date: date) -> pd.DataFrame:
         if not self.db_path.exists():
             return pd.DataFrame()
+        if self.market_frame_loader is not None:
+            return self.market_frame_loader.load(as_of_date, self.lookback_days)
         target_key = as_of_date.strftime("%Y%m%d")
         try:
             db_uri = f"{self.db_path.resolve().as_uri()}?mode=ro"

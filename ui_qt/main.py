@@ -74,6 +74,7 @@ from app_module.smart_money_semantic_service import (
     SmartMoneySemanticService,
     SQLiteSmartMoneyPriceProvider,
 )
+from app_module.decision_market_frame import DecisionMarketFrameLoader
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from app_module.workbench_source_service import WorkbenchSourceService
@@ -181,10 +182,20 @@ class MainWindow(QMainWindow):
 
     def _create_decision_desk_builder(self) -> DecisionDeskSnapshotBuilder:
         provider = self._DecisionDeskMarketRegimeProvider(self.regime_service)
+        market_frame_loader = getattr(self, "decision_market_frame_loader", None)
+        if market_frame_loader is None:
+            try:
+                market_frame_loader = DecisionMarketFrameLoader(self.config.db_file)
+                self.decision_market_frame_loader = market_frame_loader
+            except Exception as exc:  # noqa: BLE001
+                print(f"[MainWindow] 決策桌面共用市場資料初始化失敗：{exc}")
         market_breadth_service = None
         try:
             market_breadth_service = MarketBreadthService(
-                SQLiteDailyPriceMarketBreadthProvider(self.config.db_file)
+                SQLiteDailyPriceMarketBreadthProvider(
+                    self.config.db_file,
+                    market_frame_loader=market_frame_loader,
+                )
             )
         except Exception as exc:
             print(f"[MainWindow] 決策桌面 MarketBreadthService 初始化失敗：{exc}")
@@ -232,7 +243,10 @@ class MainWindow(QMainWindow):
         relative_strength_liquidity_service = None
         try:
             relative_strength_liquidity_provider = (
-                SQLiteDailyPriceRelativeStrengthLiquidityProvider(self.config.db_file)
+                SQLiteDailyPriceRelativeStrengthLiquidityProvider(
+                    self.config.db_file,
+                    market_frame_loader=market_frame_loader,
+                )
             )
             relative_strength_liquidity_service = RelativeStrengthLiquidityService(
                 provider=relative_strength_liquidity_provider
@@ -250,6 +264,7 @@ class MainWindow(QMainWindow):
             watchlist_trigger_service=watchlist_trigger_service,
             portfolio_alert_service=portfolio_alert_service,
             smart_money_service=getattr(self, "smart_money_semantic_service", None),
+            market_frame_loader=market_frame_loader,
         )
 
     def __init__(self):
@@ -478,9 +493,22 @@ class MainWindow(QMainWindow):
             print("[MainWindow] 創建主力流向視圖...")
             self.smart_money_semantic_service = None
             try:
+                market_frame_loader = getattr(
+                    self,
+                    "decision_market_frame_loader",
+                    None,
+                )
+                if market_frame_loader is None:
+                    market_frame_loader = DecisionMarketFrameLoader(
+                        self.config.db_file
+                    )
+                    self.decision_market_frame_loader = market_frame_loader
                 self.smart_money_semantic_service = SmartMoneySemanticService(
                     self.broker_flow_service,
-                    price_provider=SQLiteSmartMoneyPriceProvider(self.config.db_file),
+                    price_provider=SQLiteSmartMoneyPriceProvider(
+                        self.config.db_file,
+                        market_frame_loader=market_frame_loader,
+                    ),
                 )
             except Exception as exc:
                 print(

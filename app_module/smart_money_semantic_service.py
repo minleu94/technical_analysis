@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Iterable, Protocol
 
+from app_module.decision_market_frame import DecisionMarketFrameLoader
 from app_module.dtos.broker_flow_dtos import BrokerFlowEvent
 from app_module.dtos.smart_money_semantic_dtos import (
     SmartMoneyDashboardSummary,
@@ -28,14 +29,26 @@ class SmartMoneyPriceProvider(Protocol):
 class SQLiteSmartMoneyPriceProvider:
     """Read-only recent close-price provider for Smart Money semantic diagnostics."""
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(
+        self,
+        db_path: str | Path,
+        *,
+        market_frame_loader: DecisionMarketFrameLoader | None = None,
+    ) -> None:
         self.db_path = Path(db_path)
+        self.market_frame_loader = market_frame_loader
 
     def load_recent_prices(
         self, stock_code: str, decision_date: date, limit: int
     ) -> list[tuple[date, Decimal]]:
         if limit <= 0 or not self.db_path.exists():
             return []
+        if self.market_frame_loader is not None:
+            return self.market_frame_loader.load_recent_prices(
+                stock_code,
+                decision_date,
+                limit,
+            )
         target_key = decision_date.strftime("%Y%m%d")
         try:
             db_uri = f"{self.db_path.resolve().as_uri()}?mode=ro"

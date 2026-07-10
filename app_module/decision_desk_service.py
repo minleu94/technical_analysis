@@ -54,6 +54,10 @@ class SmartMoneyDashboardService(Protocol):
     def build_dashboard_summary(self, decision_date: date, stock_codes: tuple[str, ...] = ()): ...
 
 
+class DecisionMarketFrameResetter(Protocol):
+    def reset(self, as_of_date: date) -> None: ...
+
+
 
 class DecisionDeskSnapshotBuilder:
     """Builder for Daily Decision Desk snapshot."""
@@ -72,6 +76,7 @@ class DecisionDeskSnapshotBuilder:
         risk_prompt_service: DecisionDeskRiskPromptService | None = None,
         dashboard_composer: DecisionDeskDashboardComposer | None = None,
         smart_money_service: SmartMoneyDashboardService | None = None,
+        market_frame_loader: DecisionMarketFrameResetter | None = None,
     ):
         self.provider = provider
         self.schema_version = schema_version
@@ -84,8 +89,11 @@ class DecisionDeskSnapshotBuilder:
         self.risk_prompt_service = risk_prompt_service or DecisionDeskRiskPromptService()
         self.dashboard_composer = dashboard_composer or DecisionDeskDashboardComposer()
         self.smart_money_service = smart_money_service
+        self.market_frame_loader = market_frame_loader
 
     def build_snapshot(self, as_of_date: date) -> DecisionDeskSnapshot:
+        if self.market_frame_loader is not None:
+            self.market_frame_loader.reset(as_of_date)
         market_regime = self._build_market_regime(as_of_date)
         market_breadth = self._build_market_breadth(as_of_date)
         sector_rotation = self._build_sector_rotation(as_of_date)

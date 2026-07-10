@@ -442,3 +442,23 @@ def test_smart_money_semantic_service_is_shared_by_market_and_decision_tabs(monk
     assert target_window.smart_money_flow.smart_money_semantic_service is not None
     builder = _TrackingDecisionDeskBuilder.instances[-1]
     assert builder.kwargs["smart_money_service"] is target_window.smart_money_flow.smart_money_semantic_service
+
+
+def test_main_window_shares_one_market_frame_loader_across_decision_providers(monkeypatch):
+    app()
+    _TrackingDecisionDeskBuilder.instances = []
+    _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
+
+    target_window = _build_main_window()
+    target_window.config = types.SimpleNamespace(db_file="C:/tmp/not-used.db")
+    target_window._setup_ui()
+
+    builder = _TrackingDecisionDeskBuilder.instances[-1]
+    loader = builder.kwargs["market_frame_loader"]
+    assert loader is not None
+    assert builder.kwargs["market_breadth_service"].provider.market_frame_loader is loader
+    assert (
+        builder.kwargs["relative_strength_liquidity_service"].provider.market_frame_loader
+        is loader
+    )
+    assert builder.kwargs["smart_money_service"].price_provider.market_frame_loader is loader
