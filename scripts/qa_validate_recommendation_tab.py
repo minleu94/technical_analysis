@@ -10,6 +10,14 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import json
+from decimal import Decimal
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
+
 import traceback
 import logging
 from typing import List, Dict, Any, Optional
@@ -56,12 +64,12 @@ TEST_STOCKS = {
 EXPECTED_DTO_FIELDS = {
     '證券代號': str,
     '證券名稱': str,
-    '收盤價': float,
-    '漲幅%': float,
-    '總分': float,
-    '指標分': float,
-    '圖形分': float,
-    '成交量分': float,
+    '收盤價': (float, Decimal),
+    '漲幅%': (float, Decimal),
+    '總分': (float, Decimal),
+    '指標分': (float, Decimal),
+    '圖形分': (float, Decimal),
+    '成交量分': (float, Decimal),
     '推薦理由': str,
     '產業': str,
     'Regime匹配': str,
@@ -235,7 +243,9 @@ def validate_dataframe_quality(df: pd.DataFrame, result: ValidationResult, test_
             return False
         
         # 檢查 NaN 比例
+        optional_columns = ['score_percentile_bp', 'eligible_universe_size', 'eligible_universe_date', 'ranking_method', 'threshold_mode']
         for col in df.columns:
+            if col in optional_columns: continue
             nan_count = df[col].isna().sum()
             nan_ratio = nan_count / len(df)
             if nan_ratio > MAX_NAN_RATIO:
@@ -739,7 +749,7 @@ def generate_report(result: ValidationResult) -> str:
             if feature in result.evidence:
                 evidence = result.evidence[feature]
                 if isinstance(evidence, dict):
-                    report_lines.append(f"  - 證據: {json.dumps(evidence, ensure_ascii=False, indent=2)}")
+                    report_lines.append(f"  - 證據: {json.dumps(evidence, ensure_ascii=False, indent=2, cls=DecimalEncoder)}")
     else:
         report_lines.append("無")
     
@@ -757,7 +767,7 @@ def generate_report(result: ValidationResult) -> str:
             if fail.get('evidence'):
                 report_lines.append(f"**證據**:")
                 report_lines.append(f"```json")
-                report_lines.append(json.dumps(fail['evidence'], ensure_ascii=False, indent=2))
+                report_lines.append(json.dumps(fail['evidence'], ensure_ascii=False, indent=2, cls=DecimalEncoder))
                 report_lines.append(f"```")
             report_lines.append("")
     else:
