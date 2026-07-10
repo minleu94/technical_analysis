@@ -1003,53 +1003,6 @@ class RecommendationPortfolioBacktestService:
         data: pd.DataFrame,
     ) -> Dict[str, Any]:
         return build_relative_attribution(equity_curve, data)
-        source_groups = {
-            "benchmark": ("大盤收盤價", "benchmark_close", "market_index_close", "加權指數"),
-            "industry": ("產業指數收盤價", "industry_close", "industry_index_close"),
-            "concept": ("題材指數收盤價", "concept_close", "concept_index_close"),
-        }
-        source_columns = {
-            source_type: next((column for column in columns if column in data.columns), None)
-            for source_type, columns in source_groups.items()
-        }
-        missing_sources = sorted(
-            source_type for source_type, column in source_columns.items() if column is None
-        )
-        portfolio_return_bp = self._return_bp_from_equity_curve(equity_curve)
-        benchmarks: Dict[str, Dict[str, Any]] = {}
-        for source_type, column in source_columns.items():
-            if column is None:
-                continue
-            return_bp = self._return_bp_from_reference_column(data, column)
-            if return_bp is None:
-                benchmarks[source_type] = {
-                    "status": "insufficient_reference_observations",
-                    "source_column": column,
-                    "return_bp": None,
-                    "excess_return_bp": None,
-                }
-                continue
-            benchmarks[source_type] = {
-                "status": "observed",
-                "source_column": column,
-                "return_bp": return_bp,
-                "excess_return_bp": None if portfolio_return_bp is None else portfolio_return_bp - return_bp,
-            }
-
-        status = "observed" if benchmarks and not missing_sources else "missing_optional_sources"
-        if benchmarks and missing_sources:
-            status = "partial"
-        if not benchmarks and not missing_sources:
-            status = "insufficient_reference_observations"
-        return {
-            "schema_version": 1,
-            "status": status,
-            "policy": "same_replay_period_optional_reference_columns",
-            "portfolio_return_bp": portfolio_return_bp,
-            "source_columns": source_columns,
-            "missing_sources": missing_sources,
-            "benchmarks": benchmarks,
-        }
 
     def _return_bp_from_equity_curve(self, equity_curve: pd.DataFrame) -> int | None:
         if equity_curve is None or equity_curve.empty or "equity" not in equity_curve.columns:
@@ -1069,13 +1022,6 @@ class RecommendationPortfolioBacktestService:
 
     def _return_bp_from_values(self, values: pd.Series) -> int | None:
         return return_bp_from_values(values)
-        if len(values) < 2:
-            return None
-        first = to_decimal(values.iloc[0])
-        last = to_decimal(values.iloc[-1])
-        if first <= 0:
-            return None
-        return int((((last / first) - Decimal("1")) * Decimal("10000")).to_integral_value(rounding=ROUND_HALF_UP))
 
     @staticmethod
     def _benchmark_excess_return_bp(relative_attribution: Dict[str, Any]) -> int | None:
@@ -1104,26 +1050,6 @@ class RecommendationPortfolioBacktestService:
 
     def _build_stock_contribution(self, holdings: List[PeriodHoldingDTO]) -> List[StockContributionDTO]:
         return build_stock_contribution(holdings)
-        grouped = defaultdict(list)
-        for holding in holdings:
-            grouped[(holding.stock_code, holding.stock_name)].append(holding)
-
-        results = []
-        for (code, name), items in grouped.items():
-            returns = [item.return_pct for item in items]
-            wins = [value for value in returns if value > 0]
-            results.append(
-                StockContributionDTO(
-                    stock_code=code,
-                    stock_name=name,
-                    selected_count=len(items),
-                    total_pnl=sum(item.pnl() for item in items),
-                    avg_return_pct=sum(returns) / len(returns),
-                    win_rate=len(wins) / len(returns),
-                    worst_return_pct=min(returns),
-                )
-            )
-        return sorted(results, key=lambda item: item.total_pnl, reverse=True)
 
     def _build_credibility_manifest(
         self,
@@ -1137,103 +1063,12 @@ class RecommendationPortfolioBacktestService:
         lot_size: int | None = None,
     ) -> Dict[str, Any]:
         return build_credibility_manifest(rebalance_frequency, allocation_method, max_participation_rate, self._has_execution_cost_params(fee_bps, slippage_bps, tax_bps), lot_size, fee_bps, slippage_bps, tax_bps)
-        liquidity_supported: bool | str = "partial" if max_participation_rate else False
-        liquidity_policy = (
-            "entry_day_volume_participation_checked"
-            if max_participation_rate
-            else "volume_limit_and_gap_risk_not_applied"
-        )
-        execution_costs_supported: bool | str = (
-            "partial" if self._has_execution_cost_params(fee_bps, slippage_bps, tax_bps) else False
-        )
-        execution_costs_policy = (
-            "fee_tax_slippage_bps_applied_to_cash_ledger"
-            if execution_costs_supported
-            else "not_applied"
-        )
-        warnings = [
-            "rebalance_cash_reuse_partial",
-            "liquidity_gap_not_modeled",
-            "same_day_close_execution_assumption",
-        ]
-        return {
-            "schema_version": 1,
-            "status": "limited",
-            "execution_assumption": "idealized_same_day_close",
-            "rebalance_frequency": rebalance_frequency,
-            "allocation_method": allocation_method,
-            "cash_account": {
-                "supported": "order_sizing",
-                "policy": "available_cash_checked_before_holding_creation",
-            },
-            "rebalance": {
-                "supported": False,
-                "policy": "period_holdings_are_independent_replay_slices",
-            },
-            "unfilled_orders": {
-                "supported": True,
-                "policy": "missing_price_rows_are_recorded_as_unfilled_orders",
-            },
-            "weights": {
-                "supported": "partial",
-                "policy": "target_and_actual_executable_weights_reported",
-            },
-            "liquidity_gap": {
-                "supported": liquidity_supported,
-                "policy": liquidity_policy,
-                "max_participation_rate": max_participation_rate,
-            },
-            "gap_risk": {
-                "supported": "partial",
-                "policy": "next_open_gap_labels_when_open_price_available",
-            },
-            "execution_costs": {
-                "supported": execution_costs_supported,
-                "policy": execution_costs_policy,
-                "fee_bps": fee_bps,
-                "slippage_bps": slippage_bps,
-                "tax_bps": tax_bps,
-            },
-            "share_sizing": {
-                "supported": "partial" if lot_size else False,
-                "policy": "full_lot_floor_sizing" if lot_size else "money_allocation_without_share_sizing",
-                "lot_size": lot_size,
-            },
-            "warnings": warnings,
-        }
 
     def _build_factor_manifest(
         self,
         snapshots: List[RecommendationSnapshotDTO],
     ) -> Dict[str, Any]:
         return build_factor_manifest(snapshots, self._factor_records_from_snapshot)
-        factor_service = FactorService()
-        combined_snapshot: Dict[str, Any] = {
-            "schema_version": 1,
-            "factor_set_version": "factor-layer-v1",
-            "decision_date": snapshots[-1].as_of_date if snapshots else "",
-            "decision_dates": [snapshot.as_of_date for snapshot in snapshots],
-            "records": [],
-            "neutralized": [],
-            "skipped": [],
-            "diagnostics": [],
-        }
-
-        for snapshot in snapshots:
-            records = self._factor_records_from_snapshot(snapshot)
-            if not records:
-                continue
-            decision_date = date.fromisoformat(snapshot.as_of_date)
-            gated = factor_service.build_snapshot(records, decision_date=decision_date)
-            combined_snapshot["records"].extend(gated["records"])
-            combined_snapshot["neutralized"].extend(gated["neutralized"])
-            combined_snapshot["skipped"].extend(gated["skipped"])
-            combined_snapshot["diagnostics"].extend(gated["diagnostics"])
-
-        return {
-            "factor_snapshot": combined_snapshot,
-            "factor_contributions": factor_service.build_contributions(combined_snapshot),
-        }
 
     def _factor_records_from_snapshot(
         self,
