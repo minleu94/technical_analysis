@@ -517,6 +517,13 @@ Roadmap Hub 只負責入口與短版 Next，不保存完整歷史或架構細節
 
 策略、回測、推薦、Factor 與 Portfolio 改動前必須做 Look-ahead 自查與金融數值邊界檢查。
 
+### 重複計算消除邊界（2026-07-09）
+
+- 推薦所需的最新價格／成交量衍生特徵由 `decision_module/derived_market_features.py` 單次計算，篩選、推薦 DTO 與 negative evidence 只讀取同一份 enrichment 結果。
+- `decision_module/indicator_reuse.py` 先經 `IndicatorParameterRegistry` 驗證與正規化；只有標準預設參數及完整有效的預存欄位可以 reuse。自訂參數、缺欄位、全無效欄位、ATR 與 ADX 保持重新計算或 fail-closed。
+- `DecisionMarketFrameLoader` 只在單次 `DecisionDeskSnapshotBuilder.build_snapshot()` 內供 Market Breadth、Relative Strength / Liquidity 與 Smart Money 共用 `daily_prices` frame；每次 snapshot 開始都 reset，SQL 固定 `日期 <= as_of_date`，不形成跨日或跨排程 stale cache。
+- `RecommendationService.run_recommendation()`、`BacktestService.run_backtest()`、`UpdateService.calculate_technical_indicators()` 與 `DecisionDeskSnapshotBuilder.build_snapshot()` 的公開呼叫方式不變，且未新增 SQLite schema migration。
+
 ## 15. 驗證
 
 UI 修改：

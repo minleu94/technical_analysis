@@ -265,12 +265,14 @@ class SQLiteDailyPriceMarketBreadthProvider:
             prices = self.market_frame_loader.load(as_of_date, self.lookback_days + 1)
             if prices.empty:
                 return pd.DataFrame()
-            normalized_dates = [
+            normalized_keys = [
                 self._normalize_date_key(value)
                 for value in prices["日期"].tolist()
             ]
-            available_keys = [
-                key for key in normalized_dates if key is not None and key <= target_key
+            available_keys: list[str] = [
+                str(key)
+                for key in normalized_keys
+                if key is not None and key <= target_key
             ]
             if not available_keys:
                 return pd.DataFrame()

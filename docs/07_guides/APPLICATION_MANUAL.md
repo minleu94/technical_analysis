@@ -205,6 +205,7 @@ Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取
 - 增量寫入單股指標 CSV 時，若舊檔或新結果缺少可辨識日期欄位，會避免直接疊加資料；必要時以新計算結果覆蓋該單股檔，防止同一股票歷史列倍增。
 - 一鍵更新與排程判斷技術指標是否可跳過時，除了比較 `daily_prices` / `technical_indicators` 最新日期，也會檢查最新日 eligible 股票覆蓋數；若 TWSE 先完成、TPEX 後補進來，系統會再跑增量計算，不會因全表最新日期相同而漏掉 TPEX 股票。
 - 技術指標計算目前仍以既有單流程治理 SQLite / CSV 寫入；即使後續加入多核心，也必須拆成 compute-only 平行與單 writer 寫入，避免 SQLite lock 或 CSV 覆寫競爭。本版不提供技術指標 worker 數設定。
+- 推薦與回測載入已保存技術指標後，只有在參數等於系統標準預設、欄位完整且含有效值時才直接重用；自訂參數、缺欄位、全無效欄位、ATR 或 ADX 仍會按原流程計算。這項最佳化不改技術指標更新排程、SQLite schema、推薦門檻或回測規則。
 
 ### 4.5 SQLite 資料檢視
 
@@ -432,6 +433,8 @@ V1.7 後，「保存結果」會一併保存推薦當下的 screening matrix：�
 ### 8.1 進入與刷新
 
 Daily Decision Desk 採用 Midnight Analyst 深色介面：深色背景、section header 狀態 badge、緊湊摘要卡片與分行代碼清單。強勢、弱勢與低流動性代碼每類預設顯示前 8 檔，其餘以剩餘檔數摘要；完整資料仍由 service snapshot 保留，不因 UI 摘要而改變計算結果。
+
+Market Breadth、Relative Strength / Liquidity 與 Smart Money 會在同一次 snapshot 內共用唯讀市場資料 frame，減少重複 SQLite 查詢；每次重新建立 snapshot 都會重新載入，且只接受 `日期 <= as_of_date`。這不會跨排程沿用 cache，也不改各 section 的 quality、warnings 或降級規則。
 
 頁面最上方會先顯示 answer-first dashboard：
 
@@ -1369,6 +1372,8 @@ Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **
 - `access_boundary: v3_closeout_gate_credit=false`
 
 ## 14. 更新記錄
+
+- 2026-07-09：統一推薦最新價格／成交量衍生特徵，新增預設參數技術指標安全 reuse，並讓 Daily Decision Desk 在單次 snapshot 內共用 read-only 市場 frame；公開 service / scheduler 介面、DTO、SQLite schema、scoring、threshold 與 dry-run / confirm gate 均維持不變。
 
 - 2026-07-08：Phase 3C governed ingestion candidate 已建立 manual-only dry-run/apply 邊界；不屬於今晚 V3.0 closeout gate。
 - 2026-07-07：左側主導覽從兩字母縮寫升級為自製線條 SVG icon，並保留 icon-only 收合模式；Runtime Observatory 改為緊湊 scope note，避免大片空白；Workbench 總覽新增四個指揮台摘要 block，Evidence / 持倉追蹤 / 操作節奏標示為摘要與下鑽入口 / 預留深挖區；市場探索弱勢個股與弱勢產業的 `跌幅%` 以正數顯示並用紅色代表下跌語意。以上只改 UI presentation，不啟用 scheduler、不寫 DB、不補 Phase gate。

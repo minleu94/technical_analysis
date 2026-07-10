@@ -428,6 +428,7 @@
 - 2026-06-06：完成策略回測驗證實驗室說明文檔（[BACKTEST_LAB_FEATURES.md](../02_features/BACKTEST_LAB_FEATURES.md)）之撮合限制、SOP 驗證、未來函數防禦與強制平倉 Portfolio 記錄機制同步更新，並優化 tab info 說明對話框文字。
 - 2026-06-06：啟動策略回測視圖（`backtest_view.py`）之漸進式重構，完成 Phase 1 拆分：抽離常數、說明 Tooltip 與純計算輔助函數至 `ui_qt/views/backtest/` 目錄下。
 - 2026-06-06：完成策略回測視圖（`backtest_view.py`）之漸進式重構 Phase 2 至 Phase 4：抽離右側結果面板 `BacktestResultPanel` 與左側配置面板 `BacktestConfigPanel`，採用 QWidget native 屬性安全排除的動態委派路由，並補全所有關鍵 Widget 的顯式 `@property` 宣告以取得最佳的 mypy 與 IDE autocomplete 支援，保持與現有單元測試及 QA 契約 100% 相容。
+- 2026-07-09：新增重複計算消除設計與實作計畫；推薦衍生特徵改為 single-source、標準預設技術指標可安全 reuse，Daily Decision Desk 改為單次 snapshot 共用 read-only 市場 frame，且排程與公開 service 介面不變。
 - 2026-06-09：新增 [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md)，整理 Tech Lead 審查後的下一輪 Roadmap Rebaseline、回測時間軸治理、金融核心數值治理與 Agent 交接順序；該文件後續已歸檔。
 - 2026-06-09：執行 Roadmap Rebaseline，將當時 Roadmap current section 改為三個產品閉環敘事，同步更新 Snapshot / AI Context Pack / Navigation / Inventory。
 - 2026-06-09：更新 system_architecture.md、UI_FEATURES_DOCUMENTATION.md、BACKTEST_LAB_FEATURES.md 與 BACKTEST_LAB_CHECKLIST.md，統一產品閉環、Tab 結構、Sortino/Sharpe/Monte Carlo 指標以及參數最佳化進度與雙擊套用功能的描述，消除歷史 Phase 矛盾。

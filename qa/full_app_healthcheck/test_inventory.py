@@ -96,6 +96,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_sqlite_inspector_service.py": "service-oracle-data-market",
     "tests/test_sqlite_storage_compatibility.py": "service-oracle-data-market",
     "tests/test_stock_screener_sqlite_first.py": "service-oracle-data-market",
+    "tests/test_decision_market_frame.py": "service-oracle-data-market",
     "tests/test_statement_factor_pack.py": "service-oracle-data-market",
     "tests/test_tpex_background_refresh_script.py": "service-oracle-data-market",
     "tests/test_tpex_daily_price_history_plan.py": "service-oracle-data-market",
@@ -152,6 +153,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_recommendation_portfolio_view_charts.py": "service-oracle-recommendation",
     "tests/test_recommendation_profile_service.py": "service-oracle-recommendation",
     "tests/test_recommendation_ranking_service.py": "service-oracle-recommendation",
+    "tests/test_recommendation_recomputation.py": "service-oracle-recommendation",
 
     # service-oracle-portfolio-decision-runtime
     "tests/test_decision_desk_dashboard_service.py": "service-oracle-portfolio-decision-runtime",
@@ -196,6 +198,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_portfolio_review_service.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_portfolio_source_adapter.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_smart_money_semantic_service.py": "service-oracle-portfolio-decision-runtime",
+    "tests/test_decision_desk_shared_market_frame.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_risk_prompt_evidence_importer.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_signal_decay_dashboard_service.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_signal_decay_lifecycle_payload.py": "service-oracle-portfolio-decision-runtime",
@@ -309,6 +312,8 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_core/test_data_loader.py": "general-unit-keep-in-pytest",
     "tests/test_indicator_parameter_registry.py": "general-unit-keep-in-pytest",
     "tests/test_m2_a_integration.py": "general-unit-keep-in-pytest",
+    "tests/test_derived_market_features.py": "general-unit-keep-in-pytest",
+    "tests/test_indicator_reuse.py": "general-unit-keep-in-pytest",
 }
 
 
