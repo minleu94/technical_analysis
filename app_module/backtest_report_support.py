@@ -25,4 +25,5 @@ def score_factor_records(stock_code: str, score_series: pd.Series) -> list[Facto
     return records
 
 def create_empty_report(error_message: str) -> BacktestReportDTO:
-    return BacktestReportDTO(total_return=0.0, annual_return=0.0, sharpe_ratio=0.0, max_drawdown=0.0, win_rate=0.0, total_trades=0, expectancy=0.0, baseline_comparison=None, overfitting_risk=None, changed_layers=[], validation_status=ValidationStatus.FAIL, sample_insufficient_flags={"error": True}, validation_messages=[f"❌ 錯誤：{error_message}"], details={"error": error_message, "equity_curve": pd.DataFrame(), "trade_list": pd.DataFrame(), "can_promote": False})
+    zero = float(Decimal("0"))  # numeric-boundary: dto
+    return BacktestReportDTO(total_return=zero, annual_return=zero, sharpe_ratio=zero, max_drawdown=zero, win_rate=zero, total_trades=0, expectancy=zero, baseline_comparison=None, overfitting_risk=None, changed_layers=[], validation_status=ValidationStatus.FAIL, sample_insufficient_flags={"error": True}, validation_messages=[f"❌ 錯誤：{error_message}"], details={"error": error_message, "equity_curve": pd.DataFrame(), "trade_list": pd.DataFrame(), "can_promote": False})

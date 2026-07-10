@@ -364,39 +364,12 @@ class BacktestService:
         score_series: pd.Series,
     ) -> list[FactorRecord]:
         return score_factor_records(stock_code, score_series)
-        records: list[FactorRecord] = []
-        for index, score in score_series.items():
-            if pd.isna(score):
-                continue
-            try:
-                score_decimal = Decimal(str(score))
-            except (InvalidOperation, ValueError):
-                continue
-            as_of_date = self._date_from_index(index)
-            if as_of_date is None:
-                continue
-            records.append(
-                build_technical_total_score_factor(
-                    stock_code=stock_code,
-                    as_of_date=as_of_date,
-                    available_date=as_of_date,
-                    total_score=score_decimal,
-                )
-            )
-        return records
 
     def _factor_decision_date(self, signal_frame: pd.DataFrame) -> date | None:
         return factor_decision_date(signal_frame)
-        if signal_frame.empty:
-            return None
-        return self._date_from_index(signal_frame.index.max())
 
     def _date_from_index(self, value: Any) -> date | None:
         return date_from_index(value)
-        timestamp = pd.Timestamp(value)
-        if pd.isna(timestamp):
-            return None
-        return timestamp.date()
 
     def _load_stock_data(
         self,
@@ -775,34 +748,3 @@ class BacktestService:
     
     def _create_empty_report(self, error_message: str) -> BacktestReportDTO:
         return create_empty_report(error_message)
-        """
-        創建空報告（用於錯誤情況）
-        
-        Args:
-            error_message: 錯誤訊息
-        
-        Returns:
-            空的 BacktestReportDTO
-        """
-        return BacktestReportDTO(
-            total_return=0.0,
-            annual_return=0.0,
-            sharpe_ratio=0.0,
-            max_drawdown=0.0,
-            win_rate=0.0,
-            total_trades=0,
-            expectancy=0.0,
-            baseline_comparison=None,
-            overfitting_risk=None,
-            # Phase 3.5 SOP 護欄欄位（錯誤情況直接標記為 FAIL）
-            changed_layers=[],
-            validation_status=ValidationStatus.FAIL,
-            sample_insufficient_flags={'error': True},
-            validation_messages=[f"❌ 錯誤：{error_message}"],
-            details={
-                'error': error_message,
-                'equity_curve': pd.DataFrame(),
-                'trade_list': pd.DataFrame(),
-                'can_promote': False
-            }
-        )
