@@ -225,7 +225,7 @@ Gate：
 - technical / pattern / volume component ablation 要能回答哪個元件真正貢獻 signal；若舊 evidence 缺 component payload，先標示 `component_payload_missing`，不得回補重算舊結論。
 - ML 不屬於 V3.0 的替代決策層；ML 只能在上述 score effectiveness gate 可判讀後進入 V3.3 shadow-only 規劃。
 
-2026-07-08 closeout candidate：score bucket audit、fixed threshold robustness、component ablation readiness、ML readiness contract 與 Phase 3C source candidate readiness dry-run 已完成工程輸入。V3.0 仍只可進入 engineering candidate closeout / manual validation，不代表投資有效性、production scheduler approval、V4 maturity 或 ML production readiness。
+2026-07-09 狀態：score bucket audit、fixed threshold robustness、component ablation readiness、ML readiness contract 與 Phase 3C source candidate readiness dry-run 的工程輸入，以及 V3.0 engineering candidate closeout/readiness report 均已完成。工程狀態為 `ready_for_manual_validation`，人工驗證仍為 `PENDING_MANUAL_VALIDATION`；V3.0 尚未成為投資有效性、production scheduler approval、V4 maturity 或 ML production readiness 的證明。
 
 ### V3.1：Risk Control Effectiveness
 
@@ -331,6 +331,7 @@ V4.0 仍不代表：
 
 ## 10. 更新記錄
 
+- 2026-07-09：V3.0 engineering candidate closeout/readiness report 已完成，狀態為 `ready_for_manual_validation`；multi-day dry-run record 已達 `3/3 ready`，weekly evidence operations history 仍待真實時間累積。下一步是人工驗證與 V2.2 真實 operating loop，不提前宣告 V3 / V4 成熟度。
 - 2026-07-08：更新 V3.0 closeout candidate 狀態；score bucket audit、threshold robustness、component ablation readiness、ML shadow-only contract 與 Phase 3C source candidate readiness dry-run 已完成工程輸入，仍只作 engineering candidate / manual validation，不代表投資有效性或 scheduler approval。
 - 2026-07-08：補上 V3 score effectiveness gate 與 V3.3 ML Readiness / Shadow ML-Assisted Layer；明確 TotalScore 分組、fixed threshold robustness、component ablation 是 ML 前置條件，ML 只能 shadow-only，不取代規則式推薦或 lifecycle。
 - 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；後續已由 read-only Operating Loop closeout 補齊 UI 操作節奏，但 Phase 0 真實時間 gate、V2.2 真實 evidence loop 與 Phase 5 scheduler gate 仍未完成。
