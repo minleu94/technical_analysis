@@ -14,6 +14,7 @@ from app_module.decision_desk_dtos import (
     RelativeStrengthLiquiditySummary,
     DecisionDeskRiskPromptSummary,
 )
+from app_module.decision_desk_snapshot_support import compute_overall_quality, collect_snapshot_warnings, collect_smart_money_candidate_codes
 from app_module.decision_desk_dashboard_service import DecisionDeskDashboardComposer
 from app_module.decision_desk_risk_prompt_service import DecisionDeskRiskPromptService
 
@@ -390,6 +391,7 @@ class DecisionDeskSnapshotBuilder:
             DecisionDeskRiskPromptSummary,
         ],
     ) -> DecisionDeskQuality:
+        return compute_overall_quality(sections)
         qualities = [section.quality for section in sections]
         if DecisionDeskQuality.DEGRADED in qualities:
             return DecisionDeskQuality.DEGRADED
@@ -411,6 +413,7 @@ class DecisionDeskSnapshotBuilder:
             DecisionDeskRiskPromptSummary,
         ],
     ) -> tuple[str, ...]:
+        return collect_snapshot_warnings(sections)
         warnings: list[str] = []
         market_regime, market_breadth, sector_rotation, relative_strength_liquidity, watchlist_triggers, portfolio_alerts, risk_prompts = sections
         section_warnings = (
@@ -433,6 +436,7 @@ class DecisionDeskSnapshotBuilder:
         watchlist_triggers: WatchlistTriggerSummary,
         portfolio_alerts: PortfolioAlertSummary,
     ) -> tuple[str, ...]:
+        return collect_smart_money_candidate_codes(relative_strength_liquidity, watchlist_triggers, portfolio_alerts)
         codes: list[str] = []
         seen: set[str] = set()
         for raw_code in (
