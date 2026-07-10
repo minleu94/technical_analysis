@@ -14,6 +14,10 @@ from analysis_module import (
 from decision_module.scoring_engine import ScoringEngine
 from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
 from decision_module.derived_market_features import enrich_latest_market_features
+from decision_module.strategy_screening_support import (
+    build_recommendation_row,
+    filter_completed_frame,
+)
 from decision_module.indicator_reuse import prepare_indicator_reuse
 from decision_module.weight_contract import InvalidWeightError, WeightMigrationError
 
@@ -182,9 +186,7 @@ class StrategyConfigurator:
         """
         import logging
         logger = logging.getLogger(__name__)
-        
-        df_result = df.copy()
-        original_count = len(df_result)
+        original_count = len(df)
         
         # ✅ 記錄篩選開始
         logger.debug(
@@ -193,84 +195,7 @@ class StrategyConfigurator:
             f"篩選條件={filters}"
         )
         
-        # 漲幅篩選
-        if 'price_change_min' in filters or 'price_change_max' in filters:
-            if '漲幅%' in df_result.columns:
-                before = len(df_result)
-                if 'price_change_min' in filters:
-                    df_result = df_result[df_result['漲幅%'] >= filters['price_change_min']]
-                if 'price_change_max' in filters:
-                    df_result = df_result[df_result['漲幅%'] <= filters['price_change_max']]
-                after = len(df_result)
-                
-                # ✅ 記錄篩選結果
-                logger.debug(
-                    f"[screen_stocks] 漲幅篩選: {before} -> {after} "
-                    f"(條件: {filters.get('price_change_min', 'N/A')} ~ {filters.get('price_change_max', 'N/A')})"
-                )
-                
-                if before > 0 and after == 0:
-                    # 顯示被過濾的樣本值
-                    sample_values = df.iloc[0]['漲幅%'] if len(df) > 0 else 'N/A'
-                    if not hasattr(StrategyConfigurator, '_price_filter_log_count'):
-                        StrategyConfigurator._price_filter_log_count = 0
-                    StrategyConfigurator._price_filter_log_count += 1
-                    if StrategyConfigurator._price_filter_log_count <= 3:
-                        logger.warning(
-                            f"[漲幅篩選] 要求 >= {filters['price_change_min']}%, "
-                            f"但樣本值={sample_values:.2f}%"
-                        )
-            else:
-                # 如果欄位不存在，跳過漲幅篩選（不應該發生，但為了安全）
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.debug("漲幅%欄位不存在，跳過漲幅篩選")
-        
-        # 成交量比率篩選
-        if 'volume_ratio_min' in filters:
-            if '成交量變化率%' in df_result.columns:
-                before = len(df_result)
-                df_result = df_result[
-                    df_result['成交量變化率%'] >= filters['volume_ratio_min']
-                ]
-                after = len(df_result)
-                
-                # ✅ 記錄篩選結果
-                logger.debug(
-                    f"[screen_stocks] 成交量篩選: {before} -> {after} "
-                    f"(條件: >= {filters['volume_ratio_min']:.2f}%)"
-                )
-                
-                if before > 0 and after == 0:
-                    # 顯示被過濾的樣本值
-                    sample_values = df.iloc[0]['成交量變化率%'] if len(df) > 0 else 'N/A'
-                    if not hasattr(StrategyConfigurator, '_volume_filter_log_count'):
-                        StrategyConfigurator._volume_filter_log_count = 0
-                    StrategyConfigurator._volume_filter_log_count += 1
-                    if StrategyConfigurator._volume_filter_log_count <= 3:
-                        logger.warning(
-                            f"[成交量篩選] 要求 >= {filters['volume_ratio_min']:.2f}%, "
-                            f"但樣本值={sample_values:.2f}%"
-                        )
-            else:
-                # 如果欄位不存在，跳過成交量篩選（不應該發生，但為了安全）
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.debug("成交量變化率%欄位不存在，跳過成交量篩選")
-        
-        # RSI篩選
-        if 'rsi_min' in filters or 'rsi_max' in filters:
-            rsi_col = None
-            for col in ['RSI', 'rsi', 'RSI_14']:
-                if col in df_result.columns:
-                    rsi_col = col
-                    break
-            
-            if rsi_col:
-                if 'rsi_min' in filters:
-                    df_result = df_result[df_result[rsi_col] >= filters['rsi_min']]
-                if 'rsi_max' in filters:
-                    df_result = df_result[df_result[rsi_col] <= filters['rsi_max']]
+        df_result = filter_completed_frame(df, filters)
         
         # ✅ 記錄最終結果
         logger.debug(
@@ -440,8 +365,7 @@ class StrategyConfigurator:
                     latest_df = self.screen_stocks(latest_df, screen_filters)
         
         # 5. 重命名分數欄位以保持兼容性
-        if 'TotalScore' in latest_df.columns:
-            latest_df['綜合評分'] = latest_df['TotalScore']
+        latest_df = build_recommendation_row(latest_df)
         
         # 6. 如果通過篩選，返回結果
         if len(latest_df) > 0:
