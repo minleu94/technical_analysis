@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 # 確保 pd.isna 可用（pandas 兼容性）
 if not hasattr(pd, 'isna'):
@@ -32,6 +32,13 @@ from decision_module.derived_market_features import (
     latest_feature_decimal,
 )
 from financial_module.units import to_decimal
+from app_module.recommendation_run_support import (
+    build_negative_evidence_buffers,
+    configured_volume_change_min_percent,
+    format_decimal_for_payload,
+    matrix_row,
+    validate_ranking_config,
+)
 
 
 class RecommendationService:
@@ -87,111 +94,44 @@ class RecommendationService:
         warnings: Optional[List[str]] = None,
         industry: str = "",
     ) -> Dict[str, Any]:
-        return {
-            "stock_code": str(stock_code),
-            "stock_name": str(stock_name or stock_code),
-            "status": status,
-            "reason_codes": list(reason_codes),
-            "quality": quality,
-            "stage": stage,
-            "threshold_name": threshold_name,
-            "observed_value": "" if observed_value is None else str(observed_value),
-            "required_value": "" if required_value is None else str(required_value),
-            "total_score": "" if total_score is None else str(total_score),
-            "score_bp": score_bp,
-            "score_percentile_bp": score_percentile_bp,
-            "eligible_universe_size": eligible_universe_size,
-            "threshold_mode": threshold_mode,
-            "warnings": list(warnings or []),
-            "industry": industry,
-        }
+        return matrix_row(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            status=status,
+            reason_codes=reason_codes,
+            quality=quality,
+            stage=stage,
+            threshold_name=threshold_name,
+            observed_value=observed_value,
+            required_value=required_value,
+            total_score=total_score,
+            score_bp=score_bp,
+            score_percentile_bp=score_percentile_bp,
+            eligible_universe_size=eligible_universe_size,
+            threshold_mode=threshold_mode,
+            warnings=warnings,
+            industry=industry,
+        )
 
     def _finalize_negative_evidence_buffers(self) -> None:
-        negative_rows = [
-            dict(row)
-            for row in self.last_screening_matrix
-            if str(row.get("status")) in {"fail", "degraded", "skipped", "missing"}
-        ]
-        self.last_excluded_candidates_json = [
-            {
-                "stock_code": row["stock_code"],
-                "stock_name": row.get("stock_name", ""),
-                "status": row.get("status", ""),
-                "reason_codes": list(row.get("reason_codes") or []),
-                "quality": row.get("quality", "degraded"),
-            }
-            for row in negative_rows
-        ]
-        self.last_why_not_payload_json = negative_rows
-        self.last_liquidity_gate_payload_json = [
-            row
-            for row in negative_rows
-            if "liquidity" in " ".join(str(code) for code in row.get("reason_codes", [])).lower()
-            or "liquidity" in str(row.get("threshold_name", "")).lower()
-        ]
-        self.last_exclusion_quality = "observed" if negative_rows else "observed"
-        self.last_exclusion_warnings_json = ["screening_matrix_persisted_v1"]
+        buffers = build_negative_evidence_buffers(self.last_screening_matrix)
+        self.last_excluded_candidates_json = buffers.excluded_candidates
+        self.last_why_not_payload_json = buffers.why_not_payload
+        self.last_liquidity_gate_payload_json = buffers.liquidity_gate_payload
+        self.last_exclusion_quality = buffers.exclusion_quality
+        self.last_exclusion_warnings_json = buffers.exclusion_warnings
 
     @staticmethod
     def _configured_volume_change_min_percent(config: Dict[str, Any]) -> Decimal | None:
-        filters = config.get("filters", {})
-        key = ""
-        if "min_volume_ratio" in filters:
-            key = "min_volume_ratio"
-        elif "volume_ratio_min" in filters:
-            key = "volume_ratio_min"
-        if not key:
-            return None
-
-        try:
-            value = to_decimal(filters[key])
-        except (InvalidOperation, ValueError, TypeError):
-            return None
-        if value.is_nan():
-            return None
-
-        if key == "min_volume_ratio" or Decimal("-50") <= value <= Decimal("10"):
-            return (value - Decimal("1")) * Decimal("100")
-        return value
+        return configured_volume_change_min_percent(config)
 
     @staticmethod
     def _format_decimal_for_payload(value: Decimal) -> str:
-        return format(value.normalize(), "f")
+        return format_decimal_for_payload(value)
 
     @staticmethod
     def _validate_ranking_config(config: Dict[str, Any]) -> tuple[Dict[str, Any], str]:
-        ranking_config = config.get("recommendation_ranking", {})
-        threshold_mode = ranking_config.get("threshold_mode", "fixed")
-
-        if threshold_mode not in {"fixed", "quantile"}:
-            raise ValueError("recommendation threshold_mode must be 'fixed' or 'quantile'")
-        if threshold_mode == "fixed":
-            return ranking_config, threshold_mode
-
-        required_keys = {
-            "recommendation_min_percentile_bp",
-            "recommendation_min_universe_size",
-            "recommendation_ranking_method",
-        }
-        missing_keys = sorted(required_keys - ranking_config.keys())
-        if missing_keys:
-            raise ValueError(
-                "missing recommendation ranking parameters: "
-                + ", ".join(missing_keys)
-            )
-
-        min_percentile_bp = ranking_config["recommendation_min_percentile_bp"]
-        min_universe_size = ranking_config["recommendation_min_universe_size"]
-        ranking_method = ranking_config["recommendation_ranking_method"]
-
-        if type(min_percentile_bp) is not int or not 0 <= min_percentile_bp <= 10000:
-            raise ValueError("recommendation_min_percentile_bp must be an integer between 0 and 10000")
-        if type(min_universe_size) is not int or min_universe_size < 2:
-            raise ValueError("recommendation_min_universe_size must be an integer of at least 2")
-        if ranking_method != "nearest_rank":
-            raise ValueError("recommendation_ranking_method must be 'nearest_rank'")
-
-        return ranking_config, threshold_mode
+        return validate_ranking_config(config)
     
     def run_recommendation(
         self, 
