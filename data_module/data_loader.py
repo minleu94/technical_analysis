@@ -13,41 +13,33 @@ import yfinance as yf
 
 from .config import TWStockConfig
 from .db_manager import DBManager
-from .market_date_utils import convert_date_format, convert_to_datetime, convert_roc_date, daily_price_file
+from .market_date_utils import (
+    convert_date_format,
+    convert_to_datetime,
+    convert_roc_date,
+    daily_price_file,
+    date_range_days,
+    default_market_start_date,
+    normalize_market_date_range,
+    recent_date_range,
+    year_to_date_start,
+)
 
 class MarketDateRange:
     """市場數據日期範圍控制"""
     def __init__(self, start_date: str = None, end_date: str = None):
-        self.end_date = end_date if end_date else datetime.today().strftime('%Y-%m-%d')
-        self.start_date = start_date if start_date else self._get_default_start_date()
-        
-        # 確保日期範圍有效
-        end_dt = datetime.strptime(self.end_date, '%Y-%m-%d')
-        start_dt = datetime.strptime(self.start_date, '%Y-%m-%d')
-        if start_dt > end_dt:
-            self.start_date, self.end_date = self.end_date, self.start_date
-            
-        # 確保日期不超過今天
-        today = datetime.now().strftime('%Y-%m-%d')
-        if self.end_date > today:
-            self.end_date = today
-        if self.start_date > today:
-            self.start_date = today
+        self.start_date, self.end_date = normalize_market_date_range(start_date, end_date)
     
     @staticmethod
     def _get_default_start_date() -> str:
         """獲取預設起始日期（前一個月）"""
-        return (datetime.today() - timedelta(days=30)).strftime('%Y-%m-%d')
+        return default_market_start_date()
     
     @classmethod
     def last_n_days(cls, n: int) -> 'MarketDateRange':
         """創建最近 n 天的日期範圍"""
-        end_date = datetime.today()
-        start_date = end_date - timedelta(days=n)
-        return cls(
-            start_date=start_date.strftime('%Y-%m-%d'),
-            end_date=end_date.strftime('%Y-%m-%d')
-        )
+        start_date, end_date = recent_date_range(n)
+        return cls(start_date=start_date, end_date=end_date)
     
     @classmethod
     def last_month(cls) -> 'MarketDateRange':
@@ -67,9 +59,7 @@ class MarketDateRange:
     @classmethod
     def year_to_date(cls) -> 'MarketDateRange':
         """創建今年至今的日期範圍"""
-        return cls(
-            start_date=datetime.today().replace(month=1, day=1).strftime('%Y-%m-%d')
-        )
+        return cls(start_date=year_to_date_start())
     
     @property
     def date_range_str(self) -> str:
@@ -78,14 +68,7 @@ class MarketDateRange:
     
     def get_date_list(self) -> List[datetime]:
         """獲取日期範圍內的所有日期"""
-        start = datetime.strptime(self.start_date, '%Y-%m-%d')
-        end = datetime.strptime(self.end_date, '%Y-%m-%d')
-        
-        # 確保開始日期不晚於結束日期
-        if start > end:
-            start, end = end, start
-            
-        return [start + timedelta(days=x) for x in range((end-start).days + 1)]
+        return date_range_days(self.start_date, self.end_date)
 
 class DataLoader:
     """數據加載器，負責從各種來源加載股票數據"""

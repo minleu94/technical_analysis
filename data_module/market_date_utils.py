@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import re
 
@@ -28,3 +28,50 @@ def daily_price_file(directory: Path, value: str) -> Path:
     if normalized is None:
         raise ValueError(f"無效的日期格式: {value}")
     return directory / f"{normalized}.csv"
+
+
+def default_market_start_date(*, now: datetime | None = None) -> str:
+    current = now or datetime.today()
+    return (current - timedelta(days=30)).strftime("%Y-%m-%d")
+
+
+def normalize_market_date_range(
+    start_date: str | None,
+    end_date: str | None,
+    *,
+    now: datetime | None = None,
+) -> tuple[str, str]:
+    current = now or datetime.now()
+    today = current.strftime("%Y-%m-%d")
+    resolved_end = end_date or today
+    resolved_start = start_date or default_market_start_date(now=current)
+    start = datetime.strptime(resolved_start, "%Y-%m-%d")
+    end = datetime.strptime(resolved_end, "%Y-%m-%d")
+    if start > end:
+        resolved_start, resolved_end = resolved_end, resolved_start
+    if resolved_end > today:
+        resolved_end = today
+    if resolved_start > today:
+        resolved_start = today
+    return resolved_start, resolved_end
+
+
+def recent_date_range(days: int, *, now: datetime | None = None) -> tuple[str, str]:
+    current = now or datetime.today()
+    return (
+        (current - timedelta(days=days)).strftime("%Y-%m-%d"),
+        current.strftime("%Y-%m-%d"),
+    )
+
+
+def year_to_date_start(*, now: datetime | None = None) -> str:
+    current = now or datetime.today()
+    return current.replace(month=1, day=1).strftime("%Y-%m-%d")
+
+
+def date_range_days(start_date: str, end_date: str) -> list[datetime]:
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    if start > end:
+        start, end = end, start
+    return [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
