@@ -13,7 +13,7 @@ import yfinance as yf
 
 from .config import TWStockConfig
 from .db_manager import DBManager
-from .market_date_utils import convert_date_format, convert_to_datetime, convert_roc_date
+from .market_date_utils import convert_date_format, convert_to_datetime, convert_roc_date, daily_price_file
 
 class MarketDateRange:
     """市場數據日期範圍控制"""
@@ -520,77 +520,13 @@ class DataLoader:
 
     def _convert_date_format(self, date_str: str, to_api: bool = False) -> Optional[str]:
         return convert_date_format(date_str, to_api)
-        """轉換日期格式
-        
-        支持的格式：
-        - 113/03/29 -> 20250329 或 113/03/29
-        - 2024-03-29 -> 20250329 或 113/03/29
-        - 20250329 -> 20250329 或 113/03/29
-        
-        Args:
-            date_str: 輸入的日期字符串
-            to_api: 是否轉換為API格式（民國年）
-        """
-        try:
-            # 如果已經是 YYYYMMDD 格式
-            if re.match(r'^\d{8}$', date_str):
-                if to_api:
-                    year = int(date_str[:4]) - 1911
-                    return f"{year:03d}/{date_str[4:6]}/{date_str[6:]}"
-                return date_str
-                
-            # 如果是 YYYY-MM-DD 格式
-            if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
-                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                if to_api:
-                    year = date_obj.year - 1911
-                    return f"{year:03d}/{date_obj.month:02d}/{date_obj.day:02d}"
-                return date_obj.strftime('%Y%m%d')
-                
-            # 如果是 YYY/MM/DD 格式（民國年）
-            match = re.match(r'^(\d{3})/(\d{2})/(\d{2})$', date_str)
-            if match:
-                if to_api:
-                    return date_str
-                year = int(match.group(1)) + 1911
-                return f"{year}{match.group(2)}{match.group(3)}"
-                
-            raise ValueError(f"不支持的日期格式: {date_str}")
-            
-        except Exception as e:
-            self.logger.error(f"日期格式轉換錯誤: {str(e)}")
-            return None
 
     def _convert_to_datetime(self, date_str: str) -> Optional[datetime]:
         return convert_to_datetime(date_str)
-        """將日期字符串轉換為datetime對象"""
-        try:
-            # 如果是 YYYYMMDD 格式
-            if re.match(r'^\d{8}$', date_str):
-                return datetime.strptime(date_str, '%Y%m%d')
-                
-            # 如果是 YYYY-MM-DD 格式
-            if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
-                return datetime.strptime(date_str, '%Y-%m-%d')
-                
-            # 如果是 YYY/MM/DD 格式（民國年）
-            match = re.match(r'^(\d{3})/(\d{2})/(\d{2})$', date_str)
-            if match:
-                year = int(match.group(1)) + 1911
-                return datetime(year, int(match.group(2)), int(match.group(3)))
-                
-            raise ValueError(f"不支持的日期格式: {date_str}")
-            
-        except Exception as e:
-            self.logger.error(f"日期轉換錯誤: {str(e)}")
-            return None
 
     def get_daily_price_file(self, date: str) -> Path:
         """取得特定日期的價格檔案路徑"""
-        date_str = self._convert_date_format(date)
-        if not date_str:
-            raise ValueError(f"無效的日期格式: {date}")
-        return self.config.daily_price_dir / f'{date_str}.csv'
+        return daily_price_file(self.config.daily_price_dir, date)
 
     def get_latest_date(self, file_path: Path, date_column: str = '日期') -> Optional[str]:
         """獲取指定文件的最新日期"""
@@ -1163,20 +1099,3 @@ class DataLoader:
 
     def _convert_roc_date(self, date_str: str) -> str:
         return convert_roc_date(date_str)
-        """將民國年日期轉換為西元年日期
-        
-        Args:
-            date_str: 民國年日期字符串，例如 '111/01/04'
-            
-        Returns:
-            西元年日期字符串，例如 '2022/01/04'
-        """
-        try:
-            parts = date_str.split('/')
-            if len(parts) != 3:
-                return date_str
-                
-            year = int(parts[0]) + 1911
-            return f"{year}/{parts[1]}/{parts[2]}"
-        except Exception:
-            return date_str

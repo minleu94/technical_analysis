@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 import re
 
 def convert_date_format(value: str, to_api: bool = False) -> str | None:
@@ -20,3 +21,10 @@ def convert_roc_date(value: str) -> str:
     parts = value.split("/")
     try: return f"{int(parts[0])+1911}/{parts[1]}/{parts[2]}" if len(parts) == 3 else value
     except (ValueError, TypeError): return value
+
+
+def daily_price_file(directory: Path, value: str) -> Path:
+    normalized = convert_date_format(value)
+    if normalized is None:
+        raise ValueError(f"無效的日期格式: {value}")
+    return directory / f"{normalized}.csv"
