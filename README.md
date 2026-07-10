@@ -1,102 +1,104 @@
 # baldr
 
-baldr 是一套台股研究與投資決策工作台，目標是把資料更新、市場觀察、推薦分析、策略回測、每日決策、策略生命週期與持倉管理串成可驗證、可回溯、可演化的研究流程。
+baldr 是一套台股研究與投資決策工作台。它把資料更新、市場探索、推薦分析、策略回測、觀察清單、持倉追蹤與證據覆盤整合成可追溯的研究流程，協助你用一致的資料與規則完成判讀。
 
-這個 `main` 分支保留可安裝、可啟動、可閱讀的乾淨專案入口；日常開發狀態請使用 `dev` 分支。
+目前 `main` 提供可穩定使用的**唯讀研究版**：可以進行資料更新、研究、回測、人工覆盤與證據檢視；不會自動下單、修改策略生命週期或啟用 production evidence scheduler。
 
-## 功能概覽
+> baldr 不提供獲利保證，也不把回測或歷史重播視為實盤績效。所有推薦、風險提示與研究結果都必須連同資料品質、可得日、交易成本、成交限制與樣本量一併判讀。
 
-- 資料更新：TWSE / TPEX 每日股價、大盤、產業、券商分點、技術指標與 SQLite 同步。
-- 市場觀察：Market Regime、強弱股、強弱產業與 Smart Money 主力流向。
-- 推薦分析：Profile / Regime、Why / Why Not、候選池與推薦回放。
-- Research Lab：單股、批次、固定組合、推薦組合、Walk-forward、參數最佳化與 Research Run Registry。
-- Daily Decision Desk：Market Breadth、Sector Rotation、Relative Strength / Liquidity、Watchlist Trigger、Portfolio Alert 與 risk prompts。
-- Portfolio：交易紀錄、來源追溯、停損停利、籌碼監控、生命週期回顧與 post-trade attribution。
-- Runtime Observatory：唯讀觀察治理狀態、事件流與 Runtime 健康。
+## 這套工具能做什麼
 
-baldr 不保證推薦股票上漲，也不把回測結果宣稱為實盤績效。策略、回測與推薦結果都需要以資料品質、可得日、成本、成交限制與 out-of-sample 證據一起判讀。
+- 更新並檢查台股市場資料與本機 SQLite 狀態。
+- 從市場廣度、強弱、產業、相對強度、流動性與籌碼資訊探索市場。
+- 以 Recommendation Profile 產生候選清單，查看 Why、Why Not 與資料限制。
+- 以單股、批次、固定組合或推薦組合執行研究型回測與 walk-forward 比較。
+- 追蹤觀察清單與持倉的價格、條件、風險提示、來源與生命週期審核資訊。
+- 在「決策工作台」集中查看每日待判讀項目、Evidence、人工待處理事項與操作節奏。
+- 以 V3.0 evidence tooling 檢查訊號、警示、排除條件與分數區間的歷史 forward outcome；結果會保留樣本不足與資料品質揭露。
 
-## 快速開始
+## 開始前準備
+
+### 1. 安裝環境
+
+請先安裝 Python，然後在專案根目錄執行：
 
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
-預設正式資料根目錄由 `data_module/config.py` 的 `TWStockConfig` 決定，通常是：
+### 2. 設定資料位置
+
+baldr 預設使用的資料根目錄由 `data_module/config.py` 的 `TWStockConfig` 管理，通常為：
 
 ```text
 D:/Min/Python/Project/FA_Data
 ```
 
-可在啟動前用環境變數覆蓋：
+若你的資料放在其他位置，請在啟動前設定環境變數：
 
 ```powershell
-$env:DATA_ROOT = "D:\your\data\root"
-$env:OUTPUT_ROOT = "D:\your\data\root\output"
+$env:DATA_ROOT = "D:\your\baldr-data"
+$env:OUTPUT_ROOT = "D:\your\baldr-data\output"
 ```
 
-完整操作步驟、參數意義、結果判讀與排錯請看 [docs/07_guides/APPLICATION_MANUAL.md](docs/07_guides/APPLICATION_MANUAL.md)。
+資料目錄包含 SQLite、CSV、輸出報告與執行紀錄。請先確認該位置具有可用磁碟空間，並避免與其他程式同時大量寫入同一份資料庫。
 
-## 分支策略
-
-| 分支 | 用途 |
-|---|---|
-| `main` | 對外乾淨版本。保留必要程式碼、文件、範例與可啟動專案，不追蹤本機 QA output 或暫存 artifact。 |
-| `dev` | 日常開發主線。延續目前開發狀態，包含進行中的 healthcheck、UI smoke、文件與功能深化。 |
-| `codex/*` / `feature/*` | 短期工作分支。完成並合併後應刪除。 |
-
-## 主要入口
-
-| 目的 | 文件 |
-|---|---|
-| 使用系統 | [docs/07_guides/APPLICATION_MANUAL.md](docs/07_guides/APPLICATION_MANUAL.md) |
-| 了解目前狀態 | [docs/00_core/PROJECT_SNAPSHOT.md](docs/00_core/PROJECT_SNAPSHOT.md) |
-| 了解未來 6 個月工程路線 | [docs/00_core/ROADMAP_6M_ENGINEERING.md](docs/00_core/ROADMAP_6M_ENGINEERING.md) |
-| 了解 V2.0 之後長期版本階梯 | [docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md](docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md) |
-| 了解 V1.5-V2.0 版本形狀與外部專案參考 | [docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) |
-| 了解架構與模組邊界 | [docs/01_architecture/system_architecture.md](docs/01_architecture/system_architecture.md) |
-| 找所有文件 | [docs/00_core/DOCUMENTATION_INDEX.md](docs/00_core/DOCUMENTATION_INDEX.md) |
-| 開發者導航 | [PROJECT_NAVIGATION.md](PROJECT_NAVIGATION.md) |
-| Agent / Codex 上下文 | [AGENT_CONTEXT.md](AGENT_CONTEXT.md) 與 [AGENTS.md](AGENTS.md) |
-
-## 核心結構
-
-| 目錄 | 角色 |
-|---|---|
-| `ui_qt/` | PySide6 Qt UI，主入口為 `ui_qt/main.py`。 |
-| `app_module/` | Application service layer，負責 use case 編排、DTO 與 repository。 |
-| `decision_module/` | Decision domain，包含推薦、打分、篩選、Regime、factor 與籌碼信號。 |
-| `backtest_module/` | 回測核心、績效分析與交易模擬。 |
-| `portfolio_module/` | Portfolio domain layer，含 append-only trades、positions projection 與 Decimal 邊界。 |
-| `runtime/` | Governance-aware AI Runtime 狀態、事件與儲存。 |
-| `data_module/` | 資料設定、載入、SQLite / CSV 邊界、基本面資料層與受控 backfill workflow。 |
-| `scripts/` | 資料更新、QA 驗證與維護腳本。 |
-| `docs/` | 文件系統。 |
-| `tests/` | 自動化與 manual 測試。 |
-
-## 驗證
-
-常用 UI 修改驗證：
+### 3. 啟動應用程式
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts=
-.\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py
-.\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime
+.\.venv\Scripts\python.exe ui_qt\main.py
 ```
 
-文件或純索引調整不需要跑 UI QA；提交前至少檢查 Markdown 連結與 Git diff。若修改 Python 檔，另對變更檔執行 `py_compile`。若涉及策略、回測、推薦、績效、風控、資金或倉位，必須先做 Look-ahead bias 與金融數值邊界自查。
+首次使用時，先進入「數據更新」確認資料來源、日期與診斷訊息，再開始研究流程。
 
-## Legacy
+## 建議的日常使用流程
 
-- `ui_app/` 是舊版 Tkinter UI，只作歷史參考。
-- 過期但仍有追溯價值的文件放在 [docs/09_archive/](docs/09_archive/)。
-- 本機輸出、QA artifact、log、SQLite DB 與暫存檔不應提交到 `main`。
+1. 在「數據更新」更新資料並確認沒有 blocking diagnostics。
+2. 到「決策工作台」閱讀今日待判讀、資料品質、Evidence 與人工待處理項目。
+3. 在「市場探索」了解大盤、產業、相對強弱、流動性與籌碼背景。
+4. 在「推薦分析」建立或選擇 Profile，閱讀候選的 Why、Why Not、流動性與資料限制。
+5. 需要驗證假設時，前往「策略回測」或 Research Lab 使用固定規則、成本假設與 out-of-sample 設定進行比較。
+6. 將你要持續追蹤的標的放入「觀察清單」；已有持倉則在「持倉管理」檢查條件、風險提示與來源追溯。
+7. 定期回到「Evidence」與覆盤畫面，比對 forward outcome、資料缺口與人工決策紀錄；不要以單次結果調整策略或判定有效性。
 
-## 更新記錄
+## 工作區導覽
 
-- 2026-07-06：新增 V2.0 之後長期版本階梯入口，指向 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`。
-- 2026-07-04：新增外部專案參考與 V1.5-V2.0 版本形狀入口，指向 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。
-- 2026-06-30：重整根目錄 README 為使用者導向入口；開發者與 Agent 上下文移至 `AGENT_CONTEXT.md`；明確化 `main` / `dev` 分支策略。
+| 工作區 | 適合何時使用 |
+|---|---|
+| 決策工作台 | 每日開場：集中查看待判讀事項、Evidence、持倉追蹤與操作節奏。 |
+| 市場探索 | 先理解市場與產業背景，再進一步研究個股。 |
+| 推薦分析 | 建立候選清單並檢視 Why、Why Not、風險與資料品質。 |
+| 策略回測 | 驗證規則與假設；結果屬研究證據，不是交易指令。 |
+| 觀察清單 | 管理需要持續觀察的標的與觸發條件。 |
+| 持倉管理 | 追蹤已記錄持倉、風險提示、來源與生命週期審核資訊。 |
+| 數據更新 | 更新市場資料、檢查資料新鮮度與處理診斷。 |
+| Runtime | 檢視系統的唯讀治理與執行狀態。 |
+
+## 如何解讀結果
+
+- `OBSERVED` 代表資料可直接觀測；`DEGRADED`、`MISSING` 或 warning 代表資料有限制，不能當作完整結論。
+- 樣本不足、未成熟的 forward outcome、缺少產業 benchmark 或舊 payload 缺口，會在 evidence 結果中明確揭露；它們不是通過 gate 的訊號。
+- 推薦分數與回測指標只能用於研究比較。請一併考量資料可得日、滑價、交易成本、流動性、處置／交易限制與 out-of-sample 證據。
+- V3.0 的 score effectiveness、threshold robustness 與 component ablation 工具是唯讀診斷；不會自動調整分數、門檻、組合、生命週期或下單行為。
+
+## 安全與版本邊界
+
+- Production evidence scheduler 目前維持關閉。
+- 不提供自動下單、券商串接、AI 自動升降級策略或自動修改投資組合。
+- V3.0 工程候選已完成並可供研究使用；人工驗證與長期 evidence 累積仍在進行中，因此不代表投資有效性或 V4.0 成熟度。
+- 請先備份你的資料根目錄，再進行任何明確會寫入資料庫的更新或維護操作。
+
+## 需要更完整的操作說明？
+
+- [完整應用手冊](docs/07_guides/APPLICATION_MANUAL.md)：每個工作區的入口、步驟、參數、結果判讀、安全限制與排錯。
+- [目前狀態](docs/00_core/PROJECT_SNAPSHOT.md)：現有能力與已知限制。
+- [V2.1–V4.0 版本路線](docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md)：長期成熟度與 gate 說明。
+- [疑難排解與資料治理](docs/07_guides/APPLICATION_MANUAL.md)：資料位置、診斷訊息與安全限制。
+
+## 開發與協作
+
+一般使用者不需要閱讀內部工程文件。若你要參與開發，請使用 `dev` 分支，並先閱讀 [AGENTS.md](AGENTS.md)、[AGENT_CONTEXT.md](AGENT_CONTEXT.md) 與 [專案導航](PROJECT_NAVIGATION.md)。
+
+`main` 是可安裝、可啟動、可研究的穩定入口；`dev` 是日常開發主線。
