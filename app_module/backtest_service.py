@@ -22,6 +22,7 @@ from backtest_module.broker_simulator import BrokerSimulator, BrokerConfig
 from backtest_module.performance_metrics import PerformanceAnalyzer
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from decision_module.factors.factor_dtos import FactorRecord
+from app_module.backtest_report_support import create_empty_report, date_from_index, factor_decision_date, score_factor_records
 
 if TYPE_CHECKING:
     from app_module.walkforward_service import WalkForwardResult
@@ -362,6 +363,7 @@ class BacktestService:
         stock_code: str,
         score_series: pd.Series,
     ) -> list[FactorRecord]:
+        return score_factor_records(stock_code, score_series)
         records: list[FactorRecord] = []
         for index, score in score_series.items():
             if pd.isna(score):
@@ -384,11 +386,13 @@ class BacktestService:
         return records
 
     def _factor_decision_date(self, signal_frame: pd.DataFrame) -> date | None:
+        return factor_decision_date(signal_frame)
         if signal_frame.empty:
             return None
         return self._date_from_index(signal_frame.index.max())
 
     def _date_from_index(self, value: Any) -> date | None:
+        return date_from_index(value)
         timestamp = pd.Timestamp(value)
         if pd.isna(timestamp):
             return None
@@ -770,6 +774,7 @@ class BacktestService:
         return overfitting_risk
     
     def _create_empty_report(self, error_message: str) -> BacktestReportDTO:
+        return create_empty_report(error_message)
         """
         創建空報告（用於錯誤情況）
         
