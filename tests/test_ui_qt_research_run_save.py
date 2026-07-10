@@ -117,6 +117,24 @@ def test_single_backtest_save_uses_research_run_service_not_legacy_repo(backtest
     assert trades.equals(report.details["trade_list"])
 
 
+def test_single_backtest_updates_current_run_id_only_after_save(backtest_view):
+    report = _backtest_report()
+    backtest_view.current_report = report
+    backtest_view.current_run_params = {"stock_code": "2330", "capital": 1000000}
+    backtest_view._execution_generation = 1
+    backtest_view._single_backtest_result_generation = 1
+    backtest_view.current_run_id = "previous-run"
+
+    def assert_save_order(metadata, equity, trades, **kwargs):
+        assert backtest_view.current_run_id == "previous-run"
+
+    backtest_view.research_run_service.save_run.side_effect = assert_save_order
+
+    run_id = backtest_view._save_single_backtest_to_research_registry("Run Name", "")
+
+    assert backtest_view.current_run_id == run_id
+
+
 def test_single_backtest_save_forwards_factor_records_to_research_run_service(backtest_view):
     factor_record = build_technical_total_score_factor(
         stock_code="2330",
@@ -195,6 +213,25 @@ def test_recommendation_replay_save_uses_research_run_service(backtest_view):
     assert metadata.factor_contributions["by_stock"]["2330"][0]["factor_name"] == "technical.total_score"
     assert equity.equals(result.equity_curve)
     assert trades.equals(result.trades)
+
+
+def test_recommendation_replay_updates_current_run_id_only_after_save(backtest_view):
+    result = _FakePortfolioResult()
+    backtest_view.current_recommendation_portfolio_result = result
+    backtest_view.current_recommendation_portfolio_config = {"profile_id": "advanced"}
+    backtest_view.current_recommendation_portfolio_run_params = {"initial_capital": 1000000}
+    backtest_view._execution_generation = 3
+    backtest_view._recommendation_portfolio_result_generation = 3
+    backtest_view.current_portfolio_run_id = "previous-run"
+
+    def assert_save_order(metadata, equity, trades, **kwargs):
+        assert backtest_view.current_portfolio_run_id == "previous-run"
+
+    backtest_view.research_run_service.save_run.side_effect = assert_save_order
+
+    run_id = backtest_view._save_recommendation_portfolio_to_research_registry("Replay Run", "")
+
+    assert backtest_view.current_portfolio_run_id == run_id
 
 
 def test_fixed_basket_execution_forwards_research_mode_to_batch_service(backtest_view):
