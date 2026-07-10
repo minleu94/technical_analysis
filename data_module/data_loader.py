@@ -13,6 +13,7 @@ import yfinance as yf
 
 from .config import TWStockConfig
 from .db_manager import DBManager
+from .market_date_utils import convert_date_format, convert_to_datetime, convert_roc_date
 
 class MarketDateRange:
     """市場數據日期範圍控制"""
@@ -518,6 +519,7 @@ class DataLoader:
             return None
 
     def _convert_date_format(self, date_str: str, to_api: bool = False) -> Optional[str]:
+        return convert_date_format(date_str, to_api)
         """轉換日期格式
         
         支持的格式：
@@ -560,6 +562,7 @@ class DataLoader:
             return None
 
     def _convert_to_datetime(self, date_str: str) -> Optional[datetime]:
+        return convert_to_datetime(date_str)
         """將日期字符串轉換為datetime對象"""
         try:
             # 如果是 YYYYMMDD 格式
@@ -1159,6 +1162,7 @@ class DataLoader:
         return None
 
     def _convert_roc_date(self, date_str: str) -> str:
+        return convert_roc_date(date_str)
         """將民國年日期轉換為西元年日期
         
         Args:
