@@ -27,7 +27,7 @@
 ## 每輪工作量
 
 - Planner 最多選擇兩個切片：優先為一個中型主切片加一個低風險 helper／import／characterization 切片。
-- 兩片必須沒有共享未提交狀態，且各自具備 exact files、RED oracle、最小 GREEN、Gate、commit message 與 rollback。
+- 兩片必須沒有共享未提交狀態。一般重構片各自具備 exact files、RED oracle、最小 GREEN、Gate、commit message 與 rollback；test-only oracle-building 片則依 Master Report 9.1.1 記錄 baseline GREEN，production files 必須零 diff。
 - Implementation 逐片執行；每片各自測試、atomic commit 並 push。第一片失敗、超時、偏離 scope 或 push 失敗時，第二片不得開始。
 - QA 驗收該輪零至兩個 commit，核對每個 parent／Plan linkage／diff scope，並執行兩片 focused suite 聯集。
 - 禁止同輪同時安排兩個 Qt lifecycle 切片、兩個 production-data orchestration 切片，或兩個金融公式／portfolio 核心切片。
@@ -44,6 +44,7 @@
 ## 安全與停止規則
 
 - 只允許行為不變的最小切片；優先 import cycle、characterization 與已有 oracle 的 helper／facade。
+- 候選若只缺 characterization，Planner 必須先評估 test-only oracle-building slice，不得因沒有 production RED 直接判為 `NO_SAFE_SLICE`；該片不得同時修改 production code。
 - 禁止 production DB/evidence write、正式資料改寫、scheduler 行為變更、交易、lifecycle action、ScoringEngine／threshold／weights／portfolio 語意變更。
 - Protected contracts、DTO／序列化、排序、diagnostic token、SQL fallback、Qt lifecycle 與副作用順序不得改變。
 - Planner 發現連一個切片都無法安全完成時必須 `NO_SAFE_SLICE`；只能安全完成一片時不得為湊數加入第二片。

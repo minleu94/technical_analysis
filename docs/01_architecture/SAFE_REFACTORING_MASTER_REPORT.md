@@ -246,7 +246,7 @@ data_module / external adapters
 
 ### Wave 1：完成現行低風險支援抽取
 
-目前 continuation anchor 是 `PatternAnalyzer` characterization / dispatch / fit support。Planner 必須先檢查 Slice 17 是否已被其他執行完成；若已完成，從下一個未完成且具 characterization 的節點選擇。
+目前 continuation anchor 必須依最新 QA 重算；不得把已完成的 façade 再列為候選。當所有低風險 façade 已完成、剩餘候選缺少穩定 oracle 時，下一片應先建立「oracle-building characterization slice」，而不是重複回報 `NO_SAFE_SLICE`。
 
 允許：prefix-only golden tests、dispatch table、無 I/O fit helper、column resolution。禁止：改 pattern 公式、position、threshold、例外語意或使用未來列。
 
@@ -315,7 +315,7 @@ Planner 對候選切片使用下列原則，不用「最大檔案優先」：
 | Timebox | 可在本輪完整 RED/GREEN/QA | 只能留下半成品 |
 | User impact | 無外部行為變更 | 改 UI 流程、結果或資料語意 |
 
-選擇門檻：必須同時滿足「有 oracle、可完整驗證、可獨立回退、無 production 寫入」。
+一般重構切片的選擇門檻：必須同時滿足「有 oracle、可完整驗證、可獨立回退、無 production 寫入」。若唯一缺口是 oracle，Planner 可改選 test-only 的 oracle-building slice；該片必須鎖定現有輸入／輸出／例外／import side effect，不得同片修改 production code。
 
 ---
 
@@ -323,13 +323,26 @@ Planner 對候選切片使用下列原則，不用「最大檔案優先」：
 
 ### 9.1 每片最小 Gate
 
-1. 新增或確認 characterization RED。
-2. 最小 GREEN 實作。
+1. 一般重構切片：新增或確認 characterization RED，並觀察它因缺少預定 façade／helper 而失敗。
+2. 一般重構切片：完成最小 GREEN 實作。
 3. Focused pytest。
 4. Changed-file `py_compile`。
 5. `git diff --check`。
 6. Protected-contract diff。
 7. `git status --short` 只含本片檔案與 ignored output。
+
+### 9.1.1 Oracle-building characterization slice 例外
+
+當 Planner 已證明候選只因缺少穩定 oracle 而不能安全實作時，可安排一個 test-only oracle-building slice。這不是 production refactor，不套用「先讓現有行為失敗」的 RED 要求：
+
+1. 先以現況測試證明待鎖定契約可穩定重現，結果必須為 GREEN；不得編造會改變現有行為的期望值來製造 RED。
+2. 只新增或修改測試、fixture 或無副作用的測試 helper；production files 必須零 diff。
+3. 測試至少鎖定一項後續重構真正需要的契約：輸入輸出、例外／diagnostic token、immutability、warm-up／prefix／T-1、public re-export 或 fresh-interpreter import trace。
+4. 報告使用 `slice_kind=ORACLE_BUILDING`、`red_status=NOT_APPLICABLE_BASELINE_CHARACTERIZATION`，並記錄 baseline GREEN 證據。
+5. focused pytest、changed-test `py_compile`、適用的 import／quant Gate、diff check、atomic commit 與 push 仍不可省略。
+6. QA 只驗收 characterization 是否忠實、穩定且未修改 production code；通過後下一 Planner 才能以它作一般重構切片的 RED oracle。
+
+此例外消除「允許 characterization 候補」與「每片強制 production RED」之間的死結；不得把它擴張成跳過 RED 的 production 修改。
 
 ### 9.2 條件式 Gate
 
@@ -448,6 +461,8 @@ latest pointer 必須包含實際 artifact filename、cycle id、status、baseli
 - `BLOCKED`：未知 dirty、production / protected contract、需要外部權限 / 資料、non-fast-forward、語意無法安全判定或三次根因迴圈仍無法收斂。
 - `NO_SAFE_SLICE`：沒有能在時間盒內完成全部 Gate 的切片；這不是失敗，禁止強行開工。
 
+若候選的唯一阻礙是缺少 characterization，Planner 必須先評估 test-only oracle-building slice；只有連該測試切片也無法在時間盒內忠實完成時，才可標記 `NO_SAFE_SLICE`。
+
 ### 11.2 立即停止寫入
 
 - 非 ignored dirty file。
@@ -506,12 +521,13 @@ Support module 與 characterization tests 可能讓 repo 淨 LOC 上升。只要
 
 Planner 應依最新 QA 自行判斷，當前建議順序如下：
 
-1. 確認並完成 PatternAnalyzer Slice 17，或驗收已完成的對應 commit。
-2. 修復兩個低風險 import cycle：`backtest_service` / `walkforward_service` 型別 cycle、`update_service` package import cycle。
-3. TechnicalIndicatorCalculator 只建立 golden / warm-up / prefix characterization，不搬公式。
-4. MainWindow / TradingAnalysisApp 只建立 startup / navigation / signal wiring characterization。
-5. 回到 BacktestView、RecommendationView、UpdateView，選擇已有 oracle 的單一 coordinator / presenter 切片。
-6. Decision ↔ Application / Data 依賴反轉先做 design-only plan，不自動搬 DTO。
+1. 若最新 QA 已確認既有 column/date/fit façade 完成，先建立 `UpdateService` package-import 的 test-only oracle-building slice：以 fresh interpreter 鎖定 `app_module.update_service` 匯入成功、`app_module` public re-export identity、目前 exception/output 與 module initialization trace；production files 零 diff。
+2. 上述 oracle 經獨立 QA 接受後，下一輪才規劃 `update_service` package import cycle 的最小 production RED→GREEN；不得在同一片同時補 oracle 與改 import。
+3. `backtest_service` / `walkforward_service` 型別 cycle 仍須先補 golden/T-1/numeric contract，不得僅憑 import smoke 修改金融 runtime dependency。
+4. TechnicalIndicatorCalculator 只建立 golden / warm-up / prefix characterization，不搬公式。
+5. MainWindow / TradingAnalysisApp 只建立 startup / navigation / signal wiring characterization。
+6. 回到 BacktestView、RecommendationView、UpdateView，選擇已有 oracle 的單一 coordinator / presenter 切片。
+7. Decision ↔ Application / Data 依賴反轉先做 design-only plan，不自動搬 DTO。
 
 不得因本清單存在便跳過 Planner 的現況核對；若 HEAD、QA 或測試已改變，Planner 必須以新證據調整。
 
