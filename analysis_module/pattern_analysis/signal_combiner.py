@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from ..technical_analysis import TechnicalAnalyzer
 from .pattern_analyzer import PatternAnalyzer
+from .pattern_column_support import resolve_pattern_column
 
 class SignalCombiner:
     """信號組合分析器，用於組合不同分析模組的信號並評估綜合信號的可靠性"""
@@ -35,14 +36,7 @@ class SignalCombiner:
         Returns:
             str: 對應的列名
         """
-        # 檢查中文列名是否存在
-        if self.reverse_mapping.get(eng_name) in df.columns:
-            return self.reverse_mapping.get(eng_name)
-        # 檢查英文列名是否存在
-        elif eng_name in df.columns:
-            return eng_name
-        # 都不存在，返回None
-        return None
+        return resolve_pattern_column(df.columns, self.reverse_mapping, eng_name)
     
     def analyze_combined_signals(self, df, pattern_types=None, technical_indicators=None, volume_conditions=None):
         """分析組合信號
@@ -405,4 +399,4 @@ class SignalCombiner:
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path) 
+            plt.savefig(save_path)
