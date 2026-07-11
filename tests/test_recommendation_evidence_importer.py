@@ -63,10 +63,16 @@ def test_recommendation_importer_preserves_missing_percentile_with_warning():
     assert result.events_seen == 1
     event = result.event_payloads[0]
     assert event["event_type"] == EvidenceEventType.RECOMMENDATION_INCLUDED
+    assert event["source_type"] == "recommendation_result"
+    assert event["source_id"] == "rec-001"
     assert event["score_percentile_bp"] is None
-    assert "score_percentile_missing" in event["warnings"]
+    assert event["warnings"] == ("score_percentile_missing",)
     assert event["profile_id"] == "balanced"
     assert event["metadata"]["profile_version"] == "1.0"
+    assert [diagnostic.code for diagnostic in result.diagnostics] == [
+        "source_missing_screening_matrix",
+        "source_missing_exclusion_payload",
+    ]
     assert result.diagnostics_by_code["source_missing_exclusion_payload"] == 1
 
 

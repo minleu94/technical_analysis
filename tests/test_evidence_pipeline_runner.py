@@ -87,6 +87,14 @@ def test_runner_defaults_to_dry_run_and_does_not_write_events_or_outcomes(tmp_pa
     assert summary.outcomes_created == 0
     assert repository.list_events() == []
     assert repository.list_outcomes() == []
+    assert [step.step_name for step in summary.steps] == [
+        "source_coverage_check",
+        "capture_decision_desk_snapshot",
+        "capture_evidence_events",
+        "calculate_forward_outcomes",
+        "summarize_forward_performance",
+        "write_diagnostics_report",
+    ]
 
 
 def test_runner_summary_and_report_include_warning_breakdown(tmp_path: Path) -> None:
