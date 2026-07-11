@@ -9,12 +9,15 @@
 | 主題 | 權威文件 | 判斷規則 |
 |---|---|---|
 | 目前狀態、本週優先事項、高風險區 | `docs/00_core/PROJECT_SNAPSHOT.md` | 開場與日常工作先看 Snapshot。 |
+| 重構完成後產品方向、投資問題、產品能力演進 | `docs/00_core/PRODUCT_ROADMAP_POST_REFACTOR.md` | 定義 bounded advice、Portfolio、Exit、Evidence、Data、ML 與 pruning 產品 Gate；不保存工程 checklist。 |
 | 未來 6 個月工程路線 | `docs/00_core/ROADMAP_6M_ENGINEERING.md` | 里程碑、交付物與驗收標準以 6M Roadmap 為準。 |
 | 外部專案參考、資料源優先序、V1.5-V2.0 版本形狀 | `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` | 作為 6M Roadmap / Version Roadmap companion；不取代 Vision 或目前狀態權威。 |
-| V2.0 之後長期版本階梯 | `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` | 作為 6M Roadmap Phase 與 Vision Level 的版本 companion；不取代 6M Roadmap、Vision 或目前狀態權威。 |
+| V2.0 之後長期產品成熟度 | `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` | 維護 V2.1-V4.0 maturity milestone；不取代 Product / 6M Roadmap、Vision 或目前狀態權威。 |
 | Roadmap 入口與權威導覽 | `docs/00_core/DEVELOPMENT_ROADMAP.md` | Roadmap Hub 只保存入口與短版 Next，不保存完整歷史。 |
 | 舊 Roadmap 未完成事項移交 | `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` | 每個 Legacy 項目必須有唯一處置、月份與驗收定義。 |
 | 系統架構、模組邊界、資料流 | `docs/01_architecture/system_architecture.md` | 架構描述衝突時，以系統架構文件為準。 |
+| 理想目標架構與 Current → Target 演進 | `docs/01_architecture/target_system_architecture.md` | Target capability 不代表目前已實作；現況仍回到 system architecture。 |
+| North Star、Bounded Advice、Evidence、Success Levels、Non-goals | `docs/01_architecture/system_vision_specification.md` | 不保存詳細 implementation checklist 或完成流水帳。 |
 | 目前使用者完整操作流程 | `docs/07_guides/APPLICATION_MANUAL.md` | 8 個頂層工作區、跨工作區流程、安全限制與排錯以本手冊為準。 |
 | 文檔位置與分類 | `docs/00_core/DOCUMENTATION_INDEX.md` | 只作導航，不取代狀態或架構權威。 |
 | 文檔生命週期與歸檔規則 | `docs/00_core/DOCUMENTATION_STRUCTURE.md` | 刪除、搬移、歸檔 Markdown 前必須參考。 |
@@ -281,6 +284,9 @@
 - [ ] Snapshot 的「本週優先事項」落在 6M Roadmap 的 Month 1 或當前月度目標內。
 - [ ] Roadmap Hub 的 Next 不新增與 6M Roadmap 衝突的平行方向。
 - [ ] Snapshot 的高風險區涵蓋 6M Roadmap 近期任務的高風險模組。
+- [ ] Product Roadmap 定義產品問題與 Gate；6M Roadmap 只轉成工程交付、依賴、測試與 Exit Criteria。
+- [ ] Vision 只保存 North Star / Policy / Evidence / Success / Non-goals，不複製詳細工程 checklist。
+- [ ] Current Architecture 與 Target Architecture 清楚分開；Target-only 模組不得寫成已存在。
 
 ### Index ↔ Scoped Authority 一致性
 - [ ] Index 的進度描述不與 Snapshot、6M Roadmap 或 Architecture 衝突。
@@ -357,9 +363,10 @@
 
 ---
 
-**最後更新**：2026-07-06
+**最後更新**：2026-07-11
 
 ## 更新記錄
 
 - 2026-07-06：新增 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的 scoped authority 邊界，定位為 V2.0 之後長期版本階梯 companion。
+- 2026-07-11：新增 Post-Refactor Product Roadmap、Target Architecture 與新版 Vision scoped authority；補充 Product / Engineering、Current / Target 一致性 Gate。
 

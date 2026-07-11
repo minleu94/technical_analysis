@@ -6,6 +6,7 @@
 > **狀態**：Active engineering companion。
 > **Automation program**：`active_program=SAFE_REFACTORING_MASTER_PROGRAM`。
 > **不取代**：`PROJECT_SNAPSHOT.md`、`ROADMAP_6M_ENGINEERING.md`、`VERSION_ROADMAP_V2_1_TO_V4_0.md`、`system_architecture.md` 或 `APPLICATION_MANUAL.md`。
+> **產品交棒**：安全重構完成後的產品方向以 [PRODUCT_ROADMAP_POST_REFACTOR.md](../00_core/PRODUCT_ROADMAP_POST_REFACTOR.md) 為準，理想架構以 [target_system_architecture.md](target_system_architecture.md) 為準。本報告只負責行為不變重構，不承擔 Advice、Portfolio、Exit、Data 或 ML Roadmap。
 
 ---
 
@@ -524,6 +525,7 @@ Planner 應依最新 QA 自行判斷，當前建議順序如下：
 - Full App Healthcheck 與人工 smoke 覆蓋主要工作區。
 - 無 production 資料、scheduler、交易、投資語意或使用流程回歸。
 - 文件索引與目前架構同步。
+- 建立 Product Roadmap / Target Architecture 的交棒連結，並停止以重構切片取代產品 Gate。
 
 ---
 
@@ -552,3 +554,5 @@ Planner 應依最新 QA 自行判斷，當前建議順序如下：
 - 重大重構波次完成，需要更新 continuation anchor。
 
 單一切片完成不必每次修改本報告；進度由 `output/automation/version_loop/` 與 Git 保存。若本報告與架構權威衝突，以 `system_architecture.md` 為準並停止實作、要求人工判定。
+
+- 2026-07-11：新增 Post-Refactor Product Roadmap 與 Target Architecture 交棒連結；明確 Gate 0 closeout 後停止以重構作為產品主線。

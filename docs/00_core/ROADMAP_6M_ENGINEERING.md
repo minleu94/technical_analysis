@@ -1,168 +1,452 @@
-# Active 6M Roadmap v2 (Gate-Based)
+# baldr 未來六個月工程 Roadmap
 
-> **最後更新**：2026-07-08
-> **定位**：本文件是未來 6 個月工程執行與研究能力成長的權威路線圖。本文件已重構為 Gate-based 結構，不再保留完成流水帳。
-> **版本 companion**：V2.0 之後若需要版號判讀，請看 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。該文件只把本 Roadmap 的 Phase gate 映射為 V2.1-V4.0 產品階梯，不取代本文件的工程順序與驗收標準。
-> **歷史紀錄**：V1 (Month 1-6 與 V1.1-V1.9) 的詳細完工細節已封存至 [ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md](../09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md)。
-
----
-
-## 1. Completed Baseline (V1)
-
-截至 2026-07，系統已完成以下工程底座（皆已完成 v1 closeout，目前處於 read-only / dry-run 模式）：
-- **核心閉環**：資料與市場狀態、研究驗證、持倉檢查、Daily Decision Desk (V1)。
-- **治理防線**：Research Run Registry、Strategy Lifecycle rule engine、Portfolio Feedback。
-- **Post-V1 增量**：
-  - V1.1: Decision Workflow Integration (Profile replay comparison)
-  - V1.2: Research Credibility (rolling risk, microstructure preflight, attribution)
-  - V1.3: Evidence Operations & Manual Lifecycle
-  - V1.4: Evidence Review History
-  - V1.5: Data Credibility & Corporate Action Gate (Registry & Policy)
-  - V1.6: Cross-sectional Factor Pipeline
-  - V1.7: Screening Matrix & Negative Evidence
-  - V1.8: Portfolio Construction & Execution Trace Sandbox
-  - V1.9: Read-only Agent / MCP Evidence Access
-  - Historical Evidence Replay v1: research-only simulated scheduler replay
-  - V2.0 Phase 1 read-only Workbench prototype slice: DTO / composer / replay summary adapter / sample CLI / formal read-only source adapter
-  - V2.1 / Phase 2 Workbench MVP shell: PySide6 read-only `決策工作台` view / table models / main-tab integration backed only by `WorkbenchSourceService` / `WorkbenchDashboardDTO`，並具備排序後 read-only Action Items 人工佇列與 Operating Loop 操作節奏。
+> **最後更新**：2026-07-11
+> **定位**：本文件是未來六個月工程執行的 scoped authority，將 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 轉成可交付、可測試、可回滾的 Gate。
+> **現況**：目前完成狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。既有 V3.0 engineering candidate、read-only Workbench、candidate source readiness 或 simulated phase progress 不自動折抵本 Roadmap 的產品 Gate。
+> **版本 companion**：產品成熟度版號見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
 
 ---
 
-## 2. Active Roadmap Phases
+## 1. 六個月成果定義
 
-目前的開發主線已從「功能補齊」轉向「證據累積與決策驗證」。所有 Phase 的推進必須嚴格遵守 Gate 條件。
+六個月內不追求完成所有長期能力，而要完成一條可日常使用、可驗證、可拒絕輸出的主線：
 
-### 2026-07-08 Closeout Note：V3.0 Score / Source Readiness
+```text
+Gate 0 Safe Refactor Closeout
+→ Gate 1 Daily Usable Advice
+→ Gate 2 Real Evidence Operating Loop
+→ Gate 3 P0 Data Acceptance
+→ Gate 4 Portfolio Coach v1
+→ Gate 5 Signal Effectiveness & Pruning
+→ Gate 6 Position Health & Exit v1
+```
 
-V3.0 engineering candidate 已能提供 read-only effectiveness scaffold；使用者提出的 score audit / ML readiness 規劃已先落成工程輸入，而不是直接跳到 ML 或 V4/V5 命名。Phase 0 的資料可信度與 daily evidence 排程，仍是為了累積可驗證的真實 evidence；這些 evidence 先回答 score 是否有用，再決定 ML 是否只作 shadow layer。
+Gate 7 ML Shadow Layer 只作條件式後續：若 Gate 5 在第六個月以前具備可判讀 baseline，才可建立 shadow experiment；它不是六個月必須上 production 的承諾。
 
-截至 2026-07-08，已完成的工程輸入如下：
+## 2. 已有工程底座與不得誤讀的邊界
 
-- **Score bucket audit**：`2bd08f6` 已建立 `TotalScore` raw bucket (`0-40`, `40-50`, `50-60`, `60-70`, `70-80`, `80-100`) read-only audit，檢視 forward return、max drawdown、win rate 與 benchmark / industry excess。
-- **Fixed threshold robustness**：`b5ec05d` 已建立 buy / sell score、confirmation days、cooldown days 鄰近矩陣，辨識 stable / fragile / inconclusive，而不是找單一最佳參數。
-- **Component ablation readiness**：`b5ec05d` 已拆 technical、pattern、volume 及其組合；舊 evidence 缺 component score 時先標示 `component_payload_missing`，不回補重算。
-- **ML readiness bridge**：`b5ec05d` 只定義 feature / label / split / calibration / meta-labeling / ranking 的 shadow-only contract；不得訓練 production model 或改推薦決策。
-- **Phase 3C source candidate readiness**：`d4526c9` 已補三大法人 / 信用交易 / TDCC source candidate dry-run；缺 DB / table / `available_date` fail-closed / degraded，future available date 標示 `future_data_blocked`。
-
-今晚 active milestone 應改為 `V3.0 engineering candidate closeout/readiness report`。排程只需收尾驗證、文件一致性、focused tests / py_compile、QA closeout 與 manual validation disclosure；不得展開新 ML production、不得啟用 scheduler、不得把 candidate source 接進 `ScoringEngine`。
-
-Gate：若 score bucket、threshold robustness 或 component ablation 仍不可判讀，ML 只能維持 diagnostics-only；就算 readiness contract 已存在，也不得進入 production roadmap。
-
-### Phase 0：Evidence Accumulation Gate
-**目標**：累積真實使用數據與多日穩定紀錄，證明流程無害且有觀察價值。
-- **門檻要求**：
-  - weekly history 必須達到至少 3 次（目前 `0/3`）。
-  - multi-day dry-run 必須累積紀錄（2026-07-08 補入修正後歷史觀察日後，record 為 `3/3`；仍需保留 report / latest_status 來源與人工判讀註記）。
-- **輔助工具**：Historical Evidence Replay 可用 working-copy / replay DB 從歷史交易日逐日重放 Evidence Pipeline，並把事件 metadata 標成 `historical_replay` / `simulated_scheduler`；它只能幫助找 source gap、payload gap 與 V2.0 設計問題，不計入 weekly history。multi-day dry-run 若採修正後歷史觀察日，必須有同日或指定觀察日 dry-run report / scheduled latest_status 作為 read-only 證據，且不得寫正式 DB。
-- **輔助工具**：`scripts/inspect_simulated_phase_progress.py` 可把 replay summary 與 scheduled dry-run latest status 彙整成 simulated Phase 0-5 rehearsal；所有 replay-derived evidence 必須保留 `official_gate_credit=false` 與 `requires_real_world_validation=true`，不得標成 official completion。
-- **限制**：Production scheduler 繼續維持 `false`，不寫入正式資料，不進行自動交易。
-
-### Phase 0A：Historical Replay Evidence Quality Audit
-**狀態**：2026-07-06 已完成 reference return blocker closeout，可作為 V2.0 Phase 1 的 simulated evidence input。
-- **已驗證產品**：
-  - `historical_replay_2026-01-06_2026-07-06_reference_fix.json` / `.md` / replay DB 已產生，cleanup 後封存於 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`。
-  - rerun 範圍為 2026-01-06 至 2026-07-06，共 118 個交易日。
-  - replay events `118,056`，outcomes `472,224`。
-  - ready outcomes `380,520`；benchmark return / excess 已補齊 `380,520 / 380,520`。
-  - industry return / excess 只有 `2,029 / 2,029`，其餘 ready outcomes 保持 `DEGRADED` + `missing_industry_benchmark`，原因是舊 recommendation payload 大多沒有 sector / industry。
-  - `source_missing_screening_matrix` 仍為 `118/118` days；這是舊推薦 payload 真缺口，不回補、不重算。
-- **結論**：
-  - benchmark 全缺已解除，raw forward return 與 benchmark excess 可作 V2.0 evidence quality / maturity 參考。
-  - industry excess 只能在 sector 可映射樣本中使用；Workbench 必須清楚揭露 missing industry payload。
-  - 此 closeout 不代表策略有效、不代表 Phase 0 真實時間 gate 完成、不代表 production scheduler 可啟用。
-
-### Phase 1：V2.0 Unified Decision Workbench Design Spike
-**狀態**：2026-07-06 已完成 read-only prototype slice 與 formal read-only source adapter；2026-07-07 已接入 Phase 2 Qt read-only MVP shell，後續 Phase 2C / 2D 已把 read-only Operating Loop 收口。V2.2 真實 evidence operating loop 仍需 Phase 0 真實時間證據。
-**目標**：在不改動主 UI 且不新增交易能力的前提下，探索 V2.0 資訊架構。
-- **工作範圍**：
-  - 只做資訊架構 (Information Architecture) 與 Read-only Prototype。
-  - 梳理決策畫面動線，確認 Daily Decision、Evidence Review 與 Market Watch 合併後的呈現。
-  - 可讀取 Phase 0A 的 `_reference_fix` replay summary 作為 source gap、payload gap、event family、outcome maturity 與 data quality 的參考輸入；不得把 replay 包裝成 production readiness 或策略績效結論。
-  - 已落地 `WorkbenchDashboardDTO`、read-only composer、replay JSON summary adapter、`WorkbenchSourceService` 與 `scripts/inspect_v2_workbench_prototype.py`；CLI 保留 `--sample`，並可用受控 `--db-path` / `--decision-date` 讀取 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與可選 replay JSON summary，輸出 JSON / Markdown 的今日待判讀、Evidence mode、Daily Checklist 與 read-only access boundary。
-- **限制**：不新增交易能力，不改動生產環境 UI；adapter 只讀 existing sources，missing DB / missing table / degraded source 只回 diagnostics，不建立 schema、不寫 evidence、不建立 scheduler、不套用 lifecycle action。
-
-### Phase 2：V2.0 Workbench MVP
-**狀態**：2026-07-07 已完成 read-only MVP shell、中文優先顯示、預設 replay JSON summary 分析、舊 Daily Decision / Evidence Review / Portfolio read-only drill-down、background evidence feed / read-only Action Items MVP、Action Items 的 severity / queue group / source label 排序顯示與空 / 降級狀態文案，以及 Operating Loop 操作節奏；Phase 2 UI / read-only operating loop 可 closeout，V2.2 真實 evidence operating loop 仍待 Phase 0 gate。
-**目標**：建立單一決策入口。
-- **工作範圍**：
-  - 已落地 PySide6 `決策工作台` 分頁，呈現 status strip、今日待判讀、背景證據流、只讀 Action Items、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
-  - UI 只讀 `WorkbenchDashboardDTO`，或透過 `WorkbenchSourceService.inspect()` 取得 payload；UI 不直接讀 SQLite、不讀 replay DB、不寫 DB、不啟用 scheduler。
-  - Background evidence feed 只彙整既有 DTO / service payload：Daily Decision snapshot、Evidence Review readiness、Portfolio alerts 與可選 replay summary diagnostics。
-  - Read-only Action Items 只顯示人工待處理事項；每列必須保留 source trace、degraded reason、drill-down target、severity、queue group、source label 與 `write_intent=false`，並以穩定 sort rank 排序，不建立 repository、不寫 DB、不改 lifecycle。
-  - Read-only Operating Loop 只顯示 DTO-derived 操作節奏：每日先看、人工處理佇列、weekly review history、multi-day dry-run、manual review note 與 scheduler gate；每列必須保留 source trace、linked item ids、drill-down target 與 `write_intent=false`，不標記完成、不寫 DB、不改 lifecycle。
-  - Evidence Feed 與 Action Items 必須有空狀態 / 降級狀態文案；空狀態不得被解讀為 gate 通過，降級狀態不得補值或觸發 replay / pipeline。
-  - 若 payload 帶 Historical Replay JSON summary，Evidence mode / data quality 必須揭露 `simulated_scheduler`、source gap / coverage、payload gap、outcome maturity、benchmark coverage、industry benchmark coverage、missing industry benchmark 與 pending future-data；replay 不得用來滿足 Phase 0 gate。
-  - 已將 Daily Decision Desk、Evidence Review、Portfolio Review 轉為 Workbench read-only drill-down，仍只切到既有頁面，不寫 DB、不跑 scheduler。
-  - Phase 2 已把 feed / Action Items 與 weekly review、multi-day dry-run、manual review note 串成 read-only UI operating loop；後續 V2.2 仍需真實 weekly / multi-day / manual review evidence 讓節奏可重複。
-- **限制**：Workbench MVP 不重算 scoring / recommendation / portfolio / backtest / lifecycle，不輸出買賣建議。Phase 0 weekly history 仍為 `0/3`；multi-day dry-run record 已為 `3/3 ready`，但 manual review / action-item rhythm 與 Phase 5 scheduler gate 尚未解除。
-
-### Phase 3：P0 Data Source Candidate Dry-run
-**狀態**：2026-07-07 已完成 Phase 3A (Corporate Action) 與 Phase 3B (Trading Restriction) Candidate Dry-run，實作 `CorporateActionPolicy` 與 `TradingRestrictionPolicy`，完善 missing DB 安全降級，並將 forward outcome 降級標記與 Portfolio Sandbox 的 rejected taxonomy (如 `rejected_price_limit_locked`, `rejected_trading_restricted`) 串接。2026-07-08 已完成 Phase 3C (Institutional / Credit / TDCC Source Candidate Readiness Dry-run)，新增 `SourceCandidateReadinessService` 與 `scripts/inspect_source_candidate_readiness.py`，只輸出 readiness / coverage / diagnostics，不正式 ingestion、不改 scoring。
-**目標**：引入使研究更真實的關鍵資料，但初期僅作候選測試。
-- **工作範圍**：
-  - 微結構資料（處置股、分盤交易、全額交割、漲跌停鎖死）。
-  - Corporate action 與 PIT fundamental release date。
-  - 三大法人、信用交易、TDCC / 集保庫存 source candidate readiness。
-- **限制**：先維持 candidate-only 與 dry-run，不直接覆寫決策特徵 (ScoringEngine)，不重算歷史證據。
-
-### Phase 4：Execution Model Realism
-**狀態**：2026-07-07 已完成 research-only sandbox 買賣價差 (Taiwan stock tick slippage) 與零股 / rejected taxonomy 閉環 (Phase 4 Extension)。
-**目標**：讓回測與沙盒配置更貼近真實市場限制。
-- **工作範圍**：
-  - 導入買賣價差 (Bid-ask spread)、零股限制、跳空實際成交價模型與完整委託簿撮合。
-- **限制**：先在 research-only 的 Portfolio Sandbox 中驗證，不串接 Broker 下單。
-
-### Phase 5：Scheduler Approval Gate
-**目標**：真正啟用全自動寫入排程。
-- **門檻要求**：
-  - 只有在前面 Phase 0 證據足夠。
-  - Rollback / backup 機制完備。
-  - 取得明確的 Manual Approval。
-- **放行**：進入 write-mode，開啟 Production Scheduler。
-- **目前補充**：2026-07-07 已完成 simulated Phase 5 approval rehearsal package，可先檢查 approval checklist、source candidate backlog、execution realism backlog 與 scheduler risk register 草案；但 official Phase 5 仍 blocked，必須等待 weekly history `3/3`、multi-day dry-run `3/3`、真實 manual review/action item rhythm、backup / rollback / recovery evidence 與 explicit manual approval。
-
----
-
-## 2.1 Phase 與長期版號對照
-
-本節只作版本 companion 對照；工程執行仍以本文件 Phase gate 為準。
-
-| 6M Phase | 候選版號 | 對應產品意義 |
+| 已有底座 | 可承接工作 | 不代表 |
 |---|---|---|
-| Phase 1 | V2.0 | Unified Decision Workbench read-only prototype 與 source adapter。 |
-| Phase 2 | V2.1 | Workbench 主 UI MVP；read-only shell 已接 Qt，中文顯示、replay summary 分析、舊 Tab drill-down、background evidence feed、排序後 read-only Action Items 人工佇列、空 / 降級狀態文案與 read-only Operating Loop 已完成，可 closeout。 |
-| Phase 0 + Phase 2 | V2.2 | Evidence Operating Loop，讓 weekly review、multi-day dry-run、manual review 與 action item 形成可重複節奏。 |
-| Phase 3 | V2.3 | P0 Data Source Candidate Dry-run，先候選測試 microstructure、corporate action、PIT release date、三大法人、信用交易與 TDCC readiness，不直接進 `ScoringEngine`。 |
-| Phase 4 | V2.4 | Execution Model Realism，在 research-only sandbox 驗證買賣價差、零股、跳空與未成交原因。 |
-| Phase 5 | V2.5 | Production Evidence Scheduler Approval，只開 evidence write-mode scheduler，不代表自動交易。 |
-| Phase 0-5 之後 | V3.0 / V3.3 / V4.0 | V3 先驗證 score / signal / alert / gate 是否有用；ML 只可在 V3.0 score effectiveness gate 可判讀後作 V3.3 shadow layer；V4.0 仍需長期 evidence，不屬目前 6M 直接交付承諾。 |
+| SQLite-first、data quality、available-date policies | P0 source governance | P0 sources 已正式接受 |
+| Recommendation、Profile、screening matrix、Why / Why Not | Advice Contract | 已有可直接採信的投資建議 |
+| Backtest、Replay、Walk-forward、Registry | Experiment / Promotion Gate | historical replay 是 forward evidence |
+| Evidence Event / Outcome、weekly review、read-only dashboards | Evidence operating loop | production evidence write-mode 已批准 |
+| Workbench read-only operating loop | Advice UI shell / drill-down | Guided Mode 或 Portfolio Advice 已完成 |
+| Portfolio tracking / Condition / Chip / sandbox | Portfolio Coach / Health 的基礎 | 已有 target/current/gap 或 thesis-based Exit |
+| Score effectiveness / ML readiness engineering candidate | Gate 5/7 read models | signal 有效或 ML production ready |
+| Data update / evidence dry-run scheduled tasks | operations scaffold | 自動交易或 production evidence scheduler |
+
+## 3. 時間配置
+
+| 月份 | 主要 Gate | 交付結果 |
+|---|---|---|
+| Month 1 | Gate 0 + Gate 1 Contract | 關閉安全重構；凍結 Advice / Portfolio Advice / Mode 契約與 golden baseline。 |
+| Month 2 | Gate 1 + Gate 2 | 建立每日 Advice read model 與真實 evidence review / action-item 節奏。 |
+| Month 3 | Gate 2 + Gate 3 | 受批准的 evidence write-mode 與 P0 source diagnostics / shadow acceptance。 |
+| Month 4 | Gate 4 | Portfolio Coach v1、Equal Weight benchmark、paper portfolio、execution feasibility。 |
+| Month 5 | Gate 5 | Score / signal / gate / alert effectiveness、ablation、pruning / retirement 決議。 |
+| Month 6 | Gate 6；Gate 7 conditional | Position Health / Exit v1；只有 Gate 5 可判讀時才開 ML shadow。 |
+
+跨月 Gate 可重疊研究與設計，但前一 Gate 的正式 Exit Criteria 未通過時，不得把後一 Gate 能力接進 Guided Mode 或 formal decision layer。
+
+## 4. Gate 0：Safe Refactor Closeout
+
+### Investment Question
+
+現有產品行為是否已被安全鎖定，能停止無止盡重構並回到產品主線？
+
+### Dependencies
+
+- [SAFE_REFACTORING_MASTER_REPORT.md](../01_architecture/SAFE_REFACTORING_MASTER_REPORT.md)。
+- 現行 Recommendation、Backtest、Portfolio、Scheduler、DTO / schema、UI navigation 測試。
+- 完整 rollback point 與 known residual list。
+
+### Engineering Deliverables
+
+1. Golden baseline：固定代表性輸入、輸出、排序、warnings、DTO serialization 與主要 UI contract。
+2. Recommendation diff：Profile / ranking / screening matrix / Why / Why Not 無非預期差異。
+3. Backtest diff：交易、timeline、成本、績效與 OOS contract 無非預期差異。
+4. Portfolio diff：持倉、平均成本、PnL、alert 與 source trace 無非預期差異。
+5. Scheduler contract diff：market data write、evidence dry-run、production evidence write-mode 三者權限不混淆。
+6. DTO / schema diff：向後相容、migration / fallback 清楚。
+7. 完整 rollback point、closeout report 與後續不再主動擴張重構的停止規則。
+
+### Verification
+
+- Protected contract / characterization suite。
+- Focused pytest、適用 UI QA、mypy、py_compile、quant guard。
+- `git diff --check`、工作樹與 rollback artifact 檢查。
+- 人工 MainWindow / core flow smoke 依風險執行。
+
+### Exit Criteria
+
+- 所有 protected diff 經確認，未解釋差異為 0。
+- 主要 God nodes 已薄化或有保留理由；未完成 residual 有明確 owner / non-blocking 判定。
+- 建立可回滾 commit / tag / SHA 紀錄，不修改正式資料或 production scheduler。
+- Tech Lead 正式宣告 Gate 0 closeout 後，重構進入 maintenance，不再是產品主線。
+
+### Prohibited
+
+- 不以 LOC 最小化替代行為等價。
+- 不在 closeout 同時新增 Advice、資料源或模型功能。
+- 不因重構測試通過宣稱投資有效。
+
+## 5. Gate 1：Daily Usable Advice Product
+
+### Investment Question
+
+今天應研究哪些股票、是否能建立新部位、建議配置多少；現有持倉應 Add / Hold / Reduce / Exit 嗎？
+
+### Dependencies
+
+- Gate 0 closeout。
+- 既有 Recommendation / screening / Workbench / Portfolio source trace。
+- Product Roadmap 的 Advice / Portfolio Advice Contract。
+
+### Engineering Deliverables
+
+1. Advice action enum：`RESEARCH`、`ADD_CANDIDATE`、`HOLD`、`REDUCE_CANDIDATE`、`EXIT_CANDIDATE`、`AVOID`、`NO_NEW_POSITION`。
+2. Recommendation Advice Contract：Why、Why Not、Risk、Evidence tier、confidence tier、thesis、invalidation、horizon、liquidity、execution feasibility、strategy/data date。
+3. Portfolio Advice Contract：`target_weight_bp`、`current_weight_bp`、`weight_gap_bp`、review date。
+4. Guided Mode policy：只允許 promoted / locked / disclosure-complete strategy。
+5. Professional Mode policy：candidate experiments 與 formal Advice 嚴格分離。
+6. 共核驗證：兩種 Mode 使用相同 Recommendation / Portfolio / Evidence engine 與相同 DTO schema。
+7. Advice refusal policy：資料不足、risk budget 滿、不可成交或市場風險過高時輸出 `RESEARCH` / `AVOID` / `NO_NEW_POSITION`。
+8. Workbench read model / UI slice：先呈現建議、風險、證據與權重差距；不直接在 UI 計算。
+
+### Testing
+
+- Contract / JSON round-trip / legacy compatibility。
+- Guided Mode 不可載入 candidate / shadow 策略。
+- Professional result 未經 Promotion 不得出現在 Guided Mode。
+- Missing / degraded / stale / execution unavailable 的 fail-closed matrix。
+- `NO_NEW_POSITION` 可被正常輸出且 UI 不視為錯誤。
+- Integer bp / Decimal / Look-ahead guard。
+- UI 只讀 DTO / application façade 靜態 contract。
+
+### Evidence Gate
+
+- Advice completeness：正式樣本 100% 含必要欄位與 source trace。
+- Deterministic replay：相同 frozen data / strategy / policy 產生相同 Advice。
+- Human review：Why / Why Not / Risk / Evidence 不暗示保證獲利或自動交易。
+- Paper dry-run：Advice 可轉成 paper allocation，但不建立 broker order。
+
+### Exit Criteria
+
+- 每日流程能回答「研究誰、能否新增、配置多少、持倉動作候選」。
+- Advice 可拒絕輸出、可回溯、可重算、可版本化。
+- Guided / Professional 共核，沒有第二套 calculation path。
+- 目前仍可只在 read-only / paper mode closeout；不要求 production evidence scheduler 或真實交易。
+
+### Prohibited
+
+- 不把 TotalScore 直接映射為買入或權重。
+- 不串 broker、不自動下單、不自動平倉。
+- 不把 confidence tier 寫成勝率。
+
+## 6. Gate 2：Real Evidence Operating Loop
+
+### Investment Question
+
+Recommendation、Portfolio Advice、Alert 與 Exit 是否被持續、可比較、可回滾地驗證？
+
+### Dependencies
+
+- Gate 1 Advice artifact。
+- durable snapshots、Evidence Event / Outcome、weekly review、Decision Quality / lifecycle repositories。
+- Production scheduler approval checklist、backup / rollback / recovery 設計。
+
+### Engineering Deliverables
+
+1. 真實 weekly review cadence：固定期間、owner、輸入、結論與 action item。
+2. Action Item rhythm：open → reviewed / dismissed → follow-up；append-only history。
+3. Manual review note：引用 source trace、quality、blocking / accepted residual，不含買賣命令。
+4. Appendix-only Evidence write-mode：只新增 evidence / review artifact，不改策略、Portfolio 或交易。
+5. Backup / rollback / recovery：run id、last-good、supersede / archive policy、disable-first recovery。
+6. Production Evidence Scheduler approval package：job version、approval id、dry-run result、idempotency、recovery test。
+7. Workbench / Evidence Review 顯示 historical replay、dry-run、forward、paper、live evidence tier。
+
+### Testing
+
+- Dry-run zero write、working-copy repeat idempotency、approved write append-only。
+- Backup / restore rehearsal 與 scheduler disable-first。
+- Duplicate / partial failure / stale input / source outage matrix。
+- `production_scheduler_allowed` 只有 explicit approval artifact 才能為 true。
+- Scheduler 不能 import broker execution 或 lifecycle mutation command。
+
+### Evidence Gate
+
+- 至少 3 個真實 weekly review period 與 3 個真實操作日 evidence record；historical replay 不計入。
+- Action items 有真實 reviewed / dismissed / follow-up 節奏，不是 fixture。
+- Approval owner 檢查 diagnostics、backup、rollback、recovery 與安全旗標。
+
+### Exit Criteria
+
+- Evidence loop 可在無 UI 手動補資料下重複運行並接受人工 review。
+- Production evidence write-mode 如獲批准，只保存 evidence；不自動交易、不套 lifecycle action。
+- Historical / replay / dry-run 不被標成 forward / live。
+
+### Prohibited
+
+- 不把 scheduled dry-run `Last Result=0` 當 production approval。
+- 不用 replay 補 weekly / forward gate。
+- 不讓 scheduler 自動 Promote / Demote / Retire。
+
+## 7. Gate 3：P0 Data Integration
+
+### Investment Question
+
+回測、Advice、Portfolio 與 Exit 是否使用決策當時可得、可授權、可降級的關鍵資料？
+
+### Dependencies
+
+- Gate 2 可保存 diagnostics / evidence。
+- Source Registry / corporate action / candidate readiness 現有底座。
+- 官方或授權來源研究、license / rate-limit 決策。
+
+### P0 Scope
+
+1. Corporate Action：除權息、減資、分割、面額變更。
+2. 停牌 / 復牌、處置、分盤、全額交割、漲跌停鎖死。
+3. 三大法人。
+4. 信用交易。
+5. TDCC / 集保持股分散。
+6. PIT 月營收與季度財報公告日。
+
+### Engineering Deliverables
+
+1. 統一 Source Contract：source id/version、as-of、available-date、quality、missing、license、rate limit、look-ahead、ingestion stage、downstream eligibility。
+2. Data Source Control Center read model：freshness、coverage、schema、quarantine、retry、eligibility。
+3. Adapter + raw evidence + manifest；不得由 UI 或 domain 直接呼叫 vendor。
+4. Diagnostics → Shadow → Evidence Review → Accepted Feature 的逐來源狀態機。
+5. Corporate action / restriction 對 execution、Why Not、Health 的 candidate impact report。
+6. source outage / stale / revision / duplicate / future-data quarantine。
+
+### Testing
+
+- `available_date <= decision_date`、修訂 / late arrival、timezone / market-day boundary。
+- Missing / stale / rate-limit / schema drift / duplicate / future-data fail-closed。
+- Source adapter contract、raw manifest、idempotency、license / version disclosure。
+- Candidate source 不可被 `ScoringEngine` / formal Portfolio Advice import 的靜態 boundary test。
+
+### Evidence Gate
+
+每個來源獨立形成：
+
+- Decision use case 與可接受 quality。
+- coverage / history / missing / look-ahead report。
+- diagnostics / shadow outcome。
+- 接受、限制、拒絕或延後決議。
+- 正式 downstream eligibility 由人工核准。
+
+### Exit Criteria
+
+- 每個 P0 source 有可稽核狀態，不再只有「planned / ready」模糊語彙。
+- Accepted Feature 才能供 formal decision layer；未接受來源維持 `research_candidate`。
+- Corporate action / restriction 至少能影響可信度、execution feasibility 或 risk，不靜默忽略。
+
+### Prohibited
+
+- 不捏造 API、歷史 coverage 或 license。
+- 不直接把三大法人、信用、TDCC 單點訊號加進 score。
+- 不把 retroactive baseline 當官方 PIT history。
+
+## 8. Gate 4：Portfolio Coach v1
+
+### Investment Question
+
+在資金、風險、流動性與成本限制下，應如何配置與再平衡？
+
+### Dependencies
+
+- Gate 1 Portfolio Advice Contract。
+- Gate 3 accepted / explicitly limited data。
+- current positions / cash / prices / liquidity / execution assumptions。
+
+### Engineering Deliverables
+
+1. Versioned Portfolio Policy：total exposure、cash reserve、single / sector / concept / correlation / small-cap / liquidity caps、target volatility、drawdown、turnover、cost。
+2. Equal Weight benchmark。
+3. Candidate sizing：Score Weight、Inverse Volatility、Risk Budgeting、Confidence-adjusted；全部 opt-in、可比較。
+4. Rebalance bands：lower / target / upper、minimum trade、turnover budget、cooldown。
+5. Portfolio Advice：target/current/gap、action、reason、evidence、feasibility。
+6. Paper Portfolio 與 Trade Import / Decision Journal foundation：fill、partial fill、override、reason、execution gap。
+7. Scenario & Stress Lab v1：快速下跌、跳空跌停、流動性消失、相關股同跌、集中、source outage。
+
+### Testing
+
+- Integer bp 總和 / cap / residual cash / lot size / Decimal 金額。
+- Equal Weight、candidate methods deterministic golden tests。
+- Constraint conflict、infeasible allocation、all candidates rejected、cash-only / `NO_NEW_POSITION`。
+- Bands / minimum trade / cooldown / turnover tests。
+- Paper fill / partial / reject / gap / cost / restriction scenarios。
+
+### Evidence Gate
+
+- 所有 sizing 與 Equal Weight 使用相同 universe / period / cost / constraints 比較。
+- OOS / forward / paper 層評估成本後 return、drawdown、CVaR、turnover、concentration、exposure stability。
+- 若 candidate method 無穩定增益，正式 policy 保持 Equal Weight 或更簡單方法。
+
+### Exit Criteria
+
+- 每次 Advice 有 target/current/gap 與可成交性。
+- `ADD_CANDIDATE` 不會突破任何 risk budget；不可行時降級為 HOLD / RESEARCH / NO_NEW_POSITION。
+- Paper Portfolio 可重現；仍不串 broker。
+
+### Prohibited
+
+- 不以 unconstrained mean-variance 作早期正式方法。
+- 不因 optimizer 有解就視為可交易。
+- 不接 production broker API。
+
+## 9. Gate 5：Signal Effectiveness & Pruning
+
+### Investment Question
+
+TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，哪些應限制、降權或退休？
+
+### Dependencies
+
+- Gate 2 真實 evidence cadence。
+- Gate 4 paper / Portfolio outcomes。
+- frozen Experiment Contract、metric definitions、minimum samples。
+
+### Engineering Deliverables
+
+1. Recommendation metrics：forward / benchmark / industry / concept excess、MAE / MFE、hit、payoff、monotonicity、Precision@K、regime、liquidity、execution。
+2. Portfolio metrics：cost-adjusted / excess、Sharpe、Sortino、MDD / duration、CVaR、turnover、cash、concentration、diversification、exposure、research gap。
+3. Alert / Exit metrics：lead time、post-alert MAE、false rates、avoided / opportunity loss、early exit、post-exit、Add / Reduce outcome。
+4. Model metrics scaffold：ranking、calibration、stability、regime、feature / label drift、OOS decay、live degradation。
+5. Score bucket monotonicity、fixed threshold robustness、component ablation 與 factor attribution。
+6. Experiment Manager：hypothesis、primary metric、benchmark、success / failure、split、search budget、horizon、execution、fingerprint。
+7. Pruning review：每項 feature / signal / gate / alert / Profile 的 retain / restrict / downweight / retire 決議。
+
+### Testing
+
+- Metric formula / window / grouping / sample disclosure golden tests。
+- Same-day universe、PIT feature、purged / embargo、benchmark alignment、cost consistency。
+- Multiple comparison / search budget / frozen hypothesis guard。
+- Missing component payload 不回補舊結論。
+- Retirement 不刪歷史 artifact，改用 inactive / superseded / effective date。
+
+### Evidence Gate
+
+- 指標不只報值，必須對應產品決策。
+- 任何保留或 promotion 至少有 OOS + forward / paper 可比較證據。
+- 任何 pruning 決議保留 evidence、影響範圍、fallback 與 rollback。
+- 樣本不足標示 inconclusive，不得硬選 winner。
+
+### Exit Criteria
+
+- 回答 TotalScore 是否有排序能力、bucket 是否單調、component / gate / alert / Profile 的真實貢獻。
+- 產生第一批 retain / restrict / downweight / retire 決議。
+- Gate 7 是否可啟動有明確 yes / no；readiness scaffold 本身不算 yes。
+
+### Prohibited
+
+- 不以單次最佳參數或 dashboard 視覺判斷有效。
+- 不只新增 feature；必須允許刪除與退休。
+- 不把 ML 作為規則 baseline 不可判讀時的逃生口。
+
+## 10. Gate 6：Position Health & Exit Engine v1
+
+### Investment Question
+
+持倉何時維持、加碼、減碼或退出，且原因是否能回到 entry thesis 與 Portfolio 風險？
+
+### Dependencies
+
+- Gate 1 Advice / thesis / invalidation contract。
+- Gate 4 Portfolio Policy / paper portfolio。
+- Gate 5 alert / signal effectiveness baseline。
+- Gate 3 restriction / corporate action / quality inputs。
+
+### Engineering Deliverables
+
+1. State machine：HEALTHY、WATCH、REDUCE_CANDIDATE、EXIT_CANDIDATE、CLOSED。
+2. 判斷分類：Hard Risk、Thesis Invalidated、Relative Deterioration、Time Stop、Portfolio Rebalance、Data Quality、Trading Restriction。
+3. Entry thesis / invalidation / expected horizon / review date persistence。
+4. Add / Hold / Reduce / Exit Advice Contract 與 transition evidence。
+5. Position Health read model、Workbench drill-down、Decision Journal linkage。
+6. Portfolio-driven trim 與 Hard Risk 的優先順序、人工 override / reason。
+
+### Testing
+
+- 完整 state transition matrix、recovery / override、invalid transition。
+- Hard Risk / restriction / missing data / market / relative / time / portfolio cases。
+- Fixed stop、RSI、TotalScore 不得單獨壟斷狀態的 contract test。
+- Exit advice 不得呼叫 broker、delete position 或 mutate lifecycle。
+- Advice / journal / evidence round-trip 與 effective-date tests。
+
+### Evidence Gate
+
+- Alert lead time、post-alert MAE、false rates、avoided / opportunity loss。
+- Early exit rate、post-exit performance、Add / Reduce outcomes。
+- 按 regime、liquidity、reason category 與 data quality 分層。
+
+### Exit Criteria
+
+- 每個 active position 有 thesis / invalidation / review state 或明確 legacy-degraded 標示。
+- 每次 state transition 可解釋、可追溯、可人工 override。
+- Exit 不再只依 fixed SL / TP 或單一 score。
+- 仍是 advice candidate，不自動平倉。
+
+### Prohibited
+
+- 不把資料缺失直接解讀為正常。
+- 不自動賣出、不自動改 Portfolio。
+- 不用 hindsight 填補 entry thesis。
+
+## 11. Gate 7：ML Shadow Layer（條件式）
+
+### Entry Conditions
+
+- Gate 5 對 rule score、bucket、component、label 與 metric 已可判讀。
+- Feature / Label / Dataset Registry、purged / embargo split 與 leakage checks 完整。
+- Champion baseline、shadow storage、rollback owner 已定義。
+
+### Engineering Deliverables
+
+- Gradient Boosting / learning-to-rank / meta-label / calibration / downside risk 的最小 challenger。
+- Model Registry、Calibration Report、Feature Importance、Drift Monitor、Shadow Prediction Store。
+- Champion / Challenger comparison 與 Promotion Review package。
+
+### Testing / Evidence
+
+- Purged walk-forward、OOS ranking、calibration、net utility、regime / liquidity stability。
+- Feature / label drift、missing feature、model unavailable、rollback to champion。
+- Shadow output 不得進 formal Recommendation / Portfolio / lifecycle / scheduler。
+
+### Exit Criteria
+
+- 只能提出「繼續 shadow、拒絕、或建議人工 promotion review」。
+- 即使 promotion review 通過，也需另立 formal adapter 計畫與 rollback Gate；不自動上線。
+
+## 12. 跨 Gate 驗證規則
+
+1. **No-look-ahead**：所有 signal、feature、standardization、universe、benchmark、execution、stop / exit 只用 decision-time data。
+2. **金融數值**：核心金額、權重、成本、PnL、風險使用 Decimal / 整數；float 只在隔離 analytics / visualization boundary。
+3. **狀態誠實**：candidate / dry-run / replay / shadow / paper / live / production 必須是不同狀態。
+4. **文件同步**：使用者可見功能實作時才同步 Manual；Target-only 規劃不得提前寫成已可操作。
+5. **資料安全**：raw source 不破壞；migration / apply 有 backup / confirm / restore。
+6. **Pruning**：任何新增 signal / gate / feature 同時定義 evidence metric 與 retirement path。
+7. **自動化**：Production evidence scheduler 與 broker execution 是不同權限；本 Roadmap 不建立 broker execution。
+
+## 13. 六個月 Closeout Definition
+
+六個月 closeout 至少要求：
+
+- Gate 0 關閉，產品主線不再被安全重構佔用。
+- Gate 1 Advice Contract 可日常回答投資問題並安全拒絕輸出。
+- Gate 2 真實 evidence operating loop 成立；scheduler 狀態無矛盾。
+- P0 sources 有逐一接受／限制／拒絕決議，不以 candidate 冒充 formal。
+- Portfolio Coach 以 Equal Weight benchmark、paper portfolio 與 target/current/gap 成立。
+- Signal effectiveness 產生第一批 pruning / retirement 決議。
+- Position Health / Exit 使用 thesis-based state machine。
+- ML 如未符合 Gate，明確維持 shadow-disabled / readiness-only，不視為延期失敗。
 
 ---
 
-## 3. 驗證規則
+## 更新記錄
 
-- **文件同步**：所有功能或政策修改，必須依據 `DOC_COVERAGE_MAP.md` 同步更新相關手冊。
-- **金融邊界**：策略、回測、推薦修改，必須通過 no-look-ahead 自查與 pytest gate。金融核心數值必須維持 `Decimal` 或整數，不得新增裸 `float`。
-- **資料可信度**：Daily Decision 與各儀表板需明確揭示 provider 的 quality (如 `DEGRADED`, `MISSING`)。
-- **排程與自動化**：在通過 Phase 5 Gate 之前，嚴禁啟用 Production Write-mode Scheduler 或自動發送真實交易委託。
-- **ML 邊界**：任何 ML 規劃必須先通過 score effectiveness / threshold robustness / component ablation 的 evidence gate；ML 輸出只能 shadow-only，不得直接改推薦、策略 lifecycle、portfolio 或 scheduler。
-
----
-
-## 4. 更新記錄
-
-- 2026-07-09：同步目前狀態：V3.0 engineering candidate closeout/readiness report 已完成，工程狀態為 `ready_for_manual_validation`、人工驗證維持 `PENDING_MANUAL_VALIDATION`；multi-day dry-run record 已達 `3/3 ready`，weekly evidence operations history 仍為 `0/3 waiting_for_time`。近期主線改為人工驗證與 V2.2 真實 evidence operating loop 的 weekly / manual review / action-item 節奏累積，不啟用 production scheduler、不展開 ML production。
-- 2026-07-08：更新為 `V3.0 engineering candidate closeout/readiness report` 夜間目標；score bucket audit、fixed threshold robustness、component ablation readiness、ML shadow-only contract 與 Phase 3C source candidate readiness dry-run 均已完成工程輸入，今晚只收尾驗證與文件 / QA 一致性，不改推薦或 production scheduler。
-- 2026-07-08：新增 `V3 score effectiveness audit + ML readiness bridge` planning note；把 ML 放在 score bucket audit、fixed threshold robustness 與 component ablation 之後，且只允許 shadow-only contract，不改推薦或 production scheduler。
-- 2026-07-07：完成 Phase 3A / Phase 3B Corporate Action & Trading Restriction Candidate Dry-run；新增 `CorporateActionPolicy` 與 `TradingRestrictionPolicy`，將 forward outcome 附加 `gap_detected` warning 並降級為 `DEGRADED`。Sandbox 可透過 policy 將限制轉譯為 `rejected_price_limit_locked` 或 `rejected_trading_restricted`，完善 Phase 4 的 rejected taxonomy。此為 candidate-only 觀察層，不改分數、價格，缺表時安全 fallback 為 `source_not_ingested`。
-- 2026-07-07：完成 Phase 4 Execution Model Realism Extension；在 Portfolio Sandbox 中實作台股跳動單位 (Tick) 滑價模型，並完整閉環零股限制 (Lot Sizing) 與拒絕原因 (Rejected Taxonomy)，現在歷史回放可忠實反映買賣價差摩擦與不可成交訂單。
-- 2026-07-07：完成 Phase 2 Workbench MVP shell 並補上 background evidence feed / read-only Action Items MVP；新增 PySide6 read-only `決策工作台` view / table models / main-tab integration，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，Action Items 只列人工待處理事項並保留 source trace / degraded reason / drill-down target，不建立 repository、不寫 DB；Evidence mode / data quality 揭露 replay JSON summary 的 simulated scheduler、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data 限制；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
-- 2026-07-07：新增 V2.2 simulated phase progress 與 Phase 5 approval rehearsal package；historical replay 可演練到 simulated Phase 5，但 official completion 仍需等待 weekly history `3/3`、multi-day dry-run `3/3`、manual review/action item rhythm、source acceptance、execution realism acceptance、backup / rollback / recovery 與 explicit approval。
-- 2026-07-07：推進 Workbench Phase 2 operating-loop queue 體驗；Action Items 新增 severity / queue group / source label 顯示、穩定排序、空 / 降級狀態文案與 drill-down target contract，仍維持 read-only DTO payload、不寫 DB、不啟用 scheduler、不產生買賣建議。
-- 2026-07-07：完成 Workbench Phase 2C/2D read-only operating loop 與 closeout；新增 DTO-derived Operating Loop 操作節奏，串接 Evidence Feed、Action Items、Daily Checklist、weekly history、multi-day dry-run、manual review note 與 scheduler gate，Phase 2 UI 可收口；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 V2.2 evidence operating loop gate 不變。
-- 2026-07-06：補上 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 作為 V2.0 之後的版本 companion，並新增 Phase-to-version 對照；本文件仍保留 gate-based 工程權威。
-- 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；已落地 DTO、composer、replay JSON summary adapter、sample CLI 與 focused tests，Phase 2 主 UI、Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
-- 2026-07-06：完成 Workbench formal read-only source adapter；CLI 可從 `--sample` 擴充到受控 `--db-path` / `--decision-date`，只讀既有 evidence / readiness / Agent summary / optional replay JSON，不寫 DB；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
-- 2026-07-06：完成 Phase 0A Historical Replay Evidence Quality Audit closeout；`ForwardPerformanceService` reference lookup 已修正 missing benchmark 預設 TAIEX、market index `收盤價` fallback 與保守 industry sector mapping。新 `_reference_fix` replay 產物確認 benchmark return / excess 全部填入 ready outcomes，industry 大量缺值保留為 payload gap；此項解除 V2.0 Phase 1 read-only design spike 的 replay input blocker，但 Phase 0 真實時間 gate 與 Phase 5 scheduler gate 仍未完成。
-- 2026-07-06：新增 Historical Evidence Replay v1 作為 Phase 0 的 research-only simulated scheduler 輔助工具；可在 working-copy / replay DB 逐日重放歷史 evidence，但不取代 weekly history `0/3`、multi-day dry-run `1/3`、manual approval 或 Phase 5 production scheduler gate。
-- 2026-07-06：重構為 Gate-Based Active Roadmap，將 V1 / Month 1-6 / V1.1-V1.9 的詳細完工紀錄封存至 `docs/09_archive/ROADMAP_6M_ENGINEERING_V1_COMPLETION_RECORD_2026_07.md`；目前主線改為 Phase 0 evidence accumulation、Phase 1 V2.0 read-only design spike、Phase 2 Workbench MVP、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate。
+- 2026-07-11：依 Post-Refactor 產品主線重寫為六個月 Gate；納入 Safe Refactor Closeout、Daily Usable Advice、Real Evidence Loop、P0 Data、Portfolio Coach、Signal Pruning、Position Health / Exit 與 conditional ML Shadow。

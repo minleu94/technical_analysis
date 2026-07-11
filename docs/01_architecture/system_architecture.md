@@ -1,11 +1,12 @@
 ﻿# 系統架構
 
-> **最後更新**：2026-07-07
+> **最後更新**：2026-07-11
 > **定位**：本文件是目前模組邊界、依賴方向、資料流與高風險技術契約的架構權威。歷史遷移過程不在本文件維護。
+> **Target companion**：理想目標架構、Current → Transitional → Target 演進與尚未存在的領域邊界見 [target_system_architecture.md](target_system_architecture.md)；該文件不代表目前已實作，也不授權立即建立新 package。
 
 ## 1. 系統定位
 
-baldr 是一套可驗證、可回溯、可演化的台股研究與投資決策工作台。產品北極星與長期能力圖像見 [system_vision_specification.md](system_vision_specification.md)；本文件只描述目前架構與模組邊界。
+baldr 是一套可驗證、可回溯、可演化的台股投資決策系統。產品北極星見 [system_vision_specification.md](system_vision_specification.md)，Post-Refactor 產品方向見 [PRODUCT_ROADMAP_POST_REFACTOR.md](../00_core/PRODUCT_ROADMAP_POST_REFACTOR.md)；本文件只描述目前架構與模組邊界。
 
 目前已落地三個產品閉環：
 
@@ -70,17 +71,16 @@ Application Services / DTO / Repository
 - 不在 UI 內複製 application/domain 計算。
 - Runtime UI 不得直接讀寫 Runtime store。
 
-### 目前 9 個頂層工作區
+### 目前 8 個頂層工作區
 
-1. 數據更新
-2. 市場觀察
-3. 決策工作台（Phase 2 Unified Decision Workbench MVP shell）
-4. Daily Decision Desk（v1 / expert drill-down）
-5. 策略回測 / Research Lab
-6. 推薦分析
-7. 觀察清單
-8. 持倉管理
-9. Runtime Observatory
+1. 決策工作台（包含「決策來源」Daily Decision drill-down）
+2. 市場探索
+3. 推薦分析
+4. 策略回測 / Research Lab
+5. 觀察清單
+6. 持倉管理
+7. 數據更新
+8. Runtime Observatory
 
 完整操作見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
 
@@ -492,6 +492,8 @@ Current Result DTO / Run Metadata
 | 外部參考與 V1.5-V2.0 版本形狀 | `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` |
 | 舊 Roadmap 移交 | `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` |
 | 架構 | 本文件 |
+| 目標架構 | `docs/01_architecture/target_system_architecture.md` |
+| Post-Refactor 產品方向 | `docs/00_core/PRODUCT_ROADMAP_POST_REFACTOR.md` |
 | 使用方式 | `docs/07_guides/APPLICATION_MANUAL.md` |
 | 文件導航 | `docs/00_core/DOCUMENTATION_INDEX.md` |
 | 行為不變重構執行 companion | `docs/01_architecture/SAFE_REFACTORING_MASTER_REPORT.md` |
@@ -549,6 +551,7 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-07-11：新增 Target Architecture 與 Post-Refactor Product Roadmap companion 連結；修正目前主 UI 為 8 個左側主工作區，Daily Decision 已內嵌於「決策工作台 > 決策來源」；本文件仍只描述 Current Architecture。
 - 2026-07-11：新增 `SAFE_REFACTORING_MASTER_REPORT.md` 為行為不變重構執行 companion；目前架構、產品 Roadmap 與使用流程權威邊界不變。
 - 2026-07-07：更新 Phase 2 Workbench MVP shell 架構同步；`ui_qt/views/workbench_view.py` 與 `ui_qt/models/workbench_table_models.py` 只呈現 `WorkbenchDashboardDTO`，主 UI 透過 `WorkbenchSourceService` 注入，新增中文顯示、預設 replay JSON summary 分析與舊 Daily Decision / Evidence Review / Portfolio read-only drill-down，不直接讀 SQLite / replay DB、不寫 DB、不啟用 scheduler、不重算 scoring / portfolio / backtest / lifecycle。
 - 2026-07-08：補充 Pre-V2 readiness source-gap closeout fallback；同日 scheduled dry-run `latest_status.json` 可作為修正後歷史觀察日的唯讀證據，仍不回補 DB、不觸發 confirm、不解除 production scheduler gate。

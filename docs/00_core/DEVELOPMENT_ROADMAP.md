@@ -1,6 +1,6 @@
 ﻿# DEVELOPMENT_ROADMAP（Roadmap Hub）
 
-> **最後更新**：2026-07-08
+> **最後更新**：2026-07-11
 > **定位**：本文件是 Roadmap Hub，不再保存完整歷史長文。它負責指向目前狀態、6 個月工程路線、系統架構與歷史歸檔。
 
 ---
@@ -12,11 +12,14 @@
 | 文件 | 權威範圍 |
 |---|---|
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 目前狀態、當前工作模式、本週優先事項與高風險區。 |
+| [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) | 安全重構完成後的產品方向、bounded advice、Portfolio Coach、Exit、Evidence、Data、ML 與 pruning 的產品演進。 |
 | [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
 | [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；作為 6M Roadmap 的 companion，不取代其權威。 |
 | [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md) | V2.0 之後的長期版本階梯；將 6M Roadmap Phase 2-5 與 Vision Level 1-4 映射為 V2.1-V4.0 companion，不取代 6M Roadmap 或 Vision。 |
 | [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) | 外部開源專案參考、資料源補強優先序與 V1.5 至 V2.0 版本形狀；作為 6M Roadmap / Version Roadmap companion，不取代 Vision。 |
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統架構、模組邊界、資料流與高風險技術邊界。 |
+| [target_system_architecture.md](../01_architecture/target_system_architecture.md) | Transitional / Target Architecture、產品領域邊界、治理與決策權限；不代表目前已實作。 |
+| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | North Star、Product Principles、Bounded Advice、Evidence Requirements、Success Levels 與 Non-goals。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 文檔導航與文件所在位置，不作為功能或狀態事實來源。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與結案 Gate。 |
 | [DEVELOPMENT_ROADMAP_LEGACY_2026_06.md](../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md) | 舊線性 Phase、歷史 Done、舊 Roadmap current section；只作追溯，不作目前狀態依據。 |
@@ -27,7 +30,9 @@
 
 ## 2. 系統定位
 
-這不是每天吐股票的工具；baldr 是一套可驗證、可回溯、可演化的台股研究與投資決策工作台。
+baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資建議、建立建議 Portfolio、追蹤持倉健康與退出條件，並持續驗證自身建議是否有效的台股投資決策系統。
+
+系統可以提供 bounded investment advice，但 `Investment Advice != Broker Execution`：不保證獲利、不自動下單、不讓黑箱 AI 或未通過 Gate 的模型修改正式決策。
 
 目前產品已形成三個已落地的產品閉環，並新增一個未來目標閉環：
 
@@ -65,8 +70,18 @@
 
 ## 4. 下一步 Next
 
-未來 6 個月工程主線以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星與長期能力圖像見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)。
-V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3、V1.4、V1.5、V1.6、V1.7、V1.8、V1.9 v1、V2.0 Phase 1 read-only prototype slice、Workbench formal read-only source adapter 與 Phase 2 Workbench MVP shell / background evidence feed / read-only Action Items / read-only Operating Loop 已完成；Action Items 已補排序、分組、來源顯示、空 / 降級狀態與舊頁導向 contract，Operating Loop 已把 daily checklist、weekly review、multi-day dry-run、manual review note 與 scheduler gate 串成只讀節奏。下一步不是啟用 production scheduler，也不是把 replay 當成 gate，而是繼續累積 Phase 0 weekly / multi-day evidence，讓 V2.2 的真實 evidence operating loop 由實際紀錄成立。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
+重構完成後的產品主線以 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 為準；未來 6 個月工程以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)，理想架構見 [target_system_architecture.md](../01_architecture/target_system_architecture.md)。
+
+目前立即順序改為：
+
+1. 完成 Gate 0 Safe Refactor Closeout：行為等價、golden baseline、Recommendation / Backtest / Portfolio / Scheduler / DTO diff 與 rollback point；完成後停止無止盡重構。
+2. 建立 Gate 1 Daily Usable Advice Contract：Guided / Professional 共核、`NO_NEW_POSITION`、Why / Why Not / Risk / Evidence 與 Portfolio target/current/gap。
+3. 把既有 read-only / dry-run evidence 底座推進為 Gate 2 真實 weekly review、action-item、backup / rollback / recovery 與受批准 evidence write-mode。
+4. P0 資料先 diagnostics / shadow / acceptance；candidate source 不接 `ScoringEngine` 或 formal Portfolio Advice。
+5. 以 Equal Weight benchmark 建立 Portfolio Coach，再做 signal effectiveness / pruning 與 thesis-based Position Health / Exit；ML 只有在 rule baseline 可判讀後才進 shadow。
+
+以下既有 V1.1-V2.0 與 V3 engineering candidate 長文保留為歷史脈絡；如與上述 Next 衝突，以 Product / 6M Roadmap 為準。
+V1 release 後的版本化交付節奏見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)：V1.1、V1.2、V1.3、V1.4、V1.5、V1.6、V1.7、V1.8、V1.9 v1、V2.0 Phase 1 read-only prototype slice、Workbench formal read-only source adapter 與 Phase 2 Workbench MVP shell / background evidence feed / read-only Action Items / read-only Operating Loop 已完成；Action Items 已補排序、分組、來源顯示、空 / 降級狀態與舊頁導向 contract，Operating Loop 已把 daily checklist、weekly review、multi-day dry-run、manual review note 與 scheduler gate 串成只讀節奏。multi-day dry-run 已為 `3/3 ready`；下一步不是啟用 production scheduler，也不是把 replay 當成 gate，而是繼續累積 Phase 0 weekly history、manual review note 與 action-item 節奏，讓 V2.2 的真實 evidence operating loop 由實際紀錄成立。部分 Post-V1 design / QA 檔名保留後續里程碑日期，不作為 Roadmap Hub 的完成日期權威。
 V2.0 之後的版本階梯見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)：V2.1-V2.5 對應 Workbench 主 UI、Evidence operating loop、P0 資料源 dry-run、execution realism 與 scheduler approval gate；V3.0-V4.0 對應 Vision 的 evidence-validated decision system 與投資有效性成熟度。該文件是長期版號 companion，不提前承諾 V3/V4 已具投資有效性。
 V3.0 engineering candidate 的 closeout/readiness report 已完成，工程狀態為 `ready_for_manual_validation`；近期目標改為完成 `PENDING_MANUAL_VALIDATION` 的三項人工檢視（樣本門檻、signal / alert / gate 文案、dashboard disclosure），並累積 V2.2 所需的真實 weekly evidence operations history、manual review note 與 action-item 節奏。multi-day dry-run record 已為 `3/3 ready`，但 production scheduler 仍維持 `production_scheduler_allowed=false`；不得展開新 ML production、不得把 candidate source 接入核心 score。
 外部開源專案對照、資料源補強優先序與 V1.5 至 V2.0 的中繼版本形狀見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)；該文件只作參考 companion，不取代 6M Roadmap 的執行順序。
@@ -96,7 +111,7 @@ V3.0 engineering candidate 的 closeout/readiness report 已完成，工程狀�
    - V1.1 補 workflow bridge；V1.2 補 research credibility 與 execution diagnostics；V1.3 補 weekly evidence operations 與 manual lifecycle package；V1.4 補 weekly review history 與 Research Lab 覆盤歷史子頁；V1.5 補 data credibility gate；V1.6 補 cross-sectional factor snapshot / attribution pipeline；V1.7 補 screening matrix、Why Not / Liquidity payload 與 negative evidence capture；V1.8 補 research-only portfolio construction 與 virtual execution trace sandbox；V1.9 補 read-only Agent / MCP evidence access。
    - 2026-07-03 已完成第一個 weekly evidence operations + history working-copy operating-cycle，結果仍為 `coverage_only`，blocking gaps 尚未關閉。
    - 同日 follow-up 已修正 batch / CLI Daily Decision Desk snapshot wiring 與 numpy scalar JSON 序列化；working-copy confirm smoke 可寫入 `risk_prompt` evidence 且 repeat=2 idempotency passed。受控 tmp run 也已保存 working-copy Recommendation result，並驗證 `recommendation,risk-prompt` requested sources 可 idempotent confirm。`decision_desk_snapshot_missing`、`recommendation_persisted_missing` 與 `working_copy_confirm_smoke_missing_or_failed` 已收斂為真實 source gaps。
-   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 watchlist 無項目與 portfolio 無 active positions；舊 recommendation 缺 screening matrix / exclusion payload 時仍只診斷、不回補、不重算。production scheduler 仍未啟用；V2.0/V2.1 Workbench 已有 Phase 1 read-only prototype slice、formal read-only source adapter、Phase 2 Qt MVP shell、舊頁 read-only drill-down、排序後 Action Items 人工佇列與 read-only Operating Loop，但 V2.2 evidence operating loop 的 weekly history / multi-day dry-run / manual review note 仍需真實時間與真實流程累積。
+   - 目前下一步是繼續用 weekly evidence operations + history 累積多週覆盤證據，並用真實 workflow 補齊 watchlist 無項目與 portfolio 無 active positions；舊 recommendation 缺 screening matrix / exclusion payload 時仍只診斷、不回補、不重算。production scheduler 仍未啟用；V2.0/V2.1 Workbench 已有 Phase 1 read-only prototype slice、formal read-only source adapter、Phase 2 Qt MVP shell、舊頁 read-only drill-down、排序後 Action Items 人工佇列與 read-only Operating Loop。multi-day dry-run 已為 `3/3 ready`，但 V2.2 evidence operating loop 的 weekly history、manual review note 與 action-item 節奏仍需真實時間與真實流程累積。
 
 6. **P1：V2.0 前置補強**
    - V1.5 Data Credibility & Corporate Action Gate、V1.6 Cross-sectional Factor Pipeline、V1.7 Screening Matrix & Negative Evidence、V1.8 Portfolio Construction / Execution Trace Sandbox 與 V1.9 Read-only Agent / MCP Evidence Access 已完成 v1。
@@ -105,7 +120,7 @@ V3.0 engineering candidate 的 closeout/readiness report 已完成，工程狀�
    - 2026-07-06 Historical Evidence Replay v1 已補 `scripts/replay_historical_evidence_pipeline.py` 與 `HistoricalEvidenceReplayService`，可把 source DB 複製成 replay DB 後逐交易日重放 runner；缺 as-of recommendation result 時只記錄 diagnostic 並略過 recommendation 類來源，不用未來 result 補值。
    - 2026-07-06 Phase 0A replay quality audit 已完成，benchmark 全缺已解除；V2.0 Phase 1 read-only Workbench prototype slice 已可用 `_reference_fix` replay JSON summary 顯示 source gap、payload gap、event family、outcome maturity 與 quality boundary，不顯示成策略績效結論。
    - Phase 2 前的 background evidence / formal read-only source adapter 已完成第一版：`WorkbenchSourceService` 可讀受控 `--db-path` 的 Pre-V2 readiness、Daily Decision durable snapshot、AgentEvidenceAccess summary 與可選 replay JSON summary；Phase 2 Qt MVP 已接入主 UI，中文優先呈現 status strip、今日待判讀、background evidence feed、read-only Action Items、read-only Operating Loop、Evidence mode / data quality、Daily Checklist 與 warnings / degraded source，並提供 Daily Decision / Evidence Review / Portfolio read-only drill-down。Action Items 只列人工待處理事項，保留 source trace / degraded reason / drill-down target，且不建立 repository、不寫 DB、不套用 lifecycle；目前已依 severity / queue group / source label 排序並顯示來源，空狀態與降級狀態會保留只讀、非建議、不補值語氣。Operating Loop 只用 DTO payload 顯示今日要看、人工處理、等待真實時間累積、manual review note 與 scheduler gate，不寫 DB、不標記完成。若預設 `_reference_fix` replay JSON summary 存在，Workbench 會揭露 market benchmark coverage 380,736/380,736、industry benchmark coverage 2,245/380,736、pending future-data 91,488 與 screening matrix source gap 118/118 days；這只代表方向性 evidence input，不解除 Phase 0 或 scheduler gate。V2.2 evidence operating loop 與 scheduler approval 仍需後續 gate。
-   - 進入 V2.0 前仍需真實時間累積：多週 weekly evidence operations + history 實際紀錄目前 `0/3`，multi-day dry-run record 目前 `1/3`。若要推 production scheduler，仍需 explicit design / approval / rollback 文件；目前 `production_scheduler_allowed=false`。
+   - 進入 V2.0 前仍需真實時間累積：multi-day dry-run record 已為 `3/3 ready`，但多週 weekly evidence operations + history 實際紀錄目前仍為 `0/3`。若要推 production scheduler，仍需 explicit design / approval / rollback 文件；目前 `production_scheduler_allowed=false`。
    - `cuFOLIO`、強化學習、券商自動下單與 SQLite async / split DB 暫不納入近期 Roadmap，除非有量測證據顯示現有計算或寫入模式成為真實瓶頸。
 
 7. **P2：Phase 5 研究輸出後續**
@@ -140,6 +155,7 @@ V3.0 engineering candidate 的 closeout/readiness report 已完成，工程狀�
 
 ## 7. 更新記錄
 
+- 2026-07-11：加入 Post-Refactor Product Roadmap、Target Architecture 與新版 Vision 權威入口；Next 改為 Gate 0 closeout → Daily Advice → Real Evidence → P0 Data → Portfolio / Pruning / Exit，ML 維持 shadow-first。
 - 2026-07-08：同步 V3.0 engineering candidate closeout 目標；score effectiveness / ML readiness bridge 與 Phase 3C source candidate readiness 已完成工程輸入，夜間排程應轉為 closeout 驗證與文件 / QA 一致性，不啟用 scheduler 或 production ML。
 - 2026-07-07：完成 Workbench 左側主導覽 IA；Qt 主 UI 預設進入 read-only `決策工作台`，8 個主工作區改由左側導覽切換，`每日決策` 內嵌為 `決策工作台 > 決策來源`，`市場觀察` 改名為 `市場探索`。Workbench 只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 呈現 status strip、今日待判讀、Evidence mode / data quality、Daily Checklist 與 warnings / degraded source。Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。
 - 2026-07-07：補充 Phase 2 Workbench background evidence feed / read-only Action Items MVP；背景證據流只彙整 Daily Decision snapshot、Evidence Review readiness、Portfolio alerts 與 replay summary diagnostics，Action Items 每列保留 source trace / degraded reason / drill-down target，且不建立 repository、不寫 DB、不改 lifecycle。

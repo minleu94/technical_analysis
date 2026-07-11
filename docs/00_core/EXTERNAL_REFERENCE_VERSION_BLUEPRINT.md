@@ -1,6 +1,6 @@
 # 外部專案參考與未來版本藍圖
 
-> **最後更新**：2026-07-08
+> **最後更新**：2026-07-11
 > **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md`、`VERSION_ROADMAP_V1_1_TO_V2_0.md` 與 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的參考 companion。它負責保存外部開源專案對照、資料源補強優先序、可借鑑設計、Blueprint 衝突檢查與 V1.8 至 V2.0 版本形狀；不取代 Vision、Snapshot、6M Roadmap、長期版本階梯或 Architecture。
 
 ---
@@ -130,7 +130,17 @@ baldr 目前最值得補強的不是更早導入 GPU、強化學習、券商自�
 
 ## 6. 資料源補強優先序
 
-### P0：直接影響可信度，優先補
+Post-Refactor 後，資料優先序以 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 的投資可信度與 Advice use case 為準；本文件保留來源候選與外部參考細節。統一分級如下：
+
+| Priority | 來源 |
+|---|---|
+| P0 | Corporate Action（除權息、減資、分割、面額變更）、停復牌、處置、分盤、全額交割、漲跌停鎖死、三大法人、信用交易、TDCC、PIT 月營收與季度財報公告日。 |
+| P1 | Concept Basket、ETF 持股／指數成分、借券、重大訊息、法說、股利事件、市場波動與衍生品風險。 |
+| P2 | 新聞 NLP、公告／法說文字模型、分析師預估、替代資料、ML ranking feature、DL temporal feature。 |
+
+所有來源仍先走 Diagnostics → Shadow → Evidence Review → Accepted Feature → Formal Decision Layer；下列既有細節不構成正式 ingestion 承諾。
+
+### 6.1 既有來源細節：直接可信度與 Evidence gaps
 
 1. **Corporate action / adjusted price timeline**
    - 目的：避免除權息、分割、還原價造成 forward return、技術指標、回測與 portfolio replay 失真。
@@ -146,7 +156,7 @@ baldr 目前最值得補強的不是更早導入 GPU、強化學習、券商自�
    - 內容：Why Not / Liquidity payload、watchlist 實際事件、portfolio active positions、risk prompt source。
    - Gate：舊 result 缺 payload 只診斷，不回補、不重算；新 result 必須在 decision-time 保存。
 
-### P1：支援更好的市場判讀，但不得直接進 score
+### 6.2 既有來源細節：籌碼、信用、題材與估值
 
 2026-07-08 Phase 3C 已先把三大法人、信用交易與 TDCC 做成 source candidate readiness dry-run：只檢查 DB / table / `available_date` / future-data / diagnostics，不正式 ingestion、不接 `ScoringEngine`、不改推薦 threshold、不啟用 scheduler。下列資料源仍需後續 source policy、授權與正式 ingestion gate 才能進入日常流程。
 
@@ -170,7 +180,7 @@ baldr 目前最值得補強的不是更早導入 GPU、強化學習、券商自�
    - 用途：fundamental diagnostics / valuation presentation。
    - Gate：只接受 governed external observation 或明確 backfill record；不在系統內臨時計算分子 / 分母。
 
-### P2：長期研究，不進近期主線
+### 6.3 既有來源細節：長期研究
 
 - Broker real-time / order API：只作 virtual execution trace 與帳務語意參考。
 - News / text / theme extraction：先有 source governance 與 hallucination boundary 再談。
@@ -284,6 +294,7 @@ Roadmap Hub 不應保存完整外部分析。它只需要指向本文件，並�
 
 ## 11. 更新記錄
 
+- 2026-07-11：對齊 Post-Refactor Data Source priority；P0 納入 corporate action、trading restriction、三大法人、信用交易、TDCC 與 PIT fundamentals，P1 / P2 依產品可信度重排；所有來源仍 candidate-first，不直接進 `ScoringEngine`。
 - 2026-07-08：補上今晚目標已轉為 `V3.0 engineering candidate closeout/readiness report`；score/source readiness 只作工程候選與人工驗證輸入，不代表正式資料 ingestion、ScoringEngine 接線、scheduler approval、V4 readiness 或投資有效性。
 - 2026-07-08：補上 supervised ML 採用邊界；sklearn / XGBoost / LightGBM 只可作 V3.3 shadow-only 候選，必須等 V3 score effectiveness audit 可判讀後才進實驗，不取代 rule engine、不直接改推薦。
 - 2026-07-08：補上 Phase 3C source candidate readiness 現況；三大法人、信用交易與 TDCC 只完成 candidate-only dry-run，不代表正式資料 ingestion、ScoringEngine 接線或 scheduler approval。

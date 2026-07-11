@@ -1,342 +1,211 @@
-# V2.1 至 V4.0 版本路線圖
+# V2.1 至 V4.0 產品成熟度路線圖
 
-> **最後更新**：2026-07-08
-> **定位**：本文件是 V2.0 之後的長期版本化 companion。它把 `ROADMAP_6M_ENGINEERING.md` 的 gate-based Phase 與 `system_vision_specification.md` 的成功標準轉成可討論的產品版號階梯；不取代 6M Roadmap、Snapshot、Vision 或 Architecture。
-
----
-
-## 1. 文件邊界
-
-本文件回答三個問題：
-
-1. V2.0 Unified Decision Workbench 之後，baldr 可以如何繼續切版本？
-2. 目前 6M Roadmap 的 Phase 2 至 Phase 5，對應到哪些產品版號？
-3. Vision 的四層成功標準，如何轉成 V3.0 / V4.0 的成熟度目標？
-
-本文件不做下列事情：
-
-- 不宣告任何投資訊號已有效。
-- 不把 UI / dashboard 完成等同於 alpha 成立。
-- 不覆寫 `ROADMAP_6M_ENGINEERING.md` 的 Phase gate。
-- 不啟用 production scheduler、自動下單、AI 決策或自動 lifecycle action。
-- 不新增外部資料 ingestion 的直接承諾；資料源仍需經 source capability、available_date、quality 與 missing policy gate。
-
-## 2. Scoped Authority 對照
-
-| 主題 | 權威文件 | 本文件角色 |
-|---|---|---|
-| 目前狀態 | `PROJECT_SNAPSHOT.md` | 只引用，不改寫。 |
-| 未來 6 個月工程順序 | `ROADMAP_6M_ENGINEERING.md` | 將 Phase 對應到候選版號。 |
-| V1.1 至 V2.0 節奏 | `VERSION_ROADMAP_V1_1_TO_V2_0.md` | 承接 V2.0 之後的版本階梯。 |
-| 外部參考與 V1.5-V2.0 形狀 | `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md` | 只引用資料源與 deferred 技術邊界。 |
-| 長期願景與成功標準 | `system_vision_specification.md` | 將 Level 1-4 映射成 V2/V3/V4 成熟度。 |
-| 架構與模組邊界 | `system_architecture.md` | 不新增架構權威。 |
-
-## 3. 版本命名規則
-
-### V2.x：決策工作台與證據營運成熟
-
-V2.x 的核心是「讓 daily decision workflow 真的穩定運作」。它聚焦 Workbench 主 UI、Evidence operating loop、資料可信度 dry-run、執行模型 realism 與 production evidence scheduler approval。
-
-V2.x 的成功不是投資績效，而是：
-
-- 每天能從單一工作台看見市場、候選、持倉、evidence、資料品質與待處理事項。
-- 所有 warning、missing、degraded、manual-required 狀態都可回溯。
-- Evidence pipeline 與 weekly review 能穩定累積，不再只靠一次性 CLI output。
-
-### V3.x：Evidence-Validated Decision System
-
-V3.x 的核心是「用累積樣本證明哪些決策輔助真的有用」。它不要求所有訊號都有效，但要求系統能清楚區分：
-
-- 哪些 signal / alert / gate 有正向 evidence。
-- 哪些只是 noise。
-- 哪些條件下有效、哪些 regime 下失效。
-- 哪些資料源或 dashboard 對使用者決策沒有幫助，應降級或移除。
-
-### V4.x：Investment Effectiveness Maturity
-
-V4.x 只在 V3.x 累積足夠 forward evidence、live-vs-research gap 與 manual review evidence 後才成立。它的目標不是保證獲利，而是讓系統可驗證地改善研究與投資決策品質。
-
-若沒有足夠證據，V4.0 不應提前命名為正式交付。
+> **最後更新**：2026-07-11
+> **定位**：本文件是 V2.0 之後的長期產品成熟度與版本階梯權威；版號代表產品能力與證據成熟度，不代表功能數量。
+> **工程順序**：未來六個月以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準。
+> **產品方向**：投資問題、能力演進與產品 Gate 以 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 為準。
+> **歷史交棒**：V1.1 至 V2.0 的已完成演進見 [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md)。
 
 ---
 
-## 4. 版本階梯總覽
+## 1. 版號判讀原則
 
-| 版本 | 對應 6M Phase / Vision Level | 定位 | 主要 Gate |
+1. 工程完成不等於投資有效。
+2. Dashboard、scheduler、ML 或資料表完成不單獨構成大版本。
+3. Historical replay 不算 forward / live evidence。
+4. Candidate source、readiness、shadow model 不算 formal decision capability。
+5. V4.0 必須由長期 Forward / Paper / Live Evidence 支持，不能用規劃日期提前宣告。
+6. 版本 closeout 必須有明確 non-goals、residual、rollback 與 evidence boundary。
+
+## 2. Scoped Authority
+
+| 主題 | 權威文件 |
+|---|---|
+| 目前狀態 | `PROJECT_SNAPSHOT.md` |
+| 產品方向與產品 Gate | `PRODUCT_ROADMAP_POST_REFACTOR.md` |
+| 六個月工程交付 | `ROADMAP_6M_ENGINEERING.md` |
+| North Star / Evidence / Success Levels | `system_vision_specification.md` |
+| Current Architecture | `system_architecture.md` |
+| Target Architecture | `target_system_architecture.md` |
+| 本文件 | V2.1-V4.0 maturity mapping |
+
+## 3. 版本階梯總覽
+
+| 版本 | 成熟度定位 | 最低成立條件 | 不代表 |
 |---|---|---|---|
-| V2.0 | Phase 1 / Level 1 preflight | Unified Decision Workbench read-only prototype 與 source adapter。 | 已完成 Phase 1；Phase 2 read-only shell 已在 V2.1 段落承接。 |
-| V2.1 | Phase 2 / Level 1 | Workbench 主 UI MVP；read-only shell、background evidence feed、排序後 Action Items 人工佇列與 read-only Operating Loop 已接 Qt。 | Phase 0 evidence accumulation 不得被 replay 取代；舊 Tab 保留 expert mode；UI loop closeout 不等於 scheduler approval。 |
-| V2.2 | Phase 0 + Phase 2 / Level 1-2 | Evidence Operating Loop；simulated phase progress 可用 historical replay 預演 Phase 0-5。 | official closeout 仍必須等 weekly history、multi-day dry-run、manual review 與 action item 節奏以真實時間紀錄可重複。 |
-| V2.3 | Phase 3 / Level 2 | P0 Data Source Candidate Dry-run。 | 新資料源只作 candidate / dry-run；Corporate Action、Trading Restriction、三大法人、信用交易與 TDCC readiness 已有工程候選，不進 `ScoringEngine`。 |
-| V2.4 | Phase 4 / Level 2 | Execution Model Realism。 | execution realism 先在 research-only sandbox 驗證，不串 broker。 |
-| V2.5 | Phase 5 / Level 1-2 governance | Production Evidence Scheduler Approval。 | simulated approval rehearsal 可先完成；official approval 必須等 explicit approval、rollback / backup、multi-day record、weekly history 與 source gaps 全部通過。 |
-| V3.0 | Vision Level 2-3 | Evidence-Validated Decision System。 | 事件類型、alert、gate、dashboard 與 `TotalScore` 有足夠 forward / gap / review evidence 可判讀；score bucket、threshold robustness、component ablation 是 ML 前置 gate。 |
-| V3.1 | Vision Level 3 | Risk Control Effectiveness。 | Liquidity Gate、Why Not、Portfolio Alert、Fundamental diagnostics 有效果證據或降級決策。 |
-| V3.2 | Vision Level 3 | Strategy Lifecycle Effectiveness。 | Signal Decay / lifecycle candidate 能降低失效策略續用風險，仍需人工核准。 |
-| V3.3 | Vision Level 3 | ML Readiness / Shadow ML-Assisted Layer。 | 只能在 V3.0 score effectiveness gate 可判讀後，做 shadow-only calibration、meta-labeling、ranking 或權重學習；不得取代規則式訊號。 |
-| V4.0 | Vision Level 4 | Investment Effectiveness Maturity。 | Watchlist / Recommendation / Portfolio / Lifecycle 能以長期 evidence 支持決策改善。 |
+| V2.1 | Daily Usable Workbench | 單一日常入口、Advice Contract 可見、quality / warnings 完整 | 投資有效 |
+| V2.2 | Evidence Operations | 真實 weekly review / action-item / evidence write / recovery 節奏 | production trading |
+| V2.3 | Data Credibility | P0 source-by-source acceptance / limitation / rejection | candidate source 已進 score |
+| V2.4 | Portfolio Coach Foundation | Risk budget、target/current/gap、Equal Weight benchmark、paper portfolio | 自動配置或 broker execution |
+| V2.5 | Position Health Foundation | thesis / invalidation contract、health read model、manual decision journal | 完整 Exit effectiveness |
+| V3.0 | Signal Effectiveness & Pruning | Score、component、gate、alert、Profile 可判讀並有 pruning 決議 | 所有 signal 有效 |
+| V3.1 | Portfolio Advice Validation | sizing / bands / risk policy 有 OOS / forward / paper 成本後比較 | 保證優於 benchmark |
+| V3.2 | Position Health & Exit Validation | Add / Hold / Reduce / Exit 有 lead-time、false rate、opportunity-loss evidence | 自動平倉 |
+| V3.3 | ML Shadow / Champion-Challenger | rule baseline 可判讀；ML 只作 shadow 並具 registry / calibration / drift / rollback | production ML 或黑箱決策 |
+| V4.0 | Evidence-Validated Investment Decision System | 長期 Recommendation / Portfolio / Exit / lifecycle evidence 支持決策品質與風險調整表現 | 保證獲利、自動交易、免人工審核 |
 
----
+## 4. V2.x：Daily Usable、Evidence Operations、Data Credibility、Portfolio Foundation
 
-## 5. V2.x 詳細規劃
+### V2.1：Daily Usable Workbench
 
-### V2.0：Unified Decision Workbench 基準
+目的：把既有 Workbench 從 read-only 工程資訊入口，演進為能呈現 bounded Advice 的日常產品入口。
 
-狀態：Phase 1 read-only prototype 與 formal read-only source adapter 已完成；2026-07-07 已完成 Phase 2 read-only MVP shell、background evidence feed / read-only Action Items MVP、Action Items 人工佇列排序 / 分組 / 空降級狀態 follow-up，以及 read-only Operating Loop closeout。
+最低能力：
 
-已交付基準：
+- Guided / Professional Mode 共用核心。
+- Recommendation Advice Contract。
+- `RESEARCH`、`ADD_CANDIDATE`、`HOLD`、`REDUCE_CANDIDATE`、`EXIT_CANDIDATE`、`AVOID`、`NO_NEW_POSITION`。
+- Why / Why Not / Risk / Evidence / quality / strategy / data date。
+- Portfolio Advice 最低欄位：target/current/gap；可先為 read-only / paper。
 
-- `WorkbenchDashboardDTO`
-- `WorkbenchReadOnlyComposer`
-- `WorkbenchSourceService`
-- `_reference_fix` historical replay summary input
-- `scripts/inspect_v2_workbench_prototype.py`
-
-已完成第一版：
-
-- PySide6 頂層 `決策工作台` shell。
-- Status strip、今日待判讀、背景證據流、只讀 Action Items、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
-- Background evidence feed 只彙整 Daily Decision snapshot、Evidence Review readiness、Portfolio alerts 與 replay summary diagnostics。
-- Read-only Action Items 只顯示人工待處理事項，保留 source trace、degraded reason、drill-down target、severity、queue group、source label 與 `write_intent=false`，並依 sort rank 形成可掃描人工佇列，不建立 repository、不寫 DB、不套用 lifecycle。
-- Read-only Operating Loop 只從 `WorkbenchDashboardDTO` 推導每日先看、人工處理佇列、weekly review history、multi-day dry-run、manual review note 與 scheduler gate；所有 step 保留 source trace、linked item ids、drill-down target 與 `write_intent=false`，不標記完成、不寫 DB、不套用 lifecycle。
-- Evidence Feed 與 Action Items 的空狀態 / 降級狀態文案已補上；空狀態不代表 gate 通過，降級狀態只供人工判讀，不補值、不重跑 pipeline。
-- Qt view/model/service contract 測試，確認 UI 只讀 `WorkbenchDashboardDTO` 或呼叫 `WorkbenchSourceService`。
-- Replay JSON summary 限制揭露：`simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark、pending future-data。
-
-仍未完成：
-
-- Phase 0 真實 weekly / multi-day gate。
-- V2.2 真實 evidence operating loop：weekly history、multi-day dry-run 與 manual review note 仍需真實時間 / 真實流程累積。
-- Phase 5 production scheduler approval。
-- V2.2 simulated phase progress / Phase 5 approval rehearsal 已可用作審核包預演，但不得改寫上述未完成項目。
-
-### V2.1：Workbench 主 UI MVP
-
-目標：把 Daily Decision、Evidence Review、Portfolio Review 與 Action Items 整合成單一日常入口。
-
-Scope In：
-
-- 漸進改造現有 Daily Decision Desk，優先避免新增第 9 個頂層工作區。
-- Workbench 第一屏呈現「今日待判讀」而不是功能清單。
-- Evidence mode 成為 drill-down。
-- Market Watch / Smart Money / Research Lab 保留為專家模式或下鑽入口。
-- 所有 section 顯示 quality / warnings / source trace。
-
-Scope Out：
-
-- 不自動下單。
-- 不啟用 production scheduler。
-- 不自動套用 demote / retire / promote。
-- 不重算 scoring、recommendation、portfolio 或 backtest。
-
-Exit Gate：
-
-- UI contract 測試確認 Workbench view 不直接 import domain 計算模組。（第一版 shell 已完成；後續 drill-down 仍需維持。）
-- Manual 同步入口、操作、結果判讀、安全限制與排錯。
-- Phase 0 evidence gate 狀態在畫面上清楚揭露，不用漂亮 dashboard 掩蓋樣本不足。
+Closeout Gate：Advice 可拒絕、可重算、可回溯；UI 不直接計算；不串 broker。
 
 ### V2.2：Evidence Operating Loop
 
-目標：讓 evidence operations 變成每週 / 每日可重複流程，而不是一次性報表。
+目的：讓 Evidence 不再只有 dashboard / dry-run，而形成真實 weekly review、manual note 與 action-item rhythm。
 
-2026-07-07 補充：`scripts/inspect_simulated_phase_progress.py` 與 Phase 5 approval rehearsal package 可用 historical replay / scheduled dry-run status 預演 Phase 0-5。此軌道只允許輸出 `official_gate_credit=false`、`requires_real_world_validation=true` 與 `production_scheduler_allowed=false`；不得用 replay 把 V2.2 official closeout 標為完成。
+最低能力：
 
-Scope In：
+- 真實 weekly periods 與人工 review。
+- append-only evidence / review artifact。
+- dry-run → working-copy → approved evidence write-mode。
+- backup / rollback / recovery。
+- replay / dry-run / forward / paper / live tier 分離。
 
-- weekly evidence operations + history 至少累積可比較週期。
-- multi-day dry-run record 從 scaffold 變成實際紀錄。
-- action item planning 與 manual review note 可追蹤。
-- Evidence Review UI smoke checklist 實際 closeout。
-- Read-only Agent report sample 納入固定覆盤輸入。
+Closeout Gate：production evidence scheduler 如獲批准只保存 evidence；不自動交易、不套 lifecycle action。
 
-Exit Gate：
+### V2.3：P0 Data Credibility
 
-- weekly history 達到 3 次以上，且不是 fixture 或手動改表。
-- multi-day dry-run 達到 3 次以上，且 diagnostics 可比較。
-- source gaps 能分成 blocking / warning / accepted residual。
-- `production_scheduler_allowed=false` 仍清楚保留，直到 V2.5。
+目的：逐一處理 Corporate Action、trading restriction、三大法人、信用交易、TDCC、PIT fundamentals。
 
-### V2.3：P0 Data Source Candidate Dry-run
+最低能力：
 
-目標：把 Vision / Blueprint 中最影響可信度的資料源，先以 governed candidate 方式接入。
+- 每個 source 有 `source_id`、version、`as_of_date`、`available_date`、quality、license、rate limit、missing、look-ahead、eligibility。
+- Diagnostics → Shadow → Evidence Review → Accepted Feature。
+- Data Source Control Center 可見 freshness、coverage、quarantine、retry 與 downstream eligibility。
 
-候選資料源：
+Closeout Gate：每個 P0 source 有 accepted / limited / rejected / deferred 決議；candidate 不冒充 formal。
 
-- Corporate action / adjusted price timeline。
-- 處置股、分盤、全額交割、漲跌停鎖死。
-- PIT fundamental release date。
-- 三大法人、信用交易、TDCC 已完成 Phase 3C source candidate readiness dry-run；概念籃子仍作後續 candidate。上述資料不得直接進核心 score。
+### V2.4：Portfolio Coach Foundation
 
-Exit Gate：
+目的：從「推薦一批股票」演進為 risk-budgeted Portfolio Advice。
 
-- 每個資料源都有 `source_id`、`source_version`、`available_date`、`quality`、`missing_policy`。
-- 缺資料時 fail-closed、degraded 或 skipped，不得靜默補成 observed。
-- 候選資料只進 diagnostics / Why Not / Risk Prompt / source coverage，不直接改 `ScoringEngine`。
+最低能力：
 
-### V2.4：Execution Model Realism
+- Portfolio Risk Budget。
+- `target_weight_bp` / `current_weight_bp` / `weight_gap_bp`。
+- Equal Weight benchmark。
+- Rebalance bands、minimum trade、turnover、cooldown。
+- Paper Portfolio、execution feasibility、Trade Import / Decision Journal foundation。
 
-目標：讓 research replay 與 portfolio sandbox 更接近真實市場限制。
+Closeout Gate：能安全輸出 Portfolio Advice 或 `NO_NEW_POSITION`；不串 broker。
 
-Scope In：
+### V2.5：Position Health Foundation
 
-- 買賣價差。
-- 零股 / 整股限制。
-- 跳空成交與未成交原因。
-- 漲跌停鎖死與交易限制。
-- 完整委託生命週期的 research-only trace。
+目的：建立 thesis-based Health / Exit 的資料與狀態契約。
 
-Exit Gate：
+最低能力：
 
-- 所有金額與倉位維持 `Decimal` / 整數單位。
-- 不串 broker，不建立 production order。
-- replay credibility 明確揭露哪些成交是假設、哪些限制已模擬。
+- Entry thesis、invalidation、holding horizon、review date。
+- HEALTHY / WATCH / REDUCE_CANDIDATE / EXIT_CANDIDATE / CLOSED。
+- Hard Risk、thesis、relative、time、portfolio、data、restriction reason categories。
+- Manual override / decision journal / source trace。
 
-### V2.5：Production Evidence Scheduler Approval
+Closeout Gate：每個 transition 可解釋、可回溯；不自動平倉。
 
-目標：只針對 evidence write-mode scheduler 進入 production approval，不代表自動交易。
+## 5. V3.x：Signal、Portfolio、Exit、Pruning、ML Shadow、Paper Validation
 
-Gate：
+### V3.0：Signal Effectiveness & Pruning
 
-- Phase 0 weekly / multi-day evidence 足夠。
-- working-copy confirm smoke repeat idempotent。
-- source gaps 無 blocking。
-- rollback / backup / recovery 文件完備。
-- manual approval package 明確簽核。
-- scheduler 開啟後仍不得下單、不得自動 lifecycle action、不得改策略。
-- 2026-07-07 補充：approval rehearsal package 可先完成 checklist / backlog / risk register 草案；official V2.5 closeout 必須等待 weekly history `3/3`、multi-day dry-run `3/3`、真實 manual review/action item rhythm、backup / rollback / recovery evidence 與 explicit manual approval。
+目的：回答 TotalScore、component、gate、alert 與 Profile 是否有用。
 
----
+最低證據：
 
-## 6. V3.x 詳細規劃
+- Forward / benchmark / industry / concept excess。
+- MAE / MFE、hit、payoff、bucket monotonicity、Precision@K。
+- Fixed threshold robustness、component ablation、regime / liquidity stability。
+- Signal / gate / alert / Profile 的 retain / restrict / downweight / retire 決議。
 
-### V3.0：Evidence-Validated Decision System
+現況邊界：2026-07 的 score effectiveness / V3 engineering candidate 只代表 read-only scaffold 與 `ready_for_manual_validation`，不是本版本 closeout。
 
-目標：系統能根據累積 evidence，判斷哪些訊號、警示、排除條件與 dashboard 值得保留。
+### V3.1：Portfolio Advice Validation
 
-成功標準：
+目的：驗證 Portfolio policy 是否在成本、風險與限制後比 Equal Weight 更合理。
 
-- Watchlist Trigger、Recommendation、Why Not、Liquidity Gate、Portfolio Alert 至少有可比較 forward outcome。
-- dashboard 能顯示樣本數、confidence、regime / sector 分層與 limitations。
-- 不足樣本不被包裝成結論。
-- ineffective / noisy signal 可以被降級為觀察或移出第一屏。
-- `TotalScore` 必須能用 raw bucket (`0-40`, `40-50`, `50-60`, `60-70`, `70-80`, `80-100`) 檢視 1 / 5 / 10 / 20 日 forward return、max drawdown、win rate、benchmark excess 與 industry excess。
-- fixed threshold 需要做鄰近參數穩定性檢查；若只有單一買分 / 賣分 / confirmation / cooldown 設定有效，必須標示為 overfit risk 或 `fragile`。
-- technical / pattern / volume component ablation 要能回答哪個元件真正貢獻 signal；若舊 evidence 缺 component payload，先標示 `component_payload_missing`，不得回補重算舊結論。
-- ML 不屬於 V3.0 的替代決策層；ML 只能在上述 score effectiveness gate 可判讀後進入 V3.3 shadow-only 規劃。
+最低證據：cost-adjusted / excess return、Sharpe、Sortino、MDD / duration、CVaR、turnover、cash、concentration、diversification、exposure stability、paper vs research gap。
 
-2026-07-09 狀態：score bucket audit、fixed threshold robustness、component ablation readiness、ML readiness contract 與 Phase 3C source candidate readiness dry-run 的工程輸入，以及 V3.0 engineering candidate closeout/readiness report 均已完成。工程狀態為 `ready_for_manual_validation`，人工驗證仍為 `PENDING_MANUAL_VALIDATION`；V3.0 尚未成為投資有效性、production scheduler approval、V4 maturity 或 ML production readiness 的證明。
+方法次序：Equal Weight → Score Weight / Inverse Volatility → Risk Budgeting / HRP / shrinkage → 複雜 optimizer。Expected Return 不可靠時，不使用 unconstrained mean-variance 作正式基準。
 
-### V3.1：Risk Control Effectiveness
+### V3.2：Position Health & Exit Validation
 
-目標：證明風險提示與排除機制有助於降低錯誤研究或不良候選。
+目的：證明 Add / Hold / Reduce / Exit 不只是規則存在，而有實際 risk / opportunity 取捨。
 
-候選衡量：
+最低證據：alert lead time、alert 後 MAE、false-positive / false-negative、avoided loss、opportunity loss、early exit、post-exit、Add / Reduce outcome，並依 regime / liquidity / reason / quality 分層。
 
-- Liquidity Gate 排除組的成交風險是否高於未排除組。
-- Why Not 是否降低低品質候選進入研究流程的比例。
-- Portfolio Alert 是否能提前辨識持倉惡化。
-- Fundamental diagnostics 是否減少錯誤解讀基本面資料。
+### V3.3：ML Shadow / Champion-Challenger
 
-### V3.2：Strategy Lifecycle Effectiveness
+目的：ML 只在 V3.0 baseline 可判讀後，研究 ranking、calibration、meta-labeling、downside risk 與 drift。
 
-目標：讓 Strategy Lifecycle 不只是保存 proposed payload，而能被 evidence 驗證其管理效果。
+必要治理：Feature / Label / Dataset / Model Registry、purged / embargo split、calibration、importance、shadow prediction、drift、Champion / Challenger、Promotion Gate、rollback。
 
-Scope In：
+Closeout Gate：最多提出繼續 shadow、拒絕或人工 promotion review；不自動上線、不改 scheduler / Portfolio / lifecycle、不交易。
 
-- Signal Decay 命中後的後續表現。
-- demote / retire candidate 的人工審核結果。
-- lifecycle action 前後的 live-vs-research gap 變化。
-- 避免失效策略持續被採用的流程證據。
+## 6. V4.0：Evidence-Validated Investment Decision System
 
-Scope Out：
+V4.0 是長期 maturity milestone，不是目前六個月工程承諾。只有以下條件由長期 Forward / Paper / Live Evidence 支持時才成立：
 
-- 不讓 AI 自動升降級。
-- 不把單次 decay observation 當成策略失效證明。
-
-### V3.3：ML Readiness / Shadow ML-Assisted Layer
-
-目標：在不取代規則式框架的前提下，讓 ML 只作第二層研究輔助。
-
-前置條件：
-
-- V3.0 score bucket audit 已能顯示 `TotalScore` 分數區間與 forward outcome 的關係。
-- fixed threshold robustness matrix 已能標示 stable / fragile / inconclusive。
-- component ablation 已能區分 technical、pattern、volume 的貢獻或缺資料原因。
-- feature / label snapshot 必須符合 no-look-ahead，並保存 training window、label 定義、feature list、split policy 與 model metadata。
-
-允許：
-
-- 學權重：在不同 market regime 下調整 technical / pattern / volume 權重的 shadow diagnostics。
-- 分數校準：把 `TotalScore` / component score 校準成歷史相似情境的機率估計。
-- meta-labeling：規則式策略先產生候選 signal，ML 只判斷這個 signal 是否值得執行。
-- ranking model：在同日 universe 中做相對排序研究。
-
-不允許：
-
-- 直接用 ML 取代買賣訊號。
-- 讓 model output 改推薦、改權重、改 lifecycle、改 portfolio。
-- 把 ML 機率當成保證勝率。
-- 在沒有 walk-forward / expanding T-1 驗證前進入 production。
-
----
-
-## 7. V4.0 詳細規劃
-
-### V4.0：Investment Effectiveness Maturity
-
-V4.0 是願景層級，不是目前可承諾的 6M 工程交付。只有在 V2.x 建立日常工作台與 evidence operations，且 V3.x 累積出可判讀效果後，才可評估是否進入 V4.0。
-
-成立條件：
-
-- Watchlist Trigger 入選後的 forward return 優於合理 benchmark，且樣本足夠。
-- 推薦組合扣除交易成本後仍具備穩定性，且能分辨 regime / liquidity / source quality。
-- Live performance 與 Research performance 的落差可解釋並逐步縮小。
-- Strategy Lifecycle 能辨識訊號衰退，降低失效策略續用。
-- Decision Quality Review 能顯示使用者流程改善，而不是 hindsight blame。
+1. Recommendation ranking / Advice 在合理 benchmark、industry / concept 與 liquidity 調整後具可判讀價值。
+2. Portfolio Advice 扣除成本後有合理穩定性，且相對 Equal Weight 的增益與代價可解釋。
+3. 重大回撤、CVaR、concentration 與 exposure 可被 policy 控制。
+4. Alert / Exit 有 lead-time、avoided-loss 與 opportunity-loss 證據。
+5. Research-to-paper/live gap 可由 execution、資料、regime、策略與人工 override 解釋。
+6. Signal / strategy decay 可被發現；無效 feature / Profile / model 會被限制或退休。
+7. 持續調參受到 Experiment Contract、search budget、OOS 與 pruning 約束，沒有用過度擬合換取版號。
+8. Model / source / policy 出現 drift 或 failure 時，可回到 last approved champion。
 
 V4.0 仍不代表：
 
 - 保證獲利。
-- 自動交易。
+- 自動交易或 broker order。
 - AI 報牌。
 - 免人工審核。
+- 所有市場環境都有效。
 
----
+## 7. 版本 Promotion / Demotion 規則
+
+### Promotion
+
+- 工程 DoD、資料 Gate、Evidence Gate、風險與 rollback 全部成立。
+- 版本 artifact 可追溯 data / strategy / policy / model / decision date。
+- 人工 review 明確接受 limitations。
+
+### Demotion / Hold
+
+- Evidence 衰退、source quality 降級、research-to-live gap 擴大或風險超標時，版本可限制適用 regime、降級 Guided exposure 或停止 Promotion。
+- 單次異常不足以直接退休；需依預先定義的 evidence policy。
+
+### Retirement
+
+- 保留歷史 artifact、effective date、reason、replacement / fallback 與 rollback reference。
+- 不刪除歷史 Research Run / Evidence 以美化結果。
 
 ## 8. Deferred / 明確不納入近期版本
 
-以下項目只有在後續 evidence 或量測證明需要時才重開：
-
-- Production broker order / 自動下單。
-- AI 自動產生 lifecycle action。
-- 強化學習主線。
-- GPU-first portfolio optimization / cuFOLIO。
-- SQLite split DB / async rewrite。
-- 使用 LLM output 作為 evidence。
-- 未治理資料源直接進 `ScoringEngine`。
-
----
+- Production broker execution / 自動下單。
+- AI 自動 Strategy Lifecycle action。
+- 強化學習核心主線。
+- GPU-first Portfolio optimization。
+- 未量測就進行 SQLite split / async rewrite。
+- 未治理資料直接進 `ScoringEngine`。
+- LLM output 作為統計 evidence。
+- DL 作為近期核心推薦引擎。
 
 ## 9. 更新規則
 
-本文件應在下列情況更新：
+本文件只在 maturity definition、版本 Gate 或跨版本責任改變時更新；單一 bugfix、dashboard polish、dry-run、candidate adapter、readiness scaffold 或一次 replay 不改變版本 closeout。
 
-- `ROADMAP_6M_ENGINEERING.md` 新增、重排或關閉 Phase gate。
-- `system_vision_specification.md` 的成功標準或 Gap Register 改變。
-- V2.1 / V2.2 / V2.3 / V2.4 / V2.5 任一版本開始實作或 closeout。
-- V3.0 或 V4.0 的 evidence 標準需要量化。
+---
 
-不應因單一 bugfix、單次 smoke、單次 replay 或單次 dashboard polish 更新本文件的版本結論。
+## 更新記錄
 
-## 10. 更新記錄
-
-- 2026-07-09：V3.0 engineering candidate closeout/readiness report 已完成，狀態為 `ready_for_manual_validation`；multi-day dry-run record 已達 `3/3 ready`，weekly evidence operations history 仍待真實時間累積。下一步是人工驗證與 V2.2 真實 operating loop，不提前宣告 V3 / V4 成熟度。
-- 2026-07-08：更新 V3.0 closeout candidate 狀態；score bucket audit、threshold robustness、component ablation readiness、ML shadow-only contract 與 Phase 3C source candidate readiness dry-run 已完成工程輸入，仍只作 engineering candidate / manual validation，不代表投資有效性或 scheduler approval。
-- 2026-07-08：補上 V3 score effectiveness gate 與 V3.3 ML Readiness / Shadow ML-Assisted Layer；明確 TotalScore 分組、fixed threshold robustness、component ablation 是 ML 前置條件，ML 只能 shadow-only，不取代規則式推薦或 lifecycle。
-- 2026-07-07：同步 V2.1 / Phase 2 Workbench MVP shell；Qt `決策工作台` read-only view/model 已接入主 UI，資料只經 `WorkbenchSourceService` / `WorkbenchDashboardDTO`，replay JSON summary 限制已在 Evidence mode / data quality 揭露；後續已由 read-only Operating Loop closeout 補齊 UI 操作節奏，但 Phase 0 真實時間 gate、V2.2 真實 evidence loop 與 Phase 5 scheduler gate 仍未完成。
-- 2026-07-07：新增 V2.2 simulated phase progress / Phase 5 approval rehearsal companion 說明；simulated ready 不等於 V2.2 / V2.5 official closeout，完成標示仍需正式時間資料與 explicit approval。
-- 2026-07-07：補充 V2.1 background evidence feed / read-only Action Items MVP；Action Items 只列人工待處理事項並帶 source trace、degraded reason、drill-down target，不建立 repository、不寫 DB、不套用 lifecycle。
-- 2026-07-07：補充 V2.1 Action Items 人工佇列 follow-up；新增 severity / queue group / source label 顯示、排序、空 / 降級狀態與 drill-down target contract，仍不啟用 scheduler、不寫 DB、不產生交易建議。
-- 2026-07-07：補充 V2.1 / Phase 2 closeout；新增 read-only Operating Loop 操作節奏，把 Evidence Feed、Action Items、Daily Checklist、weekly history、multi-day dry-run、manual review note 與 scheduler gate 串接於 DTO / Qt 邊界內；V2.2 真實 evidence loop 與 Phase 0 時間 gate 仍未完成。
-- 2026-07-06：初版建立 V2.1 至 V4.0 版本階梯，將 6M Roadmap Phase 2-5 與 Vision Level 1-4 映射為長期產品版號；保持 production scheduler、自動交易、AI 決策與投資有效性結論在 gate 之外。
+- 2026-07-11：依產品成熟度重整 V2.1-V4.0；V2.x 聚焦 Daily Advice / Evidence / Data / Portfolio foundation，V3.x 聚焦 Signal / Portfolio / Exit effectiveness、pruning 與 ML shadow，V4.0 改以長期 evidence-validated investment decision system 判定。

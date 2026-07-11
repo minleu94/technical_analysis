@@ -28,12 +28,14 @@
 5. `docs/00_core/DOC_COVERAGE_MAP.md` - 文檔覆蓋矩陣（判斷 coverage 的規則文件）⭐ **必須讀取**
 6. `docs/00_core/DOCUMENTATION_INDEX.md` - 文檔索引（了解文檔結構）
 7. `docs/00_core/DEVELOPMENT_ROADMAP.md` - Roadmap Hub
-8. `docs/00_core/ROADMAP_6M_ENGINEERING.md` - 6 個月工程路線
-9. `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` - V2.0 之後長期版本階梯（涉及 V2.1+ 版號、長期成熟度或 V3/V4 規劃時必讀）
-10. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 移交矩陣
-11. `docs/01_architecture/system_architecture.md` - 系統架構
-12. `docs/07_guides/APPLICATION_MANUAL.md` - 完整操作手冊（涉及 UI / 使用流程時必讀）
-13. 本次變更涉及的檔案（由使用者提供，或由 Agent 提出需求）
+8. `docs/00_core/PRODUCT_ROADMAP_POST_REFACTOR.md` - 重構完成後產品方向
+9. `docs/00_core/ROADMAP_6M_ENGINEERING.md` - 6 個月工程路線
+10. `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` - V2.0 之後長期成熟度階梯（涉及 V2.1+ 版號或 V3/V4 規劃時必讀）
+11. `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` - 舊 Roadmap 移交矩陣
+12. `docs/01_architecture/system_architecture.md` - 現有系統架構
+13. `docs/01_architecture/target_system_architecture.md` - 目標系統架構（涉及未來架構時）
+14. `docs/07_guides/APPLICATION_MANUAL.md` - 完整操作手冊（涉及 UI / 使用流程時必讀）
+15. 本次變更涉及的檔案（由使用者提供，或由 Agent 提出需求）
 
 **未完成上述閱讀，不得執行任何任務。**
 
@@ -43,9 +45,11 @@
 
 - **`docs/00_core/PROJECT_SNAPSHOT.md`** - 專案快照（開場 30 秒狀態）
 - **`docs/00_core/ROADMAP_6M_ENGINEERING.md`** - 6 個月工程路線（未來方向的 scoped authority）
+- **`docs/00_core/PRODUCT_ROADMAP_POST_REFACTOR.md`** - Post-Refactor 產品方向與產品 Gate 權威
 - **`docs/00_core/DEVELOPMENT_ROADMAP.md`** - Roadmap Hub（權威文件入口）
 - **`docs/00_core/DOCUMENTATION_INDEX.md`** - 文檔索引（文檔位置的 scoped authority）
 - **`docs/01_architecture/system_architecture.md`** - 系統架構（架構與模組邊界的 scoped authority）
+- **`docs/01_architecture/target_system_architecture.md`** - 理想目標架構；不得作為目前完成狀態依據
 - **`docs/07_guides/APPLICATION_MANUAL.md`** - 目前 8 個工作區與跨工作區操作的使用者權威
 - **`PROJECT_NAVIGATION.md`** - 專案導航（開發者功能導航）
 

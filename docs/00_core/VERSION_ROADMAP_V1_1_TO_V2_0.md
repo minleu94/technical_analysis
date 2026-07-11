@@ -1,7 +1,7 @@
-# V1.1 至 V2.0 版本路線圖
+# V1.1 至 V2.0 歷史版本路線圖
 
-> **最後更新**：2026-07-06
-> **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md` 的版本化交付 companion。6M Roadmap 仍是未來 6 個月工程主線權威；本文件負責把「V1 已完成、main 可運行、資料可信度仍在驗證中」之後的工作拆成可討論、可 commit、可驗收的 V1.1 至 V2.0 節奏。V2.0 之後長期版號階梯見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)；外部開源專案對照與資料源優先序見 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md)。
+> **最後更新**：2026-07-11
+> **定位**：本文件保存 V1.1 至 V2.0 已完成版本與 V2.0 形成過程，是歷史產品演進 companion，不再承擔 Post-Refactor 產品方向或未來六個月工程優先序。新的產品方向見 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md)，工程 Gate 見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，V2.1 之後 maturity 版號見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
 
 ---
 
@@ -13,6 +13,8 @@
 - V1 的意義是工程入口、資料契約、操作流程與 QA gate 可用，不代表策略、推薦或警示已具備投資有效性。
 - Post-V1 evidence 底座已建立，但正式資料可信度、forward evidence 樣本、live-vs-research gap、Decision Quality 與 production scheduler 都仍在驗證中。
 - Evidence dry-run 可以繼續跑，不需要等待 3-5 個交易日才開始 V1.1 規劃與非破壞式實作；但 production write-mode scheduler 仍需明確人工核准。
+
+歷史判讀補充：本文件中的「已完成 v1」只代表當時定義的工程能力、契約或操作入口完成，不代表 Recommendation、Portfolio、Alert、Exit、Profile、Factor、Evidence 或 ML 已被證明具投資有效性。Portfolio Sandbox 不是正式 Portfolio Advice，read-only Workbench 不是完整 Advice operating loop，candidate source 不是 formal ingestion，ML readiness 不是 production model。
 
 版本切分原則：
 
@@ -354,6 +356,8 @@ V2.0 啟動條件：
 
 ## 10. 目前最合理的下一步
 
+> **歷史章節說明**：以下內容保留 2026-07-06 當時的下一步脈絡，供追溯 V2.0 形成過程；它不再是目前 Next。現行產品 Next 以 `PRODUCT_ROADMAP_POST_REFACTOR.md` 與 `ROADMAP_6M_ENGINEERING.md` 為準。
+
 V1.1 至 V1.9 v1 已收尾，下一步不應直接宣稱 Profile、factor rank、negative evidence、portfolio sandbox 或 AI evidence summary 有效，也不應把降級、配置或 AI 結論做成自動按鈕。外部專案對照後，比較穩的順序是：
 
 - V1.3 已把 promote / hold / demote_candidate / retire_candidate 相關 evidence 轉成可審核 weekly package 與 action item planning，而不是自動升降級。
@@ -364,6 +368,8 @@ V1.1 至 V1.9 v1 已收尾，下一步不應直接宣稱 Profile、factor rank�
 - V2.0 之後的 V2.1-V4.0 長期版本階梯已交棒給 `VERSION_ROADMAP_V2_1_TO_V4_0.md`；本文件不再承接 V3/V4 maturity 規劃。
 
 ## 11. 更新記錄
+
+- 2026-07-11：將本文件明確定位為 V1.1-V2.0 歷史版本與 V2.0 形成記錄；保留既有完成版號與內容，不把 Post-Refactor 長期願景回填舊版；補充工程完成不等於投資有效性，並將目前產品 Next 交棒給 Product / 6M Roadmap。
 
 - 2026-07-06：補上 V2.0 之後長期版號交棒規則，指向 `VERSION_ROADMAP_V2_1_TO_V4_0.md`；本文件仍只維護 V1.1 至 V2.0 節奏。
 - 2026-07-06：完成 V2.0 Phase 1 read-only Workbench prototype slice；當時 sample CLI 可輸出 JSON / Markdown 並讀取 `_reference_fix` replay JSON summary，不寫 evidence、不啟用 scheduler、不產生交易建議。

@@ -1,7 +1,7 @@
 # 文檔索引
 
-> **最後整理**：2026-07-08
-> **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。專案改採 Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，未來 6 個月看 `ROADMAP_6M_ENGINEERING.md`，V2.0 之後長期版號階梯看 `VERSION_ROADMAP_V2_1_TO_V4_0.md`，架構看 `system_architecture.md`。
+> **最後整理**：2026-07-11
+> **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，產品方向看 `PRODUCT_ROADMAP_POST_REFACTOR.md`，未來 6 個月工程看 `ROADMAP_6M_ENGINEERING.md`，North Star / Evidence 看 `system_vision_specification.md`，目前／目標架構分別看 `system_architecture.md` / `target_system_architecture.md`。
 
 ---
 
@@ -10,11 +10,12 @@
 | 文件 | 用途 |
 |---|---|
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與歷史歸檔。 |
-| [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來 6 個月可執行工程路線、里程碑、交付物與驗收標準。 |
-| [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1 release 後到 V2.0 的版本化交付節奏；說明 V1.1 workflow bridge、V1.2 credibility、V1.3 operations、V1.4 history、V1.5 data credibility、V1.6 factor pipeline、V1.7 negative evidence、V1.8 portfolio sandbox、V1.9 read-only Agent MCP、Pre-V2.0A replay quality audit 與 V2.0 workbench 邊界。 |
-| [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md) | V2.0 之後的長期版本階梯；將 6M Roadmap Phase 2-5 與 Vision Level 1-4 映射為 V2.1-V4.0 companion，不取代 6M Roadmap 或 Vision。 |
+| [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) | 安全重構完成後的產品方向權威；定義 bounded advice、Guided / Professional、Portfolio、Exit、Evidence、Data、ML、30/60/90 日與產品 Gate。 |
+| [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) | 未來六個月工程 Gate、交付物、依賴、測試、禁止事項與 Exit Criteria。 |
+| [VERSION_ROADMAP_V1_1_TO_V2_0.md](VERSION_ROADMAP_V1_1_TO_V2_0.md) | V1.1 至 V2.0 已完成歷史版本與 V2.0 形成過程；不承擔目前產品 Next。 |
+| [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md) | V2.1 至 V4.0 長期產品成熟度；V4.0 必須由長期 Forward / Paper / Live Evidence 支持。 |
 | [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) | 外部開源專案參考、資料源補強優先序、V1.5 至 V2.0 版本形狀與 deferred 技術邊界；作為 6M Roadmap / Version Roadmap companion，不取代 Vision。 |
-| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr 產品北極星、目前邊界、Gap Register、長期能力圖像與投資有效性驗證框架；不取代 Snapshot、6M Roadmap 或 Architecture。 |
+| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr North Star、Product Principles、Bounded Advice Policy、Evidence Requirements、Success Levels 與 Non-goals。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要、本週優先事項與高風險區。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 本文件，文檔導航。 |
@@ -35,7 +36,8 @@
 | 文件 | 用途 |
 |---|---|
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統模組、分層架構、資料流與模組邊界的架構權威。 |
-| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr 產品北極星、Current State 邊界、Evidence Requirement、Daily Decision Desk Contract、Gap Register、投資有效性驗證框架與下一階段 Evidence-Driven baldr 方向。 |
+| [target_system_architecture.md](../01_architecture/target_system_architecture.md) | 理想 Target Architecture；清楚區分 Current / Transitional / Target，定義模組、資料流、決策流、治理邊界與正式決策修改權限。 |
+| [system_vision_specification.md](../01_architecture/system_vision_specification.md) | 產品北極星、Bounded Advice、Evidence Requirements、Success Levels 與 Non-goals。 |
 | [system_flow_end_to_end.md](../01_architecture/system_flow_end_to_end.md) | 端到端流程。 |
 | [data_collection_architecture.md](../01_architecture/data_collection_architecture.md) | 資料收集架構。 |
 | [runtime_observatory_rules.md](../01_architecture/runtime_observatory_rules.md) | Runtime Observatory 架構治理規範。 |
@@ -346,6 +348,8 @@
 
 ## 目前開發狀態
 
+> 現況仍以 `PROJECT_SNAPSHOT.md` 為準。Post-Refactor 文件已建立，但屬產品／目標架構規劃，不代表 Advice Contract、Portfolio Coach、Position Health / Exit、P0 formal ingestion 或 ML production 已實作。
+
 - **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
 - **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1、Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉；Month 6 Strategy Lifecycle / Portfolio Feedback v1 已完成第一輪 service / gate / UI 入口。
 - **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，目前主線已轉為 Phase 0 evidence accumulation、V2.0 Phase 1 read-only Workbench 後已收口的 Phase 2 Workbench MVP / background evidence feed / read-only Action Items / Operating Loop UI / left navigation IA、後續 V2.2 真實 evidence operating loop、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate；長期版號對照見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
@@ -363,6 +367,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-11：新增 `PRODUCT_ROADMAP_POST_REFACTOR.md` 與 `target_system_architecture.md` 索引；重整 Vision、6M Roadmap、V1.1-V2.0 歷史定位與 V2.1-V4.0 maturity 描述，清楚分離 Current / Target 與產品 / 工程權威。
 - 2026-07-11：新增 `SAFE_REFACTORING_MASTER_REPORT.md` 架構索引，作為行為不變重構與 Planner → Implementation → QA automation 的共用執行 companion；不取代 Roadmap 或目前架構權威。
 - 2026-07-06：完成 push 前 docs 結構稽核索引同步，新增 `DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md`、`superpowers/README.md`、`strategies/README.md`，將過時 UI Qt roadmap audit 歸檔，並把 MCP patch memo 移至技術文件。
 - 2026-07-06：新增 V2.1 至 V4.0 長期版本路線圖索引，標示其為 6M Roadmap Phase 與 Vision 成功標準的版本 companion，不作目前狀態或工程順序權威。
