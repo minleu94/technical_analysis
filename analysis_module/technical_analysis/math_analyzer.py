@@ -4,6 +4,10 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 
+from analysis_module.technical_analysis.technical_column_support import (
+    resolve_technical_column,
+)
+
 class MathAnalyzer:
     """數學模型分析類"""
     
@@ -33,14 +37,7 @@ class MathAnalyzer:
         Returns:
             str: 對應的列名
         """
-        # 檢查中文列名是否存在
-        if self.reverse_mapping.get(eng_name) in df.columns:
-            return self.reverse_mapping.get(eng_name)
-        # 檢查英文列名是否存在
-        elif eng_name in df.columns:
-            return eng_name
-        # 都不存在，返回None
-        return None
+        return resolve_technical_column(df.columns, self.reverse_mapping, eng_name)
         
     def check_stationarity(self, time_series):
         """檢查時間序列的平穩性
@@ -141,4 +138,4 @@ class MathAnalyzer:
         Returns:
             相關性矩陣
         """
-        return df.corr() 
+        return df.corr()

@@ -6,6 +6,10 @@ import traceback
 from pathlib import Path
 import os
 
+from analysis_module.technical_analysis.technical_column_support import (
+    resolve_technical_column,
+)
+
 class TechnicalIndicatorCalculator:
     """技術指標計算類別，基於02_technical_calculator.md中的功能"""
     
@@ -105,14 +109,7 @@ class TechnicalIndicatorCalculator:
         Returns:
             str: 對應的列名
         """
-        # 檢查中文列名是否存在
-        if self.reverse_mapping.get(eng_name) in df.columns:
-            return self.reverse_mapping.get(eng_name)
-        # 檢查英文列名是否存在
-        elif eng_name in df.columns:
-            return eng_name
-        # 都不存在，返回None
-        return None
+        return resolve_technical_column(df.columns, self.reverse_mapping, eng_name)
     
     def process_price_data(self, df):
         """處理價格數據，包含資料清理和格式轉換
