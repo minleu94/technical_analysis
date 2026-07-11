@@ -204,6 +204,8 @@
 | [2026-06-11-financial-float-boundary-governance.md](../superpowers/plans/2026-06-11-financial-float-boundary-governance.md) | 金融 float 邊界 AST 掃描、逐行標記與 pytest gate 實作計畫。 |
 | [2026-06-11-broker-flow-sqlite-and-ui-recovery.md](../superpowers/plans/2026-06-11-broker-flow-sqlite-and-ui-recovery.md) | 券商分點 SQLite 唯一鍵、ETF 代號與 UI 復原計畫。 |
 | [2026-06-12-broker-flow-ranked-metric-reconciliation.md](../superpowers/plans/2026-06-12-broker-flow-ranked-metric-reconciliation.md) | MoneyDJ E/B 獨立榜單 union、三態品質與覆蓋率治理計畫。 |
+| [2026-07-11-safe-refactor-four-extra-cycles-design.md](../superpowers/specs/2026-07-11-safe-refactor-four-extra-cycles-design.md) | 安全重構 08:20–12:00 四個完整延長循環的時段、交接、artifact 與安全邊界設計。 |
+| [2026-07-11-safe-refactor-four-extra-cycles.md](../superpowers/plans/2026-07-11-safe-refactor-four-extra-cycles.md) | 四個延長 Planner → Implementation → QA 循環與 12:00 Final Closeout 的 automation 更新計畫。 |
 | [phase3_5_research/README.md](../05_phases/phase3_5_research/README.md) | [歷史 SOP] Phase 3.5 研究 SOP 入口。 |
 | [phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md](../05_phases/phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md) | [歷史 SOP] 研究循環 playbook。 |
 | [phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md](../05_phases/phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md) | [歷史 SOP] 指標判讀優先順序。 |
@@ -367,6 +369,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-11：新增安全重構四個延長循環的設計與實作計畫索引，並將 Master Report 執行時段延長至 12:00 Final QA / Closeout。
 - 2026-07-11：新增 `PRODUCT_ROADMAP_POST_REFACTOR.md` 與 `target_system_architecture.md` 索引；重整 Vision、6M Roadmap、V1.1-V2.0 歷史定位與 V2.1-V4.0 maturity 描述，清楚分離 Current / Target 與產品 / 工程權威。
 - 2026-07-11：新增 `SAFE_REFACTORING_MASTER_REPORT.md` 架構索引，作為行為不變重構與 Planner → Implementation → QA automation 的共用執行 companion；不取代 Roadmap 或目前架構權威。
 - 2026-07-06：完成 push 前 docs 結構稽核索引同步，新增 `DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md`、`superpowers/README.md`、`strategies/README.md`，將過時 UI Qt roadmap audit 歸檔，並把 MCP patch memo 移至技術文件。

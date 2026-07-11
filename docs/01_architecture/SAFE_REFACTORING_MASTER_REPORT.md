@@ -379,6 +379,20 @@ QA 只讀該 Implementation Report、Plan、Git commit，獨立驗收並產生 Q
 下一個 Planner 讀 Master Report + QA Report + 未完成狀態
 ```
 
+### 10.2.1 每日完整時段
+
+| 循環 | Planner | Implementation | QA / Closeout |
+|---|---|---|---|
+| A | 00:00 | 00:20 | 02:10 |
+| B | 02:30 | 02:45 | 04:20 |
+| C | 05:40 | 06:00 | 08:00 |
+| D | 08:20 | 08:40 | 09:00 |
+| E | 09:20 | 09:40 | 10:00 |
+| F | 10:20 | 10:40 | 11:00 |
+| G | 11:20 | 11:40 | 12:00 Final QA / Closeout |
+
+08:00、09:00、10:00、11:00 都是中繼 QA，必須把 exact QA artifact 交給下一輪 Planner；只有 12:00 可產生 nightly closeout 與次日 00:00 handoff。四個延長循環不可壓縮或合併角色。
+
 ### 10.3 產物命名
 
 每輪使用 `cycle_id=YYYYMMDD-HHMM-<stage>`：
@@ -386,7 +400,7 @@ QA 只讀該 Implementation Report、Plan、Git commit，獨立驗收並產生 Q
 - Planner：`refactor_plan_<cycle_id>.md/.json` 與 `latest_refactor_plan.md/.json`。
 - Implementation：`refactor_implementation_<cycle_id>.md/.json` 與 `latest_refactor_implementation.md/.json`。
 - QA：`refactor_qa_<cycle_id>.md/.json` 與 `latest_refactor_qa.md/.json`。
-- 08:00 closeout：`refactor_nightly_closeout_YYYYMMDD.md/.json`。
+- 12:00 closeout：`refactor_nightly_closeout_YYYYMMDD.md/.json`。
 
 latest pointer 必須包含實際 artifact filename、cycle id、status、baseline SHA、result SHA 與 `handoff_to`，避免讀到同名舊報告。
 
