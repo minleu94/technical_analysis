@@ -9,6 +9,9 @@ import os
 from analysis_module.technical_analysis.technical_column_support import (
     resolve_technical_column,
 )
+from analysis_module.technical_analysis.technical_date_support import (
+    safe_convert_technical_dates,
+)
 
 class TechnicalIndicatorCalculator:
     """技術指標計算類別，基於02_technical_calculator.md中的功能"""
@@ -36,42 +39,7 @@ class TechnicalIndicatorCalculator:
     
     def _safe_convert_date(self, series):
         """安全地將日期序列轉換為 YYYY-MM-DD 格式的字串，防範 int64/float64 被誤判為 UNIX 奈秒 1970-01-01"""
-        from datetime import datetime
-        # 複製 Series 避免 inplace 警告
-        s = series.copy()
-        
-        # 確保是字串類型，且移除所有浮點數 .0 的後綴
-        s = s.astype(str).str.replace(r'\.0$', '', regex=True)
-        
-        # 解析函數
-        def parse_single_date(val):
-            if not val or val == 'nan' or val == 'NaT' or val == 'None':
-                return None
-            val = val.strip()
-            # 如果是 8 位純數字 (如 20260526)
-            if len(val) == 8 and val.isdigit():
-                try:
-                    return datetime.strptime(val, '%Y%m%d').strftime('%Y-%m-%d')
-                except:
-                    pass
-            # 如果是 10 位帶分隔符的 (如 2026-05-26 或是 2026/05/26)
-            normalized = val.replace('/', '-')
-            if len(normalized) >= 10:
-                try:
-                    # 嘗試取前 10 碼 YYYY-MM-DD
-                    return datetime.strptime(normalized[:10], '%Y-%m-%d').strftime('%Y-%m-%d')
-                except:
-                    pass
-            # 降級方案：使用 pandas 彈性解析
-            try:
-                parsed = pd.to_datetime(val, errors='coerce')
-                if pd.notna(parsed):
-                    return parsed.strftime('%Y-%m-%d')
-            except:
-                pass
-            return None
-
-        return s.apply(parse_single_date)
+        return safe_convert_technical_dates(series)
     
     def _setup_logging(self):
         """設置日誌記錄"""
