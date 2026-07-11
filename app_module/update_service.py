@@ -1320,6 +1320,7 @@ class UpdateService :
                 updated_dates =[]
                 failed_dates =[]
                 skipped_dates =[]# 已存在並跳過的日期
+                diagnostic_codes :list [str ]=[]
 
                 import re
                 # ✅ 調試：記錄輸出長度和關鍵行
@@ -1417,6 +1418,21 @@ class UpdateService :
                 failed_dates =list (set (failed_dates ))
                 skipped_dates =list (set (skipped_dates ))
 
+                # 子程序成功結束卻沒有任何可解析結果時，不可把缺日誤判為成功，
+                # 也不可用「失敗_1」這類 placeholder 隱藏真正請求日期。
+                if (
+                success_count_from_summary is None
+                and fail_count_from_summary is None
+                and not success_match
+                and not fail_match
+                and not updated_dates
+                and not failed_dates
+                ):
+                    failed_dates =list (missing_dates )
+                    diagnostic_codes .append (
+                    'batch_output_missing'if not output .strip ()else 'batch_output_unparseable'
+                    )
+
                 # ✅ 優先使用總結行的數字（如果有的話）
                 final_success_count =len (updated_dates )
                 final_fail_count =len (failed_dates )
@@ -1447,7 +1463,8 @@ class UpdateService :
                     'message':message ,
                     'updated_dates':updated_dates if updated_dates else [],
                     'failed_dates':failed_dates ,
-                    'skipped_dates':skipped_dates
+                    'skipped_dates':skipped_dates ,
+                    'diagnostic_codes':diagnostic_codes
                     }
 
                 logger .info (

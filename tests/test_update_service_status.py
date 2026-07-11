@@ -95,6 +95,22 @@ def test_update_daily_returns_failure_when_batch_reports_failed_dates(tmp_path, 
     assert result["failed_dates"]
 
 
+def test_update_daily_preserves_missing_date_when_batch_output_is_empty(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    config.log_dir.mkdir(parents=True, exist_ok=True)
+
+    def fake_run(args, stdout=None, stderr=None, text=None, encoding=None):
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    result = UpdateService(config).update_daily("2026-07-10", "2026-07-10", delay_seconds=0)
+
+    assert result["success"] is False
+    assert result["failed_dates"] == ["2026-07-10"]
+    assert result["diagnostic_codes"] == ["batch_output_missing"]
+
+
 def test_check_data_status_includes_broker_branch_and_technical_summary(tmp_path):
     config = _config(tmp_path)
     pd.DataFrame({
