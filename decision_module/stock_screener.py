@@ -6,10 +6,13 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from pathlib import Path
-import sqlite3
 import logging
 import warnings
+
+from decision_module.stock_screener_sqlite_reader import (
+    load_recent_industry_indices,
+    load_recent_stock_prices,
+)
 
 # 抑制 pandas 和 numpy 的 RuntimeWarning（這些警告通常是正常的，會自動處理）
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid value encountered.*')
@@ -38,91 +41,20 @@ class StockScreener:
         self.min_liquidity = min_liquidity
 
     def _sqlite_readonly_connection(self):
-        db_file = Path(getattr(self.config, 'db_file', ''))
-        if not db_file.exists():
-            return None
+        from decision_module.stock_screener_sqlite_reader import _readonly_connection
 
-        conn = sqlite3.connect(f"{db_file.resolve().as_uri()}?mode=ro", uri=True)
-        conn.execute("PRAGMA query_only=ON")
-        return conn
+        return _readonly_connection(self.config)
 
     def _sqlite_recent_date_values(self, conn, table_name, date_column, limit):
-        sql = f"""
-            SELECT DISTINCT {date_column} AS date_value
-            FROM {table_name}
-            WHERE {date_column} IS NOT NULL
-            ORDER BY {date_column} DESC
-            LIMIT ?
-        """
-        rows = conn.execute(sql, (limit,)).fetchall()
-        return [row[0] for row in rows if row and row[0]]
+        from decision_module.stock_screener_sqlite_reader import _recent_date_values
+
+        return _recent_date_values(conn, table_name, date_column, limit)
 
     def _load_sqlite_recent_stock_prices(self, period):
-        if not getattr(self.config, 'use_sqlite', False):
-            return None
-
-        lookback_limit = max(self.volume_lookback + 8, 32 if period == 'day' else 48)
-        try:
-            conn = self._sqlite_readonly_connection()
-            if conn is None:
-                return None
-
-            with conn:
-                date_values = self._sqlite_recent_date_values(
-                    conn, "daily_prices", "日期", lookback_limit
-                )
-                if not date_values:
-                    return None
-
-                placeholders = ",".join("?" for _ in date_values)
-                sql = f"""
-                    SELECT
-                        日期,
-                        證券代號,
-                        證券名稱,
-                        收盤價,
-                        開盤價,
-                        最高價,
-                        最低價,
-                        成交股數,
-                        成交金額
-                    FROM daily_prices
-                    WHERE 日期 IN ({placeholders})
-                    ORDER BY 日期 ASC, 證券代號 ASC
-                """
-                return pd.read_sql_query(sql, conn, params=date_values)
-        except Exception as sql_err:
-            logger.warning(f"SQLite 快速載入強弱勢個股資料失敗: {sql_err}，將降級為既有路徑")
-            return None
+        return load_recent_stock_prices(self.config, period, self.volume_lookback)
 
     def _load_sqlite_recent_industry_indices(self, period):
-        if not getattr(self.config, 'use_sqlite', False):
-            return None
-
-        lookback_limit = 45 if period == 'day' else 90
-        try:
-            conn = self._sqlite_readonly_connection()
-            if conn is None:
-                return None
-
-            with conn:
-                date_values = self._sqlite_recent_date_values(
-                    conn, "industry_indices", "日期", lookback_limit
-                )
-                if not date_values:
-                    return None
-
-                placeholders = ",".join("?" for _ in date_values)
-                sql = f"""
-                    SELECT 日期, 指數名稱, 收盤指數
-                    FROM industry_indices
-                    WHERE 日期 IN ({placeholders})
-                    ORDER BY 日期 ASC, 指數名稱 ASC
-                """
-                return pd.read_sql_query(sql, conn, params=date_values)
-        except Exception as sql_err:
-            logger.warning(f"SQLite 快速載入強弱勢產業資料失敗: {sql_err}，將降級為 CSV")
-            return None
+        return load_recent_industry_indices(self.config, period)
 
     def _try_get_sqlite_stock_screen(self, period, top_n, min_volume, direction):
         df = self._load_sqlite_recent_stock_prices(period)
