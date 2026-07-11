@@ -7,6 +7,7 @@ from fastdtw import fastdtw
 from scipy.optimize import curve_fit
 from typing import Optional
 
+from analysis_module.pattern_analysis.pattern_column_support import resolve_pattern_column
 from analysis_module.pattern_analysis.pattern_fit_support import (
     _clear_polyfit_cache,
     _safe_linear_fit,
@@ -122,13 +123,7 @@ class PatternAnalyzer:
             str: 對應的列名
         """
         # 檢查中文列名是否存在
-        if self.reverse_mapping.get(eng_name) in df.columns:
-            return self.reverse_mapping.get(eng_name)
-        # 檢查英文列名是否存在
-        elif eng_name in df.columns:
-            return eng_name
-        # 都不存在，返回None
-        return None
+        return resolve_pattern_column(df.columns, self.reverse_mapping, eng_name)
     
     def find_peaks_and_troughs(self, df, price_col=None, window=5, prominence=1.0, prominence_atr_mult=None):
         """找出價格序列中的峰和谷
