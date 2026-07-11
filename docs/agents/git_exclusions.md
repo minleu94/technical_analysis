@@ -17,6 +17,7 @@
 - `.env*`：本機環境變數與密鑰設定；`.env.example` 例外，可提交。
 - `*.db`、`*.sqlite*`：本機資料庫輸出。
 - `output/`：QA、驗證、報告匯出與本機執行輸出；2026-06-30 起不應再追蹤於乾淨 `main`。
+- `**/graphify-out/`：Graphify 產生的本機知識圖譜、HTML、JSON、報告與快取；可由原始碼重新建立，不應 stage 或提交。
 - `/test.parquet`：根目錄臨時資料樣本 / 測試產物，不應提交。
 - `downloads/`、`temp_downloads/`、`tmp/`、`temp/`：下載與暫存檔。
 

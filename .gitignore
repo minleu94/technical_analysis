@@ -147,6 +147,10 @@ temp_downloads/
 # QA Outputs
 output/
 
+# Graphify is a local, regenerable knowledge-graph build artifact.  This
+# recursive rule also prevents per-subdirectory scans from polluting status.
+**/graphify-out/
+
 # 本機臨時資料樣本 / 測試產物
 /test.parquet
 
