@@ -5,6 +5,10 @@ from analysis_module.technical_analysis.math_analyzer import (
     MathAnalyzer,
     resolve_technical_column as math_resolve_technical_column,
 )
+from analysis_module.technical_analysis.technical_analyzer import (
+    TechnicalAnalyzer,
+    resolve_technical_column as analyzer_resolve_technical_column,
+)
 from analysis_module.technical_analysis.technical_indicators import (
     TechnicalIndicatorCalculator,
     resolve_technical_column as indicator_resolve_technical_column,
@@ -18,10 +22,17 @@ def test_technical_analysis_facades_reexport_shared_column_resolver():
     assert math_resolve_technical_column is (
         technical_column_support.resolve_technical_column
     )
+    assert analyzer_resolve_technical_column is (
+        technical_column_support.resolve_technical_column
+    )
 
 
 def test_technical_analysis_column_facades_match_shared_resolver():
-    for facade in (TechnicalIndicatorCalculator(logger=object()), MathAnalyzer()):
+    for facade in (
+        TechnicalIndicatorCalculator(logger=object()),
+        MathAnalyzer(),
+        TechnicalAnalyzer(),
+    ):
         for columns, eng_name in (
             (["Close", "收盤價"], "Close"),
             (["Close"], "Close"),

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import talib
+from .technical_column_support import resolve_technical_column
 from .technical_indicators import TechnicalIndicatorCalculator
 
 class TechnicalAnalyzer:
@@ -16,7 +17,7 @@ class TechnicalAnalyzer:
     
     def _get_column_name(self, df, eng_name):
         """獲取對應的列名，使用calculator的方法"""
-        return self.calculator._get_column_name(df, eng_name)
+        return resolve_technical_column(df.columns, self.reverse_mapping, eng_name)
     
     def add_momentum_indicators(self, df, config=None, full_config=None):
         """添加動量指標
