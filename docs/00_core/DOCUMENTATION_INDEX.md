@@ -42,6 +42,7 @@
 | [ui_design_system_midnight_analyst.md](../01_architecture/ui_design_system_midnight_analyst.md) | Midnight Analyst 深色 UI 設計系統規格，包含 theme tokens、全域 QSS、共用元件、效能限制與後續 agent 修改流程。 |
 | [multi_agent_workflow.md](../01_architecture/multi_agent_workflow.md) | 多 Agent 協作與合併規範。 |
 | [REFACTORING_MIGRATION_PLAN.md](../01_architecture/REFACTORING_MIGRATION_PLAN.md) | 歷史/長期 refactor 遷移計畫。 |
+| [SAFE_REFACTORING_MASTER_REPORT.md](../01_architecture/SAFE_REFACTORING_MASTER_REPORT.md) | 行為不變重構的現況證據、波次、安全 Gate 與 Planner → Implementation → QA automation 產物契約；不取代 Roadmap 或目前架構權威。 |
 
 ---
 
@@ -362,6 +363,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-11：新增 `SAFE_REFACTORING_MASTER_REPORT.md` 架構索引，作為行為不變重構與 Planner → Implementation → QA automation 的共用執行 companion；不取代 Roadmap 或目前架構權威。
 - 2026-07-06：完成 push 前 docs 結構稽核索引同步，新增 `DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md`、`superpowers/README.md`、`strategies/README.md`，將過時 UI Qt roadmap audit 歸檔，並把 MCP patch memo 移至技術文件。
 - 2026-07-06：新增 V2.1 至 V4.0 長期版本路線圖索引，標示其為 6M Roadmap Phase 與 Vision 成功標準的版本 companion，不作目前狀態或工程順序權威。
 - 2026-07-06：新增 V2.0 Workbench Phase 1 read-only prototype QA closeout 索引，標示當時 DTO / composer / replay summary adapter / sample CLI 已完成；formal source adapter 另見後續 closeout，Phase 2 UI / scheduler gate 仍未完成。

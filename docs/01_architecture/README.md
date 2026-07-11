@@ -22,6 +22,11 @@
   - 重構遷移計劃
   - 架構演進歷史記錄
 
+- **`SAFE_REFACTORING_MASTER_REPORT.md`**
+  - 目前安全重構與邏輯簡化的總報告
+  - Planner、Implementation、QA 共用的執行依據與驗收契約
+  - 不取代 Roadmap 或 `system_architecture.md` 的權威範圍
+
 ## 🔗 相關目錄
 
 - `../00_core/` - 核心文檔
