@@ -1,10 +1,10 @@
 # baldr 安全重構與邏輯簡化總報告
 
-> **建立日期**：2026-07-11  
-> **適用分支**：`dev`  
-> **用途**：Planner、Implementation、QA 與人工審查共同讀取的唯一重構執行依據。  
-> **狀態**：Active engineering companion。  
-> **Automation program**：`active_program=SAFE_REFACTORING_MASTER_PROGRAM`。  
+> **建立日期**：2026-07-11
+> **適用分支**：`dev`
+> **用途**：Planner、Implementation、QA 與人工審查共同讀取的唯一重構執行依據。
+> **狀態**：Active engineering companion。
+> **Automation program**：`active_program=SAFE_REFACTORING_MASTER_PROGRAM`。
 > **不取代**：`PROJECT_SNAPSHOT.md`、`ROADMAP_6M_ENGINEERING.md`、`VERSION_ROADMAP_V2_1_TO_V4_0.md`、`system_architecture.md` 或 `APPLICATION_MANUAL.md`。
 
 ---
