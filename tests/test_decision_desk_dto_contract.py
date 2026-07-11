@@ -3,6 +3,47 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from app_module.decision_desk_dtos import DecisionDeskQuality, DecisionDeskSectionStatus, MarketRegimeSummary
+from app_module.decision_desk_dto_support import _normalize_warnings
+
+
+def test_warning_normalization_helper_preserves_existing_collection_semantics() -> None:
+    set_warnings = {"source_lag", 7}
+
+    assert _normalize_warnings(None) == ()
+    assert _normalize_warnings(["source_lag", 7]) == ("source_lag", "7")
+    assert _normalize_warnings(("source_lag", 7)) == ("source_lag", "7")
+    assert _normalize_warnings(set_warnings) == tuple(str(item) for item in set_warnings)
+
+
+def test_warning_payloads_remain_stable_after_normalization_helper_extraction() -> None:
+    section = DecisionDeskSectionStatus(
+        as_of_date=date(2026, 7, 10),
+        quality=DecisionDeskQuality.ESTIMATED,
+        warnings=["source_lag", 7],
+    )
+    summary = MarketRegimeSummary(
+        as_of_date=date(2026, 7, 10),
+        quality=DecisionDeskQuality.OBSERVED,
+        warnings=("stable",),
+    )
+
+    assert section.warnings == ("source_lag", "7")
+    assert section.to_dict() == {
+        "as_of_date": "2026-07-10",
+        "quality": "estimated",
+        "warnings": ["source_lag", "7"],
+    }
+    assert summary.warnings == ("stable",)
+    assert list(summary.to_dict()) == [
+        "as_of_date",
+        "quality",
+        "warnings",
+        "regime_label",
+        "regime_score",
+        "regime_confidence",
+        "meta",
+    ]
+    assert summary.to_dict()["warnings"] == ["stable"]
 
 
 def test_decision_desk_quality_values_and_section_serialization_are_stable() -> None:

@@ -5,21 +5,14 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any
 
+from app_module.decision_desk_dto_support import _normalize_warnings
+
 
 class DecisionDeskQuality(str, Enum):
     OBSERVED = "observed"
     ESTIMATED = "estimated"
     DEGRADED = "degraded"
     MISSING = "missing"
-
-
-def _normalize_warnings(warnings: tuple[str, ...] | list[str] | set[str] | None) -> tuple[str, ...]:
-    if warnings is None:
-        return ()
-    normalized: list[str] = []
-    for item in warnings:
-        normalized.append(str(item))
-    return tuple(normalized)
 
 
 def _as_dict(value: Any) -> Any:
