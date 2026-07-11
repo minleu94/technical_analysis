@@ -5,6 +5,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, mean_squared_error
 from sklearn.preprocessing import StandardScaler
 
+from .ml_column_support import resolve_ml_column
+
 class MLAnalyzer:
     """機器學習模型分析類"""
     
@@ -38,14 +40,7 @@ class MLAnalyzer:
         Returns:
             str: 對應的列名
         """
-        # 檢查中文列名是否存在
-        if self.reverse_mapping.get(eng_name) in df.columns:
-            return self.reverse_mapping.get(eng_name)
-        # 檢查英文列名是否存在
-        elif eng_name in df.columns:
-            return eng_name
-        # 都不存在，返回None
-        return None
+        return resolve_ml_column(df.columns, self.reverse_mapping, eng_name)
         
     def prepare_features(self, df, feature_cols=None):
         """準備特徵數據
