@@ -10,6 +10,7 @@ from typing import Dict ,Any ,Optional ,List
 from datetime import datetime ,timedelta
 
 from app_module import update_data_normalization
+from app_module.update_service_status_support import compose_sqlite_status_read_model
 
 
 class UpdateService :
@@ -2066,14 +2067,14 @@ class UpdateService :
         # 🌟 如果啟用 SQLite，直接從資料庫極速統計！
         if getattr (self .config ,'use_sqlite',False ):
             try :
-                result ={
+                result =compose_sqlite_status_read_model ({
                 'daily_data':self ._status_from_sqlite ('daily_prices'),
                 'market_index':self ._status_from_sqlite ('market_indices'),
                 'industry_index':self ._status_from_sqlite ('industry_indices'),
                 'broker_branch':self ._broker_status_from_sqlite (),
                 'technical_indicators':self ._technical_status_from_sqlite (),
                 'monthly_revenue':self ._monthly_revenue_status_from_sqlite (),
-                }
+                })
                 logger .info ("[UpdateService] 成功從 SQLite 資料庫極速獲取數據狀態！")
                 return result
             except Exception as sql_err :
@@ -2256,16 +2257,14 @@ class UpdateService :
         # 🌟 如果啟用 SQLite，直接從資料庫極速統計！
         if getattr (self .config ,'use_sqlite',False ):
             try :
-                overview ={
+                overview =compose_sqlite_status_read_model ({
                 'daily_data':self ._status_from_sqlite ('daily_prices'),
                 'market_index':self ._status_from_sqlite ('market_indices'),
                 'industry_index':self ._status_from_sqlite ('industry_indices'),
                 'broker_branch':self ._broker_status_from_sqlite (),
                 'technical_indicators':self ._technical_status_from_sqlite (),
                 'monthly_revenue':self ._monthly_revenue_status_from_sqlite (),
-                }
-                for k ,v in overview .items ():
-                    v ['is_overview']=True
+                },is_overview =True )
                 return overview
             except Exception as sql_err :
                 import logging
