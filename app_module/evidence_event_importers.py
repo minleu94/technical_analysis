@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Mapping, Protocol
 
 from app_module.decision_desk_dtos import (
@@ -16,67 +15,18 @@ from app_module.evidence_event_importer_dtos import (
     EvidenceImportDiagnostic,
     EvidenceImportResult,
 )
+from app_module.evidence_importer_support import (
+    date_text as _date_text,
+    normalize_quality as _quality,
+    score_bp as _score_bp,
+    string_tuple as _tuple,
+)
 
 
 class EvidenceImporter(Protocol):
     source_name: str
 
     def collect(self, request: EvidenceCaptureRequest) -> EvidenceImportResult: ...
-
-
-def _quality(value: Any) -> EvidenceDataQuality:
-    raw = value.value if hasattr(value, "value") else value
-    if raw == EvidenceDataQuality.OBSERVED.value:
-        return EvidenceDataQuality.OBSERVED
-    if raw == EvidenceDataQuality.ESTIMATED.value:
-        return EvidenceDataQuality.ESTIMATED
-    if raw == EvidenceDataQuality.DEGRADED.value:
-        return EvidenceDataQuality.DEGRADED
-    if raw == EvidenceDataQuality.MISSING.value:
-        return EvidenceDataQuality.MISSING
-    if raw == DecisionDeskQuality.OBSERVED.value:
-        return EvidenceDataQuality.OBSERVED
-    if raw == DecisionDeskQuality.ESTIMATED.value:
-        return EvidenceDataQuality.ESTIMATED
-    if raw == DecisionDeskQuality.DEGRADED.value:
-        return EvidenceDataQuality.DEGRADED
-    return EvidenceDataQuality.MISSING
-
-
-def _date_text(value: Any, fallback: str | None = None) -> str:
-    if isinstance(value, datetime):
-        return value.date().isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    if value is None:
-        return fallback or date.today().isoformat()
-    text = str(value).strip()
-    if not text:
-        return fallback or date.today().isoformat()
-    try:
-        return datetime.fromisoformat(text).date().isoformat()
-    except ValueError:
-        return text[:10]
-
-
-def _tuple(value: Any) -> tuple[str, ...]:
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        if ";" in value:
-            return tuple(item.strip() for item in value.split(";") if item.strip())
-        return (value.strip(),) if value.strip() else ()
-    return tuple(str(item).strip() for item in value if str(item).strip())
-
-
-def _score_bp(value: Any) -> int | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        score = Decimal(str(value))
-    except (InvalidOperation, ValueError, TypeError):
-        return None
-    return int((score * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 class UnsupportedEvidenceImporter:
