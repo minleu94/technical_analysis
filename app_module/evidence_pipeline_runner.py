@@ -28,6 +28,7 @@ from app_module.evidence_event_importers import (
 )
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.evidence_event_service import EvidenceEventService
+from app_module.evidence_pipeline_runner_support import derive_overall_status
 from app_module.evidence_pipeline_runner_dtos import (
     EvidencePipelineDiagnostic,
     EvidencePipelineRunRequest,
@@ -708,13 +709,7 @@ class EvidencePipelineRunner:
         return EvidencePipelineStepSummary(step_name=step_name, status=STEP_SKIPPED, dry_run=dry_run)
 
     def _overall_status(self, steps: list[EvidencePipelineStepSummary], blocking_gaps: list[str]) -> str:
-        if any(step.status == STEP_FAILED for step in steps):
-            return STEP_FAILED
-        if blocking_gaps or any(step.status == STEP_DEGRADED for step in steps):
-            return STEP_DEGRADED
-        if any(step.status == STEP_READY_WITH_ADVISORIES for step in steps):
-            return STEP_READY_WITH_ADVISORIES
-        return STEP_READY
+        return derive_overall_status((step.status for step in steps), blocking_gaps)
 
     def _next_action(self, readiness: str, blocking_gaps: list[str], dry_run: bool) -> str:
         if blocking_gaps:
