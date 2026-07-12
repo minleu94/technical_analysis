@@ -1,6 +1,6 @@
 # V2.1 至 V4.0 產品成熟度路線圖
 
-> **最後更新**：2026-07-11
+> **最後更新**：2026-07-12
 > **定位**：本文件是 V2.0 之後的長期產品成熟度與版本階梯權威；版號代表產品能力與證據成熟度，不代表功能數量。
 > **工程順序**：未來六個月以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準。
 > **產品方向**：投資問題、能力演進與產品 Gate 以 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 為準。
@@ -59,6 +59,8 @@
 - Portfolio Advice 最低欄位：target/current/gap；可先為 read-only / paper。
 
 Closeout Gate：Advice 可拒絕、可重算、可回溯；UI 不直接計算；不串 broker。
+
+**目前版本狀態（2026-07-12）**：V2.1 已完成正式 closeout，限於 bounded / read-only Daily Usable Workbench。Guided 僅接受 `promoted`、parameters locked 與 disclosure complete 的策略；`max_positions` 只允許 `1..8`；Professional candidate 僅 `RESEARCH` 並與正式 Advice 分區。focused suite 為 `94 passed in 2.91s`，工程與正式 closeout 證據分別見 `docs/06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md`、`docs/06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md`。此狀態不改變本文件的 maturity 定義，亦不代表投資有效性、broker execution、production scheduler、P0 source acceptance 或後續版本 Gate 已完成。
 
 ### V2.2：Evidence Operating Loop
 
@@ -208,4 +210,5 @@ V4.0 仍不代表：
 
 ## 更新記錄
 
+- 2026-07-12：記錄 V2.1 正式 closeout；以 `592d3db` safeguards、focused suite 與人工 UI 文案 smoke 為版本事實，不改寫 V2.2+ 的 evidence / human gate。
 - 2026-07-11：依產品成熟度重整 V2.1-V4.0；V2.x 聚焦 Daily Advice / Evidence / Data / Portfolio foundation，V3.x 聚焦 Signal / Portfolio / Exit effectiveness、pruning 與 ML shadow，V4.0 改以長期 evidence-validated investment decision system 判定。

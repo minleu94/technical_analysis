@@ -221,6 +221,8 @@
 | 文件 | 說明 |
 |---|---|
 | [GATE_1_ADVICE_CLOSEOUT_2026_07_12.md](../06_qa/GATE_1_ADVICE_CLOSEOUT_2026_07_12.md) | Gate 1 Daily Usable Advice closeout：契約、唯讀 UI、驗證結果與非目標。 |
+| [V2_1_ENGINEERING_READINESS_2026_07_12.md](../06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md) | V2.1 engineering readiness：記錄 `592d3db` 的 Guided 三重門檻、最大持倉 `1..8`、Professional candidate 分區、focused suite、人工 UI 文案 smoke 與回退錨點。 |
+| [V2_1_FORMAL_CLOSEOUT_2026_07_12.md](../06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md) | V2.1 Daily Usable Workbench 正式 closeout：bounded / read-only Advice 的版本結論、非目標、驗證、人工 smoke、殘餘 Gate 與回退。 |
 | [PROJECT_SNAPSHOT_AUDIT_2026_07_12.md](../06_qa/PROJECT_SNAPSHOT_AUDIT_2026_07_12.md) | Snapshot claim 證據矩陣：保留 / 移至歷史 / 限制 / 去重判定與 Scoped SSOT 稽核。 |
 
 | 文件 | 用途 |
@@ -501,6 +503,7 @@
 - 2026-07-06：更新備份 retention audit 索引，補上 `_reference_fix` replay archive 位置與 C 槽 working-copy / QA raw output cleanup 狀態。
 - 2026-07-08：新增 V3 Score Effectiveness / ML Readiness design + plan 索引，將 TotalScore 分組、fixed threshold robustness、component ablation 放在 ML 前置 gate，ML 僅作 shadow-only 第二層。
 - 2026-07-08：新增 V3.0 engineering candidate manual validation report 索引，標示 V3 effectiveness read model / gap classifier / review scaffold / readiness inspector 已具工程候選驗證入口，但人工驗證仍為 `PENDING_MANUAL_VALIDATION`，不啟用 scheduler、不宣稱投資有效性。
+- 2026-07-12：新增 V2.1 engineering readiness 與 formal closeout 索引；正式版本以 `592d3db` 的 Guided 三重門檻、最大持倉 `1..8`、Professional candidate 分區及 focused suite 為證據，仍不宣稱投資有效性或 broker execution。
 
 
 
