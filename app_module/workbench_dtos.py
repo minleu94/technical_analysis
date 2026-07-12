@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
+from app_module.advice_dtos import AdviceDashboardDTO
+
 
 WORKBENCH_LEGACY_DRILLDOWN_TARGETS: dict[str, str] = {
     "daily_decision": "daily_decision",
@@ -255,6 +257,7 @@ class WorkbenchDashboardDTO:
     background_evidence_feed: tuple[WorkbenchEvidenceFeedItem, ...] = ()
     action_items: tuple[WorkbenchActionItem, ...] = ()
     operating_loop_steps: tuple[WorkbenchOperatingLoopStep, ...] = ()
+    advice_dashboard: AdviceDashboardDTO | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "status_strip", tuple(self.status_strip))
@@ -282,4 +285,7 @@ class WorkbenchDashboardDTO:
             "background_evidence_feed": [item.to_dict() for item in self.background_evidence_feed],
             "action_items": [item.to_dict() for item in self.action_items],
             "operating_loop_steps": [item.to_dict() for item in self.operating_loop_steps],
+            "advice_dashboard": (
+                self.advice_dashboard.to_dict() if self.advice_dashboard is not None else None
+            ),
         }

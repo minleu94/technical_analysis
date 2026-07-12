@@ -27,6 +27,8 @@ from app_module.workbench_dtos import (
 )
 from app_module.workbench_source_service import WorkbenchSourceService
 from ui_qt.models.workbench_table_models import (
+    AdvicePortfolioTableModel,
+    AdviceRecommendationTableModel,
     WorkbenchActionItemTableModel,
     WorkbenchChecklistTableModel,
     WorkbenchEvidenceFeedTableModel,
@@ -111,6 +113,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.operating_loop_model = WorkbenchOperatingLoopTableModel()
         self.evidence_model = WorkbenchEvidenceTableModel()
         self.checklist_model = WorkbenchChecklistTableModel()
+        self.advice_recommendation_model = AdviceRecommendationTableModel()
+        self.advice_portfolio_model = AdvicePortfolioTableModel()
 
         self._setup_ui()
         if dashboard is not None:
@@ -181,6 +185,15 @@ class UnifiedDecisionWorkbenchView(QWidget):
             f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 8px;"
         )
         content_layout.addWidget(self.boundary_banner)
+
+        advice_panel, self.advice_section_title = self._panel_with_title("Advice / 唯讀建議候選")
+        self.advice_summary = self._make_state_label()
+        self.advice_recommendation_table = self._make_table(self.advice_recommendation_model)
+        self.advice_portfolio_table = self._make_table(self.advice_portfolio_model)
+        advice_panel.layout.addWidget(self.advice_summary)
+        advice_panel.layout.addWidget(self.advice_recommendation_table)
+        advice_panel.layout.addWidget(self.advice_portfolio_table)
+        content_layout.addWidget(advice_panel)
 
         self.refresh_button = QPushButton("重新載入唯讀工作台")
         self.refresh_button.setProperty("variant", "secondary")
@@ -658,6 +671,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.boundary_banner.setText(
             "唯讀邊界：資料只能由 WorkbenchSourceService / WorkbenchDashboardDTO 供應；"
             "不寫 DB、不啟用正式排程器、不是交易建議；"
+            "Advice 僅呈現已注入 DTO、不執行 Policy；"
             "不重算 scoring / portfolio / backtest / lifecycle。"
         )
         self._set_summary_blocks(dashboard)
@@ -670,6 +684,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             f"正式排程器={_yes_no(dashboard.access_boundary.production_scheduler_allowed)}"
         )
         self.status_model.set_rows(dashboard.status_strip)
+        self._render_advice(dashboard)
         self.review_model.set_rows(dashboard.review_items)
         self.review_state_label.setText(self._review_queue_state_text(dashboard))
         has_review_items = bool(dashboard.review_items)
@@ -689,6 +704,28 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.warning_list.set_warnings(tuple(_humanize_warning(item) for item in dashboard.warnings))
         self._show_initial_detail(dashboard)
         self._resize_tables()
+
+    def _render_advice(self, dashboard: WorkbenchDashboardDTO) -> None:
+        advice = dashboard.advice_dashboard
+        if advice is None:
+            self.advice_summary.setText("尚未提供 AdviceDashboardDTO；唯讀工作台不執行 Policy 或核心計算。")
+            self.advice_recommendation_model.set_rows(())
+            self.advice_portfolio_model.set_rows(())
+            return
+        self.advice_summary.setText(
+            "Advice 唯讀邊界：僅呈現已注入 AdviceDashboardDTO；"
+            f"mode={advice.mode.value} | decision_date={advice.decision_date} | "
+            f"data_as_of_date={advice.data_as_of_date} | "
+            f"warnings={', '.join(advice.warnings) or 'none'} | "
+            + "；".join(
+                f"{row.stock_code or 'portfolio'} {row.advice_action.value} "
+                f"{', '.join(row.why_not_reasons or row.refusal_reasons)} "
+                f"quality={row.data_quality} feasibility={row.execution_feasibility}"
+                for row in advice.recommendations
+            )
+        )
+        self.advice_recommendation_model.set_rows(advice.recommendations)
+        self.advice_portfolio_model.set_rows(advice.portfolio_rows)
 
     def _show_initial_detail(self, dashboard: WorkbenchDashboardDTO) -> None:
         if self.evidence_feed_model.rowCount() > 0:
@@ -730,6 +767,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "尚未有操作節奏 payload：等待 WorkbenchDashboardDTO；只讀、不寫 DB、不標記完成。"
         )
         self.evidence_feed_model.set_rows(())
+        self.advice_recommendation_model.set_rows(())
+        self.advice_portfolio_model.set_rows(())
+        self.advice_summary.setText("等待 AdviceDashboardDTO；UI 不執行 Policy 或核心計算。")
         self.review_model.set_rows(())
         self.review_state_label.setText(
             "今日待判讀佇列尚未載入；等待 WorkbenchDashboardDTO。UI 不讀 DB、不執行 replay。"
@@ -759,6 +799,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
             "操作節奏降級：WorkbenchSourceService 未回傳 DTO；只供人工檢查載入問題，不寫 DB、不標記完成。"
         )
         self.evidence_feed_model.set_rows(())
+        self.advice_recommendation_model.set_rows(())
+        self.advice_portfolio_model.set_rows(())
+        self.advice_summary.setText("Advice 載入降級；UI 不執行 Policy 或核心計算。")
         self.review_model.set_rows(())
         self.review_state_label.setText(
             "今日待判讀佇列載入降級；請先確認 WorkbenchSourceService 問題。UI 不補 gate。"
@@ -777,6 +820,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
             self.evidence_feed_table,
             self.action_item_table,
             self.evidence_table,
+            self.advice_recommendation_table,
+            self.advice_portfolio_table,
         ):
             table.resizeColumnsToContents()
             table.resizeRowsToContents()

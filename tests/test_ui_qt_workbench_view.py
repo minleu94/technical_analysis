@@ -1,5 +1,6 @@
 import os
 import sys
+from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
 
@@ -19,6 +20,13 @@ from app_module.workbench_dtos import (
     WorkbenchOperatingLoopStep,
     WorkbenchReviewItem,
     WorkbenchStatusItem,
+)
+from app_module.advice_dtos import (
+    AdviceAction,
+    AdviceDashboardDTO,
+    AdviceMode,
+    AdvicePolicyConfig,
+    RecommendationAdviceDTO,
 )
 from ui_qt.models.workbench_table_models import (
     WorkbenchActionItemTableModel,
@@ -438,6 +446,33 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "需要人工覆盤" in warning_text
     assert "Missing Source" not in warning_text
     assert "Manual Review Required" not in warning_text
+
+
+def test_unified_workbench_view_renders_injected_advice_without_source_refresh() -> None:
+    app()
+    advice = AdviceDashboardDTO(
+        decision_date="2026-07-06",
+        data_as_of_date="2026-07-06",
+        mode=AdviceMode.GUIDED,
+        policy=AdvicePolicyConfig(),
+        recommendations=(
+            RecommendationAdviceDTO(
+                stock_code="2330",
+                advice_action=AdviceAction.NO_NEW_POSITION,
+                why_not_reasons=("evidence_quality_missing",),
+                data_quality="MISSING",
+                execution_feasibility="NOT_FEASIBLE",
+            ),
+        ),
+    )
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=replace(_dashboard_with_replay(), advice_dashboard=advice),
+        auto_refresh=False,
+    )
+
+    assert "NO_NEW_POSITION" in view.advice_summary.text()
+    assert "evidence_quality_missing" in view.advice_summary.text()
+    assert view.advice_recommendation_model.rowCount() == 1
 
 
 def test_unified_workbench_overview_uses_detail_inspector_and_collapsible_sections() -> None:

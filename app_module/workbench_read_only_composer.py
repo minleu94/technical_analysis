@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from app_module.advice_dtos import AdviceDashboardDTO
 from app_module.decision_desk_dtos import DecisionDeskSnapshot
 from app_module.pre_v2_readiness_service import (
     PreV2ReadinessItem,
@@ -37,6 +38,7 @@ class WorkbenchReadOnlyComposer:
         historical_replay_summary: dict[str, Any] | None = None,
         source_mode: str = "read_only",
         source_diagnostics: tuple[str, ...] = (),
+        advice_dashboard: AdviceDashboardDTO | None = None,
     ) -> WorkbenchDashboardDTO:
         warnings = self._warnings(readiness_report, agent_report_sample, historical_replay_summary, source_diagnostics)
         review_items = self._review_items(decision_snapshot, readiness_report)
@@ -69,6 +71,7 @@ class WorkbenchReadOnlyComposer:
                 daily_checklist=daily_checklist,
                 readiness_report=readiness_report,
             ),
+            advice_dashboard=advice_dashboard,
         )
 
     def _status_strip(

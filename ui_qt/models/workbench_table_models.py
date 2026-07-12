@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import Enum
 from typing import Any
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
@@ -15,6 +16,7 @@ from app_module.workbench_dtos import (
     WorkbenchReviewItem,
     WorkbenchStatusItem,
 )
+from app_module.advice_dtos import PortfolioAdviceDTO, RecommendationAdviceDTO
 
 
 ColumnSpec = tuple[tuple[str, str], ...]
@@ -168,7 +170,37 @@ class WorkbenchChecklistTableModel(_WorkbenchTableModel):
         super().__init__(rows, parent)
 
 
+class AdviceRecommendationTableModel(_WorkbenchTableModel):
+    COLUMNS = (
+        ("stock_code", "標的"),
+        ("advice_action", "Action"),
+        ("why_not_reasons", "理由"),
+        ("data_quality", "資料品質"),
+        ("execution_feasibility", "可成交性"),
+    )
+
+    def __init__(self, rows: Sequence[RecommendationAdviceDTO] = (), parent=None) -> None:
+        super().__init__(rows, parent)
+
+
+class AdvicePortfolioTableModel(_WorkbenchTableModel):
+    COLUMNS = (
+        ("stock_code", "標的"),
+        ("advice_action", "Action"),
+        ("target_weight_bp", "Target (bp)"),
+        ("current_weight_bp", "Current (bp)"),
+        ("weight_gap_bp", "Gap (bp)"),
+        ("data_quality", "資料品質"),
+        ("execution_feasibility", "可成交性"),
+    )
+
+    def __init__(self, rows: Sequence[PortfolioAdviceDTO] = (), parent=None) -> None:
+        super().__init__(rows, parent)
+
+
 def _display_value(value: object) -> str:
+    if isinstance(value, Enum):
+        return str(value.value)
     if isinstance(value, tuple):
         return "；".join(_display_token(str(item)) for item in value) or "無"
     if isinstance(value, list):
