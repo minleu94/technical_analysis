@@ -3,6 +3,7 @@ setlocal EnableExtensions
 
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=dryrun"
+if /I "%MODE%"=="weekly-register" goto weekly_register
 if /I not "%MODE%"=="dryrun" if /I not "%MODE%"=="register" goto usage
 
 set "SCRIPT_DIR=%~dp0"
@@ -67,6 +68,27 @@ schtasks.exe /Query /TN "%EVIDENCE_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%
 exit /b 0
 
+:weekly_register
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..\..") do set "REPO_ROOT=%%~fI"
+
+set "WEEKLY_TASK=baldr-v2-2-weekly-collection"
+set "WEEKLY_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_v2_2_weekly_collection.cmd"
+set "WEEKLY_ACTION=cmd.exe /c ""%WEEKLY_SCRIPT%"""
+
+echo Mode: weekly-register
+echo Task: %WEEKLY_TASK%
+echo   Schedule: WEEKLY SUN 18:00
+echo   Action: %WEEKLY_ACTION%
+
+schtasks.exe /Create /TN "%WEEKLY_TASK%" /SC WEEKLY /D SUN /ST 18:00 /TR "%WEEKLY_ACTION%" /F
+if errorlevel 1 exit /b %ERRORLEVEL%
+
+echo.
+echo Registered task:
+schtasks.exe /Query /TN "%WEEKLY_TASK%" /V /FO LIST
+exit /b %ERRORLEVEL%
+
 :usage
-echo Usage: scripts\scheduled\register_baldr_scheduled_tasks.cmd dryrun^|register
+echo Usage: scripts\scheduled\register_baldr_scheduled_tasks.cmd dryrun^|register^|weekly-register
 exit /b 2
