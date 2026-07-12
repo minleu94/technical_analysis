@@ -20,6 +20,11 @@ class AdviceMode(str, Enum):
     PROFESSIONAL = "PROFESSIONAL"
 
 
+class AdviceClassification(str, Enum):
+    FORMAL_ADVICE = "FORMAL_ADVICE"
+    PROFESSIONAL_CANDIDATE = "PROFESSIONAL_CANDIDATE"
+
+
 def _payload(value: Mapping[str, Any]) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError("Advice JSON payload must be an object")
@@ -52,6 +57,10 @@ class AdvicePolicyConfig:
 
     def __post_init__(self) -> None:
         _validate_bp("min_cash_reserve_bp", self.min_cash_reserve_bp, minimum=0, maximum=10000)
+        if isinstance(self.max_positions, bool) or not isinstance(self.max_positions, int):
+            raise ValueError("max_positions must be an integer")
+        if not 1 <= self.max_positions <= 8:
+            raise ValueError("max_positions must be between 1 and 8")
         _validate_bp("max_single_position_bp", self.max_single_position_bp, minimum=0, maximum=1500)
 
     def to_dict(self) -> dict[str, Any]:
@@ -77,6 +86,7 @@ class AdvicePolicyConfig:
 class RecommendationAdviceDTO:
     stock_code: str
     advice_action: AdviceAction
+    classification: AdviceClassification = AdviceClassification.FORMAL_ADVICE
     why_reasons: tuple[str, ...] = ()
     why_not_reasons: tuple[str, ...] = ()
     risk_reasons: tuple[str, ...] = ()
@@ -96,10 +106,18 @@ class RecommendationAdviceDTO:
     source_trace: tuple[str, ...] = ()
     refusal_reasons: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        if (
+            self.classification is AdviceClassification.PROFESSIONAL_CANDIDATE
+            and self.advice_action is not AdviceAction.RESEARCH
+        ):
+            raise ValueError("professional candidates must remain RESEARCH only")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "stock_code": self.stock_code,
             "advice_action": self.advice_action.value,
+            "classification": self.classification.value,
             "why_reasons": list(self.why_reasons),
             "why_not_reasons": list(self.why_not_reasons),
             "risk_reasons": list(self.risk_reasons),
@@ -126,6 +144,9 @@ class RecommendationAdviceDTO:
         return cls(
             stock_code=payload["stock_code"],
             advice_action=AdviceAction(payload["advice_action"]),
+            classification=AdviceClassification(
+                payload.get("classification", AdviceClassification.FORMAL_ADVICE.value)
+            ),
             why_reasons=_string_tuple(payload.get("why_reasons")),
             why_not_reasons=_string_tuple(payload.get("why_not_reasons")),
             risk_reasons=_string_tuple(payload.get("risk_reasons")),

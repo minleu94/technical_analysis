@@ -23,19 +23,28 @@ class AdvicePolicy:
         *,
         mode: AdviceMode,
         strategy_status: str | None,
-        data_quality: str | None,
-        execution_feasible: bool | None,
-        risk_budget_available: bool | None,
+        data_quality: str | None = None,
+        execution_feasible: bool | None = None,
+        risk_budget_available: bool | None = None,
         current_position_count: int | None = None,
         cash_reserve_bp: int | None = None,
         target_weight_bp: int | None = None,
+        parameters_locked: bool | None = None,
+        disclosure_complete: bool | None = None,
     ) -> AdvicePolicyDecision:
         if not isinstance(mode, AdviceMode) or not isinstance(self._config.mode, AdviceMode):
             return AdvicePolicyDecision(AdviceAction.NO_NEW_POSITION, ("invalid_mode",))
         if mode is not self._config.mode:
             return AdvicePolicyDecision(AdviceAction.NO_NEW_POSITION, ("mode_config_mismatch",))
+        if not self._is_position_cap(self._config.max_positions):
+            return AdvicePolicyDecision(AdviceAction.NO_NEW_POSITION, ("invalid_policy_max_positions",))
 
-        strategy_decision = self._strategy_decision(mode, strategy_status)
+        strategy_decision = self._strategy_decision(
+            mode,
+            strategy_status,
+            parameters_locked=parameters_locked,
+            disclosure_complete=disclosure_complete,
+        )
         if strategy_decision is not None:
             return strategy_decision
 
@@ -70,14 +79,29 @@ class AdvicePolicy:
     def _strategy_decision(
         mode: AdviceMode,
         strategy_status: str | None,
+        *,
+        parameters_locked: bool | None,
+        disclosure_complete: bool | None,
     ) -> AdvicePolicyDecision | None:
+        if mode is AdviceMode.GUIDED:
+            if strategy_status != "promoted":
+                return AdvicePolicyDecision(
+                    AdviceAction.NO_NEW_POSITION,
+                    ("guided_mode_strategy_not_promoted",),
+                )
+            if parameters_locked is not True:
+                return AdvicePolicyDecision(
+                    AdviceAction.NO_NEW_POSITION,
+                    ("guided_mode_strategy_parameters_not_locked",),
+                )
+            if disclosure_complete is not True:
+                return AdvicePolicyDecision(
+                    AdviceAction.NO_NEW_POSITION,
+                    ("guided_mode_strategy_disclosure_incomplete",),
+                )
+            return None
         if strategy_status == "promoted":
             return None
-        if mode is AdviceMode.GUIDED:
-            return AdvicePolicyDecision(
-                AdviceAction.NO_NEW_POSITION,
-                ("guided_mode_strategy_not_promoted",),
-            )
         if strategy_status == "candidate":
             return AdvicePolicyDecision(
                 AdviceAction.RESEARCH,
@@ -98,6 +122,10 @@ class AdvicePolicy:
     @staticmethod
     def _is_non_negative_integer(value: int | None) -> TypeGuard[int]:
         return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    @staticmethod
+    def _is_position_cap(value: object) -> TypeGuard[int]:
+        return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 8
 
     @classmethod
     def _is_bp(cls, value: int | None) -> TypeGuard[int]:

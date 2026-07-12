@@ -183,6 +183,10 @@ class AdviceRecommendationTableModel(_WorkbenchTableModel):
         super().__init__(rows, parent)
 
 
+class AdviceCandidateTableModel(AdviceRecommendationTableModel):
+    """Professional research candidates only; never used for formal Advice rows."""
+
+
 class AdvicePortfolioTableModel(_WorkbenchTableModel):
     COLUMNS = (
         ("stock_code", "標的"),

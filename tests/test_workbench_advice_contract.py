@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 
 from app_module.advice_dtos import (
     AdviceAction,
+    AdviceClassification,
     AdviceDashboardDTO,
     AdviceMode,
     AdvicePolicyConfig,
@@ -85,3 +86,41 @@ def test_workbench_renders_advice_dto_without_policy_execution() -> None:
     assert view.advice_portfolio_model.data(
         view.advice_portfolio_model.index(0, view.advice_portfolio_model.column_index("target_weight_bp"))
     ) == "0"
+
+
+def test_workbench_separates_professional_candidates_from_formal_advice() -> None:
+    _app()
+    dashboard = _dashboard_with_advice()
+    professional_advice = AdviceDashboardDTO(
+        decision_date=dashboard.advice_dashboard.decision_date,
+        data_as_of_date=dashboard.advice_dashboard.data_as_of_date,
+        mode=AdviceMode.PROFESSIONAL,
+        policy=AdvicePolicyConfig(mode=AdviceMode.PROFESSIONAL),
+        recommendations=(
+            RecommendationAdviceDTO(
+                stock_code="2330",
+                advice_action=AdviceAction.RESEARCH,
+                classification=AdviceClassification.PROFESSIONAL_CANDIDATE,
+            ),
+        ),
+    )
+    candidate_dashboard = WorkbenchDashboardDTO(
+        as_of_date=dashboard.as_of_date,
+        generated_at=dashboard.generated_at,
+        source_mode=dashboard.source_mode,
+        access_boundary=dashboard.access_boundary,
+        status_strip=dashboard.status_strip,
+        review_items=dashboard.review_items,
+        evidence_summary=dashboard.evidence_summary,
+        market_context=dashboard.market_context,
+        portfolio_watchlist_summary=dashboard.portfolio_watchlist_summary,
+        daily_checklist=dashboard.daily_checklist,
+        advice_dashboard=professional_advice,
+    )
+
+    view = UnifiedDecisionWorkbenchView(dashboard=candidate_dashboard, auto_refresh=False)
+
+    assert view.advice_recommendation_model.rowCount() == 0
+    assert view.advice_candidate_model.rowCount() == 1
+    assert "正式 Advice 0 筆" in view.advice_summary.text()
+    assert "Professional 研究候選 1 筆" in view.advice_summary.text()

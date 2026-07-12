@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from app_module.advice_dtos import AdviceAction, AdviceMode
+from app_module.advice_dtos import AdviceAction, AdviceClassification, AdviceMode, AdvicePolicyConfig
 from app_module.advice_policy import AdvicePolicy
 from app_module.dtos import RecommendationDTO, RecommendationResultDTO
 from app_module.portfolio_construction_dtos import (
@@ -20,6 +20,8 @@ def _recommendation_result() -> RecommendationResultDTO:
         result_name="平衡型推薦",
         config={
             "strategy_status": "promoted",
+            "parameters_locked": True,
+            "disclosure_complete": True,
             "strategy_version": "v2.1",
             "execution_feasible": True,
             "risk_budget_available": True,
@@ -151,3 +153,22 @@ def test_composer_rejects_portfolio_result_after_advice_decision_date() -> None:
             data_as_of_date=date(2026, 7, 12),
             mode=AdviceMode.GUIDED,
         )
+
+
+def test_professional_candidate_is_classified_for_research_section() -> None:
+    from app_module.advice_composer import AdviceComposer
+
+    source = _recommendation_result()
+    source.config["strategy_status"] = "candidate"
+    result = AdviceComposer(AdvicePolicy(AdvicePolicyConfig(mode=AdviceMode.PROFESSIONAL))).compose(
+        recommendations=source,
+        portfolio_result=_portfolio_result(),
+        evidence_quality="OBSERVED",
+        decision_date=date(2026, 7, 12),
+        data_as_of_date=date(2026, 7, 12),
+        mode=AdviceMode.PROFESSIONAL,
+    )
+
+    recommendation = result.recommendations[0]
+    assert recommendation.advice_action is AdviceAction.RESEARCH
+    assert recommendation.classification is AdviceClassification.PROFESSIONAL_CANDIDATE

@@ -26,8 +26,10 @@ from app_module.workbench_dtos import (
     WorkbenchEvidenceSummary,
 )
 from app_module.workbench_source_service import WorkbenchSourceService
+from app_module.advice_dtos import AdviceClassification
 from ui_qt.models.workbench_table_models import (
     AdvicePortfolioTableModel,
+    AdviceCandidateTableModel,
     AdviceRecommendationTableModel,
     WorkbenchActionItemTableModel,
     WorkbenchChecklistTableModel,
@@ -114,6 +116,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.evidence_model = WorkbenchEvidenceTableModel()
         self.checklist_model = WorkbenchChecklistTableModel()
         self.advice_recommendation_model = AdviceRecommendationTableModel()
+        self.advice_candidate_model = AdviceCandidateTableModel()
         self.advice_portfolio_model = AdvicePortfolioTableModel()
 
         self._setup_ui()
@@ -186,12 +189,16 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         content_layout.addWidget(self.boundary_banner)
 
-        advice_panel, self.advice_section_title = self._panel_with_title("Advice / 唯讀建議候選")
+        advice_panel, self.advice_section_title = self._panel_with_title("正式 Advice / 唯讀呈現")
         self.advice_summary = self._make_state_label()
         self.advice_recommendation_table = self._make_table(self.advice_recommendation_model)
+        self.advice_candidate_table = self._make_table(self.advice_candidate_model)
         self.advice_portfolio_table = self._make_table(self.advice_portfolio_model)
         advice_panel.layout.addWidget(self.advice_summary)
         advice_panel.layout.addWidget(self.advice_recommendation_table)
+        self.advice_candidate_label = QLabel("Professional 研究候選（不屬於正式 Advice）")
+        advice_panel.layout.addWidget(self.advice_candidate_label)
+        advice_panel.layout.addWidget(self.advice_candidate_table)
         advice_panel.layout.addWidget(self.advice_portfolio_table)
         content_layout.addWidget(advice_panel)
 
@@ -710,21 +717,32 @@ class UnifiedDecisionWorkbenchView(QWidget):
         if advice is None:
             self.advice_summary.setText("尚未提供 AdviceDashboardDTO；唯讀工作台不執行 Policy 或核心計算。")
             self.advice_recommendation_model.set_rows(())
+            self.advice_candidate_model.set_rows(())
             self.advice_portfolio_model.set_rows(())
             return
+        formal_rows = tuple(
+            row for row in advice.recommendations
+            if row.classification is AdviceClassification.FORMAL_ADVICE
+        )
+        candidate_rows = tuple(
+            row for row in advice.recommendations
+            if row.classification is AdviceClassification.PROFESSIONAL_CANDIDATE
+        )
         self.advice_summary.setText(
             "Advice 唯讀邊界：僅呈現已注入 AdviceDashboardDTO；"
             f"mode={advice.mode.value} | decision_date={advice.decision_date} | "
             f"data_as_of_date={advice.data_as_of_date} | "
             f"warnings={', '.join(advice.warnings) or 'none'} | "
+            f"正式 Advice {len(formal_rows)} 筆 | Professional 研究候選 {len(candidate_rows)} 筆 | "
             + "；".join(
                 f"{row.stock_code or 'portfolio'} {row.advice_action.value} "
                 f"{', '.join(row.why_not_reasons or row.refusal_reasons)} "
                 f"quality={row.data_quality} feasibility={row.execution_feasibility}"
-                for row in advice.recommendations
+                for row in formal_rows
             )
         )
-        self.advice_recommendation_model.set_rows(advice.recommendations)
+        self.advice_recommendation_model.set_rows(formal_rows)
+        self.advice_candidate_model.set_rows(candidate_rows)
         self.advice_portfolio_model.set_rows(advice.portfolio_rows)
 
     def _show_initial_detail(self, dashboard: WorkbenchDashboardDTO) -> None:
@@ -768,6 +786,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         self.evidence_feed_model.set_rows(())
         self.advice_recommendation_model.set_rows(())
+        self.advice_candidate_model.set_rows(())
         self.advice_portfolio_model.set_rows(())
         self.advice_summary.setText("等待 AdviceDashboardDTO；UI 不執行 Policy 或核心計算。")
         self.review_model.set_rows(())
@@ -800,6 +819,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         self.evidence_feed_model.set_rows(())
         self.advice_recommendation_model.set_rows(())
+        self.advice_candidate_model.set_rows(())
         self.advice_portfolio_model.set_rows(())
         self.advice_summary.setText("Advice 載入降級；UI 不執行 Policy 或核心計算。")
         self.review_model.set_rows(())

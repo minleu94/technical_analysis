@@ -8,6 +8,7 @@ from typing import Mapping, Sequence
 
 from app_module.advice_dtos import (
     AdviceAction,
+    AdviceClassification,
     AdviceDashboardDTO,
     AdviceMode,
     PortfolioAdviceDTO,
@@ -58,6 +59,8 @@ class AdviceComposer:
         cash_reserve_bp = self._cash_reserve_bp(portfolio_result)
         current_position_count = sum(1 for weight in current_weights.values() if weight > 0)
         strategy_status = self._string_or_none(config.get("strategy_status"))
+        parameters_locked = self._bool_or_none(config.get("parameters_locked"))
+        disclosure_complete = self._bool_or_none(config.get("disclosure_complete"))
         execution_feasible = config.get("execution_feasible")
         risk_budget_available = config.get("risk_budget_available")
 
@@ -76,6 +79,8 @@ class AdviceComposer:
                     recommendation,
                     result_id=result_id,
                     strategy_status=strategy_status,
+                    parameters_locked=parameters_locked,
+                    disclosure_complete=disclosure_complete,
                     mode=mode,
                     evidence_quality=evidence_quality,
                     execution_feasible=execution_feasible,
@@ -121,6 +126,8 @@ class AdviceComposer:
         *,
         result_id: str,
         strategy_status: str | None,
+        parameters_locked: bool | None,
+        disclosure_complete: bool | None,
         mode: AdviceMode,
         evidence_quality: str | None,
         execution_feasible: object,
@@ -137,6 +144,8 @@ class AdviceComposer:
         decision = self._policy.decide(
             mode=mode,
             strategy_status=strategy_status,
+            parameters_locked=parameters_locked,
+            disclosure_complete=disclosure_complete,
             data_quality=evidence_quality,
             execution_feasible=self._bool_or_none(execution_feasible),
             risk_budget_available=self._bool_or_none(risk_budget_available),
@@ -148,6 +157,7 @@ class AdviceComposer:
         return RecommendationAdviceDTO(
             stock_code=recommendation.stock_code,
             advice_action=decision.action,
+            classification=self._classification(mode, decision.reasons),
             why_reasons=tuple(self._split_reasons(recommendation.recommendation_reasons)),
             data_quality=evidence_quality or "",
             warnings=warnings,
@@ -263,3 +273,9 @@ class AdviceComposer:
     @staticmethod
     def _feasibility_text(value: object) -> str:
         return "FEASIBLE" if value is True else "NOT_FEASIBLE"
+
+    @staticmethod
+    def _classification(mode: AdviceMode, reasons: tuple[str, ...]) -> AdviceClassification:
+        if mode is AdviceMode.PROFESSIONAL and "professional_candidate_research_only" in reasons:
+            return AdviceClassification.PROFESSIONAL_CANDIDATE
+        return AdviceClassification.FORMAL_ADVICE

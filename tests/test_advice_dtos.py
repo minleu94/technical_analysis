@@ -4,6 +4,7 @@ import pytest
 
 from app_module.advice_dtos import (
     AdviceAction,
+    AdviceClassification,
     AdviceDashboardDTO,
     AdviceMode,
     AdvicePolicyConfig,
@@ -59,6 +60,22 @@ def test_advice_dashboard_round_trip_preserves_nested_json_contract() -> None:
     assert payload["mode"] == "GUIDED"
     assert payload["policy"]["min_cash_reserve_bp"] == 2000
     assert AdviceDashboardDTO.from_dict(payload) == dashboard
+
+
+def test_professional_candidate_round_trip_and_action_guard() -> None:
+    row = RecommendationAdviceDTO(
+        stock_code="2330",
+        advice_action=AdviceAction.RESEARCH,
+        classification=AdviceClassification.PROFESSIONAL_CANDIDATE,
+    )
+
+    assert RecommendationAdviceDTO.from_dict(row.to_dict()) == row
+    with pytest.raises(ValueError, match="RESEARCH"):
+        RecommendationAdviceDTO(
+            stock_code="2330",
+            advice_action=AdviceAction.ADD_CANDIDATE,
+            classification=AdviceClassification.PROFESSIONAL_CANDIDATE,
+        )
 
 
 @pytest.mark.parametrize(
