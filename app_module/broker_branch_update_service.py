@@ -13,6 +13,16 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Callable, Set
 
 import pandas as pd
+from app_module.broker_branch_registry import (
+    decode_unicode_hex,
+    detect_mojibake,
+    fix_mojibake,
+    is_headquarters,
+)
+from app_module.broker_branch_merge import merge_metric_records
+from app_module.broker_branch_transport import build_branch_url
+from app_module.broker_branch_write_coordinator import BrokerBranchWriteCoordinator
+from app_module.application_ports import BrokerBranchWritePort
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -48,7 +58,11 @@ class BrokerBranchUpdateService:
         "Referer": "https://www.google.com/",
     }
 
-    def __init__(self, config):
+    def __init__(
+        self,
+        config,
+        write_coordinator: Optional[BrokerBranchWritePort] = None,
+    ):
         """
         初始化服務
 
@@ -57,6 +71,11 @@ class BrokerBranchUpdateService:
         """
         self.config = config
         self.logger = logging.getLogger(__name__)
+        self.write_coordinator = (
+            write_coordinator
+            if write_coordinator is not None
+            else BrokerBranchWriteCoordinator(config)
+        )
 
         # 確保目錄存在
         self.config.broker_flow_dir.mkdir(parents=True, exist_ok=True)
@@ -200,12 +219,7 @@ class BrokerBranchUpdateService:
         Returns:
             是否包含 mojibake
         """
-        if not text or not isinstance(text, str):
-            return False
-
-        # 常見的 mojibake 特徵字符
-        mojibake_chars = ['æ', 'Ã', 'â€', 'â€™', 'â€œ', 'â€', 'Ã©', 'Ã¨']
-        return any(char in text for char in mojibake_chars)
+        return detect_mojibake(text)
 
     def _fix_mojibake(self, text: str) -> Optional[str]:
         """
@@ -217,19 +231,7 @@ class BrokerBranchUpdateService:
         Returns:
             修復後的文字，如果修復失敗則返回 None
         """
-        if not text or not isinstance(text, str):
-            return None
-
-        try:
-            # 嘗試：latin1 -> utf-8 解碼
-            fixed = text.encode('latin1').decode('utf-8')
-            # 檢查修復後是否還有 mojibake
-            if not self._detect_mojibake(fixed):
-                return fixed
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            pass
-
-        return None
+        return fix_mojibake(text)
 
     def _decode_unicode_hex(self, hex_str: str) -> str:
         """
@@ -238,24 +240,7 @@ class BrokerBranchUpdateService:
 
         若長度小於 16 (如 14 或 15 碼) 且皆為十六進位，會自動補足前置零至 16 碼再進行解密。
         """
-        if not hex_str or not isinstance(hex_str, str):
-            return hex_str
-
-        # 預防性補前導零
-        val = hex_str.strip()
-        if 12 <= len(val) < 16 and all(c in '0123456789abcdefABCDEF' for c in val):
-            val = val.zfill(16)
-
-        if len(val) == 16 and all(c in '0123456789abcdefABCDEF' for c in val):
-            try:
-                chars = []
-                for i in range(0, len(val), 4):
-                    code = int(val[i:i+4], 16)
-                    chars.append(chr(code))
-                return "".join(chars)
-            except Exception as e:
-                self.logger.debug(f"解密 Unicode hex 失敗: {hex_str}, error: {str(e)}")
-        return hex_str
+        return decode_unicode_hex(hex_str)
 
     def _load_branch_registry(
         self,
@@ -353,15 +338,9 @@ class BrokerBranchUpdateService:
                 branch_code = str(branch.get('branch_code', ''))
                 display_name = str(branch.get('branch_display_name', ''))
 
-                is_head = False
-                if broker_code == branch_code:
-                    is_head = True
-                elif '-' not in display_name and '分公司' not in display_name and '分行' not in display_name:
-                    headquarters_keywords = ["證券", "環球", "瑞銀", "麥格理", "野村", "匯豐", "高盛", "摩根士丹利", "摩根大通", "土銀", "大和國泰", "美林", "康和", "凱基"]
-                    if any(k in display_name for k in headquarters_keywords):
-                        is_head = True
-
-                branch['is_headquarters'] = is_head
+                branch['is_headquarters'] = is_headquarters(
+                    broker_code, branch_code, display_name
+                )
 
             self.logger.info(f"載入 {len(branches)} 個追蹤分點")
             return branches
@@ -388,27 +367,7 @@ class BrokerBranchUpdateService:
         Returns:
             URL 字串
         """
-        url_param_a = str(branch_info.get('url_param_a', ''))
-        url_param_b = str(branch_info.get('url_param_b', ''))
-
-        # 確保 url_param_b 格式正確（保留前導零）
-        if not url_param_b:
-            self.logger.error(f"url_param_b 為空: {branch_info.get('branch_system_key', 'UNKNOWN')}")
-            raise ValueError(f"url_param_b 為空: {branch_info.get('branch_system_key', 'UNKNOWN')}")
-
-        metric_codes = {
-            "lots": "E",
-            "amount": "B",
-        }
-        if metric not in metric_codes:
-            raise ValueError(f"不支援的 MoneyDJ 指標: {metric}")
-
-        metric_code = metric_codes[metric]
-        # 日期範圍：e=開始日期，f=結束日期
-        url = (
-            f"https://5850web.moneydj.com/z/zg/zgb/zgb0.djhtm"
-            f"?a={url_param_a}&b={url_param_b}&c={metric_code}&e={start_date}&f={end_date}"
-        )
+        url = build_branch_url(branch_info, start_date, end_date, metric)
 
         # 記錄 URL 以便調試
         self.logger.debug(f"構建 URL: {url}")
@@ -421,77 +380,7 @@ class BrokerBranchUpdateService:
         amount_records: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """依日期、方向與股票代碼合併張數及仟元資料。"""
-        merged: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
-
-        # 1. 處理 lot_records (E-only)
-        for record in lot_records:
-            key = (
-                str(record.get("date", "")),
-                str(record.get("trade_type", "")),
-                str(record.get("branch_system_key", "")),
-                str(record.get("counterparty_broker_code", "")),
-            )
-            if key not in merged:
-                merged[key] = {
-                    "date": record.get("date"),
-                    "trade_type": record.get("trade_type"),
-                    "branch_system_key": record.get("branch_system_key"),
-                    "branch_broker_code": record.get("branch_broker_code"),
-                    "branch_code": record.get("branch_code"),
-                    "branch_display_name": record.get("branch_display_name"),
-                    "counterparty_broker_code": record.get("counterparty_broker_code"),
-                    "counterparty_broker_name": record.get("counterparty_broker_name"),
-                    "buy_lots": record.get("buy_lots"),
-                    "sell_lots": record.get("sell_lots"),
-                    "net_lots": record.get("net_lots"),
-                    "buy_amount_k_twd": None,
-                    "sell_amount_k_twd": None,
-                    "net_amount_k_twd": None,
-                    "lots_observed": True,
-                    "amount_observed": False,
-                    "lots_rank": record.get("metric_rank"),
-                    "amount_rank": None
-                }
-
-        # 2. 處理 amount_records (B-only / E-B intersection)
-        for record in amount_records:
-            key = (
-                str(record.get("date", "")),
-                str(record.get("trade_type", "")),
-                str(record.get("branch_system_key", "")),
-                str(record.get("counterparty_broker_code", "")),
-            )
-            if key not in merged:
-                # B-only
-                merged[key] = {
-                    "date": record.get("date"),
-                    "trade_type": record.get("trade_type"),
-                    "branch_system_key": record.get("branch_system_key"),
-                    "branch_broker_code": record.get("branch_broker_code"),
-                    "branch_code": record.get("branch_code"),
-                    "branch_display_name": record.get("branch_display_name"),
-                    "counterparty_broker_code": record.get("counterparty_broker_code"),
-                    "counterparty_broker_name": record.get("counterparty_broker_name"),
-                    "buy_lots": None,
-                    "sell_lots": None,
-                    "net_lots": None,
-                    "buy_amount_k_twd": record.get("buy_amount_k_twd"),
-                    "sell_amount_k_twd": record.get("sell_amount_k_twd"),
-                    "net_amount_k_twd": record.get("net_amount_k_twd"),
-                    "lots_observed": False,
-                    "amount_observed": True,
-                    "lots_rank": None,
-                    "amount_rank": record.get("metric_rank")
-                }
-            else:
-                # E/B 交集
-                merged[key]["buy_amount_k_twd"] = record.get("buy_amount_k_twd")
-                merged[key]["sell_amount_k_twd"] = record.get("sell_amount_k_twd")
-                merged[key]["net_amount_k_twd"] = record.get("net_amount_k_twd")
-                merged[key]["amount_observed"] = True
-                merged[key]["amount_rank"] = record.get("metric_rank")
-
-        return list(merged.values())
+        return merge_metric_records(lot_records, amount_records)
 
     @staticmethod
     def _infer_metric_ranks(df: pd.DataFrame) -> pd.DataFrame:
@@ -1115,7 +1004,7 @@ class BrokerBranchUpdateService:
 
                         # 保存到 CSV
                         df = pd.DataFrame(all_data)
-                        df.to_csv(daily_file, index=False, encoding='utf-8-sig')
+                        self.write_coordinator.write_daily(df, daily_file)
 
                         updated_dates.append(date_str)
                         branch_records += len(all_data)
@@ -1377,12 +1266,7 @@ class BrokerBranchUpdateService:
                 # 排序
                 final_df = final_df.sort_values(['date', 'trade_type', 'counterparty_broker_code'])
 
-                # 備份現有檔案
-                if merged_file.exists():
-                    self.config.create_backup(merged_file)
-
-                # 保存
-                final_df.to_csv(merged_file, index=False, encoding='utf-8-sig')
+                self.write_coordinator.write_merged(final_df, merged_file)
 
                 merged_branches.append(branch_key)
                 total_records += len(final_df)
