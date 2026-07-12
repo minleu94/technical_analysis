@@ -5,7 +5,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, Optional, List
 from datetime import date, datetime
 from pathlib import Path
 import logging
@@ -23,9 +23,7 @@ from backtest_module.performance_metrics import PerformanceAnalyzer
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from decision_module.factors.factor_dtos import FactorRecord
 from app_module.backtest_report_support import create_empty_report, date_from_index, factor_decision_date, score_factor_records
-
-if TYPE_CHECKING:
-    from app_module.walkforward_service import WalkForwardResult
+from app_module.backtest_contracts import WalkForwardResultContract
 
 
 class BacktestService:
@@ -70,7 +68,7 @@ class BacktestService:
         preloaded_data: Optional[pd.DataFrame] = None,
         actual_start_date: Optional[str] = None,
         actual_end_date: Optional[str] = None,
-        walkforward_results: Optional[List['WalkForwardResult']] = None,
+        walkforward_results: Optional[List[WalkForwardResultContract]] = None,
         enable_overfitting_risk: bool = True,
         changed_layers: Optional[List[str]] = None,
         walkforward_executed: bool = False,
@@ -692,7 +690,7 @@ class BacktestService:
     def _calculate_overfitting_risk(
         self,
         analyzer: PerformanceAnalyzer,
-        walkforward_results: Optional[List['WalkForwardResult']] = None
+        walkforward_results: Optional[List[WalkForwardResultContract]] = None
     ) -> Optional[Dict[str, Any]]:
         """
         計算過擬合風險

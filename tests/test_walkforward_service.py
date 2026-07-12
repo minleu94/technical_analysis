@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -58,6 +59,82 @@ def test_walk_forward_test_fold_uses_training_history_as_signal_context():
     test_call = backtest_service.run_backtest.call_args_list[1]
     assert test_call.kwargs["start_date"] == "2024-07-02"
     assert test_call.kwargs["signal_context_start_date"] == "2024-01-01"
+
+
+def test_walk_forward_fold_keeps_training_data_strictly_before_oos_start():
+    backtest_service = MagicMock()
+    backtest_service.run_backtest.return_value = _report()
+    service = WalkForwardService(backtest_service)
+    strategy_spec = StrategySpec(
+        strategy_id="test",
+        strategy_version="1.0",
+        config={"params": {"threshold_mode": "fixed"}},
+    )
+
+    results = service.walk_forward(
+        stock_code="2330",
+        start_date="2024-01-01",
+        end_date="2024-10-02",
+        strategy_spec=strategy_spec,
+        train_months=6,
+        test_months=3,
+        step_months=3,
+    )
+
+    assert results[0].train_period == ("2024-01-01", "2024-07-01")
+    assert results[0].test_period == ("2024-07-02", "2024-10-02")
+    train_call, test_call = backtest_service.run_backtest.call_args_list
+    assert train_call.kwargs["end_date"] == "2024-07-01"
+    assert test_call.kwargs["start_date"] == "2024-07-02"
+
+
+def test_walk_forward_numeric_summary_golden_contract():
+    backtest_service = MagicMock()
+    train_report = _report()
+    train_report.sharpe_ratio = 2
+    test_report = _report()
+    test_report.sharpe_ratio = 1
+    backtest_service.run_backtest.side_effect = [train_report, test_report]
+    service = WalkForwardService(backtest_service)
+    strategy_spec = StrategySpec(
+        strategy_id="test",
+        strategy_version="1.0",
+        config={"params": {"threshold_mode": "fixed"}},
+    )
+
+    results = service.walk_forward(
+        stock_code="2330",
+        start_date="2024-01-01",
+        end_date="2024-10-02",
+        strategy_spec=strategy_spec,
+        train_months=6,
+        test_months=3,
+        step_months=3,
+    )
+
+    assert results[0].degradation == -0.5
+    assert service.summarize_walkforward(results) == {
+        "total_folds": 1,
+        "avg_train_sharpe": 2.0,
+        "avg_test_sharpe": 1.0,
+        "avg_degradation": -0.5,
+        "consistency": 1.0,
+        "positive_test_ratio": 1.0,
+    }
+
+
+def test_backtest_service_has_no_walkforward_module_dependency():
+    source_path = Path(__file__).resolve().parents[1] / "app_module" / "backtest_service.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+
+    dependencies = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "app_module.walkforward_service"
+    ]
+
+    assert dependencies == []
 
 
 def test_backtest_signal_context_is_excluded_from_execution_metrics():
