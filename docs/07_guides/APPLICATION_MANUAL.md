@@ -1107,7 +1107,13 @@ Research Lab `Evidence Review` 分頁在 V1.4 新增「覆盤歷史」子頁，�
 
 Report evidence boundary 固定為：This report is research evidence only. Close-to-close forward return is not executable live performance. No trading recommendation is produced.
 
-### 9.9.2 Evidence Review Manual Smoke / Multi-day Dry-run
+### 9.9.2 V2.2 Weekly Review Runbook
+
+V2.2 的固定三週人工覆盤格式與 working-copy 操作順序見 `docs/07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md`。每週必填週期日期、資料 freshness、dry-run 狀態、warnings、reviewed / dismissed / follow-up、owner、working-copy DB path、`--save-history` 結果與下一步；少任何一項都不能計入三週 Gate。先產生唯讀週報，再取得明確人工核准才在隔離的 working-copy DB 使用 `--save-history`；最後以 `--list-history` 唯讀核對。不要對正式 DB 保存 history，也不要以 `--allow-production-like-db` 當作 scheduler approval。
+
+截至 2026-07-12，weekly history 為 `0/3 waiting_for_time`，multi-day dry-run 為 `3/3 ready`，scheduler 尚未獲核准且 `production_scheduler_allowed=false`。因此不可建立 V2.2 formal closeout；replay、fixture、raw scheduled report、單次 smoke 或手動補表都不構成真實 weekly history。三週紀錄完成後，仍需人工完成 backup / rollback / recovery 演練與 scheduler approval package；日後若 scheduler 獲准，也只能保存 evidence，不得自動交易或套用 lifecycle action。
+
+### 9.9.3 Evidence Review Manual Smoke / Multi-day Dry-run
 
 Evidence Review UI 完成後，正式 scheduler 前仍需要人工 closeout：
 
@@ -1117,7 +1123,7 @@ Evidence Review UI 完成後，正式 scheduler 前仍需要人工 closeout：
 
 這些文件是 production scheduler 前的 QA scaffold；目前只允許受控 market data quick update、read-only freshness 與 evidence dry-run 範圍。現有 Windows Task Scheduler 會先執行非 UI 快速資料更新，再跑 data freshness check 與 evidence pipeline dry-run，不是 production confirm scheduler。任何 production confirm 未來都需要 backup、rollback、diagnostics 與 explicit human approval；scheduler 不得自動 lifecycle action，也不得自動交易。
 
-### 9.9.3 Evidence Scheduled Dry-run Wrappers
+### 9.9.4 Evidence Scheduled Dry-run Wrappers
 
 `scripts/scheduled/` 提供 safe scheduled wrappers，用於每日自動產生「可人工檢查」的 freshness 與 evidence dry-run 輸出。PowerShell `.ps1` 註冊路徑曾被 local execution policy 擋住，因此目前採 CMD wrapper + Windows 內建 `schtasks.exe`；不要使用 `Set-ExecutionPolicy`。
 
@@ -1385,6 +1391,7 @@ Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **
 
 ## 14. 更新記錄
 
+- 2026-07-12：新增 V2.2 三週 weekly review runbook 入口與 working-copy 保存步驟；目前 weekly `0/3 waiting_for_time`、multi-day `3/3 ready`、scheduler 未核准，不能 formal closeout。
 - 2026-07-12：新增 Gate 1 Advice 唯讀操作、Guided / Professional Mode、安全拒絕輸出、平衡限制、日期 / source trace 與不交易邊界；weekly review working-copy 保存仍是 Gate 2 真實時間工作。
 - 2026-07-09：統一推薦最新價格／成交量衍生特徵，新增預設參數技術指標安全 reuse，並讓 Daily Decision Desk 在單次 snapshot 內共用 read-only 市場 frame；公開 service / scheduler 介面、DTO、SQLite schema、scoring、threshold 與 dry-run / confirm gate 均維持不變。
 
