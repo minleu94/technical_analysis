@@ -20,6 +20,24 @@ EXPECTED_ALL = [
     "RegimeResultDTO",
     "BacktestReportDTO",
 ]
+EXPECTED_EAGER_SERVICE_MODULES = [
+    "app_module.recommendation_service",
+    "app_module.screening_service",
+    "app_module.regime_service",
+    "app_module.update_service",
+    "app_module.backtest_service",
+    "app_module.portfolio_service",
+    "app_module.journal_service",
+]
+EXPECTED_SERVICE_CLASS_MODULES = {
+    "RecommendationService": "app_module.recommendation_service",
+    "ScreeningService": "app_module.screening_service",
+    "RegimeService": "app_module.regime_service",
+    "UpdateService": "app_module.update_service",
+    "BacktestService": "app_module.backtest_service",
+    "PortfolioService": "app_module.portfolio_service",
+    "JournalService": "app_module.journal_service",
+}
 
 
 def test_update_service_package_import_contract_is_stable_in_fresh_interpreter():
@@ -34,7 +52,7 @@ except Exception as exc:
     print(json.dumps({"exception": type(exc).__name__, "message": str(exc)}))
     raise
 
-loaded = sorted(name for name in sys.modules if name.startswith("app_module."))
+loaded = [name for name in sys.modules if name.startswith("app_module.")]
 print(
     json.dumps(
         {
@@ -44,8 +62,28 @@ print(
             "loaded_service_modules": [
                 name
                 for name in loaded
-                if name in {"app_module.update_service", "app_module.backtest_service"}
+                if name in {
+                    "app_module.recommendation_service",
+                    "app_module.screening_service",
+                    "app_module.regime_service",
+                    "app_module.update_service",
+                    "app_module.backtest_service",
+                    "app_module.portfolio_service",
+                    "app_module.journal_service",
+                }
             ],
+            "service_class_modules": {
+                class_name: getattr(app_module, class_name).__module__
+                for class_name in [
+                    "RecommendationService",
+                    "ScreeningService",
+                    "RegimeService",
+                    "UpdateService",
+                    "BacktestService",
+                    "PortfolioService",
+                    "JournalService",
+                ]
+            },
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -67,8 +105,6 @@ print(
         "update_service_module": "app_module.update_service",
         "identity": True,
         "all": EXPECTED_ALL,
-        "loaded_service_modules": [
-            "app_module.backtest_service",
-            "app_module.update_service",
-        ],
+        "loaded_service_modules": EXPECTED_EAGER_SERVICE_MODULES,
+        "service_class_modules": EXPECTED_SERVICE_CLASS_MODULES,
     }
