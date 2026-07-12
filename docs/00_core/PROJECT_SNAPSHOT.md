@@ -269,6 +269,28 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 
 **注意**：此 Snapshot 是目前狀態入口；未來方向請看 6 個月工程 Roadmap，架構細節請看 system architecture，完整歷史請看 archive。
 
+## 歷史完成紀錄（依實際完成順序）
+
+> 本節以 Git 提交日與 closeout 證據為排序依據，採「由舊到新」。同日多項成果視為同一批次，不再以章節先後暗示更細的完成先後；跨日工作以完成區間標示。下方保留既有成果全文供查證；日期與先後一律以本表為準。
+
+| 實際完成日 | 成果 |
+|---|---|
+| 2026-05-27 | Recommendation Portfolio Backtest 穩健性、圖表、SL/TP 與 research run 補強 |
+| 2026-05-30 | SQLite 儲存、日期／大盤 Bug 修復、全量技術指標重算與讀取加速 |
+| 2026-06-02 | 安全更新 Phase 1 CSV → SQLite 同步補強 |
+| 2026-06-03 | SQLite DB-first／Inspector、CSV 匯出、Smart Money UI 與 UpdateView 重構 |
+| 2026-06-04 | Research Lab 工作流重整 |
+| 2026-06-09 | Roadmap Rebaseline（歷史基線） |
+| 2026-06-10～2026-06-11 | 金融數值邊界、回測時間軸、Portfolio 4.1／4.2、券商分點單位契約與更新分流 |
+| 2026-06-12 | 券商分點 Ranked Metric 治理、批次回測並行化與 Strategy & Scoring Governance 機制 closeout |
+| 2026-06-13～2026-06-14 | Walk-forward OOS 修正／實證、舊測試治理、SQLite Inspector 分頁與 Excel 匯出 closeout |
+| 2026-06-24 | 券商分點 MoneyDJ HTTP fast path |
+| 2026-07-02 | V1.1 Workflow Bridge 與 V1.2 Research Credibility / Execution Model v1 |
+| 2026-07-04 | V1.5 Data Credibility & Corporate Action Gate v1 |
+| 2026-07-05 | V1.6 Cross-sectional Factor Pipeline v1 |
+
+### 成果明細
+
 ## 2026-06-14 舊測試治理與模組責任確認
 
 - repo 根目錄已建立正式 `pytest.ini`，預設只收集可重現的自動測試；
@@ -323,7 +345,7 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 - **Attribution summary CLI**：新增 `scripts/inspect_cross_sectional_factor_snapshot.py`，可唯讀輸出 snapshot coverage、quality counts、rank bucket、sector / concept 分布與 diagnostics；missing DB 不會被 CLI 建檔。
 - **限制**：V1.6 沒有改 `ScoringEngine`、沒有把 factor rank 當推薦結果、沒有啟用 production scheduler、沒有產生投資有效性結論。2026-07-08 Phase 3C 已補三大法人 / 信用交易 / TDCC source candidate readiness dry-run，但仍只是 candidate-only diagnostics，不是正式 ingestion，也不進核心 score。
 
-## 2026-06-13 Strategy & Scoring Governance (增量 B：推薦橫斷面排名) 成果
+## 2026-06-12～2026-06-14 Strategy & Scoring Governance（增量 B：推薦橫斷面排名）成果
 
 - **橫斷面百分位排名元件實作**：實作 `calculate_score_percentiles` 函式，採用 empirical CDF 計算公式，並以 `bisect_right` 保證同分時取得相同百分位，徹底鎖定排名演算法之統計一致性與輸入順序無涉。
 - **策略推薦服務與 metadata 追溯**：整合 `RecommendationService`，在合格母體大小不足時拋出 `RecommendationUniverseTooSmallError` 且拒絕降級；在符合百分位門檻下注入 `score_percentile_bp` 等元數據，並使用 total_score 降序與 stock_code 升序進行穩定化排序。
@@ -331,7 +353,7 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 - **推薦 UI 欄位與控制項整合**：重構 `RecommendationView` 於進階模式下提供門檻模式、最低百分位、最小母體數及排名方法控制項，且隨 fixed/quantile 動態隱藏與顯示；在結果表格中顯示百分位與母體，並於母體不足時發出友善警示與調整建議。
   - **測試驗證**：新增單元測試 `tests/test_recommendation_percentile_ranker.py`、`tests/test_recommendation_ranking_service.py` 與 `tests/test_recommendation_dto_roundtrip.py`，並納入 UI workflow 與推薦組合回測重播驗證。
 
-## 2026-06-13 Strategy & Scoring Governance (增量 A：回測雙模式門檻) 成果
+## 2026-06-12～2026-06-14 Strategy & Scoring Governance（增量 A：回測雙模式門檻）成果
 
 - **純門檻評估元件實作**：實作 `ScoreThresholdPolicy`，支援 `fixed` 與 `quantile` 雙門檻模式。在 `fixed` 下完全向後相容舊策略；在 `quantile` 下，基點範圍採 0-10000 整數以符合量化防禦條款，並實作單股 Expanding 歷史分位數計算（暖機期 60 天），徹底排除未來函數 (Look-ahead bias)。
 - **策略執行器與回測整合**：將 `ScoreThresholdPolicy` 成功接入 `BaselineScoreExecutor`、`MomentumAggressiveExecutor` 與 `StableConservativeExecutor`。擴充 `BacktestService` 診斷，在 quantile 下從訊號中安全提取動態門檻、暖機狀態與命中天數等指標，不再在 service 重算分位數。
