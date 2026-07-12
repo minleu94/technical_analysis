@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +63,27 @@ def test_weekly_task_is_queryable_and_unregistrable_without_daily_task_changes()
 
     assert WEEKLY_TASK_NAME in query_text
     assert WEEKLY_TASK_NAME in unregister_text
+
+
+def test_register_dryrun_displays_the_weekly_sunday_task_definition() -> None:
+    result = subprocess.run(
+        [
+            "cmd.exe",
+            "/d",
+            "/c",
+            str(SCHEDULED_DIR / "register_baldr_scheduled_tasks.cmd"),
+            "dryrun",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert WEEKLY_TASK_NAME in result.stdout
+    assert "Schedule: WEEKLY SUN 18:00" in result.stdout
+    assert "Dryrun only. No scheduled task was created." in result.stdout
 
 
 def test_weekly_collection_wrappers_invoke_only_collection_cli_without_history_or_confirm() -> None:

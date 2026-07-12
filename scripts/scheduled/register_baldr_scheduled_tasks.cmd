@@ -22,6 +22,9 @@ set "UPDATE_ACTION=cmd.exe /c ""%UPDATE_SCRIPT%"""
 set "FRESH_ACTION=cmd.exe /c ""%FRESH_SCRIPT%"""
 set "RECOMMENDATION_ACTION=cmd.exe /c ""%RECOMMENDATION_SCRIPT%"""
 set "EVIDENCE_ACTION=cmd.exe /c ""%EVIDENCE_SCRIPT%"""
+set "WEEKLY_TASK=baldr-v2-2-weekly-collection"
+set "WEEKLY_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_v2_2_weekly_collection.cmd"
+set "WEEKLY_ACTION=cmd.exe /c ""%WEEKLY_SCRIPT%"""
 
 echo Mode: %MODE%
 echo Task: %UPDATE_TASK%
@@ -40,6 +43,9 @@ echo Task: %SMOKE_TASK%
 echo   Manual-only: no daily task will be created by this script.
 
 if /I "%MODE%"=="dryrun" (
+  echo Task: %WEEKLY_TASK%
+  echo   Schedule: WEEKLY SUN 18:00
+  echo   Action: %WEEKLY_ACTION%
   echo Dryrun only. No scheduled task was created.
   exit /b 0
 )
