@@ -17,6 +17,56 @@ def test_guided_mode_rejects_candidate_strategy() -> None:
     assert "guided_mode_strategy_not_promoted" in decision.reasons
 
 
+def test_guided_mode_rejects_shadow_strategy() -> None:
+    decision = AdvicePolicy().decide(
+        mode=AdviceMode.GUIDED,
+        strategy_status="shadow",
+        data_quality="OBSERVED",
+        execution_feasible=True,
+        risk_budget_available=True,
+    )
+
+    assert decision.action is AdviceAction.NO_NEW_POSITION
+    assert decision.reasons == ("guided_mode_strategy_not_promoted",)
+
+
+def test_invalid_or_missing_mode_fails_closed() -> None:
+    invalid_mode = AdvicePolicy().decide(
+        mode="GUIDED",  # type: ignore[arg-type]
+        strategy_status="candidate",
+        data_quality="OBSERVED",
+        execution_feasible=True,
+        risk_budget_available=True,
+    )
+    missing_mode = AdvicePolicy().decide(
+        mode=None,  # type: ignore[arg-type]
+        strategy_status="candidate",
+        data_quality="OBSERVED",
+        execution_feasible=True,
+        risk_budget_available=True,
+    )
+
+    assert invalid_mode.action is AdviceAction.NO_NEW_POSITION
+    assert invalid_mode.reasons == ("invalid_mode",)
+    assert missing_mode.action is AdviceAction.NO_NEW_POSITION
+    assert missing_mode.reasons == ("invalid_mode",)
+
+
+def test_call_mode_mismatch_with_policy_config_fails_closed() -> None:
+    policy = AdvicePolicy(AdvicePolicyConfig(mode=AdviceMode.GUIDED))
+
+    decision = policy.decide(
+        mode=AdviceMode.PROFESSIONAL,
+        strategy_status="candidate",
+        data_quality="OBSERVED",
+        execution_feasible=True,
+        risk_budget_available=True,
+    )
+
+    assert decision.action is AdviceAction.NO_NEW_POSITION
+    assert decision.reasons == ("mode_config_mismatch",)
+
+
 def test_exact_risk_boundaries_allow_add_candidate() -> None:
     decision = AdvicePolicy().decide(
         mode=AdviceMode.GUIDED,
@@ -100,7 +150,7 @@ def test_unavailable_risk_budget_returns_no_new_position() -> None:
 
 
 def test_professional_candidate_is_research_only() -> None:
-    decision = AdvicePolicy().decide(
+    decision = AdvicePolicy(AdvicePolicyConfig(mode=AdviceMode.PROFESSIONAL)).decide(
         mode=AdviceMode.PROFESSIONAL,
         strategy_status="candidate",
         data_quality="OBSERVED",

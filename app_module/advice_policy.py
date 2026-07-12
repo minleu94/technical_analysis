@@ -29,6 +29,11 @@ class AdvicePolicy:
         cash_reserve_bp: int | None = None,
         target_weight_bp: int | None = None,
     ) -> AdvicePolicyDecision:
+        if not isinstance(mode, AdviceMode) or not isinstance(self._config.mode, AdviceMode):
+            return AdvicePolicyDecision(AdviceAction.NO_NEW_POSITION, ("invalid_mode",))
+        if mode is not self._config.mode:
+            return AdvicePolicyDecision(AdviceAction.NO_NEW_POSITION, ("mode_config_mismatch",))
+
         strategy_decision = self._strategy_decision(mode, strategy_status)
         if strategy_decision is not None:
             return strategy_decision
