@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from decision_module.indicator_parameter_registry import IndicatorParameterRegistry
+from analysis_module.technical_analysis.indicator_parameter_registry import IndicatorParameterRegistry
 
 
 @dataclass(frozen=True)

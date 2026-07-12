@@ -75,3 +75,49 @@ class BranchFlowAggregation:
     unavailable_event_count: int = 0
     usable_event_count: int = 0
     lots_coverage_ratio: Decimal = Decimal("1")
+
+
+@dataclass
+class FlowSignalDTO:
+    """Smart Money Flow 訊號。"""
+
+    stock_code: str
+    stock_name: str
+    aggregation: StockFlowAggregation
+    smart_money_score: float = 0.0
+    confidence: float = 0.0
+    signal_tags: List[str] = field(default_factory=list)
+    explainable_reasons: List[str] = field(default_factory=list)
+    branch_concentration: float = 0.0
+    sparkline_data: List[float] = field(default_factory=list)
+    sparkline_details: List[Any] = field(default_factory=list)
+    intensity_level: int = 0
+    lots_available: bool = True
+    has_estimated_lots: bool = False
+    observed_event_count: int = 0
+    estimated_event_count: int = 0
+    unavailable_event_count: int = 0
+    usable_event_count: int = 0
+    lots_coverage_ratio: Decimal = Decimal("1")
+
+
+@dataclass
+class SmartMoneySummaryDTO:
+    """市場主力流向快速摘要。"""
+
+    market_regime: str = "Unknown"
+    bullish_stock_count: int = 0
+    bearish_stock_count: int = 0
+    strong_industries: List[str] = field(default_factory=list)
+    weak_industries: List[str] = field(default_factory=list)
+    abnormal_signal_count: int = 0
+    market_heat_score: float = 0.0
+
+
+__all__ = [
+    "BranchFlowAggregation",
+    "BrokerFlowEvent",
+    "FlowSignalDTO",
+    "SmartMoneySummaryDTO",
+    "StockFlowAggregation",
+]

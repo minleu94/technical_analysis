@@ -12,7 +12,10 @@ from analysis_module import (
     MLAnalyzer
 )
 from decision_module.scoring_engine import ScoringEngine
-from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+from analysis_module.technical_analysis.indicator_parameter_registry import (
+    IndicatorParameterRegistry,
+    InvalidParameterError,
+)
 from decision_module.derived_market_features import enrich_latest_market_features
 from decision_module.strategy_screening_support import (
     build_recommendation_row,

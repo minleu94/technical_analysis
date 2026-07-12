@@ -1,5 +1,8 @@
 import pytest
-from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+from analysis_module.technical_analysis.indicator_parameter_registry import (
+    IndicatorParameterRegistry,
+    InvalidParameterError,
+)
 
 def test_get_default_config():
     default_config = IndicatorParameterRegistry.get_default_config()

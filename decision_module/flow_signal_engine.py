@@ -7,8 +7,11 @@ import math
 from typing import List, Dict, Any
 from collections import defaultdict
 
-from app_module.dtos.broker_flow_dtos import StockFlowAggregation, BrokerFlowEvent
-from app_module.dtos.flow_signal_dtos import FlowSignalDTO
+from decision_module.flow_contracts import (
+    BrokerFlowEvent,
+    FlowSignalDTO,
+    StockFlowAggregation,
+)
 
 class FlowSignalEngine:
     """Smart Money Flow 信號引擎"""

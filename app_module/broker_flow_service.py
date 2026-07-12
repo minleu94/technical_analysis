@@ -11,8 +11,13 @@ from typing import Any, List, Dict, Optional
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from app_module.dtos.broker_flow_dtos import BrokerFlowEvent, StockFlowAggregation, BranchFlowAggregation
-from app_module.dtos.flow_signal_dtos import FlowSignalDTO, SmartMoneySummaryDTO
+from decision_module.flow_contracts import (
+    BranchFlowAggregation,
+    BrokerFlowEvent,
+    FlowSignalDTO,
+    SmartMoneySummaryDTO,
+    StockFlowAggregation,
+)
 from decision_module.flow_signal_engine import FlowSignalEngine
 
 class BrokerFlowService:

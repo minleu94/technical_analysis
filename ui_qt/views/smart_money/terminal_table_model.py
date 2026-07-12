@@ -7,7 +7,7 @@ Terminal Table Model
 
 from typing import List, Any
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
-from app_module.dtos.flow_signal_dtos import FlowSignalDTO
+from decision_module.flow_contracts import FlowSignalDTO
 
 # 自定義 Role 用於傳遞特定結構給 Delegate
 ROLE_INTENSITY = Qt.UserRole + 1
@@ -208,7 +208,7 @@ class TerminalTableModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
 
-from app_module.dtos.broker_flow_dtos import BranchFlowAggregation
+from decision_module.flow_contracts import BranchFlowAggregation
 from collections import defaultdict
 
 class BranchTrackerTableModel(QAbstractTableModel):

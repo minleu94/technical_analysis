@@ -12,6 +12,7 @@ from analysis_module.technical_analysis.technical_column_support import (
 from analysis_module.technical_analysis.technical_date_support import (
     safe_convert_technical_dates,
 )
+from analysis_module.technical_analysis.indicator_kernels import clean_price_values
 
 class TechnicalIndicatorCalculator:
     """技術指標計算類別，基於02_technical_calculator.md中的功能"""
@@ -194,7 +195,7 @@ class TechnicalIndicatorCalculator:
         Returns:
             DataFrame: 添加移動平均線後的DataFrame
         """
-        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        from .indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             df_result = df.copy()
             close_col = self._get_column_name(df, 'Close')
@@ -235,7 +236,7 @@ class TechnicalIndicatorCalculator:
         Returns:
             Dict: 包含動量指標的字典
         """
-        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        from .indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
             if rsi_params is None and macd_params is None:
@@ -245,21 +246,7 @@ class TechnicalIndicatorCalculator:
             close_col = self._get_column_name(df, 'Close')
             
             if close_col:
-                # 清理價格序列（處理 '--' 和其他無效值）
-                def clean_price_series(series):
-                    """清理價格序列"""
-                    if series.dtype == 'object':
-                        series = series.replace(['--', '', 'nan', 'NaN', 'None'], np.nan)
-                        series = pd.to_numeric(series, errors='coerce')
-                    # 轉換為 numpy array
-                    prices = np.ascontiguousarray(series.values, dtype=np.float64)
-                    # 填充 NaN
-                    mask = np.isnan(prices)
-                    if mask.any():
-                        prices = pd.Series(prices).ffill().bfill().fillna(0.0).values
-                    return prices
-                
-                close_prices = clean_price_series(df[close_col])
+                close_prices = clean_price_values(df[close_col])
                 
                 # 驗證 RSI 參數並計算
                 if rsi_params is not None:
@@ -303,7 +290,7 @@ class TechnicalIndicatorCalculator:
         Returns:
             Dict: 包含KD指標的字典
         """
-        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        from .indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
             if params is None:
@@ -368,7 +355,7 @@ class TechnicalIndicatorCalculator:
         Returns:
             Dict: 包含波動指標的字典
         """
-        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        from .indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
             if bollinger_params is None and sar_params is None:
@@ -434,7 +421,7 @@ class TechnicalIndicatorCalculator:
         Returns:
             Dict: 包含趨勢指標的字典
         """
-        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        from .indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
             if tsf_params is None:
@@ -483,7 +470,7 @@ class TechnicalIndicatorCalculator:
         Returns:
             Dict: 包含 ATR 指標的字典
         """
-        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        from .indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
             if params is None:
@@ -535,7 +522,7 @@ class TechnicalIndicatorCalculator:
         Returns:
             Dict: 包含 ADX 指標的字典
         """
-        from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+        from .indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
         try:
             result = {}
             if params is None:

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterable, Protocol
 
 from app_module.decision_market_frame import DecisionMarketFrameLoader
-from app_module.dtos.broker_flow_dtos import BrokerFlowEvent
+from decision_module.flow_contracts import BrokerFlowEvent
 from app_module.dtos.smart_money_semantic_dtos import (
     SmartMoneyDashboardSummary,
     SmartMoneySemanticSummary,

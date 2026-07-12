@@ -4,7 +4,10 @@ import numpy as np
 from decimal import Decimal
 import json
 from decision_module.strategy_configurator import StrategyConfigurator
-from decision_module.indicator_parameter_registry import IndicatorParameterRegistry, InvalidParameterError
+from analysis_module.technical_analysis.indicator_parameter_registry import (
+    IndicatorParameterRegistry,
+    InvalidParameterError,
+)
 from decision_module.weight_contract import (
     RecommendationWeightContract,
     InvalidWeightError,

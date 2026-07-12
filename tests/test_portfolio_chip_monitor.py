@@ -8,7 +8,7 @@ import pandas as pd
 
 from app_module.portfolio_chip_service import PortfolioChipService
 from data_module.config import TWStockConfig
-from app_module.dtos.broker_flow_dtos import BrokerFlowEvent
+from decision_module.flow_contracts import BrokerFlowEvent
 
 
 class TestPortfolioChipService(unittest.TestCase):

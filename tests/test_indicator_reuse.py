@@ -5,7 +5,7 @@ import math
 import pandas as pd
 import pytest
 
-from decision_module.indicator_parameter_registry import InvalidParameterError
+from analysis_module.technical_analysis.indicator_parameter_registry import InvalidParameterError
 from decision_module.indicator_reuse import prepare_indicator_reuse
 
 

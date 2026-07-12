@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from app_module.dtos.broker_flow_dtos import BrokerFlowEvent
+from decision_module.flow_contracts import BrokerFlowEvent
 from app_module.smart_money_semantic_service import SmartMoneySemanticService
 
 

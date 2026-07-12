@@ -62,7 +62,7 @@ def test_broker_flow_service_does_not_treat_legacy_b_values_as_lots(tmp_path):
 
 
 def test_flow_signal_engine_estimated_discount():
-    from app_module.dtos.broker_flow_dtos import StockFlowAggregation, BrokerFlowEvent
+    from decision_module.flow_contracts import BrokerFlowEvent, StockFlowAggregation
     from decision_module.flow_signal_engine import FlowSignalEngine
 
     event = BrokerFlowEvent(

@@ -8,8 +8,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QHeaderView
 import pandas as pd
 
-from app_module.dtos.broker_flow_dtos import BranchFlowAggregation, BrokerFlowEvent, StockFlowAggregation
-from app_module.dtos.flow_signal_dtos import FlowSignalDTO
+from decision_module.flow_contracts import (
+    BranchFlowAggregation,
+    BrokerFlowEvent,
+    FlowSignalDTO,
+    StockFlowAggregation,
+)
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
 
@@ -29,7 +33,7 @@ class FakeSmartMoneyService:
         return []
 
     def get_market_flow_summary(self, signals=None, period="week"):
-        from app_module.dtos.flow_signal_dtos import SmartMoneySummaryDTO
+        from decision_module.flow_contracts import SmartMoneySummaryDTO
 
         return SmartMoneySummaryDTO()
 

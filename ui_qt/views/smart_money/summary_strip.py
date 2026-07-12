@@ -7,7 +7,7 @@ Summary Strip
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
-from app_module.dtos.flow_signal_dtos import SmartMoneySummaryDTO
+from decision_module.flow_contracts import SmartMoneySummaryDTO
 
 class SummaryStrip(QWidget):
     def __init__(self, parent=None):

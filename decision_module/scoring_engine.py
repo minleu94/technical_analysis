@@ -8,6 +8,7 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 from decimal import Decimal, ROUND_HALF_UP
 from decision_module.weight_contract import RecommendationWeightContract, LegacyWeightMigrationAdapter
+from decision_module.scoring_kernels import normalize_weights_to_bp
 
 class ScoringEngine:
     """統一打分引擎"""
@@ -104,41 +105,7 @@ class ScoringEngine:
         """將任意 Decimal 權重字典正規化為總和嚴格等於 10000 bp 的整數字典
         使用最大餘額法 (Largest Remainder Method)，同分餘額按 key 字母順序排序
         """
-        from decimal import Decimal
-        import math
-        
-        total_raw = sum(raw_weights.values())
-        if total_raw == Decimal('0'):
-            return {'pattern': 3000, 'technical': 5000, 'volume': 2000}
-            
-        factor = Decimal('10000')
-        exact_vals = {}
-        floor_ints = {}
-        remainders = {}
-        
-        # 1. 計算精確值與向下取整值
-        for k, v in raw_weights.items():
-            exact_val = (v / total_raw) * factor
-            exact_vals[k] = exact_val
-            floor_int = math.floor(exact_val)
-            floor_ints[k] = floor_int
-            remainders[k] = exact_val - Decimal(str(floor_int))
-            
-        sum_floor = sum(floor_ints.values())
-        diff = 10000 - sum_floor
-        
-        # 2. 將差額依照 (餘額降序, key 字母升序) 排序分配 1 bp
-        sorted_keys = sorted(
-            raw_weights.keys(),
-            key=lambda k: (-remainders[k], k)
-        )
-        
-        bp_weights = floor_ints.copy()
-        for i in range(diff):
-            k = sorted_keys[i % len(sorted_keys)]
-            bp_weights[k] += 1
-            
-        return bp_weights
+        return normalize_weights_to_bp(raw_weights)
 
     def _get_regime_weights(self, regime: str, base_weights: Dict) -> Dict:
         """根據 Regime 調整權重
