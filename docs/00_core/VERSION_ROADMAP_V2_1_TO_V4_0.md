@@ -90,7 +90,7 @@ Closeout Gate：production evidence scheduler 如獲批准只保存 evidence；�
 
 Closeout Gate：每個 P0 source 有 accepted / limited / rejected / deferred 決議；candidate 不冒充 formal。
 
-**目前版本狀態（2026-07-12）**：V2.3 已建立工程 readiness 與 P0 source-by-source 人工接受台帳，見 `docs/06_qa/V2_3_ENGINEERING_READINESS_2026_07_12.md`、`docs/06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md`。corporate action、交易限制、三大法人、信用交易、TDCC 與 PIT fundamentals 目前全部是 `requires_human_acceptance`，且 `downstream eligibility=none`；`decision_ready_candidate` 只屬診斷結果，不是 accepted feature。V2.3 formal closeout 尚未建立，必須等待逐來源完成 license、quality、PIT / available-date、missing / outage 與具名 owner / date 的 accepted / limited / rejected / deferred 決議。本狀態不改變本節 maturity definition，亦不代表正式 ingestion、`ScoringEngine` 接線、Advice / Portfolio eligibility、scheduler approval 或投資有效性。
+**目前版本狀態（2026-07-12）**：V2.3 已建立工程 readiness 與完整 Gate 3 P0 source-by-source 人工接受台帳，見 `docs/06_qa/V2_3_ENGINEERING_READINESS_2026_07_12.md`、`docs/06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md`。除權息 / 除權、未登錄的減資 / 分割 / 面額變更與停牌 / 復牌、其他交易限制、三大法人、信用交易、TDCC 與 PIT fundamentals 目前全部是 `requires_human_acceptance`，且 `downstream eligibility=none`；每列保留 source version、as-of / available date、rate limit、freshness / coverage、quarantine / retry、evidence / review / rollback 與分離 owner / date。`decision_ready_candidate` 只屬診斷結果，不是 accepted feature；既有 `corporate_action.ex_dividend_timeline` 不涵蓋未登錄 corporate-action 事件。V2.3 formal closeout 尚未建立，必須等待逐來源完成 license、quality、PIT / available-date、missing / outage 與具名 owner / date 的 accepted / limited / rejected / deferred 決議。本狀態不改變本節 maturity definition，亦不代表正式 ingestion、`ScoringEngine` 接線、Advice / Portfolio eligibility、scheduler approval 或投資有效性。
 
 ### V2.4：Portfolio Coach Foundation
 

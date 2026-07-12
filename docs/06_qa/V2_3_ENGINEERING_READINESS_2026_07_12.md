@@ -7,14 +7,14 @@
 
 ## 結論
 
-V2.3 已建立 P0 source-by-source 人工決策台帳，將 Gate 3 的每個目前未決來源標示為 `requires_human_acceptance`。這是工程 readiness 文件，不是 V2.3 formal closeout：沒有來源被標示為 accepted、沒有新增正式 ingestion、沒有新增 `ScoringEngine` feature、沒有 scheduler 核准，也沒有投資有效性結論。
+V2.3 已建立完整 Gate 3 P0 source-by-source 人工決策台帳：既有的除權息 / 除權、處置、分盤、全額交割、漲跌停鎖死，與未登錄的減資 / 分割 / 面額變更、停牌 / 復牌、季度財報 PIT 缺口，以及三大法人、信用交易、TDCC、PIT 月營收，全部標示為 `requires_human_acceptance`。這是工程 readiness 文件，不是 V2.3 formal closeout：沒有來源被標示為 accepted、沒有新增正式 ingestion、沒有新增 `ScoringEngine` feature、沒有 scheduler 核准，也沒有投資有效性結論。
 
 ## 已交付的決策證據
 
-- [V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md](V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md) 逐一列出 corporate action、交易限制、三大法人、信用交易、TDCC 與 PIT fundamentals 的 source id、用途、available-date、quality、license、missing / outage policy、candidate status、人工作業、owner / date 與 downstream eligibility。
+- [V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md](V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md) 已逐一列出 13 個 Gate 3 P0 source，並於每列記錄 source id、用途、`source_version`、`as_of_date`、available-date、quality、license、rate limit、freshness / coverage、missing / outage、quarantine / retry、candidate status、人工作業、分離的 owner / date、downstream eligibility 與 evidence / review / rollback pointer。
 - 所有尚未決策列的 `human decision` 均為 `requires_human_acceptance`，`downstream eligibility=none`。
 - 台帳明確區分 `decision_ready_candidate` 與人工接受：前者僅代表單次候選資料通過自動診斷，不能成為 accepted feature。
-- 未建立「暫時 accepted」或預設 owner / date；未指定的人類決策資料保持未填，避免偽造 formal evidence。
+- 未建立「暫時 accepted」或預設 owner / date；未指定的人類決策資料保持未填，避免偽造 formal evidence。既有 `corporate_action.ex_dividend_timeline` 已明確限於除權息 / 除權；減資 / 分割 / 面額變更仍以未登錄 P0 列追蹤，沒有 capability overclaim。
 
 ## Candidate boundary 驗證
 
@@ -55,6 +55,6 @@ V2.3 已建立 P0 source-by-source 人工決策台帳，將 Gate 3 的每個目�
 | 檢查 | 結果 | 說明 |
 |---|---|---|
 | `inspect_source_candidate_readiness.py --help` | PASS | 只揭露 candidate dry-run / diagnostics 邊界。 |
-| 文件欄位完整性 | PASS | 台帳每列均具 task 要求的 11 項欄位。 |
+| 文件欄位完整性 | PASS | 台帳 13 列均具原始要求與 reviewer 補充的 17 項欄位。 |
 | 未決狀態檢查 | PASS | 無 `accepted`；所有未決來源均為 `requires_human_acceptance` 且 eligibility 為 `none`。 |
 | `git diff --check` | PASS | 最終文件變更沒有空白錯誤。 |

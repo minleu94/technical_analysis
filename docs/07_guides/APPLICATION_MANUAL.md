@@ -962,15 +962,15 @@ Phase 3C 後，可用 `scripts\inspect_source_candidate_readiness.py` 做三大�
 
 ### V2.3 P0 資料來源人工接受台帳
 
-`docs\06_qa\V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md` 是 Gate 3 / V2.3 的逐來源人工決策台帳。它涵蓋 corporate action、交易限制、三大法人、信用交易、TDCC / 集保持股分散與 PIT fundamentals；它不是資料抓取命令，也不會改變 CLI、UI、DB 或資料來源設定。
+`docs\06_qa\V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md` 是 Gate 3 / V2.3 的逐來源人工決策台帳。它完整涵蓋除權息 / 除權、未登錄的減資 / 分割 / 面額變更、停牌 / 復牌、處置、分盤、全額交割、漲跌停鎖死、三大法人、信用交易、TDCC / 集保持股分散與 PIT fundamentals；它不是資料抓取命令，也不會改變 CLI、UI、DB 或資料來源設定。
 
 操作與結果判讀：
 
 1. 先以本節的 candidate readiness CLI 保留來源 diagnostics、`available_date` 與 quality 證據；候選資料只可用於審核，不能直接接入策略訊號。
-2. 再由具名人工決策人審核 source version、授權 / 使用範圍、rate limit、coverage、PIT 語意、missing / outage、quarantine 與 retry。
-3. 未填完人工作業前，台帳的 `human decision` 必須維持 `requires_human_acceptance`，`downstream eligibility` 必須維持 `none`。
+2. 再由具名人工決策人逐列審核 source version、`as_of_date`、授權 / 使用範圍、rate limit、freshness / coverage、PIT 語意、missing / outage、quarantine、retry 與 evidence / review / rollback pointer。
+3. 未填完人工作業前，台帳的 `human decision` 必須維持 `requires_human_acceptance`，`owner` 與 `date` 必須分離保持未填，`downstream eligibility` 必須維持 `none`。
 4. `decision_ready_candidate` 只代表該筆候選資料未觸發 available-date / required-field blocking diagnostic；它不是 `accepted`，不得讓資料進入 `ScoringEngine`、Advice、Portfolio、lifecycle 或 production scheduler。
-5. 資料缺失、outage、stale、缺 `available_date` 或 `available_date > decision_date` 時，維持 fail-closed 或明示 degraded / warning；不得補值或當作 observed。
+5. 資料缺失、outage、stale、缺 `available_date` 或 `available_date > decision_date` 時，維持 fail-closed 或明示 degraded / warning；不得補值或當作 observed。除權息 / 除權 capability 不能延伸主張為減資 / 分割 / 面額變更；後三者及停牌 / 復牌均須各自完成來源接受。
 
 只有台帳已記錄真實的 `accepted` / `limited` / `rejected` / `deferred` 結論、owner、日期與明確 downstream eligibility 時，才可另行規劃後續受控實作。本手冊與台帳本身不授權任何 ingestion 或策略變更。
 
