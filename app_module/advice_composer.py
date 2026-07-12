@@ -40,6 +40,15 @@ class AdviceComposer:
         data_as_of_date_text = self._date_text(data_as_of_date, "data_as_of_date")
         if data_as_of_date_text > decision_date_text:
             raise ValueError("data_as_of_date must not be later than decision_date")
+        if portfolio_result is not None:
+            portfolio_decision_date = self._date_text(
+                portfolio_result.decision_date,
+                "portfolio_result.decision_date",
+            )
+            if portfolio_decision_date > decision_date_text:
+                raise ValueError(
+                    "portfolio_result.decision_date must not be later than decision_date"
+                )
 
         warning_values = self._strings(evidence_warnings, "evidence_warnings")
         current_weights = self._weights(current_weights_bp or {})

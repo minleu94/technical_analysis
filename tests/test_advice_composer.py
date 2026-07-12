@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from app_module.advice_dtos import AdviceAction, AdviceMode
 from app_module.advice_policy import AdvicePolicy
 from app_module.dtos import RecommendationDTO, RecommendationResultDTO
@@ -127,3 +129,25 @@ def test_composer_keeps_missing_current_weight_as_diagnostic_without_inventing_p
     assert portfolio.current_weight_bp == 0
     assert portfolio.weight_gap_bp == 1500
     assert portfolio.diagnostics == ("lot_size_applied", "current_weight_missing")
+
+
+def test_composer_rejects_portfolio_result_after_advice_decision_date() -> None:
+    from app_module.advice_composer import AdviceComposer
+
+    future_portfolio = PortfolioConstructionResult(
+        decision_date="2026-07-13",
+        allocation_method="equal_weight",
+        capital_amount=Decimal("1000000"),
+        allocations=(),
+        residual_cash=Decimal("300000"),
+    )
+
+    with pytest.raises(ValueError, match="portfolio_result.decision_date"):
+        AdviceComposer(AdvicePolicy()).compose(
+            recommendations=_recommendation_result(),
+            portfolio_result=future_portfolio,
+            evidence_quality="OBSERVED",
+            decision_date=date(2026, 7, 12),
+            data_as_of_date=date(2026, 7, 12),
+            mode=AdviceMode.GUIDED,
+        )
