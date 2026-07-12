@@ -60,7 +60,7 @@
 
 Closeout Gate：Advice 可拒絕、可重算、可回溯；UI 不直接計算；不串 broker。
 
-**目前版本狀態（2026-07-12）**：V2.1 engineering readiness 已完成，正式 closeout 狀態為 `awaiting_release_owner_confirmation`。在 release owner 實際填寫 owner、confirmation timestamp 與 `approve` / `hold` / `reject` decision 前，不得標示 V2.1 已完成正式 closeout。已驗證的 bounded / read-only Daily Usable Workbench 行為為：Guided 僅接受 `promoted`、parameters locked 與 disclosure complete 的策略；`max_positions` 只允許 `1..8`；Professional candidate 僅 `RESEARCH` 並與正式 Advice 分區。focused suite 為 `94 passed in 2.91s`，engineering readiness 與 approval record 分別見 `docs/06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md`、`docs/06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md`。此狀態不改變本文件的 maturity 定義，亦不代表投資有效性、broker execution、production scheduler、P0 source acceptance 或後續版本 Gate 已完成。
+**目前版本狀態（2026-07-12）**：V2.1 已於 2026-07-12 14:51:42 -07:00 獲 release owner 明確 `approve`，正式 closeout 狀態為 `formal_closeout_complete`。已驗證的 bounded / read-only Daily Usable Workbench 行為為：Guided 僅接受 `promoted`、parameters locked 與 disclosure complete 的策略；`max_positions` 只允許 `1..8`；Professional candidate 僅 `RESEARCH` 並與正式 Advice 分區。focused suite 為 `94 passed in 2.91s`，engineering readiness 與 approval record 分別見 `docs/06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md`、`docs/06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md`。此狀態不改變本文件的 maturity 定義，亦不代表投資有效性、broker execution、production scheduler、P0 source acceptance 或後續版本 Gate 已完成。
 
 ### V2.2：Evidence Operating Loop
 

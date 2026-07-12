@@ -1,21 +1,21 @@
 # V2.1 Formal Closeout Approval Record
 
 > 日期：2026-07-12
-> 狀態：**`awaiting_release_owner_confirmation`**；engineering readiness 已完成，**尚未**成立正式 closeout。
+> 狀態：**`formal_closeout_complete`**；release owner 已完成確認，V2.1 正式 closeout 成立。
 > 工程 readiness：見 `V2_1_ENGINEERING_READINESS_2026_07_12.md`。
 > 不代表：投資有效性、保證獲利、broker execution、production scheduler、DB write、lifecycle action 或 P0 source acceptance。
 
 ## 1. 正式 closeout 的必要人工確認
 
-本文件保留正式 closeout 所需的審核欄位，但不代填、推論或虛構 release owner 的決策。在下列欄位由授權 owner 明確填寫前，V2.1 的唯一狀態是 `engineering_readiness_complete` / `awaiting_release_owner_confirmation`。
+release owner 已明確確認 V2.1；以下保留實際確認記錄與可稽核的版本決策。若日後需要 `hold`、`reject` 或功能回退，必須新增記錄，不得改寫本次核准。
 
 | 必填欄位 | 目前記錄 | 規則 |
 |---|---|---|
-| release owner | `TBD — 未提供，不得虛構` | 必須是具有版本發布決策權的人工 owner。 |
-| confirmation timestamp | `TBD — 未提供，不得虛構` | 使用實際確認的時區時間戳。 |
-| decision | `TBD — 未提供，不得虛構` | 必須明確記錄 `approve`、`hold` 或 `reject`，並附必要限制／理由。 |
+| release owner | `使用者（release owner）` | 具有版本發布決策權的人工 owner。 |
+| confirmation timestamp | `2026-07-12 14:51:42 -07:00` | 使用實際確認時的時區時間戳。 |
+| decision | `approve` — 已審核並核准 V2.1 正式 closeout。 | 本次核准限於本文件所述 bounded / read-only V2.1 範圍。 |
 
-只有 decision 為 `approve` 且三欄完整時，才可把本文件及 Snapshot / Version Roadmap 的狀態改為正式 closeout；`hold` 或 `reject` 必須保留工程證據與 rollback SHA，不能刪除或改寫。
+本次 decision 為 `approve` 且三欄完整，因此本文件及 Snapshot / Version Roadmap 已同步為正式 closeout。`hold` 或 `reject` 必須保留工程證據與 rollback SHA，不能刪除或改寫。
 
 ## 2. Engineering readiness 的版本範圍
 
@@ -60,3 +60,4 @@ Guided Mode 只接受同時符合 `promoted`、參數已鎖定與 disclosure 完
 ## 更新記錄
 
 - 2026-07-12：修正為正式 closeout approval record；保留最新 safeguards、focused suite、人工 UI 文案 smoke 與 rollback 證據，等待 release owner 的 owner / timestamp / decision 三項明確確認。
+- 2026-07-12 14:51:42 -07:00：release owner 明確決定 `approve`；V2.1 由 `awaiting_release_owner_confirmation` 轉為 `formal_closeout_complete`。
