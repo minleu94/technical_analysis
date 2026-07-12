@@ -206,6 +206,7 @@
 | [2026-06-12-broker-flow-ranked-metric-reconciliation.md](../superpowers/plans/2026-06-12-broker-flow-ranked-metric-reconciliation.md) | MoneyDJ E/B 獨立榜單 union、三態品質與覆蓋率治理計畫。 |
 | [2026-07-11-safe-refactor-four-extra-cycles-design.md](../superpowers/specs/2026-07-11-safe-refactor-four-extra-cycles-design.md) | 安全重構 08:20–12:00 四個完整延長循環的時段、交接、artifact 與安全邊界設計。 |
 | [2026-07-11-safe-refactor-four-extra-cycles.md](../superpowers/plans/2026-07-11-safe-refactor-four-extra-cycles.md) | 四個延長 Planner → Implementation → QA 循環與 12:00 Final Closeout 的 automation 更新計畫。 |
+| [2026-07-12-gate-1-daily-usable-advice-design.md](../superpowers/specs/2026-07-12-gate-1-daily-usable-advice-design.md) | Gate 1 / V2.1 Daily Usable Advice 設計，定義平衡風險檔、Advice Policy / DTO / Composer 邊界、拒絕輸出與 weekly review 操作契約。 |
 | [phase3_5_research/README.md](../05_phases/phase3_5_research/README.md) | [歷史 SOP] Phase 3.5 研究 SOP 入口。 |
 | [phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md](../05_phases/phase3_5_research/RESEARCH_ITERATION_PLAYBOOK.md) | [歷史 SOP] 研究循環 playbook。 |
 | [phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md](../05_phases/phase3_5_research/METRIC_INTERPRETATION_PRIORITY.md) | [歷史 SOP] 指標判讀優先順序。 |
