@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -51,9 +52,21 @@ def _config(args: argparse.Namespace) -> TWStockConfig:
     return config
 
 
+_DEFAULT_PRODUCTION_DATA_ROOT = Path("D:/Min/Python/Project/FA_Data")
+
+
+def _canonical_path(path: Path) -> Path:
+    return path.expanduser().resolve()
+
+
 def _production_like(path: Path, config: TWStockConfig) -> bool:
-    configured = Path(config.data_root) / "sqlite" / "twstock.db"
-    return path.resolve() == configured.resolve()
+    actual_db_path = _canonical_path(path)
+    production_roots = {
+        _canonical_path(Path(config.data_root)),
+        _canonical_path(Path(os.environ.get("DATA_ROOT", _DEFAULT_PRODUCTION_DATA_ROOT))),
+        _canonical_path(_DEFAULT_PRODUCTION_DATA_ROOT),
+    }
+    return actual_db_path in {_canonical_path(root / "sqlite" / "twstock.db") for root in production_roots}
 
 
 def main() -> int:

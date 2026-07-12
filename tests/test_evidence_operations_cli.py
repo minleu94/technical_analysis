@@ -295,3 +295,40 @@ def test_production_like_db_is_rejected_without_escape_hatch(tmp_path: Path) -> 
 
     assert help_output.returncode == 0
     assert "--allow-production-like-db" not in help_output.stdout
+
+
+def test_data_root_override_cannot_bypass_configured_production_db_guard(tmp_path: Path) -> None:
+    configured_production_root = tmp_path / "configured-production"
+    overridden_qa_root = tmp_path / "overridden-qa"
+    production_like_db = configured_production_root / "sqlite" / "twstock.db"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_evidence_operations_weekly_review.py",
+            "--start-date",
+            "2026-07-06",
+            "--end-date",
+            "2026-07-12",
+            "--data-root",
+            str(overridden_qa_root),
+            "--db-path",
+            str(production_like_db),
+            "--save-history",
+            "--json-output",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={
+            **os.environ,
+            "DATA_ROOT": str(configured_production_root),
+            "OUTPUT_ROOT": str(tmp_path / "output"),
+            "PYTHONIOENCODING": "utf-8",
+        },
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "production-like DB" in completed.stderr
+    assert not production_like_db.exists()

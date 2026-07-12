@@ -7,7 +7,7 @@
 
 - 現況為 weekly `0/3 waiting_for_time`、multi-day `3/3 ready`、`production_scheduler_allowed=false`；不能 formal closeout。
 - 此流程不產生交易建議、不串 broker、不自動交易、不自動套用 lifecycle action。
-- `--save-history` 與 `--confirm-action-items` 只能在明確、可回溯且經人工核准的 working-copy DB 使用。CLI 對 production-like DB 一律拒絕，沒有 `--allow-production-like-db` 繞過旗標；正式 DB、production-like DB 與 scheduler write-mode 均不在本 runbook 的授權範圍。
+- `--save-history` 與 `--confirm-action-items` 只能在明確、可回溯且經人工核准的 working-copy DB 使用。CLI 會 canonicalize 實際 `--db-path`，並同時比對 configured、環境 `DATA_ROOT` 與預設正式 root；因此 `--data-root` 不能使正式 DB 變成可接受路徑。production-like DB 一律拒絕，沒有 `--allow-production-like-db` 繞過旗標；正式 DB、production-like DB 與 scheduler write-mode 均不在本 runbook 的授權範圍。
 - replay、fixture、單次 smoke、raw scheduled report 或手動補表不計入三週 Gate。每列只記錄該週實際取得的證據。
 
 ## 2. 每週固定操作順序
@@ -77,4 +77,4 @@
 ## 更新記錄
 
 - 2026-07-12：建立 V2.2 固定三週人工記錄格式與 working-copy weekly review 操作順序；明確保留 scheduler 未核准與不可 formal closeout 邊界。
-- 2026-07-12：補上 working-copy copy/guard、production-like 強制拒絕與 combined confirm/history snapshot trace；`--list-history` 缺 DB / table 時只回 diagnostics，不建立 SQLite 物件。
+- 2026-07-12：補上 working-copy copy/guard、production-like 強制拒絕與 combined confirm/history snapshot trace；`--list-history` 缺 DB / table 時只回 diagnostics，不建立 SQLite 物件。re-review 補強 `--data-root` 不可繞過 canonical production DB guard。
