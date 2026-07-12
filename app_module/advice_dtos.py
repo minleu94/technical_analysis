@@ -36,12 +36,23 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _validate_bp(field_name: str, value: Any, *, minimum: int, maximum: int) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field_name} must be an integer bp value")
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{field_name} must be between {minimum} and {maximum} bp")
+
+
 @dataclass(frozen=True)
 class AdvicePolicyConfig:
     mode: AdviceMode = AdviceMode.GUIDED
     min_cash_reserve_bp: int = 2000
     max_positions: int = 8
     max_single_position_bp: int = 1500
+
+    def __post_init__(self) -> None:
+        _validate_bp("min_cash_reserve_bp", self.min_cash_reserve_bp, minimum=0, maximum=10000)
+        _validate_bp("max_single_position_bp", self.max_single_position_bp, minimum=0, maximum=1500)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -159,6 +170,11 @@ class PortfolioAdviceDTO:
     source_trace: tuple[str, ...] = ()
     review_date: str = ""
     diagnostics: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _validate_bp("target_weight_bp", self.target_weight_bp, minimum=0, maximum=10000)
+        _validate_bp("current_weight_bp", self.current_weight_bp, minimum=0, maximum=10000)
+        _validate_bp("weight_gap_bp", self.weight_gap_bp, minimum=-10000, maximum=10000)
 
     def to_dict(self) -> dict[str, Any]:
         return {
