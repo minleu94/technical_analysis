@@ -8,6 +8,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import logging
 import warnings
+from typing import Callable, Optional
 
 from decision_module.stock_screener_sqlite_reader import (
     load_recent_industry_indices,
@@ -24,7 +25,16 @@ logger = logging.getLogger(__name__)
 class StockScreener:
     """強勢股篩選器"""
     
-    def __init__(self, config, industry_mapper=None, volume_lookback=20, min_price=5.0, min_liquidity=None):
+    def __init__(
+        self,
+        config,
+        industry_mapper=None,
+        volume_lookback=20,
+        min_price=5.0,
+        min_liquidity=None,
+        recent_stock_provider: Optional[Callable[[str, int], Optional[pd.DataFrame]]] = None,
+        recent_industry_provider: Optional[Callable[[str], Optional[pd.DataFrame]]] = None,
+    ):
         """初始化篩選器
         
         Args:
@@ -39,6 +49,8 @@ class StockScreener:
         self.volume_lookback = volume_lookback
         self.min_price = min_price
         self.min_liquidity = min_liquidity
+        self.recent_stock_provider = recent_stock_provider
+        self.recent_industry_provider = recent_industry_provider
 
     def _sqlite_readonly_connection(self):
         from decision_module.stock_screener_sqlite_reader import _readonly_connection
@@ -51,9 +63,13 @@ class StockScreener:
         return _recent_date_values(conn, table_name, date_column, limit)
 
     def _load_sqlite_recent_stock_prices(self, period):
+        if self.recent_stock_provider is not None:
+            return self.recent_stock_provider(period, self.volume_lookback)
         return load_recent_stock_prices(self.config, period, self.volume_lookback)
 
     def _load_sqlite_recent_industry_indices(self, period):
+        if self.recent_industry_provider is not None:
+            return self.recent_industry_provider(period)
         return load_recent_industry_indices(self.config, period)
 
     def _try_get_sqlite_stock_screen(self, period, top_n, min_volume, direction):

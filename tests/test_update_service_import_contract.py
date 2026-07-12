@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import sys
@@ -38,6 +39,21 @@ EXPECTED_SERVICE_CLASS_MODULES = {
     "PortfolioService": "app_module.portfolio_service",
     "JournalService": "app_module.journal_service",
 }
+
+
+def test_update_service_imports_normalization_as_an_explicit_submodule_dependency():
+    source_path = REPOSITORY_ROOT / "app_module" / "update_service.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+
+    package_attribute_imports = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "app_module"
+        and any(alias.name == "update_data_normalization" for alias in node.names)
+    ]
+
+    assert package_attribute_imports == []
 
 
 def test_update_service_package_import_contract_is_stable_in_fresh_interpreter():

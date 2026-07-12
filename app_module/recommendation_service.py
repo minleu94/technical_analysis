@@ -5,7 +5,6 @@
 
 import pandas as pd
 import numpy as np
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from decimal import Decimal
@@ -39,12 +38,24 @@ from app_module.recommendation_run_support import (
     matrix_row,
     validate_ranking_config,
 )
+from app_module.recommendation_market_data_provider import (
+    DefaultRecommendationMarketDataProvider,
+)
+from app_module.recommendation_market_frame import normalize_market_frame
+from app_module.recommendation_ranking_pipeline import build_ranking_plan
+from app_module.application_ports import MarketFrameProvider
 
 
 class RecommendationService:
     """推薦服務類"""
     
-    def __init__(self, config, industry_mapper: Optional[IndustryMapper] = None):
+    def __init__(
+        self,
+        config,
+        industry_mapper: Optional[IndustryMapper] = None,
+        market_data_provider: Optional[MarketFrameProvider] = None,
+        regime_detector: Optional[MarketRegimeDetector] = None,
+    ):
         """初始化推薦服務
         
         Args:
@@ -58,7 +69,12 @@ class RecommendationService:
             self.industry_mapper = IndustryMapper(config)
         else:
             self.industry_mapper = industry_mapper
-        self.regime_detector = MarketRegimeDetector(config)
+        self.market_data_provider = (
+            market_data_provider
+            if market_data_provider is not None
+            else DefaultRecommendationMarketDataProvider(config)
+        )
+        self.regime_detector = regime_detector or MarketRegimeDetector(config)
         self.last_screening_matrix: List[Dict[str, Any]] = []
         self.last_excluded_candidates_json: List[Dict[str, Any]] = []
         self.last_why_not_payload_json: List[Dict[str, Any]] = []
@@ -165,139 +181,7 @@ class RecommendationService:
             f"技術指標啟用={config.get('technical', {}).get('momentum', {}).get('enabled', False) or config.get('technical', {}).get('trend', {}).get('enabled', False)}"
         )
         
-        from datetime import datetime, timedelta
-        
-        # 優先嘗試從 SQLite 資料庫載入
-        df = None
-        if getattr(self.config, 'use_sqlite', False):
-            try:
-                from data_module.db_manager import DBManager
-                db = DBManager(self.config)
-                # 查出最新的交易日
-                max_date_df = db.execute_query("SELECT MAX(日期) as max_date FROM daily_prices;")
-                if not max_date_df.empty and max_date_df['max_date'].iloc[0]:
-                    max_date_str = str(max_date_df['max_date'].iloc[0])
-                    latest_date_dt = datetime.strptime(max_date_str, '%Y%m%d')
-                    start_date_dt = latest_date_dt - timedelta(days=60)
-                    start_date_str = start_date_dt.strftime('%Y%m%d')
-                    
-                    sql = """
-                        SELECT p.*, t.*
-                        FROM daily_prices p
-                        LEFT JOIN technical_indicators t ON p.證券代號 = t.證券代號 AND p.日期 = t.日期
-                        WHERE p.日期 >= ?
-                        ORDER BY p.日期 ASC;
-                    """
-                    sql_df = db.execute_query(sql, params=(start_date_str,))
-                    if not sql_df.empty:
-                        df = sql_df.loc[:, ~sql_df.columns.duplicated()]
-                        
-                        # 轉換日期與資料型態
-                        df = df.copy()
-                        df.loc[:, '日期'] = pd.to_datetime(
-                            df['日期'].astype(str),
-                            format='%Y%m%d',
-                            errors='coerce',
-                        )
-                        df = df[df['日期'].notna()].copy()
-                        df.loc[:, '證券代號'] = df['證券代號'].astype(str).str.strip()
-                        
-                        numeric_cols = ['收盤價', '開盤價', '最高價', '最低價', '成交股數', '成交金額']
-                        for col in numeric_cols:
-                            if col in df.columns:
-                                df.loc[:, col] = pd.to_numeric(df[col], errors='coerce')
-                                
-                        logger.info(f"[RecommendationService] 成功從 SQLite 載入 {len(df)} 筆股價及指標資料")
-            except Exception as sql_err:
-                logger.warning(f"[RecommendationService] 從 SQLite 載入資料失敗: {sql_err}，將降級讀取 CSV 檔案")
-
-        # Fallback 到讀取 CSV
-        if df is None:
-            # 讀取股票數據（優先使用備用文件，因為它通常更新）
-            primary_file = self.config.stock_data_file
-            backup_file = self.config.all_stocks_data_file
-            
-            if backup_file.exists():
-                stock_data_file = backup_file
-                logger.info(
-                    f"[RecommendationService] 使用備用數據文件（通常較新）: {backup_file}"
-                )
-            elif primary_file.exists():
-                stock_data_file = primary_file
-                logger.info(
-                    f"[RecommendationService] 使用主要數據文件: {primary_file}"
-                )
-            else:
-                raise FileNotFoundError(
-                    f"找不到股票數據文件:\n"
-                    f"主要文件: {primary_file} (存在: {primary_file.exists()})\n"
-                    f"備用文件: {backup_file} (存在: {backup_file.exists()})\n"
-                    f"請確認數據文件是否存在，或執行數據更新"
-                )
-            
-            logger.info(
-                f"[RecommendationService] 使用數據文件: {stock_data_file}, "
-                f"文件大小: {stock_data_file.stat().st_size / 1024 / 1024:.2f} MB"
-            )
-            
-            # 讀取最新數據（最近60天，確保有足夠數據計算技術指標）
-            df = pd.read_csv(
-                stock_data_file, 
-                encoding='utf-8-sig', 
-                on_bad_lines='skip', 
-                engine='python', 
-                nrows=500000
-            )
-            
-            if '日期' in df.columns:
-                df = df.copy()
-                date_col = df['日期'].copy()
-                if date_col.dtype in ['int64', 'int32', 'float64']:
-                    df.loc[:, '日期'] = pd.to_datetime(date_col.astype(str), errors='coerce', format='%Y%m%d')
-                else:
-                    date_str = date_col.astype(str)
-                    if date_str.str.len().eq(8).all() and date_str.str.isdigit().all():
-                        df.loc[:, '日期'] = pd.to_datetime(date_str, errors='coerce', format='%Y%m%d')
-                    else:
-                        df.loc[:, '日期'] = pd.to_datetime(date_col, errors='coerce')
-            else:
-                raise ValueError("找不到日期欄位")
-            
-            df = df[df['日期'].notna()].copy()
-            if len(df) == 0:
-                raise ValueError("沒有找到股票數據")
-            
-            # 記錄原始數據的日期範圍
-            raw_min_date = df['日期'].min()
-            raw_max_date = df['日期'].max()
-            logger.info(
-                f"[RecommendationService] 原始數據日期範圍: {raw_min_date} ~ {raw_max_date}, "
-                f"總筆數={len(df)}"
-            )
-            
-            latest_date = df['日期'].max()
-            # 取最近60天的數據
-            df = df[df['日期'] >= (latest_date - pd.Timedelta(days=60))]
-            
-            if len(df) == 0:
-                raise ValueError("沒有找到足夠的歷史數據")
-        
-        # 按股票分組處理
-        if '證券代號' in df.columns:
-            stock_col = '證券代號'
-        elif '股票代號' in df.columns:
-            stock_col = '股票代號'
-            df['證券代號'] = df['股票代號']
-            stock_col = '證券代號'
-        else:
-            raise ValueError("找不到股票代號欄位")
-        
-        # 確保有證券名稱欄位
-        if '證券名稱' not in df.columns:
-            if '股票名稱' in df.columns:
-                df['證券名稱'] = df['股票名稱']
-            else:
-                df['證券名稱'] = df['證券代號']
+        df, stock_col = normalize_market_frame(self.market_data_provider())
         
         # ✅ 記錄數據讀取結果
         import logging
@@ -619,108 +503,76 @@ class RecommendationService:
                     f"3. 技術指標或圖形模式是否過於嚴格"
                 )
         
-        # 解析 recommendation_ranking 配置
-        if threshold_mode == "quantile":
-            from decision_module.score_threshold_policy import quantize_score_to_basis_points
-            from decision_module.recommendation_percentile_ranker import calculate_score_percentiles
-            from app_module.recommendation_errors import RecommendationUniverseTooSmallError
+        latest_date_str = ""
+        if not df.empty and "日期" in df.columns:
+            latest_date_str = df["日期"].max().strftime("%Y-%m-%d")
+        ranking_plan = build_ranking_plan(
+            [(rec.stock_code, rec.total_score) for rec in all_recommendations],
+            mode=threshold_mode,
+            top_n=top_n,
+            ranking_config=ranking_config,
+            eligible_universe_date=latest_date_str,
+        )
+        recommendations_by_code = {
+            rec.stock_code: rec for rec in all_recommendations
+        }
 
-            min_percentile_bp = ranking_config["recommendation_min_percentile_bp"]
-            min_universe_size = ranking_config["recommendation_min_universe_size"]
-            ranking_method = ranking_config["recommendation_ranking_method"]
-            
-            # 1. 進行分數的量化
-            scores_by_stock = {}
-            for rec in all_recommendations:
-                val_bp = quantize_score_to_basis_points(rec.total_score)
-                if val_bp is None:
-                     raise ValueError(f"cannot quantize total score for stock {rec.stock_code}: score={rec.total_score}")
-                scores_by_stock[rec.stock_code] = val_bp
-            
-            # 2. 檢查合格母體大小
-            actual_size = len(all_recommendations)
-            if actual_size < min_universe_size:
-                raise RecommendationUniverseTooSmallError(actual_size, min_universe_size)
-                
-            # 3. 計算百分位
-            percentiles = calculate_score_percentiles(scores_by_stock)
-            
-            # 4. 百分位門檻篩選與 metadata 寫入
-            latest_date_str = ""
-            if not df.empty and '日期' in df.columns:
-                latest_date_str = df['日期'].max().strftime('%Y-%m-%d')
-                
-            filtered_recs = []
-            for rec in all_recommendations:
-                pct_bp = percentiles.get(rec.stock_code, 0)
-                matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
-                if matrix_row_for_rec is not None:
-                    matrix_row_for_rec["score_percentile_bp"] = pct_bp
-                    matrix_row_for_rec["eligible_universe_size"] = actual_size
-                    matrix_row_for_rec["threshold_name"] = "recommendation_min_percentile_bp"
-                    matrix_row_for_rec["observed_value"] = str(pct_bp)
-                    matrix_row_for_rec["required_value"] = str(min_percentile_bp)
-                    matrix_row_for_rec["threshold_mode"] = "quantile"
-                if pct_bp >= min_percentile_bp:
-                    rec.score_percentile_bp = pct_bp
-                    rec.eligible_universe_size = actual_size
-                    rec.eligible_universe_date = latest_date_str
-                    rec.ranking_method = ranking_method
-                    rec.threshold_mode = "quantile"
-                    filtered_recs.append(rec)
-                elif matrix_row_for_rec is not None:
-                    matrix_row_for_rec["status"] = "fail"
-                    matrix_row_for_rec["reason_codes"] = ["recommendation_percentile_below_min"]
-                    matrix_row_for_rec["quality"] = "observed"
-                    matrix_row_for_rec["stage"] = "threshold_gate"
-            
-            # 5. 穩定排序 (total_score 降序, stock_code 升序)
-            filtered_recs.sort(key=lambda x: x.stock_code)
-            filtered_recs.sort(key=lambda x: x.total_score, reverse=True)
-            
-            selected_recs = filtered_recs[:top_n]
-            selected_codes = {rec.stock_code for rec in selected_recs}
-            for rec in filtered_recs:
-                matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
-                if matrix_row_for_rec is None:
-                    continue
-                if rec.stock_code in selected_codes:
-                    matrix_row_for_rec["status"] = "pass"
-                    matrix_row_for_rec["reason_codes"] = ["recommendation_selected"]
-                    matrix_row_for_rec["stage"] = "final_selection"
-                else:
-                    matrix_row_for_rec["status"] = "fail"
-                    matrix_row_for_rec["reason_codes"] = ["recommendation_outside_top_n"]
-                    matrix_row_for_rec["stage"] = "top_n_gate"
-                    matrix_row_for_rec["threshold_name"] = "top_n"
-                    matrix_row_for_rec["observed_value"] = str(filtered_recs.index(rec) + 1)
-                    matrix_row_for_rec["required_value"] = str(top_n)
-            all_recommendations = selected_recs
-        else:
-            # fixed 模式：設定 DTO 門檻模式，並依原行為排序
-            for rec in all_recommendations:
-                rec.threshold_mode = "fixed"
-            all_recommendations.sort(key=lambda x: x.total_score, reverse=True)
-            selected_recs = all_recommendations[:top_n]
-            selected_codes = {rec.stock_code for rec in selected_recs}
-            for index, rec in enumerate(all_recommendations, start=1):
-                matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
-                if matrix_row_for_rec is None:
-                    continue
-                matrix_row_for_rec["threshold_mode"] = "fixed"
-                if rec.stock_code in selected_codes:
-                    matrix_row_for_rec["status"] = "pass"
-                    matrix_row_for_rec["reason_codes"] = ["recommendation_selected"]
-                    matrix_row_for_rec["stage"] = "final_selection"
-                else:
-                    matrix_row_for_rec["status"] = "fail"
-                    matrix_row_for_rec["reason_codes"] = ["recommendation_outside_top_n"]
-                    matrix_row_for_rec["stage"] = "top_n_gate"
-                    matrix_row_for_rec["threshold_name"] = "top_n"
-                    matrix_row_for_rec["observed_value"] = str(index)
-                    matrix_row_for_rec["required_value"] = str(top_n)
-            all_recommendations = selected_recs
+        for rec in all_recommendations:
+            rec.threshold_mode = ranking_plan.mode
+            matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
+            if ranking_plan.mode != "quantile":
+                continue
+            percentile_bp = ranking_plan.percentiles_bp.get(rec.stock_code, 0)
+            if matrix_row_for_rec is not None:
+                matrix_row_for_rec["score_percentile_bp"] = percentile_bp
+                matrix_row_for_rec["eligible_universe_size"] = (
+                    ranking_plan.eligible_universe_size
+                )
+                matrix_row_for_rec["threshold_name"] = (
+                    "recommendation_min_percentile_bp"
+                )
+                matrix_row_for_rec["observed_value"] = str(percentile_bp)
+                matrix_row_for_rec["required_value"] = str(
+                    ranking_plan.minimum_percentile_bp
+                )
+                matrix_row_for_rec["threshold_mode"] = "quantile"
+            if rec.stock_code in ranking_plan.ordered_codes:
+                rec.score_percentile_bp = percentile_bp
+                rec.eligible_universe_size = ranking_plan.eligible_universe_size
+                rec.eligible_universe_date = ranking_plan.eligible_universe_date
+                rec.ranking_method = ranking_plan.ranking_method
+            elif matrix_row_for_rec is not None:
+                matrix_row_for_rec["status"] = "fail"
+                matrix_row_for_rec["reason_codes"] = [
+                    "recommendation_percentile_below_min"
+                ]
+                matrix_row_for_rec["quality"] = "observed"
+                matrix_row_for_rec["stage"] = "threshold_gate"
 
+        ordered_recommendations = [
+            recommendations_by_code[code] for code in ranking_plan.ordered_codes
+        ]
+        selected_codes = set(ranking_plan.selected_codes)
+        for rank, rec in enumerate(ordered_recommendations, start=1):
+            matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
+            if matrix_row_for_rec is None:
+                continue
+            if rec.stock_code in selected_codes:
+                matrix_row_for_rec["status"] = "pass"
+                matrix_row_for_rec["reason_codes"] = ["recommendation_selected"]
+                matrix_row_for_rec["stage"] = "final_selection"
+            else:
+                matrix_row_for_rec["status"] = "fail"
+                matrix_row_for_rec["reason_codes"] = [
+                    "recommendation_outside_top_n"
+                ]
+                matrix_row_for_rec["stage"] = "top_n_gate"
+                matrix_row_for_rec["threshold_name"] = "top_n"
+                matrix_row_for_rec["observed_value"] = str(rank)
+                matrix_row_for_rec["required_value"] = str(top_n)
+        all_recommendations = [
+            recommendations_by_code[code] for code in ranking_plan.selected_codes
+        ]
         self._finalize_negative_evidence_buffers()
         return all_recommendations
     

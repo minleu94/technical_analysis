@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Dict ,Any ,Optional ,List
 from datetime import datetime ,timedelta
 
-from app_module import update_data_normalization
+import app_module.update_data_normalization as update_data_normalization
 from app_module.update_service_status_support import compose_sqlite_status_read_model
+from app_module.update_daily_output import parse_daily_update_output
 
 
 class UpdateService :
@@ -1316,177 +1317,20 @@ class UpdateService :
                 output_path_obj .unlink (missing_ok =True )
 
             if result .returncode ==0 :
-            # 解析輸出，提取成功和失敗的日期
-                updated_dates =[]
-                failed_dates =[]
-                skipped_dates =[]# 已存在並跳過的日期
-                diagnostic_codes :list [str ]=[]
-
-                import re
-                # ✅ 調試：記錄輸出長度和關鍵行
-                logger .debug (f"[UpdateService] 腳本輸出長度: {len(output)}")
-
-                # 方法 1：從總結行解析（更可靠）
-                # 優先查找 [UPDATE_SUMMARY] 標記的總結行（最可靠）
-                # 格式: [UPDATE_SUMMARY] SUCCESS: X days, FAILED: Y days
-                summary_match =re .search (r'\[UPDATE_SUMMARY\]\s*SUCCESS[：:]\s*(\d+)\s*days?[，,]\s*FAILED[：:]\s*(\d+)\s*days?',output )
-                if summary_match :
-                    success_count_from_summary =int (summary_match .group (1 ))
-                    fail_count_from_summary =int (summary_match .group (2 ))
-                    logger .debug (f"[UpdateService] 從 [UPDATE_SUMMARY] 解析: 成功={success_count_from_summary}, 失敗={fail_count_from_summary}")
+                parsed_result =parse_daily_update_output (output ,missing_dates )
+                if parsed_result ["success"]:
+                    logger .info ("[UpdateService] 每日股價更新完成: %s",parsed_result ["message"])
                 else :
-                    success_count_from_summary =None
-                    fail_count_from_summary =None
+                    logger .warning ("[UpdateService] 每日股價更新失敗: %s",parsed_result ["message"])
+                return parsed_result
 
-                    # 方法 2：從日誌行解析（備用）
-                    # 查找 "成功: X 天" 和 "失敗: X 天" 的總結行
-                    # 支持日誌格式：2026-01-02 02:01:58,598 - __main__ - INFO - 成功: 6 天
-                success_match =re .search (r'成功[：:]\s*(\d+)\s*天',output )
-                fail_match =re .search (r'失敗[：:]\s*(\d+)\s*天',output )
-
-                # 如果沒找到，嘗試查找 "成功 X 天"（沒有冒號）
-                if not success_match :
-                    success_match =re .search (r'成功\s+(\d+)\s*天',output )
-                if not fail_match :
-                    fail_match =re .search (r'失敗\s+(\d+)\s*天',output )
-
-                    # ✅ 調試：記錄匹配結果和實際輸出
-                if success_match :
-                    logger .debug (f"[UpdateService] 找到成功匹配: {success_match.group(1)}")
-                else :
-                # 查找包含 "成功" 或 "失敗" 的行
-                    lines_with_keywords =[l for l in output .split ('\n')if '成功'in l or '失敗'in l ]
-                    logger .warning (
-                    f"[UpdateService] 未找到成功匹配，"
-                    f"包含關鍵詞的行數: {len(lines_with_keywords)}, "
-                    f"最後幾行: {lines_with_keywords[-3:] if lines_with_keywords else 'None'}"
-                    )
-                if fail_match :
-                    logger .debug (f"[UpdateService] 找到失敗匹配: {fail_match.group(1)}")
-                else :
-                    logger .warning (f"[UpdateService] 未找到失敗匹配")
-
-                    # 方法 2：逐行解析日期（用於獲取具體日期列表）
-                lines =output .split ('\n')
-                for line in lines :
-                # 提取日期（如果行中包含日期）
-                    date_match =re .search (r'(\d{4}-\d{2}-\d{2})',line )
-                    if not date_match :
-                        continue
-
-                    date_str =date_match .group (1 )
-
-                    # 檢查是否為成功（更新成功或已存在並跳過）
-                    # 使用多種方式匹配，包括 Unicode 字符和轉義序列
-                    if ('更新成功'in line or '✓'in line or '\u2713'in line or
-                    '成功'in line and '筆記錄'in line ):
-                        if date_str not in updated_dates :
-                            updated_dates .append (date_str )
-                            # 檢查是否為已存在並跳過（也視為成功）
-                    elif ('已存在'in line or '⚠'in line or '\u26a0'in line or '跳過'in line ):
-                        if date_str not in skipped_dates :
-                            skipped_dates .append (date_str )
-                        if date_str not in updated_dates :
-                            updated_dates .append (date_str )# 已存在也算成功
-                            # 檢查是否為失敗
-                    elif ('更新失敗'in line or '✗'in line or '\u2717'in line or
-                    '失敗'in line and '無法獲取'in line ):
-                        if date_str not in failed_dates :
-                            failed_dates .append (date_str )
-
-                            # ✅ 如果從總結行解析到數字，使用總結行的數字（更準確）
-                if success_match and fail_match :
-                    success_count =int (success_match .group (1 ))
-                    fail_count =int (fail_match .group (1 ))
-
-                    # 如果解析到的日期數量與總結不一致，使用總結的數字
-                    if len (updated_dates )!=success_count or len (failed_dates )!=fail_count :
-                        logger .warning (
-                        f"[UpdateService] 日期解析不一致: "
-                        f"解析到 {len(updated_dates)} 成功/{len(failed_dates)} 失敗, "
-                        f"但總結顯示 {success_count} 成功/{fail_count} 失敗"
-                        )
-                        # 使用總結的數字，但保留已解析的日期列表（如果有的話）
-                        if len (updated_dates )==0 :
-                        # 如果沒有解析到日期，至少確保數字正確
-                            updated_dates =[f"成功_{i+1}"for i in range (success_count )]
-                        if len (failed_dates )==0 :
-                            failed_dates =[f"失敗_{i+1}"for i in range (fail_count )]
-
-                            # ✅ 記錄結果（去重）
-                updated_dates =list (set (updated_dates ))
-                failed_dates =list (set (failed_dates ))
-                skipped_dates =list (set (skipped_dates ))
-
-                # 子程序成功結束卻沒有任何可解析結果時，不可把缺日誤判為成功，
-                # 也不可用「失敗_1」這類 placeholder 隱藏真正請求日期。
-                if (
-                success_count_from_summary is None
-                and fail_count_from_summary is None
-                and not success_match
-                and not fail_match
-                and not updated_dates
-                and not failed_dates
-                ):
-                    failed_dates =list (missing_dates )
-                    diagnostic_codes .append (
-                    'batch_output_missing'if not output .strip ()else 'batch_output_unparseable'
-                    )
-
-                # ✅ 優先使用總結行的數字（如果有的話）
-                final_success_count =len (updated_dates )
-                final_fail_count =len (failed_dates )
-
-                # 優先使用 [UPDATE_SUMMARY] 標記的數字
-                if success_count_from_summary is not None and fail_count_from_summary is not None :
-                    final_success_count =success_count_from_summary
-                    final_fail_count =fail_count_from_summary
-                elif success_match and fail_match :
-                    final_success_count =int (success_match .group (1 ))
-                    final_fail_count =int (fail_match .group (1 ))
-
-                    # 生成訊息
-                if skipped_dates :
-                    message =f'更新完成：成功 {final_success_count} 天（其中 {len(skipped_dates)} 天已存在並跳過），失敗 {final_fail_count} 天'
-                else :
-                    message =f'更新完成：成功 {final_success_count} 天，失敗 {final_fail_count} 天'
-
-                if final_fail_count >0 :
-                    if not failed_dates :
-                        failed_dates =[f"失敗_{i+1}"for i in range (final_fail_count )]
-                    logger .warning (
-                    f"[UpdateService] 每日股價更新有失敗日期: "
-                    f"成功 {final_success_count} 天（跳過 {len(skipped_dates)} 天）, 失敗 {final_fail_count} 天"
-                    )
-                    return {
-                    'success':False ,
-                    'message':message ,
-                    'updated_dates':updated_dates if updated_dates else [],
-                    'failed_dates':failed_dates ,
-                    'skipped_dates':skipped_dates ,
-                    'diagnostic_codes':diagnostic_codes
-                    }
-
-                logger .info (
-                f"[UpdateService] 更新完成: "
-                f"成功 {final_success_count} 天（跳過 {len(skipped_dates)} 天）, 失敗 {final_fail_count} 天"
-                )
-                return {
-                'success':True ,
-                'message':message ,
-                'updated_dates':updated_dates if updated_dates else [],# 保留日期列表（如果解析到）
-                'failed_dates':failed_dates if failed_dates else [],
-                'skipped_dates':skipped_dates
-                }
-            else :
-            # ✅ 記錄錯誤
-                logger .error (f"[UpdateService] 更新失敗: {output}")
-                return {
-                'success':False ,
-                'message':f'更新失敗：{output}',
-                'updated_dates':[],
-                'failed_dates':[]
-                }
+            logger .error (f"[UpdateService] 更新失敗: {output}")
+            return {
+            'success':False ,
+            'message':f'更新失敗：{output}',
+            'updated_dates':[],
+            'failed_dates':[]
+            }
         except Exception as e :
             import traceback
             logger .error (f"[UpdateService] 執行更新時發生異常: {str(e)}")

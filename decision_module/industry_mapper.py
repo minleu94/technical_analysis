@@ -6,24 +6,30 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from decision_module.market_frame_contracts import normalize_market_dates
 
 class IndustryMapper:
     """產業映射器"""
     
-    def __init__(self, config):
+    def __init__(
+        self,
+        config,
+        industry_index_provider: Optional[Callable[[], pd.DataFrame]] = None,
+    ):
         """初始化產業映射器
         
         Args:
             config: TWStockConfig 實例
         """
         self.config = config
+        self.industry_index_provider = industry_index_provider
         self.companies_df = None
         self.industry_index_df = None
-        self.stock_to_industries = {}  # 股票代號 -> 產業類別列表
-        self.industry_normalization = {}  # 產業類別標準化映射
-        self._latest_industry_performance_by_index_name = {}
-        self._industry_performance_cache = {}
+        self.stock_to_industries: Dict[str, List[str]] = {}
+        self.industry_normalization: Dict[str, str] = {}
+        self._latest_industry_performance_by_index_name: Dict[str, Any] = {}
+        self._industry_performance_cache: Dict[str, Any] = {}
         
         # 載入數據
         self._load_companies()
@@ -50,6 +56,14 @@ class IndustryMapper:
     
     def _load_industry_index(self):
         """載入 industry_index 數據"""
+        if self.industry_index_provider is not None:
+            self.industry_index_df = self.industry_index_provider().copy()
+            if '日期' in self.industry_index_df.columns:
+                self.industry_index_df['日期'] = normalize_market_dates(
+                    self.industry_index_df['日期']
+                )
+            return
+
         # 優先嘗試從 SQLite 資料庫載入
         if getattr(self.config, 'use_sqlite', False):
             try:

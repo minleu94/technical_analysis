@@ -16,7 +16,12 @@ from decision_module.industry_mapper import IndustryMapper
 class ScreeningService:
     """篩選服務類"""
     
-    def __init__(self, config, industry_mapper: Optional[IndustryMapper] = None):
+    def __init__(
+        self,
+        config,
+        industry_mapper: Optional[IndustryMapper] = None,
+        stock_screener: Optional[StockScreener] = None,
+    ):
         """初始化篩選服務
         
         Args:
@@ -28,7 +33,9 @@ class ScreeningService:
             self.industry_mapper = IndustryMapper(config)
         else:
             self.industry_mapper = industry_mapper
-        self.stock_screener = StockScreener(config, self.industry_mapper)
+        self.stock_screener = stock_screener or StockScreener(
+            config, self.industry_mapper
+        )
     
     def get_strong_stocks(
         self, 

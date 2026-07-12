@@ -3,7 +3,7 @@
 提供市場狀態檢測的業務邏輯
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # 方案 A：不搬檔案，service 層內部 import ui_app 模組
 # from ui_app.market_regime_detector import MarketRegimeDetector
@@ -14,14 +14,18 @@ from app_module.dtos import RegimeResultDTO
 class RegimeService:
     """市場狀態服務類"""
     
-    def __init__(self, config):
+    def __init__(
+        self,
+        config,
+        regime_detector: Optional[MarketRegimeDetector] = None,
+    ):
         """初始化市場狀態服務
         
         Args:
             config: TWStockConfig 實例
         """
         self.config = config
-        self.regime_detector = MarketRegimeDetector(config)
+        self.regime_detector = regime_detector or MarketRegimeDetector(config)
     
     def detect_regime(self, date: str = None) -> RegimeResultDTO:
         """檢測市場狀態

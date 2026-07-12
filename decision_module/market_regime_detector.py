@@ -19,6 +19,12 @@ from datetime import datetime, timedelta
 import json
 import logging
 import warnings
+from typing import Callable, Optional
+from decision_module.market_regime_kernels import (
+    calculate_bollinger_bandwidth,
+    calculate_ma_slope,
+)
+from decision_module.market_frame_contracts import normalize_market_index_frame
 
 # 嘗試導入 ta 套件
 try:
@@ -34,7 +40,13 @@ logger = logging.getLogger(__name__)
 class MarketRegimeDetector:
     """市場狀態判斷器"""
     
-    def __init__(self, config, *, use_persistent_history: bool = True):
+    def __init__(
+        self,
+        config,
+        *,
+        use_persistent_history: bool = True,
+        market_frame_provider: Optional[Callable[[], pd.DataFrame]] = None,
+    ):
         """初始化市場狀態判斷器
         
         Args:
@@ -42,6 +54,7 @@ class MarketRegimeDetector:
         """
         self.config = config
         self.use_persistent_history = use_persistent_history
+        self.market_frame_provider = market_frame_provider
         
         # Regime 抖動防護：保存歷史狀態
         # 注意：resolve_output_path 用於目錄，對於文件需要手動構建路徑
@@ -242,23 +255,7 @@ class MarketRegimeDetector:
         Returns:
             float: 斜率（正數表示上升，負數表示下降）
         """
-        if len(ma_series) < period:
-            return 0.0
-        
-        recent = ma_series.iloc[-period:].values
-        x = np.arange(len(recent))
-        
-        # 線性回歸
-        coeffs = np.polyfit(x, recent, 1)
-        slope = coeffs[0]
-        
-        # 標準化為百分比變化
-        if len(recent) > 0 and recent[0] != 0:
-            slope_pct = (slope * period) / recent[0] * 100
-        else:
-            slope_pct = 0.0
-        
-        return slope_pct
+        return calculate_ma_slope(ma_series, period)
     
     def _calculate_bollinger_bandwidth(self, close: pd.Series, window: int = 20, std_dev: float = 2) -> pd.Series:
         """計算布林帶寬度（用於判斷壓縮）
@@ -271,15 +268,7 @@ class MarketRegimeDetector:
         Returns:
             Series: 帶寬序列（百分比）
         """
-        ma = close.rolling(window=window, min_periods=1).mean()
-        std = close.rolling(window=window, min_periods=1).std()
-        
-        upper = ma + (std * std_dev)
-        lower = ma - (std * std_dev)
-        
-        # 帶寬 = (上軌 - 下軌) / 中軌
-        bandwidth = ((upper - lower) / ma.replace(0, np.nan)) * 100
-        return bandwidth.fillna(0)
+        return calculate_bollinger_bandwidth(close, window, std_dev)
     
     def detect_regime(self, date: str = None) -> dict:
         """檢測市場狀態
@@ -296,22 +285,19 @@ class MarketRegimeDetector:
         """
         # 讀取大盤數據
         market_file = self.config.market_index_file
-        df = None
+        df = (
+            self.market_frame_provider().copy()
+            if self.market_frame_provider is not None
+            else None
+        )
         
-        if getattr(self.config, 'use_sqlite', False):
+        if df is None and getattr(self.config, 'use_sqlite', False):
             try:
                 from data_module.db_manager import DBManager
                 db = DBManager(self.config)
                 sql_df = db.execute_query("SELECT * FROM market_indices ORDER BY 日期 ASC;")
                 if not sql_df.empty:
                     df = sql_df
-                    # 將日期格式從 YYYYMMDD 轉回 YYYY-MM-DD 保持與原 CSV 一致
-                    df['日期'] = pd.to_datetime(df['日期'].astype(str), format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
-                    # 只有在原本無 '收盤價' 且有 '收盤指數' 時，才重命名以相容後續取值
-                    if '收盤價' not in df.columns and '收盤指數' in df.columns:
-                        df = df.rename(columns={'收盤指數': '收盤價'})
-                    # 防禦性去除重複欄位
-                    df = df.loc[:, ~df.columns.duplicated()]
                     logger.info("成功從 SQLite 載入大盤指數數據進行狀態檢測")
             except Exception as sql_err:
                 logger.warning(f"從 SQLite 載入大盤指數數據失敗: {sql_err}，將降級讀取 CSV")
@@ -333,6 +319,8 @@ class MarketRegimeDetector:
                     'details': {'error': str(e)}
                 }
             
+        df = normalize_market_index_frame(df)
+
         try:
             # 處理日期欄位
             date_col = None
