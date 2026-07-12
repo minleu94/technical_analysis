@@ -960,6 +960,20 @@ Phase 3C 後，可用 `scripts\inspect_source_candidate_readiness.py` 做三大�
 - `available_date > decision_date` 會輸出 `future_data_blocked`，不得被使用。
 - `access_boundary` 必須保留 `writes_allowed=false`、`production_scheduler_allowed=false`、`scoring_engine_write_allowed=false`、`investment_effectiveness_claim=false`。
 
+### V2.3 P0 資料來源人工接受台帳
+
+`docs\06_qa\V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md` 是 Gate 3 / V2.3 的逐來源人工決策台帳。它涵蓋 corporate action、交易限制、三大法人、信用交易、TDCC / 集保持股分散與 PIT fundamentals；它不是資料抓取命令，也不會改變 CLI、UI、DB 或資料來源設定。
+
+操作與結果判讀：
+
+1. 先以本節的 candidate readiness CLI 保留來源 diagnostics、`available_date` 與 quality 證據；候選資料只可用於審核，不能直接接入策略訊號。
+2. 再由具名人工決策人審核 source version、授權 / 使用範圍、rate limit、coverage、PIT 語意、missing / outage、quarantine 與 retry。
+3. 未填完人工作業前，台帳的 `human decision` 必須維持 `requires_human_acceptance`，`downstream eligibility` 必須維持 `none`。
+4. `decision_ready_candidate` 只代表該筆候選資料未觸發 available-date / required-field blocking diagnostic；它不是 `accepted`，不得讓資料進入 `ScoringEngine`、Advice、Portfolio、lifecycle 或 production scheduler。
+5. 資料缺失、outage、stale、缺 `available_date` 或 `available_date > decision_date` 時，維持 fail-closed 或明示 degraded / warning；不得補值或當作 observed。
+
+只有台帳已記錄真實的 `accepted` / `limited` / `rejected` / `deferred` 結論、owner、日期與明確 downstream eligibility 時，才可另行規劃後續受控實作。本手冊與台帳本身不授權任何 ingestion 或策略變更。
+
 V1.6 後，可用 cross-sectional factor snapshot inspection CLI 唯讀檢查已保存的 daily factor snapshot。這個 CLI 不建立 DB、不寫 snapshot、不重算 scoring；若指定的 DB 不存在會以錯誤結束。snapshot 只會在其他受控 workflow 明確呼叫 `CrossSectionalFactorPipeline` / `CrossSectionalFactorRepository` 保存後才存在。
 
 ```powershell
@@ -1392,6 +1406,7 @@ Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **
 
 - 2026-07-12：新增 V2.2 三週 weekly review runbook 入口與 working-copy 保存步驟；目前 weekly `0/3 waiting_for_time`、multi-day `3/3 ready`、scheduler 未核准，不能 formal closeout。
 - 2026-07-12：新增 Gate 1 Advice 唯讀操作、Guided / Professional Mode、安全拒絕輸出、平衡限制、日期 / source trace 與不交易邊界；weekly review working-copy 保存仍是 Gate 2 真實時間工作。
+- 2026-07-12：新增 V2.3 P0 資料來源人工接受台帳操作規則；candidate readiness、`decision_ready_candidate` 與正式 accepted feature 明確分離。所有未決 P0 source 維持 `requires_human_acceptance`、`downstream eligibility=none`，不啟用 ingestion、`ScoringEngine`、scheduler 或交易。
 - 2026-07-09：統一推薦最新價格／成交量衍生特徵，新增預設參數技術指標安全 reuse，並讓 Daily Decision Desk 在單次 snapshot 內共用 read-only 市場 frame；公開 service / scheduler 介面、DTO、SQLite schema、scoring、threshold 與 dry-run / confirm gate 均維持不變。
 
 - 2026-07-08：Phase 3C governed ingestion candidate 已建立 manual-only dry-run/apply 邊界；不屬於今晚 V3.0 closeout gate。
