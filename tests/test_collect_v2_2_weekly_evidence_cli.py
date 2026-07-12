@@ -96,3 +96,45 @@ def test_collect_cli_saves_failed_sidecar_record_for_invalid_period_end(tmp_path
             "SELECT status, error_type, error_message FROM evidence_weekly_collections"
         ).fetchone()
     assert row == ("collection_failed", "ValueError", "Invalid isoformat string: 'not-a-date'")
+
+
+def test_collect_cli_replaces_pending_with_failed_record_when_report_output_is_unwritable(tmp_path: Path) -> None:
+    source_db_path = tmp_path / "twstock.db"
+    sidecar_db_path = tmp_path / "weekly-collection-sidecar.sqlite"
+    output_root = tmp_path / "output-root-file"
+    _create_source_database(source_db_path)
+    output_root.write_text("not a directory", encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source-db-path",
+            str(source_db_path),
+            "--sidecar-db-path",
+            str(sidecar_db_path),
+            "--output-root",
+            str(output_root),
+            "--period-end",
+            "2026-07-12",
+            "--json-output",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode != 0
+    payload = json.loads(completed.stdout)
+    assert payload["collection_status"] == "collection_failed"
+    assert payload["error"]["type"] == "FileExistsError"
+    assert payload["error"]["message"]
+    with sqlite3.connect(sidecar_db_path) as connection:
+        rows = connection.execute(
+            "SELECT status, error_type, error_message FROM evidence_weekly_collections"
+        ).fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == "collection_failed"
+    assert rows[0][1] == "FileExistsError"
+    assert rows[0][2]

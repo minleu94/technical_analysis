@@ -139,30 +139,33 @@ def main() -> int:
         period_end=period_end,
         source_db_path=source_db_path,
     )
+    pending_payload: dict[str, Any] | None = None
     try:
         last_trading_date = _read_latest_trading_date(source_db_path, period_end=period_end)
         payload["last_trading_date"] = last_trading_date
+        pending_payload = dict(payload)
         record = repository.save_pending(
             period_start=period_start,
             period_end=period_end,
-            payload_json=payload,
+            payload_json=pending_payload,
         )
         payload["collection_status"] = record.status
         payload["collection_record"] = record.to_dict()
+        _write_reports(output_root, payload)
         exit_code = 0
     except Exception as error:
         payload["error"] = {"type": type(error).__name__, "message": str(error)}
+        payload["collection_status"] = "collection_failed"
         record = repository.save_failed(
             period_start=period_start,
             period_end=period_end,
-            payload_json=payload,
+            payload_json=pending_payload if pending_payload is not None else payload,
             error=error,
         )
         payload["collection_status"] = record.status
         payload["collection_record"] = record.to_dict()
         exit_code = 1
 
-    _write_reports(output_root, payload)
     if args.json_output:
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     else:
