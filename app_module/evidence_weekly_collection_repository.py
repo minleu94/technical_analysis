@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -32,7 +34,7 @@ class EvidenceWeeklyCollectionRepository:
         self.ensure_schema()
 
     def ensure_schema(self) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sidecar_schema_version (
@@ -80,7 +82,7 @@ class EvidenceWeeklyCollectionRepository:
             payload_json=payload_json,
             status=_PENDING_STATUS,
         )
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO evidence_weekly_collections (
@@ -107,8 +109,9 @@ class EvidenceWeeklyCollectionRepository:
             payload_json=payload_json,
             status=_FAILED_STATUS,
             error=error,
+            allow_unavailable_source_hash=True,
         )
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO evidence_weekly_collections (
@@ -125,7 +128,7 @@ class EvidenceWeeklyCollectionRepository:
         return self._get_required(record.collection_id)
 
     def get_by_identity(self, collection_id: str) -> EvidenceWeeklyCollectionRecord | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT * FROM evidence_weekly_collections WHERE collection_id = ?",
@@ -141,9 +144,15 @@ class EvidenceWeeklyCollectionRepository:
         payload_json: Mapping[str, Any],
         status: str,
         error: Exception | None = None,
+        allow_unavailable_source_hash: bool = False,
     ) -> EvidenceWeeklyCollectionRecord:
         payload = dict(payload_json)
-        source_hash = self._source_hash()
+        try:
+            source_hash = self._source_hash()
+        except OSError:
+            if not allow_unavailable_source_hash:
+                raise
+            source_hash = self._unavailable_source_hash()
         identity = _canonical_json(
             {
                 "period_start": period_start,
@@ -172,8 +181,24 @@ class EvidenceWeeklyCollectionRepository:
                 digest.update(chunk)
         return f"sha256:{digest.hexdigest()}"
 
+    def _unavailable_source_hash(self) -> str:
+        identity = f"unavailable-source:{self.source_db_path}"
+        return f"unavailable:sha256:{sha256(identity.encode('utf-8')).hexdigest()}"
+
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.sidecar_path)
+
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        connection = self._connect()
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _get_required(self, collection_id: str) -> EvidenceWeeklyCollectionRecord:
         record = self.get_by_identity(collection_id)
