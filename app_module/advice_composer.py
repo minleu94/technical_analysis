@@ -15,7 +15,7 @@ from app_module.advice_dtos import (
 )
 from app_module.advice_policy import AdvicePolicy
 from app_module.dtos import RecommendationDTO, RecommendationResultDTO
-from app_module.portfolio_construction_dtos import PortfolioConstructionResult
+from app_module.portfolio_construction_dtos import PortfolioAllocationRow, PortfolioConstructionResult
 
 
 class AdviceComposer:
@@ -61,6 +61,7 @@ class AdviceComposer:
         execution_feasible = config.get("execution_feasible")
         risk_budget_available = config.get("risk_budget_available")
 
+        recommendation_advice: tuple[RecommendationAdviceDTO, ...]
         if evidence_quality == "MISSING":
             recommendation_advice = (
                 self._refusal_recommendation(
@@ -96,7 +97,6 @@ class AdviceComposer:
                 allocation,
                 current_weights=current_weights,
                 result_id=result_id,
-                decision_date=decision_date_text,
                 data_as_of_date=data_as_of_date_text,
                 evidence_quality=evidence_quality or "",
                 warnings=warning_values,
@@ -115,30 +115,47 @@ class AdviceComposer:
             warnings=warning_values,
         )
 
-    def _recommendation_advice(self, recommendation: RecommendationDTO, **values: object) -> RecommendationAdviceDTO:
+    def _recommendation_advice(
+        self,
+        recommendation: RecommendationDTO,
+        *,
+        result_id: str,
+        strategy_status: str | None,
+        mode: AdviceMode,
+        evidence_quality: str | None,
+        execution_feasible: object,
+        risk_budget_available: object,
+        current_position_count: int,
+        cash_reserve_bp: int | None,
+        target_weight_bp: int | None,
+        decision_date: str,
+        data_as_of_date: str,
+        warnings: tuple[str, ...],
+        strategy_version: str,
+        market_regime: str,
+    ) -> RecommendationAdviceDTO:
         decision = self._policy.decide(
-            mode=values["mode"],
-            strategy_status=values["strategy_status"],
-            data_quality=values["evidence_quality"],
-            execution_feasible=values["execution_feasible"],
-            risk_budget_available=values["risk_budget_available"],
-            current_position_count=values["current_position_count"],
-            cash_reserve_bp=values["cash_reserve_bp"],
-            target_weight_bp=values["target_weight_bp"],
+            mode=mode,
+            strategy_status=strategy_status,
+            data_quality=evidence_quality,
+            execution_feasible=self._bool_or_none(execution_feasible),
+            risk_budget_available=self._bool_or_none(risk_budget_available),
+            current_position_count=current_position_count,
+            cash_reserve_bp=cash_reserve_bp,
+            target_weight_bp=target_weight_bp,
         )
-        result_id = values["result_id"]
         source_trace = ("RecommendationResultDTO",) + ((str(result_id),) if result_id else ())
         return RecommendationAdviceDTO(
             stock_code=recommendation.stock_code,
             advice_action=decision.action,
             why_reasons=tuple(self._split_reasons(recommendation.recommendation_reasons)),
-            data_quality=str(values["evidence_quality"] or ""),
-            warnings=values["warnings"],
-            strategy_version=values["strategy_version"],
-            decision_date=values["decision_date"],
-            data_as_of_date=values["data_as_of_date"],
-            market_regime=values["market_regime"],
-            execution_feasibility=self._feasibility_text(values["execution_feasible"]),
+            data_quality=evidence_quality or "",
+            warnings=warnings,
+            strategy_version=strategy_version,
+            decision_date=decision_date,
+            data_as_of_date=data_as_of_date,
+            market_regime=market_regime,
+            execution_feasibility=self._feasibility_text(execution_feasible),
             source_trace=source_trace,
             refusal_reasons=decision.reasons,
         )
@@ -156,14 +173,21 @@ class AdviceComposer:
             refusal_reasons=("evidence_quality_missing",),
         )
 
-    def _portfolio_advice(self, allocation: object, **values: object) -> PortfolioAdviceDTO:
+    def _portfolio_advice(
+        self,
+        allocation: PortfolioAllocationRow,
+        *,
+        current_weights: Mapping[str, int],
+        result_id: str,
+        data_as_of_date: str,
+        evidence_quality: str,
+        warnings: tuple[str, ...],
+    ) -> PortfolioAdviceDTO:
         stock_code = allocation.stock_code
         target_weight_bp = self._bp(allocation.constrained_weight_bp, "target_weight_bp")
-        current_weights = values["current_weights"]
         missing_current_weight = stock_code not in current_weights
         current_weight_bp = current_weights.get(stock_code, 0)
         diagnostics = tuple(allocation.diagnostics) + (("current_weight_missing",) if missing_current_weight else ())
-        result_id = values["result_id"]
         source_trace = ("PortfolioConstructionResult",) + ((str(result_id),) if result_id else ())
         return PortfolioAdviceDTO(
             stock_code=stock_code,
@@ -171,10 +195,10 @@ class AdviceComposer:
             target_weight_bp=target_weight_bp,
             current_weight_bp=current_weight_bp,
             weight_gap_bp=target_weight_bp - current_weight_bp,
-            data_quality=values["evidence_quality"],
-            warnings=values["warnings"],
+            data_quality=evidence_quality,
+            warnings=warnings,
             source_trace=source_trace,
-            review_date=values["data_as_of_date"],
+            review_date=data_as_of_date,
             diagnostics=diagnostics,
         )
 
@@ -227,6 +251,10 @@ class AdviceComposer:
     @staticmethod
     def _string_or_empty(value: object) -> str:
         return value if isinstance(value, str) else ""
+
+    @staticmethod
+    def _bool_or_none(value: object) -> bool | None:
+        return value if isinstance(value, bool) else None
 
     @staticmethod
     def _split_reasons(value: object) -> tuple[str, ...]:

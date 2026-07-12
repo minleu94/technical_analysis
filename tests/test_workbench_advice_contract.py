@@ -21,7 +21,10 @@ from ui_qt.views.workbench_view import UnifiedDecisionWorkbenchView
 
 
 def _app() -> QApplication:
-    return QApplication.instance() or QApplication(sys.argv)
+    instance = QApplication.instance()
+    if isinstance(instance, QApplication):
+        return instance
+    return QApplication(sys.argv)
 
 
 def _dashboard_with_advice() -> WorkbenchDashboardDTO:

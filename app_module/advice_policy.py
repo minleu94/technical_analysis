@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypeGuard
 
 from app_module.advice_dtos import AdviceAction, AdviceMode, AdvicePolicyConfig
 
@@ -95,9 +96,9 @@ class AdvicePolicy:
         return AdvicePolicyDecision(AdviceAction.RESEARCH, ("data_quality_not_observed",))
 
     @staticmethod
-    def _is_non_negative_integer(value: int | None) -> bool:
+    def _is_non_negative_integer(value: int | None) -> TypeGuard[int]:
         return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
     @classmethod
-    def _is_bp(cls, value: int | None) -> bool:
+    def _is_bp(cls, value: int | None) -> TypeGuard[int]:
         return cls._is_non_negative_integer(value) and value <= 10000
