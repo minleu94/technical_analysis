@@ -10,7 +10,15 @@
 - `--save-history` 與 `--confirm-action-items` 只能在明確、可回溯且經人工核准的 working-copy DB 使用。CLI 會 canonicalize 實際 `--db-path`，並同時比對 configured、環境 `DATA_ROOT` 與預設正式 root；因此 `--data-root` 不能使正式 DB 變成可接受路徑。production-like DB 一律拒絕，沒有 `--allow-production-like-db` 繞過旗標；正式 DB、production-like DB 與 scheduler write-mode 均不在本 runbook 的授權範圍。
 - replay、fixture、單次 smoke、raw scheduled report 或手動補表不計入三週 Gate。每列只記錄該週實際取得的證據。
 
-## 2. 每週固定操作順序
+## 2. 週日 Sidecar Collection（不屬於人工 weekly review）
+
+- Windows Task Scheduler 的 `baldr-v2-2-weekly-collection` 於每週日 18:00 執行 `run_v2_2_weekly_collection.cmd`。它只執行 collection CLI，將來源的週期資料保存為 sidecar record，結果只能是 `pending_human_review` 或 `collection_failed`。
+- `pending_human_review` 只代表資料已收集、等待人工判讀；它**不是** manual review、不代表 Gate 通過、不會確認 action item，也不會寫入或補造 weekly history。此 task 不帶 `--save-history` 或 `--confirm-action-items`。
+- 此 task 不改正式 source DB、不啟用 production scheduler，且 `production_scheduler_allowed=false` 維持不變。真實三週人工 review 與 append-only history 仍必須依本 runbook 的後續章節，由人工在隔離的 working-copy DB 完成。
+- 註冊前可執行 `scripts\scheduled\register_baldr_scheduled_tasks.cmd dryrun` 檢視排程；`weekly-register` 只建立或取代此週日 task，不建立、取代或啟用任何既有每日 task。查核使用 `schtasks /Query /TN baldr-v2-2-weekly-collection /V /FO LIST`。
+- 回復此收集 task 時，只能在 Windows Task Scheduler 停用，或執行 `scripts\scheduled\unregister_baldr_scheduled_tasks.cmd weekly-unregister`。禁止自動刪除 sidecar SQLite table；既有 record 與錯誤記錄保留供人工診斷。
+
+## 3. 每週固定操作順序
 
 1. 確認本週觀察期間、reviewer、正式 source DB 路徑與 working-copy DB 路徑。先用既有 working-copy smoke 的 copy/guard 建立隔離副本；它會拒絕 source 與 copy 為同一檔案、拒絕 production DB 作為 copy target，且只在副本執行 confirm smoke：
 
@@ -42,7 +50,7 @@
 
 8. 記錄下一步與本週 backup / rollback / recovery 演練狀態。三週都完成後，仍須人工彙整 scheduler approval package；不可自動進入 formal closeout。
 
-## 3. 固定三週人工紀錄格式
+## 4. 固定三週人工紀錄格式
 
 下表必須完整填寫三列。`待執行` 不是通過；若未保存 history，`--save-history` 欄必須填入拒絕原因而非虛構 review ID。
 
@@ -52,7 +60,7 @@
 | Week 2 | `<YYYY-MM-DD>.. <YYYY-MM-DD> / <timestamp>` | `<fresh / degraded / reason>` | `<dry_run / confirm / scheduler_allowed=false>` | `<逐項列出或 none>` | `<人工結論>` | `<姓名或角色>` | `<path>; 與正式 DB 不同=true>` | `<review_id/hash/status 或未保存原因>` | `<狀態與證據>` | `<可驗證下一步>` |
 | Week 3 | `<YYYY-MM-DD>.. <YYYY-MM-DD> / <timestamp>` | `<fresh / degraded / reason>` | `<dry_run / confirm / scheduler_allowed=false>` | `<逐項列出或 none>` | `<人工結論>` | `<姓名或角色>` | `<path>; 與正式 DB 不同=true>` | `<review_id/hash/status 或未保存原因>` | `<狀態與證據>` | `<可驗證下一步>` |
 
-## 4. 三週完成後的判讀
+## 5. 三週完成後的判讀
 
 只有三週都具備真實時間、人工 review 與 append-only history 時，weekly history 才能從 `0/3 waiting_for_time` 進入人工審查。即使三週齊備，下列項目未完成前仍不能建立 formal closeout：
 
@@ -63,7 +71,7 @@
 
 在所有條件完成並獲人工核准前，維持 `production_scheduler_allowed=false`；production scheduler 若日後獲准，也只能保存 evidence，不得自動交易或套用 lifecycle action。
 
-## 5. 排錯與停止條件
+## 6. 排錯與停止條件
 
 | 情況 | 必須動作 |
 |---|---|
@@ -73,8 +81,10 @@
 | dry-run 輸出出現 `write_performed=true`、scheduler allowed 或 lifecycle `apply_action=true` | 停止，保留輸出作診斷；不得把該週列為通過。 |
 | freshness / source coverage 有 blocking gap | 填入 follow-up 與 owner；不得以手動編輯或舊 report 補足。 |
 | 無法寫入或 list history 找不到剛保存的記錄 | 填入未保存原因與 recovery follow-up；此週不計入三週 Gate。 |
+| weekly sidecar collection 失敗或需停止 | 保留 sidecar error record 與 task/log 證據；停用或 `weekly-unregister` task。不得自動 drop sidecar table，亦不得把既有 `pending_human_review` 當成已完成 review。 |
 
 ## 更新記錄
 
 - 2026-07-12：建立 V2.2 固定三週人工記錄格式與 working-copy weekly review 操作順序；明確保留 scheduler 未核准與不可 formal closeout 邊界。
 - 2026-07-12：補上 working-copy copy/guard、production-like 強制拒絕與 combined confirm/history snapshot trace；`--list-history` 缺 DB / table 時只回 diagnostics，不建立 SQLite 物件。re-review 補強 `--data-root` 不可繞過 canonical production DB guard。
+- 2026-07-12：新增週日 sidecar collection 的操作與 rollback 邊界；collection 僅保存 `pending_human_review`，不屬於人工 review、不寫 weekly history，且不改 `production_scheduler_allowed=false`。

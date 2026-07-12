@@ -11,6 +11,7 @@ These wrappers are intentionally conservative. They use CMD files and Windows bu
 | `baldr-recommendation-snapshot-daily` | enabled after register | daily local time 05:10 | Runs the research-only recommendation snapshot path after freshness. Saves one recommendation result under `OUTPUT_ROOT/recommendation/runs/` and writes status/logs under `OUTPUT_ROOT/scheduled/recommendation_snapshot/`. It does not write the production evidence DB, does not confirm evidence, does not change portfolio state, and does not automate trading. |
 | `baldr-evidence-pipeline-dry-run-daily` | enabled after register | daily local time 05:15 | Runs `scripts/run_evidence_pipeline.py` with `--dry-run`. Writes only report, status, and logs under `OUTPUT_ROOT/scheduled/evidence_pipeline_dry_run/`. Scheduled status inherits freshness and pipeline overall status: missing / stale / blocking data is `degraded`, while complete observed-or-estimated MoneyDJ provenance is `ready_with_advisories`. |
 | `baldr-evidence-working-copy-smoke-manual` | manual-only | no daily schedule | Manual smoke against a working-copy DB. This repo keeps the script only; `register_baldr_scheduled_tasks.cmd` does not create a daily task for it. |
+| `baldr-v2-2-weekly-collection` | `weekly-register` 後啟用 | 每週日 18:00 | 只執行 `run_v2_2_weekly_collection.cmd`，將來源 evidence 收集為 sidecar record。成功收集只能是 `pending_human_review`；它不是 manual review、不確認 action item、也不保存 weekly history。 |
 
 ## Register
 
@@ -48,6 +49,14 @@ baldr-evidence-pipeline-dry-run-daily
 
 It does not create or enable `baldr-evidence-working-copy-smoke-manual` as a daily task.
 
+只建立或取代週日 sidecar collection task：
+
+```cmd
+scripts\scheduled\register_baldr_scheduled_tasks.cmd weekly-register
+```
+
+`weekly-register` 只建立 `baldr-v2-2-weekly-collection`，其排程為 `WEEKLY SUN 18:00` 並執行 `run_v2_2_weekly_collection.cmd`。它不建立、取代、啟用或以其他方式變更任何每日 task。
+
 ## Query
 
 ```cmd
@@ -55,6 +64,7 @@ scripts\scheduled\query_baldr_scheduled_tasks.cmd
 schtasks /Query /TN baldr-data-freshness-check-daily /V /FO LIST
 schtasks /Query /TN baldr-recommendation-snapshot-daily /V /FO LIST
 schtasks /Query /TN baldr-evidence-pipeline-dry-run-daily /V /FO LIST
+schtasks /Query /TN baldr-v2-2-weekly-collection /V /FO LIST
 ```
 
 Missing tasks are reported as friendly `Task not found` messages by the query wrapper.
@@ -73,7 +83,13 @@ Remove the scheduled tasks:
 scripts\scheduled\unregister_baldr_scheduled_tasks.cmd unregister
 ```
 
-You can also open Windows Task Scheduler and disable or delete the two daily tasks manually.
+也可以在 Windows Task Scheduler 手動停用或刪除每日 task。若只要停止週日 sidecar collection，請在其中停用 `baldr-v2-2-weekly-collection`，或執行：
+
+```cmd
+scripts\scheduled\unregister_baldr_scheduled_tasks.cmd weekly-unregister
+```
+
+Rollback 時禁止自動 drop sidecar SQLite table；保留 `pending_human_review` 與 `collection_failed` record 供人工診斷。
 
 ## Logs And Reports
 
@@ -115,6 +131,17 @@ scripts\scheduled\run_evidence_working_copy_smoke.cmd <source-db-path> <working-
 
 If the DB paths are missing, the wrapper prints usage and exits. Repeat defaults to 2.
 
+每週 sidecar collection：
+
+```text
+<OUTPUT_ROOT>/scheduled/v2_2_weekly_collection/evidence_scheduler.db
+<OUTPUT_ROOT>/scheduled/v2_2_weekly_collection/logs/v2_2_weekly_collection_YYYYMMDD_HHMMSS.log
+<OUTPUT_ROOT>/scheduled/v2_2_weekly_collection/v2_2_weekly_collection_YYYYMMDD.json
+<OUTPUT_ROOT>/scheduled/v2_2_weekly_collection/v2_2_weekly_collection_YYYYMMDD.md
+```
+
+sidecar record 刻意與 source DB 及 weekly review history 分離。成功的排程執行只保存 `pending_human_review`；收集失敗則連同 diagnostics 保存 `collection_failed`。兩種狀態都不是 manual review 或 scheduler approval。
+
 ## Evidence Boundary
 
 The daily automation runs only:
@@ -123,6 +150,8 @@ The daily automation runs only:
 - read-only data freshness checks;
 - research-only recommendation snapshot generation and recommendation result save;
 - evidence pipeline dry-run reports.
+
+週日 sidecar task 只執行 collection CLI。它不呼叫 `--save-history` 或 `--confirm-action-items`、不寫 source DB 或 weekly history，且維持 `production_scheduler_allowed=false`。它是等待人工判讀的 collection 輔助工具，不是 production scheduler。
 
 It does not run production evidence confirm, does not write the production evidence DB, does not run the UI, does not read UI state, does not change portfolio state, does not change `ScoringEngine`, does not change recommendation weights, does not promote / demote / retire strategies, and does not automate trading.
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-本 SOP 定義 Evidence Pipeline 從手動 dry-run 走向未來 production scheduler implementation 的人工核准路徑。現在不啟用 production scheduler，不建立 Windows Task Scheduler，不建立 cron，不建立 background job。
+本 SOP 定義 Evidence Pipeline 從手動 dry-run 走向未來 production scheduler implementation 的人工核准路徑。現在不啟用 production scheduler、cron 或 production background job。例外是 V2.2 的 `baldr-v2-2-weekly-collection` Windows Task：它只將週期資料收集至 sidecar，結果只能是 `pending_human_review` 或 `collection_failed`；它不是人工 review、不寫 weekly history，也不改 `production_scheduler_allowed=false`。
 
 ## Stage 1：Manual Evidence Pipeline Run
 
@@ -74,6 +74,7 @@
 - rollback / recovery path 已確認。
 - owner / reviewer 已記錄。
 - explicit human approval 已記錄。
+- `pending_human_review` sidecar record 不得當作 dashboard human review、manual approval 或 weekly history 的替代證據。
 
 ## Stage 6：Production Scheduler Design
 
@@ -100,6 +101,7 @@
 - scheduler 不得改 ScoringEngine 或推薦權重。
 - scheduler 不得把 dashboard summary 包裝成買賣建議。
 - scheduler 不得宣稱 alpha 或策略有效。
+- weekly sidecar collection 若要停止或回復，只能停用或解除註冊 Windows task；禁止以自動 drop sidecar table 作為 rollback。
 
 ## Current Status
 
@@ -109,3 +111,4 @@
 - 仍需人工 Evidence Review UI smoke。
 - 仍需 multi-day dry-run record。
 - readiness 不能視為 production-ready。
+- `baldr-v2-2-weekly-collection` 只提供 pending-human-review collection，沒有改變上述 production scheduler gate。
