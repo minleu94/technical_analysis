@@ -57,11 +57,11 @@
 - Modify: `scripts/scheduled/unregister_baldr_scheduled_tasks.cmd`
 - Test: `tests/test_scheduled_cmd_scripts_task_names.py`
 
-**Interfaces:** Task 名稱 `baldr-v2-2-weekly-collection`，Trigger 為 `/SC WEEKLY /D SUN /ST 18:00`，wrapper 只執行 collection CLI。
+**Interfaces:** Task 名稱 `baldr-v2-2-weekly-collection`，Trigger 為 `/SC WEEKLY /D SUN /ST 18:00`，wrapper 只執行 collection CLI。`weekly-register` 只能建立此週日 task，不建立、替換或啟用既有每日 task。
 
 - [ ] 寫 failing test：register CMD 含 task name 和 `/SC WEEKLY /D SUN /ST 18:00`；PowerShell wrapper 不含 `--save-history` 或 `--confirm-action-items`。
 - [ ] 執行 `./.venv/Scripts/python.exe -m pytest tests/test_scheduled_cmd_scripts_task_names.py -q -o addopts=`，確認 FAIL。
-- [ ] 依現有 CMD pattern 實作 wrapper、dryrun / register / query / unregister。PowerShell wrapper 以 explicit source、sidecar、output path 執行，保留 log 並傳回 CLI exit code。
+- [ ] 依現有 CMD pattern 實作 wrapper、dryrun / weekly-register / query / unregister。`weekly-register` 只能建立週日 task；既有 `register` 的每日行為不得被呼叫或改變。PowerShell wrapper 以 explicit source、sidecar、output path 執行，保留 log 並傳回 CLI exit code。
 - [ ] 執行 `./.venv/Scripts/python.exe -m pytest tests/test_scheduled_cmd_scripts_task_names.py tests/test_scheduled_scripts_no_trading_language.py tests/test_scheduled_scripts_exist.py -q -o addopts=`，預期 PASS。
 - [ ] Commit：`git add scripts/scheduled tests/test_scheduled_cmd_scripts_task_names.py`，再 `git commit -m "feat(v2.2): schedule weekly sidecar collection"`。
 
@@ -76,6 +76,6 @@
 
 - [ ] 文件明確說明 scheduled collection 僅保存 `pending_human_review`，不算 manual review、不寫 weekly history，`production_scheduler_allowed=false` 不變；rollback 是 task disable/unregister，絕非自動 table drop。
 - [ ] 執行 `scripts\scheduled\register_baldr_scheduled_tasks.cmd dryrun`；預期輸出 weekly task / `WEEKLY SUN 18:00` 且不建立 Task。
-- [ ] 執行 `scripts\scheduled\register_baldr_scheduled_tasks.cmd register`，再執行 `schtasks /Query /TN baldr-v2-2-weekly-collection /V /FO LIST`；預期 task 存在且只指向 weekly collection CMD wrapper。
+- [ ] 執行 `scripts\scheduled\register_baldr_scheduled_tasks.cmd weekly-register`，再執行 `schtasks /Query /TN baldr-v2-2-weekly-collection /V /FO LIST`；預期 task 存在且只指向 weekly collection CMD wrapper，未建立或替換任何既有每日 task。
 - [ ] 執行 `./.venv/Scripts/python.exe -m pytest tests/test_evidence_weekly_collection_repository.py tests/test_collect_v2_2_weekly_evidence_cli.py tests/test_scheduled_cmd_scripts_task_names.py tests/test_scheduled_scripts_no_trading_language.py tests/test_scheduled_scripts_exist.py tests/test_audit_document_encoding.py -q -o addopts=`，預期 PASS。
 - [ ] Commit：`git add docs scripts/scheduled`，再 `git commit -m "docs(v2.2): document sidecar weekly collection"`。
