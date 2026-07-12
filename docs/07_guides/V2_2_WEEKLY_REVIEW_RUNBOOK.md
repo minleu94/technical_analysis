@@ -7,12 +7,18 @@
 
 - 現況為 weekly `0/3 waiting_for_time`、multi-day `3/3 ready`、`production_scheduler_allowed=false`；不能 formal closeout。
 - 此流程不產生交易建議、不串 broker、不自動交易、不自動套用 lifecycle action。
-- `--save-history` 與 `--confirm-action-items` 只能在明確、可回溯且經人工核准的 working-copy DB 使用。正式 DB、production-like DB 與 scheduler write-mode 均不在本 runbook 的授權範圍。
+- `--save-history` 與 `--confirm-action-items` 只能在明確、可回溯且經人工核准的 working-copy DB 使用。CLI 對 production-like DB 一律拒絕，沒有 `--allow-production-like-db` 繞過旗標；正式 DB、production-like DB 與 scheduler write-mode 均不在本 runbook 的授權範圍。
 - replay、fixture、單次 smoke、raw scheduled report 或手動補表不計入三週 Gate。每列只記錄該週實際取得的證據。
 
 ## 2. 每週固定操作順序
 
-1. 確認本週觀察期間、reviewer 與 working-copy DB 路徑。確認 working-copy DB 與正式 DB 並非相同檔案；正式資料庫不得寫入。
+1. 確認本週觀察期間、reviewer、正式 source DB 路徑與 working-copy DB 路徑。先用既有 working-copy smoke 的 copy/guard 建立隔離副本；它會拒絕 source 與 copy 為同一檔案、拒絕 production DB 作為 copy target，且只在副本執行 confirm smoke：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_evidence_pipeline_working_copy.py --source-db-path <approved-source-db> --working-copy-db-path <working-copy-db> --decision-date <YYYY-MM-DD> --repeat 2 --keep-working-copy --json-output
+```
+
+若 working-copy 已存在，工具不覆蓋它；先記錄既有副本來源與 hash，再交由人工決定是否另建新的隔離副本。此步驟不啟用 scheduler，也不對 source DB 寫入。
 2. 讀取當週 freshness、source coverage、scheduled dry-run / manual dry-run 與 Evidence Review dashboard。記錄 warning、blocking gap、degraded reason 與資料品質。
 3. 先產生唯讀週報；不得帶 `--save-history` 或 `--confirm-action-items`：
 
@@ -22,13 +28,13 @@
 
 4. 檢查輸出：`write_performed=false`、`production_scheduler_allowed=false`，以及每個 manual lifecycle candidate 的 `apply_action=false`。不符合任一條件時，停止並在本週紀錄填入 follow-up；不寫 history。
 5. 人工填寫本文件的週期紀錄格式，做出 reviewed / dismissed / follow-up 結論。結論只描述 evidence、quality、warning、來源與後續工作，不得寫成買賣、倉位或 lifecycle 指令。
-6. 取得本週 append-only 保存的明確人工核准後，才在同一 working-copy DB 保存 history：
+6. 取得本週 append-only 保存的明確人工核准後，才在同一 working-copy DB 同時確認 action items 並保存 history。這是受控的可追溯操作：confirmed action 的 owner、planned item 與 write result 會一併封存在 weekly history snapshot；不可先單獨 confirm 後再把 owner 留在外部文件。
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --db-path <working-copy-db> --save-history --action-owner <owner> --json-output
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --db-path <working-copy-db> --confirm-action-items --save-history --action-owner <owner> --json-output
 ```
 
-7. 將輸出的 review ID / hash / status 記入週期紀錄，並以唯讀方式核對：
+7. 將輸出的 review ID / hash / status 與 `action_item_plan`（含 owner / created / skipped）記入週期紀錄，並以唯讀方式核對。`--list-history` 對缺 DB 或缺 history table 只輸出 diagnostics，不建立目錄、schema 或 index：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --db-path <working-copy-db> --list-history --json-output
@@ -63,6 +69,7 @@
 |---|---|
 | `--help` 沒有顯示 `--save-history`、`--list-history` 或 `--action-owner` | 停止，不執行保存；確認目前程式碼與虛擬環境。 |
 | working-copy DB 路徑等於或指向正式 DB | 停止，不使用 `--save-history` / `--confirm-action-items`；建立經核准的隔離副本後重做唯讀檢查。 |
+| 測試 production-like guard | 僅在 QA 暫存根目錄執行 `--data-root <qa-root> --db-path <qa-root>/sqlite/twstock.db --save-history`，預期 exit code `2` 且不建立 DB；不得以實際正式 DB 或任何 allow 旗標測試。 |
 | dry-run 輸出出現 `write_performed=true`、scheduler allowed 或 lifecycle `apply_action=true` | 停止，保留輸出作診斷；不得把該週列為通過。 |
 | freshness / source coverage 有 blocking gap | 填入 follow-up 與 owner；不得以手動編輯或舊 report 補足。 |
 | 無法寫入或 list history 找不到剛保存的記錄 | 填入未保存原因與 recovery follow-up；此週不計入三週 Gate。 |
@@ -70,3 +77,4 @@
 ## 更新記錄
 
 - 2026-07-12：建立 V2.2 固定三週人工記錄格式與 working-copy weekly review 操作順序；明確保留 scheduler 未核准與不可 formal closeout 邊界。
+- 2026-07-12：補上 working-copy copy/guard、production-like 強制拒絕與 combined confirm/history snapshot trace；`--list-history` 缺 DB / table 時只回 diagnostics，不建立 SQLite 物件。

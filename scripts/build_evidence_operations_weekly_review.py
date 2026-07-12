@@ -11,7 +11,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app_module.evidence_operations_service import EvidenceOperationsService
-from app_module.evidence_operations_history_repository import EvidenceOperationsHistoryRepository
+from app_module.evidence_operations_history_repository import (
+    EvidenceOperationsHistoryReadOnlyError,
+    EvidenceOperationsHistoryRepository,
+)
 from data_module.config import TWStockConfig
 
 
@@ -30,7 +33,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--list-history", action="store_true")
     parser.add_argument("--history-limit", type=int, default=20)
     parser.add_argument("--action-owner", default="human")
-    parser.add_argument("--allow-production-like-db", action="store_true")
     parser.add_argument("--json-output", action="store_true")
     parser.add_argument("--markdown-output")
     return parser.parse_args()
@@ -63,23 +65,27 @@ def main() -> int:
     if args.confirm_action_items and not args.db_path:
         print("confirm action items requires explicit --db-path", file=sys.stderr)
         return 2
-    if args.confirm_action_items and _production_like(Path(config.db_file), config) and not args.allow_production_like_db:
-        print("confirm action items blocked for production-like DB without --allow-production-like-db", file=sys.stderr)
-        return 2
-    if args.save_history and _production_like(Path(config.db_file), config) and not args.allow_production_like_db:
-        print("save history blocked for production-like DB without --allow-production-like-db", file=sys.stderr)
+    if (args.confirm_action_items or args.save_history) and _production_like(Path(config.db_file), config):
+        print("production-like DB is not permitted for action confirmation or history saving; use an approved working-copy DB", file=sys.stderr)
         return 2
     if args.list_history:
-        repo = EvidenceOperationsHistoryRepository(config, db_path=Path(config.db_file))
+        diagnostics: list[str] = []
+        try:
+            records = EvidenceOperationsHistoryRepository(
+                config,
+                db_path=Path(config.db_file),
+                read_only=True,
+            ).list_weekly_reviews(
+                start_date=args.start_date,
+                end_date=args.end_date,
+                limit=args.history_limit,
+            )
+        except EvidenceOperationsHistoryReadOnlyError as exc:
+            records = []
+            diagnostics.append(str(exc))
         history_payload: dict[str, Any] = {
-            "history_records": [
-                record.to_dict()
-                for record in repo.list_weekly_reviews(
-                    start_date=args.start_date,
-                    end_date=args.end_date,
-                    limit=args.history_limit,
-                )
-            ],
+            "history_records": [record.to_dict() for record in records],
+            "diagnostics": diagnostics,
             "write_performed": False,
         }
         if args.json_output:
@@ -106,12 +112,23 @@ def main() -> int:
             owner=args.action_owner,
             confirm=bool(args.confirm_action_items),
         )
+        if action_plan.write_performed:
+            report = service.build_weekly_review(
+                start_date=args.start_date,
+                end_date=args.end_date,
+                smoke_report_path=args.smoke_report_path,
+                result_id=args.result_id,
+            )
+            payload = report.to_dict()
+        payload["action_owner"] = args.action_owner
         payload["action_item_plan"] = action_plan.to_dict()
         payload["write_performed"] = payload["write_performed"] or action_plan.write_performed
     if args.save_history:
+        payload["write_performed"] = True
         record = EvidenceOperationsHistoryRepository(config, db_path=Path(config.db_file)).save_weekly_review(
             report,
             generated_by="build_evidence_operations_weekly_review.py",
+            payload_json=payload,
         )
         payload["history_record"] = record.to_dict()
         payload["write_performed"] = True

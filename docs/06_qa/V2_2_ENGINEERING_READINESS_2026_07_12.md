@@ -19,9 +19,9 @@
 ## 2. 已具備的工程操作能力
 
 - `scripts/build_evidence_operations_weekly_review.py` 預設建立唯讀 weekly review JSON / Markdown；沒有 `--save-history` 與 `--confirm-action-items` 時不寫入 DB。
-- `--save-history` 可在明確指定且經人工核准的 working-copy DB append-only 保存 weekly review snapshot；`--list-history` 只讀檢查已保存 history。
-- `--action-owner` 會保存 action-item owner；`--plan-action-items` 僅預覽，`--confirm-action-items` 仍須明確 DB 路徑與人工核准。
-- working-copy DB 必須與正式 DB 分離；production-like 路徑仍需額外保護旗標與明確人工核准。不得將 `--allow-production-like-db` 視為 scheduler approval。
+- `--save-history` 可在明確指定且經人工核准的 working-copy DB append-only 保存 weekly review snapshot；`--list-history` 以 SQLite read-only mode 檢查既有 history，缺 DB / table 只輸出 diagnostics，不建立目錄、schema 或 index。
+- `--action-owner` 會保存 action-item owner；`--plan-action-items` 僅預覽。正式週期以同一次 `--confirm-action-items --save-history --action-owner` 寫入，將 confirmed action 的 owner / plan / write result 封存在 history snapshot。
+- working-copy DB 必須與正式 DB 分離；production-like 路徑一律拒絕保存或 confirm，沒有 allow 旗標。既有 working-copy smoke copy/guard 是建立隔離副本的必要起點。
 - recovery 操作與三週記錄格式見 `docs/07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md`；操作包只提供人工節奏，不改變 scheduler、資料庫或交易行為。
 
 ## 3. CLI 契約驗證
@@ -32,7 +32,7 @@
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --help
 ```
 
-結果：2026-07-12 成功顯示 `--save-history`、`--list-history`、`--action-owner`，以及 working-copy / production-like boundary 相關的 `--db-path`、`--allow-production-like-db`。`--help` 僅輸出說明，未對 production DB 或任何 working-copy DB 執行操作。
+結果：2026-07-12 成功顯示 `--save-history`、`--list-history`、`--action-owner` 與 `--db-path`；`--help` 不再提供 production-like DB 繞過旗標。focused CLI 測試確認 production-like target 會在開檔前以 exit code `2` 拒絕，且 QA 暫存路徑沒有被建立為 DB。
 
 ## 4. 固定三週人工紀錄要求
 
@@ -67,3 +67,4 @@
 ## 更新記錄
 
 - 2026-07-12：建立 V2.2 engineering readiness，固定三週人工紀錄欄位，記錄 weekly `0/3 waiting_for_time`、multi-day `3/3 ready` 與 scheduler 未核准邊界。
+- 2026-07-12：reviewer P1/P2 修正 read-only history、owner snapshot trace 與 production-like hard reject；runbook 補上既有 copy/guard 操作。

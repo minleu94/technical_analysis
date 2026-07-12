@@ -1096,12 +1096,11 @@ V1.3 / V1.4 Evidence Operations weekly review CLI 用來把 scheduler readiness�
 ```powershell
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --json-output
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --plan-action-items --json-output
-.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --confirm-action-items --action-owner human --json-output
-.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-29 --end-date 2026-07-03 --db-path <working-copy-db> --save-history --json-output
+.\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-06-24 --end-date 2026-06-30 --db-path <working-copy-db> --confirm-action-items --save-history --action-owner human --json-output
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date 2026-07-01 --end-date 2026-07-04 --db-path <working-copy-db> --list-history --json-output
 ```
 
-`--plan-action-items` 只預覽 open Decision Quality item 會形成哪些 action item，不寫入 DB。`--confirm-action-items` 才會 append-only 寫入指定 DB，且必須提供 explicit `--db-path`；疑似正式 DB 仍需額外 `--allow-production-like-db`。`--save-history` 會把當次 weekly review payload、hash、status、scheduler readiness 與 production scheduler disabled 邊界保存到 `evidence_operations_weekly_reviews`，同樣必須指定 explicit `--db-path`；`--list-history` 只讀取已保存歷史。一般覆盤應先在 working-copy DB 執行。
+`--plan-action-items` 只預覽 open Decision Quality item 會形成哪些 action item，不寫入 DB。`--confirm-action-items` 才會 append-only 寫入指定 DB，且必須提供 explicit `--db-path`；production-like DB 一律被拒絕，沒有 allow 旗標。正式 weekly review 要將 `--confirm-action-items --save-history --action-owner <owner>` 合併於同一次 working-copy 操作，讓 snapshot 保存 owner、planned action 與 created / skipped 結果。`--save-history` 會把當次 weekly review payload、hash、status、scheduler readiness 與 production scheduler disabled 邊界保存到 `evidence_operations_weekly_reviews`；`--list-history` 只讀取已保存歷史，缺 DB / table 時回 diagnostics，絕不建立 SQLite 物件。一般覆盤應先用 `smoke_evidence_pipeline_working_copy.py` 的 copy/guard 建立 working-copy DB。
 
 Research Lab `Evidence Review` 分頁在 V1.4 新增「覆盤歷史」子頁，用來唯讀檢查已保存 weekly review history 的週期、status、scheduler readiness、Decision Quality / Signal Decay 數量、manual lifecycle candidate 數量與 warnings。此子頁只讀 dashboard service，不建立週報、不寫 action item、不啟用 scheduler，也不自動套用任何 lifecycle action。
 
@@ -1109,7 +1108,7 @@ Report evidence boundary 固定為：This report is research evidence only. Clos
 
 ### 9.9.2 V2.2 Weekly Review Runbook
 
-V2.2 的固定三週人工覆盤格式與 working-copy 操作順序見 `docs/07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md`。每週必填週期日期、資料 freshness、dry-run 狀態、warnings、reviewed / dismissed / follow-up、owner、working-copy DB path、`--save-history` 結果與下一步；少任何一項都不能計入三週 Gate。先產生唯讀週報，再取得明確人工核准才在隔離的 working-copy DB 使用 `--save-history`；最後以 `--list-history` 唯讀核對。不要對正式 DB 保存 history，也不要以 `--allow-production-like-db` 當作 scheduler approval。
+V2.2 的固定三週人工覆盤格式與 working-copy 操作順序見 `docs/07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md`。每週必填週期日期、資料 freshness、dry-run 狀態、warnings、reviewed / dismissed / follow-up、owner、working-copy DB path、`--save-history` 結果與下一步；少任何一項都不能計入三週 Gate。先以既有 copy/guard 建立隔離副本，再產生唯讀週報；取得明確人工核准後，在同一次 working-copy 操作使用 `--confirm-action-items --save-history --action-owner`，最後以 `--list-history` 唯讀核對。不要對正式 DB 保存 history；production-like DB 強制拒絕，沒有 `--allow-production-like-db` 可用。
 
 截至 2026-07-12，weekly history 為 `0/3 waiting_for_time`，multi-day dry-run 為 `3/3 ready`，scheduler 尚未獲核准且 `production_scheduler_allowed=false`。因此不可建立 V2.2 formal closeout；replay、fixture、raw scheduled report、單次 smoke 或手動補表都不構成真實 weekly history。三週紀錄完成後，仍需人工完成 backup / rollback / recovery 演練與 scheduler approval package；日後若 scheduler 獲准，也只能保存 evidence，不得自動交易或套用 lifecycle action。
 

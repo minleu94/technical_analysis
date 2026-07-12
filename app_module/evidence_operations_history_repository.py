@@ -4,19 +4,25 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import sqlite3
-from typing import Any
+from typing import Any, Mapping
 
 from app_module.evidence_operations_dtos import EvidenceOperationsWeeklyReview
 from app_module.evidence_operations_history_dtos import EvidenceOperationsHistoryRecord
 from app_module.research_run_dtos import canonical_json
 
 
+class EvidenceOperationsHistoryReadOnlyError(RuntimeError):
+    """Expected diagnostic for a read-only history query with no available source."""
+
+
 class EvidenceOperationsHistoryRepository:
-    def __init__(self, config: Any, *, db_path: str | Path | None = None) -> None:
+    def __init__(self, config: Any, *, db_path: str | Path | None = None, read_only: bool = False) -> None:
         self.config = config
         self.db_path = Path(db_path) if db_path is not None else Path(config.db_file)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.ensure_schema()
+        self.read_only = bool(read_only)
+        if not self.read_only:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self.ensure_schema()
 
     def ensure_schema(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
@@ -52,8 +58,11 @@ class EvidenceOperationsHistoryRepository:
         report: EvidenceOperationsWeeklyReview,
         *,
         generated_by: str = "",
+        payload_json: Mapping[str, Any] | None = None,
     ) -> EvidenceOperationsHistoryRecord:
-        payload = report.to_dict()
+        if self.read_only:
+            raise RuntimeError("cannot save weekly review from a read-only history repository")
+        payload = dict(payload_json) if payload_json is not None else report.to_dict()
         review_hash = "sha256:" + sha256(canonical_json(payload).encode("utf-8")).hexdigest()
         existing = self.get_by_hash(review_hash)
         if existing is not None:
@@ -76,7 +85,7 @@ class EvidenceOperationsHistoryRepository:
         row = self._record_to_row(record)
         columns = list(row.keys())
         placeholders = ", ".join("?" for _ in columns)
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.execute(
                 f"INSERT INTO evidence_operations_weekly_reviews ({', '.join(columns)}) VALUES ({placeholders})",
                 tuple(row[column] for column in columns),
@@ -114,13 +123,18 @@ class EvidenceOperationsHistoryRepository:
         if limit is not None:
             sql += " LIMIT ?"
             params.append(int(limit))
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(sql, tuple(params)).fetchall()
+        try:
+            with self._connect() as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(sql, tuple(params)).fetchall()
+        except sqlite3.OperationalError as exc:
+            if self.read_only and "no such table" in str(exc).lower():
+                raise EvidenceOperationsHistoryReadOnlyError("evidence_operations_history_table_missing") from exc
+            raise
         return [self._row_to_record(dict(row)) for row in rows]
 
     def _fetch_one(self, where: str, params: tuple[Any, ...]) -> EvidenceOperationsHistoryRecord | None:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 f"SELECT * FROM evidence_operations_weekly_reviews WHERE {where} LIMIT 1",
@@ -135,6 +149,13 @@ class EvidenceOperationsHistoryRepository:
         if not row["created_at"]:
             row.pop("created_at")
         return row
+
+    def _connect(self) -> sqlite3.Connection:
+        if not self.read_only:
+            return sqlite3.connect(self.db_path)
+        if not self.db_path.exists():
+            raise EvidenceOperationsHistoryReadOnlyError("evidence_operations_history_db_missing")
+        return sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
 
     def _row_to_record(self, row: dict[str, Any]) -> EvidenceOperationsHistoryRecord:
         return EvidenceOperationsHistoryRecord(
