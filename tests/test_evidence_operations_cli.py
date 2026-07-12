@@ -160,6 +160,43 @@ def test_list_history_missing_database_is_diagnostic_and_never_creates_it(tmp_pa
     assert not db_path.parent.exists()
 
 
+def test_list_history_data_root_override_does_not_create_db_parent_or_logs(tmp_path: Path) -> None:
+    qa_data_root = tmp_path / "qa-data"
+    qa_output_root = tmp_path / "qa-output"
+    expected_db_path = qa_data_root / "sqlite" / "twstock.db"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_evidence_operations_weekly_review.py",
+            "--start-date",
+            "2026-07-06",
+            "--end-date",
+            "2026-07-12",
+            "--data-root",
+            str(qa_data_root),
+            "--output-root",
+            str(qa_output_root),
+            "--list-history",
+            "--json-output",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["diagnostics"] == ["evidence_operations_history_db_missing"]
+    assert not expected_db_path.exists()
+    assert not expected_db_path.parent.exists()
+    assert not (qa_data_root / "logs").exists()
+    assert not qa_data_root.exists()
+    assert not qa_output_root.exists()
+
+
 def test_list_history_missing_table_is_diagnostic_and_does_not_create_schema(tmp_path: Path) -> None:
     db_path = tmp_path / "history-without-table.db"
     with sqlite3.connect(db_path) as conn:

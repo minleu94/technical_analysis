@@ -34,7 +34,7 @@
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --db-path <working-copy-db> --confirm-action-items --save-history --action-owner <owner> --json-output
 ```
 
-7. 將輸出的 review ID / hash / status 與 `action_item_plan`（含 owner / created / skipped）記入週期紀錄，並以唯讀方式核對。`--list-history` 對缺 DB 或缺 history table 只輸出 diagnostics，不建立目錄、schema 或 index：
+7. 將輸出的 review ID / hash / status 與 `action_item_plan`（含 owner / created / skipped）記入週期紀錄，並以唯讀方式核對。`--list-history` 在 config 初始化前只以 `--db-path` 或 `--data-root` 做純路徑解析；對缺 DB 或缺 history table 只輸出 diagnostics，不建立 DB parent、log directory、schema 或 index：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\build_evidence_operations_weekly_review.py --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --db-path <working-copy-db> --list-history --json-output

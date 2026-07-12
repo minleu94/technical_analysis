@@ -69,8 +69,50 @@ def _production_like(path: Path, config: TWStockConfig) -> bool:
     return actual_db_path in {_canonical_path(root / "sqlite" / "twstock.db") for root in production_roots}
 
 
+def _read_only_history_db_path(args: argparse.Namespace) -> Path:
+    if args.db_path:
+        return Path(args.db_path)
+    data_root = Path(args.data_root) if args.data_root is not None else Path(
+        os.environ.get("DATA_ROOT", _DEFAULT_PRODUCTION_DATA_ROOT)
+    )
+    return data_root / "sqlite" / "twstock.db"
+
+
+def _list_history(args: argparse.Namespace) -> int:
+    diagnostics: list[str] = []
+    try:
+        records = EvidenceOperationsHistoryRepository(
+            None,
+            db_path=_read_only_history_db_path(args),
+            read_only=True,
+        ).list_weekly_reviews(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            limit=args.history_limit,
+        )
+    except EvidenceOperationsHistoryReadOnlyError as exc:
+        records = []
+        diagnostics.append(str(exc))
+    history_payload: dict[str, Any] = {
+        "history_records": [record.to_dict() for record in records],
+        "diagnostics": diagnostics,
+        "write_performed": False,
+    }
+    if args.json_output:
+        print(json.dumps(history_payload, ensure_ascii=False, sort_keys=True))
+    else:
+        for record in history_payload["history_records"]:
+            print(
+                f"{record['period_start']}..{record['period_end']} "
+                f"{record['review_status']} {record['review_id']}"
+            )
+    return 0
+
+
 def main() -> int:
     args = parse_args()
+    if args.list_history:
+        return _list_history(args)
     config = _config(args)
     if args.save_history and not args.db_path:
         print("save history requires explicit --db-path", file=sys.stderr)
@@ -81,35 +123,6 @@ def main() -> int:
     if (args.confirm_action_items or args.save_history) and _production_like(Path(config.db_file), config):
         print("production-like DB is not permitted for action confirmation or history saving; use an approved working-copy DB", file=sys.stderr)
         return 2
-    if args.list_history:
-        diagnostics: list[str] = []
-        try:
-            records = EvidenceOperationsHistoryRepository(
-                config,
-                db_path=Path(config.db_file),
-                read_only=True,
-            ).list_weekly_reviews(
-                start_date=args.start_date,
-                end_date=args.end_date,
-                limit=args.history_limit,
-            )
-        except EvidenceOperationsHistoryReadOnlyError as exc:
-            records = []
-            diagnostics.append(str(exc))
-        history_payload: dict[str, Any] = {
-            "history_records": [record.to_dict() for record in records],
-            "diagnostics": diagnostics,
-            "write_performed": False,
-        }
-        if args.json_output:
-            print(json.dumps(history_payload, ensure_ascii=False, sort_keys=True))
-        else:
-            for record in history_payload["history_records"]:
-                print(
-                    f"{record['period_start']}..{record['period_end']} "
-                    f"{record['review_status']} {record['review_id']}"
-                )
-        return 0
     service = EvidenceOperationsService(config, db_path=Path(config.db_file))
     report = service.build_weekly_review(
         start_date=args.start_date,
