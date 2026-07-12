@@ -3,8 +3,8 @@
 > **建立日期**：2026-07-11
 > **適用分支**：`dev`
 > **用途**：Planner、Implementation、QA 與人工審查共同讀取的唯一重構執行依據。
-> **狀態**：Active engineering companion。
-> **Automation program**：`active_program=SAFE_REFACTORING_MASTER_PROGRAM`。
+> **狀態**：2026-07-12 current-program closeout；保留為重構歷史與 residual candidate 依據，不再是 active automation program。
+> **Automation program**：`active_program=NONE`；`SAFE_REFACTORING_MASTER_PROGRAM` 已完成本輪 closeout。
 > **不取代**：`PROJECT_SNAPSHOT.md`、`ROADMAP_6M_ENGINEERING.md`、`VERSION_ROADMAP_V2_1_TO_V4_0.md`、`system_architecture.md` 或 `APPLICATION_MANUAL.md`。
 > **產品交棒**：安全重構完成後的產品方向以 [PRODUCT_ROADMAP_POST_REFACTOR.md](../00_core/PRODUCT_ROADMAP_POST_REFACTOR.md) 為準，理想架構以 [target_system_architecture.md](target_system_architecture.md) 為準。本報告只負責行為不變重構，不承擔 Advice、Portfolio、Exit、Data 或 ML Roadmap。
 
@@ -119,6 +119,8 @@ baldr 已經具備清楚的產品閉環、治理規則與大量測試，但部�
 10. `RecommendationPortfolioBacktestService`：47 edges。
 
 Graphify 只作探索證據。圖譜含 INFERRED edges，且曾有 shrink-guard / 更新時點限制；任何重構驗收以目前程式碼、測試、Git 與實際呼叫契約為準，不得只憑圖譜移動或刪除程式。
+
+2026-07-12 增量更新後的圖譜同時存在短 source path 與完整相對 path 的重複 node identity，並殘留已刪除 `RecommendationEngine` ghost node；因此本輪不使用 node／edge 總數或 God Node degree 作 closeout 判據。Graphify clean rebuild 屬獨立工具維護，不阻擋程式碼 commit readiness。
 
 ### 3.5 已知依賴問題
 
@@ -586,3 +588,6 @@ Planner 應依最新 QA 自行判斷，當前建議順序如下：
 單一切片完成不必每次修改本報告；進度由 `output/automation/version_loop/` 與 Git 保存。若本報告與架構權威衝突，以 `system_architecture.md` 為準並停止實作、要求人工判定。
 
 - 2026-07-11：新增 Post-Refactor Product Roadmap 與 Target Architecture 交棒連結；明確 Gate 0 closeout 後停止以重構作為產品主線。
+- 2026-07-12：完成 current-program closeout。已解除 UpdateService package initialization 與 Backtest/Walk-forward cycles；建立五個 Qt shell 的 presenter/coordinator boundary；移出 MainWindow decision/runtime composition；建立 market/industry provider ports、domain-owned Flow/Indicator contracts、Recommendation pure stages、Broker Branch registry/transport/merge/write boundaries，以及 indicator/scoring/regime kernels；經人工核准移除三個 shim、`recommendation_module_legacy` 與其 consumers。
+- 2026-07-12 commit-readiness review 額外發現並修正兩個 provider normalization regression：raw SQLite `收盤指數` canonicalization 與 industry CSV ISO 日期解析。新增 Application ports 使用 named Protocol，避免以 `Any` 隱藏新跨層契約。
+- 大型 View／Service 的剩餘行數與 God-node 降低仍是 residual candidates，不代表 current-program 可無限延長。後續若重啟重構，必須重新 Planner、建立新 baseline，並以單一 atomic slice 執行；產品主線交回 Post-Refactor Product Roadmap。

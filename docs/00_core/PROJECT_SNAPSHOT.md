@@ -1,6 +1,62 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
-> **開場 30 秒內讀完** - 只放今天的狀態與入口，不放完整歷史細節
+> **開場 30 秒內讀完** - 只放今天可驗證的狀態與入口，不放完整歷史細節
+
+> 2026-07-11 安全重構續作：`UpdateService` normalization import 已改為明確 submodule dependency，並由 fresh-interpreter package re-export oracle 保護；`BacktestService` 已透過 `WalkForwardResultContract` 移除對 `walkforward_service` 的反向型別依賴。Walk-forward T-1 fold 邊界、degradation／summary golden 數值契約與 overfitting regression 均已納入 focused tests；金融公式與公開 runtime entrypoint 未變。
+>
+> 同輪 UI 薄殼化已建立五個可測試委派邊界：Backtest／Recommendation presenters、Update worker coordinator、Workbench DTO presenter 與 MainWindow workspace coordinator。現有 widget ownership、signal wiring、公開 helper、更新工作順序與 Workbench read-only 規則不變；下一個 Application 切片是移出 MainWindow 的 Decision Desk service composition。
+>
+> Decision Desk service composition 已移至 `app_module/decision_desk_composition.py`；MainWindow 不再直接包含各 provider/service 的 try/fallback 組裝流程。Composition 仍透過注入的既有 constructors 維持測試替身與 fail-soft 行為，共用 market-frame loader identity 不變；Regime confidence / score adapter 已改用 `Decimal` 轉整數 bp。
+>
+> UI 大型 presenter 續作：BacktestView 原 143 行績效摘要已縮為 presenter delegate；RecommendationView 的 profile advanced summary、權重與篩選格式鏈亦已移出。SOP／fixed／quantile／profile 顯示契約由 focused tests 保護，未修改回測或推薦計算。
+>
+> UpdateView 原 113 行 `_run_update_all` 已移至非 Qt `update_all_coordinator.py`；view 只注入日期、service operations 與 progress callback。快速／安全更新步驟、SQLite sync、TPEX soft failure、一般失敗 fail-fast 與結果 payload 契約均由 direct + widget tests 保護。
+>
+> Workbench 的 review/evidence/action/operating-loop DTO 狀態與 degraded 判讀已集中至 presenter；MainWindow 的八個 workspace key、label、icon 與註冊順序已集中為 immutable workspace plan。Read-only boundary、導航順序、widget ownership 與 signal wiring 不變。
+>
+> MainWindow 的 Smart Money semantic/common-loader 組裝與 Runtime controller/bridge/view/timer wiring 已分別移至 Application composition root 與 Qt composition coordinator。Smart Money 與 Decision Desk 共用 loader identity、Runtime 1 秒 polling、signal targets 及既有降級 UI 契約均由 direct/integration tests 保護。
+>
+> BacktestView 單檔執行已使用 immutable request 統一 service kwargs 與 `current_run_params`，消除兩份市場限制、風控、部位與成本參數 mapping。此 request 只傳遞既有值，不新增金融計算，也不改 signal context／T-1／look-ahead 邊界。
+>
+> RecommendationView 執行已使用 immutable request 集中圖形／技術指標必選驗證、`max_stocks=200`、`top_n=50` 與 10→100 progress contract。View 僅收集既有 config 並管理 worker/result；推薦排名、分數與 universe 邏輯未變。
+>
+> RecommendationView 原大型 reason formatter 與 Explain panel builder 已移至純 presenter；keyword/tag、觸發來源、score breakdown、ranking metadata 與風險提示輸出由 golden tests 保護。搬移過程的中文 encoding regression 已由 RED 捕捉並修復。
+>
+> Recommendation Why Not 的子分數、filter、Regime 與總分差距/severity HTML 已完整移至 presenter，View 僅委派既有 DTO/config。UI gate audit 顯示仍有 Backtest optimization/worker、Update action orchestration 與 Recommendation save/context-menu 等非純 widget construction，故 UI 薄殼階段尚未宣告完成。
+>
+> UpdateView 單一資料源更新已改用 immutable request；daily 的 TWSE/TPEX/SQLite/indicator 順序與 warnings/result aggregation，以及 market/industry/broker mapping 均由 direct contracts 保護。View 仍負責 radio/date widgets、log/progress widgets 與 worker lifecycle。
+>
+> BacktestView 的 grid-search 與 batch 執行已分別改用 immutable requests，集中 objective/top_n、20+ 回測欄位、save_runs、parallel threshold、research mode、progress 與 cancellation mapping。View 保留 ParamRange/parallel widgets、preflight、QTimer UI progress 與 worker lifecycle；回測／最佳化核心未改。
+>
+> Walk-forward UI 執行已使用 immutable request 集中 Train-Test/Walk-forward mode 與 service kwargs；fold/T-1 邏輯仍由既有 service/golden contracts 管理。Recommendation 保存已使用 immutable request 建構 result DTO、Profile/Regime/negative-evidence snapshot 與 watchlist payload；實際寫入仍只在使用者保存動作中發生。
+>
+> UI 薄殼 gate 已完成：五個 UI shell 不再直接呼叫核心 execution entrypoints，並由 AST contract 防止回流。Recommendation save coordinator 已提升至 Application layer，`persist()` 管理必要 result write 與 soft-failure watchlist write；View 只觸發使用者動作並呈現 outcome。下一階段為 Application orchestration／依賴反轉。
+>
+> Application DI 第一片：RecommendationService 的 market-history stage 已改由 injected provider；default adapter 原樣保留 SQLite-first、SQL join、CSV fallback、60 日窗口、日期/數值 normalization 與例外語意。ranking、recomputation、V1.7 negative-evidence 與 provider tests 保護 snapshot-equivalence；推薦 score/ranking pipeline 未改。
+>
+> Application DI 第二片：推薦市場資料欄位正規化已成為不突變來源 DataFrame 的具名純步驟；IndustryMapper 與 MarketRegimeDetector 已新增 frame-provider ports。MainWindow 的 Screening／Regime／Recommendation concrete graph 已移至 `app_module/decision_service_composition.py`，由 Application-owned SQLite-first/CSV-fallback providers 注入，共用 IndustryMapper、保留兩個獨立 regime detector；產業與 regime 金融算法未改。
+>
+> Wave 4 ownership closeout：`IndicatorParameterRegistry` 已移至 analysis domain；Flow/Broker DTO 已由 decision domain 擁有。2026-07-12 經使用者明確核准後，舊 decision registry 與 Application DTO shim 已移除；靜態 audit 未發現 Flow DTO pickle/joblib persistence，dataclass payload shape、broker flow、Smart Money 與 UI contracts 均保持。
+>
+> Wave 5 第一個金融／分析 kernel：技術指標價格清理已抽成純 `clean_price_values()`。正常與內部缺值 golden、float64 numeric boundary、prefix/T-1 契約已固定；移除前導缺值的 `bfill()`，改為只使用當下以前觀測值，修正前導價格讀取未來資料的 look-ahead，RSI/MACD 公式與參數不變。
+>
+> ScoringEngine 的 10,000 bp 最大餘額正規化已抽成 Decimal／整數 pure kernel，既有 tie-break、zero-weight default、TotalScore golden 與 prefix oracle 不變。StockScreener 的 recent stock/industry reads 已新增 provider ports，Application composition 注入 adapters 並把 StockScreener 一併移出 MainWindow service graph；非 UI constructor fallback 保留相容。
+>
+> BrokerBranchUpdateService 已完成第一輪責任分離：registry 文字解碼／mojibake／總公司判定、MoneyDJ URL request builder、E/B lots/amount merge plan 與 daily/merged CSV write coordinator 均已成為可獨立測試的 Application components。Service 保留原 private façade、HTTP→Selenium fallback、日期順序、重試、備份與 CSV schema；驗證僅使用記憶資料與 temp path，未寫正式資料。
+>
+> UpdateService 的 daily subprocess output parser 已抽成具名純步驟，固定 summary、逐日成功／跳過／失敗、空輸出 fail-closed 與 diagnostic code 契約。`update_daily()` 保留缺日掃描、subprocess 命令、暫存 log lifecycle 與公開 payload，只移出 170+ 行解析／聚合分支。
+>
+> RecommendationService final ranking 已改為純 ranking plan：輸入僅有 stock code／score、mode、top_n 與 ranking config，輸出 immutable ordered/selected codes、percentile bp 與 universe metadata；DTO 與 screening matrix mutation 留在 façade。fixed tie 維持輸入順序，quantile tie 維持 stock code 次排序，既有 ranking／negative-evidence／DTO tests 保持。
+>
+> MarketRegimeDetector 的 MA slope 與 Bollinger bandwidth 已抽成 causal analysis kernels；short-history、數值 golden 與全 prefix invariance 由 direct tests 固定，detector 保留 façade、hysteresis 與 persistent-history ownership。
+>
+> Wave 5 金融核心 closeout：TechnicalIndicator price normalization、Scoring bp normalization、MarketRegime slope/bandwidth 均已依 golden→prefix/T-1→numeric→pure kernel→façade 完成；BrokerSimulator、performance metrics、Portfolio core 與 RecommendationPortfolioBacktest 沿用既有 `financial_module.units`、ledger/metrics/result supports。92 項 timeline／Decimal／numeric governance 測試通過；已知 recommendation portfolio 同日收盤成交研究假設仍明示 warning，未被包裝成實盤等價。
+>
+> Wave 6 已獲使用者明確核准並完成移除：三個 compatibility shim、`recommendation_module_legacy`、舊 example 與兩個 legacy manual checks 已在 consumer 歸零後刪除；test inventory、導航、migration history 與架構文件已同步。Dynamic import 與 pickle/joblib audit 未發現隱藏 consumer；完整證據與回滾方式見 `SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md`。
+>
+> Wave 6 刪除後 release closeout：Full App Healthcheck `20260712_025311` passed；完整 pytest 1676 passed、Update Qt 38 passed、Update QA 23/0/4、mypy 364 files、financial checker 37 passed，compileall 與 diff check 亦通過。24 個 pytest warnings 均為既有 recommendation portfolio 同日收盤成交研究假設的明示揭露。
+>
+> Commit-readiness review follow-up：修正 Application provider 注入後 raw `market_indices.收盤指數` 未 canonicalize 為 `收盤價`，以及 industry CSV `YYYY-MM-DD` 被 strict `%Y%m%d` 轉為 `NaT` 的兩個 default-path regression；兩者均先有 reproducing RED。新增 market-frame canonical contract，同時支援 SQLite `YYYYMMDD` 與 ISO 日期。Recommendation、save、composition、Broker write 等新 DI seams 已改用 named Protocol，不再以 `Any` 隱藏 port contract。Master Report 已轉為 current-program closeout；Graphify ghost/duplicate node 問題另行處理，不作 commit gate。
 
 ## 系統定位（一句話）
 

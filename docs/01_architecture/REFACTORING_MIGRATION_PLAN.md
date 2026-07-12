@@ -146,6 +146,8 @@ technical_analysis/
 
 **實際完成時間**：已完成
 
+**2026-07-12 最終移除補記**：後續安全重構已將上述 example 與 manual consumers 歸零；`recommendation_module_legacy/`、舊 example 與兩個 legacy recommendation manual checks 已依 Wave 6 人工核准清除。此段原文保留作歷史遷移紀錄，不代表目前仍存在 compatibility module。
+
 ---
 
 ### 步驟 2：遷移業務邏輯到 decision_module（✅ 已完成）
