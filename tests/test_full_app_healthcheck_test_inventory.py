@@ -121,9 +121,9 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
 
 
 def test_inventory_exposes_pytest_collection_statuses():
-    assert len(PYTEST_COLLECTED_FILES) == 291
+    assert len(PYTEST_COLLECTED_FILES) == 348
     assert len(PYTEST_SUPPORT_FILES) == 1
-    assert len(PYTEST_NOT_COLLECTED_FILES) == 31
+    assert len(PYTEST_NOT_COLLECTED_FILES) == 29
 
     assert is_collected_by_default_pytest("tests/test_full_app_healthcheck_test_inventory.py")
     assert get_pytest_collection_status("tests/test_full_app_healthcheck_test_inventory.py") == "collected"

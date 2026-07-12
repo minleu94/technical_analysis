@@ -171,9 +171,9 @@ python ui_qt/main.py
 
 ---
 
-### ❌ 不建議使用的入口
+### 已移除的舊入口
 
-- `examples/main_example.py`：已棄用的舊版主程式示例
+- `examples/main_example.py` 與 `recommendation_module_legacy/` 已於 2026-07-12 完成 consumer 歸零並移除；不要再以歷史路徑啟動或引用。
 
 ---
 
@@ -464,24 +464,10 @@ python ui_qt/main.py
 
 ---
 
-### `recommendation_module_legacy/` 目錄
-
-**角色**：舊版推薦引擎（已棄用）
-
-**狀態**：
-- 僅被 `tests/` 和 `examples/` 使用
-- 不屬於核心架構
-- 已添加棄用警告
-
-**使用建議**：新功能應使用 `app_module/recommendation_service.py`，不應再引用 `recommendation_module_legacy/`。
-
----
-
 ### 不應再被新功能引用的模組
 
 - `ui_app/` 中的業務邏輯檔案（已遷移到 `decision_module/`）
-- `recommendation_module_legacy/`（應使用 `app_module/recommendation_service.py`）
-- `examples/main_example.py`（已棄用）
+- 舊版推薦引擎與 `examples/main_example.py` 已於 2026-07-12 完成 consumer 歸零並移除；推薦入口統一使用 `app_module/recommendation_service.py`
 
 ---
 
