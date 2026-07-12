@@ -25,9 +25,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QIcon
 
 from data_module.config import TWStockConfig
-from app_module.screening_service import ScreeningService
-from app_module.regime_service import RegimeService
-from app_module.decision_desk_dtos import DecisionDeskQuality, MarketRegimeSummary
 from app_module.market_breadth_service import (
     MarketBreadthService,
     SQLiteDailyPriceMarketBreadthProvider,
@@ -45,7 +42,6 @@ from app_module.relative_strength_liquidity_service import (
     RelativeStrengthLiquidityService,
     SQLiteDailyPriceRelativeStrengthLiquidityProvider,
 )
-from app_module.recommendation_service import RecommendationService
 from app_module.portfolio_alert_service import PortfolioAlertService
 from app_module.portfolio_condition_monitor import PortfolioConditionMonitor
 from app_module.portfolio_chip_service import PortfolioChipService
@@ -86,13 +82,20 @@ from ui_qt.theme.fonts import (
 )
 from ui_qt.widgets.left_navigation import LeftNavigationWidget, NavigationItem
 from ui_qt.widgets.text_sanitizer import sanitize_button_texts
+from ui_qt.main_window_coordinator import WORKSPACE_DEFINITIONS, resolve_workspace_key
+from ui_qt.runtime_composition import build_runtime_ui_composition
+from app_module.decision_desk_composition import (
+    DecisionDeskMarketRegimeProvider,
+    build_decision_desk_composition,
+    build_smart_money_composition,
+)
+from app_module.decision_service_composition import build_decision_service_composition
 
 # Runtime Observatory Imports
 from app_module.runtime_services.runtime_controller import RuntimeController
 from ui_qt.bridges.runtime_event_bridge import QtRuntimeBridge
 from ui_qt.views.runtime_view import RuntimeView
 from PySide6.QtCore import QTimer
-import os
 
 
 def apply_app_theme(app: QApplication) -> None:
@@ -108,164 +111,36 @@ def apply_app_theme(app: QApplication) -> None:
 class MainWindow(QMainWindow):
     """主窗口"""
 
-    class _DecisionDeskMarketRegimeProvider:
-        """僅供主畫面使用的 market regime provider（決策桌面適配器）。"""
-
-        def __init__(self, regime_service: RegimeService):
-            self.regime_service = regime_service
-
-        def _to_confidence_bp(self, confidence) -> int | None:
-            if confidence is None:
-                return None
-            try:
-                value = float(confidence)
-            except (TypeError, ValueError):
-                return None
-            if 0 <= value <= 1:
-                return int(value * 10000)
-            if 0 <= value <= 100:
-                return int(value * 100)
-            return int(value)
-
-        def fetch_market_regime(self, as_of_date):
-            if self.regime_service is None:
-                return None
-            try:
-                as_of_date_str = as_of_date.isoformat()
-                try:
-                    result = self.regime_service.detect_regime(
-                        as_of_date=as_of_date_str
-                    )
-                except TypeError:
-                    result = self.regime_service.detect_regime(date=as_of_date_str)
-                except Exception:
-                    result = self.regime_service.detect_regime(as_of_date_str)
-                details = dict(getattr(result, "details", {}) or {})
-                confidence_bp = self._to_confidence_bp(
-                    getattr(result, "confidence", None)
-                )
-                regime_score = details.get("ma20_slope")
-                if regime_score is None:
-                    regime_score = details.get("score")
-                if regime_score is None:
-                    regime_score = details.get("regime_score")
-                if regime_score is not None:
-                    try:
-                        regime_score = int(float(regime_score) * 100)
-                    except (TypeError, ValueError):
-                        regime_score = None
-
-                return MarketRegimeSummary(
-                    as_of_date=as_of_date,
-                    quality=DecisionDeskQuality.OBSERVED,
-                    warnings=(),
-                    regime_label=getattr(result, "regime_name_cn", None)
-                    or getattr(result, "regime", None),
-                    regime_score=regime_score,
-                    regime_confidence=confidence_bp,
-                    meta=details,
-                )
-            except Exception:
-                return None
-
-        def fetch_market_breadth(self, as_of_date):
-            return None
-
-        def fetch_sector_rotation(self, as_of_date):
-            return None
-
-        def fetch_watchlist_triggers(self, as_of_date):
-            return None
-
-        def fetch_portfolio_alerts(self, as_of_date):
-            return None
+    _DecisionDeskMarketRegimeProvider = DecisionDeskMarketRegimeProvider
 
     def _create_decision_desk_builder(self) -> DecisionDeskSnapshotBuilder:
-        provider = self._DecisionDeskMarketRegimeProvider(self.regime_service)
-        market_frame_loader = getattr(self, "decision_market_frame_loader", None)
-        if market_frame_loader is None:
-            try:
-                market_frame_loader = DecisionMarketFrameLoader(self.config.db_file)
-                self.decision_market_frame_loader = market_frame_loader
-            except Exception as exc:  # noqa: BLE001
-                print(f"[MainWindow] 決策桌面共用市場資料初始化失敗：{exc}")
-        market_breadth_service = None
-        try:
-            market_breadth_service = MarketBreadthService(
-                SQLiteDailyPriceMarketBreadthProvider(
-                    self.config.db_file,
-                    market_frame_loader=market_frame_loader,
-                )
-            )
-        except Exception as exc:
-            print(f"[MainWindow] 決策桌面 MarketBreadthService 初始化失敗：{exc}")
-
-        sector_rotation_service = None
-        try:
-            sector_rotation_service = SectorRotationService(
-                SQLiteIndustryIndexSectorRotationProvider(self.config.db_file)
-            )
-        except Exception as exc:
-            print(f"[MainWindow] 決策桌面 SectorRotationService 初始化失敗：{exc}")
-
-        portfolio_alert_service = None
-        try:
-            condition_monitor = PortfolioConditionMonitor()
-            chip_summary_provider = None
-            try:
-                chip_summary_provider = PortfolioChipService(
-                    self.config,
-                    broker_flow_service=getattr(self, "broker_flow_service", None),
-                )
-            except Exception as exc:  # noqa: BLE001
-                print(f"[MainWindow] 決策桌面 PortfolioChipService 初始化失敗：{exc}")
-            portfolio_alert_service = PortfolioAlertService(
-                portfolio_service=self.portfolio_service,
-                condition_monitor=condition_monitor,
-                chip_summary_provider=chip_summary_provider,
-            )
-        except Exception as exc:
-            print(f"[MainWindow] 決策桌面 PortfolioAlertService 初始化失敗：{exc}")
-
-        watchlist_trigger_service = None
-        try:
-            watchlist_provider = WatchlistServiceWatchlistProvider(
-                self.watchlist_service
-            )
-            ranking_provider = SQLiteRankingProvider(self.config.db_file)
-            watchlist_trigger_service = WatchlistTriggerService(
-                watchlist_provider=watchlist_provider,
-                ranking_provider=ranking_provider,
-            )
-        except Exception as exc:
-            print(f"[MainWindow] 決策桌面 WatchlistTriggerService 初始化失敗：{exc}")
-
-        relative_strength_liquidity_service = None
-        try:
-            relative_strength_liquidity_provider = (
-                SQLiteDailyPriceRelativeStrengthLiquidityProvider(
-                    self.config.db_file,
-                    market_frame_loader=market_frame_loader,
-                )
-            )
-            relative_strength_liquidity_service = RelativeStrengthLiquidityService(
-                provider=relative_strength_liquidity_provider
-            )
-        except Exception as exc:
-            print(
-                f"[MainWindow] 決策桌面 RelativeStrengthLiquidityService 初始化失敗：{exc}"
-            )
-
-        return DecisionDeskSnapshotBuilder(
-            provider=provider,
-            market_breadth_service=market_breadth_service,
-            sector_rotation_service=sector_rotation_service,
-            relative_strength_liquidity_service=relative_strength_liquidity_service,
-            watchlist_trigger_service=watchlist_trigger_service,
-            portfolio_alert_service=portfolio_alert_service,
+        composition = build_decision_desk_composition(
+            config=self.config,
+            regime_service=self.regime_service,
+            portfolio_service=self.portfolio_service,
+            watchlist_service=self.watchlist_service,
+            broker_flow_service=getattr(self, "broker_flow_service", None),
             smart_money_service=getattr(self, "smart_money_semantic_service", None),
-            market_frame_loader=market_frame_loader,
+            market_frame_loader=getattr(self, "decision_market_frame_loader", None),
+            dependencies={
+                "DecisionMarketFrameLoader": DecisionMarketFrameLoader,
+                "MarketBreadthService": MarketBreadthService,
+                "SQLiteDailyPriceMarketBreadthProvider": SQLiteDailyPriceMarketBreadthProvider,
+                "SectorRotationService": SectorRotationService,
+                "SQLiteIndustryIndexSectorRotationProvider": SQLiteIndustryIndexSectorRotationProvider,
+                "PortfolioConditionMonitor": PortfolioConditionMonitor,
+                "PortfolioChipService": PortfolioChipService,
+                "PortfolioAlertService": PortfolioAlertService,
+                "WatchlistServiceWatchlistProvider": WatchlistServiceWatchlistProvider,
+                "SQLiteRankingProvider": SQLiteRankingProvider,
+                "WatchlistTriggerService": WatchlistTriggerService,
+                "SQLiteDailyPriceRelativeStrengthLiquidityProvider": SQLiteDailyPriceRelativeStrengthLiquidityProvider,
+                "RelativeStrengthLiquidityService": RelativeStrengthLiquidityService,
+                "DecisionDeskSnapshotBuilder": DecisionDeskSnapshotBuilder,
+            },
         )
+        self.decision_market_frame_loader = composition.market_frame_loader
+        return composition.builder
 
     def __init__(self):
         super().__init__()
@@ -286,19 +161,10 @@ class MainWindow(QMainWindow):
             # 初始化配置和服務
             self.config = TWStockConfig()
 
-            # 共享 IndustryMapper 實例，避免重複載入資料
-            # from ui_app.industry_mapper import IndustryMapper
-            from decision_module.industry_mapper import IndustryMapper
-
-            shared_industry_mapper = IndustryMapper(self.config)
-
-            self.screening_service = ScreeningService(
-                self.config, industry_mapper=shared_industry_mapper
-            )
-            self.regime_service = RegimeService(self.config)
-            self.recommendation_service = RecommendationService(
-                self.config, industry_mapper=shared_industry_mapper
-            )
+            decision_services = build_decision_service_composition(config=self.config)
+            self.screening_service = decision_services.screening_service
+            self.regime_service = decision_services.regime_service
+            self.recommendation_service = decision_services.recommendation_service
             self.update_service = UpdateService(self.config)
             self.backtest_service = BacktestService(self.config)
             self.broker_flow_service = BrokerFlowService(self.config)
@@ -356,20 +222,7 @@ class MainWindow(QMainWindow):
         workspace_widgets = getattr(self, "workspace_widgets", {})
         if workspace_stack is None:
             return
-        label_to_key = {
-            "決策工作台": "workbench",
-            "每日決策": "workbench",
-            "市場探索": "market_explore",
-            "市場觀察": "market_explore",
-            "推薦分析": "recommendation",
-            "策略回測": "backtest",
-            "觀察清單": "watchlist",
-            "持倉管理": "portfolio",
-            "數據更新": "update",
-            "Runtime": "runtime",
-            "Runtime Observatory": "runtime",
-        }
-        key = label_to_key.get(key_or_label, key_or_label)
+        key = resolve_workspace_key(key_or_label)
         widget = workspace_widgets.get(key)
         if widget is None:
             return
@@ -491,29 +344,18 @@ class MainWindow(QMainWindow):
 
             # 主力流向標籤 (Smart Money Flow)
             print("[MainWindow] 創建主力流向視圖...")
-            self.smart_money_semantic_service = None
-            try:
-                market_frame_loader = getattr(
-                    self,
-                    "decision_market_frame_loader",
-                    None,
-                )
-                if market_frame_loader is None:
-                    market_frame_loader = DecisionMarketFrameLoader(
-                        self.config.db_file
-                    )
-                    self.decision_market_frame_loader = market_frame_loader
-                self.smart_money_semantic_service = SmartMoneySemanticService(
-                    self.broker_flow_service,
-                    price_provider=SQLiteSmartMoneyPriceProvider(
-                        self.config.db_file,
-                        market_frame_loader=market_frame_loader,
-                    ),
-                )
-            except Exception as exc:
-                print(
-                    f"[MainWindow] 決策桌面 SmartMoneySemanticService 初始化失敗：{exc}"
-                )
+            smart_money_composition = build_smart_money_composition(
+                config=self.config,
+                broker_flow_service=self.broker_flow_service,
+                market_frame_loader=getattr(self, "decision_market_frame_loader", None),
+                dependencies={
+                    "DecisionMarketFrameLoader": DecisionMarketFrameLoader,
+                    "SQLiteSmartMoneyPriceProvider": SQLiteSmartMoneyPriceProvider,
+                    "SmartMoneySemanticService": SmartMoneySemanticService,
+                },
+            )
+            self.decision_market_frame_loader = smart_money_composition.market_frame_loader
+            self.smart_money_semantic_service = smart_money_composition.service
             smart_money_flow = SmartMoneyFlowView(
                 broker_flow_service=self.broker_flow_service,
                 watchlist_service=self.watchlist_service,
@@ -674,33 +516,21 @@ class MainWindow(QMainWindow):
             runtime_widget: QWidget
             try:
                 print("[MainWindow] 初始化 Runtime Observatory...")
-                project_root_str = str(project_root)
-                self.runtime_controller = RuntimeController(
-                    os.path.join(project_root_str, "runtime")
+                runtime_composition = build_runtime_ui_composition(
+                    project_root=project_root,
+                    parent=self,
+                    dependencies={
+                        "RuntimeController": RuntimeController,
+                        "QtRuntimeBridge": QtRuntimeBridge,
+                        "RuntimeView": RuntimeView,
+                        "QTimer": QTimer,
+                    },
                 )
-                self.runtime_bridge = QtRuntimeBridge(
-                    self.runtime_controller.event_bus, self
-                )
-
-                self.runtime_view = RuntimeView(parent=self)
-
-                # Connect bridge signals to view slots
-                self.runtime_bridge.state_updated.connect(
-                    self.runtime_view.on_state_updated
-                )
-                self.runtime_bridge.health_updated.connect(
-                    self.runtime_view.on_health_updated
-                )
-                self.runtime_bridge.event_received.connect(
-                    self.runtime_view.on_event_received
-                )
-
-                runtime_widget = self.runtime_view
-
-                # Setup polling timer
-                self.runtime_timer = QTimer(self)
-                self.runtime_timer.timeout.connect(self.runtime_controller.poll_updates)
-                self.runtime_timer.start(1000)  # Poll every 1 second
+                self.runtime_controller = runtime_composition.controller
+                self.runtime_bridge = runtime_composition.bridge
+                self.runtime_view = runtime_composition.view
+                self.runtime_timer = runtime_composition.timer
+                runtime_widget = runtime_composition.view
                 print("[MainWindow] Runtime Observatory 整合完成")
             except Exception as re:
                 print(f"[MainWindow] 警告: Runtime Observatory 初始化失敗: {re}")
@@ -708,24 +538,22 @@ class MainWindow(QMainWindow):
                 runtime_widget.setWordWrap(True)
             # --------------------------------------------
 
-            add_workspace("workbench", workbench_view)
-            add_workspace("market_explore", market_tabs)
-            add_workspace("recommendation", recommendation)
-            add_workspace("backtest", backtest)
-            add_workspace("watchlist", watchlist_widget)
-            add_workspace("portfolio", portfolio_widget)
-            add_workspace("update", update_view)
-            add_workspace("runtime", runtime_widget)
+            workspace_instances = {
+                "workbench": workbench_view,
+                "market_explore": market_tabs,
+                "recommendation": recommendation,
+                "backtest": backtest,
+                "watchlist": watchlist_widget,
+                "portfolio": portfolio_widget,
+                "update": update_view,
+                "runtime": runtime_widget,
+            }
+            for definition in WORKSPACE_DEFINITIONS:
+                add_workspace(definition.key, workspace_instances[definition.key])
 
-            workspace_items = (
-                NavigationItem("workbench", "決策工作台", icon="command"),
-                NavigationItem("market_explore", "市場探索", icon="radar"),
-                NavigationItem("recommendation", "推薦分析", icon="spark-list"),
-                NavigationItem("backtest", "策略回測", icon="replay"),
-                NavigationItem("watchlist", "觀察清單", icon="bookmark"),
-                NavigationItem("portfolio", "持倉管理", icon="briefcase"),
-                NavigationItem("update", "數據更新", icon="database-sync"),
-                NavigationItem("runtime", "Runtime", icon="pulse"),
+            workspace_items = tuple(
+                NavigationItem(definition.key, definition.label, icon=definition.icon)
+                for definition in WORKSPACE_DEFINITIONS
             )
             self.left_navigation = LeftNavigationWidget(workspace_items, parent=self)
             self.left_navigation.workspaceSelected.connect(self._select_main_workspace)

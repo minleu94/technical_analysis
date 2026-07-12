@@ -1,4 +1,4 @@
-﻿"""
+"""
 數據更新視圖
 提供數據更新功能界面
 """
@@ -30,6 +30,9 @@ from ui_qt.views.update.update_formatters import (
     get_update_type_name,
     tpex_warning_messages,
 )
+from ui_qt.views.update.worker_coordinator import WorkerCoordinator
+from ui_qt.views.update.update_all_coordinator import run_update_all
+from ui_qt.views.update.source_update_coordinator import SourceUpdateRequest
 
 
 
@@ -173,7 +176,8 @@ class UpdateView(QWidget):
 
         # Worker
         self.worker: Optional[TaskWorker] = None
-        self._active_workers: List[TaskWorker] = []
+        self._worker_coordinator = WorkerCoordinator[TaskWorker]()
+        self._active_workers = self._worker_coordinator.active_workers
         meta_data_dir = getattr(
             self.update_service.config,
             "meta_data_dir",
@@ -186,17 +190,13 @@ class UpdateView(QWidget):
 
     def _start_worker(self, worker: TaskWorker) -> TaskWorker:
         """Keep background tasks alive independently until they finish."""
-        self.worker = worker
-        self._active_workers.append(worker)
+        self.worker = self._worker_coordinator.start(worker)
         if hasattr(worker, "cancelled"):
             worker.cancelled.connect(lambda current_worker=worker: self._release_worker(current_worker))
         return worker
 
     def _release_worker(self, worker: TaskWorker):
-        if worker in self._active_workers:
-            self._active_workers.remove(worker)
-        if self.worker is worker:
-            self.worker = self._active_workers[-1] if self._active_workers else None
+        self.worker = self._worker_coordinator.release(worker)
 
     def _attach_worker_cleanup(self, worker: TaskWorker):
         worker.finished.connect(lambda _payload, current_worker=worker: self._release_worker(current_worker))
@@ -1676,118 +1676,19 @@ class UpdateView(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, "背景任務狀態", f"讀取狀態失敗：{exc}")
     def _run_update_all(self, mode="quick", progress_callback=None) -> Dict[str, Any]:
-        """一鍵更新所有數據流程（支援快速與安全分流）"""
+        """?????????????? Qt coordinator?"""
         start_date, end_date = self._get_selected_date_range()
-        tpex_reference_date = self._get_tpex_reference_date(end_date)
-        completed = []
-        warnings = []
-        soft_failures = []
-
-        def report(message: str, progress: int) -> None:
-            if progress_callback:
-                progress_callback(message, progress)
-
-        def run_step(name: str, progress: int, action):
-            report(name, progress)
-            result = action()
-            if isinstance(result, dict) and not result.get("success", True):
-                return result
-            completed.append({"step": name, "result": result})
-            return result
-
-        use_sqlite = getattr(self.update_service.config, "use_sqlite", False)
-        is_quick_mode = (mode == "quick" and use_sqlite)
-
-        # 快速更新仍跳過大型合併，但資料補齊窗口與安全更新一致使用最近工作日範圍。
-        quick_start_date = start_date
-
-        daily_update_start_date = quick_start_date if is_quick_mode else start_date
-
-        steps = [
-            ("檢查資料狀態", 0, lambda: self._get_overview_status()),
-            ("每日股價更新", 12, lambda: self.update_service.update_daily(daily_update_start_date, end_date)),
-            (
-                "TPEX 每日股價更新",
-                16,
-                lambda: self._update_tpex_daily_prices(daily_update_start_date, end_date),
-            ),
-            ("同步每日股價至 SQLite", 18, lambda: self.update_service.sync_source_to_sqlite("daily_price_files", daily_update_start_date, end_date)),
-            ("大盤指數更新", 24, lambda: self.update_service.update_market(start_date, end_date)),
-            ("同步大盤指數至 SQLite", 30, lambda: self.update_service.sync_source_to_sqlite("market_index")),
-            ("產業指數更新", 36, lambda: self.update_service.update_industry(start_date, end_date)),
-            ("同步產業指數至 SQLite", 42, lambda: self.update_service.sync_source_to_sqlite("industry_index")),
-            ("券商分點更新", 48, lambda: self.update_service.update_broker_branch(quick_start_date, end_date)),
-        ]
-
-        is_quick_mode = (mode == "quick" and use_sqlite)
-
-        if is_quick_mode:
-            # ⚡ 快速更新：跳過大型合併 CSV，直接同步單日檔案至 SQLite
-            steps.extend([
-                ("同步券商分點至 SQLite (直接檔案同步)", 65, lambda: self.update_service.sync_source_to_sqlite("broker_branch_files", quick_start_date, end_date)),
-            ])
-        else:
-            # 🛡️ 安全更新：執行完整 CSV 合併整合與 SQLite 同步
-            steps.extend([
-                ("合併每日資料", 55, lambda: self.update_service.merge_daily_data(force_all=False)),
-                ("同步合併每日資料至 SQLite", 62, lambda: self.update_service.sync_source_to_sqlite("daily_data")),
-                ("合併券商分點", 69, lambda: self.update_service.merge_broker_branch_data()),
-                ("同步券商分點至 SQLite", 76, lambda: self.update_service.sync_source_to_sqlite("broker_branch")),
-            ])
-
-        steps.extend([
-            (
-                "檢查並增量計算技術指標",
-                88,
-                lambda: self._run_incremental_technical_if_needed(progress_callback),
-            ),
-            ("刷新資料狀態", 100, lambda: self._get_overview_status()),
-        ])
-
-        for name, progress, action in steps:
-            result = run_step(name, progress, action)
-            if name.startswith("TPEX 每日股價更新") and isinstance(result, dict):
-                tpex_warnings = [
-                    f"{name}: {warning}"
-                    for warning in self._tpex_warning_messages(result)
-                ]
-                if not result.get("success", True) and not tpex_warnings:
-                    tpex_warnings.append(f"{name}: {result.get('message', f'{name} 失敗')}")
-                if tpex_warnings:
-                    warnings.extend(tpex_warnings)
-                    soft_failures.append({"step": name, "result": result, "warnings": tpex_warnings})
-                    if not result.get("success", True):
-                        completed.append({"step": name, "result": result, "warning": True})
-                    elif completed and completed[-1].get("step") == name:
-                        completed[-1]["warning"] = True
-                    continue
-            if isinstance(result, dict) and not result.get("success", True):
-                return {
-                    "success": False,
-                    "message": result.get("message", f"{name} 失敗"),
-                    "failed_step": name,
-                    "completed_steps": completed,
-                    "step_result": result,
-                }
-
-        final_msg = "快速更新所有數據完成" if is_quick_mode else "安全更新所有數據完成"
-        report(final_msg, 100)
-        if soft_failures:
-            return {
-                "success": False,
-                "message": f"{final_msg}，但 TPEX 每日股價未完整更新",
-                "failed_step": soft_failures[0]["step"],
-                "completed_steps": completed,
-                "warnings": list(dict.fromkeys(warnings)),
-                "step_result": soft_failures[0]["result"],
-                "soft_failures": soft_failures,
-            }
-        return {
-            "success": True,
-            "message": final_msg,
-            "completed_steps": completed,
-            "warnings": list(dict.fromkeys(warnings)),
-        }
+        return run_update_all(
+            mode=mode,
+            start_date=start_date,
+            end_date=end_date,
+            update_service=self.update_service,
+            get_overview_status=self._get_overview_status,
+            update_tpex_daily_prices=self._update_tpex_daily_prices,
+            run_incremental_technical=self._run_incremental_technical_if_needed,
+            tpex_warning_messages=self._tpex_warning_messages,
+            progress_callback=progress_callback,
+        )
 
     def _run_incremental_technical_if_needed(self, progress_callback=None) -> Dict[str, Any]:
         """Skip technical indicator calculation when the overview already shows it is current."""
@@ -2003,80 +1904,13 @@ class UpdateView(QWidget):
             logger = logging.getLogger(__name__)
             try:
                 logger.info(f"[UpdateView] 開始執行更新任務: update_type={update_type}")
-                if update_type == 'daily':
-                    if progress_callback:
-                        progress_callback("更新 TWSE 每日股價", 15)
-                    result = self.update_service.update_daily(start_date, end_date)
-                    if progress_callback:
-                        progress_callback("更新 TPEX 每日收盤行情", 30)
-                    tpex_result = self._update_tpex_daily_prices(start_date, end_date)
-                    warnings = list(result.get('warnings', []))
-                    tpex_warnings = self._tpex_warning_messages(tpex_result)
-                    if tpex_result.get('success', False) and not tpex_warnings:
-                        result['message'] = (
-                            f"{result.get('message', '每日股票數據更新完成')}\n"
-                            f"TPEX 每日股價更新: {tpex_result.get('message', '完成')}"
-                        )
-                        result['updated_dates'] = list(result.get('updated_dates', [])) + list(
-                            tpex_result.get('updated_dates', [])
-                        )
-                    else:
-                        result['success'] = False
-                        if tpex_warnings:
-                            warnings.extend(f"TPEX 每日股價更新: {warning}" for warning in tpex_warnings)
-                        else:
-                            warnings.append(
-                                f"TPEX 每日股價更新: {tpex_result.get('message', 'unknown error')}"
-                            )
-                        result['message'] = (
-                            f"{result.get('message', '每日股票數據更新完成')}\n"
-                            f"TPEX 每日股價更新未完整：{tpex_result.get('message', 'unknown error')}"
-                        )
-
-                    if progress_callback:
-                        progress_callback("同步每日股價到 SQLite", 55)
-                    sqlite_result = self.update_service.sync_source_to_sqlite(
-                        "daily_price_files",
-                        start_date,
-                        end_date,
-                    )
-                    if not sqlite_result.get("success", True):
-                        result['success'] = False
-                        warnings.append(
-                            f"同步 daily_price_files 到 SQLite 失敗: {sqlite_result.get('message', 'unknown error')}"
-                        )
-                    else:
-                        result["synced_records"] = int(result.get("synced_records", 0)) + int(
-                            sqlite_result.get("synced_records", 0)
-                        )
-
-                    if progress_callback:
-                        progress_callback("更新技術指標（增量）", 85)
-                    indicator_result = self.update_service.calculate_technical_indicators(
-                        target_stock=None,
-                        force_all=False,
-                        start_date=None,
-                        progress_callback=progress_callback,
-                    )
-                    if not indicator_result.get("success", False):
-                        result['success'] = False
-                        warnings.append(
-                            f"技術指標計算失敗: {indicator_result.get('message', 'unknown error')}"
-                        )
-                    if warnings:
-                        result['warnings'] = list(dict.fromkeys(warnings))
-                elif update_type == 'market':
-                    result = self.update_service.update_market(start_date, end_date)
-                elif update_type == 'industry':
-                    result = self.update_service.update_industry(start_date, end_date)
-                elif update_type == 'broker_branch':
-                    result = self.update_service.update_broker_branch(
-                        start_date=start_date,
-                        end_date=end_date,
-                        progress_callback=progress_callback
-                    )
-                else:
-                    raise ValueError(f"未知的更新類型：{update_type}")
+                request = SourceUpdateRequest(str(update_type), start_date, end_date)
+                result = request.execute(
+                    self.update_service,
+                    update_tpex_daily_prices=self._update_tpex_daily_prices,
+                    tpex_warning_messages=self._tpex_warning_messages,
+                    progress_callback=progress_callback,
+                )
                 logger.info(f"[UpdateView] 更新任務完成: success={result.get('success', False)}")
                 return result
             except Exception as e:

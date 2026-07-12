@@ -73,6 +73,17 @@ from ui_qt.views.backtest import research_run_metadata
 from ui_qt.views.backtest.parameter_descriptions import PARAMETER_DESCRIPTIONS, PARAMETER_DISPLAY_NAMES
 from ui_qt.views.backtest.result_panel import BacktestResultPanel
 from ui_qt.views.backtest.config_panel import BacktestConfigPanel
+from ui_qt.views.backtest.presenter import (
+    build_portfolio_promotion_success_message,
+    choice_display_text,
+    format_backtest_summary,
+)
+from ui_qt.views.backtest.execution_coordinator import (
+    BacktestExecutionRequest,
+    BatchBacktestExecutionRequest,
+)
+from ui_qt.views.backtest.optimization_coordinator import OptimizationExecutionRequest
+from ui_qt.views.backtest.walkforward_coordinator import WalkForwardExecutionRequest
 
 
 
@@ -816,63 +827,37 @@ class BacktestView(QWidget):
         else:
             # 單檔模式
             stock_code = stock_codes[0]
+            request = BacktestExecutionRequest(
+                stock_code=stock_code,
+                start_date=start_date,
+                end_date=end_date,
+                strategy_id=str(selected_strategy_id),
+                strategy_spec=strategy_spec,
+                strategy_params=params,
+                capital=capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                execution_price=execution_price,
+                stop_loss_pct=stop_loss_pct,
+                take_profit_pct=take_profit_pct,
+                stop_loss_atr_mult=stop_loss_atr_mult,
+                take_profit_atr_mult=take_profit_atr_mult,
+                sizing_mode=sizing_mode,
+                fixed_amount=fixed_amount,
+                risk_pct=risk_pct,
+                max_positions=max_positions,
+                position_sizing=position_sizing,
+                allow_pyramid=allow_pyramid,
+                allow_reentry=allow_reentry,
+                reentry_cooldown_days=reentry_cooldown_days,
+                enable_limit=enable_limit,
+                enable_volume=enable_volume,
+                max_participation=max_participation,
+            )
+            self.current_run_params = request.run_params()
 
-            # 保存當前參數（用於後續保存結果）
-            self.current_run_params = {
-                'stock_code': stock_code,
-                'start_date': start_date,
-                'end_date': end_date,
-                'strategy_id': selected_strategy_id,
-                'strategy_params': params,
-                'capital': capital,
-                'fee_bps': fee_bps,
-                'slippage_bps': slippage_bps,
-                'execution_price': execution_price,
-                'stop_loss_pct': stop_loss_pct,
-                'take_profit_pct': take_profit_pct,
-                'stop_loss_atr_mult': stop_loss_atr_mult,
-                'take_profit_atr_mult': take_profit_atr_mult,
-                'sizing_mode': sizing_mode,
-                'fixed_amount': fixed_amount,
-                'risk_pct': risk_pct,
-                'max_positions': max_positions,
-                'position_sizing': position_sizing,
-                'allow_pyramid': allow_pyramid,
-                'allow_reentry': allow_reentry,
-                'reentry_cooldown_days': reentry_cooldown_days,
-                'enable_limit': enable_limit,
-                'enable_volume': enable_volume,
-                'max_participation': max_participation
-            }
-
-            # 創建 Worker
             def backtest_task():
-                return self.backtest_service.run_backtest(
-                    stock_code=stock_code,
-                    start_date=start_date,
-                    end_date=end_date,
-                    strategy_spec=strategy_spec,
-                    strategy_executor=None,
-                    capital=capital,
-                    fee_bps=fee_bps,
-                    slippage_bps=slippage_bps,
-                    execution_price=execution_price,
-                    stop_loss_pct=stop_loss_pct,
-                    take_profit_pct=take_profit_pct,
-                    stop_loss_atr_mult=stop_loss_atr_mult,
-                    take_profit_atr_mult=take_profit_atr_mult,
-                    sizing_mode=sizing_mode,
-                    fixed_amount=fixed_amount,
-                    risk_pct=risk_pct,
-                    max_positions=max_positions,
-                    position_sizing=position_sizing,
-                    allow_pyramid=allow_pyramid,
-                    allow_reentry=allow_reentry,
-                    reentry_cooldown_days=reentry_cooldown_days,
-                    enable_limit_up_down=enable_limit,
-                    enable_volume_constraint=enable_volume,
-                    max_participation_rate=max_participation
-                )
+                return request.execute(self.backtest_service)
 
             self.worker = TaskWorker(backtest_task)
             self.worker.finished.connect(self._on_backtest_finished)
@@ -1517,13 +1502,7 @@ class BacktestView(QWidget):
 
     def _build_portfolio_promotion_success_message(self, version_id: str, run_id: str) -> str:
         """建立推薦回放升級完成後的下一步提示。"""
-        return (
-            "推薦回放已升級為策略版本。\n\n"
-            f"版本 ID: {version_id}\n"
-            f"來源 run: {run_id}\n\n"
-            "後續可到推薦分析的 Profile / 策略版本來源查看；"
-            "若清單尚未更新，請重新整理或重新開啟推薦分析頁。"
-        )
+        return build_portfolio_promotion_success_message(version_id, run_id)
 
     def _init_parameter_descriptions(self):
         """初始化參數說明資料結構（集中管理）"""
@@ -1531,148 +1510,8 @@ class BacktestView(QWidget):
         self.parameter_display_names = PARAMETER_DISPLAY_NAMES
 
     def _format_summary(self, report: BacktestReportDTO) -> str:
-        """格式化績效摘要（Phase 3.5 SOP：Primary 指標置頂）"""
-        details = report.details
-
-        # ✅ 顯示實際使用的日期範圍
-        actual_start = details.get('start_date', '未知')
-        actual_end = details.get('end_date', '未知')
-        requested_start = details.get('requested_start_date', actual_start)
-        requested_end = details.get('requested_end_date', actual_end)
-
-        summary_lines = [
-            "=== 績效摘要 ===",
-            f"回測日期範圍: {actual_start} 至 {actual_end}",
-        ]
-
-        # 如果日期被調整，顯示提示
-        if details.get('date_adjusted'):
-            summary_lines.append(f"注意: 請求範圍 {requested_start}~{requested_end} 已調整為實際數據範圍")
-
-        # 策略分數診斷
-        score_diag = details.get('score_diagnostics')
-        if score_diag:
-            summary_lines.append("")
-            summary_lines.append("--- 策略分數診斷 (Scoring Diagnostics) ---")
-            summary_lines.append(f"最高得分: {score_diag['max_score']:.1f} | 最低得分: {score_diag['min_score']:.1f} | 平均得分: {score_diag['avg_score']:.1f}")
-
-            threshold_mode = score_diag.get('threshold_mode', 'fixed')
-            if threshold_mode == 'quantile':
-                buy_quantile_bp = score_diag.get('buy_quantile_bp', 8000)
-                sell_quantile_bp = score_diag.get('sell_quantile_bp', 4000)
-                warmup_ready_days = score_diag.get('warmup_ready_days', 0)
-                total_days = score_diag.get('total_days', 0)
-                buy_hit_days = score_diag.get('buy_hit_days', 0)
-                sell_hit_days = score_diag.get('sell_hit_days', 0)
-
-                buy_pct = (buy_hit_days / warmup_ready_days * 100.0) if warmup_ready_days > 0 else 0.0
-                sell_pct = (sell_hit_days / warmup_ready_days * 100.0) if warmup_ready_days > 0 else 0.0
-
-                summary_lines.append(f"門檻模式: 分位數 (暖機完成日數: {warmup_ready_days} 天 / 總日數: {total_days} 天)")
-                summary_lines.append(f"動態買進分位數 ({buy_quantile_bp/100:.1f}%) 命中天數: {buy_hit_days} 天 / 已暖機 {warmup_ready_days} 天 ({buy_pct:.1f}%)")
-                summary_lines.append(f"動態賣出分位數 ({sell_quantile_bp/100:.1f}%) 命中天數: {sell_hit_days} 天 / 已暖機 {warmup_ready_days} 天 ({sell_pct:.1f}%)")
-            else:
-                total_days = score_diag.get('total_days', 0)
-                buy_hit_days = score_diag.get('buy_hit_days', 0)
-                sell_hit_days = score_diag.get('sell_hit_days', 0)
-
-                buy_pct = (buy_hit_days / total_days * 100.0) if total_days > 0 else 0.0
-                sell_pct = (sell_hit_days / total_days * 100.0) if total_days > 0 else 0.0
-                summary_lines.append(f"買進門檻 ({score_diag.get('buy_score', 0.0):.1f}) 命中天數: {buy_hit_days} 天 / {total_days} 天 ({buy_pct:.1f}%)")
-                summary_lines.append(f"賣出門檻 ({score_diag.get('sell_score', 0.0):.1f}) 命中天數: {sell_hit_days} 天 / {total_days} 天 ({sell_pct:.1f}%)")
-
-        # ========== Phase 3.5 SOP 護欄：Primary 指標置頂 ==========
-        summary_lines.append("")
-        summary_lines.append("╔════════════════════════════════════════╗")
-        summary_lines.append("║  Phase 3.5 SOP 驗證（必須優先查看）     ║")
-        summary_lines.append("╚════════════════════════════════════════╝")
-
-        # 驗證狀態
-        from app_module.dtos import ValidationStatus
-        status_emoji = {
-            ValidationStatus.PASS: "[PASS]",
-            ValidationStatus.WARNING: "[WARN]",
-            ValidationStatus.FAIL: "[FAIL]"
-        }
-        status_text = status_emoji.get(report.validation_status, "[UNKNOWN]")
-        summary_lines.append(f"驗證狀態: {status_text} {report.validation_status.value}")
-
-        # 驗證訊息
-        if report.validation_messages:
-            summary_lines.append("")
-            for msg in report.validation_messages:
-                summary_lines.append(msg)
-
-        summary_lines.append("")
-        summary_lines.append("--- Primary 指標（行為健康） ---")
-        summary_lines.append(f"總交易次數: {report.total_trades}")
-
-        # 計算平均持有天數（如果有交易明細）
-        if 'trade_list' in details and isinstance(details['trade_list'], pd.DataFrame):
-            trade_list = details['trade_list']
-            if len(trade_list) > 0 and '持有天數' in trade_list.columns:
-                avg_holding_days = trade_list['持有天數'].mean()
-                summary_lines.append(f"平均持有天數: {avg_holding_days:.1f} 天")
-
-        # Baseline 對比
-        if report.baseline_comparison:
-            summary_lines.append("")
-            summary_lines.append("--- Baseline 對比 ---")
-            is_better = report.baseline_comparison.get('is_better', False)
-            better_text = "[PASS] 優於 Buy & Hold" if is_better else "[FAIL] 不如 Buy & Hold"
-            summary_lines.append(f"策略表現: {better_text}")
-
-            if 'excess_return' in report.baseline_comparison:
-                excess = report.baseline_comparison['excess_return']
-                summary_lines.append(f"超額報酬率: {excess * 100:+.2f}%")
-
-        # 過擬合風險
-        if report.overfitting_risk:
-            summary_lines.append("")
-            summary_lines.append("--- 穩健性（過擬合風險） ---")
-            risk_level = report.overfitting_risk.get('risk_level', 'unknown')
-            risk_emoji = {'low': '[LOW]', 'medium': '[MEDIUM]', 'high': '[HIGH]'}.get(risk_level, '[UNKNOWN]')
-            summary_lines.append(f"過擬合風險等級: {risk_emoji} {risk_level.upper()}")
-
-            if 'degradation' in report.overfitting_risk:
-                deg = report.overfitting_risk['degradation']
-                if deg is not None:
-                    summary_lines.append(f"退化程度: {deg * 100:.1f}%")
-
-        summary_lines.append("")
-        summary_lines.append("╔════════════════════════════════════════╗")
-        summary_lines.append("║  Secondary 指標（輔助參考）            ║")
-        summary_lines.append("╚════════════════════════════════════════╝")
-
-        summary_lines.extend([
-            "",
-            f"總報酬率: {report.total_return * 100:.2f}%",
-            f"年化報酬率 (CAGR): {report.annual_return * 100:.2f}%",
-            f"夏普比率: {report.sharpe_ratio:.2f}",
-            f"最大回撤: {report.max_drawdown * 100:.2f}%",
-            f"勝率: {report.win_rate * 100:.2f}%",
-            f"期望值: {report.expectancy * 100:.2f}%",
-            "",
-            "=== 詳細統計 ===",
-        ])
-
-        if 'profit_factor' in details:
-            summary_lines.append(f"獲利因子: {details['profit_factor']:.2f}")
-        if 'avg_win' in details:
-            summary_lines.append(f"平均獲利: ${details['avg_win']:.2f}")
-        if 'avg_loss' in details:
-            summary_lines.append(f"平均虧損: ${details['avg_loss']:.2f}")
-        if 'largest_win' in details:
-            summary_lines.append(f"最大獲利: ${details['largest_win']:.2f}")
-        if 'largest_loss' in details:
-            summary_lines.append(f"最大虧損: ${details['largest_loss']:.2f}")
-        if 'final_equity' in details:
-            summary_lines.append(f"最終權益: ${details['final_equity']:,.2f}")
-
-        if 'error' in details:
-            summary_lines.append(f"\n錯誤: {details['error']}")
-
-        return "\n".join(summary_lines)
+        """???????????????? presenter??"""
+        return format_backtest_summary(report)
 
 
 
@@ -1805,17 +1644,7 @@ class BacktestView(QWidget):
 
     @staticmethod
     def _choice_display_text(param_name: str, value: Any) -> str:
-        value_text = str(value)
-        display_map = {
-            "threshold_mode": {
-                "fixed": "固定門檻",
-                "quantile": "百分位排名",
-            },
-            "quantile_method": {
-                "nearest_rank": "最近名次法",
-            },
-        }
-        return display_map.get(param_name, {}).get(value_text, value_text)
+        return choice_display_text(param_name, value)
 
     def _add_choice_items(self, combo: QComboBox, param_name: str, choices: list[Any]) -> None:
         for choice in choices:
@@ -3502,33 +3331,26 @@ class BacktestView(QWidget):
         if hasattr(self, 'optimization_table'):
             self.optimization_table.setModel(None)
 
-        # 創建 Worker（使用自定義進度回調）
-        def optimization_task(progress_callback=None):
-            # 包裝進度回調以符合 OptimizerService 的簽名 (current, total, message)
-            def wrapped_callback(current, total, message):
-                if progress_callback:
-                    # 計算百分比
-                    percentage = int((current / total * 100)) if total > 0 else 0
-                    # 格式化消息：已完成 x/y 組參數
-                    progress_msg = f"{message}\n已完成 {current}/{total} 組參數 ({percentage}%)"
-                    progress_callback(progress_msg, percentage)
+        request = OptimizationExecutionRequest(
+            stock_code=stock_code,
+            start_date=start_date,
+            end_date=end_date,
+            strategy_id=str(selected_strategy_id),
+            base_params=base_params,
+            param_ranges=param_ranges,
+            capital=capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+            objective=objective,
+        )
 
-            return self.optimizer_service.grid_search(
-                stock_code=stock_code,
-                start_date=start_date,
-                end_date=end_date,
-                strategy_id=selected_strategy_id,
-                base_params=base_params,
-                param_ranges=param_ranges,
-                capital=capital,
-                fee_bps=fee_bps,
-                slippage_bps=slippage_bps,
-                stop_loss_pct=stop_loss_pct,
-                take_profit_pct=take_profit_pct,
-                objective=objective,
-                top_n=20,
-                progress_callback=wrapped_callback,
-                check_cancel=lambda: self.worker._is_cancelled if self.worker else False
+        def optimization_task(progress_callback=None):
+            return request.execute(
+                self.optimizer_service,
+                progress_callback=progress_callback,
+                check_cancel=lambda: self.worker._is_cancelled if self.worker else False,
             )
 
         # 使用 ProgressTaskWorker 以支持進度回調
@@ -3705,49 +3527,25 @@ class BacktestView(QWidget):
         self.progress_label.setVisible(True)
         self.progress_label.setText("正在執行 Walk-forward 驗證...")
 
-        # 創建 Worker
-        def walkforward_task():
-            mode = self.wf_mode_combo.currentText()
+        request = WalkForwardExecutionRequest(
+            mode=self.wf_mode_combo.currentText(),
+            stock_code=stock_code,
+            start_date=start_date,
+            end_date=end_date,
+            strategy_spec=strategy_spec,
+            train_ratio=self.wf_train_ratio.value(),
+            train_months=self.wf_train_months.value(),
+            test_months=self.wf_test_months.value(),
+            step_months=self.wf_step_months.value(),
+            capital=capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+        )
 
-            if mode == "Train-Test Split":
-                train_report, test_report = self.walkforward_service.train_test_split(
-                    stock_code=stock_code,
-                    start_date=start_date,
-                    end_date=end_date,
-                    strategy_spec=strategy_spec,
-                    train_ratio=self.wf_train_ratio.value(),
-                    capital=capital,
-                    fee_bps=fee_bps,
-                    slippage_bps=slippage_bps,
-                    stop_loss_pct=stop_loss_pct,
-                    take_profit_pct=take_profit_pct
-                )
-                return {
-                    'mode': 'split',
-                    'train_report': train_report,
-                    'test_report': test_report
-                }
-            else:  # Walk-forward
-                results = self.walkforward_service.walk_forward(
-                    stock_code=stock_code,
-                    start_date=start_date,
-                    end_date=end_date,
-                    strategy_spec=strategy_spec,
-                    train_months=self.wf_train_months.value(),
-                    test_months=self.wf_test_months.value(),
-                    step_months=self.wf_step_months.value(),
-                    capital=capital,
-                    fee_bps=fee_bps,
-                    slippage_bps=slippage_bps,
-                    stop_loss_pct=stop_loss_pct,
-                    take_profit_pct=take_profit_pct
-                )
-                summary = self.walkforward_service.summarize_walkforward(results)
-                return {
-                    'mode': 'walkforward',
-                    'results': results,
-                    'summary': summary
-                }
+        def walkforward_task():
+            return request.execute(self.walkforward_service)
 
         self.worker = TaskWorker(walkforward_task)
         self.worker.finished.connect(self._on_walkforward_finished)
@@ -4132,37 +3930,39 @@ class BacktestView(QWidget):
         self.progress_label.setVisible(True)
         self.progress_label.setText("正在初始化批次回測...")
 
-        # 創建 Worker
+        request = BatchBacktestExecutionRequest(
+            stock_codes=tuple(stock_codes),
+            start_date=start_date,
+            end_date=end_date,
+            strategy_spec=strategy_spec,
+            capital=capital,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            execution_price=execution_price,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+            stop_loss_atr_mult=stop_loss_atr_mult,
+            take_profit_atr_mult=take_profit_atr_mult,
+            sizing_mode=sizing_mode,
+            fixed_amount=fixed_amount,
+            risk_pct=risk_pct,
+            max_positions=max_positions,
+            position_sizing=position_sizing,
+            allow_pyramid=allow_pyramid,
+            allow_reentry=allow_reentry,
+            reentry_cooldown_days=reentry_cooldown_days,
+            enable_limit=enable_limit,
+            enable_volume=enable_volume,
+            max_participation=max_participation,
+            parallel_threshold=parallel_threshold,
+            research_mode=research_mode,
+        )
+
         def batch_backtest_task():
-            return self.batch_backtest_service.run_batch_backtest(
-                stock_codes=stock_codes,
-                start_date=start_date,
-                end_date=end_date,
-                strategy_spec=strategy_spec,
-                capital=capital,
-                fee_bps=fee_bps,
-                slippage_bps=slippage_bps,
-                execution_price=execution_price,
-                stop_loss_pct=stop_loss_pct,
-                take_profit_pct=take_profit_pct,
-                stop_loss_atr_mult=stop_loss_atr_mult,
-                take_profit_atr_mult=take_profit_atr_mult,
-                sizing_mode=sizing_mode,
-                fixed_amount=fixed_amount,
-                risk_pct=risk_pct,
-                max_positions=max_positions,
-                position_sizing=position_sizing,
-                allow_pyramid=allow_pyramid,
-                allow_reentry=allow_reentry,
-                reentry_cooldown_days=reentry_cooldown_days,
-                enable_limit_up_down=enable_limit,
-                enable_volume_constraint=enable_volume,
-                max_participation_rate=max_participation,
-                save_runs=True,
+            return request.execute(
+                self.batch_backtest_service,
                 progress_callback=progress_callback,
                 check_cancel=lambda: self.worker._is_cancelled if self.worker else False,
-                parallel_threshold=parallel_threshold,
-                research_mode=research_mode,
             )
 
         self.worker = TaskWorker(batch_backtest_task)
