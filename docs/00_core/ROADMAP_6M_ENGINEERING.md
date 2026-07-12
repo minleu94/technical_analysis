@@ -1,6 +1,6 @@
 # baldr 未來六個月工程 Roadmap
 
-> **最後更新**：2026-07-11
+> **最後更新**：2026-07-12
 > **定位**：本文件是未來六個月工程執行的 scoped authority，將 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 轉成可交付、可測試、可回滾的 Gate。
 > **現況**：目前完成狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。既有 V3.0 engineering candidate、read-only Workbench、candidate source readiness 或 simulated phase progress 不自動折抵本 Roadmap 的產品 Gate。
 > **版本 companion**：產品成熟度版號見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
@@ -447,6 +447,13 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 
 ---
 
+## Gate 狀態校正（2026-07-12）
+
+- Gate 0 已由 `ae83740` 與 `SAFE_REFACTORING_MASTER_REPORT.md` closeout；後續重構只作 maintenance，不再阻塞產品主線。
+- Gate 1 已由 Advice DTO、fail-closed policy、read-only composer 與 Workbench DTO-to-view slice closeout。驗證見 `docs/06_qa/GATE_1_ADVICE_CLOSEOUT_2026_07_12.md`。Gate 1 的完成不折抵 Gate 2 的真實 weekly evidence、Gate 3 的 P0 source acceptance，亦不代表 broker execution 或投資有效性。
+- 因此工程順序更新為 Gate 2 → Gate 3 → Gate 4；已完成 Gate 1 的 bounded Advice 仍維持 read-only / paper boundary。
+
 ## 更新記錄
 
+- 2026-07-12：校正 Gate 0 / Gate 1 closeout；下一工程 Gate 為真實 Evidence Operating Loop，不將 Advice 契約完成誤寫為 evidence、scheduler 或投資有效性完成。
 - 2026-07-11：依 Post-Refactor 產品主線重寫為六個月 Gate；納入 Safe Refactor Closeout、Daily Usable Advice、Real Evidence Loop、P0 Data、Portfolio Coach、Signal Pruning、Position Health / Exit 與 conditional ML Shadow。

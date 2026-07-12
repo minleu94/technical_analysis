@@ -1,6 +1,6 @@
 # baldr 完整操作手冊
 
-> **最後更新**：2026-07-07
+> **最後更新**：2026-07-12
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前左側主導覽的 8 個主工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
 
@@ -110,6 +110,18 @@ python ui_qt/main.py
 「總覽」頂部會先顯示四個指揮台摘要 block：今日待判讀、人工待處理、等待真實時間、Warnings。等待真實時間 block 會明確顯示 weekly history 與 multi-day dry-run 比例，讓使用者先掃描重點再往下看表格。「Evidence」、「持倉追蹤」與「操作節奏」子頁目前是摘要與下鑽入口，也是預留深挖區；完整互動能力仍需等後續功能切片與正式資料累積，不能因位置已預留就標示為已完成。
 
 Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Phase 0 weekly history 仍為 `0/3`；multi-day dry-run record 已為 `3/3 ready`，但真實 manual review / action-item rhythm 仍需正式資料與真實時間累積，不能因 UI 重排、replay summary、fixture 或人工改表而標示為完成。
+
+## Gate 1 Advice：決策工作台的唯讀操作
+
+在「決策工作台」收到 Advice DTO 時，先看 mode、`decision_date`、`data_as_of_date`、資料品質與 warnings，再閱讀 action、Why / Why Not / Risk、source trace，以及持倉的 target/current/gap。這是可追溯的研究與人工決策輔助，不是委託、報酬保證或自動交易。
+
+1. Guided Mode 僅顯示 promoted、參數鎖定且 disclosure 完整的策略結果；candidate / shadow 會 fail-closed。
+2. Professional Mode 可以查看 candidate 研究結果，但不能把它與 formal Advice 混為同一決策依據。
+3. `NO_NEW_POSITION`、`RESEARCH`、`AVOID` 是安全結果。看到這些結果時，先檢查拒絕原因（策略狀態、資料品質、可成交性、風險預算、現金或持倉限制），不要手動補值或繞過限制。
+4. 平衡風險檔為最低現金 `2000 bp`、最多 8 檔、單檔上限 `1500 bp`；權重使用整數 bp，金額使用 `Decimal`。UI 只能顯示結果，不能修改 policy。
+5. Advice 的 decision / data-as-of date 與 source trace 必須存在；資料截止日不得晚於決策日。缺資料、降級或未來資料會被拒絕或降級，不能當作可交易結論。
+
+Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring / ranking / backtest，也不套用 lifecycle action。weekly review history 的 working-copy 保存與真實時間累積屬 Gate 2；人工覆盤完成後只能以 `build_evidence_operations_weekly_review.py --save-history` 對隔離 working-copy DB 保存，再以 `--list-history` 核對，不得直接編輯 history、使用 production DB 或以 replay / fixture 補週數。它不因 Gate 1 完成而自動通過。
 
 ## 3. 每日建議流程
 
@@ -1373,6 +1385,7 @@ Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **
 
 ## 14. 更新記錄
 
+- 2026-07-12：新增 Gate 1 Advice 唯讀操作、Guided / Professional Mode、安全拒絕輸出、平衡限制、日期 / source trace 與不交易邊界；weekly review working-copy 保存仍是 Gate 2 真實時間工作。
 - 2026-07-09：統一推薦最新價格／成交量衍生特徵，新增預設參數技術指標安全 reuse，並讓 Daily Decision Desk 在單次 snapshot 內共用 read-only 市場 frame；公開 service / scheduler 介面、DTO、SQLite schema、scoring、threshold 與 dry-run / confirm gate 均維持不變。
 
 - 2026-07-08：Phase 3C governed ingestion candidate 已建立 manual-only dry-run/apply 邊界；不屬於今晚 V3.0 closeout gate。

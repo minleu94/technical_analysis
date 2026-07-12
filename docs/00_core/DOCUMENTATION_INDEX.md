@@ -1,6 +1,6 @@
 # 文檔索引
 
-> **最後整理**：2026-07-11
+> **最後整理**：2026-07-12
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，產品方向看 `PRODUCT_ROADMAP_POST_REFACTOR.md`，未來 6 個月工程看 `ROADMAP_6M_ENGINEERING.md`，North Star / Evidence 看 `system_vision_specification.md`，目前／目標架構分別看 `system_architecture.md` / `target_system_architecture.md`。
 
 ---
@@ -217,6 +217,11 @@
 
 ## 6. QA 與審核
 
+| 文件 | 說明 |
+|---|---|
+| [GATE_1_ADVICE_CLOSEOUT_2026_07_12.md](../06_qa/GATE_1_ADVICE_CLOSEOUT_2026_07_12.md) | Gate 1 Daily Usable Advice closeout：契約、唯讀 UI、驗證結果與非目標。 |
+| [PROJECT_SNAPSHOT_AUDIT_2026_07_12.md](../06_qa/PROJECT_SNAPSHOT_AUDIT_2026_07_12.md) | Snapshot claim 證據矩陣：保留 / 移至歷史 / 限制 / 去重判定與 Scoped SSOT 稽核。 |
+
 | 文件 | 用途 |
 |---|---|
 | [QA_RECOMMENDATION_TAB_ISSUES.md](../06_qa/QA_RECOMMENDATION_TAB_ISSUES.md) | 推薦分析 Tab QA 問題。 |
@@ -370,6 +375,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-12：新增 Gate 1 Advice closeout 與 Project Snapshot audit QA 索引；Gate 0 / Gate 1 完成狀態仍以 Snapshot 為準，Roadmap、Architecture、Manual 各維持 scoped authority。
 - 2026-07-11：新增安全重構四個延長循環的設計與實作計畫索引，並將 Master Report 執行時段延長至 12:00 Final QA / Closeout。
 - 2026-07-11：新增 `PRODUCT_ROADMAP_POST_REFACTOR.md` 與 `target_system_architecture.md` 索引；重整 Vision、6M Roadmap、V1.1-V2.0 歷史定位與 V2.1-V4.0 maturity 描述，清楚分離 Current / Target 與產品 / 工程權威。
 - 2026-07-11：新增 `SAFE_REFACTORING_MASTER_REPORT.md` 架構索引，作為行為不變重構與 Planner → Implementation → QA automation 的共用執行 companion；不取代 Roadmap 或目前架構權威。

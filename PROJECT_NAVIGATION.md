@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
-**版本**：v1.4.7
-**最後更新**：2026-07-07
+**版本**：v1.4.8
+**最後更新**：2026-07-12
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -152,6 +152,10 @@
 - 讓所有狀態流轉變得 Observable
 
 ---
+
+### Gate 1 Advice 導航
+
+Gate 1 的 application contract 依序為 `app_module/advice_dtos.py`、`app_module/advice_policy.py`、`app_module/advice_composer.py`，再經 `app_module/workbench_dtos.py`、`app_module/workbench_read_only_composer.py` 到 `ui_qt/views/workbench_view.py` 與 `ui_qt/models/workbench_table_models.py`。Policy / Composer 只接受注入 payload；UI 只呈現 `AdviceDashboardDTO`。變更時維持 `data_as_of_date <= decision_date`、source trace、整數 bp / `Decimal`、`2000/8/1500 bp` 限制及 Guided Mode fail-closed，禁止 DB write、核心重算、broker、scheduler 與 lifecycle action。
 
 ## 3️⃣ 專案主要入口
 

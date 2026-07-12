@@ -1,6 +1,6 @@
 ﻿# DEVELOPMENT_ROADMAP（Roadmap Hub）
 
-> **最後更新**：2026-07-11
+> **最後更新**：2026-07-12
 > **定位**：本文件是 Roadmap Hub，不再保存完整歷史長文。它負責指向目前狀態、6 個月工程路線、系統架構與歷史歸檔。
 
 ---
@@ -74,8 +74,8 @@ baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資�
 
 目前立即順序改為：
 
-1. 完成 Gate 0 Safe Refactor Closeout：行為等價、golden baseline、Recommendation / Backtest / Portfolio / Scheduler / DTO diff 與 rollback point；完成後停止無止盡重構。
-2. 建立 Gate 1 Daily Usable Advice Contract：Guided / Professional 共核、`NO_NEW_POSITION`、Why / Why Not / Risk / Evidence 與 Portfolio target/current/gap。
+1. Gate 0 Safe Refactor 已 closeout；維持行為等價與 rollback discipline，但不再把重構當作產品主線。
+2. Gate 1 Daily Usable Advice 已 closeout：Guided / Professional 共核、`NO_NEW_POSITION`、Why / Why Not / Risk / Evidence 與 Portfolio target/current/gap 已由唯讀 contract / UI 呈現。
 3. 把既有 read-only / dry-run evidence 底座推進為 Gate 2 真實 weekly review、action-item、backup / rollback / recovery 與受批准 evidence write-mode。
 4. P0 資料先 diagnostics / shadow / acceptance；candidate source 不接 `ScoringEngine` 或 formal Portfolio Advice。
 5. 以 Equal Weight benchmark 建立 Portfolio Coach，再做 signal effectiveness / pruning 與 thesis-based Position Health / Exit；ML 只有在 rule baseline 可判讀後才進 shadow。
@@ -155,6 +155,7 @@ V3.0 engineering candidate 的 closeout/readiness report 已完成，工程狀�
 
 ## 7. 更新記錄
 
+- 2026-07-12：Gate 0 / Gate 1 已 closeout；Hub 的 Next 改為 Gate 2 Real Evidence → Gate 3 P0 Data → Portfolio / Pruning / Exit，Gate 1 證據見 `GATE_1_ADVICE_CLOSEOUT_2026_07_12.md`。
 - 2026-07-11：加入 Post-Refactor Product Roadmap、Target Architecture 與新版 Vision 權威入口；Next 改為 Gate 0 closeout → Daily Advice → Real Evidence → P0 Data → Portfolio / Pruning / Exit，ML 維持 shadow-first。
 - 2026-07-08：同步 V3.0 engineering candidate closeout 目標；score effectiveness / ML readiness bridge 與 Phase 3C source candidate readiness 已完成工程輸入，夜間排程應轉為 closeout 驗證與文件 / QA 一致性，不啟用 scheduler 或 production ML。
 - 2026-07-07：完成 Workbench 左側主導覽 IA；Qt 主 UI 預設進入 read-only `決策工作台`，8 個主工作區改由左側導覽切換，`每日決策` 內嵌為 `決策工作台 > 決策來源`，`市場觀察` 改名為 `市場探索`。Workbench 只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 呈現 status strip、今日待判讀、Evidence mode / data quality、Daily Checklist 與 warnings / degraded source。Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 與 Phase 5 scheduler gate 不變。

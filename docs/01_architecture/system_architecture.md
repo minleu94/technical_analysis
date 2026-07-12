@@ -1,6 +1,6 @@
 ﻿# 系統架構
 
-> **最後更新**：2026-07-11
+> **最後更新**：2026-07-12
 > **定位**：本文件是目前模組邊界、依賴方向、資料流與高風險技術契約的架構權威。歷史遷移過程不在本文件維護。
 > **Target companion**：理想目標架構、Current → Transitional → Target 演進與尚未存在的領域邊界見 [target_system_architecture.md](target_system_architecture.md)；該文件不代表目前已實作，也不授權立即建立新 package。
 
@@ -578,8 +578,15 @@ UI 修改：
 - 驗證 Markdown relative 連結。
 - 更新 `DOCUMENTATION_INDEX.md` 與 Manual coverage。
 
+## Gate 1 Advice 現況邊界（2026-07-12）
+
+`app_module/advice_dtos.py` 定義 immutable Advice action / mode / policy / dashboard DTO；`app_module/advice_policy.py` 以固定順序做 fail-closed 判定；`app_module/advice_composer.py` 僅組合注入的 Recommendation、Portfolio 與 Evidence payload。Composer 強制 `data_as_of_date <= decision_date`，拒絕未來 Portfolio input，並保留 source trace；它不讀 UI state、不查 SQLite、不寫 DB。
+
+`WorkbenchReadOnlyComposer` 只把 `AdviceDashboardDTO` 放入 `WorkbenchDashboardDTO.advice_dashboard`；`ui_qt/views/workbench_view.py` 與 table model 只渲染 DTO。UI 不得呼叫 policy / composer、修改風險限制、重算核心或送出交易。Guided Mode 僅接受 promoted strategy；Professional Mode 的 candidate 只可研究呈現。最低現金 `2000 bp`、最多 8 檔、單檔 `1500 bp`、整數 bp 與 `Decimal` 金額屬 application contract。此 slice 不建立 broker、scheduler、write repository 或 lifecycle action。
+
 ## 16. 更新記錄
 
+- 2026-07-12：新增 Gate 1 Advice Current Architecture 邊界；Advice policy / composer 在 application layer，Workbench UI 僅渲染 DTO，所有輸入維持 as-of / fail-closed / no-write contract。
 - 2026-07-11：新增 Target Architecture 與 Post-Refactor Product Roadmap companion 連結；修正目前主 UI 為 8 個左側主工作區，Daily Decision 已內嵌於「決策工作台 > 決策來源」；本文件仍只描述 Current Architecture。
 - 2026-07-11：新增 `SAFE_REFACTORING_MASTER_REPORT.md` 為行為不變重構執行 companion；目前架構、產品 Roadmap 與使用流程權威邊界不變。
 - 2026-07-07：更新 Phase 2 Workbench MVP shell 架構同步；`ui_qt/views/workbench_view.py` 與 `ui_qt/models/workbench_table_models.py` 只呈現 `WorkbenchDashboardDTO`，主 UI 透過 `WorkbenchSourceService` 注入，新增中文顯示、預設 replay JSON summary 分析與舊 Daily Decision / Evidence Review / Portfolio read-only drill-down，不直接讀 SQLite / replay DB、不寫 DB、不啟用 scheduler、不重算 scoring / portfolio / backtest / lifecycle。

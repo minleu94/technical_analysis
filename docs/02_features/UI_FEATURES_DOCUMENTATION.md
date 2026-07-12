@@ -1,6 +1,6 @@
 # UI 功能文件（Qt）
 
-> **最後整理**：2026-07-07
+> **最後整理**：2026-07-12
 > **適用範圍**：`ui_qt/` 目前主要使用者介面。
 > **狀態判讀**：目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月工程方向以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；本文件只描述 UI 功能與操作入口。
 > **完整操作**：安裝、逐步操作、參數、結果判讀與排錯見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
@@ -103,6 +103,15 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 - 不重算 scoring、recommendation、portfolio、backtest 或 lifecycle。
 - 不產生買賣建議、不下單、不套用 lifecycle action。
 - Phase 0 weekly history `0/3` 與 multi-day dry-run `1/3` 只能繼續真實時間累積，不能用 fixture、手動改表或 replay 取代。
+
+### Gate 1 Advice（決策工作台）
+
+決策工作台在 DTO 已提供 Advice 時，會顯示 mode、decision / data-as-of date、action、理由、資料品質、可成交性、source trace，以及 Portfolio 的 target/current/gap。畫面是唯讀：不會建立委託、寫入資料庫、套用 lifecycle 或重算 scoring / portfolio / backtest。
+
+- Guided Mode 只接受 promoted strategy；Professional Mode 的 candidate 僅供研究檢視，不能混作 formal Advice。
+- `NO_NEW_POSITION`、`RESEARCH`、`AVOID` 是資料、風險、可成交性或策略狀態不符合時的正常安全輸出，不表示系統故障。
+- 平衡限制為最低現金 `2000 bp`、最多 8 檔、單檔上限 `1500 bp`；UI 只呈現 contract 結果。
+- Advice 不保證報酬、不是 broker 指令，且不解除 weekly evidence、production scheduler 或其他產品 Gate。
 
 ### 3. 策略回測
 
