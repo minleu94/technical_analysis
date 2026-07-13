@@ -3,6 +3,11 @@ from datetime import date
 import pytest
 
 from app_module.broker_flow_dashboard_dtos import BrokerFlowDashboardQuery
+from app_module.broker_flow_dashboard_query_service import (
+    BrokerFlowDashboardQueryService,
+)
+from app_module.broker_flow_sqlite_read_repository import BrokerFlowReadSnapshot
+from decision_module.flow_contracts import BrokerFlowEvent
 from scripts.qa_broker_flow_dashboard_latency import (
     inspect_broker_flow_sqlite,
     summarize_latency_samples,
@@ -95,3 +100,118 @@ def test_sqlite_shape_probe_is_read_only_and_missing_path_is_not_created(tmp_pat
     assert result["quality"] == "missing"
     assert result["row_count"] == 0
     assert not missing.exists()
+
+
+def _dashboard_event(code, net_qty, branch="branch_a"):
+    return BrokerFlowEvent(
+        date="2026-07-03",
+        branch_system_key=branch,
+        branch_display_name=branch,
+        stock_code=code,
+        stock_name=f"股票{code}",
+        buy_qty=max(net_qty, 0),
+        sell_qty=abs(min(net_qty, 0)),
+        net_qty=net_qty,
+        lots_quality="observed",
+        lots_observed=True,
+    )
+
+
+class _DashboardRepository:
+    def __init__(self, source):
+        self.source = source
+        self.calls = []
+
+    def load_dashboard_source(self, query):
+        self.calls.append(query)
+        return self.source
+
+
+class _BatchSemanticPort:
+    def __init__(self):
+        self.calls = []
+
+    def build_batch_semantics(self, stock_codes, decision_date):
+        self.calls.append((stock_codes, decision_date))
+        return {}
+
+
+def test_dashboard_service_scans_market_once_then_batches_only_selected_codes():
+    events = tuple(
+        [
+            _dashboard_event(f"P{index:03d}", 10_000 - index, f"buy_{index % 3}")
+            for index in range(60)
+        ]
+        + [
+            _dashboard_event(f"N{index:03d}", -10_000 - index, f"sell_{index % 3}")
+            for index in range(60)
+        ]
+    )
+    source = BrokerFlowReadSnapshot(
+        selected_trading_dates=(date(2026, 7, 3),),
+        events=events,
+        tracked_branches=(("branch_a", "branch_a"),),
+        quality="observed",
+        warnings=(),
+        source_fingerprint="fixture-v1",
+        query_count=2,
+        materialized_row_count=len(events),
+    )
+    repository = _DashboardRepository(source)
+    semantic_port = _BatchSemanticPort()
+    service = BrokerFlowDashboardQueryService(
+        repository,
+        semantic_port=semantic_port,
+    )
+    query = BrokerFlowDashboardQuery(
+        period="week",
+        scope="top_bottom",
+        requested_as_of_date=date(2026, 7, 5),
+        limit_per_side=50,
+    )
+
+    snapshot = service.load_dashboard_snapshot(query)
+
+    assert repository.calls == [query]
+    assert len(snapshot.top_signals) == 50
+    assert len(snapshot.bottom_signals) == 50
+    assert snapshot.summary.bullish_stock_count == 60
+    assert snapshot.summary.bearish_stock_count == 60
+    assert snapshot.as_of_date == date(2026, 7, 3)
+    assert snapshot.source_fingerprint == "fixture-v1"
+    assert snapshot.query_counts == {"repository": 2, "semantic_batch": 1}
+    assert len(semantic_port.calls) == 1
+    selected_codes, semantic_date = semantic_port.calls[0]
+    assert len(selected_codes) == 100
+    assert len(set(selected_codes)) == 100
+    assert semantic_date == date(2026, 7, 3)
+
+
+def test_dashboard_service_returns_typed_missing_without_semantic_query():
+    source = BrokerFlowReadSnapshot(
+        selected_trading_dates=(),
+        events=(),
+        tracked_branches=(),
+        quality="missing",
+        warnings=("broker_flows_table_missing",),
+        source_fingerprint="",
+        query_count=1,
+        materialized_row_count=0,
+    )
+    semantic_port = _BatchSemanticPort()
+    query = BrokerFlowDashboardQuery(
+        period="week",
+        scope="top_bottom",
+        requested_as_of_date=date(2026, 7, 5),
+        limit_per_side=50,
+    )
+
+    snapshot = BrokerFlowDashboardQueryService(
+        _DashboardRepository(source), semantic_port=semantic_port
+    ).load_dashboard_snapshot(query)
+
+    assert snapshot.quality == "missing"
+    assert snapshot.top_signals == ()
+    assert snapshot.bottom_signals == ()
+    assert snapshot.warnings == ("broker_flows_table_missing",)
+    assert semantic_port.calls == []
