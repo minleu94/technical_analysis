@@ -387,6 +387,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_event_price_resolver.py": "general-unit-keep-in-pytest",
     "tests/test_outcome_maturity_service.py": "general-unit-keep-in-pytest",
     "tests/test_p0_source_contract_registry.py": "general-unit-keep-in-pytest",
+    "tests/test_p0_corporate_restriction_shadow_adapters.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_decision_service.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_package_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_effectiveness_metrics.py": "general-unit-keep-in-pytest",

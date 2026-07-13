@@ -2,6 +2,8 @@
 
 程式側已新增 `data_module/p0_source_contract_registry.py` 作為 13 個 P0 source 的版本化機器可讀契約。所有合約目前固定 `requires_human_acceptance`、`downstream_eligibility=none`、`production_ingestion_allowed=false`，並要求 explicit `available_date <= decision_date`；此 registry 不構成任何來源的正式接受決議。
 
+Corporate Action 與交易限制已新增 shadow-only adapters，僅正規化 raw payload、available date 與生效區間。缺欄位或 future available date 會標示 `blocked`；輸出固定 `downstream_eligibility=none`、`writes_allowed=false`，不構成正式 ingestion。
+
 > 日期：2026-07-12
 > 狀態：`engineering_readiness_only` / `requires_human_acceptance`
 > 前一可回滾提交：`498ba8b6d7c7d70748213030288171bfae878515`
