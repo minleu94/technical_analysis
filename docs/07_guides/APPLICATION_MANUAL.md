@@ -1008,6 +1008,8 @@ Weekly paper report 同時列出 gross return、成本後 net return、固定成
 
 Position thesis contract 要求人工保存 entry thesis、entry/decision/available date、持有期限、下次 review date、source trace 與至少一條結構化 invalidation rule。規則 threshold 使用 Decimal，future-available thesis 會被拒絕；contract 固定 `auto_exit_allowed=false`。
 
+Position Health state machine 僅使用決策日當下可得的 Decimal metrics。future 或 missing metric 會 fail-closed 到 `WATCH`，失效規則命中只提出 `EXIT_CANDIDATE`；`CLOSED` 是終態。所有結果固定 `apply_transition=false`、`auto_exit_allowed=false`。
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_paper_portfolio_policy.py --sample --format json
 ```
