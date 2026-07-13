@@ -14,6 +14,8 @@
 
 產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 已是主 UI 的可用頂層工作區；現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
 
+Evidence rehearsal 的唯讀工程預演底座已收口為 `engineering_rehearsal_complete`；它可重跑 replay / source shadow / ML shadow / lineage 的 coverage、quality、missingness 與 blocker 揭露，Workbench 只讀顯示、沒有 apply / promote。它不是 forward evidence，也不會把 External Validation Register 自動標為 complete；接手時先讀 `docs/06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md`，再依 register 的 owner 與 completion rule 累積真實資料、授權、時間與人工 Gate。
+
 目前 roadmap 判讀已從舊線性 Phase 轉為 Scoped SSOT + Post-V1 版本節奏：目前狀態看 `docs/00_core/PROJECT_SNAPSHOT.md`，未來工程路線看 `docs/00_core/ROADMAP_6M_ENGINEERING.md`，V1.1 至 V2.0 節奏看 `docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`，V2.0 之後長期版號階梯看 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`，外部專案參考、資料源優先序與 V1.5-V2.0 版本形狀看 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。`docs/05_phases/` 僅保留為歷史 Phase / 設計追溯，不作目前 roadmap。
 
 ---

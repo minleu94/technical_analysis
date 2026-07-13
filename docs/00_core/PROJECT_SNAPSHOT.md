@@ -1,5 +1,7 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+> **Evidence rehearsal engineering closeout（2026-07-14）**：唯讀 replay / source shadow / ML shadow / lineage 工程底座狀態為 `engineering_rehearsal_complete`，可重跑 coverage、quality、missingness 與 lineage disclosure，Workbench 只顯示結果而不 apply / promote。詳細邊界與 forward handoff 見 [Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)；External Validation Register 不因本工程收口變為 complete。
+
 > **Gate 2–7 pure engineering closeout（2026-07-12）**：35 個必要 artifact/commit pairs 已涵蓋 Evidence/V3、13-source P0 contracts/adapters、Paper Portfolio 日更閉環、Position Health/Exit、9-slice structured traditional ML shadow challenger，以及 append-only human/time/ML control center。工程證據見 [Gate 2–7 Pure Engineering Closeout](../06_qa/GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md)；後續人工／時間工作從 [External Validation Register](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) 與 [Engineering Control Center](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md) 接手；ML 更新與重驗見 [Gate 7 ML Shadow Engineering](../06_qa/GATE_7_ML_SHADOW_ENGINEERING.md)。這不是 formal product closeout：P0 仍 `requires_human_acceptance`、ML 仍 shadow-only、production scheduler/broker/auto promotion/auto exit 仍禁止。
 
 > **工程終態**：`V3.3 Engineering Complete`，進入 `V4.0 Evidence Accumulation Track`；15 capability、lineage 與 operations 入口見 [V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)。正式 V4.0 與投資有效性尚未成立。

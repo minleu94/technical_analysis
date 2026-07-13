@@ -5,7 +5,7 @@ from datetime import date, datetime
 import shutil
 import sqlite3
 from pathlib import Path
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 from uuid import uuid4
 
 from app_module.evidence_event_repository import EvidenceEventRepository
@@ -14,6 +14,9 @@ from app_module.evidence_pipeline_runner_dtos import EvidencePipelineRunRequest
 from app_module.forward_performance_service import ForwardPerformanceService
 from app_module.recommendation_repository import RecommendationRepository
 from data_module.config import TWStockConfig
+
+if TYPE_CHECKING:
+    from app_module.evidence_rehearsal_dtos import RehearsalArtifact
 
 
 REPLAY_MODE_HISTORICAL = "historical_replay"

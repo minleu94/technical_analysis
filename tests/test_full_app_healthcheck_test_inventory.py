@@ -121,7 +121,7 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
 
 
 def test_inventory_exposes_pytest_collection_statuses():
-    assert len(PYTEST_COLLECTED_FILES) == 406
+    assert len(PYTEST_COLLECTED_FILES) == 412
     assert len(PYTEST_SUPPORT_FILES) == 1
     assert len(PYTEST_NOT_COLLECTED_FILES) == 29
 
@@ -129,6 +129,16 @@ def test_inventory_exposes_pytest_collection_statuses():
     assert get_pytest_collection_status("tests/test_full_app_healthcheck_test_inventory.py") == "collected"
     assert get_category("tests/test_evidence_rehearsal_dtos.py") == "governance-doc-tooling"
     assert is_collected_by_default_pytest("tests/test_evidence_rehearsal_dtos.py")
+    for path in (
+        "tests/test_evidence_rehearsal_coverage.py",
+        "tests/test_evidence_rehearsal_adapters.py",
+        "tests/test_evidence_rehearsal_service.py",
+        "tests/test_evidence_rehearsal_source_comparison.py",
+        "tests/test_evidence_rehearsal_ml_comparison.py",
+        "tests/test_evidence_rehearsal_cli.py",
+    ):
+        assert get_category(path) == "governance-doc-tooling"
+        assert is_collected_by_default_pytest(path)
     assert get_pytest_collection_status("tests/conftest.py") == "support"
     assert get_pytest_collection_status("tests/manual/legacy_diagnostics/run_tests.py") == "not-collected"
     assert get_pytest_collection_status("tests/does_not_exist.py") == "unknown"

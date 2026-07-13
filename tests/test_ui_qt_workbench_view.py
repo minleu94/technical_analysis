@@ -4,6 +4,8 @@ from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
@@ -21,8 +23,16 @@ from app_module.workbench_dtos import (
     WorkbenchReviewItem,
     WorkbenchStatusItem,
 )
-from app_module.engineering_closure_dashboard_service import EvidenceRehearsalDashboard
-from app_module.evidence_rehearsal_dtos import CoverageMetric
+from app_module.engineering_closure_dashboard_service import (
+    EngineeringClosureDashboardService,
+    EvidenceRehearsalDashboard,
+)
+from app_module.evidence_rehearsal_dtos import (
+    CoverageMetric,
+    EvidenceRehearsalReport,
+    EvidenceRehearsalScenario,
+    RehearsalArtifact,
+)
 from app_module.advice_dtos import (
     AdviceAction,
     AdviceDashboardDTO,
@@ -494,6 +504,51 @@ def test_unified_workbench_view_renders_blocked_rehearsal_without_ready_claim() 
     assert "ready" not in rehearsal_text.lower()
     assert "apply" not in rehearsal_text.lower()
     assert "promote" not in rehearsal_text.lower()
+
+
+@pytest.mark.parametrize(
+    "current_status",
+    ("outage", "insufficient", "missing", "degraded", "blocked", "insufficient_sample"),
+)
+def test_unified_workbench_view_renders_status_only_rehearsal_as_blocked(
+    current_status: str,
+) -> None:
+    app()
+    rehearsal_report = EvidenceRehearsalReport(
+        scenario=EvidenceRehearsalScenario(
+            scenario_id=f"{current_status}-rehearsal",
+            decision_date="2026-07-13",
+            source_db_path="C:/fixture/source.sqlite",
+            working_copy_db_path="C:/fixture/working-copy.sqlite",
+            tier="engineering_fixture",
+        ),
+        artifacts=(
+            RehearsalArtifact(
+                artifact_id=f"artifact-{current_status}",
+                decision_date="2026-07-13",
+                available_date="2026-07-13",
+                tier="engineering_fixture",
+                current_status=current_status,
+            ),
+        ),
+    )
+    rehearsal_dashboard = EngineeringClosureDashboardService().compose(rehearsal_report)
+
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        evidence_rehearsal_dashboard=rehearsal_dashboard,
+        auto_refresh=False,
+    )
+    rehearsal_text = (
+        view.evidence_rehearsal_summary_label.text()
+        + "\n"
+        + view.evidence_rehearsal_detail_label.text()
+    )
+
+    assert rehearsal_dashboard.status == "blocked"
+    assert f"artifact_status:{current_status}" in rehearsal_text
+    assert "status：已阻擋" in rehearsal_text
+    assert "ready" not in rehearsal_text.lower()
 
 
 def test_unified_workbench_view_renders_injected_advice_without_source_refresh() -> None:

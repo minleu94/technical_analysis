@@ -162,7 +162,14 @@ def _rehearsal_blockers(rehearsal_report: EvidenceRehearsalReport) -> tuple[str,
     for artifact in rehearsal_report.artifacts:
         if artifact.missing_state:
             blockers.append(f"missing_state:{artifact.missing_state}")
-        if artifact.current_status in {"blocked", "missing", "degraded", "insufficient_sample"}:
+        if artifact.current_status in {
+            "blocked",
+            "degraded",
+            "insufficient",
+            "insufficient_sample",
+            "missing",
+            "outage",
+        }:
             blockers.append(f"artifact_status:{artifact.current_status}")
         blockers.extend(artifact.diagnostics)
     return tuple(sorted(set(blockers)))

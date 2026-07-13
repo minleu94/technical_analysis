@@ -60,3 +60,7 @@ Control Center 與 append-only `EngineeringGateRegistry` 維持唯一外部 Gate
 Canonical lineage verifier 現已固定跨領域鏈：`daily_governed_data` → `market_context` → `recommendation` → `bounded_advice` → `paper_portfolio` → `position_health` → `evidence_event` → `forward_outcome` → `weekly_review` → `signal_effectiveness` → `ml_shadow_prediction`。後繼 artifact 必須包含直接前序領域 parent；額外更早上游 parent 可保留 provenance。相同或後序領域 parent，以及缺直接前序 parent 均 fail-closed。
 
 即使 artifact type 正確且無 cycle，parent domain/order 錯置仍使 rehearsal 報告降為 `degraded`，且不得投影 artifact DAG 或 hashes。本修正不改變 formal product closeout、production action、external Gate 或 evidence maturity。
+
+## Evidence rehearsal foundation handoff（2026-07-14）
+
+Evidence rehearsal 的唯讀工程底座已以 `engineering_rehearsal_complete` 收口，詳見 [Evidence Rehearsal Engineering Closeout](EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)。它補足 replay / shadow 的 coverage、quality、missingness、lineage 與 Workbench disclosure，但不變更本文件的 V3.3 工程狀態，也不會將 [External Validation Register](GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) 的任何項目自動標為 `complete`。

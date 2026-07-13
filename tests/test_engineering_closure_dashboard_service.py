@@ -1,3 +1,5 @@
+import pytest
+
 from app_module.engineering_closure_dashboard_service import EngineeringClosureDashboardService
 from app_module.evidence_rehearsal_dtos import (
     CoverageMetric,
@@ -139,3 +141,35 @@ def test_dashboard_projects_rehearsal_as_read_only_non_forward_evidence() -> Non
     assert "coverage_missing:p0_source=10" in dashboard.blockers
     assert dashboard.write_intent is False
     assert "工程／Replay／Shadow；不是 forward evidence" == dashboard.disclosure
+
+
+@pytest.mark.parametrize(
+    "current_status",
+    ("outage", "insufficient", "missing", "degraded", "blocked", "insufficient_sample"),
+)
+def test_dashboard_fails_closed_for_artifact_status_without_diagnostics(
+    current_status: str,
+) -> None:
+    rehearsal_report = EvidenceRehearsalReport(
+        scenario=EvidenceRehearsalScenario(
+            scenario_id=f"{current_status}-rehearsal",
+            decision_date="2026-07-13",
+            source_db_path="C:/fixture/source.sqlite",
+            working_copy_db_path="C:/fixture/working-copy.sqlite",
+            tier="engineering_fixture",
+        ),
+        artifacts=(
+            RehearsalArtifact(
+                artifact_id=f"artifact-{current_status}",
+                decision_date="2026-07-13",
+                available_date="2026-07-13",
+                tier="engineering_fixture",
+                current_status=current_status,
+            ),
+        ),
+    )
+
+    dashboard = EngineeringClosureDashboardService().compose(rehearsal_report)
+
+    assert dashboard.status == "blocked"
+    assert dashboard.blockers == (f"artifact_status:{current_status}",)
