@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Iterable, Mapping
 
 from app_module.source_candidate_readiness import SourceCandidateReadinessService
@@ -94,10 +95,14 @@ class P0SourceShadowComparisonService:
             source_id in self._source_outages
             or source_id in self._schema_missing_sources
         )
+        available_date_blocked = bool(self._available_date_blockers(shadow))
         return P0SourceShadowComparisonItem(
             source_id=source_id,
             baseline=_summary(baseline),
-            shadow=_summary(shadow, force_blocked=source_blocked),
+            shadow=_summary(
+                shadow,
+                force_blocked=source_blocked or available_date_blocked,
+            ),
             blockers=blockers,
             guidance=_guidance(blockers),
             review_status="blocked" if blockers else "eligible_for_human_review",
@@ -123,6 +128,28 @@ class P0SourceShadowComparisonService:
             if observation.status != "shadow_ready":
                 blockers.extend(observation.diagnostics)
                 blockers.append("shadow_observation_blocked")
+        blockers.extend(self._available_date_blockers(observations))
+        return tuple(sorted(set(blockers)))
+
+    def _available_date_blockers(
+        self, observations: tuple[P0ShadowObservation, ...]
+    ) -> tuple[str, ...]:
+        service_decision_date = _parse_date(self._decision_date)
+        blockers: list[str] = []
+        if observations and service_decision_date is None:
+            blockers.append("invalid_service_decision_date")
+        for observation in observations:
+            available_date = observation.available_date
+            parsed_available_date = _parse_date(available_date)
+            if available_date is None or not available_date.strip():
+                blockers.append("missing_available_date")
+            elif parsed_available_date is None:
+                blockers.append("invalid_available_date")
+            elif (
+                service_decision_date is not None
+                and parsed_available_date > service_decision_date
+            ):
+                blockers.append("future_available_date")
         return tuple(sorted(set(blockers)))
 
 
@@ -154,3 +181,12 @@ def _guidance(blockers: tuple[str, ...]) -> tuple[str, ...]:
     ):
         guidance.append("quarantine_observation")
     return tuple(guidance)
+
+
+def _parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None

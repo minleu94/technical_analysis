@@ -6,6 +6,7 @@ from app_module.evidence_rehearsal_source_comparison import (
     P0SourceShadowComparisonService,
 )
 from data_module.p0_institutional_flow_shadow_adapter import InstitutionalFlowShadowAdapter
+from data_module.p0_shadow_observation import P0ShadowObservation
 
 
 def _ready_institutional_observation():
@@ -31,6 +32,19 @@ def _ready_institutional_observation():
 
 def _item(payload: dict, source_id: str) -> dict:
     return next(item for item in payload["items"] if item["source_id"] == source_id)
+
+
+def _direct_shadow_ready_observation(available_date: str | None) -> P0ShadowObservation:
+    return P0ShadowObservation(
+        source_id="institutional_flows",
+        symbol="2330",
+        decision_date="2026-07-01",
+        available_date=available_date,
+        source_version="official-v1",
+        status="shadow_ready",
+        diagnostics=(),
+        raw_payload={},
+    )
 
 
 def test_all_p0_contracts_remain_visible_when_no_source_has_been_ingested() -> None:
@@ -67,6 +81,24 @@ def test_observed_shadow_candidate_is_only_eligible_for_human_review() -> None:
     assert item["scoring_eligible"] is False
     assert item["advice_eligible"] is False
     assert item["eligibility_delta"] == {"baseline": "none", "shadow": "none"}
+
+
+@pytest.mark.parametrize("available_date", ("2026-07-13", None, "not-an-iso-date"))
+def test_direct_shadow_ready_observation_with_unusable_available_date_fails_closed(
+    available_date: str | None,
+) -> None:
+    payload = P0SourceShadowComparisonService(
+        decision_date="2026-07-12",
+        shadow_observations=(_direct_shadow_ready_observation(available_date),),
+    ).build_report().to_dict()
+    item = _item(payload, "institutional_flows")
+
+    assert item["shadow"]["quality"] == "blocked"
+    assert item["shadow"]["coverage_bp"] == 0
+    assert item["review_status"] == "blocked"
+    assert item["downstream_eligibility"] == "none"
+    assert item["scoring_eligible"] is False
+    assert item["advice_eligible"] is False
 
 
 @pytest.mark.parametrize(
