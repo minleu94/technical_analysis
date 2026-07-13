@@ -11,3 +11,7 @@ Gate 7 使用隔離的 `ml_module/` 建立結構化傳統 ML challenger。此工
 ## Available-date boundary
 
 Feature 必須滿足 `feature.available_date <= row.decision_date`。Label 可以在決策日之後成熟，但訓練時必須是 `ready` 且 `label.available_date <= training_as_of`。Future decision rows、future features、pending labels 與 cutoff 後才可得的 labels 全部隔離並保留 diagnostics。
+
+## Purged walk-forward
+
+模型驗證使用 expanding walk-forward，不使用 random shuffle/K-fold。每個 fold 的 train decision dates 早於 test，且 train label end 不得跨入 test start；test blocks 之間保留明確 embargo。Fold 生成對未來資料保持 prefix invariance。

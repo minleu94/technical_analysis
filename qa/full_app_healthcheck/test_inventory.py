@@ -405,6 +405,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_exit_effectiveness_read_model.py": "general-unit-keep-in-pytest",
     "tests/test_ml_dataset_manifest_registry.py": "general-unit-keep-in-pytest",
     "tests/test_ml_available_date_boundary.py": "general-unit-keep-in-pytest",
+    "tests/test_ml_purged_walk_forward.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_decision_service.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_package_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_effectiveness_metrics.py": "general-unit-keep-in-pytest",
