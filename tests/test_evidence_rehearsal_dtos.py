@@ -116,6 +116,25 @@ def test_artifact_rejects_future_available_date() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "content_hash",
+    (
+        "g" * 64,
+        "A" * 63 + "-",
+        "a" * 63,
+    ),
+)
+def test_artifact_rejects_non_sha256_hex_content_hash(content_hash: str) -> None:
+    with pytest.raises(ValueError, match="content_hash"):
+        RehearsalArtifact(
+            artifact_id="invalid-hash",
+            decision_date="2026-07-12",
+            available_date="2026-07-12",
+            tier="historical_replay_candidate",
+            content_hash=content_hash,
+        )
+
+
 @pytest.mark.parametrize("tier", ("formal_evidence", "unsupported"))
 def test_artifact_rejects_formal_or_unsupported_tier(tier: str) -> None:
     with pytest.raises(ValueError, match="tier"):

@@ -223,3 +223,40 @@ def test_replay_report_projects_read_only_rehearsal_artifact() -> None:
     assert artifacts[0].parent_artifact_ids == ("source-1", "rec-1", "event-1")
     assert artifacts[0].canonical_payload is not None
     assert "score_effectiveness_rows" not in artifacts[0].canonical_payload
+
+
+def test_replay_report_projects_multiple_days_by_their_own_decision_dates() -> None:
+    report = HistoricalEvidenceReplayReport(
+        replay_run_id="hre-fixture",
+        replay_mode="historical_replay",
+        source_label="simulated_scheduler",
+        start_date="2026-07-09",
+        end_date="2026-07-10",
+        source_db_path="C:/fixtures/source.sqlite",
+        replay_db_path="C:/fixtures/replay.sqlite",
+        dry_run=True,
+        confirm=False,
+        outcome_mode="final",
+        limitations=(),
+        days=tuple(
+            HistoricalEvidenceReplayDay(
+                decision_date=decision_date,
+                selected_recommendation_result_id=None,
+                sources=(),
+                events_seen=0,
+                events_inserted=0,
+                outcomes_created=0,
+                outcomes_updated=0,
+                outcomes_pending=0,
+                blocking_gaps=(),
+            )
+            for decision_date in ("2026-07-09", "2026-07-10")
+        ),
+    )
+
+    artifacts = report.to_rehearsal_artifacts(
+        decision_date="2026-07-10",
+        rollback_reference="commit:fixture",
+    )
+
+    assert [artifact.decision_date for artifact in artifacts] == ["2026-07-09", "2026-07-10"]

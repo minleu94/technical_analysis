@@ -11,7 +11,12 @@ from app_module.evidence_rehearsal_dtos import RehearsalArtifact
 
 
 def canonical_payload_hash(payload: Mapping[str, object]) -> str:
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    encoded = json.dumps(
+        _json_compatible(payload),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
@@ -51,8 +56,7 @@ class HistoricalReplayRehearsalAdapter:
         rollback_reference: str,
     ) -> RehearsalArtifact:
         decision_date = str(day.get("decision_date") or projection_date.isoformat())
-        if _require_date(decision_date, "day.decision_date") != projection_date:
-            raise ValueError("day.decision_date must match decision_date")
+        day_decision_date = _require_date(decision_date, "day.decision_date")
         as_of_date = _optional_string(day, replay_summary, "as_of_date")
         available_date = _optional_string(day, replay_summary, "available_date")
         if as_of_date is not None:
@@ -60,8 +64,8 @@ class HistoricalReplayRehearsalAdapter:
         available = _require_date(available_date, "available_date") if available_date is not None else None
         parent_ids = _parent_ids(day)
         diagnostics = _diagnostics(day)
-        future_blocked = available is not None and available > projection_date
-        missing_state = "missing" if any("missing" in item for item in diagnostics) else None
+        future_blocked = available is not None and available > day_decision_date
+        missing_state = _missing_state(day, replay_summary, diagnostics)
         canonical_payload: dict[str, object] = {
             "replay_run_id": str(replay_summary.get("replay_run_id") or ""),
             "decision_date": decision_date,
@@ -135,6 +139,28 @@ def _optional_string(
     if value is None or not str(value):
         return None
     return str(value)
+
+
+def _missing_state(
+    day: Mapping[str, object],
+    replay_summary: Mapping[str, object],
+    diagnostics: tuple[str, ...],
+) -> str | None:
+    for source in (day, replay_summary):
+        if "missing_state" in source:
+            value = source["missing_state"]
+            return None if value is None else str(value)
+    return "missing" if any("missing" in item for item in diagnostics) else None
+
+
+def _json_compatible(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): _json_compatible(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_json_compatible(item) for item in value]
+    if isinstance(value, list):
+        return [_json_compatible(item) for item in value]
+    return value
 
 
 def _require_date(value: str, field_name: str) -> date:

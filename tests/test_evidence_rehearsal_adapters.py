@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
+
 from app_module.evidence_rehearsal_adapters import (
     HistoricalReplayRehearsalAdapter,
     canonical_payload_hash,
@@ -115,3 +117,56 @@ def test_adapter_preserves_duplicate_diagnostics_in_original_sequence() -> None:
         "missing_benchmark",
         "missing_industry_benchmark",
     )
+
+
+def test_adapter_projects_each_replay_day_using_its_own_pit_date() -> None:
+    summary = _replay_summary()
+    summary.pop("as_of_date")
+    summary["days"] = [
+        {"decision_date": "2026-07-09", "available_date": "2026-07-10"},
+        {"decision_date": "2026-07-10", "available_date": "2026-07-10"},
+    ]
+
+    artifacts = HistoricalReplayRehearsalAdapter().project(
+        summary,
+        decision_date="2026-07-10",
+        rollback_reference="commit:fixture",
+    )
+
+    assert [(artifact.decision_date, artifact.current_status) for artifact in artifacts] == [
+        ("2026-07-09", "future_blocked"),
+        ("2026-07-10", "projected"),
+    ]
+
+
+def test_adapter_preserves_raw_missing_state_without_rederiving_diagnostics() -> None:
+    summary = _replay_summary()
+    summary["days"][0]["missing_state"] = "source_declared_complete"  # type: ignore[index]
+
+    artifact = HistoricalReplayRehearsalAdapter().project(
+        summary,
+        decision_date="2026-07-10",
+        rollback_reference="commit:fixture",
+    )[0]
+
+    assert artifact.missing_state == "source_declared_complete"
+    assert artifact.canonical_payload is not None
+    assert artifact.canonical_payload["missing_state"] == "source_declared_complete"
+
+
+def test_adapter_stores_deeply_immutable_canonical_payload() -> None:
+    summary = _replay_summary()
+    artifact = HistoricalReplayRehearsalAdapter().project(
+        summary,
+        decision_date="2026-07-10",
+        rollback_reference="commit:fixture",
+    )[0]
+    original_hash = artifact.content_hash
+    summary["days"][0]["score_effectiveness_rows"][0]["sample_count"] = 999  # type: ignore[index]
+
+    assert artifact.canonical_payload is not None
+    assert artifact.canonical_payload["score_effectiveness_rows"][0]["sample_count"] == 2
+    with pytest.raises(TypeError):
+        artifact.canonical_payload["score_effectiveness_rows"][0]["sample_count"] = 3
+    assert artifact.content_hash == original_hash
+    assert artifact.content_hash == canonical_payload_hash(artifact.canonical_payload)

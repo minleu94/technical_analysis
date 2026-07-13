@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import PurePath
 import re
+from types import MappingProxyType
 from typing import Any, Literal, Mapping
 
 
@@ -134,7 +135,7 @@ class RehearsalArtifact:
         _require_tier(self.tier)
         if self.as_of_date is not None and _require_date(self.as_of_date, "as_of_date") > decision_date:
             raise ValueError("as_of_date must not be later than decision_date")
-        if self.content_hash is not None and (len(self.content_hash) != 64 or not self.content_hash.isalnum()):
+        if self.content_hash is not None and re.fullmatch(r"[0-9a-fA-F]{64}", self.content_hash) is None:
             raise ValueError("content_hash must be a SHA-256 hexadecimal digest")
         if self.effectiveness_denominator_included is not None and not isinstance(
             self.effectiveness_denominator_included, bool
@@ -142,9 +143,27 @@ class RehearsalArtifact:
             raise ValueError("effectiveness_denominator_included must be a boolean")
         object.__setattr__(self, "parent_artifact_ids", tuple(self.parent_artifact_ids))
         object.__setattr__(self, "diagnostics", tuple(self.diagnostics))
+        if self.canonical_payload is not None:
+            object.__setattr__(self, "canonical_payload", _freeze_value(self.canonical_payload))
 
     def to_dict(self) -> dict[str, object]:
-        payload = asdict(self)
+        payload = {
+            "artifact_id": self.artifact_id,
+            "decision_date": self.decision_date,
+            "available_date": self.available_date,
+            "tier": self.tier,
+            "as_of_date": self.as_of_date,
+            "parent_artifact_ids": self.parent_artifact_ids,
+            "source_version": self.source_version,
+            "data_quality": self.data_quality,
+            "missing_state": self.missing_state,
+            "content_hash": self.content_hash,
+            "current_status": self.current_status,
+            "effectiveness_denominator_included": self.effectiveness_denominator_included,
+            "diagnostics": self.diagnostics,
+            "canonical_payload": _thaw_value(self.canonical_payload),
+            "rollback_reference": self.rollback_reference,
+        }
         for field_name in (
             "as_of_date",
             "source_version",
@@ -163,6 +182,22 @@ class RehearsalArtifact:
         if not payload["diagnostics"]:
             payload.pop("diagnostics")
         return payload
+
+
+def _freeze_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze_value(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(item) for item in value)
+    return value
+
+
+def _thaw_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _thaw_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_thaw_value(item) for item in value)
+    return value
 
 
 @dataclass(frozen=True)
