@@ -1,5 +1,7 @@
 # V2.3 P0 Data Credibility Engineering Readiness
 
+程式側已新增 `data_module/p0_source_contract_registry.py` 作為 13 個 P0 source 的版本化機器可讀契約。所有合約目前固定 `requires_human_acceptance`、`downstream_eligibility=none`、`production_ingestion_allowed=false`，並要求 explicit `available_date <= decision_date`；此 registry 不構成任何來源的正式接受決議。
+
 > 日期：2026-07-12
 > 狀態：`engineering_readiness_only` / `requires_human_acceptance`
 > 前一可回滾提交：`498ba8b6d7c7d70748213030288171bfae878515`
