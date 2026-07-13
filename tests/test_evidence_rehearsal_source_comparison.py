@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app_module.evidence_rehearsal_source_comparison import (
     P0SourceShadowComparisonService,
 )
@@ -65,6 +67,32 @@ def test_observed_shadow_candidate_is_only_eligible_for_human_review() -> None:
     assert item["scoring_eligible"] is False
     assert item["advice_eligible"] is False
     assert item["eligibility_delta"] == {"baseline": "none", "shadow": "none"}
+
+
+@pytest.mark.parametrize(
+    ("source_outages", "schema_missing_sources", "expected_blocker"),
+    (
+        ({"institutional_flows": "upstream_timeout"}, (), "source_outage:upstream_timeout"),
+        ({}, ("institutional_flows",), "schema_missing"),
+    ),
+)
+def test_ready_shadow_observation_is_fail_closed_when_source_is_blocked(
+    source_outages: dict[str, str],
+    schema_missing_sources: tuple[str, ...],
+    expected_blocker: str,
+) -> None:
+    payload = P0SourceShadowComparisonService(
+        decision_date="2026-07-12",
+        shadow_observations=(_ready_institutional_observation(),),
+        source_outages=source_outages,
+        schema_missing_sources=schema_missing_sources,
+    ).build_report().to_dict()
+    item = _item(payload, "institutional_flows")
+
+    assert expected_blocker in item["blockers"]
+    assert item["shadow"]["quality"] == "blocked"
+    assert item["shadow"]["coverage_bp"] == 0
+    assert item["review_status"] == "blocked"
 
 
 def test_outage_schema_and_future_data_emit_explicit_blockers_and_safe_guidance() -> None:

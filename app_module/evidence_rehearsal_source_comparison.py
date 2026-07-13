@@ -90,10 +90,14 @@ class P0SourceShadowComparisonService:
         baseline = self._for_source(self._baseline_observations, source_id)
         shadow = self._for_source(self._shadow_observations, source_id)
         blockers = self._blockers(source_id, shadow)
+        source_blocked = (
+            source_id in self._source_outages
+            or source_id in self._schema_missing_sources
+        )
         return P0SourceShadowComparisonItem(
             source_id=source_id,
             baseline=_summary(baseline),
-            shadow=_summary(shadow),
+            shadow=_summary(shadow, force_blocked=source_blocked),
             blockers=blockers,
             guidance=_guidance(blockers),
             review_status="blocked" if blockers else "eligible_for_human_review",
@@ -122,11 +126,13 @@ class P0SourceShadowComparisonService:
         return tuple(sorted(set(blockers)))
 
 
-def _summary(observations: tuple[P0ShadowObservation, ...]) -> dict[str, Any]:
+def _summary(
+    observations: tuple[P0ShadowObservation, ...], *, force_blocked: bool = False
+) -> dict[str, Any]:
     ready_count = sum(item.status == "shadow_ready" for item in observations)
-    coverage_bp = 10000 if observations and ready_count == len(observations) else 0
-    quality = "observed" if ready_count else "missing"
-    if observations and ready_count != len(observations):
+    coverage_bp = 10000 if observations and ready_count == len(observations) and not force_blocked else 0
+    quality = "observed" if ready_count and not force_blocked else "missing"
+    if force_blocked or (observations and ready_count != len(observations)):
         quality = "blocked"
     return {
         "observation_count": len(observations),
