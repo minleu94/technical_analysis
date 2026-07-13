@@ -987,6 +987,12 @@ V1.8 後，可用 Portfolio Sandbox inspection CLI 檢查研究用 allocation / 
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format json
+
+V2.4 紙上政策可用下列唯讀 CLI 檢查。它固定使用核准的平衡型參數，對現金、單檔、產業、週轉與 cooldown 限制產生 `PAPER_TRADE_CANDIDATE` 或 `NO_PAPER_TRADE`；結果不是交易指令，也不讀實際持倉或寫入任何資料庫。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_paper_portfolio_policy.py --sample --format json
+```
 .\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format markdown
 ```
 

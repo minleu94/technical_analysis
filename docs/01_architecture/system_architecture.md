@@ -108,7 +108,7 @@ Application Services / DTO / Repository
 | 回測 | `backtest_service.py`、`batch_backtest_service.py`、`optimizer_service.py`、`walkforward_service.py`、`research_result_presentation.py` |
 | 推薦回放 | `recommendation_replay_service.py`、`recommendation_portfolio_backtest_service.py`、`profile_replay_comparison_service.py` |
 | 保存與版本 | `backtest_repository.py`、`recommendation_repository.py`、`strategy_version_service.py`、`preset_service.py`、`universe_service.py` |
-| Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py`、`portfolio_construction_service.py`、`portfolio_execution_trace_service.py` |
+| Portfolio | `portfolio_service.py`、`portfolio_condition_monitor.py`、`portfolio_source_adapter.py`、`portfolio_construction_service.py`、`portfolio_execution_trace_service.py`、`paper_portfolio_policy.py`（V2.4 核准參數的唯讀紙上再平衡評估；不讀持倉、不寫 DB、不下單） |
 | Strategy lifecycle / feedback | `strategy_lifecycle_service.py`、`strategy_lifecycle_repository.py`、`portfolio_feedback_service.py`、`portfolio_review_service.py`、`promotion_reconciliation_service.py` |
 | Post-V1 evidence / V2.0-V2.1 workbench | `evidence_event_dtos.py`、`evidence_event_repository.py`、`evidence_event_service.py`、`forward_performance_service.py`、`evidence_source_coverage_service.py`、`historical_evidence_replay.py`、`agent_evidence_access_service.py`、`pre_v2_readiness_service.py`、`workbench_dtos.py`、`workbench_read_only_composer.py`、`workbench_replay_summary.py`、`workbench_source_service.py`、`ui_qt/views/workbench_view.py`、`ui_qt/models/workbench_table_models.py`、`cross_sectional_factor_*`、recommendation screening matrix / negative evidence payloads |
 | Runtime | `runtime_services/`、`dtos/runtime_dtos.py` |

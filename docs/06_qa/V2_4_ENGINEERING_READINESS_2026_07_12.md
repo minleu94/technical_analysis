@@ -10,6 +10,12 @@
 - Portfolio condition / alert / feedback / review service 只輸出狀態、理由與 diagnostics，不改實際持倉、不下單、不套用 lifecycle。
 - 資料或假設不足時保留 warning / diagnostic 或安全輸出；sample CLI 固定 `research_basis=true`。
 
+## 核准紙上政策接線（2026-07-12）
+
+- `app_module/paper_portfolio_policy.py` 將已核准的 NT$500,000 初始資本、20% 最低現金、8 檔上限、15% 單檔上限、30% 產業上限、3% 再平衡 band、2% minimum trade、20% weekly turnover、5 個交易日 cooldown，以及 10 / 15 / 30 bp 成本假設固定為唯讀 policy contract。
+- `scripts/inspect_paper_portfolio_policy.py --sample --format json` 只以內建樣本輸出 `PAPER_TRADE_CANDIDATE` 或 `NO_PAPER_TRADE` 與拒絕理由；不讀實際持倉、不寫資料庫、不產生 broker order。
+- 政策評估器只使用 `Decimal` 資本與整數 bp，且對現金、單檔、產業、週轉與 cooldown 違反均 fail-closed。
+
 ## 本次驗證
 
 ```powershell
