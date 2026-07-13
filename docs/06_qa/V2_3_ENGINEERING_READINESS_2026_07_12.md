@@ -6,6 +6,8 @@ Corporate Action 與交易限制已新增 shadow-only adapters，僅正規化 ra
 
 三大法人已新增 shadow adapter，會核對外資、投信、自營商各自的 buy - sell = net 與 available-date。單日 flow 固定附帶 `single_day_flow_is_not_a_trading_signal` disclosure；即使 shadow-ready 也沒有 downstream eligibility。
 
+信用交易已新增 risk-only shadow adapter，會阻擋負數餘額、缺少必要欄位及 future available-date，並固定附帶 `risk_only_not_directional_signal`；不輸出槓桿方向訊號。
+
 > 日期：2026-07-12
 > 狀態：`engineering_readiness_only` / `requires_human_acceptance`
 > 前一可回滾提交：`498ba8b6d7c7d70748213030288171bfae878515`
