@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app_module.evidence_rehearsal_coverage import (
     CoverageObservation,
     EvidenceRehearsalCoverageProjector,
@@ -59,6 +61,38 @@ def test_project_counts_missing_feature_or_label_as_missing_cohort() -> None:
     assert metrics[0].coverage_bp == 0
 
 
+def test_project_counts_missing_available_date_as_missing_cohort() -> None:
+    metrics = EvidenceRehearsalCoverageProjector().project(
+        (_row(available_date=None),),
+        decision_date=DECISION_DATE,
+    )
+
+    metric = metrics[0]
+    assert metric.missing_count == 1
+    assert metric.observed_count == 0
+
+
+def test_project_prioritizes_missingness_when_a_row_has_multiple_failures() -> None:
+    metrics = EvidenceRehearsalCoverageProjector().project(
+        (
+            _row(
+                feature_present=False,
+                available_date="2026-07-13",
+                label_maturity_date="2026-07-13",
+                quality="degraded",
+            ),
+        ),
+        decision_date=DECISION_DATE,
+    )
+
+    metric = metrics[0]
+    assert metric.missing_count == 1
+    assert metric.future_blocked_count == 0
+    assert metric.immature_label_count == 0
+    assert metric.degraded_count == 0
+    assert metric.observed_count == 0
+
+
 def test_project_blocks_future_available_data_without_counting_it_as_observed() -> None:
     metrics = EvidenceRehearsalCoverageProjector().project(
         (_row(available_date="2026-07-13"),),
@@ -69,6 +103,20 @@ def test_project_blocks_future_available_data_without_counting_it_as_observed() 
     assert metric.future_blocked_count == 1
     assert metric.observed_count == 0
     assert metric.coverage_bp == 0
+
+
+def test_project_rejects_row_with_a_different_decision_date() -> None:
+    with pytest.raises(ValueError, match="row.decision_date"):
+        EvidenceRehearsalCoverageProjector().project(
+            (
+                _row(
+                    decision_date="2026-07-10",
+                    available_date="2026-07-11",
+                    label_maturity_date="2026-07-10",
+                ),
+            ),
+            decision_date=DECISION_DATE,
+        )
 
 
 def test_project_counts_unmatured_labels_separately() -> None:

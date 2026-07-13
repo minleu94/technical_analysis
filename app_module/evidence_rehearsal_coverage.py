@@ -40,7 +40,9 @@ class EvidenceRehearsalCoverageProjector:
 
 
 def _cohort_for(row: CoverageObservation, projection_date: date) -> str:
-    _parse_date(row.decision_date, "row.decision_date")
+    row_decision_date = _parse_date(row.decision_date, "row.decision_date")
+    if row_decision_date != projection_date:
+        raise ValueError("row.decision_date must match projection decision_date")
     if not row.feature_present or row.label_maturity_date is None or row.available_date is None:
         return "missing"
 
