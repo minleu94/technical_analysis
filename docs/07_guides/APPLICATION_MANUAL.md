@@ -1002,6 +1002,8 @@ Daily mark-to-market runner 只使用 `price_date <= decision_date` 且 `availab
 
 Portfolio-level rebalance evaluator 會依固定順序逐檔套用現金、單檔、產業、cooldown 與累計週轉限制；前一筆 paper candidate 會占用後續批次的週轉額度。結果固定 `apply_rebalance=false`、`broker_order_allowed=false`，需要另行人工檢視，不會改寫 snapshot。
 
+Equal-weight benchmark 在 baseline 日凍結 constituents 與等額 units，後續不因新推薦或下市存活狀態替換成分，以避免 survivor bias。每日 benchmark ledger 只接受 causal price 並 append-only 保存；任一 frozen constituent 缺價即 fail-closed。
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_paper_portfolio_policy.py --sample --format json
 ```
