@@ -28,6 +28,7 @@
 - `DOCUMENT_ENCODING_AUDIT_2026_06_16.md` - repo 文件 UTF-8 / mojibake 掃描報告
 - `DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md` - push 前 docs 全目錄位置、索引、archive 候選、版本治理與相對連結稽核
 - `SUPERPOWERS_PLAN_SPEC_DATE_AUDIT_2026_07_06.md` - Superpowers plan / spec 日期與完成狀態稽核
+- `SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md` - Wave 6 shim／legacy removal 的 consumer、dynamic import、persisted class-path 與 release closeout 證據
 
 ### 已歸檔 QA
 - `../09_archive/UI_QT_DEVELOPMENT_ROADMAP_AUDIT_2026_05_19.md` - 2026-05-19 UI Qt 對照舊 roadmap 的歷史審核報表；不作目前完成狀態依據

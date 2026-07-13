@@ -1,12 +1,13 @@
 # baldr 安全重構與邏輯簡化總報告
 
+> **歷史歸檔**：本文件記錄已於 2026-07-12 closeout 的 Gate 0 安全重構 program，只作執行證據、rollback 與 residual candidate 追溯；不得視為目前 active automation 或產品 Roadmap。
 > **建立日期**：2026-07-11
 > **適用分支**：`dev`
 > **用途**：Planner、Implementation、QA 與人工審查共同讀取的唯一重構執行依據。
 > **狀態**：2026-07-12 current-program closeout；保留為重構歷史與 residual candidate 依據，不再是 active automation program。
 > **Automation program**：`active_program=NONE`；`SAFE_REFACTORING_MASTER_PROGRAM` 已完成本輪 closeout。
 > **不取代**：`PROJECT_SNAPSHOT.md`、`ROADMAP_6M_ENGINEERING.md`、`VERSION_ROADMAP_V2_1_TO_V4_0.md`、`system_architecture.md` 或 `APPLICATION_MANUAL.md`。
-> **產品交棒**：安全重構完成後的產品方向以 [PRODUCT_ROADMAP_POST_REFACTOR.md](../00_core/PRODUCT_ROADMAP_POST_REFACTOR.md) 為準，理想架構以 [target_system_architecture.md](target_system_architecture.md) 為準。本報告只負責行為不變重構，不承擔 Advice、Portfolio、Exit、Data 或 ML Roadmap。
+> **產品交棒**：安全重構完成後的產品方向以 [PRODUCT_ROADMAP_POST_REFACTOR.md](../00_core/PRODUCT_ROADMAP_POST_REFACTOR.md) 為準，理想架構以 [target_system_architecture.md](../01_architecture/target_system_architecture.md) 為準。本報告只負責行為不變重構，不承擔 Advice、Portfolio、Exit、Data 或 ML Roadmap。
 
 ---
 
@@ -375,7 +376,7 @@ Planner 對候選切片使用下列原則，不用「最大檔案優先」：
 
 ### 10.1 唯一權威與工作目錄
 
-- Master report：`docs/01_architecture/SAFE_REFACTORING_MASTER_REPORT.md`。
+- Master report：`docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md`（current-program closeout 後的歸檔位置）。
 - Runtime handoff：`output/automation/version_loop/`，永不 stage。
 - Planner / Implementation / QA 都必須讀本報告；不得把 prompt 內的簡短摘要當成完整規格。
 - 本報告是 refactor execution companion，不改產品 Roadmap 優先權。

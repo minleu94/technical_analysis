@@ -33,6 +33,8 @@
 
 ## 🎯 建議的新組織結構
 
+> 此處樹狀圖保留提案當時的原始結構；其中 `REFACTORING_MIGRATION_PLAN.md` 現已歸檔為 `docs/09_archive/REFACTORING_MIGRATION_PLAN_2025.md`，目前位置以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
+
 ```
 docs/
 ├── 00_core/                          # 核心文檔（必讀）

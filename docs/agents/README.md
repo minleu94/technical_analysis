@@ -47,6 +47,8 @@
 - **[Shared AI Skills Registry](./skills_registry.md)** (`skills_registry.md`)
   - Codex 與 Antigravity 共用的角色選擇、流程導引與 shared context 入口
   - 僅指向既有 Agent 權威文件，不重新定義角色規則
+- **[Multi-Agent Collaboration Workflow](./multi_agent_workflow.md)** (`multi_agent_workflow.md`)
+  - 定義 Agent 分支角色、合併前檢查與協作協議
 - **[Quant Defense Guard](./skills/quant_defense_guard.md)** (`skills/quant_defense_guard.md`)
   - 量化精度防禦（無裸 float）與未來函數審查技能及一鍵式檢測工具說明
 - **[Antigravity Agent 入口](./antigravity/README.md)** (`antigravity/README.md`)

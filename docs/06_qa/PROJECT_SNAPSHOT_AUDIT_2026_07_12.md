@@ -8,7 +8,7 @@
 
 | Snapshot claim | 判定 | 可驗證依據 | 處置 |
 |---|---|---|---|
-| Gate 0 尚未 closeout / 是 active work | 過時 | `ae83740`、`SAFE_REFACTORING_MASTER_REPORT.md` | 改為已 closeout，Master Report 降為證據 / rollback companion。 |
+| Gate 0 尚未 closeout / 是 active work | 過時 | `ae83740`、`docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md` | 改為已 closeout，Master Report 已歸檔為證據 / rollback companion。 |
 | Gate 1 僅設計、尚未實作 | 過時 | `566acd4`、`99c26d5`、`4b1b2c3`、`7713344`、`d90943e`、`a505d01`、`e7b8db0`、`31813c5` 與本 closeout | 改為完成的 read-only bounded Advice Contract。 |
 | Gate 1 代表 broker / effectiveness / scheduler 完成 | 不可成立 | Gate 1 spec、實作邊界、focused tests | 明列為限制，禁止推論。 |
 | multi-day dry-run `1/3` | 舊時間點 | 2026-07-08 readiness 記錄；Snapshot / Manual / Hub 的 `3/3 ready` | 僅保留在歷史段落並明示已被目前值取代。 |

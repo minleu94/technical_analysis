@@ -4,7 +4,7 @@
 
 **Goal:** 將安全重構 automation 從 08:00 延長至 12:00，新增四個完整 Planner → Implementation → QA 循環。
 
-**Architecture:** 保留 `SAFE_REFACTORING_MASTER_REPORT.md` 為唯一執行依據。08:00 改為中繼 QA；新增十二支 cron，透過 exact artifact、stage、baseline SHA 與 handoff 串接；12:00 才執行 Final QA / Closeout。
+**Architecture:** 當時以現已歸檔的 `docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md` 為唯一執行依據。08:00 改為中繼 QA；新增十二支 cron，透過 exact artifact、stage、baseline SHA 與 handoff 串接；12:00 才執行 Final QA / Closeout。
 
 **Tech Stack:** Codex app automation、TOML 設定讀回、PowerShell、Git、Markdown。
 
@@ -21,7 +21,7 @@
 ### Task 1: 更新總報告時段契約
 
 **Files:**
-- Modify: `docs/01_architecture/SAFE_REFACTORING_MASTER_REPORT.md`
+- Modify: `docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md`（目前歸檔位置）
 - Modify: `docs/00_core/DOCUMENTATION_INDEX.md`
 - Create: `docs/superpowers/specs/2026-07-11-safe-refactor-four-extra-cycles-design.md`
 - Create: `docs/superpowers/plans/2026-07-11-safe-refactor-four-extra-cycles.md`

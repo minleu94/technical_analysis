@@ -68,7 +68,7 @@ url = service._build_branch_url(branch_info, '2025-12-21', '2025-12-22')
 ### 2.2 Registry 檔案編碼問題（Mojibake）
 
 **問題現象**：
-- `branch_display_name` 顯示為亂碼（例如：`æ°¸è±ç«¹åŒ—`）
+- `branch_display_name` 顯示為亂碼（例如「永豐竹北」被錯誤解碼成不可讀字元）
 - 中文名稱無法正確顯示
 
 **原因**：

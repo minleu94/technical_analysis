@@ -74,7 +74,7 @@
 - [x] ScoringEngine 既有 Decimal／bp／prefix oracle 下抽出 10,000 bp 最大餘額 pure kernel，保留 façade。
 - [x] MarketRegimeDetector 在 golden／short-history／prefix oracle 下抽出 MA slope 與 Bollinger bandwidth causal kernels。
 - [x] BrokerSimulator／performance／Portfolio／RecommendationPortfolio 既有 units、ledger/metrics/result supports 通過 92 項 timeline／Decimal／numeric governance closeout；未重寫已合規公式。
-- [x] 完成全 repo static/dynamic/persisted-data audit，產出 `SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md`；production imports 已遷移。
+- [x] 完成全 repo static/dynamic/persisted-data audit，產出 `docs/06_qa/SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md`；production imports 已遷移。
 - [x] 使用者於 2026-07-12 明確核准 Wave 6 移除；tests 先改為舊檔不存在契約。
 - [x] 移除無 consumer 的 shim／legacy code，並同步 inventory、導航、migration history 與架構文件。
 - [x] 完整 release healthcheck passed（run `20260712_025311`）；pytest 1676、Update UI 38、Update QA 23/0/4、mypy 364、financial checker 37 均通過。

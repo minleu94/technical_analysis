@@ -42,9 +42,6 @@
 | [data_collection_architecture.md](../01_architecture/data_collection_architecture.md) | 資料收集架構。 |
 | [runtime_observatory_rules.md](../01_architecture/runtime_observatory_rules.md) | Runtime Observatory 架構治理規範。 |
 | [ui_design_system_midnight_analyst.md](../01_architecture/ui_design_system_midnight_analyst.md) | Midnight Analyst 深色 UI 設計系統規格，包含 theme tokens、全域 QSS、共用元件、效能限制與後續 agent 修改流程。 |
-| [multi_agent_workflow.md](../01_architecture/multi_agent_workflow.md) | 多 Agent 協作與合併規範。 |
-| [REFACTORING_MIGRATION_PLAN.md](../01_architecture/REFACTORING_MIGRATION_PLAN.md) | 歷史/長期 refactor 遷移計畫。 |
-| [SAFE_REFACTORING_MASTER_REPORT.md](../01_architecture/SAFE_REFACTORING_MASTER_REPORT.md) | 行為不變重構的現況證據、波次、安全 Gate 與 Planner → Implementation → QA automation 產物契約；不取代 Roadmap 或目前架構權威。 |
 
 ---
 
@@ -228,6 +225,7 @@
 | [V2_1_ENGINEERING_READINESS_2026_07_12.md](../06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md) | V2.1 engineering readiness：記錄 `592d3db` 的 Guided 三重門檻、最大持倉 `1..8`、Professional candidate 分區、focused suite、人工 UI 文案 smoke 與回退錨點。 |
 | [V2_1_FORMAL_CLOSEOUT_2026_07_12.md](../06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md) | V2.1 formal closeout approval record：engineering readiness 證據、owner / timestamp / decision 必填欄位、人工 smoke、殘餘 Gate 與回退；目前為 `awaiting_release_owner_confirmation`。 |
 | [PROJECT_SNAPSHOT_AUDIT_2026_07_12.md](../06_qa/PROJECT_SNAPSHOT_AUDIT_2026_07_12.md) | Snapshot claim 證據矩陣：保留 / 移至歷史 / 限制 / 去重判定與 Scoped SSOT 稽核。 |
+| [SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md](../06_qa/SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md) | Wave 6 compatibility shim／legacy removal 的 consumer、dynamic import、persisted class-path 與 release closeout 證據。 |
 
 | 文件 | 用途 |
 |---|---|
@@ -295,6 +293,7 @@
 |---|---|
 | [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md) | 目前 8 個頂層工作區的完整操作手冊，包含安裝、參數、結果判讀、安全限制與排錯。 |
 | [EVIDENCE_SCHEDULED_MORNING_CHECK.md](../07_guides/EVIDENCE_SCHEDULED_MORNING_CHECK.md) | Evidence scheduled dry-run 的每日早晨人工檢查步驟，包含 CMD + `schtasks.exe` 查詢、Codex read-only 摘要、freshness status、dry-run report 與停用方式。 |
+| [V2_2_WEEKLY_REVIEW_RUNBOOK.md](../07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md) | V2.2 三週人工 Evidence Review 的 working-copy DB 安全操作、sidecar collection、append-only history 與 formal closeout 邊界。 |
 | [QUICK_START.md](../07_guides/QUICK_START.md) | 快速開始。 |
 | [QUICK_REFERENCE.md](../07_guides/QUICK_REFERENCE.md) | 常用命令與快速查找。 |
 | [INSTALL_GUIDE.md](../07_guides/INSTALL_GUIDE.md) | 安裝與環境設置。 |
@@ -330,6 +329,7 @@
 | [agents/data_cleanup_agent.md](../agents/data_cleanup_agent.md) | Data Cleanup Agent。 |
 | [agents/testing_qa_agent.md](../agents/testing_qa_agent.md) | Testing / QA Agent 權威角色，負責測試路由與結果解讀。 |
 | [agents/skills_registry.md](../agents/skills_registry.md) | Codex / Antigravity 共用的角色選擇、流程導引與 shared context 入口。 |
+| [agents/multi_agent_workflow.md](../agents/multi_agent_workflow.md) | 多 Agent 分支角色、合併前檢查與協作協議。 |
 | [agents/skills/team.md](../agents/skills/team.md) | Codex / Antigravity 任務分流與交接流程。 |
 | [agents/skills/quant_defense_guard.md](../agents/skills/quant_defense_guard.md) | 量化精度防禦與未來函數審查技能及一鍵式檢測工具。 |
 | [agents/antigravity/README.md](../agents/antigravity/README.md) | Antigravity Agent 入口與角色分流。 |
@@ -355,6 +355,8 @@
 - [DEVELOPMENT_ROADMAP_LEGACY_2026_06.md](../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md)：舊完整 Roadmap，包含線性 Phase、歷史 Done 與舊 Roadmap current section，只作追溯用途。
 - [NEXT_ACTION_PLAN.md](../09_archive/NEXT_ACTION_PLAN.md)：2026-06-09 下一輪行動計畫（已執行完畢）。
 - [PHASE_3_3B_IMPLEMENTATION_PLAN.md](../09_archive/PHASE_3_3B_IMPLEMENTATION_PLAN.md)：Phase 3.3b 實施規劃（已執行完畢）。
+- [REFACTORING_MIGRATION_PLAN_2025.md](../09_archive/REFACTORING_MIGRATION_PLAN_2025.md)：2025 年專案結構化與遷移計畫；已完成，只作架構演進追溯。
+- [SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md](../09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md)：Gate 0 行為不變安全重構的已完成執行紀錄、rollback 與 residual candidate companion。
 - [root_readme_legacy_2025_12.txt](../09_archive/root_readme_legacy_2025_12.txt)：原根目錄 `readme.txt`，內容停留在舊 Phase、舊入口與舊路徑說明，只作歷史追溯。
 - [dev_progress_note_legacy_2026_01.txt](../09_archive/dev_progress_note_legacy_2026_01.txt)：原 `docs/00_core/note.txt` 歷史開發進度筆記，只作追溯，不作目前狀態權威。
 - [ARCH_GOVERNANCE_CHECKLIST.md](../09_archive/ARCH_GOVERNANCE_CHECKLIST.md)：早期架構治理自檢清單，已自 `00_core/` 歸檔；目前架構權威以 `docs/01_architecture/system_architecture.md` 為準。
@@ -384,10 +386,12 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-12：完成全 docs 位置稽核；將 Multi-Agent workflow 移至 `docs/agents/`、Shim／Legacy removal audit 移至 `docs/06_qa/`，並將兩份已完成重構文件移至 `docs/09_archive/`，同步所有索引與引用。
+
 - 2026-07-12：新增 Gate 1 Advice closeout 與 Project Snapshot audit QA 索引；Gate 0 / Gate 1 完成狀態仍以 Snapshot 為準，Roadmap、Architecture、Manual 各維持 scoped authority。
 - 2026-07-11：新增安全重構四個延長循環的設計與實作計畫索引，並將 Master Report 執行時段延長至 12:00 Final QA / Closeout。
 - 2026-07-11：新增 `PRODUCT_ROADMAP_POST_REFACTOR.md` 與 `target_system_architecture.md` 索引；重整 Vision、6M Roadmap、V1.1-V2.0 歷史定位與 V2.1-V4.0 maturity 描述，清楚分離 Current / Target 與產品 / 工程權威。
-- 2026-07-11：新增 `SAFE_REFACTORING_MASTER_REPORT.md` 架構索引，作為行為不變重構與 Planner → Implementation → QA automation 的共用執行 companion；不取代 Roadmap 或目前架構權威。
+- 2026-07-11：新增 Safe Refactoring Master Report 作為行為不變重構與 Planner → Implementation → QA automation 的共用執行 companion；2026-07-12 closeout 後已移至 archive。
 - 2026-07-06：完成 push 前 docs 結構稽核索引同步，新增 `DOCUMENTATION_PRE_PUSH_AUDIT_2026_07_06.md`、`superpowers/README.md`、`strategies/README.md`，將過時 UI Qt roadmap audit 歸檔，並把 MCP patch memo 移至技術文件。
 - 2026-07-06：新增 V2.1 至 V4.0 長期版本路線圖索引，標示其為 6M Roadmap Phase 與 Vision 成功標準的版本 companion，不作目前狀態或工程順序權威。
 - 2026-07-06：新增 V2.0 Workbench Phase 1 read-only prototype QA closeout 索引，標示當時 DTO / composer / replay summary adapter / sample CLI 已完成；formal source adapter 另見後續 closeout，Phase 2 UI / scheduler gate 仍未完成。

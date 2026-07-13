@@ -2,7 +2,7 @@
 
 ## 目標
 
-在既有 08:00 QA 後新增四個不壓縮的 Planner → Implementation → QA 循環，延長安全重構到 12:00，並維持 `SAFE_REFACTORING_MASTER_REPORT.md` 的所有 Gate、產物追溯與 atomic commit/push 模式。
+在既有 08:00 QA 後新增四個不壓縮的 Planner → Implementation → QA 循環，延長安全重構到 12:00，並維持現已歸檔為 `docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md` 的所有 Gate、產物追溯與 atomic commit/push 模式。
 
 ## 核准時段
 

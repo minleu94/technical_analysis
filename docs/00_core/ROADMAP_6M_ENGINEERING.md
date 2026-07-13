@@ -59,7 +59,7 @@ Gate 7 ML Shadow Layer 只作條件式後續：若 Gate 5 在第六個月以前�
 
 ### Dependencies
 
-- [SAFE_REFACTORING_MASTER_REPORT.md](../01_architecture/SAFE_REFACTORING_MASTER_REPORT.md)。
+- [SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md](../09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md)（Gate 0 已完成的歷史執行與 rollback companion）。
 - 現行 Recommendation、Backtest、Portfolio、Scheduler、DTO / schema、UI navigation 測試。
 - 完整 rollback point 與 known residual list。
 
@@ -451,7 +451,7 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 
 ## Gate 狀態校正（2026-07-12）
 
-- Gate 0 已由 `ae83740` 與 `SAFE_REFACTORING_MASTER_REPORT.md` closeout；後續重構只作 maintenance，不再阻塞產品主線。
+- Gate 0 已由 `ae83740` 與歸檔的 `SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md` closeout；後續重構只作 maintenance，不再阻塞產品主線。
 - Gate 1 已由 Advice DTO、fail-closed policy、read-only composer 與 Workbench DTO-to-view slice closeout。驗證見 `docs/06_qa/GATE_1_ADVICE_CLOSEOUT_2026_07_12.md`。Gate 1 的完成不折抵 Gate 2 的真實 weekly evidence、Gate 3 的 P0 source acceptance，亦不代表 broker execution 或投資有效性。
 - 因此工程順序更新為 Gate 2 → Gate 3 → Gate 4；已完成 Gate 1 的 bounded Advice 仍維持 read-only / paper boundary。
 

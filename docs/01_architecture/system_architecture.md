@@ -525,7 +525,7 @@ Current Result DTO / Run Metadata
 | Post-Refactor 產品方向 | `docs/00_core/PRODUCT_ROADMAP_POST_REFACTOR.md` |
 | 使用方式 | `docs/07_guides/APPLICATION_MANUAL.md` |
 | 文件導航 | `docs/00_core/DOCUMENTATION_INDEX.md` |
-| 行為不變重構執行 companion | `docs/01_architecture/SAFE_REFACTORING_MASTER_REPORT.md` |
+| 已完成行為不變重構的歷史／rollback companion | `docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md` |
 
 Roadmap Hub 只負責入口與短版 Next，不保存完整歷史或架構細節。
 
@@ -588,7 +588,7 @@ UI 修改：
 
 - 2026-07-12：新增 Gate 1 Advice Current Architecture 邊界；Advice policy / composer 在 application layer，Workbench UI 僅渲染 DTO，所有輸入維持 as-of / fail-closed / no-write contract。
 - 2026-07-11：新增 Target Architecture 與 Post-Refactor Product Roadmap companion 連結；修正目前主 UI 為 8 個左側主工作區，Daily Decision 已內嵌於「決策工作台 > 決策來源」；本文件仍只描述 Current Architecture。
-- 2026-07-11：新增 `SAFE_REFACTORING_MASTER_REPORT.md` 為行為不變重構執行 companion；目前架構、產品 Roadmap 與使用流程權威邊界不變。
+- 2026-07-11：新增 Safe Refactoring Master Report 為行為不變重構執行 companion；該 program 於 2026-07-12 closeout 後已歸檔為 `docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md`，目前架構、產品 Roadmap 與使用流程權威邊界不變。
 - 2026-07-07：更新 Phase 2 Workbench MVP shell 架構同步；`ui_qt/views/workbench_view.py` 與 `ui_qt/models/workbench_table_models.py` 只呈現 `WorkbenchDashboardDTO`，主 UI 透過 `WorkbenchSourceService` 注入，新增中文顯示、預設 replay JSON summary 分析與舊 Daily Decision / Evidence Review / Portfolio read-only drill-down，不直接讀 SQLite / replay DB、不寫 DB、不啟用 scheduler、不重算 scoring / portfolio / backtest / lifecycle。
 - 2026-07-08：補充 Pre-V2 readiness source-gap closeout fallback；同日 scheduled dry-run `latest_status.json` 可作為修正後歷史觀察日的唯讀證據，仍不回補 DB、不觸發 confirm、不解除 production scheduler gate。
 - 2026-07-07：補充 Workbench background evidence feed / read-only Action Items MVP 架構；`WorkbenchDashboardDTO` 新增背景證據流與只讀人工待處理列，來源只限既有 snapshot/readiness/agent/replay summary payload，Action Items 保留 source trace / degraded reason / drill-down target 且 `write_intent=false`。

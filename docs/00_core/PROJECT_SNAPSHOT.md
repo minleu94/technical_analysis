@@ -55,7 +55,7 @@
 >
 > Wave 5 金融核心 closeout：TechnicalIndicator price normalization、Scoring bp normalization、MarketRegime slope/bandwidth 均已依 golden→prefix/T-1→numeric→pure kernel→façade 完成；BrokerSimulator、performance metrics、Portfolio core 與 RecommendationPortfolioBacktest 沿用既有 `financial_module.units`、ledger/metrics/result supports。92 項 timeline／Decimal／numeric governance 測試通過；已知 recommendation portfolio 同日收盤成交研究假設仍明示 warning，未被包裝成實盤等價。
 >
-> Wave 6 已獲使用者明確核准並完成移除：三個 compatibility shim、`recommendation_module_legacy`、舊 example 與兩個 legacy manual checks 已在 consumer 歸零後刪除；test inventory、導航、migration history 與架構文件已同步。Dynamic import 與 pickle/joblib audit 未發現隱藏 consumer；完整證據與回滾方式見 `SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md`。
+> Wave 6 已獲使用者明確核准並完成移除：三個 compatibility shim、`recommendation_module_legacy`、舊 example 與兩個 legacy manual checks 已在 consumer 歸零後刪除；test inventory、導航、migration history 與架構文件已同步。Dynamic import 與 pickle/joblib audit 未發現隱藏 consumer；完整證據與回滾方式見 [SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md](../06_qa/SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md)。
 >
 > Wave 6 刪除後 release closeout：Full App Healthcheck `20260712_025311` passed；完整 pytest 1676 passed、Update Qt 38 passed、Update QA 23/0/4、mypy 364 files、financial checker 37 passed，compileall 與 diff check 亦通過。24 個 pytest warnings 均為既有 recommendation portfolio 同日收盤成交研究假設的明示揭露。
 >
@@ -86,7 +86,7 @@ baldr 是一套可觀察台股市場、產生有條件且可追溯的結構化�
 
 ## 當前狀態
 
-**目前產品 Gate**：Gate 0 Safe Refactor 已由 `ae83740` closeout；`SAFE_REFACTORING_MASTER_REPORT.md` 保留為已完成工程的證據與 rollback companion，不再是 active product work。V2.1 / Gate 1 Daily Usable Advice 已於 2026-07-12 14:51:42 -07:00 獲 release owner `approve`，狀態為 `formal_closeout_complete`（證據見 `docs/06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md` 與 `docs/06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md`）。`592d3db` 已確認 Guided 僅接受 `promoted`、已鎖定參數且 disclosure 完整的策略；`max_positions` 僅可為 `1..8`；Professional candidate 僅作 `RESEARCH` 並與正式 Advice 分區。它是唯讀、可拒絕、可回溯的 Advice Contract，不代表 Portfolio Coach、Exit Engine、P0 formal ingestion、production scheduler、ML production 或投資有效性已完成。
+**目前產品 Gate**：Gate 0 Safe Refactor 已由 `ae83740` closeout；[SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md](../09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md) 已歸檔為完成工程的證據與 rollback companion，不再是 active product work。V2.1 / Gate 1 Daily Usable Advice 已於 2026-07-12 14:51:42 -07:00 獲 release owner `approve`，狀態為 `formal_closeout_complete`（證據見 `docs/06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md` 與 `docs/06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md`）。`592d3db` 已確認 Guided 僅接受 `promoted`、已鎖定參數且 disclosure 完整的策略；`max_positions` 僅可為 `1..8`；Professional candidate 僅作 `RESEARCH` 並與正式 Advice 分區。它是唯讀、可拒絕、可回溯的 Advice Contract，不代表 Portfolio Coach、Exit Engine、P0 formal ingestion、production scheduler、ML production 或投資有效性已完成。
 
 **V2.4 / V2.5 / V3.0 真實資料起點（2026-07-12）**：已由 `scheduled_rec_20260712_051002` 建立第一個 research-only paper baseline，3 筆 allocation 紙上可執行總額 NT$159,000、殘餘現金 NT$341,000；同一 artifact 產生 3 筆 fail-closed `WATCH` health baseline，未捏造 thesis / invalidation。V3.0 對 Week 1 working-copy 的唯讀人工驗證顯示 3 筆 score events 的 12 個 outcomes 全為 missing，另有 1,134 個事件缺 `score_bp`，故決議 `DEFER_ALL_PRUNING_DECISIONS`。這些結果不寫持倉 DB、不下單、不改 score / lifecycle，且仍缺真實 forward / paper 時間證據。
 

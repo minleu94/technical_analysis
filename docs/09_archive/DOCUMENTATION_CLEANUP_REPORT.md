@@ -31,7 +31,7 @@
 
 **理由**：
 - 這些是執行特定任務的 Agent Prompt，任務已完成
-- `REFACTORING_MIGRATION_PLAN.md` 已經記錄了完整的遷移過程
+- 現已歸檔的 `REFACTORING_MIGRATION_PLAN_2025.md` 已經記錄了完整的遷移過程
 - 這些文檔可能只在執行任務時有用，完成後可以歸檔
 
 **檢查結果**：

@@ -144,7 +144,7 @@
 * **`docs/01_architecture/system_architecture.md`**：目前架構、模組邊界與資料流權威。
 * **`docs/01_architecture/system_vision_specification.md`**：baldr 產品北極星、目前邊界、Gap Register 與投資有效性驗證框架；不作為目前可用功能依據。
 * **`docs/07_guides/APPLICATION_MANUAL.md`**：目前 8 個工作區與跨工作區流程的完整操作權威。
-* **`docs/01_architecture/multi_agent_workflow.md`**：規範 AI Agent 應如何分支與合併的協議。
+* **`docs/agents/multi_agent_workflow.md`**：規範 AI Agent 應如何分支與合併的協議。
 * **`docs/01_architecture/runtime_observatory_rules.md`**：嚴格的相依性與 DTO 架構治理規則。
 
 ### Important Technical Docs (重要技術文檔)

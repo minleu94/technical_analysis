@@ -472,7 +472,7 @@ Gate 通過前，ML 不得修改正式推薦、Portfolio Advice、Strategy Lifec
 | `target_system_architecture.md` | Current → Transitional → Target 的理想架構與治理邊界。 |
 | `VERSION_ROADMAP_V1_1_TO_V2_0.md` | 已完成版本與 V2.0 形成過程。 |
 | `VERSION_ROADMAP_V2_1_TO_V4_0.md` | 長期產品成熟度與版本階梯。 |
-| `SAFE_REFACTORING_MASTER_REPORT.md` | 行為不變重構的執行 companion。 |
+| `SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md` | 已完成行為不變重構的歷史執行與 rollback companion，位於 `docs/09_archive/`。 |
 | `APPLICATION_MANUAL.md` | 目前已實作使用流程；Target 不得提前寫入。 |
 
 ## 21. Remaining Open Decisions

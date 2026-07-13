@@ -1,7 +1,7 @@
 # 歸檔文檔目錄
 
 > **歷史記錄和總結文檔（歸檔）**
-> **最後整理**：2026-07-06
+> **最後整理**：2026-07-12
 
 本目錄包含歷史記錄、總結報告等歸檔文檔。這些文檔主要用於記錄歷史，不影響日常使用。
 歸檔文件中的狀態、下一步、Phase 或完成度描述，若與 Snapshot、6M Roadmap、版本 Roadmap 或 Architecture 衝突，一律以 active authority 為準。
@@ -34,6 +34,12 @@
 
 - **`NEXT_ACTION_PLAN.md`**
   - 下一輪 Roadmap Rebaseline、技術治理與 Agent 交接行動計畫（已執行，歷史歸檔）
+
+- **`REFACTORING_MIGRATION_PLAN_2025.md`**
+  - 2025 年專案結構化與遷移計畫；各遷移步驟已完成，只作架構演進追溯
+
+- **`SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md`**
+  - Gate 0 行為不變安全重構的已完成執行紀錄、rollback 與 residual candidate companion
 
 - **`DEVELOPMENT_ROADMAP_LEGACY_2026_06.md`**
   - 2026-06-13 前的完整 Roadmap，包含舊線性 Phase、歷史 Done、舊 Living Section 與歷史風險；只作追溯，不作目前狀態依據。

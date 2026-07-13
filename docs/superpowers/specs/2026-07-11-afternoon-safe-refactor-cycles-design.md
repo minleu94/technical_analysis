@@ -9,7 +9,7 @@
 - Repository 必須位於 `dev`，非 ignored 工作區乾淨。
 - 啟動前將本機已驗證 commit push，使 `dev == origin/dev`。
 - `latest_refactor_qa.json` 必須指向 `READY_TO_CONTINUE`；若為 remediation 或 blocked，第一輪只處理該狀態。
-- 所有角色完整讀取 `docs/01_architecture/SAFE_REFACTORING_MASTER_REPORT.md`。
+- 所有角色當時完整讀取的 Master Report 現已歸檔為 `docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md`。
 - `output/automation/**` 與 `graphify-out/**` 永不 stage。
 
 ## 時程

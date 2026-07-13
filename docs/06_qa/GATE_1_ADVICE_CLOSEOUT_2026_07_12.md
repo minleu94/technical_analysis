@@ -13,7 +13,7 @@
 | read-only composer、as-of / future input guard | `d90943e`、`a505d01` |
 | Workbench DTO-to-view render | `e7b8db0` |
 | Gate 1 type repair | `31813c5` |
-| Gate 0 前置 closeout | `ae83740`、`docs/01_architecture/SAFE_REFACTORING_MASTER_REPORT.md` |
+| Gate 0 前置 closeout | `ae83740`、`docs/09_archive/SAFE_REFACTORING_MASTER_REPORT_2026_07_12.md` |
 
 ## 已驗收行為
 

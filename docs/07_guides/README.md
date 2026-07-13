@@ -10,6 +10,12 @@
   - 目前 PySide6 UI 的完整操作手冊
   - 涵蓋 8 個頂層工作區、跨工作區流程、限制與排錯
 
+- **`EVIDENCE_SCHEDULED_MORNING_CHECK.md`**
+  - Evidence scheduled dry-run 的每日早晨人工檢查與停用方式
+
+- **`V2_2_WEEKLY_REVIEW_RUNBOOK.md`**
+  - V2.2 三週人工 Evidence Review、working-copy DB 與 append-only history 操作邊界
+
 - **`QUICK_START.md`**
   - 系統的快速開始指南
   - 三步快速開始、完整命令選項、驗證安裝
