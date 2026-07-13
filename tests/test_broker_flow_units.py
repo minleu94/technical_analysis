@@ -3,6 +3,28 @@ import pandas as pd
 from app_module.broker_flow_service import BrokerFlowService
 
 
+def test_sqlite_share_quantity_converts_exactly_to_existing_lot_unit():
+    from app_module.broker_flow_dashboard_dtos import BrokerFlowLotQuantity
+
+    quantity = BrokerFlowLotQuantity.from_sqlite_shares(160_000)
+
+    assert quantity.lots == 160
+    assert quantity.remainder_shares == 0
+    assert quantity.quality == "observed"
+    assert quantity.warnings == ()
+
+
+def test_sqlite_share_quantity_marks_non_board_lot_remainder_degraded():
+    from app_module.broker_flow_dashboard_dtos import BrokerFlowLotQuantity
+
+    quantity = BrokerFlowLotQuantity.from_sqlite_shares(160_500)
+
+    assert quantity.lots == 160
+    assert quantity.remainder_shares == 500
+    assert quantity.quality == "degraded"
+    assert quantity.warnings == ("non_board_lot_remainder_shares:500",)
+
+
 def test_broker_flow_service_reads_explicit_lot_columns(tmp_path):
     branch_dir = tmp_path / "broker_flow" / "8450_845B" / "meta"
     branch_dir.mkdir(parents=True)
