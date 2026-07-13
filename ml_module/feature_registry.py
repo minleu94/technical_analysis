@@ -20,6 +20,24 @@ class FeatureRegistry:
     excluded_families: tuple[str, ...]
     registry_hash: str
 
+    @property
+    def canonical_ids(self) -> tuple[str, ...]:
+        return tuple(spec.feature_id for spec in self.specs)
+
+    @property
+    def canonical_dtypes(self) -> tuple[str, ...]:
+        return tuple(spec.dtype for spec in self.specs)
+
+    @property
+    def canonical_units(self) -> tuple[str, ...]:
+        return tuple(spec.unit for spec in self.specs)
+
+    @property
+    def canonical_schema(self) -> tuple[tuple[str, str, str], ...]:
+        return tuple(
+            (spec.feature_id, spec.dtype, spec.unit) for spec in self.specs
+        )
+
     @classmethod
     def create(
         cls,

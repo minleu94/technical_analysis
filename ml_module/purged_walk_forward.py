@@ -21,8 +21,16 @@ class PurgedWalkForwardFold:
     test_rows: tuple[MLTimeWindowRow, ...]
     test_start: str
     test_end: str
-    purge_trading_days: int
-    embargo_trading_days: int
+    purge_days: int
+    embargo_days: int
+
+    @property
+    def purge_trading_days(self) -> int:
+        return self.purge_days
+
+    @property
+    def embargo_trading_days(self) -> int:
+        return self.embargo_days
 
 
 class PurgedWalkForwardSplitter:
@@ -84,8 +92,8 @@ class PurgedWalkForwardSplitter:
                         test_rows=test,
                         test_start=test_start,
                         test_end=test_end,
-                        purge_trading_days=self.purge_trading_days,
-                        embargo_trading_days=self.embargo_trading_days,
+                        purge_days=self.purge_trading_days,
+                        embargo_days=self.embargo_trading_days,
                     )
                 )
             start_index += self.test_date_count + self.embargo_trading_days
