@@ -11,6 +11,7 @@ def test_cli_emits_non_applying_review_package(tmp_path: Path) -> None:
         json.dumps(
             {
                 "source_id": "institutional_flows",
+                "decision_date": "2026-07-12",
                 "coverage_bp": 9000,
                 "license_evidence": "reviewed",
                 "quality_evidence": "passed",

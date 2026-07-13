@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Iterable
 
 from data_module.p0_shadow_observation import P0ShadowObservation
@@ -41,6 +42,7 @@ class P0SourceAcceptanceVerifier:
         self,
         *,
         source_id: str,
+        decision_date: str,
         observations: Iterable[P0ShadowObservation],
         coverage_bp: int,
         license_evidence: str,
@@ -49,15 +51,31 @@ class P0SourceAcceptanceVerifier:
         build_p0_source_contract_registry().require(source_id)
         rows = tuple(observations)
         diagnostics: list[str] = []
+        service_decision_date = _parse_date(decision_date)
+        if service_decision_date is None:
+            diagnostics.append("invalid_service_decision_date")
         if not rows:
             diagnostics.append("missing_shadow_observations")
         if any(row.source_id != source_id for row in rows):
             diagnostics.append("source_id_mismatch")
         if any(row.status != "shadow_ready" for row in rows):
             diagnostics.append("shadow_observation_blocked")
-        if not isinstance(coverage_bp, int) or isinstance(coverage_bp, bool) or not 0 <= coverage_bp <= 10000:
+        future_blocked = any(
+            (available_date := _parse_date(row.available_date)) is not None
+            and service_decision_date is not None
+            and available_date > service_decision_date
+            for row in rows
+        )
+        if future_blocked:
+            diagnostics.extend(("future_blocked", "quality_blocked"))
+        effective_coverage_bp = 0 if future_blocked else coverage_bp
+        if (
+            not isinstance(effective_coverage_bp, int)
+            or isinstance(effective_coverage_bp, bool)
+            or not 0 <= effective_coverage_bp <= 10000
+        ):
             diagnostics.append("invalid_coverage_bp")
-        elif coverage_bp < self._minimum_coverage_bp:
+        elif effective_coverage_bp < self._minimum_coverage_bp:
             diagnostics.append("coverage_below_minimum")
         if not license_evidence.strip():
             diagnostics.append("missing_license_evidence")
@@ -68,5 +86,14 @@ class P0SourceAcceptanceVerifier:
             source_id=source_id,
             status="blocked" if unique else "eligible_for_human_review",
             diagnostics=unique,
-            coverage_bp=coverage_bp,
+            coverage_bp=effective_coverage_bp,
         )
+
+
+def _parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None

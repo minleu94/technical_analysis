@@ -40,6 +40,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         minimum_coverage_bp=args.minimum_coverage_bp
     ).verify(
         source_id=str(payload["source_id"]),
+        decision_date=str(payload.get("decision_date", "")),
         observations=tuple(_observation(item) for item in payload.get("observations", ())),
         coverage_bp=int(payload.get("coverage_bp", -1)),
         license_evidence=str(payload.get("license_evidence", "")),
