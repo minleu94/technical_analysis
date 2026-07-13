@@ -105,7 +105,7 @@ def test_replay_uses_only_recommendation_results_available_on_decision_date(tmp_
     assert all(event.metadata["source_label"] == "simulated_scheduler" for event in events)
 
 
-def test_replay_day_evidence_ids_exclude_events_from_a_different_replay_run(tmp_path: Path) -> None:
+def test_replay_refuses_existing_working_copy_without_overwrite(tmp_path: Path) -> None:
     config = _config(tmp_path)
     _seed_market_db(config, days=3)
     _seed_result(config, result_id="past-rec", created_at="2026-07-01T06:00:00")
@@ -129,28 +129,21 @@ def test_replay_day_evidence_ids_exclude_events_from_a_different_replay_run(tmp_
         metadata={"replay_run_id": "hre-other"},
     )
 
-    report = HistoricalEvidenceReplayService(config).run(
-        HistoricalEvidenceReplayRequest(
-            start_date="2026-07-01",
-            end_date="2026-07-01",
-            source_db_path=config.db_file,
-            replay_db_path=replay_db,
-            sources=("recommendation",),
-            windows=(1,),
-            confirm=True,
-            replay_run_id="hre-current",
+    with pytest.raises(FileExistsError, match="working copy already exists"):
+        HistoricalEvidenceReplayService(config).run(
+            HistoricalEvidenceReplayRequest(
+                start_date="2026-07-01",
+                end_date="2026-07-01",
+                source_db_path=config.db_file,
+                replay_db_path=replay_db,
+                sources=("recommendation",),
+                windows=(1,),
+                confirm=True,
+                replay_run_id="hre-current",
+            )
         )
-    )
 
-    replay_events = EvidenceEventRepository(config, db_path=replay_db).list_events(decision_date="2026-07-01")
-    current_run_ids = {
-        event.event_id
-        for event in replay_events
-        if event.metadata.get("replay_run_id") == "hre-current"
-    }
-    assert current_run_ids
-    assert report.days[0].evidence_ids == tuple(sorted(current_run_ids))
-    assert other_run_event.event_id not in report.days[0].evidence_ids
+    assert other_run_event.event_id
 
 
 def test_replay_does_not_fabricate_recommendation_when_no_asof_result_exists(tmp_path: Path) -> None:
@@ -232,6 +225,33 @@ def test_replay_discovers_trading_dates_from_source_db(tmp_path: Path) -> None:
     )
 
     assert dates == ("2026-07-01", "2026-07-03")
+
+
+def test_replay_working_copy_uses_sqlite_backup_for_wal_state(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    source = config.db_file
+    replay_db = tmp_path / "replay" / "working.sqlite3"
+    before_mtime: int
+    with sqlite3.connect(source) as source_connection:
+        source_connection.execute("PRAGMA journal_mode=WAL")
+        source_connection.execute(
+            "CREATE TABLE daily_prices (股票代碼 TEXT, 日期 TEXT, 收盤價 TEXT)"
+        )
+        source_connection.execute(
+            "INSERT INTO daily_prices VALUES ('2330', '20260701', '100')"
+        )
+        source_connection.commit()
+        before_mtime = source.stat().st_mtime_ns
+
+        HistoricalEvidenceReplayService(config)._prepare_replay_db(
+            source, replay_db, overwrite=False
+        )
+
+        with sqlite3.connect(replay_db) as replay_connection:
+            assert replay_connection.execute(
+                "SELECT 股票代碼, 日期 FROM daily_prices"
+            ).fetchall() == [("2330", "20260701")]
+        assert source.stat().st_mtime_ns == before_mtime
 
 
 def test_replay_report_projects_read_only_rehearsal_artifact() -> None:

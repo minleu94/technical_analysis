@@ -51,6 +51,7 @@ def _run_cli(
     output_root: Path,
     inject_failure: str | None = None,
     environment: dict[str, str] | None = None,
+    execution_mode: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = [
         sys.executable,
@@ -66,6 +67,8 @@ def _run_cli(
         "--output-root",
         str(output_root),
     ]
+    if execution_mode is not None:
+        command.extend(("--execution-mode", execution_mode))
     if inject_failure is not None:
         command.extend(("--inject-failure", inject_failure))
     return subprocess.run(
@@ -95,15 +98,19 @@ def test_cli_defaults_to_dry_read_only_and_writes_only_report_package(tmp_path: 
     report = json.loads((output_root / "rehearsal-report.json").read_text(encoding="utf-8"))
     handoff = json.loads((output_root / "forward-handoff.json").read_text(encoding="utf-8"))
     assert (output_root / "rehearsal-report.md").is_file()
+    assert report["contract_version"] == 2
     assert report["execution"] == {
         "advice_invoked": False,
         "broker_invoked": False,
         "db_write_performed": False,
-        "mode": "dry_read_only",
+        "mode": "projection_only",
         "promotion_invoked": False,
+        "production_db_write_performed": False,
         "scheduler_invoked": False,
         "source_db_opened": False,
+        "source_db_write_performed": False,
         "working_copy_created": False,
+        "working_copy_write_performed": False,
     }
     assert report["scenario"]["production_actions_allowed"] is False
     assert len(report["p0_source_shadow"]["items"]) == 13
@@ -117,6 +124,36 @@ def test_cli_defaults_to_dry_read_only_and_writes_only_report_package(tmp_path: 
     assert not working_copy_db.exists()
     assert handoff["status"] == "forward_handoff_pending"
     assert handoff["production_actions_allowed"] is False
+
+
+def test_cli_does_not_trust_supplied_shadow_ready_status(tmp_path: Path) -> None:
+    source_db, working_copy_db, scenario, replay_summary = _write_inputs(tmp_path)
+    payload = json.loads(replay_summary.read_text(encoding="utf-8"))
+    payload["ml_shadow"] = {
+        "status": "shadow_ready",
+        "dataset_id": "unverified",
+        "total_rows": 0,
+        "accepted_rows": 999,
+    }
+    replay_summary.write_text(json.dumps(payload), encoding="utf-8")
+    output_root = tmp_path / "reports"
+
+    completed = _run_cli(
+        source_db=source_db,
+        working_copy_db=working_copy_db,
+        scenario=scenario,
+        replay_summary=replay_summary,
+        output_root=output_root,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    report = json.loads((output_root / "rehearsal-report.json").read_text(encoding="utf-8"))
+    assert report["ml_shadow"]["status"] in {
+        "boundary_inconsistent",
+        "insufficient_sample",
+        "training_context_required",
+    }
+    assert "ml_shadow:shadow_ready" not in report["blockers"]
 
 
 def test_cli_rejects_same_source_and_working_copy(tmp_path: Path) -> None:

@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
-import shutil
-import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 from uuid import uuid4
 
 from app_module.evidence_event_repository import EvidenceEventRepository
+from app_module.evidence_rehearsal_source_reader import EvidenceRehearsalSourceReader
 from app_module.evidence_pipeline_runner import EvidencePipelineRunner
 from app_module.evidence_pipeline_runner_dtos import EvidencePipelineRunRequest
 from app_module.forward_performance_service import ForwardPerformanceService
@@ -264,7 +263,7 @@ class HistoricalEvidenceReplayService:
             raise FileNotFoundError(str(source_db))
         start_key = _date_key(start_date)
         end_key = _date_key(end_date)
-        with sqlite3.connect(source_db) as conn:
+        with EvidenceRehearsalSourceReader.open_read_only(source_db) as conn:
             rows = conn.execute(
                 """
                 SELECT DISTINCT 日期
@@ -284,11 +283,11 @@ class HistoricalEvidenceReplayService:
             raise FileNotFoundError(str(source_db))
 
     def _prepare_replay_db(self, source_db: Path, replay_db: Path, *, overwrite: bool) -> None:
-        replay_db.parent.mkdir(parents=True, exist_ok=True)
-        if replay_db.exists() and overwrite:
-            replay_db.unlink()
-        if not replay_db.exists():
-            shutil.copy2(source_db, replay_db)
+        EvidenceRehearsalSourceReader().backup_to_working_copy(
+            source_db,
+            replay_db,
+            overwrite=overwrite,
+        )
 
     def _replay_config(self, replay_db: Path) -> TWStockConfig:
         replay_config = TWStockConfig(data_root=self.config.data_root, output_root=self.config.output_root)

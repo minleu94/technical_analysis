@@ -66,7 +66,6 @@ def test_rehearsal_contract_round_trip_is_frozen_and_fail_closed() -> None:
 @pytest.mark.parametrize(
     ("field_name", "invalid_value"),
     (
-        ("source_db_path", "C:/production/evidence.sqlite"),
         ("working_copy_db_path", "C:/prod/evidence.sqlite"),
         ("tier", "formal_evidence"),
         ("production_actions_allowed", True),
@@ -83,8 +82,6 @@ def test_scenario_rejects_production_like_inputs(
 @pytest.mark.parametrize(
     ("field_name", "invalid_value"),
     (
-        ("source_db_path", "C:/fixtures/production_evidence.sqlite"),
-        ("source_db_path", "C:\\fixtures\\prod-evidence.sqlite"),
         ("working_copy_db_path", "C:\\temp\\production_evidence.sqlite"),
         ("working_copy_db_path", "C:/temp/prod-evidence.sqlite"),
     ),
@@ -104,6 +101,12 @@ def test_scenario_allows_ordinary_temp_database_paths() -> None:
     )
 
     assert scenario.source_db_path == "C:/temp/evidence.sqlite"
+
+
+def test_scenario_allows_production_like_source_for_read_only_probe() -> None:
+    scenario = _scenario(source_db_path="D:/formal-data/production/twstock.sqlite")
+
+    assert scenario.source_db_path == "D:/formal-data/production/twstock.sqlite"
 
 
 def test_artifact_rejects_future_available_date() -> None:

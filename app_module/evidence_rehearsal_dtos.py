@@ -48,6 +48,11 @@ def _require_safe_db_path(value: str, field_name: str) -> None:
         raise ValueError(f"{field_name} must not reference a production-like database")
 
 
+def _require_db_source_path(value: str, field_name: str) -> None:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty path")
+
+
 def _require_tier(value: str, field_name: str = "tier") -> None:
     if value not in _ALLOWED_TIERS:
         raise ValueError(f"{field_name} must be a supported evidence tier")
@@ -69,7 +74,7 @@ class EvidenceRehearsalScenario:
 
     def __post_init__(self) -> None:
         _require_date(self.decision_date, "decision_date")
-        _require_safe_db_path(self.source_db_path, "source_db_path")
+        _require_db_source_path(self.source_db_path, "source_db_path")
         _require_safe_db_path(self.working_copy_db_path, "working_copy_db_path")
         _require_tier(self.tier)
         if self.production_actions_allowed is not False:

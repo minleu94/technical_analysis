@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -24,6 +25,10 @@ from app_module.evidence_rehearsal_dtos import (  # noqa: E402
     RehearsalArtifact,
 )
 from app_module.evidence_rehearsal_service import EvidenceRehearsalService  # noqa: E402
+from app_module.evidence_rehearsal_source_reader import (  # noqa: E402
+    EvidenceRehearsalSourceReader,
+    EvidenceRehearsalSourceSnapshot,
+)
 from app_module.evidence_rehearsal_source_comparison import (  # noqa: E402
     P0SourceShadowComparisonService,
 )
@@ -50,6 +55,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--working-copy-db", type=Path, required=True)
     parser.add_argument("--replay-summary", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument(
+        "--execution-mode",
+        choices=("projection_only", "working_copy_e2e"),
+        default="projection_only",
+    )
+    parser.add_argument("--overwrite-working-copy", action="store_true")
     parser.add_argument(
         "--inject-failure",
         choices=(
@@ -107,11 +118,7 @@ def _is_at_or_below(path: Path, root: Path) -> bool:
 def _validate_paths(source_db: Path, working_copy_db: Path, output_root: Path) -> None:
     if source_db.expanduser().resolve() == working_copy_db.expanduser().resolve():
         raise ValueError("working-copy DB must differ from source DB")
-    for label, path in (
-        ("source DB", source_db),
-        ("working-copy DB", working_copy_db),
-        ("output root", output_root),
-    ):
+    for label, path in (("working-copy DB", working_copy_db), ("output root", output_root)):
         if _is_production_like(path):
             raise ValueError(f"{label} must not be production-like")
     if not source_db.is_file():
@@ -146,11 +153,20 @@ def _build_report(
     scenario: EvidenceRehearsalScenario,
     replay_summary: Mapping[str, object],
     injection_name: str | None,
+    *,
+    execution_mode: str = "projection_only",
+    source_snapshot: EvidenceRehearsalSourceSnapshot | None = None,
+    working_copy_created: bool = False,
+    coherence_blocker: str | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    replay_artifacts = HistoricalReplayRehearsalAdapter().project(
-        replay_summary,
-        decision_date=scenario.decision_date,
-        rollback_reference="rehearsal:dry-read-only",
+    replay_artifacts = (
+        ()
+        if coherence_blocker is not None
+        else HistoricalReplayRehearsalAdapter().project(
+            replay_summary,
+            decision_date=scenario.decision_date,
+            rollback_reference="rehearsal:projection-only",
+        )
     )
     coverage = _coverage_from_replay(replay_artifacts, scenario.decision_date)
     rehearsal_report = EvidenceRehearsalService().build(
@@ -162,6 +178,8 @@ def _build_report(
     ).build_report().to_dict()
     ml_shadow = _ml_shadow_from_replay(replay_summary)
     blockers = list(_rehearsal_blockers(rehearsal_report))
+    if coherence_blocker is not None:
+        blockers.append(coherence_blocker)
     for item in p0_shadow["items"]:
         if isinstance(item, Mapping):
             source_id = item.get("source_id")
@@ -183,20 +201,49 @@ def _build_report(
         }
     )
     execution = {
-        "mode": "dry_read_only",
-        "source_db_opened": False,
-        "working_copy_created": False,
+        "mode": execution_mode,
+        "source_db_opened": source_snapshot is not None,
+        "source_db_write_performed": False,
+        "working_copy_created": working_copy_created,
+        "working_copy_write_performed": working_copy_created,
+        "production_db_write_performed": False,
         "db_write_performed": False,
         "scheduler_invoked": False,
         "broker_invoked": False,
         "advice_invoked": False,
         "promotion_invoked": False,
     }
+    semantic_fingerprint = _semantic_fingerprint(
+        scenario=scenario,
+        replay_summary=replay_summary,
+        source_snapshot=source_snapshot,
+        coherence_blocker=coherence_blocker,
+    )
     report = {
-        "contract_version": 1,
+        "contract_version": 2,
         "status": status,
         "scenario": scenario.to_dict(),
         "execution": execution,
+        "source_snapshot": (
+            source_snapshot.to_dict()
+            if source_snapshot is not None
+            else {
+                "opened": False,
+                "access_mode": "not_opened_projection_only",
+                "schema_fingerprint": None,
+                "table_row_counts": {},
+                "p0_observations": [],
+                "diagnostics": [],
+            }
+        ),
+        "semantic_fingerprint": semantic_fingerprint,
+        "lineage": {
+            "status": "pending_orchestration",
+            "artifact_dag": {},
+            "artifact_hashes": {},
+        },
+        "formal_product_closeout": False,
+        "production_actions_allowed": False,
         "injection": injection,
         "blockers": blockers,
         "rehearsal_report": rehearsal_report.to_dict(),
@@ -206,7 +253,7 @@ def _build_report(
         "historical_replay_artifacts": [artifact.to_dict() for artifact in replay_artifacts],
     }
     handoff = {
-        "contract_version": 1,
+        "contract_version": 2,
         "status": "forward_handoff_pending",
         "scenario_id": scenario.scenario_id,
         "decision_date": scenario.decision_date,
@@ -306,11 +353,15 @@ def _p0_observations_from_replay(
 def _ml_shadow_from_replay(replay_summary: Mapping[str, object]) -> dict[str, object]:
     value = replay_summary.get("ml_shadow")
     if isinstance(value, Mapping):
-        projection = dict(value)
-        projection["shadow_only"] = True
-        projection["production_action_allowed"] = False
-        if isinstance(projection.get("status"), str):
-            return projection
+        return {
+            "status": "training_context_required",
+            "dataset_id": str(value.get("dataset_id") or "unverified_input"),
+            "total_rows": 0,
+            "accepted_rows": 0,
+            "shadow_only": True,
+            "production_action_allowed": False,
+            "disclosure": "Supplied ML status is untrusted until manifest and boundary inputs are validated.",
+        }
     return {
         "status": "insufficient_sample",
         "dataset_id": "not_provided",
@@ -352,7 +403,8 @@ def _render_markdown(report: Mapping[str, object], handoff: Mapping[str, object]
         f"- mode: `{execution['mode']}`\n"
         f"- injection: `{injection['name']}`\n\n"
         "## Safety Boundary\n\n"
-        "- The source DB was not opened and the working-copy DB was not created.\n"
+        f"- Source DB opened read-only: `{execution['source_db_opened']}`.\n"
+        f"- Isolated working copy created: `{execution['working_copy_created']}`.\n"
         "- No production DB write, scheduler, broker, Advice, or promotion action was invoked.\n"
         "- This is engineering/replay rehearsal output, never forward evidence.\n\n"
         "## Blockers\n\n"
@@ -377,6 +429,42 @@ def _write_package(output_root: Path, report: Mapping[str, object], handoff: Map
     )
 
 
+def _replay_decision_date(payload: Mapping[str, object]) -> str | None:
+    days = payload.get("days")
+    if not isinstance(days, list):
+        return None
+    values = [
+        str(item.get("decision_date"))
+        for item in days
+        if isinstance(item, Mapping) and isinstance(item.get("decision_date"), str)
+    ]
+    return max(values) if values else None
+
+
+def _semantic_fingerprint(
+    *,
+    scenario: EvidenceRehearsalScenario,
+    replay_summary: Mapping[str, object],
+    source_snapshot: EvidenceRehearsalSourceSnapshot | None,
+    coherence_blocker: str | None,
+) -> str:
+    payload = {
+        "scenario_id": scenario.scenario_id,
+        "decision_date": scenario.decision_date,
+        "replay_run_id": replay_summary.get("replay_run_id"),
+        "replay_decision_date": _replay_decision_date(replay_summary),
+        "schema_fingerprint": (
+            source_snapshot.schema_fingerprint if source_snapshot is not None else None
+        ),
+        "table_row_counts": (
+            dict(source_snapshot.table_row_counts) if source_snapshot is not None else {}
+        ),
+        "coherence_blocker": coherence_blocker,
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -387,16 +475,41 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_db=args.source_db,
             working_copy_db=args.working_copy_db,
         )
+        replay_summary = _read_json_mapping(args.replay_summary, "replay summary")
+        replay_decision_date = _replay_decision_date(replay_summary)
+        coherence_blocker = (
+            "scenario_replay_decision_date_mismatch"
+            if replay_decision_date is not None
+            and replay_decision_date != scenario.decision_date
+            else None
+        )
+        source_snapshot = None
+        working_copy_created = False
+        if args.execution_mode == "working_copy_e2e" and coherence_blocker is None:
+            reader = EvidenceRehearsalSourceReader()
+            source_snapshot = reader.read(
+                args.source_db, decision_date=scenario.decision_date
+            )
+            reader.backup_to_working_copy(
+                args.source_db,
+                args.working_copy_db,
+                overwrite=args.overwrite_working_copy,
+            )
+            working_copy_created = True
         report, handoff = _build_report(
             scenario,
-            _read_json_mapping(args.replay_summary, "replay summary"),
+            replay_summary,
             args.inject_failure,
+            execution_mode=args.execution_mode,
+            source_snapshot=source_snapshot,
+            working_copy_created=working_copy_created,
+            coherence_blocker=coherence_blocker,
         )
         _write_package(args.output_root, report, handoff)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps({"status": report["status"], "output_root": str(args.output_root)}, ensure_ascii=False))
-    return 0
+    return 2 if coherence_blocker is not None else 0
 
 
 if __name__ == "__main__":
