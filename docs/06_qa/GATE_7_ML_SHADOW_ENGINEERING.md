@@ -15,3 +15,7 @@ Feature 必須滿足 `feature.available_date <= row.decision_date`。Label 可�
 ## Purged walk-forward
 
 模型驗證使用 expanding walk-forward，不使用 random shuffle/K-fold。每個 fold 的 train decision dates 早於 test，且 train label end 不得跨入 test start；test blocks 之間保留明確 embargo。Fold 生成對未來資料保持 prefix invariance。
+
+## Boosted challengers
+
+第一組完整 challenger 使用 scikit-learn histogram gradient boosting：regressor 同時提供 future return bp prediction 與 ranking score，classifier 提供 downside probability。訓練要求 feature shape 一致、有限值、至少十列及 downside 兩類樣本。Bundle 固定 `shadow_only=true`、`production_eligible=false`；float 僅存在 `ml_module` 模型邊界。
