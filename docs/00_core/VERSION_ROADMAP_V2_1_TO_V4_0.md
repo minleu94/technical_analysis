@@ -76,7 +76,7 @@ Closeout Gate：Advice 可拒絕、可重算、可回溯；UI 不直接計算；
 
 Closeout Gate：production evidence scheduler 如獲批准只保存 evidence；不自動交易、不套 lifecycle action。
 
-**目前版本狀態（2026-07-12）**：V2.2 的 weekly review CLI、append-only history 操作介面、working-copy runbook 與 scheduler approval package 已具 engineering readiness；weekly history 實際仍為 `0/3 waiting_for_time`，multi-day dry-run 已為 `3/3 ready`，scheduler 未獲核准且 `production_scheduler_allowed=false`。因此不得建立 V2.2 formal closeout，也不得將 `--save-history`、replay、fixture、raw scheduled report 或單次 smoke 解讀為真實三週 Gate。工程 readiness 詳見 `docs/06_qa/V2_2_ENGINEERING_READINESS_2026_07_12.md`；三週人工操作格式詳見 `docs/07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md`。本狀態不改變本節 maturity definition，亦不代表 production trading、lifecycle action 或投資有效性。
+**目前版本狀態（2026-07-12）**：V2.2 的 weekly review CLI、append-only history 操作介面、working-copy runbook 與 scheduler approval package 已具 engineering readiness；2026-07-06 至 2026-07-12 的 Week 1 已以隔離 working-copy 完成 repeat=2 idempotency smoke、人工 review 與 append-only history，weekly history 為 `1/3 waiting_for_time`。multi-day dry-run 已為 `3/3 ready`，scheduler 未獲核准且 `production_scheduler_allowed=false`。因此不得建立 V2.2 formal closeout，也不得將 replay、fixture、raw scheduled report 或單次 smoke 解讀為 Week 2 / Week 3。Week 1 證據見 `docs/06_qa/V2_2_WEEK1_REVIEW_2026_07_12.md`；三週人工操作格式詳見 `docs/07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md`。本狀態不代表 production trading、lifecycle action 或投資有效性。
 
 ### V2.3：P0 Data Credibility
 
@@ -121,6 +121,8 @@ Closeout Gate：每個 transition 可解釋、可回溯；不自動平倉。
 
 **目前版本狀態（2026-07-12）**：V2.5 已有 read-only `PositionHealthService` 與 sample report，將既有 condition、feedback 與 source trace 投影為 HEALTHY / WATCH / EXIT_CANDIDATE，固定 `auto_action_allowed=false`。缺 condition 或 source trace 時維持 WATCH；它不讀實際持倉、不寫 DB、不自動減碼或平倉。工程 readiness 詳見 `docs/06_qa/V2_5_ENGINEERING_READINESS_2026_07_12.md`；真實 thesis、人工 state transition 與 decision journal 尚未累積，故 formal closeout 尚未建立。
 
+**Paper baseline 補充（2026-07-12）**：V2.4 已用 `scheduled_rec_20260712_051002` 建立第一個真實 saved-Recommendation paper baseline，3 筆 allocation 的紙上可執行總額為 NT$159,000、殘餘現金 NT$341,000；V2.5 已由相同 artifact 建立 3 筆 `WATCH` health baseline，並將 thesis / invalidation / horizon / review date 保留為必填人工欄位。兩者均不寫持倉 DB、不下單、不自動 action；尚缺後續交易日 paper evidence、成本後 benchmark、人工 thesis 與 state transition，不能 formal closeout。證據見 `docs/06_qa/V2_4_PAPER_BASELINE_2026_07_12.md`、`docs/06_qa/V2_5_POSITION_HEALTH_BASELINE_2026_07_12.md`。
+
 ## 5. V3.x：Signal、Portfolio、Exit、Pruning、ML Shadow、Paper Validation
 
 ### V3.0：Signal Effectiveness & Pruning
@@ -135,6 +137,8 @@ Closeout Gate：每個 transition 可解釋、可回溯；不自動平倉。
 - Signal / gate / alert / Profile 的 retain / restrict / downweight / retire 決議。
 
 現況邊界：2026-07 的 score effectiveness / V3 engineering candidate 只代表 read-only scaffold 與 `ready_for_manual_validation`，不是本版本 closeout。
+
+**Week 1 人工驗證（2026-07-12）**：真實 working-copy 只有 3 筆有 score 的事件，12 個 outcome 全為 missing，另有 1,134 個事件缺 `score_bp`；所有 score bucket 均未達 30 筆成熟樣本門檻。因此本輪正式決議為 `DEFER_ALL_PRUNING_DECISIONS`，不調整 score、threshold、Profile、gate、alert 或 lifecycle。證據見 `docs/06_qa/V3_0_WEEK1_MANUAL_VALIDATION_2026_07_12.md`。
 
 **目前版本狀態（2026-07-12）**：V3.0 focused suite 重新驗證 26 passed，artifact readiness 為 complete 且無程式 blocking gap；sample evidence 仍有樣本不足、產業 benchmark 缺口及舊 screening-matrix payload gap。故狀態維持 `ready_for_manual_validation`，任何正式 effectiveness、pruning 或版本 closeout 均未成立。
 
