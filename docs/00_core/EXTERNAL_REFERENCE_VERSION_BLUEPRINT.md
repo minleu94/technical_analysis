@@ -1,6 +1,7 @@
 # 外部專案參考與未來版本藍圖
 
 > **最後更新**：2026-07-11
+> **狀態校正**：P0 adapters 已完成 shadow engineering，但仍須逐來源 license / quality / PIT 人工接受；candidate 不得進 ScoringEngine 或 formal Advice。
 > **定位**：本文件是 `ROADMAP_6M_ENGINEERING.md`、`VERSION_ROADMAP_V1_1_TO_V2_0.md` 與 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的參考 companion。它負責保存外部開源專案對照、資料源補強優先序、可借鑑設計、Blueprint 衝突檢查與 V1.8 至 V2.0 版本形狀；不取代 Vision、Snapshot、6M Roadmap、長期版本階梯或 Architecture。
 
 ---

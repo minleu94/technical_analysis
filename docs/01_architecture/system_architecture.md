@@ -1,6 +1,7 @@
 ﻿# 系統架構
 
 > **最後更新**：2026-07-12
+> **工程補充**：Advice 已是 CURRENT bounded/read-only；Portfolio 與 Position Health/Exit 是 CURRENT_ENGINEERING proposal/paper；P0 adapters 與 ML 固定 candidate/shadow。跨 repository 由 `artifact_lineage_verifier.py` 唯讀驗證，外部 Gate 仍以 `EngineeringGateRegistry` 為 SSOT。
 > **定位**：本文件是目前模組邊界、依賴方向、資料流與高風險技術契約的架構權威。歷史遷移過程不在本文件維護。
 > **Target companion**：理想目標架構、Current → Transitional → Target 演進與尚未存在的領域邊界見 [target_system_architecture.md](target_system_architecture.md)；該文件不代表目前已實作，也不授權立即建立新 package。
 

@@ -44,12 +44,12 @@
 |---|---|---|---|
 | Decision Workbench / UI | `ui_qt/` Workbench、Market、Recommendation、Research、Portfolio 等工作區 | Workbench 以 Advice / Portfolio / Health read models 統一第一屏，舊頁保留 drill-down | 任務導向決策工作台；Guided / Professional 共用 UI shell 與核心 DTO |
 | Application Orchestration | `app_module/` 大量 use case / DTO / repository / composer | 建立明確 application façade、command/query、transaction / approval boundary | UI 只依賴 application ports；跨領域流程由 orchestration 組合，不把 domain 規則塞入 service |
-| Advice Policy | 尚無單一正式 bounded advice owner | 先在 `app_module` 建 policy façade、Advice DTO 與拒絕輸出規則 | `advice_module` 候選或中立 domain package；統一 action、evidence tier、risk、mode 與 permission |
+| Advice Policy | `CURRENT`：`app_module` 已有 policy façade、Advice DTO、拒絕輸出與 Workbench projection | 維持 deterministic owner 與 canonical lineage projection | 抽成中立 package屬非 blocking reposition |
 | Market Intelligence | 分散在 `app_module` / `decision_module` / data provider | 以 ports / read models 統一 market state、breadth、rotation、liquidity | `market_module` 候選，成為獨立市場語意領域 |
 | Recommendation Engine & Screening | `RecommendationService`、`ScoringEngine`、Screener、Profile | 保留現行核心，增加 Advice adapter 與 Promotion status gate | 只產生候選、ranking、Why/Why Not，不直接決定 Portfolio 或 broker action |
 | Research / Backtest / Evidence | Backtest、Replay、Registry、Evidence Store / dashboards | 統一 Experiment Contract、Evidence tiers、metric decision mapping | 研究與 production advice 以 registry / promotion boundary 分離 |
 | Portfolio Construction | research-only sandbox + existing portfolio tracking | 建 Policy / Advice façade，Equal Weight benchmark、risk budget、paper portfolio | 組合建議、risk model、rebalance bands 與 execution feasibility 的獨立 domain boundary |
-| Position Health & Exit | Condition / SLTP / Chip / lifecycle review | 建 thesis-based state machine 與 Exit Advice read model | `position_health` 候選 domain；Hard Risk / thesis / relative / time / portfolio / data 分流 |
+| Position Health & Exit | `CURRENT_ENGINEERING`：thesis contract、state machine、append-only transition、Exit read model | 累積真實 thesis、人工 transition 與 exit outcome | domain reposition候選；不自動平倉 |
 | Data Source Governance | `data_module` registry / policy / candidate readiness | Source Registry、Control Center、quarantine、eligibility port | 所有來源具 PIT、quality、license、missing 與 downstream eligibility；未接受來源無法進 formal layer |
 | Execution Realism | Backtest broker simulator、sandbox trace | 統一 execution assumption / feasibility / rejected taxonomy | 研究撮合與 broker execution port 分離；正式系統仍不提供 broker command |
 | ML Shadow Layer | readiness contract / engineering candidate | Feature / Label / Dataset / Model Registry 與 shadow store | `ml_module` 候選；Challenger 只透過 Promotion Review 影響 formal Advice |
@@ -74,11 +74,11 @@ flowchart TB
     end
 
     subgraph Domain["Decision Domains"]
-        Advice["Advice Policy\nTARGET_ONLY boundary"]
+        Advice["Advice Policy\nCURRENT bounded / read-only"]
         Market["Market Intelligence\nREPOSITION / TARGET_ONLY"]
         Reco["Recommendation & Screening\nCURRENT"]
         Portfolio["Portfolio Construction\nTRANSITIONAL"]
-        Health["Position Health & Exit\nTARGET_ONLY boundary"]
+        Health["Position Health & Exit\nCURRENT_ENGINEERING / proposal-only"]
         Research["Research / Backtest / Evidence\nCURRENT"]
         ML["ML Shadow Layer\nCANDIDATE"]
     end
@@ -256,7 +256,7 @@ flowchart LR
 - **Dependencies**：domain DTO / ports，不依賴 UI / vendor。
 - **Persistent artifacts**：advice snapshot、policy version、decision reasons。
 - **Failure / degraded**：輸出 `RESEARCH` / `AVOID` / `NO_NEW_POSITION`。
-- **Current status**：`TARGET_ONLY`；現有能力分散。
+- **Current status**：`CURRENT` bounded/read-only；Advice policy/composer/DTO 已形成 deterministic owner。這不代表投資有效性或 broker execution。
 - **Target status**：單一正式 advice owner。
 - **修改正式決策**：是，但僅 deterministic、版本化、可回滾 policy。
 
@@ -316,7 +316,7 @@ flowchart LR
 - **Dependencies**：Portfolio、Market、Data Governance、Evidence。
 - **Persistent artifacts**：thesis、invalidation、transitions、decision journal。
 - **Failure / degraded**：關鍵資料缺失時 `WATCH`，Hard Risk 可直接 `EXIT_CANDIDATE` 但仍需人工執行。
-- **Current status**：`TARGET_ONLY` 統一邊界；局部監控已存在。
+- **Current status**：`CURRENT_ENGINEERING / proposal-only`；thesis contract、state machine、append-only transition 與 exit read model 已存在。真實 thesis、人工 transition 與 outcome仍屬外部 Gate。
 - **Target status**：獨立 state machine / evidence owner。
 - **修改正式決策**：可產生 Candidate advice；不可平倉。
 

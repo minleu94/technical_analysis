@@ -252,6 +252,8 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_watchlist_trigger_evidence_importer.py": "service-oracle-portfolio-decision-runtime",
 
     # governance-doc-tooling
+    "tests/test_artifact_lineage_cli.py": "governance-doc-tooling",
+    "tests/test_artifact_lineage_verifier.py": "governance-doc-tooling",
     "tests/test_audit_document_encoding.py": "governance-doc-tooling",
     "tests/test_decision_quality_no_trading_language.py": "governance-doc-tooling",
     "tests/test_evidence_pipeline_report.py": "governance-doc-tooling",

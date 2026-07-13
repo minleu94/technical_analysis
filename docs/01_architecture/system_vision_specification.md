@@ -1,6 +1,7 @@
 # baldr 系統願景規格
 
 > **最後更新**：2026-07-11
+> **目前成功層級**：`V3.3 Engineering Complete` 只表示工程入口可運作、驗證、追溯與回滾；Evidence Accumulation Track 不等同投資有效性或正式 V4.0。
 > **定位**：本文件是 baldr 的 North Star、Product Principles、Bounded Advice Policy、Evidence Requirements、Success Levels 與 Non-goals 權威。
 > **不保存**：目前完成流水帳、詳細工程 checklist、外部專案清單或現況架構細節。
 > **Scoped SSOT**：目前狀態看 [PROJECT_SNAPSHOT.md](../00_core/PROJECT_SNAPSHOT.md)；產品演進看 [PRODUCT_ROADMAP_POST_REFACTOR.md](../00_core/PRODUCT_ROADMAP_POST_REFACTOR.md)；六個月工程 Gate 看 [ROADMAP_6M_ENGINEERING.md](../00_core/ROADMAP_6M_ENGINEERING.md)；目前架構看 [system_architecture.md](system_architecture.md)；目標架構看 [target_system_architecture.md](target_system_architecture.md)。

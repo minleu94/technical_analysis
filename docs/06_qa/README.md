@@ -1,5 +1,7 @@
 # QA 相關文檔目錄
 
+- [V3.3 Engineering Closeout](V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)：15 capability、lineage verifier、operations handoff 與 external-only 清單。
+
 > **QA 驗證和問題文檔**
 
 本目錄包含所有 QA 相關的文檔。
