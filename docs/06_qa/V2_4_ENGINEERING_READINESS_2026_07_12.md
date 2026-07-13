@@ -27,9 +27,9 @@
 
 ## 不可自動關閉的 residual
 
-1. 使用者需確認平衡風險政策的實際數值：最低現金、最大持倉數、單檔／產業曝險、rebalance band、minimum trade、turnover 與 cooldown。
-2. 需要真實時間的 Paper Portfolio 觀察、成本與滑價假設 review、execution feasibility review，以及人工 decision journal。
-3. 需確認 target/current/gap 在實際 paper position 與限制情境下仍可讀且 `NO_NEW_POSITION` 行為符合預期。
+1. 平衡風險政策數值已由 `V2_4_PAPER_POLICY_APPROVAL_2026_07_12.md` 核准，並已用真實 saved Recommendation 建立第一個 paper baseline；見 `V2_4_PAPER_BASELINE_2026_07_12.md`。
+2. 仍需要後續真實時間的 Paper Portfolio 觀察、成本與滑價假設 review、Equal Weight 成本後比較、execution feasibility review，以及人工 decision journal。
+3. 第一個 baseline 已驗證 target / constrained / residual cash 可讀；仍需在後續 paper position 與限制情境驗證 current / gap 與 `NO_NEW_POSITION` 行為。
 4. broker、真實下單、自動配置、自動再平衡與正式投資有效性仍不在範圍。
 
 ## 結論
