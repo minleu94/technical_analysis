@@ -57,10 +57,10 @@ class PositionHealthStateMachine:
             visible[metric.metric_id] = metric
         triggered: list[str] = []
         for rule in thesis.invalidation_rules:
-            metric = visible.get(rule.metric_id)
-            if metric is None:
+            observed_metric = visible.get(rule.metric_id)
+            if observed_metric is None:
                 reasons.append(f"missing_metric:{rule.metric_id}")
-            elif _matches(rule, metric.value):
+            elif _matches(rule, observed_metric.value):
                 triggered.append(f"invalidation_triggered:{rule.metric_id}")
         if triggered:
             state = PositionHealthState.EXIT_CANDIDATE

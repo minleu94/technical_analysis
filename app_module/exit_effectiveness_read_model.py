@@ -70,8 +70,13 @@ class ExitEffectivenessReadModel:
         reason_code: str, rows: tuple[ExitEffectivenessObservation, ...]
     ) -> ExitEffectivenessSlice:
         ready = tuple(row for row in rows if row.maturity_status == "ready")
-        avoided = tuple(-int(row.post_exit_return_bp) for row in ready if int(row.post_exit_return_bp) < 0)
-        regret = tuple(int(row.post_exit_return_bp) for row in ready if int(row.post_exit_return_bp) > 0)
+        post_exit_returns = tuple(
+            row.post_exit_return_bp
+            for row in ready
+            if row.post_exit_return_bp is not None
+        )
+        avoided = tuple(-value for value in post_exit_returns if value < 0)
+        regret = tuple(value for value in post_exit_returns if value > 0)
         realized = tuple(row.realized_return_bp for row in ready if row.realized_return_bp is not None)
         return ExitEffectivenessSlice(
             reason_code=reason_code,

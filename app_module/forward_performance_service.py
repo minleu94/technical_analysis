@@ -158,7 +158,9 @@ class ForwardPerformanceService:
         event_price_date = str(event_price.price_date)
         event_close = event_price.close
         assert event_close is not None
-        event_price_metadata = {"return_basis": "close_to_close_event_date"}
+        event_price_metadata: dict[str, Any] = {
+            "return_basis": "close_to_close_event_date"
+        }
         if event_price.fallback_reason is not None:
             event_price_metadata["event_price_fallback_reason"] = event_price.fallback_reason
         maturity = self._outcome_maturity(

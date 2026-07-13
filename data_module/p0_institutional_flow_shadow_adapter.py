@@ -34,7 +34,12 @@ class InstitutionalFlowShadowAdapter:
             buy = row.get(f"{actor}_buy")
             sell = row.get(f"{actor}_sell")
             net = row.get(f"{actor}_net")
-            if all(isinstance(value, int) for value in (buy, sell, net)) and buy - sell != net:
+            if (
+                isinstance(buy, int)
+                and isinstance(sell, int)
+                and isinstance(net, int)
+                and buy - sell != net
+            ):
                 diagnostics.append(f"{actor}_net_mismatch")
         blocking = tuple(sorted(set(diagnostics)))
         disclosures = (*blocking, "single_day_flow_is_not_a_trading_signal")
