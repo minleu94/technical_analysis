@@ -37,7 +37,7 @@ Coverage 以 `CoverageMetric` 的 observed、missing、degraded、future-blocked
 
 ## 驗證紀錄
 
-本次工作樹驗證結果如下；QA raw output 不提交，可分享的完整命令紀錄見 `.superpowers/sdd/two-day-task-9-report.md`。
+本次工作樹驗證結果如下。QA raw output 不提交；下列命令是從 repository root 可完整重跑的 PowerShell closeout sequence。
 
 | 檢查 | 結果 |
 |---|---|
@@ -45,9 +45,58 @@ Coverage 以 `CoverageMetric` 的 observed、missing、degraded、future-blocked
 | 指定 UI pytest | `59 passed` |
 | Update Tab QA | `23 passed / 0 failed / 4 skipped` |
 | 全模組 mypy | `406 source files` 無 issue |
-| UTF-8 encoding | 660 files；0 invalid UTF-8、0 mojibake warning |
+| UTF-8 encoding | 661 files；0 invalid UTF-8、0 mojibake warning |
 | 相對 Markdown links / active index | 345 files 均可解析；closeout 已列入 Documentation Index |
 | Quant guard / Look-ahead | 全部通過 |
 | ML shadow boundary | 351 files，0 violation，`shadow_only=true` |
 | Gate 2–7 verifier | engineering package `complete`、external validation `pending`、35/35 requirements；非 formal product closeout |
 | 變更 Python `py_compile` / `git diff --check` | 全部通過 |
+
+### 可重跑 PowerShell closeout sequence
+
+```powershell
+$ErrorActionPreference = "Stop"
+
+function Invoke-Verification {
+    param([scriptblock]$Command)
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "Verification failed with exit code $LASTEXITCODE"
+    }
+}
+
+Invoke-Verification { .\.venv\Scripts\python.exe -m pytest -q -o addopts= }
+Invoke-Verification { .\.venv\Scripts\python.exe -m pytest tests\test_ui_qt_update_view_workbench.py tests\test_ui_qt_workbench_view.py -q -o addopts= }
+Invoke-Verification { .\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py }
+Invoke-Verification { .\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime }
+Invoke-Verification { .\.venv\Scripts\python.exe scripts\audit_document_encoding.py --root . --fail-on-mojibake }
+
+@'
+from pathlib import Path
+import re
+
+root = Path.cwd()
+files = [*root.joinpath("docs").rglob("*.md"), root / "PROJECT_NAVIGATION.md"]
+pattern = re.compile(r"(?<!\!)\[[^\]]+\]\(([^)]+)\)")
+missing = []
+for path in files:
+    for target in pattern.findall(path.read_text(encoding="utf-8")):
+        target = target.split("#", 1)[0].strip()
+        if target and "://" not in target and not target.startswith("mailto:") and not (path.parent / target).resolve().exists():
+            missing.append(f"{path.relative_to(root)} -> {target}")
+if missing:
+    raise SystemExit("missing relative markdown links:\n" + "\n".join(missing))
+print(f"relative_markdown_links_ok={len(files)} files")
+'@ | .\.venv\Scripts\python.exe -
+if ($LASTEXITCODE -ne 0) { throw "Relative Markdown link verification failed" }
+
+Invoke-Verification { rg -n "EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14" docs\00_core\DOCUMENTATION_INDEX.md }
+Invoke-Verification { .\.venv\Scripts\python.exe scripts\quant_guard_linter.py }
+Invoke-Verification { .\.venv\Scripts\python.exe scripts\check_ml_shadow_boundary.py }
+New-Item -ItemType Directory -Force output\qa | Out-Null
+Invoke-Verification { .\.venv\Scripts\python.exe scripts\verify_gate_2_to_7_closeout.py --output output\qa\task9_gate_2_to_7_closeout.json }
+Invoke-Verification { .\.venv\Scripts\python.exe -m py_compile app_module\engineering_closure_dashboard_service.py app_module\historical_evidence_replay.py qa\full_app_healthcheck\test_inventory.py tests\test_engineering_closure_dashboard_service.py tests\test_full_app_healthcheck_test_inventory.py tests\test_ui_qt_workbench_view.py }
+Invoke-Verification { git diff --check }
+```
+
+`output\qa\task9_gate_2_to_7_closeout.json` 與 Update Tab QA 產物都是 ignored local output，不能 stage 或提交。Gate verifier 的 `--output` 是必要參數；其 output 的 engineering package 結果不會覆寫 external register 狀態。
