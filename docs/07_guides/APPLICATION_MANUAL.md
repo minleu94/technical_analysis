@@ -987,6 +987,8 @@ V1.8 後，可用 Portfolio Sandbox inspection CLI 檢查研究用 allocation / 
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format json
+ .\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format markdown
+```
 
 V2.4 紙上政策可用下列唯讀 CLI 檢查。它固定使用核准的平衡型參數，對現金、單檔、產業、週轉與 cooldown 限制產生 `PAPER_TRADE_CANDIDATE` 或 `NO_PAPER_TRADE`；結果不是交易指令，也不讀實際持倉或寫入任何資料庫。
 
@@ -994,12 +996,22 @@ V2.4 紙上政策可用下列唯讀 CLI 檢查。它固定使用核准的平衡�
 .\.venv\Scripts\python.exe scripts\inspect_paper_portfolio_policy.py --sample --format json
 ```
 
+若要從已保存 Recommendation 建立第一個真實資料 paper baseline，使用下列命令。輸出只寫 JSON artifact，不寫 Portfolio DB、不產生 broker order、不自動再平衡；正式操作前仍需確認來源 result ID 與輸出位置。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_paper_portfolio_baseline.py --recommendation-json <saved-recommendation.json> --output <paper-baseline.json>
+```
+
 V2.5 可用下列唯讀 CLI 檢查持倉健康狀態的輸出形狀。它以內建樣本顯示 thesis／condition／feedback 缺口如何形成 `HEALTHY`、`WATCH` 或 `EXIT_CANDIDATE`；任何狀態都不是交易或平倉指令，`auto_action_allowed` 固定為 false。
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_position_health.py --sample --format json
 ```
-.\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format markdown
+
+可由 paper baseline 建立 fail-closed health baseline；缺 entry thesis、invalidation、holding horizon 或 review date 時固定為 `WATCH`，並列為人工必填欄位。此命令不寫正式持倉，也不允許自動 action。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_position_health_baseline.py --paper-baseline <paper-baseline.json> --output <health-baseline.json>
 ```
 
 目前支援的 allocation method 為 `equal_weight`、`score_weight` 與 `inverse_volatility`。`max_position_weight_bp` 只會限制單一部位上限，不會自動把超出的權重重新分配到其他股票；買不起最小 lot 或套用上限後的現金差額會留在 `residual_cash` 與 diagnostics。Virtual trace 支援 `created`、`submitted`、`partially_filled`、`filled`、`rejected`；`cancelled`、零股、買賣價差、完整撮合與 gap actual execution model 仍是後續 execution-model residual。
@@ -1136,7 +1148,7 @@ Report evidence boundary 固定為：This report is research evidence only. Clos
 
 V2.2 的固定三週人工覆盤格式與 working-copy 操作順序見 `docs/07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md`。每週必填週期日期、資料 freshness、dry-run 狀態、warnings、reviewed / dismissed / follow-up、owner、working-copy DB path、`--save-history` 結果與下一步；少任何一項都不能計入三週 Gate。先以既有 copy/guard 建立隔離副本，再產生唯讀週報；取得明確人工核准後，在同一次 working-copy 操作使用 `--confirm-action-items --save-history --action-owner`，最後以 `--list-history` 唯讀核對。不要對正式 DB 保存 history；production-like DB 強制拒絕，沒有 `--allow-production-like-db` 可用。
 
-截至 2026-07-12，weekly history 為 `0/3 waiting_for_time`，multi-day dry-run 為 `3/3 ready`，scheduler 尚未獲核准且 `production_scheduler_allowed=false`。因此不可建立 V2.2 formal closeout；replay、fixture、raw scheduled report、單次 smoke 或手動補表都不構成真實 weekly history。三週紀錄完成後，仍需人工完成 backup / rollback / recovery 演練與 scheduler approval package；日後若 scheduler 獲准，也只能保存 evidence，不得自動交易或套用 lifecycle action。
+截至 2026-07-12，Week 1 已完成並保存於隔離 working-copy，weekly history 為 `1/3 waiting_for_time`；multi-day dry-run 為 `3/3 ready`，scheduler 尚未獲核准且 `production_scheduler_allowed=false`。因此不可建立 V2.2 formal closeout；replay、fixture、raw scheduled report、單次 smoke 或手動補表都不能補足 Week 2 / Week 3。三週紀錄完成後，仍需人工完成 backup / rollback / recovery 演練與 scheduler approval package；日後若 scheduler 獲准，也只能保存 evidence，不得自動交易或套用 lifecycle action。
 
 ### 9.9.3 Evidence Review Manual Smoke / Multi-day Dry-run
 
