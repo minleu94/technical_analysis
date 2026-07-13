@@ -1,6 +1,8 @@
 # Gate 7 ML Shadow Engineering
 
-> 狀態：engineering in progress / shadow only
+> 狀態：純工程已完成 / shadow only；等待真實 shadow days、成熟 labels、revalidation 與人工 promotion review，不具 production eligibility。
+
+> **Agent 接手導覽**：工程切片與驗證證據見 [Pure Engineering Closeout](GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md)；待辦狀態以 [External Validation Register](GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) 為準；append-only 更新方式見 [Engineering Control Center](GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md)。
 
 Gate 7 使用隔離的 `ml_module/` 建立結構化傳統 ML challenger。此工程不取代 rule-generated signals、不修改推薦 threshold、不接 production scheduler、不產生交易建議，也不具有 production eligibility。
 

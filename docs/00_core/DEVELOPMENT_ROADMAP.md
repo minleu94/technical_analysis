@@ -21,6 +21,7 @@
 | [target_system_architecture.md](../01_architecture/target_system_architecture.md) | Transitional / Target Architecture、產品領域邊界、治理與決策權限；不代表目前已實作。 |
 | [system_vision_specification.md](../01_architecture/system_vision_specification.md) | North Star、Product Principles、Bounded Advice、Evidence Requirements、Success Levels 與 Non-goals。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 文檔導航與文件所在位置，不作為功能或狀態事實來源。 |
+| [GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md) | Gate 2–7 純工程完成後的接手入口；導向外部驗證、append-only gate revisions 與 ML 重驗流程，不取代各主題 SSOT。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與結案 Gate。 |
 | [DEVELOPMENT_ROADMAP_LEGACY_2026_06.md](../09_archive/DEVELOPMENT_ROADMAP_LEGACY_2026_06.md) | 舊線性 Phase、歷史 Done、舊 Roadmap current section；只作追溯，不作目前狀態依據。 |
 
@@ -45,7 +46,7 @@ baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資�
 
 ## 3. 目前執行狀態
 
-目前狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。短版摘要如下：
+目前狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。Gate 2–7 純工程完成後，後續 agent 應先讀 [Engineering Control Center](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md)，再依工作類型進入 [External Validation Register](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) 或 [Gate 7 ML Shadow Engineering](../06_qa/GATE_7_ML_SHADOW_ENGINEERING.md)。短版摘要如下：
 
 - 三個產品閉環的基礎與主要深化已完成。
 - Strategy & Scoring Governance 增量 A / B 與 10 檔 fixed / quantile OOS 實證已完成；交易樣本與 Regime coverage Gate 通過，quantile 未優於 fixed 並維持 opt-in。

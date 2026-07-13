@@ -52,6 +52,9 @@
 - **[Antigravity Agent 入口](./antigravity/README.md)** (`antigravity/README.md`)
   - 給 Antigravity 使用的角色分流與必讀規則
   - 與 repo 根目錄 `GEMINI.md`、`.agent/rules/` 搭配使用
+- **[Gate 2–7 Engineering Control Center](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md)**
+  - Gate 2–7 純工程完成後，所有 agent 的人工補件、時間驗證、資料接受與 ML revalidation 接手入口
+  - 必須沿用 append-only registry；不得把工程完成解讀成正式產品核准
 
 ## 目前專案現況速記
 

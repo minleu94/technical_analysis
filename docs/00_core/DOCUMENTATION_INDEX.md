@@ -221,6 +221,10 @@
 | 文件 | 說明 |
 |---|---|
 | [GATE_1_ADVICE_CLOSEOUT_2026_07_12.md](../06_qa/GATE_1_ADVICE_CLOSEOUT_2026_07_12.md) | Gate 1 Daily Usable Advice closeout：契約、唯讀 UI、驗證結果與非目標。 |
+| [GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md](../06_qa/GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md) | Gate 2–7 純工程結案證據：35/35 requirements、獨立 commit slices、驗證結果與 formal product closeout 邊界。 |
+| [GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) | 人工補件、資料授權、真實時間、evidence maturity、ML revalidation 與正式核准的持續工作清單。 |
+| [GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md) | 後續 agent 的 Gate 2–7 接手入口：append-only registry、Workbench projection、CLI 與文件導覽。 |
+| [GATE_7_ML_SHADOW_ENGINEERING.md](../06_qa/GATE_7_ML_SHADOW_ENGINEERING.md) | 結構化傳統 ML shadow challenger 的資料凍結、available-date、purged walk-forward、calibration、drift、promotion review 與重驗規則。 |
 | [V2_1_ENGINEERING_READINESS_2026_07_12.md](../06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md) | V2.1 engineering readiness：記錄 `592d3db` 的 Guided 三重門檻、最大持倉 `1..8`、Professional candidate 分區、focused suite、人工 UI 文案 smoke 與回退錨點。 |
 | [V2_1_FORMAL_CLOSEOUT_2026_07_12.md](../06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md) | V2.1 formal closeout approval record：engineering readiness 證據、owner / timestamp / decision 必填欄位、人工 smoke、殘餘 Gate 與回退；目前為 `awaiting_release_owner_confirmation`。 |
 | [PROJECT_SNAPSHOT_AUDIT_2026_07_12.md](../06_qa/PROJECT_SNAPSHOT_AUDIT_2026_07_12.md) | Snapshot claim 證據矩陣：保留 / 移至歷史 / 限制 / 去重判定與 Scoped SSOT 稽核。 |

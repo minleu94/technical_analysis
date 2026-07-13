@@ -1,5 +1,7 @@
 # Gate 2–7 External Validation Register
 
+> **Agent 接手導覽**：工程完成證據見 [Pure Engineering Closeout](GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md)；registry 操作與狀態投影見 [Engineering Control Center](GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md)；所有 ML 更新、重訓與 promotion review 必須遵循 [Gate 7 ML Shadow Engineering](GATE_7_ML_SHADOW_ENGINEERING.md)。本表只管理尚待人工、時間或外部條件成立的項目。
+
 > 這是未來人工補件、真實時間驗證、資料授權與 ML 更新驗證的操作入口。工程已完成不會自動把下列項目標成 complete。
 
 ## 狀態更新方式
