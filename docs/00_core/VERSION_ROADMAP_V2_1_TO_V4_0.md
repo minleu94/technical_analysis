@@ -136,6 +136,8 @@ Closeout Gate：每個 transition 可解釋、可回溯；不自動平倉。
 
 現況邊界：2026-07 的 score effectiveness / V3 engineering candidate 只代表 read-only scaffold 與 `ready_for_manual_validation`，不是本版本 closeout。
 
+**目前版本狀態（2026-07-12）**：V3.0 focused suite 重新驗證 26 passed，artifact readiness 為 complete 且無程式 blocking gap；sample evidence 仍有樣本不足、產業 benchmark 缺口及舊 screening-matrix payload gap。故狀態維持 `ready_for_manual_validation`，任何正式 effectiveness、pruning 或版本 closeout 均未成立。
+
 ### V3.1：Portfolio Advice Validation
 
 目的：驗證 Portfolio policy 是否在成本、風險與限制後比 Equal Weight 更合理。
