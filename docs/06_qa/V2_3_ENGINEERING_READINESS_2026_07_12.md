@@ -35,6 +35,8 @@ V2.3 已建立完整 Gate 3 P0 source-by-source 人工決策台帳：既有的�
 
 ## 未完成的正式 Gate
 
+2026-07-12 已完成第一輪官方來源證據盤點，確認 TWSE / TPEx OpenAPI 與 TDCC `/v1/opendata/1-5` 的候選入口及 TDCC 週頻語意；詳見 `V2_3_OFFICIAL_SOURCE_EVIDENCE_PASS_2026_07_12.md`。因 endpoint version、實際發布延遲、available-date、coverage、rate limit 與授權邊界仍未逐列閉合，台帳狀態維持不變。
+
 下列工作必須由具名人工決策人以真實來源證據完成，不能以 fixture、candidate sample、文件改字或單次 CLI 成功替代：
 
 1. 對每個 P0 source 審核授權、使用範圍、rate limit、版本、freshness、coverage 與 quality。
