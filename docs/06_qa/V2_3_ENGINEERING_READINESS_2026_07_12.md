@@ -4,6 +4,8 @@
 
 Corporate Action 與交易限制已新增 shadow-only adapters，僅正規化 raw payload、available date 與生效區間。缺欄位或 future available date 會標示 `blocked`；輸出固定 `downstream_eligibility=none`、`writes_allowed=false`，不構成正式 ingestion。
 
+三大法人已新增 shadow adapter，會核對外資、投信、自營商各自的 buy - sell = net 與 available-date。單日 flow 固定附帶 `single_day_flow_is_not_a_trading_signal` disclosure；即使 shadow-ready 也沒有 downstream eligibility。
+
 > 日期：2026-07-12
 > 狀態：`engineering_readiness_only` / `requires_human_acceptance`
 > 前一可回滾提交：`498ba8b6d7c7d70748213030288171bfae878515`
