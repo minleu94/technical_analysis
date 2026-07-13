@@ -10,7 +10,12 @@ from app_module.artifact_lineage_verifier import (
     ArtifactIdentity,
     ArtifactLineageVerifier,
 )
-from app_module.evidence_rehearsal_dtos import EvidenceRehearsalScenario
+from app_module.evidence_rehearsal_dtos import (
+    CoverageMetric,
+    EvidenceRehearsalReport,
+    EvidenceRehearsalScenario,
+    RehearsalArtifact,
+)
 
 
 _REQUIRED_ADAPTERS = (
@@ -77,6 +82,20 @@ class EvidenceRehearsalService:
 
     def __init__(self, verifier: ArtifactLineageVerifier | None = None) -> None:
         self._verifier = verifier or ArtifactLineageVerifier()
+
+    def build(
+        self,
+        scenario: EvidenceRehearsalScenario,
+        *,
+        artifacts: Iterable[RehearsalArtifact],
+        coverage: Iterable[CoverageMetric],
+    ) -> EvidenceRehearsalReport:
+        """Build the public immutable report without invoking adapters or storage."""
+        return EvidenceRehearsalReport(
+            scenario=scenario,
+            artifacts=tuple(sorted(artifacts, key=lambda item: item.artifact_id)),
+            coverage_metrics=tuple(sorted(coverage, key=lambda item: item.source_id)),
+        )
 
     def run(
         self,

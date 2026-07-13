@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
-from datetime import date, timedelta
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -16,11 +13,22 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app_module.artifact_lineage_verifier import ArtifactIdentity  # noqa: E402
 from app_module.evidence_rehearsal_adapters import HistoricalReplayRehearsalAdapter  # noqa: E402
-from app_module.evidence_rehearsal_dtos import EvidenceRehearsalScenario  # noqa: E402
+from app_module.evidence_rehearsal_coverage import (  # noqa: E402
+    CoverageObservation,
+    EvidenceRehearsalCoverageProjector,
+)
+from app_module.evidence_rehearsal_dtos import (  # noqa: E402
+    CoverageMetric,
+    EvidenceRehearsalScenario,
+    RehearsalArtifact,
+)
 from app_module.evidence_rehearsal_service import EvidenceRehearsalService  # noqa: E402
+from app_module.evidence_rehearsal_source_comparison import (  # noqa: E402
+    P0SourceShadowComparisonService,
+)
 from data_module.config import TWStockConfig  # noqa: E402
+from data_module.p0_shadow_observation import P0ShadowObservation  # noqa: E402
 
 
 _FAILURE_BLOCKERS = {
@@ -31,19 +39,6 @@ _FAILURE_BLOCKERS = {
     "immature_label": "immature_label:ml-shadow",
 }
 _PRODUCTION_MARKERS = frozenset({"prod", "production"})
-_ADAPTER_CHAIN = (
-    ("source", "source-data", "daily_governed_data", ()),
-    ("market", "market-context", "market_context", ("source-data",)),
-    ("replay", "replay-recommendation", "recommendation", ("market-context",)),
-    ("advice", "rehearsal-advice-projection", "bounded_advice", ("replay-recommendation",)),
-    ("paper", "paper-projection", "paper_portfolio", ("rehearsal-advice-projection",)),
-    ("health", "health-projection", "position_health", ("paper-projection",)),
-    ("evidence", "evidence-projection", "evidence_event", ("health-projection",)),
-    ("outcome", "outcome-projection", "forward_outcome", ("evidence-projection",)),
-    ("weekly", "weekly-projection", "weekly_review", ("outcome-projection",)),
-    ("signal", "signal-projection", "signal_effectiveness", ("weekly-projection",)),
-    ("ml", "ml-shadow", "ml_shadow_prediction", ("signal-projection",)),
-)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -147,77 +142,6 @@ def _scenario_from_payload(
     )
 
 
-def _stable_hash(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _adapter_outputs(scenario: EvidenceRehearsalScenario) -> dict[str, tuple[ArtifactIdentity | BaseException, ...]]:
-    outputs: dict[str, tuple[ArtifactIdentity | BaseException, ...]] = {}
-    for adapter_name, artifact_id, artifact_type, parents in _ADAPTER_CHAIN:
-        outputs[adapter_name] = (
-            ArtifactIdentity(
-                artifact_id=artifact_id,
-                artifact_type=artifact_type,
-                run_id=f"rehearsal:{scenario.scenario_id}",
-                decision_date=scenario.decision_date,
-                as_of_date=scenario.decision_date,
-                available_date=scenario.decision_date,
-                source_id="engineering.rehearsal",
-                source_version="v1",
-                data_quality="observed",
-                missing_state="complete",
-                strategy_version="rehearsal-rule-v1",
-                policy_version="rehearsal-policy-v1",
-                model_version="shadow-v1",
-                parent_artifact_ids=parents,
-                evidence_tier=scenario.tier,
-                current_status="rehearsal_only",
-                content_hash=_stable_hash(f"{scenario.scenario_id}:{artifact_id}"),
-                rollback_reference="rehearsal:dry-read-only",
-            ),
-        )
-    return outputs
-
-
-def _inject_failure(
-    outputs: dict[str, tuple[ArtifactIdentity | BaseException, ...]],
-    name: str | None,
-    decision_date: str,
-) -> tuple[dict[str, tuple[ArtifactIdentity | BaseException, ...]], str | None]:
-    if name is None:
-        return outputs, None
-    if name == "missing_day":
-        outputs["source"] = ()
-    elif name == "source_outage":
-        outputs["source"] = (RuntimeError("source_outage"),)
-    elif name == "future_available_date":
-        source = outputs["source"][0]
-        if isinstance(source, ArtifactIdentity):
-            future_date = (date.fromisoformat(decision_date) + timedelta(days=1)).isoformat()
-            outputs["source"] = (replace(source, available_date=future_date),)
-    elif name == "schema_missing":
-        source = outputs["source"][0]
-        if isinstance(source, ArtifactIdentity):
-            outputs["source"] = (replace(source, source_version=""),)
-    elif name == "immature_label":
-        return outputs, _FAILURE_BLOCKERS[name]
-    return outputs, None
-
-
-def _service_payload(report: Any) -> dict[str, object]:
-    return {
-        "status": report.status,
-        "ordered_artifact_ids": list(report.ordered_artifact_ids),
-        "blockers": list(report.blockers),
-        "diagnostics": list(report.diagnostics),
-        "artifact_dag": {key: list(value) for key, value in report.artifact_dag.items()},
-        "artifact_hashes": dict(report.artifact_hashes),
-        "artifact_count": report.artifact_count,
-        "formal_product_closeout": report.formal_product_closeout,
-        "production_actions_allowed": report.production_actions_allowed,
-    }
-
-
 def _build_report(
     scenario: EvidenceRehearsalScenario,
     replay_summary: Mapping[str, object],
@@ -228,15 +152,27 @@ def _build_report(
         decision_date=scenario.decision_date,
         rollback_reference="rehearsal:dry-read-only",
     )
-    outputs, additional_blocker = _inject_failure(
-        _adapter_outputs(scenario), injection_name, scenario.decision_date
+    coverage = _coverage_from_replay(replay_artifacts, scenario.decision_date)
+    rehearsal_report = EvidenceRehearsalService().build(
+        scenario, artifacts=replay_artifacts, coverage=coverage
     )
-    service_report = EvidenceRehearsalService().run(scenario, outputs)
-    blockers = list(service_report.blockers)
-    if additional_blocker is not None:
-        blockers.append(additional_blocker)
+    p0_shadow = P0SourceShadowComparisonService(
+        decision_date=scenario.decision_date,
+        shadow_observations=_p0_observations_from_replay(replay_summary),
+    ).build_report().to_dict()
+    ml_shadow = _ml_shadow_from_replay(replay_summary)
+    blockers = list(_rehearsal_blockers(rehearsal_report))
+    for item in p0_shadow["items"]:
+        if isinstance(item, Mapping):
+            source_id = item.get("source_id")
+            if isinstance(source_id, str):
+                blockers.extend(f"p0_shadow:{source_id}:{blocker}" for blocker in item.get("blockers", ()))
+    if ml_shadow["status"] != "shadow_ready":
+        blockers.append(f"ml_shadow:{ml_shadow['status']}")
+    if injection_name is not None:
+        blockers.append(_FAILURE_BLOCKERS[injection_name])
     blockers = list(dict.fromkeys(blockers))
-    status = "degraded" if blockers else service_report.status
+    status = "degraded" if blockers else "rehearsal_only"
     injection = (
         {"name": None, "status": status, "blocker": None}
         if injection_name is None
@@ -263,7 +199,10 @@ def _build_report(
         "execution": execution,
         "injection": injection,
         "blockers": blockers,
-        "service": _service_payload(service_report),
+        "rehearsal_report": rehearsal_report.to_dict(),
+        "coverage_metrics": [metric.to_dict() for metric in coverage],
+        "p0_source_shadow": p0_shadow,
+        "ml_shadow": ml_shadow,
         "historical_replay_artifacts": [artifact.to_dict() for artifact in replay_artifacts],
     }
     handoff = {
@@ -290,6 +229,115 @@ def _build_report(
         ],
     }
     return report, handoff
+
+
+def _coverage_from_replay(
+    artifacts: tuple[RehearsalArtifact, ...], decision_date: str
+) -> tuple[CoverageMetric, ...]:
+    if not artifacts:
+        return (
+            CoverageMetric(
+                source_id="historical_replay",
+                total_count=1,
+                observed_count=0,
+                degraded_count=0,
+                missing_count=1,
+                future_blocked_count=0,
+                immature_label_count=0,
+                coverage_bp=0,
+            ),
+        )
+    observations = []
+    for artifact in artifacts:
+        payload = artifact.canonical_payload or {}
+        available_date = payload.get("available_date", artifact.available_date)
+        observations.append(
+            CoverageObservation(
+                row_id=artifact.artifact_id,
+                source_id="historical_replay",
+                source_version=artifact.source_version or "missing",
+                decision_date=decision_date,
+                available_date=str(available_date) if available_date else None,
+                quality="complete" if artifact.current_status == "projected" else "degraded",
+                feature_present=artifact.missing_state is None,
+                label_maturity_date=(
+                    decision_date if artifact.effectiveness_denominator_included else None
+                ),
+            )
+        )
+    return EvidenceRehearsalCoverageProjector().project(
+        observations, decision_date=decision_date
+    )
+
+
+def _p0_observations_from_replay(
+    replay_summary: Mapping[str, object],
+) -> tuple[P0ShadowObservation, ...]:
+    raw_items = replay_summary.get("p0_shadow_observations", ())
+    if not isinstance(raw_items, list):
+        return ()
+    observations: list[P0ShadowObservation] = []
+    for item in raw_items:
+        if not isinstance(item, Mapping):
+            continue
+        required = ("source_id", "symbol", "decision_date", "source_version", "status")
+        if not all(isinstance(item.get(field), str) for field in required):
+            continue
+        diagnostics = item.get("diagnostics", ())
+        observations.append(
+            P0ShadowObservation(
+                source_id=str(item["source_id"]),
+                symbol=str(item["symbol"]),
+                decision_date=str(item["decision_date"]),
+                available_date=(
+                    str(item["available_date"])
+                    if item.get("available_date") is not None
+                    else None
+                ),
+                source_version=str(item["source_version"]),
+                status=str(item["status"]),
+                diagnostics=tuple(str(value) for value in diagnostics) if isinstance(diagnostics, list) else (),
+                raw_payload={},
+            )
+        )
+    return tuple(observations)
+
+
+def _ml_shadow_from_replay(replay_summary: Mapping[str, object]) -> dict[str, object]:
+    value = replay_summary.get("ml_shadow")
+    if isinstance(value, Mapping):
+        projection = dict(value)
+        projection["shadow_only"] = True
+        projection["production_action_allowed"] = False
+        if isinstance(projection.get("status"), str):
+            return projection
+    return {
+        "status": "insufficient_sample",
+        "dataset_id": "not_provided",
+        "total_rows": 0,
+        "accepted_rows": 0,
+        "shadow_only": True,
+        "production_action_allowed": False,
+        "disclosure": "No ML shadow projection was supplied by replay input; no model was trained or promoted.",
+    }
+
+
+def _rehearsal_blockers(report: Any) -> tuple[str, ...]:
+    blockers: list[str] = []
+    for metric in report.coverage_metrics:
+        for state, count in (
+            ("degraded", metric.degraded_count),
+            ("missing", metric.missing_count),
+            ("future_blocked", metric.future_blocked_count),
+            ("immature_label", metric.immature_label_count),
+        ):
+            if count:
+                blockers.append(f"coverage_{state}:{metric.source_id}={count}")
+    for artifact in report.artifacts:
+        if artifact.current_status == "future_blocked":
+            blockers.append(f"future_available_date:{artifact.artifact_id}")
+        blockers.extend(artifact.diagnostics)
+    return tuple(sorted(set(blockers)))
 
 
 def _render_markdown(report: Mapping[str, object], handoff: Mapping[str, object]) -> str:

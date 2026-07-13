@@ -5,7 +5,11 @@ from dataclasses import replace
 import pytest
 
 from app_module.artifact_lineage_verifier import ArtifactIdentity
-from app_module.evidence_rehearsal_dtos import EvidenceRehearsalScenario
+from app_module.evidence_rehearsal_dtos import (
+    CoverageMetric,
+    EvidenceRehearsalScenario,
+    RehearsalArtifact,
+)
 from app_module.evidence_rehearsal_service import EvidenceRehearsalService
 
 
@@ -91,6 +95,36 @@ def test_repeat_same_scenario_produces_identical_hashes_ids_and_counts() -> None
     assert first.ordered_artifact_ids == second.ordered_artifact_ids
     assert first.artifact_hashes == second.artifact_hashes
     assert first.artifact_count == second.artifact_count == 11
+
+
+def test_build_preserves_the_public_rehearsal_report_contract() -> None:
+    result = EvidenceRehearsalService().build(
+        _scenario(),
+        artifacts=(
+            RehearsalArtifact(
+                artifact_id="replay",
+                decision_date=DECISION_DATE,
+                available_date=DECISION_DATE,
+                tier="historical_replay_candidate",
+            ),
+        ),
+        coverage=(
+            CoverageMetric(
+                source_id="historical_replay",
+                total_count=1,
+                observed_count=1,
+                degraded_count=0,
+                missing_count=0,
+                future_blocked_count=0,
+                immature_label_count=0,
+                coverage_bp=10000,
+            ),
+        ),
+    )
+
+    assert result.scenario == _scenario()
+    assert result.artifacts[0].artifact_id == "replay"
+    assert result.coverage_metrics[0].source_id == "historical_replay"
 
 
 def test_preserves_upstream_multi_parent_lineage_when_direct_parent_is_present() -> None:

@@ -292,6 +292,36 @@ def test_main_window_adds_unified_decision_workbench_tab(monkeypatch, tmp_path):
     assert target_window.left_navigation.current_key() == "portfolio"
 
 
+def test_main_window_composes_controlled_rehearsal_dashboard_from_explicit_read_only_report(
+    monkeypatch, tmp_path
+):
+    app()
+    _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
+    report_path = tmp_path / "rehearsal-report.json"
+    report_path.write_text(
+        """{
+  "scenario": {"scenario_id": "controlled", "decision_date": "2026-07-13", "source_db_path": "C:/fixture/source.db", "working_copy_db_path": "C:/fixture/copy.db", "tier": "engineering_fixture", "production_actions_allowed": false},
+  "coverage_metrics": [],
+  "artifacts": [],
+  "p0_source_shadow": {"items": [{"source_id": "institutional_flows", "blockers": ["source_not_ingested"]}]},
+  "ml_shadow": {"status": "insufficient_sample"}
+}""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("EVIDENCE_REHEARSAL_REPORT", str(report_path))
+
+    target_window = _build_main_window()
+    target_window._setup_ui()
+
+    rehearsal_dashboard = target_window.workbench_view.kwargs[
+        "evidence_rehearsal_dashboard"
+    ]
+    assert rehearsal_dashboard.status == "blocked"
+    assert "source_not_ingested" in rehearsal_dashboard.blockers
+    assert "ml_shadow:insufficient_sample" in rehearsal_dashboard.blockers
+    assert rehearsal_dashboard.write_intent is False
+
+
 class _FakeRegimeService:
     def __init__(self):
         self.calls: list[str] = []

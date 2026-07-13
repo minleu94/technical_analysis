@@ -8,7 +8,25 @@ from typing import Any, Iterable, Mapping
 
 from app_module.source_candidate_readiness import SourceCandidateReadinessService
 from data_module.p0_shadow_observation import P0ShadowObservation
-from data_module.p0_source_contract_registry import ACCESS_BOUNDARY, P0_SOURCE_IDS, build_p0_source_contract_registry
+from data_module.p0_source_contract_registry import (
+    ACCESS_BOUNDARY,
+    P0_SOURCE_IDS,
+    P0SourceContract,
+    build_p0_source_contract_registry,
+)
+
+
+@dataclass(frozen=True)
+class SourceShadowComparison:
+    """Stable public projection for one P0 contract without acceptance rights."""
+
+    source_id: str
+    contract_status: str
+    baseline_coverage_bp: int
+    shadow_coverage_bp: int
+    missing_count: int
+    future_blocked_count: int
+    downstream_eligibility: str = "none"
 
 
 @dataclass(frozen=True)
@@ -63,7 +81,7 @@ class P0SourceShadowComparisonService:
     def __init__(
         self,
         *,
-        decision_date: str,
+        decision_date: str | None = None,
         baseline_observations: Iterable[P0ShadowObservation] = (),
         shadow_observations: Iterable[P0ShadowObservation] = (),
         source_outages: Mapping[str, str] | None = None,
@@ -75,13 +93,27 @@ class P0SourceShadowComparisonService:
         self._source_outages = dict(source_outages or {})
         self._schema_missing_sources = frozenset(schema_missing_sources)
 
+    def compare(
+        self,
+        contracts: Iterable[P0SourceContract],
+        observations: Iterable[P0ShadowObservation],
+    ) -> tuple[SourceShadowComparison, ...]:
+        """Return every supplied contract, including safely disclosed missing sources."""
+        observations_by_source: dict[str, list[P0ShadowObservation]] = {}
+        for observation in observations:
+            observations_by_source.setdefault(observation.source_id, []).append(observation)
+        return tuple(
+            self._public_comparison(contract, tuple(observations_by_source.get(contract.source_id, ())))
+            for contract in sorted(contracts, key=lambda item: item.source_id)
+        )
+
     def build_report(self) -> P0SourceShadowComparisonReport:
         registry = build_p0_source_contract_registry()
         candidate_readiness = SourceCandidateReadinessService(
-            decision_date=self._decision_date
+            decision_date=self._require_decision_date()
         ).build_report()
         return P0SourceShadowComparisonReport(
-            decision_date=self._decision_date,
+            decision_date=self._require_decision_date(),
             items=tuple(self._build_item(registry.require(source_id).source_id) for source_id in P0_SOURCE_IDS),
             access_boundary=dict(ACCESS_BOUNDARY),
             candidate_readiness_access_boundary=dict(candidate_readiness.access_boundary),
@@ -134,7 +166,7 @@ class P0SourceShadowComparisonService:
     def _available_date_blockers(
         self, observations: tuple[P0ShadowObservation, ...]
     ) -> tuple[str, ...]:
-        service_decision_date = _parse_date(self._decision_date)
+        service_decision_date = _parse_date(self._require_decision_date())
         blockers: list[str] = []
         if observations and service_decision_date is None:
             blockers.append("invalid_service_decision_date")
@@ -151,6 +183,45 @@ class P0SourceShadowComparisonService:
             ):
                 blockers.append("future_available_date")
         return tuple(sorted(set(blockers)))
+
+    def _public_comparison(
+        self,
+        contract: P0SourceContract,
+        observations: tuple[P0ShadowObservation, ...],
+    ) -> SourceShadowComparison:
+        future_blocked_count = sum(
+            _observation_is_future_blocked(observation) for observation in observations
+        )
+        ready_count = sum(
+            observation.status == "shadow_ready"
+            and not _observation_is_future_blocked(observation)
+            for observation in observations
+        )
+        missing_count = 1 if not observations else len(observations) - ready_count
+        shadow_coverage_bp = (
+            ready_count * 10_000 // len(observations) if observations else 0
+        )
+        contract_status = (
+            "missing"
+            if not observations
+            else "blocked"
+            if future_blocked_count or missing_count
+            else "shadow_observed"
+        )
+        return SourceShadowComparison(
+            source_id=contract.source_id,
+            contract_status=contract_status,
+            baseline_coverage_bp=0,
+            shadow_coverage_bp=shadow_coverage_bp,
+            missing_count=missing_count,
+            future_blocked_count=future_blocked_count,
+            downstream_eligibility="none",
+        )
+
+    def _require_decision_date(self) -> str:
+        if self._decision_date is None:
+            raise ValueError("decision_date is required for build_report")
+        return self._decision_date
 
 
 def _summary(
@@ -190,3 +261,9 @@ def _parse_date(value: str | None) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _observation_is_future_blocked(observation: P0ShadowObservation) -> bool:
+    decision_date = _parse_date(observation.decision_date)
+    available_date = _parse_date(observation.available_date)
+    return available_date is None or decision_date is None or available_date > decision_date

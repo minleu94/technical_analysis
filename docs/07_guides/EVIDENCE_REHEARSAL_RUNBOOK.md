@@ -16,7 +16,7 @@
 | `--scenario` | JSON object；至少含 `scenario_id`、`decision_date`，可選 `tier` | 僅讀取；`decision_date` 必須是 ISO 日期。 |
 | `--source-db` | 現有 fixture 或核准來源 DB 的路徑 metadata | 必須存在；CLI 不開啟、不複製、不寫入。不可為 production-like 路徑。 |
 | `--working-copy-db` | 預先規畫的 temp working-copy 路徑 metadata | 必須與 source 不同；CLI 不建立、不開啟、不寫入。不可為 production-like 路徑。 |
-| `--replay-summary` | Historical replay JSON summary | 僅讀取；`days` 必須是 list，資料日期需符合既有 adapter 的 PIT 規則。 |
+| `--replay-summary` | Historical replay JSON summary，以及可選的 `p0_shadow_observations` / `ml_shadow` 唯讀投影 | 僅讀取；`days` 必須是 list，資料日期需符合既有 adapter 的 PIT 規則。缺少 P0 或 ML 投影時，報告會明確列為 missing / `insufficient_sample`，不會以 fixture 補足。 |
 | `--output-root` | 演練報告目錄 | 唯一允許寫入位置；不可為 production-like 路徑。 |
 
 `production-like` 包含 `prod`／`production` 路徑 token，以及 `TWStockConfig` 的正式 `DATA_ROOT` 本身與所有子目錄（包括 `sqlite/twstock.db`）。若 source 與 working-copy 是同一路徑，命令會拒絕，並輸出 `working-copy DB must differ from source DB`。
@@ -41,11 +41,13 @@ $tempRoot = Join-Path $env:TEMP "evidence-rehearsal"
 
 | 輸出 | 內容 | 人工判讀 |
 |---|---|---|
-| `rehearsal-report.json` | scenario、固定 safety flags、replay adapter 投影、service 狀態與 blockers | 確認所有 execution flags 都是 `false`，並依 blocker 決定是否進入人工後續。 |
+| `rehearsal-report.json` | scenario、固定 safety flags、replay coverage、13 個 P0 shadow projection、ML shadow projection 與 blockers | 確認所有 execution flags 都是 `false`；P0 或 ML 投影缺漏時狀態不得為 `complete`，並依 blocker 決定是否進入人工後續。 |
 | `rehearsal-report.md` | 人可讀的 status、safety boundary、blockers 與 handoff 摘要 | 確認沒有被描述為 forward evidence 或正式完成。 |
 | `forward-handoff.json` | 真實資料／授權／人工核准所需的 handoff | 必須維持 `forward_handoff_pending`；不得由本 CLI 自動完成。 |
 
 成功產生報告時 process exit code 為 `0`；這只代表演練封包已生成。若 `status=degraded`，必須先處理或接受 blocker，不能把演練結果升格為正式證據。
+
+若要在 Workbench 顯示最新的受控報告，僅能設定 `EVIDENCE_REHEARSAL_REPORT` 為此 CLI 產生之 `rehearsal-report.json` 絕對路徑。Workbench 只讀取 JSON，不開啟 source / working-copy DB；找不到或無法讀取時會顯示封鎖狀態，不會顯示 ready 或 forward evidence。
 
 ## 故障注入
 

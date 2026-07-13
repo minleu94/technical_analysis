@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 from app_module.engineering_closure_dashboard_service import EngineeringClosureDashboardService
 from app_module.evidence_rehearsal_dtos import (
@@ -173,3 +174,24 @@ def test_dashboard_fails_closed_for_artifact_status_without_diagnostics(
 
     assert dashboard.status == "blocked"
     assert dashboard.blockers == (f"artifact_status:{current_status}",)
+
+
+def test_dashboard_loads_controlled_rehearsal_report_as_read_only_projection(tmp_path: Path) -> None:
+    report_path = tmp_path / "rehearsal-report.json"
+    report_path.write_text(
+        """{
+  "scenario": {"scenario_id": "controlled", "decision_date": "2026-07-13", "source_db_path": "C:/fixture/source.db", "working_copy_db_path": "C:/fixture/copy.db", "tier": "engineering_fixture", "production_actions_allowed": false},
+  "coverage_metrics": [{"source_id": "historical_replay", "total_count": 1, "observed_count": 1, "degraded_count": 0, "missing_count": 0, "future_blocked_count": 0, "immature_label_count": 0, "coverage_bp": 10000}],
+  "artifacts": [],
+  "p0_source_shadow": {"items": [{"source_id": "institutional_flows", "blockers": ["source_not_ingested"]}]},
+  "ml_shadow": {"status": "insufficient_sample"}
+}""",
+        encoding="utf-8",
+    )
+
+    dashboard = EngineeringClosureDashboardService().load_rehearsal_report(report_path)
+
+    assert dashboard.status == "blocked"
+    assert "source_not_ingested" in dashboard.blockers
+    assert "ml_shadow:insufficient_sample" in dashboard.blockers
+    assert dashboard.write_intent is False

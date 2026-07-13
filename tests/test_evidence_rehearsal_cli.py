@@ -106,6 +106,13 @@ def test_cli_defaults_to_dry_read_only_and_writes_only_report_package(tmp_path: 
         "working_copy_created": False,
     }
     assert report["scenario"]["production_actions_allowed"] is False
+    assert len(report["p0_source_shadow"]["items"]) == 13
+    assert all(
+        "source_not_ingested" in item["blockers"]
+        for item in report["p0_source_shadow"]["items"]
+    )
+    assert report["ml_shadow"]["status"] == "insufficient_sample"
+    assert report["status"] != "complete"
     assert source_db.read_bytes() == original_source
     assert not working_copy_db.exists()
     assert handoff["status"] == "forward_handoff_pending"

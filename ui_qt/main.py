@@ -2,6 +2,7 @@
 PySide6 主應用程式
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -74,6 +75,10 @@ from app_module.decision_market_frame import DecisionMarketFrameLoader
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from app_module.workbench_source_service import WorkbenchSourceService
+from app_module.engineering_closure_dashboard_service import (
+    EngineeringClosureDashboardService,
+    EvidenceRehearsalDashboard,
+)
 from ui_qt.views.workbench_view import UnifiedDecisionWorkbenchView
 from ui_qt.theme import build_global_stylesheet
 from ui_qt.theme.fonts import (
@@ -216,6 +221,23 @@ class MainWindow(QMainWindow):
             / "historical_replay_2026-01-06_2026-07-06_reference_fix.json"
         )
         return candidate if candidate.exists() else None
+
+    def _controlled_rehearsal_dashboard(self) -> EvidenceRehearsalDashboard | None:
+        """Read an explicitly configured controlled report without opening any database."""
+        configured_path = os.environ.get("EVIDENCE_REHEARSAL_REPORT")
+        if not configured_path:
+            return None
+        try:
+            return EngineeringClosureDashboardService().load_rehearsal_report(
+                Path(configured_path)
+            )
+        except ValueError as error:
+            return EvidenceRehearsalDashboard(
+                tier="engineering_fixture",
+                status="blocked",
+                coverage=(),
+                blockers=(f"controlled_rehearsal_report_unavailable:{error}",),
+            )
 
     def _select_main_workspace(self, key_or_label: str) -> None:
         workspace_stack = getattr(self, "workspace_stack", None)
@@ -409,6 +431,7 @@ class MainWindow(QMainWindow):
                 workbench_view = UnifiedDecisionWorkbenchView(
                     source_service=self.workbench_source_service,
                     replay_summary_json=self._default_workbench_replay_summary_path(),
+                    evidence_rehearsal_dashboard=self._controlled_rehearsal_dashboard(),
                     decision_source_widget=decision_desk_view,
                     navigate_to_daily_decision_callback=self._open_workbench_daily_decision,
                     navigate_to_market_explore_callback=self._open_workbench_market_explore,

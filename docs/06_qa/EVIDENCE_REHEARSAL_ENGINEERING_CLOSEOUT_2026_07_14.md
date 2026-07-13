@@ -4,7 +4,7 @@
 
 ## 範圍與結果
 
-本次完成的工程底座以不可變 DTO、唯讀投影與受控 CLI 連接既有 replay、coverage、P0 source shadow、paper / health、ML shadow comparison 與 lineage 檢查。它的目的在於讓工程故障情境可重跑、可揭露，而不是建立第二套 registry、寫入正式資料或提供投資結論。
+本次完成的工程底座以不可變 DTO、唯讀投影與受控 CLI 連接既有 replay、coverage、P0 source shadow、paper / health、ML shadow comparison 與 lineage 檢查。CLI 從 replay input 建立統一報告，保留 P0 / ML 缺漏的安全狀態，並非建立固定 artifact fixture chain。它的目的在於讓工程故障情境可重跑、可揭露，而不是建立第二套 registry、寫入正式資料或提供投資結論。
 
 | 層級 | 已完成的工程能力 | 不代表 |
 |---|---|---|
@@ -18,7 +18,7 @@ Coverage 以 `CoverageMetric` 的 observed、missing、degraded、future-blocked
 ## 安全與資料邊界
 
 - 只讀 engineering rehearsal；不寫 production DB、正式 Evidence / Recommendation artifact、scheduler、broker、action、promotion 或 Advice。
-- replay、source shadow 與 ML comparison 都不是 forward evidence；Workbench 只顯示注入 DTO，沒有 apply / promote 控制。
+- replay、source shadow 與 ML comparison 都不是 forward evidence；Workbench 只讀取由 `EVIDENCE_REHEARSAL_REPORT` 明確指定的受控 JSON，沒有 apply / promote 控制，也不開啟任何 DB。
 - `available_date`、`as_of_date` 與決策日維持 PIT fail-closed；不足樣本一律 defer。
 - CLI 僅可寫入明確指定且不在 `DATA_ROOT` 及其子目錄的 output root；輸出可重跑的 JSON / Markdown 報告與 forward handoff，但不寫入資料來源。
 

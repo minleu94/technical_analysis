@@ -4,9 +4,11 @@ import pytest
 
 from app_module.evidence_rehearsal_source_comparison import (
     P0SourceShadowComparisonService,
+    SourceShadowComparison,
 )
 from data_module.p0_institutional_flow_shadow_adapter import InstitutionalFlowShadowAdapter
 from data_module.p0_shadow_observation import P0ShadowObservation
+from data_module.p0_source_contract_registry import build_p0_source_contract_registry
 
 
 def _ready_institutional_observation():
@@ -63,6 +65,18 @@ def test_all_p0_contracts_remain_visible_when_no_source_has_been_ingested() -> N
         assert "source_not_ingested" in item["blockers"]
         assert "source_absent" not in item["blockers"]
         assert item["review_status"] == "blocked"
+
+
+def test_public_compare_contract_keeps_all_p0_sources_visible_when_missing() -> None:
+    comparisons = P0SourceShadowComparisonService().compare(
+        build_p0_source_contract_registry().list(),
+        (),
+    )
+
+    assert len(comparisons) == 13
+    assert all(isinstance(item, SourceShadowComparison) for item in comparisons)
+    assert {item.downstream_eligibility for item in comparisons} == {"none"}
+    assert all(item.missing_count >= 1 for item in comparisons)
 
 
 def test_observed_shadow_candidate_is_only_eligible_for_human_review() -> None:
