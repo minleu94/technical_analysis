@@ -46,6 +46,7 @@ class V3EffectivenessSlice:
     limitations: tuple[str, ...] = ()
     gap_classifications: tuple[V3GapClassification, ...] = ()
     decision_date_range: str | None = None
+    effectiveness_metrics: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -69,6 +70,7 @@ class V3EffectivenessSlice:
             "gap_classifications": [
                 gap.to_dict() for gap in self.gap_classifications
             ],
+            "effectiveness_metrics": dict(self.effectiveness_metrics),
         }
 
 

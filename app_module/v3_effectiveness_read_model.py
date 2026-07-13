@@ -10,6 +10,7 @@ from app_module.v3_effectiveness_dtos import (
     V3EffectivenessSlice,
 )
 from app_module.v3_gap_classifier import classify_v3_gap
+from app_module.v3_effectiveness_metrics import compute_effectiveness_metrics
 
 
 MAJOR_WARNING_CODES = {
@@ -41,6 +42,7 @@ class V3EffectivenessReadModel:
                 "source_traces": set(),
                 "dashboard_surface": "evidence_review",
                 "decision_date_range": None,
+                "outcomes": [],
             }
         )
         for row in rows:
@@ -74,6 +76,7 @@ class V3EffectivenessReadModel:
                 bucket["warnings"].add(str(warning))
             if row.get("source_trace"):
                 bucket["source_traces"].add(str(row["source_trace"]))
+            bucket["outcomes"].extend(row.get("outcomes", ()))
 
         slices = tuple(
             self._build_slice(key, bucket)
@@ -146,6 +149,9 @@ class V3EffectivenessReadModel:
             warnings=warnings,
             limitations=limitations,
             gap_classifications=gap_classifications,
+            effectiveness_metrics=compute_effectiveness_metrics(
+                bucket["outcomes"], k=10
+            ).to_dict(),
         )
 
     def _sample_sufficiency_label(

@@ -90,3 +90,24 @@ def test_read_model_groups_rows_and_preserves_read_only_boundary() -> None:
     assert first.sample_sufficiency_label == "insufficient_sample"
     assert report.access_boundary["writes_allowed"] is False
     assert report.manual_validation_status == "PENDING_MANUAL_VALIDATION"
+
+
+def test_read_model_exposes_integer_bp_effectiveness_metrics() -> None:
+    report = V3EffectivenessReadModel(min_sample_size=1).build_report(
+        rows=[
+            {
+                "event_family": "recommendation",
+                "event_type": "recommendation_included",
+                "source_type": "persisted_recommendation",
+                "ready_outcome_count": 2,
+                "outcomes": (
+                    {"status": "ready", "score_bp": 9000, "return_bp": 500},
+                    {"status": "ready", "score_bp": 8000, "return_bp": -200},
+                ),
+            }
+        ]
+    )
+
+    metrics = report.slices[0].to_dict()["effectiveness_metrics"]
+    assert metrics["precision_at_k_bp"] == 5000
+    assert metrics["hit_rate_bp"] == 5000
