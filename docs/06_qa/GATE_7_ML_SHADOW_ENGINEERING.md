@@ -19,3 +19,7 @@ Feature 必須滿足 `feature.available_date <= row.decision_date`。Label 可�
 ## Boosted challengers
 
 第一組完整 challenger 使用 scikit-learn histogram gradient boosting：regressor 同時提供 future return bp prediction 與 ranking score，classifier 提供 downside probability。訓練要求 feature shape 一致、有限值、至少十列及 downside 兩類樣本。Bundle 固定 `shadow_only=true`、`production_eligible=false`；float 僅存在 `ml_module` 模型邊界。
+
+## Probability calibration
+
+Downside probability 使用 isotonic calibration，且 calibration input 必須來自至少兩個 walk-forward out-of-fold blocks。校準拒絕樣本不足、單一 label class、非有限值或超出 0..1 的 raw probability。Calibrator 固定 shadow-only，不提供 production eligibility。
