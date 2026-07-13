@@ -998,6 +998,8 @@ V2.4 紙上政策可用下列唯讀 CLI 檢查。它固定使用核准的平衡�
 
 Paper Portfolio 日更工程另提供 append-only snapshot repository。每個 `snapshot_id` 只能新增一次，歷史 snapshot 不可覆寫；價格、現金與市值以 Decimal 字串保存，權重以整數 bp 保存。此 repository 僅存 research paper ledger，不連接正式持倉或 broker。
 
+Daily mark-to-market runner 只使用 `price_date <= decision_date` 且 `available_date <= decision_date` 的價格。若任一持倉沒有 causal price，整次日更 fail-closed，不建立部分 snapshot；非交易日可使用前一個可見交易日並留下 diagnostic。它只重算紙上市值與權重，不執行再平衡或 broker order。
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_paper_portfolio_policy.py --sample --format json
 ```
