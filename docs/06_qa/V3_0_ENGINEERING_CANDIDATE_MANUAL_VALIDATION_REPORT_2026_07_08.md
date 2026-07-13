@@ -162,3 +162,10 @@ Task Scheduler observation from the finish plan: 04:40、05:00、05:15 三個 sc
 - Evidence DB write in this sprint: `false`
 - Production scheduler approval: `false`
 - Auto trading / broker order / lifecycle action: `false`
+
+## 2026-07-12 Metric Applicability Follow-up
+
+- 已新增 event-family metric applicability contract，將 Recommendation ranking 類事件標示為 `score_required`。
+- `risk_prompt` 與 `decision_quality` 類事件標示為 `score_not_applicable`，不再被 V3 TotalScore 報表誤報為 `event_missing_score_bp`。
+- 未知或尚未治理的 family 維持 `score_optional`；不回填 score，也不因此取得 effectiveness credit。
+- 此修正只改善資料品質診斷，不改 score、threshold、Profile、lifecycle 或任何 production boundary。

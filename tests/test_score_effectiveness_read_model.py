@@ -36,6 +36,24 @@ def _event(event_id: str, score_bp: int | None) -> EvidenceEvent:
     )
 
 
+def _risk_prompt_without_score(event_id: str) -> EvidenceEvent:
+    return EvidenceEvent(
+        event_id=event_id,
+        event_hash=f"hash-{event_id}",
+        event_date="2026-01-02",
+        decision_date="2026-01-02",
+        symbol="2330",
+        event_type="risk_prompt_data_quality",
+        event_family="risk_prompt",
+        source_type="decision_desk_snapshot",
+        score_bp=None,
+        data_quality=EvidenceDataQuality.DEGRADED,
+        warnings=(),
+        as_of_date="2026-01-02",
+        available_date="2026-01-02",
+    )
+
+
 def _outcome(
     event_id: str,
     window_days: int,
@@ -124,6 +142,15 @@ def test_report_keeps_empty_buckets_and_read_only_disclosure() -> None:
     assert high["ready_outcome_count"] == 0
     assert high["pending_outcome_count"] == 1
     assert high["missing_outcome_count"] == 1
+
+
+def test_report_does_not_diagnose_missing_score_when_metric_is_not_applicable() -> None:
+    report = ScoreEffectivenessReadModel(
+        events=(_risk_prompt_without_score("risk-no-score"),),
+        outcomes=(),
+    ).build_report()
+
+    assert report.diagnostics == ()
 
 
 def test_sample_cli_outputs_traditional_chinese_json_and_markdown(tmp_path, capsys) -> None:

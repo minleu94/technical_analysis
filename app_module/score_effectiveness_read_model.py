@@ -13,6 +13,7 @@ from app_module.evidence_event_dtos import (
     normalize_outcome_status,
 )
 from app_module.score_effectiveness_dtos import ScoreBucketAuditRow, ScoreEffectivenessReport
+from app_module.evidence_metric_applicability import EvidenceMetricApplicability
 
 
 SCORE_BUCKETS = ("0-40", "40-50", "50-60", "60-70", "70-80", "80-100")
@@ -83,11 +84,17 @@ class ScoreEffectivenessReadModel:
         grouped_event_ids: dict[str, set[str]] = {bucket: set() for bucket in SCORE_BUCKETS}
         grouped_outcomes: dict[str, list[EvidenceOutcome]] = {bucket: [] for bucket in SCORE_BUCKETS}
         diagnostics: list[str] = []
+        applicability = EvidenceMetricApplicability()
 
         for event in self.events:
             bucket = total_score_bucket_from_bp(event.score_bp)
             if bucket is None:
-                diagnostics.append(f"event_missing_score_bp:{event.event_id}")
+                metric_contract = applicability.classify(
+                    event_family=event.event_family,
+                    event_type=str(event.event_type),
+                )
+                if metric_contract.score_requirement == "required":
+                    diagnostics.append(f"event_missing_score_bp:{event.event_id}")
                 continue
             grouped_event_ids[bucket].add(event.event_id)
             grouped_outcomes[bucket].extend(outcome_by_event_id.get(event.event_id, ()))
