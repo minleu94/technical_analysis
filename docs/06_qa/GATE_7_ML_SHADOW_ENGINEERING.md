@@ -31,3 +31,7 @@ Model registry append-only 保存 model/dataset id、feature list、artifact pat
 ## Drift and champion comparison
 
 Feature drift 使用 frozen baseline quantile bins 計算 PSI，分成 stable、moderate 與 major drift；任何狀態都不會自動 retrain。Champion comparison 強制使用同一組 unique matured samples，比較 Precision@K、challenger return MAE 與 downside Brier；結果只提供 direction review，`auto_promotion_allowed=false`。
+
+## Rollback and promotion review
+
+`scripts/build_ml_promotion_review.py` 產生非套用型 review package。需要最低 shadow days、可審查 comparison、無 major drift、calibration passed、rollback artifact 與 verification artifacts；否則 `defer`。最高狀態只有 `eligible_for_human_review`，固定 `apply_promotion=false`、`auto_promotion_allowed=false`、`production_scheduler_allowed=false`。
