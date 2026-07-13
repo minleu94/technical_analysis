@@ -27,3 +27,7 @@ Downside probability 使用 isotonic calibration，且 calibration input 必須�
 ## Model and prediction registries
 
 Model registry append-only 保存 model/dataset id、feature list、artifact path/hash、calibration id 與固定 `shadow_candidate` lifecycle。Prediction registry append-only 保存 symbol、decision/available date、return/ranking/downside outputs；future-available 或非有限值會被拒絕。兩者皆無 production action eligibility。
+
+## Drift and champion comparison
+
+Feature drift 使用 frozen baseline quantile bins 計算 PSI，分成 stable、moderate 與 major drift；任何狀態都不會自動 retrain。Champion comparison 強制使用同一組 unique matured samples，比較 Precision@K、challenger return MAE 與 downside Brier；結果只提供 direction review，`auto_promotion_allowed=false`。
