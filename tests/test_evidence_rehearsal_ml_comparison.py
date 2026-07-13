@@ -124,6 +124,23 @@ def test_actual_boundary_filter_excludes_future_features_and_unmatured_labels() 
     assert result.boundary_issues == ()
 
 
+def test_boundary_filtered_label_unavailable_at_cutoff_counts_as_immature() -> None:
+    row = MLTrainingRow(
+        row_id="label-after-cutoff",
+        decision_date="2026-06-01",
+        features=(MLFeatureValue("score_bp", 5000, "2026-06-01"),),
+        label=MLLabelValue("future_return_bp", 150, "2026-07-02", "ready"),
+    )
+    boundary_report = MLAvailableDateBoundary().filter((row,), training_as_of="2026-07-01")
+
+    result = MLRehearsalComparisonService().compare(_manifest(row_count=1), boundary_report, ())
+
+    assert result.status == "insufficient_sample"
+    assert result.accepted_rows == 0
+    assert result.immature_label_rows == 1
+    assert result.mature_label_rows == 0
+
+
 def test_inconsistent_accepted_boundary_row_fails_closed() -> None:
     inconsistent_row = MLTrainingRow(
         row_id="inconsistent",

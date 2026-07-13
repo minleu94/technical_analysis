@@ -218,7 +218,10 @@ def _project_boundary(
     immature_row_ids = {
         row_id
         for row_id, row_diagnostics in diagnostics_by_row
-        if "label_not_mature" in row_diagnostics
+        if (
+            "label_not_mature" in row_diagnostics
+            or "label_unavailable_at_training_cutoff" in row_diagnostics
+        )
     }
     mature_label_rows = 0
     missing_feature_rows = 0
