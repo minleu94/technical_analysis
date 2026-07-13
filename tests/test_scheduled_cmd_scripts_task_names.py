@@ -90,7 +90,8 @@ def test_weekly_collection_wrappers_invoke_only_collection_cli_without_history_o
     cmd_text = (SCHEDULED_DIR / "run_v2_2_weekly_collection.cmd").read_text(encoding="utf-8")
     powershell_text = (SCHEDULED_DIR / "run_v2_2_weekly_collection.ps1").read_text(encoding="utf-8")
 
-    assert "run_v2_2_weekly_collection.ps1" in cmd_text
+    assert "powershell.exe" not in cmd_text.lower()
+    assert "collect_v2_2_weekly_evidence.py" in cmd_text
     assert "collect_v2_2_weekly_evidence.py" in powershell_text
     for text in (cmd_text, powershell_text):
         assert "--save-history" not in text
