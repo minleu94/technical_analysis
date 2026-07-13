@@ -402,6 +402,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_position_thesis_contract.py": "general-unit-keep-in-pytest",
     "tests/test_position_health_state_machine.py": "general-unit-keep-in-pytest",
     "tests/test_position_health_transition_repository.py": "general-unit-keep-in-pytest",
+    "tests/test_exit_effectiveness_read_model.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_decision_service.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_package_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_effectiveness_metrics.py": "general-unit-keep-in-pytest",
