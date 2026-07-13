@@ -1004,6 +1004,8 @@ Portfolio-level rebalance evaluator 會依固定順序逐檔套用現金、單�
 
 Equal-weight benchmark 在 baseline 日凍結 constituents 與等額 units，後續不因新推薦或下市存活狀態替換成分，以避免 survivor bias。每日 benchmark ledger 只接受 causal price 並 append-only 保存；任一 frozen constituent 缺價即 fail-closed。
 
+Weekly paper report 同時列出 gross return、成本後 net return、固定成分 benchmark return、net excess、交易成本與 turnover；觀測交易日少於預期時標示 `DEGRADED / incomplete_trading_week`。報告固定 `research_only=true`、`investment_effectiveness_claim=false`。
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_paper_portfolio_policy.py --sample --format json
 ```
