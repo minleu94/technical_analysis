@@ -1,5 +1,7 @@
 # baldr 完整操作手冊
 
+> Gate 2–7 純工程完成後，所有仍需人工補件、真實時間、資料授權、evidence maturity 與 ML revalidation 的項目，統一在 `docs/06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md` 查看；狀態以 `scripts/manage_engineering_gate_registry.py` append revision，禁止覆寫歷史或把工程完成解讀成正式核准。
+
 ## V3 pruning review package（唯讀提案）
 
 執行 `scripts\build_v3_pruning_package.py --input <metrics.json> --output <package.json>`，可把已成熟的 effectiveness metrics 轉成 `retain`、`restrict`、`downweight`、`retire` 或 `defer` 審查提案。樣本不足、必要指標缺失或人工驗證未完成時必定 `defer`。所有 proposal 固定 `apply_action=false`、`review_required=true`，package 固定 `auto_trading=false`；不得用此輸出直接修改推薦權重、threshold、production scheduler 或交易狀態。

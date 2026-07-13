@@ -1,5 +1,7 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+> **Gate 2–7 pure engineering closeout（2026-07-12）**：35 個必要 artifact/commit pairs 已涵蓋 Evidence/V3、13-source P0 contracts/adapters、Paper Portfolio 日更閉環、Position Health/Exit、9-slice structured traditional ML shadow challenger，以及 append-only human/time/ML control center。Closeout 與後續入口見 `docs/06_qa/GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md`、`docs/06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md`。這不是 formal product closeout：P0 仍 `requires_human_acceptance`、ML 仍 shadow-only、production scheduler/broker/auto promotion/auto exit 仍禁止。
+
 > **開場 30 秒內讀完** - 只放今天可驗證的狀態與入口，不放完整歷史細節
 > **最後稽核**：2026-07-12；證據矩陣見 `docs/06_qa/PROJECT_SNAPSHOT_AUDIT_2026_07_12.md`。
 
