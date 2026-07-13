@@ -23,3 +23,7 @@ Feature 必須滿足 `feature.available_date <= row.decision_date`。Label 可�
 ## Probability calibration
 
 Downside probability 使用 isotonic calibration，且 calibration input 必須來自至少兩個 walk-forward out-of-fold blocks。校準拒絕樣本不足、單一 label class、非有限值或超出 0..1 的 raw probability。Calibrator 固定 shadow-only，不提供 production eligibility。
+
+## Model and prediction registries
+
+Model registry append-only 保存 model/dataset id、feature list、artifact path/hash、calibration id 與固定 `shadow_candidate` lifecycle。Prediction registry append-only 保存 symbol、decision/available date、return/ranking/downside outputs；future-available 或非有限值會被拒絕。兩者皆無 production action eligibility。
