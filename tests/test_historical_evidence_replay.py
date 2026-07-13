@@ -10,7 +10,9 @@ from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.evidence_event_service import EvidenceEventService
 from app_module.forward_performance_service import ForwardPerformanceService
 from app_module.historical_evidence_replay import (
+    HistoricalEvidenceReplayDay,
     HistoricalEvidenceReplayRequest,
+    HistoricalEvidenceReplayReport,
     HistoricalEvidenceReplayService,
 )
 from app_module.recommendation_repository import RecommendationRepository
@@ -180,3 +182,42 @@ def test_replay_discovers_trading_dates_from_source_db(tmp_path: Path) -> None:
     )
 
     assert dates == ("2026-07-01", "2026-07-03")
+
+
+def test_replay_report_projects_read_only_rehearsal_artifact() -> None:
+    report = HistoricalEvidenceReplayReport(
+        replay_run_id="hre-fixture",
+        replay_mode="historical_replay",
+        source_label="simulated_scheduler",
+        start_date="2026-07-01",
+        end_date="2026-07-01",
+        source_db_path="C:/fixtures/source.sqlite",
+        replay_db_path="C:/fixtures/replay.sqlite",
+        dry_run=True,
+        confirm=False,
+        outcome_mode="final",
+        limitations=(),
+        days=(
+            HistoricalEvidenceReplayDay(
+                decision_date="2026-07-01",
+                selected_recommendation_result_id="rec-1",
+                sources=("source-1",),
+                events_seen=1,
+                events_inserted=0,
+                outcomes_created=0,
+                outcomes_updated=0,
+                outcomes_pending=1,
+                blocking_gaps=(),
+                diagnostics=("missing_benchmark",),
+            ),
+        ),
+    )
+
+    artifacts = report.to_rehearsal_artifacts(
+        decision_date="2026-07-01",
+        rollback_reference="commit:fixture",
+    )
+
+    assert artifacts[0].parent_artifact_ids == ("source-1", "rec-1")
+    assert artifacts[0].canonical_payload is not None
+    assert artifacts[0].canonical_payload["score_effectiveness_rows"] == ()

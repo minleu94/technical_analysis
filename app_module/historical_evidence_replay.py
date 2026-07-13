@@ -80,6 +80,21 @@ class HistoricalEvidenceReplayReport:
     limitations: tuple[str, ...]
     final_outcome_summary: dict[str, Any] | None = None
 
+    def to_rehearsal_artifacts(
+        self,
+        *,
+        decision_date: str,
+        rollback_reference: str,
+    ) -> tuple["RehearsalArtifact", ...]:
+        """以現有 replay summary 建立唯讀 rehearsal artifact 投影。"""
+        from app_module.evidence_rehearsal_adapters import HistoricalReplayRehearsalAdapter
+
+        return HistoricalReplayRehearsalAdapter().project(
+            self.to_dict(),
+            decision_date=decision_date,
+            rollback_reference=rollback_reference,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "replay_run_id": self.replay_run_id,
