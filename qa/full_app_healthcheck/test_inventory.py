@@ -417,6 +417,8 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_engineering_gate_registry.py": "general-unit-keep-in-pytest",
     "tests/test_ml_revalidation_runbook_service.py": "general-unit-keep-in-pytest",
     "tests/test_ml_revalidation_runbook_cli.py": "general-unit-keep-in-pytest",
+    "tests/test_gate_2_to_7_closeout_verifier.py": "general-unit-keep-in-pytest",
+    "tests/test_gate_2_to_7_closeout_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_decision_service.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_package_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_effectiveness_metrics.py": "general-unit-keep-in-pytest",
