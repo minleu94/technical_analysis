@@ -27,6 +27,20 @@ _REQUIRED_ADAPTERS = (
     "ml",
 )
 
+_REQUIRED_ADAPTER_ARTIFACT_TYPES = {
+    "source": "daily_governed_data",
+    "market": "market_context",
+    "replay": "recommendation",
+    "advice": "bounded_advice",
+    "paper": "paper_portfolio",
+    "health": "position_health",
+    "evidence": "evidence_event",
+    "outcome": "forward_outcome",
+    "weekly": "weekly_review",
+    "signal": "signal_effectiveness",
+    "ml": "ml_shadow_prediction",
+}
+
 
 @dataclass(frozen=True)
 class EvidenceRehearsalServiceReport:
@@ -81,6 +95,12 @@ class EvidenceRehearsalService:
                     blockers.append(f"adapter_failure:{adapter_name}:{item}")
                 elif isinstance(item, ArtifactIdentity):
                     artifacts.append(item)
+                    expected_type = _REQUIRED_ADAPTER_ARTIFACT_TYPES[adapter_name]
+                    if item.artifact_type != expected_type:
+                        blockers.append(
+                            "adapter_artifact_type_mismatch:"
+                            f"{adapter_name}:{item.artifact_type}:{expected_type}"
+                        )
                     if item.decision_date != scenario.decision_date:
                         blockers.append(
                             f"scenario_decision_date_mismatch:{item.artifact_id}"
@@ -91,7 +111,8 @@ class EvidenceRehearsalService:
         lineage = self._verifier.verify(artifacts)
         blockers.extend(lineage.blockers)
         ordered_ids = lineage.ordered_artifact_ids
-        by_id = {artifact.artifact_id: artifact for artifact in artifacts}
+        verified = not blockers and lineage.status == "complete"
+        by_id = {artifact.artifact_id: artifact for artifact in artifacts} if verified else {}
         return EvidenceRehearsalServiceReport(
             status="complete" if not blockers and lineage.status == "complete" else "degraded",
             ordered_artifact_ids=ordered_ids,

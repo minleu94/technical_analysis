@@ -93,6 +93,39 @@ def test_repeat_same_scenario_produces_identical_hashes_ids_and_counts() -> None
     assert first.artifact_count == second.artifact_count == 11
 
 
+def test_fails_closed_when_adapter_emits_artifact_from_another_domain() -> None:
+    outputs = {
+        **_complete_outputs(),
+        "source": (_artifact("data", "market_context"),),
+    }
+
+    result = EvidenceRehearsalService().run(_scenario(), outputs)
+
+    assert result.status == "degraded"
+    assert (
+        "adapter_artifact_type_mismatch:source:market_context:daily_governed_data"
+        in result.blockers
+    )
+    assert result.artifact_dag == {}
+    assert result.artifact_hashes == {}
+
+
+def test_duplicate_artifact_id_is_not_projected_into_unverified_dag_or_hashes() -> None:
+    outputs = {
+        **_complete_outputs(),
+        "market": (
+            replace(_complete_outputs()["market"][0], artifact_id="data"),
+        ),
+    }
+
+    result = EvidenceRehearsalService().run(_scenario(), outputs)
+
+    assert result.status == "degraded"
+    assert "duplicate_artifact_id:data" in result.blockers
+    assert result.artifact_dag == {}
+    assert result.artifact_hashes == {}
+
+
 @pytest.mark.parametrize(
     ("name", "outputs", "expected_blocker"),
     (
