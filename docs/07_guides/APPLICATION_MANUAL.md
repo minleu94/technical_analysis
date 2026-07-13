@@ -1,5 +1,9 @@
 # baldr 完整操作手冊
 
+## V3 pruning review package（唯讀提案）
+
+執行 `scripts\build_v3_pruning_package.py --input <metrics.json> --output <package.json>`，可把已成熟的 effectiveness metrics 轉成 `retain`、`restrict`、`downweight`、`retire` 或 `defer` 審查提案。樣本不足、必要指標缺失或人工驗證未完成時必定 `defer`。所有 proposal 固定 `apply_action=false`、`review_required=true`，package 固定 `auto_trading=false`；不得用此輸出直接修改推薦權重、threshold、production scheduler 或交易狀態。
+
 > **最後更新**：2026-07-12
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前左側主導覽的 8 個主工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
