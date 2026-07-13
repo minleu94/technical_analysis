@@ -1010,6 +1010,8 @@ Position thesis contract 要求人工保存 entry thesis、entry/decision/availa
 
 Position Health state machine 僅使用決策日當下可得的 Decimal metrics。future 或 missing metric 會 fail-closed 到 `WATCH`，失效規則命中只提出 `EXIT_CANDIDATE`；`CLOSED` 是終態。所有結果固定 `apply_transition=false`、`auto_exit_allowed=false`。
 
+Position Health transition repository 採 append-only event。`proposal` 事件的 `recorded_state` 必須維持 previous state；只有帶 reviewer 的 `human_approved` 事件可記錄核准後狀態。兩者都固定 `auto_action_allowed=false`，不會送出賣單。
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_paper_portfolio_policy.py --sample --format json
 ```
