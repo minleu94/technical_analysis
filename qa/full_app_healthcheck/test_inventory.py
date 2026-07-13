@@ -412,6 +412,8 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_ml_drift_champion_comparison.py": "general-unit-keep-in-pytest",
     "tests/test_ml_promotion_review_package.py": "general-unit-keep-in-pytest",
     "tests/test_ml_promotion_review_cli.py": "general-unit-keep-in-pytest",
+    "tests/test_ml_shadow_dependency_boundary.py": "general-unit-keep-in-pytest",
+    "tests/test_ml_shadow_boundary_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_decision_service.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_package_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_effectiveness_metrics.py": "general-unit-keep-in-pytest",

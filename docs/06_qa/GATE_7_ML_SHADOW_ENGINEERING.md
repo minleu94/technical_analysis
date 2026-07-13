@@ -35,3 +35,7 @@ Feature drift 使用 frozen baseline quantile bins 計算 PSI，分成 stable、
 ## Rollback and promotion review
 
 `scripts/build_ml_promotion_review.py` 產生非套用型 review package。需要最低 shadow days、可審查 comparison、無 major drift、calibration passed、rollback artifact 與 verification artifacts；否則 `defer`。最高狀態只有 `eligible_for_human_review`，固定 `apply_promotion=false`、`auto_promotion_allowed=false`、`production_scheduler_allowed=false`。
+
+## Static shadow boundary
+
+`scripts/check_ml_shadow_boundary.py` 以 AST 檢查 production packages 不得 import `ml_module`，`ml_module` 不得 import Advice/Decision/Portfolio/UI/runtime/backtest 路徑，且不得把 production/promotion/trading flags 設為 true。違反時 CLI exit 1。
