@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from typing import Iterable
 
 
@@ -21,8 +21,8 @@ class PurgedWalkForwardFold:
     test_rows: tuple[MLTimeWindowRow, ...]
     test_start: str
     test_end: str
-    purge_days: int
-    embargo_days: int
+    purge_trading_days: int
+    embargo_trading_days: int
 
 
 class PurgedWalkForwardSplitter:
@@ -31,19 +31,32 @@ class PurgedWalkForwardSplitter:
         *,
         minimum_train_dates: int,
         test_date_count: int,
-        purge_days: int,
-        embargo_days: int,
+        purge_trading_days: int | None = None,
+        embargo_trading_days: int | None = None,
+        **legacy_calendar_parameters: int,
     ) -> None:
+        if legacy_calendar_parameters:
+            names = ", ".join(sorted(legacy_calendar_parameters))
+            raise TypeError(
+                f"ambiguous calendar parameters ({names}); use purge_trading_days "
+                "and embargo_trading_days"
+            )
+        if purge_trading_days is None or embargo_trading_days is None:
+            raise TypeError(
+                "purge_trading_days and embargo_trading_days are required"
+            )
         if minimum_train_dates <= 0:
             raise ValueError("minimum_train_dates must be positive")
         if test_date_count <= 0:
             raise ValueError("test_date_count must be positive")
-        if purge_days < 0 or embargo_days < 0:
-            raise ValueError("purge_days and embargo_days must be non-negative")
+        if purge_trading_days < 0 or embargo_trading_days < 0:
+            raise ValueError(
+                "purge_trading_days and embargo_trading_days must be non-negative"
+            )
         self.minimum_train_dates = minimum_train_dates
         self.test_date_count = test_date_count
-        self.purge_days = purge_days
-        self.embargo_days = embargo_days
+        self.purge_trading_days = purge_trading_days
+        self.embargo_trading_days = embargo_trading_days
 
     def split(self, rows: Iterable[MLTimeWindowRow]) -> tuple[PurgedWalkForwardFold, ...]:
         ordered = tuple(sorted(rows, key=lambda row: (row.decision_date, row.row_id)))
@@ -54,11 +67,12 @@ class PurgedWalkForwardSplitter:
             test_dates = dates[start_index : start_index + self.test_date_count]
             test_start = test_dates[0]
             test_end = test_dates[-1]
-            purge_cutoff = _date(test_start) - timedelta(days=self.purge_days)
+            purge_boundary_index = max(0, start_index - self.purge_trading_days)
+            eligible_train_dates = frozenset(dates[:purge_boundary_index])
             train = tuple(
                 row
                 for row in ordered
-                if _date(row.decision_date) < purge_cutoff
+                if row.decision_date in eligible_train_dates
                 and _date(row.label_end_date) < _date(test_start)
             )
             test = tuple(row for row in ordered if row.decision_date in test_dates)
@@ -70,11 +84,11 @@ class PurgedWalkForwardSplitter:
                         test_rows=test,
                         test_start=test_start,
                         test_end=test_end,
-                        purge_days=self.purge_days,
-                        embargo_days=self.embargo_days,
+                        purge_trading_days=self.purge_trading_days,
+                        embargo_trading_days=self.embargo_trading_days,
                     )
                 )
-            start_index += self.test_date_count + self.embargo_days
+            start_index += self.test_date_count + self.embargo_trading_days
         return tuple(folds)
 
 
