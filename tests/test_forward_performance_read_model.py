@@ -63,6 +63,7 @@ def _outcome(
     status: str = "ready",
     data_quality: str = "observed",
     warnings: tuple[str, ...] = (),
+    metadata: dict[str, object] | None = None,
 ) -> EvidenceOutcome:
     return EvidenceOutcome(
         outcome_id=f"out-{event_id}-{window_days}",
@@ -78,6 +79,7 @@ def _outcome(
         outcome_status=status,
         data_quality=data_quality,
         warnings=warnings,
+        metadata=metadata or {},
     )
 
 
@@ -138,6 +140,27 @@ def test_insufficient_sample_and_pending_not_in_mean(tmp_path: Path) -> None:
     assert summary.pending_count == 1
     assert summary.mean_forward_return_bp == 100
     assert summary.summary_status == SUMMARY_STATUS_INSUFFICIENT_SAMPLE
+
+
+def test_pending_summary_exposes_next_expected_maturity_date(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    repo.insert_event(_event("evt-1"))
+    repo.upsert_outcome(
+        _outcome(
+            "evt-1",
+            forward_return_bp=None,
+            benchmark_excess_bp=None,
+            industry_excess_bp=None,
+            status=EvidenceOutcomeStatus.INSUFFICIENT_FUTURE_DATA,
+            data_quality=EvidenceDataQuality.MISSING,
+            warnings=("insufficient_future_data",),
+            metadata={"expected_maturity_date": "2026-07-13"},
+        )
+    )
+
+    summary = ForwardPerformanceReadModel(repo).summarize(group_by="event_type")[0]
+
+    assert summary.next_expected_maturity_date == "2026-07-13"
 
 
 def test_missing_benchmark_and_industry_are_statused_and_counted(tmp_path: Path) -> None:

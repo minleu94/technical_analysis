@@ -77,6 +77,7 @@ class ForwardPerformanceGroupSummary:
     first_event_date: str | None = None
     last_event_date: str | None = None
     summary_status: str = SUMMARY_STATUS_INSUFFICIENT_SAMPLE
+    next_expected_maturity_date: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -137,6 +138,12 @@ class ForwardPerformanceReadModel:
         for event, outcome in rows:
             warning_counts.update(event.warnings)
             warning_counts.update(outcome.warnings)
+        expected_maturity_dates = sorted(
+            str(outcome.metadata.get("expected_maturity_date"))
+            for _, outcome in rows
+            if outcome.outcome_status == EvidenceOutcomeStatus.INSUFFICIENT_FUTURE_DATA
+            and outcome.metadata.get("expected_maturity_date")
+        )
 
         forward_values = [outcome.forward_return_bp for _, outcome in ready if outcome.forward_return_bp is not None]
         benchmark_values = [
@@ -181,6 +188,9 @@ class ForwardPerformanceReadModel:
             first_event_date=dates[0] if dates else None,
             last_event_date=dates[-1] if dates else None,
             summary_status=summary_status,
+            next_expected_maturity_date=(
+                expected_maturity_dates[0] if expected_maturity_dates else None
+            ),
         )
 
     @staticmethod

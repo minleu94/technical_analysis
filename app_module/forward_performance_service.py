@@ -23,6 +23,7 @@ from app_module.event_price_resolver import (
     EventPriceResolution,
     EventPriceResolver,
 )
+from app_module.outcome_maturity_service import OutcomeMaturity, OutcomeMaturityService
 
 
 DEFAULT_MARKET_BENCHMARK_ID = "TAIEX"
@@ -160,6 +161,16 @@ class ForwardPerformanceService:
         event_price_metadata = {"return_basis": "close_to_close_event_date"}
         if event_price.fallback_reason is not None:
             event_price_metadata["event_price_fallback_reason"] = event_price.fallback_reason
+        maturity = self._outcome_maturity(
+            str(event.symbol),
+            event_price_date,
+            window_days,
+            data_as_of_date=data_as_of_date,
+        )
+        if maturity.expected_trading_date is not None:
+            event_price_metadata["expected_maturity_date"] = maturity.expected_trading_date
+        event_price_metadata["maturity_status"] = maturity.status
+        event_price_metadata["remaining_trading_days"] = maturity.remaining_trading_days
         outcome_price = self._find_outcome_price(
             str(event.symbol),
             event_price_date,
@@ -256,6 +267,24 @@ class ForwardPerformanceService:
         if resolution.price_date is None or resolution.close is None:
             return None
         return resolution
+
+    def _outcome_maturity(
+        self,
+        symbol: str,
+        event_price_date: str,
+        window_days: int,
+        *,
+        data_as_of_date: str | None,
+    ) -> OutcomeMaturity:
+        keys, _ = self._daily_price_series(symbol)
+        trading_dates = tuple(self._date_iso(key) for key in keys)
+        as_of = data_as_of_date or (trading_dates[-1] if trading_dates else event_price_date)
+        return OutcomeMaturityService().evaluate(
+            event_date=event_price_date,
+            window_days=window_days,
+            trading_dates=trading_dates,
+            as_of_date=as_of,
+        )
 
     def _find_outcome_price(
         self,

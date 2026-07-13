@@ -176,3 +176,10 @@ Task Scheduler observation from the finish plan: 04:40、05:00、05:15 三個 sc
 - 假日／週末事件會保存 `previous_trading_day`；資料可見日早於 decision date 時保存 `data_as_of_boundary`。
 - 沒有可見價格時維持 `missing`，不再向後選取 decision date 之後的第一筆價格。
 - Prefix-invariance tests 固定 future price row 不得改變先前 decision 的 event price。
+
+## 2026-07-12 Outcome Maturity Follow-up
+
+- 5 / 10 / 20 / 60 日 horizon 改以交易日序列計算 expected maturity date，不以 calendar days 推測。
+- pending outcome 保存 `expected_maturity_date`、`maturity_status` 與 `remaining_trading_days`。
+- Forward Performance summary 顯示群組內最近的下一個成熟日；交易日曆尚不足時維持 `waiting_for_calendar`。
+- 成熟日只作驗證排程資訊，不會提前讀取 future close 或改變 label readiness。
