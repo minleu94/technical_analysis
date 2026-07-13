@@ -9,7 +9,7 @@
 
 | Gate | 目前狀態 | 判讀 |
 |---|---|---|
-| weekly history | `0/3 waiting_for_time` | 尚無三個真實且可稽核的 weekly review history；不得以 fixture、replay、單次 smoke 或手動改文件補足。 |
+| weekly history | `1/3 waiting_for_time` | Week 1（2026-07-06 至 2026-07-12）已完成；Week 2 / Week 3 不得以 fixture、replay、單次 smoke 或手動改文件補足。 |
 | multi-day dry-run | `3/3 ready` | 多日 dry-run 紀錄已達工程前置條件；它不取代 weekly history、manual review 或 action-item rhythm。 |
 | scheduler | 未獲核准 | `production_scheduler_allowed=false`；既有排程只產生受控 freshness / dry-run 產物，不是 production evidence write-mode。 |
 | formal closeout | 不可建立 | V2.2 尚缺三個真實週期、人工 review、backup / rollback / recovery 演練與明確 scheduler approval。 |
