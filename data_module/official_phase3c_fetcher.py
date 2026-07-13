@@ -3,7 +3,7 @@ import time
 import requests
 import pandas as pd
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timezone
 from typing import List, Dict, Any, Optional
 import io
 from decimal import Decimal, ROUND_HALF_UP
@@ -14,6 +14,18 @@ logger = logging.getLogger(__name__)
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
 }
+
+
+def observed_only_availability_fields() -> Dict[str, Any]:
+    """官方未提供 publication timestamp 時，只保存本次實際觀測時間。"""
+    first_observed_at = datetime.now(timezone.utc).isoformat()
+    return {
+        "publication_at": None,
+        "first_observed_at": first_observed_at,
+        "available_at": first_observed_at,
+        "available_date": None,
+        "quality": "degraded",
+    }
 
 def to_roc_date(dt: date) -> str:
     """轉換為民國年格式: YYY/MM/DD"""
@@ -57,10 +69,6 @@ def fetch_institutional_flows(decision_date: date) -> pd.DataFrame:
     date_ce = decision_date.strftime("%Y%m%d")
     date_roc = to_roc_date(decision_date)
 
-    # Policy: TWSE/TPEX data usually releases after market close, so available_date = decision_date + 1 day
-    # Or keep missing_available_date_policy and degraded.
-    available_date = (decision_date + timedelta(days=1)).isoformat()
-
     rows = []
 
     # --- TWSE ---
@@ -91,9 +99,8 @@ def fetch_institutional_flows(decision_date: date) -> pd.DataFrame:
                 rows.append({
                     "stock_code": str(item.get("證券代號")),
                     "decision_date": decision_date.isoformat(),
-                    "available_date": available_date,
                     "source_version": "twse-official-T86",
-                    "quality": "degraded",
+                    **observed_only_availability_fields(),
                     "foreign_investor_buy": fi_buy,
                     "foreign_investor_sell": fi_sell,
                     "foreign_investor_net": fi_net,
@@ -135,9 +142,8 @@ def fetch_institutional_flows(decision_date: date) -> pd.DataFrame:
                     rows.append({
                         "stock_code": str(row[0]),
                         "decision_date": decision_date.isoformat(),
-                        "available_date": available_date,
                         "source_version": "tpex-official-3itrade",
-                        "quality": "degraded",
+                        **observed_only_availability_fields(),
                         "foreign_investor_buy": fi_buy,
                         "foreign_investor_sell": fi_sell,
                         "foreign_investor_net": fi_net,
@@ -163,7 +169,6 @@ def fetch_credit_transactions(decision_date: date) -> pd.DataFrame:
     date_ce = decision_date.strftime("%Y%m%d")
     date_roc = to_roc_date(decision_date)
 
-    available_date = (decision_date + timedelta(days=1)).isoformat()
     rows = []
 
     # --- TWSE ---
@@ -184,9 +189,8 @@ def fetch_credit_transactions(decision_date: date) -> pd.DataFrame:
                         rows.append({
                             "stock_code": stock_code,
                             "decision_date": decision_date.isoformat(),
-                            "available_date": available_date,
                             "source_version": "twse-official-MI_MARGN",
-                            "quality": "degraded",
+                            **observed_only_availability_fields(),
                             "margin_purchase": safe_int(item.get("融資買進", 0)),
                             "margin_balance": safe_int(item.get("融資今日餘額", 0)),
                             "short_sale": safe_int(item.get("融券賣出", 0)),
@@ -214,9 +218,8 @@ def fetch_credit_transactions(decision_date: date) -> pd.DataFrame:
                     rows.append({
                         "stock_code": str(row[0]),
                         "decision_date": decision_date.isoformat(),
-                        "available_date": available_date,
                         "source_version": "tpex-official-margin_bal",
-                        "quality": "degraded",
+                        **observed_only_availability_fields(),
                         "margin_purchase": safe_int(row[3]),
                         "margin_balance": safe_int(row[6]),
                         "short_sale": safe_int(row[10]),
@@ -258,9 +261,6 @@ def fetch_tdcc_shareholding(decision_date: date) -> pd.DataFrame:
             logger.warning(f"TDCC 最新資料日期為 {data_date}，與 decision_date {decision_date} 不符，略過。")
             return pd.DataFrame()
 
-        # TDCC available_date = data_date + 3 days (Usually published on Saturday/Sunday for Friday)
-        available_date = data_date + timedelta(days=3)
-
         grouped = df_raw.groupby("證券代號")
         rows = []
 
@@ -290,9 +290,8 @@ def fetch_tdcc_shareholding(decision_date: date) -> pd.DataFrame:
             rows.append({
                 "stock_code": str(stock_code),
                 "decision_date": data_date.isoformat(),
-                "available_date": available_date.isoformat(),
                 "source_version": "tdcc-official-od-1-5",
-                "quality": "observed",
+                **observed_only_availability_fields(),
                 "shareholding_tiers": "weekly_distribution_available",
                 "large_holder_ratio_bp": large_bp,
                 "retail_holder_ratio_bp": retail_bp,

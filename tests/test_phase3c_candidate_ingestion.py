@@ -3,6 +3,7 @@ from datetime import date
 from unittest.mock import patch, MagicMock
 import pandas as pd
 
+from data_module.p0_candidate_repository import ProductionPathRejectedError
 from scripts.update_phase3c_candidates import update_phase3c_candidates
 
 @pytest.fixture
@@ -38,11 +39,36 @@ def test_dry_run_does_not_create_db(tmp_path, mock_fetchers):
     """Dry-run must not create a DB or initialize Phase 3C tables."""
     db_path = tmp_path / "test_twstock.db"
 
-    with patch('scripts.update_phase3c_candidates.DBManager') as MockDBManager:
+    with patch('scripts.update_phase3c_candidates.DBManager') as MockDBManager, \
+         patch('scripts.update_phase3c_candidates.TWStockConfig') as MockConfig:
         update_phase3c_candidates(date(2026, 7, 8), dry_run=True, db_path=str(db_path))
 
         assert not db_path.exists()
         MockDBManager.assert_not_called()
+        MockConfig.assert_not_called()
+
+
+def test_apply_rejects_data_root_descendant_before_config_or_db_initialization(
+    tmp_path, mock_fetchers, monkeypatch
+):
+    """即使檔案已存在，正式 DATA_ROOT 內的目標也必須先拒絕。"""
+    data_root = tmp_path / "formal-data"
+    db_path = data_root / "candidate" / "working.sqlite"
+    db_path.parent.mkdir(parents=True)
+    db_path.touch()
+    monkeypatch.setenv("DATA_ROOT", str(data_root))
+
+    with patch('scripts.update_phase3c_candidates.DBManager') as MockDBManager, \
+         patch('scripts.update_phase3c_candidates.TWStockConfig') as MockConfig:
+        with pytest.raises(ProductionPathRejectedError):
+            update_phase3c_candidates(
+                date(2026, 7, 8),
+                dry_run=False,
+                db_path=str(db_path),
+            )
+
+        MockDBManager.assert_not_called()
+        MockConfig.assert_not_called()
 
 def test_apply_without_db_aborts(tmp_path, mock_fetchers, caplog):
     """Apply mode must fail closed when the target DB does not exist."""

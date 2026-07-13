@@ -9,6 +9,7 @@ sys.path.insert(0, str(project_root))
 
 from data_module.config import TWStockConfig
 from data_module.db_manager import DBManager
+from data_module.p0_candidate_repository import validate_candidate_working_copy_path
 from data_module.official_phase3c_fetcher import (
     fetch_institutional_flows,
     fetch_credit_transactions,
@@ -23,12 +24,6 @@ def update_phase3c_candidates(decision_date: date, dry_run: bool = True, db_path
     抓取 Phase 3C 資料。
     注意：不屬於 V3.0 closeout gate，不是 production scheduler。
     """
-    config = TWStockConfig()
-    config.db_path = config.db_file
-    if db_path:
-        config.db_file = Path(db_path)
-        config.db_path = config.db_file
-
     logger.info(f"=== 開始 Phase 3C 資料更新 ({decision_date}) ===")
     logger.info("access_boundary: writes_allowed=" + ("true" if not dry_run else "false"))
     logger.info("access_boundary: production_scheduler_allowed=false")
@@ -37,9 +32,21 @@ def update_phase3c_candidates(decision_date: date, dry_run: bool = True, db_path
     logger.info("access_boundary: v3_closeout_gate_credit=false")
 
     if not dry_run:
-        if not os.path.exists(config.db_file):
-            logger.error(f"資料庫 {config.db_path} 不存在，dry-run / apply 不建立新 DB。")
+        if not db_path:
+            logger.error("apply 必須提供 explicit working-copy DB；未提供時不建立 DB。")
             return
+        production_data_root = Path(os.environ.get("DATA_ROOT", "D:/Min/Python/Project/FA_Data"))
+        candidate_db = validate_candidate_working_copy_path(
+            db_path,
+            production_data_root=production_data_root,
+            production_db_path=production_data_root / "sqlite" / "twstock.db",
+        )
+        if not candidate_db.exists():
+            logger.error(f"資料庫 {candidate_db} 不存在，dry-run / apply 不建立新 DB。")
+            return
+        config = TWStockConfig()
+        config.db_file = candidate_db
+        config.db_path = candidate_db
         db_manager = DBManager(config)
         db_manager.ensure_phase3c_candidate_tables()
     else:
