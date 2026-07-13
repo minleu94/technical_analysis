@@ -41,16 +41,18 @@ Coverage 以 `CoverageMetric` 的 observed、missing、degraded、future-blocked
 
 | 檢查 | 結果 |
 |---|---|
-| Full pytest | `1997 passed`（24 個既有 warning） |
+| Full pytest | `2001 passed, 24 warnings in 219.18s` |
 | 指定 UI pytest | `59 passed` |
 | Update Tab QA | `23 passed / 0 failed / 4 skipped` |
-| 全模組 mypy | `406 source files` 無 issue |
+| 全模組 mypy | `416 source files` 無 issue |
 | UTF-8 encoding | 661 files；0 invalid UTF-8、0 mojibake warning |
 | 相對 Markdown links / active index | 345 files 均可解析；closeout 已列入 Documentation Index |
 | Quant guard / Look-ahead | 全部通過 |
 | ML shadow boundary | 351 files，0 violation，`shadow_only=true` |
 | Gate 2–7 verifier | engineering package `complete`、external validation `pending`、35/35 requirements；非 formal product closeout |
 | 變更 Python `py_compile` / `git diff --check` | 全部通過 |
+
+> 歷史補充：integration agent 曾在 124 秒 command 時限內兩次啟動 full pytest，因工具逾時未取得當時的 pytest 結果；上表的 `2001 passed, 24 warnings in 219.18s` 是主控端後續完整驗證的最新、權威結果。
 
 ### 可重跑 PowerShell closeout sequence
 
