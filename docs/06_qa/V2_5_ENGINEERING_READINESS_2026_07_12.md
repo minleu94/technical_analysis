@@ -21,7 +21,8 @@
 
 ## 未完成的正式 Gate
 
+2026-07-12 已由 V2.4 真實 saved-Recommendation paper artifact 建立 3 筆 `WATCH` baseline，並確認缺 thesis / invalidation / horizon / review date 時不補值、不自動 action；見 `V2_5_POSITION_HEALTH_BASELINE_2026_07_12.md`。
+
 - 真實 active position 的 entry thesis、invalidation、holding horizon、review date 與人工 override／journal 記錄。
 - 真實時間的 state transition evidence 與每筆 transition 的人工決議。
 - Exit effectiveness、broker execution、任何自動減碼／平倉均不在範圍內。
-
