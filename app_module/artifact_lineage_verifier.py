@@ -7,6 +7,26 @@ from datetime import date
 from typing import Any, Iterable
 
 
+_CROSS_DOMAIN_ARTIFACT_TYPES = (
+    "daily_governed_data",
+    "market_context",
+    "recommendation",
+    "bounded_advice",
+    "paper_portfolio",
+    "position_health",
+    "evidence_event",
+    "forward_outcome",
+    "weekly_review",
+    "signal_effectiveness",
+    "ml_shadow_prediction",
+)
+_REQUIRED_PARENT_ARTIFACT_TYPES = {
+    artifact_type: _CROSS_DOMAIN_ARTIFACT_TYPES[index - 1]
+    for index, artifact_type in enumerate(_CROSS_DOMAIN_ARTIFACT_TYPES)
+    if index > 0
+}
+
+
 @dataclass(frozen=True)
 class ArtifactIdentity:
     artifact_id: str
@@ -63,6 +83,7 @@ class ArtifactLineageVerifier:
             for parent_id in item.parent_artifact_ids:
                 if parent_id not in by_id:
                     blockers.append(f"missing_parent:{item.artifact_id}:{parent_id}")
+            self._validate_cross_domain_parent_contract(item, by_id, blockers)
 
         ordered = self._topological_order(by_id)
         if len(ordered) != len(by_id):
@@ -107,6 +128,46 @@ class ArtifactLineageVerifier:
             blockers.append(f"invalid_content_hash:{item.artifact_id}")
         if not item.rollback_reference.strip():
             blockers.append(f"missing_rollback_reference:{item.artifact_id}")
+
+    @staticmethod
+    def _validate_cross_domain_parent_contract(
+        item: ArtifactIdentity,
+        by_id: dict[str, ArtifactIdentity],
+        blockers: list[str],
+    ) -> None:
+        """Enforce the fixed rehearsal chain while retaining upstream multi-parent lineage."""
+        if item.artifact_type not in _CROSS_DOMAIN_ARTIFACT_TYPES:
+            return
+        parent_types = tuple(
+            by_id[parent_id].artifact_type
+            for parent_id in item.parent_artifact_ids
+            if parent_id in by_id
+        )
+        if item.artifact_type == _CROSS_DOMAIN_ARTIFACT_TYPES[0]:
+            for parent_id in item.parent_artifact_ids:
+                parent = by_id.get(parent_id)
+                if parent is not None:
+                    blockers.append(
+                        "invalid_cross_domain_parent:"
+                        f"{item.artifact_id}:{parent_id}:{parent.artifact_type}:none"
+                    )
+            return
+        expected_parent_type = _REQUIRED_PARENT_ARTIFACT_TYPES[item.artifact_type]
+        if expected_parent_type not in parent_types:
+            blockers.append(
+                "missing_required_cross_domain_parent:"
+                f"{item.artifact_id}:{expected_parent_type}"
+            )
+        permitted_parent_types = _CROSS_DOMAIN_ARTIFACT_TYPES[
+            :_CROSS_DOMAIN_ARTIFACT_TYPES.index(item.artifact_type)
+        ]
+        for parent_id in item.parent_artifact_ids:
+            parent = by_id.get(parent_id)
+            if parent is not None and parent.artifact_type not in permitted_parent_types:
+                blockers.append(
+                    "invalid_cross_domain_parent:"
+                    f"{item.artifact_id}:{parent_id}:{parent.artifact_type}:{expected_parent_type}"
+                )
 
     @staticmethod
     def _topological_order(by_id: dict[str, ArtifactIdentity]) -> tuple[str, ...]:

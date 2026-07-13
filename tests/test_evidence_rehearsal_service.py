@@ -93,6 +93,24 @@ def test_repeat_same_scenario_produces_identical_hashes_ids_and_counts() -> None
     assert first.artifact_count == second.artifact_count == 11
 
 
+def test_preserves_upstream_multi_parent_lineage_when_direct_parent_is_present() -> None:
+    outputs = {
+        **_complete_outputs(),
+        "advice": (
+            _artifact(
+                "advice",
+                "bounded_advice",
+                parents=("recommendation", "market"),
+            ),
+        ),
+    }
+
+    result = EvidenceRehearsalService().run(_scenario(), outputs)
+
+    assert result.status == "complete"
+    assert result.artifact_dag["advice"] == ("recommendation", "market")
+
+
 def test_fails_closed_when_adapter_emits_artifact_from_another_domain() -> None:
     outputs = {
         **_complete_outputs(),
@@ -122,6 +140,22 @@ def test_duplicate_artifact_id_is_not_projected_into_unverified_dag_or_hashes() 
 
     assert result.status == "degraded"
     assert "duplicate_artifact_id:data" in result.blockers
+    assert result.artifact_dag == {}
+    assert result.artifact_hashes == {}
+
+
+def test_fails_closed_when_parent_is_in_the_wrong_cross_domain_chain_position() -> None:
+    outputs = {
+        **_complete_outputs(),
+        "advice": (
+            _artifact("advice", "bounded_advice", parents=("data",)),
+        ),
+    }
+
+    result = EvidenceRehearsalService().run(_scenario(), outputs)
+
+    assert result.status == "degraded"
+    assert "missing_required_cross_domain_parent:advice:recommendation" in result.blockers
     assert result.artifact_dag == {}
     assert result.artifact_hashes == {}
 

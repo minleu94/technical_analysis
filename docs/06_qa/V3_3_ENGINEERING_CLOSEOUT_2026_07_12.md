@@ -55,3 +55,8 @@ Control Center 與 append-only `EngineeringGateRegistry` 維持唯一外部 Gate
 - production evidence scheduler 明確 owner approval；目前維持 disabled。
 
 上述項目持續登記於 [External Validation Register](GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md)，不得用 fixture、replay 或工程測試改寫狀態。
+## P1 lineage parent contract correction (2026-07-13)
+
+Canonical lineage verifier 現已固定跨領域鏈：`daily_governed_data` → `market_context` → `recommendation` → `bounded_advice` → `paper_portfolio` → `position_health` → `evidence_event` → `forward_outcome` → `weekly_review` → `signal_effectiveness` → `ml_shadow_prediction`。後繼 artifact 必須包含直接前序領域 parent；額外更早上游 parent 可保留 provenance。相同或後序領域 parent，以及缺直接前序 parent 均 fail-closed。
+
+即使 artifact type 正確且無 cycle，parent domain/order 錯置仍使 rehearsal 報告降為 `degraded`，且不得投影 artifact DAG 或 hashes。本修正不改變 formal product closeout、production action、external Gate 或 evidence maturity。
