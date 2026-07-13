@@ -211,7 +211,9 @@ class HistoricalEvidenceReplayService:
                         )
                     ),
                     evidence_ids=tuple(
-                        event.event_id for event in event_repository.list_events(decision_date=decision_date)
+                        event.event_id
+                        for event in event_repository.list_events(decision_date=decision_date)
+                        if event.metadata.get("replay_run_id") == request.replay_run_id
                     ),
                 )
             )

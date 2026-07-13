@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 import sqlite3
 
 import pytest
@@ -102,6 +103,54 @@ def test_replay_uses_only_recommendation_results_available_on_decision_date(tmp_
     assert report.days[0].evidence_ids == tuple(event.event_id for event in events if event.decision_date == "2026-07-01")
     assert all(event.metadata["replay_mode"] == "historical_replay" for event in events)
     assert all(event.metadata["source_label"] == "simulated_scheduler" for event in events)
+
+
+def test_replay_day_evidence_ids_exclude_events_from_a_different_replay_run(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _seed_market_db(config, days=3)
+    _seed_result(config, result_id="past-rec", created_at="2026-07-01T06:00:00")
+    replay_db = tmp_path / "replay" / "historical.db"
+    replay_db.parent.mkdir(parents=True)
+    shutil.copy2(config.db_file, replay_db)
+    replay_config = TWStockConfig(data_root=config.data_root, output_root=config.output_root)
+    replay_config.db_file = replay_db
+    other_run_event = EvidenceEventService(EvidenceEventRepository(replay_config, db_path=replay_db)).record_event(
+        event_date="2026-07-01",
+        decision_date="2026-07-01",
+        symbol="2330",
+        event_type="recommendation_included",
+        event_family="recommendation",
+        source_type="recommendation_result",
+        source_id="other-rec",
+        source_snapshot_id="other-rec",
+        data_quality="observed",
+        as_of_date="2026-07-01",
+        available_date="2026-07-01",
+        metadata={"replay_run_id": "hre-other"},
+    )
+
+    report = HistoricalEvidenceReplayService(config).run(
+        HistoricalEvidenceReplayRequest(
+            start_date="2026-07-01",
+            end_date="2026-07-01",
+            source_db_path=config.db_file,
+            replay_db_path=replay_db,
+            sources=("recommendation",),
+            windows=(1,),
+            confirm=True,
+            replay_run_id="hre-current",
+        )
+    )
+
+    replay_events = EvidenceEventRepository(config, db_path=replay_db).list_events(decision_date="2026-07-01")
+    current_run_ids = {
+        event.event_id
+        for event in replay_events
+        if event.metadata.get("replay_run_id") == "hre-current"
+    }
+    assert current_run_ids
+    assert report.days[0].evidence_ids == tuple(sorted(current_run_ids))
+    assert other_run_event.event_id not in report.days[0].evidence_ids
 
 
 def test_replay_does_not_fabricate_recommendation_when_no_asof_result_exists(tmp_path: Path) -> None:
