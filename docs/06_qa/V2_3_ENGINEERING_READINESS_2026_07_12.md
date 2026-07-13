@@ -8,6 +8,8 @@ Corporate Action 與交易限制已新增 shadow-only adapters，僅正規化 ra
 
 信用交易已新增 risk-only shadow adapter，會阻擋負數餘額、缺少必要欄位及 future available-date，並固定附帶 `risk_only_not_directional_signal`；不輸出槓桿方向訊號。
 
+TDCC 已新增週頻 distribution shadow adapter，明確區分 `period_end` 與 publication `available_date`，並要求三類持股比例使用整數 bp 且合計 10,000 bp；輸出仍無 downstream eligibility。
+
 > 日期：2026-07-12
 > 狀態：`engineering_readiness_only` / `requires_human_acceptance`
 > 前一可回滾提交：`498ba8b6d7c7d70748213030288171bfae878515`
