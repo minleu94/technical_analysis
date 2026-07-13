@@ -1,4 +1,10 @@
 from app_module.engineering_closure_dashboard_service import EngineeringClosureDashboardService
+from app_module.evidence_rehearsal_dtos import (
+    CoverageMetric,
+    EvidenceRehearsalReport,
+    EvidenceRehearsalScenario,
+    RehearsalArtifact,
+)
 from app_module.engineering_gate_registry import EngineeringGateItem
 from app_module.gate_2_to_7_closeout_verifier import Gate2To7CloseoutReport
 
@@ -89,3 +95,47 @@ def test_completed_gate_is_not_added_to_action_queue() -> None:
         gates=(complete,),
     )
     assert service.to_workbench_action_items(dashboard) == ()
+
+
+def test_dashboard_projects_rehearsal_as_read_only_non_forward_evidence() -> None:
+    rehearsal_report = EvidenceRehearsalReport(
+        scenario=EvidenceRehearsalScenario(
+            scenario_id="missing-source-rehearsal",
+            decision_date="2026-07-13",
+            source_db_path="C:/fixture/source.sqlite",
+            working_copy_db_path="C:/fixture/working-copy.sqlite",
+            tier="historical_replay_candidate",
+        ),
+        coverage_metrics=(
+            CoverageMetric(
+                source_id="p0_source",
+                total_count=10,
+                observed_count=0,
+                degraded_count=0,
+                missing_count=10,
+                future_blocked_count=0,
+                immature_label_count=0,
+                coverage_bp=0,
+            ),
+        ),
+        artifacts=(
+            RehearsalArtifact(
+                artifact_id="shadow-comparison",
+                decision_date="2026-07-13",
+                available_date="2026-07-13",
+                tier="shadow_comparison",
+                diagnostics=("source_outage:p0_source", "insufficient_sample"),
+            ),
+        ),
+    )
+
+    dashboard = EngineeringClosureDashboardService().compose(rehearsal_report)
+
+    assert dashboard.tier == "historical_replay_candidate"
+    assert dashboard.status == "blocked"
+    assert dashboard.coverage == rehearsal_report.coverage_metrics
+    assert "source_outage:p0_source" in dashboard.blockers
+    assert "insufficient_sample" in dashboard.blockers
+    assert "coverage_missing:p0_source=10" in dashboard.blockers
+    assert dashboard.write_intent is False
+    assert "工程／Replay／Shadow；不是 forward evidence" == dashboard.disclosure

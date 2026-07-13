@@ -21,6 +21,8 @@ from app_module.workbench_dtos import (
     WorkbenchReviewItem,
     WorkbenchStatusItem,
 )
+from app_module.engineering_closure_dashboard_service import EvidenceRehearsalDashboard
+from app_module.evidence_rehearsal_dtos import CoverageMetric
 from app_module.advice_dtos import (
     AdviceAction,
     AdviceDashboardDTO,
@@ -446,6 +448,52 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "需要人工覆盤" in warning_text
     assert "Missing Source" not in warning_text
     assert "Manual Review Required" not in warning_text
+
+
+def test_unified_workbench_view_renders_blocked_rehearsal_without_ready_claim() -> None:
+    app()
+    rehearsal_dashboard = EvidenceRehearsalDashboard(
+        tier="shadow_comparison",
+        status="blocked",
+        coverage=(
+            CoverageMetric(
+                source_id="p0_source",
+                total_count=4,
+                observed_count=0,
+                degraded_count=0,
+                missing_count=2,
+                future_blocked_count=0,
+                immature_label_count=2,
+                coverage_bp=0,
+            ),
+        ),
+        blockers=(
+            "source_outage:p0_source",
+            "insufficient_sample",
+            "coverage_missing:p0_source=2",
+        ),
+    )
+
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        evidence_rehearsal_dashboard=rehearsal_dashboard,
+        auto_refresh=False,
+    )
+
+    rehearsal_text = (
+        view.evidence_rehearsal_summary_label.text()
+        + "\n"
+        + view.evidence_rehearsal_detail_label.text()
+    )
+    assert "工程／Replay／Shadow；不是 forward evidence" in rehearsal_text
+    assert "Shadow comparison：有" in rehearsal_text
+    assert "Forward handoff：pending" in rehearsal_text
+    assert "source_outage:p0_source" in rehearsal_text
+    assert "insufficient_sample" in rehearsal_text
+    assert "clean" not in rehearsal_text.lower()
+    assert "ready" not in rehearsal_text.lower()
+    assert "apply" not in rehearsal_text.lower()
+    assert "promote" not in rehearsal_text.lower()
 
 
 def test_unified_workbench_view_renders_injected_advice_without_source_refresh() -> None:

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from app_module.engineering_gate_registry import EngineeringGateItem
+from app_module.evidence_rehearsal_dtos import CoverageMetric, EvidenceRehearsalReport
 from app_module.gate_2_to_7_closeout_verifier import Gate2To7CloseoutReport
 from app_module.workbench_dtos import WorkbenchActionItem
 
@@ -42,6 +43,20 @@ class EngineeringClosureDashboardDTO:
     write_actions_allowed: bool = False
     production_scheduler_allowed: bool = False
     formal_product_closeout: bool = False
+
+
+@dataclass(frozen=True)
+class EvidenceRehearsalDashboard:
+    """唯讀 rehearsal 投影；絕不把工程或回放結果當成 forward 證據。"""
+
+    tier: str
+    status: str
+    coverage: tuple[CoverageMetric, ...]
+    blockers: tuple[str, ...]
+    disclosure: str = "工程／Replay／Shadow；不是 forward evidence"
+    write_intent: bool = False
+    shadow_comparison_present: bool = False
+    forward_handoff_pending: bool = True
 
 
 class EngineeringClosureDashboardService:
@@ -83,6 +98,21 @@ class EngineeringClosureDashboardService:
             closeout_blockers=closeout.blockers,
         )
 
+    def compose(self, rehearsal_report: EvidenceRehearsalReport) -> EvidenceRehearsalDashboard:
+        """將既有 rehearsal report 投影為 Control Center 可顯示的唯讀狀態。"""
+        coverage = rehearsal_report.coverage_metrics
+        blockers = _rehearsal_blockers(rehearsal_report)
+        return EvidenceRehearsalDashboard(
+            tier=rehearsal_report.scenario.tier,
+            status="blocked" if blockers else "rehearsal_only",
+            coverage=coverage,
+            blockers=blockers,
+            shadow_comparison_present=(
+                rehearsal_report.scenario.tier == "shadow_comparison"
+                or any(item.tier == "shadow_comparison" for item in rehearsal_report.artifacts)
+            ),
+        )
+
     def to_workbench_action_items(
         self, dashboard: EngineeringClosureDashboardDTO
     ) -> tuple[WorkbenchActionItem, ...]:
@@ -112,3 +142,27 @@ class EngineeringClosureDashboardService:
                 )
             )
         return tuple(actions)
+
+
+def _rehearsal_blockers(rehearsal_report: EvidenceRehearsalReport) -> tuple[str, ...]:
+    blockers: list[str] = []
+    for metric in rehearsal_report.coverage_metrics:
+        if metric.degraded_count:
+            blockers.append(f"coverage_degraded:{metric.source_id}={metric.degraded_count}")
+        if metric.missing_count:
+            blockers.append(f"coverage_missing:{metric.source_id}={metric.missing_count}")
+        if metric.future_blocked_count:
+            blockers.append(
+                f"coverage_future_blocked:{metric.source_id}={metric.future_blocked_count}"
+            )
+        if metric.immature_label_count:
+            blockers.append(
+                f"coverage_immature_label:{metric.source_id}={metric.immature_label_count}"
+            )
+    for artifact in rehearsal_report.artifacts:
+        if artifact.missing_state:
+            blockers.append(f"missing_state:{artifact.missing_state}")
+        if artifact.current_status in {"blocked", "missing", "degraded", "insufficient_sample"}:
+            blockers.append(f"artifact_status:{artifact.current_status}")
+        blockers.extend(artifact.diagnostics)
+    return tuple(sorted(set(blockers)))

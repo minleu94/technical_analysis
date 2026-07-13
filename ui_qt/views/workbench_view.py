@@ -25,6 +25,7 @@ from app_module.workbench_dtos import (
     WorkbenchDashboardDTO,
     WorkbenchEvidenceSummary,
 )
+from app_module.engineering_closure_dashboard_service import EvidenceRehearsalDashboard
 from app_module.workbench_source_service import WorkbenchSourceService
 from app_module.advice_dtos import AdviceClassification
 from ui_qt.models.workbench_table_models import (
@@ -88,6 +89,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         dashboard: WorkbenchDashboardDTO | None = None,
         decision_date: str | None = None,
         replay_summary_json: str | Path | None = None,
+        evidence_rehearsal_dashboard: EvidenceRehearsalDashboard | None = None,
         auto_refresh: bool = True,
         decision_source_widget: QWidget | None = None,
         navigate_to_daily_decision_callback: Callable[[], None] | None = None,
@@ -100,6 +102,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.source_service = source_service
         self.decision_date = decision_date
         self.replay_summary_json = replay_summary_json
+        self.evidence_rehearsal_dashboard = evidence_rehearsal_dashboard
         self.decision_source_widget = decision_source_widget
         self.navigate_to_daily_decision_callback = navigate_to_daily_decision_callback
         self.navigate_to_market_explore_callback = navigate_to_market_explore_callback
@@ -120,6 +123,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.advice_portfolio_model = AdvicePortfolioTableModel()
 
         self._setup_ui()
+        self._render_evidence_rehearsal_dashboard(self.evidence_rehearsal_dashboard)
         if dashboard is not None:
             self.render_dashboard(dashboard)
         elif auto_refresh and self.source_service is not None:
@@ -403,6 +407,15 @@ class UnifiedDecisionWorkbenchView(QWidget):
         evidence_panel.content_layout.addWidget(self.evidence_summary_row)
         evidence_panel.content_layout.addWidget(self.evidence_table)
         content_layout.addWidget(evidence_panel)
+
+        rehearsal_panel, self.evidence_rehearsal_section_title = self._panel_with_title(
+            "工程預演狀態 / Evidence Rehearsal"
+        )
+        self.evidence_rehearsal_summary_label = self._make_state_label()
+        self.evidence_rehearsal_detail_label = self._make_state_label()
+        rehearsal_panel.layout.addWidget(self.evidence_rehearsal_summary_label)
+        rehearsal_panel.layout.addWidget(self.evidence_rehearsal_detail_label)
+        content_layout.addWidget(rehearsal_panel)
 
         checklist_panel = CollapsibleSectionPanel("每日檢查清單 / Daily Checklist", collapsed=True)
         self.checklist_collapsible = checklist_panel
@@ -881,6 +894,50 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.evidence_boundary_card.value_label.setText(_format_card_lines(boundary_lines))
         self.evidence_coverage_card.value_label.setText(
             _format_card_lines(coverage_lines) if coverage_lines else "• 目前沒有額外覆蓋率缺口。"
+        )
+
+    def _render_evidence_rehearsal_dashboard(
+        self, rehearsal: EvidenceRehearsalDashboard | None
+    ) -> None:
+        if rehearsal is None:
+            self.evidence_rehearsal_summary_label.setText(
+                "尚未提供 rehearsal DTO；Workbench 不讀取資料庫、不執行 replay。"
+            )
+            self.evidence_rehearsal_detail_label.setText(
+                "工程／Replay／Shadow 的預演狀態未載入；不是 forward evidence。"
+            )
+            return
+
+        tier = {
+            "engineering_fixture": "工程",
+            "historical_replay_candidate": "Replay",
+            "shadow_comparison": "Shadow",
+            "forward_handoff_pending": "Forward handoff pending",
+        }.get(rehearsal.tier, rehearsal.tier)
+        status = "已阻擋" if rehearsal.status == "blocked" else "僅供預演"
+        shadow_text = (
+            "有"
+            if rehearsal.shadow_comparison_present or rehearsal.tier == "shadow_comparison"
+            else "未提供"
+        )
+        forward_text = "pending" if rehearsal.forward_handoff_pending else "未設定"
+        coverage_text = "；".join(
+            (
+                f"{metric.source_id}：{metric.observed_count}/{metric.total_count} observed，"
+                f"missing={metric.missing_count}，degraded={metric.degraded_count}，"
+                f"future_blocked={metric.future_blocked_count}，"
+                f"immature_label={metric.immature_label_count}"
+            )
+            for metric in rehearsal.coverage
+        ) or "未提供 coverage"
+        blockers_text = "；".join(rehearsal.blockers) or "無額外 blocker"
+        self.evidence_rehearsal_summary_label.setText(
+            f"{rehearsal.disclosure} | tier：{tier} | status：{status} | "
+            f"Shadow comparison：{shadow_text} | Forward handoff：{forward_text}"
+        )
+        self.evidence_rehearsal_detail_label.setText(
+            f"coverage：{coverage_text}\nblockers：{blockers_text}\n"
+            "唯讀揭露：不寫入資料庫、不啟用排程器、不改變 Advice。"
         )
 
     def _render_operating_loop(self, steps) -> None:
