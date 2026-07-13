@@ -1012,6 +1012,8 @@ Position Health state machine 僅使用決策日當下可得的 Decimal metrics�
 
 Position Health transition repository 採 append-only event。`proposal` 事件的 `recorded_state` 必須維持 previous state；只有帶 reviewer 的 `human_approved` 事件可記錄核准後狀態。兩者都固定 `auto_action_allowed=false`，不會送出賣單。
 
+Workbench 的 engineering closure projection 只顯示工程包完整度與尚待人工／時間／授權／ML 重驗項目。每列會顯示 owner、最早驗證日、進度及下一個驗證命令；Action Item 固定唯讀，不能在 Workbench 直接標記完成、修改 registry 或套用任何 production action。
+
 Exit effectiveness read model 依 reason code 分組，只將 maturity=`ready` 的 outcome 放入績效分母，分別揭露 avoided loss、early-exit regret、precision 與 realized return；pending 只計數。報告固定不宣稱投資有效性，也不啟用 auto exit。
 
 ```powershell
