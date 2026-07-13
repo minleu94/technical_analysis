@@ -74,3 +74,44 @@ def test_adapter_blocks_future_available_payload_and_excludes_it_from_effectiven
     assert payload["canonical_payload"]["available_date"] == "2026-07-11"
     assert payload["current_status"] == "future_blocked"
     assert payload["effectiveness_denominator_included"] is False
+
+
+def test_adapter_preserves_absent_legacy_fields_without_inventing_fallback_values() -> None:
+    artifact = HistoricalReplayRehearsalAdapter().project(
+        {
+            "replay_run_id": "hre-legacy",
+            "days": [{"decision_date": "2026-07-10", "diagnostics": ["missing_benchmark"]}],
+        },
+        decision_date="2026-07-10",
+        rollback_reference="commit:fixture",
+    )[0]
+
+    payload = artifact.to_dict()
+    assert payload["canonical_payload"] == {
+        "replay_run_id": "hre-legacy",
+        "decision_date": "2026-07-10",
+        "diagnostics": ("missing_benchmark",),
+        "missing_state": "missing",
+    }
+    assert "as_of_date" not in payload
+    assert "source_version" not in payload
+    assert "data_quality" not in payload
+
+
+def test_adapter_preserves_duplicate_diagnostics_in_original_sequence() -> None:
+    summary = _replay_summary()
+    summary["days"][0]["diagnostics"] = ["missing_benchmark", "missing_benchmark"]  # type: ignore[index]
+    summary["days"][0]["benchmark_diagnostics"] = ["missing_benchmark", "missing_industry_benchmark"]  # type: ignore[index]
+
+    artifact = HistoricalReplayRehearsalAdapter().project(
+        summary,
+        decision_date="2026-07-10",
+        rollback_reference="commit:fixture",
+    )[0]
+
+    assert artifact.diagnostics == (
+        "missing_benchmark",
+        "missing_benchmark",
+        "missing_benchmark",
+        "missing_industry_benchmark",
+    )

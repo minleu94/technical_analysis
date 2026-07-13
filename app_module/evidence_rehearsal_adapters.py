@@ -53,37 +53,45 @@ class HistoricalReplayRehearsalAdapter:
         decision_date = str(day.get("decision_date") or projection_date.isoformat())
         if _require_date(decision_date, "day.decision_date") != projection_date:
             raise ValueError("day.decision_date must match decision_date")
-        as_of_date = str(day.get("as_of_date") or replay_summary.get("as_of_date") or decision_date)
-        available_date = str(day.get("available_date") or replay_summary.get("available_date") or as_of_date)
-        _require_date(as_of_date, "as_of_date")
-        available = _require_date(available_date, "available_date")
+        as_of_date = _optional_string(day, replay_summary, "as_of_date")
+        available_date = _optional_string(day, replay_summary, "available_date")
+        if as_of_date is not None:
+            _require_date(as_of_date, "as_of_date")
+        available = _require_date(available_date, "available_date") if available_date is not None else None
         parent_ids = _parent_ids(day)
         diagnostics = _diagnostics(day)
-        future_blocked = available > projection_date
-        missing_state = "missing" if any("missing" in item for item in diagnostics) else "complete"
+        future_blocked = available is not None and available > projection_date
+        missing_state = "missing" if any("missing" in item for item in diagnostics) else None
         canonical_payload: dict[str, object] = {
             "replay_run_id": str(replay_summary.get("replay_run_id") or ""),
             "decision_date": decision_date,
-            "as_of_date": as_of_date,
-            "available_date": available_date,
-            "source_version": str(day.get("source_version") or replay_summary.get("source_version") or "unknown"),
-            "data_quality": str(day.get("data_quality") or replay_summary.get("data_quality") or "unknown"),
-            "missing_state": missing_state,
-            "parent_artifact_ids": parent_ids,
-            "diagnostics": diagnostics,
-            "score_effectiveness_rows": day.get("score_effectiveness_rows", ()),
-            "benchmark_diagnostics": day.get("benchmark_diagnostics", ()),
         }
+        for field_name, value in (
+            ("as_of_date", as_of_date),
+            ("available_date", available_date),
+            ("source_version", _optional_string(day, replay_summary, "source_version")),
+            ("data_quality", _optional_string(day, replay_summary, "data_quality")),
+            ("missing_state", missing_state),
+        ):
+            if value is not None:
+                canonical_payload[field_name] = value
+        if parent_ids:
+            canonical_payload["parent_artifact_ids"] = parent_ids
+        if diagnostics:
+            canonical_payload["diagnostics"] = diagnostics
+        for field_name in ("score_effectiveness_rows", "benchmark_diagnostics"):
+            if field_name in day:
+                canonical_payload[field_name] = day[field_name]
         content_hash = canonical_payload_hash(canonical_payload)
         return RehearsalArtifact(
             artifact_id=f"historical-replay:{canonical_payload['replay_run_id']}:{decision_date}",
             decision_date=decision_date,
-            available_date=decision_date if future_blocked else available_date,
+            available_date=decision_date if future_blocked or available_date is None else available_date,
             tier="historical_replay_candidate",
             as_of_date=as_of_date,
             parent_artifact_ids=parent_ids,
-            source_version=str(canonical_payload["source_version"]),
-            data_quality=str(canonical_payload["data_quality"]),
+            source_version=_optional_string(day, replay_summary, "source_version"),
+            data_quality=_optional_string(day, replay_summary, "data_quality"),
             missing_state=missing_state,
             content_hash=content_hash,
             current_status="future_blocked" if future_blocked else "projected",
@@ -115,7 +123,18 @@ def _diagnostics(day: Mapping[str, object]) -> tuple[str, ...]:
         value = day.get(key, ())
         if isinstance(value, (list, tuple)):
             values.extend(value)
-    return tuple(dict.fromkeys(str(value) for value in values if str(value)))
+    return tuple(str(value) for value in values if str(value))
+
+
+def _optional_string(
+    day: Mapping[str, object],
+    replay_summary: Mapping[str, object],
+    field_name: str,
+) -> str | None:
+    value = day.get(field_name, replay_summary.get(field_name))
+    if value is None or not str(value):
+        return None
+    return str(value)
 
 
 def _require_date(value: str, field_name: str) -> date:

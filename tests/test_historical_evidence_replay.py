@@ -99,6 +99,7 @@ def test_replay_uses_only_recommendation_results_available_on_decision_date(tmp_
     events = EvidenceEventRepository(config, db_path=replay_db).list_events()
     assert events
     assert {event.source_id for event in events} == {"past-rec"}
+    assert report.days[0].evidence_ids == tuple(event.event_id for event in events if event.decision_date == "2026-07-01")
     assert all(event.metadata["replay_mode"] == "historical_replay" for event in events)
     assert all(event.metadata["source_label"] == "simulated_scheduler" for event in events)
 
@@ -209,6 +210,7 @@ def test_replay_report_projects_read_only_rehearsal_artifact() -> None:
                 outcomes_pending=1,
                 blocking_gaps=(),
                 diagnostics=("missing_benchmark",),
+                evidence_ids=("event-1",),
             ),
         ),
     )
@@ -218,6 +220,6 @@ def test_replay_report_projects_read_only_rehearsal_artifact() -> None:
         rollback_reference="commit:fixture",
     )
 
-    assert artifacts[0].parent_artifact_ids == ("source-1", "rec-1")
+    assert artifacts[0].parent_artifact_ids == ("source-1", "rec-1", "event-1")
     assert artifacts[0].canonical_payload is not None
-    assert artifacts[0].canonical_payload["score_effectiveness_rows"] == ()
+    assert "score_effectiveness_rows" not in artifacts[0].canonical_payload

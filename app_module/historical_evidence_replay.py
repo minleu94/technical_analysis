@@ -55,12 +55,14 @@ class HistoricalEvidenceReplayDay:
     outcomes_pending: int
     blocking_gaps: tuple[str, ...]
     diagnostics: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["sources"] = list(self.sources)
         payload["blocking_gaps"] = list(self.blocking_gaps)
         payload["diagnostics"] = list(self.diagnostics)
+        payload["evidence_ids"] = list(self.evidence_ids)
         return payload
 
 
@@ -147,10 +149,8 @@ class HistoricalEvidenceReplayService:
 
         dry_run = not request.confirm
         days: list[HistoricalEvidenceReplayDay] = []
-        outcome_service = ForwardPerformanceService(
-            replay_config,
-            EvidenceEventRepository(replay_config, db_path=replay_db),
-        )
+        event_repository = EvidenceEventRepository(replay_config, db_path=replay_db)
+        outcome_service = ForwardPerformanceService(replay_config, event_repository)
         for decision_date in trading_dates:
             selected_result_id = self._select_recommendation_result_id(decision_date)
             sources, diagnostics = self._sources_for_day(request.sources, selected_result_id)
@@ -209,6 +209,9 @@ class HistoricalEvidenceReplayService:
                                 *runner_summary.diagnostic_codes,
                             ]
                         )
+                    ),
+                    evidence_ids=tuple(
+                        event.event_id for event in event_repository.list_events(decision_date=decision_date)
                     ),
                 )
             )
