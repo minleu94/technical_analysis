@@ -367,6 +367,7 @@ python ui_qt/main.py
 - `app_module/portfolio_review_service.py`：Portfolio Review dashboard snapshot
 - `app_module/portfolio_construction_service.py`：V1.8 research-only allocation / constraints / lot sizing sandbox
 - `app_module/paper_portfolio_policy.py`：V2.4 核准紙上政策的唯讀再平衡判讀；只輸出 candidate / 拒絕理由，不讀持倉、不寫 DB、不下單
+- `app_module/position_health_service.py`：V2.5 持倉健康狀態投影；只輸出 HEALTHY / WATCH / EXIT_CANDIDATE，不自動減碼或平倉
 - `app_module/portfolio_execution_trace_service.py`：V1.8 virtual order lifecycle trace（created / submitted / partially_filled / filled / rejected）
 - `app_module/agent_evidence_access_service.py`：V1.9 read-only Agent evidence access service
 - `mcp_servers/evidence_access_server.py`：V1.9 `twstock-evidence-access` MCP server

@@ -993,6 +993,12 @@ V2.4 紙上政策可用下列唯讀 CLI 檢查。它固定使用核准的平衡�
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_paper_portfolio_policy.py --sample --format json
 ```
+
+V2.5 可用下列唯讀 CLI 檢查持倉健康狀態的輸出形狀。它以內建樣本顯示 thesis／condition／feedback 缺口如何形成 `HEALTHY`、`WATCH` 或 `EXIT_CANDIDATE`；任何狀態都不是交易或平倉指令，`auto_action_allowed` 固定為 false。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_position_health.py --sample --format json
+```
 .\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format markdown
 ```
 

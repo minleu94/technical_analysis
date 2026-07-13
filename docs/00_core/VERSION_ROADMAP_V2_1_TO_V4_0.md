@@ -119,6 +119,8 @@ Closeout Gate：能安全輸出 Portfolio Advice 或 `NO_NEW_POSITION`；不串 
 
 Closeout Gate：每個 transition 可解釋、可回溯；不自動平倉。
 
+**目前版本狀態（2026-07-12）**：V2.5 已有 read-only `PositionHealthService` 與 sample report，將既有 condition、feedback 與 source trace 投影為 HEALTHY / WATCH / EXIT_CANDIDATE，固定 `auto_action_allowed=false`。缺 condition 或 source trace 時維持 WATCH；它不讀實際持倉、不寫 DB、不自動減碼或平倉。工程 readiness 詳見 `docs/06_qa/V2_5_ENGINEERING_READINESS_2026_07_12.md`；真實 thesis、人工 state transition 與 decision journal 尚未累積，故 formal closeout 尚未建立。
+
 ## 5. V3.x：Signal、Portfolio、Exit、Pruning、ML Shadow、Paper Validation
 
 ### V3.0：Signal Effectiveness & Pruning
