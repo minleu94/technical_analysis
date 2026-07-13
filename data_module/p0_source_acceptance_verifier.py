@@ -60,15 +60,34 @@ class P0SourceAcceptanceVerifier:
             diagnostics.append("source_id_mismatch")
         if any(row.status != "shadow_ready" for row in rows):
             diagnostics.append("shadow_observation_blocked")
+        available_dates = tuple(_parse_date(row.available_date) for row in rows)
+        missing_available_date = any(
+            row.available_date is None or not row.available_date.strip() for row in rows
+        )
+        invalid_available_date = any(
+            row.available_date is not None
+            and row.available_date.strip()
+            and available_date is None
+            for row, available_date in zip(rows, available_dates)
+        )
         future_blocked = any(
-            (available_date := _parse_date(row.available_date)) is not None
+            available_date is not None
             and service_decision_date is not None
             and available_date > service_decision_date
-            for row in rows
+            for available_date in available_dates
         )
+        if missing_available_date:
+            diagnostics.append("missing_available_date")
+        if invalid_available_date:
+            diagnostics.append("invalid_available_date")
         if future_blocked:
-            diagnostics.extend(("future_blocked", "quality_blocked"))
-        effective_coverage_bp = 0 if future_blocked else coverage_bp
+            diagnostics.append("future_blocked")
+        available_date_blocked = (
+            missing_available_date or invalid_available_date or future_blocked
+        )
+        if available_date_blocked:
+            diagnostics.append("quality_blocked")
+        effective_coverage_bp = 0 if available_date_blocked else coverage_bp
         if (
             not isinstance(effective_coverage_bp, int)
             or isinstance(effective_coverage_bp, bool)
