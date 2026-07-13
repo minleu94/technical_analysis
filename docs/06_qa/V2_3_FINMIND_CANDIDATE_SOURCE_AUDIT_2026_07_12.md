@@ -32,6 +32,10 @@
 
 使用者需在本機安全設定 `FINMIND_API_TOKEN`（不要寫進 repo 或聊天訊息）。未提供 token 時，只能進行 dataset manifest / free-tier access probe，不進行大範圍下載或 formal coverage declaration。
 
+## 本機 token probe
+
+2026-07-12 以本機 DPAPI token 對 `TaiwanStockMonthRevenue` / `2330` / `2026-01-01..2026-07-12` 執行一個 request：成功取得 6 rows、3 個 create-time groups，未發生 token 或 quota error。`2025-12`、`2026-01` 的 `create_time` 為空；`2026-02`、`2026-03` 同為 `2026-04-21`，`2026-04` 為 `2026-05-08`。這些值可作 FinMind first-observed / storage-time candidate，但不能推定為原始月營收公告日或直接建立 PIT mapping。原始候選輸出位於本機暫存 `C:/tmp/technical_analysis/finmind_monthly_revenue_probe_20260712/`，不寫 SQLite、不寫正式 availability mapping。
+
 ## 來源
 
 - [FinMind Complete API & Dataset Reference](https://finmind.github.io/llms-full.txt)
