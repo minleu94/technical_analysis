@@ -7,11 +7,10 @@ from dataclasses import replace
 from datetime import date, timedelta
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import sys
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Callable, Mapping, Sequence, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -21,6 +20,7 @@ from app_module.artifact_lineage_verifier import ArtifactIdentity  # noqa: E402
 from app_module.evidence_rehearsal_adapters import HistoricalReplayRehearsalAdapter  # noqa: E402
 from app_module.evidence_rehearsal_dtos import EvidenceRehearsalScenario  # noqa: E402
 from app_module.evidence_rehearsal_service import EvidenceRehearsalService  # noqa: E402
+from data_module.config import TWStockConfig  # noqa: E402
 
 
 _FAILURE_BLOCKERS = {
@@ -79,7 +79,8 @@ def _read_json_mapping(path: Path, label: str) -> Mapping[str, object]:
 
 
 def _is_production_like(path: Path) -> bool:
-    normalized = str(path.expanduser().resolve()).replace("\\", "/").lower()
+    resolved_path = path.expanduser().resolve()
+    normalized = str(resolved_path).replace("\\", "/").lower()
     tokens = {
         token
         for segment in normalized.split("/")
@@ -88,11 +89,24 @@ def _is_production_like(path: Path) -> bool:
     }
     if tokens & _PRODUCTION_MARKERS:
         return True
-    default_db = Path("D:/Min/Python/Project/FA_Data/sqlite/twstock.db").resolve()
-    configured_db = (
-        Path(os.environ.get("DATA_ROOT", "D:/Min/Python/Project/FA_Data")) / "sqlite" / "twstock.db"
-    ).resolve()
-    return path.expanduser().resolve() in {default_db, configured_db}
+    return _is_at_or_below(resolved_path, _configured_data_root())
+
+
+def _configured_data_root() -> Path:
+    """Resolve TWStockConfig's configured production root without constructing it."""
+    data_root_factory = cast(
+        Callable[[], Path],
+        TWStockConfig.__dataclass_fields__["data_root"].default_factory,
+    )
+    return Path(data_root_factory()).expanduser().resolve()
+
+
+def _is_at_or_below(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def _validate_paths(source_db: Path, working_copy_db: Path, output_root: Path) -> None:

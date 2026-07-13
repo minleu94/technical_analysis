@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -49,6 +50,7 @@ def _run_cli(
     replay_summary: Path,
     output_root: Path,
     inject_failure: str | None = None,
+    environment: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = [
         sys.executable,
@@ -66,7 +68,14 @@ def _run_cli(
     ]
     if inject_failure is not None:
         command.extend(("--inject-failure", inject_failure))
-    return subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+    return subprocess.run(
+        command,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
 
 
 def test_cli_defaults_to_dry_read_only_and_writes_only_report_package(tmp_path: Path) -> None:
@@ -133,6 +142,29 @@ def test_cli_rejects_production_like_target(tmp_path: Path, unsafe_name: str) ->
     assert completed.returncode != 0
     assert "production-like" in completed.stderr
     assert not (tmp_path / unsafe_name).exists()
+
+
+@pytest.mark.parametrize("target_suffix", (Path(), Path("reports") / "rehearsal"))
+def test_cli_rejects_configured_data_root_and_descendant_as_output_target(
+    tmp_path: Path,
+    target_suffix: Path,
+) -> None:
+    source_db, working_copy_db, scenario, replay_summary = _write_inputs(tmp_path)
+    data_root = tmp_path / "formal-data-root"
+    environment = {**os.environ, "DATA_ROOT": str(data_root)}
+
+    completed = _run_cli(
+        source_db=source_db,
+        working_copy_db=working_copy_db,
+        scenario=scenario,
+        replay_summary=replay_summary,
+        output_root=data_root / target_suffix,
+        environment=environment,
+    )
+
+    assert completed.returncode != 0
+    assert "production-like" in completed.stderr
+    assert not data_root.exists()
 
 
 @pytest.mark.parametrize(

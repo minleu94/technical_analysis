@@ -19,7 +19,7 @@
 | `--replay-summary` | Historical replay JSON summary | 僅讀取；`days` 必須是 list，資料日期需符合既有 adapter 的 PIT 規則。 |
 | `--output-root` | 演練報告目錄 | 唯一允許寫入位置；不可為 production-like 路徑。 |
 
-`production-like` 包含 `prod`／`production` 路徑 token，以及預設或 `DATA_ROOT` 設定的 `sqlite/twstock.db`。若 source 與 working-copy 是同一路徑，命令會拒絕，並輸出 `working-copy DB must differ from source DB`。
+`production-like` 包含 `prod`／`production` 路徑 token，以及 `TWStockConfig` 的正式 `DATA_ROOT` 本身與所有子目錄（包括 `sqlite/twstock.db`）。若 source 與 working-copy 是同一路徑，命令會拒絕，並輸出 `working-copy DB must differ from source DB`。
 
 ## 執行命令
 
