@@ -169,3 +169,10 @@ Task Scheduler observation from the finish plan: 04:40、05:00、05:15 三個 sc
 - `risk_prompt` 與 `decision_quality` 類事件標示為 `score_not_applicable`，不再被 V3 TotalScore 報表誤報為 `event_missing_score_bp`。
 - 未知或尚未治理的 family 維持 `score_optional`；不回填 score，也不因此取得 effectiveness credit。
 - 此修正只改善資料品質診斷，不改 score、threshold、Profile、lifecycle 或任何 production boundary。
+
+## 2026-07-12 Causal Event-price Follow-up
+
+- event price 改由獨立 resolver 選擇 `min(decision_date, data_as_of_date)` 當下或之前的最近交易日。
+- 假日／週末事件會保存 `previous_trading_day`；資料可見日早於 decision date 時保存 `data_as_of_boundary`。
+- 沒有可見價格時維持 `missing`，不再向後選取 decision date 之後的第一筆價格。
+- Prefix-invariance tests 固定 future price row 不得改變先前 decision 的 event price。

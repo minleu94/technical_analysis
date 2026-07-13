@@ -202,6 +202,37 @@ def test_forward_outcome_marks_insufficient_future_data_without_failing_batch(tm
     assert "insufficient_future_data" in outcome.warnings
 
 
+def test_weekend_event_uses_previous_trading_day_without_look_ahead(tmp_path):
+    config = _config(tmp_path)
+    with sqlite3.connect(config.db_file) as conn:
+        conn.execute("CREATE TABLE daily_prices (日期 TEXT, 證券代號 TEXT, 收盤價 REAL)")
+        conn.executemany(
+            "INSERT INTO daily_prices VALUES (?, ?, ?)",
+            (("20260710", "2330", 1000), ("20260713", "2330", 1010)),
+        )
+    event = EvidenceEventService(EvidenceEventRepository(config)).record_event(
+        event_date="2026-07-12",
+        decision_date="2026-07-12",
+        symbol="2330",
+        event_type=EvidenceEventType.RECOMMENDATION_INCLUDED,
+        event_family="recommendation",
+        source_type="persisted_recommendation",
+        data_quality=EvidenceDataQuality.OBSERVED,
+        warnings=(),
+        as_of_date="2026-07-12",
+        available_date="2026-07-12",
+    )
+    forward = ForwardPerformanceService(config, EvidenceEventRepository(config))
+
+    forward.calculate(windows=(1,), dry_run=False, data_as_of_date="2026-07-12")
+    outcome = forward.repository.list_outcomes(event_id=event.event_id)[0]
+
+    assert outcome.event_price_date == "2026-07-10"
+    assert outcome.event_close == "1000.0"
+    assert outcome.outcome_status == EvidenceOutcomeStatus.INSUFFICIENT_FUTURE_DATA
+    assert outcome.metadata["event_price_fallback_reason"] == "previous_trading_day"
+
+
 def test_missing_benchmark_and_industry_create_warnings_not_batch_failure(tmp_path):
     config = _config(tmp_path)
     _seed_prices(config.db_file)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bisect import bisect_left, bisect_right
+from bisect import bisect_right
 from dataclasses import asdict, dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
@@ -18,6 +18,11 @@ from app_module.evidence_event_dtos import (
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.corporate_action_policy import CorporateActionProvider, CorporateActionPolicy
 from app_module.trading_restriction_policy import TradingRestrictionProvider, TradingRestrictionPolicy
+from app_module.event_price_resolver import (
+    EventPriceObservation,
+    EventPriceResolution,
+    EventPriceResolver,
+)
 
 
 DEFAULT_MARKET_BENCHMARK_ID = "TAIEX"
@@ -149,7 +154,12 @@ class ForwardPerformanceService:
                 metadata={"return_basis": "close_to_close_event_date"},
             )
 
-        event_price_date, event_close = event_price
+        event_price_date = str(event_price.price_date)
+        event_close = event_price.close
+        assert event_close is not None
+        event_price_metadata = {"return_basis": "close_to_close_event_date"}
+        if event_price.fallback_reason is not None:
+            event_price_metadata["event_price_fallback_reason"] = event_price.fallback_reason
         outcome_price = self._find_outcome_price(
             str(event.symbol),
             event_price_date,
@@ -166,7 +176,7 @@ class ForwardPerformanceService:
                 outcome_status=EvidenceOutcomeStatus.INSUFFICIENT_FUTURE_DATA,
                 data_quality=EvidenceDataQuality.MISSING,
                 warnings=("insufficient_future_data",),
-                metadata={"return_basis": "close_to_close_event_date"},
+                metadata=event_price_metadata,
             )
 
         outcome_price_date, outcome_close = outcome_price
@@ -222,7 +232,7 @@ class ForwardPerformanceService:
             data_quality=quality,
             warnings=tuple(warnings),
             data_as_of_date=outcome_price_date,
-            metadata={"return_basis": "close_to_close_event_date"},
+            metadata=event_price_metadata,
         )
 
     def _find_event_price(
@@ -231,17 +241,21 @@ class ForwardPerformanceService:
         event_date: str,
         *,
         data_as_of_date: str | None = None,
-    ) -> tuple[str, Decimal] | None:
+    ) -> EventPriceResolution | None:
         target = self._date_key(event_date)
         as_of = self._date_key(data_as_of_date) if data_as_of_date else None
-        keys, values = self._daily_price_series(symbol)
-        index = bisect_left(keys, target)
-        if index >= len(values):
+        _, values = self._daily_price_series(symbol)
+        resolution = EventPriceResolver().resolve(
+            decision_date=self._date_iso(target),
+            data_as_of_date=self._date_iso(as_of) if as_of is not None else None,
+            prices=tuple(
+                EventPriceObservation(self._date_iso(date_key), close_value)
+                for date_key, close_value in values
+            ),
+        )
+        if resolution.price_date is None or resolution.close is None:
             return None
-        date_key, close_value = values[index]
-        if as_of and date_key > as_of:
-            return None
-        return (self._date_iso(date_key), close_value)
+        return resolution
 
     def _find_outcome_price(
         self,
