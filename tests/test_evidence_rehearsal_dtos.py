@@ -53,8 +53,14 @@ def test_rehearsal_contract_round_trip_is_frozen_and_fail_closed() -> None:
         "coverage_metrics": [metric.to_dict()],
         "artifacts": [artifact.to_dict()],
     }
-    with pytest.raises(FrozenInstanceError):
-        scenario.tier = "shadow_comparison"  # type: ignore[misc]
+    for instance, field_name, replacement in (
+        (scenario, "tier", "shadow_comparison"),
+        (metric, "coverage_bp", 9000),
+        (artifact, "tier", "shadow_comparison"),
+        (report, "artifacts", ()),
+    ):
+        with pytest.raises(FrozenInstanceError):
+            setattr(instance, field_name, replacement)
 
 
 @pytest.mark.parametrize(
@@ -74,6 +80,32 @@ def test_scenario_rejects_production_like_inputs(
         _scenario(**{field_name: invalid_value})
 
 
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    (
+        ("source_db_path", "C:/fixtures/production_evidence.sqlite"),
+        ("source_db_path", "C:\\fixtures\\prod-evidence.sqlite"),
+        ("working_copy_db_path", "C:\\temp\\production_evidence.sqlite"),
+        ("working_copy_db_path", "C:/temp/prod-evidence.sqlite"),
+    ),
+)
+def test_scenario_rejects_production_evidence_filename_variants(
+    field_name: str,
+    invalid_value: object,
+) -> None:
+    with pytest.raises(ValueError, match=field_name):
+        _scenario(**{field_name: invalid_value})
+
+
+def test_scenario_allows_ordinary_temp_database_paths() -> None:
+    scenario = _scenario(
+        source_db_path="C:/temp/evidence.sqlite",
+        working_copy_db_path="C:\\temp\\replay_evidence.sqlite",
+    )
+
+    assert scenario.source_db_path == "C:/temp/evidence.sqlite"
+
+
 def test_artifact_rejects_future_available_date() -> None:
     with pytest.raises(ValueError, match="available_date"):
         RehearsalArtifact(
@@ -81,6 +113,17 @@ def test_artifact_rejects_future_available_date() -> None:
             decision_date="2026-07-12",
             available_date="2026-07-13",
             tier="shadow_comparison",
+        )
+
+
+@pytest.mark.parametrize("tier", ("formal_evidence", "unsupported"))
+def test_artifact_rejects_formal_or_unsupported_tier(tier: str) -> None:
+    with pytest.raises(ValueError, match="tier"):
+        RehearsalArtifact(
+            artifact_id="invalid-tier",
+            decision_date="2026-07-12",
+            available_date="2026-07-12",
+            tier=tier,  # type: ignore[arg-type]
         )
 
 

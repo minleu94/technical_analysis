@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import PurePath
+import re
 from typing import Literal
 
 
@@ -34,8 +35,15 @@ def _require_date(value: str, field_name: str) -> date:
 def _require_safe_db_path(value: str, field_name: str) -> None:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field_name} must be a non-empty path")
-    parts = {part.lower() for part in PurePath(value.replace("\\", "/")).parts}
-    if parts & _PRODUCTION_PATH_MARKERS:
+    normalized_path = value.replace("\\", "/")
+    parts = {part.lower() for part in PurePath(normalized_path).parts}
+    path_tokens = {
+        token.lower()
+        for part in normalized_path.split("/")
+        for token in re.split(r"[_.-]+", part)
+        if token
+    }
+    if parts & _PRODUCTION_PATH_MARKERS or path_tokens & _PRODUCTION_PATH_MARKERS:
         raise ValueError(f"{field_name} must not reference a production-like database")
 
 
