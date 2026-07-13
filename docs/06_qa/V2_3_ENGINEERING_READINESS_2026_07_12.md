@@ -10,6 +10,8 @@ Corporate Action 與交易限制已新增 shadow-only adapters，僅正規化 ra
 
 TDCC 已新增週頻 distribution shadow adapter，明確區分 `period_end` 與 publication `available_date`，並要求三類持股比例使用整數 bp 且合計 10,000 bp；輸出仍無 downstream eligibility。
 
+PIT 月營收與季度財報已新增 announcement shadow adapters，只認 explicit announcement / available date；period / period_end 不可代替可得日，季度修訂保留 revision number 與新版 available-date。金額欄位使用整數分，資料仍只供 shadow evidence。
+
 > 日期：2026-07-12
 > 狀態：`engineering_readiness_only` / `requires_human_acceptance`
 > 前一可回滾提交：`498ba8b6d7c7d70748213030288171bfae878515`

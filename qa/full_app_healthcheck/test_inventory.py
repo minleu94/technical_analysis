@@ -391,6 +391,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_p0_institutional_flow_shadow_adapter.py": "general-unit-keep-in-pytest",
     "tests/test_p0_credit_transaction_shadow_adapter.py": "general-unit-keep-in-pytest",
     "tests/test_p0_tdcc_distribution_shadow_adapter.py": "general-unit-keep-in-pytest",
+    "tests/test_p0_pit_fundamental_announcement_adapters.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_decision_service.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_package_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_effectiveness_metrics.py": "general-unit-keep-in-pytest",
