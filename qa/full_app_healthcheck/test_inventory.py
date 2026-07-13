@@ -396,6 +396,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_p0_source_acceptance_verifier_cli.py": "general-unit-keep-in-pytest",
     "tests/test_paper_portfolio_snapshot_repository.py": "general-unit-keep-in-pytest",
     "tests/test_paper_portfolio_daily_runner.py": "general-unit-keep-in-pytest",
+    "tests/test_paper_portfolio_rebalance_evaluator.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_decision_service.py": "general-unit-keep-in-pytest",
     "tests/test_v3_pruning_package_cli.py": "general-unit-keep-in-pytest",
     "tests/test_v3_effectiveness_metrics.py": "general-unit-keep-in-pytest",
