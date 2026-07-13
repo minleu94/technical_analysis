@@ -8,6 +8,16 @@
 
 **Tech Stack:** Python 3.11、SQLite parameterized SQL／CTE、dataclasses、Decimal、PySide6 model/view與TaskWorker、pytest-qt、mypy、read-only latency harness。
 
+## Shared `dev` Execution Protocol（本計畫所有 Task 的最高優先規則）
+
+- 開工前以唯讀 `git rev-parse --abbrev-ref HEAD` 確認結果為 `dev`；不得建立或切換 branch／worktree。
+- Worker 禁止執行 `git add`、`git commit`、`git push`、`git pull`、`git stash`、`git rebase`、`git reset`、`git revert`、`git cherry-pick` 或 `git merge`。所有 Git index、commit 與 remote mutation 只由單一 Git Coordinator 串行處理。
+- 只修改本計畫 `Ownership` 明列的 exclusive paths；看到其他 agent 的未提交變更時保留原狀，不得清理、覆寫或納入自己的交付。
+- 使用獨立 `$env:TEMP\technical_analysis_parallel\C`、`OUTPUT_ROOT`，且每條 pytest command 必須同時指定 slice 專屬 `--basetemp` 與 `-o "cache_dir=..."`；latency sample、DB working copy、logs、pytest cache 與 QA outputs 不得與其他 workstream 共用。
+- Focused tests 與 bounded latency harness 可在互斥 owned files 上平行；full pytest、完整 mypy、UI QA 與正式資料 heavy smoke 由 Git Coordinator 排程串行 QA slot。
+- 每個原本的 commit slice 改成 implementation／handoff slice。Worker 在 `$env:TEMP\technical_analysis_parallel_handoffs\C-<slice>.json` 交付 `workstream_id`、`slice_id`、`handoff_status=ready_for_commit`、`ready_files`、`sha256_by_file`（path → SHA-256 mapping）、`suggested_commit_message`、`public_interfaces`、`focused_test_paths`、`focused_tests_and_results`、`boundary_checks_and_results`、`performance_or_data_coverage_results`、`blockers`、`external_gates_unchanged` 與 `rollback_notes`；handoff 不得提交進 repo。
+- Handoff 發出後停止修改該 slice，直到 Git Coordinator 驗證 SHA-256、以精確 path staging 並回覆已提交或退回修正。Coordinator 提交前若 hash 已變，必須拒絕該 handoff。
+
 ## Public Compatibility Contract
 
 必須保留：
@@ -79,13 +89,13 @@ day／week／month固定為截至明確`as_of_date`最近1／5／20個broker-flo
 
 `BrokerFlowDashboardQuery`需含 period、scope、requested_as_of_date、limit_per_side；snapshots需含as-of、quality、warnings、source fingerprint與完整市場summary。UI limit不得縮小summary母體。
 
-- [ ] **Step 5: RED verify／Commit**
+- [ ] **Step 5: RED verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_broker_flow_units.py tests/test_broker_flow_dashboard_query_service.py -q -o addopts=
-git add scripts/qa_broker_flow_dashboard_latency.py tests/test_broker_flow_units.py tests/test_broker_flow_dashboard_query_service.py app_module/broker_flow_dashboard_dtos.py
-git commit -m "test(broker-flow): lock sqlite parity and dashboard contracts"
+.\.venv\Scripts\python.exe -m pytest tests/test_broker_flow_units.py tests/test_broker_flow_dashboard_query_service.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\C\pytest-task-1 -o "cache_dir=$env:TEMP\technical_analysis_parallel\C\pytest-cache-task-1"
 ```
+
+依 Shared `dev` Execution Protocol 產生 `C-task-1.json`，ready files 僅列本 Task 的 harness、tests 與 DTO 並附 SHA-256；`suggested_commit_message` 為 `test(broker-flow): lock sqlite parity and dashboard contracts`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 2：唯讀 SQLite Repository
 
@@ -110,14 +120,14 @@ Assertions：使用URI `mode=ro`、`PRAGMA query_only=ON`、parameterized SQL；
 
 先以現有index跑`EXPLAIN QUERY PLAN`與benchmark。若未達gate，只在closeout附證據與working-copy index proposal；不得修改production DB index。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_broker_flow_sqlite_read_repository.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_broker_flow_sqlite_read_repository.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\C\pytest-task-2 -o "cache_dir=$env:TEMP\technical_analysis_parallel\C\pytest-cache-task-2"
 .\.venv\Scripts\python.exe -m py_compile app_module\broker_flow_sqlite_read_repository.py
-git add app_module/broker_flow_sqlite_read_repository.py tests/test_broker_flow_sqlite_read_repository.py
-git commit -m "feat(broker-flow): add readonly sqlite repository"
 ```
+
+依 Shared `dev` Execution Protocol 產生 `C-task-2.json`，ready files 僅列 repository 與其測試並附 SHA-256；`suggested_commit_message` 為 `feat(broker-flow): add readonly sqlite repository`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 3：單次聚合、Scope Pushdown 與 Batch Semantics
 
@@ -146,13 +156,13 @@ git commit -m "feat(broker-flow): add readonly sqlite repository"
 
 新UI走SQLite-first；legacy CSV loader只保留明確legacy/test入口，不得在missing SQLite時自動執行昂貴fallback。不要順便改正式rule score。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_broker_flow_dashboard_query_service.py tests/test_smart_money_semantic_service.py tests/test_broker_flow_units.py -q -o addopts=
-git add app_module/broker_flow_dashboard_query_service.py app_module/broker_flow_service.py app_module/smart_money_semantic_service.py app_module/dtos/smart_money_semantic_dtos.py tests/test_broker_flow_dashboard_query_service.py tests/test_smart_money_semantic_service.py tests/test_broker_flow_units.py
-git commit -m "perf(broker-flow): batch dashboard and semantic queries"
+.\.venv\Scripts\python.exe -m pytest tests/test_broker_flow_dashboard_query_service.py tests/test_smart_money_semantic_service.py tests/test_broker_flow_units.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\C\pytest-task-3 -o "cache_dir=$env:TEMP\technical_analysis_parallel\C\pytest-cache-task-3"
 ```
+
+依 Shared `dev` Execution Protocol 產生 `C-task-3.json`，ready files 僅列 query service、facade、semantic DTO／service 與測試並附 SHA-256；`suggested_commit_message` 為 `perf(broker-flow): batch dashboard and semantic queries`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 4：Smart Money UI Off-main-thread
 
@@ -178,16 +188,13 @@ UI只建立snapshot rows對應model；period/scope變更新query，不在UI重�
 
 300ms內顯示loading；summary strip顯示真實as-of、freshness、quality與文字badge；不要以emoji作結構圖示。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_smart_money_flow_view.py -q -o addopts=
-git add ui_qt/views/smart_money/smart_money_flow_view.py tests/test_ui_qt_smart_money_flow_view.py
-git diff --cached --name-only
-git commit -m "perf(ui): move smart money loading off main thread"
+.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_smart_money_flow_view.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\C\pytest-task-4 -o "cache_dir=$env:TEMP\technical_analysis_parallel\C\pytest-cache-task-4"
 ```
 
-若Task 4實際修改其他Smart Money model／delegate檔，逐檔review後各自stage；禁止stage整個目錄。
+依 Shared `dev` Execution Protocol 產生 `C-task-4.json`，逐檔列出實際修改的 Smart Money view／model／delegate 與 tests 並附 SHA-256；`suggested_commit_message` 為 `perf(ui): move smart money loading off main thread`。交付後停止修改此 slice，等待 Git Coordinator 確認；worker 不得自行 stage 整個目錄或任何檔案。
 
 ## Task 5：Latency／Responsiveness Acceptance Gates
 
@@ -218,24 +225,27 @@ git commit -m "perf(ui): move smart money loading off main thread"
 
 Benchmark scope保留市場真實母體。ETF／一般股票分流只登錄為future security-master工作，不用名稱猜測或提前排除。
 
-- [ ] **Step 4: 完整驗證**
+- [ ] **Step 4: Worker focused verification 與 Coordinator heavy QA**
+
+Worker 可先在獨立 TEMP／basetemp 執行 focused suite 與 latency harness：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_broker_flow_units.py tests/test_broker_flow_sqlite_read_repository.py tests/test_broker_flow_dashboard_query_service.py tests/test_smart_money_semantic_service.py tests/test_ui_qt_smart_money_flow_view.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_broker_flow_units.py tests/test_broker_flow_sqlite_read_repository.py tests/test_broker_flow_dashboard_query_service.py tests/test_smart_money_semantic_service.py tests/test_ui_qt_smart_money_flow_view.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\C\pytest-acceptance -o "cache_dir=$env:TEMP\technical_analysis_parallel\C\pytest-cache-acceptance"
 .\.venv\Scripts\python.exe scripts\qa_broker_flow_dashboard_latency.py --period week --runs 20
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts=
+git diff --check -- app_module/broker_flow_dashboard_dtos.py app_module/broker_flow_sqlite_read_repository.py app_module/broker_flow_dashboard_query_service.py app_module/broker_flow_service.py app_module/smart_money_semantic_service.py app_module/dtos/smart_money_semantic_dtos.py ui_qt/views/smart_money tests/test_broker_flow_units.py tests/test_broker_flow_sqlite_read_repository.py tests/test_broker_flow_dashboard_query_service.py tests/test_smart_money_semantic_service.py tests/test_ui_qt_smart_money_flow_view.py scripts/qa_broker_flow_dashboard_latency.py docs/06_qa/BROKER_FLOW_SQLITE_DASHBOARD_PERFORMANCE_2026_07_15.md
+```
+
+以下重型／共享驗證由 Git Coordinator 在無其他 heavy job 的 QA slot 執行：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\C\pytest-coordinator-ui -o "cache_dir=$env:TEMP\technical_analysis_parallel\C\pytest-cache-coordinator-ui"
 .\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py
 .\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime
-git diff --check
-git status --short
 ```
 
-- [ ] **Step 5: Closeout commit**
+- [ ] **Step 5: 準備 closeout handoff**
 
-```powershell
-git add scripts/qa_broker_flow_dashboard_latency.py tests/test_broker_flow_dashboard_query_service.py docs/06_qa/BROKER_FLOW_SQLITE_DASHBOARD_PERFORMANCE_2026_07_15.md
-git commit -m "docs(broker-flow): record sqlite performance closeout"
-```
+依 Shared `dev` Execution Protocol 產生 `C-task-5.json`，ready files 僅列 latency harness、acceptance test 與 closeout evidence 並附 SHA-256；`suggested_commit_message` 為 `docs(broker-flow): record sqlite performance closeout`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Completion Gate
 

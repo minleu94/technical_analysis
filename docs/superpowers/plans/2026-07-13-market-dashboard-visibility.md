@@ -8,6 +8,16 @@
 
 **Tech Stack:** Python 3.11、SQLite URI `mode=ro`、dataclasses、Decimal／integer bp、PySide6 existing design system／TaskWorker、pytest-qt、mypy。
 
+## Shared `dev` Execution Protocol（本計畫所有 Task 的最高優先規則）
+
+- 開工前以唯讀 `git rev-parse --abbrev-ref HEAD` 確認結果為 `dev`；不得建立或切換 branch／worktree。
+- Worker 禁止執行 `git add`、`git commit`、`git push`、`git pull`、`git stash`、`git rebase`、`git reset`、`git revert`、`git cherry-pick` 或 `git merge`。所有 Git index、commit 與 remote mutation 只由單一 Git Coordinator 串行處理。
+- 只修改本計畫 `Ownership` 明列的 exclusive paths；看到其他 agent 的未提交變更時保留原狀，不得清理、覆寫或納入自己的交付。
+- 使用獨立 `$env:TEMP\technical_analysis_parallel\D`、`OUTPUT_ROOT`，且每條 pytest command 必須同時指定 slice 專屬 `--basetemp` 與 `-o "cache_dir=..."`；UI screenshots、reports、logs、pytest cache 與 QA outputs 不得與其他 workstream 共用。
+- Focused tests 可在互斥 owned files 上平行；full pytest、完整 mypy、UI QA 與跨頁面 heavy checks 由 Git Coordinator 排程串行 QA slot。
+- 每個原本的 commit slice 改成 implementation／handoff slice。Worker 在 `$env:TEMP\technical_analysis_parallel_handoffs\D-<slice>.json` 交付 `workstream_id`、`slice_id`、`handoff_status=ready_for_commit`、`ready_files`、`sha256_by_file`（path → SHA-256 mapping）、`suggested_commit_message`、`public_interfaces`、`focused_test_paths`、`focused_tests_and_results`、`boundary_checks_and_results`、`performance_or_data_coverage_results`、`blockers`、`external_gates_unchanged` 與 `rollback_notes`；handoff 不得提交進 repo。
+- Handoff 發出後停止修改該 slice，直到 Git Coordinator 驗證 SHA-256、以精確 path staging 並回覆已提交或退回修正。Coordinator 提交前若 hash 已變，必須拒絕該 handoff。
+
 ## Target Information Architecture
 
 ```text
@@ -87,13 +97,13 @@ Assertions：只允許`available_date <= as_of_date`；同stock／period取當�
 
 即使0 rows，`institutional_flows`、`credit_transactions`、`tdcc_shareholding`、`broker_flows`、`fundamental_monthly_revenues`都必須有status，不得從UI消失。
 
-- [ ] **Step 5: RED verify／Commit**
+- [ ] **Step 5: RED verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_market_data_visibility_service.py -q -o addopts=
-git add app_module/market_data_visibility_dtos.py tests/test_market_data_visibility_service.py
-git commit -m "test(market-data): define visibility and PIT contracts"
+.\.venv\Scripts\python.exe -m pytest tests/test_market_data_visibility_service.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\D\pytest-task-1 -o "cache_dir=$env:TEMP\technical_analysis_parallel\D\pytest-cache-task-1"
 ```
+
+依 Shared `dev` Execution Protocol 產生 `D-task-1.json`，ready files 僅列 visibility DTO 與 contract tests 並附 SHA-256；`suggested_commit_message` 為 `test(market-data): define visibility and PIT contracts`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 2：唯讀 Market Data Visibility Service
 
@@ -118,14 +128,14 @@ git commit -m "test(market-data): define visibility and PIT contracts"
 
 在temp DB由0 rows加入合法institutional rows後，同一service contract自動回observed摘要；加入future rows時結果不變。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_market_data_visibility_service.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_market_data_visibility_service.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\D\pytest-task-2 -o "cache_dir=$env:TEMP\technical_analysis_parallel\D\pytest-cache-task-2"
 .\.venv\Scripts\python.exe -m py_compile app_module\market_data_visibility_dtos.py app_module\market_data_visibility_service.py
-git add app_module/market_data_visibility_service.py tests/test_market_data_visibility_service.py
-git commit -m "feat(market-data): add readonly visibility service"
 ```
+
+依 Shared `dev` Execution Protocol 產生 `D-task-2.json`，ready files 僅列 visibility service 與 tests 並附 SHA-256；`suggested_commit_message` 為 `feat(market-data): add readonly visibility service`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 3：接入 DecisionDesk Snapshot，但隔離正式決策
 
@@ -149,13 +159,13 @@ git commit -m "feat(market-data): add readonly visibility service"
 
 Builder透過port呼叫visibility service；failure產生degraded visibility section，不讓其他Decision Desk sections失敗。不要讓Dashboard composer用visibility計算action。
 
-- [ ] **Step 4: Verify／Commit**
+- [ ] **Step 4: Verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_decision_desk_dto_contract.py tests/test_decision_desk_service.py tests/test_market_data_visibility_service.py -q -o addopts=
-git add app_module/decision_desk_dtos.py app_module/decision_desk_service.py app_module/decision_desk_composition.py tests/test_decision_desk_dto_contract.py tests/test_decision_desk_service.py
-git commit -m "feat(decision-desk): attach market data visibility snapshot"
+.\.venv\Scripts\python.exe -m pytest tests/test_decision_desk_dto_contract.py tests/test_decision_desk_service.py tests/test_market_data_visibility_service.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\D\pytest-task-3 -o "cache_dir=$env:TEMP\technical_analysis_parallel\D\pytest-cache-task-3"
 ```
+
+依 Shared `dev` Execution Protocol 產生 `D-task-3.json`，ready files 僅列 DecisionDesk DTO／service／composition 與 tests 並附 SHA-256；`suggested_commit_message` 為 `feat(decision-desk): attach market data visibility snapshot`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 4：重排 Market Exploration 與移除重複Instance
 
@@ -182,13 +192,13 @@ Workbench按鈕切到`market_explore`並選市場總覽；既有大盤、強弱�
 
 以簡短來源說明、最新狀態與「開啟市場總覽」取代嵌入式Decision Desk；保持keyboard操作與可辨識focus。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_decision_desk_main_integration.py tests/test_ui_qt_workbench_view.py -q -o addopts=
-git add ui_qt/main.py ui_qt/views/workbench_view.py tests/test_ui_qt_decision_desk_main_integration.py tests/test_ui_qt_workbench_view.py
-git commit -m "refactor(ui): make decision desk the market overview"
+.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_decision_desk_main_integration.py tests/test_ui_qt_workbench_view.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\D\pytest-task-4 -o "cache_dir=$env:TEMP\technical_analysis_parallel\D\pytest-cache-task-4"
 ```
+
+依 Shared `dev` Execution Protocol 產生 `D-task-4.json`，ready files 僅列 main、Workbench 與其 tests 並附 SHA-256；`suggested_commit_message` 為 `refactor(ui): make decision desk the market overview`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 5：Dashboard Visibility Cards／Empty States
 
@@ -213,13 +223,13 @@ Cases：revenue degraded可見、2025 revenue blocked、institutional 0-row miss
 
 1280×720與1440×800不出現水平卷軸；keyboard tab order符合視覺順序；existing TaskWorker async refresh與stale-result guard保留。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Verify／handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_decision_desk_view.py -q -o addopts=
-git add ui_qt/views/decision_desk_view.py tests/test_ui_qt_decision_desk_view.py
-git commit -m "feat(ui): expose revenue and institutional status"
+.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_decision_desk_view.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\D\pytest-task-5 -o "cache_dir=$env:TEMP\technical_analysis_parallel\D\pytest-cache-task-5"
 ```
+
+依 Shared `dev` Execution Protocol 產生 `D-task-5.json`，ready files 僅列 DecisionDesk view 與 rendering tests 並附 SHA-256；`suggested_commit_message` 為 `feat(ui): expose revenue and institutional status`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 6：Manual、UI QA 與 Closeout
 
@@ -232,32 +242,40 @@ git commit -m "feat(ui): expose revenue and institutional status"
 
 同步入口、tab順序、操作、refresh／loading、月營收／法人數值判讀、missing/degraded／PIT badge、安全限制與排錯。明確說明source可見不等於source accepted或已進Score。
 
-- [ ] **Step 2: Focused UI verification**
+- [ ] **Step 2: Worker focused UI verification**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_market_data_visibility_service.py tests/test_decision_desk_dto_contract.py tests/test_decision_desk_service.py tests/test_ui_qt_decision_desk_view.py tests/test_ui_qt_decision_desk_main_integration.py tests/test_ui_qt_workbench_view.py -q -o addopts=
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_market_data_visibility_service.py tests/test_decision_desk_dto_contract.py tests/test_decision_desk_service.py tests/test_ui_qt_decision_desk_view.py tests/test_ui_qt_decision_desk_main_integration.py tests/test_ui_qt_workbench_view.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\D\pytest-acceptance -o "cache_dir=$env:TEMP\technical_analysis_parallel\D\pytest-cache-acceptance"
+```
+
+以下跨頁面／重型 UI 驗證由 Git Coordinator 在串行 QA slot 執行：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_ui_qt_update_view_workbench.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\D\pytest-coordinator-ui -o "cache_dir=$env:TEMP\technical_analysis_parallel\D\pytest-cache-coordinator-ui"
 .\.venv\Scripts\python.exe scripts\qa_validate_update_tab.py
 ```
 
-- [ ] **Step 3: Static／compile／Git verification**
+- [ ] **Step 3: Static／compile／owned-file verification**
+
+完整 mypy 由 Git Coordinator 排程：
 
 ```powershell
 .\.venv\Scripts\python.exe -m mypy ui_qt app_module data_module analysis_module backtest_module decision_module portfolio_module runtime
-git diff --check
-git status --short
+```
+
+Worker 對全部 changed Python files 執行 `py_compile`，並只檢查 owned paths：
+
+```powershell
+git diff --check -- app_module/market_data_visibility_dtos.py app_module/market_data_visibility_service.py app_module/decision_desk_dtos.py app_module/decision_desk_service.py app_module/decision_desk_composition.py ui_qt/views/decision_desk_view.py ui_qt/views/workbench_view.py ui_qt/main.py tests/test_market_data_visibility_service.py tests/test_decision_desk_dto_contract.py tests/test_decision_desk_service.py tests/test_ui_qt_decision_desk_view.py tests/test_ui_qt_decision_desk_main_integration.py tests/test_ui_qt_workbench_view.py docs/07_guides/APPLICATION_MANUAL.md docs/06_qa/MARKET_EXPLORATION_INTEGRATED_DASHBOARD_2026_07_15.md
 ```
 
 對全部changed Python files執行`py_compile`。
 
-- [ ] **Step 4: Closeout commit**
+- [ ] **Step 4: 準備 closeout handoff**
 
 Closeout記錄actual tests、screens/layout cases、DB read-only證據、仍missing source與formal boundary。
 
-```powershell
-git add docs/07_guides/APPLICATION_MANUAL.md docs/06_qa/MARKET_EXPLORATION_INTEGRATED_DASHBOARD_2026_07_15.md
-git commit -m "docs(ui): record integrated market dashboard closeout"
-```
+依 Shared `dev` Execution Protocol 產生 `D-task-6.json`，ready files 僅列 Application Manual 與 Dashboard closeout 並附 SHA-256；`suggested_commit_message` 為 `docs(ui): record integrated market dashboard closeout`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Completion Gate
 

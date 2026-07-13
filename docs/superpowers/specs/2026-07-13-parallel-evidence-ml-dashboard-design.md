@@ -2,7 +2,7 @@
 
 ## 1. 目的
 
-把 2026-07-13 系統狀態稽核轉成可由多個獨立 Codex 長任務同時推進的工程方案，完整涵蓋：
+把 2026-07-13 系統狀態稽核轉成可由多個 Codex 長任務在同一個 `dev` working tree 內協作推進的工程方案，完整涵蓋：
 
 1. Evidence Rehearsal 從投影 shell 修成真實唯讀 E2E。
 2. 使用 2024 年（含）以前的 PIT 安全歷史資料建立 ML dataset、purged walk-forward 訓練與 2025 locked OOS。
@@ -16,14 +16,14 @@
 
 ## 2. 核心設計決策
 
-### 2.1 採用方案：共享契約、獨立 ownership、分波整合
+### 2.1 採用方案：共享 `dev` working tree、獨立 ownership、分波整合
 
-採用一份 Master Plan 管理八條工作流。每條工作流擁有自己的檔案集合、測試與 closeout；跨工作流只透過明確 DTO／Protocol／artifact 交接。共享 UI 入口、正式 Recommendation 接線、中央文件與全量 QA 留給最後的 Integration 工作流。
+採用一份 Master Plan 管理八條工作流。所有 worker 共用同一個 `dev` working tree，每條工作流仍只擁有自己的 exclusive 檔案集合、focused tests 與 closeout；跨工作流只透過明確 DTO／Protocol／artifact 交接。Worker 不操作 Git 狀態，單一 Git Coordinator 依 handoff queue 精確 stage、依序 commit 並 push `dev`。共享 UI 入口、正式 Recommendation 接線、中央文件與全量 QA 留給最後的 Integration 工作流。
 
 未採用的方案：
 
 - 單一巨型任務：context 過大、無法平行、難以定位回歸。
-- 完全獨立且各自修改共享檔案：容易在 `ui_qt/main.py`、Decision Desk DTO、Recommendation 與中央文件發生 merge conflict 或語意漂移。
+- 完全獨立且各自修改共享檔案：容易在 `ui_qt/main.py`、Decision Desk DTO、Recommendation 與中央文件發生並行覆寫或語意漂移。
 - 先完成所有資料源再開始 ML：不必要地延後已有十年安全價量資料可完成的工作。
 
 ### 2.2 工作流
@@ -42,8 +42,8 @@
 ### 2.3 分波策略
 
 ```text
-Wave 0（先做，短）
-  Master contracts / ownership freeze
+Coordinator Preflight（先做，短）
+  確認目前 working tree 位於 dev、記錄 dev baseline、凍結 ownership / interface / handoff contract
 
 Wave 1（可同時）
   A Evidence E2E
@@ -59,10 +59,22 @@ Wave 2（依賴介面凍結）
   F ML Daily Inference（依賴 B 的 artifact／feature contracts）
 
 Wave 3（不可提前）
-  G Integration / full QA / central docs / closeout
+  G 核對 dev 上已提交的 handoff slices / integration state，再執行 full QA / central docs / closeout
 ```
 
-同時運行建議不超過四條實作工作流；第五條以上優先排成下一波，降低共享測試資源、SQLite fixture 與人工 review 壓力。
+同時運行建議不超過四條實作工作流；第五條以上優先排成下一波，降低共享測試資源、SQLite fixture 與人工 review 壓力。Focused tests 可在 exclusive ownership 與隔離暫存目錄下平行；共用 Git index、全量 pytest／mypy、UI 全量 QA、正式資料 benchmark 與 Gate verifier 必須序列化。
+
+### 2.4 共用 Working Tree 執行協議
+
+- 所有 worker 固定在目前的 `dev` working tree；不得建立或切換 branch／worktree。
+- 所有 worker 禁止執行 `git switch`、`git checkout`、`git branch`、`git worktree`、`git add`、`git commit`、`git push`、`git stash`、`git pull`、`git rebase`、`git reset`、`git revert`、`git cherry-pick`、`git merge`。子計畫或 Prompt Pack 內若仍有這些步驟，一律由本協議覆蓋，不得執行。
+- Worker 只可平行修改其 exclusive ownership 檔案並執行 focused tests；共享檔案維持單一 owner與既定依賴順序。發現需要跨 owner 修改時停止該檔，登錄 blocker／adapter需求，不自行越界。
+- 每個 `workstream/slice` 使用自己的 `$env:TEMP` 子目錄、`OUTPUT_ROOT`、pytest `--basetemp`與`-o cache_dir=...`；不得共用 temp DB、model artifact、benchmark output 或 pytest cache。
+- Worker handoff 必須列出 `workstream_id`、`slice_id`、`handoff_status=ready_for_commit`、完整 `ready_files`、path→SHA-256 mapping `sha256_by_file`、`suggested_commit_message`、實際 tests／結果與 blockers。交付後 worker 凍結該 slice，不再修改 ready files，直到 Git Coordinator 明確接受或退回。
+- 單一 Git Coordinator 重新計算 SHA-256、核對 ownership／tests／blockers後，才可精確 stage handoff列出的檔案；共用 Git index 同一時間只由 Coordinator 操作。Coordinator 每次只處理一個 ready slice，依序 commit並push `dev`，再通知worker該slice已接受。
+- A～F 任一工作流的必要slices全數push至`dev`後，Coordinator必須在TEMP handoff root產生 `<workstream_id>-final-committed.json`；七份final manifests是G進入寫入階段的hard gate，只有slice queue紀錄不算完成。
+- Git Coordinator是互斥角色，不同時修改domain內容。全量pytest／mypy、UI全量QA、正式資料benchmark與Gate verifier使用global QA barrier：同一時間只跑一項，且run期間所有worker暫停repository寫入，確保驗證對應穩定快照。
+- G 不整合任何 branch，也不執行 merge／cherry-pick；G 只核對 `dev` 上各 handoff對應的已提交檔案、commit queue紀錄與跨流整合狀態。
 
 ## 3. 資料與決策安全邊界
 
@@ -194,26 +206,27 @@ D擁有正式read-only `SourceVisibilityStatus`與市場摘要，即使row_count
 
 ## 7. 驗證策略
 
-每一工作流都必須遵循 RED → GREEN → focused suite → boundary checks → commit：
+每一工作流都必須遵循 RED → GREEN → focused suite → boundary checks → SHA-256 handoff；commit／push 只由 Git Coordinator 序列化執行：
 
 - Python：`py_compile`、focused pytest、targeted mypy。
 - 金融安全：`scripts/quant_guard_linter.py`、`scripts/check_ml_shadow_boundary.py`。
 - UI：指定 Qt tests、Update Tab QA、off-main-thread／stale-result tests。
 - 效能：固定 fixture 與 current read-only DB benchmark；warm p95 < 2 秒，loading state < 300 ms。
 - 資料：row conservation、date coverage、available-date、missing/outage、source version。
-- 整合：全量 pytest、全模組 mypy、encoding、relative links、Gate 2–7 verifier、`git diff --check`。
+- 整合：全量 pytest、全模組 mypy、encoding、relative links、Gate 2–7 verifier、`git diff --check`；上述重型 QA 由 G／Git Coordinator 取得單一執行槽後序列化執行。
 
 ## 8. 完成定義
 
 只有同時滿足下列條件，G 才能建立工程 closeout：
 
-1. 一個 command 能以真實唯讀 DB 產生 replay／source／ML／lineage report。
-2. 2024 年底前資料完成 purged walk-forward，2025 locked OOS 只評估一次並保存 fingerprint。
-3. 每日 inference 使用相同 feature builder，prediction append-only 且失敗回 rule-only。
-4. Market Dashboard 顯示營收與法人 source status，missing／degraded 不隱形。
-5. Broker Top/Bottom 不再先建立全部 semantics，GUI 不被同步工作阻塞。
-6. 五種 Evidence failure、PIT violation、stale UI result、model schema mismatch 都有真實測試。
-7. 中央文件只描述實際已驗證狀態；external／forward／promotion 仍保持 pending。
+1. A～F handoff的ready files與SHA-256都能對應到Git Coordinator已序列commit／push至`dev`的slice；沒有worker自行操作Git history。
+2. 一個 command 能以真實唯讀 DB 產生 replay／source／ML／lineage report。
+3. 2024 年底前資料完成 purged walk-forward，2025 locked OOS 只評估一次並保存 fingerprint。
+4. 每日 inference 使用相同 feature builder，prediction append-only 且失敗回 rule-only。
+5. Market Dashboard 顯示營收與法人 source status，missing／degraded 不隱形。
+6. Broker Top/Bottom 不再先建立全部 semantics，GUI 不被同步工作阻塞。
+7. 五種 Evidence failure、PIT violation、stale UI result、model schema mismatch 都有真實測試。
+8. 中央文件只描述實際已驗證狀態；external／forward／promotion 仍保持 pending。G的最終slice也走相同handoff／Coordinator commit流程。
 
 ## 9. 非目標
 

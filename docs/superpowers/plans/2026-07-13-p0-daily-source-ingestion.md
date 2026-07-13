@@ -8,6 +8,16 @@
 
 **Tech Stack:** Python 3.11、requests／existing fetch transport、dataclasses、Decimal／integer units、SHA-256 raw manifests、SQLite working-copy、pytest fixtures、JSON／Markdown diagnostics。
 
+## Shared `dev` Execution Model
+
+- 所有 worker 都在共享 repository 的既有 `dev` branch 工作；開始前必須以唯讀命令確認 `git rev-parse --abbrev-ref HEAD` 回傳 `dev`。若不是 `dev`，停止並通知 Git Coordinator，不得自行修正。
+- 不得建立、切換或刪除 branch／worktree；不得執行 `git add`、`git commit`、`git push`、`git stash`、`git pull`、`git rebase`、`git reset`、`git revert`、`git cherry-pick` 或 `git merge`。
+- Worker 只可修改本計畫 `Ownership` 中的 exclusive paths。若需要碰其他工作流或中央 SSOT 的 owned file，停止該變更並列入 blockers，不得跨 ownership 代改。
+- 本工作流使用獨立暫存：`TEMP=$env:TEMP\technical_analysis_parallel\E1\temp`、`TMP` 同值、`OUTPUT_ROOT=$env:TEMP\technical_analysis_parallel\E1\output`，pytest 一律加 `--basetemp $env:TEMP\technical_analysis_parallel\E1\pytest\<slice>` 與 `-o "cache_dir=$env:TEMP\technical_analysis_parallel\E1\pytest_cache\<slice>"`。SQLite working-copy 必須位於此工作流 output 下，不得共用其他 worker 的 temp、output、DB 或 pytest cache。
+- Focused tests 可與其他工作流平行執行；全量 pytest、repo-wide mypy、完整 quant／ML boundary、UI QA、encoding／link audit 與其他重型 QA 只由 Coordinator 排程。Worker 不得自行啟動重型 QA 競爭共享資源。
+- 每個原 commit slice 改為 implementation／handoff slice。Worker 完成 focused tests 後，必須交付 canonical fields：`workstream_id`、`slice_id`、`handoff_status: ready_for_commit`、`ready_files`、`sha256_by_file`（path → SHA-256 mapping）、`focused_test_paths`、`focused_tests_and_results`、`performance_or_data_coverage_results`、`suggested_commit_message`、`public_interfaces`、`boundary_checks_and_results`、`external_gates_unchanged: true` 與 `rollback_notes`，並附 blockers 給 Git Coordinator；不得自行 stage 或 commit。
+- Handoff 送出後，worker 對該 slice 進入 `handoff_waiting`，在 Coordinator 明確確認前不得再修改該 slice 的 ready files。
+
 ## Non-negotiable Data Rules
 
 - 目前 `decision_date+1` 與TDCC `data_date+3` 只是推測，不能保存為verified `available_date`。
@@ -75,13 +85,33 @@ Raw fixture使用`stock_code/decision_date`，consumer contract要求`symbol/tra
 
 Manifest含endpoint id、request parameters、HTTP metadata、fetched_at、payload hash/size、parser version、row counts；quarantine含raw row hash、reason code與source version，不保存秘密token。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Focused verification／Git Coordinator handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_p0_source_candidate_contracts.py -q -o addopts=
-git add data_module/p0_source_candidate_contracts.py data_module/p0_candidate_manifest.py tests/test_p0_source_candidate_contracts.py
-git commit -m "test(data): freeze P0 source observation contracts"
+.\.venv\Scripts\python.exe -m pytest tests/test_p0_source_candidate_contracts.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\E1\pytest\e1-1 -o "cache_dir=$env:TEMP\technical_analysis_parallel\E1\pytest_cache\e1-1"
 ```
+
+```yaml
+handoff:
+  workstream_id: E1
+  slice_id: E1-1-contracts
+  ready_files: [data_module/p0_source_candidate_contracts.py, data_module/p0_candidate_manifest.py, tests/test_p0_source_candidate_contracts.py]
+  sha256_by_file:
+    "<path from ready_files>": "<SHA-256; repeat one entry for every ready_files item>"
+  focused_test_paths: [tests/test_p0_source_candidate_contracts.py]
+  focused_tests_and_results: "<貼上實際命令/exit/pass摘要>"
+  performance_or_data_coverage_results: "<actual result or not_applicable_with_reason>"
+  blockers: "none 或具體 blocker 清單"
+  suggested_commit_message: "test(data): freeze P0 source observation contracts"
+  public_interfaces: "<none or exact interfaces introduced/changed>"
+  boundary_checks_and_results: "<actual boundary result or not_applicable>"
+  external_gates_unchanged: true
+  rollback_notes: "<exact revert/disable note; never a branch/commit operation>"
+  handoff_status: ready_for_commit
+  worker_state: handoff_waiting
+```
+
+送出後停止修改本 slice ready files，等待 Git Coordinator 確認。
 
 ## Task 2：以Captured Official Fixtures鎖定 Parsers
 
@@ -108,13 +138,33 @@ git commit -m "test(data): freeze P0 source observation contracts"
 
 Fetcher回raw envelope，不自行猜availability。Live network只作manual smoke，不作deterministic test gate；tests只用captured fixtures。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Focused verification／Git Coordinator handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_p0_official_source_parsers.py -q -o addopts=
-git add data_module/p0_official_source_parsers.py data_module/official_phase3c_fetcher.py tests/test_p0_official_source_parsers.py tests/fixtures/p0_official_sources
-git commit -m "fix(data): preserve verified source publication evidence"
+.\.venv\Scripts\python.exe -m pytest tests/test_p0_official_source_parsers.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\E1\pytest\e1-2 -o "cache_dir=$env:TEMP\technical_analysis_parallel\E1\pytest_cache\e1-2"
 ```
+
+```yaml
+handoff:
+  workstream_id: E1
+  slice_id: E1-2-official-parsers
+  ready_files: [data_module/p0_official_source_parsers.py, data_module/official_phase3c_fetcher.py, tests/test_p0_official_source_parsers.py, tests/fixtures/p0_official_sources]
+  sha256_by_file:
+    "<path from ready_files; expand fixture directories to individual files>": "<SHA-256; one entry per file>"
+  focused_test_paths: [tests/test_p0_official_source_parsers.py]
+  focused_tests_and_results: "<貼上實際命令/exit/pass摘要>"
+  performance_or_data_coverage_results: "<actual result or not_applicable_with_reason>"
+  blockers: "none 或具體 blocker 清單"
+  suggested_commit_message: "fix(data): preserve verified source publication evidence"
+  public_interfaces: "<none or exact interfaces introduced/changed>"
+  boundary_checks_and_results: "<actual boundary result or not_applicable>"
+  external_gates_unchanged: true
+  rollback_notes: "<exact revert/disable note; never a branch/commit operation>"
+  handoff_status: ready_for_commit
+  worker_state: handoff_waiting
+```
+
+送出後停止修改本 slice ready files，等待 Git Coordinator 確認。
 
 ## Task 3：Normalizers、Conservation 與 Quarantine
 
@@ -135,13 +185,33 @@ git commit -m "fix(data): preserve verified source publication evidence"
 
 Institutional／credit／TDCC各自轉canonical observation，保留source-specific extras在versioned metadata；不得讓consumer依賴raw Chinese headers。
 
-- [ ] **Step 4: Verify／Commit**
+- [ ] **Step 4: Focused verification／Git Coordinator handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_p0_official_source_parsers.py -q -o addopts=
-git add data_module/p0_official_source_parsers.py tests/test_p0_official_source_parsers.py
-git commit -m "feat(data): normalize institutional credit and TDCC candidates"
+.\.venv\Scripts\python.exe -m pytest tests/test_p0_official_source_parsers.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\E1\pytest\e1-3 -o "cache_dir=$env:TEMP\technical_analysis_parallel\E1\pytest_cache\e1-3"
 ```
+
+```yaml
+handoff:
+  workstream_id: E1
+  slice_id: E1-3-normalizers
+  ready_files: [data_module/p0_official_source_parsers.py, tests/test_p0_official_source_parsers.py]
+  sha256_by_file:
+    "<path from ready_files>": "<SHA-256; repeat one entry for every ready_files item>"
+  focused_test_paths: [tests/test_p0_official_source_parsers.py]
+  focused_tests_and_results: "<貼上實際命令/exit/pass摘要>"
+  performance_or_data_coverage_results: "<actual result or not_applicable_with_reason>"
+  blockers: "none 或具體 blocker 清單"
+  suggested_commit_message: "feat(data): normalize institutional credit and TDCC candidates"
+  public_interfaces: "<none or exact interfaces introduced/changed>"
+  boundary_checks_and_results: "<actual boundary result or not_applicable>"
+  external_gates_unchanged: true
+  rollback_notes: "<exact revert/disable note; never a branch/commit operation>"
+  handoff_status: ready_for_commit
+  worker_state: handoff_waiting
+```
+
+送出後停止修改本 slice ready files，等待 Git Coordinator 確認。
 
 ## Task 4：Candidate-only Working-copy Repository
 
@@ -168,13 +238,33 @@ Transaction中斷不留半批；重跑相同batch idempotent；conflicts append 
 
 支援current與明確date range；先fetch／parse／diagnose，再選擇dry-run或working-copy apply。Manifest、accepted、quarantine與coverage使用同一run id串起。
 
-- [ ] **Step 5: Verify／Commit**
+- [ ] **Step 5: Focused verification／Git Coordinator handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_p0_candidate_repository.py tests/test_phase3c_candidate_ingestion.py -q -o addopts=
-git add data_module/p0_candidate_repository.py scripts/update_phase3c_candidates.py tests/test_p0_candidate_repository.py tests/test_phase3c_candidate_ingestion.py
-git commit -m "feat(data): add candidate-only working-copy ingestion"
+.\.venv\Scripts\python.exe -m pytest tests/test_p0_candidate_repository.py tests/test_phase3c_candidate_ingestion.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\E1\pytest\e1-4 -o "cache_dir=$env:TEMP\technical_analysis_parallel\E1\pytest_cache\e1-4"
 ```
+
+```yaml
+handoff:
+  workstream_id: E1
+  slice_id: E1-4-working-copy
+  ready_files: [data_module/p0_candidate_repository.py, scripts/update_phase3c_candidates.py, tests/test_p0_candidate_repository.py, tests/test_phase3c_candidate_ingestion.py]
+  sha256_by_file:
+    "<path from ready_files>": "<SHA-256; repeat one entry for every ready_files item>"
+  focused_test_paths: [tests/test_p0_candidate_repository.py, tests/test_phase3c_candidate_ingestion.py]
+  focused_tests_and_results: "<貼上實際命令/exit/pass摘要>"
+  performance_or_data_coverage_results: "<actual result or not_applicable_with_reason>"
+  blockers: "none 或具體 blocker 清單"
+  suggested_commit_message: "feat(data): add candidate-only working-copy ingestion"
+  public_interfaces: "<none or exact interfaces introduced/changed>"
+  boundary_checks_and_results: "<actual boundary result or not_applicable>"
+  external_gates_unchanged: true
+  rollback_notes: "<exact revert/disable note; never a branch/commit operation>"
+  handoff_status: ready_for_commit
+  worker_state: handoff_waiting
+```
+
+送出後停止修改本 slice ready files，等待 Git Coordinator 確認。
 
 ## Task 5：Readiness／Source Status 與 Coverage Artifact
 
@@ -195,13 +285,33 @@ git commit -m "feat(data): add candidate-only working-copy ingestion"
 
 只讀manifest／candidate repository；不要在application service觸發fetch或寫入。供D/G以adapter消費，但本流不修改UI。
 
-- [ ] **Step 4: Verify／Commit**
+- [ ] **Step 4: Focused verification／Git Coordinator handoff**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_source_candidate_readiness.py -q -o addopts=
-git add app_module/source_candidate_readiness.py tests/test_source_candidate_readiness.py
-git commit -m "feat(data): expose P0 candidate source status"
+.\.venv\Scripts\python.exe -m pytest tests/test_source_candidate_readiness.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\E1\pytest\e1-5 -o "cache_dir=$env:TEMP\technical_analysis_parallel\E1\pytest_cache\e1-5"
 ```
+
+```yaml
+handoff:
+  workstream_id: E1
+  slice_id: E1-5-readiness
+  ready_files: [app_module/source_candidate_readiness.py, tests/test_source_candidate_readiness.py]
+  sha256_by_file:
+    "<path from ready_files>": "<SHA-256; repeat one entry for every ready_files item>"
+  focused_test_paths: [tests/test_source_candidate_readiness.py]
+  focused_tests_and_results: "<貼上實際命令/exit/pass摘要>"
+  performance_or_data_coverage_results: "<actual result or not_applicable_with_reason>"
+  blockers: "none 或具體 blocker 清單"
+  suggested_commit_message: "feat(data): expose P0 candidate source status"
+  public_interfaces: "<none or exact interfaces introduced/changed>"
+  boundary_checks_and_results: "<actual boundary result or not_applicable>"
+  external_gates_unchanged: true
+  rollback_notes: "<exact revert/disable note; never a branch/commit operation>"
+  handoff_status: ready_for_commit
+  worker_state: handoff_waiting
+```
+
+送出後停止修改本 slice ready files，等待 Git Coordinator 確認。
 
 ## Task 6：Bounded Live Probe、Runbook 與 Closeout
 
@@ -222,24 +332,41 @@ git commit -m "feat(data): expose P0 candidate source status"
 
 Runbook涵蓋current/range dry-run、working-copy apply、outputs、owner、rollback、failure、禁止事項與source acceptance completion rule。
 
-- [ ] **Step 4: 完整驗證**
+- [ ] **Step 4: Worker focused verification 與 Coordinator heavy-QA request**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_p0_source_candidate_contracts.py tests/test_p0_official_source_parsers.py tests/test_p0_candidate_repository.py tests/test_phase3c_candidate_ingestion.py tests/test_source_candidate_readiness.py -q -o addopts=
-.\.venv\Scripts\python.exe scripts\quant_guard_linter.py
-.\.venv\Scripts\python.exe -m mypy data_module\official_phase3c_fetcher.py data_module\p0_source_candidate_contracts.py data_module\p0_official_source_parsers.py data_module\p0_candidate_manifest.py data_module\p0_candidate_repository.py app_module\source_candidate_readiness.py scripts\update_phase3c_candidates.py
-git diff --check
-git status --short
+.\.venv\Scripts\python.exe -m pytest tests/test_p0_source_candidate_contracts.py tests/test_p0_official_source_parsers.py tests/test_p0_candidate_repository.py tests/test_phase3c_candidate_ingestion.py tests/test_source_candidate_readiness.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\E1\pytest\e1-6 -o "cache_dir=$env:TEMP\technical_analysis_parallel\E1\pytest_cache\e1-6"
+git diff --check -- docs/07_guides/P0_DAILY_SOURCE_CANDIDATE_RUNBOOK.md docs/06_qa/P0_DAILY_SOURCE_CANDIDATE_CLOSEOUT_2026_07_15.md
+git status --short  # shared dev 的 foreign dirty entries 是預期狀態；不得修改
 ```
 
 對全部changed Python files執行`py_compile`。
 
-- [ ] **Step 5: Closeout commit**
+Worker 不執行repo-wide或重型QA；`scripts/quant_guard_linter.py`、完整targeted mypy與全量suite列入Git Coordinator heavy-QA queue。
 
-```powershell
-git add docs/07_guides/P0_DAILY_SOURCE_CANDIDATE_RUNBOOK.md docs/06_qa/P0_DAILY_SOURCE_CANDIDATE_CLOSEOUT_2026_07_15.md
-git commit -m "docs(data): close P0 candidate ingestion engineering"
+- [ ] **Step 5: Closeout implementation／Git Coordinator handoff**
+
+```yaml
+handoff:
+  workstream_id: E1
+  slice_id: E1-6-closeout-docs
+  ready_files: [docs/07_guides/P0_DAILY_SOURCE_CANDIDATE_RUNBOOK.md, docs/06_qa/P0_DAILY_SOURCE_CANDIDATE_CLOSEOUT_2026_07_15.md]
+  sha256_by_file:
+    "<path from ready_files>": "<SHA-256; repeat one entry for every ready_files item>"
+  focused_test_paths: [tests/test_p0_source_candidate_contracts.py, tests/test_p0_official_source_parsers.py, tests/test_p0_candidate_repository.py, tests/test_phase3c_candidate_ingestion.py, tests/test_source_candidate_readiness.py]
+  focused_tests_and_results: "<貼上實際命令/exit/pass摘要>"
+  performance_or_data_coverage_results: "<actual result or not_applicable_with_reason>"
+  blockers: "none 或具體 blocker／Coordinator QA pending清單"
+  suggested_commit_message: "docs(data): close P0 candidate ingestion engineering"
+  public_interfaces: "<none or exact interfaces introduced/changed>"
+  boundary_checks_and_results: "<actual boundary result or not_applicable>"
+  external_gates_unchanged: true
+  rollback_notes: "<exact revert/disable note; never a branch/commit operation>"
+  handoff_status: ready_for_commit
+  worker_state: handoff_waiting
 ```
+
+送出後停止修改本 slice ready files，等待 Git Coordinator 確認。
 
 ## Completion Gate
 

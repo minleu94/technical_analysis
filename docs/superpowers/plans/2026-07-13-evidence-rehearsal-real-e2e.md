@@ -10,6 +10,16 @@
 
 ## Global Constraints
 
+### Shared `dev` Execution Protocol（本計畫所有 Task 的最高優先規則）
+
+- 開工前以唯讀 `git rev-parse --abbrev-ref HEAD` 確認結果為 `dev`；不得建立或切換 branch／worktree。
+- Worker 禁止執行 `git add`、`git commit`、`git push`、`git pull`、`git stash`、`git rebase`、`git reset`、`git revert`、`git cherry-pick` 或 `git merge`。所有 Git index、commit 與 remote mutation 只由單一 Git Coordinator 串行處理。
+- 只修改本計畫 `Ownership` 明列的 exclusive paths；看到其他 agent 的未提交變更時保留原狀，不得清理、覆寫或納入自己的交付。
+- 每個 workstream 使用獨立 `$env:TEMP\technical_analysis_parallel\A`、`OUTPUT_ROOT`，且每條 pytest command 必須同時指定 slice 專屬 `--basetemp` 與 `-o "cache_dir=..."`；不得共用 temp、cache 或其他可寫輸出目錄。
+- Focused tests 可在互斥 owned files 上平行執行；full pytest、完整 mypy、UI QA、正式資料 smoke 等重型驗證由 Git Coordinator 排程，避免資源與輸出互撞。
+- 每個原本的 commit slice 改成 implementation／handoff slice。Worker 在 `$env:TEMP\technical_analysis_parallel_handoffs\A-<slice>.json` 交付 `workstream_id`、`slice_id`、`handoff_status=ready_for_commit`、`ready_files`、`sha256_by_file`（path → SHA-256 mapping）、`suggested_commit_message`、`public_interfaces`、`focused_test_paths`、`focused_tests_and_results`、`boundary_checks_and_results`、`performance_or_data_coverage_results`、`blockers`、`external_gates_unchanged` 與 `rollback_notes`；不得把 handoff 檔提交進 repo。
+- Handoff 發出後停止修改該 slice，直到 Git Coordinator 驗證 SHA-256、以精確 path staging 並回覆已提交或退回修正。Coordinator 提交前若 hash 已變，必須拒絕該 handoff。
+
 - 不寫 production DB；source DB 必須 `mode=ro` 且 `PRAGMA query_only=ON`。
 - `projection_only` 保持既有相容；`working_copy_e2e` 必須建立明確隔離working copy。
 - working copy／output不得位於`DATA_ROOT`、正式DB目錄或其resolved descendants；既有target預設拒絕覆寫。
@@ -93,17 +103,14 @@ def test_real_e2e_opens_source_read_only_and_emits_lineage(tmp_path):
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_real_e2e.py tests/test_evidence_rehearsal_cli.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_real_e2e.py tests/test_evidence_rehearsal_cli.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\A\pytest-task-1 -o "cache_dir=$env:TEMP\technical_analysis_parallel\A\pytest-cache-task-1"
 ```
 
 Expected: 新 assertions 失敗，證明目前 CLI 未開 DB、未輸出 lineage、未驗證 ML payload。
 
-- [ ] **Step 5: Commit tests**
+- [ ] **Step 5: 準備 tests handoff**
 
-```powershell
-git add tests/test_evidence_rehearsal_real_e2e.py tests/test_evidence_rehearsal_cli.py
-git commit -m "test(evidence): expose rehearsal e2e truth gaps"
-```
+依 Shared `dev` Execution Protocol 產生 `A-task-1.json`，ready files 僅列本 Task 的兩個測試檔並附 SHA-256；`suggested_commit_message` 為 `test(evidence): expose rehearsal e2e truth gaps`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 2: Read-only Source DB Reader 與隔離 Working Copy
 
@@ -148,16 +155,13 @@ Source連線維持`mode=ro`＋`query_only=ON`，以SQLite backup API寫入安全
 - [ ] **Step 6: 跑 focused tests**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_source_reader.py tests/test_historical_evidence_replay.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_source_reader.py tests/test_historical_evidence_replay.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\A\pytest-task-2 -o "cache_dir=$env:TEMP\technical_analysis_parallel\A\pytest-cache-task-2"
 .\.venv\Scripts\python.exe -m py_compile app_module/evidence_rehearsal_source_reader.py
 ```
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: 準備 implementation handoff**
 
-```powershell
-git add app_module/evidence_rehearsal_source_reader.py app_module/historical_evidence_replay.py tests/test_evidence_rehearsal_source_reader.py tests/test_historical_evidence_replay.py
-git commit -m "feat(evidence): run replay on isolated sqlite copy"
-```
+依 Shared `dev` Execution Protocol 產生 `A-task-2.json`，只列本 Task 的 reader、replay 與測試檔並附 SHA-256；`suggested_commit_message` 為 `feat(evidence): run replay on isolated sqlite copy`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 3: 真實 Orchestrator 與 Lineage Bridge
 
@@ -203,15 +207,12 @@ Request需含execution mode、scenario、source／working-copy paths、date rang
 - [ ] **Step 5: 跑 orchestrator／lineage／ML tests**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_orchestrator.py tests/test_evidence_rehearsal_service.py tests/test_evidence_rehearsal_ml_comparison.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_orchestrator.py tests/test_evidence_rehearsal_service.py tests/test_evidence_rehearsal_ml_comparison.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\A\pytest-task-3 -o "cache_dir=$env:TEMP\technical_analysis_parallel\A\pytest-cache-task-3"
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: 準備 implementation handoff**
 
-```powershell
-git add app_module/evidence_rehearsal_orchestrator.py app_module/evidence_rehearsal_lineage_adapter.py app_module/evidence_rehearsal_service.py tests/test_evidence_rehearsal_orchestrator.py
-git commit -m "feat(evidence): orchestrate real rehearsal lineage"
-```
+依 Shared `dev` Execution Protocol 產生 `A-task-3.json`，只列本 Task 的 orchestrator、lineage bridge、service 與測試檔並附 SHA-256；`suggested_commit_message` 為 `feat(evidence): orchestrate real rehearsal lineage`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 4: Real Failure Injection Ports
 
@@ -250,12 +251,9 @@ def test_faults_are_detected_by_real_boundaries(complete_inputs, failure, expect
 
 比較完整 report canonical JSON hash，不只 blocker字串。
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 準備 implementation handoff**
 
-```powershell
-git add app_module/evidence_rehearsal_fault_injection.py app_module/evidence_rehearsal_orchestrator.py tests/test_evidence_rehearsal_fault_injection.py
-git commit -m "test(evidence): inject failures through real rehearsal boundaries"
-```
+依 Shared `dev` Execution Protocol 產生 `A-task-4.json`，只列本 Task 的 fault injection、orchestrator 與測試檔並附 SHA-256；`suggested_commit_message` 為 `test(evidence): inject failures through real rehearsal boundaries`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 5: CLI v2 接入 Orchestrator
 
@@ -287,17 +285,14 @@ git commit -m "test(evidence): inject failures through real rehearsal boundaries
 - [ ] **Step 3: 跑 CLI subprocess tests與兩次 smoke**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_cli.py tests/test_evidence_rehearsal_real_e2e.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_cli.py tests/test_evidence_rehearsal_real_e2e.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\A\pytest-task-5 -o "cache_dir=$env:TEMP\technical_analysis_parallel\A\pytest-cache-task-5"
 ```
 
 使用同一source建立兩個全新temp working copies，確認semantic fingerprint、artifact hashes與blockers一致；不要比較runtime timestamps造成的byte差異。
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 準備 implementation handoff**
 
-```powershell
-git add scripts/run_evidence_rehearsal.py tests/test_evidence_rehearsal_cli.py tests/test_evidence_rehearsal_real_e2e.py
-git commit -m "fix(evidence): run controlled rehearsal end to end"
-```
+依 Shared `dev` Execution Protocol 產生 `A-task-5.json`，只列本 Task 的 CLI 與測試檔並附 SHA-256；`suggested_commit_message` 為 `fix(evidence): run controlled rehearsal end to end`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Task 6: Runbook、Truth Closeout 與完整驗證
 
@@ -317,23 +312,20 @@ git commit -m "fix(evidence): run controlled rehearsal end to end"
 - [ ] **Step 3: 執行 focused 與 boundary verification**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_*.py tests/test_historical_evidence_replay.py tests/test_artifact_lineage_verifier.py -q -o addopts=
+.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_*.py tests/test_historical_evidence_replay.py tests/test_artifact_lineage_verifier.py -q -o addopts= --basetemp $env:TEMP\technical_analysis_parallel\A\pytest-acceptance -o "cache_dir=$env:TEMP\technical_analysis_parallel\A\pytest-cache-acceptance"
 .\.venv\Scripts\python.exe -m mypy app_module/evidence_rehearsal_dtos.py app_module/evidence_rehearsal_source_reader.py app_module/evidence_rehearsal_lineage_adapter.py app_module/evidence_rehearsal_orchestrator.py app_module/evidence_rehearsal_fault_injection.py scripts/run_evidence_rehearsal.py
 .\.venv\Scripts\python.exe scripts/quant_guard_linter.py
 .\.venv\Scripts\python.exe scripts/check_ml_shadow_boundary.py
-git diff --check
+git diff --check -- scripts/run_evidence_rehearsal.py app_module/evidence_rehearsal_dtos.py app_module/evidence_rehearsal_source_reader.py app_module/evidence_rehearsal_lineage_adapter.py app_module/evidence_rehearsal_orchestrator.py app_module/evidence_rehearsal_fault_injection.py docs/07_guides/EVIDENCE_REHEARSAL_RUNBOOK.md docs/06_qa/EVIDENCE_REHEARSAL_REAL_E2E_CLOSEOUT_2026_07_13.md
 ```
 
 - [ ] **Step 4: 核對 Git 排除**
 
 確認 temp DB、reports、logs、cache與 `output/qa` 未 stage。
 
-- [ ] **Step 5: Commit docs**
+- [ ] **Step 5: 準備 docs handoff**
 
-```powershell
-git add docs/07_guides/EVIDENCE_REHEARSAL_RUNBOOK.md docs/06_qa/EVIDENCE_REHEARSAL_REAL_E2E_CLOSEOUT_2026_07_13.md
-git commit -m "docs(evidence): close real rehearsal e2e engineering"
-```
+依 Shared `dev` Execution Protocol 產生 `A-task-6.json`，只列 runbook 與 closeout 文件並附 SHA-256；`suggested_commit_message` 為 `docs(evidence): close real rehearsal e2e engineering`。交付後停止修改此 slice，等待 Git Coordinator 確認。
 
 ## Completion Gate
 
