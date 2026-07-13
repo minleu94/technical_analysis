@@ -3,14 +3,24 @@
 > 日期：2026-07-12
 > 狀態：candidate mapping；不代表 source acceptance、正式 ingestion 或 downstream eligibility。
 
+## 帳號權限決策
+
+2026-07-12 使用者確認不具 FinMind Sponsor 資格。因此 `TaiwanStockHoldingSharesPer` 與
+`TaiwanStockSuspended` 均列為 `source_access_not_authorized`，不再列入本專案的可用來源、
+不進行 access probe、不得以爬取、替代帳號或缺席資料推定來繞過限制。
+
+後續只採用可合法取得且可追溯的來源：持股分級以 TDCC 官方股權分散表為目標來源；停牌／
+復牌與交易限制以 TWSE／TPEx 官方公告為目標來源。兩者在完成來源契約、公告時間與
+available-date 驗證前，維持 `eligibility=none`。
+
 ## 可驗證的資料集對應
 
 | V2.3 P0 項目 | FinMind dataset | 初步可用性 | 必要限制 |
 |---|---|---|---|
 | 三大法人 | `TaiwanStockInstitutionalInvestorsBuySell` / `Wide` | Free；官方文件標示日更約 20:00 | 必須保存 fetch timestamp / source version，且以可取得時間而非交易日作 `available_date`。 |
 | 信用交易 | `TaiwanStockMarginPurchaseShortSale` | Free；官方文件標示日更約 21:00 | 同上；資料未完成前不可用於同日 decision。 |
-| 集保持股分級 | `TaiwanStockHoldingSharesPer` | Backer / Sponsor | 須先確認帳號 tier、FinMind 與 TDCC 使用／再散布條款、週資料 available-date。 |
-| 停牌 / 復牌 | `TaiwanStockSuspended` | Backer / Sponsor | 須驗證公告、停牌及復牌時間語意；不以缺席價格推定。 |
+| 集保持股分級 | `TaiwanStockHoldingSharesPer` | Backer / Sponsor；本帳號未授權 | 排除；改採 TDCC 官方來源候選。 |
+| 停牌 / 復牌 | `TaiwanStockSuspended` | Backer / Sponsor；本帳號未授權 | 排除；改採 TWSE／TPEx 官方公告來源候選。 |
 | 漲跌停限制 | `TaiwanStockPriceLimit` | Free | 僅作可成交性 / restriction diagnostics；不替代成交或流動性證據。 |
 | 除權息 / 除權 | `TaiwanStockDividend` / `TaiwanStockDividendResult` | dataset 存在 | 必須逐事件驗證公告 / 生效 / available-date 與 adjusted-price policy。 |
 | 面額變更 | `TaiwanStockParValueChange` | dataset 存在 | 仍需逐事件 PIT / coverage / correction policy。 |
