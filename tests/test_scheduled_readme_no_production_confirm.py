@@ -11,7 +11,7 @@ def _scheduled_texts() -> dict[str, str]:
     return {
         path.name: path.read_text(encoding="utf-8")
         for path in SCHEDULED_DIR.glob("*")
-        if path.suffix.lower() in {".ps1", ".cmd", ".md"}
+        if path.suffix.lower() in {".ps1", ".cmd"}
     }
 
 
