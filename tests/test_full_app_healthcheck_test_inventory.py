@@ -121,12 +121,14 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
 
 
 def test_inventory_exposes_pytest_collection_statuses():
-    assert len(PYTEST_COLLECTED_FILES) == 405
+    assert len(PYTEST_COLLECTED_FILES) == 406
     assert len(PYTEST_SUPPORT_FILES) == 1
     assert len(PYTEST_NOT_COLLECTED_FILES) == 29
 
     assert is_collected_by_default_pytest("tests/test_full_app_healthcheck_test_inventory.py")
     assert get_pytest_collection_status("tests/test_full_app_healthcheck_test_inventory.py") == "collected"
+    assert get_category("tests/test_evidence_rehearsal_dtos.py") == "governance-doc-tooling"
+    assert is_collected_by_default_pytest("tests/test_evidence_rehearsal_dtos.py")
     assert get_pytest_collection_status("tests/conftest.py") == "support"
     assert get_pytest_collection_status("tests/manual/legacy_diagnostics/run_tests.py") == "not-collected"
     assert get_pytest_collection_status("tests/does_not_exist.py") == "unknown"

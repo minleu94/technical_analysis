@@ -257,6 +257,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_audit_document_encoding.py": "governance-doc-tooling",
     "tests/test_decision_quality_no_trading_language.py": "governance-doc-tooling",
     "tests/test_evidence_pipeline_report.py": "governance-doc-tooling",
+    "tests/test_evidence_rehearsal_dtos.py": "governance-doc-tooling",
     "tests/test_forward_performance_dashboard_no_trading_language.py": "governance-doc-tooling",
     "tests/test_financial_float_boundary_checker.py": "governance-doc-tooling",
     "tests/test_financial_units.py": "governance-doc-tooling",
