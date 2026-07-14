@@ -80,6 +80,21 @@ def main(argv: list[str] | None = None) -> int:
     if not db_path.exists():
         errors.append("sqlite_db_missing")
 
+    quick_update_status_path = (
+        output_root / "scheduled" / "data_update_quick" / "latest_status.json"
+    )
+    if quick_update_status_path.exists():
+        try:
+            quick_update_payload = json.loads(
+                quick_update_status_path.read_text(encoding="utf-8")
+            )
+            quick_update_status = str(quick_update_payload.get("status", "unknown"))
+            checks["data_update_quick_status"] = quick_update_status
+            if quick_update_status == "failed":
+                warnings.append("data_update_quick_failed")
+        except (OSError, json.JSONDecodeError):
+            warnings.append("data_update_quick_status_unreadable")
+
     if db_path.exists():
         try:
             uri = f"file:{db_path.as_posix()}?mode=ro"
