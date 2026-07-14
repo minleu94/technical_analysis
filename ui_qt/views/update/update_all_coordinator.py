@@ -10,7 +10,7 @@ Result = dict[str, Any]
 ProgressCallback = Callable[[str, int], None]
 
 
-def _twse_skip_warning_messages(result: Result) -> list[str]:
+def _market_skip_messages(result: Result) -> list[str]:
     skipped_dates = sorted(
         {
             str(item)
@@ -20,7 +20,7 @@ def _twse_skip_warning_messages(result: Result) -> list[str]:
     )
     if not skipped_dates:
         return []
-    return [f"TWSE 上游查無資料，已跳過日期：{', '.join(skipped_dates)}"]
+    return [f"台股因故（如颱風假）休市或無資料，全市場各項數據均已自動跳過日期：{', '.join(skipped_dates)}"]
 
 
 def run_update_all(
@@ -30,7 +30,7 @@ def run_update_all(
     end_date: str,
     update_service: Any,
     get_overview_status: Callable[[], Any],
-    update_tpex_daily_prices: Callable[[str, str], Result],
+    update_tpex_daily_prices: Callable[..., Result],
     run_incremental_technical: Callable[[ProgressCallback | None], Result],
     tpex_warning_messages: Callable[[Result], list[str]],
     progress_callback: ProgressCallback | None = None,
@@ -38,6 +38,7 @@ def run_update_all(
     """依既有 quick/safe 契約執行更新；不持有 widget 或 worker。"""
     completed: list[Result] = []
     warnings: list[str] = []
+    info_messages: list[str] = []
     soft_failures: list[Result] = []
 
     def report(message: str, progress: int) -> None:
@@ -66,7 +67,7 @@ def run_update_all(
         (
             "TPEX 每日股價更新",
             16,
-            lambda: update_tpex_daily_prices(daily_update_start_date, end_date),
+            lambda: update_tpex_daily_prices(daily_update_start_date, end_date, next((c["result"].get("no_data_skipped_dates") for c in completed if c["step"] == "每日股價更新"), None)),
         ),
         (
             "同步每日股價至 SQLite",
@@ -133,9 +134,9 @@ def run_update_all(
 
     for name, progress, action in steps:
         result = run_step(name, progress, action)
-        if name.startswith("每日股價更新") and isinstance(result, dict):
-            warnings.extend(_twse_skip_warning_messages(result))
-        if name.startswith("TPEX 每日股價更新") and isinstance(result, dict):
+        if name == "每日股價更新" and isinstance(result, dict):
+            info_messages.extend(_market_skip_messages(result))
+        if name == "TPEX 每日股價更新" and isinstance(result, dict):
             step_warnings = [f"{name}: {warning}" for warning in tpex_warning_messages(result)]
             if not result.get("success", True) and not step_warnings:
                 step_warnings.append(f"{name}: {result.get('message', f'{name} 失敗')}")
@@ -159,6 +160,9 @@ def run_update_all(
             }
 
     final_message = "快速更新所有數據完成" if is_quick_mode else "安全更新所有數據完成"
+    if info_messages:
+        final_message += "\n\n備註：\n" + "\n".join(info_messages)
+        
     report(final_message, 100)
     if soft_failures:
         return {

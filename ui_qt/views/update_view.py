@@ -1534,7 +1534,7 @@ class UpdateView(QWidget):
             end_dt = end_dt - timedelta(days=1)
         return end_dt.strftime("%Y-%m-%d")
 
-    def _update_tpex_daily_prices(self, start_date: str, end_date: str) -> Dict[str, Any]:
+    def _update_tpex_daily_prices(self, start_date: str, end_date: str, twse_no_data_dates: Optional[list[str]] = None) -> Dict[str, Any]:
         """更新 TPEX 日價；舊 service 測試替身可退回單日 API。"""
         update_range = getattr(self.update_service, "update_tpex_daily_price_range", None)
         if update_range is not None:
@@ -1545,6 +1545,7 @@ class UpdateView(QWidget):
                 sync_to_sqlite=False,
                 force_refresh=False,
                 break_on_repeated_source_date=False,
+                twse_no_data_dates=twse_no_data_dates,
             )
         return self.update_service.update_tpex_daily_price(end_date)
 

@@ -104,7 +104,7 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
                 if loader.last_daily_download_outcome == "no_data":
                     logger.info(f"  - {date} 上游查無資料，已跳過")
                     skipped_no_data_dates.append(date)
-                    print(f"SKIPPED_NO_DATA {date} 上游查無資料", flush=True)
+                    print(f"SKIPPED_NO_DATA {date} NO_DATA", flush=True)
                 else:
                     logger.error(f"  ✗ {date} 更新失敗：無法獲取數據或數據為空")
                     fail_count += 1

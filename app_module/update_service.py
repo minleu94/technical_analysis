@@ -382,15 +382,16 @@ class UpdateService :
             'output_file':None ,
             }
 
-    def update_tpex_daily_price_range (
-    self ,
-    start_date :str ,
-    end_date :str ,
-    delay_seconds :float =0.0 ,
-    force_refresh :bool =False ,
-    sync_to_sqlite :bool =False ,
-    break_on_repeated_source_date :bool =True ,
-    )->Dict [str ,Any ]:
+    def update_tpex_daily_price_range(
+        self,
+        start_date: str,
+        end_date: str,
+        delay_seconds: float = 0.0,
+        force_refresh: bool = False,
+        sync_to_sqlite: bool = False,
+        break_on_repeated_source_date: bool = True,
+        twse_no_data_dates: Optional[list[str]] = None,
+    ) -> Dict[str, Any]:
         """逐日更新 TPEX 官方收盤行情，會記錄實際回應日並可選擇同步到 SQLite。"""
         import logging
         import time
@@ -431,16 +432,25 @@ class UpdateService :
                 result =source .update_for_date (requested_date )
                 effective_source_date =result .source_date or requested_date
 
-                if result .success :
-                    updated_dates .append (effective_source_date )
-                    source_date_seen .add (effective_source_date )
-                    total_rows +=int (result .row_count )
-                    if effective_source_date !=requested_date :
-                        fallback_dates .append (effective_source_date )
-                else :
-                    failed_dates .append (requested_date )
+                if result.success:
+                    updated_dates.append(effective_source_date)
+                    source_date_seen.add(effective_source_date)
+                    total_rows += int(result.row_count)
+                    if effective_source_date != requested_date:
+                        fallback_dates.append(effective_source_date)
+                else:
+                    twse_skipped = False
+                    if twse_no_data_dates:
+                        normalized_twse = [self._date_key(d) for d in twse_no_data_dates]
+                        twse_skipped = requested_date in normalized_twse
+                    
+                    if twse_skipped:
+                        logger.info(f"[UpdateService] TPEX 缺少 {requested_date} 資料，但 TWSE 已判定為查無資料（如颱風假），標記為 skipped")
+                        skipped_dates.append(requested_date)
+                    else:
+                        failed_dates.append(requested_date)
 
-                if result .source_date and result .source_date !=requested_date :
+                if result.source_date and result.source_date != requested_date:
                     fallback_dates .append (result .source_date )
                     if result .source_date not in source_date_seen :
                         fallback_result =source .update_for_date (result .source_date )

@@ -193,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
                 force_refresh=False,
                 sync_to_sqlite=False,
                 break_on_repeated_source_date=False,
+                twse_no_data_dates=next((s["result"].get("no_data_skipped_dates", []) for s in steps if s["name"] == "update_twse_daily_prices"), []),
             ),
             warning_only=True,
         )
