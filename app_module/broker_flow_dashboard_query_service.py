@@ -57,13 +57,25 @@ class BrokerFlowDashboardQueryService:
         self.repository = repository
         self.semantic_port = semantic_port
         self.signal_engine = signal_engine or FlowSignalEngine()
+        self._dashboard_cache: dict[tuple[object, ...], BrokerFlowDashboardSnapshot] = {}
 
     def load_dashboard_snapshot(
         self, query: BrokerFlowDashboardQuery
     ) -> BrokerFlowDashboardSnapshot:
+        version_getter = getattr(self.repository, "source_cache_key", None)
+        source_version = version_getter() if callable(version_getter) else None
+        cache_key = (
+            source_version,
+            query.requested_as_of_date,
+            query.period,
+            query.scope,
+            query.limit_per_side,
+        )
+        if source_version is not None and cache_key in self._dashboard_cache:
+            return self._dashboard_cache[cache_key]
         source = self.repository.load_dashboard_source(query)
         if not source.events or not source.selected_trading_dates:
-            return BrokerFlowDashboardSnapshot(
+            snapshot = BrokerFlowDashboardSnapshot(
                 as_of_date=query.requested_as_of_date,
                 period=query.period,
                 top_signals=(),
@@ -77,6 +89,8 @@ class BrokerFlowDashboardQueryService:
                 selected_trading_dates=source.selected_trading_dates,
                 query_counts={"repository": source.query_count, "semantic_batch": 0},
             )
+            self._store_dashboard_cache(cache_key, source_version, snapshot)
+            return snapshot
 
         aggregations = self._aggregate_market(source.events)
         all_signals = self.signal_engine.generate_signals(list(aggregations.values()))
@@ -103,7 +117,7 @@ class BrokerFlowDashboardQueryService:
         )
         warnings = tuple(dict.fromkeys((*source.warnings, *semantic_warnings)))
         quality = "degraded" if warnings else source.quality
-        return BrokerFlowDashboardSnapshot(
+        snapshot = BrokerFlowDashboardSnapshot(
             as_of_date=actual_as_of,
             period=query.period,
             top_signals=top_signals,
@@ -120,6 +134,20 @@ class BrokerFlowDashboardQueryService:
                 "semantic_batch": semantic_query_count,
             },
         )
+        self._store_dashboard_cache(cache_key, source_version, snapshot)
+        return snapshot
+
+    def _store_dashboard_cache(
+        self,
+        cache_key: tuple[object, ...],
+        source_version: object,
+        snapshot: BrokerFlowDashboardSnapshot,
+    ) -> None:
+        if source_version is None:
+            return
+        self._dashboard_cache[cache_key] = snapshot
+        while len(self._dashboard_cache) > 8:
+            self._dashboard_cache.pop(next(iter(self._dashboard_cache)))
 
     def load_stock_branch_detail(
         self, stock_code: str, query: BrokerFlowDashboardQuery

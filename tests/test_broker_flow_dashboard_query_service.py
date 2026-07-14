@@ -1,4 +1,8 @@
 from datetime import date
+import os
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -9,6 +13,8 @@ from app_module.broker_flow_dashboard_query_service import (
 from app_module.broker_flow_sqlite_read_repository import BrokerFlowReadSnapshot
 from decision_module.flow_contracts import BrokerFlowEvent
 from scripts.qa_broker_flow_dashboard_latency import (
+    benchmark_operation,
+    evaluate_latency_gate,
     inspect_broker_flow_sqlite,
     summarize_latency_samples,
 )
@@ -90,6 +96,60 @@ def test_latency_summary_separates_cold_sample_and_warm_nearest_rank_p95():
         "warm_min_ms": 10.0,
         "warm_max_ms": 50.0,
     }
+
+
+def test_acceptance_benchmark_keeps_warmup_and_twenty_raw_samples():
+    calls = []
+
+    result = benchmark_operation(
+        "fixture",
+        lambda: calls.append(len(calls)) or {"query_count": 2, "row_count": 7},
+        runs=20,
+    )
+
+    assert len(calls) == 21
+    assert len(result["raw_samples_ms"]) == 20
+    assert result["warmup_ms"] >= 0
+    assert result["last_result"] == {"query_count": 2, "row_count": 7}
+
+
+def test_latency_gate_reports_failure_instead_of_masking_regression():
+    result = evaluate_latency_gate(
+        {"warm_p95_ms": 2000.0, "cold_ms": 4999.0},
+        warm_limit_ms=2000.0,
+        cold_limit_ms=5000.0,
+    )
+
+    assert result == {
+        "status": "fail",
+        "warm_limit_ms": 2000.0,
+        "warm_p95_ms": 2000.0,
+        "cold_limit_ms": 5000.0,
+        "cold_ms": 4999.0,
+    }
+
+
+def test_latency_cli_emits_cjk_and_writes_output_under_cp1252_console(tmp_path):
+    output_path = tmp_path / "latency.json"
+    code = (
+        "from pathlib import Path; "
+        "from scripts.qa_broker_flow_dashboard_latency import _emit_report; "
+        f"_emit_report('主力流向', Path({str(output_path)!r}))"
+    )
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "cp1252"
+
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode("utf-8", errors="replace")
+    assert completed.stdout.decode("utf-8").strip() == "主力流向"
+    assert output_path.read_text(encoding="utf-8") == "主力流向\n"
 
 
 def test_sqlite_shape_probe_is_read_only_and_missing_path_is_not_created(tmp_path):
@@ -215,3 +275,36 @@ def test_dashboard_service_returns_typed_missing_without_semantic_query():
     assert snapshot.bottom_signals == ()
     assert snapshot.warnings == ("broker_flows_table_missing",)
     assert semantic_port.calls == []
+
+
+def test_dashboard_cache_reuses_exact_query_and_invalidates_on_source_change():
+    source = BrokerFlowReadSnapshot(
+        selected_trading_dates=(date(2026, 7, 3),),
+        events=(_dashboard_event("2330", 1000),),
+        tracked_branches=(), quality="observed", warnings=(),
+        source_fingerprint="fixture-v1", query_count=2, materialized_row_count=1,
+    )
+
+    class VersionedRepository(_DashboardRepository):
+        version = "v1"
+
+        def source_cache_key(self):
+            return self.version
+
+    repository = VersionedRepository(source)
+    semantic_port = _BatchSemanticPort()
+    service = BrokerFlowDashboardQueryService(repository, semantic_port=semantic_port)
+    query = BrokerFlowDashboardQuery(
+        period="week", scope="top_bottom_50",
+        requested_as_of_date=date(2026, 7, 5), limit_per_side=50,
+    )
+
+    first = service.load_dashboard_snapshot(query)
+    second = service.load_dashboard_snapshot(query)
+    repository.version = "v2"
+    third = service.load_dashboard_snapshot(query)
+
+    assert first is second
+    assert third is not second
+    assert repository.calls == [query, query]
+    assert len(semantic_port.calls) == 2

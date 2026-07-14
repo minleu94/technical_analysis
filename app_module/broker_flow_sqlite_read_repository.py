@@ -6,7 +6,7 @@ import hashlib
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 from app_module.broker_flow_dashboard_dtos import (
@@ -34,6 +34,13 @@ _REQUIRED_COLUMNS = {
 }
 
 
+def _parse_date_key(raw: object) -> date:
+    text = str(raw).strip()
+    if len(text) != 8 or not text.isdigit():
+        raise ValueError(f"invalid broker-flow date key: {text}")
+    return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
+
+
 @dataclass(frozen=True)
 class BrokerFlowReadSnapshot:
     selected_trading_dates: tuple[date, ...]
@@ -51,6 +58,12 @@ class BrokerFlowSQLiteReadRepository:
 
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = Path(db_path)
+
+    def source_cache_key(self) -> str | None:
+        if not self.db_path.is_file():
+            return None
+        stat = self.db_path.stat()
+        return f"{stat.st_size}:{stat.st_mtime_ns}"
 
     def load_dashboard_source(
         self, query: BrokerFlowDashboardQuery
@@ -79,6 +92,90 @@ class BrokerFlowSQLiteReadRepository:
         )
         return self._load_source(
             query, stock_codes=codes, trading_day_limit=trading_day_limit
+        )
+
+    def load_stock_semantic_batch(
+        self,
+        stock_codes: tuple[str, ...],
+        as_of_date: date,
+        *,
+        trading_day_limit: int = 60,
+    ) -> BrokerFlowReadSnapshot:
+        """只物件化 semantics 所需欄位，避免建立未使用的金額／rank DTO。"""
+        codes = tuple(dict.fromkeys(str(code) for code in stock_codes if str(code)))
+        if not codes:
+            return self._missing("broker_flow_stock_codes_empty", query_count=0)
+        if trading_day_limit < 1:
+            raise ValueError("trading_day_limit must be at least 1")
+        query = BrokerFlowDashboardQuery(
+            period="month", scope="all", requested_as_of_date=as_of_date
+        )
+        if not self.db_path.is_file():
+            return self._missing("broker_flow_sqlite_missing", query_count=0)
+        try:
+            with closing(self._connect()) as connection:
+                columns = {
+                    str(row[1])
+                    for row in connection.execute("PRAGMA table_info(broker_flows)")
+                }
+                missing_columns = sorted(_REQUIRED_COLUMNS - columns)
+                if missing_columns:
+                    return self._missing(
+                        "broker_flows_columns_missing:" + ",".join(missing_columns),
+                        query_count=1,
+                    )
+                selected_dates = self._load_recent_dates(
+                    connection, query, limit=trading_day_limit
+                )
+                if not selected_dates:
+                    return self._missing(
+                        "broker_flow_dates_missing_for_as_of", query_count=2
+                    )
+                rows = self._load_semantic_rows(connection, selected_dates, codes)
+        except sqlite3.Error as exc:
+            return self._missing(
+                f"broker_flow_sqlite_read_failed:{type(exc).__name__}", query_count=0
+            )
+
+        events: list[BrokerFlowEvent] = []
+        for row in rows:
+            buy = BrokerFlowLotQuantity.from_sqlite_shares(row["買進股數"])
+            sell = BrokerFlowLotQuantity.from_sqlite_shares(row["賣出股數"])
+            net = BrokerFlowLotQuantity.from_sqlite_shares(row["買賣超股數"])
+            lots_observed = bool(row["lots_observed"])
+            if not lots_observed:
+                lots_quality = "unavailable"
+                net_qty = None
+            elif any(item.warnings for item in (buy, sell, net)):
+                lots_quality = "degraded"
+                net_qty = net.lots
+            else:
+                lots_quality = "observed"
+                net_qty = net.lots
+            branch = str(row["分點名稱"] or "").strip()
+            date_value = _parse_date_key(row["date_key"])
+            events.append(
+                BrokerFlowEvent(
+                    date=date_value.isoformat(),
+                    branch_system_key=branch,
+                    branch_display_name=branch,
+                    stock_code=str(row["證券代號"] or "").strip(),
+                    stock_name=str(row["證券名稱"] or "").strip(),
+                    net_qty=net_qty,
+                    lots_available=lots_quality == "observed",
+                    lots_observed=lots_observed,
+                    lots_quality=lots_quality,
+                )
+            )
+        return BrokerFlowReadSnapshot(
+            selected_trading_dates=selected_dates,
+            events=tuple(events),
+            tracked_branches=(),
+            quality="observed",
+            warnings=(),
+            source_fingerprint=self._source_fingerprint(columns),
+            query_count=2,
+            materialized_row_count=len(events),
         )
 
     def load_branch_source(
@@ -208,7 +305,7 @@ class BrokerFlowSQLiteReadRepository:
             ),
         ).fetchall()
         return tuple(
-            sorted(datetime.strptime(str(row[0]), "%Y%m%d").date() for row in rows)
+            sorted(_parse_date_key(row[0]) for row in rows)
         )
 
     def _load_aggregated_rows(
@@ -264,6 +361,32 @@ class BrokerFlowSQLiteReadRepository:
             parameters.append(row_limit)
         return connection.execute(sql, tuple(parameters)).fetchall()
 
+    def _load_semantic_rows(
+        self,
+        connection: sqlite3.Connection,
+        selected_dates: tuple[date, ...],
+        stock_codes: tuple[str, ...],
+    ) -> list[sqlite3.Row]:
+        date_keys = tuple(item.strftime("%Y%m%d") for item in selected_dates)
+        date_placeholders = ",".join("?" for _ in date_keys)
+        stock_placeholders = ",".join("?" for _ in stock_codes)
+        return connection.execute(
+            f"""
+            SELECT 日期 AS date_key, 分點名稱, 證券代號,
+                   MAX(證券名稱) AS 證券名稱,
+                   SUM(買進股數) AS 買進股數,
+                   SUM(賣出股數) AS 賣出股數,
+                   SUM(買賣超股數) AS 買賣超股數,
+                   MIN(COALESCE(lots_observed, 0)) AS lots_observed
+            FROM broker_flows
+            WHERE 日期 IN ({date_placeholders})
+              AND 證券代號 IN ({stock_placeholders})
+            GROUP BY date_key, 分點名稱, 證券代號
+            ORDER BY date_key DESC, 證券代號
+            """,
+            (*date_keys, *stock_codes),
+        ).fetchall()
+
     def _row_to_event(
         self, row: sqlite3.Row
     ) -> tuple[BrokerFlowEvent, tuple[str, ...]]:
@@ -284,7 +407,7 @@ class BrokerFlowSQLiteReadRepository:
             lots_quality = "observed"
             buy_qty, sell_qty, net_qty = buy.lots, sell.lots, net.lots
 
-        date_value = datetime.strptime(str(row["date_key"]), "%Y%m%d").date()
+        date_value = _parse_date_key(row["date_key"])
         branch = str(row["分點名稱"] or "").strip()
         event = BrokerFlowEvent(
             date=date_value.isoformat(),

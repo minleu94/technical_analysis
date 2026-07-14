@@ -152,6 +152,37 @@ def test_repository_stock_and_branch_reads_push_scope_and_limit(tmp_path):
     assert [event.date for event in branch_source.events] == ["2026-07-03", "2026-07-02"]
 
 
+def test_semantic_batch_preserves_full_batch_semantic_fields(tmp_path):
+    db_path = tmp_path / "broker.db"
+    _create_broker_db(db_path)
+    repository = BrokerFlowSQLiteReadRepository(db_path)
+    codes = ("2330", "2317")
+
+    full = repository.load_stock_batch_source(
+        codes, date(2026, 7, 5), trading_day_limit=60
+    )
+    bounded = repository.load_stock_semantic_batch(
+        codes, date(2026, 7, 5), trading_day_limit=60
+    )
+
+    def semantic_fields(source):
+        return sorted(
+            (
+                event.date,
+                event.branch_display_name,
+                event.stock_code,
+                event.stock_name,
+                event.net_qty,
+                event.lots_quality,
+            )
+            for event in source.events
+        )
+
+    assert semantic_fields(bounded) == semantic_fields(full)
+    assert bounded.query_count == 2
+    assert bounded.materialized_row_count == full.materialized_row_count
+
+
 def test_repository_missing_table_is_typed_missing_without_csv_fallback(tmp_path):
     db_path = tmp_path / "empty.db"
     with sqlite3.connect(db_path):

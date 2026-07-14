@@ -1,10 +1,14 @@
 from datetime import date, timedelta
 from decimal import Decimal
+import sqlite3
 
 from decision_module.flow_contracts import BrokerFlowEvent
 from app_module.smart_money_semantic_service import (
+    SQLiteSmartMoneyBatchPriceProvider,
     SQLiteSmartMoneyBatchSemanticAdapter,
     SmartMoneySemanticService,
+    _build_batch_price_query,
+    _parse_event_date,
 )
 from app_module.broker_flow_sqlite_read_repository import BrokerFlowReadSnapshot
 
@@ -145,7 +149,7 @@ def test_batch_semantic_adapter_uses_one_flow_batch_and_one_price_batch():
     class Repository:
         calls = []
 
-        def load_stock_batch_source(self, stock_codes, as_of_date, *, trading_day_limit):
+        def load_stock_semantic_batch(self, stock_codes, as_of_date, *, trading_day_limit):
             self.calls.append((stock_codes, as_of_date, trading_day_limit))
             events = tuple(_event(decision, "A", code, 100) for code in stock_codes)
             return BrokerFlowReadSnapshot(
@@ -170,3 +174,49 @@ def test_batch_semantic_adapter_uses_one_flow_batch_and_one_price_batch():
     assert set(result) == {"2330", "2317"}
     assert repository.calls == [(("2330", "2317"), decision, 60)]
     assert prices.calls == [(("2330", "2317"), decision, 60)]
+
+
+def test_semantic_date_parser_preserves_supported_formats():
+    expected = date(2026, 7, 9)
+
+    assert _parse_event_date("20260709") == expected
+    assert _parse_event_date("2026-07-09") == expected
+    assert _parse_event_date("2026/07/09") == expected
+
+
+def test_batch_price_provider_limits_each_stock_and_excludes_future(tmp_path):
+    db_path = tmp_path / "prices.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "CREATE TABLE daily_prices (日期 TEXT, 證券代號 TEXT, 收盤價 TEXT, "
+            "PRIMARY KEY (證券代號, 日期))"
+        )
+        connection.executemany(
+            "INSERT INTO daily_prices VALUES (?, ?, ?)",
+            [
+                ("20260708", "2330", "100"),
+                ("20260709", "2330", "101"),
+                ("20260710", "2330", "999"),
+                ("20260707", "2317", "80"),
+                ("20260709", "2317", "81"),
+            ],
+        )
+    provider = SQLiteSmartMoneyBatchPriceProvider(db_path)
+
+    result = provider.load_recent_prices_batch(
+        ("2330", "2317"), date(2026, 7, 9), 1
+    )
+
+    assert result == {
+        "2317": [(date(2026, 7, 9), Decimal("81"))],
+        "2330": [(date(2026, 7, 9), Decimal("101"))],
+    }
+
+
+def test_batch_price_query_keeps_indexable_code_and_date_predicates():
+    sql = _build_batch_price_query(2)
+
+    assert "證券代號 IN (?,?)" in sql
+    assert "日期 <= ?" in sql
+    assert "ORDER BY 日期 DESC" in sql
+    assert "REPLACE" not in sql

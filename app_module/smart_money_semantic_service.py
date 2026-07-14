@@ -96,24 +96,7 @@ class SQLiteSmartMoneyBatchPriceProvider(SQLiteSmartMoneyPriceProvider):
         codes = tuple(dict.fromkeys(str(code) for code in stock_codes if str(code)))
         if not codes or limit <= 0 or not self.db_path.is_file():
             return {}
-        placeholders = ",".join("?" for _ in codes)
-        sql = f"""
-            WITH ranked AS (
-                SELECT 證券代號, 日期, 收盤價,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY 證券代號
-                           ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') DESC
-                       ) AS row_number
-                FROM daily_prices
-                WHERE 證券代號 IN ({placeholders})
-                  AND REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
-                  AND 收盤價 IS NOT NULL
-            )
-            SELECT 證券代號, 日期, 收盤價
-            FROM ranked
-            WHERE row_number <= ?
-            ORDER BY 證券代號, row_number
-        """
+        sql = _build_batch_price_query(len(codes))
         try:
             with sqlite3.connect(
                 f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True
@@ -135,6 +118,29 @@ class SQLiteSmartMoneyBatchPriceProvider(SQLiteSmartMoneyPriceProvider):
             if price.is_finite() and price > 0:
                 result[str(raw_code)].append((price_date, price))
         return dict(result)
+
+
+def _build_batch_price_query(stock_code_count: int) -> str:
+    if stock_code_count < 1:
+        raise ValueError("stock_code_count must be at least 1")
+    placeholders = ",".join("?" for _ in range(stock_code_count))
+    return f"""
+            WITH ranked AS (
+                SELECT 證券代號, 日期, 收盤價,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY 證券代號
+                           ORDER BY 日期 DESC
+                       ) AS row_number
+                FROM daily_prices
+                WHERE 證券代號 IN ({placeholders})
+                  AND 日期 <= ?
+                  AND 收盤價 IS NOT NULL
+            )
+            SELECT 證券代號, 日期, 收盤價
+            FROM ranked
+            WHERE row_number <= ?
+            ORDER BY 證券代號, row_number
+        """
 
 
 class _StaticEventProvider:
@@ -168,7 +174,7 @@ class SQLiteSmartMoneyBatchSemanticAdapter:
         codes = tuple(dict.fromkeys(str(code) for code in stock_codes if str(code)))
         if not codes:
             return {}
-        source = self.broker_flow_repository.load_stock_batch_source(
+        source = self.broker_flow_repository.load_stock_semantic_batch(
             codes, decision_date, trading_day_limit=60
         )
         prices_by_code = self.price_provider.load_recent_prices_batch(
@@ -189,8 +195,8 @@ class SQLiteSmartMoneyBatchSemanticAdapter:
 def _parse_event_date(raw: object) -> date:
     text = str(raw).strip().replace("/", "-")
     if len(text) == 8 and text.isdigit():
-        return datetime.strptime(text, "%Y%m%d").date()
-    return datetime.strptime(text, "%Y-%m-%d").date()
+        return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
+    return date.fromisoformat(text)
 
 
 def _bp(numerator: int, denominator: int) -> int | None:
