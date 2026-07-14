@@ -4,6 +4,17 @@
 
 > 15 capability、canonical lineage verifier 與 operations handoff 見 [V3.3 Engineering Closeout](V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)；本控制中心仍是外部 Gate hub。
 
+## Forward Clock current projection（2026-07-14）
+
+| Clock | 今日狀態 | 可引用證據 | 缺失／degraded／failure | 下一步 |
+|---|---|---|---|---|
+| Development | `development_observed_degraded` | Dataset `terra-development-v0:terra-v0-canonical-2025-dev-20260714`；Research run `sha256:36e57e0c370ce0f08eb625de0871ffa49699bfdb469272f4c5d7bacaf8d910c5`；projection SHA-256 `06BED1ABF3222EA1CA35DF8A25EDB8950025FA2314B4493A1AAEFEB18CA3614E` | fit rows=`179271`；evaluation rows=`0`；OOF samples=`53559`；`research_only_degraded` corporate-action coverage、formal attested Rule snapshot missing；不是 formal OOS／promotion／投資有效性證據 | UI 僅可由 `RESEARCH_CONSOLE_PROJECTION` 顯式指向 `C:\Temp\technical_analysis_development_output\research_runs\terra-v0-canonical-2025-dev-20260714\ResearchConsoleProjection.json`；2026 matured outcomes 僅 evaluation，不得 fit |
+| Formal evidence | `capture_failed_deferred` | EV1 manual CLI 僅接受明確 `manual_observed` artifact，且只可寫 TEMP／shadow sidecar | snapshot count=`0`；missing=`manual_observed decision artifact`；degraded=`none`；capture failure=`no decision-time snapshot supplied` | 等真正 decision-time observed snapshot；禁止歷史回填、synthetic day、replay／fixture credit 與 pending denominator |
+
+本日未建立 **Formal observed day**；Development artifacts 只從外部 development root 唯讀驗證，未掃描或寫入正式 market DB，也未啟用專案 scheduler。B 方案 owner 決議 artifact 已存在於 `C:\Temp\technical_analysis_development_output\governance\DevelopmentDataUsageDecision.jsonl`（file SHA-256 `88D853DE58791F2D8482FE2C8D61013E0556518D22C6F52ED168FE863AE14B7B`；effective `2026-07-14T05:07:25.0061485Z`），`new_holdout_start=2026-07-15`；`HoldoutConsumptionRegistry.jsonl` 目前不存在，因此不得宣稱 holdout 已消費或 formal readiness 已成立。週報、人工 why-not 與月 Gate Review 僅在自然週／月到期時 append；第 12 週即使 eligible 也不得 unblind 或啟動 Task 6。
+
+操作載體為 Codex App automation `terra-forward-clock-12`，狀態 `ACTIVE`，每日本機時間 23:30 執行，最後一次為 2026-10-05 23:30。這只是一個 Codex local automation，不是 repository scheduler、Windows Task Scheduler、background trading job 或正式 ingestion 排程。
+
 ## Agent 接手入口
 
 1. 先讀 [Pure Engineering Closeout](GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md)，確認已完成工程範圍與禁止重做事項。
