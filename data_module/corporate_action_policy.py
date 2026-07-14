@@ -1,7 +1,41 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
+
+from data_module.fundamental_availability import (
+    CoverageWindow,
+    EligibilityResult,
+    evaluate_label_window_eligibility,
+)
+
+CORPORATE_ACTION_LABEL_POLICY_VERSION = "corporate-action-label-policy.v1"
+
+
+def evaluate_corporate_action_label_window(
+    *,
+    label_start: str,
+    label_end: str,
+    coverage_start: str | None,
+    coverage_end: str | None,
+    coverage_quality: str,
+    mode: str,
+) -> EligibilityResult:
+    if mode not in {"strict", "research"}:
+        raise ValueError("mode must be strict or research")
+    return evaluate_label_window_eligibility(
+        label_start=date.fromisoformat(label_start),
+        label_end=date.fromisoformat(label_end),
+        coverage=CoverageWindow(
+            source_id="corporate_action",
+            data_family="corporate_action",
+            coverage_start=(date.fromisoformat(coverage_start) if coverage_start else None),
+            coverage_end=(date.fromisoformat(coverage_end) if coverage_end else None),
+            quality=coverage_quality,
+        ),
+        strict=mode == "strict",
+    )
 
 
 @dataclass(frozen=True)

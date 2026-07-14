@@ -32,7 +32,14 @@ class CorporateActionShadowAdapter:
     ) -> P0ShadowObservation:
         _require_family(source_id, CORPORATE_SOURCES)
         effective_from = _text(row.get("event_date"))
-        required = ("symbol", "event_type", "event_date", "available_date", "source_version")
+        required = (
+            "symbol",
+            "event_type",
+            "event_date",
+            "announcement_date",
+            "available_date",
+            "source_version",
+        )
         return _adapt(source_id, row, decision_date, required, effective_from, None)
 
 
@@ -64,6 +71,10 @@ def _adapt(
     contract = build_p0_source_contract_registry().require(source_id)
     diagnostics = [f"missing_{name}" for name in required_fields if not _text(row.get(name))]
     available_date = _text(row.get("available_date"))
+    announcement_date = _text(row.get("announcement_date"))
+    if available_date and announcement_date:
+        if _parse_date(available_date) < _parse_date(announcement_date):
+            diagnostics.append("available_before_announcement")
     if available_date and _parse_date(available_date) > _parse_date(decision_date):
         diagnostics.append("future_available_date")
     return P0ShadowObservation(

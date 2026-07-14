@@ -7,6 +7,43 @@ from app_module.corporate_action_policy import CorporateActionProvider, Corporat
 
 import contextlib
 
+from data_module import corporate_action_policy as data_policy
+
+
+def test_label_window_policy_blocks_unknown_coverage_in_strict_mode():
+    evaluate = getattr(data_policy, "evaluate_corporate_action_label_window", None)
+    assert evaluate is not None, "corporate label policy contract is missing"
+    result = evaluate(
+        label_start="2025-01-01",
+        label_end="2025-01-31",
+        coverage_start=None,
+        coverage_end=None,
+        coverage_quality="unknown",
+        mode="strict",
+    )
+
+    assert data_policy.CORPORATE_ACTION_LABEL_POLICY_VERSION == "corporate-action-label-policy.v1"
+    assert result.eligible is False
+    assert result.quality == "blocked"
+    assert result.reasons == ("coverage_unknown",)
+
+
+def test_label_window_policy_degrades_unknown_coverage_in_research_mode():
+    evaluate = getattr(data_policy, "evaluate_corporate_action_label_window", None)
+    assert evaluate is not None, "corporate label policy contract is missing"
+    result = evaluate(
+        label_start="2025-01-01",
+        label_end="2025-01-31",
+        coverage_start=None,
+        coverage_end=None,
+        coverage_quality="unknown",
+        mode="research",
+    )
+
+    assert result.eligible is False
+    assert result.quality == "degraded"
+    assert result.reasons == ("coverage_unknown",)
+
 def test_provider_returns_source_not_ingested_when_db_missing():
     provider = CorporateActionProvider(Path("missing_db.sqlite"))
     dates, diagnostics = provider.get_ex_dividend_dates("2330", "2026-06-01", "2026-06-10")

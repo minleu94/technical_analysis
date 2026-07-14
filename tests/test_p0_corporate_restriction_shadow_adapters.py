@@ -44,6 +44,41 @@ def test_future_corporate_action_announcement_is_blocked() -> None:
     assert "future_available_date" in observation.diagnostics
 
 
+def test_corporate_action_rejects_available_before_announcement() -> None:
+    observation = CorporateActionShadowAdapter().adapt(
+        source_id="corporate_action.ex_dividend_timeline",
+        row={
+            "symbol": "2330",
+            "event_type": "ex_dividend",
+            "event_date": "2026-07-20",
+            "announcement_date": "2026-07-10",
+            "available_date": "2026-07-09",
+            "source_version": "candidate-v1",
+        },
+        decision_date="2026-07-12",
+    )
+
+    assert observation.status == "blocked"
+    assert "available_before_announcement" in observation.diagnostics
+
+
+def test_corporate_action_requires_distinct_announcement_evidence() -> None:
+    observation = CorporateActionShadowAdapter().adapt(
+        source_id="corporate_action.ex_dividend_timeline",
+        row={
+            "symbol": "2330",
+            "event_type": "ex_dividend",
+            "event_date": "2026-07-20",
+            "available_date": "2026-07-09",
+            "source_version": "candidate-v1",
+        },
+        decision_date="2026-07-12",
+    )
+
+    assert observation.status == "blocked"
+    assert "missing_announcement_date" in observation.diagnostics
+
+
 def test_restriction_requires_effective_range() -> None:
     observation = TradingRestrictionShadowAdapter().adapt(
         source_id="microstructure.disposition_stock",
