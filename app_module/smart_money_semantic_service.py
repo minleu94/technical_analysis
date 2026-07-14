@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
-from typing import Iterable, Protocol
+from typing import Iterable, Mapping, Protocol
 
 from app_module.decision_market_frame import DecisionMarketFrameLoader
 from decision_module.flow_contracts import BrokerFlowEvent
@@ -24,6 +24,12 @@ class SmartMoneyPriceProvider(Protocol):
     def load_recent_prices(
         self, stock_code: str, decision_date: date, limit: int
     ) -> list[tuple[date, Decimal]]: ...
+
+
+class SmartMoneyBatchPriceProvider(Protocol):
+    def load_recent_prices_batch(
+        self, stock_codes: tuple[str, ...], decision_date: date, limit: int
+    ) -> Mapping[str, list[tuple[date, Decimal]]]: ...
 
 
 class SQLiteSmartMoneyPriceProvider:
@@ -79,6 +85,105 @@ class SQLiteSmartMoneyPriceProvider:
             if price.is_finite() and price > 0:
                 prices.append((price_date, price))
         return prices
+
+
+class SQLiteSmartMoneyBatchPriceProvider(SQLiteSmartMoneyPriceProvider):
+    """以單一唯讀查詢載入多檔股票近期價格。"""
+
+    def load_recent_prices_batch(
+        self, stock_codes: tuple[str, ...], decision_date: date, limit: int
+    ) -> Mapping[str, list[tuple[date, Decimal]]]:
+        codes = tuple(dict.fromkeys(str(code) for code in stock_codes if str(code)))
+        if not codes or limit <= 0 or not self.db_path.is_file():
+            return {}
+        placeholders = ",".join("?" for _ in codes)
+        sql = f"""
+            WITH ranked AS (
+                SELECT 證券代號, 日期, 收盤價,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY 證券代號
+                           ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') DESC
+                       ) AS row_number
+                FROM daily_prices
+                WHERE 證券代號 IN ({placeholders})
+                  AND REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
+                  AND 收盤價 IS NOT NULL
+            )
+            SELECT 證券代號, 日期, 收盤價
+            FROM ranked
+            WHERE row_number <= ?
+            ORDER BY 證券代號, row_number
+        """
+        try:
+            with sqlite3.connect(
+                f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True
+            ) as connection:
+                connection.execute("PRAGMA query_only=ON")
+                rows = connection.execute(
+                    sql,
+                    (*codes, decision_date.strftime("%Y%m%d"), int(limit)),
+                ).fetchall()
+        except sqlite3.Error:
+            return {}
+        result: dict[str, list[tuple[date, Decimal]]] = defaultdict(list)
+        for raw_code, raw_date, raw_price in rows:
+            try:
+                price_date = _parse_event_date(raw_date)
+                price = Decimal(str(raw_price).replace(",", ""))
+            except (InvalidOperation, ValueError):
+                continue
+            if price.is_finite() and price > 0:
+                result[str(raw_code)].append((price_date, price))
+        return dict(result)
+
+
+class _StaticEventProvider:
+    def __init__(self, events: list[BrokerFlowEvent]) -> None:
+        self.events = events
+
+    def get_events(self, force_reload: bool = False) -> list[BrokerFlowEvent]:
+        return self.events
+
+
+class _StaticPriceProvider:
+    def __init__(self, prices: list[tuple[date, Decimal]]) -> None:
+        self.prices = prices
+
+    def load_recent_prices(
+        self, stock_code: str, decision_date: date, limit: int
+    ) -> list[tuple[date, Decimal]]:
+        return self.prices[:limit]
+
+
+class SQLiteSmartMoneyBatchSemanticAdapter:
+    """批次擷取資料，再沿用 SmartMoneySemanticService 的既有語意規則。"""
+
+    def __init__(self, broker_flow_repository, price_provider: SmartMoneyBatchPriceProvider) -> None:
+        self.broker_flow_repository = broker_flow_repository
+        self.price_provider = price_provider
+
+    def build_batch_semantics(
+        self, stock_codes: tuple[str, ...], decision_date: date
+    ) -> Mapping[str, "SmartMoneySemanticSummary"]:
+        codes = tuple(dict.fromkeys(str(code) for code in stock_codes if str(code)))
+        if not codes:
+            return {}
+        source = self.broker_flow_repository.load_stock_batch_source(
+            codes, decision_date, trading_day_limit=60
+        )
+        prices_by_code = self.price_provider.load_recent_prices_batch(
+            codes, decision_date, 60
+        )
+        events_by_code: dict[str, list[BrokerFlowEvent]] = defaultdict(list)
+        for event in source.events:
+            events_by_code[event.stock_code].append(event)
+        return {
+            code: SmartMoneySemanticService(
+                _StaticEventProvider(events_by_code.get(code, [])),
+                price_provider=_StaticPriceProvider(prices_by_code.get(code, [])),
+            ).build_stock_semantics(code, decision_date)
+            for code in codes
+        }
 
 
 def _parse_event_date(raw: object) -> date:

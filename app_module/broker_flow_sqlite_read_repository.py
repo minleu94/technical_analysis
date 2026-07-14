@@ -62,6 +62,25 @@ class BrokerFlowSQLiteReadRepository:
     ) -> BrokerFlowReadSnapshot:
         return self._load_source(query, stock_code=str(stock_code))
 
+    def load_stock_batch_source(
+        self,
+        stock_codes: tuple[str, ...],
+        as_of_date: date,
+        *,
+        trading_day_limit: int = 60,
+    ) -> BrokerFlowReadSnapshot:
+        codes = tuple(dict.fromkeys(str(code) for code in stock_codes if str(code)))
+        if not codes:
+            return self._missing("broker_flow_stock_codes_empty", query_count=0)
+        if trading_day_limit < 1:
+            raise ValueError("trading_day_limit must be at least 1")
+        query = BrokerFlowDashboardQuery(
+            period="month", scope="all", requested_as_of_date=as_of_date
+        )
+        return self._load_source(
+            query, stock_codes=codes, trading_day_limit=trading_day_limit
+        )
+
     def load_branch_source(
         self,
         branch_system_key: str,
@@ -82,8 +101,10 @@ class BrokerFlowSQLiteReadRepository:
         query: BrokerFlowDashboardQuery,
         *,
         stock_code: str | None = None,
+        stock_codes: tuple[str, ...] | None = None,
         branch_system_key: str | None = None,
         row_limit: int | None = None,
+        trading_day_limit: int | None = None,
     ) -> BrokerFlowReadSnapshot:
         if not self.db_path.is_file():
             return self._missing("broker_flow_sqlite_missing", query_count=0)
@@ -103,7 +124,9 @@ class BrokerFlowSQLiteReadRepository:
                         query_count=1,
                     )
 
-                selected_dates = self._load_recent_dates(connection, query)
+                selected_dates = self._load_recent_dates(
+                    connection, query, limit=trading_day_limit
+                )
                 if not selected_dates:
                     return BrokerFlowReadSnapshot(
                         selected_trading_dates=(),
@@ -119,6 +142,7 @@ class BrokerFlowSQLiteReadRepository:
                     connection,
                     selected_dates,
                     stock_code=stock_code,
+                    stock_codes=stock_codes,
                     branch_system_key=branch_system_key,
                     row_limit=row_limit,
                 )
@@ -167,6 +191,8 @@ class BrokerFlowSQLiteReadRepository:
         self,
         connection: sqlite3.Connection,
         query: BrokerFlowDashboardQuery,
+        *,
+        limit: int | None = None,
     ) -> tuple[date, ...]:
         rows = connection.execute(
             """
@@ -178,7 +204,7 @@ class BrokerFlowSQLiteReadRepository:
             """,
             (
                 query.requested_as_of_date.strftime("%Y%m%d"),
-                query.period_trading_days,
+                limit or query.period_trading_days,
             ),
         ).fetchall()
         return tuple(
@@ -191,6 +217,7 @@ class BrokerFlowSQLiteReadRepository:
         selected_dates: tuple[date, ...],
         *,
         stock_code: str | None,
+        stock_codes: tuple[str, ...] | None,
         branch_system_key: str | None,
         row_limit: int | None,
     ) -> list[sqlite3.Row]:
@@ -204,6 +231,9 @@ class BrokerFlowSQLiteReadRepository:
         if stock_code is not None:
             predicates.append("證券代號 = ?")
             parameters.append(stock_code)
+        if stock_codes is not None:
+            predicates.append("證券代號 IN (" + ",".join("?" for _ in stock_codes) + ")")
+            parameters.extend(stock_codes)
         if branch_system_key is not None:
             predicates.append("分點名稱 = ?")
             parameters.append(branch_system_key)

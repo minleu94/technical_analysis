@@ -5,7 +5,6 @@ Smart Money Flow - Terminal Style Scanner 主視圖
 """
 
 import pandas as pd
-import traceback
 from datetime import date
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -17,6 +16,7 @@ from PySide6.QtGui import QColor
 
 from ui_qt.widgets.info_button import InfoButton
 from app_module.broker_flow_service import BrokerFlowService
+from app_module.broker_flow_dashboard_dtos import BrokerFlowDashboardQuery
 from app_module.watchlist_service import WatchlistService
 from ui_qt.views.smart_money.summary_strip import SummaryStrip
 from ui_qt.views.smart_money.terminal_table_model import (
@@ -27,6 +27,7 @@ from ui_qt.views.smart_money.terminal_table_model import (
 from ui_qt.views.smart_money.terminal_delegate import TerminalScannerDelegate
 from ui_qt.views.smart_money.detail_table_delegate import DetailTableDelegate
 from ui_qt.models.pandas_table_model import PandasTableModel # 給 Detail Table 用
+from ui_qt.workers.task_worker import TaskWorker
 
 class SmartMoneyFlowView(QWidget):
     """Terminal Style Smart Money Scanner 主視圖"""
@@ -37,6 +38,7 @@ class SmartMoneyFlowView(QWidget):
         watchlist_service: WatchlistService = None,
         smart_money_semantic_service=None,
         parent=None,
+        task_worker_factory=TaskWorker,
     ):
         super().__init__(parent)
         self.flow_service = broker_flow_service
@@ -44,6 +46,11 @@ class SmartMoneyFlowView(QWidget):
         self.smart_money_semantic_service = smart_money_semantic_service
         self._data_loaded = False
         self._all_scanner_signals = []
+        self._task_worker_factory = task_worker_factory
+        self._request_ids = {"dashboard": 0, "detail": 0, "branch": 0}
+        self._workers = {}
+        self._retired_workers = []
+        self._dashboard_as_of_date = date.today()
 
         # 色彩設定 (更為精緻的深藍黑背景)
         palette = self.palette()
@@ -150,6 +157,10 @@ class SmartMoneyFlowView(QWidget):
         """)
         self.refresh_btn.clicked.connect(self._refresh_data)
         control_layout.addWidget(self.refresh_btn)
+
+        self.load_status_label = QLabel("就緒")
+        self.load_status_label.setStyleSheet("color: #94a3b8; margin-left: 8px;")
+        control_layout.addWidget(self.load_status_label)
 
         if self.watchlist_service:
             self.add_watchlist_btn = QPushButton("+ 觀察清單")
@@ -384,7 +395,7 @@ class SmartMoneyFlowView(QWidget):
 
     def _on_scope_changed(self):
         if self._data_loaded or self._all_scanner_signals:
-            self._apply_scanner_signals(self._all_scanner_signals)
+            self._refresh_data()
 
     def _filter_scanner_signals(self, signals):
         mode = self.scope_combo.currentData() if hasattr(self, "scope_combo") else "top_bottom_50"
@@ -412,19 +423,9 @@ class SmartMoneyFlowView(QWidget):
             seen_codes.add(signal.stock_code)
         return filtered
 
-    def _apply_scanner_signals(self, signals):
+    def _apply_scanner_signals(self, signals, *, semantics_by_code=None):
         filtered_signals = self._filter_scanner_signals(signals)
-        semantics_by_code = {}
-        if self.smart_money_semantic_service is not None:
-            decision_date = date.today()
-            for signal in filtered_signals:
-                try:
-                    semantics_by_code[signal.stock_code] = self.smart_money_semantic_service.build_stock_semantics(
-                        signal.stock_code,
-                        decision_date,
-                    )
-                except Exception:
-                    continue
+        semantics_by_code = semantics_by_code or {}
         self.scanner_model = TerminalTableModel(filtered_signals, semantics_by_code=semantics_by_code)
         self.scanner_table.setModel(self.scanner_model)
 
@@ -555,40 +556,91 @@ class SmartMoneyFlowView(QWidget):
         self._on_branch_changed()
 
     def _refresh_data(self):
-        try:
-            period = self._get_current_period_val()
+        query = BrokerFlowDashboardQuery(
+            period=self._get_current_period_val(),
+            scope=str(self.scope_combo.currentData()),
+            requested_as_of_date=date.today(),
+            limit_per_side=50,
+        )
+        self.refresh_btn.setEnabled(False)
+        self.period_combo.setEnabled(False)
+        self.scope_combo.setEnabled(False)
+        self.load_status_label.setText("主力資料載入中…")
+        self._start_request(
+            "dashboard",
+            lambda: self.flow_service.load_dashboard_snapshot(query),
+            self._apply_dashboard_snapshot,
+        )
 
-            # 1. 取得信號資料
-            signals = self.flow_service.get_stock_flow_signals(period=period)
-            self._all_scanner_signals = list(signals or [])
+    def _start_request(self, kind, task, on_success):
+        previous = self._workers.get(kind)
+        if previous is not None:
+            previous.cancel(cooperative=True, wait=False)
+            self._retired_workers.append(previous)
+        self._request_ids[kind] += 1
+        request_id = self._request_ids[kind]
+        worker = self._task_worker_factory(task)
+        self._workers[kind] = worker
+        worker.finished.connect(
+            lambda result, k=kind, rid=request_id: self._finish_request(
+                k, rid, lambda: on_success(result)
+            )
+        )
+        worker.error.connect(
+            lambda message, k=kind, rid=request_id: self._finish_request(
+                k, rid, lambda: self._show_request_error(k, message)
+            )
+        )
+        worker.cancelled.connect(
+            lambda k=kind, rid=request_id: self._finish_request(k, rid, lambda: None)
+        )
+        worker.finished.connect(lambda _result, item=worker: self._release_worker(item))
+        worker.error.connect(lambda _message, item=worker: self._release_worker(item))
+        worker.cancelled.connect(lambda item=worker: self._release_worker(item))
+        worker.start()
 
-            # 2. 更新 Summary Strip
-            summary = self.flow_service.get_market_flow_summary(signals=signals, period=period)
-            self.summary_strip.update_summary(summary)
+    def _release_worker(self, worker):
+        if worker in self._retired_workers:
+            self._retired_workers.remove(worker)
 
-            # 3. 更新 Scanner Table (使用自定義 Model)
-            self._apply_scanner_signals(self._all_scanner_signals)
+    def _finish_request(self, kind, request_id, callback):
+        if request_id != self._request_ids[kind]:
+            return
+        self._workers.pop(kind, None)
+        callback()
+        if kind == "dashboard":
+            self.refresh_btn.setEnabled(True)
+            self.period_combo.setEnabled(True)
+            self.scope_combo.setEnabled(True)
 
-            # 4. 更新 Branch Tracker 分點選單
-            branches = self.flow_service.get_tracked_branches()
-            current_branch = self.branch_combo.currentData()
+    def _show_request_error(self, kind, message):
+        labels = {"dashboard": "主力資料", "detail": "個股分點", "branch": "分點追蹤"}
+        self.load_status_label.setText(f"{labels[kind]}載入失敗：{str(message).splitlines()[0]}")
 
-            self.branch_combo.blockSignals(True)
-            self.branch_combo.clear()
-            idx_to_select = 0
-            for i, b in enumerate(branches):
-                self.branch_combo.addItem(b['display_name'], b['system_key'])
-                if b['system_key'] == current_branch:
-                    idx_to_select = i
-            if branches:
-                self.branch_combo.setCurrentIndex(idx_to_select)
-            self.branch_combo.blockSignals(False)
-
-            # 更新 Branch 表格
-            self._on_branch_changed()
-
-        except Exception as e:
-            QMessageBox.critical(self, "錯誤", f"載入主力流向資料失敗：\n{str(e)}\n{traceback.format_exc()}")
+    def _apply_dashboard_snapshot(self, snapshot):
+        self._dashboard_as_of_date = snapshot.as_of_date
+        self._all_scanner_signals = list((*snapshot.top_signals, *snapshot.bottom_signals))
+        self.summary_strip.update_summary(snapshot.summary)
+        self._apply_scanner_signals(
+            self._all_scanner_signals,
+            semantics_by_code=snapshot.semantics_by_code,
+        )
+        current_branch = self.branch_combo.currentData()
+        self.branch_combo.blockSignals(True)
+        self.branch_combo.clear()
+        selected_index = 0
+        for index, (system_key, display_name) in enumerate(snapshot.tracked_branches):
+            self.branch_combo.addItem(display_name, system_key)
+            if system_key == current_branch:
+                selected_index = index
+        if snapshot.tracked_branches:
+            self.branch_combo.setCurrentIndex(selected_index)
+        self.branch_combo.blockSignals(False)
+        self._data_loaded = True
+        self.load_status_label.setText(
+            f"完成｜資料日 {snapshot.as_of_date.isoformat()}｜{snapshot.quality}"
+        )
+        self._on_branch_changed()
 
     def _on_scanner_selection_changed(self):
         selection = self.scanner_table.selectionModel().selectedRows()
@@ -620,7 +672,18 @@ class SmartMoneyFlowView(QWidget):
 
         # 2. 載入 Detail
         period = self._get_current_period_val()
-        details = self.flow_service.get_stock_detail_by_branches(signal.stock_code, period)
+        self.detail_label.setText("分點買賣明細 (BRANCH DRILL-DOWN)｜載入中…")
+        self._start_request(
+            "detail",
+            lambda: self.flow_service.load_stock_branch_detail(
+                signal.stock_code, period, self._dashboard_as_of_date
+            ),
+            self._apply_stock_detail,
+        )
+
+    def _apply_stock_detail(self, snapshot):
+        self.detail_label.setText("分點買賣明細 (BRANCH DRILL-DOWN)")
+        details = snapshot.rows
 
         # 先按淨買賣超數值進行數值排序 (None 視為極小)
         details_sorted = sorted(
@@ -712,10 +775,17 @@ class SmartMoneyFlowView(QWidget):
             return
 
         period = self._get_current_period_val()
-        all_flows = self.flow_service.get_branch_flow_details(period=period)
+        self.load_status_label.setText("分點追蹤載入中…")
+        self._start_request(
+            "branch",
+            lambda: self.flow_service.load_branch_tracker(
+                branch_key, period, self._dashboard_as_of_date
+            ),
+            self._apply_branch_tracker,
+        )
 
-        # 過濾特定分點
-        branch_flows = [f for f in all_flows if f.branch_system_key == branch_key]
+    def _apply_branch_tracker(self, snapshot):
+        branch_flows = snapshot.rows
 
         self.branch_model = BranchTrackerTableModel(branch_flows)
         self.branch_table.setModel(self.branch_model)
@@ -730,6 +800,9 @@ class SmartMoneyFlowView(QWidget):
         self.branch_table.setColumnWidth(3, 90)  # 賣出
         self.branch_table.setColumnWidth(4, 200) # Badges
         self.branch_table.setColumnWidth(5, 150) # Sparkline
+        self.load_status_label.setText(
+            f"分點完成｜資料日 {snapshot.as_of_date.isoformat()}｜{snapshot.quality}"
+        )
 
     def _add_to_watchlist(self):
         if not self.watchlist_service:
@@ -762,7 +835,12 @@ class SmartMoneyFlowView(QWidget):
     def load_data_if_needed(self):
         if not self._data_loaded:
             self._refresh_data()
-            self._data_loaded = True
+
+    def closeEvent(self, event):
+        for worker in (*tuple(self._workers.values()), *tuple(self._retired_workers)):
+            worker.cancel(cooperative=True, wait=False)
+        self._workers.clear()
+        super().closeEvent(event)
 
     def select_stock(self, stock_code: str):
         """程式化選取並高亮掃描表格中的個股"""

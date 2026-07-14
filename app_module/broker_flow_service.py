@@ -9,7 +9,15 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, List, Dict, Optional
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+
+from app_module.broker_flow_dashboard_dtos import BrokerFlowDashboardQuery
+from app_module.broker_flow_dashboard_query_service import BrokerFlowDashboardQueryService
+from app_module.broker_flow_sqlite_read_repository import BrokerFlowSQLiteReadRepository
+from app_module.smart_money_semantic_service import (
+    SQLiteSmartMoneyBatchPriceProvider,
+    SQLiteSmartMoneyBatchSemanticAdapter,
+)
 
 from decision_module.flow_contracts import (
     BranchFlowAggregation,
@@ -23,7 +31,7 @@ from decision_module.flow_signal_engine import FlowSignalEngine
 class BrokerFlowService:
     """Smart Money Flow 服務編排層"""
 
-    def __init__(self, config):
+    def __init__(self, config, *, dashboard_query_service=None):
         self.config = config
         self.logger = logging.getLogger(__name__)
         self.signal_engine = FlowSignalEngine()
@@ -31,6 +39,47 @@ class BrokerFlowService:
         # 記憶體快取
         self._cached_events: List[BrokerFlowEvent] = []
         self._last_load_time = None
+        if dashboard_query_service is not None:
+            self.dashboard_query_service = dashboard_query_service
+        else:
+            db_file = getattr(
+                self.config,
+                "db_file",
+                Path(getattr(self.config, "data_dir", ".")) / "sqlite" / "twstock.db",
+            )
+            repository = BrokerFlowSQLiteReadRepository(db_file)
+            semantic_adapter = SQLiteSmartMoneyBatchSemanticAdapter(
+                repository,
+                SQLiteSmartMoneyBatchPriceProvider(db_file),
+            )
+            self.dashboard_query_service = BrokerFlowDashboardQueryService(
+                repository, semantic_port=semantic_adapter
+            )
+
+    def load_dashboard_snapshot(self, query: BrokerFlowDashboardQuery):
+        return self.dashboard_query_service.load_dashboard_snapshot(query)
+
+    def load_stock_branch_detail(
+        self, stock_code: str, period: str, as_of_date: date
+    ):
+        query = BrokerFlowDashboardQuery(
+            period=period,
+            scope="all",
+            requested_as_of_date=as_of_date,
+        )
+        return self.dashboard_query_service.load_stock_branch_detail(stock_code, query)
+
+    def load_branch_tracker(
+        self, branch_system_key: str, period: str, as_of_date: date
+    ):
+        query = BrokerFlowDashboardQuery(
+            period=period,
+            scope="all",
+            requested_as_of_date=as_of_date,
+        )
+        return self.dashboard_query_service.load_branch_tracker(
+            branch_system_key, query
+        )
 
     @staticmethod
     def _int_value(value: Any) -> int:

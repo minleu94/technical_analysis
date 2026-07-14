@@ -1,6 +1,7 @@
 import os
 import sys
 from decimal import Decimal
+from datetime import date
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -16,6 +17,7 @@ from decision_module.flow_contracts import (
 )
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
+from app_module.broker_flow_dashboard_dtos import BrokerFlowStockDetailSnapshot
 
 
 def app():
@@ -48,6 +50,15 @@ class FakeSmartMoneyService:
 
     def get_stock_detail_by_branches(self, stock_code, period):
         return self.stock_details
+
+    def load_stock_branch_detail(self, stock_code, period, as_of_date):
+        return BrokerFlowStockDetailSnapshot(
+            as_of_date=as_of_date,
+            period=period,
+            stock_code=stock_code,
+            rows=tuple(self.stock_details),
+            quality="observed",
+        )
 
 
 class FakeSemanticService:
@@ -166,7 +177,8 @@ def test_smart_money_table_model_renders_semantic_state_and_diagnostics():
     view.resize(1600, 800)
     view.show()
 
-    view._apply_scanner_signals([signal])
+    semantic = FakeSemanticService().build_stock_semantics("2330", date.today())
+    view._apply_scanner_signals([signal], semantics_by_code={"2330": semantic})
     qt_app.processEvents()
 
     model = view.scanner_table.model()
@@ -212,7 +224,7 @@ def test_smart_money_detail_table_fits_columns_without_horizontal_scroll():
 
     view._apply_scanner_signals([_signal("2330", 88, 500)])
     view.scanner_table.selectRow(0)
-    view._on_scanner_selection_changed()
+    view._workers["detail"].wait()
     qt_app.processEvents()
 
     model = view.detail_table.model()

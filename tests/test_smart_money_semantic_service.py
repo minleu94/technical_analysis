@@ -2,7 +2,11 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from decision_module.flow_contracts import BrokerFlowEvent
-from app_module.smart_money_semantic_service import SmartMoneySemanticService
+from app_module.smart_money_semantic_service import (
+    SQLiteSmartMoneyBatchSemanticAdapter,
+    SmartMoneySemanticService,
+)
+from app_module.broker_flow_sqlite_read_repository import BrokerFlowReadSnapshot
 
 
 class FakeBrokerFlowService:
@@ -133,3 +137,36 @@ def test_semantic_service_high_position_distribution_is_no_lookahead():
     assert summary.price_position_bp < 10000
     assert "高檔出貨疑慮" not in summary.semantic_flags
     assert "999" not in " ".join(summary.evidence_lines)
+
+
+def test_batch_semantic_adapter_uses_one_flow_batch_and_one_price_batch():
+    decision = date(2026, 6, 20)
+
+    class Repository:
+        calls = []
+
+        def load_stock_batch_source(self, stock_codes, as_of_date, *, trading_day_limit):
+            self.calls.append((stock_codes, as_of_date, trading_day_limit))
+            events = tuple(_event(decision, "A", code, 100) for code in stock_codes)
+            return BrokerFlowReadSnapshot(
+                selected_trading_dates=(decision,), events=events, tracked_branches=(),
+                quality="observed", warnings=(), source_fingerprint="x",
+                query_count=2, materialized_row_count=len(events),
+            )
+
+    class Prices:
+        calls = []
+
+        def load_recent_prices_batch(self, stock_codes, decision_date, limit):
+            self.calls.append((stock_codes, decision_date, limit))
+            return {code: [(decision, Decimal("100"))] for code in stock_codes}
+
+    repository = Repository()
+    prices = Prices()
+    adapter = SQLiteSmartMoneyBatchSemanticAdapter(repository, prices)
+
+    result = adapter.build_batch_semantics(("2330", "2317"), decision)
+
+    assert set(result) == {"2330", "2317"}
+    assert repository.calls == [(("2330", "2317"), decision, 60)]
+    assert prices.calls == [(("2330", "2317"), decision, 60)]

@@ -7,12 +7,15 @@ from decimal import Decimal
 from typing import Mapping, Protocol
 
 from app_module.broker_flow_dashboard_dtos import (
+    BrokerFlowBranchTrackerSnapshot,
     BrokerFlowDashboardQuery,
     BrokerFlowDashboardSnapshot,
+    BrokerFlowStockDetailSnapshot,
 )
 from app_module.broker_flow_sqlite_read_repository import BrokerFlowReadSnapshot
 from app_module.dtos.smart_money_semantic_dtos import SmartMoneySemanticSummary
 from decision_module.flow_contracts import (
+    BranchFlowAggregation,
     BrokerFlowEvent,
     FlowSignalDTO,
     SmartMoneySummaryDTO,
@@ -24,6 +27,14 @@ from decision_module.flow_signal_engine import FlowSignalEngine
 class BrokerFlowDashboardRepository(Protocol):
     def load_dashboard_source(
         self, query: BrokerFlowDashboardQuery
+    ) -> BrokerFlowReadSnapshot: ...
+
+    def load_stock_source(
+        self, stock_code: str, query: BrokerFlowDashboardQuery
+    ) -> BrokerFlowReadSnapshot: ...
+
+    def load_branch_source(
+        self, branch_system_key: str, query: BrokerFlowDashboardQuery, *, limit: int
     ) -> BrokerFlowReadSnapshot: ...
 
 
@@ -109,6 +120,86 @@ class BrokerFlowDashboardQueryService:
                 "semantic_batch": semantic_query_count,
             },
         )
+
+    def load_stock_branch_detail(
+        self, stock_code: str, query: BrokerFlowDashboardQuery
+    ) -> BrokerFlowStockDetailSnapshot:
+        source = self.repository.load_stock_source(str(stock_code), query)
+        rows = self._aggregate_branches(source.events, group_by_branch=True)
+        return BrokerFlowStockDetailSnapshot(
+            as_of_date=source.selected_trading_dates[-1] if source.selected_trading_dates else query.requested_as_of_date,
+            period=query.period,
+            stock_code=str(stock_code),
+            rows=rows,
+            quality=source.quality,
+            warnings=source.warnings,
+            source_fingerprint=source.source_fingerprint,
+            query_count=source.query_count,
+        )
+
+    def load_branch_tracker(
+        self, branch_system_key: str, query: BrokerFlowDashboardQuery, *, limit: int = 5000
+    ) -> BrokerFlowBranchTrackerSnapshot:
+        source = self.repository.load_branch_source(str(branch_system_key), query, limit=limit)
+        rows = self._aggregate_branches(source.events, group_by_branch=False)
+        return BrokerFlowBranchTrackerSnapshot(
+            as_of_date=source.selected_trading_dates[-1] if source.selected_trading_dates else query.requested_as_of_date,
+            period=query.period,
+            branch_system_key=str(branch_system_key),
+            rows=rows,
+            quality=source.quality,
+            warnings=source.warnings,
+            source_fingerprint=source.source_fingerprint,
+            query_count=source.query_count,
+        )
+
+    @staticmethod
+    def _aggregate_branches(
+        events: tuple[BrokerFlowEvent, ...], *, group_by_branch: bool
+    ) -> tuple[BranchFlowAggregation, ...]:
+        aggregations: dict[str, BranchFlowAggregation] = {}
+        daily_net: dict[str, dict[str, int]] = {}
+        for event in events:
+            key = event.branch_system_key if group_by_branch else event.stock_code
+            aggregation = aggregations.setdefault(
+                key,
+                BranchFlowAggregation(
+                    branch_system_key=event.branch_system_key,
+                    branch_display_name=event.branch_display_name,
+                    stock_code=event.stock_code,
+                    stock_name=event.stock_name,
+                ),
+            )
+            aggregation.events.append(event)
+            if event.lots_quality in {"observed", "degraded"}:
+                aggregation.observed_event_count += 1
+                aggregation.usable_event_count += 1
+            elif event.lots_quality == "estimated":
+                aggregation.estimated_event_count += 1
+                aggregation.usable_event_count += 1
+            else:
+                aggregation.unavailable_event_count += 1
+            if event.buy_qty is not None:
+                aggregation.total_buy_qty += event.buy_qty
+            if event.sell_qty is not None:
+                aggregation.total_sell_qty += event.sell_qty
+            if event.net_qty is not None:
+                aggregation.total_net_qty += event.net_qty
+                daily = daily_net.setdefault(key, {})
+                daily[event.date] = daily.get(event.date, 0) + event.net_qty
+
+        for key, aggregation in aggregations.items():
+            total = len(aggregation.events)
+            aggregation.lots_coverage_ratio = (
+                Decimal(aggregation.usable_event_count) / Decimal(total)
+                if total else Decimal("1")
+            )
+            aggregation.lots_available = aggregation.usable_event_count > 0
+            aggregation.has_estimated_lots = aggregation.estimated_event_count > 0
+            dates = sorted(daily_net.get(key, {}))[-5:]
+            aggregation.sparkline_data = [daily_net[key][item] for item in dates]
+            aggregation.sparkline_details = [(item, daily_net[key][item]) for item in dates]
+        return tuple(sorted(aggregations.values(), key=lambda item: item.total_net_qty, reverse=True))
 
     @staticmethod
     def _aggregate_market(

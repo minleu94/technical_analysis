@@ -7,7 +7,7 @@ from datetime import date
 from typing import Iterable, Mapping
 
 from app_module.dtos.smart_money_semantic_dtos import SmartMoneySemanticSummary
-from decision_module.flow_contracts import FlowSignalDTO, SmartMoneySummaryDTO
+from decision_module.flow_contracts import BranchFlowAggregation, FlowSignalDTO, SmartMoneySummaryDTO
 
 
 _PERIOD_TRADING_DAYS = {"day": 1, "week": 5, "month": 20}
@@ -95,8 +95,34 @@ class BrokerFlowDashboardSnapshot:
     query_counts: Mapping[str, int] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class BrokerFlowStockDetailSnapshot:
+    as_of_date: date
+    period: str
+    stock_code: str
+    rows: tuple[BranchFlowAggregation, ...]
+    quality: str
+    warnings: tuple[str, ...] = ()
+    source_fingerprint: str = ""
+    query_count: int = 0
+
+
+@dataclass(frozen=True)
+class BrokerFlowBranchTrackerSnapshot:
+    as_of_date: date
+    period: str
+    branch_system_key: str
+    rows: tuple[BranchFlowAggregation, ...]
+    quality: str
+    warnings: tuple[str, ...] = ()
+    source_fingerprint: str = ""
+    query_count: int = 0
+
+
 __all__ = [
     "BrokerFlowDashboardQuery",
     "BrokerFlowDashboardSnapshot",
+    "BrokerFlowStockDetailSnapshot",
+    "BrokerFlowBranchTrackerSnapshot",
     "BrokerFlowLotQuantity",
 ]
