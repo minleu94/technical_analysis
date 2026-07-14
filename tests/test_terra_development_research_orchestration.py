@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,6 +10,49 @@ from development_module.research_orchestration import (
     FrozenDevelopmentResearchPolicy,
     TerraDevelopmentResearchOrchestrator,
 )
+from development_module.contracts import DevelopmentDatasetManifest
+
+
+def _serialized_dataset_content_hash(dataset: dict[str, object]) -> str:
+    def normalize_row(value: object) -> dict[str, object]:
+        assert isinstance(value, dict)
+        labels = value["labels"]
+        assert isinstance(labels, list)
+        return {
+            "symbol": value["symbol"],
+            "decision_date": value["decision_date"],
+            "feature_as_of_date": value["feature_as_of_date"],
+            "available_date": value["available_date"],
+            "values": value["features"],
+            "labels": [
+                {
+                    "id": label["label_id"],
+                    "value": label["value"],
+                    "horizon_end_date": label["horizon_end_date"],
+                    "available_date": label["available_date"],
+                    "quality": label["quality"],
+                }
+                for label in labels
+                if isinstance(label, dict)
+            ],
+        }
+
+    fit_rows = dataset["fit_rows"]
+    evaluation_rows = dataset["evaluation_rows"]
+    assert isinstance(fit_rows, list) and isinstance(evaluation_rows, list)
+    return DevelopmentDatasetManifest.canonical_sha256({
+        "fit_rows": [normalize_row(row) for row in fit_rows],
+        "evaluation_rows": [normalize_row(row) for row in evaluation_rows],
+    })
+
+
+def _synchronize_manifest(manifest_path: Path, dataset_path: Path) -> None:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    manifest["fit_row_count"] = len(dataset["fit_rows"])
+    manifest["evaluation_row_count"] = len(dataset["evaluation_rows"])
+    manifest["content_hash"] = _serialized_dataset_content_hash(dataset)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
 def _write_dataset_v0(root: Path) -> tuple[Path, Path]:
@@ -26,7 +69,7 @@ def _write_dataset_v0(root: Path) -> tuple[Path, Path]:
         "zero_formal_write": True,
         "feature_registry_hash": "sha256:" + "a" * 64,
         "label_registry_hash": "sha256:" + "b" * 64,
-        "content_hash": "sha256:" + "c" * 64,
+        "content_hash": "",
         "manifest_hash": "sha256:" + "d" * 64,
         "training_as_of": "2025-12-31",
         "evaluation_as_of": "2026-12-31",
@@ -55,6 +98,7 @@ def _write_dataset_v0(root: Path) -> tuple[Path, Path]:
     dataset_path = generation / "dataset.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+    _synchronize_manifest(manifest_path, dataset_path)
     return manifest_path, dataset_path
 
 
@@ -92,6 +136,7 @@ def test_pipeline_records_but_excludes_evaluation_rows_and_rejects_apply_policy(
     evaluation_row["decision_date"] = "2026-01-02"
     dataset["evaluation_rows"] = [evaluation_row]
     dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+    _synchronize_manifest(manifest_path, dataset_path)
 
     result = TerraDevelopmentResearchOrchestrator().run(
         manifest_path=manifest_path,
@@ -107,3 +152,91 @@ def test_pipeline_records_but_excludes_evaluation_rows_and_rejects_apply_policy(
         FrozenDevelopmentResearchPolicy.bounded_for_test(
             production_apply_flags=(("apply_to_scoring", True),),
         )
+
+
+def test_pipeline_rejects_dataset_content_hash_mismatch_before_training(tmp_path: Path) -> None:
+    manifest_path, dataset_path = _write_dataset_v0(tmp_path)
+    dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    dataset["fit_rows"][0]["features"][0][1] += 1
+    dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="content hash"):
+        TerraDevelopmentResearchOrchestrator().run(
+            manifest_path=manifest_path,
+            dataset_path=dataset_path,
+            policy=FrozenDevelopmentResearchPolicy.bounded_for_test(),
+        )
+
+
+def test_pipeline_rejects_manifest_row_count_mismatch(tmp_path: Path) -> None:
+    manifest_path, dataset_path = _write_dataset_v0(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["fit_row_count"] = 47
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fit row count"):
+        TerraDevelopmentResearchOrchestrator().run(
+            manifest_path=manifest_path,
+            dataset_path=dataset_path,
+            policy=FrozenDevelopmentResearchPolicy.bounded_for_test(),
+        )
+
+
+def test_pipeline_rejects_manifest_and_dataset_from_different_generation_directories(
+    tmp_path: Path,
+) -> None:
+    manifest_path, dataset_path = _write_dataset_v0(tmp_path)
+    other = tmp_path / "generations" / "other-generation"
+    other.mkdir(parents=True)
+    copied_dataset = other / "dataset.json"
+    copied_dataset.write_bytes(dataset_path.read_bytes())
+
+    with pytest.raises(ValueError, match="generation directory"):
+        TerraDevelopmentResearchOrchestrator().run(
+            manifest_path=manifest_path,
+            dataset_path=copied_dataset,
+            policy=FrozenDevelopmentResearchPolicy.bounded_for_test(),
+        )
+
+
+def test_projection_lineage_exposes_manifest_training_as_of_and_generated_at(
+    tmp_path: Path,
+) -> None:
+    manifest_path, dataset_path = _write_dataset_v0(tmp_path)
+    generated_at = datetime(2026, 7, 14, 8, 30, tzinfo=UTC)
+
+    result = TerraDevelopmentResearchOrchestrator(now=lambda: generated_at).run(
+        manifest_path=manifest_path,
+        dataset_path=dataset_path,
+        policy=FrozenDevelopmentResearchPolicy.bounded_for_test(),
+    )
+
+    assert result.lineage["training_as_of"] == "2025-12-31"
+    assert result.lineage["generated_at"] == generated_at.isoformat()
+
+
+def test_pipeline_rejects_policy_training_cutoff_mismatch(tmp_path: Path) -> None:
+    manifest_path, dataset_path = _write_dataset_v0(tmp_path)
+
+    with pytest.raises(ValueError, match="training_as_of"):
+        TerraDevelopmentResearchOrchestrator().run(
+            manifest_path=manifest_path,
+            dataset_path=dataset_path,
+            policy=FrozenDevelopmentResearchPolicy.bounded_for_test(
+                training_as_of="2025-11-30"
+            ),
+        )
+
+
+def test_research_run_id_is_stable_across_generated_at_values(tmp_path: Path) -> None:
+    manifest_path, dataset_path = _write_dataset_v0(tmp_path)
+    policy = FrozenDevelopmentResearchPolicy.bounded_for_test()
+    first = TerraDevelopmentResearchOrchestrator(
+        now=lambda: datetime(2026, 7, 14, 8, 30, tzinfo=UTC)
+    ).run(manifest_path=manifest_path, dataset_path=dataset_path, policy=policy)
+    second = TerraDevelopmentResearchOrchestrator(
+        now=lambda: datetime(2026, 7, 14, 9, 30, tzinfo=UTC)
+    ).run(manifest_path=manifest_path, dataset_path=dataset_path, policy=policy)
+
+    assert first.projection["identity"]["research_run_id"] == second.projection["identity"]["research_run_id"]
+    assert first.lineage["generated_at"] != second.lineage["generated_at"]

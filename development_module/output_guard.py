@@ -15,12 +15,9 @@ def validate_development_output_root(
     candidate = root.expanduser().resolve()
     protected_data_root = data_root.expanduser().resolve()
     protected_formal_db = formal_db.expanduser().resolve()
-    protected_database_root = protected_formal_db.parent.parent
     if (
         candidate == protected_data_root
         or protected_data_root in candidate.parents
-        or candidate == protected_database_root
-        or protected_database_root in candidate.parents
     ):
         raise ValueError("development_output_root must be outside DATA_ROOT")
     if candidate == protected_formal_db:

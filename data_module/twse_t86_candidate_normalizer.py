@@ -12,6 +12,9 @@ from typing import Any
 from data_module.twse_t86_candidate_contracts import T86CandidateRow, T86NormalizationResult
 
 
+NORMALIZER_VERSION = "twse-t86-normalizer.v2"
+
+
 REQUIRED_FIELDS = (
     "證券代號", "證券名稱", "外陸資買進股數(不含外資自營商)",
     "外陸資賣出股數(不含外資自營商)", "外陸資買賣超股數(不含外資自營商)",

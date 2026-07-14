@@ -6,6 +6,7 @@ import argparse
 from dataclasses import asdict
 from datetime import date, datetime
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -19,8 +20,9 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-from data_module.twse_t86_candidate_normalizer import normalize_t86_payload
+from data_module.twse_t86_candidate_normalizer import NORMALIZER_VERSION, normalize_t86_payload
 from data_module.twse_t86_candidate_source import RawFetchEnvelope, fetch_t86_envelope, persist_raw_envelope
+from development_module.output_guard import validate_development_output_root
 
 
 def _read_only_connection(db_path: Path) -> sqlite3.Connection:
@@ -67,16 +69,31 @@ def run_pilot(
     db_path: Path,
     development_output_root: Path,
     cutoff_date: str,
+    generation_id: str,
     fetcher: Callable[[date], RawFetchEnvelope] = fetch_t86_envelope,
+    supersedes_generation_id: str | None = None,
 ) -> dict[str, object]:
     db_path = db_path.resolve()
-    output_root = development_output_root.resolve()
     if not db_path.is_file():
         raise ValueError("db_path must be an existing read-only source DB")
-    if output_root == db_path or db_path in output_root.parents:
-        raise ValueError("development output must not contain the source DB")
+    data_root = Path(os.environ.get("DATA_ROOT", "D:/Min/Python/Project/FA_Data")).resolve()
+    output_root = validate_development_output_root(
+        development_output_root,
+        data_root=data_root,
+        formal_db=db_path,
+    )
     if output_root.exists() and any(output_root.iterdir()):
         raise FileExistsError("development output root must be new or empty")
+    resolved_generation_id = generation_id.strip()
+    if not resolved_generation_id:
+        raise ValueError("generation_id must not be empty")
+    resolved_supersedes_generation_id: str | None = None
+    if supersedes_generation_id is not None:
+        resolved_supersedes_generation_id = supersedes_generation_id.strip()
+        if not resolved_supersedes_generation_id:
+            raise ValueError("supersedes_generation_id must not be empty")
+    if resolved_supersedes_generation_id == resolved_generation_id:
+        raise ValueError("a generation cannot supersede itself")
     output_root.mkdir(parents=True, exist_ok=True)
 
     resolved_dates = resolve_completed_dates(db_path, cutoff_date=cutoff_date)
@@ -87,20 +104,37 @@ def run_pilot(
     prior_schema: str | None = None
     schema_diffs: list[dict[str, str]] = []
     rate_limit_observations: list[dict[str, object]] = []
+    successful_date_count = 0
     for date_text in resolved_dates:
         try:
             envelope = fetcher(date.fromisoformat(date_text))
             persist_raw_envelope(envelope, output_root=output_root)
+            raw_hashes[date_text] = envelope.payload_sha256
+            rate_limit_observations.append({
+                "date": date_text, "attempts": [asdict(attempt) for attempt in envelope.attempts],
+            })
             universe = _universe(db_path, date_text)
             result = normalize_t86_payload(
                 envelope.payload, observation_date=date_text, retrieved_at=envelope.retrieved_at,
                 allowed_symbols=universe,
             )
-            raw_hashes[date_text] = envelope.payload_sha256
             schema_by_date[date_text] = result.schema_sha256
             if prior_schema is not None and prior_schema != result.schema_sha256:
                 schema_diffs.append({"date": date_text, "previous_schema_sha256": prior_schema, "schema_sha256": result.schema_sha256})
             prior_schema = result.schema_sha256
+            if "schema_drift" in result.warnings:
+                error = "schema_drift:payload schema does not match the supported T86 contract"
+                failed_dates.append({"date": date_text, "error": error})
+                coverage.append({
+                    "date": date_text,
+                    "status": "failed",
+                    "error": error,
+                    "raw_rows": result.raw_row_count,
+                    "accepted": result.accepted_count,
+                    "quarantined": result.quarantined_count,
+                    "warnings": list(result.warnings),
+                })
+                continue
             symbols = set(result.symbols)
             observed_symbols = set(result.observed_symbols)
             normalized_rows = []
@@ -120,28 +154,32 @@ def run_pilot(
                 "missing_symbols": sorted(universe - symbols), "extra_symbols": sorted(observed_symbols - universe),
                 "warnings": list(result.warnings),
             })
-            rate_limit_observations.append({
-                "date": date_text, "attempts": [asdict(attempt) for attempt in envelope.attempts],
-            })
+            successful_date_count += 1
         except Exception as exc:
             failed_dates.append({"date": date_text, "error": f"{type(exc).__name__}:{exc}"})
             coverage.append({"date": date_text, "status": "failed", "error": f"{type(exc).__name__}:{exc}"})
 
     manifest: dict[str, object] = {
-        "manifest_version": "twse-t86-candidate-pilot.v1", "source_key": "twse:T86",
+        "manifest_version": "twse-t86-candidate-pilot.v2", "source_key": "twse:T86",
+        "generation_id": resolved_generation_id,
+        "normalizer_version": NORMALIZER_VERSION,
+        "supersedes_generation_id": resolved_supersedes_generation_id,
         "source_status": "deferred", "candidate_development_only": True,
         "source_accepted": False, "formal_validation_allowed": False,
         "formal_oos_allowed": False, "production_blend_alpha_bp": 0,
         "license_terms_status": "unknown", "resolved_dates": resolved_dates,
         "requested_dates": len(resolved_dates), "received_dates": len(raw_hashes),
-        "successful_dates": len(raw_hashes), "failed_dates": failed_dates,
-        "success_ratio": f"{len(raw_hashes)}/{len(resolved_dates)}",
+        "successful_dates": successful_date_count, "failed_dates": failed_dates,
+        "success_ratio": f"{successful_date_count}/{len(resolved_dates)}",
         "raw_hashes": raw_hashes, "schema_by_date": schema_by_date,
         "schema_diffs": schema_diffs, "revision_diffs": [],
         "rate_limit_observations": rate_limit_observations, "coverage": coverage,
     }
     dossier = {
         "source_key": "twse:T86", "decision_status": "deferred",
+        "generation_id": resolved_generation_id,
+        "normalizer_version": NORMALIZER_VERSION,
+        "supersedes_generation_id": resolved_supersedes_generation_id,
         "reason": "retroactive_baseline_candidate_research_only",
         "source_accepted": False, "formal_validation_allowed": False,
         "license_terms_status": "unknown", "manifest": "manifest.json",
@@ -156,9 +194,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Recover a deferred TWSE T86 20-day candidate pilot")
     parser.add_argument("--db-path", type=Path, required=True)
     parser.add_argument("--development-output-root", type=Path, required=True)
+    parser.add_argument("--generation-id", required=True)
+    parser.add_argument("--supersedes-generation-id")
     parser.add_argument("--cutoff-date", required=True, help="已完成交易日上限 YYYY-MM-DD")
     args = parser.parse_args()
-    manifest = run_pilot(db_path=args.db_path, development_output_root=args.development_output_root, cutoff_date=args.cutoff_date)
+    manifest = run_pilot(
+        db_path=args.db_path,
+        development_output_root=args.development_output_root,
+        cutoff_date=args.cutoff_date,
+        generation_id=args.generation_id,
+        supersedes_generation_id=args.supersedes_generation_id,
+    )
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
     return 0 if not manifest["failed_dates"] else 2
 

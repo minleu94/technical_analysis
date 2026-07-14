@@ -6,6 +6,15 @@
 
 建議：**停止擴張來源範圍，保留 T86 candidate adapter 並先處理 universe authority／license review。** 目前 fetch、raw conservation、normalization、lineage 與 failure semantics 足以繼續有限 candidate research，但大量 non-ordinary-security rows 與歷史 available timestamp 不可得，尚不足以進入正式來源審核。
 
+## 2026-07-14 remediation 與歷史 artifact 狀態
+
+- `twse_t86_pilot_20260713_t4` 是最初的歷史 run；其 normalized 輸出錯把 284,089 筆來源列全部納入 candidate，已標為 **superseded / 不可消費**。
+- `twse_t86_pilot_20260713_t4_v2` 與 `_v3` 修正普通股 universe 篩選；本報告的 21,585 筆 accepted 與 262,504 筆 explicitly ignored 數字以最後的 `_v3` QA artifact 為準。這三份 artifact 都產生於本次 lineage remediation 之前，因此其 manifest 不含新的 generation 欄位，只保留作歷史稽核。
+- 後續新 run 使用 `manifest_version=twse-t86-candidate-pilot.v2` 與 `normalizer_version=twse-t86-normalizer.v2`，必須提供唯一 `generation_id`；若替代舊 run，必須以 generation lineage 明列 `supersedes_generation_id`。`revision_diffs` 只保留給同一 observation date 的來源 payload revision，不可拿 normalizer／程式世代移交冒充來源修訂。
+- Raw payload identity 與 retrieval event 已分離：相同 payload 可只保存一份 bytes，同時保留每次不同 requested/retrieved UTC 與 attempt lineage。
+- Schema drift 仍保存 received raw bytes，但該日計入 failed、不得計入 successful；development output 在任何 fetch 前即驗證必須位於 `DATA_ROOT` 之外。
+- 本次 remediation 只修改 code、tests 與本 QA 說明，**未重新發出 live TWSE request**；因此不把既有 artifact 冒充成新 v2 manifest run。
+
 ## Endpoint 與固定窗口
 
 - Endpoint：`https://www.twse.com.tw/rwd/zh/fund/T86`

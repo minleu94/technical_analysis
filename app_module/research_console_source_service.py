@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -44,10 +45,10 @@ _PIPELINE_LABELS = {
 }
 
 _REQUIRED_DISABLED_APPLY_FLAGS = (
-    "apply_promotion",
-    "apply_retrain",
-    "apply_scheduler",
-    "apply_trading",
+    "apply_to_scoring",
+    "apply_to_recommendation",
+    "apply_to_portfolio",
+    "apply_to_exit",
 )
 
 
@@ -69,7 +70,7 @@ class ResearchConsoleSourceService:
 
     def inspect(self) -> ResearchConsoleDTO:
         try:
-            payload, reference = self._read_projection()
+            payload, reference, artifact_hash = self._read_projection()
         except Exception:
             return self._missing("projection_read_failed", overall_status="degraded")
         if payload is None:
@@ -77,21 +78,28 @@ class ResearchConsoleSourceService:
         if not self._has_safe_boundary(payload):
             return self._missing("projection_boundary_violation", overall_status="degraded")
         try:
-            return self._project(payload, reference)
+            return self._project(payload, reference, artifact_hash)
         except Exception:
             return self._missing("projection_schema_invalid", overall_status="degraded")
 
-    def _read_projection(self) -> tuple[Mapping[str, object] | None, str]:
+    def _read_projection(self) -> tuple[Mapping[str, object] | None, str, str | None]:
         if self._projection_provider is not None:
-            return self._projection_provider(), "injected_projection"
+            return self._projection_provider(), "injected_projection", None
         if self._projection_path is None or not self._projection_path.is_file():
-            return None, "not_configured"
-        payload = json.loads(self._projection_path.read_text(encoding="utf-8"))
+            return None, "not_configured", None
+        projection_bytes = self._projection_path.read_bytes()
+        payload = json.loads(projection_bytes)
         if not isinstance(payload, Mapping):
             raise TypeError("projection root must be an object")
-        return payload, str(self._projection_path)
+        artifact_hash = "sha256:" + sha256(projection_bytes).hexdigest()
+        return payload, str(self._projection_path), artifact_hash
 
-    def _project(self, payload: Mapping[str, object], reference: str) -> ResearchConsoleDTO:
+    def _project(
+        self,
+        payload: Mapping[str, object],
+        reference: str,
+        artifact_hash: str | None,
+    ) -> ResearchConsoleDTO:
         identity = _mapping(payload, "identity")
         status = _mapping(payload, "status")
         metrics = _mapping(payload, "frozen_metrics")
@@ -149,7 +157,7 @@ class ResearchConsoleSourceService:
                 status="degraded" if blockers else "observed",
                 generated_at=_optional_string(lineage.get("generated_at")),
                 artifact_path=reference,
-                artifact_hash=_optional_string(lineage.get("manifest_file_sha256")),
+                artifact_hash=artifact_hash,
                 blockers=blockers,
             ),
         )
@@ -194,12 +202,15 @@ class ResearchConsoleSourceService:
         flags = status.get("apply_flags")
         if not isinstance(flags, Mapping):
             return False
+        alpha_bp = status.get("alpha_bp")
         return (
-            status.get("formal_oos") is False
-            and status.get("alpha_bp") == 0
+            status.get("scope") == "historical_research_seen_development_data"
+            and status.get("formal_oos") is False
+            and type(alpha_bp) is int
+            and alpha_bp == 0
             and status.get("promotion_eligible") is False
+            and set(flags) == set(_REQUIRED_DISABLED_APPLY_FLAGS)
             and all(flags.get(key) is False for key in _REQUIRED_DISABLED_APPLY_FLAGS)
-            and all(value is False for value in flags.values())
         )
 
 

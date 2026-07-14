@@ -9,6 +9,7 @@ import sqlite3
 import pytest
 
 from development_module.contracts import DevelopmentDatasetManifest, DevelopmentGenerationRequest
+from development_module.dataset_integrity import persisted_dataset_content_hash
 from development_module.generation import TerraDevelopmentDatasetGenerator
 from development_module.governance import load_development_data_usage_decision
 from development_module.output_guard import validate_development_output_root
@@ -39,6 +40,18 @@ def test_output_root_rejects_data_root_and_accepts_explicit_external_root(tmp_pa
         data_root=data_root,
         formal_db=formal_db,
     ) == expected
+
+
+def test_output_guard_accepts_external_sibling_when_formal_db_is_custom(tmp_path: Path) -> None:
+    data_root = tmp_path / "formal-data"
+    formal_db = tmp_path / "custom-source" / "prices.db"
+    external = tmp_path / "development-output"
+
+    assert validate_development_output_root(
+        external,
+        data_root=data_root,
+        formal_db=formal_db,
+    ) == external.resolve()
 
 
 def test_manifest_rejects_nonzero_production_alpha_or_formal_oos() -> None:
@@ -234,10 +247,23 @@ def test_writer_is_append_only_and_content_hash_is_deterministic(tmp_path: Path)
         writer.write(result)
     assert first.manifest_path.exists()
     assert first.dataset_path.exists()
+    persisted_dataset = json.loads(first.dataset_path.read_text(encoding="utf-8"))
+    assert persisted_dataset_content_hash(persisted_dataset) == result.manifest.content_hash
     assert result.manifest.content_hash.startswith("sha256:")
     assert result.manifest.content_hash == TerraDevelopmentDatasetGenerator(
         _generation_snapshot()
     ).generate(_generation_request()).manifest.content_hash
+
+
+def test_output_guard_rejects_exact_custom_formal_database_path(tmp_path: Path) -> None:
+    formal_db = tmp_path / "custom" / "prices.db"
+
+    with pytest.raises(ValueError, match="formal database"):
+        validate_development_output_root(
+            formal_db,
+            data_root=tmp_path / "separate-formal-data",
+            formal_db=formal_db,
+        )
 
 
 def test_generation_rejects_dates_at_or_after_the_new_holdout_start() -> None:

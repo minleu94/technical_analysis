@@ -116,16 +116,53 @@ def persist_raw_envelope(envelope: RawFetchEnvelope, *, output_root: Path) -> Pa
     else:
         with payload_path.open("xb") as stream:
             stream.write(envelope.payload)
-    metadata_path = raw_dir / f"{envelope.payload_sha256}.metadata.json"
-    metadata = asdict(envelope)
-    metadata.pop("payload")
-    metadata["requested_at"] = envelope.requested_at.isoformat()
-    metadata["retrieved_at"] = envelope.retrieved_at.isoformat()
-    metadata["attempts"] = [asdict(item) for item in envelope.attempts]
-    encoded = json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True).encode()
-    if metadata_path.exists() and metadata_path.read_bytes() != encoded:
-        raise FileExistsError(f"raw metadata conflict: {metadata_path}")
-    if not metadata_path.exists():
-        with metadata_path.open("xb") as stream:
-            stream.write(encoded)
+    payload_metadata = {
+        "observation_date": envelope.observation_date,
+        "source_url": envelope.source_url,
+        "request_params": dict(envelope.request_params),
+        "http_status": envelope.http_status,
+        "content_type": envelope.content_type,
+        "byte_count": envelope.byte_count,
+        "raw_row_count": envelope.raw_row_count,
+        "payload_sha256": envelope.payload_sha256,
+        "parser_version": envelope.parser_version,
+        "endpoint_version": envelope.endpoint_version,
+    }
+    metadata_path = raw_dir / "metadata" / f"{envelope.payload_sha256}.json"
+    _write_immutable_json(metadata_path, payload_metadata)
+
+    retrieval = {
+        "observation_date": envelope.observation_date,
+        "payload_sha256": envelope.payload_sha256,
+        "requested_at": envelope.requested_at.isoformat(),
+        "retrieved_at": envelope.retrieved_at.isoformat(),
+        "attempts": [asdict(item) for item in envelope.attempts],
+    }
+    retrieval_bytes = _canonical_json_bytes(retrieval)
+    retrieval_id = sha256(retrieval_bytes).hexdigest()
+    retrieval_path = raw_dir / "retrievals" / f"{retrieval_id}.json"
+    _write_immutable_bytes(retrieval_path, retrieval_bytes)
     return payload_path
+
+
+def _write_immutable_json(path: Path, value: object) -> None:
+    _write_immutable_bytes(path, _canonical_json_bytes(value))
+
+
+def _canonical_json_bytes(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def _write_immutable_bytes(path: Path, value: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        if path.read_bytes() != value:
+            raise FileExistsError(f"immutable artifact conflict: {path}")
+        return
+    with path.open("xb") as stream:
+        stream.write(value)

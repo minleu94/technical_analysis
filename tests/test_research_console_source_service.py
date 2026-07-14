@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
+
+import pytest
 
 from app_module.research_console_source_service import ResearchConsoleSourceService
 
@@ -35,10 +38,10 @@ def _projection() -> dict[str, object]:
             "formal_oos": False,
             "alpha_bp": 0,
             "apply_flags": {
-                "apply_promotion": False,
-                "apply_retrain": False,
-                "apply_scheduler": False,
-                "apply_trading": False,
+                "apply_to_scoring": False,
+                "apply_to_recommendation": False,
+                "apply_to_portfolio": False,
+                "apply_to_exit": False,
             },
             "promotion_eligible": False,
         },
@@ -99,6 +102,7 @@ def test_projection_provider_is_copied_without_recomputing_domain_metrics() -> N
     assert console.pipeline[1].status == "research_baseline"
     assert console.pipeline[2].status == "development_challenger"
     assert console.pipeline[3].blockers == ("research_only_degraded",)
+    assert console.pipeline[3].artifact_hash is None
     assert console.frozen_metrics == payload["frozen_metrics"]
     assert console.frozen_metrics is not payload["frozen_metrics"]
     assert {item.artifact_id for item in console.artifacts} >= {
@@ -118,6 +122,7 @@ def test_explicit_projection_path_is_read_only(tmp_path: Path) -> None:
 
     after = (projection_path.stat().st_size, projection_path.stat().st_mtime_ns, projection_path.read_bytes())
     assert console.source_reference == str(projection_path.resolve())
+    assert console.pipeline[3].artifact_hash == "sha256:" + sha256(before[2]).hexdigest()
     assert before == after
 
 
@@ -137,15 +142,65 @@ def test_invalid_or_unsafe_projection_fails_closed() -> None:
     assert console.boundary.production_blend_alpha_bp == 0
 
 
-def test_missing_apply_flags_fail_closed() -> None:
-    for flags in ({}, {"apply_promotion": False}):
-        unsafe = _projection()
-        unsafe["status"]["apply_flags"] = flags  # type: ignore[index]
+@pytest.mark.parametrize(
+    "flags",
+    [
+        {},
+        {"apply_to_scoring": False},
+        {
+            "apply_to_scoring": False,
+            "apply_to_recommendation": False,
+            "apply_to_portfolio": False,
+            "apply_to_exit": False,
+            "unexpected": False,
+        },
+        {
+            "apply_to_scoring": True,
+            "apply_to_recommendation": False,
+            "apply_to_portfolio": False,
+            "apply_to_exit": False,
+        },
+    ],
+)
+def test_noncanonical_apply_flags_fail_closed(flags: dict[str, bool]) -> None:
+    unsafe = _projection()
+    unsafe["status"]["apply_flags"] = flags  # type: ignore[index]
 
-        console = ResearchConsoleSourceService(projection_provider=lambda: unsafe).inspect()
+    console = ResearchConsoleSourceService(projection_provider=lambda: unsafe).inspect()
 
-        assert console.overall_status == "degraded"
-        assert "projection_boundary_violation" in console.blockers
+    assert console.overall_status == "degraded"
+    assert "projection_boundary_violation" in console.blockers
+
+
+@pytest.mark.parametrize("alpha", [False, 0.0])
+def test_non_integer_zero_alpha_fails_closed(alpha: object) -> None:
+    unsafe = _projection()
+    unsafe["status"]["alpha_bp"] = alpha  # type: ignore[index]
+
+    console = ResearchConsoleSourceService(projection_provider=lambda: unsafe).inspect()
+
+    assert console.overall_status == "degraded"
+    assert "projection_boundary_violation" in console.blockers
+
+
+def test_canonical_apply_flags_and_integer_zero_alpha_are_accepted() -> None:
+    console = ResearchConsoleSourceService(projection_provider=_projection).inspect()
+
+    assert "projection_boundary_violation" not in console.blockers
+
+
+@pytest.mark.parametrize("scope", [None, "production_ready"])
+def test_noncanonical_or_missing_scope_fails_closed(scope: str | None) -> None:
+    unsafe = _projection()
+    if scope is None:
+        unsafe["status"].pop("scope")  # type: ignore[union-attr]
+    else:
+        unsafe["status"]["scope"] = scope  # type: ignore[index]
+
+    console = ResearchConsoleSourceService(projection_provider=lambda: unsafe).inspect()
+
+    assert console.overall_status == "degraded"
+    assert "projection_boundary_violation" in console.blockers
 
 
 def test_provider_failure_returns_degraded_console_instead_of_escaping() -> None:

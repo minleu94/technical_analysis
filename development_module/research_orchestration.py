@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_EVEN
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
@@ -17,6 +18,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from decision_module.weight_contract import RecommendationWeightContract
+from development_module.dataset_integrity import validate_persisted_dataset_v0
 from ml_module.historical_evaluation import evaluate_historical_predictions
 from ml_module.probability_calibration import ShadowProbabilityCalibrator
 from ml_module.purged_walk_forward import MLTimeWindowRow, PurgedWalkForwardSplitter
@@ -171,6 +173,9 @@ class _OOFPrediction:
 class TerraDevelopmentResearchOrchestrator:
     """Runs fixed, historical-research-only Rule and ML diagnostics on Dataset V0."""
 
+    def __init__(self, *, now: Callable[[], datetime] | None = None) -> None:
+        self._now = now or (lambda: datetime.now(UTC))
+
     def run(
         self,
         *,
@@ -184,6 +189,15 @@ class TerraDevelopmentResearchOrchestrator:
         manifest = _load_json_object(manifest_file)
         dataset = _load_json_object(dataset_file)
         _validate_dataset_v0_manifest(manifest)
+        training_as_of = _required_string(manifest, "training_as_of")
+        if training_as_of != frozen_policy.training_as_of:
+            raise ValueError("manifest training_as_of must match the frozen research policy")
+        validate_persisted_dataset_v0(
+            manifest_file=manifest_file,
+            dataset_file=dataset_file,
+            manifest=manifest,
+            dataset=dataset,
+        )
         samples, feature_names, evaluation_count = _load_fit_samples(dataset, frozen_policy)
         if len(samples) < 20:
             raise ValueError("Dataset V0 requires at least twenty eligible 2025 fit rows")
@@ -259,9 +273,10 @@ class TerraDevelopmentResearchOrchestrator:
             conclusion="historical_research_only_no_formal_rule_vs_ml_conclusion",
             blockers=blockers,
         )
-        lineage: dict[str, object] = {
+        stable_lineage: dict[str, object] = {
             "dataset_id": _required_string(manifest, "dataset_id"),
             "generation_id": _required_string(manifest, "generation_id"),
+            "training_as_of": training_as_of,
             "dataset_manifest_hash": manifest.get("manifest_hash", ""),
             "dataset_content_hash": manifest.get("content_hash", ""),
             "manifest_file_sha256": _file_sha256(manifest_file),
@@ -277,11 +292,22 @@ class TerraDevelopmentResearchOrchestrator:
             "feature_names": list(feature_names),
             "max_label_available_date": max_available,
         }
+        research_run_id = _sha256({
+            "lineage": stable_lineage,
+            "policy": frozen_policy.content_hash,
+        })
+        generated_at = self._now()
+        if generated_at.tzinfo is None or generated_at.utcoffset() is None:
+            raise ValueError("generated_at clock must be timezone-aware")
+        lineage: dict[str, object] = {
+            **stable_lineage,
+            "generated_at": generated_at.astimezone(UTC).isoformat(),
+        }
         projection: dict[str, object] = {
             "identity": {
                 "dataset_id": lineage["dataset_id"],
                 "generation_id": lineage["generation_id"],
-                "research_run_id": _sha256({"lineage": lineage, "policy": frozen_policy.content_hash}),
+                "research_run_id": research_run_id,
             },
             "status": {
                 "scope": "historical_research_seen_development_data",

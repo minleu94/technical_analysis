@@ -43,6 +43,23 @@ Feature 一律採 T-1，且 `available_date <= decision_date`。Universe 名稱�
 
 labels 必須從本次 generation 讀取的受控原始價格資料重建。2025 ready labels 僅可進 `fit_rows`；2026 即使成熟也只能寫入 `evaluation_rows`，不得進 fit、normalizer、hyperparameter 或 blend 選擇。V0 不讀 corporate-action coverage source，因此 research labels 固定是 `dataset_status=research_only_degraded`，manifest 必須保留 `corporate_action_coverage_missing` blocker。每個 generation 保存 dataset/generation ID、registry hashes、四個 source fingerprints、cutoff、date range、row counts、missing／exclusion diagnostics、canonical content hash 與 zero-formal-write flags；已存在的 generation ID 一律拒絕覆寫。
 
+### Development comparison 與 Research Console projection
+
+T2 只能接受同一 generation directory 內的 `manifest.json` 與 `dataset.json`。模型 fit 前會重新驗證 directory／generation／dataset identity、fit/evaluation row counts、persisted semantic content hash，以及 manifest `training_as_of` 是否等於 frozen research policy。任一不一致都 fail closed。
+
+Research output 必須指定一個位於 `DATA_ROOT` 外、尚不存在的專屬目錄；report 與 projection 先在同 volume staging directory 完整寫入，再以 directory rename 一次發布，失敗時不留下 report-only 半套 artifact：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_terra_development_research.py `
+  --manifest C:\Temp\technical_analysis_development_output\generations\terra-v0-canonical-2025-dev-20260714\manifest.json `
+  --dataset C:\Temp\technical_analysis_development_output\generations\terra-v0-canonical-2025-dev-20260714\dataset.json `
+  --output-root C:\Temp\technical_analysis_development_output\research_runs\terra-v0-canonical-2025-dev-20260714
+```
+
+輸出的 `ResearchConsoleProjection.json` 必須維持 exact scope `historical_research_seen_development_data`、四個 canonical `apply_to_*` flags 全為 `false`、`formal_oos=false`、整數 `alpha_bp=0`、`promotion_eligible=false`。UI 只在這些條件全部成立時投影，且 E2E artifact hash 必須是 projection 檔案本身的 byte SHA-256；dataset manifest hash 只留在 dataset lineage，不可冒充 projection hash。
+
+2026-07-14 canonical development run 使用 2025-01-02～2025-07-16 共 120 個 decision dates，產生 179,271 fit rows、0 evaluation rows；完整 purged walk-forward comparison 產生 53,559 OOF samples。結果仍有 corporate-action coverage 與 formal Rule snapshot blockers；只能用來看 development baseline／challenger 差距，不得稱為 formal OOS、promotion 或投資有效性結論。正式 SQLite 在 generation 與 research run 前後 SHA-256 均維持 `604E8FC5C046E40FAEDDD5A6E183D088F6BD90D0E462D2C8E4E96101C0B6D8B4`。
+
 ## 2025 Locked OOS 指令已停用
 
 owner 已選擇 2025 方案 B，因此不得執行 `evaluate_ml_2025_oos.py`、不得提供任何 `--oos-payload`，也不得要求或嘗試取得 `formal_oos_allowed=true`。既有 locked verifier 保留為歷史程式邊界，Terra V0 不呼叫、不修改也不解封它。

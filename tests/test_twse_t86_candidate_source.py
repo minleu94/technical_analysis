@@ -44,3 +44,29 @@ def test_raw_persistence_is_content_addressed_and_never_overwrites(tmp_path: Pat
     assert first == second
     assert first.read_bytes() == envelope.payload
     assert len([path for path in (tmp_path / "raw" / "2026-07-10").glob("*.json") if not path.name.endswith(".metadata.json")]) == 1
+
+
+def test_same_payload_refetch_with_new_timestamps_preserves_both_retrieval_events(
+    tmp_path: Path,
+) -> None:
+    first_envelope = fetch_t86_envelope(
+        date(2026, 7, 10),
+        transport=lambda **_: Response(),
+        sleep=lambda _: None,
+        now=lambda: datetime(2026, 7, 13, 8, tzinfo=UTC),
+    )
+    second_envelope = fetch_t86_envelope(
+        date(2026, 7, 10),
+        transport=lambda **_: Response(),
+        sleep=lambda _: None,
+        now=lambda: datetime(2026, 7, 13, 9, tzinfo=UTC),
+    )
+
+    first = persist_raw_envelope(first_envelope, output_root=tmp_path)
+    second = persist_raw_envelope(second_envelope, output_root=tmp_path)
+
+    assert first == second
+    raw_dir = tmp_path / "raw" / "2026-07-10"
+    assert len(list(raw_dir.glob("*.json"))) == 1
+    assert len(list((raw_dir / "metadata").glob("*.json"))) == 1
+    assert len(list((raw_dir / "retrievals").glob("*.json"))) == 2

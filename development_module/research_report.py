@@ -5,21 +5,41 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import uuid
 
+from development_module.output_guard import validate_development_output_root
 from development_module.research_orchestration import DevelopmentResearchResult
 
 
 def write_development_research_artifacts(
-    result: DevelopmentResearchResult, *, output_root: str | Path
+    result: DevelopmentResearchResult,
+    *,
+    output_root: str | Path,
+    data_root: str | Path,
+    formal_db: str | Path,
 ) -> dict[str, str]:
-    root = Path(output_root).resolve()
-    root.mkdir(parents=True, exist_ok=True)
+    root = validate_development_output_root(
+        Path(output_root),
+        data_root=Path(data_root),
+        formal_db=Path(formal_db),
+    )
+    if root.exists():
+        raise FileExistsError("development research output is append-only")
+    root.parent.mkdir(parents=True, exist_ok=True)
+    staging = root.parent / f".{root.name}.{uuid.uuid4().hex}.tmp"
+    staging.mkdir(exist_ok=False)
+    try:
+        _write_canonical(staging / "DevelopmentResearchComparison.json", result.report)
+        _write_canonical(staging / "ResearchConsoleProjection.json", result.projection)
+        staging.rename(root)
+    except BaseException:
+        if staging.exists():
+            for child in staging.iterdir():
+                child.unlink()
+            staging.rmdir()
+        raise
     report_path = root / "DevelopmentResearchComparison.json"
     projection_path = root / "ResearchConsoleProjection.json"
-    if report_path.exists() or projection_path.exists():
-        raise FileExistsError("development research output is append-only")
-    _write_canonical(report_path, result.report)
-    _write_canonical(projection_path, result.projection)
     return {
         "report_id": _sha256(result.report),
         "report_sha256": _file_sha256(report_path),
