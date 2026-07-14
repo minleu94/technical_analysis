@@ -60,3 +60,21 @@ def test_projection_module_does_not_import_ml_module() -> None:
     )
 
     assert not any(name == "ml_module" or name.startswith("ml_module.") for name in imported)
+
+
+def test_external_evidence_observability_module_does_not_import_ml_module() -> None:
+    path = Path("app_module/external_evidence_observability.py")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    imported = tuple(
+        name
+        for node in ast.walk(tree)
+        for name in (
+            tuple(alias.name for alias in node.names)
+            if isinstance(node, ast.Import)
+            else ((node.module or ""),)
+            if isinstance(node, ast.ImportFrom)
+            else ()
+        )
+    )
+
+    assert not any(name == "ml_module" or name.startswith("ml_module.") for name in imported)
