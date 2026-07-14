@@ -32,6 +32,15 @@ ACCESS_BOUNDARY = {
 
 
 @dataclass(frozen=True)
+class LegacySourceIdAlignment:
+    """Name-only alignment; it has no authority to rewrite historical decisions."""
+
+    legacy_source_id: str
+    source_id: str | None
+    blockers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class P0SourceContract:
     source_id: str
     family: str
@@ -102,6 +111,13 @@ class P0SourceContractRegistry:
 
 def build_p0_source_contract_registry() -> P0SourceContractRegistry:
     return P0SourceContractRegistry(_contract(source_id) for source_id in P0_SOURCE_IDS)
+
+
+def map_legacy_source_id(legacy_source_id: str) -> LegacySourceIdAlignment:
+    """Return an explicit blocker whenever a legacy id lacks a one-to-one name match."""
+    if legacy_source_id in P0_SOURCE_IDS:
+        return LegacySourceIdAlignment(legacy_source_id, legacy_source_id, ())
+    return LegacySourceIdAlignment(legacy_source_id, None, ("unmapped_legacy_id",))
 
 
 def _contract(source_id: str) -> P0SourceContract:

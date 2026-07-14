@@ -1,6 +1,7 @@
 from data_module.p0_source_contract_registry import (
     P0_SOURCE_IDS,
     build_p0_source_contract_registry,
+    map_legacy_source_id,
 )
 
 
@@ -41,3 +42,13 @@ def test_unknown_source_cannot_be_silently_accepted() -> None:
     registry = build_p0_source_contract_registry()
 
     assert registry.get("unknown.source") is None
+
+
+def test_legacy_id_alignment_never_rewrites_decisions_and_reports_unmapped() -> None:
+    aligned = map_legacy_source_id("institutional_flows")
+    unmapped = map_legacy_source_id("legacy.broker.branch")
+
+    assert aligned.source_id == "institutional_flows"
+    assert aligned.blockers == ()
+    assert unmapped.source_id is None
+    assert unmapped.blockers == ("unmapped_legacy_id",)
