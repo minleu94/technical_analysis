@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from data_module import monthly_revenue_availability_history as history
 from data_module.monthly_revenue_availability_history import (
     build_historical_monthly_revenue_availability,
     load_pit_announcement_rows,
@@ -10,6 +11,107 @@ from data_module.monthly_revenue_availability_history import (
     parse_announcement_date,
     parse_revenue_period,
 )
+
+
+def test_governed_mapping_preserves_source_tiers_and_unmatched_reasons() -> None:
+    build = getattr(history, "build_governed_monthly_revenue_mapping", None)
+    assert build is not None, "governed monthly mapping contract is missing"
+    result = build(
+        raw_periods={
+            ("2330", "2024-04"),
+            ("2317", "2024-04"),
+            ("1101", "2024-04"),
+        },
+        evidence_rows=(
+            {
+                "stock_code": "2330",
+                "period": "2024-04",
+                "announcement_date": "2024-05-10",
+                "available_date": "2024-05-10",
+                "source_id": "mops.monthly_revenue_announcement",
+                "source_version": "mops-20240510",
+                "source_hash": "a" * 64,
+                "content_hash": "b" * 64,
+                "evidence_tier": "official",
+                "revision": "1",
+            },
+            {
+                "stock_code": "2317",
+                "period": "2024-04",
+                "first_observed_date": "2024-05-11",
+                "available_date": "2024-05-11",
+                "source_id": "archive.first_observed",
+                "source_version": "archive-v1",
+                "source_hash": "c" * 64,
+                "content_hash": "d" * 64,
+                "evidence_tier": "observed_only",
+                "revision": "1",
+            },
+            {
+                "stock_code": "1101",
+                "period": "2024-04",
+                "create_time": "2024-05-09",
+                "source_id": "finmind.monthly_revenue",
+                "source_version": "finmind-v1",
+                "source_hash": "e" * 64,
+                "content_hash": "f" * 64,
+                "evidence_tier": "official",
+                "revision": "1",
+            },
+        ),
+        feature_cutoff=date(2024, 5, 10),
+    )
+
+    assert [record.quality_tier for record in result.records] == [
+        "observed_only",
+        "official",
+    ]
+    assert result.coverage.matched_official == 1
+    assert result.coverage.matched_observed_only == 1
+    assert result.coverage.unmatched == 1
+    assert result.coverage.future_blocked == 1
+    assert result.unmatched_reasons == {
+        ("1101", "2024-04"): "non_authoritative_create_time"
+    }
+
+
+def test_governed_mapping_keeps_revisions_visible_only_as_of_availability() -> None:
+    common = {
+        "stock_code": "2330",
+        "period": "2024-04",
+        "announcement_date": "2024-05-10",
+        "source_id": "mops.monthly_revenue_announcement",
+        "source_hash": "a" * 64,
+        "evidence_tier": "official",
+    }
+    build = getattr(history, "build_governed_monthly_revenue_mapping", None)
+    assert build is not None, "governed monthly mapping contract is missing"
+    result = build(
+        raw_periods={("2330", "2024-04")},
+        evidence_rows=(
+            {
+                **common,
+                "available_date": "2024-05-10",
+                "source_version": "mops-v1",
+                "content_hash": "b" * 64,
+                "revision": "1",
+            },
+            {
+                **common,
+                "available_date": "2024-05-15",
+                "source_version": "mops-v2",
+                "content_hash": "c" * 64,
+                "revision": "2",
+                "parent_revision": "1",
+            },
+        ),
+        feature_cutoff=date(2024, 5, 31),
+    )
+
+    assert [record.revision for record in result.visible_as_of(date(2024, 5, 12))] == [1]
+    assert [record.revision for record in result.visible_as_of(date(2024, 5, 15))] == [1, 2]
+    assert result.coverage.total == 2
+    assert result.coverage.revision == 1
 
 
 def test_parse_revenue_period_accepts_roc_and_western_formats() -> None:

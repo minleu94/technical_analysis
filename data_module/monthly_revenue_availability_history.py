@@ -14,6 +14,14 @@ from urllib.request import Request, urlopen
 
 from bs4 import BeautifulSoup
 
+from data_module.fundamental_availability import (
+    AvailabilityCoverageDiagnostics,
+    AvailabilityEvidenceRecord,
+    AvailabilityEvidenceValidationError,
+    append_availability_revision,
+    summarize_availability_coverage,
+    visible_evidence_as_of,
+)
 from data_module.monthly_revenue_availability_builder import (
     MonthlyRevenueAvailabilityRow,
     RawRevenuePeriod,
@@ -44,6 +52,121 @@ _MARKET_SOURCES = {
     "twse": (TWSE_HISTORY_SOURCE, TWSE_HISTORY_SOURCE_VERSION_PREFIX),
     "tpex": (TPEX_HISTORY_SOURCE, TPEX_HISTORY_SOURCE_VERSION_PREFIX),
 }
+
+
+@dataclass(frozen=True)
+class GovernedMonthlyRevenueMappingResult:
+    records: tuple[AvailabilityEvidenceRecord, ...]
+    coverage: AvailabilityCoverageDiagnostics
+    unmatched_reasons: dict[RawRevenuePeriod, str]
+    source_manifest: tuple[tuple[str, str, str], ...]
+
+    def visible_as_of(self, as_of_date: date) -> tuple[AvailabilityEvidenceRecord, ...]:
+        return visible_evidence_as_of(self.records, as_of_date=as_of_date)
+
+
+def build_governed_monthly_revenue_mapping(
+    *,
+    raw_periods: set[RawRevenuePeriod],
+    evidence_rows: Iterable[Mapping[str, object]],
+    feature_cutoff: date,
+) -> GovernedMonthlyRevenueMappingResult:
+    """建立不猜公告日的月營收 canonical mapping。"""
+
+    history: tuple[AvailabilityEvidenceRecord, ...] = ()
+    matched_keys: set[RawRevenuePeriod] = set()
+    unmatched_reasons: dict[RawRevenuePeriod, str] = {}
+    manifest: set[tuple[str, str, str]] = set()
+
+    for row in evidence_rows:
+        stock_code = str(row.get("stock_code") or "").strip()
+        period = str(row.get("period") or "").strip()
+        key = (stock_code, period)
+        if key not in raw_periods:
+            continue
+        source_id = str(row.get("source_id") or "").strip()
+        tier = str(row.get("evidence_tier") or "").strip()
+        announcement_text = str(row.get("announcement_date") or "").strip()
+        observed_text = str(row.get("first_observed_date") or "").strip()
+        available_text = str(row.get("available_date") or "").strip()
+        if source_id.startswith("finmind.") and not announcement_text and not observed_text:
+            unmatched_reasons[key] = "non_authoritative_create_time"
+            continue
+        if tier == "official" and not announcement_text:
+            unmatched_reasons[key] = "missing_official_announcement"
+            continue
+        if tier == "observed_only" and not observed_text:
+            unmatched_reasons[key] = "missing_first_observed"
+            continue
+        if not available_text:
+            unmatched_reasons[key] = "missing_explicit_available_date"
+            continue
+
+        try:
+            record = AvailabilityEvidenceRecord(
+                source_id=source_id,
+                source_version=str(row.get("source_version") or "").strip(),
+                source_hash=str(row.get("source_hash") or "").strip(),
+                symbol=stock_code,
+                data_family="monthly_revenue",
+                period_or_event_date=_period_end(period),
+                announcement_at=(
+                    parse_announcement_date(announcement_text)
+                    if announcement_text
+                    else None
+                ),
+                first_observed_at=(
+                    parse_announcement_date(observed_text) if observed_text else None
+                ),
+                available_at=parse_announcement_date(available_text),
+                revision=int(str(row.get("revision") or "1")),
+                parent_revision=(
+                    int(str(row["parent_revision"]))
+                    if str(row.get("parent_revision") or "").strip()
+                    else None
+                ),
+                effective_at=None,
+                quality_tier=tier,
+                match_method=(
+                    "official_natural_key"
+                    if tier == "official"
+                    else "historical_first_observed"
+                ),
+                content_hash=str(row.get("content_hash") or "").strip(),
+            )
+            history = append_availability_revision(history, record)
+        except (ValueError, AvailabilityEvidenceValidationError) as exc:
+            unmatched_reasons[key] = str(exc)
+            continue
+        matched_keys.add(key)
+        manifest.add((record.source_id, record.source_version, record.source_hash))
+
+    for key in raw_periods - matched_keys:
+        unmatched_reasons.setdefault(key, "no_matching_availability_evidence")
+
+    records = tuple(
+        sorted(history, key=lambda item: (item.symbol, item.period_or_event_date, item.revision))
+    )
+    raw_coverage = summarize_availability_coverage(
+        records,
+        feature_cutoff=feature_cutoff,
+    )
+    coverage = AvailabilityCoverageDiagnostics(
+        total=len(records) + len(unmatched_reasons),
+        matched_official=raw_coverage.matched_official,
+        matched_observed_only=raw_coverage.matched_observed_only,
+        unmatched=len(unmatched_reasons),
+        duplicate=raw_coverage.duplicate,
+        revision=raw_coverage.revision,
+        future_blocked=raw_coverage.future_blocked,
+        eligible=raw_coverage.eligible,
+    )
+    return GovernedMonthlyRevenueMappingResult(
+        records=records,
+        coverage=coverage,
+        unmatched_reasons=unmatched_reasons,
+        source_manifest=tuple(sorted(manifest)),
+    )
 
 
 @dataclass(frozen=True)
