@@ -3,7 +3,7 @@
 > **設計日期**：2026-07-13
 > **核准方案**：策略二「雙時鐘並行」
 > **文件狀態**：已核准的規劃規格；尚未開始 EV1～EV5 實作
-> **基線**：`dev` / `4f72766a1d1e7bd4b80ccb595ad3cb2fa84bd84a`
+> **A～G 工程錨點**：`4f72766a1d1e7bd4b80ccb595ad3cb2fa84bd84a`；實際執行基線由 Coordinator 在每次授權時封存，必須是此錨點的後代且 `dev == origin/dev`、working tree clean。
 > **權威邊界**：本文件保存下一階段設計，不取代 `PROJECT_SNAPSHOT.md`、Roadmap、External Validation Register 或實際 QA closeout。
 
 ## 1. 目的
@@ -24,7 +24,7 @@
 
 | 項目 | 已驗證狀態 | 本設計判讀 |
 |---|---|---|
-| Git | `HEAD == origin/dev == 4f72766...`，working tree/index clean | 固定使用 `dev`；不建立 branch/worktree |
+| Git | A～G 工程錨點為 `4f72766...`；執行 HEAD 由每次 preflight 動態封存 | 固定使用 clean `dev`；要求 `HEAD == origin/dev` 且為工程錨點後代，不建立 branch/worktree |
 | A～G engineering integration | `verified` | 不重做、不重新命名為 EV 工作 |
 | Full pytest | 2240 passed | 歷史工程證據，不代表投資有效 |
 | Mypy | 455 source files，0 error | 歷史工程證據 |
@@ -313,6 +313,8 @@ decision_revision_id
 
 ### 10.1 第一個步驟：2025 OOS Exposure／Custody Audit
 
+具體執行順序、允許／禁止輸入、狀態判定與 handoff schema 見 [OOS Exposure／Custody Audit Execution Plan](../plans/2026-07-13-oos-exposure-custody-audit-execution-plan.md)。該 companion 只落實本節，不擴張 EV3 或讀取 2025 outcome payload。
+
 在建立新 dataset、重訓、讀取 2025 outcome 或執行任何 formal comparison 前，先產生 `OOSExposureCustodyReport.v1`。Audit 同時檢查：
 
 - Git history、既有 reports、notebooks、TEMP／artifact manifest、CLI invocation evidence與 registry access。
@@ -403,6 +405,8 @@ Rule-only、ML-only、research blend 分開產出。Research blend 不得作第�
 - **排除於首次 Gate**：60 日 outcome只作長期 diagnostics，不影響第一次 promotion-review eligibility。
 
 預註冊 artifact `ExperimentPreregistration.v1` 必須在 outcome unblind 前鎖定 hypothesis、Champion ID、challenger ID、Primary Label、Downside Guardrail、K policy、cost/slippage、sample policy、date-block bootstrap、`confidence_level_bp=9500`、minimum material effect、downside non-inferiority margin、multiple-testing policy與 failure rules。`minimum_material_effect_bp` 與 `downside_noninferiority_margin_bp` 是 human-bound 風險決策，必須由 Quant Validation／Risk owner 在 unblind 前以整數 bp 簽核；工程不得代填，缺任一欄即 `invalid_preregistration`。
+
+第一次實驗應直接複製 [Experiment V1 Preregistration Template](../../06_qa/EXPERIMENT_V1_PREREGISTRATION_TEMPLATE.md) 建立新的 immutable artifact；模板中的 `REQUIRES_HUMAN_DECISION` 不得由 Agent 或 fixture 數值替代。
 
 ### 11.4 Fair sample
 

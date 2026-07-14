@@ -1,6 +1,6 @@
 ﻿# 專案導航文件
 
-**版本**：v1.4.9
+**版本**：v1.4.10
 **最後更新**：2026-07-13
 **目標讀者**：專案開發者、新加入工程師
 
@@ -12,13 +12,13 @@
 
 系統提供完整的數據更新、市場觀察、股票推薦、策略回測功能，讓策略成為可被描述、被比較、被淘汰的研究對象。這不是單純的策略腳本，而是一個工具型系統。
 
-產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 已是主 UI 的可用頂層工作區；現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
+產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 的唯一實例位於「市場探索 > 市場總覽」；Workbench「決策來源」只導向同一畫面。現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
 
 Evidence rehearsal 的唯讀工程預演底座已收口為 `engineering_rehearsal_complete`；它可重跑 replay / source shadow / ML shadow / lineage 的 coverage、quality、missingness 與 blocker 揭露，Workbench 只讀顯示、沒有 apply / promote。它不是 forward evidence，也不會把 External Validation Register 自動標為 complete；接手時先讀 `docs/06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md`，再依 register 的 owner 與 completion rule 累積真實資料、授權、時間與人工 Gate。
 
 2026-07-13 跨工作流工程整合入口為 `app_module/system_execution_blueprint_adapters.py`，純 JSON 驗證入口為 `scripts/verify_system_execution_blueprint.py`。兩者只組合／驗證 Evidence、PIT／source、ML shadow、dashboard 與 latency 的既有輸出，不改 Recommendation、Score、Advice、Portfolio 或 Exit。任一契約失敗時回到原 owner 修正；禁止在整合層補值、放寬 Gate 或把 `degraded` 改成 ready。
 
-目前 roadmap 判讀已從舊線性 Phase 轉為 Scoped SSOT + Post-V1 版本節奏：目前狀態看 `docs/00_core/PROJECT_SNAPSHOT.md`，未來工程路線看 `docs/00_core/ROADMAP_6M_ENGINEERING.md`，V1.1 至 V2.0 節奏看 `docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`，V2.0 之後長期版號階梯看 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`，外部專案參考、資料源優先序與 V1.5-V2.0 版本形狀看 `docs/00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。`docs/05_phases/` 僅保留為歷史 Phase / 設計追溯，不作目前 roadmap。
+目前 roadmap 判讀已從舊線性 Phase 轉為 Scoped SSOT + Post-V1 版本節奏：目前狀態看 `docs/00_core/PROJECT_SNAPSHOT.md`，產品方向看 `docs/00_core/PRODUCT_ROADMAP_POST_REFACTOR.md`，未來工程路線看 `docs/00_core/ROADMAP_6M_ENGINEERING.md`，目前／目標架構分別看 `docs/01_architecture/system_architecture.md` / `docs/01_architecture/target_system_architecture.md`；V1.1 至 V2.0 歷史節奏、V2.1 至 V4.0 長期成熟度與外部參考則依任務再讀對應 companion。`docs/05_phases/` 僅保留為歷史 Phase / 設計追溯，不作目前 roadmap。
 
 ---
 
@@ -73,7 +73,7 @@ Evidence rehearsal 的唯讀工程預演底座已收口為 `engineering_rehearsa
 
 ### Market Intelligence / Daily Decision Desk Layer（目前位於 `app_module/`）
 
-**目前狀態**：Daily Decision Desk v1 已接上主 UI，尚未建立獨立 `market_module/`；目前透過 application services / DTO 聚合既有資料，不在 UI 重算 domain logic。
+**目前狀態**：Daily Decision Desk v1 已接上主 UI，唯一實例位於「市場探索 > 市場總覽」，尚未建立獨立 `market_module/`；目前透過 application services / DTO 聚合既有資料，不在 UI 重算 domain logic。
 
 **目前責任**：
 - Market Breadth
@@ -139,7 +139,7 @@ Evidence rehearsal 的唯讀工程預演底座已收口為 `engineering_rehearsa
 
 **如果我要改 Historical Evidence Replay**：先看 `HistoricalEvidenceReplayService`、`EvidencePipelineRunner`、`EvidenceCaptureService` 與 `ForwardPerformanceService`；replay DB 必須與 source DB 分離，recommendation result 必須受 `created_at <= decision_date` 限制，outcome price search 必須受 `data_as_of_date` 限制，replay metadata 必須保留 `historical_replay` / `simulated_scheduler`，且 replay 不得計入 production scheduler approval。
 
-**如果我要改 V2.0 / V2.1 Workbench read-only source adapter、background evidence feed、Action Items 或 Operating Loop**：先看 `WorkbenchSourceService`、`WorkbenchReadOnlyComposer`、`WorkbenchDashboardDTO`、`PreV2ReadinessService` 與 `AgentEvidenceAccessService`；adapter 只能讀受控 DB path / replay JSON summary，missing DB / table 要變成 diagnostics。背景證據流只能彙整既有 DTO / service payload；Action Items 只能顯示人工待處理事項，必須保留 severity / queue group / source label / source trace / degraded reason / sort rank / drill-down target。Operating Loop 只能從 DTO payload 串接 daily first-look、manual queue、weekly history、multi-day dry-run、manual review note 與 scheduler gate，必須保留 source trace / linked item ids / drill-down target / `write_intent=false`。目前 weekly history 為 `0/3 waiting_for_time`，multi-day dry-run 已為 `3/3 ready`；不得用 fixture、手動改表或 replay 補週數，且 multi-day ready 不構成 scheduler approval。Drill-down target 必須對齊 Daily Decision、Evidence Review、Portfolio 舊頁導向，空狀態與 degraded 狀態文案不得暗示 gate passed、補值或建議，且不得建立 repository、寫 DB、讀 UI state、重算 scoring / portfolio / backtest、啟用 scheduler、套用 lifecycle 或產生交易建議。
+**如果我要改 V2.0 / V2.1 Workbench read-only source adapter、background evidence feed、Action Items 或 Operating Loop**：先看 `WorkbenchSourceService`、`WorkbenchReadOnlyComposer`、`WorkbenchDashboardDTO`、`PreV2ReadinessService` 與 `AgentEvidenceAccessService`；adapter 只能讀受控 DB path / replay JSON summary，missing DB / table 要變成 diagnostics。背景證據流只能彙整既有 DTO / service payload；Action Items 只能顯示人工待處理事項，必須保留 severity / queue group / source label / source trace / degraded reason / sort rank / drill-down target。Operating Loop 只能從 DTO payload 串接 daily first-look、manual queue、weekly history、multi-day dry-run、manual review note 與 scheduler gate，必須保留 source trace / linked item ids / drill-down target / `write_intent=false`。Week 1 已完成，目前 weekly history 為 `1/3 waiting_for_time`，multi-day dry-run 已為 `3/3 ready`；不得用 fixture、手動改表或 replay 補 Week 2 / Week 3，且 multi-day ready 不構成 scheduler approval。Drill-down target 必須對齊 Daily Decision、Evidence Review、Portfolio 舊頁導向，空狀態與 degraded 狀態文案不得暗示 gate passed、補值或建議，且不得建立 repository、寫 DB、讀 UI state、重算 scoring / portfolio / backtest、啟用 scheduler、套用 lifecycle 或產生交易建議。
 
 ---
 
@@ -170,7 +170,7 @@ Gate 1 的 application contract 依序為 `app_module/advice_dtos.py`、`app_mod
 python ui_qt/main.py
 ```
 
-**這是什麼**：PySide6 Qt 圖形界面，包含 8 個頂層工作區：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、策略回測（即 Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory、Daily Decision Desk。
+**這是什麼**：PySide6 Qt 圖形界面，包含 8 個頂層工作區：決策工作台、市場探索、推薦分析、策略回測、觀察清單、持倉管理、數據更新、Runtime。Daily Decision Desk 不再是第九個頂層工作區；唯一實例位於「市場探索 > 市場總覽」，Workbench 只提供導覽。
 
 ---
 
@@ -211,9 +211,9 @@ python ui_qt/main.py
 
 ---
 
-### 📌 Market Watch（市場觀察）
+### 📌 Market Exploration（市場探索）
 
-**從哪個 UI 進**：`ui_qt/views/` 目錄下的 5 個視圖
+**從哪個 UI 進**：左側「市場探索」；「市場總覽」是 Daily Decision Desk 唯一實例，其他市場視圖位於 `ui_qt/views/`。
 - `market_regime_view.py`：大盤指數
 - `strong_stocks_view.py`：強勢個股
 - `weak_stocks_view.py`：弱勢個股
@@ -235,9 +235,9 @@ python ui_qt/main.py
 
 ---
 
-### 📌 Smart Money Terminal (籌碼分析)
+### 📌 Smart Money Terminal（市場探索子頁）
 
-**從哪個 UI 進**：`ui_qt/views/smart_money/smart_money_flow_view.py`（籌碼分析 Tab）
+**從哪個 UI 進**：左側「市場探索」內的主力流向子頁；實作為 `ui_qt/views/smart_money/smart_money_flow_view.py`。
 
 **對應的 Service**：`app_module/broker_flow_service.py`
 - 負責：提供籌碼流向資料編排與查詢
@@ -485,7 +485,9 @@ python ui_qt/main.py
 ## 📚 相關文檔
 
 - **目前狀態快照**：`docs/00_core/PROJECT_SNAPSHOT.md`
+- **產品方向**：`docs/00_core/PRODUCT_ROADMAP_POST_REFACTOR.md`
 - **6 個月工程路線**：`docs/00_core/ROADMAP_6M_ENGINEERING.md`
+- **目前／目標架構**：`docs/01_architecture/system_architecture.md` / `docs/01_architecture/target_system_architecture.md`
 - **V1.1 至 V2.0 版本節奏**：`docs/00_core/VERSION_ROADMAP_V1_1_TO_V2_0.md`
 - **V2.1 至 V4.0 長期版號階梯**：`docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`
 - **baldr 產品北極星**：`docs/01_architecture/system_vision_specification.md`
@@ -494,6 +496,8 @@ python ui_qt/main.py
 - **完整操作手冊**：`docs/07_guides/APPLICATION_MANUAL.md`
 - **專案盤點報告**：`PROJECT_INVENTORY.md`（完整的專案結構盤點，與本文檔同層）
 - **文檔索引**：`docs/00_core/DOCUMENTATION_INDEX.md`（所有文檔的索引）
+- **External Evidence 執行入口**：`docs/superpowers/plans/2026-07-13-oos-exposure-custody-audit-execution-plan.md`
+- **Terra 執行交接**：`docs/superpowers/prompts/2026-07-13-terra-external-evidence-execution-handoff.md`
 - **歷史 Phase 設計追溯**：`docs/05_phases/README.md`（Historical / Reference，不作目前 roadmap）
 
 ---

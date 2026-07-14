@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 固定 `dev`；不得建立或切換 branch/worktree。
-- Baseline 固定 `4f72766a1d1e7bd4b80ccb595ad3cb2fa84bd84a`，除具體 regression 外不重做 A～G。
+- A～G 工程錨點固定為 `4f72766a1d1e7bd4b80ccb595ad3cb2fa84bd84a`，除具體 regression 外不重做 A～G；每次執行另由 Task 0 封存當下 `execution_baseline_sha`，不得要求 HEAD 回退到工程錨點。
 - 不修改 `ScoringEngine` 權重或正式 Rule、Recommendation、Advice、Portfolio、Exit、Strategy Lifecycle、scheduler。
 - `production_blend_alpha_bp=0`；不得 auto promotion、auto retrain、auto exit、auto rebalance、broker execution。
 - 正式資料只允許 bounded、read-only；測試與 rehearsal 只寫 `tmp_path`／隔離 working copy／獨立 evidence registry。
@@ -31,7 +31,7 @@
 
 | 項目 | 基線真相 | 不得誤解為 |
 |---|---|---|
-| Git | `HEAD == origin/dev == 4f72766...`、clean | future execution 已開始 |
+| Git | A～G 工程錨點 `4f72766...`；執行時要求 clean `dev`、`HEAD == origin/dev` 且 HEAD 為工程錨點後代 | future execution 已開始或可回退重做 A～G |
 | A～G | engineering integration verified | formal product closeout |
 | Tests | pytest 2240、mypy 455、Gate 2～7 35/35 | 投資有效 |
 | Dashboard | visibility verified | source accepted |
@@ -529,9 +529,10 @@ class ExternalEvidenceValidationVerifier:
   git rev-parse HEAD
   git rev-parse origin/dev
   git status --short
+  git merge-base --is-ancestor 4f72766a1d1e7bd4b80ccb595ad3cb2fa84bd84a HEAD
   ```
 
-  Expected: `dev`、兩個SHA均為 `4f72766a1d1e7bd4b80ccb595ad3cb2fa84bd84a`、status無輸出。若未來經明確核准更新baseline，preflight record必須同時保存新SHA與核准來源，不能默認漂移。
+  Expected: `dev`、`HEAD == origin/dev`、status無輸出，且 ancestor check exit 0。將當下 HEAD 寫入 ignored preflight record 的 `execution_baseline_sha`；`4f72766...` 只作 A～G 工程錨點，不是要求回退的執行 HEAD。若分支不一致、工作樹不乾淨或 HEAD 不是工程錨點後代，立即停止，不自行 switch／pull／reset。
 
 - [ ] **Step 3: 凍結 ownership與forbidden paths**
 
@@ -542,6 +543,8 @@ class ExternalEvidenceValidationVerifier:
   確認本wave只寫tmp／new evidence registry；正式market DB hash/size/mtime只在必要的bounded read-only audit前後比對。
 
 ### Task 1: EV3-A 2025 OOS Exposure／Custody Audit（EV3第一步）
+
+本 Task 的 canonical 操作 companion 為 [OOS Exposure／Custody Audit Execution Plan](2026-07-13-oos-exposure-custody-audit-execution-plan.md)；其 hard gates 與 handoff 欄位優先於本節摘要，但不得改變本 Master Plan 的 domain contract。
 
 **Owner:** OOS Custody Reviewer
 **Files:** Create `ml_module/oos_exposure_custody.py`、`scripts/audit_ml_oos_exposure.py`、兩個tests。
@@ -770,6 +773,8 @@ class ExternalEvidenceValidationVerifier:
   ```
 
 ### Task 4: EV4 Experiment Preregistration 與 Rule Champion Snapshot
+
+建立真實 preregistration artifact 時使用 [Experiment V1 Preregistration Template](../../06_qa/EXPERIMENT_V1_PREREGISTRATION_TEMPLATE.md)；fixture 中的 0 bp 只可測 deterministic contract，不得帶入真實 Gate。
 
 **Owner:** Quant Validation Owner／Rule Baseline Owner
 **Files:** Create preregistration與Champion snapshot services/tests。
@@ -1488,7 +1493,7 @@ flowchart LR
 
 ### 11.6 Terra 可直接使用的第一輪啟動 Prompts
 
-以下 prompts 只供下一輪明確授權後使用；本次不啟動。
+Canonical 執行交接見 [Terra External Evidence Execution Handoff and Prompt Pack](../prompts/2026-07-13-terra-external-evidence-execution-handoff.md)。以下內容只保留為各工作流摘要；第一個可執行任務固定為 Prompt 1 / Task 1，且仍需在實際啟動時通過動態 baseline preflight。Prompt 2～5 不得因 Prompt 1 完成而自動啟動。
 
 #### Terra Prompt 1 — EV3 OOS Custody（最高優先）
 

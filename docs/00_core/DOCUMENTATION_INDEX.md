@@ -13,6 +13,16 @@
 
 ## 0. 核心入口
 
+### Scoped reading order
+
+1. 先讀 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 取得目前狀態；任何 dated plan／closeout 都不能覆寫它。
+2. 再讀 [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) 定位權威入口；涉及產品方向讀 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md)，涉及六個月工程順序讀 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)。
+3. 涉及目前模組／資料流讀 [system_architecture.md](../01_architecture/system_architecture.md)；涉及未來領域邊界才讀 [target_system_architecture.md](../01_architecture/target_system_architecture.md)，不得把 target 當 current。
+4. 涉及產品原則讀 [system_vision_specification.md](../01_architecture/system_vision_specification.md)；涉及 V2.1+ maturity、外部參考或舊工作承接，再條件式讀 Version Roadmap、External Blueprint、Legacy Carryover。
+5. 涉及 UI／操作／參數／結果／安全限制讀 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。本 Index 與 [PROJECT_NAVIGATION.md](../../PROJECT_NAVIGATION.md) 只用於找路，不作狀態真相。
+
+下表是入口 catalog，不另定優先順序或完成狀態。
+
 | 文件 | 用途 |
 |---|---|
 | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Roadmap Hub，指向 Snapshot、6M Roadmap、Architecture 與歷史歸檔。 |
@@ -119,6 +129,8 @@
 | [superpowers/README.md](../superpowers/README.md) | [歷史/實作軌跡] Superpowers specs / plans 目錄邊界，說明 spec / plan 不取代 Snapshot、6M Roadmap 或版本 roadmap。 |
 | [2026-07-13-external-evidence-investment-validation-design.md](../superpowers/specs/2026-07-13-external-evidence-investment-validation-design.md) | [規劃/未執行] External Evidence 與 Investment Effectiveness Validation 核准設計；採雙時鐘並行，鎖定 EV1～EV5 的因果證據、來源治理、OOS custody、公平比較與人工 promotion 邊界，不代表 EV1～EV5 已實作或任何 external Gate 已完成。 |
 | [2026-07-13-external-evidence-investment-validation-master-plan.md](../superpowers/plans/2026-07-13-external-evidence-investment-validation-master-plan.md) | [規劃/未執行] 上述設計的 task-by-task Master Plan、dependency DAG、ownership、fail-closed規則、可平行工作與 Terra 啟動 prompts；本 planning closeout 不啟動工作包、不改 Snapshot／Roadmap完成狀態。 |
+| [2026-07-13-oos-exposure-custody-audit-execution-plan.md](../superpowers/plans/2026-07-13-oos-exposure-custody-audit-execution-plan.md) | [執行交接/未執行] EV3 第一個切片的 bounded execution plan；只建立不讀 2025 outcome values 的 custody auditor／CLI／tests，缺聲明或 machine evidence 時維持 `indeterminate`。 |
+| [2026-07-13-terra-external-evidence-execution-handoff.md](../superpowers/prompts/2026-07-13-terra-external-evidence-execution-handoff.md) | [執行交接/未啟動] Terra 第一任務、hard gates、Executor／Independent QA prompts 與 handoff schema；worker 不操作 Git，不自動串接後續 EV tasks。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/specs/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 多模式實驗室、候選池與 Phase 3 → Portfolio 來源追溯設計。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/plans/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 工作流重整第一階段實作計畫。 |
 | [2026-06-11-financial-float-boundary-governance-design.md](../superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md) | 金融核心白名單的 AST float 邊界掃描、逐行分類標記與 pytest 防回歸設計。 |
@@ -232,7 +244,9 @@
 | [GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md) | 後續 agent 的 Gate 2–7 接手入口：append-only registry、Workbench projection、CLI 與文件導覽。 |
 | [GATE_7_ML_SHADOW_ENGINEERING.md](../06_qa/GATE_7_ML_SHADOW_ENGINEERING.md) | 結構化傳統 ML shadow challenger 的資料凍結、available-date、purged walk-forward、calibration、drift、promotion review 與重驗規則。 |
 | [V2_1_ENGINEERING_READINESS_2026_07_12.md](../06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md) | V2.1 engineering readiness：記錄 `592d3db` 的 Guided 三重門檻、最大持倉 `1..8`、Professional candidate 分區、focused suite、人工 UI 文案 smoke 與回退錨點。 |
-| [V2_1_FORMAL_CLOSEOUT_2026_07_12.md](../06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md) | V2.1 formal closeout approval record：engineering readiness 證據、owner / timestamp / decision 必填欄位、人工 smoke、殘餘 Gate 與回退；目前為 `awaiting_release_owner_confirmation`。 |
+| [V2_1_FORMAL_CLOSEOUT_2026_07_12.md](../06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md) | V2.1 formal closeout approval record：release owner 已於 2026-07-12 14:51:42 -07:00 `approve`，狀態為 `formal_closeout_complete`；此 bounded Advice closeout 不代表投資有效性、broker、scheduler、P0 source acceptance 或 ML production。 |
+| [GEMINI_DOCUMENTATION_CROSS_AUDIT_ADJUDICATION_2026_07_13.md](../06_qa/GEMINI_DOCUMENTATION_CROSS_AUDIT_ADJUDICATION_2026_07_13.md) | Gemini A～K／P0～P3 的 repository、Git、source 與 Scoped SSOT 最終裁決；區分 false positive、historical-only、scoped-not-conflict 與 human decisions。 |
+| [EXPERIMENT_V1_PREREGISTRATION_TEMPLATE.md](../06_qa/EXPERIMENT_V1_PREREGISTRATION_TEMPLATE.md) | Experiment V1 immutable preregistration 模板；Primary／Guardrail 固定，material effect 與 downside margin 必須由具名人類 owner 在 unblind 前以整數 bp 簽核。 |
 | [PROJECT_SNAPSHOT_AUDIT_2026_07_12.md](../06_qa/PROJECT_SNAPSHOT_AUDIT_2026_07_12.md) | Snapshot claim 證據矩陣：保留 / 移至歷史 / 限制 / 去重判定與 Scoped SSOT 稽核。 |
 | [SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md](../06_qa/SHIM_LEGACY_REMOVAL_AUDIT_2026-07-12.md) | Wave 6 compatibility shim／legacy removal 的 consumer、dynamic import、persisted class-path 與 release closeout 證據。 |
 
@@ -376,12 +390,12 @@
 
 ## 目前開發狀態
 
-> 現況仍以 `PROJECT_SNAPSHOT.md` 為準。Post-Refactor 文件已建立，但屬產品／目標架構規劃，不代表 Advice Contract、Portfolio Coach、Position Health / Exit、P0 formal ingestion 或 ML production 已實作。
+> 本節只作導航摘要；現況仍以 `PROJECT_SNAPSHOT.md` 為準，方向／工程／架構分別回到各自 Scoped SSOT。
 
-- **已完成（三個產品閉環之基礎建置與主要深化）**：資料與市場狀態閉環（SQLite DB-first/視覺化檢視/Smart Money Terminal/快速/安全更新工作台）、研究驗證閉環（Research Lab 多模式實驗室/單股與批次回測/Walk-forward/推薦組合回測 MVP/Fast Renderer/Promote/批次並行化/Strategy & Scoring Governance 機制回歸）、持倉檢查閉環（Portfolio Tab/來源追溯/策略與價格監控/停損停利警示/籌碼監控與下鑽）、以及 SQLite 檢視器分頁與規格化 Excel 報告背景匯出。
-- **進行中 / 當前治理**：fixed / quantile 實證 Gate 已通過；quantile 未優於 fixed 並維持 opt-in。Research Run Registry M2-A / M2-B / M2-C 與 final registry governance gate 已完成；Month 3 Factor Layer v1、Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉；Month 6 Strategy Lifecycle / Portfolio Feedback v1 已完成第一輪 service / gate / UI 入口。
-- **未來 6 個月主線**：見 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md)，目前主線已轉為 Phase 0 evidence accumulation、V2.0 Phase 1 read-only Workbench 後已收口的 Phase 2 Workbench MVP / background evidence feed / read-only Action Items / Operating Loop UI / left navigation IA、後續 V2.2 真實 evidence operating loop、Phase 3 data source dry-run、Phase 4 execution realism 與 Phase 5 scheduler approval gate；長期版號對照見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
-- **待開始 (Backlog)**：Phase 5 中的 PDF 報告輸出。
+- **工程狀態**：A～F committed handoff 已由 G 的跨流 composition／pure verifier 驗證；Gate 2～7 pure engineering 與 evidence rehearsal engineering 已完成，但不是 formal product closeout。
+- **外部狀態**：Week 1 已完成，weekly history 為 `1/3 waiting_for_time`，multi-day dry-run 為 `3/3 ready`；forward maturity、P0 source/license decisions、paper/exit evidence、ML formal OOS／promotion 與 production automation 仍 pending。
+- **產品／安全邊界**：V2.1 bounded Advice 為 `formal_closeout_complete`；`formal_oos_allowed=false`、`production_blend_alpha_bp=0`，scheduler／broker／auto action 未啟用。
+- **下一階段執行入口**：先讀 [External Validation Register](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md)；External Evidence 第一個技術切片固定是 [OOS Exposure／Custody Audit](../superpowers/plans/2026-07-13-oos-exposure-custody-audit-execution-plan.md)，不讀 2025 outcome values，也不改 Gate。
 
 ---
 
@@ -395,6 +409,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-13：完成 Gemini 文件交叉稽核裁決；校正 Scoped reading order、V2.1 closeout、目前 UI／weekly progress導航與 External Evidence 執行基線，新增 OOS Audit plan、Experiment V1 preregistration template 與 Terra handoff。External Gate、formal OOS、alpha 與 production automation 狀態不變。
 - 2026-07-13：新增 External Evidence 與 Investment Effectiveness Validation 核准設計及 Master Plan 索引；文件只定義後續 EV1～EV5 執行路徑，Snapshot、Roadmap、external Gate 與正式產品狀態均未改變。
 - 2026-07-12：完成全 docs 位置稽核；將 Multi-Agent workflow 移至 `docs/agents/`、Shim／Legacy removal audit 移至 `docs/06_qa/`，並將兩份已完成重構文件移至 `docs/09_archive/`，同步所有索引與引用。
 

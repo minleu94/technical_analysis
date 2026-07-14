@@ -145,7 +145,7 @@ python ui_qt/main.py
 
 「總覽」頂部會先顯示四個指揮台摘要 block：今日待判讀、人工待處理、等待真實時間、Warnings。等待真實時間 block 會明確顯示 weekly history 與 multi-day dry-run 比例，讓使用者先掃描重點再往下看表格。「Evidence」、「持倉追蹤」與「操作節奏」子頁目前是摘要與下鑽入口，也是預留深挖區；完整互動能力仍需等後續功能切片與正式資料累積，不能因位置已預留就標示為已完成。
 
-Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Phase 0 weekly history 仍為 `0/3`；multi-day dry-run record 已為 `3/3 ready`，但真實 manual review / action-item rhythm 仍需正式資料與真實時間累積，不能因 UI 重排、replay summary、fixture 或人工改表而標示為完成。
+Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Week 1 已完成，Phase 0 weekly history 目前為 `1/3 waiting_for_time`；multi-day dry-run record 已為 `3/3 ready`，但 Week 2 / Week 3 與真實 manual review / action-item rhythm 仍需正式資料與真實時間累積，不能因 UI 重排、replay summary、fixture 或人工改表而標示為完成。
 
 ## Gate 1 Advice：決策工作台的唯讀操作
 
@@ -942,7 +942,7 @@ No-look-ahead 邊界：
 - Recommendation 類來源只會選 `created_at` 日期不晚於當日 decision date 的 persisted result；若沒有當日以前 result，會記錄 `recommendation_asof_result_missing`，並略過 `recommendation` / `why-not` / `liquidity-gate` 類來源，不用未來 result 補值。
 - Event metadata 會帶入 `replay_mode=historical_replay`、`source_label=simulated_scheduler`、`replay_run_id`、`replay_decision_date` 與 `replay_data_as_of_date`，方便和真實 scheduled dry-run 分開查。
 - Forward outcome 計算會以 `data_as_of_date` 限制價格可見日；`final` 模式以 replay 最後一個交易日作上限，`daily` 模式以每日 replay date 作上限。在可見日尚未成熟的 5 / 10 / 20 / 60 日 window 仍會維持 pending，不會提前看未來價格。Pending outcome 會依交易日序列揭露 `expected_maturity_date` 與剩餘交易日；日曆資料不足時顯示 `waiting_for_calendar`，不得用 calendar days 補算。
-- Replay report 只能用來看 source gap、payload gap、decision workflow 與 V2.0 workbench 設計方向；不計入 weekly history `0/3`、已達 `3/3 ready` 的 multi-day dry-run 實際紀錄、manual approval 或 production scheduler gate，也不是投資有效性證明。
+- Replay report 只能用來看 source gap、payload gap、decision workflow 與 V2.0 workbench 設計方向；不計入目前 weekly history `1/3 waiting_for_time`、已達 `3/3 ready` 的 multi-day dry-run 實際紀錄、manual approval 或 production scheduler gate，也不是投資有效性證明。
 
 結果判讀：
 
@@ -1150,7 +1150,7 @@ Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified 
 - 操作節奏：只從 `WorkbenchDashboardDTO.operating_loop_steps` 顯示 daily first-look、manual queue、weekly review history、multi-day dry-run、manual review note 與 scheduler gate。這個區塊預設收合；展開後以直列 timeline card 呈現步驟編號、狀態 badge、摘要與 linked item chips，避免水平捲動。長的 source trace、人工提示與 `write_intent=false` 會收在「展開細節」中；Workbench 不會把項目標記完成、不會寫 DB、不會補 weekly history / multi-day dry-run、不會啟用 scheduler。
 - Evidence mode / data quality：讀取 DTO 內的 evidence summary 與 diagnostics；上方以兩張摘要卡拆分「邊界與 Gate 摘要」及「覆蓋率與缺口」，下方表格只保留證據、狀態與摘要，完整 diagnostics 需點列後在 Inspector 查看。若 payload 帶 replay summary，會揭露 `simulated_scheduler`、source gap / coverage、payload gap、outcome maturity、benchmark coverage、industry benchmark coverage、missing industry benchmark 與 pending future-data 限制。2026-07-06 `_reference_fix` summary 的目前判讀是市場 benchmark coverage 已補齊成熟 outcomes，但 screening matrix source gap、產業 benchmark 大量缺口與 pending future-data 仍阻擋 production readiness；這不是投資有效性結論。
 - 工程預演狀態 / Evidence Rehearsal：在「Evidence mode」下方查看注入的 `EvidenceRehearsalDashboard`。此唯讀區塊固定揭露「工程／Replay／Shadow；不是 forward evidence」、rehearsal tier、coverage、blockers、是否提供 Shadow comparison 與 `Forward handoff：pending`。coverage 會逐來源列出 observed、missing、degraded、future-blocked 與 immature-label 計數；`missing`、source outage 或 `insufficient_sample` 必須維持已阻擋／預演狀態，不得被畫成 clean、ready 或正式通過。這個區塊沒有 apply / promote 按鈕，不能寫入 DB、啟用 scheduler、改變 Advice 或把 replay / shadow 結果視為 forward evidence；要補齊問題時，只能依 blocker 回到既有人工、資料授權或真實時間流程處理。
-- Daily Checklist：以 status card 顯示 freshness、Evidence gate、multi-day dry-run、manual review 與 scheduler write-mode 等 gate，內容可換行，不再以寬表格呈現。Phase 0 weekly history 仍為 `0/3`；multi-day dry-run record 已為 `3/3 ready`，但 manual review / action-item rhythm 只能繼續靠真實時間累積，不能用 fixture、單次 smoke、手動改表或 replay 補齊。
+- Daily Checklist：以 status card 顯示 freshness、Evidence gate、multi-day dry-run、manual review 與 scheduler write-mode 等 gate，內容可換行，不再以寬表格呈現。Week 1 已完成，Phase 0 weekly history 目前為 `1/3 waiting_for_time`；multi-day dry-run record 已為 `3/3 ready`，但 Week 2 / Week 3 與 manual review / action-item rhythm 只能繼續靠真實時間累積，不能用 fixture、單次 smoke、手動改表或 replay 補齊。
 - Warnings / degraded source：missing DB、missing table、snapshot missing、replay limitation 或 Agent sample limitation 都會以 warning 保留；Warnings 會依唯讀 / Phase Gate、缺漏來源、Replay / 模擬資料、資料品質、需要人工覆盤與其他警示分組，每組預設顯示前三項，其他項目可展開查看。不要手動補空資料或改表讓畫面變綠。
 
 Replay summary 只能使用 JSON summary；不得把 replay DB 直接交給 prototype CLI 或 Qt Workbench。`--db-path` 建議使用 working-copy DB 或明確允許的 read-only source path；missing / degraded source 是要被呈現的 evidence gap，不可手動補 fixture 當作 gate 通過。Workbench CLI 與 Qt shell 都是 V2.0/V2.1 資訊架構與 read-only contract 檢查，不代表 production scheduler approval，也不是交易建議。
@@ -1439,7 +1439,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 | 市場探索 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 推薦分析 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 觀察清單 | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 市場探索 / 市場總覽；決策工作台 / 決策來源 | 完成（每日決策唯一實例位於市場探索 index 0；Workbench 僅導覽） | 完成 | 完成 | 今日待判讀、空狀態、session-only 已查看提示、主結論 / 行動等級、焦點卡、quality / warnings、月營收／三大法人資料可見性判讀；Market Breadth v1 / Sector Rotation v1 / Relative Strength / Liquidity Ranking v1 / Watchlist Trigger v1 / Portfolio Alert v1 / Smart Money semantics / Why Not v1 / fundamental diagnostics prompts 已接線 | 完成；可見性區塊不改 action / focus / Score，Phase 0 weekly history 仍為 `0/3`，multi-day dry-run record 已為 `3/3 ready`，manual review / action-item rhythm 仍待正式資料累積 |
+| 市場探索 / 市場總覽；決策工作台 / 決策來源 | 完成（每日決策唯一實例位於市場探索 index 0；Workbench 僅導覽） | 完成 | 完成 | 今日待判讀、空狀態、session-only 已查看提示、主結論 / 行動等級、焦點卡、quality / warnings、月營收／三大法人資料可見性判讀；Market Breadth v1 / Sector Rotation v1 / Relative Strength / Liquidity Ranking v1 / Watchlist Trigger v1 / Portfolio Alert v1 / Smart Money semantics / Why Not v1 / fundamental diagnostics prompts 已接線 | 完成；可見性區塊不改 action / focus / Score，Week 1 已完成，Phase 0 weekly history 為 `1/3 waiting_for_time`，multi-day dry-run record 已為 `3/3 ready`，Week 2 / Week 3 與 manual review / action-item rhythm 仍待正式資料累積 |
 | Research Lab | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 持倉管理 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
@@ -1488,6 +1488,7 @@ Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **
 
 ## 14. 更新記錄
 
+- 2026-07-13：校正目前 weekly evidence operations history 為 `1/3 waiting_for_time`；這只同步既有 Week 1 證據，不改 production scheduler、external Gate completion 或正式產品 closeout。
 - 2026-07-13：Daily Decision Desk 改為「市場探索 > 市場總覽」index 0 的唯一實例；Workbench「決策來源」改為純導覽，不再嵌入第二份 widget。市場總覽新增月營收、三大法人與五類來源的資料可見性區塊；可見性維持 read-only、PIT-aware、fail-soft，且不參與 action、focus、Score 或既有整體品質聚合。
 - 2026-07-12：新增 V2.2 三週 weekly review runbook 入口與 working-copy 保存步驟；目前 weekly `0/3 waiting_for_time`、multi-day `3/3 ready`、scheduler 未核准，不能 formal closeout。
 - 2026-07-12：新增 Gate 1 Advice 唯讀操作、Guided / Professional Mode、安全拒絕輸出、平衡限制、日期 / source trace 與不交易邊界；weekly review working-copy 保存仍是 Gate 2 真實時間工作。

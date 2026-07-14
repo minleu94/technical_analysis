@@ -6,6 +6,8 @@
 
 > 這是未來人工補件、真實時間驗證、資料授權與 ML 更新驗證的操作入口。工程已完成不會自動把下列項目標成 complete。
 
+> External Evidence 下一階段只使用 companion 文件導覽，不由本頁提前建立 revision：先讀 [External Evidence Design](../superpowers/specs/2026-07-13-external-evidence-investment-validation-design.md) 與 [Master Plan](../superpowers/plans/2026-07-13-external-evidence-investment-validation-master-plan.md)；第一個執行切片固定為 [OOS Exposure／Custody Audit Plan](../superpowers/plans/2026-07-13-oos-exposure-custody-audit-execution-plan.md)，Terra 接手邊界見 [Execution Handoff and Prompt Pack](../superpowers/prompts/2026-07-13-terra-external-evidence-execution-handoff.md)。這些文件不改變下表狀態。
+
 ## 狀態更新方式
 
 1. 複製對應 item 成 JSON，revision 加一。
