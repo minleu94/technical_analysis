@@ -1,10 +1,12 @@
 # 文檔索引
 
+> 2026-07-13 system integration：A～F 的 committed handoff、跨流 contracts、唯讀 smoke 與 latency 工程 Gate 已驗證；forward evidence、source acceptance、formal ML OOS／promotion 與 production automation 仍由 External Validation Register / Control Center 管理。
+>
 > Current engineering closeout：[V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)；外部狀態仍由 External Validation Register / Control Center 管理。
 
 > Evidence rehearsal closeout：[Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)（`engineering_rehearsal_complete`；不是 external completion）。
 
-> **最後整理**：2026-07-12
+> **最後整理**：2026-07-13
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，產品方向看 `PRODUCT_ROADMAP_POST_REFACTOR.md`，未來 6 個月工程看 `ROADMAP_6M_ENGINEERING.md`，North Star / Evidence 看 `system_vision_specification.md`，目前／目標架構分別看 `system_architecture.md` / `target_system_architecture.md`。
 
 ---

@@ -1,6 +1,6 @@
 # UI 功能文件（Qt）
 
-> **最後整理**：2026-07-12
+> **最後整理**：2026-07-13
 > **適用範圍**：`ui_qt/` 目前主要使用者介面。
 > **狀態判讀**：目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月工程方向以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；本文件只描述 UI 功能與操作入口。
 > **完整操作**：安裝、逐步操作、參數、結果判讀與排錯見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
@@ -48,10 +48,11 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 - 更新流程改動需同步 `docs/03_data/` 相關指南。
 - SQLite / CSV 雙軌行為改動需同步 `docs/01_architecture/system_architecture.md` 與 `docs/03_data/SQLITE_STORAGE_GUIDE.md`。
 
-### 2. 市場觀察
+### 2. 市場探索
 
 主要 views：
 
+- `ui_qt/views/daily_decision_view.py`（「市場總覽」唯一 Decision Desk instance）
 - `ui_qt/views/market_regime_view.py`
 - `ui_qt/views/strong_stocks_view.py`
 - `ui_qt/views/weak_stocks_view.py`
@@ -61,6 +62,7 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 
 子 Tab：
 
+- 市場總覽
 - 大盤指數
 - 強勢個股
 - 弱勢個股
@@ -70,9 +72,12 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 
 主要能力：
 
+- 市場總覽以 answer-first dashboard 顯示結論、焦點與來源可見性；Workbench「決策來源」只導向此唯一實例，不建立第二份 widget。
+- 月營收、三大法人、信用交易、TDCC 與券商分點卡片保留 status、row count、available date、coverage 與 warning。`row_count=0`／MISSING／DEGRADED 表示缺漏，不是中性分數或業務數值為零，且不參與 action、focus、Score 或品質聚合。
 - 市場 regime 判斷。
 - 強弱勢股票與產業篩選。
 - Smart Money Terminal：個股資金流向、分點進出追蹤、張數 / 金額品質標示。
+- 券商 week／month／股票明細採背景查詢並具 stale-result guard；loading 與單一來源錯誤不凍結主 UI，錯誤以 fail-soft warning 呈現。
 - 可把觀察標的送入候選池 / Watchlist。
 
 文件同步重點：

@@ -8,9 +8,37 @@
 
 執行 `scripts\build_v3_pruning_package.py --input <metrics.json> --output <package.json>`，可把已成熟的 effectiveness metrics 轉成 `retain`、`restrict`、`downweight`、`retire` 或 `defer` 審查提案。樣本不足、必要指標缺失或人工驗證未完成時必定 `defer`。所有 proposal 固定 `apply_action=false`、`review_required=true`，package 固定 `auto_trading=false`；不得用此輸出直接修改推薦權重、threshold、production scheduler 或交易狀態。
 
-> **最後更新**：2026-07-12
+> **最後更新**：2026-07-13
 > **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
 > **範圍**：本手冊涵蓋目前左側主導覽的 8 個主工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
+
+## 2026-07-13 系統工程整合判讀
+
+這次整合必須拆成六個狀態判讀，不可用單一「完成」取代：
+
+1. `engineering_integration=verified`：A～F committed handoff、跨流 contract、唯讀 smoke 與 pure verifier 已通過工程驗證。
+2. `historical_ml_shadow=continue_shadow`：只顯示 dataset／model／prediction identity 與 shadow diagnostics；`formal_oos_allowed=false`，不參與 ranking、Score、Advice、Portfolio 或 Exit。
+3. `dashboard_visibility=verified`：Daily Decision Desk 唯一實例位於「市場探索 > 市場總覽」；Workbench「決策來源」只做導覽。
+4. `forward_evidence=pending`：唯讀 replay 或 working-copy rehearsal 不等於真實週期 evidence。
+5. `source_acceptance=pending`：source／license 尚未逐項 accepted；official monthly／quarterly row count 為 0、corporate-action coverage unknown 時，必須顯示缺口，不得解讀為業務數值為零。
+6. `production_automation=pending`：scheduler、auto promotion、broker action 均未啟用；ML production blend alpha 固定為 0，且目前沒有通過 real frozen artifact smoke。
+
+### 市場總覽與資料可見性
+
+1. 從左側進入「市場探索 > 市場總覽」。這是唯一 Decision Desk instance；從 Workbench 進入只會導向同一畫面。
+2. 檢查月營收、三大法人、信用交易、TDCC 與券商分點等來源卡。卡片的 status、row count、available date 與 warning 是資料可見性，不是推薦分數。
+3. `row_count=0`、MISSING、DEGRADED 或 coverage unknown 都代表來源缺漏／受限；不可補成中性值，也不可當作「指標為零」。
+4. 更新時保留 loading；若較早查詢晚於新查詢返回，stale-result guard 會忽略舊結果。錯誤只降級該來源並保留 warning，不改 action、focus 或 Score。
+5. 券商查詢採背景載入；week／month 與股票明細應在畫面恢復互動後判讀，勿以 loading 中的暫態內容做結論。
+
+### Evidence 模式與 ML shadow
+
+- `projection_only` 只投影與驗證輸入，不建立 working copy。
+- `working_copy_e2e` 只允許明確指定、位於 `DATA_ROOT` 之外的 working-copy DB 與輸出目錄；正式來源必須唯讀，完成後應比對正式 DB hash／mtime 未改變。
+- `degraded` 是成功保留缺口的安全結果，不是正式 closeout。缺 market、Advice、paper、health、outcome、weekly、signal、ML adapter 或 lineage parent 時不得升級狀態。
+- ML shadow 畫面只供研究診斷。看到 `continue_shadow`、prediction 或 challenger metadata，不代表 formal OOS、promotion、production alpha 或投資有效性。
+
+排錯時先看來源卡與 warnings：缺來源／row count 0 回到對應 source acceptance；working-copy 路徑落在正式資料根目錄時改用外部暫存路徑；frozen artifact 不存在或驗證被擋時維持 alpha 0，禁止用 fixture 冒充真實 artifact。
 
 ## 1. 系統能做什麼
 

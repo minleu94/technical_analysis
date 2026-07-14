@@ -8,7 +8,13 @@
 完整工作區導覽：
 
 - [baldr完整操作手冊](../07_guides/APPLICATION_MANUAL.md)
-- 涵蓋數據更新、市場觀察、推薦分析、觀察清單、Research Lab、持倉管理與 Runtime Observatory
+- 涵蓋數據更新、市場探索、推薦分析、觀察清單、Research Lab、持倉管理與 Runtime Observatory
+
+### 市場探索與 Shadow 狀態判讀
+
+「市場探索 > 市場總覽」是 Daily Decision Desk 唯一實例；「決策工作台 > 決策來源」只負責導向同一畫面。來源卡顯示 MISSING、DEGRADED、`row_count=0` 或 coverage unknown 時，代表資料缺漏／受限，不代表指標為零，也不會補成推薦分數。
+
+ML 的 `continue_shadow` 只表示可繼續離線診斷；`formal_oos_allowed=false`、production blend alpha 0、沒有 real frozen artifact smoke 時，不得把 prediction 解讀為正式推薦、Advice、Portfolio 或自動交易。完整 Evidence 模式、working-copy 安全界線與排錯見 [完整操作手冊](../07_guides/APPLICATION_MANUAL.md#2026-07-13-系統工程整合判讀)。
 
 進階專題：
 

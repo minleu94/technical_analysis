@@ -1,7 +1,8 @@
 # V2.1 至 V4.0 產品成熟度路線圖
 
-> **最後更新**：2026-07-12
+> **最後更新**：2026-07-13
 > **目前狀態**：`V3.3 Engineering Complete` / `V4.0 Evidence Accumulation Track`；不可宣稱正式 V4.0，真實 evidence 與人工 Gate仍待累積。
+> **跨流整合校正**：V3.3 的 engineering shadow chain 已通過 committed-handoff 與跨模組驗證；真實 frozen artifact smoke、formal OOS、必要 shadow days、人工 promotion review 與 production alpha 仍未完成，因此 maturity 不升級。
 > **定位**：本文件是 V2.0 之後的長期產品成熟度與版本階梯權威；版號代表產品能力與證據成熟度，不代表功能數量。
 > **工程順序**：未來六個月以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準。
 > **產品方向**：投資問題、能力演進與產品 Gate 以 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 為準。

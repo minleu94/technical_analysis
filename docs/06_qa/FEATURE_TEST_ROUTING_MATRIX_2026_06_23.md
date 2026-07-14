@@ -130,3 +130,18 @@ Testing / QA Agent 接收到功能驗證請求後，將其映射到系統的六�
   * **否** (比較多組 Research Run 需要讀取並載入 SQLite Run metadata 與 Parquet 明細，應限於 `Full` 模式)。
 * **資料稽核政策 (Data Audit Policy)**：
   * **從不觸發 (Never)** (純粹比較回測 Registry 數值，無額外外部資料稽核需求)。
+
+---
+
+## 3. 2026-07-13 System Integration 測試路由
+
+| 範圍 | 路由 | 說明 |
+|---|---|---|
+| `tests/test_cross_workstream_system_integration.py` | slow E2E / environment | 依固定 A→C→E1→D→B→E2→F dependency order 驗證跨流契約；不放 Quick。 |
+| `tests/test_verify_system_execution_blueprint.py` | governance / docs / tooling | 純 JSON verifier、malformed input 與 fail-closed contract；可獨立 focused 執行。 |
+| `tests/test_full_app_healthcheck_test_inventory.py` | healthcheck-owned contract | 保護 inventory 完整性；新增測試必須先分類，不得以未登錄測試繞過 healthcheck。 |
+| Broker latency、P0、PIT、market visibility、corporate action | service oracle / data-market | 需要真實資料判讀時才觸發 Data Audit；正式 DB 一律唯讀並比對 integrity。 |
+| `ml/` focused unit tests | general unit / keep in pytest | 僅驗證 shadow contract、split、identity、drift 與 gate；不得宣稱 formal OOS 或 production。 |
+| Smart Money async UI | candidate UI bridge | 驗證 loading、stale-result、error recovery 與 UI responsiveness；真實大量 broker I/O 留在 Full。 |
+
+跨流失敗必須回到擁有該 contract 的 workstream 修正。整合 adapter／verifier 不得補缺值、把 `degraded` 改成 ready、放寬 source acceptance／ML promotion Gate，或用 fixture 折抵 forward evidence、real artifact 與人工／時間條件。

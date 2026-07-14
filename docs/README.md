@@ -1,7 +1,8 @@
 # Docs 文檔目錄
 
-> **最後整理**：2026-07-06
+> **最後整理**：2026-07-13
 > **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，V2.0 之後長期版號階梯看 `00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`，外部參考與 V1.5-V2.0 版本形狀看 `00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
+> **系統整合入口**：跨流 adapter 位於 `app_module/system_execution_blueprint_adapters.py`，純驗證入口位於 `scripts/verify_system_execution_blueprint.py`。兩者只組合／驗證既有輸出；任一 evidence、data、ML、dashboard 或 latency 契約失敗時，必須回到對應 owner 修正，不得在整合層補值或放寬 Gate。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
 

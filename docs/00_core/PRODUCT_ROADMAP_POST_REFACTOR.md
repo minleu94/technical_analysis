@@ -1,5 +1,7 @@
 # baldr Post-Refactor 產品 Roadmap
 
+> **2026-07-13 跨流整合狀態**：Evidence、資料可見性、PIT identity、broker latency、ML shadow metadata 與 dashboard contract 已完成工程鏈驗證。ML 決議仍是 `continue_shadow`、`formal_oos_allowed=false`，production blend alpha 固定為 0；P0 source／license 未 accepted，forward evidence 與 production automation 仍 pending。此整合不改寫 Advice、Portfolio、Exit 或正式 Recommendation 行為。
+>
 > **2026-07-12 純工程狀態**：Gate 2–7 的批准工程包已完成，涵蓋 Evidence/V3、P0 source contracts/shadow adapters、Paper Portfolio、Position Health/Exit、完整結構化傳統 ML shadow challenger、closeout verifier 與控制中心。這只代表 `pure_engineering_complete`；Gate 2 真實週期、Gate 3 逐來源接受、Gate 4/6 paper/exit 時間證據、Gate 5 人工 pruning 決議、Gate 7 shadow days/revalidation/promotion review 仍由 [External Validation Register](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) 管理，不能標成 formal product closeout。
 
 > **建立日期**：2026-07-11

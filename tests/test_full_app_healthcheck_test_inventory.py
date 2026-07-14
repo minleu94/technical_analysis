@@ -121,13 +121,15 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
 
 
 def test_inventory_exposes_pytest_collection_statuses():
-    assert len(PYTEST_COLLECTED_FILES) == 412
+    assert len(PYTEST_COLLECTED_FILES) == 455
     assert len(PYTEST_SUPPORT_FILES) == 1
     assert len(PYTEST_NOT_COLLECTED_FILES) == 29
 
     assert is_collected_by_default_pytest("tests/test_full_app_healthcheck_test_inventory.py")
     assert get_pytest_collection_status("tests/test_full_app_healthcheck_test_inventory.py") == "collected"
     assert get_category("tests/test_evidence_rehearsal_dtos.py") == "governance-doc-tooling"
+    assert get_category("tests/test_verify_system_execution_blueprint.py") == "governance-doc-tooling"
+    assert get_category("tests/test_cross_workstream_system_integration.py") == "slow-e2e-or-environment"
     assert is_collected_by_default_pytest("tests/test_evidence_rehearsal_dtos.py")
     for path in (
         "tests/test_evidence_rehearsal_coverage.py",
