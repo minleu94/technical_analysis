@@ -21,19 +21,33 @@ Core family 只接受 price、technical、market、industry。Fundamental 在正
 - `research`：可保留 degraded labels，但 manifest 必須是 `research_only_degraded`、`formal_oos_allowed=false`，並保存 blocker。
 - E2 coverage 改善後仍需建立新 dataset/model generation，不可覆寫既有 manifest 或 artifact。
 
-## Locked OOS 指令
+## Terra Development Dataset V0（2025 seen OOS）
+
+2025 已由 owner 決議永久標為 `seen_oos`／`development_data`；不得再稱為 virgin／untouched formal OOS。`formal_oos_allowed=false`、`production_blend_alpha_bp=0`，正式 Rule-only path 不變。Terra V0 是獨立的 development-only generation：只讀 SQLite 的 `daily_prices`、`technical_indicators`、`market_indices`、`industry_indices`；fundamental 與 broker 一律排除。
+
+操作前先確認 `DEVELOPMENT_OUTPUT_ROOT` 位於 `DATA_ROOT` 之外，且 generation ID 尚未使用。下列範例只產生最多五個 decision dates 的 bounded smoke；所有 artifact 只會寫到指定 output root：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_ml_2025_oos.py `
-  --freeze-summary <OUTPUT_ROOT>\freeze_summary.json `
-  --oos-payload <LOCKED_2025_PAYLOAD> `
-  --output-root <OUTPUT_ROOT>\locked-oos-preflight `
-  --confirm-locked-oos
+.\.venv\Scripts\python.exe scripts\build_terra_development_dataset_v0.py `
+  --database D:\Min\Python\Project\FA_Data\sqlite\twstock.db `
+  --development-output-root C:\Temp\technical_analysis_development_output `
+  --generation-id terra-v0-smoke-20260713 `
+  --decision-date-start 2025-01-02 `
+  --decision-date-end 2026-01-31 `
+  --training-as-of 2025-12-31 `
+  --evaluation-as-of 2026-12-31 `
+  --max-decision-dates 5
 ```
 
-Preflight 必須在讀取 `--oos-payload` 前驗證：顯式 confirm、完整 dataset/model hash、所有 train/blend cutoff、`formal_oos_allowed=true`、`production_alpha_bp=0`。任一 blocker 會輸出 `locked_oos_preflight.json`、exit 2，且 `oos_payload_read=false`。
+Feature 一律採 T-1，且 `available_date <= decision_date`。Universe 名稱固定為 `conservative_observed_history`：每一 decision date 至少須有 252 個先前可觀測交易日；來源不提供正式 listing／delisting metadata 時，manifest 必須揭露對應缺口，不能以今日存續股票清單補齊。
 
-禁止因 blocked 或結果不佳而改參數後重跑同一 locked OOS。合法狀態為 `reject`、`continue_shadow`、`shadow_candidate`；工程成功不等於投資有效。
+labels 必須從本次 generation 讀取的受控原始價格資料重建。2025 ready labels 僅可進 `fit_rows`；2026 即使成熟也只能寫入 `evaluation_rows`，不得進 fit、normalizer、hyperparameter 或 blend 選擇。V0 不讀 corporate-action coverage source，因此 research labels 固定是 `dataset_status=research_only_degraded`，manifest 必須保留 `corporate_action_coverage_missing` blocker。每個 generation 保存 dataset/generation ID、registry hashes、四個 source fingerprints、cutoff、date range、row counts、missing／exclusion diagnostics、canonical content hash 與 zero-formal-write flags；已存在的 generation ID 一律拒絕覆寫。
+
+## 2025 Locked OOS 指令已停用
+
+owner 已選擇 2025 方案 B，因此不得執行 `evaluate_ml_2025_oos.py`、不得提供任何 `--oos-payload`，也不得要求或嘗試取得 `formal_oos_allowed=true`。既有 locked verifier 保留為歷史程式邊界，Terra V0 不呼叫、不修改也不解封它。
+
+2025 的唯一允許用途是 Terra development generation；新 temporal holdout 由 `DevelopmentDataUsageDecision.jsonl` 的 `new_holdout_start` 管理。任何日期範圍觸及該 holdout 起點，或其 consumption registry 已標記 consumed 時，Terra CLI 必須在讀取 core source 前停止。工程成功不等於 formal OOS、model promotion 或投資有效。
 
 ## 名詞區分
 

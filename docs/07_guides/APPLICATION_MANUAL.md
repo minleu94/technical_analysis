@@ -40,6 +40,19 @@
 
 排錯時先看來源卡與 warnings：缺來源／row count 0 回到對應 source acceptance；working-copy 路徑落在正式資料根目錄時改用外部暫存路徑；frozen artifact 不存在或驗證被擋時維持 alpha 0，禁止用 fixture 冒充真實 artifact。
 
+### Terra Development Dataset V0（開發者／研究操作）
+
+這是 CLI-only、development-only 的資料集生成工具，不會出現在主 UI，也不會改變 Score、Recommendation、Advice、Portfolio、Exit 或 scheduler。2025 已永久標記為 `seen_oos`，只可作 development；它不再是 formal OOS。2026 成熟 outcomes 只供離線 evaluation，永不進 fit。
+
+1. 將 `--development-output-root` 指向 `DATA_ROOT` 外部的資料夾，例如 `C:\Temp\technical_analysis_development_output`；工具拒絕正式資料根與正式 SQLite 檔。
+2. 指定尚未使用的 `--generation-id`。同 ID 的第二次執行會停止，不覆寫既有 artifact。
+3. 只允許四類 core source：daily price、technical indicators、market indices、industry indices。fundamental／broker 不會讀取，也不會補成 0。
+4. 每筆 feature 只用前一交易日（T-1）資訊，且可得日不晚於 decision date；universe 使用最少 252 日的 `conservative_observed_history`，並將 listing／delisting metadata 缺口列入 diagnostics。
+5. corporate-action coverage 在 V0 未提供時，輸出仍可供研究，但必定顯示 `research_only_degraded`；不得把它解讀成 clean dataset 或 formal OOS。
+6. 讀取 `generations/<generation-id>/manifest.json`：確認 `fit_row_count` 只對應 2025、`evaluation_row_count` 只對應 2026、`formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`formal_rule_only_path_unchanged=true` 及 `zero_formal_write=true`。
+
+若 CLI 回報 source schema、output root、T-1、日期範圍或 generation already exists 錯誤，停止操作；不要改動正式 DB、不要覆寫 artifact，也不要以 2025 結果調參後重新宣稱 formal OOS。
+
 ## 1. 系統能做什麼
 
 目前系統提供：
