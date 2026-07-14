@@ -627,15 +627,31 @@ class UpdateView(QWidget):
 
             self.monthly_revenue_source_version_input = QLineEdit()
             self.monthly_revenue_source_version_input.setObjectName("monthly_revenue_source_version_input")
-            default_version = getattr(
-                self.update_service,
-                "monthly_revenue_source_version",
-                "mops-static-snapshot-monthly-revenue-2026-06-16",
-            )
+            
+            # 動態解析預設版本名稱
+            snapshot_path = self._default_monthly_revenue_snapshot_path()
+            default_version = "mops-static-snapshot-monthly-revenue-2026-06-16"
+            if snapshot_path and snapshot_path.is_file():
+                import re
+                match = re.search(r"_(\d{4}-\d{2}-\d{2})\.csv$", snapshot_path.name)
+                if match:
+                    default_version = f"mops-static-snapshot-monthly-revenue-{match.group(1)}"
+            
             self.monthly_revenue_source_version_input.setText(default_version)
             self.monthly_revenue_source_version_input.setToolTip(
                 "本次寫入版本名稱。用來區分不同批次的月營收資料，未來重跑或比對時可以追溯來源。"
             )
+
+            def on_snapshot_changed(text: str):
+                import re
+                from pathlib import Path
+                path = Path(text.strip())
+                match = re.search(r"_(\d{4}-\d{2}-\d{2})\.csv$", path.name)
+                if match:
+                    self.monthly_revenue_source_version_input.setText(
+                        f"mops-static-snapshot-monthly-revenue-{match.group(1)}"
+                    )
+            self.monthly_revenue_snapshot_input.textChanged.connect(on_snapshot_changed)
 
             form_layout.addRow("MOPS 月營收快照檔：", self.monthly_revenue_snapshot_input)
             form_layout.addRow("正式可得日對照檔：", self.monthly_revenue_availability_input)
@@ -1094,7 +1110,7 @@ class UpdateView(QWidget):
         ]
         if not candidates:
             return snapshot_dir
-        return max(candidates, key=lambda path: path.stat().st_size)
+        return max(candidates, key=lambda path: path.stat().st_mtime)
 
     def _default_monthly_revenue_availability_path(self) -> Path:
         config = getattr(self.update_service, "config", None)
