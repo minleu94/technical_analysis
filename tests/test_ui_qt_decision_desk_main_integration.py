@@ -20,6 +20,7 @@ from app_module.decision_desk_dtos import (
 
 import ui_qt.main as main_module
 from PySide6.QtWidgets import QWidget
+from app_module.research_console_source_service import ResearchConsoleSourceService
 
 
 class _DummySignal:
@@ -314,6 +315,10 @@ def test_main_window_adds_unified_decision_workbench_tab(monkeypatch, tmp_path):
     assert workbench_tab.source_service is _TrackingWorkbenchSourceService.instances[-1]
     assert workbench_tab.auto_refresh is True
     assert workbench_tab.kwargs["replay_summary_json"] == replay_summary_path
+    assert isinstance(
+        workbench_tab.kwargs["research_console_source_service"],
+        ResearchConsoleSourceService,
+    )
     assert callable(workbench_tab.kwargs["navigate_to_daily_decision_callback"])
     assert callable(workbench_tab.kwargs["navigate_to_market_explore_callback"])
     assert callable(workbench_tab.kwargs["navigate_to_evidence_review_callback"])

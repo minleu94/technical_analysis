@@ -141,6 +141,8 @@ Evidence rehearsal 的唯讀工程預演底座已收口為 `engineering_rehearsa
 
 **如果我要改 V2.0 / V2.1 Workbench read-only source adapter、background evidence feed、Action Items 或 Operating Loop**：先看 `WorkbenchSourceService`、`WorkbenchReadOnlyComposer`、`WorkbenchDashboardDTO`、`PreV2ReadinessService` 與 `AgentEvidenceAccessService`；adapter 只能讀受控 DB path / replay JSON summary，missing DB / table 要變成 diagnostics。背景證據流只能彙整既有 DTO / service payload；Action Items 只能顯示人工待處理事項，必須保留 severity / queue group / source label / source trace / degraded reason / sort rank / drill-down target。Operating Loop 只能從 DTO payload 串接 daily first-look、manual queue、weekly history、multi-day dry-run、manual review note 與 scheduler gate，必須保留 source trace / linked item ids / drill-down target / `write_intent=false`。Week 1 已完成，目前 weekly history 為 `1/3 waiting_for_time`，multi-day dry-run 已為 `3/3 ready`；不得用 fixture、手動改表或 replay 補 Week 2 / Week 3，且 multi-day ready 不構成 scheduler approval。Drill-down target 必須對齊 Daily Decision、Evidence Review、Portfolio 舊頁導向，空狀態與 degraded 狀態文案不得暗示 gate passed、補值或建議，且不得建立 repository、寫 DB、讀 UI state、重算 scoring / portfolio / backtest、啟用 scheduler、套用 lifecycle 或產生交易建議。
 
+**如果我要改 Workbench > Evidence / Research Console**：先看 `app_module/research_console_dtos.py`、`app_module/research_console_source_service.py`、`ui_qt/views/research_console_view.py` 與三個 `tests/test_*research_console*`。Source service 只可讀 injected sanitized mapping 或顯式 projection path；MainWindow 以 `RESEARCH_CONSOLE_PROJECTION` 注入，不可自動掃描 development／正式資料目錄。View 只能複製 DTO，必須維持 formal OOS false、production alpha 0、Rule-only formal path、P0-13 與 Broker lane 分離，以及所有 apply / promote / retrain / trade 控制不存在。
+
 ---
 
 ### AI Runtime Subsystem (`runtime/`)

@@ -102,6 +102,8 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 - Read-only Operating Loop 只從 `WorkbenchDashboardDTO.operating_loop_steps` 顯示 daily first-look、manual queue、weekly review history、multi-day dry-run、manual review note 與 scheduler gate；每列必須帶 `source_trace`、`linked_item_ids`、`drilldown_target`、`guidance` 與 `write_intent=false`。Qt model 不標記完成、不寫 DB、不補 Phase 0 時間 gate。
 - Evidence Feed、Action Items 與 Operating Loop 空狀態必須說明「目前沒有 DTO rows」不等於 gate passed 或 actionable 建議；degraded 狀態只提醒人工覆盤資料不完整，不補值、不觸發 replay / scheduler / lifecycle。
 - Optional Historical Replay JSON summary 只作 simulated evidence input；若 DTO 帶 replay summary，data quality 區塊必須揭露 `simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data。
+- Workbench `Evidence` 子頁已由 placeholder 替換為唯讀 `ResearchConsoleView`：三區依序顯示固定 fail-closed Safety Boundary、Development Dataset V0 / Rule baseline / ML challenger / E2E frozen projection，以及 EV1–EV5、P0-13、獨立 Broker lane 與 Artifact Inspector。資料只來自 `ResearchConsoleSourceService` 的 injected mapping 或顯式 sanitized JSON path；缺 artifact / 欄位顯示 Missing / Unknown，不補零、不讀 DB、不重算 domain logic。
+- Research Console 不提供 Apply、Promote、Retrain、Blend、Accept Source 或 Trade；development / candidate / provisional / degraded / fixture / replay 以文字狀態與顏色共同區分，不能解讀為 formal OOS、forward evidence、source accepted 或 production ready。
 
 防線：
 

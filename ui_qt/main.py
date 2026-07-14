@@ -76,6 +76,7 @@ from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 from app_module.market_data_visibility_service import MarketDataVisibilityService
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from app_module.workbench_source_service import WorkbenchSourceService
+from app_module.research_console_source_service import ResearchConsoleSourceService
 from app_module.engineering_closure_dashboard_service import (
     EngineeringClosureDashboardService,
     EvidenceRehearsalDashboard,
@@ -223,6 +224,11 @@ class MainWindow(QMainWindow):
             / "historical_replay_2026-01-06_2026-07-06_reference_fix.json"
         )
         return candidate if candidate.exists() else None
+
+    def _research_console_projection_path(self) -> Path | None:
+        """只接受顯式 sanitized projection；不掃描 development 或正式資料目錄。"""
+        configured_path = os.environ.get("RESEARCH_CONSOLE_PROJECTION")
+        return Path(configured_path).expanduser().resolve() if configured_path else None
 
     def _controlled_rehearsal_dashboard(self) -> EvidenceRehearsalDashboard | None:
         """Read an explicitly configured controlled report without opening any database."""
@@ -433,8 +439,12 @@ class MainWindow(QMainWindow):
             print("[MainWindow] 開始建立決策工作台...")
             try:
                 self.workbench_source_service = WorkbenchSourceService(self.config)
+                self.research_console_source_service = ResearchConsoleSourceService(
+                    projection_path=self._research_console_projection_path()
+                )
                 workbench_view = UnifiedDecisionWorkbenchView(
                     source_service=self.workbench_source_service,
+                    research_console_source_service=self.research_console_source_service,
                     replay_summary_json=self._default_workbench_replay_summary_path(),
                     evidence_rehearsal_dashboard=self._controlled_rehearsal_dashboard(),
                     navigate_to_daily_decision_callback=self._open_workbench_daily_decision,

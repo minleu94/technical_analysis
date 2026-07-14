@@ -27,6 +27,7 @@ from app_module.workbench_dtos import (
 )
 from app_module.engineering_closure_dashboard_service import EvidenceRehearsalDashboard
 from app_module.workbench_source_service import WorkbenchSourceService
+from app_module.research_console_source_service import ResearchConsoleSourceService
 from app_module.advice_dtos import AdviceClassification
 from ui_qt.models.workbench_table_models import (
     AdvicePortfolioTableModel,
@@ -58,6 +59,7 @@ from ui_qt.views.workbench_presenter import (
     operating_loop_state_text as _operating_loop_state_text,
     review_queue_state_text,
 )
+from ui_qt.views.research_console_view import ResearchConsoleView
 
 WORKBENCH_TONES: dict[str, dict[str, str]] = {
     "ready": {"fg": "#22c55e", "bg": "#0d2116", "border": "#166534"},
@@ -90,6 +92,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         decision_date: str | None = None,
         replay_summary_json: str | Path | None = None,
         evidence_rehearsal_dashboard: EvidenceRehearsalDashboard | None = None,
+        research_console_source_service: ResearchConsoleSourceService | None = None,
         auto_refresh: bool = True,
         decision_source_widget: QWidget | None = None,
         navigate_to_daily_decision_callback: Callable[[], None] | None = None,
@@ -103,6 +106,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.decision_date = decision_date
         self.replay_summary_json = replay_summary_json
         self.evidence_rehearsal_dashboard = evidence_rehearsal_dashboard
+        self.research_console_source_service = (
+            research_console_source_service or ResearchConsoleSourceService()
+        )
         self.navigate_to_daily_decision_callback = navigate_to_daily_decision_callback
         self.navigate_to_market_explore_callback = navigate_to_market_explore_callback
         self.navigate_to_evidence_review_callback = navigate_to_evidence_review_callback
@@ -439,14 +445,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
         overview_layout.addWidget(scroll_area)
         self.subtabs.addTab(overview_page, "總覽")
         self.subtabs.addTab(self._build_decision_source_page(), "決策來源")
-        self.subtabs.addTab(
-            self._build_navigation_page(
-                "Evidence",
-                "證據與品質細節留在總覽的 Evidence 區塊；需深挖時可開啟證據覆盤。",
-                self.evidence_review_button,
-            ),
-            "Evidence",
+        self.research_console_view = ResearchConsoleView(
+            source_service=self.research_console_source_service,
+            auto_refresh=True,
+            parent=self.subtabs,
         )
+        self.subtabs.addTab(self.research_console_view, "Evidence")
         self.subtabs.addTab(
             self._build_navigation_page(
                 "持倉追蹤",

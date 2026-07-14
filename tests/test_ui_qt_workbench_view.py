@@ -47,6 +47,7 @@ from ui_qt.models.workbench_table_models import (
     WorkbenchOperatingLoopTableModel,
 )
 from ui_qt.views.workbench_view import UnifiedDecisionWorkbenchView
+from ui_qt.views.research_console_view import ResearchConsoleView
 
 
 def app():
@@ -54,6 +55,15 @@ def app():
     if instance is None:
         instance = QApplication(sys.argv)
     return instance
+
+
+def test_evidence_subtab_hosts_read_only_research_console() -> None:
+    app()
+    view = UnifiedDecisionWorkbenchView(auto_refresh=False)
+
+    evidence_page = view.subtabs.widget(2)
+    assert isinstance(evidence_page, ResearchConsoleView)
+    assert evidence_page.visible_text().count("formal_oos_allowed = False") == 1
 
 
 def _dashboard_with_replay() -> WorkbenchDashboardDTO:
@@ -401,8 +411,9 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     evidence_page_text = " ".join(
         label.text() for label in view.subtabs.widget(2).findChildren(type(view.boundary_banner))
     )
-    assert "摘要與下鑽入口" in evidence_page_text
-    assert "預留深挖區" in evidence_page_text
+    assert "Research Console" in evidence_page_text
+    assert "formal_oos_allowed = False" in evidence_page_text
+    assert "projection_missing" in evidence_page_text
 
     view.daily_decision_button.click()
     view.evidence_review_button.click()
