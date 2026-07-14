@@ -25,6 +25,15 @@
 - DL、正式 alpha blending、production adapter、production scheduler 與 broker integration 全部延後。
 - 本計畫是未來執行規格，不是 EV1～EV5 的實作授權；本次規劃 commit 不執行以下 checkbox。
 
+### Wave 1 授權增補（2026-07-13）
+
+本計畫原本的 planning-only 性質不變；惟使用者已明確核准 [Wave 1 執行授權增補](../specs/2026-07-13-external-evidence-wave-1-authorization-addendum.md)。此增補只允許 EV1-A、EV3-A 與 EV4-A 自動態 clean execution baseline 平行啟動，並以該文件的 hard gate、handoff 與 Git Coordinator 規則為準。
+
+- EV3-A 的原有 hard gates 完全不變：不得讀 2025 outcome／return／metric／ranking／report body，不得 fit、retrain、calibrate 或 compare；缺 signed declaration 或 machine evidence 必為 `indeterminate`。
+- EV4-A 僅限 Rule Champion／Experiment V1 preregistration contract；不得 unblind、training 或 comparison，且不得代填 human-bound bp 門檻。
+- EV1-A 僅限 manual／shadow evidence capture；不得啟 production scheduler，且不得把歷史回填或合成日期列為 forward evidence。
+- EV2、EV5 仍未授權。`formal_oos_allowed=false`、`production_blend_alpha_bp=0` 及 forward evidence／source acceptance／promotion／automation=`pending` 均不變；工程完成不得解鎖任何 External Gate。
+
 ---
 
 ## 1. Current Verified Baseline
@@ -1493,7 +1502,7 @@ flowchart LR
 
 ### 11.6 Terra 可直接使用的第一輪啟動 Prompts
 
-Canonical 執行交接見 [Terra External Evidence Execution Handoff and Prompt Pack](../prompts/2026-07-13-terra-external-evidence-execution-handoff.md)。以下內容只保留為各工作流摘要；第一個可執行任務固定為 Prompt 1 / Task 1，且仍需在實際啟動時通過動態 baseline preflight。Prompt 2～5 不得因 Prompt 1 完成而自動啟動。
+Canonical 執行交接見 [Terra External Evidence Execution Handoff and Prompt Pack](../prompts/2026-07-13-terra-external-evidence-execution-handoff.md)，其 Wave 1 授權以 [Wave 1 執行授權增補](../specs/2026-07-13-external-evidence-wave-1-authorization-addendum.md) 為準。以下內容只保留為各工作流摘要；EV1-A、EV3-A、EV4-A 可在各自通過動態 baseline preflight 後平行啟動。EV2、EV5 與所有非授權後續工作不得因任何 Wave 1 切片完成而自動啟動。
 
 #### Terra Prompt 1 — EV3 OOS Custody（最高優先）
 

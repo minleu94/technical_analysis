@@ -4,21 +4,26 @@
 >
 > 狀態：ready for explicit execution authorization；本文件本身不啟動 worker
 >
-> 第一個任務：EV3-A 2025 OOS Exposure／Custody Audit，且只執行這一項
+> Wave 1 授權任務：EV1-A、EV3-A 與 EV4-A 可平行啟動；完成三者後停止
 >
 > 執行計畫：[OOS Audit Plan](../plans/2026-07-13-oos-exposure-custody-audit-execution-plan.md)
 >
 > Master Plan：[External Evidence Master Plan](../plans/2026-07-13-external-evidence-investment-validation-master-plan.md)
+>
+> 授權增補：[External Evidence Wave 1 執行授權增補](../specs/2026-07-13-external-evidence-wave-1-authorization-addendum.md)
 
 ## 1. Authority 與目前真相
 
 - A～G engineering integration 已驗證但不得重做；immutable engineering anchor=`4f72766a1d1e7bd4b80ccb595ad3cb2fa84bd84a`。
 - Terra 啟動時由 Coordinator 動態封存 `execution_baseline_sha`；必須是 clean、同步 `dev` 且為工程錨點後代。
 - `historical_ml_shadow=continue_shadow`、`formal_oos_allowed=false`、`production_blend_alpha_bp=0`。
+- 使用者明確授權高於本文件舊有「only EV3-A」限制：EV1-A、EV3-A、EV4-A 可平行啟動；EV2／EV5 仍未授權。任何工程完成都不得解鎖 External Gate。
+- EV1-A 只可做 manual／shadow capture 與真實 observed decision 的 causal contract；不得啟 production scheduler，亦不得以歷史回填或合成日期充作 forward evidence。
+- EV4-A 只可做 Rule Champion／Experiment V1 preregistration；不得 unblind、training 或 Rule／ML comparison。缺 bp 門檻、reviewer identity 或 EV3 custody 結果時，必須 `needs_human_decision`，不得猜測。
 - forward evidence、source acceptance、production automation、ML promotion 與 formal product closeout 均未完成。
-- 第一個任務只建立 audit capability／report；不讀 2025 outcome values，不改任何上述狀態。
+- EV3-A 只建立 audit capability／report；不讀 2025 outcome values，不改任何上述狀態。
 
-## 2. 第一個任務 Hard Gates
+## 2. EV3-A Hard Gates
 
 1. `dev`、`HEAD == origin/dev`、working tree/index clean；不 switch、pull、reset、stash 或建立 branch/worktree。
 2. `4f72766...` 必須是 HEAD ancestor；不得把 HEAD 回退到該工程錨點。
