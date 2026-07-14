@@ -40,9 +40,13 @@ def test_tpex_warning_messages_report_missing_failed_dates() -> None:
 
 
 def test_twse_skip_warning_messages_report_explicit_no_data_dates() -> None:
-    warnings = _twse_skip_warning_messages({"skipped_dates": ["2026-07-10"]})
+    warnings = _twse_skip_warning_messages({"no_data_skipped_dates": ["2026-07-10"]})
 
     assert warnings == ["TWSE 上游查無資料，已跳過日期：2026-07-10"]
+
+
+def test_twse_skip_warning_messages_ignore_existing_file_skips() -> None:
+    assert _twse_skip_warning_messages({"skipped_dates": ["2026-07-10"]}) == []
 
 
 def test_technical_is_not_current_when_latest_date_coverage_lags() -> None:

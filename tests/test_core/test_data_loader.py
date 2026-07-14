@@ -96,6 +96,13 @@ class _FutureDateSession:
             return _DummyResponse()
         return _DummyResponse(payload={"stat": "查詢日期大於今日，請重新查詢!"})
 
+
+class _TransientNoDataTextSession:
+    def get(self, url, params=None, headers=None, timeout=None):
+        if not params:
+            return _DummyResponse()
+        return _DummyResponse(payload={"stat": "系統異常，查無資料，請稍後再試"})
+
 class TestDataLoader:
     """測試數據加載器"""
     
@@ -179,6 +186,16 @@ class TestDataLoader:
 
     def test_download_keeps_future_date_response_as_failure(self, test_config, monkeypatch):
         monkeypatch.setattr("data_module.data_loader.requests.Session", _FutureDateSession)
+        monkeypatch.setattr("data_module.data_loader.time.sleep", lambda _seconds: None)
+        monkeypatch.setattr("data_module.data_loader.random.uniform", lambda _start, _end: 0)
+
+        loader = DataLoader(test_config)
+
+        assert loader.download_from_api("2026-07-10") is None
+        assert loader.last_daily_download_outcome == "failed"
+
+    def test_download_keeps_transient_no_data_text_as_failure(self, test_config, monkeypatch):
+        monkeypatch.setattr("data_module.data_loader.requests.Session", _TransientNoDataTextSession)
         monkeypatch.setattr("data_module.data_loader.time.sleep", lambda _seconds: None)
         monkeypatch.setattr("data_module.data_loader.random.uniform", lambda _start, _end: 0)
 

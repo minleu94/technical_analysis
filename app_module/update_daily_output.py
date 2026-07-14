@@ -82,6 +82,7 @@ def parse_daily_update_output(
         "updated_dates": updated,
         "failed_dates": failed,
         "skipped_dates": _unique([*skipped, *no_data_skipped]),
+        "no_data_skipped_dates": no_data_skipped,
     }
     if fail_count or diagnostics:
         result["diagnostic_codes"] = diagnostics

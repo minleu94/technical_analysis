@@ -44,6 +44,13 @@ def _date_key(value: object) -> str | None:
     return text if len(text) == 8 and text.isdigit() else None
 
 
+def _expected_quick_update_date(today: date) -> date:
+    expected = today
+    while expected.weekday() >= 5:
+        expected = expected.fromordinal(expected.toordinal() - 1)
+    return expected
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Read-only baldr data freshness probe.")
     parser.add_argument("--data-root", required=True)
@@ -83,7 +90,10 @@ def main(argv: list[str] | None = None) -> int:
     quick_update_status_path = (
         output_root / "scheduled" / "data_update_quick" / "latest_status.json"
     )
-    if quick_update_status_path.exists():
+    if not quick_update_status_path.exists():
+        checks["data_update_quick_status"] = "missing"
+        warnings.append("data_update_quick_status_missing")
+    else:
         try:
             quick_update_payload = json.loads(
                 quick_update_status_path.read_text(encoding="utf-8")
@@ -92,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
             checks["data_update_quick_status"] = quick_update_status
             if quick_update_status == "failed":
                 warnings.append("data_update_quick_failed")
+            checked_at = _parse_date(quick_update_payload.get("checked_at"))
+            expected_date = _expected_quick_update_date(date.today())
+            checks["data_update_quick_expected_date"] = expected_date.isoformat()
+            checks["data_update_quick_checked_date"] = (
+                checked_at.isoformat() if checked_at is not None else None
+            )
+            if checked_at is None or checked_at < expected_date:
+                warnings.append("data_update_quick_status_stale")
         except (OSError, json.JSONDecodeError):
             warnings.append("data_update_quick_status_unreadable")
 

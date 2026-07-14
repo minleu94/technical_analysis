@@ -27,8 +27,8 @@ from .market_date_utils import (
 
 
 def _is_explicit_twse_no_data_status(status: object) -> bool:
-    text = str(status or "").strip()
-    return "沒有符合條件的資料" in text or "查無資料" in text
+    text = "".join(str(status or "").split()).replace("!", "！")
+    return text == "很抱歉，沒有符合條件的資料！"
 
 class MarketDateRange:
     """市場數據日期範圍控制"""

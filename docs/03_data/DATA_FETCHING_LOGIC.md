@@ -135,7 +135,7 @@ TPEX 日常來源由 `data_module/tpex_daily_price_source.py` 處理：
 1. **API 參數：** 先使用 `type=ALL`；若 TWSE 回傳錯誤狀態、HTTP 307 或查無資料，fallback 到 `type=ALLBUT0999`。
 2. **數據提取：** 不再硬編碼 `data['tables'][8]`，而是尋找同時包含 `證券代號` 與 `收盤價` 欄位的個股交易表。
 3. **數據處理：** 使用 DataFrame 的 `data` 和 `fields` 直接創建，後續仍只保留四碼普通股並正規化數值欄位。
-4. **結果分類：** 只有 `ALL` 與 `ALLBUT0999` 都明確回覆「沒有符合條件的資料」或「查無資料」時，`DataLoader.last_daily_download_outcome` 才是 `no_data`；批次輸出 `SKIPPED_NO_DATA`，上層將日期放入 `skipped_dates` 並繼續後續同步。「查詢日期大於今日」、HTTP、timeout、JSON 或欄位解析問題一律為 `failed`。
+4. **結果分類：** 只有 `ALL` 與 `ALLBUT0999` 都精確回覆已驗證的官方狀態文案「很抱歉，沒有符合條件的資料！」時，`DataLoader.last_daily_download_outcome` 才是 `no_data`；批次輸出 `SKIPPED_NO_DATA`，上層將日期放入 `no_data_skipped_dates`（並保留於 `skipped_dates`）後繼續同步。「查詢日期大於今日」、HTTP、timeout、JSON、欄位解析或其他包含「查無資料」的非完整文案一律為 `failed`。
 5. **失敗處理：** 每日股價 batch 若回報 `failed_dates`，`UpdateService.update_daily()` 會回傳 `success=false`，避免快速 / 安全更新在個股日價缺漏時誤顯示完成。只有 `skipped_dates` 時會回傳成功並附警告，排程 status 為 `passed_with_warnings`。
 6. **欄位名稱：** 保持原始欄位名稱（與 notebook 一致）。
 

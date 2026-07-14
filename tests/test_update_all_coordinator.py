@@ -61,9 +61,19 @@ def test_safe_update_contract_keeps_merge_and_sqlite_order() -> None:
 def test_quick_update_continues_after_twse_no_data_skip() -> None:
     service, _progress, result = _run(
         "quick",
-        daily_result={"success": True, "skipped_dates": ["2026-07-10"]},
+        daily_result={"success": True, "no_data_skipped_dates": ["2026-07-10"]},
     )
 
     assert result["success"] is True
     assert any("TWSE 上游查無資料" in warning for warning in result["warnings"])
     assert ("sync_source_to_sqlite", "daily_price_files", "2026-07-01", "2026-07-10") in service.calls
+
+
+def test_quick_update_does_not_label_existing_file_skip_as_twse_no_data() -> None:
+    _service, _progress, result = _run(
+        "quick",
+        daily_result={"success": True, "skipped_dates": ["2026-07-10"]},
+    )
+
+    assert result["success"] is True
+    assert result["warnings"] == []

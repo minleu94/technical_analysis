@@ -86,7 +86,11 @@ def _tpex_warning_messages(result: dict[str, Any]) -> list[str]:
 
 def _twse_skip_warning_messages(result: dict[str, Any]) -> list[str]:
     skipped_dates = sorted(
-        {str(item) for item in result.get("skipped_dates", []) if str(item).strip()}
+        {
+            str(item)
+            for item in result.get("no_data_skipped_dates", [])
+            if str(item).strip()
+        }
     )
     if not skipped_dates:
         return []

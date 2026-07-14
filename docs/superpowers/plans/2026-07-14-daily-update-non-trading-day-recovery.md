@@ -4,14 +4,14 @@
 
 **Goal:** TWSE 明確查無資料日不再阻斷快速更新與排程，真正失敗必須在 UI 與 freshness 可見。
 
-**Architecture:** `DataLoader` 先區分 TWSE 的明確「沒有符合條件的資料」回覆與其他錯誤；批次下載器只根據這個受限診斷輸出 `SKIPPED_NO_DATA`。共用解析器將它轉為 `skipped_dates` 而非失敗。排程與 UI coordinator 將跳過日列為 warning，但仍繼續 TPEX、SQLite 與技術指標。freshness 唯讀最新排程狀態，讓真正失敗不可被日曆容許值掩蓋。
+**Architecture:** `DataLoader` 只接受已驗證的 TWSE 完整無資料文案，並與其他錯誤區分；批次下載器根據此受限診斷輸出 `SKIPPED_NO_DATA`。共用解析器將它轉為 `no_data_skipped_dates`，與既有檔案跳過分離。排程與 UI coordinator 只將無資料跳過列為 warning，仍繼續 TPEX、SQLite 與技術指標。freshness 唯讀最新排程狀態，並將 status 遺失或未達預期工作日視為 degraded。
 
 **Tech Stack:** Python 3.11、pytest、PySide6、SQLite、Windows Task Scheduler。
 
 ## Global Constraints
 
 - 使用繁體中文；不回補或覆寫正式 `DATA_ROOT`。
-- 只有上游明確回覆查無資料可跳過；網路、格式、解析與未知例外仍是失敗。
+- 只有兩個 TWSE fallback 都精確回覆「很抱歉，沒有符合條件的資料！」可跳過；網路、格式、解析、未來日期與未知例外仍是失敗。
 - 不改投資、推薦、evidence 或自動交易邊界。
 - 測試以 `tmp_path` 與 monkeypatch 隔離資料來源。
 
@@ -26,7 +26,7 @@
 - Test: `tests/test_core/test_data_loader.py`
 - Test: `tests/test_update_daily_output.py`
 
-**Interfaces:** `DataLoader.last_daily_download_outcome` 僅為 `success`、`no_data` 或 `failed`。只有 TWSE `stat` 文字含「沒有符合條件的資料」或「查無資料」才設為 `no_data`；例如「查詢日期大於今日」仍為 `failed`。下載器輸出 `[UPDATE_SUMMARY] SUCCESS: <n> days, SKIPPED_NO_DATA: <n> days, FAILED: <n> days`，解析器回傳 `success`、`skipped_dates`、`failed_dates`。
+**Interfaces:** `DataLoader.last_daily_download_outcome` 僅為 `success`、`no_data` 或 `failed`。只有兩個 TWSE `stat` 都精確等於「很抱歉，沒有符合條件的資料！」才設為 `no_data`；例如「查詢日期大於今日」或暫時性「查無資料」仍為 `failed`。下載器輸出 `[UPDATE_SUMMARY] SUCCESS: <n> days, SKIPPED_NO_DATA: <n> days, FAILED: <n> days`，解析器回傳 `success`、`skipped_dates`、`no_data_skipped_dates`、`failed_dates`。
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -114,7 +114,7 @@ Run: `git add scripts/batch_update_daily_data.py app_module/update_daily_output.
 - Test: `tests/test_scheduled_data_update_runner.py`
 - Test: `tests/test_update_all_coordinator.py`
 
-**Interfaces:** 成功但 `skipped_dates` 非空的每日更新，排程 status 為 `passed_with_warnings`；UI `run_update_all()` 成功結果含 TWSE warning，且包含 SQLite 同步步驟。
+**Interfaces:** 成功但 `no_data_skipped_dates` 非空的每日更新，排程 status 為 `passed_with_warnings`；UI `run_update_all()` 成功結果含 TWSE warning，且包含 SQLite 同步步驟。既有檔案的 `skipped_dates` 不產生 TWSE warning。
 
 - [ ] **Step 1: Write failing tests**
 
@@ -222,7 +222,7 @@ Run: `git add scripts/scheduled/data_freshness_probe.py tests/test_scheduled_dat
 
 - [ ] **Step 1: 更新文件**
 
-說明 `skipped_dates` 是 TWSE 上游明確查無資料的安全跳過；`failed_dates` 才代表阻斷。說明 `passed_with_warnings`、`failed`、`latest_status.json` 與當日 log 的判讀入口。
+說明 `no_data_skipped_dates` 是 TWSE 官方無資料文案的安全跳過；`skipped_dates` 也可能代表既有檔案，`failed_dates` 才代表阻斷。說明 `passed_with_warnings`、`failed`、`latest_status.json` 與當日 log 的判讀入口。
 
 - [ ] **Step 2: Run full verification**
 

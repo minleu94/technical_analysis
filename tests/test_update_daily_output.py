@@ -19,6 +19,7 @@ def test_parse_daily_update_output_golden_success_skip_and_failure() -> None:
         "updated_dates": ["2026-07-08", "2026-07-09"],
         "failed_dates": ["2026-07-10"],
         "skipped_dates": ["2026-07-09"],
+        "no_data_skipped_dates": [],
         "diagnostic_codes": [],
     }
 
@@ -44,5 +45,18 @@ def test_parse_daily_update_output_treats_explicit_no_data_as_safe_skip() -> Non
 
     assert result["success"] is True
     assert result["skipped_dates"] == ["2026-07-10"]
+    assert result["no_data_skipped_dates"] == ["2026-07-10"]
     assert result["failed_dates"] == []
     assert "上游查無資料，已跳過 1 天" in result["message"]
+
+
+def test_parse_daily_update_output_keeps_existing_file_skip_separate_from_no_data() -> None:
+    result = parse_daily_update_output(
+        "2026-07-10 已存在，跳過\n"
+        "SKIPPED_NO_DATA 2026-07-13 上游查無資料\n"
+        "[UPDATE_SUMMARY] SUCCESS: 1 days, SKIPPED_NO_DATA: 1 days, FAILED: 0 days",
+        ["2026-07-10", "2026-07-13"],
+    )
+
+    assert result["skipped_dates"] == ["2026-07-10", "2026-07-13"]
+    assert result["no_data_skipped_dates"] == ["2026-07-13"]

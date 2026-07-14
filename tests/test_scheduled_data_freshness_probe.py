@@ -49,7 +49,10 @@ def test_freshness_probe_degrades_when_tpex_file_missing_for_latest_daily_date(t
     assert payload["status"] == "degraded"
     assert payload["checks"]["twse_daily_price_file_exists_for_latest_date"] is True
     assert payload["checks"]["tpex_daily_price_file_exists_for_latest_date"] is False
-    assert payload["warnings"] == ["tpex_daily_price_file_missing:20260706"]
+    assert payload["warnings"] == [
+        "data_update_quick_status_missing",
+        "tpex_daily_price_file_missing:20260706",
+    ]
 
 
 def test_freshness_probe_degrades_when_latest_quick_update_failed(tmp_path):
@@ -92,3 +95,39 @@ def test_freshness_probe_degrades_when_latest_quick_update_failed(tmp_path):
     assert payload["status"] == "degraded"
     assert payload["checks"]["data_update_quick_status"] == "failed"
     assert "data_update_quick_failed" in payload["warnings"]
+
+
+def test_freshness_probe_degrades_when_latest_quick_update_status_is_stale(tmp_path):
+    data_root = tmp_path / "FA_Data"
+    output_root = data_root / "output"
+    sqlite_dir = data_root / "sqlite"
+    (data_root / "daily_price").mkdir(parents=True)
+    (data_root / "daily_price_tpex").mkdir(parents=True)
+    sqlite_dir.mkdir(parents=True)
+    db_path = sqlite_dir / "twstock.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute('CREATE TABLE daily_prices ("日期" TEXT)')
+        conn.execute('CREATE TABLE technical_indicators ("日期" TEXT)')
+
+    quick_status = output_root / "scheduled" / "data_update_quick" / "latest_status.json"
+    quick_status.parent.mkdir(parents=True)
+    quick_status.write_text(
+        json.dumps({"status": "passed", "checked_at": "2000-01-01T04:20:00"}),
+        encoding="utf-8",
+    )
+    status_path = tmp_path / "freshness.json"
+
+    exit_code = main(
+        [
+            "--data-root", str(data_root),
+            "--output-root", str(output_root),
+            "--db-path", str(db_path),
+            "--status-path", str(status_path),
+        ]
+    )
+
+    payload = json.loads(status_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert payload["status"] == "degraded"
+    assert payload["checks"]["data_update_quick_status"] == "passed"
+    assert "data_update_quick_status_stale" in payload["warnings"]

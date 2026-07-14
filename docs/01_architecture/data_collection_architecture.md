@@ -225,8 +225,8 @@ python scripts/merge_daily_data.py
 - 代理切換機制（新增）
 - 錯誤恢復策略（新增）
 - **批量更新自動跳過已存在的文件**（新增）
-- **TWSE 明確查無資料日**：只有 `ALL` 與 `ALLBUT0999` 都回覆「沒有符合條件的資料」或「查無資料」時，批次流程才安全跳過並保留 `skipped_dates` 診斷；HTTP、逾時、解析錯誤與未來日期回覆仍為失敗，會阻止後續同步。
-- **排程／UI 可見性**：安全跳過會以 warning 呈現並允許 TPEX、SQLite 與技術指標繼續；最近快速更新為 `failed` 時，唯讀 freshness probe 必須回報 `degraded`，不得只因日期尚在容許範圍而顯示正常。
+- **TWSE 明確查無資料日**：只有 `ALL` 與 `ALLBUT0999` 都精確回覆已驗證官方文案「很抱歉，沒有符合條件的資料！」時，批次流程才安全跳過並保留 `no_data_skipped_dates` 診斷；HTTP、逾時、解析錯誤、未來日期與其他非完整文案回覆仍為失敗，會阻止後續同步。
+- **排程／UI 可見性**：安全跳過會以 warning 呈現並允許 TPEX、SQLite 與技術指標繼續；快速更新 status 遺失、未達預期工作日或為 `failed` 時，唯讀 freshness probe 必須回報 `degraded`，不得只因日期尚在容許範圍而顯示正常。
 
 ### 4. 數據備份策略
 - 每次更新前自動備份現有數據
