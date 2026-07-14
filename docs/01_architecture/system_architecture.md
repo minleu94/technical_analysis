@@ -283,7 +283,17 @@ Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manife
 - Domain contract ownership：`analysis_module/technical_analysis/indicator_parameter_registry.py` 是指標參數 schema 唯一入口；`decision_module/flow_contracts.py` 是 Broker/Flow dataclasses 唯一入口。舊 decision registry 與 Application Flow DTO shim 已於 2026-07-12 移除，核心不再反向 import Application DTO。
 - Indicator pure kernel：`analysis_module/technical_analysis/indicator_kernels.py` 提供 causal price normalization；缺值只允許 forward-fill 過去觀測值，前導缺值使用零邊界，不允許 backward-fill 未來價格。
 - Scoring pure kernel：`decision_module/scoring_kernels.py` 擁有 Decimal 最大餘額法與 10,000 bp 不變量；`ScoringEngine` 保留 façade method 與公開結果型態。
-- Stock screening port：`StockScreener` 可注入 recent stock/industry frame providers；MainWindow 路徑由 `decision_service_composition` 注入 Application adapters，`ScreeningService` 接收已組裝 screener。
+- Stock screening port：`StockScreener` 可注入 recent stock/industry frame providers；MainWindow 路徑由 `decision_service_composition` 注入 Application adapters，`ScreeningService` 接收已組裝 screener。Provider 回傳 `DataFrame` 代表資料取得成功，即使為空也直接形成空篩選結果且不再 self-load；只有回傳 `None` 代表來源不可用，才進入既有 SQLite-first／CSV-second fallback。
+
+  | Consumer | 建立方式 | 是否仍需要 `StockScreener` self-loading fallback |
+  |---|---|---|
+  | Qt composition | `build_decision_service_composition()` 建立 `StockScreener`，注入 `recent_stock_screen_provider(config)` 與 `recent_industry_screen_provider(config)`，再注入 `ScreeningService` | 正常路徑不依賴；保留 fallback 作 provider 回傳 `None` 時的降級與 constructor 相容 |
+  | App service | `ScreeningService(config, industry_mapper)` 未收到 `stock_screener` 時自行建立未注入 provider 的 `StockScreener` | 需要 |
+  | Scripts | `scripts/qa_validate_phase2_5.py` 與 `scripts/qa_validate_phase3_3b.py` 建立 `ScreeningService(config, industry_mapper)`，沿用 app service 自建路徑 | 需要 |
+  | Legacy `ui_app/main.py` | 直接建立 `StockScreener(config, industry_mapper)` | 需要 |
+  | Tests | provider contract tests 直接建立 `StockScreener`，composition tests 以 fake constructors 驗證 wiring | 依測試目的：fallback tests 保留 self-loading，provider tests 必須證明不 self-load |
+
+  Public characterization 位於 `tests/test_stock_screener_provider.py` 與 `tests/test_stock_screener_sqlite_first.py`：直接覆蓋四個 public methods 的 injected data、成功空結果、`None` fallback、SQLite／CSV fallback、strong／weak schema 與個股 universe count。這些 contract 不調整 ranking、score、reason、日期窗口或 liquidity 規則。
 - Canonical market-frame contract：`decision_module/market_frame_contracts.py` 統一 SQLite `YYYYMMDD`／CSV ISO date，並將 raw market index `收盤指數` 映射至 detector 使用的 `收盤價`；injected、SQLite、CSV paths 共用同一 normalization，不再因 DI 繞過 schema adapter。
 - Application ports：`app_module/application_ports.py` 以 Protocol 定義 market frame、recommendation evidence/repository、regime、watchlist 與 Broker Branch writer seams；composition 與 coordinator constructor 不再以 `Any` 取代跨層契約。
 - Broker branch update boundaries：`broker_branch_registry.py` 擁有 registry 純解析規則，`broker_branch_transport.py` 擁有 MoneyDJ request URL contract，`broker_branch_merge.py` 擁有 E/B merge plan，`broker_branch_write_coordinator.py` 擁有 daily/merged CSV write 與 merged backup boundary；`BrokerBranchUpdateService` 保留 transport fallback 與 orchestration façade。
