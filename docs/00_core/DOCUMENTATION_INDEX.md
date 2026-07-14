@@ -117,6 +117,8 @@
 | [PHASE4_PORTFOLIO_DESIGN.md](../05_phases/PHASE4_PORTFOLIO_DESIGN.md) | [歷史] Phase 4 Portfolio MVP 初始設計追溯。 |
 | [PHASE4_STARTUP_SUMMARY.md](../05_phases/PHASE4_STARTUP_SUMMARY.md) | [歷史] Phase 4 骨架啟動總結追溯。 |
 | [superpowers/README.md](../superpowers/README.md) | [歷史/實作軌跡] Superpowers specs / plans 目錄邊界，說明 spec / plan 不取代 Snapshot、6M Roadmap 或版本 roadmap。 |
+| [2026-07-13-external-evidence-investment-validation-design.md](../superpowers/specs/2026-07-13-external-evidence-investment-validation-design.md) | [規劃/未執行] External Evidence 與 Investment Effectiveness Validation 核准設計；採雙時鐘並行，鎖定 EV1～EV5 的因果證據、來源治理、OOS custody、公平比較與人工 promotion 邊界，不代表 EV1～EV5 已實作或任何 external Gate 已完成。 |
+| [2026-07-13-external-evidence-investment-validation-master-plan.md](../superpowers/plans/2026-07-13-external-evidence-investment-validation-master-plan.md) | [規劃/未執行] 上述設計的 task-by-task Master Plan、dependency DAG、ownership、fail-closed規則、可平行工作與 Terra 啟動 prompts；本 planning closeout 不啟動工作包、不改 Snapshot／Roadmap完成狀態。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/specs/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 多模式實驗室、候選池與 Phase 3 → Portfolio 來源追溯設計。 |
 | [2026-06-04-research-lab-workflow-redesign.md](../superpowers/plans/2026-06-04-research-lab-workflow-redesign.md) | Research Lab 工作流重整第一階段實作計畫。 |
 | [2026-06-11-financial-float-boundary-governance-design.md](../superpowers/specs/2026-06-11-financial-float-boundary-governance-design.md) | 金融核心白名單的 AST float 邊界掃描、逐行分類標記與 pytest 防回歸設計。 |
@@ -393,6 +395,7 @@
 
 ## 🔄 更新記錄
 
+- 2026-07-13：新增 External Evidence 與 Investment Effectiveness Validation 核准設計及 Master Plan 索引；文件只定義後續 EV1～EV5 執行路徑，Snapshot、Roadmap、external Gate 與正式產品狀態均未改變。
 - 2026-07-12：完成全 docs 位置稽核；將 Multi-Agent workflow 移至 `docs/agents/`、Shim／Legacy removal audit 移至 `docs/06_qa/`，並將兩份已完成重構文件移至 `docs/09_archive/`，同步所有索引與引用。
 
 - 2026-07-12：新增 Gate 1 Advice closeout 與 Project Snapshot audit QA 索引；Gate 0 / Gate 1 完成狀態仍以 Snapshot 為準，Roadmap、Architecture、Manual 各維持 scoped authority。
