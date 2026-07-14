@@ -126,3 +126,21 @@ def test_model_manifest_rejects_uncontrolled_filename_or_incomplete_hash() -> No
         _manifest(artifact_filename="../outside.joblib")
     with pytest.raises(ValueError, match="artifact_hash"):
         _manifest(artifact_hash="sha256:short")
+
+
+def test_model_manifest_hash_freezes_research_blend_and_production_alpha_zero() -> None:
+    baseline = _manifest(
+        research_alpha_bp=2500,
+        production_alpha_bp=0,
+        blend_selection_metric="return_mae_bp",
+        blend_selection_label_cutoff="2024-12-31",
+        blend_selection_threshold_bp=0,
+    )
+    changed = _manifest(research_alpha_bp=5000)
+
+    assert baseline.manifest_hash != changed.manifest_hash
+    assert baseline.production_alpha_bp == 0
+    with pytest.raises(ValueError, match="production_alpha_bp"):
+        _manifest(production_alpha_bp=1)
+    with pytest.raises(ValueError, match="blend_selection_label_cutoff"):
+        _manifest(blend_selection_label_cutoff="2025-01-01")

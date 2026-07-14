@@ -77,6 +77,11 @@ class ModelArtifactManifest:
     artifact_filename: str
     artifact_hash: str
     manifest_hash: str
+    research_alpha_bp: int = 0
+    production_alpha_bp: int = 0
+    blend_selection_metric: str = "return_mae_bp"
+    blend_selection_label_cutoff: str = ""
+    blend_selection_threshold_bp: int = 0
     schema_version: str = "ml-model-artifact-manifest.v1"
     frozen: bool = True
     shadow_only: bool = True
@@ -101,6 +106,11 @@ class ModelArtifactManifest:
         serialization_format: str,
         artifact_filename: str,
         artifact_hash: str,
+        research_alpha_bp: int = 0,
+        production_alpha_bp: int = 0,
+        blend_selection_metric: str = "return_mae_bp",
+        blend_selection_label_cutoff: str | None = None,
+        blend_selection_threshold_bp: int = 0,
     ) -> "ModelArtifactManifest":
         text_fields = {
             "model_id": model_id,
@@ -116,7 +126,22 @@ class ModelArtifactManifest:
         _require_sha256(label_registry_hash, field_name="label_registry_hash")
         _require_sha256(hyperparameters_hash, field_name="hyperparameters_hash")
         _require_sha256(artifact_hash, field_name="artifact_hash")
-        date.fromisoformat(training_as_of[:10])
+        training_cutoff = date.fromisoformat(training_as_of[:10])
+        selection_cutoff = blend_selection_label_cutoff or training_as_of
+        if date.fromisoformat(selection_cutoff[:10]) > training_cutoff:
+            raise ValueError("blend_selection_label_cutoff must not exceed training_as_of")
+        if production_alpha_bp != 0:
+            raise ValueError("production_alpha_bp must remain zero")
+        for field_name, numeric_value in {
+            "research_alpha_bp": research_alpha_bp,
+            "blend_selection_threshold_bp": blend_selection_threshold_bp,
+        }.items():
+            if isinstance(numeric_value, bool) or not isinstance(numeric_value, int):
+                raise TypeError(f"{field_name} must be an integer basis-point value")
+        if research_alpha_bp < 0 or research_alpha_bp > 10_000:
+            raise ValueError("research_alpha_bp must be within 0..10000")
+        if not blend_selection_metric:
+            raise ValueError("blend_selection_metric is required")
         if not feature_schema:
             raise ValueError("feature_schema is required")
         feature_ids = tuple(item[0] for item in feature_schema)
@@ -157,6 +182,11 @@ class ModelArtifactManifest:
             "serialization_format": serialization_format,
             "artifact_filename": artifact_filename,
             "artifact_hash": artifact_hash,
+            "research_alpha_bp": research_alpha_bp,
+            "production_alpha_bp": 0,
+            "blend_selection_metric": blend_selection_metric,
+            "blend_selection_label_cutoff": selection_cutoff,
+            "blend_selection_threshold_bp": blend_selection_threshold_bp,
             "frozen": True,
             "shadow_only": True,
             "production_eligible": False,
@@ -179,6 +209,11 @@ class ModelArtifactManifest:
             artifact_filename=artifact_filename,
             artifact_hash=artifact_hash,
             manifest_hash=manifest_hash,
+            research_alpha_bp=research_alpha_bp,
+            production_alpha_bp=0,
+            blend_selection_metric=blend_selection_metric,
+            blend_selection_label_cutoff=selection_cutoff,
+            blend_selection_threshold_bp=blend_selection_threshold_bp,
         )
 
     def to_load_contract(self) -> ModelArtifactLoadContract:
@@ -219,6 +254,11 @@ class ModelArtifactManifest:
             "serialization_format": self.serialization_format,
             "artifact_filename": self.artifact_filename,
             "artifact_hash": self.artifact_hash,
+            "research_alpha_bp": self.research_alpha_bp,
+            "production_alpha_bp": self.production_alpha_bp,
+            "blend_selection_metric": self.blend_selection_metric,
+            "blend_selection_label_cutoff": self.blend_selection_label_cutoff,
+            "blend_selection_threshold_bp": self.blend_selection_threshold_bp,
             "manifest_hash": self.manifest_hash,
             "frozen": self.frozen,
             "shadow_only": self.shadow_only,
@@ -252,6 +292,13 @@ class ModelArtifactManifest:
             serialization_format=str(payload["serialization_format"]),
             artifact_filename=str(payload["artifact_filename"]),
             artifact_hash=str(payload["artifact_hash"]),
+            research_alpha_bp=int(payload.get("research_alpha_bp", 0)),
+            production_alpha_bp=int(payload.get("production_alpha_bp", 0)),
+            blend_selection_metric=str(payload.get("blend_selection_metric", "return_mae_bp")),
+            blend_selection_label_cutoff=str(
+                payload.get("blend_selection_label_cutoff", payload["training_as_of"])
+            ),
+            blend_selection_threshold_bp=int(payload.get("blend_selection_threshold_bp", 0)),
         )
         if manifest.manifest_hash != payload.get("manifest_hash"):
             raise ValueError("model artifact manifest hash mismatch")
