@@ -84,6 +84,7 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
     success_count = 0
     fail_count = 0
     failed_dates = []
+    skipped_no_data_dates = []
     
     for i, date in enumerate(trading_days, 1):
         logger.info(f"\n[{i}/{len(trading_days)}] 正在更新 {date} 的數據...")
@@ -100,9 +101,14 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
             df = loader.download_from_api(date)
             
             if df is None or df.empty:
-                logger.error(f"  ✗ {date} 更新失敗：無法獲取數據或數據為空")
-                fail_count += 1
-                failed_dates.append(date)
+                if loader.last_daily_download_outcome == "no_data":
+                    logger.info(f"  - {date} 上游查無資料，已跳過")
+                    skipped_no_data_dates.append(date)
+                    print(f"SKIPPED_NO_DATA {date} 上游查無資料", flush=True)
+                else:
+                    logger.error(f"  ✗ {date} 更新失敗：無法獲取數據或數據為空")
+                    fail_count += 1
+                    failed_dates.append(date)
             else:
                 logger.info(f"  ✓ {date} 更新成功：{len(df)} 筆記錄")
                 success_count += 1
@@ -127,6 +133,7 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
     logger.info("\n" + "=" * 60)
     logger.info("批量更新完成！")
     logger.info(f"成功: {success_count} 天")
+    logger.info(f"上游查無資料並跳過: {len(skipped_no_data_dates)} 天")
     logger.info(f"失敗: {fail_count} 天")
     
     if failed_dates:
@@ -140,7 +147,11 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
     # ✅ 輸出易於解析的總結行（用於 UpdateService 解析）
     # 使用 print 輸出到 stdout，確保能被 subprocess 捕獲
     # 使用英文標記避免編碼問題
-    print(f"\n[UPDATE_SUMMARY] SUCCESS: {success_count} days, FAILED: {fail_count} days", flush=True)
+    print(
+        f"\n[UPDATE_SUMMARY] SUCCESS: {success_count} days, "
+        f"SKIPPED_NO_DATA: {len(skipped_no_data_dates)} days, FAILED: {fail_count} days",
+        flush=True,
+    )
 
 def main():
     """主函數"""

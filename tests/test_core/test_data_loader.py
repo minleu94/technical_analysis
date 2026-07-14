@@ -82,6 +82,20 @@ class _FallbackSession:
             )
         return _DummyResponse(status_code=404)
 
+
+class _NoDataSession:
+    def get(self, url, params=None, headers=None, timeout=None):
+        if not params:
+            return _DummyResponse()
+        return _DummyResponse(payload={"stat": "很抱歉，沒有符合條件的資料!"})
+
+
+class _FutureDateSession:
+    def get(self, url, params=None, headers=None, timeout=None):
+        if not params:
+            return _DummyResponse()
+        return _DummyResponse(payload={"stat": "查詢日期大於今日，請重新查詢!"})
+
 class TestDataLoader:
     """測試數據加載器"""
     
@@ -152,6 +166,26 @@ class TestDataLoader:
         assert session.requested_types == ["ALL", "ALLBUT0999"]
         assert len(df) == 1
         assert (test_config.daily_price_dir / "20260702.csv").exists()
+
+    def test_download_marks_explicit_twse_no_data_as_no_data(self, test_config, monkeypatch):
+        monkeypatch.setattr("data_module.data_loader.requests.Session", _NoDataSession)
+        monkeypatch.setattr("data_module.data_loader.time.sleep", lambda _seconds: None)
+        monkeypatch.setattr("data_module.data_loader.random.uniform", lambda _start, _end: 0)
+
+        loader = DataLoader(test_config)
+
+        assert loader.download_from_api("2026-07-10") is None
+        assert loader.last_daily_download_outcome == "no_data"
+
+    def test_download_keeps_future_date_response_as_failure(self, test_config, monkeypatch):
+        monkeypatch.setattr("data_module.data_loader.requests.Session", _FutureDateSession)
+        monkeypatch.setattr("data_module.data_loader.time.sleep", lambda _seconds: None)
+        monkeypatch.setattr("data_module.data_loader.random.uniform", lambda _start, _end: 0)
+
+        loader = DataLoader(test_config)
+
+        assert loader.download_from_api("2026-07-10") is None
+        assert loader.last_daily_download_outcome == "failed"
     
     @pytest.mark.data
     def test_data_validation(self, test_config, sample_stock_data):

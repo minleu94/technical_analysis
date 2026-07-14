@@ -29,3 +29,20 @@ def test_parse_daily_update_output_fails_closed_for_empty_output() -> None:
     assert result["success"] is False
     assert result["failed_dates"] == ["2026-07-10"]
     assert result["diagnostic_codes"] == ["batch_output_missing"]
+
+
+def test_parse_daily_update_output_treats_explicit_no_data_as_safe_skip() -> None:
+    result = parse_daily_update_output(
+        "\n".join(
+            [
+                "SKIPPED_NO_DATA 2026-07-10 上游查無資料",
+                "[UPDATE_SUMMARY] SUCCESS: 1 days, SKIPPED_NO_DATA: 1 days, FAILED: 0 days",
+            ]
+        ),
+        ["2026-07-10", "2026-07-13"],
+    )
+
+    assert result["success"] is True
+    assert result["skipped_dates"] == ["2026-07-10"]
+    assert result["failed_dates"] == []
+    assert "上游查無資料，已跳過 1 天" in result["message"]

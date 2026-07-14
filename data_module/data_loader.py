@@ -25,6 +25,11 @@ from .market_date_utils import (
     year_to_date_start,
 )
 
+
+def _is_explicit_twse_no_data_status(status: object) -> bool:
+    text = str(status or "").strip()
+    return "沒有符合條件的資料" in text or "查無資料" in text
+
 class MarketDateRange:
     """市場數據日期範圍控制"""
     def __init__(self, start_date: str = None, end_date: str = None):
@@ -75,6 +80,7 @@ class DataLoader:
     
     def __init__(self, config: TWStockConfig):
         self.config = config
+        self.last_daily_download_outcome = "failed"
         self._setup_logging()
         self.db = DBManager(self.config)
         
@@ -370,6 +376,7 @@ class DataLoader:
             DataFrame 包含個股交易資料，如果下載失敗則返回 None
         """
         try:
+            self.last_daily_download_outcome = "failed"
             # 轉換日期格式為 YYYYMMDD
             date_obj = datetime.strptime(date, '%Y-%m-%d')
             formatted_date = date_obj.strftime('%Y%m%d')
@@ -402,6 +409,7 @@ class DataLoader:
             }
             
             data = None
+            api_statuses: list[str] = []
             for request_type in ("ALL", "ALLBUT0999"):
                 params = {
                     "date": formatted_date,
@@ -419,10 +427,12 @@ class DataLoader:
                     )
                     if response.status_code == 307:
                         self.logger.warning("遇到 307 重定向，將嘗試備用 type")
+                    api_statuses.append("")
                     continue
 
                 # 解析 JSON 響應
                 candidate = response.json()
+                api_statuses.append(str(candidate.get('stat') or ""))
 
                 # 檢查響應狀態
                 if candidate.get('stat') == 'OK':
@@ -431,6 +441,11 @@ class DataLoader:
                 self.logger.warning(f"API返回錯誤狀態: {candidate.get('stat')}, type={request_type}")
 
             if data is None:
+                if api_statuses and all(
+                    _is_explicit_twse_no_data_status(status)
+                    for status in api_statuses
+                ):
+                    self.last_daily_download_outcome = "no_data"
                 return None
             
             # 檢查是否有資料表
@@ -488,10 +503,12 @@ class DataLoader:
             # 保存每日價格數據
             df.to_csv(daily_price_file, index=False, encoding='utf-8-sig')
             self.logger.info(f"成功保存 {date} 的個股交易資料，共 {len(df)} 筆記錄")
+            self.last_daily_download_outcome = "success"
             
             return df
             
         except Exception as e:
+            self.last_daily_download_outcome = "failed"
             self.logger.error(f"下載個股交易資料時發生錯誤: {str(e)}")
             import traceback
             traceback.print_exc()
