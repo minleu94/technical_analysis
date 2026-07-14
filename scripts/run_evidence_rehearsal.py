@@ -1,4 +1,4 @@
-"""Run a controlled, dry/read-only evidence rehearsal and emit handoff reports."""
+"""Run a controlled projection or working-copy evidence rehearsal."""
 
 from __future__ import annotations
 
@@ -25,6 +25,17 @@ from app_module.evidence_rehearsal_dtos import (  # noqa: E402
     RehearsalArtifact,
 )
 from app_module.evidence_rehearsal_service import EvidenceRehearsalService  # noqa: E402
+from app_module.evidence_rehearsal_fault_injection import (  # noqa: E402
+    EvidenceRehearsalFaultInjector,
+)
+from app_module.evidence_rehearsal_orchestrator import (  # noqa: E402
+    EvidenceRehearsalExecutionReport,
+    EvidenceRehearsalExecutionRequest,
+    EvidenceRehearsalOrchestrator,
+)
+from app_module.evidence_rehearsal_ml_provider import (  # noqa: E402
+    JsonMLRehearsalEvidenceProvider,
+)
 from app_module.evidence_rehearsal_source_reader import (  # noqa: E402
     EvidenceRehearsalSourceReader,
     EvidenceRehearsalSourceSnapshot,
@@ -48,7 +59,7 @@ _PRODUCTION_MARKERS = frozenset({"prod", "production"})
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run a controlled evidence rehearsal in permanent dry/read-only mode."
+        description="Run a controlled projection or working-copy evidence rehearsal."
     )
     parser.add_argument("--scenario", type=Path, required=True)
     parser.add_argument("--source-db", type=Path, required=True)
@@ -61,6 +72,9 @@ def build_parser() -> argparse.ArgumentParser:
         default="projection_only",
     )
     parser.add_argument("--overwrite-working-copy", action="store_true")
+    parser.add_argument("--start-date")
+    parser.add_argument("--end-date")
+    parser.add_argument("--ml-evidence-root", type=Path)
     parser.add_argument(
         "--inject-failure",
         choices=(
@@ -429,6 +443,89 @@ def _write_package(output_root: Path, report: Mapping[str, object], handoff: Map
     )
 
 
+def _orchestrated_cli_report(
+    execution_report: EvidenceRehearsalExecutionReport,
+    scenario: EvidenceRehearsalScenario,
+    injection_name: str | None,
+) -> tuple[dict[str, object], dict[str, object]]:
+    execution_payload = execution_report.to_dict()
+    injection = {
+        "name": injection_name,
+        "status": "degraded" if injection_name is not None else execution_report.status,
+        **dict(execution_report.fault_diagnostics),
+    }
+    report = {
+        "contract_version": 2,
+        "status": execution_report.status,
+        "scenario": scenario.to_dict(),
+        "execution": {
+            "mode": execution_report.execution_mode,
+            "source_db_opened": execution_report.source_db_opened,
+            "source_db_write_performed": execution_report.source_db_write_performed,
+            "working_copy_created": execution_report.working_copy_created,
+            "working_copy_write_performed": execution_report.working_copy_write_performed,
+            "production_db_write_performed": False,
+            "db_write_performed": False,
+            "scheduler_invoked": False,
+            "broker_invoked": False,
+            "advice_invoked": False,
+            "promotion_invoked": False,
+            "service_call_facts": dict(execution_report.service_call_facts),
+            "adapter_statuses": [list(item) for item in execution_report.adapter_statuses],
+        },
+        "source_snapshot": dict(execution_report.source_snapshot),
+        "semantic_fingerprint": execution_report.semantic_fingerprint,
+        "lineage": {
+            "status": execution_report.lineage_status,
+            "artifact_dag": {
+                key: list(value) for key, value in execution_report.artifact_dag.items()
+            },
+            "artifact_hashes": dict(execution_report.artifact_hashes),
+        },
+        "formal_product_closeout": False,
+        "production_actions_allowed": False,
+        "injection": injection,
+        "blockers": list(execution_report.blockers),
+        "rehearsal_report": execution_payload,
+        "coverage_metrics": [
+            metric.to_dict() for metric in execution_report.coverage_metrics
+        ],
+        "p0_source_shadow": dict(execution_report.p0_source_shadow),
+        "ml_shadow": execution_payload["ml_shadow"],
+        "historical_replay_artifacts": [
+            artifact.to_dict()
+            for artifact in execution_report.historical_replay_artifacts
+        ],
+    }
+    handoff = {
+        "contract_version": 2,
+        "status": "forward_handoff_pending",
+        "scenario_id": scenario.scenario_id,
+        "decision_date": scenario.decision_date,
+        "rehearsal_status": execution_report.status,
+        "blockers": list(execution_report.blockers),
+        "owner": "human_evidence_operations_owner",
+        "completion_rule": (
+            "Real-time evidence, required approvals, and explicit manual review "
+            "are required; this CLI cannot complete or promote them."
+        ),
+        "required_manual_actions": [
+            "Validate real-time source availability and licence terms.",
+            "Review data quality, PIT availability, and label maturity.",
+            "Approve any scheduler, broker, Advice, or promotion action outside this rehearsal.",
+        ],
+        "production_actions_allowed": False,
+        "prohibited_actions": [
+            "production_database_write",
+            "scheduler_enablement",
+            "broker_invocation",
+            "advice_invocation",
+            "model_or_strategy_promotion",
+        ],
+    }
+    return report, handoff
+
+
 def _replay_decision_date(payload: Mapping[str, object]) -> str | None:
     days = payload.get("days")
     if not isinstance(days, list):
@@ -483,30 +580,47 @@ def main(argv: Sequence[str] | None = None) -> int:
             and replay_decision_date != scenario.decision_date
             else None
         )
-        source_snapshot = None
-        working_copy_created = False
+        if args.inject_failure is not None and args.execution_mode != "working_copy_e2e":
+            raise ValueError("failure injection requires working_copy_e2e")
         if args.execution_mode == "working_copy_e2e" and coherence_blocker is None:
-            reader = EvidenceRehearsalSourceReader()
-            source_snapshot = reader.read(
-                args.source_db, decision_date=scenario.decision_date
+            request = EvidenceRehearsalExecutionRequest(
+                scenario=scenario,
+                config=TWStockConfig(
+                    output_root=args.working_copy_db.parent / "runtime-output"
+                ),
+                source_db_path=args.source_db,
+                working_copy_db_path=args.working_copy_db,
+                start_date=args.start_date or scenario.decision_date,
+                end_date=args.end_date or scenario.decision_date,
+                overwrite_working_copy=args.overwrite_working_copy,
+                p0_observations=_p0_observations_from_replay(replay_summary),
+                ml_provider=(
+                    JsonMLRehearsalEvidenceProvider(args.ml_evidence_root)
+                    if args.ml_evidence_root is not None
+                    else None
+                ),
             )
-            reader.backup_to_working_copy(
-                args.source_db,
-                args.working_copy_db,
-                overwrite=args.overwrite_working_copy,
+            if args.inject_failure is not None:
+                request = EvidenceRehearsalFaultInjector().inject(
+                    request,
+                    args.inject_failure,
+                )
+            execution_report = EvidenceRehearsalOrchestrator().run(request)
+            report, handoff = _orchestrated_cli_report(
+                execution_report,
+                scenario,
+                args.inject_failure,
             )
-            working_copy_created = True
-        report, handoff = _build_report(
-            scenario,
-            replay_summary,
-            args.inject_failure,
-            execution_mode=args.execution_mode,
-            source_snapshot=source_snapshot,
-            working_copy_created=working_copy_created,
-            coherence_blocker=coherence_blocker,
-        )
+        else:
+            report, handoff = _build_report(
+                scenario,
+                replay_summary,
+                None,
+                execution_mode=args.execution_mode,
+                coherence_blocker=coherence_blocker,
+            )
         _write_package(args.output_root, report, handoff)
-    except ValueError as error:
+    except (FileExistsError, ValueError) as error:
         parser.error(str(error))
     print(json.dumps({"status": report["status"], "output_root": str(args.output_root)}, ensure_ascii=False))
     return 2 if coherence_blocker is not None else 0

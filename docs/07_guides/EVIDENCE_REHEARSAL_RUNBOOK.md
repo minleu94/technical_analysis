@@ -1,92 +1,95 @@
 # Controlled Evidence Rehearsal Runbook
 
-> 本 Runbook 僅用於工程／歷史 replay 演練，不是 forward evidence，也不是正式資料、策略、模型或 scheduler 的核准流程。
+> 本 Runbook 僅適用於工程／歷史 replay 演練。rehearsal、fixture 與 shadow comparison 都不是 forward、paper、live 或正式產品證據。
 
-## 目的與責任人
+## 執行模式與安全邊界
 
-- Owner：`human_evidence_operations_owner`。
-- 目的：以既有 scenario 與 historical replay summary 產生可重跑的 rehearsal 報告與 forward handoff package。
-- 完成定義：三份輸出均已產生、所有 blocker 已由人工檢閱，且 `forward-handoff.json` 仍為 `forward_handoff_pending`。
-- 非完成定義：本命令不得把任何 product／external gate、scheduler、Advice 或 promotion 標示為完成。
+CLI 有兩種模式：
 
-## 前置輸入與安全條件
+- `projection_only`（預設）：只讀 scenario 與 replay summary，不開啟、不複製、不寫入資料庫。
+- `working_copy_e2e`：以 SQLite read-only URI 開啟 source，使用 SQLite backup 建立 working copy，並由真實 `EvidenceRehearsalOrchestrator`、historical replay、P0 comparison、ML comparison、lineage verifier 與 rehearsal service 產生報告。所有 replay 寫入與 mutation 都只能發生在 working copy。
 
-| 輸入 | 用途 | 安全要求 |
-|---|---|---|
-| `--scenario` | JSON object；至少含 `scenario_id`、`decision_date`，可選 `tier` | 僅讀取；`decision_date` 必須是 ISO 日期。 |
-| `--source-db` | 現有 fixture 或核准來源 DB 的路徑 metadata | 必須存在；CLI 不開啟、不複製、不寫入。不可為 production-like 路徑。 |
-| `--working-copy-db` | 預先規畫的 temp working-copy 路徑 metadata | 必須與 source 不同；CLI 不建立、不開啟、不寫入。不可為 production-like 路徑。 |
-| `--replay-summary` | Historical replay JSON summary，以及可選的 `p0_shadow_observations` / `ml_shadow` 唯讀投影 | 僅讀取；`days` 必須是 list，資料日期需符合既有 adapter 的 PIT 規則。缺少 P0 或 ML 投影時，報告會明確列為 missing / `insufficient_sample`，不會以 fixture 補足。 |
-| `--output-root` | 演練報告目錄 | 唯一允許寫入位置；不可為 production-like 路徑。 |
+共同限制：
 
-`production-like` 包含 `prod`／`production` 路徑 token，以及 `TWStockConfig` 的正式 `DATA_ROOT` 本身與所有子目錄（包括 `sqlite/twstock.db`）。若 source 與 working-copy 是同一路徑，命令會拒絕，並輸出 `working-copy DB must differ from source DB`。
+- `--source-db` 必須存在；`--working-copy-db` 必須不同於 source，且位於 `DATA_ROOT` 之外。
+- `--output-root` 與 working copy 必須使用明確的 temp／工程演練位置，不得指向 production-like 路徑。
+- source 以 `mode=ro`／`query_only` 邊界讀取；報告必須維持 `source_db_write_performed=false` 與 `production_db_write_performed=false`。
+- working copy 已存在時預設拒絕覆寫；只有明確加上 `--overwrite-working-copy` 才能重建該演練副本。
+- `formal_product_closeout` 與 `production_actions_allowed` 永遠為 `false`。
 
-## 執行命令
+## 輸入
 
-在 repository 根目錄執行；範例必須使用 temp working-copy 路徑：
+| 參數 | 契約 |
+|---|---|
+| `--scenario` | JSON object，至少包含 `scenario_id`、ISO `decision_date`，可選 `tier`。 |
+| `--source-db` | SQLite fixture 或經核准的唯讀來源。不得同時作為 working copy。 |
+| `--working-copy-db` | 僅供演練寫入的副本，必須位於 `DATA_ROOT` 之外。 |
+| `--replay-summary` | Historical replay JSON summary；可含 `p0_shadow_observations`。 |
+| `--start-date` / `--end-date` | working-copy E2E 的 replay 範圍；`end-date` 必須與 scenario decision date 一致。未指定時兩者都取 decision date。 |
+| `--ml-evidence-root` | 可選目錄；其中必須有 `rehearsal-ml-input.json`。僅在 working-copy E2E 使用。 |
+| `--output-root` | 寫出 JSON、Markdown 與 pending handoff 的目錄。 |
+
+`rehearsal-ml-input.json` 必須提供 frozen、shadow-only、production-ineligible manifest，以及 `accepted_rows`、`rejected_rows`、`predictions`、可選 `training_as_of`。輸入自報的 `status` 會被忽略；狀態必須由 manifest、available-date／label maturity boundary 與 shadow prediction 安全旗標重新計算。不安全 manifest、prediction 或格式直接 fail closed。
+
+## working-copy E2E 範例
 
 ```powershell
 $tempRoot = Join-Path $env:TEMP "evidence-rehearsal"
 .\.venv\Scripts\python.exe scripts\run_evidence_rehearsal.py `
+  --execution-mode working_copy_e2e `
   --scenario "$tempRoot\scenario.json" `
   --source-db "$tempRoot\source-fixture.db" `
-  --working-copy-db "$tempRoot\working-copy\rehearsal.db" `
+  --working-copy-db "$tempRoot\working\rehearsal.db" `
   --replay-summary "$tempRoot\replay-summary.json" `
+  --start-date 2026-07-12 `
+  --end-date 2026-07-12 `
+  --ml-evidence-root "$tempRoot\ml-evidence" `
   --output-root "$tempRoot\reports"
 ```
 
-預設模式固定為 `dry_read_only`；沒有 confirm、apply、scheduler、broker、Advice 或 promotion 旗標。
+## 報告判讀
 
-## 輸出與判讀
+`rehearsal-report.json` 使用 contract v2，重要欄位包括：
 
-| 輸出 | 內容 | 人工判讀 |
-|---|---|---|
-| `rehearsal-report.json` | scenario、固定 safety flags、replay coverage、13 個 P0 shadow projection、ML shadow projection 與 blockers | 確認所有 execution flags 都是 `false`；P0 或 ML 投影缺漏時狀態不得為 `complete`，並依 blocker 決定是否進入人工後續。 |
-| `rehearsal-report.md` | 人可讀的 status、safety boundary、blockers 與 handoff 摘要 | 確認沒有被描述為 forward evidence 或正式完成。 |
-| `forward-handoff.json` | 真實資料／授權／人工核准所需的 handoff | 必須維持 `forward_handoff_pending`；不得由本 CLI 自動完成。 |
+- `execution.service_call_facts` 與 `execution.adapter_statuses`：哪些真實服務已呼叫，以及成功／缺輸入／失敗狀態。
+- `source_snapshot`：唯讀 source 的 schema fingerprint、row counts 與 diagnostics。
+- `historical_replay_artifacts`、`coverage`：working-copy replay 的實際 artifacts 與覆蓋投影。
+- `lineage.artifact_dag`、`lineage.artifact_hashes`：本次實際產物的 lineage；缺 stage 時保持 `incomplete`。
+- `p0_source_shadow`、`ml_shadow`：由比較服務計算的結果，不接受 supplied status 代替驗證。
+- `blockers`：任何缺輸入、PIT、schema、label maturity 或 lineage 阻擋。
+- `formal_product_closeout=false`、`production_actions_allowed=false`：不可由此 CLI 升格。
 
-成功產生報告時 process exit code 為 `0`；這只代表演練封包已生成。若 `status=degraded`，必須先處理或接受 blocker，不能把演練結果升格為正式證據。
-
-若要在 Workbench 顯示最新的受控報告，僅能設定 `EVIDENCE_REHEARSAL_REPORT` 為此 CLI 產生之 `rehearsal-report.json` 絕對路徑。Workbench 只讀取 JSON，不開啟 source / working-copy DB；找不到或無法讀取時會顯示封鎖狀態，不會顯示 ready 或 forward evidence。
+`rehearsal-report.md` 是人工摘要；`forward-handoff.json` 必須保持 `forward_handoff_pending`。process exit code `0` 只表示工程演練封包已產生，不表示 external、forward、paper、live 或產品 gate 完成。
 
 ## 故障注入
 
-故障注入只改變記憶體中的受控 DTO 投影，絕不修改 scenario、replay summary、source DB 或 working-copy DB。每次只能注入一種，且結果固定為 `degraded`：
+`--inject-failure` 只允許搭配 `working_copy_e2e`；projection-only 會直接拒絕。每次只能注入一種：
 
-| `--inject-failure` | 固定 blocker | 用途 |
+| 故障 | 實際 mutation／boundary | 真實 detector |
 |---|---|---|
-| `missing_day` | `missing_required_adapter_output:source` | 驗證缺少來源日資料時 fail-closed。 |
-| `source_outage` | `adapter_failure:source:source_outage` | 驗證來源不可用時不建立替代資料。 |
-| `future_available_date` | `future_available_date:source-data` | 驗證 PIT 可得日落後時阻擋。 |
-| `schema_missing` | `missing_field:source-data:source_version` | 驗證必要 schema metadata 遺失時阻擋。 |
-| `immature_label` | `immature_label:ml-shadow` | 驗證未成熟 label 不得進入 forward handoff completion。 |
+| `missing_day` | 從 working-copy `daily_prices` 刪除 scenario decision day；source 不變。 | Historical replay 交易日缺口檢查。 |
+| `source_outage` | 由受控 source gateway 回報 failure，不建立替代來源。 | Source adapter／rehearsal service。 |
+| `future_available_date` | 將 P0 observation 的 available date 推至 decision date 之後。 | P0 source shadow comparison。 |
+| `schema_missing` | 只在 working copy 將 `daily_prices` 改名。 | Historical replay schema 檢查。 |
+| `immature_label` | 注入結構化 rejected ML row 與 `label_not_mature` diagnostics。 | ML rehearsal comparison service。 |
 
 範例：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_evidence_rehearsal.py --scenario "$tempRoot\scenario.json" --source-db "$tempRoot\source-fixture.db" --working-copy-db "$tempRoot\working-copy\rehearsal.db" --replay-summary "$tempRoot\replay-summary.json" --output-root "$tempRoot\future-date" --inject-failure future_available_date
+.\.venv\Scripts\python.exe scripts\run_evidence_rehearsal.py `
+  --execution-mode working_copy_e2e `
+  --scenario "$tempRoot\scenario.json" `
+  --source-db "$tempRoot\source-fixture.db" `
+  --working-copy-db "$tempRoot\working\missing-day.db" `
+  --replay-summary "$tempRoot\replay-summary.json" `
+  --output-root "$tempRoot\missing-day-report" `
+  --inject-failure missing_day
 ```
 
 ## 回滾與清理
 
-此 CLI 不寫資料庫，因此沒有 DB rollback。若要清理演練，僅刪除明確指定的 temp `--output-root`（以及外部流程建立的 temp working-copy，如有）；不得對來源 DB 或正式資料根目錄執行刪除。
+資料層回滾只需刪除本次明確指定的 temp working copy 與 temp output；不得刪除、移動或修改 source DB／`DATA_ROOT`。working-copy mutation 不會回寫 source。程式回滾應針對本 slice 的 atomic commit 進行，不得以清理分支為名覆寫其他未提交變更。
 
-若需要回滾程式與文件，使用 Task 7 atomic commit：
+## 尚未完成的 gate
 
-```powershell
-git revert <task-7-commit-sha>
-```
-
-回滾後重新執行：
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_evidence_rehearsal_cli.py -q -o addopts=
-```
-
-## 明確禁止事項
-
-- 不得把正式 `twstock.db`、任何 production-like 路徑或 source DB 指為 working-copy／output target。
-- 不得期待此 CLI 建立、複製、migrate 或寫入 working-copy DB。
-- 不得啟用或建立 production scheduler task、broker 呼叫、Advice 呼叫、策略／模型 promotion、source acceptance、lifecycle transition 或資料 pruning。
-- 不得把 replay、fixture、shadow comparison、缺失資料或未成熟 label 標為 forward／paper／live／formal product evidence。
-- 不得以 0、平均數或未揭露 forward-fill 靜默掩蓋缺失資料。
+本流程只完成 engineering real-E2E 能力。下列項目維持 pending：外部來源與授權核准、真實 forward observation、paper/live 操作、scheduler、正式 source acceptance、ML promotion、Advice／Portfolio／broker production action，以及 formal product closeout。

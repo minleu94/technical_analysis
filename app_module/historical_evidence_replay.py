@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
+import sqlite3
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 from uuid import uuid4
 
 from app_module.evidence_event_repository import EvidenceEventRepository
@@ -25,6 +26,10 @@ OUTCOME_MODE_FINAL = "final"
 ALLOWED_OUTCOME_MODES = {OUTCOME_MODE_DAILY, OUTCOME_MODE_FINAL}
 
 
+class HistoricalEvidenceReplaySchemaError(RuntimeError):
+    """Working copy 缺少 replay 必要 schema。"""
+
+
 @dataclass(frozen=True)
 class HistoricalEvidenceReplayRequest:
     start_date: str
@@ -43,6 +48,7 @@ class HistoricalEvidenceReplayRequest:
     replay_mode: str = REPLAY_MODE_HISTORICAL
     source_label: str = SOURCE_LABEL_SIMULATED_SCHEDULER
     replay_run_id: str = field(default_factory=lambda: f"hre_{uuid4().hex[:12]}")
+    working_copy_mutator: Callable[[Path], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -142,9 +148,11 @@ class HistoricalEvidenceReplayService:
             raise ValueError(f"outcome_mode must be one of: {', '.join(sorted(ALLOWED_OUTCOME_MODES))}")
         self._validate_paths(source_db, replay_db)
         self._prepare_replay_db(source_db, replay_db, overwrite=request.overwrite_replay_db)
+        if request.working_copy_mutator is not None:
+            request.working_copy_mutator(replay_db)
         replay_config = self._replay_config(replay_db)
         trading_dates = self.discover_trading_dates(
-            source_db_path=source_db,
+            source_db_path=replay_db,
             start_date=request.start_date,
             end_date=request.end_date,
         )
@@ -154,7 +162,10 @@ class HistoricalEvidenceReplayService:
         event_repository = EvidenceEventRepository(replay_config, db_path=replay_db)
         outcome_service = ForwardPerformanceService(replay_config, event_repository)
         for decision_date in trading_dates:
-            selected_result_id = self._select_recommendation_result_id(decision_date)
+            selected_result_id = self._select_recommendation_result_id(
+                decision_date,
+                replay_config,
+            )
             sources, diagnostics = self._sources_for_day(request.sources, selected_result_id)
             runner_summary = EvidencePipelineRunner(replay_config, db_path=replay_db).run(
                 EvidencePipelineRunRequest(
@@ -263,17 +274,24 @@ class HistoricalEvidenceReplayService:
             raise FileNotFoundError(str(source_db))
         start_key = _date_key(start_date)
         end_key = _date_key(end_date)
-        with EvidenceRehearsalSourceReader.open_read_only(source_db) as conn:
-            rows = conn.execute(
-                """
-                SELECT DISTINCT 日期
-                FROM daily_prices
-                WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') >= ?
-                  AND REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
-                ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
-                """,
-                (start_key, end_key),
-            ).fetchall()
+        try:
+            with EvidenceRehearsalSourceReader.open_read_only(source_db) as conn:
+                rows = conn.execute(
+                    """
+                    SELECT DISTINCT 日期
+                    FROM daily_prices
+                    WHERE REPLACE(REPLACE(日期, '-', ''), '/', '') >= ?
+                      AND REPLACE(REPLACE(日期, '-', ''), '/', '') <= ?
+                    ORDER BY REPLACE(REPLACE(日期, '-', ''), '/', '') ASC
+                    """,
+                    (start_key, end_key),
+                ).fetchall()
+        except sqlite3.OperationalError as error:
+            if "no such table" in str(error).lower():
+                raise HistoricalEvidenceReplaySchemaError(
+                    "schema_missing:daily_prices"
+                ) from error
+            raise
         return tuple(_iso_date(row[0]) for row in rows)
 
     def _validate_paths(self, source_db: Path, replay_db: Path) -> None:
@@ -295,9 +313,13 @@ class HistoricalEvidenceReplayService:
         replay_config.sqlite_dir = replay_db.parent
         return replay_config
 
-    def _select_recommendation_result_id(self, decision_date: str) -> str | None:
+    def _select_recommendation_result_id(
+        self,
+        decision_date: str,
+        replay_config: TWStockConfig,
+    ) -> str | None:
         decision_key = _date_key(decision_date)
-        repository = RecommendationRepository(self.config)
+        repository = RecommendationRepository(replay_config)
         eligible: list[dict[str, Any]] = []
         for row in repository.list_results():
             created_at = str(row.get("created_at") or "")

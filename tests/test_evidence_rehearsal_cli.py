@@ -212,19 +212,18 @@ def test_cli_rejects_configured_data_root_and_descendant_as_output_target(
 
 
 @pytest.mark.parametrize(
-    ("inject_failure", "expected_blocker"),
+    "inject_failure",
     (
-        ("missing_day", "missing_required_adapter_output:source"),
-        ("source_outage", "adapter_failure:source:source_outage"),
-        ("future_available_date", "future_available_date:source-data"),
-        ("schema_missing", "missing_field:source-data:source_version"),
-        ("immature_label", "immature_label:ml-shadow"),
+        "missing_day",
+        "source_outage",
+        "future_available_date",
+        "schema_missing",
+        "immature_label",
     ),
 )
 def test_cli_failure_injections_are_deterministic_and_do_not_touch_working_copy(
     tmp_path: Path,
     inject_failure: str,
-    expected_blocker: str,
 ) -> None:
     source_db, working_copy_db, scenario, replay_summary = _write_inputs(tmp_path)
     output_root = tmp_path / inject_failure
@@ -238,15 +237,7 @@ def test_cli_failure_injections_are_deterministic_and_do_not_touch_working_copy(
         inject_failure=inject_failure,
     )
 
-    assert completed.returncode == 0, completed.stderr
-    report = json.loads((output_root / "rehearsal-report.json").read_text(encoding="utf-8"))
-    assert report["status"] == "degraded"
-    assert report["injection"] == {
-        "blocker": expected_blocker,
-        "name": inject_failure,
-        "status": "degraded",
-    }
-    assert expected_blocker in report["blockers"]
-    assert report["execution"]["db_write_performed"] is False
-    assert report["execution"]["scheduler_invoked"] is False
+    assert completed.returncode != 0
+    assert "failure injection requires working_copy_e2e" in completed.stderr
+    assert not output_root.exists()
     assert not working_copy_db.exists()
