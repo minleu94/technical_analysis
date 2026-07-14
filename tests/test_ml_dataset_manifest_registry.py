@@ -6,7 +6,9 @@ from ml_module.dataset_manifest import (
     MLDatasetField,
     MLDatasetManifest,
     MLDatasetManifestRegistry,
+    MLDatasetManifestV2,
 )
+from tests.test_ml_dataset_manifest_v2 import _manifest as _manifest_v2
 
 
 def _manifest() -> MLDatasetManifest:
@@ -40,6 +42,22 @@ def test_registry_is_append_only(tmp_path: Path) -> None:
     assert registry.get("gate7-20260712-v1") == _manifest()
     with pytest.raises(ValueError, match="already exists"):
         registry.append(_manifest())
+
+
+def test_registry_round_trips_v2_and_rejects_cross_version_dataset_id_collision(tmp_path: Path) -> None:
+    registry = MLDatasetManifestRegistry(tmp_path / "ml-v2.sqlite")
+    manifest = _manifest_v2(dataset_id="shared-id")
+    registry.append(manifest)
+
+    assert registry.get("shared-id") == manifest
+    with pytest.raises(ValueError, match="already exists"):
+        registry.append(_manifest().create(
+            dataset_id="shared-id", created_at=_manifest().created_at,
+            decision_date_start=_manifest().decision_date_start,
+            decision_date_end=_manifest().decision_date_end, row_count=1,
+            features=_manifest().features, labels=_manifest().labels,
+            source_versions=_manifest().source_versions, content_hash="sha256:collision",
+        ))
 
 
 def test_manifest_requires_available_date_for_every_field() -> None:

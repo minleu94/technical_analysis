@@ -356,7 +356,7 @@ class MLDatasetManifestRegistry:
                 "CREATE TABLE IF NOT EXISTS ml_dataset_manifests (dataset_id TEXT PRIMARY KEY, manifest_json TEXT NOT NULL)"
             )
 
-    def append(self, manifest: MLDatasetManifest) -> None:
+    def append(self, manifest: MLDatasetManifest | MLDatasetManifestV2) -> None:
         try:
             with sqlite3.connect(self._path) as conn:
                 conn.execute(
@@ -366,7 +366,7 @@ class MLDatasetManifestRegistry:
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"dataset manifest already exists: {manifest.dataset_id}") from exc
 
-    def get(self, dataset_id: str) -> MLDatasetManifest | None:
+    def get(self, dataset_id: str) -> MLDatasetManifest | MLDatasetManifestV2 | None:
         with sqlite3.connect(self._path) as conn:
             row = conn.execute(
                 "SELECT manifest_json FROM ml_dataset_manifests WHERE dataset_id = ?", (dataset_id,)
@@ -374,6 +374,8 @@ class MLDatasetManifestRegistry:
         if row is None:
             return None
         payload = json.loads(row[0])
+        if payload.get("schema_version") == "ml-dataset-manifest.v2":
+            return MLDatasetManifestV2.from_dict(payload)
         return MLDatasetManifest(
             dataset_id=payload["dataset_id"],
             created_at=payload["created_at"],

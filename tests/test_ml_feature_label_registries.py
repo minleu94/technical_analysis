@@ -114,6 +114,18 @@ def test_label_registry_hash_covers_horizon_and_availability_contract() -> None:
 
     assert first.registry_hash == same.registry_hash
     assert first.registry_hash != later.registry_hash
+
+
+def test_label_registry_hash_covers_explicit_downside_threshold() -> None:
+    spec = CORE_LONG_HISTORY_LABEL_REGISTRY.specs[0]
+    first = LabelRegistry.create(
+        registry_id="labels-v1", specs=(spec,), downside_threshold_bp=-500
+    )
+    changed = LabelRegistry.create(
+        registry_id="labels-v1", specs=(spec,), downside_threshold_bp=-501
+    )
+
+    assert first.registry_hash != changed.registry_hash
     assert CORE_LONG_HISTORY_LABEL_REGISTRY.specs
 
 

@@ -68,3 +68,29 @@ def test_build_excludes_decision_rows_after_training_as_of() -> None:
     assert result.rows == ()
     assert result.manifest is None
     assert result.excluded_diagnostics == {"future_decision_row": 1}
+
+
+def test_degraded_corporate_labels_are_manifested_as_research_only_not_clean_oos() -> None:
+    degraded = tuple(
+        HistoricalLabelRow(
+            symbol=label.symbol, decision_date=label.decision_date,
+            label_id=label.label_id, value=label.value,
+            horizon_end_date=label.horizon_end_date, available_date=label.available_date,
+            maturity_status=label.maturity_status, quality="degraded",
+        )
+        for label in _labels()
+    )
+    result = HistoricalDatasetBuilder().build(
+        feature_rows=(_feature(),), labels=degraded, training_as_of="2024-03-01",
+        dataset_id="research-only-degraded",
+        created_at="2026-07-13T12:00:00+00:00",
+        source_fingerprints={"formal_sqlite": "sha256:" + "d" * 64},
+    )
+
+    assert result.manifest is not None
+    assert result.manifest.corporate_action_coverage == "research_only_degraded"
+    assert result.formal_oos_allowed is False
+    assert result.manifest.accepted_diagnostics == {
+        "accepted": 1,
+        "degraded_corporate_action_rows": 1,
+    }

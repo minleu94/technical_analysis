@@ -26,6 +26,7 @@ class HistoricalDatasetBuildResult:
     manifest: MLDatasetManifestV2 | None
     accepted_diagnostics: dict[str, int]
     excluded_diagnostics: dict[str, int]
+    formal_oos_allowed: bool
     shadow_only: bool = True
     production_action_allowed: bool = False
 
@@ -79,14 +80,25 @@ class HistoricalDatasetBuilder:
             excluded["immature_or_unavailable_label"] = unavailable_label_count
         if future_decision_count:
             excluded["future_decision_row"] = future_decision_count
-        accepted_diagnostics = {"accepted": len(accepted)} if accepted else {}
         rows = tuple(accepted)
+        accepted_diagnostics = {"accepted": len(rows)} if rows else {}
+        degraded_row_count = sum(
+            any(label.quality != "clean" for label in row.labels) for row in rows
+        )
+        if degraded_row_count:
+            accepted_diagnostics["degraded_corporate_action_rows"] = degraded_row_count
         if not rows:
             return HistoricalDatasetBuildResult(
                 rows=(), content_hash=None, manifest=None,
                 accepted_diagnostics=accepted_diagnostics, excluded_diagnostics=excluded,
+                formal_oos_allowed=False,
             )
         content_hash = _content_hash(rows)
+        corporate_action_coverage = (
+            "research_only_degraded"
+            if any(label.quality != "clean" for row in rows for label in row.labels)
+            else "clean_official_or_observed"
+        )
         manifest = MLDatasetManifestV2.create(
             dataset_id=dataset_id,
             created_at=created_at,
@@ -115,7 +127,7 @@ class HistoricalDatasetBuilder:
             source_fingerprints=source_fingerprints,
             accepted_diagnostics=accepted_diagnostics,
             excluded_diagnostics=excluded,
-            corporate_action_coverage="research_only_unknown",
+            corporate_action_coverage=corporate_action_coverage,
             broker_eligibility="excluded_separate_addon",
             fundamental_eligibility="ineligible_pending_pit_repair",
             content_hash=content_hash,
@@ -123,6 +135,7 @@ class HistoricalDatasetBuilder:
         return HistoricalDatasetBuildResult(
             rows=rows, content_hash=content_hash, manifest=manifest,
             accepted_diagnostics=accepted_diagnostics, excluded_diagnostics=excluded,
+            formal_oos_allowed=corporate_action_coverage == "clean_official_or_observed",
         )
 
 
