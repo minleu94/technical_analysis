@@ -18,8 +18,12 @@ def test_feature_drift_uses_baseline_bins_and_flags_large_shift() -> None:
     assert stable_result.psi < 0.01
     assert stable_result.status == "stable"
     assert shifted_result.psi > 0.25
+    assert isinstance(shifted_result.psi_bp, int)
+    assert shifted_result.psi_bp > 2500
     assert shifted_result.status == "major_drift"
     assert shifted_result.retrain_automatically is False
+    assert shifted_result.auto_promotion_allowed is False
+    assert shifted_result.recommended_human_action == "disable_shadow_and_review"
 
 
 def test_challenger_comparison_uses_same_matured_sample_set() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_EVEN
 import math
 from typing import Iterable
 
@@ -18,6 +19,23 @@ class MLFeatureDriftResult:
     baseline_count: int
     current_count: int
     retrain_automatically: bool = False
+    auto_promotion_allowed: bool = False
+
+    @property
+    def psi_bp(self) -> int:
+        return int(
+            (Decimal(str(self.psi)) * Decimal("10000")).quantize(
+                Decimal("1"), rounding=ROUND_HALF_EVEN
+            )
+        )
+
+    @property
+    def recommended_human_action(self) -> str:
+        if self.status == "major_drift":
+            return "disable_shadow_and_review"
+        if self.status == "moderate_drift":
+            return "review_shadow_monitoring"
+        return "continue_shadow_monitoring"
 
 
 class MLFeatureDriftService:
