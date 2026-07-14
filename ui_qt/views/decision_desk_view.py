@@ -98,7 +98,6 @@ class DecisionDeskView(QWidget):
         self.generated_at_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_muted};")
         self.overall_quality_badge = StatusBadge("", "observed")
         self.warning_list = WarningList()
-        self.warning_list.setMaximumHeight(120)
         self.overall_warn_label = self.warning_list
         self.decision_date_card = MetricCard("決策日", self.as_of_date.isoformat())
         self.generated_at_card = MetricCard("生成時間", "N/A")
