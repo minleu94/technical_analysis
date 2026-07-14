@@ -113,6 +113,12 @@ python scripts/merge_daily_data.py
 
 同步方向固定為 CSV → SQLite，不會用 SQLite 反向覆蓋 CSV。若其中任一同步步驟失敗，安全更新會停止並顯示失敗步驟，避免 UI 狀態與資料庫內容繼續分岔。
 
+## TWSE 無資料日與排錯
+
+每日股價更新會先嘗試 TWSE `MI_INDEX` 的 `ALL` 與 `ALLBUT0999` 類型。只有兩者都明確回覆「沒有符合條件的資料」或「查無資料」時，該日期才會列入 `skipped_dates`，並以「上游查無資料，已跳過」顯示；這不是下載失敗，後續 TPEX、SQLite 同步與技術指標仍會繼續執行。
+
+HTTP 錯誤、逾時、JSON／表格解析失敗，或「查詢日期大於今日」等回覆仍會列入 `failed_dates`，並中止後續同步，避免 UI 將不完整資料誤認為已更新。排程請查看 `OUTPUT_ROOT/scheduled/data_update_quick/latest_status.json`：`passed_with_warnings` 代表有安全跳過日或 TPEX 警告；`failed` 則應同時查看當日 `*_data_update_quick.log` 與 `errors` 欄位。
+
 備份檔集中存放在 `meta_data/backup/`。為降低硬碟負擔，系統會在新備份成功後清理同一來源的舊備份：同一天只保留最新一份，且最多保留最新 5 個日期版本；清理範圍僅限備份目錄內「完全符合來源前綴 + 日期戳」的檔案，不會刪除正式資料，也不會讓一般 `twstock_*.db` 清掉 `twstock_fundamental_schema_*.db` 這類不同用途的標籤備份。備份來源與既有大檔清理候選見 [BACKUP_RETENTION_AUDIT_2026_07_06.md](BACKUP_RETENTION_AUDIT_2026_07_06.md)。
 
 ### 標準流程（推薦）
