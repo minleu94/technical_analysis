@@ -6,6 +6,7 @@ from scripts.scheduled.run_daily_data_update_quick import (
     _scheduled_target_weekday,
     _technical_is_current,
     _tpex_warning_messages,
+    _twse_skip_warning_messages,
     _weekday_window,
 )
 
@@ -36,6 +37,12 @@ def test_tpex_warning_messages_report_missing_failed_dates() -> None:
     )
 
     assert warnings == ["TPEX 每日股價缺少日期：20260706"]
+
+
+def test_twse_skip_warning_messages_report_explicit_no_data_dates() -> None:
+    warnings = _twse_skip_warning_messages({"skipped_dates": ["2026-07-10"]})
+
+    assert warnings == ["TWSE 上游查無資料，已跳過日期：2026-07-10"]
 
 
 def test_technical_is_not_current_when_latest_date_coverage_lags() -> None:

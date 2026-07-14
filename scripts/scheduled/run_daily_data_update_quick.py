@@ -84,6 +84,15 @@ def _tpex_warning_messages(result: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(messages))
 
 
+def _twse_skip_warning_messages(result: dict[str, Any]) -> list[str]:
+    skipped_dates = sorted(
+        {str(item) for item in result.get("skipped_dates", []) if str(item).strip()}
+    )
+    if not skipped_dates:
+        return []
+    return [f"TWSE 上游查無資料，已跳過日期：{', '.join(skipped_dates)}"]
+
+
 def _run_step(
     *,
     steps: list[dict[str, Any]],
@@ -241,6 +250,10 @@ def main(argv: list[str] | None = None) -> int:
     for step in steps:
         if step.get("status") == "warning" and step.get("message"):
             warnings.append(str(step["message"]))
+        if step.get("name") == "update_twse_daily_prices":
+            result = step.get("result")
+            if isinstance(result, dict):
+                warnings.extend(_twse_skip_warning_messages(result))
         if step.get("name") == "update_tpex_daily_prices":
             result = step.get("result")
             if isinstance(result, dict):

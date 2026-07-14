@@ -10,6 +10,15 @@ Result = dict[str, Any]
 ProgressCallback = Callable[[str, int], None]
 
 
+def _twse_skip_warning_messages(result: Result) -> list[str]:
+    skipped_dates = sorted(
+        {str(item) for item in result.get("skipped_dates", []) if str(item).strip()}
+    )
+    if not skipped_dates:
+        return []
+    return [f"TWSE 上游查無資料，已跳過日期：{', '.join(skipped_dates)}"]
+
+
 def run_update_all(
     *,
     mode: str,
@@ -120,6 +129,8 @@ def run_update_all(
 
     for name, progress, action in steps:
         result = run_step(name, progress, action)
+        if name.startswith("每日股價更新") and isinstance(result, dict):
+            warnings.extend(_twse_skip_warning_messages(result))
         if name.startswith("TPEX 每日股價更新") and isinstance(result, dict):
             step_warnings = [f"{name}: {warning}" for warning in tpex_warning_messages(result)]
             if not result.get("success", True) and not step_warnings:
