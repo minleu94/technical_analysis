@@ -103,7 +103,6 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.decision_date = decision_date
         self.replay_summary_json = replay_summary_json
         self.evidence_rehearsal_dashboard = evidence_rehearsal_dashboard
-        self.decision_source_widget = decision_source_widget
         self.navigate_to_daily_decision_callback = navigate_to_daily_decision_callback
         self.navigate_to_market_explore_callback = navigate_to_market_explore_callback
         self.navigate_to_evidence_review_callback = navigate_to_evidence_review_callback
@@ -216,9 +215,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         drilldown_layout.setContentsMargins(0, 0, 0, 0)
         drilldown_layout.setSpacing(8)
         self.daily_decision_button = self._make_drilldown_button(
-            "開啟決策來源",
+            "開啟市場總覽",
             self.navigate_to_daily_decision_callback,
-            "切到 Workbench 內的決策來源頁，只讀取既有 service snapshot。",
+            "切到市場探索的唯一市場總覽；Workbench 不持有第二份 Decision Desk。",
         )
         self.market_explore_button = self._make_drilldown_button(
             "開啟市場探索",
@@ -466,19 +465,11 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
 
     def _build_decision_source_page(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        if self.decision_source_widget is None:
-            label = QLabel("決策來源尚未載入；Workbench 仍維持唯讀，不補資料、不讀 DB、不啟用排程器。")
-            label.setWordWrap(True)
-            label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
-            layout.addWidget(label)
-            layout.addStretch()
-        else:
-            layout.addWidget(self.decision_source_widget)
-        return page
+        return self._build_navigation_page(
+            "市場總覽",
+            "Decision Desk 的唯一實例位於市場探索首頁；Workbench 僅提供導覽，不持有或嵌入第二份畫面。",
+            self.daily_decision_button,
+        )
 
     def _build_navigation_page(
         self,

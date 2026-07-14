@@ -13,6 +13,12 @@ from app_module.decision_desk_dtos import (
     DecisionDeskRiskPromptSummary,
     DecisionDeskSnapshot,
 )
+from app_module.market_data_visibility_dtos import (
+    InstitutionalFlowMarketSummary,
+    MarketDataVisibilitySummary,
+    MonthlyRevenueBreadthSummary,
+    SourceVisibilityStatus,
+)
 from app_module.decision_desk_service import DailyDecisionDeskProvider
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
 
@@ -176,7 +182,7 @@ def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
     )
     snapshot = builder.build_snapshot(as_of_date)
 
-    assert snapshot.schema_version == 1
+    assert snapshot.schema_version == 2
     assert snapshot.as_of_date == as_of_date
     assert snapshot.overall_quality == DecisionDeskQuality.DEGRADED
     assert snapshot.market_regime.to_dict()["quality"] == DecisionDeskQuality.OBSERVED.value
@@ -200,9 +206,11 @@ def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
         "action_summary",
         "sector_focus",
         "stock_focus",
+        "market_data_visibility",
     }
     assert payload["portfolio_alerts"]["alert_level"] == "low"
     assert payload["action_summary"]["action_level"] in {"積極研究", "正常研究", "保守觀察", "暫停新進場"}
+    assert payload["market_data_visibility"] is None
 
 
 def test_decision_desk_snapshot_overall_quality_is_observed_when_all_sections_observed():
@@ -689,3 +697,144 @@ def test_decision_desk_snapshot_serializes_risk_prompts_section():
     assert payload["risk_prompts"]["quality"] == "observed"
     assert payload["risk_prompts"]["prompts"][0]["category"] == "liquidity"
     assert payload["risk_prompts"]["prompts"][0]["code"] == "1101"
+
+
+def _visibility_summary(*, quality: str = "DEGRADED") -> MarketDataVisibilitySummary:
+    sample_date = "2026-06-15"
+    return MarketDataVisibilitySummary(
+        as_of_date=sample_date,
+        monthly_revenue=MonthlyRevenueBreadthSummary(
+            latest_period="2026-05",
+            stock_count=1200,
+            mom_comparable_count=1100,
+            mom_positive_count=620,
+            mom_positive_ratio_bp=5636,
+            yoy_comparable_count=1050,
+            yoy_positive_count=700,
+            yoy_positive_ratio_bp=6667,
+            quality=quality,
+            warnings=("historical_pit_unverified",) if quality == "DEGRADED" else (),
+        ),
+        institutional_flow=InstitutionalFlowMarketSummary(
+            latest_date=None,
+            stock_count=0,
+            foreign_net_shares=None,
+            investment_trust_net_shares=None,
+            dealer_net_shares=None,
+            quality="MISSING",
+            warnings=("尚未匯入（0 筆）",),
+        ),
+        source_statuses=(
+            SourceVisibilityStatus(
+                source_id="fundamental_monthly_revenues",
+                display_name="月營收",
+                as_of_date=sample_date,
+                latest_observation_date="2026-05",
+                available_date="2026-06-10",
+                row_count=3600,
+                stock_count=1200,
+                quality=quality,
+                pit_status="historical_pit_unverified",
+                eligibility="research_only",
+                warnings=("historical_pit_unverified",),
+            ),
+            SourceVisibilityStatus(
+                source_id="institutional_flows",
+                display_name="三大法人",
+                as_of_date=sample_date,
+                latest_observation_date=None,
+                available_date=None,
+                row_count=0,
+                stock_count=0,
+                quality="MISSING",
+                pit_status="missing",
+                eligibility="none",
+                warnings=("尚未匯入（0 筆）",),
+            ),
+        ),
+        overall_quality=quality,
+        warnings=("historical_pit_unverified", "尚未匯入（0 筆）"),
+    )
+
+
+class _FakeVisibilityService:
+    def __init__(
+        self,
+        payload: MarketDataVisibilitySummary | None = None,
+        *,
+        fail: Exception | None = None,
+    ) -> None:
+        self.payload = payload
+        self.fail = fail
+        self.calls: list[date] = []
+
+    def build_summary(self, *, as_of_date: date) -> MarketDataVisibilitySummary:
+        self.calls.append(as_of_date)
+        if self.fail is not None:
+            raise self.fail
+        assert self.payload is not None
+        return self.payload
+
+
+def test_decision_desk_attaches_visibility_without_changing_action_or_focus() -> None:
+    sample_date = date(2026, 6, 15)
+    fixed_now = datetime(2026, 6, 15, 9, 30)
+    visibility_service = _FakeVisibilityService(_visibility_summary())
+    common = {
+        "relative_strength_liquidity_service": FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=sample_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+                top_strength_codes=("2330",),
+            ),
+        ),
+        "clock": lambda: fixed_now,
+    }
+    without_visibility = DecisionDeskSnapshotBuilder(
+        AllObservedDecisionDeskProvider(),
+        **common,
+    ).build_snapshot(sample_date)
+    with_visibility = DecisionDeskSnapshotBuilder(
+        AllObservedDecisionDeskProvider(),
+        market_data_visibility_service=visibility_service,
+        **common,
+    ).build_snapshot(sample_date)
+
+    assert visibility_service.calls == [sample_date]
+    assert with_visibility.market_data_visibility == _visibility_summary()
+    assert with_visibility.action_summary == without_visibility.action_summary
+    assert with_visibility.sector_focus == without_visibility.sector_focus
+    assert with_visibility.stock_focus == without_visibility.stock_focus
+    assert with_visibility.overall_quality == without_visibility.overall_quality
+    assert with_visibility.to_dict()["market_data_visibility"]["monthly_revenue"][
+        "mom_positive_ratio_bp"
+    ] == 5636
+
+
+def test_visibility_failure_is_typed_degraded_and_does_not_fail_snapshot() -> None:
+    sample_date = date(2026, 6, 15)
+    builder = DecisionDeskSnapshotBuilder(
+        AllObservedDecisionDeskProvider(),
+        relative_strength_liquidity_service=FakeSectionService(
+            "relative_strength_liquidity",
+            RelativeStrengthLiquiditySummary(
+                as_of_date=sample_date,
+                quality=DecisionDeskQuality.OBSERVED,
+                warnings=(),
+            ),
+        ),
+        market_data_visibility_service=_FakeVisibilityService(
+            fail=RuntimeError("visibility unavailable")
+        ),
+    )
+
+    snapshot = builder.build_snapshot(sample_date)
+
+    assert snapshot.market_data_visibility is not None
+    assert snapshot.market_data_visibility.overall_quality == "DEGRADED"
+    assert "market_data_visibility_error:visibility unavailable" in (
+        snapshot.market_data_visibility.warnings
+    )
+    assert snapshot.action_summary is not None

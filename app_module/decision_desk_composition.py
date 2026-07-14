@@ -202,6 +202,10 @@ def build_decision_desk_composition(
             )
         ),
     )
+    market_data_visibility_service = optional_service(
+        "MarketDataVisibilityService",
+        lambda: dependencies["MarketDataVisibilityService"](config.db_file),
+    )
     builder = dependencies["DecisionDeskSnapshotBuilder"](
         provider=provider,
         market_breadth_service=market_breadth_service,
@@ -211,5 +215,6 @@ def build_decision_desk_composition(
         portfolio_alert_service=portfolio_alert_service,
         smart_money_service=smart_money_service,
         market_frame_loader=market_frame_loader,
+        market_data_visibility_service=market_data_visibility_service,
     )
     return DecisionDeskComposition(builder=builder, market_frame_loader=market_frame_loader)

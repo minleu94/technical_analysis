@@ -73,6 +73,7 @@ from app_module.smart_money_semantic_service import (
 )
 from app_module.decision_market_frame import DecisionMarketFrameLoader
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from app_module.market_data_visibility_service import MarketDataVisibilityService
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from app_module.workbench_source_service import WorkbenchSourceService
 from app_module.engineering_closure_dashboard_service import (
@@ -142,6 +143,7 @@ class MainWindow(QMainWindow):
                 "SQLiteDailyPriceRelativeStrengthLiquidityProvider": SQLiteDailyPriceRelativeStrengthLiquidityProvider,
                 "RelativeStrengthLiquidityService": RelativeStrengthLiquidityService,
                 "DecisionDeskSnapshotBuilder": DecisionDeskSnapshotBuilder,
+                "MarketDataVisibilityService": MarketDataVisibilityService,
             },
         )
         self.decision_market_frame_loader = composition.market_frame_loader
@@ -258,13 +260,14 @@ class MainWindow(QMainWindow):
         self._select_main_workspace(tab_name)
 
     def _open_workbench_daily_decision(self) -> None:
-        self._select_main_workspace("workbench")
-        workbench_view = getattr(self, "workbench_view", None)
-        if hasattr(workbench_view, "select_subtab"):
-            workbench_view.select_subtab("決策來源")
+        self._open_workbench_market_explore()
 
     def _open_workbench_market_explore(self) -> None:
         self._select_main_workspace("market_explore")
+        market_tabs = getattr(self, "market_tabs", None)
+        decision_desk_view = getattr(self, "decision_desk_view", None)
+        if market_tabs is not None and decision_desk_view is not None:
+            market_tabs.setCurrentWidget(decision_desk_view)
 
     def _open_workbench_evidence_review(self) -> None:
         self._select_main_workspace("backtest")
@@ -390,24 +393,23 @@ class MainWindow(QMainWindow):
             # 監聽市場觀察 tab 切換事件
             def on_market_tab_changed(index):
                 """當市場觀察 tab 被點擊時，檢查是否需要載入數據"""
-                if index == 0:  # 大盤指數（不需要自動載入，用戶點擊按鈕）
-                    pass
-                elif index == 1:  # 強勢個股
+                current_widget = market_tabs.widget(index)
+                if current_widget is strong_stocks:
                     strong_stocks.load_data_if_needed()
-                elif index == 2:  # 弱勢個股
+                elif current_widget is weak_stocks:
                     weak_stocks.load_data_if_needed()
-                elif index == 3:  # 強勢產業
+                elif current_widget is strong_industries:
                     strong_industries.load_data_if_needed()
-                elif index == 4:  # 弱勢產業
+                elif current_widget is weak_industries:
                     weak_industries.load_data_if_needed()
-                elif index == 5:  # 主力流向
+                elif current_widget is smart_money_flow:
                     smart_money_flow.load_data_if_needed()
 
             market_tabs.currentChanged.connect(on_market_tab_changed)
             self._on_market_tab_changed = on_market_tab_changed
             print("[MainWindow] 市場探索標籤頁創建成功")
 
-            # 每日決策來源（嵌入決策工作台，不再作為主工作區）
+            # 市場總覽是 Decision Desk 的唯一實例，固定置於市場探索首頁。
             print("[MainWindow] 開始建立每日決策來源...")
             try:
                 self.decision_desk_builder = self._create_decision_desk_builder()
@@ -424,6 +426,9 @@ class MainWindow(QMainWindow):
                 decision_desk_view.setWordWrap(True)
                 self.decision_desk_view = decision_desk_view
 
+            market_tabs.insertTab(0, decision_desk_view, "市場總覽")
+            market_tabs.setCurrentIndex(0)
+
             # Phase 2 Unified Decision Workbench shell（唯讀 DTO/service 邊界）
             print("[MainWindow] 開始建立決策工作台...")
             try:
@@ -432,7 +437,6 @@ class MainWindow(QMainWindow):
                     source_service=self.workbench_source_service,
                     replay_summary_json=self._default_workbench_replay_summary_path(),
                     evidence_rehearsal_dashboard=self._controlled_rehearsal_dashboard(),
-                    decision_source_widget=decision_desk_view,
                     navigate_to_daily_decision_callback=self._open_workbench_daily_decision,
                     navigate_to_market_explore_callback=self._open_workbench_market_explore,
                     navigate_to_evidence_review_callback=self._open_workbench_evidence_review,

@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any
 
 from app_module.decision_desk_dto_support import _normalize_warnings
+from app_module.market_data_visibility_dtos import MarketDataVisibilitySummary
 
 
 class DecisionDeskQuality(str, Enum):
@@ -448,6 +449,7 @@ class DecisionDeskSnapshot:
     action_summary: DecisionDeskActionSummary | None = None
     sector_focus: DecisionDeskSectorFocus | None = None
     stock_focus: DecisionDeskStockFocus | None = None
+    market_data_visibility: MarketDataVisibilitySummary | None = None
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -483,4 +485,9 @@ class DecisionDeskSnapshot:
             "action_summary": self.action_summary.to_dict() if self.action_summary is not None else None,
             "sector_focus": self.sector_focus.to_dict() if self.sector_focus is not None else None,
             "stock_focus": self.stock_focus.to_dict() if self.stock_focus is not None else None,
+            "market_data_visibility": (
+                self.market_data_visibility.to_dict()
+                if self.market_data_visibility is not None
+                else None
+            ),
         }

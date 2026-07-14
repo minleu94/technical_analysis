@@ -6,7 +6,7 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 from app_module.decision_desk_dtos import (
     DecisionDeskQuality,
@@ -27,6 +27,12 @@ from app_module.decision_desk_dtos import (
     DecisionDeskStockFocus,
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from app_module.market_data_visibility_dtos import (
+    InstitutionalFlowMarketSummary,
+    MarketDataVisibilitySummary,
+    MonthlyRevenueBreadthSummary,
+    SourceVisibilityStatus,
+)
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.views.decision_desk_view import DecisionDeskView
 
@@ -59,6 +65,7 @@ def _snapshot(
     portfolio_warnings=(),
     risk_prompts_warnings=(),
     overall_warnings=(),
+    market_data_visibility=None,
 ) -> DecisionDeskSnapshot:
     as_of = date(2026, 6, 15)
     return DecisionDeskSnapshot(
@@ -143,6 +150,7 @@ def _snapshot(
                 DecisionDeskStockCard("2603", "2603", "risk", "持倉或觀察清單風險提示", "portfolio_watchlist"),
             ),
         ),
+        market_data_visibility=market_data_visibility,
         warnings=overall_warnings,
     )
 
@@ -499,3 +507,78 @@ def test_decision_desk_view_renders_compact_code_widget_from_snapshot():
     assert "強勢：T000, T001, T002, T003, T004, T005, T006, T007（另 2 檔）" in text
     assert "弱勢：W001" in text
     assert "低流動性：L001, L002" in text
+
+
+def test_decision_desk_view_renders_visibility_quality_missing_state_and_action_hint():
+    app()
+    visibility = MarketDataVisibilitySummary(
+        as_of_date="2026-06-15",
+        monthly_revenue=MonthlyRevenueBreadthSummary(
+            latest_period="2026-05",
+            stock_count=1200,
+            mom_comparable_count=1100,
+            mom_positive_count=620,
+            mom_positive_ratio_bp=5636,
+            yoy_comparable_count=1050,
+            yoy_positive_count=700,
+            yoy_positive_ratio_bp=6667,
+            quality="DEGRADED",
+            warnings=("historical_pit_unverified",),
+        ),
+        institutional_flow=InstitutionalFlowMarketSummary(
+            latest_date=None,
+            stock_count=0,
+            foreign_net_shares=None,
+            investment_trust_net_shares=None,
+            dealer_net_shares=None,
+            quality="MISSING",
+            warnings=("尚未匯入（0 筆）",),
+        ),
+        source_statuses=(
+            SourceVisibilityStatus(
+                source_id="fundamental_monthly_revenues",
+                display_name="月營收",
+                as_of_date="2026-06-15",
+                latest_observation_date="2026-05",
+                available_date="2026-06-10",
+                row_count=3600,
+                stock_count=1200,
+                quality="DEGRADED",
+                pit_status="historical_pit_unverified",
+                eligibility="research_only",
+                warnings=("historical_pit_unverified",),
+            ),
+            SourceVisibilityStatus(
+                source_id="institutional_flows",
+                display_name="三大法人",
+                as_of_date="2026-06-15",
+                latest_observation_date=None,
+                available_date=None,
+                row_count=0,
+                stock_count=0,
+                quality="MISSING",
+                pit_status="missing",
+                eligibility="none",
+                warnings=("尚未匯入（0 筆）",),
+            ),
+        ),
+        overall_quality="DEGRADED",
+        warnings=("historical_pit_unverified", "尚未匯入（0 筆）"),
+    )
+
+    view = rendered_view(
+        FakeBuilder(_snapshot(market_data_visibility=visibility))
+    )
+
+    assert any(
+        "資料可見性與擴充因子" in label.text()
+        for label in view.visibility_section.findChildren(QLabel)
+    )
+    assert "2026-05" in view.revenue_visibility_card.value_label.text()
+    assert "月增正向 56.36%" in view.revenue_visibility_card.value_label.text()
+    assert "尚未匯入（0 筆）" in view.institutional_visibility_card.value_label.text()
+    assert "外資 0" not in view.institutional_visibility_card.value_label.text()
+    assert "降級" in view.visibility_quality_badge.text()
+    assert "僅供研究可見性" in view.visibility_action_hint.text()
+    assert "三大法人" in view.visibility_sources_label.text()
+    assert "缺漏" in view.visibility_sources_label.text()

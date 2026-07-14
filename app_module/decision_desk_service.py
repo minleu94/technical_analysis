@@ -17,6 +17,12 @@ from app_module.decision_desk_dtos import (
 from app_module.decision_desk_snapshot_support import compute_overall_quality, collect_snapshot_warnings, collect_smart_money_candidate_codes
 from app_module.decision_desk_dashboard_service import DecisionDeskDashboardComposer
 from app_module.decision_desk_risk_prompt_service import DecisionDeskRiskPromptService
+from app_module.market_data_visibility_dtos import (
+    InstitutionalFlowMarketSummary,
+    MarketDataVisibilitySummary,
+    MonthlyRevenueBreadthSummary,
+    SourceVisibilityStatus,
+)
 
 
 class DailyDecisionDeskProvider(Protocol):
@@ -59,6 +65,10 @@ class DecisionMarketFrameResetter(Protocol):
     def reset(self, as_of_date: date) -> None: ...
 
 
+class MarketDataVisibilitySectionService(Protocol):
+    def build_summary(self, *, as_of_date: date) -> MarketDataVisibilitySummary: ...
+
+
 
 class DecisionDeskSnapshotBuilder:
     """Builder for Daily Decision Desk snapshot."""
@@ -67,7 +77,7 @@ class DecisionDeskSnapshotBuilder:
         self,
         provider: DailyDecisionDeskProvider | None = None,
         *,
-        schema_version: int = 1,
+        schema_version: int = 2,
         clock: Callable[[], datetime] | None = None,
         market_breadth_service: MarketBreadthSectionService | None = None,
         sector_rotation_service: SectorRotationSectionService | None = None,
@@ -78,6 +88,7 @@ class DecisionDeskSnapshotBuilder:
         dashboard_composer: DecisionDeskDashboardComposer | None = None,
         smart_money_service: SmartMoneyDashboardService | None = None,
         market_frame_loader: DecisionMarketFrameResetter | None = None,
+        market_data_visibility_service: MarketDataVisibilitySectionService | None = None,
     ):
         self.provider = provider
         self.schema_version = schema_version
@@ -91,6 +102,7 @@ class DecisionDeskSnapshotBuilder:
         self.dashboard_composer = dashboard_composer or DecisionDeskDashboardComposer()
         self.smart_money_service = smart_money_service
         self.market_frame_loader = market_frame_loader
+        self.market_data_visibility_service = market_data_visibility_service
 
     def build_snapshot(self, as_of_date: date) -> DecisionDeskSnapshot:
         if self.market_frame_loader is not None:
@@ -101,6 +113,7 @@ class DecisionDeskSnapshotBuilder:
         relative_strength_liquidity = self._build_relative_strength_liquidity(as_of_date)
         watchlist_triggers = self._build_watchlist_triggers(as_of_date)
         portfolio_alerts = self._build_portfolio_alerts(as_of_date)
+        market_data_visibility = self._build_market_data_visibility(as_of_date)
         risk_prompts = self.risk_prompt_service.build_summary(
             as_of_date=as_of_date,
             market_regime=market_regime,
@@ -172,7 +185,68 @@ class DecisionDeskSnapshotBuilder:
             action_summary=action_summary,
             sector_focus=sector_focus,
             stock_focus=stock_focus,
+            market_data_visibility=market_data_visibility,
         )
+
+    def _build_market_data_visibility(
+        self, as_of_date: date
+    ) -> MarketDataVisibilitySummary | None:
+        if self.market_data_visibility_service is None:
+            return None
+        try:
+            return self.market_data_visibility_service.build_summary(as_of_date=as_of_date)
+        except Exception as exc:  # noqa: BLE001
+            warning = f"market_data_visibility_error:{exc}"
+            source_names = (
+                ("fundamental_monthly_revenues", "月營收"),
+                ("institutional_flows", "三大法人"),
+                ("credit_transactions", "信用交易"),
+                ("tdcc_shareholding", "集保股權分散"),
+                ("broker_flows", "券商分點"),
+            )
+            statuses = tuple(
+                SourceVisibilityStatus(
+                    source_id=source_id,
+                    display_name=display_name,
+                    as_of_date=as_of_date.isoformat(),
+                    latest_observation_date=None,
+                    available_date=None,
+                    row_count=0,
+                    stock_count=0,
+                    quality="MISSING",
+                    pit_status="missing",
+                    eligibility="none",
+                    warnings=(warning,),
+                )
+                for source_id, display_name in source_names
+            )
+            return MarketDataVisibilitySummary(
+                as_of_date=as_of_date.isoformat(),
+                monthly_revenue=MonthlyRevenueBreadthSummary(
+                    latest_period=None,
+                    stock_count=0,
+                    mom_comparable_count=0,
+                    mom_positive_count=0,
+                    mom_positive_ratio_bp=None,
+                    yoy_comparable_count=0,
+                    yoy_positive_count=0,
+                    yoy_positive_ratio_bp=None,
+                    quality="MISSING",
+                    warnings=(warning,),
+                ),
+                institutional_flow=InstitutionalFlowMarketSummary(
+                    latest_date=None,
+                    stock_count=0,
+                    foreign_net_shares=None,
+                    investment_trust_net_shares=None,
+                    dealer_net_shares=None,
+                    quality="MISSING",
+                    warnings=(warning,),
+                ),
+                source_statuses=statuses,
+                overall_quality="DEGRADED",
+                warnings=(warning,),
+            )
 
     def _build_market_regime(self, as_of_date: date) -> MarketRegimeSummary:
         if self.provider is None:

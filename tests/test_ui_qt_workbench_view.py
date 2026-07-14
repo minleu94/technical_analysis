@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from app_module.workbench_dtos import (
     WorkbenchAccessBoundary,
@@ -395,7 +395,7 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     ]
     assert view.select_subtab("決策來源") is True
     assert view.subtabs.tabText(view.subtabs.currentIndex()) == "決策來源"
-    assert view.daily_decision_button.text() == "開啟決策來源"
+    assert view.daily_decision_button.text() == "開啟市場總覽"
     assert view.evidence_review_button.text() == "開啟證據覆盤"
     assert view.portfolio_button.text() == "開啟持倉管理"
     evidence_page_text = " ".join(
@@ -458,6 +458,38 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     assert "需要人工覆盤" in warning_text
     assert "Missing Source" not in warning_text
     assert "Manual Review Required" not in warning_text
+
+
+def test_workbench_decision_source_page_is_navigation_only_and_does_not_own_dashboard() -> None:
+    app()
+    duplicate_dashboard = QWidget()
+    duplicate_dashboard.setObjectName("duplicateDecisionDesk")
+    clicked: list[str] = []
+
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+        decision_source_widget=duplicate_dashboard,
+        navigate_to_daily_decision_callback=lambda: clicked.append("market-overview"),
+    )
+
+    decision_page = view.subtabs.widget(1)
+    page_text = " ".join(
+        label.text() for label in decision_page.findChildren(type(view.boundary_banner))
+    )
+    assert "市場總覽" in page_text
+    assert "唯一" in page_text
+    assert not hasattr(view, "decision_source_widget")
+    assert duplicate_dashboard.parent() is None
+    assert view.findChild(QWidget, "duplicateDecisionDesk") is None
+
+    navigation_button = next(
+        button
+        for button in decision_page.findChildren(type(view.daily_decision_button))
+        if button.text() == "開啟市場總覽"
+    )
+    navigation_button.click()
+    assert clicked == ["market-overview"]
 
 
 def test_unified_workbench_view_renders_blocked_rehearsal_without_ready_claim() -> None:

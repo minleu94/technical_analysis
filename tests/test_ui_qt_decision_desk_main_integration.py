@@ -47,11 +47,14 @@ class _DummyRecommendationView(_DummyView):
 
 
 class _RecordedDecisionDeskView(_DummyView):
+    instances: list["_RecordedDecisionDeskView"] = []
+
     def __init__(self, decision_desk_builder, as_of_date=None, navigate_to_smart_money_callback=None, parent=None):
         self.decision_desk_builder = decision_desk_builder
         self.as_of_date = as_of_date
         self.navigate_to_smart_money_callback = navigate_to_smart_money_callback
         super().__init__(parent=parent)
+        _RecordedDecisionDeskView.instances.append(self)
 
 
 class _RecordedWorkbenchView(_DummyView):
@@ -219,9 +222,10 @@ def _get_nav_labels(main_window) -> list[str]:
     ]
 
 
-def test_main_window_embeds_daily_decision_in_workbench_source_tab(monkeypatch):
+def test_main_window_owns_one_decision_desk_as_market_overview_index_zero(monkeypatch):
     app()
     _TrackingDecisionDeskBuilder.instances = []
+    _RecordedDecisionDeskView.instances = []
     _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
 
     target_window = _build_main_window()
@@ -233,11 +237,47 @@ def test_main_window_embeds_daily_decision_in_workbench_source_tab(monkeypatch):
         target_window.decision_desk_view.navigate_to_smart_money_callback
         == target_window.show_smart_money_flow_for_stock
     )
-    assert target_window.workbench_view.kwargs["decision_source_widget"] is target_window.decision_desk_view
+    assert len(_RecordedDecisionDeskView.instances) == 1
+    assert target_window.market_tabs.tabText(0) == "市場總覽"
+    assert target_window.market_tabs.widget(0) is target_window.decision_desk_view
+    assert "decision_source_widget" not in target_window.workbench_view.kwargs
     assert _TrackingDecisionDeskBuilder.instances
     builder = _TrackingDecisionDeskBuilder.instances[-1]
     assert builder.provider is not None
     assert callable(getattr(builder.provider, "fetch_market_regime", None))
+
+
+def test_market_exploration_lazy_loading_uses_widget_identity_after_overview_insert(
+    monkeypatch,
+):
+    app()
+    _install_fake_dependencies(monkeypatch, _TrackingDecisionDeskBuilder)
+    target_window = _build_main_window(
+        config=types.SimpleNamespace(db_file="C:/tmp/not-used.db")
+    )
+    target_window._setup_ui()
+
+    expected_tabs = (
+        "市場總覽",
+        "大盤指數",
+        "強勢個股",
+        "弱勢個股",
+        "強勢產業",
+        "弱勢產業",
+        "主力流向",
+    )
+    assert tuple(
+        target_window.market_tabs.tabText(index)
+        for index in range(target_window.market_tabs.count())
+    ) == expected_tabs
+
+    for label in expected_tabs:
+        index = expected_tabs.index(label)
+        target_window._on_market_tab_changed(index)
+
+    for label in ("強勢個股", "弱勢個股", "強勢產業", "弱勢產業", "主力流向"):
+        widget = target_window.market_tabs.widget(expected_tabs.index(label))
+        assert widget.load_data_if_needed_calls == 1
 
 
 def test_main_window_adds_unified_decision_workbench_tab(monkeypatch, tmp_path):
@@ -280,10 +320,13 @@ def test_main_window_adds_unified_decision_workbench_tab(monkeypatch, tmp_path):
     assert callable(workbench_tab.kwargs["navigate_to_portfolio_callback"])
 
     workbench_tab.kwargs["navigate_to_daily_decision_callback"]()
-    assert target_window.left_navigation.current_key() == "workbench"
+    assert target_window.left_navigation.current_key() == "market_explore"
+    assert target_window.market_tabs.currentIndex() == 0
 
+    target_window.market_tabs.setCurrentIndex(3)
     workbench_tab.kwargs["navigate_to_market_explore_callback"]()
     assert target_window.left_navigation.current_key() == "market_explore"
+    assert target_window.market_tabs.currentIndex() == 0
 
     workbench_tab.kwargs["navigate_to_evidence_review_callback"]()
     assert target_window.left_navigation.current_key() == "backtest"

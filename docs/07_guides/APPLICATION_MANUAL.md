@@ -31,7 +31,7 @@
 - quantile 一定優於 fixed；2026-06-14 的 10 檔 OOS 實證未顯示 quantile 優於 fixed，因此仍為 opt-in。
 - 推薦回放等同可成交的實盤績效；V1.2 新增的 rolling risk、microstructure preflight 與 relative attribution 只是可信度診斷，不會把 replay 變成實盤撮合。
 - Forward Evidence / Forward Performance 的 close-to-close forward return 等同實盤可執行績效，或能證明任一訊號有效。
-- Daily Decision Desk 已整併到主 UI「決策工作台 > 決策來源」子頁，並保留 answer-first dashboard：先顯示今日主結論、研究模式註記、優先 / 風險產業與股票焦點，再保留各模組細節；股票焦點可下鑽至「市場探索 > 主力流向」。Market Breadth v1 已由 SQLite `daily_prices` 接線，Sector Rotation v1 已由 SQLite `industry_indices` 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 接線，Portfolio Alert v1 已由 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService` 接線，Relative Strength / Liquidity Ranking v1 已由 SQLite `daily_prices` 接線，Why Not / 風險提示 v1 已由 `DecisionDeskRiskPromptService` 對接，並可呈現 fundamental diagnostics 來源的基本面風險提示。缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
+- Daily Decision Desk 是主 UI「市場探索 > 市場總覽」的唯一實例；「決策工作台 > 決策來源」只保留導覽入口，不再嵌入第二份畫面。市場總覽保留 answer-first dashboard：先顯示今日主結論、研究模式註記、優先 / 風險產業與股票焦點，再保留各模組細節；股票焦點可下鑽至「市場探索 > 主力流向」。Market Breadth v1 已由 SQLite `daily_prices` 接線，Sector Rotation v1 已由 SQLite `industry_indices` 接線，Watchlist Trigger v1 已由 `WatchlistService` 與 SQLite `technical_indicators` 接線，Portfolio Alert v1 已由 `PortfolioService`、`PortfolioConditionMonitor` 與 `PortfolioChipService` 接線，Relative Strength / Liquidity Ranking v1 已由 SQLite `daily_prices` 接線，Why Not / 風險提示 v1 已由 `DecisionDeskRiskPromptService` 對接，並可呈現 fundamental diagnostics 來源的基本面風險提示。缺口會以 MISSING / DEGRADED / ESTIMATED 顯示，並保留 warnings。
 - Runtime Observatory 會自動修復問題或自動下單。
 - 觀察清單等同實際投資組合。
 
@@ -113,7 +113,7 @@ python ui_qt/main.py
 
 左側主導覽每個主工作區都有自製線條 SVG icon，協助快速辨識工作區意義；可用導覽列頂部的收合按鈕切換為 icon-only 模式以釋放橫向空間，也可以在目前已選取的主工作區按鈕上再點一次直接收合 / 展開。收合後仍可用 tooltip 辨識完整工作區名稱，並且只影響畫面空間，不改變任何資料載入、排程、報告或 service 行為。
 
-「每日決策」不再是頂層主工作區，已整併為「決策工作台 > 決策來源」。決策工作台內部子頁包含「總覽」、「決策來源」、「Evidence」、「持倉追蹤」與「操作節奏」；今日待判讀佇列清空時會顯示空狀態，提示可前往「市場探索」研究。這只代表目前 DTO payload 沒有待判讀項目，不代表 Phase gate 已完成，也不是買賣建議。
+「每日決策」不再是頂層主工作區；唯一畫面位於「市場探索 > 市場總覽」。決策工作台內部子頁仍包含「總覽」、「決策來源」、「Evidence」、「持倉追蹤」與「操作節奏」，其中「決策來源」只提供「開啟市場總覽」導覽，不持有 Decision Desk widget，也不啟動第二次背景刷新。今日待判讀佇列清空時會顯示空狀態，提示可前往「市場探索」研究。這只代表目前 DTO payload 沒有待判讀項目，不代表 Phase gate 已完成，也不是買賣建議。
 
 「總覽」頂部會先顯示四個指揮台摘要 block：今日待判讀、人工待處理、等待真實時間、Warnings。等待真實時間 block 會明確顯示 weekly history 與 multi-day dry-run 比例，讓使用者先掃描重點再往下看表格。「Evidence」、「持倉追蹤」與「操作節奏」子頁目前是摘要與下鑽入口，也是預留深挖區；完整互動能力仍需等後續功能切片與正式資料累積，不能因位置已預留就標示為已完成。
 
@@ -468,7 +468,7 @@ Watchlist、持倉或單一股票風險不會直接降低整體市場行動等�
 
 warnings 在 UI 會以繁體中文說明主要原因與影響範圍；原始 token 保留在底層 snapshot / log 供除錯追溯，不直接作為一般畫面文字。看到 warnings 時先判斷是資料覆蓋率、歷史不足或服務降級，不應只看工程代碼做決策。
 
-1. 進入左側主導覽「決策工作台」，再切到上方子頁「決策來源」。
+1. 進入左側主導覽「市場探索」，選擇第一個子頁「市場總覽」。也可在「決策工作台 > 決策來源」按「開啟市場總覽」前往同一個唯一實例。
 2. 進入頁面時會先顯示「尚未載入 / 載入中」，Snapshot 會在背景執行緒建立，避免主 App 啟動被每日決策查詢阻塞。
 3. 點選「刷新」可在背景重建 Snapshot；載入期間按鈕會暫時停用，完成後自動更新畫面。
 4. 若初始化或刷新失敗，畫面會保留可閱讀狀態並顯示 fallback 提示，不會中斷整體 App。
@@ -483,6 +483,9 @@ warnings 在 UI 會以繁體中文說明主要原因與影響範圍；原始 tok
 - `quality`：整體品質（`OBSERVED` / `ESTIMATED` / `DEGRADED` / `MISSING`）
 - `warnings`：所有 section 的缺口與降級原因彙總
 - 各區塊 section：如 Market Regime、Market Breadth、Sector Rotation、Watchlist Trigger、Portfolio Alert
+- 「資料可見性與擴充因子」：顯示月營收廣度、三大法人市場流向，以及各來源的觀測日、可得日、PIT 與 eligibility 狀態。此區塊只供研究可見性，不參與主結論、行動等級、產業／股票焦點、Score 或整體品質聚合。
+
+月營收正向比例以整數 basis points 呈現為百分比；例如 `5636 bp` 顯示為 `56.36%`。三大法人尚未匯入時會顯示「尚未匯入（0 筆）」，不會把缺漏資料假裝成「外資 0」。可見性服務失敗時，只有此區塊降級為 `DEGRADED`／`MISSING` 並保留來源 warning；既有 Decision Desk action、focus 與 Score 不會因此被重算或改寫。
 
 Market Breadth v1 會從 SQLite `daily_prices` 唯讀推導：
 
@@ -1109,7 +1112,7 @@ Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified 
 
 - 入口：執行 `.\.venv\Scripts\python.exe ui_qt\main.py`，開啟頂層 `決策工作台` 分頁。
 - 今日重點帶與摘要卡：第一屏最上方會用醒目色帶彙總待判讀、人工處理、等待真實時間與 warnings。橘色代表需要人工注意或等待真實時間，紅色代表 warning / blocked / missing 類高風險，藍色代表資訊或 manual observed，綠色代表 ready / observed / passed。顏色只用來輔助掃描，仍需依 Inspector 與原始 source trace 判讀。
-- 操作下鑽：`開啟每日決策`、`開啟證據覆盤`、`開啟持倉管理` 只會切到既有 Daily Decision、Research Lab / 證據覆盤、Portfolio 頁面；它們是 expert drill-down，不會從 Workbench 觸發寫入、scheduler、回測或 lifecycle action。Action Items、今日待判讀與背景證據流的 row drill-down target 也走同一個舊頁導向 contract：`daily_decision` 切每日決策、`portfolio_review` 切持倉管理、`evidence_review` / `evidence_mode` 切證據覆盤。
+- 操作下鑽：`開啟市場總覽`、`開啟市場探索`、`開啟證據覆盤`、`開啟持倉管理` 只會切到既有 Market Exploration / Daily Decision、Research Lab / 證據覆盤、Portfolio 頁面；Workbench 不嵌入或建立第二份 Decision Desk。它們是 expert drill-down，不會從 Workbench 觸發寫入、scheduler、回測或 lifecycle action。Action Items、今日待判讀與背景證據流的 row drill-down target 也走同一個舊頁導向 contract：`daily_decision` 切到「市場探索 > 市場總覽」、`portfolio_review` 切持倉管理、`evidence_review` / `evidence_mode` 切證據覆盤。
 - Status strip：檢查 Daily Decision durable snapshot、Evidence gate、Data quality 與 Production Scheduler；scheduler 應維持 `off` / `production_scheduler_allowed=false`。
 - 今日待判讀：只列出需要人工 review 的 watchlist trigger、portfolio alert、risk prompt 或 readiness gap；它不是買賣建議，也不會產生下單動作。
 - 詳情檢視 / Inspector：點選今日待判讀、背景證據流或 Action Items 的任一列，右側會用狀態徽章與三個分區顯示完整內容：「重點摘要」看標題與 summary，「來源與邊界」看 source trace、degraded reason、drill-down target 與 read-only 保證，「診斷訊號」看 diagnostics token。表格只保留掃描欄位；完整證據不要在表格橫向捲動找，改看 Inspector。
@@ -1408,7 +1411,7 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 | 市場探索 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 推薦分析 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 觀察清單 | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 決策工作台 / 決策來源 | 完成（左側主導覽預設首頁；每日決策已內嵌） | 完成 | 完成 | 今日待判讀、空狀態、session-only 已查看提示、主結論 / 行動等級、焦點卡、quality / warnings 判讀；Market Breadth v1 / Sector Rotation v1 / Relative Strength / Liquidity Ranking v1 / Watchlist Trigger v1 / Portfolio Alert v1 / Smart Money semantics / Why Not v1 / fundamental diagnostics prompts 已接線 | 完成；Phase 0 weekly history 仍為 `0/3`，multi-day dry-run record 已為 `3/3 ready`，manual review / action-item rhythm 仍待正式資料累積 |
+| 市場探索 / 市場總覽；決策工作台 / 決策來源 | 完成（每日決策唯一實例位於市場探索 index 0；Workbench 僅導覽） | 完成 | 完成 | 今日待判讀、空狀態、session-only 已查看提示、主結論 / 行動等級、焦點卡、quality / warnings、月營收／三大法人資料可見性判讀；Market Breadth v1 / Sector Rotation v1 / Relative Strength / Liquidity Ranking v1 / Watchlist Trigger v1 / Portfolio Alert v1 / Smart Money semantics / Why Not v1 / fundamental diagnostics prompts 已接線 | 完成；可見性區塊不改 action / focus / Score，Phase 0 weekly history 仍為 `0/3`，multi-day dry-run record 已為 `3/3 ready`，manual review / action-item rhythm 仍待正式資料累積 |
 | Research Lab | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 持倉管理 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
@@ -1457,6 +1460,7 @@ Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **
 
 ## 14. 更新記錄
 
+- 2026-07-13：Daily Decision Desk 改為「市場探索 > 市場總覽」index 0 的唯一實例；Workbench「決策來源」改為純導覽，不再嵌入第二份 widget。市場總覽新增月營收、三大法人與五類來源的資料可見性區塊；可見性維持 read-only、PIT-aware、fail-soft，且不參與 action、focus、Score 或既有整體品質聚合。
 - 2026-07-12：新增 V2.2 三週 weekly review runbook 入口與 working-copy 保存步驟；目前 weekly `0/3 waiting_for_time`、multi-day `3/3 ready`、scheduler 未核准，不能 formal closeout。
 - 2026-07-12：新增 Gate 1 Advice 唯讀操作、Guided / Professional Mode、安全拒絕輸出、平衡限制、日期 / source trace 與不交易邊界；weekly review working-copy 保存仍是 Gate 2 真實時間工作。
 - 2026-07-12：新增 V2.3 P0 資料來源人工接受台帳操作規則；candidate readiness、`decision_ready_candidate` 與正式 accepted feature 明確分離。所有未決 P0 source 維持 `requires_human_acceptance`、`downstream eligibility=none`，不啟用 ingestion、`ScoringEngine`、scheduler 或交易。

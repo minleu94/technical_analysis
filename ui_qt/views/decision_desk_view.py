@@ -20,6 +20,7 @@ from app_module.decision_desk_dtos import (
     DecisionDeskSnapshot,
 )
 from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from app_module.market_data_visibility_dtos import MarketDataVisibilitySummary
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.workers.task_worker import TaskWorker
 from ui_qt.widgets.theme_widgets import CompactCodeList, MetricCard, SectionPanel, StatusBadge, WarningList
@@ -152,6 +153,32 @@ class DecisionDeskView(QWidget):
         focus_group.layout.addWidget(self.stock_focus_button_container)
         content_layout.addWidget(focus_group)
 
+        self.visibility_section = SectionPanel("資料可見性與擴充因子")
+        visibility_header = QHBoxLayout()
+        visibility_intro = QLabel("呈現決策日當下可取得的資料範圍與研究因子，不參與今日行動、焦點或 Score。")
+        visibility_intro.setWordWrap(True)
+        visibility_intro.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+        self.visibility_quality_badge = StatusBadge("尚未載入", "missing")
+        visibility_header.addWidget(visibility_intro, 1)
+        visibility_header.addWidget(self.visibility_quality_badge, 0)
+        self.visibility_section.layout.addLayout(visibility_header)
+        visibility_cards = QHBoxLayout()
+        self.revenue_visibility_card = MetricCard("月營收廣度", "尚未載入")
+        self.institutional_visibility_card = MetricCard("三大法人市場流向", "尚未載入")
+        visibility_cards.addWidget(self.revenue_visibility_card)
+        visibility_cards.addWidget(self.institutional_visibility_card)
+        self.visibility_section.layout.addLayout(visibility_cards)
+        self.visibility_sources_label = QLabel("來源狀態：尚未載入")
+        self.visibility_sources_label.setWordWrap(True)
+        self.visibility_sources_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.visibility_sources_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+        self.visibility_action_hint = QLabel("僅供研究可見性；不代表可交易訊號，也不改寫既有決策輸出。")
+        self.visibility_action_hint.setWordWrap(True)
+        self.visibility_action_hint.setStyleSheet(f"color: {MIDNIGHT_ANALYST.warning};")
+        self.visibility_section.layout.addWidget(self.visibility_sources_label)
+        self.visibility_section.layout.addWidget(self.visibility_action_hint)
+        content_layout.addWidget(self.visibility_section)
+
         self.market_regime_status = QLabel("")
         self.market_regime_value = QLabel("")
         self.market_breadth_status = QLabel("")
@@ -247,6 +274,7 @@ class DecisionDeskView(QWidget):
         self.priority_stock_label.setText("優先研究股票：尚未載入")
         self.risk_stock_label.setText("風險股票：尚未載入")
         self._set_stock_focus_buttons(())
+        self._render_market_data_visibility(None)
         for status_label, badge in self._status_badges.items():
             status_label.setText("尚未載入")
             badge.setText("尚未載入")
@@ -328,6 +356,7 @@ class DecisionDeskView(QWidget):
 
     def _render_snapshot(self, snapshot: DecisionDeskSnapshot) -> None:
         self._render_answer_first_dashboard(snapshot)
+        self._render_market_data_visibility(snapshot.market_data_visibility)
         self.overall_status_label.setText(f"整體品質：{self._quality_label(snapshot.overall_quality)}")
         self.generated_at_label.setText(f"生成時間：{snapshot.generated_at.isoformat()}（決策日 {snapshot.as_of_date.isoformat()}）")
         self.overall_quality_badge.setText(self._quality_label(snapshot.overall_quality))
@@ -421,6 +450,75 @@ class DecisionDeskView(QWidget):
                 f"border: 1px solid {MIDNIGHT_ANALYST.success}; "
                 "border-radius: 6px; padding: 8px; font-size: 13pt; font-weight: 700;"
             )
+
+    @staticmethod
+    def _visibility_quality_label(value: str) -> str:
+        return {
+            "OBSERVED": "已觀測",
+            "ESTIMATED": "估算",
+            "DEGRADED": "降級",
+            "MISSING": "缺漏",
+        }.get(str(value).upper(), str(value))
+
+    @staticmethod
+    def _format_ratio_bp(value: int | None) -> str:
+        if value is None:
+            return "N/A"
+        sign = "-" if value < 0 else ""
+        absolute = abs(value)
+        return f"{sign}{absolute // 100}.{absolute % 100:02d}%"
+
+    @staticmethod
+    def _format_share_count(value: int | None) -> str:
+        return f"{value:,}" if value is not None else "N/A"
+
+    def _render_market_data_visibility(
+        self, summary: MarketDataVisibilitySummary | None
+    ) -> None:
+        if summary is None:
+            self.visibility_quality_badge.setText("缺漏")
+            self.visibility_quality_badge.set_quality("missing")
+            self.revenue_visibility_card.value_label.setText("尚未匯入（0 筆）")
+            self.institutional_visibility_card.value_label.setText("尚未匯入（0 筆）")
+            self.visibility_sources_label.setText("來源狀態：缺漏")
+            return
+
+        quality = str(summary.overall_quality).upper()
+        self.visibility_quality_badge.setText(self._visibility_quality_label(quality))
+        self.visibility_quality_badge.set_quality(quality.lower())
+
+        revenue = summary.monthly_revenue
+        if revenue.latest_period is None:
+            revenue_text = "尚未匯入（0 筆）"
+        else:
+            revenue_text = (
+                f"{revenue.latest_period}｜{revenue.stock_count} 檔\n"
+                f"月增正向 {self._format_ratio_bp(revenue.mom_positive_ratio_bp)}｜"
+                f"年增正向 {self._format_ratio_bp(revenue.yoy_positive_ratio_bp)}"
+            )
+        self.revenue_visibility_card.value_label.setText(revenue_text)
+
+        institutional = summary.institutional_flow
+        if institutional.latest_date is None or str(institutional.quality).upper() == "MISSING":
+            institutional_text = "、".join(institutional.warnings) or "尚未匯入（0 筆）"
+        else:
+            institutional_text = (
+                f"{institutional.latest_date}｜{institutional.stock_count} 檔\n"
+                f"外資 {self._format_share_count(institutional.foreign_net_shares)} 股｜"
+                f"投信 {self._format_share_count(institutional.investment_trust_net_shares)} 股｜"
+                f"自營商 {self._format_share_count(institutional.dealer_net_shares)} 股"
+            )
+        self.institutional_visibility_card.value_label.setText(institutional_text)
+
+        source_lines = [
+            (
+                f"{status.display_name}：{self._visibility_quality_label(status.quality)}｜"
+                f"觀測 {status.latest_observation_date or 'N/A'}｜可得 {status.available_date or 'N/A'}｜"
+                f"PIT {status.pit_status}｜資格 {status.eligibility}"
+            )
+            for status in summary.source_statuses
+        ]
+        self.visibility_sources_label.setText("\n".join(source_lines) or "來源狀態：缺漏")
 
     def _render_answer_first_dashboard(self, snapshot: DecisionDeskSnapshot) -> None:
         action = getattr(snapshot, "action_summary", None)
