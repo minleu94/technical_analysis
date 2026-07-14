@@ -1,8 +1,10 @@
 import sys
 import os
 from pathlib import Path
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from hashlib import sha256
 import logging
+from typing import Callable
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -13,11 +15,160 @@ from data_module.p0_candidate_repository import validate_candidate_working_copy_
 from data_module.official_phase3c_fetcher import (
     fetch_institutional_flows,
     fetch_credit_transactions,
-    fetch_tdcc_shareholding
+    fetch_tdcc_shareholding,
+    safe_request,
+)
+from data_module.p0_official_source_parsers import (
+    OfficialParserResult,
+    RawFetchEnvelope,
+    parse_tdcc_shareholding,
+    parse_twse_credit,
+    parse_twse_institutional,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def run_bounded_official_probe(probe_date: date) -> dict:
+    """對三個官方端點做單日、唯讀、無落盤 probe，僅回報工程 diagnostics。"""
+    date_ce = probe_date.strftime("%Y%m%d")
+    probe_requests: tuple[
+        tuple[
+            str,
+            str,
+            str,
+            str,
+            dict[str, str],
+            Callable[[RawFetchEnvelope], OfficialParserResult],
+        ],
+        ...,
+    ] = (
+        (
+            "twse_institutional",
+            "twse-T86.v1",
+            "twse:T86",
+            "https://www.twse.com.tw/fund/T86",
+            {"response": "json", "date": date_ce, "selectType": "ALL"},
+            parse_twse_institutional,
+        ),
+        (
+            "twse_credit",
+            "twse-MI_MARGN.v1",
+            "twse:MI_MARGN",
+            "https://www.twse.com.tw/exchangeReport/MI_MARGN",
+            {"response": "json", "date": date_ce, "selectType": "ALL"},
+            parse_twse_credit,
+        ),
+        (
+            "tdcc_shareholding",
+            "tdcc-1-5.v1",
+            "tdcc:1-5",
+            "https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5",
+            {},
+            parse_tdcc_shareholding,
+        ),
+    )
+    diagnostics: list[dict] = []
+    for source_id, source_version, endpoint_id, url, params, parser in probe_requests:
+        fetched_at = datetime.now(timezone.utc)
+        try:
+            response = safe_request(url, params or None)
+            payload = bytes(response.content)
+        except Exception as exc:
+            diagnostics.append(
+                {
+                    "source_id": source_id,
+                    "endpoint_id": endpoint_id,
+                    "network_status": "failed",
+                    "http_status": None,
+                    "payload_sha256": None,
+                    "payload_size_bytes": 0,
+                    "fetched_at": fetched_at.isoformat(),
+                    "schema_status": "unavailable",
+                    "timestamp_evidence": "unavailable",
+                    "raw_row_count": 0,
+                    "accepted_row_count": 0,
+                    "duplicate_row_count": 0,
+                    "quarantine_row_count": 0,
+                    "blocked_row_count": 0,
+                    "quarantine_reasons": [],
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            )
+            continue
+
+        envelope = RawFetchEnvelope(
+            source_id=source_id,
+            source_version=source_version,
+            endpoint_id=endpoint_id,
+            request_parameters=params,
+            fetched_at=fetched_at,
+            http_status=int(response.status_code),
+            http_headers=dict(response.headers),
+            payload=payload,
+        )
+        raw_evidence = {
+            "source_id": source_id,
+            "endpoint_id": endpoint_id,
+            "network_status": "reachable",
+            "http_status": int(response.status_code),
+            "payload_sha256": sha256(payload).hexdigest(),
+            "payload_size_bytes": len(payload),
+            "fetched_at": fetched_at.isoformat(),
+        }
+        try:
+            result = parser(envelope)
+            evidence_kinds = {
+                row.availability_evidence_kind for row in result.accepted
+            }
+            timestamp_evidence = (
+                next(iter(evidence_kinds))
+                if len(evidence_kinds) == 1
+                else "mixed_or_unavailable"
+            )
+            diagnostics.append(
+                {
+                    **raw_evidence,
+                    "schema_status": "matched",
+                    "timestamp_evidence": timestamp_evidence,
+                    "raw_row_count": result.raw_row_count,
+                    "accepted_row_count": result.accepted_row_count,
+                    "duplicate_row_count": result.duplicate_row_count,
+                    "quarantine_row_count": result.quarantine_row_count,
+                    "blocked_row_count": result.blocked_row_count,
+                    "quarantine_reasons": sorted(
+                        {record.reason_code for record in result.quarantine}
+                    ),
+                }
+            )
+        except Exception as exc:
+            diagnostics.append(
+                {
+                    **raw_evidence,
+                    "schema_status": "mismatch",
+                    "timestamp_evidence": "unavailable",
+                    "raw_row_count": 0,
+                    "accepted_row_count": 0,
+                    "duplicate_row_count": 0,
+                    "quarantine_row_count": 0,
+                    "blocked_row_count": 0,
+                    "quarantine_reasons": [],
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            )
+    return {
+        "probe_date": probe_date.isoformat(),
+        "probe_mode": "bounded_official_read_only",
+        "sources": diagnostics,
+        "license_accepted": False,
+        "source_accepted": False,
+        "downstream_eligibility": "none",
+        "production_scheduler_allowed": False,
+        "human_decision": "requires_human_acceptance",
+    }
 
 def update_phase3c_candidates(decision_date: date, dry_run: bool = True, db_path: str = None):
     """

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -8,6 +9,7 @@ from typing import Any, Iterable
 
 
 SOURCE_CANDIDATES = ("institutional_flows", "credit_transactions", "tdcc_shareholding")
+P0_SOURCE_IDS = ("twse_institutional", "twse_credit", "tdcc_shareholding")
 
 ACCESS_BOUNDARY = {
     "writes_allowed": False,
@@ -149,6 +151,112 @@ class SourceCandidateReadinessReport:
             "limitations": list(self.limitations),
             "diagnostics": list(self.diagnostics),
         }
+
+
+@dataclass(frozen=True)
+class P0SourceCandidateStatus:
+    source_id: str
+    latest_observation_date: str | None
+    latest_available_at: str | None
+    row_count: int
+    symbol_count: int
+    schema_quality: str
+    coverage: dict[str, Any]
+    warnings: tuple[str, ...]
+    downstream_eligibility: str = "none"
+    human_decision: str = "requires_human_acceptance"
+    production_scheduler_allowed: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_id": self.source_id,
+            "latest_observation_date": self.latest_observation_date,
+            "latest_available_at": self.latest_available_at,
+            "row_count": self.row_count,
+            "symbol_count": self.symbol_count,
+            "schema_quality": self.schema_quality,
+            "coverage": dict(self.coverage),
+            "warnings": list(self.warnings),
+            "downstream_eligibility": self.downstream_eligibility,
+            "human_decision": self.human_decision,
+            "production_scheduler_allowed": self.production_scheduler_allowed,
+        }
+
+
+def build_p0_candidate_statuses(db_path: Path | str) -> tuple[P0SourceCandidateStatus, ...]:
+    """從 candidate working-copy 唯讀投影狀態；不觸發 fetch 或寫入。"""
+    path = Path(db_path)
+    if not path.exists():
+        return tuple(_empty_p0_status(source_id, "source_not_ingested") for source_id in P0_SOURCE_IDS)
+
+    observations: dict[str, list[dict[str, Any]]] = {source_id: [] for source_id in P0_SOURCE_IDS}
+    quarantines: dict[str, int] = {source_id: 0 for source_id in P0_SOURCE_IDS}
+    uri = f"file:{path.as_posix()}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as conn:
+        tables = {
+            str(row[0])
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        if "p0_candidate_observations" not in tables:
+            return tuple(_empty_p0_status(source_id, "candidate_schema_missing") for source_id in P0_SOURCE_IDS)
+        for (payload_json,) in conn.execute(
+            "SELECT observation_json FROM p0_candidate_observations"
+        ):
+            payload = json.loads(str(payload_json))
+            source_id = str(payload.get("source_id", ""))
+            if source_id in observations:
+                observations[source_id].append(payload)
+        if "p0_candidate_quarantine" in tables:
+            for source_id, count in conn.execute(
+                "SELECT source_id, COUNT(*) FROM p0_candidate_quarantine GROUP BY source_id"
+            ):
+                if str(source_id) in quarantines:
+                    quarantines[str(source_id)] = int(count)
+
+    statuses: list[P0SourceCandidateStatus] = []
+    for source_id in P0_SOURCE_IDS:
+        rows = observations[source_id]
+        if not rows:
+            statuses.append(_empty_p0_status(source_id, "source_not_ingested"))
+            continue
+        qualities = {str(row.get("quality", "missing")) for row in rows}
+        schema_quality = "verified" if qualities == {"verified"} else "degraded"
+        quantity_fields = sorted(
+            {
+                str(field_name)
+                for row in rows
+                for field_name in dict(row.get("quantities", {})).keys()
+            }
+        )
+        warnings = ["candidate_only_requires_human_acceptance", "license_not_accepted"]
+        if quarantines[source_id]:
+            warnings.append(f"quarantine_rows:{quarantines[source_id]}")
+        statuses.append(
+            P0SourceCandidateStatus(
+                source_id=source_id,
+                latest_observation_date=max(str(row["observation_date"]) for row in rows),
+                latest_available_at=max(str(row["available_at"]) for row in rows),
+                row_count=len(rows),
+                symbol_count=len({str(row["symbol"]) for row in rows}),
+                schema_quality=schema_quality,
+                coverage={"quantity_fields": quantity_fields},
+                warnings=tuple(warnings),
+            )
+        )
+    return tuple(statuses)
+
+
+def _empty_p0_status(source_id: str, warning: str) -> P0SourceCandidateStatus:
+    return P0SourceCandidateStatus(
+        source_id=source_id,
+        latest_observation_date=None,
+        latest_available_at=None,
+        row_count=0,
+        symbol_count=0,
+        schema_quality="missing",
+        coverage={"quantity_fields": []},
+        warnings=(warning, "candidate_only_requires_human_acceptance", "license_not_accepted"),
+    )
 
 
 class SourceCandidateReadinessService:

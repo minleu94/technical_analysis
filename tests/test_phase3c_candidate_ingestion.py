@@ -1,10 +1,12 @@
 import pytest
 from datetime import date
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pandas as pd
 
 from data_module.p0_candidate_repository import ProductionPathRejectedError
 from scripts.update_phase3c_candidates import update_phase3c_candidates
+from scripts.update_phase3c_candidates import run_bounded_official_probe
 
 @pytest.fixture
 def mock_fetchers():
@@ -107,3 +109,77 @@ def test_optional_fields_are_none():
     }])
     assert mock_credit['financing'].iloc[0] is None
     assert mock_credit['securities_lending'].iloc[0] is None
+
+
+def test_bounded_probe_reports_schema_timestamp_and_conservation_without_acceptance(tmp_path):
+    fixture_root = Path(__file__).parent / "fixtures" / "p0_official_sources"
+    responses = []
+    for filename, content_type in (
+        ("twse_institutional.json", "application/json"),
+        ("twse_credit.json", "application/json"),
+        ("tdcc_shareholding.csv", "text/csv"),
+    ):
+        response = MagicMock()
+        response.content = (fixture_root / filename).read_bytes()
+        response.headers = {"Content-Type": content_type}
+        response.status_code = 200
+        responses.append(response)
+
+    before = tuple(tmp_path.rglob("*"))
+    with patch("scripts.update_phase3c_candidates.safe_request", side_effect=responses):
+        report = run_bounded_official_probe(date(2026, 7, 10))
+
+    assert tuple(tmp_path.rglob("*")) == before
+    assert report["license_accepted"] is False
+    assert report["source_accepted"] is False
+    assert report["downstream_eligibility"] == "none"
+    assert report["production_scheduler_allowed"] is False
+    assert {item["source_id"] for item in report["sources"]} == {
+        "twse_institutional",
+        "twse_credit",
+        "tdcc_shareholding",
+    }
+    for item in report["sources"]:
+        assert item["raw_row_count"] == (
+            item["accepted_row_count"]
+            + item["duplicate_row_count"]
+            + item["quarantine_row_count"]
+            + item["blocked_row_count"]
+        )
+        assert item["schema_status"] == "matched"
+        assert item["timestamp_evidence"] in {
+            "official_publication_timestamp",
+            "first_observed_only",
+        }
+
+
+def test_bounded_probe_preserves_raw_http_evidence_when_parser_detects_schema_drift():
+    fixture_root = Path(__file__).parent / "fixtures" / "p0_official_sources"
+    drifted = MagicMock()
+    drifted.content = b'{"stat":"No data"}'
+    drifted.headers = {"Content-Type": "application/json"}
+    drifted.status_code = 200
+    valid_credit = MagicMock()
+    valid_credit.content = (fixture_root / "twse_credit.json").read_bytes()
+    valid_credit.headers = {"Content-Type": "application/json"}
+    valid_credit.status_code = 200
+    valid_tdcc = MagicMock()
+    valid_tdcc.content = (fixture_root / "tdcc_shareholding.csv").read_bytes()
+    valid_tdcc.headers = {"Content-Type": "text/csv"}
+    valid_tdcc.status_code = 200
+
+    with patch(
+        "scripts.update_phase3c_candidates.safe_request",
+        side_effect=[drifted, valid_credit, valid_tdcc],
+    ):
+        report = run_bounded_official_probe(date(2026, 7, 10))
+
+    institutional = next(
+        item for item in report["sources"] if item["source_id"] == "twse_institutional"
+    )
+    assert institutional["network_status"] == "reachable"
+    assert institutional["http_status"] == 200
+    assert institutional["payload_size_bytes"] == len(drifted.content)
+    assert len(institutional["payload_sha256"]) == 64
+    assert institutional["schema_status"] == "mismatch"
+    assert institutional["error_type"] == "ValueError"
