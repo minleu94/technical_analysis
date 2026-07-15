@@ -269,6 +269,12 @@ def _insert_monthly_revenue_records(
     conn: sqlite3.Connection,
     records: tuple[MonthlyRevenueRecord, ...],
 ) -> int:
+    # 先刪除相同 (stock_code, period) 的舊紀錄，以防因為 source_version 不同而在 SQLite 產生重複資料
+    to_delete = sorted(set((r.stock_code, r.period) for r in records))
+    conn.executemany(
+        "DELETE FROM fundamental_monthly_revenues WHERE stock_code = ? AND period = ?",
+        to_delete
+    )
     conn.executemany(
         """
         INSERT OR REPLACE INTO fundamental_monthly_revenues(
