@@ -14,6 +14,11 @@ from app_module.update_service_status_support import compose_sqlite_status_read_
 from app_module.update_daily_output import parse_daily_update_output
 
 
+def _monthly_revenue_status_today() -> str:
+    """回傳月營收可得性狀態使用的本機日期。"""
+    return datetime.now().date().isoformat()
+
+
 class UpdateService :
     """數據更新服務類"""
 
@@ -1694,17 +1699,30 @@ class UpdateService :
             from data_module .db_manager import DBManager
 
             db =DBManager (self .config )
+            today =_monthly_revenue_status_today ()
             df =db .execute_query (
             """
+                WITH period_availability AS (
+                    SELECT
+                        period,
+                        MAX(available_date) AS fully_available_date
+                    FROM fundamental_monthly_revenues
+                    GROUP BY period
+                )
                 SELECT
                     COUNT(*) AS count,
                     MIN(period) AS min_period,
                     MAX(period) AS max_period,
                     MAX(as_of_date) AS max_as_of_date,
                     COUNT(DISTINCT stock_code) AS stock_count,
-                    COUNT(DISTINCT period) AS period_count
+                    COUNT(DISTINCT period) AS period_count,
+                    (SELECT MAX(period) FROM period_availability WHERE fully_available_date <= ?) AS latest_available_period,
+                    (SELECT MAX(fully_available_date) FROM period_availability WHERE fully_available_date <= ?) AS latest_available_date,
+                    (SELECT MIN(fully_available_date) FROM period_availability WHERE fully_available_date > ?) AS next_available_date,
+                    (SELECT COUNT(*) FROM period_availability WHERE fully_available_date > ?) AS pending_period_count
                 FROM fundamental_monthly_revenues;
-                """
+                """,
+                (today ,today ,today ,today ),
             )
             if df .empty :
                 return {'latest_date':None ,'total_records':0 ,'status':'empty'}
@@ -1718,6 +1736,10 @@ class UpdateService :
             'total_records':count ,
             'stock_count':int (row ['stock_count']or 0 ),
             'period_count':int (row ['period_count']or 0 ),
+            'latest_available_period':row ['latest_available_period']if count else None ,
+            'latest_available_date':row ['latest_available_date']if count else None ,
+            'next_available_date':row ['next_available_date']if count else None ,
+            'pending_period_count':int (row ['pending_period_count']or 0 ),
             'status':'ok'if count >0 else 'empty',
             }
         except Exception as e :

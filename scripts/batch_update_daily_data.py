@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 import argparse
+import json
 import logging
 import time
 import random
@@ -99,6 +100,14 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
             
             # 使用主模組的 download_from_api 方法
             df = loader.download_from_api(date)
+            diagnostic = {
+                "date": date,
+                **loader.last_daily_download_diagnostics,
+            }
+            print(
+                f"UPDATE_DIAGNOSTIC {json.dumps(diagnostic, ensure_ascii=False, sort_keys=True)}",
+                flush=True,
+            )
             
             if df is None or df.empty:
                 if loader.last_daily_download_outcome == "no_data":

@@ -74,6 +74,7 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 
 - 市場總覽以 answer-first dashboard 顯示結論、焦點與來源可見性；Workbench「決策來源」只導向此唯一實例，不建立第二份 widget。
 - 月營收、三大法人、信用交易、TDCC 與券商分點卡片保留 status、row count、available date、coverage 與 warning。`row_count=0`／MISSING／DEGRADED 表示缺漏，不是中性分數或業務數值為零，且不參與 action、focus、Score 或品質聚合。
+- 「資料更新 > 全部資料」的月營收狀態卡分開顯示已匯入期別與依該期全部資料 `available_date` 判定的目前完整 PIT 可用期別；只要同一期仍有公司尚未生效，該期就會顯示在待生效數與完整可用起始日中，不會誤標成更新失敗。
 - 市場 regime 判斷。
 - 強弱勢股票與產業篩選。
 - Smart Money Terminal：個股資金流向、分點進出追蹤、張數 / 金額品質標示。

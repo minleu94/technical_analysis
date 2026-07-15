@@ -1,5 +1,6 @@
 import pytest
 import pandas as pd
+import requests
 from pathlib import Path
 from data_module.data_loader import DataLoader
 
@@ -11,6 +12,11 @@ class _DummyResponse:
 
     def json(self):
         return self._payload
+
+
+class _MalformedJsonResponse(_DummyResponse):
+    def json(self):
+        raise ValueError("invalid json")
 
 
 class _FallbackSession:
@@ -87,6 +93,47 @@ class _NoDataSession:
     def get(self, url, params=None, headers=None, timeout=None):
         if not params:
             return _DummyResponse()
+        return _DummyResponse(payload={"stat": "很抱歉，沒有符合條件的資料!"})
+
+
+class _MixedNoDataSession:
+    def __init__(self):
+        self.requested_types = []
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        if not params:
+            return _DummyResponse()
+        request_type = params.get("type")
+        self.requested_types.append(request_type)
+        if request_type == "ALL":
+            return _DummyResponse(status_code=307)
+        return _DummyResponse(payload={"stat": "很抱歉，沒有符合條件的資料!"})
+
+
+class _HttpErrorAndNoDataSession:
+    def get(self, url, params=None, headers=None, timeout=None):
+        if not params:
+            return _DummyResponse()
+        if params.get("type") == "ALL":
+            return _DummyResponse(status_code=500)
+        return _DummyResponse(payload={"stat": "很抱歉，沒有符合條件的資料!"})
+
+
+class _TimeoutAndNoDataSession:
+    def get(self, url, params=None, headers=None, timeout=None):
+        if not params:
+            return _DummyResponse()
+        if params.get("type") == "ALL":
+            raise requests.Timeout("timed out")
+        return _DummyResponse(payload={"stat": "很抱歉，沒有符合條件的資料!"})
+
+
+class _MalformedJsonAndNoDataSession:
+    def get(self, url, params=None, headers=None, timeout=None):
+        if not params:
+            return _DummyResponse()
+        if params.get("type") == "ALL":
+            return _MalformedJsonResponse()
         return _DummyResponse(payload={"stat": "很抱歉，沒有符合條件的資料!"})
 
 
@@ -183,6 +230,54 @@ class TestDataLoader:
 
         assert loader.download_from_api("2026-07-10") is None
         assert loader.last_daily_download_outcome == "no_data"
+
+    def test_download_accepts_one_official_no_data_response_when_fallback_transport_differs(
+        self, test_config, monkeypatch
+    ):
+        session = _MixedNoDataSession()
+        monkeypatch.setattr("data_module.data_loader.requests.Session", lambda: session)
+        monkeypatch.setattr("data_module.data_loader.time.sleep", lambda _seconds: None)
+        monkeypatch.setattr("data_module.data_loader.random.uniform", lambda _start, _end: 0)
+
+        loader = DataLoader(test_config)
+
+        assert loader.download_from_api("2026-07-10") is None
+        assert loader.last_daily_download_outcome == "no_data"
+        assert loader.last_daily_download_diagnostics["reason_code"] == "twse_official_no_data"
+        assert loader.last_daily_download_diagnostics["request_attempts"] == [
+            {"request_type": "ALL", "http_status": 307, "api_status": None},
+            {
+                "request_type": "ALLBUT0999",
+                "http_status": 200,
+                "api_status": "很抱歉，沒有符合條件的資料!",
+            },
+        ]
+
+    @pytest.mark.parametrize(
+        "session_type",
+        [_HttpErrorAndNoDataSession, _TimeoutAndNoDataSession, _MalformedJsonAndNoDataSession],
+    )
+    def test_download_does_not_hide_real_transport_failure_behind_official_no_data(
+        self, test_config, monkeypatch, session_type
+    ):
+        monkeypatch.setattr("data_module.data_loader.requests.Session", session_type)
+        monkeypatch.setattr("data_module.data_loader.time.sleep", lambda _seconds: None)
+        monkeypatch.setattr("data_module.data_loader.random.uniform", lambda _start, _end: 0)
+
+        loader = DataLoader(test_config)
+
+        assert loader.download_from_api("2026-07-10") is None
+        assert loader.last_daily_download_outcome == "failed"
+        assert loader.last_daily_download_diagnostics["reason_code"] == "twse_no_usable_response"
+        first_attempt = loader.last_daily_download_diagnostics["request_attempts"][0]
+        assert first_attempt["request_type"] == "ALL"
+        if session_type is _TimeoutAndNoDataSession:
+            assert first_attempt["error_type"] == "Timeout"
+            assert first_attempt["error"] == "timed out"
+        elif session_type is _MalformedJsonAndNoDataSession:
+            assert first_attempt["http_status"] == 200
+            assert first_attempt["error_type"] == "ValueError"
+            assert first_attempt["error"] == "invalid json"
 
     def test_download_keeps_future_date_response_as_failure(self, test_config, monkeypatch):
         monkeypatch.setattr("data_module.data_loader.requests.Session", _FutureDateSession)

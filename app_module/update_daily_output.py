@@ -1,5 +1,6 @@
 """Daily update subprocess output 的純解析步驟。"""
 
+import json
 import re
 from typing import Any, Dict, Iterable
 
@@ -28,7 +29,14 @@ def parse_daily_update_output(
     skipped: list[str] = []
     no_data_skipped: list[str] = []
     diagnostics: list[str] = []
+    source_diagnostics: list[dict[str, Any]] = []
     for line in output.splitlines():
+        if line.startswith("UPDATE_DIAGNOSTIC "):
+            try:
+                source_diagnostics.append(json.loads(line.removeprefix("UPDATE_DIAGNOSTIC ")))
+            except (json.JSONDecodeError, TypeError):
+                diagnostics.append("source_diagnostic_unparseable")
+            continue
         date_match = re.search(r"(\d{4}-\d{2}-\d{2})", line)
         if date_match is None:
             continue
@@ -61,6 +69,14 @@ def parse_daily_update_output(
         success_count, fail_count = len(updated), len(failed)
 
     if fail_count and not failed:
+        resolved_dates = set(updated) | set(skipped) | set(no_data_skipped)
+        unresolved_dates = [date for date in missing_dates if date not in resolved_dates]
+        if len(unresolved_dates) == fail_count:
+            failed = unresolved_dates
+        else:
+            diagnostics.append("failed_date_unresolved")
+
+    if fail_count and not failed:
         failed = [f"失敗_{index + 1}" for index in range(fail_count)]
     if no_data_skipped:
         message_parts = [f"更新完成：成功 {success_count} 天"]
@@ -83,6 +99,7 @@ def parse_daily_update_output(
         "failed_dates": failed,
         "skipped_dates": _unique([*skipped, *no_data_skipped]),
         "no_data_skipped_dates": no_data_skipped,
+        "source_diagnostics": source_diagnostics,
     }
     if fail_count or diagnostics:
         result["diagnostic_codes"] = diagnostics

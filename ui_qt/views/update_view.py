@@ -1459,6 +1459,26 @@ class UpdateView(QWidget):
             total_records = value.get('total_records', 0)
             status_str = value.get('status', 'unknown')
 
+            if key == 'monthly_revenue':
+                latest_period = value.get('latest_period') or latest_date
+                latest_available_period = value.get('latest_available_period') or '尚無'
+                next_available_date = value.get('next_available_date')
+                pending_period_count = int(value.get('pending_period_count') or 0)
+                lines = [
+                    f"已匯入期別：{latest_period}",
+                    f"目前可用期別：{latest_available_period}",
+                ]
+                if pending_period_count and next_available_date:
+                    lines.append(
+                        f"待生效：{pending_period_count} 個期別（{next_available_date} 起可用）"
+                    )
+                lines.extend([
+                    f"總記錄數：{total_records:,}",
+                    f"狀態：{status_str}",
+                ])
+                monthly_revenue_text = "\n".join(lines)
+                continue
+
             if key == 'broker_branch':
                 date_count = value.get('date_count', 0)
                 e_only = value.get('e_only_count', 0)

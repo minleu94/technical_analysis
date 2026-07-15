@@ -1,3 +1,5 @@
+import json
+
 from app_module.update_daily_output import parse_daily_update_output
 
 
@@ -20,6 +22,7 @@ def test_parse_daily_update_output_golden_success_skip_and_failure() -> None:
         "failed_dates": ["2026-07-10"],
         "skipped_dates": ["2026-07-09"],
         "no_data_skipped_dates": [],
+        "source_diagnostics": [],
         "diagnostic_codes": [],
     }
 
@@ -60,3 +63,43 @@ def test_parse_daily_update_output_keeps_existing_file_skip_separate_from_no_dat
 
     assert result["skipped_dates"] == ["2026-07-10", "2026-07-13"]
     assert result["no_data_skipped_dates"] == ["2026-07-13"]
+
+
+def test_parse_daily_update_output_preserves_structured_non_trading_day_diagnostics() -> None:
+    diagnostic = {
+        "date": "2026-07-10",
+        "outcome": "no_data",
+        "reason_code": "twse_official_no_data",
+        "request_attempts": [
+            {"request_type": "ALL", "http_status": 307, "api_status": None},
+            {
+                "request_type": "ALLBUT0999",
+                "http_status": 200,
+                "api_status": "很抱歉，沒有符合條件的資料!",
+            },
+        ],
+    }
+    result = parse_daily_update_output(
+        "\n".join(
+            [
+                f"UPDATE_DIAGNOSTIC {json.dumps(diagnostic, ensure_ascii=False)}",
+                "SKIPPED_NO_DATA 2026-07-10 上游查無資料",
+                "[UPDATE_SUMMARY] SUCCESS: 0 days, SKIPPED_NO_DATA: 1 days, FAILED: 0 days",
+            ]
+        ),
+        ["2026-07-10"],
+    )
+
+    assert result["success"] is True
+    assert result["source_diagnostics"] == [diagnostic]
+
+
+def test_parse_daily_update_output_infers_real_failed_date_without_placeholder() -> None:
+    result = parse_daily_update_output(
+        "[UPDATE_SUMMARY] SUCCESS: 0 days, SKIPPED_NO_DATA: 0 days, FAILED: 1 days",
+        ["2026-07-10"],
+    )
+
+    assert result["success"] is False
+    assert result["failed_dates"] == ["2026-07-10"]
+    assert "failed_date_unresolved" not in result["diagnostic_codes"]

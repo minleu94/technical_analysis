@@ -42,7 +42,7 @@ def test_tpex_warning_messages_report_missing_failed_dates() -> None:
 def test_twse_skip_warning_messages_report_explicit_no_data_dates() -> None:
     warnings = _twse_skip_warning_messages({"no_data_skipped_dates": ["2026-07-10"]})
 
-    assert warnings == ["TWSE 上游查無資料，已跳過日期：2026-07-10"]
+    assert warnings == ["TWSE 官方無交易資料日（休市／颱風等），已略過日期：2026-07-10"]
 
 
 def test_twse_skip_warning_messages_ignore_existing_file_skips() -> None:

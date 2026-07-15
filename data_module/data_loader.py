@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Dict, List, Union
+from typing import Any, Optional, Dict, List, Union
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
@@ -81,6 +81,11 @@ class DataLoader:
     def __init__(self, config: TWStockConfig):
         self.config = config
         self.last_daily_download_outcome = "failed"
+        self.last_daily_download_diagnostics: Dict[str, Any] = {
+            "outcome": "failed",
+            "reason_code": "not_started",
+            "request_attempts": [],
+        }
         self._setup_logging()
         self.db = DBManager(self.config)
         
@@ -377,6 +382,13 @@ class DataLoader:
         """
         try:
             self.last_daily_download_outcome = "failed"
+            request_attempts: list[dict[str, Any]] = []
+            self.last_daily_download_diagnostics = {
+                "date": date,
+                "outcome": "failed",
+                "reason_code": "in_progress",
+                "request_attempts": request_attempts,
+            }
             # 轉換日期格式為 YYYYMMDD
             date_obj = datetime.strptime(date, '%Y-%m-%d')
             formatted_date = date_obj.strftime('%Y%m%d')
@@ -419,9 +431,35 @@ class DataLoader:
 
                 # 發送請求（使用 session 和 headers）
                 self.logger.info(f"正在從 MI_INDEX API 獲取 {formatted_date} 的數據，type={request_type}...")
-                response = session.get(url, params=params, headers=headers, timeout=self.config.request_timeout)
+                try:
+                    response = session.get(
+                        url,
+                        params=params,
+                        headers=headers,
+                        timeout=self.config.request_timeout,
+                    )
+                except requests.RequestException as request_error:
+                    request_attempts.append({
+                        "request_type": request_type,
+                        "http_status": None,
+                        "api_status": None,
+                        "error_type": type(request_error).__name__,
+                        "error": str(request_error),
+                    })
+                    self.logger.warning(
+                        "MI_INDEX transport error for %s, type=%s: %s",
+                        formatted_date,
+                        request_type,
+                        request_error,
+                    )
+                    continue
 
                 if response.status_code != 200:
+                    request_attempts.append({
+                        "request_type": request_type,
+                        "http_status": response.status_code,
+                        "api_status": None,
+                    })
                     self.logger.warning(
                         f"無法獲取 {formatted_date} 的數據: HTTP {response.status_code}, type={request_type}"
                     )
@@ -431,8 +469,34 @@ class DataLoader:
                     continue
 
                 # 解析 JSON 響應
-                candidate = response.json()
-                api_statuses.append(str(candidate.get('stat') or ""))
+                try:
+                    candidate = response.json()
+                    if not isinstance(candidate, dict):
+                        raise TypeError(
+                            f"unexpected JSON payload type: {type(candidate).__name__}"
+                        )
+                except (TypeError, ValueError) as parse_error:
+                    request_attempts.append({
+                        "request_type": request_type,
+                        "http_status": response.status_code,
+                        "api_status": None,
+                        "error_type": type(parse_error).__name__,
+                        "error": str(parse_error),
+                    })
+                    self.logger.warning(
+                        "MI_INDEX JSON error for %s, type=%s: %s",
+                        formatted_date,
+                        request_type,
+                        parse_error,
+                    )
+                    continue
+                api_status = str(candidate.get('stat') or "")
+                api_statuses.append(api_status)
+                request_attempts.append({
+                    "request_type": request_type,
+                    "http_status": response.status_code,
+                    "api_status": api_status,
+                })
 
                 # 檢查響應狀態
                 if candidate.get('stat') == 'OK':
@@ -441,15 +505,45 @@ class DataLoader:
                 self.logger.warning(f"API返回錯誤狀態: {candidate.get('stat')}, type={request_type}")
 
             if data is None:
-                if api_statuses and all(
+                has_official_no_data = any(
                     _is_explicit_twse_no_data_status(status)
                     for status in api_statuses
-                ):
+                )
+                attempts_are_safe_no_data = bool(request_attempts) and all(
+                    (
+                        attempt["http_status"] == 307
+                        and attempt["api_status"] is None
+                        and "error_type" not in attempt
+                    )
+                    or (
+                        attempt["http_status"] == 200
+                        and _is_explicit_twse_no_data_status(attempt["api_status"])
+                    )
+                    for attempt in request_attempts
+                )
+                if has_official_no_data and attempts_are_safe_no_data:
                     self.last_daily_download_outcome = "no_data"
+                    self.last_daily_download_diagnostics = {
+                        "date": date,
+                        "outcome": "no_data",
+                        "reason_code": "twse_official_no_data",
+                        "request_attempts": request_attempts,
+                    }
+                else:
+                    self.last_daily_download_diagnostics = {
+                        "date": date,
+                        "outcome": "failed",
+                        "reason_code": "twse_no_usable_response",
+                        "request_attempts": request_attempts,
+                    }
                 return None
             
             # 檢查是否有資料表
             if 'tables' not in data:
+                self.last_daily_download_diagnostics.update(
+                    reason_code="twse_tables_missing",
+                    request_attempts=request_attempts,
+                )
                 self.logger.warning("API響應中沒有資料表")
                 return None
             
@@ -461,10 +555,18 @@ class DataLoader:
                     break
 
             if stock_data is None:
+                self.last_daily_download_diagnostics.update(
+                    reason_code="twse_stock_table_missing",
+                    request_attempts=request_attempts,
+                )
                 self.logger.warning("API響應中找不到個股交易資料表")
                 return None
             
             if not stock_data.get('data'):
+                self.last_daily_download_diagnostics.update(
+                    reason_code="twse_stock_table_empty",
+                    request_attempts=request_attempts,
+                )
                 self.logger.warning("股票交易資料為空")
                 return None
             
@@ -504,11 +606,24 @@ class DataLoader:
             df.to_csv(daily_price_file, index=False, encoding='utf-8-sig')
             self.logger.info(f"成功保存 {date} 的個股交易資料，共 {len(df)} 筆記錄")
             self.last_daily_download_outcome = "success"
+            self.last_daily_download_diagnostics = {
+                "date": date,
+                "outcome": "success",
+                "reason_code": "twse_data_available",
+                "request_attempts": request_attempts,
+            }
             
             return df
             
         except Exception as e:
             self.last_daily_download_outcome = "failed"
+            self.last_daily_download_diagnostics = {
+                "date": date,
+                "outcome": "failed",
+                "reason_code": "twse_download_exception",
+                "error": str(e),
+                "request_attempts": locals().get("request_attempts", []),
+            }
             self.logger.error(f"下載個股交易資料時發生錯誤: {str(e)}")
             import traceback
             traceback.print_exc()

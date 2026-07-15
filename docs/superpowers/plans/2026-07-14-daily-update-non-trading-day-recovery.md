@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 使用繁體中文；不回補或覆寫正式 `DATA_ROOT`。
-- 只有兩個 TWSE fallback 都精確回覆「很抱歉，沒有符合條件的資料！」可跳過；網路、格式、解析、未來日期與未知例外仍是失敗。
+- 沒有成功資料時，至少一個 TWSE fallback 須精確回覆「很抱歉，沒有符合條件的資料！」，且其他嘗試只能是同一官方文案或 HTTP 307；其他網路、格式、解析、未來日期與未知例外仍是失敗。
 - 不改投資、推薦、evidence 或自動交易邊界。
 - 測試以 `tmp_path` 與 monkeypatch 隔離資料來源。
 
@@ -26,7 +26,7 @@
 - Test: `tests/test_core/test_data_loader.py`
 - Test: `tests/test_update_daily_output.py`
 
-**Interfaces:** `DataLoader.last_daily_download_outcome` 僅為 `success`、`no_data` 或 `failed`。只有兩個 TWSE `stat` 都精確等於「很抱歉，沒有符合條件的資料！」才設為 `no_data`；例如「查詢日期大於今日」或暫時性「查無資料」仍為 `failed`。下載器輸出 `[UPDATE_SUMMARY] SUCCESS: <n> days, SKIPPED_NO_DATA: <n> days, FAILED: <n> days`，解析器回傳 `success`、`skipped_dates`、`no_data_skipped_dates`、`failed_dates`。
+**Interfaces:** `DataLoader.last_daily_download_outcome` 僅為 `success`、`no_data` 或 `failed`。沒有成功資料時，至少一個 TWSE `stat` 精確等於「很抱歉，沒有符合條件的資料！」，且其他嘗試只能是同一官方文案或 HTTP 307，才設為 `no_data`；例如 HTTP 500、timeout、「查詢日期大於今日」或暫時性「查無資料」仍為 `failed`。下載器輸出 `[UPDATE_SUMMARY] SUCCESS: <n> days, SKIPPED_NO_DATA: <n> days, FAILED: <n> days`，解析器回傳 `success`、`skipped_dates`、`no_data_skipped_dates`、`failed_dates` 與逐 request `source_diagnostics`。
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -77,7 +77,14 @@ Expected: FAIL，現有摘要不接受 `SKIPPED_NO_DATA`。
 
 ```python
 # data_module/data_loader.py
-if all(_is_explicit_twse_no_data_status(status) for status in api_statuses):
+has_official_no_data = any(
+    _is_explicit_twse_no_data_status(status) for status in api_statuses
+)
+attempts_are_safe_no_data = all(
+    attempt_is_official_no_data(attempt) or attempt_is_http_307(attempt)
+    for attempt in request_attempts
+)
+if has_official_no_data and attempts_are_safe_no_data:
     self.last_daily_download_outcome = "no_data"
     return None
 

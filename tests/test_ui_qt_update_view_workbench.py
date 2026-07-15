@@ -77,6 +77,7 @@ class FakeUpdateService:
         sync_to_sqlite=False,
         force_refresh=False,
         break_on_repeated_source_date=False,
+        twse_no_data_dates=None,
     ):
         self.calls.append((
             "update_tpex_daily_price_range",
@@ -350,14 +351,21 @@ def test_all_data_view_has_monthly_revenue_status_card():
 
     view._on_status_checked({
         "monthly_revenue": {
-            "latest_date": "2026-05",
-            "total_records": 244499,
+            "latest_date": "2026-06-30",
+            "latest_period": "2026-06",
+            "latest_available_period": "2026-05",
+            "next_available_date": "2026-07-15",
+            "pending_period_count": 1,
+            "total_records": 246331,
             "status": "ok",
         }
     })
 
-    assert "2026-05" in view.monthly_revenue_status_text.toPlainText()
-    assert "244,499" in view.monthly_revenue_status_text.toPlainText()
+    text = view.monthly_revenue_status_text.toPlainText()
+    assert "已匯入期別：2026-06" in text
+    assert "目前可用期別：2026-05" in text
+    assert "2026-07-15 起可用" in text
+    assert "246,331" in text
 
 
 def test_selected_date_range_uses_recent_ten_business_days_for_auto_updates():
@@ -543,6 +551,7 @@ class FailingTpexService(FakeUpdateService):
         sync_to_sqlite=False,
         force_refresh=False,
         break_on_repeated_source_date=False,
+        twse_no_data_dates=None,
     ):
         self.calls.append((
             "update_tpex_daily_price_range",

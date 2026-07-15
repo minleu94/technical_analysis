@@ -205,7 +205,7 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 - 技術指標數據
 - 月營收資料
 
-月營收卡片會顯示 `fundamental_monthly_revenues` 的最新資料年月、筆數與狀態，用來確認正式 SQLite 基本面資料是否已進入目前資料庫。
+月營收卡片會分別顯示 `fundamental_monthly_revenues` 的「已匯入期別」與依該期全部資料的 `available_date` 判斷的「目前完整可用期別」。若同一期仍有部分公司尚未到可得日，該期仍列為待生效；卡片會顯示待生效期別數與完整可用起始日。這是 point-in-time 可見性保護，不代表更新失敗。
 
 狀態意義：
 
@@ -222,6 +222,8 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 |---|---|---|
 | 快速更新（跳過大型合併） | TWSE / TPEX 每日股價與券商分點會依 UI 最近範圍補齊，預設為結束日前最近 10 個工作日，並直接增量同步 SQLite；會保留已下載的日檔 CSV，但跳過 `stock_data_whole.csv` 與券商分點 `merged.csv` 的大型重寫。 | 日常盤後更新、只需要讓 SQLite 查詢與技術指標追上最新資料。 |
 | 安全更新（完整 CSV + SQLite） | 依 UI 最近範圍補齊 TWSE / TPEX / 大盤 / 產業 / 券商分點，預設為結束日前最近 10 個工作日；完成後重建每日股價大表與券商分點 `merged.csv`，再同步 SQLite。 | 資料修復、備份完整性檢查、需要確認 CSV 歷史資料庫也完整時。 |
+
+TWSE 補檔遇到平日休市（例如颱風停市）時，只有在至少一個官方查詢型別明確回覆「沒有符合條件的資料」且沒有任何成功資料時，才會標記為「官方無交易資料日」並略過。HTTP 錯誤、逾時或無法辨識的回覆仍保留為更新失敗；更新結果會保留各查詢型別的 HTTP / API 狀態與實際日期，方便後續診斷。
 
 快速更新仍會更新必要的日檔 CSV，因為 SQLite 同步以這些日檔作為可追溯來源；速度優勢主要來自跳過大型合併檔重寫。最近 10 個工作日可涵蓋使用者約兩週才開一次程式的常見情境；若間隔更久，請改用個別資料來源日期範圍或安全更新補齊。若近期資料已存在，系統會先用 CSV / SQLite 判斷並跳過網頁抓取。
 
@@ -1504,6 +1506,8 @@ Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **
 - `access_boundary: v3_closeout_gate_credit=false`
 
 ## 14. 更新記錄
+
+- 2026-07-14：修正 TWSE 平日休市補檔判斷；颱風等官方無交易資料日不再因備援查詢的 HTTP 307 被誤判為失敗，未知網路錯誤仍 fail-closed。全部資料的月營收狀態卡改為分開顯示已匯入期別、目前 PIT 可用期別與待生效日。
 
 - 2026-07-13：校正目前 weekly evidence operations history 為 `1/3 waiting_for_time`；這只同步既有 Week 1 證據，不改 production scheduler、external Gate completion 或正式產品 closeout。
 - 2026-07-13：Daily Decision Desk 改為「市場探索 > 市場總覽」index 0 的唯一實例；Workbench「決策來源」改為純導覽，不再嵌入第二份 widget。市場總覽新增月營收、三大法人與五類來源的資料可見性區塊；可見性維持 read-only、PIT-aware、fail-soft，且不參與 action、focus、Score 或既有整體品質聚合。

@@ -115,9 +115,9 @@ python scripts/merge_daily_data.py
 
 ## TWSE 無資料日與排錯
 
-每日股價更新會先嘗試 TWSE `MI_INDEX` 的 `ALL` 與 `ALLBUT0999` 類型。只有兩者都回覆已驗證的官方狀態文案「很抱歉，沒有符合條件的資料！」時，該日期才會列入 `no_data_skipped_dates`（同時保留在 `skipped_dates`），並以「上游查無資料，已跳過」顯示；這不是下載失敗，後續 TPEX、SQLite 同步與技術指標仍會繼續執行。
+每日股價更新會先嘗試 TWSE `MI_INDEX` 的 `ALL` 與 `ALLBUT0999` 類型。當沒有任何成功資料、至少一個查詢型別回覆已驗證的官方狀態文案「很抱歉，沒有符合條件的資料！」，且其他嘗試也只可能是同一官方文案或已確認的 HTTP 307 fallback 差異時，該日期才會列入 `no_data_skipped_dates`（同時保留在 `skipped_dates`），並以「官方無交易資料日」顯示；這不是下載失敗，後續 TPEX、SQLite 同步與技術指標仍會繼續執行。
 
-HTTP 錯誤、逾時、JSON／表格解析失敗，或「查詢日期大於今日」與包含「查無資料」但非官方完整文案的回覆，仍會列入 `failed_dates`，並中止後續同步，避免 UI 將不完整資料誤認為已更新。排程請查看 `OUTPUT_ROOT/scheduled/data_update_quick/latest_status.json`：`passed_with_warnings` 代表有安全跳過日或 TPEX 警告；`failed` 則應同時查看當日 `*_data_update_quick.log` 與 `errors` 欄位。
+除上述 HTTP 307 fallback 外，HTTP 錯誤、逾時、連線例外、JSON／表格解析失敗，或「查詢日期大於今日」與包含「查無資料」但非官方完整文案的回覆，仍會列入 `failed_dates`，並中止後續同步，避免 UI 將不完整資料誤認為已更新。每個查詢型別的 HTTP／API／transport 診斷會保留在批次結果中。排程請查看 `OUTPUT_ROOT/scheduled/data_update_quick/latest_status.json`：`passed_with_warnings` 代表有安全跳過日或 TPEX 警告；`failed` 則應同時查看當日 `*_data_update_quick.log` 與 `errors` 欄位。
 
 備份檔集中存放在 `meta_data/backup/`。為降低硬碟負擔，系統會在新備份成功後清理同一來源的舊備份：同一天只保留最新一份，且最多保留最新 5 個日期版本；清理範圍僅限備份目錄內「完全符合來源前綴 + 日期戳」的檔案，不會刪除正式資料，也不會讓一般 `twstock_*.db` 清掉 `twstock_fundamental_schema_*.db` 這類不同用途的標籤備份。備份來源與既有大檔清理候選見 [BACKUP_RETENTION_AUDIT_2026_07_06.md](BACKUP_RETENTION_AUDIT_2026_07_06.md)。
 

@@ -94,7 +94,7 @@ def _twse_skip_warning_messages(result: dict[str, Any]) -> list[str]:
     )
     if not skipped_dates:
         return []
-    return [f"TWSE 上游查無資料，已跳過日期：{', '.join(skipped_dates)}"]
+    return [f"TWSE 官方無交易資料日（休市／颱風等），已略過日期：{', '.join(skipped_dates)}"]
 
 
 def _run_step(
