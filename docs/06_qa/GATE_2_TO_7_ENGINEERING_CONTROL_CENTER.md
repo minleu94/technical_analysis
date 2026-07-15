@@ -13,7 +13,7 @@
 
 本日未建立 **Formal observed day**；Development artifacts 只從外部 development root 唯讀驗證，未掃描或寫入正式 market DB，也未啟用專案 scheduler。B 方案 owner 決議 artifact 已存在於 `C:\Temp\technical_analysis_development_output\governance\DevelopmentDataUsageDecision.jsonl`（file SHA-256 `88D853DE58791F2D8482FE2C8D61013E0556518D22C6F52ED168FE863AE14B7B`；effective `2026-07-14T05:07:25.0061485Z`），`new_holdout_start=2026-07-15`；`HoldoutConsumptionRegistry.jsonl` 目前不存在，因此不得宣稱 holdout 已消費或 formal readiness 已成立。週報、人工 why-not 與月 Gate Review 僅在自然週／月到期時 append；第 12 週即使 eligible 也不得 unblind 或啟動 Task 6。
 
-操作載體為 Codex App automation `terra-forward-clock-12`，狀態 `ACTIVE`，每日本機時間 23:30 執行，最後一次為 2026-10-05 23:30。這只是一個 Codex local automation，不是 repository scheduler、Windows Task Scheduler、background trading job 或正式 ingestion 排程。
+操作載體為 Codex App automation `terra-forward-clock-12`（顯示名稱 `Terra Continuous Development／Forward Clock`），狀態 `ACTIVE`，每日本機時間 23:30 執行且無截止日。每次 invocation 最多推進一個由 automation memory 去重的 research-only Development increment；同日可多次手動執行並從既有游標續跑，但 invocation count 不得換算 elapsed days、Formal observed snapshots、週期或 forward credit。若沒有新的合格 increment，必須記錄 `no_op`，不得捏造進度。2026-10-05 只保留為第 12 週 formal readiness checkpoint，checkpoint 後兩條 clock 仍按相同邊界持續。這只是一個 Codex local automation，不是 repository scheduler、Windows Task Scheduler、background trading job 或正式 ingestion 排程。
 
 ## Agent 接手入口
 
