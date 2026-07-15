@@ -3,6 +3,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 
 def _module():
     try:
@@ -178,3 +180,86 @@ def test_timeline_cli_writes_only_explicit_staging_root(tmp_path: Path) -> None:
 
     assert result == 0
     assert len(tuple(output_root.iterdir())) == 3
+
+
+def test_timeline_writer_rejects_existing_output_without_overwriting(tmp_path: Path) -> None:
+    module = _module()
+    assert module is not None, "corporate timeline contract is missing"
+    existing = tmp_path / "corporate_action_availability_coverage.json"
+    existing.write_bytes(b"owner-existing-output")
+    result = module.build_corporate_action_availability_history(
+        evidence_rows=(_event(),),
+        coverage_rows=(),
+        as_of_date=date(2025, 12, 31),
+    )
+
+    with pytest.raises(FileExistsError, match="corporate_action_output_exists"):
+        module.write_corporate_action_availability_history(result, output_root=tmp_path)
+
+    assert existing.read_bytes() == b"owner-existing-output"
+    assert {path.name for path in tmp_path.iterdir()} == {existing.name}
+
+
+def test_timeline_writer_publishes_staged_files_and_cleans_staging(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    module = _module()
+    assert module is not None, "corporate timeline contract is missing"
+    result = module.build_corporate_action_availability_history(
+        evidence_rows=(_event(),), coverage_rows=(), as_of_date=date(2025, 12, 31)
+    )
+    original_replace = Path.replace
+    replacements: list[tuple[str, str]] = []
+
+    def recording_replace(source: Path, target: Path) -> Path:
+        replacements.append((source.name, Path(target).name))
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", recording_replace)
+
+    outputs = module.write_corporate_action_availability_history(result, output_root=tmp_path)
+
+    assert {target for _, target in replacements} == {path.name for path in outputs.values()}
+    assert not tuple(path for path in tmp_path.iterdir() if path.name.startswith(".corporate-action-"))
+
+
+def test_timeline_writer_rejects_output_under_forbidden_root(tmp_path: Path) -> None:
+    module = _module()
+    assert module is not None, "corporate timeline contract is missing"
+    forbidden = tmp_path / "formal-data"
+    output_root = forbidden / "output" / "corporate-action"
+    result = module.build_corporate_action_availability_history(
+        evidence_rows=(_event(),), coverage_rows=(), as_of_date=date(2025, 12, 31)
+    )
+
+    with pytest.raises(ValueError, match="corporate_action_output_forbidden_root"):
+        module.write_corporate_action_availability_history(
+            result, output_root=output_root, forbidden_roots=(forbidden,)
+        )
+
+    assert not forbidden.exists()
+
+
+def test_timeline_cli_rejects_output_under_configured_data_root(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    events = tmp_path / "events.json"
+    coverage = tmp_path / "coverage.json"
+    formal_root = tmp_path / "formal-data"
+    output_root = formal_root / "output" / "corporate-action"
+    events.write_text(json.dumps([_event()]), encoding="utf-8")
+    coverage.write_text("[]", encoding="utf-8")
+    monkeypatch.setenv("DATA_ROOT", str(formal_root))
+    cli = importlib.import_module("scripts.build_corporate_action_availability_history")
+
+    with pytest.raises(ValueError, match="corporate_action_output_forbidden_root"):
+        cli.main(
+            [
+                "--evidence-json", str(events),
+                "--coverage-json", str(coverage),
+                "--as-of-date", "2025-12-31",
+                "--output-root", str(output_root),
+            ]
+        )
+
+    assert not formal_root.exists()

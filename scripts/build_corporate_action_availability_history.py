@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -31,6 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     outputs = write_corporate_action_availability_history(
         result,
         output_root=args.output_root,
+        forbidden_roots=(Path(os.environ["DATA_ROOT"]),) if os.environ.get("DATA_ROOT") else (),
     )
     print(json.dumps({key: str(path) for key, path in outputs.items()}, sort_keys=True))
     return 0

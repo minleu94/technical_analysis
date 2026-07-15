@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 from typing import Iterable, Mapping
+from uuid import uuid4
 
 
 @dataclass(frozen=True)
@@ -178,43 +180,65 @@ def write_corporate_action_availability_history(
     result: CorporateActionAvailabilityHistoryResult,
     *,
     output_root: Path,
+    forbidden_roots: Iterable[Path] = (),
 ) -> dict[str, Path]:
     root = Path(output_root).resolve()
+    resolved_forbidden = tuple(Path(path).resolve() for path in forbidden_roots)
+    if any(root == forbidden or root.is_relative_to(forbidden) for forbidden in resolved_forbidden):
+        raise ValueError("corporate_action_output_forbidden_root")
     root.mkdir(parents=True, exist_ok=True)
     timeline = root / "corporate_action_availability_timeline.csv"
     coverage = root / "corporate_action_availability_coverage.json"
     manifest = root / "corporate_action_availability_manifest.json"
+    existing = tuple(path for path in (timeline, coverage, manifest) if path.exists())
+    if existing:
+        names = ",".join(path.name for path in existing)
+        raise FileExistsError(f"corporate_action_output_exists:{names}")
+    staging = root / f".corporate-action-{uuid4().hex}"
+    staging.mkdir()
+    staged_timeline = staging / timeline.name
+    staged_coverage = staging / coverage.name
+    staged_manifest = staging / manifest.name
     fieldnames = tuple(CorporateEventRecord.__dataclass_fields__)
-    with timeline.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
-        writer.writeheader()
-        for record in result.records:
-            writer.writerow({key: _serialize(getattr(record, key)) for key in fieldnames})
-    coverage.write_text(
-        json.dumps(
-            {
-                source_id: _coverage_payload(item)
-                for source_id, item in sorted(result.coverage_by_source.items())
-            },
-            sort_keys=True,
-            indent=2,
+    try:
+        with staged_timeline.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+            writer.writeheader()
+            for record in result.records:
+                writer.writerow({key: _serialize(getattr(record, key)) for key in fieldnames})
+        staged_coverage.write_text(
+            json.dumps(
+                {
+                    source_id: _coverage_payload(item)
+                    for source_id, item in sorted(result.coverage_by_source.items())
+                },
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
         )
-        + "\n",
-        encoding="utf-8",
-    )
-    manifest.write_text(
-        json.dumps(
-            {
-                "schema_version": "corporate-action-availability.v1",
-                "sources": [list(item) for item in result.source_manifest],
-                "unmatched": [list(item) for item in result.unmatched_reasons],
-            },
-            sort_keys=True,
-            indent=2,
+        staged_manifest.write_text(
+            json.dumps(
+                {
+                    "schema_version": "corporate-action-availability.v1",
+                    "sources": [list(item) for item in result.source_manifest],
+                    "unmatched": [list(item) for item in result.unmatched_reasons],
+                },
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
         )
-        + "\n",
-        encoding="utf-8",
-    )
+        for staged, target in (
+            (staged_timeline, timeline),
+            (staged_coverage, coverage),
+            (staged_manifest, manifest),
+        ):
+            staged.replace(target)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     return {"timeline": timeline, "coverage": coverage, "manifest": manifest}
 
 
