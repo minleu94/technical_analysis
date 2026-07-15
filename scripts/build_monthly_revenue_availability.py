@@ -43,6 +43,24 @@ def main(argv: list[str] | None = None) -> int:
     raw_dir = args.raw_dir or (config.data_root / "financial_data")
     official_rows = _load_official_rows(args.source_json, args.source_url)
     raw_periods = load_raw_monthly_revenue_periods(raw_dir)
+
+    # 另外從最新的 MOPS 快照檔中讀取 raw periods，以支援新下載月份的可用日對照
+    snapshot_dir = config.output_root / "monthly_revenue_mops_snapshots"
+    if snapshot_dir.exists():
+        candidates = [
+            path
+            for path in snapshot_dir.glob("mops_monthly_revenue_snapshot_*.csv")
+            if ".before_" not in path.name
+        ]
+        if candidates:
+            latest_snapshot = max(candidates, key=lambda p: p.stat().st_mtime)
+            with latest_snapshot.open("r", encoding="utf-8-sig", newline="") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    stock_code = (row.get("stock_code") or "").strip()
+                    period = (row.get("period") or "").strip()
+                    if stock_code and period:
+                        raw_periods.add((stock_code, period))
     result = build_monthly_revenue_availability_rows(
         official_rows,
         raw_periods=raw_periods,
