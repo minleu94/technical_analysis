@@ -292,3 +292,40 @@ def test_timeline_cli_rejects_invalid_json_rows_before_creating_output(
         )
 
     assert not output_root.exists()
+
+
+@pytest.mark.parametrize(
+    ("label", "failure", "expected_error"),
+    (
+        ("evidence", "malformed", "corporate_action_evidence_json_invalid"),
+        ("coverage", "malformed", "corporate_action_coverage_json_invalid"),
+        ("evidence", "missing", "corporate_action_evidence_read_failed"),
+        ("coverage", "missing", "corporate_action_coverage_read_failed"),
+    ),
+)
+def test_timeline_cli_rejects_unreadable_json_before_creating_output(
+    tmp_path: Path, label: str, failure: str, expected_error: str,
+) -> None:
+    events = tmp_path / "events.json"
+    coverage = tmp_path / "coverage.json"
+    output_root = tmp_path / "staging"
+    events.write_text(json.dumps([_event()]), encoding="utf-8")
+    coverage.write_text("[]", encoding="utf-8")
+    input_path = events if label == "evidence" else coverage
+    if failure == "malformed":
+        input_path.write_text("[{", encoding="utf-8")
+    else:
+        input_path.unlink()
+    cli = importlib.import_module("scripts.build_corporate_action_availability_history")
+
+    with pytest.raises(ValueError, match=expected_error):
+        cli.main(
+            [
+                "--evidence-json", str(events),
+                "--coverage-json", str(coverage),
+                "--as-of-date", "2025-12-31",
+                "--output-root", str(output_root),
+            ]
+        )
+
+    assert not output_root.exists()

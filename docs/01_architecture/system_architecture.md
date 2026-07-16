@@ -427,6 +427,8 @@ Month 5 v1 已新增 `data_module/fundamental_availability.py` 集中處理公�
 
 `development_module/` 是獨立於正式資料、ML formal verifier 與 application domain 的 development-only generation 邊界。它只透過 SQLite `mode=ro`／`PRAGMA query_only=ON` 讀取 `daily_prices`、`technical_indicators`、`market_indices`、`industry_indices`；以每張表的 schema／內容 fingerprint、T-1 feature、252 日 `conservative_observed_history` universe 及新建價格 labels 產生 append-only artifact。輸出只能位於呼叫端明確指定、且不在 `DATA_ROOT` 的 development output root。2025 只可列 development fit、2026 matured labels 只可列 evaluation，corporate-action coverage 缺失固定產生 `research_only_degraded`。此模組固定 `formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`zero_formal_write=true`，不得 import／修改 `locked_oos`、ScoringEngine、Recommendation、Portfolio、Exit 或 scheduler。
 
+`scripts/build_corporate_action_availability_history.py` 與 `data_module/corporate_action_availability_history.py` 是 corporate-action PIT timeline 的 staging-only 邊界。CLI 只接受 object rows list 形式的 evidence／coverage JSON；schema 根不符即以 deterministic diagnostic fail closed。Writer 接受 explicit output root 與 forbidden roots，CLI 在環境 `DATA_ROOT` 存在時將其注入並拒絕該 root／descendant；任一 canonical target 已存在即拒絕覆寫。三件套先寫入同 root 的唯一 staging directory，完成後以 replace 發布並在 finally 清理 staging；這不宣稱跨三檔 transaction atomicity，也不把 staging artifact 接入正式 market DB、Terra V0 generation、Formal Recommendation／Portfolio／Exit／Score 或 lifecycle。
+
 ## 9. Broker Flow 與資料品質
 
 MoneyDJ 張數榜 `c=E` 與金額榜 `c=B` 是各自獨立的 Top 50：
@@ -604,6 +606,7 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-07-15：同步 corporate-action availability history staging-only CLI 邊界；JSON root deterministic fail-closed、既有 target 拒絕覆寫、staging publish／cleanup 與環境 `DATA_ROOT` forbidden-root guard 均不接正式資料或 Formal lifecycle。
 - 2026-07-13：新增 Terra Development Dataset V0 獨立 development-only generation 邊界；四個 core source 唯讀、T-1／252 日 observed universe、2025 development／2026 evaluation-only、append-only artifact 與 zero-formal-write safety flags 不接正式 Rule-only path。
 - 2026-07-12：新增 Gate 1 Advice Current Architecture 邊界；Advice policy / composer 在 application layer，Workbench UI 僅渲染 DTO，所有輸入維持 as-of / fail-closed / no-write contract。
 - 2026-07-11：新增 Target Architecture 與 Post-Refactor Product Roadmap companion 連結；修正目前主 UI 為 8 個左側主工作區，Daily Decision 已內嵌於「決策工作台 > 決策來源」；本文件仍只描述 Current Architecture。

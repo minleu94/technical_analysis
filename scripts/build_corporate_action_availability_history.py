@@ -18,7 +18,16 @@ from data_module.corporate_action_availability_history import (
 
 
 def _load_json_rows(path: Path, *, label: str) -> list[dict[str, object]]:
-    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except UnicodeError as exc:
+        raise ValueError(f"corporate_action_{label}_json_invalid") from exc
+    except OSError as exc:
+        raise ValueError(f"corporate_action_{label}_read_failed") from exc
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"corporate_action_{label}_json_invalid") from exc
     if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
         raise ValueError(f"corporate_action_{label}_rows_invalid")
     return payload
