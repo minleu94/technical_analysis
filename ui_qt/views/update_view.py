@@ -105,6 +105,7 @@ class StatusCard(QFrame):
         """相容 QTextEdit.setPlainText，用於解析並更新卡片 UI"""
         self._raw_text = text
 
+        date_label = "最新日期"
         latest_date = "未知"
         total_records = "--"
         status_str = "unknown"
@@ -112,16 +113,19 @@ class StatusCard(QFrame):
 
         lines = text.split('\n')
         for line in lines:
-            if "最新日期" in line:
+            if "最新可用日" in line:
+                date_label = "最新可用日"
+                latest_date = line.split("：")[-1].strip()
+            elif "最新日期" in line:
                 latest_date = line.split("：")[-1].strip()
             elif "總記錄數" in line:
                 total_records = line.split("：")[-1].strip()
             elif "狀態" in line:
                 status_str = line.split("：")[-1].strip()
-            elif "指標檔數" in line:
+            elif "指標檔數" in line or "已匯入期別" in line:
                 extra_info = line.strip()
 
-        self.date_label.setText(f"<span style='color:#94a3b8;'>最新日期：</span><b style='color:#f8fafc;'>{latest_date}</b>")
+        self.date_label.setText(f"<span style='color:#94a3b8;'>{date_label}：</span><b style='color:#f8fafc;'>{latest_date}</b>")
         self.records_label.setText(f"<span style='color:#94a3b8;'>總記錄數：</span><b style='color:#f8fafc;'>{total_records}</b>")
 
         if extra_info:
@@ -135,7 +139,7 @@ class StatusCard(QFrame):
             self.indicator_label.setText("<span style='font-size:11px; color:#94a3b8;'>未檢查</span>")
         elif "錯誤" in text or "失敗" in text or "異常" in text:
             self.indicator_label.setText("<span style='font-size:11px; color:#ef4444;'>異常</span>")
-        elif "success" in status_str or "正常" in status_str or "最新" in text:
+        elif status_str.lower() in {"ok", "success"} or "正常" in status_str or "最新" in text:
             self.indicator_label.setText("<span style='font-size:11px; color:#22c55e;'>最新</span>")
         else:
             self.indicator_label.setText("<span style='font-size:11px; color:#eab308;'>待更新</span>")
@@ -318,7 +322,7 @@ class UpdateView(QWidget):
         self.industry_status_text = StatusCard("產業指數數據", "", self)
         self.broker_branch_status_text = StatusCard("券商分點數據", "", self)
         self.technical_status_text = StatusCard("技術指標數據", "", self)
-        self.monthly_revenue_status_text = StatusCard("月營收資料", "月", self)
+        self.monthly_revenue_status_text = StatusCard("月營收資料", "", self)
 
         # 卡片佈局
         cards_layout = QHBoxLayout()
@@ -1462,9 +1466,11 @@ class UpdateView(QWidget):
             if key == 'monthly_revenue':
                 latest_period = value.get('latest_period') or latest_date
                 latest_available_period = value.get('latest_available_period') or '尚無'
+                latest_available_date = value.get('latest_available_date') or '尚無'
                 next_available_date = value.get('next_available_date')
                 pending_period_count = int(value.get('pending_period_count') or 0)
                 lines = [
+                    f"最新可用日：{latest_available_date}",
                     f"已匯入期別：{latest_period}",
                     f"目前可用期別：{latest_available_period}",
                 ]

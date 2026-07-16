@@ -55,6 +55,8 @@
 
 若 CLI 回報 source schema、output root、T-1、日期範圍或 generation already exists 錯誤，停止操作；不要改動正式 DB、不要覆寫 artifact，也不要以 2025 結果調參後重新宣稱 formal OOS。
 
+Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔助工具，不是正式資料 apply。執行 `scripts/build_corporate_action_availability_history.py` 時，必須提供 `--evidence-json`、`--coverage-json`、`--as-of-date` 與明確的 `--output-root`；兩個 JSON 根都必須是 object rows 的 list，否則分別以 `corporate_action_evidence_rows_invalid` 或 `corporate_action_coverage_rows_invalid` 停止，且不建立輸出。JSON 語法／編碼不合法時回報 `corporate_action_<label>_json_invalid`，檔案不存在或無法讀取時回報 `corporate_action_<label>_read_failed`，兩者都在建立 output root 前 fail closed。`--output-root` 應使用 `DATA_ROOT` 外的 TEMP／development 路徑；若環境已設定 `DATA_ROOT`，CLI 會拒絕該 root 與其子路徑。三個 canonical output 任一已存在時會以 `corporate_action_output_exists` 停止，不覆寫既有 bytes；新輸出先寫入同 root 的唯一 staging directory，完成後才逐檔發布並清理 staging。這降低半套輸出風險，但不代表三檔具單一 filesystem transaction，也不構成 corporate-action coverage 已接受、Formal evidence 或 forward credit。
+
 ## 1. 系統能做什麼
 
 目前系統提供：
@@ -205,7 +207,7 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 - 技術指標數據
 - 月營收資料
 
-月營收卡片會分別顯示 `fundamental_monthly_revenues` 的「已匯入期別」與依該期全部資料的 `available_date` 判斷的「目前完整可用期別」。若同一期仍有部分公司尚未到可得日，該期仍列為待生效；卡片會顯示待生效期別數與完整可用起始日。這是 point-in-time 可見性保護，不代表更新失敗。
+月營收卡片會以「最新可用日」顯示該期全部資料的 `available_date`，並在附加列顯示 `fundamental_monthly_revenues` 的「已匯入期別」；這兩者不能視為每日交易資料的「最新日期」。若同一期仍有部分公司尚未到可得日，該期仍列為待生效；卡片會顯示待生效期別數與完整可用起始日。這是 point-in-time 可見性保護，不代表更新失敗。
 
 狀態意義：
 
