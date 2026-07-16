@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import date
+import json
 
+from scripts.batch_update_daily_data import _format_update_diagnostic
 from scripts.scheduled.run_daily_data_update_quick import (
     _scheduled_target_weekday,
     _technical_is_current,
@@ -9,6 +11,26 @@ from scripts.scheduled.run_daily_data_update_quick import (
     _twse_skip_warning_messages,
     _weekday_window,
 )
+
+
+def test_update_diagnostic_is_ascii_safe_for_windows_stdout() -> None:
+    diagnostic = {
+        "date": "2026-07-10",
+        "outcome": "no_data",
+        "reason_code": "twse_official_no_data",
+        "request_attempts": [
+            {
+                "request_type": "ALLBUT0999",
+                "http_status": 200,
+                "api_status": "很抱歉，沒有符合條件的資料!",
+            }
+        ],
+    }
+
+    line = _format_update_diagnostic(diagnostic)
+
+    line.encode("cp1252")
+    assert json.loads(line.removeprefix("UPDATE_DIAGNOSTIC ")) == diagnostic
 
 
 def test_scheduled_target_weekday_uses_today_on_weekday() -> None:

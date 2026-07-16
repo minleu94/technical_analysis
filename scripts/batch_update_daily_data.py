@@ -15,6 +15,16 @@ sys.path.append(str(project_root))
 from data_module.config import TWStockConfig
 from data_module.data_loader import DataLoader
 
+
+def _format_update_diagnostic(diagnostic: dict[str, object]) -> str:
+    """以 ASCII 安全格式輸出結構化診斷，避免 Windows 重導向 stdout 編碼錯誤。"""
+    return "UPDATE_DIAGNOSTIC " + json.dumps(
+        diagnostic,
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+
+
 def setup_logging():
     """設置日誌"""
     logging.basicConfig(
@@ -104,10 +114,7 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
                 "date": date,
                 **loader.last_daily_download_diagnostics,
             }
-            print(
-                f"UPDATE_DIAGNOSTIC {json.dumps(diagnostic, ensure_ascii=False, sort_keys=True)}",
-                flush=True,
-            )
+            print(_format_update_diagnostic(diagnostic), flush=True)
             
             if df is None or df.empty:
                 if loader.last_daily_download_outcome == "no_data":
