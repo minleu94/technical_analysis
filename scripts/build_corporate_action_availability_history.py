@@ -17,6 +17,13 @@ from data_module.corporate_action_availability_history import (
 )
 
 
+def _load_json_rows(path: Path, *, label: str) -> list[dict[str, object]]:
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
+        raise ValueError(f"corporate_action_{label}_rows_invalid")
+    return payload
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build corporate PIT timeline in staging.")
     parser.add_argument("--evidence-json", type=Path, required=True)
@@ -25,8 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-root", type=Path, required=True)
     args = parser.parse_args(argv)
     result = build_corporate_action_availability_history(
-        evidence_rows=json.loads(args.evidence_json.read_text(encoding="utf-8-sig")),
-        coverage_rows=json.loads(args.coverage_json.read_text(encoding="utf-8-sig")),
+        evidence_rows=_load_json_rows(args.evidence_json, label="evidence"),
+        coverage_rows=_load_json_rows(args.coverage_json, label="coverage"),
         as_of_date=date.fromisoformat(args.as_of_date),
     )
     outputs = write_corporate_action_availability_history(

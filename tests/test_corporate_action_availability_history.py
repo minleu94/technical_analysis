@@ -263,3 +263,32 @@ def test_timeline_cli_rejects_output_under_configured_data_root(
         )
 
     assert not formal_root.exists()
+
+
+@pytest.mark.parametrize(
+    ("label", "invalid_payload"),
+    (("evidence", {}), ("coverage", ["not-an-object"])),
+)
+def test_timeline_cli_rejects_invalid_json_rows_before_creating_output(
+    tmp_path: Path, label: str, invalid_payload: object,
+) -> None:
+    events = tmp_path / "events.json"
+    coverage = tmp_path / "coverage.json"
+    output_root = tmp_path / "staging"
+    events.write_text(json.dumps([_event()]), encoding="utf-8")
+    coverage.write_text("[]", encoding="utf-8")
+    input_path = events if label == "evidence" else coverage
+    input_path.write_text(json.dumps(invalid_payload), encoding="utf-8")
+    cli = importlib.import_module("scripts.build_corporate_action_availability_history")
+
+    with pytest.raises(ValueError, match=f"corporate_action_{label}_rows_invalid"):
+        cli.main(
+            [
+                "--evidence-json", str(events),
+                "--coverage-json", str(coverage),
+                "--as-of-date", "2025-12-31",
+                "--output-root", str(output_root),
+            ]
+        )
+
+    assert not output_root.exists()
