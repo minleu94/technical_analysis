@@ -33,6 +33,13 @@ def _load_json_rows(path: Path, *, label: str) -> list[dict[str, object]]:
     return payload
 
 
+def _parse_as_of_date(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("corporate_action_as_of_date_invalid") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build corporate PIT timeline in staging.")
     parser.add_argument("--evidence-json", type=Path, required=True)
@@ -43,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     result = build_corporate_action_availability_history(
         evidence_rows=_load_json_rows(args.evidence_json, label="evidence"),
         coverage_rows=_load_json_rows(args.coverage_json, label="coverage"),
-        as_of_date=date.fromisoformat(args.as_of_date),
+        as_of_date=_parse_as_of_date(args.as_of_date),
     )
     outputs = write_corporate_action_availability_history(
         result,

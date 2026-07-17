@@ -329,3 +329,26 @@ def test_timeline_cli_rejects_unreadable_json_before_creating_output(
         )
 
     assert not output_root.exists()
+
+
+def test_timeline_cli_rejects_invalid_as_of_date_before_creating_output(
+    tmp_path: Path,
+) -> None:
+    events = tmp_path / "events.json"
+    coverage = tmp_path / "coverage.json"
+    output_root = tmp_path / "staging"
+    events.write_text(json.dumps([_event()]), encoding="utf-8")
+    coverage.write_text("[]", encoding="utf-8")
+    cli = importlib.import_module("scripts.build_corporate_action_availability_history")
+
+    with pytest.raises(ValueError, match="^corporate_action_as_of_date_invalid$"):
+        cli.main(
+            [
+                "--evidence-json", str(events),
+                "--coverage-json", str(coverage),
+                "--as-of-date", "2025-02-30",
+                "--output-root", str(output_root),
+            ]
+        )
+
+    assert not output_root.exists()
