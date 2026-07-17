@@ -281,6 +281,10 @@ class UpdateView(QWidget):
             ("broker_branch", "券商分點"),
             ("technical", "技術指標"),
             ("monthly_revenue", "月營收"),
+            ("institutional_flow", "三大法人"),
+            ("credit_transaction", "信用交易"),
+            ("tdcc_shareholding", "集保股權"),
+            ("scheduler_status", "排程狀態"),
             ("db_inspector", "SQLite 資料檢視"),
         ]
         for _, label in self._nav_items:
@@ -334,6 +338,30 @@ class UpdateView(QWidget):
         cards_layout.addWidget(self.technical_status_text)
         cards_layout.addWidget(self.monthly_revenue_status_text)
         all_layout.addLayout(cards_layout)
+
+        # 候選與決策資料域群組
+        candidate_group = QGroupBox("候選與決策資料域（治理檢視 / 尚未啟用）")
+        candidate_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                margin-top: 10px;
+                font-weight: bold;
+                color: #94a3b8;
+            }
+        """)
+        candidate_layout = QHBoxLayout(candidate_group)
+        candidate_layout.setSpacing(10)
+        candidate_layout.setContentsMargins(12, 12, 12, 12)
+
+        self.institutional_status_text = StatusCard("三大法人數據", "", self)
+        self.credit_status_text = StatusCard("信用交易數據", "", self)
+        self.tdcc_status_text = StatusCard("集保股權數據", "", self)
+
+        candidate_layout.addWidget(self.institutional_status_text)
+        candidate_layout.addWidget(self.credit_status_text)
+        candidate_layout.addWidget(self.tdcc_status_text)
+        all_layout.addWidget(candidate_group)
 
         # 一鍵更新與輔助按鈕
         actions_layout = QHBoxLayout()
@@ -581,11 +609,96 @@ class UpdateView(QWidget):
         self.broker_branch_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.technical_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
         self.monthly_revenue_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
+        self.institutional_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
+        self.credit_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
+        self.tdcc_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
 
         self.nav_list.setCurrentRow(0)
 
     def _add_source_tab_content(self, layout: QVBoxLayout, key: str):
         """為個別資料源維護分頁建立專屬操作與手動配置界面"""
+        if key in {"institutional_flow", "credit_transaction", "tdcc_shareholding", "scheduler_status"}:
+            info_group = QGroupBox("資料域狀態與治理說明")
+            info_group.setStyleSheet("""
+                QGroupBox {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    color: #475569;
+                    font-weight: bold;
+                }
+            """)
+            info_layout = QVBoxLayout(info_group)
+            info_layout.setSpacing(10)
+
+            status_desc = {
+                "institutional_flow": "目前此資料庫中『三大法人』表雖然存在，但因為尚未獲得業務數據授權，因此為 **0 筆**（未接線）。\n"
+                                      "UI 整體品質將明確顯示為 MISSING / 尚未匯入，決策引擎與 Scoring 模組不會採信此處的 0 值，以防誤判為法人無交易行為。",
+                "credit_transaction": "目前信用交易（融資融券）資料表雖然存在，但目前為 **0 筆**。\n"
+                                      "UI 與決策模組將明確提示為 MISSING，不允許在未接線的情況下將融資券餘額假裝為 0 股或判定為無訊號。",
+                "tdcc_shareholding": "集保股權分散表存在，但目前為 **0 筆**。\n"
+                                    "UI 會將其標示為 MISSING，不假裝大戶持股為 0 或呈現中性無風險狀態。",
+                "scheduler_status": "目前自動更新排程（Scheduler）處於 `Simulated/Waiting for time` 階段，且生產環境排程權限 `production_scheduler_allowed` 固定為 false。\n"
+                                    "此頁面提供唯讀日誌與排程狀態檢視，嚴禁在此處手動觸發排程寫入。"
+            }
+
+            text_label = QLabel(status_desc.get(key, ""))
+            text_label.setWordWrap(True)
+            text_label.setStyleSheet("color: #475569; font-size: 12px; line-height: 140%;")
+            info_layout.addWidget(text_label)
+
+            if key == "scheduler_status":
+                log_box = QTextEdit()
+                log_box.setReadOnly(True)
+                log_box.setPlaceholderText("背景排程尚未啟動，目前無執行日誌。")
+                log_box.setStyleSheet("background-color: #0f172a; color: #cbd5e1; font-family: monospace; font-size: 11px;")
+                status_path = Path(self.update_service.config.output_root) / "scheduled" / "data_freshness" / "latest_status.json"
+                if status_path.exists():
+                    try:
+                        import json
+                        status_data = json.loads(status_path.read_text(encoding="utf-8"))
+                        log_box.setPlainText(json.dumps(status_data, ensure_ascii=False, indent=2))
+                    except Exception as e:
+                        log_box.setPlainText(f"加載排程狀態失敗: {e}")
+                info_layout.addWidget(QLabel("Scheduler 狀態 (latest_status.json)："))
+                info_layout.addWidget(log_box)
+
+            layout.addWidget(info_group)
+
+            op_group = QGroupBox("數據操作")
+            op_group.setStyleSheet("""
+                QGroupBox {
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    color: #475569;
+                    font-weight: bold;
+                }
+            """)
+            button_layout = QHBoxLayout(op_group)
+            check_btn = QPushButton("檢查此資料源狀態")
+            check_btn.setMinimumHeight(35)
+            check_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f8fafc;
+                    color: #475569;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    padding: 6px 12px;
+                }
+                QPushButton:hover {
+                    background-color: #f1f5f9;
+                }
+            """)
+            check_btn.clicked.connect(lambda _checked=False, source=key: self._check_source_detail(source, force=True))
+            button_layout.addWidget(check_btn)
+            button_layout.addStretch()
+            layout.addWidget(op_group)
+
+            layout.addStretch()
+            return
         descriptions = {
             "daily": "檢查與維護每日股價原始資料（TWSE + TPEX）與 SQLite 對應數據。此處支援增量合併與 Danger Zone 強制重新合併。",
             "market": "檢查與更新加權指數大盤數據。此處會將大盤資料同步儲存至資料庫的 market_indices 表。",
@@ -631,7 +744,7 @@ class UpdateView(QWidget):
 
             self.monthly_revenue_source_version_input = QLineEdit()
             self.monthly_revenue_source_version_input.setObjectName("monthly_revenue_source_version_input")
-            
+
             # 動態解析預設版本名稱
             snapshot_path = self._default_monthly_revenue_snapshot_path()
             default_version = "mops-static-snapshot-monthly-revenue-2026-06-16"
@@ -640,7 +753,7 @@ class UpdateView(QWidget):
                 match = re.search(r"_(\d{4}-\d{2}-\d{2})\.csv$", snapshot_path.name)
                 if match:
                     default_version = f"mops-static-snapshot-monthly-revenue-{match.group(1)}"
-            
+
             self.monthly_revenue_source_version_input.setText(default_version)
             self.monthly_revenue_source_version_input.setToolTip(
                 "本次寫入版本名稱。用來區分不同批次的月營收資料，未來重跑或比對時可以追溯來源。"
@@ -1349,6 +1462,8 @@ class UpdateView(QWidget):
             self.industry_radio.setChecked(True)
         elif key == "broker_branch":
             self.broker_branch_radio.setChecked(True)
+        elif key in {"institutional_flow", "credit_transaction", "tdcc_shareholding", "scheduler_status"}:
+            pass
         elif key == "db_inspector":
             inspector_widget = self.content_stack.widget(row)
             if hasattr(inspector_widget, "refresh_tables"):
@@ -1382,8 +1497,23 @@ class UpdateView(QWidget):
     def _get_overview_status(self) -> Dict[str, Any]:
         """取得全部資料頁使用的輕量狀態"""
         if hasattr(self.update_service, "check_data_overview"):
-            return self.update_service.check_data_overview()
-        return self.update_service.check_data_status()
+            res = self.update_service.check_data_overview()
+        else:
+            res = self.update_service.check_data_status()
+
+        # 呼叫 Service 層以維護架構邊界，不直連 SQLite
+        if hasattr(self.update_service, "check_decision_data_status"):
+            decision_status = self.update_service.check_decision_data_status()
+            res.update(decision_status)
+        else:
+            # 測試或 Mock Service 時的向下相容預設值
+            if 'institutional_flow' not in res:
+                res['institutional_flow'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
+            if 'credit_transaction' not in res:
+                res['credit_transaction'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
+            if 'tdcc_shareholding' not in res:
+                res['tdcc_shareholding'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
+        return res
 
     def _get_source_detail(self, source: str) -> Dict[str, Any]:
         """取得單一資料來源詳細狀態並包成 UI 可套用的狀態 dict"""
@@ -1394,6 +1524,10 @@ class UpdateView(QWidget):
             "broker_branch": "broker_branch",
             "technical": "technical_indicators",
             "monthly_revenue": "monthly_revenue",
+            "institutional_flow": "institutional_flow",
+            "credit_transaction": "credit_transaction",
+            "tdcc_shareholding": "tdcc_shareholding",
+            "scheduler_status": "scheduler_status",
         }
         status_key = source_map.get(source, source)
         if hasattr(self.update_service, "check_source_detail"):
@@ -1538,6 +1672,43 @@ class UpdateView(QWidget):
         self.broker_branch_status_text.setPlainText(broker_branch_text)
         self.technical_status_text.setPlainText(technical_text)
         self.monthly_revenue_status_text.setPlainText(monthly_revenue_text)
+
+        # 更新決策與候選資料域卡片
+        inst_val = status.get('institutional_flow', {})
+        inst_records = inst_val.get('total_records', 0)
+        inst_date = inst_val.get('latest_date', '無')
+        inst_status = inst_val.get('status', 'MISSING')
+        self.institutional_status_text.setPlainText(
+            f"最新日期：{inst_date}\n"
+            f"總記錄數：{inst_records}\n"
+            f"狀態：{inst_status} / 尚未匯入\n"
+            f"（未接線，不參與評分）"
+        )
+
+        credit_val = status.get('credit_transaction', {})
+        credit_records = credit_val.get('total_records', 0)
+        credit_date = credit_val.get('latest_date', '無')
+        credit_status = credit_val.get('status', 'MISSING')
+        self.credit_status_text.setPlainText(
+            f"最新日期：{credit_date}\n"
+            f"總記錄數：{credit_records}\n"
+            f"狀態：{credit_status} / 尚未匯入\n"
+            f"（未接線，不參與評分）"
+        )
+
+        tdcc_val = status.get('tdcc_shareholding', {})
+        tdcc_records = tdcc_val.get('total_records', 0)
+        tdcc_date = tdcc_val.get('latest_date', '無')
+        tdcc_status = tdcc_val.get('status', 'MISSING')
+        self.tdcc_status_text.setPlainText(
+            f"最新日期：{tdcc_date}\n"
+            f"總記錄數：{tdcc_records}\n"
+            f"狀態：{tdcc_status} / 尚未匯入\n"
+            f"（未接線，不參與評分）"
+        )
+
+
+
         self._log(f"數據狀態檢查完成")
 
     def _on_status_error(self, error_msg: str):

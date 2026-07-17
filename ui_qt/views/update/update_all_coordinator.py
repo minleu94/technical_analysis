@@ -136,6 +136,9 @@ def run_update_all(
         result = run_step(name, progress, action)
         if name == "每日股價更新" and isinstance(result, dict):
             info_messages.extend(_market_skip_messages(result))
+            no_data_dates = result.get("no_data_skipped_dates", [])
+            if no_data_dates:
+                warnings.append(f"TWSE 上游查無資料：{', '.join(str(d) for d in no_data_dates)}")
         if name == "TPEX 每日股價更新" and isinstance(result, dict):
             step_warnings = [f"{name}: {warning}" for warning in tpex_warning_messages(result)]
             if not result.get("success", True) and not step_warnings:
@@ -162,7 +165,7 @@ def run_update_all(
     final_message = "快速更新所有數據完成" if is_quick_mode else "安全更新所有數據完成"
     if info_messages:
         final_message += "\n\n備註：\n" + "\n".join(info_messages)
-        
+
     report(final_message, 100)
     if soft_failures:
         return {

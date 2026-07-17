@@ -451,6 +451,8 @@ class MainWindow(QMainWindow):
                     navigate_to_market_explore_callback=self._open_workbench_market_explore,
                     navigate_to_evidence_review_callback=self._open_workbench_evidence_review,
                     navigate_to_portfolio_callback=self._open_workbench_portfolio,
+                    navigate_to_update_callback=lambda: self._select_main_workspace("update"),
+                    navigate_to_recommendation_callback=lambda: self._select_main_workspace("recommendation"),
                     auto_refresh=True,
                     parent=self,
                 )

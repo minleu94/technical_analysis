@@ -448,7 +448,7 @@ class UpdateService :
                     if twse_no_data_dates:
                         normalized_twse = [self._date_key(d) for d in twse_no_data_dates]
                         twse_skipped = requested_date in normalized_twse
-                    
+
                     if twse_skipped:
                         logger.info(f"[UpdateService] TPEX 缺少 {requested_date} 資料，但 TWSE 已判定為查無資料（如颱風假），標記為 skipped")
                         skipped_dates.append(requested_date)
@@ -3487,3 +3487,52 @@ class UpdateService :
             'success':False ,
             'message':f'匯出失敗：{str(e)}'
             }
+
+    def check_decision_data_status(self) -> Dict[str, Any]:
+        """直連 SQLite 查詢三大法人、信用交易、集保股權的最新狀態 (與架構相容的 Read Model)"""
+        res = {}
+        if getattr(self.config, "use_sqlite", False):
+            import sqlite3
+            try:
+                with sqlite3.connect(self.config.db_file) as conn:
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
+
+                    # 查詢 institutional_flows
+                    cursor.execute("SELECT COUNT(*), MAX(decision_date) FROM institutional_flows")
+                    row = cursor.fetchone()
+                    res['institutional_flow'] = {
+                        'total_records': row[0] if row else 0,
+                        'latest_date': row[1] if row and row[1] else '無',
+                        'status': 'MISSING' if not row or row[0] == 0 else 'ok'
+                    }
+
+                    # 查詢 credit_transactions
+                    cursor.execute("SELECT COUNT(*), MAX(decision_date) FROM credit_transactions")
+                    row = cursor.fetchone()
+                    res['credit_transaction'] = {
+                        'total_records': row[0] if row else 0,
+                        'latest_date': row[1] if row and row[1] else '無',
+                        'status': 'MISSING' if not row or row[0] == 0 else 'ok'
+                    }
+
+                    # 查詢 tdcc_shareholding
+                    cursor.execute("SELECT COUNT(*), MAX(decision_date) FROM tdcc_shareholding")
+                    row = cursor.fetchone()
+                    res['tdcc_shareholding'] = {
+                        'total_records': row[0] if row else 0,
+                        'latest_date': row[1] if row and row[1] else '無',
+                        'status': 'MISSING' if not row or row[0] == 0 else 'ok'
+                    }
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"check_decision_data_status 失敗: {e}")
+
+        if 'institutional_flow' not in res:
+            res['institutional_flow'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
+        if 'credit_transaction' not in res:
+            res['credit_transaction'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
+        if 'tdcc_shareholding' not in res:
+            res['tdcc_shareholding'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
+
+        return res

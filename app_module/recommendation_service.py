@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
 
 # 確保 pd.isna 可用（pandas 兼容性）
@@ -48,7 +49,7 @@ from app_module.application_ports import MarketFrameProvider
 
 class RecommendationService:
     """推薦服務類"""
-    
+
     def __init__(
         self,
         config,
@@ -57,7 +58,7 @@ class RecommendationService:
         regime_detector: Optional[MarketRegimeDetector] = None,
     ):
         """初始化推薦服務
-        
+
         Args:
             config: TWStockConfig 實例
             industry_mapper: IndustryMapper 實例（可選，如果為 None 則自動創建）
@@ -148,22 +149,39 @@ class RecommendationService:
     @staticmethod
     def _validate_ranking_config(config: Dict[str, Any]) -> tuple[Dict[str, Any], str]:
         return validate_ranking_config(config)
-    
+
+    @staticmethod
+    def _normalize_decision_date(raw_date: Any) -> str:
+        """將來源日期轉成 PIT 查詢可用的 ISO 日期；無法判讀時 fail-closed。"""
+        if isinstance(raw_date, (pd.Timestamp, datetime, date)):
+            if pd.isna(raw_date):
+                raise ValueError("decision date is missing")
+            return raw_date.strftime("%Y-%m-%d")
+
+        date_text = str(raw_date).strip()
+        if not date_text:
+            raise ValueError("decision date is empty")
+
+        normalized_text = date_text.replace("-", "").replace("/", "")
+        if len(normalized_text) != 8 or not normalized_text.isdigit():
+            raise ValueError(f"unsupported decision date: {date_text}")
+        return datetime.strptime(normalized_text, "%Y%m%d").date().isoformat()
+
     def run_recommendation(
-        self, 
+        self,
         config: Dict[str, Any],
         max_stocks: int = 200,
         top_n: int = 50
     ) -> List[RecommendationDTO]:
         """執行推薦分析
-        
+
         這是從 ui_app/main.py 的 _execute_strategy_analysis_thread 提取的核心邏輯
-        
+
         Args:
             config: 策略配置字典（包含 technical, patterns, signals, filters, regime 等）
             max_stocks: 最大處理股票數量（用於性能優化）
             top_n: 返回前 N 名推薦
-            
+
         Returns:
             List[RecommendationDTO]: 推薦股票列表，按總分降序排列
         """
@@ -171,7 +189,7 @@ class RecommendationService:
         logger = logging.getLogger(__name__)
         ranking_config, threshold_mode = self._validate_ranking_config(config)
         self._reset_negative_evidence_buffers()
-        
+
         # ✅ 記錄輸入參數
         logger.info(
             f"[RecommendationService] 開始推薦分析: "
@@ -180,9 +198,9 @@ class RecommendationService:
             f"圖形模式={config.get('patterns', {}).get('selected', [])}, "
             f"技術指標啟用={config.get('technical', {}).get('momentum', {}).get('enabled', False) or config.get('technical', {}).get('trend', {}).get('enabled', False)}"
         )
-        
+
         df, stock_col = normalize_market_frame(self.market_data_provider())
-        
+
         # ✅ 記錄數據讀取結果
         import logging
         logger = logging.getLogger(__name__)
@@ -192,22 +210,22 @@ class RecommendationService:
             f"股票數={df[stock_col].nunique()}, "
             f"日期範圍={df['日期'].min()} ~ {df['日期'].max()}"
         )
-        
+
         # 應用產業篩選（先篩選產業，再限制數量）
         industry_filter = config.get('filters', {}).get('industry', '全部')
         all_stocks = df[stock_col].unique()
-        
+
         if industry_filter and industry_filter != '全部':
             # 先從所有股票中篩選出屬於指定產業的股票
             filtered_stocks = self.industry_mapper.filter_stocks_by_industry(
                 [str(s) for s in all_stocks],
                 industry_filter
             )
-            
+
             if len(filtered_stocks) == 0:
                 # 提供更詳細的錯誤信息，幫助調試
                 all_industries = self.industry_mapper.get_all_industries()
-                similar_industries = [ind for ind in all_industries 
+                similar_industries = [ind for ind in all_industries
                                      if industry_filter in ind or ind in industry_filter]
                 error_msg = f"在數據中沒有找到屬於「{industry_filter}」產業的股票"
                 if similar_industries:
@@ -222,12 +240,12 @@ class RecommendationService:
                         error_msg += f"\n範例：股票 {test_stock} 屬於：{', '.join(test_industries[:3])}"
                         break
                 raise ValueError(error_msg)
-            
+
             # 只保留屬於該產業的股票
             stocks = [s for s in all_stocks if str(s) in filtered_stocks]
             # 限制處理數量（在產業篩選後）
             stocks = stocks[:max_stocks]
-            
+
             # ✅ 記錄產業篩選結果
             logger.info(
                 f"[RecommendationService] 產業篩選完成: "
@@ -238,19 +256,19 @@ class RecommendationService:
         else:
             # 沒有產業篩選，直接限制數量
             stocks = all_stocks[:max_stocks]
-        
+
         # 🚀 效能優化：過濾 df 僅保留需要處理的股票，避免在包含所有個股的巨量 DataFrame 上進行高頻 boolean indexing
         df = df[df[stock_col].isin(stocks)].copy()
-        
+
         # ✅ 記錄處理開始
         logger.info(
             f"[RecommendationService] 開始處理 {len(stocks)} 支股票"
         )
-        
+
         # 對每支股票執行策略分析
         all_recommendations = []
         matrix_rows_by_stock: Dict[str, Dict[str, Any]] = {}
-        
+
         # 調試統計
         stats = {
             'total_stocks': len(stocks),
@@ -260,7 +278,7 @@ class RecommendationService:
             'skipped_exception': 0,
             'success': 0
         }
-        
+
         for idx, stock_code in enumerate(stocks):
             stock_df = df[df[stock_col] == stock_code].copy()
             stock_df = stock_df.sort_values('日期').reset_index(drop=True)
@@ -268,7 +286,7 @@ class RecommendationService:
             stock_name_text = stock_code_text
             if len(stock_df) > 0 and '證券名稱' in stock_df.columns:
                 stock_name_text = str(stock_df.iloc[-1].get('證券名稱', stock_code_text))
-            
+
             # 確保至少有20筆數據才能計算技術指標
             if len(stock_df) < 20:
                 stats['skipped_insufficient_data'] += 1
@@ -289,13 +307,13 @@ class RecommendationService:
                 continue
 
             stock_df = enrich_latest_market_features(stock_df)
-            
+
             try:
                 # 生成推薦（generate_recommendations 內部會處理篩選，這裡不需要額外篩選）
                 result_df = self.strategy_configurator.generate_recommendations(stock_df, config)
-                
+
                 stats['processed'] += 1
-                
+
                 # ✅ 添加調試信息：記錄為什麼返回空 DataFrame
                 if len(result_df) == 0:
                     # 記錄前3個被過濾的股票詳情
@@ -338,17 +356,179 @@ class RecommendationService:
                     )
                     self.last_screening_matrix.append(row)
                     matrix_rows_by_stock[stock_code_text] = row
-                
+
                 if len(result_df) > 0:
                     latest_row = result_df.iloc[-1]
-                    
+
+                    # 取得決策日期。基本面篩選只接受可標準化的日期，避免無效日期
+                    # 造成 PIT 查詢意外納入未來資料。
+                    raw_date = stock_df.iloc[-1]['日期']
+                    pe_ratio_max = to_decimal(config.get('filters', {}).get('pe_ratio_max', "999.0"))
+                    revenue_yoy_min = to_decimal(config.get('filters', {}).get('monthly_revenue_yoy_min', "-100.0"))
+                    fundamental_filters_enabled = (
+                        pe_ratio_max < to_decimal("999.0")
+                        or revenue_yoy_min > to_decimal("-100.0")
+                    )
+                    try:
+                        decision_date = self._normalize_decision_date(raw_date)
+                    except (TypeError, ValueError):
+                        if fundamental_filters_enabled:
+                            row = self._matrix_row(
+                                stock_code=stock_code_text,
+                                stock_name=stock_name_text,
+                                status="skipped",
+                                reason_codes=["fundamental_decision_date_invalid"],
+                                quality="degraded",
+                                stage="strategy_evaluation",
+                                threshold_name="decision_date",
+                                observed_value=str(raw_date),
+                                required_value="YYYY-MM-DD",
+                                threshold_mode=threshold_mode,
+                            )
+                            self.last_screening_matrix.append(row)
+                            matrix_rows_by_stock[stock_code_text] = row
+                            stats['skipped_no_result'] += 1
+                            continue
+                        decision_date = ""
+
+                    # 1. 本益比 PE 過濾
+                    if pe_ratio_max < to_decimal("999.0"):
+                        pe_val_dec = None
+                        import sqlite3
+                        try:
+                            with sqlite3.connect(self.config.db_file) as conn:
+                                conn.row_factory = sqlite3.Row
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    "SELECT value FROM fundamental_valuation_metrics "
+                                    "WHERE stock_code = ? AND metric_name = 'pe' AND available_date <= ? "
+                                    "ORDER BY available_date DESC, as_of_date DESC LIMIT 1",
+                                    (stock_code_text, decision_date)
+                                )
+                                row = cursor.fetchone()
+                                if row and row['value'] is not None:
+                                    pe_val_dec = to_decimal(row['value'])
+                        except Exception as e:
+                            logger.error(f"查詢 PE 失敗: {e}")
+
+                        if pe_val_dec is None:
+                            # 查不到基本面資料，明確排除
+                            row = self._matrix_row(
+                                stock_code=stock_code_text,
+                                stock_name=stock_name_text,
+                                status="skipped",
+                                reason_codes=["valuation_pe_missing"],
+                                quality="observed",
+                                stage="strategy_evaluation",
+                                threshold_name="filters.pe_ratio_max",
+                                observed_value="missing",
+                                required_value=pe_ratio_max,
+                                threshold_mode=threshold_mode,
+                            )
+                            self.last_screening_matrix.append(row)
+                            matrix_rows_by_stock[stock_code_text] = row
+                            stats['skipped_no_result'] += 1
+                            continue
+
+                        if pe_val_dec > pe_ratio_max:
+                            row = self._matrix_row(
+                                stock_code=stock_code_text,
+                                stock_name=stock_name_text,
+                                status="skipped",
+                                reason_codes=["valuation_pe_above_max"],
+                                quality="observed",
+                                stage="strategy_evaluation",
+                                threshold_name="filters.pe_ratio_max",
+                                observed_value=pe_val_dec,
+                                required_value=pe_ratio_max,
+                                threshold_mode=threshold_mode,
+                            )
+                            self.last_screening_matrix.append(row)
+                            matrix_rows_by_stock[stock_code_text] = row
+                            stats['skipped_no_result'] += 1
+                            continue
+
+                    # 2. 月營收 YOY% 過濾
+                    if revenue_yoy_min > to_decimal("-100.0"):
+                        yoy_val_dec = None
+                        import sqlite3
+                        try:
+                            with sqlite3.connect(self.config.db_file) as conn:
+                                conn.row_factory = sqlite3.Row
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    "SELECT period, revenue FROM fundamental_monthly_revenues "
+                                    "WHERE stock_code = ? AND available_date <= ? "
+                                    "ORDER BY available_date DESC, period DESC LIMIT 1",
+                                    (stock_code_text, decision_date)
+                                )
+                                row = cursor.fetchone()
+                                if row and row['revenue'] is not None:
+                                    period_curr = row['period']
+                                    rev_curr_dec = to_decimal(row['revenue'])
+
+                                    year_curr, month_curr = map(int, period_curr.split('-'))
+                                    period_prev = f"{year_curr - 1:04d}-{month_curr:02d}"
+
+                                    # 去年同期營收查詢，同樣限制 available_date <= decision_date，並以 available_date 與 period 穩定降序排列以滿足 PIT 可重複性
+                                    cursor.execute(
+                                        "SELECT revenue FROM fundamental_monthly_revenues "
+                                        "WHERE stock_code = ? AND period = ? AND available_date <= ? "
+                                        "ORDER BY available_date DESC, period DESC LIMIT 1",
+                                        (stock_code_text, period_prev, decision_date)
+                                    )
+                                    row_prev = cursor.fetchone()
+                                    if row_prev and row_prev['revenue'] is not None:
+                                        rev_prev_dec = to_decimal(row_prev['revenue'])
+                                        if rev_prev_dec > to_decimal("0"):
+                                            yoy_val_dec = ((rev_curr_dec - rev_prev_dec) / rev_prev_dec) * to_decimal("100.0")
+                        except Exception as e:
+                            logger.error(f"查詢月營收 YOY 失敗: {e}")
+
+                        if yoy_val_dec is None:
+                            # 查不到營收或去年同期營收，明確排除
+                            row = self._matrix_row(
+                                stock_code=stock_code_text,
+                                stock_name=stock_name_text,
+                                status="skipped",
+                                reason_codes=["fundamental_revenue_yoy_missing"],
+                                quality="observed",
+                                stage="strategy_evaluation",
+                                threshold_name="filters.monthly_revenue_yoy_min",
+                                observed_value="missing",
+                                required_value=revenue_yoy_min,
+                                threshold_mode=threshold_mode,
+                            )
+                            self.last_screening_matrix.append(row)
+                            matrix_rows_by_stock[stock_code_text] = row
+                            stats['skipped_no_result'] += 1
+                            continue
+
+                        if yoy_val_dec < revenue_yoy_min:
+                            row = self._matrix_row(
+                                stock_code=stock_code_text,
+                                stock_name=stock_name_text,
+                                status="skipped",
+                                reason_codes=["fundamental_revenue_yoy_below_min"],
+                                quality="observed",
+                                stage="strategy_evaluation",
+                                threshold_name="filters.monthly_revenue_yoy_min",
+                                observed_value=yoy_val_dec.quantize(to_decimal("0.01")),
+                                required_value=revenue_yoy_min,
+                                threshold_mode=threshold_mode,
+                            )
+                            self.last_screening_matrix.append(row)
+                            matrix_rows_by_stock[stock_code_text] = row
+                            stats['skipped_no_result'] += 1
+                            continue
+
                     # 獲取收盤價
                     close_col = None
                     for col in ['收盤價', 'Close', 'close']:
                         if col in latest_row.index:
                             close_col = col
                             break
-                    
+
                     price_change_value = latest_feature_decimal(stock_df, "漲幅%")
                     volume_change_value = latest_feature_decimal(
                         stock_df,
@@ -362,16 +542,16 @@ class RecommendationService:
                     latest_row['成交量變化率%'] = float(
                         volume_change_value or Decimal("0")
                     )
-                    
+
                     # 獲取股票所屬產業
                     stock_industries = self.industry_mapper.get_stock_industries(stock_code)
                     industry_display = ', '.join(stock_industries[:2]) if stock_industries else '未知'
                     if len(stock_industries) > 2:
                         industry_display += '...'
-                    
+
                     # 生成推薦理由（包含市場狀態和產業信息）
                     reasons = self.reason_engine.generate_reasons(latest_row, config)
-                    
+
                     # 添加產業表現理由
                     if stock_industries:
                         for industry in stock_industries[:1]:  # 只取第一個產業
@@ -383,22 +563,22 @@ class RecommendationService:
                                         industry_change = float(industry_change.replace('%', ''))
                                     except:
                                         industry_change = 0
-                                
+
                                 if industry_change > 0:
                                     reasons.append({
                                         'tag': f'{industry}指數上漲',
                                         'evidence': f'{industry}類指數漲幅 {industry_change:.2f}%',
                                         'score_contrib': min(industry_change * 0.5, 10)
                                     })
-                    
+
                     reason_text = self.reason_engine.format_reason_text(reasons, max_reasons=3)
-                    
+
                     # 使用 FinalScore（含 Regime Match Factor）作為排序依據
                     final_score = latest_row.get(
-                        'FinalScore', 
+                        'FinalScore',
                         latest_row.get('TotalScore', latest_row.get('綜合評分', 0))
                     )
-                    
+
                     # 判斷 Regime Match
                     regime = config.get('regime', None)
                     regime_match = False
@@ -407,7 +587,7 @@ class RecommendationService:
                         total_score = latest_row.get('TotalScore', 0)
                         if to_decimal(final_score) > to_decimal(total_score) * to_decimal("1.05"):  # 允許5%誤差
                             regime_match = True
-                    
+
                     # 創建 DTO
                     recommendation = RecommendationDTO(
                         stock_code=stock_code_text,
@@ -422,7 +602,7 @@ class RecommendationService:
                         industry=industry_display,
                         regime_match=regime_match
                     )
-                    
+
                     all_recommendations.append(recommendation)
                     row = self._matrix_row(
                         stock_code=stock_code_text,
@@ -440,7 +620,7 @@ class RecommendationService:
                     stats['success'] += 1
                 else:
                     stats['skipped_no_result'] += 1
-                    
+
             except Exception as e:
                 # 跳過處理失敗的股票
                 stats['skipped_exception'] += 1
@@ -470,7 +650,7 @@ class RecommendationService:
                         f"堆疊追蹤:\n{traceback.format_exc()}"
                     )
                 continue
-        
+
         # ✅ 記錄處理結果摘要
         logger.info(
             f"[RecommendationService] 推薦分析完成: "
@@ -479,7 +659,7 @@ class RecommendationService:
             f"成功={stats['success']}, "
             f"返回推薦數={len(all_recommendations)}"
         )
-        
+
         # 如果沒有找到任何推薦，提供調試信息
         if len(all_recommendations) == 0 and stats['total_stocks'] > 0:
             logger.warning(
@@ -491,7 +671,7 @@ class RecommendationService:
                 f"無結果={stats['skipped_no_result']}, "
                 f"異常={stats['skipped_exception']}"
             )
-            
+
             # 提供診斷建議
             if stats['skipped_no_result'] > 0:
                 logger.warning(
@@ -502,7 +682,7 @@ class RecommendationService:
                     f"2. 最小成交量比率是否過高（當前：{config.get('filters', {}).get('volume_ratio_min', 1.0)}）"
                     f"3. 技術指標或圖形模式是否過於嚴格"
                 )
-        
+
         latest_date_str = ""
         if not df.empty and "日期" in df.columns:
             latest_date_str = df["日期"].max().strftime("%Y-%m-%d")
@@ -575,10 +755,10 @@ class RecommendationService:
         ]
         self._finalize_negative_evidence_buffers()
         return all_recommendations
-    
+
     def detect_regime(self) -> Dict[str, Any]:
         """檢測市場狀態
-        
+
         Returns:
             dict: {
                 'regime': 'Trend' | 'Reversion' | 'Breakout',
@@ -591,32 +771,32 @@ class RecommendationService:
         regime = regime_result.get('regime', 'Trend')
         confidence = regime_result.get('confidence', 0.5)
         details = regime_result.get('details', {})
-        
+
         regime_name_map = {
             'Trend': '趨勢追蹤',
             'Reversion': '均值回歸',
             'Breakout': '突破準備'
         }
         regime_name_cn = regime_name_map.get(regime, regime)
-        
+
         return {
             'regime': regime,
             'confidence': confidence,
             'details': details,
             'regime_name_cn': regime_name_cn
         }
-    
+
     def get_strategy_config_for_regime(self, regime: str) -> Dict[str, Any]:
         """獲取指定市場狀態的策略配置
-        
+
         Args:
             regime: 'Trend' | 'Reversion' | 'Breakout'
-            
+
         Returns:
             dict: 策略配置字典
         """
         return self.regime_detector.get_strategy_config(regime)
-    
+
     def load_strategy_from_preset(
         self,
         preset_id: str,
@@ -624,11 +804,11 @@ class RecommendationService:
     ) -> Optional[Dict[str, Any]]:
         """
         從 Preset 載入策略配置
-        
+
         Args:
             preset_id: Preset ID
             preset_service: PresetService 實例
-        
+
         Returns:
             策略配置字典或 None
         """
@@ -636,16 +816,16 @@ class RecommendationService:
         if preset is None:
             return None
         preset_meta = preset.meta or {}
-        
+
         # 構建策略配置字典
         config = {
             'strategy_id': preset.strategy_id,
             'params': preset.params,
             **preset_meta.get('config', {})
         }
-        
+
         return config
-    
+
     def load_strategy_from_version(
         self,
         version_id: str,
@@ -653,18 +833,18 @@ class RecommendationService:
     ) -> Optional[Dict[str, Any]]:
         """
         從策略版本載入策略配置
-        
+
         Args:
             version_id: 策略版本 ID
             strategy_version_service: StrategyVersionService 實例
-        
+
         Returns:
             策略配置字典或 None
         """
         version = strategy_version_service.get_version(version_id)
         if version is None:
             return None
-        
+
         # 構建策略配置字典
         config = {
             'strategy_id': version.strategy_id,
@@ -672,9 +852,9 @@ class RecommendationService:
             'params': version.params,
             **version.config
         }
-        
+
         return config
-    
+
     def load_strategy_spec_from_preset(
         self,
         preset_id: str,
@@ -682,11 +862,11 @@ class RecommendationService:
     ) -> Optional[StrategySpec]:
         """
         從 Preset 載入 StrategySpec
-        
+
         Args:
             preset_id: Preset ID
             preset_service: PresetService 實例
-        
+
         Returns:
             StrategySpec 對象或 None
         """
@@ -694,14 +874,14 @@ class RecommendationService:
         if preset is None:
             return None
         preset_meta = preset.meta or {}
-        
+
         return StrategySpec(
             strategy_id=preset.strategy_id,
             strategy_version=preset_meta.get('strategy_version', '1.0.0'),
             default_params=preset.params,
             config=preset_meta.get('config', {})
         )
-    
+
     def load_strategy_spec_from_version(
         self,
         version_id: str,
@@ -709,18 +889,18 @@ class RecommendationService:
     ) -> Optional[StrategySpec]:
         """
         從策略版本載入 StrategySpec
-        
+
         Args:
             version_id: 策略版本 ID
             strategy_version_service: StrategyVersionService 實例
-        
+
         Returns:
             StrategySpec 對象或 None
         """
         version = strategy_version_service.get_version(version_id)
         if version is None:
             return None
-        
+
         return StrategySpec(
             strategy_id=version.strategy_id,
             strategy_version=version.strategy_version,

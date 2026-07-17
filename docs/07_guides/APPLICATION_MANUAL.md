@@ -174,6 +174,8 @@ Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取
 4. 平衡風險檔為最低現金 `2000 bp`、最多 8 檔、單檔上限 `1500 bp`；權重使用整數 bp，金額使用 `Decimal`。UI 只能顯示結果，不能修改 policy。
 5. Advice 的 decision / data-as-of date 與 source trace 必須存在；資料截止日不得晚於決策日。缺資料、降級或未來資料會被拒絕或降級，不能當作可交易結論。
 
+Advice 表格有三種空白狀態，不能只用「沒有列」判斷：`WAITING_FOR_ADVICE_DTO` 代表尚未載入 Advice DTO，應先依畫面導引檢查資料更新或推薦分析；`NO_ELIGIBLE_ADVICE` 代表 DTO 已成功載入但沒有符合條件的建議；`ADVICE_DTO_ERROR` 才代表 DTO 遺失、結構不完整或安全診斷拒絕。來源顯示 degraded / warning 但仍帶有有效 recommendations 時，表格應照常呈現，並把警告保留在摘要與警告區；不得把它誤判成 DTO 錯誤。
+
 Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring / ranking / backtest，也不套用 lifecycle action。weekly review history 的 working-copy 保存與真實時間累積屬 Gate 2；人工覆盤完成後只能以 `build_evidence_operations_weekly_review.py --save-history` 對隔離 working-copy DB 保存，再以 `--list-history` 核對，不得直接編輯 history、使用 production DB 或以 replay / fixture 補週數。它不因 Gate 1 完成而自動通過。
 
 ## 3. 每日建議流程
@@ -240,6 +242,8 @@ TWSE 補檔遇到平日休市（例如颱風停市）時，只有在至少一個
 - 技術指標
 - 月營收
 - SQLite 資料檢視
+
+另有「三大法人」、「信用交易」、「集保股權」與「自動排程狀態」四個唯讀治理頁。前三者只顯示 SQLite 表的筆數與最新決策日期；`MISSING` 或筆數為 0 表示目前尚未接線或沒有已匯入資料，不是籌碼數值為零，也不會提供假性的手動下載按鈕。排程狀態只讀取最近狀態紀錄，供人工判讀背景工作是否曾執行；它不授權啟用 production scheduler，也不代表資料已完整。
 
 每日股價、大盤、產業、券商分點操作：
 
@@ -422,6 +426,8 @@ Profile-Regime 說明：
 - 最小成交量比率
 - 產業
 - 排名門檻
+- 月營收 YoY 最低值（可選）
+- PE 最高值（可選）
 
 參數治理限制：
 
@@ -430,6 +436,7 @@ Profile-Regime 說明：
 - 評分權重使用 `pattern`、`technical`、`volume` 三項整數基點，總和必須為 `10000 bp`。
 - 核心總分使用 Decimal 並固定至 `0.01` 分；設定錯誤屬治理例外，不會被轉成空結果。
 - buy score / sell score 是總分完成後的判讀門檻；調整門檻只改入選 / 賣出判讀，不會改變各項指標如何貢獻總分。若要改變「為什麼得分」，必須修改 Profile 權重、技術指標、型態或前置篩選，並重新做推薦回放 / Research Run 驗證。
+- 啟用月營收 YoY 或 PE 篩選時，系統只採用 `available_date <= decision_date` 的基本面版本；決策日期無法標準化、PE／同月去年營收缺失、或未達門檻時，候選會以 `skipped` 留在 screening matrix，不會以 0、空值或未來資料補足。PE 預設 `999`、YoY 預設 `-100` 為停用哨兵；調整後才會啟用對應篩選。
 
 ### 6.3 固定門檻與百分位排名
 

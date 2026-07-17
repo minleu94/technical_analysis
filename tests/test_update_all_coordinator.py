@@ -28,7 +28,7 @@ def _run(mode: str, *, use_sqlite: bool = True, daily_result=None):
         end_date="2026-07-10",
         update_service=service,
         get_overview_status=lambda: {"success": True},
-        update_tpex_daily_prices=lambda start, end: {"success": True},
+        update_tpex_daily_prices=lambda start, end, skipped_dates=None: {"success": True},
         run_incremental_technical=lambda callback: {"success": True},
         tpex_warning_messages=lambda result: [],
         progress_callback=lambda message, pct: progress.append((message, pct)),

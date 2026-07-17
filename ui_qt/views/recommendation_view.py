@@ -4,7 +4,7 @@
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTableView, QGroupBox, QProgressBar,
     QTextEdit, QHeaderView, QCheckBox, QSpinBox, QDoubleSpinBox,
     QComboBox, QMessageBox, QSplitter, QScrollArea,
@@ -84,13 +84,13 @@ def build_recommendation_portfolio_backtest_config(
 
 class RecommendationView(QWidget):
     """推薦分析視圖"""
-    
+
     # 自定義信號
     recommendationRequested = Signal(dict)  # 推薦請求（傳遞配置）
     sendToBacktestRequested = Signal(dict)  # 一鍵送回測請求（Phase 3.3）
-    
+
     def __init__(
-        self, 
+        self,
         recommendation_service: RecommendationService,
         regime_service: RegimeService,
         watchlist_service: WatchlistService = None,
@@ -100,7 +100,7 @@ class RecommendationView(QWidget):
         profile_service: Optional[RecommendationProfileService] = None
     ):
         """初始化推薦視圖
-        
+
         Args:
             recommendation_service: 推薦服務實例
             regime_service: 市場狀態服務實例
@@ -113,7 +113,7 @@ class RecommendationView(QWidget):
         self.recommendation_service = recommendation_service
         self.regime_service = regime_service
         self.watchlist_service = watchlist_service
-        
+
         # 初始化 Repository（如果提供了 config）
         if config:
             self.recommendation_repository = RecommendationRepository(config)
@@ -125,44 +125,44 @@ class RecommendationView(QWidget):
         else:
             self.recommendation_repository = None
             self.universe_service = universe_service
-        
+
         # 數據模型
         self.recommendations_model: Optional[PandasTableModel] = None
-        
+
         # Worker
         self.worker: Optional[ProgressTaskWorker] = None
         from app_module.report_export_service import ReportExportService
         self.report_export_service = ReportExportService()
         self._report_export_workers = []
-        
+
         # 策略配置狀態
         self.strategy_config = self._get_default_config()
-        
+
         # 當前推薦結果（用於保存）
         self.current_recommendations: Optional[List[RecommendationDTO]] = None
         self.current_config: Optional[Dict[str, Any]] = None
         self.current_regime: Optional[str] = None
         self.current_profile: Optional[str] = None  # 當前使用的 Profile
-        
+
         # 模式切換（新手/進階）
         self.is_beginner_mode = True  # 預設為新手模式
-        
+
         # 技術指標和圖形模式的說明數據
         self.technical_descriptions = TECHNICAL_DESCRIPTIONS
         self.pattern_descriptions = PATTERN_DESCRIPTIONS
         self.technical_name_map = TECHNICAL_NAME_MAP
         self.pattern_name_map = PATTERN_NAME_MAP
-        
+
         # 初始化 Profiles
         self.profiles = DEFAULT_PROFILES
         self.profile_service = profile_service or self._create_profile_service(config)
         self._refresh_profile_options()
-        
+
         self._setup_ui()
         self._load_current_regime()
         # 初始化策略傾向提示
         self._update_strategy_tendency()
-    
+
     def _create_profile_service(
         self,
         config: Optional[TWStockConfig],
@@ -249,13 +249,13 @@ class RecommendationView(QWidget):
             },
             'regime': None  # 將從市場狀態服務獲取
         }
-    
+
     def _setup_ui(self):
         """設置 UI"""
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(10, 10, 10, 10)
-        
+
         # 標題列（標題 + InfoButton）
         title_layout = QHBoxLayout()
         title = QLabel("推薦分析")
@@ -268,39 +268,39 @@ class RecommendationView(QWidget):
         info_btn = InfoButton("recommendation", self)
         title_layout.addWidget(info_btn)
         main_layout.addLayout(title_layout)
-        
+
         # 創建分割器（左側配置，右側結果）
         splitter = QSplitter(Qt.Horizontal)
-        
+
         # 左側：策略配置面板（使用 ScrollArea 支援滾動）
         config_scroll = QScrollArea()
         config_scroll.setWidgetResizable(True)
         config_scroll.setMinimumWidth(350)  # 設置最小寬度
         config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         config_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
+
         config_panel = self._create_config_panel()
         config_scroll.setWidget(config_panel)
         splitter.addWidget(config_scroll)
-        
+
         # 右側：結果面板
         result_panel = self._create_result_panel()
         splitter.addWidget(result_panel)
-        
+
         # 設置分割器比例（左側40%，右側60%）
         splitter.setSizes([200, 800])
-        
+
         main_layout.addWidget(splitter)
-    
+
     def _create_checkbox_with_tooltip(
-        self, 
-        text: str, 
-        desc_key: str, 
+        self,
+        text: str,
+        desc_key: str,
         desc_type: str = 'technical',  # 'technical' 或 'pattern'
         checked: bool = False
     ) -> QCheckBox:
         """創建帶 tooltip 的 checkbox（從集中資料結構讀取）
-        
+
         Args:
             text: 顯示名稱（如 "RSI"）
             desc_key: 說明資料的 key（如 "rsi"）
@@ -312,32 +312,32 @@ class RecommendationView(QWidget):
             desc = self.technical_descriptions.get(desc_key, {})
         else:
             desc = self.pattern_descriptions.get(desc_key, {})
-        
+
         short_label = desc.get('short_label', '')
         tooltip_lines = desc.get('tooltip_lines', [])
-        
+
         # 組合顯示文字：名稱（短說明）
         display_text = f"{text}（{short_label}）"
         checkbox = QCheckBox(display_text)
         checkbox.setChecked(checked)
-        
+
         # 組合 tooltip（使用換行符）
         tooltip_text = remove_symbol_icons('\n'.join(tooltip_lines))
         checkbox.setToolTip(tooltip_text)
-        
+
         # 保存 desc_key 供後續使用
         checkbox.setProperty('desc_key', desc_key)
         checkbox.setProperty('desc_type', desc_type)
-        
+
         return checkbox
-    
+
     def _create_config_panel(self) -> QWidget:
         """創建策略配置面板"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)  # 設置邊距，確保內容不會貼邊
-        
+
         # 標題和模式切換
         title_layout = QHBoxLayout()
         title = QLabel("策略配置")
@@ -347,14 +347,14 @@ class RecommendationView(QWidget):
         title.setFont(title_font)
         title_layout.addWidget(title)
         title_layout.addStretch()
-        
+
         # 模式切換按鈕
         self.mode_btn = QPushButton("切換至進階模式")
         self.mode_btn.setCheckable(False)
         self.mode_btn.clicked.connect(self._toggle_mode)
         title_layout.addWidget(self.mode_btn)
         layout.addLayout(title_layout)
-        
+
         # 市場狀態顯示
         regime_group = QGroupBox("市場狀態")
         regime_layout = QVBoxLayout()
@@ -363,7 +363,7 @@ class RecommendationView(QWidget):
         regime_layout.addWidget(self.regime_label)
         regime_group.setLayout(regime_layout)
         layout.addWidget(regime_group)
-        
+
         # Regime → Profile 建議（Phase 3.2）
         self.regime_suggestion_group = QGroupBox("策略建議")
         suggestion_layout = QVBoxLayout()
@@ -380,20 +380,20 @@ class RecommendationView(QWidget):
             }
         """)
         suggestion_layout.addWidget(self.regime_suggestion_label)
-        
+
         # 一鍵套用按鈕
         self.apply_suggestion_btn = QPushButton("一鍵套用建議 Profile")
         self.apply_suggestion_btn.setVisible(False)
         self.apply_suggestion_btn.clicked.connect(self._apply_suggested_profile)
         suggestion_layout.addWidget(self.apply_suggestion_btn)
-        
+
         self.regime_suggestion_group.setLayout(suggestion_layout)
         self.regime_suggestion_group.setVisible(False)  # 初始隱藏，等待 Regime 檢測
         layout.addWidget(self.regime_suggestion_group)
-        
+
         # 保存建議的 Profile ID（用於一鍵套用）
         self.suggested_profile_id: Optional[str] = None
-        
+
         # 新手模式：Profile 選擇（只在新手模式顯示）
         self.profile_group = QGroupBox("選擇策略風格（Profile）")
         profile_layout = QVBoxLayout()
@@ -405,7 +405,7 @@ class RecommendationView(QWidget):
         self.save_custom_profile_btn = QPushButton("保存目前設定為自訂 Profile")
         self.save_custom_profile_btn.clicked.connect(self._on_save_custom_profile_clicked)
         profile_layout.addWidget(self.save_custom_profile_btn)
-        
+
         # Profile 說明
         self.profile_desc_label = QLabel("")
         self.profile_desc_label.setWordWrap(True)
@@ -422,7 +422,7 @@ class RecommendationView(QWidget):
         profile_layout.addWidget(self.profile_desc_label)
         self.profile_group.setLayout(profile_layout)
         layout.addWidget(self.profile_group)
-        
+
         # 策略傾向提示區（新增）
         self.strategy_tendency_group = QGroupBox("目前策略傾向摘要")
         strategy_tendency_layout = QVBoxLayout()
@@ -439,18 +439,18 @@ class RecommendationView(QWidget):
         strategy_tendency_layout.addWidget(self.strategy_tendency_label)
         self.strategy_tendency_group.setLayout(strategy_tendency_layout)
         layout.addWidget(self.strategy_tendency_group)
-        
+
         # 技術指標配置（按交易意圖分類）- 進階模式才顯示
         tech_group = QGroupBox("技術指標")
         tech_layout = QVBoxLayout()
-        
+
         # 趨勢類
         trend_label = QLabel("趨勢 (Trend)")
         trend_font = QFont()
         trend_font.setBold(True)
         trend_label.setFont(trend_font)
         tech_layout.addWidget(trend_label)
-        
+
         self.ma_check = self._create_checkbox_with_tooltip(
             "移動平均線",
             'ma',
@@ -459,7 +459,7 @@ class RecommendationView(QWidget):
         )
         tech_layout.addWidget(self.ma_check)
         self.ma_check.toggled.connect(self._update_strategy_tendency)
-        
+
         self.adx_check = self._create_checkbox_with_tooltip(
             "ADX",
             'adx',
@@ -468,7 +468,7 @@ class RecommendationView(QWidget):
         )
         tech_layout.addWidget(self.adx_check)
         self.adx_check.toggled.connect(self._update_strategy_tendency)
-        
+
         self.macd_check = self._create_checkbox_with_tooltip(
             "MACD",
             'macd',
@@ -477,14 +477,14 @@ class RecommendationView(QWidget):
         )
         tech_layout.addWidget(self.macd_check)
         self.macd_check.toggled.connect(self._update_strategy_tendency)
-        
+
         # 動能類
         momentum_label = QLabel("動能 (Momentum)")
         momentum_font = QFont()
         momentum_font.setBold(True)
         momentum_label.setFont(momentum_font)
         tech_layout.addWidget(momentum_label)
-        
+
         self.rsi_check = self._create_checkbox_with_tooltip(
             "RSI",
             'rsi',
@@ -493,7 +493,7 @@ class RecommendationView(QWidget):
         )
         tech_layout.addWidget(self.rsi_check)
         self.rsi_check.toggled.connect(self._update_strategy_tendency)
-        
+
         self.kd_check = self._create_checkbox_with_tooltip(
             "KD",
             'kd',
@@ -502,14 +502,14 @@ class RecommendationView(QWidget):
         )
         tech_layout.addWidget(self.kd_check)
         self.kd_check.toggled.connect(self._update_strategy_tendency)
-        
+
         # 波動/風險類
         volatility_label = QLabel("波動 / 風險 (Volatility)")
         volatility_font = QFont()
         volatility_font.setBold(True)
         volatility_label.setFont(volatility_font)
         tech_layout.addWidget(volatility_label)
-        
+
         self.bollinger_check = self._create_checkbox_with_tooltip(
             "布林通道",
             'bollinger',
@@ -518,7 +518,7 @@ class RecommendationView(QWidget):
         )
         tech_layout.addWidget(self.bollinger_check)
         self.bollinger_check.toggled.connect(self._update_strategy_tendency)
-        
+
         self.atr_check = self._create_checkbox_with_tooltip(
             "ATR",
             'atr',
@@ -527,22 +527,22 @@ class RecommendationView(QWidget):
         )
         tech_layout.addWidget(self.atr_check)
         self.atr_check.toggled.connect(self._update_strategy_tendency)
-        
+
         tech_group.setLayout(tech_layout)
         layout.addWidget(tech_group)
         self.tech_group = tech_group  # 保存引用以便切換顯示
-        
+
         # 圖形模式配置（按交易意圖分類）- 進階模式才顯示
         pattern_group = QGroupBox("圖形模式")
         pattern_layout = QVBoxLayout()
-        
+
         # 反轉類（看漲反轉）
         reversal_label = QLabel("反轉 (Bullish Reversal)")
         reversal_font = QFont()
         reversal_font.setBold(True)
         reversal_label.setFont(reversal_font)
         pattern_layout.addWidget(reversal_label)
-        
+
         self.pattern_w_bottom = self._create_checkbox_with_tooltip(
             "W底",
             'w_bottom',
@@ -551,7 +551,7 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_w_bottom)
         self.pattern_w_bottom.toggled.connect(self._update_strategy_tendency)
-        
+
         self.pattern_head_shoulder_bottom = self._create_checkbox_with_tooltip(
             "頭肩底",
             'head_shoulder_bottom',
@@ -560,7 +560,7 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_head_shoulder_bottom)
         self.pattern_head_shoulder_bottom.toggled.connect(self._update_strategy_tendency)
-        
+
         self.pattern_double_bottom = self._create_checkbox_with_tooltip(
             "雙底",
             'double_bottom',
@@ -569,7 +569,7 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_double_bottom)
         self.pattern_double_bottom.toggled.connect(self._update_strategy_tendency)
-        
+
         self.pattern_v_reversal = self._create_checkbox_with_tooltip(
             "V形反轉",
             'v_reversal',
@@ -578,7 +578,7 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_v_reversal)
         self.pattern_v_reversal.toggled.connect(self._update_strategy_tendency)
-        
+
         self.pattern_rounding_bottom = self._create_checkbox_with_tooltip(
             "圓底",
             'rounding_bottom',
@@ -587,14 +587,14 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_rounding_bottom)
         self.pattern_rounding_bottom.toggled.connect(self._update_strategy_tendency)
-        
+
         # 上漲延續類
         continuation_label = QLabel("上漲延續 (Bullish Continuation)")
         continuation_font = QFont()
         continuation_font.setBold(True)
         continuation_label.setFont(continuation_font)
         pattern_layout.addWidget(continuation_label)
-        
+
         self.pattern_flag = self._create_checkbox_with_tooltip(
             "旗形",
             'flag',
@@ -603,7 +603,7 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_flag)
         self.pattern_flag.toggled.connect(self._update_strategy_tendency)
-        
+
         self.pattern_wedge = self._create_checkbox_with_tooltip(
             "楔形",
             'wedge',
@@ -612,14 +612,14 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_wedge)
         self.pattern_wedge.toggled.connect(self._update_strategy_tendency)
-        
+
         # 盤整/區間類
         consolidation_label = QLabel("盤整 / 區間 (Consolidation)")
         consolidation_font = QFont()
         consolidation_font.setBold(True)
         consolidation_label.setFont(consolidation_font)
         pattern_layout.addWidget(consolidation_label)
-        
+
         self.pattern_rectangle = self._create_checkbox_with_tooltip(
             "矩形",
             'rectangle',
@@ -628,7 +628,7 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_rectangle)
         self.pattern_rectangle.toggled.connect(self._update_strategy_tendency)
-        
+
         self.pattern_triangle = self._create_checkbox_with_tooltip(
             "三角形",
             'triangle',
@@ -637,14 +637,14 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_triangle)
         self.pattern_triangle.toggled.connect(self._update_strategy_tendency)
-        
+
         # 下跌訊號類（用於反向篩選）
         bearish_label = QLabel("下跌訊號 (Bearish Signal)")
         bearish_font = QFont()
         bearish_font.setBold(True)
         bearish_label.setFont(bearish_font)
         pattern_layout.addWidget(bearish_label)
-        
+
         self.pattern_head_shoulder_top = self._create_checkbox_with_tooltip(
             "頭肩頂",
             'head_shoulder_top',
@@ -653,7 +653,7 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_head_shoulder_top)
         self.pattern_head_shoulder_top.toggled.connect(self._update_strategy_tendency)
-        
+
         self.pattern_double_top = self._create_checkbox_with_tooltip(
             "雙頂",
             'double_top',
@@ -662,7 +662,7 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_double_top)
         self.pattern_double_top.toggled.connect(self._update_strategy_tendency)
-        
+
         self.pattern_rounding_top = self._create_checkbox_with_tooltip(
             "圓頂",
             'rounding_top',
@@ -671,15 +671,15 @@ class RecommendationView(QWidget):
         )
         pattern_layout.addWidget(self.pattern_rounding_top)
         self.pattern_rounding_top.toggled.connect(self._update_strategy_tendency)
-        
+
         pattern_group.setLayout(pattern_layout)
         layout.addWidget(pattern_group)
         self.pattern_group = pattern_group  # 保存引用以便切換顯示
-        
+
         # 篩選條件 - 進階模式才顯示
         filter_group = QGroupBox("篩選條件")
         filter_layout = QVBoxLayout()
-        
+
         # 最小漲幅
         price_layout = QHBoxLayout()
         price_label = QLabel("最小漲幅:")
@@ -693,7 +693,7 @@ class RecommendationView(QWidget):
         self.price_change_min.setToolTip(price_label.toolTip())
         price_layout.addWidget(self.price_change_min)
         filter_layout.addLayout(price_layout)
-        
+
         # 最小成交量比率
         volume_layout = QHBoxLayout()
         volume_label = QLabel("最小成交量比率:")
@@ -707,7 +707,35 @@ class RecommendationView(QWidget):
         self.volume_ratio_min.setToolTip(volume_label.toolTip())
         volume_layout.addWidget(self.volume_ratio_min)
         filter_layout.addLayout(volume_layout)
-        
+
+        # 月營收 YOY% 最低門檻
+        yoy_layout = QHBoxLayout()
+        yoy_label = QLabel("月營收 YOY下限:")
+        yoy_label.setToolTip("只保留月營收年增率 (YoY%) 大於等於此數值的個股；-100% 代表不套用。")
+        yoy_layout.addWidget(yoy_label)
+        self.revenue_yoy_min = QDoubleSpinBox()
+        self.revenue_yoy_min.setRange(-100.0, 1000.0)
+        self.revenue_yoy_min.setValue(-100.0)
+        self.revenue_yoy_min.setDecimals(1)
+        self.revenue_yoy_min.setSuffix("%")
+        self.revenue_yoy_min.setToolTip(yoy_label.toolTip())
+        yoy_layout.addWidget(self.revenue_yoy_min)
+        filter_layout.addLayout(yoy_layout)
+
+        # 本益比 PE 最高門檻
+        pe_layout = QHBoxLayout()
+        pe_label = QLabel("本益比 PE 上限:")
+        pe_label.setToolTip("只保留本益比 (PE Ratio) 小於等於此數值的個股；999 倍代表不套用。")
+        pe_layout.addWidget(pe_label)
+        self.pe_ratio_max = QDoubleSpinBox()
+        self.pe_ratio_max.setRange(0.0, 999.0)
+        self.pe_ratio_max.setValue(999.0)
+        self.pe_ratio_max.setDecimals(1)
+        self.pe_ratio_max.setSuffix(" 倍")
+        self.pe_ratio_max.setToolTip(pe_label.toolTip())
+        pe_layout.addWidget(self.pe_ratio_max)
+        filter_layout.addLayout(pe_layout)
+
         # 產業篩選
         industry_layout = QHBoxLayout()
         industry_layout.addWidget(QLabel("產業:"))
@@ -723,15 +751,15 @@ class RecommendationView(QWidget):
             print(f"[RecommendationView] 載入產業列表失敗: {e}")
         industry_layout.addWidget(self.industry_filter)
         filter_layout.addLayout(industry_layout)
-        
+
         filter_group.setLayout(filter_layout)
         layout.addWidget(filter_group)
         self.filter_group = filter_group  # 保存引用以便切換顯示
-        
+
         # 排名門檻 - 進階模式才顯示
         ranking_group = QGroupBox("排名門檻")
         ranking_layout = QVBoxLayout()
-        
+
         # 門檻模式
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("門檻模式:"))
@@ -741,7 +769,7 @@ class RecommendationView(QWidget):
         self.threshold_mode_combo.setToolTip("固定門檻使用絕對分數；百分位排名會依當次合格母體排序後取前段股票。")
         mode_layout.addWidget(self.threshold_mode_combo)
         ranking_layout.addLayout(mode_layout)
-        
+
         # 最低百分位
         percentile_layout = QHBoxLayout()
         self.percentile_label = QLabel("最低百分位%:")
@@ -758,7 +786,7 @@ class RecommendationView(QWidget):
         self.percentile_container_layout.setContentsMargins(0, 0, 0, 0)
         self.percentile_container_layout.addLayout(percentile_layout)
         ranking_layout.addWidget(self.percentile_container)
-        
+
         # 最小母體數
         universe_layout = QHBoxLayout()
         self.universe_label = QLabel("最小母體數:")
@@ -773,7 +801,7 @@ class RecommendationView(QWidget):
         self.universe_container_layout.setContentsMargins(0, 0, 0, 0)
         self.universe_container_layout.addLayout(universe_layout)
         ranking_layout.addWidget(self.universe_container)
-        
+
         # 排名方法
         method_layout = QHBoxLayout()
         self.method_label = QLabel("排名方法:")
@@ -787,47 +815,47 @@ class RecommendationView(QWidget):
         self.method_container_layout.setContentsMargins(0, 0, 0, 0)
         self.method_container_layout.addLayout(method_layout)
         ranking_layout.addWidget(self.method_container)
-        
+
         ranking_group.setLayout(ranking_layout)
         layout.addWidget(ranking_group)
         self.ranking_group = ranking_group  # 保存引用以便切換顯示
-        
+
         # 連接事件
         self.threshold_mode_combo.currentIndexChanged.connect(self._on_threshold_mode_changed)
         self._on_threshold_mode_changed(0)
-        
+
         # 執行按鈕
         self.execute_btn = QPushButton("執行推薦分析")
         self.execute_btn.setMinimumHeight(40)
         self.execute_btn.setProperty("variant", "primary")
         self.execute_btn.clicked.connect(self._execute_recommendation)
         layout.addWidget(self.execute_btn)
-        
+
         # 進度條
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
-        
+
         # 進度文本
         self.progress_label = QLabel("")
         self.progress_label.setVisible(False)
         layout.addWidget(self.progress_label)
-        
+
         layout.addStretch()
-        
+
         # 初始設置：新手模式隱藏進階選項
         self._update_mode_ui()
-        
+
         return panel
-    
+
     def _create_result_panel(self) -> QWidget:
         """創建結果面板"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setSpacing(10)
-        
+
         # 標題和控制欄
         title_layout = QHBoxLayout()
         title = QLabel("推薦結果")
@@ -837,21 +865,21 @@ class RecommendationView(QWidget):
         title.setFont(title_font)
         title_layout.addWidget(title)
         title_layout.addStretch()
-        
+
         # 保存結果按鈕
         self.save_result_btn = QPushButton("保存結果")
         self.save_result_btn.setVisible(False)  # 初始隱藏
         self.save_result_btn.clicked.connect(self._save_recommendation_result)
         if self.recommendation_repository:
             title_layout.addWidget(self.save_result_btn)
-        
+
         # 加入觀察清單按鈕
         self.add_to_watchlist_btn = QPushButton("加入觀察清單")
         self.add_to_watchlist_btn.setVisible(False)  # 初始隱藏
         self.add_to_watchlist_btn.clicked.connect(self._add_selected_to_watchlist)
         if self.watchlist_service:
             title_layout.addWidget(self.add_to_watchlist_btn)
-        
+
         # 送 Research Lab 批次回測按鈕（Phase 3.3）
         self.send_to_backtest_btn = QPushButton("送 Research Lab 批次回測")
         self.send_to_backtest_btn.setToolTip("使用目前推薦名單建立批次研究輸入；這是回測今日名單，不是重播推薦邏輯。")
@@ -869,18 +897,18 @@ class RecommendationView(QWidget):
             self._send_profile_to_portfolio_backtest
         )
         title_layout.addWidget(self.send_profile_to_portfolio_backtest_btn)
-        
+
         # 📊 匯出 Excel 按鈕
         self.export_report_btn = QPushButton("匯出 Excel")
         self.export_report_btn.setVisible(False)
         self.export_report_btn.clicked.connect(self._export_current_recommendation)
         title_layout.addWidget(self.export_report_btn)
-        
+
         layout.addLayout(title_layout)
-        
+
         # 使用分割器來控制表格和詳情的比例
         result_splitter = QSplitter(Qt.Vertical)
-        
+
         # 結果表格
         self.results_table = QTableView()
         apply_financial_table_style(self.results_table)
@@ -889,13 +917,13 @@ class RecommendationView(QWidget):
         # 設置選擇模式為單行選擇
         self.results_table.setSelectionBehavior(QTableView.SelectRows)
         self.results_table.setSelectionMode(QTableView.SingleSelection)
-        
+
         # 啟用右鍵選單
         self.results_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.results_table.customContextMenuRequested.connect(self._show_results_table_context_menu)
-        
+
         result_splitter.addWidget(self.results_table)
-        
+
         # 詳細信息（推薦理由）
         detail_group = QGroupBox("推薦理由詳情")
         detail_layout = QVBoxLayout()
@@ -905,16 +933,16 @@ class RecommendationView(QWidget):
         detail_layout.addWidget(self.detail_text)
         detail_group.setLayout(detail_layout)
         result_splitter.addWidget(detail_group)
-        
+
         # 設置分割器比例（上面70%，下面30%）
         result_splitter.setSizes([700, 300])
-        
+
         layout.addWidget(result_splitter)
-        
+
         # 注意：表格選擇事件將在設置模型後連接（在 _on_recommendation_finished 中）
-        
+
         return panel
-    
+
     def _load_current_regime(self):
         """載入當前市場狀態"""
         try:
@@ -937,14 +965,14 @@ class RecommendationView(QWidget):
                 f"資料日期 / 來源：{as_of_date} / {source}"
             )
             self.regime_label.setText(regime_text)
-            
+
             # 更新策略配置中的 regime
             self.strategy_config['regime'] = regime_code
             self.current_regime = regime_code
-            
+
             # 根據 Regime 建議 Profile（Phase 3.2）
             self._suggest_profile_for_regime(regime_code, confidence_value)
-            
+
             # 根據 Regime 自動調整策略配置（如果用戶沒有選擇 Profile）
             if not self.current_profile:
                 auto_config = self.regime_service.get_strategy_config(regime_code)
@@ -959,10 +987,10 @@ class RecommendationView(QWidget):
                     self.profile_desc_label.setText(self._build_profile_description(profile_option, profile))
         except Exception as e:
             self.regime_label.setText(f"檢測失敗：{str(e)}")
-    
+
     def _suggest_profile_for_regime(self, regime: str, confidence: float):
         """根據市場狀態建議 Profile（Phase 3.2）
-        
+
         Args:
             regime: 市場狀態（'Trend' | 'Reversion' | 'Breakout'）
             confidence: 信心度（0-1）
@@ -972,13 +1000,13 @@ class RecommendationView(QWidget):
         for profile_id, profile in self.profiles.items():
             if regime in profile.get('regime', []):
                 suitable_profiles.append((profile_id, profile))
-        
+
         if not suitable_profiles:
             # 沒有適用的 Profile，隱藏建議
             if hasattr(self, 'regime_suggestion_group'):
                 self.regime_suggestion_group.setVisible(False)
             return
-        
+
         # 選擇最適合的 Profile（優先選擇風險等級適中的）
         # 如果信心度高，可以選擇風險較高的 Profile
         if confidence >= 0.7:
@@ -987,18 +1015,18 @@ class RecommendationView(QWidget):
         else:
             # 低信心度：優先選擇風險較低的 Profile
             suitable_profiles.sort(key=lambda x: {'high': 1, 'medium': 2, 'low': 3}.get(x[1].get('risk_level', 'medium'), 2), reverse=True)
-        
+
         suggested_profile_id, suggested_profile = suitable_profiles[0]
         self.suggested_profile_id = suggested_profile_id
-        
+
         # 顯示建議（如果建議區塊存在）
         if hasattr(self, 'regime_suggestion_group'):
             self._update_regime_suggestion(suggested_profile_id, suggested_profile, confidence)
             self.regime_suggestion_group.setVisible(True)
-    
+
     def _update_regime_suggestion(self, profile_id: str, profile: Dict[str, Any], confidence: float):
         """更新 Regime 建議顯示
-        
+
         Args:
             profile_id: 建議的 Profile ID
             profile: Profile 資料
@@ -1010,38 +1038,38 @@ class RecommendationView(QWidget):
             'Breakout': '突破準備'
         }
         current_regime_name = regime_names.get(self.current_regime, self.current_regime)
-        
+
         suggestion_text = f"<b>💡 根據當前市場狀態（{current_regime_name}，信心度 {confidence:.0%}）</b><br/>"
         suggestion_text += f"<b>建議使用：{profile['name']}</b><br/><br/>"
         suggestion_text += f"{profile['description']}<br/><br/>"
         suggestion_text += f"<b>風險等級：</b>{profile.get('risk_level', '未知')}"
-        
+
         self.regime_suggestion_label.setText(suggestion_text)
         self.apply_suggestion_btn.setVisible(True)
-    
+
     def _apply_suggested_profile(self):
         """一鍵套用建議的 Profile"""
         if not self.suggested_profile_id:
             return
-        
+
         profile = self.profiles.get(self.suggested_profile_id)
         if not profile:
             return
-        
+
         # 切換到新手模式（如果當前是進階模式）
         if not self.is_beginner_mode:
             self.is_beginner_mode = True
             self._update_mode_ui()
-        
+
         # 在 Profile 下拉選單中選擇建議的 Profile
         for i in range(self.profile_combo.count()):
             if self.profile_combo.itemData(i) == self.suggested_profile_id:
                 self.profile_combo.setCurrentIndex(i)
                 break
-        
+
         # 套用 Profile 配置
         self._apply_profile_config(profile)
-        
+
         # 顯示提示
         QMessageBox.information(
             self,
@@ -1049,7 +1077,7 @@ class RecommendationView(QWidget):
             f"已套用建議的 Profile：{profile['name']}\n\n"
             f"配置已自動更新，您可以點擊「執行推薦分析」開始分析。"
         )
-    
+
     def _update_ui_from_config(self):
         """從配置更新 UI"""
         # 更新技術指標
@@ -1057,15 +1085,15 @@ class RecommendationView(QWidget):
         self.rsi_check.setChecked(momentum.get('rsi', {}).get('enabled', False))
         self.macd_check.setChecked(momentum.get('macd', {}).get('enabled', False))
         self.kd_check.setChecked(momentum.get('kd', {}).get('enabled', False))
-        
+
         trend = self.strategy_config.get('technical', {}).get('trend', {})
         self.ma_check.setChecked(trend.get('ma', {}).get('enabled', False))
         self.adx_check.setChecked(trend.get('adx', {}).get('enabled', False))
-        
+
         volatility = self.strategy_config.get('technical', {}).get('volatility', {})
         self.bollinger_check.setChecked(volatility.get('bollinger', {}).get('enabled', False))
         self.atr_check.setChecked(volatility.get('atr', {}).get('enabled', False))
-        
+
         # 更新圖形模式
         patterns = self.strategy_config.get('patterns', {}).get('selected', [])
         self.pattern_w_bottom.setChecked('W底' in patterns)
@@ -1080,32 +1108,34 @@ class RecommendationView(QWidget):
         self.pattern_head_shoulder_top.setChecked('頭肩頂' in patterns)
         self.pattern_double_top.setChecked('雙頂' in patterns)
         self.pattern_rounding_top.setChecked('圓頂' in patterns)
-        
+
         # 更新篩選條件
         filters = self.strategy_config.get('filters', {})
         self.price_change_min.setValue(filters.get('price_change_min', 0.0))
         self.volume_ratio_min.setValue(filters.get('volume_ratio_min', 1.0))
-        
+        self.revenue_yoy_min.setValue(filters.get('monthly_revenue_yoy_min', -100.0))
+        self.pe_ratio_max.setValue(filters.get('pe_ratio_max', 999.0))
+
         # 更新排名門檻
         ranking_config = self.strategy_config.get('recommendation_ranking', {})
         threshold_mode = ranking_config.get('threshold_mode', 'fixed')
-        
+
         mode_idx = self.threshold_mode_combo.findData(threshold_mode)
         if mode_idx >= 0:
             self.threshold_mode_combo.setCurrentIndex(mode_idx)
-            
+
         self.min_percentile_bp_spin.setValue(ranking_config.get('recommendation_min_percentile_bp', 8000) / 100.0)
         self.min_universe_size_spin.setValue(ranking_config.get('recommendation_min_universe_size', 20))
-        
+
         method_idx = self.ranking_method_combo.findData(ranking_config.get('recommendation_ranking_method', 'nearest_rank'))
         if method_idx >= 0:
             self.ranking_method_combo.setCurrentIndex(method_idx)
-            
+
         self._on_threshold_mode_changed(self.threshold_mode_combo.currentIndex())
-        
+
         # 更新策略傾向
         self._update_strategy_tendency()
-        
+
     def _on_threshold_mode_changed(self, index: int):
         """門檻模式切換事件"""
         mode = self.threshold_mode_combo.itemData(index)
@@ -1113,12 +1143,12 @@ class RecommendationView(QWidget):
         self.percentile_container.setVisible(is_quantile)
         self.universe_container.setVisible(is_quantile)
         self.method_container.setVisible(is_quantile)
-    
+
     def _toggle_mode(self):
         """切換新手/進階模式"""
         self.is_beginner_mode = not self.is_beginner_mode
         self._update_mode_ui()
-    
+
     def _update_mode_ui(self):
         """根據模式更新 UI 顯示"""
         if self.is_beginner_mode:
@@ -1145,7 +1175,7 @@ class RecommendationView(QWidget):
             # Regime 建議在進階模式下也顯示（但一鍵套用按鈕可能不太有用）
             if hasattr(self, 'regime_suggestion_group'):
                 self.regime_suggestion_group.setVisible(self.suggested_profile_id is not None)
-    
+
     def _on_profile_selected(self, index: int):
         """Profile 選擇改變"""
         profile_id = self.profile_combo.itemData(index)
@@ -1153,16 +1183,16 @@ class RecommendationView(QWidget):
             self.profile_desc_label.setText("")
             self.current_profile = None
             return
-        
+
         profile_option = self._get_profile_option(profile_id)
         profile = self.profiles.get(profile_id)
         if not profile:
             return
-        
+
         self.current_profile = str(profile_id)
         desc_text = self._build_profile_description(profile_option, profile)
         self.profile_desc_label.setText(desc_text)
-        
+
         # 套用 Profile 配置
         self._apply_profile_config(profile)
 
@@ -1261,26 +1291,26 @@ class RecommendationView(QWidget):
             self._build_profile_description(saved, self.profiles[saved.profile_id])
         )
         return saved
-    
+
     def _apply_profile_config(self, profile: Dict[str, Any]):
         """套用 Profile 配置到 UI"""
         config = profile.get('config', {})
-        
+
         # 更新技術指標
         tech_config = config.get('technical', {})
         momentum = tech_config.get('momentum', {})
         self.rsi_check.setChecked(momentum.get('rsi', {}).get('enabled', False))
         self.macd_check.setChecked(momentum.get('macd', {}).get('enabled', False))
         self.kd_check.setChecked(momentum.get('kd', {}).get('enabled', False))
-        
+
         trend = tech_config.get('trend', {})
         self.ma_check.setChecked(trend.get('ma', {}).get('enabled', False))
         self.adx_check.setChecked(trend.get('adx', {}).get('enabled', False))
-        
+
         volatility = tech_config.get('volatility', {})
         self.bollinger_check.setChecked(volatility.get('bollinger', {}).get('enabled', False))
         self.atr_check.setChecked(volatility.get('atr', {}).get('enabled', False))
-        
+
         # 更新圖形模式
         patterns = config.get('patterns', {}).get('selected', [])
         self.pattern_w_bottom.setChecked('W底' in patterns)
@@ -1295,12 +1325,14 @@ class RecommendationView(QWidget):
         self.pattern_head_shoulder_top.setChecked('頭肩頂' in patterns)
         self.pattern_double_top.setChecked('雙頂' in patterns)
         self.pattern_rounding_top.setChecked('圓頂' in patterns)
-        
+
         # 更新篩選條件
         filters = config.get('filters', {})
         self.price_change_min.setValue(self._numeric_for_qt(filters.get('price_change_min'), 0.0))
         self.volume_ratio_min.setValue(self._numeric_for_qt(filters.get('volume_ratio_min'), 1.0))
-        
+        self.revenue_yoy_min.setValue(self._numeric_for_qt(filters.get('monthly_revenue_yoy_min'), -100.0))
+        self.pe_ratio_max.setValue(self._numeric_for_qt(filters.get('pe_ratio_max'), 999.0))
+
         # 更新策略傾向
         self._update_strategy_tendency()
 
@@ -1309,7 +1341,7 @@ class RecommendationView(QWidget):
             return float(value)
         except (TypeError, ValueError):
             return default
-    
+
     def _update_strategy_tendency(self):
         """根據當前選擇的指標/圖形，動態更新策略傾向提示"""
         # 收集已勾選的技術指標
@@ -1328,7 +1360,7 @@ class RecommendationView(QWidget):
             selected_indicators.append(self.technical_descriptions['bollinger'])
         if self.atr_check.isChecked():
             selected_indicators.append(self.technical_descriptions['atr'])
-        
+
         # 收集已勾選的圖形模式
         selected_patterns = []
         if self.pattern_w_bottom.isChecked():
@@ -1355,7 +1387,7 @@ class RecommendationView(QWidget):
             selected_patterns.append(self.pattern_descriptions['double_top'])
         if self.pattern_rounding_top.isChecked():
             selected_patterns.append(self.pattern_descriptions['rounding_top'])
-        
+
         # 計算策略傾向
         if not selected_indicators and not selected_patterns:
             tendency_text = "請選擇技術指標和圖形模式"
@@ -1366,11 +1398,11 @@ class RecommendationView(QWidget):
             trend_count = sum(1 for ind in selected_indicators if ind['category'] == 'Trend')
             momentum_count = sum(1 for ind in selected_indicators if ind['category'] == 'Momentum')
             volatility_count = sum(1 for ind in selected_indicators if ind['category'] == 'Volatility')
-            
+
             reversal_count = sum(1 for pat in selected_patterns if pat['category'] == 'Reversal')
             continuation_count = sum(1 for pat in selected_patterns if pat['category'] == 'Continuation')
             consolidation_count = sum(1 for pat in selected_patterns if pat['category'] == 'Consolidation')
-            
+
             # 判斷策略傾向
             # 趨勢策略：Trend 類指標權重較高
             if trend_count >= 2 and (momentum_count + volatility_count) <= 2:
@@ -1397,7 +1429,7 @@ class RecommendationView(QWidget):
                 tendency_text = "目前選擇偏向：混合策略（可能不穩定）"
                 tendency_icon = ""
                 tendency_color = "#dc2626"
-        
+
         # 更新標籤
         self.strategy_tendency_label.setText(tendency_text)
         self.strategy_tendency_label.setStyleSheet(f"""
@@ -1410,7 +1442,7 @@ class RecommendationView(QWidget):
                 border: 1px solid {tendency_color}40;
             }}
         """)
-    
+
     def _collect_config(self) -> Dict[str, Any]:
         """收集策略配置（新手模式使用 Profile 配置，進階模式使用 UI 配置）"""
         # 如果在新手模式下且已選擇 Profile，使用 Profile 配置
@@ -1422,7 +1454,7 @@ class RecommendationView(QWidget):
                 config['regime'] = self.strategy_config.get('regime')
                 config['recommendation_ranking'] = {'threshold_mode': 'fixed'}
                 return config
-        
+
         # 進階模式或未選擇 Profile：使用 UI 配置
         # 技術指標
         momentum = {
@@ -1431,19 +1463,19 @@ class RecommendationView(QWidget):
             'macd': {'enabled': self.macd_check.isChecked(), 'fast': 12, 'slow': 26, 'signal': 9},
             'kd': {'enabled': self.kd_check.isChecked()}
         }
-        
+
         trend = {
             'enabled': self.ma_check.isChecked() or self.adx_check.isChecked(),
             'adx': {'enabled': self.adx_check.isChecked(), 'period': 14},
             'ma': {'enabled': self.ma_check.isChecked(), 'windows': [5, 10, 20, 60]}
         }
-        
+
         volatility = {
             'enabled': self.bollinger_check.isChecked() or self.atr_check.isChecked(),
             'bollinger': {'enabled': self.bollinger_check.isChecked(), 'window': 20, 'std': 2},
             'atr': {'enabled': self.atr_check.isChecked(), 'period': 14}
         }
-        
+
         # 圖形模式
         patterns = []
         if self.pattern_w_bottom.isChecked():
@@ -1470,7 +1502,7 @@ class RecommendationView(QWidget):
             patterns.append('雙頂')
         if self.pattern_rounding_top.isChecked():
             patterns.append('圓頂')
-        
+
         # 信號組合
         technical_indicators = []
         if momentum['enabled']:
@@ -1479,7 +1511,7 @@ class RecommendationView(QWidget):
             technical_indicators.append('trend')
         if volatility['enabled']:
             technical_indicators.append('volatility')
-        
+
         # 篩選條件
         filters = {
             'price_change_min': self.price_change_min.value(),
@@ -1487,9 +1519,11 @@ class RecommendationView(QWidget):
             'volume_ratio_min': self.volume_ratio_min.value(),
             'rsi_min': 0,
             'rsi_max': 100,
-            'industry': self.industry_filter.currentText()
+            'industry': self.industry_filter.currentText(),
+            'monthly_revenue_yoy_min': self.revenue_yoy_min.value(),
+            'pe_ratio_max': self.pe_ratio_max.value()
         }
-        
+
         # 排名門檻
         threshold_mode = self.threshold_mode_combo.currentData()
         ranking_config = {
@@ -1501,7 +1535,7 @@ class RecommendationView(QWidget):
                 'recommendation_min_universe_size': self.min_universe_size_spin.value(),
                 'recommendation_ranking_method': self.ranking_method_combo.currentData()
             })
-        
+
         config = {
             'technical': {
                 'momentum': momentum,
@@ -1536,112 +1570,112 @@ class RecommendationView(QWidget):
             except ValueError:
                 return value
         return value
-    
+
     def _execute_recommendation(self):
         """執行推薦分析"""
         # 收集配置
         config = self._collect_config()
         request = RecommendationExecutionRequest(config)
-        
+
         # 檢查配置有效性
         validation_error = request.validation_error()
         if validation_error:
             QMessageBox.warning(self, "配置錯誤", validation_error)
             return
-        
+
         # 保存當前配置和 Regime（用於後續保存）
         self.current_config = config
         self.current_regime = config.get('regime')
         self.current_recommendation_source_created_at = ""
-        
+
         # 保存當前 Profile（如果在新手模式下）
         if self.is_beginner_mode:
             profile_index = self.profile_combo.currentIndex()
             self.current_profile = self.profile_combo.itemData(profile_index)
         else:
             self.current_profile = None
-        
+
         # 禁用執行按鈕
         self.execute_btn.setEnabled(False)
         self.execute_btn.setText("分析中...")
-        
+
         # 顯示進度條
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
         self.progress_label.setText("準備開始分析...")
-        
+
         # 清空結果
         self.results_table.setModel(None)
         self.detail_text.clear()
-        
+
         # 隱藏保存按鈕（等待結果）
         if self.recommendation_repository:
             self.save_result_btn.setVisible(False)
         self.export_report_btn.setVisible(False)
         self.current_recommendations = None
-        
+
         # 創建 Worker 包裝推薦服務調用
         def recommendation_task(progress_callback=None):
             """推薦分析任務（支持進度回調）"""
             return request.execute(self.recommendation_service, progress_callback)
-        
+
         # 創建 Worker
         self.worker = ProgressTaskWorker(recommendation_task)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished.connect(self._on_recommendation_finished)
         self.worker.error.connect(self._on_recommendation_error)
         self.worker.start()
-    
+
     def _on_progress(self, message: str, percentage: int):
         """進度更新"""
         self.progress_label.setText(message)
         self.progress_bar.setValue(percentage)
-    
+
     def _on_recommendation_finished(self, recommendations: List[RecommendationDTO]):
         """推薦分析完成"""
         # 恢復按鈕
         self.execute_btn.setEnabled(True)
         self.execute_btn.setText("執行推薦分析")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 保存當前推薦結果（用於保存功能）
         self.current_recommendations = recommendations
-        
+
         # 顯示結果
         if not recommendations:
             QMessageBox.information(self, "分析完成", "沒有找到符合條件的推薦股票")
             return
-        
+
         # 轉換為 DataFrame
         data = [rec.to_dict() for rec in recommendations]
         df = pd.DataFrame(data)
-        
+
         # 設置模型
         self.recommendations_model = PandasTableModel(df)
         self.results_table.setModel(self.recommendations_model)
-        
+
         # 連接表格選擇事件（在設置模型後）
         selection_model = self.results_table.selectionModel()
         if selection_model:
             selection_model.selectionChanged.connect(self._on_selection_changed)
-        
+
         # 連接雙擊事件
         self.results_table.doubleClicked.connect(self._on_row_double_clicked)
-        
+
         # 連接單擊事件（確保單擊也能觸發）
         self.results_table.clicked.connect(self._on_row_clicked)
-        
+
         # 調整列寬
         self.results_table.resizeColumnsToContents()
-        
+
         # 顯示統計信息
         self.progress_label.setText(f"找到 {len(recommendations)} 支推薦股票")
         self.progress_label.setVisible(True)
-        
+
         # 顯示按鈕
         if self.watchlist_service:
             self.add_to_watchlist_btn.setVisible(True)
@@ -1651,17 +1685,17 @@ class RecommendationView(QWidget):
         self.send_to_backtest_btn.setVisible(True)
         self.send_profile_to_portfolio_backtest_btn.setVisible(True)
         self.export_report_btn.setVisible(True)
-    
+
     def _on_recommendation_error(self, error_msg: str):
         """推薦分析出錯"""
         # 恢復按鈕
         self.execute_btn.setEnabled(True)
         self.execute_btn.setText("執行推薦分析")
-        
+
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
-        
+
         # 判斷是否為 UniverseTooSmall 錯誤
         if "eligible universe too small" in error_msg:
             try:
@@ -1682,29 +1716,29 @@ class RecommendationView(QWidget):
                     return
             except Exception as e:
                 print(f"[RecommendationView] 解析 UniverseTooSmall 錯誤訊息失敗: {e}")
-        
+
         # 顯示錯誤（如果錯誤信息太長，截取前500字符）
         display_msg = error_msg[:500] + "..." if len(error_msg) > 500 else error_msg
         QMessageBox.critical(
-            self, 
-            "分析失敗", 
+            self,
+            "分析失敗",
             f"推薦分析失敗：\n\n{display_msg}\n\n"
             f"請檢查：\n"
             f"1. 數據文件是否存在且格式正確\n"
             f"2. 技術指標計算所需的欄位是否完整\n"
             f"3. 查看日誌文件獲取詳細錯誤信息"
         )
-    
+
     def _send_to_backtest(self):
         """送 Research Lab 批次回測（Profile → Backtest）（Phase 3.3）"""
         if not self.current_recommendations or not self.current_config:
             QMessageBox.warning(self, "錯誤", "沒有可送回測的推薦結果")
             return
-        
+
         # 獲取選中的股票（如果沒有選中，則使用所有推薦股票）
         selection = self.results_table.selectionModel()
         selected_stocks = []
-        
+
         if selection and selection.selectedRows():
             # 使用選中的股票
             df = self.recommendations_model.getDataFrame()
@@ -1718,11 +1752,11 @@ class RecommendationView(QWidget):
             # 使用所有推薦股票（最多前 20 檔）
             for rec in self.current_recommendations[:20]:
                 selected_stocks.append(rec.stock_code)
-        
+
         if not selected_stocks:
             QMessageBox.warning(self, "錯誤", "沒有可送回測的股票")
             return
-        
+
         # 準備回測配置
         backtest_config = {
             'stock_list': selected_stocks,
@@ -1732,13 +1766,13 @@ class RecommendationView(QWidget):
             'regime': self.current_regime,
             'regime_snapshot': None
         }
-        
+
         # 如果有 Profile，添加 Profile 信息
         if self.current_profile and self.current_profile in self.profiles:
             profile = self.profiles[self.current_profile]
             backtest_config['profile_name'] = profile.get('name') or '推薦分析'
             backtest_config['profile_version'] = profile.get('version', '1.0.0')
-        
+
         # 創建 Regime snapshot
         if self.current_regime:
             try:
@@ -1755,10 +1789,10 @@ class RecommendationView(QWidget):
                     'regime': self.current_regime,
                     'detected_at': datetime.now().isoformat()
                 }
-        
+
         # 發送信號
         self.sendToBacktestRequested.emit(backtest_config)
-        
+
         # 顯示提示
         QMessageBox.information(
             self,
@@ -1794,17 +1828,17 @@ class RecommendationView(QWidget):
             "已將推薦 Profile/Config 送出到 Research Lab 推薦回放\n\n"
             "請切換到「策略回測 / Research Lab」標籤確認期間與資金後執行。"
         )
-    
+
     def _add_selected_to_watchlist(self):
         """將選中的股票加入觀察清單"""
         if not self.watchlist_service or not self.recommendations_model:
             return
-        
+
         selection = self.results_table.selectionModel().selectedRows()
         if not selection:
             QMessageBox.warning(self, "提示", "請先選擇要加入觀察清單的股票")
             return
-        
+
         # 取得選中的股票
         df = self.recommendations_model.getDataFrame()
         stocks = []
@@ -1818,21 +1852,21 @@ class RecommendationView(QWidget):
                         'stock_code': str(stock_code),
                         'stock_name': str(stock_name)
                     })
-        
+
         if stocks:
             try:
                 # 添加來源信息（Profile/時間/Regime）到 notes
                 profile_name = self.current_profile or '進階模式'
                 if self.current_profile and self.current_profile in self.profiles:
                     profile_name = self.profiles[self.current_profile]['name']
-                
+
                 regime_name = self.current_regime or '未知'
                 notes = f"來源：{profile_name}, Regime: {regime_name}, 時間: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-                
+
                 # 將 notes 添加到每個股票
                 for stock in stocks:
                     stock['notes'] = notes
-                
+
                 added_count = self.watchlist_service.add_stocks(stocks, source='recommendation')
                 if added_count > 0:
                     QMessageBox.information(self, "成功", f"已將 {added_count} 檔股票加入觀察清單\n{notes}")
@@ -1840,7 +1874,7 @@ class RecommendationView(QWidget):
                     QMessageBox.warning(self, "提示", "選中的股票已在觀察清單中")
             except Exception as e:
                 QMessageBox.critical(self, "錯誤", f"加入觀察清單失敗：\n{str(e)}")
-    
+
     def _build_current_result_snapshot(self) -> RecommendationResultDTO:
         """建立未保存推薦結果快照，僅供 Portfolio 來源追溯使用。"""
 
@@ -1891,11 +1925,11 @@ class RecommendationView(QWidget):
         if not self.recommendation_repository:
             QMessageBox.warning(self, "錯誤", "推薦結果儲存庫未初始化")
             return
-        
+
         if not self.current_recommendations or not self.current_config:
             QMessageBox.warning(self, "錯誤", "沒有可保存的推薦結果")
             return
-        
+
         # 顯示輸入對話框
         from PySide6.QtWidgets import QInputDialog
         result_name, ok = QInputDialog.getText(
@@ -1904,10 +1938,10 @@ class RecommendationView(QWidget):
             "請輸入結果名稱:",
             text=f"推薦結果_{datetime.now().strftime('%Y%m%d_%H%M')}"
         )
-        
+
         if not ok or not result_name.strip():
             return
-        
+
         try:
             profile_meta = (
                 self.profiles.get(self.current_profile, {}) if self.current_profile else {}
@@ -1931,7 +1965,7 @@ class RecommendationView(QWidget):
                     "[RecommendationView] 創建選股清單失敗: "
                     f"{outcome.watchlist_error}"
                 )
-            
+
             # 顯示成功訊息
             profile_label = "進階模式"
             if self.current_profile and self.current_profile in self.profiles:
@@ -1951,7 +1985,7 @@ class RecommendationView(QWidget):
                     f"\n\n已自動創建選股清單：{outcome.watchlist_name}\n"
                     "可在「策略回測」Tab 的選股清單中查看。"
                 )
-            
+
             QMessageBox.information(
                 self,
                 "成功",
@@ -1964,23 +1998,23 @@ class RecommendationView(QWidget):
                 "錯誤",
                 f"保存推薦結果失敗：\n{str(e)}\n\n{traceback.format_exc()}"
             )
-    
+
     def _on_selection_changed(self):
         """表格選擇改變（單擊時觸發）"""
         self._update_detail_text()
-    
+
     def _on_row_clicked(self, index):
         """表格行單擊事件"""
         self._update_detail_text()
-    
+
     def _on_row_double_clicked(self, index):
         """表格行雙擊事件"""
         self._update_detail_text()
-    
+
     def _generate_why_not(self, recommendation: RecommendationDTO, config: Dict[str, Any]) -> str:
         """生成 Why Not（相容入口，委派純 presenter）。"""
         return generate_why_not(recommendation, config)
-    
+
     def _format_recommendation_reason(self, reason_text: str) -> str:
         """格式化推薦理由（相容入口，委派純 presenter）。"""
         return format_recommendation_reason(
@@ -1988,27 +2022,27 @@ class RecommendationView(QWidget):
             technical_descriptions=self.technical_descriptions,
             pattern_descriptions=self.pattern_descriptions,
         )
-    
+
     def _update_detail_text(self):
         """更新推薦理由詳情顯示"""
         if not self.recommendations_model:
             self.detail_text.clear()
             return
-        
+
         selection = self.results_table.selectionModel()
         if not selection:
             self.detail_text.clear()
             return
-        
+
         selected_rows = selection.selectedRows()
         if not selected_rows:
             self.detail_text.clear()
             return
-        
+
         # 獲取選中的行
         row = selected_rows[0].row()
         df = self.recommendations_model.getDataFrame()
-        
+
         if row < len(df):
             # 獲取對應的 RecommendationDTO
             stock_code = df.iloc[row].get('證券代號', '')
@@ -2018,15 +2052,15 @@ class RecommendationView(QWidget):
                     if str(rec.stock_code) == str(stock_code):
                         recommendation = rec
                         break
-            
+
             html_content = ""
-            
+
             # Explain 面板 v1：分數拆解（Phase 3.3）
             if recommendation:
                 explain_panel = self._generate_explain_panel(recommendation)
                 html_content += explain_panel
                 html_content += "<hr style='margin: 10px 0;'/>"
-            
+
             # 顯示推薦理由（Why）
             reason = df.iloc[row].get('推薦理由', '')
             if reason:
@@ -2035,20 +2069,20 @@ class RecommendationView(QWidget):
                 html_content += formatted_reason
             else:
                 html_content += "<div style='line-height: 1.6;'><p>無推薦理由</p></div>"
-            
+
             # 顯示 Why Not（反向解釋）
             if recommendation and self.current_config:
                 why_not = self._generate_why_not(recommendation, self.current_config)
                 html_content += "<hr style='margin: 10px 0;'/>"
                 html_content += why_not
-            
+
             if html_content:
                 self.detail_text.setHtml(remove_symbol_icons(html_content))
             else:
                 self.detail_text.setPlainText("無詳細信息")
         else:
             self.detail_text.clear()
-    
+
     def _generate_explain_panel(self, recommendation: RecommendationDTO) -> str:
         """生成 Explain 面板（相容入口，委派純 presenter）。"""
         return generate_explain_panel(recommendation)
@@ -2056,7 +2090,7 @@ class RecommendationView(QWidget):
     @staticmethod
     def _ranking_value_label(kind: str, value: Any) -> str:
         return ranking_value_label(kind, value)
-        
+
     def _show_results_table_context_menu(self, pos):
         """顯示推薦結果表格的右鍵選單"""
         if not self.recommendations_model:
@@ -2147,7 +2181,7 @@ class RecommendationView(QWidget):
 
         elif action == action_add_watchlist:
             self._add_selected_to_watchlist()
-    
+
     def _build_current_recommendation_export_payload(self):
         from app_module.report_export_dtos import ReportMetadata, CurrentRecommendationExportPayload
         import pandas as pd
@@ -2204,7 +2238,7 @@ class RecommendationView(QWidget):
         if not self.current_recommendations:
             QMessageBox.warning(self, "錯誤", "無可匯出的推薦結果")
             return
-            
+
         from PySide6.QtWidgets import QFileDialog
         default_filename = f"current_recommendation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         target_path, _ = QFileDialog.getSaveFileName(
@@ -2219,21 +2253,21 @@ class RecommendationView(QWidget):
 
     def _export_current_recommendation_to_path(self, target_path: Path):
         payload = self._build_current_recommendation_export_payload()
-        
+
         self.export_report_btn.setEnabled(False)
         self.export_report_btn.setText("匯出中...")
-        
+
         from ui_qt.workers.task_worker import TaskWorker
         worker = TaskWorker(
             self.report_export_service.export_current_recommendation,
             target_path,
             payload
         )
-        
+
         worker.finished.connect(self._on_excel_export_finished)
         worker.error.connect(self._on_excel_export_error)
         worker.cancelled.connect(self._on_excel_export_cancelled)
-        
+
         self._report_export_workers.append(worker)
         worker.start()
 

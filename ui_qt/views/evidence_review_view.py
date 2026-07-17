@@ -33,14 +33,37 @@ class EvidenceReviewView(QWidget):
         layout.addWidget(self.boundary_banner)
         self._add_database_path_row(layout)
         self.tabs = QTabWidget()
-        self.tabs.addTab(forward_performance_widget, "前瞻證據")
-        self.tabs.addTab(LiveResearchGapView(live_gap_service, auto_refresh=False), "研究落差")
-        self.tabs.addTab(SignalDecayView(signal_decay_service, auto_refresh=False), "訊號衰退")
-        self.tabs.addTab(DecisionQualityView(decision_quality_service, auto_refresh=False), "決策品質")
-        if evidence_history_service is not None:
-            self.tabs.addTab(EvidenceOperationsHistoryView(evidence_history_service, auto_refresh=False), "覆盤歷史")
+
+        # 1. 今日決策
+        today_decision_widget = QWidget()
+        today_decision_layout = QVBoxLayout(today_decision_widget)
+        today_decision_layout.setContentsMargins(0, 0, 0, 0)
+        today_decision_tabs = QTabWidget()
+        today_decision_tabs.addTab(DecisionQualityView(decision_quality_service, auto_refresh=False), "決策品質")
         if scheduled_status_service is not None:
-            self.tabs.addTab(ScheduledEvidenceStatusView(scheduled_status_service), "排程狀態")
+            today_decision_tabs.addTab(ScheduledEvidenceStatusView(scheduled_status_service), "排程狀態")
+        today_decision_layout.addWidget(today_decision_tabs)
+        self.tabs.addTab(today_decision_widget, "今日決策")
+
+        # 2. 歷史驗證
+        historical_verification_widget = QWidget()
+        historical_verification_layout = QVBoxLayout(historical_verification_widget)
+        historical_verification_layout.setContentsMargins(0, 0, 0, 0)
+        historical_verification_tabs = QTabWidget()
+        historical_verification_tabs.addTab(forward_performance_widget, "前瞻證據")
+        historical_verification_tabs.addTab(SignalDecayView(signal_decay_service, auto_refresh=False), "訊號衰退")
+        if evidence_history_service is not None:
+            historical_verification_tabs.addTab(EvidenceOperationsHistoryView(evidence_history_service, auto_refresh=False), "覆盤歷史")
+        historical_verification_layout.addWidget(historical_verification_tabs)
+        self.tabs.addTab(historical_verification_widget, "歷史驗證")
+
+        # 3. 資料缺口
+        data_gap_widget = QWidget()
+        data_gap_layout = QVBoxLayout(data_gap_widget)
+        data_gap_layout.setContentsMargins(0, 0, 0, 0)
+        data_gap_layout.addWidget(LiveResearchGapView(live_gap_service, auto_refresh=False))
+        self.tabs.addTab(data_gap_widget, "資料缺口")
+
         layout.addWidget(self.tabs, stretch=1)
 
     def _add_database_path_row(self, layout: QVBoxLayout) -> None:

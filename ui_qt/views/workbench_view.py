@@ -99,6 +99,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         navigate_to_market_explore_callback: Callable[[], None] | None = None,
         navigate_to_evidence_review_callback: Callable[[], None] | None = None,
         navigate_to_portfolio_callback: Callable[[], None] | None = None,
+        navigate_to_update_callback: Callable[[], None] | None = None,
+        navigate_to_recommendation_callback: Callable[[], None] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -113,6 +115,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.navigate_to_market_explore_callback = navigate_to_market_explore_callback
         self.navigate_to_evidence_review_callback = navigate_to_evidence_review_callback
         self.navigate_to_portfolio_callback = navigate_to_portfolio_callback
+        self.navigate_to_update_callback = navigate_to_update_callback
+        self.navigate_to_recommendation_callback = navigate_to_recommendation_callback
         self._dashboard: WorkbenchDashboardDTO | None = None
         self._viewed_review_item_ids: set[str] = set()
 
@@ -209,6 +213,35 @@ class UnifiedDecisionWorkbenchView(QWidget):
         advice_panel.layout.addWidget(self.advice_candidate_label)
         advice_panel.layout.addWidget(self.advice_candidate_table)
         advice_panel.layout.addWidget(self.advice_portfolio_table)
+
+        # 建立三態空狀態 Widget 及其唯讀導引
+        self.advice_empty_widget = QWidget()
+        self.advice_empty_layout = QVBoxLayout(self.advice_empty_widget)
+        self.advice_empty_layout.setContentsMargins(0, 0, 0, 0)
+        self.advice_empty_label = QLabel("")
+        self.advice_empty_label.setWordWrap(True)
+        self.advice_empty_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.advice_empty_label.setStyleSheet("padding: 10px; background-color: #1e293b; color: #cbd5e1; border-radius: 6px; border: 1px solid #334155;")
+        self.advice_empty_layout.addWidget(self.advice_empty_label)
+
+        # 唯讀導引按鈕列
+        nav_buttons_row = QHBoxLayout()
+        self.nav_to_update_btn = QPushButton("前往數據更新工作台")
+        self.nav_to_update_btn.setProperty("variant", "secondary")
+        self.nav_to_update_btn.clicked.connect(lambda: self.navigate_to_drilldown_target("update"))
+
+        self.nav_to_recommend_btn = QPushButton("前往推薦分析工作區")
+        self.nav_to_recommend_btn.setProperty("variant", "secondary")
+        self.nav_to_recommend_btn.clicked.connect(lambda: self.navigate_to_drilldown_target("recommendation"))
+
+        nav_buttons_row.addWidget(self.nav_to_update_btn)
+        nav_buttons_row.addWidget(self.nav_to_recommend_btn)
+        nav_buttons_row.addStretch()
+        self.advice_empty_layout.addLayout(nav_buttons_row)
+
+        advice_panel.layout.addWidget(self.advice_empty_widget)
+        self.advice_empty_widget.setVisible(False)
+
         content_layout.addWidget(advice_panel)
 
         self.refresh_button = QPushButton("重新載入唯讀工作台")
@@ -584,6 +617,11 @@ class UnifiedDecisionWorkbenchView(QWidget):
         layout.addWidget(title_label)
         layout.addWidget(value_label)
         layout.addWidget(detail_label)
+        if key == "waiting":
+            block.setToolTip(
+                "【等待真實時間】\n"
+                "系統當前正處於 waiting_for_time 階段，Paper Portfolio 正處於第 1 週的累積與驗證中。"
+            )
         self.summary_blocks[key] = block
         self.summary_value_labels[key] = value_label
         self.summary_detail_labels[key] = detail_label
@@ -621,6 +659,13 @@ class UnifiedDecisionWorkbenchView(QWidget):
             self.refresh_button.setEnabled(True)
 
     def navigate_to_drilldown_target(self, target: str) -> bool:
+        if target == "update" and hasattr(self, "navigate_to_update_callback") and self.navigate_to_update_callback:
+            self.navigate_to_update_callback()
+            return True
+        if target == "recommendation" and hasattr(self, "navigate_to_recommendation_callback") and self.navigate_to_recommendation_callback:
+            self.navigate_to_recommendation_callback()
+            return True
+
         legacy_target = WORKBENCH_LEGACY_DRILLDOWN_TARGETS.get(str(target))
         callbacks: dict[str, Callable[[], None] | None] = {
             "daily_decision": self.navigate_to_daily_decision_callback,
@@ -720,14 +765,59 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self._show_initial_detail(dashboard)
         self._resize_tables()
 
+    def _set_advice_state(self, state: str, extra_msg: str = ""):
+        if state == "WAITING_FOR_ADVICE_DTO":
+            self.advice_empty_label.setText(
+                "<b>【狀態：WAITING_FOR_ADVICE_DTO】</b><br/>"
+                "尚未載入 Advice DTO。請先完成資料更新，並至「推薦分析」頁執行策略篩選與保存，或使用下方導引按鈕。"
+            )
+            self.advice_empty_widget.setVisible(True)
+            self.advice_recommendation_table.setVisible(False)
+            self.advice_candidate_label.setVisible(False)
+            self.advice_candidate_table.setVisible(False)
+            self.advice_portfolio_table.setVisible(False)
+            self.advice_summary.setText("等待 AdviceDashboardDTO；UI 不執行 Policy 或核心計算。")
+
+        elif state == "NO_ELIGIBLE_ADVICE":
+            reasons_str = f" | 原因: {extra_msg}" if extra_msg else ""
+            self.advice_empty_label.setText(
+                "<b>【狀態：NO_ELIGIBLE_ADVICE】</b><br/>"
+                f"目前無符合條件之 Advice 建議{reasons_str}。<br/>"
+                "這可能是由於今日策略條件過於嚴格、資料品質未達 Gate 閥值、或可成交性不足所導致的正常空結果。"
+            )
+            self.advice_empty_widget.setVisible(True)
+            self.advice_recommendation_table.setVisible(False)
+            self.advice_candidate_label.setVisible(False)
+            self.advice_candidate_table.setVisible(False)
+            self.advice_portfolio_table.setVisible(False)
+            self.advice_summary.setText("無可用建議；UI 不執行 Policy。")
+
+        elif state == "ADVICE_DTO_ERROR":
+            self.advice_empty_label.setText(
+                "<b>【狀態：ADVICE_DTO_ERROR】</b><br/>"
+                f"載入 Advice DTO 發生錯誤或安全診斷攔截（{extra_msg or 'DTO 載入降級'}）。<br/>"
+                "請點擊下方『重新載入』或檢查底層服務日誌；不可保留可能過期的舊表格而不標示 stale。"
+            )
+            self.advice_empty_widget.setVisible(True)
+            self.advice_recommendation_table.setVisible(False)
+            self.advice_candidate_label.setVisible(False)
+            self.advice_candidate_table.setVisible(False)
+            self.advice_portfolio_table.setVisible(False)
+            self.advice_summary.setText("Advice 載入錯誤或降級。")
+
+        elif state == "READY":
+            self.advice_empty_widget.setVisible(False)
+            self.advice_recommendation_table.setVisible(True)
+            self.advice_candidate_label.setVisible(True)
+            self.advice_candidate_table.setVisible(True)
+            self.advice_portfolio_table.setVisible(True)
+
     def _render_advice(self, dashboard: WorkbenchDashboardDTO) -> None:
         advice = dashboard.advice_dashboard
         if advice is None:
-            self.advice_summary.setText("尚未提供 AdviceDashboardDTO；唯讀工作台不執行 Policy 或核心計算。")
-            self.advice_recommendation_model.set_rows(())
-            self.advice_candidate_model.set_rows(())
-            self.advice_portfolio_model.set_rows(())
+            self._set_advice_state("WAITING_FOR_ADVICE_DTO")
             return
+
         formal_rows = tuple(
             row for row in advice.recommendations
             if row.classification is AdviceClassification.FORMAL_ADVICE
@@ -736,6 +826,14 @@ class UnifiedDecisionWorkbenchView(QWidget):
             row for row in advice.recommendations
             if row.classification is AdviceClassification.PROFESSIONAL_CANDIDATE
         )
+        portfolio_rows = advice.portfolio_rows if hasattr(advice, "portfolio_rows") else ()
+
+        total_rows = len(formal_rows) + len(candidate_rows) + len(portfolio_rows)
+        if total_rows == 0:
+            self._set_advice_state("NO_ELIGIBLE_ADVICE", ", ".join(advice.warnings) or "無合格標的")
+            return
+
+        self._set_advice_state("READY")
         self.advice_summary.setText(
             "Advice 唯讀邊界：僅呈現已注入 AdviceDashboardDTO；"
             f"mode={advice.mode.value} | decision_date={advice.decision_date} | "
@@ -751,7 +849,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         self.advice_recommendation_model.set_rows(formal_rows)
         self.advice_candidate_model.set_rows(candidate_rows)
-        self.advice_portfolio_model.set_rows(advice.portfolio_rows)
+        self.advice_portfolio_model.set_rows(portfolio_rows)
 
     def _show_initial_detail(self, dashboard: WorkbenchDashboardDTO) -> None:
         if self.evidence_feed_model.rowCount() > 0:
@@ -796,7 +894,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.advice_recommendation_model.set_rows(())
         self.advice_candidate_model.set_rows(())
         self.advice_portfolio_model.set_rows(())
-        self.advice_summary.setText("等待 AdviceDashboardDTO；UI 不執行 Policy 或核心計算。")
+        self._set_advice_state("WAITING_FOR_ADVICE_DTO")
         self.review_model.set_rows(())
         self.review_state_label.setText(
             "今日待判讀佇列尚未載入；等待 WorkbenchDashboardDTO。UI 不讀 DB、不執行 replay。"
@@ -829,7 +927,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.advice_recommendation_model.set_rows(())
         self.advice_candidate_model.set_rows(())
         self.advice_portfolio_model.set_rows(())
-        self.advice_summary.setText("Advice 載入降級；UI 不執行 Policy 或核心計算。")
+        self._set_advice_state("ADVICE_DTO_ERROR", error_message)
         self.review_model.set_rows(())
         self.review_state_label.setText(
             "今日待判讀佇列載入降級；請先確認 WorkbenchSourceService 問題。UI 不補 gate。"
@@ -1001,6 +1099,14 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.summary_detail_labels["waiting"].setText(_format_phase0_ratio_text(dashboard))
         self.summary_value_labels["warning"].setText(f"{warning_count} 則")
         self.summary_detail_labels["warning"].setText("降級、缺口與 replay 限制需人工檢查")
+
+        self.summary_blocks["waiting"].setToolTip(
+            "【等待真實時間】\n"
+            "系統當前正處於 waiting_for_time 階段（等待市場真實時間流逝與數據累積）。\n"
+            "此時 Paper Portfolio 正處於第 1 週的資料累積中（Week 1）。\n"
+            "在未滿 1 週之前，持倉損益與大戶籌碼追蹤尚不足以形成穩健的證據，\n"
+            "請耐心等待真實交易日數據陸續更新與回填。"
+        )
         self._apply_summary_block_style("review", "info" if review_count else "ready")
         self._apply_summary_block_style("action", "warning" if action_count else "ready")
         self._apply_summary_block_style("waiting", "warning" if waiting_count else "ready")

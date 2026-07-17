@@ -221,7 +221,7 @@ TAB_INFO = {
         "what": "這是系統內部的 Governance-aware 狀態機監控站，負責監控整個系統的生命週期事件流、健康狀況與核心狀態機演化。",
         "how_to_use": [
             "查看「System State」即時觀測當前系統所處的核心狀態（如 IDLE, THINKING, VALIDATING, APPROVED 等）",
-            "在「Observatory Logs」面板追蹤系統所有模組之間發布和訂閱的 EventBus 消息流",
+            "在「Observatory Logs」面板追蹤系統所有模組之間發布 and 訂閱的 EventBus 消息流",
             "在「System Health」區塊監看內存、I/O 速度以及錯誤率，判斷系統是否有潛在風險",
             "如果系統因異常錯誤而轉入 HALTED 狀態，可在此處觀測引發異常的模組與呼叫棧鏈路"
         ],
@@ -229,16 +229,61 @@ TAB_INFO = {
             "不是日常選股的分析頁面：這是提供給工程維運與策略執行生命週期監控的專業視窗",
             "不修改底層數據：此處僅做事件訂閱與唯讀觀測，點擊不會影響數據庫或交易部位"
         ]
+    },
+    "institutional_flow": {
+        "title": "三大法人數據",
+        "what": "展示外資、投信與自營商的每日買賣超明細，寫入 institutional_flows 表。此數據目前處於治理檢視與尚未啟用狀態。",
+        "how_to_use": [
+            "本分頁目前作為「治理檢視 / 尚未啟用」的唯讀觀測視角，不提供手動更新或下載按鈕。",
+            "若顯示為 MISSING / 尚未匯入，代表目前資料庫無法人資料，不參與策略評分。",
+            "此分頁目前僅供研究與可見性展示，未接線至自動推薦邏輯以防止回測過擬合。"
+        ],
+        "misconceptions": [
+            "三大法人未接線不代表無資料：表存在且可手動匯入，但基於治理政策，尚未正式參與 ScoringEngine 計算。",
+            "買賣超為零不代表正常：若尚未載入，UI 將明確提示為 MISSING，而非誤導地顯示買賣超金額為 0。"
+        ]
+    },
+    "credit_transaction": {
+        "title": "信用交易數據",
+        "what": "展示融資融券餘額與變動，寫入 credit_transactions 表，提供市場散戶籌碼與槓桿資金觀測。目前處於治理檢視與尚未啟用狀態。",
+        "how_to_use": [
+            "本分頁目前作為「治理檢視 / 尚未啟用」的唯讀觀測視角，不提供手動更新或下載按鈕。",
+            "在未匯入時顯示為 MISSING，不假裝融資券餘額為 0 股。"
+        ],
+        "misconceptions": [
+            "融資餘額 0 的精確意義：若無資料，應顯示 MISSING，若真正交易額為 0，始可呈現 0 值。"
+        ]
+    },
+    "tdcc_shareholding": {
+        "title": "集保股權數據",
+        "what": "展示每週集保戶股權分散數據，寫入 tdcc_shareholding 表，追蹤大戶（千張）與散戶持股比例變化。目前處於治理檢視與尚未啟用狀態。",
+        "how_to_use": [
+            "本分頁目前作為「治理檢視 / 尚未啟用」的唯讀觀測視角，不提供手動更新或下載按鈕。",
+            "以每週為單位載入集保分散度，查看千張大戶比例、散戶比例與分散度指數 bp。"
+        ],
+        "misconceptions": [
+            "集保非每日更新：通常為每週五盤後公告，更新日期應與每日股價區分，不可直接聯動最新股價日。"
+        ]
+    },
+    "scheduler_status": {
+        "title": "自動更新排程狀態",
+        "what": "展示系統自動化更新排程 (Scheduler) 的狀態機與執行日誌，包括 freshness 差距與品質一致性分析。",
+        "how_to_use": [
+            "查看當前 Scheduler 是否被安全鎖定（fail-closed），並瀏覽最新的背景排程執行日誌。"
+        ],
+        "misconceptions": [
+            "未獲明確授權前 scheduler 禁止啟用：當前 scheduler_allowed 固定為 false，此頁面僅作為唯讀狀態監控。"
+        ]
     }
 }
 
 def get_tab_info(tab_key: str) -> dict:
     """
     獲取指定 Tab 的說明資訊
-    
+
     Args:
         tab_key: Tab 的 key（例如 "update", "recommendation"）
-    
+
     Returns:
         包含 title, what, how_to_use, misconceptions 的字典
     """

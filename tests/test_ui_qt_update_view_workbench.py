@@ -31,7 +31,7 @@ class FakeUpdateService:
         self.calls = []
         self.config = FakeConfig()
         self.scripts_dir = Path("scripts")
-        
+
     def export_table_to_csv(self, table_name, target_path, start_date=None, end_date=None):
         self.calls.append(("export_table_to_csv", table_name, target_path, start_date, end_date))
         return {"success": True, "message": "export ok"}
@@ -329,9 +329,13 @@ def test_update_view_uses_workbench_navigation():
         "broker_branch",
         "technical",
         "monthly_revenue",
+        "institutional_flow",
+        "credit_transaction",
+        "tdcc_shareholding",
+        "scheduler_status",
         "db_inspector",
     ]
-    assert view.content_stack.count() == 8
+    assert view.content_stack.count() == 12
     assert view.nav_list.currentRow() == 0
 
 
@@ -624,13 +628,13 @@ def test_manual_daily_update_also_fetches_tpex_daily_price(monkeypatch):
 def test_update_view_with_config_instantiates_inspector_widget(tmp_path):
     from data_module.config import TWStockConfig
     from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
-    
+
     # 建立臨時路徑
     data_root = tmp_path / "data"
     output_root = tmp_path / "output"
     data_root.mkdir()
     output_root.mkdir()
-    
+
     # 建立隔離的 config
     config = TWStockConfig(
         data_root=data_root,
@@ -638,19 +642,19 @@ def test_update_view_with_config_instantiates_inspector_widget(tmp_path):
         profile="test"
     )
     config.use_sqlite = True
-    
+
     # 注入到 FakeUpdateService
     service = FakeUpdateService()
     service.config = config
-    
+
     # 實例化 view
     app()
     view = _TestableUpdateView(service)
-    
+
     # 驗證 sqlite_inspector_widget 是否被成功建立
-    assert view.nav_list.count() == 8
+    assert view.nav_list.count() == 12
     # 最後一頁應該是 SqliteInspectorWidget 的實例
-    last_widget = view.content_stack.widget(7)
+    last_widget = view.content_stack.widget(11)
     assert isinstance(last_widget, SqliteInspectorWidget)
 
 
@@ -765,10 +769,10 @@ class FakeInspectorService:
     def __init__(self, total=250):
         self.total = total
         self.last_query = {}
-        
+
     def is_enabled(self):
         return True
-        
+
     def get_tables(self):
         return ["daily_prices", "broker_flows"]
 
@@ -776,7 +780,7 @@ class FakeInspectorService:
         if table_name == "broker_flows" and column_name == "分點名稱":
             return ["凱基台北", "美商高盛"]
         return []
-        
+
     def get_table_info(self, table_name):
         return {
             "success": True,
@@ -786,13 +790,13 @@ class FakeInspectorService:
             "earliest_date": "2026-05-01",
             "latest_date": "2026-05-30"
         }
-        
+
     def get_table_schema(self, table_name):
         return pd.DataFrame([{"cid": 0, "name": "日期", "type": "TEXT"}])
-        
+
     def query_table_data_count(self, **kwargs):
         return self.total
-        
+
     def query_table_data(self, table_name, **kwargs):
         self.last_query = kwargs
         limit = kwargs.get("limit", 100)
@@ -804,7 +808,7 @@ class SynchronousTaskWorker:
         self.task_function = task_function
         self.args = args
         self.kwargs = kwargs
-        
+
         class DummySignal:
             def __init__(self, name):
                 self.name = name
@@ -815,7 +819,7 @@ class SynchronousTaskWorker:
                 print(f"[DummySignal] emitting {self.name}")
                 for slot in self.slots:
                     slot(*args)
-        
+
         self.started = DummySignal("started")
         self.finished = DummySignal("finished")
         self.error = DummySignal("error")
@@ -924,7 +928,7 @@ def test_sqlite_inspector_next_page_uses_offset(monkeypatch):
     from PySide6.QtWidgets import QMessageBox
     monkeypatch.setattr(sqlite_inspector_widget, "TaskWorker", SynchronousTaskWorker)
     monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
-    
+
     app()
     print("[Test] app() initialized")
     from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
@@ -937,7 +941,7 @@ def test_sqlite_inspector_next_page_uses_offset(monkeypatch):
     print("[Test] calling _request_page")
     widget._request_page(load_schema=False)
     print("[Test] _request_page returned")
-    
+
     assert service.last_query.get("offset") == 100
 
 
@@ -947,7 +951,7 @@ def test_filter_reload_resets_to_first_page(monkeypatch):
     from PySide6.QtWidgets import QMessageBox
     monkeypatch.setattr(sqlite_inspector_widget, "TaskWorker", SynchronousTaskWorker)
     monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
-    
+
     app()
     from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
     service = FakeInspectorService(total=250)
@@ -957,7 +961,7 @@ def test_filter_reload_resets_to_first_page(monkeypatch):
     widget.current_page = 4
     widget.stock_code_input.setText("2330")
     widget._load_current_table_data()
-    
+
     assert widget.current_page == 1
 
 

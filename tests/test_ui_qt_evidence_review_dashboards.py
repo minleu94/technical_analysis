@@ -177,8 +177,27 @@ def test_evidence_review_view_contains_read_only_tabs_including_scheduled_status
     )
 
     labels = [view.tabs.tabText(index) for index in range(view.tabs.count())]
-    assert labels == ["前瞻證據", "研究落差", "訊號衰退", "決策品質", "覆盤歷史", "排程狀態"]
-    assert "不是買賣建議" in view.boundary_banner.text()
+    assert labels == ["今日決策", "歷史驗證", "資料缺口"]
+
+    # 驗證嵌套的子 Tab 項目是否齊全
+    # 今日決策
+    today_widget = view.tabs.widget(0)
+    today_tabs = today_widget.findChild(QTabWidget)
+    assert today_tabs is not None
+    today_labels = [today_tabs.tabText(i) for i in range(today_tabs.count())]
+    assert "決策品質" in today_labels
+    assert "排程狀態" in today_labels
+
+    # 歷史驗證
+    hist_widget = view.tabs.widget(1)
+    hist_tabs = hist_widget.findChild(QTabWidget)
+    assert hist_tabs is not None
+    hist_labels = [hist_tabs.tabText(i) for i in range(hist_tabs.count())]
+    assert "前瞻證據" in hist_labels
+    assert "訊號衰退" in hist_labels
+    assert "覆盤歷史" in hist_labels
+
+    assert "任何 demote / retire" in view.boundary_banner.text()
 
 
 def test_evidence_review_view_shows_current_evidence_database_path() -> None:
