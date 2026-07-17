@@ -44,3 +44,29 @@
 - 分離記錄的 owner、日期、結論與明確 downstream eligibility。
 
 在這些欄位全數完成前，任何 `decision_ready_candidate` 僅表示該次列資料通過候選診斷，不能改寫為 accepted feature。
+
+## 4. 2026-07-17 Owner 候選稽核紀錄（append-only）
+
+### Owner 使用意圖聲明
+
+Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研究、可自動抓取與保存、不可再散布。此為專案 Owner 的使用意圖，**不是**來源方授權、開放資料條款、書面許可或正式 `accepted` 決議的替代證據；因此所有來源的 `human decision` 仍為 `requires_human_acceptance`，`downstream eligibility` 仍為 `none`。
+
+### 單日唯讀候選探測
+
+- 執行日期：2026-07-17（探測資料日：2026-07-16）。
+- 指令：`.\.venv\Scripts\python.exe scripts\run_p0_candidate_audit.py --decision-date 2026-07-16 --output <isolated-temp-output>`。
+- 寫入邊界：不寫正式資料庫；`production_scheduler_allowed=false`；不改 `ScoringEngine`、Advice、Portfolio 或交易／排程路徑。
+- 驗證：相關 pytest 28 passed；信用交易候選解析器已對齊 TWSE 現行重複欄名的明細表結構。
+
+| source id | 本次候選狀態 | 筆數 | 品質／待補證據 |
+|---|---|---:|---|
+| `institutional_flows` | `observed_candidate` | 13,821 | `degraded`；僅有 first-observed time，缺正式 publication timestamp。 |
+| `credit_transactions` | `observed_candidate` | 1,284 | `degraded`；僅有 first-observed time，缺正式 publication timestamp。 |
+| `tdcc_shareholding` | `observed_candidate` | 68,170 | `degraded`；僅有 first-observed time，缺正式 publication timestamp。 |
+| 其餘 10 項 P0 | `not_started_no_candidate_adapter` | 0 | 尚未建立 candidate adapter；不得據此推定來源不可用、品質合格或已接受。 |
+
+### 後續續作入口
+
+1. 先取得逐來源的授權／條款、rate limit、正式公告時間與修訂政策證據。
+2. 為尚未接線的 10 項建立 source-specific candidate adapter、raw manifest、quarantine 與可得時間契約。
+3. 以多個實際日期累積 coverage、schema drift、缺漏與修訂證據後，再由 Owner 逐項作出具名決議。

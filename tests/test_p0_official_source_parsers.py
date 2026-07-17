@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -69,6 +70,44 @@ def test_twse_credit_parser_preserves_missing_as_missing_not_zero() -> None:
     assert quantities["margin_balance_shares"] == 2500
     assert "short_balance_shares" not in quantities
     assert "missing_quantity:short_balance_shares" in result.accepted[0].warnings
+
+
+def test_twse_credit_parser_accepts_current_duplicate_column_schema() -> None:
+    payload = {
+        "date": "20260716",
+        "tables": [
+            {
+                "fields": [
+                    "代號", "名稱", "買進", "賣出", "現金償還", "前日餘額", "今日餘額",
+                    "次一營業日限額", "買進", "賣出", "現券償還", "前日餘額", "今日餘額",
+                    "次一營業日限額", "資券互抵", "註記",
+                ],
+                "data": [["2330", "台積電", "100", "20", "1", "400", "479", "999", "3", "4", "0", "20", "24", "999", "0", ""]],
+            }
+        ],
+    }
+    envelope = RawFetchEnvelope(
+        source_id="twse_credit",
+        source_version="twse-MI_MARGN.v1",
+        endpoint_id="twse:MI_MARGN",
+        request_parameters={"date": "20260716"},
+        fetched_at=FETCHED_AT,
+        http_status=200,
+        http_headers={"Content-Type": "application/json"},
+        payload=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+    )
+
+    result = parse_twse_credit(envelope)
+
+    assert result.raw_row_count == 1
+    assert result.accepted_row_count == 1
+    assert result.quarantine_row_count == 0
+    assert result.accepted[0].to_dict()["quantities"] == {
+        "margin_balance_shares": 479,
+        "margin_purchase_shares": 100,
+        "short_balance_shares": 24,
+        "short_sale_shares": 4,
+    }
 
 
 def test_tdcc_period_end_is_not_promoted_to_publication_time() -> None:

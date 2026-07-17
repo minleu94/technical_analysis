@@ -245,6 +245,7 @@
 | [GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md](../06_qa/GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md) | Gate 2–7 純工程結案證據：35/35 requirements、獨立 commit slices、驗證結果與 formal product closeout 邊界。 |
 | [GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) | 人工補件、資料授權、真實時間、evidence maturity、ML revalidation 與正式核准的持續工作清單。 |
 | [GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md) | 後續 agent 的 Gate 2–7 接手入口：append-only registry、Workbench projection、CLI 與文件導覽。 |
+| [V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md](../06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md) | V2.3 P0 資料來源逐項人工接受台帳；含 Owner 候選稽核紀錄與尚待補證據。 |
 | [GATE_7_ML_SHADOW_ENGINEERING.md](../06_qa/GATE_7_ML_SHADOW_ENGINEERING.md) | 結構化傳統 ML shadow challenger 的資料凍結、available-date、purged walk-forward、calibration、drift、promotion review 與重驗規則。 |
 | [V2_1_ENGINEERING_READINESS_2026_07_12.md](../06_qa/V2_1_ENGINEERING_READINESS_2026_07_12.md) | V2.1 engineering readiness：記錄 `592d3db` 的 Guided 三重門檻、最大持倉 `1..8`、Professional candidate 分區、focused suite、人工 UI 文案 smoke 與回退錨點。 |
 | [V2_1_FORMAL_CLOSEOUT_2026_07_12.md](../06_qa/V2_1_FORMAL_CLOSEOUT_2026_07_12.md) | V2.1 formal closeout approval record：release owner 已於 2026-07-12 14:51:42 -07:00 `approve`，狀態為 `formal_closeout_complete`；此 bounded Advice closeout 不代表投資有效性、broker、scheduler、P0 source acceptance 或 ML production。 |
@@ -320,6 +321,7 @@
 | [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md) | 目前 8 個頂層工作區的完整操作手冊，包含安裝、參數、結果判讀、安全限制與排錯。 |
 | [EVIDENCE_SCHEDULED_MORNING_CHECK.md](../07_guides/EVIDENCE_SCHEDULED_MORNING_CHECK.md) | Evidence scheduled dry-run 的每日早晨人工檢查步驟，包含 CMD + `schtasks.exe` 查詢、Codex read-only 摘要、freshness status、dry-run report 與停用方式。 |
 | [V2_2_WEEKLY_REVIEW_RUNBOOK.md](../07_guides/V2_2_WEEKLY_REVIEW_RUNBOOK.md) | V2.2 三週人工 Evidence Review 的 working-copy DB 安全操作、sidecar collection、append-only history 與 formal closeout 邊界。 |
+| [P0_DAILY_SOURCE_CANDIDATE_RUNBOOK.md](../07_guides/P0_DAILY_SOURCE_CANDIDATE_RUNBOOK.md) | 13 項 P0 候選資料來源的唯讀品質稽核指令、結果判讀與排程隔離邊界。 |
 | [QUICK_START.md](../07_guides/QUICK_START.md) | 快速開始。 |
 | [QUICK_REFERENCE.md](../07_guides/QUICK_REFERENCE.md) | 常用命令與快速查找。 |
 | [INSTALL_GUIDE.md](../07_guides/INSTALL_GUIDE.md) | 安裝與環境設置。 |

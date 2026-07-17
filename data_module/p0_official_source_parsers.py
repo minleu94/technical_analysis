@@ -194,6 +194,74 @@ def parse_twse_institutional(envelope: RawFetchEnvelope) -> OfficialParserResult
 
 
 def parse_twse_credit(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    payload = _json_payload(envelope)
+    tables = payload.get("tables")
+    if not isinstance(tables, list):
+        raise ValueError("schema drift: tables missing")
+
+    # TWSE 現行信用交易明細表使用兩組重複的「買進／賣出」欄名，
+    # 因此不能以欄名 zip 後再取值；明細表的欄位位置才是穩定契約。
+    detail_table = next(
+        (
+            table
+            for table in tables
+            if isinstance(table, Mapping)
+            and isinstance(table.get("fields"), list)
+            and isinstance(table.get("data"), list)
+            and "代號" in table["fields"]
+            and "名稱" in table["fields"]
+        ),
+        None,
+    )
+    if detail_table is not None:
+        publication_at = _parse_timestamp(payload.get("publicationTime"))
+        observation_date = _parse_yyyymmdd(payload.get("date"))
+        accepted: list[NormalizedP0Observation] = []
+        quarantine: list[QuarantineRecord] = []
+        rows = detail_table["data"]
+        for raw_row in rows:
+            if not isinstance(raw_row, list):
+                continue
+            row = {str(index): value for index, value in enumerate(raw_row)}
+            try:
+                if len(raw_row) < 13:
+                    raise ValueError("credit detail row has insufficient columns")
+                symbol = str(raw_row[0]).strip()
+                if not symbol:
+                    raise ValueError("missing symbol")
+                accepted.append(
+                    NormalizedP0Observation.build(
+                        source_id=envelope.source_id,
+                        source_version=envelope.source_version,
+                        symbol=symbol,
+                        observation_date=observation_date,
+                        period="daily",
+                        publication_at=publication_at,
+                        first_observed_at=envelope.fetched_at,
+                        raw_payload_sha256=_raw_row_hash(row),
+                        quantities={
+                            "margin_purchase_shares": _strict_int(raw_row[2]),
+                            "margin_balance_shares": _strict_int(raw_row[6]),
+                            "short_sale_shares": _strict_int(raw_row[9]),
+                            "short_balance_shares": _strict_int(raw_row[12]),
+                        },
+                    )
+                )
+            except (TypeError, ValueError) as exc:
+                quarantine.append(
+                    _quarantine(
+                        envelope,
+                        row,
+                        reason_code="malformed_credit_quantity",
+                        detail=str(exc),
+                    )
+                )
+        return OfficialParserResult(
+            accepted=tuple(accepted),
+            quarantine=tuple(quarantine),
+            raw_row_count=len(rows),
+        )
+
     field_map = {
         "margin_purchase_shares": "融資買進",
         "margin_balance_shares": "融資今日餘額",
