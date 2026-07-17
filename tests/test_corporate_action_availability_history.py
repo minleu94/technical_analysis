@@ -331,21 +331,23 @@ def test_timeline_cli_rejects_unreadable_json_before_creating_output(
     assert not output_root.exists()
 
 
-def test_timeline_cli_rejects_invalid_as_of_date_before_creating_output(
+def test_timeline_cli_rejects_invalid_as_of_date_before_reading_json_or_creating_output(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    events = tmp_path / "events.json"
-    coverage = tmp_path / "coverage.json"
     output_root = tmp_path / "staging"
-    events.write_text(json.dumps([_event()]), encoding="utf-8")
-    coverage.write_text("[]", encoding="utf-8")
     cli = importlib.import_module("scripts.build_corporate_action_availability_history")
+
+    def fail_if_json_is_loaded(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        raise AssertionError("json_loader_called_before_as_of_date_validation")
+
+    monkeypatch.setattr(cli, "_load_json_rows", fail_if_json_is_loaded)
 
     with pytest.raises(ValueError, match="^corporate_action_as_of_date_invalid$"):
         cli.main(
             [
-                "--evidence-json", str(events),
-                "--coverage-json", str(coverage),
+                "--evidence-json", str(tmp_path / "events.json"),
+                "--coverage-json", str(tmp_path / "coverage.json"),
                 "--as-of-date", "2025-02-30",
                 "--output-root", str(output_root),
             ]

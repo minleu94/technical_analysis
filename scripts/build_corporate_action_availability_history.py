@@ -47,10 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--as-of-date", required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     args = parser.parse_args(argv)
+    as_of_date = _parse_as_of_date(args.as_of_date)
     result = build_corporate_action_availability_history(
         evidence_rows=_load_json_rows(args.evidence_json, label="evidence"),
         coverage_rows=_load_json_rows(args.coverage_json, label="coverage"),
-        as_of_date=_parse_as_of_date(args.as_of_date),
+        as_of_date=as_of_date,
     )
     outputs = write_corporate_action_availability_history(
         result,
