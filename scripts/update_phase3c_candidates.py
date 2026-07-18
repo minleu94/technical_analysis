@@ -197,7 +197,6 @@ def update_phase3c_candidates(decision_date: date, dry_run: bool = True, db_path
             return
         config = TWStockConfig()
         config.db_file = candidate_db
-        config.db_path = candidate_db
         db_manager = DBManager(config)
         db_manager.ensure_phase3c_candidate_tables()
     else:
@@ -211,7 +210,7 @@ def update_phase3c_candidates(decision_date: date, dry_run: bool = True, db_path
         logger.warning(f"  [三大法人] {decision_date} 無資料或抓取失敗")
     else:
         logger.info(f"  [三大法人] 取得 {len(df_inst)} 筆資料")
-        if not dry_run:
+        if db_manager is not None:
             db_manager.write_dataframe("institutional_flows", df_inst, if_exists="append")
 
     # 2. 信用交易
@@ -221,7 +220,7 @@ def update_phase3c_candidates(decision_date: date, dry_run: bool = True, db_path
         logger.warning(f"  [信用交易] {decision_date} 無資料或抓取失敗")
     else:
         logger.info(f"  [信用交易] 取得 {len(df_credit)} 筆資料")
-        if not dry_run:
+        if db_manager is not None:
             db_manager.write_dataframe("credit_transactions", df_credit, if_exists="append")
 
     # 3. TDCC 集保庫存
@@ -231,7 +230,7 @@ def update_phase3c_candidates(decision_date: date, dry_run: bool = True, db_path
         logger.warning("  [TDCC] 無資料、日期不符或抓取失敗")
     else:
         logger.info(f"  [TDCC] 取得 {len(df_tdcc)} 筆資料")
-        if not dry_run:
+        if db_manager is not None:
             db_manager.write_dataframe("tdcc_shareholding", df_tdcc, if_exists="append")
 
     logger.info("=== Phase 3C 資料更新完成 ===")
