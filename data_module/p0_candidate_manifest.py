@@ -134,6 +134,14 @@ class QuarantineRecord:
     reason_code: str
     detail: str
 
+    def __post_init__(self) -> None:
+        if not all((self.run_id, self.source_id, self.source_version, self.reason_code, self.detail)):
+            raise ValueError("quarantine identity and reason are required")
+        if len(self.raw_row_sha256) != 64 or any(
+            char not in "0123456789abcdef" for char in self.raw_row_sha256.lower()
+        ):
+            raise ValueError("raw_row_sha256 必須是 64 字元 SHA-256")
+
     @classmethod
     def from_raw_row(
         cls,

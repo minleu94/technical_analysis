@@ -12,7 +12,7 @@ from data_module.p0_candidate_repository import (
     ProductionPathRejectedError,
     validate_candidate_working_copy_path,
 )
-from data_module.p0_candidate_manifest import RawPayloadManifest
+from data_module.p0_candidate_manifest import QuarantineRecord, RawPayloadManifest
 from data_module.p0_source_candidate_contracts import NormalizedP0Observation
 
 
@@ -174,3 +174,29 @@ def test_manifest_direct_construction_remains_fail_closed(
 
     with pytest.raises(ValueError, match=message):
         replace(manifest, **{field: value})
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("raw_row_sha256", "invalid", "raw_row_sha256"),
+        ("reason_code", "", "identity and reason"),
+    ],
+)
+def test_quarantine_record_direct_construction_remains_fail_closed(
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    payload = {
+        "run_id": "run-1",
+        "source_id": "twse_institutional",
+        "source_version": "twse-T86.v1",
+        "raw_row_sha256": "a" * 64,
+        "reason_code": "malformed_row",
+        "detail": "invalid quantity",
+    }
+    payload[field] = value
+
+    with pytest.raises(ValueError, match=message):
+        QuarantineRecord(**payload)
