@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 
@@ -65,6 +66,7 @@ def _projection() -> dict[str, object]:
             "input_evaluation_row_count": 0,
             "feature_names": ["rsi_normalized_bp", "adx_normalized_bp"],
             "max_label_available_date": "2025-02-18",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         },
     }
 
@@ -124,6 +126,68 @@ def test_explicit_projection_path_is_read_only(tmp_path: Path) -> None:
     assert console.source_reference == str(projection_path.resolve())
     assert console.pipeline[3].artifact_hash == "sha256:" + sha256(before[2]).hexdigest()
     assert before == after
+
+
+def test_projection_freshness_is_observed_within_seven_days() -> None:
+    payload = _projection()
+    payload["blockers"] = []
+    payload["lineage"]["generated_at"] = "2026-07-14T08:00:00Z"  # type: ignore[index]
+
+    console = ResearchConsoleSourceService(
+        projection_provider=lambda: payload,
+        clock=lambda: datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+    ).inspect()
+
+    assert console.overall_status == "observed"
+    assert "projection_stale" not in console.blockers
+
+
+def test_stale_projection_is_visible_but_degraded() -> None:
+    payload = _projection()
+    payload["blockers"] = []
+    payload["lineage"]["generated_at"] = "2026-07-01T08:00:00Z"  # type: ignore[index]
+
+    console = ResearchConsoleSourceService(
+        projection_provider=lambda: payload,
+        clock=lambda: datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+    ).inspect()
+
+    assert console.overall_status == "degraded"
+    assert console.blockers == ("projection_stale",)
+    assert console.pipeline[3].identity == payload["identity"]["research_run_id"]  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    ("generated_at", "expected"),
+    [
+        (None, "projection_generated_at_missing"),
+        ("not-a-timestamp", "projection_generated_at_invalid"),
+        ("2026-07-17T09:00:01Z", "projection_generated_at_future"),
+    ],
+)
+def test_projection_timestamp_diagnostics_fail_degraded(
+    generated_at: str | None,
+    expected: str,
+) -> None:
+    payload = _projection()
+    payload["blockers"] = []
+    if generated_at is None:
+        payload["lineage"].pop("generated_at", None)  # type: ignore[union-attr]
+    else:
+        payload["lineage"]["generated_at"] = generated_at  # type: ignore[index]
+
+    console = ResearchConsoleSourceService(
+        projection_provider=lambda: payload,
+        clock=lambda: datetime(2026, 7, 17, 8, 0, tzinfo=timezone.utc),
+    ).inspect()
+
+    assert console.overall_status == "degraded"
+    assert console.blockers == (expected,)
+
+
+def test_projection_age_threshold_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="max_projection_age"):
+        ResearchConsoleSourceService(max_projection_age=timedelta(0))
 
 
 def test_invalid_or_unsafe_projection_fails_closed() -> None:

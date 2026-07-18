@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from app_module.research_console_dtos import (
 
 ProjectionProvider = Callable[[], Mapping[str, object] | None]
 GovernanceProvider = Callable[[], Mapping[str, object] | None]
+ClockProvider = Callable[[], datetime]
 
 P0_SOURCE_IDS = (
     "corporate_action.ex_dividend_timeline",
@@ -51,6 +53,9 @@ _REQUIRED_DISABLED_APPLY_FLAGS = (
     "apply_to_exit",
 )
 
+_DEFAULT_MAX_PROJECTION_AGE = timedelta(days=7)
+_FUTURE_TIMESTAMP_TOLERANCE = timedelta(minutes=5)
+
 
 class ResearchConsoleSourceService:
     """只讀取呼叫端注入 payload 或顯式 JSON artifact。"""
@@ -61,12 +66,18 @@ class ResearchConsoleSourceService:
         projection_provider: ProjectionProvider | None = None,
         projection_path: str | Path | None = None,
         governance_provider: GovernanceProvider | None = None,
+        clock: ClockProvider | None = None,
+        max_projection_age: timedelta = _DEFAULT_MAX_PROJECTION_AGE,
     ) -> None:
         if projection_provider is not None and projection_path is not None:
             raise ValueError("use either projection_provider or projection_path")
         self._projection_provider = projection_provider
         self._projection_path = Path(projection_path).resolve() if projection_path is not None else None
         self._governance_provider = governance_provider
+        if max_projection_age <= timedelta(0):
+            raise ValueError("max_projection_age must be positive")
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._max_projection_age = max_projection_age
 
     def inspect(self) -> ResearchConsoleDTO:
         try:
@@ -104,7 +115,7 @@ class ResearchConsoleSourceService:
         status = _mapping(payload, "status")
         metrics = _mapping(payload, "frozen_metrics")
         lineage = _mapping(payload, "lineage")
-        blockers = _string_tuple(payload.get("blockers"))
+        blockers = _string_tuple(payload.get("blockers")) + self._freshness_blockers(lineage)
         governance = self._governance_provider() if self._governance_provider is not None else None
         if governance is not None and not isinstance(governance, Mapping):
             raise TypeError("governance projection must be an object")
@@ -172,6 +183,26 @@ class ResearchConsoleSourceService:
             frozen_metrics=metrics,
             blockers=blockers,
         )
+
+    def _freshness_blockers(self, lineage: Mapping[str, object]) -> tuple[str, ...]:
+        generated_at = _optional_string(lineage.get("generated_at"))
+        if generated_at is None:
+            return ("projection_generated_at_missing",)
+        try:
+            parsed = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+        except ValueError:
+            return ("projection_generated_at_invalid",)
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return ("projection_generated_at_invalid",)
+        now = self._clock()
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("clock must return a timezone-aware datetime")
+        age = now.astimezone(timezone.utc) - parsed.astimezone(timezone.utc)
+        if age < -_FUTURE_TIMESTAMP_TOLERANCE:
+            return ("projection_generated_at_future",)
+        if age > self._max_projection_age:
+            return ("projection_stale",)
+        return ()
 
     def _missing(self, blocker: str, *, overall_status: str = "missing") -> ResearchConsoleDTO:
         return ResearchConsoleDTO(
