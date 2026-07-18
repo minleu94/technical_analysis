@@ -24,6 +24,9 @@ def _probe_report() -> dict[str, object]:
                 "timestamp_evidence": "first_observed_only",
                 "raw_row_count": 10,
                 "accepted_row_count": 10,
+                "duplicate_row_count": 0,
+                "quarantine_row_count": 0,
+                "blocked_row_count": 0,
                 "payload_sha256": "a" * 64,
             },
             {
@@ -32,6 +35,9 @@ def _probe_report() -> dict[str, object]:
                 "timestamp_evidence": "official_publication_timestamp",
                 "raw_row_count": 8,
                 "accepted_row_count": 8,
+                "duplicate_row_count": 0,
+                "quarantine_row_count": 0,
+                "blocked_row_count": 0,
                 "payload_sha256": "b" * 64,
             },
             {
@@ -40,6 +46,9 @@ def _probe_report() -> dict[str, object]:
                 "timestamp_evidence": "first_observed_only",
                 "raw_row_count": 6,
                 "accepted_row_count": 6,
+                "duplicate_row_count": 0,
+                "quarantine_row_count": 0,
+                "blocked_row_count": 0,
                 "payload_sha256": "c" * 64,
             },
         ],
@@ -112,4 +121,25 @@ def test_unknown_probe_source_id_fails_closed() -> None:
     report["sources"].append({"source_id": "unknown"})  # type: ignore[union-attr]
 
     with pytest.raises(ValueError, match="unknown probe source_id"):
+        build_p0_candidate_audit(date(2026, 7, 16), probe_report=report)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("raw_row_count", True, "raw_row_count"),
+        ("accepted_row_count", -1, "accepted_row_count"),
+        ("accepted_row_count", 9, "row conservation"),
+        ("payload_sha256", "not-a-digest", "payload_sha256"),
+    ],
+)
+def test_matched_probe_count_and_hash_boundaries_fail_closed(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    report = _probe_report()
+    report["sources"][0][field] = value  # type: ignore[index]
+
+    with pytest.raises(ValueError, match=message):
         build_p0_candidate_audit(date(2026, 7, 16), probe_report=report)

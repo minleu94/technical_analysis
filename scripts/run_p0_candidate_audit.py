@@ -66,14 +66,15 @@ def build_p0_candidate_audit(
                 }
             )
             continue
+        counts = _validated_probe_counts(probe)
         timestamp_evidence = str(probe.get("timestamp_evidence", "unavailable"))
         items.append(
             {
                 "source_id": source_id,
                 "audit_status": "observed_candidate" if probe.get("schema_status") == "matched" else "schema_blocked",
                 "quality_status": "verified" if timestamp_evidence == "official_publication_timestamp" else "degraded",
-                "row_count": int(probe.get("raw_row_count", 0)),
-                "accepted_row_count": int(probe.get("accepted_row_count", 0)),
+                "row_count": counts["raw_row_count"],
+                "accepted_row_count": counts["accepted_row_count"],
                 "timestamp_evidence": timestamp_evidence,
                 "payload_sha256": probe.get("payload_sha256"),
                 "blockers": (["official_publication_timestamp_missing"] if timestamp_evidence == "first_observed_only" else []),
@@ -126,8 +127,46 @@ def _validate_probe_report(
             raise ValueError(f"duplicate probe source_id: {source_id}")
         if source_id not in LIVE_PROBE_SOURCE_MAP.values():
             raise ValueError(f"unknown probe source_id: {source_id}")
+        _validated_probe_counts(raw_item)
+        _validate_payload_sha256(raw_item)
         probe_items[source_id] = dict(raw_item)
     return probe_items
+
+
+def _validated_probe_counts(probe: Mapping[str, Any]) -> dict[str, int]:
+    names = (
+        "raw_row_count",
+        "accepted_row_count",
+        "duplicate_row_count",
+        "quarantine_row_count",
+        "blocked_row_count",
+    )
+    counts: dict[str, int] = {}
+    for name in names:
+        value = probe.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"probe {name} must be a non-negative integer")
+        counts[name] = value
+    classified = (
+        counts["accepted_row_count"]
+        + counts["duplicate_row_count"]
+        + counts["quarantine_row_count"]
+        + counts["blocked_row_count"]
+    )
+    if counts["raw_row_count"] != classified:
+        raise ValueError("probe row conservation violated")
+    return counts
+
+
+def _validate_payload_sha256(probe: Mapping[str, Any]) -> None:
+    payload_sha256 = probe.get("payload_sha256")
+    if probe.get("schema_status") == "matched":
+        if not isinstance(payload_sha256, str) or len(payload_sha256) != 64:
+            raise ValueError("matched probe payload_sha256 must be a SHA-256 hex digest")
+        try:
+            int(payload_sha256, 16)
+        except ValueError as exc:
+            raise ValueError("matched probe payload_sha256 must be a SHA-256 hex digest") from exc
 
 
 def _probe_report_sha256(report: Mapping[str, Any]) -> str:
