@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -152,3 +153,24 @@ def test_repository_duplicate_is_idempotent_and_conflict_is_quarantined(tmp_path
             "SELECT reason_code FROM p0_candidate_quarantine"
         ).fetchall()
     assert quarantine == [("identity_content_conflict",)]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("raw_row_count", -1, "row counts"),
+        ("accepted_row_count", 0, "row conservation"),
+        ("payload_sha256", "not-a-digest", "payload_sha256"),
+        ("payload_size_bytes", -1, "payload_size_bytes"),
+        ("payload_size_bytes", True, "payload_size_bytes"),
+    ],
+)
+def test_manifest_direct_construction_remains_fail_closed(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    manifest = _manifest(run_id="run-1")
+
+    with pytest.raises(ValueError, match=message):
+        replace(manifest, **{field: value})

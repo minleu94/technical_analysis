@@ -21,3 +21,5 @@
 輸出的 `lineage` 會保存 `probe_date`、`probe_mode=bounded_official_read_only` 與 canonical `probe_report_sha256`。Builder 會在投影前拒絕日期、mode、license/source acceptance、downstream eligibility、scheduler 或 human decision 邊界不符，以及重複 `source_id`；hash 對 source row 排序不敏感，但不代表來源已正式接受。
 
 已標記 `schema_status=matched` 的 probe row 必須有 64 位 SHA-256 payload digest，並維持 `raw_row_count = accepted + duplicate + quarantine + blocked`；缺欄、布林值、負值、非整數或不守恆都會 fail-closed。這些是 candidate diagnostics 的資料品質邊界，不會提升 source acceptance 或 formal evidence 狀態。
+
+即使未經 `capture()` 而直接建立 raw manifest，manifest 本身也會重新檢查 timezone、非負整數 counts、row conservation、payload size 與 SHA-256 digest 格式；因此 candidate repository 不會接受由直接建構繞過的無效 provenance。

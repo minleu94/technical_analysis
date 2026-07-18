@@ -38,6 +38,30 @@ class RawPayloadManifest:
     quarantine_row_count: int
     blocked_row_count: int
 
+    def __post_init__(self) -> None:
+        _require_aware(self.fetched_at)
+        counts = (
+            self.raw_row_count,
+            self.accepted_row_count,
+            self.duplicate_row_count,
+            self.quarantine_row_count,
+            self.blocked_row_count,
+        )
+        if any(isinstance(count, bool) or not isinstance(count, int) or count < 0 for count in counts):
+            raise ValueError("row counts 必須為非負 integer")
+        if self.raw_row_count != sum(counts[1:]):
+            raise ValueError("row conservation violated")
+        if (
+            isinstance(self.payload_size_bytes, bool)
+            or not isinstance(self.payload_size_bytes, int)
+            or self.payload_size_bytes < 0
+        ):
+            raise ValueError("payload_size_bytes 必須為非負 integer")
+        if len(self.payload_sha256) != 64 or any(
+            char not in "0123456789abcdef" for char in self.payload_sha256.lower()
+        ):
+            raise ValueError("payload_sha256 必須是 64 字元 SHA-256")
+
     @classmethod
     def capture(
         cls,
