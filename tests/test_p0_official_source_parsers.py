@@ -12,6 +12,7 @@ from data_module.p0_official_source_parsers import (
     parse_twse_disposition,
     parse_twse_ex_dividend,
     parse_twse_institutional,
+    parse_twse_periodic_call_auction,
     parse_twse_reduction,
 )
 from data_module.official_phase3c_fetcher import (
@@ -163,6 +164,20 @@ def test_twse_disposition_parser_quarantines_invalid_period() -> None:
     assert result.accepted_row_count == 0
     assert result.quarantine_row_count == 1
     assert result.quarantine[0].reason_code == "malformed_disposition_row"
+
+
+def test_twse_periodic_call_auction_filters_disposition_measures() -> None:
+    result = parse_twse_periodic_call_auction(
+        _envelope(
+            "twse_disposition.json",
+            source_id="twse_periodic_call_auction",
+            source_version="twse-punish.v1",
+        )
+    )
+
+    assert result.raw_row_count == 1
+    assert len(result.accepted) == 1
+    assert result.accepted[0].symbol == "1303"
 
 
 def test_twse_ex_dividend_parser_keeps_event_date_without_inferred_publication() -> None:

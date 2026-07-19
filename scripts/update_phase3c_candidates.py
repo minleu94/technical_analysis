@@ -26,6 +26,7 @@ from data_module.p0_official_source_parsers import (
     parse_twse_disposition,
     parse_twse_ex_dividend,
     parse_twse_institutional,
+    parse_twse_periodic_call_auction,
     parse_twse_reduction,
 )
 
@@ -79,6 +80,14 @@ def run_bounded_official_probe(probe_date: date) -> dict:
             "https://www.twse.com.tw/announcement/punish",
             {"response": "json", "startDate": date_ce, "endDate": date_ce},
             parse_twse_disposition,
+        ),
+        (
+            "twse_periodic_call_auction",
+            "twse-punish.v1",
+            "twse:announcement:punish",
+            "https://www.twse.com.tw/announcement/punish",
+            {"response": "json", "startDate": date_ce, "endDate": date_ce},
+            parse_twse_periodic_call_auction,
         ),
         (
             "twse_ex_dividend",

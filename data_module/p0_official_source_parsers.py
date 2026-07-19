@@ -398,6 +398,24 @@ def parse_twse_disposition(envelope: RawFetchEnvelope) -> OfficialParserResult:
     return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(raw_rows))
 
 
+def parse_twse_periodic_call_auction(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Extract periodic-call-auction measures from official TWSE disposition notices."""
+    disposition = parse_twse_disposition(envelope)
+    periodic_measure = re.compile(r"(?:分鐘\s*撮合|分盤)")
+    accepted = tuple(
+        observation
+        for observation in disposition.accepted
+        if periodic_measure.search(
+            f"{observation.metadata.get('measure', '')} {observation.metadata.get('content', '')}"
+        )
+    )
+    return OfficialParserResult(
+        accepted=accepted,
+        quarantine=disposition.quarantine,
+        raw_row_count=disposition.raw_row_count,
+    )
+
+
 def parse_twse_ex_dividend(envelope: RawFetchEnvelope) -> OfficialParserResult:
     """Parse the official ex-right/ex-dividend calculation table as an observed candidate."""
     payload = _json_payload(envelope)
