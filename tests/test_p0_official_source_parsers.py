@@ -11,6 +11,8 @@ from data_module.p0_official_source_parsers import (
     parse_twse_credit,
     parse_twse_disposition,
     parse_twse_ex_dividend,
+    parse_twse_full_delivery,
+    parse_twse_halt_resume,
     parse_twse_institutional,
     parse_twse_periodic_call_auction,
     parse_twse_reduction,
@@ -178,6 +180,26 @@ def test_twse_periodic_call_auction_filters_disposition_measures() -> None:
     assert result.raw_row_count == 1
     assert len(result.accepted) == 1
     assert result.accepted[0].symbol == "1303"
+
+
+def test_twse_full_delivery_parser_marks_daily_snapshot() -> None:
+    result = parse_twse_full_delivery(
+        _envelope("twse_full_delivery.json", source_id="twse_full_delivery", source_version="twse-TWT85U.v1")
+    )
+    row = result.accepted[0].to_dict()
+    assert row["observation_date"] == "2026-07-13"
+    assert row["metadata"]["periodic_call_auction_marker"] is True
+    assert row["quality"] == "degraded"
+
+
+def test_twse_halt_resume_parser_keeps_effective_dates() -> None:
+    result = parse_twse_halt_resume(
+        _envelope("twse_halt_resume.json", source_id="twse_halt_resume", source_version="twse-TWTAWU.v1")
+    )
+    row = result.accepted[0].to_dict()
+    assert row["observation_date"] == "2026-07-06"
+    assert row["metadata"]["resume_date"] == "2026-07-07"
+    assert row["quality"] == "degraded"
 
 
 def test_twse_ex_dividend_parser_keeps_event_date_without_inferred_publication() -> None:

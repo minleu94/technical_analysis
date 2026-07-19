@@ -416,6 +416,106 @@ def parse_twse_periodic_call_auction(envelope: RawFetchEnvelope) -> OfficialPars
     )
 
 
+def _request_date(envelope: RawFetchEnvelope) -> str:
+    raw_date = envelope.request_parameters.get("date")
+    if raw_date is None:
+        return envelope.fetched_at.date().isoformat()
+    if not isinstance(raw_date, str) or not re.fullmatch(r"\d{8}", raw_date):
+        raise ValueError("malformed request date")
+    return datetime.strptime(raw_date, "%Y%m%d").date().isoformat()
+
+
+def parse_twse_full_delivery(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse the official altered-trading-method (full-delivery) daily snapshot."""
+    payload = _json_payload(envelope)
+    fields, raw_rows = payload.get("fields"), payload.get("data")
+    if not isinstance(fields, list) or not isinstance(raw_rows, list):
+        raise ValueError("schema drift: full-delivery fields/data missing")
+    required = {"證券代號", "證券名稱", "分盤集合競價(以**表示)"}
+    if not required.issubset({str(field) for field in fields}):
+        raise ValueError("schema drift: full-delivery required fields missing")
+    snapshot_date = _request_date(envelope)
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, list):
+            continue
+        row = dict(zip((str(field) for field in fields), raw_row))
+        try:
+            symbol = str(row["證券代號"]).strip()
+            if not symbol:
+                raise ValueError("missing symbol")
+            periodic_marker = str(row["分盤集合競價(以**表示)"]).strip()
+            accepted.append(
+                NormalizedP0Observation.build(
+                    source_id=envelope.source_id,
+                    source_version=envelope.source_version,
+                    symbol=symbol,
+                    observation_date=snapshot_date,
+                    period="daily",
+                    publication_at=None,
+                    first_observed_at=envelope.fetched_at,
+                    raw_payload_sha256=_raw_row_hash(row),
+                    quantities={"full_delivery_member": 1},
+                    metadata={
+                        "event_type": "altered_trading_method_full_delivery_snapshot",
+                        "snapshot_date": snapshot_date,
+                        "security_name": str(row["證券名稱"]).strip(),
+                        "periodic_call_auction_marker": periodic_marker == "**",
+                    },
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            quarantine.append(_quarantine(envelope, row, reason_code="malformed_full_delivery_row", detail=str(exc)))
+    return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(raw_rows))
+
+
+def parse_twse_halt_resume(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse the official TWSE halt/resume table without inventing announcement time."""
+    payload = _json_payload(envelope)
+    fields, raw_rows = payload.get("fields"), payload.get("data")
+    if not isinstance(fields, list) or not isinstance(raw_rows, list):
+        raise ValueError("schema drift: halt/resume fields/data missing")
+    required = {"證券代號", "暫停交易日期", "暫停交易時間", "恢復交易日期", "恢復交易時間"}
+    if not required.issubset({str(field) for field in fields}):
+        raise ValueError("schema drift: halt/resume required fields missing")
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, list):
+            continue
+        row = dict(zip((str(field) for field in fields), raw_row))
+        try:
+            symbol = str(row["證券代號"]).strip()
+            if not symbol:
+                raise ValueError("missing symbol")
+            halt_date = _parse_roc_date(row["暫停交易日期"])
+            resume_date = _parse_roc_date(row["恢復交易日期"])
+            accepted.append(
+                NormalizedP0Observation.build(
+                    source_id=envelope.source_id,
+                    source_version=envelope.source_version,
+                    symbol=symbol,
+                    observation_date=halt_date,
+                    period="event",
+                    publication_at=None,
+                    first_observed_at=envelope.fetched_at,
+                    raw_payload_sha256=_raw_row_hash(row),
+                    quantities={"halt_resume_event": 1},
+                    metadata={
+                        "event_type": "suspended_halt_resume",
+                        "halt_date": halt_date,
+                        "halt_time": str(row["暫停交易時間"]).strip(),
+                        "resume_date": resume_date,
+                        "resume_time": str(row["恢復交易時間"]).strip(),
+                    },
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            quarantine.append(_quarantine(envelope, row, reason_code="malformed_halt_resume_row", detail=str(exc)))
+    return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(raw_rows))
+
+
 def parse_twse_ex_dividend(envelope: RawFetchEnvelope) -> OfficialParserResult:
     """Parse the official ex-right/ex-dividend calculation table as an observed candidate."""
     payload = _json_payload(envelope)

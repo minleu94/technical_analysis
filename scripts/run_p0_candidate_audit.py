@@ -24,6 +24,8 @@ LIVE_PROBE_SOURCE_MAP = {
     "tdcc_shareholding": "tdcc_shareholding",
     "microstructure.disposition_stock": "twse_disposition",
     "microstructure.periodic_call_auction": "twse_periodic_call_auction",
+    "microstructure.full_delivery": "twse_full_delivery",
+    "microstructure.suspended_halt_resume": "twse_halt_resume",
     "corporate_action.ex_dividend_timeline": "twse_ex_dividend",
     "corporate_action.reduction_split_par_value": "twse_reduction",
 }
