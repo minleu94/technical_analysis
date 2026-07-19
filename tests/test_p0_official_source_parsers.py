@@ -16,6 +16,7 @@ from data_module.p0_official_source_parsers import (
     parse_twse_institutional,
     parse_twse_periodic_call_auction,
     parse_twse_reduction,
+    parse_monthly_revenue_open_data,
 )
 from data_module.official_phase3c_fetcher import (
     fetch_credit_transactions,
@@ -199,6 +200,17 @@ def test_twse_halt_resume_parser_keeps_effective_dates() -> None:
     row = result.accepted[0].to_dict()
     assert row["observation_date"] == "2026-07-06"
     assert row["metadata"]["resume_date"] == "2026-07-07"
+    assert row["quality"] == "degraded"
+
+
+def test_monthly_revenue_open_data_preserves_report_date_without_claiming_time() -> None:
+    result = parse_monthly_revenue_open_data(
+        _envelope("twse_monthly_revenue.json", source_id="twse_monthly_revenue", source_version="twse-t187ap05_L.v1")
+    )
+    row = result.accepted[0].to_dict()
+    assert row["observation_date"] == "2026-07-17"
+    assert row["quantities"]["monthly_revenue"] == 13382706
+    assert row["publication_at"] is None
     assert row["quality"] == "degraded"
 
 

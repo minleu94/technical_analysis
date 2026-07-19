@@ -30,6 +30,7 @@ from data_module.p0_official_source_parsers import (
     parse_twse_institutional,
     parse_twse_periodic_call_auction,
     parse_twse_reduction,
+    parse_monthly_revenue_open_data,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -123,6 +124,8 @@ def run_bounded_official_probe(probe_date: date) -> dict:
             {"response": "json", "startDate": event_start_ce, "endDate": date_ce},
             parse_twse_reduction,
         ),
+        ("twse_monthly_revenue", "twse-t187ap05_L.v1", "twse:opendata:t187ap05_L", "https://openapi.twse.com.tw/v1/opendata/t187ap05_L", {}, parse_monthly_revenue_open_data),
+        ("tpex_monthly_revenue", "tpex-mopsfin_t187ap05_O.v1", "tpex:openapi:mopsfin_t187ap05_O", "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O", {}, parse_monthly_revenue_open_data),
     )
     diagnostics: list[dict] = []
     for source_id, source_version, endpoint_id, url, params, parser in probe_requests:

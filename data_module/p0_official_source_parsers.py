@@ -121,6 +121,31 @@ def _json_payload(envelope: RawFetchEnvelope) -> Mapping[str, Any]:
     return decoded
 
 
+def parse_monthly_revenue_open_data(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse current official revenue open data; report date is not an intraday publication time."""
+    rows = json.loads(envelope.payload.decode("utf-8-sig"))
+    if not isinstance(rows, list):
+        raise ValueError("schema drift: monthly revenue root must be a list")
+    required = {"出表日期", "資料年月", "公司代號", "營業收入-當月營收"}
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        try:
+            if not required.issubset(set(row)):
+                raise ValueError("monthly revenue required fields missing")
+            symbol = str(row["公司代號"]).strip()
+            period = str(row["資料年月"]).strip()
+            if not symbol or not re.fullmatch(r"\d{5}", period):
+                raise ValueError("malformed symbol or ROC period")
+            report_date = _parse_roc_date(str(row["出表日期"])[:3] + "/" + str(row["出表日期"])[3:5] + "/" + str(row["出表日期"])[5:])
+            accepted.append(NormalizedP0Observation.build(source_id=envelope.source_id, source_version=envelope.source_version, symbol=symbol, observation_date=report_date, period="monthly", publication_at=None, first_observed_at=envelope.fetched_at, raw_payload_sha256=_raw_row_hash(row), quantities={"monthly_revenue": _strict_int(row["營業收入-當月營收"])}, metadata={"report_date": report_date, "roc_period": period, "availability_policy": "first_observed_only_report_date_not_intraday_publication"}))
+        except (KeyError, TypeError, ValueError) as exc:
+            quarantine.append(_quarantine(envelope, row, reason_code="malformed_monthly_revenue_row", detail=str(exc)))
+    return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(rows))
+
+
 def _twse_rows(payload: Mapping[str, Any], *, table_mode: bool) -> Sequence[Mapping[str, Any]]:
     if table_mode:
         tables = payload.get("tables")

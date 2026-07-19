@@ -26,6 +26,8 @@ LIVE_PROBE_SOURCE_MAP = {
     "microstructure.periodic_call_auction": "twse_periodic_call_auction",
     "microstructure.full_delivery": "twse_full_delivery",
     "microstructure.suspended_halt_resume": "twse_halt_resume",
+    "twse.monthly_revenue_announcement": "twse_monthly_revenue",
+    "tpex.monthly_revenue_announcement": "tpex_monthly_revenue",
     "corporate_action.ex_dividend_timeline": "twse_ex_dividend",
     "corporate_action.reduction_split_par_value": "twse_reduction",
 }
