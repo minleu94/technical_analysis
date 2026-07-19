@@ -7,5 +7,6 @@
 | `twse_institutional.json` | `https://www.twse.com.tw/fund/T86` | TWSE `fields` + `data` JSON；capture date 2026-07-13 |
 | `twse_credit.json` | `https://www.twse.com.tw/exchangeReport/MI_MARGN` | TWSE `tables[].fields/data` JSON；capture date 2026-07-13 |
 | `tdcc_shareholding.csv` | `https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5` | TDCC Open Data CSV header；capture date 2026-07-13 |
+| `twse_disposition.json` | `https://www.twse.com.tw/announcement/punish` | TWSE `fields` + `data` JSON；公布日期與處置起迄日是民國日期，官方 payload 未提供可驗證 publication timestamp；capture date 2026-07-18 |
 
 Fixture 中的數值是最小合成列；欄名、容器形狀與日期格式依 captured official schema 固定。fixture 不構成來源 license acceptance 或正式 source acceptance。

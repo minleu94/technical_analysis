@@ -51,6 +51,17 @@ def _probe_report() -> dict[str, object]:
                 "blocked_row_count": 0,
                 "payload_sha256": "c" * 64,
             },
+            {
+                "source_id": "twse_disposition",
+                "schema_status": "matched",
+                "timestamp_evidence": "first_observed_only",
+                "raw_row_count": 1,
+                "accepted_row_count": 1,
+                "duplicate_row_count": 0,
+                "quarantine_row_count": 0,
+                "blocked_row_count": 0,
+                "payload_sha256": "d" * 64,
+            },
         ],
     }
 
@@ -72,6 +83,9 @@ def test_audit_keeps_all_p0_sources_visible_and_does_not_enable_scheduler() -> N
     assert institutional["audit_status"] == "observed_candidate"
     assert institutional["quality_status"] == "degraded"
     assert "official_publication_timestamp_missing" in institutional["blockers"]
+    disposition = next(item for item in payload["items"] if item["source_id"] == "microstructure.disposition_stock")
+    assert disposition["audit_status"] == "observed_candidate"
+    assert disposition["quality_status"] == "degraded"
     unimplemented = next(item for item in payload["items"] if item["source_id"] == "pit.quarterly_financials")
     assert unimplemented["audit_status"] == "not_started_no_candidate_adapter"
     assert unimplemented["blockers"] == ["candidate_adapter_not_implemented"]

@@ -23,6 +23,7 @@ from data_module.p0_official_source_parsers import (
     RawFetchEnvelope,
     parse_tdcc_shareholding,
     parse_twse_credit,
+    parse_twse_disposition,
     parse_twse_institutional,
 )
 
@@ -67,6 +68,14 @@ def run_bounded_official_probe(probe_date: date) -> dict:
             "https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5",
             {},
             parse_tdcc_shareholding,
+        ),
+        (
+            "twse_disposition",
+            "twse-punish.v1",
+            "twse:announcement:punish",
+            "https://www.twse.com.tw/announcement/punish",
+            {"response": "json", "startDate": date_ce, "endDate": date_ce},
+            parse_twse_disposition,
         ),
     )
     diagnostics: list[dict] = []

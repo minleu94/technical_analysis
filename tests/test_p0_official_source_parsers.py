@@ -9,6 +9,7 @@ from data_module.p0_official_source_parsers import (
     RawFetchEnvelope,
     parse_tdcc_shareholding,
     parse_twse_credit,
+    parse_twse_disposition,
     parse_twse_institutional,
 )
 from data_module.official_phase3c_fetcher import (
@@ -126,6 +127,40 @@ def test_tdcc_period_end_is_not_promoted_to_publication_time() -> None:
     assert row["available_at"] == FETCHED_AT.isoformat()
     assert row["quality"] == "degraded"
     assert "official_publication_timestamp_missing" in row["warnings"]
+
+
+def test_twse_disposition_parser_preserves_announcement_and_effective_period() -> None:
+    result = parse_twse_disposition(
+        _envelope(
+            "twse_disposition.json",
+            source_id="twse_disposition",
+            source_version="twse-punish.v1",
+        )
+    )
+
+    assert result.raw_row_count == 1
+    assert result.accepted_row_count == 1
+    row = result.accepted[0].to_dict()
+    assert row["symbol"] == "1303"
+    assert row["observation_date"] == "2026-07-02"
+    assert row["metadata"]["effective_from"] == "2026-07-03"
+    assert row["metadata"]["effective_to"] == "2026-07-16"
+    assert row["quality"] == "degraded"
+    assert "official_publication_timestamp_missing" in row["warnings"]
+
+
+def test_twse_disposition_parser_quarantines_invalid_period() -> None:
+    result = parse_twse_disposition(
+        _envelope(
+            "twse_disposition_malformed.json",
+            source_id="twse_disposition",
+            source_version="twse-punish.v1",
+        )
+    )
+
+    assert result.accepted_row_count == 0
+    assert result.quarantine_row_count == 1
+    assert result.quarantine[0].reason_code == "malformed_disposition_row"
 
 
 def test_malformed_row_is_quarantined_and_conserved() -> None:

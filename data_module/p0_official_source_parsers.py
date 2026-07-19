@@ -69,6 +69,15 @@ def _parse_yyyymmdd(value: object) -> str:
     return datetime.strptime(str(value).strip(), "%Y%m%d").date().isoformat()
 
 
+def _parse_roc_date(value: object) -> str:
+    normalized = str(value).strip().replace("-", "/")
+    parts = normalized.split("/")
+    if len(parts) != 3:
+        raise ValueError("invalid ROC date")
+    year, month, day = (int(part) for part in parts)
+    return datetime(year + 1911, month, day).date().isoformat()
+
+
 def _strict_int(value: object) -> int:
     if value is None or not str(value).strip():
         raise ValueError("missing integer")
@@ -334,3 +343,55 @@ def parse_tdcc_shareholding(envelope: RawFetchEnvelope) -> OfficialParserResult:
         quarantine=tuple(quarantine),
         raw_row_count=len(rows),
     )
+
+
+def parse_twse_disposition(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse TWSE disposition notices without inferring a publication timestamp."""
+    payload = _json_payload(envelope)
+    fields, raw_rows = payload.get("fields"), payload.get("data")
+    if not isinstance(fields, list) or not isinstance(raw_rows, list):
+        raise ValueError("schema drift: disposition fields/data missing")
+    required = {"公布日期", "證券代號", "累計", "處置條件", "處置起迄時間", "處置措施", "處置內容"}
+    if not required.issubset({str(field) for field in fields}):
+        raise ValueError("schema drift: disposition required fields missing")
+
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, list):
+            continue
+        row = dict(zip((str(field) for field in fields), raw_row))
+        try:
+            symbol = str(row["證券代號"]).strip()
+            if not symbol:
+                raise ValueError("missing symbol")
+            start_text, separator, end_text = str(row["處置起迄時間"]).strip().partition("～")
+            if not separator:
+                raise ValueError("missing disposition period separator")
+            announcement_date = _parse_roc_date(row["公布日期"])
+            effective_from = _parse_roc_date(start_text)
+            effective_to = _parse_roc_date(end_text)
+            accepted.append(
+                NormalizedP0Observation.build(
+                    source_id=envelope.source_id,
+                    source_version=envelope.source_version,
+                    symbol=symbol,
+                    observation_date=announcement_date,
+                    period="event",
+                    publication_at=None,
+                    first_observed_at=envelope.fetched_at,
+                    raw_payload_sha256=_raw_row_hash(row),
+                    quantities={"disposition_sequence": _strict_int(row["累計"])},
+                    metadata={
+                        "announcement_date": announcement_date,
+                        "effective_from": effective_from,
+                        "effective_to": effective_to,
+                        "condition": str(row["處置條件"]).strip(),
+                        "measure": str(row["處置措施"]).strip(),
+                        "content": str(row["處置內容"]).strip(),
+                    },
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            quarantine.append(_quarantine(envelope, row, reason_code="malformed_disposition_row", detail=str(exc)))
+    return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(raw_rows))

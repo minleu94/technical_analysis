@@ -22,6 +22,7 @@ LIVE_PROBE_SOURCE_MAP = {
     "institutional_flows": "twse_institutional",
     "credit_transactions": "twse_credit",
     "tdcc_shareholding": "tdcc_shareholding",
+    "microstructure.disposition_stock": "twse_disposition",
 }
 
 
