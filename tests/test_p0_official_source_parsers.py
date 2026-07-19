@@ -10,7 +10,9 @@ from data_module.p0_official_source_parsers import (
     parse_tdcc_shareholding,
     parse_twse_credit,
     parse_twse_disposition,
+    parse_twse_ex_dividend,
     parse_twse_institutional,
+    parse_twse_reduction,
 )
 from data_module.official_phase3c_fetcher import (
     fetch_credit_transactions,
@@ -161,6 +163,51 @@ def test_twse_disposition_parser_quarantines_invalid_period() -> None:
     assert result.accepted_row_count == 0
     assert result.quarantine_row_count == 1
     assert result.quarantine[0].reason_code == "malformed_disposition_row"
+
+
+def test_twse_ex_dividend_parser_keeps_event_date_without_inferred_publication() -> None:
+    result = parse_twse_ex_dividend(
+        _envelope(
+            "twse_ex_dividend.json",
+            source_id="twse_ex_dividend",
+            source_version="twse-TWT49U.v1",
+        )
+    )
+
+    row = result.accepted[0].to_dict()
+    assert row["observation_date"] == "2026-07-01"
+    assert row["metadata"]["right_or_dividend"] == "息"
+    assert row["publication_at"] is None
+    assert row["quality"] == "degraded"
+
+
+def test_twse_reduction_parser_keeps_resume_date_and_reason() -> None:
+    result = parse_twse_reduction(
+        _envelope(
+            "twse_reduction.json",
+            source_id="twse_reduction",
+            source_version="twse-TWTAUU.v1",
+        )
+    )
+
+    row = result.accepted[0].to_dict()
+    assert row["symbol"] == "2380"
+    assert row["observation_date"] == "2026-06-29"
+    assert row["metadata"]["reduction_reason"] == "彌補虧損"
+    assert row["publication_at"] is None
+
+
+def test_twse_reduction_parser_quarantines_invalid_resume_date() -> None:
+    result = parse_twse_reduction(
+        _envelope(
+            "twse_reduction_malformed.json",
+            source_id="twse_reduction",
+            source_version="twse-TWTAUU.v1",
+        )
+    )
+
+    assert result.accepted_row_count == 0
+    assert result.quarantine[0].reason_code == "malformed_reduction_row"
 
 
 def test_malformed_row_is_quarantined_and_conserved() -> None:

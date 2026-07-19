@@ -23,6 +23,8 @@ LIVE_PROBE_SOURCE_MAP = {
     "credit_transactions": "twse_credit",
     "tdcc_shareholding": "tdcc_shareholding",
     "microstructure.disposition_stock": "twse_disposition",
+    "corporate_action.ex_dividend_timeline": "twse_ex_dividend",
+    "corporate_action.reduction_split_par_value": "twse_reduction",
 }
 
 

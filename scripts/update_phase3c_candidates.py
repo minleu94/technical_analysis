@@ -24,7 +24,9 @@ from data_module.p0_official_source_parsers import (
     parse_tdcc_shareholding,
     parse_twse_credit,
     parse_twse_disposition,
+    parse_twse_ex_dividend,
     parse_twse_institutional,
+    parse_twse_reduction,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -34,6 +36,7 @@ logger = logging.getLogger(__name__)
 def run_bounded_official_probe(probe_date: date) -> dict:
     """對三個官方端點做單日、唯讀、無落盤 probe，僅回報工程 diagnostics。"""
     date_ce = probe_date.strftime("%Y%m%d")
+    event_start_ce = (probe_date - timedelta(days=35)).strftime("%Y%m%d")
     probe_requests: tuple[
         tuple[
             str,
@@ -76,6 +79,22 @@ def run_bounded_official_probe(probe_date: date) -> dict:
             "https://www.twse.com.tw/announcement/punish",
             {"response": "json", "startDate": date_ce, "endDate": date_ce},
             parse_twse_disposition,
+        ),
+        (
+            "twse_ex_dividend",
+            "twse-TWT49U.v1",
+            "twse:exchangeReport:TWT49U",
+            "https://www.twse.com.tw/exchangeReport/TWT49U",
+            {"response": "json", "startDate": event_start_ce, "endDate": date_ce},
+            parse_twse_ex_dividend,
+        ),
+        (
+            "twse_reduction",
+            "twse-TWTAUU.v1",
+            "twse:exchangeReport:TWTAUU",
+            "https://www.twse.com.tw/exchangeReport/TWTAUU",
+            {"response": "json", "startDate": event_start_ce, "endDate": date_ce},
+            parse_twse_reduction,
         ),
     )
     diagnostics: list[dict] = []

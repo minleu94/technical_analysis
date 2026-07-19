@@ -119,6 +119,8 @@ def test_bounded_probe_reports_schema_timestamp_and_conservation_without_accepta
         ("twse_credit.json", "application/json"),
         ("tdcc_shareholding.csv", "text/csv"),
         ("twse_disposition.json", "application/json"),
+        ("twse_ex_dividend.json", "application/json"),
+        ("twse_reduction.json", "application/json"),
     ):
         response = MagicMock()
         response.content = (fixture_root / filename).read_bytes()
@@ -140,6 +142,8 @@ def test_bounded_probe_reports_schema_timestamp_and_conservation_without_accepta
         "twse_credit",
         "tdcc_shareholding",
         "twse_disposition",
+        "twse_ex_dividend",
+        "twse_reduction",
     }
     for item in report["sources"]:
         assert item["raw_row_count"] == (

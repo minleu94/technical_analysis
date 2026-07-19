@@ -8,7 +8,7 @@
 .\.venv\Scripts\python.exe scripts\run_p0_candidate_audit.py --decision-date 2026-07-16 --output $env:TEMP\p0_candidate_audit.json
 ```
 
-目前可直接探測的官方候選來源是三大法人、信用交易、TDCC 股權分散與 TWSE 處置有價證券；`microstructure.disposition_stock` 會保留公告日、處置起迄日、處置條件、措施與原始 payload SHA-256。TWSE payload 未提供可驗證的官方發布 timestamp，因此它固定為 `degraded` / `official_publication_timestamp_missing`，不可宣稱 PIT 完整。其餘 P0 項目會以 `not_started_no_candidate_adapter` 顯示，代表尚未建立候選 adapter，不代表來源不可用或已接受。
+目前可直接探測的官方候選來源是三大法人、信用交易、TDCC 股權分散，以及 TWSE 的處置、除權息計算與減資恢復買賣資訊。`microstructure.disposition_stock` 會保留公告日、處置起迄日、處置條件、措施與原始 payload SHA-256；`corporate_action.ex_dividend_timeline` 會保留除權息生效日與權／息類別；`corporate_action.reduction_split_par_value` 會保留減資恢復日、原因與參考價。這三種 TWSE payload 都未提供可驗證的官方發布 timestamp，因此固定為 `degraded` / `official_publication_timestamp_missing`，不可宣稱 PIT 完整。其餘 P0 項目會以 `not_started_no_candidate_adapter` 顯示，代表尚未建立候選 adapter，不代表來源不可用或已接受。
 
 ## 判讀
 

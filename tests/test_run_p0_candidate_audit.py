@@ -62,6 +62,28 @@ def _probe_report() -> dict[str, object]:
                 "blocked_row_count": 0,
                 "payload_sha256": "d" * 64,
             },
+            {
+                "source_id": "twse_ex_dividend",
+                "schema_status": "matched",
+                "timestamp_evidence": "first_observed_only",
+                "raw_row_count": 2,
+                "accepted_row_count": 2,
+                "duplicate_row_count": 0,
+                "quarantine_row_count": 0,
+                "blocked_row_count": 0,
+                "payload_sha256": "e" * 64,
+            },
+            {
+                "source_id": "twse_reduction",
+                "schema_status": "matched",
+                "timestamp_evidence": "first_observed_only",
+                "raw_row_count": 1,
+                "accepted_row_count": 1,
+                "duplicate_row_count": 0,
+                "quarantine_row_count": 0,
+                "blocked_row_count": 0,
+                "payload_sha256": "f" * 64,
+            },
         ],
     }
 
@@ -86,6 +108,10 @@ def test_audit_keeps_all_p0_sources_visible_and_does_not_enable_scheduler() -> N
     disposition = next(item for item in payload["items"] if item["source_id"] == "microstructure.disposition_stock")
     assert disposition["audit_status"] == "observed_candidate"
     assert disposition["quality_status"] == "degraded"
+    ex_dividend = next(item for item in payload["items"] if item["source_id"] == "corporate_action.ex_dividend_timeline")
+    reduction = next(item for item in payload["items"] if item["source_id"] == "corporate_action.reduction_split_par_value")
+    assert ex_dividend["audit_status"] == "observed_candidate"
+    assert reduction["audit_status"] == "observed_candidate"
     unimplemented = next(item for item in payload["items"] if item["source_id"] == "pit.quarterly_financials")
     assert unimplemented["audit_status"] == "not_started_no_candidate_adapter"
     assert unimplemented["blockers"] == ["candidate_adapter_not_implemented"]

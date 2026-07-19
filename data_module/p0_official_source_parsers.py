@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from hashlib import sha256
 import io
 import json
+import re
 from typing import Any, Callable, Mapping, Sequence
 
 from data_module.p0_candidate_manifest import QuarantineRecord
@@ -70,7 +71,7 @@ def _parse_yyyymmdd(value: object) -> str:
 
 
 def _parse_roc_date(value: object) -> str:
-    normalized = str(value).strip().replace("-", "/")
+    normalized = re.sub(r"(\d+)年(\d+)月(\d+)日", r"\1/\2/\3", str(value).strip()).replace("-", "/")
     parts = normalized.split("/")
     if len(parts) != 3:
         raise ValueError("invalid ROC date")
@@ -394,4 +395,92 @@ def parse_twse_disposition(envelope: RawFetchEnvelope) -> OfficialParserResult:
             )
         except (KeyError, TypeError, ValueError) as exc:
             quarantine.append(_quarantine(envelope, row, reason_code="malformed_disposition_row", detail=str(exc)))
+    return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(raw_rows))
+
+
+def parse_twse_ex_dividend(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse the official ex-right/ex-dividend calculation table as an observed candidate."""
+    payload = _json_payload(envelope)
+    fields, raw_rows = payload.get("fields"), payload.get("data")
+    if not isinstance(fields, list) or not isinstance(raw_rows, list):
+        raise ValueError("schema drift: ex-dividend fields/data missing")
+    required = {"資料日期", "股票代號", "權/息", "除權息參考價"}
+    if not required.issubset({str(field) for field in fields}):
+        raise ValueError("schema drift: ex-dividend required fields missing")
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, list):
+            continue
+        row = dict(zip((str(field) for field in fields), raw_row))
+        try:
+            symbol = str(row["股票代號"]).strip()
+            if not symbol:
+                raise ValueError("missing symbol")
+            event_date = _parse_roc_date(row["資料日期"])
+            accepted.append(
+                NormalizedP0Observation.build(
+                    source_id=envelope.source_id,
+                    source_version=envelope.source_version,
+                    symbol=symbol,
+                    observation_date=event_date,
+                    period="event",
+                    publication_at=None,
+                    first_observed_at=envelope.fetched_at,
+                    raw_payload_sha256=_raw_row_hash(row),
+                    quantities={"event_count": 1},
+                    metadata={
+                        "event_type": "ex_dividend_or_ex_right",
+                        "event_date": event_date,
+                        "right_or_dividend": str(row["權/息"]).strip(),
+                        "reference_price": str(row["除權息參考價"]).strip(),
+                    },
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            quarantine.append(_quarantine(envelope, row, reason_code="malformed_ex_dividend_row", detail=str(exc)))
+    return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(raw_rows))
+
+
+def parse_twse_reduction(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse the official reduction-resumption table without inventing announcement time."""
+    payload = _json_payload(envelope)
+    fields, raw_rows = payload.get("fields"), payload.get("data")
+    if not isinstance(fields, list) or not isinstance(raw_rows, list):
+        raise ValueError("schema drift: reduction fields/data missing")
+    required = {"恢復買賣日期", "股票代號", "恢復買賣參考價", "減資原因"}
+    if not required.issubset({str(field) for field in fields}):
+        raise ValueError("schema drift: reduction required fields missing")
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, list):
+            continue
+        row = dict(zip((str(field) for field in fields), raw_row))
+        try:
+            symbol = str(row["股票代號"]).strip()
+            if not symbol:
+                raise ValueError("missing symbol")
+            resume_date = _parse_roc_date(row["恢復買賣日期"])
+            accepted.append(
+                NormalizedP0Observation.build(
+                    source_id=envelope.source_id,
+                    source_version=envelope.source_version,
+                    symbol=symbol,
+                    observation_date=resume_date,
+                    period="event",
+                    publication_at=None,
+                    first_observed_at=envelope.fetched_at,
+                    raw_payload_sha256=_raw_row_hash(row),
+                    quantities={"event_count": 1},
+                    metadata={
+                        "event_type": "reduction_split_or_par_value",
+                        "resume_date": resume_date,
+                        "reduction_reason": str(row["減資原因"]).strip(),
+                        "resume_reference_price": str(row["恢復買賣參考價"]).strip(),
+                    },
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            quarantine.append(_quarantine(envelope, row, reason_code="malformed_reduction_row", detail=str(exc)))
     return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(raw_rows))
