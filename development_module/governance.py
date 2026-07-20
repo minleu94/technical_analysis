@@ -78,7 +78,10 @@ def _records(raw: bytes, path: Path) -> list[dict[str, object]]:
 
 def _holdout_consumed(registry: Path, holdout_start: str) -> bool:
     for record in _records(registry.read_bytes(), registry):
-        observed = record.get("trading_session", record.get("holdout_start"))
+        observed = record.get(
+            "development_holdout_start",
+            record.get("trading_session", record.get("holdout_start")),
+        )
         if observed == holdout_start:
             return True
     return False

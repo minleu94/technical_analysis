@@ -22,13 +22,13 @@ def _decision(root, holdout: str = "2026-07-14") -> None:
     (governance / "DevelopmentDataUsageDecision.jsonl").write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
 
-def _snapshot(path) -> None:
+def _snapshot(path, decision_date: str = "2026-07-15") -> None:
     path.write_text(
         json.dumps(
             {
-                "decision_timestamp": "2026-07-14T09:00:00+08:00",
-                "data_as_of_date": "2026-07-14",
-                "max_available_timestamp": "2026-07-14T08:59:59+08:00",
+                "decision_timestamp": f"{decision_date}T09:00:00+08:00",
+                "data_as_of_date": decision_date,
+                "max_available_timestamp": f"{decision_date}T08:59:59+08:00",
                 "source_versions": {"daily_prices": "sha256:" + "1" * 64},
                 "strategy_version": "rule-v1", "policy_version": "policy-v1",
                 "rule_champion_snapshot_id": "champion:rule-v1", "universe_id": "tw-equity",
@@ -63,9 +63,10 @@ def test_owner_attested_binding_and_valid_snapshot_only_allow_shadow_capture(tmp
     (tmp_path / "governance" / "HoldoutConsumptionRegistry.jsonl").write_text(
         json.dumps(
             {
-                "schema_version": "holdout-consumption-registry.v1",
-                "record_type": "holdout_binding",
-                "trading_session": "2026-07-15",
+                "schema_version": "holdout-consumption-registry.v2",
+                "record_type": "formal_holdout_binding",
+                "development_holdout_start": "2026-07-15",
+                "formal_trading_session": "2026-07-15",
                 "owner_id": "owner-1",
                 "binding_authorization": "owner-approved-decision-1",
                 "bound_at": "2026-07-14T14:00:00+08:00",
@@ -89,7 +90,7 @@ def test_owner_attested_binding_and_valid_snapshot_only_allow_shadow_capture(tmp
     assert "holdout_binding_requires_owner_authority" in report["blockers"]
 
 
-def test_consumed_holdout_never_allows_capture(tmp_path) -> None:
+def test_legacy_registry_record_never_allows_capture(tmp_path) -> None:
     _decision(tmp_path)
     (tmp_path / "governance" / "HoldoutConsumptionRegistry.jsonl").write_text(
         json.dumps({"trading_session": "2026-07-14"}) + "\n", encoding="utf-8"
@@ -99,4 +100,34 @@ def test_consumed_holdout_never_allows_capture(tmp_path) -> None:
 
     assert report["owner_decision"] == "valid"
     assert report["can_capture_shadow_snapshot"] is False
-    assert "holdout_binding_must_be_exactly_one" in report["blockers"]
+    assert "holdout_binding_missing" in report["blockers"]
+
+
+def test_snapshot_from_a_different_session_never_allows_capture(tmp_path) -> None:
+    _decision(tmp_path, holdout="2026-07-15")
+    decision_sha256 = "sha256:" + sha256(
+        (tmp_path / "governance" / "DevelopmentDataUsageDecision.jsonl").read_bytes()
+    ).hexdigest()
+    (tmp_path / "governance" / "HoldoutConsumptionRegistry.jsonl").write_text(
+        json.dumps(
+            {
+                "schema_version": "holdout-consumption-registry.v2",
+                "record_type": "formal_holdout_binding",
+                "development_holdout_start": "2026-07-15",
+                "formal_trading_session": "2026-07-16",
+                "owner_id": "owner-1", "binding_authorization": "owner-approved-decision-1",
+                "bound_at": "2026-07-14T14:00:00+08:00", "owner_decision_sha256": decision_sha256,
+                "unconsumed_before_binding": True, "formal_oos_allowed": False,
+                "production_blend_alpha_bp": 0,
+            }
+        ) + "\n",
+        encoding="utf-8",
+    )
+    snapshot = tmp_path / "manual_observed.json"
+    _snapshot(snapshot, decision_date="2026-07-15")
+
+    report = inspect_readiness(tmp_path, snapshot)
+
+    assert report["formal_trading_session"] == "2026-07-16"
+    assert report["can_capture_shadow_snapshot"] is False
+    assert "manual_observed_session_mismatch" in report["blockers"]

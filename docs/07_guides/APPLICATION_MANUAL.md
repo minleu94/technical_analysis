@@ -1087,13 +1087,13 @@ Formal clock 不是 development adapter 完成的延伸；只有在真實決策�
 
 若上述任一項缺失，snapshot count 維持 0；不得以同日多次執行、pending outcome、歷史回填或 fake／replay artifact 取得 formal credit。
 
-`HoldoutConsumptionRegistry.jsonl` 是 owner 的 append-only 決議載體，不是 automation 可代寫的設定檔。owner 真正決定綁定後，才可由 owner 依下列一行 JSONL 契約建立第一筆 record；尖括號內容必須是 owner 的真實資料，不能直接複製為正式證據：
+`HoldoutConsumptionRegistry.jsonl` 是 owner 的 append-only 決議載體，不是 automation 可代寫的設定檔。`development_holdout_start` 是開發資料的排除起點；`formal_trading_session` 則是 owner 在綁定當下選定的第一個未消費正式觀測交易時段，兩者不可因為現在才綁定而倒填成過去的 observed day。owner 真正決定綁定後，才可依下列一行 JSONL 契約建立第一筆 record；尖括號內容必須是 owner 的真實資料，不能直接複製為正式證據：
 
 ```json
-{"schema_version":"holdout-consumption-registry.v1","record_type":"holdout_binding","trading_session":"<new_holdout_start 的第一個未消費交易時段>","owner_id":"<具名 owner>","binding_authorization":"<可引用的 owner 決議 ID 或 artifact>","bound_at":"<含時區的綁定時間>","owner_decision_sha256":"<DevelopmentDataUsageDecision.jsonl 的 sha256:...>","unconsumed_before_binding":true,"formal_oos_allowed":false,"production_blend_alpha_bp":0}
+{"schema_version":"holdout-consumption-registry.v2","record_type":"formal_holdout_binding","development_holdout_start":"2026-07-15","formal_trading_session":"<綁定後第一個未消費臺灣交易時段>","owner_id":"<具名 owner>","binding_authorization":"<可引用的 owner 決議 ID 或 artifact>","bound_at":"<含時區的綁定時間>","owner_decision_sha256":"<DevelopmentDataUsageDecision.jsonl 的 sha256:...>","unconsumed_before_binding":true,"formal_oos_allowed":false,"production_blend_alpha_bp":0}
 ```
 
-preflight 會拒絕缺欄、無時區、早於 owner decision、decision hash 不符、未明示 `unconsumed_before_binding=true`，或任何解除安全旗標的 record。它只能驗證 owner 的結構化聲明，不能自行證明交易時段確為「第一個」；該判定與授權仍屬 owner 責任。
+preflight 會拒絕缺欄、無時區、早於 owner decision、formal session 早於 binding、decision hash 不符、未明示 `unconsumed_before_binding=true`，或任何解除安全旗標的 record；snapshot 的決策日期也必須剛好等於 `formal_trading_session`。它只能驗證 owner 的結構化聲明，不能自行證明交易時段確為「第一個」；該判定與授權仍屬 owner 責任。
 
 先以唯讀 preflight 檢查 owner decision、owner-attested registry binding 與**已存在**的 snapshot 結構；此命令不建立 registry、不綁定 holdout、不寫 evidence，也不會宣稱 formal readiness。`can_capture_shadow_snapshot=true` 僅表示 binding 契約與 snapshot 均通過結構驗證；實際「第一個未消費交易時段」的判定仍須具名 owner 決議，且 source acceptance 未完成時 `formal_readiness` 一律為 `false`。
 
