@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from data_module.p0_source_contract_registry import P0_SOURCE_IDS
+from scripts.validate_mops_quarterly_artifact import validate_artifact
 from scripts.update_phase3c_candidates import run_bounded_official_probe
 
 
@@ -38,6 +39,7 @@ def build_p0_candidate_audit(
     *,
     probe_report: Mapping[str, Any] | None = None,
     fubon_projection: Mapping[str, Any] | None = None,
+    mops_quarterly_artifact: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """投影候選品質；只探測已接線的三個官方來源，絕不寫入資料庫。"""
     report = dict(
@@ -47,9 +49,22 @@ def build_p0_candidate_audit(
     )
     probe_items = _validate_probe_report(report, decision_date)
     fubon_items = _validate_fubon_projection(fubon_projection) if fubon_projection is not None else {}
+    mops_rows = _validate_mops_quarterly_artifact(mops_quarterly_artifact) if mops_quarterly_artifact is not None else []
     probe_report_sha256 = _probe_report_sha256(report)
     items: list[dict[str, Any]] = []
     for source_id in P0_SOURCE_IDS:
+        if source_id == "pit.quarterly_financials" and mops_rows:
+            items.append({
+                "source_id": source_id,
+                "audit_status": "observed_candidate",
+                "quality_status": "verified",
+                "row_count": len(mops_rows),
+                "accepted_row_count": len(mops_rows),
+                "timestamp_evidence": "official_document_upload_timestamp",
+                "payload_sha256": mops_rows[0]["source_hash"],
+                "blockers": ["research_only_not_source_accepted"],
+            })
+            continue
         probe_source_id = LIVE_PROBE_SOURCE_MAP.get(source_id)
         if probe_source_id is None:
             item = {
@@ -99,6 +114,7 @@ def build_p0_candidate_audit(
             "probe_mode": "bounded_official_read_only",
             "probe_report_sha256": f"sha256:{probe_report_sha256}",
             "fubon_research_projection_present": fubon_projection is not None,
+            "mops_quarterly_artifact_present": mops_quarterly_artifact is not None,
         },
         "items": items,
         "formal_oos_allowed": False,
@@ -106,6 +122,23 @@ def build_p0_candidate_audit(
         "downstream_eligibility": "none",
         "human_decision": "requires_human_acceptance",
     }
+
+
+def _validate_mops_quarterly_artifact(payload: Mapping[str, Any]) -> list[dict[str, object]]:
+    expected = {
+        "research_only": True,
+        "formal_oos_allowed": False,
+        "production_scheduler_allowed": False,
+        "downstream_eligibility": "none",
+    }
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            raise ValueError(f"MOPS quarterly artifact {key} mismatch")
+    rows = validate_artifact(dict(payload))
+    for row in rows:
+        if row.get("statement_scope") != "consolidated" or row.get("correction_status") != "none":
+            raise ValueError("MOPS quarterly artifact must be an uncorrected consolidated report")
+    return rows
 
 
 def _attach_fubon_research_supplement(
@@ -258,13 +291,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--decision-date", type=date.fromisoformat, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--fubon-projection", type=Path, help="唯讀載入手動富邦 research JSON")
+    parser.add_argument("--mops-quarterly-artifact", type=Path, help="唯讀載入已保存的 MOPS 季報 artifact")
     args = parser.parse_args(argv)
     fubon_projection = (
         json.loads(args.fubon_projection.read_text(encoding="utf-8"))
         if args.fubon_projection is not None
         else None
     )
-    payload = build_p0_candidate_audit(args.decision_date, fubon_projection=fubon_projection)
+    mops_quarterly_artifact = (
+        json.loads(args.mops_quarterly_artifact.read_text(encoding="utf-8"))
+        if args.mops_quarterly_artifact is not None
+        else None
+    )
+    payload = build_p0_candidate_audit(
+        args.decision_date,
+        fubon_projection=fubon_projection,
+        mops_quarterly_artifact=mops_quarterly_artifact,
+    )
     rendered = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)

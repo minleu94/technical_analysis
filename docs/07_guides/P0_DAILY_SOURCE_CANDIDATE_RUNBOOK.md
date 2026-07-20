@@ -8,6 +8,29 @@
 .\.venv\Scripts\python.exe scripts\run_p0_candidate_audit.py --decision-date 2026-07-16 --output $env:TEMP\p0_candidate_audit.json
 ```
 
+### MOPS 季報原始附件（research-only）
+
+當使用者已保存 MOPS「電子資料查詢作業」HTML 與其列出的中文 IFRSs 合併財報 PDF 時，可建立單筆、可雜湊的 PIT source artifact。HTML 必須保留原始查詢 URL、公司代號、季別、上傳時間與「財務報告更（補）正」欄位；PDF 檔名與大小必須和 HTML 主列完全相符。`captured_at` 是本機保存時間，不能冒充公告時間；PIT availability 使用 HTML 的官方上傳 timestamp。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_mops_quarterly_pit_artifact.py `
+  --listing-html 'C:\Users\archi\Downloads\電子資料查詢作業.html' `
+  --primary-pdf $env:TEMP\202601_2330_AI1.pdf `
+  --captured-at '2026-07-19T18:22:14-07:00' `
+  --output-json $env:TEMP\mops_2330_2026q1_pit_research.json
+
+.\.venv\Scripts\python.exe scripts\validate_mops_quarterly_artifact.py `
+  --artifact-json $env:TEMP\mops_2330_2026q1_pit_research.json `
+  --output-json $env:TEMP\mops_2330_2026q1_pit_validated.json
+
+.\.venv\Scripts\python.exe scripts\run_p0_candidate_audit.py `
+  --decision-date 2026-07-19 `
+  --mops-quarterly-artifact $env:TEMP\mops_2330_2026q1_pit_research.json `
+  --output $env:TEMP\p0_candidate_audit.json
+```
+
+此流程只建立 candidate metadata/provenance，並不解析或寫入完整財報數值、正式資料庫、ScoringEngine、Advice、Portfolio 或交易路徑。更（補）正不是 `無`、主 PDF 檔名不符、來源 URL 不符、缺少 timezone-aware capture time，或 safety fields 被升格時，builder/audit 必須 fail closed。
+
 ### 富邦唯讀行情補強（research-only）
 
 富邦行情僅補強當下可觀測的處置、分盤撮合秒數、暫停狀態、漲跌停鎖死，以及未來／當日除權息與資本變動事件；它不是 TWSE／TPEX／MOPS 原始公告，也不補造歷史 PIT。先設定與「富邦行情 API 人工唯讀連線測試」相同的環境變數與 Windows Credential Manager credential，接著手動執行：
