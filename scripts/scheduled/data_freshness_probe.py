@@ -16,6 +16,10 @@ def _parse_date(value: object) -> date | None:
             return datetime.strptime(text, fmt).date()
         except ValueError:
             continue
+    try:
+        return datetime.fromisoformat(text).date()
+    except ValueError:
+        pass
     return None
 
 
