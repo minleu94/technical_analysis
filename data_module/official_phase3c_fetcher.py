@@ -48,17 +48,26 @@ def safe_int(val) -> int:
     except Exception:
         return 0
 
-def safe_request(url: str, params: Optional[Dict] = None) -> requests.Response:
-    """帶重試機制的安全請求"""
-    for attempt in range(3):
+def safe_request(
+    url: str,
+    params: Optional[Dict] = None,
+    *,
+    timeout_seconds: int = 10,
+    max_attempts: int = 3,
+) -> requests.Response:
+    """帶可明確限定逾時與重試次數的安全請求。"""
+    if timeout_seconds <= 0 or max_attempts <= 0:
+        raise ValueError("timeout_seconds and max_attempts must be positive")
+    for attempt in range(max_attempts):
         try:
-            resp = requests.get(url, params=params, headers=HEADERS, timeout=10)
+            resp = requests.get(url, params=params, headers=HEADERS, timeout=timeout_seconds)
             if resp.status_code == 200:
                 return resp
             logger.warning(f"請求失敗: {url}, 狀態碼: {resp.status_code}, 正在重試...")
         except requests.RequestException as e:
             logger.warning(f"請求例外: {url}, 錯誤: {e}, 正在重試...")
-        time.sleep(3)
+        if attempt + 1 < max_attempts:
+            time.sleep(3)
     raise RuntimeError(f"無法取得資料: {url}")
 
 # ==========================================

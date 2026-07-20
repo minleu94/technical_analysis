@@ -169,6 +169,20 @@ def test_bounded_probe_reports_schema_timestamp_and_conservation_without_accepta
         }
 
 
+def test_bounded_probe_uses_one_short_attempt_per_source() -> None:
+    response = MagicMock()
+    response.content = b'{"stat":"No data"}'
+    response.headers = {"Content-Type": "application/json"}
+    response.status_code = 200
+    with patch("scripts.update_phase3c_candidates.safe_request", return_value=response) as request:
+        run_bounded_official_probe(date(2026, 7, 10))
+
+    assert request.call_count == 11
+    for call in request.call_args_list:
+        assert call.kwargs["timeout_seconds"] == 8
+        assert call.kwargs["max_attempts"] == 1
+
+
 def test_bounded_probe_preserves_raw_http_evidence_when_parser_detects_schema_drift():
     fixture_root = Path(__file__).parent / "fixtures" / "p0_official_sources"
     drifted = MagicMock()

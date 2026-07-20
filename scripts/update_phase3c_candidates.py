@@ -131,7 +131,14 @@ def run_bounded_official_probe(probe_date: date) -> dict:
     for source_id, source_version, endpoint_id, url, params, parser in probe_requests:
         fetched_at = datetime.now(timezone.utc)
         try:
-            response = safe_request(url, params or None)
+            # Candidate audit must not inherit the production fetcher's retry window:
+            # each source is independently reported as unavailable after one bounded try.
+            response = safe_request(
+                url,
+                params or None,
+                timeout_seconds=8,
+                max_attempts=1,
+            )
             payload = bytes(response.content)
         except Exception as exc:
             diagnostics.append(
