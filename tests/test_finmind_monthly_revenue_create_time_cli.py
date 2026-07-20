@@ -5,6 +5,26 @@ import csv
 from scripts import fetch_finmind_monthly_revenue_create_time
 
 
+def test_finmind_create_time_cli_uses_480_request_soft_limit_by_default(tmp_path, monkeypatch) -> None:
+    raw_dir = tmp_path / "financial_data"
+    raw_dir.mkdir()
+    (raw_dir / "2330_monthly_revenue.csv").write_text("", encoding="utf-8")
+    observed: dict[str, int] = {}
+
+    monkeypatch.setattr(fetch_finmind_monthly_revenue_create_time, "load_finmind_token", lambda token_file=None: "token")
+    monkeypatch.setattr(fetch_finmind_monthly_revenue_create_time, "fetch_finmind_monthly_revenue_rows", lambda *args: [])
+    monkeypatch.setattr(
+        fetch_finmind_monthly_revenue_create_time,
+        "calculate_sleep_seconds",
+        lambda requests_per_hour: observed.setdefault("requests_per_hour", requests_per_hour) or 0,
+    )
+
+    assert fetch_finmind_monthly_revenue_create_time.main(
+        ["--start-date", "2026-04-01", "--end-date", "2026-05-31", "--raw-dir", str(raw_dir), "--output-dir", str(tmp_path / "out")]
+    ) == 0
+    assert observed["requests_per_hour"] == 480
+
+
 def test_finmind_create_time_cli_writes_candidate_rows_and_groups(tmp_path, monkeypatch) -> None:
     raw_dir = tmp_path / "financial_data"
     raw_dir.mkdir()
