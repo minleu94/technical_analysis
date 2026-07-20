@@ -114,6 +114,12 @@ def _attach_fubon_research_supplement(
     """Expose a bounded research supplement without upgrading official evidence."""
     if not rows:
         return
+    if item["audit_status"] in {"not_started_no_candidate_adapter", "probe_not_returned"}:
+        # A captured Fubon projection is a real, but explicitly non-official,
+        # candidate path.  Do not leave it indistinguishable from no adapter.
+        item["audit_status"] = "observed_research_only"
+        item["quality_status"] = "degraded"
+        item["timestamp_evidence"] = "first_observed_only"
     item["fubon_research_supplement"] = {
         "status": "observed_research_only",
         "row_count": len(rows),

@@ -156,6 +156,13 @@ def test_fubon_projection_is_exposed_only_as_degraded_research_supplement() -> N
                 "availability_evidence_kind": "first_observed_only",
                 "downstream_eligibility": "none",
                 "production_scheduler_allowed": False,
+            },
+            {
+                "source_id": "microstructure.limit_lock",
+                "quality": "degraded",
+                "availability_evidence_kind": "first_observed_only",
+                "downstream_eligibility": "none",
+                "production_scheduler_allowed": False,
             }
         ],
     }
@@ -166,6 +173,11 @@ def test_fubon_projection_is_exposed_only_as_degraded_research_supplement() -> N
     disposition = next(item for item in payload["items"] if item["source_id"] == "microstructure.disposition_stock")
     assert disposition["fubon_research_supplement"]["status"] == "observed_research_only"
     assert disposition["quality_status"] == "degraded"
+    limit_lock = next(item for item in payload["items"] if item["source_id"] == "microstructure.limit_lock")
+    assert limit_lock["audit_status"] == "observed_research_only"
+    assert limit_lock["quality_status"] == "degraded"
+    assert limit_lock["timestamp_evidence"] == "first_observed_only"
+    assert limit_lock["fubon_research_supplement"]["row_count"] == 1
     assert payload["formal_oos_allowed"] is False
 
 

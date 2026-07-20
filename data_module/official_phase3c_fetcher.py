@@ -63,9 +63,11 @@ def safe_request(
             resp = requests.get(url, params=params, headers=HEADERS, timeout=timeout_seconds)
             if resp.status_code == 200:
                 return resp
-            logger.warning(f"請求失敗: {url}, 狀態碼: {resp.status_code}, 正在重試...")
+            message = "正在重試..." if attempt + 1 < max_attempts else "不再重試。"
+            logger.warning(f"請求失敗: {url}, 狀態碼: {resp.status_code}, {message}")
         except requests.RequestException as e:
-            logger.warning(f"請求例外: {url}, 錯誤: {e}, 正在重試...")
+            message = "正在重試..." if attempt + 1 < max_attempts else "不再重試。"
+            logger.warning(f"請求例外: {url}, 錯誤: {e}, {message}")
         if attempt + 1 < max_attempts:
             time.sleep(3)
     raise RuntimeError(f"無法取得資料: {url}")
