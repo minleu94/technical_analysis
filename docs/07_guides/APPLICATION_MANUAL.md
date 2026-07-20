@@ -1061,7 +1061,7 @@ V1.8 後，可用 Portfolio Sandbox inspection CLI 檢查研究用 allocation / 
 
 資料源的嘗試順序為：同一語意的富邦或官方 API／官方 HTML fast path → 同一語意的受控爬蟲 fallback（MoneyDJ 僅 HTTP Big5 失敗或無法解析時才啟用 Selenium）→ 已保存 raw artifact 的唯讀重試。任何 source 切換都要保留 provider、source version、實測時間、row count、成功／失敗原因與 fallback 原因；沒有等價語意的來源時 fail closed，不以其他資料類型補值。
 
-FinMind 是低頻 bulk／缺口來源，不是全市場逐檔的日常更新主線。帳戶上限為每小時 600 requests，實作與人工執行均採 `480` requests/hour 軟上限，保留 20% 給暫時錯誤與人工查詢；逐檔 dataset 必須以缺口 queue、夜間執行與 `--resume` 續跑，官方或富邦已成功取得的同一資料不得重複請求。可一次取得全市場或涵蓋所需期間的 FinMind dataset 才可進 bulk queue；`create_time` 僅是 FinMind 觀測時間，不能取代 MOPS／交易所公告時間。
+FinMind 是低頻 bulk／缺口來源，不是全市場逐檔的日常更新主線。帳戶上限為每小時 600 requests，實作與人工執行均採 `480` requests/hour 軟上限，保留 20% 給暫時錯誤與人工查詢；逐檔 dataset 必須以缺口 queue、夜間執行與 `--resume` 續跑，官方或富邦已成功取得的同一資料不得重複請求。月營收 create-time CLI 必須明確提供至少一個 `--stock-code`；若確實要使用 raw 清單做批次，必須同時提供 `--all-raw-stock-codes --resume`，避免無意間啟動全市場逐檔請求。可一次取得全市場或涵蓋所需期間的 FinMind dataset 才可進 bulk queue；`create_time` 僅是 FinMind 觀測時間，不能取代 MOPS／交易所公告時間。
 
 ### 富邦行情 API 人工唯讀連線測試
 

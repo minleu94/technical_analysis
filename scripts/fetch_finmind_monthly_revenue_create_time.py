@@ -27,6 +27,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--end-date", required=True)
     parser.add_argument("--raw-dir", type=Path, default=None)
     parser.add_argument("--stock-code", action="append", default=None)
+    parser.add_argument(
+        "--all-raw-stock-codes",
+        action="store_true",
+        help="explicitly opt into the resumable raw-directory batch; requires --resume",
+    )
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--state-file", type=Path, default=None)
     parser.add_argument("--resume", action="store_true")
@@ -34,6 +39,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fetch-date", default=date.today().isoformat())
     parser.add_argument("--token-file", type=Path, default=None)
     args = parser.parse_args(argv)
+
+    if args.stock_code and args.all_raw_stock_codes:
+        parser.error("--stock-code and --all-raw-stock-codes are mutually exclusive")
+    if args.all_raw_stock_codes and not args.resume:
+        parser.error("--all-raw-stock-codes requires --resume")
+    if not args.stock_code and not args.all_raw_stock_codes:
+        parser.error("provide --stock-code or explicitly opt into --all-raw-stock-codes --resume")
 
     config = TWStockConfig()
     raw_dir = args.raw_dir or (config.data_root / "financial_data")

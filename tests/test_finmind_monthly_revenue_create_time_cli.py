@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 
+import pytest
+
 from scripts import fetch_finmind_monthly_revenue_create_time
 
 
@@ -20,7 +22,10 @@ def test_finmind_create_time_cli_uses_480_request_soft_limit_by_default(tmp_path
     )
 
     assert fetch_finmind_monthly_revenue_create_time.main(
-        ["--start-date", "2026-04-01", "--end-date", "2026-05-31", "--raw-dir", str(raw_dir), "--output-dir", str(tmp_path / "out")]
+        [
+            "--start-date", "2026-04-01", "--end-date", "2026-05-31", "--raw-dir", str(raw_dir),
+            "--output-dir", str(tmp_path / "out"), "--stock-code", "2330",
+        ]
     ) == 0
     assert observed["requests_per_hour"] == 480
 
@@ -61,6 +66,8 @@ def test_finmind_create_time_cli_writes_candidate_rows_and_groups(tmp_path, monk
             str(raw_dir),
             "--output-dir",
             str(output_dir),
+            "--all-raw-stock-codes",
+            "--resume",
             "--max-requests-per-hour",
             "0",
             "--fetch-date",
@@ -78,3 +85,18 @@ def test_finmind_create_time_cli_writes_candidate_rows_and_groups(tmp_path, monk
     assert rows[0]["stock_code"] == "2330"
     assert rows[0]["source"] == "finmind.monthly_revenue_create_time"
     assert groups[0]["stock_codes"] == "2330"
+
+
+def test_finmind_create_time_cli_requires_explicit_resumable_bulk_opt_in(tmp_path) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        fetch_finmind_monthly_revenue_create_time.main(
+            ["--start-date", "2026-04-01", "--end-date", "2026-05-31", "--raw-dir", str(tmp_path)]
+        )
+
+    with pytest.raises(SystemExit, match="2"):
+        fetch_finmind_monthly_revenue_create_time.main(
+            [
+                "--start-date", "2026-04-01", "--end-date", "2026-05-31", "--raw-dir", str(tmp_path),
+                "--all-raw-stock-codes",
+            ]
+        )
