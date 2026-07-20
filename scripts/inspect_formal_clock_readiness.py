@@ -9,6 +9,7 @@ formal-clock credit.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 from pathlib import Path
 import sys
@@ -22,8 +23,10 @@ from app_module.external_evidence_contracts import ExternalEvidenceDecisionSnaps
 from development_module.governance import load_development_data_usage_decision
 
 
-def _read_registry(path: Path, holdout_start: str) -> tuple[str, str | None]:
-    """Return only the registry state; never infer a holdout binding."""
+def _read_registry(
+    path: Path, holdout_start: str, decision_sha256: str, decision_effective_at: str
+) -> tuple[str, str | None]:
+    """Validate an owner-attested binding without inferring a trading session."""
     if not path.exists():
         return "missing", "consumption_registry_missing"
     try:
@@ -32,9 +35,33 @@ def _read_registry(path: Path, holdout_start: str) -> tuple[str, str | None]:
         return "unreadable", "consumption_registry_unreadable"
     if any(not isinstance(record, dict) for record in records):
         return "invalid", "consumption_registry_invalid"
-    if any(record.get("trading_session", record.get("holdout_start")) == holdout_start for record in records):
-        return "consumed", "holdout_already_consumed"
-    return "present_unconsumed", None
+    matching = [record for record in records if record.get("trading_session", record.get("holdout_start")) == holdout_start]
+    if not matching:
+        return "present_without_binding", "holdout_binding_missing"
+    bindings = [record for record in matching if record.get("record_type") == "holdout_binding"]
+    if len(bindings) != 1:
+        return "invalid", "holdout_binding_must_be_exactly_one"
+    binding = bindings[0]
+    required = ("owner_id", "binding_authorization", "bound_at")
+    if binding.get("schema_version") != "holdout-consumption-registry.v1":
+        return "invalid", "holdout_binding_schema_invalid"
+    if any(not isinstance(binding.get(field), str) or not binding[field].strip() for field in required):
+        return "invalid", "holdout_binding_owner_attestation_missing"
+    try:
+        bound_at = datetime.fromisoformat(str(binding["bound_at"]).replace("Z", "+00:00"))
+    except ValueError:
+        return "invalid", "holdout_binding_timestamp_invalid"
+    if bound_at.tzinfo is None:
+        return "invalid", "holdout_binding_timestamp_invalid"
+    if bound_at < datetime.fromisoformat(decision_effective_at.replace("Z", "+00:00")):
+        return "invalid", "holdout_binding_precedes_owner_decision"
+    if binding.get("owner_decision_sha256") != decision_sha256:
+        return "invalid", "holdout_binding_decision_hash_mismatch"
+    if binding.get("unconsumed_before_binding") is not True:
+        return "invalid", "holdout_binding_unconsumed_attestation_missing"
+    if binding.get("formal_oos_allowed") is not False or binding.get("production_blend_alpha_bp") != 0:
+        return "invalid", "holdout_binding_safety_flags_invalid"
+    return "owner_attested_binding_valid", None
 
 
 def _inspect_snapshot(path: Path | None) -> tuple[str, str | None]:
@@ -73,7 +100,9 @@ def inspect_readiness(output_root: Path, snapshot_json: Path | None = None) -> d
     }
     blockers: list[str] = []
     try:
-        decision = load_development_data_usage_decision(decision_path, output_root=root)
+        decision = load_development_data_usage_decision(
+            decision_path, output_root=root, require_unconsumed=False
+        )
     except (OSError, ValueError):
         blockers.append("owner_decision_missing_or_invalid")
         report["snapshot"] = _inspect_snapshot(snapshot_json)[0]
@@ -82,7 +111,10 @@ def inspect_readiness(output_root: Path, snapshot_json: Path | None = None) -> d
         report["holdout_start"] = decision.new_holdout_start
         report["owner_decision_sha256"] = decision.decision_record_sha256
         registry_state, registry_blocker = _read_registry(
-            root / "governance" / "HoldoutConsumptionRegistry.jsonl", decision.new_holdout_start
+            root / "governance" / "HoldoutConsumptionRegistry.jsonl",
+            decision.new_holdout_start,
+            decision.decision_record_sha256,
+            decision.effective_timestamp_utc,
         )
         report["consumption_registry"] = registry_state
         if registry_blocker:
@@ -92,7 +124,7 @@ def inspect_readiness(output_root: Path, snapshot_json: Path | None = None) -> d
         if snapshot_blocker:
             blockers.append(snapshot_blocker)
         report["can_capture_shadow_snapshot"] = (
-            registry_state == "present_unconsumed" and snapshot_state == "structurally_valid"
+            registry_state == "owner_attested_binding_valid" and snapshot_state == "structurally_valid"
         )
     blockers.append("holdout_binding_requires_owner_authority")
     blockers.append("source_acceptance_owner_review_required")

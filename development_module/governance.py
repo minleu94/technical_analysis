@@ -15,12 +15,14 @@ class DevelopmentDataUsageDecision:
 
     new_holdout_start: str
     decision_record_sha256: str
+    effective_timestamp_utc: str
 
 
 def load_development_data_usage_decision(
     decision_path: str | Path,
     *,
     output_root: str | Path,
+    require_unconsumed: bool = True,
 ) -> DevelopmentDataUsageDecision:
     """Validate the append-only owner decision and an unconsumed replacement holdout."""
     root = Path(output_root).expanduser().resolve()
@@ -55,11 +57,12 @@ def load_development_data_usage_decision(
     holdout = str(decision.get("new_holdout_start", ""))
     date.fromisoformat(holdout)
     registry = root / "governance" / "HoldoutConsumptionRegistry.jsonl"
-    if registry.exists() and _holdout_consumed(registry, holdout):
+    if require_unconsumed and registry.exists() and _holdout_consumed(registry, holdout):
         raise ValueError("new holdout has already been consumed")
     return DevelopmentDataUsageDecision(
         new_holdout_start=holdout,
         decision_record_sha256="sha256:" + hashlib.sha256(raw).hexdigest(),
+        effective_timestamp_utc=effective_timestamp,
     )
 
 
