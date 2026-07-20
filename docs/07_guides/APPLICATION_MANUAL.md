@@ -1087,6 +1087,21 @@ Formal clock 不是 development adapter 完成的延伸；只有在真實決策�
 
 若上述任一項缺失，snapshot count 維持 0；不得以同日多次執行、pending outcome、歷史回填或 fake／replay artifact 取得 formal credit。
 
+先以唯讀 preflight 檢查 owner decision、registry 與**已存在**的 snapshot 結構；此命令不建立 registry、不綁定 holdout、不寫 evidence，也不會宣稱 formal readiness。`can_capture_shadow_snapshot=true` 僅表示 registry 目前可讀且未見同一 holdout 已消費、snapshot 通過結構驗證；實際綁定仍須具名 owner 決議，且 source acceptance 未完成時 `formal_readiness` 一律為 `false`。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_formal_clock_readiness.py `
+  --development-output-root C:\Temp\technical_analysis_development_output
+```
+
+若已有真正 decision-time artifact，才可額外傳入其路徑檢查契約；不要用 fixture、replay 或事後補寫檔案測試後就執行 capture：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_formal_clock_readiness.py `
+  --development-output-root C:\Temp\technical_analysis_development_output `
+  --snapshot-json <真實決策當下保存的-manual_observed.json>
+```
+
 V2.4 紙上政策可用下列唯讀 CLI 檢查。它固定使用核准的平衡型參數，對現金、單檔、產業、週轉與 cooldown 限制產生 `PAPER_TRADE_CANDIDATE` 或 `NO_PAPER_TRADE`；結果不是交易指令，也不讀實際持倉或寫入任何資料庫。
 
 Paper Portfolio 日更工程另提供 append-only snapshot repository。每個 `snapshot_id` 只能新增一次，歷史 snapshot 不可覆寫；價格、現金與市值以 Decimal 字串保存，權重以整數 bp 保存。此 repository 僅存 research paper ledger，不連接正式持倉或 broker。
