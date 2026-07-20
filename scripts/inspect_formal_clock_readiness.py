@@ -136,7 +136,8 @@ def inspect_readiness(output_root: Path, snapshot_json: Path | None = None) -> d
             registry_state == "owner_attested_binding_valid" and snapshot_state == "structurally_valid"
             and snapshot_date == formal_session
         )
-    blockers.append("holdout_binding_requires_owner_authority")
+    if report["consumption_registry"] != "owner_attested_binding_valid":
+        blockers.append("holdout_binding_requires_owner_authority")
     blockers.append("source_acceptance_owner_review_required")
     report["blockers"] = blockers
     return report

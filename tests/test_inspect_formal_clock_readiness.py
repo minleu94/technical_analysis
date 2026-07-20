@@ -87,7 +87,7 @@ def test_owner_attested_binding_and_valid_snapshot_only_allow_shadow_capture(tmp
     assert report["snapshot"] == "structurally_valid"
     assert report["can_capture_shadow_snapshot"] is True
     assert report["formal_readiness"] is False
-    assert "holdout_binding_requires_owner_authority" in report["blockers"]
+    assert "holdout_binding_requires_owner_authority" not in report["blockers"]
 
 
 def test_legacy_registry_record_never_allows_capture(tmp_path) -> None:
