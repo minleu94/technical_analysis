@@ -315,7 +315,7 @@ TWSE 補檔遇到平日休市（例如颱風停市）時，只有在至少一個
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\fetch_mops_monthly_revenue_snapshot.py --start-period 2014-04 --end-period 2026-05 --markets twse,tpex --output-dir D:\Min\Python\Project\FA_Data\output\monthly_revenue_mops_snapshots --fetch-date 2026-06-16 --sleep-seconds 0.5
-.\.venv\Scripts\python.exe scripts\fetch_finmind_monthly_revenue_create_time.py --start-date 2014-04-01 --end-date 2026-05-31 --raw-dir D:\Min\Python\Project\FA_Data\financial_data --output-dir D:\Min\Python\Project\FA_Data\output\monthly_revenue_finmind_create_time --max-requests-per-hour 540 --resume --fetch-date 2026-06-16
+.\.venv\Scripts\python.exe scripts\fetch_finmind_monthly_revenue_create_time.py --start-date 2014-04-01 --end-date 2026-05-31 --raw-dir D:\Min\Python\Project\FA_Data\financial_data --output-dir D:\Min\Python\Project\FA_Data\output\monthly_revenue_finmind_create_time --max-requests-per-hour 480 --resume --fetch-date 2026-06-16
 ```
 
 第一個命令會保存 MOPS raw HTML 與完整市場月營收 snapshot CSV；它只代表營收內容快照，不得用 period 或歷史查詢日推定官方公告日。若從某天開始每日保存 MOPS snapshot，可把本機首次看見該月營收列的日期視為 first-seen observation candidate，搭配 `available_date=first_seen+1 calendar day` 作保守候選 mapping；這仍不是官方 MOPS 公告日，正式寫入前必須由人工確認。第二個命令會使用已加密保存於本機的 FinMind token 逐檔抓取 `TaiwanStockMonthRevenue.create_time`，輸出 create_time 分組檔；`create_time` 只作備用 / 交叉檢查與每月分批更新參考，不作主線 mapping。若 FinMind 流程中斷，用同一個 `--output-dir` 加 `--resume` 重跑即可接續。
@@ -1055,9 +1055,37 @@ V1.8 後，可用 Portfolio Sandbox inspection CLI 檢查研究用 allocation / 
  .\.venv\Scripts\python.exe scripts\inspect_portfolio_sandbox.py --sample --format markdown
 ```
 
+### 資料來源路由與 FinMind 配額
+
+日常更新優先使用富邦 market-data API、TWSE／TPEX／MOPS／TDCC 官方端點與已受控的自有網頁抓取器；每種資料必須先依資料語意選擇 provider，不能把價格、法定公告與盤中狀態互相冒充 fallback。富邦是授權市場資料主源，適用於即時／當下可觀測行情與已文件化的公司行動欄位；MOPS 仍是財報、月營收與更補正的法定公告鏈；TWSE／TPEX／TDCC 仍是市場制度與日終資料鏈。
+
+資料源的嘗試順序為：同一語意的富邦或官方 API／官方 HTML fast path → 同一語意的受控爬蟲 fallback（MoneyDJ 僅 HTTP Big5 失敗或無法解析時才啟用 Selenium）→ 已保存 raw artifact 的唯讀重試。任何 source 切換都要保留 provider、source version、實測時間、row count、成功／失敗原因與 fallback 原因；沒有等價語意的來源時 fail closed，不以其他資料類型補值。
+
+FinMind 是低頻 bulk／缺口來源，不是全市場逐檔的日常更新主線。帳戶上限為每小時 600 requests，實作與人工執行均採 `480` requests/hour 軟上限，保留 20% 給暫時錯誤與人工查詢；逐檔 dataset 必須以缺口 queue、夜間執行與 `--resume` 續跑，官方或富邦已成功取得的同一資料不得重複請求。可一次取得全市場或涵蓋所需期間的 FinMind dataset 才可進 bulk queue；`create_time` 僅是 FinMind 觀測時間，不能取代 MOPS／交易所公告時間。
+
 ### 富邦行情 API 人工唯讀連線測試
 
 `scripts/test_fubon_readonly_marketdata.py` 只供人工確認 Windows Credential Manager API key、憑證與 OTC 行情 snapshot 連線。執行前設定 `FUBON_PERSONAL_ID`、`FUBON_CERT_PATH`，必要時設定 `FUBON_CERT_PASS`；API key 必須保存在 Credential Manager 的 service `fubon-neo-readonly-api-key`、username `market-data`，不得寫入 repo、命令列或 log。缺少任一 credential 時腳本以 exit code 2 停止，登入失敗以 exit code 1 停止；成功登入後唯一允許的資料呼叫是 OTC snapshot quotes。此工具不呼叫帳務、持倉、委託或交易 API，不保存行情、不寫 DB，也不代表 broker lane、source acceptance 或 Formal evidence 已成立。自動化與測試只能使用 injected fake SDK，不得代替人工實際登入。
+
+### Formal clock 起跑前檢查
+
+Formal clock 不是 development adapter 完成的延伸；只有在真實決策當下才能建立第一個 observed day。開始前必須同時具備：
+
+1. 具名 owner 的 `HoldoutConsumptionRegistry.jsonl` 已置於 development output root 的 `governance/`，並在每次綁定前重新檢查；它必須可證明 owner decision 指定的第一個未消費交易時段尚未被使用。沒有 registry 時不得宣稱 holdout 已綁定、已消費或 formal readiness 成立。
+2. 真正 decision-time 產生的 `manual_observed` JSON：`decision_timestamp`、`max_available_timestamp`、`data_as_of_date`、source versions、Rule champion identity、universe hash、symbol、why／why-not／risk、restriction state 與所有 missing/degraded reason 都必須來自當下可見的決策輸出。不得由歷史 replay、fixture、事後補寫或 automation invocation count 合成。
+3. snapshot 僅可追加到 TEMP 或明確命名的 shadow sidecar，並由下列命令人工確認；它不寫 market DB、不啟用 scheduler、交易、training、promotion 或 formal OOS：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\capture_external_evidence_manual.py `
+  --db $env:TEMP\external-evidence-shadow\evidence.sqlite `
+  --output-root $env:TEMP\external-evidence-shadow `
+  --snapshot-json <真實決策當下保存的-manual_observed.json> `
+  --confirm append-external-evidence
+```
+
+4. 每一筆 P0 source 仍需依 `docs/06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md` 取得具名 owner／reviewer 的 license、quality、PIT、coverage、missing／outage 與 rollback 決議；candidate、degraded 或 research-only artifact 都不會自動變成 accepted source。
+
+若上述任一項缺失，snapshot count 維持 0；不得以同日多次執行、pending outcome、歷史回填或 fake／replay artifact 取得 formal credit。
 
 V2.4 紙上政策可用下列唯讀 CLI 檢查。它固定使用核准的平衡型參數，對現金、單檔、產業、週轉與 cooldown 限制產生 `PAPER_TRADE_CANDIDATE` 或 `NO_PAPER_TRADE`；結果不是交易指令，也不讀實際持倉或寫入任何資料庫。
 
