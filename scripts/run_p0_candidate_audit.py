@@ -37,6 +37,7 @@ def build_p0_candidate_audit(
     decision_date: date,
     *,
     probe_report: Mapping[str, Any] | None = None,
+    fubon_projection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """投影候選品質；只探測已接線的三個官方來源，絕不寫入資料庫。"""
     report = dict(
@@ -45,13 +46,13 @@ def build_p0_candidate_audit(
         else run_bounded_official_probe(decision_date)
     )
     probe_items = _validate_probe_report(report, decision_date)
+    fubon_items = _validate_fubon_projection(fubon_projection) if fubon_projection is not None else {}
     probe_report_sha256 = _probe_report_sha256(report)
     items: list[dict[str, Any]] = []
     for source_id in P0_SOURCE_IDS:
         probe_source_id = LIVE_PROBE_SOURCE_MAP.get(source_id)
         if probe_source_id is None:
-            items.append(
-                {
+            item = {
                     "source_id": source_id,
                     "audit_status": "not_started_no_candidate_adapter",
                     "quality_status": "missing",
@@ -59,12 +60,12 @@ def build_p0_candidate_audit(
                     "accepted_row_count": 0,
                     "blockers": ["candidate_adapter_not_implemented"],
                 }
-            )
+            _attach_fubon_research_supplement(item, fubon_items.get(source_id))
+            items.append(item)
             continue
         probe = probe_items.get(probe_source_id)
         if probe is None:
-            items.append(
-                {
+            item = {
                     "source_id": source_id,
                     "audit_status": "probe_not_returned",
                     "quality_status": "missing",
@@ -72,12 +73,12 @@ def build_p0_candidate_audit(
                     "accepted_row_count": 0,
                     "blockers": ["official_probe_not_returned"],
                 }
-            )
+            _attach_fubon_research_supplement(item, fubon_items.get(source_id))
+            items.append(item)
             continue
         counts = _validated_probe_counts(probe)
         timestamp_evidence = str(probe.get("timestamp_evidence", "unavailable"))
-        items.append(
-            {
+        item = {
                 "source_id": source_id,
                 "audit_status": "observed_candidate" if probe.get("schema_status") == "matched" else "schema_blocked",
                 "quality_status": "verified" if timestamp_evidence == "official_publication_timestamp" else "degraded",
@@ -87,7 +88,8 @@ def build_p0_candidate_audit(
                 "payload_sha256": probe.get("payload_sha256"),
                 "blockers": (["official_publication_timestamp_missing"] if timestamp_evidence == "first_observed_only" else []),
             }
-        )
+        _attach_fubon_research_supplement(item, fubon_items.get(source_id))
+        items.append(item)
     return {
         "schema_version": "p0-candidate-audit.v1",
         "decision_date": decision_date.isoformat(),
@@ -96,6 +98,7 @@ def build_p0_candidate_audit(
             "probe_date": decision_date.isoformat(),
             "probe_mode": "bounded_official_read_only",
             "probe_report_sha256": f"sha256:{probe_report_sha256}",
+            "fubon_research_projection_present": fubon_projection is not None,
         },
         "items": items,
         "formal_oos_allowed": False,
@@ -103,6 +106,56 @@ def build_p0_candidate_audit(
         "downstream_eligibility": "none",
         "human_decision": "requires_human_acceptance",
     }
+
+
+def _attach_fubon_research_supplement(
+    item: dict[str, Any], rows: Sequence[Mapping[str, Any]] | None
+) -> None:
+    """Expose a bounded research supplement without upgrading official evidence."""
+    if not rows:
+        return
+    item["fubon_research_supplement"] = {
+        "status": "observed_research_only",
+        "row_count": len(rows),
+        "quality": "degraded",
+        "availability_evidence": "first_observed_only",
+        "blockers": [
+            "not_official_announcement_evidence",
+            "formal_oos_not_allowed",
+        ],
+    }
+
+
+def _validate_fubon_projection(
+    projection: Mapping[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    expected = {
+        "schema_version": "fubon-p0-research-projection.v1",
+        "source": "fubon.marketdata",
+        "research_only": True,
+        "formal_oos_allowed": False,
+        "production_scheduler_allowed": False,
+        "production_blend_alpha_bp": 0,
+    }
+    for key, value in expected.items():
+        if projection.get(key) != value:
+            raise ValueError(f"Fubon projection {key} mismatch")
+    raw_rows = projection.get("observations")
+    if not isinstance(raw_rows, Sequence) or isinstance(raw_rows, (str, bytes)):
+        raise ValueError("Fubon projection observations must be an array")
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in raw_rows:
+        if not isinstance(row, Mapping):
+            raise ValueError("Fubon projection observation must be an object")
+        source_id = row.get("source_id")
+        if source_id not in P0_SOURCE_IDS:
+            raise ValueError("Fubon projection source_id must be a P0 source")
+        if row.get("quality") != "degraded" or row.get("availability_evidence_kind") != "first_observed_only":
+            raise ValueError("Fubon projection must remain first_observed_only degraded")
+        if row.get("downstream_eligibility") != "none" or row.get("production_scheduler_allowed") is not False:
+            raise ValueError("Fubon projection access boundary mismatch")
+        grouped.setdefault(str(source_id), []).append(dict(row))
+    return grouped
 
 
 def _validate_probe_report(
@@ -198,8 +251,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decision-date", type=date.fromisoformat, required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--fubon-projection", type=Path, help="唯讀載入手動富邦 research JSON")
     args = parser.parse_args(argv)
-    payload = build_p0_candidate_audit(args.decision_date)
+    fubon_projection = (
+        json.loads(args.fubon_projection.read_text(encoding="utf-8"))
+        if args.fubon_projection is not None
+        else None
+    )
+    payload = build_p0_candidate_audit(args.decision_date, fubon_projection=fubon_projection)
     rendered = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)

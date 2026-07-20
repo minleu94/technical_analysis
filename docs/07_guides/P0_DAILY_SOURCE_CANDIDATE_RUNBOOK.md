@@ -8,6 +8,25 @@
 .\.venv\Scripts\python.exe scripts\run_p0_candidate_audit.py --decision-date 2026-07-16 --output $env:TEMP\p0_candidate_audit.json
 ```
 
+### 富邦唯讀行情補強（research-only）
+
+富邦行情僅補強當下可觀測的處置、分盤撮合秒數、暫停狀態、漲跌停鎖死，以及未來／當日除權息與資本變動事件；它不是 TWSE／TPEX／MOPS 原始公告，也不補造歷史 PIT。先設定與「富邦行情 API 人工唯讀連線測試」相同的環境變數與 Windows Credential Manager credential，接著手動執行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_fubon_p0_research_probe.py `
+  --symbol 2330 `
+  --start-date 2026-07-01 `
+  --end-date 2026-07-31 `
+  --output $env:TEMP\fubon_p0_research.json
+
+.\.venv\Scripts\python.exe scripts\run_p0_candidate_audit.py `
+  --decision-date 2026-07-19 `
+  --fubon-projection $env:TEMP\fubon_p0_research.json `
+  --output $env:TEMP\p0_candidate_audit.json
+```
+
+輸出的 `fubon_research_supplement` 固定為 `observed_research_only`、`degraded`、`first_observed_only`，不會提高官方 probe 的 `quality_status`，也不會啟用正式 ingestion、ScoringEngine、Advice、Portfolio、scheduler 或交易。SDK 版本低於 `2.2.8`、公司行動端點不符或缺少行情欄位時，probe 必須失敗或列出 diagnostics；不得手動補值。
+
 `twse_full_delivery` probes the official TWT85U daily altered-trading-method list; `twse_halt_resume` probes TWTAWU halt/resume effective dates and times. Both preserve only first-observed evidence because neither payload supplies a verified official publication timestamp.
 
 `twse_monthly_revenue` and `tpex_monthly_revenue` probe the current official open-data snapshots. Their `出表日期` is retained as a report date, but it is not treated as an intraday publication timestamp; the free endpoints are current-period snapshots and do not prove historical PIT availability.

@@ -141,6 +141,34 @@ def test_probe_report_hash_is_stable_across_source_order() -> None:
     assert first["lineage"]["probe_report_sha256"] == second["lineage"]["probe_report_sha256"]
 
 
+def test_fubon_projection_is_exposed_only_as_degraded_research_supplement() -> None:
+    projection = {
+        "schema_version": "fubon-p0-research-projection.v1",
+        "source": "fubon.marketdata",
+        "research_only": True,
+        "formal_oos_allowed": False,
+        "production_scheduler_allowed": False,
+        "production_blend_alpha_bp": 0,
+        "observations": [
+            {
+                "source_id": "microstructure.disposition_stock",
+                "quality": "degraded",
+                "availability_evidence_kind": "first_observed_only",
+                "downstream_eligibility": "none",
+                "production_scheduler_allowed": False,
+            }
+        ],
+    }
+    payload = build_p0_candidate_audit(
+        date(2026, 7, 16), probe_report=_probe_report(), fubon_projection=projection
+    )
+
+    disposition = next(item for item in payload["items"] if item["source_id"] == "microstructure.disposition_stock")
+    assert disposition["fubon_research_supplement"]["status"] == "observed_research_only"
+    assert disposition["quality_status"] == "degraded"
+    assert payload["formal_oos_allowed"] is False
+
+
 @pytest.mark.parametrize(
     ("key", "unsafe_value"),
     [
