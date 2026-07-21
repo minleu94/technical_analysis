@@ -48,3 +48,12 @@
 ```
 
 必須重新凍結 dataset manifest、檢查 available dates、purged walk-forward、訓練 challenger、OOF calibration、寫 shadow predictions、drift、same-sample champion comparison、promotion review package 與 shadow dependency guard。完成後仍只可送人工 review，不會自動 promotion。
+
+## Formal Week 1 evidence report revision（2026-07-14 至 2026-07-19）
+
+- revision: `formal-week-1-20260719-r1`；在自然週結束後補登，不改寫任何既有 state。
+- formal credit snapshot count=`0`；outcome revision count=`0`；matured outcome denominator=`0`。
+- manual why-not：週期內沒有已綁定的未消費 formal trading session，也沒有合格 decision-time `manual_observed` artifact；因此不得以 development invocation、replay、fixture 或事後資料補成 observed day。
+- source acceptance：13 個 P0 source 仍待逐來源 owner/reviewer 的 license、quality、PIT、coverage、missing/outage 與 rollback review；沒有 source 被自動 accepted。
+- safety：`formal_oos_allowed=false`；`production_blend_alpha_bp=0`；Rule-only；未啟用交易、scheduler、training、promotion 或 unblind。
+- note：2026-07-21 的 TEMP/shadow snapshot 發生在本週期之後，不回填 Week 1，也不構成 Week 1 credit。
