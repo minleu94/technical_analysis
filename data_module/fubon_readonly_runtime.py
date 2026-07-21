@@ -33,7 +33,7 @@ def load_fubon_readonly_runtime(
 
     api_key = password_loader(API_KEY_SERVICE, USERNAME) or ""
     personal_id = resolve("FUBON_PERSONAL_ID", PERSONAL_ID_SERVICE)
-    cert_path = resolve("FUBON_CERT_PATH", CERT_PATH_SERVICE)
+    cert_path = _normalize_windows_path(resolve("FUBON_CERT_PATH", CERT_PATH_SERVICE))
     cert_pass = resolve("FUBON_CERT_PASS", CERT_PASS_SERVICE) or personal_id
     if not api_key or not personal_id or not cert_path:
         return None
@@ -43,3 +43,9 @@ def load_fubon_readonly_runtime(
         cert_path=cert_path,
         cert_pass=cert_pass,
     )
+
+
+def _normalize_windows_path(value: str) -> str:
+    """Accept Explorer's quoted ``Copy as path`` form without logging it."""
+
+    return value[1:-1] if len(value) >= 2 and value.startswith('"') and value.endswith('"') else value

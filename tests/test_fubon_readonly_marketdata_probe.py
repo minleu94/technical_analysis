@@ -116,3 +116,16 @@ def test_probe_uses_credential_manager_fallback_for_identity_and_certificate_pat
 
     assert result == 0
     assert sdk.calls[0] == ("apikey_login", ("id", "key", "cert", "id"), {})
+
+
+def test_probe_accepts_explorer_quoted_certificate_path() -> None:
+    sdk = _SDK(login=_Login(True))
+    result = run_probe(
+        environ={"FUBON_PERSONAL_ID": "id", "FUBON_CERT_PATH": '"C:\\certificates\\fubon.p12"'},
+        api_key_loader=lambda service, username: "key" if service == SERVICE else None,
+        sdk_factory=lambda: sdk,
+        output=lambda message: None,
+    )
+
+    assert result == 0
+    assert sdk.calls[0] == ("apikey_login", ("id", "key", "C:\\certificates\\fubon.p12", "id"), {})
