@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
+from data_module.fubon_readonly_runtime import CERT_PATH_SERVICE, PERSONAL_ID_SERVICE
 from scripts.test_fubon_readonly_marketdata import SERVICE, USERNAME, run_probe
 
 
@@ -57,8 +58,8 @@ def test_probe_fails_closed_when_credentials_are_missing() -> None:
 
     assert result == 2
     assert sdk_created is False
-    assert credential_loaded is False
-    assert messages == ["missing FUBON_PERSONAL_ID, FUBON_CERT_PATH, or Windows Credential Manager API key"]
+    assert credential_loaded is True
+    assert messages == ["missing Fubon read-only credentials (environment or Windows Credential Manager)"]
 
 
 def test_probe_stops_after_failed_login() -> None:
@@ -96,3 +97,22 @@ def test_probe_uses_only_otc_snapshot_after_successful_login() -> None:
         ("init_realtime", (), {}),
         ("quotes", (), {"market": "OTC"}),
     ]
+
+
+def test_probe_uses_credential_manager_fallback_for_identity_and_certificate_path() -> None:
+    sdk = _SDK(login=_Login(True))
+    values = {
+        (SERVICE, USERNAME): "key",
+        (PERSONAL_ID_SERVICE, USERNAME): "id",
+        (CERT_PATH_SERVICE, USERNAME): "cert",
+    }
+
+    result = run_probe(
+        environ={},
+        api_key_loader=lambda service, username: values.get((service, username)),
+        sdk_factory=lambda: sdk,
+        output=lambda message: None,
+    )
+
+    assert result == 0
+    assert sdk.calls[0] == ("apikey_login", ("id", "key", "cert", "id"), {})

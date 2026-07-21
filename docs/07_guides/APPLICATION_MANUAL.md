@@ -1065,7 +1065,7 @@ FinMind 是低頻 bulk／缺口來源，不是全市場逐檔的日常更新主�
 
 ### 富邦行情 API 人工唯讀連線測試
 
-`scripts/test_fubon_readonly_marketdata.py` 只供人工確認 Windows Credential Manager API key、憑證與 OTC 行情 snapshot 連線。執行前設定 `FUBON_PERSONAL_ID`、`FUBON_CERT_PATH`，必要時設定 `FUBON_CERT_PASS`；API key 必須保存在 Credential Manager 的 service `fubon-neo-readonly-api-key`、username `market-data`，不得寫入 repo、命令列或 log。缺少任一 credential 時腳本以 exit code 2 停止，登入失敗以 exit code 1 停止；成功登入後唯一允許的資料呼叫是 OTC snapshot quotes。此工具不呼叫帳務、持倉、委託或交易 API，不保存行情、不寫 DB，也不代表 broker lane、source acceptance 或 Formal evidence 已成立。自動化與測試只能使用 injected fake SDK，不得代替人工實際登入。
+`scripts/test_fubon_readonly_marketdata.py` 只供人工確認 Windows Credential Manager API key、憑證與 OTC 行情 snapshot 連線。可在目前終端設定 `FUBON_PERSONAL_ID`、`FUBON_CERT_PATH`，必要時設定 `FUBON_CERT_PASS`；若 Codex／Antigravity 等終端 process 不共用環境變數，則可在 Windows Credential Manager 建立下列 Generic Credentials，username 一律為 `market-data`：`fubon-neo-readonly-api-key`（API key）、`fubon-neo-readonly-personal-id`（身分識別）、`fubon-neo-readonly-cert-path`（憑證完整路徑），以及只有私鑰密碼不同於身分識別時才建立的 `fubon-neo-readonly-cert-pass`。工具優先使用當前 process 的環境變數，其次讀取這些 Credential Manager 項目；不得把任何值寫入 repo、命令列或 log。缺少任一必要 credential 時腳本以 exit code 2 停止，登入失敗以 exit code 1 停止；成功登入後唯一允許的資料呼叫是 OTC snapshot quotes。此工具不呼叫帳務、持倉、委託或交易 API，不保存行情、不寫 DB，也不代表 broker lane、source acceptance 或 Formal evidence 已成立。自動化與測試只能使用 injected fake SDK，不得代替人工實際登入。
 
 ### Formal clock 起跑前檢查
 

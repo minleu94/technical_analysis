@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -20,10 +19,7 @@ from data_module.fubon_marketdata_research import (
     project_dividends,
     project_ticker,
 )
-
-SERVICE = "fubon-neo-readonly-api-key"
-USERNAME = "market-data"
-
+from data_module.fubon_readonly_runtime import load_fubon_readonly_runtime
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -33,18 +29,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True, help="明確指定 TEMP JSON 輸出位置")
     args = parser.parse_args(argv)
 
-    api_key = _load_api_key()
-    personal_id = os.environ.get("FUBON_PERSONAL_ID", "").strip()
-    cert_path = os.environ.get("FUBON_CERT_PATH", "").strip()
-    cert_pass = os.environ.get("FUBON_CERT_PASS", "").strip() or personal_id
-    if not api_key or not personal_id or not cert_path:
-        print("missing FUBON_PERSONAL_ID, FUBON_CERT_PATH, or Windows Credential Manager API key")
+    credentials = _load_credentials()
+    if credentials is None:
+        print("missing Fubon read-only credentials (environment or Windows Credential Manager)")
         return 2
 
     from fubon_neo.sdk import FubonSDK
 
     sdk = FubonSDK()
-    login = sdk.apikey_login(personal_id, api_key, cert_path, cert_pass)
+    login = sdk.apikey_login(
+        credentials.personal_id,
+        credentials.api_key,
+        credentials.cert_path,
+        credentials.cert_pass,
+    )
     if not login.is_success:
         print(f"login failed: {login.message}")
         return 1
@@ -74,10 +72,11 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _load_api_key() -> str | None:
+def _load_credentials():
     from keyring import get_password
+    import os
 
-    return get_password(SERVICE, USERNAME)
+    return load_fubon_readonly_runtime(os.environ, get_password)
 
 
 def _data_rows(payload: Any) -> list[dict[str, Any]]:

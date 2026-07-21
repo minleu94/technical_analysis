@@ -6,9 +6,13 @@ import sys
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from data_module.fubon_readonly_runtime import (
+    API_KEY_SERVICE,
+    USERNAME,
+    load_fubon_readonly_runtime,
+)
 
-SERVICE = "fubon-neo-readonly-api-key"
-USERNAME = "market-data"
+SERVICE = API_KEY_SERVICE
 
 
 def run_probe(
@@ -19,19 +23,18 @@ def run_probe(
     output: Callable[[str], None] = print,
 ) -> int:
     """Run the bounded OTC quote probe with explicitly injected dependencies."""
-    personal_id = environ.get("FUBON_PERSONAL_ID", "").strip()
-    cert_path = environ.get("FUBON_CERT_PATH", "").strip()
-    cert_pass = environ.get("FUBON_CERT_PASS", "").strip() or personal_id
-    if not personal_id or not cert_path:
-        output("missing FUBON_PERSONAL_ID, FUBON_CERT_PATH, or Windows Credential Manager API key")
-        return 2
-    api_key = api_key_loader(SERVICE, USERNAME)
-    if not api_key:
-        output("missing FUBON_PERSONAL_ID, FUBON_CERT_PATH, or Windows Credential Manager API key")
+    credentials = load_fubon_readonly_runtime(environ, api_key_loader)
+    if credentials is None:
+        output("missing Fubon read-only credentials (environment or Windows Credential Manager)")
         return 2
 
     sdk = sdk_factory()
-    login = sdk.apikey_login(personal_id, api_key, cert_path, cert_pass)
+    login = sdk.apikey_login(
+        credentials.personal_id,
+        credentials.api_key,
+        credentials.cert_path,
+        credentials.cert_pass,
+    )
     if not login.is_success:
         output(f"login failed: {login.message}")
         return 1
