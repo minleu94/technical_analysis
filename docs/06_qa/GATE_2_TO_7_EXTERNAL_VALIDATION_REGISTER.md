@@ -55,6 +55,6 @@
 - formal credit snapshot count=`0`；outcome revision count=`0`；matured outcome denominator=`0`。
 - manual why-not：週期內沒有已綁定的未消費 formal trading session，也沒有合格 decision-time `manual_observed` artifact；因此不得以 development invocation、replay、fixture 或事後資料補成 observed day。
 - source acceptance：13 個 P0 source 仍待逐來源 owner/reviewer 的 license、quality、PIT、coverage、missing/outage 與 rollback review；沒有 source 被自動 accepted。
-- fubon.marketdata：已為 Fubon market-data 建立 research-only candidate dossier 審查投影，當前 hash: `sha256:8275ef80b6a409d3da4f9372569246abe0d28cabc60d322634c5d9a639715a60` (projection: `C:\Temp\external-evidence-shadow\fubon_dossier_projection.json`)，維持 deferred/disabled 且 eligibility=none，不供 downstream 使用。
+- fubon.marketdata：已為 Fubon market-data 建立 research-only candidate dossier 審查投影，當前 hash: `sha256:8275ef80b6a409d3da4f9372569246abe0d28cabc60d322634c5d9a639715a60` (projection: `C:\Temp\external-evidence-shadow\fubon_dossier_projection.json`)，已完成第三輪硬化使 review package 檢核清單與阻擋器完全一致（可用 `scripts/inspect_fubon_dossier.py` 進行唯讀、review-only 盤點），其狀態為 owner review pending / deferred candidate，eligibility 保持 none，formal credit 保持 0，不供 downstream 使用。
 - safety：`formal_oos_allowed=false`；`production_blend_alpha_bp=0`；Rule-only；未啟用交易、scheduler、training、promotion 或 unblind。
 - note：2026-07-21 的 TEMP/shadow snapshot 發生在本週期之後，不回填 Week 1，也不構成 Week 1 credit。

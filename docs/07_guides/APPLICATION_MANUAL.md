@@ -1068,6 +1068,19 @@ FinMind 是低頻 bulk／缺口來源，不是全市場逐檔的日常更新主�
 
 `scripts/test_fubon_readonly_marketdata.py` 只供人工確認 Windows Credential Manager API key、憑證與 OTC 行情 snapshot 連線。可在目前終端設定 `FUBON_PERSONAL_ID`、`FUBON_CERT_PATH`，必要時設定 `FUBON_CERT_PASS`；若 Codex／Antigravity 等終端 process 不共用環境變數，則可在 Windows Credential Manager 建立下列 Generic Credentials，username 一律為 `market-data`：`fubon-neo-readonly-api-key`（API key）、`fubon-neo-readonly-personal-id`（身分識別）、`fubon-neo-readonly-cert-path`（憑證完整路徑），以及只有私鑰密碼不同於身分識別時才建立的 `fubon-neo-readonly-cert-pass`。工具優先使用當前 process 的環境變數，其次讀取這些 Credential Manager 項目；不得把任何值寫入 repo、命令列或 log。缺少任一必要 credential 時腳本以 exit code 2 停止，登入失敗以 exit code 1 停止；成功登入後唯一允許的資料呼叫是 OTC snapshot quotes。此工具不呼叫帳務、持倉、委託或交易 API，不保存行情、不寫 DB，也不代表 broker lane、source acceptance 或 Formal evidence 已成立。自動化與測試只能使用 injected fake SDK，不得代替人工實際登入。
 
+### 富邦行情 Source Acceptance Dossier 唯讀盤點與評估
+
+`scripts/inspect_fubon_dossier.py` 用於對富邦 market-data 的 source acceptance dossier 進行唯讀盤點與評估。它可以檢測當前 dossier 缺少的證據，並區分「程式可驗證」與「只能由 owner / legal / source owner 提供」的項目，最後在指定安全白名單的 shadow root 目錄下產生一個供 owner 審查的繁體中文範本：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_fubon_dossier.py `
+  --dossier C:\Temp\external-evidence-shadow\fubon_dossier_projection.json `
+  --output-template C:\Temp\external-evidence-shadow\review_template.md `
+  --shadow-root C:\Temp\external-evidence-shadow
+```
+
+本工具為 review-only，所處理之 dossier 被標記為 deferred candidate，且狀態始終保持為 owner review pending。無論檢核項目是否完整，狀態一律投影為 deferred、allowed_use_cases=()，且下游 downstream_eligibility=none。此工具不寫入正式資料庫，預設不輸出 template 檔案，且只有當 `--output-template` 與 `--shadow-root` 同時存在並通過嚴格的正式路徑拒絕驗證時才允許寫入。
+
 ### Formal clock 起跑前檢查
 
 Formal clock 不是 development adapter 完成的延伸；只有在真實決策當下才能建立第一個 observed day。開始前必須同時具備：
