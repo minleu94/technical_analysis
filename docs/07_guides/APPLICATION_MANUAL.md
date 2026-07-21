@@ -1036,6 +1036,7 @@ Phase 3C 後，可用 `scripts\inspect_source_candidate_readiness.py` 做三大�
 3. 未填完人工作業前，台帳的 `human decision` 必須維持 `requires_human_acceptance`，`owner` 與 `date` 必須分離保持未填，`downstream eligibility` 必須維持 `none`。
 4. `decision_ready_candidate` 只代表該筆候選資料未觸發 available-date / required-field blocking diagnostic；它不是 `accepted`，不得讓資料進入 `ScoringEngine`、Advice、Portfolio、lifecycle 或 production scheduler。
 5. 資料缺失、outage、stale、缺 `available_date` 或 `available_date > decision_date` 時，維持 fail-closed 或明示 degraded / warning；不得補值或當作 observed。除權息 / 除權 capability 不能延伸主張為減資 / 分割 / 面額變更；後三者及停牌 / 復牌均須各自完成來源接受。
+6. `python -m scripts.build_source_acceptance_dossier --input <candidate-json> --output <TEMP-projection.json>` 只可輸出到正式 `DATA_ROOT` 之外。投影的 `dossier_content_hash` 是 dossier 欄位的 canonical SHA-256；檔案傳輸或落盤完整性必須另算 serialized file SHA-256，兩者不可混用。投影仍固定 `candidate_only=true`、`formal_oos_allowed=false`、`production_blend_alpha_bp=0`，不構成來源接受。
 
 只有台帳已記錄真實的 `accepted` / `limited` / `rejected` / `deferred` 結論、owner、日期與明確 downstream eligibility 時，才可另行規劃後續受控實作。本手冊與台帳本身不授權任何 ingestion 或策略變更。
 

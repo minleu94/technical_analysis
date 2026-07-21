@@ -25,6 +25,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "candidate_only": True,
         "formal_oos_allowed": False,
         "production_blend_alpha_bp": 0,
+        "dossier_content_hash": dossier.content_hash,
         "dossier": dossier.to_dict(),
     }
     args.output.write_text(

@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+import pytest
+
+from data_module.source_acceptance_governance import SourceAcceptanceDossier
 from scripts.build_source_acceptance_dossier import main
 
 
@@ -45,6 +48,13 @@ def test_cli_builds_read_only_deferred_dossier_projection(tmp_path: Path) -> Non
     assert payload["read_only"] is True
     assert payload["formal_oos_allowed"] is False
     assert payload["production_blend_alpha_bp"] == 0
+    round_tripped = SourceAcceptanceDossier.from_dict(payload["dossier"])
+    assert payload["dossier_content_hash"] == round_tripped.content_hash
+
+
+def test_dossier_rejects_unknown_projection_schema() -> None:
+    with pytest.raises(ValueError, match="unsupported source acceptance dossier schema"):
+        SourceAcceptanceDossier.from_dict({"schema_version": "source-acceptance-dossier.v2"})
 
 
 def test_cli_rejects_output_under_the_configured_production_data_root(

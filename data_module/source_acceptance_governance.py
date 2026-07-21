@@ -47,6 +47,9 @@ class SourceAcceptanceDossier:
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "SourceAcceptanceDossier":
         values = dict(payload)
+        schema_version = values.pop("schema_version", "source-acceptance-dossier.v1")
+        if schema_version != "source-acceptance-dossier.v1":
+            raise ValueError(f"unsupported source acceptance dossier schema: {schema_version}")
         values["downstream_use_cases"] = tuple(values.get("downstream_use_cases", ()))
         values["disable_conditions"] = tuple(values.get("disable_conditions", ()))
         values["evidence_artifact_ids"] = tuple(values.get("evidence_artifact_ids", ()))
