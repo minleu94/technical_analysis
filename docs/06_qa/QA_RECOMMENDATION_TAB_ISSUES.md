@@ -39,7 +39,7 @@
 ### 2.1 DTO 欄位命名
 
 **問題**: DTO 屬性名與 `to_dict()` 輸出欄位名不一致
-- **位置**: `app_module/dtos.py:RecommendationDTO`
+- **位置**: `app_module/dtos/__init__.py:RecommendationDTO`
 - **描述**: 
   - DTO 屬性: `price_change` (英文)
   - `to_dict()` 輸出: `漲幅%` (中文)

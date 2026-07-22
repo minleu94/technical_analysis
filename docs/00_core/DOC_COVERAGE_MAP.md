@@ -75,7 +75,7 @@
 **變更範圍：**
 - `app_module/*.py` 新增/修改/刪除
 - `decision_module/*.py` 新增/修改/刪除
-- DTO 結構變更（`app_module/dtos.py`）
+- DTO 結構變更（`app_module/runtime_dtos.py` / `app_module/decision_desk_dtos.py`）
 
 **必須更新（Must）：**
 - `PROJECT_NAVIGATION.md` - 「三層架構導航」段落（如架構變更）

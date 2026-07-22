@@ -53,7 +53,7 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 
 主要 views：
 
-- `ui_qt/views/daily_decision_view.py`（「市場總覽」唯一 Decision Desk instance）
+- `ui_qt/views/decision_desk_view.py`（「市場總覽」唯一 Decision Desk instance）
 - `ui_qt/views/market_regime_view.py`
 - `ui_qt/views/strong_stocks_view.py`
 - `ui_qt/views/weak_stocks_view.py`
