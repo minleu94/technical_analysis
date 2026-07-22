@@ -147,6 +147,9 @@ temp_downloads/
 # QA Outputs
 output/
 
+# Local QA report exports; share conclusions through docs/06_qa/ instead.
+qa/reports/
+
 # Graphify is a local, regenerable knowledge-graph build artifact.  This
 # recursive rule also prevents per-subdirectory scans from polluting status.
 **/graphify-out/
