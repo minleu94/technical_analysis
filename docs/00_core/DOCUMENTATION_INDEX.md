@@ -34,13 +34,11 @@
 | [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr North Star、Product Principles、Bounded Advice Policy、Evidence Requirements、Success Levels 與 Non-goals。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
 | [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要、本週優先事項與高風險區。 |
+| [GATE_2_DATA_GOVERNANCE_CONSOLIDATION_AUDIT_2026_07_22.md](../06_qa/GATE_2_DATA_GOVERNANCE_CONSOLIDATION_AUDIT_2026_07_22.md) | Gate 2 資料治理工程收斂稽核報告、全量 SQLite 數據與 P0 資料源缺口矩陣。 |
+| [SCHEDULER_HEALTH_OBSERVABILITY_REPORT.md](../06_qa/SCHEDULER_HEALTH_OBSERVABILITY_REPORT.md) | 排程與日常證據可觀測性健康報告、寫入意圖與相依性過濾。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 本文件，文檔導航。 |
 | [EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md) | 唯讀 evidence rehearsal engineering closeout、四層 tier、已知缺口與 forward handoff；不改寫 external Gate。 |
 | [DOCUMENTATION_STRUCTURE.md](DOCUMENTATION_STRUCTURE.md) | `docs/` 資料夾歸屬、生命週期、刪除/歸檔規則。 |
-| [DOC_COVERAGE_MAP.md](DOC_COVERAGE_MAP.md) | 變更類型對應需要同步更新的文件。 |
-| [AI_CONTEXT_PACK.md](AI_CONTEXT_PACK.md) | 給外部 AI / Agent 的高密度專案上下文。 |
-| [../../README.md](../../README.md) | repo 根目錄的使用者導向入口、功能概覽、啟動方式與分支策略。 |
-| [../../AGENT_CONTEXT.md](../../AGENT_CONTEXT.md) | Agent / 開發者快速上下文，補充文件權威、分支策略與接手導覽。 |
 | [PROJECT_NAVIGATION.md](../../PROJECT_NAVIGATION.md) | repo 根目錄的日常開發導航。 |
 | [PROJECT_INVENTORY.md](../../PROJECT_INVENTORY.md) | repo 根目錄的完整專案盤點。 |
 | [../../AGENTS.md](../../AGENTS.md) | Codex 自動讀取的 repo 根目錄指令入口，指向 `docs/agents/` 完整 Agent 架構。 |

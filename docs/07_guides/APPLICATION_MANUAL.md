@@ -1372,6 +1372,53 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 歷史載入、刪除與 legacy Promote 能力仍保留在舊 repository 邊界；新版 Cross-run Comparison 與 Registry-based Promote Gate 以 Registry run 為準。結果 details 會包含 `portfolio_credibility`、`unfilled_orders`、`cash_ledger`、`weight_exposure` 與 `gap_risk`：若推薦股票在回放視窗內沒有可用價格列，會以 `missing_price_rows` 記錄為未成交，而不是靜默跳過；若呼叫端提供 `max_participation_rate`，系統會用進場日成交股數與收盤價估算可參與金額，配置金額超過時以 `liquidity_limited` 記錄為未成交。回放現在會在建立 holding 前檢查可用現金，現金不足時以 `cash_limited` 記錄為未成交；`cash_ledger` 由這個現金 gate 流程產生買進、賣出與 `ending_cash`。若呼叫端提供 fee / tax / slippage bps，成本會套用到買賣現金流、ledger breakdown 與 `total_transaction_cost`；未提供時維持無成本回放。若呼叫端提供 `lot_size`，配置金額會依進場價向下取整為可成交整股股數，買不起最小交易單位時以 `lot_size_limited` 記錄為未成交。期間持倉的 `allocation_weight` 代表推薦配置的目標權重，`actual_allocation_weight` 代表整股 sizing 與 cash gate 後的實際可成交權重；`weight_exposure` 會依每個再平衡日彙總目標權重、實際權重、未成交權重與殘餘現金權重。若歷史資料含「開盤價」，`gap_risk.records` 會列出每筆 holding 的 `entry_close_price`、下一個可用交易日 `next_open_price`、`gap_pct`、`gap_direction` 與 `severity`，用來揭露同日收盤成交假設在隔日開盤可能遇到的跳空風險。V1.2 details 另含 `rolling_risk_metrics`、`microstructure_preflight` 與 `relative_attribution`：rolling risk 只讀已產生 equity curve / holdings；microstructure preflight 只檢查歷史資料內可選的處置股、分盤交易、全額交割、漲跌停鎖死與除權息欄位，缺欄位時揭露 missing source；relative attribution 只在 history 提供 benchmark / industry / concept 參考欄位時產生相對報酬。`portfolio_credibility` 仍會揭露同日收盤成交、再平衡現金重用限制、成交量 / Liquidity 與 Gap 限制；目前仍未建零股、委託簿撮合、買賣價差或 gap 實際成交模型，`gap_risk`、microstructure 與 attribution 只做診斷，不會改變 PnL、成交價、cash ledger 或 sizing。這些 warning 應先讀完，再判讀回放績效。結果仍依成交與推薦回放假設，不等同實盤。
 
+## 11. Gate 2 Data Governance Consolidation & PIT Safeguards
+
+### 11.1 資料品質防線 (DataQualityFirewall)
+
+`DataQualityFirewall` 提供非破壞性數據品質診斷，絕不上寫或刪除正式 SQLite 原始資料庫：
+
+1. **`daily_prices` 診斷**:
+   - 捕捉 NULL / 空白 / 非法 `證券代號`（隔離標記 `QUARANTINE_REJECT`）。
+   - 捕捉週末 / 休市日 OHLC 記錄（標記 `SUSPICIOUS_WEEKEND_DATE` 與警告日誌）。
+   - 捕捉重複主鍵 `(證券代號, 日期)` 與價格範圍違規（`QUARANTINE_ISOLATE`）。
+   - 產出可追溯 anomaly report，包含 exact primary key、row hash、原因與建議處置。
+
+2. **`market_indices` 診斷**:
+   - 檢核規範欄位 `指數名稱` 與舊欄位 `收盤價` / `收盤指數`。
+   - 若 `指數名稱` 缺失但舊 OHLC 仍可由 fallback 讀取，系統明確評估為 `degraded`（降級），絕不誤報為 `healthy`。
+
+### 11.2 PIT (Point-In-Time) 安全防線
+
+適用於 `fundamental_monthly_revenues`、`fundamental_statement_items` 與 `valuation`：
+
+1. **可得日規則**: 強制要求 `available_date <= decision_as_of_date` 才能在歷史推薦、策略評分與回測中採信。
+2. **未來資料偏誤攔截**:
+   - `available_date > decision_as_of_date` 觸發 `PIT_FUTURE_LOOK_AHEAD` 並強制拒絕。
+   - `available_date` 缺失觸發 `PIT_AVAILABLE_DATE_MISSING` 並強制拒絕/降級。
+   - 月營收與季度財報讀取同時要求可驗證的 `announced_date`；缺失時觸發 `PIT_ANNOUNCED_DATE_MISSING` 並 fail-closed，不得把回填 `available_date` 當作歷史 PIT 證據。
+   - 事後補齊之公告日觸發 `PIT_POST_HOC_ANNOUNCEMENT` 並強制拒絕。
+3. **無 Future Leakage 保證**: 防線確保缺失資料不會默默填充為 0 或高分，絕不引入未來函數。
+
+### 11.3 Gate 2 證據三層模型與運作包
+
+1. **三層模型**:
+   - **Layer 1: Weekly Collection**: 側邊每週自動採集，標記為 `pending_human_review` 或 `collection_failed`。
+   - **Layer 2: Approved History Projection**: 經具名 owner 核准之外部唯讀 JSON 投影 (`approved-weekly-history-projection.v1`)，固定 `formal_credit_authorized=false`。
+   - **Layer 3: Formal DB Credit**: 正式資料庫 credit 權限，必須由具名人工權責角色簽署。
+2. **Projection 驗證限制**: 嚴禁 projection 指向正式 SQLite 資料庫目錄，並重複檢查週期重疊與 Schema 格式。
+3. **人工審查包與災原演練**:
+   - 提供週次審查表單範本、Working-Copy 備份與復原演練 SOP 及緊急回滾核對清單。
+
+### 11.4 排程與日常證據可觀測性
+
+1. **五大排程任務相依性**:
+   - `daily_data_update_quick` -> `daily_data_freshness_check` -> `scheduled_recommendation_snapshot` -> `scheduled_evidence_pipeline_dry_run` -> `v2_2_weekly_collection`
+2. **寫入意圖劃分**:
+   - `daily_data_update_quick` 允許進行市場價格資料更新寫入 (`MARKET_DATA_UPDATE_WRITE`)。
+   - `production_scheduler_allowed=false` 僅約束正式 DB Evidence 寫入，**絕不代表禁止每日市場價格資料更新**。
+
+
 ## 10. 持倉管理
 
 ### 10.1 手動記錄交易

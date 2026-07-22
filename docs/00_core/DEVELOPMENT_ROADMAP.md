@@ -1,4 +1,4 @@
-﻿# DEVELOPMENT_ROADMAP（Roadmap Hub）
+# DEVELOPMENT_ROADMAP（Roadmap Hub）
 
 > **2026-07-13 系統工程整合**：A～F committed handoff 已由 G 依 SHA、ownership 與 focused suite 驗證，跨流 DTO／JSON composition、唯讀 smoke 與 pure verifier 均成立。這只代表工程整合已驗證；下一步仍是 forward evidence、逐來源人工接受與正式 ML OOS／promotion review，不是 scheduler、production automation 或 formal product closeout。
 >
@@ -24,6 +24,8 @@
 | [system_architecture.md](../01_architecture/system_architecture.md) | 目前系統架構、模組邊界、資料流與高風險技術邊界。 |
 | [target_system_architecture.md](../01_architecture/target_system_architecture.md) | Transitional / Target Architecture、產品領域邊界、治理與決策權限；不代表目前已實作。 |
 | [system_vision_specification.md](../01_architecture/system_vision_specification.md) | North Star、Product Principles、Bounded Advice、Evidence Requirements、Success Levels 與 Non-goals。 |
+| [GATE_2_DATA_GOVERNANCE_CONSOLIDATION_AUDIT_2026_07_22.md](../06_qa/GATE_2_DATA_GOVERNANCE_CONSOLIDATION_AUDIT_2026_07_22.md) | Gate 2 資料治理工程收斂稽核報告、全量 SQLite 統計、13 個 P0 源狀態與 PIT 安全矩陣。 |
+| [SCHEDULER_HEALTH_OBSERVABILITY_REPORT.md](../06_qa/SCHEDULER_HEALTH_OBSERVABILITY_REPORT.md) | 排程與日常證據可觀測性健康報告、5 大任務狀態、寫入意圖劃分與運作提示。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 文檔導航與文件所在位置，不作為功能或狀態事實來源。 |
 | [GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md) | Gate 2–7 純工程完成後的接手入口；導向外部驗證、append-only gate revisions 與 ML 重驗流程，不取代各主題 SSOT。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與結案 Gate。 |

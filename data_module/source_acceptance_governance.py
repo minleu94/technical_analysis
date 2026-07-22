@@ -225,8 +225,8 @@ class SourceAcceptanceGovernance:
         add_item("rollback_reference", "驗證回滾參考是否設定為有效的註冊表修訂版或禁用參考", False, "missing_rollback_reference", f"目前參考: {dossier.rollback_reference}")
 
         # 缺失證據清單
-        missing_prog = [item["name"] for item in checklist if item["is_programmatic"] and item["status"] != "verified"]
-        missing_auth = [item["name"] for item in checklist if not item["is_programmatic"] and item["status"] != "verified"]
+        missing_prog: list[str] = [str(item["name"]) for item in checklist if item["is_programmatic"] and item["status"] != "verified"]
+        missing_auth: list[str] = [str(item["name"]) for item in checklist if not item["is_programmatic"] and item["status"] != "verified"]
 
         is_ready = len(missing_prog) == 0 and len(missing_auth) == 0 and len(blockers) == 0
 

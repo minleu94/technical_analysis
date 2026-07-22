@@ -383,3 +383,14 @@ class DBManager:
         except Exception as e:
             self.logger.error(f"執行查詢失敗: {sql}, 錯誤: {str(e)}")
             raise e
+
+    def has_table(self, table_name: str) -> bool:
+        """檢查指定資料庫 Table 是否存在"""
+        try:
+            df = self.execute_query(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
+                (table_name,),
+            )
+            return not df.empty
+        except Exception:
+            return False
