@@ -296,6 +296,41 @@ def test_pre_v2_readiness_reports_parallel_ready_and_time_waiting_items(tmp_path
     assert "V2.0" in render_pre_v2_readiness_markdown(report)
 
 
+def test_pre_v2_readiness_uses_explicit_owner_approved_weekly_projection(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    projection_path = tmp_path / "approved-weekly-history.json"
+    projection_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "approved-weekly-history-projection.v1",
+                "formal_credit_authorized": False,
+                "records": [
+                    {
+                        "review_id": "eor_week1",
+                        "review_hash": "sha256:week1",
+                        "period_start": "2026-07-06",
+                        "period_end": "2026-07-12",
+                        "owner_role": "archi",
+                        "approved_at": "2026-07-13T00:00:00+08:00",
+                        "status": "approved_weekly_review",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    report = PreV2ReadinessService(
+        config,
+        evidence_db_path=tmp_path / "missing.db",
+        approved_weekly_history_projection_path=projection_path,
+    ).inspect(decision_date="2026-07-20")
+    weekly = {item.item_id: item for item in report.items}["weekly_history"]
+    assert weekly.observed_count == 1
+    assert weekly.status == STATUS_WAITING_FOR_TIME
+    assert weekly.evidence["approved_projection_path"] == str(projection_path)
+
+
 def test_pre_v2_readiness_flags_source_and_report_gaps_without_creating_missing_db(tmp_path: Path) -> None:
     config = _config(tmp_path)
     missing_db = tmp_path / "missing" / "evidence.db"

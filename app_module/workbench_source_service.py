@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import os
 import sqlite3
 from typing import Any
 
@@ -37,6 +38,7 @@ class WorkbenchSourceService:
             config,
             evidence_db_path=self.evidence_db_path,
             research_db_path=self.research_db_path,
+            approved_weekly_history_projection_path=os.environ.get("WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH"),
         )
         self.composer = WorkbenchReadOnlyComposer()
         self.scheduled_status_service = ScheduledEvidenceStatusService(config)

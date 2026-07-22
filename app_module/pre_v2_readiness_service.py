@@ -13,6 +13,7 @@ from app_module.agent_evidence_access_service import (
     build_ai_report_template,
 )
 from app_module.decision_desk_snapshot_storage_dtos import section_is_ready
+from app_module.approved_weekly_history_projection import load_approved_weekly_history_projection
 
 
 STATUS_READY = "ready"
@@ -76,12 +77,14 @@ class PreV2ReadinessService:
         *,
         evidence_db_path: str | Path | None = None,
         research_db_path: str | Path | None = None,
+        approved_weekly_history_projection_path: str | Path | None = None,
     ) -> None:
         self.config = config
         self.evidence_db_path = Path(evidence_db_path) if evidence_db_path is not None else Path(config.db_file)
         self.research_db_path = (
             Path(research_db_path) if research_db_path is not None else Path(config.research_run_db_file)
         )
+        self.approved_weekly_history_projection_path = approved_weekly_history_projection_path
 
     def inspect(
         self,
@@ -151,7 +154,42 @@ class PreV2ReadinessService:
         }
 
     def _weekly_history_item(self, min_weekly_records: int) -> PreV2ReadinessItem:
+        try:
+            projection = load_approved_weekly_history_projection(self.approved_weekly_history_projection_path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            projection = None
+            projection_diagnostic = f"approved_weekly_history_projection_unavailable:{exc}"
+        else:
+            projection_diagnostic = ""
+        if projection is not None:
+            count = len(projection.records)
+            projection_latest_period_end = max((item["period_end"] for item in projection.records), default=None)
+            evidence = {
+                "approved_projection_path": str(projection.path),
+                "latest_period_end": projection_latest_period_end,
+            }
+            if count < min_weekly_records:
+                return PreV2ReadinessItem(
+                    item_id="weekly_history",
+                    label="多週 weekly evidence operations history",
+                    status=STATUS_WAITING_FOR_TIME,
+                    required_count=int(min_weekly_records),
+                    observed_count=count,
+                    blocking_reasons=("insufficient_weekly_history_records",),
+                    next_actions=("繼續累積經具名 owner 核准的不同週期 weekly review。",),
+                    evidence=evidence,
+                )
+            return PreV2ReadinessItem(
+                item_id="weekly_history",
+                label="多週 weekly evidence operations history",
+                status=STATUS_READY,
+                required_count=int(min_weekly_records),
+                observed_count=count,
+                evidence=evidence,
+            )
         diagnostics: list[str] = []
+        if projection_diagnostic:
+            diagnostics.append(projection_diagnostic)
         count = 0
         latest_period_end: str | None = None
         try:
