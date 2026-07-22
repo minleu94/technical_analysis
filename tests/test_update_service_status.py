@@ -317,6 +317,48 @@ def test_sync_daily_price_files_to_sqlite_preserves_zero_padded_stock_codes(tmp_
     ]
 
 
+def test_sync_daily_price_files_skips_invalid_schema_and_weekend_without_evidence(tmp_path, monkeypatch):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    pd.DataFrame({
+        "Date": ["2024-01-06"],
+        "Open": [1.0],
+        "High": [2.0],
+        "Low": [1.0],
+        "Close": [1.5],
+        "Volume": [100],
+    }).to_csv(config.daily_price_dir / "20240106.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame({
+        "證券代號": ["2330"],
+        "收盤價": [900.0],
+    }).to_csv(config.daily_price_dir / "20260624.csv", index=False, encoding="utf-8-sig")
+    monkeypatch.setattr("app_module.update_service.official_twse_session_exists", lambda _: False)
+
+    result = UpdateService(config).sync_source_to_sqlite("daily_price_files")
+
+    assert result["success"] is True
+    synced = DBManager(config).execute_query('SELECT "日期", "證券代號" FROM daily_prices;')
+    assert synced.to_dict(orient="records") == [{"日期": "20260624", "證券代號": "2330"}]
+
+
+def test_sync_daily_price_files_accepts_weekend_only_with_official_session_evidence(tmp_path, monkeypatch):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    pd.DataFrame({
+        "證券代號": ["2330"],
+        "收盤價": [900.0],
+    }).to_csv(config.daily_price_dir / "20240106.csv", index=False, encoding="utf-8-sig")
+    monkeypatch.setattr("app_module.update_service.official_twse_session_exists", lambda _: True)
+
+    result = UpdateService(config).sync_source_to_sqlite("daily_price_files")
+
+    assert result["success"] is True
+    synced = DBManager(config).execute_query('SELECT "日期", "證券代號" FROM daily_prices;')
+    assert synced.to_dict(orient="records") == [{"日期": "20240106", "證券代號": "2330"}]
+
+
 def test_sync_daily_data_to_sqlite_preserves_zero_padded_stock_codes(tmp_path):
     from data_module.db_manager import DBManager
 
@@ -544,6 +586,24 @@ def test_sync_market_and_industry_csv_to_sqlite_replaces_tables(tmp_path):
             if row["pk"]
         ]
     assert market_pk_cols == ["指數名稱", "日期"]
+
+
+def test_sync_market_index_normalizes_single_series_csv_to_taiex(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    pd.DataFrame({
+        "日期": ["2026-05-29"],
+        "收盤價": [21100.0],
+    }).to_csv(config.market_index_file, index=False, encoding="utf-8-sig")
+
+    result = UpdateService(config).sync_source_to_sqlite("market_index")
+
+    assert result["success"] is True
+    market = DBManager(config).execute_query('SELECT "日期", "指數名稱", "收盤指數" FROM market_indices;')
+    assert market.to_dict(orient="records") == [
+        {"日期": "20260529", "指數名稱": "TAIEX", "收盤指數": 21100.0}
+    ]
 
 
 def test_check_data_status_does_not_repair_or_write_broker_registry(tmp_path):

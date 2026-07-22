@@ -12,6 +12,12 @@ from datetime import datetime ,timedelta
 import app_module.update_data_normalization as update_data_normalization
 from app_module.update_service_status_support import compose_sqlite_status_read_model
 from app_module.update_daily_output import parse_daily_update_output
+from data_module.market_data_integrity import (
+is_valid_daily_price_frame ,
+is_weekend_date_key ,
+normalize_market_index_frame ,
+official_twse_session_exists ,
+)
 
 
 def _monthly_revenue_status_today() -> str:
@@ -193,6 +199,7 @@ class UpdateService :
                 delete_date_keys =True
             elif normalized =='market_index':
                 df =self ._load_csv_for_sqlite (self .config .market_index_file ,require_date =True )
+                df =normalize_market_index_frame (df )if not df .empty else df
                 table_name ='market_indices'
                 replace_table =True
                 delete_date_keys =False
@@ -607,6 +614,18 @@ class UpdateService :
                     continue
                 df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
                 if df .empty :
+                    continue
+                if not is_valid_daily_price_frame (df ):
+                    import logging
+                    logging .getLogger (__name__ ).warning (
+                    "[UpdateService] skip invalid daily-price CSV schema: %s",path
+                    )
+                    continue
+                if is_weekend_date_key (date_key )and not official_twse_session_exists (date_key ):
+                    import logging
+                    logging .getLogger (__name__ ).warning (
+                    "[UpdateService] daily-price session has no official TWSE evidence; skip file: %s",path
+                    )
                     continue
                 if '日期'not in df .columns and '日期'not in df .columns :
                     df .insert (0 ,'日期',date_key )

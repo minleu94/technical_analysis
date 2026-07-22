@@ -294,7 +294,29 @@ TWSE 補檔遇到平日休市（例如颱風停市）時，只有在至少一個
 
 此工具是受控唯讀檢視器，不應用來修改或刪除資料。
 
-### 4.6 匯出 CSV 備案
+### 4.6 市場資料完整性修復（受控 CLI）
+
+當資料品質稽核發現 `daily_prices` 有空白股票代號、非交易日誤入資料，或 `market_indices` 缺少指數名稱時，使用受控 CLI；它不會改動 raw CSV、策略、Recommendation、evidence 或 scheduler。星期六、日不是直接刪除條件：個股日檔必須先符合「含 `證券代號`、`收盤價`」的欄位契約；若日期落在週末，還必須有 TWSE `MI_INDEX` 的官方開市資料才允許同步。官方查詢失敗時 fail-closed，不把該日當作可交易日。
+
+```powershell
+# 先只讀列出預計修復範圍與每個週末日期的官方查詢證據
+.\.venv\Scripts\python.exe scripts\repair_market_data_integrity.py --json-output
+
+# 人工核對後才套用：只建立一份 SQLite snapshot、移除已驗證非交易日 / 空代號列，並由 raw market_index.csv 重建 market_indices
+.\.venv\Scripts\python.exe scripts\repair_market_data_integrity.py --apply --confirm apply-market-data-integrity-repair --json-output
+```
+
+套用前腳本會用 SQLite backup API 建立 `DATA_ROOT/sqlite/backups/twstock_before_market_data_integrity_<timestamp>.db`，並執行 `PRAGMA quick_check`。若驗證不通過，正式 DB 不會進行刪除。回復時應停止寫入工作、以該 snapshot 依 SQLite backup API 還原，再重新跑 `PRAGMA quick_check`；不可用複製貼上方式覆寫仍在使用中的 WAL 資料庫。
+
+大型備份不會由腳本自動刪除。先以只讀盤點確認健康度與保留候選，再由 owner 對每一份候選確認用途與可回復性：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\audit_sqlite_backup_retention.py --verify
+```
+
+預設建議是保留 active DB 與三份最新、已驗證的完整 snapshot；舊 snapshot 僅列為人工審核候選，絕不自動刪除，避免破壞與 migration / backfill 對應的回復點。
+
+### 4.7 匯出 CSV 備案
 
 個別資料頁可選：
 
@@ -303,11 +325,11 @@ TWSE 補檔遇到平日休市（例如颱風停市）時，只有在至少一個
 
 輸出使用 UTF-8 with BOM，方便用 Excel 開啟。這是離線備份與人工研究功能，不影響系統日常運作。
 
-### 4.7 高風險操作
+### 4.8 高風險操作
 
 「強制重新合併」與「強制全量更新」會長時間處理大量歷史資料。只有在資料損毀、schema 修復或算法變更後使用，不要作為日常更新方式。
 
-### 4.8 Month 5 月營收候選資料抓取
+### 4.9 Month 5 月營收候選資料抓取
 
 月營收候選資料抓取只負責來源驗證與 raw evidence 保存；抓取 CLI 本身不會寫入正式 `DATA_ROOT/meta_data/monthly_revenue_availability.csv`，也不會寫入 `fundamental_monthly_revenues`。正式 mapping 與 SQLite 回填需另外走 validator / backfill 流程，並在高風險操作前由人工確認。
 

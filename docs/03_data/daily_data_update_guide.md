@@ -121,6 +121,12 @@ python scripts/merge_daily_data.py
 
 備份檔集中存放在 `meta_data/backup/`。為降低硬碟負擔，系統會在新備份成功後清理同一來源的舊備份：同一天只保留最新一份，且最多保留最新 5 個日期版本；清理範圍僅限備份目錄內「完全符合來源前綴 + 日期戳」的檔案，不會刪除正式資料，也不會讓一般 `twstock_*.db` 清掉 `twstock_fundamental_schema_*.db` 這類不同用途的標籤備份。備份來源與既有大檔清理候選見 [BACKUP_RETENTION_AUDIT_2026_07_06.md](BACKUP_RETENTION_AUDIT_2026_07_06.md)。
 
+### CSV 欄位契約與週末交易日證據
+
+同步 `daily_price/YYYYMMDD.csv` 前，檔案必須至少包含 `證券代號` 與 `收盤價`；像單一市場序列、指數或其他非個股格式的 CSV 會被警告並跳過，不會寫入 `daily_prices`。週末日期也不採「一律跳過」：只有 TWSE `MI_INDEX` 對該日回傳官方交易資料時才會同步；若官方查詢沒有資料、逾時或解析失敗，則 fail-closed 不寫入，並保留原始 CSV 供人工稽核。這避免把補班、特殊開市或錯置檔案用星期規則誤判。
+
+若既有 SQLite 已出現空股票代號、已驗證非交易日資料或沒有 `指數名稱` 的大盤列，請使用 `scripts/repair_market_data_integrity.py` 先 dry-run；正式套用需要 `--apply --confirm apply-market-data-integrity-repair`，會先建立一份 SQLite snapshot，絕不修改 raw CSV。操作與回復步驟見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md#46-市場資料完整性修復受控-cli)。
+
 ### 標準流程（推薦）
 
 ```bash
