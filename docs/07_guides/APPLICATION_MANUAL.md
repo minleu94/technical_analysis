@@ -243,7 +243,11 @@ TWSE 補檔遇到平日休市（例如颱風停市）時，只有在至少一個
 - 月營收
 - SQLite 資料檢視
 
-另有「三大法人」、「信用交易」、「集保股權」與「自動排程狀態」四個唯讀治理頁。前三者只顯示 SQLite 表的筆數與最新決策日期；`MISSING` 或筆數為 0 表示目前尚未接線或沒有已匯入資料，不是籌碼數值為零，也不會提供假性的手動下載按鈕。排程狀態只讀取最近狀態紀錄，供人工判讀背景工作是否曾執行；它不授權啟用 production scheduler，也不代表資料已完整。
+另有「三大法人」、「信用交易」、「集保股權」與「自動排程狀態」四個唯讀治理頁。
+
+- **三大法人與信用交易**：目前屬於 Phase 3C 候選研究資料 (Candidate Data)。可使用獨立受控的歷史回補 CLI 腳本（`scripts/update_phase3c_candidates.py`），依據具官方證據的台股交易日進行斷點續跑匯入。apply 必須明確指定位於 `DATA_ROOT` 外的 Candidate DB；例如 `D:/Min/Python/Project/FA_Data_candidate/phase3c_candidate.db`。絕不寫入或覆寫正式資料庫 `twstock.db`。UI 只會讀取 `PHASE3C_CANDIDATE_DB_PATH` 指定的 Candidate DB，並顯示其筆數、最早/最新日期與 checkpoint 覆蓋率；它不會猜測路徑或將正式 DB 當成候選資料。
+- **集保股權 (TDCC)**：目前官方 OpenData 端點 (`id=1-5`) 僅提供最新單週公開資料，不支援歷史多日期輪詢回補。系統將歷史期別明確標示為 `BLOCKED_NO_HISTORICAL_ENDPOINT` / `PARTIAL`，不偽造歷史數據。
+- **排程狀態**：只讀取最近狀態紀錄，供人工判讀背景工作是否曾執行；它不授權啟用 production scheduler，也不代表資料已完整。
 
 每日股價、大盤、產業、券商分點操作：
 
@@ -1637,14 +1641,15 @@ Runtime Observatory 只監控 Runtime / Governance 任務、agent workflow 或�
 
 Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **manual-only candidate ingestion**，它不屬於 V3.0 engineering closeout gate，不掛載於「一鍵安全更新」，也不由正式排程執行。
 
-執行腳本 `scripts/update_phase3c_candidates.py` 預設為 `--dry-run` 模式，不會建立 DB、不會建立 table，只會在主控台印出 diagnostics。
+執行腳本 `scripts/update_phase3c_candidates.py` 預設為 `--dry-run` 模式，不會建立 Candidate DB 或 table；它只進行來源與交易日 diagnostics，並在隔離暫定位置輸出摘要 sidecar。apply 必須同時提供確認 token 與明確的、位於 `DATA_ROOT` 外的 Candidate DB 路徑。
 
 ```powershell
-# Dry-run，不寫入 DB
+# Dry-run；不寫入 Candidate DB。預設不對本地缺少證據的日期進行線上交易日 probe。
 .\.venv\Scripts\python.exe scripts\update_phase3c_candidates.py --start-date 2026-07-06 --end-date 2026-07-08
 
-# 實際寫入指定的 DB (需使用 --confirm)
-.\.venv\Scripts\python.exe scripts\update_phase3c_candidates.py --start-date 2026-07-06 --end-date 2026-07-08 --confirm apply-phase3c-candidate-ingestion --db-path output\working_copy.db
+# 實際寫入隔離 Candidate DB（不可放在 DATA_ROOT 下），並讓 UI 能唯讀顯示狀態。
+$env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3c_candidate.db'
+.\.venv\Scripts\python.exe scripts\update_phase3c_candidates.py --start-date 2026-07-06 --end-date 2026-07-08 --sources institutional,credit --db-path $env:PHASE3C_CANDIDATE_DB_PATH --confirm apply-phase3c-candidate-ingestion
 ```
 
 輸出會明確包含以下邊界：

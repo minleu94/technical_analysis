@@ -633,12 +633,14 @@ class UpdateView(QWidget):
             info_layout.setSpacing(10)
 
             status_desc = {
-                "institutional_flow": "目前此資料庫中『三大法人』表雖然存在，但因為尚未獲得業務數據授權，因此為 **0 筆**（未接線）。\n"
-                                      "UI 整體品質將明確顯示為 MISSING / 尚未匯入，決策引擎與 Scoring 模組不會採信此處的 0 值，以防誤判為法人無交易行為。",
-                "credit_transaction": "目前信用交易（融資融券）資料表雖然存在，但目前為 **0 筆**。\n"
-                                      "UI 與決策模組將明確提示為 MISSING，不允許在未接線的情況下將融資券餘額假裝為 0 股或判定為無訊號。",
-                "tdcc_shareholding": "集保股權分散表存在，但目前為 **0 筆**。\n"
-                                    "UI 會將其標示為 MISSING，不假裝大戶持股為 0 或呈現中性無風險狀態。",
+                "institutional_flow": "『三大法人』屬 Phase 3C 候選研究資料 (Candidate Data)。\n"
+                                      "安全邊界說明：目前獨立於正式資料庫外，嚴禁直接參與 ScoringEngine、Recommendation、Advice、Portfolio 或任何交易邏輯。\n"
+                                      "若要對 2024-07-22 至今日開展可續跑 Candidate DB 回補，請使用下方 CLI 命令。",
+                "credit_transaction": "『信用交易 (融資融券)』屬 Phase 3C 候選研究資料 (Candidate Data)。\n"
+                                      "安全邊界說明：獨立於正式資料庫外，嚴禁將融資券餘額假裝為 0 股或填入正式資料庫。\n"
+                                      "若要開展兩年歷史可續跑 Candidate DB 回補，請使用下方 CLI 命令。",
+                "tdcc_shareholding": "『集保股權』目前僅 OpenAPI `id=1-5` 提供最新單週公開資料，不支援歷史多日期輪詢回補 (BLOCKED_NO_HISTORICAL_ENDPOINT)。\n"
+                                    "UI 會將歷史期別標示為 MISSING / PARTIAL，不假裝大戶持股為 0 或捏造歷史資料。",
                 "scheduler_status": "目前自動更新排程（Scheduler）處於 `Simulated/Waiting for time` 階段，且生產環境排程權限 `production_scheduler_allowed` 固定為 false。\n"
                                     "此頁面提供唯讀日誌與排程狀態檢視，嚴禁在此處手動觸發排程寫入。"
             }
@@ -647,6 +649,25 @@ class UpdateView(QWidget):
             text_label.setWordWrap(True)
             text_label.setStyleSheet("color: #475569; font-size: 12px; line-height: 140%;")
             info_layout.addWidget(text_label)
+
+            if key in {"institutional_flow", "credit_transaction"}:
+                cli_box = QTextEdit()
+                cli_box.setReadOnly(True)
+                cli_box.setMaximumHeight(80)
+                cmd_str = (
+                    "$env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3c_candidate.db'\n"
+                    "$startDate = (Get-Date).AddYears(-2).ToString('yyyy-MM-dd')\n"
+                    "$endDate = (Get-Date).ToString('yyyy-MM-dd')\n"
+                    "python scripts/update_phase3c_candidates.py `\n"
+                    "  --start-date $startDate --end-date $endDate `\n"
+                    "  --sources institutional,credit `\n"
+                    "  --db-path $env:PHASE3C_CANDIDATE_DB_PATH `\n"
+                    "  --confirm apply-phase3c-candidate-ingestion"
+                )
+                cli_box.setPlainText(cmd_str)
+                cli_box.setStyleSheet("background-color: #0f172a; color: #38bdf8; font-family: monospace; font-size: 11px;")
+                info_layout.addWidget(QLabel("可複製的安全受控 CLI 回補命令 (寫入隔離 Candidate DB)："))
+                info_layout.addWidget(cli_box)
 
             if key == "scheduler_status":
                 log_box = QTextEdit()
@@ -1674,38 +1695,31 @@ class UpdateView(QWidget):
         self.monthly_revenue_status_text.setPlainText(monthly_revenue_text)
 
         # 更新決策與候選資料域卡片
-        inst_val = status.get('institutional_flow', {})
-        inst_records = inst_val.get('total_records', 0)
-        inst_date = inst_val.get('latest_date', '無')
-        inst_status = inst_val.get('status', 'MISSING')
-        self.institutional_status_text.setPlainText(
-            f"最新日期：{inst_date}\n"
-            f"總記錄數：{inst_records}\n"
-            f"狀態：{inst_status} / 尚未匯入\n"
-            f"（未接線，不參與評分）"
-        )
+        def _fmt_cand_card(val: dict, name: str) -> str:
+            rec = val.get('total_records', 0)
+            st_d = val.get('earliest_date', '無')
+            end_d = val.get('latest_date', '無')
+            cov = val.get('coverage_pct', '0.0%')
+            st = val.get('status', 'MISSING')
+            disc = val.get('disclaimer', '候選研究資料，不參與評分')
+            if rec > 0:
+                return (
+                    f"狀態：{st}\n"
+                    f"總筆數：{rec:,}\n"
+                    f"區間：{st_d} ~ {end_d}\n"
+                    f"覆蓋率：{cov}\n"
+                    f"[{disc}]"
+                )
+            return (
+                f"最新日期：{end_d}\n"
+                f"總記錄數：{rec}\n"
+                f"狀態：{st} / 尚未匯入\n"
+                f"[{disc}]"
+            )
 
-        credit_val = status.get('credit_transaction', {})
-        credit_records = credit_val.get('total_records', 0)
-        credit_date = credit_val.get('latest_date', '無')
-        credit_status = credit_val.get('status', 'MISSING')
-        self.credit_status_text.setPlainText(
-            f"最新日期：{credit_date}\n"
-            f"總記錄數：{credit_records}\n"
-            f"狀態：{credit_status} / 尚未匯入\n"
-            f"（未接線，不參與評分）"
-        )
-
-        tdcc_val = status.get('tdcc_shareholding', {})
-        tdcc_records = tdcc_val.get('total_records', 0)
-        tdcc_date = tdcc_val.get('latest_date', '無')
-        tdcc_status = tdcc_val.get('status', 'MISSING')
-        self.tdcc_status_text.setPlainText(
-            f"最新日期：{tdcc_date}\n"
-            f"總記錄數：{tdcc_records}\n"
-            f"狀態：{tdcc_status} / 尚未匯入\n"
-            f"（未接線，不參與評分）"
-        )
+        self.institutional_status_text.setPlainText(_fmt_cand_card(status.get('institutional_flow', {}), "三大法人"))
+        self.credit_status_text.setPlainText(_fmt_cand_card(status.get('credit_transaction', {}), "信用交易"))
+        self.tdcc_status_text.setPlainText(_fmt_cand_card(status.get('tdcc_shareholding', {}), "集保股權"))
 
 
 

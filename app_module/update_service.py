@@ -4,6 +4,7 @@
 """
 
 import subprocess
+import os
 import sys
 from pathlib import Path
 from typing import Dict ,Any ,Optional ,List
@@ -18,6 +19,7 @@ is_weekend_date_key ,
 normalize_market_index_frame ,
 official_twse_session_exists ,
 )
+from data_module.phase3c_backfill_runner import configured_candidate_db_path
 
 
 def _monthly_revenue_status_today() -> str:
@@ -1273,6 +1275,7 @@ class UpdateService :
             }
         """
         import subprocess
+        import os
         import sys
         import logging
         from datetime import datetime ,timedelta
@@ -1396,6 +1399,7 @@ class UpdateService :
             }
         """
         import subprocess
+        import os
         import sys
         import logging
         import traceback
@@ -1540,6 +1544,7 @@ class UpdateService :
             }
         """
         import subprocess
+        import os
         import sys
         import logging
         import traceback
@@ -2592,6 +2597,7 @@ class UpdateService :
 
         try :
         # 直接調用 merge 腳本的函數
+            import os
             import sys
             import importlib .util
 
@@ -3011,6 +3017,7 @@ class UpdateService :
                 'end_date': str
             }
         """
+        import os
         import sys
         import importlib .util
         import logging
@@ -3508,50 +3515,80 @@ class UpdateService :
             }
 
     def check_decision_data_status(self) -> Dict[str, Any]:
-        """直連 SQLite 查詢三大法人、信用交易、集保股權的最新狀態 (與架構相容的 Read Model)"""
-        res = {}
-        if getattr(self.config, "use_sqlite", False):
-            import sqlite3
+        """讀取明確設定的 candidate DB 狀態；不將正式 DB 偽裝為候選資料。"""
+        candidate_db = configured_candidate_db_path()
+        tables = {
+            "institutional_flow": ("institutional_flows", "institutional"),
+            "credit_transaction": ("credit_transactions", "credit"),
+            "tdcc_shareholding": ("tdcc_shareholding", "tdcc"),
+        }
+
+        def empty_info() -> Dict[str, Any]:
+            return {
+                "total_records": 0,
+                "earliest_date": "無",
+                "latest_date": "無",
+                "coverage_pct": "無 checkpoint",
+                "distinct_dates": 0,
+            }
+
+        def inspect_candidate(table_name: str, source: str) -> Dict[str, Any]:
+            if candidate_db is None or not candidate_db.exists():
+                return empty_info()
             try:
-                with sqlite3.connect(self.config.db_file) as conn:
-                    conn.row_factory = sqlite3.Row
-                    cursor = conn.cursor()
-
-                    # 查詢 institutional_flows
-                    cursor.execute("SELECT COUNT(*), MAX(decision_date) FROM institutional_flows")
-                    row = cursor.fetchone()
-                    res['institutional_flow'] = {
-                        'total_records': row[0] if row else 0,
-                        'latest_date': row[1] if row and row[1] else '無',
-                        'status': 'MISSING' if not row or row[0] == 0 else 'ok'
+                import sqlite3
+                with sqlite3.connect(candidate_db) as conn:
+                    row = conn.execute(
+                        f"SELECT COUNT(*), MIN(decision_date), MAX(decision_date), "
+                        f"COUNT(DISTINCT decision_date) FROM {table_name}"
+                    ).fetchone()
+                    if row is None or int(row[0]) == 0:
+                        return empty_info()
+                    try:
+                        success_count, attempted_count = conn.execute(
+                            """
+                            SELECT
+                                COUNT(DISTINCT CASE WHEN status = 'SUCCESS' THEN decision_date END),
+                                COUNT(DISTINCT CASE WHEN status IN ('SUCCESS', 'FAILED_RETRYABLE') THEN decision_date END)
+                            FROM phase3c_backfill_checkpoints WHERE source = ?
+                            """,
+                            (source,),
+                        ).fetchone()
+                    except sqlite3.OperationalError:
+                        success_count, attempted_count = 0, 0
+                    coverage = (
+                        f"{(int(success_count) / int(attempted_count) * 100):.1f}%"
+                        if attempted_count
+                        else "無 checkpoint"
+                    )
+                    return {
+                        "total_records": int(row[0]),
+                        "earliest_date": row[1] or "無",
+                        "latest_date": row[2] or "無",
+                        "coverage_pct": coverage,
+                        "distinct_dates": int(row[3]),
                     }
+            except Exception:
+                return empty_info()
 
-                    # 查詢 credit_transactions
-                    cursor.execute("SELECT COUNT(*), MAX(decision_date) FROM credit_transactions")
-                    row = cursor.fetchone()
-                    res['credit_transaction'] = {
-                        'total_records': row[0] if row else 0,
-                        'latest_date': row[1] if row and row[1] else '無',
-                        'status': 'MISSING' if not row or row[0] == 0 else 'ok'
-                    }
-
-                    # 查詢 tdcc_shareholding
-                    cursor.execute("SELECT COUNT(*), MAX(decision_date) FROM tdcc_shareholding")
-                    row = cursor.fetchone()
-                    res['tdcc_shareholding'] = {
-                        'total_records': row[0] if row else 0,
-                        'latest_date': row[1] if row and row[1] else '無',
-                        'status': 'MISSING' if not row or row[0] == 0 else 'ok'
-                    }
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"check_decision_data_status 失敗: {e}")
-
-        if 'institutional_flow' not in res:
-            res['institutional_flow'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
-        if 'credit_transaction' not in res:
-            res['credit_transaction'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
-        if 'tdcc_shareholding' not in res:
-            res['tdcc_shareholding'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
-
-        return res
+        result: Dict[str, Any] = {}
+        for key, (table_name, source) in tables.items():
+            info = inspect_candidate(table_name, source)
+            has_candidate = info["total_records"] > 0
+            result[key] = {
+                "candidate_db_exists": candidate_db is not None and candidate_db.exists(),
+                "candidate_db_path": str(candidate_db) if candidate_db else "未設定 PHASE3C_CANDIDATE_DB_PATH",
+                **info,
+                "quality_pit_status": "PROVENANCE_TRACKED" if has_candidate else "UNAVAILABLE",
+                "status": (
+                    "CANDIDATE_AVAILABLE"
+                    if has_candidate
+                    else "BLOCKED_NO_HISTORICAL_ENDPOINT"
+                    if source == "tdcc"
+                    else "MISSING"
+                ),
+                "disclaimer": "候選研究資料，不參與評分或投資決策",
+                "formal_records": 0,
+                "candidate_records": info["total_records"],
+            }
+        return result
