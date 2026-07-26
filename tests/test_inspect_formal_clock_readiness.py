@@ -22,19 +22,26 @@ def _decision(root, holdout: str = "2026-07-14") -> None:
     (governance / "DevelopmentDataUsageDecision.jsonl").write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
 
-def _snapshot(path, decision_date: str = "2026-07-15") -> None:
+def _snapshot(
+    path,
+    decision_date: str = "2026-07-15",
+    *,
+    source_versions: dict[str, str] | None = None,
+    why: list[str] | None = None,
+) -> None:
     path.write_text(
         json.dumps(
             {
                 "decision_timestamp": f"{decision_date}T09:00:00+08:00",
                 "data_as_of_date": decision_date,
                 "max_available_timestamp": f"{decision_date}T08:59:59+08:00",
-                "source_versions": {"daily_prices": "sha256:" + "1" * 64},
+                "source_versions": source_versions
+                or {"daily_prices": "sha256:" + "1" * 64},
                 "strategy_version": "rule-v1", "policy_version": "policy-v1",
                 "rule_champion_snapshot_id": "champion:rule-v1", "universe_id": "tw-equity",
                 "universe_hash": "sha256:" + "2" * 64, "symbol": "2330", "score_bp": 7000,
                 "score_status": "observed", "rank": 1, "action_or_prompt": "RESEARCH",
-                "why": ["rule_rank_top_k"], "why_not": [], "risk_reasons": ["market_risk"],
+                "why": why or ["rule_rank_top_k"], "why_not": [], "risk_reasons": ["market_risk"],
                 "market_regime": "neutral", "liquidity_state": "liquid", "restriction_state": "clear",
                 "evidence_tier": "shadow", "missing_sources": [], "degraded_reasons": [],
                 "parent_artifact_ids": ["research:20260714"], "capture_kind": "manual_observed",
@@ -131,3 +138,24 @@ def test_snapshot_from_a_different_session_never_allows_capture(tmp_path) -> Non
     assert report["formal_trading_session"] == "2026-07-16"
     assert report["can_capture_shadow_snapshot"] is False
     assert "manual_observed_session_mismatch" in report["blockers"]
+
+
+def test_free_text_fubon_mention_does_not_create_source_dependency(tmp_path) -> None:
+    snapshot = tmp_path / "manual_observed.json"
+    _snapshot(snapshot, why=["Fubon not used; Rule-only input"])
+
+    report = inspect_readiness(tmp_path, snapshot)
+
+    assert "fubon_source_not_accepted_for_formal_clock" not in report["blockers"]
+
+
+def test_typed_fubon_source_version_blocks_formal_clock(tmp_path) -> None:
+    snapshot = tmp_path / "manual_observed.json"
+    _snapshot(
+        snapshot,
+        source_versions={"fubon.marketdata": "sha256:" + "3" * 64},
+    )
+
+    report = inspect_readiness(tmp_path, snapshot)
+
+    assert "fubon_source_not_accepted_for_formal_clock" in report["blockers"]

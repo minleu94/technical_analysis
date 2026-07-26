@@ -102,15 +102,26 @@ def inspect_readiness(output_root: Path, snapshot_json: Path | None = None) -> d
         "snapshot": "not_checked",
         "can_capture_shadow_snapshot": False,
         "formal_readiness": False,
+        "shadow_computation_readiness": True,
+        "formal_blockers": [],
+        "optional_shadow_blockers": [],
+        "shadow_diagnostics": [
+            "fubon_shadow_lane_optional_does_not_block_rule_only_formal_clock"
+        ],
         "blockers": [],
     }
-    blockers: list[str] = []
+    formal_blockers: list[str] = []
+    optional_shadow_blockers: list[str] = []
+    shadow_diagnostics: list[str] = [
+        "fubon_shadow_lane_optional_does_not_block_rule_only_formal_clock"
+    ]
+
     try:
         decision = load_development_data_usage_decision(
             decision_path, output_root=root, require_unconsumed=False
         )
     except (OSError, ValueError):
-        blockers.append("owner_decision_missing_or_invalid")
+        formal_blockers.append("owner_decision_missing_or_invalid")
         report["snapshot"] = _inspect_snapshot(snapshot_json)[0]
     else:
         report["owner_decision"] = "valid"
@@ -125,22 +136,56 @@ def inspect_readiness(output_root: Path, snapshot_json: Path | None = None) -> d
         report["consumption_registry"] = registry_state
         report["formal_trading_session"] = formal_session
         if registry_blocker:
-            blockers.append(registry_blocker)
+            formal_blockers.append(registry_blocker)
         snapshot_state, snapshot_blocker, snapshot_date = _inspect_snapshot(snapshot_json)
         report["snapshot"] = snapshot_state
         if snapshot_blocker:
-            blockers.append(snapshot_blocker)
+            formal_blockers.append(snapshot_blocker)
         if snapshot_state == "structurally_valid" and formal_session is not None and snapshot_date != formal_session:
-            blockers.append("manual_observed_session_mismatch")
+            formal_blockers.append("manual_observed_session_mismatch")
         report["can_capture_shadow_snapshot"] = (
             registry_state == "owner_attested_binding_valid" and snapshot_state == "structurally_valid"
             and snapshot_date == formal_session
         )
     if report["consumption_registry"] != "owner_attested_binding_valid":
-        blockers.append("holdout_binding_requires_owner_authority")
-    blockers.append("source_acceptance_owner_review_required")
-    report["blockers"] = blockers
+        formal_blockers.append("holdout_binding_requires_owner_authority")
+
+    # A valid snapshot declares its typed lineage through source_versions.
+    # Free-form text is never treated as source usage.
+    snapshot_path = snapshot_json
+    if snapshot_path is not None and snapshot_path.exists():
+        try:
+            data = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            if _snapshot_references_fubon(data):
+                formal_blockers.append("fubon_source_not_accepted_for_formal_clock")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            pass
+
+    report["formal_blockers"] = formal_blockers
+    report["optional_shadow_blockers"] = optional_shadow_blockers
+    report["shadow_diagnostics"] = shadow_diagnostics
+    report["shadow_computation_readiness"] = True
+    report["formal_readiness"] = False
+    report["blockers"] = formal_blockers
     return report
+
+
+def _snapshot_references_fubon(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    source_versions = payload.get("source_versions")
+    if not isinstance(source_versions, dict):
+        return False
+    fubon_source_ids = {
+        "fubon.marketdata",
+        "microstructure.disposition_stock",
+        "microstructure.periodic_call_auction",
+        "microstructure.suspended_halt_resume",
+        "microstructure.limit_lock",
+        "corporate_action.ex_dividend_timeline",
+        "corporate_action.reduction_split_par_value",
+    }
+    return any(str(source_id) in fubon_source_ids for source_id in source_versions)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

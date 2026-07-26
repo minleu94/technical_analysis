@@ -2,7 +2,29 @@
 
 > 目的：盤點 `tests/` 底下所有有效 Python 測試檔，分類哪些可以被非破壞式 Full App Healthcheck Runner 呼叫、哪些只能作 service/oracle 證據、哪些必須保留在一般 pytest 或人工檢查流程。
 
-## 結論
+## 2026-07-25 machine refresh
+
+Current filesystem Python files: `528`
+
+| 分類 | 數量 |
+|---|---:|
+| `general-unit-keep-in-pytest` | 128 |
+| `governance-doc-tooling` | 61 |
+| `healthcheck-runner-owned` | 29 |
+| `legacy-or-low-priority` | 10 |
+| `manual-only` | 14 |
+| `service-oracle-data-market` | 72 |
+| `service-oracle-portfolio-decision-runtime` | 66 |
+| `service-oracle-recommendation` | 18 |
+| `service-oracle-research-backtest` | 56 |
+| `slow-e2e-or-environment` | 3 |
+| `ui-healthcheck-candidate-bridge` | 18 |
+| `ui-healthcheck-direct-bridge` | 11 |
+| `write-risk-dry-run-required` | 42 |
+
+本節由 `scripts/audit_test_inventory.py` 的 deterministic audit 契約維護；CLI 同時檢查 filesystem／inventory 缺漏、過時路徑、上述數量漂移、AST parse errors、精確重複測試函式與 `pytest --collect-only` 結果。下方清單保留 2026-06-23 初始盤點歷史，不再作 current count SSOT。
+
+## 2026-06-23 初始結論
 
 目前有效測試區 Python 檔共 208 個，不含 `__pycache__` 與 `.pytest_cache`。分類結果如下：
 

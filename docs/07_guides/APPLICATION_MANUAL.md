@@ -50,12 +50,34 @@
 4. 每筆 feature 只用前一交易日（T-1）資訊，且可得日不晚於 decision date；universe 使用最少 252 日的 `conservative_observed_history`，並將 listing／delisting metadata 缺口列入 diagnostics。
 5. corporate-action coverage 在 V0 未提供時，輸出仍可供研究，但必定顯示 `research_only_degraded`；不得把它解讀成 clean dataset 或 formal OOS。
 6. 讀取 `generations/<generation-id>/manifest.json`：確認 `fit_row_count` 只對應 2025、`evaluation_row_count` 只對應 2026、`formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`formal_rule_only_path_unchanged=true` 及 `zero_formal_write=true`。
+
 7. 執行 `scripts/run_terra_development_research.py` 時，`--manifest` 與 `--dataset` 必須來自同一 generation directory；工具會在 fit 前重算 row counts 與 semantic content hash。`--output-root` 必須在 `DATA_ROOT` 外且尚不存在，report／projection 會成對 atomic publish。
 8. 若要在 UI 查看，將 `RESEARCH_CONSOLE_PROJECTION` 指向該 run 的 `ResearchConsoleProjection.json` 後啟動 UI；畫面只呈現 frozen DTO，不重算 Rule／ML 或讀取正式 DB。
 
 若 CLI 回報 source schema、output root、T-1、日期範圍或 generation already exists 錯誤，停止操作；不要改動正式 DB、不要覆寫 artifact，也不要以 2025 結果調參後重新宣稱 formal OOS。
 
 Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔助工具，不是正式資料 apply。執行 `scripts/build_corporate_action_availability_history.py` 時，必須提供 `--evidence-json`、`--coverage-json`、`--as-of-date` 與明確的 `--output-root`；CLI 會先驗證 `--as-of-date`，日期無效時不讀取任何 evidence／coverage JSON。兩個 JSON 根都必須是 object rows 的 list，否則分別以 `corporate_action_evidence_rows_invalid` 或 `corporate_action_coverage_rows_invalid` 停止，且不建立輸出。JSON 語法／編碼不合法時回報 `corporate_action_<label>_json_invalid`，檔案不存在或無法讀取時回報 `corporate_action_<label>_read_failed`，`--as-of-date` 不是有效 ISO 日期時回報 `corporate_action_as_of_date_invalid`；三者都在建立 output root 前 fail closed。`--output-root` 應使用 `DATA_ROOT` 外的 TEMP／development 路徑；若環境已設定 `DATA_ROOT`，CLI 會拒絕該 root 與其子路徑。三個 canonical output 任一已存在時會以 `corporate_action_output_exists` 停止，不覆寫既有 bytes；新輸出先寫入同 root 的唯一 staging directory，完成後才逐檔發布並清理 staging。這降低半套輸出風險，但不代表三檔具單一 filesystem transaction，也不構成 corporate-action coverage 已接受、Formal evidence 或 forward credit。
+
+### 富邦行情 PIT-Safe Shadow Decision Pipeline CLI（開發者／研究操作）
+
+這是 CLI-only、shadow-only 的 Fubon 行情決策評估工具，不會影響正式 Rule-only 決策結果，也不會取得 Formal Evidence Credit。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_fubon_shadow_decision.py `
+  --authorization <path-to-authorization-json> `
+  --input <path-to-fubon-observation-json> `
+  --universe <path-to-universe-json> `
+  --strategy-config <path-to-strategy-config-json> `
+  --decision-timestamp "2026-07-26T00:00:00+00:00" `
+  --output-root $env:TEMP\technical_analysis_fubon_shadow `
+  --candidate-db $env:TEMP\technical_analysis_fubon_shadow\fubon_candidates.sqlite
+```
+
+- `--authorization` 可省略並載入預設 shadow 授權；`--input`、`--universe`、`--strategy-config` 與 `--decision-timestamp` 必須明確提供。
+- `--output-root` 可省略為只輸出 stdout；`--candidate-db` 可將驗證後資料寫入獨立 development SQLite。兩者均拒絕正式資料根、正式 DB 與 repository 內路徑。
+- 嚴格驗證 `available_at <= decision_timestamp`；缺少可得時間不會猜測，hash 不符或 identity 衝突會隔離。
+- `formal_decision_influence_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0` 固定不可覆寫。
+- 在建立明確的 Fubon 欄位到既有規則輸入映射前，Score、Recommendation、Portfolio、Exit 一律回傳 typed `not_computable`，不得以未改變的 baseline 假裝已完成 shadow 計算。
 
 ## 1. 系統能做什麼
 
