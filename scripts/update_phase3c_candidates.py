@@ -243,6 +243,8 @@ def update_phase3c_candidates(
     dry_run: bool = True,
     db_path: Optional[str] = None,
     sources: Sequence[str] = ("institutional", "credit"),
+    rate_limit_seconds: float = 3.0,
+    confirm_token: Optional[str] = None,
 ):
     """單日 Phase 3C 資料回補包裝函式。"""
     return update_phase3c_candidates_range(
@@ -251,6 +253,8 @@ def update_phase3c_candidates(
         dry_run=dry_run,
         db_path=db_path,
         sources=sources,
+        rate_limit_seconds=rate_limit_seconds,
+        confirm_token=confirm_token,
     )
 
 
