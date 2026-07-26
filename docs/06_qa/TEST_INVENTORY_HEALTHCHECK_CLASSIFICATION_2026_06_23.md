@@ -4,11 +4,11 @@
 
 ## 2026-07-25 machine refresh
 
-Current filesystem Python files: `528`
+Current filesystem Python files: `529`
 
 | 分類 | 數量 |
 |---|---:|
-| `general-unit-keep-in-pytest` | 128 |
+| `general-unit-keep-in-pytest` | 129 |
 | `governance-doc-tooling` | 61 |
 | `healthcheck-runner-owned` | 29 |
 | `legacy-or-low-priority` | 10 |

@@ -559,6 +559,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_pattern_analysis/test_pattern_column_support.py": "general-unit-keep-in-pytest",
     "tests/test_pattern_analysis/test_pattern_fit_support.py": "general-unit-keep-in-pytest",
     "tests/test_pattern_analysis/test_signal_combiner_column_support.py": "general-unit-keep-in-pytest",
+    "tests/test_fubon_shadow_feature_mapping.py": "general-unit-keep-in-pytest",
 }
 
 
