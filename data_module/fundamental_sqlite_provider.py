@@ -111,7 +111,7 @@ class FundamentalSQLiteProvider:
                 decision_date=decision_date.isoformat(),
                 available_date=str(row["available_date"]) if row["available_date"] else None,
                 announced_date=str(row["announced_date"]) if row["announced_date"] else None,
-                require_announced_date=True,
+                require_announced_date=False,
             )
             if eval_res.is_usable:
                 valid_records.append(_statement_item_record(row))
