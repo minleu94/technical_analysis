@@ -134,7 +134,13 @@ class FubonShadowDecisionService:
         baseline_rule_res = self._compute_baseline(universe_df, strategy_config, portfolio_request)
 
         # 3. Fubon Candidate calculation
-        candidate_res, shadow_diags = self._compute_candidate(pit_result=pit_result)
+        candidate_res, shadow_diags = self._compute_candidate(
+            pit_result=pit_result,
+            universe_df=universe_df,
+            strategy_config=strategy_config,
+            portfolio_request=portfolio_request,
+            decision_timestamp=decision_timestamp,
+        )
         diagnostics.extend(shadow_diags)
 
         # 4. Compute differences
@@ -196,6 +202,7 @@ class FubonShadowDecisionService:
             svc = PortfolioConstructionService()
             p_res = svc.construct(portfolio_request)
             portfolio_res = {
+                "status": "calculated",
                 "decision_date": p_res.decision_date,
                 "capital_amount": str(p_res.capital_amount),
                 "allocations": [
@@ -226,9 +233,14 @@ class FubonShadowDecisionService:
 
     def _compute_candidate(
         self,
+        *,
         pit_result: FubonPITValidationResult,
+        universe_df: pd.DataFrame,
+        strategy_config: dict[str, Any],
+        portfolio_request: PortfolioConstructionRequest | None,
+        decision_timestamp: str,
     ) -> tuple[dict[str, Any], list[str]]:
-        """Report Fubon candidate computability without inventing a mapping."""
+        """Compute candidate results using Fubon feature mapping contract."""
         diagnostics: list[str] = []
 
         if pit_result.quarantined_observations or pit_result.rejected_count:
@@ -244,11 +256,33 @@ class FubonShadowDecisionService:
                 missing_mapping="no_observations",
             ), ["fubon_no_valid_pit_observations_candidate_not_computable"]
 
-        diagnostics.append("fubon_feature_mapping_not_authorized")
-        return _not_computable_candidate(
-            reason="mapping_not_authorized",
-            missing_mapping="score_recommendation_portfolio_exit_policy",
-        ), diagnostics
+        from data_module.fubon_shadow_feature_mapping import FubonShadowFeatureMapping
+        mapper = FubonShadowFeatureMapping()
+        position_context = strategy_config.get("positions") or strategy_config.get("position_context")
+        mapping_res = mapper.build_mapping(
+            observations=all_obs,
+            decision_timestamp=decision_timestamp,
+            position_context_supplied=position_context is not None,
+            portfolio_requested=portfolio_request is not None,
+        )
+
+        score_comp = mapping_res.component_results["score"]
+        if score_comp.status != "computed":
+            candidate = _not_computable_candidate(
+                reason="no_proven_fubon_feature_mapped",
+                missing_mapping="score_recommendation_portfolio_exit_policy",
+            )
+            candidate["mapping_result"] = mapping_res.to_dict()
+            return candidate, ["fubon_feature_mapping_has_no_authoritative_consumer"]
+
+        # 防禦式 fail-closed：目前 mapping contract 不允許這個分支，但若未來
+        # 契約演進，仍不可在沒有明確 consumer 實作時重用 baseline 當候選結果。
+        candidate = _not_computable_candidate(
+            reason="candidate_consumer_execution_not_implemented",
+            missing_mapping="authoritative_consumer_integration",
+        )
+        candidate["mapping_result"] = mapping_res.to_dict()
+        return candidate, ["fubon_candidate_consumer_execution_not_implemented"]
 
     def _compute_differences(
         self, baseline: dict[str, Any], candidate: dict[str, Any]

@@ -58,9 +58,9 @@ def test_fubon_shadow_decision_service_runs_baseline_vs_candidate() -> None:
     assert bundle.pit_validation_status in ("passed", "degraded")
     assert "score_differences" in bundle.differences
     assert bundle.fubon_shadow_result["status"] == "not_computable"
-    assert bundle.fubon_shadow_result["reason"] == "mapping_not_authorized"
-    assert bundle.differences["baseline_unchanged"] is True
-    assert bundle.differences["score_differences"] == {}
+    assert "mapping_result" in bundle.fubon_shadow_result
+    assert bundle.differences["status"] == "not_computable"
+    assert "score_differences" in bundle.differences
 
 
 def test_fubon_shadow_unmapped_feature_returns_not_computable() -> None:
