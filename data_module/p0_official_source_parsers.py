@@ -627,3 +627,102 @@ def parse_twse_reduction(envelope: RawFetchEnvelope) -> OfficialParserResult:
         except (KeyError, TypeError, ValueError) as exc:
             quarantine.append(_quarantine(envelope, row, reason_code="malformed_reduction_row", detail=str(exc)))
     return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(raw_rows))
+
+
+def parse_twse_limit_lock(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse TWSE limit-lock (price limit reach) observations."""
+    payload = _json_payload(envelope)
+    fields, raw_rows = payload.get("fields"), payload.get("data")
+    if not isinstance(fields, list) or not isinstance(raw_rows, list):
+        raise ValueError("schema drift: limit_lock fields/data missing")
+    required = {"證券代號", "收盤價", "漲跌停標示"}
+    if not required.issubset({str(field) for field in fields}):
+        raise ValueError("schema drift: limit_lock required fields missing")
+    observation_date = _parse_yyyymmdd(payload.get("date")) if payload.get("date") else _request_date(envelope)
+    publication_at = _parse_timestamp(payload.get("publicationTime"))
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    blocked_row_count = 0
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, list):
+            continue
+        row = dict(zip((str(field) for field in fields), raw_row))
+        try:
+            symbol = str(row["證券代號"]).strip()
+            if not symbol:
+                raise ValueError("missing symbol")
+            marker = str(row["漲跌停標示"]).strip()
+            if marker not in {"漲停鎖死", "跌停鎖死"}:
+                # 一般上漲／下跌不是鎖死事件；保留 row conservation，且絕不
+                # 將整個 MI_INDEX universe 錯標成 limit-lock。
+                blocked_row_count += 1
+                continue
+            quantity_name = "limit_up_locked" if marker == "漲停鎖死" else "limit_down_locked"
+            accepted.append(
+                NormalizedP0Observation.build(
+                    source_id=envelope.source_id,
+                    source_version=envelope.source_version,
+                    symbol=symbol,
+                    observation_date=observation_date,
+                    period="daily",
+                    publication_at=publication_at,
+                    first_observed_at=envelope.fetched_at,
+                    raw_payload_sha256=_raw_row_hash(row),
+                    quantities={quantity_name: 1},
+                    metadata={
+                        "event_type": "microstructure_limit_lock",
+                        "limit_lock_marker": marker,
+                        "close_price": str(row["收盤價"]).strip(),
+                    },
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            quarantine.append(_quarantine(envelope, row, reason_code="malformed_limit_lock_row", detail=str(exc)))
+    return OfficialParserResult(
+        accepted=tuple(accepted),
+        quarantine=tuple(quarantine),
+        raw_row_count=len(raw_rows),
+        blocked_row_count=blocked_row_count,
+    )
+
+
+def parse_mops_quarterly_financials(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse MOPS quarterly financials candidate observations."""
+    payload = _json_payload(envelope)
+    rows = payload.get("rows") if isinstance(payload.get("rows"), list) else ([payload] if "stock_code" in payload else [])
+    if not isinstance(rows, list):
+        raise ValueError("schema drift: quarterly financials rows missing")
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        try:
+            symbol = str(row.get("stock_code") or row.get("證券代號") or "").strip()
+            if not symbol:
+                raise ValueError("missing symbol")
+            period = str(row.get("period") or "").strip()
+            period_end = str(row.get("period_end") or "").strip()
+            announcement_raw = row.get("announcement_date")
+            publication_at = _parse_timestamp(announcement_raw) if announcement_raw else None
+            accepted.append(
+                NormalizedP0Observation.build(
+                    source_id=envelope.source_id,
+                    source_version=envelope.source_version,
+                    symbol=symbol,
+                    observation_date=period_end or envelope.fetched_at.date().isoformat(),
+                    period="quarterly",
+                    publication_at=publication_at,
+                    first_observed_at=envelope.fetched_at,
+                    raw_payload_sha256=str(row.get("source_hash") or _raw_row_hash(row)),
+                    quantities={"financial_report_count": 1},
+                    metadata={
+                        "period": period,
+                        "statement_scope": str(row.get("statement_scope", "consolidated")),
+                        "revision": int(row.get("revision", 1)),
+                    },
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            quarantine.append(_quarantine(envelope, row, reason_code="malformed_quarterly_financials_row", detail=str(exc)))
+    return OfficialParserResult(accepted=tuple(accepted), quarantine=tuple(quarantine), raw_row_count=len(rows))

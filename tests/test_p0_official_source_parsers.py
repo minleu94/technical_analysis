@@ -16,6 +16,8 @@ from data_module.p0_official_source_parsers import (
     parse_twse_institutional,
     parse_twse_periodic_call_auction,
     parse_twse_reduction,
+    parse_twse_limit_lock,
+    parse_mops_quarterly_financials,
     parse_monthly_revenue_open_data,
 )
 from data_module.official_phase3c_fetcher import (
@@ -346,3 +348,57 @@ def test_legacy_credit_fetcher_does_not_emit_decision_date_plus_one() -> None:
     assert row["available_at"] == row["first_observed_at"]
     assert datetime.fromisoformat(row["available_at"]).tzinfo is not None
     assert row["quality"] == "degraded"
+
+
+def test_twse_limit_lock_parser_normalizes_limit_up_down_marker() -> None:
+    result = parse_twse_limit_lock(
+        _envelope(
+            "twse_limit_lock.json",
+            source_id="microstructure.limit_lock",
+            source_version="twse-limit-lock.v1",
+        )
+    )
+
+    assert result.raw_row_count == 1
+    assert result.accepted_row_count == 1
+    obs = result.accepted[0].to_dict()
+    assert obs["symbol"] == "2330"
+    assert obs["quantities"]["limit_up_locked"] == 1
+    assert obs["metadata"]["limit_lock_marker"] == "漲停鎖死"
+    assert obs["metadata"]["close_price"] == "1000.00"
+
+
+def test_twse_limit_lock_parser_does_not_treat_regular_price_change_as_lock() -> None:
+    payload = json.loads((FIXTURE_ROOT / "twse_limit_lock.json").read_text(encoding="utf-8"))
+    payload["data"][0][-1] = "+"
+    envelope = RawFetchEnvelope(
+        source_id="microstructure.limit_lock",
+        source_version="twse-limit-lock.v1",
+        endpoint_id="twse:exchangeReport:MI_INDEX",
+        request_parameters={},
+        fetched_at=datetime(2026, 7, 16, tzinfo=timezone.utc),
+        http_status=200,
+        http_headers={},
+        payload=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+    )
+    result = parse_twse_limit_lock(envelope)
+    assert result.accepted_row_count == 0
+    assert result.blocked_row_count == 1
+
+
+def test_mops_quarterly_financials_parser_accepts_consolidated_uncorrected_artifact() -> None:
+    result = parse_mops_quarterly_financials(
+        _envelope(
+            "mops_quarterly_financials.json",
+            source_id="pit.quarterly_financials",
+            source_version="mops-quarterly-financials.v1",
+        )
+    )
+
+    assert result.raw_row_count == 1
+    assert result.accepted_row_count == 1
+    obs = result.accepted[0].to_dict()
+    assert obs["symbol"] == "2330"
+    assert obs["observation_date"] == "2026-03-31"
+    assert obs["quantities"]["financial_report_count"] == 1
+    assert obs["metadata"]["period"] == "2026-Q1"
