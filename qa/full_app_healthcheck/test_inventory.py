@@ -45,6 +45,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_fubon_shadow_candidate_repository.py": "service-oracle-data-market",
     "tests/test_audit_test_inventory.py": "governance-doc-tooling",
     "tests/test_run_p0_candidate_audit.py": "governance-doc-tooling",
+    "tests/test_run_p0_source_evidence_audit.py": "governance-doc-tooling",
     "tests/test_tpex_disposal_artifact.py": "service-oracle-data-market",
     "tests/test_validate_mops_quarterly_artifact.py": "governance-doc-tooling",
     "tests/test_twse_t86_candidate_normalizer.py": "service-oracle-data-market",
