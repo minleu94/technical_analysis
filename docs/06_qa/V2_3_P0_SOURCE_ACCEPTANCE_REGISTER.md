@@ -97,4 +97,22 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
 | 10 | `tdcc_shareholding` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TDCC 1-5 開放資料的集保持股分散級距資料作為內部量化研究與歷史回測備選源？ |
 | 11 | `twse.monthly_revenue_announcement` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE t187ap05_L OpenData 的上市月營收公告資料作為 PIT 營收比對備選源？ |
 | 12 | `tpex.monthly_revenue_announcement` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TPEx OpenData 的上櫃月營收公告資料作為 PIT 營收比對備選源？ |
-| 13 | `pit.quarterly_financials` | `verified` | `candidate_adapter_ready` | `pit_date_verified` | `candidate_artifact_verified` | `legal_and_license_acceptance_required` | 是否核准將來自 MOPS 官方採集之合併未更正季報歷史 Artifact 作為 PIT 季度財報比對備選源？ |
+| 13 | `pit.quarterly_financials` | `missing` | `candidate_artifact_not_supplied` | `unavailable` | `candidate_artifact_not_supplied` | `mops_candidate_artifact_not_supplied` | 尚未提供符合 provenance 契約的 MOPS 季報 Artifact；不得核准、不得推定 PIT 可用性。 |
+
+## 6. 2026-07-27 P0-13 官方證據與就緒度強化紀錄（GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1）
+
+### 稽核與驗證摘要
+
+- **任務 ID**：`GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1`
+- **執行日期**：2026-07-27
+- **CLI 入口**：`scripts/run_p0_source_evidence_audit.py`
+- **預設模式**：非連線模式（只產出未探測／既有 MOPS artifact 的現況）；Live 模式必須顯式帶入 `--live` 與 `--confirm-live-readonly`。
+- **5 大群組化 Owner 決策包**：將 13 項 P0 來源收斂為 5 個聚焦於內部研究意圖/條款接受度的群組化決策問題，完全不要求 Owner 審視逐列 raw data：
+  1. `twse_market_corporate`: 除權息與減資/分割/面額變更（2 項）
+  2. `twse_microstructure`: 停復牌、處置股、分盤撮合、全額交割與漲跌停鎖死（5 項）
+  3. `twse_flows_credit`: 三大法人買賣超與信用交易（2 項）
+  4. `tdcc_distribution`: TDCC 集保持股分散級距（1 項）
+  5. `mops_monthly_quarterly`: TWSE/TPEx 月營收公告與 MOPS 季度財報 Artifact（3 項）
+- **安全約束**：所有來源維持 `human_decision="requires_human_acceptance"`、`downstream_eligibility="none"`；`formal_oos_allowed=False`、`production_scheduler_allowed=False`；所有 formal clock zeros 維持 0。
+- **Handoff JSON**：%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1.json。
+- **Handoff 限制**：CLI 自動輸出的 `status=audit_generated_not_validation_handoff`；它不會自行宣稱 pytest、mypy 或 Git 終態已通過，這些只能由獨立審查流程填入。

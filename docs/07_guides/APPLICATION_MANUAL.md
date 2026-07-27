@@ -94,6 +94,30 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - 自動寫入 audit packet 至 `%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1.json`；其 `status=audit_generated_not_validation_handoff`，不宣稱已完成 Git、型別或完整 pytest 驗證。真正交接必須在獨立驗證後補齊終態。
 - 嚴格守護 `downstream_eligibility=none`、`human_decision=requires_human_acceptance`、`production_scheduler_allowed=false` 與 `formal_oos_allowed=false`；絕不寫入正式 DB 或影響推薦與交易決策。
 
+### P0-13 官方證據與就緒度強化 CLI（GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1）
+
+這是 CLI-only 的唯讀 P0-13 官方證據與就緒度 (Readiness) 稽核工具，對全部 13 項 P0 候選資料源執行非破壞性、可重跑的機器驗證，產出「Machine Evidence Matrix」與「5 大群組化 Owner 決策包」：
+
+```powershell
+# 預設非連線模式（不發網路請求；未提供 artifact 的來源維持未探測／缺件）
+.\.venv\Scripts\python.exe scripts\run_p0_source_evidence_audit.py `
+  --decision-date "2026-07-26" `
+  --output $env:TEMP\technical_analysis_p0_audit\p0_evidence_hardening.json
+
+# Live 探測模式（必須同時帶入 --live 與 --confirm-live-readonly）
+.\.venv\Scripts\python.exe scripts\run_p0_source_evidence_audit.py `
+  --decision-date "2026-07-26" `
+  --live --confirm-live-readonly `
+  --output $env:TEMP\technical_analysis_p0_audit\p0_evidence_hardening_live.json
+```
+
+- `--decision-date` 必須明確提供 ISO 日期。
+- 預設模式不發起任何網路請求；Live 探測模式未提供 `--confirm-live-readonly` 時會立即拒絕執行。
+- `--output` 輸出路徑目前嚴格受限於 OS TEMP；尚未定義受治理的 candidate-safe 根目錄，因此也拒絕寫入 repository、正式 DB 或正式 Evidence DB。
+- 13 項 P0 來源自動收斂為 5 大群組化 Owner 決策（除權息/減資分割、交易限制 Preflight、三大法人/信用交易、TDCC 集保持股、月營收/季報 Artifact），僅要求 Owner 判斷內部研究意圖/條款接受度，完全無需審視逐列 raw data。
+- 產出稽核草稿 handoff JSON 至 `%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1.json`；其 `status=audit_generated_not_validation_handoff`，不宣稱 pytest、mypy 或 Git 終態已通過。
+- 嚴格守護 `downstream_eligibility=none`、`human_decision=requires_human_acceptance`、`production_scheduler_allowed=false` 與 `formal_oos_allowed=false`；所有 formal clock zeros 維持 0。
+
 ## 1. 系統能做什麼
 
 目前系統提供：
