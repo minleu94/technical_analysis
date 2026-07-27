@@ -79,6 +79,21 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - `formal_decision_influence_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0` 固定不可覆寫。
 - 在建立明確的 Fubon 欄位到既有規則輸入映射前，Score、Recommendation、Portfolio、Exit 一律回傳 typed `not_computable`，不得以未改變的 baseline 假裝已完成 shadow 計算。
 
+### P0-13 機器稽核工具 CLI（GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1）
+
+這是 CLI-only 的唯讀 P0-13 機器稽核工具，對全部 13 項 P0 候選資料源執行高效率、可重跑的機器驗證，將 machine-verified、degraded 與缺 artifact／probe 的狀態分開呈現，並產出極簡 Owner Decision Packet 與 audit JSON：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_p0_candidate_audit.py `
+  --decision-date "2026-07-25" `
+  --output $env:TEMP\technical_analysis_p0_audit\p0_audit_results.json
+```
+
+- `--decision-date` 必須明確提供 ISO 日期。
+- 輸出 JSON 包含 13 項 P0 來源完整驗證矩陣與 `machine_verified_sources`、`degraded_sources`、`unavailable_sources` 統計。缺官方公告時間、probe 未回傳或 MOPS artifact 未提供時會保留 blocker；不得因 owner 問題存在而將它們計為已解除。
+- 自動寫入 audit packet 至 `%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1.json`；其 `status=audit_generated_not_validation_handoff`，不宣稱已完成 Git、型別或完整 pytest 驗證。真正交接必須在獨立驗證後補齊終態。
+- 嚴格守護 `downstream_eligibility=none`、`human_decision=requires_human_acceptance`、`production_scheduler_allowed=false` 與 `formal_oos_allowed=false`；絕不寫入正式 DB 或影響推薦與交易決策。
+
 ## 1. 系統能做什麼
 
 目前系統提供：

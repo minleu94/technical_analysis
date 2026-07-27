@@ -70,3 +70,31 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
 1. 先取得逐來源的授權／條款、rate limit、正式公告時間與修訂政策證據。
 2. 為尚未接線的 10 項建立 source-specific candidate adapter、raw manifest、quarantine 與可得時間契約。
 3. 以多個實際日期累積 coverage、schema drift、缺漏與修訂證據後，再由 Owner 逐項作出具名決議。
+
+## 5. 2026-07-26 P0-13 機器稽核與 Blocker 消除紀錄（GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1）
+
+### 稽核與驗證摘要
+
+- **任務 ID**：`GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1`
+- **執行日期**：2026-07-26
+- **完成狀態**：12 項具備 bounded official probe adapter；`pit.quarterly_financials` 僅具備已提供 MOPS artifact 的解析契約，尚未提供 artifact 時維持 missing。任何 `degraded`、probe 未回傳或缺官方公告時間的來源都仍保留 blocker，不得宣稱工程與機器類 blocker 為 0。
+- **安全約束**：所有來源維持 `human_decision="requires_human_acceptance"`、`downstream_eligibility="none"`；`formal_oos_allowed=False`、`production_scheduler_allowed=False`。
+- **Handoff JSON**：%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1.json。
+
+### 13 項 P0 來源機器驗證矩陣
+
+| # | source_id | machine_status | adapter_status | pit_status | evidence_status | remaining_blocker | minimum_owner_question |
+|---|---|---|---|---|---|---|---|
+| 1 | `corporate_action.ex_dividend_timeline` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE TWT49U 的除權息時間軸資料作為內部量化研究與歷史回測備選源？ |
+| 2 | `corporate_action.reduction_split_par_value` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE TWTAUU 的減資／分割／面額變更資料作為內部量化研究與歷史回測備選源？ |
+| 3 | `microstructure.suspended_halt_resume` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE TWTAWU 的停牌／復牌時間資料作為交易限制 preflight 備選源？ |
+| 4 | `microstructure.disposition_stock` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE 公告的處置股資料作為交易限制 preflight 備選源？ |
+| 5 | `microstructure.periodic_call_auction` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE 處置公告分盤撮合措施作為交易限制 preflight 備選源？ |
+| 6 | `microstructure.full_delivery` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE TWT85U 的變更交易全額交割資料作為交易限制 preflight 備選源？ |
+| 7 | `microstructure.limit_lock` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE MI_INDEX 的漲跌停鎖死標示作為成交可行性 preflight 備選源？ |
+| 8 | `institutional_flows` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE T86 的三大法人買賣超資料作為內部量化研究與歷史回測備選源？ |
+| 9 | `credit_transactions` | `verified` | `candidate_adapter_ready` | `pit_date_verified` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE MI_MARGN 的信用交易（融資融券）金額與餘額資料作為內部量化研究與歷史回測備選源？ |
+| 10 | `tdcc_shareholding` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TDCC 1-5 開放資料的集保持股分散級距資料作為內部量化研究與歷史回測備選源？ |
+| 11 | `twse.monthly_revenue_announcement` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TWSE t187ap05_L OpenData 的上市月營收公告資料作為 PIT 營收比對備選源？ |
+| 12 | `tpex.monthly_revenue_announcement` | `degraded` | `candidate_adapter_ready` | `official_publication_timestamp_missing` | `official_endpoint_probed` | `legal_and_license_acceptance_required` | 是否核准將來自 TPEx OpenData 的上櫃月營收公告資料作為 PIT 營收比對備選源？ |
+| 13 | `pit.quarterly_financials` | `verified` | `candidate_adapter_ready` | `pit_date_verified` | `candidate_artifact_verified` | `legal_and_license_acceptance_required` | 是否核准將來自 MOPS 官方採集之合併未更正季報歷史 Artifact 作為 PIT 季度財報比對備選源？ |
