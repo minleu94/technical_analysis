@@ -197,6 +197,8 @@ def test_bounded_probe_reports_schema_timestamp_and_conservation_without_accepta
         ("twse_reduction.json", "application/json"),
         ("twse_monthly_revenue.json", "application/json"),
         ("tpex_monthly_revenue.json", "application/json"),
+        ("twse_limit_lock.json", "application/json"),
+        ("mops_quarterly_financials.json", "application/json"),
     ):
         response = MagicMock()
         response.content = (fixture_root / filename).read_bytes()
@@ -227,6 +229,7 @@ def test_bounded_probe_reports_schema_timestamp_and_conservation_without_accepta
         "twse_reduction",
         "twse_monthly_revenue",
         "tpex_monthly_revenue",
+        "twse_limit_lock",
     }
     for item in report["sources"]:
         assert item["raw_row_count"] == (
@@ -238,6 +241,7 @@ def test_bounded_probe_reports_schema_timestamp_and_conservation_without_accepta
         assert item["schema_status"] == "matched"
         assert item["timestamp_evidence"] in {
             "official_publication_timestamp",
+            "official_document_upload_timestamp",
             "first_observed_only",
         }
 
@@ -252,7 +256,9 @@ def test_bounded_probe_uses_one_short_attempt_per_source() -> None:
     ) as request:
         run_bounded_official_probe(date(2026, 7, 10))
 
-    assert request.call_count == 11
+    # 季報僅能接收既有、可驗證的 MOPS artifact；不可把 HTML 頁面當成
+    # JSON probe 端點，因此 bounded official probe 維持 12 個來源。
+    assert request.call_count == 12
     for call in request.call_args_list:
         assert call.kwargs["timeout_seconds"] == 8
         assert call.kwargs["max_attempts"] == 1

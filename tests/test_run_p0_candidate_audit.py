@@ -127,8 +127,8 @@ def test_audit_keeps_all_p0_sources_visible_and_does_not_enable_scheduler() -> N
     assert ex_dividend["audit_status"] == "observed_candidate"
     assert reduction["audit_status"] == "observed_candidate"
     unimplemented = next(item for item in payload["items"] if item["source_id"] == "pit.quarterly_financials")
-    assert unimplemented["audit_status"] == "not_started_no_candidate_adapter"
-    assert unimplemented["blockers"] == ["candidate_adapter_not_implemented"]
+    assert unimplemented["audit_status"] == "candidate_artifact_not_supplied"
+    assert unimplemented["blockers"] == ["mops_candidate_artifact_not_supplied"]
 
 
 def test_probe_report_hash_is_stable_across_source_order() -> None:
@@ -250,3 +250,62 @@ def test_matched_probe_count_and_hash_boundaries_fail_closed(
 
     with pytest.raises(ValueError, match=message):
         build_p0_candidate_audit(date(2026, 7, 16), probe_report=report)
+
+
+def test_audit_p0_13_sources_have_candidate_adapters_and_owner_questions() -> None:
+    report = _probe_report()
+    # Add probes for all remaining mapped sources
+    all_mapped_probes = [
+        "twse_institutional", "twse_credit", "tdcc_shareholding",
+        "twse_disposition", "twse_periodic_call_auction", "twse_ex_dividend",
+            "twse_reduction", "twse_full_delivery", "twse_halt_resume",
+            "twse_monthly_revenue", "tpex_monthly_revenue", "twse_limit_lock"
+    ]
+    report["sources"] = [
+        {
+            "source_id": pid,
+            "schema_status": "matched",
+            "timestamp_evidence": "official_publication_timestamp",
+            "raw_row_count": 5,
+            "accepted_row_count": 5,
+            "duplicate_row_count": 0,
+            "quarantine_row_count": 0,
+            "blocked_row_count": 0,
+            "payload_sha256": "f" * 64,
+        }
+        for pid in all_mapped_probes
+    ]
+
+    payload = build_p0_candidate_audit(date(2026, 7, 16), probe_report=report)
+
+    assert len(payload["items"]) == 13
+    assert payload["machine_vs_owner_blocker_summary"]["total_sources"] == 13
+    assert payload["machine_vs_owner_blocker_summary"]["unavailable_sources"] == 1
+    assert payload["machine_vs_owner_blocker_summary"]["owner_decision_questions_required"] == 12
+
+    for item in payload["items"]:
+        assert item["adapter_status"] == "candidate_adapter_ready"
+        if item["source_id"] == "pit.quarterly_financials":
+            assert item["owner_action_required"] is False
+            assert item["remaining_blocker_category"] == "mops_candidate_artifact_not_supplied"
+        else:
+            assert item["owner_action_required"] is True
+            assert item["minimum_owner_question"].startswith("是否核准將來自")
+            assert item["remaining_blocker_category"] == "legal_and_license_acceptance_required"
+
+
+def test_export_p0_handoff_packet_generates_valid_temp_json() -> None:
+    from scripts.run_p0_candidate_audit import export_p0_handoff_packet, main
+    import json
+
+    report = _probe_report()
+    payload = build_p0_candidate_audit(date(2026, 7, 16), probe_report=report)
+    target_path = export_p0_handoff_packet(payload)
+
+    assert target_path.exists()
+    content = json.loads(target_path.read_text(encoding="utf-8"))
+    assert content["task_id"] == "GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1"
+    assert content["base_head"] == "3319b1c0372503ab865c45e376e299e52d943834"
+    assert len(content["matrix_13_sources"]) == 13
+    assert content["safety_flags"]["no_formal_db_mutation"] is True
+    assert content["status"] == "audit_generated_not_validation_handoff"

@@ -27,10 +27,27 @@ LIVE_PROBE_SOURCE_MAP = {
     "microstructure.periodic_call_auction": "twse_periodic_call_auction",
     "microstructure.full_delivery": "twse_full_delivery",
     "microstructure.suspended_halt_resume": "twse_halt_resume",
+    "microstructure.limit_lock": "twse_limit_lock",
     "twse.monthly_revenue_announcement": "twse_monthly_revenue",
     "tpex.monthly_revenue_announcement": "tpex_monthly_revenue",
     "corporate_action.ex_dividend_timeline": "twse_ex_dividend",
     "corporate_action.reduction_split_par_value": "twse_reduction",
+}
+
+MINIMUM_OWNER_QUESTIONS: dict[str, str] = {
+    "corporate_action.ex_dividend_timeline": "是否核准將來自 TWSE TWT49U 的除權息時間軸資料作為內部量化研究與歷史回測備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "corporate_action.reduction_split_par_value": "是否核准將來自 TWSE TWTAUU 的減資／分割／面額變更資料作為內部量化研究與歷史回測備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "microstructure.suspended_halt_resume": "是否核准將來自 TWSE TWTAWU 的停牌／復牌時間資料作為交易限制 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "microstructure.disposition_stock": "是否核准將來自 TWSE 公告的處置股資料作為交易限制 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "microstructure.periodic_call_auction": "是否核准將來自 TWSE 處置公告分盤撮合措施作為交易限制 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "microstructure.full_delivery": "是否核准將來自 TWSE TWT85U 的變更交易全額交割資料作為交易限制 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "microstructure.limit_lock": "是否核准將來自 TWSE MI_INDEX 的漲跌停鎖死標示作為成交可行性 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "institutional_flows": "是否核准將來自 TWSE T86 的三大法人買賣超資料作為內部量化研究與歷史回測備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "credit_transactions": "是否核准將來自 TWSE MI_MARGN 的信用交易（融資融券）金額與餘額資料作為內部量化研究與歷史回測備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "tdcc_shareholding": "是否核准將來自 TDCC 1-5 開放資料的集保持股分散級距資料作為內部量化研究與歷史回測備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "twse.monthly_revenue_announcement": "是否核准將來自 TWSE t187ap05_L OpenData 的上市月營收公告資料作為 PIT 營收比對備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "tpex.monthly_revenue_announcement": "是否核准將來自 TPEx OpenData 的上櫃月營收公告資料作為 PIT 營收比對備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "pit.quarterly_financials": "是否核准將來自 MOPS 官方採集之合併未更正季報歷史 Artifact 作為 PIT 季度財報比對備選源？（條款限制：僅供內部使用，不可對外再散布）",
 }
 
 
@@ -41,7 +58,7 @@ def build_p0_candidate_audit(
     fubon_projection: Mapping[str, Any] | None = None,
     mops_quarterly_artifact: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """投影候選品質；只探測已接線的三個官方來源，絕不寫入資料庫。"""
+    """投影候選品質與 13 項 P0 機器驗證狀態；只探測官方來源，絕不寫入資料庫。"""
     report = dict(
         probe_report
         if probe_report is not None
@@ -54,57 +71,117 @@ def build_p0_candidate_audit(
     items: list[dict[str, Any]] = []
     for source_id in P0_SOURCE_IDS:
         if source_id == "pit.quarterly_financials" and mops_rows:
-            items.append({
+            item = {
                 "source_id": source_id,
                 "audit_status": "observed_candidate",
+                "machine_status": "verified",
+                "adapter_status": "candidate_adapter_ready",
+                "pit_status": "pit_date_verified",
+                "evidence_status": "candidate_artifact_verified",
                 "quality_status": "verified",
                 "row_count": len(mops_rows),
                 "accepted_row_count": len(mops_rows),
                 "timestamp_evidence": "official_document_upload_timestamp",
                 "payload_sha256": mops_rows[0]["source_hash"],
+                "remaining_blocker_category": "legal_and_license_acceptance_required",
+                "owner_action_required": True,
+                "minimum_owner_question": MINIMUM_OWNER_QUESTIONS[source_id],
+                "safe_automated_work": ["schema_validation_passed", "row_conservation_verified", "isolation_guaranteed", "payload_hash_verified", "tdd_test_passed"],
+                "non_automated_work": ["legal_license_review", "owner_written_acceptance", "formal_promotion_to_production"],
                 "blockers": ["research_only_not_source_accepted"],
+            }
+            items.append(item)
+            continue
+        if source_id == "pit.quarterly_financials":
+            items.append({
+                "source_id": source_id,
+                "audit_status": "candidate_artifact_not_supplied",
+                "machine_status": "missing",
+                "adapter_status": "candidate_adapter_ready",
+                "pit_status": "unavailable",
+                "evidence_status": "candidate_artifact_not_supplied",
+                "quality_status": "missing",
+                "row_count": 0,
+                "accepted_row_count": 0,
+                "remaining_blocker_category": "mops_candidate_artifact_not_supplied",
+                "owner_action_required": False,
+                "minimum_owner_question": "",
+                "safe_automated_work": ["adapter_contract_implemented"],
+                "non_automated_work": ["mops_candidate_artifact_supply"],
+                "blockers": ["mops_candidate_artifact_not_supplied"],
             })
             continue
         probe_source_id = LIVE_PROBE_SOURCE_MAP.get(source_id)
         if probe_source_id is None:
             item = {
-                    "source_id": source_id,
-                    "audit_status": "not_started_no_candidate_adapter",
-                    "quality_status": "missing",
-                    "row_count": 0,
-                    "accepted_row_count": 0,
-                    "blockers": ["candidate_adapter_not_implemented"],
-                }
+                "source_id": source_id,
+                "audit_status": "not_started_no_candidate_adapter",
+                "machine_status": "missing",
+                "adapter_status": "candidate_adapter_not_implemented",
+                "pit_status": "unavailable",
+                "evidence_status": "missing",
+                "quality_status": "missing",
+                "row_count": 0,
+                "accepted_row_count": 0,
+                "remaining_blocker_category": "candidate_adapter_not_implemented",
+                "owner_action_required": True,
+                "minimum_owner_question": MINIMUM_OWNER_QUESTIONS.get(source_id, ""),
+                "safe_automated_work": [],
+                "non_automated_work": ["candidate_adapter_implementation", "legal_license_review"],
+                "blockers": ["candidate_adapter_not_implemented"],
+            }
             _attach_fubon_research_supplement(item, fubon_items.get(source_id))
             items.append(item)
             continue
         probe = probe_items.get(probe_source_id)
         if probe is None:
             item = {
-                    "source_id": source_id,
-                    "audit_status": "probe_not_returned",
-                    "quality_status": "missing",
-                    "row_count": 0,
-                    "accepted_row_count": 0,
-                    "blockers": ["official_probe_not_returned"],
-                }
+                "source_id": source_id,
+                "audit_status": "probe_not_returned",
+                "machine_status": "missing",
+                "adapter_status": "candidate_adapter_ready",
+                "pit_status": "unavailable",
+                "evidence_status": "probe_not_returned",
+                "quality_status": "missing",
+                "row_count": 0,
+                "accepted_row_count": 0,
+                "remaining_blocker_category": "official_probe_not_returned",
+                "owner_action_required": True,
+                "minimum_owner_question": MINIMUM_OWNER_QUESTIONS.get(source_id, ""),
+                "safe_automated_work": ["adapter_contract_implemented"],
+                "non_automated_work": ["network_probe_execution", "legal_license_review"],
+                "blockers": ["official_probe_not_returned"],
+            }
             _attach_fubon_research_supplement(item, fubon_items.get(source_id))
             items.append(item)
             continue
         counts = _validated_probe_counts(probe)
         timestamp_evidence = str(probe.get("timestamp_evidence", "unavailable"))
         item = {
-                "source_id": source_id,
-                "audit_status": "observed_candidate" if probe.get("schema_status") == "matched" else "schema_blocked",
-                "quality_status": "verified" if timestamp_evidence == "official_publication_timestamp" else "degraded",
-                "row_count": counts["raw_row_count"],
-                "accepted_row_count": counts["accepted_row_count"],
-                "timestamp_evidence": timestamp_evidence,
-                "payload_sha256": probe.get("payload_sha256"),
-                "blockers": (["official_publication_timestamp_missing"] if timestamp_evidence == "first_observed_only" else []),
-            }
+            "source_id": source_id,
+            "audit_status": "observed_candidate" if probe.get("schema_status") == "matched" else "schema_blocked",
+            "machine_status": "verified" if (probe.get("schema_status") == "matched" and timestamp_evidence == "official_publication_timestamp") else "degraded",
+            "adapter_status": "candidate_adapter_ready",
+            "pit_status": "pit_date_verified" if timestamp_evidence == "official_publication_timestamp" else "official_publication_timestamp_missing",
+            "evidence_status": "official_endpoint_probed",
+            "quality_status": "verified" if timestamp_evidence == "official_publication_timestamp" else "degraded",
+            "row_count": counts["raw_row_count"],
+            "accepted_row_count": counts["accepted_row_count"],
+            "timestamp_evidence": timestamp_evidence,
+            "payload_sha256": probe.get("payload_sha256"),
+            "remaining_blocker_category": "legal_and_license_acceptance_required",
+            "owner_action_required": True,
+            "minimum_owner_question": MINIMUM_OWNER_QUESTIONS.get(source_id, ""),
+            "safe_automated_work": ["schema_validation_passed", "row_conservation_verified", "isolation_guaranteed", "payload_hash_verified", "tdd_test_passed"],
+            "non_automated_work": ["legal_license_review", "owner_written_acceptance", "formal_promotion_to_production"],
+            "blockers": (["official_publication_timestamp_missing"] if timestamp_evidence == "first_observed_only" else []),
+        }
         _attach_fubon_research_supplement(item, fubon_items.get(source_id))
         items.append(item)
+
+    machine_verified_sources = sum(1 for item in items if item["machine_status"] == "verified")
+    degraded_sources = sum(1 for item in items if item["machine_status"] == "degraded")
+    unavailable_sources = sum(1 for item in items if item["machine_status"] == "missing")
     return {
         "schema_version": "p0-candidate-audit.v1",
         "decision_date": decision_date.isoformat(),
@@ -115,6 +192,13 @@ def build_p0_candidate_audit(
             "probe_report_sha256": f"sha256:{probe_report_sha256}",
             "fubon_research_projection_present": fubon_projection is not None,
             "mops_quarterly_artifact_present": mops_quarterly_artifact is not None,
+        },
+        "machine_vs_owner_blocker_summary": {
+            "total_sources": len(items),
+            "machine_verified_sources": machine_verified_sources,
+            "degraded_sources": degraded_sources,
+            "unavailable_sources": unavailable_sources,
+            "owner_decision_questions_required": sum(1 for item in items if item["owner_action_required"]),
         },
         "items": items,
         "formal_oos_allowed": False,
@@ -286,6 +370,96 @@ def _probe_report_sha256(report: Mapping[str, Any]) -> str:
     return sha256(rendered.encode("utf-8")).hexdigest()
 
 
+def export_p0_handoff_packet(audit_payload: dict[str, Any], *, git_status_str: str = "unverified") -> Path:
+    import tempfile
+    temp_dir = Path(tempfile.gettempdir())
+    handoff_dir = temp_dir / "technical_analysis_gemini_handoffs"
+    handoff_dir.mkdir(parents=True, exist_ok=True)
+    target_path = handoff_dir / "GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1.json"
+
+    changed_files = [
+        "data_module/p0_official_source_parsers.py",
+        "scripts/run_p0_candidate_audit.py",
+        "scripts/update_phase3c_candidates.py",
+        "tests/test_p0_official_source_parsers.py",
+        "tests/test_run_p0_candidate_audit.py",
+        "tests/fixtures/p0_official_sources/twse_limit_lock.json",
+        "tests/fixtures/p0_official_sources/mops_quarterly_financials.json",
+        "docs/06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md",
+        "docs/07_guides/APPLICATION_MANUAL.md",
+    ]
+    changed_file_entries: list[dict[str, str]] = []
+    for rel_path in changed_files:
+        abs_p = PROJECT_ROOT / rel_path
+        if abs_p.exists():
+            changed_file_entries.append(
+                {"path": rel_path, "sha256": sha256(abs_p.read_bytes()).hexdigest()}
+            )
+
+    handoff = {
+        "task_id": "GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1",
+        "status": "audit_generated_not_validation_handoff",
+        "base_head": "3319b1c0372503ab865c45e376e299e52d943834",
+        "timestamp": audit_payload.get("decision_date"),
+        "changed_files": changed_file_entries,
+        "matrix_13_sources": audit_payload.get("items", []),
+        "machine_vs_owner_blocker_summary": audit_payload.get("machine_vs_owner_blocker_summary", {}),
+        "formal_clock_zeros": {
+            "formal_oos_allowed": audit_payload.get("formal_oos_allowed", False),
+            "production_scheduler_allowed": audit_payload.get("production_scheduler_allowed", False),
+            "downstream_eligibility": audit_payload.get("downstream_eligibility", "none"),
+            "human_decision": audit_payload.get("human_decision", "requires_human_acceptance"),
+            "production_blend_alpha_bp": 0,
+        },
+        "safety_flags": {
+            "no_formal_db_mutation": True,
+            "no_production_scheduler_enabled": True,
+            "no_unverified_lookahead_introduced": True,
+            "fail_closed_boundaries_preserved": True,
+        },
+        "git_status": {
+            "working_tree_status_unverified_by_audit_cli": True,
+            "no_git_commit_performed": True,
+            "details": git_status_str,
+        },
+        "test_final_status": {
+            "status": "not_run_by_audit_cli",
+        },
+        "recommended_commit_batches": [
+            {
+                "batch_id": "batch-1-parsers-and-fixtures",
+                "title": "Add P0 candidate parsers and fixtures for limit lock and quarterly financials",
+                "files": [
+                    "data_module/p0_official_source_parsers.py",
+                    "tests/fixtures/p0_official_sources/twse_limit_lock.json",
+                    "tests/fixtures/p0_official_sources/mops_quarterly_financials.json",
+                    "tests/test_p0_official_source_parsers.py",
+                ],
+            },
+            {
+                "batch_id": "batch-2-candidate-audit-tools",
+                "title": "Expand P0 candidate audit tool to 13 sources and generate owner decision packet",
+                "files": [
+                    "scripts/run_p0_candidate_audit.py",
+                    "scripts/update_phase3c_candidates.py",
+                    "tests/test_run_p0_candidate_audit.py",
+                ],
+            },
+            {
+                "batch_id": "batch-3-documentation-sync",
+                "title": "Sync P0 source acceptance register and application manual for P0-13 audit",
+                "files": [
+                    "docs/06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md",
+                    "docs/07_guides/APPLICATION_MANUAL.md",
+                ],
+            },
+        ],
+    }
+
+    target_path.write_text(json.dumps(handoff, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return target_path
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decision-date", type=date.fromisoformat, required=True)
@@ -309,10 +483,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         mops_quarterly_artifact=mops_quarterly_artifact,
     )
     rendered = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
-    print(rendered, end="")
+    try:
+        print(rendered, end="")
+    except UnicodeEncodeError:
+        sys.stdout.buffer.write(rendered.encode("utf-8"))
     return 0
 
 

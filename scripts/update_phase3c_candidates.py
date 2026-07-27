@@ -30,6 +30,7 @@ from data_module.p0_official_source_parsers import (
     parse_twse_institutional,
     parse_twse_periodic_call_auction,
     parse_twse_reduction,
+    parse_twse_limit_lock,
     parse_monthly_revenue_open_data,
 )
 from data_module.phase3c_backfill_runner import (
@@ -130,6 +131,7 @@ def run_bounded_official_probe(probe_date: date) -> dict:
         ),
         ("twse_monthly_revenue", "twse-t187ap05_L.v1", "twse:opendata:t187ap05_L", "https://openapi.twse.com.tw/v1/opendata/t187ap05_L", {}, parse_monthly_revenue_open_data),
         ("tpex_monthly_revenue", "tpex-mopsfin_t187ap05_O.v1", "tpex:openapi:mopsfin_t187ap05_O", "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O", {}, parse_monthly_revenue_open_data),
+        ("twse_limit_lock", "twse-MI_INDEX.v1", "twse:exchangeReport:MI_INDEX", "https://www.twse.com.tw/exchangeReport/MI_INDEX", {"response": "json", "date": date_ce, "type": "ALLBUT0999"}, parse_twse_limit_lock),
     )
     diagnostics: list[dict] = []
     for source_id, source_version, endpoint_id, url, params, parser in probe_requests:
