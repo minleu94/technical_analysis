@@ -23,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dataset", type=Path, required=True, help="Terra Dataset V0 dataset.json 路徑")
     parser.add_argument("--output-root", type=Path, required=True, help="TEMP 輸出根目錄")
     parser.add_argument("--candidate-artifact", type=Path, action="append", help="可選的研究候選 Artifact JSON 路徑")
+    parser.add_argument("--candidate-artifact-sha256", type=str, action="append", help="可選的研究候選 Artifact 預期 SHA-256 哈希值")
     args = parser.parse_args(argv)
 
     if not args.manifest.is_file():
@@ -30,11 +31,20 @@ def main(argv: list[str] | None = None) -> int:
     if not args.dataset.is_file():
         parser.error(f"dataset file not found: {args.dataset}")
 
+    expected_hashes: dict[str, str] = {}
+    if args.candidate_artifact and args.candidate_artifact_sha256:
+        if len(args.candidate_artifact) != len(args.candidate_artifact_sha256):
+            parser.error("count of --candidate-artifact must match count of --candidate-artifact-sha256")
+        for art_p, exp_h in zip(args.candidate_artifact, args.candidate_artifact_sha256):
+            expected_hashes[str(art_p.resolve())] = exp_h
+            expected_hashes[art_p.name] = exp_h
+
     result = build_development_data_inventory(
         manifest_path=args.manifest,
         dataset_path=args.dataset,
         output_root=args.output_root,
         candidate_artifacts=args.candidate_artifact,
+        candidate_expected_hashes=expected_hashes,
     )
 
     out_summary = {

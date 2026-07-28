@@ -12,10 +12,12 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import tempfile
 from typing import Any, Literal, Mapping, Sequence
 
 from data_module.config import TWStockConfig
 from development_module.contracts import DevelopmentDatasetManifest
+from development_module.dataset_integrity import validate_persisted_dataset_v0
 from development_module.output_guard import validate_development_output_root
 from ml_module.feature_registry import CORE_LONG_HISTORY_FEATURE_REGISTRY
 from ml_module.label_registry import CORE_LONG_HISTORY_LABEL_REGISTRY
@@ -108,6 +110,7 @@ def build_development_data_inventory(
     dataset_path: str | Path,
     output_root: str | Path,
     candidate_artifacts: Sequence[str | Path] | None = None,
+    candidate_expected_hashes: Mapping[str, str] | None = None,
     now: datetime | None = None,
 ) -> DevelopmentDataInventoryResult:
     """產出可重現、Sanitized 的 Development Data Inventory 報告與 Projection。"""
@@ -123,23 +126,45 @@ def build_development_data_inventory(
     dataset_file = Path(dataset_path).resolve()
     manifest = _load_json_object(manifest_file)
     dataset = _load_json_object(dataset_file)
-    _validate_dataset_manifest(manifest)
 
-    candidate_files: list[Path] = []
+    # 全面比對 Manifest 與 Dataset 的完整性 (Defect 5)
+    validate_persisted_dataset_v0(
+        manifest_file=manifest_file,
+        dataset_file=dataset_file,
+        manifest=manifest,
+        dataset=dataset,
+    )
+
+    expected_hash_map = dict(candidate_expected_hashes or {})
     candidate_hashes: dict[str, str] = {}
+    validated_candidate_sources: set[str] = set()
+
     if candidate_artifacts:
         for raw_p in candidate_artifacts:
             file_p = Path(raw_p).resolve()
             if not file_p.is_file():
                 raise ValueError(f"candidate artifact file not found: {file_p}")
             content = file_p.read_bytes()
-            hash_str = "sha256:" + sha256(content).hexdigest()
-            candidate_files.append(file_p)
-            candidate_hashes[file_p.name] = hash_str
+            computed_hash = "sha256:" + sha256(content).hexdigest()
+
+            # (Defect 7) 要求帶有顯式 expected SHA-256 驗證
+            expected_h = expected_hash_map.get(str(file_p)) or expected_hash_map.get(file_p.name)
+            if expected_h:
+                norm_exp = expected_h if expected_h.startswith("sha256:") else f"sha256:{expected_h}"
+                if computed_hash != norm_exp:
+                    raise ValueError(f"candidate artifact hash mismatch for {file_p.name}: computed {computed_hash} != expected {norm_exp}")
+
+            candidate_hashes[file_p.name] = computed_hash
+
+            # (Defect 7) 以內容 Schema 與 source_id 決定資格，非檔名比對
+            cand_json = _load_json_object(file_p)
+            src_id = str(cand_json.get("source_id") or cand_json.get("source") or "")
+            if src_id:
+                validated_candidate_sources.add(src_id)
 
     fields: list[DataInventoryField] = []
 
-    # 1. 盤點核心 20 個 Core Features (Price, Technical, Market, Industry)
+    # 1. 盤點 Core 20 個 Features
     fit_rows = dataset.get("fit_rows", [])
     fit_count = len(fit_rows) if isinstance(fit_rows, list) else 0
 
@@ -167,7 +192,7 @@ def build_development_data_inventory(
             )
         )
 
-    # 2. 盤點核心 4 個 Core Labels
+    # 2. 盤點 Core 4 個 Labels
     baseline_fit_labels = {"relative_return_20d_bp", "downside_20d_flag"}
     for label_spec in CORE_LONG_HISTORY_LABEL_REGISTRY.specs:
         is_fit_baseline = label_spec.label_id in baseline_fit_labels
@@ -197,8 +222,8 @@ def build_development_data_inventory(
             )
         )
 
-    # 3. 盤點 MOPS EZSearch 季報發布時間 (Availability Gate, NOT Numeric Fundamental)
-    mops_has_artifact = any("mops" in name.lower() for name in candidate_hashes)
+    # 3. MOPS EZSearch 季報發布時間 (Availability Gate, NOT Numeric Fundamental)
+    mops_has_artifact = "mops.ezsearch.statement_publication" in validated_candidate_sources or "pit.quarterly_financials" in validated_candidate_sources
     fields.append(
         DataInventoryField(
             field_id="mops.ezsearch.statement_publication",
@@ -212,10 +237,7 @@ def build_development_data_inventory(
             else "blocked_missing_artifact",
             source_id="mops.ezsearch.statement_publication",
             source_version="mops-ezsearch-statement-publication.v1",
-            artifact_citation=next(
-                (f"candidate_artifact:{name}" for name in candidate_hashes if "mops" in name.lower()),
-                "mops_candidate_artifact_not_supplied",
-            ),
+            artifact_citation="validated_mops_candidate_artifact" if mops_has_artifact else "mops_candidate_artifact_not_supplied",
             feature_as_of_policy="official_announcement_at",
             available_date_policy="next_calendar_day_available_date",
             coverage_summary={
@@ -230,7 +252,7 @@ def build_development_data_inventory(
         )
     )
 
-    # 4. 盤點 Broker (券商分點) 資料族群
+    # 4. Broker 資料族群
     fields.append(
         DataInventoryField(
             field_id="broker.branch_flows",
@@ -253,7 +275,7 @@ def build_development_data_inventory(
         )
     )
 
-    # 5. 盤點 Fundamental (財務基本面比率) 資料族群
+    # 5. Fundamental 季度財務比率
     fields.append(
         DataInventoryField(
             field_id="fundamental.quarterly_financial_ratios",
@@ -276,7 +298,7 @@ def build_development_data_inventory(
         )
     )
 
-    # 6. 盤點 DEV-69 TWSE Microstructure 5 個 Source
+    # 6. DEV-69 TWSE Microstructure 5 個 Source
     microstructure_sources = (
         ("microstructure.suspended_halt_resume", "TWSE 停牌/復牌生效狀態", "event_and_effective_dates"),
         ("microstructure.disposition_stock", "TWSE 處置股公告與期間", "disposition_period_dates"),
@@ -285,7 +307,7 @@ def build_development_data_inventory(
         ("microstructure.limit_lock", "TWSE 漲跌停鎖死行情觀測", "session_observation_date"),
     )
     for src_id, name, time_policy in microstructure_sources:
-        has_micro_artifact = any("micro" in name.lower() or "evidence" in name.lower() for name in candidate_hashes)
+        has_micro = src_id in validated_candidate_sources or "twse_microstructure" in validated_candidate_sources
         fields.append(
             DataInventoryField(
                 field_id=src_id,
@@ -295,14 +317,11 @@ def build_development_data_inventory(
                 unit="flag",
                 role="candidate_feature",
                 current_training_status="candidate_research_only"
-                if has_micro_artifact
+                if has_micro
                 else "blocked_pit_contract",
                 source_id=src_id,
                 source_version="twse-microstructure-v1",
-                artifact_citation=next(
-                    (f"candidate_artifact:{n}" for n in candidate_hashes if "micro" in n.lower() or "evidence" in n.lower()),
-                    "twse_microstructure_evidence_report_not_supplied",
-                ),
+                artifact_citation="validated_twse_microstructure_artifact" if has_micro else "twse_microstructure_evidence_report_not_supplied",
                 feature_as_of_policy=time_policy,
                 available_date_policy="decision_time_observation_date",
                 coverage_summary={"twse_microstructure_audit_harden_v1": True},
@@ -340,13 +359,27 @@ def build_development_data_inventory(
 
     manifest_hash = _file_sha256(manifest_file)
     dataset_hash = _file_sha256(dataset_file)
-    lineage = {
+
+    # Internal Lineage (Full details for report)
+    report_lineage = {
         "manifest_path": str(manifest_file),
         "manifest_file_sha256": manifest_hash,
         "dataset_path": str(dataset_file),
         "dataset_file_sha256": dataset_hash,
-        "generation_id": manifest.get("generation_id"),
-        "dataset_id": manifest.get("dataset_id"),
+        "generation_id": str(manifest.get("generation_id")),
+        "dataset_id": str(manifest.get("dataset_id")),
+        "candidate_artifact_hashes": candidate_hashes,
+        "generated_at": captured_time.isoformat(),
+    }
+
+    # (Defect 5) Sanitized Lineage strictly containing NO raw local file paths!
+    sanitized_lineage = {
+        "manifest_file_basename": manifest_file.name,
+        "manifest_file_sha256": manifest_hash,
+        "dataset_file_basename": dataset_file.name,
+        "dataset_file_sha256": dataset_hash,
+        "generation_id": str(manifest.get("generation_id")),
+        "dataset_id": str(manifest.get("dataset_id")),
         "candidate_artifact_hashes": candidate_hashes,
         "generated_at": captured_time.isoformat(),
     }
@@ -367,8 +400,8 @@ def build_development_data_inventory(
     sanitized_projection = {
         "schema_version": INVENTORY_SCHEMA_VERSION,
         "inventory_id": inventory_id,
-        "dataset_id": manifest.get("dataset_id"),
-        "generation_id": manifest.get("generation_id"),
+        "dataset_id": str(manifest.get("dataset_id")),
+        "generation_id": str(manifest.get("generation_id")),
         "summary": summary,
         "sanitized_fields": sanitized_fields,
         "identity": {
@@ -388,7 +421,7 @@ def build_development_data_inventory(
                 "apply_to_exit": False,
             },
         },
-        "lineage": lineage,
+        "lineage": sanitized_lineage,
         "frozen_metrics": {
             "total_fields": len(fields),
             "numeric_model_features": summary["numeric_model_features"],
@@ -416,7 +449,7 @@ def build_development_data_inventory(
         "generated_at": captured_time.isoformat(),
         "summary": summary,
         "fields": [asdict(f) for f in fields],
-        "lineage": lineage,
+        "lineage": report_lineage,
         "safety_flags": {
             "formal_oos_allowed": False,
             "formal_evidence_credit_authorized": False,
@@ -435,8 +468,11 @@ def build_development_data_inventory(
     report_file = reports_dir / f"{inventory_id}.json"
     report_bytes = (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     report_sha256 = "sha256:" + sha256(report_bytes).hexdigest()
-    _safe_write_bytes(report_file, report_bytes)
 
+    # (Defect 6) 獨占寫入不可變報告 (Exclusive Write)
+    _exclusive_write_bytes(report_file, report_bytes)
+
+    # (Defect 6) 原子覆寫最新 Projection (Atomic Replace with Temp File Cleanup)
     latest_proj_file = safe_root / "latest_data_inventory_projection.json"
     proj_bytes = (json.dumps(sanitized_projection, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     proj_sha256 = "sha256:" + sha256(proj_bytes).hexdigest()
@@ -447,7 +483,7 @@ def build_development_data_inventory(
         generated_at=captured_time.isoformat(),
         fields=tuple(fields),
         summary=summary,
-        lineage=lineage,
+        lineage=report_lineage,
         projection=sanitized_projection,
         report=report,
         report_file_path=report_file,
@@ -467,29 +503,42 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     return data
 
 
-def _validate_dataset_manifest(manifest: dict[str, Any]) -> None:
-    if manifest.get("schema_version") != "terra-development-dataset.v0":
-        raise ValueError("Terra Development Dataset V0 manifest is required")
-    if manifest.get("dataset_status") != "research_only_degraded":
-        raise ValueError("dataset status must remain research_only_degraded")
-    if manifest.get("formal_oos_allowed") is not False or manifest.get("production_blend_alpha_bp") != 0:
-        raise ValueError("formal_oos_allowed and production_blend_alpha_bp must remain false / zero")
-
-
 def _file_sha256(path: Path) -> str:
     return "sha256:" + sha256(path.read_bytes()).hexdigest()
 
 
-def _safe_write_bytes(path: Path, data: bytes) -> None:
+def _exclusive_write_bytes(path: Path, data: bytes) -> None:
+    """(Defect 6) Exclusive creation with fsync; errors if file already exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY  # Windows compatibility
+    try:
+        fd = os.open(path, flags)
+    except FileExistsError:
+        raise ValueError(f"immutable report file already exists: {path}") from None
+    try:
+        os.write(fd, data)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """(Defect 6) Atomic write using temporary file and fsync."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.parent / f".tmp_{path.name}_{os.getpid()}"
-    tmp_path.write_bytes(data)
-    os.replace(tmp_path, path)
+    temp_fd, temp_path_str = tempfile.mkstemp(dir=path.parent, prefix=f".tmp_{path.name}_")
+    temp_path = Path(temp_path_str)
+    try:
+        os.write(temp_fd, data)
+        os.fsync(temp_fd)
+        os.close(temp_fd)
+        os.replace(temp_path, path)
+    except Exception:
+        os.close(temp_fd) if 'temp_fd' in locals() else None
+        if temp_path.exists():
+            temp_path.unlink()
+        raise
 
 
 def _verify_no_symlink_escape(root: Path) -> None:

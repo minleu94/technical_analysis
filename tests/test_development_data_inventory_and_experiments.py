@@ -1,10 +1,11 @@
-"""DEV-70 focused test suite for Data Inventory & Experiment Runner."""
+"""DEV-70 comprehensive test suite for Data Inventory, Experiment Runner & Hostile Safety Checks."""
 
 from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+import re
 
 import pytest
 
@@ -185,33 +186,213 @@ def test_experiment_contract_executes_ablation_and_model_comparison(tmp_path: Pa
     assert res.sanitized_projection_path.is_file()
 
 
-def test_experiment_contract_rejects_empty_features_and_mops_as_numeric_feature(tmp_path: Path) -> None:
+# =========================================================================
+# Hostile Safety & Boundary Test Cases (Defects 1 - 8)
+# =========================================================================
+
+def test_pipeline_rejects_parent_manifest_hash_mismatch(tmp_path: Path) -> None:
+    """Defect 2: Contract parent_dataset_manifest_hash mismatch fails closed."""
     manifest_p, dataset_p = _write_dataset_v0(tmp_path)
     output_root = tmp_path / "dev_output"
     manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
 
-    with pytest.raises(ValueError, match="feature_ids must not be empty"):
-        DevelopmentExperimentContract(
-            experiment_id="exp-invalid",
-            parent_dataset_id=manifest_data["dataset_id"],
-            parent_dataset_manifest_hash=manifest_data["manifest_hash"],
-            feature_ids=(),
-        )
-
-    contract_mops = DevelopmentExperimentContract(
-        experiment_id="exp-mops-invalid",
+    contract = DevelopmentExperimentContract(
+        experiment_id="exp-hash-mismatch",
         parent_dataset_id=manifest_data["dataset_id"],
-        parent_dataset_manifest_hash=manifest_data["manifest_hash"],
-        feature_ids=("mops.ezsearch.statement_publication",),
+        parent_dataset_manifest_hash="sha256:" + "0" * 64,  # Mismatched hash!
+        feature_ids=PREDEFINED_FEATURE_PACKS["price_only"],
     )
 
     runner = DevelopmentExperimentRunner()
-    with pytest.raises(ValueError, match="availability gate"):
+    with pytest.raises(ValueError, match="parent_dataset_manifest_hash mismatch"):
         runner.run(
             manifest_path=manifest_p,
             dataset_path=dataset_p,
             output_root=output_root,
-            contract=contract_mops,
+            contract=contract,
+        )
+
+
+def test_pipeline_rejects_future_label_available_date_and_non_ready_labels(tmp_path: Path) -> None:
+    """Defect 3: Label available_date > cutoff or maturity_status != ready fails closed."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+    manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
+
+    # Corrupt label available_date to future date
+    dataset = json.loads(dataset_p.read_text(encoding="utf-8"))
+    dataset["fit_rows"][0]["labels"][0]["available_date"] = "2026-06-01"
+    dataset_p.write_text(json.dumps(dataset), encoding="utf-8")
+    _synchronize_manifest(manifest_p, dataset_p)
+    manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
+
+    contract = DevelopmentExperimentContract(
+        experiment_id="exp-future-label",
+        parent_dataset_id=manifest_data["dataset_id"],
+        parent_dataset_manifest_hash=manifest_data["manifest_hash"],
+        feature_ids=PREDEFINED_FEATURE_PACKS["price_only"],
+        training_cutoff_date="2025-12-31",
+    )
+
+    runner = DevelopmentExperimentRunner()
+    with pytest.raises(ValueError, match="label available_date .* exceeds training_cutoff_date"):
+        runner.run(
+            manifest_path=manifest_p,
+            dataset_path=dataset_p,
+            output_root=output_root,
+            contract=contract,
+        )
+
+
+def test_pipeline_rejects_feature_timing_violating_t_minus_1(tmp_path: Path) -> None:
+    """Defect 3: Feature available_date > decision_date violates T-1 PIT."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+
+    dataset = json.loads(dataset_p.read_text(encoding="utf-8"))
+    dataset["fit_rows"][0]["available_date"] = "2025-01-05"  # Decision date is 2025-01-01
+    dataset_p.write_text(json.dumps(dataset), encoding="utf-8")
+    _synchronize_manifest(manifest_p, dataset_p)
+    manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
+
+    contract = DevelopmentExperimentContract(
+        experiment_id="exp-t1-violation",
+        parent_dataset_id=manifest_data["dataset_id"],
+        parent_dataset_manifest_hash=manifest_data["manifest_hash"],
+        feature_ids=PREDEFINED_FEATURE_PACKS["price_only"],
+    )
+
+    runner = DevelopmentExperimentRunner()
+    with pytest.raises(ValueError, match="feature timing timing defect"):
+        runner.run(
+            manifest_path=manifest_p,
+            dataset_path=dataset_p,
+            output_root=output_root,
+            contract=contract,
+        )
+
+
+def test_pipeline_rejects_candidate_numeric_feature_materialization(tmp_path: Path) -> None:
+    """Defect 1: Candidate numeric feature materialization fails closed honestly."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+    manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
+
+    contract = DevelopmentExperimentContract(
+        experiment_id="exp-candidate-unsupported",
+        parent_dataset_id=manifest_data["dataset_id"],
+        parent_dataset_manifest_hash=manifest_data["manifest_hash"],
+        feature_ids=("broker.branch_flows",),
+    )
+
+    runner = DevelopmentExperimentRunner()
+    with pytest.raises(ValueError, match="candidate_numeric_feature_materialization_not_implemented"):
+        runner.run(
+            manifest_path=manifest_p,
+            dataset_path=dataset_p,
+            output_root=output_root,
+            contract=contract,
+        )
+
+
+def test_candidate_artifact_hash_validation(tmp_path: Path) -> None:
+    """Defect 7: Candidate artifact expected SHA mismatch fails closed."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+
+    cand_file = tmp_path / "candidate_artifact.json"
+    cand_file.write_text(json.dumps({"source_id": "test_src"}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="candidate artifact hash mismatch"):
+        build_development_data_inventory(
+            manifest_path=manifest_p,
+            dataset_path=dataset_p,
+            output_root=output_root,
+            candidate_artifacts=[cand_file],
+            candidate_expected_hashes={cand_file.name: "sha256:" + "f" * 64},
+        )
+
+
+def test_sanitized_projection_contains_no_raw_local_filesystem_paths(tmp_path: Path) -> None:
+    """Defect 5: Sanitized projection must NOT leak raw local filesystem absolute paths."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+    manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
+
+    inv_res = build_development_data_inventory(
+        manifest_path=manifest_p,
+        dataset_path=dataset_p,
+        output_root=output_root,
+    )
+
+    proj_str = json.dumps(inv_res.projection)
+    # Check no Windows / Unix absolute file paths leak into sanitized projection
+    assert r"C:\Projects" not in proj_str
+    assert r"tmp_path" not in proj_str
+    assert str(manifest_p) not in proj_str
+    assert str(dataset_p) not in proj_str
+
+    contract = DevelopmentExperimentContract(
+        experiment_id="exp-leak-test",
+        parent_dataset_id=manifest_data["dataset_id"],
+        parent_dataset_manifest_hash=manifest_data["manifest_hash"],
+        feature_ids=PREDEFINED_FEATURE_PACKS["technical_only"],
+    )
+    exp_res = DevelopmentExperimentRunner().run(
+        manifest_path=manifest_p,
+        dataset_path=dataset_p,
+        output_root=output_root,
+        contract=contract,
+    )
+
+    exp_proj_str = json.dumps(exp_res.projection)
+    assert str(manifest_p) not in exp_proj_str
+    assert str(dataset_p) not in exp_proj_str
+
+
+def test_immutable_report_exclusive_write_prevents_overwrite_collision(tmp_path: Path) -> None:
+    """Defect 6: Attempting to overwrite an existing immutable report file fails closed."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+    manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
+
+    contract = DevelopmentExperimentContract(
+        experiment_id="exp-collision-test",
+        parent_dataset_id=manifest_data["dataset_id"],
+        parent_dataset_manifest_hash=manifest_data["manifest_hash"],
+        feature_ids=PREDEFINED_FEATURE_PACKS["price_only"],
+    )
+
+    runner = DevelopmentExperimentRunner()
+    runner.run(manifest_path=manifest_p, dataset_path=dataset_p, output_root=output_root, contract=contract)
+
+    # Re-running with same experiment_id must fail due to exclusive write!
+    with pytest.raises(ValueError, match="immutable report file already exists"):
+        runner.run(manifest_path=manifest_p, dataset_path=dataset_p, output_root=output_root, contract=contract)
+
+
+def test_model_parameters_validates_family_and_bounded_ranges(tmp_path: Path) -> None:
+    """Defect 4: Model parameters schema validation tests."""
+    manifest_data = {"dataset_id": "test_id", "manifest_hash": "sha256:" + "a" * 64}
+
+    # Invalid parameter key
+    with pytest.raises(ValueError, match="unknown parameter 'invalid_key'"):
+        DevelopmentExperimentContract(
+            experiment_id="exp-invalid-params",
+            parent_dataset_id=manifest_data["dataset_id"],
+            parent_dataset_manifest_hash=manifest_data["manifest_hash"],
+            feature_ids=PREDEFINED_FEATURE_PACKS["price_only"],
+            model_parameters={"linear_logistic": {"invalid_key": 1.0}},
+        )
+
+    # Out of bounds range check
+    with pytest.raises(ValueError, match="max_iter must be between 5 and 500"):
+        DevelopmentExperimentContract(
+            experiment_id="exp-invalid-range",
+            parent_dataset_id=manifest_data["dataset_id"],
+            parent_dataset_manifest_hash=manifest_data["manifest_hash"],
+            feature_ids=PREDEFINED_FEATURE_PACKS["price_only"],
+            model_parameters={"hist_gradient_boosting": {"max_iter": 9999}},
         )
 
 

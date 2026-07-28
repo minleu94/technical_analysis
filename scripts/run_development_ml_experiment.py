@@ -43,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         help="模型家族 (逗號分隔，預設 linear_logistic,hist_gradient_boosting)",
     )
     parser.add_argument("--candidate-artifact", type=Path, help="可選的研究候選 Artifact JSON 路徑")
+    parser.add_argument("--candidate-artifact-sha256", type=str, help="可選的研究候選 Artifact 預期 SHA-256 哈希值")
     args = parser.parse_args(argv)
 
     if not args.manifest or not args.dataset or not args.output_root or not args.experiment_id:
@@ -93,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         output_root=args.output_root,
         contract=contract,
         candidate_artifact_path=args.candidate_artifact,
+        candidate_expected_sha256=args.candidate_artifact_sha256,
     )
 
     summary = {
