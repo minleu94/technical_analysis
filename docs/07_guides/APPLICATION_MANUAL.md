@@ -87,24 +87,26 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 .\.venv\Scripts\python.exe scripts\fetch_mops_daily_research_freshness.py `
   --start-date 2026-07-27 `
   --end-date 2026-07-28 `
-  --output-root $env:TEMP\technical_analysis_development_output `
-  --prior-artifact $env:TEMP\technical_analysis_development_output\runs\<prior-run-id>.json `
+  --output-root C:\Temp\technical_analysis_development_output\mops-daily-freshness `
+  --prior-artifact C:\Temp\technical_analysis_development_output\mops-daily-freshness\runs\<prior-run-id>.json `
+  --prior-artifact-sha256 <prior-artifact-64-hex-sha256> `
   --live --confirm-live-readonly
 ```
 
-- **離線與連線模式**：預設可用 `--fixture-file` 做離線測試與診斷比對；若要連線 MOPS 官方 HTTPS 介面，必須明確帶入 `--live --confirm-live-readonly` 旗標。
+- **離線與連線模式**：預設可用 `--fixture-file` 做離線測試與診斷比對；若要連線 MOPS 官方 HTTPS 介面，必須明確帶入 `--live --confirm-live-readonly` 旗標。兩種模式互斥，單獨提供 confirm flag、同時提供 live 與 fixture，或 `timeout <= 0` 都會拒絕執行。提供 `--prior-artifact` 時必須同時提供該檔案真實 bytes 的 `--prior-artifact-sha256`；hash 不符即 fail closed。
 - **查詢邊界**：僅允許 MOPS 官方 HTTPS 介面、僅查詢 F26–F29、單次查詢窗口上限 31 天、單一查詢回傳滿 1000 筆觸發 1000-row cap 失敗封閉；M31 永久排除。
 - **輸出路徑**：`--output-root` 嚴格通過 `validate_development_output_root` 檢查，拒絕 `DATA_ROOT`、正式 DB、repo 根目錄、路徑穿越與 symlink escape。
 - **Immutable Run Artifacts 與 Atomic Projection**：
   - 每次執行之 raw/research diagnostic 會以不可變且包含 SHA-256 Hash 的檔名寫入 `<output_root>/runs/<run_id>.json`。
   - 最新 sanitized 投影會以 atomic write 寫入 `<output_root>/latest_sanitized_projection.json`。
 - **Freshness / Outage / Revision 狀態判讀**：
-  - `observed`：16 組 query (4 markets × 4 items) 完整成功、Schema 合法且 Row Conservation 計算無誤。
+  - `observed`：16 個不重複的 market × item key 完整成功、每筆 `source_status=success`、response SHA-256 合法、Schema 與 Row Conservation 無誤；不能以重複 key 補足遺漏 key。
   - `observed_empty`：16 組 query 完整成功，但當期事件數為 0（此非 Outage）。
   - `capture_failed`：網路/HTTP/JSON/格式錯誤，會寫入 append-only failure diagnostic artifact 並以 non-zero (exit 1) 結束，不偽造空成功或 mapping。
   - `baseline_missing`：未提供 prior artifact 時無法宣稱多日證據。
   - `stale`：當指定 `--expected-through` 且查詢 end_date 早於 expected-through 時標示。
-- **Research Console 唯讀投影**：在啟動 UI 或 Research Console 時設定顯式投影路徑（如 `latest_sanitized_projection.json`），即可以唯讀方式呈現 diagnostics。安全邊界旗標 `formal_oos_allowed=false`、`formal_credit_authorized=false`、`production_blend_alpha_bp=0`、`fubon_shadow_usable=true`、`fubon_formal_credit_allowed=false` 固定保留。
+  - `multi_day_evidence_ready=true`：prior 與 current 必須是同一 query window、兩者 query matrix 完整，且實際 capture 發生在不同的台北曆日；同日重跑永遠不能換算成多日證據。
+- **Research Console 唯讀投影**：在啟動 UI 或 Research Console 時以 `RESEARCH_CONSOLE_PROJECTION` 設定顯式投影路徑（如 `latest_sanitized_projection.json`），即可唯讀呈現 diagnostics。`capture_failed`、`stale`、matrix incomplete、baseline missing 與不可比較 window 都會成為 blocker，使整體狀態 degraded；未知 MOPS projection schema、治理欄位不一致、artifact hash 不合法或含 raw／credential-like forbidden keys 時 fail closed。安全邊界旗標 `formal_oos_allowed=false`、`formal_credit_authorized=false`、`production_blend_alpha_bp=0`、`fubon_shadow_usable=true`、`fubon_formal_credit_allowed=false` 固定保留。
 
 ### P0-13 機器稽核工具 CLI（GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1）
 

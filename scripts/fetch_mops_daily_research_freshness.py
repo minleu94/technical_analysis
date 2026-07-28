@@ -29,6 +29,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--end-date", type=date.fromisoformat, required=True, help="YYYY-MM-DD")
     parser.add_argument("--output-root", type=Path, required=True, help="TEMP 輸出根目錄")
     parser.add_argument("--prior-artifact", type=Path, help="先前 immutable run artifact JSON 路徑")
+    parser.add_argument(
+        "--prior-artifact-sha256",
+        help="先前 immutable run artifact 的 64 位十六進位 SHA-256",
+    )
     parser.add_argument("--expected-through", type=date.fromisoformat, help="預期涵蓋截止日 YYYY-MM-DD")
     parser.add_argument("--live", action="store_true", help="啟用 MOPS 官方 HTTPS 唯讀查詢")
     parser.add_argument("--confirm-live-readonly", action="store_true", help="確認為 live 唯讀查詢")
@@ -36,8 +40,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout-seconds", type=int, default=30)
     args = parser.parse_args(argv)
 
-    if args.live and not args.confirm-live-readonly:
+    if args.live and not args.confirm_live_readonly:
         parser.error("使用 --live 時必須同時指定 --confirm-live-readonly")
+    if args.confirm_live_readonly and not args.live:
+        parser.error("--confirm-live-readonly 只能搭配 --live")
+    if args.live and args.fixture_file:
+        parser.error("--live 與 --fixture-file 不得同時使用")
+    if args.timeout_seconds <= 0:
+        parser.error("--timeout-seconds 必須大於 0")
+    if bool(args.prior_artifact) != bool(args.prior_artifact_sha256):
+        parser.error("--prior-artifact 與 --prior-artifact-sha256 必須同時提供")
 
     query_results: list[MOPSQueryResult] | None = None
     if args.fixture_file:
@@ -51,8 +63,9 @@ def main(argv: list[str] | None = None) -> int:
         output_root=args.output_root,
         query_results=query_results,
         prior_artifact_path=args.prior_artifact,
+        prior_artifact_sha256=args.prior_artifact_sha256,
         expected_through_date=args.expected_through,
-        live_readonly=args.live and args.confirm-live-readonly,
+        live_readonly=args.live and args.confirm_live_readonly,
         timeout_seconds=args.timeout_seconds,
     )
 

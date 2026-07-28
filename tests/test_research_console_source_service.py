@@ -386,8 +386,85 @@ def test_mops_sanitized_projection_is_read_by_research_console_service(tmp_path:
         clock=lambda: datetime(2026, 7, 27, 20, 0, tzinfo=timezone.utc),
     ).inspect()
 
-    assert console.blockers == ()
-    assert console.overall_status == "observed"
+    assert console.blockers == ("mops_multi_day_baseline_missing",)
+    assert console.overall_status == "degraded"
     mops_source = next(row for row in console.sources if row.source_id == "pit.quarterly_financials")
     assert mops_source.status == "observed"
     assert mops_source.observed_rows == 4
+
+
+def test_mops_projection_unknown_schema_fails_closed(tmp_path: Path) -> None:
+    payload = _projection()
+    payload.update(
+        {
+            "schema_version": "mops-sanitized-research-projection.unknown",
+            "source": "mops.ezsearch.statement_publication",
+            "p0_lane": "pit.quarterly_financials",
+        }
+    )
+    path = tmp_path / "unknown-mops-projection.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    console = ResearchConsoleSourceService(projection_path=path).inspect()
+
+    assert console.overall_status == "degraded"
+    assert console.blockers == ("projection_schema_invalid",)
+
+
+def test_mops_projection_with_raw_or_credential_key_fails_closed(
+    tmp_path: Path,
+) -> None:
+    payload = {
+        **_projection(),
+        "schema_version": "mops-sanitized-research-projection.v1",
+        "source": "mops.ezsearch.statement_publication",
+        "p0_lane": "pit.quarterly_financials",
+        "source_decision": "decision:mops.ezsearch.statement_publication:20260727-r1",
+        "acceptance": "limited",
+        "formal_allowed": False,
+        "production_allowed": False,
+        "current_artifact_hash": "sha256:" + "a" * 64,
+        "multi_day_evidence_ready": False,
+        "current_run_status": "observed",
+        "counts": {"events": 1},
+        "sources": [
+            {
+                "source_id": "pit.quarterly_financials",
+                "lane": "p0",
+                "status": "observed",
+            }
+        ],
+        "headers": {"Cookie": "must-not-be-projected"},
+    }
+    path = tmp_path / "unsafe-mops-projection.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    console = ResearchConsoleSourceService(projection_path=path).inspect()
+
+    assert console.overall_status == "degraded"
+    assert console.blockers == ("projection_schema_invalid",)
+
+
+def test_mops_capture_failure_projection_is_degraded(tmp_path: Path) -> None:
+    from data_module.mops_daily_research_freshness import (
+        run_mops_daily_freshness_diagnostics,
+    )
+
+    diag = run_mops_daily_freshness_diagnostics(
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 27),
+        output_root=tmp_path,
+        captured_at="2026-07-27T20:00:00+08:00",
+    )
+    console = ResearchConsoleSourceService(
+        projection_path=diag.sanitized_projection_path,
+        clock=lambda: datetime(2026, 7, 27, 13, 0, tzinfo=timezone.utc),
+    ).inspect()
+
+    assert diag.exit_code == 1
+    assert console.overall_status == "degraded"
+    assert console.blockers == ("mops_capture_failed",)
+    mops_source = next(
+        row for row in console.sources if row.source_id == "pit.quarterly_financials"
+    )
+    assert mops_source.status == "degraded"

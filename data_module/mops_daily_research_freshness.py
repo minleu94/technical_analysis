@@ -22,6 +22,7 @@ from data_module.mops_ezsearch_statement_availability import (
     MOPS_STATEMENT_AVAILABILITY_SOURCE_VERSION,
     MOPS_STATEMENT_ITEMS,
     MOPSQueryResult,
+    TAIPEI_TIMEZONE,
     build_statement_availability_artifact,
     query_mops_ezsearch,
 )
@@ -30,6 +31,8 @@ from development_module.output_guard import validate_development_output_root
 DIAGNOSTICS_SCHEMA_VERSION = "mops-daily-research-freshness-diagnostics.v1"
 SANITIZED_PROJECTION_SCHEMA_VERSION = "mops-sanitized-research-projection.v1"
 MAX_QUERY_WINDOW_DAYS = 31
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+_SHA256_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
 REQUIRED_DISABLED_APPLY_FLAGS = {
     "apply_to_scoring": False,
     "apply_to_recommendation": False,
@@ -58,19 +61,22 @@ def run_mops_daily_freshness_diagnostics(
     session: Any | None = None,
     query_results: Sequence[MOPSQueryResult] | None = None,
     prior_artifact_path: Path | None = None,
+    prior_artifact_sha256: str | None = None,
     expected_through_date: date | None = None,
     captured_at: str | None = None,
     live_readonly: bool = False,
     timeout_seconds: int = 30,
 ) -> DiagnosticsRunResult:
     """執行 MOPS daily freshness 診斷與 sanitized projection 產出。"""
+    _verify_no_linked_path_components(output_root)
     config = TWStockConfig()
     safe_root = validate_development_output_root(
         output_root,
         data_root=Path(config.data_root),
         formal_db=Path(config.db_file),
     )
-    _verify_no_symlink_escape(safe_root)
+    if safe_root == REPOSITORY_ROOT or REPOSITORY_ROOT in safe_root.parents:
+        raise ValueError("development_output_root must be outside the repository")
 
     runs_dir = safe_root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
@@ -80,7 +86,7 @@ def run_mops_daily_freshness_diagnostics(
         if captured_at
         else datetime.now(timezone.utc)
     )
-    run_id_prefix = captured_time.strftime("%Y%m%dT%H%M%SZ")
+    run_id_prefix = captured_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
     # 1. 檢查 query window
     if end_date < start_date:
@@ -104,6 +110,16 @@ def run_mops_daily_freshness_diagnostics(
             end_date=end_date,
             reason=f"query range exceeds maximum allowed limit of {MAX_QUERY_WINDOW_DAYS} days",
         )
+    if timeout_seconds <= 0:
+        return _write_failure_run(
+            safe_root=safe_root,
+            runs_dir=runs_dir,
+            run_id=f"mops-daily-research-{run_id_prefix}-invalid-timeout",
+            captured_time=captured_time,
+            start_date=start_date,
+            end_date=end_date,
+            reason="timeout_seconds must be greater than zero",
+        )
 
     # 2. 抓取 / 取得查詢結果
     actual_results: list[MOPSQueryResult] = []
@@ -112,9 +128,11 @@ def run_mops_daily_freshness_diagnostics(
     if query_results is not None:
         actual_results = list(query_results)
     elif live_readonly:
+        owned_session = None
         if session is None:
             import requests
-            session = requests.Session()
+            owned_session = requests.Session()
+            session = owned_session
         try:
             for market in MOPS_MARKETS:
                 for item in sorted(MOPS_STATEMENT_ITEMS):
@@ -128,7 +146,10 @@ def run_mops_daily_freshness_diagnostics(
                     )
                     actual_results.append(res)
         except Exception as exc:
-            outage_reason = f"live query failed: {exc}"
+            outage_reason = f"live query failed: {type(exc).__name__}"
+        finally:
+            if owned_session is not None:
+                owned_session.close()
     else:
         outage_reason = "neither live_readonly nor query_results supplied for offline run"
 
@@ -143,12 +164,20 @@ def run_mops_daily_freshness_diagnostics(
             reason=outage_reason,
         )
 
-    # 3. 檢查矩陣完整性 (4 markets x 4 items = 16 queries)
-    expected_matrix_count = len(MOPS_MARKETS) * len(MOPS_STATEMENT_ITEMS)
-    matrix_complete = len(actual_results) == expected_matrix_count and all(
-        res.market in MOPS_MARKETS and res.announcement_item in MOPS_STATEMENT_ITEMS
-        for res in actual_results
-    )
+    # 3. 檢查矩陣完整性與每筆 query manifest 的 fail-closed contract。
+    try:
+        matrix_diagnostics = _validate_query_matrix(actual_results)
+    except ValueError as exc:
+        return _write_failure_run(
+            safe_root=safe_root,
+            runs_dir=runs_dir,
+            run_id=f"mops-daily-research-{run_id_prefix}-query-contract-failure",
+            captured_time=captured_time,
+            start_date=start_date,
+            end_date=end_date,
+            reason=str(exc),
+        )
+    matrix_complete = bool(matrix_diagnostics["complete"])
 
     # 4. 建立基礎 Availability Artifact 並驗證 row conservation
     try:
@@ -208,7 +237,11 @@ def run_mops_daily_freshness_diagnostics(
     # 5. 判斷 Freshness / Status 語意
     if not matrix_complete:
         run_status = "degraded"
-        degraded_reason = f"partial query matrix: {len(actual_results)}/{expected_matrix_count} queries completed"
+        degraded_reason = (
+            "query matrix incomplete: "
+            f"missing={matrix_diagnostics['missing_keys']}, "
+            f"duplicates={matrix_diagnostics['duplicate_keys']}"
+        )
     elif event_count == 0:
         run_status = "observed_empty"
         degraded_reason = None
@@ -221,12 +254,27 @@ def run_mops_daily_freshness_diagnostics(
         degraded_reason = f"artifact query end_date ({end_date.isoformat()}) is earlier than expected_through ({expected_through_date.isoformat()})"
 
     # 6. 比對 Prior Artifact (Comparison)
-    comparison_summary = _compare_with_prior(
-        current_rows=availability_artifact["rows"],
-        current_start_date=start_date,
-        current_end_date=end_date,
-        prior_artifact_path=prior_artifact_path,
-    )
+    try:
+        comparison_summary = _compare_with_prior(
+            current_rows=availability_artifact["rows"],
+            current_start_date=start_date,
+            current_end_date=end_date,
+            current_captured_time=captured_time,
+            current_matrix_complete=matrix_complete,
+            current_run_status=run_status,
+            prior_artifact_path=prior_artifact_path,
+            prior_artifact_expected_sha256=prior_artifact_sha256,
+        )
+    except ValueError as exc:
+        return _write_failure_run(
+            safe_root=safe_root,
+            runs_dir=runs_dir,
+            run_id=f"mops-daily-research-{run_id_prefix}-prior-artifact-invalid",
+            captured_time=captured_time,
+            start_date=start_date,
+            end_date=end_date,
+            reason=str(exc),
+        )
 
     run_id = f"mops-daily-research-{run_id_prefix}-{sha256(json.dumps(availability_artifact, sort_keys=True).encode()).hexdigest()[:8]}"
 
@@ -242,6 +290,7 @@ def run_mops_daily_freshness_diagnostics(
         "query_end_date": end_date.isoformat(),
         "expected_through_date": expected_through_date.isoformat() if expected_through_date else None,
         "query_matrix_complete": matrix_complete,
+        "query_matrix_diagnostics": matrix_diagnostics,
         "run_status": run_status,
         "outage_reason": None,
         "degraded_reason": degraded_reason,
@@ -278,9 +327,11 @@ def run_mops_daily_freshness_diagnostics(
     _safe_write_bytes(run_artifact_file, artifact_bytes)
 
     # 9. 建立 Sanitized Projection 內容 (Research Console 相容)
-    multi_day_ready = (
-        comparison_summary["comparison_status"] == "comparable"
-        and comparison_summary["prior_artifact_hash"] is not None
+    multi_day_ready = bool(comparison_summary["multi_day_evidence_ready"])
+    projection_blockers = _projection_blockers(
+        run_status=run_status,
+        comparison_status=str(comparison_summary["comparison_status"]),
+        multi_day_ready=multi_day_ready,
     )
 
     sanitized_projection = {
@@ -291,7 +342,14 @@ def run_mops_daily_freshness_diagnostics(
         "acceptance": "limited",
         "allowed_use": "research_pit_statement_availability, development_shadow_projection",
         "formal_allowed": False,
+        "formal_evidence_credit_authorized": False,
         "production_allowed": False,
+        "production_blend_alpha_bp": 0,
+        "scheduler_allowed": False,
+        "training_allowed": False,
+        "promotion_allowed": False,
+        "fubon_shadow_usable": True,
+        "fubon_formal_credit_allowed": False,
         "current_run_status": run_status,
         "query_date_window": {
             "start_date": start_date.isoformat(),
@@ -301,6 +359,8 @@ def run_mops_daily_freshness_diagnostics(
             "markets": list(MOPS_MARKETS),
             "items": sorted(MOPS_STATEMENT_ITEMS),
             "query_matrix_complete": matrix_complete,
+            "missing_keys": matrix_diagnostics["missing_keys"],
+            "duplicate_keys": matrix_diagnostics["duplicate_keys"],
         },
         "counts": {
             "manifest_raw_rows": manifest_raw_rows,
@@ -317,6 +377,7 @@ def run_mops_daily_freshness_diagnostics(
         "prior_artifact_hash": comparison_summary.get("prior_artifact_hash"),
         "current_artifact_hash": f"sha256:{artifact_sha256}",
         "multi_day_evidence_ready": multi_day_ready,
+        "comparison_identity_sha256": comparison_summary["comparison_identity_sha256"],
         "artifact_citation": f"ResearchConsoleProjection.mops_daily_research_freshness.{run_id}",
         "identity": {
             "dataset_id": "mops-daily-research-freshness",
@@ -335,13 +396,13 @@ def run_mops_daily_freshness_diagnostics(
             "dataset_manifest_hash": f"sha256:{artifact_sha256}",
         },
         "frozen_metrics": {},
-        "blockers": [],
+        "blockers": projection_blockers,
         "sources": [
             {
                 "source_id": "pit.quarterly_financials",
                 "label": "MOPS 季報發布 (F26-F29 官方秒級時間軸)",
                 "lane": "p0",
-                "status": run_status if run_status in {"observed", "degraded", "missing"} else "observed",
+                "status": _research_console_source_status(run_status),
                 "allowed_use": "research_pit_statement_availability, development_shadow_projection",
                 "observed_rows": event_count,
                 "revision": comparison_summary.get("prior_run_id") or "v1",
@@ -394,10 +455,20 @@ def _compare_with_prior(
     current_rows: Sequence[Mapping[str, Any]],
     current_start_date: date,
     current_end_date: date,
+    current_captured_time: datetime,
+    current_matrix_complete: bool,
+    current_run_status: str,
     prior_artifact_path: Path | None,
+    prior_artifact_expected_sha256: str | None,
 ) -> dict[str, Any]:
     """比對當前 run 與先前的 immutable artifact。"""
-    if prior_artifact_path is None or not prior_artifact_path.is_file():
+    if prior_artifact_path is None:
+        identity = _comparison_identity(
+            current_rows=current_rows,
+            prior_artifact_hash=None,
+            current_start_date=current_start_date,
+            current_end_date=current_end_date,
+        )
         return {
             "prior_run_id": None,
             "prior_artifact_hash": None,
@@ -408,7 +479,16 @@ def _compare_with_prior(
             "missing_from_repeat_query_count": 0,
             "revision_candidates": [],
             "missing_candidates": [],
+            "comparison_identity_sha256": identity,
+            "multi_day_evidence_ready": False,
         }
+    if not prior_artifact_path.is_file():
+        raise ValueError("prior artifact path does not exist or is not a file")
+    if (
+        not isinstance(prior_artifact_expected_sha256, str)
+        or not _SHA256_PATTERN.fullmatch(prior_artifact_expected_sha256)
+    ):
+        raise ValueError("prior artifact expected SHA-256 is required and must be 64 hex")
 
     try:
         prior_bytes = prior_artifact_path.read_bytes()
@@ -416,6 +496,8 @@ def _compare_with_prior(
         prior = json.loads(prior_bytes)
     except Exception as exc:
         raise ValueError(f"failed to read or parse prior artifact: {exc}") from exc
+    if prior_hash != f"sha256:{prior_artifact_expected_sha256.lower()}":
+        raise ValueError("prior artifact SHA-256 mismatch")
 
     if not isinstance(prior, Mapping):
         raise ValueError("prior artifact root must be a JSON object")
@@ -428,6 +510,16 @@ def _compare_with_prior(
     prior_rows = prior.get("rows", [])
     if not isinstance(prior_rows, list):
         raise ValueError("prior artifact rows must be a list")
+    if prior_schema == DIAGNOSTICS_SCHEMA_VERSION:
+        boundary = prior.get("safety_boundary")
+        if not isinstance(boundary, Mapping):
+            raise ValueError("prior diagnostics artifact safety_boundary must be an object")
+        if (
+            boundary.get("formal_oos_allowed") is not False
+            or boundary.get("formal_credit_authorized") is not False
+            or boundary.get("production_blend_alpha_bp") != 0
+        ):
+            raise ValueError("prior diagnostics artifact violates the research-only boundary")
 
     prior_start = prior.get("query_start_date")
     prior_end = prior.get("query_end_date")
@@ -435,6 +527,26 @@ def _compare_with_prior(
         prior_start == current_start_date.isoformat()
         and prior_end == current_end_date.isoformat()
     )
+    identity = _comparison_identity(
+        current_rows=current_rows,
+        prior_artifact_hash=prior_hash,
+        current_start_date=current_start_date,
+        current_end_date=current_end_date,
+    )
+    if not same_window:
+        return {
+            "prior_run_id": prior_run_id,
+            "prior_artifact_hash": prior_hash,
+            "comparison_status": "non_comparable_window",
+            "exact_repeated_event_count": 0,
+            "new_event_count": 0,
+            "revision_candidate_count": 0,
+            "missing_from_repeat_query_count": 0,
+            "revision_candidates": [],
+            "missing_candidates": [],
+            "comparison_identity_sha256": identity,
+            "multi_day_evidence_ready": False,
+        }
 
     prior_hashes = {str(r.get("event_hash")) for r in prior_rows if isinstance(r, Mapping) and r.get("event_hash")}
     current_hashes = {str(r.get("event_hash")) for r in current_rows if isinstance(r, Mapping) and r.get("event_hash")}
@@ -471,22 +583,32 @@ def _compare_with_prior(
 
     # Missing from repeat query only if identical window
     missing_candidates: list[dict[str, str]] = []
-    if same_window:
-        current_by_key = {
-            (str(r.get("stock_code")), str(r.get("statement_type")), str(r.get("period")))
-            for r in current_rows if isinstance(r, Mapping)
-        }
-        for key, prior_r in prior_by_key.items():
-            if key not in current_by_key:
-                missing_candidates.append(
-                    {
-                        "stock_code": key[0],
-                        "statement_type": key[1],
-                        "period": key[2],
-                        "prior_announcement_at": str(prior_r.get("announcement_at")),
-                        "candidate_type": "missing_from_repeat_query",
-                    }
-                )
+    current_by_key = {
+        (str(r.get("stock_code")), str(r.get("statement_type")), str(r.get("period")))
+        for r in current_rows if isinstance(r, Mapping)
+    }
+    for key, prior_r in prior_by_key.items():
+        if key not in current_by_key:
+            missing_candidates.append(
+                {
+                    "stock_code": key[0],
+                    "statement_type": key[1],
+                    "period": key[2],
+                    "prior_announcement_at": str(prior_r.get("announcement_at")),
+                    "candidate_type": "missing_from_repeat_query",
+                }
+            )
+
+    prior_captured_at = _parse_prior_captured_at(prior)
+    different_observation_day = (
+        prior_captured_at.astimezone(TAIPEI_TIMEZONE).date()
+        != current_captured_time.astimezone(TAIPEI_TIMEZONE).date()
+    )
+    prior_matrix_complete = (
+        prior_schema == DIAGNOSTICS_SCHEMA_VERSION
+        and prior.get("query_matrix_complete") is True
+        and prior.get("run_status") in {"observed", "observed_empty"}
+    )
 
     return {
         "prior_run_id": prior_run_id,
@@ -498,6 +620,13 @@ def _compare_with_prior(
         "missing_from_repeat_query_count": len(missing_candidates),
         "revision_candidates": revision_candidates,
         "missing_candidates": missing_candidates,
+        "comparison_identity_sha256": identity,
+        "multi_day_evidence_ready": (
+            current_matrix_complete
+            and current_run_status in {"observed", "observed_empty"}
+            and prior_matrix_complete
+            and different_observation_day
+        ),
     }
 
 
@@ -512,6 +641,7 @@ def _write_failure_run(
     reason: str,
 ) -> DiagnosticsRunResult:
     """寫入失敗時的 append-only failure diagnostic run artifact。"""
+    sanitized_reason = _sanitize_diagnostic_reason(reason)
     failure_artifact = {
         "schema_version": DIAGNOSTICS_SCHEMA_VERSION,
         "run_id": run_id,
@@ -522,8 +652,8 @@ def _write_failure_run(
         "query_end_date": end_date.isoformat(),
         "query_matrix_complete": False,
         "run_status": "capture_failed",
-        "outage_reason": reason,
-        "degraded_reason": reason,
+        "outage_reason": sanitized_reason,
+        "degraded_reason": sanitized_reason,
         "quality_summary": {
             "manifest_raw_row_count": 0,
             "event_count": 0,
@@ -573,7 +703,14 @@ def _write_failure_run(
         "acceptance": "limited",
         "allowed_use": "research_pit_statement_availability, development_shadow_projection",
         "formal_allowed": False,
+        "formal_evidence_credit_authorized": False,
         "production_allowed": False,
+        "production_blend_alpha_bp": 0,
+        "scheduler_allowed": False,
+        "training_allowed": False,
+        "promotion_allowed": False,
+        "fubon_shadow_usable": True,
+        "fubon_formal_credit_allowed": False,
         "current_run_status": "capture_failed",
         "query_date_window": {
             "start_date": start_date.isoformat(),
@@ -589,8 +726,8 @@ def _write_failure_run(
             "new_events": 0,
             "revision_candidates": 0,
         },
-        "outage_reason": reason,
-        "degraded_reason": reason,
+        "outage_reason": sanitized_reason,
+        "degraded_reason": sanitized_reason,
         "prior_artifact_hash": None,
         "current_artifact_hash": f"sha256:{artifact_sha256}",
         "multi_day_evidence_ready": False,
@@ -612,6 +749,7 @@ def _write_failure_run(
             "dataset_manifest_hash": f"sha256:{artifact_sha256}",
         },
         "frozen_metrics": {},
+        "blockers": ["mops_capture_failed"],
         "sources": [
             {
                 "source_id": "pit.quarterly_financials",
@@ -622,7 +760,7 @@ def _write_failure_run(
                 "observed_rows": 0,
                 "revision": "capture_failed",
                 "owner": "archi",
-                "degraded_reason": reason,
+                "degraded_reason": sanitized_reason,
             }
         ],
     }
@@ -641,7 +779,7 @@ def _write_failure_run(
         "artifact_sha256": artifact_sha256,
         "sanitized_projection_path": str(latest_projection_file),
         "sanitized_projection_sha256": sanitized_sha256,
-        "outage_reason": reason,
+        "outage_reason": sanitized_reason,
         "formal_oos_allowed": False,
         "formal_credit_authorized": False,
         "production_blend_alpha_bp": 0,
@@ -661,14 +799,27 @@ def _write_failure_run(
 
 def _safe_write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    if path.exists():
+        if path.read_bytes() == data:
+            return
+        raise FileExistsError(f"immutable artifact already exists with different bytes: {path}")
+    with path.open("xb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.parent / f".tmp_{path.name}_{os.getpid()}"
-    tmp_path.write_bytes(data)
-    os.replace(tmp_path, path)
+    tmp_path = path.parent / f".tmp_{path.name}_{os.getpid()}_{os.urandom(4).hex()}"
+    try:
+        with tmp_path.open("xb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def _parse_iso_timestamp(text: str) -> datetime:
@@ -678,8 +829,119 @@ def _parse_iso_timestamp(text: str) -> datetime:
     return parsed
 
 
-def _verify_no_symlink_escape(root: Path) -> None:
-    resolved = root.resolve()
-    for parent in (resolved, *resolved.parents):
-        if parent.is_symlink():
-            raise ValueError(f"symlink path detected: {parent}")
+def _validate_query_matrix(
+    results: Sequence[MOPSQueryResult],
+) -> dict[str, Any]:
+    expected_keys = {
+        (market, item)
+        for market in MOPS_MARKETS
+        for item in MOPS_STATEMENT_ITEMS
+    }
+    actual_keys: list[tuple[str, str]] = []
+    for result in results:
+        key = (result.market, result.announcement_item)
+        if result.market not in MOPS_MARKETS:
+            raise ValueError(f"unsupported MOPS market: {result.market}")
+        if result.announcement_item not in MOPS_STATEMENT_ITEMS:
+            raise ValueError(
+                f"unsupported MOPS statement item: {result.announcement_item}"
+            )
+        if result.source_status != "success":
+            raise ValueError(f"MOPS query returned non-success status for {key}")
+        if not _SHA256_PATTERN.fullmatch(result.response_sha256):
+            raise ValueError(f"MOPS query response SHA-256 is invalid for {key}")
+        if len(result.rows) >= 1000:
+            raise ValueError(f"MOPS query reached the 1000-row cap for {key}")
+        actual_keys.append(key)
+
+    duplicate_keys = sorted(
+        f"{market}:{item}"
+        for market, item in set(actual_keys)
+        if actual_keys.count((market, item)) > 1
+    )
+    missing_keys = sorted(
+        f"{market}:{item}" for market, item in expected_keys - set(actual_keys)
+    )
+    return {
+        "complete": not duplicate_keys and not missing_keys,
+        "expected_query_count": len(expected_keys),
+        "actual_query_count": len(results),
+        "missing_keys": missing_keys,
+        "duplicate_keys": duplicate_keys,
+    }
+
+
+def _comparison_identity(
+    *,
+    current_rows: Sequence[Mapping[str, Any]],
+    prior_artifact_hash: str | None,
+    current_start_date: date,
+    current_end_date: date,
+) -> str:
+    material = {
+        "current_event_hashes": sorted(
+            str(row.get("event_hash"))
+            for row in current_rows
+            if isinstance(row, Mapping) and row.get("event_hash")
+        ),
+        "prior_artifact_hash": prior_artifact_hash,
+        "query_start_date": current_start_date.isoformat(),
+        "query_end_date": current_end_date.isoformat(),
+    }
+    canonical = json.dumps(
+        material, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return "sha256:" + sha256(canonical).hexdigest()
+
+
+def _parse_prior_captured_at(prior: Mapping[str, Any]) -> datetime:
+    value = prior.get("captured_at")
+    if not isinstance(value, str):
+        raise ValueError("prior artifact captured_at is required for multi-day evidence")
+    try:
+        parsed = _parse_iso_timestamp(value)
+    except ValueError as exc:
+        raise ValueError("prior artifact captured_at must be timezone-aware") from exc
+    return parsed
+
+
+def _projection_blockers(
+    *,
+    run_status: str,
+    comparison_status: str,
+    multi_day_ready: bool,
+) -> list[str]:
+    blockers: list[str] = []
+    if run_status == "degraded":
+        blockers.append("mops_query_matrix_incomplete")
+    elif run_status == "stale":
+        blockers.append("mops_expected_through_not_met")
+    if comparison_status == "baseline_missing":
+        blockers.append("mops_multi_day_baseline_missing")
+    elif comparison_status == "non_comparable_window":
+        blockers.append("mops_prior_window_not_comparable")
+    if not multi_day_ready and not blockers:
+        blockers.append("mops_multi_day_evidence_not_ready")
+    return blockers
+
+
+def _research_console_source_status(run_status: str) -> str:
+    if run_status in {"degraded", "stale", "capture_failed"}:
+        return "degraded"
+    return run_status
+
+
+def _verify_no_linked_path_components(root: Path) -> None:
+    candidate = root.expanduser().absolute()
+    existing_parts = [candidate, *candidate.parents]
+    for part in existing_parts:
+        if not part.exists():
+            continue
+        is_junction = getattr(part, "is_junction", lambda: False)
+        if part.is_symlink() or is_junction():
+            raise ValueError(f"linked output path component is not allowed: {part}")
+
+
+def _sanitize_diagnostic_reason(reason: str) -> str:
+    without_urls = re.sub(r"https?://\S+", "<redacted_url>", reason)
+    return re.sub(r"[A-Za-z]:[\\/]\S+", "<redacted_path>", without_urls)

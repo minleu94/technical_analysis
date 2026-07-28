@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
+import re
 from typing import Any
 
 from app_module.research_console_dtos import (
@@ -55,6 +56,28 @@ _REQUIRED_DISABLED_APPLY_FLAGS = (
 
 _DEFAULT_MAX_PROJECTION_AGE = timedelta(days=7)
 _FUTURE_TIMESTAMP_TOLERANCE = timedelta(minutes=5)
+_MOPS_SANITIZED_SCHEMA = "mops-sanitized-research-projection.v1"
+_MOPS_SOURCE_ID = "mops.ezsearch.statement_publication"
+_MOPS_DECISION_ID = "decision:mops.ezsearch.statement_publication:20260727-r1"
+_MOPS_ALLOWED_USE = (
+    "research_pit_statement_availability, development_shadow_projection"
+)
+_SHA256_REFERENCE = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
+_MOPS_FORBIDDEN_KEYS = frozenset(
+    {
+        "rows",
+        "availability_projection",
+        "subject",
+        "hyperlink",
+        "detail_url",
+        "cookies",
+        "headers",
+        "token",
+        "credential",
+        "session",
+        "db_path",
+    }
+)
 
 
 class ResearchConsoleSourceService:
@@ -111,6 +134,7 @@ class ResearchConsoleSourceService:
         reference: str,
         artifact_hash: str | None,
     ) -> ResearchConsoleDTO:
+        _validate_mops_sanitized_projection(payload)
         identity = _mapping(payload, "identity")
         status = _mapping(payload, "status")
         metrics = _mapping(payload, "frozen_metrics")
@@ -411,11 +435,85 @@ def _optional_int(value: object, *, fallback: int | None = None) -> int | None:
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
-    if value is None:
-        return ()
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise TypeError("blockers must be a string array")
     return tuple(value)
+
+
+def _validate_mops_sanitized_projection(payload: Mapping[str, object]) -> None:
+    is_mops_projection = (
+        payload.get("source") == _MOPS_SOURCE_ID
+        or payload.get("p0_lane") == "pit.quarterly_financials"
+    )
+    if not is_mops_projection:
+        return
+    if payload.get("schema_version") != _MOPS_SANITIZED_SCHEMA:
+        raise ValueError("unsupported MOPS sanitized projection schema")
+    if (
+        payload.get("source") != _MOPS_SOURCE_ID
+        or payload.get("p0_lane") != "pit.quarterly_financials"
+        or payload.get("source_decision") != _MOPS_DECISION_ID
+        or payload.get("acceptance") != "limited"
+        or payload.get("allowed_use") != _MOPS_ALLOWED_USE
+        or payload.get("formal_allowed") is not False
+        or payload.get("formal_evidence_credit_authorized") is not False
+        or payload.get("production_allowed") is not False
+        or payload.get("production_blend_alpha_bp") != 0
+        or payload.get("scheduler_allowed") is not False
+        or payload.get("training_allowed") is not False
+        or payload.get("promotion_allowed") is not False
+        or payload.get("fubon_shadow_usable") is not True
+        or payload.get("fubon_formal_credit_allowed") is not False
+    ):
+        raise ValueError("MOPS sanitized projection governance boundary is invalid")
+    _reject_forbidden_projection_keys(payload)
+    artifact_hash = payload.get("current_artifact_hash")
+    if not isinstance(artifact_hash, str) or not _SHA256_REFERENCE.fullmatch(artifact_hash):
+        raise ValueError("MOPS sanitized projection artifact hash is invalid")
+    if type(payload.get("multi_day_evidence_ready")) is not bool:
+        raise TypeError("multi_day_evidence_ready must be boolean")
+    counts = _mapping(payload, "counts")
+    for key, value in counts.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"MOPS sanitized projection count is invalid: {key}")
+    run_status = payload.get("current_run_status")
+    if run_status not in {
+        "observed",
+        "observed_empty",
+        "degraded",
+        "stale",
+        "capture_failed",
+    }:
+        raise ValueError("MOPS sanitized projection run status is invalid")
+    sources = payload.get("sources")
+    if not isinstance(sources, list) or len(sources) != 1:
+        raise ValueError("MOPS sanitized projection must contain exactly one source row")
+    source = sources[0]
+    if not isinstance(source, Mapping):
+        raise TypeError("MOPS sanitized source row must be an object")
+    expected_source_status = (
+        "degraded" if run_status in {"degraded", "stale", "capture_failed"} else run_status
+    )
+    if (
+        source.get("source_id") != "pit.quarterly_financials"
+        or source.get("lane") != "p0"
+        or source.get("status") != expected_source_status
+        or source.get("allowed_use") != _MOPS_ALLOWED_USE
+        or source.get("observed_rows") != counts.get("events")
+    ):
+        raise ValueError("MOPS sanitized source row is inconsistent with run status")
+
+
+def _reject_forbidden_projection_keys(value: object) -> None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            normalized = str(key).strip().lower()
+            if normalized in _MOPS_FORBIDDEN_KEYS:
+                raise ValueError(f"forbidden key in MOPS sanitized projection: {key}")
+            _reject_forbidden_projection_keys(item)
+    elif isinstance(value, list):
+        for item in value:
+            _reject_forbidden_projection_keys(item)
 
 
 def _component_status(value: object, fallback: str) -> str:
