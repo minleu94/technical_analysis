@@ -32,9 +32,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"dataset file not found: {args.dataset}")
 
     expected_hashes: dict[str, str] = {}
-    if args.candidate_artifact and args.candidate_artifact_sha256:
-        if len(args.candidate_artifact) != len(args.candidate_artifact_sha256):
-            parser.error("count of --candidate-artifact must match count of --candidate-artifact-sha256")
+    if args.candidate_artifact:
+        if not args.candidate_artifact_sha256 or len(args.candidate_artifact) != len(args.candidate_artifact_sha256):
+            parser.error("each --candidate-artifact requires a corresponding --candidate-artifact-sha256")
         for art_p, exp_h in zip(args.candidate_artifact, args.candidate_artifact_sha256):
             expected_hashes[str(art_p.resolve())] = exp_h
             expected_hashes[art_p.name] = exp_h

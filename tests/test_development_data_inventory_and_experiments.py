@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-import re
 
 import pytest
 
@@ -20,6 +20,8 @@ from development_module.experiment_contract import (
     DevelopmentExperimentContract,
     DevelopmentExperimentRunner,
 )
+import scripts.inspect_development_ml_data_inventory as inventory_cli
+import scripts.run_development_ml_experiment as experiment_cli
 
 
 def _serialized_dataset_content_hash(dataset: dict[str, object]) -> str:
@@ -187,7 +189,7 @@ def test_experiment_contract_executes_ablation_and_model_comparison(tmp_path: Pa
 
 
 # =========================================================================
-# Hostile Safety & Boundary Test Cases (Defects 1 - 8)
+# Hostile Safety & Boundary Test Cases
 # =========================================================================
 
 def test_pipeline_rejects_parent_manifest_hash_mismatch(tmp_path: Path) -> None:
@@ -217,7 +219,6 @@ def test_pipeline_rejects_future_label_available_date_and_non_ready_labels(tmp_p
     """Defect 3: Label available_date > cutoff or maturity_status != ready fails closed."""
     manifest_p, dataset_p = _write_dataset_v0(tmp_path)
     output_root = tmp_path / "dev_output"
-    manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
 
     # Corrupt label available_date to future date
     dataset = json.loads(dataset_p.read_text(encoding="utf-8"))
@@ -313,6 +314,72 @@ def test_candidate_artifact_hash_validation(tmp_path: Path) -> None:
         )
 
 
+def test_inventory_api_rejects_candidate_artifact_without_expected_sha(tmp_path: Path) -> None:
+    """Strict Hostile Test: Inventory API fails closed if candidate artifact lacks expected SHA."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+
+    cand_file = tmp_path / "candidate_artifact.json"
+    cand_file.write_text(json.dumps({"source_id": "mops.ezsearch.statement_publication"}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="candidate artifact expected SHA-256 is required"):
+        build_development_data_inventory(
+            manifest_path=manifest_p,
+            dataset_path=dataset_p,
+            output_root=output_root,
+            candidate_artifacts=[cand_file],
+            candidate_expected_hashes=None,  # Missing expected SHA!
+        )
+
+
+def test_inventory_cli_rejects_candidate_artifact_without_expected_sha(tmp_path: Path) -> None:
+    """Strict Hostile Test: Inventory CLI fails closed if --candidate-artifact lacks --candidate-artifact-sha256."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+
+    cand_file = tmp_path / "candidate_artifact.json"
+    cand_file.write_text(json.dumps({"source_id": "mops.ezsearch.statement_publication"}), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        inventory_cli.main([
+            "--manifest", str(manifest_p),
+            "--dataset", str(dataset_p),
+            "--output-root", str(output_root),
+            "--candidate-artifact", str(cand_file),
+            # Missing --candidate-artifact-sha256!
+        ])
+    assert exc_info.value.code == 2
+
+
+def test_experiment_runner_rejects_candidate_artifact_without_expected_sha(tmp_path: Path) -> None:
+    """Strict Hostile Test: Experiment runner fails closed if candidate artifact lacks expected SHA."""
+    manifest_p, dataset_p = _write_dataset_v0(tmp_path)
+    output_root = tmp_path / "dev_output"
+    manifest_data = json.loads(manifest_p.read_text(encoding="utf-8"))
+
+    cand_file = tmp_path / "candidate_artifact.json"
+    cand_file.write_text(json.dumps({"source_id": "test_src"}), encoding="utf-8")
+
+    contract = DevelopmentExperimentContract(
+        experiment_id="exp-cand-sha-missing",
+        parent_dataset_id=manifest_data["dataset_id"],
+        parent_dataset_manifest_hash=manifest_data["manifest_hash"],
+        feature_ids=PREDEFINED_FEATURE_PACKS["price_only"],
+        candidate_research_only=True,
+    )
+
+    runner = DevelopmentExperimentRunner()
+    with pytest.raises(ValueError, match="candidate artifact expected SHA-256 is required"):
+        runner.run(
+            manifest_path=manifest_p,
+            dataset_path=dataset_p,
+            output_root=output_root,
+            contract=contract,
+            candidate_artifact_path=cand_file,
+            candidate_expected_sha256=None,  # Missing expected SHA!
+        )
+
+
 def test_sanitized_projection_contains_no_raw_local_filesystem_paths(tmp_path: Path) -> None:
     """Defect 5: Sanitized projection must NOT leak raw local filesystem absolute paths."""
     manifest_p, dataset_p = _write_dataset_v0(tmp_path)
@@ -326,7 +393,6 @@ def test_sanitized_projection_contains_no_raw_local_filesystem_paths(tmp_path: P
     )
 
     proj_str = json.dumps(inv_res.projection)
-    # Check no Windows / Unix absolute file paths leak into sanitized projection
     assert r"C:\Projects" not in proj_str
     assert r"tmp_path" not in proj_str
     assert str(manifest_p) not in proj_str

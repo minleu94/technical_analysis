@@ -147,12 +147,14 @@ def build_development_data_inventory(
             content = file_p.read_bytes()
             computed_hash = "sha256:" + sha256(content).hexdigest()
 
-            # (Defect 7) 要求帶有顯式 expected SHA-256 驗證
-            expected_h = expected_hash_map.get(str(file_p)) or expected_hash_map.get(file_p.name)
-            if expected_h:
-                norm_exp = expected_h if expected_h.startswith("sha256:") else f"sha256:{expected_h}"
-                if computed_hash != norm_exp:
-                    raise ValueError(f"candidate artifact hash mismatch for {file_p.name}: computed {computed_hash} != expected {norm_exp}")
+            # (Strict Requirement) 強制顯式 expected SHA-256 驗證，不可缺失
+            expected_h = expected_hash_map.get(str(file_p)) or expected_hash_map.get(file_p.name) or expected_hash_map.get(str(raw_p))
+            if not expected_h:
+                raise ValueError(f"candidate artifact expected SHA-256 is required for {file_p.name}")
+
+            norm_exp = expected_h if expected_h.startswith("sha256:") else f"sha256:{expected_h}"
+            if computed_hash != norm_exp:
+                raise ValueError(f"candidate artifact hash mismatch for {file_p.name}: computed {computed_hash} != expected {norm_exp}")
 
             candidate_hashes[file_p.name] = computed_hash
 

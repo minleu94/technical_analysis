@@ -243,19 +243,21 @@ class DevelopmentExperimentRunner:
         if contract.parent_dataset_manifest_hash != manifest.get("manifest_hash"):
             raise ValueError(f"parent_dataset_manifest_hash mismatch: contract '{contract.parent_dataset_manifest_hash}' != manifest '{manifest.get('manifest_hash')}'")
 
-        # (Defect 7) Candidate Artifact 處理與 SHA-256 比對
+        # (Defect 7 & Strict Requirement) Candidate Artifact 處理與 SHA-256 比對
         candidate_info: dict[str, Any] | None = None
         if candidate_artifact_path:
             cand_p = Path(candidate_artifact_path).resolve()
             if not cand_p.is_file():
                 raise ValueError(f"candidate artifact not found: {cand_p}")
+            if not candidate_expected_sha256 or not str(candidate_expected_sha256).strip():
+                raise ValueError("candidate artifact expected SHA-256 is required when candidate artifact is provided")
+
             cand_content = cand_p.read_bytes()
             computed_h = "sha256:" + hashlib.sha256(cand_content).hexdigest()
 
-            if candidate_expected_sha256:
-                norm_exp = candidate_expected_sha256 if candidate_expected_sha256.startswith("sha256:") else f"sha256:{candidate_expected_sha256}"
-                if computed_h != norm_exp:
-                    raise ValueError(f"candidate artifact SHA-256 mismatch: computed {computed_h} != expected {norm_exp}")
+            norm_exp = candidate_expected_sha256 if candidate_expected_sha256.startswith("sha256:") else f"sha256:{candidate_expected_sha256}"
+            if computed_h != norm_exp:
+                raise ValueError(f"candidate artifact SHA-256 mismatch: computed {computed_h} != expected {norm_exp}")
 
             cand_data = _load_json_object(cand_p)
             candidate_info = {"basename": cand_p.name, "hash": computed_h, "schema": cand_data.get("schema_version")}

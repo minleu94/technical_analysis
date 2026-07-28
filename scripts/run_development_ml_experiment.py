@@ -66,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"manifest file not found: {args.manifest}")
     if not args.dataset.is_file():
         parser.error(f"dataset file not found: {args.dataset}")
+    if args.candidate_artifact and not args.candidate_artifact_sha256:
+        parser.error("--candidate-artifact-sha256 is required when --candidate-artifact is provided")
 
     manifest_data = json.loads(args.manifest.read_text(encoding="utf-8-sig"))
     parent_dataset_id = str(manifest_data.get("dataset_id", ""))
