@@ -11,6 +11,9 @@ from data_module.fundamental_statement_availability_sources import (
     StatementAvailabilityOverride,
     load_statement_availability_overrides_csv,
 )
+from data_module.mops_ezsearch_statement_availability import (
+    MOPS_STATEMENT_AVAILABILITY_SOURCE,
+)
 from decision_module.factors.factor_dtos import FactorDiagnostic
 
 
@@ -18,6 +21,7 @@ STATEMENT_ALLOWED_AVAILABILITY_SOURCES = frozenset(
     {
         "manual.statement_available_date_mapping",
         "tej.statement_announcement_pit",
+        MOPS_STATEMENT_AVAILABILITY_SOURCE,
         RETROACTIVE_STATEMENT_BASELINE_SOURCE,
     }
 )
@@ -114,4 +118,7 @@ def _unreasonably_late_available_date_diagnostic(
 def _requires_disclosure_window_check(
     override: StatementAvailabilityOverride,
 ) -> bool:
-    return override.source != RETROACTIVE_STATEMENT_BASELINE_SOURCE
+    return override.source not in {
+        RETROACTIVE_STATEMENT_BASELINE_SOURCE,
+        MOPS_STATEMENT_AVAILABILITY_SOURCE,
+    }

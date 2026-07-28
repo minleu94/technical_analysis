@@ -71,3 +71,28 @@ def test_allowed_sources_include_statement_retroactive_baseline():
         "manual.retroactive_statement_baseline_mapping"
         in STATEMENT_ALLOWED_AVAILABILITY_SOURCES
     )
+
+
+def test_allowed_sources_include_official_mops_ezsearch_publication():
+    assert (
+        "mops.ezsearch.statement_publication"
+        in STATEMENT_ALLOWED_AVAILABILITY_SOURCES
+    )
+
+
+def test_validate_statement_availability_file_accepts_late_official_mops_publication(
+    tmp_path,
+):
+    mapping_file = tmp_path / "fundamental_statement_availability.csv"
+    mapping_file.write_text(
+        "stock_code,statement_type,period,as_of_date,announced_date,available_date,source,source_version\n"
+        "7835,income_statement,2025-Q4,2025-12-31,2026-07-27,2026-07-28,"
+        "mops.ezsearch.statement_publication,mops-ezsearch-statement-publication.v1\n",
+        encoding="utf-8-sig",
+    )
+
+    result = validate_statement_availability_file(mapping_file)
+
+    assert result.valid is True
+    assert result.accepted_count == 1
+    assert result.diagnostics == ()

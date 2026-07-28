@@ -1,8 +1,9 @@
-"""Append-only EV2 decision registry; no source acceptance is permitted in Wave 2A."""
+"""Append-only source acceptance decision registry with evidence-gated applying states."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -56,7 +57,7 @@ class SourceAcceptanceDecisionRegistry:
         self._initialize()
 
     def append(self, revision: SourceAcceptanceDecisionRevision) -> SourceAcceptanceDecisionRevision:
-        _validate_non_applying_revision(revision)
+        _validate_revision(revision)
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT payload FROM source_acceptance_decisions WHERE content_hash = ?",
@@ -173,11 +174,53 @@ class SourceAcceptanceDecisionRegistry:
         return current.decision_revision_id
 
 
-def _validate_non_applying_revision(revision: SourceAcceptanceDecisionRevision) -> None:
-    if revision.status not in {"deferred", "rejected", "disabled"}:
-        raise ValueError("accepted or limited decisions are not authorized in Wave 2A")
-    if revision.allowed_use_cases:
-        raise ValueError("Wave 2A decisions must not allow downstream use cases")
+def _validate_revision(revision: SourceAcceptanceDecisionRevision) -> None:
+    non_applying_statuses = {"deferred", "rejected", "disabled"}
+    applying_statuses = {"limited", "accepted"}
+    if revision.status not in non_applying_statuses | applying_statuses:
+        raise ValueError("unsupported source acceptance decision status")
+    if not revision.source_id or not revision.decision_revision_id:
+        raise ValueError("source_id and decision_revision_id are required")
+    if not revision.owner_role or not revision.reviewer_role:
+        raise ValueError("owner_role and reviewer_role are required")
+    if not revision.rollback_reference:
+        raise ValueError("rollback_reference is required")
+    decided_at = datetime.fromisoformat(revision.decided_at.replace("Z", "+00:00"))
+    if decided_at.tzinfo is None:
+        raise ValueError("decided_at must include a timezone")
+
+    if revision.status in non_applying_statuses:
+        if revision.allowed_use_cases:
+            raise ValueError("non-applying decisions must not allow downstream use cases")
+        return
+
+    if not revision.allowed_use_cases:
+        raise ValueError("accepted or limited decisions require explicit allowed_use_cases")
+    if revision.blockers:
+        raise ValueError("accepted or limited decisions cannot retain blockers")
+    if not revision.license_evidence_ids:
+        raise ValueError("accepted or limited decisions require license evidence")
+    if not revision.quality_evidence_ids:
+        raise ValueError("accepted or limited decisions require quality evidence")
+    if not revision.pit_evidence_ids:
+        raise ValueError("accepted or limited decisions require PIT evidence")
+    prohibited_tokens = {
+        "formal",
+        "production",
+        "scoring",
+        "advice",
+        "portfolio",
+        "scheduler",
+        "trading",
+    }
+    if any(
+        token in use_case.lower()
+        for use_case in revision.allowed_use_cases
+        for token in prohibited_tokens
+    ):
+        raise ValueError(
+            "source acceptance registry cannot authorize formal or production use cases"
+        )
 
 
 def _from_payload(payload: str) -> SourceAcceptanceDecisionRevision:

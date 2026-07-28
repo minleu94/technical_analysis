@@ -66,13 +66,13 @@ def test_append_rejects_a_stale_parent_fork(tmp_path: Path) -> None:
         registry.append(_decision("rev-3", parent_revision_id="rev-1"))
 
 
-def test_registry_rejects_any_attempt_to_accept_a_source(tmp_path: Path) -> None:
+def test_registry_accepts_evidence_complete_limited_source_decision(tmp_path: Path) -> None:
     registry = SourceAcceptanceDecisionRegistry(tmp_path / "governance.sqlite")
-    prohibited = SourceAcceptanceDecisionRevision(
+    limited = SourceAcceptanceDecisionRevision(
         source_id="institutional_flows",
-        decision_revision_id="rev-accepted",
+        decision_revision_id="rev-limited",
         parent_revision_id=None,
-        status="accepted",
+        status="limited",
         allowed_use_cases=("research",),
         blockers=(),
         license_evidence_ids=("license:accepted",),
@@ -84,7 +84,51 @@ def test_registry_rejects_any_attempt_to_accept_a_source(tmp_path: Path) -> None
         rollback_reference="decision:future-disable-revision",
     )
 
-    with pytest.raises(ValueError, match="accepted"):
+    assert registry.append(limited) == limited
+    assert registry.current("institutional_flows") == limited
+
+
+def test_registry_rejects_incomplete_applying_source_decision(tmp_path: Path) -> None:
+    registry = SourceAcceptanceDecisionRegistry(tmp_path / "governance.sqlite")
+    incomplete = SourceAcceptanceDecisionRevision(
+        source_id="institutional_flows",
+        decision_revision_id="rev-accepted",
+        parent_revision_id=None,
+        status="accepted",
+        allowed_use_cases=("research",),
+        blockers=(),
+        license_evidence_ids=(),
+        quality_evidence_ids=("quality:accepted",),
+        pit_evidence_ids=("pit:accepted",),
+        owner_role="Data Source Owner",
+        reviewer_role="Data Governance Owner",
+        decided_at="2026-07-13T09:00:00+08:00",
+        rollback_reference="decision:future-disable-revision",
+    )
+
+    with pytest.raises(ValueError, match="license evidence"):
+        registry.append(incomplete)
+
+
+def test_registry_rejects_formal_or_production_use_case(tmp_path: Path) -> None:
+    registry = SourceAcceptanceDecisionRegistry(tmp_path / "governance.sqlite")
+    prohibited = SourceAcceptanceDecisionRevision(
+        source_id="institutional_flows",
+        decision_revision_id="rev-formal",
+        parent_revision_id=None,
+        status="limited",
+        allowed_use_cases=("formal_scoring",),
+        blockers=(),
+        license_evidence_ids=("license:accepted",),
+        quality_evidence_ids=("quality:accepted",),
+        pit_evidence_ids=("pit:accepted",),
+        owner_role="Data Source Owner",
+        reviewer_role="Data Governance Owner",
+        decided_at="2026-07-13T09:00:00+08:00",
+        rollback_reference="decision:future-disable-revision",
+    )
+
+    with pytest.raises(ValueError, match="formal or production"):
         registry.append(prohibited)
 
 

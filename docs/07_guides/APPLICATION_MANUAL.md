@@ -778,6 +778,17 @@ MOPS snapshot 可以用來補「從導入日之後才可使用」的歷史 basel
 
 季度財報 raw CSV 不能直接進入因子層；必須先有 `fundamental_statement_availability.csv` 作 `available_date` gate。正式預設路徑為 `DATA_ROOT/meta_data/fundamental_statement_availability.csv`，欄位為 `stock_code`、`statement_type`、`period`、`as_of_date`、`announced_date`、`available_date`、`source`、`source_version`。
 
+MOPS 公告快易查現在可作季報官方發布時間的 research-only 主線。它只讀查詢 `F26` 資產負債表、`F27` 綜合損益表、`F28` 現金流量表與 `F29` 權益變動表，保存「公告日期時間」至秒及 `+08:00` 時區；不使用 `M31`，因為 M31 同時包含「董事會預計召開日期」與「董事會通過財報」，不能一律視為財報已發布。執行範例：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\fetch_mops_statement_availability.py `
+  --start-date 2026-07-27 `
+  --end-date 2026-07-28 `
+  --output-root C:\Temp\technical_analysis_development_output\mops-statement-availability
+```
+
+`--output-root` 必須位於正式 `DATA_ROOT` 與 repo 之外；單次最多 31 天，任一 market/item 回傳達 1000 筆時會拒絕輸出，必須縮小日期區間。輸出包含完整 JSON artifact 與 `fundamental-statement-availability.csv` 候選 mapping；JSON 保留官方 `announcement_at`，CSV 因既有 consumer 只有 date grain，固定以公告次一曆日作 `available_date`，避免同日盤中 look-ahead。具官方 timestamp 的延後申報採實際公告日，不再套用 120 天推定窗口。此 CLI 不寫正式 availability mapping／SQLite、不執行每日更新或排程、不提供 Formal credit；要接到正式資料仍須另一個明確 apply 決議與備份流程。
+
 若目前只要建立「導入日後可用」的歷史 baseline candidate，可先產生候選檔：
 
 ```powershell
@@ -1838,3 +1849,4 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-06-15：補充 Sector Rotation v1 已由 SQLite `industry_indices` 接線，說明領先 / 落後產業、5 / 20 日變化、輪動強度、產業排名 metadata 與非交易日 fallback warning。
 - 2026-07-26：新增 Fubon Shadow Feature Mapping 契約與可計算性 (computability contract)；對 post-DEV-61 Fubon shadow lane 做完整唯讀稽核，建立 FubonShadowFeatureMapping 契約與 ComponentComputabilityResult。目前既有 Score、Recommendation、Portfolio 與 Exit consumer 尚未讀取 Fubon shadow 欄位，因此即使觀測資料通過 PIT 驗證，也會回傳 typed not_computable 與 machine-readable blockers，避免將不變的 baseline 誤稱為候選結果。此診斷為 symbol-isolated、PIT-safe、research-only；formal_rule_only_path_unchanged=true，formal_decision_influence_allowed=false，formal_evidence_credit_authorized=false，production_blend_alpha_bp=0，不影響正式 Rule-only 決策與證據信用。
 - 2026-07-13：Workbench > Evidence placeholder 替換為唯讀 Research Console；新增 Safety Boundary、Development Pipeline、EV1–EV5／P0-13／Broker lane／Artifact Inspector，僅讀顯式 sanitized projection 或 injected DTO。`formal_oos_allowed=false`、`production_blend_alpha_bp=0`、Rule-only 正式路徑與所有 apply / promotion / trading 禁令維持不變。
+- 2026-07-27：新增 MOPS 公告快易查 F26–F29 季報秒級 publication-time research adapter 與 TEMP-only CLI；說明 M31 語意排除、31 日／1000-row fail-closed、次日 `available_date` look-ahead 邊界，以及 limited research acceptance 不等於正式 ingestion 或 Formal credit。

@@ -1,7 +1,7 @@
 # V2.3 P0 資料來源人工接受台帳
 
 > 日期：2026-07-12
-> 狀態：`engineering_readiness_only`；所有列均為 `requires_human_acceptance`
+> 狀態：`engineering_readiness_only`；`mops.ezsearch.statement_publication` 已 limited 接受於內部 research PIT availability，其餘列仍為 `requires_human_acceptance`
 > 適用 Gate：Gate 3 / V2.3 P0 Data Credibility
 > 權威邊界：本台帳記錄待決的人工作業；不得將任何列解讀為正式 ingestion、`ScoringEngine` feature、排程核准、投資有效性或交易資格。
 
@@ -31,7 +31,7 @@
 | `tdcc_shareholding` | TDCC / 集保持股分散、持股級距、大戶 / 散戶比例候選。 | 每列必填；目前不以 sample version 代表正式版本。 | 週期資料的資料截止日逐列必填。 | 週資料與公告延遲資料皆須 explicit `available_date <= decision_date`。 | 僅 candidate dry-run；未有任一候選 payload 時為 `source_not_ingested`。 | TDCC / 供應者條款與使用範圍未審核。 | 未記錄；須由人工決定。 | 未量測；無正式來源 coverage。 | 缺 DB / table / candidate payload / available date 或 future data 時 fail-closed。 | 未配置；保留 diagnostics，隔離 / retry 待決。 | `decision_ready_candidate_possible` | `requires_human_acceptance` | 未指定 | 未填 | `none`（不進 score、Advice、Portfolio 或 scheduler） | [candidate service](../../app_module/source_candidate_readiness.py)；[review](V2_3_ENGINEERING_READINESS_2026_07_12.md)；rollback `53ca505` |
 | `twse.monthly_revenue_announcement` | PIT 月營收公告日 mapping 候選。 | 每筆 mapping 必填；builder 可產生版本前綴，尚非人工接受版本。 | 月營收 period / 公告日逐列必填。 | 僅採有效公告日 / mapping 的 explicit date；raw CSV 不可推定。 | candidate mapping；需保留 source version 並通過公告日合理性審核。 | 官方 OpenAPI / 文件條款與使用範圍未審核。 | 未記錄；須由人工決定。 | 未量測；無 formal coverage 結論。 | 缺 mapping、公告日、source version 或超出合理窗口時不產生 normalized record。 | 未配置；候選 mapping 的隔離 / retry 待決。 | `pit_mapping_candidate` | `requires_human_acceptance` | 未指定 | 未填 | `none`（既有 guarded research path 不因本台帳而升級） | [availability builder](../../data_module/monthly_revenue_availability_builder.py)；[review](V2_3_ENGINEERING_READINESS_2026_07_12.md)；rollback `53ca505` |
 | `tpex.monthly_revenue_announcement` | OTC PIT 月營收公告日 mapping 候選。 | 每筆 mapping 必填；尚無人工接受版本。 | 月營收 period / 公告日逐列必填。 | 僅採有效公告日 / mapping 的 explicit date；raw CSV 不可推定。 | candidate mapping；需保留 source version 並通過公告日合理性審核。 | 官方 OpenAPI / 文件條款與使用範圍未審核。 | 未記錄；須由人工決定。 | 未量測；無 formal coverage 結論。 | 缺 mapping、公告日、source version 或超出合理窗口時不產生 normalized record。 | 未配置；候選 mapping 的隔離 / retry 待決。 | `pit_mapping_candidate` | `requires_human_acceptance` | 未指定 | 未填 | `none`（既有 guarded research path 不因本台帳而升級） | [availability history](../../data_module/monthly_revenue_availability_history.py)；[review](V2_3_ENGINEERING_READINESS_2026_07_12.md)；rollback `53ca505` |
-| `unregistered.pit_quarterly_financials` | PIT 季度財報公告日與 statement items 的待登錄 P0 source；非既有 adapter。 | 未指定。 | 財報 period、公告 / 更正日期語意未選定。 | 尚無受治理 contract；不得由 period end 或 raw 檔日期推定。 | `missing`；無 source manifest / PIT evidence。 | 未指定。 | 未指定。 | 未量測；無 coverage。 | `fail_closed`；不產生正式 decision-time feature。 | 未配置；先建立 quarantine / retry contract。 | `unregistered_candidate` | `requires_human_acceptance` | 未指定 | 未填 | `none` | evidence：未建立；[review](V2_3_ENGINEERING_READINESS_2026_07_12.md)；rollback `53ca505` |
+| `mops.ezsearch.statement_publication` | MOPS F26–F29 季度財報表發布時間，供 research PIT availability mapping；M31 混合預告／通過語意，明確排除。 | `mops-ezsearch-statement-publication.v1`。 | 逐事件保存 `period`、`period_end` 與官方 `announcement_at`（Asia/Taipei，秒級）。 | JSON 保存官方 timestamp；date-only mapping 採次一曆日，避免同日盤中 look-ahead；不得由 period end 或 raw CSV 日期推定。 | 2026-07-27..28 live capture 36 events、36 unique projection keys、validator diagnostics 0。 | Owner 接受 public endpoint 唯讀、內部研究、不得再散布；不宣稱來源方額外授權。 | bounded 31-day query；任一 market/item 達 1000 rows 即 fail-closed 並要求縮小區間。 | 本次上市 12、上櫃 24；歷史完整 coverage 與多日 freshness 尚待累積。 | HTTP／JSON／required field／官方 URL／timestamp／period 任一失敗即不產生 artifact；來源空回傳保留 manifest。 | TEMP/shadow only；response hash、event hash、exact duplicate 計數；後續需累積 correction/revision evidence。 | `official_timestamp_artifact_verified` | `limited` | `archi` | `2026-07-27T21:19:18.3035865-07:00` | `research_pit_statement_availability`、`development_shadow_projection`；formal／production=`none` | [adapter](../../data_module/mops_ezsearch_statement_availability.py)；[CLI](../../scripts/fetch_mops_statement_availability.py)；decision `decision:mops.ezsearch.statement_publication:20260727-r1`；artifact SHA-256 `838A7507...DCD602E`；rollback：append disabled revision + revert DEV-66 commit |
 
 ## 3. 人工接受前檢核
 
@@ -116,3 +116,13 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
 - **安全約束**：所有來源維持 `human_decision="requires_human_acceptance"`、`downstream_eligibility="none"`；`formal_oos_allowed=False`、`production_scheduler_allowed=False`；所有 formal clock zeros 維持 0。
 - **Handoff JSON**：%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1.json。
 - **Handoff 限制**：CLI 自動輸出的 `status=audit_generated_not_validation_handoff`；它不會自行宣稱 pytest、mypy 或 Git 終態已通過，這些只能由獨立審查流程填入。
+
+## 7. 2026-07-27 MOPS 季報官方時間 limited 決議（DEV-66）
+
+- **Owner 決議**：owner=`archi` 明確核准 `mops.ezsearch.statement_publication` 供內部 `research_pit_statement_availability` 與 `development_shadow_projection`；狀態=`limited`，不得再散布、正式 ingestion、Formal credit、Scoring、Advice、Portfolio、scheduler 或交易。
+- **決議 ID**：`decision:mops.ezsearch.statement_publication:20260727-r1`；content hash `sha256:520aa2d2e56e497a658659816677e541b095c63689dcbb36f2a4a1a2b179f930`。
+- **官方證據**：MOPS 公告快易查 `F26`–`F29`，capture range=`2026-07-27..2026-07-28`；36 events、36 unique event hashes、36 unique projection keys、invalid/future=`0`，artifact SHA-256 `838A7507655934646D5118E3111118679D15DC935E5FA1E4372F8F060DCD602E`。
+- **validator**：date-only mapping SHA-256 `E621D19863BE40641EBDA7F9A6F83A5B78243D2CDA2D90E459D2EFA0DDBE838F`；accepted=`36`、diagnostics=`0`。官方延後公告採實際 timestamp，不再被 120 天推定窗口誤判；mapping 仍採次一曆日避免同日盤中 look-ahead。
+- **解除 blocker**：`candidate_artifact_not_supplied`、`mops_candidate_artifact_not_supplied`、季報 blanket `official_publication_timestamp_missing`，以及 registry 對所有 `limited`／`accepted` 決議的一律拒絕。registry 現改為 evidence-gated applying state：缺 allowed use case、owner/reviewer、時區、license／quality／PIT evidence、rollback，或仍有 blocker 時一律拒絕。
+- **仍保留**：歷史完整 coverage、correction/revision、多日 freshness/outage、正式 apply 與 Formal source lane。M31 不是財報發布證據，因其同時包含未來董事會預告與已通過財報。
+- **rollback**：在 TEMP working-copy decision registry append `disabled` revision；程式／文件以 DEV-66 單一 commit revert。TEMP artifact 與 working-copy SQLite 不納入 Git。
