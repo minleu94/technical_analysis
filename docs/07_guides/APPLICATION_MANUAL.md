@@ -1207,11 +1207,24 @@ Formal clock 不是 development adapter 完成的延伸；只有在真實決策�
 
 preflight 會拒絕缺欄、無時區、早於 owner decision、formal session 早於 binding、decision hash 不符、未明示 `unconsumed_before_binding=true`，或任何解除安全旗標的 record；snapshot 的決策日期也必須剛好等於 `formal_trading_session`。它只能驗證 owner 的結構化聲明，不能自行證明交易時段確為「第一個」；該判定與授權仍屬 owner 責任。
 
+若舊 v2 session 已經留下 shadow-only／deferred artifact，不得覆寫或倒填。owner 可以另建一份 `formal-observation-lane-decision.v1`，以 `holdout_id`、決議時間、第一個決議後未使用交易日、Rule-only source whitelist 與 candidate-source exclusion list 凍結新 lane；接著使用下列 CLI append 一筆 v3 binding。CLI 會保留舊 v2 record，拒絕重複 `holdout_id`、重複交易時段、決議前 binding、非 owner 核准 session、repo／正式 `DATA_ROOT` 路徑與任何安全旗標放寬：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\bind_formal_observation_lane.py `
+  --development-output-root C:\Temp\technical_analysis_development_output `
+  --decision-json C:\Temp\technical_analysis_development_output\governance\FormalObservationLaneDecision_20260728_r1.json `
+  --formal-trading-session 2026-07-29 `
+  --bound-at <含時區的真實綁定時間>
+```
+
+v3 binding 只是 future observation lane 的 owner-attested boundary，不是 observed snapshot、holdout consumption、Formal credit 或 source acceptance。富邦可以同時維持 shadow／candidate 可用，但若 decision artifact 未把 `fubon.marketdata` 排除，lane contract 會 fail closed。
+
 先以唯讀 preflight 檢查 owner decision、owner-attested registry binding 與**已存在**的 snapshot 結構；此命令不建立 registry、不綁定 holdout、不寫 evidence，也不會宣稱 formal readiness。`can_capture_shadow_snapshot=true` 僅表示 binding 契約與 snapshot 均通過結構驗證；實際「第一個未消費交易時段」的判定仍須具名 owner 決議，且 source acceptance 未完成時 `formal_readiness` 一律為 `false`。
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_formal_clock_readiness.py `
-  --development-output-root C:\Temp\technical_analysis_development_output
+  --development-output-root C:\Temp\technical_analysis_development_output `
+  --lane-decision-json C:\Temp\technical_analysis_development_output\governance\FormalObservationLaneDecision_20260728_r1.json
 ```
 
 若已有真正 decision-time artifact，才可額外傳入其路徑檢查契約；不要用 fixture、replay 或事後補寫檔案測試後就執行 capture：
@@ -1219,6 +1232,7 @@ preflight 會拒絕缺欄、無時區、早於 owner decision、formal session �
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_formal_clock_readiness.py `
   --development-output-root C:\Temp\technical_analysis_development_output `
+  --lane-decision-json C:\Temp\technical_analysis_development_output\governance\FormalObservationLaneDecision_20260728_r1.json `
   --snapshot-json <真實決策當下保存的-manual_observed.json>
 ```
 

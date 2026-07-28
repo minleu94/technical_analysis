@@ -126,3 +126,12 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
 - **解除 blocker**：`candidate_artifact_not_supplied`、`mops_candidate_artifact_not_supplied`、季報 blanket `official_publication_timestamp_missing`，以及 registry 對所有 `limited`／`accepted` 決議的一律拒絕。registry 現改為 evidence-gated applying state：缺 allowed use case、owner/reviewer、時區、license／quality／PIT evidence、rollback，或仍有 blocker 時一律拒絕。
 - **仍保留**：歷史完整 coverage、correction/revision、多日 freshness/outage、正式 apply 與 Formal source lane。M31 不是財報發布證據，因其同時包含未來董事會預告與已通過財報。
 - **rollback**：在 TEMP working-copy decision registry append `disabled` revision；程式／文件以 DEV-66 單一 commit revert。TEMP artifact 與 working-copy SQLite 不納入 Git。
+
+## 8. 2026-07-28 富邦 shadow 與 Formal Rule-only lane 分流決議（DEV-67）
+
+- **Owner 決議**：owner=`archi` 核准建立新的 Rule-only／candidate-source-exclusion observation lane；決議 ID=`decision:formal.rule_only_candidate_exclusion:20260728-r1`，content hash=`sha256:961f425ceae517fe6ba96363657ae4608d4a78f76792453c2c92e2c26ead602c`。
+- **富邦用途**：`fubon.marketdata` 繼續依 `FubonShadowComputationAuthorization` 供 decision-time、historical-PIT 與 candidate Score／Recommendation／Portfolio／Exit shadow 計算；不得因此取得 Formal decision influence、Formal evidence credit、production blend、broker、training、promotion 或 scheduler 權限。
+- **Formal lane whitelist**：僅 `daily_prices`、`industry_indices`、`market_indices`、`technical_indicators`；富邦與本台帳尚未正式接受的 P0 candidates 全數排除。`fubon_shadow_usable=true` 與 `fubon_formal_credit_allowed=false` 必須同時呈現，避免把「可做 shadow」誤讀成「可取得 Formal credit」。
+- **forward binding**：在 append 前重新檢查 registry，確認交易時段未使用後，綁定 `holdout_id=formal-rule-only-20260729-r1` 至 `2026-07-29`。既有 2026-07-21 snapshot 不回填、不重算、不追認。
+- **目前 blocker**：只剩 2026-07-29 真正 decision-time 的 Rule-only `manual_observed` artifact；這是等待真實時間，不是未完成的 owner 人工審核。snapshot count、outcome revision、matured denominator、Formal credit 與 consumption increment 在本次均為 0。
+- **rollback**：append 一筆引用本決議的 `formal-observation-lane-disabled.v1`，不得刪除或改寫既有 decision／binding；程式與文件以 DEV-67 單一 commit revert。TEMP artifact 不納入 Git。
