@@ -116,6 +116,193 @@ SOURCE_PROVIDER_INFO: dict[str, tuple[str, str, str]] = {
 
 REDACT_KEYS = {"api_key", "cookie", "credential", "password", "authorization", "secret", "token"}
 
+MICROSTRUCTURE_SOURCE_IDS = (
+    "microstructure.suspended_halt_resume",
+    "microstructure.disposition_stock",
+    "microstructure.periodic_call_auction",
+    "microstructure.full_delivery",
+    "microstructure.limit_lock",
+)
+
+MICROSTRUCTURE_TIMESTAMP_POLICIES: dict[str, dict[str, str]] = {
+    "microstructure.suspended_halt_resume": {
+        "primary_evidence_class": "first_observed_only",
+        "primary_field": "first_observed_at",
+        "pit_blocker": "official_publication_timestamp_missing",
+        "research_use": "停牌／復牌有效狀態與事件順序的 research preflight",
+    },
+    "microstructure.disposition_stock": {
+        "primary_evidence_class": "official_publication_date_only",
+        "primary_field": "official_publication_date",
+        "pit_blocker": "official_publication_timestamp_missing",
+        "research_use": "處置公告日期、有效期間與措施內容的 research preflight",
+    },
+    "microstructure.periodic_call_auction": {
+        "primary_evidence_class": "official_publication_date_only",
+        "primary_field": "official_publication_date",
+        "pit_blocker": "official_publication_timestamp_missing",
+        "research_use": "由處置公告相符措施衍生的分盤撮合 research preflight",
+    },
+    "microstructure.full_delivery": {
+        "primary_evidence_class": "market_session_observation",
+        "primary_field": "market_session_date",
+        "pit_blocker": "official_publication_timestamp_missing",
+        "research_use": "全額交割／交易方法當日狀態的 research preflight",
+    },
+    "microstructure.limit_lock": {
+        "primary_evidence_class": "market_session_observation",
+        "primary_field": "market_session_date",
+        "pit_blocker": "decision_time_availability_not_proven",
+        "research_use": "漲跌停鎖死的交易日行情觀測與成交可行性 research preflight",
+    },
+}
+
+TIMESTAMP_FIELDS = (
+    "official_publication_timestamp",
+    "official_publication_date",
+    "effective_from",
+    "effective_to",
+    "market_session_date",
+    "decision_time_observed_at",
+    "first_observed_at",
+    "captured_at",
+    "http_date",
+    "http_last_modified",
+)
+
+
+def _timestamp_field_projection(
+    probe: Mapping[str, Any],
+    *,
+    field_name: str,
+    evidence_class: str,
+    pit_gate_allowed: bool,
+    missing_reason: str,
+) -> dict[str, Any]:
+    source_field = field_name
+    value = probe.get(field_name)
+    if field_name == "http_last_modified" and value is None:
+        source_field = "last_modified"
+        value = probe.get(source_field)
+    return {
+        "raw_evidence_location": f"probe.{source_field}",
+        "normalized_value": value,
+        "timezone": "Asia/Taipei" if field_name not in {"http_date", "http_last_modified"} else "HTTP-header-defined",
+        "evidence_class": evidence_class if value is not None else "missing",
+        "quality": "verified" if value is not None else "missing",
+        "pit_gate_allowed": pit_gate_allowed and value is not None,
+        "reason_code": None if value is not None else missing_reason,
+    }
+
+
+def _build_microstructure_timestamp_semantics(
+    source_id: str,
+    probe: Mapping[str, Any],
+    *,
+    decision_date: date,
+) -> dict[str, Any]:
+    policy = MICROSTRUCTURE_TIMESTAMP_POLICIES[source_id]
+    primary_class = policy["primary_evidence_class"]
+    primary_field = policy["primary_field"]
+    semantics: dict[str, dict[str, Any]] = {}
+
+    for field_name in TIMESTAMP_FIELDS:
+        if field_name in {"http_date", "http_last_modified"}:
+            evidence_class = "capture_time_only"
+            pit_gate_allowed = False
+            missing_reason = "http_header_not_supplied"
+        elif field_name == "official_publication_timestamp":
+            evidence_class = "official_row_timestamp"
+            pit_gate_allowed = True
+            missing_reason = "official_publication_timestamp_not_proven"
+        elif field_name == "official_publication_date":
+            evidence_class = "official_publication_date_only"
+            pit_gate_allowed = False
+            missing_reason = "official_publication_date_not_exposed_by_probe"
+        elif field_name in {"effective_from", "effective_to"}:
+            evidence_class = "effective_date_only"
+            pit_gate_allowed = False
+            missing_reason = "effective_period_not_exposed_by_probe"
+        elif field_name == "market_session_date":
+            evidence_class = "market_session_observation"
+            pit_gate_allowed = False
+            missing_reason = "market_session_date_not_exposed_by_probe"
+        elif field_name == "decision_time_observed_at":
+            evidence_class = "market_session_observation"
+            pit_gate_allowed = True
+            missing_reason = "decision_time_observation_not_exposed_by_probe"
+        elif field_name == "captured_at":
+            evidence_class = "capture_time_only"
+            pit_gate_allowed = False
+            missing_reason = "capture_time_not_exposed_by_probe"
+        elif field_name == "first_observed_at":
+            evidence_class = "first_observed_only"
+            pit_gate_allowed = False
+            missing_reason = "first_observed_time_not_exposed_by_probe"
+        else:
+            evidence_class = "missing"
+            pit_gate_allowed = False
+            missing_reason = f"{field_name}_not_proven"
+        semantics[field_name] = _timestamp_field_projection(
+            probe,
+            field_name=field_name,
+            evidence_class=evidence_class,
+            pit_gate_allowed=pit_gate_allowed,
+            missing_reason=missing_reason,
+        )
+
+    if primary_field == "market_session_date" and semantics[primary_field]["normalized_value"] is None:
+        semantics[primary_field] = {
+            "raw_evidence_location": "probe.probe_date",
+            "normalized_value": decision_date.isoformat(),
+            "timezone": "Asia/Taipei",
+            "evidence_class": "market_session_observation",
+            "quality": "date_only",
+            "pit_gate_allowed": False,
+            "reason_code": "decision_time_within_session_not_proven",
+        }
+
+    return {
+        "source_id": source_id,
+        "primary_evidence_class": primary_class,
+        "primary_field": primary_field,
+        "fields": semantics,
+        "http_headers_never_promoted_to_publication": True,
+        "capture_time_never_promoted_to_publication": True,
+        "first_observed_never_backfilled_as_publication": True,
+    }
+
+
+def _microstructure_owner_recommendation(
+    item: Mapping[str, Any],
+    *,
+    fubon_shadow_usable: bool,
+) -> dict[str, Any]:
+    source_id = str(item["source_id"])
+    policy = MICROSTRUCTURE_TIMESTAMP_POLICIES[source_id]
+    machine_blockers = [str(item["remaining_blocker"])]
+    return {
+        "source_id": source_id,
+        "proposed_decision": "deferred",
+        "machine_recommendation": "deferred",
+        "ready_for_owner_review": False,
+        "timestamp_evidence_class": item["timestamp_kind"],
+        "pit_gate_allowed": False,
+        "permitted_research_use": policy["research_use"],
+        "prohibited_use": [
+            "formal_evidence_credit",
+            "production_ingestion",
+            "formal_score_or_advice",
+            "broker_execution",
+        ],
+        "machine_blockers": machine_blockers,
+        "human_blockers": ["legal_license_review", "owner_written_acceptance"],
+        "fubon_shadow_usable": fubon_shadow_usable,
+        "fubon_formal_credit_allowed": False,
+        "production_blend_alpha_bp": 0,
+        "rollback_path": "disable_or_supersede_future_owner_decision; preserve append-only evidence",
+    }
+
 
 def validate_approved_output_path(target_path: Path) -> bool:
     """確認輸出路徑是否位於 OS TEMP 內。
@@ -326,6 +513,42 @@ def build_p0_source_evidence_audit(
                 "owner_written_acceptance",
             ],
         }
+        if source_id in MICROSTRUCTURE_SOURCE_IDS:
+            policy = MICROSTRUCTURE_TIMESTAMP_POLICIES[source_id]
+            timestamp_semantics = _build_microstructure_timestamp_semantics(
+                source_id,
+                probe,
+                decision_date=decision_date,
+            )
+            primary_field = policy["primary_field"]
+            primary_projection = timestamp_semantics["fields"][primary_field]
+            official_timestamp = timestamp_semantics["fields"][
+                "official_publication_timestamp"
+            ]
+            if (
+                raw_timestamp_evidence == "official_publication_timestamp"
+                and official_timestamp["normalized_value"] is not None
+            ):
+                timestamp_kind = "official_row_timestamp"
+                pit_status = "pit_timestamp_verified"
+                remaining_blocker = "legal_and_license_acceptance_required"
+                item["machine_status"] = "verified"
+            elif primary_projection["normalized_value"] is not None:
+                timestamp_kind = str(primary_projection["evidence_class"])
+                pit_status = (
+                    "market_session_observation_only"
+                    if timestamp_kind == "market_session_observation"
+                    else "official_publication_date_only"
+                )
+                remaining_blocker = policy["pit_blocker"]
+            else:
+                timestamp_kind = "first_observed_only"
+                pit_status = "official_publication_timestamp_missing"
+                remaining_blocker = policy["pit_blocker"]
+            item["timestamp_kind"] = timestamp_kind
+            item["pit_status"] = pit_status
+            item["remaining_blocker"] = remaining_blocker
+            item["timestamp_semantics"] = timestamp_semantics
         if "request_parameters" in probe:
             item["request_parameters"] = probe["request_parameters"]
         matrix.append(item)
@@ -357,6 +580,24 @@ def build_p0_source_evidence_audit(
                     "missing_sources": missing_count,
                 },
                 "decision_scope": "internal_research_only_intent_and_terms_acceptability",
+                **(
+                    {
+                        "source_recommendations": [
+                            _microstructure_owner_recommendation(
+                                matrix_by_id[source_id],
+                                fubon_shadow_usable=bool(fubon_items.get(source_id)),
+                            )
+                            for source_id in covered_ids
+                        ],
+                        "fubon_shadow_usable": any(
+                            bool(fubon_items.get(source_id)) for source_id in covered_ids
+                        ),
+                        "fubon_formal_credit_allowed": False,
+                        "production_blend_alpha_bp": 0,
+                    }
+                    if group_key == "twse_microstructure"
+                    else {}
+                ),
             }
         )
 
@@ -388,7 +629,12 @@ def build_p0_source_evidence_audit(
         "safety_flags": {
             "formal_oos_allowed": False,
             "formal_evidence_credit_authorized": False,
+            "production_allowed": False,
             "production_blend_alpha_bp": 0,
+            "training_allowed": False,
+            "promotion_allowed": False,
+            "scheduler_allowed": False,
+            "unblind_allowed": False,
             "formal_rule_only_path_unchanged": True,
             "downstream_eligibility": "none",
             "human_decision": "requires_human_acceptance",

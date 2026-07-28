@@ -135,3 +135,15 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
 - **forward binding**：在 append 前重新檢查 registry，確認交易時段未使用後，綁定 `holdout_id=formal-rule-only-20260729-r1` 至 `2026-07-29`。既有 2026-07-21 snapshot 不回填、不重算、不追認。
 - **目前 blocker**：只剩 2026-07-29 真正 decision-time 的 Rule-only `manual_observed` artifact；這是等待真實時間，不是未完成的 owner 人工審核。snapshot count、outcome revision、matured denominator、Formal credit 與 consumption increment 在本次均為 0。
 - **rollback**：append 一筆引用本決議的 `formal-observation-lane-disabled.v1`，不得刪除或改寫既有 decision／binding；程式與文件以 DEV-67 單一 commit revert。TEMP artifact 不納入 Git。
+
+## 9. 2026-07-28 TWSE microstructure timestamp semantics hardening（DEV-69）
+
+- **範圍**：只補強既有 `twse_microstructure` evidence audit 的五個 source；不執行 live probe、不建立第二套 registry、不代替 owner/reviewer 決議。
+- **停牌／復牌**：現有 probe 仍只有 `first_observed_only`；有效事件與公告發布時間分開，row-level 官方公告 timestamp 未證明。
+- **處置／分盤**：audit 可表達 `official_publication_date_only`、有效起訖與衍生 provenance，但目前 probe 未投影可引用公告日期值，因此維持 `first_observed_only` 與 `official_publication_timestamp_missing`。
+- **全額交割**：TWT85U 現有證據為 `market_session_observation`；當日狀態不冒充公告，正式公告時間仍未證明。
+- **漲跌停鎖死**：MI_INDEX 正確分類為 `market_session_observation`，本來就不是公告來源；remaining blocker 改為 `decision_time_availability_not_proven`，不再錯列為公告時間缺失。
+- **HTTP／capture 防線**：HTTP `Date`／`Last-Modified`、capture time 與 first-observed 永不升格或回填為官方公告時間；每個 timestamp field 都保存 evidence class、timezone、PIT gate eligibility 與 missing reason。
+- **Owner packet**：既有五群組 packet 內新增五個逐 source machine recommendation；目前全部為 `deferred`、`ready_for_owner_review=false`，仍需 machine evidence、legal/license 與具名 owner 決議。這不是 accepted／limited revision。
+- **富邦邊界**：可作 shadow corroboration 的來源會顯示 `fubon_shadow_usable=true`；`fubon_formal_credit_allowed=false`、`production_blend_alpha_bp=0` 固定不變，富邦不得補造 TWSE 官方公告時間。
+- **安全**：`formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、Rule-only formal path；未寫 DB、未捕捉 Formal snapshot、未執行 scheduler、training、promotion、unblind 或 production blend。

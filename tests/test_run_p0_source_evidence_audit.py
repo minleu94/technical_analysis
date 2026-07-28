@@ -209,6 +209,90 @@ def test_http_headers_and_dates_not_upgraded_to_publication_timestamp() -> None:
     assert inst["pit_status"] == "official_publication_timestamp_missing"
 
 
+def test_microstructure_timestamp_semantics_are_source_specific() -> None:
+    report = _sample_probe_report()
+    report["sources"][3]["http_date"] = "Sun, 26 Jul 2026 18:00:00 GMT"  # type: ignore[index]
+    report["sources"][3]["last_modified"] = "Sun, 26 Jul 2026 17:30:00 GMT"  # type: ignore[index]
+    payload = build_p0_source_evidence_audit(
+        date(2026, 7, 26),
+        probe_report=report,
+    )
+    matrix = {item["source_id"]: item for item in payload["machine_evidence_matrix"]}
+
+    disposition = matrix["microstructure.disposition_stock"]
+    disposition_semantics = disposition["timestamp_semantics"]
+    assert disposition["timestamp_kind"] == "first_observed_only"
+    assert disposition["remaining_blocker"] == "official_publication_timestamp_missing"
+    assert (
+        disposition_semantics["fields"]["official_publication_date"]["reason_code"]
+        == "official_publication_date_not_exposed_by_probe"
+    )
+    assert (
+        disposition_semantics["fields"]["http_date"]["pit_gate_allowed"] is False
+    )
+    assert (
+        disposition_semantics["fields"]["http_last_modified"]["raw_evidence_location"]
+        == "probe.last_modified"
+    )
+    assert (
+        disposition_semantics["fields"]["http_last_modified"]["evidence_class"]
+        == "capture_time_only"
+    )
+
+    full_delivery = matrix["microstructure.full_delivery"]
+    assert full_delivery["timestamp_kind"] == "market_session_observation"
+    assert full_delivery["pit_status"] == "market_session_observation_only"
+    assert (
+        full_delivery["timestamp_semantics"]["fields"]["market_session_date"][
+            "normalized_value"
+        ]
+        == "2026-07-26"
+    )
+    assert (
+        full_delivery["timestamp_semantics"]["fields"]["market_session_date"][
+            "pit_gate_allowed"
+        ]
+        is False
+    )
+
+    limit_lock = matrix["microstructure.limit_lock"]
+    assert limit_lock["timestamp_kind"] == "market_session_observation"
+    assert limit_lock["pit_status"] == "market_session_observation_only"
+    assert limit_lock["remaining_blocker"] == "decision_time_availability_not_proven"
+    assert "official_publication_timestamp_missing" not in limit_lock["remaining_blocker"]
+
+
+def test_microstructure_owner_packet_is_per_source_and_never_self_approves() -> None:
+    payload = build_p0_source_evidence_audit(
+        date(2026, 7, 26),
+        probe_report=_sample_probe_report(),
+    )
+    group = next(
+        item
+        for item in payload["grouped_owner_decision_packet"]
+        if item["group_id"] == "twse_microstructure"
+    )
+    recommendations = group["source_recommendations"]
+    assert [item["source_id"] for item in recommendations] == [
+        "microstructure.suspended_halt_resume",
+        "microstructure.disposition_stock",
+        "microstructure.periodic_call_auction",
+        "microstructure.full_delivery",
+        "microstructure.limit_lock",
+    ]
+    assert group["fubon_shadow_usable"] is False
+    assert group["fubon_formal_credit_allowed"] is False
+    assert group["production_blend_alpha_bp"] == 0
+    for item in recommendations:
+        assert item["proposed_decision"] == "deferred"
+        assert item["machine_recommendation"] == "deferred"
+        assert item["ready_for_owner_review"] is False
+        assert item["pit_gate_allowed"] is False
+        assert item["fubon_formal_credit_allowed"] is False
+        assert item["production_blend_alpha_bp"] == 0
+        assert "legal_license_review" in item["human_blockers"]
+
+
 def test_mops_artifact_missing_required_fields_fails_closed() -> None:
     # Incomplete MOPS quarterly artifact (missing available_date, revision, content_hash)
     incomplete_artifact = {

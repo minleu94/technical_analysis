@@ -144,6 +144,10 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - 預設模式不發起任何網路請求；Live 探測模式未提供 `--confirm-live-readonly` 時會立即拒絕執行。
 - `--output` 輸出路徑目前嚴格受限於 OS TEMP；尚未定義受治理的 candidate-safe 根目錄，因此也拒絕寫入 repository、正式 DB 或正式 Evidence DB。
 - 13 項 P0 來源自動收斂為 5 大群組化 Owner 決策（除權息/減資分割、交易限制 Preflight、三大法人/信用交易、TDCC 集保持股、月營收/季報 Artifact），僅要求 Owner 判斷內部研究意圖/條款接受度，完全無需審視逐列 raw data。
+- `twse_microstructure` 群組另提供五個 source 的逐項 machine recommendation；目前全部固定為 `deferred`，且 `ready_for_owner_review=false`。這只是可重算的機器建議，不是 owner/reviewer 決議，也不會寫入 source acceptance registry。
+- Timestamp semantics 會分開投影官方公告 timestamp／date-only、有效期間、交易日觀測、decision-time observation、first-observed、capture time 與 HTTP headers。HTTP `Date`／`Last-Modified`、capture time 與 first-observed 均不得升格或回填為官方公告時間。
+- `microstructure.full_delivery` 與 `microstructure.limit_lock` 的現有官方 probe 只證明交易日狀態／行情觀測；其中 limit-lock 本來就不是公告來源，因此 blocker 是 `decision_time_availability_not_proven`，不是 `official_publication_timestamp_missing`。停復牌、處置與分盤目前仍缺可引用的 row-level 官方公告時間。
+- 富邦只可作相符 microstructure source 的 shadow corroboration；輸出會分開顯示 `fubon_shadow_usable` 與固定 `fubon_formal_credit_allowed=false`、`production_blend_alpha_bp=0`，不得用富邦補造 TWSE 官方公告時間。
 - 產出稽核草稿 handoff JSON 至 `%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1.json`；其 `status=audit_generated_not_validation_handoff`，不宣稱 pytest、mypy 或 Git 終態已通過。
 - 嚴格守護 `downstream_eligibility=none`、`human_decision=requires_human_acceptance`、`production_scheduler_allowed=false` 與 `formal_oos_allowed=false`；所有 formal clock zeros 維持 0。
 
