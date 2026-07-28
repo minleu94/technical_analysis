@@ -58,3 +58,14 @@
 - fubon.marketdata：已為 Fubon market-data 建立 research-only candidate dossier 審查投影，當前 hash: `sha256:8275ef80b6a409d3da4f9372569246abe0d28cabc60d322634c5d9a639715a60` (projection: `C:\Temp\external-evidence-shadow\fubon_dossier_projection.json`)，已完成第三輪硬化使 review package 檢核清單與阻擋器完全一致（可用 `scripts/inspect_fubon_dossier.py` 進行唯讀、review-only 盤點），其狀態為 owner review pending / deferred candidate，eligibility 保持 none，formal credit 保持 0，不供 downstream 使用。
 - safety：`formal_oos_allowed=false`；`production_blend_alpha_bp=0`；Rule-only；未啟用交易、scheduler、training、promotion 或 unblind。
 - note：2026-07-21 的 TEMP/shadow snapshot 發生在本週期之後，不回填 Week 1，也不構成 Week 1 credit。
+
+## Formal Week 2 evidence report revision（2026-07-20 至 2026-07-26）
+
+- revision: `formal-week-2-20260726-r1`；在自然週結束後於 2026-07-27 append，不覆寫 Week 1 或任何既有 state。
+- formal credit snapshot count=`0`；既有 shadow `manual_observed` count=`1`；outcome revision count=`0`；matured outcome denominator increment=`0`；formal credit increment=`0`。
+- manual why-not：週內 2026-07-21 的 `snapshot:2330:20260721:6bec1c3d03ebae5e` 是 decision-time TEMP/shadow `DEFER` artifact，結構驗證有效，但其 `fubon.marketdata` owner decision revision `decision:fubon.marketdata:20260721-r1` 仍為 `deferred`、allowed use cases 空、downstream eligibility=`none`、formal credit 未授權；因此不得納入 formal snapshot count、observed day、matured denominator 或任何產品／投資有效性結論。
+- holdout registry：`HoldoutConsumptionRegistry.jsonl` v2 owner-attested binding 重新檢查為有效，formal trading session=`2026-07-21`；本 revision 沒有建立新 binding、沒有把 shadow capture 宣稱為 formal consumption，也沒有消耗另一個交易時段。
+- source acceptance：13 個 P0 source 仍全數為 `requires_human_acceptance`、downstream eligibility=`none`。本週完成的 P0 machine audit/readiness hardening 只改善 candidate evidence diagnostics；12 項 official probes 未在本次重跑，`pit.quarterly_financials` 仍缺具公告／可得時間、revision、source hash 與 correction status 的真實 MOPS artifact，不構成 owner/reviewer acceptance。
+- approved weekly history：外部 `approved-weekly-history-projection.v1` SHA-256 仍為 `5D86BE7C469AB83B4C769DB4A76A7BE052FE4F38A667A93E5BBB301782C07ED4` 且固定 `formal_credit_authorized=false`；其 owner-approved UI disclosure records 不轉換為 Formal Week 2 observed snapshot 或 credit。
+- degraded：`first_observed_only`、`official publication timestamp missing`、`no documented full-delivery indicator`；missing=`new decision-time manual_observed artifact`、`accepted Fubon source decision`；capture failure=`none in this revision`。
+- safety：`formal_oos_allowed=false`；`formal_evidence_credit_authorized=false`；`production_blend_alpha_bp=0`；Rule-only formal path；未寫 Candidate／formal／market DB，未執行 scheduler、broker/trading、Recommendation／Portfolio／Exit／Score／lifecycle mutation、training、retraining、promotion、unblind 或 blend。
