@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 
@@ -340,3 +340,54 @@ def test_injected_governance_projection_copies_ev_p0_broker_and_artifact_status(
     assert broker.status == "degraded" and broker.degraded_reason == "license_pending"
     assert len(tuple(row for row in console.sources if row.lane == "p0")) == 13
     assert any(row.artifact_id == "ev2:review-package" for row in console.artifacts)
+
+
+def test_mops_sanitized_projection_is_read_by_research_console_service(tmp_path: Path) -> None:
+    from data_module.mops_daily_research_freshness import run_mops_daily_freshness_diagnostics
+    from data_module.mops_ezsearch_statement_availability import MOPS_MARKETS, MOPS_STATEMENT_ITEMS, MOPSQueryResult
+
+    # Create dummy full success matrix
+    results = []
+    for market in MOPS_MARKETS:
+        for item in sorted(MOPS_STATEMENT_ITEMS):
+            results.append(
+                MOPSQueryResult(
+                    market=market,
+                    announcement_item=item,
+                    rows=(
+                        {
+                            "CDATE": "115/07/27",
+                            "CTIME": "18:17:06",
+                            "TYPEK": market,
+                            "COMPANY_ID": "2330",
+                            "COMPANY_NAME": "台積電",
+                            "CODE_NAME": "半導體業",
+                            "AN_CODE": item,
+                            "AN_NAME": "資產負債表",
+                            "SUBJECT": "115年第2季資產負債表",
+                            "HYPERLINK": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb03?co_id=2330&year=115&season=2",
+                        },
+                    ),
+                    response_sha256="a" * 64,
+                    source_status="success",
+                )
+            )
+
+    diag = run_mops_daily_freshness_diagnostics(
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 27),
+        output_root=tmp_path,
+        query_results=results,
+        captured_at="2026-07-27T20:00:00+08:00",
+    )
+
+    console = ResearchConsoleSourceService(
+        projection_path=diag.sanitized_projection_path,
+        clock=lambda: datetime(2026, 7, 27, 20, 0, tzinfo=timezone.utc),
+    ).inspect()
+
+    assert console.blockers == ()
+    assert console.overall_status == "observed"
+    mops_source = next(row for row in console.sources if row.source_id == "pit.quarterly_financials")
+    assert mops_source.status == "observed"
+    assert mops_source.observed_rows == 4

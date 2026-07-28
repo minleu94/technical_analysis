@@ -79,6 +79,33 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - `formal_decision_influence_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0` 固定不可覆寫。
 - 在建立明確的 Fubon 欄位到既有規則輸入映射前，Score、Recommendation、Portfolio、Exit 一律回傳 typed `not_computable`，不得以未改變的 baseline 假裝已完成 shadow 計算。
 
+### MOPS 每日研究用財報發布 Freshness、Outage 與 Revision 診斷 CLI（開發者／人工研究操作）
+
+這是人工可執行的 MOPS EZSearch 季報公告發布時間（F26–F29）每日 Freshness、Outage、與 Revision/Correction 診斷工具。僅供研究與 shadow 投影，不會寫入正式 SQLite 或 FA_Data，也不取得 Formal Evidence Credit。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\fetch_mops_daily_research_freshness.py `
+  --start-date 2026-07-27 `
+  --end-date 2026-07-28 `
+  --output-root $env:TEMP\technical_analysis_development_output `
+  --prior-artifact $env:TEMP\technical_analysis_development_output\runs\<prior-run-id>.json `
+  --live --confirm-live-readonly
+```
+
+- **離線與連線模式**：預設可用 `--fixture-file` 做離線測試與診斷比對；若要連線 MOPS 官方 HTTPS 介面，必須明確帶入 `--live --confirm-live-readonly` 旗標。
+- **查詢邊界**：僅允許 MOPS 官方 HTTPS 介面、僅查詢 F26–F29、單次查詢窗口上限 31 天、單一查詢回傳滿 1000 筆觸發 1000-row cap 失敗封閉；M31 永久排除。
+- **輸出路徑**：`--output-root` 嚴格通過 `validate_development_output_root` 檢查，拒絕 `DATA_ROOT`、正式 DB、repo 根目錄、路徑穿越與 symlink escape。
+- **Immutable Run Artifacts 與 Atomic Projection**：
+  - 每次執行之 raw/research diagnostic 會以不可變且包含 SHA-256 Hash 的檔名寫入 `<output_root>/runs/<run_id>.json`。
+  - 最新 sanitized 投影會以 atomic write 寫入 `<output_root>/latest_sanitized_projection.json`。
+- **Freshness / Outage / Revision 狀態判讀**：
+  - `observed`：16 組 query (4 markets × 4 items) 完整成功、Schema 合法且 Row Conservation 計算無誤。
+  - `observed_empty`：16 組 query 完整成功，但當期事件數為 0（此非 Outage）。
+  - `capture_failed`：網路/HTTP/JSON/格式錯誤，會寫入 append-only failure diagnostic artifact 並以 non-zero (exit 1) 結束，不偽造空成功或 mapping。
+  - `baseline_missing`：未提供 prior artifact 時無法宣稱多日證據。
+  - `stale`：當指定 `--expected-through` 且查詢 end_date 早於 expected-through 時標示。
+- **Research Console 唯讀投影**：在啟動 UI 或 Research Console 時設定顯式投影路徑（如 `latest_sanitized_projection.json`），即可以唯讀方式呈現 diagnostics。安全邊界旗標 `formal_oos_allowed=false`、`formal_credit_authorized=false`、`production_blend_alpha_bp=0`、`fubon_shadow_usable=true`、`fubon_formal_credit_allowed=false` 固定保留。
+
 ### P0-13 機器稽核工具 CLI（GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1）
 
 這是 CLI-only 的唯讀 P0-13 機器稽核工具，對全部 13 項 P0 候選資料源執行高效率、可重跑的機器驗證，將 machine-verified、degraded 與缺 artifact／probe 的狀態分開呈現，並產出極簡 Owner Decision Packet 與 audit JSON：

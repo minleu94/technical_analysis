@@ -117,6 +117,8 @@ class ResearchConsoleSourceService:
         lineage = _mapping(payload, "lineage")
         blockers = _string_tuple(payload.get("blockers")) + self._freshness_blockers(lineage)
         governance = self._governance_provider() if self._governance_provider is not None else None
+        if governance is None and ("sources" in payload or "gates" in payload):
+            governance = payload
         if governance is not None and not isinstance(governance, Mapping):
             raise TypeError("governance projection must be an object")
         sample_count = _optional_int(metrics.get("sample_count"))
@@ -409,6 +411,8 @@ def _optional_int(value: object, *, fallback: int | None = None) -> int | None:
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise TypeError("blockers must be a string array")
     return tuple(value)
