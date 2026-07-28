@@ -1489,6 +1489,25 @@ Codex app 另外有一個 read-only daily automation：`baldr scheduled evidence
 
 這些 wrappers 中只有 `baldr-data-update-quick-daily` 會寫 market data CSV / SQLite；evidence dry-run 與 Codex read-only 摘要不寫 production evidence DB、不跑 UI、不讀 UI state、不做 portfolio / lifecycle action，也不代表任何訊號或事件類型已被證明有效。
 
+### 9.9.5 DEV-70 Development ML Data Inventory & Experiment Runner
+
+DEV-70 提供獨立、Sanitized、Machine-Readable 的 ML 資料盤點 CLI (`scripts/inspect_development_ml_data_inventory.py`) 與 ML 實驗執行 CLI (`scripts/run_development_ml_experiment.py`)。其所有輸出皆限定於 TEMP 根目錄 (`validate_development_output_root`)，絕不寫入正式 DB、不改寫 Formal Acceptance 狀態，也不授權 Production Promotion。
+
+1. **Development ML Data Inventory Inspection CLI**:
+   盤點核心 20 個特徵、4 個標籤、MOPS 季報時間軸 (Availability Gate)、Broker/Fundamental 候選族群與 DEV-69 TWSE 微觀結構 5 個 Source 的訓練狀態與遮蔽原因。
+   ```powershell
+   .\.venv\Scripts\python.exe scripts/inspect_development_ml_data_inventory.py --manifest C:\Temp\technical_analysis_development_output\generations\terra-v0-canonical-2025-dev-20260714\manifest.json --dataset C:\Temp\technical_analysis_development_output\generations\terra-v0-canonical-2025-dev-20260714\dataset.json --output-root C:\Temp\technical_analysis_development_output
+   ```
+
+2. **Development ML Experiment Runner CLI**:
+   執行具備不可變 Contract 的隔離 ML 開發實驗，支援特徵組合 (Feature Pack: `core_20`, `technical_only`, `price_only`, `price_technical`)、模型家族對比 (`linear_logistic`, `hist_gradient_boosting`) 與超參數 Grid 實驗。
+   ```powershell
+   .\.venv\Scripts\python.exe scripts/run_development_ml_experiment.py --manifest C:\Temp\technical_analysis_development_output\generations\terra-v0-canonical-2025-dev-20260714\manifest.json --dataset C:\Temp\technical_analysis_development_output\generations\terra-v0-canonical-2025-dev-20260714\dataset.json --output-root C:\Temp\technical_analysis_development_output --experiment-id exp-ablation-technical-v1 --feature-pack technical_only
+   ```
+
+安全旗標恆定為：`formal_oos_allowed=false`, `production_blend_alpha_bp=0`, `promotion_allowed=false`。
+
+
 **報告匯出按鈕**：
 - 在「實驗摘要」設有「匯出 Excel 報告」按鈕（僅在單股回測成功後啟用）。
 - 在「批次結果」設有「匯出批次 Excel」按鈕（僅在批次回測成功後啟用）。

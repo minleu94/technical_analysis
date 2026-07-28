@@ -12,6 +12,8 @@
 3. 在具名人工決策人、日期、授權 / 使用範圍、quality、PIT、freshness / coverage、missing / outage 與 evidence review 均完成前，`human decision` 固定為 `requires_human_acceptance`，`downstream eligibility` 固定為 `none`。
 4. 資料缺失、來源中斷、過期、缺 `available_date` 或 `available_date > decision_date` 時，依列示 policy fail-closed 或保留降級診斷；不得補值、不得把 stale 偽裝為 observed。
 5. 現有 registry 的 `ready` / `partial` 只表示 capability metadata，不能取代本台帳的人工作業；未登錄 ID 只用於指出 P0 缺口，不是 adapter、source manifest 或可呼叫資料來源。
+6. DEV-70 的 Development Data Inventory 欄位盤點 (Candidate Feature / Candidate Research Only) 純屬開發階段資料源可見度與實驗分類；特徵經 Data Inventory 盤點或於 TEMP 中執行 ML Experiment 絕不等於本台帳之 Source Acceptance。
+
 
 ## 2. P0 source-by-source 決策表
 
