@@ -278,6 +278,10 @@ def build_development_data_inventory(
     )
 
     # 5. Fundamental 季度財務比率
+    pit_fund_has_artifact = (
+        "pit.quarterly_financials" in validated_candidate_sources
+        or "fundamental.quarterly_financial_ratios" in validated_candidate_sources
+    )
     fields.append(
         DataInventoryField(
             field_id="fundamental.quarterly_financial_ratios",
@@ -286,13 +290,23 @@ def build_development_data_inventory(
             dtype="int",
             unit="bp",
             role="candidate_feature",
-            current_training_status="blocked_missing_artifact",
+            current_training_status="candidate_research_only"
+            if pit_fund_has_artifact
+            else "blocked_missing_artifact",
             source_id="pit.quarterly_financials",
             source_version="mops-financial-ratios.candidate",
+            artifact_citation="validated_pit_fundamental_candidate_artifact"
+            if pit_fund_has_artifact
+            else None,
             feature_as_of_policy="statement_available_date",
             available_date_policy="available_date_before_or_on_decision",
-            coverage_summary={"numeric_pit_ratios_supplied": False},
-            blockers=(
+            coverage_summary={
+                "numeric_pit_ratios_supplied": pit_fund_has_artifact,
+                "research_pit_numeric_candidate": pit_fund_has_artifact,
+            },
+            blockers=()
+            if pit_fund_has_artifact
+            else (
                 "fundamental_pit_numeric_data_missing",
                 "statement_publication_timestamp_does_not_forge_financial_ratios",
             ),
