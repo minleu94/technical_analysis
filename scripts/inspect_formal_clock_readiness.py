@@ -175,6 +175,12 @@ def _inspect_snapshot(path: Path | None) -> tuple[str, str | None, str | None]:
         return "unreadable", "manual_observed_snapshot_unreadable", None
     if not isinstance(payload, dict) or payload.get("capture_kind") != "manual_observed":
         return "invalid", "capture_kind_must_be_manual_observed", None
+    parent_artifact_ids = payload.get("parent_artifact_ids")
+    if not isinstance(parent_artifact_ids, list) or not any(
+        isinstance(item, str) and ":sha256:" in item
+        for item in parent_artifact_ids
+    ):
+        return "invalid", "manual_observed_decision_output_lineage_missing", None
     payload.pop("snapshot_id", None)
     try:
         ExternalEvidenceDecisionSnapshot.create(**payload)
@@ -223,7 +229,10 @@ def inspect_readiness(
         )
     except (OSError, ValueError):
         formal_blockers.append("owner_decision_missing_or_invalid")
-        report["snapshot"] = _inspect_snapshot(snapshot_json)[0]
+        snapshot_state, snapshot_blocker, _ = _inspect_snapshot(snapshot_json)
+        report["snapshot"] = snapshot_state
+        if snapshot_blocker:
+            formal_blockers.append(snapshot_blocker)
     else:
         report["owner_decision"] = "valid"
         report["holdout_start"] = decision.new_holdout_start

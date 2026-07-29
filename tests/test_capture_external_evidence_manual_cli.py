@@ -39,3 +39,21 @@ def test_cli_rejects_capture_without_manual_observed_declaration(tmp_path, capsy
 
     assert exit_code == 2
     assert "manual_observed" in capsys.readouterr().out
+
+
+def test_cli_rejects_snapshot_without_hash_addressed_decision_output(tmp_path, capsys) -> None:
+    artifact = tmp_path / "snapshot.json"
+    artifact.write_text(
+        '{"capture_kind":"manual_observed","parent_artifact_ids":["lane:20260729"]}',
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--db", str(tmp_path / "evidence.sqlite"), "--snapshot-json", str(artifact),
+            "--confirm", "append-external-evidence",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "decision_output_lineage_missing" in capsys.readouterr().out

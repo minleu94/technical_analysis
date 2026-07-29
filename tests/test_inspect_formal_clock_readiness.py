@@ -49,7 +49,7 @@ def _snapshot(
                 "why": why or ["rule_rank_top_k"], "why_not": [], "risk_reasons": ["market_risk"],
                 "market_regime": "neutral", "liquidity_state": "liquid", "restriction_state": "clear",
                 "evidence_tier": "shadow", "missing_sources": [], "degraded_reasons": [],
-                "parent_artifact_ids": ["research:20260714"], "capture_kind": "manual_observed",
+                "parent_artifact_ids": ["decision-output:sha256:" + "3" * 64], "capture_kind": "manual_observed",
             }
         ),
         encoding="utf-8",
@@ -152,6 +152,19 @@ def test_free_text_fubon_mention_does_not_create_source_dependency(tmp_path) -> 
     report = inspect_readiness(tmp_path, snapshot)
 
     assert "fubon_source_not_accepted_for_formal_clock" not in report["blockers"]
+
+
+def test_snapshot_without_hash_addressed_decision_output_is_rejected(tmp_path) -> None:
+    snapshot = tmp_path / "synthetic_snapshot.json"
+    _snapshot(snapshot)
+    payload = json.loads(snapshot.read_text(encoding="utf-8"))
+    payload["parent_artifact_ids"] = ["formal_lane_decision:20260728-r1"]
+    snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = inspect_readiness(tmp_path, snapshot)
+
+    assert report["snapshot"] == "invalid"
+    assert "manual_observed_decision_output_lineage_missing" in report["blockers"]
 
 
 def test_typed_fubon_source_version_blocks_formal_clock(tmp_path) -> None:

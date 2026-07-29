@@ -66,6 +66,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if artifact.get("capture_kind") != "manual_observed":
             print(json.dumps({"status": "rejected", "reason": "capture_kind_must_be_manual_observed"}, sort_keys=True))
             return 2
+        parent_artifact_ids = artifact.get("parent_artifact_ids")
+        if not isinstance(parent_artifact_ids, list) or not any(
+            isinstance(item, str) and ":sha256:" in item
+            for item in parent_artifact_ids
+        ):
+            print(json.dumps({"status": "rejected", "reason": "manual_observed_decision_output_lineage_missing"}, sort_keys=True))
+            return 2
         try:
             snapshot = ExternalEvidenceDecisionSnapshot.create(**artifact)
         except (TypeError, ValueError) as exc:

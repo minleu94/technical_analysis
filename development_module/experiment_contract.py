@@ -69,10 +69,6 @@ PREDEFINED_FEATURE_PACKS: dict[str, tuple[str, ...]] = {
         "volume_ratio_5d_bp",
         "volume_ratio_20d_bp",
     ),
-    "core_20_plus_pit_fundamental": (
-        *(spec.feature_id for spec in CORE_LONG_HISTORY_FEATURE_REGISTRY.specs),
-        "fundamental.quarterly_financial_ratios",
-    ),
 }
 
 _APPLY_FLAGS_DICT = {

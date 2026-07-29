@@ -1232,6 +1232,8 @@ Formal clock 不是 development adapter 完成的延伸；只有在真實決策�
 
 若上述任一項缺失，snapshot count 維持 0；不得以同日多次執行、pending outcome、歷史回填或 fake／replay artifact 取得 formal credit。
 
+不得用內建常數、sample rows、固定 timestamp／score／source hash 的 CLI 輸出組裝 `manual_observed`。每個 snapshot 的 `parent_artifact_ids` 至少必須有一個 hash-addressed 的真實 decision-output lineage（格式含 `:sha256:`）；缺少時 capture 與 preflight 都會拒絕。即使其他 schema 欄位相符，該 JSON 仍是 synthetic fixture，沒有真實決策輸出與來源 provenance，必須排除於 Formal snapshot、observed day、denominator 與 credit。
+
 `HoldoutConsumptionRegistry.jsonl` 是 owner 的 append-only 決議載體，不是 automation 可代寫的設定檔。`development_holdout_start` 是開發資料的排除起點；`formal_trading_session` 則是 owner 在綁定當下選定的第一個未消費正式觀測交易時段，兩者不可因為現在才綁定而倒填成過去的 observed day。owner 真正決定綁定後，才可依下列一行 JSONL 契約建立第一筆 record；尖括號內容必須是 owner 的真實資料，不能直接複製為正式證據：
 
 ```json
