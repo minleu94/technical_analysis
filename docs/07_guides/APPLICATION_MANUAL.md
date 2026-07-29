@@ -813,6 +813,8 @@ MOPS snapshot 可以用來補「從導入日之後才可使用」的歷史 basel
 
 MOPS 公告快易查現在可作季報官方發布時間的 research-only 主線。它只讀查詢 `F26` 資產負債表、`F27` 綜合損益表、`F28` 現金流量表與 `F29` 權益變動表，保存「公告日期時間」至秒及 `+08:00` 時區；不使用 `M31`，因為 M31 同時包含「董事會預計召開日期」與「董事會通過財報」，不能一律視為財報已發布。執行範例：
 
+MOPS 公告時間 artifact 只證明 availability，不能自行衍生 ROE、毛利率、營益率、負債比或 EPS。任何聲稱 numeric PIT 的 research candidate 必須以獨立、唯讀保存的原始數值財報 artifact 為來源，並同時保存 raw-numeric artifact、MOPS availability artifact、canonical dataset manifest/dataset 的 SHA-256 lineage；每列要有 raw numeric row 與 availability event 的 SHA-256、帶時區 publication timestamp、次一曆日的 `available_date`，且數值只用整數 minor units／basis points。validator 只會標為 `research_candidate`，不會賦予 official、source acceptance、formal OOS 或 production eligibility。內建常數、sample/default ratio、固定更正履歷、或將寫入前的 digest 塞回同一份 JSON 的輸出，一律 fail-closed。
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\fetch_mops_statement_availability.py `
   --start-date 2026-07-27 `
