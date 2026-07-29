@@ -815,6 +815,19 @@ MOPS 公告快易查現在可作季報官方發布時間的 research-only 主線
 
 MOPS 公告時間 artifact 只證明 availability，不能自行衍生 ROE、毛利率、營益率、負債比或 EPS。任何聲稱 numeric PIT 的 research candidate 必須以獨立、唯讀保存的原始數值財報 artifact 為來源，並同時保存 raw-numeric artifact、MOPS availability artifact、canonical dataset manifest/dataset 的 SHA-256 lineage；每列要有 raw numeric row 與 availability event 的 SHA-256、帶時區 publication timestamp、次一曆日的 `available_date`，且數值只用整數 minor units／basis points。validator 只會標為 `research_candidate`，不會賦予 official、source acceptance、formal OOS 或 production eligibility。內建常數、sample/default ratio、固定更正履歷、或將寫入前的 digest 塞回同一份 JSON 的輸出，一律 fail-closed。
 
+若需要建立可核驗的 bounded numeric PIT candidate，可使用 `scripts/build_mops_numeric_pit_candidate.py`。它從 MOPS `t163sb06` 保存季度數值比率 raw HTML，再從 `t57sb01` 保存同一公司／季度的 IFRSs 合併財報 listing，以 listing 上的原始上傳時間和更(補)正欄建立 publication/revision lineage；所有檔案、各層 SHA-256 與 candidate 都會寫入唯一 TEMP run directory。範例：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_mops_numeric_pit_candidate.py `
+  --stock-code 2330 --roc-year 114 --season 1 --market sii `
+  --output-root C:\Temp\technical_analysis_development_output `
+  --run-id dev71-mops-numeric-pit-2330-2025q1-r1 `
+  --canonical-manifest C:\Temp\technical_analysis_development_output\generations\terra-v0-canonical-2025-dev-20260714\manifest.json `
+  --canonical-dataset C:\Temp\technical_analysis_development_output\generations\terra-v0-canonical-2025-dev-20260714\dataset.json
+```
+
+`--run-id` 不可重用；工具會在同一目錄保存 raw HTML、numeric source、availability source、candidate 與 run manifest，並在發布 candidate 前重新執行 validator。MOPS listing 若顯示更(補)正，不會猜測 revision，而是停止要求另行建立具比較基準的 correction lineage。此工具可計算 canonical dataset 的 PIT-eligible coverage；coverage 有限時只代表 source artifact 已取得，不能當作 feature 已 materialize、ML 可訓練、source accepted 或 Formal evidence。
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\fetch_mops_statement_availability.py `
   --start-date 2026-07-27 `
