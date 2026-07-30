@@ -1,0 +1,92 @@
+{
+  "run_id": "release-v4-prod",
+  "trigger": "production_promotion",
+  "dataset_id": "frozen-v4-dataset",
+  "current_model_id": "rule-champion-v1",
+  "training_as_of": "2026-07-30",
+  "owner": "release_owner",
+  "steps": [
+    {
+      "step_id": "freeze_dataset",
+      "command": "build core_long_history and all_field_enriched manifests",
+      "expected_artifact": "dataset-manifest.json",
+      "completion_rule": "manifest hashes, schema, vintages and source versions recorded"
+    },
+    {
+      "step_id": "audit_feature_eligibility",
+      "command": "scan every table.column into the fail-closed eligibility registry",
+      "expected_artifact": "feature-eligibility.json",
+      "completion_rule": "100 percent of discovered columns have an explicit disposition"
+    },
+    {
+      "step_id": "validate_available_dates",
+      "command": "pytest tests/test_ml_available_date_boundary.py",
+      "expected_artifact": "available-date-report.json",
+      "completion_rule": "zero accepted future features, revisions or immature labels"
+    },
+    {
+      "step_id": "validate_causal_portfolio_state",
+      "command": "replay the T-1 paper ledger and allocation teacher",
+      "expected_artifact": "causal-portfolio-state.json",
+      "completion_rule": "no same-day Advice or oracle portfolio state is consumed"
+    },
+    {
+      "step_id": "purged_walk_forward",
+      "command": "run at least four expanding outer folds with purge=60 and embargo=5",
+      "expected_artifact": "walk-forward-folds.json",
+      "completion_rule": "all folds pass date, purge, embargo and OOF isolation checks"
+    },
+    {
+      "step_id": "train_feature_pack_experts",
+      "command": "train Ridge/Logistic champions and HGB challengers by feature pack",
+      "expected_artifact": "model-artifacts.json",
+      "completion_rule": "imputers, normalizers and calibrators are fit inside each train fold"
+    },
+    {
+      "step_id": "train_meta_allocator",
+      "command": "train the integer-bp allocation meta model from OOF expert predictions",
+      "expected_artifact": "allocation-model.json",
+      "completion_rule": "public outputs are bp/shares/minor-units and feature-family weights total 10000bp"
+    },
+    {
+      "step_id": "write_shadow_predictions",
+      "command": "append causal allocation proposals and four alpha lane replays",
+      "expected_artifact": "allocation-shadow-replay.json",
+      "completion_rule": "alpha lanes 0/2000/3500/5000 are deterministic and constraint-complete"
+    },
+    {
+      "step_id": "measure_calibration_drift",
+      "command": "measure OOF ECE, Brier and frozen-bin PSI",
+      "expected_artifact": "calibration-drift.json",
+      "completion_rule": "all metrics use frozen OOF or post-freeze evidence"
+    },
+    {
+      "step_id": "compare_portfolio_lanes",
+      "command": "run same-sample costed Rule versus blended portfolio replay",
+      "expected_artifact": "portfolio-lane-comparison.json",
+      "completion_rule": "same matured samples, costs, constraints and benchmark are used"
+    },
+    {
+      "step_id": "evaluate_promotion",
+      "command": "evaluate the allocation-promotion-v4 machine policy",
+      "expected_artifact": "promotion-authorization.json",
+      "completion_rule": "artifact authorizes the smallest passing alpha or atomically returns alpha=0"
+    },
+    {
+      "step_id": "check_boundaries",
+      "command": "python scripts/check_ml_shadow_boundary.py",
+      "expected_artifact": "boundary-and-replay-hash.json",
+      "completion_rule": "zero future-prefix or constraint violations and identical replay hashes"
+    }
+  ],
+  "candidate_alpha_bp": [
+    0,
+    2000,
+    3500,
+    5000
+  ],
+  "promotion_policy_id": "allocation-promotion-v4",
+  "auto_retrain_allowed": false,
+  "auto_promotion_allowed": true,
+  "production_scheduler_allowed": true
+}

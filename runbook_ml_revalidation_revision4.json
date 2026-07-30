@@ -1,0 +1,73 @@
+[
+  {
+    "item_id": "ml:revalidation",
+    "revision": 4,
+    "category": "ml_revalidation",
+    "title": "V4 全資料配置型 ML revalidation",
+    "status": "in_progress",
+    "owner": "ml-copilot-scheduler",
+    "earliest_validation_date": "2026-07-31",
+    "progress_bp": 7500,
+    "required_artifacts": [
+      "dataset/feature manifests",
+      "four OOS folds",
+      "calibration/drift",
+      "portfolio lane comparison",
+      "promotion authorization"
+    ],
+    "validation_commands": [
+      "python scripts/build_ml_revalidation_runbook.py --trigger production_promotion ...",
+      "python scripts/train_ml_allocation_copilot.py ...",
+      "python scripts/run_daily_ml_allocation_orchestration.py --decision-at 2026-07-31T08:30:00+08:00"
+    ],
+    "completion_rules": [
+      "all allocation-promotion-v4 evidence is machine-verifiable"
+    ],
+    "prohibited_actions": [
+      "不得用 fixture/replay 補真實 elapsed evidence",
+      "不得把現在快照回填成歷史 PIT",
+      "不得將 bounded engineering OOF 改稱 Formal OOS",
+      "不得手動硬改 formal_oos_allowed 或 production blend alpha",
+      "不得連接券商或自動送單"
+    ],
+    "notes": "全市場 immutable raw PIT publication、custody-v2 配置資料集、30,424-row/4-fold actual training、bit-identical deterministic retrain，以及 2026-07-31 strict T-1 post-freeze inference/promotion orchestration 均已完成。正式 calibration/drift/lane metrics 與 20 個真實 post-freeze shadow days 尚未成熟；promotion consumer 因 promotion_evidence_missing 合規選擇 alpha=0、formal_oos_allowed=false。此項由每日 scheduler 自動重驗，不需人工簽核，也不阻擋 Rule operational production。",
+    "completion_evidence": [
+      "full_market_raw_publication_id=pit-4a860a5fa18add4e0e15f2aa",
+      "full_market_raw_publication_manifest_hash=sha256:db439b9081dacfe94ac0f09d74e194a333396228f9e0f82d6c5374ae4fcfd4e2",
+      "full_market_raw_row_count=34447843",
+      "full_market_all_field_raw_rows=15876434",
+      "full_market_all_field_manifest_hash=sha256:e6fcfa6c19e5ab2c453096e1db165744972100eec29d2321e2715b77ecebae37",
+      "full_market_research_shadow_rows=2694975",
+      "full_market_research_shadow_manifest_hash=sha256:0678da5a40a48370cd981e40fbb7dd38cf304a73d2b072fe2e56ea7f32878ca3",
+      "dataset_id=all_field_enriched-portfolio-allocation-0eadb2bca4c5",
+      "dataset_identity_hash=sha256:0eadb2bca4c5f5a18836e516e66ddfaa2f89f04a4facc6ee56c8cfd3bafc5eed",
+      "dataset_manifest_hash=sha256:30bd1c73fb1cb996a802983d1037f377df16e8f789d08b401bce5948319df646",
+      "dataset_manifest_file_hash=sha256:a1ac4e27d9601d1c04c29dea8f84c37930b660cdc97f9731811a25407e0bcda1",
+      "feature_registry_hash=sha256:8b0f831a94ecd503591a146d36412b2385397928b98fbd607a33fa6073630f27",
+      "training_rows=30424",
+      "outer_folds=4",
+      "base_oof_predictions=546936",
+      "meta_oof_predictions=17090",
+      "model_artifact_hash=sha256:d9eb9fa9772a9f82758e2216aefcd5818870f7dfc5e6dde0c2a43b1e1eec4e8b",
+      "training_audit_file_hash=sha256:a787db91c30227cca15b0ed0cc4d1e50e36f11f2f76fbf6df91bb6b14e71a99f",
+      "training_manifest_file_hash=sha256:a137213d208074813bf07f85aa328c0604f24696653b6325d5a9c449777de504",
+      "deterministic_replay_hash=sha256:bbf39dbb0167ee00b31a66e06688e2effbd6bf847130ed502e008e31d72f8926",
+      "deterministic_retrain_files=bit_identical",
+      "daily_data_t_minus_one=2026-07-30",
+      "orchestration_status=passed_rule_only",
+      "orchestration_run_hash=sha256:5ede8dff1c9581b6eaa0d6fe9f9108c1474bd05a64c453e27e42a899a01eba16",
+      "post_freeze_input_hash=sha256:eae7da39ffc915d2674748bccced90ed3c4454533a4cbad4310a4710a6e649a0",
+      "inference_proposal_hash=sha256:77fa02aa9082cd2995e882f1b7340445d5560a1072b75319f6f3b6b4e2b79aa3",
+      "inference_coverage_bp=8322",
+      "promotion_artifact_hash=sha256:164a4032de9157cfe6db664d7c4f10318b51c242b8c862a3ab41899451ad7557",
+      "promotion_reason=promotion_evidence_missing",
+      "formal_ece=NOT_EVALUATED",
+      "formal_brier=NOT_EVALUATED",
+      "formal_psi=NOT_EVALUATED",
+      "formal_oos_lane_comparison=NOT_EVALUATED",
+      "production_blend_alpha_bp=0",
+      "formal_oos_allowed=false",
+      "broker_order_allowed=false"
+    ]
+  }
+]

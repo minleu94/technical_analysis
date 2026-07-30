@@ -1,0 +1,56 @@
+[
+  {
+    "item_id": "ml:revalidation",
+    "revision": 3,
+    "category": "ml_revalidation",
+    "title": "V4 全資料配置型 ML revalidation",
+    "status": "in_progress",
+    "owner": "ml-copilot-scheduler",
+    "earliest_validation_date": "2026-07-30",
+    "progress_bp": 6500,
+    "required_artifacts": [
+      "dataset/feature manifests",
+      "four OOS folds",
+      "calibration/drift",
+      "portfolio lane comparison",
+      "promotion authorization"
+    ],
+    "validation_commands": [
+      "python scripts/build_ml_revalidation_runbook.py --trigger production_promotion ...",
+      "python scripts/train_ml_allocation_copilot.py ...",
+      "python scripts/build_ml_allocation_post_freeze_shadow_input.py ...",
+      "python scripts/infer_ml_allocation_copilot.py ..."
+    ],
+    "completion_rules": [
+      "all allocation-promotion-v4 evidence is machine-verifiable"
+    ],
+    "prohibited_actions": [
+      "不得用 fixture/replay 補真實 elapsed evidence",
+      "不得把現在快照回填成歷史 PIT",
+      "不得將 bounded engineering OOF 改稱 Formal OOS",
+      "不得手動硬改 formal_oos_allowed 或 production blend alpha",
+      "不得連接券商或自動送單"
+    ],
+    "notes": "全欄位資格治理、bounded PIT publication、30,424-row/5-fold actual training、bit-identical deterministic retrain 與 post-freeze fail-closed input boundary 已完成；正式 calibration/drift/lane metrics 與 20 個真實 post-freeze shadow days 尚未成熟，因此 machine gate 維持 alpha=0、formal_oos_allowed=false。此項由每日 scheduler 自動重驗，不需人工簽核，也不阻擋 Rule operational production。",
+    "completion_evidence": [
+      "dataset_id=all_field_enriched-portfolio-allocation-f9b246109d91",
+      "dataset_manifest_hash=sha256:f9b246109d91b51e9d56224128937ebcbc5d64bc5ae1f9a6d72a670235fdf1c9",
+      "feature_registry_hash=sha256:8b0f831a94ecd503591a146d36412b2385397928b98fbd607a33fa6073630f27",
+      "raw_pit_publication_hash=sha256:a59f0530f1ab4e12dc608d26eeecac54036fabe61a0071d1778bdfd12321901e",
+      "raw_all_field_manifest_hash=sha256:45e775668a1653028ece4422abec6ea888473083122df2570c3255d7333e6fa9",
+      "training_rows=30424",
+      "outer_folds=5",
+      "base_oof_predictions=657576",
+      "meta_oof_predictions=21920",
+      "model_artifact_hash=sha256:f4b54cb1c816b56324e392333a9c1031f2cb0ca4aa0e74b2af5a5fc044f13086",
+      "training_audit_file_hash=sha256:edb3bdb46112654805615e750f25ffbb654b58c3c172300e86f8521bbd9f1997",
+      "training_manifest_file_hash=sha256:f8ef0daa516bc6ce000d7d09bf6ab4a58de879c55a2a5fe69bb564610050c542",
+      "deterministic_replay_hash=sha256:8edc4baa1b9dc50baa1f528b42fa226d7fb4699410f5d3938f187cc593e4645e",
+      "deterministic_retrain_files=bit_identical",
+      "post_freeze_2026-07-31=blocked_raw_cutoff_before_2026-07-30_close",
+      "production_blend_alpha_bp=0",
+      "formal_oos_allowed=false",
+      "broker_order_allowed=false"
+    ]
+  }
+]

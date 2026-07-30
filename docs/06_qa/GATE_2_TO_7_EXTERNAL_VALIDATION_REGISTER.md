@@ -1,6 +1,40 @@
 # Gate 2–7 External Validation Register
 
-> **Agent 接手導覽**：工程完成證據見 [Pure Engineering Closeout](GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md)；registry 操作與狀態投影見 [Engineering Control Center](GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md)；所有 ML 更新、重訓與 promotion review 必須遵循 [Gate 7 ML Shadow Engineering](GATE_7_ML_SHADOW_ENGINEERING.md)。本表只管理尚待人工、時間或外部條件成立的項目。
+> **V4.0 最新狀態（2026-07-30）**：本頁已由「等待人工清單」轉成「append-only machine evidence／policy decision register」。舊初始矩陣保留作歷史，不再要求 blanket human acceptance。Rule/Advice/Paper operational production 已啟用；ML Production Co-pilot 每日評估四條 alpha lane，但全市場 direct OOC、實際因果投組 replay 與 20 個成熟 shadow 交易日尚未齊備，所以合法狀態仍是 `alpha=0`、`formal_oos_allowed=false`。證據不足不阻擋 Rule 路徑，也不得被改寫為通過。
+
+## V4.0 最新 revision 投影
+
+| Item | 最新狀態 | 機器／政策決議 |
+|---|---|---|
+| `evidence:weekly-history-3` | `complete` | scheduler sidecar 已累積 4 個不同真實週期（門檻 3），revision 3 由機器證據完成 |
+| `evidence:forward-maturity` | `insufficient_evidence` | 只把 available/matured outcomes 放入分母 |
+| `p0:source-acceptance-13` | `complete` | 13/13 已逐源處置：0 accepted、12 research shadow、1 blocked provenance |
+| `paper:policy-approval` | `complete` | 平衡型 int-bp／Decimal policy 正式採用 |
+| `paper:elapsed-observation` | `insufficient_evidence` | 05:28 task 已啟動，真實週期由 append-only ledger 累積 |
+| `v3:manual-pruning-review` | `complete` | Rule champion 保留；低證據 challenger 全部限制於 shadow |
+| `health:thesis-input` | `complete` | 缺 thesis → WATCH；invalidation → EXIT；ML 不得創建 thesis |
+| `health:transition-review` | `complete` | 合法／非法 transition 由 deterministic state-machine tests 判定 |
+| `exit:outcome-maturity` | `insufficient_evidence` | 只由成熟 horizon 自動更新 |
+| `ml:shadow-days` | `insufficient_evidence` | 四 lane 已啟動；歷史 replay 不算 20 個真實 elapsed trading days |
+| `ml:promotion-policy` | `complete` | `allocation-promotion-v4`；最小通過 alpha，任一失效原子回退 0 |
+| `ml:revalidation` | `in_progress`（revision 6，8,500 bp） | 全市場 raw PIT custody、official-event bounded 4-fold model、八個 feature packs、逐 horizon outcome 契約與自動 promotion／authority 管線已完成；revision 6 封存時 direct store 已完成 2014–2018、2019 組裝中，live checkpoint 隨後至少完成至 2019。Engineering replay 可重算帳務但 Formal semantic verifier 仍 fail closed；Shadow observation 不具 promotion day credit，formal OOC／calibration／drift 由 scheduler 自動續驗 |
+| `release:rule-operational` | `complete` | Decision／Advice／Paper／配置已 operational；broker=false |
+| `release:formal-gates` | `insufficient_evidence` | 僅指 ML 非零權重；不影響 Rule operational production |
+
+正式 sidecar registry：`OUTPUT_ROOT/release_v4/engineering_gate_registry.sqlite`。2026-07-30 首批與 live P0 重驗共 append 28 個 revisions；weekly sidecar 自動計數達 4/3 後 append `evidence:weekly-history-3` revision 3；`ml:revalidation` 依序追加 revision 3（actual training 與 post-freeze fail-closed）、revision 4（全市場 raw custody 與每日 Co-pilot）、revision 5（全市場 direct OOC checkpoint、逐 horizon metrics 與獨立 promotion authority）及 revision 6（正式 replay semantic gate、Shadow day-credit gate 與完整 release QA）。目前共 33 列；除 weekly history 與 ML revalidation 外，其餘項目最新仍為 revision 2，禁止改寫既有 row。
+
+## 自動 Gate 決策規則
+
+- Gate 2：weekly、forward maturity 與 elapsed evidence 由排程計數；未達門檻寫 `insufficient_evidence`。
+- Gate 3：每一個 P0 source 都必須是 accepted／research_shadow／rejected／blocked 的明確決議；沒有 blanket acceptance。
+- Gate 4：policy 已決議；每日 Paper task 只做 T-1 append-only 估值，不自動 rebalance。
+- Gate 5：Rule champion 固定保留，challenger 必須有可重播 evidence 才能解除 shadow。
+- Gate 6：Health/Exit 由狀態機與硬風控決定；ML 不能取消 EXIT。
+- Gate 7：policy 已接受，權重影響仍只由 promotion artifact 決定；禁止手動設定 `formal_oos_allowed` 或非零 alpha。
+
+機器 promotion 必須同時證明 PIT/future/constraint violations=0、replay hash 一致、至少四 folds 且三 folds 勝 Rule、bootstrap 95% lower bound >=0、ECE <=500 bp、calibrated Brier 不劣化、PSI <2500 bp、core/enriched/fill coverage 達門檻、MDD/CVaR 惡化 <=100 bp、turnover 達門檻及 20 個真實 shadow trading days。候選 alpha 固定 `2000 → 3500 → 5000` 選最小通過者。
+
+> **Agent 接手導覽**：工程完成證據見 [Pure Engineering Closeout](GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md)；registry 操作與狀態投影見 [Engineering Control Center](GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md)；所有 ML 更新、重訓與 promotion review 必須遵循 [Gate 7 ML Shadow Engineering](GATE_7_ML_SHADOW_ENGINEERING.md)。本表管理自動時間證據、外部來源條件與政策決議；不再建立等待人工批准的 blanket Gate。
 
 > 每個 cadence 的 command/input/output/owner/safety/failure/rollback/completion/prohibited 契約見 [V3.3 Engineering Closeout](V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)；本表只保存 append-only external state，不複製操作規則。
 
@@ -15,7 +49,7 @@
 3. 透過 `scripts/manage_engineering_gate_registry.py ... append` 新增 revision。
 4. 用 `list-latest` / `history` 檢查；禁止直接修改 SQLite 舊列。
 
-## 初始待辦矩陣
+## 初始待辦矩陣（歷史；不可當最新狀態）
 
 | Item ID | Category | Owner | Earliest validation | 初始狀態 | Completion rule | 禁止動作 |
 |---|---|---|---|---|---|---|
@@ -47,7 +81,7 @@
 .\.venv\Scripts\python.exe scripts\build_ml_revalidation_runbook.py --run-id <id> --trigger <trigger> --dataset-id <new-frozen-id> --current-model-id <id> --training-as-of <YYYY-MM-DD> --owner <owner> --output <runbook.json>
 ```
 
-必須重新凍結 dataset manifest、檢查 available dates、purged walk-forward、訓練 challenger、OOF calibration、寫 shadow predictions、drift、same-sample champion comparison、promotion review package 與 shadow dependency guard。完成後仍只可送人工 review，不會自動 promotion。
+必須重新凍結 dataset manifest、檢查 available dates、purged walk-forward、訓練 challenger、OOF calibration、寫 shadow predictions、drift、same-sample champion comparison、promotion evidence package 與 shadow dependency guard。只有機器可驗證 evidence 全數通過後，獨立 promotion authority 才可簽發相容 artifact 並選擇最小通過 alpha；任何條件失效皆原子回退 `alpha=0`，不等待人工 review，也不得手動 promotion。
 
 ## Formal Week 1 evidence report revision（2026-07-14 至 2026-07-19）
 

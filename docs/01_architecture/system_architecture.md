@@ -1,6 +1,43 @@
 ﻿# 系統架構
 
-> **最後更新**：2026-07-13
+> **最後更新：2026-07-30｜V4.0 Operational Production**。Current architecture 現已包含全欄位治理、年度 PIT shards、配置型 ML Production Co-pilot、Rule/ML 整數 bp 混合、deterministic risk projection、confirmed Decision/Evidence capture 與 strict T-1 Paper ledger。ML 非零權重仍由 machine promotion gate 控制；目前 alpha 0。Live broker execution 不在系統範圍。
+
+## V4.0 配置決策資料流
+
+```text
+SQLite + raw files + governed sidecars
+  -> field eligibility / file inventory
+  -> annual PIT raw observations (core / enriched / research-shadow split)
+  -> decision-date as-of rows + T-1 causal Paper state
+  -> pack experts (Ridge/Logistic + HGB; OOF only)
+  -> Meta Allocator (target/delta/risk/cash)
+  -> MLAllocationProposal (int bp)
+               \
+Rule allocation -> integer largest-remainder blend
+  -> Health/Exit + cash/symbol/sector/liquidity/turnover/lot/cost projection
+  -> PortfolioAllocationResultV2
+  -> AdviceComposer (action/why/why-not/risk/target/current/gap/executable)
+  -> PySide6 read-only presentation + append-only evidence/paper stores
+
+Formal promotion side path:
+full-market OOC + 4+ Meta OOF folds
+  -> primary / verification accounting replay
+  -> independent semantic verifier
+     (official calendar + production Rule + six-head Meta OOF + raw derivation)
+  -> unsigned evidence -> DPAPI authority -> consumer re-verification
+  -> alpha 2000 / 3500 / 5000, otherwise atomic alpha 0
+```
+
+核心依賴邊界：
+
+- `ml_module` 允許 sklearn/numpy float，但只能在模型內部；輸入／輸出與 artifact metadata 回到縮放整數或 bp。
+- `data_module` 以 `mode=ro/query_only` 讀正式 SQLite，未知欄位 fail closed；formal/shadow manifests 不可交叉。
+- `app_module/portfolio_allocation_service.py` 負責相同單位的 Rule/ML 混合與硬風控，不讓模型直接改 recorded portfolio state。
+- `AdviceComposer` 只消費最終 allocation result；current unknown 不得轉成 0。
+- replay 的帳務可重算與正式配置語意是兩個不同 Gate；`formal_semantic_validation.verified=false` 或 Meta OOF folds 少於 4 時，Promotion Builder 必須拒絕。Shadow observation 只有 `promotion_day_credit_allowed=true` 才能累積 20 日門檻。
+- scheduler wrapper 不讀 UI state。只有既有 data update、confirmed evidence repository 與 isolated Paper ledger 具有各自明確寫入範圍；無 broker adapter。
+
+> **舊架構稽核基線**：2026-07-13
 > **工程補充**：Advice 已是 CURRENT bounded/read-only；Portfolio 與 Position Health/Exit 是 CURRENT_ENGINEERING proposal/paper；P0 adapters 與 ML 固定 candidate/shadow。跨 repository 由 `artifact_lineage_verifier.py` 唯讀驗證，外部 Gate 仍以 `EngineeringGateRegistry` 為 SSOT。
 > **跨流整合邊界**：`app_module/system_execution_blueprint_adapters.py` 只以中立 DTO／JSON composition 聚合 A～F 已有輸出，不讓 app/runtime 反向 import `ml`，也不改 `Recommendation`、Score、Advice、Portfolio 或 Exit domain。`scripts/verify_system_execution_blueprint.py` 是 fail-closed 的純 JSON verifier；它只驗證輸入契約與狀態，不觸發資料寫入、scheduler、promotion 或 production action。
 > **定位**：本文件是目前模組邊界、依賴方向、資料流與高風險技術契約的架構權威。歷史遷移過程不在本文件維護。

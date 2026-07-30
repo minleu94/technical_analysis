@@ -2,19 +2,24 @@
 
 > 目的：盤點 `tests/` 底下所有有效 Python 測試檔，分類哪些可以被非破壞式 Full App Healthcheck Runner 呼叫、哪些只能作 service/oracle 證據、哪些必須保留在一般 pytest 或人工檢查流程。
 
-## 2026-07-25 machine refresh
+## 2026-07-30 machine refresh
 
-Current filesystem Python files: `530`
+Current filesystem Python files: `571`
+
+- 預設 pytest 可收集測試檔：`540`
+- pytest support 檔：`1`
+- 預設不收集檔：`30`
+- `pytest --collect-only -q -o addopts=`：`2970 tests collected`
 
 | 分類 | 數量 |
 |---|---:|
-| `general-unit-keep-in-pytest` | 129 |
-| `governance-doc-tooling` | 62 |
+| `general-unit-keep-in-pytest` | 130 |
+| `governance-doc-tooling` | 64 |
 | `healthcheck-runner-owned` | 29 |
 | `legacy-or-low-priority` | 10 |
 | `manual-only` | 14 |
-| `service-oracle-data-market` | 72 |
-| `service-oracle-portfolio-decision-runtime` | 66 |
+| `service-oracle-data-market` | 82 |
+| `service-oracle-portfolio-decision-runtime` | 94 |
 | `service-oracle-recommendation` | 18 |
 | `service-oracle-research-backtest` | 56 |
 | `slow-e2e-or-environment` | 3 |
@@ -23,6 +28,8 @@ Current filesystem Python files: `530`
 | `write-risk-dry-run-required` | 42 |
 
 本節由 `scripts/audit_test_inventory.py` 的 deterministic audit 契約維護；CLI 同時檢查 filesystem／inventory 缺漏、過時路徑、上述數量漂移、AST parse errors、精確重複測試函式與 `pytest --collect-only` 結果。下方清單保留 2026-06-23 初始盤點歷史，不再作 current count SSOT。
+
+2026-07-30 起人工決策清單已清空；來源授權或 PIT 證據不可證時由自動規則 fail closed 至 `research_shadow`，缺 provenance 時自動標記 `blocked_no_provenance`，不再等待人工簽核，也不把未證實資料升為 Formal。
 
 ## 2026-06-23 初始結論
 

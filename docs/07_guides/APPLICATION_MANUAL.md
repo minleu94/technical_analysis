@@ -1,8 +1,194 @@
 # baldr 完整操作手冊
 
-> Gate 2–7 純工程完成後，所有仍需人工補件、真實時間、資料授權、evidence maturity 與 ML revalidation 的項目，統一在 `docs/06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md` 查看；狀態以 `scripts/manage_engineering_gate_registry.py` append revision，禁止覆寫歷史或把工程完成解讀成正式核准。
+> **最後更新：2026-07-30｜適用 V4.0 Operational Production**。Decision／Advice／Rule 配置／Paper Portfolio 與 evidence loop 已可正式日常運作；不連接券商。ML 為 Production Co-pilot，非零 alpha 完全由自動 promotion artifact 決定；目前證據不足時顯示 `alpha=0` 是正確 fallback，不需要也禁止人工解除。
+
+## V4.0 每日操作
+
+1. 開啟 `ui_qt/main.py`，從市場總覽確認 Market Breadth、Sector Rotation、Relative Strength/Liquidity、Watchlist Trigger 與 Portfolio Alerts。Workbench 的「決策來源」仍導向同一個 Decision Desk，不建立第二份狀態。
+2. Advice 必須含 action、Why／Why Not、Risk Prompt、target/current/gap/executable。`current` 不明時會保留 unknown，不能猜成 0，也不能產生可執行 gap。
+3. 可見 action 為 `ADD_CANDIDATE`、`HOLD`、`REDUCE_CANDIDATE`、`EXIT_CANDIDATE`、`NO_NEW_POSITION`、`AVOID`。它們是配置與硬限制後的決策建議，不是券商委託。
+4. 檢查 `OUTPUT_ROOT/scheduled/ml_allocation_copilot/latest_status.json`：`selected_alpha_bp=0` 表示 Rule-only；只有可信 promotion custody、consumer re-verification 與所有 thresholds 都通過，才可能出現 2000／3500／5000。`shadow_day_credit_allowed=false` 代表本日 observation 已正常保存，但因正式 Rule/context custody 不足而不計入 20 日 Promotion 門檻，不是 runner 失敗。request 中自行填入非零 alpha 不會生效。
+5. 檢查 `OUTPUT_ROOT/scheduled/decision_evidence_capture/latest_status.json` 與 `OUTPUT_ROOT/scheduled/paper_portfolio_daily/latest_status.json`。前者應揭露 snapshot/event counts；後者應揭露 T-1 diagnostics、cash、total value 及 market DB `ro/query_only`。
+6. Gate 2 weekly history 目前由 scheduler sidecar 自動計數為 `4/3 complete`；不需人工補週數。Gate 2–7 的 14 個 registry items 現為 8 個 complete、1 個 in progress、5 個 `insufficient_evidence`。forward、Paper elapsed、Exit outcome、ML shadow days 與非零 alpha 仍由各自的機器 evidence maturity 決定。
+
+### ML Promotion Reference 與 Shadow Evidence
+
+凍結 reference 必須由正式 training model／manifest／dataset manifest 產生，不能拿 daily observation 自建 baseline：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_ml_allocation_promotion_reference.py `
+  --model-artifact <RELEASE>\allocation_model_v3.joblib `
+  --training-manifest <RELEASE>\training_manifest_v2.json `
+  --dataset-manifest <PORTFOLIO_TRAIN_RUN>\manifest.json `
+  --promotion-policy-hash sha256:<POLICY_HASH> `
+  --output-root <OUTPUT>\ml_promotion_reference_v4
+```
+
+Canonical reference v2 為 22,093 rows、62 features／3 formal families，reference hash=`sha256:8ee81ae9c5691c6e10d95f14eac293b2ecd121a53877f0d0de73e20b514dd5b0`、file hash=`sha256:d02ab09f8cfa19449b7524d4ca12139a9e27e55b2f4d78f70cbc1be15821800f`，並綁定 outcome contract=`sha256:95172f7d8678fd6ecde83c1c166b56878b0d3b769750290acb5b0b3753c96a11`。每日排程會自動載入此 reference，分別保存 5／10／20／60 日 calibrated／uncalibrated downside probabilities 與 current feature/family distribution；使用者不需也不能手工填 calibration 或 PSI。
+
+每日結果位於：
+
+- `OUTPUT_ROOT/scheduled/ml_allocation_copilot/shadow_evidence_collector/shadow_evidence.sqlite`：append-only observation／outcome revisions。
+- `.../observations/`、`.../evidence/`：immutable 四 lane observation 與彙總。
+- `.../reference_metrics/<hash>.json` 與 `latest_reference_metrics.json`：逐 horizon immutable calibration／drift metrics custody。
+- `.../production_advice/<date>_alpha_0.json`：目前合法 Rule-only Advice，不是券商委託。
+- `OUTPUT_ROOT/scheduled/ml_promotion_evidence/latest_status.json`：05:17 unsigned evidence preflight；blocked 不代表 Rule 失敗。
+- `OUTPUT_ROOT/release_v4/ml_promotion_authority/latest_status.json`：05:18 DPAPI Authority 是否簽章及 machine blockers。
+
+同日同 custody 重跑必須顯示 `idempotent=true`；同日新 custody 只追加 revision，成熟天數仍只算該日最新 revision一次。任一 horizon 未滿 20 個唯一成熟交易日時，ECE、calibrated／uncalibrated Brier、feature/family PSI 都應是 `null / NOT EVALUATED`，reference maturity blocker 格式為 `matured_shadow_days_insufficient:h<horizon>:<n>/20`。看到 `0` 指標、缺 hash custody、future/PIT violation 或 reference tamper 都應視為錯誤並保持 `alpha=0`。
+
+2026-07-31 最新 canonical reference-v2 接線驗證已保存 observation revision=7、fully matured outcome=0；shadow evidence hash=`sha256:82332fb24eb62dcf2018e8d940d9f7e4faa21dd83a5e9bd48990dbd2d6d36669`，metrics hash=`sha256:607adf7b48f4210809ee2f31d355d3adfef56027cb0d7d6322db3fd02dda750d`。該 observation 明確為 `promotion_day_credit_allowed=false`，所以 5／10／20／60 日 promotion 計數均為 `0/20`；全市場 OOC 與正式 semantic replay 亦尚未形成 compatible evidence，reference baseline／feature distribution 則為 `ready`。
+
+## V4.0 排程
+
+| 本機時間 | Task | 寫入範圍 |
+|---|---|---|
+| 04:20 | `baldr-data-update-quick-daily` | 既有市場 raw/SQLite 更新 |
+| 04:50 | `baldr-official-market-events-daily` | append-only 官方 market-event vintages |
+| 05:00 | `baldr-data-freshness-check-daily` | status/log only |
+| 05:10 | `baldr-recommendation-snapshot-daily` | research recommendation snapshot |
+| 05:15 | `baldr-evidence-pipeline-dry-run-daily` | dry-run report |
+| 05:17 | `baldr-ml-promotion-evidence-daily` | unsigned formal OOC／雙 replay／Shadow／metrics evidence |
+| 05:18 | `baldr-ml-promotion-authority-daily` | DPAPI machine authorization；不足即不簽 |
+| 05:20 | `baldr-ml-allocation-copilot-daily` | immutable lane sidecar/promotion status |
+| 05:25 | `baldr-decision-evidence-capture-daily` | durable DDD snapshot + evidence events |
+| 05:28 | `baldr-paper-portfolio-daily` | isolated append-only Paper ledger |
+| 週日 18:00 | `baldr-v2-2-weekly-collection` | append-only weekly evidence sidecar + machine revalidation |
+
+查詢：
+
+```powershell
+scripts\scheduled\query_baldr_scheduled_tasks.cmd
+```
+
+目前 10 個 daily tasks 加 1 個 weekly task 共 11 個 Windows tasks。ML evidence／Authority／Co-pilot 三段已實際觸發且 `Last Result=0`；Evidence 可因 OOC／replay 尚未完整而輸出 `blocked`，Authority 可輸出 `skipped_evidence_unavailable`，這兩者是成功的 fail-closed 營運狀態。Scheduler process-level 成功不表示資料來源全數 observed 或 ML promotion 已通過。所有 tasks 都不得送單；只有經成熟度、交易日、雙 replay、簽章與 inference-release identity 全部驗證的 evidence 才能影響 alpha。
+
+## 全欄位資料稽核與年度 shards
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_ml_all_field_readiness.py `
+  --decision-at 2026-07-30T08:30:00+08:00 `
+  --history-start-date 2014-01-01 `
+  --output-dir D:\Min\Python\Project\FA_Data\output\release_v4
+
+.\.venv\Scripts\python.exe scripts\inspect_ml_file_field_inventory.py `
+  --data-root D:\Min\Python\Project\FA_Data `
+  --output D:\Min\Python\Project\FA_Data\output\release_v4\ml_file_field_inventory.json
+
+.\.venv\Scripts\python.exe scripts\build_ml_pit_year_shards.py `
+  --database D:\Min\Python\Project\FA_Data\sqlite\twstock.db `
+  --output-dir D:\Min\Python\Project\FA_Data\output\release_v4\ml_pit_year_shards `
+  --decision-at 2026-07-30T08:30:00+08:00 `
+  --history-start-date 2014-01-01 `
+  --all-universe
+```
+
+正式 train 只讀 manifest 中 `formal_backfill`，以及未來通過來源／授權／publication lineage 驗證後才可能出現的 `first_seen_only`。本次 freeze 的 disposition summary 為 `formal_backfill=52`、`first_seen_only=0`、`research_shadow=32`；月營收／財報／估值的 4 個數值候選與其他 28 個新資料欄位都只能留在 `research_shadow_all_fields`。legacy pickle/predictions/replay/outcomes、現在公司快照及缺 provenance 欄位不能被搬進正式 manifest。ATR/ADX 由 shard builder 依 OHLC prefix 重算；不要把原表 NULL 以 0 補值。
+
+2026-07-30 全市場 publication 已完成：`pit-4a860a5fa18add4e0e15f2aa`，共 34,447,843 raw rows／28 年度 shards；`all_field_enriched` 有 15,876,434 rows、52 formal features、214,058,770 values，manifest=`sha256:e6fcfa6c19e5ab2c453096e1db165744972100eec29d2321e2715b77ecebae37`。Gate revision 6 記錄時 direct numeric checkpoint 完成 2014–2018；live checkpoint 隨後已至少完成至 2019 並自動續跑。這代表 raw PIT custody 已發布，不代表 direct numeric／OOC v5 已完成。應檢查：
+
+- `OUTPUT_ROOT/release_v4/portfolio_ml_direct_numeric_production_v4_v2/latest_manifest.json`
+- `OUTPUT_ROOT/release_v4/portfolio_ml_direct_ooc_training_production_v4_v5/latest_manifest.json`
+- `OUTPUT_ROOT/release_v4/portfolio_ml_direct_ooc_training_production_v4_v5/continuation_status.json`
+
+OOS replay 由 `build_ml_allocation_oos_portfolio_replay.py` 產生 primary／verification 兩次獨立結果。它只接受 training run 內的 `allocation-ooc-replay-inputs.v1` execution ledger、Rule baseline 與 realized daily returns；缺件時會在 `ml_allocation_oos_replay_production_v4/<role>/blocked/` 留下精確 blocker，且不建立／覆寫 `latest_replay.json`。禁止用 Teacher target 或 horizon label 合成一份看似通過的 replay。
+
+即使帳務 replay 完成，也必須查看 `formal_semantic_validation`。目前工程 artifact 固定 `verified=false`、`promotion_eligible_input=false`，因為尚未由獨立 verifier 從官方交易日曆、production Rule Champion、完整六頭 Meta OOF 與 retro raw derivation 重建每日 requested／projected holdings。Promotion Builder 另要求至少 4 個 Meta OOF folds；少一項就維持 `alpha=0`。Cash-only 訓練 state 不得在 replay 階段事後改造成非現金 state。
+
+`build_portfolio_ml_training_shards.py --sector-membership` 只接受 `pit-sector-membership-sidecar-v1` 封套。每列必須是 `status=accepted`，並含 `source_id`、`license_id`、`source_hash`、`available_at` 與 effective range；manifest 必須帶可重算的 canonical rows／manifest hash。舊式裸 JSON array、non-accepted row、缺欄、hash tamper、cutoff 後才可得的 mapping 與 `meta_data/companies.csv` 當期快照都會使 build blocked。不要把 2026 公司清單改寫成較早 `available_at` 或歷史產業 sidecar。
+
+Portfolio ML dataset assembler 會按 decision time 先選可適用的最新 event period，再在該 period 內選當時已可得的最新 revision；較舊 period 的晚到修訂不得覆蓋較新的適用 period。輸入 manifest 與 raw observation 的 JSON boolean 欄位只接受真正的 `true`／`false`，`0`、`1` 或字串一律 fail-closed。
+
+正式 assembler 必須明示 portfolio state policy 與 transition custody；沒有 canonical recursive ledger 的 publication 不得宣稱已學到 turnover 或 cooldown。全種類 research 流程須接續執行下方 causal ledger overlay，Teacher target 只作 supervised label，不會回灌成下一決策日 state。Teacher 的 `cvar_loss_bp` 使用 20 日路徑最差 20% session loss 的平均 tail loss，不再以 MAE 代替。
+
+### 建立並訓練全種類 Research Challenger
+
+下列流程把正式配置列與所有 `research_shadow` 欄位在相同 `symbol + decision_at` 做 PIT as-of join。它會實際進入配置型 Ridge／Logistic／HGB experts 與 Meta Allocator，但永遠不能供正式 orchestrator、Promotion 或非零 alpha 使用：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_ml_research_shadow_union.py `
+  --formal-raw-manifest <PIT_RUN>\all_field_enriched\manifest.json `
+  --shadow-raw-manifest <PIT_RUN>\research_shadow_all_fields\manifest.json `
+  --base-training-manifest <PORTFOLIO_TRAIN_RUN>\manifest.json `
+  --corporate-action-manifest <OFFICIAL_EVENT_RUN>\manifest.json `
+  --output-dir <OUTPUT>\ml_research_shadow_union
+
+$pointer = Get-Content <OUTPUT>\ml_research_shadow_union\latest_manifest.json |
+  ConvertFrom-Json
+$unionManifest = Join-Path <OUTPUT>\ml_research_shadow_union $pointer.manifest_path
+
+.\.venv\Scripts\python.exe scripts\build_ml_research_causal_ledger_overlay.py `
+  --research-union-manifest $unionManifest `
+  --output-dir <OUTPUT>\ml_research_causal_ledger
+
+$ledgerPointer = Get-Content <OUTPUT>\ml_research_causal_ledger\latest_manifest.json |
+  ConvertFrom-Json
+$ledgerManifest = Join-Path <OUTPUT>\ml_research_causal_ledger $ledgerPointer.manifest_path
+$ledgerRoot = Split-Path $ledgerManifest
+$trainArgs = @(
+  'scripts\train_ml_research_shadow_challenger.py',
+  '--dataset-manifest', $ledgerManifest
+)
+foreach ($shard in Get-ChildItem $ledgerRoot -Filter 'year=*.jsonl.gz') {
+  $trainArgs += '--input'
+  $trainArgs += $shard.FullName
+}
+$trainArgs += @(
+  '--artifact-output', '<OUTPUT>\research_model.joblib',
+  '--audit-output', '<OUTPUT>\research_audit.json',
+  '--manifest-output', '<OUTPUT>\research_training_manifest.json'
+)
+& .\.venv\Scripts\python.exe @trainArgs
+```
+
+官方事件 manifest 只允許 publication-time 可證明且 `result_only=false` 的停復牌／交易限制事件進特徵；除權息、減資等 result-only 事件不得反推公告時點。Causal ledger overlay 會逐 decision date 只讀 T-1 價格 prefix 與前一日 state，以整數 bp 遞迴 Rule／Risk Budget／Inverse Volatility baseline，並套用現金、檔數、單檔、週轉、band、minimum trade、cooldown 與成本限制；Teacher target 與同日 Advice 都不會餵回 state。
+
+必須檢查 union 的 `dataset_id=research_shadow_challenger_all_fields`、causal overlay 與 training manifest 的 `dataset_id=research_shadow_causal_allocation_ledger`，且三者都維持 `research_only=true`、`formal_oos_allowed=false`、`production_alpha_bp=0`、`promotion_eligible=false`、`formal_consumer_compatible=false`。專用 trainer 沒有 alpha、Promotion 或 Formal OOS 的命令列開關；訓練 manifest schema 為 `allocation-research-training-manifest-v1`，正式 release loader 會直接拒絕。
+
+缺值不能補成 0。某欄位若在決策時尚未 `first_seen`、已 stale、品質被阻擋或沒有 PIT provenance，樣本會保留 `value_int=null`、`observed=false` 及 data-quality mask。這代表欄位種類已進入研究訓練契約，不代表其歷史數值已被合法回補。
+
+2026-07-30 的 final research dataset 為 22,093 rows、150 features／8 packs、4 folds。官方事件 overlay 只納入可證明 publication time 且 `result_only=false` 的停復牌／交易限制資料；`corporate_microstructure` 有 44,186／88,372 個 feature values observed、coverage 5,000 bp。Causal ledger 有 2,533 個決策日，其中 2,493 日為非現金 state，累積 792 次 add、754 次 reduce；它只讀 T-1 價格 prefix 與前一日 state，不讀同日 Advice，也不把 Teacher target 餵回下一日。
+
+Final A/B 兩次獨立訓練完成 1,137,664 筆 base OOF 與 12,984 筆 meta OOF；model hash 均為 `sha256:dd512d6d32d853db151e971e816d514cd81c6b1cbf143289fc719ae41009a705`，audit hash 均為 `sha256:8a95519bd0f20b2cfabe119f0b91d3a160262f9f02b307ab13d114f370b6eefa`，training manifest file hash 均為 `sha256:ae511983a486317bd8c412934f280ed09e6df0aa3278e9d8ab1183d5d8337d19`，replay hash 均為 `sha256:b7dce1751da79b2269228f6c16b93615a309b3b6b4d173087de3e08392b9764a`。Family weights 是 `corporate=123`、`data_quality=2,893`、`flow_chip=123`、`fundamental=0`、`market_sector=2,118`、`price_technical=1,771`、`rule_portfolio_health=2,972`、`valuation=0 bp`，合計 10,000 bp；整個 dataset 沒有 observed 值的 family 固定為 0。Canonical research artifact 是 `ml_research_shadow_challenger_causal_official_events_a`，B 只作 deterministic 證據；兩者都不能供 Formal orchestrator 或非零 alpha 使用。
+
+## ML revalidation 與推論安全
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_ml_revalidation_runbook.py `
+  --run-id release-v4-prod `
+  --trigger production_promotion `
+  --dataset-id frozen-v4-dataset `
+  --owner release_owner `
+  --output runbook_prod.json
+```
+
+Runbook、dataset/model/policy hash、calibration、PSI、OOF lane comparison、bootstrap、coverage、drawdown/CVaR、turnover、shadow days 與 rollback 缺一不可。歷史回放只可作 development/OOS portfolio replay，不能替代 freeze 後 Formal OOS 或 20 個真實 elapsed trading days。
+
+訓練器 artifact schema 為 `allocation-model-artifact-v2`。每個 feature pack／5、10、20、60 日／Ridge-Logistic 或 HGB expert 會輸出 9 個 head（benchmark／產業超額報酬、downside、MAE、MFE、realized volatility、max drawdown、tail loss、fill feasibility）、1 個 benchmark rank 與 9 個逐 head missing masks；Meta Allocator 的每個 expert input 因此固定為 19 維。缺 PIT-safe label 的 head 必須帶 missing reason/mask，不得補成已觀測的 0。
+
+目前 canonical official-event post-policy training 已涵蓋 11 symbols、22,093 rows 與 4 個 expanding folds，產生 426,624 筆 base OOF predictions、12,984 筆 meta OOF predictions。這代表訓練／OOF／Meta 流水線已實際執行，不代表 Formal OOS promotion 通過。正式 compact model artifact hash 為 `sha256:92668aa574967990fa560aef8a48e595296eb22f3fef2a4264cff08210d78b6d`，replay hash 為 `sha256:ba0eb2456569d55d5981d97b612f109818c4acc01881e07ca9d1d6bf2042092d`。
+
+目前 Formal calibration ECE／Brier、PSI、成本後 alpha OOS lane comparison、bootstrap、promotion coverage、MDD／CVaR、turnover 與 20 個真實 shadow trading days 均為 **`NOT EVALUATED`**。Engineering 4-fold training 與測試通過不等於模型績效已通過；在正式 promotion evidence 齊備前，正確狀態是 `formal_oos_allowed=false`、有效 alpha 0。
+
+### 非零 alpha 的可信 custody
+
+每日正式鏈不接受人工作業環境變數提供 promotion artifact path：
+
+1. 05:17 `baldr-ml-promotion-evidence-daily` 從固定 full-market OOC、雙 replay、Shadow 與 metrics custody 建立 unsigned evidence；缺件時只寫 blocked status，不發布 compatible pointer。
+2. 05:18 `baldr-ml-promotion-authority-daily` 只讀固定 evidence pointer，以 Windows user-scope DPAPI 保護的 issuer secret 驗證 machine Gate；只有 evaluator 已證明最小非零 lane 合格時才簽發 authorization。
+3. 05:20 `baldr-ml-allocation-copilot-daily` 只讀 `OUTPUT_ROOT/release_v4/ml_promotion_authority/latest_authorization_pointer.json`，並再次核對 authorization 的 model／dataset 與本次真正推論 release 完全相同。
+
+舊版 CLI 的 promotion artifact path 參數僅為相容 parser 形狀，在正式 orchestration 中會被忽略，排程 wrapper 也不傳入。issuer key 不得寫入 repo、文件、command line、status 或 log。Verifier 會檢查 issuer HMAC、custody root/id、registry revision、decision validity/freeze time，並重新計算 evidence、model、dataset、OOF、shadow 與 registry 實體檔 SHA-256；驗證不通過即 alpha 0。顯式部署 trust 設定只能替換或縮小可信邊界，不能注入 artifact、繞過固定 pointer 或直接授權 alpha。不得手改 `formal_oos_allowed`，也不得把 authorization JSON 本身當成已驗證能力。
+
+### T-1 causal portfolio completeness
+
+正式配置投影必須提供 `CausalPortfolioState`：`as_of_date` 嚴格早於 decision date、`AllocationWeightContract` 連同現金總和 10,000 bp、完整列出所有現有持倉 symbol，並帶可重算的 `state_hash`。每個 symbol 的 context `current_weight_bp` 與 request cash 必須和該 state 完全一致。缺 state、漏持倉、日期／hash／cash／context 不一致時，系統不猜 current=0：結果會是 `NO_NEW_POSITION`、`executable_weights=null`，但保留 target 與 diagnostics 供排錯。
+
+> Gate 2–7 最新狀態統一在 `docs/06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md` 查看；weekly machine Gate 已為 `4/3 complete`，其餘項目由 append-only machine evidence／policy revision 更新，不再使用 blanket human acceptance。禁止覆寫歷史或把工程完成解讀成模型績效通過。
 
 > Daily / Weekly / Monthly / Maturity / Failure 的完整操作契約見 [V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)。`verify_artifact_lineage.py` 只做唯讀工程驗證，fixture 不得冒充 forward/paper/live evidence。
+
+> 下方日期標示為 2026-07-13 或更早的 Gate 數字是歷史操作紀錄；若與本頁頂部 V4.0 區塊衝突，以 V4.0 區塊及 External Validation Register 最新 append-only revision 為準。
 
 ## V3 pruning review package（唯讀提案）
 
