@@ -25,6 +25,12 @@ TUPLE_FIELDS = (
 )
 
 
+def _configure_utf8_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
 def _item(payload: dict[str, Any]) -> EngineeringGateItem:
     normalized = dict(payload)
     for name in TUPLE_FIELDS:
@@ -33,6 +39,7 @@ def _item(payload: dict[str, Any]) -> EngineeringGateItem:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_utf8_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, required=True)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -46,9 +53,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "append":
             payload = json.loads(args.input.read_text(encoding="utf-8"))
-            item = _item(payload)
-            registry.append(item)
-            output: Any = item.to_dict()
+            if isinstance(payload, list):
+                items = tuple(_item(row) for row in payload)
+                registry.append_many(items)
+                output: Any = [item.to_dict() for item in items]
+            else:
+                item = _item(payload)
+                registry.append(item)
+                output = item.to_dict()
         elif args.command == "history":
             output = [item.to_dict() for item in registry.history(args.item_id)]
         else:

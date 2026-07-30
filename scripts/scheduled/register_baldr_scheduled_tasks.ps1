@@ -1,9 +1,19 @@
 param(
-    [ValidateSet('DryRun', 'Register')][string]$Mode = 'DryRun',
+    [ValidateSet('DryRun', 'Register', 'WeeklyRegister', 'RegisterAll')][string]$Mode = 'DryRun',
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
     [string]$UpdateAt = "04:20",
+    [string]$OfficialEventsAt = "04:50",
     [string]$FreshnessAt = "05:00",
-    [string]$EvidenceAt = "05:15"
+    [string]$RecommendationAt = "05:10",
+    [string]$EvidenceAt = "05:15",
+    [string]$MLPromotionEvidenceAt = "05:17",
+    [string]$MLPromotionAuthorityAt = "05:18",
+    [string]$MLAllocationAt = "05:20",
+    [string]$DecisionEvidenceAt = "05:25",
+    [string]$PaperPortfolioAt = "05:28",
+    [ValidateSet('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')]
+    [string]$WeeklyDay = "Sunday",
+    [string]$WeeklyAt = "18:00"
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,57 +23,109 @@ function New-CmdAction([string]$ScriptPath) {
     return New-ScheduledTaskAction -Execute "cmd.exe" -Argument $arguments
 }
 
-$updateScript = Join-Path $RepoRoot "scripts\scheduled\run_daily_data_update_quick.cmd"
-$freshnessScript = Join-Path $RepoRoot "scripts\scheduled\run_daily_data_freshness_check.ps1"
-$evidenceScript = Join-Path $RepoRoot "scripts\scheduled\run_evidence_pipeline_dry_run.ps1"
-$smokeScript = Join-Path $RepoRoot "scripts\scheduled\run_evidence_working_copy_smoke.ps1"
+function New-DailyTaskSpec(
+    [string]$Name,
+    [string]$Description,
+    [string]$ScriptPath,
+    [string]$At
+) {
+    return [ordered]@{
+        Name = $Name
+        Description = $Description
+        ScriptPath = $ScriptPath
+        ScheduleType = "Daily"
+        Schedule = "DAILY $At"
+        At = $At
+        DaysOfWeek = $null
+        Action = "cmd.exe /c `"$ScriptPath`""
+        Enabled = $true
+    }
+}
 
-$tasks = @(
-    [ordered]@{
-        Name = "baldr-data-update-quick-daily"
-        Description = "Non-UI baldr quick market data update."
-        Action = New-CmdAction $updateScript
-        Trigger = New-ScheduledTaskTrigger -Daily -At $UpdateAt
+function New-WeeklyTaskSpec(
+    [string]$Name,
+    [string]$Description,
+    [string]$ScriptPath,
+    [string]$Day,
+    [string]$At
+) {
+    return [ordered]@{
+        Name = $Name
+        Description = $Description
+        ScriptPath = $ScriptPath
+        ScheduleType = "Weekly"
+        Schedule = "WEEKLY $($Day.ToUpperInvariant()) $At"
+        At = $At
+        DaysOfWeek = $Day
+        Action = "cmd.exe /c `"$ScriptPath`""
         Enabled = $true
-    },
-    [ordered]@{
-        Name = "baldr-data-freshness-check-daily"
-        Description = "Read-only baldr data freshness check."
-        Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -File `"$freshnessScript`""
-        Trigger = New-ScheduledTaskTrigger -Daily -At $FreshnessAt
-        Enabled = $true
-    },
-    [ordered]@{
-        Name = "baldr-evidence-pipeline-dry-run-daily"
-        Description = "Dry-run baldr evidence pipeline report."
-        Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -File `"$evidenceScript`""
-        Trigger = New-ScheduledTaskTrigger -Daily -At $EvidenceAt
-        Enabled = $true
-    },
-    [ordered]@{
-        Name = "baldr-evidence-working-copy-smoke-manual"
-        Description = "Manual-only working-copy evidence smoke. Requires explicit paths when run outside Task Scheduler."
-        Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -File `"$smokeScript`" -SourceDbPath `"<source-db>`" -WorkingCopyDbPath `"<working-copy-db>`""
-        Trigger = New-ScheduledTaskTrigger -Once -At "2099-01-01T09:00:00"
-        Enabled = $false
+    }
+}
+
+$updateScript = Join-Path $RepoRoot "scripts\scheduled\run_daily_data_update_quick.cmd"
+$officialEventsScript = Join-Path $RepoRoot "scripts\scheduled\run_official_market_event_backfill.cmd"
+$freshnessScript = Join-Path $RepoRoot "scripts\scheduled\run_daily_data_freshness_check.cmd"
+$recommendationScript = Join-Path $RepoRoot "scripts\scheduled\run_recommendation_snapshot.cmd"
+$evidenceScript = Join-Path $RepoRoot "scripts\scheduled\run_evidence_pipeline_dry_run.cmd"
+$mlPromotionEvidenceScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_promotion_evidence.cmd"
+$mlAllocationScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_allocation_copilot.cmd"
+$mlPromotionAuthorityScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_promotion_authority.cmd"
+$decisionEvidenceScript = Join-Path $RepoRoot "scripts\scheduled\run_decision_evidence_capture.cmd"
+$paperPortfolioScript = Join-Path $RepoRoot "scripts\scheduled\run_paper_portfolio_daily.cmd"
+$weeklyScript = Join-Path $RepoRoot "scripts\scheduled\run_v2_2_weekly_collection.cmd"
+
+$dailyTasks = @(
+    (New-DailyTaskSpec "baldr-data-update-quick-daily" "Non-UI baldr quick market data update." $updateScript $UpdateAt),
+    (New-DailyTaskSpec "baldr-official-market-events-daily" "Append-only official market event publication." $officialEventsScript $OfficialEventsAt),
+    (New-DailyTaskSpec "baldr-data-freshness-check-daily" "Read-only baldr data freshness check." $freshnessScript $FreshnessAt),
+    (New-DailyTaskSpec "baldr-recommendation-snapshot-daily" "Research-only baldr recommendation snapshot." $recommendationScript $RecommendationAt),
+    (New-DailyTaskSpec "baldr-evidence-pipeline-dry-run-daily" "Dry-run baldr evidence pipeline report." $evidenceScript $EvidenceAt),
+    (New-DailyTaskSpec "baldr-ml-promotion-evidence-daily" "Unsigned formal OOC/replay/shadow promotion evidence builder." $mlPromotionEvidenceScript $MLPromotionEvidenceAt),
+    (New-DailyTaskSpec "baldr-ml-promotion-authority-daily" "Independent DPAPI-protected machine promotion authority for the next decision session." $mlPromotionAuthorityScript $MLPromotionAuthorityAt),
+    (New-DailyTaskSpec "baldr-ml-allocation-copilot-daily" "Fail-closed baldr ML allocation co-pilot promotion evaluation." $mlAllocationScript $MLAllocationAt),
+    (New-DailyTaskSpec "baldr-decision-evidence-capture-daily" "Idempotent Decision Desk snapshot and evidence event capture." $decisionEvidenceScript $DecisionEvidenceAt),
+    (New-DailyTaskSpec "baldr-paper-portfolio-daily" "Strict T-1 append-only Paper Portfolio daily valuation." $paperPortfolioScript $PaperPortfolioAt)
+)
+$weeklyTasks = @(
+    (New-WeeklyTaskSpec "baldr-v2-2-weekly-collection" "Append-only weekly evidence collection with automatic maturity revalidation." $weeklyScript $WeeklyDay $WeeklyAt)
+)
+$allTasks = @($dailyTasks) + @($weeklyTasks)
+
+$selectedTasks = @(
+    switch ($Mode) {
+        "DryRun" { $allTasks }
+        "Register" { $dailyTasks }
+        "WeeklyRegister" { $weeklyTasks }
+        "RegisterAll" { $allTasks }
     }
 )
 
-foreach ($task in $tasks) {
+foreach ($task in $selectedTasks) {
     Write-Host "Task: $($task.Name)"
-    Write-Host "  Enabled: $($task.Enabled)"
+    Write-Host "  Schedule: $($task.Schedule)"
+    Write-Host "  Action: $($task.Action)"
     Write-Host "  Description: $($task.Description)"
-    if ($Mode -eq "Register") {
-        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
-        Register-ScheduledTask -TaskName $task.Name -Action $task.Action -Trigger $task.Trigger -Settings $settings -Description $task.Description -Force | Out-Null
-        if (-not $task.Enabled) {
-            Disable-ScheduledTask -TaskName $task.Name | Out-Null
-        }
-    }
+    Write-Host "  Enabled: $($task.Enabled)"
 }
 
 if ($Mode -eq "DryRun") {
-    Write-Host "DryRun only. No scheduled task was registered."
-} else {
-    Write-Host "Scheduled tasks registered. Working-copy smoke remains disabled."
+    Write-Host "DryRun only. No scheduled task was registered. Use RegisterAll to register all displayed tasks."
+    return
 }
+
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+
+foreach ($task in $selectedTasks) {
+    $action = New-CmdAction $task.ScriptPath
+    if ($task.ScheduleType -eq "Daily") {
+        $trigger = New-ScheduledTaskTrigger -Daily -At $task.At
+    } else {
+        $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek $task.DaysOfWeek -At $task.At
+    }
+    Register-ScheduledTask -TaskName $task.Name -Action $action -Trigger $trigger -Settings $settings -Description $task.Description -Force | Out-Null
+    if (-not $task.Enabled) {
+        Disable-ScheduledTask -TaskName $task.Name | Out-Null
+    }
+}
+
+Write-Host "Registered $($selectedTasks.Count) scheduled task(s) in mode $Mode."

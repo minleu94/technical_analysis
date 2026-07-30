@@ -26,6 +26,55 @@ def test_guard_detects_production_import_of_ml_module(tmp_path: Path) -> None:
     assert any("production_imports_ml_module" in item for item in report.violations)
 
 
+def test_guard_allows_only_hash_bound_allocation_inference_contracts(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app_module").mkdir()
+    (tmp_path / "ml_module").mkdir()
+    (tmp_path / "app_module" / "ml_allocation_inference_service.py").write_text(
+        "from ml_module.allocation_contracts import PITFeatureValue\n"
+        "from ml_module.allocation_training_service import ARTIFACT_SCHEMA_VERSION\n",
+        encoding="utf-8",
+    )
+
+    report = MLShadowBoundaryGuard(tmp_path).inspect()
+
+    assert report.violations == ()
+
+
+def test_guard_allows_only_shadow_evidence_contracts_and_frozen_reference(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app_module").mkdir()
+    (tmp_path / "ml_module").mkdir()
+    (tmp_path / "app_module" / "ml_allocation_shadow_evidence.py").write_text(
+        "from ml_module.allocation_contracts import PortfolioMLDatasetRow\n"
+        "from ml_module.allocation_promotion_reference import "
+        "evaluate_matured_promotion_reference\n",
+        encoding="utf-8",
+    )
+
+    report = MLShadowBoundaryGuard(tmp_path).inspect()
+
+    assert report.violations == ()
+
+
+def test_guard_allows_portfolio_consumer_side_promotion_verifier(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app_module").mkdir()
+    (tmp_path / "ml_module").mkdir()
+    (tmp_path / "app_module" / "portfolio_allocation_service.py").write_text(
+        "from ml_module.allocation_validation import "
+        "PromotionAuthorizationVerifier\n",
+        encoding="utf-8",
+    )
+
+    report = MLShadowBoundaryGuard(tmp_path).inspect()
+
+    assert report.violations == ()
+
+
 def test_guard_detects_ml_import_of_production_decision_path(tmp_path: Path) -> None:
     (tmp_path / "ml_module").mkdir()
     (tmp_path / "ml_module" / "bad.py").write_text(

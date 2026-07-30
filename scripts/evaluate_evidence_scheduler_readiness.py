@@ -21,8 +21,14 @@ if hasattr(sys.stderr, "reconfigure"):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Evaluate manual evidence scheduler readiness.")
-    parser.add_argument("--db-path", required=True)
+    parser = argparse.ArgumentParser(
+        description="Evaluate V4 automated evidence scheduler readiness."
+    )
+    parser.add_argument(
+        "--db-path",
+        type=Path,
+        help="Evidence SQLite DB path. Defaults to TWStockConfig.db_file.",
+    )
     parser.add_argument("--decision-date")
     parser.add_argument("--result-id")
     parser.add_argument("--smoke-report")
@@ -43,9 +49,10 @@ def _config_from_args(args: argparse.Namespace) -> TWStockConfig:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    config = _config_from_args(args)
     summary = evaluate_evidence_scheduler_readiness(
-        _config_from_args(args),
-        db_path=args.db_path,
+        config,
+        db_path=args.db_path if args.db_path is not None else config.db_file,
         smoke_report_path=args.smoke_report,
         decision_date=args.decision_date,
         result_id=args.result_id,

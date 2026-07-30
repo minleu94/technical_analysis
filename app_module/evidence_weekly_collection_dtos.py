@@ -26,7 +26,7 @@ class EvidenceWeeklyCollectionRecord:
     created_at: str = ""
 
     def __post_init__(self) -> None:
-        if self.status not in {"pending_human_review", "collection_failed"}:
+        if self.status not in {"observed_automatic", "collection_failed"}:
             raise ValueError(f"unsupported collection status: {self.status}")
         object.__setattr__(self, "payload_json", _payload(self.payload_json))
 

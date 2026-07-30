@@ -55,3 +55,19 @@ def test_cli_history_preserves_revisions(tmp_path: Path, capsys) -> None:
     assert main(["--db", str(db), "history", "--item-id", "evidence:weekly-history"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert [item["revision"] for item in payload] == [1, 2]
+
+
+def test_cli_appends_json_array_atomically(tmp_path: Path, capsys) -> None:
+    db = tmp_path / "control.sqlite"
+    source = tmp_path / "gates.json"
+    second = _payload()
+    second["item_id"] = "paper:elapsed-observation"
+    source.write_text(json.dumps([_payload(), second]), encoding="utf-8")
+
+    assert main(["--db", str(db), "append", "--input", str(source)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert [item["item_id"] for item in payload] == [
+        "evidence:weekly-history",
+        "paper:elapsed-observation",
+    ]

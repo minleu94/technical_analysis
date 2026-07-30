@@ -27,7 +27,7 @@ def test_daily_runner_marks_positions_and_recomputes_integer_weights() -> None:
     result = PaperPortfolioDailyRunner().run(
         prior=_prior(),
         decision_date="2026-07-11",
-        prices=(PaperPriceObservation("2330", "2026-07-11", "2026-07-11", Decimal("1010")),),
+        prices=(PaperPriceObservation("2330", "2026-07-10", "2026-07-10", Decimal("1010")),),
     )
 
     assert result.snapshot.total_value == Decimal("503000.00")
@@ -58,7 +58,23 @@ def test_latest_visible_price_on_or_before_decision_date_is_used() -> None:
     )
 
     assert result.snapshot.positions[0].mark_price == Decimal("1010")
-    assert "previous_visible_trading_day:2330" in result.diagnostics
+    assert "t_minus_one_visible_price:2330:2026-07-11" in result.diagnostics
+
+
+def test_same_day_close_is_never_visible_at_0830_decision_time() -> None:
+    with pytest.raises(ValueError, match="missing causal price"):
+        PaperPortfolioDailyRunner().run(
+            prior=_prior(),
+            decision_date="2026-07-11",
+            prices=(
+                PaperPriceObservation(
+                    "2330",
+                    "2026-07-11",
+                    "2026-07-11",
+                    Decimal("1010"),
+                ),
+            ),
+        )
 
 
 def test_runner_rejects_non_forward_snapshot_date() -> None:

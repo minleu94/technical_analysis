@@ -55,7 +55,11 @@ def test_training_uses_fold_only_preprocessing_and_freezes_both_model_families()
     assert all(set(audit.preprocessor_fit_row_ids).isdisjoint(audit.test_row_ids)
                for audit in result.fold_audits)
     assert result.research_blend_policy.production_alpha_bp == 0
-    assert result.research_blend_policy.research_alpha_bp in (0, 2500, 5000, 7500, 10000)
+    assert result.research_blend_policy.research_alpha_bp == 0
+    assert (
+        result.research_blend_policy.selection_metric
+        == "legacy_score_return_blend_disabled_unit_mismatch"
+    )
     assert result.research_blend_policy.max_selection_label_available_date <= "2024-12-31"
     assert result.selected_model_family in {"linear", "hist_gradient_boosting"}
     assert result.artifact_hash.startswith("sha256:")
@@ -95,9 +99,8 @@ def test_all_missing_training_column_keeps_frozen_feature_shape_without_warning(
             dataset_id="all-missing-column", feature_names=("f1", "f2"),
             samples=samples, folds=_folds(samples), training_as_of="2024-12-31",
             blend_selection_label_cutoff="2024-12-31",
-        )
+    )
     payload = joblib.load(BytesIO(result.artifact_bytes))
-    transformed = payload["return_model"].named_steps["imputer"].transform([[1, None]])
 
-    assert transformed.shape[1] == 2
+    assert payload["return_model"].n_features_in_ == 2
     assert not [item for item in caught if "Skipping features" in str(item.message)]

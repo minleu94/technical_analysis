@@ -107,6 +107,41 @@ def _seed_weekly_history(db_path: Path, count: int) -> None:
             )
 
 
+def _seed_automatic_weekly_sidecar(config: TWStockConfig, count: int) -> None:
+    sidecar = (
+        Path(config.output_root)
+        / "scheduled"
+        / "v2_2_weekly_collection"
+        / "evidence_scheduler.db"
+    )
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(sidecar) as conn:
+        conn.execute(
+            """
+            CREATE TABLE evidence_weekly_collections (
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                status TEXT NOT NULL,
+                error_type TEXT NOT NULL,
+                source_hash TEXT NOT NULL
+            )
+            """
+        )
+        for index in range(count):
+            conn.execute(
+                """
+                INSERT INTO evidence_weekly_collections
+                    (period_start, period_end, status, error_type, source_hash)
+                VALUES (?, ?, 'observed_automatic', '', ?)
+                """,
+                (
+                    f"2026-06-{1 + index * 7:02d}",
+                    f"2026-06-{7 + index * 7:02d}",
+                    f"sha256:{index:064d}",
+                ),
+            )
+
+
 def _seed_recommendation(config: TWStockConfig, *, with_payloads: bool) -> None:
     runs_dir = Path(config.output_root) / "recommendation" / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
@@ -293,6 +328,10 @@ def test_pre_v2_readiness_reports_parallel_ready_and_time_waiting_items(tmp_path
     assert items["source_gaps"].status == STATUS_READY
     assert items["read_only_agent_report_sample"].status == STATUS_READY
     assert report.production_scheduler_allowed is False
+    assert report.rule_operational_scheduler_allowed is True
+    assert report.required_human_action is False
+    assert report.automatic_revalidation_enabled is True
+    assert report.blocking_scope == "formal_evidence_credit_only"
     assert "V2.0" in render_pre_v2_readiness_markdown(report)
 
 
@@ -344,10 +383,30 @@ def test_pre_v2_readiness_flags_source_and_report_gaps_without_creating_missing_
     items = {item.item_id: item for item in report.items}
 
     assert report.overall_status == STATUS_ACTION_REQUIRED
-    assert items["weekly_history"].status == STATUS_ACTION_REQUIRED
+    assert items["weekly_history"].status == STATUS_WAITING_FOR_TIME
     assert items["source_gaps"].status == STATUS_ACTION_REQUIRED
     assert items["read_only_agent_report_sample"].status == STATUS_ACTION_REQUIRED
     assert not missing_db.exists()
+
+
+def test_pre_v2_readiness_counts_automatic_weekly_sidecar_without_human_gate(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    _seed_automatic_weekly_sidecar(config, 3)
+
+    weekly = PreV2ReadinessService(
+        config,
+        evidence_db_path=tmp_path / "missing.db",
+    )._weekly_history_item(3)
+
+    assert weekly.status == STATUS_READY
+    assert weekly.observed_count == 3
+    assert weekly.evidence["human_approval_required"] is False
+    assert weekly.evidence["automatic_revalidation"] is True
+    assert {
+        row["evidence_source"] for row in weekly.evidence["observed_periods"]
+    } == {"automatic_weekly_collection"}
 
 
 def test_pre_v2_readiness_accepts_same_day_scheduled_dry_run_for_corrected_source_gap_closeout(

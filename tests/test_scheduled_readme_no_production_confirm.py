@@ -15,7 +15,7 @@ def _scheduled_texts() -> dict[str, str]:
     }
 
 
-def test_scheduled_scripts_do_not_create_production_confirm_schedule() -> None:
+def test_confirm_is_not_embedded_in_general_scheduled_cmd_or_ps1_wrappers() -> None:
     for name, text in _scheduled_texts().items():
         lowered = text.lower()
         assert "--confirm" not in lowered or name in {
@@ -24,10 +24,10 @@ def test_scheduled_scripts_do_not_create_production_confirm_schedule() -> None:
         }
         assert "--allow-production-db-confirm" not in lowered
     readme = (SCHEDULED_DIR / "README.md").read_text(encoding="utf-8").lower()
-    assert "do not create a production evidence confirm schedule" in readme
+    assert "only the dedicated decision/evidence capture task" in readme
 
 
-def test_daily_tasks_are_read_only_or_dry_run() -> None:
+def test_general_daily_tasks_remain_read_only_or_dry_run() -> None:
     register_text = (SCHEDULED_DIR / "register_baldr_scheduled_tasks.cmd").read_text(encoding="utf-8")
     dry_run_text = (SCHEDULED_DIR / "run_evidence_pipeline_dry_run.cmd").read_text(encoding="utf-8")
     recommendation_text = (SCHEDULED_DIR / "run_recommendation_snapshot.cmd").read_text(encoding="utf-8")
@@ -36,6 +36,7 @@ def test_daily_tasks_are_read_only_or_dry_run() -> None:
     assert "run_daily_data_freshness_check.cmd" in register_text
     assert "run_recommendation_snapshot.cmd" in register_text
     assert "run_evidence_pipeline_dry_run.cmd" in register_text
+    assert "run_decision_evidence_capture.cmd" in register_text
     assert "--dry-run" in dry_run_text
     assert "--confirm" not in dry_run_text.lower()
     assert "--confirm" not in recommendation_text.lower()

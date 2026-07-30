@@ -57,14 +57,15 @@ class PaperPortfolioDailyRunner:
                 item
                 for item in observations
                 if item.stock_code == position.stock_code
-                and _date(item.available_date) <= _date(decision_date)
-                and _date(item.price_date) <= _date(decision_date)
+                and _date(item.available_date) < _date(decision_date)
+                and _date(item.price_date) < _date(decision_date)
             )
             if not visible:
                 raise ValueError(f"missing causal price for {position.stock_code}")
             selected = max(visible, key=lambda item: (item.price_date, item.available_date))
-            if selected.price_date != decision_date:
-                diagnostics.append(f"previous_visible_trading_day:{position.stock_code}")
+            diagnostics.append(
+                f"t_minus_one_visible_price:{position.stock_code}:{selected.price_date}"
+            )
             market_value = (selected.close * position.quantity).quantize(MONEY_QUANTUM)
             marked.append((position, selected.close, market_value, selected.price_date))
         total_value = (prior.cash + sum((item[2] for item in marked), Decimal("0"))).quantize(

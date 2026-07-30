@@ -237,7 +237,7 @@ def test_scheduler_health_observability_directory_fixtures(tmp_path: Path):
     (sched_dir / "v2_2_weekly_collection" / "v2_2_weekly_collection_20260719.json").write_text(
         json.dumps(
             {
-                "collection_status": "pending_human_review",
+                "collection_status": "observed_automatic",
                 "collection_record": {"created_at": "2026-07-20T01:00:00"},
             }
         ),
@@ -270,6 +270,7 @@ def test_scheduler_health_observability_directory_fixtures(tmp_path: Path):
 
     t4 = report.tasks[4]
     assert t4.task_name == "v2_2_weekly_collection"
-    assert t4.status == "PENDING_HUMAN_REVIEW"
+    assert t4.status == "SUCCESS"
+    assert t4.write_intent == "AUTOMATIC_SIDECAR_APPEND"
     assert t4.last_run_timestamp == "2026-07-20T01:00:00"
     assert all(task.status != "MISSING" for task in report.tasks)

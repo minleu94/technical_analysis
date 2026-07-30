@@ -49,6 +49,7 @@ class MOPSQueryResult:
     rows: tuple[dict[str, str], ...]
     response_sha256: str
     source_status: str
+    error_code: str = ""
 
 
 def build_query_payload(
@@ -155,6 +156,7 @@ def build_statement_availability_artifact(
                 "response_sha256": result.response_sha256,
                 "source_status": result.source_status,
                 "row_count": len(result.rows),
+                "error_code": result.error_code,
             }
         )
         for raw_row in result.rows:
@@ -213,6 +215,13 @@ def build_statement_availability_artifact(
             "duplicate_event_count": duplicate_event_count,
             "future_event_count": 0,
             "invalid_event_count": 0,
+            "query_count": len(query_manifest),
+            "successful_query_count": sum(
+                1 for item in query_manifest if item["source_status"] == "success"
+            ),
+            "failed_query_count": sum(
+                1 for item in query_manifest if item["source_status"] != "success"
+            ),
         },
         "rows": parsed_rows,
         "availability_projection": projection_rows,

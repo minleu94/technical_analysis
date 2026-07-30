@@ -64,7 +64,7 @@ class TaskStatusItem:
     expected_order_index: int
     last_run_timestamp: Optional[str]
     status: str  # SUCCESS, PASSED_WITH_WARNINGS, DEGRADED, FAILED, STALE, MISSING
-    write_intent: str  # MARKET_DATA_UPDATE_WRITE, DRY_RUN_NO_WRITE, PENDING_REVIEW_WRITE, FORMAL_EVIDENCE_PROHIBITED
+    write_intent: str  # MARKET_DATA_UPDATE_WRITE, DRY_RUN_NO_WRITE, AUTOMATIC_SIDECAR_APPEND
     status_json_path: str
     failure_reason: Optional[str] = None
 
@@ -148,7 +148,7 @@ class SchedulerHealthService:
             "daily_data_freshness_check": "DRY_RUN_NO_WRITE",
             "scheduled_recommendation_snapshot": "DRY_RUN_NO_WRITE",
             "scheduled_evidence_pipeline_dry_run": "DRY_RUN_NO_WRITE",
-            "v2_2_weekly_collection": "PENDING_REVIEW_WRITE",
+            "v2_2_weekly_collection": "AUTOMATIC_SIDECAR_APPEND",
         }
 
         for idx, task_name in enumerate(SCHEDULED_TASK_ORDERING):
@@ -208,10 +208,10 @@ class SchedulerHealthService:
 
                 if raw_status in ("passed", "success", "ok") or (success_flag and not raw_status):
                     status_str = "SUCCESS"
+                elif raw_status == "observed_automatic":
+                    status_str = "SUCCESS"
                 elif raw_status in ("passed_with_warnings", "ready_with_advisories", "ready_for_manual_confirm", "ready"):
                     status_str = "PASSED_WITH_WARNINGS"
-                elif raw_status == "pending_human_review":
-                    status_str = "PENDING_HUMAN_REVIEW"
                 elif raw_status == "degraded":
                     status_str = "DEGRADED"
                 else:
@@ -261,7 +261,7 @@ class SchedulerHealthService:
         has_failed = any(t.status == "FAILED" for t in task_items)
         has_missing = any(t.status == "MISSING" for t in task_items)
         has_advisory = any(
-            t.status in ("PASSED_WITH_WARNINGS", "DEGRADED", "PENDING_HUMAN_REVIEW")
+            t.status in ("PASSED_WITH_WARNINGS", "DEGRADED")
             for t in task_items
         )
 

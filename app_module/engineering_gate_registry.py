@@ -17,9 +17,20 @@ GATE_CATEGORIES = frozenset(
         "data_license",
         "evidence_maturity",
         "ml_revalidation",
+        "automated_evidence",
+        "policy_decision",
     }
 )
-GATE_STATUSES = frozenset({"open", "in_progress", "waiting", "complete", "rejected"})
+GATE_STATUSES = frozenset(
+    {
+        "open",
+        "in_progress",
+        "waiting",
+        "insufficient_evidence",
+        "complete",
+        "rejected",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -90,17 +101,53 @@ class EngineeringGateRegistry:
             )
 
     def append(self, item: EngineeringGateItem) -> None:
-        current = self.latest(item.item_id)
-        if current is not None and item.revision <= current.revision:
-            raise ValueError(f"gate revision already exists or is stale: {item.item_id}:{item.revision}")
+        self.append_many((item,))
+
+    def append_many(self, items: tuple[EngineeringGateItem, ...]) -> None:
+        if not items:
+            raise ValueError("at least one gate revision is required")
+        identities = tuple((item.item_id, item.revision) for item in items)
+        if len(set(identities)) != len(identities):
+            raise ValueError("duplicate gate revision in append batch")
         try:
             with sqlite3.connect(self._path) as conn:
-                conn.execute(
+                current_revisions = {
+                    str(row[0]): int(row[1])
+                    for row in conn.execute(
+                        """SELECT item_id, MAX(revision)
+                           FROM engineering_gate_revisions
+                           GROUP BY item_id"""
+                    ).fetchall()
+                }
+                batch_revisions: dict[str, int] = {}
+                for item in items:
+                    latest_revision = max(
+                        current_revisions.get(item.item_id, 0),
+                        batch_revisions.get(item.item_id, 0),
+                    )
+                    expected_revision = latest_revision + 1
+                    if item.revision != expected_revision:
+                        raise ValueError(
+                            "gate revision must be contiguous: "
+                            f"{item.item_id}:expected={expected_revision}:"
+                            f"actual={item.revision}"
+                        )
+                    batch_revisions[item.item_id] = item.revision
+                conn.executemany(
                     "INSERT INTO engineering_gate_revisions VALUES (?, ?, ?, ?, ?)",
-                    (item.item_id, item.revision, item.category, item.status, json.dumps(item.to_dict())),
+                    tuple(
+                        (
+                            item.item_id,
+                            item.revision,
+                            item.category,
+                            item.status,
+                            json.dumps(item.to_dict()),
+                        )
+                        for item in items
+                    ),
                 )
         except sqlite3.IntegrityError as exc:
-            raise ValueError(f"gate revision already exists: {item.item_id}:{item.revision}") from exc
+            raise ValueError("gate revision already exists in append batch") from exc
 
     def latest(self, item_id: str) -> EngineeringGateItem | None:
         with sqlite3.connect(self._path) as conn:

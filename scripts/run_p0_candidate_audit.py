@@ -15,6 +15,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from data_module.p0_source_contract_registry import P0_SOURCE_IDS
+from data_module.mops_ezsearch_statement_availability import (
+    MOPS_STATEMENT_AVAILABILITY_SCHEMA,
+    MOPS_STATEMENT_AVAILABILITY_SOURCE,
+    build_availability_projection,
+)
 from scripts.validate_mops_quarterly_artifact import validate_artifact
 from scripts.update_phase3c_candidates import run_bounded_official_probe
 
@@ -209,6 +214,8 @@ def build_p0_candidate_audit(
 
 
 def _validate_mops_quarterly_artifact(payload: Mapping[str, Any]) -> list[dict[str, object]]:
+    if payload.get("schema_version") == MOPS_STATEMENT_AVAILABILITY_SCHEMA:
+        return _validate_mops_ezsearch_availability_artifact(payload)
     expected = {
         "research_only": True,
         "formal_oos_allowed": False,
@@ -223,6 +230,104 @@ def _validate_mops_quarterly_artifact(payload: Mapping[str, Any]) -> list[dict[s
         if row.get("statement_scope") != "consolidated" or row.get("correction_status") != "none":
             raise ValueError("MOPS quarterly artifact must be an uncorrected consolidated report")
     return rows
+
+
+def _validate_mops_ezsearch_availability_artifact(
+    payload: Mapping[str, Any],
+) -> list[dict[str, object]]:
+    """驗證新版 MOPS 秒級 availability-only artifact。
+
+    此 artifact 只證明公告可得時間，不含財報數值，也不授權 formal
+    credit。P0 audit 可據此解除「artifact 未提供」，但後續 disposition
+    仍只能是 availability/research shadow。
+    """
+
+    expected = {
+        "source_id": MOPS_STATEMENT_AVAILABILITY_SOURCE,
+        "research_only": True,
+        "read_only_source": True,
+        "formal_oos_allowed": False,
+        "formal_credit_authorized": False,
+        "production_scheduler_allowed": False,
+        "production_blend_alpha_bp": 0,
+    }
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            raise ValueError(f"MOPS EZSearch availability artifact {key} mismatch")
+    rows = payload.get("rows")
+    projections = payload.get("availability_projection")
+    quality = payload.get("quality_summary")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("MOPS EZSearch availability artifact rows are required")
+    if not isinstance(projections, list) or not projections:
+        raise ValueError(
+            "MOPS EZSearch availability artifact projection is required"
+        )
+    if not isinstance(quality, Mapping):
+        raise ValueError("MOPS EZSearch availability quality summary is required")
+    if quality.get("event_count") != len(rows):
+        raise ValueError("MOPS EZSearch availability event count mismatch")
+    if quality.get("projection_count") != len(projections):
+        raise ValueError("MOPS EZSearch availability projection count mismatch")
+    for key in (
+        "duplicate_event_count",
+        "future_event_count",
+        "invalid_event_count",
+    ):
+        if quality.get(key) != 0:
+            raise ValueError(f"MOPS EZSearch availability {key} must be zero")
+    normalized_rows: list[Mapping[str, Any]] = []
+    for raw_row in rows:
+        if not isinstance(raw_row, Mapping):
+            raise ValueError("MOPS EZSearch availability row must be an object")
+        required = {
+            "stock_code",
+            "statement_type",
+            "period",
+            "period_end",
+            "announcement_at",
+            "announcement_item",
+            "detail_url",
+            "event_hash",
+        }
+        if not required.issubset(raw_row):
+            raise ValueError("MOPS EZSearch availability row fields are incomplete")
+        event_material = {
+            "announcement_at": str(raw_row["announcement_at"]),
+            "announcement_item": str(raw_row["announcement_item"]),
+            "detail_url": str(raw_row["detail_url"]),
+            "period": str(raw_row["period"]),
+            "stock_code": str(raw_row["stock_code"]),
+        }
+        expected_event_hash = sha256(
+            json.dumps(
+                event_material,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if raw_row.get("event_hash") != expected_event_hash:
+            raise ValueError("MOPS EZSearch availability event hash mismatch")
+        normalized_rows.append(raw_row)
+    if build_availability_projection(normalized_rows) != projections:
+        raise ValueError("MOPS EZSearch availability projection mismatch")
+    source_hash = sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return [
+        {
+            **dict(row),
+            "source_hash": source_hash,
+            "evidence_tier": "availability_only",
+        }
+        for row in projections
+    ]
 
 
 def _attach_fubon_research_supplement(

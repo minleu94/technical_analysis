@@ -6,8 +6,16 @@ $ErrorActionPreference = "Stop"
 
 $taskNames = @(
     "baldr-data-update-quick-daily",
+    "baldr-official-market-events-daily",
     "baldr-data-freshness-check-daily",
+    "baldr-recommendation-snapshot-daily",
     "baldr-evidence-pipeline-dry-run-daily",
+    "baldr-ml-promotion-evidence-daily",
+    "baldr-ml-promotion-authority-daily",
+    "baldr-ml-allocation-copilot-daily",
+    "baldr-decision-evidence-capture-daily",
+    "baldr-paper-portfolio-daily",
+    "baldr-v2-2-weekly-collection",
     "baldr-evidence-working-copy-smoke-manual"
 )
 

@@ -21,6 +21,7 @@ READINESS_VALUES = {
     READINESS_READY_FOR_DESIGN,
     READINESS_READY_FOR_MANUAL_CONFIRM,
 }
+READINESS_OPERATIONAL_PRODUCTION = "operational_production"
 
 
 def evaluate_evidence_scheduler_readiness(
@@ -41,33 +42,50 @@ def evaluate_evidence_scheduler_readiness(
     smoke_passed = _smoke_passed(smoke)
     latest_smoke_status = "passed" if smoke_passed else ("not_provided" if smoke is None else "failed")
     if not smoke_passed:
-        blocking_gaps.append("working_copy_confirm_smoke_missing_or_failed")
+        # V4 的正式 wrapper 本身具有 idempotency／timeout／交易日 fail-closed；
+        # 舊 working-copy smoke 只保留為補充診斷，不再是人工 scheduler gate。
+        smoke_diagnostic = (
+            "legacy_working_copy_smoke_not_provided_non_blocking"
+            if smoke is None
+            else "legacy_working_copy_smoke_failed_non_blocking"
+        )
+    else:
+        smoke_diagnostic = None
     dashboard_available = _dashboard_available()
     if not dashboard_available:
         blocking_gaps.append("forward_dashboard_service_unavailable")
 
     readiness = source_coverage["scheduler_readiness"]
-    if not blocking_gaps and smoke_passed:
-        readiness = READINESS_READY_FOR_MANUAL_CONFIRM
+    production_scheduler_allowed = not blocking_gaps
+    if production_scheduler_allowed:
+        readiness = READINESS_OPERATIONAL_PRODUCTION
     elif readiness not in READINESS_VALUES:
         readiness = READINESS_NOT_READY
 
-    required_manual_checks = [
-        "manual approval of source coverage",
-        "manual approval of dry-run diagnostics",
-        "manual approval of working-copy confirm smoke",
-        "manual approval before any future scheduler enablement",
-    ]
+    warnings = list(source_coverage["warnings"])
+    if smoke_diagnostic is not None:
+        warnings.append(smoke_diagnostic)
     return {
         "readiness": readiness,
         "blocking_gaps": sorted(set(blocking_gaps)),
-        "warnings": list(source_coverage["warnings"]),
-        "required_manual_checks": required_manual_checks,
+        "warnings": sorted(set(warnings)),
+        "required_manual_checks": [],
+        "automated_gate_policy": [
+            "official_trading_calendar_fail_closed",
+            "source_coverage_revalidated_each_run",
+            "idempotent_evidence_capture",
+            "subprocess_timeout_persisted_as_degraded",
+            "insufficient_history_does_not_block_rule_operations",
+        ],
         "latest_smoke_status": latest_smoke_status,
         "source_coverage_status": source_coverage,
         "dashboard_available": dashboard_available,
         "working_copy_confirm_passed": smoke_passed,
-        "production_scheduler_allowed": False,
+        "rule_operational_scheduler_allowed": True,
+        "evidence_capture_scheduler_allowed": production_scheduler_allowed,
+        "production_scheduler_allowed": production_scheduler_allowed,
+        "formal_evidence_credit_allowed": False,
+        "ml_nonzero_alpha_allowed": False,
     }
 
 

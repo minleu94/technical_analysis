@@ -13,15 +13,17 @@ def test_runbook_contains_complete_revalidation_sequence() -> None:
 
     assert [step.step_id for step in runbook.steps] == [
         "freeze_dataset",
+        "audit_feature_eligibility",
         "validate_available_dates",
+        "validate_causal_portfolio_state",
         "purged_walk_forward",
-        "train_challengers",
-        "calibrate_oof",
+        "train_feature_pack_experts",
+        "train_meta_allocator",
         "write_shadow_predictions",
-        "measure_drift",
-        "compare_champion",
-        "build_review_package",
-        "check_shadow_boundary",
+        "measure_calibration_drift",
+        "compare_portfolio_lanes",
+        "evaluate_promotion",
+        "check_boundaries",
     ]
     assert runbook.auto_retrain_allowed is False
     assert runbook.auto_promotion_allowed is False
@@ -42,7 +44,7 @@ def test_runbook_converts_to_open_ml_revalidation_gate() -> None:
     assert gate.category == "ml_revalidation"
     assert gate.status == "open"
     assert gate.progress_bp == 0
-    assert "do not auto-promote challenger" in gate.prohibited_actions
+    assert "do not bypass the machine promotion artifact" in gate.prohibited_actions
 
 
 def test_unknown_revalidation_trigger_is_rejected() -> None:

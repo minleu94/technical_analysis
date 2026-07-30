@@ -127,7 +127,7 @@ class HistoricalTrainingService:
         policy = ResearchBlendPolicy(
             research_alpha_bp=alpha,
             production_alpha_bp=0,
-            selection_metric="return_mae_bp",
+            selection_metric="legacy_score_return_blend_disabled_unit_mismatch",
             selection_label_cutoff=blend_selection_label_cutoff,
             max_selection_label_available_date=max(row.label_available_date for row, _, _ in selection_rows),
         )
@@ -181,14 +181,12 @@ class HistoricalTrainingService:
             ))
         else:
             return_model = Pipeline((
-                ("imputer", SimpleImputer(strategy="median", keep_empty_features=True)),
                 ("model", HistGradientBoostingRegressor(
                     max_iter=self.hgb_max_iter, learning_rate=0.05,
                     max_depth=3, random_state=self.random_state,
                 )),
             ))
             downside_model = Pipeline((
-                ("imputer", SimpleImputer(strategy="median", keep_empty_features=True)),
                 ("model", HistGradientBoostingClassifier(
                     max_iter=self.hgb_max_iter, learning_rate=0.05,
                     max_depth=3, random_state=self.random_state,
@@ -211,14 +209,12 @@ def _mean_absolute_error(values: list[tuple[HistoricalTrainingSample, int, int]]
 
 
 def _select_alpha(values: tuple[tuple[HistoricalTrainingSample, int, int], ...]) -> int:
-    candidates = (0, 2500, 5000, 7500, 10000)
-    def error(alpha: int) -> tuple[int, int]:
-        total = 0
-        for row, prediction, _ in values:
-            blended = (alpha * prediction + (10_000 - alpha) * row.rule_score_bp) // 10_000
-            total += abs(row.return_target_bp - blended)
-        return total, alpha
-    return min(candidates, key=error)
+    del values
+    # Legacy rows mix a return forecast (bp of return) with a Rule score
+    # (ranking points expressed as bp).  They are not the same financial unit,
+    # so any non-zero blend would be semantically invalid.  V4 blending happens
+    # only between Rule and ML portfolio weights through AllocationWeightContract.
+    return 0
 
 
 def _round_float(value: float | np.floating[Any]) -> int:

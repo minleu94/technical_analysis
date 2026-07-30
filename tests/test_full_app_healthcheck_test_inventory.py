@@ -121,9 +121,28 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
 
 
 def test_inventory_exposes_pytest_collection_statuses():
-    assert len(PYTEST_COLLECTED_FILES) == 500
-    assert len(PYTEST_SUPPORT_FILES) == 1
-    assert len(PYTEST_NOT_COLLECTED_FILES) == 29
+    expected_collected = frozenset(
+        path
+        for path in TEST_INVENTORY
+        if path.startswith("tests/")
+        and not path.startswith("tests/manual/")
+        and not path.startswith("tests/scripts/")
+        and Path(path).name.startswith("test_")
+        and path.endswith(".py")
+    )
+    assert PYTEST_COLLECTED_FILES == expected_collected
+    assert PYTEST_SUPPORT_FILES == frozenset({"tests/conftest.py"})
+    assert PYTEST_NOT_COLLECTED_FILES == (
+        frozenset(TEST_INVENTORY)
+        - PYTEST_COLLECTED_FILES
+        - PYTEST_SUPPORT_FILES
+    )
+    assert (
+        len(PYTEST_COLLECTED_FILES)
+        + len(PYTEST_SUPPORT_FILES)
+        + len(PYTEST_NOT_COLLECTED_FILES)
+        == len(TEST_INVENTORY)
+    )
 
     assert is_collected_by_default_pytest("tests/test_full_app_healthcheck_test_inventory.py")
     assert get_pytest_collection_status("tests/test_full_app_healthcheck_test_inventory.py") == "collected"

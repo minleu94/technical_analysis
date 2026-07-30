@@ -57,12 +57,20 @@ class PreV2ReadinessReport:
     production_scheduler_allowed: bool
     items: tuple[PreV2ReadinessItem, ...]
     limitations: tuple[str, ...]
+    rule_operational_scheduler_allowed: bool = True
+    required_human_action: bool = False
+    automatic_revalidation_enabled: bool = True
+    blocking_scope: str = "formal_evidence_credit_only"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "generated_at": self.generated_at,
             "overall_status": self.overall_status,
             "production_scheduler_allowed": self.production_scheduler_allowed,
+            "rule_operational_scheduler_allowed": self.rule_operational_scheduler_allowed,
+            "required_human_action": self.required_human_action,
+            "automatic_revalidation_enabled": self.automatic_revalidation_enabled,
+            "blocking_scope": self.blocking_scope,
             "items": [item.to_dict() for item in self.items],
             "limitations": list(self.limitations),
         }
@@ -108,8 +116,8 @@ class PreV2ReadinessService:
             items=items,
             limitations=(
                 "此報告只讀取現有 evidence / 文件 / report，不會建立 schema 或寫入 DB。",
-                "waiting_for_time 代表仍需真實多週或多日觀察，不能用單次 smoke 取代。",
-                "ready 只代表可進入 V2.0 design discussion，不代表投資有效性或 production scheduler approval。",
+                "waiting_for_time 只限制 formal evidence credit；排程會自動累積與重驗，不需要人工批准。",
+                "Rule / Advice / Paper operational scheduler 可持續運作；本報告不授予 ML 非零 alpha 或投資有效性聲明。",
             ),
         )
 
@@ -154,80 +162,81 @@ class PreV2ReadinessService:
         }
 
     def _weekly_history_item(self, min_weekly_records: int) -> PreV2ReadinessItem:
+        periods: dict[tuple[str, str], str] = {}
+        diagnostics: list[str] = []
+        evidence: dict[str, Any] = {
+            "count_policy": "distinct_periods_from_automatic_collection_or_legacy_review",
+            "automatic_revalidation": True,
+            "human_approval_required": False,
+        }
         try:
             projection = load_approved_weekly_history_projection(self.approved_weekly_history_projection_path)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             projection = None
-            projection_diagnostic = f"approved_weekly_history_projection_unavailable:{exc}"
-        else:
-            projection_diagnostic = ""
+            diagnostics.append(f"approved_weekly_history_projection_unavailable:{exc}")
         if projection is not None:
-            count = len(projection.records)
-            projection_latest_period_end = max((item["period_end"] for item in projection.records), default=None)
-            evidence = {
-                "approved_projection_path": str(projection.path),
-                "latest_period_end": projection_latest_period_end,
-            }
-            if count < min_weekly_records:
-                return PreV2ReadinessItem(
-                    item_id="weekly_history",
-                    label="多週 weekly evidence operations history",
-                    status=STATUS_WAITING_FOR_TIME,
-                    required_count=int(min_weekly_records),
-                    observed_count=count,
-                    blocking_reasons=("insufficient_weekly_history_records",),
-                    next_actions=("繼續累積經具名 owner 核准的不同週期 weekly review。",),
-                    evidence=evidence,
-                )
-            return PreV2ReadinessItem(
-                item_id="weekly_history",
-                label="多週 weekly evidence operations history",
-                status=STATUS_READY,
-                required_count=int(min_weekly_records),
-                observed_count=count,
-                evidence=evidence,
-            )
-        diagnostics: list[str] = []
-        if projection_diagnostic:
-            diagnostics.append(projection_diagnostic)
-        count = 0
-        latest_period_end: str | None = None
+            evidence["approved_projection_path"] = str(projection.path)
+            for item in projection.records:
+                key = (str(item["period_start"]), str(item["period_end"]))
+                periods[key] = "legacy_approved_projection"
+
         try:
             with _connect_read_only(self.evidence_db_path) as conn:
-                if not _table_exists(conn, "evidence_operations_weekly_reviews"):
-                    return PreV2ReadinessItem(
-                        item_id="weekly_history",
-                        label="多週 weekly evidence operations history",
-                        status=STATUS_ACTION_REQUIRED,
-                        required_count=int(min_weekly_records),
-                        observed_count=0,
-                        blocking_reasons=("evidence_operations_weekly_reviews_table_missing",),
-                        next_actions=("先保存至少一筆 weekly review history，再累積到 3 筆以上。",),
-                    )
-                row = conn.execute(
-                    """
-                    SELECT COUNT(*) AS row_count, MAX(period_end) AS latest_period_end
-                    FROM evidence_operations_weekly_reviews
-                    """
-                ).fetchone()
-                count = int(row["row_count"] or 0)
-                latest_period_end = row["latest_period_end"]
+                if _table_exists(conn, "evidence_operations_weekly_reviews"):
+                    rows = conn.execute(
+                        """
+                        SELECT period_start, period_end
+                        FROM evidence_operations_weekly_reviews
+                        """
+                    ).fetchall()
+                    for row in rows:
+                        periods[(str(row["period_start"]), str(row["period_end"]))] = (
+                            "legacy_review_history"
+                        )
         except FileNotFoundError as exc:
-            diagnostics.append(f"evidence_db_missing:{exc}")
+            diagnostics.append(f"legacy_evidence_db_missing_non_blocking:{exc}")
         except sqlite3.Error as exc:
-            diagnostics.append(f"weekly_history_unavailable:{exc}")
+            diagnostics.append(f"legacy_weekly_history_unavailable_non_blocking:{exc}")
 
-        if diagnostics:
-            return PreV2ReadinessItem(
-                item_id="weekly_history",
-                label="多週 weekly evidence operations history",
-                status=STATUS_ACTION_REQUIRED,
-                required_count=int(min_weekly_records),
-                observed_count=0,
-                blocking_reasons=("weekly_history_unavailable",),
-                next_actions=("確認 working-copy evidence DB path，並以 --save-history 保存 weekly review。",),
-                diagnostics=tuple(diagnostics),
-            )
+        sidecar_path = (
+            Path(self.config.output_root)
+            / "scheduled"
+            / "v2_2_weekly_collection"
+            / "evidence_scheduler.db"
+        )
+        evidence["automatic_collection_sidecar_path"] = str(sidecar_path)
+        try:
+            with _connect_read_only(sidecar_path) as conn:
+                if _table_exists(conn, "evidence_weekly_collections"):
+                    rows = conn.execute(
+                        """
+                        SELECT period_start, period_end
+                        FROM evidence_weekly_collections
+                        WHERE status = 'observed_automatic'
+                          AND error_type = ''
+                          AND source_hash LIKE 'sha256:%'
+                        """
+                    ).fetchall()
+                    for row in rows:
+                        periods[(str(row["period_start"]), str(row["period_end"]))] = (
+                            "automatic_weekly_collection"
+                        )
+        except FileNotFoundError:
+            diagnostics.append("automatic_weekly_collection_not_yet_observed")
+        except sqlite3.Error as exc:
+            diagnostics.append(f"automatic_weekly_collection_unavailable:{exc}")
+
+        count = len(periods)
+        latest_period_end = max((period_end for _, period_end in periods), default=None)
+        evidence["latest_period_end"] = latest_period_end
+        evidence["observed_periods"] = [
+            {
+                "period_start": period_start,
+                "period_end": period_end,
+                "evidence_source": periods[(period_start, period_end)],
+            }
+            for period_start, period_end in sorted(periods)
+        ]
         if count < min_weekly_records:
             return PreV2ReadinessItem(
                 item_id="weekly_history",
@@ -236,8 +245,9 @@ class PreV2ReadinessService:
                 required_count=int(min_weekly_records),
                 observed_count=count,
                 blocking_reasons=("insufficient_weekly_history_records",),
-                next_actions=("繼續跑 weekly evidence operations + history，累積跨週樣本。",),
-                evidence={"latest_period_end": latest_period_end},
+                next_actions=("排程將自動每週累積並重驗；不需要人工簽核。",),
+                evidence=evidence,
+                diagnostics=tuple(diagnostics),
             )
         return PreV2ReadinessItem(
             item_id="weekly_history",
@@ -245,7 +255,8 @@ class PreV2ReadinessService:
             status=STATUS_READY,
             required_count=int(min_weekly_records),
             observed_count=count,
-            evidence={"latest_period_end": latest_period_end},
+            evidence=evidence,
+            diagnostics=tuple(diagnostics),
         )
 
     def _multi_day_dry_run_item(
@@ -352,6 +363,9 @@ def render_pre_v2_readiness_markdown(report: PreV2ReadinessReport) -> str:
         f"- generated_at: `{report.generated_at}`",
         f"- overall_status: `{report.overall_status}`",
         f"- production_scheduler_allowed: `{str(report.production_scheduler_allowed).lower()}`",
+        f"- rule_operational_scheduler_allowed: `{str(report.rule_operational_scheduler_allowed).lower()}`",
+        f"- required_human_action: `{str(report.required_human_action).lower()}`",
+        f"- blocking_scope: `{report.blocking_scope}`",
         "",
         "| Item | Status | Observed | Required | Blocking reasons |",
         "|---|---|---:|---:|---|",
@@ -367,8 +381,8 @@ def render_pre_v2_readiness_markdown(report: PreV2ReadinessReport) -> str:
             "## V2.0 Boundary",
             "",
             "- ready 只代表可進入 V2.0 design discussion。",
-            "- waiting_for_time 不能用單次 smoke 或 fixture 取代。",
-            "- production scheduler 仍需 explicit approval、backup 與 rollback。",
+            "- waiting_for_time 由排程自動累積與重驗，不需要人工批准。",
+            "- legacy production_scheduler_allowed 只代表 formal evidence credit；Rule operational scheduler 由獨立 V4 自動 gate 控制。",
         ]
     )
     return "\n".join(lines)

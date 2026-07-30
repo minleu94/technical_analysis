@@ -173,8 +173,9 @@ class PortfolioAdviceDTO:
     stock_code: str
     advice_action: AdviceAction
     target_weight_bp: int
-    current_weight_bp: int
-    weight_gap_bp: int
+    current_weight_bp: int | None
+    weight_gap_bp: int | None
+    executable_weight_bp: int | None = None
     reasons: tuple[str, ...] = ()
     risk_reasons: tuple[str, ...] = ()
     confidence_tier: str = ""
@@ -194,8 +195,17 @@ class PortfolioAdviceDTO:
 
     def __post_init__(self) -> None:
         _validate_bp("target_weight_bp", self.target_weight_bp, minimum=0, maximum=10000)
-        _validate_bp("current_weight_bp", self.current_weight_bp, minimum=0, maximum=10000)
-        _validate_bp("weight_gap_bp", self.weight_gap_bp, minimum=-10000, maximum=10000)
+        if self.current_weight_bp is not None:
+            _validate_bp("current_weight_bp", self.current_weight_bp, minimum=0, maximum=10000)
+        if self.weight_gap_bp is not None:
+            _validate_bp("weight_gap_bp", self.weight_gap_bp, minimum=-10000, maximum=10000)
+        if self.executable_weight_bp is not None:
+            _validate_bp(
+                "executable_weight_bp",
+                self.executable_weight_bp,
+                minimum=0,
+                maximum=10000,
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -204,6 +214,7 @@ class PortfolioAdviceDTO:
             "target_weight_bp": self.target_weight_bp,
             "current_weight_bp": self.current_weight_bp,
             "weight_gap_bp": self.weight_gap_bp,
+            "executable_weight_bp": self.executable_weight_bp,
             "reasons": list(self.reasons),
             "risk_reasons": list(self.risk_reasons),
             "confidence_tier": self.confidence_tier,
@@ -231,6 +242,7 @@ class PortfolioAdviceDTO:
             target_weight_bp=payload["target_weight_bp"],
             current_weight_bp=payload["current_weight_bp"],
             weight_gap_bp=payload["weight_gap_bp"],
+            executable_weight_bp=payload.get("executable_weight_bp"),
             reasons=_string_tuple(payload.get("reasons")),
             risk_reasons=_string_tuple(payload.get("risk_reasons")),
             confidence_tier=payload.get("confidence_tier", ""),

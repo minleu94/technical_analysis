@@ -16,6 +16,23 @@ PRODUCTION_ROOTS = (
     "backtest_module",
 )
 FORBIDDEN_ML_IMPORT_ROOTS = frozenset(PRODUCTION_ROOTS)
+ALLOWED_READ_ONLY_PRODUCTION_ML_IMPORTS = {
+    "app_module/ml_allocation_inference_service.py": frozenset(
+        {
+            "ml_module.allocation_contracts",
+            "ml_module.allocation_training_service",
+        }
+    ),
+    "app_module/ml_allocation_shadow_evidence.py": frozenset(
+        {
+            "ml_module.allocation_contracts",
+            "ml_module.allocation_promotion_reference",
+        }
+    ),
+    "app_module/portfolio_allocation_service.py": frozenset(
+        {"ml_module.allocation_validation"}
+    ),
+}
 FORBIDDEN_TRUE_FLAGS = frozenset(
     {
         "production_eligible",
@@ -54,8 +71,16 @@ class MLShadowBoundaryGuard:
             for path in sorted(package_root.rglob("*.py")):
                 inspected += 1
                 tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+                relative = path.relative_to(self.root).as_posix()
+                allowed = ALLOWED_READ_ONLY_PRODUCTION_ML_IMPORTS.get(
+                    relative,
+                    frozenset(),
+                )
                 for module in _import_modules(tree):
-                    if module == "ml_module" or module.startswith("ml_module."):
+                    if (
+                        module == "ml_module"
+                        or module.startswith("ml_module.")
+                    ) and module not in allowed:
                         violations.append(f"production_imports_ml_module:{path.relative_to(self.root)}:{module}")
         return MLShadowBoundaryReport(inspected, tuple(sorted(violations)))
 

@@ -146,6 +146,26 @@ def test_cli_sample_outputs_json_and_markdown(tmp_path: Path, capsys) -> None:
     _ = capsys.readouterr()
 
 
+def test_cli_without_arguments_uses_twstock_config_database(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    data_root = tmp_path / "formal-data"
+    output_root = tmp_path / "formal-output"
+    expected_db = data_root / "sqlite" / "twstock.db"
+    monkeypatch.setenv("DATA_ROOT", str(data_root))
+    monkeypatch.setenv("OUTPUT_ROOT", str(output_root))
+    monkeypatch.setenv("PROFILE", "prod")
+
+    assert inspect_source_candidate_readiness_main([]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["source_mode"] == "read_only_sqlite"
+    assert "missing_db" in payload["diagnostics"]
+    assert expected_db.exists() is False
+
+
 def test_p0_candidate_statuses_keep_zero_row_sources_visible_without_creating_db(tmp_path: Path) -> None:
     db_path = tmp_path / "missing.sqlite"
 

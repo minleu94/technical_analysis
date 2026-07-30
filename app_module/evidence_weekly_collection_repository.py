@@ -11,9 +11,11 @@ from typing import Any, Mapping
 from app_module.evidence_weekly_collection_dtos import EvidenceWeeklyCollectionRecord
 
 
-_SCHEMA_VERSION = 1
-_PENDING_STATUS = "pending_human_review"
+_SCHEMA_VERSION = 2
+_OBSERVED_STATUS = "observed_automatic"
+_LEGACY_PENDING_STATUS = "pending_human_review"
 _FAILED_STATUS = "collection_failed"
+_MIGRATION_TABLE = "evidence_weekly_collections_schema_v2_migration"
 
 
 def _canonical_json(payload: Mapping[str, Any]) -> str:
@@ -35,6 +37,7 @@ class EvidenceWeeklyCollectionRepository:
 
     def ensure_schema(self) -> None:
         with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sidecar_schema_version (
@@ -42,34 +45,232 @@ class EvidenceWeeklyCollectionRepository:
                 )
                 """
             )
+            if not self._table_exists(conn, "evidence_weekly_collections"):
+                self._create_collection_table(conn, "evidence_weekly_collections")
+            elif self._requires_schema_v2_migration(conn):
+                self._migrate_collection_table_to_v2(conn)
+            conn.execute("DELETE FROM sidecar_schema_version")
             conn.execute(
-                """
-                INSERT INTO sidecar_schema_version (version)
-                SELECT ?
-                WHERE NOT EXISTS (SELECT 1 FROM sidecar_schema_version)
-                """,
+                "INSERT INTO sidecar_schema_version (version) VALUES (?)",
                 (_SCHEMA_VERSION,),
             )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS evidence_weekly_collections (
+
+    @staticmethod
+    def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        return row is not None
+
+    @staticmethod
+    def _create_collection_table(
+        conn: sqlite3.Connection,
+        table_name: str,
+    ) -> None:
+        if table_name not in {
+            "evidence_weekly_collections",
+            _MIGRATION_TABLE,
+        }:
+            raise ValueError(f"unsupported collection table name: {table_name}")
+        conn.execute(
+            f"""
+                CREATE TABLE {table_name} (
                     collection_id TEXT PRIMARY KEY,
                     period_start TEXT NOT NULL,
                     period_end TEXT NOT NULL,
                     source_path TEXT NOT NULL,
                     source_hash TEXT NOT NULL,
                     status TEXT NOT NULL CHECK (
-                        status IN ('pending_human_review', 'collection_failed')
+                        status IN ('observed_automatic', 'collection_failed')
                     ),
                     payload_json TEXT NOT NULL,
                     error_type TEXT NOT NULL DEFAULT '',
                     error_message TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
+            """
+        )
+
+    @staticmethod
+    def _requires_schema_v2_migration(conn: sqlite3.Connection) -> bool:
+        row = conn.execute(
+            """
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'evidence_weekly_collections'
+            """
+        ).fetchone()
+        if row is None or not isinstance(row[0], str):
+            raise RuntimeError("weekly collection sidecar schema is unavailable")
+        normalized_sql = "".join(row[0].lower().split())
+        legacy_count = int(
+            conn.execute(
                 """
+                SELECT COUNT(*)
+                FROM evidence_weekly_collections
+                WHERE status = ?
+                """,
+                (_LEGACY_PENDING_STATUS,),
+            ).fetchone()[0]
+        )
+        return (
+            "'observed_automatic','collection_failed'" not in normalized_sql
+            or _LEGACY_PENDING_STATUS in normalized_sql
+            or legacy_count > 0
+        )
+
+    @classmethod
+    def _migrate_collection_table_to_v2(
+        cls,
+        conn: sqlite3.Connection,
+    ) -> None:
+        if cls._table_exists(conn, _MIGRATION_TABLE):
+            raise RuntimeError(
+                "weekly collection schema v2 migration table already exists"
             )
 
-    def save_pending(
+        status_rows = conn.execute(
+            """
+            SELECT status, COUNT(*)
+            FROM evidence_weekly_collections
+            GROUP BY status
+            """
+        ).fetchall()
+        unexpected_statuses = sorted(
+            str(status)
+            for status, _ in status_rows
+            if status
+            not in {
+                _LEGACY_PENDING_STATUS,
+                _OBSERVED_STATUS,
+                _FAILED_STATUS,
+            }
+        )
+        if unexpected_statuses:
+            raise RuntimeError(
+                "unsupported legacy weekly collection statuses: "
+                + ", ".join(unexpected_statuses)
+            )
+
+        cls._create_collection_table(conn, _MIGRATION_TABLE)
+        conn.execute(
+            f"""
+            INSERT INTO {_MIGRATION_TABLE} (
+                collection_id,
+                period_start,
+                period_end,
+                source_path,
+                source_hash,
+                status,
+                payload_json,
+                error_type,
+                error_message,
+                created_at
+            )
+            SELECT
+                collection_id,
+                period_start,
+                period_end,
+                source_path,
+                source_hash,
+                CASE status
+                    WHEN ? THEN ?
+                    ELSE status
+                END,
+                payload_json,
+                error_type,
+                error_message,
+                created_at
+            FROM evidence_weekly_collections
+            """,
+            (_LEGACY_PENDING_STATUS, _OBSERVED_STATUS),
+        )
+        mismatch_count = int(
+            conn.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM (
+                    SELECT
+                        collection_id,
+                        period_start,
+                        period_end,
+                        source_path,
+                        source_hash,
+                        CASE status
+                            WHEN '{_LEGACY_PENDING_STATUS}' THEN '{_OBSERVED_STATUS}'
+                            ELSE status
+                        END AS status,
+                        payload_json,
+                        error_type,
+                        error_message,
+                        created_at
+                    FROM evidence_weekly_collections
+                    EXCEPT
+                    SELECT
+                        collection_id,
+                        period_start,
+                        period_end,
+                        source_path,
+                        source_hash,
+                        status,
+                        payload_json,
+                        error_type,
+                        error_message,
+                        created_at
+                    FROM {_MIGRATION_TABLE}
+                )
+                """
+            ).fetchone()[0]
+        )
+        reverse_mismatch_count = int(
+            conn.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM (
+                    SELECT
+                        collection_id,
+                        period_start,
+                        period_end,
+                        source_path,
+                        source_hash,
+                        status,
+                        payload_json,
+                        error_type,
+                        error_message,
+                        created_at
+                    FROM {_MIGRATION_TABLE}
+                    EXCEPT
+                    SELECT
+                        collection_id,
+                        period_start,
+                        period_end,
+                        source_path,
+                        source_hash,
+                        CASE status
+                            WHEN '{_LEGACY_PENDING_STATUS}' THEN '{_OBSERVED_STATUS}'
+                            ELSE status
+                        END AS status,
+                        payload_json,
+                        error_type,
+                        error_message,
+                        created_at
+                    FROM evidence_weekly_collections
+                )
+                """
+            ).fetchone()[0]
+        )
+        if mismatch_count or reverse_mismatch_count:
+            raise RuntimeError(
+                "weekly collection schema v2 migration content validation failed"
+            )
+
+        conn.execute("DROP TABLE evidence_weekly_collections")
+        conn.execute(
+            f"ALTER TABLE {_MIGRATION_TABLE} RENAME TO evidence_weekly_collections"
+        )
+
+    def save_observed(
         self,
         *,
         period_start: str,
@@ -80,7 +281,7 @@ class EvidenceWeeklyCollectionRepository:
             period_start=period_start,
             period_end=period_end,
             payload_json=payload_json,
-            status=_PENDING_STATUS,
+            status=_OBSERVED_STATUS,
         )
         with self._connection() as conn:
             conn.execute(
@@ -94,6 +295,20 @@ class EvidenceWeeklyCollectionRepository:
                 self._record_values(record),
             )
         return self._get_required(record.collection_id)
+
+    def save_pending(
+        self,
+        *,
+        period_start: str,
+        period_end: str,
+        payload_json: Mapping[str, Any],
+    ) -> EvidenceWeeklyCollectionRecord:
+        """Compatibility alias that persists the machine-observed v2 status."""
+        return self.save_observed(
+            period_start=period_start,
+            period_end=period_end,
+            payload_json=payload_json,
+        )
 
     def save_failed(
         self,

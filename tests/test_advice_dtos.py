@@ -30,6 +30,19 @@ def test_portfolio_advice_round_trip_preserves_integer_bp() -> None:
     assert PortfolioAdviceDTO.from_dict(payload) == row
 
 
+def test_portfolio_advice_round_trip_preserves_unknown_current_weight() -> None:
+    row = PortfolioAdviceDTO(
+        stock_code="2330",
+        advice_action=AdviceAction.NO_NEW_POSITION,
+        target_weight_bp=1500,
+        current_weight_bp=None,
+        weight_gap_bp=None,
+        reasons=("current_weight_missing",),
+    )
+
+    assert PortfolioAdviceDTO.from_dict(row.to_dict()) == row
+
+
 def test_advice_dashboard_round_trip_preserves_nested_json_contract() -> None:
     recommendation = RecommendationAdviceDTO(
         stock_code="2330",

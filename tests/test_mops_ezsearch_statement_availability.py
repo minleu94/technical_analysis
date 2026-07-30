@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+import requests
 
 from data_module.mops_ezsearch_statement_availability import (
     MOPSQueryResult,
@@ -167,3 +168,48 @@ def test_artifact_rejects_future_timestamp() -> None:
             end_date=date(2026, 7, 28),
             captured_at="2026-07-27T10:00:00+08:00",
         )
+
+
+def test_artifact_counts_failed_queries_without_treating_them_as_empty_success() -> None:
+    artifact = build_statement_availability_artifact(
+        [
+            _result(_row()),
+            MOPSQueryResult(
+                market="otc",
+                announcement_item="F26",
+                rows=(),
+                response_sha256="b" * 64,
+                source_status="error",
+                error_code="network_timeout",
+            ),
+        ],
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 28),
+        captured_at="2026-07-28T12:00:00+08:00",
+    )
+
+    assert artifact["quality_summary"]["successful_query_count"] == 1
+    assert artifact["quality_summary"]["failed_query_count"] == 1
+    assert artifact["query_manifest"][1]["error_code"] == "network_timeout"
+
+
+def test_fetch_cli_safe_query_converts_timeout_to_structured_failure() -> None:
+    from scripts.fetch_mops_statement_availability import _safe_query
+
+    class TimeoutSession:
+        def post(self, *args, **kwargs):
+            del args, kwargs
+            raise requests.Timeout("timed out")
+
+    result = _safe_query(
+        TimeoutSession(),  # type: ignore[arg-type]
+        market="sii",
+        announcement_item="F26",
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 28),
+        timeout_seconds=1,
+    )
+
+    assert result.source_status == "error"
+    assert result.error_code == "network_timeout"
+    assert result.rows == ()

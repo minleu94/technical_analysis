@@ -17,7 +17,9 @@ from app_module.evidence_weekly_collection_repository import EvidenceWeeklyColle
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Collect V2.2 weekly evidence into a sidecar for human review.")
+    parser = argparse.ArgumentParser(
+        description="Collect V4 weekly evidence into an append-only sidecar for automatic revalidation."
+    )
     parser.add_argument("--source-db-path", required=True)
     parser.add_argument("--sidecar-db-path", required=True)
     parser.add_argument("--output-root", required=True)
@@ -71,7 +73,9 @@ def _render_markdown(payload: dict[str, Any]) -> str:
         f"- Period: `{payload['period_start']}` to `{payload['period_end']}`",
         f"- Last trading date: `{payload.get('last_trading_date', '')}`",
         "- Source access: `SQLite mode=ro`",
-        "- Human approval required: `true`",
+        "- Human approval required: `false`",
+        f"- Automatic revalidation: `{str(payload.get('automatic_revalidation', False)).lower()}`",
+        f"- Gate credit status: `{payload.get('gate_credit_status', '')}`",
     ]
     if payload.get("error"):
         error = payload["error"]
@@ -91,8 +95,11 @@ def _base_payload(*, period_start: str, period_end: str, source_db_path: Path) -
         "period_end": period_end,
         "source_db_path": str(source_db_path),
         "source_access": "sqlite_uri_mode_ro",
-        "human_approval_required": True,
-        "write_intent": False,
+        "human_approval_required": False,
+        "automatic_revalidation": True,
+        "source_write_allowed": False,
+        "sidecar_append_allowed": True,
+        "write_intent": "append_only_sidecar_and_report",
     }
 
 
@@ -144,12 +151,32 @@ def main() -> int:
         last_trading_date = _read_latest_trading_date(source_db_path, period_end=period_end)
         payload["last_trading_date"] = last_trading_date
         pending_payload = dict(payload)
-        record = repository.save_pending(
+        record = repository.save_observed(
             period_start=period_start,
             period_end=period_end,
             payload_json=pending_payload,
         )
-        payload["collection_status"] = record.status
+        with sqlite3.connect(repository.sidecar_path) as connection:
+            observed_week_count = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(DISTINCT period_start || '|' || period_end)
+                    FROM evidence_weekly_collections
+                    WHERE status = 'observed_automatic'
+                      AND error_type = ''
+                      AND source_hash LIKE 'sha256:%'
+                    """
+                ).fetchone()[0]
+            )
+        payload["collection_status"] = "observed_automatic"
+        payload["storage_status"] = record.status
+        payload["observed_week_count"] = observed_week_count
+        payload["required_week_count"] = 3
+        payload["gate_credit_status"] = (
+            "ready_for_machine_revalidation"
+            if observed_week_count >= 3
+            else "insufficient_evidence"
+        )
         payload["collection_record"] = record.to_dict()
         _write_reports(output_root, payload)
         exit_code = 0

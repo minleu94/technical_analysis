@@ -56,6 +56,9 @@ def test_pre_v2_readiness_cli_reports_json_without_creating_missing_db(tmp_path:
     assert result.returncode == 0
     assert payload["overall_status"] == "action_required"
     assert payload["production_scheduler_allowed"] is False
+    assert payload["rule_operational_scheduler_allowed"] is True
+    assert payload["required_human_action"] is False
+    assert payload["blocking_scope"] == "formal_evidence_credit_only"
     assert any(item["item_id"] == "weekly_history" for item in payload["items"])
     assert not missing_db.exists()
 

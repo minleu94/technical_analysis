@@ -78,10 +78,13 @@ def run_test_inventory_audit(
         if pytest_collection_error:
             collection_errors.append(pytest_collection_error)
 
-    # Genuine human / time / environment gaps
-    human_decision_required = [
-        "owner_policy_formal_source_acceptance_review",
-        "legal_data_license_and_terms_final_interpretation",
+    # Gate 2-7 不再等待人工簽核：無法自動證明 license / PIT 的來源會
+    # fail closed 為 research_shadow / blocked_no_provenance，而不是阻擋
+    # Rule operational production。
+    human_decision_required: list[str] = []
+    automatic_fail_closed_dispositions = [
+        "unverified_source_license_or_pit_to_research_shadow",
+        "missing_provenance_to_blocked_no_provenance",
     ]
     waiting_for_time = [
         "forward_performance_close_to_close_maturity_days",
@@ -125,6 +128,7 @@ def run_test_inventory_audit(
         "documentation_count_drift": documentation_count_drift,
         "machine_checkable_blockers": machine_checkable_blockers,
         "human_decision_required": human_decision_required,
+        "automatic_fail_closed_dispositions": automatic_fail_closed_dispositions,
         "waiting_for_time": waiting_for_time,
         "external_environment_required": external_environment_required,
         "overall_status": overall_status,
@@ -173,7 +177,7 @@ def _read_documented_current_counts() -> dict[str, int]:
         content = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return {}
-    marker = "## 2026-07-25 machine refresh"
+    marker = "## 2026-07-30 machine refresh"
     if marker not in content:
         return {}
     section = content.split(marker, 1)[1].split("## ", 1)[0]

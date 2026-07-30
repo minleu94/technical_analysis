@@ -20,7 +20,9 @@ def _create_source_database(path: Path) -> None:
         )
 
 
-def test_collect_cli_saves_pending_sidecar_record_and_read_only_reports(tmp_path: Path) -> None:
+def test_collect_cli_saves_automatic_sidecar_observation_and_reports(
+    tmp_path: Path,
+) -> None:
     source_db_path = tmp_path / "twstock.db"
     sidecar_db_path = tmp_path / "weekly-collection-sidecar.sqlite"
     output_root = tmp_path / "output"
@@ -49,17 +51,36 @@ def test_collect_cli_saves_pending_sidecar_record_and_read_only_reports(tmp_path
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert payload["collection_status"] == "pending_human_review"
+    assert payload["collection_status"] == "observed_automatic"
+    assert payload["storage_status"] == "observed_automatic"
+    assert payload["gate_credit_status"] == "insufficient_evidence"
+    assert payload["observed_week_count"] == 1
+    assert payload["human_approval_required"] is False
+    assert payload["automatic_revalidation"] is True
     assert payload["last_trading_date"] == "2026-07-10"
     assert source_db_path.read_bytes() == source_bytes_before
+    with sqlite3.connect(sidecar_db_path) as connection:
+        stored_statuses = connection.execute(
+            "SELECT DISTINCT status FROM evidence_weekly_collections"
+        ).fetchall()
+        schema_version = connection.execute(
+            "SELECT version FROM sidecar_schema_version"
+        ).fetchall()
+    assert stored_statuses == [("observed_automatic",)]
+    assert schema_version == [(2,)]
 
     report_directory = output_root / "scheduled" / "v2_2_weekly_collection"
     json_reports = list(report_directory.glob("*.json"))
     markdown_reports = list(report_directory.glob("*.md"))
     assert len(json_reports) == 1
     assert len(markdown_reports) == 1
-    assert json.loads(json_reports[0].read_text(encoding="utf-8"))["collection_status"] == "pending_human_review"
-    assert "pending_human_review" in markdown_reports[0].read_text(encoding="utf-8")
+    assert (
+        json.loads(json_reports[0].read_text(encoding="utf-8"))[
+            "collection_status"
+        ]
+        == "observed_automatic"
+    )
+    assert "observed_automatic" in markdown_reports[0].read_text(encoding="utf-8")
 
 
 def test_collect_cli_saves_failed_sidecar_record_for_invalid_period_end(tmp_path: Path) -> None:

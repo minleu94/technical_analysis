@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 from datetime import date, datetime, timezone
+from hashlib import sha256
 import json
 from pathlib import Path
 import sys
@@ -21,6 +22,7 @@ from data_module.fundamental_statement_availability_sources import (
 )
 from data_module.mops_ezsearch_statement_availability import (
     MOPS_MARKETS,
+    MOPSQueryResult,
     MOPS_STATEMENT_ITEMS,
     build_statement_availability_artifact,
     query_mops_ezsearch,
@@ -67,8 +69,8 @@ def main(argv: list[str] | None = None) -> int:
     mapping_path = _safe_output_path(safe_root, args.mapping_name)
 
     with requests.Session() as session:
-        results = [
-            query_mops_ezsearch(
+        results = tuple(
+            _safe_query(
                 session,
                 market=market,
                 announcement_item=item,
@@ -78,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             for market in markets
             for item in items
-        ]
+        )
 
     captured_at = datetime.now(timezone.utc).isoformat()
     artifact = build_statement_availability_artifact(
@@ -102,12 +104,70 @@ def main(argv: list[str] | None = None) -> int:
         "mapping_path": str(mapping_path),
         "event_count": artifact["quality_summary"]["event_count"],
         "projection_count": artifact["quality_summary"]["projection_count"],
+        "successful_query_count": artifact["quality_summary"]["successful_query_count"],
+        "failed_query_count": artifact["quality_summary"]["failed_query_count"],
+        "status": (
+            "ready"
+            if artifact["quality_summary"]["failed_query_count"] == 0
+            else "degraded"
+            if artifact["quality_summary"]["successful_query_count"] > 0
+            else "unavailable"
+        ),
         "formal_oos_allowed": False,
         "formal_credit_authorized": False,
         "production_blend_alpha_bp": 0,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if artifact["quality_summary"]["successful_query_count"] > 0 else 3
+
+
+def _safe_query(
+    session: requests.Session,
+    *,
+    market: str,
+    announcement_item: str,
+    start_date: date,
+    end_date: date,
+    timeout_seconds: int,
+) -> MOPSQueryResult:
+    try:
+        return query_mops_ezsearch(
+            session,
+            market=market,
+            announcement_item=announcement_item,
+            start_date=start_date,
+            end_date=end_date,
+            timeout_seconds=timeout_seconds,
+        )
+    except (requests.RequestException, ValueError) as exc:
+        error_code = (
+            "network_timeout"
+            if isinstance(exc, requests.Timeout)
+            or "timeout" in type(exc).__name__.lower()
+            or "timed out" in str(exc).lower()
+            else "network_error"
+            if isinstance(exc, requests.RequestException)
+            else "invalid_response"
+        )
+        material = json.dumps(
+            {
+                "market": market,
+                "announcement_item": announcement_item,
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "error_code": error_code,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return MOPSQueryResult(
+            market=market,
+            announcement_item=announcement_item,
+            rows=(),
+            response_sha256=sha256(material.encode("utf-8")).hexdigest(),
+            source_status="error",
+            error_code=error_code,
+        )
 
 
 def _parse_choices(raw: str, allowed: set[str], label: str) -> tuple[str, ...]:
