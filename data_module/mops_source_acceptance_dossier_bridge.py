@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Any, Mapping
 
+from data_module.config import TWStockConfig
+from data_module.mops_numeric_pit_aggregator import (
+    DEFAULT_MINIMUM_COVERAGE_BP,
+    validate_mops_numeric_pit_aggregate_payload,
+)
 from data_module.p0_source_contract_registry import resolve_mops_numeric_pit_source_mapping
+from development_module.output_guard import resolve_development_output_dir
 from data_module.source_acceptance_governance import (
     SourceAcceptanceDiagnosis,
     SourceAcceptanceDossier,
@@ -55,7 +63,7 @@ def build_mops_readiness_package(
     aggregate_payload: Mapping[str, Any],
     *,
     license_evidence_id: str = "",
-    minimum_coverage_bp: int = 8000,
+    minimum_coverage_bp: int = DEFAULT_MINIMUM_COVERAGE_BP,
     owner_role: str = "data_engineering_lead",
     reviewer_role: str = "",
     decision_timestamp: str = "",
@@ -70,23 +78,28 @@ def build_mops_readiness_package(
     5. Even if programmatic evidence passes, max status is eligible_for_human_review (never auto-accepted).
     6. downstream_eligibility remains 'none'.
     """
-    art_src = str(aggregate_payload.get("artifact_source_id") or "mops.statement.publication")
-    num_src = str(aggregate_payload.get("numeric_source_id") or "mops.t163sb06.financial_ratio")
-    avail_src = str(aggregate_payload.get("availability_source_id") or "mops.document_listing.statement_publication")
+    validate_mops_numeric_pit_aggregate_payload(aggregate_payload)
+    if minimum_coverage_bp != DEFAULT_MINIMUM_COVERAGE_BP:
+        raise ValueError("minimum_coverage_bp is a fixed policy threshold of 8000 bp")
+    art_src = aggregate_payload.get("artifact_source_id")
+    num_src = aggregate_payload.get("numeric_source_id")
+    avail_src = aggregate_payload.get("availability_source_id")
+    if not all(isinstance(value, str) and value.strip() for value in (art_src, num_src, avail_src)):
+        raise ValueError("aggregate source identity fields are required")
 
     mapping = resolve_mops_numeric_pit_source_mapping(
-        artifact_source_id=art_src,
-        numeric_source_id=num_src,
-        availability_source_id=avail_src,
+        artifact_source_id=str(art_src),
+        numeric_source_id=str(num_src),
+        availability_source_id=str(avail_src),
     )
     if mapping.blockers or not mapping.governance_source_id:
         raise ValueError(f"aggregate artifact source identity mapping failed: {mapping.blockers}")
 
     p0_source_id = mapping.governance_source_id
 
-    num_rows = int(aggregate_payload.get("pit_eligible_row_count", 0))
-    den_rows = int(aggregate_payload.get("canonical_denominator", 0))
-    cov_bp = int(aggregate_payload.get("cumulative_coverage_bp", 0))
+    num_rows = aggregate_payload["pit_eligible_row_count"]
+    den_rows = aggregate_payload["canonical_denominator"]
+    cov_bp = aggregate_payload["cumulative_coverage_bp"]
 
     evidence_ids: list[str] = [
         f"pit:candidate_count:{aggregate_payload.get('candidate_count', 0)}",
@@ -96,7 +109,9 @@ def build_mops_readiness_package(
     if license_evidence_id.strip():
         evidence_ids.append(f"license:{license_evidence_id.strip()}")
 
-    license_status = "approved" if license_evidence_id.strip() else "requires_review"
+    # A supplied identifier is only a review reference.  Approval can only come
+    # from a separately validated applying decision revision.
+    license_status = "requires_review"
 
     dossier = SourceAcceptanceDossier(
         source_id=p0_source_id,
@@ -116,7 +131,7 @@ def build_mops_readiness_package(
         missing_policy="fail_closed_missing_data_policy",
         row_conservation_counts={
             "canonical_rows": den_rows,
-            "matching_rows": int(aggregate_payload.get("matching_decision_row_count", 0)),
+            "matching_rows": aggregate_payload["matching_decision_row_count"],
             "eligible_rows": num_rows,
         },
         quarantine_policy="quarantine_malformed_html_or_hash_mismatches",
@@ -168,16 +183,20 @@ def build_mops_readiness_package(
         all_diagnostics.append("requires_human_acceptance")
 
     unique_diag = tuple(sorted(set(all_diagnostics)))
-    pkg_status = "blocked" if "missing_license_evidence" in unique_diag or "coverage_below_minimum" in unique_diag else (
+    pkg_status = "blocked" if {
+        "missing_license_evidence",
+        "license_not_accepted",
+        "coverage_below_minimum",
+    }.intersection(unique_diag) else (
         "eligible_for_human_review" if not unique_diag or unique_diag == ("requires_human_acceptance",) else "blocked"
     )
 
     return MOPSReadinessPackage(
         source_id=p0_source_id,
         governance_source_id=p0_source_id,
-        artifact_source_id=art_src,
-        numeric_source_id=num_src,
-        availability_source_id=avail_src,
+        artifact_source_id=str(art_src),
+        numeric_source_id=str(num_src),
+        availability_source_id=str(avail_src),
         status=pkg_status,
         diagnostics=unique_diag,
         programmatic_evidence=tuple(prog_ev),
@@ -195,7 +214,7 @@ def export_mops_readiness_package(
     output_root: Path,
     run_id: str,
     license_evidence_id: str = "",
-    minimum_coverage_bp: int = 8000,
+    minimum_coverage_bp: int = DEFAULT_MINIMUM_COVERAGE_BP,
     owner_role: str = "data_engineering_lead",
     reviewer_role: str = "",
     decision_timestamp: str = "",
@@ -209,10 +228,27 @@ def export_mops_readiness_package(
         reviewer_role=reviewer_role,
         decision_timestamp=decision_timestamp,
     )
-    target_dir = (output_root / run_id).resolve()
-    target_dir.mkdir(parents=True, exist_ok=True)
-    out_json = target_dir / "readiness-package.json"
-    out_json.write_text(json.dumps(pkg.to_dict(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    out_tmpl = target_dir / "owner-review-template.md"
-    out_tmpl.write_text(pkg.owner_review_template, encoding="utf-8")
-    return out_json
+    config = TWStockConfig()
+    target_dir = resolve_development_output_dir(
+        output_root,
+        run_id,
+        data_root=Path(config.data_root),
+        formal_db=Path(config.db_file),
+    )
+    if target_dir.exists():
+        raise ValueError(f"output directory {target_dir} already exists")
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(tempfile.mkdtemp(prefix=f".{run_id}.staging-", dir=str(target_dir.parent)))
+    try:
+        out_json = staging_dir / "readiness-package.json"
+        out_json.write_text(
+            json.dumps(pkg.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        out_tmpl = staging_dir / "owner-review-template.md"
+        out_tmpl.write_text(pkg.owner_review_template, encoding="utf-8")
+        os.replace(staging_dir, target_dir)
+    except Exception:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
+    return target_dir / "readiness-package.json"

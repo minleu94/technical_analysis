@@ -1,4 +1,7 @@
 from pathlib import Path
+import json
+import shutil
+from hashlib import sha256
 import pytest
 
 from data_module.mops_numeric_pit_aggregator import (
@@ -89,3 +92,32 @@ def test_coverage_uses_integer_division(tmp_path: Path) -> None:
     expected_bp = (174 * 10000) // 179271
     assert out["cumulative_coverage_bp"] == expected_bp == 9
     assert isinstance(out["cumulative_coverage_bp"], int)
+
+
+def test_tampered_coverage_counts_fail_closed(tmp_path: Path) -> None:
+    copied = tmp_path / "tampered-candidate"
+    shutil.copytree(REAL_CANDIDATE_DIRS[0], copied)
+    candidate_path = copied / "numeric-pit-candidate.json"
+    payload = json.loads(candidate_path.read_text(encoding="utf-8"))
+    coverage = payload["pit_coverage_summary"]
+    coverage["canonical_dataset_row_count"] = 1
+    coverage["canonical_matching_decision_row_count"] = 2
+    coverage["canonical_pit_eligible_row_count"] = 2
+    coverage["canonical_pit_eligible_coverage_bp"] = 20000
+    candidate_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    manifest_path = copied / "run-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"]["candidate"] = f"sha256:{sha256(candidate_path.read_bytes()).hexdigest()}"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="coverage counts"):
+        validate_single_candidate_bundle(copied)
+
+
+def test_run_id_cannot_escape_output_root(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="run_id"):
+        build_mops_numeric_pit_aggregate(
+            candidate_dirs=[REAL_CANDIDATE_DIRS[0]],
+            output_root=tmp_path,
+            run_id="../escaped",
+        )

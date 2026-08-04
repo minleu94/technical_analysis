@@ -1015,6 +1015,14 @@ MOPS 公告時間 artifact 只證明 availability，不能自行衍生 ROE、毛
 
 `--run-id` 不可重用；工具會在同一目錄保存 raw HTML、numeric source、availability source、candidate 與 run manifest，並在發布 candidate 前重新執行 validator。MOPS listing 若顯示更(補)正，不會猜測 revision，而是停止要求另行建立具比較基準的 correction lineage。此工具可計算 canonical dataset 的 PIT-eligible coverage；coverage 有限時只代表 source artifact 已取得，不能當作 feature 已 materialize、ML 可訓練、source accepted 或 Formal evidence。
 
+#### MOPS numeric PIT aggregate、bounded resume 與 materialization gate
+
+多份 candidate 只能在 TEMP／development root 內以 `scripts/aggregate_mops_numeric_pit_candidates.py` 聚合；aggregate validator 會重新核對四層 source identity、canonical/candidate/manifest SHA-256、candidate identity 唯一性、`0 <= eligible <= matching <= denominator` 與固定 `8,000 bp` coverage policy。`--minimum-coverage-bp` 不得用來降低門檻，輸出採 staging 後 atomic rename，不能寫入正式 `DATA_ROOT`、SQLite 或 Formal DB。
+
+`scripts/acquire_mops_numeric_pit_batch.py` 是前景 bounded 工具，`--max-items` 必填；既有 `(stock_code, period)` 只有在 batch manifest 明確提供且完全相符的 `candidate_sha256` 時才可 skip。缺 hash、hash 衝突、既有 bundle 損壞或 output path 不在 TEMP root 時，會在 fetch 前 fail-closed；不會自動建立 revision，也不啟用 scheduler、background job 或 retry loop。
+
+`check_mops_materialization_readiness` 與 `materialize_development_feature_overlay` 只接受有效 aggregate、具名 Source Owner／Reviewer dossier，以及 append-only decision registry 的 `accepted`／`limited` applying revision；revision 的 source、evidence IDs、decision timestamp、rollback reference、allowed use case 與 dossier 必須逐項相符。沒有 registry revision、coverage 不足、license 未核准或 lineage 不一致時不得 materialize。即使 gate 通過，輸出仍固定 `research_only=true`、`formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`downstream_eligibility=none`，不得進入 scoring、Recommendation、Portfolio、Exit、training 或正式資料庫。
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\fetch_mops_statement_availability.py `
   --start-date 2026-07-27 `

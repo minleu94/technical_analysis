@@ -1,4 +1,6 @@
 from pathlib import Path
+import pytest
+
 from data_module.mops_numeric_pit_aggregator import build_mops_numeric_pit_aggregate
 from data_module.mops_source_acceptance_dossier_bridge import build_mops_readiness_package
 
@@ -34,16 +36,25 @@ def test_dossier_bridge_programmatic_complete_never_auto_accepted(tmp_path: Path
     pkg = build_mops_readiness_package(
         agg,
         license_evidence_id="artifact:license:mops:v1",
-        minimum_coverage_bp=5,  # lower threshold so coverage passes
         owner_role="data_engineering_lead",
         reviewer_role="qa_lead",
         decision_timestamp="2026-08-04T00:00:00Z",
     )
 
     # Even when programmatic & license & reviewer present, max status is eligible_for_human_review, NEVER accepted!
-    assert pkg.status in {"eligible_for_human_review", "requires_human_acceptance"}
+    assert pkg.status == "blocked"
     assert pkg.dossier.downstream_eligibility == "none"
     assert not pkg.to_dict()["formal_acceptance_applied"]
+
+
+def test_dossier_bridge_rejects_threshold_override(tmp_path: Path) -> None:
+    agg = build_mops_numeric_pit_aggregate(
+        candidate_dirs=REAL_CANDIDATE_DIRS,
+        output_root=tmp_path,
+        run_id="test-dossier-agg-threshold",
+    )
+    with pytest.raises(ValueError, match="fixed policy threshold"):
+        build_mops_readiness_package(agg, minimum_coverage_bp=5)
 
 
 def test_dossier_bridge_prohibits_formal_production_use_cases(tmp_path: Path) -> None:

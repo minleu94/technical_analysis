@@ -30,7 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from data_module.config import TWStockConfig
-from development_module.output_guard import validate_development_output_root
+from development_module.output_guard import resolve_development_output_dir
 from scripts.validate_mops_quarterly_artifact import validate_artifact
 
 
@@ -175,12 +175,12 @@ def build_candidate(
         raise ValueError("timeout_seconds must be positive")
 
     config = TWStockConfig()
-    safe_root = validate_development_output_root(
+    target = resolve_development_output_dir(
         output_root,
+        run_id,
         data_root=Path(config.data_root),
         formal_db=Path(config.db_file),
     )
-    target = (safe_root / run_id).resolve()
     if target.exists():
         raise ValueError("run output already exists; immutable candidates must use a new run_id")
     for path in (canonical_manifest, canonical_dataset):
@@ -188,6 +188,7 @@ def build_candidate(
             raise ValueError(f"canonical input does not exist: {path}")
 
     captured_at = datetime.now(timezone.utc).isoformat()
+    safe_root = target.parent
     safe_root.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{run_id}.staging-", dir=safe_root))
     try:

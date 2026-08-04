@@ -166,3 +166,11 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
   - **Authority / License Evidence**：`PENDING`（尚需具名 Source Owner、Reviewer 與合規授權決議）
   - **Formal Time Evidence**：`PENDING`（`formal_snapshot_count=0`、`matured_outcomes=0`、`formal_credit_authorized=false`）
 - **安全邊界**：維持 `formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0`、`Rule-only` 治理與 `broker=false`。無正式 DB / Candidate DB / Formal DB 變更、無背景排程、無 ML training 或 promotion。
+
+## 11. 2026-08-04 DEV-79 獨立 fail-closed 審查與修正
+
+- **審查對象**：`GEMINI-MOPS-NUMERIC-PIT-ENGINEERING-BLOCKER-CLOSURE-V1` 的 commit `71b6b6dc3ab2bf4542bcffc58c3cf3ccae46035d`；本節是 append-only 審查修正，不改寫第 10 節歷史交接紀錄。
+- **發現並修正**：原實作可接受呼叫端偽造 aggregate coverage、在沒有 applying decision registry revision 時進入 materialization、resume 前先進行 builder/fetch，且 run_id／candidate output containment 與多檔 publication 邊界不足；另補上 aggregate/candidate hash identity、coverage conservation、overlay latest-applicable lineage 與原子 staging 發布。
+- **修正結果**：`check_mops_materialization_readiness` 現要求有效 aggregate、具名 dossier 與相符的 append-only `accepted`/`limited` applying revision（evidence、timestamp、rollback、use case 全部一致）；`acquire_mops_numeric_pit_batch` 缺少預期 candidate SHA-256 或 identity 衝突時在 fetch 前 fail；aggregate/readiness package 只可在 TEMP development root 內原子發布。
+- **驗證**：MOPS numeric PIT focused suite `21 passed`；scoped mypy `Success: no issues found in 10 source files`；changed Python `py_compile` 通過。此次沒有 source acceptance、formal snapshot、outcome、credit、正式 DB、training、promotion 或 production blend。
+- **當前狀態**：P0/P13 source acceptance 仍為 owner/reviewer 待決；目前 4 份 candidate aggregate 為 `174 / 179,271 = 9 bp`，距離固定 8,000 bp 門檻差 `7,991 bp`，`downstream_eligibility=none`。
