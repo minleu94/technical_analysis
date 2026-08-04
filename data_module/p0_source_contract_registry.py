@@ -22,6 +22,11 @@ P0_SOURCE_IDS = (
     "pit.quarterly_financials",
 )
 
+P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION = "p0-candidate-source-alignment.v1"
+_P0_CANDIDATE_SOURCE_ALIGNMENTS = {
+    "mops.statement.publication": "pit.quarterly_financials",
+}
+
 ACCESS_BOUNDARY = {
     "production_ingestion_allowed": False,
     "scoring_allowed": False,
@@ -37,6 +42,16 @@ class LegacySourceIdAlignment:
 
     legacy_source_id: str
     source_id: str | None
+    blockers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CandidateSourceIdAlignment:
+    """Identity-only candidate mapping; it cannot grant source acceptance."""
+
+    candidate_source_id: str
+    source_id: str | None
+    mapping_version: str
     blockers: tuple[str, ...]
 
 
@@ -118,6 +133,24 @@ def map_legacy_source_id(legacy_source_id: str) -> LegacySourceIdAlignment:
     if legacy_source_id in P0_SOURCE_IDS:
         return LegacySourceIdAlignment(legacy_source_id, legacy_source_id, ())
     return LegacySourceIdAlignment(legacy_source_id, None, ("unmapped_legacy_id",))
+
+
+def map_candidate_source_id(candidate_source_id: str) -> CandidateSourceIdAlignment:
+    """Map an explicitly governed candidate identity to one P0 contract."""
+    source_id = _P0_CANDIDATE_SOURCE_ALIGNMENTS.get(candidate_source_id)
+    if source_id is None:
+        return CandidateSourceIdAlignment(
+            candidate_source_id=candidate_source_id,
+            source_id=None,
+            mapping_version=P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION,
+            blockers=("unmapped_candidate_source_id",),
+        )
+    return CandidateSourceIdAlignment(
+        candidate_source_id=candidate_source_id,
+        source_id=source_id,
+        mapping_version=P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION,
+        blockers=(),
+    )
 
 
 def _contract(source_id: str) -> P0SourceContract:

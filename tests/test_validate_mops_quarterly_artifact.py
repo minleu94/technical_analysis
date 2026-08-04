@@ -9,6 +9,9 @@ def test_mops_artifact_requires_announcement_and_revision_parent() -> None:
     payload = {"source_id": "mops.statement.publication", "source_version": "mops-v1", "captured_at": "2026-07-18T00:00:00Z", "rows": [{"stock_code": "2330", "statement_type": "income_statement", "statement_scope": "consolidated", "period": "2026-Q1", "period_end": "2026-03-31", "announcement_date": "2026-05-10", "available_date": "2026-05-10", "revision": 1, "content_hash": "a" * 64}]}
     rows = validate_artifact(payload)
     assert rows[0]["evidence_tier"] == "research_candidate"
+    assert rows[0]["source_id"] == "pit.quarterly_financials"
+    assert rows[0]["artifact_source_id"] == "mops.statement.publication"
+    assert rows[0]["source_contract_mapping_version"] == "p0-candidate-source-alignment.v1"
 
 
 def test_numeric_pit_claim_requires_separate_raw_and_availability_lineage() -> None:
@@ -67,3 +70,5 @@ def test_numeric_pit_claim_with_immutable_lineage_is_research_candidate() -> Non
 
     rows = validate_artifact(payload)
     assert rows[0]["evidence_tier"] == "research_candidate"
+    assert rows[0]["source_id"] == "pit.quarterly_financials"
+    assert rows[0]["artifact_source_id"] == "mops.statement.publication"

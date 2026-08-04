@@ -7,7 +7,14 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Mapping
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from data_module.p0_source_contract_registry import map_candidate_source_id
 
 
 REQUIRED_ARTIFACT_FIELDS = {"source_id", "source_version", "captured_at", "rows"}
@@ -110,6 +117,9 @@ def validate_artifact(payload: object) -> list[dict[str, object]]:
         raise ValueError("mops artifact missing required provenance fields")
     if payload["source_id"] != "mops.statement.publication":
         raise ValueError("unexpected mops source_id")
+    source_alignment = map_candidate_source_id(str(payload["source_id"]))
+    if source_alignment.blockers or source_alignment.source_id != "pit.quarterly_financials":
+        raise ValueError("mops artifact source_id lacks a governed P0 contract mapping")
     rows = payload["rows"]
     if not isinstance(rows, list):
         raise ValueError("mops artifact rows must be a list")
@@ -123,7 +133,17 @@ def validate_artifact(payload: object) -> list[dict[str, object]]:
         revision = int(str(row["revision"]))
         if revision < 1 or (revision > 1 and not str(row.get("parent_revision") or "").strip()):
             raise ValueError("mops artifact revision chain invalid")
-        normalized.append({**row, "source_id": payload["source_id"], "source_version": payload["source_version"], "source_hash": artifact_hash, "evidence_tier": "research_candidate"})
+        normalized.append(
+            {
+                **row,
+                "source_id": source_alignment.source_id,
+                "artifact_source_id": source_alignment.candidate_source_id,
+                "source_contract_mapping_version": source_alignment.mapping_version,
+                "source_version": payload["source_version"],
+                "source_hash": artifact_hash,
+                "evidence_tier": "research_candidate",
+            }
+        )
     return normalized
 
 

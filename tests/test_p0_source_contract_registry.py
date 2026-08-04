@@ -1,6 +1,8 @@
 from data_module.p0_source_contract_registry import (
+    P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION,
     P0_SOURCE_IDS,
     build_p0_source_contract_registry,
+    map_candidate_source_id,
     map_legacy_source_id,
 )
 
@@ -52,3 +54,20 @@ def test_legacy_id_alignment_never_rewrites_decisions_and_reports_unmapped() -> 
     assert aligned.blockers == ()
     assert unmapped.source_id is None
     assert unmapped.blockers == ("unmapped_legacy_id",)
+
+
+def test_mops_candidate_identity_maps_only_to_quarterly_financials_contract() -> None:
+    aligned = map_candidate_source_id("mops.statement.publication")
+
+    assert aligned.candidate_source_id == "mops.statement.publication"
+    assert aligned.source_id == "pit.quarterly_financials"
+    assert aligned.mapping_version == P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION
+    assert aligned.blockers == ()
+
+
+def test_unknown_candidate_identity_fails_closed() -> None:
+    alignment = map_candidate_source_id("mops.unreviewed.numeric_source")
+
+    assert alignment.source_id is None
+    assert alignment.mapping_version == P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION
+    assert alignment.blockers == ("unmapped_candidate_source_id",)
