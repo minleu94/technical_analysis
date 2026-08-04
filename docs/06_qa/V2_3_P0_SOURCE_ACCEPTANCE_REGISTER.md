@@ -149,3 +149,20 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
 - **Owner packet**：既有五群組 packet 內新增五個逐 source machine recommendation；目前全部為 `deferred`、`ready_for_owner_review=false`，仍需 machine evidence、legal/license 與具名 owner 決議。這不是 accepted／limited revision。
 - **富邦邊界**：可作 shadow corroboration 的來源會顯示 `fubon_shadow_usable=true`；`fubon_formal_credit_allowed=false`、`production_blend_alpha_bp=0` 固定不變，富邦不得補造 TWSE 官方公告時間。
 - **安全**：`formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、Rule-only formal path；未寫 DB、未捕捉 Formal snapshot、未執行 scheduler、training、promotion、unblind 或 production blend。
+
+## 10. 2026-08-04 MOPS Numeric PIT 工程 Blocker 閉環紀錄（GEMINI-MOPS-NUMERIC-PIT-ENGINEERING-BLOCKER-CLOSURE-V1）
+
+- **任務 ID**：`GEMINI-MOPS-NUMERIC-PIT-ENGINEERING-BLOCKER-CLOSURE-V1`
+- **執行日期**：2026-08-04
+- **完成工程範圍**：
+  1. **Source Identity Mapping Contract**：實作程式化、fail-closed 的 `resolve_mops_numeric_pit_source_mapping`。嚴格區分與保存 `artifact_source_id` (`mops.statement.publication`)、`numeric_source_id` (`mops.t163sb06.financial_ratio`)、`availability_source_id` (`mops.document_listing.statement_publication`) 與 `governance_source_id` (`pit.quarterly_financials`) 四者，禁止直接改字串或把 `mops.ezsearch.statement_publication` 混為 numeric 來源；現有 4 份 v1 candidates 經 mapping 完全向後相容。
+  2. **Multi-Candidate Aggregator & Validator**：完成確定性研究用 `build_mops_numeric_pit_aggregate` 模組與 CLI (`scripts/aggregate_mops_numeric_pit_candidates.py`)。重驗 4 份既有 immutable candidate SHA-256，計算得 candidate_count=`4`、unique identities=`4`、matching decision rows=`470`、eligible rows=`174`、canonical denominator=`179,271`、cumulative coverage=`9 bp`、coverage gap=`7,991 bp`（對比 8,000 bp 預設門檻）。
+  3. **P0 Source Acceptance Readiness & Dossier Bridge**：完成 `build_mops_readiness_package` 模組，自動經 mapping contract 導出 `source_id = pit.quarterly_financials` 並產生 non-applying 診斷與 owner review template。明確劃分 programmatic evidence、authority/license evidence 與 formal time evidence；在缺 license evidence 時固定為 `blocked`，缺 owner/reviewer 決議時固定為 `requires_human_acceptance`，`downstream_eligibility` 固定保持為 `none`。
+  4. **Bounded Foreground Batch Acquisition Tooling**：完成前景受控 batch 工具 `scripts/acquire_mops_numeric_pit_batch.py`，強制 `--max-items` 邊界、sleep / rate limit 與 retry，支援依 SHA-256 hash 無損 resume / skip 與 conflict 診斷；禁止無界迴圈、背景 process 或 scheduler。
+  5. **Materialization Readiness Gate**：完成確定性預flight檢查 `check_mops_materialization_readiness` 與 TEMP-only 特徵 overlay 產出器 `materialize_development_feature_overlay`。在當前真實 4 份 candidate 條件下，明確拒絕 feature materialization（`materialization_ready = False`），輸出完整 active blockers（`coverage_below_minimum`、`missing_license_evidence`、`missing_owner_reviewer_decision`、`unauthorized_use_case`）。
+- **關鍵區分 (Four-way Partitioning)**：
+  - **Engineering Readiness**：`CLOSED` / `COMPLETE`（工程模組、驗證器、CLI 工具、Gate 與單元測試已全數完成）
+  - **Coverage Evidence**：`PENDING`（目前 `9 bp` / 門檻 `8,000 bp`，缺口 `7,991 bp`）
+  - **Authority / License Evidence**：`PENDING`（尚需具名 Source Owner、Reviewer 與合規授權決議）
+  - **Formal Time Evidence**：`PENDING`（`formal_snapshot_count=0`、`matured_outcomes=0`、`formal_credit_authorized=false`）
+- **安全邊界**：維持 `formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0`、`Rule-only` 治理與 `broker=false`。無正式 DB / Candidate DB / Formal DB 變更、無背景排程、無 ML training 或 promotion。

@@ -1,6 +1,6 @@
 # Month 5 Fundamental Source Inventory
 
-> **最後更新**：2026-06-16  
+> **最後更新**：2026-06-16
 > **範圍**：Month 5 Fundamental Layer preflight 的資料來源盤點。本文只描述資料來源與可用性，不宣告任何基本面因子已可用於推薦、回測或 Daily Decision Desk。
 
 ## 1. 結論
@@ -450,3 +450,4 @@ CLI 範例：
 - 2026-06-16：新增 `scripts/inspect_fundamental_factors.py` 唯讀檢視 CLI，確認正式 `fundamental_monthly_revenues` 已可餵入 Revenue Factor Pack；目前 2026-05 單月資料只足以產生 3M trend / new high，YoY / MoM 仍回 baseline missing diagnostics，且未接 `ScoringEngine`。
 - 2026-06-16：新增 retroactive baseline mapping workflow，允許 MOPS snapshot 歷史月營收以 `manual.retroactive_baseline_mapping` 進入候選 mapping；此來源只可供導入日後決策使用，quality 為 `degraded`，不得當作官方公告日或導入日前回測資料。
 - 2026-06-16：SQLite Inspector 白名單新增 `fundamental_monthly_revenues`、`fundamental_statement_items`、`fundamental_valuation_metrics`，並支援英文欄位表格的 `stock_code` 與 `as_of_date` 篩選 / 排序。
+- 2026-08-04：`GEMINI-MOPS-NUMERIC-PIT-ENGINEERING-BLOCKER-CLOSURE-V1` 完成 MOPS numeric PIT 治理與工程 blocker 閉環：建立程式化 Source Identity Mapping Contract (`resolve_mops_numeric_pit_source_mapping`)、確定性 Multi-Candidate Aggregator (`build_mops_numeric_pit_aggregate`)、P0 Dossier Bridge (`build_mops_readiness_package`)、前景受控 Batch 工具 (`acquire_mops_numeric_pit_batch`) 與 Materialization Readiness Gate (`check_mops_materialization_readiness`)。當前 4 份既有 2025-Q1 candidates 經確定性聚合為 9 bp coverage、7,991 bp coverage gap，Materialization 於當前條件下明確拒絕（`materialization_ready = False`），不改寫正式 SQLite / DB 或改發正式 `accepted` 狀態。

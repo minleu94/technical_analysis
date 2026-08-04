@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from data_module.p0_source_contract_registry import map_candidate_source_id
+from data_module.p0_source_contract_registry import map_candidate_source_id, resolve_mops_numeric_pit_source_mapping
 
 
 REQUIRED_ARTIFACT_FIELDS = {"source_id", "source_version", "captured_at", "rows"}
@@ -117,12 +117,26 @@ def validate_artifact(payload: object) -> list[dict[str, object]]:
         raise ValueError("mops artifact missing required provenance fields")
     if payload["source_id"] != "mops.statement.publication":
         raise ValueError("unexpected mops source_id")
-    source_alignment = map_candidate_source_id(str(payload["source_id"]))
-    if source_alignment.blockers or source_alignment.source_id != "pit.quarterly_financials":
-        raise ValueError("mops artifact source_id lacks a governed P0 contract mapping")
+
     rows = payload["rows"]
     if not isinstance(rows, list):
         raise ValueError("mops artifact rows must be a list")
+
+    numeric_src_id = "mops.t163sb06.financial_ratio"
+    avail_src_id = "mops.document_listing.statement_publication"
+    lineage = payload.get("lineage")
+    if isinstance(lineage, Mapping) and isinstance(lineage.get("numeric_statement_source"), Mapping):
+        numeric_src_id = str(lineage["numeric_statement_source"].get("source_id") or numeric_src_id)
+
+    mapping = resolve_mops_numeric_pit_source_mapping(
+        artifact_source_id=str(payload["source_id"]),
+        numeric_source_id=numeric_src_id,
+        availability_source_id=avail_src_id,
+    )
+    if mapping.blockers or mapping.governance_source_id != "pit.quarterly_financials":
+        raise ValueError(f"mops artifact source_id lacks a governed P0 contract mapping: {mapping.blockers}")
+
+    source_alignment = map_candidate_source_id(str(payload["source_id"]))
     if _numeric_claimed(payload, rows):
         _validate_numeric_lineage(payload, rows)
     artifact_hash = sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -136,15 +150,18 @@ def validate_artifact(payload: object) -> list[dict[str, object]]:
         normalized.append(
             {
                 **row,
-                "source_id": source_alignment.source_id,
-                "artifact_source_id": source_alignment.candidate_source_id,
-                "source_contract_mapping_version": source_alignment.mapping_version,
+                "source_id": mapping.governance_source_id,
+                "artifact_source_id": mapping.artifact_source_id,
+                "numeric_source_id": mapping.numeric_source_id,
+                "availability_source_id": mapping.availability_source_id,
+                "source_contract_mapping_version": mapping.mapping_version,
                 "source_version": payload["source_version"],
                 "source_hash": artifact_hash,
                 "evidence_tier": "research_candidate",
             }
         )
     return normalized
+
 
 
 def main(argv: list[str] | None = None) -> int:

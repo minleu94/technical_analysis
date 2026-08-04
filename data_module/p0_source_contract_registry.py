@@ -53,6 +53,37 @@ class CandidateSourceIdAlignment:
     source_id: str | None
     mapping_version: str
     blockers: tuple[str, ...]
+    numeric_source_id: str | None = None
+    availability_source_id: str | None = None
+
+
+@dataclass(frozen=True)
+class MOPSNumericPITSourceIdentityMapping:
+    """Formal fail-closed governance mapping contract for MOPS numeric PIT candidates.
+
+    Preserves all four distinct identities:
+    1. artifact_source_id (e.g. mops.statement.publication)
+    2. numeric_source_id (e.g. mops.t163sb06.financial_ratio)
+    3. availability_source_id (e.g. mops.document_listing.statement_publication)
+    4. governance_source_id (e.g. pit.quarterly_financials)
+    """
+
+    artifact_source_id: str
+    numeric_source_id: str
+    availability_source_id: str
+    governance_source_id: str | None
+    mapping_version: str
+    blockers: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "artifact_source_id": self.artifact_source_id,
+            "numeric_source_id": self.numeric_source_id,
+            "availability_source_id": self.availability_source_id,
+            "governance_source_id": self.governance_source_id,
+            "mapping_version": self.mapping_version,
+            "blockers": list(self.blockers),
+        }
 
 
 @dataclass(frozen=True)
@@ -145,12 +176,61 @@ def map_candidate_source_id(candidate_source_id: str) -> CandidateSourceIdAlignm
             mapping_version=P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION,
             blockers=("unmapped_candidate_source_id",),
         )
+    numeric_source_id = "mops.t163sb06.financial_ratio" if candidate_source_id == "mops.statement.publication" else None
+    availability_source_id = "mops.document_listing.statement_publication" if candidate_source_id == "mops.statement.publication" else None
     return CandidateSourceIdAlignment(
         candidate_source_id=candidate_source_id,
         source_id=source_id,
         mapping_version=P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION,
         blockers=(),
+        numeric_source_id=numeric_source_id,
+        availability_source_id=availability_source_id,
     )
+
+
+def resolve_mops_numeric_pit_source_mapping(
+    *,
+    artifact_source_id: str,
+    numeric_source_id: str,
+    availability_source_id: str,
+) -> MOPSNumericPITSourceIdentityMapping:
+    """Validate and map candidate source identities to the governed P0 source contract.
+
+    Fail-closed rules:
+    - Blank, unknown, or mismatched source identities generate explicit blockers.
+    - mops.ezsearch.statement_publication is an availability lane, NOT numeric source acceptance.
+    """
+    blockers: list[str] = []
+    art_id = artifact_source_id.strip()
+    num_id = numeric_source_id.strip()
+    avail_id = availability_source_id.strip()
+
+    if not art_id or not num_id or not avail_id:
+        blockers.append("missing_source_identity")
+
+    if art_id == "mops.ezsearch.statement_publication" or num_id == "mops.ezsearch.statement_publication":
+        blockers.append("availability_lane_cannot_be_numeric_source")
+
+    if art_id != "mops.statement.publication":
+        blockers.append("unmapped_candidate_artifact_source_id")
+
+    if num_id not in {"mops.t163sb06.financial_ratio", "mops.financial_statement.raw"}:
+        blockers.append("unmapped_numeric_source_id")
+
+    if avail_id not in {"mops.document_listing.statement_publication", "mops.t57sb01.statement_publication"}:
+        blockers.append("unmapped_availability_source_id")
+
+    governance_source_id = "pit.quarterly_financials" if not blockers else None
+
+    return MOPSNumericPITSourceIdentityMapping(
+        artifact_source_id=artifact_source_id,
+        numeric_source_id=numeric_source_id,
+        availability_source_id=availability_source_id,
+        governance_source_id=governance_source_id,
+        mapping_version=P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION,
+        blockers=tuple(sorted(set(blockers))),
+    )
+
 
 
 def _contract(source_id: str) -> P0SourceContract:
