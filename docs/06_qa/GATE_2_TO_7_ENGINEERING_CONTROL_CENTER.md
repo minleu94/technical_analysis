@@ -8,12 +8,12 @@
 
 | Clock | 今日狀態 | 可引用證據 | 缺失／degraded／failure | 下一步 |
 |---|---|---|---|---|
-| Development | `DEV-82-mops-numeric-pit-bounded-coverage-expansion-20260805` | DEV-81 的 18 個候選保持有效；本次前景 batch 嘗試 10 個 2025-Q1 上市候選，7 個取得並通過 immutable raw/candidate 驗證；批次 runner 在輸出 1303、1310、1314 的細項 diagnostics 前逾時，三者未產生候選；累計 `candidate_count=25`、`eligible_rows=1,140`、`denominator=179,271`、`coverage=63 bp`、`gap=7,937 bp`；aggregate hash=`sha256:cb4663e2911137d4c718152e1c8cfe48523045e19c89a99680955cd2181adb26` | 7 個新增候選只在 TEMP；1303、1310、1314 屬本批 capture failure，未產生可用候選；coverage 仍遠低於固定 8,000 bp，且 license、quality/PIT、具名 reviewer 與 applying registry revision 仍缺；`downstream_eligibility=none`、`formal_acceptance_applied=false`、`materialization_ready=false` | 保留 runner timeout 與三個未產生候選的 diagnostics，不重跑未變輸入、不補值、不 materialize；下一批只有在新的官方 artifact／可引用細項 failure evidence 存在時才執行，仍不得寫正式 DB、feature、fit、training 或 promotion |
+| Development | `DEV-83-mops-ezsearch-availability-cross-source-capture-20260805` | DEV-82 的 25 個候選保持有效；對 1303、1310、1314 的受治理 MOPS EZSearch availability sidecar 執行 4 個官方 F26–F29 queries（2025-04-20..2025-05-20），取得 0 events／0 projections，4/4 responses 均 `invalid_response`；既有 aggregate 維持 `candidate_count=25`、`eligible_rows=1,140`、`denominator=179,271`、`coverage=63 bp`、`gap=7,937 bp`；aggregate hash=`sha256:cb4663e2911137d4c718152e1c8cfe48523045e19c89a99680955cd2181adb26` | EZSearch sidecar artifact 只在 TEMP，沒有可連結 1303／1310／1314 的 announcement row；t57sb01 同樣回 502，numeric PIT candidate 不增加；coverage 仍遠低於固定 8,000 bp，且 license、quality/PIT、具名 reviewer 與 applying registry revision 仍缺；`downstream_eligibility=none`、`formal_acceptance_applied=false`、`materialization_ready=false` | 保留 4 個 EZSearch `invalid_response` hashes 與 t57sb01 502 diagnostics；不把 0 rows 當作缺失值、不把 sidecar failure 轉成 availability、不 materialize；下一批只有在官方 endpoint 回傳可驗證 JSON／HTML 或新 artifact 存在時才執行，仍不得寫正式 DB、feature、fit、training 或 promotion |
 | Formal evidence | `rule_only_20260805_snapshot_missing` | `holdout_id=formal-rule-only-20260805-r1` 與 Rule-only source whitelist 仍有效；該 lane 尚無可引用的 decision-time `manual_observed` artifact | 本次 snapshot count=`0`；outcome revision count=`0`；matured denominator/formal credit/consumption increment=`0`；missing=`decision-time Rule-only manual_observed artifact`；degraded/capture failure=`no genuine observed artifact supplied`。固定 timestamp、source hash 或 score 組裝的 TEMP JSON 不計入 Formal evidence | 等待下一個有 owner 決議且 registry 尚未 consumption 的真實 decision-time artifact；不得回填、重綁或將同日 invocation 換算 elapsed day／credit |
 
-截至本次 **2026-08-04** projection refresh，`DEV-82-mops-numeric-pit-bounded-coverage-expansion-20260805` 完成一個可獨立驗證的 research-only 回補增量；DEV-79 至 DEV-81 的工程安全約束仍全部適用：
-1. **Bounded acquisition** 前景取得 7/10 個 2025-Q1 MOPS 數值／公告時間候選；1303、1310、1314 在 runner timeout 前未產生 immutable bundle，細項 failure reason 未被捕捉，不以猜測、重試或補值掩蓋。
-2. **Aggregate coverage** 25 個 immutable candidates 經 validator 聚合為 1,140 個 PIT-eligible rows、63 bp coverage；固定 8,000 bp 門檻仍未達成，未建立 feature materialization。
+截至本次 **2026-08-04** projection refresh，`DEV-83-mops-ezsearch-availability-cross-source-capture-20260805` 完成一個可獨立驗證的 research-only availability diagnostics 增量；DEV-79 至 DEV-82 的工程安全約束仍全部適用：
+1. **Cross-source availability probe** 對 2025-Q1 1303、1310、1314 執行 MOPS EZSearch F26–F29 四項 queries；4/4 回應為 `invalid_response`、event/projection 均為 0，沒有把 0 rows 當成可用或缺值填補。
+2. **Aggregate coverage unchanged** 既有 25 個 immutable candidates 維持 1,140 個 PIT-eligible rows、63 bp coverage；固定 8,000 bp 門檻仍未達成，未建立 feature materialization。
 3. **Research-only boundary** 新增 raw/source/candidate/run manifest/aggregate 均位於 TEMP，`formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`downstream_eligibility=none`。
 4. **No applying acceptance** Owner bounded acquisition authorization 不轉換成 source acceptance；license、quality/PIT、coverage、具名 reviewer 與 registry applying revision 仍待補齊。
 5. **Aggregate contract** 強制 source identity、canonical hash、candidate hash、coverage count conservation 與固定 8,000 bp policy；不接受呼叫端自報 coverage。
@@ -21,6 +21,7 @@
 7. **TEMP containment** 驗證 run_id 與 candidate output 皆在 development root，aggregate/readiness package 以 staging + atomic rename 發布。
 8. **Foreground resume** 僅在既有 candidate hash 與 manifest 預期 hash 完全相同時 skip；缺 hash 或衝突均在 fetch 前 fail，revision 另行處理。
 9. **Overlay lineage** 只接受 aggregate 已列出的 candidate hash，並按 decision date 選取最新適用 available date；formal／production flag 固定關閉。
+10. **Availability separation** `mops.ezsearch.statement_publication` 只作受治理 availability sidecar；本次沒有成功 row，不能替代 numeric source、不能替代 t57 listing lineage，也不能授予 source acceptance。
 
 以上工程 hardening 不等於 coverage 達標、不等於來源方授權／License 核准、更不等於 Formal credit。Owner 已授權 bounded research acquisition，但 P0/P13 的逐來源 applying source acceptance 仍等待可引用 license、quality/PIT、coverage、rollback 與具名 reviewer evidence；Formal lane 仍缺真實 decision-time Rule-only `manual_observed` artifact，本次 snapshot、elapsed formal day、outcome revision、matured denominator、formal credit 與 consumption increments 均為 0。
 
