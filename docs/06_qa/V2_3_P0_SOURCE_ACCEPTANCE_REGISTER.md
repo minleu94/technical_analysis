@@ -174,3 +174,13 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
 - **修正結果**：`check_mops_materialization_readiness` 現要求有效 aggregate、具名 dossier 與相符的 append-only `accepted`/`limited` applying revision（evidence、timestamp、rollback、use case 全部一致）；`acquire_mops_numeric_pit_batch` 缺少預期 candidate SHA-256 或 identity 衝突時在 fetch 前 fail；aggregate/readiness package 只可在 TEMP development root 內原子發布。
 - **驗證**：MOPS numeric PIT focused suite `21 passed`；scoped mypy `Success: no issues found in 10 source files`；changed Python `py_compile` 通過。此次沒有 source acceptance、formal snapshot、outcome、credit、正式 DB、training、promotion 或 production blend。
 - **當前狀態**：P0/P13 source acceptance 仍為 owner/reviewer 待決；目前 4 份 candidate aggregate 為 `174 / 179,271 = 9 bp`，距離固定 8,000 bp 門檻差 `7,991 bp`，`downstream_eligibility=none`。
+
+## 12. 2026-08-05 Owner bounded research acquisition 授權（append-only）
+
+- **Owner**：`archi`。
+- **決議 ID**：`owner:p0-p13.research-acquisition:20260805-r1`。
+- **決議內容**：P0/P13 全部 13 個 source lane 均可在「官方 endpoint／artifact 實際可取得」的前提下，進行前景 bounded、唯讀、TEMP／research-only acquisition 與保存；不得再散布、不得寫正式 DB、不得進入 Scoring／Advice／Portfolio／Exit／scheduler／交易或 Formal evidence。這是 Owner 的研究使用範圍授權，不是來源方條款、獨立 reviewer 或 source acceptance 的替代品。
+- **不可取得資料**：不得補造、回填或以公告時間推導不存在的數值；缺數值的列必須 quarantine／排除，coverage 分母與 diagnostics 照實保留。
+- **分離 lineage**：公告／available-date source 與 numeric source 可以不同。`mops.ezsearch.statement_publication` 僅作 F26–F29 秒級公告／availability sidecar；numeric value 可來自另一個可核驗 source，但必須有自己的 `source_id`、版本、raw／row hash、PIT／available-date、quality、license、revision 與 rollback evidence。EZSearch 不得被改標成 numeric source；現行 MOPS numeric contract 的 `t57sb01` listing／document-listing lineage 仍須逐候選保存。
+- **決議狀態**：`owner_intent=approved_bounded_research_acquisition`；13 個來源的 `human_decision` 仍維持 `requires_human_acceptance`，直到逐來源具名 reviewer、license／quality／PIT／coverage／rollback evidence 完成並由 append-only registry 產生相符的 `limited`／`accepted` applying revision；`downstream_eligibility=none`。
+- **安全與 Formal clock**：`formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0`、Rule-only formal path；本決議不增加 observed snapshot、elapsed day、outcome、matured denominator 或 formal credit。
