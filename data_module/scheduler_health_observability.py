@@ -64,7 +64,7 @@ class TaskStatusItem:
     expected_order_index: int
     last_run_timestamp: Optional[str]
     status: str  # SUCCESS, PASSED_WITH_WARNINGS, DEGRADED, FAILED, STALE, MISSING
-    write_intent: str  # MARKET_DATA_UPDATE_WRITE, DRY_RUN_NO_WRITE, AUTOMATIC_SIDECAR_APPEND
+    write_intent: str  # MARKET_DATA_UPDATE_WRITE, DRY_RUN_NO_WRITE, SIDECAR_PENDING_HUMAN_REVIEW
     status_json_path: str
     failure_reason: Optional[str] = None
 
@@ -148,7 +148,7 @@ class SchedulerHealthService:
             "daily_data_freshness_check": "DRY_RUN_NO_WRITE",
             "scheduled_recommendation_snapshot": "DRY_RUN_NO_WRITE",
             "scheduled_evidence_pipeline_dry_run": "DRY_RUN_NO_WRITE",
-            "v2_2_weekly_collection": "AUTOMATIC_SIDECAR_APPEND",
+            "v2_2_weekly_collection": "SIDECAR_PENDING_HUMAN_REVIEW",
         }
 
         for idx, task_name in enumerate(SCHEDULED_TASK_ORDERING):
@@ -208,8 +208,11 @@ class SchedulerHealthService:
 
                 if raw_status in ("passed", "success", "ok") or (success_flag and not raw_status):
                     status_str = "SUCCESS"
-                elif raw_status == "observed_automatic":
-                    status_str = "SUCCESS"
+                elif raw_status in ("pending_human_review", "observed_automatic"):
+                    # The legacy observed_automatic value is unapproved historical
+                    # output. Treat both values as a non-failing review queue, not
+                    # as accepted weekly evidence.
+                    status_str = "PASSED_WITH_WARNINGS"
                 elif raw_status in ("passed_with_warnings", "ready_with_advisories", "ready_for_manual_confirm", "ready"):
                     status_str = "PASSED_WITH_WARNINGS"
                 elif raw_status == "degraded":

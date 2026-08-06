@@ -165,9 +165,10 @@ class PreV2ReadinessService:
         periods: dict[tuple[str, str], str] = {}
         diagnostics: list[str] = []
         evidence: dict[str, Any] = {
-            "count_policy": "distinct_periods_from_automatic_collection_or_legacy_review",
-            "automatic_revalidation": True,
-            "human_approval_required": False,
+            "count_policy": "distinct_periods_from_owner_approved_projection_or_legacy_review; pending_sidecar_excluded",
+            "automatic_revalidation": False,
+            "human_approval_required": True,
+            "pending_collection_periods": [],
         }
         try:
             projection = load_approved_weekly_history_projection(self.approved_weekly_history_projection_path)
@@ -178,7 +179,7 @@ class PreV2ReadinessService:
             evidence["approved_projection_path"] = str(projection.path)
             for item in projection.records:
                 key = (str(item["period_start"]), str(item["period_end"]))
-                periods[key] = "legacy_approved_projection"
+                periods[key] = "owner_approved_weekly_history"
 
         try:
             with _connect_read_only(self.evidence_db_path) as conn:
@@ -204,7 +205,7 @@ class PreV2ReadinessService:
             / "v2_2_weekly_collection"
             / "evidence_scheduler.db"
         )
-        evidence["automatic_collection_sidecar_path"] = str(sidecar_path)
+        evidence["weekly_collection_sidecar_path"] = str(sidecar_path)
         try:
             with _connect_read_only(sidecar_path) as conn:
                 if _table_exists(conn, "evidence_weekly_collections"):
@@ -212,19 +213,23 @@ class PreV2ReadinessService:
                         """
                         SELECT period_start, period_end
                         FROM evidence_weekly_collections
-                        WHERE status = 'observed_automatic'
+                        WHERE status IN ('pending_human_review', 'observed_automatic')
                           AND error_type = ''
                           AND source_hash LIKE 'sha256:%'
                         """
                     ).fetchall()
                     for row in rows:
-                        periods[(str(row["period_start"]), str(row["period_end"]))] = (
-                            "automatic_weekly_collection"
+                        evidence["pending_collection_periods"].append(
+                            {
+                                "period_start": str(row["period_start"]),
+                                "period_end": str(row["period_end"]),
+                                "evidence_source": "pending_human_review_sidecar",
+                            }
                         )
         except FileNotFoundError:
-            diagnostics.append("automatic_weekly_collection_not_yet_observed")
+            diagnostics.append("weekly_collection_sidecar_not_observed")
         except sqlite3.Error as exc:
-            diagnostics.append(f"automatic_weekly_collection_unavailable:{exc}")
+            diagnostics.append(f"weekly_collection_sidecar_unavailable:{exc}")
 
         count = len(periods)
         latest_period_end = max((period_end for _, period_end in periods), default=None)
@@ -237,6 +242,15 @@ class PreV2ReadinessService:
             }
             for period_start, period_end in sorted(periods)
         ]
+        pending_periods = evidence["pending_collection_periods"]
+        if pending_periods:
+            next_actions = (
+                "由 owner/reviewer 審核 pending_human_review 週期，並寫入具名 approved-weekly-history projection；未核准前不計 Gate credit。",
+            )
+        else:
+            next_actions = (
+                "繼續等待自然週期；新 weekly sidecar 仍須經 owner/reviewer 審核後才可計入 Gate credit。",
+            )
         if count < min_weekly_records:
             return PreV2ReadinessItem(
                 item_id="weekly_history",
@@ -245,7 +259,7 @@ class PreV2ReadinessService:
                 required_count=int(min_weekly_records),
                 observed_count=count,
                 blocking_reasons=("insufficient_weekly_history_records",),
-                next_actions=("排程將自動每週累積並重驗；不需要人工簽核。",),
+                next_actions=next_actions,
                 evidence=evidence,
                 diagnostics=tuple(diagnostics),
             )
@@ -255,6 +269,7 @@ class PreV2ReadinessService:
             status=STATUS_READY,
             required_count=int(min_weekly_records),
             observed_count=count,
+            next_actions=next_actions if pending_periods else (),
             evidence=evidence,
             diagnostics=tuple(diagnostics),
         )
@@ -381,7 +396,7 @@ def render_pre_v2_readiness_markdown(report: PreV2ReadinessReport) -> str:
             "## V2.0 Boundary",
             "",
             "- ready 只代表可進入 V2.0 design discussion。",
-            "- waiting_for_time 由排程自動累積與重驗，不需要人工批准。",
+            "- 自然成熟的 waiting_for_time 由排程累積與重驗；weekly `pending_human_review` 則須由 owner/reviewer 審核，未核准不計 Gate credit。",
             "- legacy production_scheduler_allowed 只代表 formal evidence credit；Rule operational scheduler 由獨立 V4 自動 gate 控制。",
         ]
     )

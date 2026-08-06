@@ -11,11 +11,11 @@ from typing import Any, Mapping
 from app_module.evidence_weekly_collection_dtos import EvidenceWeeklyCollectionRecord
 
 
-_SCHEMA_VERSION = 2
-_OBSERVED_STATUS = "observed_automatic"
-_LEGACY_PENDING_STATUS = "pending_human_review"
+_SCHEMA_VERSION = 3
+_PENDING_STATUS = "pending_human_review"
+_LEGACY_OBSERVED_STATUS = "observed_automatic"
 _FAILED_STATUS = "collection_failed"
-_MIGRATION_TABLE = "evidence_weekly_collections_schema_v2_migration"
+_MIGRATION_TABLE = "evidence_weekly_collections_schema_v3_migration"
 
 
 def _canonical_json(payload: Mapping[str, Any]) -> str:
@@ -47,8 +47,8 @@ class EvidenceWeeklyCollectionRepository:
             )
             if not self._table_exists(conn, "evidence_weekly_collections"):
                 self._create_collection_table(conn, "evidence_weekly_collections")
-            elif self._requires_schema_v2_migration(conn):
-                self._migrate_collection_table_to_v2(conn)
+            elif self._requires_schema_v3_migration(conn):
+                self._migrate_collection_table_to_v3(conn)
             conn.execute("DELETE FROM sidecar_schema_version")
             conn.execute(
                 "INSERT INTO sidecar_schema_version (version) VALUES (?)",
@@ -82,7 +82,7 @@ class EvidenceWeeklyCollectionRepository:
                     source_path TEXT NOT NULL,
                     source_hash TEXT NOT NULL,
                     status TEXT NOT NULL CHECK (
-                        status IN ('observed_automatic', 'collection_failed')
+                        status IN ('pending_human_review', 'collection_failed')
                     ),
                     payload_json TEXT NOT NULL,
                     error_type TEXT NOT NULL DEFAULT '',
@@ -93,7 +93,7 @@ class EvidenceWeeklyCollectionRepository:
         )
 
     @staticmethod
-    def _requires_schema_v2_migration(conn: sqlite3.Connection) -> bool:
+    def _requires_schema_v3_migration(conn: sqlite3.Connection) -> bool:
         row = conn.execute(
             """
             SELECT sql
@@ -104,30 +104,30 @@ class EvidenceWeeklyCollectionRepository:
         if row is None or not isinstance(row[0], str):
             raise RuntimeError("weekly collection sidecar schema is unavailable")
         normalized_sql = "".join(row[0].lower().split())
-        legacy_count = int(
+        legacy_observed_count = int(
             conn.execute(
                 """
                 SELECT COUNT(*)
                 FROM evidence_weekly_collections
                 WHERE status = ?
                 """,
-                (_LEGACY_PENDING_STATUS,),
+                (_LEGACY_OBSERVED_STATUS,),
             ).fetchone()[0]
         )
         return (
-            "'observed_automatic','collection_failed'" not in normalized_sql
-            or _LEGACY_PENDING_STATUS in normalized_sql
-            or legacy_count > 0
+            "statusin('pending_human_review','collection_failed')" not in normalized_sql
+            or _LEGACY_OBSERVED_STATUS in normalized_sql
+            or legacy_observed_count > 0
         )
 
     @classmethod
-    def _migrate_collection_table_to_v2(
+    def _migrate_collection_table_to_v3(
         cls,
         conn: sqlite3.Connection,
     ) -> None:
         if cls._table_exists(conn, _MIGRATION_TABLE):
             raise RuntimeError(
-                "weekly collection schema v2 migration table already exists"
+                "weekly collection schema v3 migration table already exists"
             )
 
         status_rows = conn.execute(
@@ -142,8 +142,8 @@ class EvidenceWeeklyCollectionRepository:
             for status, _ in status_rows
             if status
             not in {
-                _LEGACY_PENDING_STATUS,
-                _OBSERVED_STATUS,
+                _PENDING_STATUS,
+                _LEGACY_OBSERVED_STATUS,
                 _FAILED_STATUS,
             }
         )
@@ -184,7 +184,7 @@ class EvidenceWeeklyCollectionRepository:
                 created_at
             FROM evidence_weekly_collections
             """,
-            (_LEGACY_PENDING_STATUS, _OBSERVED_STATUS),
+            (_LEGACY_OBSERVED_STATUS, _PENDING_STATUS),
         )
         mismatch_count = int(
             conn.execute(
@@ -198,7 +198,7 @@ class EvidenceWeeklyCollectionRepository:
                         source_path,
                         source_hash,
                         CASE status
-                            WHEN '{_LEGACY_PENDING_STATUS}' THEN '{_OBSERVED_STATUS}'
+                            WHEN '{_LEGACY_OBSERVED_STATUS}' THEN '{_PENDING_STATUS}'
                             ELSE status
                         END AS status,
                         payload_json,
@@ -248,7 +248,7 @@ class EvidenceWeeklyCollectionRepository:
                         source_path,
                         source_hash,
                         CASE status
-                            WHEN '{_LEGACY_PENDING_STATUS}' THEN '{_OBSERVED_STATUS}'
+                            WHEN '{_LEGACY_OBSERVED_STATUS}' THEN '{_PENDING_STATUS}'
                             ELSE status
                         END AS status,
                         payload_json,
@@ -262,7 +262,7 @@ class EvidenceWeeklyCollectionRepository:
         )
         if mismatch_count or reverse_mismatch_count:
             raise RuntimeError(
-                "weekly collection schema v2 migration content validation failed"
+                "weekly collection schema v3 migration content validation failed"
             )
 
         conn.execute("DROP TABLE evidence_weekly_collections")
@@ -270,7 +270,7 @@ class EvidenceWeeklyCollectionRepository:
             f"ALTER TABLE {_MIGRATION_TABLE} RENAME TO evidence_weekly_collections"
         )
 
-    def save_observed(
+    def save_pending(
         self,
         *,
         period_start: str,
@@ -281,7 +281,7 @@ class EvidenceWeeklyCollectionRepository:
             period_start=period_start,
             period_end=period_end,
             payload_json=payload_json,
-            status=_OBSERVED_STATUS,
+            status=_PENDING_STATUS,
         )
         with self._connection() as conn:
             conn.execute(
@@ -296,15 +296,15 @@ class EvidenceWeeklyCollectionRepository:
             )
         return self._get_required(record.collection_id)
 
-    def save_pending(
+    def save_observed(
         self,
         *,
         period_start: str,
         period_end: str,
         payload_json: Mapping[str, Any],
     ) -> EvidenceWeeklyCollectionRecord:
-        """Compatibility alias that persists the machine-observed v2 status."""
-        return self.save_observed(
+        """Backward-compatible alias; automatic collection remains pending review."""
+        return self.save_pending(
             period_start=period_start,
             period_end=period_end,
             payload_json=payload_json,

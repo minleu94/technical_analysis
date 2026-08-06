@@ -107,7 +107,7 @@ def _seed_weekly_history(db_path: Path, count: int) -> None:
             )
 
 
-def _seed_automatic_weekly_sidecar(config: TWStockConfig, count: int) -> None:
+def _seed_pending_weekly_sidecar(config: TWStockConfig, count: int) -> None:
     sidecar = (
         Path(config.output_root)
         / "scheduled"
@@ -132,7 +132,7 @@ def _seed_automatic_weekly_sidecar(config: TWStockConfig, count: int) -> None:
                 """
                 INSERT INTO evidence_weekly_collections
                     (period_start, period_end, status, error_type, source_hash)
-                VALUES (?, ?, 'observed_automatic', '', ?)
+                VALUES (?, ?, 'pending_human_review', '', ?)
                 """,
                 (
                     f"2026-06-{1 + index * 7:02d}",
@@ -389,24 +389,25 @@ def test_pre_v2_readiness_flags_source_and_report_gaps_without_creating_missing_
     assert not missing_db.exists()
 
 
-def test_pre_v2_readiness_counts_automatic_weekly_sidecar_without_human_gate(
+def test_pre_v2_readiness_excludes_pending_weekly_sidecar_from_gate(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path)
-    _seed_automatic_weekly_sidecar(config, 3)
+    _seed_pending_weekly_sidecar(config, 3)
 
     weekly = PreV2ReadinessService(
         config,
         evidence_db_path=tmp_path / "missing.db",
     )._weekly_history_item(3)
 
-    assert weekly.status == STATUS_READY
-    assert weekly.observed_count == 3
-    assert weekly.evidence["human_approval_required"] is False
-    assert weekly.evidence["automatic_revalidation"] is True
-    assert {
-        row["evidence_source"] for row in weekly.evidence["observed_periods"]
-    } == {"automatic_weekly_collection"}
+    assert weekly.status == STATUS_WAITING_FOR_TIME
+    assert weekly.observed_count == 0
+    assert weekly.evidence["human_approval_required"] is True
+    assert weekly.evidence["automatic_revalidation"] is False
+    assert len(weekly.evidence["pending_collection_periods"]) == 3
+    assert weekly.evidence["observed_periods"] == []
+    assert "owner/reviewer" in weekly.next_actions[0]
+    assert "不計 Gate credit" in weekly.next_actions[0]
 
 
 def test_pre_v2_readiness_accepts_same_day_scheduled_dry_run_for_corrected_source_gap_closeout(

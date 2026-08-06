@@ -20,7 +20,7 @@ def _create_source_database(path: Path) -> None:
         )
 
 
-def test_collect_cli_saves_automatic_sidecar_observation_and_reports(
+def test_collect_cli_saves_pending_sidecar_record_and_reports(
     tmp_path: Path,
 ) -> None:
     source_db_path = tmp_path / "twstock.db"
@@ -51,12 +51,12 @@ def test_collect_cli_saves_automatic_sidecar_observation_and_reports(
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert payload["collection_status"] == "observed_automatic"
-    assert payload["storage_status"] == "observed_automatic"
-    assert payload["gate_credit_status"] == "insufficient_evidence"
-    assert payload["observed_week_count"] == 1
-    assert payload["human_approval_required"] is False
-    assert payload["automatic_revalidation"] is True
+    assert payload["collection_status"] == "pending_human_review"
+    assert payload["storage_status"] == "pending_human_review"
+    assert payload["human_approval_required"] is True
+    assert payload["automatic_revalidation"] is False
+    assert payload["gate_credit_status"] == "pending_human_review"
+    assert payload["write_intent"] is False
     assert payload["last_trading_date"] == "2026-07-10"
     assert source_db_path.read_bytes() == source_bytes_before
     with sqlite3.connect(sidecar_db_path) as connection:
@@ -66,8 +66,8 @@ def test_collect_cli_saves_automatic_sidecar_observation_and_reports(
         schema_version = connection.execute(
             "SELECT version FROM sidecar_schema_version"
         ).fetchall()
-    assert stored_statuses == [("observed_automatic",)]
-    assert schema_version == [(2,)]
+    assert stored_statuses == [("pending_human_review",)]
+    assert schema_version == [(3,)]
 
     report_directory = output_root / "scheduled" / "v2_2_weekly_collection"
     json_reports = list(report_directory.glob("*.json"))
@@ -78,9 +78,12 @@ def test_collect_cli_saves_automatic_sidecar_observation_and_reports(
         json.loads(json_reports[0].read_text(encoding="utf-8"))[
             "collection_status"
         ]
-        == "observed_automatic"
+        == "pending_human_review"
     )
-    assert "observed_automatic" in markdown_reports[0].read_text(encoding="utf-8")
+    markdown = markdown_reports[0].read_text(encoding="utf-8")
+    assert "pending_human_review" in markdown
+    assert "Human approval required: `true`" in markdown
+    assert "Write intent: `false`" in markdown
 
 
 def test_collect_cli_saves_failed_sidecar_record_for_invalid_period_end(tmp_path: Path) -> None:

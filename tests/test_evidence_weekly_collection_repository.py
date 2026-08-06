@@ -14,7 +14,7 @@ def _create_source_database(path: Path) -> None:
         conn.execute("INSERT INTO source_marker (value) VALUES ('source data')")
 
 
-def test_save_observed_is_idempotent_and_never_modifies_source_database(
+def test_save_pending_is_idempotent_and_never_modifies_source_database(
     tmp_path: Path,
 ) -> None:
     source_db_path = tmp_path / "twstock.db"
@@ -39,7 +39,7 @@ def test_save_observed_is_idempotent_and_never_modifies_source_database(
     )
 
     assert first.collection_id == second.collection_id == compatibility_alias.collection_id
-    assert first.status == second.status == compatibility_alias.status == "observed_automatic"
+    assert first.status == second.status == compatibility_alias.status == "pending_human_review"
     assert source_db_path.read_bytes() == source_bytes_before
 
 
@@ -89,7 +89,7 @@ def test_two_repositories_share_an_idempotent_sidecar_migration(tmp_path: Path) 
     assert collection_count == 1
 
 
-def test_schema_v2_migration_preserves_every_legacy_row_and_is_idempotent(
+def test_schema_v3_migration_converts_legacy_observed_rows_to_pending_and_is_idempotent(
     tmp_path: Path,
 ) -> None:
     source_db_path = tmp_path / "twstock.db"
@@ -112,7 +112,7 @@ def test_schema_v2_migration_preserves_every_legacy_row_and_is_idempotent(
                 source_path TEXT NOT NULL,
                 source_hash TEXT NOT NULL,
                 status TEXT NOT NULL CHECK (
-                    status IN ('pending_human_review', 'collection_failed')
+                    status IN ('observed_automatic', 'collection_failed')
                 ),
                 payload_json TEXT NOT NULL,
                 error_type TEXT NOT NULL DEFAULT '',
@@ -136,7 +136,7 @@ def test_schema_v2_migration_preserves_every_legacy_row_and_is_idempotent(
                     "2026-07-12",
                     str(source_db_path),
                     f"sha256:{'1' * 64}",
-                    "pending_human_review",
+                    "observed_automatic",
                     '{"nested":{"value":"保留"},"status":"coverage_only"}',
                     "",
                     "",
@@ -192,12 +192,12 @@ def test_schema_v2_migration_preserves_every_legacy_row_and_is_idempotent(
             connection.execute(
                 """
                 UPDATE evidence_weekly_collections
-                SET status = 'pending_human_review'
+                SET status = 'observed_automatic'
                 WHERE collection_id = 'ewc_legacy_observed'
                 """
             )
 
-    assert version_rows == [(2,)]
+    assert version_rows == [(3,)]
     assert rows == [
         (
             "ewc_legacy_failed",
@@ -217,19 +217,19 @@ def test_schema_v2_migration_preserves_every_legacy_row_and_is_idempotent(
             "2026-07-12",
             str(source_db_path),
             f"sha256:{'1' * 64}",
-            "observed_automatic",
+            "pending_human_review",
             '{"nested":{"value":"保留"},"status":"coverage_only"}',
             "",
             "",
             "2026-07-13 01:02:03",
         ),
     ]
-    assert "observed_automatic" in schema_sql
-    assert "pending_human_review" not in schema_sql
+    assert "pending_human_review" in schema_sql
+    assert "observed_automatic" not in schema_sql
     assert source_db_path.read_bytes() == source_bytes_before
 
 
-def test_schema_v2_migration_rolls_back_on_an_unknown_legacy_status(
+def test_schema_v3_migration_rolls_back_on_an_unknown_legacy_status(
     tmp_path: Path,
 ) -> None:
     source_db_path = tmp_path / "twstock.db"
@@ -301,7 +301,7 @@ def test_schema_v2_migration_rolls_back_on_an_unknown_legacy_status(
                 """
                 SELECT COUNT(*) FROM sqlite_master
                 WHERE type = 'table'
-                  AND name = 'evidence_weekly_collections_schema_v2_migration'
+                  AND name = 'evidence_weekly_collections_schema_v3_migration'
                 """
             ).fetchone()[0]
         )
