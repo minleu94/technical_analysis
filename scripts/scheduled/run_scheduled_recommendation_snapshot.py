@@ -18,6 +18,7 @@ from app_module.dtos import RecommendationResultDTO
 from app_module.recommendation_repository import RecommendationRepository
 from app_module.recommendation_service import RecommendationService
 from data_module.config import TWStockConfig
+from scripts.scheduled.scheduled_clock import scheduled_now
 
 
 TASK_NAME = "baldr-recommendation-snapshot-daily"
@@ -129,8 +130,8 @@ def main(argv: list[str] | None = None) -> int:
     run_root = output_root / "scheduled" / "recommendation_snapshot"
     run_root.mkdir(parents=True, exist_ok=True)
 
-    now = datetime.now()
-    decision_date = date.today().isoformat()
+    now = scheduled_now()
+    decision_date = now.date().isoformat()
     today_key = decision_date.replace("-", "")
     status_path = run_root / "latest_status.json"
     log_path = run_root / f"{today_key}_recommendation_snapshot.log"

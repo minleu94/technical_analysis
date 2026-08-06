@@ -5,6 +5,13 @@ import json
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.scheduled.scheduled_clock import scheduled_now
 
 
 def _parse_date(value: object) -> date | None:
@@ -72,7 +79,9 @@ def main(argv: list[str] | None = None) -> int:
     output_root = Path(args.output_root)
     db_path = Path(args.db_path)
     run_root = output_root / "scheduled" / "data_freshness"
-    today_key = date.today().isoformat().replace("-", "")
+    run_now = scheduled_now()
+    run_date = run_now.date()
+    today_key = run_date.isoformat().replace("-", "")
     status_path = Path(args.status_path) if args.status_path else run_root / "latest_status.json"
     log_path = Path(args.log_path) if args.log_path else run_root / f"{today_key}_data_freshness.log"
     status_path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             if quick_update_status == "failed":
                 warnings.append("data_update_quick_failed")
             checked_at = _parse_date(quick_update_payload.get("checked_at"))
-            expected_date = _expected_quick_update_date(date.today())
+            expected_date = _expected_quick_update_date(run_date)
             checks["data_update_quick_expected_date"] = expected_date.isoformat()
             checks["data_update_quick_checked_date"] = (
                 checked_at.isoformat() if checked_at is not None else None
@@ -128,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
                     if parsed is None:
                         warnings.append(f"{table}_latest_date_missing")
                         continue
-                    age_days = (date.today() - parsed).days
+                    age_days = (run_date - parsed).days
                     checks[f"{table}_age_days"] = age_days
                     if age_days > args.stale_days:
                         warnings.append(f"{table}_stale")
@@ -157,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         "task": "baldr-data-freshness-check-daily",
         "status": status,
         "read_only": True,
-        "checked_at": datetime.now().isoformat(timespec="seconds"),
+        "checked_at": run_now.isoformat(timespec="seconds"),
         "data_root": str(data_root),
         "output_root": str(output_root),
         "checks": checks,

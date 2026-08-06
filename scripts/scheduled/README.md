@@ -10,13 +10,13 @@ These wrappers are intentionally conservative. They use CMD files and Windows bu
 | `baldr-official-market-events-daily` | enabled after register | daily local time 04:50 | 以官方來源建立 append-only market-event vintages；無公告／生效／修訂時間的事件 fail closed，不反推歷史可得時間。 |
 | `baldr-data-freshness-check-daily` | enabled after register | daily local time 05:00 | Read-only SQLite / `DATA_ROOT` freshness check. Also verifies raw TWSE / TPEX daily price files for the latest SQLite daily date. Writes only status and logs under `OUTPUT_ROOT/scheduled/data_freshness/`. |
 | `baldr-recommendation-snapshot-daily` | enabled after register | daily local time 05:10 | Runs the research-only recommendation snapshot path after freshness. Saves one recommendation result under `OUTPUT_ROOT/recommendation/runs/` and writes status/logs under `OUTPUT_ROOT/scheduled/recommendation_snapshot/`. It does not write the production evidence DB, does not confirm evidence, does not change portfolio state, and does not automate trading. |
-| `baldr-evidence-pipeline-dry-run-daily` | enabled after register | daily local time 05:15 | Runs `scripts/run_evidence_pipeline.py` with `--dry-run`. Writes only report, status, and logs under `OUTPUT_ROOT/scheduled/evidence_pipeline_dry_run/`. Scheduled status inherits freshness and pipeline overall status: missing / stale / blocking data is `degraded`, while complete observed-or-estimated MoneyDJ provenance is `ready_with_advisories`. |
+| `baldr-evidence-pipeline-dry-run-daily` | enabled after register | daily local time 05:15 | Runs `scripts/run_evidence_pipeline.py` with `--dry-run` and forwards the resolved `DATA_ROOT` / `OUTPUT_ROOT` explicitly. Writes only report, status, and logs under `OUTPUT_ROOT/scheduled/evidence_pipeline_dry_run/`. Scheduled status inherits freshness and pipeline overall status: missing / stale / blocking data is `degraded`, while complete observed-or-estimated MoneyDJ provenance is `ready_with_advisories`. |
 | `baldr-ml-promotion-evidence-daily` | enabled after register | daily local time 05:17 | 固定 discovery 並重驗 formal OOC v5、雙 replay、Shadow outcome、逐 horizon calibration／drift 與 hash custody。證據不完整時只寫 blocked status，不更新 compatible pointer；完整時也只發布 unsigned evidence。 |
 | `baldr-ml-promotion-authority-daily` | enabled after register | daily local time 05:18 | 由獨立 DPAPI user-scope authority 重驗 compatible evidence、Gate registry 與決策有效窗。只有所有機器門檻通過才簽章；否則成功 fail closed，維持 alpha 0。 |
 | `baldr-ml-allocation-copilot-daily` | enabled after register | daily local time 05:20 | 執行配置型 ML promotion 評估並寫入 append-only sidecar、promotion artifact 與 `latest_status.json`。缺少、無效或未授權證據時仍成功完成每日流程，但固定輸出 `formal_oos_allowed=false`、`selected_alpha_bp=0` 與四條未通過 lane；不改寫來源資料庫或投組狀態。 |
 | `baldr-decision-evidence-capture-daily` | enabled after register | daily local time 05:25 | 依台北時間選擇下一個尚未到達的 08:30 日曆決策日，依序確認保存 durable Decision Desk snapshot 與 Evidence Event。既有 hash／unique key 使重跑轉為 duplicate；任一步失敗即回傳失敗並保留下一次重跑能力。它不推定交易日／成熟日、不改 Rule／Advice／Portfolio 狀態，也不連接券商執行。 |
 | `baldr-paper-portfolio-daily` | enabled after register | daily local time 05:28 | 以正式市場 SQLite `mode=ro/query_only` 讀取嚴格早於決策日的最近行情，更新 append-only Paper Portfolio 估值帳本。只做 T-1 mark-to-market，不自動調倉、不修改 Advice，也不具券商執行能力。 |
-| `baldr-v2-2-weekly-collection` | `weekly-register` 後啟用 | 每週日 18:00 | 執行 `run_v2_2_weekly_collection.cmd`，將來源 evidence append 至 sidecar。對外狀態為 `observed_automatic`；不足三個不同週期時為 `insufficient_evidence`，排程會繼續累積並自動重驗，不需人工簽核。 |
+| `baldr-v2-2-weekly-collection` | `weekly-register` 後啟用 | 每週日 18:00 | 執行 `run_v2_2_weekly_collection.cmd`，以 SQLite read-only 讀取來源並將 evidence append 至 sidecar。對外狀態為 `pending_human_review`；需要人工判讀，但不代表 Gate 通過、不寫 weekly history，且 `write_intent=false`。 |
 
 ## Register
 
@@ -124,7 +124,7 @@ scripts\scheduled\unregister_baldr_scheduled_tasks.cmd unregister
 scripts\scheduled\unregister_baldr_scheduled_tasks.cmd weekly-unregister
 ```
 
-Rollback 時禁止自動 drop sidecar SQLite table；保留 `observed_automatic` 與 `collection_failed` record 供稽核與自動重試。
+Rollback 時禁止自動 drop sidecar SQLite table；保留 `pending_human_review` 與 `collection_failed` record 供稽核與人工處理。
 
 ## Logs And Reports
 
@@ -215,7 +215,7 @@ If the DB paths are missing, the wrapper prints usage and exits. Repeat defaults
 <OUTPUT_ROOT>/scheduled/v2_2_weekly_collection/v2_2_weekly_collection_YYYYMMDD.md
 ```
 
-sidecar record 刻意與 source DB 分離。Schema v2 只允許 `observed_automatic` 與 `collection_failed`；首次開啟舊 sidecar 時，repository 會在單一 SQLite transaction 內保留所有 `collection_id`、payload、hash、error 與建立時間，並把舊 `pending_human_review` 原子映射為 `observed_automatic`。Migration 可重跑且不開啟或修改 source DB。成功週期以不同 period 自動計數，收集失敗則保存 `collection_failed` 與 diagnostics，待下次自動重試。
+sidecar record 刻意與 source DB 分離。Schema v3 只允許 `pending_human_review` 與 `collection_failed`；首次開啟舊 sidecar 時，repository 會在單一 SQLite transaction 內保留所有 `collection_id`、payload、hash、error 與建立時間，並把舊版 `observed_automatic`（尚未取得人工核准）原子映射回 `pending_human_review`。Migration 可重跑且不開啟或修改 source DB。收集成功只代表待人工審核，收集失敗則保存 `collection_failed` 與 diagnostics。
 
 ## Evidence Boundary
 
@@ -243,7 +243,7 @@ Generated evidence reports 是機器 Gate 的可稽核輸入；它們本身不�
 
 During dry-run, the runner may build a transient Daily Decision Desk snapshot for the same run. Reports mark this as `source_coverage_basis=dry_run_transient_decision_desk_snapshot`; this reconciles diagnostics only and does not persist the snapshot.
 
-The evidence dry-run `latest_status.json` also includes selected pipeline summary fields from the same run, including `pipeline_overall_status`, warning counts, advisory counts, source-quality coverage rows, diagnostics, and source-coverage readiness. `pipeline_warnings_count` is only actual warning occurrences. `pipeline_advisories_count` separately records complete but estimated MoneyDJ provenance; it does not mean source data is missing. Fixed-threshold recommendation snapshots may leave `score_percentile_bp` empty because no comparable ranked universe is persisted; that is not a warning. These fields are copied from the dry-run stdout only; the wrapper does not rerun the pipeline.
+The evidence dry-run `latest_status.json` also includes selected pipeline summary fields from the same run, including `pipeline_overall_status`, warning counts, advisory counts, source-quality coverage rows, diagnostics, and source-coverage readiness. `pipeline_warnings_count` is only actual warning occurrences. `pipeline_natural_maturity_warning_counts` separates `insufficient_future_data` from `pipeline_actionable_warning_counts`; `natural_maturity_only=true` means the remaining degradation is expected to resolve only as forward observations mature and is not a manual repair blocker. `manual_action_required=true` is reserved for a failed or stale freshness input, missing pipeline summary, pipeline error / blocking gap, or non-natural warning. The wrapper always records `dry_run=true`, `confirm=false`, `writes_evidence_db=false`, and `production_scheduler_allowed=false`. `pipeline_advisories_count` separately records complete but estimated MoneyDJ provenance; it does not mean source data is missing. Fixed-threshold recommendation snapshots may leave `score_percentile_bp` empty because no comparable ranked universe is persisted; that is not a warning. These fields are copied from the dry-run stdout only; the wrapper does not rerun the pipeline. Decision Desk SQLite section providers use `mode=ro` / `query_only` for scheduled reads.
 
 ## Codex Morning Summary
 

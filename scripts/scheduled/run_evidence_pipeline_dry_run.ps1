@@ -49,6 +49,8 @@ $Args = @(
     "--decision-date", $DecisionDate,
     "--dry-run",
     "--db-path", $DbPath,
+    "--data-root", $DataRoot,
+    "--output-root", $OutputRoot,
     "--sources", $Sources,
     "--report-output", $ReportPath,
     "--json-output"
@@ -67,7 +69,9 @@ $Status = [ordered]@{
     task = "baldr-evidence-pipeline-dry-run-daily"
     status = $PipelineStatus
     dry_run = $true
+    confirm = $false
     writes_evidence_db = $false
+    production_scheduler_allowed = $false
     decision_date = $DecisionDate
     db_path = $DbPath
     freshness_status = $FreshnessStatus

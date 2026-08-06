@@ -278,7 +278,9 @@ class SQLiteDailyPriceMarketBreadthProvider:
                 return pd.DataFrame()
             return self._build_breadth_frame(prices, max(available_keys), target_key)
 
-        with sqlite3.connect(self.db_path) as conn:
+        db_uri = f"{self.db_path.resolve().as_uri()}?mode=ro"
+        with sqlite3.connect(db_uri, uri=True) as conn:
+            conn.execute("PRAGMA query_only=ON")
             date_rows = pd.read_sql_query(
                 """
                 SELECT DISTINCT 日期

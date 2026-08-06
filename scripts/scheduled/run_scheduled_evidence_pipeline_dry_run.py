@@ -5,9 +5,14 @@ import json
 from json import JSONDecodeError
 import subprocess
 import sys
-from datetime import date, datetime
 from typing import Any
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.scheduled.scheduled_clock import scheduled_now
 
 
 def _read_status(path: Path) -> str:
@@ -44,6 +49,16 @@ def _pipeline_status_fields(summary: dict[str, Any] | None) -> dict[str, Any]:
         source_coverage = {}
     warning_counts = _warning_counts(summary.get("warning_counts"))
     advisory_counts = _warning_counts(summary.get("advisory_counts"))
+    natural_maturity_warning_counts = {
+        token: count
+        for token, count in warning_counts.items()
+        if token == "insufficient_future_data"
+    }
+    actionable_warning_counts = {
+        token: count
+        for token, count in warning_counts.items()
+        if token not in natural_maturity_warning_counts
+    }
     return {
         "pipeline_summary_available": True,
         "pipeline_overall_status": str(summary.get("overall_status") or "unknown"),
@@ -51,6 +66,12 @@ def _pipeline_status_fields(summary: dict[str, Any] | None) -> dict[str, Any]:
         "pipeline_warning_counts": warning_counts,
         "pipeline_warning_unique_count": _warning_unique_count(summary, warning_counts),
         "pipeline_warning_top_counts": _top_warning_counts(warning_counts),
+        "pipeline_natural_maturity_warning_count": sum(natural_maturity_warning_counts.values()),
+        "pipeline_natural_maturity_warning_counts": natural_maturity_warning_counts,
+        "pipeline_actionable_warning_count": sum(actionable_warning_counts.values()),
+        "pipeline_actionable_warning_counts": actionable_warning_counts,
+        "pipeline_dry_run": bool(summary.get("dry_run")),
+        "pipeline_confirm": bool(summary.get("confirm")),
         "pipeline_advisories_count": int(summary.get("advisories_count") or 0),
         "pipeline_advisory_counts": advisory_counts,
         "pipeline_advisory_unique_count": _advisory_unique_count(summary, advisory_counts),
@@ -93,15 +114,14 @@ def _warning_counts(value: Any) -> dict[str, int]:
 
 
 def _warning_unique_count(summary: dict[str, Any], warning_counts: dict[str, int]) -> int:
-    try:
-        parsed = int(summary.get("warning_unique_count"))
-    except (TypeError, ValueError):
+    parsed = _optional_int(summary.get("warning_unique_count"))
+    if parsed is None:
         return len(warning_counts)
     return parsed if parsed >= 0 else len(warning_counts)
 
 
 def _top_warning_counts(warning_counts: dict[str, int], *, limit: int = 10) -> list[dict[str, int | str]]:
-    rows = [
+    rows: list[dict[str, int | str]] = [
         {"warning": token, "count": count}
         for token, count in warning_counts.items()
         if token and count > 0
@@ -110,20 +130,26 @@ def _top_warning_counts(warning_counts: dict[str, int], *, limit: int = 10) -> l
 
 
 def _advisory_unique_count(summary: dict[str, Any], advisory_counts: dict[str, int]) -> int:
-    try:
-        parsed = int(summary.get("advisory_unique_count"))
-    except (TypeError, ValueError):
+    parsed = _optional_int(summary.get("advisory_unique_count"))
+    if parsed is None:
         return len(advisory_counts)
     return parsed if parsed >= 0 else len(advisory_counts)
 
 
 def _top_advisory_counts(advisory_counts: dict[str, int], *, limit: int = 10) -> list[dict[str, int | str]]:
-    rows = [
+    rows: list[dict[str, int | str]] = [
         {"advisory": token, "count": count}
         for token, count in advisory_counts.items()
         if token and count > 0
     ]
     return sorted(rows, key=lambda item: (-int(item["count"]), str(item["advisory"])))[:limit]
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _scheduled_status(
@@ -175,7 +201,8 @@ def main(argv: list[str] | None = None) -> int:
     run_root.mkdir(parents=True, exist_ok=True)
     report_root.mkdir(parents=True, exist_ok=True)
 
-    decision_date = date.today().isoformat()
+    run_now = scheduled_now()
+    decision_date = run_now.date().isoformat()
     today_key = decision_date.replace("-", "")
     status_path = run_root / "latest_status.json"
     log_path = run_root / f"{today_key}_evidence_pipeline_dry_run.log"
@@ -190,6 +217,10 @@ def main(argv: list[str] | None = None) -> int:
         "--dry-run",
         "--db-path",
         args.db_path,
+        "--data-root",
+        args.data_root,
+        "--output-root",
+        args.output_root,
         "--sources",
         args.sources,
         "--report-output",
@@ -213,11 +244,28 @@ def main(argv: list[str] | None = None) -> int:
         pipeline_summary=pipeline_summary,
     )
 
+    pipeline_fields = _pipeline_status_fields(pipeline_summary)
+    pipeline_actionable_warning_count = int(pipeline_fields.get("pipeline_actionable_warning_count") or 0)
+    pipeline_natural_maturity_warning_count = int(
+        pipeline_fields.get("pipeline_natural_maturity_warning_count") or 0
+    )
+    pipeline_errors_count = int(pipeline_fields.get("pipeline_errors_count") or 0)
+    pipeline_blocking_gaps = list(pipeline_fields.get("pipeline_blocking_gaps") or [])
+    manual_action_required = bool(
+        completed.returncode != 0
+        or freshness_status != "passed"
+        or pipeline_summary is None
+        or pipeline_errors_count > 0
+        or pipeline_blocking_gaps
+        or pipeline_actionable_warning_count > 0
+    )
     payload = {
         "task": "baldr-evidence-pipeline-dry-run-daily",
         "status": status,
         "dry_run": True,
+        "confirm": False,
         "writes_evidence_db": False,
+        "production_scheduler_allowed": False,
         "decision_date": decision_date,
         "db_path": args.db_path,
         "freshness_status": freshness_status,
@@ -225,9 +273,13 @@ def main(argv: list[str] | None = None) -> int:
         "report_path": str(report_path),
         "log_path": str(log_path),
         "exit_code": completed.returncode,
-        "checked_at": datetime.now().isoformat(timespec="seconds"),
+        "checked_at": run_now.isoformat(timespec="seconds"),
+        "manual_action_required": manual_action_required,
+        "natural_maturity_only": bool(
+            pipeline_natural_maturity_warning_count > 0 and not manual_action_required
+        ),
     }
-    payload.update(_pipeline_status_fields(pipeline_summary))
+    payload.update(pipeline_fields)
     status_text = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
     stdout_text = json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2)
     status_path.write_text(status_text + "\n", encoding="utf-8")

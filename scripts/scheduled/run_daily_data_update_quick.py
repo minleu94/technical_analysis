@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from app_module.update_service import UpdateService
 from data_module.config import TWStockConfig
+from scripts.scheduled.scheduled_clock import scheduled_now
 
 
 StepAction = Callable[[], dict[str, Any]]
@@ -155,7 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     output_root = Path(args.output_root)
     run_root = output_root / "scheduled" / "data_update_quick"
-    today_key = date.today().strftime("%Y%m%d")
+    run_now = scheduled_now()
+    run_date = run_now.date()
+    today_key = run_date.strftime("%Y%m%d")
     status_path = Path(args.status_path) if args.status_path else run_root / "latest_status.json"
     log_path = Path(args.log_path) if args.log_path else run_root / f"{today_key}_data_update_quick.log"
     _setup_logging(log_path)
@@ -164,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         start_date = args.start_date
         end_date = args.end_date
     else:
-        end_day = _scheduled_target_weekday(date.today())
+        end_day = _scheduled_target_weekday(run_date)
         start_date, end_date = _weekday_window(end_day, max(1, args.window_weekdays))
 
     config = TWStockConfig(data_root=Path(args.data_root), output_root=output_root)
@@ -268,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     payload = {
         "task": "baldr-data-update-quick-daily",
         "status": final_status,
-        "checked_at": datetime.now().isoformat(timespec="seconds"),
+        "checked_at": run_now.isoformat(timespec="seconds"),
         "data_root": str(config.data_root),
         "output_root": str(config.output_root),
         "start_date": start_date,

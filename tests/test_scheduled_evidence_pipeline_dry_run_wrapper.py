@@ -43,6 +43,9 @@ def test_scheduled_wrapper_stdout_survives_cp1252_console_with_chinese_paths(
     payload = json.loads(raw_output)
     assert exit_code == 0
     assert payload["db_path"] == str(db_path)
+    assert payload["confirm"] is False
+    assert payload["production_scheduler_allowed"] is False
+    assert payload["manual_action_required"] is True
     assert "輸出" in payload["report_path"]
     assert "\\u8f38\\u51fa" in raw_output
     assert (output_root / "scheduled" / "evidence_pipeline_dry_run" / "latest_status.json").exists()
@@ -75,7 +78,10 @@ def test_scheduled_wrapper_persists_pipeline_source_coverage_summary(
         },
     }
 
+    captured: dict[str, object] = {}
+
     def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["command"] = args[0]
         stdout = "config log before json\n" + json.dumps(pipeline_summary)
         return subprocess.CompletedProcess(args=args, returncode=0, stdout=stdout)
 
@@ -115,6 +121,75 @@ def test_scheduled_wrapper_persists_pipeline_source_coverage_summary(
     assert payload["recommendation_screening_matrix_available"] is False
     assert payload["recommendation_exclusion_payload_available"] is True
     assert payload["source_coverage_basis"] == "dry_run_transient_decision_desk_snapshot"
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert command[command.index("--data-root") + 1] == str(tmp_path / "data")
+    assert command[command.index("--output-root") + 1] == str(output_root)
+    assert payload["pipeline_actionable_warning_count"] == 3
+    assert payload["manual_action_required"] is True
+    assert payload["natural_maturity_only"] is False
+
+
+def test_scheduled_wrapper_marks_only_future_outcomes_as_natural_maturity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output_root = tmp_path / "output"
+    db_path = tmp_path / "data" / "sqlite" / "twstock.db"
+    freshness_path = output_root / "scheduled" / "data_freshness" / "latest_status.json"
+    freshness_path.parent.mkdir(parents=True)
+    freshness_path.write_text(json.dumps({"status": "passed"}), encoding="utf-8")
+    pipeline_summary = {
+        "overall_status": "degraded",
+        "dry_run": True,
+        "confirm": False,
+        "warnings_count": 2,
+        "warning_counts": {"insufficient_future_data": 2},
+        "advisories_count": 1,
+        "advisory_counts": {"portfolio_alerts_chip_estimated:2330": 1},
+        "errors_count": 0,
+        "blocking_gaps": [],
+        "source_coverage": {},
+    }
+
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(pipeline_summary),
+        ),
+    )
+
+    exit_code = run_scheduled_evidence_pipeline_dry_run.main(
+        [
+            "--dry-run",
+            "--data-root",
+            str(tmp_path / "data"),
+            "--output-root",
+            str(output_root),
+            "--db-path",
+            str(db_path),
+        ]
+    )
+
+    payload = json.loads(
+        (output_root / "scheduled" / "evidence_pipeline_dry_run" / "latest_status.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert exit_code == 0
+    assert payload["status"] == "degraded"
+    assert payload["pipeline_natural_maturity_warning_count"] == 2
+    assert payload["pipeline_natural_maturity_warning_counts"] == {"insufficient_future_data": 2}
+    assert payload["pipeline_actionable_warning_count"] == 0
+    assert payload["manual_action_required"] is False
+    assert payload["natural_maturity_only"] is True
+    assert payload["dry_run"] is True
+    assert payload["confirm"] is False
+    assert payload["writes_evidence_db"] is False
+    assert payload["production_scheduler_allowed"] is False
 
 
 def test_scheduled_wrapper_preserves_ready_with_advisories(tmp_path: Path, monkeypatch) -> None:
