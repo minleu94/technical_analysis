@@ -1428,7 +1428,19 @@ Formal clock 不是 development adapter 完成的延伸；只有在真實決策�
 
 1. 具名 owner 的 `HoldoutConsumptionRegistry.jsonl` 已置於 development output root 的 `governance/`，並在每次綁定前重新檢查；它必須可證明 owner decision 指定的第一個未消費交易時段尚未被使用。沒有 registry 時不得宣稱 holdout 已綁定、已消費或 formal readiness 成立。
 2. 真正 decision-time 產生的 `manual_observed` JSON：`decision_timestamp`、`max_available_timestamp`、`data_as_of_date`、source versions、Rule champion identity、universe hash、symbol、why／why-not／risk、restriction state 與所有 missing/degraded reason 都必須來自當下可見的決策輸出。不得由歷史 replay、fixture、事後補寫或 automation invocation count 合成。
-3. snapshot 僅可追加到 TEMP 或明確命名的 shadow sidecar，並由下列命令人工確認；它不寫 market DB、不啟用 scheduler、交易、training、promotion 或 formal OOS：
+3. owner 若已綁定 Rule-only lane，可在該 lane 的**真實台北盤中 09:00–13:30**，以新的 foreground-only 命令產生當下的 decision source。它只讀 `daily_prices` 中嚴格早於決策日的最近 60 個交易日，使用固定 20 日價格／成交量整數 bp 排名，輸出受 HMAC 驗證的 Rule Champion、hash-addressed decision output 與可交給下一步的 `manual_observed.json`。它不讀 MOPS／富邦／基本面／ML，不寫 market DB、Recommendation、Portfolio、Exit、Score、lifecycle 或 evidence ledger，也不建立 scheduler。第一次使用前，owner 必須在自己的 Windows 使用者環境設定受控的 `RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY` 與非空的 `RULE_CHAMPION_CONTROLLED_STORE_ID`；key 不得寫入 repo、命令列、log 或 JSON artifact。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_manual_rule_only_decision.py `
+  --development-output-root C:\Temp\technical_analysis_development_output `
+  --market-db <TWStockConfig.db_file 的實際 SQLite 路徑> `
+  --lane-decision-json C:\Temp\technical_analysis_development_output\governance\FormalObservationLaneDecision_20260807_r1.json `
+  --confirm produce-manual-rule-only-decision
+```
+
+成功時請從 JSON 輸出取得 `manual_observed_json` 路徑；這只建立決策來源，**不**代表 formal credit、elapsed day、holdout consumption、source acceptance 或 production readiness。若命令回報盤外、session mismatch、registry／lane 無效、資料庫時間晚於決策時間、資料不足或 attestation key 缺失，保持 snapshot count=`0`，不要用改時間、fixture、歷史資料或再次 automation invocation 補造輸出。
+
+4. snapshot 僅可追加到 TEMP 或明確命名的 shadow sidecar，並由下列命令人工確認；它不寫 market DB、不啟用 scheduler、交易、training、promotion 或 formal OOS：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\capture_external_evidence_manual.py `
@@ -1438,7 +1450,7 @@ Formal clock 不是 development adapter 完成的延伸；只有在真實決策�
   --confirm append-external-evidence
 ```
 
-4. 每一筆 P0 source 仍需依 `docs/06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md` 取得具名 owner／reviewer 的 license、quality、PIT、coverage、missing／outage 與 rollback 決議；candidate、degraded 或 research-only artifact 都不會自動變成 accepted source。
+5. 每一筆 P0 source 仍需依 `docs/06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md` 取得具名 owner／reviewer 的 license、quality、PIT、coverage、missing／outage 與 rollback 決議；candidate、degraded 或 research-only artifact 都不會自動變成 accepted source。
 
 若上述任一項缺失，snapshot count 維持 0；不得以同日多次執行、pending outcome、歷史回填或 fake／replay artifact 取得 formal credit。
 
