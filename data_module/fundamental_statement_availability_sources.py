@@ -1,4 +1,4 @@
-"""受治理的季度財報 available_date 來源契約。"""
+"""Governed quarterly-statement ``available_date`` source contract."""
 
 from __future__ import annotations
 
@@ -9,15 +9,19 @@ from pathlib import Path
 from typing import Mapping
 
 from data_module.fundamental_availability import (
+    FIRST_OBSERVED_EVIDENCE_CLASSES,
+    FORMAL_AVAILABILITY_CONTRACT_VERSION,
     FundamentalAvailabilityInput,
+    FormalAvailabilityProvenance,
     RETROACTIVE_STATEMENT_BASELINE_SOURCE,
+    parse_formal_official_provenance,
     resolve_fundamental_availability,
 )
 from decision_module.factors.factor_dtos import FactorDiagnostic, FactorQuality
 
 
 StatementAvailabilityKey = tuple[str, str, str]
-STATEMENT_AVAILABILITY_COLUMNS = (
+_BASE_STATEMENT_AVAILABILITY_COLUMNS = (
     "stock_code",
     "statement_type",
     "period",
@@ -26,6 +30,33 @@ STATEMENT_AVAILABILITY_COLUMNS = (
     "available_date",
     "source",
     "source_version",
+)
+STATEMENT_FORMAL_PROVENANCE_COLUMNS = (
+    "availability_contract_version",
+    "evidence_class",
+    "source_hash",
+    "revision",
+    "parent_revision",
+)
+STATEMENT_AVAILABILITY_COLUMNS = (
+    *_BASE_STATEMENT_AVAILABILITY_COLUMNS,
+    *STATEMENT_FORMAL_PROVENANCE_COLUMNS,
+)
+STATEMENT_FORMAL_AVAILABILITY_SOURCES = frozenset(
+    {
+        "manual.statement_available_date_mapping",
+        "tej.statement_announcement_pit",
+        "mops.ezsearch.statement_publication",
+    }
+)
+STATEMENT_BASELINE_AVAILABILITY_SOURCES = frozenset(
+    {RETROACTIVE_STATEMENT_BASELINE_SOURCE}
+)
+STATEMENT_ALLOWED_AVAILABILITY_SOURCES = frozenset(
+    {
+        *STATEMENT_FORMAL_AVAILABILITY_SOURCES,
+        *STATEMENT_BASELINE_AVAILABILITY_SOURCES,
+    }
 )
 RAW_STATEMENT_SOURCES = frozenset(
     {
@@ -47,6 +78,11 @@ class StatementAvailabilityOverride:
     quality: FactorQuality
     source: str
     source_version: str
+    evidence_class: str = ""
+    source_hash: str = ""
+    revision: int = 0
+    parent_revision: int | None = None
+    provenance_mode: str = ""
 
 
 @dataclass(frozen=True)
@@ -62,7 +98,13 @@ class StatementAvailabilityOverrideLoadResult:
 def load_statement_availability_overrides(
     rows: list[Mapping[str, str]],
 ) -> StatementAvailabilityOverrideLoadResult:
+    """Load a mapping while keeping first-seen evidence out of the formal lane."""
+
     overrides: dict[StatementAvailabilityKey, StatementAvailabilityOverride] = {}
+    formal_candidates: dict[
+        StatementAvailabilityKey,
+        list[StatementAvailabilityOverride],
+    ] = {}
     diagnostics: list[FactorDiagnostic] = []
 
     for row in rows:
@@ -71,28 +113,61 @@ def load_statement_availability_overrides(
         period = row.get("period", "").strip()
         source = row.get("source", "").strip()
         source_version = row.get("source_version", "").strip()
-        factor_name = "fundamental.statement_availability"
 
         if source in RAW_STATEMENT_SOURCES:
             diagnostics.append(
                 FactorDiagnostic(
                     code="fundamental_statement_availability.raw_csv_not_available_source",
-                    factor_name=factor_name,
+                    factor_name="fundamental.statement_availability",
                     stock_code=stock_code,
                     message=(
                         "raw statement CSV date is not an announcement or "
-                        f"available_date source; statement_type={statement_type}; period={period}"
+                        "available_date source; "
+                        f"statement_type={statement_type}; period={period}"
                     ),
                 )
             )
             continue
 
+        provenance, provenance_mode, provenance_diagnostics = _resolve_provenance(
+            row,
+            source=source,
+            source_version=source_version,
+            stock_code=stock_code,
+            statement_type=statement_type,
+            period=period,
+        )
+        diagnostics.extend(provenance_diagnostics)
+        if provenance_mode is None:
+            continue
+
         try:
             as_of_date = _parse_required_date(row.get("as_of_date", ""))
+        except ValueError:
+            diagnostics.append(
+                _invalid_date_diagnostic(stock_code, statement_type, period, "as_of_date")
+            )
+            continue
+
+        try:
             announced_date = _parse_optional_date(row.get("announced_date", ""))
             available_date = _parse_optional_date(row.get("available_date", ""))
         except ValueError as exc:
-            diagnostics.append(_invalid_date_diagnostic(stock_code, statement_type, period, str(exc)))
+            diagnostics.append(
+                _invalid_date_diagnostic(stock_code, statement_type, period, str(exc))
+            )
+            continue
+
+        if provenance_mode != "retroactive_baseline" and announced_date is None:
+            diagnostics.append(
+                _provenance_diagnostic(
+                    "official_announcement_missing",
+                    stock_code,
+                    statement_type,
+                    period,
+                    "formal availability mapping requires an explicit official announcement date",
+                )
+            )
             continue
 
         resolution = resolve_fundamental_availability(
@@ -109,7 +184,7 @@ def load_statement_availability_overrides(
         if resolution.available_date is None:
             continue
 
-        overrides[(stock_code, statement_type, period)] = StatementAvailabilityOverride(
+        override = StatementAvailabilityOverride(
             stock_code=stock_code,
             statement_type=statement_type,
             period=period,
@@ -119,7 +194,28 @@ def load_statement_availability_overrides(
             quality=resolution.quality,
             source=source,
             source_version=source_version,
+            evidence_class=(
+                "retroactive_baseline" if provenance is None else provenance.evidence_class
+            ),
+            source_hash="" if provenance is None else provenance.source_hash,
+            revision=0 if provenance is None else provenance.revision,
+            parent_revision=None if provenance is None else provenance.parent_revision,
+            provenance_mode=provenance_mode,
         )
+        key = (stock_code, statement_type, period)
+        if provenance_mode == "retroactive_baseline":
+            overrides[key] = override
+        else:
+            formal_candidates.setdefault(key, []).append(override)
+
+    for key, candidates in formal_candidates.items():
+        latest, chain_diagnostics = _select_latest_formal_revision(candidates)
+        diagnostics.extend(
+            _provenance_diagnostic(code, key[0], key[1], key[2], message)
+            for code, message in chain_diagnostics
+        )
+        if latest is not None:
+            overrides[key] = latest
 
     return StatementAvailabilityOverrideLoadResult(
         overrides=overrides,
@@ -148,7 +244,7 @@ def load_statement_availability_overrides_csv(
         reader = csv.DictReader(handle)
         fieldnames = tuple(reader.fieldnames or ())
         missing_columns = [
-            column for column in STATEMENT_AVAILABILITY_COLUMNS if column not in fieldnames
+            column for column in _BASE_STATEMENT_AVAILABILITY_COLUMNS if column not in fieldnames
         ]
         if missing_columns:
             return StatementAvailabilityOverrideLoadResult(
@@ -166,6 +262,173 @@ def load_statement_availability_overrides_csv(
                 ),
             )
         return load_statement_availability_overrides(list(reader))
+
+
+def _resolve_provenance(
+    row: Mapping[str, str],
+    *,
+    source: str,
+    source_version: str,
+    stock_code: str,
+    statement_type: str,
+    period: str,
+) -> tuple[
+    FormalAvailabilityProvenance | None,
+    str | None,
+    tuple[FactorDiagnostic, ...],
+]:
+    evidence_class = (row.get("evidence_class") or "").strip()
+    contract_version = (row.get("availability_contract_version") or "").strip()
+
+    if (
+        evidence_class in FIRST_OBSERVED_EVIDENCE_CLASSES
+        or _looks_like_first_observed_value(source)
+        or _looks_like_first_observed_value(source_version)
+    ):
+        return None, None, (
+            _provenance_diagnostic(
+                "first_observed_evidence_not_formal",
+                stock_code,
+                statement_type,
+                period,
+                "local first-seen / first-observed evidence is shadow-only and cannot "
+                "be accepted as a formal PIT availability mapping",
+            ),
+        )
+
+    if source in STATEMENT_BASELINE_AVAILABILITY_SOURCES:
+        return None, "retroactive_baseline", ()
+
+    if source not in STATEMENT_FORMAL_AVAILABILITY_SOURCES:
+        return None, None, (
+            _provenance_diagnostic(
+                "unsupported_available_date_source",
+                stock_code,
+                statement_type,
+                period,
+                f"statement availability source is not formally governed; source={source}",
+            ),
+        )
+
+    provenance_values_present = any(
+        (row.get(column) or "").strip() for column in STATEMENT_FORMAL_PROVENANCE_COLUMNS
+    )
+    if not provenance_values_present:
+        return None, None, (
+            _provenance_diagnostic(
+                "formal_provenance_missing",
+                stock_code,
+                statement_type,
+                period,
+                "official mapping must declare formal-availability.v2 provenance",
+            ),
+        )
+
+    if contract_version != FORMAL_AVAILABILITY_CONTRACT_VERSION:
+        return None, None, (
+            _provenance_diagnostic(
+                "unsupported_provenance_contract_version",
+                stock_code,
+                statement_type,
+                period,
+                f"expected={FORMAL_AVAILABILITY_CONTRACT_VERSION}; "
+                f"actual={contract_version or 'missing'}",
+            ),
+        )
+    if not source_version:
+        return None, None, (
+            _provenance_diagnostic(
+                "formal_source_version_missing",
+                stock_code,
+                statement_type,
+                period,
+                "official mapping requires a non-empty source_version",
+            ),
+        )
+
+    provenance, issues = parse_formal_official_provenance(
+        evidence_class=evidence_class,
+        source_hash=row.get("source_hash"),
+        revision=row.get("revision"),
+        parent_revision=row.get("parent_revision"),
+    )
+    if issues:
+        return None, None, tuple(
+            _provenance_diagnostic(
+                f"formal_{issue}",
+                stock_code,
+                statement_type,
+                period,
+                f"official mapping provenance failed validation; issue={issue}",
+            )
+            for issue in issues
+        )
+    assert provenance is not None
+    return provenance, "formal_v2", ()
+
+
+def _select_latest_formal_revision(
+    candidates: list[StatementAvailabilityOverride],
+) -> tuple[
+    StatementAvailabilityOverride | None,
+    tuple[tuple[str, str], ...],
+]:
+    by_revision: dict[int, StatementAvailabilityOverride] = {}
+    issues: list[tuple[str, str]] = []
+    for candidate in candidates:
+        existing = by_revision.get(candidate.revision)
+        if existing is not None:
+            issues.append(
+                (
+                    "formal_duplicate_revision",
+                    f"revision={candidate.revision} occurs more than once for the same natural key",
+                )
+            )
+            continue
+        by_revision[candidate.revision] = candidate
+
+    if issues:
+        return None, tuple(issues)
+
+    revisions = sorted(by_revision)
+    if revisions != list(range(1, len(revisions) + 1)):
+        return None, (
+            (
+                "formal_revision_chain_incomplete",
+                f"revisions must be contiguous from 1; found={revisions}",
+            ),
+        )
+    for revision in revisions:
+        candidate = by_revision[revision]
+        if revision == 1 and candidate.parent_revision is not None:
+            return None, (
+                (
+                    "formal_initial_revision_has_parent",
+                    "revision=1 must not declare parent_revision",
+                ),
+            )
+        if revision > 1 and candidate.parent_revision != revision - 1:
+            return None, (
+                (
+                    "formal_revision_parent_missing",
+                    f"revision={revision} must reference parent_revision={revision - 1}",
+                ),
+            )
+    return by_revision[revisions[-1]], ()
+
+
+def _looks_like_first_observed_value(value: str) -> bool:
+    normalized = value.casefold()
+    return any(
+        token in normalized
+        for token in (
+            "first-seen",
+            "first_seen",
+            "first-observed",
+            "first_observed",
+            "observation",
+        )
+    )
 
 
 def _parse_required_date(value: str) -> date:
@@ -198,4 +461,19 @@ def _invalid_date_diagnostic(
             "statement availability mapping has invalid date field; "
             f"statement_type={statement_type}; period={period}; field={field_name}"
         ),
+    )
+
+
+def _provenance_diagnostic(
+    code: str,
+    stock_code: str,
+    statement_type: str,
+    period: str,
+    message: str,
+) -> FactorDiagnostic:
+    return FactorDiagnostic(
+        code=f"fundamental_statement_availability.{code}",
+        factor_name="fundamental.statement_availability",
+        stock_code=stock_code,
+        message=f"{message}; statement_type={statement_type}; period={period}",
     )

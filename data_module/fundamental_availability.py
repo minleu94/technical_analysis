@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import re
 from typing import Iterable
 
 from decision_module.factors.factor_dtos import FactorDiagnostic, FactorQuality
@@ -18,9 +19,109 @@ RETROACTIVE_BASELINE_SOURCES = frozenset(
 )
 RETROACTIVE_BACKFILL_DATE = date(2026, 6, 17)
 
+# `available_date` is not enough to establish that a row was formally usable at
+# a historical decision boundary.  Keep first-observed evidence in the
+# research/shadow lane and require a separately verifiable official
+# announcement record before a mapping can enter the formal lane.
+OFFICIAL_ANNOUNCEMENT_EVIDENCE_CLASS = "official_announcement"
+FORMAL_AVAILABILITY_CONTRACT_VERSION = "formal-availability.v2"
+FIRST_OBSERVED_EVIDENCE_CLASSES = frozenset(
+    {
+        "first_observed",
+        "local_first_seen",
+        "observed_only",
+    }
+)
+_SHA256_PATTERN = re.compile(r"^(?:sha256:)?[0-9a-fA-F]{64}$")
+
 
 class AvailabilityEvidenceValidationError(ValueError):
     """可得性 evidence 違反時間或 revision contract。"""
+
+
+@dataclass(frozen=True)
+class FormalAvailabilityProvenance:
+    """正式公告 mapping 所需的可稽核 provenance。
+
+    此 DTO 只描述「可接受為正式公告 mapping」的證據。retroactive
+    baseline 與 first-observed evidence 有不同用途，不能用這個 DTO 假裝成
+    歷史公告證據。
+    """
+
+    evidence_class: str
+    source_hash: str
+    revision: int
+    parent_revision: int | None
+
+
+def parse_formal_official_provenance(
+    *,
+    evidence_class: str | None,
+    source_hash: str | None,
+    revision: str | int | None,
+    parent_revision: str | int | None,
+) -> tuple[FormalAvailabilityProvenance | None, tuple[str, ...]]:
+    """解析並驗證正式公告 mapping 的 evidence／hash／revision contract.
+
+    回傳的錯誤代碼刻意不綁定月營收或財報，讓兩個 availability loader
+    都能以各自的 factor diagnostic prefix 呈現同一個 fail-closed 規則。
+    """
+
+    issues: list[str] = []
+    normalized_class = (evidence_class or "").strip()
+    if not normalized_class:
+        issues.append("missing_evidence_class")
+    elif normalized_class in FIRST_OBSERVED_EVIDENCE_CLASSES:
+        issues.append("first_observed_evidence_not_formal")
+    elif normalized_class != OFFICIAL_ANNOUNCEMENT_EVIDENCE_CLASS:
+        issues.append("invalid_evidence_class")
+
+    normalized_hash = (source_hash or "").strip()
+    if not normalized_hash:
+        issues.append("missing_source_hash")
+    elif _SHA256_PATTERN.fullmatch(normalized_hash) is None:
+        issues.append("invalid_source_hash")
+
+    parsed_revision = _parse_provenance_revision(revision)
+    if parsed_revision is None:
+        issues.append("missing_or_invalid_revision")
+
+    raw_parent = "" if parent_revision is None else str(parent_revision).strip()
+    parsed_parent = _parse_provenance_revision(parent_revision) if raw_parent else None
+    if raw_parent and parsed_parent is None:
+        issues.append("invalid_parent_revision")
+
+    if parsed_revision is not None:
+        if parsed_revision == 1 and raw_parent:
+            issues.append("initial_revision_has_parent")
+        elif parsed_revision > 1:
+            if parsed_parent is None:
+                issues.append("revision_parent_missing")
+            elif parsed_parent != parsed_revision - 1:
+                issues.append("revision_parent_must_be_previous")
+
+    if issues:
+        return None, tuple(sorted(set(issues)))
+    assert parsed_revision is not None
+    return (
+        FormalAvailabilityProvenance(
+            evidence_class=normalized_class,
+            source_hash=normalized_hash,
+            revision=parsed_revision,
+            parent_revision=parsed_parent,
+        ),
+        (),
+    )
+
+
+def _parse_provenance_revision(value: str | int | None) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    text = str(value).strip()
+    if not text or not text.isdigit():
+        return None
+    parsed = int(text)
+    return parsed if parsed >= 1 else None
 
 
 @dataclass(frozen=True)

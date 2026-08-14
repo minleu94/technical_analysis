@@ -8,6 +8,7 @@ from pathlib import Path
 
 from data_module.fundamental_availability import RETROACTIVE_STATEMENT_BASELINE_SOURCE
 from data_module.fundamental_statement_availability_sources import (
+    STATEMENT_ALLOWED_AVAILABILITY_SOURCES as _STATEMENT_ALLOWED_AVAILABILITY_SOURCES,
     StatementAvailabilityOverride,
     load_statement_availability_overrides_csv,
 )
@@ -17,14 +18,7 @@ from data_module.mops_ezsearch_statement_availability import (
 from decision_module.factors.factor_dtos import FactorDiagnostic
 
 
-STATEMENT_ALLOWED_AVAILABILITY_SOURCES = frozenset(
-    {
-        "manual.statement_available_date_mapping",
-        "tej.statement_announcement_pit",
-        MOPS_STATEMENT_AVAILABILITY_SOURCE,
-        RETROACTIVE_STATEMENT_BASELINE_SOURCE,
-    }
-)
+STATEMENT_ALLOWED_AVAILABILITY_SOURCES = _STATEMENT_ALLOWED_AVAILABILITY_SOURCES
 STATEMENT_MAX_AVAILABLE_LAG_DAYS = 120
 
 

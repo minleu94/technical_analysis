@@ -18,6 +18,8 @@ from data_module.fundamental_availability import (
     AvailabilityCoverageDiagnostics,
     AvailabilityEvidenceRecord,
     AvailabilityEvidenceValidationError,
+    FORMAL_AVAILABILITY_CONTRACT_VERSION,
+    OFFICIAL_ANNOUNCEMENT_EVIDENCE_CLASS,
     append_availability_revision,
     summarize_availability_coverage,
     visible_evidence_as_of,
@@ -25,6 +27,7 @@ from data_module.fundamental_availability import (
 from data_module.monthly_revenue_availability_builder import (
     MonthlyRevenueAvailabilityRow,
     RawRevenuePeriod,
+    _official_row_source_hash,
 )
 from decision_module.factors.factor_dtos import FactorDiagnostic
 
@@ -360,6 +363,11 @@ def build_historical_monthly_revenue_availability(
                     "available_date": available_date.isoformat(),
                     "source": source,
                     "source_version": source_version,
+                    "availability_contract_version": FORMAL_AVAILABILITY_CONTRACT_VERSION,
+                    "evidence_class": OFFICIAL_ANNOUNCEMENT_EVIDENCE_CLASS,
+                    "source_hash": _official_row_source_hash(official_row),
+                    "revision": "1",
+                    "parent_revision": "",
                 }
             )
 

@@ -5,10 +5,11 @@
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 # 確保 pd.isna 可用（pandas 兼容性）
 if not hasattr(pd, 'isna'):
@@ -45,6 +46,7 @@ from app_module.recommendation_market_data_provider import (
 from app_module.recommendation_market_frame import normalize_market_frame
 from app_module.recommendation_ranking_pipeline import build_ranking_plan
 from app_module.application_ports import MarketFrameProvider
+from data_module.fundamental_sqlite_provider import FundamentalSQLiteProvider
 
 
 class RecommendationService:
@@ -82,6 +84,8 @@ class RecommendationService:
         self.last_liquidity_gate_payload_json: List[Dict[str, Any]] = []
         self.last_exclusion_quality: str = "observed"
         self.last_exclusion_warnings_json: List[str] = []
+        self._fundamental_sqlite_provider: FundamentalSQLiteProvider | None = None
+        self._fundamental_provider_initialization_attempted = False
 
     def _reset_negative_evidence_buffers(self) -> None:
         self.last_screening_matrix = []
@@ -166,6 +170,65 @@ class RecommendationService:
         if len(normalized_text) != 8 or not normalized_text.isdigit():
             raise ValueError(f"unsupported decision date: {date_text}")
         return datetime.strptime(normalized_text, "%Y%m%d").date().isoformat()
+
+    def _load_governed_monthly_revenues(
+        self,
+        *,
+        stock_code: str,
+        decision_date: date,
+    ):
+        """只讀取有獨立正式 availability mapping 支持的月營收。"""
+
+        provider = self._get_fundamental_sqlite_provider()
+        if provider is None:
+            return ()
+        try:
+            return provider.load_monthly_revenues(
+                stock_code=stock_code,
+                decision_date=decision_date,
+            )
+        except Exception as exc:
+            # 基本面門檻無法建立正式 PIT 證據時，後續流程會以 missing 排除；
+            # 不可退回到直接讀 SQLite row 的舊路徑。
+            import logging
+
+            logging.getLogger(__name__).error("查詢受治理月營收失敗: %s", exc)
+            return ()
+
+    def _get_fundamental_sqlite_provider(self) -> FundamentalSQLiteProvider | None:
+        if self._fundamental_sqlite_provider is not None:
+            return self._fundamental_sqlite_provider
+        if self._fundamental_provider_initialization_attempted:
+            return None
+
+        self._fundamental_provider_initialization_attempted = True
+        db_file = getattr(self.config, "db_file", None)
+        if db_file is None:
+            return None
+        try:
+            db_path = Path(cast(str, db_file))
+        except (TypeError, ValueError):
+            return None
+
+        availability_file = getattr(
+            self.config,
+            "monthly_revenue_availability_file",
+            None,
+        )
+        try:
+            availability_path = (
+                Path(availability_file) if availability_file is not None else None
+            )
+        except (TypeError, ValueError):
+            availability_file = None
+        else:
+            availability_file = availability_path
+
+        self._fundamental_sqlite_provider = FundamentalSQLiteProvider(
+            db_path,
+            monthly_revenue_availability_file=availability_file,
+        )
+        return self._fundamental_sqlite_provider
 
     def run_recommendation(
         self,
@@ -451,39 +514,42 @@ class RecommendationService:
                     # 2. 月營收 YOY% 過濾
                     if revenue_yoy_min > to_decimal("-100.0"):
                         yoy_val_dec = None
-                        import sqlite3
-                        try:
-                            with sqlite3.connect(self.config.db_file) as conn:
-                                conn.row_factory = sqlite3.Row
-                                cursor = conn.cursor()
-                                cursor.execute(
-                                    "SELECT period, revenue FROM fundamental_monthly_revenues "
-                                    "WHERE stock_code = ? AND available_date <= ? "
-                                    "ORDER BY available_date DESC, period DESC LIMIT 1",
-                                    (stock_code_text, decision_date)
+                        revenue_records = self._load_governed_monthly_revenues(
+                            stock_code=stock_code_text,
+                            decision_date=date.fromisoformat(decision_date),
+                        )
+                        if revenue_records:
+                            latest_revenue = max(
+                                revenue_records,
+                                key=lambda record: (
+                                    record.available_date,
+                                    record.period,
+                                    record.source_version,
+                                ),
+                            )
+                            year_curr, month_curr = map(
+                                int,
+                                latest_revenue.period.split("-"),
+                            )
+                            period_prev = f"{year_curr - 1:04d}-{month_curr:02d}"
+                            prior_candidates = [
+                                record
+                                for record in revenue_records
+                                if record.period == period_prev
+                            ]
+                            if prior_candidates:
+                                prior_revenue = max(
+                                    prior_candidates,
+                                    key=lambda record: (
+                                        record.available_date,
+                                        record.source_version,
+                                    ),
                                 )
-                                row = cursor.fetchone()
-                                if row and row['revenue'] is not None:
-                                    period_curr = row['period']
-                                    rev_curr_dec = to_decimal(row['revenue'])
-
-                                    year_curr, month_curr = map(int, period_curr.split('-'))
-                                    period_prev = f"{year_curr - 1:04d}-{month_curr:02d}"
-
-                                    # 去年同期營收查詢，同樣限制 available_date <= decision_date，並以 available_date 與 period 穩定降序排列以滿足 PIT 可重複性
-                                    cursor.execute(
-                                        "SELECT revenue FROM fundamental_monthly_revenues "
-                                        "WHERE stock_code = ? AND period = ? AND available_date <= ? "
-                                        "ORDER BY available_date DESC, period DESC LIMIT 1",
-                                        (stock_code_text, period_prev, decision_date)
-                                    )
-                                    row_prev = cursor.fetchone()
-                                    if row_prev and row_prev['revenue'] is not None:
-                                        rev_prev_dec = to_decimal(row_prev['revenue'])
-                                        if rev_prev_dec > to_decimal("0"):
-                                            yoy_val_dec = ((rev_curr_dec - rev_prev_dec) / rev_prev_dec) * to_decimal("100.0")
-                        except Exception as e:
-                            logger.error(f"查詢月營收 YOY 失敗: {e}")
+                                if prior_revenue.revenue > to_decimal("0"):
+                                    yoy_val_dec = (
+                                        (latest_revenue.revenue - prior_revenue.revenue)
+                                        / prior_revenue.revenue
+                                    ) * to_decimal("100.0")
 
                         if yoy_val_dec is None:
                             # 查不到營收或去年同期營收，明確排除

@@ -10,6 +10,10 @@ import re
 from typing import Any, Iterable, Mapping, Protocol
 from urllib.parse import urlparse
 
+from data_module.fundamental_availability import (
+    FORMAL_AVAILABILITY_CONTRACT_VERSION,
+    OFFICIAL_ANNOUNCEMENT_EVIDENCE_CLASS,
+)
 
 MOPS_EZSEARCH_URL = "https://mopsov.twse.com.tw/mops/web/ezsearch"
 MOPS_EZSEARCH_QUERY_URL = "https://mopsov.twse.com.tw/mops/web/ezsearch_query"
@@ -149,6 +153,8 @@ def build_statement_availability_artifact(
             raise ValueError(f"unsupported MOPS market: {result.market}")
         if result.announcement_item not in MOPS_STATEMENT_ITEMS:
             raise ValueError(f"unsupported MOPS statement item: {result.announcement_item}")
+        if re.fullmatch(r"[0-9a-fA-F]{64}", result.response_sha256) is None:
+            raise ValueError("MOPS query result response_sha256 must be a SHA-256 hex digest")
         query_manifest.append(
             {
                 "market": result.market,
@@ -167,6 +173,7 @@ def build_statement_availability_artifact(
                 start_date=start_date,
                 end_date=end_date,
                 captured_at=captured,
+                source_hash=f"sha256:{result.response_sha256}",
             )
             if row["event_hash"] in seen_event_hashes:
                 duplicate_event_count += 1
@@ -256,6 +263,11 @@ def build_availability_projection(
                 "available_date": (announcement_at.date() + timedelta(days=1)).isoformat(),
                 "source": MOPS_STATEMENT_AVAILABILITY_SOURCE,
                 "source_version": MOPS_STATEMENT_AVAILABILITY_SOURCE_VERSION,
+                "availability_contract_version": FORMAL_AVAILABILITY_CONTRACT_VERSION,
+                "evidence_class": OFFICIAL_ANNOUNCEMENT_EVIDENCE_CLASS,
+                "source_hash": str(row["source_hash"]),
+                "revision": "1",
+                "parent_revision": "",
             }
         )
     return projected
@@ -269,6 +281,7 @@ def _parse_statement_row(
     start_date: date,
     end_date: date,
     captured_at: datetime,
+    source_hash: str,
 ) -> dict[str, Any]:
     required = {
         "CDATE",
@@ -333,6 +346,7 @@ def _parse_statement_row(
         "announcement_at": announcement_at.isoformat(),
         "detail_url": detail_url,
         "event_hash": event_hash,
+        "source_hash": source_hash,
     }
 
 

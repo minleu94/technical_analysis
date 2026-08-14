@@ -22,9 +22,12 @@ def _write_revenue_csv(raw_dir, stock_code: str = "2330") -> None:
 
 def _write_availability_csv(path) -> None:
     path.write_text(
-        "stock_code,period,as_of_date,announced_date,available_date,source,source_version\n"
+        "stock_code,period,as_of_date,announced_date,available_date,source,source_version,"
+        "availability_contract_version,evidence_class,source_hash,revision,parent_revision\n"
         "2330,2026-05,2026-05-31,2026-06-10,2026-06-11,"
-        "manual.twse_monthly_revenue_announcement_log,announcement-log-2026-06-16\n",
+        "manual.twse_monthly_revenue_announcement_log,announcement-log-2026-06-16,"
+        "formal-availability.v2,official_announcement,sha256:"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,1,\n",
         encoding="utf-8",
     )
 

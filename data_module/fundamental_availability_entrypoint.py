@@ -8,22 +8,17 @@ from pathlib import Path
 
 from data_module.fundamental_availability import RETROACTIVE_BASELINE_SOURCE
 from data_module.fundamental_availability_sources import (
+    MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES as _MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES,
     FundamentalAvailabilityOverride,
     load_monthly_revenue_availability_overrides_csv,
 )
 from decision_module.factors.factor_dtos import FactorDiagnostic
 
 
-MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES = frozenset(
-    {
-        "manual.twse_monthly_revenue_announcement_log",
-        "manual.available_date_mapping",
-        "twse.monthly_revenue_announcement",
-        "tpex.monthly_revenue_announcement",
-        "mops.monthly_revenue_announcement",
-        "tej.monthly_revenue_announcement_pit",
-        RETROACTIVE_BASELINE_SOURCE,
-    }
+# Keep the public entrypoint constant for callers, but make the loader and the
+# validator share exactly the same governed-source policy.
+MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES = (
+    _MONTHLY_REVENUE_ALLOWED_AVAILABILITY_SOURCES
 )
 MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS = 45
 

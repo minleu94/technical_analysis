@@ -34,7 +34,12 @@ def main(argv: list[str] | None = None) -> int:
     config = TWStockConfig()
     db_file = args.db_file or config.db_file
     companies_file = args.companies_file or (config.meta_data_dir / "companies.csv")
-    backup_dir = args.backup_dir or config.backup_dir
+    if args.backup_dir is not None:
+        backup_dir = args.backup_dir
+    elif args.db_file is not None:
+        backup_dir = args.db_file.parent / "backup"
+    else:
+        backup_dir = config.backup_dir
     industry_by_stock = load_industry_by_stock_from_companies(companies_file)
 
     if args.apply:

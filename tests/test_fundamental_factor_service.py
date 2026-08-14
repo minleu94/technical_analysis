@@ -3,9 +3,39 @@ from __future__ import annotations
 import sqlite3
 from calendar import monthrange
 from datetime import date
+from pathlib import Path
 
 from app_module.fundamental_factor_service import FundamentalFactorService
 from data_module.fundamental_schema import apply_fundamental_schema
+
+
+def _write_formal_mapping(path: Path, rows: list[tuple[str, str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = (
+        "stock_code,period,as_of_date,announced_date,available_date,source,source_version,"
+        "availability_contract_version,evidence_class,source_hash,revision,parent_revision"
+    )
+    mapping_rows = []
+    for index, (period, as_of_date, available_date) in enumerate(rows, start=1):
+        mapping_rows.append(
+            ",".join(
+                (
+                    "2330",
+                    period,
+                    as_of_date,
+                    available_date,
+                    available_date,
+                    "twse.monthly_revenue_announcement",
+                    "test-formal-v2",
+                    "formal-availability.v2",
+                    "official_announcement",
+                    f"{index:064x}",
+                    "1",
+                    "",
+                )
+            )
+        )
+    path.write_text("\n".join((header, *mapping_rows)) + "\n", encoding="utf-8")
 
 
 def _insert_revenue(conn, period: str, available_date: str, revenue: str) -> None:
@@ -41,6 +71,15 @@ def test_fundamental_factor_service_builds_revenue_pack_from_sqlite_provider(tmp
         _insert_revenue(conn, "2026-04", "2026-05-11", "100")
         _insert_revenue(conn, "2026-05", "2026-06-11", "120")
         _insert_revenue(conn, "2026-06", "2026-07-11", "140")
+    _write_formal_mapping(
+        tmp_path / "meta_data" / "monthly_revenue_availability.csv",
+        [
+            ("2025-05", "2025-05-31", "2025-06-11"),
+            ("2026-04", "2026-04-30", "2026-05-11"),
+            ("2026-05", "2026-05-31", "2026-06-11"),
+            ("2026-06", "2026-06-30", "2026-07-11"),
+        ],
+    )
 
     snapshot = FundamentalFactorService(db_file).build_snapshot(
         stock_code="2330",

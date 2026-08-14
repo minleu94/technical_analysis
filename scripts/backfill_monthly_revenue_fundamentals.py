@@ -37,7 +37,12 @@ def main(argv: list[str] | None = None) -> int:
     db_file = args.db_file or config.db_file
     raw_dir = args.raw_dir or (config.data_root / "financial_data")
     availability_file = args.availability_file or config.monthly_revenue_availability_file
-    backup_dir = args.backup_dir or config.backup_dir
+    if args.backup_dir is not None:
+        backup_dir = args.backup_dir
+    elif args.db_file is not None:
+        backup_dir = args.db_file.parent / "backup"
+    else:
+        backup_dir = config.backup_dir
 
     if args.apply:
         if args.confirm != "apply-monthly-revenue-backfill":

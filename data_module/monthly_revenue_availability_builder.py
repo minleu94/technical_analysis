@@ -6,9 +6,15 @@ import csv
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, timedelta
+from hashlib import sha256
+import json
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from data_module.fundamental_availability import (
+    FORMAL_AVAILABILITY_CONTRACT_VERSION,
+    OFFICIAL_ANNOUNCEMENT_EVIDENCE_CLASS,
+)
 
 TWSE_MONTHLY_REVENUE_SOURCE = "twse.monthly_revenue_announcement"
 TWSE_MONTHLY_REVENUE_SOURCE_VERSION_PREFIX = "twse-openapi-t187ap05-p"
@@ -71,6 +77,11 @@ def build_monthly_revenue_availability_rows(
                 "available_date": available_date.isoformat(),
                 "source": TWSE_MONTHLY_REVENUE_SOURCE,
                 "source_version": source_version,
+                "availability_contract_version": FORMAL_AVAILABILITY_CONTRACT_VERSION,
+                "evidence_class": OFFICIAL_ANNOUNCEMENT_EVIDENCE_CLASS,
+                "source_hash": _official_row_source_hash(official_row),
+                "revision": "1",
+                "parent_revision": "",
             }
         )
 
@@ -131,3 +142,24 @@ def _period_end(period: str) -> date:
     year = int(year_text)
     month = int(month_text)
     return date(year, month, monthrange(year, month)[1])
+
+
+def _official_row_source_hash(row: Mapping[str, object]) -> str:
+    """Return a stable, row-level fingerprint of the official source evidence.
+
+    Loader-specific ``__...`` fields are intentionally excluded: they describe
+    how this process read an official response, rather than the response row
+    that the mapping is meant to prove.
+    """
+
+    canonical = json.dumps(
+        {
+            str(key): str(value)
+            for key, value in row.items()
+            if not str(key).startswith("__")
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"sha256:{sha256(canonical.encode('utf-8')).hexdigest()}"

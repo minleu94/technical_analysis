@@ -18,17 +18,21 @@ def test_build_monthly_revenue_availability_rows_uses_twse_publication_date() ->
         fetch_date=date(2026, 6, 16),
     )
 
-    assert result.rows == [
-        {
-            "stock_code": "2330",
-            "period": "2026-05",
-            "as_of_date": "2026-05-31",
-            "announced_date": "2026-06-15",
-            "available_date": "2026-06-16",
-            "source": "twse.monthly_revenue_announcement",
-            "source_version": "twse-openapi-t187ap05-p-2026-06-16",
-        }
-    ]
+    assert result.rows[0] == {
+        "stock_code": "2330",
+        "period": "2026-05",
+        "as_of_date": "2026-05-31",
+        "announced_date": "2026-06-15",
+        "available_date": "2026-06-16",
+        "source": "twse.monthly_revenue_announcement",
+        "source_version": "twse-openapi-t187ap05-p-2026-06-16",
+        "availability_contract_version": "formal-availability.v2",
+        "evidence_class": "official_announcement",
+        "source_hash": "sha256:"
+        "4fa84dc3604c1167e8f8fd9ff44fb4cfe328b5123161f3b1235bd6a413a3e4b5",
+        "revision": "1",
+        "parent_revision": "",
+    }
     assert result.skipped_not_in_raw_count == 1
     assert result.diagnostics == ()
 

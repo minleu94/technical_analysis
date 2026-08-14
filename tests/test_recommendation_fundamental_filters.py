@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from app_module.recommendation_service import RecommendationService
 from app_module.application_ports import MarketFrameProvider
+from data_module.fundamental_schema import apply_fundamental_schema
 
 
 class _FakeMarketFrameProvider(MarketFrameProvider):
@@ -21,44 +24,42 @@ class _FakeMarketFrameProvider(MarketFrameProvider):
         return self._stock_df[self._stock_df["證券代號"] == stock_code]
 
 
+def _write_formal_mapping(path: Path, rows: list[tuple[str, ...]]) -> None:
+    header = (
+        "stock_code,period,as_of_date,announced_date,available_date,source,source_version,"
+        "availability_contract_version,evidence_class,source_hash,revision,parent_revision"
+    )
+    path.write_text(
+        "\n".join((header, *( ",".join(row) for row in rows))) + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_fundamental_filters_pe_and_yoy_scenarios(test_config) -> None:
     # 1. 建立測試的 SQLite 基本面資料表
     with sqlite3.connect(test_config.db_file) as conn:
-        conn.execute(
-            """
-            CREATE TABLE fundamental_valuation_metrics (
-                stock_code TEXT NOT NULL,
-                metric_name TEXT NOT NULL,
-                as_of_date TEXT NOT NULL,
-                available_date TEXT NOT NULL,
-                value REAL NOT NULL,
-                PRIMARY KEY (stock_code, metric_name, available_date)
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE fundamental_monthly_revenues (
-                stock_code TEXT NOT NULL,
-                period TEXT NOT NULL,
-                as_of_date TEXT NOT NULL,
-                available_date TEXT NOT NULL,
-                revenue REAL NOT NULL,
-                PRIMARY KEY (stock_code, period, available_date)
-            )
-            """
-        )
+        apply_fundamental_schema(conn)
 
         # 插入 PE 測試資料
         # 股票 2330: PE = 12 (符合門檻 15)
         conn.execute(
-            "INSERT INTO fundamental_valuation_metrics VALUES (?, ?, ?, ?, ?)",
-            ("2330", "pe", "2026-06-30", "2026-07-01", 12.0)
+            """
+            INSERT INTO fundamental_valuation_metrics(
+                stock_code, as_of_date, available_date, metric_name, value,
+                industry, industry_percentile_bp, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2330", "2026-06-30", "2026-07-01", "pe", "12.0", None, None, "test", "v1", "observed")
         )
         # 股票 2317: PE = 18 (超出門檻 15，應排除)
         conn.execute(
-            "INSERT INTO fundamental_valuation_metrics VALUES (?, ?, ?, ?, ?)",
-            ("2317", "pe", "2026-06-30", "2026-07-01", 18.0)
+            """
+            INSERT INTO fundamental_valuation_metrics(
+                stock_code, as_of_date, available_date, metric_name, value,
+                industry, industry_percentile_bp, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2317", "2026-06-30", "2026-07-01", "pe", "18.0", None, None, "test", "v1", "observed")
         )
         # 股票 2454: 故意不在 PE 表中插入資料，以測試 PE 缺失排除
 
@@ -66,52 +67,135 @@ def test_fundamental_filters_pe_and_yoy_scenarios(test_config) -> None:
         # 2026-07-10 宣告 PE = 14 (應採用)
         # 2026-07-18 宣告 PE = 22 (未來資料，不應採用)
         conn.execute(
-            "INSERT INTO fundamental_valuation_metrics VALUES (?, ?, ?, ?, ?)",
-            ("2303", "pe", "2026-06-30", "2026-07-10", 14.0)
+            """
+            INSERT INTO fundamental_valuation_metrics(
+                stock_code, as_of_date, available_date, metric_name, value,
+                industry, industry_percentile_bp, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2303", "2026-06-30", "2026-07-10", "pe", "14.0", None, None, "test", "v1", "observed")
         )
         conn.execute(
-            "INSERT INTO fundamental_valuation_metrics VALUES (?, ?, ?, ?, ?)",
-            ("2303", "pe", "2026-07-15", "2026-07-18", 22.0)
+            """
+            INSERT INTO fundamental_valuation_metrics(
+                stock_code, as_of_date, available_date, metric_name, value,
+                industry, industry_percentile_bp, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2303", "2026-07-15", "2026-07-18", "pe", "22.0", None, None, "test", "v1", "observed")
         )
 
         # 插入月營收 YoY 測試資料
         # 門檻為 5.0%
         # 2330: 今年營收 108，去年同期營收 100，YoY = 8% (符合)
         conn.execute(
-            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?)",
-            ("2330", "2026-06", "2026-06-30", "2026-07-10", 108.0)
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2330", "2026-06", "2026-06-30", "2026-07-10", "2026-07-10", "108.0", "mops.monthly_revenue_static_snapshot", "test-snapshot", "observed")
         )
         conn.execute(
-            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?)",
-            ("2330", "2025-06", "2025-06-30", "2025-07-10", 100.0)
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2330", "2025-06", "2025-06-30", "2025-07-10", "2025-07-10", "100.0", "mops.monthly_revenue_static_snapshot", "test-snapshot", "observed")
         )
 
         # 2317: 今年營收 103，去年同期營收 100，YoY = 3% (低於 5.0%，應排除)
         conn.execute(
-            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?)",
-            ("2317", "2026-06", "2026-06-30", "2026-07-10", 103.0)
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2317", "2026-06", "2026-06-30", "2026-07-10", "2026-07-10", "103.0", "mops.monthly_revenue_static_snapshot", "test-snapshot", "observed")
         )
         conn.execute(
-            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?)",
-            ("2317", "2025-06", "2025-06-30", "2025-07-10", 100.0)
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2317", "2025-06", "2025-06-30", "2025-07-10", "2025-07-10", "100.0", "mops.monthly_revenue_static_snapshot", "test-snapshot", "observed")
         )
 
         # 2303: 去年同期有多個版本，測試 PIT 穩定排序 (ORDER BY available_date DESC)
         # 今年營收 110 (YoY 對照 100 應為 10%)
         conn.execute(
-            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?)",
-            ("2303", "2026-06", "2026-06-30", "2026-07-10", 110.0)
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2303", "2026-06", "2026-06-30", "2026-07-10", "2026-07-10", "110.0", "mops.monthly_revenue_static_snapshot", "test-snapshot", "observed")
         )
         # 2025-06 原始版: 營收 100 (available_date: 2025-07-05)
         # 2025-06 修正版: 營收 105 (available_date: 2025-07-09) -> 應採用此版，YoY = 4.76% (低於 5%，排除)
         conn.execute(
-            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?)",
-            ("2303", "2025-06", "2025-06-30", "2025-07-05", 100.0)
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2303", "2025-06", "2025-06-30", "2025-07-05", "2025-07-05", "100.0", "mops.monthly_revenue_static_snapshot", "test-snapshot-r1", "observed")
         )
         conn.execute(
-            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?)",
-            ("2303", "2025-06", "2025-06-30", "2025-07-09", 105.0)
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("2303", "2025-06", "2025-06-30", "2025-07-09", "2025-07-09", "105.0", "mops.monthly_revenue_static_snapshot", "test-snapshot-r2", "observed")
         )
+
+    _write_formal_mapping(
+        test_config.monthly_revenue_availability_file,
+        [
+            (
+                stock_code,
+                period,
+                as_of_date,
+                announced_date,
+                available_date,
+                "twse.monthly_revenue_announcement",
+                "test-formal-v2",
+                "formal-availability.v2",
+                "official_announcement",
+                source_hash,
+                revision,
+                parent_revision,
+            )
+            for (
+                stock_code,
+                period,
+                as_of_date,
+                announced_date,
+                available_date,
+                source_hash,
+                revision,
+                parent_revision,
+            ) in [
+                ("2330", "2026-06", "2026-06-30", "2026-07-10", "2026-07-10", "a" * 64, "1", ""),
+                ("2330", "2025-06", "2025-06-30", "2025-07-10", "2025-07-10", "b" * 64, "1", ""),
+                ("2317", "2026-06", "2026-06-30", "2026-07-10", "2026-07-10", "c" * 64, "1", ""),
+                ("2317", "2025-06", "2025-06-30", "2025-07-10", "2025-07-10", "d" * 64, "1", ""),
+                ("2303", "2026-06", "2026-06-30", "2026-07-10", "2026-07-10", "e" * 64, "1", ""),
+                ("2303", "2025-06", "2025-06-30", "2025-07-05", "2025-07-05", "f" * 64, "1", ""),
+                ("2303", "2025-06", "2025-06-30", "2025-07-09", "2025-07-09", "0" * 64, "2", "1"),
+            ]
+        ],
+    )
 
     # 2. 模擬市場資料 DataFrame (生成 20 筆歷史數據以符合 pre_evaluation 長度限制)
     rows = []
@@ -187,6 +271,108 @@ def test_fundamental_filters_pe_and_yoy_scenarios(test_config) -> None:
     # YoY = (110 - 105) / 105 * 100 = 4.7619... -> quantize to 0.01 is 4.76
     assert row_2303["observed_value"] == "4.76"
     assert row_2303["required_value"] == "5.0"
+
+
+def test_recommendation_yoy_filter_rejects_unmapped_snapshot_rows(test_config) -> None:
+    with sqlite3.connect(test_config.db_file) as conn:
+        apply_fundamental_schema(conn)
+        conn.executemany(
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "2330",
+                    "2025-05",
+                    "2025-05-31",
+                    "2025-06-16",
+                    "2025-06-17",
+                    "100.0",
+                    "mops.monthly_revenue_static_snapshot",
+                    "snapshot-2026-07-14",
+                    "observed",
+                ),
+                (
+                    "2330",
+                    "2026-05",
+                    "2026-05-31",
+                    "2026-06-16",
+                    "2026-06-17",
+                    "110.0",
+                    "mops.monthly_revenue_static_snapshot",
+                    "snapshot-2026-07-14",
+                    "observed",
+                ),
+            ],
+        )
+
+    # 檔案本身有效，但沒有為 2330 的 snapshot row 提供正式 availability 證據。
+    _write_formal_mapping(
+        test_config.monthly_revenue_availability_file,
+        [
+            (
+                "9999",
+                "2026-06",
+                "2026-06-30",
+                "2026-07-14",
+                "2026-07-15",
+                "twse.monthly_revenue_announcement",
+                "test-formal-v2",
+                "formal-availability.v2",
+                "official_announcement",
+                "a" * 64,
+                "1",
+                "",
+            )
+        ],
+    )
+    market_frame = pd.DataFrame(
+        [
+            {
+                "日期": pd.Timestamp("2026-06-11") + pd.Timedelta(days=index),
+                "證券代號": "2330",
+                "證券名稱": "台積電",
+                "漲幅%": 1.5,
+                "成交量": 50000,
+                "收盤價": 100.0,
+                "成交量變化率%": 10.0,
+            }
+            for index in range(20)
+        ]
+    )
+    service = RecommendationService(
+        config=test_config,
+        market_data_provider=_FakeMarketFrameProvider(market_frame),
+    )
+    service.strategy_configurator.generate_recommendations = lambda _frame, _config: pd.DataFrame(
+        {
+            "TotalScore": [80.0],
+            "FinalScore": [80.0],
+            "收盤價": [100.0],
+            "成交量": [50000],
+        }
+    )
+
+    result = service.run_recommendation(
+        config={
+            "filters": {
+                "pe_ratio_max": 999.0,
+                "monthly_revenue_yoy_min": 5.0,
+                "volume_change_min_percent": 0.0,
+            },
+            "ranking": {"weights": {"漲幅%": 100}},
+        },
+        max_stocks=1,
+        top_n=1,
+    )
+
+    assert result == []
+    assert service.last_screening_matrix[0]["reason_codes"] == [
+        "fundamental_revenue_yoy_missing"
+    ]
 
 
 def test_normalize_decision_date_rejects_ambiguous_input() -> None:

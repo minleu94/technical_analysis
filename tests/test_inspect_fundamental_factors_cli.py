@@ -1,9 +1,51 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 from data_module.fundamental_schema import apply_fundamental_schema
 from scripts.inspect_fundamental_factors import main
+
+
+def _write_formal_mapping_from_db(db_file: Path) -> None:
+    with sqlite3.connect(db_file) as conn:
+        rows = conn.execute(
+            """
+            SELECT stock_code, period, as_of_date, announced_date, available_date
+            FROM fundamental_monthly_revenues
+            ORDER BY stock_code, period, available_date
+            """
+        ).fetchall()
+
+    mapping_file = db_file.parent / "meta_data" / "monthly_revenue_availability.csv"
+    mapping_file.parent.mkdir(parents=True, exist_ok=True)
+    header = (
+        "stock_code,period,as_of_date,announced_date,available_date,source,source_version,"
+        "availability_contract_version,evidence_class,source_hash,revision,parent_revision"
+    )
+    mapping_rows = [
+        ",".join(
+            (
+                stock_code,
+                period,
+                as_of_date,
+                announced_date,
+                available_date,
+                "twse.monthly_revenue_announcement",
+                "test-formal-v2",
+                "formal-availability.v2",
+                "official_announcement",
+                f"{index:064x}",
+                "1",
+                "",
+            )
+        )
+        for index, (stock_code, period, as_of_date, announced_date, available_date) in enumerate(
+            rows,
+            start=1,
+        )
+    ]
+    mapping_file.write_text("\n".join((header, *mapping_rows)) + "\n", encoding="utf-8")
 
 
 def _insert_revenue(
@@ -45,6 +87,7 @@ def test_inspect_fundamental_factors_cli_reports_revenue_factor_summary(tmp_path
         _insert_revenue(conn, stock_code="2330", period="2026-03", as_of_date="2026-03-31", revenue="110", available_date="2026-04-11")
         _insert_revenue(conn, stock_code="2330", period="2026-04", as_of_date="2026-04-30", revenue="120", available_date="2026-05-11")
         _insert_revenue(conn, stock_code="2330", period="2026-05", as_of_date="2026-05-31", revenue="150", available_date="2026-06-17")
+    _write_formal_mapping_from_db(db_file)
 
     exit_code = main(
         [
@@ -74,6 +117,7 @@ def test_inspect_fundamental_factors_cli_can_scan_all_monthly_revenue_stocks(tmp
         apply_fundamental_schema(conn)
         _insert_revenue(conn, stock_code="2330", period="2026-05", as_of_date="2026-05-31", revenue="150", available_date="2026-06-17")
         _insert_revenue(conn, stock_code="3207", period="2026-05", as_of_date="2026-05-31", revenue="80", available_date="2026-06-17")
+    _write_formal_mapping_from_db(db_file)
 
     exit_code = main(
         [
@@ -98,6 +142,7 @@ def test_inspect_fundamental_factors_cli_limits_stock_summary_rows(tmp_path, cap
         apply_fundamental_schema(conn)
         _insert_revenue(conn, stock_code="2330", period="2026-05", as_of_date="2026-05-31", revenue="150", available_date="2026-06-17")
         _insert_revenue(conn, stock_code="3207", period="2026-05", as_of_date="2026-05-31", revenue="80", available_date="2026-06-17")
+    _write_formal_mapping_from_db(db_file)
 
     exit_code = main(
         [

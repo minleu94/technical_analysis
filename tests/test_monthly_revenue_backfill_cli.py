@@ -16,9 +16,12 @@ def _prepare_files(tmp_path):
     )
     availability_file = tmp_path / "monthly_revenue_availability.csv"
     availability_file.write_text(
-        "stock_code,period,as_of_date,announced_date,available_date,source,source_version\n"
+        "stock_code,period,as_of_date,announced_date,available_date,source,source_version,"
+        "availability_contract_version,evidence_class,source_hash,revision,parent_revision\n"
         "2330,2026-05,2026-05-31,2026-06-10,2026-06-11,"
-        "manual.twse_monthly_revenue_announcement_log,announcement-log-2026-06-16\n",
+        "manual.twse_monthly_revenue_announcement_log,announcement-log-2026-06-16,"
+        "formal-availability.v2,official_announcement,sha256:"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,1,\n",
         encoding="utf-8",
     )
     db_file = tmp_path / "twstock.db"

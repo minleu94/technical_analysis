@@ -22,6 +22,19 @@
 
 `2026-06-17` retroactive backfill、period end、filing deadline、檔名日期、mtime 與 FinMind `create_time` 都不是歷史 official announcement evidence。
 
+### 正式 availability mapping provenance（`formal-availability.v2`）
+
+新建立或新寫入 staging 的月營收／季報正式 mapping，必須逐列帶有：
+
+- `availability_contract_version=formal-availability.v2`；
+- `evidence_class=official_announcement` 與明確 `announced_date`；
+- 可稽核的 `source_hash`（SHA-256）；
+- append-only 的 `revision`／`parent_revision` lineage（初版為 `revision=1`、空白 parent）。
+
+`first_observed`、`local_first_seen`、本機 observation 或 `manual.available_date_mapping` 類來源一律只屬 shadow／研究證據，不得作為正式 PIT mapping 的輸入。retroactive baseline 仍可保留為 degraded coverage，但不能轉換成歷史公告證據。
+
+為了不倒退既有 Owner 可用性，僅目前已 materialize 的 2026-06 月營收 mapping 可走限縮 legacy compatibility：`twse.monthly_revenue_announcement / twse-openapi-t187ap05-l-2026-07-14` 與 `tpex.monthly_revenue_announcement / tpex-openapi-mopsfin-t187ap05-o-2026-07-14`。此例外是精確 source/version pair，不是新 ingestion 的模板；任何新 source snapshot 都必須使用 v2 provenance。
+
 ## 3. 隔離執行環境
 
 ```powershell

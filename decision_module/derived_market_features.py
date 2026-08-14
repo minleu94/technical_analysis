@@ -58,6 +58,25 @@ def _volume_change_percent(frame: pd.DataFrame) -> Decimal:
     return (latest / average - Decimal("1")) * _HUNDRED
 
 
+def _assign_latest_feature(
+    frame: pd.DataFrame,
+    *,
+    column: str,
+    index: object,
+    value: Decimal,
+) -> None:
+    """將 Decimal 特徵安全寫入 pandas 欄位，避免 dtype 隱式升級。"""
+
+    series = frame[column]
+    if pd.api.types.is_numeric_dtype(series):
+        # pandas 的數值欄位不能直接容納 Decimal；這裡是分析資料框邊界，
+        # 明確轉成 nullable float，避免新版本 pandas 將隱式轉型升級為錯誤。
+        frame[column] = pd.to_numeric(series, errors="coerce").astype("Float64")
+        frame.at[index, column] = float(value)  # numeric-boundary: analytics
+        return
+    frame.at[index, column] = value
+
+
 def enrich_latest_market_features(frame: pd.DataFrame) -> pd.DataFrame:
     """回傳防禦性複製，並只在最新一列加入推薦所需的衍生特徵。"""
 
@@ -70,8 +89,18 @@ def enrich_latest_market_features(frame: pd.DataFrame) -> pd.DataFrame:
         result["漲幅%"] = pd.Series(pd.NA, index=result.index, dtype="object")
     if "成交量變化率%" not in result.columns:
         result["成交量變化率%"] = pd.Series(pd.NA, index=result.index, dtype="object")
-    result.at[latest_index, "漲幅%"] = _price_change_percent(result)
-    result.at[latest_index, "成交量變化率%"] = _volume_change_percent(result)
+    _assign_latest_feature(
+        result,
+        column="漲幅%",
+        index=latest_index,
+        value=_price_change_percent(result),
+    )
+    _assign_latest_feature(
+        result,
+        column="成交量變化率%",
+        index=latest_index,
+        value=_volume_change_percent(result),
+    )
     return result
 
 

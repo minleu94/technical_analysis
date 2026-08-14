@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from data_module.fundamental_availability import FORMAL_AVAILABILITY_CONTRACT_VERSION
 from data_module.fundamental_statement_availability_sources import (
     STATEMENT_AVAILABILITY_COLUMNS,
     load_statement_availability_overrides,
@@ -10,21 +11,31 @@ from data_module.fundamental_statement_availability_sources import (
 from decision_module.factors.factor_dtos import FactorQuality
 
 
-def test_load_statement_availability_overrides_preserves_announcement_contract():
-    result = load_statement_availability_overrides(
-        [
-            {
-                "stock_code": "2330",
-                "statement_type": "income_statement",
-                "period": "2024-Q1",
-                "as_of_date": "2024-03-31",
-                "announced_date": "2024-05-10",
-                "available_date": "2024-05-11",
-                "source": "manual.statement_available_date_mapping",
-                "source_version": "statement-availability-2026-06-17",
-            }
-        ]
-    )
+_HASH = "a" * 64
+
+
+def _formal_row(**overrides: str) -> dict[str, str]:
+    row = {
+        "stock_code": "2330",
+        "statement_type": "income_statement",
+        "period": "2024-Q1",
+        "as_of_date": "2024-03-31",
+        "announced_date": "2024-05-10",
+        "available_date": "2024-05-11",
+        "source": "manual.statement_available_date_mapping",
+        "source_version": "statement-availability-2026-06-17",
+        "availability_contract_version": FORMAL_AVAILABILITY_CONTRACT_VERSION,
+        "evidence_class": "official_announcement",
+        "source_hash": f"sha256:{_HASH}",
+        "revision": "1",
+        "parent_revision": "",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_load_statement_availability_overrides_preserves_formal_announcement_contract():
+    result = load_statement_availability_overrides([_formal_row()])
 
     override = result.overrides[("2330", "income_statement", "2024-Q1")]
 
@@ -35,6 +46,10 @@ def test_load_statement_availability_overrides_preserves_announcement_contract()
     assert override.announced_date == date(2024, 5, 10)
     assert override.available_date == date(2024, 5, 11)
     assert override.quality == FactorQuality.OBSERVED
+    assert override.evidence_class == "official_announcement"
+    assert override.source_hash == f"sha256:{_HASH}"
+    assert override.revision == 1
+    assert override.provenance_mode == "formal_v2"
     assert result.diagnostics == ()
 
 
@@ -59,7 +74,35 @@ def test_load_statement_availability_overrides_degrades_retroactive_baseline():
     assert override.announced_date is None
     assert override.available_date == date(2026, 6, 17)
     assert override.quality == FactorQuality.DEGRADED
+    assert override.provenance_mode == "retroactive_baseline"
     assert result.diagnostics == ()
+
+
+def test_load_statement_availability_overrides_rejects_local_first_seen_evidence():
+    result = load_statement_availability_overrides(
+        [
+            _formal_row(
+                source_version="statement-first-seen-observation-2026-06-17",
+                evidence_class="local_first_seen",
+            )
+        ]
+    )
+
+    assert result.overrides == {}
+    assert result.diagnostics[0].code == (
+        "fundamental_statement_availability.first_observed_evidence_not_formal"
+    )
+
+
+def test_load_statement_availability_overrides_requires_revision_lineage():
+    result = load_statement_availability_overrides(
+        [_formal_row(revision="2", parent_revision="1")]
+    )
+
+    assert result.overrides == {}
+    assert result.diagnostics[0].code == (
+        "fundamental_statement_availability.formal_revision_chain_incomplete"
+    )
 
 
 def test_load_statement_availability_overrides_rejects_raw_statement_source():
@@ -84,13 +127,12 @@ def test_load_statement_availability_overrides_rejects_raw_statement_source():
 
 def test_load_statement_availability_overrides_csv_reads_governed_file(tmp_path):
     mapping_file = tmp_path / "fundamental_statement_availability.csv"
+    row = _formal_row()
     mapping_file.write_text(
         ",".join(STATEMENT_AVAILABILITY_COLUMNS)
         + "\n"
-        + (
-            "2330,income_statement,2024-Q1,2024-03-31,2024-05-10,2024-05-11,"
-            "manual.statement_available_date_mapping,statement-availability-2026-06-17\n"
-        ),
+        + ",".join(row[column] for column in STATEMENT_AVAILABILITY_COLUMNS)
+        + "\n",
         encoding="utf-8-sig",
     )
 

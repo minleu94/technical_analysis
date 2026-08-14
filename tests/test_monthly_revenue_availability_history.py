@@ -165,7 +165,21 @@ def test_build_history_rows_keeps_twse_and_tpex_sources_distinct() -> None:
         fetch_date=date(2026, 6, 16),
     )
 
-    assert result.rows == [
+    assert [
+        {
+            key: row[key]
+            for key in (
+                "stock_code",
+                "period",
+                "as_of_date",
+                "announced_date",
+                "available_date",
+                "source",
+                "source_version",
+            )
+        }
+        for row in result.rows
+    ] == [
         {
             "stock_code": "2330",
             "period": "2026-05",
@@ -185,6 +199,13 @@ def test_build_history_rows_keeps_twse_and_tpex_sources_distinct() -> None:
             "source_version": "tpex-openapi-mopsfin-t187ap05-o-2026-06-16",
         },
     ]
+    for row in result.rows:
+        assert row["availability_contract_version"] == "formal-availability.v2"
+        assert row["evidence_class"] == "official_announcement"
+        assert row["source_hash"].startswith("sha256:")
+        assert len(row["source_hash"]) == len("sha256:") + 64
+        assert row["revision"] == "1"
+        assert row["parent_revision"] == ""
     assert result.requested_periods == ("2026-05",)
     assert result.fetched_periods == ("2026-05",)
     assert result.matched_raw_monthly_revenue_rows == 2

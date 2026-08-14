@@ -141,7 +141,24 @@ def test_pit_safety_evaluation_and_provider_integration(tmp_path: Path):
             ('2330', '2026-04', '2026-04-30', '2026-07-20', '2026-07-08', 170000.0, 'twse', 'v1', 'observed');
         """)
 
-    provider = FundamentalSQLiteProvider(db_file, firewall=firewall)
+    mapping_file = tmp_path / "monthly_revenue_availability.csv"
+    mapping_file.write_text(
+        "\n".join(
+            [
+                "stock_code,period,as_of_date,announced_date,available_date,source,source_version,availability_contract_version,evidence_class,source_hash,revision,parent_revision",
+                "2330,2026-06,2026-06-30,2026-07-10,2026-07-10,twse.monthly_revenue_announcement,test-formal-v2,formal-availability.v2,official_announcement,"
+                + "a" * 64
+                + ",1,",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    provider = FundamentalSQLiteProvider(
+        db_file,
+        firewall=firewall,
+        monthly_revenue_availability_file=mapping_file,
+    )
 
     # Query with decision_date = 2026-07-15
     records = provider.load_monthly_revenues(stock_code="2330", decision_date=date(2026, 7, 15))

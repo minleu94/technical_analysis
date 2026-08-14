@@ -112,6 +112,7 @@ def test_artifact_preserves_official_timestamp_and_projects_next_day() -> None:
     assert event["announcement_at"] == "2026-07-27T18:17:06+08:00"
     assert event["period"] == "2026-Q2"
     assert event["period_end"] == "2026-06-30"
+    assert event["source_hash"] == "sha256:" + "a" * 64
     assert mapping == {
         "stock_code": "3321",
         "statement_type": "balance_sheet",
@@ -121,6 +122,11 @@ def test_artifact_preserves_official_timestamp_and_projects_next_day() -> None:
         "available_date": "2026-07-28",
         "source": MOPS_STATEMENT_AVAILABILITY_SOURCE,
         "source_version": "mops-ezsearch-statement-publication.v1",
+        "availability_contract_version": "formal-availability.v2",
+        "evidence_class": "official_announcement",
+        "source_hash": "sha256:" + "a" * 64,
+        "revision": "1",
+        "parent_revision": "",
     }
     assert artifact["formal_oos_allowed"] is False
     assert artifact["formal_credit_authorized"] is False
@@ -167,6 +173,24 @@ def test_artifact_rejects_future_timestamp() -> None:
             start_date=date(2026, 7, 27),
             end_date=date(2026, 7, 28),
             captured_at="2026-07-27T10:00:00+08:00",
+        )
+
+
+def test_artifact_rejects_non_sha256_source_hash() -> None:
+    with pytest.raises(ValueError, match="response_sha256"):
+        build_statement_availability_artifact(
+            [
+                MOPSQueryResult(
+                    market="sii",
+                    announcement_item="F26",
+                    rows=(_row(),),
+                    response_sha256="not-a-hash",
+                    source_status="success",
+                )
+            ],
+            start_date=date(2026, 7, 27),
+            end_date=date(2026, 7, 28),
+            captured_at="2026-07-28T12:00:00+08:00",
         )
 
 
