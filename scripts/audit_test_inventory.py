@@ -177,10 +177,16 @@ def _read_documented_current_counts() -> dict[str, int]:
         content = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return {}
-    marker = "## 2026-07-30 machine refresh"
-    if marker not in content:
+    marker_match = re.search(
+        r"^## \d{4}-\d{2}-\d{2} machine refresh\s*$",
+        content,
+        flags=re.MULTILINE,
+    )
+    if marker_match is None:
         return {}
-    section = content.split(marker, 1)[1].split("## ", 1)[0]
+    remaining = content[marker_match.end():]
+    next_section = re.search(r"^## ", remaining, flags=re.MULTILINE)
+    section = remaining[:next_section.start()] if next_section is not None else remaining
     counts: dict[str, int] = {}
     total_match = re.search(r"Current filesystem Python files:\s*`(\d+)`", section)
     if total_match:

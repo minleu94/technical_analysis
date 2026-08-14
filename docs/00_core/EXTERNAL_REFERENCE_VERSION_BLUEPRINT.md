@@ -159,6 +159,32 @@ Post-Refactor 後，資料優先序以 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUC
 
 ### 6.2 既有來源細節：籌碼、信用、題材與估值
 
+#### 2026-08-14 Formal ML PIT sector source audit
+
+TWSE Data E-Shop 的 `TWT58U`「證券及產業別對照表」官方頁面明列：每日交易日 22:00 產製、內容為證券代號與產業別代碼、資料起始日為 `2019-12-23`，並以月訂閱提供。這是可作為正式 source candidate 的受控來源，但目前沒有本機授權下載、原始 publication archive 或 license／source hash lineage；更重要的是，它無法單獨覆蓋 Direct/OOC 所需的 `2014–2026` 全期間。未取得可驗證的 2014–2019 歷史來源前，不得以 TWT58U 尾段、現行 `companies.csv` 或產業指數成分回填 PIT sector membership；`pit_sector_membership_present` 維持 blocked。
+
+來源：[TWSE Data E-Shop｜證券及產業別對照表（TWT58U）](https://eshop.twse.com.tw/zh/product/detail/000000006e0bbe8d016f18269c59032c)。
+
+#### 2026-08-14 Formal ML PIT sector source expansion audit
+
+本次進一步核對到兩個可能覆蓋完整 Direct/OOC 歷史區間的官方產品，但兩者都仍是受控訂閱來源，尚未取得本機授權原始檔：
+
+- TWSE `T97`「漲跌幅度表檔」每日 23:30 產製，資料內容包含證券代號與產業別代碼，資料起始日為 `2014-01-06`。官方頁面同時列出 TEXT／CSV、訂閱與內外部使用限制；它可作為上市市場的 PIT sector source candidate，但不能在未交付逐日原始檔、publication timestamp、license 與 source hash lineage 前直接進 sidecar。
+- TPEX「上櫃股票基本資料」頁面列出每日 `T30`「上櫃股票漲跌幅度表」，資料起始日為 `2008-11-01`，且可申購歷史月份；TPEX 格式文件確認產業別代碼是 T30 欄位。它可作為上櫃市場的 PIT sector source candidate，但仍須逐檔驗證格式版本、publication time、修訂切換與授權範圍。
+
+因此，`T97 + T30` 是目前最接近覆蓋 `2014–2026` 的正式候選組合，但本機仍沒有可驗證 deposit，尚未建立或採用任何 partial／synthetic sidecar。正式 acceptance 仍要求：市場與證券 universe coverage、每檔原始檔 SHA-256、publication／available_at、格式版本或修訂 lineage、license id，以及轉換後 `pit-sector-membership-sidecar-v1` 的 canonical manifest。`pit_sector_membership_present` 維持 blocked。
+
+來源：[TWSE T97 漲跌幅度表檔](https://eshop.twse.com.tw/zh/product/detail/75ce5fd1ad574df49ad9ff82209ca837)、[TPEX 上櫃股票基本資料（含 T30）](https://eshop.tpex.org.tw/zh/product/detail/BCDDCDFD315841EC011ED99B91DD528E)、[TPEX 收市後交易資訊格式說明](https://www.tpex.org.tw/storage/regular_system/%E6%96%B0%E7%89%88%E6%94%B6%E5%B8%82%E5%BE%8C%E4%BA%A4%E6%98%93%E8%B3%87%E8%A8%8A%E6%A0%BC%E5%BC%8F%E8%AA%AA%E6%98%8E%28V1.33%E7%89%88%29.pdf?t=20251127)。
+
+#### 2026-08-14 Local causal ledger candidate rejection audit
+
+唯讀盤點發現本機存在 `ml_research_causal_ledger_full_v4_official_events` 的 research ledger
+與 SQLite，但 latest pointer 的 `schema_version` 為 `research-causal-ledger-latest.v1`、
+`research_only=true`；其目前 run manifest 另明列 `formal_consumer_compatible=false`、
+`promotion_eligible=false`，並包含 `research_causal_ledger_not_formal_source` blocker。這些
+artifact 不可作為 `causal_non_cash_portfolio_ledger` 的 owner-controlled formal deposit，
+因此沒有設定 formal path、沒有改寫正式 DB，也沒有觸發 Direct/OOC refresh。
+
 2026-07-08 Phase 3C 已先把三大法人、信用交易與 TDCC 做成 source candidate readiness dry-run：只檢查 DB / table / `available_date` / future-data / diagnostics，不正式 ingestion、不接 `ScoringEngine`、不改推薦 threshold、不啟用 scheduler。下列資料源仍需後續 source policy、授權與正式 ingestion gate 才能進入日常流程。
 
 1. **三大法人 / 外資 / 投信 / 自營商**

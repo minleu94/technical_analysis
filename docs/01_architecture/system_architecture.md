@@ -1,6 +1,6 @@
 ﻿# 系統架構
 
-> **最後更新：2026-07-30｜V4.0 Operational Production**。Current architecture 現已包含全欄位治理、年度 PIT shards、配置型 ML Production Co-pilot、Rule/ML 整數 bp 混合、deterministic risk projection、confirmed Decision/Evidence capture 與 strict T-1 Paper ledger。ML 非零權重仍由 machine promotion gate 控制；目前 alpha 0。Live broker execution 不在系統範圍。
+> **最後更新：2026-08-14｜V4.0 Operational Production**。Current architecture 現已包含全欄位治理、年度 PIT shards、配置型 ML Production Co-pilot、Rule/ML 整數 bp 混合、deterministic risk projection、confirmed Decision/Evidence capture 與 strict T-1 Paper ledger。ML 非零權重仍由 machine promotion gate 控制；目前 alpha 0。Live broker execution 不在系統範圍。
 
 ## V4.0 配置決策資料流
 
@@ -33,8 +33,10 @@ full-market OOC + 4+ Meta OOF folds
 - `ml_module` 允許 sklearn/numpy float，但只能在模型內部；輸入／輸出與 artifact metadata 回到縮放整數或 bp。
 - `data_module` 以 `mode=ro/query_only` 讀正式 SQLite，未知欄位 fail closed；formal/shadow manifests 不可交叉。
 - `app_module/portfolio_allocation_service.py` 負責相同單位的 Rule/ML 混合與硬風控，不讓模型直接改 recorded portfolio state。
+- Rule Champion 的 persisted artifact／history 簽章驗證實作位於 `data_module/rule_champion_snapshot_service.py`；`app_module/rule_champion_snapshot_service.py` 僅保留相容性 facade，ML／replay／data assembly 不得反向依賴 app layer。
 - `AdviceComposer` 只消費最終 allocation result；current unknown 不得轉成 0。
 - replay 的帳務可重算與正式配置語意是兩個不同 Gate；`formal_semantic_validation.verified=false` 或 Meta OOF folds 少於 4 時，Promotion Builder 必須拒絕。Shadow observation 只有 `promotion_day_credit_allowed=true` 才能累積 20 日門檻。
+- Formal ML input custody 由 `causal-portfolio-ledger.v1`、`rule-champion-snapshot-history.v1` 與 `pit-sector-membership-sidecar-v1` 分別驗證；ledger／Rule history 的 manifest／file hash 會從 Direct、OOC store 綁到 OOS replay input，replay consumer 仍會再次驗證，缺件時維持 blocked，不以 research／current snapshot／cash-only fallback 補值。
 - scheduler wrapper 不讀 UI state。只有既有 data update、confirmed evidence repository 與 isolated Paper ledger 具有各自明確寫入範圍；無 broker adapter。
 
 > **舊架構稽核基線**：2026-07-13
@@ -308,7 +310,7 @@ Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manife
 - Update orchestration：`ui_qt/views/update/update_all_coordinator.py` 擁有 quick/safe step graph、progress、completed steps、TPEX soft failure 與其他步驟 fail-fast 規則；`UpdateView._run_update_all()` 僅取得日期並注入 service operations。實際更新／合併仍由 `UpdateService` 執行，順序與公開 result payload 不變。
 - 單一資料源更新由 `ui_qt/views/update/source_update_coordinator.py::SourceUpdateRequest` 負責：daily 固定 TWSE→TPEX→SQLite→indicator 與 warnings/result aggregation，market/industry/broker 只映射既有 service call。View 只管理 radio/date widgets 與 worker signals。
 - Workbench presenter 已承接 review queue、background evidence feed、action items 與 operating loop 的 DTO 狀態文字及 degraded 判讀；不讀 DB、不補值、不執行 replay。MainWindow 的八個 workspace key/label/icon 與 registration 順序由 `WORKSPACE_DEFINITIONS` 單一 immutable plan 供應，視窗仍擁有 QWidget 與 signal lifecycle。
-- Smart Money composition 由 `app_module/decision_desk_composition.py::build_smart_money_composition()` 建立 semantic service 與 price provider，並沿用 Decision Desk 的 market-frame loader；失敗回傳 `service=None` 供 UI 降級。Runtime Observatory 的 controller/event bridge/view/poll timer wiring 位於 `ui_qt/runtime_composition.py`，MainWindow 只保存四個 Qt ownership references。
+- Smart Money composition 由 `app_module/decision_desk_composition.py::build_smart_money_composition()` 建立 semantic service 與 price provider，並沿用 Decision Desk 的 market-frame loader；失敗回傳 `service=None` 供 UI 降級。Runtime Observatory 的 composition 位於 `ui_qt/runtime_composition.py`；MainWindow 將 repo `runtime/` 與 `OUTPUT_ROOT/scheduled` 兩個唯讀 root 注入 RuntimeController，並保存 controller／bridge／view／timer 四個 Qt lifecycle references。controller 只發佈治理 DTO 與排程營運 DTO，不呼叫 task、資料更新或模型流程。
 - Backtest 單檔執行 mapping 位於 `ui_qt/views/backtest/execution_coordinator.py::BacktestExecutionRequest`。同一不可變 request 同時產生 `BacktestService.run_backtest()` kwargs 與既有 `current_run_params` payload，避免 UI 內兩份參數清單漂移；不計算訊號、績效或資金數值。
 - 同目錄的 `BatchBacktestExecutionRequest` 與 `optimization_coordinator.py::OptimizationExecutionRequest` 分別集中 batch 的 save/parallel/research/progress/cancel mapping，以及 grid-search 的 objective/top_n/progress/cancel mapping。View 仍擁有 ParamRange/parallel widgets、preflight dialog、QTimer UI update 與 workers。
 - `walkforward_coordinator.py::WalkForwardExecutionRequest` 集中 Train-Test/Walk-forward mode、train ratio/fold months、成本/風控 kwargs 與既有 result envelope；真正 fold/T-1 切分仍在 `WalkForwardService`。
@@ -490,22 +492,37 @@ Smart Money 語意層沿用上述資料品質契約：observed / estimated 可�
 
 ## 10. Runtime Subsystem
 
-### 分層
+### 兩條獨立觀測平面
 
 ```text
-runtime/ core
-  -> app_module/runtime_services
-      -> app_module DTO
-          -> ui_qt/bridges/runtime_event_bridge.py
-              -> ui_qt/views/runtime_view.py
+治理 Runtime：runtime/ state + append-only events
+  -> LocalFileStore / RuntimeSnapshotService / RuntimeHealthService / RuntimeEventStreamService
+  -> RuntimeStateSnapshotDTO / RuntimeHealthSnapshotDTO / RuntimeEventDTO
+  -> EventBus -> QtRuntimeBridge -> RuntimeView
+
+日常營運：OUTPUT_ROOT/scheduled/*/latest_status.json
+  -> ScheduledOperationsStatusService
+  -> ScheduledOperationStatusDTO / ScheduledOperationsSnapshotDTO
+  -> EventBus -> QtRuntimeBridge -> RuntimeView
 ```
+
+兩條平面只共用 composition、EventBus、bridge 與 view，**不得互相寫入、不得由任一方推導另一方健康度**。治理 `ERROR`／`HALTED` 不表示日常排程失敗；營運 `attention` 也不改寫治理狀態機。
+
+### 邊界與時間語意
+
+- `RuntimeSnapshotService`、`RuntimeHealthService` 與 `RuntimeEventStreamService` 是 Runtime `IRuntimeStore` 的讀取 application services；controller 只協調它們的 DTO 發佈。
+- `ScheduledOperationsStatusService` 是唯一可讀取 scheduled status artifact 的 application service；它只讀檔案，不呼叫／設定 Windows Task Scheduler，也不觸發 update、retrain、promotion 或 Paper execution。
+- saved status artifact 不等於 Windows task registered／running／`Last Result`；Windows Scheduler 仍由專用 query 工具判定。
+- Runtime event timestamp 不得以目前時間補造。只有 current window 內、可解析且不在未來的治理事件影響 health；歷史／未來／時間無法解析事件以 DTO scope 與 diagnostic 揭露。事件檔不可讀或部分不可解析時，health 必須 fail-closed，不得偽裝為 no events。
+- core artifact 的 missing／unreadable／stale 必須 fail-closed 為 attention；非 core 不能被默認為成功。ML rule-only／promotion gate 等預期安全狀態以 guarded 顯示，不能被當成 promotion。
+- Runtime event UI 只保留本次 session 開啟後的最近 500 筆新事件；底層 JSONL 仍 append-only，不因 UI 裁切而刪除。
 
 ### 禁止依賴
 
 - `runtime/` 不依賴 `app_module` 或 `ui_qt`。
 - `app_module` Runtime service 不依賴 PySide6。
-- Runtime UI 只接受 DTO 與 Qt signal。
-- Runtime View 不直接讀寫檔案或 store。
+- Runtime UI 只接受 DTO 與 Qt signal，不直接讀寫 Runtime／scheduled 檔案或 store。
+- EventBus 與 Qt bridge 只能傳遞 DTO，不能承擔 task invocation、狀態修復或資料更新。
 
 詳細規則見 [runtime_observatory_rules.md](runtime_observatory_rules.md)。
 

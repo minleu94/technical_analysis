@@ -1,0 +1,440 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "BALDR 專案狀態與背景資源診斷",
+    "description": "截至 2026-08-14 的 ML、資料、UI、runtime、QA 與正式 promotion readiness 證據快照。",
+    "generatedAt": "2026-08-14T13:47:48-07:00",
+    "cards": [
+      {
+        "id": "ooc_folds",
+        "description": "目前 production v4/v5 allocation OOC run 已完成的 fold 數。",
+        "dataset": "headline",
+        "sourceId": "ml_artifacts",
+        "metrics": [
+          { "label": "OOC folds 完成", "field": "ooc_folds", "format": "number" },
+          { "label": "目標", "field": "ooc_fold_target", "format": "number" }
+        ]
+      },
+      {
+        "id": "formal_inputs",
+        "description": "通過 formal readiness inspector 的正式 replay 輸入數；需求共三項。",
+        "dataset": "headline",
+        "sourceId": "formal_readiness",
+        "metrics": [
+          { "label": "正式輸入已通過", "field": "formal_inputs_ready", "format": "number" },
+          { "label": "需求", "field": "formal_inputs_required", "format": "number" }
+        ]
+      },
+      {
+        "id": "focused_tests",
+        "description": "本次針對 UI、runtime、排程服務、crash diagnostics 與 shutdown 的焦點測試結果。",
+        "dataset": "headline",
+        "sourceId": "qa_run",
+        "metrics": [
+          { "label": "焦點測試通過", "field": "focused_tests_passed", "format": "number" },
+          { "label": "失敗", "field": "focused_tests_failed", "format": "number" }
+        ]
+      },
+      {
+        "id": "dirty_paths",
+        "description": "目前 dev branch 尚未 commit 的 tracked modifications 與 untracked paths。",
+        "dataset": "headline",
+        "sourceId": "git_inventory",
+        "metrics": [
+          { "label": "未提交 paths", "field": "dirty_paths", "format": "number" },
+          { "label": "untracked", "field": "untracked_paths", "format": "number" }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "cpu_by_process",
+        "title": "CPU 高點不是 MCP 造成",
+        "subtitle": "10 秒取樣；數值是占 16 logical CPUs 的全系統百分點。MCP Python 程序在取樣期間近乎閒置。",
+        "headerMarkdown": "`ChatGPT/Codex desktop` 與獨立的 `remoting_host.exe` 才是當下主要 CPU 使用者。",
+        "type": "bar",
+        "dataset": "process_cpu",
+        "sourceId": "runtime_sample",
+        "encodings": {
+          "x": { "field": "process_group", "type": "nominal", "label": "程序群組" },
+          "y": { "field": "system_cpu_pct", "type": "quantitative", "label": "全系統 CPU 百分點", "format": "number" },
+          "tooltip": [
+            { "field": "instances", "type": "quantitative", "label": "程序數", "format": "number" },
+            { "field": "memory_mb", "type": "quantitative", "label": "記憶體 MB", "format": "number" },
+            { "field": "single_core_equivalent_pct", "type": "quantitative", "label": "單核心等效 %", "format": "number" },
+            { "field": "role", "type": "nominal", "label": "判讀" }
+          ]
+        },
+        "yAxisTitle": "全系統 CPU 百分點",
+        "valueFormat": "number",
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "project_matrix",
+        "title": "專案進度矩陣",
+        "subtitle": "圖示代表此刻的工程與證據狀態，不是主觀完成百分比。",
+        "dataset": "project_status",
+        "sourceId": "project_evidence",
+        "columns": [
+          { "field": "icon", "label": "圖示", "type": "text" },
+          { "field": "area", "label": "工作線", "type": "text" },
+          { "field": "state", "label": "狀態", "type": "text" },
+          { "field": "current", "label": "目前做到哪裡", "type": "text" },
+          { "field": "remaining", "label": "仍未補完", "type": "text" }
+        ],
+        "layout": "full",
+        "density": "dense"
+      },
+      {
+        "id": "mcp_inventory",
+        "title": "重複 MCP runtime 盤點",
+        "subtitle": "每個 MCP service 有 9 份；Windows venv launcher 與 base interpreter 各算一個 Python process。",
+        "dataset": "mcp_services",
+        "sourceId": "runtime_sample",
+        "columns": [
+          { "field": "service", "label": "MCP service", "type": "text" },
+          { "field": "copies", "label": "份數", "format": "number" },
+          { "field": "base_python_memory_mb", "label": "base Python 記憶體 MB", "format": "number" },
+          { "field": "sampled_cpu", "label": "取樣 CPU", "type": "text" },
+          { "field": "diagnosis", "label": "判讀", "type": "text" }
+        ],
+        "layout": "full",
+        "density": "dense"
+      },
+      {
+        "id": "next_actions",
+        "title": "建議處理順序",
+        "subtitle": "先處理能立即降低資源占用且不改變正式證據語義的工作。",
+        "dataset": "next_actions",
+        "sourceId": "project_evidence",
+        "columns": [
+          { "field": "priority", "label": "優先", "format": "number" },
+          { "field": "icon", "label": "類型", "type": "text" },
+          { "field": "action", "label": "下一步", "type": "text" },
+          { "field": "why", "label": "原因／預期效果", "type": "text" }
+        ],
+        "layout": "full",
+        "density": "dense"
+      }
+    ],
+    "sources": [
+      {
+        "id": "ml_artifacts",
+        "label": "Allocation OOC 與 OOS artifact manifests",
+        "path": "artifact://allocation-ooc-aab7ec6a692afb9a9a52093f",
+        "query": {
+          "engine": "filesystem-json",
+          "sql": "SELECT fold_count AS ooc_folds, status, formal_oos_allowed FROM run_manifest WHERE run_id = 'allocation-ooc-aab7ec6a692afb9a9a52093f'",
+          "description": "讀取目前 OOC run 與 formal OOS 狀態。",
+          "tables_used": ["run_manifest", "final_meta_manifest", "oos_build_status", "calibration_audit", "promotion_manifest"]
+        }
+      },
+      {
+        "id": "formal_readiness",
+        "label": "Formal input readiness latest snapshot",
+        "path": "artifact://ml-formal-input-readiness/latest",
+        "query": {
+          "engine": "filesystem-json",
+          "sql": "SELECT portfolio_ledger_ready, rule_history_ready, pit_sector_membership_ready, status FROM formal_input_readiness_latest",
+          "description": "讀取三個 formal input readiness booleans；不讀取 HMAC secret。",
+          "tables_used": ["formal_input_readiness_latest"]
+        }
+      },
+      {
+        "id": "project_docs",
+        "label": "Scoped SSOT 專案文件",
+        "path": "docs/00_core/PROJECT_SNAPSHOT.md",
+        "query": {
+          "engine": "markdown",
+          "sql": "SELECT section, statement, evidence_date FROM scoped_ssot_documents WHERE current = TRUE",
+          "description": "讀取最新 Scoped SSOT 專案狀態段落。",
+          "tables_used": ["PROJECT_SNAPSHOT", "ROADMAP_6M_ENGINEERING", "GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER", "APPLICATION_MANUAL"]
+        }
+      },
+      {
+        "id": "runtime_sample",
+        "label": "Windows 程序與記憶體取樣",
+        "path": "live://windows/process-sample/2026-08-14",
+        "query": {
+          "engine": "powershell",
+          "sql": "SELECT process_group, system_cpu_pct, single_core_equivalent_pct, instances, memory_mb, sample_seconds, role FROM windows_process_sample WHERE sample_seconds = 10",
+          "description": "3 秒與 10 秒 CPU delta、working set 與 parent-child 程序分組。",
+          "tables_used": ["Win32_Process", "Get-Process", "Win32_PerfFormattedData_PerfOS_Memory"]
+        }
+      },
+      {
+        "id": "scheduled_tasks",
+        "label": "Windows baldr-* 排程任務查詢",
+        "path": "live://windows/scheduled-tasks/2026-08-14",
+        "query": {
+          "engine": "powershell",
+          "sql": "SELECT TaskName, State, LastRunTime, LastTaskResult, NextRunTime FROM windows_scheduled_tasks WHERE TaskName LIKE 'baldr-%'",
+          "description": "查詢 BALDR 排程目前狀態與最近執行結果。",
+          "tables_used": ["Windows Task Scheduler"]
+        }
+      },
+      {
+        "id": "qa_run",
+        "label": "UI/runtime focused pytest run",
+        "path": "tests/",
+        "query": {
+          "engine": "pytest",
+          "sql": "SELECT outcome, COUNT(*) AS test_count FROM focused_pytest_results GROUP BY outcome",
+          "description": "八個 UI/runtime 測試檔的本次 pytest 結果。",
+          "tables_used": ["focused_pytest_results"]
+        }
+      },
+      {
+        "id": "git_inventory",
+        "label": "dev branch git status inventory",
+        "path": ".git",
+        "query": {
+          "engine": "git",
+          "sql": "SELECT status_code, COUNT(*) AS path_count FROM git_status_short WHERE branch = 'dev' GROUP BY status_code",
+          "description": "唯讀統計 dev branch working tree。",
+          "tables_used": ["git_status_short"]
+        }
+      },
+      {
+        "id": "project_evidence",
+        "label": "上述 artifacts、SSOT、runtime、QA 與 Git 證據的彙整",
+        "path": "docs/06_qa/project_status_2026_08_14/artifact.json",
+        "query": {
+          "engine": "evidence-synthesis",
+          "sql": "SELECT workstream, evidence_state, current_state, remaining_work FROM reviewed_project_evidence ORDER BY display_order",
+          "description": "依工作線綜整本報告 canonical sources；狀態是類別而非完成百分比。",
+          "tables_used": ["ml_artifacts", "formal_readiness", "project_docs", "runtime_sample", "scheduled_tasks", "qa_run", "git_inventory"]
+        }
+      }
+    ],
+    "blocks": [
+      { "id": "title", "type": "markdown", "body": "# BALDR 專案狀態與背景資源診斷" },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n**ML 訓練本體已完成，正式上線證據尚未完成。** OOC 已跑完 41/41 folds，final meta allocator 也已產出；但 formal OOS replay 仍因三項正式輸入均缺而被擋住，校準品質亦未過門檻。因此目前維持 `formal_oos_allowed=false`、production alpha = 0、broker order disabled。\n\n**確實有重複 MCP，但它們不是當下 CPU 高的主因。** 目前觀察到 9 套 Codex task runtime，各自啟動相同五個 MCP；合計 90 個 Python process，約占 7.2 GB RAM。10 秒 CPU 取樣期間 MCP 近乎閒置；主要 CPU 是 ChatGPT/Codex desktop 約 7.93 個全系統百分點，以及與 Codex/MCP 無直接關係的 `remoting_host.exe` 約 4.65 個百分點。"
+      },
+      { "id": "headline_metrics", "type": "metric-strip", "cardIds": ["ooc_folds", "formal_inputs", "focused_tests", "dirty_paths"] },
+      {
+        "id": "legend",
+        "type": "markdown",
+        "body": "## 圖示說明\n\n- ✅ 已完成且有本機證據\n- 🟦 工程能力已可用，但不等於正式證據完成\n- 🟡 部分完成／仍需收尾\n- 🔴 明確阻擋或驗證失敗\n- 🧪 僅 research/candidate，不可當正式來源\n- ⏳ 需要未來時間或 forward evidence 累積\n- 🔒 依治理刻意鎖定\n- 🛠️ 大量未提交工程變更，尚待分批驗證與 commit"
+      },
+      { "id": "project_status", "type": "table", "tableId": "project_matrix", "layout": "full" },
+      {
+        "id": "ml_interpretation",
+        "type": "markdown",
+        "sourceId": "ml_artifacts",
+        "body": "## ML 現在精確做到哪裡\n\n訓練鏈已走到 **Direct → 41-fold OOC → final meta allocator**。本次 OOC 有 3,335,023 rows、984 base experts，final 階段保留 24 experts；執行峰值 RSS 約 3.5 GB，低於 4 GB 預算。\n\n下一關不是再跑一次 OOC，而是建立合法的 formal OOS replay inputs。當前 `build_status.json` 明確列出三個 immediate blockers：causal non-cash portfolio ledger、formal rule champion snapshot history、PIT sector membership。另有 calibration audit：最大 ECE 2,627 bp，高於 500 bp 門檻，5/10/20/60-day horizons 全部未通過。final meta 的 `rebalance_worthwhile` 標籤只有 class 0，亦顯示缺少可學習的非現金換倉事件。"
+      },
+      { "id": "cpu_chart", "type": "chart", "chartId": "cpu_by_process", "layout": "full" },
+      {
+        "id": "runtime_interpretation",
+        "type": "markdown",
+        "sourceId": "runtime_sample",
+        "body": "## CPU 與 MCP 判讀\n\n9 份重複不是單一 task 內的 runaway loop，而是 **9 個 Codex task runtime × 5 個 MCP × 2 個 Windows Python processes**。這會浪費記憶體、增加 process 數量，但目前沒有證據顯示 MCP 在反覆執行重工作。若只保留一個活躍 task runtime，理論上可少掉約 8/9 的 MCP 記憶體，約 6.4 GB。\n\n`remoting_host.exe` 是 service-parented 的獨立 remoting 程序；因受保護程序資訊有限，將它判為 Chrome Remote Desktop/遠端控制 host 是根據名稱與 parent 關係的推論，不把它算成 MCP。系統當時仍有約 31.5 GB available memory、paging file 使用約 2.26%，所以目前更像是「桌面 app/遠端 host CPU 活躍 + MCP RAM 浪費」，不是記憶體壓力造成的 paging storm。"
+      },
+      { "id": "mcp_table", "type": "table", "tableId": "mcp_inventory", "layout": "full" },
+      {
+        "id": "scheduling",
+        "type": "markdown",
+        "sourceId": "scheduled_tasks",
+        "body": "## 排程與 watcher\n\n13 個 `baldr-*` Windows 排程任務目前全部是 `Ready`；2026-08-14 最近一次執行結果全部為 `0`，因此它們不是持續占用 CPU 的常駐工作。下一次 daily tasks 預定於 2026-08-15 04:20–05:30（本機 -07:00）依序執行。\n\n另一方面，先前 formal readiness watcher PID 33756 已不存在，現在也沒有 ML training process；最新 readiness snapshot 停在 2026-08-14 10:57:56 -07:00，而 OOS build status 更新到 13:18:54。換句話說，排程健康，但那個額外 watcher 並未持續運作。"
+      },
+      {
+        "id": "ui_and_qa",
+        "type": "markdown",
+        "sourceId": "qa_run",
+        "body": "## UI、runtime 與 QA\n\nPySide6 主 UI、Data Sources cards、Decision Workbench、Advice DTO rendering、candidate/runtime views 與 read-only operating loop 都已有工程能力。這次針對 runtime view、event stream、health、scheduled operations、crash diagnostics、shutdown coordinator、task worker 與 Update Workbench 的焦點測試為 **78 passed, 0 failed**。\n\n仍未補完的 UI/產品面包括：real evidence 的寫入與審核流程、真實 holdings/import 到 formal ledger 的操作鏈、完整 reconciliation 管理 UI、以及 formal OOS/promotion 解鎖後的 production 操作面。歷史 Qt native crash 已有防護與診斷，但還不能聲稱找到唯一根因。目前全量 baseline 文件記錄為 3,185 passed / 1 skipped；本次沒有針對 161 個 dirty paths 重跑完整全量 suite。"
+      },
+      { "id": "next_steps", "type": "table", "tableId": "next_actions", "layout": "full" },
+      {
+        "id": "integrity_note",
+        "type": "markdown",
+        "sourceId": "formal_readiness",
+        "body": "## 正式證據完整性界線\n\n目前 owner 已確認沒有真實持倉，現有 Portfolio 記錄只是測試。依現行契約，causal ledger 必須有 `non_cash_state_day_count > 0`，因此不能把測試持倉、cash-only ledger、research ledger、teacher target 或同日 advice 包裝成 formal input。Rule snapshots 與 PIT membership 也不能在截止時間後冒充當時已存在的正式證據。\n\n若不採購完整歷史正式來源，合法方向是重新定義一個**未來 prospective formal clock**，讓 Rule/PIT/ledger 從新起點開始真實累積；「忽略 2014」只能透過明確改版契約與新 clock 排除，不能把舊期間標記為已完成。"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## 範圍與限制\n\n這是一份 2026-08-14 本機快照。CPU 數值來自兩次短時間取樣，其中圖表採 10 秒樣本；不代表全天平均。`remoting_host.exe` 的產品歸屬是推論。Git paths 數量會隨其他工作變更。本報告沒有停止程序、關閉 task、修改排程、重建資料、設定 secret 或 commit 任一變更。"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-14T13:47:48-07:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [
+        {
+          "ooc_folds": 41,
+          "ooc_fold_target": 41,
+          "formal_inputs_ready": 0,
+          "formal_inputs_required": 3,
+          "focused_tests_passed": 78,
+          "focused_tests_failed": 0,
+          "dirty_paths": 161,
+          "untracked_paths": 38
+        }
+      ],
+      "process_cpu": [
+        { "process_group": "ChatGPT / Codex desktop", "system_cpu_pct": 7.93, "single_core_equivalent_pct": 126.9, "instances": 10, "memory_mb": 2394.0, "sample_seconds": 10, "role": "主要 CPU 來源；Chromium 多程序架構" },
+        { "process_group": "remoting_host", "system_cpu_pct": 4.65, "single_core_equivalent_pct": 74.3, "instances": 1, "memory_mb": 318.9, "sample_seconds": 10, "role": "獨立遠端控制 host；非 MCP" },
+        { "process_group": "Task Manager", "system_cpu_pct": 0.38, "single_core_equivalent_pct": 6.1, "instances": 1, "memory_mb": 0, "sample_seconds": 10, "role": "觀測工具本身" },
+        { "process_group": "Codex CLI", "system_cpu_pct": 0.01, "single_core_equivalent_pct": 0.2, "instances": 1, "memory_mb": 0, "sample_seconds": 10, "role": "近乎閒置" },
+        { "process_group": "全部 MCP Python", "system_cpu_pct": 0.0, "single_core_equivalent_pct": 0.0, "instances": 90, "memory_mb": 7190.5, "sample_seconds": 10, "role": "CPU 近乎閒置，但 RAM 浪費明顯" }
+      ],
+      "project_status": [
+        { "icon": "✅", "area": "ML / Direct + OOC", "state": "完成", "current": "Direct dataset 與 41/41 OOC folds 完成；final meta allocator 已產出", "remaining": "不需重跑 OOC；應轉往 formal replay 與 validation" },
+        { "icon": "🔴", "area": "ML / Formal OOS", "state": "阻擋", "current": "OOS replay input builder 已產出 blocked status", "remaining": "補齊 causal non-cash ledger、formal Rule history、PIT sector membership" },
+        { "icon": "🔴", "area": "ML / Calibration", "state": "未過 Gate", "current": "最大 ECE 2,627 bp；5/10/20/60-day horizons 皆 fail", "remaining": "校準附掛、分類品質改善、正式 OOS 比較" },
+        { "icon": "🔒", "area": "ML / Promotion", "state": "刻意鎖定", "current": "formal_oos_allowed=false、alpha=0、broker_order_allowed=false", "remaining": "formal replay、20 個成熟 shadow days、drift 與 promotion evidence" },
+        { "icon": "✅", "area": "資料 / Core PIT", "state": "可用", "current": "Raw PIT 最新到 2026-08-13；15,938,679 rows、52 features", "remaining": "維持 daily T-1 freshness 與正式 lineage" },
+        { "icon": "🧪", "area": "資料 / External candidates", "state": "僅候選", "current": "institutional/credit/TDCC candidate 有資料，但 formal_records=0", "remaining": "license、publication metadata、正式可接受 lineage" },
+        { "icon": "🔴", "area": "資料 / Formal inputs", "state": "0/3", "current": "三個 path artifacts 都未存在；HMAC key/store ID 已設定", "remaining": "不可事後偽造；需新 prospective clock 或合法歷史來源" },
+        { "icon": "🟦", "area": "UI / PySide6", "state": "主要操作面可用", "current": "Data Sources、Decision Workbench、Advice、candidate/runtime read-only views 已有", "remaining": "evidence write/review、holdings import、reconciliation、production OOS 操作面" },
+        { "icon": "🟡", "area": "Runtime / Background", "state": "排程健康、session 過多", "current": "13 個排程 Ready 且 last result=0；存在 9 套 MCP runtimes", "remaining": "關閉閒置 Codex tasks；formal watcher 需重新啟動或納入排程" },
+        { "icon": "✅", "area": "QA / Focused", "state": "通過", "current": "本次 UI/runtime focused suite 78 passed", "remaining": "161 dirty paths 分批驗證後再跑完整 baseline" },
+        { "icon": "🛠️", "area": "Git / Engineering", "state": "待整理", "current": "dev branch 有 123 modified + 38 untracked = 161 paths", "remaining": "按功能切批、先驗證、再做有意義的小 commits" }
+      ],
+      "mcp_services": [
+        { "service": "evidence_access_server.py", "copies": 9, "base_python_memory_mb": 2274.5, "sampled_cpu": "≈ 0%", "diagnosis": "重複 session copy；記憶體最大" },
+        { "service": "mcp_server_yfinance", "copies": 9, "base_python_memory_mb": 1414.2, "sampled_cpu": "≈ 0%", "diagnosis": "重複 session copy" },
+        { "service": "sqlite_server.py", "copies": 9, "base_python_memory_mb": 1300.5, "sampled_cpu": "≈ 0%", "diagnosis": "重複 session copy" },
+        { "service": "project_context_server.py", "copies": 9, "base_python_memory_mb": 1299.7, "sampled_cpu": "≈ 0%", "diagnosis": "重複 session copy" },
+        { "service": "git_server.py", "copies": 9, "base_python_memory_mb": 716.0, "sampled_cpu": "≈ 0%", "diagnosis": "重複 session copy" },
+        { "service": "各 MCP 的 venv launcher parents", "copies": 45, "base_python_memory_mb": 185.6, "sampled_cpu": "≈ 0%", "diagnosis": "Windows venv 啟動器；與上述 45 children 配對" }
+      ],
+      "next_actions": [
+        { "priority": 1, "icon": "🧹", "action": "關閉／封存 8 個閒置 Codex tasks，或在保存工作後重啟 Codex app", "why": "預估可釋放約 6.4 GB MCP RAM；若只剩一個 task，Python process 應由 90 降到約 10" },
+        { "priority": 2, "icon": "🕰️", "action": "對 formal clock 做一次 owner 決策並版本化契約", "why": "沒有真實持倉，現行 non-cash ledger Gate 無法誠實通過；需 prospective start 或調整產品 Gate" },
+        { "priority": 3, "icon": "📚", "action": "決定 PIT sector 資料策略：合法歷史採購或 prospective-only", "why": "避免持續卡在無法補齊的 2014–2026 歷史契約" },
+        { "priority": 4, "icon": "🧪", "action": "修正 calibration 與 rebalance label 單一 class 問題", "why": "即使三個輸入齊全，當前 ECE 與單一 class 仍不支援 promotion" },
+        { "priority": 5, "icon": "🧭", "action": "恢復 formal readiness watcher，或把它併入既有 daily maintainer", "why": "目前 watcher 已停；最新 readiness snapshot 落後於 OOS build status" },
+        { "priority": 6, "icon": "📦", "action": "將 161 paths 依 data/runtime/UI/ML/docs/tests 分批 QA 與 commit", "why": "建立可追溯進度，避免巨大混合 commit；不應先盲目全 add" }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "ml_artifacts",
+      "label": "Allocation OOC 與 OOS artifact manifests",
+      "path": "artifact://allocation-ooc-aab7ec6a692afb9a9a52093f",
+      "query": {
+        "engine": "filesystem-json",
+        "description": "讀取 OOC run manifest、final meta manifest、OOS replay build status、calibration audit 與 promotion manifest。",
+        "sql": "Read manifest.json and artifacts/**/manifest.json from allocation-ooc-aab7ec6a692afb9a9a52093f",
+        "tables_used": ["run_manifest", "final_meta_manifest", "oos_build_status", "calibration_audit", "promotion_manifest"],
+        "filters": ["formal_source_only=true", "current run id=allocation-ooc-aab7ec6a692afb9a9a52093f"],
+        "metric_definitions": ["OOC folds = run manifest fold_count", "max ECE = maximum horizon ECE in calibration audit"],
+        "executed_at": "2026-08-14T13:30:00-07:00"
+      }
+    },
+    {
+      "id": "formal_readiness",
+      "label": "Formal input readiness latest snapshot",
+      "path": "artifact://ml-formal-input-readiness/latest",
+      "query": {
+        "engine": "filesystem-json",
+        "description": "讀取三個 formal input path 與 controlled-store config 的 readiness 結果，不讀取或顯示 HMAC secret。",
+        "sql": "Read latest.json; project only readiness booleans, status, created_at and custody hashes",
+        "tables_used": ["formal_input_readiness"],
+        "filters": ["secret value excluded"],
+        "metric_definitions": ["正式輸入已通過 = count of ready formal ledger, Rule history and PIT sector membership"],
+        "executed_at": "2026-08-14T13:30:00-07:00"
+      }
+    },
+    {
+      "id": "project_docs",
+      "label": "Scoped SSOT 專案文件",
+      "path": "docs/00_core/PROJECT_SNAPSHOT.md",
+      "query": {
+        "engine": "markdown",
+        "description": "讀取 PROJECT_SNAPSHOT、6-month engineering roadmap、external validation register 與 application manual 的最新狀態段落。",
+        "sql": "Read scoped SSOT Markdown documents under docs/00_core, docs/04_roadmap and docs/07_guides",
+        "tables_used": ["PROJECT_SNAPSHOT", "ROADMAP_6M_ENGINEERING", "GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER", "APPLICATION_MANUAL"],
+        "executed_at": "2026-08-14T13:30:00-07:00"
+      }
+    },
+    {
+      "id": "runtime_sample",
+      "label": "Windows 程序與記憶體取樣",
+      "path": "live://windows/process-sample/2026-08-14",
+      "query": {
+        "engine": "powershell",
+        "description": "以 3 秒與 10 秒 CPU deltas 取樣程序；依 executable/command line 分組並檢查 parent-child 關係。敏感 command line 內容未保留。",
+        "sql": "Get-Process snapshots; CPU delta / sample duration / logical processor count; group Win32_Process by sanitized command line",
+        "tables_used": ["Win32_Process", "Get-Process", "Win32_PerfFormattedData_PerfOS_Memory"],
+        "filters": ["sample window=10 seconds for chart", "logical processors=16", "secrets excluded"],
+        "metric_definitions": ["system_cpu_pct = total process CPU seconds / sample seconds / 16 * 100", "single_core_equivalent_pct = total process CPU seconds / sample seconds * 100", "memory_mb = summed working set / 1 MiB"],
+        "executed_at": "2026-08-14T13:30:00-07:00"
+      }
+    },
+    {
+      "id": "scheduled_tasks",
+      "label": "Windows baldr-* 排程任務查詢",
+      "path": "live://windows/scheduled-tasks/2026-08-14",
+      "query": {
+        "engine": "powershell",
+        "description": "查詢 TaskName、State、LastRunTime、LastTaskResult 與 NextRunTime。",
+        "sql": "Get-ScheduledTask | where TaskName matches ^baldr-; Get-ScheduledTaskInfo",
+        "tables_used": ["Windows Task Scheduler"],
+        "filters": ["TaskName starts with baldr-"],
+        "metric_definitions": ["healthy last run = LastTaskResult equals 0"],
+        "executed_at": "2026-08-14T13:40:00-07:00"
+      }
+    },
+    {
+      "id": "qa_run",
+      "label": "UI/runtime focused pytest run",
+      "path": "tests/",
+      "query": {
+        "engine": "pytest",
+        "description": "執行八個 UI/runtime 測試檔；結果 78 passed、0 failed、1 個 pytest cache permission warning。",
+        "sql": ".venv/Scripts/python.exe -m pytest tests/test_ui_qt_runtime_view.py tests/test_runtime_event_stream_service.py tests/test_runtime_health_service.py tests/test_scheduled_operations_service.py tests/test_ui_qt_crash_diagnostics.py tests/test_ui_qt_shutdown_coordinator.py tests/test_ui_qt_task_worker.py tests/test_ui_qt_update_view_workbench.py -q -o addopts=",
+        "tables_used": ["pytest test collection"],
+        "metric_definitions": ["focused_tests_passed = pytest passed count", "focused_tests_failed = pytest failed count"],
+        "executed_at": "2026-08-14T13:42:00-07:00"
+      }
+    },
+    {
+      "id": "git_inventory",
+      "label": "dev branch git status inventory",
+      "path": ".git",
+      "query": {
+        "engine": "git",
+        "description": "唯讀統計 git status --short；不 stage、不 commit。",
+        "sql": "git status --short; group by status code",
+        "tables_used": ["git index", "working tree"],
+        "filters": ["current branch=dev"],
+        "metric_definitions": ["dirty_paths = modified tracked paths + untracked paths"],
+        "executed_at": "2026-08-14T13:47:48-07:00"
+      }
+    },
+    {
+      "id": "project_evidence",
+      "label": "Artifacts、SSOT、runtime、QA 與 Git 證據彙整",
+      "path": "docs/06_qa/project_status_2026_08_14/artifact.json",
+      "query": {
+        "engine": "evidence-synthesis",
+        "description": "將本報告其他七個 canonical sources 綜整成專案矩陣與建議處理順序；不新增推測性完成百分比。",
+        "sql": "Join evidence by workstream and classify as complete, engineering-ready, partial, blocked, research-only, time-dependent, locked or uncommitted",
+        "tables_used": ["ml_artifacts", "formal_readiness", "project_docs", "runtime_sample", "scheduled_tasks", "qa_run", "git_inventory"],
+        "metric_definitions": ["status icons are categorical evidence states, not completion percentages"],
+        "executed_at": "2026-08-14T13:47:48-07:00"
+      }
+    }
+  ],
+  "package_info": {
+    "originUrl": "artifact://baldr-project-status-2026-08-14",
+    "root": "docs/06_qa/project_status_2026_08_14",
+    "manifestPath": "artifact.json",
+    "snapshotPath": "artifact.json",
+    "controls": { "edit": false, "refresh": false }
+  }
+}

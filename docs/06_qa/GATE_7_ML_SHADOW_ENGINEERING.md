@@ -122,6 +122,8 @@ Daily orchestrator 以 strict T-1 post-freeze rows、當日 proposal 與同一 f
 
 > **目前狀態**：Production Co-pilot 的資料、訓練器、推論、四 lane、unsigned builder、DPAPI Authority、consumer custody 與 rollback 工程路徑可日常執行；canonical 11-symbol official-event training 已完成 22,093 rows／4 folds／426,624 base OOF／12,984 meta OOF，Rule production 不等待人工。全市場 raw PIT publication 已完成，direct numeric／OOC v5 仍由 checkpoint pipeline 建立；現有正式 training 尚缺 execution-ledger replay inputs，producer 會明確 blocked 而不合成績效。Formal ECE／PSI／OOS lane 等模型指標仍為 `NOT EVALUATED`，所以 ML 非零權重目前不具 eligibility，也不再等待或接受人工 promotion review。
 
+2026-08-14 以現有 test fixtures 完成 formal downstream wiring 回歸：OOS replay／promotion pipeline `30 passed`、promotion evidence/reference/validation `53 passed`、copilot／portfolio consumer `31 passed`。三項正式 custody 到位後，正式執行順序固定為 `build_allocation_oos_replay_inputs()`、primary／verification identical result hash，再進入 promotion evidence；測試 fixture 不會被發布為正式 evidence。
+
 > **Agent 接手導覽**：工程切片與驗證證據見 [Pure Engineering Closeout](GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md)；待辦狀態以 [External Validation Register](GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) 為準；append-only 更新方式見 [Engineering Control Center](GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md)。
 
 Gate 7 使用隔離的 `ml_module/` 建立結構化傳統 ML challenger。此工程不取代 rule-generated signals、不修改推薦 threshold、不接 production scheduler、不產生交易建議，也不具有 production eligibility。
@@ -145,6 +147,28 @@ Feature 必須滿足 `feature.available_date <= row.decision_date`。Label 可�
 ## Probability calibration
 
 Downside probability 使用 isotonic calibration，且 calibration input 必須來自至少兩個 walk-forward out-of-fold blocks。校準拒絕樣本不足、單一 label class、非有限值或超出 0..1 的 raw probability。Calibrator 固定 shadow-only，不提供 production eligibility。
+
+既有 OOC run 可用 `scripts/audit_existing_ooc_calibration.py --training-manifest <training-manifest> --output <shadow-audit.json>` 做完整 artifact hash 重驗與 cross-fitted calibration 重算；此命令為唯讀診斷，不改寫 training manifest、不寫入正式 SQLite，也不建立 promotion-compatible pointer。`quality_pass` 或 calibration 通過不會單獨解除 formal OOS、alpha 或 broker gate。
+
+2026-08-14 起 audit report 的每個 calibration horizon 另保存 `horizon_trading_days`（5／10／20／60），不再依賴陣列順序判讀 ECE／Brier；此為觀測契約修正，不改變 calibration 數值、training artifact 或 promotion gate。
+
+2026-08-14 起 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 會在 polling
+時重新讀取 Windows 使用者／系統環境的受控 formal path、PIT sector path、Rule HMAC key
+與 store id，補足
+長駐 process 的啟動時 environment snapshot 限制。刷新只存在目前 process memory，變數 value
+不會寫入檔案、command line、status 或 log；移除 watcher 自己採用的 registry value 會清除
+該 process 內的 adopted value，並維持 schema／hash／cutoff／HMAC／formal gate 的原有
+fail-closed 驗證。此為 custody handoff observability／runtime contract，未放寬任何 promotion、
+alpha 或 broker 條件。
+
+獨立 readiness inspector 也共用這個受控 Windows environment handoff：它可接收 watcher 啟動後才出現的 owner deposit，但只更新當前 read-only process memory，仍不會寫入 artifact、source DB 或任何 secret-bearing status。
+
+2026-08-14 另完成既有 OOC calibration 的唯讀 scope split：984 個 base OOF experts 分成
+492 個 `ridge_logistic` 與 492 個 `hist_gradient_boosting` 後，兩組在 5／10／20／60 日
+horizon 仍全部 `quality_pass=false`；combined 最大 ECE=`2,627 bp`，ridge 最大
+ECE=`2,668 bp`，HGB 最大 ECE=`2,683 bp`，均高於 `500 bp`。因此高 ECE 不是單純由
+跨模型混合造成的 indexing／reporting 假象；calibration 仍是 shadow diagnostic，
+不放寬 threshold，也不把未 attached 的 calibrator 當成 production evidence。
 
 ## Model and prediction registries
 
