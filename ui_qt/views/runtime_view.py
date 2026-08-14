@@ -7,7 +7,12 @@ from PySide6.QtGui import QFont
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.theme_widgets import EmptyStatePanel
 from ui_qt.theme import MIDNIGHT_ANALYST
-from app_module.dtos.runtime_dtos import RuntimeStateSnapshotDTO, RuntimeHealthSnapshotDTO, RuntimeEventDTO
+from app_module.dtos.runtime_dtos import (
+    RuntimeStateSnapshotDTO,
+    RuntimeHealthSnapshotDTO,
+    RuntimeEventDTO,
+    ScheduledOperationsSnapshotDTO,
+)
 
 STATE_LABELS = {
     "IDLE": "閒置",
@@ -40,6 +45,25 @@ SEVERITY_LABELS = {
     "CRITICAL": "重大",
 }
 
+OPERATION_STATE_LABELS = {
+    "operational": "正常",
+    "guarded": "安全邊界中",
+    "attention": "需要注意",
+    "unavailable": "無法判定",
+    "observed": "已觀測",
+}
+MAX_RENDERED_RUNTIME_EVENTS = 500
+DEFAULT_HEALTH_SCOPE_NOTE = (
+    "治理暫停或拒絕率升高只代表 agent / governance workflow 狀態，"
+    "不代表日常營運排程或主 App 一般功能失敗。"
+)
+EVENT_LOG_READ_STATE_LABELS = {
+    "observed": "已讀取",
+    "missing": "尚未建立",
+    "degraded": "部分無法解析",
+    "unavailable": "無法讀取",
+}
+
 
 class RuntimeView(QWidget):
     """
@@ -57,7 +81,7 @@ class RuntimeView(QWidget):
 
         # 標題列（標題 + InfoButton）
         title_layout = QHBoxLayout()
-        title = QLabel("運行監控站 (Runtime Observatory)")
+        title = QLabel("Owner 營運與治理監控")
         title_font = QFont()
         title_font.setPointSize(14)
         title_font.setBold(True)
@@ -69,7 +93,7 @@ class RuntimeView(QWidget):
         main_layout.addLayout(title_layout)
 
         self.scope_label = QLabel(
-            "Runtime Observatory 不監控資料更新背景任務；資料更新、回測與推薦長任務仍由各自頁面顯示狀態。"
+            "上方營運排程只讀取 OUTPUT_ROOT/scheduled 的已保存狀態；它不代表 Windows Task Scheduler 正在執行或已註冊。"
         )
         self.scope_label.setWordWrap(True)
         self.scope_label.setMaximumHeight(44)
@@ -79,6 +103,21 @@ class RuntimeView(QWidget):
             f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 6px 8px;"
         )
         main_layout.addWidget(self.scope_label)
+
+        self.operations_group = QGroupBox("營運排程（OUTPUT_ROOT／唯讀）")
+        operations_layout = QVBoxLayout(self.operations_group)
+        self.operations_summary_label = QLabel("日常營運：尚未讀取已保存排程狀態")
+        self.operations_summary_label.setStyleSheet("font-weight: bold;")
+        self.operations_detail_label = QLabel(
+            "核心資料更新、推薦與 Paper Portfolio 與治理 Runtime 分開判讀；ML blocked / rule-only 可能是預期安全邊界。"
+        )
+        self.operations_detail_label.setWordWrap(True)
+        self.operations_list = QListWidget()
+        self.operations_list.setMaximumHeight(142)
+        operations_layout.addWidget(self.operations_summary_label)
+        operations_layout.addWidget(self.operations_detail_label)
+        operations_layout.addWidget(self.operations_list)
+        main_layout.addWidget(self.operations_group)
 
         splitter = QSplitter(Qt.Horizontal)
         splitter.setMinimumHeight(360)
@@ -117,15 +156,13 @@ class RuntimeView(QWidget):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
 
-        self.health_group = QGroupBox("治理健康狀態")
+        self.health_group = QGroupBox("治理 Runtime（獨立於日常排程）")
         health_layout = QVBoxLayout(self.health_group)
         self.health_state_label = QLabel("整體治理狀態：未知")
         self.rejection_rate_label = QLabel("驗證拒絕率：0.0%（穩定）｜連續失敗次數：0")
         self.last_violation_label = QLabel("最近重大違規：無")
         self.last_violation_label.setStyleSheet("color: red; font-weight: bold;")
-        self.health_scope_note_label = QLabel(
-            "治理暫停或拒絕率升高只代表 agent / governance workflow 狀態，不代表主 App 一般功能失敗。"
-        )
+        self.health_scope_note_label = QLabel(DEFAULT_HEALTH_SCOPE_NOTE)
         self.health_scope_note_label.setWordWrap(True)
 
         health_layout.addWidget(self.health_state_label)
@@ -133,11 +170,11 @@ class RuntimeView(QWidget):
         health_layout.addWidget(self.last_violation_label)
         health_layout.addWidget(self.health_scope_note_label)
 
-        self.events_group = QGroupBox("事件流")
+        self.events_group = QGroupBox("本次開啟後的治理事件流")
         events_layout = QVBoxLayout(self.events_group)
         self.event_empty_state = EmptyStatePanel(
             "尚無 Runtime 事件",
-            "當治理 workflow 產生事件時，會依時間順序顯示在下方。"
+            "本次開啟後，治理 workflow 產生的事件會依時間順序顯示在下方；這不是完整歷史稽核查詢。"
         )
         events_layout.addWidget(self.event_empty_state)
         self.event_list = QListWidget()
@@ -170,12 +207,17 @@ class RuntimeView(QWidget):
 
     def on_health_updated(self, dto: RuntimeHealthSnapshotDTO) -> None:
         """Pure rendering slot for Health Analytics DTO"""
+        if dto.observation_scope != "current":
+            self._render_noncurrent_governance_health(dto)
+            return
+
         state_value = dto.current_state.value
         state_label = STATE_LABELS.get(state_value, state_value)
         high_risk = (
             state_value in {"ERROR", "HALTED"}
             or dto.rejection_rate >= 0.5
             or dto.consecutive_failures >= 3
+            or not dto.is_healthy
         )
         state_color = "red" if high_risk else "green"
         self.health_state_label.setText(f"整體治理狀態：<font color='{state_color}'>{state_label}</font>")
@@ -185,6 +227,11 @@ class RuntimeView(QWidget):
         trend_arrow = "↑" if dto.rejection_rate_trend == "UP" else ("↓" if dto.rejection_rate_trend == "DOWN" else "→")
         self.rejection_rate_label.setText(
             f"驗證拒絕率：{rate_pct:.1f}%（{trend_arrow}）｜連續失敗次數：{dto.consecutive_failures}"
+            + (f"｜未來時間事件：{dto.future_event_count}" if dto.future_event_count else "")
+            + self._event_log_read_suffix(dto)
+        )
+        self.health_scope_note_label.setText(
+            DEFAULT_HEALTH_SCOPE_NOTE + self._event_log_read_note(dto)
         )
 
         if dto.last_critical_violation:
@@ -193,10 +240,77 @@ class RuntimeView(QWidget):
         else:
             self.last_violation_label.setText("最近重大違規：無")
 
+    def on_scheduled_operations_updated(self, dto: ScheduledOperationsSnapshotDTO) -> None:
+        """純渲染已保存的日常營運狀態；不呼叫排程或資料更新。"""
+        overall_label = "正常" if dto.overall_state == "operational" else "需要注意"
+        self.operations_summary_label.setText(
+            f"日常營運：{overall_label}｜核心工作已就緒 {dto.core_ready_count}/{dto.core_job_count}"
+        )
+        self.operations_list.clear()
+        for operation in dto.operations:
+            state_label = OPERATION_STATE_LABELS.get(operation.state, operation.state)
+            updated_text = (
+                operation.updated_at.astimezone().strftime("%Y-%m-%d %H:%M")
+                if operation.updated_at is not None
+                else "未知"
+            )
+            item = QListWidgetItem(
+                f"{operation.label}｜{state_label}｜{operation.raw_status}｜{updated_text}"
+            )
+            item.setToolTip(
+                "\n".join(
+                    (
+                        f"job: {operation.job_id}",
+                        f"lane: {operation.lane}",
+                        f"read_state: {operation.read_state}",
+                        f"timestamp_source: {operation.observed_at_source}",
+                        f"source: {operation.source_path}",
+                        f"diagnostic: {operation.diagnostic or 'none'}",
+                    )
+                )
+            )
+            self.operations_list.addItem(item)
+
+    def _render_noncurrent_governance_health(
+        self,
+        dto: RuntimeHealthSnapshotDTO,
+    ) -> None:
+        if dto.observation_scope == "historical_only":
+            state_label = "僅有歷史治理事件"
+            detail = "目前未觀測到活躍治理 Runtime；歷史事件不能用來判定今天的營運狀態。"
+        elif dto.observation_scope == "timestamp_invalid":
+            state_label = "治理事件時間無法解析"
+            detail = "治理事件缺少可信時間，不能用來判定目前狀態。"
+        elif dto.observation_scope == "timestamp_future":
+            state_label = "治理事件時間在未來"
+            detail = "治理事件時間超出可接受時鐘誤差，不能用來判定目前狀態。"
+        elif dto.observation_scope == "event_log_unreadable":
+            state_label = "治理事件檔無法讀取"
+            detail = "事件檔無法讀取，不能把它解讀為沒有治理事件或目前健康。"
+        elif dto.observation_scope == "event_log_degraded":
+            state_label = "治理事件檔部分無法解析"
+            detail = "事件檔含無法解析的資料，不能據此宣稱治理 Runtime 健康。"
+        else:
+            state_label = "尚無治理事件"
+            detail = "尚未觀測到治理 Runtime 事件。"
+        self.health_state_label.setText(f"整體治理狀態：{state_label}")
+        self.health_state_label.setStyleSheet("font-weight: bold;")
+        self.rejection_rate_label.setText(
+            f"歷史事件：{dto.historical_event_count}｜時間無法解析：{dto.timestamp_invalid_count}"
+            f"｜未來時間：{dto.future_event_count}"
+            + self._event_log_read_suffix(dto)
+        )
+        self.health_scope_note_label.setText(detail + self._event_log_read_note(dto))
+        if dto.last_critical_violation:
+            message = self._localize_message(dto.last_critical_violation.human_readable_message)
+            self.last_violation_label.setText(f"最近歷史重大違規：{message}")
+        else:
+            self.last_violation_label.setText("最近歷史重大違規：無")
+
     def on_event_received(self, dto: RuntimeEventDTO) -> None:
         """Pure rendering slot for appending event logs"""
         self.event_empty_state.hide()
-        time_str = dto.timestamp.strftime("%H:%M:%S")
+        time_str = dto.timestamp.strftime("%H:%M:%S") if dto.timestamp is not None else "時間未知"
         severity_label = SEVERITY_LABELS.get(dto.severity.value, dto.severity.value)
         event_label = EVENT_LABELS.get(dto.event_type, dto.event_type)
         message = self._localize_message(dto.human_readable_message)
@@ -205,10 +319,13 @@ class RuntimeView(QWidget):
         item = QListWidgetItem(item_text)
         item.setToolTip(
             f"raw event_type: {dto.event_type}\n"
+            f"raw timestamp: {dto.timestamp_raw or 'missing'}\n"
             f"payload: {dto.payload_preview}\n"
             f"message: {dto.human_readable_message}"
         )
         self.event_list.addItem(item)
+        while self.event_list.count() > MAX_RENDERED_RUNTIME_EVENTS:
+            self.event_list.takeItem(0)
         self.event_list.scrollToBottom()
 
     def _localize_message(self, message: str) -> str:
@@ -216,3 +333,22 @@ class RuntimeView(QWidget):
         for raw, label in ERROR_LABELS.items():
             localized = localized.replace(raw, label)
         return localized
+
+    @staticmethod
+    def _event_log_read_suffix(dto: RuntimeHealthSnapshotDTO) -> str:
+        if dto.event_log_read_state == "observed":
+            return ""
+        label = EVENT_LOG_READ_STATE_LABELS.get(
+            dto.event_log_read_state,
+            dto.event_log_read_state,
+        )
+        return f"｜事件檔：{label}"
+
+    @staticmethod
+    def _event_log_read_note(dto: RuntimeHealthSnapshotDTO) -> str:
+        if dto.event_log_read_state == "observed":
+            return ""
+        detail = f" 事件檔讀取狀態：{dto.event_log_read_state}。"
+        if dto.event_log_diagnostic:
+            detail += f" 診斷：{dto.event_log_diagnostic}。"
+        return detail

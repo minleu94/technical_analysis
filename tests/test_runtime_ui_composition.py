@@ -10,8 +10,9 @@ class _Signal:
 
 
 class _Controller:
-    def __init__(self, runtime_dir):
+    def __init__(self, runtime_dir, *, scheduled_output_root=None):
         self.runtime_dir = runtime_dir
+        self.scheduled_output_root = scheduled_output_root
         self.event_bus = object()
 
     def poll_updates(self):
@@ -25,6 +26,7 @@ class _Bridge:
         self.state_updated = _Signal()
         self.health_updated = _Signal()
         self.event_received = _Signal()
+        self.scheduled_operations_updated = _Signal()
 
 
 class _View:
@@ -38,6 +40,9 @@ class _View:
         pass
 
     def on_event_received(self):
+        pass
+
+    def on_scheduled_operations_updated(self):
         pass
 
 
@@ -66,11 +71,16 @@ def test_runtime_composition_wires_bridge_view_and_poll_timer(tmp_path) -> None:
             "RuntimeView": _View,
             "QTimer": _Timer,
         },
+        scheduled_output_root=tmp_path / "output" / "scheduled",
     )
 
     assert result.controller.runtime_dir == str(tmp_path / "runtime")
+    assert result.controller.scheduled_output_root == tmp_path / "output" / "scheduled"
     assert result.bridge.state_updated.targets == [result.view.on_state_updated]
     assert result.bridge.health_updated.targets == [result.view.on_health_updated]
     assert result.bridge.event_received.targets == [result.view.on_event_received]
+    assert result.bridge.scheduled_operations_updated.targets == [
+        result.view.on_scheduled_operations_updated
+    ]
     assert result.timer.timeout.targets == [result.controller.poll_updates]
     assert result.timer.interval == 1000

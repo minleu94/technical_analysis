@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ui_qt.models.pandas_table_model import PandasTableModel
-from ui_qt.workers.task_worker import ProgressTaskWorker
+from ui_qt.workers.task_worker import ProgressTaskWorker, TaskWorker
 from app_module.recommendation_service import RecommendationService
 from app_module.regime_service import RegimeService
 from app_module.watchlist_service import WatchlistService
@@ -2269,7 +2269,29 @@ class RecommendationView(QWidget):
         worker.cancelled.connect(self._on_excel_export_cancelled)
 
         self._report_export_workers.append(worker)
+        worker.finished.connect(
+            lambda _path, current_worker=worker: self._release_report_export_worker(
+                current_worker
+            )
+        )
+        worker.error.connect(
+            lambda _message, current_worker=worker: self._release_report_export_worker(
+                current_worker
+            )
+        )
+        worker.cancelled.connect(
+            lambda current_worker=worker: self._release_report_export_worker(
+                current_worker
+            )
+        )
         worker.start()
+
+    def _release_report_export_worker(self, worker: TaskWorker) -> None:
+        if worker in self._report_export_workers:
+            self._report_export_workers.remove(worker)
+        delete_later = getattr(worker, "deleteLater", None)
+        if callable(delete_later):
+            delete_later()
 
     def _on_excel_export_finished(self, path):
         self.export_report_btn.setEnabled(True)
@@ -2289,12 +2311,20 @@ class RecommendationView(QWidget):
         self.export_report_btn.setText("匯出 Excel")
         QMessageBox.information(self, "取消", "匯出已被取消")
 
+    def request_cooperative_shutdown(self) -> bool:
+        workers = [self.worker, *self._report_export_workers]
+        for worker in workers:
+            if worker is not None and worker.isRunning():
+                worker.cancel(cooperative=True, wait=False)
+        return not any(
+            worker is not None and worker.isRunning()
+            for worker in workers
+        )
+
     def closeEvent(self, event):
         """關閉事件"""
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-        for worker in self._report_export_workers:
-            if worker.isRunning():
-                worker.wait()
+        if not self.request_cooperative_shutdown():
+            event.ignore()
+            return
         event.accept()
 

@@ -4,16 +4,21 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EXPECTED_MAINWINDOW_TAB_LABELS = (
-    "數據更新",
-    "市場觀察",
-    "每日決策",
-    "策略回測",
+EXPECTED_MAINWINDOW_WORKSPACE_LABELS = (
+    "決策工作台",
+    "市場探索",
     "推薦分析",
+    "策略回測",
     "觀察清單",
     "持倉管理",
-    "Runtime Observatory",
+    "數據更新",
+    "Runtime",
 )
+
+# Backwards-compatible public name.  The current MainWindow uses a left-side
+# workspace navigator rather than a primary QTabWidget, but downstream report
+# consumers still read the historical ``expected_tabs`` field.
+EXPECTED_MAINWINDOW_TAB_LABELS = EXPECTED_MAINWINDOW_WORKSPACE_LABELS
 
 
 @dataclass(frozen=True)
@@ -48,6 +53,7 @@ def build_mainwindow_smoke_evidence(
     resize_evidence: list[dict[str, Any]] | None = None,
     dialog_cancel_evidence: list[dict[str, Any]] | None = None,
     forbidden_actions_invoked: list[str] | None = None,
+    navigation_mode: str | None = None,
 ) -> dict[str, Any]:
     return {
         "window_title": window_title,
@@ -59,6 +65,7 @@ def build_mainwindow_smoke_evidence(
         "resize_evidence": list(resize_evidence or []),
         "dialog_cancel_evidence": list(dialog_cancel_evidence or []),
         "forbidden_actions_invoked": list(forbidden_actions_invoked or []),
+        "navigation_mode": navigation_mode,
     }
 
 
@@ -68,18 +75,38 @@ def collect_mainwindow_smoke_evidence(
     switch_tabs: bool = False,
 ) -> dict[str, Any]:
     """收集主視窗唯讀 smoke evidence；呼叫端負責提供已建立的 window。"""
-    tab_widget = _find_primary_tab_widget(window)
-    tab_labels = [str(tab_widget.tabText(index)) for index in range(tab_widget.count())]
+    workspace_navigation = _find_workspace_navigation(window)
+    if workspace_navigation is not None:
+        tab_labels, workspace_keys = _workspace_labels_and_keys(workspace_navigation)
+        select_workspace = getattr(window, "_select_main_workspace", None)
+        navigation_mode = "left_workspace_navigation"
+    else:
+        tab_widget = _find_primary_tab_widget(window)
+        tab_labels = [str(tab_widget.tabText(index)) for index in range(tab_widget.count())]
+        workspace_keys = []
+        select_workspace = None
+        navigation_mode = "legacy_tabs"
+
     missing_tabs = [label for label in EXPECTED_MAINWINDOW_TAB_LABELS if label not in tab_labels]
 
     switched_tabs: list[str] = []
     if switch_tabs:
-        for label in EXPECTED_MAINWINDOW_TAB_LABELS:
-            if label not in tab_labels:
-                continue
-            index = tab_labels.index(label)
-            tab_widget.setCurrentIndex(index)
-            switched_tabs.append(label)
+        if workspace_navigation is not None:
+            for key, label in zip(workspace_keys, tab_labels, strict=True):
+                if label not in EXPECTED_MAINWINDOW_TAB_LABELS:
+                    continue
+                if callable(select_workspace):
+                    select_workspace(key)
+                else:
+                    workspace_navigation.set_current_key(key)
+                switched_tabs.append(label)
+        else:
+            for label in EXPECTED_MAINWINDOW_TAB_LABELS:
+                if label not in tab_labels:
+                    continue
+                index = tab_labels.index(label)
+                tab_widget.setCurrentIndex(index)
+                switched_tabs.append(label)
 
     return build_mainwindow_smoke_evidence(
         window_title=_window_title(window),
@@ -87,6 +114,7 @@ def collect_mainwindow_smoke_evidence(
         missing_tabs=missing_tabs,
         switched_tabs=switched_tabs,
         forbidden_actions_invoked=[],
+        navigation_mode=navigation_mode,
     )
 
 
@@ -109,6 +137,29 @@ def _find_primary_tab_widget(window: Any) -> Any:
                 return candidate
 
     raise AssertionError("找不到主視窗分頁容器")
+
+
+def _find_workspace_navigation(window: Any) -> Any | None:
+    navigation = getattr(window, "left_navigation", None)
+    if navigation is None:
+        return None
+    if all(
+        callable(getattr(navigation, method_name, None))
+        for method_name in ("item_keys", "label_for_key", "set_current_key")
+    ):
+        return navigation
+    return None
+
+
+def _workspace_labels_and_keys(navigation: Any) -> tuple[list[str], list[str]]:
+    keys = [str(key) for key in navigation.item_keys()]
+    labels: list[str] = []
+    for key in keys:
+        label = navigation.label_for_key(key)
+        if not isinstance(label, str) or not label:
+            raise AssertionError(f"左側工作區導覽缺少有效標籤：{key}")
+        labels.append(label)
+    return labels, keys
 
 
 def _looks_like_tab_widget(candidate: Any) -> bool:

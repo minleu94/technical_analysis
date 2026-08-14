@@ -142,6 +142,7 @@ def run_mainwindow_smoke(
             resize_evidence=resize_evidence,
             dialog_cancel_evidence=dialog_cancel_evidence,
             forbidden_actions_invoked=forbidden_actions_invoked,
+            navigation_mode=evidence.get("navigation_mode"),
         )
     finally:
         close = getattr(window, "close", None)

@@ -10,6 +10,34 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from ui_qt.crash_diagnostics import install_crash_diagnostics, record_exception
+
+
+def _configure_console_streams() -> None:
+    """讓 Windows 非 UTF-8 console 不會因為啟動訊息而中止 App。"""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (OSError, ValueError):
+            # Console／test capture stream 可能不允許重新設定；啟動流程
+            # 仍應繼續，真正的 exception 會由 crash diagnostics 記錄。
+            continue
+
+
+# 直接啟動桌面 App 時，在載入 Qt 與各服務前先裝上 crash hooks；單元測試匯入
+# ui_qt.main 時不會碰觸正式 DATA_ROOT。
+_crash_diagnostics_log_path: Path | None = None
+if __name__ == "__main__":
+    _configure_console_streams()
+    try:
+        _crash_diagnostics_log_path = install_crash_diagnostics()
+    except Exception as diagnostics_error:
+        print(f"[Main] 無法啟用 crash diagnostics: {diagnostics_error}")
+
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -91,6 +119,9 @@ from ui_qt.widgets.left_navigation import LeftNavigationWidget, NavigationItem
 from ui_qt.widgets.text_sanitizer import sanitize_button_texts
 from ui_qt.main_window_coordinator import WORKSPACE_DEFINITIONS, resolve_workspace_key
 from ui_qt.runtime_composition import build_runtime_ui_composition
+from ui_qt.workers.task_worker import (
+    request_cooperative_task_worker_shutdown,
+)
 from app_module.decision_desk_composition import (
     DecisionDeskMarketRegimeProvider,
     build_decision_desk_composition,
@@ -323,6 +354,7 @@ class MainWindow(QMainWindow):
             # 數據更新標籤
             print("[MainWindow] 創建數據更新視圖...")
             update_view = UpdateView(update_service=self.update_service, parent=self)
+            self.update_view = update_view
             print("[MainWindow] 數據更新視圖創建成功")
 
             # 市場探索標籤頁（包含多個子標籤）
@@ -489,6 +521,7 @@ class MainWindow(QMainWindow):
             recommendation.sendToBacktestRequested.connect(
                 lambda config: self._handle_send_to_backtest(backtest, config)
             )
+            self.recommendation_view = recommendation
             print("[MainWindow] 推薦分析視圖創建成功")
 
             # 觀察清單標籤（作為獨立 Tab，方便管理）
@@ -558,6 +591,7 @@ class MainWindow(QMainWindow):
                 runtime_composition = build_runtime_ui_composition(
                     project_root=project_root,
                     parent=self,
+                    scheduled_output_root=Path(self.config.output_root) / "scheduled",
                     dependencies={
                         "RuntimeController": RuntimeController,
                         "QtRuntimeBridge": QtRuntimeBridge,
@@ -685,8 +719,29 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event):
-        """關閉事件"""
-        # TODO: 清理資源
+        """只在所有受管背景工作安全結束後才允許關閉。"""
+        remaining_workers = request_cooperative_task_worker_shutdown()
+        update_view = getattr(self, "update_view", None)
+        background_process_running = bool(
+            update_view is not None
+            and getattr(
+                update_view,
+                "has_running_background_process",
+                lambda: False,
+            )()
+        )
+        if remaining_workers or background_process_running:
+            parts: list[str] = []
+            if remaining_workers:
+                parts.append(f"{len(remaining_workers)} 個合作式取消中的背景工作")
+            if background_process_running:
+                parts.append("TPEX 背景更新程序")
+            self.statusBar().showMessage(
+                "已暫停關閉：" + "、".join(parts) + "。工作安全結束後請再次關閉。",
+                10_000,
+            )
+            event.ignore()
+            return
         event.accept()
 
 
@@ -694,7 +749,10 @@ def main():
     """主函數"""
     import traceback
 
+    _configure_console_streams()
     print("[Main] 開始啟動應用程序...")
+    if _crash_diagnostics_log_path is not None:
+        print(f"[Main] Crash diagnostics: {_crash_diagnostics_log_path}")
 
     try:
         print("[Main] 正在創建 QApplication...")
@@ -726,6 +784,7 @@ def main():
 
             print("[Main] 應用程序準備就緒，進入事件循環...")
         except Exception as e:
+            record_exception("main_window_initialization", e)
             print(f"[Main] 錯誤：創建主窗口失敗")
             print(f"[Main] 錯誤類型: {type(e).__name__}")
             print(f"[Main] 錯誤訊息: {str(e)}")
@@ -736,8 +795,9 @@ def main():
         print("[Main] 開始運行應用程序事件循環...")
         exit_code = app.exec()
         print(f"[Main] 應用程序退出，退出碼: {exit_code}")
-        sys.exit(exit_code)
+        return int(exit_code)
     except Exception as e:
+        record_exception("application_startup", e)
         print(f"[Main] 錯誤：應用程序啟動失敗")
         print(f"[Main] 錯誤類型: {type(e).__name__}")
         print(f"[Main] 錯誤訊息: {str(e)}")
@@ -746,4 +806,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -130,7 +130,7 @@ def app():
 
 
 class _RuntimeController:
-    def __init__(self, _):
+    def __init__(self, *_args, **_kwargs):
         self.event_bus = object()
 
     def poll_updates(self):
@@ -142,6 +142,7 @@ class _RuntimeBridge:
         self.state_updated = _DummySignal()
         self.health_updated = _DummySignal()
         self.event_received = _DummySignal()
+        self.scheduled_operations_updated = _DummySignal()
 
 
 class _RuntimeView(QWidget):
@@ -152,6 +153,9 @@ class _RuntimeView(QWidget):
         pass
 
     def on_event_received(self, *args, **kwargs):
+        pass
+
+    def on_scheduled_operations_updated(self, *args, **kwargs):
         pass
 
 

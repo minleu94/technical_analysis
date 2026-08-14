@@ -16,14 +16,22 @@ class RuntimeUiComposition:
 
 
 def build_runtime_ui_composition(
-    *, project_root: Path, parent: Any, dependencies: dict[str, Any]
+    *,
+    project_root: Path,
+    parent: Any,
+    dependencies: dict[str, Any],
+    scheduled_output_root: Path | None = None,
 ) -> RuntimeUiComposition:
-    controller = dependencies["RuntimeController"](str(project_root / "runtime"))
+    controller = dependencies["RuntimeController"](
+        str(project_root / "runtime"),
+        scheduled_output_root=scheduled_output_root,
+    )
     bridge = dependencies["QtRuntimeBridge"](controller.event_bus, parent)
     view = dependencies["RuntimeView"](parent=parent)
     bridge.state_updated.connect(view.on_state_updated)
     bridge.health_updated.connect(view.on_health_updated)
     bridge.event_received.connect(view.on_event_received)
+    bridge.scheduled_operations_updated.connect(view.on_scheduled_operations_updated)
     timer = dependencies["QTimer"](parent)
     timer.timeout.connect(controller.poll_updates)
     timer.start(1000)

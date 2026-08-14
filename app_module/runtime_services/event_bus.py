@@ -1,5 +1,10 @@
 from typing import Callable, List
-from app_module.dtos.runtime_dtos import RuntimeEventDTO, RuntimeStateSnapshotDTO, RuntimeHealthSnapshotDTO
+from app_module.dtos.runtime_dtos import (
+    RuntimeEventDTO,
+    RuntimeStateSnapshotDTO,
+    RuntimeHealthSnapshotDTO,
+    ScheduledOperationsSnapshotDTO,
+)
 
 class EventBus:
     """
@@ -10,6 +15,9 @@ class EventBus:
         self._event_subscribers: List[Callable[[RuntimeEventDTO], None]] = []
         self._state_subscribers: List[Callable[[RuntimeStateSnapshotDTO], None]] = []
         self._health_subscribers: List[Callable[[RuntimeHealthSnapshotDTO], None]] = []
+        self._scheduled_operations_subscribers: List[
+            Callable[[ScheduledOperationsSnapshotDTO], None]
+        ] = []
 
     def subscribe_events(self, callback: Callable[[RuntimeEventDTO], None]) -> None:
         self._event_subscribers.append(callback)
@@ -19,6 +27,12 @@ class EventBus:
 
     def subscribe_health(self, callback: Callable[[RuntimeHealthSnapshotDTO], None]) -> None:
         self._health_subscribers.append(callback)
+
+    def subscribe_scheduled_operations(
+        self,
+        callback: Callable[[ScheduledOperationsSnapshotDTO], None],
+    ) -> None:
+        self._scheduled_operations_subscribers.append(callback)
 
     def publish_event(self, event_dto: RuntimeEventDTO) -> None:
         for sub in self._event_subscribers:
@@ -31,3 +45,10 @@ class EventBus:
     def publish_health(self, health_dto: RuntimeHealthSnapshotDTO) -> None:
         for sub in self._health_subscribers:
             sub(health_dto)
+
+    def publish_scheduled_operations(
+        self,
+        scheduled_operations_dto: ScheduledOperationsSnapshotDTO,
+    ) -> None:
+        for sub in self._scheduled_operations_subscribers:
+            sub(scheduled_operations_dto)

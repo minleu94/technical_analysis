@@ -333,6 +333,8 @@ class DecisionDeskView(QWidget):
     def closeEvent(self, event) -> None:
         if self._refresh_worker is not None and self._refresh_worker.isRunning():
             self._refresh_worker.cancel(cooperative=True, wait=False)
+            event.ignore()
+            return
         super().closeEvent(event)
 
     def _set_section_quality(self, status_label: QLabel, quality: DecisionDeskQuality) -> None:

@@ -1,5 +1,36 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import List, Dict, Any
+
+
+@dataclass(frozen=True)
+class RuntimeEventCursor:
+    """Append-only JSONL stream 的 byte cursor。``-1`` 表示先定位到檔尾。"""
+
+    position: int
+
+
+@dataclass(frozen=True)
+class RuntimeEventReadBatch:
+    """一批不跨越 cursor 的 JSONL event；壞行以計數揭露而非偽造事件。"""
+
+    events: tuple[Dict[str, Any], ...]
+    next_cursor: RuntimeEventCursor
+    has_more: bool
+    cursor_reset: bool = False
+    invalid_line_count: int = 0
+    read_state: str = "observed"
+    diagnostic: str = ""
+
+
+@dataclass(frozen=True)
+class RuntimeEventReadResult:
+    """事件檔尾端讀取結果，保留 I/O 與 JSON 完整性狀態。"""
+
+    events: tuple[Dict[str, Any], ...]
+    read_state: str
+    diagnostic: str = ""
+    invalid_line_count: int = 0
 
 class IRuntimeStore(ABC):
     """
@@ -14,6 +45,20 @@ class IRuntimeStore(ABC):
     @abstractmethod
     def read_latest_events(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Reads the latest events from the append-only log for replayability."""
+        pass
+
+    @abstractmethod
+    def read_latest_events_result(self, limit: int = 100) -> RuntimeEventReadResult:
+        """Reads latest events together with read integrity, without hiding I/O failure."""
+        pass
+
+    @abstractmethod
+    def read_events_after(
+        self,
+        cursor: RuntimeEventCursor | None,
+        limit: int = 50,
+    ) -> RuntimeEventReadBatch:
+        """從 byte cursor 讀取未發送事件；不可用事件數量作 watermark。"""
         pass
         
     @abstractmethod

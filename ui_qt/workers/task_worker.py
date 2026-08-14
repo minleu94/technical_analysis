@@ -3,13 +3,90 @@
 用於執行長時間運行的任務（推薦、回測、更新資料等）
 """
 
-from PySide6.QtCore import QThread, Signal, QObject
+from PySide6.QtCore import QThread, Signal
 from typing import Callable, Any, Dict, Optional
 import traceback
+from weakref import WeakSet
 from app_module.exceptions import BacktestCancelledError
 
 
-class TaskWorker(QThread):
+_MANAGED_TASK_WORKERS: WeakSet[QThread] = WeakSet()
+# A QThread wrapper must stay strongly referenced until Qt has emitted the
+# native ``QThread.finished()`` signal.  The task result signal below is
+# emitted from ``run()`` before the native thread has necessarily returned;
+# views must not be able to drop the last Python reference in that window.
+_LIVE_TASK_WORKERS: set[QThread] = set()
+
+
+class _ManagedTaskThread(QThread):
+    """Keep QThread lifetime separate from the task-result signal lifecycle.
+
+    ``TaskWorker`` historically exposes ``finished(object)`` for task results,
+    which shadows QThread's native ``finished()`` signal.  The alias is
+    declared on this intermediate class so it still binds to the base Qt
+    signal.  Cleanup requested while the task-result callback is running is
+    deferred until native thread completion; this prevents deleting a running
+    QThread wrapper during queued UI cleanup.
+    """
+
+    native_thread_finished = QThread.finished
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._delete_later_requested = False
+        _MANAGED_TASK_WORKERS.add(self)
+        self.native_thread_finished.connect(self._on_native_thread_finished)
+
+    def start(self, priority: Any = QThread.InheritPriority) -> None:
+        _LIVE_TASK_WORKERS.add(self)
+        try:
+            super().start(priority)
+        except BaseException:
+            _LIVE_TASK_WORKERS.discard(self)
+            raise
+
+    def deleteLater(self) -> None:
+        """Defer QObject deletion until the native QThread has stopped."""
+
+        if self.isRunning():
+            self._delete_later_requested = True
+            return
+        _LIVE_TASK_WORKERS.discard(self)
+        super().deleteLater()
+
+    def _on_native_thread_finished(self) -> None:
+        if self._delete_later_requested:
+            self._delete_later_requested = False
+            super().deleteLater()
+        _LIVE_TASK_WORKERS.discard(self)
+
+
+def running_task_workers() -> tuple[QThread, ...]:
+    """傳回仍在執行的受管背景工作，供根視窗安全關閉協調。"""
+
+    return tuple(
+        worker
+        for worker in tuple(_MANAGED_TASK_WORKERS)
+        if worker.isRunning()
+    )
+
+
+def request_cooperative_task_worker_shutdown() -> tuple[QThread, ...]:
+    """送出非阻塞合作式取消，回傳仍未安全結束的工作。
+
+    此函式刻意不呼叫 ``terminate()`` 或 ``wait()``。呼叫端若仍有回傳
+    worker，必須保留視窗並等待工作自然結束，不能在持有 SQLite／檔案資源時
+    強制關閉程序。
+    """
+
+    for worker in running_task_workers():
+        cancel = getattr(worker, "cancel", None)
+        if callable(cancel):
+            cancel(cooperative=True, wait=False)
+    return running_task_workers()
+
+
+class TaskWorker(_ManagedTaskThread):
     """通用背景任務 Worker
 
     使用方式：
@@ -76,27 +153,21 @@ class TaskWorker(QThread):
             else:
                 self.cancelled.emit()
 
-    def cancel(self, cooperative: bool = False, wait: bool = True):
+    def cancel(self, cooperative: bool = True, wait: bool = False):
         """取消任務
 
         Args:
-            cooperative: 是否為合作式軟取消。
-                - True: 僅設置取消標記，不調用 terminate()。適合已對接 cooperative cancellation 檢查的任務（如回測、參數掃描）。
-                - False: [警告: Legacy Fallback] 會直接呼叫 QThread.terminate() 強行終止執行緒。
-                         此方法為防回歸的舊有頁面（Update, Recommendation, SQLite Inspector）相容手段，
-                         有造成 Mutex 死鎖、SQLite 資源鎖定或未釋放資源的潛在風險。後續應逐步改造為合作式取消。
-            wait: 是否在呼叫取消後同步等待執行緒結束。
+            cooperative: 保留給既有呼叫端的相容參數。取消一律採合作式，
+                僅設置取消標記，不會呼叫 QThread.terminate()。
+            wait: 是否在呼叫取消後同步等待執行緒結束。預設為 false，避免
+                關閉 UI 時在主執行緒無期限阻塞。
         """
         self._is_cancelled = True
-        if cooperative:
-            if wait:
-                self.wait()
-        else:
-            self.terminate()
+        if wait:
             self.wait()
 
 
-class ProgressTaskWorker(QThread):
+class ProgressTaskWorker(_ManagedTaskThread):
     """支持進度報告的任務 Worker
 
     任務函數需要接受一個 progress_callback 參數：
@@ -170,23 +241,17 @@ class ProgressTaskWorker(QThread):
             else:
                 self.cancelled.emit()
 
-    def cancel(self, cooperative: bool = False, wait: bool = True):
+    def cancel(self, cooperative: bool = True, wait: bool = False):
         """取消任務
 
         Args:
-            cooperative: 是否為合作式軟取消。
-                - True: 僅設置取消標記，不調用 terminate()。適合已對接 cooperative cancellation 檢查的任務（如回測、參數掃描）。
-                - False: [警告: Legacy Fallback] 會直接呼叫 QThread.terminate() 強行終止執行緒。
-                         此方法為防回歸的舊有頁面（Update, Recommendation, SQLite Inspector）相容手段，
-                         有造成 Mutex 死鎖、SQLite 資源鎖定或未釋放資源的潛在風險。後續應逐步改造為合作式取消。
-            wait: 是否在呼叫取消後同步等待執行緒結束。
+            cooperative: 保留給既有呼叫端的相容參數。取消一律採合作式，
+                僅設置取消標記，不會呼叫 QThread.terminate()。
+            wait: 是否在呼叫取消後同步等待執行緒結束。預設為 false，避免
+                關閉 UI 時在主執行緒無期限阻塞。
         """
         self._is_cancelled = True
-        if cooperative:
-            if wait:
-                self.wait()
-        else:
-            self.terminate()
+        if wait:
             self.wait()
 
 

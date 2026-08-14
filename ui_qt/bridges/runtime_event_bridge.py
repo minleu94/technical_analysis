@@ -1,5 +1,10 @@
 from PySide6.QtCore import QObject, Signal
-from app_module.dtos.runtime_dtos import RuntimeEventDTO, RuntimeStateSnapshotDTO, RuntimeHealthSnapshotDTO
+from app_module.dtos.runtime_dtos import (
+    RuntimeEventDTO,
+    RuntimeStateSnapshotDTO,
+    RuntimeHealthSnapshotDTO,
+    ScheduledOperationsSnapshotDTO,
+)
 from app_module.runtime_services.event_bus import EventBus
 
 class QtRuntimeBridge(QObject):
@@ -12,6 +17,7 @@ class QtRuntimeBridge(QObject):
     event_received = Signal(RuntimeEventDTO)
     state_updated = Signal(RuntimeStateSnapshotDTO)
     health_updated = Signal(RuntimeHealthSnapshotDTO)
+    scheduled_operations_updated = Signal(ScheduledOperationsSnapshotDTO)
     
     def __init__(self, event_bus: EventBus, parent=None):
         super().__init__(parent)
@@ -21,6 +27,7 @@ class QtRuntimeBridge(QObject):
         self._event_bus.subscribe_events(self._on_event_received)
         self._event_bus.subscribe_state(self._on_state_updated)
         self._event_bus.subscribe_health(self._on_health_updated)
+        self._event_bus.subscribe_scheduled_operations(self._on_scheduled_operations_updated)
         
     def _on_event_received(self, dto: RuntimeEventDTO) -> None:
         """Convert pure callback to Qt Signal emission"""
@@ -31,3 +38,9 @@ class QtRuntimeBridge(QObject):
         
     def _on_health_updated(self, dto: RuntimeHealthSnapshotDTO) -> None:
         self.health_updated.emit(dto)
+
+    def _on_scheduled_operations_updated(
+        self,
+        dto: ScheduledOperationsSnapshotDTO,
+    ) -> None:
+        self.scheduled_operations_updated.emit(dto)

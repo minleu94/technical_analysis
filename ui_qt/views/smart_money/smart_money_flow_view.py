@@ -836,9 +836,23 @@ class SmartMoneyFlowView(QWidget):
         if not self._data_loaded:
             self._refresh_data()
 
+    @staticmethod
+    def _worker_is_running(worker) -> bool:
+        """回報 worker 是否仍在執行；未知實作一律保守視為執行中。"""
+        is_running = getattr(worker, "isRunning", None)
+        if callable(is_running):
+            return bool(is_running())
+        # 測試替身或外部注入 worker 若不提供生命週期查詢，不能假設它已安全停止。
+        return True
+
     def closeEvent(self, event):
-        for worker in (*tuple(self._workers.values()), *tuple(self._retired_workers)):
-            worker.cancel(cooperative=True, wait=False)
+        workers = (*tuple(self._workers.values()), *tuple(self._retired_workers))
+        for worker in workers:
+            if self._worker_is_running(worker):
+                worker.cancel(cooperative=True, wait=False)
+        if any(self._worker_is_running(worker) for worker in workers):
+            event.ignore()
+            return
         self._workers.clear()
         super().closeEvent(event)
 

@@ -32,12 +32,13 @@ class RuntimeTransitionDTO:
 class RuntimeEventDTO:
     """Encapsulates raw event logs for secure UI consumption."""
     event_id: str
-    timestamp: datetime
+    timestamp: Optional[datetime]
     actor: str
     event_type: str
     severity: GovernanceSeverity
     human_readable_message: str
     payload_preview: Dict[str, Any] = field(default_factory=dict)
+    timestamp_raw: Optional[str] = None
 
 @dataclass
 class RuntimeHealthSnapshotDTO:
@@ -48,6 +49,45 @@ class RuntimeHealthSnapshotDTO:
     rejection_rate_trend: str     # "UP", "DOWN", "STABLE"
     consecutive_failures: int
     last_critical_violation: Optional[RuntimeEventDTO] = None
+    # Legacy publishers created this DTO without an observation scope; keep
+    # their explicit state semantics instead of rendering them as no events.
+    observation_scope: str = "current"
+    latest_event_at: Optional[datetime] = None
+    latest_event_timestamp_raw: Optional[str] = None
+    historical_event_count: int = 0
+    timestamp_invalid_count: int = 0
+    future_event_count: int = 0
+    event_log_read_state: str = "observed"
+    event_log_diagnostic: str = ""
+
+
+@dataclass(frozen=True)
+class ScheduledOperationStatusDTO:
+    """單一已保存排程產物的唯讀狀態。"""
+
+    job_id: str
+    label: str
+    raw_status: str
+    state: str
+    updated_at: Optional[datetime]
+    lane: str = "other"
+    observed_at_raw: Optional[str] = None
+    observed_at_source: str = "none"
+    source_path: str = ""
+    read_state: str = "observed"
+    diagnostic: str = ""
+
+
+@dataclass(frozen=True)
+class ScheduledOperationsSnapshotDTO:
+    """Owner 日常營運狀態的唯讀投影。"""
+
+    overall_state: str
+    core_ready_count: int
+    core_job_count: int
+    operations: tuple[ScheduledOperationStatusDTO, ...]
+    observed_at: datetime
+    scheduled_root: str = ""
     
 @dataclass
 class RuntimeStateSnapshotDTO:

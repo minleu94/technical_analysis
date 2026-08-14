@@ -151,6 +151,34 @@ class FakeMainWindow:
         return [self.tab_widget]
 
 
+class FakeWorkspaceNavigation:
+    def __init__(self, labels):
+        self._items = [(f"workspace_{index}", label) for index, label in enumerate(labels)]
+        self.current_key = None
+
+    def item_keys(self):
+        return [key for key, _label in self._items]
+
+    def label_for_key(self, key):
+        return next((label for item_key, label in self._items if item_key == key), None)
+
+    def set_current_key(self, key):
+        self.current_key = key
+
+
+class FakeWorkspaceMainWindow:
+    def __init__(self, labels):
+        self.left_navigation = FakeWorkspaceNavigation(labels)
+        self.selected_workspace_keys = []
+
+    def windowTitle(self):
+        return "baldr"
+
+    def _select_main_workspace(self, key):
+        self.selected_workspace_keys.append(key)
+        self.left_navigation.set_current_key(key)
+
+
 def test_collect_mainwindow_smoke_evidence_with_injected_window():
     window = FakeMainWindow(FakeTabWidget(EXPECTED_MAINWINDOW_TAB_LABELS))
 
@@ -171,6 +199,17 @@ def test_collect_mainwindow_smoke_evidence_reports_missing_tabs():
 
     assert evidence["missing_tabs"] == ["持倉管理"]
     assert evidence["switched_tabs"] == []
+
+
+def test_collect_mainwindow_smoke_evidence_uses_current_left_workspace_navigation():
+    window = FakeWorkspaceMainWindow(EXPECTED_MAINWINDOW_TAB_LABELS)
+
+    evidence = collect_mainwindow_smoke_evidence(window, switch_tabs=True)
+
+    assert evidence["navigation_mode"] == "left_workspace_navigation"
+    assert evidence["missing_tabs"] == []
+    assert evidence["switched_tabs"] == list(EXPECTED_MAINWINDOW_TAB_LABELS)
+    assert window.selected_workspace_keys == window.left_navigation.item_keys()
 
 
 def test_parse_viewport_spec_accepts_width_by_height():
