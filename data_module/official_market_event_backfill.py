@@ -480,9 +480,20 @@ class RequestsOfficialEndpointFetcher:
                             payload=bytes(response.content),
                         )
                 else:
+                    response_headers = response.headers
+                    header_diagnostics = [
+                        f"content_type={response_headers.get('Content-Type', '')}",
+                    ]
+                    for header_name in ("Server", "CF-Ray", "Retry-After"):
+                        header_value = response_headers.get(header_name)
+                        if header_value:
+                            header_diagnostics.append(
+                                f"{header_name.lower()}={header_value}"
+                            )
                     last_error = RuntimeError(
                         "official endpoint returned HTTP "
-                        f"{response.status_code}: {source_url}"
+                        f"{response.status_code}: {source_url}; "
+                        + "; ".join(header_diagnostics)
                     )
                     if (
                         response.status_code < 500
@@ -495,9 +506,14 @@ class RequestsOfficialEndpointFetcher:
                 time_module.sleep(
                     min(30, retry_delay_seconds * attempt)
                 )
+        diagnostic = (
+            ""
+            if last_error is None
+            else f"; last_error={_exception_summary(last_error)}"
+        )
         raise RuntimeError(
             f"official endpoint fetch failed after {max_attempts} attempts: "
-            f"{source_url}"
+            f"{source_url}{diagnostic}"
         ) from last_error
 
 
@@ -2151,6 +2167,15 @@ def _date_end(value: date) -> str:
 
 def _is_missing_official_value(value: object) -> bool:
     return str(value).strip() in {"", "-", "--", "N/A", "null", "None"}
+
+
+def _exception_summary(error: BaseException) -> str:
+    """Return a bounded, single-line diagnostic safe for scheduled status."""
+
+    message = str(error).replace("\r", " ").replace("\n", " ").strip()
+    if not message:
+        message = type(error).__name__
+    return message[:512]
 
 
 def _optional_header(

@@ -8,9 +8,11 @@ import pytest
 
 from data_module.official_market_event_backfill import (
     OFFICIAL_MARKET_ENDPOINTS,
+    OfficialMarketEndpoint,
     OfficialMarketEventBackfillBuilder,
     OfficialMarketEventBackfillRequest,
     OfficialMarketEventPublication,
+    RequestsOfficialEndpointFetcher,
     RawOfficialResponse,
     parse_official_market_events,
 )
@@ -32,7 +34,7 @@ class _OfficialFixtureFetcher:
 
     def fetch(
         self,
-        endpoint: object,
+        endpoint: OfficialMarketEndpoint,
         request_year: int,
         *,
         timeout_seconds: int,
@@ -589,7 +591,11 @@ def test_same_available_revisions_keep_stable_order_and_ambiguity() -> None:
     first, second, third = events
     assert first.available_at == second.available_at
     assert first.available_at == "2015-03-20T23:59:59+08:00"
-    assert first.announced_at < second.announced_at
+    first_announced_at = first.announced_at
+    second_announced_at = second.announced_at
+    assert first_announced_at is not None
+    assert second_announced_at is not None
+    assert first_announced_at < second_announced_at
     assert first.revision_availability_ambiguous is True
     assert second.revision_availability_ambiguous is True
     assert third.revision_availability_ambiguous is False
@@ -627,6 +633,45 @@ def test_twse_current_year_range_stops_at_retrieval_date() -> None:
 
     assert parameters["startDate"] == "20260101"
     assert parameters["endDate"] == "20260730"
+
+
+def test_official_fetcher_exposes_http_failure_diagnostics() -> None:
+    endpoint = next(
+        item
+        for item in OFFICIAL_MARKET_ENDPOINTS
+        if item.parser_id == "tpex_sprcHis.v1"
+    )
+
+    class _Http520Response:
+        status_code = 520
+        content = b"origin error"
+        headers = {
+            "Content-Type": "text/html",
+            "Server": "cloudflare",
+            "CF-Ray": "test-ray",
+        }
+
+    class _Http520Session:
+        def get(self, *args: object, **kwargs: object) -> _Http520Response:
+            del args, kwargs
+            return _Http520Response()
+
+    fetcher = RequestsOfficialEndpointFetcher(
+        session=_Http520Session(),
+        now=lambda: datetime(2026, 8, 10, 12, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="HTTP 520.*server=cloudflare.*cf-ray=test-ray",
+    ):
+        fetcher.fetch(
+            endpoint,
+            2025,
+            timeout_seconds=1,
+            max_attempts=1,
+            retry_delay_seconds=0,
+        )
 
 
 def test_twse_explicit_no_data_is_zero_rows_not_an_accepted_event() -> None:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import sys
 from datetime import datetime
@@ -24,6 +26,9 @@ from data_module.config import TWStockConfig
 TWSE_LISTED_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 TPEX_OTC_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
 TPEX_EMERGING_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_R"
+TWSE_LISTED_CSV_URL = "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv"
+TPEX_OTC_CSV_URL = "https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv"
+TPEX_EMERGING_CSV_URL = "https://mopsfin.twse.com.tw/opendata/t187ap03_R.csv"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,7 +47,23 @@ def main(argv: list[str] | None = None) -> int:
     output = args.output or (config.meta_data_dir / "companies.csv")
     backup_dir = args.backup_dir or config.backup_dir
     download_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    sources = _load_sources(args.source_json_dir)
+    try:
+        sources = _load_sources(args.source_json_dir)
+    except RuntimeError as exc:
+        print(
+            json.dumps(
+                {
+                    "status": "blocked",
+                    "reason": "official_company_registry_source_unavailable",
+                    "error": str(exc),
+                    "output": str(output),
+                    "writes_allowed": False,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+        return 1
 
     result = build_company_registry_rows(
         twse_rows=sources["twse_listed"],
@@ -84,10 +105,33 @@ def _load_sources(source_json_dir: Path | None) -> dict[str, list[dict[str, Any]
             "tpex_emerging": _load_json_file(source_json_dir / "tpex_emerging.json"),
         }
     return {
-        "twse_listed": _fetch_json(TWSE_LISTED_URL),
-        "tpex_otc": _fetch_json(TPEX_OTC_URL),
-        "tpex_emerging": _fetch_json(TPEX_EMERGING_URL),
+        "twse_listed": _fetch_official_registry(
+            TWSE_LISTED_URL,
+            TWSE_LISTED_CSV_URL,
+        ),
+        "tpex_otc": _fetch_official_registry(
+            TPEX_OTC_URL,
+            TPEX_OTC_CSV_URL,
+        ),
+        "tpex_emerging": _fetch_official_registry(
+            TPEX_EMERGING_URL,
+            TPEX_EMERGING_CSV_URL,
+        ),
     }
+
+
+def _fetch_official_registry(json_url: str, csv_url: str) -> list[dict[str, Any]]:
+    try:
+        return _fetch_json(json_url)
+    except RuntimeError as json_error:
+        try:
+            return _fetch_csv(csv_url)
+        except RuntimeError as csv_error:
+            raise RuntimeError(
+                "official registry source unavailable: "
+                f"json={json_url}: {json_error}; "
+                f"csv={csv_url}: {csv_error}"
+            ) from csv_error
 
 
 def _fetch_json(url: str) -> list[dict[str, Any]]:
@@ -107,6 +151,35 @@ def _fetch_json(url: str) -> list[dict[str, Any]]:
         except (RequestException, ValueError) as exc:
             last_error = exc
     raise RuntimeError(f"failed to fetch official registry after retries: {url}: {last_error}")
+
+
+def _fetch_csv(url: str) -> list[dict[str, Any]]:
+    last_error: Exception | None = None
+    for _ in range(3):
+        try:
+            response = requests.get(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept": "text/csv,application/octet-stream",
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            text = response.content.decode("utf-8-sig")
+            rows = [
+                dict(row)
+                for row in csv.DictReader(io.StringIO(text))
+                if any(str(value or "").strip() for value in row.values())
+            ]
+            if not rows:
+                raise ValueError("official registry CSV contains no rows")
+            return rows
+        except (RequestException, UnicodeDecodeError, ValueError) as exc:
+            last_error = exc
+    raise RuntimeError(
+        f"failed to fetch official registry CSV after retries: {url}: {last_error}"
+    )
 
 
 def _load_json_file(path: Path) -> list[dict[str, Any]]:

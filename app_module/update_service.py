@@ -3537,7 +3537,11 @@ class UpdateService :
                 return empty_info()
             try:
                 import sqlite3
-                with sqlite3.connect(candidate_db) as conn:
+                read_only_uri = (
+                    f"file:{candidate_db.resolve().as_posix()}?mode=ro"
+                )
+                with sqlite3.connect(read_only_uri, uri=True) as conn:
+                    conn.execute("PRAGMA query_only=ON")
                     row = conn.execute(
                         f"SELECT COUNT(*), MIN(decision_date), MAX(decision_date), "
                         f"COUNT(DISTINCT decision_date) FROM {table_name}"

@@ -290,7 +290,13 @@ def test_legacy_institutional_fetcher_does_not_emit_decision_date_plus_one() -> 
         "data": [["2330", "2,000", "800", "1,200"]],
     }
     tpex_response = MagicMock()
-    tpex_response.json.return_value = {"aaData": []}
+    tpex_response.json.return_value = {
+        "stat": "ok",
+        "tables": [{
+            "fields": ["代號"] + [f"欄{i}" for i in range(1, 17)],
+            "data": [["6488", "環球晶"] + ["0"] * 15],
+        }],
+    }
 
     with patch(
         "data_module.official_phase3c_fetcher.safe_request",
@@ -329,12 +335,21 @@ def test_legacy_credit_fetcher_does_not_emit_decision_date_plus_one() -> None:
     twse_response.json.return_value = {
         "stat": "OK",
         "tables": [{
-            "fields": ["證券代號", "融資買進", "融資今日餘額", "融券賣出", "融券今日餘額"],
-            "data": [["2330", "100", "2,500", "20", "400"]],
+            "fields": ["代號"] + [f"欄{i}" for i in range(1, 16)],
+            "data": [[
+                "2330", "台積電", "100", "0", "0", "0", "2,500", "0",
+                "0", "20", "0", "0", "400", "0", "0", "",
+            ]],
         }],
     }
     tpex_response = MagicMock()
-    tpex_response.json.return_value = {"aaData": []}
+    tpex_response.json.return_value = {
+        "stat": "ok",
+        "tables": [{
+            "fields": ["代號"] + [f"欄{i}" for i in range(1, 20)],
+            "data": [["6488", "環球晶"] + ["0"] * 18],
+        }],
+    }
 
     with patch(
         "data_module.official_phase3c_fetcher.safe_request",

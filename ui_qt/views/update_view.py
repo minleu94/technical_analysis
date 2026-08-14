@@ -206,6 +206,20 @@ class UpdateView(QWidget):
         worker.finished.connect(lambda _payload, current_worker=worker: self._release_worker(current_worker))
         worker.error.connect(lambda _message, current_worker=worker: self._release_worker(current_worker))
 
+    def has_running_background_process(self) -> bool:
+        """TPEX 獨立程序未結束時，主視窗不得假裝可安全關閉。"""
+        process = self._tpex_background_process
+        return process is not None and process.poll() is None
+
+    def request_cooperative_shutdown(self) -> bool:
+        """送出取消但不強制終止；回傳是否已能安全釋放本 view。"""
+        for worker in list(self._active_workers):
+            if worker.isRunning() and hasattr(worker, "cancel"):
+                worker.cancel(cooperative=True, wait=False)
+        return not any(
+            worker.isRunning() for worker in self._active_workers
+        ) and not self.has_running_background_process()
+
     def _setup_ui(self):
         """設置 UI"""
         # 最外層主布局
@@ -640,7 +654,7 @@ class UpdateView(QWidget):
                                       "安全邊界說明：獨立於正式資料庫外，嚴禁將融資券餘額假裝為 0 股或填入正式資料庫。\n"
                                       "若要開展兩年歷史可續跑 Candidate DB 回補，請使用下方 CLI 命令。",
                 "tdcc_shareholding": "『集保股權』目前僅 OpenAPI `id=1-5` 提供最新單週公開資料，不支援歷史多日期輪詢回補 (BLOCKED_NO_HISTORICAL_ENDPOINT)。\n"
-                                    "UI 會將歷史期別標示為 MISSING / PARTIAL，不假裝大戶持股為 0 或捏造歷史資料。",
+                                    "可用下方受控命令把官方最新週 snapshot 寫入隔離 Candidate DB；資料日採官方 payload，不會冒充成執行日。",
                 "scheduler_status": "目前自動更新排程（Scheduler）處於 `Simulated/Waiting for time` 階段，且生產環境排程權限 `production_scheduler_allowed` 固定為 false。\n"
                                     "此頁面提供唯讀日誌與排程狀態檢視，嚴禁在此處手動觸發排程寫入。"
             }
@@ -650,20 +664,30 @@ class UpdateView(QWidget):
             text_label.setStyleSheet("color: #475569; font-size: 12px; line-height: 140%;")
             info_layout.addWidget(text_label)
 
-            if key in {"institutional_flow", "credit_transaction"}:
+            if key in {"institutional_flow", "credit_transaction", "tdcc_shareholding"}:
                 cli_box = QTextEdit()
                 cli_box.setReadOnly(True)
                 cli_box.setMaximumHeight(80)
-                cmd_str = (
-                    "$env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3c_candidate.db'\n"
-                    "$startDate = (Get-Date).AddYears(-2).ToString('yyyy-MM-dd')\n"
-                    "$endDate = (Get-Date).ToString('yyyy-MM-dd')\n"
-                    "python scripts/update_phase3c_candidates.py `\n"
-                    "  --start-date $startDate --end-date $endDate `\n"
-                    "  --sources institutional,credit `\n"
-                    "  --db-path $env:PHASE3C_CANDIDATE_DB_PATH `\n"
-                    "  --confirm apply-phase3c-candidate-ingestion"
-                )
+                if key == "tdcc_shareholding":
+                    cmd_str = (
+                        "$env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3c_candidate.db'\n"
+                        "$endDate = (Get-Date).ToString('yyyy-MM-dd')\n"
+                        "python scripts/update_phase3c_candidates.py `\n"
+                        "  --date $endDate --sources tdcc --include-latest-tdcc `\n"
+                        "  --db-path $env:PHASE3C_CANDIDATE_DB_PATH `\n"
+                        "  --confirm apply-phase3c-candidate-ingestion"
+                    )
+                else:
+                    cmd_str = (
+                        "$env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3c_candidate.db'\n"
+                        "$startDate = (Get-Date).AddYears(-2).ToString('yyyy-MM-dd')\n"
+                        "$endDate = (Get-Date).ToString('yyyy-MM-dd')\n"
+                        "python scripts/update_phase3c_candidates.py `\n"
+                        "  --start-date $startDate --end-date $endDate `\n"
+                        "  --sources institutional,credit `\n"
+                        "  --db-path $env:PHASE3C_CANDIDATE_DB_PATH `\n"
+                        "  --confirm apply-phase3c-candidate-ingestion"
+                    )
                 cli_box.setPlainText(cmd_str)
                 cli_box.setStyleSheet("background-color: #0f172a; color: #38bdf8; font-family: monospace; font-size: 11px;")
                 info_layout.addWidget(QLabel("可複製的安全受控 CLI 回補命令 (寫入隔離 Candidate DB)："))
@@ -2766,11 +2790,8 @@ class UpdateView(QWidget):
 
     def closeEvent(self, event):
         """關閉事件"""
-        for worker in list(self._active_workers):
-            if worker.isRunning():
-                if hasattr(worker, "cancel"):
-                    worker.cancel()
-                if not worker.wait(5000) and hasattr(worker, "terminate"):
-                    worker.terminate()
-                    worker.wait(1000)
+        if not self.request_cooperative_shutdown():
+            self._log("已送出合作式取消；背景工作結束後才可關閉資料更新頁。")
+            event.ignore()
+            return
         event.accept()

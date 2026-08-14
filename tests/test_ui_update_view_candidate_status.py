@@ -89,8 +89,21 @@ def test_update_service_reads_only_explicit_candidate_db(monkeypatch, tmp_path):
         conn.execute("INSERT INTO phase3c_backfill_checkpoints VALUES ('2024-07-22', 'institutional', 'SUCCESS')")
 
     monkeypatch.setenv("PHASE3C_CANDIDATE_DB_PATH", str(candidate_db))
+    original_connect = sqlite3.connect
+    connect_calls = []
+
+    def spy_connect(database, *args, **kwargs):
+        connect_calls.append((database, kwargs))
+        return original_connect(database, *args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", spy_connect)
     status = UpdateService(config).check_decision_data_status()
 
     assert status["institutional_flow"]["status"] == "CANDIDATE_AVAILABLE"
     assert status["institutional_flow"]["coverage_pct"] == "100.0%"
     assert status["credit_transaction"]["status"] == "MISSING"
+    assert len(connect_calls) == 3
+    assert all(
+        kwargs.get("uri") is True and "mode=ro" in str(database)
+        for database, kwargs in connect_calls
+    )

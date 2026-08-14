@@ -246,6 +246,7 @@ def update_phase3c_candidates(
     db_path: Optional[str] = None,
     sources: Sequence[str] = ("institutional", "credit"),
     rate_limit_seconds: float = 3.0,
+    include_latest_tdcc_snapshot: bool = False,
     confirm_token: Optional[str] = None,
 ):
     """單日 Phase 3C 資料回補包裝函式。"""
@@ -256,6 +257,7 @@ def update_phase3c_candidates(
         db_path=db_path,
         sources=sources,
         rate_limit_seconds=rate_limit_seconds,
+        include_latest_tdcc_snapshot=include_latest_tdcc_snapshot,
         confirm_token=confirm_token,
     )
 
@@ -268,6 +270,7 @@ def update_phase3c_candidates_range(
     sources: Sequence[str] = ("institutional", "credit"),
     rate_limit_seconds: float = 3.0,
     allow_online_calendar_probe: bool = False,
+    include_latest_tdcc_snapshot: bool = False,
     progress_callback=None,
     confirm_token: Optional[str] = None,
 ):
@@ -289,6 +292,7 @@ def update_phase3c_candidates_range(
         production_db_path=prod_root / "sqlite" / "twstock.db",
         rate_limit_seconds=rate_limit_seconds,
         allow_online_calendar_probe=allow_online_calendar_probe,
+        include_latest_tdcc_snapshot=include_latest_tdcc_snapshot,
     )
 
     summary = runner.run_backfill(
@@ -308,6 +312,15 @@ def update_phase3c_candidates_range(
 
 if __name__ == "__main__":
     import argparse
+
+    # Windows 傳統主控台可能仍使用 cp1252；先固定成 UTF-8，讓中文 help 與
+    # 自動化 log 不會因 UnicodeEncodeError 中斷。
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="Update Phase 3C Source Candidates (Institutional, Credit, TDCC)")
     parser.add_argument("--date", type=str, help="YYYY-MM-DD, 預設為今天", default=None)
     parser.add_argument("--start-date", type=str, help="YYYY-MM-DD 起始日", default=None)
@@ -320,6 +333,11 @@ if __name__ == "__main__":
         "--allow-online-calendar-probe",
         action="store_true",
         help="僅在本地官方交易日證據缺失時，允許一次 TWSE 查詢；預設不連線猜測。",
+    )
+    parser.add_argument(
+        "--include-latest-tdcc",
+        action="store_true",
+        help="另外取得 TDCC 最新一週 snapshot；不假造逐日歷史資料。",
     )
     parser.add_argument("--dry-run", action="store_true", help="強制 dry-run", default=True)
     args = parser.parse_args()
@@ -350,6 +368,7 @@ if __name__ == "__main__":
         sources=sources_list,
         rate_limit_seconds=args.rate_limit_seconds,
         allow_online_calendar_probe=args.allow_online_calendar_probe,
+        include_latest_tdcc_snapshot=args.include_latest_tdcc,
         confirm_token=confirm_token,
     )
     logger.info(res["message"])

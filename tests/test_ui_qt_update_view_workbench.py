@@ -5,7 +5,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QDate, Qt
-from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget, QMessageBox, QDateEdit
+from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget, QMessageBox, QDateEdit, QTextEdit
 import pandas as pd
 
 from ui_qt.views.update_view import UpdateView
@@ -337,6 +337,16 @@ def test_update_view_uses_workbench_navigation():
     ]
     assert view.content_stack.count() == 12
     assert view.nav_list.currentRow() == 0
+
+
+def test_tdcc_governance_page_exposes_latest_snapshot_candidate_command():
+    view = make_view()
+
+    tdcc_page = view.content_stack.widget(9)
+    command_boxes = tdcc_page.findChildren(QTextEdit)
+
+    assert any("--include-latest-tdcc" in box.toPlainText() for box in command_boxes)
+    assert any("--sources tdcc" in box.toPlainText() for box in command_boxes)
 
 
 def test_all_data_view_has_safe_update_primary_button():

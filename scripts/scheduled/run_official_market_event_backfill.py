@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,7 @@ from data_module.official_market_event_backfill import (  # noqa: E402
 
 
 _TAIPEI = ZoneInfo("Asia/Taipei")
+_HISTORICAL_START_YEAR = 2014
 
 
 def _configure_utf8_stdio() -> None:
@@ -44,8 +46,27 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _year_window(as_of_date: date) -> tuple[int, int]:
-    return as_of_date.year - 1, as_of_date.year
+def _year_window(
+    as_of_date: date,
+    publication_root: Path | None = None,
+) -> tuple[int, int]:
+    """Use a bounded increment, but self-heal a narrowed formal pointer."""
+
+    incremental_start = as_of_date.year - 1
+    if publication_root is None:
+        return incremental_start, as_of_date.year
+
+    known_good = _inspect_last_known_good_publication(
+        publication_root.resolve()
+    )
+    requested_start = known_good.get("requested_start_year")
+    if (
+        known_good.get("validation_status") == "verified"
+        and isinstance(requested_start, int)
+        and requested_start <= _HISTORICAL_START_YEAR
+    ):
+        return incremental_start, as_of_date.year
+    return _HISTORICAL_START_YEAR, as_of_date.year
 
 
 def _same_day_failed_custody(
@@ -85,15 +106,160 @@ def _same_day_failed_custody(
     )
 
 
+def _inspect_last_known_good_publication(
+    publication_root: Path,
+) -> dict[str, object]:
+    """Verify the untouched formal pointer before reporting a retryable failure."""
+
+    pointer_path = publication_root / "latest_manifest.json"
+    if not pointer_path.is_file():
+        return {
+            "validation_status": "missing",
+            "diagnostic": "latest_manifest_missing",
+        }
+    try:
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+        if not isinstance(pointer, dict):
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "latest_manifest_not_object",
+            }
+        manifest_relative = pointer.get("manifest_path")
+        if not isinstance(manifest_relative, str) or not manifest_relative:
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "latest_manifest_path_missing",
+            }
+        root = publication_root.resolve()
+        manifest_path = (root / Path(manifest_relative)).resolve()
+        if not manifest_path.is_relative_to(root):
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "latest_manifest_path_escapes_root",
+            }
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "formal_manifest_not_object",
+            }
+        if manifest.get("status") != "formal_source_publication":
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "latest_manifest_not_formal_publication",
+            }
+        manifest_hash = str(manifest.get("manifest_hash", ""))
+        if not manifest_hash or pointer.get("manifest_hash") != manifest_hash:
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "latest_manifest_hash_mismatch",
+            }
+        manifest_file_hash = _sha256_file(manifest_path)
+        if pointer.get("manifest_file_hash") != manifest_file_hash:
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "latest_manifest_file_hash_mismatch",
+            }
+        canonical = manifest.get("canonical_events")
+        if not isinstance(canonical, dict):
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "formal_manifest_canonical_section_missing",
+            }
+        canonical_relative = canonical.get("path")
+        if not isinstance(canonical_relative, str) or not canonical_relative:
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "formal_manifest_canonical_path_missing",
+            }
+        canonical_path = (manifest_path.parent / canonical_relative).resolve()
+        if not canonical_path.is_relative_to(manifest_path.parent):
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "formal_manifest_canonical_path_escapes_root",
+            }
+        canonical_hash = _sha256_file(canonical_path)
+        if canonical.get("file_hash") != canonical_hash:
+            return {
+                "validation_status": "invalid",
+                "diagnostic": "formal_manifest_canonical_hash_mismatch",
+            }
+        return {
+            "validation_status": "verified",
+            "publication_id": pointer.get("publication_id"),
+            "manifest_path": str(manifest_path),
+            "manifest_hash": manifest_hash,
+            "manifest_file_hash": manifest_file_hash,
+            "canonical_events_hash": canonical_hash,
+            "generated_at": manifest.get("generated_at"),
+            "requested_start_year": manifest.get("request", {}).get(
+                "start_year"
+            )
+            if isinstance(manifest.get("request"), dict)
+            else None,
+            "requested_end_year": manifest.get("request", {}).get(
+                "end_year"
+            )
+            if isinstance(manifest.get("request"), dict)
+            else None,
+        }
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+        KeyError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as exc:
+        return {
+            "validation_status": "invalid",
+            "diagnostic": f"latest_manifest_validation_failed:{type(exc).__name__}",
+        }
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
+
+
+def _failure_context(
+    publication_root: Path,
+    error: BaseException,
+) -> dict[str, object]:
+    message = str(error).lower()
+    if "tpex.org.tw" in message:
+        failure_class = "tpex_official_endpoint_unavailable"
+    elif "official endpoint" in message:
+        failure_class = "official_endpoint_unavailable_or_anomalous"
+    else:
+        failure_class = "official_market_event_backfill_failed"
+    known_good = _inspect_last_known_good_publication(publication_root)
+    return {
+        "failure_class": failure_class,
+        "automatic_retry": True,
+        "manual_action_required": False,
+        "formal_publication_preserved": (
+            known_good.get("validation_status") == "verified"
+        ),
+        "last_known_good_publication": known_good,
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     _configure_utf8_stdio()
     args = _parser().parse_args(argv)
     now = datetime.now(_TAIPEI)
     as_of_date = args.as_of_date or now.date()
-    start_year, end_year = _year_window(as_of_date)
     output_root = args.output_root.resolve()
     publication_root = (
         output_root / "release_v4" / "official_market_events"
+    )
+    start_year, end_year = _year_window(
+        as_of_date,
+        publication_root,
     )
     status_root = output_root / "scheduled" / "official_market_events"
     status_root.mkdir(parents=True, exist_ok=True)
@@ -131,6 +297,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         status = {
             **base_status,
+            **_failure_context(publication_root, exc),
             "status": "failed",
             "error_type": type(exc).__name__,
             "message": str(exc),

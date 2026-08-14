@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
+import json
 
+import scripts.update_company_registry as update_company_registry
 from scripts.update_company_registry import main
 
 
@@ -21,6 +23,61 @@ def test_company_registry_cli_dry_run_does_not_write_output(tmp_path, capsys) ->
     assert exit_code == 0
     assert "ready_for_apply: true" in capsys.readouterr().out
     assert not output.exists()
+
+
+def test_company_registry_cli_reports_source_outage_without_writing(
+    tmp_path,
+    capsys,
+    monkeypatch,
+) -> None:
+    output = tmp_path / "companies.csv"
+
+    def fail_sources(_source_json_dir):
+        raise RuntimeError("official registry endpoint returned HTTP 520")
+
+    monkeypatch.setattr(update_company_registry, "_load_sources", fail_sources)
+
+    assert main(["--output", str(output), "--dry-run"]) == 1
+
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert payload == {
+        "error": "official registry endpoint returned HTTP 520",
+        "output": str(output),
+        "reason": "official_company_registry_source_unavailable",
+        "status": "blocked",
+        "writes_allowed": False,
+    }
+    assert not output.exists()
+
+
+def test_company_registry_sources_fall_back_to_official_csv(monkeypatch) -> None:
+    calls = []
+
+    def fake_json(url):
+        calls.append(("json", url))
+        if url == update_company_registry.TPEX_OTC_URL:
+            raise RuntimeError("HTTP 520")
+        return [{"source": url}]
+
+    def fake_csv(url):
+        calls.append(("csv", url))
+        return [{"source": url}]
+
+    monkeypatch.setattr(update_company_registry, "_fetch_json", fake_json)
+    monkeypatch.setattr(update_company_registry, "_fetch_csv", fake_csv)
+
+    sources = update_company_registry._load_sources(None)
+
+    assert sources["twse_listed"] == [
+        {"source": update_company_registry.TWSE_LISTED_URL}
+    ]
+    assert sources["tpex_otc"] == [
+        {"source": update_company_registry.TPEX_OTC_CSV_URL}
+    ]
+    assert sources["tpex_emerging"] == [
+        {"source": update_company_registry.TPEX_EMERGING_URL}
+    ]
+    assert ("csv", update_company_registry.TPEX_OTC_CSV_URL) in calls
 
 
 def test_company_registry_cli_apply_requires_confirm(tmp_path) -> None:
