@@ -51,21 +51,29 @@ class TechnicalIndicatorCalculator:
         for handler in logger.handlers[:]:
             logger.removeHandler(handler)
         
-        # 檔案處理器
-        file_handler = logging.FileHandler('technical_calculation.log', encoding='utf-8')
-        file_handler.setFormatter(
-            logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        )
-        
         # 控制台處理器
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(
             logging.Formatter('%(levelname)s: %(message)s')
         )
-        console_handler.setLevel(logging.ERROR)
-        
-        logger.addHandler(file_handler)
+        console_handler.setLevel(logging.WARNING)
         logger.addHandler(console_handler)
+
+        try:
+            file_handler = logging.FileHandler(
+                'technical_calculation.log',
+                encoding='utf-8',
+            )
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "無法建立 TechnicalIndicator 檔案日誌，改用 console-only: %s",
+                exc,
+            )
+        else:
+            file_handler.setFormatter(
+                logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            )
+            logger.addHandler(file_handler)
         return logger
     
     def _get_column_name(self, df, eng_name):

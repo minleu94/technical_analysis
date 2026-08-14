@@ -258,25 +258,30 @@ class TWStockConfig:
         
         # 避免重複添加處理器，導致 I/O on closed file
         if not self.logger.handlers:
-            # 創建文件處理器
-            file_handler = logging.FileHandler(
-                self.log_dir / "config.log",
-                encoding='utf-8'
-            )
-            file_handler.setLevel(logging.INFO)
-            
-            # 創建控制台處理器
+            # 控制台處理器永遠保留；read-only CLI 不應因 log 目錄不可寫而無法啟動。
             console_handler = logging.StreamHandler()
             console_handler.setLevel(logging.INFO)
             
             # 設置格式
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            file_handler.setFormatter(formatter)
             console_handler.setFormatter(formatter)
-            
-            # 添加處理器
-            self.logger.addHandler(file_handler)
             self.logger.addHandler(console_handler)
+
+            # 創建文件處理器；正式環境可寫時保留持久化 log，唯讀或受限環境則降級。
+            try:
+                file_handler = logging.FileHandler(
+                    self.log_dir / "config.log",
+                    encoding='utf-8'
+                )
+            except (OSError, ValueError) as exc:
+                self.logger.warning(
+                    "無法建立配置檔案日誌，改用 console-only: %s",
+                    exc,
+                )
+            else:
+                file_handler.setLevel(logging.INFO)
+                file_handler.setFormatter(formatter)
+                self.logger.addHandler(file_handler)
     
     def create_backup(self, source_file: Path, backup_file: Path = None):
         """創建文件備份"""

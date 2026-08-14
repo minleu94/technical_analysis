@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from data_module.config import TWStockConfig
 
@@ -43,3 +44,35 @@ def test_config_creates_required_directories(tmp_path: Path) -> None:
     assert config.backup_dir.is_dir()
     assert config.sqlite_dir.is_dir()
     assert config.output_root.is_dir()
+
+
+def test_config_falls_back_to_console_when_log_file_is_unwritable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    logger = logging.getLogger("data_module.config")
+    original_handlers = list(logger.handlers)
+    file_handler_type = logging.FileHandler
+    logger.handlers.clear()
+
+    def raise_permission_error(*args, **kwargs):
+        raise PermissionError("log path is read-only")
+
+    monkeypatch.setattr(logging, "FileHandler", raise_permission_error)
+    try:
+        TWStockConfig(
+            data_root=tmp_path / "data",
+            output_root=tmp_path / "output",
+            profile="prod",
+        )
+
+        assert any(
+            isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, file_handler_type)
+            for handler in logger.handlers
+        )
+        assert not any(isinstance(handler, file_handler_type) for handler in logger.handlers)
+    finally:
+        for handler in logger.handlers:
+            handler.close()
+        logger.handlers[:] = original_handlers

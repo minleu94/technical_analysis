@@ -46,22 +46,27 @@ class TWMarketDataProcessor:
         for handler in self.logger.handlers[:]:
             self.logger.removeHandler(handler)
         
-        # 檔案處理器
-        log_file = self.config.meta_data_dir / 'market_data_process.log'
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setFormatter(
-            logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        )
-        
         # 控制台處理器 - 只顯示錯誤和關鍵信息
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(
             logging.Formatter('%(levelname)s: %(message)s')
         )
-        console_handler.setLevel(logging.ERROR)  # 提高顯示門檻
-        
-        self.logger.addHandler(file_handler)
+        console_handler.setLevel(logging.WARNING)
         self.logger.addHandler(console_handler)
+
+        log_file = self.config.meta_data_dir / 'market_data_process.log'
+        try:
+            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        except (OSError, ValueError) as exc:
+            self.logger.warning(
+                "無法建立 MarketDataProcessor 檔案日誌，改用 console-only: %s",
+                exc,
+            )
+        else:
+            file_handler.setFormatter(
+                logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            )
+            self.logger.addHandler(file_handler)
 
     def _make_request(self, url: str, params: Dict = None, retries: int = None) -> Optional[requests.Response]:
         """發送HTTP請求並處理重試邏輯"""

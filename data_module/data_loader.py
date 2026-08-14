@@ -96,25 +96,29 @@ class DataLoader:
         
         # 避免重複添加處理器，導致 I/O on closed file
         if not self.logger.handlers:
-            # 創建文件處理器
-            file_handler = logging.FileHandler(
-                self.config.log_dir / "data_loader.log",
-                encoding='utf-8'
-            )
-            file_handler.setLevel(logging.INFO)
-            
             # 創建控制台處理器
             console_handler = logging.StreamHandler()
             console_handler.setLevel(logging.INFO)
             
             # 設置格式
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            file_handler.setFormatter(formatter)
             console_handler.setFormatter(formatter)
-            
-            # 添加處理器
-            self.logger.addHandler(file_handler)
             self.logger.addHandler(console_handler)
+
+            try:
+                file_handler = logging.FileHandler(
+                    self.config.log_dir / "data_loader.log",
+                    encoding='utf-8'
+                )
+            except (OSError, ValueError) as exc:
+                self.logger.warning(
+                    "無法建立 DataLoader 檔案日誌，改用 console-only: %s",
+                    exc,
+                )
+            else:
+                file_handler.setLevel(logging.INFO)
+                file_handler.setFormatter(formatter)
+                self.logger.addHandler(file_handler)
     
     def load_daily_price(self, date: str) -> Optional[pd.DataFrame]:
         """加載指定日期的價格數據"""

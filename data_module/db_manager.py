@@ -27,21 +27,29 @@ class DBManager:
         self.logger.propagate = False
 
         if not self.logger.handlers:
-            file_handler = logging.FileHandler(
-                self.config.log_dir / "db_manager.log",
-                encoding='utf-8'
-            )
-            file_handler.setLevel(logging.INFO)
-
             console_handler = logging.StreamHandler()
             console_handler.setLevel(logging.WARNING)
 
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            file_handler.setFormatter(formatter)
             console_handler.setFormatter(formatter)
-
-            self.logger.addHandler(file_handler)
             self.logger.addHandler(console_handler)
+
+            # 診斷檔暫時被鎖定或目錄不可寫時，資料庫本身仍應可啟動；
+            # 不讓 logging side effect 變成整個桌面 App 的 startup failure。
+            try:
+                file_handler = logging.FileHandler(
+                    self.config.log_dir / "db_manager.log",
+                    encoding='utf-8'
+                )
+            except (OSError, ValueError) as exc:
+                self.logger.warning(
+                    "無法建立 DBManager 檔案日誌，改用 console-only: %s",
+                    exc,
+                )
+            else:
+                file_handler.setLevel(logging.INFO)
+                file_handler.setFormatter(formatter)
+                self.logger.addHandler(file_handler)
 
     @contextmanager
     def connect(self) -> Generator[sqlite3.Connection, None, None]:
