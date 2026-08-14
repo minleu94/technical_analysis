@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -178,6 +179,30 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.info("Scheduled quick data update window: %s to %s", start_date, end_date)
 
+    run_id = f"{today_key}-{os.getpid()}"
+    _write_json(
+        status_path,
+        {
+            "task": "baldr-data-update-quick-daily",
+            "status": "running",
+            "run_id": run_id,
+            "started_at": run_now.isoformat(timespec="seconds"),
+            "process_id": os.getpid(),
+            "data_root": str(config.data_root),
+            "output_root": str(config.output_root),
+            "start_date": start_date,
+            "end_date": end_date,
+            "log_path": str(log_path),
+            "steps": [],
+            "warnings": [],
+            "errors": [],
+            "writes_market_data_db": True,
+            "writes_evidence_db": False,
+            "auto_trading": False,
+            "auto_lifecycle_action": False,
+        },
+    )
+
     failed = _run_step(steps=steps, name="check_overview_before", action=service.check_data_overview)
     if failed is None:
         failed = _run_step(
@@ -268,10 +293,15 @@ def main(argv: list[str] | None = None) -> int:
                 warnings.extend(_tpex_warning_messages(result))
     warnings = list(dict.fromkeys(warnings))
     final_status = "failed" if failed is not None else "passed_with_warnings" if warnings else "passed"
+    completed_at = scheduled_now()
     payload = {
         "task": "baldr-data-update-quick-daily",
         "status": final_status,
-        "checked_at": run_now.isoformat(timespec="seconds"),
+        "run_id": run_id,
+        "started_at": run_now.isoformat(timespec="seconds"),
+        "completed_at": completed_at.isoformat(timespec="seconds"),
+        "process_id": os.getpid(),
+        "checked_at": completed_at.isoformat(timespec="seconds"),
         "data_root": str(config.data_root),
         "output_root": str(config.output_root),
         "start_date": start_date,

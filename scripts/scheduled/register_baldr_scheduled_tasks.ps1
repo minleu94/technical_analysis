@@ -4,6 +4,8 @@ param(
     [string]$UpdateAt = "04:20",
     [string]$OfficialEventsAt = "04:50",
     [string]$FreshnessAt = "05:00",
+    [string]$MLRawPitRefreshAt = "05:05",
+    [string]$MLDirectChainMaintainerAt = "05:30",
     [string]$RecommendationAt = "05:10",
     [string]$EvidenceAt = "05:15",
     [string]$MLPromotionEvidenceAt = "05:17",
@@ -65,6 +67,8 @@ function New-WeeklyTaskSpec(
 $updateScript = Join-Path $RepoRoot "scripts\scheduled\run_daily_data_update_quick.cmd"
 $officialEventsScript = Join-Path $RepoRoot "scripts\scheduled\run_official_market_event_backfill.cmd"
 $freshnessScript = Join-Path $RepoRoot "scripts\scheduled\run_daily_data_freshness_check.cmd"
+$mlRawPitRefreshScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_raw_pit_refresh.cmd"
+$mlDirectChainMaintainerScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_direct_chain_maintenance.cmd"
 $recommendationScript = Join-Path $RepoRoot "scripts\scheduled\run_recommendation_snapshot.cmd"
 $evidenceScript = Join-Path $RepoRoot "scripts\scheduled\run_evidence_pipeline_dry_run.cmd"
 $mlPromotionEvidenceScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_promotion_evidence.cmd"
@@ -78,6 +82,8 @@ $dailyTasks = @(
     (New-DailyTaskSpec "baldr-data-update-quick-daily" "Non-UI baldr quick market data update." $updateScript $UpdateAt),
     (New-DailyTaskSpec "baldr-official-market-events-daily" "Append-only official market event publication." $officialEventsScript $OfficialEventsAt),
     (New-DailyTaskSpec "baldr-data-freshness-check-daily" "Read-only baldr data freshness check." $freshnessScript $FreshnessAt),
+    (New-DailyTaskSpec "baldr-ml-raw-pit-refresh-daily" "Automatic immutable full-market raw PIT publication after data freshness proof." $mlRawPitRefreshScript $MLRawPitRefreshAt),
+    (New-DailyTaskSpec "baldr-ml-direct-chain-maintainer" "Automatic fail-closed Direct v4 to OOC v5 process-custody maintainer." $mlDirectChainMaintainerScript $MLDirectChainMaintainerAt),
     (New-DailyTaskSpec "baldr-recommendation-snapshot-daily" "Research-only baldr recommendation snapshot." $recommendationScript $RecommendationAt),
     (New-DailyTaskSpec "baldr-evidence-pipeline-dry-run-daily" "Dry-run baldr evidence pipeline report." $evidenceScript $EvidenceAt),
     (New-DailyTaskSpec "baldr-ml-promotion-evidence-daily" "Unsigned formal OOC/replay/shadow promotion evidence builder." $mlPromotionEvidenceScript $MLPromotionEvidenceAt),

@@ -13,6 +13,7 @@ if "%ML_ALLOCATION_PAPER_STATE_DB%"=="" set "ML_ALLOCATION_PAPER_STATE_DB=%OUTPU
 
 set "DECISION_AT_ARG="
 if not "%ML_ALLOCATION_DECISION_AT%"=="" set "DECISION_AT_ARG=--decision-at "%ML_ALLOCATION_DECISION_AT%""
+set "AUTO_CATCH_UP_ARG=--auto-catch-up"
 
-"%PYTHON%" "scripts\run_daily_ml_allocation_orchestration.py" --output-root "%OUTPUT_ROOT%" --paper-state-db "%ML_ALLOCATION_PAPER_STATE_DB%" %DECISION_AT_ARG%
+"%PYTHON%" "scripts\run_daily_ml_allocation_orchestration.py" --output-root "%OUTPUT_ROOT%" --paper-state-db "%ML_ALLOCATION_PAPER_STATE_DB%" %AUTO_CATCH_UP_ARG% %DECISION_AT_ARG%
 exit /b %ERRORLEVEL%

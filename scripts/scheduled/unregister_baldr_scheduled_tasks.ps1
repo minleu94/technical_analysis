@@ -8,6 +8,8 @@ $taskNames = @(
     "baldr-data-update-quick-daily",
     "baldr-official-market-events-daily",
     "baldr-data-freshness-check-daily",
+    "baldr-ml-raw-pit-refresh-daily",
+    "baldr-ml-direct-chain-maintainer",
     "baldr-recommendation-snapshot-daily",
     "baldr-evidence-pipeline-dry-run-daily",
     "baldr-ml-promotion-evidence-daily",

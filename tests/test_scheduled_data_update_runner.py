@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timezone
 import json
 
 from scripts.batch_update_daily_data import _format_update_diagnostic
+from scripts.scheduled import run_daily_data_update_quick as runner
 from scripts.scheduled.run_daily_data_update_quick import (
     _scheduled_target_weekday,
     _technical_is_current,
@@ -88,3 +89,76 @@ def test_technical_is_not_current_when_latest_date_coverage_lags() -> None:
 
     assert current is False
     assert "1/2" in message
+
+
+def test_quick_update_publishes_running_before_work_and_terminal_metadata(
+    tmp_path, monkeypatch
+) -> None:
+    data_root = tmp_path / "FA_Data"
+    output_root = data_root / "output"
+    status_path = output_root / "scheduled" / "data_update_quick" / "latest_status.json"
+    log_path = output_root / "scheduled" / "data_update_quick" / "run.log"
+    observed = {"running": False}
+
+    class _FakeUpdateService:
+        def __init__(self, _config) -> None:
+            pass
+
+        def check_data_overview(self):
+            if not observed["running"]:
+                payload = json.loads(status_path.read_text(encoding="utf-8"))
+                assert payload["status"] == "running"
+                assert payload["process_id"] > 0
+                observed["running"] = True
+            return {
+                "success": True,
+                "daily_data": {"latest_date": "2026-07-03"},
+                "technical_indicators": {"latest_date": "2026-07-03"},
+            }
+
+        def _success(self, *_args, **_kwargs):
+            return {"success": True}
+
+        update_daily = _success
+        update_tpex_daily_price_range = _success
+        sync_source_to_sqlite = _success
+        update_market = _success
+        update_industry = _success
+        update_broker_branch = _success
+
+        def check_technical_indicator_latest_coverage(self):
+            return {"success": True, "is_current": True}
+
+    monkeypatch.setattr(runner, "UpdateService", _FakeUpdateService)
+    clock = iter(
+        (
+            runner.datetime(2026, 7, 3, 4, 20, tzinfo=timezone.utc),
+            runner.datetime(2026, 7, 3, 4, 21, tzinfo=timezone.utc),
+        )
+    )
+    monkeypatch.setattr(
+        runner,
+        "scheduled_now",
+        lambda: next(clock),
+    )
+
+    exit_code = runner.main(
+        [
+            "--data-root",
+            str(data_root),
+            "--output-root",
+            str(output_root),
+            "--status-path",
+            str(status_path),
+            "--log-path",
+            str(log_path),
+        ]
+    )
+
+    payload = json.loads(status_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert observed["running"] is True
+    assert payload["status"] == "passed"
+    assert payload["run_id"].startswith("20260703-")
+    assert payload["started_at"] < payload["completed_at"]
+    assert payload["checked_at"] == payload["completed_at"]

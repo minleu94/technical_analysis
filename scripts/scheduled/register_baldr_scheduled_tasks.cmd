@@ -12,6 +12,8 @@ for %%I in ("%SCRIPT_DIR%..\..") do set "REPO_ROOT=%%~fI"
 set "UPDATE_TASK=baldr-data-update-quick-daily"
 set "OFFICIAL_EVENTS_TASK=baldr-official-market-events-daily"
 set "FRESH_TASK=baldr-data-freshness-check-daily"
+set "ML_RAW_PIT_REFRESH_TASK=baldr-ml-raw-pit-refresh-daily"
+set "ML_DIRECT_CHAIN_MAINTAINER_TASK=baldr-ml-direct-chain-maintainer"
 set "RECOMMENDATION_TASK=baldr-recommendation-snapshot-daily"
 set "EVIDENCE_TASK=baldr-evidence-pipeline-dry-run-daily"
 set "ML_PROMOTION_EVIDENCE_TASK=baldr-ml-promotion-evidence-daily"
@@ -22,6 +24,8 @@ set "PAPER_PORTFOLIO_TASK=baldr-paper-portfolio-daily"
 set "UPDATE_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_daily_data_update_quick.cmd"
 set "OFFICIAL_EVENTS_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_official_market_event_backfill.cmd"
 set "FRESH_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_daily_data_freshness_check.cmd"
+set "ML_RAW_PIT_REFRESH_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_ml_raw_pit_refresh.cmd"
+set "ML_DIRECT_CHAIN_MAINTAINER_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_ml_direct_chain_maintenance.cmd"
 set "RECOMMENDATION_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_recommendation_snapshot.cmd"
 set "EVIDENCE_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_evidence_pipeline_dry_run.cmd"
 set "ML_PROMOTION_EVIDENCE_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_ml_promotion_evidence.cmd"
@@ -32,6 +36,8 @@ set "PAPER_PORTFOLIO_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_paper_portfolio_da
 set "UPDATE_ACTION=cmd.exe /c ""%UPDATE_SCRIPT%"""
 set "OFFICIAL_EVENTS_ACTION=cmd.exe /c ""%OFFICIAL_EVENTS_SCRIPT%"""
 set "FRESH_ACTION=cmd.exe /c ""%FRESH_SCRIPT%"""
+set "ML_RAW_PIT_REFRESH_ACTION=cmd.exe /c ""%ML_RAW_PIT_REFRESH_SCRIPT%"""
+set "ML_DIRECT_CHAIN_MAINTAINER_ACTION=cmd.exe /c ""%ML_DIRECT_CHAIN_MAINTAINER_SCRIPT%"""
 set "RECOMMENDATION_ACTION=cmd.exe /c ""%RECOMMENDATION_SCRIPT%"""
 set "EVIDENCE_ACTION=cmd.exe /c ""%EVIDENCE_SCRIPT%"""
 set "ML_PROMOTION_EVIDENCE_ACTION=cmd.exe /c ""%ML_PROMOTION_EVIDENCE_SCRIPT%"""
@@ -53,6 +59,12 @@ echo   Action: %OFFICIAL_EVENTS_ACTION%
 echo Task: %FRESH_TASK%
 echo   Schedule: DAILY 05:00
 echo   Action: %FRESH_ACTION%
+echo Task: %ML_RAW_PIT_REFRESH_TASK%
+echo   Schedule: DAILY 05:05
+echo   Action: %ML_RAW_PIT_REFRESH_ACTION%
+echo Task: %ML_DIRECT_CHAIN_MAINTAINER_TASK%
+echo   Schedule: DAILY 05:30
+echo   Action: %ML_DIRECT_CHAIN_MAINTAINER_ACTION%
 echo Task: %RECOMMENDATION_TASK%
 echo   Schedule: DAILY 05:10
 echo   Action: %RECOMMENDATION_ACTION%
@@ -91,6 +103,12 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Create /TN "%FRESH_TASK%" /SC DAILY /ST 05:00 /TR "%FRESH_ACTION%" /F
 if errorlevel 1 exit /b %ERRORLEVEL%
 
+schtasks.exe /Create /TN "%ML_RAW_PIT_REFRESH_TASK%" /SC DAILY /ST 05:05 /TR "%ML_RAW_PIT_REFRESH_ACTION%" /F
+if errorlevel 1 exit /b %ERRORLEVEL%
+
+schtasks.exe /Create /TN "%ML_DIRECT_CHAIN_MAINTAINER_TASK%" /SC DAILY /ST 05:30 /TR "%ML_DIRECT_CHAIN_MAINTAINER_ACTION%" /F
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 schtasks.exe /Create /TN "%RECOMMENDATION_TASK%" /SC DAILY /ST 05:10 /TR "%RECOMMENDATION_ACTION%" /F
 if errorlevel 1 exit /b %ERRORLEVEL%
 
@@ -119,6 +137,10 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%OFFICIAL_EVENTS_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%FRESH_TASK%" /V /FO LIST
+if errorlevel 1 exit /b %ERRORLEVEL%
+schtasks.exe /Query /TN "%ML_RAW_PIT_REFRESH_TASK%" /V /FO LIST
+if errorlevel 1 exit /b %ERRORLEVEL%
+schtasks.exe /Query /TN "%ML_DIRECT_CHAIN_MAINTAINER_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%RECOMMENDATION_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%

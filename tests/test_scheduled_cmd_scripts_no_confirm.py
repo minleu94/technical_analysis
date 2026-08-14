@@ -69,6 +69,39 @@ def test_official_market_event_wrapper_has_no_prompt_or_broker() -> None:
     assert "production_action_allowed" in text
 
 
+def test_ml_raw_pit_refresh_wrapper_is_noninteractive_and_read_only() -> None:
+    cmd_text = (SCHEDULED_DIR / "run_ml_raw_pit_refresh.cmd").read_text(encoding="utf-8").lower()
+    py_text = (SCHEDULED_DIR / "run_ml_raw_pit_refresh.py").read_text(encoding="utf-8").lower()
+    text = cmd_text + "\n" + py_text
+
+    assert "run_ml_raw_pit_refresh.py" in cmd_text
+    assert "--all-universe" in py_text
+    assert "query_only" in py_text
+    assert "writes_source_database" in py_text
+    assert "--confirm" not in text
+    assert "input(" not in text
+
+
+def test_ml_direct_chain_maintenance_wrapper_is_noninteractive_and_fail_closed() -> None:
+    cmd_text = (
+        SCHEDULED_DIR / "run_ml_direct_chain_maintenance.cmd"
+    ).read_text(encoding="utf-8").lower()
+    py_text = (
+        SCHEDULED_DIR / "run_ml_direct_chain_maintenance.py"
+    ).read_text(encoding="utf-8").lower()
+    text = cmd_text + "\n" + py_text
+
+    assert "maintain_ml_direct_v3_refresh_chain.py" in text
+    assert "watch-formal-inputs" in text
+    assert "query_only" in text
+    assert "writes_source_database" in text
+    assert "formal_oos_allowed" in text
+    assert "production_alpha_bp" in text
+    assert "broker_order_allowed" in text
+    assert "input(" not in text
+    assert "--confirm" not in text
+
+
 def test_ml_allocation_copilot_wrapper_is_fail_closed() -> None:
     text = (
         SCHEDULED_DIR / "run_ml_allocation_copilot.cmd"
@@ -80,6 +113,7 @@ def test_ml_allocation_copilot_wrapper_is_fail_closed() -> None:
     assert "ml_allocation_promotion_evidence" not in text
     assert "--promotion-evidence" not in text
     assert "--promotion-authorization" not in text
+    assert "--auto-catch-up" in text
 
 
 def test_ml_promotion_authority_wrapper_is_independent_and_noninteractive() -> None:
