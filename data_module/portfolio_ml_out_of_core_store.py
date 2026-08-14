@@ -364,6 +364,19 @@ class PortfolioMLOutOfCoreStoreBuilder:
             },
             "store_identity": store_identity,
         }
+        source_policy = source_manifest.get("portfolio_state_policy")
+        if (
+            isinstance(source_policy, Mapping)
+            and source_policy.get("cash_only_fallback") is False
+        ):
+            manifest["portfolio_state_policy"] = dict(source_policy)
+        formal_rule_history = source_manifest.get(
+            "formal_rule_champion_history"
+        )
+        if isinstance(formal_rule_history, Mapping):
+            manifest["formal_rule_champion_history"] = dict(
+                formal_rule_history
+            )
         manifest["manifest_hash"] = _sha256_json(manifest)
         _write_json(manifest_path, manifest)
         manifest_file_hash = _file_sha256(manifest_path)

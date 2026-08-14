@@ -22,6 +22,15 @@ import sqlite3
 import struct
 from typing import Any, Iterable, Mapping, Sequence, cast
 
+from data_module.rule_champion_snapshot_service import (
+    RuleChampionSnapshotHistoryCustody,
+    load_verified_rule_champion_snapshot_history,
+)
+from data_module.formal_portfolio_ledger import (
+    FormalPortfolioStateReplay,
+    load_formal_portfolio_state_ledger,
+)
+
 
 REPLAY_SCHEMA_VERSION = "allocation-ooc-portfolio-replay.v1"
 REPLAY_POINTER_SCHEMA_VERSION = "allocation-ooc-portfolio-replay-pointer.v1"
@@ -154,6 +163,8 @@ class _FormalCustody:
     base_oof_by_fold: Mapping[str, tuple[Mapping[str, object], ...]]
     meta_oof_by_fold: Mapping[str, Mapping[str, object]]
     dataset_replay_source_hash: str
+    portfolio_state_ledger: FormalPortfolioStateReplay | None
+    rule_champion_history: RuleChampionSnapshotHistoryCustody | None
 
 
 @dataclass(frozen=True)
@@ -226,6 +237,16 @@ def build_allocation_oos_portfolio_replay(
             ),
             "dataset_replay_source_hash": (
                 custody.dataset_replay_source_hash
+            ),
+            "formal_portfolio_ledger": (
+                None
+                if custody.portfolio_state_ledger is None
+                else custody.portfolio_state_ledger.custody_payload()
+            ),
+            "formal_rule_champion_history": (
+                None
+                if custody.rule_champion_history is None
+                else custody.rule_champion_history.custody_payload()
             ),
             "outer_fold_count": len(custody.outer_fold_ids),
             "daily_observation_count": len(rows),
@@ -329,6 +350,14 @@ def _load_formal_custody(training_path: Path) -> _FormalCustody:
     if training.get("dataset_identity_hash") != dataset_identity_hash:
         _block("training_dataset_identity_hash_mismatch")
 
+    portfolio_state_ledger = _load_formal_portfolio_state_ledger_custody(
+        dataset
+    )
+    rule_champion_history = _load_formal_rule_champion_history_custody(
+        dataset,
+        training=training,
+    )
+
     readiness_value = dataset.get("readiness")
     if readiness_value is None:
         readiness_value = dataset.get("execution")
@@ -353,7 +382,11 @@ def _load_formal_custody(training_path: Path) -> _FormalCustody:
             )
         )
         if not replay_can_reconstruct:
-            _block("formal_ooc_dataset_full_market_not_ready")
+            readiness_detail = ",".join(sorted(failed_checks))
+            _block(
+                "formal_ooc_dataset_full_market_not_ready:"
+                + (readiness_detail or "unspecified")
+            )
     safety = _required_mapping(dataset.get("safety"), "dataset.safety")
     if safety.get("pit_contract_revalidated_per_row") is not True:
         _block("formal_ooc_dataset_pit_not_revalidated")
@@ -528,6 +561,14 @@ def _load_formal_custody(training_path: Path) -> _FormalCustody:
         "dataset_manifest_file_hash": dataset_file_hash,
         "oof_source_hash": oof_source_hash,
     }
+    if portfolio_state_ledger is not None:
+        input_custody["formal_portfolio_ledger_manifest_hash"] = (
+            portfolio_state_ledger.ledger_manifest_hash
+        )
+    if rule_champion_history is not None:
+        input_custody["formal_rule_champion_history_manifest_hash"] = (
+            rule_champion_history.manifest_hash
+        )
     base_by_fold: dict[str, list[Mapping[str, object]]] = {
         fold_id: [] for fold_id in outer_fold_ids
     }
@@ -556,7 +597,108 @@ def _load_formal_custody(training_path: Path) -> _FormalCustody:
             dataset,
             dataset_path=dataset_path,
         ),
+        portfolio_state_ledger=portfolio_state_ledger,
+        rule_champion_history=rule_champion_history,
     )
+
+
+def _load_formal_portfolio_state_ledger_custody(
+    dataset: Mapping[str, object],
+) -> FormalPortfolioStateReplay | None:
+    value = dataset.get("portfolio_state_policy")
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        _block("formal_oos_replay_portfolio_ledger_custody_invalid")
+    assert isinstance(value, Mapping)
+    manifest_path = Path(
+        _required_text(
+            value.get("ledger_manifest_path"),
+            "dataset.portfolio_state_policy.ledger_manifest_path",
+        )
+    ).resolve()
+    _require_file(
+        manifest_path,
+        "formal_oos_replay_portfolio_ledger_manifest_missing",
+    )
+    expected_file_hash = _required_sha256(
+        value.get("ledger_manifest_file_hash"),
+        "dataset.portfolio_state_policy.ledger_manifest_file_hash",
+    )
+    if _file_hash(manifest_path) != expected_file_hash:
+        _block("formal_oos_replay_portfolio_ledger_manifest_hash_mismatch")
+    try:
+        ledger = load_formal_portfolio_state_ledger(manifest_path)
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+        sqlite3.Error,
+    ) as exc:
+        _block(
+            "formal_oos_replay_portfolio_ledger_invalid:"
+            f"{type(exc).__name__}:{_safe_reason(exc)}"
+        )
+    if dict(ledger.custody_payload()) != dict(value):
+        _block("formal_oos_replay_portfolio_ledger_custody_mismatch")
+    return ledger
+
+
+def _load_formal_rule_champion_history_custody(
+    dataset: Mapping[str, object],
+    *,
+    training: Mapping[str, object],
+) -> RuleChampionSnapshotHistoryCustody | None:
+    value = dataset.get("formal_rule_champion_history")
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        _block("formal_oos_replay_rule_champion_history_custody_invalid")
+    assert isinstance(value, Mapping)
+    manifest_path = Path(
+        _required_text(
+            value.get("manifest_path"),
+            "dataset.formal_rule_champion_history.manifest_path",
+        )
+    ).resolve()
+    _require_file(
+        manifest_path,
+        "formal_oos_replay_rule_champion_history_manifest_missing",
+    )
+    expected_file_hash = _required_sha256(
+        value.get("manifest_file_hash"),
+        "dataset.formal_rule_champion_history.manifest_file_hash",
+    )
+    if _file_hash(manifest_path) != expected_file_hash:
+        _block(
+            "formal_oos_replay_rule_champion_history_manifest_hash_mismatch"
+        )
+    try:
+        history = load_verified_rule_champion_snapshot_history(
+            manifest_path,
+            training_as_of=_required_text(
+                training.get("training_as_of"),
+                "training.training_as_of",
+            ),
+        )
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        _block(
+            "formal_oos_replay_rule_champion_history_invalid:"
+            f"{type(exc).__name__}:{_safe_reason(exc)}"
+        )
+    if dict(history.custody_payload()) != dict(value):
+        _block("formal_oos_replay_rule_champion_history_custody_mismatch")
+    return history
 
 
 def _dataset_replay_source_hash(
@@ -725,6 +867,23 @@ def _load_replay_input(
         != custody.dataset_replay_source_hash
     ):
         _block("formal_oos_replay_dataset_source_hash_mismatch")
+    expected_portfolio_ledger = (
+        None
+        if custody.portfolio_state_ledger is None
+        else custody.portfolio_state_ledger.custody_payload()
+    )
+    if payload.get("formal_portfolio_ledger") != expected_portfolio_ledger:
+        _block("formal_oos_replay_portfolio_ledger_custody_mismatch")
+    expected_rule_history = (
+        None
+        if custody.rule_champion_history is None
+        else custody.rule_champion_history.custody_payload()
+    )
+    if (
+        payload.get("formal_rule_champion_history")
+        != expected_rule_history
+    ):
+        _block("formal_oos_replay_rule_champion_history_custody_mismatch")
     if tuple(
         _required_text(item, "outer_fold_id")
         for item in _required_sequence(

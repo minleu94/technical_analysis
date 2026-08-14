@@ -27,6 +27,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--benchmark-entity", required=True)
     parser.add_argument("--sector-membership", type=Path)
     parser.add_argument("--corporate-action-manifest", type=Path)
+    parser.add_argument("--formal-portfolio-ledger", type=Path)
+    parser.add_argument("--formal-rule-champion-history", type=Path)
     parser.add_argument("--years", nargs="*", type=int, default=())
     parser.add_argument("--minimum-train-dates", type=int, default=252)
     parser.add_argument("--test-date-count", type=int, default=63)
@@ -50,6 +52,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 sector_membership_path=args.sector_membership,
                 corporate_action_manifest_path=(
                     args.corporate_action_manifest
+                ),
+                formal_portfolio_ledger_path=args.formal_portfolio_ledger,
+                formal_rule_champion_history_path=(
+                    args.formal_rule_champion_history
                 ),
                 years=tuple(args.years),
                 minimum_train_dates=args.minimum_train_dates,

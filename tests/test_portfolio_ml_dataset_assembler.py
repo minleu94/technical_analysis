@@ -304,6 +304,7 @@ def _horizon_poison_labels(
     omit_after_horizon: bool = False,
     corporate_action_effective_date: str | None = None,
     exclusion_sink: list[dict[str, object]] | None = None,
+    progress_events: list[str] | None = None,
 ) -> dict[int, dict[str, object]]:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
@@ -377,6 +378,9 @@ def _horizon_poison_labels(
             if corporate_action_effective_date is None
             else {"2330": (corporate_action_effective_date,)}
         ),
+        progress_callback=(
+            None if progress_events is None else progress_events.append
+        ),
     )
     rows = tuple(
         connection.execute(
@@ -413,6 +417,32 @@ def _horizon_poison_labels(
         }
         for row in rows
     }
+
+
+def test_spool_prices_do_not_create_duplicate_primary_key_index() -> None:
+    connection = sqlite3.connect(":memory:")
+    try:
+        _initialize_spool(connection)
+        indexes = {
+            str(row[1])
+            for row in connection.execute("PRAGMA index_list('prices')")
+        }
+        assert "idx_prices_scope_entity_date" not in indexes
+
+        query_plan = list(
+            connection.execute(
+                "EXPLAIN QUERY PLAN "
+                "SELECT event_date FROM prices "
+                "WHERE scope=? AND entity_key=? ORDER BY event_date",
+                ("stock", "2330"),
+            )
+        )
+        assert any(
+            "PRIMARY KEY" in str(row[-1]).upper()
+            for row in query_plan
+        )
+    finally:
+        connection.close()
 
 
 def test_assembler_emits_direct_training_jsonl_with_strict_pit_and_folds(
@@ -590,6 +620,11 @@ def test_corporate_action_manifest_binds_identity_and_excludes_samples(
     assert custody.manifest_hash == official.manifest_hash
     assert custody.canonical_events_hash == official.canonical_events_hash
     assert custody.effective_dates_by_symbol["2330"] == ("2024-01-10",)
+    assert custody.official_trade_restriction_timeline_present is True
+    assert custody.trade_restriction_source_count == 2
+    assert custody.trade_restriction_source_coverage_complete is True
+    assert custody.trade_restriction_ambiguity_count == 0
+    assert custody.trade_restriction_events_by_symbol["2330"]
 
     common = {
         "dataset_manifest_path": raw.dataset_manifest_paths[
@@ -994,6 +1029,19 @@ def test_horizon_label_is_prefix_invariant_to_later_price_poison() -> None:
 
     assert baseline[2] == poisoned[2]
     assert baseline[4] != poisoned[4]
+
+
+def test_label_spool_progress_callback_reports_lifecycle() -> None:
+    events: list[str] = []
+
+    _horizon_poison_labels(progress_events=events)
+
+    assert events[0].startswith("label_spool_starting_")
+    assert any(
+        event.startswith("label_spool_symbols_1_of_1_processed")
+        for event in events
+    )
+    assert events[-1] == "label_spool_complete"
 
 
 def test_later_horizon_gap_does_not_discard_valid_short_horizon_label() -> None:

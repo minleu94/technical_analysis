@@ -15,6 +15,7 @@ from ml_promotion_test_support import (
 from runtime.promotion_authority_secret_store import (
     PromotionAuthoritySecretStore,
 )
+from scripts import run_ml_promotion_authority as authority
 from scripts.run_ml_promotion_authority import (
     POINTER_SCHEMA_VERSION,
     _payload_hash,
@@ -44,6 +45,32 @@ def _write_pointer(path: Path, body: dict[str, object]) -> None:
         )
         + "\n",
         encoding="utf-8",
+    )
+
+
+def test_status_atomic_write_retries_transient_windows_lock(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "status.json"
+    attempts = 0
+    real_replace = authority.os.replace
+
+    def flaky_replace(source: object, target: object) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise PermissionError("test_windows_replace_lock")
+        real_replace(source, target)
+
+    monkeypatch.setattr(authority.os, "replace", flaky_replace)
+    monkeypatch.setattr(authority.time_module, "sleep", lambda _: None)
+
+    authority._atomic_write_json(path, {"status": "skipped_evidence_unavailable"})
+
+    assert attempts == 3
+    assert json.loads(path.read_text(encoding="utf-8"))["status"] == (
+        "skipped_evidence_unavailable"
     )
 
 
@@ -242,4 +269,3 @@ def test_pointer_tamper_skips_without_authorization(tmp_path: Path) -> None:
 
     assert result["status"] == "skipped_invalid_or_incomplete_custody"
     assert result["authorization_created"] is False
-

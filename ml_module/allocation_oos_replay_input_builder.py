@@ -22,6 +22,9 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
+from data_module.rule_champion_snapshot_service import (
+    RuleChampionSnapshotHistoryCustody,
+)
 from ml_module import allocation_oos_portfolio_replay as replay
 
 
@@ -108,7 +111,13 @@ def build_allocation_oos_replay_inputs(
             custody,
             retro_output_root=input_root / "replay_sources",
         )
-        records = _build_records(custody, sources)
+        rule_champion_history = custody.rule_champion_history
+        formal_portfolio_ledger = custody.portfolio_state_ledger
+        records = _build_records(
+            custody,
+            sources,
+            rule_champion_history=rule_champion_history,
+        )
         if not records:
             raise ValueError("formal_oos_replay_input_has_no_daily_records")
         input_root.mkdir(parents=True, exist_ok=True)
@@ -123,10 +132,24 @@ def build_allocation_oos_replay_inputs(
         )
         rule_policy_hash = replay._payload_hash(
             {
-                "method": "causal_t_minus_one_ma20_equal_risk_budget",
+                "method": (
+                    "formal_rule_champion_history_equal_risk_budget"
+                    if rule_champion_history is not None
+                    else "causal_t_minus_one_ma20_equal_risk_budget"
+                ),
                 "initial_capital": str(INITIAL_CAPITAL),
                 "policy": replay._REPLAY_POLICY,
                 "teacher_targets_used": False,
+                "formal_rule_champion_history_manifest_hash": (
+                    None
+                    if rule_champion_history is None
+                    else rule_champion_history.manifest_hash
+                ),
+                "formal_portfolio_ledger": (
+                    None
+                    if formal_portfolio_ledger is None
+                    else formal_portfolio_ledger.custody_payload()
+                ),
             }
         )
         cost_policy_hash = replay._payload_hash(
@@ -180,6 +203,16 @@ def build_allocation_oos_replay_inputs(
             "causal_portfolio_ledger_hash": ledger_hash,
             "fold_bindings": replay._expected_fold_bindings(custody),
             "replay_source_manifest_set_hash": source_hash,
+            "formal_portfolio_ledger": (
+                None
+                if formal_portfolio_ledger is None
+                else formal_portfolio_ledger.custody_payload()
+            ),
+            "formal_rule_champion_history": (
+                None
+                if rule_champion_history is None
+                else rule_champion_history.custody_payload()
+            ),
             "replay_source_artifacts": [
                 {
                     "year": year,
@@ -924,11 +957,33 @@ def _read_mapping(path: Path) -> Mapping[str, object]:
     return value
 
 
+def _rule_scores_by_date(
+    history: RuleChampionSnapshotHistoryCustody | None,
+) -> Mapping[str, Mapping[str, int]] | None:
+    if history is None:
+        return None
+    result: dict[str, dict[str, int]] = {}
+    for date_text in history.decision_dates:
+        snapshot = history.snapshot_by_date[date_text]
+        scores: dict[str, int] = {}
+        for row in snapshot.decision_rows:
+            if row.symbol in scores:
+                raise ValueError("formal_rule_champion_history_symbol_duplicate")
+            if row.rule_score_bp is None:
+                raise ValueError("formal_rule_champion_history_score_missing")
+            scores[row.symbol] = row.rule_score_bp
+        result[date_text] = scores
+    return result
+
+
 def _build_records(
     custody: replay._FormalCustody,
     sources: Mapping[int, Mapping[str, object]],
+    *,
+    rule_champion_history: RuleChampionSnapshotHistoryCustody | None,
 ) -> list[dict[str, object]]:
     meta_paths = _meta_oof_paths(custody)
+    rule_scores_by_date = _rule_scores_by_date(rule_champion_history)
     result: list[dict[str, object]] = []
     for fold_index, fold_id in enumerate(custody.outer_fold_ids):
         fold = custody.folds_by_id[fold_id]
@@ -950,6 +1005,7 @@ def _build_records(
             fold_id=fold_id,
             refs=refs,
             meta=meta,
+            rule_scores_by_date=rule_scores_by_date,
         )
         rule_state = _LaneState()
         lane_states = {
@@ -1134,6 +1190,7 @@ def _fold_candidates(
     fold_id: str,
     refs: np.memmap,
     meta: np.memmap | None,
+    rule_scores_by_date: Mapping[str, Mapping[str, int]] | None,
 ) -> list[tuple[date, tuple[_Candidate, ...]]]:
     years = replay._mapping_sequence(custody.dataset.get("years"), "years")
     grouped: dict[date, list[_Candidate]] = {}
@@ -1169,9 +1226,19 @@ def _fold_candidates(
                 raise ValueError("replay_source_ref_missing")
             global_position = int(positions[target])
             decision_at = _parse_datetime(str(row["decision_at"]))
+            decision_date_text = str(row["decision_date"])
+            formal_rule_score: int | None = None
+            if rule_scores_by_date is not None:
+                scores = rule_scores_by_date.get(decision_date_text)
+                if scores is None:
+                    connection.close()
+                    raise ValueError(
+                        "formal_rule_champion_history_decision_date_missing"
+                    )
+                formal_rule_score = scores.get(str(row["symbol"]))
             candidate = _Candidate(
                 fold_id=fold_id,
-                decision_date=date.fromisoformat(str(row["decision_date"])),
+                decision_date=date.fromisoformat(decision_date_text),
                 decision_at=decision_at,
                 symbol=str(row["symbol"]),
                 sector_id=(
@@ -1186,7 +1253,11 @@ def _fold_candidates(
                 median_volume_20d_shares=_optional_int(
                     row["median_volume_20d_shares"]
                 ),
-                rule_score_bp=_optional_int(row["rule_score_bp"]),
+                rule_score_bp=(
+                    formal_rule_score
+                    if rule_scores_by_date is not None
+                    else _optional_int(row["rule_score_bp"])
+                ),
                 trade_restriction_status=str(
                     row["trade_restriction_status"]
                 ),

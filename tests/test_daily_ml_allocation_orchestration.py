@@ -204,6 +204,148 @@ def _run(
     )
 
 
+def test_automatic_previous_candidates_are_bounded_to_past_trading_days() -> None:
+    requested = datetime(2026, 8, 13, 8, 30, tzinfo=TAIPEI)
+    now = datetime(2026, 8, 12, 11, 41, tzinfo=TAIPEI)
+    calendar = _Calendar(
+        {
+            date(2026, 8, 12): (True, "official_open"),
+            date(2026, 8, 11): (True, "official_open"),
+            date(2026, 8, 10): (False, "holiday"),
+            date(2026, 8, 9): (False, "weekend"),
+            date(2026, 8, 8): (False, "weekend"),
+            date(2026, 8, 7): (True, "official_open"),
+        }
+    )
+    candidates = orchestration._automatic_previous_decision_candidates(
+        calendar=calendar,
+        requested_decision_at=requested,
+        now=now,
+    )
+
+    assert candidates == (
+        datetime(2026, 8, 12, 8, 30, tzinfo=TAIPEI),
+        datetime(2026, 8, 11, 8, 30, tzinfo=TAIPEI),
+        datetime(2026, 8, 7, 8, 30, tzinfo=TAIPEI),
+    )
+    assert all(candidate.date() <= now.date() for candidate in candidates)
+
+
+def test_automatic_previous_candidates_fail_closed_on_unknown_calendar() -> None:
+    requested = datetime(2026, 8, 13, 8, 30, tzinfo=TAIPEI)
+    now = datetime(2026, 8, 12, 11, 41, tzinfo=TAIPEI)
+    calendar = _Calendar(
+        {
+            date(2026, 8, 12): (None, "calendar_missing"),
+        }
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="automatic_catch_up_calendar_unknown",
+    ):
+        orchestration._automatic_previous_decision_candidates(
+            calendar=calendar,
+            requested_decision_at=requested,
+            now=now,
+        )
+
+
+def test_automatic_mode_does_not_search_when_candidate_is_not_future() -> None:
+    requested = datetime(2026, 8, 12, 8, 30, tzinfo=TAIPEI)
+    now = datetime(2026, 8, 12, 7, 30, tzinfo=TAIPEI)
+    calendar = _Calendar(
+        {
+            date(2026, 8, 11): (True, "official_open"),
+        }
+    )
+
+    assert orchestration._automatic_previous_decision_candidates(
+        calendar=calendar,
+        requested_decision_at=requested,
+        now=now,
+    ) == ()
+
+
+def test_main_wires_auto_catch_up_selection_into_hash_bound_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selected = datetime(2026, 8, 12, 8, 30, tzinfo=TAIPEI)
+    requested = datetime(2026, 8, 13, 8, 30, tzinfo=TAIPEI)
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        orchestration,
+        "OfficialTradingCalendar",
+        lambda _database_path: object(),
+    )
+    monkeypatch.setattr(
+        orchestration,
+        "_promotion_trust_configuration",
+        lambda **_kwargs: ({}, (), None),
+    )
+    monkeypatch.setattr(
+        orchestration,
+        "_parse_decision_at",
+        lambda _value: requested,
+    )
+    monkeypatch.setattr(
+        orchestration,
+        "_automatic_previous_decision_candidates",
+        lambda **_kwargs: (selected,),
+    )
+    monkeypatch.setattr(
+        orchestration,
+        "_taipei_now",
+        lambda: datetime(2026, 8, 12, 11, 41, tzinfo=TAIPEI),
+    )
+
+    calls: list[dict[str, Any]] = []
+
+    def fake_run(**kwargs: Any) -> dict[str, object]:
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return {
+                "status": "passed_rule_only",
+                "orchestration_status": "fail_closed",
+                "failed_stage": "post_freeze_input",
+                "failed_reasons": [
+                    "post_freeze_input:ValueError:expected_price_date not ready"
+                ],
+                "decision_selection_mode": "automatic_candidate",
+            }
+        captured.update(kwargs)
+        return {
+            "status": "passed_rule_only",
+            "orchestration_status": "completed",
+            "failed_stage": None,
+            "failed_reasons": [],
+            "decision_selection_mode": "automatic_catch_up",
+        }
+
+    monkeypatch.setattr(orchestration, "run", fake_run)
+
+    result = orchestration.main(
+        [
+            "--database",
+            str(tmp_path / "twstock.db"),
+            "--output-root",
+            str(tmp_path / "output"),
+            "--release-root",
+            str(tmp_path / "release"),
+            "--auto-catch-up",
+        ]
+    )
+
+    assert result == 0
+    assert len(calls) == 2
+    assert captured["decision_at"] == selected
+    assert captured["requested_decision_at"] == requested
+    assert captured["decision_selection_mode"] == "automatic_catch_up"
+    assert captured["decision_selection_attempts"]
+
+
 def test_success_runs_raw_input_inference_then_promotion_and_hashes_status(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -339,6 +481,11 @@ def test_success_runs_raw_input_inference_then_promotion_and_hashes_status(
     assert str(result["inference_audit_file_hash"]).startswith("sha256:")
     assert result["promotion_status_hash"] == f"sha256:{'7' * 64}"
     assert str(result["promotion_artifact_file_hash"]).startswith("sha256:")
+    assert result["decision_selection_mode"] == "requested"
+    assert result["requested_decision_at"] == DECISION_AT.isoformat(
+        timespec="seconds"
+    )
+    assert result["decision_selection_attempts"] == []
     assert str(result["promotion_sidecar_file_hash"]).startswith("sha256:")
 
     status_path = (

@@ -377,7 +377,18 @@ def _load_formal_custody(
         "dataset_manifest.readiness_or_execution",
     )
     if readiness.get("full_market_ready") is not True:
-        _blocked("formal_ooc_dataset_full_market_not_ready")
+        failed_checks = {
+            _required_text(item, "dataset.readiness_failed_check")
+            for item in _required_sequence(
+                readiness.get("readiness_failed_checks"),
+                "dataset.readiness_failed_checks",
+            )
+        }
+        readiness_detail = ",".join(sorted(failed_checks))
+        _blocked(
+            "formal_ooc_dataset_full_market_not_ready:"
+            + (readiness_detail or "unspecified")
+        )
     safety = _required_mapping(dataset.get("safety"), "dataset_manifest.safety")
     if safety.get("pit_contract_revalidated_per_row") is not True:
         _blocked("formal_ooc_dataset_pit_not_revalidated")
@@ -590,6 +601,38 @@ def _load_replay_custody(
         "dataset_manifest_file_hash": formal.dataset_manifest_file_hash,
         "oof_source_hash": formal.oof_source_hash,
     }
+    formal_ledger = formal.dataset.get("portfolio_state_policy")
+    if formal_ledger is not None:
+        if not isinstance(formal_ledger, Mapping):
+            _blocked("formal_portfolio_ledger_custody_invalid")
+        assert isinstance(formal_ledger, Mapping)
+        expected_input["formal_portfolio_ledger_manifest_hash"] = (
+            _required_sha256(
+                formal_ledger.get("ledger_manifest_hash"),
+                "dataset.portfolio_state_policy.ledger_manifest_hash",
+            )
+        )
+    formal_rule_history = formal.dataset.get(
+        "formal_rule_champion_history"
+    )
+    if formal_rule_history is not None:
+        if not isinstance(formal_rule_history, Mapping):
+            _blocked("formal_rule_champion_history_custody_invalid")
+        assert isinstance(formal_rule_history, Mapping)
+        expected_input[
+            "formal_rule_champion_history_manifest_hash"
+        ] = _required_sha256(
+            formal_rule_history.get("manifest_hash"),
+            "dataset.formal_rule_champion_history.manifest_hash",
+        )
+    expected_ledger_payload = (
+        None if formal_ledger is None else dict(formal_ledger)
+    )
+    expected_rule_history_payload = (
+        None
+        if formal_rule_history is None
+        else dict(formal_rule_history)
+    )
     for label, path in paths:
         _require_file(path, f"formal_replay_{label}_missing")
         replay = _read_json_mapping(path, f"formal_replay_{label}")
@@ -630,6 +673,15 @@ def _load_replay_custody(
         )
         if dict(custody) != expected_input:
             _blocked(f"formal_replay_{label}_input_custody_mismatch")
+        if replay.get("formal_portfolio_ledger") != expected_ledger_payload:
+            _blocked(f"formal_replay_{label}_portfolio_ledger_custody_mismatch")
+        if (
+            replay.get("formal_rule_champion_history")
+            != expected_rule_history_payload
+        ):
+            _blocked(
+                f"formal_replay_{label}_rule_champion_history_custody_mismatch"
+            )
         lanes = _normalize_replay_lanes(
             replay.get("lanes"),
             expected_fold_ids=formal.outer_fold_ids,

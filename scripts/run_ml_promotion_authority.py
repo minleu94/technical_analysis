@@ -18,11 +18,17 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
+import time as time_module
 from typing import Any, Mapping, Protocol
 from zoneinfo import ZoneInfo
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Windows Defender/indexer/backup scans can transiently hold the status target.
+# Keep authority publication fail-closed, but use the same bounded recovery
+# window as the Direct/OOC/release chain.
+_ATOMIC_REPLACE_RETRY_COUNT = 120
+_ATOMIC_REPLACE_RETRY_DELAY_SECONDS = 0.5
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -122,7 +128,14 @@ def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        for attempt in range(_ATOMIC_REPLACE_RETRY_COUNT):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt + 1 >= _ATOMIC_REPLACE_RETRY_COUNT:
+                    raise
+                time_module.sleep(_ATOMIC_REPLACE_RETRY_DELAY_SECONDS)
     finally:
         if temporary.exists():
             temporary.unlink()

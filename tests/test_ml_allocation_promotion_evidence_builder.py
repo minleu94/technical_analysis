@@ -647,6 +647,42 @@ def _complete_fixture(
     return request
 
 
+def test_unready_dataset_blocker_exposes_failed_readiness_checks(
+    tmp_path: Path,
+) -> None:
+    training_path, dataset_path = _build_formal_ooc(tmp_path)
+    dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    dataset["readiness"] = {
+        "full_market_ready": False,
+        "readiness_failed_checks": [
+            "pit_sector_membership_present",
+            "causal_non_cash_portfolio_ledger_present",
+        ],
+    }
+    dataset.pop("manifest_hash", None)
+    _write(dataset_path, _with_hash(dataset, "manifest_hash"))
+
+    training = json.loads(training_path.read_text(encoding="utf-8"))
+    training["store_manifest_file_hash"] = _file_hash(dataset_path)
+    training.pop("manifest_hash", None)
+    _write(training_path, _with_hash(training, "manifest_hash"))
+
+    request = _request_skeleton(
+        tmp_path,
+        training_path=training_path,
+        dataset_path=dataset_path,
+    )
+    result = build_compatible_allocation_promotion_evidence(request)
+
+    assert result.status == "blocked"
+    assert result.blockers == (
+        "formal_ooc_dataset_full_market_not_ready:"
+        "causal_non_cash_portfolio_ledger_present,"
+        "pit_sector_membership_present",
+    )
+    assert result.promotion_evidence_path is None
+
+
 def _rehash_replay(path: Path) -> dict[str, object]:
     replay = json.loads(path.read_text(encoding="utf-8"))
     replay.pop("manifest_hash", None)

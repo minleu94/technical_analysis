@@ -671,6 +671,47 @@ def test_missing_actual_execution_ledger_blocks_without_pointer(
     assert not result.latest_pointer_path.exists()
 
 
+def test_unready_dataset_blocker_exposes_failed_readiness_checks(
+    tmp_path: Path,
+) -> None:
+    training_path, dataset_path = _build_formal_ooc(tmp_path)
+    dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    dataset["readiness"] = {
+        "direct_numeric_store": True,
+        "direct_store_complete": True,
+        "full_market_ready": False,
+        "readiness_failed_checks": [
+            "pit_sector_membership_present",
+            "causal_non_cash_portfolio_ledger_present",
+        ],
+    }
+    dataset.pop("manifest_hash", None)
+    _write(dataset_path, _with_hash(dataset, "manifest_hash"))
+
+    training = json.loads(training_path.read_text(encoding="utf-8"))
+    training["store_manifest_file_hash"] = _file_hash(dataset_path)
+    training.pop("manifest_hash", None)
+    _write(training_path, _with_hash(training, "manifest_hash"))
+
+    result = build_allocation_oos_portfolio_replay(
+        _request(
+            training_path,
+            tmp_path / "output",
+            role="primary",
+            run_id="unready-dataset",
+        )
+    )
+
+    assert result.status == "blocked"
+    assert result.blockers == (
+        "formal_ooc_dataset_full_market_not_ready:"
+        "causal_non_cash_portfolio_ledger_present,"
+        "pit_sector_membership_present",
+    )
+    assert result.replay_path.is_file()
+    assert not result.latest_pointer_path.exists()
+
+
 def _active_candidate(day: date) -> _Candidate:
     decision_at = datetime.combine(
         day,

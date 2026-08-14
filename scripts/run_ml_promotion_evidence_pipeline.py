@@ -9,17 +9,24 @@ publication；它不簽章、不選正式 alpha、不改寫模型／來源資料
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 import hashlib
 import json
 import os
 from pathlib import Path
 import sys
-from typing import Mapping, Protocol
+import time as time_module
+from typing import Mapping, Protocol, Sequence
 from zoneinfo import ZoneInfo
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Windows Defender/indexer/backup scans can transiently hold the status target.
+# Keep the status publication fail-closed, but give the lock a bounded recovery
+# window consistent with the Direct/OOC/release chain.
+_ATOMIC_REPLACE_RETRY_COUNT = 120
+_ATOMIC_REPLACE_RETRY_DELAY_SECONDS = 0.5
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -38,7 +45,8 @@ from ml_module.allocation_oos_portfolio_replay import (  # noqa: E402
 
 TAIPEI = ZoneInfo("Asia/Taipei")
 TASK_NAME = "baldr-ml-promotion-evidence-daily"
-STATUS_SCHEMA_VERSION = "ml-promotion-evidence-pipeline-status.v1"
+STATUS_SCHEMA_VERSION = "ml-promotion-evidence-pipeline-status.v3"
+AUTO_CATCH_UP_MAX_CALENDAR_DAYS = 31
 TRAINING_POINTER_SCHEMA_VERSION = "allocation-ooc-training-latest.v1"
 TRAINING_SCHEMA_VERSION = "allocation-ooc-training.v5"
 STORE_SCHEMA_VERSION = "portfolio-ml-ooc-store.v3"
@@ -46,6 +54,14 @@ REPLAY_POINTER_SCHEMA_VERSION = (
     "allocation-ooc-portfolio-replay-pointer.v1"
 )
 REPLAY_SCHEMA_VERSION = "allocation-ooc-portfolio-replay.v1"
+OFFICIAL_EVENT_POINTER_SCHEMA_VERSION = "official-market-event-latest.v1"
+OFFICIAL_EVENT_PUBLICATION_SCHEMA_VERSION = (
+    "official-market-event-publication.v1"
+)
+# Replay run ids are immutable.  Keep a small namespace revision in the id so
+# a deterministic change to blocked diagnostics cannot collide with an older
+# artifact for the same training custody and decision date.
+REPLAY_RUN_ID_REVISION = "v2"
 REFERENCE_POINTER_SCHEMA_VERSION = (
     "ml-allocation-promotion-reference-pointer-v1"
 )
@@ -60,6 +76,26 @@ class _Calendar(Protocol):
         target_date: date,
     ) -> tuple[bool | None, str]:
         ...
+
+
+@dataclass(frozen=True)
+class _DecisionSelection:
+    requested_decision_at: datetime
+    decision_at: datetime
+    decision_reason: str
+    strict_t_minus_one: date
+    strict_t_minus_one_reason: str
+    mode: str
+    selection_reason: str
+    attempts: tuple[Mapping[str, object], ...]
+    latest_core_feature_date: date | None
+
+
+@dataclass(frozen=True)
+class _CoreFeatureProof:
+    state: str
+    latest_feature_date: date | None
+    reason: str
 
 
 def _canonical_json(payload: object) -> str:
@@ -121,7 +157,14 @@ def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
             + "\n",
             encoding="utf-8",
         )
-        os.replace(temporary, path)
+        for attempt in range(_ATOMIC_REPLACE_RETRY_COUNT):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt + 1 >= _ATOMIC_REPLACE_RETRY_COUNT:
+                    raise
+                time_module.sleep(_ATOMIC_REPLACE_RETRY_DELAY_SECONDS)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -214,6 +257,242 @@ def _strict_previous_trading_day(
     raise RuntimeError("strict_t_minus_one_not_found_within_31_days")
 
 
+def _automatic_previous_decision_candidates(
+    *,
+    calendar: _Calendar,
+    requested_decision_at: datetime,
+    now: datetime,
+) -> tuple[datetime, ...]:
+    """Return only known official decisions at or before today's Taipei date."""
+
+    if requested_decision_at.tzinfo is None:
+        raise ValueError(
+            "requested_decision_at must be timezone-aware Taipei 08:30"
+        )
+    requested = requested_decision_at.astimezone(TAIPEI)
+    local_now = now.astimezone(TAIPEI)
+    if requested.time() != time(8, 30):
+        raise ValueError(
+            "requested_decision_at must be timezone-aware Taipei 08:30"
+        )
+    if requested.date() <= local_now.date():
+        return ()
+
+    candidates: list[datetime] = []
+    for offset in range(1, AUTO_CATCH_UP_MAX_CALENDAR_DAYS + 1):
+        candidate_date = requested.date() - timedelta(days=offset)
+        if candidate_date > local_now.date():
+            continue
+        is_open, _reason = calendar.is_official_trading_day(candidate_date)
+        if is_open is None:
+            if candidates:
+                return tuple(candidates)
+            raise RuntimeError(
+                "automatic_catch_up_calendar_unknown:"
+                f"{candidate_date.isoformat()}"
+            )
+        if is_open:
+            candidates.append(
+                datetime.combine(
+                    candidate_date,
+                    time(8, 30),
+                    tzinfo=TAIPEI,
+                )
+            )
+    return tuple(candidates)
+
+
+def _core_feature_proof(output_root: Path) -> _CoreFeatureProof:
+    """Read the upstream quick-update proof without touching the source DB."""
+
+    status_path = (
+        output_root
+        / "scheduled"
+        / "data_update_quick"
+        / "latest_status.json"
+    )
+    if not status_path.is_file():
+        return _CoreFeatureProof(
+            state="missing",
+            latest_feature_date=None,
+            reason="status_file_missing",
+        )
+    try:
+        payload = _read_mapping(status_path, label="data update status")
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return _CoreFeatureProof(
+            state="invalid",
+            latest_feature_date=None,
+            reason=f"read_error:{type(exc).__name__}",
+        )
+    status_value = payload.get("status")
+    if status_value not in {"passed", "passed_with_warnings"}:
+        return _CoreFeatureProof(
+            state="not_passed",
+            latest_feature_date=None,
+            reason=f"status={status_value}",
+        )
+    steps = payload.get("steps")
+    if not isinstance(steps, Sequence) or isinstance(steps, (str, bytes)):
+        return _CoreFeatureProof(
+            state="invalid",
+            latest_feature_date=None,
+            reason="steps_missing_or_invalid",
+        )
+    overview: Mapping[str, object] | None = None
+    for step in steps:
+        if not isinstance(step, Mapping) or step.get("name") != "check_overview_after":
+            continue
+        candidate = step.get("result")
+        if isinstance(candidate, Mapping):
+            overview = candidate
+            break
+    if overview is None:
+        return _CoreFeatureProof(
+            state="invalid",
+            latest_feature_date=None,
+            reason="check_overview_after_missing",
+        )
+    dates: list[date] = []
+    for table_name in ("daily_data", "technical_indicators"):
+        table = overview.get(table_name)
+        if not isinstance(table, Mapping):
+            return _CoreFeatureProof(
+                state="invalid",
+                latest_feature_date=None,
+                reason=f"{table_name}_overview_missing_or_invalid",
+            )
+        value = table.get("latest_date")
+        if not isinstance(value, str):
+            return _CoreFeatureProof(
+                state="invalid",
+                latest_feature_date=None,
+                reason=f"{table_name}_latest_date_missing_or_invalid",
+            )
+        try:
+            dates.append(date.fromisoformat(value[:10]))
+        except ValueError:
+            return _CoreFeatureProof(
+                state="invalid",
+                latest_feature_date=None,
+                reason=f"{table_name}_latest_date_invalid",
+            )
+    if not dates:
+        return _CoreFeatureProof(
+            state="invalid",
+            latest_feature_date=None,
+            reason="core_feature_dates_empty",
+        )
+    return _CoreFeatureProof(
+        state="ready",
+        latest_feature_date=min(dates),
+        reason="passed",
+    )
+
+
+def _latest_core_feature_date(output_root: Path) -> date | None:
+    """Compatibility helper for callers that only need the proven date."""
+
+    return _core_feature_proof(output_root).latest_feature_date
+
+
+def _select_decision(
+    *,
+    output_root: Path,
+    calendar: _Calendar,
+    now: datetime,
+    core_proof: _CoreFeatureProof | None = None,
+) -> _DecisionSelection:
+    requested, requested_reason = _next_official_decision(
+        now=now,
+        calendar=calendar,
+    )
+    requested_t_minus_one, requested_t_minus_one_reason = (
+        _strict_previous_trading_day(
+            decision_date=requested.date(),
+            calendar=calendar,
+        )
+    )
+    proof = core_proof or _core_feature_proof(output_root)
+    if proof.state != "ready" or proof.latest_feature_date is None:
+        raise RuntimeError(
+            "upstream_data_update_proof_"
+            f"{proof.state}:{proof.reason}"
+        )
+    latest_core_feature_date = proof.latest_feature_date
+    local_now = now.astimezone(TAIPEI)
+    if latest_core_feature_date > local_now.date():
+        raise RuntimeError(
+            "upstream_data_update_proof_future_date:"
+            f"latest_core_feature_date={latest_core_feature_date.isoformat()};"
+            f"local_date={local_now.date().isoformat()}"
+        )
+    attempts: list[Mapping[str, object]] = [
+        {
+            "decision_at": requested.isoformat(timespec="seconds"),
+            "selection": "requested",
+            "strict_t_minus_one": requested_t_minus_one.isoformat(),
+            "upstream_data_update_proof_state": proof.state,
+            "upstream_data_update_proof_reason": proof.reason,
+            "strict_t_minus_one_available": (
+                requested_t_minus_one <= latest_core_feature_date
+            ),
+        }
+    ]
+    if (
+        requested_t_minus_one <= latest_core_feature_date
+    ):
+        return _DecisionSelection(
+            requested_decision_at=requested,
+            decision_at=requested,
+            decision_reason=requested_reason,
+            strict_t_minus_one=requested_t_minus_one,
+            strict_t_minus_one_reason=requested_t_minus_one_reason,
+            mode="requested",
+            selection_reason="upstream_strict_t_minus_one_available",
+            attempts=tuple(attempts),
+            latest_core_feature_date=latest_core_feature_date,
+        )
+
+    candidates = _automatic_previous_decision_candidates(
+        calendar=calendar,
+        requested_decision_at=requested,
+        now=now,
+    )
+    for candidate in candidates:
+        candidate_t_minus_one, candidate_t_minus_one_reason = (
+            _strict_previous_trading_day(
+                decision_date=candidate.date(),
+                calendar=calendar,
+            )
+        )
+        ready = candidate_t_minus_one <= latest_core_feature_date
+        attempts.append(
+            {
+                "decision_at": candidate.isoformat(timespec="seconds"),
+                "selection": "automatic_catch_up_candidate",
+                "strict_t_minus_one": candidate_t_minus_one.isoformat(),
+                "strict_t_minus_one_available": ready,
+            }
+        )
+        if ready:
+            return _DecisionSelection(
+                requested_decision_at=requested,
+                decision_at=candidate,
+                decision_reason="automatic_catch_up_from_data_update_status",
+                strict_t_minus_one=candidate_t_minus_one,
+                strict_t_minus_one_reason=candidate_t_minus_one_reason,
+                mode="automatic_catch_up",
+                selection_reason="upstream_strict_t_minus_one_not_ready",
+                attempts=tuple(attempts),
+                latest_core_feature_date=latest_core_feature_date,
+            )
+    raise RuntimeError(
+        "automatic_catch_up_strict_t_minus_one_not_ready:"
+        f"latest_core_feature_date={latest_core_feature_date.isoformat()}"
+    )
+
+
 def _discover_training_and_store(
     *,
     release_root: Path,
@@ -268,11 +547,113 @@ def _discover_training_and_store(
         field_name="manifest_hash",
         label="OOC store manifest",
     )
+    _validate_current_official_event_custody(
+        release_root=release_root,
+        store=store,
+    )
     return (
         manifest_path,
         store_path,
         _text(manifest.get("run_id"), label="OOC training run_id"),
     )
+
+
+def _validate_current_official_event_custody(
+    *,
+    release_root: Path,
+    store: Mapping[str, object],
+) -> None:
+    """Reject a formal OOC store that lags the verified event publication.
+
+    Temporary/unit-test release roots may not carry an official-event pointer;
+    those roots are not formal production custody and keep the existing
+    discovery behavior. Once the pointer exists, all three physical/logical
+    hashes are required to agree with the store's corporate-action custody.
+    """
+
+    event_root = release_root / "official_market_events"
+    pointer_path = event_root / "latest_manifest.json"
+    if not pointer_path.is_file():
+        return
+    pointer = _read_mapping(
+        pointer_path,
+        label="official market-event latest pointer",
+    )
+    if pointer.get("schema_version") != OFFICIAL_EVENT_POINTER_SCHEMA_VERSION:
+        raise ValueError("official market-event pointer schema mismatch")
+    manifest_path = _resolve_relative_file(
+        base=event_root,
+        value=pointer.get("manifest_path"),
+        root=event_root,
+        label="official market-event manifest_path",
+    )
+    manifest = _read_mapping(
+        manifest_path,
+        label="official market-event publication manifest",
+    )
+    if (
+        manifest.get("schema_version")
+        != OFFICIAL_EVENT_PUBLICATION_SCHEMA_VERSION
+        or manifest.get("status") != "formal_source_publication"
+    ):
+        raise ValueError("official market-event publication is not formal")
+    manifest_hash = _verify_logical_hash(
+        manifest,
+        field_name="manifest_hash",
+        label="official market-event publication manifest",
+    )
+    if pointer.get("manifest_hash") != manifest_hash:
+        raise ValueError("official market-event pointer logical hash mismatch")
+    manifest_file_hash = _file_hash(manifest_path)
+    if pointer.get("manifest_file_hash") != manifest_file_hash:
+        raise ValueError("official market-event pointer physical hash mismatch")
+
+    canonical = manifest.get("canonical_events")
+    if not isinstance(canonical, Mapping):
+        raise TypeError("official market-event canonical section is missing")
+    canonical_path = _resolve_relative_file(
+        base=manifest_path.parent,
+        value=canonical.get("path"),
+        root=manifest_path.parent,
+        label="official market-event canonical path",
+    )
+    canonical_file_hash = _sha256(
+        canonical.get("file_hash"),
+        label="official market-event canonical file_hash",
+    )
+    if _file_hash(canonical_path) != canonical_file_hash:
+        raise ValueError("official market-event canonical physical hash mismatch")
+    if pointer.get("canonical_events_hash") != canonical_file_hash:
+        raise ValueError("official market-event pointer canonical hash mismatch")
+
+    custody = store.get("corporate_action_custody")
+    if not isinstance(custody, Mapping):
+        raise ValueError("formal_ooc_corporate_action_custody_missing")
+    mismatches = []
+    for field_name, expected in (
+        ("manifest_hash", manifest_hash),
+        ("manifest_file_hash", manifest_file_hash),
+        ("canonical_events_hash", canonical_file_hash),
+    ):
+        if custody.get(field_name) != expected:
+            mismatches.append(field_name)
+    if mismatches:
+        # The official publisher may emit a new publication envelope for an
+        # unchanged canonical event timeline (for example, when duplicate
+        # accounting metadata is corrected).  The direct store is immutable,
+        # so rebuilding all annual numeric shards solely for that envelope
+        # change would add cost without changing any labels or restrictions.
+        # Keep the gate fail-closed on actual event-content changes while
+        # accepting this safe no-op republish case.
+        if (
+            set(mismatches) == {"manifest_hash", "manifest_file_hash"}
+            and custody.get("canonical_events_hash") == canonical_file_hash
+        ):
+            return
+        raise ValueError(
+            "formal_ooc_corporate_action_custody_stale:"
+            + ",".join(mismatches)
+        )
 
 
 def _discover_replay(
@@ -336,6 +717,7 @@ def _build_replays(
 
     training_file_hash = _file_hash(training_manifest_path)
     identity = (
+        f"{REPLAY_SCHEMA_VERSION}-{REPLAY_RUN_ID_REVISION}-"
         f"{training_file_hash[7:23]}-{decision_at.strftime('%Y%m%d')}"
     )
     replay_root = (
@@ -456,6 +838,13 @@ def _status(
     decision_at: datetime | None,
     strict_t_minus_one: date | None,
     blockers: tuple[str, ...],
+    requested_decision_at: datetime | None = None,
+    decision_selection_mode: str = "requested",
+    decision_selection_reason: str | None = None,
+    decision_selection_attempts: Sequence[Mapping[str, object]] = (),
+    latest_core_feature_date: date | None = None,
+    upstream_data_update_proof_state: str | None = None,
+    upstream_data_update_proof_reason: str | None = None,
     extra: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     body: dict[str, object] = {
@@ -468,6 +857,23 @@ def _status(
             if decision_at is not None
             else None
         ),
+        "requested_decision_at": (
+            requested_decision_at.isoformat(timespec="seconds")
+            if requested_decision_at is not None
+            else None
+        ),
+        "decision_selection_mode": decision_selection_mode,
+        "decision_selection_reason": decision_selection_reason,
+        "decision_selection_attempts": [
+            dict(item) for item in decision_selection_attempts
+        ],
+        "latest_core_feature_date": (
+            latest_core_feature_date.isoformat()
+            if latest_core_feature_date is not None
+            else None
+        ),
+        "upstream_data_update_proof_state": upstream_data_update_proof_state,
+        "upstream_data_update_proof_reason": upstream_data_update_proof_reason,
         "strict_t_minus_one": (
             strict_t_minus_one.isoformat()
             if strict_t_minus_one is not None
@@ -501,19 +907,35 @@ def run(
         / "latest_status.json"
     )
     decision_at: datetime | None = None
+    requested_decision_at: datetime | None = None
     strict_t_minus_one: date | None = None
+    decision_selection_mode = "requested"
+    decision_selection_reason: str | None = None
+    decision_selection_attempts: tuple[Mapping[str, object], ...] = ()
+    latest_core_feature_date: date | None = None
+    upstream_data_update_proof_state: str | None = None
+    upstream_data_update_proof_reason: str | None = None
     try:
         calendar_service = calendar or OfficialTradingCalendar(database_path)
-        decision_at, decision_reason = _next_official_decision(
-            now=local_now,
+        core_proof = _core_feature_proof(output_root)
+        latest_core_feature_date = core_proof.latest_feature_date
+        upstream_data_update_proof_state = core_proof.state
+        upstream_data_update_proof_reason = core_proof.reason
+        selection = _select_decision(
+            output_root=output_root,
             calendar=calendar_service,
+            now=local_now,
+            core_proof=core_proof,
         )
-        strict_t_minus_one, t_minus_one_reason = (
-            _strict_previous_trading_day(
-                decision_date=decision_at.date(),
-                calendar=calendar_service,
-            )
-        )
+        requested_decision_at = selection.requested_decision_at
+        decision_at = selection.decision_at
+        decision_reason = selection.decision_reason
+        strict_t_minus_one = selection.strict_t_minus_one
+        t_minus_one_reason = selection.strict_t_minus_one_reason
+        decision_selection_mode = selection.mode
+        decision_selection_reason = selection.selection_reason
+        decision_selection_attempts = selection.attempts
+        latest_core_feature_date = selection.latest_core_feature_date
         training_path, dataset_path, training_run_id = (
             _discover_training_and_store(release_root=release_root)
         )
@@ -582,6 +1004,17 @@ def run(
                 decision_at=decision_at,
                 strict_t_minus_one=strict_t_minus_one,
                 blockers=result.blockers,
+                requested_decision_at=requested_decision_at,
+                decision_selection_mode=decision_selection_mode,
+                decision_selection_reason=decision_selection_reason,
+                decision_selection_attempts=decision_selection_attempts,
+                latest_core_feature_date=latest_core_feature_date,
+                upstream_data_update_proof_state=(
+                    upstream_data_update_proof_state
+                ),
+                upstream_data_update_proof_reason=(
+                    upstream_data_update_proof_reason
+                ),
                 extra={
                     "decision_calendar_reason": decision_reason,
                     "strict_t_minus_one_reason": t_minus_one_reason,
@@ -596,6 +1029,17 @@ def run(
                 decision_at=decision_at,
                 strict_t_minus_one=strict_t_minus_one,
                 blockers=(),
+                requested_decision_at=requested_decision_at,
+                decision_selection_mode=decision_selection_mode,
+                decision_selection_reason=decision_selection_reason,
+                decision_selection_attempts=decision_selection_attempts,
+                latest_core_feature_date=latest_core_feature_date,
+                upstream_data_update_proof_state=(
+                    upstream_data_update_proof_state
+                ),
+                upstream_data_update_proof_reason=(
+                    upstream_data_update_proof_reason
+                ),
                 extra={
                     "decision_calendar_reason": decision_reason,
                     "strict_t_minus_one_reason": t_minus_one_reason,
@@ -625,6 +1069,17 @@ def run(
             generated_at=local_now,
             decision_at=decision_at,
             strict_t_minus_one=strict_t_minus_one,
+            requested_decision_at=requested_decision_at,
+            decision_selection_mode=decision_selection_mode,
+            decision_selection_reason=decision_selection_reason,
+            decision_selection_attempts=decision_selection_attempts,
+            latest_core_feature_date=latest_core_feature_date,
+            upstream_data_update_proof_state=(
+                upstream_data_update_proof_state
+            ),
+            upstream_data_update_proof_reason=(
+                upstream_data_update_proof_reason
+            ),
             blockers=(
                 f"promotion_evidence_preflight:{type(exc).__name__}:"
                 f"{' '.join(str(exc).split())}",

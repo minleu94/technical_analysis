@@ -4,6 +4,7 @@ from datetime import date, datetime
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Mapping
 from zoneinfo import ZoneInfo
 
@@ -38,6 +39,59 @@ def _write_json(path: Path, payload: Mapping[str, object]) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def test_status_atomic_write_retries_transient_windows_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "status.json"
+    attempts = 0
+    real_replace = pipeline.os.replace
+
+    def flaky_replace(source: object, target: object) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise PermissionError("test_windows_replace_lock")
+        real_replace(source, target)
+
+    monkeypatch.setattr(pipeline.os, "replace", flaky_replace)
+    monkeypatch.setattr(pipeline.time_module, "sleep", lambda _: None)
+
+    pipeline._atomic_write_json(path, {"status": "blocked"})
+
+    assert attempts == 3
+    assert json.loads(path.read_text(encoding="utf-8"))["status"] == "blocked"
+
+
+def _write_data_update_status(
+    output_root: Path,
+    *,
+    daily_date: str,
+    technical_date: str,
+    status: str = "passed",
+) -> None:
+    _write_json(
+        output_root
+        / "scheduled"
+        / "data_update_quick"
+        / "latest_status.json",
+        {
+            "status": status,
+            "steps": [
+                {
+                    "name": "check_overview_after",
+                    "result": {
+                        "daily_data": {"latest_date": daily_date},
+                        "technical_indicators": {
+                            "latest_date": technical_date,
+                        },
+                    },
+                }
+            ],
+        },
+    )
+
+
 def _with_hash(
     payload: Mapping[str, object],
     *,
@@ -46,6 +100,44 @@ def _with_hash(
     result = dict(payload)
     result[field_name] = pipeline._payload_hash(result)
     return result
+
+
+def _write_official_event_pointer(
+    release_root: Path,
+) -> tuple[dict[str, str], dict[str, str]]:
+    event_root = release_root / "official_market_events"
+    run_root = event_root / "runs" / "official-1"
+    canonical_path = run_root / "canonical" / "events.jsonl"
+    canonical_path.parent.mkdir(parents=True, exist_ok=True)
+    canonical_path.write_bytes(b"{\"event\":1}\n")
+    canonical_hash = pipeline._file_hash(canonical_path)
+    manifest = _with_hash(
+        {
+            "schema_version": pipeline.OFFICIAL_EVENT_PUBLICATION_SCHEMA_VERSION,
+            "status": "formal_source_publication",
+            "canonical_events": {
+                "path": "canonical/events.jsonl",
+                "file_hash": canonical_hash,
+            },
+        },
+        field_name="manifest_hash",
+    )
+    manifest_path = run_root / "manifest.json"
+    _write_json(manifest_path, manifest)
+    pointer = {
+        "schema_version": pipeline.OFFICIAL_EVENT_POINTER_SCHEMA_VERSION,
+        "manifest_path": "runs/official-1/manifest.json",
+        "manifest_hash": str(manifest["manifest_hash"]),
+        "manifest_file_hash": pipeline._file_hash(manifest_path),
+        "canonical_events_hash": canonical_hash,
+    }
+    _write_json(event_root / "latest_manifest.json", pointer)
+    custody = {
+        "manifest_hash": str(manifest["manifest_hash"]),
+        "manifest_file_hash": pointer["manifest_file_hash"],
+        "canonical_events_hash": canonical_hash,
+    }
+    return pointer, custody
 
 
 def test_decision_window_uses_official_calendar_and_strict_t_minus_one() -> None:
@@ -71,11 +163,161 @@ def test_decision_window_uses_official_calendar_and_strict_t_minus_one() -> None
     assert prior_reason == "official_open"
 
 
+def test_automatic_selection_catches_up_when_upstream_t_minus_one_is_stale(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "output"
+    _write_data_update_status(
+        output_root,
+        daily_date="2026-07-31",
+        technical_date="2026-07-31",
+    )
+    now = datetime(2026, 8, 1, 11, 33, tzinfo=TAIPEI)
+    calendar = _Calendar(
+        {
+            date(2026, 8, 3): (True, "official_open"),
+            date(2026, 8, 1): (True, "official_open"),
+            date(2026, 7, 31): (True, "official_open"),
+        }
+    )
+
+    selection = pipeline._select_decision(
+        output_root=output_root,
+        calendar=calendar,
+        now=now,
+    )
+
+    assert selection.requested_decision_at == datetime(
+        2026, 8, 3, 8, 30, tzinfo=TAIPEI
+    )
+    assert selection.decision_at == datetime(
+        2026, 8, 1, 8, 30, tzinfo=TAIPEI
+    )
+    assert selection.strict_t_minus_one == date(2026, 7, 31)
+    assert selection.mode == "automatic_catch_up"
+    assert selection.selection_reason == (
+        "upstream_strict_t_minus_one_not_ready"
+    )
+    assert len(selection.attempts) == 2
+
+
+def test_automatic_selection_keeps_next_decision_when_t_minus_one_is_ready(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "output"
+    _write_data_update_status(
+        output_root,
+        daily_date="2026-08-01",
+        technical_date="2026-08-01",
+    )
+    now = datetime(2026, 8, 1, 20, 17, tzinfo=TAIPEI)
+    calendar = _Calendar(
+        {
+            date(2026, 8, 3): (True, "official_open"),
+            date(2026, 8, 1): (True, "official_open"),
+        }
+    )
+
+    selection = pipeline._select_decision(
+        output_root=output_root,
+        calendar=calendar,
+        now=now,
+    )
+
+    assert selection.decision_at == selection.requested_decision_at
+    assert selection.decision_at == datetime(
+        2026, 8, 3, 8, 30, tzinfo=TAIPEI
+    )
+    assert selection.strict_t_minus_one == date(2026, 8, 1)
+    assert selection.mode == "requested"
+    assert selection.selection_reason == (
+        "upstream_strict_t_minus_one_available"
+    )
+
+
+def test_selection_blocks_when_upstream_status_is_missing(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        RuntimeError,
+        match="upstream_data_update_proof_missing:status_file_missing",
+    ):
+        pipeline._select_decision(
+            output_root=tmp_path / "output",
+            calendar=_Calendar(
+                {
+                    date(2026, 8, 3): (True, "official_open"),
+                    date(2026, 8, 1): (True, "official_open"),
+                }
+            ),
+            now=datetime(2026, 8, 1, 11, 33, tzinfo=TAIPEI),
+        )
+
+
+def test_selection_blocks_when_upstream_status_is_not_passed(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "output"
+    _write_data_update_status(
+        output_root,
+        daily_date="2026-08-01",
+        technical_date="2026-08-01",
+        status="failed",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="upstream_data_update_proof_not_passed:status=failed",
+    ):
+        pipeline._select_decision(
+            output_root=output_root,
+            calendar=_Calendar(
+                {
+                    date(2026, 8, 3): (True, "official_open"),
+                    date(2026, 8, 1): (True, "official_open"),
+                }
+            ),
+            now=datetime(2026, 8, 1, 11, 33, tzinfo=TAIPEI),
+        )
+
+
+def test_selection_blocks_when_upstream_status_has_future_core_date(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "output"
+    _write_data_update_status(
+        output_root,
+        daily_date="2026-08-04",
+        technical_date="2026-08-04",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="upstream_data_update_proof_future_date",
+    ):
+        pipeline._select_decision(
+            output_root=output_root,
+            calendar=_Calendar(
+                {
+                    date(2026, 8, 3): (True, "official_open"),
+                    date(2026, 8, 1): (True, "official_open"),
+                }
+            ),
+            now=datetime(2026, 8, 1, 11, 33, tzinfo=TAIPEI),
+        )
+
+
 def test_missing_formal_ooc_is_successful_fail_closed_status(
     tmp_path: Path,
 ) -> None:
+    output_root = tmp_path / "output"
+    _write_data_update_status(
+        output_root,
+        daily_date="2026-07-31",
+        technical_date="2026-07-31",
+    )
     result = pipeline.run(
-        output_root=tmp_path / "output",
+        output_root=output_root,
         database_path=tmp_path / "twstock.db",
         now=NOW,
         calendar=_Calendar(
@@ -100,8 +342,48 @@ def test_missing_formal_ooc_is_successful_fail_closed_status(
         / "latest_status.json"
     )
     stored = json.loads(status_path.read_text(encoding="utf-8"))
+    assert stored["upstream_data_update_proof_state"] == "ready"
+    assert stored["upstream_data_update_proof_reason"] == "passed"
     status_hash = stored.pop("status_hash")
     assert status_hash == pipeline._payload_hash(stored)
+
+
+def test_replay_run_id_includes_immutable_namespace_revision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    training_path = tmp_path / "training.json"
+    training_path.write_bytes(b"training-custody")
+    captured: list[str] = []
+
+    def fake_replay(request: object) -> SimpleNamespace:
+        captured.append(str(getattr(request, "replay_run_id")))
+        return SimpleNamespace(
+            status="blocked",
+            blockers=("formal_ooc_dataset_full_market_not_ready",),
+        )
+
+    monkeypatch.setattr(
+        pipeline,
+        "build_allocation_oos_portfolio_replay",
+        fake_replay,
+    )
+
+    with pytest.raises(RuntimeError, match="formal_oos_primary_replay_blocked"):
+        pipeline._build_replays(
+            release_root=tmp_path / "release",
+            training_manifest_path=training_path,
+            decision_at=datetime(2026, 7, 31, 8, 30, tzinfo=TAIPEI),
+        )
+
+    assert captured == [
+        (
+            "primary-"
+            f"{pipeline.REPLAY_SCHEMA_VERSION}-"
+            f"{pipeline.REPLAY_RUN_ID_REVISION}-"
+            f"{pipeline._file_hash(training_path)[7:23]}-20260731"
+        )
+    ]
 
 
 def test_training_pointer_discovers_only_hash_bound_store(
@@ -159,6 +441,52 @@ def test_training_pointer_discovers_only_hash_bound_store(
     assert run_id == "training-1"
 
 
+def test_ooc_store_must_match_current_official_event_custody(
+    tmp_path: Path,
+) -> None:
+    release_root = tmp_path / "release_v4"
+    _, custody = _write_official_event_pointer(release_root)
+    store = {"corporate_action_custody": custody}
+
+    pipeline._validate_current_official_event_custody(
+        release_root=release_root,
+        store=store,
+    )
+
+    stale = dict(store)
+    stale["corporate_action_custody"] = {
+        **custody,
+        "canonical_events_hash": f"sha256:{'0' * 64}",
+    }
+    with pytest.raises(
+        ValueError,
+        match="formal_ooc_corporate_action_custody_stale:canonical_events_hash",
+    ):
+        pipeline._validate_current_official_event_custody(
+            release_root=release_root,
+            store=stale,
+        )
+
+
+def test_ooc_store_allows_same_canonical_timeline_republished_envelope(
+    tmp_path: Path,
+) -> None:
+    release_root = tmp_path / "release_v4"
+    _, custody = _write_official_event_pointer(release_root)
+    republished = {
+        "corporate_action_custody": {
+            **custody,
+            "manifest_hash": f"sha256:{'a' * 64}",
+            "manifest_file_hash": f"sha256:{'b' * 64}",
+        }
+    }
+
+    pipeline._validate_current_official_event_custody(
+        release_root=release_root,
+        store=republished,
+    )
+
+
 def test_replay_discovery_requires_complete_pointer_and_physical_hash(
     tmp_path: Path,
 ) -> None:
@@ -213,6 +541,11 @@ def test_published_builder_result_is_exposed_but_never_self_authorized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output_root = tmp_path / "output"
+    _write_data_update_status(
+        output_root,
+        daily_date="2026-07-31",
+        technical_date="2026-07-31",
+    )
     release_root = output_root / "release_v4"
     custody_root = release_root / "custody"
     custody_root.mkdir(parents=True)

@@ -48,6 +48,8 @@ class PortfolioMLRawToOOCRequest:
     benchmark_entity_id: str
     sector_membership_path: Path | None = None
     corporate_action_manifest_path: Path | None = None
+    formal_portfolio_ledger_path: Path | None = None
+    formal_rule_champion_history_path: Path | None = None
     research_shadow_manifest_path: Path | None = None
     research_symbols: tuple[str, ...] | None = None
     years: tuple[int, ...] = ()
@@ -71,6 +73,10 @@ class PortfolioMLRawToOOCRequest:
             sector_membership_path=self.sector_membership_path,
             corporate_action_manifest_path=(
                 self.corporate_action_manifest_path
+            ),
+            formal_portfolio_ledger_path=self.formal_portfolio_ledger_path,
+            formal_rule_champion_history_path=(
+                self.formal_rule_champion_history_path
             ),
             years=self.years,
             minimum_train_dates=self.minimum_train_dates,
@@ -175,6 +181,14 @@ class PortfolioMLRawToOOCBuilder:
                 request.temporary_storage_budget_bytes
             ),
         }
+        if request.formal_portfolio_ledger_path is not None:
+            identity["formal_portfolio_ledger_file_hash"] = _file_sha256(
+                request.formal_portfolio_ledger_path.resolve()
+            )
+        if request.formal_rule_champion_history_path is not None:
+            identity["formal_rule_champion_history_file_hash"] = _file_sha256(
+                request.formal_rule_champion_history_path.resolve()
+            )
         if request.research_shadow_manifest_path is not None:
             identity["research_shadow_manifest_hash"] = _read_json(
                 request.research_shadow_manifest_path.resolve()
@@ -706,15 +720,31 @@ class PortfolioMLRawToOOCBuilder:
                 raise ValueError(
                     "raw-to-ooc pipeline requires at least four folds"
                 )
-            replay = legacy._build_cash_only_portfolio_state_replay(
+            formal_rule_champion_custody = (
+                legacy._load_formal_rule_champion_history(
+                    request.formal_rule_champion_history_path,
+                    decision_dates=eligible_dates,
+                    training_as_of=cutoff.isoformat(),
+                )
+            )
+            replay = legacy._build_portfolio_state_replay(
                 calendar=calendar,
                 decision_dates=eligible_dates,
+                formal_portfolio_ledger_path=(
+                    request.formal_portfolio_ledger_path
+                ),
             )
             portfolio_state_policy = replay.custody_payload()
-            assembly_blockers = {
-                "portfolio_ledger_missing_cash_only_fallback_"
-                "turnover_and_cooldown_not_learned",
-            }
+            assembly_blockers: set[str] = set()
+            if replay.cash_only_fallback:
+                assembly_blockers.add(
+                    "portfolio_ledger_missing_cash_only_fallback_"
+                    "turnover_and_cooldown_not_learned"
+                )
+            if formal_rule_champion_custody is None:
+                assembly_blockers.add(
+                    "formal_rule_champion_snapshot_history_missing_formal_replay_blocked"
+                )
             if not corporate_action_custody.manifest_present:
                 assembly_blockers.add(
                     "corporate_action_adjustment_timeline_not_in_raw_"
@@ -766,6 +796,15 @@ class PortfolioMLRawToOOCBuilder:
                     "portfolio_state_replay_custody": (
                         portfolio_state_policy
                     ),
+                    **(
+                        {}
+                        if formal_rule_champion_custody is None
+                        else {
+                            "formal_rule_champion_history": (
+                                formal_rule_champion_custody.custody_payload()
+                            )
+                        }
+                    ),
                     "corporate_action_custody": (
                         corporate_action_policy
                     ),
@@ -798,6 +837,10 @@ class PortfolioMLRawToOOCBuilder:
                 ),
                 dataset_identity_hash=dataset_identity_hash,
             )
+            if formal_rule_champion_custody is not None:
+                header_common["formal_rule_champion_history"] = (
+                    formal_rule_champion_custody.custody_payload()
+                )
             teacher_incomplete_count, sample_count = (
                 legacy.PortfolioMLDatasetAssembler()._assemble_samples(
                     connection=connection,
@@ -932,6 +975,10 @@ class PortfolioMLRawToOOCBuilder:
                 },
                 "shards": shard_payloads,
             }
+            if formal_rule_champion_custody is not None:
+                training_manifest["formal_rule_champion_history"] = (
+                    formal_rule_champion_custody.custody_payload()
+                )
             training_manifest["manifest_hash"] = legacy._sha256_json(
                 training_manifest
             )

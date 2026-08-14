@@ -77,7 +77,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 resume=not args.no_resume,
             )
         )
-    except (OSError, TypeError, ValueError, KeyError, RuntimeError) as exc:
+    except (
+        MemoryError,
+        OSError,
+        TypeError,
+        ValueError,
+        KeyError,
+        RuntimeError,
+    ) as exc:
         print(
             json.dumps(
                 {
@@ -86,6 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "message": str(exc),
                     "formal_oos_allowed": False,
                     "production_alpha_bp": 0,
+                    "broker_order_allowed": False,
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -110,6 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "meta_fold_count": publication.meta_fold_count,
                 "formal_oos_allowed": publication.formal_oos_allowed,
                 "production_alpha_bp": publication.production_alpha_bp,
+                "broker_order_allowed": False,
                 "replay_input_status": replay_inputs.status,
                 "replay_input_blockers": list(replay_inputs.blockers),
                 "replay_input_manifest_path": (

@@ -25,7 +25,7 @@ import sqlite3
 import tempfile
 import threading
 import time
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 import joblib
 import numpy as np
@@ -47,6 +47,9 @@ from ml_module.allocation_training_service import (
     EXPERT_VECTOR_WIDTH,
     REGRESSION_EXPERT_HEADS,
 )
+from ml_module.ooc_cross_fitted_calibration import (
+    cross_fitted_binned_calibration,
+)
 
 
 TRAINING_SCHEMA_VERSION = "allocation-ooc-training.v5"
@@ -61,6 +64,11 @@ _CLASSIFICATION_LABEL_POSITIONS = (2, 8)
 _SIGNED_HEADS = frozenset(
     {"expected_excess_return_bp", "expected_sector_excess_return_bp"}
 )
+# Keep the exact training contract deterministic while preventing the wide
+# final-meta training matrix from being materialized as one full memmap.  The
+# sample is selected evenly across the causal training rows; all means and
+# variances still use the full row stream below.
+_PREPROCESSOR_MAX_MEDIAN_SAMPLE_ROWS = 100_000
 
 
 @dataclass(frozen=True)
@@ -171,6 +179,13 @@ class _LinearBoundaryModel:
         if self.classifier:
             return _sigmoid(values)
         return np.asarray(values, dtype=np.float64)
+
+
+@dataclass(frozen=True)
+class _MetaTrainingSelection:
+    fold_id: str
+    selected_positions: NDArray[np.int64]
+    selected_refs: NDArray[np.int64]
 
 
 @dataclass
@@ -890,6 +905,11 @@ class AllocationOutOfCoreTrainingService:
                 batch_size=effective_batch_size,
             )
             peak_rss_bytes = monitor.stop()
+            calibration_blocker = (
+                "classifier_calibration_not_attached_to_ooc_model"
+                if calibration.get("cross_fitted_calibration") is True
+                else "classifier_calibration_not_cross_fitted"
+            )
             blockers = sorted(
                 set(
                     _text_sequence(
@@ -900,7 +920,7 @@ class AllocationOutOfCoreTrainingService:
                     "automatic_shadow_replay_below_20_trading_days",
                     "post_freeze_drift_input_unavailable",
                     "portfolio_oos_alpha_comparison_not_completed",
-                    "classifier_calibration_not_cross_fitted",
+                    calibration_blocker,
                 }
             )
             manifest: dict[str, Any] = {
@@ -923,6 +943,8 @@ class AllocationOutOfCoreTrainingService:
                 "source_manifest_hashes": store.manifest[
                     "source_manifest_hashes"
                 ],
+                "formal_oos_allowed": False,
+                "production_alpha_bp": 0,
                 "formal_source_only": True,
                 "research_shadow_included": False,
                 "row_count": store.manifest["row_count"],
@@ -1012,6 +1034,7 @@ class AllocationOutOfCoreTrainingService:
                     "manifest_file_hash": manifest_file_hash,
                     "formal_oos_allowed": False,
                     "production_alpha_bp": 0,
+                    "broker_order_allowed": False,
                 },
             )
             audit.close()
@@ -1183,6 +1206,7 @@ class AllocationOutOfCoreTrainingService:
                 "store_manifest_hash": store.manifest["manifest_hash"],
                 "formal_oos_allowed": False,
                 "production_alpha_bp": 0,
+                "broker_order_allowed": False,
             }
             artifact["manifest_hash"] = _sha256_json(artifact)
             _write_json(staging / "manifest.json", artifact)
@@ -1208,6 +1232,26 @@ class AllocationOutOfCoreTrainingService:
         batch_size: int,
         audit: sqlite3.Connection,
     ) -> list[dict[str, Any]]:
+        existing_artifacts = _existing_final_base_artifacts(
+            artifacts_root=artifacts_root,
+            store=store,
+            horizons=selected_horizons,
+            algorithms=request.algorithms,
+        )
+        if existing_artifacts is not None:
+            for artifact in existing_artifacts:
+                _append_event(
+                    audit,
+                    event_type="final_base_expert_complete",
+                    natural_key=(
+                        f"{artifact['pack_id']}|"
+                        f"{artifact['horizon_trading_days']}|"
+                        f"{artifact['algorithm']}"
+                    ),
+                    payload=artifact,
+                )
+            return existing_artifacts
+
         final_work = work_root / "final-base"
         _prepare_clean_work_directory(final_work, work_root)
         refs_path = final_work / "all.refs.i64"
@@ -1425,17 +1469,10 @@ class AllocationOutOfCoreTrainingService:
         if (final_directory / "manifest.json").is_file():
             return _read_and_validate_artifact(final_directory)
         expert_ids = _expert_ids(base_artifacts)
-        final_work = work_root / "meta" / "final"
-        _prepare_clean_work_directory(final_work, work_root)
-        matrix, refs = _materialize_meta_train_matrix(
+        selections, train_row_count = _collect_meta_training_selections(
             store=store,
-            run_directory=run_directory,
-            base_artifacts=base_artifacts,
-            expert_ids=expert_ids,
             previous_folds=store.folds,
             cutoff="9999-12-31",
-            output_directory=final_work,
-            batch_size=batch_size,
         )
         artifact = _fit_meta_artifact(
             request=request,
@@ -1443,9 +1480,9 @@ class AllocationOutOfCoreTrainingService:
             run_directory=run_directory,
             final_directory=final_directory,
             fold_id="final",
-            train_refs=refs,
+            train_refs=None,
             test_refs=None,
-            train_matrix=matrix,
+            train_matrix=None,
             test_matrix=None,
             expert_ids=expert_ids,
             training_source_fold_ids=tuple(
@@ -1457,6 +1494,14 @@ class AllocationOutOfCoreTrainingService:
             ),
             label_maturity_cutoff_exclusive="9999-12-31",
             batch_size=batch_size,
+            batch_factory=lambda: _iter_meta_training_batches(
+                run_directory=run_directory,
+                base_artifacts=base_artifacts,
+                expert_ids=expert_ids,
+                selections=selections,
+                batch_size=batch_size,
+            ),
+            train_row_count=train_row_count,
         )
         _append_event(
             audit,
@@ -1464,10 +1509,6 @@ class AllocationOutOfCoreTrainingService:
             natural_key="final",
             payload=artifact,
         )
-        _close_memmap(matrix)
-        _close_memmap(refs)
-        del matrix, refs
-        _safe_remove_tree(final_work, work_root)
         return artifact
 
 
@@ -1505,7 +1546,7 @@ def _fit_linear_base_expert(
         refs = np.asarray(train_refs[start:stop], dtype=np.int64)
         labels, label_masks = store.read_label_batch(refs, horizon)
         transformed = _transform_linear_batch(
-            np.asarray(train_matrix[start:stop]),
+            _read_matrix_batch(train_matrix, start, stop),
             medians=medians,
             means=means,
             standard_deviations=standard_deviations,
@@ -1640,7 +1681,7 @@ def _fit_linear_base_expert(
 
     if test_refs is not None and test_matrix is not None and oof is not None:
         for start, stop in _batch_ranges(len(test_refs), batch_size):
-            raw = np.asarray(test_matrix[start:stop])
+            raw = _read_matrix_batch(test_matrix, start, stop)
             for column, head_id in enumerate(EXPERT_HEAD_IDS):
                 current_model = models[head_id]
                 if current_model is None:
@@ -1684,10 +1725,11 @@ def _fit_hgb_base_expert(
         shape=(len(fit_indexes), train_matrix.shape[1]),
     )
     for start, stop in _batch_ranges(len(fit_indexes), batch_size):
-        sampled_raw[start:stop, :] = train_matrix[
+        sampled_raw[start:stop, :] = _read_matrix_rows(
+            train_matrix,
             fit_indexes[start:stop],
-            :,
-        ]
+            batch_size=batch_size,
+        )
     sampled_raw.flush()
     hgb_train = _materialize_hgb_matrix(
         raw=sampled_raw,
@@ -1895,7 +1937,7 @@ def _fit_logistic_irls(
             if not np.any(valid):
                 continue
             transformed = _transform_linear_batch(
-                np.asarray(train_matrix[start:stop])[valid],
+                _read_matrix_batch(train_matrix, start, stop)[valid],
                 medians=medians,
                 means=means,
                 standard_deviations=standard_deviations,
@@ -1938,14 +1980,24 @@ def _fit_preprocessor(
     NDArray[np.float64],
     NDArray[np.float64],
 ]:
+    sample_indexes = _deterministic_bounded_indexes(
+        row_count=len(matrix),
+        maximum=_PREPROCESSOR_MAX_MEDIAN_SAMPLE_ROWS,
+    )
+    median_sample = _read_matrix_rows(
+        matrix,
+        sample_indexes,
+        batch_size=batch_size,
+    )
     medians = np.empty(matrix.shape[1], dtype=np.float64)
     for column in range(matrix.shape[1]):
-        values = np.asarray(matrix[:, column], dtype=np.float64)
+        values = np.asarray(median_sample[:, column], dtype=np.float64)
         finite = values[np.isfinite(values)]
         medians[column] = (
             float(np.median(finite)) if len(finite) else 0.0
         )
         del values, finite
+    del median_sample, sample_indexes
     width = matrix.shape[1] * 2
     sums = np.zeros(width, dtype=np.float64)
     squares = np.zeros(width, dtype=np.float64)
@@ -1954,7 +2006,7 @@ def _fit_preprocessor(
     identity_scales = np.ones(width, dtype=np.float64)
     for start, stop in _batch_ranges(len(matrix), batch_size):
         transformed = _transform_linear_batch(
-            np.asarray(matrix[start:stop]),
+            _read_matrix_batch(matrix, start, stop),
             medians=medians,
             means=identity_means,
             standard_deviations=identity_scales,
@@ -1969,6 +2021,144 @@ def _fit_preprocessor(
     standard_deviations = np.sqrt(variances)
     standard_deviations[standard_deviations < 1e-12] = 1.0
     return medians, means, standard_deviations
+
+
+def _fit_streaming_preprocessor(
+    *,
+    batch_factory: Callable[[], Iterable[tuple[NDArray[Any], NDArray[Any]]]],
+    row_count: int,
+) -> tuple[
+    NDArray[np.float64],
+    NDArray[np.float64],
+    NDArray[np.float64],
+]:
+    sample_indexes = _deterministic_bounded_indexes(
+        row_count=row_count,
+        maximum=_PREPROCESSOR_MAX_MEDIAN_SAMPLE_ROWS,
+    )
+    sample_rows: NDArray[Any] | None = None
+    processed_rows = 0
+    for matrix, _ in batch_factory():
+        if sample_rows is None:
+            sample_rows = np.empty(
+                (len(sample_indexes), matrix.shape[1]),
+                dtype=matrix.dtype,
+            )
+        start = processed_rows
+        stop = start + len(matrix)
+        left = int(np.searchsorted(sample_indexes, start, side="left"))
+        right = int(np.searchsorted(sample_indexes, stop, side="left"))
+        if left < right:
+            sample_rows[left:right, :] = matrix[
+                sample_indexes[left:right] - start,
+                :,
+            ]
+        processed_rows = stop
+    if sample_rows is None or processed_rows != row_count:
+        raise ValueError("streaming preprocessor row count mismatch")
+    medians = np.empty(sample_rows.shape[1], dtype=np.float64)
+    for column in range(sample_rows.shape[1]):
+        values = np.asarray(sample_rows[:, column], dtype=np.float64)
+        finite = values[np.isfinite(values)]
+        medians[column] = (
+            float(np.median(finite)) if len(finite) else 0.0
+        )
+        del values, finite
+    del sample_rows, sample_indexes
+    width = medians.shape[0] * 2
+    sums = np.zeros(width, dtype=np.float64)
+    squares = np.zeros(width, dtype=np.float64)
+    processed_rows = 0
+    identity_means = np.zeros(width, dtype=np.float64)
+    identity_scales = np.ones(width, dtype=np.float64)
+    for matrix, _ in batch_factory():
+        transformed = _transform_linear_batch(
+            matrix,
+            medians=medians,
+            means=identity_means,
+            standard_deviations=identity_scales,
+        )
+        sums += np.sum(transformed, axis=0)
+        squares += np.sum(np.square(transformed), axis=0)
+        processed_rows += len(matrix)
+    if processed_rows != row_count or processed_rows < 2:
+        raise ValueError("streaming preprocessor requires complete rows")
+    means = sums / processed_rows
+    variances = np.maximum(
+        squares / processed_rows - np.square(means),
+        0.0,
+    )
+    standard_deviations = np.sqrt(variances)
+    standard_deviations[standard_deviations < 1e-12] = 1.0
+    return medians, means, standard_deviations
+
+
+def _read_matrix_batch(
+    matrix: np.memmap,
+    start: int,
+    stop: int,
+) -> NDArray[np.floating[Any]]:
+    """Read a batch through a short-lived mapping to bound RSS on Windows."""
+    if not isinstance(matrix, np.memmap):
+        return np.asarray(matrix[start:stop]).copy()
+    reopened = _reopen_memmap(matrix)
+    try:
+        return np.asarray(reopened[start:stop]).copy()
+    finally:
+        _close_memmap(reopened)
+
+
+def _read_matrix_rows(
+    matrix: np.memmap,
+    indexes: NDArray[np.integer[Any]],
+    *,
+    batch_size: int,
+) -> NDArray[np.floating[Any]]:
+    """Read deterministic row selections without retaining the source mmap."""
+    result = np.empty(
+        (len(indexes), matrix.shape[1]),
+        dtype=np.dtype(matrix.dtype),
+    )
+    for start, stop in _batch_ranges(len(indexes), batch_size):
+        if isinstance(matrix, np.memmap):
+            reopened = _reopen_memmap(matrix)
+            try:
+                result[start:stop, :] = reopened[indexes[start:stop], :]
+            finally:
+                _close_memmap(reopened)
+        else:
+            result[start:stop, :] = matrix[indexes[start:stop], :]
+    return result
+
+
+def _write_memmap_slice(
+    *,
+    path: Path,
+    dtype: np.dtype[Any],
+    shape: tuple[int, ...],
+    row_slice: slice,
+    values: NDArray[Any],
+) -> None:
+    """Write one bounded slice and release its Windows mapping immediately."""
+    target = np.memmap(path, dtype=dtype, mode="r+", shape=shape)
+    try:
+        target[row_slice, ...] = values
+        target.flush()
+    finally:
+        _close_memmap(target)
+
+
+def _reopen_memmap(matrix: np.memmap) -> np.memmap:
+    filename = getattr(matrix, "filename", None)
+    if filename is None:
+        raise ValueError("memmap filename is unavailable")
+    return np.memmap(
+        os.fspath(filename),
+        dtype=matrix.dtype,
+        mode="r",
+        offset=int(getattr(matrix, "offset", 0)),
+        shape=matrix.shape,
+    )
 
 
 def _transform_linear_batch(
@@ -2007,24 +2197,77 @@ def _fit_meta_artifact(
     run_directory: Path,
     final_directory: Path,
     fold_id: str,
-    train_refs: NDArray[np.integer[Any]],
+    train_refs: NDArray[np.integer[Any]] | None,
     test_refs: NDArray[np.integer[Any]] | None,
-    train_matrix: np.memmap,
+    train_matrix: np.memmap | None,
     test_matrix: np.memmap | None,
     expert_ids: tuple[str, ...],
     training_source_fold_ids: tuple[str, ...],
     label_maturity_cutoff_exclusive: str,
     batch_size: int,
+    batch_factory: (
+        Callable[[], Iterable[tuple[NDArray[Any], NDArray[np.int64]]]]
+        | None
+    ) = None,
+    train_row_count: int | None = None,
 ) -> dict[str, Any]:
     final_directory.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(
         tempfile.mkdtemp(prefix=".meta-", dir=final_directory.parent)
     )
     try:
-        medians, means, standard_deviations = _fit_preprocessor(
-            train_matrix,
-            batch_size=batch_size,
-        )
+        if batch_factory is None:
+            if train_refs is None or train_matrix is None:
+                raise ValueError(
+                    "dense meta training requires refs and matrix"
+                )
+            if train_row_count is not None:
+                raise ValueError(
+                    "dense meta training must not provide train_row_count"
+                )
+
+            def dense_batches() -> Iterable[
+                tuple[NDArray[Any], NDArray[np.int64]]
+            ]:
+                for start, stop in _batch_ranges(
+                    len(train_refs),
+                    batch_size,
+                ):
+                    yield (
+                        _read_matrix_batch(train_matrix, start, stop),
+                        np.asarray(
+                            train_refs[start:stop],
+                            dtype=np.int64,
+                        ),
+                    )
+
+            train_stream = dense_batches
+            row_count = len(train_refs)
+            medians, means, standard_deviations = _fit_preprocessor(
+                train_matrix,
+                batch_size=batch_size,
+            )
+        else:
+            if train_refs is not None or train_matrix is not None:
+                raise ValueError(
+                    "streaming meta training must not provide dense inputs"
+                )
+            if train_row_count is None:
+                raise ValueError(
+                    "streaming meta training requires train_row_count"
+                )
+            if train_row_count < 2:
+                raise ValueError(
+                    "streaming meta training requires at least two rows"
+                )
+            train_stream = batch_factory
+            row_count = train_row_count
+            medians, means, standard_deviations = (
+                _fit_streaming_preprocessor(
+                    batch_factory=train_stream,
+                    row_count=row_count,
+                )
+            )
         width = len(means)
         grams = [
             np.zeros((width + 1, width + 1), dtype=np.float64)
@@ -2034,16 +2277,16 @@ def _fit_meta_artifact(
             np.zeros(width + 1, dtype=np.float64) for _ in range(5)
         ]
         class_counts = np.zeros(2, dtype=np.int64)
-        for start, stop in _batch_ranges(len(train_refs), batch_size):
+        for raw_matrix, refs_batch in train_stream():
             transformed = _transform_linear_batch(
-                np.asarray(train_matrix[start:stop]),
+                raw_matrix,
                 medians=medians,
                 means=means,
                 standard_deviations=standard_deviations,
             )
             augmented = _augment_intercept(transformed)
             targets = store.read_target_batch(
-                np.asarray(train_refs[start:stop], dtype=np.int64)
+                np.asarray(refs_batch, dtype=np.int64)
             )
             common_gram = augmented.T @ augmented
             for position in range(5):
@@ -2083,7 +2326,7 @@ def _fit_meta_artifact(
                     "head_id": field_name,
                     "path": path.name,
                     "status": "fit",
-                    "fit_row_count": len(train_refs),
+                    "fit_row_count": row_count,
                 }
             )
         if np.count_nonzero(class_counts) == 1:
@@ -2097,7 +2340,11 @@ def _fit_meta_artifact(
                 classifier=True,
                 constant_probability=float(np.argmax(class_counts)),
             )
-        else:
+        elif batch_factory is None:
+            if train_refs is None or train_matrix is None:
+                raise ValueError(
+                    "dense meta logistic requires refs and matrix"
+                )
             rebalance = _fit_meta_logistic(
                 store=store,
                 refs=train_refs,
@@ -2109,6 +2356,16 @@ def _fit_meta_artifact(
                 iterations=request.logistic_iterations,
                 batch_size=batch_size,
             )
+        else:
+            rebalance = _fit_meta_logistic_streaming(
+                store=store,
+                batch_factory=train_stream,
+                medians=medians,
+                means=means,
+                standard_deviations=standard_deviations,
+                alpha=alpha,
+                iterations=request.logistic_iterations,
+            )
         models["rebalance_worthwhile"] = rebalance
         rebalance_path = staging / "head-05.joblib"
         joblib.dump(rebalance, rebalance_path, compress=3)
@@ -2117,7 +2374,7 @@ def _fit_meta_artifact(
                 "head_id": "rebalance_worthwhile",
                 "path": rebalance_path.name,
                 "status": "fit",
-                "fit_row_count": len(train_refs),
+                "fit_row_count": row_count,
                 "class_counts": [
                     int(class_counts[0]),
                     int(class_counts[1]),
@@ -2136,7 +2393,7 @@ def _fit_meta_artifact(
                 shape=(len(test_refs), len(TARGET_FIELDS)),
             )
             for start, stop in _batch_ranges(len(test_refs), batch_size):
-                raw = np.asarray(test_matrix[start:stop])
+                raw = _read_matrix_batch(test_matrix, start, stop)
                 for position, field_name in enumerate(TARGET_FIELDS):
                     values = models[field_name].predict_numeric(raw)
                     if field_name == "delta_weight_bp":
@@ -2164,7 +2421,7 @@ def _fit_meta_artifact(
                 else "meta_oof_allocator"
             ),
             "fold_id": fold_id,
-            "train_row_count": len(train_refs),
+            "train_row_count": row_count,
             "test_row_count": (
                 0 if test_refs is None else len(test_refs)
             ),
@@ -2192,6 +2449,7 @@ def _fit_meta_artifact(
             "store_manifest_hash": store.manifest["manifest_hash"],
             "formal_oos_allowed": False,
             "production_alpha_bp": 0,
+            "broker_order_allowed": False,
         }
         artifact["manifest_hash"] = _sha256_json(artifact)
         _write_json(staging / "manifest.json", artifact)
@@ -2227,7 +2485,7 @@ def _fit_meta_logistic(
         gradient = np.zeros(width + 1, dtype=np.float64)
         for start, stop in _batch_ranges(len(refs), batch_size):
             transformed = _transform_linear_batch(
-                np.asarray(matrix[start:stop]),
+                _read_matrix_batch(matrix, start, stop),
                 medians=medians,
                 means=means,
                 standard_deviations=standard_deviations,
@@ -2235,6 +2493,61 @@ def _fit_meta_logistic(
             augmented = _augment_intercept(transformed)
             targets = store.read_target_batch(
                 np.asarray(refs[start:stop], dtype=np.int64)
+            )
+            target = np.asarray(targets[:, 5], dtype=np.float64)
+            probability = _sigmoid(augmented @ beta)
+            weights = np.maximum(
+                probability * (1.0 - probability),
+                1e-6,
+            )
+            hessian += augmented.T @ (augmented * weights[:, None])
+            gradient += augmented.T @ (target - probability)
+        hessian += penalty
+        gradient -= penalty @ beta
+        delta = _stable_solve(hessian, gradient)
+        beta += delta
+        if float(np.max(np.abs(delta))) < 1e-7:
+            break
+    return _LinearBoundaryModel(
+        head_id="rebalance_worthwhile",
+        medians=medians,
+        means=means,
+        standard_deviations=standard_deviations,
+        coefficients=beta[:-1],
+        intercept=float(beta[-1]),
+        classifier=True,
+    )
+
+
+def _fit_meta_logistic_streaming(
+    *,
+    store: _NumericStore,
+    batch_factory: Callable[
+        [], Iterable[tuple[NDArray[Any], NDArray[np.int64]]]
+    ],
+    medians: NDArray[np.float64],
+    means: NDArray[np.float64],
+    standard_deviations: NDArray[np.float64],
+    alpha: float,
+    iterations: int,
+) -> _LinearBoundaryModel:
+    width = len(means)
+    beta = np.zeros(width + 1, dtype=np.float64)
+    penalty = np.eye(width + 1, dtype=np.float64) * alpha
+    penalty[-1, -1] = 0.0
+    for _ in range(iterations):
+        hessian = np.zeros((width + 1, width + 1), dtype=np.float64)
+        gradient = np.zeros(width + 1, dtype=np.float64)
+        for raw_matrix, refs_batch in batch_factory():
+            transformed = _transform_linear_batch(
+                raw_matrix,
+                medians=medians,
+                means=means,
+                standard_deviations=standard_deviations,
+            )
+            augmented = _augment_intercept(transformed)
+            targets = store.read_target_batch(
+                np.asarray(refs_batch, dtype=np.int64)
             )
             target = np.asarray(targets[:, 5], dtype=np.float64)
             probability = _sigmoid(augmented @ beta)
@@ -2429,6 +2742,13 @@ def _materialize_meta_train_matrix(
         mode="w+",
         shape=(total, len(expert_ids) * EXPERT_VECTOR_WIDTH),
     )
+    matrix_shape = matrix.shape
+    refs_shape = refs_output.shape
+    matrix.flush()
+    refs_output.flush()
+    _close_memmap(matrix)
+    _close_memmap(refs_output)
+    del matrix, refs_output
     output_start = 0
     for fold, selected_positions, selected_refs in selected:
         fold_id = _required_text(
@@ -2454,18 +2774,147 @@ def _materialize_meta_train_matrix(
                 output_start + local_stop,
             )
             source_indexes = selected_positions[local_start:local_stop]
-            matrix[output_slice, :] = full_matrix[source_indexes, :]
-            refs_output[output_slice, :] = selected_refs[
-                local_start:local_stop,
-                :,
-            ]
+            _write_memmap_slice(
+                path=matrix_path,
+                dtype=FLOAT_DTYPE,
+                shape=matrix_shape,
+                row_slice=output_slice,
+                values=full_matrix[source_indexes, :],
+            )
+            _write_memmap_slice(
+                path=refs_path,
+                dtype=ROW_REF_DTYPE,
+                shape=refs_shape,
+                row_slice=output_slice,
+                values=selected_refs[local_start:local_stop, :],
+            )
         output_start = output_stop
         _close_memmap(full_matrix)
         del full_matrix
         full_matrix_path.unlink(missing_ok=True)
-    matrix.flush()
-    refs_output.flush()
-    return matrix, refs_output
+    return (
+        np.memmap(
+            matrix_path,
+            dtype=FLOAT_DTYPE,
+            mode="r",
+            shape=matrix_shape,
+        ),
+        np.memmap(
+            refs_path,
+            dtype=ROW_REF_DTYPE,
+            mode="r",
+            shape=refs_shape,
+        ),
+    )
+
+
+def _collect_meta_training_selections(
+    *,
+    store: _NumericStore,
+    previous_folds: Sequence[Mapping[str, Any]],
+    cutoff: str,
+) -> tuple[tuple[_MetaTrainingSelection, ...], int]:
+    selections: list[_MetaTrainingSelection] = []
+    total = 0
+    for fold in previous_folds:
+        fold_id = _required_text(
+            fold.get("fold_id"),
+            field_name="fold_id",
+        )
+        refs = store.open_fold_refs(fold, "test")
+        try:
+            selected_positions = store.mature_positions(
+                refs,
+                cutoff=cutoff,
+            )
+            selected_refs = np.asarray(
+                refs[selected_positions],
+                dtype=ROW_REF_DTYPE,
+            )
+        finally:
+            _close_memmap(refs)
+        selections.append(
+            _MetaTrainingSelection(
+                fold_id=fold_id,
+                selected_positions=np.asarray(
+                    selected_positions,
+                    dtype=np.int64,
+                ),
+                selected_refs=selected_refs,
+            )
+        )
+        total += len(selected_positions)
+    if total < 10:
+        raise ValueError("meta allocator lacks ten matured prior OOF rows")
+    return tuple(selections), total
+
+
+def _iter_meta_training_batches(
+    *,
+    run_directory: Path,
+    base_artifacts: Sequence[Mapping[str, Any]],
+    expert_ids: tuple[str, ...],
+    selections: Sequence[_MetaTrainingSelection],
+    batch_size: int,
+) -> Iterable[tuple[NDArray[Any], NDArray[np.int64]]]:
+    for selection in selections:
+        by_expert = {
+            str(item["expert_id"]): item
+            for item in base_artifacts
+            if item.get("fold_id") == selection.fold_id
+        }
+        if set(by_expert) != set(expert_ids):
+            raise ValueError(
+                f"fold {selection.fold_id} lacks a complete OOF expert set"
+            )
+        oof_mmaps: list[np.memmap] = []
+        try:
+            for expert_id in expert_ids:
+                artifact_directory = run_directory / _required_text(
+                    by_expert[expert_id].get("artifact_path"),
+                    field_name="artifact_path",
+                )
+                row_count = _required_integer(
+                    by_expert[expert_id].get("test_row_count"),
+                    field_name="test_row_count",
+                )
+                oof_mmaps.append(
+                    np.memmap(
+                        artifact_directory / "oof.i32",
+                        dtype=OOF_DTYPE,
+                        mode="r",
+                        shape=(row_count, EXPERT_VECTOR_WIDTH),
+                    )
+                )
+            for start, stop in _batch_ranges(
+                len(selection.selected_positions),
+                batch_size,
+            ):
+                positions = selection.selected_positions[start:stop]
+                matrix = np.empty(
+                    (
+                        len(positions),
+                        len(expert_ids) * EXPERT_VECTOR_WIDTH,
+                    ),
+                    dtype=FLOAT_DTYPE,
+                )
+                for expert_index, oof in enumerate(oof_mmaps):
+                    column_start = expert_index * EXPERT_VECTOR_WIDTH
+                    column_stop = column_start + EXPERT_VECTOR_WIDTH
+                    matrix[:, column_start:column_stop] = oof[
+                        positions,
+                        :,
+                    ]
+                yield (
+                    matrix,
+                    np.asarray(
+                        selection.selected_refs[start:stop],
+                        dtype=np.int64,
+                    ),
+                )
+        finally:
+            for oof in oof_mmaps:
+                _close_memmap(oof)
 
 
 def _write_rank_column(
@@ -2558,6 +3007,234 @@ def _feature_family_weights(
 
 
 def _calibration_summary(
+    *,
+    store: _NumericStore,
+    artifacts: Sequence[Mapping[str, Any]],
+    batch_size: int,
+) -> dict[str, Any]:
+    """建立只用 prior、已成熟 OOF blocks 的 shadow calibration 報告。"""
+
+    fold_by_id = {
+        _required_text(fold.get("fold_id"), field_name="fold_id"): fold
+        for fold in store.folds
+    }
+    fold_ids = tuple(
+        _required_text(fold.get("fold_id"), field_name="fold_id")
+        for fold in store.folds
+    )
+    fold_index_by_id = {
+        fold_id: index for index, fold_id in enumerate(fold_ids)
+    }
+    horizons = tuple(
+        sorted(
+            {
+                _required_integer(
+                    artifact.get("horizon_trading_days"),
+                    field_name="horizon_trading_days",
+                )
+                for artifact in artifacts
+            }
+        )
+    )
+    probability_width = 10_001
+    raw_counts = {
+        horizon: np.zeros(
+            (len(fold_ids), probability_width),
+            dtype=np.int64,
+        )
+        for horizon in horizons
+    }
+    raw_positive_counts = {
+        horizon: np.zeros(
+            (len(fold_ids), probability_width),
+            dtype=np.int64,
+        )
+        for horizon in horizons
+    }
+    calibration_counts = {
+        horizon: np.zeros(
+            (len(fold_ids), probability_width),
+            dtype=np.int64,
+        )
+        for horizon in horizons
+    }
+    calibration_positive_counts = {
+        horizon: np.zeros(
+            (len(fold_ids), probability_width),
+            dtype=np.int64,
+        )
+        for horizon in horizons
+    }
+
+    # A source fold contributes to a later calibration fit only when its
+    # labels are mature before the next outer fold starts. This keeps the
+    # calibration boundary aligned with causal meta OOF fitting.
+    calibration_ready_by_fold: dict[str, NDArray[np.bool_]] = {}
+    for fold_index, fold in enumerate(store.folds[:-1]):
+        fold_id = fold_ids[fold_index]
+        refs = store.open_fold_refs(fold, "test")
+        next_cutoff = _required_text(
+            store.folds[fold_index + 1].get("test_start"),
+            field_name="fold.test_start",
+        )
+        mature_positions = store.mature_positions(
+            refs,
+            cutoff=next_cutoff,
+        )
+        ready = np.zeros(len(refs), dtype=np.bool_)
+        ready[mature_positions] = True
+        calibration_ready_by_fold[fold_id] = ready
+        _close_memmap(refs)
+
+    probability_column = EXPERT_HEAD_IDS.index(
+        "downside_probability_bp"
+    )
+    for artifact in artifacts:
+        fold_id = _required_text(
+            artifact.get("fold_id"),
+            field_name="fold_id",
+        )
+        fold = fold_by_id[fold_id]
+        refs = store.open_fold_refs(fold, "test")
+        row_count = len(refs)
+        directory = (
+            Path(artifact["_run_directory"])
+            / _required_text(
+                artifact.get("artifact_path"),
+                field_name="artifact_path",
+            )
+            if "_run_directory" in artifact
+            else None
+        )
+        if directory is None:
+            _close_memmap(refs)
+            continue
+        horizon = _required_integer(
+            artifact.get("horizon_trading_days"),
+            field_name="horizon_trading_days",
+        )
+        fold_index = fold_index_by_id[fold_id]
+        calibration_ready = calibration_ready_by_fold.get(fold_id)
+        oof = np.memmap(
+            directory / "oof.i32",
+            dtype=OOF_DTYPE,
+            mode="r",
+            shape=(row_count, EXPERT_VECTOR_WIDTH),
+        )
+        for start, stop in _batch_ranges(row_count, batch_size):
+            labels, masks = store.read_label_batch(
+                np.asarray(refs[start:stop], dtype=np.int64),
+                horizon,
+            )
+            probability = np.asarray(
+                oof[start:stop, probability_column],
+                dtype=np.int64,
+            )
+            observed = np.asarray(labels[:, 2], dtype=np.int64)
+            valid = masks[:, 2] == 0
+            if np.any((probability < 0) | (probability > 10_000)):
+                raise ValueError(
+                    "OOF downside probability is outside bp range"
+                )
+            if np.any((observed[valid] < 0) | (observed[valid] > 1)):
+                raise ValueError("downside labels must be binary")
+            valid_probability = probability[valid]
+            valid_observed = observed[valid]
+            if len(valid_probability):
+                np.add.at(
+                    raw_counts[horizon][fold_index],
+                    valid_probability,
+                    1,
+                )
+                np.add.at(
+                    raw_positive_counts[horizon][fold_index],
+                    valid_probability,
+                    valid_observed,
+                )
+            if calibration_ready is not None:
+                ready = calibration_ready[start:stop][valid]
+                if np.any(ready):
+                    np.add.at(
+                        calibration_counts[horizon][fold_index],
+                        valid_probability[ready],
+                        1,
+                    )
+                    np.add.at(
+                        calibration_positive_counts[horizon][fold_index],
+                        valid_probability[ready],
+                        valid_observed[ready],
+                    )
+        _close_memmap(oof)
+        _close_memmap(refs)
+
+    reports: list[dict[str, Any]] = []
+    for horizon in horizons:
+        report = cross_fitted_binned_calibration(
+            raw_counts_by_fold=raw_counts[horizon],
+            raw_positive_counts_by_fold=raw_positive_counts[horizon],
+            calibration_counts_by_fold=calibration_counts[horizon],
+            calibration_positive_counts_by_fold=calibration_positive_counts[
+                horizon
+            ],
+            fold_ids=fold_ids,
+        )
+        reports.append(
+            {
+                "horizon_trading_days": horizon,
+                **report,
+            }
+        )
+    evaluable_reports = [
+        report
+        for report in reports
+        if report.get("cross_fitted_calibration") is True
+    ]
+    if not evaluable_reports:
+        return {
+            "status": "not_evaluable",
+            "reason": (
+                "insufficient_prior_oof_blocks_or_two_label_classes"
+            ),
+            "ece_bp": None,
+            "brier_score_bp": None,
+            "threshold_ece_bp": 500,
+            "cross_fitted_calibration": False,
+            "production_eligible": False,
+            "oof_diagnostic_only": True,
+            "horizons": reports,
+        }
+    return {
+        "status": "measured_cross_fitted_oof",
+        "ece_bp": max(
+            int(cast(int, report["ece_bp"]))
+            for report in evaluable_reports
+        ),
+        "brier_score_bp": max(
+            int(cast(int, report["brier_score_bp"]))
+            for report in evaluable_reports
+        ),
+        "calibrated_brier_score_bp": max(
+            int(cast(int, report["brier_score_bp"]))
+            for report in evaluable_reports
+        ),
+        "uncalibrated_ece_bp": max(
+            int(cast(int, report["uncalibrated_ece_bp"]))
+            for report in evaluable_reports
+        ),
+        "uncalibrated_brier_score_bp": max(
+            int(cast(int, report["uncalibrated_brier_score_bp"]))
+            for report in evaluable_reports
+        ),
+        "threshold_ece_bp": 500,
+        "cross_fitted_calibration": True,
+        "production_eligible": False,
+        "oof_diagnostic_only": True,
+        "horizons": reports,
+        "promotion_pass": False,
+    }
+
+
+def _legacy_uncalibrated_calibration_summary(
     *,
     store: _NumericStore,
     artifacts: Sequence[Mapping[str, Any]],
@@ -2867,6 +3544,45 @@ def _existing_pack_artifacts(
         for horizon in horizons
         for algorithm in algorithms
     ]
+
+
+def _existing_final_base_artifacts(
+    *,
+    artifacts_root: Path,
+    store: _NumericStore,
+    horizons: Sequence[int],
+    algorithms: Sequence[str],
+) -> list[dict[str, Any]] | None:
+    """Return final-base artifacts only when the complete set is valid.
+
+    A resume after final-meta was atomically persisted but before the training
+    manifest was published must not rebuild full-market feature matrices just
+    to rediscover already immutable final-base artifacts.  A partial set still
+    follows the normal materialize-and-complete path below.
+    """
+
+    artifacts: list[dict[str, Any]] = []
+    for pack in store.feature_packs:
+        pack_id = _required_text(
+            pack.get("pack_id"),
+            field_name="pack_id",
+        )
+        for horizon in horizons:
+            for algorithm in algorithms:
+                directory = _final_expert_directory(
+                    artifacts_root=artifacts_root,
+                    pack_id=pack_id,
+                    horizon=horizon,
+                    algorithm=algorithm,
+                )
+                if not (directory / "manifest.json").is_file():
+                    return None
+                artifacts.append(_read_and_validate_artifact(directory))
+    expected_count = len(store.feature_packs) * len(horizons) * len(algorithms)
+    canonical = _canonical_artifacts(artifacts)
+    if len(canonical) != expected_count:
+        raise RuntimeError("final base expert coverage is incomplete")
+    return canonical
 
 
 def _read_and_validate_artifact(directory: Path) -> dict[str, Any]:
@@ -3224,6 +3940,7 @@ def _write_latest_pointer(
             "manifest_hash": manifest["manifest_hash"],
             "formal_oos_allowed": False,
             "production_alpha_bp": 0,
+            "broker_order_allowed": False,
         },
     )
 

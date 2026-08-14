@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, ROUND_HALF_EVEN
 import gzip
 import hashlib
@@ -20,7 +20,8 @@ from pathlib import Path
 import shutil
 import sqlite3
 import tempfile
-from typing import Any, Mapping, Sequence, cast
+import time as time_module
+from typing import Any, Callable, Mapping, Sequence, cast
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -30,8 +31,12 @@ from data_module import portfolio_ml_out_of_core_store as store_module
 from ml_module.allocation_training_service import AllocationTrainingSample
 
 
-DIRECT_SCHEMA_VERSION = "portfolio-ml-direct-numeric.v2"
+DIRECT_SCHEMA_VERSION = "portfolio-ml-direct-numeric.v4"
 DIRECT_CHECKPOINT_SCHEMA_VERSION = "portfolio-ml-direct-checkpoint.v2"
+DIRECT_HEARTBEAT_SCHEMA_VERSION = "portfolio-ml-direct-heartbeat.v1"
+DIRECT_DISCOVERY_CACHE_SCHEMA_VERSION = (
+    "portfolio-ml-direct-discovery-cache.v1"
+)
 _TAIPEI = ZoneInfo("Asia/Taipei")
 _DECISION_TIME = time(hour=8, minute=30)
 _SHA256_PREFIX = "sha256:"
@@ -40,6 +45,19 @@ _PRICE_OPEN_FEATURE_ID = "daily_prices.開盤價"
 _PRICE_CLOSE_FEATURE_ID = "daily_prices.收盤價"
 _PRICE_VOLUME_FEATURE_ID = "daily_prices.成交股數"
 _RULE_MA20_FEATURE_ID = "technical_indicators.MA20"
+_OFFICIAL_TRADE_RESTRICTION_HALT = "trading_halt"
+_OFFICIAL_TRADE_RESTRICTION_RESUME = "trading_resume"
+_TRADE_RESTRICTION_STATUS_UNKNOWN = (
+    "unknown_no_official_restriction_timeline"
+)
+# Windows Defender/indexers may briefly hold a heartbeat, checkpoint, or
+# annual staging directory.  Keep the retry bounded, but long enough to cover
+# a normal scan window; custody validation still fails closed after exhaustion.
+_ATOMIC_REPLACE_RETRY_COUNT = 120
+_ATOMIC_REPLACE_RETRY_DELAY_SECONDS = 0.5
+_DISCOVERY_PROGRESS_INTERVAL = 100_000
+_DISCOVERY_PROGRESS_CHECK_INTERVAL = 4_096
+_DISCOVERY_PROGRESS_MAX_SILENCE_NS = 30 * 1_000_000_000
 
 
 @dataclass(frozen=True)
@@ -50,6 +68,8 @@ class PortfolioMLDirectNumericRequest:
     benchmark_entity_id: str
     sector_membership_path: Path | None = None
     corporate_action_manifest_path: Path | None = None
+    formal_portfolio_ledger_path: Path | None = None
+    formal_rule_champion_history_path: Path | None = None
     minimum_train_dates: int = 252
     test_date_count: int = 63
     purge_trading_days: int = 60
@@ -69,6 +89,10 @@ class PortfolioMLDirectNumericRequest:
             sector_membership_path=self.sector_membership_path,
             corporate_action_manifest_path=(
                 self.corporate_action_manifest_path
+            ),
+            formal_portfolio_ledger_path=self.formal_portfolio_ledger_path,
+            formal_rule_champion_history_path=(
+                self.formal_rule_champion_history_path
             ),
             minimum_train_dates=self.minimum_train_dates,
             test_date_count=self.test_date_count,
@@ -154,6 +178,49 @@ class _Discovery:
     source_content_hash: str
 
 
+def _official_trade_restriction_status(
+    events: Sequence[Any],
+    *,
+    decision_at: datetime,
+    timeline_present: bool,
+) -> str:
+    """Return an as-of execution status without using future visibility.
+
+    A halt/resume event whose effective time has passed but whose official
+    availability is still in the future makes the state unknowable at the
+    decision timestamp.  That case is deliberately not treated as tradable.
+    """
+
+    if not timeline_present:
+        return _TRADE_RESTRICTION_STATUS_UNKNOWN
+    visible: list[Any] = []
+    for event in events:
+        if event.revision_availability_ambiguous:
+            if event.effective_at <= decision_at:
+                return "unknown_official_restriction_revision"
+            continue
+        if event.effective_at > decision_at:
+            continue
+        if event.available_at > decision_at:
+            return "unknown_official_restriction_availability"
+        visible.append(event)
+    if not visible:
+        return "officially_tradable"
+    latest = max(
+        visible,
+        key=lambda event: (
+            event.effective_at,
+            event.available_at,
+            event.event_id,
+        ),
+    )
+    if latest.event_type == _OFFICIAL_TRADE_RESTRICTION_HALT:
+        return "officially_blocked"
+    if latest.event_type == _OFFICIAL_TRADE_RESTRICTION_RESUME:
+        return "officially_tradable"
+    return "unknown_official_restriction_event"
+
+
 class PortfolioMLDirectNumericStoreBuilder:
     """逐年 bounded workspace、manifest-last 的 direct numeric builder。"""
 
@@ -197,6 +264,22 @@ class PortfolioMLDirectNumericStoreBuilder:
             "purge_trading_days": request.purge_trading_days,
             "embargo_trading_days": request.embargo_trading_days,
         }
+        if request.formal_portfolio_ledger_path is not None:
+            direct_identity["formal_portfolio_ledger_file_hash"] = (
+                _file_sha256(request.formal_portfolio_ledger_path.resolve())
+            )
+            direct_identity["formal_portfolio_ledger_path"] = str(
+                request.formal_portfolio_ledger_path.resolve()
+            )
+        if request.formal_rule_champion_history_path is not None:
+            direct_identity["formal_rule_champion_history_file_hash"] = (
+                _file_sha256(
+                    request.formal_rule_champion_history_path.resolve()
+                )
+            )
+            direct_identity["formal_rule_champion_history_path"] = str(
+                request.formal_rule_champion_history_path.resolve()
+            )
         run_id = "direct-ooc-" + _sha256_json(direct_identity)[7:31]
         output_root = request.output_root.resolve()
         runs_root = output_root / "runs"
@@ -205,10 +288,38 @@ class PortfolioMLDirectNumericStoreBuilder:
         run_directory.mkdir(parents=True, exist_ok=True)
         manifest_path = run_directory / "manifest.json"
         latest_path = output_root / "latest_manifest.json"
+        heartbeat_path = run_directory / "heartbeat.json"
+        if not manifest_path.is_file() and not request.resume and any(
+            run_directory.iterdir()
+        ):
+            raise FileExistsError(
+                "incomplete direct numeric run exists and resume=false"
+            )
+        _write_heartbeat(
+            path=heartbeat_path,
+            run_id=run_id,
+            raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+            status="running",
+            stage="run_initialized",
+            completed_years=(),
+        )
 
-        discovery = _discover(
+        def report_discovery(stage: str) -> None:
+            _write_heartbeat(
+                path=heartbeat_path,
+                run_id=run_id,
+                raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                status="running",
+                stage=stage,
+                completed_years=(),
+            )
+
+        discovery_cache_path = run_directory / "discovery_cache.json"
+        discovery = _load_discovery_cache(
+            path=discovery_cache_path,
             raw_manifest_path=raw_path,
             raw_manifest=raw_manifest,
+            raw_manifest_file_hash=raw_file_hash,
             cutoff=cutoff,
             benchmark_entity_id=request.benchmark_entity_id,
             minimum_train_dates=request.minimum_train_dates,
@@ -216,7 +327,41 @@ class PortfolioMLDirectNumericStoreBuilder:
             purge_trading_days=request.purge_trading_days,
             embargo_trading_days=request.embargo_trading_days,
         )
+        if discovery is None:
+            discovery = _discover(
+                raw_manifest_path=raw_path,
+                raw_manifest=raw_manifest,
+                cutoff=cutoff,
+                benchmark_entity_id=request.benchmark_entity_id,
+                minimum_train_dates=request.minimum_train_dates,
+                test_date_count=request.test_date_count,
+                purge_trading_days=request.purge_trading_days,
+                embargo_trading_days=request.embargo_trading_days,
+                progress_callback=report_discovery,
+            )
+            _write_discovery_cache(
+                path=discovery_cache_path,
+                raw_manifest=raw_manifest,
+                raw_manifest_file_hash=raw_file_hash,
+                cutoff=cutoff,
+                benchmark_entity_id=request.benchmark_entity_id,
+                minimum_train_dates=request.minimum_train_dates,
+                test_date_count=request.test_date_count,
+                purge_trading_days=request.purge_trading_days,
+                embargo_trading_days=request.embargo_trading_days,
+                discovery=discovery,
+            )
+        else:
+            report_discovery("discovery_cache_reused")
         memory_guard.observe(stage="raw_discovery_complete")
+        _write_heartbeat(
+            path=heartbeat_path,
+            run_id=run_id,
+            raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+            status="running",
+            stage="discovery_complete",
+            completed_years=(),
+        )
         corporate_custody = legacy._load_corporate_action_custody(
             request.corporate_action_manifest_path,
             training_as_of=cutoff,
@@ -239,9 +384,17 @@ class PortfolioMLDirectNumericStoreBuilder:
             sector_manifest_hash=sector_manifest_hash,
             corporate_action_manifest_hash=corporate_custody.manifest_hash,
         )
-        portfolio_replay = legacy._build_cash_only_portfolio_state_replay(
+        portfolio_replay = legacy._build_portfolio_state_replay(
             calendar=discovery.calendar,
             decision_dates=discovery.eligible_dates,
+            formal_portfolio_ledger_path=request.formal_portfolio_ledger_path,
+        )
+        formal_rule_champion_custody = (
+            legacy._load_formal_rule_champion_history(
+                request.formal_rule_champion_history_path,
+                decision_dates=discovery.eligible_dates,
+                training_as_of=cutoff.isoformat(),
+            )
         )
         dataset_identity_hash = _sha256_json(
             {
@@ -258,6 +411,15 @@ class PortfolioMLDirectNumericStoreBuilder:
                 ),
                 "portfolio_state_policy": (
                     portfolio_replay.custody_payload()
+                ),
+                **(
+                    {}
+                    if formal_rule_champion_custody is None
+                    else {
+                        "formal_rule_champion_history": (
+                            formal_rule_champion_custody.custody_payload()
+                        )
+                    }
                 ),
             }
         )
@@ -287,6 +449,18 @@ class PortfolioMLDirectNumericStoreBuilder:
                 run_id=run_id,
                 manifest=existing_manifest,
             )
+            _write_heartbeat(
+                path=heartbeat_path,
+                run_id=run_id,
+                raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                status="complete",
+                stage="completed_manifest_reused",
+                completed_years=tuple(
+                    int(item["year"])
+                    for item in existing_manifest.get("years", ())
+                    if isinstance(item, Mapping) and "year" in item
+                ),
+            )
             return _publication(
                 run_id=run_id,
                 run_directory=run_directory,
@@ -294,11 +468,6 @@ class PortfolioMLDirectNumericStoreBuilder:
                 latest_path=latest_path,
                 manifest=existing_manifest,
             )
-        if not request.resume and any(run_directory.iterdir()):
-            raise FileExistsError(
-                "incomplete direct numeric run exists and resume=false"
-            )
-
         temporary_preflight = _preflight_temporary_budget(
             shards=tuple(discovery.shard_by_year.values()),
             feature_count=len(discovery.feature_ids),
@@ -327,8 +496,17 @@ class PortfolioMLDirectNumericStoreBuilder:
         )
         total_corporate_exclusions = 0
         total_teacher_incomplete = 0
+        total_trade_restriction_unknown = 0
         year_manifests: list[dict[str, Any]] = []
         years = tuple(sorted(discovery.shard_by_year))
+        _write_heartbeat(
+            path=heartbeat_path,
+            run_id=run_id,
+            raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+            status="running",
+            stage="checkpoint_loaded",
+            completed_years=tuple(sorted(completed)),
+        )
         for ordinal, year in enumerate(years):
             year_directory = run_directory / f"year={year:04d}"
             existing_year = completed.get(year)
@@ -354,6 +532,21 @@ class PortfolioMLDirectNumericStoreBuilder:
                         "teacher_incomplete_decision_count", 0
                     )
                 )
+                total_trade_restriction_unknown += int(
+                    year_manifest.get(
+                        "trade_restriction_unknown_row_count", 0
+                    )
+                )
+                _write_heartbeat(
+                    path=heartbeat_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    status="running",
+                    stage="year_checkpoint_reused",
+                    completed_years=tuple(sorted(completed)),
+                    current_year=year,
+                    year_ordinal=ordinal,
+                )
                 continue
             if existing_year is not None:
                 raise RuntimeError(
@@ -376,6 +569,16 @@ class PortfolioMLDirectNumericStoreBuilder:
                     completed=completed,
                     peak_temporary_bytes=peak_temporary_bytes,
                 )
+                _write_heartbeat(
+                    path=heartbeat_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    status="running",
+                    stage="year_checkpoint_adopted",
+                    completed_years=tuple(sorted(completed)),
+                    current_year=year,
+                    year_ordinal=ordinal,
+                )
                 year_manifests.append(year_manifest)
                 carry = _read_carry(year_directory / "carry.state.gz")
                 total_corporate_exclusions += int(
@@ -388,10 +591,38 @@ class PortfolioMLDirectNumericStoreBuilder:
                         "teacher_incomplete_decision_count", 0
                     )
                 )
+                total_trade_restriction_unknown += int(
+                    year_manifest.get(
+                        "trade_restriction_unknown_row_count", 0
+                    )
+                )
                 memory_guard.observe(
                     stage=f"year_{year}_checkpoint_adopted"
                 )
                 continue
+            _write_heartbeat(
+                path=heartbeat_path,
+                run_id=run_id,
+                raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                status="running",
+                stage="building_year",
+                completed_years=tuple(sorted(completed)),
+                current_year=year,
+                year_ordinal=ordinal,
+            )
+
+            def _report_year_stage(stage: str) -> None:
+                _write_heartbeat(
+                    path=heartbeat_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    status="running",
+                    stage=stage,
+                    completed_years=tuple(sorted(completed)),
+                    current_year=year,
+                    year_ordinal=ordinal,
+                )
+
             year_manifest, carry, temp_bytes = self._build_year(
                 request=request,
                 run_directory=run_directory,
@@ -408,6 +639,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                 corporate_custody=corporate_custody,
                 carry=carry,
                 memory_guard=memory_guard,
+                heartbeat=_report_year_stage,
             )
             peak_temporary_bytes = max(
                 peak_temporary_bytes,
@@ -426,6 +658,9 @@ class PortfolioMLDirectNumericStoreBuilder:
             total_teacher_incomplete += int(
                 year_manifest["teacher_incomplete_decision_count"]
             )
+            total_trade_restriction_unknown += int(
+                year_manifest["trade_restriction_unknown_row_count"]
+            )
             completed[year] = _completed_year_entry(
                 year=year,
                 year_directory=year_directory,
@@ -438,8 +673,26 @@ class PortfolioMLDirectNumericStoreBuilder:
                 completed=completed,
                 peak_temporary_bytes=peak_temporary_bytes,
             )
+            _write_heartbeat(
+                path=heartbeat_path,
+                run_id=run_id,
+                raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                status="running",
+                stage="year_checkpoint_complete",
+                completed_years=tuple(sorted(completed)),
+                current_year=year,
+                year_ordinal=ordinal,
+            )
             memory_guard.observe(stage=f"year_{year}_checkpoint_complete")
 
+        _write_heartbeat(
+            path=heartbeat_path,
+            run_id=run_id,
+            raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+            status="running",
+            stage="building_fold_indexes",
+            completed_years=tuple(sorted(completed)),
+        )
         fold_manifests = (
             store_module.PortfolioMLOutOfCoreStoreBuilder()
             ._build_fold_indexes(
@@ -452,12 +705,25 @@ class PortfolioMLDirectNumericStoreBuilder:
                 batch_size=request.batch_size,
             )
         )
-        blockers = {
-            "portfolio_ledger_missing_cash_only_fallback_"
-            "turnover_and_cooldown_not_learned",
-            "official_trade_restriction_timeline_missing_formal_replay_blocked",
-            "formal_rule_champion_snapshot_history_missing_formal_replay_blocked",
-        }
+        portfolio_state_policy = portfolio_replay.custody_payload()
+        official_trade_restriction_timeline_present = bool(
+            corporate_custody.official_trade_restriction_timeline_present
+            and total_trade_restriction_unknown == 0
+        )
+        blockers: set[str] = set()
+        if portfolio_replay.cash_only_fallback:
+            blockers.add(
+                "portfolio_ledger_missing_cash_only_fallback_"
+                "turnover_and_cooldown_not_learned"
+            )
+        if formal_rule_champion_custody is None:
+            blockers.add(
+                "formal_rule_champion_snapshot_history_missing_formal_replay_blocked"
+            )
+        if not official_trade_restriction_timeline_present:
+            blockers.add(
+                "official_trade_restriction_timeline_missing_formal_replay_blocked"
+            )
         if sector_count == 0:
             blockers.add(
                 "pit_sector_membership_missing_teacher_new_positions_disabled"
@@ -471,7 +737,6 @@ class PortfolioMLDirectNumericStoreBuilder:
             blockers.add(
                 "teacher_search_incomplete_for_one_or_more_decision_dates"
             )
-        portfolio_state_policy = portfolio_replay.custody_payload()
         row_count = sum(
             int(item["row_count"]) for item in year_manifests
         )
@@ -492,11 +757,14 @@ class PortfolioMLDirectNumericStoreBuilder:
             "causal_non_cash_portfolio_ledger_present": (
                 not bool(portfolio_state_policy["cash_only_fallback"])
             ),
-            # Direct raw-PIT store 尚未接收可逐日驗證的正式交易限制與 Rule
-            # Champion snapshot history；兩者皆是 OOS 配置語意的一部分，
-            # 不可在 replay 階段以 proxy 或現在值補寫。
-            "official_trade_restriction_timeline_present": False,
-            "formal_rule_champion_snapshot_history_present": False,
+            # Official restriction status is persisted per replay row only
+            # after its effective/available ordering has been validated.
+            "official_trade_restriction_timeline_present": (
+                official_trade_restriction_timeline_present
+            ),
+            "formal_rule_champion_snapshot_history_present": (
+                formal_rule_champion_custody is not None
+            ),
             "teacher_search_complete": total_teacher_incomplete == 0,
             "memory_budget_measurable_and_within_limit": (
                 memory_guard.peak_rss_bytes <= memory_guard.budget_bytes
@@ -566,6 +834,9 @@ class PortfolioMLDirectNumericStoreBuilder:
                 "full_market_ready": full_market_ready,
                 "readiness_checks": readiness_checks,
                 "readiness_failed_checks": readiness_failed_checks,
+                "trade_restriction_unknown_row_count": (
+                    total_trade_restriction_unknown
+                ),
                 "full_period_observation_sqlite": False,
                 "training_jsonl_intermediate": False,
                 "annual_work_sqlite": True,
@@ -603,13 +874,33 @@ class PortfolioMLDirectNumericStoreBuilder:
                     corporate_custody.manifest_present
                 ),
                 "post_event_corporate_action_used_as_feature": False,
+                "official_trade_restriction_bound_per_row": (
+                    official_trade_restriction_timeline_present
+                ),
+                "trade_restriction_unknown_row_count": (
+                    total_trade_restriction_unknown
+                ),
                 "production_alpha_bp": 0,
                 "formal_oos_allowed": False,
                 "broker_order_allowed": False,
             },
             "store_identity": store_identity,
         }
+        if formal_rule_champion_custody is not None:
+            manifest["formal_rule_champion_history"] = (
+                formal_rule_champion_custody.custody_payload()
+            )
+        if not portfolio_replay.cash_only_fallback:
+            manifest["portfolio_state_policy"] = portfolio_state_policy
         manifest["manifest_hash"] = _sha256_json(manifest)
+        _write_heartbeat(
+            path=heartbeat_path,
+            run_id=run_id,
+            raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+            status="running",
+            stage="publishing_manifest",
+            completed_years=tuple(sorted(completed)),
+        )
         _write_json(manifest_path, manifest)
         manifest_file_hash = _file_sha256(manifest_path)
         _atomic_write_json(
@@ -631,6 +922,14 @@ class PortfolioMLDirectNumericStoreBuilder:
             latest_manifest_path=latest_path,
             run_id=run_id,
             manifest=manifest,
+        )
+        _write_heartbeat(
+            path=heartbeat_path,
+            run_id=run_id,
+            raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+            status="complete",
+            stage="complete",
+            completed_years=tuple(sorted(completed)),
         )
         return _publication(
             run_id=run_id,
@@ -658,6 +957,7 @@ class PortfolioMLDirectNumericStoreBuilder:
         corporate_custody: Any,
         carry: Any,
         memory_guard: _MemoryBudgetGuard,
+        heartbeat: Callable[[str], None],
     ) -> tuple[dict[str, Any], Any, int]:
         work = run_directory / f".work-year-{year:04d}"
         if work.exists():
@@ -689,7 +989,9 @@ class PortfolioMLDirectNumericStoreBuilder:
                 definitions=spool_definitions,
                 source_digest=hashlib.sha256(),
                 batch_size=request.batch_size,
+                progress_callback=heartbeat,
             )
+            heartbeat("year_raw_spool_complete")
             memory_guard.observe(stage=f"year_{year}_raw_spool_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
@@ -710,7 +1012,9 @@ class PortfolioMLDirectNumericStoreBuilder:
                 corporate_action_effective_dates=(
                     corporate_custody.effective_dates_by_symbol
                 ),
+                progress_callback=heartbeat,
             )
+            heartbeat("year_labels_complete")
             memory_guard.observe(stage=f"year_{year}_labels_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
@@ -748,6 +1052,12 @@ class PortfolioMLDirectNumericStoreBuilder:
                 feature_ids=discovery.feature_ids,
                 feature_scales=discovery.feature_scales,
                 horizons=legacy.SUPPORTED_HORIZONS,
+                trade_restriction_events_by_symbol=(
+                    corporate_custody.trade_restriction_events_by_symbol
+                ),
+                trade_restriction_timeline_present=(
+                    corporate_custody.official_trade_restriction_timeline_present
+                ),
                 batch_size=request.batch_size,
             )
             teacher_incomplete, sample_count = (
@@ -767,8 +1077,10 @@ class PortfolioMLDirectNumericStoreBuilder:
                     years=(year,),
                     batch_size=request.batch_size,
                     initial_current_feature_cache=carry,
+                    progress_callback=heartbeat,
                 )
             )
+            heartbeat("year_assembly_complete")
             memory_guard.observe(stage=f"year_{year}_assembly_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
@@ -851,7 +1163,13 @@ class PortfolioMLDirectNumericStoreBuilder:
                     "t_minus_one_price_event_and_availability_persisted": True,
                     "pit_sector_id_persisted": True,
                     "median_volume_20d_uses_distinct_causal_price_events": True,
-                    "official_trade_restriction_timeline_present": False,
+                    "official_trade_restriction_timeline_present": (
+                        corporate_custody.official_trade_restriction_timeline_present
+                        and registry.writer.unknown_trade_restriction_count == 0
+                    ),
+                    "trade_restriction_unknown_row_count": (
+                        registry.writer.unknown_trade_restriction_count
+                    ),
                     "teacher_targets_used": False,
                 },
                 "direct_source_shards": [
@@ -865,6 +1183,9 @@ class PortfolioMLDirectNumericStoreBuilder:
                 ],
                 "carry_entry_count": carry_count,
                 "teacher_incomplete_decision_count": teacher_incomplete,
+                "trade_restriction_unknown_row_count": (
+                    registry.writer.unknown_trade_restriction_count
+                ),
                 "corporate_action_excluded_label_count": (
                     corporate_excluded
                 ),
@@ -873,6 +1194,7 @@ class PortfolioMLDirectNumericStoreBuilder:
             }
             year_manifest["manifest_hash"] = _sha256_json(year_manifest)
             _write_json(staging / "manifest.json", year_manifest)
+            heartbeat("year_artifacts_complete")
             memory_guard.observe(stage=f"year_{year}_artifacts_complete")
             connection.close()
             temp_bytes = _directory_size_bytes(work) + _directory_size_bytes(
@@ -883,8 +1205,9 @@ class PortfolioMLDirectNumericStoreBuilder:
                 budget_bytes=request.temporary_storage_budget_bytes,
             )
             final_directory = run_directory / f"year={year:04d}"
-            os.replace(staging, final_directory)
+            _replace_directory_with_retry(staging, final_directory)
             _safe_remove_tree(work, run_directory)
+            heartbeat("year_directory_finalized")
             return year_manifest, carry, temp_bytes
         except Exception:
             connection.close()
@@ -905,6 +1228,10 @@ class _DirectWriterRegistry:
         feature_ids: tuple[str, ...],
         feature_scales: tuple[int, ...],
         horizons: tuple[int, ...],
+        trade_restriction_events_by_symbol: Mapping[
+            str, Sequence[Any]
+        ],
+        trade_restriction_timeline_present: bool,
         batch_size: int,
     ) -> None:
         self.expected_year = expected_year
@@ -915,6 +1242,12 @@ class _DirectWriterRegistry:
             feature_ids=feature_ids,
             feature_scales=feature_scales,
             horizons=horizons,
+            trade_restriction_events_by_symbol=(
+                trade_restriction_events_by_symbol
+            ),
+            trade_restriction_timeline_present=(
+                trade_restriction_timeline_present
+            ),
             batch_size=batch_size,
         )
 
@@ -935,6 +1268,10 @@ class _DirectYearWriter:
         feature_ids: tuple[str, ...],
         feature_scales: tuple[int, ...],
         horizons: tuple[int, ...],
+        trade_restriction_events_by_symbol: Mapping[
+            str, Sequence[Any]
+        ],
+        trade_restriction_timeline_present: bool,
         batch_size: int,
     ) -> None:
         self.year = year
@@ -946,6 +1283,12 @@ class _DirectYearWriter:
             for index, feature_id in enumerate(feature_ids)
         }
         self.horizons = horizons
+        self.trade_restriction_events_by_symbol = (
+            trade_restriction_events_by_symbol
+        )
+        self.trade_restriction_timeline_present = (
+            trade_restriction_timeline_present
+        )
         self.horizon_position = {
             horizon: index for index, horizon in enumerate(horizons)
         }
@@ -1011,7 +1354,9 @@ class _DirectYearWriter:
         self._row_batch: list[tuple[object, ...]] = []
         self._replay_source_batch: list[tuple[object, ...]] = []
         self._volume_history: dict[str, deque[tuple[str, int]]] = {}
+        self._decision_at_cache: dict[str, datetime] = {}
         self.row_count = 0
+        self.unknown_trade_restriction_count = 0
         self.observed_counts = np.zeros(
             len(feature_ids),
             dtype=np.int64,
@@ -1134,6 +1479,7 @@ class _DirectYearWriter:
         )
         replay_values = self._replay_values(
             symbol=symbol,
+            decision_at=row.decision_at,
             stock_current=stock_current,
         )
         self._replay_source_batch.append(
@@ -1152,7 +1498,7 @@ class _DirectYearWriter:
                 replay_values["volume_shares"],
                 replay_values["median_volume_20d_shares"],
                 replay_values["rule_score_bp"],
-                "unknown_no_official_restriction_timeline",
+                replay_values["trade_restriction_status"],
                 replay_values["source_values_hash"],
             )
         )
@@ -1164,6 +1510,7 @@ class _DirectYearWriter:
         self,
         *,
         symbol: str,
+        decision_at: str,
         stock_current: Mapping[str, Any],
     ) -> dict[str, object]:
         open_value = stock_current.get(_PRICE_OPEN_FEATURE_ID)
@@ -1207,6 +1554,20 @@ class _DirectYearWriter:
         open_scale = _eligible_current_scale(open_value)
         close_scale = _eligible_current_scale(close_value)
         rule_score_bp = _relative_score_bp(close_value, ma20_value)
+        decision_datetime = self._decision_at_cache.get(decision_at)
+        if decision_datetime is None:
+            decision_datetime = legacy._available_datetime(
+                decision_at,
+                field_name="direct replay decision_at",
+            )
+            self._decision_at_cache[decision_at] = decision_datetime
+        trade_restriction_status = _official_trade_restriction_status(
+            self.trade_restriction_events_by_symbol.get(symbol, ()),
+            decision_at=decision_datetime,
+            timeline_present=self.trade_restriction_timeline_present,
+        )
+        if trade_restriction_status.startswith("unknown_"):
+            self.unknown_trade_restriction_count += 1
         hashes = sorted(
             str(value.source_value_hash)
             for value in (
@@ -1227,6 +1588,7 @@ class _DirectYearWriter:
             "volume_shares": volume_shares,
             "median_volume_20d_shares": median_volume,
             "rule_score_bp": rule_score_bp,
+            "trade_restriction_status": trade_restriction_status,
             "source_values_hash": _sha256_json(hashes),
         }
 
@@ -1278,6 +1640,268 @@ class _DirectYearWriter:
         self._closed = True
 
 
+def _discovery_cache_identity(
+    *,
+    raw_manifest: Mapping[str, Any],
+    raw_manifest_file_hash: str,
+    cutoff: datetime,
+    benchmark_entity_id: str,
+    minimum_train_dates: int,
+    test_date_count: int,
+    purge_trading_days: int,
+    embargo_trading_days: int,
+) -> dict[str, Any]:
+    return {
+        "raw_manifest_hash": str(raw_manifest["manifest_hash"]),
+        "raw_manifest_file_hash": raw_manifest_file_hash,
+        "training_as_of": cutoff.isoformat(),
+        "benchmark_entity_id": benchmark_entity_id,
+        "minimum_train_dates": minimum_train_dates,
+        "test_date_count": test_date_count,
+        "purge_trading_days": purge_trading_days,
+        "embargo_trading_days": embargo_trading_days,
+    }
+
+
+def _write_discovery_cache(
+    *,
+    path: Path,
+    raw_manifest: Mapping[str, Any],
+    raw_manifest_file_hash: str,
+    cutoff: datetime,
+    benchmark_entity_id: str,
+    minimum_train_dates: int,
+    test_date_count: int,
+    purge_trading_days: int,
+    embargo_trading_days: int,
+    discovery: _Discovery,
+) -> None:
+    discovery_payload: dict[str, Any] = {
+        "definitions": [
+            asdict(definition) for definition in discovery.definitions
+        ],
+        "feature_packs": discovery.feature_packs,
+        "feature_ids": list(discovery.feature_ids),
+        "feature_scales": list(discovery.feature_scales),
+        "calendar": list(discovery.calendar),
+        "eligible_dates": list(discovery.eligible_dates),
+        "fold_windows": [
+            asdict(window) for window in discovery.fold_windows
+        ],
+        "shard_by_year": {
+            str(year): dict(shard)
+            for year, shard in discovery.shard_by_year.items()
+        },
+        "source_content_hash": discovery.source_content_hash,
+    }
+    payload: dict[str, Any] = {
+        "schema_version": DIRECT_DISCOVERY_CACHE_SCHEMA_VERSION,
+        "identity": _discovery_cache_identity(
+            raw_manifest=raw_manifest,
+            raw_manifest_file_hash=raw_manifest_file_hash,
+            cutoff=cutoff,
+            benchmark_entity_id=benchmark_entity_id,
+            minimum_train_dates=minimum_train_dates,
+            test_date_count=test_date_count,
+            purge_trading_days=purge_trading_days,
+            embargo_trading_days=embargo_trading_days,
+        ),
+        "discovery": discovery_payload,
+    }
+    payload["cache_hash"] = _sha256_json(payload)
+    _atomic_write_json(path, payload)
+
+
+def _load_discovery_cache(
+    *,
+    path: Path,
+    raw_manifest_path: Path,
+    raw_manifest: Mapping[str, Any],
+    raw_manifest_file_hash: str,
+    cutoff: datetime,
+    benchmark_entity_id: str,
+    minimum_train_dates: int,
+    test_date_count: int,
+    purge_trading_days: int,
+    embargo_trading_days: int,
+) -> _Discovery | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = _read_json(path)
+        if payload.get("schema_version") != (
+            DIRECT_DISCOVERY_CACHE_SCHEMA_VERSION
+        ):
+            return None
+        cache_hash = payload.get("cache_hash")
+        unsigned_payload = dict(payload)
+        unsigned_payload.pop("cache_hash", None)
+        if cache_hash != _sha256_json(unsigned_payload):
+            return None
+        expected_identity = _discovery_cache_identity(
+            raw_manifest=raw_manifest,
+            raw_manifest_file_hash=raw_manifest_file_hash,
+            cutoff=cutoff,
+            benchmark_entity_id=benchmark_entity_id,
+            minimum_train_dates=minimum_train_dates,
+            test_date_count=test_date_count,
+            purge_trading_days=purge_trading_days,
+            embargo_trading_days=embargo_trading_days,
+        )
+        if payload.get("identity") != expected_identity:
+            return None
+        discovery_payload = _mapping(
+            payload.get("discovery"),
+            field_name="discovery cache discovery",
+        )
+        _validate_discovery_cache_shards(
+            raw_manifest_path=raw_manifest_path,
+            raw_manifest=raw_manifest,
+            cached_shards=discovery_payload.get("shard_by_year"),
+        )
+        definitions = tuple(
+            _cached_feature_definition(item)
+            for item in _mapping_sequence(
+                discovery_payload.get("definitions"),
+                field_name="discovery cache definitions",
+            )
+        )
+        feature_packs = [
+            dict(item)
+            for item in _mapping_sequence(
+                discovery_payload.get("feature_packs"),
+                field_name="discovery cache feature_packs",
+            )
+        ]
+        feature_ids = tuple(
+            str(item)
+            for item in _sequence(
+                discovery_payload.get("feature_ids"),
+                field_name="discovery cache feature_ids",
+            )
+        )
+        feature_scales = tuple(
+            int(cast(Any, item))
+            for item in _sequence(
+                discovery_payload.get("feature_scales"),
+                field_name="discovery cache feature_scales",
+            )
+        )
+        if len(feature_ids) != len(feature_scales):
+            raise ValueError("discovery cache feature scale length mismatch")
+        calendar = tuple(
+            str(item)
+            for item in _sequence(
+                discovery_payload.get("calendar"),
+                field_name="discovery cache calendar",
+            )
+        )
+        eligible_dates = tuple(
+            str(item)
+            for item in _sequence(
+                discovery_payload.get("eligible_dates"),
+                field_name="discovery cache eligible_dates",
+            )
+        )
+        fold_windows = tuple(
+            _cached_fold_window(item)
+            for item in _mapping_sequence(
+                discovery_payload.get("fold_windows"),
+                field_name="discovery cache fold_windows",
+            )
+        )
+        cached_shards = _mapping(
+            discovery_payload.get("shard_by_year"),
+            field_name="discovery cache shard_by_year",
+        )
+        shard_by_year = {
+            int(year): dict(
+                _mapping(item, field_name="discovery cache shard")
+            )
+            for year, item in cached_shards.items()
+        }
+        source_content_hash = str(
+            discovery_payload["source_content_hash"]
+        )
+        if not source_content_hash.startswith(_SHA256_PREFIX):
+            raise ValueError("discovery cache source hash is invalid")
+        if len(fold_windows) < 4:
+            raise ValueError("discovery cache requires at least four folds")
+        return _Discovery(
+            definitions=definitions,
+            feature_packs=feature_packs,
+            feature_ids=feature_ids,
+            feature_scales=feature_scales,
+            calendar=calendar,
+            eligible_dates=eligible_dates,
+            fold_windows=fold_windows,
+            shard_by_year=shard_by_year,
+            source_content_hash=source_content_hash,
+        )
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _validate_discovery_cache_shards(
+    *,
+    raw_manifest_path: Path,
+    raw_manifest: Mapping[str, Any],
+    cached_shards: object,
+) -> None:
+    cached = _mapping(
+        cached_shards,
+        field_name="discovery cache shard_by_year",
+    )
+    publication_root = raw_manifest_path.parent.parent.resolve()
+    manifest_shards = legacy._mapping_sequence(
+        raw_manifest.get("shards"),
+        field_name="shards",
+    )
+    manifest_years = {int(item["year"]) for item in manifest_shards}
+    cached_years = {int(year) for year in cached}
+    if cached_years != manifest_years:
+        raise ValueError("discovery cache shard years mismatch")
+    for shard in manifest_shards:
+        shard_path = (
+            publication_root / str(shard["path"])
+        ).resolve()
+        if not shard_path.is_relative_to(publication_root):
+            raise ValueError("raw shard path escapes publication root")
+        if _file_sha256(shard_path) != str(shard["compressed_sha256"]):
+            raise ValueError("raw shard compressed hash mismatch")
+
+
+def _cached_feature_definition(
+    value: Mapping[str, Any],
+) -> Any:
+    dimensions = value.get("dimension_values")
+    if not isinstance(dimensions, list):
+        raise TypeError("discovery cache dimension_values must be a list")
+    return legacy._FeatureDefinition(
+        feature_id=str(value["feature_id"]),
+        base_feature_id=str(value["base_feature_id"]),
+        table_name=str(value["table_name"]),
+        family_id=str(value["family_id"]),
+        source_id=str(value["source_id"]),
+        scale=int(value["scale"]),
+        stale_after_days=int(value["stale_after_days"]),
+        record_hash=str(value["record_hash"]),
+        scope=str(value["scope"]),
+        dimension_values=tuple(str(item) for item in dimensions),
+    )
+
+
+def _cached_fold_window(value: Mapping[str, Any]) -> Any:
+    return legacy._FoldWindow(
+        fold_id=str(value["fold_id"]),
+        train_end_date=str(value["train_end_date"]),
+        test_start=str(value["test_start"]),
+        test_end=str(value["test_end"]),
+        purge_trading_days=int(value["purge_trading_days"]),
+        embargo_trading_days=int(value["embargo_trading_days"]),
+    )
+
+
 def _discover(
     *,
     raw_manifest_path: Path,
@@ -1288,6 +1912,7 @@ def _discover(
     test_date_count: int,
     purge_trading_days: int,
     embargo_trading_days: int,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> _Discovery:
     base_definitions = legacy._base_feature_definitions(raw_manifest)
     runtime = dict(base_definitions)
@@ -1317,6 +1942,8 @@ def _discover(
         shard_digest = hashlib.sha256()
         row_count = 0
         value_count = 0
+        last_reported_rows = 0
+        last_reported_at_ns = time_module.monotonic_ns()
         with gzip.open(shard_path, "rb") as stream:
             for raw_line in stream:
                 if not raw_line.strip():
@@ -1365,6 +1992,24 @@ def _discover(
                     )
                 row_count += 1
                 value_count += len(values)
+                if progress_callback is not None:
+                    now_ns = time_module.monotonic_ns()
+                    if (
+                        row_count - last_reported_rows
+                        >= _DISCOVERY_PROGRESS_INTERVAL
+                        or (
+                            row_count % _DISCOVERY_PROGRESS_CHECK_INTERVAL
+                            == 0
+                            and now_ns - last_reported_at_ns
+                            >= _DISCOVERY_PROGRESS_MAX_SILENCE_NS
+                        )
+                    ):
+                        progress_callback(
+                            f"discovery_source_shard_{year}_rows_"
+                            f"{row_count}_processed"
+                        )
+                        last_reported_rows = row_count
+                        last_reported_at_ns = now_ns
         if _SHA256_PREFIX + shard_digest.hexdigest() != str(
             shard["content_sha256"]
         ):
@@ -1373,6 +2018,10 @@ def _discover(
             raise ValueError("raw shard row_count mismatch")
         if value_count != int(shard["feature_value_count"]):
             raise ValueError("raw shard feature_value_count mismatch")
+        if progress_callback is not None:
+            progress_callback(
+                f"discovery_source_shard_{year}_complete"
+            )
     legacy._finalize_long_format_definitions(
         runtime_definitions=runtime,
         base_definitions=base_definitions,
@@ -1699,6 +2348,42 @@ def _write_incomplete_checkpoint(
     )
 
 
+def _write_heartbeat(
+    *,
+    path: Path,
+    run_id: str,
+    raw_manifest_hash: str,
+    status: str,
+    stage: str,
+    completed_years: Sequence[int],
+    current_year: int | None = None,
+    year_ordinal: int | None = None,
+) -> None:
+    """Publish a small, fail-closed progress heartbeat for supervisors.
+
+    The checkpoint remains the completion authority.  This sidecar only makes
+    a long-running annual build observable without opening the SQLite work
+    file or guessing from process CPU usage.  Consumers must still verify the
+    PID and checkpoint/manifest custody before treating a run as complete.
+    """
+
+    payload: dict[str, Any] = {
+        "schema_version": DIRECT_HEARTBEAT_SCHEMA_VERSION,
+        "run_id": run_id,
+        "raw_manifest_hash": raw_manifest_hash,
+        "pid": os.getpid(),
+        "status": status,
+        "stage": stage,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "completed_years": sorted(int(year) for year in completed_years),
+    }
+    if current_year is not None:
+        payload["current_year"] = int(current_year)
+    if year_ordinal is not None:
+        payload["year_ordinal"] = int(year_ordinal)
+    _atomic_write_json(path, payload)
+
+
 def _preflight_temporary_budget(
     *,
     shards: Sequence[Mapping[str, Any]],
@@ -1866,6 +2551,18 @@ def _mapping_sequence(
     return tuple(result)
 
 
+def _mapping(value: object, *, field_name: str) -> Mapping[str, Any]:
+    if not isinstance(value, dict):
+        raise TypeError(f"{field_name} must be object")
+    return value
+
+
+def _sequence(value: object, *, field_name: str) -> tuple[object, ...]:
+    if not isinstance(value, list):
+        raise TypeError(f"{field_name} must be list")
+    return tuple(value)
+
+
 def _directory_size_bytes(root: Path) -> int:
     return sum(
         path.stat().st_size
@@ -1888,7 +2585,27 @@ def _safe_remove_tree(path: Path, allowed_root: Path) -> None:
     root = allowed_root.resolve()
     if not resolved.is_relative_to(root) or resolved == root:
         raise ValueError("refusing to remove outside direct run root")
-    shutil.rmtree(resolved)
+    for attempt in range(_ATOMIC_REPLACE_RETRY_COUNT):
+        try:
+            shutil.rmtree(resolved)
+            return
+        except PermissionError:
+            if attempt + 1 >= _ATOMIC_REPLACE_RETRY_COUNT:
+                raise
+            time_module.sleep(_ATOMIC_REPLACE_RETRY_DELAY_SECONDS)
+
+
+def _replace_directory_with_retry(staging: Path, final: Path) -> None:
+    """Atomically publish one annual directory across transient Win32 locks."""
+
+    for attempt in range(_ATOMIC_REPLACE_RETRY_COUNT):
+        try:
+            os.replace(staging, final)
+            return
+        except PermissionError:
+            if attempt + 1 >= _ATOMIC_REPLACE_RETRY_COUNT:
+                raise
+            time_module.sleep(_ATOMIC_REPLACE_RETRY_DELAY_SECONDS)
 
 
 def _canonical_json(payload: object) -> str:
@@ -1947,6 +2664,13 @@ def _atomic_write_json(path: Path, payload: object) -> None:
     temporary = Path(name)
     try:
         _write_json(temporary, payload)
-        os.replace(temporary, path)
+        for attempt in range(_ATOMIC_REPLACE_RETRY_COUNT):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt + 1 >= _ATOMIC_REPLACE_RETRY_COUNT:
+                    raise
+                time_module.sleep(_ATOMIC_REPLACE_RETRY_DELAY_SECONDS)
     finally:
         temporary.unlink(missing_ok=True)

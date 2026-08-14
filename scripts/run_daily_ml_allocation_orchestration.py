@@ -65,7 +65,7 @@ from scripts.run_ml_allocation_copilot import (  # noqa: E402
 
 TAIPEI = ZoneInfo("Asia/Taipei")
 TASK_NAME = "baldr-ml-allocation-copilot-daily"
-SCHEMA_VERSION = "ml-allocation-daily-orchestration.v2"
+SCHEMA_VERSION = "ml-allocation-daily-orchestration.v3"
 TRAINING_MANIFEST_SCHEMA_VERSION = "allocation-training-output-manifest-v2"
 PROMOTION_REFERENCE_POINTER_SCHEMA_VERSION = (
     "ml-allocation-promotion-reference-pointer-v1"
@@ -95,6 +95,7 @@ DEFAULT_UNIVERSE_ID = "twse-bounded-11-v4"
 DEFAULT_POLICY_ID = "balanced-v4-operational"
 DEFAULT_RAW_LOOKBACK_DAYS = 730
 ALLOWED_ALPHA_BP = frozenset({0, 2_000, 3_500, 5_000})
+AUTO_CATCH_UP_MAX_CALENDAR_DAYS = 31
 
 
 @dataclass(frozen=True)
@@ -482,6 +483,84 @@ def _strict_previous_trading_day(
     raise RuntimeError("strict_t_minus_one_not_found_within_31_days")
 
 
+def _automatic_previous_decision_candidates(
+    *,
+    calendar: TradingCalendar,
+    requested_decision_at: datetime,
+    now: datetime,
+) -> tuple[datetime, ...]:
+    requested = _validate_decision_at(requested_decision_at)
+    local_now = now.astimezone(TAIPEI)
+    if requested.date() <= local_now.date():
+        return ()
+    candidates: list[datetime] = []
+    for offset in range(1, AUTO_CATCH_UP_MAX_CALENDAR_DAYS + 1):
+        candidate_date = requested.date() - timedelta(days=offset)
+        if candidate_date > local_now.date():
+            continue
+        is_open, _reason = _calendar_day_state(calendar, candidate_date)
+        if is_open is None:
+            if candidates:
+                return tuple(candidates)
+            raise RuntimeError(
+                "automatic_catch_up_calendar_unknown:"
+                f"{candidate_date.isoformat()}"
+            )
+        if is_open is True:
+            candidates.append(
+                datetime.combine(
+                    candidate_date,
+                    time(8, 30),
+                    tzinfo=TAIPEI,
+                )
+            )
+    return tuple(candidates)
+
+
+def _is_retryable_automatic_catch_up_failure(
+    *,
+    payload: Mapping[str, object],
+    requested_decision_at: datetime,
+    selected_decision_at: datetime,
+    now: datetime,
+) -> bool:
+    requested = _validate_decision_at(requested_decision_at)
+    selected = _validate_decision_at(selected_decision_at)
+    if requested.date() <= now.astimezone(TAIPEI).date():
+        return False
+    if selected.date() > now.astimezone(TAIPEI).date():
+        candidate_selected = True
+    else:
+        candidate_selected = (
+            payload.get("decision_selection_mode")
+            == "automatic_catch_up"
+        )
+    if not candidate_selected:
+        return False
+    if payload.get("orchestration_status") != "fail_closed":
+        return False
+    failed_stage = payload.get("failed_stage")
+    if failed_stage not in {"raw_pit_publication", "post_freeze_input"}:
+        return False
+    failed_reasons = payload.get("failed_reasons")
+    reason_text = " ".join(
+        str(item) for item in failed_reasons
+    ).lower() if isinstance(failed_reasons, list) else ""
+    return any(marker in reason_text for marker in (
+        "strict t-1",
+        "strict_t_minus_one",
+        "expected_price_date",
+        "latest provable t-1",
+        "raw rows are missing",
+    ))
+
+
+def _taipei_now() -> datetime:
+    """Return the scheduler clock through one patchable boundary."""
+
+    return datetime.now(TAIPEI)
+
+
 def _build_raw_publication(
     *,
     database_path: Path,
@@ -730,6 +809,10 @@ def _base_status(
     decision_at: datetime,
     trading_calendar_is_open: bool | None,
     trading_calendar_reason: str,
+    decision_selection_mode: str,
+    requested_decision_at: datetime,
+    decision_selection_reason: str | None,
+    decision_selection_attempts: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -738,6 +821,14 @@ def _base_status(
         "operation_mode": "rule_only",
         "orchestration_status": "fail_closed",
         "decision_at": decision_at.isoformat(timespec="seconds"),
+        "decision_selection_mode": decision_selection_mode,
+        "requested_decision_at": requested_decision_at.isoformat(
+            timespec="seconds"
+        ),
+        "decision_selection_reason": decision_selection_reason,
+        "decision_selection_attempts": [
+            dict(attempt) for attempt in decision_selection_attempts
+        ],
         "trading_calendar_validated": trading_calendar_is_open is not None,
         "trading_calendar_is_open": trading_calendar_is_open,
         "trading_calendar_reason": trading_calendar_reason,
@@ -942,6 +1033,10 @@ def run(
     release_root: Path,
     paper_state_db_path: Path | None = None,
     decision_at: datetime,
+    decision_selection_mode: str = "requested",
+    requested_decision_at: datetime | None = None,
+    decision_selection_reason: str | None = None,
+    decision_selection_attempts: Sequence[Mapping[str, object]] = (),
     symbols: tuple[str, ...] = DEFAULT_SYMBOLS,
     policy_hash: str = POLICY_HASH,
     raw_lookback_days: int = DEFAULT_RAW_LOOKBACK_DAYS,
@@ -965,6 +1060,13 @@ def run(
     trusted_custody_id: str | None = None,
 ) -> dict[str, object]:
     local_decision_at = _validate_decision_at(decision_at)
+    local_requested_decision_at = (
+        _validate_decision_at(requested_decision_at)
+        if requested_decision_at is not None
+        else local_decision_at
+    )
+    if not decision_selection_mode.strip():
+        raise ValueError("decision_selection_mode must not be empty")
     normalized_symbols = tuple(dict.fromkeys(symbol.strip() for symbol in symbols))
     if normalized_symbols != DEFAULT_SYMBOLS:
         raise ValueError("daily orchestration universe must equal the fixed 11 symbols")
@@ -984,6 +1086,10 @@ def run(
         decision_at=local_decision_at,
         trading_calendar_is_open=is_trading_day,
         trading_calendar_reason=calendar_reason,
+        decision_selection_mode=decision_selection_mode,
+        requested_decision_at=local_requested_decision_at,
+        decision_selection_reason=decision_selection_reason,
+        decision_selection_attempts=decision_selection_attempts,
     )
 
     if is_trading_day is False:
@@ -1185,6 +1291,14 @@ def run(
     orchestration_run_hash = _payload_hash(
         {
             "decision_at": local_decision_at.isoformat(timespec="seconds"),
+            "decision_selection_mode": decision_selection_mode,
+            "requested_decision_at": local_requested_decision_at.isoformat(
+                timespec="seconds"
+            ),
+            "decision_selection_reason": decision_selection_reason,
+            "decision_selection_attempts": [
+                dict(attempt) for attempt in decision_selection_attempts
+            ],
             "raw_publication_manifest_hash": (
                 raw.publication_manifest_hash
             ),
@@ -1810,6 +1924,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="含時區 ISO timestamp；必須對應 Asia/Taipei 08:30。",
     )
     parser.add_argument(
+        "--auto-catch-up",
+        action="store_true",
+        help=(
+            "未明指定決策時間時，若實際 orchestration 證明下一個候選日的"
+            "strict T-1 尚未就緒，只向後重試最近的已過交易日。"
+        ),
+    )
+    parser.add_argument(
         "--raw-lookback-days",
         type=int,
         default=DEFAULT_RAW_LOOKBACK_DAYS,
@@ -1847,35 +1969,124 @@ def main(argv: list[str] | None = None) -> int:
     _configure_standard_streams_utf8()
     args = build_parser().parse_args(argv)
     try:
+        requested_decision_at = _parse_decision_at(args.decision_at)
+        selected_decision_at = requested_decision_at
+        automatic_mode = args.auto_catch_up and args.decision_at is None
+        automatic_now = _taipei_now() if automatic_mode else None
+        decision_selection_mode = (
+            "automatic_candidate" if automatic_mode else "requested"
+        )
+        decision_selection_reason = (
+            "scheduler_candidate" if automatic_mode else None
+        )
+        decision_selection_attempts: tuple[Mapping[str, object], ...] = ()
         trusted_keys, trusted_roots, trusted_custody_id = (
             _promotion_trust_configuration(output_root=args.output_root)
         )
-        payload = run(
-            database_path=args.database,
-            output_root=args.output_root,
-            release_root=args.release_root,
-            paper_state_db_path=args.paper_state_db,
-            decision_at=_parse_decision_at(args.decision_at),
-            raw_lookback_days=args.raw_lookback_days,
-            batch_size=args.batch_size,
-            compression_level=args.compression_level,
-            evidence_path=args.promotion_evidence,
-            authorization_path=args.promotion_authorization,
-            registry_revision_path=args.promotion_registry_revision,
-            model_artifact_path=args.promotion_model_artifact,
-            dataset_manifest_path=args.promotion_dataset_manifest,
-            oof_bundle_path=args.promotion_oof_bundle,
-            shadow_evidence_path=args.promotion_shadow_evidence,
-            promotion_reference_pointer_path=(
-                args.promotion_reference_pointer
-            ),
-            promotion_authority_pointer_path=(
-                args.promotion_authorization_pointer
-            ),
-            trusted_issuer_keys=trusted_keys,
-            trusted_custody_roots=trusted_roots,
-            trusted_custody_id=trusted_custody_id,
+        def _execute(
+            *,
+            candidate_decision_at: datetime,
+            selection_mode: str,
+            selection_reason: str | None,
+            selection_attempts: Sequence[Mapping[str, object]],
+        ) -> dict[str, object]:
+            return run(
+                database_path=args.database,
+                output_root=args.output_root,
+                release_root=args.release_root,
+                paper_state_db_path=args.paper_state_db,
+                decision_at=candidate_decision_at,
+                decision_selection_mode=selection_mode,
+                requested_decision_at=requested_decision_at,
+                decision_selection_reason=selection_reason,
+                decision_selection_attempts=selection_attempts,
+                raw_lookback_days=args.raw_lookback_days,
+                batch_size=args.batch_size,
+                compression_level=args.compression_level,
+                evidence_path=args.promotion_evidence,
+                authorization_path=args.promotion_authorization,
+                registry_revision_path=args.promotion_registry_revision,
+                model_artifact_path=args.promotion_model_artifact,
+                dataset_manifest_path=args.promotion_dataset_manifest,
+                oof_bundle_path=args.promotion_oof_bundle,
+                shadow_evidence_path=args.promotion_shadow_evidence,
+                promotion_reference_pointer_path=(
+                    args.promotion_reference_pointer
+                ),
+                promotion_authority_pointer_path=(
+                    args.promotion_authorization_pointer
+                ),
+                trusted_issuer_keys=trusted_keys,
+                trusted_custody_roots=trusted_roots,
+                trusted_custody_id=trusted_custody_id,
+            )
+
+        payload = _execute(
+            candidate_decision_at=selected_decision_at,
+            selection_mode=decision_selection_mode,
+            selection_reason=decision_selection_reason,
+            selection_attempts=decision_selection_attempts,
         )
+        if automatic_mode and automatic_now is not None:
+            if _is_retryable_automatic_catch_up_failure(
+                payload=payload,
+                requested_decision_at=requested_decision_at,
+                selected_decision_at=selected_decision_at,
+                now=automatic_now,
+            ):
+                failure_attempt: dict[str, object] = {
+                    "decision_at": selected_decision_at.isoformat(
+                        timespec="seconds"
+                    ),
+                    "selection": "not_selected",
+                    "failed_stage": payload.get("failed_stage"),
+                    "failed_reasons": payload.get("failed_reasons"),
+                }
+                attempts: tuple[Mapping[str, object], ...] = (
+                    failure_attempt,
+                )
+                try:
+                    candidates = _automatic_previous_decision_candidates(
+                        calendar=OfficialTradingCalendar(args.database),
+                        requested_decision_at=requested_decision_at,
+                        now=automatic_now,
+                    )
+                except Exception:
+                    candidates = ()
+                for candidate in candidates:
+                    candidate_attempt: dict[str, object] = {
+                        "decision_at": candidate.isoformat(
+                            timespec="seconds"
+                        ),
+                        "selection": "selected",
+                    }
+                    attempts = (*attempts, candidate_attempt)
+                    payload = _execute(
+                        candidate_decision_at=candidate,
+                        selection_mode="automatic_catch_up",
+                        selection_reason=(
+                            "runtime_strict_t_minus_one_not_ready"
+                        ),
+                        selection_attempts=attempts,
+                    )
+                    if not _is_retryable_automatic_catch_up_failure(
+                        payload=payload,
+                        requested_decision_at=requested_decision_at,
+                        selected_decision_at=candidate,
+                        now=automatic_now,
+                    ):
+                        break
+                    attempts = (
+                        *attempts,
+                        {
+                            "decision_at": candidate.isoformat(
+                                timespec="seconds"
+                            ),
+                            "selection": "not_selected",
+                            "failed_stage": payload.get("failed_stage"),
+                            "failed_reasons": payload.get("failed_reasons"),
+                        },
+                    )
     except Exception as exc:  # noqa: BLE001 - 無法寫入 status 的啟動錯誤
         print(
             json.dumps(

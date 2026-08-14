@@ -29,10 +29,19 @@ from pathlib import Path
 import shutil
 import sqlite3
 import tempfile
-from typing import Any, Iterable, Iterator, Mapping, Sequence
+from time import monotonic_ns
+from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 import uuid
 from zoneinfo import ZoneInfo
 
+from data_module.rule_champion_snapshot_service import (
+    RuleChampionSnapshotHistoryCustody,
+    load_verified_rule_champion_snapshot_history,
+)
+from data_module.formal_portfolio_ledger import (
+    FormalPortfolioStateReplay,
+    load_formal_portfolio_state_ledger,
+)
 from ml_module.allocation_contracts import (
     AllocationTargets,
     AllocationWeightContract,
@@ -88,13 +97,28 @@ _BUY_COST_BP = 25
 _SELL_COST_BP = 55
 _ZERO_SHA256 = "sha256:" + ("0" * 64)
 _PORTFOLIO_STATE_REPLAY_SCHEMA_VERSION = "causal-portfolio-state-replay-v1"
+_RAW_SPOOL_PROGRESS_INTERVAL = 100_000
+_RAW_SPOOL_PROGRESS_CHECK_INTERVAL = 4_096
+_RAW_SPOOL_PROGRESS_MAX_SILENCE_NS = 30 * 1_000_000_000
+_ASSEMBLY_PROGRESS_INTERVAL = 100_000
+_ASSEMBLY_PROGRESS_CHECK_INTERVAL = 4_096
+_ASSEMBLY_PROGRESS_MAX_SILENCE_NS = _RAW_SPOOL_PROGRESS_MAX_SILENCE_NS
+_LABEL_SPOOL_PROGRESS_SYMBOL_INTERVAL = 25
+_LABEL_SPOOL_PROGRESS_CHECK_INTERVAL = 128
+_LABEL_SPOOL_PROGRESS_MAX_SILENCE_NS = _RAW_SPOOL_PROGRESS_MAX_SILENCE_NS
 _CORPORATE_ACTION_CUSTODY_SCHEMA_VERSION = (
     "portfolio-ml-corporate-action-custody.v1"
+)
+_OFFICIAL_TRADE_RESTRICTION_CUSTODY_SCHEMA_VERSION = (
+    "portfolio-ml-official-trade-restriction-custody.v1"
 )
 _OFFICIAL_MARKET_EVENT_PUBLICATION_SCHEMA_VERSION = (
     "official-market-event-publication.v1"
 )
 _OFFICIAL_MARKET_EVENT_SCHEMA_VERSION = "official-market-event.v1"
+_OFFICIAL_TRADE_RESTRICTION_EVENT_TYPES = frozenset(
+    {"trading_halt", "trading_resume"}
+)
 _CORPORATE_ACTION_LABEL_EVENT_TYPES = frozenset(
     {
         "ex_right_dividend_result",
@@ -116,6 +140,8 @@ class PortfolioMLDatasetAssemblyRequest:
     benchmark_entity_id: str
     sector_membership_path: Path | None = None
     corporate_action_manifest_path: Path | None = None
+    formal_portfolio_ledger_path: Path | None = None
+    formal_rule_champion_history_path: Path | None = None
     years: tuple[int, ...] = ()
     minimum_train_dates: int = 252
     test_date_count: int = 63
@@ -295,6 +321,18 @@ class _PortfolioStateReplay:
 
 
 @dataclass(frozen=True)
+class _TradeRestrictionEvent:
+    natural_key: str
+    symbol: str
+    event_type: str
+    effective_at: datetime
+    available_at: datetime
+    event_id: str
+    revision_id: str
+    revision_availability_ambiguous: bool
+
+
+@dataclass(frozen=True)
 class _CorporateActionCustody:
     manifest_present: bool
     manifest_hash: str
@@ -307,6 +345,21 @@ class _CorporateActionCustody:
     effective_dates_by_symbol: Mapping[str, tuple[str, ...]]
     min_effective_date: str | None = None
     max_effective_date: str | None = None
+    trade_restriction_events_by_symbol: Mapping[
+        str, tuple[_TradeRestrictionEvent, ...]
+    ] = field(default_factory=dict)
+    trade_restriction_source_count: int = 0
+    trade_restriction_source_coverage_complete: bool = False
+    trade_restriction_ambiguity_count: int = 0
+
+    @property
+    def official_trade_restriction_timeline_present(self) -> bool:
+        return bool(
+            self.manifest_present
+            and self.trade_restriction_source_count > 0
+            and self.trade_restriction_source_coverage_complete
+            and self.trade_restriction_ambiguity_count == 0
+        )
 
     def custody_payload(self) -> dict[str, Any]:
         return {
@@ -329,6 +382,31 @@ class _CorporateActionCustody:
             "allowed_use": "supervised_label_exclusion_and_ledger_only",
             "decision_feature_allowed": False,
             "post_event_values_used_as_features": False,
+            "official_trade_restriction_timeline": {
+                "schema_version": (
+                    _OFFICIAL_TRADE_RESTRICTION_CUSTODY_SCHEMA_VERSION
+                ),
+                "present": self.official_trade_restriction_timeline_present,
+                "source_count": self.trade_restriction_source_count,
+                "source_coverage_complete": (
+                    self.trade_restriction_source_coverage_complete
+                ),
+                "event_count": sum(
+                    len(events)
+                    for events in self.trade_restriction_events_by_symbol.values()
+                ),
+                "covered_symbol_count": len(
+                    self.trade_restriction_events_by_symbol
+                ),
+                "revision_availability_ambiguity_count": (
+                    self.trade_restriction_ambiguity_count
+                ),
+                "allowed_use": (
+                    "formal_oos_replay_execution_restriction_only"
+                ),
+                "decision_feature_allowed": False,
+                "post_event_values_used_as_features": False,
+            },
         }
 
 
@@ -471,16 +549,29 @@ class PortfolioMLDatasetAssembler:
                     f"embargo_trading_days={request.embargo_trading_days}"
                 )
 
-            assembly_blockers: set[str] = set()
-            portfolio_state_replay = _build_cash_only_portfolio_state_replay(
+            formal_rule_champion_custody = _load_formal_rule_champion_history(
+                request.formal_rule_champion_history_path,
+                decision_dates=eligible_dates,
+                training_as_of=cutoff.isoformat(),
+            )
+            portfolio_state_replay = _build_portfolio_state_replay(
                 calendar=calendar,
                 decision_dates=eligible_dates,
+                formal_portfolio_ledger_path=(
+                    request.formal_portfolio_ledger_path
+                ),
             )
             portfolio_state_policy = portfolio_state_replay.custody_payload()
-            assembly_blockers.add(
-                "portfolio_ledger_missing_cash_only_fallback_"
-                "turnover_and_cooldown_not_learned"
-            )
+            assembly_blockers: set[str] = set()
+            if portfolio_state_replay.cash_only_fallback:
+                assembly_blockers.add(
+                    "portfolio_ledger_missing_cash_only_fallback_"
+                    "turnover_and_cooldown_not_learned"
+                )
+            if formal_rule_champion_custody is None:
+                assembly_blockers.add(
+                    "formal_rule_champion_snapshot_history_missing_formal_replay_blocked"
+                )
             if sector_count == 0:
                 assembly_blockers.add(
                     "pit_sector_membership_missing_teacher_new_positions_disabled"
@@ -514,6 +605,15 @@ class PortfolioMLDatasetAssembler:
                     "horizons": list(SUPPORTED_HORIZONS),
                     "fold_windows": [asdict(window) for window in fold_windows],
                     "portfolio_state_replay_custody": portfolio_state_policy,
+                    **(
+                        {}
+                        if formal_rule_champion_custody is None
+                        else {
+                            "formal_rule_champion_history": (
+                                formal_rule_champion_custody.custody_payload()
+                            )
+                        }
+                    ),
                     "corporate_action_custody": corporate_action_policy,
                     "corporate_action_excluded_label_count": (
                         corporate_action_excluded_label_count
@@ -589,6 +689,10 @@ class PortfolioMLDatasetAssembler:
                     "post_event_corporate_action_used_as_feature": False,
                 },
             }
+            if formal_rule_champion_custody is not None:
+                header_common["formal_rule_champion_history"] = (
+                    formal_rule_champion_custody.custody_payload()
+                )
             teacher_incomplete_count, sample_count = self._assemble_samples(
                 connection=connection,
                 definitions=feature_definitions,
@@ -713,6 +817,10 @@ class PortfolioMLDatasetAssembler:
                 },
                 "shards": shard_payloads,
             }
+            if formal_rule_champion_custody is not None:
+                publication_manifest["formal_rule_champion_history"] = (
+                    formal_rule_champion_custody.custody_payload()
+                )
             publication_manifest["manifest_hash"] = _sha256_json(
                 publication_manifest
             )
@@ -779,6 +887,7 @@ class PortfolioMLDatasetAssembler:
         definitions: dict[str, _FeatureDefinition],
         source_digest: Any,
         batch_size: int,
+        progress_callback: Callable[[str], None] | None = None,
     ) -> tuple[int, int]:
         publication_root = dataset_manifest_path.parent.parent.resolve()
         dataset_id = str(manifest["dataset_id"])
@@ -797,6 +906,7 @@ class PortfolioMLDatasetAssembler:
             content_digest = hashlib.sha256()
             shard_row_count = 0
             shard_value_count = 0
+            last_progress_ns = monotonic_ns()
             with gzip.open(shard_path, "rb") as stream:
                 for line_number, raw_line in enumerate(stream, start=1):
                     if not raw_line.strip():
@@ -948,6 +1058,28 @@ class PortfolioMLDatasetAssembler:
                     raw_row_count += 1
                     shard_row_count += 1
                     shard_value_count += len(value_mappings)
+                    if progress_callback is not None:
+                        row_interval_due = (
+                            shard_row_count % _RAW_SPOOL_PROGRESS_INTERVAL == 0
+                        )
+                        time_interval_due = False
+                        if (
+                            not row_interval_due
+                            and shard_row_count
+                            % _RAW_SPOOL_PROGRESS_CHECK_INTERVAL
+                            == 0
+                        ):
+                            time_interval_due = (
+                                monotonic_ns() - last_progress_ns
+                                >= _RAW_SPOOL_PROGRESS_MAX_SILENCE_NS
+                            )
+                        if row_interval_due or time_interval_due:
+                            progress_callback(
+                                "raw_spool_source_shard_"
+                                f"{int(shard['year']):04d}_rows_"
+                                f"{shard_row_count}_processed"
+                            )
+                            last_progress_ns = monotonic_ns()
                     if len(observation_batch) >= batch_size:
                         _insert_observations(connection, observation_batch)
                         observation_batch.clear()
@@ -964,6 +1096,23 @@ class PortfolioMLDatasetAssembler:
             if shard_value_count != int(shard["feature_value_count"]):
                 raise ValueError(
                     f"raw shard feature_value_count mismatch: {shard_path}"
+                )
+            # A year build reads at most the current and next shard, but the
+            # raw observations can still be very large.  Commit at the shard
+            # boundary so the ephemeral work database does not hold one
+            # multi-shard transaction; the caller still publishes only after
+            # the full annual work directory passes its custody checks.
+            if observation_batch:
+                _insert_observations(connection, observation_batch)
+                observation_batch.clear()
+            if price_batch:
+                _insert_prices(connection, price_batch)
+                price_batch.clear()
+            connection.commit()
+            if progress_callback is not None:
+                progress_callback(
+                    "raw_spool_source_shard_"
+                    f"{int(shard['year']):04d}_complete"
                 )
         if observation_batch:
             _insert_observations(connection, observation_batch)
@@ -986,10 +1135,11 @@ class PortfolioMLDatasetAssembler:
         benchmark_entity_id: str,
         benchmark_returns: Mapping[tuple[str, int], tuple[int, str, str]],
         eligible_dates: tuple[str, ...],
-        portfolio_state_replay: _PortfolioStateReplay,
+        portfolio_state_replay: Any,
         years: tuple[int, ...],
         batch_size: int,
         initial_current_feature_cache: _CurrentFeatureCache | None = None,
+        progress_callback: Callable[[str], None] | None = None,
     ) -> tuple[int, int]:
         del benchmark_returns  # 已於 label spool 使用，保留參數作稽核邊界。
         by_scope = {
@@ -1017,6 +1167,41 @@ class PortfolioMLDatasetAssembler:
         sample_count = 0
         teacher_incomplete_count = 0
         requested_years = frozenset(years)
+        next_progress_sample = _ASSEMBLY_PROGRESS_INTERVAL
+        last_progress_ns = monotonic_ns()
+
+        def _maybe_report_assembly_progress(
+            decision_date: str,
+            *,
+            force_check: bool = False,
+        ) -> None:
+            nonlocal next_progress_sample, last_progress_ns
+            if progress_callback is None:
+                return
+            row_interval_due = sample_count >= next_progress_sample
+            if (
+                not force_check
+                and not row_interval_due
+                and sample_count % _ASSEMBLY_PROGRESS_CHECK_INTERVAL != 0
+            ):
+                return
+            now_ns = monotonic_ns()
+            time_interval_due = (
+                now_ns - last_progress_ns
+                >= _ASSEMBLY_PROGRESS_MAX_SILENCE_NS
+            )
+            if not row_interval_due and not time_interval_due:
+                return
+            progress_callback(
+                "assembly_decision_"
+                f"{decision_date}_rows_{sample_count}_processed"
+            )
+            last_progress_ns = now_ns
+            if row_interval_due:
+                next_progress_sample = (
+                    sample_count // _ASSEMBLY_PROGRESS_INTERVAL + 1
+                ) * _ASSEMBLY_PROGRESS_INTERVAL
+
         for decision_date in eligible_dates:
             decision_year = date.fromisoformat(decision_date).year
             if requested_years and decision_year not in requested_years:
@@ -1150,6 +1335,14 @@ class PortfolioMLDatasetAssembler:
                 else:
                     writer.write_sample(sample)
                 sample_count += 1
+                _maybe_report_assembly_progress(decision_date)
+            # Check the date boundary as well, while the inner-loop callback
+            # above prevents one large decision date from making the heartbeat
+            # silent for an unbounded interval.
+            _maybe_report_assembly_progress(
+                decision_date,
+                force_check=True,
+            )
         return teacher_incomplete_count, sample_count
 
 
@@ -1219,8 +1412,9 @@ def _initialize_spool(connection: sqlite3.Connection) -> None:
             source_row_hash TEXT NOT NULL,
             PRIMARY KEY(scope, entity_key, event_date)
         ) WITHOUT ROWID;
-        CREATE INDEX idx_prices_scope_entity_date
-            ON prices(scope, entity_key, event_date);
+        -- The WITHOUT ROWID primary-key B-tree already serves the exact
+        -- scope/entity/date access pattern used by the label builder.  Do not
+        -- maintain a duplicate index for every annual spool price insert.
         CREATE TABLE labels (
             symbol TEXT NOT NULL,
             decision_date TEXT NOT NULL,
@@ -1857,6 +2051,72 @@ def _load_corporate_action_custody(
         raise ValueError(
             "corporate action result tables cannot be decision features"
         )
+
+    # Result-only events and halt/resume events share one official
+    # publication, but they have different formal uses.  Keep the
+    # restriction timeline explicitly custody-bound and never treat it as a
+    # decision feature.
+    trade_restriction_source_ids: set[str] = set()
+    source_registry_raw = manifest.get("source_registry")
+    if source_registry_raw is not None:
+        source_registry = _as_mapping(
+            source_registry_raw,
+            field_name="corporate action source_registry",
+        )
+        for source in _mapping_sequence(
+            source_registry.get("sources"),
+            field_name="corporate action source_registry.sources",
+        ):
+            source_id = _required_text(
+                source.get("source_id"),
+                field_name="corporate action source_registry source_id",
+            )
+            allowed_uses_raw = source.get("allowed_uses")
+            if not isinstance(allowed_uses_raw, (list, tuple)):
+                raise TypeError(
+                    "corporate action source_registry.allowed_uses "
+                    "must be an array"
+                )
+            allowed_uses = {str(item) for item in allowed_uses_raw}
+            if "formal_trading_restriction_timeline" in allowed_uses:
+                if _required_json_bool(
+                    source.get("result_only"),
+                    field_name=(
+                        "corporate action source_registry.result_only"
+                    ),
+                ):
+                    raise ValueError(
+                        "result-only source cannot authorize restriction timeline"
+                    )
+                trade_restriction_source_ids.add(source_id)
+
+    trade_restriction_coverage_complete = False
+    coverage_raw = manifest.get("coverage")
+    if trade_restriction_source_ids and coverage_raw is not None:
+        coverage_by_source = {
+            _required_text(
+                item.get("source_id"),
+                field_name="corporate action coverage source_id",
+            ): item
+            for item in _mapping_sequence(
+                coverage_raw,
+                field_name="corporate action coverage",
+            )
+        }
+        trade_restriction_coverage_complete = all(
+            source_id in coverage_by_source
+            and _required_json_bool(
+                coverage_by_source[source_id].get("complete_year_coverage"),
+                field_name=(
+                    "corporate action coverage.complete_year_coverage"
+                ),
+            )
+            and not _required_json_bool(
+                coverage_by_source[source_id].get("result_only"),
+                field_name="corporate action coverage.result_only",
+            )
+            for source_id in trade_restriction_source_ids
+        )
     canonical = _as_mapping(
         manifest.get("canonical_events"),
         field_name="corporate action canonical_events",
@@ -1910,6 +2170,8 @@ def _load_corporate_action_custody(
     eligible_label_ledger_count = 0
     eligible_effective_dates: dict[str, set[str]] = {}
     eligible_dates: list[str] = []
+    trade_restriction_events: dict[str, list[_TradeRestrictionEvent]] = {}
+    trade_restriction_ambiguity_count = 0
     observed_count = 0
     with events_path.open("rt", encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, start=1):
@@ -2111,6 +2373,48 @@ def _load_corporate_action_custody(
                     raise ValueError(
                         "trading restriction event usage flags invalid"
                     )
+                event_type = _required_text(
+                    event.get("event_type"),
+                    field_name="corporate action event_type",
+                )
+                if event_type not in _OFFICIAL_TRADE_RESTRICTION_EVENT_TYPES:
+                    raise ValueError(
+                        "unsupported trading restriction event_type"
+                    )
+                if event.get("effective_precision") != "second":
+                    raise ValueError(
+                        "trading restriction event must use second precision"
+                    )
+                symbol = _required_text(
+                    event.get("symbol"),
+                    field_name="corporate action symbol",
+                )
+                if (
+                    trade_restriction_source_ids
+                    and _required_text(
+                        event.get("source_id"),
+                        field_name="corporate action source_id",
+                    )
+                    not in trade_restriction_source_ids
+                ):
+                    raise ValueError(
+                        "restriction event source is not custody-authorized"
+                    )
+                if ambiguity:
+                    trade_restriction_ambiguity_count += 1
+                if available <= training_as_of:
+                    trade_restriction_events.setdefault(symbol, []).append(
+                        _TradeRestrictionEvent(
+                            natural_key=natural_key,
+                            symbol=symbol,
+                            event_type=event_type,
+                            effective_at=effective,
+                            available_at=available,
+                            event_id=event_id,
+                            revision_id=revision_id,
+                            revision_availability_ambiguous=ambiguity,
+                        )
+                    )
                 continue
             if not formal_label_allowed or formal_restriction_allowed:
                 raise ValueError(
@@ -2148,6 +2452,19 @@ def _load_corporate_action_custody(
         symbol: tuple(sorted(dates))
         for symbol, dates in sorted(eligible_effective_dates.items())
     }
+    normalized_trade_restrictions = {
+        symbol: tuple(
+            sorted(
+                events,
+                key=lambda event: (
+                    event.effective_at,
+                    event.available_at,
+                    event.event_id,
+                ),
+            )
+        )
+        for symbol, events in sorted(trade_restriction_events.items())
+    }
     return _CorporateActionCustody(
         manifest_present=True,
         manifest_hash=expected_manifest_hash,
@@ -2162,6 +2479,12 @@ def _load_corporate_action_custody(
         effective_dates_by_symbol=normalized_dates,
         min_effective_date=min(eligible_dates) if eligible_dates else None,
         max_effective_date=max(eligible_dates) if eligible_dates else None,
+        trade_restriction_events_by_symbol=normalized_trade_restrictions,
+        trade_restriction_source_count=len(trade_restriction_source_ids),
+        trade_restriction_source_coverage_complete=(
+            trade_restriction_coverage_complete
+        ),
+        trade_restriction_ambiguity_count=trade_restriction_ambiguity_count,
     )
 
 
@@ -2244,6 +2567,7 @@ def _build_label_spool(
     corporate_action_effective_dates: (
         Mapping[str, tuple[str, ...]] | None
     ) = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> tuple[
     tuple[str, ...],
     dict[tuple[str, int], tuple[int, str, str]],
@@ -2302,10 +2626,17 @@ def _build_label_spool(
             "WHERE scope='stock' ORDER BY entity_key"
         )
     )
+    if progress_callback is not None:
+        progress_callback(
+            "label_spool_starting_"
+            f"{len(symbols)}_symbols_{len(calendar)}_dates"
+        )
     industry_price_cache: dict[str, dict[str, sqlite3.Row]] = {}
     label_batch: list[tuple[object, ...]] = []
     exclusion_batch: list[tuple[object, ...]] = []
     corporate_dates = corporate_action_effective_dates or {}
+    last_progress_ns = monotonic_ns()
+    processed_symbols = 0
     for symbol in symbols:
         stock_rows = tuple(
             connection.execute(
@@ -2332,6 +2663,21 @@ def _build_label_spool(
             )
         )
         for index, decision_date in enumerate(calendar):
+            if (
+                progress_callback is not None
+                and index % _LABEL_SPOOL_PROGRESS_CHECK_INTERVAL == 0
+            ):
+                now_ns = monotonic_ns()
+                if (
+                    now_ns - last_progress_ns
+                    >= _LABEL_SPOOL_PROGRESS_MAX_SILENCE_NS
+                ):
+                    progress_callback(
+                        "label_spool_symbol_"
+                        f"{processed_symbols + 1}_of_{len(symbols)}_"
+                        f"decision_{index}_of_{len(calendar)}_processed"
+                    )
+                    last_progress_ns = now_ns
             entry = stock_by_date.get(decision_date)
             if entry is None or not _positive_price(
                 entry["open_int"], entry["open_scale"]
@@ -2547,11 +2893,27 @@ def _build_label_spool(
             if len(label_batch) >= batch_size:
                 _insert_labels(connection, label_batch)
                 label_batch.clear()
+        processed_symbols += 1
+        if progress_callback is not None:
+            now_ns = monotonic_ns()
+            if (
+                processed_symbols % _LABEL_SPOOL_PROGRESS_SYMBOL_INTERVAL == 0
+                or now_ns - last_progress_ns
+                >= _LABEL_SPOOL_PROGRESS_MAX_SILENCE_NS
+                or processed_symbols == len(symbols)
+            ):
+                progress_callback(
+                    "label_spool_symbols_"
+                    f"{processed_symbols}_of_{len(symbols)}_processed"
+                )
+                last_progress_ns = now_ns
     if label_batch:
         _insert_labels(connection, label_batch)
     if exclusion_batch:
         _insert_label_exclusions(connection, exclusion_batch)
     connection.commit()
+    if progress_callback is not None:
+        progress_callback("label_spool_complete")
     return calendar, benchmark_returns
 
 
@@ -2660,6 +3022,39 @@ def _build_fold_windows(
             )
         start_index += test_date_count + embargo_trading_days
     return tuple(windows)
+
+
+def _build_portfolio_state_replay(
+    *,
+    calendar: tuple[str, ...],
+    decision_dates: tuple[str, ...],
+    formal_portfolio_ledger_path: Path | None,
+) -> _PortfolioStateReplay | FormalPortfolioStateReplay:
+    if formal_portfolio_ledger_path is None:
+        return _build_cash_only_portfolio_state_replay(
+            calendar=calendar,
+            decision_dates=decision_dates,
+        )
+    return load_formal_portfolio_state_ledger(
+        formal_portfolio_ledger_path,
+        calendar=calendar,
+        decision_dates=decision_dates,
+    )
+
+
+def _load_formal_rule_champion_history(
+    path: Path | None,
+    *,
+    decision_dates: tuple[str, ...],
+    training_as_of: str,
+) -> RuleChampionSnapshotHistoryCustody | None:
+    if path is None:
+        return None
+    return load_verified_rule_champion_snapshot_history(
+        path,
+        decision_dates=decision_dates,
+        training_as_of=training_as_of,
+    )
 
 
 def _build_cash_only_portfolio_state_replay(

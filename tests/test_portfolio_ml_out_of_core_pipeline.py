@@ -1,19 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import sqlite3
 import subprocess
 import sys
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pytest
 
+from data_module import portfolio_ml_dataset_assembler as assembler_module
 from data_module import portfolio_ml_direct_numeric_store as direct_store_module
 from data_module.portfolio_ml_dataset_assembler import (
     PortfolioMLDatasetAssembler,
@@ -339,6 +341,16 @@ def test_base_oof_and_meta_use_only_prior_mature_folds(
         )
     assert manifest["validation"]["pit_violation_count"] == 0
     assert manifest["validation"]["future_prefix_violation_count"] == 0
+    calibration = manifest["validation"]["calibration"]
+    assert calibration["status"] == "measured_cross_fitted_oof"
+    assert calibration["cross_fitted_calibration"] is True
+    assert calibration["production_eligible"] is False
+    assert "classifier_calibration_not_cross_fitted" not in manifest[
+        "promotion"
+    ]["blockers"]
+    assert "classifier_calibration_not_attached_to_ooc_model" in manifest[
+        "promotion"
+    ]["blockers"]
 
 
 def test_hgb_fit_population_is_bounded_and_disclosed(
@@ -469,7 +481,62 @@ def test_transitional_raw_adapter_binds_corporate_action_custody(
 def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
     bounded_e2e: _BoundedE2E,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    heartbeat_stages: list[str] = []
+    original_write_heartbeat = direct_store_module._write_heartbeat
+
+    # Force the test fixture to exercise the time-based progress fallback
+    # without making the production row threshold artificially small.
+    monotonic_value = 0
+
+    def fake_monotonic_ns() -> int:
+        nonlocal monotonic_value
+        monotonic_value += 1
+        return monotonic_value
+
+    monkeypatch.setattr(
+        assembler_module,
+        "_RAW_SPOOL_PROGRESS_INTERVAL",
+        1_000_000,
+    )
+    monkeypatch.setattr(
+        assembler_module,
+        "_RAW_SPOOL_PROGRESS_CHECK_INTERVAL",
+        64,
+    )
+    monkeypatch.setattr(
+        assembler_module,
+        "_RAW_SPOOL_PROGRESS_MAX_SILENCE_NS",
+        1,
+    )
+    monkeypatch.setattr(
+        assembler_module,
+        "_ASSEMBLY_PROGRESS_INTERVAL",
+        1,
+    )
+    monkeypatch.setattr(
+        assembler_module,
+        "_ASSEMBLY_PROGRESS_MAX_SILENCE_NS",
+        1,
+    )
+    monkeypatch.setattr(
+        assembler_module,
+        "monotonic_ns",
+        fake_monotonic_ns,
+    )
+
+    def capture_heartbeat(**kwargs: Any) -> None:
+        stage = kwargs.get("stage")
+        if isinstance(stage, str):
+            heartbeat_stages.append(stage)
+        original_write_heartbeat(**kwargs)
+
+    monkeypatch.setattr(
+        direct_store_module,
+        "_write_heartbeat",
+        capture_heartbeat,
+    )
     official = _official_corporate_action_publication(tmp_path)
     request = PortfolioMLDirectNumericRequest(
         raw_manifest_path=bounded_e2e.raw_manifest_path,
@@ -484,15 +551,93 @@ def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
         batch_size=61,
         workers=2,
         memory_budget_mb=1_024,
+        resume=False,
     )
     publication = PortfolioMLDirectNumericStoreBuilder().build(request)
-    replay = PortfolioMLDirectNumericStoreBuilder().build(request)
+    assert (
+        publication.run_directory / "discovery_cache.json"
+    ).is_file()
+
+    def _unexpected_discovery(**_: Any) -> Any:
+        raise AssertionError(
+            "resume should reuse the hash-bound discovery cache"
+        )
+
+    monkeypatch.setattr(
+        direct_store_module,
+        "_discover",
+        _unexpected_discovery,
+    )
+    resume_request = replace(request, resume=True)
+    replay = PortfolioMLDirectNumericStoreBuilder().build(resume_request)
     manifest = _read_json(publication.manifest_path)
+    heartbeat = _read_json(
+        publication.run_directory / "heartbeat.json"
+    )
 
     assert replay.run_id == publication.run_id
     assert replay.manifest_hash == publication.manifest_hash
     assert replay.manifest_file_hash == publication.manifest_file_hash
     assert manifest["execution"]["direct_numeric_store"] is True
+    assert heartbeat["schema_version"] == (
+        direct_store_module.DIRECT_HEARTBEAT_SCHEMA_VERSION
+    )
+    assert heartbeat["status"] == "complete"
+    assert heartbeat["stage"] in {
+        "complete",
+        "completed_manifest_reused",
+    }
+    assert heartbeat["run_id"] == publication.run_id
+    assert heartbeat["completed_years"] == sorted(
+        heartbeat["completed_years"]
+    )
+    assert heartbeat["completed_years"] == sorted(
+        int(item["year"]) for item in manifest["years"]
+    )
+    assert {
+        "year_raw_spool_complete",
+        "year_labels_complete",
+        "year_assembly_complete",
+        "year_artifacts_complete",
+        "year_directory_finalized",
+    }.issubset(heartbeat_stages)
+    assert any(
+        stage.startswith("raw_spool_source_shard_")
+        for stage in heartbeat_stages
+    )
+    assert any(
+        stage.startswith("discovery_source_shard_")
+        and stage.endswith("_complete")
+        for stage in heartbeat_stages
+    )
+    assert "discovery_cache_reused" in heartbeat_stages
+    assert any(
+        stage.endswith("rows_64_processed")
+        for stage in heartbeat_stages
+    )
+    assert any(
+        stage.startswith("assembly_decision_")
+        for stage in heartbeat_stages
+    )
+    assert any(
+        stage.startswith("label_spool_starting_")
+        for stage in heartbeat_stages
+    )
+    assert any(
+        stage.startswith("label_spool_symbols_")
+        for stage in heartbeat_stages
+    )
+    assert "label_spool_complete" in heartbeat_stages
+    assembly_stages = [
+        stage
+        for stage in heartbeat_stages
+        if stage.startswith("assembly_decision_")
+    ]
+    assembly_dates = [
+        stage.removeprefix("assembly_decision_").split("_rows_", 1)[0]
+        for stage in assembly_stages
+    ]
+    assert len(assembly_stages) > len(set(assembly_dates))
     assert manifest["execution"]["direct_store_complete"] is True
     assert manifest["execution"]["full_market_scale_capable"] is True
     assert manifest["execution"]["full_market_ready"] is False
@@ -502,8 +647,17 @@ def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
     )
     assert (
         "official_trade_restriction_timeline_present"
-        in manifest["execution"]["readiness_failed_checks"]
+        not in manifest["execution"]["readiness_failed_checks"]
     )
+    assert manifest["corporate_action_custody"][
+        "official_trade_restriction_timeline"
+    ]["present"] is True
+    assert manifest["execution"][
+        "trade_restriction_unknown_row_count"
+    ] == 0
+    assert manifest["safety"][
+        "official_trade_restriction_bound_per_row"
+    ] is True
     assert (
         "formal_rule_champion_snapshot_history_present"
         in manifest["execution"]["readiness_failed_checks"]
@@ -538,7 +692,7 @@ def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
         encoding="utf-8",
     )
     publication.manifest_path.unlink()
-    adopted = PortfolioMLDirectNumericStoreBuilder().build(request)
+    adopted = PortfolioMLDirectNumericStoreBuilder().build(resume_request)
     adopted_checkpoint = _read_json(checkpoint_path)
     assert adopted.run_id == publication.run_id
     assert finalized_year in adopted_checkpoint["completed_years"]
@@ -563,7 +717,14 @@ def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
     assert trained_manifest["meta_fold_count"] == (
         manifest["fold_count"] - 1
     )
+    assert trained_manifest["formal_oos_allowed"] is False
+    assert trained_manifest["production_alpha_bp"] == 0
+    assert trained_manifest["broker_order_allowed"] is False
     assert trained_manifest["promotion"]["production_alpha_bp"] == 0
+    latest_pointer = _read_json(trained.latest_manifest_path)
+    assert latest_pointer["formal_oos_allowed"] is False
+    assert latest_pointer["production_alpha_bp"] == 0
+    assert latest_pointer["broker_order_allowed"] is False
 
 
 def test_direct_numeric_preflight_rejects_low_temporary_budget(
@@ -658,7 +819,10 @@ def test_long_halt_label_maturity_poison_is_excluded(
             ),
         )
     store = object.__new__(_NumericStore)
-    store.years = (SimpleNamespace(directory=year_directory),)
+    store.years = cast(
+        tuple[Any, ...],
+        (SimpleNamespace(directory=year_directory),),
+    )
     refs = np.asarray(((0, 0), (0, 1)), dtype=np.int64)
     selected = store.mature_positions(refs, cutoff="2025-08-01")
     assert selected.tolist() == [0]
@@ -685,6 +849,222 @@ def test_rss_measurement_failure_is_fail_closed(
     )
     with pytest.raises(RuntimeError, match="fails closed"):
         _PeakRSSMonitor(memory_budget_mb=256)
+
+
+def test_direct_heartbeat_atomic_replace_retries_transient_permission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "heartbeat.json"
+    original_replace = direct_store_module.os.replace
+    attempts = 0
+
+    def _flaky_replace(source: Any, target: Any) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise PermissionError("simulated transient Windows lock")
+        original_replace(source, target)
+
+    monkeypatch.setattr(
+        direct_store_module.os,
+        "replace",
+        _flaky_replace,
+    )
+    direct_store_module._atomic_write_json(
+        path,
+        {"status": "running"},
+    )
+
+    assert attempts == 3
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "status": "running"
+    }
+
+
+def test_preprocessor_uses_bounded_deterministic_memmap_sample(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import ml_module.allocation_out_of_core_training_service as trainer_module
+
+    path = tmp_path / "matrix.f32"
+    matrix = np.memmap(
+        path,
+        dtype=np.dtype("<f4"),
+        mode="w+",
+        shape=(32, 4),
+    )
+    matrix[:] = np.arange(128, dtype=np.float32).reshape(32, 4)
+    matrix.flush()
+    monkeypatch.setattr(
+        trainer_module,
+        "_PREPROCESSOR_MAX_MEDIAN_SAMPLE_ROWS",
+        7,
+    )
+    observed_sample_sizes: list[int] = []
+    original_read_rows = trainer_module._read_matrix_rows
+
+    def _spy_read_rows(
+        source: np.memmap,
+        indexes: np.ndarray,
+        *,
+        batch_size: int,
+    ) -> np.ndarray:
+        observed_sample_sizes.append(len(indexes))
+        return original_read_rows(
+            source,
+            indexes,
+            batch_size=batch_size,
+        )
+
+    monkeypatch.setattr(
+        trainer_module,
+        "_read_matrix_rows",
+        _spy_read_rows,
+    )
+    medians, means, standard_deviations = trainer_module._fit_preprocessor(
+        matrix,
+        batch_size=5,
+    )
+
+    expected_indexes = trainer_module._deterministic_bounded_indexes(
+        row_count=32,
+        maximum=7,
+    )
+    expected = np.median(
+        np.asarray(matrix[expected_indexes, :], dtype=np.float64),
+        axis=0,
+    )
+    assert observed_sample_sizes == [7]
+    np.testing.assert_allclose(medians, expected)
+    assert means.shape == (8,)
+    assert standard_deviations.shape == (8,)
+    assert np.all(np.isfinite(means))
+    assert np.all(np.isfinite(standard_deviations))
+    trainer_module._close_memmap(matrix)
+
+
+def test_resume_after_final_meta_before_manifest_skips_final_base_materialization(
+    bounded_e2e: _BoundedE2E,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = AllocationOutOfCoreTrainingRequest(
+        store_manifest_path=bounded_e2e.store_manifest_path,
+        output_root=tmp_path / "interrupted-final-manifest",
+        algorithms=("ridge_logistic",),
+        horizons=(5,),
+        batch_size=31,
+        workers=2,
+        memory_budget_mb=1_024,
+        logistic_iterations=2,
+    )
+    import ml_module.allocation_out_of_core_training_service as trainer_module
+
+    original_assert_within_budget = (
+        trainer_module._PeakRSSMonitor.assert_within_budget
+    )
+
+    def _interrupt_after_final_meta(
+        monitor: _PeakRSSMonitor,
+        *,
+        stage: str,
+    ) -> None:
+        if stage == "final_meta":
+            raise MemoryError("simulated final-meta memory gate")
+        original_assert_within_budget(monitor, stage=stage)
+
+    monkeypatch.setattr(
+        trainer_module._PeakRSSMonitor,
+        "assert_within_budget",
+        _interrupt_after_final_meta,
+    )
+    with pytest.raises(MemoryError, match="simulated final-meta"):
+        AllocationOutOfCoreTrainingService().train(request)
+
+    run_directory = next((request.output_root / "runs").iterdir())
+    assert not (run_directory / "manifest.json").exists()
+    assert not (request.output_root / "latest_manifest.json").exists()
+    monkeypatch.setattr(
+        trainer_module._PeakRSSMonitor,
+        "assert_within_budget",
+        original_assert_within_budget,
+    )
+
+    def _unexpected_materialization(**_: object) -> np.memmap:
+        raise AssertionError("completed final-base artifacts must be reused")
+
+    monkeypatch.setattr(
+        trainer_module,
+        "_materialize_feature_matrix",
+        _unexpected_materialization,
+    )
+
+    def _unexpected_meta_materialization(**_: object) -> np.memmap:
+        raise AssertionError(
+            "final meta training must stream prior OOF folds"
+        )
+
+    monkeypatch.setattr(
+        trainer_module,
+        "_materialize_meta_train_matrix",
+        _unexpected_meta_materialization,
+    )
+    resumed = AllocationOutOfCoreTrainingService().train(request)
+
+    assert resumed.run_directory == run_directory
+    assert resumed.manifest_path.is_file()
+    assert resumed.latest_manifest_path.is_file()
+    manifest = _read_json(resumed.manifest_path)
+    assert manifest["final_base_expert_count"] == len(
+        manifest["final_base_experts"]
+    )
+    assert manifest["meta_fold_count"] == len(manifest["meta_folds"])
+
+
+def test_ooc_training_cli_reports_memory_error_as_structured_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script_path = ROOT / "scripts" / "train_ml_allocation_out_of_core.py"
+    spec = importlib.util.spec_from_file_location(
+        "test_train_ml_allocation_out_of_core_cli",
+        script_path,
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class _MemoryConstrainedService:
+        def train(self, _: object) -> object:
+            raise MemoryError("training memory budget exceeded")
+
+    monkeypatch.setattr(
+        module,
+        "AllocationOutOfCoreTrainingService",
+        _MemoryConstrainedService,
+    )
+    exit_code = module.main(
+        [
+            "--store-manifest",
+            "store.json",
+            "--output-dir",
+            "output",
+        ]
+    )
+
+    assert exit_code == 2
+    payload = json.loads(capsys.readouterr().err)
+    assert payload == {
+        "error_type": "MemoryError",
+        "formal_oos_allowed": False,
+        "message": "training memory budget exceeded",
+        "production_alpha_bp": 0,
+        "broker_order_allowed": False,
+        "status": "blocked",
+    }
 
 
 @pytest.mark.parametrize(
