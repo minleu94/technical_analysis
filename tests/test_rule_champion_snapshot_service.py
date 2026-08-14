@@ -4,12 +4,17 @@ import hashlib
 import hmac
 import json
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 
 from app_module.rule_champion_snapshot_service import (
     PersistedFormalDecisionArtifactRepository,
     RuleChampionSnapshotService,
+    load_verified_rule_champion_snapshot_history,
+)
+from ml_module.allocation_oos_portfolio_replay import (
+    _load_formal_rule_champion_history_custody,
 )
 
 
@@ -183,3 +188,104 @@ def test_noncontiguous_ranks_and_cross_decision_timestamp_remain_rejected() -> N
     )
     with pytest.raises(ValueError, match="same decision_timestamp"):
         _build(_repository(first, second), first["decision_snapshot_id"], second["decision_snapshot_id"])
+
+
+def _history_payload(snapshot) -> dict[str, object]:
+    body: dict[str, object] = {
+        "schema_version": "rule-champion-snapshot-history.v1",
+        "status": "complete",
+        "formal_source_only": True,
+        "research_only": False,
+        "formal_consumer_compatible": True,
+        "promotion_eligible": False,
+        "rule_only_proof": "formal_rule_only",
+        "registered_store_id": _TEST_STORE_ID,
+        "decision_dates": ["2026-07-13"],
+        "snapshot_count": 1,
+        "snapshots": [snapshot.to_manifest()],
+    }
+    body["manifest_hash"] = "sha256:" + hashlib.sha256(
+        _canonical_bytes(body)
+    ).hexdigest()
+    return body
+
+
+def test_history_loader_verifies_signed_snapshot_manifest_and_date_coverage(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact()
+    snapshot = _build(
+        _repository(artifact),
+        str(artifact["decision_snapshot_id"]),
+    )
+    path = tmp_path / "rule_champion_history.json"
+    path.write_text(
+        json.dumps(_history_payload(snapshot), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    custody = load_verified_rule_champion_snapshot_history(
+        path,
+        decision_dates=("2026-07-13",),
+        training_as_of="2026-07-13T23:59:59+08:00",
+    )
+
+    assert custody.decision_dates == ("2026-07-13",)
+    assert custody.snapshot_by_date["2026-07-13"].decision_rows[0].symbol == "2330"
+    assert custody.custody_payload()["research_only"] is False
+
+
+def test_history_loader_rejects_research_shadow_and_missing_coverage(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact()
+    snapshot = _build(
+        _repository(artifact),
+        str(artifact["decision_snapshot_id"]),
+    )
+    payload = _history_payload(snapshot)
+    payload["research_only"] = True
+    payload["manifest_hash"] = "sha256:" + hashlib.sha256(
+        _canonical_bytes({key: value for key, value in payload.items() if key != "manifest_hash"})
+    ).hexdigest()
+    path = tmp_path / "research_history.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="research-only"):
+        load_verified_rule_champion_snapshot_history(path)
+
+    valid = _history_payload(snapshot)
+    valid_path = tmp_path / "valid_history.json"
+    valid_path.write_text(json.dumps(valid), encoding="utf-8")
+    with pytest.raises(ValueError, match="does not cover assembly"):
+        load_verified_rule_champion_snapshot_history(
+            valid_path,
+            decision_dates=("2026-07-12",),
+        )
+
+
+def test_oos_consumer_revalidates_rule_history_custody(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact()
+    snapshot = _build(
+        _repository(artifact),
+        str(artifact["decision_snapshot_id"]),
+    )
+    path = tmp_path / "rule_champion_history.json"
+    path.write_text(
+        json.dumps(_history_payload(snapshot), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    history = load_verified_rule_champion_snapshot_history(path)
+
+    verified = _load_formal_rule_champion_history_custody(
+        {"formal_rule_champion_history": history.custody_payload()},
+        training={"training_as_of": "2026-07-13T23:59:59+08:00"},
+    )
+
+    assert verified is not None
+    assert verified.manifest_hash == history.manifest_hash
+    assert verified.snapshot_by_date["2026-07-13"].decision_rows[0].symbol == (
+        "2330"
+    )

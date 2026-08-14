@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -114,6 +115,8 @@ def _daily_price_db(tmp_path: Path, *, include_decision_day: bool = False) -> Pa
                 "INSERT INTO daily_prices VALUES (?, ?, ?, ?)",
                 ("20260807", "2317", "9999", 999_999_999),
             )
+    # 固定 fixture 的發布時間，讓 look-ahead guard 不受測試執行日期影響。
+    os.utime(db_path, (1, 1))
     return db_path
 
 
