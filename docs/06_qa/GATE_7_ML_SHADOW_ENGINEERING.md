@@ -164,6 +164,8 @@ Downside probability 使用 isotonic calibration，且 calibration input 必須�
 
 2026-08-15 的 PFS-09 frozen-candidate OOS evidence 只綁定外部完成的 primary／verification replay、inference calibration audit 與 integer-bp PSI report；兩次 replay 的 identity／result hash 必須一致，且 fit／retrain／post-outcome method selection 全為 false。缺件、identity mismatch 或 quality failure 都只留下 blockers；即使 package `ready_for_formal_review`，仍固定 `formal_oos_allowed=false`、alpha=`0`、promotion=`false`，下一步才是 PFS-10 review authority。
 
+2026-08-15 的 PFS-10 promotion review package 只聚合 machine gates 與 owner-review metadata；10 個 machine gates 全 true 時最多回報 `ready_for_owner_review`，仍固定 owner authorization false、`promotion_eligible=false`、`formal_oos_allowed=false`、alpha=`0`、broker disabled。程式面 PFS-01～PFS-10 已完成，執行面不會自行選 activation date、設定正式 path 或啟動 watcher，等待 owner 的受控 prospective decision。
+
 2026-08-14 起 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 會在 polling
 時重新讀取 Windows 使用者／系統環境的受控 formal path、PIT sector path、Rule HMAC key
 與 store id，補足

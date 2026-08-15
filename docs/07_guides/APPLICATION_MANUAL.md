@@ -26,6 +26,12 @@ PFS-09 frozen-candidate evidence inspector 可用於受控 fixture 的 hash cust
 - 缺 primary／verification、maturity、calibration 或 PSI，或 quality／identity 不通過時，輸出 `waiting_for_frozen_oos_evidence` 與 blockers；不會呼叫現有重型 replay engine，不會 fit／retrain／事後選 calibration method。
 - 即使輸出 `ready_for_formal_review`，仍固定 `formal_oos_allowed=false`、production alpha=`0`、promotion=`false`、broker disabled。PFS-10 才負責 promotion review 與人工／機器 Gate authority。
 
+PFS-10 promotion review inspector 可用於受控 fixture 的最後 machine-gate aggregation：
+
+- `scripts\inspect_prospective_promotion_review.py --fixture-only` 讀取 PFS-09 package 與 10 個 machine-gate 布林值；缺件或任一 false 都輸出 blockers，所有 true 時才輸出 `ready_for_owner_review`。
+- `ready_for_owner_review` 不等於 promotion。review package 永久固定 `owner_review_required=true`、`owner_review_received=false`、`owner_authorization_received=false`、`promotion_eligible=false`、`formal_oos_allowed=false`、alpha=`0`、broker disabled。
+- 這個命令不選 activation 日期、不設定 Windows path／secret、不啟動 watcher／Direct／OOC；下一步必須由 owner 在受控環境另行決定是否開始未來 clock。若要 retrain／recalibrate，先關閉本 clock，建立新 candidate 與新 clock。
+
 ## 2026-08-14 自動鏈 current state
 
 ### 正式 ML 輸入接線狀態（2026-08-14）
