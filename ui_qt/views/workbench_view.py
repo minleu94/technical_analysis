@@ -8,6 +8,8 @@ from typing import cast
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -171,6 +173,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         title.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
         content_layout.addWidget(title)
 
+        self._build_today_action_center(content_layout)
+
         self.priority_banner = QLabel("")
         self.priority_banner.setWordWrap(True)
         self.priority_banner.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -202,7 +206,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         content_layout.addWidget(self.boundary_banner)
 
-        advice_panel, self.advice_section_title = self._panel_with_title("正式 Advice / 唯讀呈現")
+        advice_panel, self.advice_section_title = self._panel_with_title("今日 Advice 與研究候選")
         self.advice_summary = self._make_state_label()
         self.advice_recommendation_table = self._make_table(self.advice_recommendation_model)
         self.advice_candidate_table = self._make_table(self.advice_candidate_model)
@@ -243,11 +247,6 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.advice_empty_widget.setVisible(False)
 
         content_layout.addWidget(advice_panel)
-
-        self.refresh_button = QPushButton("重新載入唯讀工作台")
-        self.refresh_button.setProperty("variant", "secondary")
-        self.refresh_button.clicked.connect(self.refresh_dashboard)
-        content_layout.addWidget(self.refresh_button)
 
         drilldown_panel, self.drilldown_section_title = self._panel_with_title("操作下鑽 / Drill-down")
         drilldown_layout = QHBoxLayout()
@@ -590,6 +589,330 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         return label
 
+    def _build_today_action_center(self, parent_layout: QVBoxLayout) -> None:
+        """建立首頁的任務導向入口；按鈕只切換既有工作區。"""
+
+        panel = QFrame()
+        panel.setObjectName("todayActionCenter")
+        panel.setStyleSheet(
+            f"#todayActionCenter {{ background: {MIDNIGHT_ANALYST.surface_1}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-left: 4px solid {MIDNIGHT_ANALYST.accent}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; }}"
+        )
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 12, 14, 14)
+        layout.setSpacing(10)
+
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(10)
+        copy_layout = QVBoxLayout()
+        copy_layout.setContentsMargins(0, 0, 0, 0)
+        copy_layout.setSpacing(2)
+        self.today_action_title = QLabel("今日行動中心")
+        title_font = QFont()
+        title_font.setPointSize(15)
+        title_font.setBold(True)
+        self.today_action_title.setFont(title_font)
+        self.today_action_title.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_primary};")
+        self.today_action_hint_label = QLabel("")
+        self.today_action_hint_label.setWordWrap(True)
+        self.today_action_hint_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 11px;"
+        )
+        copy_layout.addWidget(self.today_action_title)
+        copy_layout.addWidget(self.today_action_hint_label)
+        header_layout.addLayout(copy_layout, 1)
+
+        self.primary_action_button = QPushButton("開始今天的檢查")
+        self.primary_action_button.setObjectName("todayPrimaryAction")
+        self.primary_action_button.setProperty("variant", "primary")
+        self.primary_action_button.setMinimumHeight(34)
+        self.primary_action_button.setToolTip(
+            "只會帶你前往既有工作區；不會更新資料、執行策略、寫入持倉或交易。"
+        )
+        self.primary_action_button.clicked.connect(self._open_primary_today_action)
+        header_layout.addWidget(self.primary_action_button)
+
+        self.refresh_button = QPushButton("重新整理狀態")
+        self.refresh_button.setProperty("variant", "secondary")
+        self.refresh_button.setMinimumHeight(34)
+        self.refresh_button.setToolTip("重新讀取既有的唯讀工作台狀態。")
+        self.refresh_button.clicked.connect(self.refresh_dashboard)
+        header_layout.addWidget(self.refresh_button)
+        layout.addWidget(header)
+
+        cards_layout = QGridLayout()
+        cards_layout.setContentsMargins(0, 0, 0, 0)
+        cards_layout.setHorizontalSpacing(10)
+        cards_layout.setVerticalSpacing(10)
+        self.today_action_cards: dict[str, QFrame] = {}
+        self.today_action_status_labels: dict[str, QLabel] = {}
+        self.today_action_body_labels: dict[str, QLabel] = {}
+        self.today_action_buttons: dict[str, QPushButton] = {}
+        self._today_action_targets: dict[str, str] = {}
+        self._primary_action_target = ""
+
+        specifications = (
+            ("data", "資料狀態", "檢查今日資料是否可用", "查看數據更新", "update"),
+            ("market", "市場判讀", "查看市場與今日待判讀事項", "開啟市場總覽", "daily_decision"),
+            ("advice", "Advice 與候選", "確認今日是否已有可檢閱結果", "前往推薦分析", "recommendation"),
+            ("portfolio", "持倉覆盤", "優先處理既有持倉的人工事項", "開啟持倉管理", "portfolio_review"),
+        )
+        for index, (key, title, description, button_text, target) in enumerate(specifications):
+            card = self._make_today_action_card(
+                key,
+                title,
+                description,
+                button_text,
+                target,
+            )
+            cards_layout.addWidget(card, index // 2, index % 2)
+        layout.addLayout(cards_layout)
+        parent_layout.addWidget(panel)
+
+    def _make_today_action_card(
+        self,
+        key: str,
+        title: str,
+        description: str,
+        button_text: str,
+        target: str,
+    ) -> QFrame:
+        card = QFrame()
+        card.setObjectName(f"todayActionCard_{key}")
+        card.setMinimumHeight(128)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(5)
+        title_label = QLabel(title)
+        title_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_primary}; font-size: 12px; font-weight: 800;"
+        )
+        status_label = QLabel("等待狀態")
+        status_label.setMinimumHeight(22)
+        body_label = QLabel(description)
+        body_label.setWordWrap(True)
+        body_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 11px;"
+        )
+        button = QPushButton(button_text)
+        button.setProperty("variant", "secondary")
+        button.setMinimumHeight(28)
+        button.clicked.connect(
+            lambda _checked=False, action_key=key: self._open_today_action(action_key)
+        )
+        layout.addWidget(title_label)
+        layout.addWidget(status_label)
+        layout.addWidget(body_label, 1)
+        layout.addWidget(button)
+        self.today_action_cards[key] = card
+        self.today_action_status_labels[key] = status_label
+        self.today_action_body_labels[key] = body_label
+        self.today_action_buttons[key] = button
+        self._today_action_targets[key] = target
+        self._set_today_action_card(
+            key,
+            status="等待狀態",
+            body=description,
+            tone="neutral",
+            button_text=button_text,
+            target=target,
+        )
+        return card
+
+    def _set_today_action_card(
+        self,
+        key: str,
+        *,
+        status: str,
+        body: str,
+        tone: str,
+        button_text: str,
+        target: str,
+    ) -> None:
+        color = WORKBENCH_TONES.get(tone, WORKBENCH_TONES["neutral"])
+        card = self.today_action_cards[key]
+        card.setStyleSheet(
+            f"QFrame#{card.objectName()} {{ background: {color['bg']}; "
+            f"border: 1px solid {color['border']}; border-left: 4px solid {color['fg']}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; }}"
+        )
+        status_label = self.today_action_status_labels[key]
+        status_label.setText(status)
+        status_label.setStyleSheet(
+            f"color: {color['fg']}; font-size: 11px; font-weight: 800;"
+        )
+        self.today_action_body_labels[key].setText(body)
+        button = self.today_action_buttons[key]
+        button.setText(button_text)
+        button.setEnabled(self._today_action_available(target))
+        self._today_action_targets[key] = target
+
+    def _render_today_action_center(self, dashboard: WorkbenchDashboardDTO | None) -> None:
+        if dashboard is None:
+            self.today_action_hint_label.setText(
+                "正在等待工作台狀態；重新整理只會讀取既有資料，不會執行任何寫入。"
+            )
+            self.primary_action_button.setText("重新整理目前狀態")
+            self.primary_action_button.setEnabled(self._today_action_available("refresh"))
+            self._primary_action_target = "refresh"
+            for key, status, body in (
+                ("data", "等待狀態", "尚未取得資料狀態；可重新整理或前往數據更新確認。"),
+                ("market", "等待狀態", "尚未取得市場判讀；資料載入後會顯示今日待判讀數。"),
+                ("advice", "等待狀態", "尚未取得 Advice DTO；不把缺資料解讀為沒有風險。"),
+                ("portfolio", "等待狀態", "尚未取得持倉覆盤項目；不會自行假定沒有持倉風險。"),
+            ):
+                self._set_today_action_card(
+                    key,
+                    status=status,
+                    body=body,
+                    tone="neutral",
+                    button_text="重新整理狀態",
+                    target="refresh",
+                )
+            return
+
+        source_status = str(dashboard.market_context.get("source_status", "missing")).strip().lower()
+        source_unavailable = source_status in {"", "missing", "blocked", "outage", "error"}
+        if source_unavailable:
+            self._set_today_action_card(
+                "data",
+                status="資料待確認",
+                body="市場資料狀態尚未就緒；先確認更新與資料品質，再進行研究。",
+                tone="warning",
+                button_text="查看數據更新",
+                target="update",
+            )
+        else:
+            self._set_today_action_card(
+                "data",
+                status="資料可檢視",
+                body=f"市場資料來源目前標示為 {display_workbench_value(source_status)}；仍請留意警告與日期。",
+                tone="ready",
+                button_text="查看數據更新",
+                target="update",
+            )
+
+        review_count = len(dashboard.review_items)
+        if review_count:
+            self._set_today_action_card(
+                "market",
+                status=f"待判讀 {review_count} 項",
+                body="先看市場總覽與既有風險訊號，再決定是否繼續研究候選。",
+                tone="warning",
+                button_text="開啟市場總覽",
+                target="daily_decision",
+            )
+        else:
+            self._set_today_action_card(
+                "market",
+                status="目前無待判讀",
+                body="清單為空只代表目前 DTO 沒有列項，不代表所有 Gate 已通過。",
+                tone="info",
+                button_text="開啟市場總覽",
+                target="daily_decision",
+            )
+
+        advice = dashboard.advice_dashboard
+        advice_rows = tuple(getattr(advice, "recommendations", ())) if advice is not None else ()
+        portfolio_rows = tuple(getattr(advice, "portfolio_rows", ())) if advice is not None else ()
+        if advice is None:
+            self._set_today_action_card(
+                "advice",
+                status="尚未載入 Advice",
+                body="尚未有 Advice DTO；可到推薦分析建立並保存研究結果，不能以空白當成結論。",
+                tone="warning",
+                button_text="前往推薦分析",
+                target="recommendation",
+            )
+        elif not advice_rows and not portfolio_rows:
+            self._set_today_action_card(
+                "advice",
+                status="目前無合格建議",
+                body="這是正常的安全結果；請閱讀品質、限制與 Why Not，而非手動補值。",
+                tone="info",
+                button_text="檢視推薦分析",
+                target="recommendation",
+            )
+        else:
+            self._set_today_action_card(
+                "advice",
+                status=f"已載入 {len(advice_rows)} 筆結果",
+                body="只讀呈現既有 Advice 與研究候選；請在原工作區檢閱完整理由與限制。",
+                tone="ready",
+                button_text="檢視推薦分析",
+                target="recommendation",
+            )
+
+        action_count = len(dashboard.action_items)
+        if action_count:
+            self._set_today_action_card(
+                "portfolio",
+                status=f"待覆盤 {action_count} 項",
+                body="已有持倉或風險相關的人工事項時，優先前往持倉管理檢查。",
+                tone="warning",
+                button_text="開啟持倉管理",
+                target="portfolio_review",
+            )
+        else:
+            self._set_today_action_card(
+                "portfolio",
+                status="目前無待覆盤項目",
+                body="沒有 Action Item 不代表持倉風險為零；可在持倉管理進行人工確認。",
+                tone="info",
+                button_text="開啟持倉管理",
+                target="portfolio_review",
+            )
+
+        if source_unavailable:
+            primary_label, primary_target = "先確認資料狀態", "update"
+        elif action_count:
+            primary_label, primary_target = "先檢查持倉事項", "portfolio_review"
+        elif review_count:
+            primary_label, primary_target = f"查看 {review_count} 項今日待判讀", "daily_decision"
+        elif advice is None:
+            primary_label, primary_target = "建立今天的研究候選", "recommendation"
+        else:
+            primary_label, primary_target = "前往市場總覽", "daily_decision"
+        self.today_action_hint_label.setText(
+            f"建議下一步：{primary_label}。此入口只導覽，不會自動更新資料、執行策略或交易。"
+        )
+        self.primary_action_button.setText(primary_label)
+        self.primary_action_button.setEnabled(self._today_action_available(primary_target))
+        self._primary_action_target = primary_target
+
+    def _today_action_available(self, target: str) -> bool:
+        if target == "refresh":
+            return self.source_service is not None
+        if target == "update":
+            return self.navigate_to_update_callback is not None
+        if target == "recommendation":
+            return self.navigate_to_recommendation_callback is not None
+        legacy_target = WORKBENCH_LEGACY_DRILLDOWN_TARGETS.get(target, target)
+        callbacks: dict[str, Callable[[], None] | None] = {
+            "daily_decision": self.navigate_to_daily_decision_callback,
+            "evidence_review": self.navigate_to_evidence_review_callback,
+            "portfolio": self.navigate_to_portfolio_callback,
+        }
+        return callbacks.get(legacy_target) is not None
+
+    def _open_today_action(self, key: str) -> None:
+        target = self._today_action_targets.get(key, "")
+        if target == "refresh":
+            self.refresh_dashboard()
+            return
+        self.navigate_to_drilldown_target(target)
+
+    def _open_primary_today_action(self) -> None:
+        target = self._primary_action_target
+        if target == "refresh":
+            self.refresh_dashboard()
+            return
+        self.navigate_to_drilldown_target(target)
+
     def _make_summary_block(self, key: str, title: str) -> QWidget:
         block = QWidget()
         block.setObjectName("workbenchSummaryBlock")
@@ -729,13 +1052,17 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self._dashboard = dashboard
         self.refresh_button.setEnabled(self.source_service is not None)
         self.boundary_banner.setText(
-            "唯讀邊界：資料只能由 WorkbenchSourceService / WorkbenchDashboardDTO 供應；"
-            "不寫 DB、不啟用正式排程器、不是交易建議；"
-            "Advice 僅呈現已注入 DTO、不執行 Policy；"
+            "安全與唯讀邊界：這裡只整理既有狀態與導覽；不是交易建議，不會寫 DB、執行策略或交易；"
+            "Advice 僅呈現已注入 DTO、不執行 Policy；不重算 scoring / portfolio / backtest / lifecycle。"
+        )
+        self.boundary_banner.setToolTip(
+            "資料只由 WorkbenchSourceService / WorkbenchDashboardDTO 供應；"
+            "不寫 DB、不啟用正式排程器、不是交易建議；Advice 僅呈現已注入 DTO，"
             "不重算 scoring / portfolio / backtest / lifecycle。"
         )
         self._set_summary_blocks(dashboard)
         self._set_priority_banner(dashboard)
+        self._render_today_action_center(dashboard)
         self.meta_label.setText(
             f"決策日期={dashboard.as_of_date.isoformat()} | "
             f"產生時間={dashboard.generated_at.isoformat()} | "
@@ -874,8 +1201,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
     def _display_pending_dashboard(self) -> None:
         self.refresh_button.setEnabled(self.source_service is not None)
+        self._render_today_action_center(None)
         self.boundary_banner.setText(
-            "唯讀邊界：等待 WorkbenchDashboardDTO；不是交易建議；正式排程器維持關閉。"
+            "安全邊界：正在等待既有工作台狀態；不會將缺資料解讀為可交易結果。"
         )
         self._set_summary_placeholder("等待 DTO", "尚未載入 WorkbenchDashboardDTO")
         self.meta_label.setText("工作台尚未載入。")
@@ -907,8 +1235,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self._set_detail_placeholder("等待 DTO", "請先重新載入 WorkbenchDashboardDTO。")
 
     def _display_exception_dashboard(self, error_message: str) -> None:
+        self._render_today_action_center(None)
         self.boundary_banner.setText(
-            "唯讀邊界：工作台載入降級；不是交易建議；正式排程器維持關閉。"
+            "安全邊界：工作台狀態載入降級；不會補值、執行策略或把資料問題當成交易結論。"
         )
         self._set_summary_placeholder("載入降級", "請先確認 WorkbenchSourceService；Phase gate 不變")
         self.meta_label.setText(f"工作台載入失敗：{error_message}")

@@ -1,5 +1,11 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-14 Daily Workbench UX / desktop responsive follow-up
+
+- 主 UI 的預設「決策工作台」首頁已由工程狀態優先，調整為「今日行動中心」優先：依既有 `WorkbenchDashboardDTO` 只讀投影資料狀態、市場待判讀、Advice／候選與持倉覆盤四項，並依資料缺口、既有持倉 Action Item、待判讀與 Advice 是否存在，選出一個下一步導覽。這些按鈕只切換至既有數據更新、市場總覽、推薦分析或持倉管理，不觸發更新、策略、寫入、持倉變更或交易。
+- `AdaptiveWorkspaceStack` 改為只讓目前可見工作區提供主視窗最小尺寸；先前 1024×768 會被隱藏工作區的最大 hint 強制放大為 1881×1014，現在真實 offscreen MainWindow smoke 的 1440×900 與 1024×768 都 `matched`。寬度不大於 1120 時左側導覽自動收為 icon-only，僅在此自動收合情況下於寬度回到 1240 時展開；使用者手動收合不會被覆寫。
+- focused UI／read-only boundary 驗證為 `85 passed`，資料更新頁 QA 為 `23 passed / 0 failed`；另以隔離 `DATA_ROOT` 的 8-workspace MainWindow smoke 驗證所有工作區仍可切換、沒有發出任何禁止動作。此變更不改變 Advice／ML／Evidence／Data Gate，`formal_oos_allowed=false`、production alpha 0 與 broker 禁用狀態不變。
+
 ## 2026-08-14 Windows WER／Qt native crash follow-up
 
 - 重新以唯讀方式盤點 `C:\ProgramData\Microsoft\Windows\WER\ReportArchive` 後，修正先前「沒有 Python Application Error」的過度結論：目前可讀取的 `python.exe` archive report 中，有 `59` 筆 fault module=`Qt6Core.dll`、exception code=`c0000409`、event type=`BEX64`，最新一筆為 `2026-07-27`；代表性報告的 `AppPath` 是 Python 3.11 base interpreter，但 loaded modules 明確包含本專案 `.venv\Lib\site-packages\PySide6\` 下的 `Qt6Core.dll`、`Qt6Gui.dll`、`Qt6Widgets.dll`、Shiboken，以及本專案環境的 numpy／pyarrow。這支持歷史上確實有本專案 Python／PySide6／Qt environment 的 native crash 線索，但沒有 command line 或 dump，不能鎖定是哪個 entrypoint、不能單獨證明唯一觸發點，更不能推論為 SQLite lock。

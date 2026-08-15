@@ -763,6 +763,51 @@ def test_unified_workbench_view_refreshes_only_through_source_service() -> None:
     assert view.evidence_model.rowCount() == 2
 
 
+def test_workbench_today_action_center_prioritizes_data_and_uses_navigation_only() -> None:
+    app()
+    clicked: list[str] = []
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_empty_dashboard(),
+        auto_refresh=False,
+        navigate_to_daily_decision_callback=lambda: clicked.append("market"),
+        navigate_to_portfolio_callback=lambda: clicked.append("portfolio"),
+        navigate_to_update_callback=lambda: clicked.append("update"),
+        navigate_to_recommendation_callback=lambda: clicked.append("recommendation"),
+    )
+
+    assert view.today_action_title.text() == "今日行動中心"
+    assert "資料待確認" in view.today_action_status_labels["data"].text()
+    assert view.primary_action_button.text() == "先確認資料狀態"
+    assert "不會自動更新資料" in view.today_action_hint_label.text()
+
+    view.primary_action_button.click()
+    view.today_action_buttons["advice"].click()
+
+    assert clicked == ["update", "recommendation"]
+
+
+def test_workbench_today_action_center_prioritizes_existing_portfolio_review() -> None:
+    app()
+    clicked: list[str] = []
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+        navigate_to_daily_decision_callback=lambda: clicked.append("market"),
+        navigate_to_portfolio_callback=lambda: clicked.append("portfolio"),
+        navigate_to_update_callback=lambda: clicked.append("update"),
+        navigate_to_recommendation_callback=lambda: clicked.append("recommendation"),
+    )
+
+    assert "待覆盤 1 項" in view.today_action_status_labels["portfolio"].text()
+    assert view.primary_action_button.text() == "先檢查持倉事項"
+    assert "只導覽" in view.today_action_hint_label.text()
+
+    view.primary_action_button.click()
+    view.today_action_buttons["market"].click()
+
+    assert clicked == ["portfolio", "market"]
+
+
 def test_workbench_view_does_not_import_db_scheduler_or_domain_calculation_modules() -> None:
     view_source = Path("ui_qt/views/workbench_view.py").read_text(encoding="utf-8")
     model_source = Path("ui_qt/models/workbench_table_models.py").read_text(encoding="utf-8")

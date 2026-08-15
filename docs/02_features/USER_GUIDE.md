@@ -14,6 +14,8 @@
 
 「市場探索 > 市場總覽」是 Daily Decision Desk 唯一實例；「決策工作台 > 決策來源」只負責導向同一畫面。來源卡顯示 MISSING、DEGRADED、`row_count=0` 或 coverage unknown 時，代表資料缺漏／受限，不代表指標為零，也不會補成推薦分數。
 
+日常從「決策工作台」開始時，先看頂部的「今日行動中心」：它會把已存在的資料狀態、市場待判讀、Advice／候選與持倉覆盤整理成四個入口，主按鈕只把你帶到下一個既有工作區。它不是自動更新、交易或 Advice 執行器；看到「資料待確認」先檢查數據更新，看到持倉待覆盤則先進持倉管理。
+
 ML 的 `continue_shadow` 只表示可繼續離線診斷；`formal_oos_allowed=false`、production blend alpha 0、沒有 real frozen artifact smoke 時，不得把 prediction 解讀為正式推薦、Advice、Portfolio 或自動交易。完整 Evidence 模式、working-copy 安全界線與排錯見 [完整操作手冊](../07_guides/APPLICATION_MANUAL.md#2026-07-13-系統工程整合判讀)。
 
 進階專題：

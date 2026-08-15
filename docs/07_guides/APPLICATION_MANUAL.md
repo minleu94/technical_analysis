@@ -617,9 +617,13 @@ python ui_qt/main.py
 
 左側主導覽每個主工作區都有自製線條 SVG icon，協助快速辨識工作區意義；可用導覽列頂部的收合按鈕切換為 icon-only 模式以釋放橫向空間，也可以在目前已選取的主工作區按鈕上再點一次直接收合 / 展開。收合後仍可用 tooltip 辨識完整工作區名稱，並且只影響畫面空間，不改變任何資料載入、排程、報告或 service 行為。
 
+主視窗會只以目前可見的工作區決定最小尺寸，避免隱藏的圖表或設定頁把整個 App 撐大。當視窗寬度不大於 1120 px，左側導覽會自動收成 icon-only；若這次是系統自動收合，視窗回到 1240 px 以上時才會自動展開。使用者手動收合的選擇不會被這個規則覆寫。
+
 「每日決策」不再是頂層主工作區；唯一畫面位於「市場探索 > 市場總覽」。決策工作台內部子頁仍包含「總覽」、「決策來源」、「Evidence」、「持倉追蹤」與「操作節奏」，其中「決策來源」只提供「開啟市場總覽」導覽，不持有 Decision Desk widget，也不啟動第二次背景刷新。今日待判讀佇列清空時會顯示空狀態，提示可前往「市場探索」研究。這只代表目前 DTO payload 沒有待判讀項目，不代表 Phase gate 已完成，也不是買賣建議。
 
-「總覽」頂部會先顯示四個指揮台摘要 block：今日待判讀、人工待處理、等待真實時間、Warnings。等待真實時間 block 會明確顯示 weekly history 與 multi-day dry-run 比例，讓使用者先掃描重點再往下看表格。「Evidence」子頁已替換為唯讀 Research Console；「持倉追蹤」與「操作節奏」仍是摘要與下鑽入口。Research Console 的可見性不代表 formal evidence、source acceptance 或 promotion 已完成。
+「總覽」現在先顯示「今日行動中心」：四張卡依序整理資料狀態、市場判讀、Advice／候選與持倉覆盤；上方唯一主要按鈕會依既有 DTO 選出下一個應檢查的工作區。它只會切換至數據更新、市場總覽、推薦分析或持倉管理，不會更新資料、執行策略、產生或套用 Advice、寫入持倉或交易。資料待確認時先看數據更新；有持倉 Action Item 時先看持倉管理；再依待判讀與 Advice DTO 狀態導向市場總覽或推薦分析。
+
+行動中心下方保留四個指揮台摘要 block：今日待判讀、人工待處理、等待真實時間、Warnings。等待真實時間 block 會明確顯示 weekly history 與 multi-day dry-run 比例，讓使用者掃描重點後再往下看表格。「Evidence」子頁已替換為唯讀 Research Console；「持倉追蹤」與「操作節奏」仍是摘要與下鑽入口。Research Console 的可見性不代表 formal evidence、source acceptance 或 promotion 已完成。
 
 Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Week 1 已完成，Phase 0 weekly history 目前為 `1/3 waiting_for_time`；multi-day dry-run record 已為 `3/3 ready`，但 Week 2 / Week 3 與真實 manual review / action-item rhythm 仍需正式資料與真實時間累積，不能因 UI 重排、replay summary、fixture 或人工改表而標示為完成。
 
@@ -1795,7 +1799,7 @@ V3 score effectiveness audit 可用 `scripts\inspect_score_effectiveness.py` 檢
 
 輸出固定保留 `0-40`、`40-50`、`50-60`、`60-70`、`70-80`、`80-100` 六個分數區間，即使該 bucket 沒有樣本也會顯示 empty bucket。每個 bucket 會列出樣本數、ready / pending / missing outcome、各 horizon 的 forward return bp、benchmark excess bp、industry excess bp、max drawdown bp、win rate bp、warnings 與 limitations。`access_boundary.writes_allowed=false`、`production_scheduler_allowed=false`、`investment_effectiveness_claim=false` 與 `ml_training_allowed=false` 必須保留；結果只能用於研究覆盤，不能解讀為買賣建議、投資有效性證明、threshold promotion 或 ML production readiness。
 
-Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified Decision Workbench MVP shell。2026-07-07 後，這個分頁已從中文 read-only shell + 舊頁 drill-down 推進到 background evidence feed / read-only Action Items MVP，並完成 Phase 2C / 2D read-only Operating Loop closeout。總覽頁已改為「今日重點帶 + 語意色摘要卡 + 緊湊清單 + 右側詳情檢視」：啟動主程式後進入此分頁，第一屏先看到今日重點、status strip、今日待判讀、背景證據流、只讀 Action Items 與 Inspector；操作節奏、Evidence mode / data quality、Daily Checklist 與 warnings / degraded source 改成可收合區塊，需要時再展開。畫面只透過 `WorkbenchSourceService` 取得 `WorkbenchDashboardDTO`，不直接讀 SQLite、不寫 DB、不啟用 scheduler，也不重算 scoring、portfolio、backtest 或 lifecycle。若預設 `_reference_fix` replay JSON summary 存在於 `OUTPUT_ROOT/evidence_pipeline/historical_replay_reference_fix_20260706/`，主 UI 會自動把 JSON summary 傳入 WorkbenchSourceService；這仍只是讀 summary，不會讀 replay DB 或執行 replay。
+Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified Decision Workbench MVP shell。2026-08-14 後，總覽第一屏先顯示「今日行動中心」與單一下一步導覽，再顯示今日重點帶、語意色摘要卡、今日待判讀、背景證據流、只讀 Action Items 與 Inspector；這些導覽按鈕只切換既有工作區。操作節奏、Evidence mode / data quality、Daily Checklist 與 warnings / degraded source 改成可收合區塊，需要時再展開。畫面只透過 `WorkbenchSourceService` 取得 `WorkbenchDashboardDTO`，不直接讀 SQLite、不寫 DB、不啟用 scheduler，也不重算 scoring、portfolio、backtest 或 lifecycle。若預設 `_reference_fix` replay JSON summary 存在於 `OUTPUT_ROOT/evidence_pipeline/historical_replay_reference_fix_20260706/`，主 UI 會自動把 JSON summary 傳入 WorkbenchSourceService；這仍只是讀 summary，不會讀 replay DB 或執行 replay。
 
 操作與判讀：
 
@@ -2195,7 +2199,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 .\.venv\Scripts\python.exe scripts\run_full_app_healthcheck.py --mode full --ui-smoke --ui-smoke-switch-tabs --ui-smoke-screenshot --ui-smoke-resize 1366x768 --ui-smoke-resize 390x844 --ui-smoke-dialog-cancel --output-dir output\qa\full_app_healthcheck_tmp --fail-fast
 ```
 
-這會在隔離子程序啟動真實 PySide6 MainWindow、逐一切換左側主導覽的 8 個主工作區、保存 startup / resize screenshots、記錄 requested / actual viewport size，並測試 UpdateView 強制重新合併 dialog 的取消路徑。`--ui-smoke-dialog-cancel` 只會按取消，不會按確認；若 destructive action 被呼叫，healthcheck 會失敗。窄 viewport 可能被主視窗最小寬度限制，report 會以 `constrained_by_minimum` 呈現，仍需人工開圖判讀視覺可讀性。
+這會在隔離子程序啟動真實 PySide6 MainWindow、逐一切換左側主導覽的 8 個主工作區、保存 startup / resize screenshots、記錄 requested / actual viewport size，並測試 UpdateView 強制重新合併 dialog 的取消路徑。`--ui-smoke-dialog-cancel` 只會按取消，不會按確認；若 destructive action 被呼叫，healthcheck 會失敗。1024×768 與 1440×900 是目前決策工作台／主導覽的基本 desktop viewport；report 應為 `matched`，仍需人工開圖判讀文字與按鈕的可讀性。
 
 ## Phase 3C governed ingestion candidate CLI
 
@@ -2223,6 +2227,8 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - `access_boundary: v3_closeout_gate_credit=false`
 
 ## 14. 更新記錄
+
+- 2026-08-14：決策工作台首頁改為「今日行動中心」，以既有唯讀 DTO 將資料狀態、市場待判讀、Advice／候選與持倉覆盤整理成四個入口，並只提供導向既有工作區的下一步按鈕；不會更新資料、執行策略、寫入持倉或交易。主工作區也改為只由目前可見頁面決定最小尺寸，1024×768 時左側導覽會自動收為 icon-only，避免隱藏頁面強制放大視窗。
 
 - 2026-08-13：修正 Phase 3C backfill 對 TWSE／TPEX 現行 `tables[].data`、三大法人 24 欄與信用交易 15 欄 schema 的解析，加入回應日期 fail-closed 與 TDCC 最新週 snapshot 明確選項；歷史 TDCC 仍維持 blocked。桌面 App 新增啟動前 native／Python／背景執行緒 crash diagnostics，DBManager／DataLoader 的檔案日誌失敗改為 console-only 降級，並保留既有合作式安全關閉契約。另修正 Direct/OOC release follow-up 將 `output/release_v4` 重複附加為共同 output root 的問題，後續 promotion／authority／daily orchestration 會讀取正確的 scheduled proof 路徑，仍維持 fail-closed 與 `--auto-catch-up` 時序限制。
 

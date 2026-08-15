@@ -97,6 +97,8 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 主要能力：
 
 - Phase 2 Unified Decision Workbench MVP shell，頂層分頁名稱為「決策工作台」。
+- 總覽第一屏新增「今日行動中心」：只用既有 `WorkbenchDashboardDTO` 的資料狀態、review items、Advice DTO 與 Action Items，整理資料／市場／Advice／持倉四張行動卡與一個下一步按鈕。按鈕僅呼叫既有數據更新、Daily Decision、推薦分析或持倉管理導覽 callback；不讀 DB、不更新資料、不執行 Policy、不寫入持倉或交易。
+- 主 shell 使用 `ui_qt/widgets/adaptive_workspace_stack.py`，只讓當前可見工作區貢獻尺寸提示，避免隱藏工作區的圖表／設定面板鎖死視窗最小尺寸；主視窗在窄桌面寬度會暫時收合左側導覽，但不改變 workspace、資料載入或 service 行為。
 - 第一版已從中文 read-only shell 推進到 background evidence feed / read-only Action Items 人工佇列體驗，並完成 Phase 2 read-only Operating Loop closeout：呈現 status strip、今日待判讀、背景證據流、依 severity / queue group / source 排序的只讀 Action Items、操作節奏、Evidence mode / data quality、Daily Checklist、warnings / degraded source。
 - 只透過 `WorkbenchSourceService` 取得 `WorkbenchDashboardDTO`，或直接呈現呼叫端提供的 DTO；UI 不直接讀 SQLite、不讀 replay DB、不寫 DB、不啟用 scheduler。
 - 背景證據流只彙整既有 DTO / service payload：Daily Decision snapshot、Evidence Review readiness、Portfolio alerts 與可選 replay summary diagnostics；不在 UI 端重算任何 source gap、portfolio、scoring、backtest 或 lifecycle。

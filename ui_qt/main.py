@@ -43,7 +43,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
     QStatusBar,
-    QStackedWidget,
     QTabWidget,
     QMessageBox,
     QLabel,
@@ -116,6 +115,7 @@ from ui_qt.theme.fonts import (
     register_qt_chinese_fonts,
 )
 from ui_qt.widgets.left_navigation import LeftNavigationWidget, NavigationItem
+from ui_qt.widgets.adaptive_workspace_stack import AdaptiveWorkspaceStack
 from ui_qt.widgets.text_sanitizer import sanitize_button_texts
 from ui_qt.main_window_coordinator import WORKSPACE_DEFINITIONS, resolve_workspace_key
 from ui_qt.runtime_composition import build_runtime_ui_composition
@@ -185,6 +185,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("baldr")
         self.setGeometry(100, 100, 1400, 800)
+        self._navigation_collapsed_by_window = False
 
         # 設置窗口 icon
         icon_path = Path(__file__).parent / "app_icon.png"
@@ -344,7 +345,7 @@ class MainWindow(QMainWindow):
             shell_layout = QHBoxLayout(shell)
             shell_layout.setContentsMargins(0, 0, 0, 0)
             shell_layout.setSpacing(0)
-            workspace_stack = QStackedWidget()
+            workspace_stack = AdaptiveWorkspaceStack()
             workspace_widgets: dict[str, QWidget] = {}
 
             def add_workspace(key: str, widget: QWidget) -> int:
@@ -658,6 +659,24 @@ class MainWindow(QMainWindow):
 
             print(f"[MainWindow] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             raise
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        """在窄桌面視窗自動釋放導覽列空間，不覆寫使用者手動收合。"""
+
+        super().resizeEvent(event)
+        navigation = getattr(self, "left_navigation", None)
+        if navigation is None:
+            return
+
+        if self.width() <= 1120:
+            if not navigation.is_collapsed():
+                navigation.set_collapsed(True)
+                self._navigation_collapsed_by_window = True
+            return
+
+        if self.width() >= 1240 and self._navigation_collapsed_by_window:
+            navigation.set_collapsed(False)
+            self._navigation_collapsed_by_window = False
 
     def _handle_send_to_backtest(
         self, backtest_view: BacktestView, config: Dict[str, Any]
