@@ -20,6 +20,12 @@ PFS-08 maturity inspector 可用於受控 fixture 的唯讀檢查：
 - maturity gate 固定要求至少 20 個 unique shadow days、每個 horizon 至少 20 個 matured observations，且 `rebalance_worthwhile` class 0／1 都是自然觀測；`future_teacher_target_used`、`same_day_advice_used`、replay、backfill 或 synthetic outcome 任一為 true 都會 fail-closed。
 - 輸出 `maturity_gate_ready_shadow_only` 仍不解除 `formal_oos_allowed=false`、alpha=`0` 或 broker disabled。下一階段 PFS-09 才能對 frozen candidate 產出 matured Formal OOS replay、calibration 與 PSI evidence。
 
+PFS-09 frozen-candidate evidence inspector 可用於受控 fixture 的 hash custody：
+
+- `scripts\inspect_prospective_frozen_oos.py --fixture-only` 只讀 PFS-08 maturity report、primary／verification replay wrappers、inference calibration audit 與 integer-bp PSI report；兩個 replay 必須綁同一 frozen model／dataset／feature／policy identity，`result_identity_hash` 與 `replay_result_hash` 必須相同。
+- 缺 primary／verification、maturity、calibration 或 PSI，或 quality／identity 不通過時，輸出 `waiting_for_frozen_oos_evidence` 與 blockers；不會呼叫現有重型 replay engine，不會 fit／retrain／事後選 calibration method。
+- 即使輸出 `ready_for_formal_review`，仍固定 `formal_oos_allowed=false`、production alpha=`0`、promotion=`false`、broker disabled。PFS-10 才負責 promotion review 與人工／機器 Gate authority。
+
 ## 2026-08-14 自動鏈 current state
 
 ### 正式 ML 輸入接線狀態（2026-08-14）

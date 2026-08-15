@@ -162,6 +162,8 @@ Downside probability 使用 isotonic calibration，且 calibration input 必須�
 
 2026-08-15 的 PFS-08 shadow maturity gate 只接受 activation 後的 complete observation 與已成熟 integer-bp outcomes，重新驗證 T-1 input、clock／activation／source lineage hashes、unique sorted capture dates 與 no-replay／no-backfill flags。至少 20 個 shadow days、每個 5／10／20／60 horizon 至少 20 個 matured observations 且 `rebalance_worthwhile` 雙類別自然覆蓋後，才回報 `maturity_gate_ready_shadow_only`；這仍不授權 Formal OOS、promotion、alpha 或 broker，下一步才是 PFS-09 frozen-candidate replay／calibration／PSI。
 
+2026-08-15 的 PFS-09 frozen-candidate OOS evidence 只綁定外部完成的 primary／verification replay、inference calibration audit 與 integer-bp PSI report；兩次 replay 的 identity／result hash 必須一致，且 fit／retrain／post-outcome method selection 全為 false。缺件、identity mismatch 或 quality failure 都只留下 blockers；即使 package `ready_for_formal_review`，仍固定 `formal_oos_allowed=false`、alpha=`0`、promotion=`false`，下一步才是 PFS-10 review authority。
+
 2026-08-14 起 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 會在 polling
 時重新讀取 Windows 使用者／系統環境的受控 formal path、PIT sector path、Rule HMAC key
 與 store id，補足

@@ -1,6 +1,6 @@
 # Prospective Formal Simulated Portfolio Execution Plan（2026-08-14）
 
-> 狀態：`owner_direction_approved / PFS-08_complete / PFS-09_next`
+> 狀態：`owner_direction_approved / PFS-09_complete / PFS-10_next`
 >
 > 範圍：Gate 7 正式模擬持倉的未來式證據鏈、PIT sector 邊界、Rule Champion custody、calibration policy 與 frozen-candidate OOS 評估順序。
 >
@@ -93,7 +93,7 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 | PFS-06 | `complete` | `data_module/prospective_capture_readiness.py`、`scripts/inspect_prospective_capture_readiness.py`、tests | 唯讀檢查 calibration／ledger wrapper／Rule history／PIT 三項 input；ledger 要求相對 SQLite、hash chain 與 `non_cash_state_day_count>0`；capture-only 永不呼叫 Direct/OOC；heavy rebuild launch 永遠 false；6 focused tests、py_compile、mypy 0 issues | `feat(ml): guard prospective capture readiness` |
 | PFS-07 | `complete` | `data_module/prospective_formal_clock_activation.py`、`scripts/activate_prospective_formal_clock.py`、`scripts/record_prospective_daily_capture.py`、tests | frozen candidate／calibration／evaluation／seed identities；三個 controlled path + file hash；controlled store id 與 secret-store configured flag（不含 secret）；owner activation timestamp；daily capture sequence；rebuild／formal／credit flags 全部 fail-closed；8 focused tests、py_compile、mypy 0 issues | `ops(ml): freeze prospective activation contract` |
 | PFS-08 | `complete` | `data_module/prospective_shadow_maturity.py`、`scripts/inspect_prospective_shadow_maturity.py`、tests | complete observation 只接受 activation 後 capture、T-1 input、clock／activation／source hash、已成熟 integer-bp outcomes；maturity report 固定 20 shadow days、每 horizon 至少 20 matured observations、`rebalance_worthwhile` 雙類別；replay/backfill/synthetic/future target 全拒絕；6 focused tests、py_compile、mypy 0 issues | `feat(ml): enforce prospective shadow maturity` |
-| PFS-09 | `waiting_for_evidence` | frozen-candidate Formal OOS replay、calibration／PSI report | 只對 clock 已綁定 model/policies 評估；primary／verification hash 相同；不 fit、不 retrain、不用 formal outcomes 選方法 | run artifact；程式未變時不為 run output 建 commit |
+| PFS-09 | `complete` | `data_module/prospective_frozen_oos_evidence.py`、`scripts/inspect_prospective_frozen_oos.py`、tests | frozen-candidate primary／verification replay wrapper；model／dataset／feature／clock／policy identity；maturity hash；calibration audit／PSI hash；primary／verification replay identity equality；fit／retrain／post-outcome method selection false；missing／quality failure 只產生 blocker；7 focused tests、py_compile、mypy 0 issues | `feat(ml): bind frozen oos evidence` |
 | PFS-10 | `waiting_for_gates` | promotion review package 或 next-candidate decision | 所有 machine／human Gate 通過才可評估 promotion；預設仍 `promotion_eligible=false`。如需 retrain／recalibrate，關閉本 clock 並從另一個未來 clock 評估 | 依實際 review 分批 |
 
 ## 7. PFS-01：完成證據與 PFS-02 交接
@@ -119,7 +119,7 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 - 新增 `tests/test_prospective_formal_clock.py`：`14 passed`，涵蓋 past／same-day activation、training cutoff、unknown field、tamper hash、seed／integer notional、calendar evidence、read-only inspector 與外部 evidence override。
 - `py_compile` 通過；mypy 以 `--explicit-package-bases` 檢查三個檔案為 `0 issues`。此 slice 沒有設定正式 path、寫 SQLite、建立 transition／Rule／PIT artifact 或啟動 watcher。
 
-PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。PFS-03～PFS-08 亦已完成；下一個 slice 是 PFS-09：對同一 frozen candidate 執行 matured Formal OOS replay 與 inference-level calibration／PSI evidence。
+PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。PFS-03～PFS-09 亦已完成；下一個 slice 是 PFS-10：把完整 evidence 交給 promotion review，仍不自動授權 alpha／broker。
 
 ### 本 slice 明確不做
 
@@ -238,6 +238,17 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
 
 - 不使用 2014–2026 history、research replay、paper／cash-only ledger、Teacher target 或補日來增加 elapsed days；不把日曆天數自動當成交易日，不在本 slice 代替官方 PIT／Rule／transition producer。
 - maturity gate 通過只表示 observations 足夠進入 PFS-09 的 frozen-candidate Formal OOS replay；不代表 calibration、PSI、promotion、production alpha 或 broker permission 已通過。
+
+### PFS-09 已完成證據
+
+- 新增 `data_module/prospective_frozen_oos_evidence.py`：只封裝外部已完成的 frozen-candidate primary／verification replay，不執行 heavy replay、fit、retrain、calibrator attach 或 PSI 計算。兩個 role 必須綁定同一 clock／activation／candidate model／feature／dataset／calibration／evaluation identity、同一 maturity report hash，且 `result_identity_hash` 與 `replay_result_hash` 都相同。
+- PFS-09 package 另外綁定 inference-level calibration audit 與 integer-bp PSI report；目前 calibration quality 或 PSI 缺件／失敗只產生 `waiting_for_frozen_oos_evidence` blockers，不把 diagnostic 改名為 pass。package 固定 `replay_fit_called=false`、`retrained=false`、`post_outcome_method_selection=false`、`formal_oos_allowed=false`、alpha=`0`。
+- 新增 `scripts/inspect_prospective_frozen_oos.py`，強制 `--fixture-only`；它只讀 activation／maturity／replay／calibration／PSI JSON，輸出 create-only evidence package，不設定 path、不啟動 watcher／Direct／OOC。`tests/test_prospective_frozen_oos_evidence.py` 共 `7 passed`，涵蓋完整雙 replay、缺件／quality blocker、identity mismatch、maturity gate、create-only、unsafe fit flag 與 CLI guard；py_compile 與 mypy `0 issues`。
+
+### PFS-09 明確不做
+
+- 不把現有 2014–2026 OOS replay、base-OOF calibration diagnostic 或 research PSI 自動轉成 prospective Formal evidence；沒有同一 frozen candidate 的成熟輸入就維持 waiting。
+- `ready_for_formal_review` 仍不是 promotion authority；必須到 PFS-10 完成人工／機器 Gate review，且任何 quality／coverage／cost／drawdown／class failure 都維持 alpha=`0` 與 broker disabled。
 
 ## 8. Activation 與日常蒐證 Runbook（待程式完成後使用）
 
