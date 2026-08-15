@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 from types import MappingProxyType
@@ -335,6 +336,34 @@ def build_clock_manifest(
         )
     payload["manifest_hash"] = payload_hash(payload)
     return payload
+
+
+def write_immutable_clock_manifest(
+    output_path: Path,
+    manifest: Mapping[str, object],
+) -> str:
+    """以 canonical JSON create-only 保存已驗證的 planned clock manifest。"""
+
+    supplied = _required_hash(manifest.get("manifest_hash"), "manifest_hash")
+    body = dict(manifest)
+    body.pop("manifest_hash", None)
+    if payload_hash(body) != supplied:
+        raise ProspectiveFormalClockError("clock manifest hash mismatch")
+    output = output_path.expanduser().resolve()
+    if not output.parent.exists():
+        raise ProspectiveFormalClockError(
+            "clock manifest output parent directory must already exist"
+        )
+    try:
+        with output.open("xb") as stream:
+            stream.write(canonical_json(dict(manifest)).encode("utf-8"))
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError as error:
+        raise ProspectiveFormalClockError(
+            "clock manifest output already exists"
+        ) from error
+    return file_sha256(output)
 
 
 def inspect_clock_manifest(
