@@ -1,6 +1,6 @@
 # Prospective Formal Simulated Portfolio Execution Plan（2026-08-14）
 
-> 狀態：`owner_direction_approved / PFS-01_complete / PFS-02_next`
+> 狀態：`owner_direction_approved / PFS-02_complete / PFS-03_next`
 >
 > 範圍：Gate 7 正式模擬持倉的未來式證據鏈、PIT sector 邊界、Rule Champion custody、calibration policy 與 frozen-candidate OOS 評估順序。
 >
@@ -86,8 +86,8 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 |---|---|---|---|---|
 | PFS-00 | `complete` | 本決策與執行計畫 | owner 採用 prospective-only 正式模擬持倉；沒有 Gate credit | `docs(ml): plan prospective formal simulation track` |
 | PFS-01 | `complete` | `data_module/prospective_formal_clock.py`、`scripts/inspect_prospective_formal_clock.py`、`tests/test_prospective_formal_clock.py` | 純 contract／validator；拒絕過去或同日 activation、training cutoff 污染、retro credit、real-money/broker flags、缺 hash、無官方 calendar evidence、未知欄位；fixture-only，不寫 `D:` | `feat(ml): define prospective formal simulation clock` |
-| PFS-02 | `next` | 模擬 ledger domain service、單日 capture CLI、tests | cash seed → 當日 causal output；T-1、append-only、idempotent、canonical row/chain/hash、non-cash count；無 Teacher／same-day Advice／裸 float | `feat(ml): capture prospective simulated transitions` |
-| PFS-03 | `queued` | controlled Rule history publisher adapter／CLI、tests | clock-bound、HMAC-signed canonical bytes、store identity、snapshot id／lineage、rank `1..N`、不可回填；任何輸出不含 secret | `feat(ml): publish clock-bound rule snapshots` |
+| PFS-02 | `complete` | `data_module/formal_simulated_portfolio_ledger.py`、`scripts/capture_formal_simulated_portfolio_transition.py`、tests | cash seed → 當日 causal output；T-1、append-only、idempotent、canonical row/chain/hash、non-cash count；無 Teacher／same-day Advice／裸 float；5 focused tests、既有 ledger／turnover regression、py_compile、mypy 0 issues | `feat(ml): capture prospective simulated transitions` |
+| PFS-03 | `next` | controlled Rule history publisher adapter／CLI、tests | clock-bound、HMAC-signed canonical bytes、store identity、snapshot id／lineage、rank `1..N`、不可回填；任何輸出不含 secret | `feat(ml): publish clock-bound rule snapshots` |
 | PFS-04 | `external_source_required` | prospective PIT manifest／validator／capture、tests、source acceptance evidence | 每列 accepted；source/license/publication/available/effective/hash 完整；只由首次合格 publication 往後計 credit | `feat(data): add prospective PIT sector custody` |
 | PFS-05 | `queued` | inference-level calibration audit、預註冊方法與 immutable policy hash | 使用正式 inference 相同的 horizon/family aggregation；每個 validation fold 僅用 prior folds fit；identity 與 isotonic 並列；activation 前凍結，未達預註冊門檻不得 attach 或事後改選 | `fix(ml): align calibration audit with inference` |
 | PFS-06 | `queued` | readiness mode、capture-only preflight、heavy-rebuild guard、tests | 三條 capture producer 完整才 ready；capture 路徑不呼叫 Direct/OOC；重建預估與 owner confirmation 分離；status 只顯示 secret configured flag | `feat(ml): guard prospective capture readiness` |
@@ -119,13 +119,37 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 - 新增 `tests/test_prospective_formal_clock.py`：`14 passed`，涵蓋 past／same-day activation、training cutoff、unknown field、tamper hash、seed／integer notional、calendar evidence、read-only inspector 與外部 evidence override。
 - `py_compile` 通過；mypy 以 `--explicit-package-bases` 檢查三個檔案為 `0 issues`。此 slice 沒有設定正式 path、寫 SQLite、建立 transition／Rule／PIT artifact 或啟動 watcher。
 
-下一個 slice 是 PFS-02：先建立 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它必須消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不得寫正式 `D:`。
+PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。下一個 slice 是 PFS-03：建立 clock-bound、HMAC-signed 的 Rule Champion snapshot history publisher。
 
 ### 本 slice 明確不做
 
 - 不選 activation date、不設定三個正式 path、不啟動 capture／watcher／scheduler。
 - 不建立 transitions、Rule signatures、PIT rows、elapsed day 或 promotion credit。
 - 不重跑 Direct／OOC、不修改 calibration artifact、不寫正式 SQLite。
+
+### PFS-02 已完成證據
+
+- 新增 `data_module/formal_simulated_portfolio_ledger.py`：使用獨立的
+  `causal-simulated-portfolio-ledger.v1`，以 T-1 `CausalPortfolioState`、整數 bp
+  turnover、canonical transition hash、明確 `previous_chain_hash` 與 recursive
+  chain hash 寫入 append-only SQLite；update／delete trigger 與 metadata identity
+  會在讀回時重新驗證。
+- 新增 `scripts/capture_formal_simulated_portfolio_transition.py`：明確要求
+  `--fixture-only`，只接受呼叫端指定的 SQLite，沒有正式 path、watcher、ML
+  rebuild 或 HMAC secret 讀取；可用 `--previous-chain-hash` 重播連續日。
+- 新增 `tests/test_formal_simulated_portfolio_ledger.py`：`5 passed`，涵蓋首日
+  cash seed、idempotent／conflict、T-1／decision time、兩筆連續日 state／chain
+  continuity 與 append-only trigger。
+- PFS-02 另通過既有 formal portfolio ledger／turnover regression `6 passed`、
+  PFS-01 clock `14 passed`、py_compile 與 mypy `0 issues`。這些是 repo／tmp
+  fixture 驗證，不是正式 clock 的 elapsed day 或 Formal OOS credit。
+
+### PFS-02 明確不做
+
+- 不建立 `manifest.json`、不設定 `BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH`，也不
+  將模擬 SQLite 接到既有 `causal-portfolio-ledger.v1` full-history consumer。
+- 不產生 Rule HMAC snapshot、PIT sector row、activation date、elapsed day、
+  promotion credit 或正式 `D:` artifact。
 
 ## 8. Activation 與日常蒐證 Runbook（待程式完成後使用）
 

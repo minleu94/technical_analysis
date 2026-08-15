@@ -4,7 +4,7 @@
 
 - Owner 已確認現有持倉是功能測試資料、不是實際券商持倉，且截止時間前沒有真實保存的正式 Portfolio transitions／HMAC-signed Rule snapshots；因此不回填、不把 research/history 改名 Formal，改採 **prospective-only、受治理但非實盤** 的模擬持倉 clock。完整順序、契約邊界與驗收見 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md)。
 - 正式起算日尚未指定；只有 clock contract、Portfolio／Rule producer、合法 prospective PIT source 與 capture readiness 通過 QA 後，才選當時仍在未來的台灣交易日。`2014–2026` 既有 Direct／OOC 與 research artifacts 保留為 history，不取得 full-history Formal credit；prospective-only 也不豁免每日 sector source／license／publication／hash lineage。
-- `PFS-01` 已完成：prospective clock strict contract、唯讀 inspector、14 個 focused tests、`py_compile` 與 mypy `0 issues` 均通過；沒有 secret、正式 path、`D:` 寫入、transition／Rule／PIT artifact 或 watcher 啟動。下一個可執行 slice 是 `PFS-02`，建立 append-only、T-1、idempotent 模擬 Portfolio transition producer。預設仍把 cutoff=`2026-08-13T08:30:00+08:00` 的現有 candidate 綁為未來 clock 的 frozen challenger；clock 啟動後不得用已消費的 Formal OOS 期間重訓或替換 model／calibration，重型 watcher 維持停止。
+- `PFS-01` 與 `PFS-02` 已完成：clock strict contract／唯讀 inspector 通過 14 個 focused tests；模擬 Portfolio producer 通過 5 個 focused tests、既有 ledger／turnover regression、`py_compile` 與 mypy `0 issues`。PFS-02 僅建立 fixture-only、append-only、T-1、idempotent 的獨立 simulated ledger，不寫正式 path、`D:` 或 watcher；下一個可執行 slice 是 `PFS-03` clock-bound HMAC Rule snapshot publisher。預設仍把 cutoff=`2026-08-13T08:30:00+08:00` 的現有 candidate 綁為未來 clock 的 frozen challenger；clock 啟動後不得用已消費的 Formal OOS 期間重訓或替換 model／calibration，重型 watcher 維持停止。
 - 這項產品決策不放寬既有 Gate；目前仍為 `formal_oos_allowed=false`、production alpha=`0`、broker disabled，calibration `quality_pass=false` 與 `rebalance_worthwhile` class 1 缺失仍需分別修正與重新驗證。
 
 ## 2026-08-14 Formal watcher post-refresh custody correction
