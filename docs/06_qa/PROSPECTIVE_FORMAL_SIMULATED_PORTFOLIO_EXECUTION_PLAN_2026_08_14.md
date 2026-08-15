@@ -293,6 +293,29 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
 可供 activation。這不是 failure，也不會觸發補檔、重訓或 watcher；owner 設定合法
 manifest paths 後，再重新執行同一 preflight，才可進入 PFS-07 activation command。
 
+為了讓目前狀態可以直接交接給下一個執行者，另提供單一唯讀 execution-plan
+inspector：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_prospective_execution_plan.py `
+  --now <OWNER-SUPPLIED-ISO-TIMESTAMP>
+```
+
+它會把環境、clock、readiness、activation、daily capture、shadow maturity、
+frozen OOS／calibration／PSI 與 promotion review 固定列成八個 stage，並且把
+需要 owner 補齊的 path／source／日期決策列成 `next_actions`。這個工具的 schema
+是 `prospective-formal-execution-plan.v1`；輸出固定
+`read_only=true`、`date_auto_selected=false`、`formal_oos_allowed=false`、
+`heavy_rebuild_launch_allowed=false`、`promotion_eligible=false`，不會寫入
+Windows 環境、不會建立任何 formal artifact、不會啟動 watcher／Direct／OOC，
+也不會輸出 HMAC secret。若要留存 immutable handoff，可加上已存在 parent 的
+`--output <PLAN_JSON>`；檔案已存在時拒絕覆寫。
+
+目前該 inspector 的結果同樣是 `waiting_for_owner_inputs`，三個
+`BALDR_ML_*_PATH` blocker 尚未消失；這代表程式與執行順序已 ready，外部合法
+資料／path 與 owner activation decision 仍是唯一未完成的輸入，不代表可以用
+research／現行公司快照或 2014 舊檔代替。
+
 Owner 設定 paths 後，PFS-06 可用明確的 `--controlled-environment` opt-in 直接讀取
 同一個 shared reader，再驗證三份 manifest／sidecar 的 schema、hash、clock boundary、
 T-1 與 lineage；這仍是唯讀 capture readiness，不會把環境值寫入 process、repo 或

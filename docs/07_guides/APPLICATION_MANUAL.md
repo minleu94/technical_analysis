@@ -23,6 +23,31 @@ PFS-07 的 activation contract 已可用於受控 fixture preflight：
 
 預設只取樣 Python／MCP／ML 程序，輸出角色分組、PID、CPU／記憶體、duplicate MCP 與單核心 busy warning；`--all-processes` 才會擴大到其他程序。工具不輸出原始 command line、環境變數或 secret，也沒有停止／終止程序功能；`attention_required` 只是要求 owner 人工判讀，不是自動修復或 ML gate。
 
+### 單一 execution-plan handoff
+
+若要一次看完整個 prospective-only 專案目前卡在哪一層，以及下一步要執行的
+安全命令，可使用唯讀 execution-plan inspector：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_prospective_execution_plan.py `
+  --now <OWNER-SUPPLIED-ISO-TIMESTAMP>
+```
+
+它會把受控環境、clock、PFS-06 readiness、owner activation、daily capture、20
+個自然 shadow trading days、frozen OOS／calibration／PSI 與 promotion review
+列成八個階段，並輸出目前 blockers 與 owner actions。`--now` 必須由呼叫端明確
+提供，repo 不會自行選 formal clock 日期；命令不寫三個正式 path、不建立 transition／
+Rule／PIT artifact、不啟動 watcher／Direct／OOC，也不輸出 HMAC secret。若要保留
+狀態快照，可另加已存在的 parent 與 create-only `--output <PLAN_JSON>`；重複路徑
+會拒絕覆寫。
+
+2026-08-15 的目前結果是 `waiting_for_owner_inputs`：
+`BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH`、
+`BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH`、
+`BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH` 尚未提供；controlled store identity 與
+HMAC secret store 的 configured flag 已可見，但 `formal_oos_allowed=false`、
+`heavy_rebuild_launch_allowed=false`、`promotion_eligible=false` 仍維持。
+
 clock manifest 只是起算邊界與 identity custody，不會產生任何 transition。若 activation 已到達且 SQLite 內已有合法 prospective transitions，可先用
 `scripts\publish_prospective_simulated_portfolio_ledger.py --fixture-only` 產生
 `prospective-formal-simulated-portfolio-ledger-manifest.v1`。它會重新驗證 recursive
