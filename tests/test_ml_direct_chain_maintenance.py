@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
 from pathlib import Path
@@ -79,6 +80,25 @@ def test_legacy_watcher_detects_nested_prospective_pit_manifest(
         ),
         encoding="utf-8",
     )
+    args.sector_membership = prospective
+
+    assert maintenance._legacy_watcher_prospective_guard(args) == (
+        "pit_sector_membership:scope=prospective_only",
+    )
+
+
+def test_legacy_watcher_detects_compressed_prospective_pit_sidecar(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path)
+    prospective = tmp_path / "pit-sidecar.jsonl.gz"
+    header = {
+        "record_type": "manifest",
+        "schema_version": "pit-sector-membership-sidecar-v1",
+        "manifest": {"scope": "prospective_only"},
+    }
+    with gzip.open(prospective, "wt", encoding="utf-8", newline="\n") as stream:
+        stream.write(json.dumps(header, separators=(",", ":")) + "\n")
     args.sector_membership = prospective
 
     assert maintenance._legacy_watcher_prospective_guard(args) == (

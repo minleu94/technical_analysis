@@ -503,9 +503,17 @@ def _prospective_only_manifest_declaration(path: Path) -> str | None:
     """
 
     try:
-        if path.suffix.lower() == ".gz":
-            with gzip.open(path, "rt", encoding="utf-8") as stream:
-                payload: Any = json.load(stream)
+        suffix = path.name.casefold()
+        if suffix.endswith(".jsonl.gz") or suffix.endswith(".jsonl"):
+            opener = gzip.open if suffix.endswith(".jsonl.gz") else open
+            with opener(path, "rt", encoding="utf-8") as stream:
+                first_line = next(
+                    (line for line in stream if line.strip()),
+                    "",
+                )
+            if not first_line:
+                return None
+            payload = json.loads(first_line)
         else:
             payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, UnicodeDecodeError, json.JSONDecodeError):
