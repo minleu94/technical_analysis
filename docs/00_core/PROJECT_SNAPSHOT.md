@@ -1,5 +1,11 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-15 Controlled handoff／CPU read-only diagnosis
+
+- prospective activation preflight 再驗證仍為 `waiting_for_controlled_environment`：`BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH`、`BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH` 與 `BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH` 都是 `missing`；`controlled_store_configured=true`、`hmac_secret_store_configured=true`，但 `activation_launch_allowed=false`、`heavy_rebuild_launch_allowed=false`、`formal_oos_allowed=false`。本專案沒有因此啟動 watcher、Direct、OOC 或任何重型 ML。
+- 同一輪唯讀 `psutil` process custody 盤點發現目前 CPU 異常來源不是本專案 ML：PID `27036` 是外部 `C:\Projects\PythonProjects\ig_tracking` 的 `inkscope_probe` 子程序，command line 只嘗試對 `D:\Min\Python\Project\ig_data` 建立／刪除暫存檔；它單執行緒、低記憶體但持續約一核心 busy，最近 3 秒 CPU time 增加約 `2.984` 秒。父程序為 PID `4116`，同一 probe command；repo 不會未經 owner 指示終止它。另觀察到 `mcp_server_yfinance` 3 個、`evidence_access_server.py` 2 個與 `sqlite_server.py` 1 個常駐實例，該次 3 秒取樣 CPU 近乎 0，屬重複常駐／記憶體成本而非主要 CPU 來源。
+- PFS-01 clock publisher 已以 commit `4785583` 保存；它只接受 owner 提供的未來交易日與官方 calendar evidence，採 canonical create-only，不自動選日期、不回填、不設定正式 path。三項正式輸入仍未到位，故 activation step 維持 `in_progress`。
+
 ## 2026-08-14 Prospective formal simulated portfolio decision
 
 - Owner 已確認現有持倉是功能測試資料、不是實際券商持倉，且截止時間前沒有真實保存的正式 Portfolio transitions／HMAC-signed Rule snapshots；因此不回填、不把 research/history 改名 Formal，改採 **prospective-only、受治理但非實盤** 的模擬持倉 clock。完整順序、契約邊界與驗收見 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md)。
