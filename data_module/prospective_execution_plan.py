@@ -80,8 +80,9 @@ def build_prospective_execution_plan(
             "capture_readiness",
             "blocked_until_inputs_ready",
             ["clock_manifest_and_all_three_inputs_required"],
-            "PFS-06 必須同時驗證 causal simulated ledger、Rule Champion history 與 PIT sidecar。",
+            "strict PFS-06 必須同時驗證 causal simulated ledger、Rule Champion history 與 PIT sidecar；若三項尚未存在，可先建立 deferred staging，但不會取得任何 formal credit。",
             [
+                ".\\.venv\\Scripts\\python.exe scripts\\inspect_prospective_capture_readiness.py --fixture-only --defer-until-activation ...",
                 ".\\.venv\\Scripts\\python.exe scripts\\inspect_prospective_capture_readiness.py --controlled-environment ...",
             ],
         ),
@@ -89,8 +90,9 @@ def build_prospective_execution_plan(
             "clock_activation",
             "blocked_until_readiness_ready",
             ["owner_activation_requires_ready_for_future_activation"],
-            "activation 只凍結 identity 與 path hashes；不等於 formal OOS permission，也不啟動重型 ML。",
+            "strict activation 凍結 identity 與 path hashes；deferred activation 只凍結未來預約與 null paths；兩者都不等於 formal OOS permission，也不啟動重型 ML。",
             [
+                ".\\.venv\\Scripts\\python.exe scripts\\activate_prospective_formal_clock.py --fixture-only --controlled-environment --defer-inputs ...",
                 ".\\.venv\\Scripts\\python.exe scripts\\activate_prospective_formal_clock.py --fixture-only --controlled-environment ...",
             ],
         ),
@@ -135,12 +137,13 @@ def build_prospective_execution_plan(
     next_actions = [
         {
             "step": 1,
-            "owner_action": "在 Windows 使用者環境／受控 secret store 配置三個合法 prospective input path、RULE_CHAMPION_CONTROLLED_STORE_ID 與 HMAC secret key。",
+            "owner_action": "在 Windows 使用者環境／受控 secret store 確認 RULE_CHAMPION_CONTROLLED_STORE_ID 與 HMAC secret key；三個 formal input path 若尚未存在，可先走 deferred staging，strict readiness 前再補齊。",
             "required_environment_names": [
                 *FORMAL_PATH_ENV_NAMES,
                 CONTROLLED_STORE_ID_ENV_NAME,
                 CONTROLLED_HMAC_KEY_ENV_NAME,
             ],
+            "formal_path_requirement_before_activation": "optional_for_deferred_staging_required_for_strict_readiness",
             "secret_handling": "HMAC key 只設在受控環境；不要貼到對話、repo、命令列、status 或 log。",
             "repo_action": "inspect_only",
         },
@@ -156,8 +159,8 @@ def build_prospective_execution_plan(
         },
         {
             "step": 4,
-            "owner_action": "三項輸入同時 ready 後，先跑 readiness，再由 owner 明確確認 activation；不要直接啟動舊 watch-formal-inputs heavy rebuild。",
-            "repo_action": "readiness_then_activation",
+            "owner_action": "若三項輸入尚未 ready，先以 deferred readiness + --defer-inputs 預約未來 clock；第一個未來決策日後補齊三 path，再跑 strict readiness 與 activation。若三項已 ready，直接走 strict readiness → owner activation；不要啟動舊 watch-formal-inputs heavy rebuild。",
+            "repo_action": "deferred_or_strict_readiness_then_activation",
         },
     ]
 

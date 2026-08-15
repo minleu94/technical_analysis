@@ -311,6 +311,11 @@ Windows 環境、不會建立任何 formal artifact、不會啟動 watcher／Dir
 也不會輸出 HMAC secret。若要留存 immutable handoff，可加上已存在 parent 的
 `--output <PLAN_JSON>`；檔案已存在時拒絕覆寫。
 
+當三個 formal path 尚未存在時，`next_actions` 會把目前分流寫清楚：先以
+`--defer-until-activation` 產生 staging readiness，再以
+`--defer-inputs` 預約 clock；第一個未來決策日後才補 path 並重新跑 strict
+readiness。這只改善交接可執行性，不改變任何 formal gate。
+
 目前該 inspector 的結果同樣是 `waiting_for_owner_inputs`，三個
 `BALDR_ML_*_PATH` blocker 尚未消失；這代表程式與執行順序已 ready，外部合法
 資料／path 與 owner activation decision 仍是唯一未完成的輸入，不代表可以用

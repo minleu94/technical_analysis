@@ -34,6 +34,24 @@ def test_plan_is_fail_closed_and_contains_owner_actions() -> None:
     assert safety["secret_values_emitted"] is False
     assert len(cast(list[object], plan["stages"])) == 8
     assert len(cast(list[object], plan["next_actions"])) == 4
+    stages = cast(list[dict[str, object]], plan["stages"])
+    readiness_stage = next(
+        item for item in stages if item["stage"] == "capture_readiness"
+    )
+    assert any(
+        "--defer-until-activation" in command
+        for command in cast(list[str], readiness_stage["commands"])
+    )
+    activation_stage = next(
+        item for item in stages if item["stage"] == "clock_activation"
+    )
+    assert any(
+        "--defer-inputs" in command
+        for command in cast(list[str], activation_stage["commands"])
+    )
+    actions = cast(list[dict[str, object]], plan["next_actions"])
+    assert "deferred staging" in str(actions[0]["owner_action"])
+    assert "deferred readiness" in str(actions[3]["owner_action"])
 
 
 def test_plan_does_not_emit_hmac_secret(tmp_path: Path) -> None:
@@ -70,4 +88,3 @@ def test_plan_output_is_create_only(tmp_path: Path) -> None:
     assert write_immutable_execution_plan(output, plan).startswith("sha256:")
     with pytest.raises(ProspectiveExecutionPlanError, match="already exists"):
         write_immutable_execution_plan(output, plan)
-

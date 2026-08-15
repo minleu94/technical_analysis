@@ -77,6 +77,10 @@ Rule／PIT artifact、不啟動 watcher／Direct／OOC，也不輸出 HMAC secre
 狀態快照，可另加已存在的 parent 與 create-only `--output <PLAN_JSON>`；重複路徑
 會拒絕覆寫。
 
+當三個 path 尚未存在時，`next_actions` 會明確列出
+`--defer-until-activation` → `--defer-inputs` 的預約分流；這只讓未來 clock
+可被 owner 受控排程，不會把缺件變成 ready，也不會啟動 heavy watcher。
+
 2026-08-15 的目前結果是 `waiting_for_owner_inputs`：
 `BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH`、
 `BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH`、
