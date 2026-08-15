@@ -13,6 +13,16 @@ PFS-07 的 activation contract 已可用於受控 fixture preflight：
 - `scripts\record_prospective_daily_capture.py --fixture-only` 只建立低 CPU daily capture 的 `started` record，固定 PIT publication → Rule snapshot → T-1 Portfolio transition → frozen inference → heartbeat 順序；`elapsed_day_credit=0`、`formal_credit=0`，不能隔日補寫。
 - 兩個命令都不設定 Windows 使用者環境、不接受／讀取／輸出 `RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY`，不啟動 watcher、Direct 或 OOC。實際 activation date、三個正式 path、`RULE_CHAMPION_CONTROLLED_STORE_ID` 與受控 secret-store 狀態仍須由 owner 在未來時點明確提供；本段工具不會自行選日期或產生正式 `D:` artifact。
 
+### 唯讀 CPU／MCP process custody
+
+若要判斷背景 CPU 或 MCP 是否重複，使用：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_runtime_process_custody.py --sample-seconds 1
+```
+
+預設只取樣 Python／MCP／ML 程序，輸出角色分組、PID、CPU／記憶體、duplicate MCP 與單核心 busy warning；`--all-processes` 才會擴大到其他程序。工具不輸出原始 command line、環境變數或 secret，也沒有停止／終止程序功能；`attention_required` 只是要求 owner 人工判讀，不是自動修復或 ML gate。
+
 clock manifest 只是起算邊界與 identity custody，不會產生任何 transition。若 activation 已到達且 SQLite 內已有合法 prospective transitions，可先用
 `scripts\publish_prospective_simulated_portfolio_ledger.py --fixture-only` 產生
 `prospective-formal-simulated-portfolio-ledger-manifest.v1`。它會重新驗證 recursive
