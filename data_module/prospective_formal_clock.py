@@ -1,0 +1,469 @@
+"""Prospective-only 正式模擬持倉 clock 的純契約與唯讀驗證器。
+
+本模組只驗證 clock manifest，不建立 Portfolio transition、Rule snapshot、PIT
+sidecar 或任何正式資料。它把 prospective simulation 與既有 full-history
+``causal-portfolio-ledger.v1`` 隔離，並在 activation 前固定 model、training、
+calibration 與 evaluation identities，避免以已消費的 Formal OOS 日期回頭改訓。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, datetime, time
+import hashlib
+import json
+from pathlib import Path
+import re
+from types import MappingProxyType
+from typing import Mapping
+from zoneinfo import ZoneInfo
+
+
+PROSPECTIVE_FORMAL_CLOCK_SCHEMA_VERSION = (
+    "prospective-formal-simulated-portfolio-clock.v1"
+)
+PROSPECTIVE_FORMAL_CLOCK_MODE = "prospective_formal_simulation"
+PROSPECTIVE_FORMAL_CLOCK_STATUS = "planned"
+CALENDAR_EVIDENCE_SCHEMA_VERSION = "official-trading-calendar-evidence.v1"
+TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
+SHA256_PREFIX = "sha256:"
+_SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+_CLOCK_FIELDS = frozenset(
+    {
+        "schema_version",
+        "status",
+        "clock_id",
+        "mode",
+        "owner_decision_id",
+        "owner_decision_timestamp",
+        "activation_trading_day",
+        "decision_timezone",
+        "decision_time",
+        "activation_calendar_evidence",
+        "seed_state",
+        "virtual_notional_minor_units",
+        "strategy_version",
+        "policy_version",
+        "policy_hash",
+        "universe_hash",
+        "source_policy_hash",
+        "candidate_model_hash",
+        "candidate_feature_manifest_hash",
+        "candidate_training_cutoff",
+        "calibration_policy_hash",
+        "evaluation_policy_hash",
+        "real_money",
+        "broker_execution",
+        "historical_backfill_claimed",
+        "manifest_hash",
+    }
+)
+_SEED_FIELDS = frozenset({"kind", "cash_bp", "position_count", "state_hash"})
+_CALENDAR_FIELDS = frozenset(
+    {"schema_version", "date", "is_trading_day", "reason_code", "source", "source_hash"}
+)
+_ALLOWED_CALENDAR_REASONS = frozenset(
+    {
+        "twse_holiday_schedule_open",
+        "twse_holiday_schedule_explicit_open",
+        "twstock_db_market_indices_evidence",
+    }
+)
+
+
+class ProspectiveFormalClockError(ValueError):
+    """Clock manifest 不符合 prospective-only 安全契約。"""
+
+
+@dataclass(frozen=True)
+class ProspectiveFormalClock:
+    """通過 activation 前驗證的 immutable clock identity。"""
+
+    clock_id: str
+    activation_trading_day: date
+    owner_decision_timestamp: datetime
+    candidate_training_cutoff: datetime
+    manifest_hash: str
+    payload: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "payload", MappingProxyType(dict(self.payload)))
+
+    @property
+    def mode(self) -> str:
+        return str(self.payload["mode"])
+
+    @property
+    def candidate_model_hash(self) -> str:
+        return str(self.payload["candidate_model_hash"])
+
+    def custody_payload(self) -> dict[str, object]:
+        """回傳不含 secret、可供 readiness/status 使用的 custody 摘要。"""
+
+        return {
+            "schema_version": "prospective-formal-clock-custody.v1",
+            "clock_id": self.clock_id,
+            "mode": self.mode,
+            "activation_trading_day": self.activation_trading_day.isoformat(),
+            "owner_decision_timestamp": self.owner_decision_timestamp.isoformat(),
+            "candidate_training_cutoff": self.candidate_training_cutoff.isoformat(),
+            "candidate_model_hash": self.candidate_model_hash,
+            "calibration_policy_hash": self.payload["calibration_policy_hash"],
+            "evaluation_policy_hash": self.payload["evaluation_policy_hash"],
+            "historical_backfill_claimed": False,
+            "real_money": False,
+            "broker_execution": False,
+            "manifest_hash": self.manifest_hash,
+        }
+
+
+def canonical_json(value: object) -> str:
+    """以 repo 既有 custody 規則產生 deterministic JSON。"""
+
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def payload_hash(value: object) -> str:
+    return SHA256_PREFIX + hashlib.sha256(
+        canonical_json(value).encode("utf-8")
+    ).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return SHA256_PREFIX + digest.hexdigest()
+
+
+def validate_clock_manifest(
+    manifest: Mapping[str, object],
+    *,
+    now: datetime,
+    calendar_evidence: Mapping[str, object] | None = None,
+) -> ProspectiveFormalClock:
+    """驗證尚未啟動的 clock，所有時間與 calendar 證據都由呼叫端注入。
+
+    ``now`` 必須是帶 timezone 的 datetime。預設只接受 activation 嚴格晚於
+    Taipei 的當日；這個方法不接受已經過去的 active clock，避免 inspector 被
+    誤用成 retroactive credit 工具。
+    """
+
+    if not isinstance(manifest, Mapping):
+        raise ProspectiveFormalClockError("clock manifest must be an object")
+    unknown = set(manifest) - _CLOCK_FIELDS
+    missing = _CLOCK_FIELDS - set(manifest)
+    if unknown:
+        raise ProspectiveFormalClockError(
+            "clock manifest contains unknown fields: " + ", ".join(sorted(unknown))
+        )
+    if missing:
+        raise ProspectiveFormalClockError(
+            "clock manifest missing fields: " + ", ".join(sorted(missing))
+        )
+
+    if manifest.get("schema_version") != PROSPECTIVE_FORMAL_CLOCK_SCHEMA_VERSION:
+        raise ProspectiveFormalClockError("clock schema_version is invalid")
+    if manifest.get("status") != PROSPECTIVE_FORMAL_CLOCK_STATUS:
+        raise ProspectiveFormalClockError("clock status must be planned before activation")
+    if manifest.get("mode") != PROSPECTIVE_FORMAL_CLOCK_MODE:
+        raise ProspectiveFormalClockError("clock mode must be prospective_formal_simulation")
+    if manifest.get("real_money") is not False:
+        raise ProspectiveFormalClockError("real_money must be false")
+    if manifest.get("broker_execution") is not False:
+        raise ProspectiveFormalClockError("broker_execution must be false")
+    if manifest.get("historical_backfill_claimed") is not False:
+        raise ProspectiveFormalClockError("historical_backfill_claimed must be false")
+
+    clock_id = _required_text(manifest.get("clock_id"), "clock_id")
+    _required_text(manifest.get("owner_decision_id"), "owner_decision_id")
+    _required_text(manifest.get("strategy_version"), "strategy_version")
+    _required_text(manifest.get("policy_version"), "policy_version")
+    if manifest.get("decision_timezone") != "Asia/Taipei":
+        raise ProspectiveFormalClockError("decision_timezone must be Asia/Taipei")
+    decision_time = _parse_local_time(manifest.get("decision_time"), "decision_time")
+    if decision_time.tzinfo is not None:
+        raise ProspectiveFormalClockError("decision_time must not contain a timezone")
+
+    owner_decision_timestamp = _parse_aware_datetime(
+        manifest.get("owner_decision_timestamp"), "owner_decision_timestamp"
+    )
+    candidate_training_cutoff = _parse_aware_datetime(
+        manifest.get("candidate_training_cutoff"), "candidate_training_cutoff"
+    )
+    now_aware = _parse_now(now)
+    activation_day = _parse_date(
+        manifest.get("activation_trading_day"), "activation_trading_day"
+    )
+    now_taipei_day = now_aware.astimezone(TAIPEI_TIMEZONE).date()
+    if activation_day <= now_taipei_day:
+        raise ProspectiveFormalClockError(
+            "activation_trading_day must be strictly after the current Taipei date"
+        )
+    if activation_day <= owner_decision_timestamp.astimezone(TAIPEI_TIMEZONE).date():
+        raise ProspectiveFormalClockError(
+            "activation_trading_day must be after owner decision date"
+        )
+    if candidate_training_cutoff.astimezone(TAIPEI_TIMEZONE).date() >= activation_day:
+        raise ProspectiveFormalClockError(
+            "candidate_training_cutoff must be before activation_trading_day"
+        )
+    if owner_decision_timestamp > now_aware:
+        raise ProspectiveFormalClockError(
+            "owner_decision_timestamp cannot be in the future"
+        )
+
+    _validate_seed_state(manifest.get("seed_state"))
+    _required_positive_int(
+        manifest.get("virtual_notional_minor_units"),
+        "virtual_notional_minor_units",
+    )
+    for field_name in (
+        "policy_hash",
+        "universe_hash",
+        "source_policy_hash",
+        "candidate_model_hash",
+        "candidate_feature_manifest_hash",
+        "calibration_policy_hash",
+        "evaluation_policy_hash",
+    ):
+        _required_hash(manifest.get(field_name), field_name)
+
+    embedded_calendar_evidence = manifest.get("activation_calendar_evidence")
+    if calendar_evidence is not None:
+        if canonical_json(calendar_evidence) != canonical_json(embedded_calendar_evidence):
+            raise ProspectiveFormalClockError(
+                "supplied calendar evidence does not match manifest evidence"
+            )
+    _validate_calendar_evidence(embedded_calendar_evidence, activation_day)
+
+    supplied_manifest_hash = _required_hash(
+        manifest.get("manifest_hash"), "manifest_hash"
+    )
+    identity = dict(manifest)
+    identity.pop("manifest_hash", None)
+    if payload_hash(identity) != supplied_manifest_hash:
+        raise ProspectiveFormalClockError("clock manifest hash mismatch")
+
+    return ProspectiveFormalClock(
+        clock_id=clock_id,
+        activation_trading_day=activation_day,
+        owner_decision_timestamp=owner_decision_timestamp,
+        candidate_training_cutoff=candidate_training_cutoff,
+        manifest_hash=supplied_manifest_hash,
+        payload=manifest,
+    )
+
+
+def load_clock_manifest(
+    path: Path,
+    *,
+    now: datetime,
+    calendar_evidence: Mapping[str, object] | None = None,
+) -> ProspectiveFormalClock:
+    """唯讀載入並驗證 JSON manifest；不建立 parent、不寫檔。"""
+
+    resolved = path.expanduser().resolve()
+    try:
+        raw = json.loads(resolved.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ProspectiveFormalClockError("clock manifest is missing") from exc
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProspectiveFormalClockError("clock manifest is unreadable") from exc
+    if not isinstance(raw, dict):
+        raise ProspectiveFormalClockError("clock manifest root must be an object")
+    return validate_clock_manifest(
+        raw,
+        now=now,
+        calendar_evidence=calendar_evidence,
+    )
+
+
+def build_clock_manifest(
+    payload_without_hash: Mapping[str, object],
+) -> dict[str, object]:
+    """只補 canonical manifest hash，不繞過 validator 或改變欄位。"""
+
+    payload = dict(payload_without_hash)
+    if "manifest_hash" in payload:
+        raise ProspectiveFormalClockError(
+            "build_clock_manifest expects payload without manifest_hash"
+        )
+    payload["manifest_hash"] = payload_hash(payload)
+    return payload
+
+
+def inspect_clock_manifest(
+    path: Path,
+    *,
+    now: datetime,
+    calendar_evidence: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """建立唯讀 readiness payload；任何錯誤皆轉成 blocked，不拋出給 CLI。"""
+
+    resolved = path.expanduser().resolve()
+    report: dict[str, object] = {
+        "schema_version": "prospective-formal-clock-readiness.v1",
+        "manifest_path": str(resolved),
+        "status": "blocked",
+        "formal_oos_allowed": False,
+        "production_blend_alpha_bp": 0,
+        "broker_order_allowed": False,
+        "read_only": True,
+        "secret_values_emitted": False,
+        "blockers": [],
+    }
+    blockers = report["blockers"]
+    if not isinstance(blockers, list):  # pragma: no cover - local literal guard
+        raise AssertionError("blockers must be a list")
+    try:
+        clock = load_clock_manifest(
+            resolved,
+            now=now,
+            calendar_evidence=calendar_evidence,
+        )
+    except ProspectiveFormalClockError as exc:
+        blockers.append(str(exc))
+        if resolved.is_file():
+            try:
+                report["manifest_file_hash"] = file_sha256(resolved)
+            except OSError:
+                blockers.append("manifest_file_hash_unreadable")
+        return report
+
+    report.update(
+        {
+            "status": "ready_for_activation",
+            "clock": clock.custody_payload(),
+            "logical_manifest_hash": clock.manifest_hash,
+            "manifest_file_hash": file_sha256(resolved),
+        }
+    )
+    return report
+
+
+def _validate_seed_state(value: object) -> None:
+    if not isinstance(value, Mapping):
+        raise ProspectiveFormalClockError("seed_state must be an object")
+    unknown = set(value) - _SEED_FIELDS
+    missing = _SEED_FIELDS - set(value)
+    if unknown:
+        raise ProspectiveFormalClockError(
+            "seed_state contains unknown fields: " + ", ".join(sorted(unknown))
+        )
+    if missing:
+        raise ProspectiveFormalClockError(
+            "seed_state missing fields: " + ", ".join(sorted(missing))
+        )
+    if value.get("kind") != "cash":
+        raise ProspectiveFormalClockError("seed_state.kind must be cash")
+    if value.get("cash_bp") != 10_000:
+        raise ProspectiveFormalClockError("seed_state.cash_bp must be 10000")
+    if value.get("position_count") != 0:
+        raise ProspectiveFormalClockError("seed_state.position_count must be 0")
+    expected = payload_hash(
+        {
+            "cash_bp": 10_000,
+            "kind": "cash",
+            "position_count": 0,
+        }
+    )
+    if value.get("state_hash") != expected:
+        raise ProspectiveFormalClockError("seed_state.state_hash mismatch")
+
+
+def _validate_calendar_evidence(value: object, activation_day: date) -> None:
+    if not isinstance(value, Mapping):
+        raise ProspectiveFormalClockError(
+            "activation calendar evidence is required"
+        )
+    unknown = set(value) - _CALENDAR_FIELDS
+    missing = _CALENDAR_FIELDS - set(value)
+    if unknown:
+        raise ProspectiveFormalClockError(
+            "calendar evidence contains unknown fields: "
+            + ", ".join(sorted(unknown))
+        )
+    if missing:
+        raise ProspectiveFormalClockError(
+            "calendar evidence missing fields: " + ", ".join(sorted(missing))
+        )
+    if value.get("schema_version") != CALENDAR_EVIDENCE_SCHEMA_VERSION:
+        raise ProspectiveFormalClockError("calendar evidence schema_version is invalid")
+    if _parse_date(value.get("date"), "calendar evidence date") != activation_day:
+        raise ProspectiveFormalClockError("calendar evidence date mismatch")
+    if value.get("is_trading_day") is not True:
+        raise ProspectiveFormalClockError("activation date is not an official trading day")
+    reason = _required_text(value.get("reason_code"), "calendar evidence reason_code")
+    if reason not in _ALLOWED_CALENDAR_REASONS:
+        raise ProspectiveFormalClockError("calendar evidence reason_code is not official")
+    _required_text(value.get("source"), "calendar evidence source")
+    _required_hash(value.get("source_hash"), "calendar evidence source_hash")
+
+
+def _parse_now(value: datetime) -> datetime:
+    if not isinstance(value, datetime):
+        raise ProspectiveFormalClockError("now must be a datetime")
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ProspectiveFormalClockError("now must include timezone")
+    return value
+
+
+def _parse_aware_datetime(value: object, field_name: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ProspectiveFormalClockError(f"{field_name} must be timezone-aware ISO datetime")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ProspectiveFormalClockError(f"{field_name} is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ProspectiveFormalClockError(f"{field_name} must include timezone")
+    return parsed
+
+
+def _parse_local_time(value: object, field_name: str) -> time:
+    if not isinstance(value, str) or not value.strip():
+        raise ProspectiveFormalClockError(f"{field_name} must be HH:MM:SS")
+    try:
+        parsed = time.fromisoformat(value)
+    except ValueError as exc:
+        raise ProspectiveFormalClockError(f"{field_name} is invalid") from exc
+    if parsed.tzinfo is not None or parsed.microsecond != 0:
+        raise ProspectiveFormalClockError(f"{field_name} must be a local second-resolution time")
+    if parsed.isoformat(timespec="seconds") != value:
+        raise ProspectiveFormalClockError(f"{field_name} must use HH:MM:SS")
+    return parsed
+
+
+def _parse_date(value: object, field_name: str) -> date:
+    if not isinstance(value, str) or not value.strip():
+        raise ProspectiveFormalClockError(f"{field_name} must be YYYY-MM-DD")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ProspectiveFormalClockError(f"{field_name} is invalid") from exc
+
+
+def _required_text(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ProspectiveFormalClockError(f"{field_name} must be non-empty text")
+    return value.strip()
+
+
+def _required_positive_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ProspectiveFormalClockError(f"{field_name} must be a positive integer")
+    return value
+
+
+def _required_hash(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+        raise ProspectiveFormalClockError(f"{field_name} must be sha256: plus 64 lowercase hex")
+    return value
