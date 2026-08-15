@@ -156,6 +156,8 @@ Downside probability 使用 isotonic calibration，且 calibration input 必須�
 
 2026-08-15 的 PFS-05 另建立 `prospective-formal-inference-calibration-policy.v1` 與 shadow audit：正式 inference calibration 必須並列 `identity`／`isotonic_integer_bp`，每個 target fold 只能使用完整 prior validation folds，5／10／20／60 日採 conservative max，ECE 門檻固定 `500 bp`，且 `rebalance_worthwhile` 必須自然具備 class 0／1。policy hash 綁定 clock／model／dataset identity；isotonic 若 ECE／Brier 不優於 identity、任何 horizon 缺 class coverage 或 only class 0，audit 維持 blocked，不可事後改選 method、attach calibrator、產生非零 alpha 或解除 Formal Gate。
 
+2026-08-15 的 PFS-06 capture-only readiness 只驗證 clock-bound policy、prospective ledger wrapper、Rule history 與 PIT sidecar 的完整 custody；即使三項均 ready，readiness 仍固定 `capture_only=true`、`heavy_rebuild_launch_allowed=false`，不會自動呼叫 Direct/OOC。未經 PFS-07 owner activation 與未來交易日選定，不設定正式 Windows paths、不計 elapsed day、不產生 Formal OOS 或 promotion credit。
+
 2026-08-14 起 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 會在 polling
 時重新讀取 Windows 使用者／系統環境的受控 formal path、PIT sector path、Rule HMAC key
 與 store id，補足
