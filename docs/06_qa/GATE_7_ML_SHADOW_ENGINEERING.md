@@ -166,6 +166,12 @@ Downside probability 使用 isotonic calibration，且 calibration input 必須�
 
 2026-08-15 的 PFS-10 promotion review package 只聚合 machine gates 與 owner-review metadata；10 個 machine gates 全 true 時最多回報 `ready_for_owner_review`，仍固定 owner authorization false、`promotion_eligible=false`、`formal_oos_allowed=false`、alpha=`0`、broker disabled。程式面 PFS-01～PFS-10 已完成，執行面不會自行選 activation date、設定正式 path 或啟動 watcher，等待 owner 的受控 prospective decision。
 
+Execution handoff 另由 `scripts/inspect_prospective_activation_environment.py` 唯讀檢查
+Windows user/system registry：目前三個 formal path 都 missing；controlled store／HMAC
+configured flag 只以布林值回報，secret 不會出現在 stdout、JSON、repo、command line 或
+log。未來 paths 尚未全部存在前，不能執行 activation CLI，也不能把既有 research／
+fixture artifacts 放入 formal path。
+
 2026-08-14 起 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 會在 polling
 時重新讀取 Windows 使用者／系統環境的受控 formal path、PIT sector path、Rule HMAC key
 與 store id，補足

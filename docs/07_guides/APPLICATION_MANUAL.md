@@ -32,6 +32,20 @@ PFS-10 promotion review inspector 可用於受控 fixture 的最後 machine-gate
 - `ready_for_owner_review` 不等於 promotion。review package 永久固定 `owner_review_required=true`、`owner_review_received=false`、`owner_authorization_received=false`、`promotion_eligible=false`、`formal_oos_allowed=false`、alpha=`0`、broker disabled。
 - 這個命令不選 activation 日期、不設定 Windows path／secret、不啟動 watcher／Direct／OOC；下一步必須由 owner 在受控環境另行決定是否開始未來 clock。若要 retrain／recalibrate，先關閉本 clock，建立新 candidate 與新 clock。
 
+### Activation handoff preflight
+
+設定 owner-controlled paths 後，先執行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_prospective_activation_environment.py
+```
+
+它只回報三個 formal path 的 configured／exists／file hash、controlled store 是否配置，
+以及 HMAC secret store 的 configured 布林值；不會輸出 secret、不會設定環境、不會啟動
+任何 ML 程序。若任一路徑缺失，狀態是 `waiting_for_controlled_environment`；即使全部
+ready，也仍要由 owner 提供未來 activation decision，才可使用 fixture-only activation
+command。當前 preflight 的三個 formal path 都是 missing，這是預期的 fail-closed 狀態。
+
 ## 2026-08-14 自動鏈 current state
 
 ### 正式 ML 輸入接線狀態（2026-08-14）

@@ -8,7 +8,7 @@
 
 Owner 已決定不以測試持倉、research causal ledger、歷史 replay 或 current-company sector snapshot 回填既有 Formal Gate，改採從未來交易日起算的受治理模擬持倉 clock。執行 SSOT 是 [Prospective Formal Simulated Portfolio Execution Plan](PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md)：先完成 clock contract、三條 append-only capture producer、prospective PIT source acceptance、calibration policy 與 capture-only 護欄，再把既有 candidate／policies 凍結後選仍在未來的台灣交易日開始累積。預設不重訓；clock 期間禁止以已消費的 Formal OOS 日期重訓或替換 frozen identities。
 
-此 owner 決議只建立後續工程方向，不產生 snapshot、elapsed day、source acceptance、Formal OOS 或 promotion credit。既有 `2014–2026` Direct／OOC 留在 research/history；`formal_oos_allowed=false`、production alpha 0、broker disabled 與 append-only external Gate 規則不變。`PFS-01`～`PFS-10` 已完成 strict clock／fixture-only capture／prospective PIT custody／inference calibration policy／capture-only readiness／frozen activation contract／shadow maturity gate／frozen OOS evidence／promotion review focused QA；程式面已完成，執行面等待 owner 的受控 prospective activation decision，且不得啟動現行 heavy watcher 代替它。
+此 owner 決議只建立後續工程方向，不產生 snapshot、elapsed day、source acceptance、Formal OOS 或 promotion credit。既有 `2014–2026` Direct／OOC 留在 research/history；`formal_oos_allowed=false`、production alpha 0、broker disabled 與 append-only external Gate 規則不變。`PFS-01`～`PFS-10` 已完成 strict clock／fixture-only capture／prospective PIT custody／inference calibration policy／capture-only readiness／frozen activation contract／shadow maturity gate／frozen OOS evidence／promotion review focused QA；程式面已完成，execution handoff preflight 目前顯示三個 formal path missing，執行面等待 owner 的受控 prospective activation decision，且不得啟動現行 heavy watcher 代替它。
 
 ## Forward Clock current projection（2026-08-06）
 

@@ -261,6 +261,25 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
 - 不自動產生 owner decision、選 activation trading day、設定三個正式 path／store identity／secret store，不執行任何實際 replay、promotion、retrain 或 broker action。
 - review package 完成後，專案仍須等待 owner 明確提供未來 activation decision；若任何 machine／human Gate 失敗，維持 alpha=`0`、broker disabled，另開新 clock 才能評估 retrain／recalibration。
 
+## 11. Execution handoff preflight（PFS-01～10 之後）
+
+程式面完成後，第一個實際執行步驟是唯讀檢查 Windows 使用者／系統環境，不是啟動 watcher：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_prospective_activation_environment.py
+```
+
+這個命令只檢查三個 `BALDR_ML_*_PATH` 是否是已存在的檔案，以及
+`RULE_CHAMPION_CONTROLLED_STORE_ID`／HMAC secret store 是否配置；secret 只在
+受控 reader 內取 configured flag，不會輸出 value。即使回報
+`ready_for_owner_activation`，`activation_launch_allowed=false`、
+`heavy_rebuild_launch_allowed=false`、`formal_oos_allowed=false` 仍固定不變。
+
+2026-08-15 的目前唯讀結果是 `waiting_for_controlled_environment`：三個 formal path
+均缺失；shared controlled reader 回報 store／HMAC configured flag，但沒有任何 path
+可供 activation。這不是 failure，也不會觸發補檔、重訓或 watcher；owner 設定合法
+manifest paths 後，再重新執行同一 preflight，才可進入 PFS-07 activation command。
+
 ## 8. Activation 與日常蒐證 Runbook（待程式完成後使用）
 
 下列是執行順序，不是現有可直接複製的命令；實際 CLI 名稱與參數由 PFS-01～06 固化後才寫入 Application Manual：
