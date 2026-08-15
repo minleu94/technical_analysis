@@ -170,7 +170,11 @@ Execution handoff 另由 `scripts/inspect_prospective_activation_environment.py`
 Windows user/system registry：目前三個 formal path 都 missing；controlled store／HMAC
 configured flag 只以布林值回報，secret 不會出現在 stdout、JSON、repo、command line 或
 log。未來 paths 尚未全部存在前，不能執行 activation CLI，也不能把既有 research／
-fixture artifacts 放入 formal path。
+fixture artifacts 放入 formal path。Owner 設定 paths 後，
+`scripts/inspect_prospective_capture_readiness.py --controlled-environment` 可用明確
+opt-in 把同一 controlled reader 的三條路徑交給 PFS-06 schema／hash／T-1／lineage
+驗證；這個命令仍只做 capture-only preflight，不寫環境、不讀 HMAC secret、不啟動
+watcher／Direct／OOC，任何 missing／invalid 都維持 formal OOS blocked。
 
 2026-08-14 起 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 會在 polling
 時重新讀取 Windows 使用者／系統環境的受控 formal path、PIT sector path、Rule HMAC key
