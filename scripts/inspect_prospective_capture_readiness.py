@@ -1,8 +1,17 @@
-"""Fixture-only prospective capture readiness inspector."""
+"""Prospective capture readiness inspector.
+
+The default mode is deliberately guarded by ``--fixture-only``.  An explicit
+``--controlled-environment`` mode is also available for the owner handoff: it
+reads the three formal input paths through the shared Windows controlled
+environment reader, then runs the same read-only PFS-06 validators.  Neither
+mode starts a watcher, launches Direct/OOC, changes environment variables, or
+reads the HMAC secret value.
+"""
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 from datetime import datetime
 import json
 from pathlib import Path
@@ -18,6 +27,10 @@ from data_module.prospective_capture_readiness import (  # noqa: E402
     build_prospective_capture_readiness_report,
     write_immutable_capture_readiness_report,
 )
+from data_module.prospective_activation_environment import (  # noqa: E402
+    FORMAL_PATH_ENV_NAMES,
+    build_prospective_activation_environment_preflight,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -25,7 +38,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fixture-only",
         action="store_true",
-        help="required guard: no environment discovery or heavy rebuild",
+        help="use explicit fixture paths; no environment discovery or heavy rebuild",
+    )
+    parser.add_argument(
+        "--controlled-environment",
+        action="store_true",
+        help=(
+            "explicit owner handoff mode: read formal paths from the shared "
+            "Windows controlled environment; never launches ML"
+        ),
     )
     parser.add_argument("--clock-manifest", type=Path, required=True)
     parser.add_argument("--calibration-policy", type=Path, required=True)
@@ -46,12 +67,12 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    if not args.fixture_only:
+    if args.fixture_only == args.controlled_environment:
         print(
             json.dumps(
                 {
                     "status": "blocked",
-                    "reason": "--fixture-only is required",
+                    "reason": "exactly one of --fixture-only or --controlled-environment is required",
                     "capture_only": True,
                     "heavy_rebuild_launch_allowed": False,
                     "formal_oos_allowed": False,
@@ -64,7 +85,75 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if args.controlled_environment and any(
+        value is not None
+        for value in (
+            args.portfolio_ledger_manifest,
+            args.rule_history,
+            args.pit_sector_membership,
+        )
+    ):
+        print(
+            json.dumps(
+                {
+                    "status": "blocked",
+                    "reason": "controlled-environment mode forbids explicit formal input paths",
+                    "capture_only": True,
+                    "heavy_rebuild_launch_allowed": False,
+                    "formal_oos_allowed": False,
+                    "production_blend_alpha_bp": 0,
+                    "broker_order_allowed": False,
+                    "secret_values_emitted": False,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+        return 2
     try:
+        controlled_paths: dict[str, Path | None] = {
+            "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH": args.portfolio_ledger_manifest,
+            "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH": args.rule_history,
+            "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH": args.pit_sector_membership,
+        }
+        if args.controlled_environment:
+            environment_report = build_prospective_activation_environment_preflight()
+            environment_blockers = cast(list[object], environment_report["blockers"])
+            if environment_blockers:
+                print(
+                    json.dumps(
+                        {
+                            "status": "blocked",
+                            "reason": "controlled environment preflight is not ready",
+                            "environment_status": environment_report["status"],
+                            "environment_blockers": environment_blockers,
+                            "capture_only": True,
+                            "heavy_rebuild_launch_allowed": False,
+                            "formal_oos_allowed": False,
+                            "production_blend_alpha_bp": 0,
+                            "broker_order_allowed": False,
+                            "secret_values_emitted": False,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
+            formal_paths = cast(dict[str, object], environment_report["formal_paths"])
+            for name in FORMAL_PATH_ENV_NAMES:
+                entry = formal_paths.get(name)
+                if not isinstance(entry, Mapping):
+                    raise ProspectiveCaptureReadinessError(
+                        f"controlled environment path entry is invalid: {name}"
+                    )
+                path_value = entry.get("path")
+                if not isinstance(path_value, str) or not path_value:
+                    raise ProspectiveCaptureReadinessError(
+                        f"controlled environment path is invalid: {name}"
+                    )
+                controlled_paths[name] = Path(path_value)
         symbols: Any = json.loads(args.symbols_json.read_text(encoding="utf-8"))
         if not isinstance(symbols, list) or not all(
             isinstance(item, str) for item in symbols
@@ -82,9 +171,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             decision_timestamp=args.decision_timestamp,
             now=now,
             expected_symbols=tuple(symbols),
-            portfolio_ledger_manifest_path=args.portfolio_ledger_manifest,
-            rule_history_path=args.rule_history,
-            pit_sector_membership_path=args.pit_sector_membership,
+            portfolio_ledger_manifest_path=controlled_paths[
+                "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH"
+            ],
+            rule_history_path=controlled_paths[
+                "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH"
+            ],
+            pit_sector_membership_path=controlled_paths[
+                "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH"
+            ],
             active_clock=args.active_clock,
         )
         file_hash = write_immutable_capture_readiness_report(args.output, report)

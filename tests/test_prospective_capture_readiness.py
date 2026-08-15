@@ -311,3 +311,85 @@ def test_fixture_cli_requires_explicit_guard_and_keeps_heavy_off(
     assert output.is_file()
     assert '"heavy_rebuild_launch_allowed": false' in captured.out
     assert captured.err == ""
+
+
+def test_controlled_environment_mode_fails_closed_without_formal_paths(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.inspect_prospective_capture_readiness as inspector
+
+    kwargs = _report_kwargs(tmp_path)
+    symbols_path = tmp_path / "symbols.json"
+    symbols_path.write_text(json.dumps(["2317", "2330"]), encoding="utf-8")
+    output = tmp_path / "readiness.json"
+    monkeypatch.setattr(
+        inspector,
+        "build_prospective_activation_environment_preflight",
+        lambda: {
+            "status": "waiting_for_controlled_environment",
+            "blockers": [
+                "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH:missing",
+                "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH:missing",
+                "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH:missing",
+            ],
+            "formal_paths": {},
+        },
+    )
+    exit_code = inspector.main(
+        [
+            "--controlled-environment",
+            "--clock-manifest",
+            str(kwargs["clock_manifest_path"]),
+            "--calibration-policy",
+            str(kwargs["calibration_policy_path"]),
+            "--decision-timestamp",
+            DECISION_TIMESTAMP,
+            "--now",
+            PLANNING_NOW.isoformat(),
+            "--symbols-json",
+            str(symbols_path),
+            "--output",
+            str(output),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert not output.exists()
+    assert "environment_blockers" in captured.err
+    assert "secret_values_emitted" in captured.err
+    assert "HMAC" not in captured.err
+
+
+def test_readiness_cli_rejects_mixed_environment_modes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.inspect_prospective_capture_readiness import main
+
+    kwargs = _report_kwargs(tmp_path)
+    symbols_path = tmp_path / "symbols.json"
+    symbols_path.write_text(json.dumps(["2317", "2330"]), encoding="utf-8")
+    output = tmp_path / "readiness.json"
+    exit_code = main(
+        [
+            "--fixture-only",
+            "--controlled-environment",
+            "--clock-manifest",
+            str(kwargs["clock_manifest_path"]),
+            "--calibration-policy",
+            str(kwargs["calibration_policy_path"]),
+            "--decision-timestamp",
+            DECISION_TIMESTAMP,
+            "--now",
+            PLANNING_NOW.isoformat(),
+            "--symbols-json",
+            str(symbols_path),
+            "--output",
+            str(output),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "exactly one" in captured.err

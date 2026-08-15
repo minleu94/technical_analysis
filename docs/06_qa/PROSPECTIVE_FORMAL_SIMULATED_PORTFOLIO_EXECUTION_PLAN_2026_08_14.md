@@ -280,6 +280,13 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
 可供 activation。這不是 failure，也不會觸發補檔、重訓或 watcher；owner 設定合法
 manifest paths 後，再重新執行同一 preflight，才可進入 PFS-07 activation command。
 
+Owner 設定 paths 後，PFS-06 可用明確的 `--controlled-environment` opt-in 直接讀取
+同一個 shared reader，再驗證三份 manifest／sidecar 的 schema、hash、clock boundary、
+T-1 與 lineage；這仍是唯讀 capture readiness，不會把環境值寫入 process、repo 或
+artifact，不會讀出 HMAC secret，也不會啟動 watcher／Direct／OOC。任何 path missing
+或 input invalid 都維持 blocked；只有 readiness report 及 owner activation manifest
+都通過後，才進入未來交易日的 daily capture。
+
 ## 8. Activation 與日常蒐證 Runbook（待程式完成後使用）
 
 下列是執行順序，不是現有可直接複製的命令；實際 CLI 名稱與參數由 PFS-01～06 固化後才寫入 Application Manual：

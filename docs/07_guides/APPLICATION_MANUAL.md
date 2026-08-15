@@ -46,6 +46,26 @@ PFS-10 promotion review inspector 可用於受控 fixture 的最後 machine-gate
 ready，也仍要由 owner 提供未來 activation decision，才可使用 fixture-only activation
 command。當前 preflight 的三個 formal path 都是 missing，這是預期的 fail-closed 狀態。
 
+Owner 設定三個 path 後，可用下列明確 opt-in 的唯讀模式把同一份 controlled
+environment 直接交給 PFS-06 readiness；這個模式不會把 path 寫回 process、repo 或
+任何正式 artifact，也不會讀出 HMAC secret：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_prospective_capture_readiness.py `
+  --controlled-environment `
+  --clock-manifest <CLOCK_MANIFEST> `
+  --calibration-policy <CALIBRATION_POLICY> `
+  --decision-timestamp <DECISION_TIMESTAMP> `
+  --now <NOW> `
+  --symbols-json <SORTED_SYMBOLS_JSON> `
+  --output <READINESS_OUTPUT>
+```
+
+`--controlled-environment` 與 `--fixture-only` 互斥；任何 path missing、非檔案或
+PFS-06 ledger／Rule／PIT custody 驗證失敗都會回傳 blocked。即使 readiness ready，
+`capture_only=true`、`heavy_rebuild_launch_allowed=false`、`formal_oos_allowed=false`、
+alpha=`0` 與 broker disabled 仍不變，後續仍需 owner 的 future activation manifest。
+
 ## 2026-08-14 自動鏈 current state
 
 ### 正式 ML 輸入接線狀態（2026-08-14）
