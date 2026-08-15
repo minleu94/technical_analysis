@@ -6,7 +6,7 @@ from typing import Any
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 
 from app_module.dtos.portfolio_dtos import PortfolioDTO, PositionDTO, TradeDTO
 from ui_qt.views.portfolio_view import AddTradeDialog, PortfolioView
@@ -130,6 +130,7 @@ class FakePortfolioService:
                 trade_date="2026-06-20",
             ),
         ]
+        self.deleted_trade_ids: list[str] = []
 
     def get_portfolio(self):
         return PortfolioDTO(
@@ -153,6 +154,14 @@ class FakePortfolioService:
             if position.stock_code == stock_code:
                 return position.current_price
         return None
+
+    def delete_trade(self, trade_id: str) -> bool:
+        self.deleted_trade_ids.append(trade_id)
+        remaining = [trade for trade in self.trades if trade.trade_id != trade_id]
+        if len(remaining) == len(self.trades):
+            return False
+        self.trades = remaining
+        return True
 
 
 class FakeJournalService:
@@ -220,6 +229,53 @@ def test_trade_history_filter_label_and_clear_button(tmp_path):
     view.clear_trade_filter_button.click()
     assert view.selected_stock_code == ""
     assert "顯示全部交易歷史" in view.trade_filter_status_label.text()
+
+
+def test_portfolio_trade_delete_button_requires_a_selected_transaction(tmp_path):
+    view = make_portfolio_view(tmp_path)
+
+    assert view.delete_selected_trade_button.text() == "刪除選取交易"
+    assert not view.delete_selected_trade_button.isEnabled()
+
+    view.trades_table.selectRow(0)
+    app().processEvents()
+
+    assert view.delete_selected_trade_button.isEnabled()
+    assert view.selected_trade_id == "t1"
+    assert "已選取：2330 台積電" in view.trade_selection_hint_label.text()
+
+
+def test_portfolio_trade_delete_button_confirms_then_deletes_one_transaction(tmp_path, monkeypatch):
+    view = make_portfolio_view(tmp_path)
+    service = view.portfolio_service
+    portfolio_updates: list[bool] = []
+    view.portfolioUpdated.connect(lambda: portfolio_updates.append(True))
+    view.trades_table.selectRow(0)
+    app().processEvents()
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: None)
+
+    view.delete_selected_trade_button.click()
+
+    assert service.deleted_trade_ids == ["t1"]
+    assert [trade.trade_id for trade in service.trades] == ["t2"]
+    assert portfolio_updates == [True]
+    assert not view.delete_selected_trade_button.isEnabled()
+
+
+def test_portfolio_trade_delete_button_keeps_data_when_confirmation_is_cancelled(tmp_path, monkeypatch):
+    view = make_portfolio_view(tmp_path)
+    service = view.portfolio_service
+    view.trades_table.selectRow(0)
+    app().processEvents()
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
+
+    view.delete_selected_trade_button.click()
+
+    assert service.deleted_trade_ids == []
+    assert [trade.trade_id for trade in service.trades] == ["t1", "t2"]
 
 
 def test_portfolio_monitoring_shows_price_as_of_manual_source_and_chinese_chip_risk(tmp_path):

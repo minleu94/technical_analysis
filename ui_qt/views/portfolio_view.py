@@ -332,6 +332,7 @@ class PortfolioView(QWidget):
         self.positions_model: Optional[PandasTableModel] = None
         self.trades_model: Optional[PandasTableModel] = None
         self.selected_stock_code: str = ""
+        self.selected_trade_id: str = ""
 
         # 緩存最新推薦結果，用以在背景進行 Condition Monitor 條件監控
         self.rec_cache: Dict[str, Dict[str, Any]] = {}
@@ -473,11 +474,30 @@ class PortfolioView(QWidget):
         self.trades_table = QTableView()
         apply_financial_table_style(self.trades_table)
         self.trades_table.setSelectionBehavior(QTableView.SelectRows)
+        self.trades_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.trades_table.horizontalHeader().setStretchLastSection(True)
         # 啟用右鍵選單
         self.trades_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.trades_table.customContextMenuRequested.connect(self._show_trade_context_menu)
         history_layout.addWidget(self.trades_table)
+
+        trade_action_layout = QHBoxLayout()
+        self.trade_selection_hint_label = QLabel("選取一筆交易後，可安全刪除該筆紀錄。")
+        self.trade_selection_hint_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 11px;"
+        )
+        self.trade_selection_hint_label.setWordWrap(True)
+        trade_action_layout.addWidget(self.trade_selection_hint_label, 1)
+        self.delete_selected_trade_button = QPushButton("刪除選取交易")
+        self.delete_selected_trade_button.setObjectName("deleteSelectedTradeButton")
+        self.delete_selected_trade_button.setProperty("variant", "danger")
+        self.delete_selected_trade_button.setEnabled(False)
+        self.delete_selected_trade_button.setToolTip(
+            "選取一筆交易後才可刪除；系統會先驗證剩餘交易仍能重算合法持倉。"
+        )
+        self.delete_selected_trade_button.clicked.connect(self._delete_selected_trade)
+        trade_action_layout.addWidget(self.delete_selected_trade_button)
+        history_layout.addLayout(trade_action_layout)
 
         right_widget.addTab(history_tab, "交易歷史")
 
@@ -784,6 +804,7 @@ class PortfolioView(QWidget):
     def _load_trades_history(self):
         """加載交易明細，若有選定股票，則進行篩選"""
         try:
+            self.selected_trade_id = ""
             trades = self.portfolio_service.list_trades()
             if self.selected_stock_code:
                 trades = [t for t in trades if t.stock_code == self.selected_stock_code]
@@ -813,6 +834,10 @@ class PortfolioView(QWidget):
                 self.trades_model.setVisibleColumns([col for col in df.columns if col != "_trade_id"])
             self.trades_table.setModel(self.trades_model)
             self.trades_table.resizeColumnsToContents()
+            selection_model = self.trades_table.selectionModel()
+            if selection_model is not None:
+                selection_model.selectionChanged.connect(self._sync_selected_trade_action)
+            self._sync_selected_trade_action()
             if self.selected_stock_code:
                 self.trade_filter_status_label.setText(f"目前只顯示：{self.selected_stock_code}")
                 self.clear_trade_filter_button.setEnabled(True)
@@ -821,6 +846,54 @@ class PortfolioView(QWidget):
                 self.clear_trade_filter_button.setEnabled(False)
         except Exception as e:
             logger.error("Failed to load trades history: %s", e)
+
+    def _selected_trade_record(self) -> Optional[Dict[str, Any]]:
+        """取得目前表格中選取的原始交易，避免將衍生持倉列當作可刪除紀錄。"""
+        if not self.trades_model:
+            return None
+        selection_model = self.trades_table.selectionModel()
+        if selection_model is None:
+            return None
+        selected_rows = selection_model.selectedRows()
+        if not selected_rows:
+            return None
+
+        row = selected_rows[0].row()
+        df = self.trades_model.getDataFrame()
+        if row < 0 or row >= len(df) or "_trade_id" not in df.columns:
+            return None
+
+        trade_id = str(df.iloc[row]["_trade_id"] or "").strip()
+        if not trade_id:
+            return None
+        return {
+            "trade_id": trade_id,
+            "stock_code": str(df.iloc[row].get("證券代號", "")).strip(),
+            "stock_name": str(df.iloc[row].get("證券名稱", "")).strip(),
+            "side": str(df.iloc[row].get("買賣", "")).strip(),
+            "quantity": df.iloc[row].get("交易股數", ""),
+            "price": df.iloc[row].get("單價", ""),
+        }
+
+    def _sync_selected_trade_action(self, *_args) -> None:
+        """同步單筆刪除按鈕，未選取交易時永遠不可按。"""
+        record = self._selected_trade_record()
+        self.selected_trade_id = str(record["trade_id"]) if record is not None else ""
+        self.delete_selected_trade_button.setEnabled(record is not None)
+        if record is None:
+            self.trade_selection_hint_label.setText("選取一筆交易後，可安全刪除該筆紀錄。")
+            return
+        self.trade_selection_hint_label.setText(
+            f"已選取：{record['stock_code']} {record['stock_name']}｜刪除後會重算持倉。"
+        )
+
+    def _delete_selected_trade(self) -> None:
+        """以可見按鈕刪除單筆選取交易；實際寫入仍交由 service 驗證。"""
+        record = self._selected_trade_record()
+        if record is None:
+            QMessageBox.information(self, "請先選取交易", "請先在交易歷史選取一筆交易紀錄。")
+            return
+        self._confirm_and_delete_trade(record)
 
     def _clear_trade_history_filter(self):
         self.selected_stock_code = ""
@@ -958,37 +1031,51 @@ class PortfolioView(QWidget):
         if not index.isValid() or not self.trades_model:
             return
 
-        df = self.trades_model.getDataFrame()
-        row = index.row()
-        if row >= len(df) or "_trade_id" not in df.columns:
+        self.trades_table.selectRow(index.row())
+        record = self._selected_trade_record()
+        if record is None:
             return
-
-        trade_id = df.iloc[row]["_trade_id"]
-        stock_name = df.iloc[row]["證券名稱"]
-        side_str = df.iloc[row]["買賣"]
-        qty = df.iloc[row]["交易股數"]
-        price = df.iloc[row]["單價"]
 
         menu = QMenu(self)
         action_delete = menu.addAction("刪除此交易紀錄")
 
         action = menu.exec(self.trades_table.viewport().mapToGlobal(pos))
         if action == action_delete:
-            confirm = QMessageBox.question(
-                self, "二次確認",
-                f"您確定要刪除這筆 {stock_name} 的 {side_str} ({qty}股, @{price}) 紀錄嗎？\n這將會自動重新計算您的庫存部位與平均成本！",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-            )
-            if confirm == QMessageBox.Yes:
-                try:
-                    self.portfolio_service.delete_trade(trade_id)
-                    QMessageBox.information(self, "成功", "該交易紀錄已成功移除，持倉與成本均已重算完畢！")
-                    self.refresh_all()
-                    self.portfolioUpdated.emit()
-                except PortfolioValidationError as pve:
-                    QMessageBox.critical(self, "刪除失敗 (領域防禦)", str(pve))
-                except Exception as e:
-                    QMessageBox.critical(self, "刪除失敗", f"發生非預期錯誤：\n{e}")
+            self._confirm_and_delete_trade(record)
+
+    def _confirm_and_delete_trade(self, record: Dict[str, Any]) -> None:
+        """二次確認後刪除一筆原始交易，並將合法性判斷留在 PortfolioService。"""
+        confirm = QMessageBox.question(
+            self,
+            "確認刪除單筆交易",
+            (
+                f"確定刪除這筆 {record['stock_name']} 的 {record['side']} "
+                f"({record['quantity']} 股，@{record['price']}) 紀錄嗎？\n\n"
+                "系統會依剩餘交易重新計算持倉與平均成本；若會造成超賣或不合法持倉，刪除會被拒絕且原始資料會保留。"
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            deleted = self.portfolio_service.delete_trade(str(record["trade_id"]))
+            if not deleted:
+                QMessageBox.warning(self, "交易已變更", "找不到這筆交易；請重新整理後再試一次。")
+                self.refresh_all()
+                return
+            if self.selected_stock_code == record["stock_code"]:
+                remaining_trades = self.portfolio_service.list_trades()
+                if not any(trade.stock_code == record["stock_code"] for trade in remaining_trades):
+                    self.selected_stock_code = ""
+            QMessageBox.information(self, "已刪除", "交易紀錄已移除，持倉與平均成本已依剩餘交易重新計算。")
+            self.refresh_all()
+            self.portfolioUpdated.emit()
+        except PortfolioValidationError as error:
+            QMessageBox.critical(self, "刪除被保護", str(error))
+        except Exception as error:
+            QMessageBox.critical(self, "刪除失敗", f"發生非預期錯誤：\n{error}")
 
     def _show_journal_context_menu(self, pos):
         """日記列表的右鍵選單"""
