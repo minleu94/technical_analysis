@@ -193,3 +193,49 @@ def test_maturity_cli_requires_fixture_only(tmp_path: Path, capsys: pytest.Captu
     )
     assert code == 2
     assert "fixture-only" in capsys.readouterr().err
+
+
+def test_observation_capture_cli_requires_fixture_only(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.capture_prospective_shadow_observation import main
+
+    code = main(
+        [
+            "--clock-manifest",
+            str(tmp_path / "clock.json"),
+            "--calibration-policy",
+            str(tmp_path / "policy.json"),
+            "--readiness-report",
+            str(tmp_path / "readiness.json"),
+            "--activation-manifest",
+            str(tmp_path / "activation.json"),
+            "--capture-date",
+            "2026-08-17",
+            "--decision-timestamp",
+            "2026-08-17T08:30:00+08:00",
+            "--previous-trading-day",
+            "2026-08-16",
+            "--input-state-date",
+            "2026-08-16",
+            "--pit-publication-hash",
+            HASHES[2],
+            "--rule-snapshot-hash",
+            HASHES[3],
+            "--portfolio-transition-hash",
+            HASHES[4],
+            "--inference-artifact-hash",
+            HASHES[5],
+            "--source-lineage-hash",
+            HASHES[6],
+            "--outcome-rows-json",
+            str(tmp_path / "outcomes.json"),
+            "--now",
+            NOW.isoformat(),
+            "--output",
+            str(tmp_path / "observation.json"),
+        ]
+    )
+    assert code == 2
+    assert "fixture-only" in capsys.readouterr().err

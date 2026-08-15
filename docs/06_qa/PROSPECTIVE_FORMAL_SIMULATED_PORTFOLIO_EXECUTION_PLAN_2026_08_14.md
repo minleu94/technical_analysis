@@ -232,7 +232,8 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
 - 新增 `data_module/prospective_shadow_maturity.py`：complete observation 必須在 frozen activation 後、決策日未來界線內，帶有 PIT publication／Rule snapshot／Portfolio transition／inference／source lineage hashes，且 `input_state_date == previous_trading_day < capture_date`。每筆 outcome 只能使用已到 `now` 的日期與 `matured_at`，採 integer bp；缺少 horizon 時保持 waiting，不預先建立 target。
 - maturity report 只依 activation-bound、sorted unique observation dates 計算 elapsed shadow days；固定至少 `20` 個 shadow days、每個 `5/10/20/60` horizon 至少 `20` 個 matured observations，並要求每個 horizon 的 `rebalance_worthwhile` class `0/1` 自然出現。任何 `future_teacher_target_used`、`same_day_advice_used`、`replayed`、`backfilled` 或 `synthetic_outcomes_used` flag 都會拒絕。
 - 新增 `scripts/inspect_prospective_shadow_maturity.py`，強制 `--fixture-only`；輸出只報告 `waiting_for_maturity` 或 `maturity_gate_ready_shadow_only`，即使 gate ready 仍固定 `formal_oos_allowed=false`、alpha=`0`、promotion=`false`，不啟動 Direct/OOC、不寫正式 `D:`。
-- `tests/test_prospective_shadow_maturity.py` 共 `6 passed`，涵蓋 20 日／四 horizon／雙類別、future outcome、unsafe flags、duplicate capture date、create-only report 與 CLI guard；py_compile 與 mypy `0 issues`。
+- 新增 `scripts/capture_prospective_shadow_observation.py`，強制 `--fixture-only`；只把 owner/producer 已提供的五條 lineage hash、T-1 日期與已成熟 outcome rows 交給 PFS-08 builder，寫出 create-only 單日 observation，不抓資料、不回放、不補日、不建立 target。
+- `tests/test_prospective_shadow_maturity.py` 共 `7 passed`，涵蓋 20 日／四 horizon／雙類別、future outcome、unsafe flags、duplicate capture date、create-only report、observation CLI 與 maturity CLI guard；py_compile 與 mypy `0 issues`。
 
 ### PFS-08 明確不做
 
