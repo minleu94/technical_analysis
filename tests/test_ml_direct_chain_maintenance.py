@@ -40,6 +40,94 @@ def _args(tmp_path: Path) -> argparse.Namespace:
     )
 
 
+def test_legacy_watcher_detects_prospective_wrapper_without_exposing_path(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path)
+    prospective = tmp_path / "prospective-ledger.json"
+    prospective.write_text(
+        json.dumps(
+            {
+                "schema_version": "prospective-formal-simulated-portfolio-ledger-manifest.v1",
+                "mode": "prospective_formal_simulation",
+            }
+        ),
+        encoding="utf-8",
+    )
+    args.formal_portfolio_ledger = prospective
+
+    reasons = maintenance._legacy_watcher_prospective_guard(args)
+
+    assert reasons == ("formal_portfolio_ledger:mode=prospective_formal_simulation",)
+    assert str(prospective) not in " ".join(reasons)
+
+
+def test_legacy_watcher_detects_nested_prospective_pit_manifest(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path)
+    prospective = tmp_path / "pit-sidecar.json"
+    prospective.write_text(
+        json.dumps(
+            {
+                "schema_version": "pit-sector-membership-sidecar-v1",
+                "manifest": {
+                    "scope": "prospective_only",
+                },
+                "rows": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    args.sector_membership = prospective
+
+    assert maintenance._legacy_watcher_prospective_guard(args) == (
+        "pit_sector_membership:scope=prospective_only",
+    )
+
+
+def test_one_shot_legacy_watcher_blocks_prospective_input_before_launch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _args(tmp_path)
+    args.training_output_dir.mkdir()
+    prospective = tmp_path / "prospective-rule-history.json"
+    prospective.write_text(
+        json.dumps(
+            {
+                "schema_version": "prospective-formal-rule-champion-snapshot-history.v1",
+                "mode": "prospective_formal_simulation",
+            }
+        ),
+        encoding="utf-8",
+    )
+    args.formal_rule_champion_history = prospective
+    monkeypatch.setattr(
+        maintenance,
+        "_parser",
+        lambda: SimpleNamespace(parse_args=lambda _argv: args),
+    )
+    monkeypatch.setattr(maintenance, "_refresh_controlled_runtime_environment", lambda: ())
+    monkeypatch.setattr(
+        maintenance,
+        "_target_processes",
+        lambda _output: (_ for _ in ()).throw(AssertionError("legacy process inspection must not run")),
+    )
+    monkeypatch.setattr(
+        maintenance,
+        "_start_continuation",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("legacy continuation must not start")),
+    )
+
+    assert maintenance.main([]) == 2
+    log_path = args.training_output_dir / "logs" / "ml_direct_chain_maintenance.log"
+    payload = json.loads(log_path.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["message"] == "prospective_only_inputs_detected_legacy_watcher_blocked"
+    assert payload["formal_oos_allowed"] is False
+    assert payload["secret_values_emitted"] is False
+
+
 def test_recovery_command_is_hash_bound_and_fail_closed(tmp_path: Path) -> None:
     command = maintenance._continuation_command(_args(tmp_path))
 

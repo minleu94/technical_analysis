@@ -48,6 +48,13 @@ Rule／PIT artifact、不啟動 watcher／Direct／OOC，也不輸出 HMAC secre
 HMAC secret store 的 configured flag 已可見，但 `formal_oos_allowed=false`、
 `heavy_rebuild_launch_allowed=false`、`promotion_eligible=false` 仍維持。
 
+另外，legacy `scripts\maintain_ml_direct_v3_refresh_chain.py` 已加入 prospective
+schema guard：若任一受控 path 宣告 `mode=prospective_formal_simulation`、
+`scope=prospective_only` 或 `prospective-formal-*` schema，legacy one-shot 會回傳
+blocked；`--watch-formal-inputs` 只低 CPU 等待，不會啟動 Direct/OOC。這個 guard
+只記錄 schema／mode blocker，不輸出檔案路徑、環境值或 HMAC；prospective data
+必須交給獨立 capture lane。
+
 clock manifest 只是起算邊界與 identity custody，不會產生任何 transition。若 activation 已到達且 SQLite 內已有合法 prospective transitions，可先用
 `scripts\publish_prospective_simulated_portfolio_ledger.py --fixture-only` 產生
 `prospective-formal-simulated-portfolio-ledger-manifest.v1`。它會重新驗證 recursive

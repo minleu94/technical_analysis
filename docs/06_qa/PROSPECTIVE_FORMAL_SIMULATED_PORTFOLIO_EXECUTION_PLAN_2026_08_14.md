@@ -330,18 +330,45 @@ identity 檢查。path、store id 或 HMAC configured flag 任一缺失時不寫
 即使成功，manifest 仍固定 `heavy_rebuild_launch_allowed=false`、`formal_oos_allowed=false`、
 alpha=`0`、broker disabled，且不啟動任何 ML 程序。
 
-## 8. Activation 與日常蒐證 Runbook（待程式完成後使用）
+## 8. Activation 與日常蒐證 Runbook（PFS-01～10 已完成；等待 owner inputs）
 
-下列是執行順序，不是現有可直接複製的命令；實際 CLI 名稱與參數由 PFS-01～06 固化後才寫入 Application Manual：
+下列是目前可執行的順序。每個命令都必須由 owner 明確提供 clock／policy／
+readiness／activation identity 與輸出 parent；fixture-only 或
+`--controlled-environment` 模式只做受控驗證與 create-only evidence，不會自動
+啟動 legacy Direct/OOC watcher。prospective capture lane 與歷史 heavy rebuild
+lane 必須保持分離：三個 prospective path 出現時，不能直接把它們交給舊的
+`--watch-formal-inputs` 重建器。
 
-1. 以 dry-run 驗證下一個可用台灣交易日、clock contract、PIT source acceptance、HMAC/store configured flags 與三條 producer readiness。
-2. 預設綁定既有 cutoff=`2026-08-13T08:30:00+08:00` candidate。若 owner 明確要求較新的 candidate，先在 clock 外做一次 pre-activation rebuild、驗證其 model/training identities，完成後才選更晚的 activation；不啟動長駐 watcher。
-3. 凍結 model、feature、training cutoff、calibration 與 evaluation policy hashes。Owner 核准 activation manifest；manifest 一經發布，起算日、seed、policy、universe 與任何 frozen identity 不得原地修改，變更只能開新 clock id。
-4. 在 Windows 使用者環境／受控 secret store 設定 path 與 Rule store identity；HMAC secret 不出現在對話、repo、命令列、status 或 log。
-5. 啟動獨立的低 CPU capture task；每天依序封存 PIT publication → Rule snapshot → T-1 portfolio transition → frozen-candidate inference → readiness/heartbeat。當日任一步驟失敗即不給該日 credit，不在隔日補寫。
-6. 重型 ML watcher 在整個 clock 期間維持停止。每週只讀稽核 row count、chain continuity、late/missing days、class counts、source/license drift、frozen identity 與 secret exposure。
-7. 各 horizon outcomes 真實成熟後，對同一 frozen candidate 執行 Formal OOS replay／calibration／PSI 與 promotion review；不在本 clock 內 fit 或 retrain。任何 Gate 失敗都保持 alpha 0 與 broker disabled。
-8. 若 review 指向 retrain／recalibration，先關閉本 clock、建立新 candidate，再選另一個未來 activation；舊 Formal OOS 只能作前一 candidate 的證據。
+1. 執行 `scripts\inspect_prospective_execution_plan.py --now <NOW>` 與
+   `scripts\inspect_prospective_activation_environment.py`；三個 path、store
+   identity、HMAC configured flag 與目前 ML／CPU 狀態先只讀確認。
+2. Owner 提供合法 prospective PIT source／license／publication/hash lineage、
+   clock calendar evidence、cash seed、frozen candidate 與 calibration policy；
+   以 `publish_prospective_formal_clock.py --fixture-only` 建立 planned clock。
+   不自動選日期、不回填 2014–2026。
+3. 在 Windows 使用者環境／受控 secret store 設定三個 path 與 Rule store
+   identity；HMAC secret 不出現在對話、repo、命令列、status 或 log。再以
+   `inspect_prospective_capture_readiness.py --controlled-environment` 同時驗證
+   三項 input，不能 partial start。
+4. Owner 明確確認 activation 後，以
+   `activate_prospective_formal_clock.py --fixture-only --controlled-environment`
+   凍結 path／file hashes 與所有 candidate identities。activation manifest 不會
+   自動給 Formal OOS permission。
+5. 每個未來交易日只執行低 CPU capture：先建立
+   `record_prospective_daily_capture.py --fixture-only` 的 start record，再由
+   PIT／Rule／T-1 transition／frozen inference producers 供給 lineage hashes，
+   以 `capture_prospective_shadow_observation.py --fixture-only` 形成單日 evidence。
+   任一步驟失敗即不給該日 credit，不在隔日補寫。
+6. 重型 legacy ML watcher 在整個 prospective clock 期間維持停止。每週只讀稽核
+   row count、chain continuity、late/missing days、class counts、source/license
+   drift、frozen identity 與 secret exposure；不要把 prospective wrapper 當成
+   舊 full-history consumer 的輸入。
+7. 各 horizon outcomes 真實成熟後，以
+   `inspect_prospective_shadow_maturity.py`、`inspect_prospective_frozen_oos.py`
+   與 `inspect_prospective_promotion_review.py` 依序檢查；不在本 clock 內 fit 或
+   retrain。任何 Gate 失敗都保持 alpha 0 與 broker disabled。
+8. 若 review 指向 retrain／recalibration，先關閉本 clock、建立新 candidate，再
+   選另一個未來 activation；舊 Formal OOS 只能作前一 candidate 的證據。
 
 ## 9. 停止條件與恢復方式
 

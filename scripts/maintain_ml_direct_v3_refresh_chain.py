@@ -10,8 +10,10 @@ SQLite、不直接寫入任何 model pointer，也不放寬 formal promotion gat
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import gzip
 import hashlib
 import json
 import os
@@ -488,6 +490,73 @@ def _environment_path(environment_name: str) -> Path | None:
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
     return candidate if candidate.is_file() else None
+
+
+def _prospective_only_manifest_declaration(path: Path) -> str | None:
+    """Return a safe discriminator when a path belongs to the PFS lane.
+
+    The legacy maintainer must not pass a prospective wrapper to the historical
+    Direct/OOC consumer.  Only a small JSON header is inspected; no command
+    line, environment value, HMAC secret, or path is returned by this helper.
+    Invalid/legacy files return ``None`` and continue through the existing
+    strict validators, which preserves the old fail-closed behaviour.
+    """
+
+    try:
+        if path.suffix.lower() == ".gz":
+            with gzip.open(path, "rt", encoding="utf-8") as stream:
+                payload: Any = json.load(stream)
+        else:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    candidates: list[Mapping[str, object]] = []
+    if isinstance(payload, Mapping):
+        candidates.append(payload)
+        nested = payload.get("manifest")
+        if isinstance(nested, Mapping):
+            candidates.append(nested)
+    for candidate in candidates:
+        schema = candidate.get("schema_version")
+        mode = candidate.get("mode")
+        scope = candidate.get("scope")
+        if mode == "prospective_formal_simulation":
+            return "mode=prospective_formal_simulation"
+        if scope == "prospective_only":
+            return "scope=prospective_only"
+        if isinstance(schema, str) and schema.startswith("prospective-formal-"):
+            return f"schema={schema}"
+    return None
+
+
+def _legacy_watcher_prospective_guard(args: argparse.Namespace) -> tuple[str, ...]:
+    """Detect prospective inputs before the legacy watcher can launch work."""
+
+    configured: tuple[tuple[str, Path | None], ...] = (
+        (
+            "formal_portfolio_ledger",
+            getattr(args, "formal_portfolio_ledger", None)
+            or _environment_path(FORMAL_PORTFOLIO_LEDGER_ENV),
+        ),
+        (
+            "formal_rule_champion_history",
+            getattr(args, "formal_rule_champion_history", None)
+            or _environment_path(FORMAL_RULE_CHAMPION_HISTORY_ENV),
+        ),
+        (
+            "pit_sector_membership",
+            getattr(args, "sector_membership", None)
+            or _environment_path(PIT_SECTOR_MEMBERSHIP_ENV),
+        ),
+    )
+    reasons: list[str] = []
+    for label, path in configured:
+        if not isinstance(path, Path) or not path.is_file():
+            continue
+        declaration = _prospective_only_manifest_declaration(path)
+        if declaration is not None:
+            reasons.append(f"{label}:{declaration}")
+    return tuple(sorted(set(reasons)))
 
 
 def _validated_formal_portfolio_ledger_path(
@@ -1013,6 +1082,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     training_output_dir = args.training_output_dir.resolve()
     log_path = training_output_dir / "logs" / "ml_direct_chain_maintenance.log"
     restart_count = 0
+    last_prospective_guard: tuple[str, ...] | None = None
     lock = _acquire_instance_lock(training_output_dir)
     if lock is None:
         return 0
@@ -1025,6 +1095,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "controlled_environment_refreshed",
                     variables=list(refreshed_environment),
                 )
+            prospective_guard = _legacy_watcher_prospective_guard(args)
+            if prospective_guard:
+                if prospective_guard != last_prospective_guard:
+                    _log(
+                        log_path,
+                        "prospective_only_inputs_detected_legacy_watcher_blocked",
+                        reasons=list(prospective_guard),
+                        capture_lane="prospective_formal_simulation",
+                        heavy_rebuild_launch_allowed=False,
+                        formal_oos_allowed=False,
+                        secret_values_emitted=False,
+                    )
+                    last_prospective_guard = prospective_guard
+                if not args.watch_formal_inputs:
+                    return 2
+                time.sleep(args.poll_seconds)
+                continue
+            last_prospective_guard = None
             targets = _target_processes(args.store_output_dir)
             if targets:
                 _log(
