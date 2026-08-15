@@ -158,6 +158,8 @@ Downside probability 使用 isotonic calibration，且 calibration input 必須�
 
 2026-08-15 的 PFS-06 capture-only readiness 只驗證 clock-bound policy、prospective ledger wrapper、Rule history 與 PIT sidecar 的完整 custody；即使三項均 ready，readiness 仍固定 `capture_only=true`、`heavy_rebuild_launch_allowed=false`，不會自動呼叫 Direct/OOC。未經 PFS-07 owner activation 與未來交易日選定，不設定正式 Windows paths、不計 elapsed day、不產生 Formal OOS 或 promotion credit。
 
+2026-08-15 的 PFS-07 activation contract 將 PFS-06 readiness hash、candidate／feature／training cutoff、calibration／evaluation／universe／source／seed identities 與三個 controlled path 的 file hash 綁成 create-only manifest；只接受 owner activation timestamp 已發生、activation trading day 仍在未來、controlled store id 與 secret-store configured flag 已就緒的 schedule。低 CPU daily start record 只固定蒐證順序與 zero-credit flags，仍不設定 Windows paths、不讀 HMAC secret、不啟動 watcher／Direct／OOC；下一個 Gate 是 PFS-08 的真實 elapsed trading days 與 matured outcomes。
+
 2026-08-14 起 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 會在 polling
 時重新讀取 Windows 使用者／系統環境的受控 formal path、PIT sector path、Rule HMAC key
 與 store id，補足

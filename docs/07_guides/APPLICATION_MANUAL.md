@@ -1,5 +1,19 @@
 # baldr 完整操作手冊
 
+## 2026-08-15 prospective-only formal simulation（PFS-07）
+
+Owner 已選擇「正式、但 prospective-only 的非實盤模擬持倉 clock」。既有
+`2014–2026` Direct／OOC 與 research artifacts 只保留 history，不回填成 Formal
+evidence；目前 `formal_oos_allowed=false`、production alpha=`0`、broker disabled。
+
+PFS-07 的 activation contract 已可用於受控 fixture preflight：
+
+- `scripts\activate_prospective_formal_clock.py --fixture-only` 只在三個 PFS-06 input 都 ready、candidate／calibration／evaluation identities 與 file hashes 都一致、owner activation timestamp 已發生、activation trading day 仍在未來時建立 create-only manifest。
+- `scripts\record_prospective_daily_capture.py --fixture-only` 只建立低 CPU daily capture 的 `started` record，固定 PIT publication → Rule snapshot → T-1 Portfolio transition → frozen inference → heartbeat 順序；`elapsed_day_credit=0`、`formal_credit=0`，不能隔日補寫。
+- 兩個命令都不設定 Windows 使用者環境、不接受／讀取／輸出 `RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY`，不啟動 watcher、Direct 或 OOC。實際 activation date、三個正式 path、`RULE_CHAMPION_CONTROLLED_STORE_ID` 與受控 secret-store 狀態仍須由 owner 在未來時點明確提供；本段工具不會自行選日期或產生正式 `D:` artifact。
+
+Readiness 通過不等於 Formal OOS 或 promotion permission。完成 PFS-07 後，下一階段是只累積真實經過的交易日、PIT／Rule／Portfolio chain 與 matured outcomes；任何 Gate 失敗都維持 alpha=`0`。
+
 ## 2026-08-14 自動鏈 current state
 
 ### 正式 ML 輸入接線狀態（2026-08-14）
