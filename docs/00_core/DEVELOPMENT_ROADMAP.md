@@ -2,7 +2,7 @@
 
 > **2026-07-13 系統工程整合**：A～F committed handoff 已由 G 依 SHA、ownership 與 focused suite 驗證，跨流 DTO／JSON composition、唯讀 smoke 與 pure verifier 均成立。這只代表工程整合已驗證；下一步仍是 forward evidence、逐來源人工接受與正式 ML OOS／promotion review，不是 scheduler、production automation 或 formal product closeout。
 >
-> **最後更新**：2026-07-13
+> **最後更新**：2026-08-14
 > **工程主線**：`V3.3 Engineering Complete`，進入 `V4.0 Evidence Accumulation Track`；這不是正式 V4.0。詳見 [V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)。
 > **Evidence rehearsal**：唯讀 replay / shadow 工程底座另以 `engineering_rehearsal_complete` 收口；它只提供可重跑 diagnostics 與 forward handoff，不會改寫 external Gate 狀態。見 [Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)。
 > **定位**：本文件是 Roadmap Hub，不再保存完整歷史長文。它負責指向目前狀態、6 個月工程路線、系統架構與歷史歸檔。
@@ -80,6 +80,8 @@ baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資�
 重構完成後的產品主線以 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 為準；未來 6 個月工程以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)，理想架構見 [target_system_architecture.md](../01_architecture/target_system_architecture.md)。
 
 目前立即順序改為：
+
+> **目前 Gate 7 執行軌**：Owner 已採用 prospective-only、非實盤的正式模擬持倉 clock；`2014–2026` 保留 research/history，不事後回填。依 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md) 從 `PFS-01` 純 clock contract 開始，完成 capture readiness 並凍結 candidate／calibration／evaluation identities 後才選未來交易日起算；重型 watcher 維持停止，同一 clock 不得用已消費的 Formal OOS 期間重訓。這是 Gate 7 的執行計畫，不取代 Product／6M Roadmap，也不產生 Formal OOS 或 promotion credit。
 
 1. Gate 0 Safe Refactor 已 closeout；維持行為等價與 rollback discipline，但不再把重構當作產品主線。
 2. Gate 1 Daily Usable Advice 已 closeout：Guided / Professional 共核、`NO_NEW_POSITION`、Why / Why Not / Risk / Evidence 與 Portfolio target/current/gap 已由唯讀 contract / UI 呈現。

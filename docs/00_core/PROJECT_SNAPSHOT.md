@@ -1,5 +1,12 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-14 Prospective formal simulated portfolio decision
+
+- Owner 已確認現有持倉是功能測試資料、不是實際券商持倉，且截止時間前沒有真實保存的正式 Portfolio transitions／HMAC-signed Rule snapshots；因此不回填、不把 research/history 改名 Formal，改採 **prospective-only、受治理但非實盤** 的模擬持倉 clock。完整順序、契約邊界與驗收見 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md)。
+- 正式起算日尚未指定；只有 clock contract、Portfolio／Rule producer、合法 prospective PIT source 與 capture readiness 通過 QA 後，才選當時仍在未來的台灣交易日。`2014–2026` 既有 Direct／OOC 與 research artifacts 保留為 history，不取得 full-history Formal credit；prospective-only 也不豁免每日 sector source／license／publication／hash lineage。
+- 下一個可執行 slice 是 `PFS-01`：新增純 `prospective-formal-simulated-portfolio-clock.v1` contract、唯讀 inspector 與 fail-closed tests；不需 secret、不寫 `D:`、不設定正式 path、不啟動 scheduler／watcher、不重訓。預設把 cutoff=`2026-08-13T08:30:00+08:00` 的現有 candidate 綁為未來 clock 的 frozen challenger；clock 啟動後不得用已消費的 Formal OOS 期間重訓或替換 model／calibration，重型 watcher 維持停止。
+- 這項產品決策不放寬既有 Gate；目前仍為 `formal_oos_allowed=false`、production alpha=`0`、broker disabled，calibration `quality_pass=false` 與 `rebalance_worthwhile` class 1 缺失仍需分別修正與重新驗證。
+
 ## 2026-08-14 Formal watcher post-refresh custody correction
 
 - 唯讀重驗現行 readiness 後，`RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY` 與 `RULE_CHAMPION_CONTROLLED_STORE_ID` 已可由 controlled runtime handoff 使用；秘密值未讀出或寫入任何 command line、status 或 log。真正仍缺的是三個正式 artifact path：causal non-cash portfolio ledger、formal Rule Champion snapshot history 與 PIT sector membership，因此 `formal_oos_allowed=false`、production alpha=`0`、broker disabled 不變。

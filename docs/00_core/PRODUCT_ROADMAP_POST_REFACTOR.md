@@ -331,6 +331,8 @@ Expected Return 不可靠時，不得過早使用 unconstrained mean-variance；
 
 Gate 通過前，ML 不得修改正式推薦、Portfolio Advice、Strategy Lifecycle、scheduler、參數或交易。
 
+Owner 已選擇以 prospective-only 的受治理模擬持倉建立後續 Formal clock：它固定 `real_money=false`、`broker_execution=false`，只計 clock 啟動後真實經過的交易日，不能把既有測試持倉、research ledger、replay 或 `2014–2026` Direct／OOC 回填成 Formal。歷史資料繼續服務研究與比較；既有 model 只能作 frozen research-trained challenger，training cutoff、model、calibration 與 evaluation policy 必須在 activation 前凍結，同一 clock 不得以已消費的 Formal OOS 日期重訓。Prospective PIT 仍須來源、授權、publication／available time 與 canonical hash lineage。詳細工程順序由 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md) 管理；此選擇不降低 calibration、class coverage、shadow maturity、promotion authority 或 rollback 門檻。
+
 ## 13. 輔助工具 Roadmap
 
 | 工具 | 產品目的 | 最早 Gate | 邊界 |

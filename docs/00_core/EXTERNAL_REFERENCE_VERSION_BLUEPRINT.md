@@ -176,6 +176,12 @@ TWSE Data E-Shop 的 `TWT58U`「證券及產業別對照表」官方頁面明列
 
 來源：[TWSE T97 漲跌幅度表檔](https://eshop.twse.com.tw/zh/product/detail/75ce5fd1ad574df49ad9ff82209ca837)、[TPEX 上櫃股票基本資料（含 T30）](https://eshop.tpex.org.tw/zh/product/detail/BCDDCDFD315841EC011ED99B91DD528E)、[TPEX 收市後交易資訊格式說明](https://www.tpex.org.tw/storage/regular_system/%E6%96%B0%E7%89%88%E6%94%B6%E5%B8%82%E5%BE%8C%E4%BA%A4%E6%98%93%E8%B3%87%E8%A8%8A%E6%A0%BC%E5%BC%8F%E8%AA%AA%E6%98%8E%28V1.33%E7%89%88%29.pdf?t=20251127)。
 
+#### 2026-08-14 Prospective-only sector decision
+
+Owner 已決定不再以補齊 `2014–2026` full-history Formal coverage 作為目前產品路線，T97／T30 歷史採購與 `2014-01-03` 補充來源因此移為 deferred option；既有期間只保留 research/history，不宣稱舊契約通過。新的 Gate 7 路線依 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md)，從未來 activation trading day 開始保存每日 PIT membership。
+
+這項範圍縮減只移除「回溯 2014」的產品主張，不等於可以使用未授權或無 lineage 的現行分類。Activation 前仍須確定合法 daily source 與 allowed use、保存 license id、原始 publication／available_at、格式版本、source hash、effective interval、universe coverage 與轉換後 canonical hash；沒有這些證據時，prospective PIT capture 與 Formal clock 都必須維持 blocked，且不得自行付費採購。
+
 #### 2026-08-14 Local causal ledger candidate rejection audit
 
 唯讀盤點發現本機存在 `ml_research_causal_ledger_full_v4_official_events` 的 research ledger

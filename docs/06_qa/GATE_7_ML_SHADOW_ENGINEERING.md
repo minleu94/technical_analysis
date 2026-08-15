@@ -2,6 +2,8 @@
 
 > **V4.0 覆寫（2026-07-30）**：Gate 7 已由「價格／技術 shadow challenger」升級為「全欄位配置型 Production Co-pilot」。Production Co-pilot 表示資料、訓練、推論、shadow sidecar 與 promotion/rollback lane 可正式日常執行；不表示目前已有非零配置權重。截至本次 freeze，reference v2 與逐 horizon metrics artifact 已存在，但 machine gate 仍缺正式 OOS、實際因果投組 replay 及 20 個真實成熟 shadow days，因此 ECE／Brier／PSI 為 `null / NOT EVALUATED`，並輸出 `alpha=0`、`formal_oos_allowed=false`。下方原 shadow 文件保留作歷史底座；若旗標或流程描述衝突，以本 V4.0 區塊為準。
 
+> **Prospective-only 決議（2026-08-14）**：Owner 已確認現有 Portfolio 是測試資料，沒有可追溯的歷史 Formal transitions／Rule snapshots；後續依 [Prospective Formal Simulated Portfolio Execution Plan](PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md) 建立從未來交易日起算、`real_money=false`／`broker_execution=false` 的正式模擬持倉 clock。既有 model 只能作 frozen research-trained challenger；model／training cutoff／calibration／evaluation identities 必須在 activation 前凍結，同一 clock 禁止以已消費的 Formal OOS period 重訓。此決議不回填 `2014–2026`、不讓新契約靜默通過舊 full-history v1 Gate，也不改變 calibration、20 日、class coverage、promotion authority、alpha 0 或 broker disabled 邊界。
+
 ## V4.0 全欄位配置架構
 
 資料治理先為每個 SQLite `table.column` 與 file-backed source field 登錄 source、dtype、unit/scale、event/announced/available/first-seen/effective/revision、missing/staleness/quality/license/hash。正式 dataset 契約只允許 `formal_backfill` 與已完成來源／授權驗證的 `first_seen_only`；本次 freeze 的 disposition summary 為 `formal_backfill=52`、`first_seen_only=0`、`research_shadow=32`，shadow 特徵獨立發布。identifier、leakage、blocked provenance 與 unreviewed 全部 fail closed，Wildcard 不得自動進模型。
