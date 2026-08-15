@@ -8,11 +8,27 @@ evidence；目前 `formal_oos_allowed=false`、production alpha=`0`、broker dis
 
 PFS-07 的 activation contract 已可用於受控 fixture preflight：
 
-- `scripts\activate_prospective_formal_clock.py --fixture-only` 只在三個 PFS-06 input 都 ready、candidate／calibration／evaluation identities 與 file hashes 都一致、owner activation timestamp 已發生、activation trading day 仍在未來時建立 create-only manifest。
+- `scripts\activate_prospective_formal_clock.py --fixture-only` 只在三個 PFS-06 input 都 ready、candidate／calibration／evaluation identities 與 file hashes 都一致、owner activation timestamp 已發生、activation trading day 仍在未來時建立 create-only manifest。Owner handoff 可改用 `--fixture-only --controlled-environment`，由 shared Windows reader 取得三個 formal paths、非秘密 store identity 與 HMAC configured flag；此模式不讀／輸出 secret、不設定環境，缺件即 blocked。
 - `scripts\record_prospective_daily_capture.py --fixture-only` 只建立低 CPU daily capture 的 `started` record，固定 PIT publication → Rule snapshot → T-1 Portfolio transition → frozen inference → heartbeat 順序；`elapsed_day_credit=0`、`formal_credit=0`，不能隔日補寫。
 - 兩個命令都不設定 Windows 使用者環境、不接受／讀取／輸出 `RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY`，不啟動 watcher、Direct 或 OOC。實際 activation date、三個正式 path、`RULE_CHAMPION_CONTROLLED_STORE_ID` 與受控 secret-store 狀態仍須由 owner 在未來時點明確提供；本段工具不會自行選日期或產生正式 `D:` artifact。
 
 Readiness 通過不等於 Formal OOS 或 promotion permission。完成 PFS-07 後，下一階段是只累積真實經過的交易日、PIT／Rule／Portfolio chain 與 matured outcomes；任何 Gate 失敗都維持 alpha=`0`。
+
+Controlled activation 的命令仍需 owner 明確提供 clock、policy、readiness、activation id、
+已發生的 owner activation timestamp、`--now` 與 create-only output；不會自行選 activation
+trading day，也不會啟動 watcher／Direct／OOC：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\activate_prospective_formal_clock.py `
+  --fixture-only --controlled-environment `
+  --clock-manifest <CLOCK_MANIFEST> `
+  --calibration-policy <CALIBRATION_POLICY> `
+  --readiness-report <READINESS_REPORT> `
+  --owner-activation-id <OWNER_ACTIVATION_ID> `
+  --owner-activation-timestamp <OWNER_APPROVED_TIMESTAMP> `
+  --now <NOW> `
+  --output <ACTIVATION_MANIFEST>
+```
 
 PFS-08 maturity inspector 可用於受控 fixture 的唯讀檢查：
 

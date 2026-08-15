@@ -341,3 +341,85 @@ def test_activation_cli_requires_fixture_only(tmp_path: Path, capsys: pytest.Cap
     )
     assert code == 2
     assert "fixture-only" in capsys.readouterr().err
+
+
+def test_activation_cli_controlled_environment_fails_closed_without_paths(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.activate_prospective_formal_clock as activation_cli
+
+    monkeypatch.setattr(
+        activation_cli,
+        "build_prospective_activation_environment_preflight",
+        lambda: {
+            "status": "waiting_for_controlled_environment",
+            "blockers": [
+                "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH:missing",
+                "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH:missing",
+                "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH:missing",
+            ],
+            "formal_paths": {},
+            "hmac_secret_store": {"configured": True},
+        },
+    )
+    monkeypatch.setattr(activation_cli, "resolve_controlled_store_id", lambda: None)
+    code = activation_cli.main(
+        [
+            "--fixture-only",
+            "--controlled-environment",
+            "--clock-manifest",
+            str(tmp_path / "clock.json"),
+            "--calibration-policy",
+            str(tmp_path / "policy.json"),
+            "--readiness-report",
+            str(tmp_path / "readiness.json"),
+            "--owner-activation-id",
+            "owner-activation:test",
+            "--owner-activation-timestamp",
+            "2026-08-15T09:00:00+08:00",
+            "--now",
+            PLANNING_NOW.isoformat(),
+            "--output",
+            str(tmp_path / "activation.json"),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert code == 2
+    assert not (tmp_path / "activation.json").exists()
+    assert "environment_blockers" in captured.err
+    assert "secret_values_emitted" in captured.err
+    assert "HMAC secret" not in captured.err
+
+
+def test_activation_cli_controlled_environment_rejects_explicit_store_id(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.activate_prospective_formal_clock import main
+
+    code = main(
+        [
+            "--fixture-only",
+            "--controlled-environment",
+            "--controlled-store-id",
+            "store-id-must-not-be-mixed",
+            "--clock-manifest",
+            str(tmp_path / "clock.json"),
+            "--calibration-policy",
+            str(tmp_path / "policy.json"),
+            "--readiness-report",
+            str(tmp_path / "readiness.json"),
+            "--owner-activation-id",
+            "owner-activation:test",
+            "--owner-activation-timestamp",
+            "2026-08-15T09:00:00+08:00",
+            "--now",
+            PLANNING_NOW.isoformat(),
+            "--output",
+            str(tmp_path / "activation.json"),
+        ]
+    )
+    assert code == 2
+    assert "forbids explicit" in capsys.readouterr().err

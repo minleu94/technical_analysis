@@ -287,6 +287,13 @@ artifact，不會讀出 HMAC secret，也不會啟動 watcher／Direct／OOC。�
 或 input invalid 都維持 blocked；只有 readiness report 及 owner activation manifest
 都通過後，才進入未來交易日的 daily capture。
 
+PFS-07 activation CLI 也支援同一個明確的 `--fixture-only --controlled-environment`
+source mode：它只取三個 path、非秘密 `RULE_CHAMPION_CONTROLLED_STORE_ID` 與 HMAC
+configured boolean，重新交給既有 activation validator 做 readiness/file-hash/frozen
+identity 檢查。path、store id 或 HMAC configured flag 任一缺失時不寫 activation manifest；
+即使成功，manifest 仍固定 `heavy_rebuild_launch_allowed=false`、`formal_oos_allowed=false`、
+alpha=`0`、broker disabled，且不啟動任何 ML 程序。
+
 ## 8. Activation 與日常蒐證 Runbook（待程式完成後使用）
 
 下列是執行順序，不是現有可直接複製的命令；實際 CLI 名稱與參數由 PFS-01～06 固化後才寫入 Application Manual：

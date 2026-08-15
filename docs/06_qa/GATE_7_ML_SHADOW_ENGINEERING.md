@@ -174,7 +174,10 @@ fixture artifacts 放入 formal path。Owner 設定 paths 後，
 `scripts/inspect_prospective_capture_readiness.py --controlled-environment` 可用明確
 opt-in 把同一 controlled reader 的三條路徑交給 PFS-06 schema／hash／T-1／lineage
 驗證；這個命令仍只做 capture-only preflight，不寫環境、不讀 HMAC secret、不啟動
-watcher／Direct／OOC，任何 missing／invalid 都維持 formal OOS blocked。
+watcher／Direct／OOC，任何 missing／invalid 都維持 formal OOS blocked。PFS-07
+activation CLI 也支援 `--fixture-only --controlled-environment`，只取非秘密 store
+identity 與 HMAC configured flag，並把 path/file hash 再交給 immutable activation
+validator；它不自行選日期、不建立歷史 credit，也不啟動 ML。
 
 2026-08-14 起 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 會在 polling
 時重新讀取 Windows 使用者／系統環境的受控 formal path、PIT sector path、Rule HMAC key

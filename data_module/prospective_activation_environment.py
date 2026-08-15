@@ -126,6 +126,29 @@ def build_prospective_activation_environment_preflight(
     return {**body, "preflight_hash": payload_hash(body)}
 
 
+def resolve_controlled_store_id(
+    *,
+    environment: Mapping[str, str] | None = None,
+    platform_name: str | None = None,
+    registry: object | None = None,
+) -> str | None:
+    """Resolve the non-secret controlled-store identity for owner handoff.
+
+    This helper intentionally exposes only ``RULE_CHAMPION_CONTROLLED_STORE_ID``;
+    the HMAC secret has no equivalent resolver and is represented solely by the
+    configured boolean in the preflight report.
+    """
+
+    effective_environment = os.environ if environment is None else environment
+    value, _ = _effective_value(
+        CONTROLLED_STORE_ID_ENV_NAME,
+        environment=effective_environment,
+        platform_name=platform_name or os.name,
+        registry=registry,
+    )
+    return value
+
+
 def write_immutable_activation_environment_preflight(
     output_path: Path,
     report: Mapping[str, object],
