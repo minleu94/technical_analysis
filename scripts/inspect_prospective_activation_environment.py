@@ -55,4 +55,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    from runtime.console_encoding import configure_utf8_console
+
+    configure_utf8_console()
     raise SystemExit(main())

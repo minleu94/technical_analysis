@@ -210,4 +210,7 @@ def _read_json_object(path: Path) -> dict[str, object]:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    from runtime.console_encoding import configure_utf8_console
+
+    configure_utf8_console()
     raise SystemExit(main())

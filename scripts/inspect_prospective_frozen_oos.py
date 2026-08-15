@@ -9,6 +9,10 @@ from pathlib import Path
 import sys
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from data_module.prospective_calibration_policy import (
     load_prospective_calibration_policy,
 )
@@ -103,4 +107,7 @@ def _read_optional_object(path: Path | None) -> dict[str, object] | None:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    from runtime.console_encoding import configure_utf8_console
+
+    configure_utf8_console()
     raise SystemExit(main())
