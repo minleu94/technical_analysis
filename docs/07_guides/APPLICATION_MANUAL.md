@@ -9,9 +9,45 @@ evidence；目前 `formal_oos_allowed=false`、production alpha=`0`、broker dis
 PFS-07 的 activation contract 已可用於受控 fixture preflight：
 
 - `scripts\publish_prospective_formal_clock.py --fixture-only` 可把 owner 已核准、仍在未來的 activation trading day 與官方 calendar evidence 寫成 planned clock manifest。呼叫端必須明確提供 clock／owner decision、cash seed、strategy／policy／universe／source identities、frozen candidate training cutoff、calibration／evaluation hashes 與 `--now`；命令不會自行選日期、查找或回填歷史、設定任何 `BALDR_ML_*` path、讀取 HMAC secret 或啟動 watcher。輸出 parent 必須先存在，manifest 採 canonical JSON create-only。
-- `scripts\activate_prospective_formal_clock.py --fixture-only` 只在三個 PFS-06 input 都 ready、candidate／calibration／evaluation identities 與 file hashes 都一致、owner activation timestamp 已發生、activation trading day 仍在未來時建立 create-only manifest。Owner handoff 可改用 `--fixture-only --controlled-environment`，由 shared Windows reader 取得三個 formal paths、非秘密 store identity 與 HMAC configured flag；此模式不讀／輸出 secret、不設定環境，缺件即 blocked。
+- `scripts\activate_prospective_formal_clock.py --fixture-only` 在 strict 模式只於三個 PFS-06 input 都 ready、candidate／calibration／evaluation identities 與 file hashes 都一致、owner activation timestamp 已發生、activation trading day 仍在未來時建立 create-only manifest。Owner handoff 可改用 `--fixture-only --controlled-environment`，由 shared Windows reader 取得三個 formal paths、非秘密 store identity 與 HMAC configured flag；此模式不讀／輸出 secret、不設定環境，缺件即 blocked。
 - `scripts\record_prospective_daily_capture.py --fixture-only` 只建立低 CPU daily capture 的 `started` record，固定 PIT publication → Rule snapshot → T-1 Portfolio transition → frozen inference → heartbeat 順序；`elapsed_day_credit=0`、`formal_credit=0`，不能隔日補寫。
 - 兩個命令都不設定 Windows 使用者環境、不接受／讀取／輸出 `RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY`，不啟動 watcher、Direct 或 OOC。實際 activation date、三個正式 path、`RULE_CHAMPION_CONTROLLED_STORE_ID` 與受控 secret-store 狀態仍須由 owner 在未來時點明確提供；本段工具不會自行選日期或產生正式 `D:` artifact。
+
+### 先預約 clock，再於未來累積正式輸入
+
+prospective-only 的三份輸入在 activation 前尚不存在是合法狀態；若 strict readiness
+現在就要求 `non_cash_state_day_count>0`，會形成「沒有 activation 就不能有
+transition、沒有 transition 就不能 activation」的循環。因此可先用明確的 staging
+模式預約未來 clock：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_prospective_capture_readiness.py `
+  --fixture-only --defer-until-activation `
+  --clock-manifest <CLOCK_MANIFEST> `
+  --calibration-policy <CALIBRATION_POLICY> `
+  --decision-timestamp <FIRST_FUTURE_DECISION_TIMESTAMP> `
+  --now <NOW> `
+  --symbols-json <SORTED_SYMBOLS_JSON> `
+  --output <DEFERRED_READINESS_OUTPUT>
+
+.\.venv\Scripts\python.exe scripts\activate_prospective_formal_clock.py `
+  --fixture-only --controlled-environment --defer-inputs `
+  --clock-manifest <CLOCK_MANIFEST> `
+  --calibration-policy <CALIBRATION_POLICY> `
+  --readiness-report <DEFERRED_READINESS_OUTPUT> `
+  --owner-activation-id <OWNER_ACTIVATION_ID> `
+  --owner-activation-timestamp <OWNER_APPROVED_TIMESTAMP> `
+  --now <NOW> `
+  --output <ACTIVATION_MANIFEST>
+```
+
+`--defer-until-activation` 與 `--defer-inputs` 只建立「等待未來資料」的受控
+activation manifest：三個 controlled path 會以 `deferred=true`／`path=null` 保存，
+不會給 non-cash day、Formal OOS、promotion 或任何交易 credit；controlled store
+identity 與 HMAC configured flag 仍必須存在，且 secret 永不輸出。clock 到達第一個
+未來決策日後，owner 才設定三個正式 path，重新執行不帶 defer 的 strict readiness，
+並只接受當日實際產生的 T-1 transition、Rule snapshot 與 PIT lineage；不可用歷史、
+paper／cash-only ledger 或補日填入 deferred 期間。
 
 ### 唯讀 CPU／MCP process custody
 

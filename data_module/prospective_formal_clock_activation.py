@@ -22,6 +22,7 @@ from data_module.prospective_calibration_policy import (
     validate_policy_against_clock,
 )
 from data_module.prospective_capture_readiness import (
+    PROSPECTIVE_CAPTURE_READINESS_DEFERRED_SCHEMA_VERSION,
     PROSPECTIVE_CAPTURE_READINESS_SCHEMA_VERSION,
 )
 from data_module.prospective_formal_clock import (
@@ -99,6 +100,9 @@ _ACTIVATION_FIELDS = frozenset(
     }
 )
 _CONTROLLED_PATH_FIELDS = frozenset({"path", "path_hash", "file_hash"})
+_DEFERRED_CONTROLLED_PATH_FIELDS = frozenset(
+    {"deferred", "path", "path_hash", "file_hash"}
+)
 _DAILY_CAPTURE_FIELDS = frozenset(
     {
         "schema_version",
@@ -167,7 +171,7 @@ def build_prospective_clock_activation_manifest(
     clock: ProspectiveFormalClock,
     calibration_policy: ProspectiveCalibrationPolicy,
     readiness_report: Mapping[str, object],
-    controlled_paths: Mapping[str, Path],
+    controlled_paths: Mapping[str, Path | None],
     controlled_store_id: str,
     hmac_secret_store_configured: bool,
     owner_activation_id: str,
@@ -224,6 +228,9 @@ def build_prospective_clock_activation_manifest(
         controlled_paths,
         readiness_inputs=readiness_inputs,
     )
+    inputs_deferred = all(
+        item.get("state") == "deferred" for item in readiness_inputs.values()
+    )
     owner_id = _required_text(owner_activation_id, "owner_activation_id")
     store_id = _required_text(controlled_store_id, "controlled_store_id")
     if hmac_secret_store_configured is not True:
@@ -259,7 +266,11 @@ def build_prospective_clock_activation_manifest(
         "source_policy_hash": str(clock.payload["source_policy_hash"]),
         "seed_state_hash": _seed_state_hash(clock),
         "readiness_hash": readiness_hash,
-        "readiness_status": "ready_for_future_activation",
+        "readiness_status": (
+            "inputs_deferred_until_activation"
+            if inputs_deferred
+            else "ready_for_future_activation"
+        ),
         "controlled_paths": activation_paths,
         "controlled_store_id": store_id,
         "hmac_secret_store_configured": True,
@@ -371,8 +382,29 @@ def validate_prospective_clock_activation_manifest(
         raise ProspectiveClockActivationError(
             "controlled HMAC secret store must be configured"
         )
+    readiness_status = manifest.get("readiness_status")
+    if readiness_status not in {
+        "ready_for_future_activation",
+        "inputs_deferred_until_activation",
+    }:
+        raise ProspectiveClockActivationError(
+            "activation readiness_status is invalid"
+        )
+    if readiness_status == "inputs_deferred_until_activation":
+        controlled_entries = manifest.get("controlled_paths")
+        if not isinstance(controlled_entries, Mapping):
+            raise ProspectiveClockActivationError(
+                "deferred activation controlled_paths are invalid"
+            )
+        if any(
+            not isinstance(entry, Mapping)
+            or entry.get("deferred") is not True
+            for entry in controlled_entries.values()
+        ):
+            raise ProspectiveClockActivationError(
+                "deferred activation paths must remain deferred"
+            )
     for field_name, expected in (
-        ("readiness_status", "ready_for_future_activation"),
         ("rebuild_requested", False),
         ("heavy_rebuild_launch_allowed", False),
         ("formal_oos_allowed", False),
@@ -609,9 +641,16 @@ def _validate_readiness_report(
         "production_blend_alpha_bp", "promotion_eligible", "broker_order_allowed",
         "secret_values_emitted", "readiness_hash",
     }
+    schema_version = report.get("schema_version")
+    deferred = schema_version == PROSPECTIVE_CAPTURE_READINESS_DEFERRED_SCHEMA_VERSION
+    if deferred:
+        expected_fields.add("input_collection_phase")
     if set(report) != expected_fields:
         raise ProspectiveClockActivationError("readiness report fields are invalid")
-    if report.get("schema_version") != PROSPECTIVE_CAPTURE_READINESS_SCHEMA_VERSION:
+    if schema_version not in {
+        PROSPECTIVE_CAPTURE_READINESS_SCHEMA_VERSION,
+        PROSPECTIVE_CAPTURE_READINESS_DEFERRED_SCHEMA_VERSION,
+    }:
         raise ProspectiveClockActivationError("readiness report schema_version is invalid")
     if report.get("status") != "ready_for_future_activation":
         raise ProspectiveClockActivationError("prospective inputs are not ready")
@@ -632,10 +671,28 @@ def _validate_readiness_report(
             raise ProspectiveClockActivationError(
                 f"readiness report {field_name} is unsafe"
             )
+    if deferred and report.get("input_collection_phase") != "deferred_until_activation":
+        raise ProspectiveClockActivationError(
+            "deferred readiness input_collection_phase is invalid"
+        )
+    if not deferred and report.get("input_collection_phase", "validated") != "validated":
+        raise ProspectiveClockActivationError(
+            "readiness input_collection_phase is invalid"
+        )
     decision = _parse_taipei_timestamp(
         report.get("decision_timestamp"), "readiness decision_timestamp"
     )
-    if decision > _parse_now(now).astimezone(TAIPEI_TIMEZONE):
+    if deferred:
+        expected_decision = datetime.combine(
+            clock.activation_trading_day,
+            _clock_decision_time(clock.payload),
+            tzinfo=TAIPEI_TIMEZONE,
+        )
+        if decision != expected_decision:
+            raise ProspectiveClockActivationError(
+                "deferred readiness decision_timestamp does not match activation"
+            )
+    elif decision > _parse_now(now).astimezone(TAIPEI_TIMEZONE):
         raise ProspectiveClockActivationError("readiness decision_timestamp is after now")
     guard = report.get("heavy_rebuild_guard")
     if not isinstance(guard, Mapping):
@@ -660,10 +717,34 @@ def _validate_readiness_report(
         name = _required_text(item.get("input"), "readiness input")
         if name in by_name or name not in CAPTURE_INPUT_TO_ENV:
             raise ProspectiveClockActivationError("readiness input set is invalid")
-        if item.get("state") != "ready":
-            raise ProspectiveClockActivationError(f"readiness input {name} is not ready")
-        _required_text(item.get("path"), f"readiness {name} path")
-        _required_hash(item.get("file_hash"), f"readiness {name} file_hash")
+        if deferred:
+            if set(item) != {
+                "input",
+                "state",
+                "reason",
+                "controlled_path_env_name",
+                "formal_consumer_compatible",
+            }:
+                raise ProspectiveClockActivationError(
+                    f"deferred readiness input {name} fields are invalid"
+                )
+            if item.get("state") != "deferred":
+                raise ProspectiveClockActivationError(
+                    f"deferred readiness input {name} is not deferred"
+                )
+            if item.get("controlled_path_env_name") != CAPTURE_INPUT_TO_ENV[name]:
+                raise ProspectiveClockActivationError(
+                    f"deferred readiness input {name} env name is invalid"
+                )
+            if item.get("formal_consumer_compatible") is not False:
+                raise ProspectiveClockActivationError(
+                    f"deferred readiness input {name} cannot be formal compatible"
+                )
+        else:
+            if item.get("state") != "ready":
+                raise ProspectiveClockActivationError(f"readiness input {name} is not ready")
+            _required_text(item.get("path"), f"readiness {name} path")
+            _required_hash(item.get("file_hash"), f"readiness {name} file_hash")
         by_name[name] = item
     if set(by_name) != set(CAPTURE_INPUT_TO_ENV):
         raise ProspectiveClockActivationError("readiness must contain all three inputs")
@@ -676,7 +757,7 @@ def _validate_readiness_report(
 
 
 def _build_controlled_paths(
-    paths: Mapping[str, Path],
+    paths: Mapping[str, Path | None],
     *,
     readiness_inputs: Mapping[str, Mapping[str, object]],
 ) -> dict[str, object]:
@@ -684,6 +765,20 @@ def _build_controlled_paths(
         raise ProspectiveClockActivationError(
             "controlled_paths must contain exactly the three formal path env names"
         )
+    if all(item.get("state") == "deferred" for item in readiness_inputs.values()):
+        if any(value is not None for value in paths.values()):
+            raise ProspectiveClockActivationError(
+                "deferred readiness cannot bind concrete input paths"
+            )
+        return {
+            env_name: {
+                "deferred": True,
+                "path": None,
+                "path_hash": None,
+                "file_hash": None,
+            }
+            for env_name in CONTROLLED_PATH_ENV_NAMES
+        }
     result: dict[str, object] = {}
     for env_name in CONTROLLED_PATH_ENV_NAMES:
         path = paths.get(env_name)
@@ -725,6 +820,27 @@ def _validate_controlled_path_entries(
 ) -> None:
     if set(entries) != set(CONTROLLED_PATH_ENV_NAMES):
         raise ProspectiveClockActivationError("activation controlled path names are invalid")
+    deferred_entries = all(
+        isinstance(item, Mapping) and item.get("state") == "deferred"
+        for item in readiness_inputs.values()
+    )
+    if deferred_entries:
+        for env_name in CONTROLLED_PATH_ENV_NAMES:
+            entry = entries.get(env_name)
+            if not isinstance(entry, Mapping) or set(entry) != _DEFERRED_CONTROLLED_PATH_FIELDS:
+                raise ProspectiveClockActivationError(
+                    f"deferred controlled path {env_name} fields are invalid"
+                )
+            if (
+                entry.get("deferred") is not True
+                or entry.get("path") is not None
+                or entry.get("path_hash") is not None
+                or entry.get("file_hash") is not None
+            ):
+                raise ProspectiveClockActivationError(
+                    f"deferred controlled path {env_name} is unsafe"
+                )
+        return
     normalized_paths: dict[str, Path] = {}
     for env_name in CONTROLLED_PATH_ENV_NAMES:
         entry = entries.get(env_name)

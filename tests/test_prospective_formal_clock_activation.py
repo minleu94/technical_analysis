@@ -136,6 +136,61 @@ def _readiness(tmp_path: Path, clock, policy) -> tuple[dict[str, object], dict[s
     return {**body, "readiness_hash": payload_hash(body)}, paths
 
 
+def _deferred_readiness(clock, policy) -> dict[str, object]:
+    inputs = [
+        {
+            "input": input_name,
+            "state": "deferred",
+            "reason": reason,
+            "controlled_path_env_name": env_name,
+            "formal_consumer_compatible": False,
+        }
+        for input_name, reason, env_name in (
+            (
+                "causal_simulated_portfolio_ledger",
+                "collect_after_activation_first_non_cash_transition",
+                CONTROLLED_PATH_ENV_NAMES[0],
+            ),
+            (
+                "prospective_rule_champion_history",
+                "collect_after_activation_controlled_store_snapshot",
+                CONTROLLED_PATH_ENV_NAMES[1],
+            ),
+            (
+                "prospective_pit_sector_membership",
+                "collect_after_activation_licensed_publication",
+                CONTROLLED_PATH_ENV_NAMES[2],
+            ),
+        )
+    ]
+    body: dict[str, object] = {
+        "schema_version": "prospective-formal-capture-readiness-deferred.v1",
+        "status": "ready_for_future_activation",
+        "mode": "prospective_formal_simulation",
+        "clock_id": clock.clock_id,
+        "clock_manifest_hash": clock.manifest_hash,
+        "calibration_policy_hash": policy.policy_hash,
+        "decision_timestamp": "2026-08-17T08:30:00+08:00",
+        "active_clock": False,
+        "inputs": inputs,
+        "input_collection_phase": "deferred_until_activation",
+        "capture_only": True,
+        "heavy_rebuild_guard": {
+            "heavy_rebuild_launch_allowed": False,
+            "owner_confirmation_required_for_heavy_rebuild": True,
+            "owner_confirmation_received": False,
+            "direct_ooc_invocation_count": 0,
+            "reason": "capture_only_preflight_never_launches_direct_or_ooc",
+        },
+        "formal_oos_allowed": False,
+        "production_blend_alpha_bp": 0,
+        "promotion_eligible": False,
+        "broker_order_allowed": False,
+        "secret_values_emitted": False,
+    }
+    return {**body, "readiness_hash": payload_hash(body)}
+
+
 def _build_activation(tmp_path: Path):
     clock, policy = _clock_and_policy(tmp_path)
     readiness, paths = _readiness(tmp_path, clock, policy)
@@ -177,6 +232,41 @@ def test_activation_freezes_identities_and_three_controlled_paths(tmp_path: Path
         CONTROLLED_PATH_ENV_NAMES
     )
     assert all(path.is_file() for path in paths.values())
+
+
+def test_deferred_activation_can_be_scheduled_before_non_cash_inputs_exist(
+    tmp_path: Path,
+) -> None:
+    clock, policy = _clock_and_policy(tmp_path)
+    readiness = _deferred_readiness(clock, policy)
+    deferred_paths = {name: None for name in CONTROLLED_PATH_ENV_NAMES}
+
+    manifest = build_prospective_clock_activation_manifest(
+        clock=clock,
+        calibration_policy=policy,
+        readiness_report=readiness,
+        controlled_paths=deferred_paths,
+        controlled_store_id="controlled-store:pfs07-test",
+        hmac_secret_store_configured=True,
+        owner_activation_id="owner-activation:pfs07-deferred",
+        owner_activation_timestamp=datetime.fromisoformat(
+            "2026-08-15T09:00:00+08:00"
+        ),
+        now=PLANNING_NOW,
+    )
+
+    assert manifest["readiness_status"] == "inputs_deferred_until_activation"
+    controlled = cast(Mapping[str, Mapping[str, object]], manifest["controlled_paths"])
+    assert all(entry["deferred"] is True for entry in controlled.values())
+    assert all(entry["path"] is None for entry in controlled.values())
+    validated = validate_prospective_clock_activation_manifest(
+        manifest,
+        clock=clock,
+        calibration_policy=policy,
+        readiness_report=readiness,
+        now=PLANNING_NOW,
+    )
+    assert validated.activation_trading_day.isoformat() == "2026-08-17"
 
 
 def test_activation_rejects_secret_absence_or_rebuild_request(tmp_path: Path) -> None:
@@ -391,6 +481,79 @@ def test_activation_cli_controlled_environment_fails_closed_without_paths(
     assert "environment_blockers" in captured.err
     assert "secret_values_emitted" in captured.err
     assert "HMAC secret" not in captured.err
+
+
+def test_activation_cli_can_defer_inputs_in_controlled_environment(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.activate_prospective_formal_clock as activation_cli
+
+    clock, policy = _clock_and_policy(tmp_path)
+    clock_path = tmp_path / "clock.json"
+    policy_path = tmp_path / "policy.json"
+    readiness_path = tmp_path / "readiness-deferred.json"
+    policy_path.write_text(canonical_json(policy.to_dict()), encoding="utf-8")
+    readiness_path.write_text(
+        canonical_json(_deferred_readiness(clock, policy)), encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        activation_cli,
+        "build_prospective_activation_environment_preflight",
+        lambda: {
+            "status": "waiting_for_controlled_environment",
+            "blockers": [
+                "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH:missing",
+                "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH:missing",
+                "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH:missing",
+            ],
+            "formal_paths": {},
+            "hmac_secret_store": {"configured": True},
+        },
+    )
+    monkeypatch.setattr(
+        activation_cli,
+        "resolve_controlled_store_id",
+        lambda: "controlled-store:pfs07-test",
+    )
+    secret = "never-print-this-test-secret"
+    monkeypatch.setenv("RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY", secret)
+    output = tmp_path / "activation-deferred.json"
+
+    code = activation_cli.main(
+        [
+            "--fixture-only",
+            "--controlled-environment",
+            "--defer-inputs",
+            "--clock-manifest",
+            str(clock_path),
+            "--calibration-policy",
+            str(policy_path),
+            "--readiness-report",
+            str(readiness_path),
+            "--owner-activation-id",
+            "owner-activation:pfs07-deferred-cli",
+            "--owner-activation-timestamp",
+            "2026-08-15T09:00:00+08:00",
+            "--now",
+            PLANNING_NOW.isoformat(),
+            "--output",
+            str(output),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert secret not in captured.out
+    assert secret not in captured.err
+    assert '"inputs_deferred": true' in captured.out
+    manifest = json.loads(output.read_text(encoding="utf-8"))
+    controlled = cast(Mapping[str, Mapping[str, object]], manifest["controlled_paths"])
+    assert all(entry["deferred"] is True for entry in controlled.values())
+    assert all(entry["path"] is None for entry in controlled.values())
+    assert manifest["formal_oos_allowed"] is False
+    assert manifest["promotion_eligible"] is False
 
 
 def test_activation_cli_controlled_environment_rejects_explicit_store_id(

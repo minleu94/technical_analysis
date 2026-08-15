@@ -10,7 +10,7 @@ ready，``heavy_rebuild_launch_allowed`` 仍固定為 false，必須另走 owner
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import date, datetime, time
 import hashlib
 import json
 import os
@@ -45,6 +45,9 @@ from data_module.prospective_pit_sector_membership import (
 
 PROSPECTIVE_CAPTURE_READINESS_SCHEMA_VERSION = (
     "prospective-formal-capture-readiness.v1"
+)
+PROSPECTIVE_CAPTURE_READINESS_DEFERRED_SCHEMA_VERSION = (
+    "prospective-formal-capture-readiness-deferred.v1"
 )
 PROSPECTIVE_LEDGER_MANIFEST_SCHEMA_VERSION = (
     "prospective-formal-simulated-portfolio-ledger-manifest.v1"
@@ -92,10 +95,21 @@ def build_prospective_capture_readiness_report(
     rule_history_path: Path | None = None,
     pit_sector_membership_path: Path | None = None,
     active_clock: bool = False,
+    defer_until_activation: bool = False,
 ) -> dict[str, object]:
-    """建立 read-only capture readiness report；不啟動任何重型程序。"""
+    """建立 read-only capture readiness report；不啟動任何重型程序。
+
+    ``defer_until_activation`` 是 prospective clock 專用的 staging gate：它
+    不把空 ledger、缺少 Rule history 或缺少 PIT sidecar 當成正式 ready，僅
+    建立一份明確的「activation 後才收集」報告，讓未來 clock 能合法開始。
+    Strict readiness（預設）仍要求三項 input 與 non-cash state 完整通過。
+    """
 
     _validate_now(now)
+    if defer_until_activation and active_clock:
+        raise ProspectiveCaptureReadinessError(
+            "deferred readiness cannot be requested for an active clock"
+        )
     clock_loader = load_clock_manifest_for_capture if active_clock else load_clock_manifest
     try:
         clock = clock_loader(clock_manifest_path, now=now)
@@ -113,30 +127,51 @@ def build_prospective_capture_readiness_report(
 
     decision = _parse_taipei_timestamp(decision_timestamp, "decision_timestamp")
     expected = _normalize_symbols(expected_symbols)
-    inputs = [
-        _ledger_readiness(
-            path=portfolio_ledger_manifest_path,
-            clock=clock,
-            now=now,
-        ),
-        _rule_history_readiness(
-            path=rule_history_path,
-            clock=clock,
-            decision=decision,
-            now=now,
-        ),
-        _pit_readiness(
-            path=pit_sector_membership_path,
-            clock=clock,
-            decision=decision,
-            now=now,
-            expected_symbols=expected,
-        ),
-    ]
+    if defer_until_activation:
+        expected_decision = datetime.combine(
+            clock.activation_trading_day,
+            _clock_decision_time(clock),
+            tzinfo=TAIPEI_TIMEZONE,
+        )
+        if decision != expected_decision:
+            raise ProspectiveCaptureReadinessError(
+                "deferred readiness decision_timestamp must equal clock activation decision time"
+            )
+        inputs = _deferred_inputs()
+    else:
+        inputs = [
+            _ledger_readiness(
+                path=portfolio_ledger_manifest_path,
+                clock=clock,
+                now=now,
+            ),
+            _rule_history_readiness(
+                path=rule_history_path,
+                clock=clock,
+                decision=decision,
+                now=now,
+            ),
+            _pit_readiness(
+                path=pit_sector_membership_path,
+                clock=clock,
+                decision=decision,
+                now=now,
+                expected_symbols=expected,
+            ),
+        ]
     all_ready = all(item.get("state") == "ready" for item in inputs)
+    schema_version = (
+        PROSPECTIVE_CAPTURE_READINESS_DEFERRED_SCHEMA_VERSION
+        if defer_until_activation
+        else PROSPECTIVE_CAPTURE_READINESS_SCHEMA_VERSION
+    )
     body: dict[str, object] = {
-        "schema_version": PROSPECTIVE_CAPTURE_READINESS_SCHEMA_VERSION,
-        "status": "ready_for_future_activation" if all_ready else "waiting_for_prospective_inputs",
+        "schema_version": schema_version,
+        "status": (
+            "ready_for_future_activation"
+            if defer_until_activation or all_ready
+            else "waiting_for_prospective_inputs"
+        ),
         "mode": "prospective_formal_simulation",
         "clock_id": clock.clock_id,
         "clock_manifest_hash": clock.manifest_hash,
@@ -158,7 +193,42 @@ def build_prospective_capture_readiness_report(
         "broker_order_allowed": False,
         "secret_values_emitted": False,
     }
+    if defer_until_activation:
+        body["input_collection_phase"] = "deferred_until_activation"
     return {**body, "readiness_hash": _payload_hash(body)}
+
+
+def _deferred_inputs() -> list[dict[str, object]]:
+    """Return explicit post-activation collection placeholders.
+
+    These rows are intentionally not ``ready`` and contain no path.  They are
+    suitable only for scheduling a future clock; no formal consumer may use
+    them as evidence.
+    """
+
+    return [
+        {
+            "input": "causal_simulated_portfolio_ledger",
+            "state": "deferred",
+            "reason": "collect_after_activation_first_non_cash_transition",
+            "controlled_path_env_name": "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH",
+            "formal_consumer_compatible": False,
+        },
+        {
+            "input": "prospective_rule_champion_history",
+            "state": "deferred",
+            "reason": "collect_after_activation_controlled_store_snapshot",
+            "controlled_path_env_name": "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH",
+            "formal_consumer_compatible": False,
+        },
+        {
+            "input": "prospective_pit_sector_membership",
+            "state": "deferred",
+            "reason": "collect_after_activation_licensed_publication",
+            "controlled_path_env_name": "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH",
+            "formal_consumer_compatible": False,
+        },
+    ]
 
 
 def write_immutable_capture_readiness_report(
@@ -530,6 +600,19 @@ def _parse_taipei_timestamp(value: object, field_name: str) -> datetime:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ProspectiveCaptureReadinessError(f"{field_name} must include timezone")
     return parsed.astimezone(TAIPEI_TIMEZONE)
+
+
+def _clock_decision_time(clock: ProspectiveFormalClock) -> time:
+    value = clock.payload.get("decision_time")
+    if not isinstance(value, str):
+        raise ProspectiveCaptureReadinessError("clock decision_time is invalid")
+    try:
+        parsed = datetime.strptime(value, "%H:%M:%S").time()
+    except ValueError as error:
+        raise ProspectiveCaptureReadinessError(
+            "clock decision_time is invalid"
+        ) from error
+    return parsed
 
 
 def _validate_now(value: datetime) -> None:

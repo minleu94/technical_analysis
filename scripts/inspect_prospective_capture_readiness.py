@@ -62,6 +62,14 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use the capture-time clock loader after activation",
     )
+    parser.add_argument(
+        "--defer-until-activation",
+        action="store_true",
+        help=(
+            "pre-activation staging mode: defer all three inputs until the "
+            "future clock starts; never grants formal credit"
+        ),
+    )
     return parser
 
 
@@ -78,6 +86,40 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "formal_oos_allowed": False,
                     "production_blend_alpha_bp": 0,
                     "broker_order_allowed": False,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+        return 2
+    if args.defer_until_activation and (
+        not args.fixture_only
+        or args.controlled_environment
+        or args.active_clock
+        or any(
+            value is not None
+            for value in (
+                args.portfolio_ledger_manifest,
+                args.rule_history,
+                args.pit_sector_membership,
+            )
+        )
+    ):
+        print(
+            json.dumps(
+                {
+                    "status": "blocked",
+                    "reason": (
+                        "--defer-until-activation requires fixture-only planned "
+                        "mode without active clock or input paths"
+                    ),
+                    "capture_only": True,
+                    "heavy_rebuild_launch_allowed": False,
+                    "formal_oos_allowed": False,
+                    "production_blend_alpha_bp": 0,
+                    "broker_order_allowed": False,
+                    "secret_values_emitted": False,
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -181,6 +223,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH"
             ],
             active_clock=args.active_clock,
+            defer_until_activation=args.defer_until_activation,
         )
         file_hash = write_immutable_capture_readiness_report(args.output, report)
     except Exception as exc:  # pragma: no cover - CLI fail-closed boundary
@@ -213,6 +256,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "readiness_file_hash": file_hash,
                 "ready_inputs": sum(
                     item.get("state") == "ready" for item in inputs
+                ),
+                "deferred_inputs": sum(
+                    item.get("state") == "deferred" for item in inputs
                 ),
                 "input_count": len(inputs),
                 "capture_only": report["capture_only"],

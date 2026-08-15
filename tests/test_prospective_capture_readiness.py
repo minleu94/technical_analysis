@@ -18,6 +18,7 @@ from data_module.prospective_calibration_policy import (
     publish_prospective_calibration_policy,
 )
 from data_module.prospective_capture_readiness import (
+    PROSPECTIVE_CAPTURE_READINESS_DEFERRED_SCHEMA_VERSION,
     ProspectiveCaptureReadinessError,
     build_prospective_capture_readiness_report,
     write_immutable_capture_readiness_report,
@@ -123,6 +124,42 @@ def test_missing_inputs_wait_and_never_launch_heavy_rebuild(tmp_path: Path) -> N
     assert guard["owner_confirmation_received"] is False
     assert guard["direct_ooc_invocation_count"] == 0
     assert report["formal_oos_allowed"] is False
+
+
+def test_deferred_pre_activation_readiness_breaks_non_cash_circular_gate(
+    tmp_path: Path,
+) -> None:
+    kwargs = _report_kwargs(tmp_path)
+    kwargs["decision_timestamp"] = "2026-08-17T08:30:00+08:00"
+    kwargs["defer_until_activation"] = True
+
+    report = build_prospective_capture_readiness_report(**kwargs)
+
+    assert report["schema_version"] == PROSPECTIVE_CAPTURE_READINESS_DEFERRED_SCHEMA_VERSION
+    assert report["status"] == "ready_for_future_activation"
+    assert report["input_collection_phase"] == "deferred_until_activation"
+    assert all(item["state"] == "deferred" for item in _inputs(report))
+    assert all("path" not in item for item in _inputs(report))
+    assert report["formal_oos_allowed"] is False
+    assert _guard(report)["heavy_rebuild_launch_allowed"] is False
+
+
+def test_deferred_readiness_rejects_active_clock_or_wrong_decision_time(
+    tmp_path: Path,
+) -> None:
+    kwargs = _report_kwargs(tmp_path, active=True)
+    kwargs["decision_timestamp"] = "2026-08-17T08:30:00+08:00"
+    kwargs["defer_until_activation"] = True
+    with pytest.raises(ProspectiveCaptureReadinessError, match="active clock"):
+        build_prospective_capture_readiness_report(**kwargs)
+
+    second_tmp = tmp_path / "wrong-time"
+    second_tmp.mkdir()
+    kwargs = _report_kwargs(second_tmp)
+    kwargs["decision_timestamp"] = "2026-08-17T08:31:00+08:00"
+    kwargs["defer_until_activation"] = True
+    with pytest.raises(ProspectiveCaptureReadinessError, match="activation decision time"):
+        build_prospective_capture_readiness_report(**kwargs)
 
 
 def _cash_state() -> CausalPortfolioState:
@@ -310,6 +347,42 @@ def test_fixture_cli_requires_explicit_guard_and_keeps_heavy_off(
     assert exit_code == 0
     assert output.is_file()
     assert '"heavy_rebuild_launch_allowed": false' in captured.out
+    assert captured.err == ""
+
+
+def test_deferred_fixture_cli_publishes_staging_readiness_without_inputs(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.inspect_prospective_capture_readiness import main
+
+    kwargs = _report_kwargs(tmp_path)
+    symbols_path = tmp_path / "symbols.json"
+    symbols_path.write_text(json.dumps(["2317", "2330"]), encoding="utf-8")
+    output = tmp_path / "deferred-readiness.json"
+    exit_code = main(
+        [
+            "--fixture-only",
+            "--defer-until-activation",
+            "--clock-manifest",
+            str(kwargs["clock_manifest_path"]),
+            "--calibration-policy",
+            str(kwargs["calibration_policy_path"]),
+            "--decision-timestamp",
+            "2026-08-17T08:30:00+08:00",
+            "--now",
+            PLANNING_NOW.isoformat(),
+            "--symbols-json",
+            str(symbols_path),
+            "--output",
+            str(output),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert output.is_file()
+    assert '"deferred_inputs": 3' in captured.out
+    assert '"formal_oos_allowed": false' in captured.out
     assert captured.err == ""
 
 

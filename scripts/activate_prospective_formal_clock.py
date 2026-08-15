@@ -57,6 +57,14 @@ def main(argv: list[str] | None = None) -> int:
             "environment; still requires --fixture-only"
         ),
     )
+    parser.add_argument(
+        "--defer-inputs",
+        action="store_true",
+        help=(
+            "schedule the future clock while the three formal inputs remain "
+            "deferred; requires --controlled-environment"
+        ),
+    )
     parser.add_argument("--owner-activation-id", required=True)
     parser.add_argument("--owner-activation-timestamp", required=True)
     parser.add_argument("--now", required=True)
@@ -66,6 +74,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "refusing activation CLI without explicit --fixture-only; "
             "this command never writes Windows environment variables",
+            file=sys.stderr,
+        )
+        return 2
+    if args.defer_inputs and not args.controlled_environment:
+        print(
+            "blocked: --defer-inputs requires --controlled-environment",
             file=sys.stderr,
         )
         return 2
@@ -93,6 +107,12 @@ def main(argv: list[str] | None = None) -> int:
             hmac_store = cast(Mapping[str, object], environment_report["hmac_secret_store"])
             if hmac_store.get("configured") is not True:
                 blockers.append("RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY:missing")
+            if args.defer_inputs:
+                blockers = [
+                    blocker
+                    for blocker in blockers
+                    if not _is_formal_path_blocker(blocker)
+                ]
             if blockers:
                 print(
                     json.dumps(
@@ -111,30 +131,39 @@ def main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
                 return 2
-            formal_paths = cast(dict[str, object], environment_report["formal_paths"])
-            resolved_paths: dict[str, Path] = {}
-            for name in FORMAL_PATH_ENV_NAMES:
-                entry = formal_paths.get(name)
-                if not isinstance(entry, Mapping):
-                    raise ProspectiveActivationEnvironmentError(
-                        f"controlled environment path entry is invalid: {name}"
-                    )
-                value = entry.get("path")
-                if not isinstance(value, str) or not value:
-                    raise ProspectiveActivationEnvironmentError(
-                        f"controlled environment path is invalid: {name}"
-                    )
-                resolved_paths[name] = Path(value)
             if store_id is None:  # pragma: no cover - guarded above
                 raise ProspectiveActivationEnvironmentError(
                     f"{CONTROLLED_STORE_ID_ENV_NAME} is missing"
                 )
-            portfolio_path = resolved_paths[FORMAL_PATH_ENV_NAMES[0]]
-            rule_path = resolved_paths[FORMAL_PATH_ENV_NAMES[1]]
-            pit_path = resolved_paths[FORMAL_PATH_ENV_NAMES[2]]
             controlled_store_id = store_id
             hmac_configured = True
+            if args.defer_inputs:
+                portfolio_path = None
+                rule_path = None
+                pit_path = None
+            else:
+                formal_paths = cast(dict[str, object], environment_report["formal_paths"])
+                resolved_paths: dict[str, Path] = {}
+                for name in FORMAL_PATH_ENV_NAMES:
+                    entry = formal_paths.get(name)
+                    if not isinstance(entry, Mapping):
+                        raise ProspectiveActivationEnvironmentError(
+                            f"controlled environment path entry is invalid: {name}"
+                        )
+                    value = entry.get("path")
+                    if not isinstance(value, str) or not value:
+                        raise ProspectiveActivationEnvironmentError(
+                            f"controlled environment path is invalid: {name}"
+                        )
+                    resolved_paths[name] = Path(value)
+                portfolio_path = resolved_paths[FORMAL_PATH_ENV_NAMES[0]]
+                rule_path = resolved_paths[FORMAL_PATH_ENV_NAMES[1]]
+                pit_path = resolved_paths[FORMAL_PATH_ENV_NAMES[2]]
         else:
+            if args.defer_inputs:
+                raise ProspectiveActivationEnvironmentError(
+                    "--defer-inputs cannot be used in fixture mode"
+                )
             if any(
                 value is None
                 for value in (
@@ -193,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
                 "file_hash": file_hash,
                 "heavy_rebuild_launch_allowed": False,
                 "formal_oos_allowed": False,
+                "inputs_deferred": manifest["readiness_status"]
+                == "inputs_deferred_until_activation",
                 "secret_values_emitted": False,
             },
             ensure_ascii=False,
@@ -207,6 +238,12 @@ def _read_json_object(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         raise ValueError("readiness report root must be an object")
     return raw
+
+
+def _is_formal_path_blocker(value: object) -> bool:
+    return isinstance(value, str) and any(
+        value.startswith(f"{name}:") for name in FORMAL_PATH_ENV_NAMES
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover
