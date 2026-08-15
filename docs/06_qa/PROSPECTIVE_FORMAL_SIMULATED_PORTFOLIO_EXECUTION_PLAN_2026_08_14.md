@@ -1,6 +1,6 @@
 # Prospective Formal Simulated Portfolio Execution Plan（2026-08-14）
 
-> 狀態：`owner_direction_approved / PFS-07_complete / PFS-08_next`
+> 狀態：`owner_direction_approved / PFS-08_complete / PFS-09_next`
 >
 > 範圍：Gate 7 正式模擬持倉的未來式證據鏈、PIT sector 邊界、Rule Champion custody、calibration policy 與 frozen-candidate OOS 評估順序。
 >
@@ -92,7 +92,7 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 | PFS-05 | `complete` | `data_module/prospective_calibration_policy.py`、`scripts/audit_prospective_inference_calibration.py`、tests | policy hash 固定 identity／isotonic 並列、5／10／20／60 horizon、prior validation folds、ECE `500 bp`、class coverage 與 `rebalance_worthwhile` 雙類別；固定 conservative max、禁止 post-outcome method selection；8 focused tests、既有 calibration/OOC/monitor 8 passed、py_compile、mypy 0 issues | `fix(ml): align calibration audit with inference` |
 | PFS-06 | `complete` | `data_module/prospective_capture_readiness.py`、`scripts/inspect_prospective_capture_readiness.py`、tests | 唯讀檢查 calibration／ledger wrapper／Rule history／PIT 三項 input；ledger 要求相對 SQLite、hash chain 與 `non_cash_state_day_count>0`；capture-only 永不呼叫 Direct/OOC；heavy rebuild launch 永遠 false；6 focused tests、py_compile、mypy 0 issues | `feat(ml): guard prospective capture readiness` |
 | PFS-07 | `complete` | `data_module/prospective_formal_clock_activation.py`、`scripts/activate_prospective_formal_clock.py`、`scripts/record_prospective_daily_capture.py`、tests | frozen candidate／calibration／evaluation／seed identities；三個 controlled path + file hash；controlled store id 與 secret-store configured flag（不含 secret）；owner activation timestamp；daily capture sequence；rebuild／formal／credit flags 全部 fail-closed；8 focused tests、py_compile、mypy 0 issues | `ops(ml): freeze prospective activation contract` |
-| PFS-08 | `waiting_for_time` | 每日 Rule/PIT/transition chain、mature outcomes、shadow observations | 只計真實經過的交易日；至少滿足既有 20 日 shadow Gate；各 5/10/20/60 horizon 仍須分別等到成熟；`rebalance_worthwhile` 需自然出現兩類，不得合成正例或重播補日 | artifact revision，不預先承諾 repo commit |
+| PFS-08 | `complete` | `data_module/prospective_shadow_maturity.py`、`scripts/inspect_prospective_shadow_maturity.py`、tests | complete observation 只接受 activation 後 capture、T-1 input、clock／activation／source hash、已成熟 integer-bp outcomes；maturity report 固定 20 shadow days、每 horizon 至少 20 matured observations、`rebalance_worthwhile` 雙類別；replay/backfill/synthetic/future target 全拒絕；6 focused tests、py_compile、mypy 0 issues | `feat(ml): enforce prospective shadow maturity` |
 | PFS-09 | `waiting_for_evidence` | frozen-candidate Formal OOS replay、calibration／PSI report | 只對 clock 已綁定 model/policies 評估；primary／verification hash 相同；不 fit、不 retrain、不用 formal outcomes 選方法 | run artifact；程式未變時不為 run output 建 commit |
 | PFS-10 | `waiting_for_gates` | promotion review package 或 next-candidate decision | 所有 machine／human Gate 通過才可評估 promotion；預設仍 `promotion_eligible=false`。如需 retrain／recalibrate，關閉本 clock 並從另一個未來 clock 評估 | 依實際 review 分批 |
 
@@ -119,7 +119,7 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 - 新增 `tests/test_prospective_formal_clock.py`：`14 passed`，涵蓋 past／same-day activation、training cutoff、unknown field、tamper hash、seed／integer notional、calendar evidence、read-only inspector 與外部 evidence override。
 - `py_compile` 通過；mypy 以 `--explicit-package-bases` 檢查三個檔案為 `0 issues`。此 slice 沒有設定正式 path、寫 SQLite、建立 transition／Rule／PIT artifact 或啟動 watcher。
 
-PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。PFS-03～PFS-07 亦已完成；下一個 slice 是 PFS-08：只累積真實經過的 daily Rule／PIT／transition 與 matured outcomes。
+PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。PFS-03～PFS-08 亦已完成；下一個 slice 是 PFS-09：對同一 frozen candidate 執行 matured Formal OOS replay 與 inference-level calibration／PSI evidence。
 
 ### 本 slice 明確不做
 
@@ -226,6 +226,18 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
 
 - 不替 owner 選 activation trading day、不宣稱「第一個未消費交易日」、不建立正式 `D:` artifact，不設定 `BALDR_ML_*` path、`RULE_CHAMPION_CONTROLLED_STORE_ID` 或任何 HMAC secret。
 - 不啟動 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs`，不呼叫 Direct／OOC，不重訓／重校準、不消費 Formal OOS 日期；activation manifest 與 daily start record 都不是 Formal OOS permission 或 promotion credit。
+
+### PFS-08 已完成證據
+
+- 新增 `data_module/prospective_shadow_maturity.py`：complete observation 必須在 frozen activation 後、決策日未來界線內，帶有 PIT publication／Rule snapshot／Portfolio transition／inference／source lineage hashes，且 `input_state_date == previous_trading_day < capture_date`。每筆 outcome 只能使用已到 `now` 的日期與 `matured_at`，採 integer bp；缺少 horizon 時保持 waiting，不預先建立 target。
+- maturity report 只依 activation-bound、sorted unique observation dates 計算 elapsed shadow days；固定至少 `20` 個 shadow days、每個 `5/10/20/60` horizon 至少 `20` 個 matured observations，並要求每個 horizon 的 `rebalance_worthwhile` class `0/1` 自然出現。任何 `future_teacher_target_used`、`same_day_advice_used`、`replayed`、`backfilled` 或 `synthetic_outcomes_used` flag 都會拒絕。
+- 新增 `scripts/inspect_prospective_shadow_maturity.py`，強制 `--fixture-only`；輸出只報告 `waiting_for_maturity` 或 `maturity_gate_ready_shadow_only`，即使 gate ready 仍固定 `formal_oos_allowed=false`、alpha=`0`、promotion=`false`，不啟動 Direct/OOC、不寫正式 `D:`。
+- `tests/test_prospective_shadow_maturity.py` 共 `6 passed`，涵蓋 20 日／四 horizon／雙類別、future outcome、unsafe flags、duplicate capture date、create-only report 與 CLI guard；py_compile 與 mypy `0 issues`。
+
+### PFS-08 明確不做
+
+- 不使用 2014–2026 history、research replay、paper／cash-only ledger、Teacher target 或補日來增加 elapsed days；不把日曆天數自動當成交易日，不在本 slice 代替官方 PIT／Rule／transition producer。
+- maturity gate 通過只表示 observations 足夠進入 PFS-09 的 frozen-candidate Formal OOS replay；不代表 calibration、PSI、promotion、production alpha 或 broker permission 已通過。
 
 ## 8. Activation 與日常蒐證 Runbook（待程式完成後使用）
 

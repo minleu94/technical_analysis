@@ -14,6 +14,12 @@ PFS-07 的 activation contract 已可用於受控 fixture preflight：
 
 Readiness 通過不等於 Formal OOS 或 promotion permission。完成 PFS-07 後，下一階段是只累積真實經過的交易日、PIT／Rule／Portfolio chain 與 matured outcomes；任何 Gate 失敗都維持 alpha=`0`。
 
+PFS-08 maturity inspector 可用於受控 fixture 的唯讀檢查：
+
+- `scripts\inspect_prospective_shadow_maturity.py --fixture-only` 讀取 activation-bound complete observations，只接受已發生的 decision／outcome timestamp、T-1 input 與 canonical hashes；缺少 5／10／20／60 horizon 時保持 waiting，不以 replay 或補日填入。
+- maturity gate 固定要求至少 20 個 unique shadow days、每個 horizon 至少 20 個 matured observations，且 `rebalance_worthwhile` class 0／1 都是自然觀測；`future_teacher_target_used`、`same_day_advice_used`、replay、backfill 或 synthetic outcome 任一為 true 都會 fail-closed。
+- 輸出 `maturity_gate_ready_shadow_only` 仍不解除 `formal_oos_allowed=false`、alpha=`0` 或 broker disabled。下一階段 PFS-09 才能對 frozen candidate 產出 matured Formal OOS replay、calibration 與 PSI evidence。
+
 ## 2026-08-14 自動鏈 current state
 
 ### 正式 ML 輸入接線狀態（2026-08-14）
