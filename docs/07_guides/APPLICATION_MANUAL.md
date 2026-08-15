@@ -12,6 +12,13 @@ PFS-07 的 activation contract 已可用於受控 fixture preflight：
 - `scripts\record_prospective_daily_capture.py --fixture-only` 只建立低 CPU daily capture 的 `started` record，固定 PIT publication → Rule snapshot → T-1 Portfolio transition → frozen inference → heartbeat 順序；`elapsed_day_credit=0`、`formal_credit=0`，不能隔日補寫。
 - 兩個命令都不設定 Windows 使用者環境、不接受／讀取／輸出 `RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY`，不啟動 watcher、Direct 或 OOC。實際 activation date、三個正式 path、`RULE_CHAMPION_CONTROLLED_STORE_ID` 與受控 secret-store 狀態仍須由 owner 在未來時點明確提供；本段工具不會自行選日期或產生正式 `D:` artifact。
 
+若 activation 已到達且 SQLite 內已有合法 prospective transitions，可先用
+`scripts\publish_prospective_simulated_portfolio_ledger.py --fixture-only` 產生
+`prospective-formal-simulated-portfolio-ledger-manifest.v1`。它會重新驗證 recursive
+chain、T-1、non-cash day、clock identity、relative child path 與 SQLite file hash，並
+以 create-only 寫入；不會設定 `BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH`，也不會把
+research／fixture ledger 升格成正式歷史證據。
+
 Readiness 通過不等於 Formal OOS 或 promotion permission。完成 PFS-07 後，下一階段是只累積真實經過的交易日、PIT／Rule／Portfolio chain 與 matured outcomes；任何 Gate 失敗都維持 alpha=`0`。
 
 Controlled activation 的命令仍需 owner 明確提供 clock、policy、readiness、activation id、

@@ -86,7 +86,7 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 |---|---|---|---|---|
 | PFS-00 | `complete` | 本決策與執行計畫 | owner 採用 prospective-only 正式模擬持倉；沒有 Gate credit | `docs(ml): plan prospective formal simulation track` |
 | PFS-01 | `complete` | `data_module/prospective_formal_clock.py`、`scripts/inspect_prospective_formal_clock.py`、`tests/test_prospective_formal_clock.py` | 純 contract／validator；拒絕過去或同日 activation、training cutoff 污染、retro credit、real-money/broker flags、缺 hash、無官方 calendar evidence、未知欄位；fixture-only，不寫 `D:` | `feat(ml): define prospective formal simulation clock` |
-| PFS-02 | `complete` | `data_module/formal_simulated_portfolio_ledger.py`、`scripts/capture_formal_simulated_portfolio_transition.py`、tests | cash seed → 當日 causal output；T-1、append-only、idempotent、canonical row/chain/hash、non-cash count；無 Teacher／same-day Advice／裸 float；5 focused tests、既有 ledger／turnover regression、py_compile、mypy 0 issues | `feat(ml): capture prospective simulated transitions` |
+| PFS-02 | `complete` | `data_module/formal_simulated_portfolio_ledger.py`、`data_module/prospective_simulated_ledger_manifest.py`、`scripts/capture_formal_simulated_portfolio_transition.py`、`scripts/publish_prospective_simulated_portfolio_ledger.py`、tests | cash seed → 當日 causal output；T-1、append-only、idempotent、canonical row/chain/hash、non-cash count；relative SQLite manifest publisher 重新驗證 file hash／clock identity；無 Teacher／same-day Advice／裸 float；ledger／manifest focused tests、既有 ledger／turnover regression、py_compile、mypy 0 issues | `feat(ml): capture prospective simulated transitions` |
 | PFS-03 | `complete` | `data_module/prospective_rule_champion_publisher.py`、`scripts/publish_prospective_rule_champion_history.py`、tests | clock-bound `RuleChampionSnapshot.v1`／`FormalRuleDecisionSnapshot.v1`；controlled-store HMAC、store identity、snapshot id／lineage、rank `1..N`、decision timestamp、canonical immutable manifest、不可回填；任何輸出不含 secret；6 focused tests、PFS-01／Rule service regression、mypy 0 issues | `feat(ml): publish clock-bound rule snapshots` |
 | PFS-04 | `complete` | `data_module/prospective_pit_sector_membership.py`、`scripts/capture_prospective_pit_sector_membership.py`、tests | prospective-only sidecar 支援 `.json`／`.jsonl`／`.jsonl.gz`；每列 accepted；source/license/publication/available/effective/hash 完整；clock／universe／coverage 綁定；拒絕歷史回填與 current/research fallback；8 focused tests、py_compile、mypy 0 issues | `feat(data): add prospective PIT sector custody` |
 | PFS-05 | `complete` | `data_module/prospective_calibration_policy.py`、`scripts/audit_prospective_inference_calibration.py`、tests | policy hash 固定 identity／isotonic 並列、5／10／20／60 horizon、prior validation folds、ECE `500 bp`、class coverage 與 `rebalance_worthwhile` 雙類別；固定 conservative max、禁止 post-outcome method selection；8 focused tests、既有 calibration/OOC/monitor 8 passed、py_compile、mypy 0 issues | `fix(ml): align calibration audit with inference` |
@@ -137,17 +137,27 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
 - 新增 `scripts/capture_formal_simulated_portfolio_transition.py`：明確要求
   `--fixture-only`，只接受呼叫端指定的 SQLite，沒有正式 path、watcher、ML
   rebuild 或 HMAC secret 讀取；可用 `--previous-chain-hash` 重播連續日。
+- 新增 `data_module/prospective_simulated_ledger_manifest.py` 與
+  `scripts/publish_prospective_simulated_portfolio_ledger.py`：在 activation-bound
+  clock 下唯讀重驗 SQLite chain、T-1、相對 child path、file hash 與
+  `non_cash_state_day_count>0`，再 create-only 產生
+  `prospective-formal-simulated-portfolio-ledger-manifest.v1`；publisher 不設定
+  formal environment，也不把 fixture/research ledger 自動升格。
 - 新增 `tests/test_formal_simulated_portfolio_ledger.py`：`5 passed`，涵蓋首日
   cash seed、idempotent／conflict、T-1／decision time、兩筆連續日 state／chain
   continuity 與 append-only trigger。
+- `tests/test_prospective_simulated_ledger_manifest.py`：`4 passed`，涵蓋相對
+  SQLite custody、non-cash gate、外部 path、create-only 與寫入前 file-hash drift。
 - PFS-02 另通過既有 formal portfolio ledger／turnover regression `6 passed`、
   PFS-01 clock `14 passed`、py_compile 與 mypy `0 issues`。這些是 repo／tmp
   fixture 驗證，不是正式 clock 的 elapsed day 或 Formal OOS credit。
 
 ### PFS-02 明確不做
 
-- 不建立 `manifest.json`、不設定 `BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH`，也不
-  將模擬 SQLite 接到既有 `causal-portfolio-ledger.v1` full-history consumer。
+- publisher 可以建立 prospective wrapper `manifest.json`，但不設定
+  `BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH`，也不將模擬 SQLite 接到既有
+  `causal-portfolio-ledger.v1` full-history consumer；是否成為 owner-controlled
+  input 仍須 activation 前的合法 path／clock／readiness custody。
 - 不產生 Rule HMAC snapshot、PIT sector row、activation date、elapsed day、
   promotion credit 或正式 `D:` artifact。
 
