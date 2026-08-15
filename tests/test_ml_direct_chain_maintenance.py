@@ -106,6 +106,21 @@ def test_legacy_watcher_detects_compressed_prospective_pit_sidecar(
     )
 
 
+def test_legacy_watcher_bounded_reads_large_json_sidecar(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path)
+    prospective = tmp_path / "large-pit-sidecar.json"
+    prefix = b'{"manifest":{"scope":"prospective_only"},"rows":['
+    prospective.write_bytes(prefix + (b"0," * 1_100_000) + b"0]}")
+    args.sector_membership = prospective
+
+    assert prospective.stat().st_size > 2_000_000
+    assert maintenance._legacy_watcher_prospective_guard(args) == (
+        "pit_sector_membership:scope=prospective_only",
+    )
+
+
 def test_one_shot_legacy_watcher_blocks_prospective_input_before_launch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

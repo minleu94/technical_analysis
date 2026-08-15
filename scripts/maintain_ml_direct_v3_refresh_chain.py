@@ -514,6 +514,23 @@ def _prospective_only_manifest_declaration(path: Path) -> str | None:
             if not first_line:
                 return None
             payload = json.loads(first_line)
+        elif suffix.endswith(".json") and path.stat().st_size > 2_000_000:
+            # PIT JSON envelopes can contain millions of rows.  Their manifest
+            # is emitted before ``rows``; bounded marker inspection prevents
+            # the legacy watcher from loading the entire sidecar every poll.
+            with path.open("rb") as stream:
+                prefix = stream.read(256 * 1024)
+            text = prefix.decode("utf-8")
+            markers = (
+                (b'"mode":"prospective_formal_simulation"', "mode=prospective_formal_simulation"),
+                (b'"scope":"prospective_only"', "scope=prospective_only"),
+            )
+            for marker, reason in markers:
+                if marker in prefix:
+                    return reason
+            if b'"schema_version":"prospective-formal-' in prefix:
+                return "schema=prospective-formal-*"
+            return None
         else:
             payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, UnicodeDecodeError, json.JSONDecodeError):
