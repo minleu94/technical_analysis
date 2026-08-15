@@ -1,5 +1,11 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-14 Formal watcher post-refresh custody correction
+
+- 唯讀重驗現行 readiness 後，`RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY` 與 `RULE_CHAMPION_CONTROLLED_STORE_ID` 已可由 controlled runtime handoff 使用；秘密值未讀出或寫入任何 command line、status 或 log。真正仍缺的是三個正式 artifact path：causal non-cash portfolio ledger、formal Rule Champion snapshot history 與 PIT sector membership，因此 `formal_oos_allowed=false`、production alpha=`0`、broker disabled 不變。
+- 發現 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs` 在一次成功的 Direct/OOC continuation 後會直接正常結束，沒有回到 formal-input polling；這是 watcher custody 的退出缺口，不是 ML training crash 或重複 MCP。已修正為成功 continuation 後保留 instance lock 並繼續 polling，且新增 regression test 覆蓋此路徑。修正不建立 formal artifact、不重跑訓練、不改寫 SQLite，也不放寬任何 promotion gate。
+- 本輪 focused maintainer／scheduled wrapper regression=`26 passed`、calibration／teacher／OOS replay 相關 regression=`28 passed`、`py_compile` 通過；mypy 以 package-base 模式檢查 `scripts/maintain_ml_direct_v3_refresh_chain.py` 與其測試為 `0 issues`。Windows watcher 尚待以這個修正版本重新啟動後才會恢復長駐 heartbeat。
+
 ## 2026-08-14 Daily Workbench UX / desktop responsive follow-up
 
 - 主 UI 的預設「決策工作台」首頁已由工程狀態優先，調整為「今日行動中心」優先：依既有 `WorkbenchDashboardDTO` 只讀投影資料狀態、市場待判讀、Advice／候選與持倉覆盤四項，並依資料缺口、既有持倉 Action Item、待判讀與 Advice 是否存在，選出一個下一步導覽。這些按鈕只切換至既有數據更新、市場總覽、推薦分析或持倉管理，不觸發更新、策略、寫入、持倉變更或交易。

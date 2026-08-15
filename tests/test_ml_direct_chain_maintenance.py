@@ -34,6 +34,9 @@ def _args(tmp_path: Path) -> argparse.Namespace:
         memory_budget_mb=4096,
         temporary_storage_budget_bytes=None,
         poll_seconds=15,
+        retry_delay_seconds=30,
+        watch_formal_inputs=False,
+        max_restarts=0,
     )
 
 
@@ -127,6 +130,70 @@ def test_chain_complete_requires_machine_status(tmp_path: Path) -> None:
 
     status_path.write_text(json.dumps({"status": "complete"}), encoding="utf-8")
     assert maintenance._chain_complete(training) is True
+
+
+def test_watch_mode_stays_alive_after_successful_continuation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A completed refresh must return the watcher to formal-input polling."""
+
+    args = _args(tmp_path)
+    args.training_output_dir.mkdir()
+    args.watch_formal_inputs = True
+    candidate = maintenance._RefreshCandidate(
+        raw_manifest=tmp_path / "raw.json",
+        training_as_of=args.training_as_of,
+        sector_membership=None,
+        corporate_action_manifest=None,
+        formal_portfolio_ledger=None,
+        formal_rule_champion_history=None,
+        reasons=("new_validated_official_market_event_publication",),
+    )
+
+    monkeypatch.setattr(
+        maintenance,
+        "_parser",
+        lambda: SimpleNamespace(parse_args=lambda _argv: args),
+    )
+    monkeypatch.setattr(maintenance, "_refresh_controlled_runtime_environment", lambda: ())
+    monkeypatch.setattr(maintenance, "_target_processes", lambda _output: [])
+    monkeypatch.setattr(maintenance, "_chain_complete", lambda _training: True)
+    monkeypatch.setattr(
+        maintenance,
+        "_auto_refresh_candidate",
+        lambda _args: candidate,
+    )
+    monkeypatch.setattr(
+        maintenance,
+        "_continuation_command",
+        lambda _args, **_kwargs: ["safe-test-command"],
+    )
+    monkeypatch.setattr(
+        maintenance,
+        "_start_continuation",
+        lambda _command, _log: SimpleNamespace(wait=lambda: 0),
+    )
+
+    class _StopPolling(Exception):
+        pass
+
+    def _stop_after_first_watch_sleep(_seconds: int) -> None:
+        raise _StopPolling
+
+    monkeypatch.setattr(maintenance.time, "sleep", _stop_after_first_watch_sleep)
+
+    with pytest.raises(_StopPolling):
+        maintenance.main([])
+
+    log_path = args.training_output_dir / "logs" / "ml_direct_chain_maintenance.log"
+    messages = [
+        json.loads(line)["message"]
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert "continuation_exited" in messages
+    assert "chain_complete_watching_formal_inputs" in messages
+    assert not (args.training_output_dir / ".ml_direct_chain_maintenance.lock").exists()
 
 
 def test_auto_refresh_candidate_requires_current_v4_without_sector_hash(

@@ -1111,7 +1111,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return_code=return_code,
             )
             if _chain_complete(training_output_dir):
-                return 0
+                if not args.watch_formal_inputs:
+                    return 0
+                # A successful refresh must not turn a formal-input watcher
+                # into a one-shot process.  Keep its custody lock and return
+                # to the polling loop so late owner deposits are still
+                # observed without a manual restart.
+                _log(
+                    log_path,
+                    "chain_complete_watching_formal_inputs",
+                    restart_count=restart_count,
+                )
+                time.sleep(args.poll_seconds)
+                continue
             if args.retry_delay_seconds:
                 time.sleep(args.retry_delay_seconds)
     finally:
