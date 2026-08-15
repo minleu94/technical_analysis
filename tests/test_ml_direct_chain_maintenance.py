@@ -63,6 +63,31 @@ def test_legacy_watcher_detects_prospective_wrapper_without_exposing_path(
     assert str(prospective) not in " ".join(reasons)
 
 
+def test_legacy_watcher_does_not_let_explicit_legacy_path_hide_prospective_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _args(tmp_path)
+    legacy = tmp_path / "legacy-ledger.json"
+    legacy.write_text("{}", encoding="utf-8")
+    prospective = tmp_path / "prospective-ledger.json"
+    prospective.write_text(
+        json.dumps(
+            {
+                "schema_version": "prospective-formal-simulated-portfolio-ledger-manifest.v1",
+                "mode": "prospective_formal_simulation",
+            }
+        ),
+        encoding="utf-8",
+    )
+    args.formal_portfolio_ledger = legacy
+    monkeypatch.setenv(maintenance.FORMAL_PORTFOLIO_LEDGER_ENV, str(prospective))
+
+    assert maintenance._legacy_watcher_prospective_guard(args) == (
+        "formal_portfolio_ledger:mode=prospective_formal_simulation",
+    )
+
+
 def test_legacy_watcher_detects_nested_prospective_pit_manifest(
     tmp_path: Path,
 ) -> None:

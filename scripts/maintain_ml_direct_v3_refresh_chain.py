@@ -557,26 +557,37 @@ def _prospective_only_manifest_declaration(path: Path) -> str | None:
 def _legacy_watcher_prospective_guard(args: argparse.Namespace) -> tuple[str, ...]:
     """Detect prospective inputs before the legacy watcher can launch work."""
 
-    configured: tuple[tuple[str, Path | None], ...] = (
+    configured: list[tuple[str, Path]] = []
+    for label, argument_name, environment_name in (
         (
             "formal_portfolio_ledger",
-            getattr(args, "formal_portfolio_ledger", None)
-            or _environment_path(FORMAL_PORTFOLIO_LEDGER_ENV),
+            "formal_portfolio_ledger",
+            FORMAL_PORTFOLIO_LEDGER_ENV,
         ),
         (
             "formal_rule_champion_history",
-            getattr(args, "formal_rule_champion_history", None)
-            or _environment_path(FORMAL_RULE_CHAMPION_HISTORY_ENV),
+            "formal_rule_champion_history",
+            FORMAL_RULE_CHAMPION_HISTORY_ENV,
         ),
-        (
-            "pit_sector_membership",
-            getattr(args, "sector_membership", None)
-            or _environment_path(PIT_SECTOR_MEMBERSHIP_ENV),
-        ),
-    )
+        ("pit_sector_membership", "sector_membership", PIT_SECTOR_MEMBERSHIP_ENV),
+    ):
+        explicit = getattr(args, argument_name, None)
+        candidates: list[Path] = []
+        if isinstance(explicit, Path):
+            candidates.append(explicit)
+        environment_path = _environment_path(environment_name)
+        if environment_path is not None:
+            candidates.append(environment_path)
+        seen: set[Path] = set()
+        for candidate in candidates:
+            resolved = candidate.expanduser().resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            configured.append((label, resolved))
     reasons: list[str] = []
     for label, path in configured:
-        if not isinstance(path, Path) or not path.is_file():
+        if not path.is_file():
             continue
         declaration = _prospective_only_manifest_declaration(path)
         if declaration is not None:
