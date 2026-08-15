@@ -81,7 +81,7 @@ baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資�
 
 目前立即順序改為：
 
-> **目前 Gate 7 執行軌**：Owner 已採用 prospective-only、非實盤的正式模擬持倉 clock；`2014–2026` 保留 research/history，不事後回填。`PFS-01` clock contract／唯讀 inspector 與 `PFS-02` fixture-only、append-only、T-1 simulated transition producer 均已完成 focused QA；依 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md) 下一步進入 `PFS-03` clock-bound HMAC Rule snapshot publisher，完成 capture readiness 並凍結 candidate／calibration／evaluation identities 後才選未來交易日起算。重型 watcher 維持停止，同一 clock 不得用已消費的 Formal OOS 期間重訓。這是 Gate 7 的執行計畫，不取代 Product／6M Roadmap，也不產生 Formal OOS 或 promotion credit。
+> **目前 Gate 7 執行軌**：Owner 已採用 prospective-only、非實盤的正式模擬持倉 clock；`2014–2026` 保留 research/history，不事後回填。`PFS-01` clock contract／唯讀 inspector、`PFS-02` fixture-only simulated transition producer 與 `PFS-03` clock-bound HMAC Rule snapshot publisher 均已完成 focused QA；依 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md) 下一步進入 `PFS-04` prospective PIT sector source／manifest custody，完成 capture readiness 並凍結 candidate／calibration／evaluation identities 後才選未來交易日起算。重型 watcher 維持停止，同一 clock 不得用已消費的 Formal OOS 期間重訓。這是 Gate 7 的執行計畫，不取代 Product／6M Roadmap，也不產生 Formal OOS 或 promotion credit。
 
 1. Gate 0 Safe Refactor 已 closeout；維持行為等價與 rollback discipline，但不再把重構當作產品主線。
 2. Gate 1 Daily Usable Advice 已 closeout：Guided / Professional 共核、`NO_NEW_POSITION`、Why / Why Not / Risk / Evidence 與 Portfolio target/current/gap 已由唯讀 contract / UI 呈現。

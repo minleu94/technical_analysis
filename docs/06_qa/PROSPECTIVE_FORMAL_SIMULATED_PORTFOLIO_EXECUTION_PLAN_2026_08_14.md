@@ -1,6 +1,6 @@
 # Prospective Formal Simulated Portfolio Execution Plan（2026-08-14）
 
-> 狀態：`owner_direction_approved / PFS-02_complete / PFS-03_next`
+> 狀態：`owner_direction_approved / PFS-03_complete / PFS-04_next`
 >
 > 範圍：Gate 7 正式模擬持倉的未來式證據鏈、PIT sector 邊界、Rule Champion custody、calibration policy 與 frozen-candidate OOS 評估順序。
 >
@@ -87,8 +87,8 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 | PFS-00 | `complete` | 本決策與執行計畫 | owner 採用 prospective-only 正式模擬持倉；沒有 Gate credit | `docs(ml): plan prospective formal simulation track` |
 | PFS-01 | `complete` | `data_module/prospective_formal_clock.py`、`scripts/inspect_prospective_formal_clock.py`、`tests/test_prospective_formal_clock.py` | 純 contract／validator；拒絕過去或同日 activation、training cutoff 污染、retro credit、real-money/broker flags、缺 hash、無官方 calendar evidence、未知欄位；fixture-only，不寫 `D:` | `feat(ml): define prospective formal simulation clock` |
 | PFS-02 | `complete` | `data_module/formal_simulated_portfolio_ledger.py`、`scripts/capture_formal_simulated_portfolio_transition.py`、tests | cash seed → 當日 causal output；T-1、append-only、idempotent、canonical row/chain/hash、non-cash count；無 Teacher／same-day Advice／裸 float；5 focused tests、既有 ledger／turnover regression、py_compile、mypy 0 issues | `feat(ml): capture prospective simulated transitions` |
-| PFS-03 | `next` | controlled Rule history publisher adapter／CLI、tests | clock-bound、HMAC-signed canonical bytes、store identity、snapshot id／lineage、rank `1..N`、不可回填；任何輸出不含 secret | `feat(ml): publish clock-bound rule snapshots` |
-| PFS-04 | `external_source_required` | prospective PIT manifest／validator／capture、tests、source acceptance evidence | 每列 accepted；source/license/publication/available/effective/hash 完整；只由首次合格 publication 往後計 credit | `feat(data): add prospective PIT sector custody` |
+| PFS-03 | `complete` | `data_module/prospective_rule_champion_publisher.py`、`scripts/publish_prospective_rule_champion_history.py`、tests | clock-bound `RuleChampionSnapshot.v1`／`FormalRuleDecisionSnapshot.v1`；controlled-store HMAC、store identity、snapshot id／lineage、rank `1..N`、decision timestamp、canonical immutable manifest、不可回填；任何輸出不含 secret；6 focused tests、PFS-01／Rule service regression、mypy 0 issues | `feat(ml): publish clock-bound rule snapshots` |
+| PFS-04 | `next` | prospective PIT manifest／validator／capture、tests、source acceptance evidence | 每列 accepted；source/license/publication/available/effective/hash 完整；只由首次合格 publication 往後計 credit | `feat(data): add prospective PIT sector custody` |
 | PFS-05 | `queued` | inference-level calibration audit、預註冊方法與 immutable policy hash | 使用正式 inference 相同的 horizon/family aggregation；每個 validation fold 僅用 prior folds fit；identity 與 isotonic 並列；activation 前凍結，未達預註冊門檻不得 attach 或事後改選 | `fix(ml): align calibration audit with inference` |
 | PFS-06 | `queued` | readiness mode、capture-only preflight、heavy-rebuild guard、tests | 三條 capture producer 完整才 ready；capture 路徑不呼叫 Direct/OOC；重建預估與 owner confirmation 分離；status 只顯示 secret configured flag | `feat(ml): guard prospective capture readiness` |
 | PFS-07 | `waiting_for_prerequisites` | frozen candidate/calibration/evaluation identities、immutable clock manifest、三個受控 path、輕量 daily capture 啟動紀錄 | PFS-01～06 通過；預設綁定 cutoff 2026-08-13 的現有 candidate；如選 rebuild，必須在 activation 前另行核准並完成；之後選當時仍在未來的台灣交易日 | `ops(ml): activate prospective formal clock` |
@@ -119,7 +119,7 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 - 新增 `tests/test_prospective_formal_clock.py`：`14 passed`，涵蓋 past／same-day activation、training cutoff、unknown field、tamper hash、seed／integer notional、calendar evidence、read-only inspector 與外部 evidence override。
 - `py_compile` 通過；mypy 以 `--explicit-package-bases` 檢查三個檔案為 `0 issues`。此 slice 沒有設定正式 path、寫 SQLite、建立 transition／Rule／PIT artifact 或啟動 watcher。
 
-PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。下一個 slice 是 PFS-03：建立 clock-bound、HMAC-signed 的 Rule Champion snapshot history publisher。
+PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。PFS-03 亦已完成，下一個 slice 是 PFS-04：建立合法來源邊界下的 prospective PIT sector membership manifest／validator／capture。
 
 ### 本 slice 明確不做
 
@@ -150,6 +150,33 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
   將模擬 SQLite 接到既有 `causal-portfolio-ledger.v1` full-history consumer。
 - 不產生 Rule HMAC snapshot、PIT sector row、activation date、elapsed day、
   promotion credit 或正式 `D:` artifact。
+
+### PFS-03 已完成證據
+
+- 新增 `data_module/prospective_rule_champion_publisher.py`：只呼叫既有
+  `RuleChampionSnapshotService`／`PersistedFormalDecisionArtifactRepository`，由
+  controlled runtime HMAC 驗證每列 `FormalRuleDecisionSnapshot.v1`，再建立獨立的
+  `prospective-formal-rule-champion-snapshot-history.v1`。manifest 明列 clock id／
+  manifest hash、activation boundary、decision time、store identity、Rule／policy／
+  score／universe identities、snapshot／lineage ids、連續 rank、canonical hash、
+  `historical_backfill_claimed=false` 與 `promotion_eligible=false`。
+- 新增 `scripts/publish_prospective_rule_champion_history.py`：明確要求
+  `--fixture-only`，只讀 clock／requests／artifact fixture，輸出至呼叫端既有
+  parent；不輸出 HMAC key、不啟動 watcher、不讀正式 Portfolio／PIT path。
+- 新增 `tests/test_prospective_rule_champion_publisher.py`：`6 passed`，涵蓋
+  activation 後 capture loader、clock／timestamp boundary、HMAC／rank、canonical
+  manifest、immutable output、fixture CLI 與 secret-safe stdout。
+- PFS-03 另通過 PFS-01 clock／既有 Rule service regression `30 passed`、PFS-02／
+  formal ledger／turnover regression `11 passed`、py_compile 與 mypy `0 issues`。
+  這仍是受控 fixture 驗證，不建立歷史 elapsed day 或 Formal OOS credit。
+
+### PFS-03 明確不做
+
+- 不設定 `BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH`，不把 prospective wrapper
+  靜默交給舊的 full-history `rule-champion-snapshot-history.v1` loader；consumer 必須
+  顯式選擇 `prospective_formal_simulation` mode。
+- 不合成缺失的 historical Rule rows、不使用 current／research snapshot、不產生 PIT
+  membership、activation credit、promotion artifact 或正式 `D:` history。
 
 ## 8. Activation 與日常蒐證 Runbook（待程式完成後使用）
 

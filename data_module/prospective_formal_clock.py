@@ -148,6 +148,7 @@ def validate_clock_manifest(
     *,
     now: datetime,
     calendar_evidence: Mapping[str, object] | None = None,
+    allow_elapsed_activation: bool = False,
 ) -> ProspectiveFormalClock:
     """驗證尚未啟動的 clock，所有時間與 calendar 證據都由呼叫端注入。
 
@@ -203,7 +204,12 @@ def validate_clock_manifest(
         manifest.get("activation_trading_day"), "activation_trading_day"
     )
     now_taipei_day = now_aware.astimezone(TAIPEI_TIMEZONE).date()
-    if activation_day <= now_taipei_day:
+    if allow_elapsed_activation:
+        if activation_day > now_taipei_day:
+            raise ProspectiveFormalClockError(
+                "capture clock activation_trading_day cannot be in the future"
+            )
+    elif activation_day <= now_taipei_day:
         raise ProspectiveFormalClockError(
             "activation_trading_day must be strictly after the current Taipei date"
         )
@@ -283,6 +289,37 @@ def load_clock_manifest(
         raw,
         now=now,
         calendar_evidence=calendar_evidence,
+    )
+
+
+def load_clock_manifest_for_capture(
+    path: Path,
+    *,
+    now: datetime,
+    calendar_evidence: Mapping[str, object] | None = None,
+) -> ProspectiveFormalClock:
+    """唯讀載入已到 activation 邊界的 immutable clock。
+
+    Activation 前的 ``load_clock_manifest`` 仍嚴格拒絕過去／同日日期；daily
+    capture 必須使用這個明確入口，讓 clock 經過相同 hash、seed、calendar 與
+    simulation-only 驗證，只放寬「現在已經到達預先綁定的 activation day」這一
+    個時間邊界。它不改寫 clock status，也不建立任何 artifact。
+    """
+
+    resolved = path.expanduser().resolve()
+    try:
+        raw = json.loads(resolved.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ProspectiveFormalClockError("clock manifest is missing") from exc
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProspectiveFormalClockError("clock manifest is unreadable") from exc
+    if not isinstance(raw, dict):
+        raise ProspectiveFormalClockError("clock manifest root must be an object")
+    return validate_clock_manifest(
+        raw,
+        now=now,
+        calendar_evidence=calendar_evidence,
+        allow_elapsed_activation=True,
     )
 
 
