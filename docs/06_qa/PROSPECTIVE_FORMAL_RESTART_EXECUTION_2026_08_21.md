@@ -55,4 +55,4 @@
 
 ## 回滾／隔離
 
-新 clock custody 只使用 create-only／append-only；若後續 gate 失敗，保留 immutable evidence、停止 consumer 採用並建立新的 successor clock，不刪除或覆寫原始資料。舊 `clock-20260819` 不變更。Repo 變更尚未以本任務 commit；回滾時採逐檔 review／revert，不使用 reset 或 checkout 覆寫其他 dirty changes。
+新 clock custody 只使用 create-only／append-only；若後續 gate 失敗，保留 immutable evidence、停止 consumer 採用並建立新的 successor clock，不刪除或覆寫原始資料。舊 `clock-20260819` 不變更。Repo 變更已分三批提交（`002c36c`、`ec05c28`、`c21cd1e`）；回滾時採逐檔 review／revert，不使用 reset 或 checkout 覆寫其他 dirty changes。
