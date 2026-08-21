@@ -58,6 +58,25 @@ _SOURCE_FIELDS = frozenset(
         "allowed_use",
     }
 )
+_OFFICIAL_SOURCE_FIELDS = frozenset(
+    {
+        "source_kind",
+        "dataset_id",
+        "market",
+        "endpoint",
+        "license_url",
+        "raw_hash",
+        "canonical_rows_hash",
+        "publication_date",
+        "available_at",
+        "effective_from",
+        "clock_id",
+        "clock_manifest_hash",
+        "universe_hash",
+        "source_registry_hash",
+        "schema_fields",
+    }
+)
 _MANIFEST_FIELDS = frozenset(
     {
         "schema_version",
@@ -306,6 +325,12 @@ def _validate_envelope(
     if not isinstance(rows_value, list) or not rows_value:
         raise ProspectivePitSectorMembershipError("PIT sidecar rows are required")
     normalized_sources = _normalize_source_registry(manifest.get("source_registry"))
+    _validate_official_source_bindings(
+        normalized_sources,
+        clock=clock,
+        decision=decision,
+        coverage_start=coverage_start,
+    )
     normalized_rows, source_ids = _normalize_rows(
         rows_value,
         normalized_sources,
@@ -348,6 +373,12 @@ def _validate_content(
     expected_symbols: Sequence[str],
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], tuple[str, ...]]:
     normalized_sources = _normalize_source_registry(source_registry)
+    _validate_official_source_bindings(
+        normalized_sources,
+        clock=clock,
+        decision=decision,
+        coverage_start=clock.activation_trading_day,
+    )
     normalized_rows, source_ids = _normalize_rows(
         list(rows),
         normalized_sources,
@@ -371,7 +402,13 @@ def _normalize_source_registry(value: object) -> list[dict[str, object]]:
     normalized: list[dict[str, object]] = []
     seen: set[tuple[str, str, str]] = set()
     for item in value:
-        if not isinstance(item, Mapping) or set(item) != _SOURCE_FIELDS:
+        if not isinstance(item, Mapping):
+            raise ProspectivePitSectorMembershipError(
+                "prospective PIT source_registry entry fields are invalid"
+            )
+        item_fields = set(item)
+        is_official = item_fields == _SOURCE_FIELDS | _OFFICIAL_SOURCE_FIELDS
+        if item_fields != _SOURCE_FIELDS and not is_official:
             raise ProspectivePitSectorMembershipError(
                 "prospective PIT source_registry entry fields are invalid"
             )
@@ -404,16 +441,22 @@ def _normalize_source_registry(value: object) -> list[dict[str, object]]:
                 "source_registry entries must be unique"
             )
         seen.add(key)
-        normalized.append(
-            {
-                "source_id": source_id,
-                "license_id": license_id,
-                "source_hash": str(source_hash),
-                "source_version": source_version,
-                "publication_at": publication.isoformat(),
-                "allowed_use": sorted(set(allowed_use)),
-            }
-        )
+        normalized_entry: dict[str, object] = {
+            "source_id": source_id,
+            "license_id": license_id,
+            "source_hash": str(source_hash),
+            "source_version": source_version,
+            "publication_at": publication.isoformat(),
+            "allowed_use": sorted(set(allowed_use)),
+        }
+        if is_official:
+            normalized_entry.update(
+                _normalize_official_source_fields(
+                    item,
+                    publication=publication,
+                )
+            )
+        normalized.append(normalized_entry)
     return sorted(
         normalized,
         key=lambda item: (
@@ -422,6 +465,143 @@ def _normalize_source_registry(value: object) -> list[dict[str, object]]:
             str(item["source_hash"]),
         ),
     )
+
+
+def _normalize_official_source_fields(
+    item: Mapping[str, object],
+    *,
+    publication: datetime,
+) -> dict[str, object]:
+    """Normalize and validate official source registry provenance fields."""
+
+    source_kind = _source_text(item.get("source_kind"), "source_kind")
+    if source_kind != "official_company_basic_first_seen":
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry source_kind is invalid"
+        )
+    dataset_id = _source_text(item.get("dataset_id"), "dataset_id")
+    market = _source_text(item.get("market"), "market")
+    endpoint = _source_text(item.get("endpoint"), "endpoint")
+    license_url = _source_text(item.get("license_url"), "license_url")
+    if not (endpoint.startswith("https://") or endpoint.startswith("http://")):
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry endpoint must be an HTTP(S) URL"
+        )
+    if not (license_url.startswith("https://") or license_url.startswith("http://")):
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry license_url must be an HTTP(S) URL"
+        )
+    raw_hash = item.get("raw_hash")
+    canonical_rows_hash = item.get("canonical_rows_hash")
+    _require_sha256(raw_hash, "source_registry.raw_hash")
+    _require_sha256(canonical_rows_hash, "source_registry.canonical_rows_hash")
+    if raw_hash != item.get("source_hash"):
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry raw_hash must equal source_hash"
+        )
+    publication_date = _parse_date(
+        item.get("publication_date"),
+        "source_registry.publication_date",
+    )
+    if publication.date() != publication_date:
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry publication_date mismatch"
+        )
+    available_at = _parse_aware(
+        item.get("available_at"),
+        "source_registry.available_at",
+    )
+    effective_from = _parse_date(
+        item.get("effective_from"),
+        "source_registry.effective_from",
+    )
+    clock_id = _source_text(item.get("clock_id"), "source_registry.clock_id")
+    clock_manifest_hash = item.get("clock_manifest_hash")
+    universe_hash = item.get("universe_hash")
+    _require_sha256(clock_manifest_hash, "source_registry.clock_manifest_hash")
+    _require_sha256(universe_hash, "source_registry.universe_hash")
+    schema_fields = item.get("schema_fields")
+    if not isinstance(schema_fields, list) or not schema_fields:
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry.schema_fields must be a non-empty array"
+        )
+    if any(not isinstance(field, str) or not field.strip() for field in schema_fields):
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry.schema_fields must contain text"
+        )
+    normalized_schema_fields = sorted(set(schema_fields))
+    if normalized_schema_fields != schema_fields:
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry.schema_fields must be sorted and unique"
+        )
+    source_registry_hash = item.get("source_registry_hash")
+    _require_sha256(source_registry_hash, "source_registry.source_registry_hash")
+    source_without_hash = dict(item)
+    source_without_hash.pop("source_registry_hash", None)
+    if source_registry_hash != _sha256_json(source_without_hash):
+        raise ProspectivePitSectorMembershipError(
+            "official source_registry source_registry_hash mismatch"
+        )
+    return {
+        "source_kind": source_kind,
+        "dataset_id": dataset_id,
+        "market": market,
+        "endpoint": endpoint,
+        "license_url": license_url,
+        "raw_hash": str(raw_hash),
+        "canonical_rows_hash": str(canonical_rows_hash),
+        "publication_date": publication_date.isoformat(),
+        "available_at": available_at.isoformat(),
+        "effective_from": effective_from.isoformat(),
+        "clock_id": clock_id,
+        "clock_manifest_hash": str(clock_manifest_hash),
+        "universe_hash": str(universe_hash),
+        "source_registry_hash": str(source_registry_hash),
+        "schema_fields": normalized_schema_fields,
+    }
+
+
+def _validate_official_source_bindings(
+    sources: Sequence[Mapping[str, object]],
+    *,
+    clock: ProspectiveFormalClock,
+    decision: datetime,
+    coverage_start: date,
+) -> None:
+    official_sources = [
+        source
+        for source in sources
+        if source.get("source_kind") == "official_company_basic_first_seen"
+    ]
+    for source in official_sources:
+        if source.get("clock_id") != clock.clock_id:
+            raise ProspectivePitSectorMembershipError(
+                "official source_registry clock_id mismatch"
+            )
+        if source.get("clock_manifest_hash") != clock.manifest_hash:
+            raise ProspectivePitSectorMembershipError(
+                "official source_registry clock manifest hash mismatch"
+            )
+        if source.get("universe_hash") != str(clock.payload["universe_hash"]):
+            raise ProspectivePitSectorMembershipError(
+                "official source_registry universe hash mismatch"
+            )
+        available_at = _parse_aware(
+            source.get("available_at"),
+            "source_registry.available_at",
+        )
+        if available_at > decision:
+            raise ProspectivePitSectorMembershipError(
+                "official source_registry available_at is after decision timestamp"
+            )
+        effective_from = _parse_date(
+            source.get("effective_from"),
+            "source_registry.effective_from",
+        )
+        if effective_from != coverage_start:
+            raise ProspectivePitSectorMembershipError(
+                "official source_registry effective_from must equal coverage start"
+            )
 
 
 def _normalize_rows(
@@ -490,6 +670,23 @@ def _normalize_rows(
             raise ProspectivePitSectorMembershipError(
                 "source publication_at is after row available_at"
             )
+        if source.get("source_kind") == "official_company_basic_first_seen":
+            source_available = _parse_aware(
+                source.get("available_at"),
+                "source_registry.available_at",
+            )
+            source_effective = _parse_date(
+                source.get("effective_from"),
+                "source_registry.effective_from",
+            )
+            if available != source_available:
+                raise ProspectivePitSectorMembershipError(
+                    "official PIT row available_at does not match source registry"
+                )
+            if effective_from != source_effective:
+                raise ProspectivePitSectorMembershipError(
+                    "official PIT row effective_from does not match source registry"
+                )
         if _looks_like_current_snapshot_source(source_id):
             raise ProspectivePitSectorMembershipError(
                 "current company snapshot cannot be a prospective PIT source"
