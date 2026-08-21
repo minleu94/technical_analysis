@@ -46,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="development output root 內已綁定的 FormalObservationLaneDecision JSON",
     )
     parser.add_argument(
+        "--universe-symbols-json",
+        type=Path,
+        default=None,
+        help="可選的 clock-bound sorted company symbol JSON；缺少時使用完整 daily_prices universe",
+    )
+    parser.add_argument(
         "--confirm",
         default="",
         help=f"必須完全等於：{MANUAL_CONFIRMATION}",
@@ -64,11 +70,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             reconfigure(encoding="utf-8", errors="backslashreplace")
     args = build_parser().parse_args(argv)
     try:
+        eligible_symbols = None
+        if args.universe_symbols_json is not None:
+            try:
+                value = json.loads(
+                    args.universe_symbols_json.read_text(encoding="utf-8")
+                )
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ManualRuleOnlyDecisionError(
+                    "clock_bound_rule_universe_json_unreadable"
+                ) from exc
+            if not isinstance(value, list) or any(
+                not isinstance(item, str) or not item.strip() for item in value
+            ):
+                raise ManualRuleOnlyDecisionError(
+                    "clock_bound_rule_universe_json_invalid"
+                )
+            eligible_symbols = tuple(value)
         result = produce_manual_rule_only_decision(
             development_output_root=args.development_output_root,
             market_db=args.market_db,
             lane_decision_json=args.lane_decision_json,
             confirmation=args.confirm,
+            eligible_symbols=eligible_symbols,
         )
     except ManualRuleOnlyDecisionError as exc:
         print(

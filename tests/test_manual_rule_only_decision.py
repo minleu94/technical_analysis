@@ -139,6 +139,7 @@ def test_produces_signed_temp_only_manual_observed_source(
         lane_decision_json=lane_path,
         confirmation=MANUAL_CONFIRMATION,
         observed_at=_observed_at(),
+        eligible_symbols=("2317", "2330"),
     )
 
     assert result["status"] == "manual_observed_source_created"
@@ -170,6 +171,29 @@ def test_produces_signed_temp_only_manual_observed_source(
     assert persisted["rule_only_proof"] == "formal_rule_only"
     assert persisted["registered_store_id"] == "controlled-store:test"
     assert persisted["rule_rank"] == 1
+
+
+def test_clock_bound_rule_universe_missing_t1_history_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, lane_path = _development_root(tmp_path, monkeypatch)
+    db_path = _daily_price_db(tmp_path)
+    monkeypatch.setenv(_KEY_ENV, "isolated-test-controlled-store-key")
+    monkeypatch.setenv(_STORE_ENV, "controlled-store:test")
+
+    with pytest.raises(
+        ManualRuleOnlyDecisionError,
+        match="clock_bound_rule_universe_incomplete_t1_history",
+    ):
+        produce_manual_rule_only_decision(
+            development_output_root=root,
+            market_db=db_path,
+            lane_decision_json=lane_path,
+            confirmation=MANUAL_CONFIRMATION,
+            observed_at=_observed_at(),
+            eligible_symbols=("2317", "9999"),
+        )
+    assert not (root / "formal_rule_only_manual").exists()
 
 
 def test_confirmation_required_does_not_create_a_run(

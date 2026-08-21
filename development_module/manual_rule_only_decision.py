@@ -23,7 +23,7 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from app_module.external_evidence_contracts import ExternalEvidenceDecisionSnapshot
@@ -240,8 +240,24 @@ def load_read_only_daily_price_window(
     )
 
 
-def rank_rule_only_candidates(window: ReadOnlyDailyPriceWindow) -> tuple[RuleOnlyCandidate, ...]:
-    """Rank complete 20-session daily-price histories using the fixed bp rule."""
+def rank_rule_only_candidates(
+    window: ReadOnlyDailyPriceWindow,
+    *,
+    eligible_symbols: Sequence[str] | None = None,
+) -> tuple[RuleOnlyCandidate, ...]:
+    """Rank complete 20-session daily-price histories using the fixed bp rule.
+
+    ``eligible_symbols`` is an optional clock-bound company universe.  When it
+    is supplied, every symbol must have a complete T-1 history; silently
+    dropping a missing symbol would change the frozen universe hash, so the
+    function fails closed instead.
+    """
+    normalized_eligible = (
+        _normalize_eligible_symbols(eligible_symbols)
+        if eligible_symbols is not None
+        else None
+    )
+    eligible_set = set(normalized_eligible or ())
     rows_by_symbol: dict[str, list[dict[str, object]]] = defaultdict(list)
     for record in window.records:
         symbol = _normalized_symbol(record.get("證券代號"))
@@ -253,6 +269,8 @@ def rank_rule_only_candidates(window: ReadOnlyDailyPriceWindow) -> tuple[RuleOnl
 
     candidates: list[RuleOnlyCandidate] = []
     for symbol, rows in rows_by_symbol.items():
+        if eligible_set and symbol not in eligible_set:
+            continue
         ordered_rows = sorted(rows, key=lambda item: str(item["日期"]))
         _reject_duplicate_symbol_dates(symbol, ordered_rows)
         if len(ordered_rows) < 20 or ordered_rows[-1]["日期"] != window.data_as_of_date:
@@ -263,6 +281,12 @@ def rank_rule_only_candidates(window: ReadOnlyDailyPriceWindow) -> tuple[RuleOnl
             # A malformed security row must never be substituted with a value.
             continue
 
+    if normalized_eligible is not None:
+        candidate_symbols = {candidate.symbol for candidate in candidates}
+        if candidate_symbols != set(normalized_eligible):
+            raise ManualRuleOnlyDecisionError(
+                "clock_bound_rule_universe_incomplete_t1_history"
+            )
     if not candidates:
         raise ManualRuleOnlyDecisionError("no_complete_rule_only_candidate")
     return tuple(sorted(candidates, key=lambda item: (-item.score_bp, item.symbol)))
@@ -275,6 +299,7 @@ def produce_manual_rule_only_decision(
     lane_decision_json: str | Path,
     confirmation: str,
     observed_at: datetime | None = None,
+    eligible_symbols: Sequence[str] | None = None,
 ) -> dict[str, object]:
     """Produce one real-time TEMP-only source artifact after explicit confirmation.
 
@@ -313,7 +338,10 @@ def produce_manual_rule_only_decision(
     max_available = datetime.fromisoformat(window.max_available_timestamp)
     if max_available > observed.astimezone(timezone.utc):
         raise ManualRuleOnlyDecisionError("market_db_timestamp_later_than_decision_time")
-    candidates = rank_rule_only_candidates(window)
+    candidates = rank_rule_only_candidates(
+        window,
+        eligible_symbols=eligible_symbols,
+    )
     selected = candidates[0]
 
     observed_timestamp = observed.isoformat(timespec="microseconds")
@@ -664,6 +692,19 @@ def _normalized_symbol(value: object) -> str:
     if not text:
         raise ManualRuleOnlyDecisionError("daily_prices_symbol_invalid")
     return text
+
+
+def _normalize_eligible_symbols(value: Sequence[str]) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)) or not value:
+        raise ManualRuleOnlyDecisionError(
+            "clock_bound_rule_universe_must_be_non_empty"
+        )
+    normalized = tuple(_normalized_symbol(item) for item in value)
+    if normalized != tuple(sorted(set(normalized))):
+        raise ManualRuleOnlyDecisionError(
+            "clock_bound_rule_universe_must_be_sorted_and_unique"
+        )
+    return normalized
 
 
 def _decimal_field(
