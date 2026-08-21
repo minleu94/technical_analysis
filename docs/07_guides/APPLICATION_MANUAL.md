@@ -13,6 +13,30 @@ PFS-07 的 activation contract 已可用於受控 fixture preflight：
 - `scripts\record_prospective_daily_capture.py --fixture-only` 只建立低 CPU daily capture 的 `started` record，固定 PIT publication → Rule snapshot → T-1 Portfolio transition → frozen inference → heartbeat 順序；`elapsed_day_credit=0`、`formal_credit=0`，不能隔日補寫。
 - 兩個命令都不設定 Windows 使用者環境、不接受／讀取／輸出 `RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY`，不啟動 watcher、Direct 或 OOC。實際 activation date、三個正式 path、`RULE_CHAMPION_CONTROLLED_STORE_ID` 與受控 secret-store 狀態仍須由 owner 在未來時點明確提供；本段工具不會自行選日期或產生正式 `D:` artifact。
 
+### Prospective Formal Restart：官方公司基本資料 PIT staging
+
+Restart 第一階段的官方產業來源固定為 [TWSE `t187ap03_L`](https://openapi.twse.com.tw/v1/opendata/t187ap03_L)、[TPEX `t187ap03_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O)；只有 clock universe 明確含興櫃標的時才可加入 TPEX `t187ap03_R`。操作入口
+`scripts\capture_prospective_official_pit_sector.py` 不會自行下載來源，必須由呼叫端提供每個 endpoint 的 raw JSON bytes、sorted symbol universe、license id／URL 與明確的 publication timestamp。它會驗證官方欄位、民國／西元出表日期、兩位數產業代碼、重複／缺列、raw／canonical hash、available／effective time 與 clock／universe lineage；任何不成立都 fail closed。這條路徑禁止 `companies.csv`、current snapshot、research output 與歷史回填。
+
+activation 前的 source fixture 可用 `--preactivation-staging`，只產生標示為 `staged`、formal consumer 不可直接消費的 create-only package：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\capture_prospective_official_pit_sector.py `
+  --fixture-only --preactivation-staging `
+  --clock-manifest <PLANNED_CLOCK> `
+  --now <TAIPEI_NOW> `
+  --decision-timestamp <FUTURE_DECISION_TIMESTAMP> `
+  --available-at <SOURCE_AVAILABLE_AT> `
+  --effective-from <CLOCK_ACTIVATION_DATE> `
+  --symbols-json <SORTED_CLOCK_SYMBOLS_JSON> `
+  --source-metadata-json <OFFICIAL_SOURCE_METADATA_JSON> `
+  --twse-raw-json <TWSE_RAW_JSON> `
+  --tpex-raw-json <TPEX_RAW_JSON> `
+  --output <STAGING_PACKAGE>
+```
+
+clock 到達 activation day 後，移除 `--preactivation-staging` 才會把同一 producer 的 rows／registry 交給既有 `pit-sector-membership-prospective-manifest-v1` sidecar writer；輸出 parent 必須先存在且既有檔案不會覆寫。這個入口不註冊 scheduler；後續低 CPU daily capture 仍依 PIT publication → Rule snapshot → T−1 Portfolio transition → frozen inference 的既有順序，由 owner 在 strict readiness 全部通過後另行啟用。任何 readiness、calibration、shadow maturity、Formal OOS、promotion 或 broker gate 未通過時，仍固定 `formal_oos_allowed=false`、alpha=`0`、promotion=`false`、`broker_order_allowed=false`。
+
 ### 先預約 clock，再於未來累積正式輸入
 
 prospective-only 的三份輸入在 activation 前尚不存在是合法狀態；若 strict readiness
