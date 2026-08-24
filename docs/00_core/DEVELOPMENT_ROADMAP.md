@@ -2,7 +2,7 @@
 
 > **2026-07-13 系統工程整合**：A～F committed handoff 已由 G 依 SHA、ownership 與 focused suite 驗證，跨流 DTO／JSON composition、唯讀 smoke 與 pure verifier 均成立。這只代表工程整合已驗證；下一步仍是 forward evidence、逐來源人工接受與正式 ML OOS／promotion review，不是 scheduler、production automation 或 formal product closeout。
 >
-> **最後更新**：2026-08-14
+> **最後更新**：2026-08-25
 > **工程主線**：`V3.3 Engineering Complete`，進入 `V4.0 Evidence Accumulation Track`；這不是正式 V4.0。詳見 [V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)。
 > **Evidence rehearsal**：唯讀 replay / shadow 工程底座另以 `engineering_rehearsal_complete` 收口；它只提供可重跑 diagnostics 與 forward handoff，不會改寫 external Gate 狀態。見 [Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)。
 > **定位**：本文件是 Roadmap Hub，不再保存完整歷史長文。它負責指向目前狀態、6 個月工程路線、系統架構與歷史歸檔。
@@ -81,7 +81,9 @@ baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資�
 
 目前立即順序改為：
 
-> **目前 Gate 7 執行軌**：Owner 已採用 prospective-only、非實盤的正式模擬持倉 clock；`2014–2026` 保留 research/history，不事後回填。`PFS-01`～`PFS-10`（clock contract／唯讀 inspector、fixture-only simulated transition producer、clock-bound HMAC Rule snapshot publisher、prospective PIT sector custody、inference-level calibration policy、capture-only readiness／heavy-rebuild guard、frozen activation contract、shadow maturity gate、frozen-candidate OOS evidence contract、promotion review boundary）均已完成 focused QA；依 [Prospective Formal Simulated Portfolio Execution Plan](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026-08-14.md) 程式面已完成，下一步只等待 owner 以受控環境提供仍在未來的 activation decision。重型 watcher 維持停止，同一 clock 不得用已消費的 Formal OOS 期間重訓。這是 Gate 7 的執行計畫，不取代 Product／6M Roadmap，也不產生 Formal OOS 或 promotion credit。
+> **目前 Gate 7 執行軌**：Owner 已採用 prospective-only、非實盤的正式模擬持倉 clock；`2014–2026` 保留 research/history，不事後回填。`PFS-01`～`PFS-10` 均已完成 focused QA；舊 `clock:prospective:20260819:v1` 因決策日已過且正式輸入未成立，只保留歷史追溯。依 [Prospective Formal Restart Direction](../06_qa/PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md)，下一個長任務改為：以官方共同交易日與完整準備日建立新未來 clock；由 Codex 提出 Rule Champion；以 TWSE／TPEX 官方公司基本資料建立 prospective PIT sector；三份 manifests 通過 strict readiness 後才開始低 CPU capture。唯一前置 owner checkpoint 是接受具體 Rule Champion identity；重型 watcher、非零 alpha、promotion 與 Broker 全部維持關閉。這不產生 Formal OOS 或 promotion credit。
+
+> **2026-08-25 pre-open status**：新 clock `clock:prospective:20260825:v1` 與 2026-08-24 完整準備日已成立，Rule Champion 已接受，TWSE／TPEX activation-only source 已完成 staging；目前仍早於 08:30，正式 Rule／Portfolio／PIT inputs 為 `0/3`，strict readiness 尚未通過，不得 partial start 或把 staging 視為 Formal evidence。後續只在真實 activation 時間後依序完成 PIT capture、Rule history、首日 Portfolio transition，再重新執行 strict readiness。
 
 1. Gate 0 Safe Refactor 已 closeout；維持行為等價與 rollback discipline，但不再把重構當作產品主線。
 2. Gate 1 Daily Usable Advice 已 closeout：Guided / Professional 共核、`NO_NEW_POSITION`、Why / Why Not / Risk / Evidence 與 Portfolio target/current/gap 已由唯讀 contract / UI 呈現。
@@ -164,6 +166,7 @@ V3.0 engineering candidate 的 closeout/readiness report 已完成，工程狀�
 
 ## 7. 更新記錄
 
+- 2026-08-19：鎖定 Gate 7 prospective restart 方向；舊 2026-08-19 clock 禁止重建／回填，下一個長任務改建新未來 clock、由 Codex 提出 Rule Champion、採 TWSE／TPEX 官方產業來源，Broker 持續關閉。
 - 2026-07-12：Gate 0 / Gate 1 已 closeout；Hub 的 Next 改為 Gate 2 Real Evidence → Gate 3 P0 Data → Portfolio / Pruning / Exit，Gate 1 證據見 `GATE_1_ADVICE_CLOSEOUT_2026_07_12.md`。
 - 2026-07-11：加入 Post-Refactor Product Roadmap、Target Architecture 與新版 Vision 權威入口；Next 改為 Gate 0 closeout → Daily Advice → Real Evidence → P0 Data → Portfolio / Pruning / Exit，ML 維持 shadow-first。
 - 2026-07-08：同步 V3.0 engineering candidate closeout 目標；score effectiveness / ML readiness bridge 與 Phase 3C source candidate readiness 已完成工程輸入，夜間排程應轉為 closeout 驗證與文件 / QA 一致性，不啟用 scheduler 或 production ML。

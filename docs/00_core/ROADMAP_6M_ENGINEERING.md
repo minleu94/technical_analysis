@@ -8,7 +8,7 @@
 
 > **2026-07-13 系統整合校正**：跨流 contracts、唯讀正式資料 smoke、Dashboard／Broker latency 與 pure closeout verifier 已完成工程驗證。Gate 2 真實 forward evidence、Gate 3 source／license acceptance、Gate 7 formal OOS、shadow-day 累積與 promotion review 均仍是 external pending，不能由本次工程測試折抵。
 >
-> **最後更新**：2026-07-13
+> **最後更新**：2026-08-25
 > **定位**：本文件是未來六個月工程執行的 scoped authority，將 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 轉成可交付、可測試、可回滾的 Gate。
 > **現況**：目前完成狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。既有 V3.0 engineering candidate、read-only Workbench、candidate source readiness 或 simulated phase progress 不自動折抵本 Roadmap 的產品 Gate。
 > **版本 companion**：產品成熟度版號見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
@@ -407,6 +407,20 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 
 ## 11. Gate 7：ML Shadow Layer（條件式）
 
+### 2026-08-19 Prospective restart execution lock
+
+- 舊 `clock:prospective:20260819:v1` 已錯過且不得重建、沿用或回填；歷史 `2014–2026` artifacts 不取得 prospective Formal credit。
+- 下一個執行 clock 依執行當下的官方 TWSE／TPEX 共同交易日與至少一個完整準備日另建新 identity；選日方法、責任與 DoD 見 [Prospective Formal Restart Direction](../06_qa/PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md)。
+- Rule Champion 由 Codex 從現有可重播、版本化、正式 Rule path 提出單一首選；Owner 只對具體 Champion identity 做一次接受，不需要自行設計策略。
+- Prospective PIT sector 固定採 TWSE `t187ap03_L` 與 TPEX `t187ap03_O` 官方公司基本資料，保存 source／license／publication／available／hash lineage；不得用 current `companies.csv` 回填歷史。
+- 本執行軌持續 `formal_oos_allowed=false`、alpha 0、Broker disabled；strict readiness 不等於 Formal OOS、promotion 或下單授權。
+
+### 2026-08-25 activation-day pre-open status
+
+- `clock:prospective:20260825:v1` 已建立，activation=`2026-08-25`、preparation=`2026-08-24`；官方 TWSE／TPEX source bytes 已在 create-only staging，尚未寫入正式 PIT manifest。
+- Rule Champion identity 已接受，但三份 clock-bound formal inputs 仍為 `0/3`，controlled path 缺件與 T-1 `2026-08-24` market rows 使 strict readiness fail-closed；不得 partial start、回填或把 staging／fixture 當成 Formal evidence。
+- 本週狀態、source hashes、測試與未通過 gates 見 [Prospective Formal Restart Weekly Update](../06_qa/PROSPECTIVE_FORMAL_RESTART_WEEKLY_UPDATE_2026_08_25.md)；本段不代表 Formal OOS、promotion、broker 或 weekly gate credit。
+
 ### Entry Conditions
 
 - Gate 5 對 rule score、bucket、component、label 與 metric 已可判讀。
@@ -463,5 +477,6 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 
 ## 更新記錄
 
+- 2026-08-19：新增 Gate 7 prospective restart execution lock；定案新未來 clock、Codex Rule Champion proposal、TWSE／TPEX 官方產業來源與 Broker 關閉邊界。
 - 2026-07-12：校正 Gate 0 / Gate 1 closeout；下一工程 Gate 為真實 Evidence Operating Loop，不將 Advice 契約完成誤寫為 evidence、scheduler 或投資有效性完成。
 - 2026-07-11：依 Post-Refactor 產品主線重寫為六個月 Gate；納入 Safe Refactor Closeout、Daily Usable Advice、Real Evidence Loop、P0 Data、Portfolio Coach、Signal Pruning、Position Health / Exit 與 conditional ML Shadow。
