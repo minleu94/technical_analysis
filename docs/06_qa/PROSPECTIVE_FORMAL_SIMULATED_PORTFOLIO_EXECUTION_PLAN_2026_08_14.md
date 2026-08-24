@@ -1,10 +1,12 @@
 # Prospective Formal Simulated Portfolio Execution Plan（2026-08-14）
 
-> 狀態：`owner_direction_approved / PFS-10_complete / execution_waiting_for_owner_activation`
+> 狀態：`owner_direction_approved / PFS-10_complete / restart_direction_locked / restart_execution_not_started`
 >
 > 範圍：Gate 7 正式模擬持倉的未來式證據鏈、PIT sector 邊界、Rule Champion custody、calibration policy 與 frozen-candidate OOS 評估順序。
 >
 > 安全狀態：`formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`broker_order_allowed=false`；重型 ML watcher 維持停止。
+
+> **2026-08-19 方向更新**：舊 `clock:prospective:20260819:v1` 已錯過且不得回填。Owner 已核准改建新未來 clock、由 Codex 提出 Rule Champion、採 TWSE／TPEX 官方產業來源、Broker 持續關閉；完整責任與下一個長任務順序見 [Prospective Formal Restart Direction](PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md)。本更新不建立新 clock 或任何 Gate credit。
 
 ## 1. Owner 決策與產品語意
 
@@ -12,7 +14,7 @@ Owner 已確認現有持倉是功能測試用資料，不是實際券商持倉�
 
 1. 建立 **prospective-only 的正式模擬持倉 clock**。這裡的「正式」只表示受治理、不可事後改寫、可供既定 verifier 稽核；`real_money=false`、`broker_execution=false`，不宣稱是真實持倉。
 2. `2014–2026` 既有 Direct／OOC、research causal ledger、paper portfolio、Teacher target 與 current-company sector snapshot 全部保留在 research/history 邊界，不改名、不回填、不升格為 Formal 證據。
-3. 正式起算日不在本文件預填。只有 capture contract、producer、PIT source、readiness 與安全護欄完成 QA 後，才由 owner 選定當時仍在未來的台灣交易日；不能把已經過去的日期補成起點。
+3. 正式起算日不在本文件預填。2026-08-19 owner direction 已核准由 Codex 在 capture contract、producer、PIT source、readiness 與安全護欄完成 QA 後，依官方共同交易日與完整準備日規則選定當時仍在未來的日期；不能把已經過去的日期補成起點。
 4. 每日正式蒐證與重型 Direct → OOC 重建分開。預設直接把 current cutoff=`2026-08-13T08:30:00+08:00` 的既有 candidate 綁成 prospective clock 的 frozen model，不為了啟動 clock 重訓；若 owner 日後選擇 pre-activation rebuild，必須在起算日前完成並綁定新 identity。Clock 啟動後，同一 clock 期間禁止以已消費的 Formal OOS 日期重訓或替換 model／calibration policy。
 5. 這項決策不放寬 calibration、class coverage、20 個真實成熟 shadow trading days、promotion authority 或 rollback Gate。
 
@@ -121,7 +123,7 @@ PFS-05 可與 PFS-02～04 平行實作，但 methodology 與 policy hash 必須�
 - 新增 `tests/test_publish_prospective_formal_clock.py`：`4 passed`，涵蓋 immutable file hash、重複寫入、fixture-only guard、有效未來 clock 與同日 activation 拒絕。
 - `py_compile` 通過；mypy 以 `--explicit-package-bases` 檢查三個檔案為 `0 issues`。此 slice 沒有設定正式 path、寫 SQLite、建立 transition／Rule／PIT artifact 或啟動 watcher。
 
-PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。PFS-03～PFS-10 亦已完成；接下來不再由 repo 自動選日期或啟動正式流程，等待 owner 以受控環境提供未來 activation decision。
+PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio transition producer；它消費 clock manifest 的 frozen identities，但仍只允許 fixture／受控測試輸入，不寫正式 `D:`。PFS-03～PFS-10 亦已完成；publisher 本身仍不自動選日期或啟動正式流程，下一個長任務依已核准的 restart direction 做日期 preflight、Rule Champion proposal 與受控 activation。
 
 ### 本 slice 明確不做
 
@@ -272,7 +274,7 @@ PFS-02 已完成：新增 append-only、T-1、idempotent 的模擬 Portfolio tra
 ### PFS-10 明確不做
 
 - 不自動產生 owner decision、選 activation trading day、設定三個正式 path／store identity／secret store，不執行任何實際 replay、promotion、retrain 或 broker action。
-- review package 完成後，專案仍須等待 owner 明確提供未來 activation decision；若任何 machine／human Gate 失敗，維持 alpha=`0`、broker disabled，另開新 clock 才能評估 retrain／recalibration。
+- review package 完成後，專案仍須遵守 owner 已核准的未來選日方法與特定 Rule Champion identity 接受；若任何 machine／human Gate 失敗，維持 alpha=`0`、broker disabled，另開新 clock 才能評估 retrain／recalibration。
 
 ## 11. Execution handoff preflight（PFS-01～10 之後）
 
@@ -348,10 +350,10 @@ HMAC configured flag 任一缺失時不寫 manifest；deferred 只允許 path �
 store／HMAC gate。即使成功，manifest 仍固定 `heavy_rebuild_launch_allowed=false`、
 `formal_oos_allowed=false`、alpha=`0`、broker disabled，且不啟動任何 ML 程序。
 
-## 8. Activation 與日常蒐證 Runbook（PFS-01～10 已完成；等待 owner inputs）
+## 8. Activation 與日常蒐證 Runbook（PFS-01～10 已完成；restart direction 已鎖定）
 
-下列是目前可執行的順序。每個命令都必須由 owner 明確提供 clock／policy／
-readiness／activation identity 與輸出 parent；fixture-only 或
+下列是目前可執行的順序。每個命令都必須使用 owner 已核准的方法、具體 Rule
+Champion identity、readiness／activation identity 與受控輸出 parent；fixture-only 或
 `--controlled-environment` 模式只做受控驗證與 create-only evidence，不會自動
 啟動 legacy Direct/OOC watcher。prospective capture lane 與歷史 heavy rebuild
 lane 必須保持分離：三個 prospective path 出現時，不能直接把它們交給舊的
@@ -360,22 +362,22 @@ lane 必須保持分離：三個 prospective path 出現時，不能直接把它
 1. 執行 `scripts\inspect_prospective_execution_plan.py --now <NOW>` 與
    `scripts\inspect_prospective_activation_environment.py`；三個 path、store
    identity、HMAC configured flag 與目前 ML／CPU 狀態先只讀確認。
-2. Owner 提供合法 prospective PIT source／license／publication/hash lineage、
-   clock calendar evidence、cash seed、frozen candidate 與 calibration policy；
+2. Codex 依 restart direction 準備合法 prospective PIT source／license／publication/hash
+   lineage、clock calendar evidence、cash seed、frozen candidate 與 calibration policy；
    以 `publish_prospective_formal_clock.py --fixture-only` 建立 planned clock。
-   不自動選日期、不回填 2014–2026。
+   Publisher 不自行猜日期；呼叫端只能傳入依 owner 核准方法選出的未來日期，且不回填 2014–2026。
 3. 若三份正式 input 尚未存在，先以
    `inspect_prospective_capture_readiness.py --fixture-only --defer-until-activation`
-   建立 deferred readiness，再由 owner 確認 controlled store identity／HMAC
+   建立 deferred readiness，再由受控 preflight 確認 controlled store identity／HMAC
    configured flag 後執行 `activate_prospective_formal_clock.py --fixture-only
    --controlled-environment --defer-inputs`。這一步只預約 clock，不建立 transition、
    snapshot 或 PIT row。
-4. 在第一個未來決策日以前或當日，由 owner 透過 Windows 使用者環境／受控 secret
-   store 設定三個 path；HMAC secret 不出現在對話、repo、命令列、status 或 log。再以
+4. 在第一個未來決策日以前或當日，由受控執行流程透過 Windows 使用者環境／受控
+   secret store 設定三個 path；HMAC secret 不出現在對話、repo、命令列、status 或 log。再以
    `inspect_prospective_capture_readiness.py --controlled-environment`（不帶 defer）
    同時驗證三項 input，不能 partial start；若沒有合法 source／license／publication/
    hash lineage 就維持 blocked。
-5. Owner 明確確認 activation 後，以 strict
+5. Owner 接受具體 Rule Champion identity，且日期、source 與三份 input 通過 preflight 後，以 strict
    `activate_prospective_formal_clock.py --fixture-only --controlled-environment`
    凍結 path／file hashes 與所有 candidate identities。deferred 預約不會自動轉成
    strict readiness，也不會自動給 Formal OOS permission。

@@ -4,6 +4,8 @@
 >
 > 本文件記錄 owner 在美國加州時間 2026-08-17 13:30 提供的啟動意圖，以及只到 deferred staging 的可驗證交接。它不是 Portfolio transition、Rule snapshot、PIT sidecar 或 promotion 證據。
 
+> **2026-08-19 後續裁決**：本 handoff 的 `2026-08-19` 決策日已經過去，且 canonical clock／activation manifest bytes 與三份正式輸入未在時限內成立，因此此 clock 只保留歷史追溯，禁止重建、沿用或回填。新的 owner 方向見 [Prospective Formal Restart Direction](PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md)。
+
 ## Owner 啟動邊界
 
 | 項目 | 值 |
@@ -49,7 +51,7 @@ BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH=D:\Min\Python\Project\FA_Data\output\formal_
 - HMAC secret 沒有被讀出、保存、輸出或改寫；目前只確認受控 secret store `configured=true`。
 - calibration policy、source policy、evaluation policy 都已以 hash 凍結；這些是方法／治理規則，不代表 PIT 合法來源已到位。
 
-## 下一個實際關卡
+## 本 handoff 當時的下一個實際關卡（歷史）
 
 在第一個決策日以前，必須由 producer 產生並通過 strict readiness 的三份真實資料：
 
@@ -58,4 +60,3 @@ BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH=D:\Min\Python\Project\FA_Data\output\formal_
 3. 具 source／license／publication／canonical hash lineage 的 prospective PIT sector sidecar。
 
 三份同時通過後才可進入低 CPU 的每日 capture；仍不會自動開啟 legacy Direct → OOC，也不會解除 calibration、20 個成熟 shadow days、class coverage 或 promotion gates。
-

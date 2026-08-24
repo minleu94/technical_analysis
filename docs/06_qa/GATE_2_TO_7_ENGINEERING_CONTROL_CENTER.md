@@ -4,13 +4,25 @@
 
 > 15 capability、canonical lineage verifier 與 operations handoff 見 [V3.3 Engineering Closeout](V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)；本控制中心仍是外部 Gate hub。
 
+## Prospective formal restart direction（2026-08-19）
+
+Owner 已鎖定新的執行方向，完整決策見 [Prospective Formal Restart Direction](PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md)：舊 `clock:prospective:20260819:v1` 只保留歷史追溯，不重建、不沿用、不回填；下一個長任務依官方 TWSE／TPEX 共同交易日與至少一個完整準備日建立新未來 clock，由 Codex 先提出唯一首選 Rule Champion，再以 TWSE `t187ap03_L`／TPEX `t187ap03_O` 建立 prospective first-seen 產業歸屬。Broker 固定關閉。
+
+此方向已解除「尚未決定採哪條路」的需求 blocker，但沒有解除證據 Gate。唯一預定的 owner checkpoint 是：Codex 交付具完整設定與 hashes 的 Rule Champion proposal 後，由 owner 接受特定 Champion identity。Clock preflight、官方來源接線、三個 producers、tests、文件與 strict readiness 由 Codex 完成；自然成熟 shadow 日不能加速，promotion 簽章與非零 alpha 仍是日後獨立 owner gate。
+
+本文件更新沒有建立 clock bytes、source acceptance、Rule snapshot、Portfolio transition、PIT sidecar、Formal OOS、shadow day、promotion credit、scheduler 或 broker 權限；安全旗標維持 `formal_oos_allowed=false`、production alpha 0、`broker_order_allowed=false`。
+
+截至 2026-08-25T05:21:31+08:00，`clock:prospective:20260825:v1` 已建立並綁定 2026-08-24 完整準備日；Rule Champion 已接受，TWSE／TPEX raw source 只完成 activation-day staging。因尚未到 08:30，三份正式 inputs 仍為 `0/3`，strict readiness 維持 fail-closed；此狀態不產生 Formal OOS、shadow maturity、promotion 或 broker credit。
+
 ## Prospective formal simulation track（2026-08-14）
 
 Owner 已決定不以測試持倉、research causal ledger、歷史 replay 或 current-company sector snapshot 回填既有 Formal Gate，改採從未來交易日起算的受治理模擬持倉 clock。執行 SSOT 是 [Prospective Formal Simulated Portfolio Execution Plan](PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md)：先完成 clock contract、三條 append-only capture producer、prospective PIT source acceptance、calibration policy 與 capture-only 護欄，再把既有 candidate／policies 凍結後選仍在未來的台灣交易日開始累積。預設不重訓；clock 期間禁止以已消費的 Formal OOS 日期重訓或替換 frozen identities。
 
 此 owner 決議只建立後續工程方向，不產生 snapshot、elapsed day、source acceptance、Formal OOS 或 promotion credit。既有 `2014–2026` Direct／OOC 留在 research/history；`formal_oos_allowed=false`、production alpha 0、broker disabled 與 append-only external Gate 規則不變。`PFS-01`～`PFS-10` 已完成 strict clock／fixture-only capture／prospective PIT custody／inference calibration policy／capture-only readiness／frozen activation contract／shadow maturity gate／frozen OOS evidence／promotion review focused QA；程式面已完成。[Prospective Formal Clock Activation Handoff](PROSPECTIVE_FORMAL_CLOCK_ACTIVATION_2026_08_18.md) 現已記錄 owner 的 `2026-08-17T13:30:00-07:00` activation decision 與其選定的未來 `2026-08-19` 台灣決策日，但三個 formal paths 目前只完成環境配置，對應 manifests 仍全部 `file_missing`；不得把 deferred staging、文件中的 hash 或既有 heavy watcher 當成 strict readiness、capture 或 Formal evidence。
 
-## Forward Clock current projection（2026-08-18）
+## Historical Forward Clock projection（2026-08-18）
+
+下表保留 2026-08-18 當時的 projection，供追溯舊 clock 為何沒有成立；它已被 2026-08-19 restart direction 取代，不是目前下一步。
 
 | Clock | 今日狀態 | 可引用證據 | 缺失／degraded／failure | 下一步 |
 |---|---|---|---|---|
