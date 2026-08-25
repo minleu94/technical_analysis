@@ -442,6 +442,49 @@ def test_deferred_fixture_cli_publishes_staging_readiness_without_inputs(
     assert captured.err == ""
 
 
+def test_deferred_fixture_cli_accepts_separate_pit_timestamp(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.inspect_prospective_capture_readiness import main
+
+    kwargs = _report_kwargs(
+        tmp_path,
+        decision_time="09:00:00",
+        pit_decision_time="08:30:00",
+    )
+    symbols_path = tmp_path / "symbols.json"
+    symbols_path.write_text(json.dumps(["2317", "2330"]), encoding="utf-8")
+    output = tmp_path / "split-deferred-readiness.json"
+    exit_code = main(
+        [
+            "--fixture-only",
+            "--defer-until-activation",
+            "--clock-manifest",
+            str(kwargs["clock_manifest_path"]),
+            "--calibration-policy",
+            str(kwargs["calibration_policy_path"]),
+            "--decision-timestamp",
+            "2026-08-17T09:00:00+08:00",
+            "--pit-decision-timestamp",
+            "2026-08-17T08:30:00+08:00",
+            "--now",
+            PLANNING_NOW.isoformat(),
+            "--symbols-json",
+            str(symbols_path),
+            "--output",
+            str(output),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["decision_timestamp"] == "2026-08-17T09:00:00+08:00"
+    assert payload["pit_decision_timestamp"] == "2026-08-17T08:30:00+08:00"
+    assert '"formal_oos_allowed": false' in captured.out
+    assert captured.err == ""
+
+
 def test_controlled_environment_mode_fails_closed_without_formal_paths(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
