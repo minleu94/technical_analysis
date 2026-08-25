@@ -88,6 +88,7 @@
 
 - focused prospective tests：`51 passed`。
 - prospective regression suite：`108 passed`。
+- combined prospective／formal simulated-ledger recheck：`114 passed`。
 - changed Python files `py_compile`：通過。
 - changed source `mypy data_module development_module`：`0 issues`（117 files）。
 - quant guard／no-look-ahead checks：通過；未新增裸 `float` 核心計算。
