@@ -24,7 +24,7 @@ from data_module.formal_simulated_portfolio_ledger import (  # noqa: E402
     build_simulated_transition,
 )
 from data_module.prospective_formal_clock import (  # noqa: E402
-    load_clock_manifest,
+    load_clock_manifest_for_capture,
 )
 from ml_module.allocation_contracts import (  # noqa: E402
     AllocationWeightContract,
@@ -127,7 +127,10 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
-        clock = load_clock_manifest(
+        # This command is an activation-time capture entry.  The clock remains
+        # immutable and is only read through the explicit elapsed-activation
+        # loader; the planning loader would reject the valid activation day.
+        clock = load_clock_manifest_for_capture(
             args.clock_manifest,
             now=_parse_now(args.now),
         )

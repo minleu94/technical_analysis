@@ -23,6 +23,8 @@ from development_module.manual_rule_only_decision import (
     ManualRuleOnlyDecisionError,
     produce_manual_rule_only_decision,
     require_development_temp_root,
+    load_read_only_daily_price_window,
+    rank_rule_only_candidates,
 )
 from scripts.inspect_formal_clock_readiness import inspect_readiness
 from scripts.run_manual_rule_only_decision import build_parser
@@ -194,6 +196,28 @@ def test_clock_bound_rule_universe_missing_t1_history_fails_closed(
             eligible_symbols=("2317", "9999"),
         )
     assert not (root / "formal_rule_only_manual").exists()
+
+
+def test_non_trade_rows_are_not_forward_filled_but_valid_history_is_replayed(
+    tmp_path: Path,
+) -> None:
+    db_path = _daily_price_db(tmp_path)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            'UPDATE daily_prices SET "收盤價" = NULL WHERE "證券代號" = ? AND "日期" IN (?, ?)',
+            ("2330", "20260724", "20260725"),
+        )
+    window = load_read_only_daily_price_window(
+        db_path,
+        decision_session=date(2026, 8, 7),
+    )
+    candidates = rank_rule_only_candidates(
+        window,
+        eligible_symbols=("2317", "2330"),
+    )
+    assert {candidate.symbol for candidate in candidates} == {"2317", "2330"}
+    by_symbol = {candidate.symbol: candidate for candidate in candidates}
+    assert by_symbol["2330"].latest_date == "2026-07-23"
 
 
 def test_confirmation_required_does_not_create_a_run(

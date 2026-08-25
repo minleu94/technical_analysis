@@ -218,6 +218,27 @@ def test_publishes_clock_bound_hmac_history_with_canonical_manifest(tmp_path: Pa
     assert _TEST_KEY not in result.manifest_path.read_text(encoding="utf-8")
 
 
+def test_owner_decision_may_be_captured_after_clock_boundary(tmp_path: Path) -> None:
+    _, clock = _clock(tmp_path)
+    snapshot_id = "decision:20260817:2330-after-boundary"
+    artifact = _artifact(
+        snapshot_id=snapshot_id,
+        decision_timestamp="2026-08-17T08:45:00+08:00",
+    )
+    kwargs = _publish_kwargs(tmp_path, clock, _repository(artifact))
+    kwargs["requests"] = (
+        ProspectiveRuleSnapshotRequest(
+            decision_date="2026-08-17",
+            decision_snapshot_ids=(snapshot_id,),
+        ),
+    )
+    result = publish_prospective_rule_history(**kwargs)
+    payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert payload["snapshots"][0]["decision_timestamp"] == (
+        "2026-08-17T08:45:00+08:00"
+    )
+
+
 def test_clock_and_hmac_boundaries_fail_closed(tmp_path: Path) -> None:
     _, clock = _clock(tmp_path)
     valid = _artifact(

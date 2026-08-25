@@ -214,9 +214,13 @@ def publish_prospective_rule_history(
             raise ProspectiveRuleChampionPublisherError(
                 "Rule Champion decision timestamp does not match requested date"
             )
-        if local_timestamp.timetz().replace(tzinfo=None) != decision_time:
+        # ``decision_time`` is the owner-bound lower boundary.  A genuine
+        # owner observation may be captured after the boundary (for example
+        # when a foreground handoff starts a few minutes after open); it must
+        # never be backdated before the boundary or after ``now``.
+        if local_timestamp.timetz().replace(tzinfo=None) < decision_time:
             raise ProspectiveRuleChampionPublisherError(
-                "Rule Champion decision timestamp does not match clock decision_time"
+                "Rule Champion decision timestamp precedes clock decision_time"
             )
         if local_timestamp > now_taipei:
             raise ProspectiveRuleChampionPublisherError(

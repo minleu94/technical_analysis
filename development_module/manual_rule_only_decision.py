@@ -273,10 +273,30 @@ def rank_rule_only_candidates(
             continue
         ordered_rows = sorted(rows, key=lambda item: str(item["日期"]))
         _reject_duplicate_symbol_dates(symbol, ordered_rows)
-        if len(ordered_rows) < 20 or ordered_rows[-1]["日期"] != window.data_as_of_date:
+        # A suspended or otherwise non-trading security may not have a row on
+        # the latest market session.  It is still causal to rank its latest
+        # twenty observed sessions, all of which are strictly before the
+        # decision session; requiring a same-day row would silently change the
+        # frozen universe and turn ordinary coverage gaps into universe drift.
+        if not ordered_rows or str(ordered_rows[-1]["日期"]) > window.data_as_of_date:
+            continue
+        # A no-trade row can legitimately carry no close.  It is not an
+        # observation and must not be forward-filled or otherwise imputed;
+        # use the latest twenty valid observed sessions inside the frozen
+        # sixty-session causal window instead.  Non-empty malformed values
+        # still reach _candidate_from_rows and reject that security.
+        observed_rows = tuple(
+            row
+            for row in ordered_rows
+            if row.get("收盤價") is not None
+            and str(row.get("收盤價")).strip()
+            and row.get("成交股數") is not None
+            and str(row.get("成交股數")).strip()
+        )
+        if len(observed_rows) < 20:
             continue
         try:
-            candidates.append(_candidate_from_rows(symbol, ordered_rows[-20:]))
+            candidates.append(_candidate_from_rows(symbol, observed_rows[-20:]))
         except ManualRuleOnlyDecisionError:
             # A malformed security row must never be substituted with a value.
             continue
