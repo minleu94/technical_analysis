@@ -12,9 +12,12 @@ from data_module.prospective_formal_clock import (
     PROSPECTIVE_FORMAL_CLOCK_MODE,
     PROSPECTIVE_FORMAL_CLOCK_SCHEMA_VERSION,
     ProspectiveFormalClockError,
+    SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON,
+    SAME_DAY_PREOPEN_OWNER_OVERRIDE_SCHEMA_VERSION,
     build_clock_manifest,
     inspect_clock_manifest,
     load_clock_manifest,
+    load_clock_manifest_for_capture,
     payload_hash,
 )
 
@@ -70,6 +73,20 @@ def _manifest(**overrides: object) -> dict[str, object]:
     return body
 
 
+def _same_day_override(
+    *, timestamp: str = "2026-08-14T07:45:00+08:00"
+) -> dict[str, object]:
+    return {
+        "schema_version": SAME_DAY_PREOPEN_OWNER_OVERRIDE_SCHEMA_VERSION,
+        "owner_override_id": "owner-override:same-day-preopen:20260814:v1",
+        "owner_override_timestamp": timestamp,
+        "reason_code": SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON,
+        "activation_trading_day": "2026-08-14",
+        "historical_backfill_allowed": False,
+        "same_day_preopen_only": True,
+    }
+
+
 def test_valid_future_clock_manifest_is_accepted(tmp_path: Path) -> None:
     clock = load_clock_manifest(
         _write_manifest(_manifest(), tmp_path),
@@ -99,6 +116,86 @@ def test_clock_rejects_pit_boundary_after_rule_time(tmp_path: Path) -> None:
     body = _manifest(decision_time="09:00:00", pit_decision_time="09:30:00")
     with pytest.raises(ProspectiveFormalClockError, match="pit_decision_time"):
         load_clock_manifest(_write_manifest(body, tmp_path), now=_NOW)
+
+
+def test_clock_accepts_explicit_same_day_preopen_owner_override(tmp_path: Path) -> None:
+    calendar = dict(_CALENDAR)
+    calendar["date"] = "2026-08-14"
+    clock = load_clock_manifest(
+        _write_manifest(
+            _manifest(
+                activation_trading_day="2026-08-14",
+                owner_decision_timestamp="2026-08-13T08:45:00+08:00",
+                activation_calendar_evidence=calendar,
+                decision_time="09:00:00",
+                pit_decision_time="08:30:00",
+                activation_timing_override=_same_day_override(),
+            ),
+            tmp_path,
+        ),
+        now=datetime.fromisoformat("2026-08-14T08:00:00+08:00"),
+    )
+
+    custody = clock.custody_payload()
+    assert custody["activation_timing_override"] == _same_day_override()
+    assert custody["historical_backfill_claimed"] is False
+
+    captured = load_clock_manifest_for_capture(
+        tmp_path / "manifest.json",
+        now=datetime.fromisoformat("2026-08-14T09:00:00+08:00"),
+    )
+    assert captured.clock_id == clock.clock_id
+
+
+def test_clock_rejects_same_day_override_at_or_after_pit_boundary(
+    tmp_path: Path,
+) -> None:
+    calendar = dict(_CALENDAR)
+    calendar["date"] = "2026-08-14"
+    body = _manifest(
+        activation_trading_day="2026-08-14",
+        owner_decision_timestamp="2026-08-13T08:45:00+08:00",
+        activation_calendar_evidence=calendar,
+        decision_time="09:00:00",
+        pit_decision_time="08:30:00",
+        activation_timing_override=_same_day_override(),
+    )
+    with pytest.raises(ProspectiveFormalClockError, match="before pit_decision_time"):
+        load_clock_manifest(
+            _write_manifest(body, tmp_path),
+            now=datetime.fromisoformat("2026-08-14T08:30:00+08:00"),
+        )
+
+
+def test_clock_rejects_late_or_backfill_same_day_override(tmp_path: Path) -> None:
+    calendar = dict(_CALENDAR)
+    calendar["date"] = "2026-08-14"
+    override = _same_day_override(timestamp="2026-08-14T08:30:00+08:00")
+    body = _manifest(
+        activation_trading_day="2026-08-14",
+        owner_decision_timestamp="2026-08-13T08:45:00+08:00",
+        activation_calendar_evidence=calendar,
+        activation_timing_override=override,
+    )
+    with pytest.raises(ProspectiveFormalClockError, match="before pit_decision_time"):
+        load_clock_manifest(
+            _write_manifest(body, tmp_path),
+            now=datetime.fromisoformat("2026-08-14T08:31:00+08:00"),
+        )
+
+    override = _same_day_override()
+    override["historical_backfill_allowed"] = True
+    body = _manifest(
+        activation_trading_day="2026-08-14",
+        owner_decision_timestamp="2026-08-13T08:45:00+08:00",
+        activation_calendar_evidence=calendar,
+        activation_timing_override=override,
+    )
+    with pytest.raises(ProspectiveFormalClockError, match="must be false"):
+        load_clock_manifest(
+            _write_manifest(body, tmp_path),
+            now=datetime.fromisoformat("2026-08-14T08:00:00+08:00"),
+        )
 
 
 @pytest.mark.parametrize(

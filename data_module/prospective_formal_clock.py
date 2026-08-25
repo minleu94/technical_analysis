@@ -26,6 +26,12 @@ PROSPECTIVE_FORMAL_CLOCK_SCHEMA_VERSION = (
 PROSPECTIVE_FORMAL_CLOCK_MODE = "prospective_formal_simulation"
 PROSPECTIVE_FORMAL_CLOCK_STATUS = "planned"
 CALENDAR_EVIDENCE_SCHEMA_VERSION = "official-trading-calendar-evidence.v1"
+SAME_DAY_PREOPEN_OWNER_OVERRIDE_SCHEMA_VERSION = (
+    "prospective-same-day-preopen-owner-override.v1"
+)
+SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON = (
+    "owner_explicit_same_day_preopen_activation"
+)
 TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 SHA256_PREFIX = "sha256:"
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -63,7 +69,9 @@ _CLOCK_FIELDS = frozenset(
 # A clock may expose a separate PIT boundary while retaining one owner-bound
 # Rule/Portfolio decision time. Existing clocks omit this optional field and
 # continue to inherit the Rule/Portfolio time for PIT capture.
-_OPTIONAL_CLOCK_FIELDS = frozenset({"pit_decision_time"})
+_OPTIONAL_CLOCK_FIELDS = frozenset(
+    {"pit_decision_time", "activation_timing_override"}
+)
 _SEED_FIELDS = frozenset({"kind", "cash_bp", "position_count", "state_hash"})
 _CALENDAR_FIELDS = frozenset(
     {"schema_version", "date", "is_trading_day", "reason_code", "source", "source_hash"}
@@ -73,6 +81,17 @@ _ALLOWED_CALENDAR_REASONS = frozenset(
         "twse_holiday_schedule_open",
         "twse_holiday_schedule_explicit_open",
         "twstock_db_market_indices_evidence",
+    }
+)
+_ACTIVATION_TIMING_OVERRIDE_FIELDS = frozenset(
+    {
+        "schema_version",
+        "owner_override_id",
+        "owner_override_timestamp",
+        "reason_code",
+        "activation_trading_day",
+        "historical_backfill_allowed",
+        "same_day_preopen_only",
     }
 )
 
@@ -106,7 +125,7 @@ class ProspectiveFormalClock:
     def custody_payload(self) -> dict[str, object]:
         """回傳不含 secret、可供 readiness/status 使用的 custody 摘要。"""
 
-        return {
+        result: dict[str, object] = {
             "schema_version": "prospective-formal-clock-custody.v1",
             "clock_id": self.clock_id,
             "mode": self.mode,
@@ -125,6 +144,10 @@ class ProspectiveFormalClock:
             "broker_execution": False,
             "manifest_hash": self.manifest_hash,
         }
+        timing_override = self.payload.get("activation_timing_override")
+        if isinstance(timing_override, Mapping):
+            result["activation_timing_override"] = dict(timing_override)
+        return result
 
 
 def canonical_json(value: object) -> str:
@@ -162,8 +185,9 @@ def validate_clock_manifest(
     """驗證尚未啟動的 clock，所有時間與 calendar 證據都由呼叫端注入。
 
     ``now`` 必須是帶 timezone 的 datetime。預設只接受 activation 嚴格晚於
-    Taipei 的當日；這個方法不接受已經過去的 active clock，避免 inspector 被
-    誤用成 retroactive credit 工具。
+    Taipei 的當日；唯一例外是具名、同日且早於 PIT 邊界的 owner override。
+    這個方法不接受已經過去的 active clock，避免 inspector 被誤用成
+    retroactive credit 工具。
     """
 
     if not isinstance(manifest, Mapping):
@@ -221,15 +245,36 @@ def validate_clock_manifest(
         manifest.get("activation_trading_day"), "activation_trading_day"
     )
     now_taipei_day = now_aware.astimezone(TAIPEI_TIMEZONE).date()
+    timing_override = manifest.get("activation_timing_override")
+    if timing_override is not None:
+        _validate_activation_timing_override(
+            timing_override,
+            activation_day=activation_day,
+            pit_decision_time=pit_decision_time,
+            now=now_aware,
+            allow_elapsed_activation=allow_elapsed_activation,
+        )
     if allow_elapsed_activation:
         if activation_day > now_taipei_day:
             raise ProspectiveFormalClockError(
                 "capture clock activation_trading_day cannot be in the future"
             )
-    elif activation_day <= now_taipei_day:
+    elif activation_day < now_taipei_day:
         raise ProspectiveFormalClockError(
             "activation_trading_day must be strictly after the current Taipei date"
         )
+    elif activation_day == now_taipei_day:
+        if timing_override is None:
+            raise ProspectiveFormalClockError(
+                "activation_trading_day must be strictly after the current Taipei date "
+                "unless an explicit same-day pre-open owner override is present"
+            )
+        now_taipei = now_aware.astimezone(TAIPEI_TIMEZONE)
+        if now_taipei.timetz().replace(tzinfo=None) >= pit_decision_time:
+            raise ProspectiveFormalClockError(
+                "same-day pre-open owner override must be published before "
+                "pit_decision_time"
+            )
     if activation_day <= owner_decision_timestamp.astimezone(TAIPEI_TIMEZONE).date():
         raise ProspectiveFormalClockError(
             "activation_trading_day must be after owner decision date"
@@ -317,10 +362,10 @@ def load_clock_manifest_for_capture(
 ) -> ProspectiveFormalClock:
     """唯讀載入已到 activation 邊界的 immutable clock。
 
-    Activation 前的 ``load_clock_manifest`` 仍嚴格拒絕過去／同日日期；daily
-    capture 必須使用這個明確入口，讓 clock 經過相同 hash、seed、calendar 與
-    simulation-only 驗證，只放寬「現在已經到達預先綁定的 activation day」這一
-    個時間邊界。它不改寫 clock status，也不建立任何 artifact。
+    Activation 前的 ``load_clock_manifest`` 仍嚴格拒絕過去日期與未具名授權的
+    同日日期；daily capture 必須使用這個明確入口，讓 clock 經過相同 hash、
+    seed、calendar 與 simulation-only 驗證，只放寬「現在已經到達預先綁定的
+    activation day」這一個時間邊界。它不改寫 clock status，也不建立 artifact。
     """
 
     resolved = path.expanduser().resolve()
@@ -488,6 +533,79 @@ def _validate_calendar_evidence(value: object, activation_day: date) -> None:
         raise ProspectiveFormalClockError("calendar evidence reason_code is not official")
     _required_text(value.get("source"), "calendar evidence source")
     _required_hash(value.get("source_hash"), "calendar evidence source_hash")
+
+
+def _validate_activation_timing_override(
+    value: object,
+    *,
+    activation_day: date,
+    pit_decision_time: time,
+    now: datetime,
+    allow_elapsed_activation: bool,
+) -> None:
+    if not isinstance(value, Mapping):
+        raise ProspectiveFormalClockError(
+            "activation_timing_override must be an object"
+        )
+    unknown = set(value) - _ACTIVATION_TIMING_OVERRIDE_FIELDS
+    missing = _ACTIVATION_TIMING_OVERRIDE_FIELDS - set(value)
+    if unknown:
+        raise ProspectiveFormalClockError(
+            "activation_timing_override contains unknown fields: "
+            + ", ".join(sorted(unknown))
+        )
+    if missing:
+        raise ProspectiveFormalClockError(
+            "activation_timing_override missing fields: "
+            + ", ".join(sorted(missing))
+        )
+    if value.get("schema_version") != SAME_DAY_PREOPEN_OWNER_OVERRIDE_SCHEMA_VERSION:
+        raise ProspectiveFormalClockError(
+            "activation_timing_override schema_version is invalid"
+        )
+    _required_text(value.get("owner_override_id"), "owner_override_id")
+    if value.get("reason_code") != SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON:
+        raise ProspectiveFormalClockError(
+            "activation_timing_override reason_code is invalid"
+        )
+    if (
+        _parse_date(
+            value.get("activation_trading_day"),
+            "activation_timing_override activation_trading_day",
+        )
+        != activation_day
+    ):
+        raise ProspectiveFormalClockError(
+            "activation_timing_override activation_trading_day mismatch"
+        )
+    if value.get("historical_backfill_allowed") is not False:
+        raise ProspectiveFormalClockError(
+            "activation_timing_override historical_backfill_allowed must be false"
+        )
+    if value.get("same_day_preopen_only") is not True:
+        raise ProspectiveFormalClockError(
+            "activation_timing_override same_day_preopen_only must be true"
+        )
+    override_timestamp = _parse_aware_datetime(
+        value.get("owner_override_timestamp"), "owner_override_timestamp"
+    )
+    override_taipei = override_timestamp.astimezone(TAIPEI_TIMEZONE)
+    if override_taipei.date() != activation_day:
+        raise ProspectiveFormalClockError(
+            "owner_override_timestamp must be on activation_trading_day"
+        )
+    if override_taipei.timetz().replace(tzinfo=None) >= pit_decision_time:
+        raise ProspectiveFormalClockError(
+            "owner_override_timestamp must be before pit_decision_time"
+        )
+    if override_timestamp > now:
+        raise ProspectiveFormalClockError(
+            "owner_override_timestamp cannot be in the future"
+        )
+    if not allow_elapsed_activation and now.astimezone(TAIPEI_TIMEZONE).date() != activation_day:
+        raise ProspectiveFormalClockError(
+            "same-day pre-open owner override is valid only on activation_trading_day"
+        )
 
 
 def _parse_now(value: datetime) -> datetime:

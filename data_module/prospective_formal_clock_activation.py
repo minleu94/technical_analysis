@@ -219,12 +219,7 @@ def build_prospective_clock_activation_manifest(
         raise ProspectiveClockActivationError(
             "owner_activation_timestamp must follow owner_decision_timestamp"
         )
-    if clock.activation_trading_day <= activation_timestamp.astimezone(
-        TAIPEI_TIMEZONE
-    ).date():
-        raise ProspectiveClockActivationError(
-            "activation_trading_day must remain after owner activation date"
-        )
+    _validate_owner_activation_date(clock, activation_timestamp)
     activation_paths = _build_controlled_paths(
         controlled_paths,
         readiness_inputs=readiness_inputs,
@@ -382,12 +377,7 @@ def validate_prospective_clock_activation_manifest(
         raise ProspectiveClockActivationError(
             "owner_activation_timestamp must follow owner_decision_timestamp"
         )
-    if clock.activation_trading_day <= activation_timestamp.astimezone(
-        TAIPEI_TIMEZONE
-    ).date():
-        raise ProspectiveClockActivationError(
-            "activation_trading_day must remain after owner activation date"
-        )
+    _validate_owner_activation_date(clock, activation_timestamp)
     _required_text(manifest.get("owner_activation_id"), "owner_activation_id")
     _required_text(manifest.get("controlled_store_id"), "controlled_store_id")
     if manifest.get("hmac_secret_store_configured") is not True:
@@ -637,6 +627,42 @@ def write_immutable_daily_capture_activation_record(
             "daily capture output already exists"
         ) from error
     return file_sha256(output)
+
+
+def _validate_owner_activation_date(
+    clock: ProspectiveFormalClock,
+    activation_timestamp: datetime,
+) -> None:
+    activation_taipei = activation_timestamp.astimezone(TAIPEI_TIMEZONE)
+    if clock.activation_trading_day > activation_taipei.date():
+        return
+    if clock.activation_trading_day < activation_taipei.date():
+        raise ProspectiveClockActivationError(
+            "activation_trading_day must remain after owner activation date"
+        )
+
+    timing_override = clock.payload.get("activation_timing_override")
+    if not isinstance(timing_override, Mapping):
+        raise ProspectiveClockActivationError(
+            "same-day owner activation requires clock timing override"
+        )
+    override_timestamp = _parse_aware_datetime(
+        timing_override.get("owner_override_timestamp"),
+        "owner_override_timestamp",
+    )
+    if activation_timestamp < override_timestamp:
+        raise ProspectiveClockActivationError(
+            "owner activation cannot precede same-day owner override"
+        )
+    pit_boundary = datetime.combine(
+        clock.activation_trading_day,
+        _clock_decision_time(clock.payload, "pit_decision_time"),
+        tzinfo=TAIPEI_TIMEZONE,
+    )
+    if activation_timestamp >= pit_boundary:
+        raise ProspectiveClockActivationError(
+            "same-day owner activation must occur before PIT decision boundary"
+        )
 
 
 def _validate_readiness_report(

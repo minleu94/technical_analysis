@@ -1,6 +1,6 @@
 """Run one low-CPU prospective formal activation and strict readiness handoff.
 
-The command is intentionally one-shot.  It uses the immutable v3 clock, the
+The command is intentionally one-shot.  It uses an immutable prospective clock, the
 already staged official raw custody, the accepted Rule Champion identity, and
 the real T-1 market database state.  It never starts a watcher or a model
 pipeline and it refuses to overwrite any formal output.
@@ -459,12 +459,10 @@ def _require_market_t1(path: Path, activation_day: date) -> None:
 
 
 def _previous_trading_day(activation_day: date) -> date:
-    # v3 calendar explicitly reserved 2026-08-26 as the complete preparation
-    # day; no historical fallback or calendar inference is permitted here.
-    previous = activation_day.fromordinal(activation_day.toordinal() - 1)
-    if activation_day.isoformat() == "2026-08-27" and previous.isoformat() != "2026-08-26":
-        raise ProspectiveActivationOnceError("v3_t1_calendar_contract_invalid")
-    return previous
+    # This bounded one-shot accepts only a consecutive calendar-day T-1.  The
+    # caller then proves that exact date exists in the read-only market DB;
+    # it never searches backward, guesses across a weekend, or reads T prices.
+    return activation_day.fromordinal(activation_day.toordinal() - 1)
 
 
 def _clock_timestamp(clock: ProspectiveFormalClock, field: str) -> str:

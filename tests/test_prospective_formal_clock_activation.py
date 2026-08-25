@@ -309,6 +309,99 @@ def test_deferred_activation_can_be_scheduled_before_non_cash_inputs_exist(
     assert validated.activation_trading_day.isoformat() == "2026-08-17"
 
 
+def test_same_day_preopen_override_allows_owner_activation_before_pit(
+    tmp_path: Path,
+) -> None:
+    policy = build_prospective_calibration_policy(
+        policy_id="calibration-policy:pfs07:same-day",
+        clock_id="clock:prospective:pfs07:same-day",
+        model_artifact_hash=MODEL_HASH,
+        dataset_identity_hash=DATASET_HASH,
+    )
+    seed = {"kind": "cash", "cash_bp": 10_000, "position_count": 0}
+    seed["state_hash"] = payload_hash(seed)
+    body: dict[str, object] = {
+        "schema_version": "prospective-formal-simulated-portfolio-clock.v1",
+        "status": "planned",
+        "clock_id": "clock:prospective:pfs07:same-day",
+        "mode": "prospective_formal_simulation",
+        "owner_decision_id": "owner-decision:pfs07-same-day",
+        "owner_decision_timestamp": "2026-08-14T08:45:00+08:00",
+        "activation_trading_day": "2026-08-15",
+        "decision_timezone": "Asia/Taipei",
+        "decision_time": "09:00:00",
+        "pit_decision_time": "08:30:00",
+        "activation_timing_override": {
+            "schema_version": "prospective-same-day-preopen-owner-override.v1",
+            "owner_override_id": "owner-override:pfs07-same-day",
+            "owner_override_timestamp": "2026-08-15T07:45:00+08:00",
+            "reason_code": "owner_explicit_same_day_preopen_activation",
+            "activation_trading_day": "2026-08-15",
+            "historical_backfill_allowed": False,
+            "same_day_preopen_only": True,
+        },
+        "activation_calendar_evidence": {
+            "schema_version": "official-trading-calendar-evidence.v1",
+            "date": "2026-08-15",
+            "is_trading_day": True,
+            "reason_code": "twse_holiday_schedule_open",
+            "source": "TWSE holidaySchedule",
+            "source_hash": "sha256:" + "4" * 64,
+        },
+        "seed_state": seed,
+        "virtual_notional_minor_units": 1_000_000,
+        "strategy_version": "rule-v1",
+        "policy_version": "policy-v1",
+        "policy_hash": "sha256:" + "5" * 64,
+        "universe_hash": UNIVERSE_HASH,
+        "source_policy_hash": "sha256:" + "6" * 64,
+        "candidate_model_hash": MODEL_HASH,
+        "candidate_feature_manifest_hash": "sha256:" + "7" * 64,
+        "candidate_training_cutoff": "2026-08-13T08:30:00+08:00",
+        "calibration_policy_hash": policy.policy_hash,
+        "evaluation_policy_hash": "sha256:" + "8" * 64,
+        "real_money": False,
+        "broker_execution": False,
+        "historical_backfill_claimed": False,
+    }
+    clock_path = tmp_path / "same-day-clock.json"
+    clock_path.write_text(
+        canonical_json(build_clock_manifest(body)), encoding="utf-8"
+    )
+    clock = load_clock_manifest(
+        clock_path,
+        now=datetime.fromisoformat("2026-08-15T08:00:00+08:00"),
+    )
+    readiness = _deferred_readiness(clock, policy)
+    readiness.pop("readiness_hash")
+    readiness["decision_timestamp"] = "2026-08-15T09:00:00+08:00"
+    readiness["pit_decision_timestamp"] = "2026-08-15T08:30:00+08:00"
+    readiness["readiness_hash"] = payload_hash(readiness)
+
+    manifest = build_prospective_clock_activation_manifest(
+        clock=clock,
+        calibration_policy=policy,
+        readiness_report=readiness,
+        controlled_paths={name: None for name in CONTROLLED_PATH_ENV_NAMES},
+        controlled_store_id="controlled-store:pfs07-same-day",
+        hmac_secret_store_configured=True,
+        owner_activation_id="owner-activation:pfs07-same-day",
+        owner_activation_timestamp=datetime.fromisoformat(
+            "2026-08-15T07:50:00+08:00"
+        ),
+        now=datetime.fromisoformat("2026-08-15T08:00:00+08:00"),
+    )
+
+    assert manifest["status"] == "scheduled"
+    validate_prospective_clock_activation_manifest(
+        manifest,
+        clock=clock,
+        calibration_policy=policy,
+        readiness_report=readiness,
+        now=datetime.fromisoformat("2026-08-15T09:15:00+08:00"),
+    )
+
+
 def test_activation_rejects_secret_absence_or_rebuild_request(tmp_path: Path) -> None:
     clock, policy = _clock_and_policy(tmp_path)
     readiness, paths = _readiness(tmp_path, clock, policy)

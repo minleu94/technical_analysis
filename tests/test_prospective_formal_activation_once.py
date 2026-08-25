@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from datetime import date
 
 import pytest
 
@@ -9,6 +10,7 @@ from scripts.run_prospective_formal_activation_once import (
     _create_staging_root,
     _formal_paths,
     _publish_staged_outputs,
+    _previous_trading_day,
     _rollback_published_outputs,
 )
 
@@ -61,3 +63,7 @@ def test_staged_publish_refuses_existing_target(tmp_path):
         assert final_paths["pit"].read_bytes() == b"existing"
     finally:
         shutil.rmtree(staging_root, ignore_errors=True)
+
+
+def test_previous_trading_day_uses_only_consecutive_t1() -> None:
+    assert _previous_trading_day(date(2026, 8, 26)) == date(2026, 8, 25)

@@ -15,6 +15,8 @@ if str(ROOT) not in sys.path:
 
 from data_module.prospective_formal_clock import (  # noqa: E402
     ProspectiveFormalClockError,
+    SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON,
+    SAME_DAY_PREOPEN_OWNER_OVERRIDE_SCHEMA_VERSION,
     build_clock_manifest,
     validate_clock_manifest,
     write_immutable_clock_manifest,
@@ -38,6 +40,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-policy-hash", required=True)
     parser.add_argument("--decision-time", default="08:30:00")
     parser.add_argument("--pit-decision-time")
+    parser.add_argument("--same-day-preopen-owner-override-id")
+    parser.add_argument("--same-day-preopen-owner-override-timestamp")
     parser.add_argument("--candidate-model-hash", required=True)
     parser.add_argument("--candidate-feature-manifest-hash", required=True)
     parser.add_argument("--candidate-training-cutoff", required=True)
@@ -89,6 +93,26 @@ def main(argv: list[str] | None = None) -> int:
         }
         if args.pit_decision_time is not None:
             body["pit_decision_time"] = args.pit_decision_time
+        override_values = (
+            args.same_day_preopen_owner_override_id,
+            args.same_day_preopen_owner_override_timestamp,
+        )
+        if any(value is not None for value in override_values):
+            if not all(value is not None for value in override_values):
+                raise ValueError(
+                    "same-day pre-open owner override id and timestamp are both required"
+                )
+            body["activation_timing_override"] = {
+                "schema_version": SAME_DAY_PREOPEN_OWNER_OVERRIDE_SCHEMA_VERSION,
+                "owner_override_id": args.same_day_preopen_owner_override_id,
+                "owner_override_timestamp": (
+                    args.same_day_preopen_owner_override_timestamp
+                ),
+                "reason_code": SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON,
+                "activation_trading_day": args.activation_trading_day,
+                "historical_backfill_allowed": False,
+                "same_day_preopen_only": True,
+            }
         manifest = build_clock_manifest(body)
         validate_clock_manifest(
             manifest,

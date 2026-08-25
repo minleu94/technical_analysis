@@ -181,3 +181,28 @@ def test_cli_publishes_distinct_pit_and_owner_decision_times(tmp_path: Path) -> 
 def test_cli_rejects_same_day_activation(tmp_path: Path) -> None:
     assert main(_cli_args(tmp_path, activation_day="2026-08-15")) == 2
     assert not (tmp_path / "clock.json").exists()
+
+
+def test_cli_publishes_explicit_same_day_preopen_owner_override(
+    tmp_path: Path,
+) -> None:
+    args = _cli_args(tmp_path, activation_day="2026-08-15")
+    args[args.index("--now") + 1] = "2026-08-15T08:00:00+08:00"
+    args.extend(
+        [
+            "--decision-time",
+            "09:00:00",
+            "--pit-decision-time",
+            "08:30:00",
+            "--same-day-preopen-owner-override-id",
+            "owner-override:same-day-preopen:20260815:v1",
+            "--same-day-preopen-owner-override-timestamp",
+            "2026-08-15T07:45:00+08:00",
+        ]
+    )
+
+    assert main(args) == 0
+    manifest = json.loads((tmp_path / "clock.json").read_text(encoding="utf-8"))
+    override = manifest["activation_timing_override"]
+    assert override["historical_backfill_allowed"] is False
+    assert override["same_day_preopen_only"] is True
