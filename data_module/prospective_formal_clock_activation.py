@@ -99,6 +99,7 @@ _ACTIVATION_FIELDS = frozenset(
         "manifest_hash",
     }
 )
+_OPTIONAL_ACTIVATION_FIELDS = frozenset({"pit_decision_time"})
 _CONTROLLED_PATH_FIELDS = frozenset({"path", "path_hash", "file_hash"})
 _DEFERRED_CONTROLLED_PATH_FIELDS = frozenset(
     {"deferred", "path", "path_hash", "file_hash"}
@@ -254,6 +255,9 @@ def build_prospective_clock_activation_manifest(
         "activation_trading_day": clock.activation_trading_day.isoformat(),
         "decision_timezone": "Asia/Taipei",
         "decision_time": str(clock.payload["decision_time"]),
+        "pit_decision_time": str(
+            clock.payload.get("pit_decision_time", clock.payload["decision_time"])
+        ),
         "candidate_training_cutoff": str(clock.payload["candidate_training_cutoff"]),
         "candidate_model_hash": str(clock.payload["candidate_model_hash"]),
         "candidate_feature_manifest_hash": str(
@@ -305,7 +309,9 @@ def validate_prospective_clock_activation_manifest(
 ) -> ProspectiveClockActivation:
     """重新驗證 activation manifest 與所有 frozen identities。"""
 
-    if set(manifest) != _ACTIVATION_FIELDS:
+    unknown = set(manifest) - (_ACTIVATION_FIELDS | _OPTIONAL_ACTIVATION_FIELDS)
+    missing = _ACTIVATION_FIELDS - set(manifest)
+    if unknown or missing:
         raise ProspectiveClockActivationError("activation manifest fields are invalid")
     if manifest.get("schema_version") != PROSPECTIVE_CLOCK_ACTIVATION_SCHEMA_VERSION:
         raise ProspectiveClockActivationError("activation schema_version is invalid")
@@ -358,6 +364,12 @@ def validate_prospective_clock_activation_manifest(
             raise ProspectiveClockActivationError(
                 f"activation {field_name} does not match frozen clock"
             )
+    if "pit_decision_time" in manifest and manifest.get(
+        "pit_decision_time"
+    ) != clock.payload.get("pit_decision_time", clock.payload["decision_time"]):
+        raise ProspectiveClockActivationError(
+            "activation pit_decision_time does not match frozen clock"
+        )
     activation_timestamp = _parse_aware_datetime(
         manifest.get("owner_activation_timestamp"), "owner_activation_timestamp"
     )
@@ -641,11 +653,15 @@ def _validate_readiness_report(
         "production_blend_alpha_bp", "promotion_eligible", "broker_order_allowed",
         "secret_values_emitted", "readiness_hash",
     }
+    optional_fields = {"pit_decision_timestamp"}
     schema_version = report.get("schema_version")
     deferred = schema_version == PROSPECTIVE_CAPTURE_READINESS_DEFERRED_SCHEMA_VERSION
     if deferred:
         expected_fields.add("input_collection_phase")
-    if set(report) != expected_fields:
+    if (
+        set(report) - expected_fields - optional_fields
+        or expected_fields - set(report)
+    ):
         raise ProspectiveClockActivationError("readiness report fields are invalid")
     if schema_version not in {
         PROSPECTIVE_CAPTURE_READINESS_SCHEMA_VERSION,
@@ -682,6 +698,20 @@ def _validate_readiness_report(
     decision = _parse_taipei_timestamp(
         report.get("decision_timestamp"), "readiness decision_timestamp"
     )
+    pit_value = report.get("pit_decision_timestamp")
+    pit_decision = (
+        _parse_taipei_timestamp(pit_value, "readiness pit_decision_timestamp")
+        if pit_value is not None
+        else (
+            datetime.combine(
+                clock.activation_trading_day,
+                _clock_decision_time(clock.payload, "pit_decision_time"),
+                tzinfo=TAIPEI_TIMEZONE,
+            )
+            if deferred
+            else decision
+        )
+    )
     if deferred:
         expected_decision = datetime.combine(
             clock.activation_trading_day,
@@ -692,8 +722,23 @@ def _validate_readiness_report(
             raise ProspectiveClockActivationError(
                 "deferred readiness decision_timestamp does not match activation"
             )
-    elif decision > _parse_now(now).astimezone(TAIPEI_TIMEZONE):
-        raise ProspectiveClockActivationError("readiness decision_timestamp is after now")
+        expected_pit_decision = datetime.combine(
+            clock.activation_trading_day,
+            _clock_decision_time(clock.payload, "pit_decision_time"),
+            tzinfo=TAIPEI_TIMEZONE,
+        )
+        if pit_decision != expected_pit_decision:
+            raise ProspectiveClockActivationError(
+                "deferred readiness pit_decision_timestamp does not match activation"
+            )
+    else:
+        now_taipei = _parse_now(now).astimezone(TAIPEI_TIMEZONE)
+        if decision > now_taipei:
+            raise ProspectiveClockActivationError("readiness decision_timestamp is after now")
+        if pit_decision > now_taipei:
+            raise ProspectiveClockActivationError(
+                "readiness pit_decision_timestamp is after now"
+            )
     guard = report.get("heavy_rebuild_guard")
     if not isinstance(guard, Mapping):
         raise ProspectiveClockActivationError("readiness heavy_rebuild_guard is invalid")
@@ -905,16 +950,23 @@ def _seed_state_hash(clock: ProspectiveFormalClock) -> str:
     return _required_hash(state_hash, "seed_state_hash")
 
 
-def _clock_decision_time(payload: Mapping[str, object]) -> time:
-    value = payload.get("decision_time")
+def _clock_decision_time(
+    payload: Mapping[str, object],
+    field_name: str = "decision_time",
+) -> time:
+    value = payload.get(field_name)
+    if value is None and field_name == "pit_decision_time":
+        value = payload.get("decision_time")
     if not isinstance(value, str):
-        raise ProspectiveClockActivationError("clock decision_time is invalid")
+        raise ProspectiveClockActivationError(f"clock {field_name} is invalid")
     try:
         parsed = time.fromisoformat(value)
     except ValueError as error:
-        raise ProspectiveClockActivationError("clock decision_time is invalid") from error
+        raise ProspectiveClockActivationError(f"clock {field_name} is invalid") from error
     if parsed.tzinfo is not None:
-        raise ProspectiveClockActivationError("clock decision_time must not contain timezone")
+        raise ProspectiveClockActivationError(
+            f"clock {field_name} must not contain timezone"
+        )
     return parsed
 
 

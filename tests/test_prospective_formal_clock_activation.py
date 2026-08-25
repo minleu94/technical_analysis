@@ -36,7 +36,12 @@ PLANNING_NOW = datetime.fromisoformat("2026-08-15T10:00:00+08:00")
 ACTIVE_NOW = datetime.fromisoformat("2026-08-17T09:00:00+08:00")
 
 
-def _clock_and_policy(tmp_path: Path):
+def _clock_and_policy(
+    tmp_path: Path,
+    *,
+    decision_time: str = "08:30:00",
+    pit_decision_time: str | None = None,
+):
     policy = build_prospective_calibration_policy(
         policy_id="calibration-policy:pfs07:test",
         clock_id="clock:prospective:pfs07:test",
@@ -62,7 +67,7 @@ def _clock_and_policy(tmp_path: Path):
         "owner_decision_timestamp": "2026-08-14T08:45:00+08:00",
         "activation_trading_day": "2026-08-17",
         "decision_timezone": "Asia/Taipei",
-        "decision_time": "08:30:00",
+        "decision_time": decision_time,
         "activation_calendar_evidence": calendar,
         "seed_state": seed,
         "virtual_notional_minor_units": 1_000_000,
@@ -80,6 +85,8 @@ def _clock_and_policy(tmp_path: Path):
         "broker_execution": False,
         "historical_backfill_claimed": False,
     }
+    if pit_decision_time is not None:
+        body["pit_decision_time"] = pit_decision_time
     clock_path = tmp_path / "clock.json"
     clock_path.write_text(canonical_json(build_clock_manifest(body)), encoding="utf-8")
     return load_clock_manifest(clock_path, now=PLANNING_NOW), policy
@@ -232,6 +239,39 @@ def test_activation_freezes_identities_and_three_controlled_paths(tmp_path: Path
         CONTROLLED_PATH_ENV_NAMES
     )
     assert all(path.is_file() for path in paths.values())
+
+
+def test_activation_preserves_separate_pit_decision_time(tmp_path: Path) -> None:
+    clock, policy = _clock_and_policy(
+        tmp_path,
+        decision_time="09:00:00",
+        pit_decision_time="08:30:00",
+    )
+    readiness, paths = _readiness(tmp_path, clock, policy)
+
+    manifest = build_prospective_clock_activation_manifest(
+        clock=clock,
+        calibration_policy=policy,
+        readiness_report=readiness,
+        controlled_paths=paths,
+        controlled_store_id="controlled-store:pfs07-split-test",
+        hmac_secret_store_configured=True,
+        owner_activation_id="owner-activation:pfs07-split-test",
+        owner_activation_timestamp=datetime.fromisoformat(
+            "2026-08-15T09:00:00+08:00"
+        ),
+        now=PLANNING_NOW,
+    )
+
+    assert manifest["decision_time"] == "09:00:00"
+    assert manifest["pit_decision_time"] == "08:30:00"
+    validate_prospective_clock_activation_manifest(
+        manifest,
+        clock=clock,
+        calibration_policy=policy,
+        readiness_report=readiness,
+        now=PLANNING_NOW,
+    )
 
 
 def test_deferred_activation_can_be_scheduled_before_non_cash_inputs_exist(

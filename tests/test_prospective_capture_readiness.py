@@ -51,7 +51,13 @@ def _policy(tmp_path: Path):
     return policy, path
 
 
-def _clock(tmp_path: Path, policy):
+def _clock(
+    tmp_path: Path,
+    policy,
+    *,
+    decision_time: str = "08:30:00",
+    pit_decision_time: str | None = None,
+):
     seed = {"kind": "cash", "cash_bp": 10_000, "position_count": 0}
     seed["state_hash"] = payload_hash(seed)
     calendar = {
@@ -71,7 +77,7 @@ def _clock(tmp_path: Path, policy):
         "owner_decision_timestamp": "2026-08-14T08:45:00+08:00",
         "activation_trading_day": "2026-08-17",
         "decision_timezone": "Asia/Taipei",
-        "decision_time": "08:30:00",
+        "decision_time": decision_time,
         "activation_calendar_evidence": calendar,
         "seed_state": seed,
         "virtual_notional_minor_units": 1_000_000,
@@ -89,14 +95,27 @@ def _clock(tmp_path: Path, policy):
         "broker_execution": False,
         "historical_backfill_claimed": False,
     }
+    if pit_decision_time is not None:
+        body["pit_decision_time"] = pit_decision_time
     path = tmp_path / "clock.json"
     path.write_text(canonical_json(build_clock_manifest(body)), encoding="utf-8")
     return path
 
 
-def _report_kwargs(tmp_path: Path, *, active: bool = False):
+def _report_kwargs(
+    tmp_path: Path,
+    *,
+    active: bool = False,
+    decision_time: str = "08:30:00",
+    pit_decision_time: str | None = None,
+):
     policy, policy_path = _policy(tmp_path)
-    clock_path = _clock(tmp_path, policy)
+    clock_path = _clock(
+        tmp_path,
+        policy,
+        decision_time=decision_time,
+        pit_decision_time=pit_decision_time,
+    )
     return {
         "clock_manifest_path": clock_path,
         "calibration_policy_path": policy_path,
@@ -124,6 +143,43 @@ def test_missing_inputs_wait_and_never_launch_heavy_rebuild(tmp_path: Path) -> N
     assert guard["owner_confirmation_received"] is False
     assert guard["direct_ooc_invocation_count"] == 0
     assert report["formal_oos_allowed"] is False
+    assert report["pit_decision_timestamp"] == DECISION_TIMESTAMP
+
+
+def test_readiness_routes_separate_pit_boundary_without_weakening_strictness(
+    tmp_path: Path,
+) -> None:
+    kwargs = _report_kwargs(
+        tmp_path,
+        active=True,
+        decision_time="09:00:00",
+        pit_decision_time="08:30:00",
+    )
+    kwargs["decision_timestamp"] = "2026-08-17T09:00:00+08:00"
+    kwargs["pit_decision_timestamp"] = "2026-08-17T08:30:00+08:00"
+
+    report = build_prospective_capture_readiness_report(**kwargs)
+
+    assert report["status"] == "waiting_for_prospective_inputs"
+    assert report["decision_timestamp"] == "2026-08-17T09:00:00+08:00"
+    assert report["pit_decision_timestamp"] == "2026-08-17T08:30:00+08:00"
+    assert all(item["state"] == "missing" for item in _inputs(report))
+
+
+def test_deferred_readiness_rejects_wrong_separate_pit_boundary(
+    tmp_path: Path,
+) -> None:
+    kwargs = _report_kwargs(
+        tmp_path,
+        decision_time="09:00:00",
+        pit_decision_time="08:30:00",
+    )
+    kwargs["decision_timestamp"] = "2026-08-17T09:00:00+08:00"
+    kwargs["pit_decision_timestamp"] = "2026-08-17T09:00:00+08:00"
+    kwargs["defer_until_activation"] = True
+
+    with pytest.raises(ProspectiveCaptureReadinessError, match="PIT time"):
+        build_prospective_capture_readiness_report(**kwargs)
 
 
 def test_deferred_pre_activation_readiness_breaks_non_cash_circular_gate(

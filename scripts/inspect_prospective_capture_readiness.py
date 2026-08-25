@@ -51,6 +51,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--clock-manifest", type=Path, required=True)
     parser.add_argument("--calibration-policy", type=Path, required=True)
     parser.add_argument("--decision-timestamp", required=True)
+    parser.add_argument("--pit-decision-timestamp")
     parser.add_argument("--now", required=True)
     parser.add_argument("--symbols-json", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -211,6 +212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             clock_manifest_path=args.clock_manifest,
             calibration_policy_path=args.calibration_policy,
             decision_timestamp=args.decision_timestamp,
+            pit_decision_timestamp=args.pit_decision_timestamp,
             now=now,
             expected_symbols=tuple(symbols),
             portfolio_ledger_manifest_path=controlled_paths[

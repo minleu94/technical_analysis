@@ -89,6 +89,7 @@ def build_prospective_capture_readiness_report(
     clock_manifest_path: Path,
     calibration_policy_path: Path,
     decision_timestamp: str,
+    pit_decision_timestamp: str | None = None,
     now: datetime,
     expected_symbols: Sequence[str],
     portfolio_ledger_manifest_path: Path | None = None,
@@ -126,16 +127,22 @@ def build_prospective_capture_readiness_report(
         ) from error
 
     decision = _parse_taipei_timestamp(decision_timestamp, "decision_timestamp")
+    pit_decision = (
+        _parse_taipei_timestamp(pit_decision_timestamp, "pit_decision_timestamp")
+        if pit_decision_timestamp is not None
+        else _clock_boundary_timestamp(clock, "pit_decision_time")
+    )
     expected = _normalize_symbols(expected_symbols)
     if defer_until_activation:
-        expected_decision = datetime.combine(
-            clock.activation_trading_day,
-            _clock_decision_time(clock),
-            tzinfo=TAIPEI_TIMEZONE,
-        )
+        expected_decision = _clock_boundary_timestamp(clock, "decision_time")
         if decision != expected_decision:
             raise ProspectiveCaptureReadinessError(
                 "deferred readiness decision_timestamp must equal clock activation decision time"
+            )
+        expected_pit_decision = _clock_boundary_timestamp(clock, "pit_decision_time")
+        if pit_decision != expected_pit_decision:
+            raise ProspectiveCaptureReadinessError(
+                "deferred readiness pit_decision_timestamp must equal clock activation PIT time"
             )
         inputs = _deferred_inputs()
     else:
@@ -154,7 +161,7 @@ def build_prospective_capture_readiness_report(
             _pit_readiness(
                 path=pit_sector_membership_path,
                 clock=clock,
-                decision=decision,
+                decision=pit_decision,
                 now=now,
                 expected_symbols=expected,
             ),
@@ -177,6 +184,7 @@ def build_prospective_capture_readiness_report(
         "clock_manifest_hash": clock.manifest_hash,
         "calibration_policy_hash": policy.policy_hash,
         "decision_timestamp": decision.isoformat(),
+        "pit_decision_timestamp": pit_decision.isoformat(),
         "active_clock": active_clock,
         "inputs": inputs,
         "capture_only": True,
@@ -602,17 +610,33 @@ def _parse_taipei_timestamp(value: object, field_name: str) -> datetime:
     return parsed.astimezone(TAIPEI_TIMEZONE)
 
 
-def _clock_decision_time(clock: ProspectiveFormalClock) -> time:
-    value = clock.payload.get("decision_time")
+def _clock_decision_time(
+    clock: ProspectiveFormalClock,
+    field_name: str = "decision_time",
+) -> time:
+    value = clock.payload.get(field_name)
+    if value is None and field_name == "pit_decision_time":
+        value = clock.payload.get("decision_time")
     if not isinstance(value, str):
-        raise ProspectiveCaptureReadinessError("clock decision_time is invalid")
+        raise ProspectiveCaptureReadinessError(f"clock {field_name} is invalid")
     try:
         parsed = datetime.strptime(value, "%H:%M:%S").time()
     except ValueError as error:
         raise ProspectiveCaptureReadinessError(
-            "clock decision_time is invalid"
+            f"clock {field_name} is invalid"
         ) from error
     return parsed
+
+
+def _clock_boundary_timestamp(
+    clock: ProspectiveFormalClock,
+    field_name: str,
+) -> datetime:
+    return datetime.combine(
+        clock.activation_trading_day,
+        _clock_decision_time(clock, field_name),
+        tzinfo=TAIPEI_TIMEZONE,
+    )
 
 
 def _validate_now(value: datetime) -> None:

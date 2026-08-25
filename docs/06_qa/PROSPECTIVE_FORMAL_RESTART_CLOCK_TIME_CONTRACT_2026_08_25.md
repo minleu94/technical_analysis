@@ -19,7 +19,7 @@ Prospective Formal Restart 的新 clock 將兩個邊界明確分開：
 - 不得晚於 owner-bound `decision_time`。
 - 仍由 clock manifest hash 綁定，不能在 capture 時另行改寫。
 
-PIT publisher 會選擇 `pit_decision_time`（若存在），Rule／Portfolio publisher 維持使用 `decision_time`。這是 contract clarification，不是移除 readiness、資料來源、look-ahead 或安全 gate。
+PIT publisher 會選擇 `pit_decision_time`（若存在），Rule／Portfolio publisher 維持使用 `decision_time`。strict readiness report 同時保存 `decision_timestamp` 與 `pit_decision_timestamp`，分別驗證 Rule／Portfolio 與 PIT；activation custody 也可保存 optional `pit_decision_time`。舊 readiness／activation JSON 若沒有新欄位，validator 會依舊 clock contract 相容解讀。這是 contract clarification，不是移除 readiness、資料來源、look-ahead 或安全 gate。
 
 ## Immutable 與安全界線
 
@@ -31,4 +31,4 @@ PIT publisher 會選擇 `pit_decision_time`（若存在），Rule／Portfolio pu
 
 ## 驗證證據
 
-2026-08-25 已通過 focused contract suite：51 passed，1 個 pytest cache permission warning（不影響測試結果）。涵蓋 clock schema、雙時間邊界、PIT capture、clock publisher、Rule publisher、Portfolio ledger 與 strict readiness。
+2026-08-25 已通過 focused contract suite：51 passed，1 個 pytest cache permission warning（不影響測試結果）；prospective regression suite：108 passed。涵蓋 clock schema、雙時間邊界、PIT capture、clock publisher、Rule publisher、Portfolio ledger、activation custody 與 strict readiness。
