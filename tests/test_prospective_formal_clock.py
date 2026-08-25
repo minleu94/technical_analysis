@@ -82,6 +82,25 @@ def test_valid_future_clock_manifest_is_accepted(tmp_path: Path) -> None:
     assert clock.custody_payload()["broker_execution"] is False
 
 
+def test_clock_accepts_separate_pit_boundary_before_rule_time(tmp_path: Path) -> None:
+    clock = load_clock_manifest(
+        _write_manifest(
+            _manifest(decision_time="09:00:00", pit_decision_time="08:30:00"),
+            tmp_path,
+        ),
+        now=_NOW,
+    )
+
+    assert clock.custody_payload()["decision_time"] == "09:00:00"
+    assert clock.custody_payload()["pit_decision_time"] == "08:30:00"
+
+
+def test_clock_rejects_pit_boundary_after_rule_time(tmp_path: Path) -> None:
+    body = _manifest(decision_time="09:00:00", pit_decision_time="09:30:00")
+    with pytest.raises(ProspectiveFormalClockError, match="pit_decision_time"):
+        load_clock_manifest(_write_manifest(body, tmp_path), now=_NOW)
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [

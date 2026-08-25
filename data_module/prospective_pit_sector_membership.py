@@ -887,16 +887,23 @@ def _decision_timestamp(value: str, clock: ProspectiveFormalClock) -> datetime:
         raise ProspectivePitSectorMembershipError(
             "decision_timestamp precedes prospective activation"
         )
-    raw_time = clock.payload.get("decision_time")
+    time_field = (
+        "pit_decision_time"
+        if "pit_decision_time" in clock.payload
+        else "decision_time"
+    )
+    raw_time = clock.payload.get(time_field)
     if not isinstance(raw_time, str):
-        raise ProspectivePitSectorMembershipError("clock decision_time is invalid")
+        raise ProspectivePitSectorMembershipError(f"clock {time_field} is invalid")
     try:
         expected = time.fromisoformat(raw_time)
     except ValueError as error:
-        raise ProspectivePitSectorMembershipError("clock decision_time is invalid") from error
+        raise ProspectivePitSectorMembershipError(
+            f"clock {time_field} is invalid"
+        ) from error
     if decision.timetz().replace(tzinfo=None) != expected:
         raise ProspectivePitSectorMembershipError(
-            "decision_timestamp does not match clock decision_time"
+            f"decision_timestamp does not match clock {time_field}"
         )
     return decision
 

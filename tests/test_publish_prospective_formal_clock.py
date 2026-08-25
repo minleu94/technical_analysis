@@ -158,6 +158,26 @@ def test_cli_publishes_owner_bound_future_clock(tmp_path: Path) -> None:
     )
 
 
+def test_cli_publishes_distinct_pit_and_owner_decision_times(tmp_path: Path) -> None:
+    args = _cli_args(tmp_path)
+    output_index = args.index("--output") + 1
+    args[output_index] = str(tmp_path / "clock_distinct_times.json")
+    decision_index = args.index("--decision-time") if "--decision-time" in args else None
+    if decision_index is None:
+        args[args.index("--calendar-evidence-json"):args.index("--calendar-evidence-json")] = [
+            "--decision-time",
+            "09:00:00",
+            "--pit-decision-time",
+            "08:30:00",
+        ]
+    else:
+        args[decision_index + 1] = "09:00:00"
+    assert main(args) == 0
+    manifest = json.loads((tmp_path / "clock_distinct_times.json").read_text(encoding="utf-8"))
+    assert manifest["decision_time"] == "09:00:00"
+    assert manifest["pit_decision_time"] == "08:30:00"
+
+
 def test_cli_rejects_same_day_activation(tmp_path: Path) -> None:
     assert main(_cli_args(tmp_path, activation_day="2026-08-15")) == 2
     assert not (tmp_path / "clock.json").exists()

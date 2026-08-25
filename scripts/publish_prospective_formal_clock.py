@@ -36,6 +36,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--policy-hash", required=True)
     parser.add_argument("--universe-hash", required=True)
     parser.add_argument("--source-policy-hash", required=True)
+    parser.add_argument("--decision-time", default="08:30:00")
+    parser.add_argument("--pit-decision-time")
     parser.add_argument("--candidate-model-hash", required=True)
     parser.add_argument("--candidate-feature-manifest-hash", required=True)
     parser.add_argument("--candidate-training-cutoff", required=True)
@@ -67,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
             "owner_decision_timestamp": args.owner_decision_timestamp,
             "activation_trading_day": args.activation_trading_day,
             "decision_timezone": "Asia/Taipei",
-            "decision_time": "08:30:00",
+            "decision_time": args.decision_time,
             "activation_calendar_evidence": calendar,
             "seed_state": seed,
             "virtual_notional_minor_units": args.virtual_notional_minor_units,
@@ -85,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
             "broker_execution": False,
             "historical_backfill_claimed": False,
         }
+        if args.pit_decision_time is not None:
+            body["pit_decision_time"] = args.pit_decision_time
         manifest = build_clock_manifest(body)
         validate_clock_manifest(
             manifest,

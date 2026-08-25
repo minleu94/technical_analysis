@@ -60,6 +60,10 @@ _CLOCK_FIELDS = frozenset(
         "manifest_hash",
     }
 )
+# A clock may expose a separate PIT boundary while retaining one owner-bound
+# Rule/Portfolio decision time. Existing clocks omit this optional field and
+# continue to inherit the Rule/Portfolio time for PIT capture.
+_OPTIONAL_CLOCK_FIELDS = frozenset({"pit_decision_time"})
 _SEED_FIELDS = frozenset({"kind", "cash_bp", "position_count", "state_hash"})
 _CALENDAR_FIELDS = frozenset(
     {"schema_version", "date", "is_trading_day", "reason_code", "source", "source_hash"}
@@ -110,6 +114,10 @@ class ProspectiveFormalClock:
             "owner_decision_timestamp": self.owner_decision_timestamp.isoformat(),
             "candidate_training_cutoff": self.candidate_training_cutoff.isoformat(),
             "candidate_model_hash": self.candidate_model_hash,
+            "decision_time": str(self.payload["decision_time"]),
+            "pit_decision_time": str(
+                self.payload.get("pit_decision_time", self.payload["decision_time"])
+            ),
             "calibration_policy_hash": self.payload["calibration_policy_hash"],
             "evaluation_policy_hash": self.payload["evaluation_policy_hash"],
             "historical_backfill_claimed": False,
@@ -160,7 +168,7 @@ def validate_clock_manifest(
 
     if not isinstance(manifest, Mapping):
         raise ProspectiveFormalClockError("clock manifest must be an object")
-    unknown = set(manifest) - _CLOCK_FIELDS
+    unknown = set(manifest) - (_CLOCK_FIELDS | _OPTIONAL_CLOCK_FIELDS)
     missing = _CLOCK_FIELDS - set(manifest)
     if unknown:
         raise ProspectiveFormalClockError(
@@ -193,6 +201,14 @@ def validate_clock_manifest(
     decision_time = _parse_local_time(manifest.get("decision_time"), "decision_time")
     if decision_time.tzinfo is not None:
         raise ProspectiveFormalClockError("decision_time must not contain a timezone")
+    pit_decision_time = _parse_local_time(
+        manifest.get("pit_decision_time", decision_time.isoformat(timespec="seconds")),
+        "pit_decision_time",
+    )
+    if pit_decision_time > decision_time:
+        raise ProspectiveFormalClockError(
+            "pit_decision_time cannot be after decision_time"
+        )
 
     owner_decision_timestamp = _parse_aware_datetime(
         manifest.get("owner_decision_timestamp"), "owner_decision_timestamp"

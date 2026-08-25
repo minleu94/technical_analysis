@@ -24,7 +24,12 @@ from data_module.prospective_pit_sector_membership import (
 _NOW = datetime.fromisoformat("2026-08-17T09:00:00+08:00")
 
 
-def _clock(tmp_path: Path):
+def _clock(
+    tmp_path: Path,
+    *,
+    decision_time: str = "08:30:00",
+    pit_decision_time: str | None = None,
+):
     seed = {"kind": "cash", "cash_bp": 10_000, "position_count": 0}
     seed["state_hash"] = payload_hash(seed)
     calendar = {
@@ -44,7 +49,7 @@ def _clock(tmp_path: Path):
         "owner_decision_timestamp": "2026-08-14T08:45:00+08:00",
         "activation_trading_day": "2026-08-17",
         "decision_timezone": "Asia/Taipei",
-        "decision_time": "08:30:00",
+        "decision_time": decision_time,
         "activation_calendar_evidence": calendar,
         "seed_state": seed,
         "virtual_notional_minor_units": 1_000_000,
@@ -62,6 +67,8 @@ def _clock(tmp_path: Path):
         "broker_execution": False,
         "historical_backfill_claimed": False,
     }
+    if pit_decision_time is not None:
+        body["pit_decision_time"] = pit_decision_time
     path = tmp_path / "clock.json"
     path.write_text(json.dumps(build_clock_manifest(body)), encoding="utf-8")
     return load_clock_manifest_for_capture(path, now=_NOW)
@@ -151,6 +158,19 @@ def test_capture_and_validate_supported_sidecar_formats(
         PIT_SECTOR_MEMBERSHIP_PROSPECTIVE_MANIFEST_SCHEMA_VERSION
     )
     assert payload["manifest"]["historical_backfill_claimed"] is False
+
+
+def test_pit_capture_uses_separate_pit_boundary(tmp_path: Path) -> None:
+    clock = _clock(
+        tmp_path,
+        decision_time="09:00:00",
+        pit_decision_time="08:30:00",
+    )
+    result = capture_prospective_pit_sector_membership(
+        **_capture_kwargs(tmp_path, clock, tmp_path / "pit_separate_boundary.json")
+    )
+
+    assert result.coverage_end == "2026-08-17"
 
 
 def test_source_license_and_status_lineage_are_required(tmp_path: Path) -> None:
