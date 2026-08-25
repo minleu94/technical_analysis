@@ -121,3 +121,11 @@
 - Repo 分批提交：`73433d6`（split PIT／owner decision boundaries）、`cc831b1`（split clock staging record）、`4cbae9f`（readiness routes PIT boundary）、`49f7bc2`（readiness rollback／compatibility documentation）、`4887362`（split timestamp focused tests）；本次 Portfolio clock-bound fix 與 v2 文件另以後續 commits 保存。
 - 受控 D 槽資料採 create-only／append-only；外部 artifact 失敗時保留 immutable bytes、停止 consumer 採用並建立 successor clock，不刪除或覆寫原始資料。舊 `clock-20260819` 與 8/25、8/27 v1 不變更。
 - Repo 回滾採逐一 `git revert <docs-commit>` 或依檔案 review 後 revert，不使用 `git reset --hard`／`git checkout --` 覆寫其他工作；本週報不會藉回滾刪除外部受控資料。
+
+## Activation handoff preparation addendum（2026-08-26 01:56 Asia/Taipei）
+
+- 唯讀重新取得台北時間為 `2026-08-26T01:56:58+08:00`；v3 activation 仍是 `2026-08-27`，因此尚未產生任何三份 formal manifest，也沒有把 deferred/staging input 宣稱為 ready。
+- `development_module/prospective_rule_only_decision.py` 與 `scripts/run_prospective_rule_only_decision.py` 已接上 v3 owner acceptance、frozen universe、T-1 `daily_prices`、受控 HMAC artifact 與 exact safety flags；Rule observation 允許在 09:00 boundary 後真實取得，但不可早於 boundary。
+- `scripts/run_prospective_formal_activation_once.py` 已準備低 CPU 單次入口：官方 PIT → owner-bound Rule history → T-1 simulated Portfolio → strict readiness；所有 formal output create-only，任何既有 output、source、schema、T-1 或 HMAC 不成立即停止。
+- Rule coverage 的唯讀 probe 發現 `1341` 有無成交列缺少 close；producer 不前填、不補造數值，只從固定 60-session causal window 取最近 20 個有效觀測。probe 在目前資料下仍覆蓋 frozen 1,932 symbols；此 probe 不是 Formal evidence，activation 時會重新讀取實際 T-1。
+- Portfolio capture CLI 已改用 activation-time clock loader；既有 clock bytes、market DB 與外部 raw custody 均未覆寫。上述新增程式可逐一 revert；外部 v3 artifact 若失敗則保留 immutable bytes，改用 successor clock 回滾 consumer adoption。

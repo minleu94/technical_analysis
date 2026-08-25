@@ -65,12 +65,12 @@ only record configured booleans; no secret value was emitted.
 
 ## Single-run activation handoff
 
-On 2026-08-27, run the existing fixture-only low-CPU entries with actual timestamps:
+On 2026-08-27, run the low-CPU one-shot entries with actual timestamps:
 
-1. 08:30：re-capture official TWSE／TPEX raw bytes and publish v3 PIT manifest.
-2. after 09:00：consume the real owner-bound controlled-store HMAC artifact and publish v3 Rule history.
-3. after the 2026-08-26 close: use the 2026-08-26 T-1 state and v3 09:00 boundary to append the first non-cash simulated Portfolio transition, then publish its manifest.
-4. only after all three exist: run strict readiness; partial start is forbidden.
+1. `scripts/run_prospective_rule_only_decision.py` 在真實台北 09:00–13:30 盤中，以 v3 owner acceptance、frozen 1,932-symbol universe、唯讀 `daily_prices` 與受控 HMAC store 產生 TEMP owner-bound Rule source；缺資料、store／HMAC 或 schema 不成立時 fail closed。
+2. `scripts/capture_prospective_official_pit_sector.py`（不帶 `--preactivation-staging`）在 08:30 boundary 後，以 TWSE `t187ap03_L`／TPEX `t187ap03_O` raw custody publish v3 PIT manifest；`available_at` 必須不晚於 08:30，且不呼叫 `t187ap03_R`。
+3. `scripts/capture_formal_simulated_portfolio_transition.py` 使用 2026-08-26 T-1 cash seed、Rule observed target 與 v3 09:00 clock boundary append 首筆 simulated Portfolio transition，再由 `scripts/publish_prospective_simulated_portfolio_ledger.py` publish manifest。
+4. `scripts/run_prospective_formal_activation_once.py` 可將上述一次性流程串起；只有三份 formal input 都存在後才寫 strict readiness，三份 input 不可 partial start。Rule 的真實 observation 可以晚於 09:00，但不可早於 clock boundary；Portfolio 仍固定使用 09:00 boundary。
 
 No continuous scheduler, Direct/OOC watcher, training, retraining, promotion,
 broker adapter, order, automatic rebalance or automatic liquidation is enabled.
