@@ -4,6 +4,15 @@
 
 > 15 capability、canonical lineage verifier 與 operations handoff 見 [V3.3 Engineering Closeout](V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)；本控制中心仍是外部 Gate hub。
 
+## Current Forward Clock projection（2026-08-25）
+
+| Clock | 今日狀態 | 可引用證據 | 缺失／degraded／failure | 下一步 |
+|---|---|---|---|---|
+| Development | `DEV-133-prospective-v3-lineage-current-projection-20260825` | 新 create-only successor `clock:prospective:20260827:v3` 維持 `planned`；clock manifest hash=`sha256:43d3872b4646d7565762a16104e9e53302885adcad0ad6a7596ce75853806882`，PIT／Rule-Portfolio boundary 分別為 08:30／09:00 Asia/Taipei。唯讀驗證確認 TWSE／TPEX staging 為 1,932／1,932 個唯一 symbols、file hash=`sha256:7c9f915b16122892a7db8d740605bac6432a465f0118470f8aa8f7c09ea1c3fb`，且 `formal_consumer_compatible=false`；deferred readiness=`ready_for_future_activation`，hash=`sha256:3cd4ddb22678378dc1853b6df7ea05ea5f4f3f39a976c0792fa8eb0699d750ad`。沒有 endpoint、capture、producer、DB、clock activation、training 或 promotion 動作 | 三份正式 Rule／Portfolio／PIT manifests 仍不存在；activation environment=`waiting_for_controlled_environment`，execution plan=`waiting_for_owner_inputs`。preactivation raw／staging 不是 activation-session freshness 或 Formal evidence；strict readiness 尚未啟動。degraded=`activation_session_inputs_deferred`；failure=`none` | 等待 2026-08-27 真實 08:30／09:00 boundary、2026-08-26 T-1 state 與當日官方 source lineage；屆時仍須三份 input 同時通過 strict readiness。本 projection 不啟動 capture、scheduler、watcher、Direct／OOC、training、promotion 或 broker |
+| Formal evidence | `formal-rule-only-20260807-r1 / zero_credit` | owner decision 與四筆 consumption-registry binding 維持有效且未消耗；formal session=`2026-08-07`，snapshot=`missing`，唯一 blocker=`manual_observed_snapshot_missing`，`formal_readiness=false`。本次 Formal Week 6 只追加一次人工 why-not revision | 本次 snapshot count、outcome revision、matured denominator、Formal credit、consumption 與 elapsed-day increment 全部為 `0`；missing=`genuine decision-time Rule-only manual_observed artifact`；degraded=`none for the latest bound Rule-only lane`；capture failure=`no qualifying decision-time artifact supplied or found`。歷史 `manual_observed_20260729.json` 不重用、不回填 | 不重綁或消耗 2026-08-07，不把 prospective clock、staging、development invocation、replay、fixture 或事後審核換算為 observed day。新 holdout 仍須可引用 owner 決議時間 artifact，且綁定前重新檢查 registry |
+
+截至 **2026-08-25 14:35（Asia/Taipei）**，Formal Week 6（2026-08-17 至 2026-08-23）已自然結束，External Validation Register 已追加唯一 zero-credit why-not revision；Formal Week 7 尚在進行中。August 尚未完成，因此不新增當月 Gate Review。安全旗標維持 `formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0`、Rule-only Formal path、`broker_order_allowed=false`。
+
 ## Prospective formal restart direction（2026-08-19）
 
 Owner 已鎖定新的執行方向，完整決策見 [Prospective Formal Restart Direction](PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md)：舊 `clock:prospective:20260819:v1` 只保留歷史追溯，不重建、不沿用、不回填；下一個長任務依官方 TWSE／TPEX 共同交易日與至少一個完整準備日建立新未來 clock，由 Codex 先提出唯一首選 Rule Champion，再以 TWSE `t187ap03_L`／TPEX `t187ap03_O` 建立 prospective first-seen 產業歸屬。Broker 固定關閉。
@@ -12,7 +21,7 @@ Owner 已鎖定新的執行方向，完整決策見 [Prospective Formal Restart 
 
 本文件更新沒有建立 clock bytes、source acceptance、Rule snapshot、Portfolio transition、PIT sidecar、Formal OOS、shadow day、promotion credit、scheduler 或 broker 權限；安全旗標維持 `formal_oos_allowed=false`、production alpha 0、`broker_order_allowed=false`。
 
-截至 2026-08-25T05:21:31+08:00，`clock:prospective:20260825:v1` 已建立並綁定 2026-08-24 完整準備日；Rule Champion 已接受，TWSE／TPEX raw source 只完成 activation-day staging。因尚未到 08:30，三份正式 inputs 仍為 `0/3`，strict readiness 維持 fail-closed；此狀態不產生 Formal OOS、shadow maturity、promotion 或 broker credit。
+`clock:prospective:20260825:v1` 與 rejected v2 bytes 只保留 immutable 歷史追溯，不重建、不沿用、不回填。最新 successor 是 `clock:prospective:20260827:v3`；Rule Champion 已接受，TWSE／TPEX raw source 只完成 preactivation staging。三份正式 inputs 仍為 `0/3`，strict readiness 維持 fail-closed；此狀態不產生 Formal OOS、shadow maturity、promotion 或 broker credit。
 
 ## Prospective formal simulation track（2026-08-14）
 
