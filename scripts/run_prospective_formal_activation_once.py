@@ -13,8 +13,10 @@ from collections.abc import Mapping
 from datetime import date, datetime, time
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import sys
+import tempfile
 from typing import Any, Sequence
 from zoneinfo import ZoneInfo
 
@@ -28,13 +30,11 @@ from data_module.formal_simulated_portfolio_ledger import (  # noqa: E402
     build_simulated_transition,
 )
 from data_module.prospective_capture_readiness import (  # noqa: E402
-    ProspectiveCaptureReadinessError,
     build_prospective_capture_readiness_report,
     write_immutable_capture_readiness_report,
 )
 from data_module.prospective_formal_clock import (  # noqa: E402
     ProspectiveFormalClock,
-    file_sha256,
     load_clock_manifest_for_capture,
     payload_hash,
 )
@@ -95,9 +95,68 @@ def run_activation_once(
     clock = load_clock_manifest_for_capture(clock_manifest, now=observed)
     _require_activation_boundary(clock, observed)
     symbols = _read_symbols(universe_symbols)
-    paths = _formal_paths(output_root)
-    _refuse_existing_formal_outputs(paths)
+    final_paths = _formal_paths(output_root)
+    _refuse_existing_formal_outputs(final_paths)
     _require_market_t1(market_db, clock.activation_trading_day)
+
+    # Keep all producer writes outside the formal consumer paths until every
+    # input has independently passed strict readiness.  This prevents a PIT
+    # or Rule file from being left behind if a later producer fails.
+    staging_root = _create_staging_root(output_root)
+    staging_paths = _formal_paths(staging_root)
+    published: list[tuple[Path, Path]] = []
+    readiness_created = [False]
+
+    try:
+        return _run_activation_capture(
+            observed=observed,
+            clock=clock,
+            symbols=symbols,
+            market_db=market_db,
+            calibration_policy=calibration_policy,
+            clock_manifest=clock_manifest,
+            universe_symbols=universe_symbols,
+            owner_acceptance=owner_acceptance,
+            source_metadata=source_metadata,
+            pit_staging_package=pit_staging_package,
+            twse_raw=twse_raw,
+            tpex_raw=tpex_raw,
+            development_output_root=development_output_root,
+            staging_paths=staging_paths,
+            final_paths=final_paths,
+            published=published,
+            readiness_created_ref=readiness_created,
+        )
+    except Exception:
+        if readiness_created[0] and final_paths["readiness"].exists():
+            final_paths["readiness"].unlink()
+        _rollback_published_outputs(published)
+        raise
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
+
+
+def _run_activation_capture(
+    *,
+    observed: datetime,
+    clock: ProspectiveFormalClock,
+    symbols: tuple[str, ...],
+    market_db: Path,
+    calibration_policy: Path,
+    clock_manifest: Path,
+    universe_symbols: Path,
+    owner_acceptance: Path,
+    source_metadata: Path,
+    pit_staging_package: Path,
+    twse_raw: Path,
+    tpex_raw: Path,
+    development_output_root: Path,
+    staging_paths: Mapping[str, Path],
+    final_paths: Mapping[str, Path],
+    published: list[tuple[Path, Path]],
+    readiness_created_ref: list[bool],
+) -> dict[str, object]:
+    """Run the producer chain and publish only after staged readiness passes."""
 
     # Produce the owner-bound Rule source first.  It writes only TEMP source
     # custody; no formal path is touched until the HMAC artifact is ready.
@@ -122,7 +181,7 @@ def run_activation_once(
     pit_time = _clock_timestamp(clock, "pit_decision_time")
     pit_result = capture_prospective_pit_sector_membership(
         clock=clock,
-        output_path=paths["pit"],
+        output_path=staging_paths["pit"],
         decision_timestamp=pit_time,
         now=observed,
         rows=pit_capture.rows,
@@ -141,7 +200,7 @@ def run_activation_once(
     repository = PersistedFormalDecisionArtifactRepository(artifacts)
     rule_result = publish_prospective_rule_history(
         clock=clock,
-        output_path=paths["rule"],
+        output_path=staging_paths["rule"],
         now=observed,
         strategy_version=str(rule_source["strategy_version"]),
         policy_version=str(rule_source["policy_version"]),
@@ -189,19 +248,18 @@ def run_activation_once(
         output_weekly_turnover_used_bp=PORTFOLIO_WEIGHT_BP,
         previous_chain_hash=ZERO_CHAIN_HASH,
     )
-    append_simulated_transition(paths["portfolio_sqlite"], transition)
+    append_simulated_transition(staging_paths["portfolio_sqlite"], transition)
     ledger_clock = load_clock_for_ledger_manifest(clock_manifest, now=observed)
     ledger_manifest = build_prospective_simulated_ledger_manifest(
         clock=ledger_clock,
-        sqlite_path=paths["portfolio_sqlite"],
-        manifest_path=paths["portfolio"],
+        sqlite_path=staging_paths["portfolio_sqlite"],
+        manifest_path=staging_paths["portfolio"],
         now=observed,
     )
     ledger_file_hash = publish_prospective_simulated_ledger_manifest(
-        paths["portfolio"], ledger_manifest
+        staging_paths["portfolio"], ledger_manifest
     )
 
-    decision_timestamp = str(rule_result.decision_dates[0])
     # The publisher result intentionally exposes only dates; read the
     # canonical snapshot timestamp from the already-written source custody.
     rule_snapshot_timestamp = _read_rule_timestamp(
@@ -214,29 +272,48 @@ def run_activation_once(
         pit_decision_timestamp=pit_time,
         now=observed,
         expected_symbols=symbols,
-        portfolio_ledger_manifest_path=paths["portfolio"],
-        rule_history_path=paths["rule"],
-        pit_sector_membership_path=paths["pit"],
+        portfolio_ledger_manifest_path=staging_paths["portfolio"],
+        rule_history_path=staging_paths["rule"],
+        pit_sector_membership_path=staging_paths["pit"],
         active_clock=True,
-    )
-    readiness_file_hash = write_immutable_capture_readiness_report(
-        paths["readiness"], readiness
     )
     if readiness.get("status") != "ready":
         raise ProspectiveActivationOnceError(
-            "strict readiness did not reach ready after all three manifests"
+            "staged strict readiness did not reach ready after all three manifests"
         )
+
+    _publish_staged_outputs(staging_paths, final_paths, published)
+    final_readiness = build_prospective_capture_readiness_report(
+        clock_manifest_path=clock_manifest,
+        calibration_policy_path=calibration_policy,
+        decision_timestamp=rule_snapshot_timestamp,
+        pit_decision_timestamp=pit_time,
+        now=observed,
+        expected_symbols=symbols,
+        portfolio_ledger_manifest_path=final_paths["portfolio"],
+        rule_history_path=final_paths["rule"],
+        pit_sector_membership_path=final_paths["pit"],
+        active_clock=True,
+    )
+    if final_readiness.get("status") != "ready":
+        raise ProspectiveActivationOnceError(
+            "final strict readiness did not reach ready after staged publication"
+        )
+    readiness_file_hash = write_immutable_capture_readiness_report(
+        final_paths["readiness"], final_readiness
+    )
+    readiness_created_ref[0] = True
     return {
         "status": "complete",
         "clock_id": clock.clock_id,
         "clock_manifest_hash": clock.manifest_hash,
-        "pit_manifest": str(paths["pit"]),
+        "pit_manifest": str(final_paths["pit"]),
         "pit_manifest_file_hash": pit_result.sidecar_file_hash,
-        "rule_manifest": str(paths["rule"]),
+        "rule_manifest": str(final_paths["rule"]),
         "rule_manifest_file_hash": rule_result.manifest_file_hash,
-        "portfolio_manifest": str(paths["portfolio"]),
+        "portfolio_manifest": str(final_paths["portfolio"]),
         "portfolio_manifest_file_hash": ledger_file_hash,
-        "readiness": str(paths["readiness"]),
+        "readiness": str(final_paths["readiness"]),
         "readiness_file_hash": readiness_file_hash,
         "decision_timestamp": rule_snapshot_timestamp,
         "pit_decision_timestamp": pit_time,
@@ -300,6 +377,52 @@ def _formal_paths(output_root: Path) -> dict[str, Path]:
     if any(not path.parent.is_dir() for path in paths.values()):
         raise ProspectiveActivationOnceError("formal output parent directory is missing")
     return paths
+
+
+def _create_staging_root(output_root: Path) -> Path:
+    root = output_root.expanduser().resolve()
+    staging_parent = root / ".activation_staging"
+    staging_parent.mkdir(parents=True, exist_ok=True)
+    staging_root = Path(tempfile.mkdtemp(prefix="v3-", dir=staging_parent))
+    for directory in (
+        "pit_sector_membership",
+        "rule_champion_history",
+        "portfolio_ledger",
+        "readiness",
+    ):
+        (staging_root / directory).mkdir(parents=True, exist_ok=True)
+    return staging_root
+
+
+def _publish_staged_outputs(
+    staging_paths: Mapping[str, Path],
+    final_paths: Mapping[str, Path],
+    published: list[tuple[Path, Path]],
+) -> None:
+    for name in ("pit", "rule", "portfolio_sqlite", "portfolio"):
+        source = staging_paths[name]
+        target = final_paths[name]
+        if not source.is_file():
+            raise ProspectiveActivationOnceError(
+                f"staged formal output is missing:{name}"
+            )
+        if target.exists():
+            raise ProspectiveActivationOnceError(
+                f"formal output appeared during activation:{name}"
+            )
+        source.rename(target)
+        published.append((source, target))
+
+
+def _rollback_published_outputs(published: list[tuple[Path, Path]]) -> None:
+    for source, target in reversed(published):
+        if not target.exists():
+            continue
+        if source.exists():
+            raise ProspectiveActivationOnceError(
+                "formal output rollback target already exists"
+            )
+        target.rename(source)
 
 
 def _refuse_existing_formal_outputs(paths: Mapping[str, Path]) -> None:
