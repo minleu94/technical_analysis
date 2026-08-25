@@ -70,4 +70,4 @@ Clock 是 create-only、planned、prospective-only。`real_money=false`、`broke
 
 ## Rollback
 
-所有 2026-08-28 外部 artifacts 都是新路徑的 create-only output。若 owner 取消此 successor，保留原始 bytes 與 hashes，將 clock 標記為 superseded／cancelled 並停止後續 capture；不刪除、不覆寫、不把它改名成 Formal。程式 contract 變更可用 Git `revert` 依序回滾 commits `73433d6`、`cc831b1`，不影響既有 2026-08-25／2026-08-27 immutable artifacts。
+所有 2026-08-28 外部 artifacts 都是新路徑的 create-only output。若 owner 取消此 successor，保留原始 bytes 與 hashes，將 clock 標記為 superseded／cancelled 並停止後續 capture；不刪除、不覆寫、不把它改名成 Formal。程式 contract 變更可用 Git `revert` 依序回滾 commits `73433d6`、`cc831b1`、`4cbae9f`，不影響既有 2026-08-25／2026-08-27 immutable artifacts。
