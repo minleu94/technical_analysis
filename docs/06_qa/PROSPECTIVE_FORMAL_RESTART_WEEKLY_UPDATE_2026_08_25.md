@@ -129,3 +129,12 @@
 - `scripts/run_prospective_formal_activation_once.py` 已準備低 CPU 單次入口：官方 PIT → owner-bound Rule history → T-1 simulated Portfolio → strict readiness；所有 formal output create-only，任何既有 output、source、schema、T-1 或 HMAC 不成立即停止。
 - Rule coverage 的唯讀 probe 發現 `1341` 有無成交列缺少 close；producer 不前填、不補造數值，只從固定 60-session causal window 取最近 20 個有效觀測。probe 在目前資料下仍覆蓋 frozen 1,932 symbols；此 probe 不是 Formal evidence，activation 時會重新讀取實際 T-1。
 - Portfolio capture CLI 已改用 activation-time clock loader；既有 clock bytes、market DB 與外部 raw custody 均未覆寫。上述新增程式可逐一 revert；外部 v3 artifact 若失敗則保留 immutable bytes，改用 successor clock 回滾 consumer adoption。
+
+## Owner same-day pre-open override addendum（2026-08-26 05:45 Asia/Taipei）
+
+- Owner 明確要求排除本 clock 的完整自然準備日循環延期。較新的具體授權已在權威方向文件記為只限 2026-08-26、08:30 前、具名、不可回填的窄例外；不改變其他 clock，也不放寬 PIT／T-1／strict readiness／ML／promotion／broker Gate。
+- 新 `clock:prospective:20260826:v1` 已 create-only 建立；clock manifest hash=`sha256:5409fe23d5247dc1698af09a5af9295ad8f7ad3f02c6926233582e11e93efde7`、file hash=`sha256:c8ee8be95936adf48637d9077351bb90ee33b9bf8cc27b7c86780523f0c05784`。8/27 v3 與 8/28 v1 均保持 immutable，不刪除、不改掛。
+- 8/25 market DB 已有 1,955 rows／1,955 symbols，直接成為 8/26 T-1；沒有 drop、回填或 same-day close。官方 calendar 證明 8/26 是 TWSE／TPEX 共同交易日。
+- 官方 PIT raw first-seen 為 2026-08-25 13:40:58+08:00，早於 8/26 PIT boundary；新 clock staging coverage=`1932/1932`、file hash=`sha256:30e09b71d1415c63d690df048848a3026d8779cdfbbe4882e9c59c686be967b7`。
+- 一次性 Codex automation `prospective-formal-20260826-one-shot-activation` 已實際註冊為 `ACTIVE`，於 8/26 09:00 Asia/Taipei 執行一次，不是 suggestion card 或每日排程。三份正式 inputs 與 strict readiness 仍須等真實 09:00 transaction；pre-open 維持 0/3，不提前冒充 Formal。
+- 完整 hash、source lineage、QA、rollback 與安全狀態見 [2026-08-26 same-day staging record](PROSPECTIVE_FORMAL_RESTART_CLOCK_2026_08_26_STAGING.md)。

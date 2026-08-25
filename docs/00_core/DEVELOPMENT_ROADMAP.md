@@ -83,6 +83,8 @@ baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資�
 
 > **目前 Gate 7 執行軌**：Owner 已採用 prospective-only、非實盤的正式模擬持倉 clock；`2014–2026` 保留 research/history，不事後回填。`PFS-01`～`PFS-10` 均已完成 focused QA；舊 `clock:prospective:20260819:v1` 因決策日已過且正式輸入未成立，只保留歷史追溯。依 [Prospective Formal Restart Direction](../06_qa/PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md)，下一個長任務改為：以官方共同交易日與完整準備日建立新未來 clock；由 Codex 提出 Rule Champion；以 TWSE／TPEX 官方公司基本資料建立 prospective PIT sector；三份 manifests 通過 strict readiness 後才開始低 CPU capture。唯一前置 owner checkpoint 是接受具體 Rule Champion identity；重型 watcher、非零 alpha、promotion 與 Broker 全部維持關閉。這不產生 Formal OOS 或 promotion credit。
 
+> **2026-08-26 same-day pre-open override**：Owner 已明確排除本 clock 的完整自然準備日循環延期；新 `clock:prospective:20260826:v1` 只依具名、08:30 前、不可回填的 owner override 成立。2026-08-25 T-1 已在 read-only market DB 存在，官方 TWSE／TPEX 日曆確認 8/26 共同交易，PIT staging 1932/1932。一次性 activation automation 已為 ACTIVE，於 09:00 Asia/Taipei 執行一次；三份 formal inputs 與 strict readiness 在 transaction 完成前仍不得宣稱 ready。這個窄例外不授權其他 same-day／past clock，也不改變 ML alpha=0、promotion=false 或 broker=false。
+
 > **2026-08-25 pre-open status**：新 clock `clock:prospective:20260825:v1` 與 2026-08-24 完整準備日已成立，Rule Champion 已接受，TWSE／TPEX activation-only source 已完成 staging；目前仍早於 08:30，正式 Rule／Portfolio／PIT inputs 為 `0/3`，strict readiness 尚未通過，不得 partial start 或把 staging 視為 Formal evidence。後續只在真實 activation 時間後依序完成 PIT capture、Rule history、首日 Portfolio transition，再重新執行 strict readiness。
 
 1. Gate 0 Safe Refactor 已 closeout；維持行為等價與 rollback discipline，但不再把重構當作產品主線。

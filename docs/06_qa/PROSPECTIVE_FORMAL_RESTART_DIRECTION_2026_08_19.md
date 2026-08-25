@@ -95,3 +95,16 @@ Codex 負責完成候選盤點、比較與首選提案。**Owner 只需在看到
 - 不宣稱 ML 已正式生效；在非零 alpha 另行獲准前，所有正式 Tab 仍是 Rule-only。
 - 不把 source endpoint 可連線直接當成 source acceptance；仍須保存授權、品質、PIT、coverage、rollback 與 reviewer evidence。
 - 不建立 broker adapter，不下單，不把 UI 持倉當成 simulated clock seed。
+
+## 9. 2026-08-26 owner 單次同日 pre-open 修正
+
+Owner 在 `2026-08-26` 開盤前明確要求排除「必須再等一個完整自然準備日」造成的循環延期，並要求由 Codex 直接建立當日三份正式 input。這項較新的具體決議只對 `clock:prospective:20260826:v1` 形成下列窄化修正，取代第 2 節第 3、4 點在本 clock 的完整準備日要求；其餘 no-backfill、PIT、T-1、controlled store 與安全 Gate 均不變：
+
+1. 同日 activation 只可在當日 `08:30:00 Asia/Taipei` PIT boundary 前，以具名 `prospective-same-day-preopen-owner-override.v1` 寫入新的 create-only clock；沒有 override、已達 PIT boundary 或 activation 已過去時仍 fail closed。
+2. Override 必須保存 owner override id、實際 timezone-aware timestamp、activation day、固定 reason code，且 `historical_backfill_allowed=false`、`same_day_preopen_only=true`；不能成為任意日期 bypass。
+3. 2026-08-26 的 Portfolio T-1 固定為 2026-08-25。市場 DB 已有該日 `1955` rows／`1955` symbols；不得刪除這一天，也不得改用 2026-08-26 same-day close。
+4. TWSE／TPEX 官方日曆必須證明 2026-08-26 為共同交易日；官方 `t187ap03_L`／`t187ap03_O` raw bytes 的 first-seen `available_at` 必須早於 2026-08-26 08:30，effective date 才可設為 2026-08-26。
+5. Rule／Portfolio 仍只能在真實 09:00 boundary 後建立，三份正式 input 必須以 staging transaction 一起發布並通過 strict readiness；任何失敗不得留下 partial formal output。
+6. 本修正不授權歷史回填、ML training／retraining、Direct／OOC watcher、promotion、非零 alpha、broker adapter、下單、自動再平衡或自動平倉。
+
+具體 clock、hash、官方來源與一次性操作證據見 [2026-08-26 same-day staging record](PROSPECTIVE_FORMAL_RESTART_CLOCK_2026_08_26_STAGING.md)。

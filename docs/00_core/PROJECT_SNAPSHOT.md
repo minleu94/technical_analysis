@@ -1,5 +1,13 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-26 Same-day pre-open owner override status
+
+- Owner 已明確排除本次 clock 的完整自然準備日循環延期；權威方向文件已新增只限 2026-08-26 08:30 前、具名且不可回填的窄例外。新 `clock:prospective:20260826:v1` 已 create-only 建立，PIT boundary=`08:30`、Rule／Portfolio boundary=`09:00 Asia/Taipei`；manifest hash=`sha256:5409fe23d5247dc1698af09a5af9295ad8f7ad3f02c6926233582e11e93efde7`。舊 8/19、8/25、8/27 與 8/28 clocks 全部未修改。
+- 官方日曆證明 2026-08-26 是 TWSE／TPEX 共同交易日；TWSE response hash=`sha256:7644c1a8af784c09f54670fd7413f536b13eb76c54d658058e8873d1aee32117`，TPEX response hash=`sha256:237e3ce533e2ed10a8888f48e2323ed6f425b6f079db946d5aac19fc812107ab`。市場 DB 已有 2026-08-25 T-1 1,955 rows／symbols，未刪除、未回填。
+- TWSE `t187ap03_L`／TPEX `t187ap03_O` first-seen raw 已綁定新 clock，coverage=`1932/1932`、staging file hash=`sha256:30e09b71d1415c63d690df048848a3026d8779cdfbbe4882e9c59c686be967b7`；不含興櫃、不讀 `companies.csv`。
+- 一次性 automation `prospective-formal-20260826-one-shot-activation` 已真正註冊為 `ACTIVE`，於 2026-08-26 09:00 Asia/Taipei 執行一次；不是 suggestion card 或每日循環。Pre-open strict baseline 仍是 0/3，必須等三份 input transaction 全部通過才成為 ready。
+- `formal_oos_allowed=false`、production alpha=`0`、promotion=false、broker=false；未啟動 Direct／OOC watcher、training、retraining 或 broker。完整證據見 [2026-08-26 same-day staging record](../06_qa/PROSPECTIVE_FORMAL_RESTART_CLOCK_2026_08_26_STAGING.md)。
+
 ## 2026-08-25 Activation-day pre-open status
 
 - 目前實際 Asia/Taipei 時間為 `2026-08-25T05:21:31+08:00`，仍早於 clock decision time `08:30:00`；新 clock `clock:prospective:20260825:v1` 已以 create-only planned identity 建立，activation trading day=`2026-08-25`、完整準備日=`2026-08-24`，舊 `clock:prospective:20260819:v1` 未改動且僅供歷史追溯。
