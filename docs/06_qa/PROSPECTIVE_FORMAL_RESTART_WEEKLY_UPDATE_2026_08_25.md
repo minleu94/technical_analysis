@@ -82,6 +82,7 @@
 - 結果：`0/3`，`waiting_for_prospective_inputs`；三份 input 不可 partial start。controlled store 與 HMAC secret store 僅顯示 configured，沒有輸出 secret。
 - 受控 market DB `daily_prices` 最新 session=`2026-08-24`；這是目前可證明的最新資料，不能提前宣稱 2026-08-27 T-1，也不以回填、watcher 或人工拼接解決。
 - activation environment preflight：三個 BALDR formal path 均 configured，但目前檔案不存在且尚未綁定 `clock-20260828`；controlled store／HMAC secret store configured，secret 未輸出。這是 activation 前的一次性 path binding，不是修改既有 clock 的理由。
+- activation environment preflight metadata file hash=`sha256:bdfa3e943f1968cd2904b32a23260e661fa8dd81c1e0a1249ea62fcc34336861`，保存在新 clock metadata；它只保存 configured／file status／hash 與安全旗標，不保存 secret。
 - deferred readiness hash=`sha256:8790853c60ad7167ac15d1bc66c1e07388876f35b2dfbf68de865dd8c148eca4`；strict pre-activation readiness hash=`sha256:a3bd7d26c660f4d05bf56fbcd20d3f1a3c301efa9995b190457cd885762f1909`；activation custody hash=`sha256:4c32ff3502d338da5d48880a2e5092046f13e50723e383be532eeee05d181218`。
 
 ### 已執行／已完成的 QA

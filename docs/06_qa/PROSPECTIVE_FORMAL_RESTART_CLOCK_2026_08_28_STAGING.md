@@ -55,6 +55,7 @@ Clock 是 create-only、planned、prospective-only。`real_money=false`、`broke
 - deferred readiness：`ready_for_future_activation`，3/3 input deferred；hash `sha256:8790853c60ad7167ac15d1bc66c1e07388876f35b2dfbf68de865dd8c148eca4`。
 - strict pre-activation readiness：`waiting_for_prospective_inputs`，0/3 ready；hash `sha256:a3bd7d26c660f4d05bf56fbcd20d3f1a3c301efa9995b190457cd885762f1909`。
 - activation custody：`scheduled`，`inputs_deferred_until_activation`；hash `sha256:4c32ff3502d338da5d48880a2e5092046f13e50723e383be532eeee05d181218`。
+- activation environment preflight：`waiting_for_controlled_environment`；metadata file=`metadata/activation_environment_preflight.json`，file hash=`sha256:bdfa3e943f1968cd2904b32a23260e661fa8dd81c1e0a1249ea62fcc34336861`。三個 BALDR formal path 均 configured 但目前 `file_missing`，controlled store／HMAC secret store 均 configured，未輸出 secret；本文件不修改 Windows environment。
 - controlled store 與 HMAC secret store 只確認 configured；沒有輸出 secret。三個 BALDR formal path 在 activation 前保持 file_missing，不註冊新的持續排程。
 
 ## 2026-08-28 單次操作入口
