@@ -21,7 +21,7 @@ from ml_module.allocation_contracts import AllocationWeightContract, CausalPortf
 _NOW = datetime.fromisoformat("2026-08-14T09:00:00+08:00")
 
 
-def _clock(tmp_path: Path):
+def _clock(tmp_path: Path, *, decision_time: str = "08:30:00"):
     seed = {"kind": "cash", "cash_bp": 10_000, "position_count": 0}
     seed["state_hash"] = payload_hash(seed)
     calendar = {
@@ -41,7 +41,7 @@ def _clock(tmp_path: Path):
         "owner_decision_timestamp": "2026-08-14T08:45:00+08:00",
         "activation_trading_day": "2026-08-17",
         "decision_timezone": "Asia/Taipei",
-        "decision_time": "08:30:00",
+        "decision_time": decision_time,
         "activation_calendar_evidence": calendar,
         "seed_state": seed,
         "virtual_notional_minor_units": 1_000_000,
@@ -89,6 +89,27 @@ def _transition(clock, *, previous_chain_hash: str = "sha256:" + "0" * 64):
         output_weekly_turnover_used_bp=1_000,
         previous_chain_hash=previous_chain_hash,
     )
+
+
+def test_portfolio_uses_clock_bound_decision_time(tmp_path: Path) -> None:
+    clock = _clock(tmp_path, decision_time="09:00:00")
+    transition = build_simulated_transition(
+        clock=clock,
+        decision_date="2026-08-17",
+        decision_at="2026-08-17T09:00:00+08:00",
+        previous_trading_day="2026-08-14",
+        input_state=_cash_state(),
+        desired_weights=_invested_state(),
+        feature_input_hash="sha256:" + "9" * 64,
+        estimated_cost_bp=25,
+        output_weekly_turnover_used_bp=1_000,
+    )
+
+    path = tmp_path / "ledger-09.sqlite"
+    append_simulated_transition(path, transition)
+    summary = summarize_simulated_ledger(path, clock=clock)
+
+    assert summary.decision_dates == ("2026-08-17",)
 
 
 def test_first_transition_is_t_minus_one_and_hash_bound(tmp_path: Path) -> None:

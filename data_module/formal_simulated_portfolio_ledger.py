@@ -397,7 +397,13 @@ def summarize_simulated_ledger(
         non_cash = 0
         for row in rows:
             transition = _transition_from_row(dict(row))
-            _validate_transition(transition)
+            expected_decision_time = time.fromisoformat(
+                str(clock.payload["decision_time"])
+            )
+            _validate_transition(
+                transition,
+                expected_decision_time=expected_decision_time,
+            )
             if transition.clock_id != clock.clock_id:
                 raise SimulatedPortfolioLedgerError("row clock_id mismatch")
             if transition.clock_manifest_hash != clock.manifest_hash:
@@ -564,7 +570,11 @@ def _ensure_metadata(
         raise SimulatedPortfolioLedgerError("simulated ledger metadata fields are invalid")
 
 
-def _validate_transition(transition: SimulatedPortfolioTransition) -> None:
+def _validate_transition(
+    transition: SimulatedPortfolioTransition,
+    *,
+    expected_decision_time: time | None = None,
+) -> None:
     if transition.future_teacher_target_used or transition.same_day_advice_used:
         raise SimulatedPortfolioLedgerError(
             "simulated transition contains forbidden future input"
@@ -603,6 +613,13 @@ def _validate_transition(transition: SimulatedPortfolioTransition) -> None:
     if parsed_decision_at.date().isoformat() != decision_day:
         raise SimulatedPortfolioLedgerError(
             "decision_at date does not match decision_date"
+        )
+    if (
+        expected_decision_time is not None
+        and parsed_decision_at.timetz().replace(tzinfo=None) != expected_decision_time
+    ):
+        raise SimulatedPortfolioLedgerError(
+            "decision_at does not match clock decision_time"
         )
     integer_fields = (
         "buy_turnover_bp",
@@ -840,10 +857,7 @@ def _parse_decision_at(value: str) -> datetime:
         raise SimulatedPortfolioLedgerError("decision_at is invalid") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise SimulatedPortfolioLedgerError("decision_at must include timezone")
-    taipei = parsed.astimezone(TAIPEI_TIMEZONE)
-    if taipei.timetz().replace(tzinfo=None) != time(8, 30):
-        raise SimulatedPortfolioLedgerError("decision_at must be 08:30 Asia/Taipei")
-    return taipei
+    return parsed.astimezone(TAIPEI_TIMEZONE)
 
 
 def _required_nonnegative_int(value: object, field_name: str) -> int:
