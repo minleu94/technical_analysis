@@ -116,6 +116,14 @@
 
 本週及 activation pre-open 沒有：回填過去日期、修改舊 clock、使用 `companies.csv` 回填 sector、啟動 legacy Direct／OOC watcher、training／retraining、promotion、Recommendation／Advice／正式 Portfolio ML 權重變更、broker adapter、下單、自動再平衡或自動平倉。
 
+## 2026-08-27 pre-activation continuation addendum（06:41 Asia/Taipei）
+
+- 本次唯讀核對顯示台北時間為 `2026-08-27T06:41`；尚未到 v3 的 PIT `08:30` 或 owner-bound Rule／Portfolio `09:00` boundary。`clock:prospective:20260827:v3` 仍為唯一待啟用 successor，activation=`2026-08-27`、完整準備日=`2026-08-26`。
+- 受控唯讀 market DB `daily_prices` 已有 exact 2026-08-26 T-1 state（`1966` rows），最新日期為 `20260826`；本次未刪除、未 drop、未覆寫、未回填，也未把資料庫改成符合日期的假資料。
+- v3 `pit_sector_membership/manifest.json`、`rule_champion_history/manifest.json`、`portfolio_ledger/manifest.json` 與 `readiness/strict_readiness.json` 目前均不存在，`.activation_staging` 亦不存在；因此目前仍是 `0/3` formal inputs，沒有 partial start 或假冒 Formal evidence。
+- 一次性 completion heartbeat 仍為 ACTIVE；它只在真實 09:00 後呼叫既有低 CPU atomic runner，並在所有三份 input 完整後才建立 strict readiness。本週沒有新增持續排程，也沒有啟動 Direct／OOC watcher、training、retraining、promotion 或 broker。
+- 本 addendum 只校正截至目前的 current status，不改寫前述 8/26 activation miss、v3 staging、官方日曆與 immutable custody 歷史證據；若 activation 成功，另以實際 timestamp、manifest hash 與 readiness hash 追加結果。
+
 ## 變更與回滾
 
 - Repo 分批提交：`73433d6`（split PIT／owner decision boundaries）、`cc831b1`（split clock staging record）、`4cbae9f`（readiness routes PIT boundary）、`49f7bc2`（readiness rollback／compatibility documentation）、`4887362`（split timestamp focused tests）；本次 Portfolio clock-bound fix 與 v2 文件另以後續 commits 保存。
