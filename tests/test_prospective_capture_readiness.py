@@ -302,7 +302,7 @@ def test_valid_ledger_wrapper_is_read_only_accepted(tmp_path: Path) -> None:
     report = build_prospective_capture_readiness_report(**kwargs)
     ledger = next(item for item in _inputs(report) if item["input"] == "causal_simulated_portfolio_ledger")
     assert ledger["state"] == "ready"
-    assert ledger["non_cash_state_day_count"] == 1
+    assert ledger["non_cash_state_day_count"] == 2
     assert _guard(report)["heavy_rebuild_launch_allowed"] is False
 
 

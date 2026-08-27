@@ -119,6 +119,31 @@ def _ledger(tmp_path: Path, clock) -> Path:
     return sqlite_path
 
 
+def _first_transition_ledger(tmp_path: Path, clock) -> Path:
+    sqlite_path = tmp_path / "first-transition-ledger.sqlite"
+    input_state = CausalPortfolioState.create(
+        as_of_date="2026-08-16",
+        weights=AllocationWeightContract(positions_bp=(), cash_bp=10_000),
+        weekly_turnover_used_bp=0,
+    )
+    transition = build_simulated_transition(
+        clock=clock,
+        decision_date="2026-08-17",
+        decision_at="2026-08-17T08:30:00+08:00",
+        previous_trading_day="2026-08-16",
+        input_state=input_state,
+        desired_weights=AllocationWeightContract(
+            positions_bp=(("2330", 1_000),),
+            cash_bp=9_000,
+        ),
+        feature_input_hash="sha256:" + "b" * 64,
+        estimated_cost_bp=25,
+        output_weekly_turnover_used_bp=1_000,
+    )
+    append_simulated_transition(sqlite_path, transition)
+    return sqlite_path
+
+
 def test_manifest_publisher_custodies_relative_sqlite_and_non_cash_state(
     tmp_path: Path,
 ) -> None:
@@ -140,7 +165,7 @@ def test_manifest_publisher_custodies_relative_sqlite_and_non_cash_state(
     assert manifest["formal_consumer_compatible"] is True
     assert manifest["promotion_eligible"] is False
     assert manifest["sqlite_path"] == "ledger.sqlite"
-    assert manifest["non_cash_state_day_count"] == 1
+    assert manifest["non_cash_state_day_count"] == 2
     assert publish_prospective_simulated_ledger_manifest(output, manifest).startswith(
         "sha256:"
     )
@@ -149,6 +174,21 @@ def test_manifest_publisher_custodies_relative_sqlite_and_non_cash_state(
     ]
     with pytest.raises(ProspectiveSimulatedLedgerManifestError, match="already exists"):
         publish_prospective_simulated_ledger_manifest(output, manifest)
+
+
+def test_manifest_accepts_first_cash_seed_to_non_cash_output(
+    tmp_path: Path,
+) -> None:
+    clock = _clock(tmp_path)
+    sqlite_path = _first_transition_ledger(tmp_path, clock)
+    manifest = build_prospective_simulated_ledger_manifest(
+        clock=clock,
+        sqlite_path=sqlite_path,
+        manifest_path=tmp_path / "first-transition-manifest.json",
+        now=PLANNING_NOW,
+    )
+    assert manifest["decision_date_count"] == 1
+    assert manifest["non_cash_state_day_count"] == 1
 
 
 def test_manifest_publisher_rejects_sqlite_outside_manifest_directory(

@@ -128,7 +128,7 @@ def test_first_transition_is_t_minus_one_and_hash_bound(tmp_path: Path) -> None:
     summary = summarize_simulated_ledger(tmp_path / "ledger.sqlite", clock=clock)
     assert summary.schema_version == SIMULATED_PORTFOLIO_LEDGER_SCHEMA_VERSION
     assert summary.decision_dates == ("2026-08-17",)
-    assert summary.non_cash_state_day_count == 0
+    assert summary.non_cash_state_day_count == 1
 
 
 def test_same_transition_is_idempotent_but_conflict_is_rejected(tmp_path: Path) -> None:
@@ -177,7 +177,7 @@ def test_second_transition_preserves_state_and_recursive_chain(tmp_path: Path) -
     summary = summarize_simulated_ledger(path, clock=clock)
     assert summary.decision_dates == ("2026-08-17", "2026-08-18")
     assert summary.decision_date_count == 2
-    assert summary.non_cash_state_day_count == 1
+    assert summary.non_cash_state_day_count == 2
     assert summary.transition_chain_hash == second.chain_hash
 
     connection = sqlite3.connect(path)

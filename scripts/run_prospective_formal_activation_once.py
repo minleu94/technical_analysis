@@ -134,6 +134,7 @@ def run_activation_once(
         raise
     finally:
         shutil.rmtree(staging_root, ignore_errors=True)
+        _remove_empty_staging_parent(staging_root.parent)
 
 
 def _run_activation_capture(
@@ -392,6 +393,17 @@ def _create_staging_root(output_root: Path) -> Path:
     ):
         (staging_root / directory).mkdir(parents=True, exist_ok=True)
     return staging_root
+
+
+def _remove_empty_staging_parent(staging_parent: Path) -> None:
+    """Remove only the empty per-activation staging parent after cleanup."""
+
+    try:
+        staging_parent.rmdir()
+    except OSError:
+        # A concurrent activation or diagnostic may still own the directory;
+        # never recurse or remove anything that is not empty.
+        pass
 
 
 def _publish_staged_outputs(

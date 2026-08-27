@@ -429,7 +429,10 @@ def summarize_simulated_ledger(
             if dates and transition.decision_date <= dates[-1]:
                 raise SimulatedPortfolioLedgerError("ledger decision dates are not increasing")
             dates.append(transition.decision_date)
-            non_cash += transition.input_state.weights.invested_bp > 0
+            # The prospective first transition intentionally seeds a cash-only
+            # T-1 input and produces the first non-cash state on the decision
+            # date.  Count the resulting state day, not the seed input day.
+            non_cash += transition.output_state.weights.invested_bp > 0
             previous_chain_hash = transition.chain_hash
             previous_output_hash = transition.output_state.state_hash
         if not rows:
