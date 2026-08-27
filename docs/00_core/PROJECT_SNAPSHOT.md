@@ -1,5 +1,12 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-27 Activation attempt status（current）
+
+- v3 `clock:prospective:20260827:v3` 的一次性 heartbeat 已在台北時間 `2026-08-27T09:00:10+08:00` 執行 runner 一次；market DB exact `2026-08-26` T-1=`1,966` rows，未被修改、刪除或回填。
+- runner 在 publish 前因 Portfolio ledger validator defect fail closed；Rule／Portfolio／PIT／strict readiness 四個正式 output 均不存在，空的 activation staging parent 已清除，沒有 partial output 或 formal credit。
+- 已修正 prospective ledger 將首筆 cash-only T-1 input→non-cash decision-date output 計入 `non_cash_state_day_count`，並新增單筆 transition regression；相關 focused suite `27 passed`，py_compile、mypy、no-look-ahead 與 quant guards 通過。
+- 本次 one-shot 不重跑；目前 v3 formal inputs 仍為 `0/3`。`formal_oos_allowed=false`、ML alpha=`0`、promotion=`false`、`broker_order_allowed=false` 不變，未啟動 watcher、training、promotion 或 broker。
+
 ## 2026-08-26 Same-day pre-open owner override status
 
 - Owner 已明確排除本次 clock 的完整自然準備日循環延期；權威方向文件已新增只限 2026-08-26 08:30 前、具名且不可回填的窄例外。新 `clock:prospective:20260826:v1` 已 create-only 建立，PIT boundary=`08:30`、Rule／Portfolio boundary=`09:00 Asia/Taipei`；manifest hash=`sha256:5409fe23d5247dc1698af09a5af9295ad8f7ad3f02c6926233582e11e93efde7`。舊 8/19、8/25、8/27 與 8/28 clocks 全部未修改。

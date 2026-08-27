@@ -1,5 +1,7 @@
 # DEVELOPMENT_ROADMAP（Roadmap Hub）
 
+> **2026-08-27 activation attempt**：v3 一次性 runner 已於台北 `09:00:10` 實際執行一次，但在正式 publish 前因 prospective ledger 將 cash-only T-1 input 誤計為非現金日而 fail closed；四個正式 output 維持不存在，沒有 partial start。修正已改計 decision-date `output_state` 並加入單筆 transition regression；focused `27 passed`、py_compile、mypy、no-look-ahead 與 quant guards 均通過。本次 one-shot 不重跑，待另行明確授權的新一次性 activation；所有 ML／promotion／broker safety flags 維持關閉。
+
 > **2026-07-13 系統工程整合**：A～F committed handoff 已由 G 依 SHA、ownership 與 focused suite 驗證，跨流 DTO／JSON composition、唯讀 smoke 與 pure verifier 均成立。這只代表工程整合已驗證；下一步仍是 forward evidence、逐來源人工接受與正式 ML OOS／promotion review，不是 scheduler、production automation 或 formal product closeout。
 >
 > **最後更新**：2026-08-25

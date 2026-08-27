@@ -146,3 +146,11 @@
 - 官方 PIT raw first-seen 為 2026-08-25 13:40:58+08:00，早於 8/26 PIT boundary；新 clock staging coverage=`1932/1932`、file hash=`sha256:30e09b71d1415c63d690df048848a3026d8779cdfbbe4882e9c59c686be967b7`。
 - 一次性 Codex automation `prospective-formal-20260826-one-shot-activation` 已實際註冊為 `ACTIVE`，於 8/26 09:00 Asia/Taipei 執行一次，不是 suggestion card 或每日排程。三份正式 inputs 與 strict readiness 仍須等真實 09:00 transaction；pre-open 維持 0/3，不提前冒充 Formal。
 - 完整 hash、source lineage、QA、rollback 與安全狀態見 [2026-08-26 same-day staging record](PROSPECTIVE_FORMAL_RESTART_CLOCK_2026_08_26_STAGING.md)。
+
+## 2026-08-27 activation attempt and validator repair（09:00 Asia/Taipei）
+
+- 依 v3 heartbeat 在台北時間 `2026-08-27T09:00:10+08:00` 以實際時間執行一次且僅一次 `scripts/run_prospective_formal_activation_once.py`；唯讀 market DB 的 exact `2026-08-26` T-1 已確認為 `1,966` rows，未修改、刪除、drop 或回填。
+- activation 在正式 publish 前 fail closed，錯誤為 `ProspectiveSimulatedLedgerManifestError: ledger must contain transitions and a positive non-cash state day count`。四個正式 output（Rule／Portfolio／PIT／strict readiness）均不存在；本次建立的空 `.activation_staging` 父目錄已清除，故沒有 partial formal output 或 readiness credit。
+- 根因是 `summarize_simulated_ledger()` 將 `non_cash_state_day_count` 計算在 cash-only T-1 `input_state`，而 prospective 首筆 transition 的合法語意是 cash seed input → non-cash decision-date output。已修正為計算 `output_state`，並保留 append-only、T-1、hash chain 與 future-input guards。
+- 修正後 activation／ledger／manifest／readiness focused suite=`27 passed`；changed Python `py_compile`、full mypy（`515` files）、`check_look_ahead_bias.py` 與 `quant_guard_linter.py` 均通過。新增 regression 覆蓋單筆 cash-seed→non-cash-output manifest。
+- 本次一次性 heartbeat 已消耗且不重跑 runner；因此 v3 目前仍是 `0/3` formal inputs、strict readiness 未建立。calibration、shadow maturity、Formal OOS、promotion、ML alpha 與 broker gates 均維持未通過／關閉；未啟動 Direct／OOC、training、retraining、promotion 或 broker。

@@ -75,6 +75,23 @@ On 2026-08-27, run the low-CPU one-shot entries with actual timestamps:
 No continuous scheduler, Direct/OOC watcher, training, retraining, promotion,
 broker adapter, order, automatic rebalance or automatic liquidation is enabled.
 
+## Actual activation attempt（2026-08-27 09:00 Asia/Taipei）
+
+The scheduled one-shot runner was executed exactly once at
+`2026-08-27T09:00:10+08:00`. It read the exact `2026-08-26` T-1 from the
+read-only market DB, then failed closed before publication with
+`ProspectiveSimulatedLedgerManifestError` because the ledger summary counted the
+cash-only T-1 input instead of the non-cash decision-date output. All four formal
+outputs remain absent and the empty activation staging parent was removed. No
+market DB, clock, raw custody, broker state, ML state, or promotion state was
+modified.
+
+The repository repair now counts `output_state` for the prospective
+`non_cash_state_day_count` and adds a single-transition regression test. The
+runner is not retried in this one-shot heartbeat; a future activation attempt
+must use a separately authorized one-shot execution. The frozen v3 clock,
+official PIT staging, safety flags, and no-look-ahead boundaries remain intact.
+
 ## Rollback
 
 Keep v3 immutable bytes. If v3 is cancelled, stop consumer adoption and create a
