@@ -154,3 +154,13 @@
 - 根因是 `summarize_simulated_ledger()` 將 `non_cash_state_day_count` 計算在 cash-only T-1 `input_state`，而 prospective 首筆 transition 的合法語意是 cash seed input → non-cash decision-date output。已修正為計算 `output_state`，並保留 append-only、T-1、hash chain 與 future-input guards。
 - 修正後 activation／ledger／manifest／readiness focused suite=`27 passed`；changed Python `py_compile`、full mypy（`515` files）、`check_look_ahead_bias.py` 與 `quant_guard_linter.py` 均通過。新增 regression 覆蓋單筆 cash-seed→non-cash-output manifest。
 - 本次一次性 heartbeat 已消耗且不重跑 runner；因此 v3 目前仍是 `0/3` formal inputs、strict readiness 未建立。calibration、shadow maturity、Formal OOS、promotion、ML alpha 與 broker gates 均維持未通過／關閉；未啟動 Direct／OOC、training、retraining、promotion 或 broker。
+
+## 2026-08-27 current continuation and next legal activation（15:10 Asia/Taipei）
+
+- 本週報不把 8/27 失敗的一次性 heartbeat 重算為 Formal evidence：根因已在 `2f13df0` 修正，`4338fe1` 已記錄實際 failure、零 partial output 與回滾邊界。v3 四個 formal output 仍不存在，strict readiness 未建立。
+- 8/27 15:10 的唯讀核對確認，下一個合法 prospective clock 是既有 create-only `clock:prospective:20260828:v1`：activation=`2026-08-28`、完整 preparation day=`2026-08-27`、PIT=`08:30`、Rule／Portfolio=`09:00` Asia/Taipei；clock hash=`sha256:dfcd95b89f02cf1e68de945525694d0d912fd37b138e17c04b5506c7e2655f6d`，file hash=`sha256:85d50c270d9a10098e4e99d4531b0b3ce96eb096797977ab64349bc164c90161`。
+- 官方日曆現行重查：TWSE holiday schedule response hash=`sha256:7644c1a8af784c09f54670fd7413f536b13eb76c54d658058e8873d1aee32117`，1150828 無 holiday row；TPEX 202608 calendar response hash=`sha256:153d3d091a2d84befe33cc7fcc6a230360df7086753ef5a21afe0cc56d347f84`，20260828=`holiday=false`、`holidayList=[]`。這是日曆證據重查，不是回填或改寫舊 clock。
+- 受控唯讀 market DB 目前最新為 `20260826`；20260826=`1,966` rows、20260827=`0` rows。因此 8/28 的 Portfolio manifest 仍待自然資料流程產生 8/27 T-1；本 restart 不會修改或捏造 market DB。這是唯一尚未滿足的 activation-time data prerequisite。
+- 已建立一次且僅一次的 Codex heartbeat `Prospective Formal 20260828 one-shot activation`，於 8/28 09:00 Asia/Taipei 執行同一低 CPU runner；它會先唯讀確認 T-1，成功時以 atomic staging transaction 同步產生 Rule／Portfolio／PIT 與 strict readiness，失敗時維持 `0/3`，不留下 partial input。
+- 8/28 PIT staging 維持 TWSE `t187ap03_L`／TPEX `t187ap03_O`，1932/1932 coverage；raw hashes 分別為 `sha256:9e6f88f30420552e435951193dc44094d726412c8d917d8a975581d8ae083c97` 與 `sha256:4f055c3c035d84c75b299211f36ef2dbe01b700c58c2115aeb6630c7628ce835`，canonical hashes 分別為 `sha256:612a8adce72c182ee2299aa84147a5c5a84588158a66187311ec168eecea5894` 與 `sha256:7b7f111d5a0d9637997cae287628b6ed426b6a4afedabe62afc29ab0ab7272b5`；沒有使用 `t187ap03_R`，沒有使用 `companies.csv`。
+- 本次續行仍維持 `formal_oos_allowed=false`、ML alpha=`0`、`promotion_eligible=false`、`broker_order_allowed=false`；calibration、shadow maturity、promotion 與 broker gates 未通過，且未啟動 Direct／OOC watcher、training、retraining、promotion 或 broker adapter。
