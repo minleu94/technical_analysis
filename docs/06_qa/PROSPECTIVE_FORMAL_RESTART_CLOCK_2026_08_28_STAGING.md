@@ -69,6 +69,16 @@ Clock 是 create-only、planned、prospective-only。`real_money=false`、`broke
 
 現有 `scripts/capture_prospective_official_pit_sector.py`、`scripts/publish_prospective_rule_champion_history.py`、`scripts/publish_prospective_simulated_portfolio_ledger.py` 與 `scripts/inspect_prospective_capture_readiness.py` 可作為單次低 CPU 入口；本次沒有註冊新的 continuous scheduler 或 watcher。
 
+## 2026-08-27 current revalidation and one-shot handoff（15:10 Asia/Taipei）
+
+- 唯讀取得台北時間為 `2026-08-27T15:10:48+08:00`；8/27 v3 的 08:30／09:00 activation window 已經結束，沒有偽造 timestamp，也沒有重跑已消耗的 v3 one-shot。8/27 v3 四個 formal output 仍為 `0/3` manifests、strict readiness 未建立。
+- 既有 `clock:prospective:20260828:v1` 的 clock manifest 以現行 validator 唯讀檢查為 `ready_for_activation`；clock manifest hash=`sha256:dfcd95b89f02cf1e68de945525694d0d912fd37b138e17c04b5506c7e2655f6d`、file hash=`sha256:85d50c270d9a10098e4e99d4531b0b3ce96eb096797977ab64349bc164c90161`。既有 staging／raw／auxiliary metadata 均保留 immutable，不把 auxiliary metadata 冒充 formal input，也不覆寫既有 bytes。
+- 重新查詢官方日曆：TWSE `holidaySchedule/holidaySchedule` 現行 response hash=`sha256:7644c1a8af784c09f54670fd7413f536b13eb76c54d658058e8873d1aee32117`，1150828 無 holiday row；TPEX `mktCalendar?ym=202608&lang=zh-tw` 現行 response hash=`sha256:153d3d091a2d84befe33cc7fcc6a230360df7086753ef5a21afe0cc56d347f84`，20260828 的 `holiday=false`、`holidayList=[]`。因此 8/28 仍是下一個可用的共同交易日，8/27 是完整 preparation day。
+- 受控唯讀 market DB 最新日期為 `20260826`；20260826 有 `1,966` rows，20260827 目前為 `0` rows。8/28 activation 只會接受自然產生且已存在的 20260827 T-1；本流程不修改、刪除、drop、回填或拼造 market DB。
+- 已在 Codex app 建立一次且僅一次的 `Prospective Formal 20260828 one-shot activation`，預定於 2026-08-28 09:00 Asia/Taipei 喚醒，使用既有低 CPU atomic runner。runner 會先讀取 T-1，再由同一 staging transaction 產生 Rule／Portfolio／PIT 三份正式 manifest 與 strict readiness；任一 T-1、schema、source lineage 或 controlled-store 條件不成立，維持零 partial output。
+- 本次 8/27 validator repair 已由 `2f13df0` 保存，失敗與修正證據由 `4338fe1` 保存；修正後 focused activation／ledger／manifest／readiness suite=`27 passed`、py_compile、full mypy、`check_look_ahead_bias.py` 與 `quant_guard_linter.py` 均通過。
+- 這次 handoff 全程維持 `formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`promotion_eligible=false`、`broker_order_allowed=false`；未啟動 Direct／OOC watcher、training、retraining、promotion 或 broker adapter，也未輸出 HMAC secret。
+
 ## Rollback
 
 所有 2026-08-28 外部 artifacts 都是新路徑的 create-only output。若 owner 取消此 successor，保留原始 bytes 與 hashes，將 clock 標記為 superseded／cancelled 並停止後續 capture；不刪除、不覆寫、不把它改名成 Formal。程式 contract 變更可用 Git `revert` 依序回滾 commits `73433d6`、`cc831b1`、`4cbae9f`，不影響既有 2026-08-25／2026-08-27 immutable artifacts。
