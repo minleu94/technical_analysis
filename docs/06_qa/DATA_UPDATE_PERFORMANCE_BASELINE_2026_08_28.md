@@ -1,0 +1,71 @@
+# Data Update 效能基線與平行化邊界 — 2026-08-28
+
+## 目的
+
+這份基線先回答「慢在哪裡、哪些可以平行、哪些不能平行」，不把尚未量測的
+thread 數或 worker 數直接寫進 production。所有結果都是唯讀觀測；不能因為
+dashboard warm query 很快，就推論資料抓取、CSV 寫入或 SQLite sync 已經可無限制
+加速。
+
+## 目前實測
+
+在目前正式資料庫（`D:\Min\Python\Project\FA_Data\sqlite\twstock.db`）以
+`scripts\qa_broker_flow_dashboard_latency.py --period week --runs 3` 量測：
+
+| Stage | cold | warm p95 | 結果 |
+|---|---:|---:|---|
+| Broker dashboard（含 semantics） | 2215.593 ms | 0.263 ms | pass；冷啟主要是首次 SQLite／semantic setup，不是可直接平行化證據 |
+| Broker dashboard（source-only diagnostic） | 436.731 ms | 0.185 ms | diagnostic-only |
+| 單股 branch detail | 15.677 ms | 14.205 ms | pass |
+| branch tracker | 11.955 ms | 12.006 ms | pass |
+
+SQLite shape probe 觀察到 `broker_flows` 約 966,616 rows、212 個交易日、51 個
+分點、2,189 個標的；probe 前後 DB SHA-256 相同，未寫入資料庫。
+
+技術指標 probe 的重現方式（只讀指定單股 CSV，不呼叫 writer）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_latency.py `
+  --technical-dir D:\Min\Python\Project\FA_Data\technical_analysis `
+  --stocks 0050 2330 3008 --rows 500 --runs 3
+```
+
+以現有檔案尾端最多 500 rows、每檔 3 runs 觀察到 `calculate_all_indicators`
+的 cold 約 3.51–5.34 ms、warm p95 約 3.32–4.23 ms，CSV read 約 5.90–8.91 ms。
+這不是全市場更新承諾：完整批次還包含
+CSV 讀取、每股 merge／寫入、全市場 concat、backup 與可選 SQLite rebuild。
+
+## 現行寫入與平行化事實
+
+- Broker ingestion 目前依 branch/date 順序抓取；lots 與 amount 依序請求。HTTP
+  失敗才進 Selenium fallback，而 fallback 使用共用 driver，不能把同一 driver
+  放進多執行緒。
+- Broker CSV mutation 現在由 `BrokerBranchWriteCoordinator` 統一包住，並以
+  process-local single-writer lock 序列化 daily／merged CSV 寫入與 backup；這只
+  建立安全邊界，沒有偷偷開啟 fetch concurrency。
+- Technical indicator batch 目前逐股計算、逐股保存，最後再整合 CSV；新的
+  `qa_technical_indicator_latency.py` 明確標示 `parallelism_enabled=false`、
+  `observed_worker_count=1` 與 `single_writer_required=true`，不會誤宣稱已完成
+  多核心版本。
+- SQLite 仍遵循 single-writer；若未來要把計算放進 process pool，worker 只能回傳
+  immutable result，SQLite／整合 CSV 必須由一個受控 writer commit，且要保留取消、
+  backup、hash、duplicate 與 fail-closed 邊界。
+
+## 下一個可實作切點（尚未啟用）
+
+1. 先把完整批次拆成 `read → calculate → write → aggregate → SQLite commit` 五段
+   timing，保留每段的 row count、error、cancel 與 file hash。
+2. Broker 只考慮 bounded HTTP fetch pool；每個 task 必須含 global rate-limit、retry
+   budget、source/date identity，Selenium fallback 維持 serialized，結果交給上述
+   single writer。
+3. Technical indicators 只在 CPU／memory 基線與 worker overhead 有證據時，才以
+   bounded process pool 計算；禁止把 pandas DataFrame 或 SQLite connection 共享到
+   writer 以外的 process。
+4. 以 synthetic staging／isolated output 做 throughput、取消、重試、重複與 crash
+   recovery QA；未通過前不改 production worker 數，不碰正式 `DATA_ROOT`。
+
+## 結論
+
+效能不是目前 P0／Paper／Formal gate 的資料缺口，但它確實需要工程化。現在已先
+把可觀測基線與 single-writer 安全護欄補上；「平行」仍是後續在量測證明後才可
+opt-in 的行為，不會因半成品觀感而用高 thread 數掩蓋 rate-limit 或寫入一致性問題。

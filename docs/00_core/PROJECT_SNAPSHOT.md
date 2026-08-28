@@ -6,6 +6,12 @@
 - `scripts/inspect_ml_formal_input_readiness.py` 現在明示每項正式 input 的 expected schema；遇到 `prospective-formal-*`／`*-prospective-*`、`consumer_mode=prospective_formal_simulation` 或 `scope=prospective_only` 時標成 `prospective_manifest_requires_formal_consumer_publication`，不會把 wrapper 當成正式 `3/3`。
 - 明確設定的 `BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH` 以 hash-bound discovery 驗證並具有權威性；旁邊其他可 discovery sidecar 不得靜默取代它。正式 `BALDR_ML_FORMAL_*` path、Formal OOS、alpha、scheduler、promotion 與 broker 仍全部關閉；本次 dry-run 沒有寫正式資料根目錄。
 
+## 2026-08-28 Data Update 效能基線與 single-writer 護欄（current engineering）
+
+- 新增唯讀 `scripts/qa_technical_indicator_latency.py`，量測明確指定的技術指標 CSV 之 read／calculate stage；它固定揭露 `parallelism_enabled=false`、`observed_worker_count=1`、`single_writer_required=true`，不建立檔案、不寫 SQLite。
+- `BrokerBranchWriteCoordinator` 增加 process-local single-writer lock，daily／merged CSV 寫入與 backup 維持序列化；這是為未來 bounded HTTP fetch 留下安全邊界，不代表已啟用 broker concurrency 或 Selenium 多執行緒。
+- 目前基線與後續 process-pool／rate-limit acceptance criteria 見 [Data Update 效能基線與平行化邊界](../06_qa/DATA_UPDATE_PERFORMANCE_BASELINE_2026_08_28.md)。
+
 ## 2026-08-28 Paper Equal Weight controlled build slice（current engineering）
 
 - Equal Weight benchmark 建置已抽成 `app_module/paper_equal_weight_benchmark_builder.py`，CLI 與 Portfolio UI 共用同一個 preview／confirm／revalidate 契約；預覽只讀 baseline、Paper snapshot 與市場 SQLite 的 T-1 價格，確認後才以 atomic append-only 方式建立新 ledger，既有檔案一律拒絕覆寫。

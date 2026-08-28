@@ -483,6 +483,7 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 
 ## 更新記錄
 
+- 2026-08-28：新增唯讀 `scripts/qa_technical_indicator_latency.py` 與 Data Update 效能基線；Broker CSV writer 加上 process-local single-writer lock。這只固定測量與寫入安全邊界，未啟用 broker／Selenium 平行抓取或 technical-indicator process pool；後續須先有 rate-limit、CPU／memory、取消、hash 與 single-writer contention 證據。
 - 2026-08-27：新增 `scripts/append_source_acceptance_decision.py` 的 preview／明確確認 append foundation；applying decision 必須綁定 `ready_for_owner_review` intake 與 evidence ids，registry 只能位於 `DATA_ROOT` 之外，且 append 不改變 downstream／formal／scheduler／broker fail-closed 邊界。
 - 2026-08-27：Update 大型每日合併與 SQLite CSV 匯出改用 `ProgressTaskWorker` 與批次進度回報；合併回報檔案／讀取批次／整合檔 chunk，匯出先以 query-only count 建立預估筆數並回報已處理筆數。取消仍維持檔案／資料批次安全邊界，不改變原子提交與既有資料保留規則；合併新增單檔內讀取批次取消檢查，仍不做逐列中斷。
 - 2026-08-27：Update 增量合併在沒有新 CSV 時改回傳結構化 `no_op=true` 與既有筆數／最新日期，UI 明確顯示「資料已是最新」且不先建立備份，避免把 no-op 誤報成一般重新合併或產生不必要副作用。

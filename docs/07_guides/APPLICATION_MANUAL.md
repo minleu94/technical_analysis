@@ -1057,6 +1057,20 @@ TWSE 補檔遇到平日休市（例如颱風停市）時，只有在至少一個
 
 券商分點下載仍採保守序列流程，但進入 MoneyDJ 前會先用每日股價日檔或 SQLite `daily_prices` 檢查目標日期是否有行情證據；無行情證據的日期會整天跳過，不會讓每個分點各自重試。MoneyDJ 正常頁面會優先使用 HTTP fast path 直接抓取 Big5 HTML，只有 HTTP 失敗或解析不到資料時才退回 Selenium fallback。預設請求間隔為 0.5 秒；若一次更新約 40 個分點耗時較長，先確認是否已有 CSV / SQLite 既有資料可跳過。本版尚未支援 5 或 10 worker 並行，避免對 MoneyDJ 造成過高併發與站方阻擋風險。
 
+若需要量測技術指標本身而不觸發寫入，可使用：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_latency.py `
+  --technical-dir D:\Min\Python\Project\FA_Data\technical_analysis `
+  --stocks 0050 2330 3008 --rows 500 --runs 3
+```
+
+此 probe 只讀取明確指定的既有指標 CSV，輸出 CSV read／calculate latency，並固定
+標示 `parallelism_enabled=false`、`observed_worker_count=1` 與
+`single_writer_required=true`。它不建立備份、不寫 SQLite，也不能用來宣稱全市場
+更新已完成多核心化；完整規劃與 acceptance criteria 見
+`docs/06_qa/DATA_UPDATE_PERFORMANCE_BASELINE_2026_08_28.md`。
+
 ### 4.4 技術指標
 
 - 「增量更新」：只處理新資料，日常首選；若單股指標已到最新股價日期會直接跳過，只有落後時才回看 120 個交易日重算重疊區間。
