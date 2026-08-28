@@ -79,6 +79,14 @@ Clock 是 create-only、planned、prospective-only。`real_money=false`、`broke
 - 本次 8/27 validator repair 已由 `2f13df0` 保存，失敗與修正證據由 `4338fe1` 保存；修正後 focused activation／ledger／manifest／readiness suite=`27 passed`、py_compile、full mypy、`check_look_ahead_bias.py` 與 `quant_guard_linter.py` 均通過。
 - 這次 handoff 全程維持 `formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`promotion_eligible=false`、`broker_order_allowed=false`；未啟動 Direct／OOC watcher、training、retraining、promotion 或 broker adapter，也未輸出 HMAC secret。
 
+## 2026-08-28 one-shot activation result（09:01:50 Asia/Taipei）
+
+- 本次唯讀 preflight 取得台北時間 `2026-08-28T09:01:27.687113+08:00`；官方日曆既有證據確認 8/28 為 TWSE／TPEX 共同交易日，8/27 為完整 preparation day。market DB 未修改；exact `2026-08-27` T-1 為 `1,961` rows／`1,961` symbols，且為目前 latest date。
+- 既有 create-only `clock:prospective:20260828:v1` 未被重建、覆寫或回填；本次一次且僅一次執行 `scripts/run_prospective_formal_activation_once.py`。執行在 publish 前 fail closed：`status=blocked`，錯誤為 `staged strict readiness did not reach ready after all three manifests`。正式 Rule／Portfolio／PIT 與 strict readiness 均維持 `0/3`、不存在；runner 已清理 activation staging，沒有 partial output。
+- 後續唯讀 diagnostic 證明三個 producer validator 的資料本身均已 ready：Portfolio `decision_date_count=1`、`non_cash_state_day_count=1`、ledger manifest hash=`sha256:1264949e65bccf174e8b94204418f9bb6d07b5b65f208bc2eae2f449f9bf667e`、transition chain hash=`sha256:300d7e5fa0dbc0ef5e80e4235af1561090f3cb95493b987e1b1d7017f42f3cbe`；Rule snapshot count=`1` 且 HMAC attestation present（未輸出 secret）；PIT row count=`1,932`、source ids=`official:tpex:t187ap03_O`／`official:twse:t187ap03_L`、canonical hash=`sha256:5c01b1b56b0f597ccd05b449e7b6e8b754e20cb49b7c93fdd193712dd825b7b2`、rows hash=`sha256:532c647adefe889f6cfd078393682e1fda1aeb550984562c373f5fe7dc11aa09`。
+- failure 根因為 readiness builder 將「strict 三項全 ready」錯誤標成 `ready_for_future_activation`，而 atomic runner 合約要求嚴格字串 `ready`；不是 T-1、官方 source、schema 或 lineage 缺失。已修正為 deferred 仍為 `ready_for_future_activation`、strict 全 ready 才為 `ready`，並補上 regression test；依本次 automation 的一次性限制不重跑 runner、不手動發布 formal files。
+- 修正後 QA：focused prospective／formal simulated-ledger tests=`29 passed`；changed Python `py_compile` 通過；`mypy data_module development_module`=`Success: no issues found in 118 source files`；`check_look_ahead_bias.py` 與 `quant_guard_linter.py` 通過。全程仍為 `formal_oos_allowed=false`、`production_blend_alpha_bp=0`、`promotion_eligible=false`、`broker_order_allowed=false`，沒有啟動 Direct／OOC watcher、training、retraining、promotion 或 broker adapter。
+
 ## Rollback
 
 所有 2026-08-28 外部 artifacts 都是新路徑的 create-only output。若 owner 取消此 successor，保留原始 bytes 與 hashes，將 clock 標記為 superseded／cancelled 並停止後續 capture；不刪除、不覆寫、不把它改名成 Formal。程式 contract 變更可用 Git `revert` 依序回滾 commits `73433d6`、`cc831b1`、`4cbae9f`，不影響既有 2026-08-25／2026-08-27 immutable artifacts。
