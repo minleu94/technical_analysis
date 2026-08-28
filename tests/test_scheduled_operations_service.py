@@ -143,3 +143,27 @@ def test_future_checked_timestamp_falls_back_to_file_mtime_instead_of_hiding_sta
     assert operation.updated_at == NOW
     assert operation.observed_at_source == "file_mtime"
     assert "future_status_timestamp:checked_at" in operation.diagnostic
+
+
+def test_known_completed_and_non_trading_day_safety_statuses_are_not_reported_as_failures(
+    tmp_path,
+):
+    root = tmp_path / "scheduled"
+    _write_status(
+        root,
+        "ml_raw_pit_refresh",
+        {"status": "completed", "completed_at": NOW.isoformat()},
+    )
+    _write_status(
+        root,
+        "ml_allocation_copilot",
+        {"status": "skipped_non_trading_day"},
+    )
+
+    snapshot = ScheduledOperationsStatusService(root, now_provider=lambda: NOW).get_snapshot()
+    operations = {operation.job_id: operation for operation in snapshot.operations}
+
+    assert operations["ml_raw_pit_refresh"].state == "operational"
+    assert operations["ml_raw_pit_refresh"].diagnostic == ""
+    assert operations["ml_allocation_copilot"].state == "guarded"
+    assert operations["ml_allocation_copilot"].diagnostic == "non_trading_day_noop"

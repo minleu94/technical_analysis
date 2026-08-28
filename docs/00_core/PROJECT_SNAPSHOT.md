@@ -53,6 +53,7 @@
 - `UpdateService.check_source_detail()` 現在也支援三大法人／信用交易／集保股權候選 DB，以及排程 `latest_status.json` artifacts；此前這些下鑽按鈕會落到 `unknown source`，造成總覽與分頁顯示分裂。候選查詢維持 SQLite `mode=ro`／`PRAGMA query_only=ON`，排程查詢只彙整 runtime read model，不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - UpdateView 的候選與排程分頁會在重新檢查後刷新 inline 摘要；排程頁同步更新 raw status JSON，並分開顯示核心就緒、正常／受控／需處理／不可用工作數。這只修正可觀測性，不改變 `production_scheduler_allowed=false` 或任何正式 gate。
 - Runtime 排程 read model 現在將 `ml_direct_chain_maintenance` 列為已知安全工作；`blocked_insufficient_storage` 會顯示為「需要注意」並保留 `direct_chain_storage_preflight_blocked`，不再以未知 job id 淹沒容量診斷。這只改善狀態可見性，不啟動 chain、不改寫資料。
+- Scheduler／Data Update 狀態分類已補齊既有安全結果：`ml_raw_pit_refresh` 的 `completed` 會顯示為正常完成，`ml_allocation_copilot` 休市的 `skipped_non_trading_day` 會顯示為受控略過並保留 `non_trading_day_noop`，不再把合法 no-op 誤報成 failure；Direct/OOC 的真正 `failed` 與容量 blocker 仍維持需處理。
 - `scripts/run_p0_candidate_audit.py` 的直接 CLI 入口補上 UTF-8 stdio guard；在 Windows CP1252 主控台執行 `--help` 不再因繁中說明拋出 `UnicodeEncodeError`。這是 CLI 可用性修正，不改變 P0 candidate-only 邊界。
 
 ## 2026-08-28 P0 machine evidence handoff projection（current engineering）
