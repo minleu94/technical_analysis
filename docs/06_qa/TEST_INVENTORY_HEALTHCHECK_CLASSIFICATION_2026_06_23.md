@@ -20,7 +20,7 @@ Current filesystem Python files: `648`
 - 預設不收集檔：`30`
 - `pytest --collect-only -q -o addopts=`：`3674 tests collected`
 
-2026-08-28 全量 pytest 已以 `-o addopts=` 完成：`3668 passed, 1 skipped, 26 warnings`（`542.69s`；Formal candidate inventory 與前述 freshness／readiness／Evidence／cutoff／PowerShell wrapper 回歸均納入；此全量執行早於本次 scheduler `--help` guard 測試）。
+2026-08-28 最新全量 pytest 已以 `-o addopts=` 完成：`3674 passed, 1 skipped, 66 warnings`（`537.05s`；已納入 scheduler `--help` guard、availability builder snapshot 選擇與月營收候選狀態回歸）。
 下方較早的 `3613 passed`／`3607 passed`／`3606 passed`／`3603 passed`／`3592 passed` 是前一輪中間基準，
 不取代本次完整回歸結果。
 
@@ -41,7 +41,7 @@ Current filesystem Python files: `648`
 | `write-risk-dry-run-required` | 42 |
 
 最近一次完整 pytest 已以 `-o addopts=` 完成：`3668 passed, 1 skipped, 26 warnings`（`542.69s`；本次執行未指定 JUnit 輸出）。本輪修正 OOC RSS monitor 的 preflight thread lifecycle、UpdateView 合作式取消、SQLite 結果可見性與匯出／合併原子安全邊界，並加入 P0 intake validator／decision append CLI、P0 audit → candidate intake projection、freshness ACL-safe status/log route、machine evidence handoff projection／intake envelope guard、explicit freshness readiness projection、owner packet route evidence、Evidence Workbench pending-period 顯示、formal cutoff 時區診斷、freshness probe ACL fail-soft、PowerShell freshness wrapper canonical delegation、匯出／合併批次進度、增量合併 no-op 狀態、Runtime staging Registry transaction／rollback probe、Runtime existing-file write-handle probe、Paper future-date look-ahead guard、Paper／Decision 排程 future-write guard、Decision Desk current-date/query-only guard、UpdateView 台灣市場日期／localized unavailable／全域錯誤摘要同步、候選資料源頁內摘要、窄版導覽／卡片／操作鈕重排、Paper fills template/append CLI UTF-8 guard、單檔 CSV 讀取批次取消與 reader cleanup、Recommendation Pattern Explain evidence、SQLite 欄位別名正規化、Formal stale-clock diagnostic、Pre-V2／Simulation projection consistency、P0 owner packet renderer、P0 audit CLI CP1252 console guard、TPEx institutional／credit fallback 與日期 fail-closed guard、P0 fallback rejected／date provenance UI projection、technical process-pool／worker recovery acceptance、scheduler registration inspector、Formal candidate inventory 與 inventory 登錄後，全量執行未再重現先前約 89% 的 Windows access violation；warnings 主要是 joblib 核心數偵測 fallback、研究回測同日成交假設與 pytest cache 權限提示。仍保留 focused／full run 證據，後續若再出現 native fault 需以 WER／dump 交叉定位。
-- scheduler `--help` CP1252 guard targeted regression：`3 passed / 1 warning`；這個低風險 CLI 修正尚未重新跑全量 pytest，前述 `3668 passed` 是其前一個完整基準。
+- scheduler `--help` CP1252 guard targeted regression：`3 passed / 1 warning`；其後已納入上述最新全量回歸。
 第一次 full run 暴露的新測試檔未登錄 inventory；補登錄與數量同步後重跑全量已通過，inventory audit 維持 `0` machine-checkable blockers。本輪環境／Runtime／Update／healthcheck
 集中 regression（涵蓋 Update worker／coordinator／service／SQLite／UI／formatter、匯出／合併原子邊界與 healthcheck）既有基準為 `177 passed`；本輪受影響的 Update／UI／coordinator targeted suite 為 `151 passed / 1 warning`，UpdateView focused UI regression 為 `59 passed / 1 warning`，大型合併讀取批次取消與 Update service suite 為 `58 passed / 1 warning`，Pre-V2／Workbench projection consistency 為 `38 passed / 1 warning`、Simulation projection consistency 為 `5 passed / 1 warning`，
 Update Tab QA 為 `23 passed / 0 failed / 4 skipped`。
