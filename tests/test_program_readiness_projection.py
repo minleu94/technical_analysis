@@ -5,7 +5,11 @@ from app_module.program_readiness_projection import (
     PROGRAM_READINESS_SCHEMA,
     load_program_readiness,
 )
-from ui_qt.views.update.update_formatters import format_program_readiness_summary
+from ui_qt.views.update.update_formatters import (
+    format_program_readiness_blockers,
+    format_program_readiness_lane_progress,
+    format_program_readiness_summary,
+)
 
 
 def _payload() -> dict:
@@ -89,3 +93,90 @@ def test_program_readiness_summary_keeps_status_and_boundary_visible(tmp_path: P
     assert "writes_allowed=False" in summary
     assert "broker_order_allowed=False" in summary
     assert "source_acceptance_decision_missing" not in summary
+
+
+def test_projection_keeps_bounded_lane_progress_without_nested_details(tmp_path: Path):
+    payload = _payload()
+    payload["workstreams"]["p0"]["details"] = {
+        "source_count": 13,
+        "accepted_count": 0,
+        "limited_count": 0,
+        "projection": {
+            "machine_status_counts": {"verified": 1, "degraded": 12},
+            "rows": [
+                {
+                    "route_probe_statuses": [
+                        {"status": "observed"},
+                        {"status": "not_attempted"},
+                    ]
+                }
+            ],
+            "details_that_must_not_leak": {"large": "payload"},
+        },
+    }
+    payload["workstreams"]["evidence"] = {
+        "status": "waiting_for_external_input",
+        "blockers": ["insufficient_weekly_history_records"],
+        "next_actions": ["等待真實週期"],
+        "external_input_required": True,
+        "details": {
+            "readiness": {
+                "formal_credit_authorized": False,
+                "items": [
+                    {
+                        "item_id": "weekly_history",
+                        "observed_count": 0,
+                        "required_count": 3,
+                    },
+                    {
+                        "item_id": "multi_day_dry_run",
+                        "observed_count": 2,
+                        "required_count": 3,
+                    },
+                ],
+            }
+        },
+    }
+    path = tmp_path / "program-readiness.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    projected = load_program_readiness(path)
+
+    assert projected["workstreams"]["p0"]["metrics"] == {
+        "source_count": 13,
+        "accepted_count": 0,
+        "limited_count": 0,
+        "machine_verified_count": 1,
+        "machine_degraded_count": 12,
+        "route_count": 2,
+        "route_attempted_count": 1,
+        "route_not_attempted_count": 1,
+        "route_observed_count": 1,
+    }
+    assert projected["workstreams"]["evidence"]["metrics"] == {
+        "weekly_observed_count": 0,
+        "weekly_required_count": 3,
+        "dry_run_observed_count": 2,
+        "dry_run_required_count": 3,
+        "formal_credit_authorized": False,
+    }
+    assert "details" not in projected["workstreams"]["p0"]
+    assert "details_that_must_not_leak" not in json.dumps(projected)
+
+    p0_progress = format_program_readiness_lane_progress(
+        "p0", projected["workstreams"]["p0"]
+    )
+    assert "accepted 0／limited 0" in p0_progress
+    assert "route 已嘗試 1/2" in p0_progress
+    evidence_progress = format_program_readiness_lane_progress(
+        "evidence", projected["workstreams"]["evidence"]
+    )
+    assert "weekly 0/3" in evidence_progress
+    assert "dry-run 2/3" in evidence_progress
+    assert "formal credit=未授權" in evidence_progress
+
+    blockers = format_program_readiness_blockers(
+        ["source_acceptance_decision_missing", "formal_input_not_ready:pit_sector_membership"]
+    )
+    assert "尚未提供來源接受決議（source_acceptance_decision_missing）" in blockers
+    assert "Formal 輸入未就緒：pit_sector_membership" in blockers

@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 PROGRAM_READINESS_SCHEMA = "program-readiness.v1"
@@ -36,6 +36,19 @@ PROGRAM_READINESS_LANE_LABELS: dict[str, str] = {
     "performance": "效能／容量",
     "update_history": "更新歷史",
 }
+
+_ROUTE_PROBE_STATUS_TOKENS = frozenset(
+    {
+        "observed",
+        "failed",
+        "official_no_data",
+        "date_mismatch",
+        "no_accepted_rows",
+        "schema_mismatch",
+        "not_usable",
+        "not_attempted",
+    }
+)
 
 _BOUNDARY_DEFAULTS: dict[str, bool] = {
     "read_only": True,
@@ -131,7 +144,7 @@ def _project_payload(payload: Mapping[str, Any], path: Path) -> dict[str, Any]:
     for lane in PROGRAM_READINESS_LANE_ORDER:
         raw_lane = workstreams.get(lane)
         if isinstance(raw_lane, Mapping):
-            projected_workstreams[lane] = _project_lane(raw_lane)
+            projected_workstreams[lane] = _project_lane(lane, raw_lane)
 
     # Older artifacts may only contain the ordered execution list.  Keep the
     # lane visible without treating a missing workstream as healthy.
@@ -141,7 +154,7 @@ def _project_payload(payload: Mapping[str, Any], path: Path) -> dict[str, Any]:
         lane = str(raw_lane.get("lane") or "").strip()
         if lane not in PROGRAM_READINESS_LANE_ORDER or lane in projected_workstreams:
             continue
-        projected_workstreams[lane] = _project_lane(raw_lane)
+        projected_workstreams[lane] = _project_lane(lane, raw_lane)
 
     boundary = dict(_BOUNDARY_DEFAULTS)
     raw_boundary = payload.get("boundary")
@@ -165,13 +178,184 @@ def _project_payload(payload: Mapping[str, Any], path: Path) -> dict[str, Any]:
     }
 
 
-def _project_lane(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return {
+def _project_lane(lane: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    projected: dict[str, Any] = {
         "status": _status_token(payload.get("status")),
         "blockers": _string_list(payload.get("blockers"), limit=8),
         "next_actions": _string_list(payload.get("next_actions"), limit=3),
         "external_input_required": payload.get("external_input_required") is True,
     }
+    metrics = _project_lane_metrics(lane, payload)
+    if metrics:
+        projected["metrics"] = metrics
+    return projected
+
+
+def _project_lane_metrics(lane: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep a tiny allowlisted progress summary for the UI.
+
+    The readiness artifact contains large diagnostic payloads.  The UI should
+    still be able to answer "how far along is this lane?" without receiving
+    arbitrary nested details or paths.  Only bounded counters/status tokens are
+    copied here; this projection never changes gate decisions.
+    """
+
+    details = payload.get("details")
+    if not isinstance(details, Mapping):
+        return {}
+    metrics: dict[str, Any] = {}
+
+    if lane == "p0":
+        _copy_nonnegative_int(details, "source_count", metrics)
+        _copy_nonnegative_int(details, "accepted_count", metrics)
+        _copy_nonnegative_int(details, "limited_count", metrics)
+        projection = details.get("projection")
+        if isinstance(projection, Mapping):
+            _copy_nonnegative_int(projection, "p0_source_count", metrics)
+            _copy_nonnegative_int(projection, "accepted_count", metrics)
+            _copy_nonnegative_int(projection, "limited_count", metrics)
+            machine_counts = projection.get("machine_status_counts")
+            if isinstance(machine_counts, Mapping):
+                for raw_name in ("verified", "degraded", "failed", "missing"):
+                    value = machine_counts.get(raw_name)
+                    if _is_nonnegative_int(value):
+                        metrics[f"machine_{raw_name}_count"] = cast(int, value)
+            rows = projection.get("rows")
+            if isinstance(rows, (list, tuple)):
+                route_count = 0
+                route_attempted = 0
+                route_status_counts: dict[str, int] = {}
+                for row in rows:
+                    if not isinstance(row, Mapping):
+                        continue
+                    route_statuses = row.get("route_probe_statuses")
+                    if not isinstance(route_statuses, (list, tuple)):
+                        continue
+                    for route in route_statuses:
+                        if not isinstance(route, Mapping):
+                            continue
+                        if route_count >= 4096:
+                            break
+                        route_count += 1
+                        status = str(route.get("status") or "unknown").strip().lower()
+                        if status not in _ROUTE_PROBE_STATUS_TOKENS:
+                            status = "unknown"
+                        if status != "not_attempted":
+                            route_attempted += 1
+                        route_status_counts[status] = route_status_counts.get(status, 0) + 1
+                if route_count:
+                    metrics["route_count"] = route_count
+                    metrics["route_attempted_count"] = route_attempted
+                    for status, count in sorted(route_status_counts.items()):
+                        metrics[f"route_{status}_count"] = count
+
+    elif lane == "evidence":
+        readiness = details.get("readiness")
+        if isinstance(readiness, Mapping):
+            items = readiness.get("items")
+            if isinstance(items, (list, tuple)):
+                for item in items:
+                    if not isinstance(item, Mapping):
+                        continue
+                    item_id = str(item.get("item_id") or "").strip()
+                    if item_id == "weekly_history":
+                        _copy_nonnegative_int(item, "observed_count", metrics, "weekly_observed_count")
+                        _copy_nonnegative_int(item, "required_count", metrics, "weekly_required_count")
+                    elif item_id == "multi_day_dry_run":
+                        _copy_nonnegative_int(item, "observed_count", metrics, "dry_run_observed_count")
+                        _copy_nonnegative_int(item, "required_count", metrics, "dry_run_required_count")
+            if isinstance(readiness.get("formal_credit_authorized"), bool):
+                metrics["formal_credit_authorized"] = bool(readiness["formal_credit_authorized"])
+
+    elif lane == "paper":
+        readiness = details.get("readiness")
+        if isinstance(readiness, Mapping):
+            for key in (
+                "snapshot_count",
+                "benchmark_observation_count",
+                "cost_record_count",
+                "filled_event_count",
+                "partial_fill_event_count",
+                "rejected_event_count",
+                "override_event_count",
+            ):
+                _copy_nonnegative_int(readiness, key, metrics)
+            for key in ("weekly_report_status", "cost_ledger_status", "latest_status"):
+                _copy_short_status(readiness, key, metrics)
+
+    elif lane == "formal_ml":
+        readiness = details.get("readiness")
+        if isinstance(readiness, Mapping):
+            for key in ("ready_input_count", "input_count"):
+                _copy_nonnegative_int(readiness, key, metrics)
+            _copy_short_status(readiness, "ready_input_ratio", metrics)
+            _copy_short_status(readiness, "status", metrics, "readiness_status")
+
+    elif lane == "runtime":
+        readiness = details.get("readiness")
+        if isinstance(readiness, Mapping):
+            _copy_short_status(readiness, "overall_state", metrics)
+            _copy_short_status(readiness, "write_probe", metrics)
+
+    elif lane == "performance":
+        for key in ("parallelism_enabled", "single_writer_required"):
+            value = details.get(key)
+            if isinstance(value, bool):
+                metrics[key] = bool(value)
+        artifacts = details.get("artifacts")
+        if isinstance(artifacts, Mapping):
+            for artifact_name in (
+                "technical",
+                "technical_batch",
+                "technical_write",
+                "technical_worker",
+                "broker",
+                "ml_direct_chain",
+                "technical_canary",
+            ):
+                artifact = artifacts.get(artifact_name)
+                if isinstance(artifact, Mapping):
+                    _copy_short_status(artifact, "status", metrics, f"{artifact_name}_status")
+
+    elif lane == "update_history":
+        for key in ("terminal_record_count", "unique_run_count", "size_bytes"):
+            _copy_nonnegative_int(details, key, metrics)
+        for key in ("retention_status", "freshness_status"):
+            _copy_short_status(details, key, metrics)
+        scheduler = details.get("scheduled_task_status")
+        if isinstance(scheduler, Mapping):
+            _copy_nonnegative_int(scheduler, "available_count", metrics, "scheduled_available_count")
+            _copy_nonnegative_int(scheduler, "task_count", metrics, "scheduled_task_count")
+
+    return metrics
+
+
+def _is_nonnegative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _copy_nonnegative_int(
+    source: Mapping[str, Any],
+    source_key: str,
+    target: dict[str, Any],
+    target_key: str | None = None,
+) -> None:
+    value = source.get(source_key)
+    if _is_nonnegative_int(value):
+        target[target_key or source_key] = cast(int, value)
+
+
+def _copy_short_status(
+    source: Mapping[str, Any],
+    source_key: str,
+    target: dict[str, Any],
+    target_key: str | None = None,
+) -> None:
+    value = source.get(source_key)
+    if isinstance(value, str):
+        text = value.strip()
+        if text and len(text) <= 96:
+            target[target_key or source_key] = text
 
 
 def _status_token(value: Any) -> str:

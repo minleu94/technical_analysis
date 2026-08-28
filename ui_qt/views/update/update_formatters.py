@@ -290,6 +290,152 @@ def format_program_readiness_summary(payload: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+_READINESS_BLOCKER_LABELS = {
+    "decision_time_availability_not_proven": "決策時間可得性尚未證明",
+    "downstream_eligibility_none": "下游使用資格尚未開放",
+    "formal_oos_disabled": "Formal OOS 尚未開放",
+    "insufficient_dry_run_days": "多日 dry-run 天數不足",
+    "insufficient_weekly_history_records": "weekly 歷史週期不足",
+    "legal_and_license_acceptance_required": "需要法務／授權審核",
+    "license_not_accepted": "來源授權尚未接受",
+    "official_publication_timestamp_missing": "官方發布時間戳缺漏",
+    "p0_source_acceptance_pending": "P0 來源接受決議待處理",
+    "paper_weekly_report_not_computable": "Paper 週報尚不可計算",
+    "production_scheduler_disabled": "正式排程維持關閉",
+    "source_acceptance_decision_missing": "尚未提供來源接受決議",
+    "direct_chain_storage_preflight_blocked": "Direct/OOC 容量預檢受阻",
+    "technical_production_single_writer_canary_not_completed": "technical 正式 single-writer canary 尚未完成",
+    "formal_credit_not_authorized": "Formal credit 尚未授權",
+}
+
+
+def format_program_readiness_blockers(value: Any) -> str:
+    """Render blocker tokens with Chinese meaning while retaining raw tokens."""
+
+    if not isinstance(value, (list, tuple)) or not value:
+        return "無"
+    rendered: list[str] = []
+    for raw_value in value[:8]:
+        raw = str(raw_value or "").strip()
+        if not raw:
+            continue
+        if raw.startswith("formal_input_not_ready:"):
+            input_name = raw.split(":", 1)[1].strip() or "未命名輸入"
+            label = f"Formal 輸入未就緒：{input_name}"
+        elif raw.startswith("scheduled_tasks_missing_or_unavailable:"):
+            label = "排程工作未完整可用"
+        else:
+            label = _READINESS_BLOCKER_LABELS.get(raw, raw)
+        rendered.append(f"{label}（{raw}）" if label != raw else raw)
+    return "；".join(rendered) or "無"
+
+
+def format_program_readiness_lane_progress(lane: str, value: Mapping[str, Any]) -> str:
+    """Render bounded progress facts for one projected readiness lane."""
+
+    metrics = value.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return ""
+
+    if lane == "p0":
+        source_count = _safe_nonnegative_int(
+            metrics.get("source_count", metrics.get("p0_source_count"))
+        )
+        accepted = _safe_nonnegative_int(metrics.get("accepted_count"))
+        limited = _safe_nonnegative_int(metrics.get("limited_count"))
+        verified = _safe_nonnegative_int(metrics.get("machine_verified_count"))
+        degraded = _safe_nonnegative_int(metrics.get("machine_degraded_count"))
+        parts: list[str] = []
+        if source_count:
+            parts.append(f"來源 {source_count} 個")
+        if verified or degraded or source_count:
+            parts.append(f"機器證據 {verified + degraded}/{source_count or verified + degraded}")
+        parts.append(f"accepted {accepted}／limited {limited}")
+        route_count = _safe_nonnegative_int(metrics.get("route_count"))
+        route_attempted = _safe_nonnegative_int(metrics.get("route_attempted_count"))
+        if route_count:
+            parts.append(f"route 已嘗試 {route_attempted}/{route_count}")
+        return "；".join(parts)
+
+    if lane == "evidence":
+        parts = []
+        weekly_required = _safe_nonnegative_int(metrics.get("weekly_required_count"))
+        if weekly_required:
+            parts.append(
+                f"weekly {_safe_nonnegative_int(metrics.get('weekly_observed_count'))}/{weekly_required}"
+            )
+        dry_required = _safe_nonnegative_int(metrics.get("dry_run_required_count"))
+        if dry_required:
+            parts.append(
+                f"dry-run {_safe_nonnegative_int(metrics.get('dry_run_observed_count'))}/{dry_required}"
+            )
+        if "formal_credit_authorized" in metrics:
+            parts.append(
+                "formal credit="
+                + ("已授權" if metrics.get("formal_credit_authorized") is True else "未授權")
+            )
+        return "；".join(parts)
+
+    if lane == "paper":
+        parts = []
+        for key, label in (
+            ("snapshot_count", "snapshot"),
+            ("benchmark_observation_count", "benchmark"),
+            ("cost_record_count", "成本紀錄"),
+            ("filled_event_count", "fills"),
+        ):
+            if key in metrics:
+                parts.append(f"{label} {_safe_nonnegative_int(metrics.get(key))}")
+        weekly_status = str(metrics.get("weekly_report_status") or "").strip()
+        if weekly_status:
+            parts.append(f"週報 {format_status_token(weekly_status)}（{weekly_status}）")
+        return "；".join(parts)
+
+    if lane == "formal_ml":
+        ready = _safe_nonnegative_int(metrics.get("ready_input_count"))
+        total = _safe_nonnegative_int(metrics.get("input_count"))
+        return f"owner-controlled input {ready}/{total}" if total else ""
+
+    if lane == "runtime":
+        state = str(metrics.get("overall_state") or "").strip()
+        probe = str(metrics.get("write_probe") or "").strip()
+        parts = []
+        if state:
+            parts.append(f"host {format_status_token(state)}（{state}）")
+        if probe:
+            parts.append(f"probe={probe}")
+        return "；".join(parts)
+
+    if lane == "performance":
+        parts = []
+        for key, label in (
+            ("technical_canary_status", "technical canary"),
+            ("broker_status", "broker"),
+            ("ml_direct_chain_status", "Direct/OOC"),
+        ):
+            status = str(metrics.get(key) or "").strip()
+            if status:
+                parts.append(f"{label} {format_status_token(status)}（{status}）")
+        return "；".join(parts)
+
+    if lane == "update_history":
+        parts = []
+        if "unique_run_count" in metrics:
+            parts.append(f"run {_safe_nonnegative_int(metrics.get('unique_run_count'))}")
+        if "terminal_record_count" in metrics:
+            parts.append(f"terminal {_safe_nonnegative_int(metrics.get('terminal_record_count'))}")
+        task_count = _safe_nonnegative_int(metrics.get("scheduled_task_count"))
+        if task_count:
+            available = _safe_nonnegative_int(metrics.get("scheduled_available_count"))
+            parts.append(f"排程 {available}/{task_count}")
+        freshness = str(metrics.get("freshness_status") or "").strip()
+        if freshness:
+            parts.append(f"freshness {format_status_token(freshness)}（{freshness}）")
+        return "；".join(parts)
+
+    return ""
+
+
 def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[str]:
     """投影月營收數值 snapshot 與 availability mapping 候選的唯讀差異。"""
 

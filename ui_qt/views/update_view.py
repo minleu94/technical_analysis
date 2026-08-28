@@ -50,6 +50,8 @@ from ui_qt.views.update.update_formatters import (
     format_monthly_revenue_candidate_lines,
     format_p0_license_capture_status,
     format_p0_route_probe_statuses,
+    format_program_readiness_blockers,
+    format_program_readiness_lane_progress,
     format_program_readiness_summary,
     format_scheduler_operations_detail,
     format_source_detail_summary,
@@ -3025,13 +3027,20 @@ class UpdateView(QWidget):
             if not lane_supplied:
                 blockers = [f"readiness_lane_not_supplied:{lane}"]
                 next_actions = ["重新產生包含此 lane 的完整 readiness artifact。"]
+            progress_text = (
+                format_program_readiness_lane_progress(lane, raw_lane)
+                if lane_supplied
+                else ""
+            )
             next_text = "；".join(next_actions) or "無"
+            if progress_text:
+                next_text = f"目前：{progress_text}\n下一步：{next_text}"
             if not lane_supplied or raw_lane.get("external_input_required") is True:
                 next_text = f"{next_text}（需外部輸入）"
             cells = (
                 PROGRAM_READINESS_LANE_LABELS.get(lane, lane),
                 f"{format_status_token(raw_status)}（{raw_status}）",
-                "；".join(blockers) or "無",
+                format_program_readiness_blockers(blockers),
                 next_text,
             )
             row_index = table.rowCount()

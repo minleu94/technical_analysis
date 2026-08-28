@@ -181,6 +181,10 @@ Paper Portfolio readiness／weekly UI 也已將 `ready`、`not_computable_cost_l
 
 Readiness UI 的 lane 表格已固定顯示七個預期 lane；若明確 artifact 少了某列，畫面會顯示「未提供」、`readiness_lane_not_supplied:<lane>` 與重新產生完整 artifact 的動作，不再讓缺列看起來像功能不存在。阻擋原因／下一步欄位改為可換行並以 bounded scroll 呈現，摘要顯示已載入／預期比例；focused projection／UpdateView regression=`82 passed / 1 warning`，不改 readiness 或正式權限。
 
+本輪再補上 lane 進度投影：P0 顯示 `machine evidence／source`、`accepted／limited` 與 route probe `attempted／total`；Evidence 顯示 weekly／dry-run `observed／required` 與 Formal credit；Paper 顯示 snapshot／benchmark／cost／fills；Formal／ML 顯示 owner-controlled input `ready／total`；Runtime、performance、Update History 顯示 host probe、canary／容量、排程與 freshness。阻擋欄先顯示中文意義並保留原始 token，避免已有資料時仍被誤讀成「完全沒有功能」；projection 只取固定 allowlist 計數／狀態，不複製大型 details，也不改變任何 gate。
+
+以最新 host P0 + normalized MOPS candidate audit 重算的 unified readiness 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_mops_normalized_refresh_host_20260828.json`（status=`action_required`；SHA-256=`6621210BDEBAC42F469327361C3B2222F85ACDF6149E2016DD37F1B5F7A1D128`）。此份輸入反映 P0 `13/13` machine evidence、`1 verified / 12 degraded`、route `13/27` attempted，Evidence `weekly 0/3`／dry-run `3/3`、Paper `21/21` snapshot／benchmark 但 cost `0`、Formal `0/3`、Runtime／Update History `ready`，performance 仍為 Direct/OOC 容量預檢與 technical production single-writer canary blockers；所有寫入／scheduler／broker／Formal 邊界仍關閉。
+
 排程 read model 的狀態分類也已與現有 wrapper contract 對齊：`ml_raw_pit_refresh=completed` 投影為正常完成，`ml_allocation_copilot=skipped_non_trading_day` 投影為受控 no-op（diagnostic=`non_trading_day_noop`），不再讓合法的休市／完成結果污染「需處理」計數；真實 `failed` 會使用明確 `scheduled_job_failed`，storage preflight 或 evidence degradation 仍會保留 attention。
 
 排程分頁明細同步改為 bounded 人類可讀投影：每個 operation 顯示中文 state、原始 token、diagnostic 與觀測時間，最多 32 列；operation 缺漏會直接顯示未提供，不再要求使用者從 raw JSON 猜測「完成／受控／需處理」。原始 status artifact、Task Scheduler 與所有正式權限均未被修改。
