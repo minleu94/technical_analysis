@@ -305,6 +305,17 @@ owner acceptance，因此不解除 `accepted=0`、`limited=0` 與 downstream gat
 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_post_commit_host_headers_20260828.json`
 （SHA-256=`6C81E4FEF966DA6BC74F9037422F34C7A07D8A1987150EA0DBD030E0ADA90A70`）。
 
+同一 host context 也重新執行條款候選 capture：TWSE／TDCC 兩個 allowlisted target
+為 `captured`，TPEx 條款 endpoint 回 `HTTP 520`；artifact=
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence_capture_20260828_host_refresh.json`
+（`captured_count=2`、`failed_count=1`、SHA-256=`883872F09F4050E901F05A9D4A3D2A769B899C84ADCE2D433BB0329DA4A48338`）。
+這份 artifact 只保存 bounded response hash／metadata／keyword flags，未保存頁面全文，也不
+自動寫入 source acceptance；Control Center 仍為 `12 blocked_provenance / 1 research_shadow`、
+`accepted=0`、`limited=0`。載入新 P0 與 license evidence 後重算的 unified readiness 為
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_post_commit_host_license_refresh_20260828.json`
+（status=`action_required`、SHA-256=`733E5C7E38549A1D6C6FB9B4946B7090DD9324C23079B4FE43F87002224935B7`）；
+P0 的 owner／license／publication／PIT 與 downstream gate 仍未自動解除。
+
 ## Scheduler wrapper／action wiring 續測
 
 早期沙盒 wrapper manifest `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json`（SHA-256=`4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7`）仍保留 13/13 wrapper present，但 task query 不可用的 token 觀察。實際 host-context recheck 已確認 13/13 task `Enabled`／`Ready`、`Task To Run` 全部觀測且 action 相符；這些 query-only 檢查沒有註冊或修改 task。
