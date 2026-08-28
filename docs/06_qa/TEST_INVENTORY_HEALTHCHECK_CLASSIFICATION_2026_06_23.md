@@ -4,21 +4,21 @@
 
 ## 2026-08-28 machine refresh
 
-本輪 Data Update trust UX、Gate 3 P0 Source Control Center／P0 intake validator／decision append CLI、Gate 4 Portfolio foundation、Dashboard／market／candidate-pool refresh status、OOC RSS monitor lifecycle、MainWindow startup screenshot 時序、Runtime environment readiness、Runtime existing-file write-handle／Registry transaction probe、Runtime 窄版垂直欄／session context strip、Update date-level progress、合作式取消與大型匯出／合併批次進度及安全邊界、增量合併 no-op 明確狀態、Paper future-date look-ahead guard、Decision Desk current-date/query-only guard、Paper／Decision 排程 future-write guard、UpdateView 台灣市場日期／localized unavailable／全域錯誤摘要同步回歸、候選資料源頁內摘要、窄版導覽／卡片／操作鈕重排、Paper fills template/append CLI UTF-8 guard、單檔 CSV 讀取批次取消、Recommendation Pattern Explain evidence、SQLite 欄位別名正規化、Formal stale-clock diagnostic、Pre-V2／Simulation projection consistency、prospective staging diagnostics 回歸補強後重新收集：`3604 tests collected`，filesystem／inventory 為
-`638/638`，缺漏路徑、過時路徑與 collection errors 均為 `0`。新增納管的測試主要是
+本輪 Data Update trust UX、Gate 3 P0 Source Control Center／P0 intake validator／decision append CLI、Gate 4 Portfolio foundation、Dashboard／market／candidate-pool refresh status、OOC RSS monitor lifecycle、MainWindow startup screenshot 時序、Runtime environment readiness、Runtime existing-file write-handle／Registry transaction probe、Runtime 窄版垂直欄／session context strip、Update date-level progress、合作式取消與大型匯出／合併批次進度及安全邊界、增量合併 no-op 明確狀態、Paper future-date look-ahead guard、Decision Desk current-date/query-only guard、Paper／Decision 排程 future-write guard、UpdateView 台灣市場日期／localized unavailable／全域錯誤摘要同步回歸、候選資料源頁內摘要、窄版導覽／卡片／操作鈕重排、Paper fills template/append CLI UTF-8 guard、單檔 CSV 讀取批次取消、Recommendation Pattern Explain evidence、SQLite 欄位別名正規化、Formal stale-clock diagnostic、Pre-V2／Simulation projection consistency、prospective staging diagnostics、P0 owner packet renderer 回歸補強後重新收集：`3607 tests collected`，filesystem／inventory 為
+`639/639`，缺漏路徑、過時路徑與 collection errors 均為 `0`。新增納管的測試主要是
 P0 source control center／P0 intake validator／decision append CLI、Portfolio Stress Lab、Trade Import contract、Paper Portfolio readiness、Paper Trade Ledger、Paper fills CSV producer、Equal Weight builder、Paper weekly evidence、Stress history 與 UI bridge；這些測試仍維持原分類與執行邊界，
 不會因此被 quick healthcheck 直接執行。
 
-> 機器重算（2026-08-28）：新增 `tests/test_inspect_ml_formal_input_readiness.py` 的 staging observation coverage 後，實際為 `3604 tests collected`、filesystem／inventory `638/638`；current category `general-unit-keep-in-pytest=143`。以下 current count 欄位已同步，前述段落中的 `3596`／`637` 為補登錄前的中間讀數，`3603` 為 staging diagnostics 測試加入前的中間讀數。
+> 機器重算（2026-08-28）：新增 `tests/test_render_p0_owner_decision_packet.py` 並完成 inventory 登錄後，實際為 `3607 tests collected`、filesystem／inventory `639/639`；current category `general-unit-keep-in-pytest=143`。以下 current count 欄位已同步，前述段落中的 `3596`／`637` 為補登錄前的中間讀數，`3603`／`3604` 為前序中間讀數。
 
 本輪另以 `scripts/run_full_app_healthcheck.py --mode full --ui-smoke --ui-smoke-switch-tabs --ui-smoke-screenshot --ui-smoke-resize 1366x768 --ui-smoke-resize 390x844 --ui-smoke-dialog-cancel --output-dir output/qa/full_app_healthcheck_20260827_update_responsive_final --fail-fast` 完成真實 MainWindow smoke（最新 run `20260827_104105`）：8 個 workspace 均可切換、cancel-only probe 未觸發 destructive action；目前環境的 weekly projection 在 startup 畫面揭露 `3/3`；`1366x768` 與 `390x844` 實際均符合 requested viewport（`matched`），窄版 Runtime 改為垂直治理欄並提供垂直捲動，UpdateView 導覽／卡片／操作鈕也改為可讀重排。UI smoke 子程序會在報告目錄下使用隔離 `_isolated_app/data`／`_isolated_app/output`，不依賴正式資料根目錄的寫入權限，也不寫正式資料；其中 UpdateView focused regression 為 `59 passed / 1 warning`。
 
-Current filesystem Python files: `638`
+Current filesystem Python files: `639`
 
 - 預設 pytest 可收集測試檔：`607`
 - pytest support 檔：`1`
 - 預設不收集檔：`30`
-- `pytest --collect-only -q -o addopts=`：`3604 tests collected`
+- `pytest --collect-only -q -o addopts=`：`3607 tests collected`
 
 2026-08-28 全量 pytest 已以 `-o addopts=` 完成：`3603 passed, 1 skipped, 26 warnings`
 （`521.90s`；未指定 JUnit 輸出）。下方較早的 `3592 passed` 是前一輪中間基準，
@@ -27,7 +27,7 @@ Current filesystem Python files: `638`
 | 分類 | 數量 |
 |---|---:|
 | `general-unit-keep-in-pytest` | 143 |
-| `governance-doc-tooling` | 96 |
+| `governance-doc-tooling` | 97 |
 | `healthcheck-runner-owned` | 29 |
 | `legacy-or-low-priority` | 10 |
 | `manual-only` | 14 |

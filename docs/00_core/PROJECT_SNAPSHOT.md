@@ -83,7 +83,7 @@
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 
-- 測試 inventory 機器重算（2026-08-28）：新增 `tests/test_inspect_ml_formal_input_readiness.py` 的 staging observation coverage 後為 `638/638`、`3604 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `637/637`／`3596` 讀數屬補登錄前中間基準，`3603` 為本次測試加入前的中間讀數。
+- 測試 inventory 機器重算（2026-08-28）：新增 `tests/test_render_p0_owner_decision_packet.py` 並完成登錄後為 `639/639`、`3607 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `638/638`／`3604`、`637/637`／`3596` 讀數屬前序中間基準。
 - 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3603 passed / 1 skipped / 26 warnings`（`521.90s`）；warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示，沒有新的 test failure。
 
 - Data Update 狀態卡已改為 fail-closed 顯示：只有明確 `ok`／`success`／`current`／`normal` 才顯示綠色「最新」；`error`、`missing`、`empty`、`unavailable`、部分 payload 缺漏與整體狀態檢查失敗不再沿用舊數字或假綠。

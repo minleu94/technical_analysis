@@ -25,6 +25,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_rule_champion_snapshot_service.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_source_acceptance_decision_registry.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_source_acceptance_dossier_cli.py": "governance-doc-tooling",
+    "tests/test_render_p0_owner_decision_packet.py": "governance-doc-tooling",
     "tests/test_source_acceptance_governance.py": "governance-doc-tooling",
     "tests/test_terra_development_dataset_v0.py": "service-oracle-data-market",
     "tests/test_terra_development_research_cli.py": "governance-doc-tooling",
