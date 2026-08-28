@@ -546,6 +546,64 @@ def test_evidence_audit_exposes_multiple_acquisition_routes() -> None:
     }
 
 
+def test_evidence_audit_distinguishes_attempted_and_unattempted_routes() -> None:
+    payload = build_p0_source_evidence_audit(
+        date(2026, 7, 26), probe_report=_sample_probe_report()
+    )
+
+    summary = payload["acquisition_route_probe_summary"]
+    assert summary["route_count"] == 27
+    assert summary["attempted_route_count"] == 12
+    assert summary["status_counts"]["not_attempted"] == 15
+    assert summary["candidate_evidence_only"] is True
+
+    institutional = next(
+        item
+        for item in payload["machine_evidence_matrix"]
+        if item["source_id"] == "institutional_flows"
+    )
+    route_statuses = {
+        item["route_id"]: item
+        for item in institutional["route_probe_statuses"]
+    }
+    assert route_statuses["twse.T86"]["status"] == "observed"
+    assert route_statuses["tpex.tpex_3insti_daily_trading"]["status"] == "not_attempted"
+
+
+def test_evidence_audit_preserves_fallback_route_probe_status() -> None:
+    report = _sample_probe_report()
+    tdcc_probe = next(
+        item for item in report["sources"] if item["source_id"] == "tdcc_shareholding"
+    )
+    tdcc_probe.update(
+        {
+            "endpoint_id": "tdcc:openapi:1-5",
+            "acquisition_route_id": "tdcc.openapi_1-5",
+            "fallback_used": True,
+            "fallback_from_endpoint_id": "tdcc:1-5",
+            "fallback_from_acquisition_route_id": "tdcc.legacy_1-5_csv",
+            "fallback_attempted": True,
+            "fallback_probe_outcome": "matched",
+            "fallback_payload_sha256": "d" * 64,
+        }
+    )
+
+    payload = build_p0_source_evidence_audit(
+        date(2026, 7, 26), probe_report=report
+    )
+    tdcc = next(
+        item
+        for item in payload["machine_evidence_matrix"]
+        if item["source_id"] == "tdcc_shareholding"
+    )
+    route_statuses = {
+        item["route_id"]: item for item in tdcc["route_probe_statuses"]
+    }
+    assert route_statuses["tdcc.openapi_1-5"]["status"] == "observed"
+    assert route_statuses["tdcc.legacy_1-5_csv"]["status"] == "observed"
+    assert route_statuses["tdcc.legacy_1-5_csv"]["fallback"] is True
+
+
 def test_evidence_audit_preserves_actual_fallback_route_lineage() -> None:
     report = _sample_probe_report()
     tdcc_probe = next(

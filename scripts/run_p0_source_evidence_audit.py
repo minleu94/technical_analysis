@@ -24,6 +24,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from data_module.p0_source_contract_registry import P0_SOURCE_IDS
 from data_module.p0_source_acquisition_routes import (
+    P0AcquisitionRouteRegistry,
     build_p0_acquisition_route_registry,
 )
 from scripts.run_p0_candidate_audit import (
@@ -342,6 +343,138 @@ def redact_secrets(data: Any) -> Any:
     return data
 
 
+def _route_probe_status(
+    *,
+    network_status: Any = None,
+    probe_outcome: Any = None,
+    schema_status: Any = None,
+) -> str:
+    """將單一路徑的 probe 結果正規化成有限狀態集合。"""
+
+    network = str(network_status or "").strip().lower()
+    outcome = str(probe_outcome or "").strip().lower()
+    schema = str(schema_status or "").strip().lower()
+    if network == "failed" or outcome in {"network_error", "transport_error"}:
+        return "failed"
+    if outcome == "official_no_data" or schema == "no_data":
+        return "official_no_data"
+    if outcome in {"observed", "matched"} or schema == "matched":
+        return "observed"
+    if outcome in {"date_mismatch", "no_accepted_rows", "schema_mismatch"}:
+        return outcome
+    return "not_usable"
+
+
+def _fallback_route_probe_status(item: Mapping[str, Any]) -> str:
+    """從 fallback 欄位投影狀態；未嘗試時不猜測結果。"""
+
+    if not item.get("fallback_attempted") and not item.get("fallback_used"):
+        return "not_attempted"
+    if item.get("fallback_used") is True:
+        return "observed"
+    return _route_probe_status(
+        network_status=(
+            "failed"
+            if str(item.get("fallback_probe_outcome") or "").strip().lower()
+            in {"network_error", "transport_error"}
+            else "reachable"
+        ),
+        probe_outcome=item.get("fallback_probe_outcome"),
+        schema_status=(
+            "no_data"
+            if item.get("fallback_probe_outcome") == "official_no_data"
+            else "matched"
+            if item.get("fallback_probe_outcome") == "matched"
+            else None
+        ),
+    )
+
+
+def _build_route_probe_summary(
+    matrix: Sequence[Mapping[str, Any]],
+    registry: P0AcquisitionRouteRegistry,
+) -> dict[str, Any]:
+    """標示每條候選 route 是否真的被本次 audit 嘗試。
+
+    ``acquisition_routes`` 是設計／候選目錄；它本身不代表網路請求已發出。
+    本投影只消費 audit 已保存的 primary／fallback lineage，其他 route 明確
+    標成 ``not_attempted``，避免把路由註冊誤讀成資料可用性證據。
+    """
+
+    by_source: dict[str, list[dict[str, Any]]] = {}
+    routes: list[dict[str, Any]] = []
+    for item in matrix:
+        source_id = str(item.get("source_id") or "")
+        selected_route_id = str(item.get("acquisition_route_id") or "").strip()
+        fallback_route_id = str(
+            item.get("fallback_acquisition_route_id")
+            or item.get("fallback_from_acquisition_route_id")
+            or ""
+        ).strip()
+        source_rows: list[dict[str, Any]] = []
+        for route in registry.for_source(source_id):
+            route_id = route.route_id
+            if route_id == selected_route_id and selected_route_id:
+                if item.get("availability") == "artifact_verified":
+                    status = "observed"
+                    attempt_kind = "selected_artifact"
+                elif "probe_outcome" not in item and "network_status" not in item:
+                    status = "not_attempted"
+                    attempt_kind = "not_attempted"
+                else:
+                    status = _route_probe_status(
+                        network_status=item.get("network_status"),
+                        probe_outcome=item.get("probe_outcome"),
+                        schema_status=item.get("schema_status"),
+                    )
+                    attempt_kind = "selected"
+            elif route_id == fallback_route_id and fallback_route_id:
+                status = _fallback_route_probe_status(item)
+                attempt_kind = "fallback"
+            else:
+                status = "not_attempted"
+                attempt_kind = "not_attempted"
+            row = {
+                "source_id": source_id,
+                "route_id": route_id,
+                "provider": route.provider,
+                "endpoint": route.endpoint,
+                "implementation_status": route.implementation_status,
+                "attempt_kind": attempt_kind,
+                "status": status,
+                "selected": route_id == selected_route_id and bool(selected_route_id),
+                "fallback": route_id == fallback_route_id and bool(fallback_route_id),
+            }
+            source_rows.append(row)
+            routes.append(row)
+        by_source[source_id] = source_rows
+
+    status_counts = {
+        status: sum(1 for row in routes if row["status"] == status)
+        for status in (
+            "observed",
+            "failed",
+            "official_no_data",
+            "date_mismatch",
+            "no_accepted_rows",
+            "schema_mismatch",
+            "not_usable",
+            "not_attempted",
+        )
+    }
+    return {
+        "route_count": len(routes),
+        "attempted_route_count": len(routes) - status_counts["not_attempted"],
+        "status_counts": status_counts,
+        "by_source": by_source,
+        "routes": routes,
+        "candidate_evidence_only": True,
+        "source_acceptance_granted": False,
+        "formal_eligible": False,
+        "production_ingestion_allowed": False,
+    }
+
+
 def build_p0_source_evidence_audit(
     decision_date: date,
     *,
@@ -639,6 +772,21 @@ def build_p0_source_evidence_audit(
         matrix.append(item)
 
     # Aggregate matrix into 5 grouped owner decision questions
+    for item in matrix:
+        if not str(item.get("acquisition_route_id") or "").strip():
+            source_routes = acquisition_routes.for_source(
+                str(item.get("source_id") or "")
+            )
+            if source_routes:
+                # The registry order is the governed primary→alternate order.
+                # A default route id is metadata only; the summary below still
+                # marks it not_attempted when no probe result was supplied.
+                item["acquisition_route_id"] = source_routes[0].route_id
+    route_probe_summary = _build_route_probe_summary(matrix, acquisition_routes)
+    for item in matrix:
+        item["route_probe_statuses"] = route_probe_summary["by_source"].get(
+            item["source_id"], []
+        )
     grouped_packet: list[dict[str, Any]] = []
     matrix_by_id = {item["source_id"]: item for item in matrix}
 
@@ -699,6 +847,7 @@ def build_p0_source_evidence_audit(
         "machine_evidence_matrix": matrix,
         "grouped_owner_decision_packet": grouped_packet,
         "acquisition_route_summary": acquisition_routes.to_dict(),
+        "acquisition_route_probe_summary": route_probe_summary,
         "machine_vs_owner_blocker_summary": {
             "total_sources": len(matrix),
             "machine_verified_sources": verified_sources,

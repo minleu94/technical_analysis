@@ -138,6 +138,8 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 兩條 TPEx fallback 已有 source-specific parser、ROC compact date 正規化、row conservation 與日期 fail-closed 測試。這是「能取得另一條官方路徑」的工程完成，不是 source acceptance；TPEx OpenAPI 目前是 latest snapshot，不會被自動回填到較早或未證明的交易日。
 
+P0 audit 現在也會對 27 條候選 route 產生 `acquisition_route_probe_summary`：每條 route 明確標成 `observed`、`failed`、`official_no_data`、`date_mismatch`、`no_accepted_rows`、`schema_mismatch` 或 `not_attempted`，並保留 selected／fallback lineage。路由目錄本身不再被誤讀成已完成探測；本次 sample contract 會顯示 12 條已嘗試、15 條尚未嘗試，這只增加下一步的 machine evidence 可見性，不改 source acceptance、PIT 或 production boundary。
+
 既有官方 market-event backfill 也已通過 host-context custody recheck：publication=`official-market-events-dc8e30d0a11eec68f955b354`，涵蓋 2014–2026 的 TWSE `TWTAWU`／`TWT49U`／`TWTAUU` 與 TPEx `sprcHis` 四個 endpoint，canonical=`28,599` 筆、new=`11`、四個 source coverage 均完整；manifest hash=`sha256:e0477b4a440e09e4b655e671104924c925ce82cc4ae728ddce8be8dc90286413`、canonical hash=`sha256:fc34c1db2ec06d3e2123dd927d2681ef6c194093563923385b72a7c867e2b36a`。publication safety 明確為 append-only、raw immutable、`active_sqlite_written=false`、result-only TWT49U／TWTAUU 只供 label／ledger；這補上正式事件 custody，但不代表 P0 license／publication/PIT／owner decision 已通過。
 
 漲跌停鎖死來源已由不相符的 `MI_INDEX` 改為官方 `TWT84U`。本次 `TWT84U` 原始 1,377 列、鎖死事件 0 列；這表示該交易日沒有符合條件的事件，不是 schema 或 endpoint 失敗。
