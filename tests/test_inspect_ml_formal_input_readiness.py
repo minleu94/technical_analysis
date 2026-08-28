@@ -44,6 +44,9 @@ def test_readiness_is_fail_closed_when_all_formal_inputs_are_missing(
         "missing",
         "missing",
     ]
+    assert report["ready_input_ratio"] == "0/3"
+    assert report["ready_input_count"] == 0
+    assert report["input_count"] == 3
     assert report["runtime_attestation"]["secret_values_emitted"] is False
 
 
@@ -243,6 +246,7 @@ def test_readiness_adopts_late_windows_owner_deposit(
         "ready",
         "ready",
     ]
+    assert report["ready_input_ratio"] == "3/3"
     assert os.environ[readiness.PORTFOLIO_LEDGER_ENV] == str(
         ledger_path.resolve()
     )

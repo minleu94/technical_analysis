@@ -666,7 +666,9 @@ def build_readiness_report(
             training_as_of=training_as_of,
         ),
     ]
-    all_ready = all(item.get("state") == "ready" for item in results)
+    ready_input_count = sum(item.get("state") == "ready" for item in results)
+    input_count = len(results)
+    all_ready = ready_input_count == input_count
     prospective_observation = _inspect_prospective_output_roots(resolved_root)
     body: dict[str, Any] = {
         "schema_version": READINESS_SCHEMA_VERSION,
@@ -674,6 +676,9 @@ def build_readiness_report(
         "output_root": str(resolved_root),
         "training_as_of": training_as_of,
         "status": "ready" if all_ready else "waiting_for_formal_inputs",
+        "ready_input_count": ready_input_count,
+        "input_count": input_count,
+        "ready_input_ratio": f"{ready_input_count}/{input_count}",
         "formal_oos_allowed": False,
         "production_alpha_bp": 0,
         "broker_order_allowed": False,
@@ -774,11 +779,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             {
                 "status": report["status"],
                 "readiness_hash": report["readiness_hash"],
-                "ready_inputs": sum(
-                    item.get("state") == "ready"
-                    for item in report["inputs"]
-                ),
-                "input_count": len(report["inputs"]),
+                "ready_inputs": report["ready_input_count"],
+                "input_count": report["input_count"],
+                "ready_input_ratio": report["ready_input_ratio"],
                 "output": str(args.output.resolve()),
             },
             ensure_ascii=False,
