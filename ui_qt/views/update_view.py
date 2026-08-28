@@ -3859,6 +3859,9 @@ class UpdateView(QWidget):
         display_message = f"{display_message}\n\n{sqlite_summary}"
         self._log(f"{mode_name}失敗：{failed_step} - {message}")
         QMessageBox.warning(self, f"{mode_name}未完成", f"{failed_step} 失敗：\n{display_message}")
+        # 失敗也可能已經提交部分 CSV／SQLite；完成後重新讀取，避免卡片
+        # 繼續顯示上一輪成功數字而掩蓋本輪實際 partial write。
+        self._check_data_status()
 
     def _on_update_all_error(self, error_msg: str):
         """更新流程出錯"""
@@ -3878,6 +3881,7 @@ class UpdateView(QWidget):
         if len(error_display) > 500:
             error_display = error_display[:500] + "\n\n（錯誤訊息過長，已截斷，請查看日誌獲取完整訊息）"
         QMessageBox.critical(self, f"{mode_name}失敗", error_display)
+        self._check_data_status()
 
     def _execute_update(self):
         """執行數據更新"""
@@ -4035,6 +4039,7 @@ class UpdateView(QWidget):
             message = f"{message}\n\n{sqlite_summary}"
             self._log(f"更新失敗：{message}")
             QMessageBox.warning(self, "更新未完整", message)
+            self._check_data_status()
 
     def _on_update_error(self, error_msg: str):
         """更新出錯"""
@@ -4055,6 +4060,7 @@ class UpdateView(QWidget):
         # 顯示錯誤
         self._log(f"錯誤：{error_msg}")
         QMessageBox.critical(self, "更新失敗", f"數據更新失敗：\n{error_msg}")
+        self._check_data_status()
 
     def _get_update_type_name(self, update_type: str) -> str:
         """獲取更新類型名稱"""

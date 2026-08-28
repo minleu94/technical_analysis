@@ -1095,6 +1095,26 @@ def test_update_view_refreshes_manual_summary_on_update_error(monkeypatch):
     assert "network timeout" in text
 
 
+def test_update_view_rechecks_status_after_partial_update_failure(monkeypatch):
+    view = make_view()
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.Ok)
+    checks = []
+    view._check_data_status = lambda: checks.append("recheck")
+
+    view._active_update_operation = "安全更新"
+    view._on_update_all_finished(
+        {
+            "success": False,
+            "failed_step": "大盤指數更新",
+            "message": "market failed",
+            "warnings": [],
+        }
+    )
+
+    assert checks == ["recheck"]
+    assert "本次手動更新：失敗（failed）" in view.data_update_action_summary_label.text()
+
+
 def test_partial_status_payload_clears_stale_cards_instead_of_reusing_old_values():
     view = make_view()
 
