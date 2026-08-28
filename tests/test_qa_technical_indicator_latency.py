@@ -8,6 +8,7 @@ import pytest
 
 from scripts import qa_technical_indicator_latency as probe
 from scripts import qa_technical_indicator_full_batch as batch_probe
+from scripts import qa_technical_indicator_write_probe as write_probe
 
 
 def test_indicator_latency_probe_is_read_only(
@@ -188,3 +189,117 @@ def test_full_batch_latency_probe_validates_options(tmp_path: Path) -> None:
         batch_probe.measure_full_batch_latency(stock_data_file=stock_data_file, min_rows=0)
     with pytest.raises(ValueError, match="runs"):
         batch_probe.measure_full_batch_latency(stock_data_file=stock_data_file, runs=0)
+
+
+def test_write_probe_requires_explicit_confirmation_without_creating_files(
+    tmp_path: Path,
+) -> None:
+    stock_data_file = tmp_path / "stock_data.csv"
+    staging_root = tmp_path / "staging"
+    protected_root = tmp_path / "protected"
+    staging_root.mkdir()
+    protected_root.mkdir()
+    pd.DataFrame({"證券代號": ["2330"], "日期": ["2026-08-28"]}).to_csv(
+        stock_data_file,
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    report = write_probe.measure_write_probe(
+        stock_data_file=stock_data_file,
+        staging_root=staging_root,
+        protected_roots=(protected_root,),
+    )
+
+    assert report["status"] == "confirmation_required"
+    assert report["staging_write_attempted"] is False
+    assert report["production_write_attempted"] is False
+    assert list(staging_root.iterdir()) == []
+
+
+def test_write_probe_rejects_staging_inside_protected_root(tmp_path: Path) -> None:
+    stock_data_file = tmp_path / "stock_data.csv"
+    protected_root = tmp_path / "protected"
+    staging_root = protected_root / "staging"
+    protected_root.mkdir()
+    staging_root.mkdir()
+    pd.DataFrame({"證券代號": ["2330"], "日期": ["2026-08-28"]}).to_csv(
+        stock_data_file,
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    report = write_probe.measure_write_probe(
+        stock_data_file=stock_data_file,
+        staging_root=staging_root,
+        protected_roots=(protected_root,),
+        confirm_write_probe=True,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["blocker"] == "staging_root_inside_protected_root"
+    assert list(staging_root.iterdir()) == []
+
+
+def test_write_probe_serializes_staging_and_proves_sqlite_single_writer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stock_data_file = tmp_path / "stock_data.csv"
+    staging_root = tmp_path / "staging"
+    protected_root = tmp_path / "protected"
+    staging_root.mkdir()
+    protected_root.mkdir()
+    frame = pd.DataFrame(
+        {
+            "日期": [
+                "2026-08-27",
+                "2026-08-28",
+                "2026-08-27",
+                "2026-08-28",
+            ],
+            "證券代號": ["2330", "2330", "0050", "0050"],
+            "收盤價": [900, 901, 200, 201],
+        }
+    )
+    frame.to_csv(stock_data_file, index=False, encoding="utf-8-sig")
+    before = hashlib.sha256(stock_data_file.read_bytes()).hexdigest()
+
+    class FakeCalculator:
+        def __init__(self, logger=None):
+            self.logger = logger
+
+        def calculate_all_indicators(self, group, stock_id):
+            result = group.copy()
+            result["fake_indicator"] = 1
+            return result
+
+    monkeypatch.setattr(write_probe, "TechnicalIndicatorCalculator", FakeCalculator)
+    report = write_probe.measure_write_probe(
+        stock_data_file=stock_data_file,
+        staging_root=staging_root,
+        protected_roots=(protected_root,),
+        confirm_write_probe=True,
+        stock_ids=("0050", "2330"),
+        min_rows=2,
+        max_rows_per_stock=2,
+    )
+
+    assert report["status"] == "measured"
+    assert report["write_attempted"] is True
+    assert report["staging_write_attempted"] is True
+    assert report["production_write_attempted"] is False
+    assert report["sqlite_write_attempted"] is True
+    assert report["production_sqlite_write_attempted"] is False
+    assert report["parallelism_enabled"] is False
+    assert report["observed_worker_count"] == 1
+    assert report["single_writer_required"] is True
+    assert report["cleanup_succeeded"] is True
+    assert report["input_unchanged"] is True
+    assert report["rows"]["sqlite_rows"] == 4
+    assert report["sqlite"]["write_ok"] is True
+    assert report["sqlite"]["contention"]["contention_observed"] is True
+    assert report["sqlite"]["contention"]["retry_succeeded"] is True
+    assert report["sqlite"]["contention"]["row_count"] == 2
+    assert hashlib.sha256(stock_data_file.read_bytes()).hexdigest() == before
+    assert list(staging_root.iterdir()) == []

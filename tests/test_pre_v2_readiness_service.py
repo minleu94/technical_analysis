@@ -592,12 +592,33 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
         ),
         encoding="utf-8",
     )
+    write_path = tmp_path / "technical-write.json"
+    write_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "technical-indicator-write-probe.v1",
+                "status": "measured",
+                "read_only": False,
+                "write_attempted": True,
+                "staging_write_attempted": True,
+                "production_write_attempted": False,
+                "sqlite_write_attempted": True,
+                "production_sqlite_write_attempted": False,
+                "cleanup_succeeded": True,
+                "parallelism_enabled": False,
+                "observed_worker_count": 1,
+                "single_writer_required": True,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     report = inspect_program_readiness(
         data_root=tmp_path / "data",
         output_root=tmp_path / "output",
         technical_performance_path=technical_path,
         technical_batch_performance_path=batch_path,
+        technical_write_performance_path=write_path,
         broker_performance_path=broker_path,
     )
     rendered = render_markdown(report)
@@ -608,3 +629,4 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
     assert "bounded worker" in rendered
     assert report["workstreams"]["performance"]["status"] == "partial"
     assert report["workstreams"]["performance"]["details"]["artifacts"]["technical_batch"]["status"] == "measured"
+    assert report["workstreams"]["performance"]["details"]["artifacts"]["technical_write"]["status"] == "measured"

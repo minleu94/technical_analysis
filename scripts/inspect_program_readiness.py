@@ -67,6 +67,7 @@ def inspect_program_readiness(
     training_as_of: str | None = None,
     technical_performance_path: str | Path | None = None,
     technical_batch_performance_path: str | Path | None = None,
+    technical_write_performance_path: str | Path | None = None,
     broker_performance_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
@@ -131,6 +132,7 @@ def inspect_program_readiness(
         "performance": _inspect_performance_lane(
             _optional_path(technical_performance_path),
             _optional_path(technical_batch_performance_path),
+            _optional_path(technical_write_performance_path),
             _optional_path(broker_performance_path),
         ),
     }
@@ -492,17 +494,19 @@ def _inspect_update_history_lane(
 def _inspect_performance_lane(
     technical_path: Path | None,
     technical_batch_path: Path | None,
+    technical_write_path: Path | None,
     broker_path: Path | None,
 ) -> dict[str, Any]:
     artifacts: dict[str, Any] = {}
     blockers: list[str] = []
-    if technical_path is None and technical_batch_path is None:
+    if technical_path is None and technical_batch_path is None and technical_write_path is None:
         blockers.append("technical_performance_baseline_not_supplied")
     if broker_path is None:
         blockers.append("broker_performance_baseline_not_supplied")
     for label, path in (
         ("technical", technical_path),
         ("technical_batch", technical_batch_path),
+        ("technical_write", technical_write_path),
         ("broker", broker_path),
     ):
         if path is None:
@@ -521,6 +525,7 @@ def _inspect_performance_lane(
             details={
                 "technical_path": str(technical_path) if technical_path else None,
                 "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
+                "technical_write_path": str(technical_write_path) if technical_write_path else None,
                 "broker_path": str(broker_path) if broker_path else None,
                 "artifacts": artifacts,
             },
@@ -528,18 +533,31 @@ def _inspect_performance_lane(
     for label, payload in artifacts.items():
         if not isinstance(payload, Mapping):
             continue
-        if payload.get("write_attempted") is True:
+        production_write_attempted = payload.get("production_write_attempted") is True
+        unscoped_write_attempted = (
+            payload.get("write_attempted") is True
+            and payload.get("staging_write_attempted") is not True
+        )
+        if production_write_attempted or unscoped_write_attempted:
             blockers.append(f"{label}_performance_probe_wrote_data")
+        if payload.get("production_sqlite_write_attempted") is True:
+            blockers.append(f"{label}_performance_probe_wrote_production_sqlite")
+        if label == "technical_write":
+            if payload.get("staging_write_attempted") is not True:
+                blockers.append("technical_write_staging_write_not_confirmed")
+            if payload.get("cleanup_succeeded") is False:
+                blockers.append("technical_write_staging_cleanup_failed")
         if payload.get("parallelism_enabled") is True:
             blockers.append(f"{label}_parallelism_claim_requires_single_writer_review")
     return _lane(
         "partial",
         blockers=tuple(blockers + ["bounded_worker_design_not_completed"]),
-        next_actions=("完成 full-batch read→calculate→aggregate timing，並先定義券商 fetch concurrency 與 technical single-writer 邊界，再做 bounded worker proof。",),
+        next_actions=("已具備 full-batch 與 isolated CSV／SQLite writer timing；接著定義券商 fetch concurrency、取消／retry 與 technical single-writer 邊界，再做 bounded worker proof。",),
         external_input_required=True,
         details={
             "technical_path": str(technical_path) if technical_path else None,
             "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
+            "technical_write_path": str(technical_write_path) if technical_write_path else None,
             "broker_path": str(broker_path) if broker_path else None,
             "artifacts": artifacts,
             "parallelism_enabled": False,
@@ -554,7 +572,7 @@ def _execution_order(workstreams: Mapping[str, Mapping[str, Any]]) -> list[dict[
         (2, "evidence", "持續累積真實週期，並由 owner/reviewer 審核 weekly history；projection 不授予 Formal credit。"),
         (3, "paper", "補真實 fills／partial-fill／reject／override／Decimal cost／execution gap，再計算成本後 weekly。"),
         (4, "formal_ml", "由 owner 發布當前三項 formal inputs；禁止用 prospective 或歷史 shadow artifact 冒充。"),
-        (5, "performance", "先量測 full batch 與 contention，再設計 bounded worker／single writer。"),
+        (5, "performance", "已量測 full batch 與 isolated writer contention；接著設計 bounded worker／single writer。"),
         (6, "update_history", "等真實排程產生 history，執行 live refresh、retention 與狀態投影 QA。"),
     )
     result: list[dict[str, Any]] = []
@@ -666,6 +684,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--training-as-of")
     parser.add_argument("--technical-performance-baseline", type=Path)
     parser.add_argument("--technical-batch-performance-baseline", type=Path)
+    parser.add_argument("--technical-write-performance-baseline", type=Path)
     parser.add_argument("--broker-performance-baseline", type=Path)
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
@@ -695,6 +714,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         training_as_of=args.training_as_of,
         technical_performance_path=args.technical_performance_baseline,
         technical_batch_performance_path=args.technical_batch_performance_baseline,
+        technical_write_performance_path=args.technical_write_performance_baseline,
         broker_performance_path=args.broker_performance_baseline,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,
