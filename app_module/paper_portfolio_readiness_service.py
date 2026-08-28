@@ -29,6 +29,7 @@ PAPER_PORTFOLIO_READINESS_SCHEMA_VERSION = "paper-portfolio-readiness.v1"
 PAPER_DAILY_STATUS_SCHEMA_VERSION = "paper-portfolio-daily-status.v1"
 DEFAULT_PORTFOLIO_ID = "paper-main"
 DEFAULT_BENCHMARK_ID = "paper-main-equal"
+DEFAULT_BENCHMARK_LEDGER_FILENAME = "paper_equal_weight_benchmark.sqlite"
 DEFAULT_COST_LEDGER_FILENAME = "paper_trade_ledger.sqlite"
 
 
@@ -244,7 +245,11 @@ class PaperPortfolioReadinessService:
         configured_benchmark = benchmark_db_path
         if configured_benchmark is None:
             configured_benchmark = os.environ.get("PAPER_EQUAL_WEIGHT_BENCHMARK_PATH")
-        self.benchmark_db_path = Path(configured_benchmark) if configured_benchmark else None
+        self.benchmark_db_path = (
+            Path(configured_benchmark)
+            if configured_benchmark
+            else self.output_root / "paper_portfolio" / DEFAULT_BENCHMARK_LEDGER_FILENAME
+        )
         configured_cost_ledger = cost_ledger_db_path
         if configured_cost_ledger is None:
             configured_cost_ledger = os.environ.get("PAPER_TRADE_LEDGER_PATH")
@@ -566,9 +571,6 @@ class PaperPortfolioReadinessService:
 
     def _read_benchmark(self, blockers: list[str], diagnostics: list[str]) -> dict[str, Any]:
         result: dict[str, Any] = {"count": 0, "first_date": None, "latest_date": None}
-        if self.benchmark_db_path is None:
-            blockers.append("equal_weight_benchmark_path_not_configured")
-            return result
         if not self.benchmark_db_path.is_file():
             blockers.append("equal_weight_benchmark_db_missing")
             return result

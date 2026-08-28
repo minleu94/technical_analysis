@@ -73,7 +73,7 @@ def test_missing_paper_inputs_are_not_configured_without_creating_files(tmp_path
     assert result.status == "not_configured"
     assert "paper_daily_status_missing" in result.blockers
     assert "paper_snapshot_db_missing" in result.blockers
-    assert "equal_weight_benchmark_path_not_configured" in result.blockers
+    assert "equal_weight_benchmark_db_missing" in result.blockers
     assert not (tmp_path / "output" / "paper_portfolio").exists()
     assert result.read_only is True
     assert result.writes_allowed is False

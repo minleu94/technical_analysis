@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import sys
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -318,7 +319,7 @@ def test_paper_portfolio_readiness_tab_discloses_snapshot_and_missing_benchmark(
     assert "raw 累積 1 筆" in view.paper_readiness_summary_label.text()
     assert "TWD 1,000.00" in view.paper_readiness_summary_label.text()
     assert "Equal Weight：尚無" in view.paper_readiness_summary_label.text()
-    assert "equal_weight_benchmark_path_not_configured" in view.paper_readiness_detail_label.text()
+    assert "equal_weight_benchmark_db_missing" in view.paper_readiness_detail_label.text()
     assert view.paper_snapshot_table.model().rowCount() == 1
 
 
@@ -330,6 +331,82 @@ def test_paper_portfolio_tab_discloses_weekly_evidence_gap_without_writing(tmp_p
     assert "最近週報" in view.paper_weekly_report_label.text()
     assert "paper_snapshot_db_missing" in view.paper_weekly_report_label.text()
     assert not (tmp_path / "paper_portfolio").exists()
+
+
+def test_paper_equal_weight_button_previews_then_builds_new_ledger(tmp_path, monkeypatch):
+    baseline_path = tmp_path / "paper_portfolio" / "baseline_20260712.json"
+    baseline_path.parent.mkdir(parents=True)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "decision_date": "2026-08-20",
+                "residual_cash": "800.00",
+                "research_only": True,
+                "writes_positions_db": False,
+                "broker_order_allowed": False,
+                "auto_rebalance_allowed": False,
+                "allocations": [
+                    {
+                        "stock_code": "2330",
+                        "reference_price": "100.00",
+                        "executable_shares": 1,
+                        "executable_amount": "100.00",
+                    },
+                    {
+                        "stock_code": "2317",
+                        "reference_price": "50.00",
+                        "executable_shares": 2,
+                        "executable_amount": "100.00",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    state_db = tmp_path / "paper_portfolio" / "paper_portfolio.sqlite"
+    for snapshot_id, decision_date, total_value in (
+        ("paper-main-20260820", "2026-08-20", "1000.00"),
+        ("paper-main-20260821", "2026-08-21", "1010.00"),
+    ):
+        PaperPortfolioSnapshotRepository(state_db).append(
+            PaperPortfolioSnapshot(
+                snapshot_id=snapshot_id,
+                portfolio_id="paper-main",
+                decision_date=decision_date,
+                source_result_id="recommendation-1",
+                cash=Decimal("800.00"),
+                total_value=Decimal(total_value),
+                positions=(
+                    PaperPortfolioPositionSnapshot(
+                        stock_code="2330",
+                        quantity=1,
+                        mark_price=Decimal("100.00"),
+                        market_value=Decimal("100.00"),
+                        weight_bp=1000,
+                    ),
+                ),
+            )
+        )
+    market_db = tmp_path / "sqlite" / "twstock.db"
+    market_db.parent.mkdir(parents=True)
+    with sqlite3.connect(market_db) as connection:
+        connection.execute("CREATE TABLE daily_prices (證券代號 TEXT, 日期 TEXT, 收盤價 TEXT)")
+        connection.executemany(
+            "INSERT INTO daily_prices VALUES (?, ?, ?)",
+            (("2330", "20260820", "101.00"), ("2317", "20260820", "49.00")),
+        )
+
+    view = make_portfolio_view(tmp_path)
+    messages: list[str] = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: messages.append(str(_args[2])))
+
+    view.btn_build_paper_benchmark.click()
+
+    benchmark_path = tmp_path / "paper_portfolio" / "paper_equal_weight_benchmark.sqlite"
+    assert benchmark_path.exists()
+    assert "已保存" in messages[-1]
+    assert "Equal Weight：2 筆" in view.paper_readiness_summary_label.text()
 
 
 def test_paper_fill_csv_import_requires_confirmation_and_only_writes_paper_ledger(

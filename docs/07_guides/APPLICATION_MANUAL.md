@@ -2363,6 +2363,7 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 5. 「匯入 Paper 成交 CSV」只接受完整的 paper execution 欄位，先顯示檔案 hash、筆數與總成本，二次確認後才 append 至 Paper Trade Ledger；不會修改手動 Portfolio、Paper snapshot 或發送 broker 訂單。取消、欄位缺失、狀態／數量不一致或檔案在確認前變更時，整批拒絕且不建立 ledger。
 6. 「匯出成交範本」會建立空白 `paper_fills_template.csv`；範本只有欄位標題、不包含示例交易，且預設不覆寫既有檔案。請填入真實 execution 後，再按「匯入 Paper 成交 CSV」走預覽與二次確認。
 7. 每日 Paper／Decision Desk 排程預設採用最近一個已到達的台北 08:30 cutoff；若以 `--decision-at` 明確指定尚未到達的時間，Paper runner 會回報 `skipped_future_decision` 並不開啟 state／market DB，避免再產生 look-ahead row。
+8. 「預覽／建立 Equal Weight」會先唯讀驗證 baseline safety flag、snapshot 首尾日期、frozen constituents 與每個決策日的 T-1 市場價格；預覽成功後才二次確認建立新的 benchmark ledger。目標已存在、輸入在確認前變更、future snapshot 或缺因果價格時會拒絕，不覆寫既有資料；這只補 benchmark observation，不能替代真實 Paper fills。
 
 `export_paper_trade_csv_template.py --help` 會先設定 UTF-8 console；Windows CP1252 主控台也能正常顯示繁中說明。這只影響 CLI 顯示，不改變範本不含資料、預設不覆寫與不建立 Paper ledger 的安全邊界。
 
@@ -2376,13 +2377,15 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 上述 Paper readiness、Paper weekly evidence、Equal Weight builder 與 Runtime readiness CLI 會在解析參數前設定 UTF-8 主控台輸出；Windows 預設 CP1252 環境也能正常使用 `--help` 與繁中診斷。這只影響顯示，不改變唯讀與不建 schema 的安全邊界。
 
-若 Equal Weight ledger 已由受控流程保存，必須明確提供：
+Equal Weight readiness 預設讀取 `<OUTPUT_ROOT>/paper_portfolio/paper_equal_weight_benchmark.sqlite`；若 ledger 放在其他位置，可明確提供：
 
 ```powershell
 $env:PAPER_EQUAL_WEIGHT_BENCHMARK_PATH = '<EQUAL_WEIGHT_LEDGER.sqlite>'
 ```
 
-此環境變數只供唯讀檢查定位既有 ledger；未配置時，Paper snapshot 仍可觀測，但成本後 Equal Weight／weekly report 維持不可計算。最近一次實測有 `21` 筆 raw snapshot，raw 最新日 `2026-08-28`、總值 `490950.00`；本次台北市場日同為 `2026-08-28`，該列可作當日 current projection。受控 QA staging 已以 frozen constituents `1418／1536／1615` 建立 `21` 筆 Equal Weight observation，指定該 ledger 時 benchmark reader 為 ready；這只證明 benchmark builder 與讀取契約可用，不會自動套用正式 output，也不補足 Paper Trade Ledger。正式 readiness 仍為 `partial`，不能因此宣稱成本後績效或投資有效性。若執行時台北市場日早於 snapshot 日期，readiness 會將該列標成 future、排除於 current NAV，並只保留 blocker／diagnostic。
+此環境變數只供唯讀檢查定位既有 ledger；預設檔案不存在時會顯示 `equal_weight_benchmark_db_missing`，不會由 readiness／weekly evidence 自動建立 schema。持倉管理 > Paper Portfolio 的「預覽／建立 Equal Weight」會使用 baseline、Paper snapshot 與 `TWStockConfig.db_file` 的市場資料，先產生只讀 preview；使用者明確確認後才建立新的研究用 append-only ledger，且若目標已存在會拒絕覆寫。這個入口不改市場 DB、Paper snapshot、手動 Portfolio 或 Paper Trade Ledger，也不把 benchmark 當成成交紀錄。
+
+最近一次實測有 `21` 筆 raw snapshot，raw 最新日 `2026-08-28`、總值 `490950.00`；本次台北市場日同為 `2026-08-28`，該列可作當日 current projection。受控 QA staging 已以 frozen constituents `1418／1536／1615` 建立 `21` 筆 Equal Weight observation，指定該 ledger 時 benchmark reader 為 ready；這只證明 benchmark builder 與讀取契約可用，不會自動套用正式 output，也不補足 Paper Trade Ledger。正式 readiness 仍為 `partial`，不能因此宣稱成本後績效或投資有效性。若執行時台北市場日早於 snapshot 日期，readiness 會將該列標成 future、排除於 current NAV，並只保留 blocker／diagnostic。
 
 若 Paper Portfolio、weekly evidence 或 Equal Weight builder 遇到 `paper_snapshot_future_dated`、`paper_daily_status_future_dated` 或 `paper_weekly_report_future_period`，先停止採用該期間，不要刪除、回填或手動改寫正式資料；請由 owner 追查排程時鐘、時區與來源事件。現行排程入口已改採最近已到達 cutoff，且 writer 對明確未到達的 `--decision-at` fail-closed；既有 future row 仍只作 blocker／diagnostic。Equal Weight builder 也會在 preview／apply 前拒絕 future snapshot，避免 look-ahead 污染 benchmark。
 

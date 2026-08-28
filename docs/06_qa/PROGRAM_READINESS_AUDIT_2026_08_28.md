@@ -4,7 +4,7 @@
 
 程式可以持續推進，而且原先六項 blocker 中有三項是舊投影或不完整診斷，不是資料真的不存在：P0 已取得 `13/13` 來源候選證據、Evidence Gate 已是 `3/3`、正式路徑的既有檔案 write-handle probe 在一般 host context 已通過。現在真正不能由程式自動補造的，只剩具名來源接受決議、真實 Paper execution evidence，以及必須隨 prospective clock 累積的 Formal inputs。
 
-這仍不是完整產品 closeout。Data Update 的第一個 read-model slice 已把明確指定的 live audit route／fallback／publication-PIT／治理狀態投影到同一個唯讀畫面；Paper 成本後週報與 ML Formal lane 仍尚未可計算。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
+這仍不是完整產品 closeout。Data Update 的第一個 read-model slice 已把明確指定的 live audit route／fallback／publication-PIT／治理狀態投影到同一個唯讀畫面；Paper benchmark 建置入口已完成，但成本後週報與 ML Formal lane 仍尚未可計算。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
 ## 目前真實狀態
 
@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | P0 來源 | `13 contract_only`、像是全部沒資料 | live audit=`1 verified / 12 degraded / 0 missing`；Control Center=`0 contract_only`；13 個來源共 27 條候選 route，全部都有至少 2 條 route | 12 項 publication／decision-time provenance、13 項具名 owner/reviewer decision 與 license/use-case 證據；`accepted=0`、`limited=0` | 可以；資料取得與 governance 分流推進 |
 | Evidence Gate | weekly `0/3` | owner-approved weekly projection=`3/3`；multi-day dry-run=`3/3`；Pre-V2=`ready` | 另有 8 個 pending-human-review sidecar 期間；此 projection 不授予 Formal credit 或 production scheduler | 可以；Gate 顯示已修正，後續只累積真實週期與審核 |
-| Paper Portfolio | 只有 snapshot、週報不可算 | 21 筆 Paper snapshot；QA staging Equal Weight ledger 21 筆，benchmark reader=`ready` | 真實 fill／partial-fill／reject／override、Decimal 成本、turnover、execution gap；正式 Paper Trade Ledger 缺失 | 可以；benchmark 工程已通，execution evidence 不可推造 |
+| Paper Portfolio | 只有 snapshot、週報不可算 | 21 筆 Paper snapshot；QA staging Equal Weight ledger 21 筆，benchmark reader=`ready`；UI／CLI 已有受控 preview→confirm 建置流程 | 真實 fill／partial-fill／reject／override、Decimal 成本、turnover、execution gap；正式 Paper Trade Ledger 缺失 | 可以；benchmark 可由既有輸入建立，execution evidence 不可推造 |
 | Formal／ML | formal input `0/3` | 仍是 `0/3`，三個受控 manifest path 都不存在 | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership | 只能 prospective 累積；不得拿 2026-08-25 之後的 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | 一般 host context 對既有 `config.log`／Research Registry 的零位元 write-handle probe 通過，overall=`ready` | 尚未做 Registry SQLite transaction＋rollback 的實寫證明 | 可以；路徑 ACL 不是目前 blocker，若要 DB transaction probe 需另行受控執行 |
 | 效能工程 | 尚未設計 | 既有 batch backtest、optimizer 與部分 TPEX refresh 已有受控平行化 | 券商來源 rate limit／retry／Selenium 邊界；技術指標 process pool＋SQLite/CSV single writer 設計 | 可以；先量測、再做 bounded worker 與 single-writer，不直接拉高 thread 數 |
@@ -43,7 +43,7 @@
 
 1. 將 live P0 audit、actual route、fallback reason、publication/PIT class 與 owner decision 投影接進 Data Update／Research Console，同時保留 candidate-only 安全邊界。（Data Update 的唯讀 projection 已完成；後續補 artifact refresh／capture history。）
 2. 以 5 組 owner packet 完成 13 項 source 的 license/use-case/reviewer 決議；可先 `limited`，不必等待全部來源一次 accepted。
-3. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
+3. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程（已完成 CLI／UI 共用 preview→confirm 與不可覆寫 ledger）；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
 4. 修正 prospective Formal input publisher 與現行 ML validator 的版本契約，但不做歷史回填；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積。
 5. 先量測 broker／technical indicator 各階段耗時、限流與 write contention，再實作 bounded worker＋single-writer queue。
 6. 完成整個 Update 使用流程的 live UI QA：成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 都要有不同且一致的顯示。
@@ -61,6 +61,7 @@
 - ML Formal readiness：`C:\Users\archi\AppData\Local\Temp\ml-formal-input-readiness-20260828.json`
 - Runtime readiness：2026-08-28T04:12:24Z 以 `scripts/inspect_runtime_environment_readiness.py --format json` 在一般 host context 重跑；overall=`ready`、`write_probe=os.access_plus_existing_handle`、diagnostics=`[]`（CLI 唯讀輸出，未建立 probe artifact）
 - QA Equal Weight ledger：`D:\Min\Python\Project\FA_Data\output\qa\readiness_refresh_20260828\paper_equal_weight_preview.sqlite`
+- Equal Weight workflow service：`app_module/paper_equal_weight_benchmark_builder.py`；Portfolio UI 入口為持倉管理 > Paper Portfolio >「預覽／建立 Equal Weight」
 
 ## 安全邊界
 

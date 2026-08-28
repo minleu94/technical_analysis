@@ -52,6 +52,9 @@ from app_module.paper_portfolio_readiness_service import (
 from app_module.paper_portfolio_weekly_evidence_service import (
     PaperPortfolioWeeklyEvidenceService,
 )
+from app_module.paper_equal_weight_benchmark_builder import (
+    PaperEqualWeightBenchmarkBuilder,
+)
 from app_module.paper_trade_import_service import PaperTradeImportService
 from app_module.trade_import_service import TradeImportService
 
@@ -359,6 +362,7 @@ class PortfolioView(QWidget):
             benchmark_db_path=self.paper_readiness_service.benchmark_db_path,
             cost_ledger_db_path=self.paper_readiness_service.cost_ledger_db_path,
         )
+        self.paper_benchmark_builder = PaperEqualWeightBenchmarkBuilder()
         self.paper_trade_import_service = PaperTradeImportService()
         self.trade_import_service = TradeImportService()
         self.chip_service = PortfolioChipService(
@@ -578,6 +582,13 @@ class PortfolioView(QWidget):
         self.btn_refresh_paper.setToolTip("只讀 status JSON 與既有 append-only ledger，不會寫入資料。")
         self.btn_refresh_paper.clicked.connect(self._load_paper_readiness)
         paper_controls.addWidget(self.btn_refresh_paper)
+        self.btn_build_paper_benchmark = QPushButton("預覽／建立 Equal Weight")
+        self.btn_build_paper_benchmark.setProperty("variant", "secondary")
+        self.btn_build_paper_benchmark.setToolTip(
+            "先以 baseline、snapshot 與市場資料產生唯讀 preview；確認後才建立新的研究用 benchmark ledger，既有檔案不覆寫。"
+        )
+        self.btn_build_paper_benchmark.clicked.connect(self._build_paper_benchmark)
+        paper_controls.addWidget(self.btn_build_paper_benchmark)
         self.btn_import_paper_fills = QPushButton("匯入 Paper 成交 CSV")
         self.btn_import_paper_fills.setProperty("variant", "secondary")
         self.btn_import_paper_fills.setToolTip(
@@ -983,6 +994,70 @@ class PortfolioView(QWidget):
         if result.diagnostics:
             details.extend(f"診斷：{item}" for item in result.diagnostics)
         self.paper_weekly_report_label.setText(summary + "\n" + "\n".join(details))
+
+    def _build_paper_benchmark(self) -> None:
+        """預覽並在二次確認後建立新的 Equal Weight benchmark ledger。"""
+        config = self.portfolio_service.config
+        configured_market_db = getattr(config, "db_file", None)
+        if configured_market_db is None:
+            configured_market_db = Path(getattr(config, "data_dir", config.output_root)) / "sqlite" / "twstock.db"
+        market_db_path = Path(configured_market_db)
+        try:
+            preview = self.paper_benchmark_builder.preview(
+                baseline_path=self.paper_readiness_service.baseline_path,
+                state_db_path=self.paper_readiness_service.state_db_path,
+                market_db_path=market_db_path,
+                output_ledger_path=self.paper_readiness_service.benchmark_db_path,
+            )
+        except Exception as exc:
+            logger.error("Paper Equal Weight benchmark preview failed: %s", exc)
+            QMessageBox.warning(
+                self,
+                "Equal Weight benchmark 無法預覽",
+                f"未建立任何檔案。\n診斷：{exc}",
+            )
+            return
+
+        output_path = preview.output_ledger_path
+        if output_path.exists():
+            QMessageBox.information(
+                self,
+                "Equal Weight benchmark 已存在",
+                f"預覽成功，但為避免覆寫既有 ledger，這次不會寫入：\n{output_path}",
+            )
+            return
+        summary = (
+            f"frozen constituents：{preview.constituent_count} 檔（{', '.join(preview.constituents)}）\n"
+            f"觀測：{preview.observation_count} 筆｜{preview.first_date} → {preview.latest_date}\n"
+            f"初始值：TWD {preview.initial_value}｜最新值：TWD {preview.latest_value}\n"
+            f"baseline：{preview.baseline_path}\n"
+            f"snapshot DB：{preview.state_db_path}\n"
+            f"市場 DB（只讀 T-1）：{preview.market_db_path}\n"
+            f"目標 ledger：{output_path}\n\n"
+            "按『是』才會建立新的研究用 append-only Equal Weight ledger；不修改市場 DB、Paper snapshot、手動 Portfolio，也不會下單。"
+        )
+        if QMessageBox.question(
+            self,
+            "確認建立 Equal Weight benchmark",
+            summary,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        ) != QMessageBox.Yes:
+            return
+        try:
+            built_path = self.paper_benchmark_builder.commit(preview, confirm=True)
+        except Exception as exc:
+            logger.error("Paper Equal Weight benchmark build failed: %s", exc)
+            QMessageBox.warning(self, "Equal Weight benchmark 未建立", str(exc))
+            return
+        self._load_paper_readiness()
+        self._load_paper_weekly_evidence()
+        QMessageBox.information(
+            self,
+            "Equal Weight benchmark 已建立",
+            f"已保存 {preview.observation_count} 筆 benchmark observation：\n{built_path}\n\n"
+            "這只補齊 benchmark 輸入；Paper Trade Ledger 仍需真實 execution fills 才能計算成本後週報。",
+        )
 
     def _load_stress_lab(self):
         """以目前持倉做唯讀情境投影；不寫入任何資料或交易紀錄。"""

@@ -1,5 +1,12 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-28 Paper Equal Weight controlled build slice（current engineering）
+
+- Equal Weight benchmark 建置已抽成 `app_module/paper_equal_weight_benchmark_builder.py`，CLI 與 Portfolio UI 共用同一個 preview／confirm／revalidate 契約；預覽只讀 baseline、Paper snapshot 與市場 SQLite 的 T-1 價格，確認後才以 atomic append-only 方式建立新 ledger，既有檔案一律拒絕覆寫。
+- Portfolio「Paper Portfolio」分頁新增「預覽／建立 Equal Weight」入口。它使用 `TWStockConfig.db_file`（測試／缺少屬性時 fallback 至 `<data_dir>/sqlite/twstock.db`），預覽成功後才二次確認；不修改市場 DB、snapshot、手動 Portfolio，不把成交或成本灌入 Paper Trade Ledger。
+- Paper readiness／weekly evidence 的 benchmark 路徑現在有明確預設 `<OUTPUT_ROOT>/paper_portfolio/paper_equal_weight_benchmark.sqlite`，仍可用 `PAPER_EQUAL_WEIGHT_BENCHMARK_PATH` 覆寫。缺少檔案會顯示 `equal_weight_benchmark_db_missing`；建立 benchmark 不會自動解除成本後週報 blocker，真實 fills 仍必須由 Paper execution producer／使用者提供。
+- CLI、readiness、weekly evidence 與 Portfolio UI focused regression 已涵蓋 preview、確認建立、既有檔案不覆寫、T-1／future-date／schema fail-closed；此 slice 只完成 benchmark workflow，不代表 Paper Trade Ledger 或 Gate 4 成本後 evidence 已完成。
+
 ## 2026-08-27 Data Update × P0 source status projection（current engineering）
 
 - `UpdateView` 的全域狀態檢查現在以 `compose_source_status_projection()` 統一保留核心 SQLite/CSV 狀態與 P0 Control Center 狀態；主視窗將既有的 `P0_SOURCE_CONTROL_CENTER_AUDIT`／`P0_SOURCE_CONTROL_CENTER_DECISIONS` 明確路徑傳入更新頁，不掃描正式資料目錄、不發網路請求。
