@@ -89,6 +89,7 @@ class PreV2ReadinessService:
         evidence_db_path: str | Path | None = None,
         research_db_path: str | Path | None = None,
         approved_weekly_history_projection_path: str | Path | None = None,
+        weekly_collection_sidecar_path: str | Path | None = None,
     ) -> None:
         self.config = config
         self.evidence_db_path = Path(evidence_db_path) if evidence_db_path is not None else Path(config.db_file)
@@ -96,6 +97,11 @@ class PreV2ReadinessService:
             Path(research_db_path) if research_db_path is not None else Path(config.research_run_db_file)
         )
         self.approved_weekly_history_projection_path = approved_weekly_history_projection_path
+        self.weekly_collection_sidecar_path = (
+            Path(weekly_collection_sidecar_path)
+            if weekly_collection_sidecar_path is not None
+            else None
+        )
 
     def inspect(
         self,
@@ -209,7 +215,7 @@ class PreV2ReadinessService:
         except sqlite3.Error as exc:
             diagnostics.append(f"legacy_weekly_history_unavailable_non_blocking:{exc}")
 
-        sidecar_path = (
+        sidecar_path = self.weekly_collection_sidecar_path or (
             Path(self.config.output_root)
             / "scheduled"
             / "v2_2_weekly_collection"

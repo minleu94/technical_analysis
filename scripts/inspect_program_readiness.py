@@ -61,6 +61,7 @@ def inspect_program_readiness(
     evidence_db_path: str | Path | None = None,
     research_db_path: str | Path | None = None,
     approved_weekly_history_path: str | Path | None = None,
+    weekly_collection_sidecar_path: str | Path | None = None,
     multi_day_record_path: str | Path | None = None,
     min_weekly_records: int = 3,
     min_dry_run_days: int = 3,
@@ -103,6 +104,7 @@ def inspect_program_readiness(
         "evidence": _inspect_evidence_lane(
             config,
             approved_weekly_history_path=_optional_path(approved_weekly_history_path),
+            weekly_collection_sidecar_path=_optional_path(weekly_collection_sidecar_path),
             multi_day_record_path=_optional_path(multi_day_record_path),
             min_weekly_records=min_weekly_records,
             min_dry_run_days=min_dry_run_days,
@@ -245,6 +247,7 @@ def _inspect_evidence_lane(
     config: ReadOnlyConfig,
     *,
     approved_weekly_history_path: Path | None,
+    weekly_collection_sidecar_path: Path | None,
     multi_day_record_path: Path | None,
     min_weekly_records: int,
     min_dry_run_days: int,
@@ -255,6 +258,7 @@ def _inspect_evidence_lane(
             evidence_db_path=config.db_file,
             research_db_path=config.research_run_db_file,
             approved_weekly_history_projection_path=approved_weekly_history_path,
+            weekly_collection_sidecar_path=weekly_collection_sidecar_path,
         ).inspect(
             multi_day_record_path=multi_day_record_path,
             min_weekly_records=min_weekly_records,
@@ -792,6 +796,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-db-path", type=Path)
     parser.add_argument("--research-db-path", type=Path)
     parser.add_argument("--approved-weekly-history-projection", type=Path)
+    parser.add_argument(
+        "--weekly-collection-sidecar",
+        type=Path,
+        help="明確指定 V2.2 pending weekly collection sidecar；只讀，不授予 Gate credit",
+    )
     parser.add_argument("--multi-day-record-path", type=Path)
     parser.add_argument("--min-weekly-records", type=int, default=3)
     parser.add_argument("--min-dry-run-days", type=int, default=3)
@@ -824,6 +833,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         evidence_db_path=args.evidence_db_path,
         research_db_path=args.research_db_path,
         approved_weekly_history_path=args.approved_weekly_history_projection,
+        weekly_collection_sidecar_path=args.weekly_collection_sidecar,
         multi_day_record_path=args.multi_day_record_path,
         min_weekly_records=args.min_weekly_records,
         min_dry_run_days=args.min_dry_run_days,

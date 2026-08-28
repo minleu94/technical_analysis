@@ -456,6 +456,51 @@ def test_pre_v2_readiness_excludes_pending_weekly_sidecar_from_gate(
     assert "不計 Gate credit" in weekly.next_actions[0]
 
 
+def test_pre_v2_readiness_reads_explicit_pending_weekly_sidecar_outside_output_root(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    sidecar = tmp_path / "isolated" / "evidence_scheduler.db"
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(sidecar) as conn:
+        conn.execute(
+            """
+            CREATE TABLE evidence_weekly_collections (
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                status TEXT NOT NULL,
+                error_type TEXT NOT NULL,
+                source_hash TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO evidence_weekly_collections
+                (period_start, period_end, status, error_type, source_hash)
+            VALUES ('2026-08-24', '2026-08-28', 'pending_human_review', '', ?)
+            """,
+            ("sha256:" + "a" * 64,),
+        )
+
+    weekly = PreV2ReadinessService(
+        config,
+        evidence_db_path=tmp_path / "missing.db",
+        weekly_collection_sidecar_path=sidecar,
+    )._weekly_history_item(3)
+
+    assert weekly.observed_count == 0
+    assert weekly.evidence["weekly_collection_sidecar_path"] == str(sidecar)
+    assert weekly.evidence["pending_collection_periods"] == [
+        {
+            "period_start": "2026-08-24",
+            "period_end": "2026-08-28",
+            "evidence_source": "pending_human_review_sidecar",
+        }
+    ]
+    assert "不計 Gate credit" in weekly.next_actions[0]
+
+
 def test_pre_v2_readiness_accepts_same_day_scheduled_dry_run_for_corrected_source_gap_closeout(
     tmp_path: Path,
 ) -> None:
@@ -558,6 +603,42 @@ def test_program_readiness_marks_update_history_identity_mismatch(tmp_path: Path
     assert "latest_status_run_not_equal_to_history_latest_run" in lane["blockers"]
     assert lane["details"]["terminal_record_count"] == 1
     assert lane["details"]["unique_run_count"] == 1
+
+
+def test_program_readiness_forwards_explicit_weekly_collection_sidecar(tmp_path: Path) -> None:
+    sidecar = tmp_path / "sidecar" / "evidence_scheduler.db"
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(sidecar) as conn:
+        conn.execute(
+            """
+            CREATE TABLE evidence_weekly_collections (
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                status TEXT NOT NULL,
+                error_type TEXT NOT NULL,
+                source_hash TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO evidence_weekly_collections
+                (period_start, period_end, status, error_type, source_hash)
+            VALUES ('2026-08-24', '2026-08-28', 'pending_human_review', '', ?)
+            """,
+            ("sha256:" + "b" * 64,),
+        )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        weekly_collection_sidecar_path=sidecar,
+    )
+
+    weekly = report["workstreams"]["evidence"]["details"]["readiness"]["items"][0]
+    assert weekly["item_id"] == "weekly_history"
+    assert weekly["evidence"]["weekly_collection_sidecar_path"] == str(sidecar)
+    assert weekly["evidence"]["pending_collection_periods"][0]["period_end"] == "2026-08-28"
 
 
 def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_path: Path) -> None:

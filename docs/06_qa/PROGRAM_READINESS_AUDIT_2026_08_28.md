@@ -24,6 +24,7 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --output-root <OUTPUT_ROOT> `
   --p0-audit-json <P0_AUDIT_JSON> `
   --approved-weekly-history-projection <APPROVED_WEEKLY_HISTORY_JSON> `
+  --weekly-collection-sidecar <WEEKLY_COLLECTION_SIDECAR_DB> `
   --training-as-of <TRAINING_AS_OF> `
   --technical-performance-baseline <TECHNICAL_BASELINE_JSON> `
   --technical-batch-performance-baseline <TECHNICAL_BATCH_BASELINE_JSON> `
@@ -34,8 +35,10 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --format markdown
 ```
 
-輸出固定分成 `p0`、`evidence`、`paper`、`formal_ml`、`runtime`、`update_history` 與
-`performance` 七個 lane，並以 `execution_order` 列出目前順序。`ready` 只代表該 lane
+輸出固定分成 `p0`、`evidence`、`paper`、`formal_ml`、`runtime`、`performance` 與
+`update_history` 七個 lane，並以 `execution_order` 列出目前順序（與上述推進順序一致）。
+`--weekly-collection-sidecar` 可把隔離 TEMP 的 `pending_human_review` collection 接入
+Evidence read model；它只會顯示待審核週期，不會把 pending 轉成 Gate credit。`ready` 只代表該 lane
 的既有輸入通過；`partial` 代表仍有安全邊界或後續工程；`waiting_for_external_input`
 代表要等真實週期／owner artifact；`action_required` 代表需要先修正資料或治理決策。
 缺少路徑時會明示「未觀察」，不會以同根目錄的 prospective、replay、snapshot 或舊
@@ -53,7 +56,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 | 區域 | 先前觀感 | 2026-08-28 實測 | 真正剩餘缺口 | 可否繼續推進 |
 |---|---|---|---|---|
 | P0 來源 | `13 contract_only`、像是全部沒資料 | live audit=`1 verified / 10 degraded / 2 official_no_data`；Control Center=`0 contract_only`；13 個來源共 27 條候選 route，全部都有至少 2 條 route；TWSE T86／MI_MARGN 無資料時已會再 probe TPEx OpenAPI | 12 項 publication／decision-time provenance、13 項具名 owner/reviewer decision 與 license/use-case 證據；`accepted=0`、`limited=0`；fallback 仍須證明要求日期，不能用最新快照冒充 | 可以；資料取得與 governance 分流推進 |
-| Evidence Gate | weekly `0/3` | owner-approved weekly projection=`3/3`；multi-day dry-run=`3/3`；Pre-V2=`ready`；readiness 明確輸出 `formal_credit_authorized=false` | 另有 8 個 pending-human-review sidecar 期間；此 projection 不授予 Formal credit 或 production scheduler | 可以；Gate 顯示已修正，後續只累積真實週期與審核 |
+| Evidence Gate | weekly `0/3` | owner-approved weekly projection=`3/3`；multi-day dry-run=`3/3`；Pre-V2=`ready`；另以正式 SQLite 唯讀連線收集 `2026-08-24..2026-08-28` 一筆 `pending_human_review` sidecar；readiness 明確輸出 `formal_credit_authorized=false` | 另有 8 個 pending-human-review sidecar 期間；此 projection／sidecar 都不授予 Formal credit 或 production scheduler | 可以；Gate 顯示已修正，後續只累積真實週期與審核 |
 | Paper Portfolio | 只有 snapshot、週報不可算 | 21 筆 Paper snapshot；正式 Paper output Equal Weight ledger 21 筆，benchmark reader=`ready`；UI／CLI 已有受控 preview→confirm 建置流程 | 真實 fill／partial-fill／reject／override、Decimal 成本、turnover、execution gap；Paper Trade Ledger 缺失 | 可以；benchmark 已建立，execution evidence 不可推造 |
 | Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但受控環境目前把三個 path 指向缺失且早於 `training_as_of=2026-08-28` 的 `clock-20260819`；readiness 已明示 stale-clock hint，並列出同 output root 下 6 個 `diagnostic_only` prospective clock/staging marker | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費；owner 必須發布當前 clock 並更新明確 path | 可以工程化累積；不得自動改接 `clock-20260828`、也不得拿 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | `scripts/inspect_runtime_environment_readiness.py --confirm-write-probe` 已能在明確 TEMP staging 以正式 Registry schema 完成 insert／讀回／rollback／清除；統一 inspector 可用 `--runtime-write-probe` 載入這份 artifact。此 host 對正式 `config.log`／Research Registry 的 write-handle 仍可能回 PermissionError，會標成 production ACL 未驗證而不再混同 staging 能力 | 正式 Registry 本身仍未做實寫；production ACL／鎖定仍需 owner 在正式環境確認 | 可以；schema transaction 已在非正式 staging 驗證，正式路徑只差環境權限證據 |
@@ -94,10 +97,11 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 1. 將 live P0 audit、actual route、fallback reason、publication/PIT class 與 owner decision 投影接進 Data Update／Research Console，同時保留 candidate-only 安全邊界。（Data Update 的唯讀 projection、fallback 拒絕診斷與 append-only history producer 已完成；後續觀察真實排程並補 live refresh／retention。）
 2. 以 5 組 owner packet 完成 13 項 source 的 license/use-case/reviewer 決議；可先 `limited`，不必等待全部來源一次 accepted。
-3. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程（已完成 CLI／UI 共用 preview→confirm 與不可覆寫 ledger）；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
-4. 保持 prospective publisher 與歷史 ML validator 的 schema 分離；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積，並用 readiness inspector 的 lane／schema 診斷避免把 shadow bytes 誤接到正式 consumer。
-5. 已完成 technical indicator 各階段耗時、writer contention、real staging bounded process-pool 與 broker 離線 fetch contract；下一步補 worker recovery／integration，再由 owner 允許真實 broker canary。
-6. 完成整個 Update 使用流程的 live UI QA：程式端已先以 fixture 覆蓋成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 的狀態投影；剩餘是正式環境真實排程／權限／歷史 retention 的觀察與截圖證據。
+3. 持續收集真實 weekly sidecar 並完成 owner review；目前已接入明確 sidecar 參數，不能用 pending 或 projection 直接取得 Formal credit。
+4. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程（已完成 CLI／UI 共用 preview→confirm 與不可覆寫 ledger）；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
+5. 保持 prospective publisher 與歷史 ML validator 的 schema 分離；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積，並用 readiness inspector 的 lane／schema 診斷避免把 shadow bytes 誤接到正式 consumer。
+6. 已完成 technical indicator 各階段耗時、writer contention、real staging bounded process-pool 與 broker 離線 fetch contract；下一步補 worker recovery／integration，再由 owner 允許真實 broker canary。
+7. 完成整個 Update 使用流程的 live UI QA：程式端已先以 fixture 覆蓋成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 的狀態投影；剩餘是正式環境真實排程／權限／歷史 retention 的觀察與截圖證據。
 
 ## 本次程式與證據
 
