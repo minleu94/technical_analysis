@@ -23,6 +23,15 @@ def test_format_status_token_preserves_known_unknown_and_missing_values() -> Non
     assert format_status_token("pending_human_review") == "待人工覆核"
     assert format_status_token("blocked") == "已阻擋"
     assert format_status_token("running") == "執行中"
+    assert format_status_token("date_mismatch") == "日期不符"
+    assert format_status_token("transport_error") == "傳輸失敗"
+    assert format_status_token("registry_error") == "登錄檔異常"
+    assert format_status_token("blocked_insufficient_storage") == "磁碟空間不足"
+    assert (
+        format_status_token("not_computable_cost_ledger_missing")
+        == "尚不可計算（成本帳缺漏）"
+    )
+    assert format_status_token("official_no_data") == "官方無資料"
 
 
 def test_format_freshness_gap_explains_lagging_reference_and_latest_date() -> None:

@@ -405,6 +405,9 @@ def test_update_view_projects_explicit_data_update_timeline_and_steps(tmp_path):
     assert "明確路徑" in view.data_update_timeline_summary_label.text()
     assert view.data_update_timeline_table.rowCount() == 2
     assert view.data_update_timeline_table.item(1, 0).text() == "SQLite"
+    assert UpdateView._timeline_status_text("date_mismatch") == "日期不符"
+    assert UpdateView._timeline_status_text("official_no_data") == "官方無資料"
+    assert UpdateView._timeline_status_color("official_no_data") == "#fbbf24"
 
 
 def test_update_view_labels_p0_ratio_as_parser_acceptance_not_universe_coverage():
