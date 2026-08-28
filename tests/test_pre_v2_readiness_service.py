@@ -1081,6 +1081,55 @@ def test_program_readiness_records_actual_runtime_staging_probe(tmp_path: Path) 
     assert runtime["details"]["staging_write_probe"]["status"] == "passed"
 
 
+def test_program_readiness_accepts_explicit_host_runtime_artifact(
+    tmp_path: Path,
+) -> None:
+    readiness_path = tmp_path / "runtime-host-readiness.json"
+    readiness_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "runtime-environment-readiness.v1",
+                "overall_state": "ready",
+                "diagnostics": [],
+                "side_effect_free": True,
+                "write_probe": "os.access_plus_existing_handle",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        runtime_readiness_path=readiness_path,
+    )
+
+    runtime = report["workstreams"]["runtime"]
+    assert runtime["status"] == "ready"
+    assert runtime["blockers"] == []
+    assert runtime["details"]["readiness_source_path"] == str(readiness_path.resolve())
+
+
+def test_program_readiness_rejects_invalid_host_runtime_artifact(
+    tmp_path: Path,
+) -> None:
+    readiness_path = tmp_path / "runtime-host-readiness-invalid.json"
+    readiness_path.write_text(
+        json.dumps({"schema_version": "wrong", "overall_state": "ready"}),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        runtime_readiness_path=readiness_path,
+    )
+
+    runtime = report["workstreams"]["runtime"]
+    assert runtime["status"] == "action_required"
+    assert "runtime_readiness_inspection_failed" in runtime["blockers"]
+
+
 def test_program_readiness_accepts_measured_technical_production_canary(
     tmp_path: Path,
 ) -> None:

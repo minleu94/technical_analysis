@@ -75,6 +75,7 @@ def inspect_program_readiness(
     broker_performance_path: str | Path | None = None,
     ml_direct_chain_status_path: str | Path | None = None,
     runtime_write_probe_path: str | Path | None = None,
+    runtime_readiness_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
     freshness_status_path: str | Path | None = None,
@@ -124,6 +125,7 @@ def inspect_program_readiness(
             resolved_data_root,
             resolved_output_root,
             _optional_path(runtime_write_probe_path),
+            _optional_path(runtime_readiness_path),
         ),
         "update_history": _inspect_update_history_lane(
             _safe_resolve(
@@ -188,6 +190,11 @@ def inspect_program_readiness(
             "ml_direct_chain_status_path": (
                 str(_optional_path(ml_direct_chain_status_path))
                 if ml_direct_chain_status_path is not None
+                else None
+            ),
+            "runtime_readiness_path": (
+                str(_optional_path(runtime_readiness_path))
+                if runtime_readiness_path is not None
                 else None
             ),
             "p0_license_evidence_path": (
@@ -440,36 +447,44 @@ def _inspect_runtime_lane(
     data_root: Path,
     output_root: Path,
     write_probe_path: Path | None = None,
+    readiness_path: Path | None = None,
 ) -> dict[str, Any]:
     try:
-        snapshot = EnvironmentReadinessService(data_root, output_root).get_snapshot()
-        payload = {
-            "overall_state": snapshot.overall_state,
-            "observed_at": snapshot.observed_at.isoformat(timespec="seconds"),
-            "data_root": snapshot.data_root,
-            "output_root": snapshot.output_root,
-            "log_root": snapshot.log_root,
-            "research_registry": snapshot.research_registry,
-            "side_effect_free": snapshot.side_effect_free,
-            "write_probe": snapshot.write_probe,
-            "diagnostics": list(snapshot.diagnostics),
-            "paths": [
-                {
-                    "key": item.key,
-                    "label": item.label,
-                    "path": item.path,
-                    "kind": item.kind,
-                    "exists": item.exists,
-                    "parent_exists": item.parent_exists,
-                    "readable": item.readable,
-                    "writable": item.writable,
-                    "requires_write": item.requires_write,
-                    "status": item.status,
-                    "diagnostic": item.diagnostic,
-                }
-                for item in snapshot.paths
-            ],
-        }
+        if readiness_path is not None:
+            payload = _read_json_mapping(readiness_path)
+            if payload.get("schema_version") != "runtime-environment-readiness.v1":
+                raise ValueError("unsupported runtime readiness artifact schema")
+            readiness_source_path = str(readiness_path)
+        else:
+            snapshot = EnvironmentReadinessService(data_root, output_root).get_snapshot()
+            payload = {
+                "overall_state": snapshot.overall_state,
+                "observed_at": snapshot.observed_at.isoformat(timespec="seconds"),
+                "data_root": snapshot.data_root,
+                "output_root": snapshot.output_root,
+                "log_root": snapshot.log_root,
+                "research_registry": snapshot.research_registry,
+                "side_effect_free": snapshot.side_effect_free,
+                "write_probe": snapshot.write_probe,
+                "diagnostics": list(snapshot.diagnostics),
+                "paths": [
+                    {
+                        "key": item.key,
+                        "label": item.label,
+                        "path": item.path,
+                        "kind": item.kind,
+                        "exists": item.exists,
+                        "parent_exists": item.parent_exists,
+                        "readable": item.readable,
+                        "writable": item.writable,
+                        "requires_write": item.requires_write,
+                        "status": item.status,
+                        "diagnostic": item.diagnostic,
+                    }
+                    for item in snapshot.paths
+                ],
+            }
+            readiness_source_path = None
     except (OSError, TypeError, ValueError) as error:
         return _lane(
             "action_required",
@@ -481,6 +496,8 @@ def _inspect_runtime_lane(
     status = "ready" if raw_status == "ready" else "action_required"
     blockers = _string_list(payload.get("diagnostics"))
     details: dict[str, Any] = {"readiness": payload}
+    if readiness_source_path is not None:
+        details["readiness_source_path"] = readiness_source_path
     staging_probe: Mapping[str, Any] | None = None
     if write_probe_path is not None:
         try:
@@ -1113,6 +1130,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="唯讀 Direct/OOC maintainer status；只投影容量／維護阻塞，不啟動 worker",
     )
     parser.add_argument("--runtime-write-probe", type=Path)
+    parser.add_argument(
+        "--runtime-readiness-json",
+        type=Path,
+        help="唯讀 host-context runtime-environment-readiness.v1 artifact；不重新探測或修改正式路徑",
+    )
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
     parser.add_argument(
@@ -1159,6 +1181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         broker_performance_path=args.broker_performance_baseline,
         ml_direct_chain_status_path=args.ml_direct_chain_status,
         runtime_write_probe_path=args.runtime_write_probe,
+        runtime_readiness_path=args.runtime_readiness_json,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,
         freshness_status_path=args.freshness_status_path,
