@@ -33,6 +33,7 @@
 - Data Update 狀態卡的燈號現在保留較細的語意：`partial` 顯示「部分完成」、`degraded` 顯示「需注意」、`action_required` 顯示「需處理」、`running` 顯示「進行中」、`pending_human_review` 顯示「待人工覆核」，`not_configured`／`not_observed` 顯示「未設定」；原始 machine token 仍留在卡片內文，不改任何資料或 readiness gate。
 - Paper Portfolio readiness／weekly 摘要現在也會以「中文說明（machine token）」顯示成本帳／週報狀態；不改變真實 fills、成本與 weekly evidence gate。
 - Data Update「全部資料」新增 `program-readiness.v1` 七 lane 唯讀投影：透過明確的 `PROGRAM_READINESS_ARTIFACT` 路徑，UI 會同時揭露整體 status、每個 lane 的 blocker／next action 與外部輸入需求；未設定、遺失或 schema 不符時保留 fail-closed 診斷，不掃描、不寫入、不授予任何正式 gate。
+- UI slice 完成後以正式 DB 的唯讀 freshness probe 重算最新 readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\freshness_probe_after_ui.json` 為 `status=passed`，daily／technical latest=`2026-08-28`；對應 `program_readiness_after_ui_freshness_20260828.json` 為 `status=action_required`，七個 lane 為 `runtime=ready`、`update_history=ready`、`evidence=partial`、`paper=partial`、`formal_ml=action_required`、`p0=action_required`、`performance=partial`，SHA-256=`E317E1807ED3E87B0949FE4ABD728CEE76312A0E4D4F2BA5E7F60DEEBB9E1844`。兩份 artifact 都只寫入 TEMP，未改正式資料、未啟用 scheduler／broker。
 
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
 

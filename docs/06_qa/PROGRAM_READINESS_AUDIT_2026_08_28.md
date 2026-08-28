@@ -19,6 +19,16 @@ Data Update「全部資料」現在另有「整體程式 readiness（唯讀）�
 目錄、不發網路、不寫 SQLite，也不會因顯示 `ready` 而授予 Formal、scheduler、broker 或
 source acceptance；路徑未設定、遺失或 schema 不符時會保留可見的 fail-closed 診斷。
 
+UI slice 完成後又以正式 DB 做一次明確的唯讀 freshness probe：
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\freshness_probe_after_ui.json`
+回報 `status=passed`、daily／technical latest=`2026-08-28`，未覆寫正式
+`data_freshness/latest_status.json`。以該 probe 重新產生的
+`program_readiness_after_ui_freshness_20260828.json` 為 `status=action_required`，
+七個 lane 為 `runtime=ready`、`update_history=ready`、`evidence=partial`、
+`paper=partial`、`formal_ml=action_required`、`p0=action_required`、
+`performance=partial`；artifact SHA-256=`E317E1807ED3E87B0949FE4ABD728CEE76312A0E4D4F2BA5E7F60DEEBB9E1844`。
+這兩份輸出都只寫入 TEMP，沒有修改正式資料、啟用 scheduler 或 broker。
+
 這仍不是完整產品 closeout。真正尚未具備的不是同一種「補資料」問題，而是不同性質的外部 gate：P0 的具名 owner／license／PIT decision、Evidence 的真實週期與 review credit、Paper 的真實 fills／成本／execution gap、Formal/ML 的 3 個 owner-controlled inputs、正式 Runtime Registry transaction／rollback evidence、technical production backup／rollback＋canary，以及 scheduler 的自然 history 與 production governance。Broker 現在已完成一次受控真實 HTTP canary，但長期 rate-limit／Selenium fallback／production writer 仍未驗收。程式不能替這些事實自行推導或用 replay 填入。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
 technical production canary 的 guarded 入口與 readiness contract 已完成，預設只做唯讀預演；目前沒有執行任何正式 technical 寫入。要解除這一項 blocker，仍需 owner 在停用並行 writer 後明確核准一檔股票的 backup／rollback canary。
