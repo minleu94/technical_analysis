@@ -438,6 +438,70 @@ def test_check_source_detail_uses_sqlite_when_enabled(tmp_path):
     assert detail["file_count"] == 1
 
 
+def test_check_source_detail_reads_candidate_domains_without_writing_manifest(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    candidate_db = tmp_path / "candidate" / "phase3c_candidate.db"
+    candidate_db.parent.mkdir(parents=True)
+    with sqlite3.connect(candidate_db) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE institutional_flows (
+                stock_code TEXT,
+                decision_date TEXT
+            );
+            CREATE TABLE credit_transactions (
+                stock_code TEXT,
+                decision_date TEXT
+            );
+            CREATE TABLE tdcc_shareholding (
+                stock_code TEXT,
+                decision_date TEXT
+            );
+            CREATE TABLE phase3c_backfill_checkpoints (
+                source TEXT,
+                decision_date TEXT,
+                status TEXT
+            );
+            INSERT INTO institutional_flows VALUES ('2330', '2026-08-27');
+            INSERT INTO credit_transactions VALUES ('2330', '2026-08-27');
+            INSERT INTO tdcc_shareholding VALUES ('2330', '2026-08-23');
+            INSERT INTO phase3c_backfill_checkpoints VALUES ('institutional', '2026-08-27', 'SUCCESS');
+            INSERT INTO phase3c_backfill_checkpoints VALUES ('credit', '2026-08-27', 'SUCCESS');
+            INSERT INTO phase3c_backfill_checkpoints VALUES ('tdcc', '2026-08-23', 'SUCCESS');
+            """
+        )
+    monkeypatch.setenv("PHASE3C_CANDIDATE_DB_PATH", str(candidate_db))
+
+    service = UpdateService(config)
+    institutional = service.check_source_detail("institutional_flow")
+    credit = service.check_source_detail("credit_transaction")
+    tdcc = service.check_source_detail("tdcc_shareholding")
+
+    assert institutional["status"] == "CANDIDATE_AVAILABLE"
+    assert institutional["candidate_records"] == 1
+    assert credit["status"] == "CANDIDATE_AVAILABLE"
+    assert tdcc["status"] == "CANDIDATE_AVAILABLE"
+    assert not service.status_manifest_file.exists()
+
+
+def test_check_source_detail_reads_scheduler_artifacts_read_only(tmp_path):
+    config = _config(tmp_path)
+    config.output_root = tmp_path / "output"
+    status_path = config.output_root / "scheduled" / "data_update_quick" / "latest_status.json"
+    status_path.parent.mkdir(parents=True)
+    status_path.write_text('{"status": "passed"}', encoding="utf-8")
+
+    detail = UpdateService(config).check_source_detail("scheduler_status")
+
+    assert detail["status"] == "attention"
+    assert detail["scheduler_state"] == "attention"
+    assert detail["core_job_count"] == 6
+    assert detail["operation_count"] >= 9
+    assert detail["read_only"] is True
+    assert any("latest_status_missing" in item for item in detail["warnings"])
+    assert not (config.output_root / "scheduled" / "data_freshness" / "latest_status.json").exists()
+
+
 def test_sync_daily_price_files_to_sqlite_upserts_only_csv_dates(tmp_path):
     from data_module.db_manager import DBManager
 

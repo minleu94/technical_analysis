@@ -51,6 +51,9 @@ def format_status_token(status: Any) -> str:
         "candidate_available": "候選可用",
         "ready_for_merge": "可併入候選",
         "already_merged": "已併入",
+        "operational": "正常",
+        "guarded": "受控",
+        "attention": "需處理",
         "conflict": "有衝突",
         "merge_blocked": "合併受阻",
         "invalid": "候選無效",
@@ -139,6 +142,25 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
             f"SQLite 筆數：{total_records:,}",
             f"狀態：{format_status_token(detail.get('status'))}",
         ])
+    elif source == "scheduler_status":
+        scheduler_state = str(
+            detail.get("scheduler_state") or detail.get("status") or "unknown"
+        ).strip()
+        operation_count = _safe_nonnegative_int(
+            detail.get("operation_count", detail.get("total_records"))
+        )
+        core_ready = _safe_nonnegative_int(detail.get("core_ready_count"))
+        core_jobs = _safe_nonnegative_int(detail.get("core_job_count"))
+        lines = [
+            f"排程狀態：{format_status_token(scheduler_state)}（{scheduler_state}）",
+            f"核心工作就緒：{core_ready:,}/{core_jobs:,}",
+            f"已觀測工作：{operation_count:,}",
+            f"正常：{_safe_nonnegative_int(detail.get('operational_count')):,}"
+            f"／受控：{_safe_nonnegative_int(detail.get('guarded_count')):,}"
+            f"／需處理：{_safe_nonnegative_int(detail.get('attention_count')):,}"
+            f"／不可用：{_safe_nonnegative_int(detail.get('unavailable_count')):,}",
+            f"狀態：{format_status_token(detail.get('status'))}",
+        ]
     else:
         lines = [
             f"最新日期：{latest_date}",
@@ -159,6 +181,12 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
         lines.append(f"金額榜專屬：{_safe_nonnegative_int(detail.get('b_only_count')):,}")
     elif source in {"technical", "technical_indicators"} and detail.get("file_count") is not None:
         lines.append(f"指標檔數：{_safe_nonnegative_int(detail.get('file_count')):,}")
+    elif source == "scheduler_status":
+        scheduled_root = str(detail.get("scheduled_root") or "").strip()
+        if scheduled_root:
+            lines.append(f"狀態根目錄：{scheduled_root}")
+        if detail.get("read_only") is True:
+            lines.append("邊界：唯讀，不註冊或修改 Windows Task Scheduler")
     read_mode = str(detail.get("read_mode") or "").strip()
     if read_mode:
         lines.append(f"讀取模式：{read_mode}")

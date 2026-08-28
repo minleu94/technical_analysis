@@ -2579,6 +2579,93 @@ class UpdateService :
         }
         return overview
 
+    def _scheduler_status_from_artifacts(self) -> Dict[str, Any]:
+        """以唯讀方式彙整排程 latest_status artifacts，供 Update 分頁下鑽。"""
+
+        scheduled_root = Path(
+            getattr(self.config, "output_root", Path("."))
+        ) / "scheduled"
+        try:
+            from app_module.runtime_services.scheduled_operations_service import (
+                ScheduledOperationsStatusService,
+            )
+
+            snapshot = ScheduledOperationsStatusService(scheduled_root).get_snapshot()
+            operations: list[dict[str, Any]] = []
+            diagnostics: list[str] = []
+            counts = {
+                "operational": 0,
+                "guarded": 0,
+                "attention": 0,
+                "unavailable": 0,
+            }
+            for operation in snapshot.operations:
+                state = str(operation.state or "unavailable").strip().lower()
+                if state in counts:
+                    counts[state] += 1
+                if operation.diagnostic:
+                    diagnostics.append(
+                        f"{operation.job_id}:{operation.diagnostic}"
+                    )
+                operations.append(
+                    {
+                        "job_id": operation.job_id,
+                        "label": operation.label,
+                        "raw_status": operation.raw_status,
+                        "state": state,
+                        "updated_at": (
+                            operation.updated_at.isoformat()
+                            if operation.updated_at is not None
+                            else None
+                        ),
+                        "lane": operation.lane,
+                        "observed_at_source": operation.observed_at_source,
+                        "source_path": operation.source_path,
+                        "read_state": operation.read_state,
+                        "diagnostic": operation.diagnostic,
+                    }
+                )
+            status = "ok" if snapshot.overall_state == "operational" else "attention"
+            return {
+                "status": status,
+                "scheduler_state": snapshot.overall_state,
+                "latest_date": snapshot.observed_at.isoformat(),
+                "total_records": len(operations),
+                "operation_count": len(operations),
+                "core_ready_count": int(snapshot.core_ready_count),
+                "core_job_count": int(snapshot.core_job_count),
+                "operational_count": counts["operational"],
+                "guarded_count": counts["guarded"],
+                "attention_count": counts["attention"],
+                "unavailable_count": counts["unavailable"],
+                "operations": operations,
+                "scheduled_root": snapshot.scheduled_root,
+                "read_only": True,
+                "warnings": list(dict.fromkeys(diagnostics[:12])),
+            }
+        except Exception as exc:
+            # 分頁狀態讀取失敗仍要顯示可排錯的 fail-closed 結果，且不建立
+            # 任何 output 目錄／狀態檔。
+            return {
+                "status": "error",
+                "scheduler_state": "attention",
+                "latest_date": None,
+                "total_records": 0,
+                "operation_count": 0,
+                "core_ready_count": 0,
+                "core_job_count": 0,
+                "operational_count": 0,
+                "guarded_count": 0,
+                "attention_count": 0,
+                "unavailable_count": 0,
+                "operations": [],
+                "scheduled_root": str(scheduled_root),
+                "read_only": True,
+                "warnings": [
+                    f"scheduled_operations_read_failed:{type(exc).__name__}:{exc}"
+                ],
+            }
+
     def check_source_detail (self ,source :str )->Dict [str ,Any ]:
         """取得單一資料來源的詳細狀態，供切入 subtab 或手動檢查使用"""
         source_map ={
@@ -2592,10 +2679,36 @@ class UpdateService :
         'technical':'technical_indicators',
         'technical_indicators':'technical_indicators',
         'monthly_revenue':'monthly_revenue',
+        # 候選資料域與排程頁也共用同一個詳細狀態入口。此前這三類
+        # 會直接落入 unknown source，導致分頁的「檢查」按鈕顯示錯誤，
+        # 即使總覽已能讀到 candidate／scheduled artifact。
+        'institutional_flow':'institutional_flow',
+        'credit_transaction':'credit_transaction',
+        'tdcc_shareholding':'tdcc_shareholding',
+        'scheduler_status':'scheduler_status',
         }
         normalized =source_map .get (source )
         if normalized is None :
             return {'latest_date':None ,'total_records':0 ,'status':f'unknown source: {source}'}
+
+        # Candidate DB 與 scheduler artifact 必須維持唯讀邊界，不能走
+        # 下面的正式 SQLite／CSV manifest 更新路徑。
+        if normalized in {
+            'institutional_flow',
+            'credit_transaction',
+            'tdcc_shareholding',
+        }:
+            return self.check_decision_data_status().get(
+                normalized,
+                {
+                    'latest_date': '無',
+                    'total_records': 0,
+                    'status': 'MISSING',
+                    'disclaimer': '候選研究資料，不參與評分或投資決策',
+                },
+            )
+        if normalized == 'scheduler_status':
+            return self._scheduler_status_from_artifacts()
 
             # 🌟 如果啟用 SQLite，直接從資料庫極速統計！
         if getattr (self .config ,'use_sqlite',False ):

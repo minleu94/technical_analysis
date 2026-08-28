@@ -1239,6 +1239,37 @@ def test_source_detail_check_uses_detail_service_contract():
     assert view.update_service.calls == [("check_source_detail", "broker_branch")]
 
 
+def test_scheduler_detail_projection_updates_summary_and_raw_status_panel():
+    view = make_view()
+
+    view._render_source_detail_status(
+        "scheduler_status",
+        {
+            "scheduler_status": {
+                "status": "attention",
+                "scheduler_state": "attention",
+                "latest_date": "2026-08-28T12:00:00+00:00",
+                "operation_count": 9,
+                "core_ready_count": 2,
+                "core_job_count": 6,
+                "operational_count": 2,
+                "guarded_count": 1,
+                "attention_count": 5,
+                "unavailable_count": 1,
+                "scheduled_root": "C:/output/scheduled",
+                "read_only": True,
+                "operations": [],
+            }
+        },
+    )
+
+    summary = view.scheduler_status_detail_status_label.text()
+    assert "排程狀態：需處理（attention）" in summary
+    assert "核心工作就緒：2/6" in summary
+    assert "邊界：唯讀" in summary
+    assert "operation_count" in view.scheduler_status_log_box.toPlainText()
+
+
 def test_source_tabs_have_operational_content():
     view = make_view()
 

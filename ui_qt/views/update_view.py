@@ -1414,6 +1414,7 @@ class UpdateView(QWidget):
 
             if key == "scheduler_status":
                 log_box = QTextEdit()
+                self.scheduler_status_log_box = log_box
                 log_box.setReadOnly(True)
                 log_box.setPlaceholderText("背景排程尚未啟動，目前無執行日誌。")
                 log_box.setStyleSheet("background-color: #0f172a; color: #cbd5e1; font-family: monospace; font-size: 11px;")
@@ -1461,9 +1462,14 @@ class UpdateView(QWidget):
             button_layout.addStretch()
             layout.addWidget(op_group)
 
-            # 候選資料源也要有自己的唯讀狀態摘要；只更新頂部卡片會讓
-            # 使用者進入分頁後無法判斷「檢查此資料源狀態」是否真的完成。
-            if key in {"institutional_flow", "credit_transaction", "tdcc_shareholding"}:
+            # 候選資料源與排程頁也要有自己的唯讀狀態摘要；只更新頂部
+            # 卡片／載入一次 raw JSON，會讓使用者無法判斷檢查是否完成。
+            if key in {
+                "institutional_flow",
+                "credit_transaction",
+                "tdcc_shareholding",
+                "scheduler_status",
+            }:
                 self._add_source_detail_status(layout, key, self)
 
             layout.addStretch()
@@ -2891,6 +2897,7 @@ class UpdateView(QWidget):
             "institutional_flow": "institutional_flow",
             "credit_transaction": "credit_transaction",
             "tdcc_shareholding": "tdcc_shareholding",
+            "scheduler_status": "scheduler_status",
         }.get(str(source or ""))
         if source_key:
             detail = status.get(source_key)
@@ -2911,6 +2918,7 @@ class UpdateView(QWidget):
             "institutional_flow": "institutional_flow",
             "credit_transaction": "credit_transaction",
             "tdcc_shareholding": "tdcc_shareholding",
+            "scheduler_status": "scheduler_status",
         }.get(source)
         detail = {
             "latest_date": None,
@@ -2957,6 +2965,7 @@ class UpdateView(QWidget):
             "institutional_flow": "institutional_flow",
             "credit_transaction": "credit_transaction",
             "tdcc_shareholding": "tdcc_shareholding",
+            "scheduler_status": "scheduler_status",
         }
         key = source_to_key.get(source)
         label = getattr(self, f"{source}_detail_status_label", None)
@@ -2967,6 +2976,15 @@ class UpdateView(QWidget):
             label.setText("尚未檢查此資料源狀態")
             return
         label.setText(self._format_source_detail_summary(source, detail))
+        if source == "scheduler_status":
+            log_box = getattr(self, "scheduler_status_log_box", None)
+            if log_box is not None:
+                try:
+                    log_box.setPlainText(
+                        json.dumps(detail, ensure_ascii=False, indent=2, default=str)
+                    )
+                except Exception as exc:
+                    log_box.setPlainText(f"排程狀態格式化失敗：{exc}")
 
     @staticmethod
     def _format_candidate_status_card(value: Dict[str, Any]) -> str:
