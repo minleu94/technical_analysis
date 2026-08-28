@@ -96,7 +96,7 @@ python scripts/merge_daily_data.py
 
 - ✅ 自動檢測新的 daily_price 文件
 - ✅ 增量合併（只處理新文件）
-- ✅ 自動創建備份，且同一資料來源只保留最新 5 個日期版本
+- ✅ 真正有資料要提交時自動創建備份，且同一資料來源只保留最新 5 個日期版本；增量 no-op 不建立新備份
 - ✅ 顯示合併結果統計
 
 ## 完整更新流程
@@ -113,9 +113,20 @@ python scripts/merge_daily_data.py
 
 同步方向固定為 CSV → SQLite，不會用 SQLite 反向覆蓋 CSV。若其中任一同步步驟失敗，安全更新會停止並顯示失敗步驟，避免 UI 狀態與資料庫內容繼續分岔。
 
+快速／安全一鍵更新會先執行一次更新前資料狀態檢查；若總覽 payload 內任一核心資料源明確回報 `error`／`failed`／`exception`，流程會在任何下載、合併或 SQLite 寫入前停止，並列出失敗資料源。`lagging`、`empty`、`unavailable` 等可診斷狀態不會被誤當成寫入錯誤，但完成後仍會由最後狀態檢查判定是否成功。
+
+UI 更新工作具單一寫入互斥：快速／安全更新、個別來源下載、CSV／SQLite 合併、技術指標計算與匯出不能重疊啟動；重複按鈕會提示目前已有背景工作，需等待完成後再重試。唯讀的來源詳情與資料狀態檢查可並行執行。進度條會把技術指標等子流程映射到外層區間並維持單調遞增；每日資料合併會顯示檔案／讀取批次／寫入批次進度，若增量掃描判定沒有新 CSV，會回傳結構化 `no_op=true` 並在 UI 顯示「資料已是最新」，不把 no-op 誤報成一般重新合併，也不會先建立整合檔備份；只有確認有新資料、即將原子提交時才建立備份；CSV 匯出會先取得查詢筆數並顯示已處理筆數，只有最後狀態刷新成功才會顯示 100%。
+寫入型工作進行時，進度列下方的「取消目前工作」會送出非阻塞合作式取消。TWSE batch 會先排空目前 API 輸出，TPEX／券商分點／技術指標在日期、檔案或 SQLite 安全邊界停止；每日整合檔會在檔案讀取批次與輸出批次之間檢查取消，SQLite CSV 匯出會在資料批次之間檢查取消；已完成的寫入保留，不會強制終止 QThread。完成訊息與進度列會顯示 SQLite 同步的來源、table、筆數及失敗／取消原因，取消後應重新執行狀態檢查。
+
+狀態卡的綠色「最新」只代表明確的 `ok`／`success`／`current`／`normal` token；`error`／`missing`／`empty`／`unavailable` 或整體檢查失敗會顯示異常，部分 payload 缺少資料源時不會沿用上一輪卡片數字。尚未執行檢查時的提示文字不會被誤當成狀態，燈號維持灰色「未檢查」而不是黃色「待更新」。localized `不可用` 也會視為異常，不會因中文 token 未命中而落到待更新。
+
+每日股價、大盤、產業、券商分點、技術指標、月營收，以及三個候選資料源（法人／信用／集保）分頁均有唯讀 inline 狀態摘要；全域檢查會同步更新這九份摘要，個別來源失敗時只標記該來源，全域檢查失敗時則清除九份舊摘要並保留共同錯誤原因。月營收摘要另外揭露已匯入期別、目前完整 PIT 可用期別與待生效起始日。候選資料源仍是 research-only，不會因此進入正式評分或交易流程。更新頁日期控件的「今日」以台灣市場日期為準，避免作業系統時區跨日造成查詢窗口偏移。
+
+UpdateService overview／detail 在 SQLite 缺失時會先停在 `unavailable`，存在時也只用共用 `mode=ro`／`PRAGMA query_only=ON` adapter，不會呼叫會初始化 schema 的可寫 DB manager；因此狀態檢查本身不改變資料根目錄，也不與寫入連線爭用 schema／WAL。若 Windows 外部鎖定使一般 read lock 不可用，adapter 會明確標記 `read_mode=immutable_fallback` 與提醒；這只代表最後已提交的唯讀快照，應停止其他寫入後再重查。
+
 ## TWSE 無資料日與排錯
 
-每日股價更新會先嘗試 TWSE `MI_INDEX` 的 `ALL` 與 `ALLBUT0999` 類型。當沒有任何成功資料、至少一個查詢型別回覆已驗證的官方狀態文案「很抱歉，沒有符合條件的資料！」，且其他嘗試也只可能是同一官方文案或已確認的 HTTP 307 fallback 差異時，該日期才會列入 `no_data_skipped_dates`（同時保留在 `skipped_dates`），並以「官方無交易資料日」顯示；這不是下載失敗，後續 TPEX、SQLite 同步與技術指標仍會繼續執行。
+每日股價更新會先嘗試 TWSE `MI_INDEX` 的 `ALL` 與 `ALLBUT0999` 類型。當沒有任何成功資料、至少一個查詢型別回覆已驗證的官方狀態文案「很抱歉，沒有符合條件的資料！」，且其他嘗試也只可能是同一官方文案或已確認的 HTTP 307 fallback 差異時，該日期才會列入 `no_data_skipped_dates`（同時保留在 `skipped_dates`），並以「官方無交易資料日」顯示；這不是下載失敗，後續 TPEX、SQLite 同步與技術指標仍會繼續執行。若 TWSE 回傳任何 `failed_dates`、transport／解析例外或其他 `success=false`，單一每日流程會立即停止，不呼叫 TPEX、SQLite 同步或技術指標，避免拿既有舊檔繼續產生部分寫入。
 
 除上述 HTTP 307 fallback 外，HTTP 錯誤、逾時、連線例外、JSON／表格解析失敗，或「查詢日期大於今日」與包含「查無資料」但非官方完整文案的回覆，仍會列入 `failed_dates`，並中止後續同步，避免 UI 將不完整資料誤認為已更新。每個查詢型別的 HTTP／API／transport 診斷會保留在批次結果中。排程請查看 `OUTPUT_ROOT/scheduled/data_update_quick/latest_status.json`：`passed_with_warnings` 代表有安全跳過日或 TPEX 警告；`failed` 則應同時查看當日 `*_data_update_quick.log` 與 `errors` 欄位。
 
@@ -124,6 +135,8 @@ python scripts/merge_daily_data.py
 ### CSV 欄位契約與週末交易日證據
 
 同步 `daily_price/YYYYMMDD.csv` 前，檔案必須至少包含 `證券代號` 與 `收盤價`；像單一市場序列、指數或其他非個股格式的 CSV 會被警告並跳過，不會寫入 `daily_prices`。週末日期也不採「一律跳過」：只有 TWSE `MI_INDEX` 對該日回傳官方交易資料時才會同步；若官方查詢沒有資料、逾時或解析失敗，則 fail-closed 不寫入，並保留原始 CSV 供人工稽核。這避免把補班、特殊開市或錯置檔案用星期規則誤判。
+
+寫入 SQLite 前，UpdateService 會把宣告過的欄位別名正規化為 canonical schema：日期接受 `日期`／`date`／`Date`／`trade_date`／`decision_date`，股票代號接受 `證券代號`／`股票代號`／`stock_code`／`stock_id`／`code`／`ticker`，股票名稱接受 `證券名稱`／`股票名稱`／`stock_name`／`name`。日期與股票代號也會統一格式；正規化只作用於寫入用副本，不會原地改寫 raw CSV 或呼叫端 DataFrame。缺少日期（且檔名無法補日期）或缺少 `證券代號`／`收盤價` 時仍會跳過並保留診斷。
 
 若既有 SQLite 已出現空股票代號、已驗證非交易日資料或沒有 `指數名稱` 的大盤列，請使用 `scripts/repair_market_data_integrity.py` 先 dry-run；正式套用需要 `--apply --confirm apply-market-data-integrity-repair`，會先建立一份 SQLite snapshot，絕不修改 raw CSV。操作與回復步驟見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md#46-市場資料完整性修復受控-cli)。
 

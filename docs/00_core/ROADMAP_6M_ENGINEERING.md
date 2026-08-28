@@ -224,7 +224,7 @@ Recommendation、Portfolio Advice、Alert 與 Exit 是否被持續、可比較�
 ### Engineering Deliverables
 
 1. 統一 Source Contract：source id/version、as-of、available-date、quality、missing、license、rate limit、look-ahead、ingestion stage、downstream eligibility。
-2. Data Source Control Center read model：freshness、coverage、schema、quarantine、retry、eligibility。
+2. Data Source Control Center read model：freshness、coverage、schema、quarantine、retry、eligibility。2026-08-26 已先落地 `app_module/p0_source_control_center.py` 與 `scripts/inspect_p0_source_control_center.py` 的 13-source 唯讀 composition；它只投影 contract／audit／decision evidence，沒有 auto-accept 或 downstream grant，後續仍需逐來源補齊真實 evidence。
 3. Adapter + raw evidence + manifest；不得由 UI 或 domain 直接呼叫 vendor。
 4. Diagnostics → Shadow → Evidence Review → Accepted Feature 的逐來源狀態機。
 5. Corporate action / restriction 對 execution、Why Not、Health 的 candidate impact report。
@@ -280,6 +280,10 @@ Recommendation、Portfolio Advice、Alert 與 Exit 是否被持續、可比較�
 5. Portfolio Advice：target/current/gap、action、reason、evidence、feasibility。
 6. Paper Portfolio 與 Trade Import / Decision Journal foundation：fill、partial fill、override、reason、execution gap。
 7. Scenario & Stress Lab v1：快速下跌、跳空跌停、流動性消失、相關股同跌、集中、source outage。
+
+2026-08-27 進度：Portfolio UI 已接上最小唯讀 Scenario & Stress Lab v1、受控手動 Trade Import、Paper Portfolio readiness、Paper weekly evidence read model 與獨立 Paper Trade Ledger v1 contract；另有預覽／明確確認分離的 `append_paper_trade_ledger.py` JSON producer、完整 execution contract 的 `append_paper_trade_csv.py`／UI Paper fills 匯入，以及從 baseline／既有 snapshots／T-1 市場資料建立 frozen-constituent Equal Weight preview 的 `build_paper_equal_weight_benchmark.py`。正式輸出重新檢查到 21 筆 raw paper snapshots，其中最新 `2026-08-28` 超過台北今日 `2026-08-27`；readiness 會將狀態降為 `degraded` 並把 future row 排除於 current projection，weekly evidence 與 Equal Weight builder 遇到 future period／snapshot 則 fail-closed。Equal Weight ledger／Paper Trade Ledger 尚未配置，故 weekly evidence 仍 `not_computable`；固定情境缺價只顯示 partial，輪動失敗／來源中斷維持 `not_computable`。本輪再加入 Stress history v1：明確確認後才可保存 hash-idempotent 研究快照，Portfolio UI 與 `append_portfolio_stress_history.py` 均提供唯讀歷史揭露。這些是可見的工程入口，不代表 Gate 4 的 OOS / forward / paper 成本後 evidence 已完成；producer 的實際來源資料、成本 fill、壓力結果與 forward outcome 關聯及 review 仍待後續輸入。
+
+2026-08-28 台北日期刷新：`taiwan_market_today()` 已進入 `2026-08-28`，上述 raw snapshot 不再是 future row；Paper readiness 目前為 `partial`。已在 QA output 以 3 檔 frozen constituents 產生 21 筆 Equal Weight staging preview（最新 `472302.39`），但正式 output 尚未配置；真正缺口是正式 Equal Weight ledger、Paper Trade Ledger 與可計算的週報／forward outcome。future-date guard 仍保留，下一筆超過台北市場日的資料仍必須 fail-closed。
 
 ### Testing
 
@@ -477,6 +481,23 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 
 ## 更新記錄
 
+- 2026-08-27：新增 `scripts/append_source_acceptance_decision.py` 的 preview／明確確認 append foundation；applying decision 必須綁定 `ready_for_owner_review` intake 與 evidence ids，registry 只能位於 `DATA_ROOT` 之外，且 append 不改變 downstream／formal／scheduler／broker fail-closed 邊界。
+- 2026-08-27：Update 大型每日合併與 SQLite CSV 匯出改用 `ProgressTaskWorker` 與批次進度回報；合併回報檔案／讀取批次／整合檔 chunk，匯出先以 query-only count 建立預估筆數並回報已處理筆數。取消仍維持檔案／資料批次安全邊界，不改變原子提交與既有資料保留規則；合併新增單檔內讀取批次取消檢查，仍不做逐列中斷。
+- 2026-08-27：Update 增量合併在沒有新 CSV 時改回傳結構化 `no_op=true` 與既有筆數／最新日期，UI 明確顯示「資料已是最新」且不先建立備份，避免把 no-op 誤報成一般重新合併或產生不必要副作用。
+- 2026-08-27：Runtime readiness CLI 新增必須明確確認、且禁止指向正式 `DATA_ROOT`／`OUTPUT_ROOT` 的 ephemeral file／SQLite staging write probe；probe 會驗證寫入、讀回與清理，但不建立正式 registry 或授予 scheduler／formal credit。
+- 2026-08-27：Runtime formal path readiness 補上既有 logger／Research Registry 的不寫入 write-handle probe；`os.access` 與實際開啟權限不一致時，狀態固定降級為 `attention`，保留 formal ACL／鎖定 blocker。
+- 2026-08-27：Runtime／MainWindow 窄版 UX 補強：長路徑診斷與 status strip 不再貢獻過大的水平 minimum hint；主視窗明確保留 320px compact 下限，Runtime 小於 720px 改用垂直治理欄並提供內容捲動。此為 presentation／可觀測性改善，不解除任何 formal、scheduler 或資料權限 blocker。
+- 2026-08-27：Data Update 窄版 UX 補強：更新工作區加入垂直捲動，來源導覽移到上方，核心狀態卡改雙欄、候選卡單欄、操作按鈕直列；只修正 presentation，不改 update worker、SQLite sync 或資料來源 gate。
+- 2026-08-27：Paper Portfolio readiness／weekly evidence／Equal Weight builder 新增台北交易日 future-date look-ahead guard；raw future snapshot 只保留診斷，current projection 改用最後一筆安全 snapshot，週報／benchmark builder 遇到 future period 直接降級或拒絕。Equal Weight builder CLI 也統一 UTF-8 stdout／stderr，Windows CP1252 可正常顯示 `--help` 與拒絕診斷。
+- 2026-08-27：修正每日 Paper／Decision Desk 排程的 cutoff 選擇；排程入口改用最近已到達的台北 08:30，Paper writer 對明確未到達的 `--decision-at` 在開啟資料庫前回報 `skipped_future_decision`，避免重複產生 future／look-ahead row。既有正式 raw row 不刪除、不回填，仍需 owner 稽核。
+- 2026-08-27：新增 `scripts/inspect_p0_intake_readiness.py` 唯讀 P0 source intake validator 與 13 列候選範本；它驗證 dossier schema／型別／分母／secret-like 欄位／安全旗標，將 `deferred`、`ready_for_owner_review`、`invalid_input` 分開投影，並固定不建立 decision registry、不授予 downstream eligibility。這是外部輸入的可重跑接入口，不是 source acceptance closeout。
+- 2026-08-27：Pre-V2 readiness 的 Workbench、`inspect_pre_v2_readiness.py` 與 `inspect_simulated_phase_progress.py` 統一讀取 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH`（亦支援明確 projection path）；projection 只供 UI／readiness 揭露，不授予 formal credit，避免不同入口顯示不同 weekly Gate 數字。
+- 2026-08-27：Decision Desk／Pre-V2／Workbench／Evidence source coverage 的 current snapshot 查詢加入台灣市場今日上限；future row 只留 raw 診斷並阻擋 current evidence。Evidence source coverage 與 snapshot inspector 改用 query-only 讀取，避免正式唯讀 DB 被 writer repository 初始化 schema。
+- 2026-08-27：UpdateView 日期控件統一以台灣市場日期服務初始化；localized `不可用` 狀態改判異常；全域狀態檢查失敗時，六個核心與三個候選來源 inline 摘要同步清除舊內容並保留共同錯誤原因，候選來源分頁也會投影自己的檢查結果。補上 UI regression 與全量 pytest 證據，未改資料更新／SQLite 寫入契約。
+- 2026-08-27：Recommendation Explain 補上 PatternScore rolling confirmation evidence；結果列保存 `PatternNames`／`Pattern_Signal`／`PatternAgeDays`，ReasonEngine 只消費已確認資料，無具體名稱時不從分數臆測型態。此為可追溯性修補，不改 score、交易訊號或任何 formal Gate。
+- 2026-08-27：Recommendation 與四個策略 executor 移除未使用的全歷史 PatternAnalyzer 預掃描，避免和 ScoringEngine rolling path 重複計算；策略訊號與 score contract 維持不變。
+- 2026-08-27：Data Update SQLite sync 修正欄位別名與重複條件處理；日期／股票代號／股票名稱的受治理 aliases 會先在副本上映射至 canonical schema，日期與四碼代號格式一致，raw CSV 不被改寫，缺必要欄位仍 fail-closed。
+- 2026-08-26：Gate 3 先完成 13-source P0 Data Source Control Center 唯讀 read model、CLI 與 Evidence/Research Console 可見投影；只收斂 contract／audit／decision evidence，仍維持 auto-accept、downstream eligibility、formal OOS 與 production scheduler 關閉。
 - 2026-08-19：新增 Gate 7 prospective restart execution lock；定案新未來 clock、Codex Rule Champion proposal、TWSE／TPEX 官方產業來源與 Broker 關閉邊界。
 - 2026-07-12：校正 Gate 0 / Gate 1 closeout；下一工程 Gate 為真實 Evidence Operating Loop，不將 Advice 契約完成誤寫為 evidence、scheduler 或投資有效性完成。
 - 2026-07-11：依 Post-Refactor 產品主線重寫為六個月 Gate；納入 Safe Refactor Closeout、Daily Usable Advice、Real Evidence Loop、P0 Data、Portfolio Coach、Signal Pruning、Position Health / Exit 與 conditional ML Shadow。

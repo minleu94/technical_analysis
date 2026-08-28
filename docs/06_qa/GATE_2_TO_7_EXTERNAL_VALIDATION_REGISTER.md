@@ -1,6 +1,10 @@
 # Gate 2–7 External Validation Register
 
-> **V4.0 最新狀態（2026-07-30）**：本頁已由「等待人工清單」轉成「append-only machine evidence／policy decision register」。舊初始矩陣保留作歷史，不再要求 blanket human acceptance。Rule/Advice/Paper operational production 已啟用；ML Production Co-pilot 每日評估四條 alpha lane，但全市場 direct OOC、實際因果投組 replay 與 20 個成熟 shadow 交易日尚未齊備，所以合法狀態仍是 `alpha=0`、`formal_oos_allowed=false`。證據不足不阻擋 Rule 路徑，也不得被改寫為通過。
+> **Current-state notice（2026-08-27）**：本文件下方的 V4.0 revision／table 是 2026-07-30 的 append-only 歷史投影，保留供追溯，**不是目前 readiness 的 SSOT**。目前狀態請以 [Program Readiness Audit 2026-08-27](PROGRAM_READINESS_AUDIT_2026_08_27.md)、對應的唯讀 inspectors 與實際 registry revision 重新判讀；不得從本頁歷史的 `complete`／`4/3`／`13/13` 敘述推定今日 Gate 已解除。2026-08-27 現況 audit 實測 P0 為 `13 contract_only / accepted 0`；若載入目前 owner-approved weekly projection，UI／Pre-V2 只揭露 weekly `3/3`，未載入時正式 DB legacy path 為 `0/3`。Paper Portfolio 仍 `partial`／weekly `not_computable`，formal／ML 仍 fail-closed。既有歷史列不在本次文件修訂中回填或改寫。
+
+## V4.0 歷史 revision 投影（2026-07-30；非目前狀態）
+
+> 本節與下方 revision／table 是 append-only 歷史資料，只供追溯。`Rule/Advice/Paper operational production` 等文字描述的是當時 revision 的宣告，不代表目前環境已啟用；目前狀態以本頁上方 Current-state notice、Program Readiness Audit 與實際 inspectors 為準。
 
 ## V4.0 最新 revision 投影
 

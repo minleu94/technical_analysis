@@ -1,5 +1,115 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-27 Recommendation Explain pattern evidence（current engineering）
+
+- `ScoringEngine.calculate_pattern_score()` 現在與分數同步保存 rolling detector 的已確認型態 evidence：名稱、方向、確認日與 20 日衰減窗中的 `age`。只有在突破或安全延遲確認日後才建立 evidence，`end_idx` 當天不會被 Explain 當成成立。
+- `calculate_total_score()` 將 evidence 投影為 `PatternNames`、`Pattern_Signal`／`PatternSignal` 與 `PatternAgeDays`；`ReasonEngine` 消費這些欄位產生具體型態理由與標準化 reason tags。沒有型態名稱時只顯示 generic 方向訊號，不從 PatternScore 臆測具體模式。
+- Recommendation 與四個策略 executor 不再先做未使用的全歷史 `identify_patterns()` 預掃描；圖形識別統一由 ScoringEngine rolling path 執行，避免重複計算與把未確認 `end_idx` 當成理由。
+- 此 slice 不改 PatternScore 數值、權重、交易訊號或資料庫；新增 look-ahead／projection／ReasonTag regression，並同步更新評分說明、UI 功能文檔與操作手冊。它改善 Explain 的可追溯性，但不解除 P0、Paper、ML 或 production Gate。
+- Data Update 的 SQLite 輸入正規化也已補齊：日期、股票代號與股票名稱的受治理中英文 aliases 會先映射至 canonical 欄位，再統一日期／四碼代號；修正重複條件讓英文欄位在檢核前被丟棄的問題。正規化只改寫入副本，不改 raw CSV 或呼叫端 DataFrame，缺必要欄位仍 fail-closed。
+
+## 2026-08-27 MainWindow full smoke / environment isolation（current engineering）
+
+- 本次完整盤點與後續順序見 [Program Readiness Audit 2026-08-27](../06_qa/PROGRAM_READINESS_AUDIT_2026_08_27.md)。
+- 完整 non-destructive MainWindow smoke 已通過：8 個頂層工作區全部建立並切換，Update 強制重新合併 dialog 的 cancel-only probe 未呼叫 destructive action；`startup.png` 已在切換工作區前擷取，最新證據見 `output/qa/full_app_healthcheck_20260827_update_responsive_final/20260827_104105/result.json`。目前環境的 weekly projection 也在 Workbench 首頁實際揭露 `3/3`；`1366×768` 與 `390×844` 均精確符合 requested viewport（`matched`，前者不再被 Runtime 高度 hint 推高，後者不再被 Runtime 寬度 hint 鎖成 798px）。窄版 Runtime 會上下排列治理面板並提供垂直捲動，UpdateView 也會將導覽、狀態卡與操作鈕改為可讀重排；此次 smoke 納入 UpdateView `59 passed` focused regression。
+- Healthcheck 的 UI smoke 子程序現在固定使用報告目錄下的 `_isolated_app/data` 與 `_isolated_app/output` 作為 `DATA_ROOT`／`OUTPUT_ROOT`，避免受控或唯讀機器在啟動 metadata repository 時誤觸正式 SQLite；這是 smoke 隔離，不改變正式 App 的資料根目錄設定。
+- 曾觀測到直接沿用正式 `OUTPUT_ROOT` 時，`ResearchRunRepository.ensure_schema()` 可能因正式 research registry 唯讀而使 MainWindow 在回測頁初始化中止；現行 smoke 已不再把該環境權限問題誤判為 UI 缺功能。正式環境若輸出根目錄不可寫，回測 Registry 寫入仍應由操作員修正權限或改用明確可寫的 `OUTPUT_ROOT`。
+- `BacktestView` 現在對 Research Run Registry 初始化採可見 fail-soft：Registry DB 不可寫時仍開啟回測與唯讀 Evidence Review，保存／Registry 比較按鈕停用並顯示第一行原因；不會以空 registry 或假成功掩蓋持久化缺口。
+- Runtime 現在有「正式路徑環境（唯讀診斷）」卡片，首次組裝時立即發布 snapshot，之後約每 30 秒刷新；正式根目錄的 `DATA_ROOT`、`OUTPUT_ROOT`、logs、Research Run Registry 均存在且可讀，但新增既有檔案 write-handle probe 實測 `config.log` 與 Research Registry 均被拒絕，正式 readiness 應回報 `attention`，不再被 `os.access` 誤標為 ready。CLI `scripts/inspect_runtime_environment_readiness.py` 同步支援 JSON／UTF-8 Markdown，缺路徑時不建立任何檔案並以 exit code `2` fail-closed；另提供必須明確確認、且禁止指向正式根目錄的 ephemeral file／SQLite write probe，供受控 staging ACL 驗證。
+- Decision Desk／Pre-V2／Workbench／Evidence source coverage 的 current 查詢現在共用台灣市場日期上限；本次 `2026-08-28` 台灣市場日重查時，正式 DB latest active snapshot `2026-08-28` 已可作 current，超過當日的 future row 仍只保留 blocker／diagnostic。`EvidenceSourceCoverageService` 與 `inspect_decision_desk_snapshots.py` 使用 query-only 讀取，正式唯讀 DB 不會因 writer repository 初始化 schema 而報錯；capture／runner 也拒絕 future decision date，避免再產生 look-ahead row。
+- 每日排程的日期選擇已修正為最近已到達的台北 08:30 cutoff；Paper writer 對明確未到達的 `--decision-at` 會在開啟 state／market DB 前回報 `skipped_future_decision`。這只阻止新的 future row，不自動刪除或回填既有正式 raw snapshot。
+- Data Update 顯示邊界已再收斂：UpdateView 的全域／各來源「今日」日期控件統一採台灣市場日期；localized `不可用` 會落到異常燈號；全域狀態檢查失敗會清除六個核心與三個候選來源頁的舊 inline 摘要，並同步保留共同錯誤原因，避免卡片與頁面內容分裂；候選資料源分頁也會投影自己的檢查結果。窄版小於 720px 時導覽、卡片與操作按鈕改用可讀的單欄／雙欄排列，頁面可垂直捲動，不改變更新服務或寫入契約。
+
+## 2026-08-28 Taiwan market date readiness refresh（current observation）
+
+- 本次完整的「資料可取得／治理未放行／真實外部輸入／尚待工程」分流盤點見 [Program Readiness Audit 2026-08-28](../06_qa/PROGRAM_READINESS_AUDIT_2026_08_28.md)。結論不是 13 個 P0 來源都缺資料：live audit 已覆蓋 `13/13`、machine=`1 verified / 12 degraded / 0 missing`，13 個來源共登錄 27 條候選 route，全部至少 2 條；載入 audit 後 Control Center=`0 contract_only / 12 blocked_provenance / 1 research_shadow`。目前 `accepted=0`、`limited=0` 的主因是 publication／decision-time provenance 與 13 筆具名 owner/reviewer decision 尚未完成，不是 parser 全部失效。
+- `taiwan_market_today()` 在本次檢查為 `2026-08-28`；因此前一版以 `2026-08-27` 為上限時暫時排除的 Paper／Decision `2026-08-28` row，現在已是當日 current candidate，不再是 future blocker。所有 future-date guard 仍保留，避免下一筆未來 row 進入 current／forward evidence。
+- 唯讀 readiness 最新結果：Paper Portfolio=`partial`（21 snapshots，當日最新 `490950.00`）；QA staging Equal Weight ledger 已以 3 檔 frozen constituents 實際建立 21 筆 observation、最新 `472302.39`，指定該 ledger 時 benchmark reader=`ready`。正式 Paper Trade Ledger 仍缺真實 fill／partial-fill／reject／override、Decimal 成本、turnover 與 execution gap，因此成本後 weekly 仍 `not_computable`，不得從手動 `trades.jsonl` 或 snapshot 補造。Decision Desk=22 snapshots／latest `2026-08-28`／quality=`degraded`、Pre-V2=`ready`（weekly `3/3`、multi-day `3/3`，但 `production_scheduler_allowed=false`）。
+- Gate 4 的空白 Paper fills CSV 入口也補上 Windows UTF-8 console guard；`export_paper_trade_csv_template.py --help` 在 CP1252 主控台不再因繁中說明崩潰，仍維持只產生欄位標題、不建立 ledger 的安全契約。
+- P0 parser／probe 已支援 `TWT84U` 漲跌停行情、TDCC OpenAPI JSON、月營收 JSON／MOPS CSV fallback，並將官方無事件、schema mismatch 與 network failure 分開。這些證據仍是 candidate-only；13 筆 decision 均為 `not_supplied`，不推導 acceptance。Gate 7 ML 仍 `waiting_for_formal_inputs`／`0/3`：2026-08-25 的 1,932 列 prospective PIT sector artifact 不能回填成 historical ML input，portfolio ledger 與 rule champion history 也尚不存在，`formal_oos_allowed=false`。
+- Runtime 先前在受限 sandbox 看到的既有檔案 `Permission denied` 已由一般 host context 重跑排除；對正式 `config.log` 與 Research Registry 的零位元 existing-file write-handle probe 通過，overall=`ready`、`write_probe=os.access_plus_existing_handle`。這證明目前 ACL 可開啟既有寫入 handle，但尚不是 Registry SQLite transaction／rollback 實寫證明。觀測 JSON 保留於 OS TEMP；QA Equal Weight ledger 位於 `output/qa/readiness_refresh_20260828/`，未套用正式 Paper output。
+
+## 2026-08-26 Data Update trust UX slice（current engineering）
+
+- Data Update 狀態卡已改為 fail-closed 顯示：只有明確 `ok`／`success`／`current`／`normal` 才顯示綠色「最新」；`error`、`missing`、`empty`、`unavailable`、部分 payload 缺漏與整體狀態檢查失敗不再沿用舊數字或假綠。
+- Workbench 的 Pre-V2 readiness 現在會把 weekly history 的 projection 未設定／找不到與各 readiness item 的 blocker/diagnostic 帶到首頁 warnings；目前環境若設定通過驗證的 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH`，CLI／畫面會一致揭露 owner-approved weekly `3/3`（只供 UI／Pre-V2 顯示、不授予 formal credit），清除該變數時則明示只計算正式 DB legacy review history，不再只顯示模糊的「等待中」。
+- Research Console 的 P0 Control Center 現在也可透過明確 `P0_SOURCE_CONTROL_CENTER_DECISIONS` 唯讀載入 owner decision；外部 owner-review 封包只可投影為 deferred／rejected／disabled，不能由 UI 或 CLI 推導 accepted／limited、formal OOS 或 production eligibility。
+- quick/safe、個別下載、CSV／SQLite 同步、合併、技術指標與匯出等寫入型背景工作共用 exclusive guard；唯讀來源詳情仍可並行。技術指標子流程進度映射至外層區間，每日合併現在回報檔案／讀取批次／寫入批次並可在單檔讀取批次邊界取消，CSV 匯出回報預估總筆數／已處理筆數，最終狀態檢查成功前不顯示 100%；兩者仍不在半個檔案／資料批次內提交。
+- SQLite Inspector 初始化改成 `mode=ro`／`PRAGMA query_only=ON`；缺少或不可讀的 DB 會在頁面顯示 unavailable，不建立空 `twstock.db`，主視窗仍可啟動。
+- 主畫面的全域 `check_data_status()` 與 SQLite 個別詳情現在都套用 daily reference freshness；市場、產業與技術資料若最晚日期落後每日股價，會明確標成 `lagging`，不再只因有資料列就顯示 `ok`。
+- UpdateService 的 overview／detail SQLite 狀態查詢也先檢查 DB 是否存在；缺 DB 只回 `unavailable`，不再透過可寫 `DBManager` 建立空資料庫。
+- 一鍵 quick／safe 更新新增更新前 baseline guard：總覽內核心資料源若明確回報 `error`／`failed`／`exception`，會在任何下載、合併或 SQLite 寫入前 fail-closed；`lagging`／`empty`／`unavailable` 仍保留為診斷狀態，最後 refresh 另行判定。
+- 單一每日股價流程若 TWSE 明確回報 `success=false`／`failed_dates`，會在 TPEX、SQLite 同步與技術指標前停止；官方驗證的 `no_data_skipped_dates` 仍是可安全繼續的休市／無資料例外。
+- UpdateService overview／detail／technical coverage 現已與 SQLite Inspector 共用 query-only adapter；已存在 DB 的狀態讀取也不再建構可寫 `DBManager`、初始化 schema 或切換 WAL。
+- UpdateView 寫入型工作現在會顯示「取消目前工作」：TWSE batch 會先安全排空目前請求，TPEX／券商分點／技術指標在日期、檔案或 SQLite 邊界停止；完成訊息與進度列會直接揭露 SQLite 來源、table、筆數與取消／失敗原因。大型合併與 CSV 匯出已改為顯示目前安全操作進度，但仍會完成當前檔案／資料批次後才套用取消，尚未逐筆傳遞 cancellation token。增量合併若沒有新 CSV 會在 UI 明示 no-op，且延後備份到實際原子提交前，不會因檢查最新狀態產生新備份。
+- Windows 一般 read lock 不可取得時，query-only adapter 會使用並揭露 `immutable_fallback`；UpdateView 將該狀態顯示為黃色待確認並列出最後已提交快照提醒，不假裝即時。
+- 六個核心與三個候選來源分頁現在都有可見的唯讀 inline 狀態摘要；全域檢查會同步刷新，個別來源錯誤只標記該來源，月營收摘要另列 PIT 可用期別與待生效起始日；候選來源仍維持 research-only，不參與正式評分。
+- 每日股價頁的 TPEX 背景補齊新增可見 `尚未啟動`／`執行中`／`完成`／`失敗` 狀態列；狀態檔建立／讀取失敗不再靜默吞掉，無法可靠保存進度時會 fail-closed 不啟動背景程序，日期範圍同步例外也會記錄。
+- 此輪未寫入正式資料、未改 SQLite schema；環境／Runtime／Update／healthcheck 集中 regression=`177 passed`（含合作式取消、SQLite 結果投影與匯出／合併原子邊界）、本輪受影響的 Update／UI／coordinator targeted suite=`151 passed / 1 warning`、UpdateView focused UI regression=`59 passed / 1 warning`、大型合併／讀取批次取消與 Update service suite=`58 passed / 1 warning`、Pre-V2 CLI／Workbench projection consistency=`38 passed / 1 warning`、Simulation projection consistency=`5 passed / 1 warning`、P0 intake validator=`9 passed`、P0 decision append CLI=`7 passed`、P0 decision projection／parser focused suite=`72 passed / 1 warning`、Gate 3／Gate 4 focused regression（既有基準）=`194 passed`，Update Tab QA=`23 passed / 0 failed / 4 skipped`，Paper future-date／Equal Weight builder／Portfolio UI focused suite=`43 passed / 1 warning`，Decision Desk／Evidence coverage future-date + query-only focused suite=`54 passed / 1 warning`，Runtime handle probe／UI focused suite=`25 passed / 1 warning`，Paper／Decision 排程 future-write guard=`28 passed / 1 warning`，Recommendation Pattern Explain／score compatibility=`3 passed / 1 warning`，Portfolio QA 全過；目前 test inventory=`633/633`、`3563 collected`，mypy（510 source files）、py_compile、quick portfolio healthcheck 與 diff check 均通過。最新完整 pytest=`3562 passed / 1 skipped / 26 warnings`（JUnit：`output/qa/full_pytest_20260827_paper_gate4_cli_utf8_final2.xml`）；OOC RSS monitor 已延後至 preflight 後才啟動，全量未再重現先前約 89% 的 Windows access violation。Warnings 主要是既有 joblib 核心數偵測、研究回測同日成交理想化假設與 pytest cache 權限提示。若後續再出現 native fault，仍需以 WER／dump 交叉定位。新增的 Portfolio Stress Lab／Trade Import／Paper Portfolio readiness／Paper fills CSV producer／Equal Weight benchmark／Paper weekly evidence／Stress history／P0 intake validator／P0 decision append CLI／Runtime staging write probe 仍不接 Advice／ML／券商自動交易；本輪新增的 Paper future-date look-ahead guard、Data Update 顯示回歸、候選資料源頁內摘要、窄版導覽／卡片／操作鈕重排、Paper fills template/append CLI UTF-8 guard、長檔讀取批次取消、Recommendation Pattern Explain evidence 與 SQLite 欄位別名正規化、Runtime 窄版垂直欄／session context strip 已納入全量回歸。
+
+## 2026-08-27 Paper Portfolio readiness read model（current engineering）
+
+- 新增 `app_module/paper_portfolio_readiness_service.py` 與 `scripts/inspect_paper_portfolio_readiness.py`。兩者只以 `mode=ro`／`PRAGMA query_only=ON` 讀取既有 Paper Portfolio daily status、snapshot DB 與可選 Equal Weight ledger；缺檔、schema 不符、狀態不一致或安全旗標違反時 fail-closed，不建 DB、不呼叫 writer repository。
+- Portfolio 右側新增「Paper Portfolio」分頁，會顯示最新可採用 snapshot、raw 累積筆數、持倉、市值、現金、Equal Weight 觀測數、週報可計算性、路徑與 blockers；遇到 future row 時不把 raw 最新列當 current projection，並固定揭露 `research_only=true`、`writes_allowed=false`、`broker_execution=false`、`auto_rebalance_allowed=false`。
+- 目前正式輸出實測有 `21` 筆 raw Paper snapshot，raw 最新日為 `2026-08-28`、總值 `490950.00`；本次台北市場日同為 `2026-08-28`，readiness 回報 `partial`，最新當日列可作 current projection，現金 `341000.00`、3 檔持倉。`PAPER_EQUAL_WEIGHT_BENCHMARK_PATH` 未設定、交易成本 ledger 尚未配置，weekly report 維持 `not_computable`；若之後出現超過台北市場日的 row，仍會保留 blocker／diagnostic 並排除於 current／forward evidence。
+- Paper weekly `build_latest()` 與 Equal Weight benchmark builder 現在都對未來 period／snapshot fail-closed；這是防止排程時鐘污染演變成 look-ahead 的讀取邊界，不刪除、不回填正式 raw snapshot。此切片不將 paper snapshot 回填正式 Portfolio、不宣稱投資有效性、不啟用 broker 或 scheduler；Gate 4 仍需期間化 Equal Weight、成本帳、fill／partial-fill／override／execution-gap 與 stress history。
+
+## 2026-08-27 Read-only Evidence Operations history guard（current engineering）
+
+- `create_evidence_operations_history_dashboard_service()` 現在以 query-only repository 讀取 weekly review history；缺少 DB／table 時回傳可見診斷與空狀態，不會因 Research Lab 刷新而建立空 schema。既有 history writer 與 CLI `--save-history` 行為不變。
+
+## 2026-08-27 Dashboard refresh status guard（current engineering）
+
+- `ui_qt/views/dashboard_view.py` 已補上 `Optional` 型別匯入，並為強勢個股／產業表加入可見的載入中、成功筆數與錯誤狀態列。實際主程式使用的 `strong_stocks_view.py`、`weak_stocks_view.py`、`strong_industries_view.py`、`weak_industries_view.py` 也同步移除空結果的假 `0` 數值列：現在以空模型與狀態列呈現尚未載入／0 筆／錯誤，刷新失敗會清空過期模型並保留第一行診斷；弱勢頁對字串數字採顯示邊界正規化，無法轉換者留為缺值。新增 focused UI regression 覆蓋初始化、成功筆數與失敗清空行為；不改資料、SQLite 或 scoring。
+- 候選池 `watchlist_view.py` 同步移除空清單／載入失敗時的 `-` 佔位列，改用真正空模型與可見狀態文字；空清單仍維持 Research Lab 批次入口停用，載入錯誤不會留下過期候選。
+
+## 2026-08-27 Portfolio price read path correction（current engineering）
+
+- `PortfolioService.get_current_price()` 已改用共用 `ReadOnlySQLiteManager` 查詢既有 `daily_prices`；SQLite 缺失或不可讀時才降級讀取既有 CSV。持倉頁的目前價格與未實現損益投影不再透過可寫 `DBManager` 建立空 `twstock.db`、初始化 schema 或切換 WAL。
+- 新增回歸測試確認缺少 SQLite 時查詢價格仍可由 CSV 顯示，且 DB 檔案維持不存在。這修正了 Update／Inspector 已唯讀、Portfolio 卻可能建立資料庫的邊界不一致；不改正式資料或 schema。
+
+## 2026-08-27 Paper Trade Ledger v1（current engineering）
+
+- 新增 `app_module/paper_trade_ledger.py`，以獨立於手動 Portfolio 的 append-only SQLite contract 保存研究用 paper fill event；每筆事件要求 requested／filled 股數、`filled`／`partially_filled`／`rejected`／`cancelled` 狀態、Decimal 成本、turnover、execution gap 與來源事件，並固定 `research_only=true`、`broker_order_allowed=false`、`auto_rebalance_allowed=false`。
+- Paper readiness 現在會唯讀檢查預設 `output/paper_portfolio/paper_trade_ledger.sqlite`（可由 `PAPER_TRADE_LEDGER_PATH` 或 CLI 覆蓋），顯示成本帳狀態、筆數、成本合計、full／partial／reject／override 統計與欄位缺口；ledger 不存在、空白或缺 turnover／execution gap 時，weekly report 仍維持不可計算。
+- 這個 slice 只完成 contract、repository 與 readiness 投影，沒有把既有手動交易或現有 21 筆 raw snapshot 轉寫成 paper fill，也沒有建立正式成本帳；Paper fills CSV producer 現已要求完整 execution 欄位並可在確認後 atomic append，但目前正式 output 仍未配置，仍需實際受控來源與 review，再以同 universe／現金政策／成本假設產生 Equal Weight history。
+- 新增 `scripts/append_paper_trade_ledger.py`：預設只做 JSON fill 預覽，必須明確傳入 `--confirm-append-paper-ledger` 才建立 ledger 並 append；不改手動 `trades.jsonl`、正式市場 SQLite 或 broker。
+- 新增 `app_module/paper_trade_import_service.py` 與 `scripts/append_paper_trade_csv.py`：Paper Portfolio 分頁新增「匯入 Paper 成交 CSV」，預覽會要求 status、reference／fill price、Decimal 成本、turnover、execution gap 與 source event；二次確認且 hash 未變更後才 append 至 Paper Trade Ledger，固定綁定 CSV hash 與 research-only safety flags，不寫手動 Portfolio 或 snapshot。
+- Paper 成交輸入現在另有「匯出成交範本」按鈕與 `scripts/export_paper_trade_csv_template.py`；輸出只含治理欄位標題、預設不覆寫既有檔案、不建立 ledger，避免使用者因缺少欄位格式而無法提供真實 execution evidence。範本本身不增加任何成交或 Gate credit。
+- 新增 `scripts/build_paper_equal_weight_benchmark.py`：預設唯讀讀取 baseline、既有 paper snapshots 與 T-1 市場價格，產生 frozen-constituent Equal Weight benchmark preview；只有明確 `--confirm-build-paper-benchmark` 才以暫存檔原子建立新的 benchmark ledger，既有檔案不覆寫。若 snapshot 含超過台北今日的 future date，preview／apply 會直接拒絕，避免 benchmark 把未來 NAV 當成可用觀測；先前安全 20 筆觀測的 preview 為 2026-07-12～2026-08-27、初始 `500000.00`、最新 `468194.50`，尚未寫入正式 output。
+- Decision Desk 的 read-only repository／inspection path 也補上同一日期契約：查詢預設以台灣市場今日為上限，raw future row 只供稽核；缺檔或缺 table 不建立資料庫。這讓 Workbench、Pre-V2、Evidence scheduler readiness 與 snapshot inspector 不會對同一筆 future row 給出互相矛盾的 current 判讀。
+- 新增 Paper Trade Ledger／readiness／Equal Weight builder／Paper weekly evidence focused tests 與 UI regression 通過；目前 inventory audit 為 `632/632`、`3552 collected` 且無 machine-checkable blocker；最新完整 full pytest 為 `3551 passed / 1 skipped / 66 warnings`（JUnit：`output/qa/full_pytest_runtime_probe_20260827_pattern_explain.xml`），本輪 Paper future-date／Equal Weight builder focused suite 為 `26 passed / 1 warning`，Paper／Decision 排程 future-write guard 為 `28 passed / 1 warning`，大型合併讀取批次取消與 Update service suite 為 `58 passed / 1 warning`。這些測試證明 contract 與 fail-closed 行為，不等於正式 paper 成本後 evidence 已成立。
+
+## 2026-08-27 Portfolio Stress history v1（current engineering）
+
+- 新增 `app_module/portfolio_stress_history.py`：把既有 `PortfolioStressResult` 轉成 hash-idempotent、append-only 的研究快照；保存 `scenario`、執行時間、基準／壓力後市值、payload hash 與固定 `research_only=true`／`investment_effectiveness_claim=false`，不把結果升格成正式績效或交易 evidence。
+- 新增 `scripts/append_portfolio_stress_history.py`：預設只驗證並預覽 JSON，只有明確傳入 `--confirm-save-stress-history` 才建立／寫入指定 history DB；重複 payload fail-closed，不覆寫既有 row。
+- Portfolio「情境壓力」分頁新增「保存研究快照」二次確認與 Stress 歷史表；refresh 透過 `PortfolioStressHistoryReadService` query-only 讀取，缺 DB 只顯示 `stress_history_not_configured`，不因狀態檢查初始化 `output/portfolio`。
+- 此 slice 仍只完成研究歷史保存與可追溯揭露；正式 Stress evidence 需要跨期間的 forward outcome、來源／價格 quality 與人工 review，尚未完成。
+
+## 2026-08-27 P0 Source Intake Validator（current engineering）
+
+- `scripts/inspect_p0_intake_readiness.py` 現在是真正的唯讀 P0 intake validator，不再硬編空白 dossier 或預設寫入 repo 下的 `qa/reports`。它要求 `p0-source-intake.v1` 與完整 13 列 `source-acceptance-dossier.v1`，驗證欄位型別、重複／缺列、secret-like 欄位、治理 checklist 與安全旗標，並固定輸出 13 列 owner review 診斷。
+- 產生的 `ready_for_owner_review` 只代表 checklist 完成、可交給具名 owner／reviewer 審查；`decision_preview` 仍為 `deferred`、`allowed_use_cases=[]`、`downstream_eligibility=none`，不會建立 decision registry、正式資料或 production gate。缺列／重複／schema／安全邊界錯誤回傳 `invalid_input` 與 exit code `2`；格式有效但證據不足維持 `deferred` 並回傳 `0`。
+- 範本與報告必須使用明確、位於 `DATA_ROOT` 外的候選路徑；這個 slice 讓 P0 外部輸入有可重跑、可 hash、可審查的接入口，但不替 owner 做 license、quality 或 source acceptance 決策。
+
+## 2026-08-27 P0 Source Acceptance Decision CLI（current engineering）
+
+- 新增 `scripts/append_source_acceptance_decision.py`：預設只 preview decision revision，不開啟 registry；只有明確 `--registry` + `--confirm-append` 才會透過既有 append-only `SourceAcceptanceDecisionRegistry` 寫入候選 registry。`accepted`／`limited` 強制綁定完整 intake、`ready_for_owner_review` 與 license／quality／PIT evidence ids；相同 revision 再執行回傳 `already_present`，不覆寫歷史。
+- CLI 會拒絕 registry 位於 `DATA_ROOT`、不安全／未知 schema、未綁 dossier 或缺 evidence 的 applying decision；即使 append 成功，`downstream_eligibility=none`、`formal_oos_allowed=false`、scheduler／broker 關閉仍不變。這是受控治理寫入 foundation，不是 P0 accepted feature closeout。
+
+## 2026-08-26 Gate 3 P0 Source Control Center（current engineering）
+
+- 新增 `app_module/p0_source_control_center.py`，以 authoritative `P0_SOURCE_IDS` 固定 13 個來源分母，將 contract、candidate/evidence audit、人工 decision revision 投影成不可變 read model；沒有輸入時也保留 13 列並明示 `candidate_audit_not_supplied`、`source_acceptance_decision_missing`、`downstream_eligibility_none`，不再用模糊的 planned/ready 文字掩蓋缺口。
+- 新增 `scripts/inspect_p0_source_control_center.py`，可唯讀讀取 `p0-candidate-audit.v1` 或 `p0-source-evidence-audit.v1` 與選擇性 decision JSON；不建立 `SourceAcceptanceDecisionRegistry`、不寫正式 SQLite、不自動接受來源。所有列與總覽固定 `downstream_eligibility=none`、`formal_oos_allowed=false`、`production_scheduler_allowed=false`、`auto_accept_allowed=false`。
+- Workbench 的 Evidence → Research Console 現在新增可見的「P0 Data Source Control Center」表格，呈現治理狀態、machine/audit 狀態、row 數、人工決議、下游資格與 blockers；這是治理可觀測性，不代表 P0 已 accepted 或可以接入 Scoring／Advice／Portfolio。
+- 控制中心的人工決議投影與 append-only registry 共用 `validate_source_acceptance_decision_revision()`；`accepted/limited` 若缺 license、quality、PIT evidence、仍保留 blocker 或含 formal/production 用途會直接拒絕，避免 UI/CLI 顯示虛假的已接受狀態。Phase 3C 的 `twse_institutional`／`twse_credit`／`tdcc_shareholding` provider identity 亦已由 `p0-candidate-source-alignment.v1` 明確對齊至 canonical P0 contract，僅供 traceability，不授予下游資格。
+- Control Center DTO 會在建構時由 13 筆 authoritative rows 重新驗證 governance／machine／decision counts 及 accepted、limited、research-shadow、blocked、contract-only totals，並強制所有 safety boundary flags 維持 fail-closed；因此 CLI、Workbench 與 Research Console 不會因外部彙總欄位誤植而顯示不一致的完成度。
+- Portfolio MVP 的相容 `get_benchmark_comparison()` 已改為明確 `not_computable`（回傳 `None` 與缺少輸入清單），避免沒有期間／現金帳／固定 benchmark constituents 時以三個 0 佯裝已完成比較；正式成本後 Equal Weight 對照仍以 Paper Portfolio ledger 為準。
+- Gate 4 新增 `app_module/portfolio_stress_lab_service.py` 與持倉頁「情境壓力」分頁：快速下跌、跳空跌停、相關股同跌、最大持倉事件與流動性消失可做 Decimal／研究唯讀投影；缺價只部分計算，輪動失敗／來源中斷因缺必要輸入而明確 `not_computable`。此功能不改持倉、不寫 DB、不產生交易指令，仍不等於完整 Stress Lab evidence gate。
+- Gate 4 另新增 `app_module/trade_import_service.py` 與持倉頁「匯入交易 CSV」入口：先做 UTF-8／CP950、欄位、買賣別、Decimal 數值、日期、hash 與重複 ID 預覽，只有明確二次確認才呼叫 `PortfolioService.record_trades()`；取消、錯誤或來源檔變更不寫入。這是受控的手動／紙上匯入 foundation，仍不是券商 API 或自動交易。
+- 本 slice 的新 focused contract/UI/CLI tests 已加入 test inventory（目前 `617/617`、`3391 collected`）；後續仍需把真實逐來源 publication/available-date、coverage、license/owner/reviewer evidence 與逐列決議輸入控制中心，才可能推進至 accepted feature。
+
 ## 2026-08-27 Activation attempt status（current）
 
 - v3 `clock:prospective:20260827:v3` 的一次性 heartbeat 已在台北時間 `2026-08-27T09:00:10+08:00` 執行 runner 一次；market DB exact `2026-08-26` T-1=`1,966` rows，未被修改、刪除或回填。

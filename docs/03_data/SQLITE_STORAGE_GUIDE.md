@@ -43,7 +43,7 @@ graph TD
 [7] SQLite 指標批量寫入 <── [6] 重算衍生指標 <── [5] 合併 CSV 後再同步 SQLite
 ```
 
-1. **極速狀態檢查**：優先對 SQLite 執行 `COUNT(*)` 聚合，幾毫秒內在 UI 呈報現有數據起始與結束日期；SQLite 查詢不可用時才降級為 CSV 狀態檢查。
+1. **極速狀態檢查**：優先對 SQLite 執行 `COUNT(*)` 聚合，幾毫秒內在 UI 呈報現有數據起始與結束日期；SQLite 查詢不可用時才降級為 CSV 狀態檢查。UI 狀態卡只有明確 `ok`／`success`／`current`／`normal` 才顯示最新，缺表／錯誤不會因仍有筆數或文字含「最新」而假綠。
 2. **爬取最新 CSV 資料**：爬蟲去抓取最新日期的個股 CSV、大盤、產業及分點檔案。
 3. **CSV 後同步 SQLite（Phase 1）**：每日股價單日 CSV 成功產生後，會先同步到 `daily_prices`；大盤與產業 CSV 成功更新後，會同步到 `market_indices` 與 `industry_indices`。
 4. **安全合併每日 CSV**：將最新的單日 CSV 資料，追加合併入 `stock_data_whole.csv`。
@@ -56,7 +56,11 @@ graph TD
 
 目前安全更新採「補同步，不改使用習慣」：CSV 仍是日常更新與人工檢查可見的落地格式，SQLite 則在每個成功步驟後跟進同步，讓 UI 狀態、回測與後續 DB-first 查詢可取得最新資料。這個階段不移除 CSV，也不把 CSV 匯出改成手動；若 SQLite 同步失敗，安全更新會在該同步步驟停止並回報失敗來源。
 
+SQLite Inspector 是獨立的唯讀查詢邊界：使用 SQLite URI `mode=ro` 並啟用 `PRAGMA query_only=ON`，不建立 schema、WAL 或空資料庫。若 DB 不存在、損毀或無權限，Inspector 頁面顯示 `SQLite 不可用`，主 UI 仍可啟動；Windows 無法取得一般 read lock 時可降級為 `immutable_fallback`，頁首會標示快照可能非即時，應停止其他寫入後重查。這不代表資料已完整，應依錯誤訊息確認 `TWStockConfig.db_file` 與資料庫權限。
+
 每日個股 CSV 同步另有最小欄位契約：必須有 `證券代號` 與 `收盤價`。檔案日期在週末時，必須由 TWSE `MI_INDEX` 回傳官方交易資料才可寫入；查詢失敗或無資料時不寫入 SQLite，但保留 raw CSV。此規則不把「週末」本身當作刪除依據，而是防止非個股 CSV 或缺乏官方開市證據的檔案污染 `daily_prices`。單一序列的 `market_index.csv` 會在同步時正規化為 `指數名稱=TAIEX` 與 `收盤指數`，保留原始 OHLC 欄位。
+
+同步入口在欄位契約檢核前會把受治理的日期／股票代號／股票名稱 aliases（例如 `date`、`stock_code`、`stock_name`）映射到上述 canonical 欄位，並統一 `YYYYMMDD` 日期與四碼股票代號；正規化只作用於寫入副本，不修改 raw CSV。
 
 ---
 

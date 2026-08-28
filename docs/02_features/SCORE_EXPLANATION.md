@@ -57,6 +57,12 @@ TotalScore = (
 
 每個模式都有對應的分數，最終加權平均得到 PatternScore。
 
+推薦結果的 Explain 會同步保存 `PatternNames`、`Pattern_Signal` 與
+`PatternAgeDays` 唯讀欄位。這些欄位只在 rolling detector 於突破／安全延遲
+確認日後建立，並沿用 20 個交易日衰減窗；`end_idx` 當天不會被當成已確認
+型態。若資料只有方向訊號而沒有型態名稱，畫面只顯示「圖形訊號偏多／偏空」
+並明確標示未推斷具體模式，不會從分數猜出 W 底或其他型態。
+
 #### 3. VolumeScore（成交量分數）
 
 基於成交量的變化：

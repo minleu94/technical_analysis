@@ -2,6 +2,46 @@
 
 > 目的：盤點 `tests/` 底下所有有效 Python 測試檔，分類哪些可以被非破壞式 Full App Healthcheck Runner 呼叫、哪些只能作 service/oracle 證據、哪些必須保留在一般 pytest 或人工檢查流程。
 
+## 2026-08-27 machine refresh
+
+本輪 Data Update trust UX、Gate 3 P0 Source Control Center／P0 intake validator／decision append CLI、Gate 4 Portfolio foundation、Dashboard／market／candidate-pool refresh status、OOC RSS monitor lifecycle、MainWindow startup screenshot 時序、Runtime environment readiness、Runtime existing-file write-handle probe、Runtime 窄版垂直欄／session context strip、Update date-level progress、合作式取消與大型匯出／合併批次進度及安全邊界、增量合併 no-op 明確狀態、Paper future-date look-ahead guard、Decision Desk current-date/query-only guard、Paper／Decision 排程 future-write guard、UpdateView 台灣市場日期／localized unavailable／全域錯誤摘要同步回歸、候選資料源頁內摘要、窄版導覽／卡片／操作鈕重排、Paper fills template/append CLI UTF-8 guard、單檔 CSV 讀取批次取消、Recommendation Pattern Explain evidence、SQLite 欄位別名正規化、Pre-V2／Simulation projection consistency 回歸補強後重新收集：`3563 tests collected`，filesystem／inventory 為
+`633/633`，缺漏路徑、過時路徑與 collection errors 均為 `0`。新增納管的測試主要是
+P0 source control center／P0 intake validator／decision append CLI、Portfolio Stress Lab、Trade Import contract、Paper Portfolio readiness、Paper Trade Ledger、Paper fills CSV producer、Equal Weight builder、Paper weekly evidence、Stress history 與 UI bridge；這些測試仍維持原分類與執行邊界，
+不會因此被 quick healthcheck 直接執行。
+
+本輪另以 `scripts/run_full_app_healthcheck.py --mode full --ui-smoke --ui-smoke-switch-tabs --ui-smoke-screenshot --ui-smoke-resize 1366x768 --ui-smoke-resize 390x844 --ui-smoke-dialog-cancel --output-dir output/qa/full_app_healthcheck_20260827_update_responsive_final --fail-fast` 完成真實 MainWindow smoke（最新 run `20260827_104105`）：8 個 workspace 均可切換、cancel-only probe 未觸發 destructive action；目前環境的 weekly projection 在 startup 畫面揭露 `3/3`；`1366x768` 與 `390x844` 實際均符合 requested viewport（`matched`），窄版 Runtime 改為垂直治理欄並提供垂直捲動，UpdateView 導覽／卡片／操作鈕也改為可讀重排。UI smoke 子程序會在報告目錄下使用隔離 `_isolated_app/data`／`_isolated_app/output`，不依賴正式資料根目錄的寫入權限，也不寫正式資料；其中 UpdateView focused regression 為 `59 passed / 1 warning`。
+
+Current filesystem Python files: `633`
+
+- 預設 pytest 可收集測試檔：`583`
+- pytest support 檔：`4`
+- `tests/manual`／`tests/scripts` 預設不收集檔：`27`
+- `pytest --collect-only -q -o addopts=`：`3563 tests collected`
+
+| 分類 | 數量 |
+|---|---:|
+| `general-unit-keep-in-pytest` | 140 |
+| `governance-doc-tooling` | 95 |
+| `healthcheck-runner-owned` | 29 |
+| `legacy-or-low-priority` | 10 |
+| `manual-only` | 14 |
+| `service-oracle-data-market` | 89 |
+| `service-oracle-portfolio-decision-runtime` | 103 |
+| `service-oracle-recommendation` | 18 |
+| `service-oracle-research-backtest` | 56 |
+| `slow-e2e-or-environment` | 3 |
+| `ui-healthcheck-candidate-bridge` | 22 |
+| `ui-healthcheck-direct-bridge` | 12 |
+| `write-risk-dry-run-required` | 42 |
+
+最近一次完整 pytest 已以 `-o addopts=` 完成：`3562 passed, 1 skipped, 26 warnings`（`532.59s`；JUnit：`output/qa/full_pytest_20260827_paper_gate4_cli_utf8_final2.xml`）。本輪修正 OOC RSS monitor 的 preflight thread lifecycle、UpdateView 合作式取消、SQLite 結果可見性與匯出／合併原子安全邊界，並加入 P0 intake validator／decision append CLI、匯出／合併批次進度、增量合併 no-op 狀態、Runtime staging write probe、Runtime existing-file write-handle probe、Paper future-date look-ahead guard、Paper／Decision 排程 future-write guard、Decision Desk current-date／query-only guard、UpdateView 台灣市場日期／localized unavailable／全域錯誤摘要同步、候選資料源頁內摘要、窄版導覽／卡片／操作鈕重排、Paper fills template/append CLI UTF-8 guard、單檔 CSV 讀取批次取消與 reader cleanup、Recommendation Pattern Explain evidence、SQLite 欄位別名正規化、Pre-V2／Simulation projection consistency 與 owner decision projection 回歸後，全量執行未再重現先前約 89% 的 Windows access violation；warnings 主要是 joblib 核心數偵測 fallback、研究回測的同日成交理想化假設與 pytest cache 權限提示。仍保留 focused／full run 證據，後續若再出現 native fault 需以 WER／dump 交叉定位。
+沒有 test failure。本輪環境／Runtime／Update／healthcheck
+集中 regression（涵蓋 Update worker／coordinator／service／SQLite／UI／formatter、匯出／合併原子邊界與 healthcheck）既有基準為 `177 passed`；本輪受影響的 Update／UI／coordinator targeted suite 為 `151 passed / 1 warning`，UpdateView focused UI regression 為 `59 passed / 1 warning`，大型合併讀取批次取消與 Update service suite 為 `58 passed / 1 warning`，Pre-V2／Workbench projection consistency 為 `38 passed / 1 warning`、Simulation projection consistency 為 `5 passed / 1 warning`，
+Update Tab QA 為 `23 passed / 0 failed / 4 skipped`。
+
+本節由 `scripts/audit_test_inventory.py` 的 deterministic audit 契約維護；`2026-08-14`
+以下段落保留作歷史基準。
+
 ## 2026-08-14 machine refresh
 
 本輪新增 Direct/OOC formal-input watcher、scheduled raw PIT refresh、既有 owner
@@ -175,6 +215,7 @@ backtest 的研究假設提示，沒有 test failure 或 stderr error；相關 w
 - `tests/test_ui_qt_research_lab_mode_driven_ui.py`
 - `tests/test_ui_qt_research_lab_workbench_copy_text.py`
 - `tests/test_ui_qt_research_run_save.py`
+- `tests/test_ui_qt_session_context_strip.py`
 - `tests/test_ui_qt_theme.py`
 
 ### service-oracle-data-market
@@ -280,6 +321,8 @@ backtest 的研究假設提示，沒有 test failure 或 stderr error；相關 w
 - `tests/test_portfolio_numeric_governance.py`
 - `tests/test_portfolio_review_service.py`
 - `tests/test_portfolio_source_adapter.py`
+- `tests/test_portfolio_stress_lab_service.py`
+- `tests/test_trade_import_service.py`
 - `tests/test_smart_money_semantic_service.py`
 - `tests/test_watchlist_trigger_service.py`
 
