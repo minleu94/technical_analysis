@@ -1074,7 +1074,7 @@ history；不可用舊 latest status 回填。
   --format markdown
 ```
 
-需要載入已存在的證據時，再加上 `--p0-audit-json`、
+需要載入已存在的證據時，再加上 `--p0-audit-json`、`--p0-license-evidence-json`、
 `--approved-weekly-history-projection`、`--technical-performance-baseline` 與
 `--broker-performance-baseline`。程式會固定顯示 P0、Evidence、Paper、Formal/ML、
 Runtime、Update history、Performance 七個 lane 以及依序下一步；未提供的 artifact

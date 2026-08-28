@@ -573,6 +573,46 @@ def test_program_readiness_aggregates_lanes_without_creating_missing_roots(tmp_p
     assert not output_root.exists()
 
 
+def test_program_readiness_projects_p0_license_candidate_evidence(tmp_path: Path) -> None:
+    license_path = tmp_path / "p0-license.json"
+    license_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "p0-license-evidence-capture.v1",
+                "candidate_only": True,
+                "source_acceptance_granted": False,
+                "license_accepted": False,
+                "downstream_eligibility": "none",
+                "formal_eligible": False,
+                "production_ingestion_allowed": False,
+                "production_scheduler_allowed": False,
+                "targets": [
+                    {
+                        "license_evidence_url": "https://www.twse.com.tw/zh/terms/use.html",
+                        "source_ids": ["institutional_flows"],
+                        "status": "transport_error",
+                        "content_persisted": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        p0_license_evidence_path=license_path,
+    )
+
+    lane = report["workstreams"]["p0"]
+    assert lane["status"] == "waiting_for_external_input"
+    assert lane["details"]["projection"]["rows"][7][
+        "license_evidence_capture_status"
+    ] == "capture_transport_error"
+    assert report["inputs"]["p0_license_evidence_path"] == str(license_path.resolve())
+
+
 def test_program_readiness_marks_update_history_identity_mismatch(tmp_path: Path) -> None:
     history_path = tmp_path / "output" / "scheduled" / "data_update_quick" / "history.jsonl"
     payload = {

@@ -27,6 +27,7 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --data-root <DATA_ROOT> `
   --output-root <OUTPUT_ROOT> `
   --p0-audit-json <P0_AUDIT_JSON> `
+  --p0-license-evidence-json <P0_LICENSE_EVIDENCE_JSON> `
   --approved-weekly-history-projection <APPROVED_WEEKLY_HISTORY_JSON> `
   --weekly-collection-sidecar <WEEKLY_COLLECTION_SIDECAR_DB> `
   --freshness-status-path <FRESHNESS_STATUS_JSON> `

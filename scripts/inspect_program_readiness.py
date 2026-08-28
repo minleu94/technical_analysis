@@ -57,6 +57,7 @@ def inspect_program_readiness(
     data_root: str | Path,
     output_root: str | Path,
     p0_audit_path: str | Path | None = None,
+    p0_license_evidence_path: str | Path | None = None,
     p0_decision_path: str | Path | None = None,
     evidence_db_path: str | Path | None = None,
     research_db_path: str | Path | None = None,
@@ -102,6 +103,7 @@ def inspect_program_readiness(
     workstreams = {
         "p0": _inspect_p0_lane(
             _optional_path(p0_audit_path),
+            _optional_path(p0_license_evidence_path),
             _optional_path(p0_decision_path),
         ),
         "evidence": _inspect_evidence_lane(
@@ -181,6 +183,11 @@ def inspect_program_readiness(
                 if technical_production_canary_path is not None
                 else None
             ),
+            "p0_license_evidence_path": (
+                str(_optional_path(p0_license_evidence_path))
+                if p0_license_evidence_path is not None
+                else None
+            ),
         },
         "safety": {
             "side_effect_free": True,
@@ -195,10 +202,16 @@ def inspect_program_readiness(
 
 def _inspect_p0_lane(
     audit_path: Path | None,
+    license_evidence_path: Path | None,
     decision_path: Path | None,
 ) -> dict[str, Any]:
     try:
         audit = _read_json_mapping(audit_path) if audit_path is not None else None
+        license_evidence = (
+            _read_json_mapping(license_evidence_path)
+            if license_evidence_path is not None
+            else None
+        )
         decisions = (
             parse_source_acceptance_decisions(_read_json_value(decision_path))
             if decision_path is not None
@@ -206,6 +219,7 @@ def _inspect_p0_lane(
         )
         projection = P0SourceControlCenterService().build(
             candidate_audit=audit,
+            license_evidence=license_evidence,
             decisions=decisions,
         ).to_dict()
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
@@ -250,6 +264,9 @@ def _inspect_p0_lane(
         external_input_required=status in {"waiting_for_external_input", "action_required"},
         details={
             "audit_path": str(audit_path) if audit_path is not None else None,
+            "license_evidence_path": (
+                str(license_evidence_path) if license_evidence_path is not None else None
+            ),
             "decision_path": str(decision_path) if decision_path is not None else None,
             "source_count": source_count,
             "accepted_count": accepted,
@@ -991,6 +1008,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--output-root", type=Path, default=None)
     parser.add_argument("--p0-audit-json", type=Path)
+    parser.add_argument("--p0-license-evidence-json", type=Path)
     parser.add_argument("--p0-decision-json", type=Path)
     parser.add_argument("--evidence-db-path", type=Path)
     parser.add_argument("--research-db-path", type=Path)
@@ -1039,6 +1057,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         data_root=data_root,
         output_root=output_root,
         p0_audit_path=args.p0_audit_json,
+        p0_license_evidence_path=args.p0_license_evidence_json,
         p0_decision_path=args.p0_decision_json,
         evidence_db_path=args.evidence_db_path,
         research_db_path=args.research_db_path,
