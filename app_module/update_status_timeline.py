@@ -36,6 +36,66 @@ def _bounded_text(value: Any, *, max_length: int = 128) -> str:
     return str(value).strip()[:max_length]
 
 
+def _date_key(value: Any) -> str | None:
+    """Normalize common YYYY-MM-DD／YYYYMMDD values for consistency checks."""
+
+    text = _bounded_text(value, max_length=32).replace("-", "").replace("/", "")
+    if len(text) == 8 and text.isdigit():
+        return text
+    return None
+
+
+def _freshness_consistency_diagnostics(
+    update: Mapping[str, Any],
+    freshness: Mapping[str, Any],
+) -> list[str]:
+    """Compare freshness observations with the quick-run target date.
+
+    Missing optional fields remain compatible with older artifacts.  Once a
+    field is supplied, a mismatch is explicit and degrades the timeline rather
+    than allowing a top-level ``status=passed`` to hide stale data.
+    """
+
+    target_key = _date_key(update.get("target_date"))
+    if target_key is None:
+        return []
+    diagnostics: list[str] = []
+    comparisons = (
+        ("data_update_quick_expected_date", "quick_expected_date"),
+        ("data_update_quick_checked_date", "quick_checked_date"),
+        ("daily_prices_latest_date", "daily_prices_latest_date"),
+        ("technical_indicators_latest_date", "technical_indicators_latest_date"),
+    )
+    for field_name, diagnostic_name in comparisons:
+        value = freshness.get(field_name)
+        if value in (None, ""):
+            continue
+        observed_key = _date_key(value)
+        if observed_key is None:
+            diagnostics.append(f"freshness:{diagnostic_name}_invalid:{value}")
+        elif observed_key != target_key:
+            diagnostics.append(
+                f"freshness:{diagnostic_name}_mismatch:{value}:target={update.get('target_date')}"
+            )
+
+    quick_status = _normalise_status(freshness.get("data_update_quick_status"))
+    if quick_status not in {"unknown", "", *_SUCCESS_STATUSES}:
+        diagnostics.append(f"freshness:quick_status_not_success:{quick_status}")
+    for field_name, diagnostic_name in (
+        (
+            "twse_daily_price_file_exists_for_latest_date",
+            "twse_daily_price_file_missing",
+        ),
+        (
+            "tpex_daily_price_file_exists_for_latest_date",
+            "tpex_daily_price_file_missing",
+        ),
+    ):
+        if freshness.get(field_name) is False:
+            diagnostics.append(f"freshness:{diagnostic_name}")
+    return diagnostics
+
+
 def _local_timezone() -> tzinfo:
     return datetime.now().astimezone().tzinfo or timezone.utc
 
@@ -226,6 +286,12 @@ def load_data_update_timeline(
     update_status = _normalise_status(update.get("status"))
     update_age = update.get("age_seconds")
     has_future_timestamp = any(item == "update:timestamp_in_future" for item in diagnostics)
+    freshness_consistency = (
+        _freshness_consistency_diagnostics(update, freshness)
+        if freshness.get("available")
+        else []
+    )
+    diagnostics.extend(freshness_consistency)
 
     if not update.get("available"):
         status = "missing" if update.get("configured") else "not_configured"
@@ -252,6 +318,8 @@ def load_data_update_timeline(
     ):
         status = "degraded"
     elif freshness.get("available") and _normalise_status(freshness.get("status")) in _FAILURE_STATUSES:
+        status = "degraded"
+    elif freshness_consistency:
         status = "degraded"
     elif freshness.get("available") and _normalise_status(freshness.get("status")) not in _SUCCESS_STATUSES:
         status = "partial"

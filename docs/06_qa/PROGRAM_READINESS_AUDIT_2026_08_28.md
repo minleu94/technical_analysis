@@ -179,6 +179,8 @@ Readiness UI 的 lane 表格已固定顯示七個預期 lane；若明確 artifac
 
 同一輪修正也補上更新時間軸的 freshness 明細：read model 只保留 allowlist 內的日價／技術指標最新日、quick-run 檢查／預期日與 TWSE／TPEx 原始日檔存在性，UI 顯示在 `Freshness 檢查` 之後。這能辨識「status=passed 但資料日或原始日檔不一致」的情況；未提供或 malformed 欄位維持未知／缺漏，不會被補成成功。
 
+時間軸的判定也會把已提供的 freshness observations 與 quick-run `target_date` 做一致性核對；日價／技術指標日期、quick status／檢查日／預期日或原始日檔缺漏時，會標為 `degraded` 並留下明確 diagnostics。舊 artifact 沒有這些 optional 欄位時仍維持相容，不會以缺欄位自行猜測資料已更新。
+
 ### Data Update 排程註冊觀察
 
 沙盒帳號 `codexsandboxoffline` 以 `cmd /c scripts\\scheduled\\query_baldr_scheduled_tasks.cmd` 做唯讀查詢時曾得到 `13 of 13 task(s) missing or unavailable`；這只代表該 token 無法呼叫 `schtasks.exe`，沒有刪除或修改任何 task。另一方面，2026-08-28 quick runner 已由既有程序完成真實 `running`／terminal history（run=`20260828-29472`）。實際 Windows host-context 重新 query 已確認 13/13 task `Enabled`／`Ready`、action wiring 全部相符，因此目前缺的是下一個自然週期的 freshness／history 與 owner governance，不是 scheduler registration；不應在這個 host 重複註冊。

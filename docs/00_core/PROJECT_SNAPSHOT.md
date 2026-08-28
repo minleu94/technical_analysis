@@ -93,6 +93,7 @@
 - 可見性缺口已縮小為治理層：正式 `data_freshness` 已與 `2026-08-28` quick run 對齊，host scheduler 註冊與 action wiring 也已確認；readiness 不再把資料更新問題誤判成核心市場資料不存在。
 - 排程頁的初始 freshness 預覽已改用明確注入的 `DATA_FRESHNESS_STATUS_ARTIFACT`／設定路徑，投影成 bounded 中文摘要（狀態與原始 token、檢查時間、日價／技術指標最新日、warnings／errors），不再直接顯示 raw JSON，也不把單一 freshness 工作誤當整體 Scheduler；此修正只影響可見性，維持唯讀與 `production_scheduler_allowed=false`。
 - 更新時間軸的 freshness read model 現在也保留 allowlist 內的日價／技術指標最新日、quick-run 檢查／預期日與 TWSE／TPEx 原始日檔存在性，UI 會在 `Freshness 檢查` 下方顯示這些觀測；malformed 或未提供欄位不會被推成成功，仍只讀取明確 artifact。
+- 更新時間軸也會將 freshness 觀測與 quick-run `target_date` 做日期／檔案一致性比對；若日價、技術指標、quick status 或原始日檔與目標日不一致，整體 timeline 會降為 `degraded` 並留下 bounded diagnostics，不再讓 top-level `status=passed` 形成假綠。
 
 ## 2026-08-28 P0 owner packet renderer（current engineering）
 

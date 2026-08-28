@@ -852,6 +852,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - Data Update → 排程狀態頁的初始預覽會讀取明確的 `data_freshness/latest_status.json` 路徑，並以中文狀態、原始 token、檢查時間、日價／技術指標最新日與 warnings／errors 摘要呈現；它只代表這一個 freshness 工作，不是整體 Scheduler。按「檢查此資料源狀態」後才會讀取明確 `scheduled/*/latest_status.json` 並彙整核心／受控／需處理／不可用工作。每日資料更新 task 的註冊／執行不等於 Evidence／ML 生產寫入授權；`production_scheduler_allowed=false` 固定保留，頁面不提供手動觸發或 Task Scheduler 修改。
 - 更新時間軸的步驟／歷史表格與 freshness／TPEX 摘要會同時顯示中文狀態與原始 machine token（例如 `完成（passed）`）；原始 token 仍保留供排錯，不代表任何正式治理或交易授權。
 - 更新時間軸的 freshness 摘要會另外顯示 artifact 內的日價／技術指標最新日、對應 quick-run 的檢查／預期日，以及 TWSE／TPEx 最新日檔是否存在；這些欄位只來自明確 freshness artifact 的 allowlist，未提供或格式不符時顯示未知／缺漏，不會由狀態 token 推導。
+- 當 freshness artifact 已提供上述觀測時，時間軸也會與 quick-run 目標資料日比對；日期不一致、quick status 不是成功狀態或原始日檔缺漏，整體狀態會顯示 `freshness 異常（degraded）` 並列出診斷。舊版 artifact 沒有 optional checks 時不會被自動回填或推導。
 - 時間軸也會翻譯 `in_progress`、`schema_mismatch`、`blocked_provenance` 等排程／治理 token；未知 token 仍原文顯示，避免把未辨識狀態誤當成功。
 - Portfolio → Paper Portfolio 的 readiness／weekly 摘要也會以中文說明包住原始狀態（例如 `成本帳：尚不可計算（成本帳缺漏）（not_computable_cost_ledger_missing）`）；這只是可讀性改善，缺少真實 fills 時仍不會計算成本後週報。
 

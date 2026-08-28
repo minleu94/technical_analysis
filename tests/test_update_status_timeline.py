@@ -83,6 +83,38 @@ def test_timeline_preserves_bounded_freshness_observations(tmp_path: Path) -> No
     assert projection["twse_daily_price_file_exists_for_latest_date"] is True
 
 
+def test_timeline_degrades_when_freshness_observations_mismatch_target_date(
+    tmp_path: Path,
+) -> None:
+    update = _write(tmp_path / "update.json", _update_payload())
+    freshness = _write(
+        tmp_path / "freshness.json",
+        {
+            "status": "passed",
+            "checked_at": "2026-08-28T09:05:00+08:00",
+            "checks": {
+                "daily_prices_latest_date": "20260827",
+                "technical_indicators_latest_date": "20260828",
+                "data_update_quick_status": "failed",
+                "data_update_quick_checked_date": "2026-08-27",
+                "data_update_quick_expected_date": "2026-08-28",
+                "twse_daily_price_file_exists_for_latest_date": False,
+            },
+        },
+    )
+
+    result = load_data_update_timeline(
+        update_status_path=update,
+        freshness_status_path=freshness,
+        now=datetime(2026, 8, 28, 10, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["status"] == "degraded"
+    assert any("daily_prices_latest_date_mismatch" in item for item in result["diagnostics"])
+    assert any("quick_status_not_success" in item for item in result["diagnostics"])
+    assert any("twse_daily_price_file_missing" in item for item in result["diagnostics"])
+
+
 def test_timeline_does_not_claim_success_for_failed_or_future_run(tmp_path: Path) -> None:
     failed = _write(tmp_path / "failed.json", _update_payload(status="failed"))
     failed_result = load_data_update_timeline(
