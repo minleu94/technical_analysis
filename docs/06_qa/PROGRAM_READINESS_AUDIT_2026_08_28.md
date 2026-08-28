@@ -169,7 +169,7 @@ Paper Portfolio readiness／weekly UI 也已將 `ready`、`not_computable_cost_l
 
 Readiness UI 的 lane 表格已固定顯示七個預期 lane；若明確 artifact 少了某列，畫面會顯示「未提供」、`readiness_lane_not_supplied:<lane>` 與重新產生完整 artifact 的動作，不再讓缺列看起來像功能不存在。阻擋原因／下一步欄位改為可換行並以 bounded scroll 呈現，摘要顯示已載入／預期比例；focused projection／UpdateView regression=`82 passed / 1 warning`，不改 readiness 或正式權限。
 
-排程 read model 的狀態分類也已與現有 wrapper contract 對齊：`ml_raw_pit_refresh=completed` 投影為正常完成，`ml_allocation_copilot=skipped_non_trading_day` 投影為受控 no-op（diagnostic=`non_trading_day_noop`），不再讓合法的休市／完成結果污染「需處理」計數；真實 `failed`、storage preflight 或 evidence degradation 仍會保留 attention。
+排程 read model 的狀態分類也已與現有 wrapper contract 對齊：`ml_raw_pit_refresh=completed` 投影為正常完成，`ml_allocation_copilot=skipped_non_trading_day` 投影為受控 no-op（diagnostic=`non_trading_day_noop`），不再讓合法的休市／完成結果污染「需處理」計數；真實 `failed` 會使用明確 `scheduled_job_failed`，storage preflight 或 evidence degradation 仍會保留 attention。
 
 ### Data Update 排程註冊觀察
 

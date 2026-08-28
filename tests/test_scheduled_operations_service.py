@@ -167,3 +167,16 @@ def test_known_completed_and_non_trading_day_safety_statuses_are_not_reported_as
     assert operations["ml_raw_pit_refresh"].diagnostic == ""
     assert operations["ml_allocation_copilot"].state == "guarded"
     assert operations["ml_allocation_copilot"].diagnostic == "non_trading_day_noop"
+
+
+def test_failed_safety_job_keeps_specific_failure_diagnostic(tmp_path):
+    root = tmp_path / "scheduled"
+    _write_status(root, "ml_direct_chain_maintenance", {"status": "failed"})
+
+    snapshot = ScheduledOperationsStatusService(root, now_provider=lambda: NOW).get_snapshot()
+    operation = next(
+        item for item in snapshot.operations if item.job_id == "ml_direct_chain_maintenance"
+    )
+
+    assert operation.state == "attention"
+    assert operation.diagnostic == "scheduled_job_failed"

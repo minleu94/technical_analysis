@@ -217,6 +217,8 @@ class ScheduledOperationsStatusService:
     ) -> tuple[str, str]:
         if raw_status in _SUCCESS_STATUSES:
             return "operational", ""
+        if raw_status in {"failed", "failure", "error"}:
+            return "attention", "scheduled_job_failed"
         if job_id == "evidence_pipeline_dry_run" and raw_status == "degraded":
             if _is_expected_evidence_degradation(payload):
                 return "guarded", "natural_maturity_or_nonblocking_degradation"
