@@ -20,6 +20,7 @@ from typing import Any, Mapping, Sequence
 SCHEMA_VERSION = "scheduled-task-registration.v1"
 DEFAULT_EXECUTABLE = "schtasks.exe"
 DEFAULT_TIMEOUT_SECONDS = 15
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED_TASKS: tuple[dict[str, str], ...] = (
     {"name": "baldr-data-update-quick-daily", "schedule": "DAILY 04:20", "required": "true"},
@@ -37,6 +38,22 @@ EXPECTED_TASKS: tuple[dict[str, str], ...] = (
     {"name": "baldr-v2-2-weekly-collection", "schedule": "WEEKLY SUN 18:00", "required": "true"},
 )
 
+TASK_WRAPPER_PATHS: dict[str, str] = {
+    "baldr-data-update-quick-daily": "scripts/scheduled/run_daily_data_update_quick.cmd",
+    "baldr-official-market-events-daily": "scripts/scheduled/run_official_market_event_backfill.cmd",
+    "baldr-data-freshness-check-daily": "scripts/scheduled/run_daily_data_freshness_check.cmd",
+    "baldr-ml-raw-pit-refresh-daily": "scripts/scheduled/run_ml_raw_pit_refresh.cmd",
+    "baldr-recommendation-snapshot-daily": "scripts/scheduled/run_recommendation_snapshot.cmd",
+    "baldr-evidence-pipeline-dry-run-daily": "scripts/scheduled/run_evidence_pipeline_dry_run.cmd",
+    "baldr-ml-promotion-evidence-daily": "scripts/scheduled/run_ml_promotion_evidence.cmd",
+    "baldr-ml-promotion-authority-daily": "scripts/scheduled/run_ml_promotion_authority.cmd",
+    "baldr-ml-allocation-copilot-daily": "scripts/scheduled/run_ml_allocation_copilot.cmd",
+    "baldr-decision-evidence-capture-daily": "scripts/scheduled/run_decision_evidence_capture.cmd",
+    "baldr-paper-portfolio-daily": "scripts/scheduled/run_paper_portfolio_daily.cmd",
+    "baldr-ml-direct-chain-maintainer": "scripts/scheduled/run_ml_direct_chain_maintenance.cmd",
+    "baldr-v2-2-weekly-collection": "scripts/scheduled/run_v2_2_weekly_collection.cmd",
+}
+
 _SAFE_SUMMARY_KEYS = (
     "status",
     "task_to_run",
@@ -51,12 +68,14 @@ def inspect_scheduled_task_registration(
     executable: str | None = None,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     runner=None,
+    repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Query every expected task and return a redacted, deterministic summary."""
 
     if timeout_seconds < 1 or timeout_seconds > 120:
         raise ValueError("timeout_seconds must be between 1 and 120")
     command = executable or os.environ.get("BALDR_SCHTASKS_EXE", DEFAULT_EXECUTABLE)
+    resolved_repo_root = _resolve_repo_root(repo_root)
     run = runner or subprocess.run
     task_results: list[dict[str, Any]] = []
     for spec in EXPECTED_TASKS:
@@ -73,19 +92,28 @@ def inspect_scheduled_task_registration(
                 check=False,
             )
         except FileNotFoundError as error:
-            task_results.append(
-                _task_result(spec, status="unavailable", error=f"{type(error).__name__}:{error}")
-            )
+            task_results.append(_task_result(
+                spec,
+                repo_root=resolved_repo_root,
+                status="unavailable",
+                error=f"{type(error).__name__}:{error}",
+            ))
             continue
         except subprocess.TimeoutExpired as error:
-            task_results.append(
-                _task_result(spec, status="timeout", error=f"{type(error).__name__}:{error}")
-            )
+            task_results.append(_task_result(
+                spec,
+                repo_root=resolved_repo_root,
+                status="timeout",
+                error=f"{type(error).__name__}:{error}",
+            ))
             continue
         except OSError as error:
-            task_results.append(
-                _task_result(spec, status="unavailable", error=f"{type(error).__name__}:{error}")
-            )
+            task_results.append(_task_result(
+                spec,
+                repo_root=resolved_repo_root,
+                status="unavailable",
+                error=f"{type(error).__name__}:{error}",
+            ))
             continue
 
         stdout = str(getattr(completed, "stdout", "") or "")
@@ -93,29 +121,45 @@ def inspect_scheduled_task_registration(
         returncode = int(getattr(completed, "returncode", 1))
         summary = _parse_list_summary(stdout)
         status = "available" if returncode == 0 else "missing_or_unavailable"
-        task_results.append(
-            _task_result(
-                spec,
-                status=status,
-                returncode=returncode,
-                command_output_sha256=_sha256_text(stdout + "\n" + stderr),
-                summary=summary,
-                error=None if returncode == 0 else _compact_error(stderr or stdout),
-            )
-        )
+        task_results.append(_task_result(
+            spec,
+            repo_root=resolved_repo_root,
+            status=status,
+            returncode=returncode,
+            command_output_sha256=_sha256_text(stdout + "\n" + stderr),
+            summary=summary,
+            error=None if returncode == 0 else _compact_error(stderr or stdout),
+        ))
 
     available_count = sum(item["status"] == "available" for item in task_results)
     missing_count = len(task_results) - available_count
+    wrapper_missing_count = sum(
+        item.get("wrapper_status") != "present" for item in task_results
+    )
+    action_mismatch_count = sum(
+        item.get("action_matches_wrapper") is False for item in task_results
+    )
+    all_wrappers_present = wrapper_missing_count == 0
+    all_actions_match = action_mismatch_count == 0
     return {
         "schema_version": SCHEMA_VERSION,
         "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "executable": command,
+        "repo_root": str(resolved_repo_root),
         "query_only": True,
         "side_effect_free": True,
         "task_count": len(task_results),
         "available_count": available_count,
         "missing_or_unavailable_count": missing_count,
         "all_available": missing_count == 0,
+        "wrapper_count": len(task_results),
+        "wrapper_missing_count": wrapper_missing_count,
+        "all_wrappers_present": all_wrappers_present,
+        "action_mismatch_count": action_mismatch_count,
+        "all_actions_match": all_actions_match,
+        "configuration_ready": (
+            missing_count == 0 and all_wrappers_present and all_actions_match
+        ),
         "tasks": task_results,
     }
 
@@ -123,6 +167,7 @@ def inspect_scheduled_task_registration(
 def _task_result(
     spec: Mapping[str, str],
     *,
+    repo_root: Path,
     status: str,
     returncode: int | None = None,
     command_output_sha256: str | None = None,
@@ -135,6 +180,13 @@ def _task_result(
         "required": spec["required"] == "true",
         "status": status,
     }
+    wrapper = _wrapper_info(spec["name"], repo_root)
+    payload.update(wrapper)
+    payload["action_matches_wrapper"] = _action_matches_wrapper(
+        summary.get("task_to_run") if summary else None,
+        repo_root=repo_root,
+        wrapper_path=wrapper.get("wrapper_path"),
+    )
     if returncode is not None:
         payload["returncode"] = returncode
     if command_output_sha256:
@@ -144,6 +196,53 @@ def _task_result(
     if error:
         payload["error"] = error[:500]
     return payload
+
+
+def _wrapper_info(task_name: str, repo_root: Path) -> dict[str, Any]:
+    relative_path = TASK_WRAPPER_PATHS.get(task_name)
+    if relative_path is None:
+        return {
+            "wrapper_path": None,
+            "wrapper_status": "unconfigured",
+            "wrapper_exists": False,
+        }
+    target = repo_root / Path(relative_path)
+    try:
+        if not target.is_file():
+            return {
+                "wrapper_path": relative_path,
+                "wrapper_status": "missing",
+                "wrapper_exists": False,
+            }
+        return {
+            "wrapper_path": relative_path,
+            "wrapper_status": "present",
+            "wrapper_exists": True,
+            "wrapper_sha256": _sha256_file(target),
+        }
+    except OSError as error:
+        return {
+            "wrapper_path": relative_path,
+            "wrapper_status": "unreadable",
+            "wrapper_exists": False,
+            "wrapper_error": f"{type(error).__name__}:{error}",
+        }
+
+
+def _action_matches_wrapper(
+    action: object,
+    *,
+    repo_root: Path,
+    wrapper_path: object,
+) -> bool | None:
+    if not isinstance(action, str) or not action.strip():
+        return None
+    if not isinstance(wrapper_path, str) or not wrapper_path.strip():
+        return False
+    normalized_action = action.replace("/", "\\").replace('"', "").lower()
+    normalized_absolute = str((repo_root / Path(wrapper_path)).resolve()).replace("/", "\\").lower()
+    normalized_relative = wrapper_path.replace("/", "\\").lower()
+    return normalized_absolute in normalized_action or normalized_relative in normalized_action
 
 
 def _parse_list_summary(output: str) -> dict[str, str]:
@@ -170,10 +269,27 @@ def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _resolve_repo_root(value: str | Path | None) -> Path:
+    candidate = value or os.environ.get("BALDR_SCHEDULED_REPO_ROOT") or PROJECT_ROOT
+    try:
+        return Path(candidate).expanduser().resolve()
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return Path(candidate).expanduser().absolute()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--executable", default=None, help="schtasks executable; defaults to BALDR_SCHTASKS_EXE")
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
+    parser.add_argument("--repo-root", type=Path, help="repository root used to verify scheduled wrapper files")
     parser.add_argument("--output", type=Path, help="optional JSON output path")
     return parser
 
@@ -184,6 +300,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = inspect_scheduled_task_registration(
         executable=args.executable,
         timeout_seconds=args.timeout_seconds,
+        repo_root=args.repo_root,
     )
     rendered = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output is not None:

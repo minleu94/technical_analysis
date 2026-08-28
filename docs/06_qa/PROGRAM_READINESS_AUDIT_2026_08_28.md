@@ -226,6 +226,10 @@ candidate 的 validator 與 merge preview：2026-07、1,851 rows、可用日 202
 - Scheduler registration 續測：`scripts/inspect_scheduled_task_registration.py` 仍觀察到 `available=0/13`、`all_available=false`、`query_only=true`、`side_effect_free=true`；每個 task 均為 `missing_or_unavailable`，首筆錯誤為 `ERROR: The system cannot find the path specified.`，沒有建立或修改 task。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_continuation_20260828.json`（SHA-256=`EC768C8ADAEE6AF165054B233738AFC6964B9C4A776AC33F0EB6FC13D2971519`）。
 - Broker real HTTP canary：`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_real_http_canary_20260828.json`（SHA-256=`5532F53BDE0C86B4A8983B766DA46AF45D5DF53D893EAEE0F70797F22A48E83C`）；`1030_1030`／`2026-08-28`／`lots` 單一 GET 解析 100 rows，Selenium 未啟動，正式 writer／SQLite 均未寫入。這只證明當次來源可讀與 parser 可用，不代表長期 rate-limit、授權、Selenium fallback 或 production pool。
 
+## Scheduler wrapper／action wiring 續測
+
+同一檢查器明確指定 repo root 後，13/13 本機 .cmd wrapper 均為 present，查詢可見的 Task To Run action 與預期 wrapper 路徑 mismatch=0；configuration_ready=false 僅因實際 task registration 仍為 available=0/13。artifact=C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json（SHA-256=CC726A1C30B206BCDAC71A022AE80C406D261D95A83CFB59FC237331240094CA）。這仍是 query-only 證據，不註冊、不修改 task；若未來 wrapper 遺失或 action 指錯，unified readiness 會分別保留 scheduled_task_wrapper_missing_or_unreadable／scheduled_task_action_mismatch blocker。
+
 ## 安全邊界
 
 本次沒有把任何 candidate source 升格為 accepted／limited，沒有把 QA benchmark 當正式績效，沒有從既有 snapshot 補造 Paper fills，沒有回填 prospective Formal evidence，也沒有開啟 ML training、promotion、production scheduler 或 broker。正式 source、Paper execution 與 Formal clock 仍各走自己的 append-only／PIT 契約。

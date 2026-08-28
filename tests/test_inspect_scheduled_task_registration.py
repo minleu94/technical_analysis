@@ -32,6 +32,9 @@ def test_scheduler_registration_probe_is_query_only_and_redacts_raw_output() -> 
     assert report["query_only"] is True
     assert report["side_effect_free"] is True
     assert report["all_available"] is True
+    assert report["all_wrappers_present"] is True
+    assert report["all_actions_match"] is True
+    assert report["configuration_ready"] is True
     assert report["available_count"] == len(EXPECTED_TASKS)
     assert len(calls) == len(EXPECTED_TASKS)
     assert all(call[0][1:3] == ["/Query", "/TN"] for call in calls)
@@ -55,6 +58,36 @@ def test_scheduler_registration_probe_counts_missing_tasks() -> None:
     assert report["missing_or_unavailable_count"] == len(EXPECTED_TASKS) - 1
     assert report["tasks"][0]["status"] == "available"
     assert report["tasks"][1]["status"] == "missing_or_unavailable"
+
+
+def test_scheduler_registration_probe_detects_missing_local_wrappers(tmp_path: Path) -> None:
+    def fake_run(command, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="Last Result: 0\n", stderr="")
+
+    report = inspect_scheduled_task_registration(runner=fake_run, repo_root=tmp_path)
+
+    assert report["all_available"] is True
+    assert report["all_wrappers_present"] is False
+    assert report["wrapper_missing_count"] == len(EXPECTED_TASKS)
+    assert report["configuration_ready"] is False
+    assert report["tasks"][0]["wrapper_status"] == "missing"
+
+
+def test_scheduler_registration_probe_detects_task_action_mismatch() -> None:
+    def fake_run(command, **kwargs):
+        return SimpleNamespace(
+            returncode=0,
+            stdout='Task To Run: cmd.exe /c "C:\\wrong\\wrapper.cmd"\n',
+            stderr="",
+        )
+
+    report = inspect_scheduled_task_registration(runner=fake_run)
+
+    assert report["all_available"] is True
+    assert report["all_wrappers_present"] is True
+    assert report["action_mismatch_count"] == len(EXPECTED_TASKS)
+    assert report["all_actions_match"] is False
+    assert report["configuration_ready"] is False
 
 
 def test_scheduler_registration_help_is_utf8_safe_with_cp1252() -> None:

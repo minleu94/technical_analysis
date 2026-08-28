@@ -688,6 +688,35 @@ def test_program_readiness_projects_scheduler_registration_diagnostics(tmp_path:
     assert "重新註冊 13 個 baldr task" in lane["next_actions"][0]
 
 
+def test_program_readiness_projects_scheduler_wrapper_and_action_diagnostics(tmp_path: Path) -> None:
+    scheduler_path = tmp_path / "scheduler-status.json"
+    scheduler_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "scheduled-task-registration.v1",
+                "task_count": 13,
+                "available_count": 13,
+                "missing_or_unavailable_count": 0,
+                "all_available": True,
+                "all_wrappers_present": False,
+                "all_actions_match": False,
+                "tasks": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        scheduled_task_status_path=scheduler_path,
+    )
+    lane = report["workstreams"]["update_history"]
+
+    assert "scheduled_task_wrapper_missing_or_unreadable" in lane["blockers"]
+    assert "scheduled_task_action_mismatch" in lane["blockers"]
+
+
 def test_program_readiness_projects_explicit_freshness_status(tmp_path: Path) -> None:
     freshness_path = tmp_path / "freshness" / "latest_status.json"
     freshness_path.parent.mkdir(parents=True, exist_ok=True)

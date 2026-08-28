@@ -283,6 +283,14 @@ schtasks /Query /TN baldr-v2-2-weekly-collection /V /FO LIST
 
 Missing tasks are reported as friendly `Task not found` messages by the query wrapper.
 
+For a machine-readable, side-effect-free check, run
+`scripts\inspect_scheduled_task_registration.py`. In addition to querying each
+expected task, it verifies that all 13 repository wrapper files exist and, when
+`schtasks /Query` exposes `Task To Run`, that the registered action contains the
+expected wrapper path. The report keeps these checks separate from
+`all_available`; `configuration_ready` is true only when task availability,
+local wrappers, and visible actions all pass. No task is created or changed.
+
 ## Unregister
 
 Preview:

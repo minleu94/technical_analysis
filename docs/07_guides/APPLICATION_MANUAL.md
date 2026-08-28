@@ -1054,9 +1054,11 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
   --output C:\Users\archi\AppData\Local\Temp\scheduled_task_status.json
 ```
 
-輸出會列出 13 個預期 task 的 available／missing 計數與安全摘要；它不會註冊或修改
-task。也可把該 JSON 以 unified readiness 的 `--scheduled-task-status` 載入，讓
-Update History lane 顯示 `scheduled_tasks_missing_or_unavailable:<available>/<total>`。
+輸出會列出 13 個預期 task 的 available／missing 計數、安全摘要，以及本地 wrapper
+manifest 是否存在、每個 task action 是否指向預期 `.cmd`。它不會註冊或修改 task；若要
+指定其他 checkout，可加 `--repo-root <path>`。也可把該 JSON 以 unified readiness 的
+`--scheduled-task-status` 載入，讓 Update History lane 顯示
+`scheduled_tasks_missing_or_unavailable:<available>/<total>`、wrapper 缺漏或 action mismatch。
 若 task 缺失，需由 owner 在正確帳號下執行受控的
 `scripts\scheduled\register_baldr_scheduled_tasks.cmd`，再觀察下一次真實 running／terminal
 history；不可用舊 latest status 回填。
