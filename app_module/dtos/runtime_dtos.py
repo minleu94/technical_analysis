@@ -125,13 +125,14 @@ class EnvironmentReadinessSnapshotDTO:
 
 @dataclass(frozen=True)
 class EnvironmentWriteProbeDTO:
-    """受控、短生命週期的實際檔案／SQLite 寫入 probe 結果。"""
+    """受控、短生命週期的實際檔案／Registry SQLite probe 結果。"""
 
     status: str
     probe_root: str
     observed_at: datetime
     file_write_succeeded: bool = False
     sqlite_write_succeeded: bool = False
+    registry_transaction_succeeded: bool = False
     cleanup_succeeded: bool = False
     side_effect_free: bool = True
     write_probe: str = "not_run"

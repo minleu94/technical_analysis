@@ -51,12 +51,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--write-probe-root",
         type=Path,
         default=None,
-        help="指定非正式、已存在的 staging 目錄供實際 ephemeral write probe；預設不寫入。",
+        help="指定非正式、已存在的 staging 目錄供實際 ephemeral file／Registry SQLite probe；預設不寫入。",
     )
     parser.add_argument(
         "--confirm-write-probe",
         action="store_true",
-        help="明確確認執行 ephemeral file／SQLite write probe；禁止指向 DATA_ROOT／OUTPUT_ROOT。",
+        help="明確確認執行 ephemeral file／Registry SQLite transaction／rollback probe；禁止指向 DATA_ROOT／OUTPUT_ROOT。",
     )
     args = parser.parse_args(argv)
 
@@ -156,6 +156,7 @@ def _write_probe_payload(result: Any) -> dict[str, Any]:
         "observed_at": _isoformat(result.observed_at),
         "file_write_succeeded": result.file_write_succeeded,
         "sqlite_write_succeeded": result.sqlite_write_succeeded,
+        "registry_transaction_succeeded": result.registry_transaction_succeeded,
         "cleanup_succeeded": result.cleanup_succeeded,
         "side_effect_free": result.side_effect_free,
         "write_probe": result.write_probe,
@@ -174,10 +175,11 @@ def _render_write_probe(result: Any) -> str:
         f"- write_probe: `{result.write_probe}`",
         f"- file_write_succeeded: `{result.file_write_succeeded}`",
         f"- sqlite_write_succeeded: `{result.sqlite_write_succeeded}`",
+        f"- registry_transaction_succeeded: `{result.registry_transaction_succeeded}`",
         f"- cleanup_succeeded: `{result.cleanup_succeeded}`",
         f"- diagnostic: `{result.diagnostic or 'none'}`",
         "",
-        "此結果只代表指定非正式 staging 目錄的 ephemeral file／SQLite 寫入與清理；不代表正式 Registry schema 或正式資料可寫。",
+        "此結果只代表指定非正式 staging 目錄的 ephemeral file 與實際 Research Run Registry schema transaction／rollback 及清理；不代表正式 Registry schema、ACL 或正式資料可寫。",
     ]
     return "\n".join(lines)
 

@@ -142,9 +142,10 @@ def test_environment_write_probe_passes_and_cleans_ephemeral_artifacts(tmp_path:
     assert result.status == "passed"
     assert result.file_write_succeeded is True
     assert result.sqlite_write_succeeded is True
+    assert result.registry_transaction_succeeded is True
     assert result.cleanup_succeeded is True
     assert result.side_effect_free is False
-    assert result.write_probe == "actual_ephemeral"
+    assert result.write_probe == "actual_ephemeral_registry_transaction"
     assert not list(probe_root.iterdir())
 
 

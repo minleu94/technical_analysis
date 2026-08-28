@@ -2605,7 +2605,7 @@ Runtime 頁面最上方的「正式路徑環境（唯讀診斷）」會立即顯
   --format markdown
 ```
 
-確認 staging 目錄無誤後，才可明確加入 `--confirm-write-probe`。程式會在該目錄建立短生命週期的暫存文字檔與 SQLite、寫入／讀回一筆 probe，再清理全部檔案；通過時 exit code 為 `0`，其他狀態為 `2`。這只能證明指定 staging 目錄的實際寫入能力，不能取代正式 Research Registry schema／ACL 驗證；指向正式 `DATA_ROOT` 或 `OUTPUT_ROOT` 會被阻擋。
+確認 staging 目錄無誤後，才可明確加入 `--confirm-write-probe`。程式會在該目錄建立短生命週期的暫存文字檔與使用正式 `ResearchRunRepository` schema 的 SQLite，寫入／讀回一筆 probe、rollback 後確認該筆消失，再清理全部檔案；JSON／Markdown 會顯示 `registry_transaction_succeeded`，通過時 exit code 為 `0`，其他狀態為 `2`。這只能證明指定 staging 目錄的實際 Registry schema transaction／rollback 與清理能力，不能取代正式 Registry ACL／鎖定驗證；指向正式 `DATA_ROOT` 或 `OUTPUT_ROOT` 會被阻擋。
 
 ### 11.2 營運排程判讀
 

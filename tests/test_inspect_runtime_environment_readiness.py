@@ -86,7 +86,8 @@ def test_environment_readiness_cli_actual_write_probe_is_explicit_and_ephemeral(
     assert payload["schema_version"] == "runtime-environment-write-probe.v1"
     assert payload["status"] == "passed"
     assert payload["side_effect_free"] is False
-    assert payload["write_probe"] == "actual_ephemeral"
+    assert payload["write_probe"] == "actual_ephemeral_registry_transaction"
+    assert payload["registry_transaction_succeeded"] is True
     assert not list(probe_root.iterdir())
 
 

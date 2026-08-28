@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from contextlib import closing
+import gc
 import os
 from pathlib import Path
 import sqlite3
 import tempfile
+from types import SimpleNamespace
 from typing import Callable
 
 from app_module.dtos.runtime_dtos import (
@@ -16,6 +18,7 @@ from app_module.dtos.runtime_dtos import (
     EnvironmentReadinessSnapshotDTO,
     EnvironmentWriteProbeDTO,
 )
+from app_module.research_run_repository import ResearchRunRepository
 
 
 @dataclass(frozen=True)
@@ -151,6 +154,7 @@ class EnvironmentReadinessService:
 
         file_write_succeeded = False
         sqlite_write_succeeded = False
+        registry_transaction_succeeded = False
         cleanup_succeeded = False
         diagnostic = ""
         temporary_path: Path | None = None
@@ -167,20 +171,56 @@ class EnvironmentReadinessService:
                     == "baldr-runtime-write-probe-v1\n"
                 )
 
-                database_path = temporary_path / "sqlite_probe.sqlite"
+                database_path = temporary_path / "research_runs.db"
+                # Use the production repository's schema initializer only in
+                # the ephemeral probe database.  The real Registry path is
+                # never opened by this method.
+                registry_repository = ResearchRunRepository(
+                    SimpleNamespace(research_run_db_file=database_path)
+                )
+                # ResearchRunRepository's schema bootstrap is intentionally
+                # kept outside the production path.  Release its bootstrap
+                # connection before Windows removes the ephemeral directory.
+                del registry_repository
+                gc.collect()
                 with closing(sqlite3.connect(database_path)) as connection:
-                    with connection:
-                        connection.execute(
-                            "CREATE TABLE runtime_write_probe (probe_id INTEGER PRIMARY KEY, value TEXT NOT NULL)"
+                    schema_row = connection.execute(
+                        "SELECT version FROM schema_version WHERE name = ?",
+                        (ResearchRunRepository.SCHEMA_NAME,),
+                    ).fetchone()
+                    if schema_row != (ResearchRunRepository.SCHEMA_VERSION,):
+                        raise sqlite3.DatabaseError(
+                            "Research Run Registry schema version mismatch"
                         )
-                        connection.execute(
-                            "INSERT INTO runtime_write_probe(value) VALUES (?)",
-                            ("ok",),
-                        )
-                        row = connection.execute(
-                            "SELECT value FROM runtime_write_probe WHERE probe_id = 1"
-                        ).fetchone()
-                        sqlite_write_succeeded = row == ("ok",)
+                    connection.execute("BEGIN IMMEDIATE")
+                    connection.execute(
+                        """
+                        INSERT INTO research_runs(
+                            run_id, run_name, run_type, payload_hash, created_at
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "runtime-write-probe-v1",
+                            "runtime write probe",
+                            "runtime_probe",
+                            "sha256:runtime-write-probe",
+                            observed_at.isoformat(),
+                        ),
+                    )
+                    visible_row = connection.execute(
+                        "SELECT run_id FROM research_runs WHERE run_id = ?",
+                        ("runtime-write-probe-v1",),
+                    ).fetchone()
+                    connection.rollback()
+                    rolled_back_row = connection.execute(
+                        "SELECT run_id FROM research_runs WHERE run_id = ?",
+                        ("runtime-write-probe-v1",),
+                    ).fetchone()
+                    registry_transaction_succeeded = (
+                        visible_row == ("runtime-write-probe-v1",)
+                        and rolled_back_row is None
+                    )
+                    sqlite_write_succeeded = registry_transaction_succeeded
             cleanup_succeeded = temporary_path is not None and not temporary_path.exists()
         except (OSError, sqlite3.Error, UnicodeError) as exc:
             diagnostic = f"{type(exc).__name__}: {exc}"
@@ -189,7 +229,11 @@ class EnvironmentReadinessService:
 
         status = (
             "passed"
-            if file_write_succeeded and sqlite_write_succeeded and cleanup_succeeded
+            if (
+                file_write_succeeded
+                and registry_transaction_succeeded
+                and cleanup_succeeded
+            )
             else "failed"
         )
         if not diagnostic and status != "passed":
@@ -200,9 +244,10 @@ class EnvironmentReadinessService:
             observed_at=observed_at,
             file_write_succeeded=file_write_succeeded,
             sqlite_write_succeeded=sqlite_write_succeeded,
+            registry_transaction_succeeded=registry_transaction_succeeded,
             cleanup_succeeded=cleanup_succeeded,
             side_effect_free=False,
-            write_probe="actual_ephemeral",
+            write_probe="actual_ephemeral_registry_transaction",
             diagnostic=diagnostic,
         )
 
