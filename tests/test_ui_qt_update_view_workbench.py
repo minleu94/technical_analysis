@@ -235,6 +235,29 @@ def _write_p0_evidence_audit(path: Path) -> Path:
     return path
 
 
+def _write_p0_license_evidence(path: Path) -> Path:
+    payload = {
+        "schema_version": "p0-license-evidence-capture.v1",
+        "candidate_only": True,
+        "source_acceptance_granted": False,
+        "license_accepted": False,
+        "downstream_eligibility": "none",
+        "formal_eligible": False,
+        "production_ingestion_allowed": False,
+        "production_scheduler_allowed": False,
+        "targets": [
+            {
+                "license_evidence_url": "https://www.twse.com.tw/zh/terms/use.html",
+                "source_ids": ["institutional_flows"],
+                "status": "transport_error",
+                "content_persisted": False,
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
 def test_update_view_projects_p0_routes_fallback_and_pit_into_status_table(tmp_path):
     audit_path = _write_p0_evidence_audit(tmp_path / "p0-audit.json")
     app()
@@ -254,6 +277,27 @@ def test_update_view_projects_p0_routes_fallback_and_pit_into_status_table(tmp_p
     assert "route.legacy" in view.p0_source_control_table.item(9, 3).text()
     assert "official_publication_timestamp_missing" in view.p0_source_control_table.item(0, 4).text()
     assert "downstream_eligibility=none" in view.p0_source_control_summary_label.text()
+
+
+def test_update_view_projects_license_candidate_capture_status(tmp_path):
+    audit_path = _write_p0_evidence_audit(tmp_path / "p0-audit-license.json")
+    license_path = _write_p0_license_evidence(tmp_path / "p0-license.json")
+    app()
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        p0_source_audit_path=audit_path,
+        p0_license_evidence_path=license_path,
+    )
+
+    status = view._get_overview_status()
+    view._on_status_checked(status)
+
+    institutional = status["p0_source_control"]["rows"][7]
+    assert institutional["license_evidence_capture_status"] == "capture_transport_error"
+    license_cell = view.p0_source_control_table.item(7, 6)
+    assert license_cell is not None
+    assert "capture_transport_error" in license_cell.text()
+    assert "License 候選證據" in view.p0_source_control_summary_label.text()
 
 
 def test_update_view_shows_rejected_fallback_reason_and_date_provenance(tmp_path):

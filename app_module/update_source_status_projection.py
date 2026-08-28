@@ -128,6 +128,12 @@ def compose_p0_source_control_projection(
             "license_status_counts": dict(
                 Counter(row.license_status for row in control_center.rows)
             ),
+            "license_evidence_capture_status_counts": dict(
+                Counter(
+                    row.license_evidence_capture_status
+                    for row in control_center.rows
+                )
+            ),
         },
         "boundary": {
             "read_only": control_center.read_only,

@@ -244,6 +244,7 @@ class UpdateView(QWidget):
         parent=None,
         *,
         p0_source_audit_path: str | Path | None = None,
+        p0_license_evidence_path: str | Path | None = None,
         p0_source_decision_path: str | Path | None = None,
         data_update_status_path: str | Path | None = None,
         data_update_history_path: str | Path | None = None,
@@ -261,6 +262,11 @@ class UpdateView(QWidget):
         self.p0_source_audit_path = (
             Path(p0_source_audit_path).expanduser().resolve()
             if p0_source_audit_path is not None
+            else None
+        )
+        self.p0_license_evidence_path = (
+            Path(p0_license_evidence_path).expanduser().resolve()
+            if p0_license_evidence_path is not None
             else None
         )
         self.p0_source_decision_path = (
@@ -2517,6 +2523,7 @@ class UpdateView(QWidget):
     ) -> tuple[P0SourceControlCenterDTO | None, str | None, str]:
         """只讀取明確指定的 P0 artifact；任何錯誤均回傳 fail-closed 投影。"""
         audit = None
+        license_evidence = None
         decisions = ()
         references: list[str] = []
         try:
@@ -2530,6 +2537,18 @@ class UpdateView(QWidget):
                 if not isinstance(parsed_audit, dict):
                     raise TypeError("P0 稽核 artifact 根節點必須是 object")
                 audit = parsed_audit
+            if self.p0_license_evidence_path is not None:
+                references.append(str(self.p0_license_evidence_path))
+                if not self.p0_license_evidence_path.is_file():
+                    raise FileNotFoundError(
+                        f"P0 license 候選證據 artifact 不存在：{self.p0_license_evidence_path}"
+                    )
+                parsed_license = json.loads(
+                    self.p0_license_evidence_path.read_text(encoding="utf-8")
+                )
+                if not isinstance(parsed_license, dict):
+                    raise TypeError("P0 license 候選證據 artifact 根節點必須是 object")
+                license_evidence = parsed_license
             if self.p0_source_decision_path is not None:
                 references.append(str(self.p0_source_decision_path))
                 if not self.p0_source_decision_path.is_file():
@@ -2542,6 +2561,7 @@ class UpdateView(QWidget):
                 decisions = parse_source_acceptance_decisions(parsed_decisions)
             center = self._p0_control_center_service.build(
                 candidate_audit=audit,
+                license_evidence=license_evidence,
                 decisions=decisions,
             )
             reference = ", ".join(references) if references else "未設定（contract-only default）"
@@ -2659,6 +2679,15 @@ class UpdateView(QWidget):
         license_urls = row.get("license_evidence_urls") or []
         if license_urls:
             license_display += f"\n證據 URL：{len(license_urls)}"
+        capture_status = str(row.get("license_evidence_capture_status") or "not_supplied")
+        if capture_status != "not_supplied":
+            license_display += f"\n候選證據：{capture_status}"
+        capture_hashes = row.get("license_evidence_content_sha256") or []
+        if capture_hashes:
+            license_display += f"\n內容 hash：{len(capture_hashes)}"
+        keyword_groups = row.get("license_evidence_keyword_groups") or []
+        if keyword_groups:
+            license_display += f"\n限制提示：{len(keyword_groups)} 組"
         decision = str(row.get("decision_status") or "not_supplied")
         eligibility = str(row.get("downstream_eligibility") or "none")
         owner_display = f"{decision}\n下游：{eligibility}"
@@ -2698,12 +2727,19 @@ class UpdateView(QWidget):
             f"{key} {self._p0_count_text(item)}"
             for key, item in decision_counts.items()
         ) or "未提供"
+        license_capture_counts = summary.get("license_evidence_capture_status_counts") or {}
         lines = [
             f"P0 狀態：{status}｜來源：{source_count}｜治理：{governance_text}",
             f"Machine：{machine_text}｜Owner 決議：{decision_text}",
             "唯讀邊界：writes=false、formal_oos=false、scheduler=false、"
             "auto_accept=false、downstream_eligibility=none",
         ]
+        if license_capture_counts and set(license_capture_counts) != {"not_supplied"}:
+            license_capture_text = ", ".join(
+                f"{key} {self._p0_count_text(item)}"
+                for key, item in license_capture_counts.items()
+            )
+            lines.append(f"License 候選證據：{license_capture_text}")
         observed_rows = summary.get("observed_rows")
         accepted_rows = summary.get("accepted_rows")
         blocked_rows = summary.get("blocked_rows")

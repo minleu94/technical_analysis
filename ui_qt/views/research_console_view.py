@@ -389,4 +389,10 @@ def _control_pit_coverage(row: Any) -> str:
 def _control_license(row: Any) -> str:
     status = str(getattr(row, "license_status", None) or "Missing / Unknown")
     urls = getattr(row, "license_evidence_urls", ()) or ()
-    return f"{status} / URLs: {len(urls)}" if urls else status
+    result = f"{status} / URLs: {len(urls)}" if urls else status
+    capture_status = str(
+        getattr(row, "license_evidence_capture_status", None) or "not_supplied"
+    )
+    if capture_status != "not_supplied":
+        result += f" / candidate: {capture_status}"
+    return result

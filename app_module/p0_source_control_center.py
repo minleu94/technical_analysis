@@ -20,6 +20,7 @@ from data_module.p0_source_contract_registry import (
     P0SourceContractRegistry,
     build_p0_source_contract_registry,
 )
+from data_module.p0_source_acquisition_routes import build_p0_acquisition_route_registry
 from data_module.source_acceptance_decision_registry import (
     SourceAcceptanceDecisionRevision,
     validate_source_acceptance_decision_revision,
@@ -29,6 +30,7 @@ from data_module.source_acceptance_decision_registry import (
 CONTROL_CENTER_SCHEMA_VERSION = "p0-source-control-center.v1"
 _CANDIDATE_AUDIT_SCHEMA = "p0-candidate-audit.v1"
 _EVIDENCE_AUDIT_SCHEMA = "p0-source-evidence-audit.v1"
+_LICENSE_CAPTURE_SCHEMA = "p0-license-evidence-capture.v1"
 _DECISION_STATUSES = frozenset(
     {"deferred", "rejected", "disabled", "limited", "accepted"}
 )
@@ -108,6 +110,9 @@ class P0SourceControlRow:
     schema_status: str | None = None
     availability: str | None = None
     license_evidence_urls: tuple[str, ...] = ()
+    license_evidence_capture_status: str = "not_supplied"
+    license_evidence_content_sha256: tuple[str, ...] = ()
+    license_evidence_keyword_groups: tuple[str, ...] = ()
     allowed_use_cases: tuple[str, ...] = ()
     blockers: tuple[str, ...] = ()
     evidence_requirements: tuple[str, ...] = _REQUIRED_EVIDENCE
@@ -139,6 +144,16 @@ class P0SourceControlRow:
             _string_tuple(self.fallback_quarantine_reasons),
         )
         object.__setattr__(self, "license_evidence_urls", _string_tuple(self.license_evidence_urls))
+        object.__setattr__(
+            self,
+            "license_evidence_content_sha256",
+            _string_tuple(self.license_evidence_content_sha256),
+        )
+        object.__setattr__(
+            self,
+            "license_evidence_keyword_groups",
+            _string_tuple(self.license_evidence_keyword_groups),
+        )
         object.__setattr__(self, "blockers", _string_tuple(self.blockers))
         object.__setattr__(self, "evidence_requirements", _string_tuple(self.evidence_requirements))
         object.__setattr__(self, "owner_actions", _string_tuple(self.owner_actions))
@@ -195,6 +210,9 @@ class P0SourceControlRow:
             "schema_status": self.schema_status,
             "availability": self.availability,
             "license_evidence_urls": list(self.license_evidence_urls),
+            "license_evidence_capture_status": self.license_evidence_capture_status,
+            "license_evidence_content_sha256": list(self.license_evidence_content_sha256),
+            "license_evidence_keyword_groups": list(self.license_evidence_keyword_groups),
             "allowed_use_cases": list(self.allowed_use_cases),
             "blockers": list(self.blockers),
             "evidence_requirements": list(self.evidence_requirements),
@@ -327,12 +345,23 @@ class P0SourceControlCenterService:
         self,
         *,
         candidate_audit: Mapping[str, Any] | None = None,
+        license_evidence: Mapping[str, Any] | None = None,
         decisions: Iterable[SourceAcceptanceDecisionRevision] = (),
     ) -> P0SourceControlCenterDTO:
         audit_items = _normalize_audit(candidate_audit) if candidate_audit is not None else {}
+        license_items = (
+            _normalize_license_evidence(license_evidence)
+            if license_evidence is not None
+            else {}
+        )
         decision_items = _normalize_decisions(decisions)
         rows = tuple(
-            self._build_row(contract, audit_items.get(contract.source_id), decision_items.get(contract.source_id))
+            self._build_row(
+                contract,
+                audit_items.get(contract.source_id),
+                license_items,
+                decision_items.get(contract.source_id),
+            )
             for contract in self._registry.list()
         )
         status_counts = Counter(item.governance_status for item in rows)
@@ -368,6 +397,7 @@ class P0SourceControlCenterService:
         self,
         contract: P0SourceContract,
         audit: Mapping[str, Any] | None,
+        license_items: Mapping[str, Mapping[str, Any]],
         decision: SourceAcceptanceDecisionRevision | None,
     ) -> P0SourceControlRow:
         audit_status = _text(audit.get("audit_status")) if audit else "not_supplied"
@@ -492,10 +522,15 @@ class P0SourceControlCenterService:
             ),
             schema_status=_optional_text(audit.get("schema_status")) if audit else None,
             availability=_optional_text(audit.get("availability")) if audit else None,
-            license_evidence_urls=(
-                tuple(_string_tuple(audit.get("license_evidence_urls", ())))
-                if audit
-                else ()
+            license_evidence_urls=_license_urls_for_source(contract.source_id, audit, license_items),
+            license_evidence_capture_status=_license_capture_status_for_source(
+                contract.source_id, license_items
+            ),
+            license_evidence_content_sha256=_license_capture_hashes_for_source(
+                contract.source_id, license_items
+            ),
+            license_evidence_keyword_groups=_license_capture_keyword_groups_for_source(
+                contract.source_id, license_items
             ),
             allowed_use_cases=(
                 tuple(decision.allowed_use_cases)
@@ -689,6 +724,144 @@ def _normalize_audit_row(raw: Mapping[str, Any], evidence_matrix: bool) -> Mappi
         "license_evidence_urls": _license_evidence_urls(raw.get("acquisition_routes")),
         "blockers": _unique_strings(_string_tuple(raw.get("blockers", ()))),
     }
+
+
+def _normalize_license_evidence(
+    payload: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    """Validate a candidate license-capture artifact without granting authority."""
+
+    if not isinstance(payload, Mapping):
+        raise TypeError("P0 license evidence must be an object")
+    if payload.get("schema_version") != _LICENSE_CAPTURE_SCHEMA:
+        raise ValueError("unsupported P0 license evidence schema")
+    _require_boundary(
+        payload,
+        {
+            "candidate_only": True,
+            "source_acceptance_granted": False,
+            "license_accepted": False,
+            "downstream_eligibility": "none",
+            "formal_eligible": False,
+            "production_ingestion_allowed": False,
+            "production_scheduler_allowed": False,
+        },
+    )
+    raw_targets = payload.get("targets")
+    if not isinstance(raw_targets, list):
+        raise ValueError("P0 license evidence targets must be an array")
+    allowed_urls = {
+        route.license_evidence_url
+        for source_id in P0_SOURCE_IDS
+        for route in build_p0_acquisition_route_registry().for_source(source_id)
+    }
+    result: dict[str, Mapping[str, Any]] = {}
+    for raw in raw_targets:
+        if not isinstance(raw, Mapping):
+            raise TypeError("P0 license evidence target must be an object")
+        url = _optional_text(raw.get("license_evidence_url"))
+        if url is None or url not in allowed_urls:
+            raise ValueError("P0 license evidence URL is outside the route registry")
+        if url in result:
+            raise ValueError(f"duplicate P0 license evidence URL: {url}")
+        source_ids = raw.get("source_ids")
+        if not isinstance(source_ids, list) or not source_ids:
+            raise ValueError("P0 license evidence source_ids must be a non-empty array")
+        normalized_sources = tuple(_string_tuple(source_ids))
+        if any(source_id not in P0_SOURCE_IDS for source_id in normalized_sources):
+            raise ValueError("P0 license evidence source is outside the denominator")
+        status = _optional_text(raw.get("status"))
+        if status not in {"captured", "http_error", "transport_error", "not_captured"}:
+            raise ValueError("unsupported P0 license evidence target status")
+        content_sha256 = _optional_text(raw.get("content_sha256"))
+        if content_sha256 is not None and (
+            len(content_sha256) != 64
+            or any(char not in "0123456789abcdefABCDEF" for char in content_sha256)
+        ):
+            raise ValueError("P0 license evidence content_sha256 must be 64 hex characters")
+        keyword_flags = raw.get("keyword_flags", {})
+        if keyword_flags is not None and not isinstance(keyword_flags, Mapping):
+            raise TypeError("P0 license evidence keyword_flags must be an object")
+        result[url] = {
+            "license_evidence_url": url,
+            "source_ids": normalized_sources,
+            "status": status,
+            "content_sha256": content_sha256,
+            "keyword_flags": keyword_flags if isinstance(keyword_flags, Mapping) else {},
+        }
+    if not result:
+        raise ValueError("P0 license evidence must contain at least one target")
+    return result
+
+
+def _license_records_for_source(
+    source_id: str,
+    license_items: Mapping[str, Mapping[str, Any]],
+) -> tuple[Mapping[str, Any], ...]:
+    return tuple(
+        item
+        for item in license_items.values()
+        if source_id in _string_tuple(item.get("source_ids", ()))
+    )
+
+
+def _license_urls_for_source(
+    source_id: str,
+    audit: Mapping[str, Any] | None,
+    license_items: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, ...]:
+    urls = list(_string_tuple(audit.get("license_evidence_urls", ()))) if audit else []
+    for item in _license_records_for_source(source_id, license_items):
+        url = _optional_text(item.get("license_evidence_url"))
+        if url is not None and url not in urls:
+            urls.append(url)
+    return tuple(dict.fromkeys(urls))
+
+
+def _license_capture_status_for_source(
+    source_id: str,
+    license_items: Mapping[str, Mapping[str, Any]],
+) -> str:
+    records = _license_records_for_source(source_id, license_items)
+    if not records:
+        return "not_supplied"
+    statuses = {str(item.get("status")) for item in records}
+    if statuses == {"captured"}:
+        return "captured_candidate"
+    if statuses == {"not_captured"}:
+        return "preview_not_captured"
+    for status in ("transport_error", "http_error"):
+        if status in statuses:
+            return f"capture_{status}"
+    return "capture_incomplete"
+
+
+def _license_capture_hashes_for_source(
+    source_id: str,
+    license_items: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, ...]:
+    hashes = {
+        value
+        for item in _license_records_for_source(source_id, license_items)
+        for value in (_optional_text(item.get("content_sha256")),)
+        if value is not None
+    }
+    return tuple(sorted(hashes))
+
+
+def _license_capture_keyword_groups_for_source(
+    source_id: str,
+    license_items: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, ...]:
+    groups: set[str] = set()
+    for item in _license_records_for_source(source_id, license_items):
+        flags = item.get("keyword_flags")
+        if not isinstance(flags, Mapping):
+            continue
+        for group, value in flags.items():
+            if isinstance(value, Mapping) and value.get("matched") is True:
+                groups.add(str(group))
+    return tuple(sorted(groups))
 
 
 def _require_boundary(payload: Mapping[str, Any], expected: Mapping[str, object]) -> None:

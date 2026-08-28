@@ -283,6 +283,11 @@ class MainWindow(QMainWindow):
         configured_path = os.environ.get("P0_SOURCE_CONTROL_CENTER_DECISIONS")
         return Path(configured_path).expanduser().resolve() if configured_path else None
 
+    def _p0_license_evidence_path(self) -> Path | None:
+        """只接受顯式 P0 license candidate artifact；不掃描正式資料或 QA 目錄。"""
+        configured_path = os.environ.get("P0_SOURCE_CONTROL_CENTER_LICENSE_EVIDENCE")
+        return Path(configured_path).expanduser().resolve() if configured_path else None
+
     def _data_update_status_path(self) -> Path | None:
         """資料更新時間軸只讀取明確 artifact；未設定時使用固定排程出口。"""
         configured_path = os.environ.get("DATA_UPDATE_STATUS_ARTIFACT")
@@ -437,6 +442,7 @@ class MainWindow(QMainWindow):
                 update_service=self.update_service,
                 parent=self,
                 p0_source_audit_path=self._p0_source_audit_path(),
+                p0_license_evidence_path=self._p0_license_evidence_path(),
                 p0_source_decision_path=self._p0_source_decision_path(),
                 data_update_status_path=self._data_update_status_path(),
                 data_update_history_path=self._data_update_history_path(),
@@ -563,6 +569,7 @@ class MainWindow(QMainWindow):
                 self.research_console_source_service = ResearchConsoleSourceService(
                     projection_path=self._research_console_projection_path(),
                     p0_audit_path=self._p0_source_audit_path(),
+                    p0_license_evidence_path=self._p0_license_evidence_path(),
                     p0_decision_path=self._p0_source_decision_path(),
                 )
                 workbench_view = UnifiedDecisionWorkbenchView(

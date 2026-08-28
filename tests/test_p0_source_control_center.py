@@ -36,6 +36,30 @@ def _candidate_audit(*, machine_status: str = "verified") -> dict[str, object]:
     }
 
 
+def _license_evidence(*, status: str = "transport_error") -> dict[str, object]:
+    return {
+        "schema_version": "p0-license-evidence-capture.v1",
+        "candidate_only": True,
+        "source_acceptance_granted": False,
+        "license_accepted": False,
+        "downstream_eligibility": "none",
+        "formal_eligible": False,
+        "production_ingestion_allowed": False,
+        "production_scheduler_allowed": False,
+        "targets": [
+            {
+                "license_evidence_url": "https://www.twse.com.tw/zh/terms/use.html",
+                "source_ids": ["institutional_flows"],
+                "status": status,
+                "content_sha256": "a" * 64 if status == "captured" else None,
+                "keyword_flags": {
+                    "automated_access_or_crawler": {"matched": True, "terms": ["自動"]}
+                },
+            }
+        ],
+    }
+
+
 def test_default_center_is_authoritative_and_fail_closed() -> None:
     center = P0SourceControlCenterService().build()
 
@@ -116,6 +140,35 @@ def test_official_evidence_matrix_is_supported_as_read_only_input() -> None:
     assert center.rows[0].accepted_rows == 2
     assert center.rows[0].governance_status == "research_shadow"
     assert center.downstream_eligible_count == 0
+
+
+def test_license_candidate_evidence_is_visible_without_granting_acceptance() -> None:
+    center = P0SourceControlCenterService().build(
+        license_evidence=_license_evidence()
+    )
+
+    row = next(item for item in center.rows if item.source_id == "institutional_flows")
+    assert row.license_evidence_urls == (
+        "https://www.twse.com.tw/zh/terms/use.html",
+    )
+    assert row.license_evidence_capture_status == "capture_transport_error"
+    assert row.license_evidence_content_sha256 == ()
+    assert row.license_evidence_keyword_groups == (
+        "automated_access_or_crawler",
+    )
+    assert row.license_status == "requires_review"
+    assert row.downstream_eligibility == "none"
+
+
+def test_captured_license_candidate_hash_is_projected_but_not_accepted() -> None:
+    center = P0SourceControlCenterService().build(
+        license_evidence=_license_evidence(status="captured")
+    )
+    row = next(item for item in center.rows if item.source_id == "institutional_flows")
+    assert row.license_evidence_capture_status == "captured_candidate"
+    assert row.license_evidence_content_sha256 == ("a" * 64,)
+    assert row.license_status == "requires_review"
+    assert "license_not_accepted" in row.blockers
 
 
 def test_decision_projection_is_visible_but_never_grants_downstream() -> None:

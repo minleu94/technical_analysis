@@ -31,6 +31,7 @@ from data_module.source_acceptance_decision_registry import (
 ProjectionProvider = Callable[[], Mapping[str, object] | None]
 GovernanceProvider = Callable[[], Mapping[str, object] | None]
 P0AuditProvider = Callable[[], Mapping[str, Any] | None]
+P0LicenseEvidenceProvider = Callable[[], Mapping[str, Any] | None]
 P0DecisionProvider = Callable[[], Iterable[SourceAcceptanceDecisionRevision]]
 ClockProvider = Callable[[], datetime]
 
@@ -101,6 +102,8 @@ class ResearchConsoleSourceService:
         governance_provider: GovernanceProvider | None = None,
         p0_audit_provider: P0AuditProvider | None = None,
         p0_audit_path: str | Path | None = None,
+        p0_license_evidence_provider: P0LicenseEvidenceProvider | None = None,
+        p0_license_evidence_path: str | Path | None = None,
         p0_decision_provider: P0DecisionProvider | None = None,
         p0_decision_path: str | Path | None = None,
         clock: ClockProvider | None = None,
@@ -115,6 +118,16 @@ class ResearchConsoleSourceService:
         if p0_audit_provider is not None and p0_audit_path is not None:
             raise ValueError("use either p0_audit_provider or p0_audit_path")
         self._p0_audit_path = Path(p0_audit_path).resolve() if p0_audit_path is not None else None
+        self._p0_license_evidence_provider = p0_license_evidence_provider
+        if p0_license_evidence_provider is not None and p0_license_evidence_path is not None:
+            raise ValueError(
+                "use either p0_license_evidence_provider or p0_license_evidence_path"
+            )
+        self._p0_license_evidence_path = (
+            Path(p0_license_evidence_path).resolve()
+            if p0_license_evidence_path is not None
+            else None
+        )
         self._p0_decision_provider = p0_decision_provider
         if p0_decision_provider is not None and p0_decision_path is not None:
             raise ValueError("use either p0_decision_provider or p0_decision_path")
@@ -309,8 +322,20 @@ class ResearchConsoleSourceService:
         elif self._p0_decision_path is not None:
             decision_bytes = self._p0_decision_path.read_bytes()
             decisions = parse_source_acceptance_decisions(json.loads(decision_bytes))
+        license_evidence = (
+            self._p0_license_evidence_provider()
+            if self._p0_license_evidence_provider is not None
+            else None
+        )
+        if license_evidence is None and self._p0_license_evidence_path is not None:
+            license_bytes = self._p0_license_evidence_path.read_bytes()
+            parsed_license = json.loads(license_bytes)
+            if not isinstance(parsed_license, Mapping):
+                raise TypeError("P0 license evidence artifact must be an object")
+            license_evidence = parsed_license  # type: ignore[assignment]
         return self._p0_control_center_service.build(
             candidate_audit=audit,
+            license_evidence=license_evidence,
             decisions=decisions,
         )
 

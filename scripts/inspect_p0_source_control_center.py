@@ -29,12 +29,19 @@ from data_module.source_acceptance_decision_registry import (
 def inspect_p0_source_control_center(
     *,
     audit_path: Path | None = None,
+    license_evidence_path: Path | None = None,
     decision_path: Path | None = None,
 ) -> dict[str, Any]:
     audit_payload = _read_json_object(audit_path) if audit_path is not None else None
+    license_payload = (
+        _read_json_object(license_evidence_path)
+        if license_evidence_path is not None
+        else None
+    )
     decisions = _read_decisions(decision_path) if decision_path is not None else ()
     return P0SourceControlCenterService().build(
         candidate_audit=audit_payload,
+        license_evidence=license_payload,
         decisions=decisions,
     ).to_dict()
 
@@ -92,6 +99,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     _configure_utf8_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audit-json", type=Path, help="候選或 P0 source evidence audit JSON（唯讀）")
+    parser.add_argument(
+        "--license-evidence-json",
+        type=Path,
+        help="P0 license candidate evidence JSON（唯讀）",
+    )
     parser.add_argument("--decision-json", type=Path, help="source acceptance decision revisions JSON（唯讀）")
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     parser.add_argument("--output", type=Path, help="輸出報告路徑；未指定時輸出至 stdout")
@@ -100,6 +112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         payload = inspect_p0_source_control_center(
             audit_path=args.audit_json,
+            license_evidence_path=args.license_evidence_json,
             decision_path=args.decision_json,
         )
         rendered = (
