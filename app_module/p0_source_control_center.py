@@ -84,6 +84,24 @@ class P0SourceControlRow:
     fallback_used: bool | None = None
     fallback_from_route_id: str | None = None
     fallback_reason: str | None = None
+    # 保留 evidence matrix 的 fallback 觀測，不讓 UI 只能看到「是否採用」。
+    # ``fallback_used`` 與 ``fallback_attempted`` 必須分開：官方替代路徑可能
+    # 已被嘗試，但因日期不符、官方無資料或 transport error 而安全拒絕。
+    fallback_attempted: bool | None = None
+    fallback_from_endpoint_id: str | None = None
+    fallback_endpoint_id: str | None = None
+    fallback_acquisition_route_id: str | None = None
+    fallback_probe_outcome: str | None = None
+    fallback_official_status: str | None = None
+    fallback_http_status: int | None = None
+    fallback_payload_sha256: str | None = None
+    fallback_payload_size_bytes: int | None = None
+    fallback_observation_dates: tuple[str, ...] = ()
+    fallback_requested_date: str | None = None
+    fallback_quarantine_reasons: tuple[str, ...] = ()
+    fallback_error_type: str | None = None
+    fallback_error: str | None = None
+    primary_official_status: str | None = None
     pit_status: str | None = None
     timestamp_kind: str | None = None
     probe_outcome: str | None = None
@@ -110,12 +128,24 @@ class P0SourceControlRow:
                 raise ValueError("coverage_bp must be within 0..10000")
         object.__setattr__(self, "allowed_use_cases", _string_tuple(self.allowed_use_cases))
         object.__setattr__(self, "acquisition_route_ids", _string_tuple(self.acquisition_route_ids))
+        object.__setattr__(
+            self,
+            "fallback_observation_dates",
+            _string_tuple(self.fallback_observation_dates),
+        )
+        object.__setattr__(
+            self,
+            "fallback_quarantine_reasons",
+            _string_tuple(self.fallback_quarantine_reasons),
+        )
         object.__setattr__(self, "license_evidence_urls", _string_tuple(self.license_evidence_urls))
         object.__setattr__(self, "blockers", _string_tuple(self.blockers))
         object.__setattr__(self, "evidence_requirements", _string_tuple(self.evidence_requirements))
         object.__setattr__(self, "owner_actions", _string_tuple(self.owner_actions))
         if self.fallback_used is not None and type(self.fallback_used) is not bool:
             raise TypeError("fallback_used must be a boolean or None")
+        if self.fallback_attempted is not None and type(self.fallback_attempted) is not bool:
+            raise TypeError("fallback_attempted must be a boolean or None")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -144,6 +174,21 @@ class P0SourceControlRow:
             "fallback_used": self.fallback_used,
             "fallback_from_route_id": self.fallback_from_route_id,
             "fallback_reason": self.fallback_reason,
+            "fallback_attempted": self.fallback_attempted,
+            "fallback_from_endpoint_id": self.fallback_from_endpoint_id,
+            "fallback_endpoint_id": self.fallback_endpoint_id,
+            "fallback_acquisition_route_id": self.fallback_acquisition_route_id,
+            "fallback_probe_outcome": self.fallback_probe_outcome,
+            "fallback_official_status": self.fallback_official_status,
+            "fallback_http_status": self.fallback_http_status,
+            "fallback_payload_sha256": self.fallback_payload_sha256,
+            "fallback_payload_size_bytes": self.fallback_payload_size_bytes,
+            "fallback_observation_dates": list(self.fallback_observation_dates),
+            "fallback_requested_date": self.fallback_requested_date,
+            "fallback_quarantine_reasons": list(self.fallback_quarantine_reasons),
+            "fallback_error_type": self.fallback_error_type,
+            "fallback_error": self.fallback_error,
+            "primary_official_status": self.primary_official_status,
             "pit_status": self.pit_status,
             "timestamp_kind": self.timestamp_kind,
             "probe_outcome": self.probe_outcome,
@@ -389,6 +434,55 @@ class P0SourceControlCenterService:
             fallback_reason=(
                 _optional_text(audit.get("fallback_reason")) if audit else None
             ),
+            fallback_attempted=(
+                _optional_bool(audit.get("fallback_attempted")) if audit else None
+            ),
+            fallback_from_endpoint_id=(
+                _optional_text(audit.get("fallback_from_endpoint_id")) if audit else None
+            ),
+            fallback_endpoint_id=(
+                _optional_text(audit.get("fallback_endpoint_id")) if audit else None
+            ),
+            fallback_acquisition_route_id=(
+                _optional_text(audit.get("fallback_acquisition_route_id")) if audit else None
+            ),
+            fallback_probe_outcome=(
+                _optional_text(audit.get("fallback_probe_outcome")) if audit else None
+            ),
+            fallback_official_status=(
+                _optional_text(audit.get("fallback_official_status")) if audit else None
+            ),
+            fallback_http_status=(
+                _optional_int(audit.get("fallback_http_status")) if audit else None
+            ),
+            fallback_payload_sha256=(
+                _optional_text(audit.get("fallback_payload_sha256")) if audit else None
+            ),
+            fallback_payload_size_bytes=(
+                _optional_int(audit.get("fallback_payload_size_bytes")) if audit else None
+            ),
+            fallback_observation_dates=(
+                _optional_string_tuple(audit.get("fallback_observation_dates"))
+                if audit
+                else ()
+            ),
+            fallback_requested_date=(
+                _optional_text(audit.get("fallback_requested_date")) if audit else None
+            ),
+            fallback_quarantine_reasons=(
+                _optional_string_tuple(audit.get("fallback_quarantine_reasons"))
+                if audit
+                else ()
+            ),
+            fallback_error_type=(
+                _optional_text(audit.get("fallback_error_type")) if audit else None
+            ),
+            fallback_error=(
+                _optional_text(audit.get("fallback_error")) if audit else None
+            ),
+            primary_official_status=(
+                _optional_text(audit.get("primary_official_status")) if audit else None
+            ),
             pit_status=_optional_text(audit.get("pit_status")) if audit else None,
             timestamp_kind=(
                 _optional_text(audit.get("timestamp_kind")) if audit else None
@@ -512,6 +606,29 @@ def _normalize_audit_row(raw: Mapping[str, Any], evidence_matrix: bool) -> Mappi
             "fallback_used": fallback_used,
             "fallback_from_route_id": fallback_from_route_id,
             "fallback_reason": fallback_reason,
+            "fallback_attempted": _optional_bool(raw.get("fallback_attempted")),
+            "fallback_from_endpoint_id": _optional_text(raw.get("fallback_from_endpoint_id")),
+            "fallback_endpoint_id": _optional_text(raw.get("fallback_endpoint_id")),
+            "fallback_acquisition_route_id": _optional_text(
+                raw.get("fallback_acquisition_route_id")
+            ),
+            "fallback_probe_outcome": _optional_text(raw.get("fallback_probe_outcome")),
+            "fallback_official_status": _optional_text(raw.get("fallback_official_status")),
+            "fallback_http_status": _optional_int(raw.get("fallback_http_status")),
+            "fallback_payload_sha256": _optional_text(raw.get("fallback_payload_sha256")),
+            "fallback_payload_size_bytes": _optional_int(
+                raw.get("fallback_payload_size_bytes")
+            ),
+            "fallback_observation_dates": _optional_string_tuple(
+                raw.get("fallback_observation_dates")
+            ),
+            "fallback_requested_date": _optional_text(raw.get("fallback_requested_date")),
+            "fallback_quarantine_reasons": _optional_string_tuple(
+                raw.get("fallback_quarantine_reasons")
+            ),
+            "fallback_error_type": _optional_text(raw.get("fallback_error_type")),
+            "fallback_error": _optional_text(raw.get("fallback_error")),
+            "primary_official_status": _optional_text(raw.get("primary_official_status")),
             "pit_status": _optional_text(raw.get("pit_status")),
             "timestamp_kind": _optional_text(raw.get("timestamp_kind")),
             "probe_outcome": _optional_text(raw.get("probe_outcome")),
@@ -543,6 +660,27 @@ def _normalize_audit_row(raw: Mapping[str, Any], evidence_matrix: bool) -> Mappi
         "fallback_used": fallback_used,
         "fallback_from_route_id": fallback_from_route_id,
         "fallback_reason": fallback_reason,
+        "fallback_attempted": _optional_bool(raw.get("fallback_attempted")),
+        "fallback_from_endpoint_id": _optional_text(raw.get("fallback_from_endpoint_id")),
+        "fallback_endpoint_id": _optional_text(raw.get("fallback_endpoint_id")),
+        "fallback_acquisition_route_id": _optional_text(
+            raw.get("fallback_acquisition_route_id")
+        ),
+        "fallback_probe_outcome": _optional_text(raw.get("fallback_probe_outcome")),
+        "fallback_official_status": _optional_text(raw.get("fallback_official_status")),
+        "fallback_http_status": _optional_int(raw.get("fallback_http_status")),
+        "fallback_payload_sha256": _optional_text(raw.get("fallback_payload_sha256")),
+        "fallback_payload_size_bytes": _optional_int(raw.get("fallback_payload_size_bytes")),
+        "fallback_observation_dates": _optional_string_tuple(
+            raw.get("fallback_observation_dates")
+        ),
+        "fallback_requested_date": _optional_text(raw.get("fallback_requested_date")),
+        "fallback_quarantine_reasons": _optional_string_tuple(
+            raw.get("fallback_quarantine_reasons")
+        ),
+        "fallback_error_type": _optional_text(raw.get("fallback_error_type")),
+        "fallback_error": _optional_text(raw.get("fallback_error")),
+        "primary_official_status": _optional_text(raw.get("primary_official_status")),
         "pit_status": _optional_text(raw.get("pit_status")),
         "timestamp_kind": _optional_text(raw.get("timestamp_kind")),
         "probe_outcome": _optional_text(raw.get("probe_outcome")),
@@ -691,6 +829,13 @@ def _string_tuple(values: Iterable[object] | object) -> tuple[str, ...]:
     if not all(isinstance(value, str) for value in materialized):
         raise TypeError("string collection must contain strings")
     return materialized
+
+
+def _optional_string_tuple(value: object) -> tuple[str, ...]:
+    """將可選的 evidence array 正規化；缺少／null 不代表虛構資料。"""
+    if value is None:
+        return ()
+    return _string_tuple(value)
 
 
 def _unique_strings(values: Iterable[object]) -> tuple[str, ...]:

@@ -82,6 +82,55 @@ def test_update_projection_keeps_core_keys_and_fail_closed_boundary() -> None:
     assert payload["p0_source_control"]["rows"][9]["fallback_used"] is True
 
 
+def test_p0_projection_preserves_rejected_fallback_diagnostics() -> None:
+    audit = _evidence_audit()
+    rows = audit["machine_evidence_matrix"]
+    assert isinstance(rows, list)
+    rows[7].update(
+        {
+            "fallback_used": False,
+            "fallback_attempted": True,
+            "fallback_endpoint_id": "tpex:openapi:institutional",
+            "fallback_acquisition_route_id": "tpex.institutional",
+            "fallback_probe_outcome": "network_error",
+            "fallback_error_type": "RuntimeError",
+            "fallback_error": "transport failed",
+        }
+    )
+    rows[8].update(
+        {
+            "fallback_used": False,
+            "fallback_attempted": True,
+            "fallback_probe_outcome": "date_mismatch",
+            "fallback_requested_date": "2026-08-28",
+            "fallback_observation_dates": ["2026-08-27"],
+            "fallback_http_status": 200,
+        }
+    )
+
+    center = P0SourceControlCenterService().build(candidate_audit=audit)
+    institutional = center.rows[7]
+    credit = center.rows[8]
+
+    assert institutional.fallback_attempted is True
+    assert institutional.fallback_probe_outcome == "network_error"
+    assert institutional.fallback_acquisition_route_id == "tpex.institutional"
+    assert institutional.fallback_error_type == "RuntimeError"
+    assert credit.fallback_probe_outcome == "date_mismatch"
+    assert credit.fallback_requested_date == "2026-08-28"
+    assert credit.fallback_observation_dates == ("2026-08-27",)
+    assert credit.fallback_http_status == 200
+
+    projection = compose_source_status_projection({}, p0_control_center=center)
+    projected_institutional = projection["p0_source_control"]["rows"][7]
+    assert projected_institutional["fallback_attempted"] is True
+    assert projected_institutional["fallback_error"] == "transport failed"
+    summary = projection["p0_source_control"]["summary"]
+    assert summary["fallback_attempted_count"] == 3
+    assert summary["fallback_used_count"] == 1
+    assert summary["fallback_rejected_count"] == 2
+
+
 def test_update_projection_marks_artifact_read_error_without_fake_success() -> None:
     center = P0SourceControlCenterService().build()
     payload = compose_source_status_projection(

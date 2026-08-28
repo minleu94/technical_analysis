@@ -256,6 +256,56 @@ def test_update_view_projects_p0_routes_fallback_and_pit_into_status_table(tmp_p
     assert "downstream_eligibility=none" in view.p0_source_control_summary_label.text()
 
 
+def test_update_view_shows_rejected_fallback_reason_and_date_provenance(tmp_path):
+    audit_path = _write_p0_evidence_audit(tmp_path / "p0-audit-fallback-diagnostics.json")
+    payload = json.loads(audit_path.read_text(encoding="utf-8"))
+    rows = payload["machine_evidence_matrix"]
+    rows[7].update(
+        {
+            "fallback_used": False,
+            "fallback_attempted": True,
+            "fallback_endpoint_id": "tpex:openapi:institutional",
+            "fallback_acquisition_route_id": "tpex.institutional",
+            "fallback_probe_outcome": "network_error",
+            "fallback_error_type": "RuntimeError",
+            "fallback_error": "transport failed",
+        }
+    )
+    rows[8].update(
+        {
+            "fallback_used": False,
+            "fallback_attempted": True,
+            "fallback_endpoint_id": "tpex:openapi:credit",
+            "fallback_acquisition_route_id": "tpex.credit",
+            "fallback_probe_outcome": "date_mismatch",
+            "fallback_requested_date": "2026-08-28",
+            "fallback_observation_dates": ["2026-08-27"],
+        }
+    )
+    audit_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    app()
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        p0_source_audit_path=audit_path,
+    )
+    status = view._get_overview_status()
+    view._on_status_checked(status)
+
+    institutional_cell = view.p0_source_control_table.item(7, 3)
+    credit_cell = view.p0_source_control_table.item(8, 3)
+    assert institutional_cell is not None
+    assert credit_cell is not None
+    assert "已嘗試但未採用" in institutional_cell.text()
+    assert "network_error" in institutional_cell.text()
+    assert "tpex.institutional" in institutional_cell.text()
+    assert "transport failed" in institutional_cell.toolTip()
+    assert "date_mismatch" in credit_cell.text()
+    assert "要求日：2026-08-28" in credit_cell.text()
+    assert "觀測日：2026-08-27" in credit_cell.text()
+    assert "Fallback：已嘗試 3／已採用 1／未採用 2" in view.p0_source_control_summary_label.text()
+
+
 def test_update_view_marks_missing_p0_artifact_as_unavailable(tmp_path):
     app()
     view = _TestableUpdateView(

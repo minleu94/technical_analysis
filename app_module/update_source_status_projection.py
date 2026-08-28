@@ -93,6 +93,17 @@ def compose_p0_source_control_projection(
         status = "governance_review"
 
     rows = [row.to_dict() for row in control_center.rows]
+    # 舊 artifact 尚未帶 ``fallback_attempted`` 時，已採用本身就是「曾嘗試」
+    # 的證據；只在 summary 做此保守推導，不覆寫 row 原始欄位。
+    fallback_attempted_count = sum(
+        row.fallback_attempted is True or row.fallback_used is True
+        for row in control_center.rows
+    )
+    fallback_used_count = sum(row.fallback_used is True for row in control_center.rows)
+    fallback_rejected_count = sum(
+        row.fallback_attempted is True and row.fallback_used is not True
+        for row in control_center.rows
+    )
     return {
         "schema_version": UPDATE_SOURCE_STATUS_PROJECTION_SCHEMA,
         "status": status,
@@ -111,6 +122,9 @@ def compose_p0_source_control_projection(
             "observed_rows": _sum_optional_int(row.observed_rows for row in control_center.rows),
             "accepted_rows": _sum_optional_int(row.accepted_rows for row in control_center.rows),
             "blocked_rows": _sum_optional_int(row.blocked_rows for row in control_center.rows),
+            "fallback_attempted_count": fallback_attempted_count,
+            "fallback_used_count": fallback_used_count,
+            "fallback_rejected_count": fallback_rejected_count,
             "license_status_counts": dict(
                 Counter(row.license_status for row in control_center.rows)
             ),
@@ -134,4 +148,3 @@ def _sum_optional_int(values: Any) -> int | None:
     if not materialized:
         return None
     return sum(materialized)
-

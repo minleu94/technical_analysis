@@ -2334,7 +2334,43 @@ class UpdateView(QWidget):
             "empty": "尚未建立",
             "invalid": "格式異常",
             "not_configured": "未設定",
+            "passed": "完成",
+            "success": "完成",
+            "succeeded": "完成",
+            "done": "完成",
+            "ok": "完成",
+            "completed": "完成",
+            "failure": "失敗",
+            "error": "錯誤",
+            "blocked": "阻擋",
+            "unknown": "未知",
         }.get(str(value or "").strip().lower(), str(value or "未知"))
+
+    @staticmethod
+    def _timeline_status_color(value: Any) -> str:
+        return {
+            "current": "#86efac",
+            "partial": "#fbbf24",
+            "degraded": "#fbbf24",
+            "stale": "#fbbf24",
+            "running": "#38bdf8",
+            "in_progress": "#38bdf8",
+            "started": "#38bdf8",
+            "failed": "#fca5a5",
+            "failure": "#fca5a5",
+            "error": "#fca5a5",
+            "blocked": "#fca5a5",
+            "missing": "#fca5a5",
+            "invalid": "#fca5a5",
+            "not_configured": "#94a3b8",
+            "unknown": "#94a3b8",
+            "passed": "#86efac",
+            "success": "#86efac",
+            "succeeded": "#86efac",
+            "done": "#86efac",
+            "ok": "#86efac",
+            "completed": "#86efac",
+        }.get(str(value or "").strip().lower(), "#cbd5e1")
 
     def _render_data_update_timeline(self, payload: Any) -> None:
         """把更新時間軸及步驟結果投影到看板，並清除本輪沒有的舊列。"""
@@ -2393,18 +2429,9 @@ class UpdateView(QWidget):
             lines.append("診斷：" + "；".join(diagnostics[:3]))
         lines.append("邊界：唯讀、明確路徑、不啟動網路或寫入")
         label.setText("\n".join(lines))
-        color = {
-            "current": "#86efac",
-            "partial": "#fbbf24",
-            "degraded": "#fbbf24",
-            "stale": "#fbbf24",
-            "running": "#38bdf8",
-            "failed": "#fca5a5",
-            "missing": "#fca5a5",
-            "invalid": "#fca5a5",
-            "not_configured": "#94a3b8",
-        }.get(status, "#cbd5e1")
-        label.setStyleSheet(f"color: {color}; font-size: 11px;")
+        label.setStyleSheet(
+            f"color: {self._timeline_status_color(status)}; font-size: 11px;"
+        )
 
         table.setRowCount(0)
         steps = value.get("steps") if isinstance(value.get("steps"), list) else []
@@ -2413,14 +2440,21 @@ class UpdateView(QWidget):
                 continue
             row_index = table.rowCount()
             table.insertRow(row_index)
+            raw_status = str(raw_step.get("status") or "unknown").strip().lower()
             cells = (
                 str(raw_step.get("name") or "未命名步驟"),
-                str(raw_step.get("status") or "unknown"),
+                raw_status,
                 str(raw_step.get("message") or ""),
             )
             for column_index, cell in enumerate(cells):
                 item = QTableWidgetItem(cell)
-                item.setToolTip(cell)
+                if column_index == 1:
+                    item.setToolTip(
+                        f"{self._timeline_status_text(raw_status)}（{raw_status}）"
+                    )
+                    item.setForeground(QColor(self._timeline_status_color(raw_status)))
+                else:
+                    item.setToolTip(cell)
                 table.setItem(row_index, column_index, item)
 
         history_table = getattr(self, "data_update_timeline_history_table", None)
@@ -2443,15 +2477,22 @@ class UpdateView(QWidget):
             start_date = str(raw_record.get("start_date") or "")
             end_date = str(raw_record.get("end_date") or "")
             period = f"{start_date} ~ {end_date}" if start_date or end_date else "未提供"
+            raw_status = str(raw_record.get("status") or "unknown").strip().lower()
             cells = (
                 completed_at,
-                str(raw_record.get("status") or "unknown"),
+                raw_status,
                 str(raw_record.get("run_id") or "未知"),
                 period,
             )
             for column_index, cell in enumerate(cells):
                 item = QTableWidgetItem(cell)
-                item.setToolTip(cell)
+                if column_index == 1:
+                    item.setToolTip(
+                        f"{self._timeline_status_text(raw_status)}（{raw_status}）"
+                    )
+                    item.setForeground(QColor(self._timeline_status_color(raw_status)))
+                else:
+                    item.setToolTip(cell)
                 history_table.setItem(row_index, column_index, item)
 
     def _load_p0_source_control_center(
@@ -2540,11 +2581,44 @@ class UpdateView(QWidget):
         else:
             route_display = route_id
         fallback_used = row.get("fallback_used")
+        fallback_attempted = row.get("fallback_attempted")
+        fallback_route = str(
+            row.get("fallback_acquisition_route_id")
+            or row.get("fallback_endpoint_id")
+            or ""
+        ).strip()
+        fallback_outcome = str(
+            row.get("fallback_probe_outcome")
+            or row.get("fallback_official_status")
+            or row.get("fallback_error_type")
+            or ""
+        ).strip()
+        fallback_reason = str(row.get("fallback_reason") or "").strip()
         if fallback_used is True:
             fallback_from = str(row.get("fallback_from_route_id") or "來源未提供")
-            fallback_reason = str(row.get("fallback_reason") or "")
             fallback_display = f"是（{fallback_from}）"
+            if fallback_route:
+                fallback_display += f"\n採用路徑：{fallback_route}"
             if fallback_reason:
+                fallback_display += f"\n{fallback_reason}"
+        elif fallback_attempted is True:
+            fallback_display = "否（已嘗試但未採用）"
+            if fallback_outcome:
+                fallback_display += f"\n結果：{fallback_outcome}"
+            if fallback_route:
+                fallback_display += f"\n替代路徑：{fallback_route}"
+            requested_date = str(row.get("fallback_requested_date") or "").strip()
+            observation_dates = row.get("fallback_observation_dates") or []
+            observation_text = ", ".join(
+                str(item) for item in observation_dates if str(item).strip()
+            )
+            if requested_date:
+                fallback_display += f"\n要求日：{requested_date}"
+            if observation_text:
+                fallback_display += f"\n觀測日：{observation_text}"
+            # 舊版正規化器會把 ``fallback_from:*`` 當作路徑 lineage 的
+            # 合成說明；fallback 未採用時不能把它誤顯示成失敗原因。
+            if fallback_reason and not fallback_reason.startswith("fallback_from:"):
                 fallback_display += f"\n{fallback_reason}"
         elif fallback_used is False:
             fallback_display = "否"
@@ -2624,6 +2698,24 @@ class UpdateView(QWidget):
                     self._p0_count_text(blocked_rows),
                 )
             )
+        fallback_attempted_count = summary.get("fallback_attempted_count")
+        fallback_used_count = summary.get("fallback_used_count")
+        fallback_rejected_count = summary.get("fallback_rejected_count")
+        if any(
+            value is not None
+            for value in (
+                fallback_attempted_count,
+                fallback_used_count,
+                fallback_rejected_count,
+            )
+        ):
+            lines.append(
+                "Fallback：已嘗試 {0}／已採用 {1}／未採用 {2}".format(
+                    self._p0_count_text(fallback_attempted_count),
+                    self._p0_count_text(fallback_used_count),
+                    self._p0_count_text(fallback_rejected_count),
+                )
+            )
         reference = str(value.get("reference") or "").strip()
         if reference:
             lines.append(f"Artifact：{reference}")
@@ -2658,6 +2750,34 @@ class UpdateView(QWidget):
                 for item in license_urls
                 if str(item).strip()
             )
+            fallback_diagnostics = []
+            if raw_row.get("fallback_attempted") is True:
+                fallback_diagnostics.append(
+                    "fallback_attempted=true"
+                )
+            for key in (
+                "fallback_probe_outcome",
+                "fallback_official_status",
+                "fallback_endpoint_id",
+                "fallback_acquisition_route_id",
+                "fallback_http_status",
+                "fallback_requested_date",
+                "fallback_error_type",
+                "fallback_error",
+                "fallback_payload_sha256",
+                "fallback_payload_size_bytes",
+                "primary_official_status",
+            ):
+                raw_value = raw_row.get(key)
+                if raw_value not in (None, "", []):
+                    fallback_diagnostics.append(f"{key}={raw_value}")
+            for key in ("fallback_observation_dates", "fallback_quarantine_reasons"):
+                values = raw_row.get(key) or []
+                if values:
+                    fallback_diagnostics.append(
+                        f"{key}={';'.join(str(item) for item in values)}"
+                    )
+            extra.extend(fallback_diagnostics)
             if extra:
                 for column_index in range(table.columnCount()):
                     item = table.item(row_index, column_index)
