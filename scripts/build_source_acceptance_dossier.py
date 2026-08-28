@@ -5,8 +5,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Sequence
+
+# Keep both ``python -m scripts...`` and direct ``python scripts/...``
+# invocation working from any current working directory.  The latter is the
+# documented operator path for the read-only dossier builder, but Python only
+# adds ``scripts`` (not the repository root) to ``sys.path`` for that form.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from data_module.source_acceptance_governance import SourceAcceptanceDossier
 
