@@ -26,6 +26,7 @@ _SAFETY_JOBS: tuple[tuple[str, str], ...] = (
     ("official_market_events", "官方市場事件"),
     ("ml_promotion_evidence", "ML Promotion 證據"),
     ("ml_allocation_copilot", "ML Shadow Co-pilot"),
+    ("ml_direct_chain_maintenance", "ML Direct/OOC 維護"),
 )
 _JOB_LABELS = dict(_CORE_JOBS + _SAFETY_JOBS)
 _SUCCESS_STATUSES = frozenset({"passed", "published"})
@@ -224,6 +225,11 @@ class ScheduledOperationsStatusService:
             return "guarded", "ml_promotion_safety_gate_active"
         if job_id == "ml_allocation_copilot" and raw_status == "passed_rule_only":
             return "guarded", "ml_shadow_rule_only"
+        if (
+            job_id == "ml_direct_chain_maintenance"
+            and raw_status == "blocked_insufficient_storage"
+        ):
+            return "attention", "direct_chain_storage_preflight_blocked"
         if is_core_job:
             return "attention", f"unexpected_core_status:{raw_status}"
         return "attention", f"unexpected_status:{raw_status}"

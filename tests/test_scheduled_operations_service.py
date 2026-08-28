@@ -53,6 +53,11 @@ def test_snapshot_distinguishes_operational_core_from_guarded_safety_boundaries(
         {"status": "passed_rule_only", "decision_at": "2026-08-07T08:30:00+08:00"},
     )
     _write_status(root, "ml_promotion_evidence", {"status": "blocked"})
+    _write_status(
+        root,
+        "ml_direct_chain_maintenance",
+        {"status": "blocked_insufficient_storage"},
+    )
 
     snapshot = ScheduledOperationsStatusService(root, now_provider=lambda: NOW).get_snapshot()
     operations = {operation.job_id: operation for operation in snapshot.operations}
@@ -64,6 +69,11 @@ def test_snapshot_distinguishes_operational_core_from_guarded_safety_boundaries(
     assert operations["ml_allocation_copilot"].observed_at_source == "file_mtime"
     assert operations["ml_allocation_copilot"].updated_at == NOW
     assert operations["ml_promotion_evidence"].state == "guarded"
+    assert operations["ml_direct_chain_maintenance"].label == "ML Direct/OOC 維護"
+    assert operations["ml_direct_chain_maintenance"].state == "attention"
+    assert operations["ml_direct_chain_maintenance"].diagnostic == (
+        "direct_chain_storage_preflight_blocked"
+    )
 
 
 def test_evidence_degraded_fails_closed_without_complete_natural_maturity_proof(tmp_path):
