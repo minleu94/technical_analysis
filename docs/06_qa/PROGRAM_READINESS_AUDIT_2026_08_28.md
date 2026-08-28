@@ -17,7 +17,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 | 區域 | 先前觀感 | 2026-08-28 實測 | 真正剩餘缺口 | 可否繼續推進 |
 |---|---|---|---|---|
-| P0 來源 | `13 contract_only`、像是全部沒資料 | live audit=`1 verified / 12 degraded / 0 missing`；Control Center=`0 contract_only`；13 個來源共 27 條候選 route，全部都有至少 2 條 route | 12 項 publication／decision-time provenance、13 項具名 owner/reviewer decision 與 license/use-case 證據；`accepted=0`、`limited=0` | 可以；資料取得與 governance 分流推進 |
+| P0 來源 | `13 contract_only`、像是全部沒資料 | live audit=`1 verified / 10 degraded / 2 official_no_data`；Control Center=`0 contract_only`；13 個來源共 27 條候選 route，全部都有至少 2 條 route；TWSE T86／MI_MARGN 無資料時已會再 probe TPEx OpenAPI | 12 項 publication／decision-time provenance、13 項具名 owner/reviewer decision 與 license/use-case 證據；`accepted=0`、`limited=0`；fallback 仍須證明要求日期，不能用最新快照冒充 | 可以；資料取得與 governance 分流推進 |
 | Evidence Gate | weekly `0/3` | owner-approved weekly projection=`3/3`；multi-day dry-run=`3/3`；Pre-V2=`ready`；readiness 明確輸出 `formal_credit_authorized=false` | 另有 8 個 pending-human-review sidecar 期間；此 projection 不授予 Formal credit 或 production scheduler | 可以；Gate 顯示已修正，後續只累積真實週期與審核 |
 | Paper Portfolio | 只有 snapshot、週報不可算 | 21 筆 Paper snapshot；正式 Paper output Equal Weight ledger 21 筆，benchmark reader=`ready`；UI／CLI 已有受控 preview→confirm 建置流程 | 真實 fill／partial-fill／reject／override、Decimal 成本、turnover、execution gap；Paper Trade Ledger 缺失 | 可以；benchmark 已建立，execution evidence 不可推造 |
 | Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但受控環境目前把三個 path 指向缺失且早於 `training_as_of=2026-08-28` 的 `clock-20260819`；readiness 已明示 stale-clock hint，並列出同 output root 下 6 個 `diagnostic_only` prospective clock/staging marker | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費；owner 必須發布當前 clock 並更新明確 path | 可以工程化累積；不得自動改接 `clock-20260828`、也不得拿 prospective sector coverage 回填歷史 |
@@ -27,15 +27,19 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 ## P0 多路徑取得結果
 
-新增 `p0-source-acquisition-routes.v1`，固定 13 個來源分母與 27 條受治理候選 route；每個來源至少兩條 route。已直接接上三條 live fallback：
+新增 `p0-source-acquisition-routes.v1`，固定 13 個來源分母與 27 條受治理候選 route；每個來源至少兩條 route。已直接接上五條 live fallback：
 
 - TDCC legacy CSV 失敗時改走 `https://openapi.tdcc.com.tw/v1/opendata/1-5`。
 - TWSE 月營收 OpenAPI 失敗時改走 MOPS `t187ap05_L.csv`。
 - TPEx 月營收 OpenAPI 失敗時改走 MOPS `t187ap05_O.csv`。
+- TWSE T86 回覆官方無資料或 primary transport 失敗時，改 probe `https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading`；只接受與要求日期完全相同的列。
+- TWSE MI_MARGN 回覆官方無資料或 primary transport 失敗時，改 probe `https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance`；只接受與要求日期完全相同的列。
+
+兩條 TPEx fallback 已有 source-specific parser、ROC compact date 正規化、row conservation 與日期 fail-closed 測試。這是「能取得另一條官方路徑」的工程完成，不是 source acceptance；TPEx OpenAPI 目前是 latest snapshot，不會被自動回填到較早或未證明的交易日。
 
 漲跌停鎖死來源已由不相符的 `MI_INDEX` 改為官方 `TWT84U`。本次 `TWT84U` 原始 1,377 列、鎖死事件 0 列；這表示該交易日沒有符合條件的事件，不是 schema 或 endpoint 失敗。
 
-2026-08-28 重新以受控外部網路完成 bounded live audit：13/13 來源均有 machine row，`1 verified / 10 degraded / 2 official_no_data`；raw rows=`72,202`、accepted rows=`70,825`。主要 row count 為：除權息 251、減資／分割 2、停復牌 1、處置 4、分盤 4、全額交割 10、漲跌停行情 1,377（鎖死事件 0）、三大法人 0、信用交易 0、TDCC 68,578、TWSE 月營收 1,085、TPEx 月營收 890；三大法人與信用交易的 0 列是官方當日無資料回覆，不是 network failure；MOPS 季報 availability artifact 通過驗證。所有 route 仍固定 `candidate_evidence_only=true`、`formal_eligible=false`、scheduler／production ingestion 關閉。
+2026-08-28 重新以受控外部網路完成 bounded live audit：13/13 來源均有 machine row，`1 verified / 10 degraded / 2 official_no_data`；raw rows=`72,202`、accepted rows=`70,825`。主要 row count 為：除權息 251、減資／分割 2、停復牌 1、處置 4、分盤 4、全額交割 10、漲跌停行情 1,377（鎖死事件 0）、三大法人 0、信用交易 0、TDCC 68,578、TWSE 月營收 1,085、TPEx 月營收 890；三大法人與信用交易的 primary 0 列是官方當日無資料回覆，不是 network failure。新增的 fallback evidence 顯示：信用交易 TPEx OpenAPI 確實回 `2026-08-27`、但要求日為 `2026-08-28`，所以明確標成 `date_mismatch` 並拒絕；三大法人本次 fallback 遇到 response prematurely，明確標成 `network_error`，沒有把它誤算成資料。MOPS 季報 availability artifact 通過驗證。所有 route 仍固定 `candidate_evidence_only=true`、`formal_eligible=false`、scheduler／production ingestion 關閉。
 
 所以 `contract_only` 的正確解讀是「Control Center 沒有載入 audit」，不能再解讀為「沒有資料」。載入本次 audit 後，真實治理狀態為 `12 blocked_provenance + 1 research_shadow`，人工 decision 為 `13 not_supplied`。
 
@@ -65,8 +69,8 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 - live probe／fallback：`scripts/update_phase3c_candidates.py`
 - P0 evidence audit：`scripts/run_p0_source_evidence_audit.py`
 - candidate audit：`scripts/run_p0_candidate_audit.py`
-- live audit（2026-08-28 fresh capture）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_all_markets_mops_complete.json`（SHA-256=`a7e3b14465d1f2847140052e9de56874dae64e685719c21eb7f21d4e8290a40e`）
-- P0 owner packet（由 fresh capture 唯讀重排）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260828_live.md`
+- live audit（2026-08-28 fresh capture，含 TPEx fallback lineage）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_fallback_v2.json`（SHA-256=`94186ed0565f544a296427b423b01167e78ef15d2871e1c757bb8de9efe83d82`）
+- P0 owner packet（由最新 fresh capture 唯讀重排）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260828_live_tpex_fallback.md`（SHA-256=`be6e164ead39fb2894e5a6f028ca275dcafa1f0f4926888fe2efb299c5ad7314`）
 - Control Center：`C:\Users\archi\AppData\Local\Temp\p0-source-control-center-20260827.json`
 - Evidence readiness：`C:\Users\archi\AppData\Local\Temp\pre-v2-readiness-20260828.json`
 - ML Formal readiness：`C:\Users\archi\AppData\Local\Temp\ml-formal-input-readiness-20260828.json`
