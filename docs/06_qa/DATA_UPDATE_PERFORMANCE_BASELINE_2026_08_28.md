@@ -222,6 +222,25 @@ MoneyDJ 真實連線品質或授權證明；`network_enabled=false`、`productio
 `production_write_attempted=false`。正式 HTTP canary、真實 rate-limit、Selenium driver
 重建／fallback QA 與 production writer integration 仍需另外取得 owner／環境允許後驗收。
 
+### 2026-08-28 15:25 UTC 單次 MoneyDJ real HTTP canary（本輪新增）
+
+新增 `scripts\qa_broker_real_http_canary.py`。它要求明確的既有 staging root、protected
+roots、branch identity、日期、指標與 `--confirm-real-http-canary`；未確認時不連線。確認後
+固定只執行一個 `BrokerBranchUpdateService._fetch_metric_records_http` GET（`retries=1`），
+不寫正式 registry／CSV／SQLite、不啟動 Selenium、不啟用 fetch pool。可用
+`--baseline-json` 將 network observation 與前一節的離線 bounded baseline 合併成新的
+readiness input，來源 baseline bytes 保持不變。
+
+本次以 `1030_1030`（土銀）、`2026-08-28`、`lots` 實測：HTTP 200，解析 `100` rows，
+`request_count=1`、`selenium_invocations=0`、`cleanup_succeeded=true`，parsed rows hash
+=`52984172A39F9160A308D503554E39CE5429D976CCA975EA598F86EDF2C6B9A6`。合併 artifact 為
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_real_http_canary_20260828.json`，
+SHA-256=`5532F53BDE0C86B4A8983B766DA46AF45D5DF53D893EAEE0F70797F22A48E83C`，其中
+`network_enabled=true`、`production_fetch_pool_enabled=false`、`production_write_attempted=false`。
+
+這只證明當次單一來源請求與 parser 可用，不代表授權、長期 rate-limit、Selenium fallback、
+production broker writer 或 technical production canary 已完成；後者仍維持 gated／關閉。
+
 ### 2026-08-28 09:30 UTC bounded worker contract probe（本輪新增）
 
 新增 `scripts\qa_bounded_worker_acceptance.py`，以 deterministic synthetic tasks 驗證

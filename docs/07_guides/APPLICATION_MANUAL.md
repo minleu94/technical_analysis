@@ -1289,6 +1289,29 @@ duplicate、transient 與預期 permanent failure，結果只由父程序寫入 
 canary 成功；真實 HTTP canary、rate-limit 觀測、Selenium driver recovery 與 production
 broker worker 仍需另行取得環境／owner 允許。
 
+若要只做一次真實來源連線驗證，可使用受控 canary：
+
+```powershell
+New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_analysis_performance -Force
+.\.venv\Scripts\python.exe scripts\qa_broker_real_http_canary.py `
+  --staging-root C:\Users\archi\AppData\Local\Temp\technical_analysis_performance `
+  --protected-root D:\Min\Python\Project\FA_Data `
+  --protected-root D:\Min\Python\Project\FA_Data\output `
+  --branch-system-key 1030_1030 --branch-broker-code 1030 --branch-code 1030 `
+  --branch-display-name 土銀 --url-param-a 1030 --url-param-b 1030 `
+  --date 2026-08-28 --metric lots --timeout 15 `
+  --confirm-real-http-canary `
+  --baseline-json C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_bounded_fetch_20260828.json `
+  --output-json <TEMP_OUTPUT>
+```
+
+未提供 `--confirm-real-http-canary` 時完全不發網路請求；確認後固定只發一個 GET、
+`retries=1`，使用既有 HTTP parser，Selenium 與平行 fetch 均不啟動。輸出會保留
+branch/date/metric、endpoint、解析列數、parsed-row hash、cleanup 與所有 production
+write flags。若加上 `--baseline-json`，只會讀既有離線 baseline 並產生新的合併 artifact，
+不改寫 baseline。一次成功不能代表來源授權、長期 rate-limit、Selenium recovery 或
+production writer 已通過；後續仍需 owner review，broker pool 維持關閉。
+
 若要驗證未來 technical compute-only worker 的 bounded queue 契約，可使用 synthetic probe：
 
 ```powershell
