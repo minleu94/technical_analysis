@@ -258,6 +258,24 @@ def _write_p0_license_evidence(path: Path) -> Path:
     return path
 
 
+def _write_p0_partial_license_evidence(path: Path) -> Path:
+    payload = json.loads(_write_p0_license_evidence(path).read_text(encoding="utf-8"))
+    payload["targets"][0]["status"] = "captured"
+    payload["targets"][0]["content_sha256"] = "a" * 64
+    payload["targets"].append(
+        {
+            "license_evidence_url": (
+                "https://www.tpex.org.tw/web/inc/gtsm_disclaimer.php?l=zh-tw"
+            ),
+            "source_ids": ["institutional_flows"],
+            "status": "http_error",
+            "content_persisted": False,
+        }
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
 def test_update_view_projects_p0_routes_fallback_and_pit_into_status_table(tmp_path):
     audit_path = _write_p0_evidence_audit(tmp_path / "p0-audit.json")
     app()
@@ -298,6 +316,29 @@ def test_update_view_projects_license_candidate_capture_status(tmp_path):
     assert license_cell is not None
     assert "capture_transport_error" in license_cell.text()
     assert "License 候選證據" in view.p0_source_control_summary_label.text()
+
+
+def test_update_view_explains_partial_license_candidate_capture(tmp_path):
+    audit_path = _write_p0_evidence_audit(tmp_path / "p0-audit-license-partial.json")
+    license_path = _write_p0_partial_license_evidence(
+        tmp_path / "p0-license-partial.json"
+    )
+    app()
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        p0_source_audit_path=audit_path,
+        p0_license_evidence_path=license_path,
+    )
+
+    status = view._get_overview_status()
+    view._on_status_checked(status)
+
+    institutional = status["p0_source_control"]["rows"][7]
+    assert institutional["license_evidence_capture_status"] == "capture_partial"
+    license_cell = view.p0_source_control_table.item(7, 6)
+    assert license_cell is not None
+    assert "capture_partial" in license_cell.text()
+    assert "部分取得，仍需複核" in license_cell.text()
 
 
 def test_update_view_shows_rejected_fallback_reason_and_date_provenance(tmp_path):

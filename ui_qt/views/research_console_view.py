@@ -23,6 +23,7 @@ from app_module.research_console_source_service import ResearchConsoleSourceServ
 from app_module.p0_source_control_center import P0SourceControlCenterDTO
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.theme_widgets import SectionPanel
+from ui_qt.views.update.update_formatters import format_p0_license_capture_status
 
 
 _STATUS_COLORS = {
@@ -405,5 +406,5 @@ def _control_license(row: Any) -> str:
         getattr(row, "license_evidence_capture_status", None) or "not_supplied"
     )
     if capture_status != "not_supplied":
-        result += f" / candidate: {capture_status}"
+        result += f" / candidate: {format_p0_license_capture_status(capture_status)}"
     return result

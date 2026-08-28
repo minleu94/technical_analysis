@@ -92,6 +92,26 @@ def format_status_token(status: Any) -> str:
     return mapping.get(normalized, raw_status or "未知")
 
 
+def format_p0_license_capture_status(status: Any) -> str:
+    """Render a P0 license-capture token without hiding its machine value."""
+
+    raw_status = str(status or "not_supplied").strip()
+    normalized = raw_status.lower()
+    labels = {
+        "captured_candidate": "已取得候選指紋",
+        "capture_partial": "部分取得，仍需複核",
+        "preview_not_captured": "預覽未擷取",
+        "capture_transport_error": "傳輸失敗",
+        "capture_http_error": "HTTP 失敗",
+        "capture_incomplete": "擷取未完成",
+        "not_supplied": "未提供",
+    }
+    label = labels.get(normalized)
+    if label is None:
+        return raw_status or "未知"
+    return f"{label}（{raw_status}）"
+
+
 def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[str]:
     """投影月營收數值 snapshot 與 availability mapping 候選的唯讀差異。"""
 

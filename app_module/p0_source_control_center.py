@@ -830,6 +830,12 @@ def _license_capture_status_for_source(
         return "captured_candidate"
     if statuses == {"not_captured"}:
         return "preview_not_captured"
+    # A source can legitimately reference more than one official terms page
+    # (for example TWSE and TPEx).  Do not let one failed URL hide a successful
+    # candidate fingerprint from another URL; the owner still has to review
+    # every URL, so this is only a transport/readability projection.
+    if "captured" in statuses:
+        return "capture_partial"
     for status in ("transport_error", "http_error"):
         if status in statuses:
             return f"capture_{status}"

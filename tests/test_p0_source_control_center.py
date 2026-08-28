@@ -171,6 +171,31 @@ def test_captured_license_candidate_hash_is_projected_but_not_accepted() -> None
     assert "license_not_accepted" in row.blockers
 
 
+def test_mixed_license_candidate_capture_is_projected_as_partial() -> None:
+    payload = _license_evidence(status="captured")
+    targets = payload["targets"]
+    assert isinstance(targets, list)
+    targets.append(
+        {
+            "license_evidence_url": (
+                "https://www.tpex.org.tw/web/inc/gtsm_disclaimer.php?l=zh-tw"
+            ),
+            "source_ids": ["institutional_flows"],
+            "status": "http_error",
+            "content_sha256": None,
+            "keyword_flags": {},
+        }
+    )
+
+    center = P0SourceControlCenterService().build(license_evidence=payload)
+    row = next(item for item in center.rows if item.source_id == "institutional_flows")
+
+    assert row.license_evidence_capture_status == "capture_partial"
+    assert row.license_evidence_content_sha256 == ("a" * 64,)
+    assert row.license_status == "requires_review"
+    assert "license_not_accepted" in row.blockers
+
+
 def test_decision_projection_is_visible_but_never_grants_downstream() -> None:
     decision = SourceAcceptanceDecisionRevision(
         source_id=P0_SOURCE_IDS[0],

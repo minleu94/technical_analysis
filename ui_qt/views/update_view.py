@@ -41,6 +41,7 @@ from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 from ui_qt.views.update.update_formatters import (
     format_freshness_gap,
     format_monthly_revenue_candidate_lines,
+    format_p0_license_capture_status,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
@@ -2735,7 +2736,9 @@ class UpdateView(QWidget):
             license_display += f"\n證據 URL：{len(license_urls)}"
         capture_status = str(row.get("license_evidence_capture_status") or "not_supplied")
         if capture_status != "not_supplied":
-            license_display += f"\n候選證據：{capture_status}"
+            license_display += (
+                f"\n候選證據：{format_p0_license_capture_status(capture_status)}"
+            )
         capture_hashes = row.get("license_evidence_content_sha256") or []
         if capture_hashes:
             license_display += f"\n內容 hash：{len(capture_hashes)}"

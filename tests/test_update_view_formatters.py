@@ -1,10 +1,23 @@
 from ui_qt.views.update.update_formatters import (
     format_freshness_gap,
+    format_p0_license_capture_status,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
     tpex_warning_messages,
 )
+
+
+def test_format_p0_license_capture_status_keeps_machine_token_and_explains_partial() -> None:
+    assert (
+        format_p0_license_capture_status("capture_partial")
+        == "部分取得，仍需複核（capture_partial）"
+    )
+    assert (
+        format_p0_license_capture_status("capture_http_error")
+        == "HTTP 失敗（capture_http_error）"
+    )
+    assert format_p0_license_capture_status("custom") == "custom"
 
 
 def test_format_status_token_preserves_known_unknown_and_missing_values() -> None:
