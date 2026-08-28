@@ -668,7 +668,7 @@ def _inspect_performance_lane(
     return _lane(
         "partial",
         blockers=tuple(blockers),
-        next_actions=("已具備 technical full-batch、real staging process-pool 與 isolated writer timing；接著補 bounded worker recovery／integration，並以離線契約後的受控 canary 驗收券商 fetch。",),
+        next_actions=("已具備 technical full-batch、real staging bounded worker 與 worker recovery／取消 acceptance；接著完成 production single-writer integration，再由 owner 允許 broker canary。",),
         external_input_required=True,
         details={
             "technical_path": str(technical_path) if technical_path else None,
@@ -690,7 +690,7 @@ def _execution_order(workstreams: Mapping[str, Mapping[str, Any]]) -> list[dict[
         (3, "paper", "補真實 fills／partial-fill／reject／override／Decimal cost／execution gap，再計算成本後 weekly。"),
         (4, "formal_ml", "由 owner 發布當前三項 formal inputs；禁止用 prospective 或歷史 shadow artifact 冒充。"),
         (5, "runtime", "先確認 staging transaction 與正式 config／Registry ACL；staging 證據不能取代正式環境權限。"),
-        (6, "performance", "已量測 full batch、isolated writer contention 與 real staging bounded worker；接著補 recovery／integration，再驗收 broker bounded fetch。"),
+        (6, "performance", "已量測 full batch、isolated writer contention 與 real staging bounded worker recovery／取消；接著完成 production single-writer integration，再驗收 broker canary。"),
         (7, "update_history", "等真實排程產生 history，執行 live refresh、retention 與狀態投影 QA。"),
     )
     result: list[dict[str, Any]] = []
