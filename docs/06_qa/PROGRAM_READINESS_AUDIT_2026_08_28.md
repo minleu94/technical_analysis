@@ -20,7 +20,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 | P0 來源 | `13 contract_only`、像是全部沒資料 | live audit=`1 verified / 12 degraded / 0 missing`；Control Center=`0 contract_only`；13 個來源共 27 條候選 route，全部都有至少 2 條 route | 12 項 publication／decision-time provenance、13 項具名 owner/reviewer decision 與 license/use-case 證據；`accepted=0`、`limited=0` | 可以；資料取得與 governance 分流推進 |
 | Evidence Gate | weekly `0/3` | owner-approved weekly projection=`3/3`；multi-day dry-run=`3/3`；Pre-V2=`ready` | 另有 8 個 pending-human-review sidecar 期間；此 projection 不授予 Formal credit 或 production scheduler | 可以；Gate 顯示已修正，後續只累積真實週期與審核 |
 | Paper Portfolio | 只有 snapshot、週報不可算 | 21 筆 Paper snapshot；正式 Paper output Equal Weight ledger 21 筆，benchmark reader=`ready`；UI／CLI 已有受控 preview→confirm 建置流程 | 真實 fill／partial-fill／reject／override、Decimal 成本、turnover、execution gap；Paper Trade Ledger 缺失 | 可以；benchmark 已建立，execution evidence 不可推造 |
-| Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但正式受控 manifest path 仍不存在 | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費 | 可以工程化累積；不得拿 2026-08-25 之後的 prospective sector coverage 回填歷史 |
+| Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但受控環境目前把三個 path 指向缺失且早於 `training_as_of=2026-08-28` 的 `clock-20260819`；readiness 已明示 stale-clock hint | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費；owner 必須發布當前 clock 並更新明確 path | 可以工程化累積；不得自動改接 `clock-20260828`、也不得拿 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | 一般 host context 對既有 `config.log`／Research Registry 的零位元 write-handle probe 通過，overall=`ready`；隔離 staging probe 已能以正式 Registry schema 完成 insert／讀回／rollback／清除 | 正式 Registry 本身仍未做實寫；production ACL／鎖定仍需 owner 在正式環境確認 | 可以；路徑 ACL 不是目前 blocker，schema transaction 能力已可在非正式 staging 驗證 |
 | 效能工程 | 尚未設計 | 既有 batch backtest、optimizer 與部分 TPEX refresh 已有受控平行化 | 券商來源 rate limit／retry／Selenium 邊界；技術指標 process pool＋SQLite/CSV single writer 設計 | 可以；先量測、再做 bounded worker 與 single-writer，不直接拉高 thread 數 |
 | Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；另新增 `data-update-timeline.v1`，明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness 狀態 | 目前只投影固定的 `latest_status` 出口，尚未建立 append-only capture history；缺失、格式錯誤、失敗、執行中與過期已分開顯示，不會以 DB mtime 或舊卡片冒充成功 | 可以；下一步可在受治理 artifact 到位後接續 live refresh／capture history，不應掃描目錄或繞過 candidate-only 邊界 |
@@ -45,6 +45,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 2. **Paper fills 是執行事實。** 現有 `trades.jsonl`、virtual order trace 或每日 NAV 不能反推出真實 partial fill、reject、滑價、手續費與 override；硬轉換會製造不存在的績效證據。
 3. **Formal clock 是時間事實。** 2026-08-25 的 prospective sector membership 有 1,932 列，但只證明該日起的前景 coverage；把它套回更早日期會造成 look-ahead。現有 historical ML validator 拒絕該 prospective schema 是正確的 fail-closed。
 4. **Runtime staging transaction 不是正式 Registry 實寫。** Probe 現在會在非正式暫存 DB 使用正式 Registry schema，驗證 insert／讀回／rollback／清除；這排除了「程式完全沒有 transaction 路徑」的疑問，但仍不能宣稱正式 Registry 的 ACL／鎖定／production 實寫已成功。
+5. **Formal path 的 missing 可能是 stale owner handoff。** 本次 readiness 實測三個受控 path 都落在缺失的 `clock-20260819`，且該 clock 日期早於 `training_as_of`；這是 path／publication 尚未完成，不代表可以把同根下另一個 clock 自動冒充正式 input。
 
 ## 持續推進順序
 

@@ -53,6 +53,10 @@ _EXPECTED_SCHEMA_VERSION_BY_INPUT = {
 _PROSPECTIVE_LANE = "prospective_formal_simulation"
 _PROSPECTIVE_READ_BYTES = 2_000_000
 _PROSPECTIVE_HEADER_BYTES = 256 * 1024
+_PROSPECTIVE_CLOCK_COMPONENT_RE = re.compile(
+    r"^clock-(?P<date>\d{8})(?:-|$)",
+    re.IGNORECASE,
+)
 _ATOMIC_REPLACE_RETRY_COUNT = 120
 _ATOMIC_REPLACE_RETRY_DELAY_SECONDS = 0.5
 _CONTROLLED_RUNTIME_ENVIRONMENT_NAMES = (
@@ -267,6 +271,7 @@ def _missing_result(
     environment_name: str,
     reason: str,
     path: Path | None = None,
+    training_as_of: str | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "input": input_name,
@@ -283,7 +288,57 @@ def _missing_result(
             result["reason"] = "prospective_output_not_published"
             result["source_lane"] = _PROSPECTIVE_LANE
             result["formal_consumer_compatible"] = False
+            _add_prospective_clock_hint(
+                result,
+                path=path,
+                training_as_of=training_as_of,
+            )
     return result
+
+
+def _add_prospective_clock_hint(
+    result: dict[str, Any],
+    *,
+    path: Path,
+    training_as_of: str | None,
+) -> None:
+    """Expose an explicit stale-clock hint without discovering replacement paths."""
+
+    if training_as_of is None:
+        return
+    clock_component = next(
+        (
+            part
+            for part in reversed(path.parts)
+            if _PROSPECTIVE_CLOCK_COMPONENT_RE.match(part)
+        ),
+        None,
+    )
+    if clock_component is None:
+        return
+    match = _PROSPECTIVE_CLOCK_COMPONENT_RE.match(clock_component)
+    if match is None:  # pragma: no cover - guarded by the comprehension
+        return
+    try:
+        clock_date = datetime.strptime(
+            match.group("date"),
+            "%Y%m%d",
+        ).date()
+        cutoff_date = _cutoff_date(training_as_of)
+    except (TypeError, ValueError):
+        return
+    result["configured_clock_id"] = clock_component
+    result["configured_clock_date"] = clock_date.isoformat()
+    result["training_as_of_date"] = cutoff_date.isoformat()
+    result["configured_clock_date_before_training_as_of"] = (
+        clock_date < cutoff_date
+    )
+    if clock_date < cutoff_date:
+        result["diagnostic"] = (
+            "configured prospective clock is older than training_as_of; "
+            "publish the current owner-controlled clock output and update the "
+            "explicit path, without automatic path discovery"
+        )
 
 
 def _invalid_result(
@@ -324,6 +379,7 @@ def _ledger_readiness(
             environment_name=PORTFOLIO_LEDGER_ENV,
             reason="configured_path_is_not_a_file",
             path=path,
+            training_as_of=training_as_of,
         )
     prospective_hint = _prospective_manifest_hint(path)
     if prospective_hint is not None:
@@ -379,6 +435,7 @@ def _rule_history_readiness(
             environment_name=RULE_HISTORY_ENV,
             reason="configured_path_is_not_a_file",
             path=path,
+            training_as_of=training_as_of,
         )
     prospective_hint = _prospective_manifest_hint(path)
     if prospective_hint is not None:
@@ -427,6 +484,7 @@ def _sector_readiness(
             environment_name=SECTOR_MEMBERSHIP_ENV,
             reason="configured_path_is_not_a_file",
             path=configured,
+            training_as_of=training_as_of,
         )
     if configured is not None:
         prospective_hint = _prospective_manifest_hint(configured)
@@ -465,6 +523,7 @@ def _sector_readiness(
                 "_operational_lineage"
             ),
             path=configured,
+            training_as_of=training_as_of,
         )
     if configured is not None and candidate.resolve() != configured.resolve():
         result = _invalid_result(

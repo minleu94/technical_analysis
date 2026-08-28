@@ -47,6 +47,48 @@ def test_readiness_is_fail_closed_when_all_formal_inputs_are_missing(
     assert report["runtime_attestation"]["secret_values_emitted"] is False
 
 
+def test_missing_prospective_path_exposes_stale_configured_clock_hint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_root = tmp_path / "output"
+    output_root.mkdir()
+    stale_root = (
+        tmp_path
+        / "formal_prospective"
+        / "clock-20260819"
+        / "portfolio_ledger"
+        / "manifest.json"
+    )
+    monkeypatch.setenv(readiness.PORTFOLIO_LEDGER_ENV, str(stale_root))
+    for name in (
+        readiness.RULE_HISTORY_ENV,
+        readiness.SECTOR_MEMBERSHIP_ENV,
+        readiness.RULE_HMAC_KEY_ENV,
+        readiness.RULE_STORE_ID_ENV,
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(
+        readiness,
+        "discover_valid_sector_membership",
+        lambda **_: None,
+    )
+
+    report = readiness.build_readiness_report(
+        output_root=output_root,
+        training_as_of="2026-08-28T08:30:00+08:00",
+    )
+
+    portfolio = report["inputs"][0]
+    assert portfolio["reason"] == "prospective_output_not_published"
+    assert portfolio["source_lane"] == "prospective_formal_simulation"
+    assert portfolio["configured_clock_id"] == "clock-20260819"
+    assert portfolio["configured_clock_date"] == "2026-08-19"
+    assert portfolio["training_as_of_date"] == "2026-08-28"
+    assert portfolio["configured_clock_date_before_training_as_of"] is True
+    assert "update the explicit path" in portfolio["diagnostic"]
+
+
 def test_readiness_adopts_late_windows_owner_deposit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

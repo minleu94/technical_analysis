@@ -225,6 +225,12 @@ Readiness inspector 也會在每項結果標示 `expected_schema_version`。若�
 `BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH` 具有權威性：即使旁邊另有可 discovery 的 sidecar，
 只要指定檔案沒有通過 hash-bound production validation，結果仍是 invalid，不會靜默改用另一份檔案。
 
+若 configured path 位於 `formal_prospective/clock-YYYYMMDD/` 且檔案尚未發布，結果會額外揭露
+`configured_clock_id`、`configured_clock_date`、`training_as_of_date` 與
+`configured_clock_date_before_training_as_of`；日期較舊時 diagnostic 會提示 owner 更新明確受控
+path。這只是 handoff 診斷，readiness 不會掃描或自動改接同一輸出根下的其他 clock，也不會把
+prospective wrapper 轉成 Formal input。
+
 最新 raw PIT publication 已自動更新至 `pit-a2f236fefac769e7346e04be`（decision
 `2026-08-13T08:30:00+08:00`、15,938,679 rows、52 features）。Direct
 `direct-ooc-6ff7650245ffea99ced5bf21` 已於 `2026-08-13T21:05:01Z` 完成 2014–2026；
