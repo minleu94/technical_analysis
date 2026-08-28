@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
 from scripts.inspect_scheduled_task_registration import (
@@ -52,3 +56,21 @@ def test_scheduler_registration_probe_counts_missing_tasks() -> None:
     assert report["tasks"][0]["status"] == "available"
     assert report["tasks"][1]["status"] == "missing_or_unavailable"
 
+
+def test_scheduler_registration_help_is_utf8_safe_with_cp1252() -> None:
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "inspect_scheduled_task_registration.py"
+    )
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "cp1252"
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "唯讀檢查" in completed.stdout.decode("utf-8")

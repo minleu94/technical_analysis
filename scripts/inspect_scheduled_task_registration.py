@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 from typing import Any, Mapping, Sequence
 
 
@@ -178,6 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_utf8_stdio()
     args = build_parser().parse_args(argv)
     report = inspect_scheduled_task_registration(
         executable=args.executable,
@@ -190,6 +192,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         print(rendered, end="")
     return 0 if report["all_available"] else 1
+
+
+def _configure_utf8_stdio() -> None:
+    """讓 Windows CP1252 主控台也能安全輸出繁中說明與診斷。"""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            continue
 
 
 if __name__ == "__main__":

@@ -1032,6 +1032,9 @@ Update History lane 顯示 `scheduled_tasks_missing_or_unavailable:<available>/<
 若 task 缺失，需由 owner 在正確帳號下執行受控的
 `scripts\scheduled\register_baldr_scheduled_tasks.cmd`，再觀察下一次真實 running／terminal
 history；不可用舊 latest status 回填。
+此 inspector 在解析參數前會設定 UTF-8 stdout／stderr，因此 Windows CP1252 主控台也能
+正常使用 `--help` 與輸出繁中診斷；這只改善診斷工具顯示，不會改變 query-only 與不註冊 task
+的安全邊界。
 
 ### 4.1.1 整體程式 readiness 盤點（唯讀）
 
