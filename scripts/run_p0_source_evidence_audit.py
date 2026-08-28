@@ -813,6 +813,7 @@ def export_p0_13_handoff_json(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_utf8_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decision-date", type=date.fromisoformat, required=True, help="決策日期 (YYYY-MM-DD)")
     parser.add_argument("--output", type=Path, help="指定輸出的 JSON 檔案路徑 (必須位於 TEMP 或 candidate Safe 目錄)")
@@ -845,16 +846,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     export_p0_13_handoff_json(payload)
 
     rendered = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-    if hasattr(sys.stdout, "reconfigure"):
-        try:
-            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-        except Exception:
-            pass
     try:
         print(rendered, end="")
     except UnicodeEncodeError:
         sys.stdout.buffer.write(rendered.encode("utf-8"))
     return 0
+
+
+def _configure_utf8_stdio() -> None:
+    """讓直接執行 audit CLI 的 Windows 主控台能顯示繁中說明。"""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (OSError, ValueError):
+            # 測試 capture stream 或外部 host 管理的 stream 可能禁止重設；
+            # 這不應改變 audit 的資料取得與輸出契約。
+            continue
 
 
 if __name__ == "__main__":

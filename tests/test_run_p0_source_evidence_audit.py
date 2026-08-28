@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from datetime import date
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 
 import pytest
@@ -573,3 +576,21 @@ def test_handoff_export_and_safety_flags() -> None:
     assert data["formal_clock_zeros"]["snapshot_count"] == 0
     assert len(data["machine_evidence_matrix"]) == 13
     assert len(data["grouped_owner_decision_packet"]) == 5
+
+
+def test_audit_cli_help_is_safe_on_cp1252_console() -> None:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "run_p0_source_evidence_audit.py"
+    environment = dict(os.environ)
+    environment["PYTHONIOENCODING"] = "cp1252"
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=script.parents[1],
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "唯讀" in completed.stdout.decode("utf-8")
