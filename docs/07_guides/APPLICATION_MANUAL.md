@@ -1178,8 +1178,27 @@ New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_a
 worker 只回傳計算結果，逐股／合併 CSV 由父程序寫入 ephemeral staging，SQLite connection
 不會進入子程序。輸出會列出 worker PID、in-flight 上限、retry、CSV serialization、
 cleanup、input hash 與 `production_worker_enabled=false`。`status=measured` 只代表真實
-calculator 的 staging process-pool 形狀通過；worker crash recovery、長時間取消、正式
-single-writer integration 與 broker HTTP rate-limit／retry 仍未完成，因此 production
+calculator 的 staging process-pool 形狀通過；這份 probe 本身不涵蓋 worker crash recovery、
+長時間取消與正式 single-writer integration，因此 production worker 數維持 1。
+
+若要在同樣的隔離邊界驗證 worker process 意外結束後的 recovery、queued cancellation
+與 partial-result discard，可使用：
+
+```powershell
+New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_analysis_worker_recovery_stage -Force
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_worker_recovery.py `
+  --stock-data-file D:\Min\Python\Project\FA_Data\meta_data\all_stocks_data_top10.csv `
+  --staging-root C:\Users\archi\AppData\Local\Temp\technical_analysis_worker_recovery_stage `
+  --protected-root D:\Min\Python\Project\FA_Data `
+  --protected-root D:\Min\Python\Project\FA_Data\output `
+  --confirm-probe --stocks 2330 2308 --min-rows 30 --max-rows-per-stock 120 `
+  --workers 2 --max-in-flight 2 --max-retries 1 --output-json <TEMP_OUTPUT>
+```
+
+此 probe 會以真實 `TechnicalIndicatorCalculator` 驗證 `BrokenProcessPool` 後重建
+executor、取消 queued work 與丟棄取消後才完成的結果；worker 不持有 CSV／SQLite writer，
+staging 結束後會清理。`status=measured` 仍只代表 recovery／取消 staging contract，
+`production_single_writer_integration=not_completed`；未完成正式整合前 production
 worker 數維持 1。
 
 若要驗證券商 HTTP fetch 的 bounded queue、global rate-limit、retry、duplicate 與
@@ -1214,8 +1233,8 @@ broker worker 仍需另行取得環境／owner 允許。
 它不讀取或寫入任何正式資料，只驗證 in-flight 上限、有限 retry、permanent failure 不寫入、
 duplicate idempotency、取消後停止新提交，以及 worker 不直接寫入而由主執行緒 single writer
 收口。`status=measured` 只代表 synthetic orchestration contract 通過；真實 indicator
-process-pool throughput 已有獨立 staging probe，crash recovery、broker HTTP rate-limit／retry
-仍需另外驗收，在此之前 production worker 數維持 1。
+process-pool throughput 與 crash recovery 已有獨立 staging probe，broker HTTP rate-limit／retry
+與正式 single-writer integration 仍需另外驗收，在此之前 production worker 數維持 1。
 
 ### 4.4 技術指標
 

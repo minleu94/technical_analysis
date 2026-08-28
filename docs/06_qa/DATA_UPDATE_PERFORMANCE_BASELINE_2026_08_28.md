@@ -143,8 +143,27 @@ SHA-256=`C662A26E0937363547022FEB30ADAFD0185875AFBBDD7A3FD08AEF9323765FFF`。
 
 這是「真實 calculator＋bounded process pool＋parent single writer」的 staging 證據，
 不是 production 啟用證明；`production_worker_enabled=false`、`production_write_attempted=false`、
-`production_sqlite_write_attempted=false`。仍未涵蓋 worker crash recovery、長時間取消
+`production_sqlite_write_attempted=false`。本節本身不涵蓋 worker crash recovery、長時間取消
 與正式 single-writer integration，也不能替代 broker HTTP rate-limit／retry acceptance。
+
+### 2026-08-28 10:15 UTC real worker recovery／cancellation acceptance（本輪新增）
+
+新增 `scripts\qa_technical_indicator_worker_recovery.py`。它先以同一份受控 raw
+CSV 跑 real `TechnicalIndicatorCalculator` bounded process pool，再在隔離 staging
+故意讓一個 worker process 結束，確認 `BrokenProcessPool` 後重建 executor 能完成
+下一個 120-row 計算；另以單 worker、8 個延遲 task 驗證取消時至少 6 個 queued task
+被取消，2 個已開始但取消後完成的結果被丟棄。worker 沒有 writer 或 SQLite handle，
+產物只保存 metadata，不把 production worker 開啟。
+
+實測使用 `all_stocks_data_top10.csv` 的 `2330`／`2308` 兩組、
+`max_workers=2`、`max_in_flight=2`、`max_retries=1`；real calculator 2/2 groups、
+crash recovery=`measured`（`BrokenProcessPool` → recovery `120` rows）、cancellation
+=`measured`（6 cancelled／2 discarded），所有 combined checks 通過。artifact 暫存於
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_worker_recovery_20260828.json`，
+SHA-256=`3068F4947AB076CD171961D5D021C0E5298690D0209EB57D43AE4F62B4B92B95`。
+
+這只補足 staging 的 recovery／取消前置條件；`production_single_writer_integration`
+仍為 `not_completed`，因此 readiness 仍不會把 technical worker 切到 production。
 
 ### 2026-08-28 09:50 UTC broker bounded fetch acceptance probe（本輪新增）
 
@@ -213,9 +232,9 @@ rate-limit 仍未完成，因此 production worker 仍維持關閉。
 
 ## 下一個可實作切點（尚未啟用）
 
-1. 以 real process-pool staging probe 為基礎，補 worker crash recovery、長時間取消、
-   partial result discard 與正式 single-writer integration；保留每段 row count、error、
-   cancel 與 file hash，未通過前不開 production worker。
+1. real process-pool staging 的 crash recovery、queued cancellation 與 partial-result
+   discard 已有 acceptance；下一步只剩把相同 contract 接到正式 single-writer integration，
+   保留每段 row count、error、cancel 與 file hash，完成前不開 production worker。
 2. Broker 只在 owner／環境允許的真實 canary 中考慮 bounded HTTP fetch pool；每個 task
    必須含 global rate-limit、retry budget、source/date identity，Selenium fallback 維持
    serialized，結果交給上述 single writer。離線 parser／queue acceptance 已完成，
