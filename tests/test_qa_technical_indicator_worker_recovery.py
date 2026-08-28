@@ -74,7 +74,7 @@ def test_worker_recovery_measures_real_calculator_crash_and_cancel(tmp_path: Pat
     assert report["production_worker_enabled"] is False
     assert report["staging_write_attempted"] is True
     assert report["production_write_attempted"] is False
-    assert report["sqlite_write_attempted"] is False
+    assert report["sqlite_write_attempted"] is True
     assert report["production_sqlite_write_attempted"] is False
     assert all(report["checks"].values())
     assert report["crash_recovery"]["status"] == "measured"
@@ -82,7 +82,9 @@ def test_worker_recovery_measures_real_calculator_crash_and_cancel(tmp_path: Pat
     assert report["crash_recovery"]["recovered_rows"] > 0
     assert report["cancellation"]["status"] == "measured"
     assert report["cancellation"]["cancelled_ids"]
-    assert report["production_single_writer_integration"]["status"] == "not_completed"
+    assert report["production_single_writer_integration"]["status"] == "staging_measured"
+    assert report["production_single_writer_integration"]["scope"] == "isolated_staging"
+    assert report["production_single_writer_integration"]["production_write_attempted"] is False
     assert report["cleanup_succeeded"] is True
     assert hashlib.sha256(stock_data_file.read_bytes()).hexdigest() == before
     assert list(staging_root.iterdir()) == []
@@ -105,4 +107,3 @@ def test_worker_recovery_rejects_protected_staging_root(tmp_path: Path) -> None:
 
     assert report["status"] == "blocked"
     assert report["blocker"] == "staging_root_inside_protected_root"
-

@@ -769,6 +769,13 @@ def test_program_readiness_accepts_real_staging_process_pool_worker_contract(
                     "retry_budget_respected": True,
                     "no_worker_sqlite_write": True,
                 },
+                "crash_recovery": {"status": "measured"},
+                "cancellation": {"status": "measured"},
+                "production_single_writer_integration": {
+                    "status": "staging_measured",
+                    "scope": "isolated_staging",
+                    "production_worker_enabled": False,
+                },
             }
         ),
         encoding="utf-8",
@@ -783,8 +790,8 @@ def test_program_readiness_accepts_real_staging_process_pool_worker_contract(
     blockers = report["workstreams"]["performance"]["blockers"]
     assert "technical_bounded_worker_acceptance_invalid" not in blockers
     assert "technical_bounded_worker_acceptance_not_completed" not in blockers
-    assert "technical_worker_crash_recovery_not_completed" in blockers
-    assert "technical_worker_cancel_acceptance_not_completed" in blockers
+    assert "technical_worker_crash_recovery_not_completed" not in blockers
+    assert "technical_worker_cancel_acceptance_not_completed" not in blockers
     assert "technical_production_single_writer_integration_not_completed" in blockers
 
 
