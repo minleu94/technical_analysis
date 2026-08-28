@@ -11,6 +11,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -26,6 +27,7 @@ from scripts import maintain_ml_direct_v3_refresh_chain as maintenance
 
 _DEFAULT_DATA_ROOT = Path(r"D:\Min\Python\Project\FA_Data")
 _RAW_ROOT_NAME = "ml_pit_year_shards"
+_DEFAULT_MINIMUM_FREE_SPACE_BYTES = 20 * 1024**3
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -40,6 +42,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=8_192)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--memory-budget-mb", type=int, default=4_096)
+    parser.add_argument(
+        "--minimum-free-space-bytes",
+        type=int,
+        default=_DEFAULT_MINIMUM_FREE_SPACE_BYTES,
+        help=(
+            "fail closed before launching Direct/OOC when the output "
+            "filesystem has less free space than this threshold"
+        ),
+    )
     return parser
 
 
@@ -271,6 +282,29 @@ def _write_status(path: Path, payload: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _storage_preflight(
+    path: Path,
+    *,
+    minimum_free_space_bytes: int,
+) -> dict[str, Any]:
+    """Read filesystem headroom without creating, deleting, or mutating data."""
+
+    if minimum_free_space_bytes <= 0:
+        raise ValueError("minimum-free-space-bytes must be positive")
+    probe_path = path if path.exists() else path.parent
+    usage = shutil.disk_usage(probe_path)
+    free_bytes = int(usage.free)
+    minimum = int(minimum_free_space_bytes)
+    return {
+        "probe_path": str(probe_path),
+        "total_bytes": int(usage.total),
+        "used_bytes": int(usage.used),
+        "free_bytes": free_bytes,
+        "minimum_free_space_bytes": minimum,
+        "within_minimum_free_space": free_bytes >= minimum,
+    }
+
+
 def _run_maintainer_with_heartbeat(
     command: list[str],
     *,
@@ -332,6 +366,27 @@ def main(argv: list[str] | None = None) -> int:
     try:
         command, metadata = _resolve_inputs(args)
         training_output_dir = Path(str(metadata["training_output_dir"]))
+        storage_preflight = _storage_preflight(
+            training_output_dir,
+            minimum_free_space_bytes=args.minimum_free_space_bytes,
+        )
+        metadata["storage_preflight"] = storage_preflight
+        if not storage_preflight["within_minimum_free_space"]:
+            _write_status(
+                status_path,
+                {
+                    **base_status,
+                    **metadata,
+                    "status": "blocked_insufficient_storage",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "error_type": "InsufficientFreeSpace",
+                    "error": (
+                        "output filesystem free space is below the "
+                        "configured Direct/OOC preflight threshold"
+                    ),
+                },
+            )
+            return 0
         owner_state, owner_pid = _maintenance_lock_state(training_output_dir)
         execution_disposition = (
             "existing_owner_lock"

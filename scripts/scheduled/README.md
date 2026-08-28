@@ -37,6 +37,13 @@ dataset safety、`decision_at` 與 official market-event custody，再把已驗�
 immutable manifest 傳給既有 Direct → OOC maintainer。它不建立 raw data、不改寫
 來源 SQLite、不建立歷史 sector membership，也不把 `companies.csv` 當成 PIT sidecar。
 
+wrapper 在取得 immutable input 後、啟動 maintainer 前會做唯讀 filesystem
+headroom preflight。預設要求輸出所在磁碟至少保留 20 GiB；不足時只寫
+`status=blocked_insufficient_storage` 與 `storage_preflight`（含 total／used／free
+bytes），不建立 Direct/OOC worker、不進入 retry loop，也不刪除既有 run。可用
+`--minimum-free-space-bytes` 在受控環境調整門檻；這個門檻不是 Formal／promotion
+gate，實際 owner 仍須依 raw shard 估算與 rollback 空間確認容量。
+
 狀態寫入：
 
 ```text

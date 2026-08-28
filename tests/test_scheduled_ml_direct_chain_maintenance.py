@@ -2,11 +2,87 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
 from scripts.scheduled import run_ml_direct_chain_maintenance as runner
+
+
+def test_storage_preflight_is_read_only_and_reports_low_headroom(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probe = tmp_path / "training"
+    probe.mkdir()
+    monkeypatch.setattr(
+        runner.shutil,
+        "disk_usage",
+        lambda _path: SimpleNamespace(total=100, used=90, free=10),
+    )
+
+    result = runner._storage_preflight(
+        probe,
+        minimum_free_space_bytes=20,
+    )
+
+    assert result["free_bytes"] == 10
+    assert result["minimum_free_space_bytes"] == 20
+    assert result["within_minimum_free_space"] is False
+    assert probe.is_dir()
+
+
+def test_main_blocks_before_launch_when_storage_headroom_is_low(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    status_path = tmp_path / "scheduled" / "latest_status.json"
+    training = tmp_path / "training"
+    training.mkdir()
+    args = SimpleNamespace(
+        poll_seconds=30,
+        retry_delay_seconds=120,
+        minimum_free_space_bytes=20,
+        status_path=status_path,
+        data_root=tmp_path,
+        output_root=tmp_path / "output",
+    )
+    monkeypatch.setattr(
+        runner,
+        "_parser",
+        lambda: SimpleNamespace(parse_args=lambda _argv: args),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_resolve_inputs",
+        lambda _args: (
+            ["python.exe", "maintainer.py"],
+            {"training_output_dir": str(training), "database_mode": "ro"},
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_storage_preflight",
+        lambda _path, minimum_free_space_bytes: {
+            "free_bytes": 10,
+            "minimum_free_space_bytes": minimum_free_space_bytes,
+            "within_minimum_free_space": False,
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "_maintenance_lock_state",
+        lambda _path: (_ for _ in ()).throw(
+            AssertionError("low storage must block before custody checks")
+        ),
+    )
+
+    assert runner.main([]) == 0
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "blocked_insufficient_storage"
+    assert status["error_type"] == "InsufficientFreeSpace"
+    assert status["storage_preflight"]["free_bytes"] == 10
 
 
 def _write_publication(output_root: Path) -> Path:

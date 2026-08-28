@@ -3150,6 +3150,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-27：補強資料更新頁顯示一致性：全域／各來源日期控件的「今日」統一採台灣市場日期；localized `不可用` 會顯示為異常而非待更新；全域狀態檢查失敗會清除六個核心與三個候選來源頁的舊 inline 摘要並保留共同錯誤原因，候選來源分頁也會顯示檢查結果，方便排錯且不誤讀舊數字。
 - 2026-08-28：資料更新狀態卡與來源詳情會將 `degraded`／`partial`／`action_required` 等狀態統一轉成中文；核心資料落後 daily reference 時，直接顯示新鮮度基準日與資料最新日，並保留來源錯誤訊息供排錯。
 - 2026-08-28：月營收狀態卡新增明確 `MONTHLY_REVENUE_SNAPSHOT_CANDIDATE` 唯讀入口；同一期 snapshot 也會顯示抓取日，外部候選遺失／命名無效時保留缺漏與診斷，不再靜默退回另一份 snapshot。候選仍不會自動寫入正式 SQLite 或 availability mapping。
+- 2026-08-28：Direct/OOC scheduled wrapper 新增唯讀 filesystem headroom preflight；輸出所在磁碟低於預設 20 GiB 時只寫 `blocked_insufficient_storage` 與 `storage_preflight`，不啟動重建、不進 retry loop、不刪除既有 run，避免 `Errno 28 No space left on device` 反覆消耗容量。這不改 Formal／promotion／broker gate。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
@@ -3318,3 +3319,10 @@ owner deposit 能被同一個 process 接收；只更新 process memory，HMAC v
 清掉，formal 驗證仍會 blocked。
 
 單獨執行 `scripts\inspect_ml_formal_input_readiness.py` 時也會使用相同的受控 Windows registry handoff；它只把 late owner deposit 接到當前唯讀 process memory，不會寫回 registry、artifact 或 source DB。
+
+`run_ml_direct_chain_maintenance.cmd` 在啟動 Direct/OOC 前另做唯讀磁碟空間 preflight，
+預設要求輸出所在檔案系統至少有 20 GiB 可用空間。低於門檻時會寫入
+`status=blocked_insufficient_storage`、`storage_preflight.free_bytes` 與診斷，直接結束本次
+wrapper，不啟動重建、不進入維護器 retry loop，也不刪除既有 run。這只是容量保護，不是
+Formal／promotion 通過；若需調整門檻，使用受控命令列的
+`--minimum-free-space-bytes`，並先確認年度 raw shard 估算、備份與 rollback 空間。
