@@ -1143,7 +1143,11 @@ performance lane，另加 `--ml-direct-chain-status <ML_DIRECT_CHAIN_STATUS_JSON
 若已有允許實際 host context 產生的 `runtime-environment-readiness.v1` 唯讀 artifact，
 可再加 `--runtime-readiness-json <RUNTIME_READINESS_JSON>`；它只載入已核實的 Runtime
 read model，不重新探測或修改正式 logger／Registry 路徑。schema 不符會 fail-closed，且
-這仍不等同正式 Registry transaction／rollback proof。
+這仍不等同正式 Registry transaction／rollback proof。若要在不寫正式 Registry 的前提下
+驗證目前正式 DB 的 schema 與 transaction 契約，可再加
+`--runtime-registry-snapshot-probe <REGISTRY_SNAPSHOT_PROBE_JSON>`；它只載入由
+`scripts\inspect_research_registry_transaction.py` 產生的 read-only source → TEMP clone
+證據，不能把 clone proof 當成正式 ACL 寫入成功。
 程式會固定顯示 P0、Evidence、Paper、Formal/ML、
 Runtime、Update history、Performance 七個 lane 以及依序下一步；未提供的 artifact
 會顯示 `waiting_for_external_input` 或 `action_required`，不會自行搜尋、回放、補歷史
@@ -3010,6 +3014,23 @@ Runtime 頁面最上方的「正式路徑環境（唯讀診斷）」會立即顯
 
 確認 staging 目錄無誤後，才可明確加入 `--confirm-write-probe`；`--output` 可把 JSON／Markdown 證據保存到明確指定的非正式路徑。程式會在該目錄建立短生命週期的暫存文字檔與使用正式 `ResearchRunRepository` schema 的 SQLite，寫入／讀回一筆 probe、rollback 後確認該筆消失，再清理全部檔案；JSON／Markdown 會顯示 `registry_transaction_succeeded`，通過時 exit code 為 `0`，其他狀態為 `2`。這只能證明指定 staging 目錄的實際 Registry schema transaction／rollback 與清理能力，不能取代正式 Registry ACL／鎖定驗證；指向正式 `DATA_ROOT` 或 `OUTPUT_ROOT` 會被阻擋。
 
+若需要更接近正式 Registry 的 schema 證據，可使用下列唯讀來源 clone probe：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_research_registry_transaction.py `
+  --registry D:\Min\Python\Project\FA_Data\output\research_runs\research_runs.db `
+  --confirm-snapshot-probe `
+  --format json `
+  --output C:\Temp\research_registry_snapshot_probe.json
+```
+
+此命令只以 `mode=ro` 開啟 `--registry`，將一致性 snapshot 複製到 OS TEMP，再在 clone
+上執行 schema／`quick_check`／insert／讀回／rollback；clone 會自動清除，正式 DB 的
+bytes、mtime 與 SHA-256 會前後比對。報告的
+`write_probe=formal_registry_read_only_snapshot_clone_transaction`、
+`formal_write_attempted=false` 代表目前正式 schema 可由 clone 驗證，並不代表正式
+Registry ACL、鎖定或 production writer 已經實寫成功。
+
 ### 11.2 營運排程判讀
 
 - **正常**：核心工作已保存可接受的最新狀態。
@@ -3164,6 +3185,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：Runtime 排程 read model 新增 `ML Direct/OOC 維護` 安全工作；`blocked_insufficient_storage` 會以「需要注意」與明確容量 diagnostic 顯示，並保留 raw status／source path 供排錯。
 - 2026-08-28：整體 readiness 盤點新增 `--ml-direct-chain-status`；載入 Direct/OOC maintainer status 後，performance lane 會明確投影 `direct_chain_storage_preflight_blocked`／磁碟不足診斷與下一步，仍維持唯讀、不啟動 worker、不刪除歷史 run。
 - 2026-08-28：整體 readiness 盤點新增 `--runtime-readiness-json`；可載入明確 host-context `runtime-environment-readiness.v1` artifact，避免 sandbox token 的 `PermissionError` 覆蓋 host 狀態；schema 不符即 fail-closed，仍不寫正式 Registry。
+- 2026-08-28：新增 `scripts\inspect_research_registry_transaction.py` 與 `--runtime-registry-snapshot-probe`；以正式 Research Registry 的 read-only snapshot 在 TEMP clone 驗證 schema／quick_check／insert／rollback／source hash 不變，明確區分 clone proof 與正式 production writer／ACL 證據。
 - 2026-08-28：新增 `inspect_ml_storage_retention.py` 唯讀容量／retention inventory；可對明確 Direct/OOC 根目錄做 bounded metadata scan，列出完整／截斷狀態、manifest status 與 owner review 候選，固定不刪除、不搬移、不修改 lock／pointer。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。

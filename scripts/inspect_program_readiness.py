@@ -76,6 +76,7 @@ def inspect_program_readiness(
     ml_direct_chain_status_path: str | Path | None = None,
     runtime_write_probe_path: str | Path | None = None,
     runtime_readiness_path: str | Path | None = None,
+    runtime_registry_snapshot_probe_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
     freshness_status_path: str | Path | None = None,
@@ -126,6 +127,7 @@ def inspect_program_readiness(
             resolved_output_root,
             _optional_path(runtime_write_probe_path),
             _optional_path(runtime_readiness_path),
+            _optional_path(runtime_registry_snapshot_probe_path),
         ),
         "update_history": _inspect_update_history_lane(
             _safe_resolve(
@@ -195,6 +197,11 @@ def inspect_program_readiness(
             "runtime_readiness_path": (
                 str(_optional_path(runtime_readiness_path))
                 if runtime_readiness_path is not None
+                else None
+            ),
+            "runtime_registry_snapshot_probe_path": (
+                str(_optional_path(runtime_registry_snapshot_probe_path))
+                if runtime_registry_snapshot_probe_path is not None
                 else None
             ),
             "p0_license_evidence_path": (
@@ -448,6 +455,7 @@ def _inspect_runtime_lane(
     output_root: Path,
     write_probe_path: Path | None = None,
     readiness_path: Path | None = None,
+    registry_snapshot_probe_path: Path | None = None,
 ) -> dict[str, Any]:
     try:
         if readiness_path is not None:
@@ -519,6 +527,7 @@ def _inspect_runtime_lane(
                 blockers.append("runtime_staging_write_probe_failed")
             elif status != "ready":
                 status = "partial"
+    actions: tuple[str, ...]
     if staging_probe is not None and staging_probe.get("status") == "passed":
         actions = (
             "Runtime staging 的實際 Registry transaction／rollback 已通過；正式 config.log／Registry ACL 仍依目前 host 權限顯示，需由 owner 在正式環境確認。",
@@ -527,6 +536,43 @@ def _inspect_runtime_lane(
         actions = (
             "Runtime host 已可觀察；若要證明實際寫入，另在非正式 staging 目錄明確執行 write probe，不能把 os.access hint 當成正式 Registry transaction。",
         )
+    if registry_snapshot_probe_path is not None:
+        try:
+            registry_probe = _read_json_mapping(registry_snapshot_probe_path)
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+            registry_probe = None
+            blockers.append(
+                f"runtime_registry_snapshot_probe_invalid:{type(error).__name__}"
+            )
+        if registry_probe is None:
+            blockers.append("runtime_registry_snapshot_probe_not_supplied_or_missing")
+        else:
+            details["registry_snapshot_transaction_probe"] = dict(registry_probe)
+            transaction_probe = registry_probe.get("transaction")
+            if not isinstance(transaction_probe, Mapping):
+                transaction_probe = {}
+            probe_passed = (
+                registry_probe.get("schema_version")
+                == "research-registry-snapshot-transaction.v1"
+                and registry_probe.get("status") == "passed"
+                and registry_probe.get("read_only_source") is True
+                and registry_probe.get("formal_write_attempted") is False
+                and registry_probe.get("writes_formal_registry") is False
+                and registry_probe.get("source_unchanged") is True
+                and registry_probe.get("cleanup_succeeded") is True
+                and transaction_probe.get("insert_visible_before_rollback")
+                is True
+                and transaction_probe.get("rolled_back_row_absent")
+                is True
+                and transaction_probe.get("row_count_unchanged")
+                is True
+            )
+            if not probe_passed:
+                blockers.append("runtime_registry_snapshot_probe_failed")
+            else:
+                actions = tuple(actions) + (
+                    "正式 Registry 的 read-only snapshot clone 已通過 schema／insert／rollback／quick_check；正式 ACL／production write 仍未被宣稱。",
+                )
     return _lane(status, blockers=tuple(blockers), next_actions=actions, details=details)
 
 
@@ -1135,6 +1181,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="唯讀 host-context runtime-environment-readiness.v1 artifact；不重新探測或修改正式路徑",
     )
+    parser.add_argument(
+        "--runtime-registry-snapshot-probe",
+        type=Path,
+        help="唯讀正式 Registry → TEMP clone transaction artifact；不寫正式 Registry",
+    )
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
     parser.add_argument(
@@ -1182,6 +1233,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ml_direct_chain_status_path=args.ml_direct_chain_status,
         runtime_write_probe_path=args.runtime_write_probe,
         runtime_readiness_path=args.runtime_readiness_json,
+        runtime_registry_snapshot_probe_path=args.runtime_registry_snapshot_probe,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,
         freshness_status_path=args.freshness_status_path,

@@ -1110,6 +1110,72 @@ def test_program_readiness_accepts_explicit_host_runtime_artifact(
     assert runtime["details"]["readiness_source_path"] == str(readiness_path.resolve())
 
 
+def test_program_readiness_accepts_formal_registry_snapshot_clone_probe(
+    tmp_path: Path,
+) -> None:
+    probe_path = tmp_path / "registry-snapshot-probe.json"
+    probe_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "research-registry-snapshot-transaction.v1",
+                "status": "passed",
+                "read_only_source": True,
+                "formal_write_attempted": False,
+                "writes_formal_registry": False,
+                "source_unchanged": True,
+                "cleanup_succeeded": True,
+                "transaction": {
+                    "insert_visible_before_rollback": True,
+                    "rolled_back_row_absent": True,
+                    "row_count_unchanged": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        runtime_registry_snapshot_probe_path=probe_path,
+    )
+
+    runtime = report["workstreams"]["runtime"]
+    assert "runtime_registry_snapshot_probe_failed" not in runtime["blockers"]
+    assert runtime["details"]["registry_snapshot_transaction_probe"]["status"] == "passed"
+    assert any("snapshot clone" in action for action in runtime["next_actions"])
+
+
+def test_program_readiness_rejects_invalid_formal_registry_snapshot_clone_probe(
+    tmp_path: Path,
+) -> None:
+    probe_path = tmp_path / "registry-snapshot-probe-invalid.json"
+    probe_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "research-registry-snapshot-transaction.v1",
+                "status": "passed",
+                "read_only_source": True,
+                "formal_write_attempted": False,
+                "writes_formal_registry": False,
+                "source_unchanged": False,
+                "cleanup_succeeded": True,
+                "transaction": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        runtime_registry_snapshot_probe_path=probe_path,
+    )
+
+    runtime = report["workstreams"]["runtime"]
+    assert "runtime_registry_snapshot_probe_failed" in runtime["blockers"]
+
+
 def test_program_readiness_rejects_invalid_host_runtime_artifact(
     tmp_path: Path,
 ) -> None:
