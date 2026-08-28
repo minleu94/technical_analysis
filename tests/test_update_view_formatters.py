@@ -19,6 +19,10 @@ def test_format_status_token_preserves_known_unknown_and_missing_values() -> Non
     assert format_status_token("partial") == "部分完成"
     assert format_status_token("waiting_for_external_input") == "等待外部輸入"
     assert format_status_token("action_required") == "需處理"
+    assert format_status_token("not_computable") == "尚不可計算"
+    assert format_status_token("pending_human_review") == "待人工覆核"
+    assert format_status_token("blocked") == "已阻擋"
+    assert format_status_token("running") == "執行中"
 
 
 def test_format_freshness_gap_explains_lagging_reference_and_latest_date() -> None:

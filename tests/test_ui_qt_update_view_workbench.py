@@ -962,6 +962,20 @@ def test_status_card_surfaces_immutable_snapshot_as_needs_confirmation():
     assert "可能只反映" in card.extra_label.text()
 
 
+def test_status_card_surfaces_parser_ratio_in_extra_summary():
+    app()
+    card = StatusCard("P0")
+
+    card.setPlainText(
+        "最新日期：2026-08-28\n"
+        "總記錄數：10\n"
+        "解析通過率：100%（accepted/observed）\n"
+        "狀態：candidate_available"
+    )
+
+    assert "解析通過率：100%（accepted/observed）" in card.extra_label.text()
+
+
 def test_status_card_placeholder_remains_unchecked_not_needs_update():
     app()
     card = StatusCard("測試")

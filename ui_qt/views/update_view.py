@@ -167,6 +167,7 @@ class StatusCard(QFrame):
                 or "待生效" in line
                 or "區間" in line
                 or "覆蓋率" in line
+                or "解析通過率" in line
             ):
                 extra_info_lines.append(line.strip())
             elif "讀取模式" in line or "提醒" in line:
