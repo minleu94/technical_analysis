@@ -68,6 +68,7 @@ def inspect_program_readiness(
     technical_performance_path: str | Path | None = None,
     technical_batch_performance_path: str | Path | None = None,
     technical_write_performance_path: str | Path | None = None,
+    technical_worker_acceptance_path: str | Path | None = None,
     broker_performance_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
@@ -133,6 +134,7 @@ def inspect_program_readiness(
             _optional_path(technical_performance_path),
             _optional_path(technical_batch_performance_path),
             _optional_path(technical_write_performance_path),
+            _optional_path(technical_worker_acceptance_path),
             _optional_path(broker_performance_path),
         ),
     }
@@ -495,11 +497,17 @@ def _inspect_performance_lane(
     technical_path: Path | None,
     technical_batch_path: Path | None,
     technical_write_path: Path | None,
+    technical_worker_path: Path | None,
     broker_path: Path | None,
 ) -> dict[str, Any]:
     artifacts: dict[str, Any] = {}
     blockers: list[str] = []
-    if technical_path is None and technical_batch_path is None and technical_write_path is None:
+    if (
+        technical_path is None
+        and technical_batch_path is None
+        and technical_write_path is None
+        and technical_worker_path is None
+    ):
         blockers.append("technical_performance_baseline_not_supplied")
     if broker_path is None:
         blockers.append("broker_performance_baseline_not_supplied")
@@ -507,6 +515,7 @@ def _inspect_performance_lane(
         ("technical", technical_path),
         ("technical_batch", technical_batch_path),
         ("technical_write", technical_write_path),
+        ("technical_worker", technical_worker_path),
         ("broker", broker_path),
     ):
         if path is None:
@@ -526,6 +535,7 @@ def _inspect_performance_lane(
                 "technical_path": str(technical_path) if technical_path else None,
                 "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
                 "technical_write_path": str(technical_write_path) if technical_write_path else None,
+                "technical_worker_path": str(technical_worker_path) if technical_worker_path else None,
                 "broker_path": str(broker_path) if broker_path else None,
                 "artifacts": artifacts,
             },
@@ -547,17 +557,47 @@ def _inspect_performance_lane(
                 blockers.append("technical_write_staging_write_not_confirmed")
             if payload.get("cleanup_succeeded") is False:
                 blockers.append("technical_write_staging_cleanup_failed")
+        if label == "technical_worker":
+            checks = payload.get("checks")
+            checks_passed = isinstance(checks, Mapping) and bool(checks) and all(
+                value is True for value in checks.values()
+            )
+            if (
+                payload.get("status") != "measured"
+                or payload.get("production_worker_enabled") is not False
+                or payload.get("synthetic_parallelism_enabled") is not True
+                or not checks_passed
+            ):
+                blockers.append("technical_bounded_worker_acceptance_invalid")
         if payload.get("parallelism_enabled") is True:
             blockers.append(f"{label}_parallelism_claim_requires_single_writer_review")
+    if (
+        not any(
+            isinstance(artifacts.get(key), Mapping)
+            and artifacts[key].get("status") == "measured"
+            for key in ("technical_worker",)
+        )
+    ):
+        blockers.append("technical_bounded_worker_acceptance_not_completed")
+    # No broker worker artifact is accepted as a proxy for technical worker proof.
+    broker_payload = artifacts.get("broker")
+    broker_acceptance = (
+        isinstance(broker_payload, Mapping)
+        and isinstance(broker_payload.get("bounded_fetch_acceptance"), Mapping)
+        and broker_payload["bounded_fetch_acceptance"].get("status") == "measured"
+    )
+    if not broker_acceptance:
+        blockers.append("broker_bounded_fetch_acceptance_not_completed")
     return _lane(
         "partial",
-        blockers=tuple(blockers + ["bounded_worker_design_not_completed"]),
+        blockers=tuple(blockers),
         next_actions=("已具備 full-batch 與 isolated CSV／SQLite writer timing；接著定義券商 fetch concurrency、取消／retry 與 technical single-writer 邊界，再做 bounded worker proof。",),
         external_input_required=True,
         details={
             "technical_path": str(technical_path) if technical_path else None,
             "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
             "technical_write_path": str(technical_write_path) if technical_write_path else None,
+            "technical_worker_path": str(technical_worker_path) if technical_worker_path else None,
             "broker_path": str(broker_path) if broker_path else None,
             "artifacts": artifacts,
             "parallelism_enabled": False,
@@ -685,6 +725,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--technical-performance-baseline", type=Path)
     parser.add_argument("--technical-batch-performance-baseline", type=Path)
     parser.add_argument("--technical-write-performance-baseline", type=Path)
+    parser.add_argument("--technical-worker-acceptance-baseline", type=Path)
     parser.add_argument("--broker-performance-baseline", type=Path)
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
@@ -715,6 +756,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         technical_performance_path=args.technical_performance_baseline,
         technical_batch_performance_path=args.technical_batch_performance_baseline,
         technical_write_performance_path=args.technical_write_performance_baseline,
+        technical_worker_acceptance_path=args.technical_worker_acceptance_baseline,
         broker_performance_path=args.broker_performance_baseline,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,

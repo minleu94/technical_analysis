@@ -612,6 +612,25 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
         ),
         encoding="utf-8",
     )
+    worker_path = tmp_path / "technical-worker.json"
+    worker_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "bounded-worker-acceptance.v1",
+                "status": "measured",
+                "read_only": True,
+                "write_attempted": False,
+                "production_write_attempted": False,
+                "synthetic_parallelism_enabled": True,
+                "production_worker_enabled": False,
+                "checks": {
+                    "bounded_in_flight": True,
+                    "worker_did_not_write": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     report = inspect_program_readiness(
         data_root=tmp_path / "data",
@@ -619,6 +638,7 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
         technical_performance_path=technical_path,
         technical_batch_performance_path=batch_path,
         technical_write_performance_path=write_path,
+        technical_worker_acceptance_path=worker_path,
         broker_performance_path=broker_path,
     )
     rendered = render_markdown(report)
@@ -630,3 +650,6 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
     assert report["workstreams"]["performance"]["status"] == "partial"
     assert report["workstreams"]["performance"]["details"]["artifacts"]["technical_batch"]["status"] == "measured"
     assert report["workstreams"]["performance"]["details"]["artifacts"]["technical_write"]["status"] == "measured"
+    assert report["workstreams"]["performance"]["details"]["artifacts"]["technical_worker"]["status"] == "measured"
+    assert "technical_bounded_worker_acceptance_not_completed" not in report["workstreams"]["performance"]["blockers"]
+    assert "broker_bounded_fetch_acceptance_not_completed" in report["workstreams"]["performance"]["blockers"]
