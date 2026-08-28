@@ -298,6 +298,49 @@ def test_incomplete_cost_ledger_is_visible_and_not_weekly_ready(tmp_path: Path) 
     assert "paper_trade_ledger_fields_incomplete" in result.warnings
 
 
+def test_future_dated_cost_event_is_invalid_and_never_counts_as_ready(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(paper_readiness, "paper_portfolio_today", lambda: date(2026, 8, 20))
+    output_root = tmp_path / "output"
+    cost_db = output_root / "paper_portfolio" / "paper_trade_ledger.sqlite"
+    PaperTradeLedgerRepository(cost_db).append(
+        PaperTradeFill(
+            fill_id="future-fill",
+            order_id="future-order",
+            portfolio_id="paper-main",
+            event_date="2026-08-21",
+            stock_code="2330",
+            side="buy",
+            requested_quantity=1,
+            filled_quantity=1,
+            reference_price=Decimal("900.00"),
+            fill_price=Decimal("900.10"),
+            commission=Decimal("1.00"),
+            tax=Decimal("0.00"),
+            slippage_cost=Decimal("0.10"),
+            turnover_bp=100,
+            execution_gap_bp=1,
+            status="filled",
+            source_event_id="future-event",
+        )
+    )
+
+    result = PaperPortfolioReadinessService(
+        output_root=output_root,
+        cost_ledger_db_path=cost_db,
+    ).inspect()
+
+    assert result.cost_ledger_status == "invalid"
+    assert result.future_dated_event_count == 1
+    assert "paper_trade_ledger_future_dated" in result.blockers
+    # cost_record_count preserves the raw ledger row for auditability; the
+    # future-dated row is still excluded from valid cost totals/readiness.
+    assert result.cost_record_count == 1
+    assert result.cost_total_cost is None
+    assert any("paper_trade_ledger_future_date:2026-08-21" in item for item in result.diagnostics)
+
+
 def test_misaligned_benchmark_boundaries_are_not_weekly_ready(tmp_path: Path) -> None:
     output_root = tmp_path / "output"
     state_db = output_root / "paper_portfolio" / "paper_portfolio.sqlite"

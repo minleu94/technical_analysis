@@ -2416,7 +2416,7 @@ $env:PAPER_EQUAL_WEIGHT_BENCHMARK_PATH = '<EQUAL_WEIGHT_LEDGER.sqlite>'
 
 若 Paper Portfolio、weekly evidence 或 Equal Weight builder 遇到 `paper_snapshot_future_dated`、`paper_daily_status_future_dated` 或 `paper_weekly_report_future_period`，先停止採用該期間，不要刪除、回填或手動改寫正式資料；請由 owner 追查排程時鐘、時區與來源事件。現行排程入口已改採最近已到達 cutoff，且 writer 對明確未到達的 `--decision-at` fail-closed；既有 future row 仍只作 blocker／diagnostic。Equal Weight builder 也會在 preview／apply 前拒絕 future snapshot，避免 look-ahead 污染 benchmark。
 
-Paper Trade Ledger 預設位置為 `<OUTPUT_ROOT>/paper_portfolio/paper_trade_ledger.sqlite`，也可用 `PAPER_TRADE_LEDGER_PATH` 或 CLI 的 `--cost-ledger-db` 指定。Ledger 必須由受控 paper execution producer 寫入；不能把手動 Portfolio 的 `trades.jsonl`、virtual order trace 或 snapshot mark 直接複製成成本帳。每筆 fill 至少要有 requested／filled 數量、狀態、Decimal 成本、turnover、execution gap 與來源事件；缺任何必要欄位時 weekly report 維持不可計算。
+Paper Trade Ledger 預設位置為 `<OUTPUT_ROOT>/paper_portfolio/paper_trade_ledger.sqlite`，也可用 `PAPER_TRADE_LEDGER_PATH` 或 CLI 的 `--cost-ledger-db` 指定。Ledger 必須由受控 paper execution producer 寫入；不能把手動 Portfolio 的 `trades.jsonl`、virtual order trace 或 snapshot mark 直接複製成成本帳。每筆 fill 至少要有 requested／filled 數量、狀態、Decimal 成本、turnover、execution gap 與來源事件；缺任何必要欄位時 weekly report 維持不可計算。Readiness 會另外檢查 `event_date` 是否晚於台灣市場日；future-dated fill 會保留 raw row 供稽核但標成 `paper_trade_ledger_future_dated`、排除成本總額與 ready 判定，Portfolio UI 會顯示 future-dated fill 計數。
 
 目前可用的受控 producer CLI 為：
 

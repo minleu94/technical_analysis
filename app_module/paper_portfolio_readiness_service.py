@@ -96,6 +96,7 @@ class PaperPortfolioReadinessDTO:
     override_event_count: int = 0
     missing_execution_gap_count: int = 0
     missing_turnover_count: int = 0
+    future_dated_event_count: int = 0
     benchmark_id: str = DEFAULT_BENCHMARK_ID
     benchmark_observation_count: int = 0
     benchmark_first_date: str | None = None
@@ -129,6 +130,7 @@ class PaperPortfolioReadinessDTO:
             "override_event_count",
             "missing_execution_gap_count",
             "missing_turnover_count",
+            "future_dated_event_count",
         ):
             value = getattr(self, field_name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -193,6 +195,7 @@ class PaperPortfolioReadinessDTO:
             "override_event_count": self.override_event_count,
             "missing_execution_gap_count": self.missing_execution_gap_count,
             "missing_turnover_count": self.missing_turnover_count,
+            "future_dated_event_count": self.future_dated_event_count,
             "benchmark_id": self.benchmark_id,
             "benchmark_observation_count": self.benchmark_observation_count,
             "benchmark_first_date": self.benchmark_first_date,
@@ -405,6 +408,7 @@ class PaperPortfolioReadinessService:
             override_event_count=cost_ledger["override_count"],
             missing_execution_gap_count=cost_ledger["missing_execution_gap_count"],
             missing_turnover_count=cost_ledger["missing_turnover_count"],
+            future_dated_event_count=cost_ledger["future_dated_event_count"],
             benchmark_id=self.benchmark_id,
             benchmark_observation_count=benchmark["count"],
             benchmark_first_date=benchmark["first_date"],
@@ -617,6 +621,7 @@ class PaperPortfolioReadinessService:
             "override_count": 0,
             "missing_execution_gap_count": 0,
             "missing_turnover_count": 0,
+            "future_dated_event_count": 0,
         }
         if not self.cost_ledger_db_path.is_file():
             warnings.append("paper_trade_cost_ledger_not_configured")
@@ -690,7 +695,19 @@ class PaperPortfolioReadinessService:
 
         valid: list[PaperTradeFill] = []
         invalid_count = 0
+        today = paper_portfolio_today()
         for row in rows:
+            try:
+                event_date = date.fromisoformat(str(row["event_date"])[:10])
+            except (TypeError, ValueError):
+                event_date = None
+            if event_date is not None and event_date > today:
+                result["future_dated_event_count"] += 1
+                diagnostics.append(
+                    "paper_trade_ledger_future_date:"
+                    f"{event_date.isoformat()}:today={today.isoformat()}"
+                )
+                continue
             status = str(row["status"] or "")
             if status == "filled":
                 result["filled_count"] += 1
@@ -770,7 +787,10 @@ class PaperPortfolioReadinessService:
             result["total_cost"] = sum(
                 (item.total_cost for item in valid), Decimal("0")
             ).quantize(Decimal("0.01"))
-        if invalid_count:
+        if result["future_dated_event_count"]:
+            blockers.append("paper_trade_ledger_future_dated")
+            result["status"] = "invalid"
+        elif invalid_count:
             blockers.append("paper_trade_ledger_invalid_row")
             result["status"] = "invalid"
         elif result["missing_turnover_count"] or result["missing_execution_gap_count"]:

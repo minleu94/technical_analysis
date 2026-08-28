@@ -909,7 +909,8 @@ class PortfolioView(QWidget):
             ),
             (
                 f"欄位缺口：execution gap {result.missing_execution_gap_count} 筆、"
-                f"turnover {result.missing_turnover_count} 筆"
+                f"turnover {result.missing_turnover_count} 筆、"
+                f"future-dated fill {result.future_dated_event_count} 筆"
             ),
             "研究用途；read_only=true、writes_allowed=false、broker_execution=false、auto_rebalance_allowed=false。",
         ]
