@@ -328,6 +328,12 @@ The quick update publishes `status=running` with a run/process identity before i
 兩個變數都未設定時維持既有 `<OUTPUT_ROOT>/scheduled/data_freshness/` 出口。這只改變
 read-only status／log 的寫入位置，不會繞過正式 DB、scheduler、Evidence 或 Formal gate；
 UI 若要讀取外部 status，另需設定 `DATA_FRESHNESS_STATUS_ARTIFACT` 指向同一個明確檔案。
+若 status／log 路徑仍因 ACL 或其他 `OSError` 無法寫入，canonical
+`data_freshness_probe.py` 不再留下未處理 traceback；它會在 stdout 輸出
+`status=failed` 與 `status_artifact_write_failed:<ErrorType>`／
+`log_artifact_write_failed:<ErrorType>`，並以 exit code `1` 結束。如此 scheduler／wrapper
+可以把「資料檢查失敗」與「結果檔無法發布」分開診斷；能寫入的 artifact 也會被重寫成同一份
+結構化錯誤，不會沿用舊的 `passed` 假狀態。
 
 The same runner appends bounded `data-update-status-history.v1` records to `history.jsonl` (or the explicit `--history-path`) for the running and terminal attempts. The history is append-only and idempotent by record hash; it does not backfill an existing `latest_status.json` and does not change any downstream readiness or write permission.
 

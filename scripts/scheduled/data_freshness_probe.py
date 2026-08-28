@@ -73,6 +73,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _write_artifact(path: Path, text: str, *, label: str) -> str | None:
+    """Best-effort write that keeps ACL failures visible as structured output."""
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    except OSError as exc:
+        # Do not hide a protected output root behind an unhandled traceback.  The
+        # caller will add this diagnostic to the payload and return non-zero.
+        return f"{label}_artifact_write_failed:{type(exc).__name__}"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     data_root = Path(args.data_root)
@@ -84,8 +97,6 @@ def main(argv: list[str] | None = None) -> int:
     today_key = run_date.isoformat().replace("-", "")
     status_path = Path(args.status_path) if args.status_path else run_root / "latest_status.json"
     log_path = Path(args.log_path) if args.log_path else run_root / f"{today_key}_data_freshness.log"
-    status_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     checks: dict[str, object] = {
         "data_root_exists": data_root.exists(),
@@ -175,8 +186,21 @@ def main(argv: list[str] | None = None) -> int:
         "stale_days": args.stale_days,
     }
     text = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
-    status_path.write_text(text + "\n", encoding="utf-8")
-    log_path.write_text(text + "\n", encoding="utf-8")
+    write_errors: list[str] = []
+    for label, path in (("status", status_path), ("log", log_path)):
+        write_error = _write_artifact(path, text + "\n", label=label)
+        if write_error is not None:
+            write_errors.append(write_error)
+
+    if write_errors:
+        errors.extend(write_errors)
+        payload["status"] = "failed"
+        payload["errors"] = errors
+        text = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
+        # A status file may have been writable while its log was not.  Rewrite
+        # both best-effort so any artifact that exists carries the same failure.
+        for label, path in (("status_retry", status_path), ("log_retry", log_path)):
+            _write_artifact(path, text + "\n", label=label)
     print(text)
     return 1 if errors else 0
 

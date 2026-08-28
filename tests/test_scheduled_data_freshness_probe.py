@@ -1,9 +1,57 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import sqlite3
 
 from scripts.scheduled.data_freshness_probe import main
+
+
+def test_freshness_probe_reports_artifact_write_failure_as_structured_error(
+    tmp_path, monkeypatch, capsys
+):
+    data_root = tmp_path / "FA_Data"
+    output_root = data_root / "output"
+    sqlite_dir = data_root / "sqlite"
+    sqlite_dir.mkdir(parents=True)
+    db_path = sqlite_dir / "twstock.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute('CREATE TABLE daily_prices ("日期" TEXT)')
+        conn.execute('CREATE TABLE technical_indicators ("日期" TEXT)')
+
+    status_path = tmp_path / "freshness.json"
+    log_path = tmp_path / "freshness.log"
+    original_write_text = Path.write_text
+
+    def deny_artifact_writes(path, *args, **kwargs):
+        if path in {status_path, log_path}:
+            raise PermissionError("artifact output denied")
+        return original_write_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", deny_artifact_writes)
+
+    exit_code = main(
+        [
+            "--data-root",
+            str(data_root),
+            "--output-root",
+            str(output_root),
+            "--db-path",
+            str(db_path),
+            "--status-path",
+            str(status_path),
+            "--log-path",
+            str(log_path),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert "status_artifact_write_failed:PermissionError" in payload["errors"]
+    assert "log_artifact_write_failed:PermissionError" in payload["errors"]
+    assert not status_path.exists()
+    assert not log_path.exists()
 
 
 def test_freshness_probe_degrades_when_tpex_file_missing_for_latest_daily_date(tmp_path):
