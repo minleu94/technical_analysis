@@ -20,6 +20,13 @@ These wrappers are intentionally conservative. They use CMD files and Windows bu
 | `baldr-ml-direct-chain-maintainer` | enabled after register | daily local time 05:30 | 自動解析並重驗最新全市場 immutable raw PIT pointer、official market-event custody 與目前 Direct identity，然後啟動／維持 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs`。使用既有 instance lock 防止重複訓練；無效輸入只寫 `blocked_invalid_bootstrap_input`，不寫來源 SQLite、不建立未受控 sidecar、不放寬 formal／alpha／broker gate。 |
 | `baldr-v2-2-weekly-collection` | `weekly-register` 後啟用 | 每週日 18:00 | 執行 `run_v2_2_weekly_collection.cmd`，以 SQLite read-only 讀取來源並將 evidence append 至 sidecar。對外狀態為 `pending_human_review`；需要人工判讀，但不代表 Gate 通過、不寫 weekly history，且 `write_intent=false`。 |
 
+`baldr-data-update-quick-daily` 預設以 serial technical-indicator path 執行。
+只有在受控 canary 的 task environment 明確設定
+`BALDR_ENABLE_TECHNICAL_PROCESS_POOL=1` 時，CMD wrapper 才會傳入
+`--enable-technical-process-pool`；worker 上限、in-flight 與 retry 預設仍為
+`2 / 4 / 1`，每次 running／terminal status 會留存實際旗標。未設定時不會啟動
+technical process pool，也不會因 staging acceptance 自動改變排程行為。
+
 ## Direct chain automatic bootstrap
 
 `baldr-ml-direct-chain-maintainer` 的入口是

@@ -170,6 +170,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="append-only JSONL history path; defaults beside --status-path",
     )
     parser.add_argument("--log-path")
+    parser.add_argument(
+        "--enable-technical-process-pool",
+        action="store_true",
+        help=(
+            "explicitly enable bounded technical-indicator workers for this run; "
+            "default remains serial and parent-only"
+        ),
+    )
+    parser.add_argument("--technical-process-pool-workers", type=int)
+    parser.add_argument("--technical-process-pool-max-in-flight", type=int)
+    parser.add_argument("--technical-process-pool-max-retries", type=int)
     return parser
 
 
@@ -196,7 +207,17 @@ def main(argv: list[str] | None = None) -> int:
         end_day = _scheduled_target_weekday(run_date)
         start_date, end_date = _weekday_window(end_day, max(1, args.window_weekdays))
 
-    config = TWStockConfig(data_root=Path(args.data_root), output_root=output_root)
+    config = TWStockConfig(
+        data_root=Path(args.data_root),
+        output_root=output_root,
+        technical_process_pool_enabled=bool(args.enable_technical_process_pool),
+    )
+    if args.technical_process_pool_workers is not None:
+        config.technical_process_pool_workers = args.technical_process_pool_workers
+    if args.technical_process_pool_max_in_flight is not None:
+        config.technical_process_pool_max_in_flight = args.technical_process_pool_max_in_flight
+    if args.technical_process_pool_max_retries is not None:
+        config.technical_process_pool_max_retries = args.technical_process_pool_max_retries
     service = UpdateService(config)
     steps: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -224,6 +245,10 @@ def main(argv: list[str] | None = None) -> int:
         "auto_trading": False,
         "auto_lifecycle_action": False,
         "history_path": str(history_path),
+        "technical_process_pool_enabled": config.technical_process_pool_enabled,
+        "technical_process_pool_workers": config.technical_process_pool_workers,
+        "technical_process_pool_max_in_flight": config.technical_process_pool_max_in_flight,
+        "technical_process_pool_max_retries": config.technical_process_pool_max_retries,
     }
     _write_json(status_path, running_payload)
     running_payload["history"] = _append_history_safely(history_path, running_payload)
@@ -301,6 +326,10 @@ def main(argv: list[str] | None = None) -> int:
                     start_date=None,
                     progress_callback=None,
                     incremental_lookback_days=120,
+                    technical_process_pool=config.technical_process_pool_enabled,
+                    technical_process_pool_workers=config.technical_process_pool_workers,
+                    technical_process_pool_max_in_flight=config.technical_process_pool_max_in_flight,
+                    technical_process_pool_max_retries=config.technical_process_pool_max_retries,
                 ),
             )
     if failed is None:
@@ -341,6 +370,10 @@ def main(argv: list[str] | None = None) -> int:
         "auto_trading": False,
         "auto_lifecycle_action": False,
         "history_path": str(history_path),
+        "technical_process_pool_enabled": config.technical_process_pool_enabled,
+        "technical_process_pool_workers": config.technical_process_pool_workers,
+        "technical_process_pool_max_in_flight": config.technical_process_pool_max_in_flight,
+        "technical_process_pool_max_retries": config.technical_process_pool_max_retries,
     }
     payload["history"] = _append_history_safely(history_path, payload)
     _write_json(status_path, payload)

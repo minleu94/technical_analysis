@@ -182,9 +182,23 @@ raw input hash 均通過。
 artifact 暫存於
 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_worker_recovery_20260828.json`，
 SHA-256=`983FDEB4C1829137857F49513463BA48579910BF5A3882B73260F096F0454A8D`。
-這讓 production integration 的剩餘工作縮小為：把同一 writer contract 接入正式
-technical batch 的 feature flag／scheduler lifecycle，並由 owner 先核准 rollback、
-backup 與小範圍 canary；在此之前不得把 `staging_measured` 升格成 production。
+這讓 production integration 的剩餘工作縮小為：在正式環境由 owner 核准 rollback、
+backup 與小範圍 canary；程式端的 technical batch feature flag／scheduler lifecycle
+已接上，但預設仍為關閉，`staging_measured` 不會自動升格成 production。
+
+### 2026-08-28 11:00 UTC production batch feature-flag wiring（本輪新增）
+
+`UpdateService.calculate_technical_indicators` 現在可由明確的
+`technical_process_pool_enabled`／`--enable-technical-process-pool` opt-in。父程序先
+完成股票分組、日期與 incremental warm-up 判斷，再把準備好的 frame 送入 bounded
+`ProcessPoolExecutor`；worker 只回傳 DataFrame，逐股 CSV、aggregate CSV 與 SQLite
+仍由父程序既有 writer 完成。worker exception、pool restart、有限 retry、取消與父程序
+寫入數會保存於 step result；不會自動 fallback 到第二套計算或把 partial 結果標為完整。
+
+`TWStockConfig` 的預設為 `enabled=false`、`workers=2`、`max_in_flight=4`、
+`max_retries=1`。排程 wrapper 預設不傳 enable 旗標；只有受控 canary 才能在單次
+run 明確傳入，running／terminal status 會同時記錄參數。這一批只證明程式邊界已接上，
+不代表正式 host ACL、backup／rollback 或來源端效能 canary 已完成。
 
 ### 2026-08-28 09:50 UTC broker bounded fetch acceptance probe（本輪新增）
 
@@ -242,21 +256,19 @@ rate-limit 仍未完成，因此 production worker 仍維持關閉。
 - Broker CSV mutation 現在由 `BrokerBranchWriteCoordinator` 統一包住，並以
   process-local single-writer lock 序列化 daily／merged CSV 寫入與 backup；這只
   建立安全邊界，沒有偷偷開啟 fetch concurrency。
-- Technical indicator production batch 目前仍逐股計算、逐股保存，最後再整合 CSV；
-  `qa_technical_indicator_latency.py` 與 full-batch probe 明確標示
-  `parallelism_enabled=false`、`observed_worker_count=1`。上一節的 process-pool
-  僅在 staging 驗證真實 calculator，並以 `staging_process_pool_enabled=true`、
-  parent single writer 證明可安全接入的形狀，不會誤宣稱 production 已切換多核心。
+- Technical indicator production batch 預設仍逐股計算、逐股保存，最後再整合 CSV；
+  `technical_process_pool_enabled=false` 時維持這條既有路徑。明確 opt-in 後才使用
+  bounded compute-only workers，`parallelism_enabled`／worker PID／retry／cancel 與
+  parent single-writer summary 會寫入該次 step result；尚未完成 canary 前排程不傳旗標。
 - SQLite 仍遵循 single-writer；若未來要把計算放進 process pool，worker 只能回傳
   immutable result，SQLite／整合 CSV 必須由一個受控 writer commit，且要保留取消、
   backup、hash、duplicate 與 fail-closed 邊界。
 
 ## 下一個可實作切點（尚未啟用）
 
-1. real process-pool staging 的 crash recovery、queued cancellation、partial-result
-   discard 與 parent single-writer integration 已有 acceptance；下一步是把相同
-   contract 接到正式 technical batch 的 feature flag／scheduler lifecycle，保留每段
-   row count、error、cancel、file hash 與 rollback，完成前不開 production worker。
+1. production batch 的 feature flag／scheduler lifecycle 已接上；下一步由 owner 在
+   正式環境核准 backup／rollback 並做小範圍 canary，保留每段 row count、error、cancel、
+   file hash 與 rollback，完成前不把排程預設改為 enabled。
 2. Broker 只在 owner／環境允許的真實 canary 中考慮 bounded HTTP fetch pool；每個 task
    必須含 global rate-limit、retry budget、source/date identity，Selenium fallback 維持
    serialized，結果交給上述 single writer。離線 parser／queue acceptance 已完成，

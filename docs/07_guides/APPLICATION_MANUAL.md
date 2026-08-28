@@ -1201,8 +1201,22 @@ executor、取消 queued work 與丟棄取消後才完成的結果；接著在 e
 SQLite lock／retry。worker 不持有 CSV／SQLite writer，staging 結束後會清理。
 `status=measured` 代表 recovery／取消與 parent writer staging contract 通過，
 而 `production_single_writer_integration=staging_measured`、scope=`isolated_staging`
-仍不是正式啟用證明；未完成 production batch feature flag／scheduler lifecycle、
-backup／rollback 與 owner-approved canary 前，production worker 數維持 1。
+仍不是正式資料寫入證明。現在 production batch 已接上明確 feature flag，但預設仍關閉；
+未完成 backup／rollback 與 owner-approved canary 前，不應在排程 task 傳入啟用旗標。
+
+若要在受控環境以已驗收的 contract 執行一次 bounded technical worker，可明確傳入：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\scheduled\run_daily_data_update_quick.py `
+  --data-root <DATA_ROOT> --output-root <OUTPUT_ROOT> `
+  --enable-technical-process-pool --technical-process-pool-workers 2 `
+  --technical-process-pool-max-in-flight 4 --technical-process-pool-max-retries 1
+```
+
+這個旗標只把計算放入 bounded process pool；日期／warm-up 決策仍在父程序，
+worker 不寫 CSV／SQLite，父程序才逐股保存並做整合寫入。每次 run 的 running／terminal
+status 會記錄 flag 與 queue 參數，便於回滾與查核。未傳入旗標時維持既有 serial path；
+worker 例外或取消不會自動降級成另一套計算結果。
 
 若要驗證券商 HTTP fetch 的 bounded queue、global rate-limit、retry、duplicate 與
 single-writer 契約，可使用離線 transport probe：
@@ -1246,7 +1260,7 @@ process-pool throughput 與 crash recovery 已有獨立 staging probe，broker H
 - 股票代號留空代表處理全部；輸入例如 `2330` 代表只處理單一股票。
 - 增量寫入單股指標 CSV 時，若舊檔或新結果缺少可辨識日期欄位，會避免直接疊加資料；必要時以新計算結果覆蓋該單股檔，防止同一股票歷史列倍增。
 - 一鍵更新與排程判斷技術指標是否可跳過時，除了比較 `daily_prices` / `technical_indicators` 最新日期，也會檢查最新日 eligible 股票覆蓋數；若 TWSE 先完成、TPEX 後補進來，系統會再跑增量計算，不會因全表最新日期相同而漏掉 TPEX 股票。
-- 技術指標計算目前仍以既有單流程治理 SQLite / CSV 寫入；即使後續加入多核心，也必須拆成 compute-only 平行與單 writer 寫入，避免 SQLite lock 或 CSV 覆寫競爭。本版不提供技術指標 worker 數設定。
+- 技術指標計算預設仍是單流程；若受控 caller 傳入 `--enable-technical-process-pool`，才會以 bounded compute-only worker 平行計算，並由父程序單一 writer 統一寫入 CSV／SQLite。可設定的 worker、in-flight 與 retry 上限會寫入 run status；正式 scheduler 預設不傳旗標，待 backup／rollback、真實 canary 與效能觀測完成後才評估啟用。
 - 推薦與回測載入已保存技術指標後，只有在參數等於系統標準預設、欄位完整且含有效值時才直接重用；自訂參數、缺欄位、全無效欄位、ATR 或 ADX 仍會按原流程計算。這項最佳化不改技術指標更新排程、SQLite schema、推薦門檻或回測規則。
 
 ### 4.5 SQLite 資料檢視
