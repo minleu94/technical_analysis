@@ -105,7 +105,11 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 嘗試手動執行 `data_freshness_probe.py` 時，對正式
 `output\\scheduled\\data_freshness\\latest_status.json` 的寫入被
 `PermissionError` 拒絕；因此 freshness 檔仍停在 `2026-08-27`，這是正式 output ACL
-問題，不是把核心 SQLite 判定成落後。
+問題，不是把核心 SQLite 判定成落後。程式端已補上
+`BALDR_FRESHNESS_STATUS_PATH`／`BALDR_FRESHNESS_LOG_PATH` 的受控覆寫；owner 可在
+修正 ACL 前先把 read-only 產物導到已核准可寫路徑，並在 UI 設定
+`DATA_FRESHNESS_STATUS_ARTIFACT` 讀取同一份明確檔案。這仍需要 owner 更新 Task
+Scheduler 執行環境，不能由 readiness inspector 自動套用。
 
 ## 為什麼有些東西不能直接補滿
 

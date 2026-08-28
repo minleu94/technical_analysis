@@ -322,6 +322,13 @@ Data freshness:
 
 The quick update publishes `status=running` with a run/process identity before its long-running steps begin, then records `started_at` and `completed_at` on the terminal status. Downstream freshness and ML evidence checks treat a running or stale update as not-ready, so a partially completed update cannot be consumed.
 
+若正式 `OUTPUT_ROOT` 的 ACL 只允許讀取，`run_daily_data_freshness_check.cmd` 可由 owner
+明確設定 `BALDR_FRESHNESS_STATUS_PATH`；若未另外設定
+`BALDR_FRESHNESS_LOG_PATH`，wrapper 會把 log 放在 status path 同一位置（加上 `.log`）。
+兩個變數都未設定時維持既有 `<OUTPUT_ROOT>/scheduled/data_freshness/` 出口。這只改變
+read-only status／log 的寫入位置，不會繞過正式 DB、scheduler、Evidence 或 Formal gate；
+UI 若要讀取外部 status，另需設定 `DATA_FRESHNESS_STATUS_ARTIFACT` 指向同一個明確檔案。
+
 The same runner appends bounded `data-update-status-history.v1` records to `history.jsonl` (or the explicit `--history-path`) for the running and terminal attempts. The history is append-only and idempotent by record hash; it does not backfill an existing `latest_status.json` and does not change any downstream readiness or write permission.
 
 ```text

@@ -62,6 +62,16 @@ def test_register_cmd_contains_task_names_and_times() -> None:
     assert text.index("DAILY 05:18") < text.index("DAILY 05:20")
 
 
+def test_freshness_cmd_exposes_explicit_acl_safe_status_and_log_paths() -> None:
+    text = (SCHEDULED_DIR / "run_daily_data_freshness_check.cmd").read_text(encoding="utf-8")
+
+    assert "BALDR_FRESHNESS_STATUS_PATH" in text
+    assert "BALDR_FRESHNESS_LOG_PATH" in text
+    assert "--status-path" in text
+    assert "--log-path" in text
+    assert "OUTPUT_ROOT cannot block" in text
+
+
 def test_register_powershell_defines_all_daily_and_weekly_tasks() -> None:
     text = (SCHEDULED_DIR / "register_baldr_scheduled_tasks.ps1").read_text(encoding="utf-8")
 
