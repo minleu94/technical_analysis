@@ -703,6 +703,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - 輸出 JSON 包含 13 項 P0 來源完整驗證矩陣與 `machine_verified_sources`、`degraded_sources`、`unavailable_sources` 統計。缺官方公告時間、probe 未回傳或 MOPS artifact 未提供時會保留 blocker；不得因 owner 問題存在而將它們計為已解除。
 - 自動寫入 audit packet 至 `%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-MACHINE-AUDIT-AND-BLOCKER-REDUCTION-V1.json`；其 `status=audit_generated_not_validation_handoff`，不宣稱已完成 Git、型別或完整 pytest 驗證。真正交接必須在獨立驗證後補齊終態。
 - 嚴格守護 `downstream_eligibility=none`、`human_decision=requires_human_acceptance`、`production_scheduler_allowed=false` 與 `formal_oos_allowed=false`；絕不寫入正式 DB 或影響推薦與交易決策。
+- Windows 主控台若仍使用 CP1252，CLI 會先將 stdout／stderr 切到 UTF-8；因此直接執行 `--help` 也能顯示完整繁中說明，不會因編碼錯誤中止。
 
 ### P0-13 官方證據與就緒度強化 CLI（GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1）
 

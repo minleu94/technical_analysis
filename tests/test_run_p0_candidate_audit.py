@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from datetime import date
+import os
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -461,3 +465,19 @@ def test_export_p0_handoff_packet_generates_valid_temp_json() -> None:
     assert len(content["matrix_13_sources"]) == 13
     assert content["safety_flags"]["no_formal_db_mutation"] is True
     assert content["status"] == "audit_generated_not_validation_handoff"
+
+
+def test_candidate_audit_help_is_utf8_safe_on_cp1252_console() -> None:
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+    script = Path(__file__).resolve().parents[1] / "scripts" / "run_p0_candidate_audit.py"
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "產生 13 項 P0 候選資料來源" in completed.stdout.decode("utf-8")

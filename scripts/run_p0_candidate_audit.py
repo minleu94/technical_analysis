@@ -737,6 +737,7 @@ def export_p0_handoff_packet(audit_payload: dict[str, Any], *, git_status_str: s
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_utf8_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decision-date", type=date.fromisoformat, required=True)
     parser.add_argument("--output", type=Path)
@@ -772,6 +773,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     except UnicodeEncodeError:
         sys.stdout.buffer.write(rendered.encode("utf-8"))
     return 0
+
+
+def _configure_utf8_stdio() -> None:
+    """讓直接執行候選稽核 CLI 的 Windows 主控台能顯示繁中說明。"""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (OSError, ValueError):
+            # 測試 capture stream 或外部 host 管理的 stream 可能禁止重設；
+            # 這不應改變 audit 的資料取得與輸出契約。
+            continue
 
 
 if __name__ == "__main__":
