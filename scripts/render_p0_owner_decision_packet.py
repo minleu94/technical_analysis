@@ -35,6 +35,12 @@ def render_owner_decision_packet(payload: Mapping[str, Any]) -> str:
     assert isinstance(safety, Mapping)
     groups = payload["grouped_owner_decision_packet"]
     assert isinstance(groups, list)
+    machine_matrix = payload.get("machine_evidence_matrix")
+    machine_by_source = {
+        str(item.get("source_id")): item
+        for item in machine_matrix
+        if isinstance(item, Mapping) and str(item.get("source_id") or "").strip()
+    } if isinstance(machine_matrix, list) else {}
 
     lines = [
         "# P0 Owner Decision Packet",
@@ -82,6 +88,50 @@ def render_owner_decision_packet(payload: Mapping[str, Any]) -> str:
                 "",
             ]
         )
+
+        machine_items = [
+            machine_by_source[source_id]
+            for source_id in covered_ids
+            if source_id in machine_by_source
+        ]
+        if machine_items:
+            lines.extend(
+                [
+                    "**Machine route evidence（唯讀）**",
+                    "",
+                    "| Source | Actual／candidate routes | Fallback | Probe／availability | PIT／timestamp | Rows raw／accepted／blocked | License URL(s) |",
+                    "|---|---|---|---|---|---:|---|",
+                ]
+            )
+            for machine_item in machine_items:
+                route_cells = _machine_route_cells(machine_item)
+                fallback_attempted = machine_item.get("fallback_attempted")
+                if fallback_attempted is None:
+                    fallback_attempted = machine_item.get("fallback_used")
+                fallback_label = (
+                    "attempted"
+                    if fallback_attempted is True
+                    else "not_used"
+                    if fallback_attempted is False
+                    else "unknown"
+                )
+                rows = (
+                    f"{machine_item.get('raw_row_count', 0)} / "
+                    f"{machine_item.get('accepted_row_count', 0)} / "
+                    f"{machine_item.get('blocked_row_count', 0)}"
+                )
+                lines.append(
+                    f"| `{_markdown_cell(machine_item.get('source_id', 'unknown'))}` | "
+                    f"{_markdown_cell('<br>'.join(route_cells) or '未提供')} | "
+                    f"`{fallback_label}` | "
+                    f"`{_markdown_cell(machine_item.get('probe_outcome', 'unknown'))}` / "
+                    f"`{_markdown_cell(machine_item.get('availability', 'unknown'))}` | "
+                    f"`{_markdown_cell(machine_item.get('pit_status', 'unknown'))}` / "
+                    f"`{_markdown_cell(machine_item.get('timestamp_kind', 'unknown'))}` | "
+                    f"`{_markdown_cell(rows)}` | "
+                    f"{_markdown_cell('<br>'.join(_machine_license_urls(machine_item)) or '待補')} |"
+                )
+            lines.append("")
 
         recommendations = raw_group.get("source_recommendations")
         if isinstance(recommendations, list) and recommendations:
@@ -161,6 +211,51 @@ def _validate_audit_payload(payload: Mapping[str, Any]) -> None:
         raise ValueError("P0 audit production_blend_alpha_bp must remain zero")
     if safety.get("downstream_eligibility") != "none":
         raise ValueError("P0 audit downstream_eligibility must remain none")
+
+
+def _markdown_cell(value: object) -> str:
+    """Keep machine-provided packet cells on one safe Markdown table row."""
+
+    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+
+
+def _machine_route_cells(machine_item: Mapping[str, Any]) -> list[str]:
+    routes = machine_item.get("acquisition_routes")
+    cells: list[str] = []
+    if isinstance(routes, list):
+        for route in routes:
+            if not isinstance(route, Mapping):
+                continue
+            route_id = str(route.get("route_id") or "").strip()
+            if not route_id:
+                continue
+            provider = str(route.get("provider") or "").strip()
+            endpoint = str(route.get("endpoint") or "").strip()
+            label = route_id
+            if provider:
+                label += f" ({provider})"
+            if endpoint:
+                label += f" — {endpoint}"
+            cell = _markdown_cell(label)
+            if cell not in cells:
+                cells.append(cell)
+    actual_route = str(machine_item.get("acquisition_route_id") or "").strip()
+    if actual_route and not any(actual_route in cell for cell in cells):
+        cells.insert(0, _markdown_cell(actual_route))
+    return cells
+
+
+def _machine_license_urls(machine_item: Mapping[str, Any]) -> list[str]:
+    routes = machine_item.get("acquisition_routes")
+    urls: list[str] = []
+    if isinstance(routes, list):
+        for route in routes:
+            if not isinstance(route, Mapping):
+                continue
+            url = str(route.get("license_evidence_url") or "").strip()
+            if url and url not in urls:
+                urls.append(url)
+    return urls
 
 
 def _require_non_production_output(path: Path) -> None:

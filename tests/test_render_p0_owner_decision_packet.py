@@ -25,6 +25,9 @@ def test_renderer_preserves_group_questions_and_safety_boundary() -> None:
     assert "mops_monthly_quarterly" in rendered
     assert "formal_oos_allowed=false" in rendered
     assert "accepted 或 limited" in rendered
+    assert "Machine route evidence（唯讀）" in rendered
+    assert "twse.TWT49U" in rendered
+    assert "License URL(s)" in rendered
     assert "raw_row" not in rendered
 
 
