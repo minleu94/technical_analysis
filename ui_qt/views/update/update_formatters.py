@@ -364,6 +364,11 @@ def format_program_readiness_lane_progress(lane: str, value: Mapping[str, Any]) 
             parts.append(
                 f"weekly {_safe_nonnegative_int(metrics.get('weekly_observed_count'))}/{weekly_required}"
             )
+        if "weekly_pending_count" in metrics:
+            parts.append(
+                "待人工審核 "
+                f"{_safe_nonnegative_int(metrics.get('weekly_pending_count'))} 期"
+            )
         dry_required = _safe_nonnegative_int(metrics.get("dry_run_required_count"))
         if dry_required:
             parts.append(

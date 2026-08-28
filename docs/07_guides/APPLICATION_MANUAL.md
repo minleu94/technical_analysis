@@ -1192,7 +1192,7 @@ freshness status、`checked_at`、warnings／errors 與 read-only 標誌，不�
 是否超過 8 MiB、是否有重複 record、terminal run，以及 latest status 與 history
 最新 run 是否一致。
 
-每個 lane 的「下一步」欄也會顯示 bounded 進度摘要，讓「已有機器證據」與「尚未通過治理／執行 gate」分開閱讀：P0 會顯示來源數、機器證據比例、`accepted／limited` 與 route 嘗試數；Evidence 會顯示 weekly／dry-run `已觀測／要求` 與 Formal credit 是否授權；Paper 會顯示 snapshot、benchmark、成本紀錄與 fills；Formal／ML 會顯示 owner-controlled input `ready／total`；Runtime、效能與更新歷史則顯示 host probe、canary／容量、排程與 freshness 摘要。阻擋原因會先顯示中文意義，括號保留原始 machine token，方便直接對照 log／artifact；這些只是 UI read model，不會改變任何 gate。
+每個 lane 的「下一步」欄也會顯示 bounded 進度摘要，讓「已有機器證據」與「尚未通過治理／執行 gate」分開閱讀：P0 會顯示來源數、機器證據比例、`accepted／limited` 與 route 嘗試數；Evidence 會顯示 weekly／dry-run `已觀測／要求`、sidecar 中待人工審核的 `pending_human_review` 期數與 Formal credit 是否授權；Paper 會顯示 snapshot、benchmark、成本紀錄與 fills；Formal／ML 會顯示 owner-controlled input `ready／total`；Runtime、效能與更新歷史則顯示 host probe、canary／容量、排程與 freshness 摘要。阻擋原因會先顯示中文意義，括號保留原始 machine token，方便直接對照 log／artifact；這些只是 UI read model，不會改變任何 gate。
 
 此命令是 query-only readiness projection：不建立資料夾、不寫正式 SQLite、不發網路、
 不啟用 scheduler／broker；輸出 `partial` 也不代表 Formal credit、source acceptance、

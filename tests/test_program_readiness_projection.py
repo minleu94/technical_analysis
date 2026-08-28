@@ -127,6 +127,13 @@ def test_projection_keeps_bounded_lane_progress_without_nested_details(tmp_path:
                         "item_id": "weekly_history",
                         "observed_count": 0,
                         "required_count": 3,
+                        "evidence": {
+                            "pending_collection_periods": [
+                                {"period_start": "2026-08-17", "period_end": "2026-08-23"},
+                                {"period_start": "2026-08-24", "period_end": "2026-08-28"},
+                                {"details_that_must_not_leak": {"large": "payload"}},
+                            ]
+                        },
                     },
                     {
                         "item_id": "multi_day_dry_run",
@@ -156,6 +163,7 @@ def test_projection_keeps_bounded_lane_progress_without_nested_details(tmp_path:
     assert projected["workstreams"]["evidence"]["metrics"] == {
         "weekly_observed_count": 0,
         "weekly_required_count": 3,
+        "weekly_pending_count": 3,
         "dry_run_observed_count": 2,
         "dry_run_required_count": 3,
         "formal_credit_authorized": False,
@@ -172,6 +180,7 @@ def test_projection_keeps_bounded_lane_progress_without_nested_details(tmp_path:
         "evidence", projected["workstreams"]["evidence"]
     )
     assert "weekly 0/3" in evidence_progress
+    assert "待人工審核 3 期" in evidence_progress
     assert "dry-run 2/3" in evidence_progress
     assert "formal credit=未授權" in evidence_progress
 

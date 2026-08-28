@@ -261,6 +261,18 @@ def _project_lane_metrics(lane: str, payload: Mapping[str, Any]) -> dict[str, An
                     if item_id == "weekly_history":
                         _copy_nonnegative_int(item, "observed_count", metrics, "weekly_observed_count")
                         _copy_nonnegative_int(item, "required_count", metrics, "weekly_required_count")
+                        evidence = item.get("evidence")
+                        if isinstance(evidence, Mapping):
+                            pending_periods = evidence.get("pending_collection_periods")
+                            if isinstance(pending_periods, (list, tuple)):
+                                # 只投影 bounded 計數，不把 sidecar 期別、路徑或任意
+                                # nested payload 帶進 UI；pending 不會被當成 Gate credit。
+                                pending_count = sum(
+                                    1
+                                    for pending in pending_periods[:4096]
+                                    if isinstance(pending, Mapping)
+                                )
+                                metrics["weekly_pending_count"] = pending_count
                     elif item_id == "multi_day_dry_run":
                         _copy_nonnegative_int(item, "observed_count", metrics, "dry_run_observed_count")
                         _copy_nonnegative_int(item, "required_count", metrics, "dry_run_required_count")
