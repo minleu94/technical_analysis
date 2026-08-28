@@ -8,6 +8,7 @@
 - focused regression 已加入既有 `tests/test_pre_v2_readiness_service.py`；本 slice 未寫正式資料、未發網路、未啟用 scheduler／broker。
 - 新增 guarded `scripts/qa_technical_indicator_production_canary.py` 與 readiness contract：預設唯讀預演，只有 owner token、無並行 writer acknowledgement 與 explicit confirm 同時成立才會對單股建立 SQLite／CSV backup 並走 bounded parent-only writer；post-state 驗證失敗會嘗試 rollback。2026-08-28 尚未執行 production canary，technical blocker 仍為 `technical_production_single_writer_canary_not_completed`；新增 7 個定向測試，collect count=`3691`。
 - 2026-08-28 已對 production `2330` 做唯讀 canary preview（daily／technical latest=`2026-08-28`、SQLite `quick_check=ok`、daily rows=`3,075`、technical rows=`3,084`），artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_production_canary_preview_20260828.json`，SHA-256=`EBCC4308C00DDF743B2AEF2546737ECA19019E87819EBFAD0DF0506AA7B7FB23`；沒有建立 backup、沒有寫 production SQLite／CSV、沒有啟用 worker。
+- 以同一組既有 P0／Evidence／Paper／Formal／Runtime／performance artifacts 載入該 preview 後，unified readiness 仍為 `action_required`，且 performance 只保留 `technical_production_single_writer_canary_not_completed`；報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_technical_canary_preview_20260828.json`，SHA-256=`BEEFAA4E47E2C02D60CDB30CC334093E78B318EED684B681B317081541CAD825`。
 
 ## 2026-08-28 P0 machine evidence handoff projection（current engineering）
 
