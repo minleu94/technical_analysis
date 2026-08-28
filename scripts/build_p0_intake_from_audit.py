@@ -68,6 +68,7 @@ _MACHINE_EVIDENCE_FIELDS = (
     "remaining_blocker",
     "endpoint_id",
     "acquisition_route_id",
+    "route_probe_statuses",
     "http_date",
     "last_modified",
     "etag",

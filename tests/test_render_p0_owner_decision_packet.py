@@ -27,6 +27,7 @@ def test_renderer_preserves_group_questions_and_safety_boundary() -> None:
     assert "accepted 或 limited" in rendered
     assert "Machine route evidence（唯讀）" in rendered
     assert "twse.TWT49U" in rendered
+    assert "[not_attempted, selected]" in rendered
     assert "License URL(s)" in rendered
     assert "raw_row" not in rendered
 

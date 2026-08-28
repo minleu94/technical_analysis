@@ -132,6 +132,14 @@ def test_machine_route_and_fallback_lineage_is_projected_without_dossier_widenin
                     "license_evidence_url": "https://www.twse.com.tw/zh/terms/use.html",
                 }
             ],
+            "route_probe_statuses": [
+                {
+                    "route_id": "twse.TWT49U",
+                    "status": "observed",
+                    "selected": True,
+                    "fallback": False,
+                }
+            ],
         }
     )
 
@@ -143,6 +151,7 @@ def test_machine_route_and_fallback_lineage_is_projected_without_dossier_widenin
     assert first["fallback_attempted"] is True
     assert first["fallback_endpoint_id"] == "tpex.tpex_exright_daily"
     assert first["acquisition_routes"][0]["license_evidence_url"].startswith("https://")
+    assert first["route_probe_statuses"][0]["status"] == "observed"
     assert "api_key" not in first
 
     # The governed dossier remains the original strict v1 shape and is still

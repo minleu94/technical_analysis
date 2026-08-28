@@ -222,6 +222,11 @@ def _markdown_cell(value: object) -> str:
 
 def _machine_route_cells(machine_item: Mapping[str, Any]) -> list[str]:
     routes = machine_item.get("acquisition_routes")
+    probe_statuses = {
+        str(item.get("route_id") or "").strip(): item
+        for item in machine_item.get("route_probe_statuses", [])
+        if isinstance(item, Mapping) and str(item.get("route_id") or "").strip()
+    }
     cells: list[str] = []
     if isinstance(routes, list):
         for route in routes:
@@ -237,6 +242,15 @@ def _machine_route_cells(machine_item: Mapping[str, Any]) -> list[str]:
                 label += f" ({provider})"
             if endpoint:
                 label += f" — {endpoint}"
+            probe = probe_statuses.get(route_id)
+            if probe is not None:
+                status = str(probe.get("status") or "not_usable").strip()
+                markers = []
+                if probe.get("selected") is True:
+                    markers.append("selected")
+                if probe.get("fallback") is True:
+                    markers.append("fallback")
+                label += f" [{status}{', ' + ', '.join(markers) if markers else ''}]"
             cell = _markdown_cell(label)
             if cell not in cells:
                 cells.append(cell)

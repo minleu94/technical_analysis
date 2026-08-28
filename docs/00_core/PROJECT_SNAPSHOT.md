@@ -28,6 +28,7 @@
 - P0 Data Update／Research Console 的比例欄位已改名為「解析通過率」並標示 `accepted/observed`；這是 payload row-conservation 的品質訊號，不是官方市場 universe／日期 coverage。沒有獨立來源分母與 missingness evidence 時，UI 不會再用「覆蓋率」暗示完整來源。
 - P0 audit 另新增 `acquisition_route_probe_summary`，對 27 條候選 route 分別標示已觀測、失敗、官方無資料、日期不符、解析／接受列缺漏或尚未嘗試，並保留 selected／fallback lineage；route registry 不再與實際 HTTP／artifact probe 混為一談。此投影仍是 candidate evidence only，不授予 source acceptance、PIT 或 production ingestion。
 - Data Update 的 P0 控制中心新增「Probe 路徑狀態」欄與摘要計數；每列直接顯示各候選 route 的 `observed`／`failed`／`official_no_data`／`date_mismatch`／`not_attempted` 等 bounded 結果，並保留已選／fallback 標記。這讓 route probe 不必再打開原始 audit JSON 才能判讀，但仍維持 `downstream_eligibility=none`、不寫正式資料與不自動接受來源。
+- P0 candidate intake 與 owner decision packet 也會保留同一份 route probe status；owner 看到的 route 不再只是 registry endpoint，而是附帶實際 `status`／selected／fallback lineage。這仍是 machine evidence transport，不會擴張 dossier contract 或自動產生 owner decision。
 - P0 license projection 對同一來源多個官方條款 URL 的混合結果改以 `capture_partial` 顯示，並在 Data Update／Research Console 呈現「部分取得，仍需複核」；已取得的 hash 與失敗原因都保留，但不改變 `license_accepted=false`、owner review 或 `downstream_eligibility=none`。
 - Data Update 排程頁已移除過時的 `Simulated/Waiting for time` 固定文案；初始預覽明確標為單一 freshness artifact，按檢查後才顯示 `scheduled/*` 唯讀彙總，並把 daily task 執行與 `production_scheduler_allowed=false` 的生產寫入治理分開呈現。
 - 更新時間軸的步驟／歷史與 freshness／TPEX 摘要現在以「中文說明（machine token）」呈現，例如 `完成（passed）`；保留 token 供排錯，不放寬任何正式 gate。

@@ -1127,6 +1127,8 @@ $env:PROGRAM_READINESS_ARTIFACT = "C:\path\to\program_readiness.json"
 
 表格最右側的「Probe 路徑狀態」會逐條顯示候選 route 的實際 probe 結果，例如 `已觀測（observed）`、`失敗（failed）`、`官方無資料（official_no_data）`、`日期不符（date_mismatch）` 或 `未嘗試（not_attempted）`，並以「已選」與 `fallback` 標記 lineage。摘要會列出已嘗試／總路徑及各狀態計數；若舊 artifact 沒有這個欄位，畫面保留「未提供」，不會把 route registry 當成網路成功證據。這仍是候選、唯讀診斷，不會解除 license／owner／PIT gate。
 
+由「產生 P0 candidate intake／Owner packet」工具輸出的 machine evidence 也會保留 route probe status；packet 內 route label 會附上 `observed`／`failed`／`not_attempted` 與 selected／fallback 標記。這只方便 Owner 逐路徑複核，不會把 route registry 或單次 probe 自動轉成 accepted／limited。
+
 快速更新排程會在 `latest_status.json` 旁以 append-only 方式保存 `data-update-status-history.v1` JSONL；每次真實執行會記錄 `running` 與 terminal status 的 run／時間／步驟摘要。預設 history 路徑為 `OUTPUT_ROOT/scheduled/data_update_quick/history.jsonl`，也可用 runner 的 `--history-path` 或 UI 的 `DATA_UPDATE_HISTORY_ARTIFACT` 指定。這個功能不會回放既有 latest status、不會把檔案 mtime 當成完成時間；既有環境的 history 缺檔會顯示「缺漏」，等下一次真實排程自然產生，不得手動複製舊結果補足。
 
 若 history 缺檔，先用下列唯讀命令確認 Windows task 是否真的存在：
