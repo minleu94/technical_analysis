@@ -576,11 +576,28 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
     )
     broker_path = tmp_path / "broker.json"
     broker_path.write_text(json.dumps({"status": "measured"}), encoding="utf-8")
+    batch_path = tmp_path / "technical-batch.json"
+    batch_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "technical-indicator-full-batch-latency.v1",
+                "status": "measured",
+                "read_only": True,
+                "write_attempted": False,
+                "sqlite_write_attempted": False,
+                "parallelism_enabled": False,
+                "observed_worker_count": 1,
+                "single_writer_required": True,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     report = inspect_program_readiness(
         data_root=tmp_path / "data",
         output_root=tmp_path / "output",
         technical_performance_path=technical_path,
+        technical_batch_performance_path=batch_path,
         broker_performance_path=broker_path,
     )
     rendered = render_markdown(report)
@@ -590,3 +607,4 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
     assert "`performance`" in rendered
     assert "bounded worker" in rendered
     assert report["workstreams"]["performance"]["status"] == "partial"
+    assert report["workstreams"]["performance"]["details"]["artifacts"]["technical_batch"]["status"] == "measured"

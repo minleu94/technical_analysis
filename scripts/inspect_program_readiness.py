@@ -66,6 +66,7 @@ def inspect_program_readiness(
     min_dry_run_days: int = 3,
     training_as_of: str | None = None,
     technical_performance_path: str | Path | None = None,
+    technical_batch_performance_path: str | Path | None = None,
     broker_performance_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
@@ -129,6 +130,7 @@ def inspect_program_readiness(
         ),
         "performance": _inspect_performance_lane(
             _optional_path(technical_performance_path),
+            _optional_path(technical_batch_performance_path),
             _optional_path(broker_performance_path),
         ),
     }
@@ -489,13 +491,21 @@ def _inspect_update_history_lane(
 
 def _inspect_performance_lane(
     technical_path: Path | None,
+    technical_batch_path: Path | None,
     broker_path: Path | None,
 ) -> dict[str, Any]:
     artifacts: dict[str, Any] = {}
     blockers: list[str] = []
-    for label, path in (("technical", technical_path), ("broker", broker_path)):
+    if technical_path is None and technical_batch_path is None:
+        blockers.append("technical_performance_baseline_not_supplied")
+    if broker_path is None:
+        blockers.append("broker_performance_baseline_not_supplied")
+    for label, path in (
+        ("technical", technical_path),
+        ("technical_batch", technical_batch_path),
+        ("broker", broker_path),
+    ):
         if path is None:
-            blockers.append(f"{label}_performance_baseline_not_supplied")
             artifacts[label] = None
             continue
         try:
@@ -503,12 +513,17 @@ def _inspect_performance_lane(
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
             blockers.append(f"{label}_performance_baseline_invalid")
             artifacts[label] = {"path": str(path), "error_type": type(error).__name__, "error": str(error)}
-    if not artifacts.get("technical") and not artifacts.get("broker"):
+    if not any(isinstance(value, Mapping) for value in artifacts.values()):
         return _lane(
             "waiting_for_external_input",
             blockers=tuple(blockers),
             next_actions=("先提供 read-only latency baseline，再做 full-batch CPU／CSV write／SQLite contention measurement；在此之前不要啟用 worker。",),
-            details={"technical_path": str(technical_path) if technical_path else None, "broker_path": str(broker_path) if broker_path else None, "artifacts": artifacts},
+            details={
+                "technical_path": str(technical_path) if technical_path else None,
+                "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
+                "broker_path": str(broker_path) if broker_path else None,
+                "artifacts": artifacts,
+            },
         )
     for label, payload in artifacts.items():
         if not isinstance(payload, Mapping):
@@ -524,6 +539,7 @@ def _inspect_performance_lane(
         external_input_required=True,
         details={
             "technical_path": str(technical_path) if technical_path else None,
+            "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
             "broker_path": str(broker_path) if broker_path else None,
             "artifacts": artifacts,
             "parallelism_enabled": False,
@@ -649,6 +665,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-dry-run-days", type=int, default=3)
     parser.add_argument("--training-as-of")
     parser.add_argument("--technical-performance-baseline", type=Path)
+    parser.add_argument("--technical-batch-performance-baseline", type=Path)
     parser.add_argument("--broker-performance-baseline", type=Path)
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
@@ -677,6 +694,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         min_dry_run_days=args.min_dry_run_days,
         training_as_of=args.training_as_of,
         technical_performance_path=args.technical_performance_baseline,
+        technical_batch_performance_path=args.technical_batch_performance_baseline,
         broker_performance_path=args.broker_performance_baseline,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,
