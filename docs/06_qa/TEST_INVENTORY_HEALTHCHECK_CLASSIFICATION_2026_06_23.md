@@ -28,7 +28,7 @@ Current filesystem Python files: `656`
 - 預設不收集檔：`30`
 - `pytest --collect-only -q -o addopts=`：`3748 tests collected`
 
-2026-08-28 本輪改動後完整 pytest 已以 `-o addopts=` 完成：`3747 passed, 1 skipped, 26 warnings`（`533.67s`；已納入 Registry clone transaction、storage retention inventory、monthly-revenue candidate projection 與 weekly review CLI UTF-8 guard）。首輪全量回歸暴露兩個新測試檔未登錄 inventory，以及 CP1252 主控台輸出週報 JSON 失敗；補登錄、UTF-8 console guard 與數量同步後重跑全量已通過。
+2026-08-28 本輪改動後完整 pytest 已以 `-o addopts=` 完成：`3747 passed, 1 skipped, 26 warnings`（`532.28s`；已納入 Registry clone transaction、storage retention inventory、technical canary storage preflight、monthly-revenue candidate projection 與 weekly review CLI UTF-8 guard）。首輪全量回歸暴露兩個新測試檔未登錄 inventory，以及 CP1252 主控台輸出週報 JSON 失敗；補登錄、UTF-8 console guard 與數量同步後重跑全量已通過。
 下方較早的 `3613 passed`／`3607 passed`／`3606 passed`／`3603 passed`／`3592 passed` 是前一輪中間基準，
 不取代本次完整回歸結果。
 
