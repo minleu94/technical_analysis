@@ -8,6 +8,8 @@
 
 technical production canary 的 guarded 入口與 readiness contract 已完成，預設只做唯讀預演；目前沒有執行任何正式 technical 寫入。要解除這一項 blocker，仍需 owner 在停用並行 writer 後明確核准一檔股票的 backup／rollback canary。
 
+Evidence scheduler readiness 也已收斂為 fail-closed：即使 source coverage、dashboard 與 working-copy smoke 沒有 blocking gap，仍必須提供未過期、具名 owner、七項 checks 全部通過的 `evidence-production-scheduler-approval.v1` artifact；缺少或無效時不會回報 `operational_production`，不會啟用任何 production write-mode task。
+
 P0 license／terms 的候選證據入口也已完成：`scripts/capture_p0_license_evidence.py` 會從 27 條 route 收斂 3 個唯一 allowlisted 官方 URL，僅保留 bounded response metadata、SHA-256 與關鍵限制 flags，不保存頁面全文、不改 source acceptance。2026-08-28 已產生 no-network preview；同日嘗試受控 bounded GET 時，當前 Windows host 以 `WinError 10013` 拒絕 socket，因此三個 target 都被保留為 `transport_error`。這是本機 egress／權限證據，不是官方來源不存在；需在允許 HTTPS 的執行環境重跑，或由 Owner／Reviewer 提供可驗證的外部保存頁面 hash，才能進入 license review。
 
 ## 可重複的整體盤點入口
