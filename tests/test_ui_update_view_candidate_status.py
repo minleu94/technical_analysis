@@ -62,7 +62,7 @@ def test_update_view_candidate_status_rendering(tmp_path):
     view._on_status_checked(fake_status)
 
     inst_text = view.institutional_status_text.toPlainText()
-    assert "CANDIDATE_AVAILABLE" in inst_text
+    assert "候選可用" in inst_text
     assert "2024-07-22" in inst_text
     assert "候選研究資料，不參與評分" in inst_text
     # Candidate cards use the same canonical fields as the regular data cards;
@@ -72,7 +72,7 @@ def test_update_view_candidate_status_rendering(tmp_path):
     assert "98.5%" in view.institutional_status_text.extra_label.text()
 
     credit_text = view.credit_status_text.toPlainText()
-    assert "MISSING" in credit_text
+    assert "缺漏" in credit_text
     assert "候選研究資料，不參與評分" in credit_text
 
 
