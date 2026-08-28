@@ -18,6 +18,10 @@
 - Data Update P0 表格會區分「已採用」、「已嘗試但未採用」與「未嘗試／未提供」；`date_mismatch`、`official_no_data`、`network_error` 會在列內及 tooltip 顯示，summary 另列 fallback 嘗試／採用／拒絕計數。已採用 route 才能顯示採用，不會把 fallback 嘗試誤報成成功。
 - 更新時間軸的 steps／history 保留原始 status token，同時提供可讀 tooltip 與狀態色；不改變唯讀、明確路徑、無網路／無寫入邊界。新增 projection／UI regression 涵蓋 rejected fallback 日期與傳輸診斷。
 
+## 2026-08-28 Evidence pending-period visibility（current engineering）
+
+- Workbench 證據門檻摘要現在會在 weekly `observed/required` ratio 旁投影 sidecar 的 `pending_human_review` 期數與日期區間（最多前三期），並固定保留 `formal_credit_authorized=false`。這只改善「已觀測 3/3」與「尚待人工核准」的區分，不會自動寫入 approved history、授予 Formal credit 或啟用 production scheduler。
+
 ## 2026-08-28 Data Update live status timeline（current engineering）
 
 - `UpdateView` 現在會把固定出口 `output/scheduled/data_update_quick/latest_status.json`、`output/scheduled/data_freshness/latest_status.json` 與 `meta_data/tpex_full_refresh_status.json` 投影成唯讀 `data-update-timeline.v1`；可見最後成功完成時間、run、目標資料日、每個步驟結果與 freshness 狀態，不再只看 SQLite 筆數猜測更新是否完成。

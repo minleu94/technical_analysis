@@ -2429,6 +2429,8 @@ V1.3 / V1.4 Evidence Operations weekly review CLI 用來把 scheduler readiness�
 Research Lab `Evidence Review` 分頁在 V1.4 新增「覆盤歷史」子頁，用來唯讀檢查已保存 weekly review history 的週期、status、scheduler readiness、Decision Quality / Signal Decay 數量、manual lifecycle candidate 數量與 warnings。此子頁只讀 dashboard service，不建立週報、不寫 action item、不啟用 scheduler，也不自動套用任何 lifecycle action。
 
 若 weekly history 保存在隔離 working-copy DB，主 UI 不會自行掃描或合併該 DB。可由具名 owner 建立外部 `approved-weekly-history-projection.v1` JSON，並在啟動 UI 前設定 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH` 為該檔案的絕對路徑；決策工作台只讀取其中 `status=approved_weekly_review`、具 `review_id`、`review_hash`、週期、`owner_role` 與 `approved_at` 的列，顯示其累積數。projection 必須固定 `formal_credit_authorized=false`，只供 UI 揭露 weekly Gate 進度，不寫入正式 DB、不授權 formal credit、不啟用 scheduler 或交易。
+
+Workbench 的證據門檻摘要會另外列出 sidecar 中仍為 `pending_human_review` 的期數與日期區間（最多預覽前三期），並同時顯示 `formal_credit_authorized=false`。因此 `3/3` 是已觀測／具名核准 projection 的數量，不代表 pending 週期已核准，也不代表 Formal 或 production scheduler 已開啟。
 若未設定該環境變數，Workbench 會在 warnings 與 weekly history 詳情明示 `approved_weekly_history_projection_not_configured`，並只計算正式 evidence DB 內可讀的 legacy review history；這不代表 projection 已自動核准，也不會把 pending sidecar 轉成 Gate credit。
 
 Report evidence boundary 固定為：This report is research evidence only. Close-to-close forward return is not executable live performance. No trading recommendation is produced.
