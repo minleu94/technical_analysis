@@ -78,13 +78,13 @@
 - `UpdateView` 現在會把固定出口 `output/scheduled/data_update_quick/latest_status.json`、`output/scheduled/data_freshness/latest_status.json` 與 `meta_data/tpex_full_refresh_status.json` 投影成唯讀 `data-update-timeline.v1`；可見最後成功完成時間、run、目標資料日、每個步驟結果與 freshness 狀態，不再只看 SQLite 筆數猜測更新是否完成。
 - 時間軸只讀取明確路徑，檔案缺漏、格式錯誤、失敗、執行中、過期或未設定均分開顯示；不沿用上一輪步驟列，不掃描其他 `latest_status`，不啟動網路或寫入。預設可用環境變數 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT`、`TPEX_REFRESH_STATUS_ARTIFACT` 覆寫單一路徑。
 - 2026-08-28 由既有 quick runner 完成真實 run=`20260828-29472`、目標資料日=`2026-08-28`、12/12 步驟通過；每日／大盤／產業／券商／技術指標 SQLite 均已追上 `2026-08-28`。這是資料更新完成證據，不等於 Paper fills、P0 acceptance 或 Formal credit。
-- 同一 run 已在 `data-update-status-history.v1` JSONL 保存 `running` 與 terminal=`passed` 兩筆 record；歷史 producer／UI projection 不會回放舊 latest status。正式 `data_freshness/latest_status.json` 仍停在 `2026-08-27`，但隔離 TEMP 的唯讀 freshness probe 已觀察到 `status=passed`、SQLite daily／technical 最新日均為 `2026-08-28`；這份 probe 不覆寫正式 output。host-context Scheduler inspector 已確認 13/13 task 註冊與 action wiring，下一步是等下一個自然週期觀察 freshness／history live refresh，而不是重複註冊 task。
+- 同一 run 已在 `data-update-status-history.v1` JSONL 保存 `running` 與 terminal=`passed` 兩筆 record；歷史 producer／UI projection 不會回放舊 latest status。host scheduler 隨後已產生正式 `data_freshness/latest_status.json`，`status=passed`、SQLite daily／technical 最新日均為 `2026-08-28`；隔離 TEMP probe 與正式 freshness 結果一致。host-context Scheduler inspector 已確認 13/13 task 註冊與 action wiring，下一步是觀察後續自然週期，不重複註冊 task。
 
 ## 2026-08-28 Data Update real refresh（current evidence）
 
 - `scripts/qa_validate_update_tab.py` 在 quick runner 完成後為 `23 passed / 0 failed / 4 skipped`；目前核心資料狀態為 daily `5,284,040`、market `3,071`、industry `210,775`、broker `973,609`、technical `5,228,274`，均為 `2026-08-28`。
 - technical step 實際處理 `2,153` 檔、成功 `1,960`、失敗 `0`；另有 `8` 檔資料不足，已列入 terminal diagnostics，不以缺資料假標成功。
-- 可見性缺口已縮小為自然週期與治理層：正式 `data_freshness` status 尚未更新至最新 run，host scheduler 註冊與 action wiring 已確認；readiness 不再把這些問題誤判成核心市場資料不存在。
+- 可見性缺口已縮小為治理層：正式 `data_freshness` 已與 `2026-08-28` quick run 對齊，host scheduler 註冊與 action wiring 也已確認；readiness 不再把資料更新問題誤判成核心市場資料不存在。
 
 ## 2026-08-28 P0 owner packet renderer（current engineering）
 
