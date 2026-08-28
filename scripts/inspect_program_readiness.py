@@ -528,7 +528,15 @@ def _inspect_update_history_lane(
     }
     history_status = str(history.get("status") or "unknown")
     blockers: list[str] = list(diagnostics)
-    if history_status in {"invalid", "missing"}:
+    scheduler_missing = any(
+        item.startswith("scheduled_tasks_missing_or_unavailable:")
+        for item in diagnostics
+    )
+    if scheduler_missing:
+        # 排程未註冊是可立即處理的 host 狀態，不應被誤標成單純等待
+        # 下一次自然週期；即使 history 尚未建立，下一步也是先註冊 task。
+        status = "action_required"
+    elif history_status in {"invalid", "missing"}:
         status = "action_required" if history_status == "invalid" else "waiting_for_external_input"
     elif history_status in {"not_configured", "empty"}:
         status = "waiting_for_external_input"
@@ -541,7 +549,12 @@ def _inspect_update_history_lane(
     else:
         status = "ready"
     if status == "action_required":
-        actions = ("修正 history JSONL／latest status 的 schema 或 run identity；禁止用舊 latest status 回填 history。",)
+        if scheduler_missing:
+            actions = (
+                "由 owner 在正確 Windows 帳號下受控重新註冊 13 個 baldr task，再觀察下一次真實 running／terminal history；不可用舊 latest status 回填。",
+            )
+        else:
+            actions = ("修正 history JSONL／latest status 的 schema 或 run identity；禁止用舊 latest status 回填 history。",)
     elif status == "waiting_for_external_input":
         actions = ("等待下一次真實 Data Update 排程自然產生 running 與 terminal history，再觀察 retention 與 UI live refresh。",)
     else:

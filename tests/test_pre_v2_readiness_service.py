@@ -630,6 +630,7 @@ def test_program_readiness_projects_scheduler_registration_diagnostics(tmp_path:
 
     assert "scheduled_tasks_missing_or_unavailable:0/13" in lane["blockers"]
     assert lane["details"]["scheduled_task_status"]["task_count"] == 13
+    assert "重新註冊 13 個 baldr task" in lane["next_actions"][0]
 
 
 def test_program_readiness_forwards_explicit_weekly_collection_sidecar(tmp_path: Path) -> None:
