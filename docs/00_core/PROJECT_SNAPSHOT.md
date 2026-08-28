@@ -19,6 +19,7 @@
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
 
 - Scheduler wiring 唯讀續測已把 task 未註冊與 wrapper/action 形狀錯誤拆開：13/13 預期 repository .cmd wrapper 均存在；目前 task 全部不可用，Task To Run 尚未觀測（action_unobserved=13），沒有 false mismatch。現在 available=0/13，故 configuration_ready=false 的主因仍是 host 尚未完成 task registration。artifact=C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json，SHA-256=4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7。檢查器為 query-only，不會註冊或修改 task；unified readiness 會保留 action unobserved、wrapper missing／action mismatch 的獨立 blocker。
+- 使用該 manifest 重算的 unified readiness 為 C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_scheduler_wiring_20260828_v2.json（status=action_required；SHA-256=BE3E6BDE5E603BD1B2D3C67F8B1BC30C85335D6A87F5FA9D2628AD04FABAD32B）。runtime staging transaction 使用正確 artifact 後通過，正式 ACL 仍只留下兩個 PermissionError；Update History 仍是 task 0/13，沒有把未觀測 action 算成 mismatch。
 
 ## 2026-08-28 P0 machine evidence handoff projection（current engineering）
 

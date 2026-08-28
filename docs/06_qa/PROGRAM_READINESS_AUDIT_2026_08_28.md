@@ -230,6 +230,8 @@ candidate 的 validator 與 merge preview：2026-07、1,851 rows、可用日 202
 
 同一檢查器明確指定 repo root 後，13/13 本機 .cmd wrapper 均為 present；目前 task 全部不可用，因此 Task To Run action 尚未觀測（action_unobserved=13），沒有 false mismatch。configuration_ready=false 的主因仍是實際 task registration available=0/13。artifact=C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json（SHA-256=4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7）。這仍是 query-only 證據，不註冊、不修改 task；若 task 恢復但無法觀測 action，unified readiness 會保留 scheduled_task_action_unobserved；若 wrapper 遺失或 action 指錯，則分別保留 scheduled_task_wrapper_missing_or_unreadable／scheduled_task_action_mismatch。
 
+- 重新載入上述 wrapper manifest 的 unified readiness artifact 為 C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_scheduler_wiring_20260828_v2.json（status=action_required；SHA-256=BE3E6BDE5E603BD1B2D3C67F8B1BC30C85335D6A87F5FA9D2628AD04FABAD32B）。runtime staging probe 使用正確的 transaction artifact 後只保留正式 config.log／Research Registry 的兩個 PermissionError；Update History 只保留 scheduled_tasks_missing_or_unavailable:0/13，未把 action_unobserved 誤算成 mismatch。
+
 ## 安全邊界
 
 本次沒有把任何 candidate source 升格為 accepted／limited，沒有把 QA benchmark 當正式績效，沒有從既有 snapshot 補造 Paper fills，沒有回填 prospective Formal evidence，也沒有開啟 ML training、promotion、production scheduler 或 broker。正式 source、Paper execution 與 Formal clock 仍各走自己的 append-only／PIT 契約。
