@@ -288,6 +288,23 @@ downstream eligibility 或 Formal gate。未取得 response 時欄位明確為 `
 header 不會被複製。新增測試已驗證 allowlist 與 secret-like header 排除；本輪相關測試
 `37 passed`。
 
+同日以允許 HTTPS 的 host context 重新執行 bounded live probe：
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_continuation_live_host_headers.json`
+（SHA-256=`CC269C559A8A4C52662DD3538229130B6968903A01D134CC4861C80E001A1E53`）。
+13 個 source row 均有 machine evidence，12/13 為 network observed、1/13 為 MOPS
+artifact verified；raw=`91,348`、accepted=`89,971`、blocked=`1,377`、quarantine=`0`。
+12 個 HTTP response 有 `Date`／`Content-Type` transport metadata；這次也實際取得三大
+法人 `17,629` rows 與信用交易 `1,295` rows。這證明「替代路徑與 host 網路可取得資料」
+可以持續推進，但仍不證明歷史 coverage、official publication/PIT timestamp、license 或
+owner acceptance，因此不解除 `accepted=0`、`limited=0` 與 downstream gate。由此 audit
+唯讀重建的 owner intake／packet 分別為
+`p0_candidate_intake_continuation_live_host_headers.json`（SHA-256=`931FCA921E7DA659425C2CE279C46668BEB986307FA1FBC50FA5E93786E7BD14`）與
+`p0_owner_packet_continuation_live_host_headers.md`（SHA-256=`569E96474C0BC2FEC260ED8BB5E373569F4124E61A9603D18ACCB0A790A90440`）。
+同一組 host 證據重算的 unified readiness 仍為 `action_required`，但 `runtime`／
+`update_history` 維持 `ready`；artifact=
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_post_commit_host_headers_20260828.json`
+（SHA-256=`6C81E4FEF966DA6BC74F9037422F34C7A07D8A1987150EA0DBD030E0ADA90A70`）。
+
 ## Scheduler wrapper／action wiring 續測
 
 早期沙盒 wrapper manifest `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json`（SHA-256=`4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7`）仍保留 13/13 wrapper present，但 task query 不可用的 token 觀察。實際 host-context recheck 已確認 13/13 task `Enabled`／`Ready`、`Task To Run` 全部觀測且 action 相符；這些 query-only 檢查沒有註冊或修改 task。
