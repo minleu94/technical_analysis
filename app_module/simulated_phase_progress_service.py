@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -134,11 +135,17 @@ class SimulatedPhaseProgressService:
         *,
         evidence_db_path: str | Path | None = None,
         research_db_path: str | Path | None = None,
+        approved_weekly_history_projection_path: str | Path | None = None,
     ) -> None:
         self.config = config
         self.evidence_db_path = Path(evidence_db_path) if evidence_db_path is not None else Path(config.db_file)
         self.research_db_path = (
             Path(research_db_path) if research_db_path is not None else Path(config.research_run_db_file)
+        )
+        self.approved_weekly_history_projection_path = (
+            approved_weekly_history_projection_path
+            if approved_weekly_history_projection_path is not None
+            else os.environ.get("WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH")
         )
 
     def build_report(
@@ -162,6 +169,7 @@ class SimulatedPhaseProgressService:
             self.config,
             evidence_db_path=self.evidence_db_path,
             research_db_path=self.research_db_path,
+            approved_weekly_history_projection_path=self.approved_weekly_history_projection_path,
         ).inspect(
             decision_date=decision_date,
             multi_day_record_path=multi_day_record_path,

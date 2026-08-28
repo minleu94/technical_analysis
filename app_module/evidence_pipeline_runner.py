@@ -45,6 +45,7 @@ from app_module.evidence_pipeline_runner_dtos import (
     scheduler_readiness_after_run,
 )
 from app_module.evidence_source_coverage_service import EvidenceSourceCoverageService
+from app_module.paper_portfolio_time import taiwan_market_today
 from app_module.forward_performance_read_model import (
     ForwardPerformanceFilter,
     ForwardPerformanceReadModel,
@@ -258,6 +259,16 @@ class EvidencePipelineRunner:
             raise ValueError("--confirm requires explicit --db-path")
         if request.confirm and self._looks_like_production_db(request.db_path) and not request.allow_production_db_confirm:
             raise ValueError("--confirm against production-like DB requires --allow-production-db-confirm")
+        try:
+            request_date = date.fromisoformat(str(request.decision_date)[:10])
+        except ValueError as exc:
+            raise ValueError(f"invalid decision_date: {request.decision_date}") from exc
+        today = taiwan_market_today()
+        if request_date > today:
+            raise ValueError(
+                "decision_date cannot be future-dated: "
+                f"{request_date.isoformat()} (today={today.isoformat()})"
+            )
 
     def _looks_like_production_db(self, db_path: str | None) -> bool:
         if not db_path:

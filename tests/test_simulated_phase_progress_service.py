@@ -96,6 +96,38 @@ def _write_multi_day_record(path: Path, *, rows: int) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _write_approved_projection(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "approved-weekly-history-projection.v1",
+                "formal_credit_authorized": False,
+                "purpose": "test-only read-only projection",
+                "records": [
+                    {
+                        "review_id": f"review-{index}",
+                        "review_hash": f"sha256:{index:064d}",
+                        "period_start": period_start,
+                        "period_end": period_end,
+                        "owner_role": "release_owner",
+                        "approved_at": f"2026-07-{12 + index:02d}T12:00:00Z",
+                        "status": "approved_weekly_review",
+                    }
+                    for index, (period_start, period_end) in enumerate(
+                        (
+                            ("2026-07-06", "2026-07-12"),
+                            ("2026-07-13", "2026-07-19"),
+                            ("2026-07-20", "2026-07-26"),
+                        ),
+                        start=1,
+                    )
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_simulated_phase_report_marks_replay_and_keeps_official_gate_blocked(tmp_path: Path) -> None:
     config = _config(tmp_path)
     replay_summary = tmp_path / "replay.json"
@@ -151,3 +183,23 @@ def test_simulated_phase_markdown_excludes_forbidden_runtime_terms(tmp_path: Pat
     assert "requires_real_world_validation: `true`" in markdown
     forbidden_terms = ("official_ready", "phase_complete", "scheduler_approved", "production_ready")
     assert all(term not in markdown for term in forbidden_terms)
+
+
+def test_simulated_phase_progress_uses_approved_projection_environment(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+    projection_path = tmp_path / "approved-weekly-history.json"
+    _write_approved_projection(projection_path)
+    monkeypatch.setenv("WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH", str(projection_path))
+
+    replay_summary = tmp_path / "replay.json"
+    _write_replay_summary(replay_summary, days=1, events_seen=2, outcomes_created=0)
+    report = SimulatedPhaseProgressService(config, evidence_db_path=tmp_path / "missing.db").build_report(
+        decision_date="2026-07-07",
+        replay_summary_path=replay_summary,
+    )
+
+    assert report.official_gate_summary["weekly_history_observed"] == 3
+    weekly_item = next(
+        item for item in report.official_gate_summary["items"] if item["item_id"] == "weekly_history"
+    )
+    assert weekly_item["status"] == "ready"

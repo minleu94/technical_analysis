@@ -600,14 +600,31 @@ class _PeakRSSMonitor:
         self._budget_bytes = memory_budget_mb * 1024 * 1024
         self._peak = initial
         self._measurement_failed = False
-        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._started = False
+        self._stopped = False
+        self._thread = threading.Thread(
+            target=self._poll,
+            name="allocation-ooc-rss-monitor",
+            daemon=True,
+        )
 
     def start(self) -> None:
+        if self._stopped:
+            raise RuntimeError("RSS monitor cannot restart after stop")
+        if self._started:
+            return
+        self._started = True
         self._thread.start()
 
     def stop(self, *, enforce: bool = True) -> int:
+        if self._stopped:
+            if enforce:
+                self.assert_within_budget(stage="monitor_stop")
+            return self._peak
+        self._stopped = True
         self._stop.set()
-        self._thread.join(timeout=2)
+        if self._started and self._thread.is_alive():
+            self._thread.join(timeout=2)
         current = _current_rss_bytes()
         if current is None:
             self._measurement_failed = True
@@ -648,7 +665,6 @@ class AllocationOutOfCoreTrainingService:
         monitor = _PeakRSSMonitor(
             memory_budget_mb=request.memory_budget_mb
         )
-        monitor.start()
         store = _NumericStore(request.store_manifest_path)
         selected_horizons = (
             request.horizons if request.horizons else store.horizons
@@ -687,7 +703,6 @@ class AllocationOutOfCoreTrainingService:
                 run_id=run_id,
                 manifest=existing,
             )
-            monitor.stop(enforce=False)
             return _training_publication(
                 run_id=run_id,
                 run_directory=run_directory,
@@ -696,7 +711,6 @@ class AllocationOutOfCoreTrainingService:
                 manifest=existing,
             )
         if not request.resume and any(run_directory.iterdir()):
-            monitor.stop()
             raise FileExistsError(
                 "incomplete out-of-core training exists and resume=false"
             )
@@ -732,6 +746,9 @@ class AllocationOutOfCoreTrainingService:
             ),
         )
 
+        # 只有完成 manifest／output／audit 等 preflight 後才啟動 polling thread；
+        # fail-closed 驗證例外不應在 pytest 或長駐程序留下背景 thread。
+        monitor.start()
         try:
             for fold in store.folds:
                 fold_id = _required_text(

@@ -10,7 +10,10 @@ from app_module.evidence_operations_history_dashboard_dtos import (
     EvidenceOperationsHistoryDashboardResult,
     EvidenceOperationsHistoryDashboardRow,
 )
-from app_module.evidence_operations_history_repository import EvidenceOperationsHistoryRepository
+from app_module.evidence_operations_history_repository import (
+    EvidenceOperationsHistoryReadOnlyError,
+    EvidenceOperationsHistoryRepository,
+)
 
 
 class EvidenceOperationsHistoryDashboardService:
@@ -21,19 +24,26 @@ class EvidenceOperationsHistoryDashboardService:
         self,
         request: EvidenceOperationsHistoryDashboardRequest,
     ) -> EvidenceOperationsHistoryDashboardResult:
-        records = tuple(
-            self.backend.list_weekly_reviews(
-                start_date=_blank_to_none(request.start_date),
-                end_date=_blank_to_none(request.end_date),
-                limit=request.limit,
+        diagnostics: tuple[str, ...] = ()
+        try:
+            records = tuple(
+                self.backend.list_weekly_reviews(
+                    start_date=_blank_to_none(request.start_date),
+                    end_date=_blank_to_none(request.end_date),
+                    limit=request.limit,
+                )
             )
-        )
+        except EvidenceOperationsHistoryReadOnlyError as exc:
+            # A missing history DB/table is an expected read-only state.  Do
+            # not let a dashboard refresh create a schema just to render 0.
+            records = ()
+            diagnostics = (str(exc),)
         rows = tuple(_row_from_record(record) for record in records)
         return EvidenceOperationsHistoryDashboardResult(
             request=request,
             cards=_cards_from_rows(rows),
             rows=rows,
-            empty_state_message=_empty_state_message(rows),
+            empty_state_message=_empty_state_message(rows, diagnostics=diagnostics),
         )
 
 
@@ -42,7 +52,9 @@ def create_evidence_operations_history_dashboard_service(
     *,
     db_path: str | Path | None = None,
 ) -> EvidenceOperationsHistoryDashboardService:
-    return EvidenceOperationsHistoryDashboardService(EvidenceOperationsHistoryRepository(config, db_path=db_path))
+    return EvidenceOperationsHistoryDashboardService(
+        EvidenceOperationsHistoryRepository(config, db_path=db_path, read_only=True)
+    )
 
 
 def _row_from_record(record: Any) -> EvidenceOperationsHistoryDashboardRow:
@@ -73,9 +85,18 @@ def _cards_from_rows(rows: tuple[EvidenceOperationsHistoryDashboardRow, ...]) ->
     )
 
 
-def _empty_state_message(rows: tuple[EvidenceOperationsHistoryDashboardRow, ...]) -> str:
+def _empty_state_message(
+    rows: tuple[EvidenceOperationsHistoryDashboardRow, ...],
+    *,
+    diagnostics: tuple[str, ...] = (),
+) -> str:
     if rows:
         return ""
+    if diagnostics:
+        return (
+            "尚無 weekly review history；目前只讀資料源不可用，未建立或修改資料庫。"
+            f" 診斷：{'; '.join(diagnostics)}"
+        )
     return "尚無 weekly review history。請先用 CLI 產生 weekly review，並以 --save-history 封存人工覆盤紀錄。"
 
 

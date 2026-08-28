@@ -115,6 +115,127 @@ def test_projection_provider_is_copied_without_recomputing_domain_metrics() -> N
     }
 
 
+def test_explicit_p0_audit_path_is_projected_into_research_console(tmp_path: Path) -> None:
+    audit_path = tmp_path / "p0-audit.json"
+    audit_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "p0-candidate-audit.v1",
+                "formal_oos_allowed": False,
+                "production_scheduler_allowed": False,
+                "downstream_eligibility": "none",
+                "human_decision": "requires_human_acceptance",
+                "items": [
+                    {
+                        "source_id": source_id,
+                        "audit_status": "observed_candidate",
+                        "machine_status": "verified",
+                        "row_count": 3,
+                        "accepted_row_count": 3,
+                        "blocked_row_count": 0,
+                        "blockers": ["research_only_not_source_accepted"],
+                    }
+                    for source_id in sorted(P0_SOURCE_IDS)
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    console = ResearchConsoleSourceService(
+        projection_provider=_projection,
+        p0_audit_path=audit_path,
+    ).inspect()
+
+    assert console.source_control_center is not None
+    assert console.source_control_center.p0_source_count == 13
+    assert console.source_control_center.research_shadow_count == 13
+    assert console.source_control_center.downstream_eligible_count == 0
+    assert console.source_control_center.rows[0].observed_rows == 3
+
+
+def test_explicit_owner_review_decision_path_is_projected_fail_closed(tmp_path: Path) -> None:
+    decision_path = tmp_path / "p0-owner-review.json"
+    decision_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "source-acceptance-owner-review-decision.v1",
+                "source_id": "corporate_action.ex_dividend_timeline",
+                "decision_revision_id": "decision:ex-dividend:deferred",
+                "parent_revision_id": None,
+                "status": "deferred",
+                "owner_role": "owner",
+                "reviewer_role": "reviewer",
+                "decision_timestamp": "2026-08-27T12:00:00+08:00",
+                "active_blockers": ["missing_publication_time_policy"],
+                "rollback_reference": "owner-policy:disable",
+                "formal_oos_allowed": False,
+                "production_blend_alpha_bp": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    console = ResearchConsoleSourceService(
+        projection_provider=_projection,
+        p0_decision_path=decision_path,
+    ).inspect()
+
+    assert console.source_control_center is not None
+    row = console.source_control_center.rows[0]
+    assert row.decision_status == "deferred"
+    assert row.revision == "decision:ex-dividend:deferred"
+    assert row.governance_status == "deferred"
+    assert "missing_publication_time_policy" in row.blockers
+    assert "source_acceptance_deferred" in row.blockers
+    assert console.source_control_center.accepted_count == 0
+    assert console.source_control_center.downstream_eligible_count == 0
+
+
+def test_invalid_owner_review_applying_decision_fails_closed(tmp_path: Path) -> None:
+    decision_path = tmp_path / "p0-owner-review-accepted.json"
+    decision_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "source-acceptance-owner-review-decision.v1",
+                "source_id": "institutional_flows",
+                "decision_revision_id": "decision:institutional_flows:accepted",
+                "parent_revision_id": None,
+                "status": "accepted",
+                "owner_role": "owner",
+                "reviewer_role": "reviewer",
+                "decision_timestamp": "2026-08-27T12:00:00+08:00",
+                "rollback_reference": "owner-policy:disable",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    console = ResearchConsoleSourceService(
+        projection_provider=_projection,
+        p0_decision_path=decision_path,
+    ).inspect()
+
+    assert console.overall_status == "degraded"
+    assert console.blockers == ("projection_schema_invalid",)
+
+
+def test_p0_decision_provider_and_path_are_mutually_exclusive(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="either p0_decision_provider or p0_decision_path"):
+        ResearchConsoleSourceService(
+            p0_decision_provider=lambda: (),
+            p0_decision_path=tmp_path / "p0-decision.json",
+        )
+
+
+def test_p0_audit_provider_and_path_are_mutually_exclusive(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="either p0_audit_provider or p0_audit_path"):
+        ResearchConsoleSourceService(
+            p0_audit_provider=lambda: None,
+            p0_audit_path=tmp_path / "p0.json",
+        )
+
+
 def test_explicit_projection_path_is_read_only(tmp_path: Path) -> None:
     projection_path = tmp_path / "ResearchConsoleProjection.json"
     projection_path.write_text(json.dumps(_projection()), encoding="utf-8")

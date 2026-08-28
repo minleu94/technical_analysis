@@ -49,6 +49,8 @@ def test_portfolio_service_gets_current_price_from_csv(tmp_path):
 
     price_unknown = service.get_current_price("9999")
     assert price_unknown is None
+    # 讀取持倉價格不可因缺少 SQLite 而建立空資料庫。
+    assert not config.db_file.exists()
 
 
 def test_portfolio_service_dto_calculates_unrealized_pnl(tmp_path):

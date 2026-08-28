@@ -5,7 +5,11 @@ import json
 from pathlib import Path
 import sqlite3
 
-from scripts.run_paper_portfolio_daily import _next_decision_at, run
+from scripts.run_paper_portfolio_daily import (
+    _latest_reached_decision_at,
+    _next_decision_at,
+    run,
+)
 
 
 class _OpenCalendar:
@@ -103,6 +107,66 @@ def test_default_decision_is_next_future_taipei_cutoff() -> None:
         None,
         now=datetime.fromisoformat("2026-07-29T20:00:00+08:00"),
     ).isoformat() == "2026-07-30T08:30:00+08:00"
+
+
+def test_scheduled_default_decision_is_latest_reached_taipei_cutoff() -> None:
+    assert _latest_reached_decision_at(
+        None,
+        now=datetime.fromisoformat("2026-07-30T20:00:00+08:00"),
+    ).isoformat() == "2026-07-30T08:30:00+08:00"
+    assert _latest_reached_decision_at(
+        None,
+        now=datetime.fromisoformat("2026-07-30T08:29:59+08:00"),
+    ).isoformat() == "2026-07-29T08:30:00+08:00"
+
+
+def test_scheduled_default_decision_rejects_naive_clock() -> None:
+    try:
+        _latest_reached_decision_at(
+            None,
+            now=datetime.fromisoformat("2026-07-30T08:00:00"),
+        )
+    except ValueError as exc:
+        assert "timezone" in str(exc)
+    else:
+        raise AssertionError("naive scheduler clock must fail closed")
+
+
+def test_future_decision_does_not_initialize_or_append_paper_ledger(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "output" / "paper_portfolio" / "baseline.json"
+    market_db = tmp_path / "market.sqlite"
+    state_db = tmp_path / "output" / "paper_portfolio" / "paper.sqlite"
+    _baseline(baseline)
+    _market_db(market_db)
+
+    result = run(
+        baseline_path=baseline,
+        state_db=state_db,
+        market_db=market_db,
+        output_root=tmp_path / "output",
+        decision_at=datetime.fromisoformat("2026-08-28T08:30:00+08:00"),
+        now=datetime.fromisoformat("2026-08-27T20:00:00+08:00"),
+        calendar=_OpenCalendar(),
+    )
+
+    assert result["status"] == "skipped_future_decision"
+    assert result["snapshot_appended"] is False
+    assert result["market_db_mode"] == "not_opened"
+    assert result["trading_calendar_validated"] is False
+    assert not state_db.exists()
+    persisted = json.loads(
+        (
+            tmp_path
+            / "output"
+            / "scheduled"
+            / "paper_portfolio_daily"
+            / "latest_status.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert persisted["status"] == "skipped_future_decision"
+    assert persisted["writes_market_db"] is False
 
 
 def test_closed_day_does_not_initialize_or_append_paper_ledger(

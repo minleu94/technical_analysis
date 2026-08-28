@@ -96,6 +96,33 @@ def test_next_unreached_taipei_decision_at_rejects_naive_datetime() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("now_text", "expected"),
+    (
+        ("2026-07-30T08:29:59+08:00", "2026-07-29T08:30:00+08:00"),
+        ("2026-07-30T08:30:00+08:00", "2026-07-30T08:30:00+08:00"),
+        ("2026-07-30T20:00:00+08:00", "2026-07-30T08:30:00+08:00"),
+        ("2026-07-29T17:30:00-07:00", "2026-07-30T08:30:00+08:00"),
+    ),
+)
+def test_latest_reached_taipei_decision_at(
+    now_text: str,
+    expected: str,
+) -> None:
+    result = runner.latest_reached_taipei_decision_at(
+        datetime.fromisoformat(now_text)
+    )
+
+    assert result.isoformat() == expected
+
+
+def test_latest_reached_taipei_decision_at_rejects_naive_datetime() -> None:
+    with pytest.raises(ValueError, match="時區"):
+        runner.latest_reached_taipei_decision_at(
+            datetime.fromisoformat("2026-07-30T08:00:00")
+        )
+
+
 def test_successful_run_writes_atomic_status_and_uses_confirmed_existing_clis(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -117,7 +144,7 @@ def test_successful_run_writes_atomic_status_and_uses_confirmed_existing_clis(
         data_root=tmp_path / "data",
         output_root=tmp_path / "output",
         db_path=tmp_path / "twstock.db",
-        now=datetime.fromisoformat("2026-07-30T07:00:00+08:00"),
+        now=datetime.fromisoformat("2026-07-30T09:00:00+08:00"),
         python_executable="python-test",
         calendar=_OpenCalendar(),
     )

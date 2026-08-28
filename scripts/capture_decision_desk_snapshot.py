@@ -25,6 +25,7 @@ from app_module.decision_desk_dtos import (
 from app_module.decision_desk_builder_factory import build_service_backed_decision_desk_snapshot_builder
 from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRepository
 from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot
+from app_module.paper_portfolio_time import taiwan_market_today
 from data_module.config import TWStockConfig
 
 
@@ -151,6 +152,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     config = _config_from_args(args)
     decision_date = _parse_date(args.decision_date)
+    today = taiwan_market_today()
+    if decision_date > today:
+        raise ValueError(
+            "decision_date cannot be future-dated: "
+            f"{decision_date.isoformat()} (today={today.isoformat()})"
+        )
     dry_run = bool(args.dry_run or not args.confirm)
 
     builder = build_service_backed_decision_desk_snapshot_builder(

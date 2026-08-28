@@ -95,6 +95,37 @@ def test_source_coverage_flags_durable_source_gaps_as_blocking(tmp_path: Path) -
     assert "why_not_exclusion_payload_missing" not in summary["blocking_gaps"]
 
 
+def test_source_coverage_missing_inputs_stays_query_only(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    missing_db = tmp_path / "missing" / "evidence.db"
+    recommendation_db = Path(config.output_root) / "recommendation" / "runs" / "recommendation_runs.db"
+
+    EvidenceSourceCoverageService(config, db_path=missing_db).inspect()
+
+    assert not missing_db.exists()
+    assert not recommendation_db.exists()
+
+
+def test_source_coverage_excludes_future_snapshot_and_blocks_readiness(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+    monkeypatch.setattr(
+        "app_module.evidence_source_coverage_service.taiwan_market_today",
+        lambda: date(2026, 7, 7),
+    )
+    _seed_snapshot(config)
+    DecisionDeskSnapshotRepository(config).save_snapshot(
+        build_stored_decision_desk_snapshot(_snapshot(date(2026, 7, 8)))
+    )
+    _seed_recommendation(config, with_payloads=True, with_matrix=True)
+
+    summary = EvidenceSourceCoverageService(config, db_path=config.db_file).inspect().to_dict()
+
+    assert summary["latest_decision_desk_snapshot_date"] == "2026-06-30"
+    assert summary["future_decision_desk_snapshot_dates"] == ["2026-07-08"]
+    assert "decision_desk_snapshot_future_dated" in summary["blocking_gaps"]
+    assert summary["scheduler_readiness"] == READINESS_NOT_READY
+
+
 def test_source_coverage_treats_exclusion_payload_gaps_as_warnings(tmp_path: Path) -> None:
     config = _config(tmp_path)
     _seed_snapshot(config)

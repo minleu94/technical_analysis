@@ -88,6 +88,54 @@ class ScheduledOperationsSnapshotDTO:
     operations: tuple[ScheduledOperationStatusDTO, ...]
     observed_at: datetime
     scheduled_root: str = ""
+
+
+@dataclass(frozen=True)
+class EnvironmentPathReadinessDTO:
+    """單一路徑的唯讀環境能力檢查結果。"""
+
+    key: str
+    label: str
+    path: str
+    kind: str
+    exists: bool
+    parent_exists: bool
+    readable: bool
+    writable: Optional[bool]
+    requires_write: bool
+    status: str
+    diagnostic: str = ""
+
+
+@dataclass(frozen=True)
+class EnvironmentReadinessSnapshotDTO:
+    """正式 App 路徑與 Registry 的 side-effect-free readiness 投影。"""
+
+    overall_state: str
+    observed_at: datetime
+    data_root: str
+    output_root: str
+    log_root: str
+    research_registry: str
+    paths: tuple[EnvironmentPathReadinessDTO, ...]
+    diagnostics: tuple[str, ...] = ()
+    side_effect_free: bool = True
+    write_probe: str = "os.access_only"
+
+
+@dataclass(frozen=True)
+class EnvironmentWriteProbeDTO:
+    """受控、短生命週期的實際檔案／SQLite 寫入 probe 結果。"""
+
+    status: str
+    probe_root: str
+    observed_at: datetime
+    file_write_succeeded: bool = False
+    sqlite_write_succeeded: bool = False
+    cleanup_succeeded: bool = False
+    side_effect_free: bool = True
+    write_probe: str = "not_run"
+    diagnostic: str = ""
     
 @dataclass
 class RuntimeStateSnapshotDTO:

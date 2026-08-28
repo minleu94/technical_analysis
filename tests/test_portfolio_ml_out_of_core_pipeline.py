@@ -851,6 +851,38 @@ def test_rss_measurement_failure_is_fail_closed(
         _PeakRSSMonitor(memory_budget_mb=256)
 
 
+def test_ooc_rss_monitor_stops_before_start_and_preflight_does_not_start_thread(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monitor = _PeakRSSMonitor(memory_budget_mb=256)
+    peak = monitor.stop(enforce=False)
+    assert peak > 0
+    assert monitor.stop(enforce=False) == peak
+
+    import ml_module.allocation_out_of_core_training_service as trainer_module
+
+    starts: list[bool] = []
+    original_start = trainer_module._PeakRSSMonitor.start
+
+    def _spy_start(self: _PeakRSSMonitor) -> None:
+        starts.append(True)
+        original_start(self)
+
+    monkeypatch.setattr(trainer_module._PeakRSSMonitor, "start", _spy_start)
+    request = AllocationOutOfCoreTrainingRequest(
+        store_manifest_path=tmp_path / "missing-store.json",
+        output_root=tmp_path / "ooc-output",
+        algorithms=("ridge_logistic",),
+        horizons=(5,),
+        memory_budget_mb=256,
+        logistic_iterations=2,
+    )
+    with pytest.raises(FileNotFoundError):
+        AllocationOutOfCoreTrainingService().train(request)
+    assert starts == []
+
+
 def test_direct_heartbeat_atomic_replace_retries_transient_permission(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

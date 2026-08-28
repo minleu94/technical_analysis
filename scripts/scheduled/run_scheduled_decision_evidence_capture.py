@@ -74,6 +74,28 @@ def next_unreached_taipei_decision_at(now: datetime | None = None) -> datetime:
     return candidate
 
 
+def latest_reached_taipei_decision_at(now: datetime | None = None) -> datetime:
+    """回傳最近一個已到達的台北 08:30 日曆決策時間。
+
+    Windows 排程在台灣 08:30 前執行時，若選下一個尚未到達的 cutoff，
+    capture CLI 會收到 future decision date。排程入口因此只選已到達的
+    cutoff；回放／明確 ``decision_at`` 仍可保留原有語意並由下游驗證。
+    """
+
+    current = now or datetime.now(TAIPEI)
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise ValueError("now 必須包含時區")
+    current_taipei = current.astimezone(TAIPEI)
+    candidate = datetime.combine(
+        current_taipei.date(),
+        DECISION_TIME,
+        tzinfo=TAIPEI,
+    )
+    if candidate > current_taipei:
+        candidate -= timedelta(days=1)
+    return candidate
+
+
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
@@ -348,8 +370,8 @@ def run(
         raise ValueError("now 必須包含時區")
     checked_at = checked_raw.astimezone(TAIPEI)
     if decision_at is None:
-        resolved_decision_at = next_unreached_taipei_decision_at(checked_at)
-        decision_date_basis = "next_unreached_calendar_decision_at"
+        resolved_decision_at = latest_reached_taipei_decision_at(checked_at)
+        decision_date_basis = "latest_reached_calendar_decision_at"
     else:
         if decision_at.tzinfo is None or decision_at.utcoffset() is None:
             raise ValueError("decision_at 必須包含時區")

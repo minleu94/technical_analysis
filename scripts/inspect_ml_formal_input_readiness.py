@@ -392,6 +392,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_utf8_stdio()
     args = _build_parser().parse_args(argv)
     try:
         report = build_readiness_report(
@@ -434,6 +435,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     )
     return 0
+
+
+def _configure_utf8_stdio() -> None:
+    """讓直接執行腳本的 Windows 主控台也能顯示繁中說明與診斷。"""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            # 測試 capture stream 或外部 host 管理的 stream 可能禁止重設；
+            # 這不應改變 readiness 結果。
+            continue
 
 
 if __name__ == "__main__":

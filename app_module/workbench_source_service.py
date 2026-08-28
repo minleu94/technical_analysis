@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 import json
 import os
@@ -17,6 +18,7 @@ from app_module.workbench_dtos import WorkbenchDashboardDTO
 from app_module.workbench_read_only_composer import WorkbenchReadOnlyComposer
 from app_module.workbench_replay_summary import load_historical_replay_summary
 from app_module.scheduled_evidence_status_service import ScheduledEvidenceStatusService
+from app_module.paper_portfolio_time import taiwan_market_today
 
 
 class WorkbenchSourceService:
@@ -79,32 +81,43 @@ class WorkbenchSourceService:
 
     def _load_decision_snapshot(self, decision_date: str | None) -> tuple[DecisionDeskSnapshot | None, list[str]]:
         diagnostics: list[str] = []
+        today = taiwan_market_today()
+        cutoff_date, requested_future_date = _bounded_decision_date(decision_date, today)
         try:
             with _connect_read_only(self.evidence_db_path) as conn:
                 if not _table_exists(conn, "decision_desk_snapshots"):
                     diagnostics.append("decision_desk_snapshots_table_missing")
                     return None, diagnostics
-                if decision_date:
-                    row = conn.execute(
-                        """
-                        SELECT *
-                        FROM decision_desk_snapshots
-                        WHERE decision_date <= ? AND snapshot_status = 'active'
-                        ORDER BY decision_date DESC, created_at DESC
-                        LIMIT 1
-                        """,
-                        (decision_date,),
-                    ).fetchone()
-                else:
-                    row = conn.execute(
-                        """
-                        SELECT *
-                        FROM decision_desk_snapshots
-                        WHERE snapshot_status = 'active'
-                        ORDER BY decision_date DESC, created_at DESC
-                        LIMIT 1
-                        """
-                    ).fetchone()
+                future_rows = conn.execute(
+                    """
+                    SELECT DISTINCT decision_date
+                    FROM decision_desk_snapshots
+                    WHERE snapshot_status = 'active' AND decision_date > ?
+                    ORDER BY decision_date ASC
+                    """,
+                    (today.isoformat(),),
+                ).fetchall()
+                future_dates = tuple(str(item["decision_date"]) for item in future_rows)
+                if requested_future_date is not None:
+                    diagnostics.append(
+                        "decision_desk_snapshot_request_future_date:"
+                        f"{requested_future_date.isoformat()}:today={today.isoformat()}"
+                    )
+                diagnostics.extend(
+                    "decision_desk_snapshot_future_date:"
+                    f"{item}:today={today.isoformat()}"
+                    for item in future_dates
+                )
+                row = conn.execute(
+                    """
+                    SELECT *
+                    FROM decision_desk_snapshots
+                    WHERE decision_date <= ? AND snapshot_status = 'active'
+                    ORDER BY decision_date DESC, created_at DESC
+                    LIMIT 1
+                    """,
+                    (cutoff_date,),
+                ).fetchone()
         except FileNotFoundError as exc:
             diagnostics.append(f"decision_desk_snapshot_db_missing:{exc}")
             return None, diagnostics
@@ -168,3 +181,21 @@ def _json_value(raw: Any, fallback: Any) -> Any:
     if raw is None:
         return fallback
     return json.loads(str(raw))
+
+
+def _bounded_decision_date(
+    decision_date: str | None,
+    today: date,
+) -> tuple[str, date | None]:
+    """把 Workbench 的 current 查詢上限限制在台灣市場今天。"""
+
+    if not decision_date:
+        return today.isoformat(), None
+    text = str(decision_date).strip()[:10]
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError:
+        return text, None
+    if parsed > today:
+        return today.isoformat(), parsed
+    return parsed.isoformat(), None

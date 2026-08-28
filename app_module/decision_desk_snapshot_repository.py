@@ -14,11 +14,19 @@ from app_module.evidence_event_service import utc_timestamp
 class DecisionDeskSnapshotRepository:
     """SQLite repository for durable Daily Decision Desk snapshots."""
 
-    def __init__(self, config: Any, *, db_path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        config: Any,
+        *,
+        db_path: str | Path | None = None,
+        read_only: bool = False,
+    ) -> None:
         self.config = config
         self.db_path = Path(db_path) if db_path is not None else Path(config.db_file)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.ensure_schema()
+        self.read_only = bool(read_only)
+        if not self.read_only:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self.ensure_schema()
 
     def ensure_schema(self) -> None:
         with sqlite3.connect(self.db_path) as conn:
@@ -76,6 +84,8 @@ class DecisionDeskSnapshotRepository:
             )
 
     def save_snapshot(self, snapshot: StoredDecisionDeskSnapshot) -> StoredDecisionDeskSnapshot:
+        if self.read_only:
+            raise RuntimeError("read-only decision desk snapshot repository cannot save snapshots")
         existing = self.get_snapshot_by_hash(snapshot.snapshot_hash)
         if existing is not None:
             return existing
@@ -141,6 +151,8 @@ class DecisionDeskSnapshotRepository:
         return rows[0] if rows else None
 
     def archive(self, snapshot_id: str) -> bool:
+        if self.read_only:
+            raise RuntimeError("read-only decision desk snapshot repository cannot archive snapshots")
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "UPDATE decision_desk_snapshots SET snapshot_status = 'archived' WHERE snapshot_id = ?",
@@ -153,9 +165,21 @@ class DecisionDeskSnapshotRepository:
         return rows[0] if rows else None
 
     def _fetch_many(self, sql: str, params: tuple[Any, ...]) -> list[StoredDecisionDeskSnapshot]:
-        with sqlite3.connect(self.db_path) as conn:
+        if self.read_only and not self.db_path.exists():
+            return []
+        if self.read_only:
+            uri_path = self.db_path.resolve().as_posix()
+            conn = sqlite3.connect(f"file:{uri_path}?mode=ro", uri=True)
+        else:
+            conn = sqlite3.connect(self.db_path)
+        with conn:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute(sql, params).fetchall()
+            try:
+                rows = conn.execute(sql, params).fetchall()
+            except sqlite3.Error:
+                if not self.read_only:
+                    raise
+                return []
         return [self._row_to_snapshot(dict(row)) for row in rows]
 
     def _snapshot_to_row(self, snapshot: StoredDecisionDeskSnapshot) -> dict[str, Any]:

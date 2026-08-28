@@ -5,6 +5,9 @@ from app_module.runtime_services.event_stream_service import RuntimeEventStreamU
 from app_module.runtime_services.scheduled_operations_service import (
     ScheduledOperationsStatusService,
 )
+from app_module.runtime_services.environment_readiness_service import (
+    EnvironmentReadinessService,
+)
 from runtime.interfaces.store_interface import RuntimeEventCursor, RuntimeEventReadBatch
 from runtime.store.local_file_store import LocalFileStore
 
@@ -165,3 +168,27 @@ def test_controller_publishes_fail_closed_schedule_snapshot_when_status_service_
     assert controller.runtime_event_diagnostics == [
         "scheduled_operations_read_failed:OSError"
     ]
+
+
+def test_controller_publishes_environment_readiness_once_per_poll_interval_without_creating_paths(
+    tmp_path,
+):
+    data_root = tmp_path / "data"
+    output_root = tmp_path / "output"
+    service = EnvironmentReadinessService(data_root, output_root)
+    controller = RuntimeController(
+        str(tmp_path / "runtime"),
+        environment_readiness_service=service,
+        monotonic_clock=lambda: 0,
+    )
+    received = []
+    controller.event_bus.subscribe_environment_readiness(received.append)
+
+    controller.poll_updates()
+    controller.poll_updates()
+
+    assert len(received) == 1
+    assert received[0].overall_state == "unavailable"
+    assert received[0].side_effect_free is True
+    assert not data_root.exists()
+    assert not output_root.exists()

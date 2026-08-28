@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 from app_module.evidence_event_dtos import (
@@ -192,12 +193,17 @@ def _seed_recommendation(config: TWStockConfig, *, with_payloads: bool) -> None:
         )
 
 
-def _seed_decision_desk_snapshot(db_path: Path) -> None:
-    section = {"quality": "observed", "as_of_date": "2026-07-06"}
+def _seed_decision_desk_snapshot(
+    db_path: Path,
+    *,
+    decision_date: str = "2026-07-06",
+    snapshot_id: str = "dds-ready",
+) -> None:
+    section = {"quality": "observed", "as_of_date": decision_date}
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             """
-            CREATE TABLE decision_desk_snapshots (
+            CREATE TABLE IF NOT EXISTS decision_desk_snapshots (
                 snapshot_id TEXT PRIMARY KEY,
                 snapshot_hash TEXT NOT NULL UNIQUE,
                 decision_date TEXT NOT NULL,
@@ -245,10 +251,10 @@ def _seed_decision_desk_snapshot(db_path: Path) -> None:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
             """,
             (
-                "dds-ready",
-                "sha256:dds-ready",
-                "2026-07-06",
-                "2026-07-06",
+                snapshot_id,
+                f"sha256:{snapshot_id}",
+                decision_date,
+                decision_date,
                 "test",
                 "test",
                 "observed",
@@ -264,6 +270,35 @@ def _seed_decision_desk_snapshot(db_path: Path) -> None:
                 "{}",
             ),
         )
+
+
+def test_pre_v2_readiness_excludes_future_decision_desk_snapshot_from_current_source_gap(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = _config(tmp_path)
+    monkeypatch.setattr(
+        "app_module.pre_v2_readiness_service.taiwan_market_today",
+        lambda: date(2026, 7, 7),
+    )
+    _seed_recommendation(config, with_payloads=True)
+    _seed_decision_desk_snapshot(config.db_file)
+    _seed_decision_desk_snapshot(
+        config.db_file,
+        decision_date="2026-07-08",
+        snapshot_id="dds-future",
+    )
+
+    source_gaps = {
+        item.item_id: item
+        for item in PreV2ReadinessService(config, evidence_db_path=config.db_file).inspect().items
+    }["source_gaps"]
+
+    assert source_gaps.status == STATUS_ACTION_REQUIRED
+    assert "decision_desk_snapshot_future_dated" in source_gaps.blocking_reasons
+    assert source_gaps.evidence["latest_decision_desk_snapshot_date"] == "2026-07-06"
+    assert source_gaps.evidence["decision_desk_snapshot_future_dates"] == ["2026-07-08"]
+    assert "decision_desk_snapshot_future_date:2026-07-08:today=2026-07-07" in source_gaps.diagnostics
 
 
 def _multi_day_record(path: Path, rows: int) -> None:
@@ -384,6 +419,11 @@ def test_pre_v2_readiness_flags_source_and_report_gaps_without_creating_missing_
 
     assert report.overall_status == STATUS_ACTION_REQUIRED
     assert items["weekly_history"].status == STATUS_WAITING_FOR_TIME
+    assert "approved_weekly_history_projection_not_configured" in items["weekly_history"].diagnostics
+    assert any(
+        "WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH" in action
+        for action in items["weekly_history"].next_actions
+    )
     assert items["source_gaps"].status == STATUS_ACTION_REQUIRED
     assert items["read_only_agent_report_sample"].status == STATUS_ACTION_REQUIRED
     assert not missing_db.exists()

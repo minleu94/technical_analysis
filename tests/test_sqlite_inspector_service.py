@@ -112,6 +112,23 @@ def test_sqlite_inspector_service_basic(test_config):
         service.get_table_schema("sqlite_master")
 
 
+def test_sqlite_inspector_missing_db_is_fail_soft_and_does_not_create_file(tmp_path):
+    data_root = tmp_path / "data"
+    output_root = tmp_path / "output"
+    config = TWStockConfig(data_root=data_root, output_root=output_root, profile="test")
+    config.use_sqlite = True
+
+    db_file = config.db_file
+    assert not db_file.exists()
+
+    service = SqliteInspectorService(config)
+
+    assert service.get_tables() == []
+    assert service.last_error is not None
+    assert "找不到 SQLite 資料庫" in service.last_error
+    assert not db_file.exists()
+
+
 def test_sqlite_inspector_service_info(test_config):
     """測試獲取表資訊"""
     service = SqliteInspectorService(test_config)

@@ -4,6 +4,7 @@ from app_module.dtos.runtime_dtos import (
     RuntimeStateSnapshotDTO,
     RuntimeHealthSnapshotDTO,
     ScheduledOperationsSnapshotDTO,
+    EnvironmentReadinessSnapshotDTO,
 )
 
 class EventBus:
@@ -17,6 +18,9 @@ class EventBus:
         self._health_subscribers: List[Callable[[RuntimeHealthSnapshotDTO], None]] = []
         self._scheduled_operations_subscribers: List[
             Callable[[ScheduledOperationsSnapshotDTO], None]
+        ] = []
+        self._environment_readiness_subscribers: List[
+            Callable[[EnvironmentReadinessSnapshotDTO], None]
         ] = []
 
     def subscribe_events(self, callback: Callable[[RuntimeEventDTO], None]) -> None:
@@ -33,6 +37,12 @@ class EventBus:
         callback: Callable[[ScheduledOperationsSnapshotDTO], None],
     ) -> None:
         self._scheduled_operations_subscribers.append(callback)
+
+    def subscribe_environment_readiness(
+        self,
+        callback: Callable[[EnvironmentReadinessSnapshotDTO], None],
+    ) -> None:
+        self._environment_readiness_subscribers.append(callback)
 
     def publish_event(self, event_dto: RuntimeEventDTO) -> None:
         for sub in self._event_subscribers:
@@ -52,3 +62,10 @@ class EventBus:
     ) -> None:
         for sub in self._scheduled_operations_subscribers:
             sub(scheduled_operations_dto)
+
+    def publish_environment_readiness(
+        self,
+        environment_readiness_dto: EnvironmentReadinessSnapshotDTO,
+    ) -> None:
+        for sub in self._environment_readiness_subscribers:
+            sub(environment_readiness_dto)

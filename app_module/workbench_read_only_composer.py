@@ -661,6 +661,14 @@ class WorkbenchReadOnlyComposer:
             *readiness_report.limitations,
             *source_diagnostics,
         ]
+        # 將 readiness 的具體 blocker/diagnostic 帶到首頁 warnings，避免
+        # 使用者只看到「等待中」卻不知道缺哪一份證據或設定。
+        for item in readiness_report.items:
+            warnings.extend(
+                f"{item.item_id}:{reason}"
+                for reason in (*item.blocking_reasons, *item.diagnostics)
+                if str(reason).strip()
+            )
         if agent_report_sample:
             warnings.extend(str(item) for item in agent_report_sample.get("warnings", ()))
             warnings.extend(str(item) for item in agent_report_sample.get("limitations", ()))

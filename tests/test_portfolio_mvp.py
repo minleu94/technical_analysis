@@ -179,3 +179,17 @@ def test_portfolio_service_loads_legacy_trade_without_source_summary(tmp_path):
     positions = service.list_positions()
     assert positions[0].source_summary == {}
     assert positions[0].source_id == "rec_legacy"
+
+
+def test_portfolio_benchmark_compatibility_api_is_explicitly_not_computable(tmp_path):
+    service = PortfolioService(make_config(tmp_path))
+
+    result = service.get_benchmark_comparison("buy_hold")
+
+    assert result["status"] == "not_computable"
+    assert result["portfolio_return"] is None
+    assert result["benchmark_return"] is None
+    assert result["excess_return"] is None
+    assert "comparison_period" in result["missing_inputs"]
+    assert result["research_only"] is True
+    assert result["investment_effectiveness_claim"] is False

@@ -9,6 +9,7 @@ import pandas as pd
 
 from app_module.dtos.portfolio_dtos import PortfolioDTO, PositionDTO, TradeDTO
 from app_module.portfolio_store import PortfolioJsonlStore
+from app_module.sqlite_read_only import ReadOnlySQLiteManager
 from data_module.config import TWStockConfig
 from financial_module.units import quantize_money, to_decimal
 from portfolio_module import PortfolioValidationError, Trade, rebuild_positions, validate_trade
@@ -81,6 +82,42 @@ class PortfolioService:
         logger.info("[PortfolioService] recorded trade %s", dto.trade_id)
         return dto
 
+    def record_trades(self, trades: List[TradeDTO]) -> List[TradeDTO]:
+        """Validate a batch before appending it to the append-only trade store.
+
+        This is the write boundary used by Trade Import.  Every row is validated
+        and the complete rebuilt portfolio is checked before the first append;
+        callers still need an explicit confirmation before invoking this method.
+        """
+        if not trades:
+            raise PortfolioValidationError("at least one trade is required")
+
+        existing_domain_trades = self._load_domain_trades()
+        existing_ids = {trade.trade_id for trade in self._load_trade_dtos()}
+        batch_ids: set[str] = set()
+        domain_trades: list[Trade] = []
+        normalized: list[TradeDTO] = []
+        for incoming in trades:
+            dto = TradeDTO.from_dict(incoming.to_dict())
+            if not dto.created_at:
+                dto.created_at = datetime.now().isoformat()
+            if not dto.trade_id:
+                raise PortfolioValidationError("trade_id is required")
+            if dto.trade_id in existing_ids or dto.trade_id in batch_ids:
+                raise PortfolioValidationError(f"trade_id already exists: {dto.trade_id}")
+            batch_ids.add(dto.trade_id)
+            domain_trade = Trade.from_mapping(dto.to_dict())
+            validate_trade(domain_trade)
+            domain_trades.append(domain_trade)
+            normalized.append(dto)
+
+        # Validate the final state before writing any row.
+        rebuild_positions([*existing_domain_trades, *domain_trades])
+        for dto in normalized:
+            self.store.append_trade(dto.to_dict())
+        logger.info("[PortfolioService] recorded %s imported trades", len(normalized))
+        return normalized
+
     def list_trades(self, portfolio_id: str = "default") -> List[TradeDTO]:
         trades = [TradeDTO.from_dict(item) for item in self.store.load_trades()]
         return [trade for trade in trades if trade.portfolio_id == portfolio_id]
@@ -117,12 +154,28 @@ class PortfolioService:
         return self.get_portfolio()
 
     def get_benchmark_comparison(self, benchmark_type: str = "buy_hold") -> Dict[str, Any]:
+        """Return an explicit not-computable result until a period is supplied.
+
+        The Phase 4.1 manual-trade portfolio has no canonical benchmark period,
+        cash ledger, or frozen constituent set. Returning numeric zeroes here
+        would look like a measured result and could be mistaken for a valid
+        excess-return comparison, so the compatibility API remains
+        fail-closed until the paper-portfolio benchmark path is connected.
+        """
         return {
             "benchmark_type": benchmark_type,
-            "portfolio_return": 0.0,
-            "benchmark_return": 0.0,
-            "excess_return": 0.0,
-            "note": "Deferred in Phase 4.1 MVP",
+            "status": "not_computable",
+            "portfolio_return": None,
+            "benchmark_return": None,
+            "excess_return": None,
+            "missing_inputs": (
+                "comparison_period",
+                "cash_and_flow_ledger",
+                "frozen_benchmark_constituents",
+            ),
+            "note": "Phase 4.1 manual portfolio has no canonical benchmark observation yet",
+            "research_only": True,
+            "investment_effectiveness_claim": False,
         }
 
     def delete_trade(self, trade_id: str) -> bool:
@@ -154,6 +207,9 @@ class PortfolioService:
             trades = [trade for trade in trades if trade.portfolio_id == portfolio_id]
         return trades
 
+    def _load_trade_dtos(self) -> List[TradeDTO]:
+        return [TradeDTO.from_dict(item) for item in self.store.load_trades()]
+
     def _sum_money(self, values) -> float:
         total = sum((to_decimal(value) for value in values), to_decimal("0"))
         return float(quantize_money(total))  # numeric-boundary: dto
@@ -162,14 +218,17 @@ class PortfolioService:
         """獲取指定個股的最新收盤價。"""
         if getattr(self.config, 'use_sqlite', False):
             try:
-                from data_module.db_manager import DBManager
-                db = DBManager(self.config)
+                # Portfolio 的價格投影是唯讀查詢；不可因為打開持倉頁或
+                # 查詢單一價格而初始化 schema、切換 WAL 或建立空 DB。
+                db = ReadOnlySQLiteManager(self.config.db_file)
                 df = db.execute_query(
                     "SELECT 收盤價 FROM daily_prices WHERE 證券代號 = ? ORDER BY 日期 DESC LIMIT 1;",
                     (stock_code,)
                 )
                 if not df.empty:
                     return float(df.iloc[0]['收盤價'])  # numeric-boundary: dto
+            except FileNotFoundError:
+                logger.debug("SQLite price database is unavailable: %s", self.config.db_file)
             except Exception as e:
                 logger.warning("從 SQLite 獲取 %s 最新收盤價失敗: %s", stock_code, e)
         

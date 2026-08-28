@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -18,10 +18,20 @@ from app_module.research_console_dtos import (
     ResearchPipelineRowDTO,
     ResearchSourceRowDTO,
 )
+from app_module.p0_source_control_center import (
+    P0SourceControlCenterDTO,
+    P0SourceControlCenterService,
+)
+from data_module.source_acceptance_decision_registry import (
+    SourceAcceptanceDecisionRevision,
+    parse_source_acceptance_decisions,
+)
 
 
 ProjectionProvider = Callable[[], Mapping[str, object] | None]
 GovernanceProvider = Callable[[], Mapping[str, object] | None]
+P0AuditProvider = Callable[[], Mapping[str, Any] | None]
+P0DecisionProvider = Callable[[], Iterable[SourceAcceptanceDecisionRevision]]
 ClockProvider = Callable[[], datetime]
 
 P0_SOURCE_IDS = (
@@ -89,6 +99,10 @@ class ResearchConsoleSourceService:
         projection_provider: ProjectionProvider | None = None,
         projection_path: str | Path | None = None,
         governance_provider: GovernanceProvider | None = None,
+        p0_audit_provider: P0AuditProvider | None = None,
+        p0_audit_path: str | Path | None = None,
+        p0_decision_provider: P0DecisionProvider | None = None,
+        p0_decision_path: str | Path | None = None,
         clock: ClockProvider | None = None,
         max_projection_age: timedelta = _DEFAULT_MAX_PROJECTION_AGE,
     ) -> None:
@@ -97,6 +111,17 @@ class ResearchConsoleSourceService:
         self._projection_provider = projection_provider
         self._projection_path = Path(projection_path).resolve() if projection_path is not None else None
         self._governance_provider = governance_provider
+        self._p0_audit_provider = p0_audit_provider
+        if p0_audit_provider is not None and p0_audit_path is not None:
+            raise ValueError("use either p0_audit_provider or p0_audit_path")
+        self._p0_audit_path = Path(p0_audit_path).resolve() if p0_audit_path is not None else None
+        self._p0_decision_provider = p0_decision_provider
+        if p0_decision_provider is not None and p0_decision_path is not None:
+            raise ValueError("use either p0_decision_provider or p0_decision_path")
+        self._p0_decision_path = (
+            Path(p0_decision_path).resolve() if p0_decision_path is not None else None
+        )
+        self._p0_control_center_service = P0SourceControlCenterService()
         if max_projection_age <= timedelta(0):
             raise ValueError("max_projection_age must be positive")
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -145,6 +170,7 @@ class ResearchConsoleSourceService:
             governance = payload
         if governance is not None and not isinstance(governance, Mapping):
             raise TypeError("governance projection must be an object")
+        source_control_center = self._build_p0_source_control_center(governance)
         sample_count = _optional_int(metrics.get("sample_count"))
         feature_names = lineage.get("feature_names")
         feature_count = len(feature_names) if isinstance(feature_names, list) else None
@@ -206,6 +232,7 @@ class ResearchConsoleSourceService:
             gates=_governance_gates(governance),
             sources=_governance_sources(governance),
             artifacts=_artifact_rows(lineage) + _governance_artifacts(governance),
+            source_control_center=source_control_center,
             frozen_metrics=metrics,
             blockers=blockers,
         )
@@ -231,6 +258,13 @@ class ResearchConsoleSourceService:
         return ()
 
     def _missing(self, blocker: str, *, overall_status: str = "missing") -> ResearchConsoleDTO:
+        try:
+            source_control_center = self._build_p0_source_control_center(None)
+        except Exception:
+            # A malformed optional audit/decision artifact must not make the
+            # fail-closed fallback itself escape.  Keep the authoritative
+            # thirteen contract rows visible without applying the bad input.
+            source_control_center = self._p0_control_center_service.build()
         return ResearchConsoleDTO(
             overall_status=overall_status,
             source_reference="not_configured",
@@ -247,7 +281,37 @@ class ResearchConsoleSourceService:
             ),
             gates=_missing_gates(),
             sources=_missing_sources(),
+            source_control_center=source_control_center,
             blockers=(blocker,),
+        )
+
+    def _build_p0_source_control_center(
+        self, governance: Mapping[str, object] | None
+    ) -> P0SourceControlCenterDTO:
+        audit = self._p0_audit_provider() if self._p0_audit_provider is not None else None
+        if audit is None and self._p0_audit_path is not None:
+            audit_bytes = self._p0_audit_path.read_bytes()
+            parsed = json.loads(audit_bytes)
+            if not isinstance(parsed, Mapping):
+                raise TypeError("P0 audit artifact must be an object")
+            audit = parsed  # type: ignore[assignment]
+        if audit is None and governance is not None:
+            schema = governance.get("schema_version")
+            if schema in {"p0-candidate-audit.v1", "p0-source-evidence-audit.v1"}:
+                audit = governance  # type: ignore[assignment]
+            else:
+                embedded = governance.get("p0_candidate_audit")
+                if isinstance(embedded, Mapping):
+                    audit = embedded  # type: ignore[assignment]
+        decisions: Iterable[SourceAcceptanceDecisionRevision] = ()
+        if self._p0_decision_provider is not None:
+            decisions = self._p0_decision_provider()
+        elif self._p0_decision_path is not None:
+            decision_bytes = self._p0_decision_path.read_bytes()
+            decisions = parse_source_acceptance_decisions(json.loads(decision_bytes))
+        return self._p0_control_center_service.build(
+            candidate_audit=audit,
+            decisions=decisions,
         )
 
     @staticmethod

@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Literal, Mapping
 
+from app_module.p0_source_control_center import P0SourceControlCenterDTO
+
 
 @dataclass(frozen=True)
 class ResearchConsoleBoundaryDTO:
@@ -94,6 +96,7 @@ class ResearchConsoleDTO:
     gates: tuple[ResearchGateCardDTO, ...] = ()
     sources: tuple[ResearchSourceRowDTO, ...] = ()
     artifacts: tuple[ResearchArtifactRowDTO, ...] = ()
+    source_control_center: P0SourceControlCenterDTO | None = None
     frozen_metrics: Mapping[str, object] = field(default_factory=dict)
     blockers: tuple[str, ...] = ()
 

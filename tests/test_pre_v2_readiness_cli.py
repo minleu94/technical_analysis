@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,7 +19,20 @@ def _empty_record(path: Path) -> None:
     )
 
 
-def _run_cli(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _run_cli(
+    tmp_path: Path,
+    *args: str,
+    env_overrides: dict[str, str | None] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    # Tests that do not explicitly provide a projection must exercise the
+    # default no-projection path, independent of the developer shell.
+    env.pop("WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH", None)
+    for key, value in (env_overrides or {}).items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
     return subprocess.run(
         [
             sys.executable,
@@ -32,6 +46,41 @@ def _run_cli(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        env=env,
+    )
+
+
+def _write_approved_projection(path: Path) -> None:
+    records = []
+    for index, (period_start, period_end) in enumerate(
+        (
+            ("2026-07-06", "2026-07-12"),
+            ("2026-07-13", "2026-07-19"),
+            ("2026-07-20", "2026-07-26"),
+        ),
+        start=1,
+    ):
+        records.append(
+            {
+                "review_id": f"review-{index}",
+                "review_hash": f"sha256:{index:064d}",
+                "period_start": period_start,
+                "period_end": period_end,
+                "owner_role": "release_owner",
+                "approved_at": f"2026-07-{12 + index:02d}T12:00:00Z",
+                "status": "approved_weekly_review",
+            }
+        )
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "approved-weekly-history-projection.v1",
+                "formal_credit_authorized": False,
+                "purpose": "test-only read-only projection",
+                "records": records,
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -82,3 +131,29 @@ def test_pre_v2_readiness_cli_can_emit_markdown_report_file(tmp_path: Path) -> N
     assert result.returncode == 0
     assert "# Pre-V2 Readiness Report" in result.stdout
     assert "V2.0" in report_path.read_text(encoding="utf-8")
+
+
+def test_pre_v2_readiness_cli_reads_approved_projection_from_environment(tmp_path: Path) -> None:
+    projection_path = tmp_path / "approved-weekly-history.json"
+    _write_approved_projection(projection_path)
+    record_path = tmp_path / "multi-day.md"
+    _empty_record(record_path)
+
+    result = _run_cli(
+        tmp_path,
+        "--db-path",
+        str(tmp_path / "missing.db"),
+        "--multi-day-record-path",
+        str(record_path),
+        "--json-output",
+        env_overrides={"WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH": str(projection_path)},
+    )
+    payload = json.loads(result.stdout)
+    weekly = next(item for item in payload["items"] if item["item_id"] == "weekly_history")
+
+    assert result.returncode == 0
+    assert weekly["status"] == "ready"
+    assert weekly["observed_count"] == 3
+    assert weekly["evidence"]["approved_projection_configured"] is True
+    assert weekly["evidence"]["approved_projection_path"] == str(projection_path.resolve())
+    assert "approved_weekly_history_projection_not_configured" not in weekly["diagnostics"]

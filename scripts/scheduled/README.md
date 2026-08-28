@@ -15,8 +15,8 @@ These wrappers are intentionally conservative. They use CMD files and Windows bu
 | `baldr-ml-promotion-evidence-daily` | enabled after register | daily local time 05:17 | 固定 discovery 並重驗 formal OOC v5、雙 replay、Shadow outcome、逐 horizon calibration／drift 與 hash custody。證據不完整時只寫 blocked status，不更新 compatible pointer；若 OOC readiness 不足，blocker 會附上 `formal_ooc_dataset_full_market_not_ready:<readiness_check,...>` 的具體檢查名；若 direct store 落後最新 verified official market-event publication，會輸出 `formal_ooc_corporate_action_custody_stale:<field,...>`；完整時也只發布 unsigned evidence。 |
 | `baldr-ml-promotion-authority-daily` | enabled after register | daily local time 05:18 | 由獨立 DPAPI user-scope authority 重驗 compatible evidence、Gate registry 與決策有效窗。只有所有機器門檻通過才簽章；否則成功 fail closed，維持 alpha 0。 |
 | `baldr-ml-allocation-copilot-daily` | enabled after register | daily local time 05:20 | 執行配置型 ML promotion 評估並寫入 append-only sidecar、promotion artifact 與 `latest_status.json`。缺少、無效或未授權證據時仍成功完成每日流程，但固定輸出 `formal_oos_allowed=false`、`selected_alpha_bp=0` 與四條未通過 lane；不改寫來源資料庫或投組狀態。 |
-| `baldr-decision-evidence-capture-daily` | enabled after register | daily local time 05:25 | 依台北時間選擇下一個尚未到達的 08:30 日曆決策日，依序確認保存 durable Decision Desk snapshot 與 Evidence Event。既有 hash／unique key 使重跑轉為 duplicate；任一步失敗即回傳失敗並保留下一次重跑能力。它不推定交易日／成熟日、不改 Rule／Advice／Portfolio 狀態，也不連接券商執行。 |
-| `baldr-paper-portfolio-daily` | enabled after register | daily local time 05:28 | 以正式市場 SQLite `mode=ro/query_only` 讀取嚴格早於決策日的最近行情，更新 append-only Paper Portfolio 估值帳本。只做 T-1 mark-to-market，不自動調倉、不修改 Advice，也不具券商執行能力。 |
+| `baldr-decision-evidence-capture-daily` | enabled after register | daily local time 05:25 | 依台北時間選擇最近一個**已到達**的 08:30 日曆決策日，依序確認保存 durable Decision Desk snapshot 與 Evidence Event；不再把隔日 cutoff 當成已發生資料。既有 hash／unique key 使重跑轉為 duplicate；任一步失敗即回傳失敗並保留下一次重跑能力。它不推定交易日／成熟日、不改 Rule／Advice／Portfolio 狀態，也不連接券商執行。 |
+| `baldr-paper-portfolio-daily` | enabled after register | daily local time 05:28 | 依台北時間選擇最近一個**已到達**的 08:30 決策日，以正式市場 SQLite `mode=ro/query_only` 讀取嚴格早於決策日的最近行情，更新 append-only Paper Portfolio 估值帳本。明確指定未到達的 `--decision-at` 會寫入 `skipped_future_decision` 並不開啟 state／market DB；只做 T-1 mark-to-market，不自動調倉、不修改 Advice，也不具券商執行能力。 |
 | `baldr-ml-direct-chain-maintainer` | enabled after register | daily local time 05:30 | 自動解析並重驗最新全市場 immutable raw PIT pointer、official market-event custody 與目前 Direct identity，然後啟動／維持 `maintain_ml_direct_v3_refresh_chain.py --watch-formal-inputs`。使用既有 instance lock 防止重複訓練；無效輸入只寫 `blocked_invalid_bootstrap_input`，不寫來源 SQLite、不建立未受控 sidecar、不放寬 formal／alpha／broker gate。 |
 | `baldr-v2-2-weekly-collection` | `weekly-register` 後啟用 | 每週日 18:00 | 執行 `run_v2_2_weekly_collection.cmd`，以 SQLite read-only 讀取來源並將 evidence append 至 sidecar。對外狀態為 `pending_human_review`；需要人工判讀，但不代表 Gate 通過、不寫 weekly history，且 `write_intent=false`。 |
 
@@ -388,7 +388,7 @@ Decision Desk / Evidence confirmed capture：
 <OUTPUT_ROOT>/scheduled/decision_evidence_capture/latest_status.json
 ```
 
-`latest_status.json` 記錄台北 `decision_at`、`snapshot.saved`／`snapshot.duplicate`、`evidence.events_inserted`／`evidence.duplicates`／`evidence.failures`，以及整體 `passed`／`failed`。預設時間選擇規則只比較台北當下與 08:30；它明確輸出 `trading_calendar_validated=false`、`maturity_date_inferred=false`，不把週末、休市或未成熟資料偽裝成正式交易日證據。snapshot 成功、event capture 失敗時，下次執行會重用 snapshot hash 並再次嘗試 event unique-key capture。
+`latest_status.json` 記錄台北 `decision_at`、`snapshot.saved`／`snapshot.duplicate`、`evidence.events_inserted`／`evidence.duplicates`／`evidence.failures`，以及整體 `passed`／`failed`。排程預設選擇最近一個已到達的台北 08:30 cutoff；明確指定未到達的日期則由 capture CLI 以 `decision_date cannot be future-dated` fail closed。它明確輸出 `trading_calendar_validated=false`、`maturity_date_inferred=false`，不把週末、休市或未成熟資料偽裝成正式交易日證據。snapshot 成功、event capture 失敗時，下次執行會重用 snapshot hash 並再次嘗試 event unique-key capture。
 
 Paper Portfolio 每日估值：
 
@@ -397,7 +397,7 @@ Paper Portfolio 每日估值：
 <OUTPUT_ROOT>/scheduled/paper_portfolio_daily/latest_status.json
 ```
 
-runner 會以既有 baseline 初始化一次，之後只 append 新 snapshot。市場 DB 永遠唯讀，SQL 與 domain runner 都拒絕 `price_date >= decision_date` 或 `available_date >= decision_date`；同一決策日重跑只回報 duplicate。此排程不把 current weight 猜成 0、不產生交易、不套用配置提案。
+runner 會以既有 baseline 初始化一次，之後只 append 新 snapshot。排程預設選擇最近一個已到達的台北 08:30 cutoff；明確指定仍未到達的 `--decision-at` 會寫入 `skipped_future_decision`，且不開啟 state／market DB。市場 DB 永遠唯讀，SQL 與 domain runner 都拒絕 `price_date >= decision_date` 或 `available_date >= decision_date`；同一決策日重跑只回報 duplicate。此排程不把 current weight 猜成 0、不產生交易、不套用配置提案。
 
 Working-copy smoke diagnostic script（不構成人工 Gate，也不註冊為 task）：
 

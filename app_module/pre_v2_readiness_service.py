@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 import json
 import re
@@ -14,6 +14,7 @@ from app_module.agent_evidence_access_service import (
 )
 from app_module.decision_desk_snapshot_storage_dtos import section_is_ready
 from app_module.approved_weekly_history_projection import load_approved_weekly_history_projection
+from app_module.paper_portfolio_time import taiwan_market_today
 
 
 STATUS_READY = "ready"
@@ -168,8 +169,11 @@ class PreV2ReadinessService:
             "count_policy": "distinct_periods_from_owner_approved_projection_or_legacy_review; pending_sidecar_excluded",
             "automatic_revalidation": False,
             "human_approval_required": True,
+            "approved_projection_configured": self.approved_weekly_history_projection_path is not None,
             "pending_collection_periods": [],
         }
+        if self.approved_weekly_history_projection_path is None:
+            diagnostics.append("approved_weekly_history_projection_not_configured")
         try:
             projection = load_approved_weekly_history_projection(self.approved_weekly_history_projection_path)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -180,6 +184,10 @@ class PreV2ReadinessService:
             for item in projection.records:
                 key = (str(item["period_start"]), str(item["period_end"]))
                 periods[key] = "owner_approved_weekly_history"
+        elif self.approved_weekly_history_projection_path is not None:
+            configured_path = Path(self.approved_weekly_history_projection_path)
+            if not configured_path.exists():
+                diagnostics.append("approved_weekly_history_projection_not_found")
 
         try:
             with _connect_read_only(self.evidence_db_path) as conn:
@@ -243,9 +251,15 @@ class PreV2ReadinessService:
             for period_start, period_end in sorted(periods)
         ]
         pending_periods = evidence["pending_collection_periods"]
+        next_actions: tuple[str, ...]
         if pending_periods:
             next_actions = (
                 "由 owner/reviewer 審核 pending_human_review 週期，並寫入具名 approved-weekly-history projection；未核准前不計 Gate credit。",
+            )
+        elif self.approved_weekly_history_projection_path is None:
+            next_actions = (
+                "若已有 owner-approved weekly history，請設定 WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH 指向該 projection；未提供時只會計算正式 DB 內的 legacy review history。",
+                "繼續等待自然週期；新 weekly sidecar 仍須經 owner/reviewer 審核後才可計入 Gate credit。",
             )
         else:
             next_actions = (
@@ -334,12 +348,14 @@ class PreV2ReadinessService:
                 blocking_reasons=(*blocking_gaps, *warnings),
                 next_actions=("補 persisted recommendation payload、DDD snapshot section 或真實 watchlist / portfolio workflow 樣本。",),
                 evidence=payload,
+                diagnostics=tuple(str(item) for item in payload.get("diagnostics", ())),
             )
         return PreV2ReadinessItem(
             item_id="source_gaps",
             label="Source gaps 收斂狀態",
             status=STATUS_READY,
             evidence=payload,
+            diagnostics=tuple(str(item) for item in payload.get("diagnostics", ())),
         )
 
     def _read_only_agent_report_item(self, limit: int) -> PreV2ReadinessItem:
@@ -466,8 +482,14 @@ def _inspect_source_gaps_read_only(
     evidence_db_path: Path,
     decision_date: str | None,
 ) -> dict[str, Any]:
+    today = taiwan_market_today()
+    effective_decision_date, requested_future_date = _bounded_decision_date(decision_date, today)
     recommendation = _latest_recommendation_payload(config)
-    latest_snapshot = _latest_decision_desk_snapshot(evidence_db_path, decision_date)
+    latest_snapshot, future_snapshot_dates = _latest_decision_desk_snapshot(
+        evidence_db_path,
+        effective_decision_date,
+        today=today,
+    )
     recommendation_available = recommendation is not None
     why_not_ready = _has_payload((recommendation or {}).get("why_not_payload_json"))
     liquidity_ready = _has_payload((recommendation or {}).get("liquidity_gate_payload_json"))
@@ -488,6 +510,20 @@ def _inspect_source_gaps_read_only(
         blocking_gaps.append("portfolio_alert_snapshot_section_missing")
     if snapshot_available and not risk_ready:
         blocking_gaps.append("risk_prompt_snapshot_section_missing")
+    diagnostics: list[str] = []
+    if requested_future_date is not None:
+        blocking_gaps.append("decision_desk_snapshot_request_future_dated")
+        diagnostics.append(
+            "decision_desk_snapshot_request_future_date:"
+            f"{requested_future_date.isoformat()}:today={today.isoformat()}"
+        )
+    if future_snapshot_dates:
+        blocking_gaps.append("decision_desk_snapshot_future_dated")
+        diagnostics.extend(
+            "decision_desk_snapshot_future_date:"
+            f"{item}:today={today.isoformat()}"
+            for item in future_snapshot_dates
+        )
 
     warnings: list[str] = []
     if not why_not_ready:
@@ -499,11 +535,16 @@ def _inspect_source_gaps_read_only(
 
     scheduled_closeout = _scheduled_dry_run_source_gap_closeout(
         config,
-        decision_date=decision_date,
+        decision_date=effective_decision_date,
         durable_snapshot_available=snapshot_available,
         durable_snapshot_date=latest_snapshot["decision_date"] if latest_snapshot else None,
     )
-    if (blocking_gaps or warnings) and scheduled_closeout is not None:
+    if (
+        (blocking_gaps or warnings)
+        and scheduled_closeout is not None
+        and not future_snapshot_dates
+        and requested_future_date is None
+    ):
         return scheduled_closeout
 
     return {
@@ -514,6 +555,8 @@ def _inspect_source_gaps_read_only(
         "recommendation_screening_matrix_available": screening_matrix_ready,
         "decision_desk_snapshot_available": snapshot_available,
         "latest_decision_desk_snapshot_date": latest_snapshot["decision_date"] if latest_snapshot else None,
+        "decision_desk_snapshot_date_cutoff": effective_decision_date,
+        "decision_desk_snapshot_future_dates": list(future_snapshot_dates),
         "watchlist_trigger_capture_ready": watchlist_ready,
         "portfolio_alert_capture_ready": portfolio_ready,
         "risk_prompt_capture_ready": risk_ready,
@@ -522,6 +565,7 @@ def _inspect_source_gaps_read_only(
         "screening_matrix_capture_ready": screening_matrix_ready,
         "blocking_gaps": blocking_gaps,
         "warnings": warnings,
+        "diagnostics": diagnostics,
     }
 
 
@@ -541,6 +585,9 @@ def _scheduled_dry_run_source_gap_closeout(
         return None
 
     scheduled_decision_date = str(loaded.get("decision_date") or "")
+    today = taiwan_market_today()
+    if _is_future_date_text(scheduled_decision_date, today):
+        return None
     if decision_date and scheduled_decision_date != decision_date:
         return None
     if loaded.get("status") != "passed":
@@ -634,40 +681,71 @@ def _latest_recommendation_payload(config: Any) -> dict[str, Any] | None:
 def _latest_decision_desk_snapshot(
     evidence_db_path: Path,
     decision_date: str | None,
-) -> dict[str, Any] | None:
+    *,
+    today: date,
+) -> tuple[dict[str, Any] | None, tuple[str, ...]]:
+    future_snapshot_dates: tuple[str, ...] = ()
     try:
         with _connect_read_only(evidence_db_path) as conn:
             if not _table_exists(conn, "decision_desk_snapshots"):
-                return None
-            if decision_date:
-                row = conn.execute(
-                    """
-                    SELECT *
-                    FROM decision_desk_snapshots
-                    WHERE decision_date <= ? AND snapshot_status = 'active'
-                    ORDER BY decision_date DESC, created_at DESC
-                    LIMIT 1
-                    """,
-                    (decision_date,),
-                ).fetchone()
-            else:
-                row = conn.execute(
-                    """
-                    SELECT *
-                    FROM decision_desk_snapshots
-                    WHERE snapshot_status = 'active'
-                    ORDER BY decision_date DESC, created_at DESC
-                    LIMIT 1
-                    """
-                ).fetchone()
+                return None, future_snapshot_dates
+            future_rows = conn.execute(
+                """
+                SELECT DISTINCT decision_date
+                FROM decision_desk_snapshots
+                WHERE snapshot_status = 'active' AND decision_date > ?
+                ORDER BY decision_date ASC
+                """,
+                (today.isoformat(),),
+            ).fetchall()
+            future_snapshot_dates = tuple(str(row["decision_date"]) for row in future_rows)
+            row = conn.execute(
+                """
+                SELECT *
+                FROM decision_desk_snapshots
+                WHERE decision_date <= ? AND snapshot_status = 'active'
+                ORDER BY decision_date DESC, created_at DESC
+                LIMIT 1
+                """,
+                (decision_date or today.isoformat(),),
+            ).fetchone()
     except (FileNotFoundError, sqlite3.Error):
-        return None
+        return None, future_snapshot_dates
     if row is None:
-        return None
+        return None, future_snapshot_dates
     payload = dict(row)
     for column in ("watchlist_trigger_json", "portfolio_alert_json", "risk_prompt_json"):
         payload[column] = json.loads(str(payload[column] or "{}"))
-    return payload
+    return payload, future_snapshot_dates
+
+
+def _bounded_decision_date(
+    decision_date: str | None,
+    today: date,
+) -> tuple[str, date | None]:
+    """把查詢上限限制在台灣市場今天，防止把未來快照當成 current evidence。"""
+
+    if not decision_date:
+        return today.isoformat(), None
+    text = str(decision_date).strip()[:10]
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError:
+        # 保留既有資料錯誤／空結果行為；不因日期格式診斷而建立或修復任何資料。
+        return text, None
+    if parsed > today:
+        return today.isoformat(), parsed
+    return parsed.isoformat(), None
+
+
+def _is_future_date_text(value: str, today: date) -> bool:
+    text = str(value or "").strip()[:10]
+    if not text:
+        return False
+    try:
+        return date.fromisoformat(text) > today
+    except ValueError:
+        return False
 
 
 def _has_payload(value: Any) -> bool:

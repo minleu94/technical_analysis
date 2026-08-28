@@ -56,10 +56,44 @@ def _next_decision_at(
         if local.timetz().replace(tzinfo=None) != time(8, 30):
             raise ValueError("--decision-at must be Asia/Taipei 08:30")
         return local
-    current = (now or datetime.now(TAIPEI)).astimezone(TAIPEI)
+    current_raw = now or datetime.now(TAIPEI)
+    if current_raw.tzinfo is None or current_raw.utcoffset() is None:
+        raise ValueError("now must include timezone")
+    current = current_raw.astimezone(TAIPEI)
     candidate = datetime.combine(current.date(), time(8, 30), tzinfo=TAIPEI)
     if candidate <= current:
         candidate += timedelta(days=1)
+    return candidate
+
+
+def _latest_reached_decision_at(
+    value: str | None,
+    *,
+    now: datetime | None = None,
+) -> datetime:
+    """Resolve the latest Taipei 08:30 cutoff that has already occurred.
+
+    Scheduled tasks run before the Taiwan market cutoff on this host.  Using
+    the next unreached cutoff would create a future-dated paper snapshot, so
+    the writer defaults to the latest reached cutoff instead.  Explicit
+    ``--decision-at`` values are preserved and validated by :func:`run`.
+    """
+
+    if value is not None:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("--decision-at must include timezone")
+        local = parsed.astimezone(TAIPEI)
+        if local.timetz().replace(tzinfo=None) != time(8, 30):
+            raise ValueError("--decision-at must be Asia/Taipei 08:30")
+        return local
+    current_raw = now or datetime.now(TAIPEI)
+    if current_raw.tzinfo is None or current_raw.utcoffset() is None:
+        raise ValueError("now must include timezone")
+    current = current_raw.astimezone(TAIPEI)
+    candidate = datetime.combine(current.date(), time(8, 30), tzinfo=TAIPEI)
+    if candidate > current:
+        candidate -= timedelta(days=1)
     return candidate
 
 
@@ -161,6 +195,7 @@ def run(
     output_root: Path,
     decision_at: datetime,
     calendar: OfficialTradingCalendar | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     if decision_at.tzinfo is None or decision_at.utcoffset() is None:
         raise ValueError("decision_at must include timezone")
@@ -168,12 +203,44 @@ def run(
     if decision_at.timetz().replace(tzinfo=None) != time(8, 30):
         raise ValueError("decision_at must be Asia/Taipei 08:30")
 
+    checked_raw = now or datetime.now(TAIPEI)
+    if checked_raw.tzinfo is None or checked_raw.utcoffset() is None:
+        raise ValueError("now must include timezone")
+    checked_at = checked_raw.astimezone(TAIPEI)
+
     status_path = (
         output_root
         / "scheduled"
         / "paper_portfolio_daily"
         / "latest_status.json"
     )
+    if decision_at > checked_at:
+        future_status: dict[str, Any] = {
+            "schema_version": SCHEMA_VERSION,
+            "status": "skipped_future_decision",
+            "decision_at": decision_at.isoformat(timespec="seconds"),
+            "decision_date": decision_at.date().isoformat(),
+            "checked_at": checked_at.isoformat(timespec="seconds"),
+            "trading_calendar_validated": False,
+            "trading_calendar_is_open": None,
+            "trading_calendar_reason": "decision_at_not_reached",
+            "snapshot_appended": False,
+            "skipped_duplicate": False,
+            "diagnostics": [
+                "future_decision_at:"
+                f"{decision_at.isoformat(timespec='seconds')}:"
+                f"checked_at={checked_at.isoformat(timespec='seconds')}"
+            ],
+            "state_db": str(state_db.resolve()),
+            "market_db_mode": "not_opened",
+            "writes_market_db": False,
+            "auto_rebalance_allowed": False,
+            "changes_advice": False,
+            "broker_execution": False,
+        }
+        _atomic_write_json(status_path, future_status)
+        return future_status
+
     calendar_service = calendar or OfficialTradingCalendar(db_path=market_db)
     try:
         is_trading_day, calendar_reason = (
@@ -183,7 +250,7 @@ def run(
         is_trading_day = None
         calendar_reason = f"calendar_exception:{type(exc).__name__}"
     if is_trading_day is not True:
-        blocked_status: dict[str, Any] = {
+        calendar_status: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "status": (
                 "skipped_non_trading_day"
@@ -211,8 +278,8 @@ def run(
             "changes_advice": False,
             "broker_execution": False,
         }
-        _atomic_write_json(status_path, blocked_status)
-        return blocked_status
+        _atomic_write_json(status_path, calendar_status)
+        return calendar_status
 
     repository = PaperPortfolioSnapshotRepository(state_db)
     baseline = _baseline_snapshot(_load_mapping(baseline_path))
@@ -226,6 +293,7 @@ def run(
     decision_date = decision_at.date().isoformat()
     snapshot_id = f"{PORTFOLIO_ID}-{decision_date.replace('-', '')}"
     duplicate = repository.get(snapshot_id)
+    diagnostics: tuple[str, ...]
     if duplicate is not None:
         result_snapshot = duplicate
         diagnostics = ("snapshot_already_exists",)
@@ -332,7 +400,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             state_db=state_db,
             market_db=market_db,
             output_root=output_root,
-            decision_at=_next_decision_at(args.decision_at),
+            decision_at=_latest_reached_decision_at(args.decision_at),
         )
     except Exception as exc:
         failed = {

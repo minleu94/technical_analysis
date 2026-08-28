@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from app_module.evidence_operations_history_dashboard_dtos import EvidenceOperationsHistoryDashboardRequest
-from app_module.evidence_operations_history_dashboard_service import EvidenceOperationsHistoryDashboardService
+from app_module.evidence_operations_history_dashboard_service import (
+    EvidenceOperationsHistoryDashboardService,
+    create_evidence_operations_history_dashboard_service,
+)
 from app_module.evidence_operations_history_repository import EvidenceOperationsHistoryRepository
 from app_module.evidence_operations_service import EvidenceOperationsService
 from data_module.config import TWStockConfig
@@ -56,3 +59,18 @@ def test_history_dashboard_empty_state_is_explicit(tmp_path: Path) -> None:
 
     assert result.rows == ()
     assert "尚無 weekly review history" in result.empty_state_message
+
+
+def test_history_dashboard_factory_is_query_only_when_db_is_missing(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    missing_db = tmp_path / "missing" / "evidence-ops-history.db"
+    config.db_file = missing_db
+
+    service = create_evidence_operations_history_dashboard_service(config)
+    result = service.load_dashboard(EvidenceOperationsHistoryDashboardRequest())
+
+    assert result.rows == ()
+    assert "目前只讀資料源不可用" in result.empty_state_message
+    assert "evidence_operations_history_db_missing" in result.empty_state_message
+    assert not missing_db.exists()
+    assert not missing_db.parent.exists()

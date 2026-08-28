@@ -6,8 +6,11 @@ SQLite 資料庫檢視服務 (SQLite Inspector Service)
 import re
 import logging
 from typing import Dict, List, Any, Optional
+from app_module.sqlite_read_only import ReadOnlySQLiteManager
 import pandas as pd
-from data_module.db_manager import DBManager
+
+
+_ReadOnlySQLiteManager = ReadOnlySQLiteManager
 
 
 class SqliteInspectorService:
@@ -34,7 +37,8 @@ class SqliteInspectorService:
         """
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.db_manager = DBManager(config)
+        self.db_manager = ReadOnlySQLiteManager(config.db_file)
+        self.last_error: Optional[str] = None
 
     def _validate_table_name(self, table_name: str):
         if table_name not in self.ALLOWED_TABLES:
@@ -44,9 +48,7 @@ class SqliteInspectorService:
 
     def _get_raw_columns(self, table_name: str) -> List[str]:
         self._validate_table_name(table_name)
-        with self.db_manager.connect() as conn:
-            cursor = conn.execute(f"PRAGMA table_info({table_name});")
-            return [row["name"] for row in cursor.fetchall()]
+        return self.db_manager.get_table_columns(table_name)
 
     def _display_column_name(self, raw_column: str) -> str:
         return self.DISPLAY_COLUMN_ALIASES.get(raw_column, raw_column)
@@ -157,11 +159,13 @@ class SqliteInspectorService:
         try:
             sql = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
             df = self.db_manager.execute_query(sql)
+            self.last_error = None
             if not df.empty:
                 existing = df['name'].tolist()
                 return [t for t in existing if t in self.ALLOWED_TABLES]
             return []
         except Exception as e:
+            self.last_error = str(e)
             self.logger.error(f"[SqliteInspectorService] 獲取資料表列表失敗: {e}")
             return []
 
@@ -216,39 +220,34 @@ class SqliteInspectorService:
         self._validate_table_name(table_name)
 
         try:
-            # PRAGMA 查詢需要獨立連線
-            with self.db_manager.connect() as conn:
-                cursor = conn.execute(f"PRAGMA table_info({table_name});")
-                rows = cursor.fetchall()
-                if not rows:
-                    return pd.DataFrame()
-                
-                # 轉成 DataFrame
-                cols = ['cid', 'name', 'type', 'notnull', 'dflt_value', 'pk']
-                data = []
-                for row in rows:
-                    data.append({c: row[c] for c in cols if c in row.keys()})
-                
-                df = pd.DataFrame(data)
-                # 將 pk 欄位轉為易讀的布林或文字
-                if 'pk' in df.columns:
-                    df['pk'] = df['pk'].map(lambda x: '✓ 主鍵' if x else '')
-                if 'notnull' in df.columns:
-                    df['notnull'] = df['notnull'].map(lambda x: '✓' if x else '')
-                
-                # 重命名欄位以便於 UI 呈現
-                rename_map = {
-                    'cid': '序號',
-                    'name': '欄位名稱',
-                    'type': '資料型態',
-                    'notnull': '必填 (Not Null)',
-                    'dflt_value': '預設值',
-                    'pk': '主鍵'
-                }
-                df = df.rename(columns=rename_map)
-                if '欄位名稱' in df.columns:
-                    df['欄位名稱'] = df['欄位名稱'].map(self._display_column_name)
-                return df
+            # PRAGMA 查詢仍走 query-only adapter；adapter 在 Windows lock
+            # 情境可降級 immutable 唯讀快照，不會建構 writable DBManager。
+            df = self.db_manager.execute_query(f"PRAGMA table_info(\"{table_name}\");")
+            if df.empty:
+                return pd.DataFrame()
+
+            # 保留 SQLite PRAGMA 的標準欄位形狀。
+            cols = ['cid', 'name', 'type', 'notnull', 'dflt_value', 'pk']
+            df = df[[column for column in cols if column in df.columns]].copy()
+            # 將 pk／notnull 欄位轉為易讀的布林或文字
+            if 'pk' in df.columns:
+                df['pk'] = df['pk'].map(lambda x: '✓ 主鍵' if x else '')
+            if 'notnull' in df.columns:
+                df['notnull'] = df['notnull'].map(lambda x: '✓' if x else '')
+
+            # 重命名欄位以便於 UI 呈現
+            rename_map = {
+                'cid': '序號',
+                'name': '欄位名稱',
+                'type': '資料型態',
+                'notnull': '必填 (Not Null)',
+                'dflt_value': '預設值',
+                'pk': '主鍵'
+            }
+            df = df.rename(columns=rename_map)
+            if '欄位名稱' in df.columns:
+                df['欄位名稱'] = df['欄位名稱'].map(self._display_column_name)
+            return df
         except Exception as e:
             self.logger.error(f"[SqliteInspectorService] 獲取資料表 {table_name} Schema 失敗: {e}")
             return pd.DataFrame()

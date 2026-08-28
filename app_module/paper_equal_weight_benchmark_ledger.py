@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -82,36 +83,38 @@ class EqualWeightBenchmarkLedger:
     def __init__(self, db_path: str | Path) -> None:
         self._path = Path(db_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self._path) as conn:
-            conn.execute(
-                """CREATE TABLE IF NOT EXISTS paper_equal_weight_benchmark (
-                    benchmark_id TEXT NOT NULL,
-                    decision_date TEXT NOT NULL,
-                    constituents_json TEXT NOT NULL,
-                    units_json TEXT NOT NULL,
-                    total_value TEXT NOT NULL,
-                    PRIMARY KEY (benchmark_id, decision_date)
-                )"""
-            )
+        with closing(sqlite3.connect(self._path)) as conn:
+            with conn:
+                conn.execute(
+                    """CREATE TABLE IF NOT EXISTS paper_equal_weight_benchmark (
+                        benchmark_id TEXT NOT NULL,
+                        decision_date TEXT NOT NULL,
+                        constituents_json TEXT NOT NULL,
+                        units_json TEXT NOT NULL,
+                        total_value TEXT NOT NULL,
+                        PRIMARY KEY (benchmark_id, decision_date)
+                    )"""
+                )
 
     def append(self, entry: EqualWeightBenchmarkEntry) -> None:
         try:
-            with sqlite3.connect(self._path) as conn:
-                conn.execute(
-                    "INSERT INTO paper_equal_weight_benchmark VALUES (?, ?, ?, ?, ?)",
-                    (
-                        entry.benchmark_id,
-                        entry.decision_date,
-                        json.dumps(entry.constituents),
-                        json.dumps([(code, str(units)) for code, units in entry.units]),
-                        str(entry.total_value),
-                    ),
-                )
+            with closing(sqlite3.connect(self._path)) as conn:
+                with conn:
+                    conn.execute(
+                        "INSERT INTO paper_equal_weight_benchmark VALUES (?, ?, ?, ?, ?)",
+                        (
+                            entry.benchmark_id,
+                            entry.decision_date,
+                            json.dumps(entry.constituents),
+                            json.dumps([(code, str(units)) for code, units in entry.units]),
+                            str(entry.total_value),
+                        ),
+                    )
         except sqlite3.IntegrityError as exc:
             raise ValueError("benchmark entry already exists") from exc
 
     def list(self, benchmark_id: str) -> tuple[EqualWeightBenchmarkEntry, ...]:
-        with sqlite3.connect(self._path) as conn:
+        with closing(sqlite3.connect(self._path)) as conn:
             rows = conn.execute(
                 "SELECT * FROM paper_equal_weight_benchmark WHERE benchmark_id = ? ORDER BY decision_date",
                 (benchmark_id,),

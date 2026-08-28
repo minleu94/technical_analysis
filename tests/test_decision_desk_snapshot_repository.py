@@ -142,3 +142,13 @@ def test_missing_sections_are_persisted_as_degraded_payload_not_neutral(tmp_path
     restored = saved.to_decision_desk_snapshot()
     assert restored.market_regime.quality == DecisionDeskQuality.MISSING
     assert "regime_missing" in restored.market_regime.warnings
+
+
+def test_read_only_repository_never_creates_missing_db_or_schema(tmp_path):
+    config = _config(tmp_path)
+    missing_db = tmp_path / "missing" / "evidence.db"
+    repository = DecisionDeskSnapshotRepository(config, db_path=missing_db, read_only=True)
+
+    assert repository.list_snapshots() == []
+    assert repository.latest_before_or_on(date(2026, 7, 1)) is None
+    assert not missing_db.exists()

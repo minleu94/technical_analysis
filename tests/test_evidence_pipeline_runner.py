@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -228,6 +229,22 @@ def test_runner_confirm_requires_explicit_db_path(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="explicit --db-path"):
         EvidencePipelineRunner(config).run(
             EvidencePipelineRunRequest(decision_date="2026-07-01", confirm=True, dry_run=False)
+        )
+
+
+def test_runner_rejects_future_decision_date_before_any_pipeline_step(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = _config(tmp_path)
+    monkeypatch.setattr(
+        "app_module.evidence_pipeline_runner.taiwan_market_today",
+        lambda: date(2026, 7, 7),
+    )
+
+    with pytest.raises(ValueError, match="future-dated"):
+        EvidencePipelineRunner(config).run(
+            EvidencePipelineRunRequest(decision_date="2026-07-08")
         )
 
 

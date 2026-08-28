@@ -358,3 +358,101 @@ def test_pattern_score_confirm_logic_no_look_ahead():
         
         # 4. confirm_idx + 1 (18) 分數進行線性衰減：factor = 1.0 - (1/20) = 0.95, 分數 = 50 + 35 * 0.95 = 83.25
         assert abs(pattern_score.iloc[18] - 83.25) < 1e-5
+
+        # Explain metadata 必須與 score 使用同一個確認日：end_idx 當天
+        # 不得出現型態，確認後才進入 20 日衰減觀察窗。
+        evidence = pattern_score.attrs['pattern_evidence']
+        assert evidence[12] == ()
+        assert evidence[17][0]['pattern'] == 'W底'
+        assert evidence[17][0]['confirm_idx'] == 17
+        assert evidence[17][0]['age'] == 0
+        assert evidence[18][0]['age'] == 1
+
+
+def test_total_score_projects_confirmed_pattern_summary_without_guessing():
+    """PatternScore 的已確認 evidence 會投影至輸出列，供 Explain 使用。"""
+    from decision_module.scoring_engine import ScoringEngine
+
+    dates = pd.date_range("2026-06-01", periods=30, freq="D")
+    df = pd.DataFrame(
+        {
+            '收盤價': [
+                100.0, 99.0, 98.0, 97.0, 96.0,
+                95.0, 98.0, 102.0, 105.0, 102.0,
+                99.0, 97.0, 96.0, 97.0, 98.0,
+                100.0, 103.0, 106.0, 107.0, 108.0,
+                109.0, 110.0, 111.0, 112.0, 113.0,
+                114.0, 115.0, 116.0, 117.0, 118.0,
+            ]
+        },
+        index=dates,
+    )
+    mock_w_bottom = {
+        'pattern': 'W底',
+        'start_idx': 5,
+        'end_idx': 12,
+        'trough1_idx': 5,
+        'trough2_idx': 12,
+        'peak_idx': 8,
+        'direction': 'bullish',
+    }
+    config = {'patterns': {'selected': ['W底']}}
+    from unittest.mock import patch
+
+    with patch(
+        "analysis_module.pattern_analysis.pattern_analyzer.PatternAnalyzer.identify_pattern",
+        return_value=[mock_w_bottom],
+    ):
+        result = ScoringEngine().calculate_total_score(df, config)
+
+    assert result.loc[dates[12], 'PatternNames'] == ''
+    assert result.loc[dates[12], 'Pattern_Signal'] == 0
+    assert result.loc[dates[17], 'PatternNames'] == 'W底'
+    assert result.loc[dates[17], 'Pattern_Signal'] == 1
+    assert result.loc[dates[17], 'PatternAgeDays'] == 0
+    assert result.loc[dates[18], 'PatternAgeDays'] == 1
+
+    # Existing SignalCombiner output keeps its original column semantics;
+    # rolling confirmation uses an explicit non-destructive alias instead.
+    with patch(
+        "analysis_module.pattern_analysis.pattern_analyzer.PatternAnalyzer.identify_pattern",
+        return_value=[mock_w_bottom],
+    ):
+        preserved = ScoringEngine().calculate_total_score(
+            df.assign(Pattern_Signal=7),
+            config,
+        )
+    assert preserved.loc[dates[17], 'Pattern_Signal'] == 7
+    assert preserved.loc[dates[17], 'ConfirmedPatternSignal'] == 1
+
+
+def test_reason_engine_consumes_confirmed_pattern_evidence_only():
+    """ReasonEngine 顯示具體型態，沒有名稱時不從分數臆測型態。"""
+    from decision_module.reason_engine import ReasonEngine
+    from app_module.reason_tags import ReasonTagGenerator
+
+    config = {'patterns': {'selected': ['W底', '雙頂']}}
+    engine = ReasonEngine()
+
+    reasons = engine.generate_reasons(
+        pd.Series({'PatternNames': 'W底', 'PatternScore': 85.0, 'PatternAgeDays': 2}),
+        config,
+    )
+    assert [reason['tag'] for reason in reasons if reason['tag'] == 'W底'] == ['W底']
+    assert '距確認日 2 個交易日' in reasons[0]['evidence']
+    assert 'pattern_w_bottom' in ReasonTagGenerator.generate_tags(reasons)
+
+    generic_reasons = engine.generate_reasons(
+        pd.Series({'PatternScore': 70.0, 'Pattern_Signal': 1}),
+        config,
+    )
+    assert any(reason['tag'] == '圖形訊號偏多' for reason in generic_reasons)
+    assert not any(reason['tag'] == 'W底' for reason in generic_reasons)
+
+    from decision_module.scoring_engine import ScoringEngine
+    assert ScoringEngine().generate_reasons(pd.DataFrame(), config) == []
+    delegated = ScoringEngine().generate_reasons(
+        pd.DataFrame([{'PatternNames': 'W底', 'PatternScore': 85.0}]),
+        config,
+    )
+    assert any(reason['tag'] == 'W底' for reason in delegated)
