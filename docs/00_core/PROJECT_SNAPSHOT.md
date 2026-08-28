@@ -114,7 +114,7 @@
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 
-- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard、scheduled-task registration inspector、technical process-pool／worker recovery acceptance、P0 audit → candidate intake projection、freshness ACL-safe status/log route 與 machine evidence handoff projection／intake envelope guard 測試並完成 inventory 登錄後為 `646/646`、`3661 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `3614`／`3612 collected` 與 `639/639`／`638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
+- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard、scheduled-task registration inspector、technical process-pool／worker recovery acceptance、P0 audit → candidate intake projection、freshness ACL-safe status/log route、machine evidence handoff projection／intake envelope guard、explicit freshness readiness projection 與 owner packet route evidence 測試並完成 inventory 登錄後為 `646/646`、`3663 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `3614`／`3612 collected` 與 `639/639`／`638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
 - 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3660 passed / 1 skipped / 26 warnings`（`576.78s`）；新增 machine evidence handoff projection／intake envelope guard 後的完整回歸沒有新增 failure。warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示。`3613 passed` 為前一輪 inventory 登錄前的中間結果。
 
 - Data Update 狀態卡已改為 fail-closed 顯示：只有明確 `ok`／`success`／`current`／`normal` 才顯示綠色「最新」；`error`、`missing`、`empty`、`unavailable`、部分 payload 缺漏與整體狀態檢查失敗不再沿用舊數字或假綠。
