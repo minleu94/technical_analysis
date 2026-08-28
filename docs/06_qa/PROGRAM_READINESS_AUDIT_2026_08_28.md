@@ -77,6 +77,16 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 補充：technical production canary 現在已有明確、預設唯讀的 guarded entry 與 readiness validator；它只是把「下一步怎麼安全取得正式證據」做成可核驗工具，沒有把 production gate 預先標成通過。
 
+> **Host-context recheck（2026-08-28 18:45 UTC）**：上表中先前由 `codexsandboxoffline`
+> 執行的 `available=0/13` 只反映沙盒無法呼叫 `schtasks.exe`。在實際 Windows host context
+> 重新執行 `scripts/inspect_scheduled_task_registration.py` 後，13/13 task 均為
+> `available`，wrapper 全部存在、Task To Run 全部可觀測且 action 全部相符，
+> `configuration_ready=true`。目前唯一非零 `Last Result` 是
+> `baldr-ml-direct-chain-maintainer=1`；這是該工作本身的 Formal input／maintenance
+> 狀態，不能把 task 註冊成功解讀成 ML promotion 通過。host-context artifact：
+> `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_host_20260828.json`，
+> SHA-256=`14C1F4C59611231961F62105C4608AE3FDBA4A8BE2D48ABA3A5E70281E8C9845`。
+
 ## P0 多路徑取得結果
 
 新增 `p0-source-acquisition-routes.v1`，固定 13 個來源分母與 27 條受治理候選 route；每個來源至少兩條 route。已直接接上五條 live fallback：
@@ -238,6 +248,7 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - Technical production canary guarded entry：`scripts/qa_technical_indicator_production_canary.py`；預設只讀 production state，要求 owner token、無並行 writer acknowledgement 與 explicit confirm，確認後才會先建立 SQLite online backup／單股 CSV backup，再執行 bounded parent-only writer；驗證失敗會嘗試 rollback。2026-08-28 尚未執行 production canary，因此 readiness 仍保留 `technical_production_single_writer_canary_not_completed`。
 - 2026-08-28 已完成 production `2330` 的唯讀 canary preview；SQLite `quick_check=ok`、daily latest／technical latest 均為 `2026-08-28`，沒有建立 backup 或寫入 production。preview artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_production_canary_preview_20260828.json`（SHA-256=`EBCC4308C00DDF743B2AEF2546737ECA19019E87819EBFAD0DF0506AA7B7FB23`）；這不能解除正式 canary blocker。續測仍為 `confirmation_required`，再次確認 `production_write_attempted=false`、`writes_allowed=false`；artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_production_canary_preview_continuation_20260828.json`（SHA-256=`7A80085F52B7176212EAA5B9958F465431E01316BA7E84E7BDFD32A9065B248F`）。
 - Scheduler registration 續測：`scripts/inspect_scheduled_task_registration.py` 仍觀察到 `available=0/13`、`all_available=false`、`query_only=true`、`side_effect_free=true`；每個 task 均為 `missing_or_unavailable`，首筆錯誤為 `ERROR: The system cannot find the path specified.`，沒有建立或修改 task。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_continuation_20260828.json`（SHA-256=`EC768C8ADAEE6AF165054B233738AFC6964B9C4A776AC33F0EB6FC13D2971519`）。
+- Host-context Scheduler recheck：`available=13/13`、`configuration_ready=true`、`all_actions_observed=true`、`all_actions_match=true`；13 個 task 均為 `Enabled`／`Ready`，`Logon Mode=Interactive only`，最近 query 顯示 `baldr-ml-direct-chain-maintainer` 的 `Last Result=1`，其餘 task 為 `0`。這只證明註冊／action wiring 與互動式帳號下的執行觀測，不解除 `production_scheduler_allowed=false` 或 Formal／Evidence gate。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_host_20260828.json`（SHA-256=`14C1F4C59611231961F62105C4608AE3FDBA4A8BE2D48ABA3A5E70281E8C9845`）。
 - Broker real HTTP canary：`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_real_http_canary_20260828.json`（SHA-256=`5532F53BDE0C86B4A8983B766DA46AF45D5DF53D893EAEE0F70797F22A48E83C`）；`1030_1030`／`2026-08-28`／`lots` 單一 GET 解析 100 rows，Selenium 未啟動，正式 writer／SQLite 均未寫入。這只證明當次來源可讀與 parser 可用，不代表長期 rate-limit、授權、Selenium fallback 或 production pool。
 
 ## Scheduler wrapper／action wiring 續測
