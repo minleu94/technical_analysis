@@ -35,6 +35,26 @@ SQLite shape probe（2026-08-28 06:38 UTC host rerun）觀察到 `broker_flows` 
 這不是全市場更新承諾：完整批次還包含
 CSV 讀取、每股 merge／寫入、全市場 concat、backup 與可選 SQLite rebuild。
 
+### 2026-08-28 08:33 UTC host rerun（本輪觀測）
+
+本輪以 4 檔明確指定 CSV（`2330`、`2317`、`2454`、`0050`）、尾端 120 rows、2 runs
+重跑技術指標唯讀 probe：CSV read=`3.12–22.08 ms`、計算 cold=`2.98–4.82 ms`、
+warm p95=`2.76–3.07 ms`；每檔輸入／輸出均為 120 rows，`write_attempted=false`、
+`parallelism_enabled=false`、`observed_worker_count=1`。
+
+同時以 `qa_broker_flow_dashboard_latency.py --period week --runs 2` 重跑正式 SQLite
+唯讀 dashboard：含 semantics cold=`2176.638 ms`、warm p95=`0.207 ms`，source-only
+diagnostic cold=`429.314 ms`、warm p95=`0.167 ms`；單股 branch detail warm p95=`13.825 ms`、
+branch tracker warm p95=`11.284 ms`，各自 gate=`pass`。Probe 前後資料庫 SHA-256 均為
+`3a5e791dd8f5e0b4cab338abff65d34d442d2ce5b1ceade2385e25b347cd1f61`，確認未寫入正式 DB。
+原始 JSON 證據留在 OS TEMP：`technical_latency_20260828.json`（SHA-256=`188D47C63D8EF16C4B14BC51B4D9198E25C8B15EC90DE38F55E8650C2B46A0B5`）與
+`broker_flow_latency_20260828.json`（SHA-256=`1EB08E31B5321B3AA5F60F5595ADF1CE56D9F3EDEACE21B0B1E2D315EE2E2807`）。
+
+這組數字只支持「目前 query／單股計算的 warm path 很快、冷啟有固定成本」；仍不足以
+批准全市場 worker 數或 broker 併發。下一步仍必須量測完整 `read → calculate → write →
+aggregate → SQLite commit` 五段與取消／retry／contention，再於 isolated staging 做 bounded
+worker acceptance。
+
 ## 現行寫入與平行化事實
 
 - Broker ingestion 目前依 branch/date 順序抓取；lots 與 amount 依序請求。HTTP

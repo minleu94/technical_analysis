@@ -42,6 +42,7 @@
 - 新增唯讀 `scripts/qa_technical_indicator_latency.py`，量測明確指定的技術指標 CSV 之 read／calculate stage；它固定揭露 `parallelism_enabled=false`、`observed_worker_count=1`、`single_writer_required=true`，不建立檔案、不寫 SQLite。
 - `BrokerBranchWriteCoordinator` 增加 process-local single-writer lock，daily／merged CSV 寫入與 backup 維持序列化；這是為未來 bounded HTTP fetch 留下安全邊界，不代表已啟用 broker concurrency 或 Selenium 多執行緒。
 - 目前基線與後續 process-pool／rate-limit acceptance criteria 見 [Data Update 效能基線與平行化邊界](../06_qa/DATA_UPDATE_PERFORMANCE_BASELINE_2026_08_28.md)。
+- 2026-08-28 08:33 UTC host rerun 以 4 檔、120 rows、2 runs 取得技術指標 CSV read `3.12–22.08 ms`／計算 warm p95 `2.76–3.07 ms`；Broker dashboard warm p95 `0.207 ms`、branch detail `13.825 ms`，正式 DB 前後 hash 不變。這仍只是 read／CPU 基線，尚未授權全市場並行或 broker worker。
 
 ## 2026-08-28 Paper Equal Weight controlled build slice（current engineering）
 
