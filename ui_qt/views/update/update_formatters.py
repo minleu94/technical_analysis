@@ -84,6 +84,12 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
             f"已匯入期別：{latest_period}",
             f"目前可用期別：{latest_available_period}",
         ]
+        candidate_period = str(detail.get("candidate_latest_period") or "").strip()
+        if candidate_period and (
+            latest_period in {None, "", "未知"}
+            or candidate_period > str(latest_period)
+        ):
+            lines.append(f"候選待套用期別：{candidate_period}")
         if pending_period_count and next_available_date:
             lines.append(
                 f"待生效：{pending_period_count} 個期別（{next_available_date} 起可用）"

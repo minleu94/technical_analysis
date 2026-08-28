@@ -120,6 +120,26 @@ status artifact SHA-256=`3A077E2D2775F02E4BE6A4016EA5DEB6A8B7B1B5E784303699CE647
 `DATA_FRESHNESS_STATUS_ARTIFACT` 讀取同一份明確檔案。這仍需要 owner 更新 Task
 Scheduler 執行環境，不能由 readiness inspector 自動套用。
 
+### 2026-08-28 月營收更新缺口與候選補齊
+
+SQLite 月營收目前仍停在 `2026-06`（246,331 rows、最新完整可用日
+`2026-07-15`），但這不代表官方來源沒有新資料。以 MOPS static snapshot
+取得 `2026-07` 數值後，再分別查詢 TWSE `t187ap05_L` 與 TPEx
+`mopsfin_t187ap05_O` 的官方 `出表日期`，兩條鏈交集為 `1,851` rows：TWSE
+991、TPEx 860，公告日皆為 `2026-08-17`、保守 `available_date=2026-08-18`。
+另有 2 筆 snapshot（2850、2883）沒有官方公告映射，保留為缺口，沒有用猜測日期補值。
+
+候選 CSV 已通過 validator（accepted=1,851、diagnostics=0），並以正式 DB
+執行唯讀 backfill dry-run（raw=1,851、normalized=1,851、diagnostics=0）；
+候選與 raw／DB 仍在 TEMP，沒有寫入正式 availability mapping 或 SQLite。這也暴露
+原本更新頁的顯示問題：只有 SQLite 狀態時會顯示 `status=ok`，看不出較新的數值
+候選尚未套用。更新服務現在依 snapshot 期別選檔並揭露
+`candidate_latest_period`；若候選較新，UI 顯示「候選可用／候選待套用期別」，不再
+把抓取完成誤顯示成正式完成。正式 apply 仍需 owner 確認。
+
+本輪 snapshot SHA-256=`D055DF5F6193961198655C5B46F5D6111D808430CBEFDC4DDB27F521EBABAD65`；
+availability candidate SHA-256=`9CAE017074FE08B5EE14761FDAB8458D738AFD63AF0ED73F4E5A72E8BF34D016`。
+
 ## 為什麼有些東西不能直接補滿
 
 1. **Owner／license decision 是權限事實，不是資料欄位。** 程式可以蒐集官方 endpoint、條款 URL、hash、coverage 與 PIT 證據，但不能冒用具名 reviewer 作出 `accepted`／`limited` 決議。

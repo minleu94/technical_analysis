@@ -21,6 +21,10 @@ normalize_market_index_frame ,
 official_twse_session_exists ,
 )
 from data_module.phase3c_backfill_runner import configured_candidate_db_path
+from data_module.monthly_revenue_snapshot_selection import (
+    inspect_monthly_revenue_snapshot,
+    select_latest_monthly_revenue_snapshot,
+)
 
 
 def _monthly_revenue_status_today() -> str:
@@ -166,14 +170,10 @@ class UpdateService :
             return path
 
         snapshot_dir =self .config .output_root /'monthly_revenue_mops_snapshots'
-        candidates =[
-        path
-        for path in snapshot_dir .glob ('mops_monthly_revenue_snapshot_*.csv')
-        if '.before_'not in path .name
-        ]
-        if not candidates :
+        selected = select_latest_monthly_revenue_snapshot(snapshot_dir)
+        if selected is None:
             raise FileNotFoundError (f"找不到 MOPS 月營收 snapshot CSV: {snapshot_dir}")
-        return max (candidates ,key =lambda path :path .stat ().st_size )
+        return selected
 
     def sync_source_to_sqlite (
     self ,
@@ -2019,7 +2019,7 @@ class UpdateService :
 
             row =df .iloc [0 ]
             count =int (row ['count']or 0 )
-            return self._annotate_sqlite_read_mode({
+            payload = {
             'latest_date':row ['max_as_of_date']if count else None ,
             'latest_period':row ['max_period']if count else None ,
             'earliest_date':row ['min_period']if count else None ,
@@ -2031,7 +2031,25 @@ class UpdateService :
             'next_available_date':row ['next_available_date']if count else None ,
             'pending_period_count':int (row ['pending_period_count']or 0 ),
             'status':'ok'if count >0 else 'empty',
-            }, db)
+            }
+            # Snapshot 是數值候選，不是正式 availability 證據；只在唯讀狀態
+            # 中揭露較新的候選期別，避免使用者把「已抓到」誤認成「已套用」。
+            candidate_path = select_latest_monthly_revenue_snapshot(
+                self.config.output_root / 'monthly_revenue_mops_snapshots'
+            )
+            if candidate_path is not None:
+                candidate = inspect_monthly_revenue_snapshot(candidate_path)
+                if candidate.latest_period:
+                    payload['candidate_latest_period'] = candidate.latest_period
+                    payload['candidate_fetch_date'] = candidate.fetch_date
+                    payload['candidate_snapshot_file'] = str(candidate.path)
+                    imported_period = str(payload.get('latest_period') or '')
+                    if not imported_period or candidate.latest_period > imported_period:
+                        payload['status'] = 'candidate_available'
+                        payload['warnings'] = [
+                            '已有較新的 MOPS 月營收數值候選；尚未完成 availability dry-run／正式套用'
+                        ]
+            return self._annotate_sqlite_read_mode(payload, db)
         except Exception as e :
             import logging
             logging .getLogger (__name__ ).warning (f"[UpdateService] 從 SQLite 取得月營收狀態失敗: {e}")

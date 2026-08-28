@@ -120,6 +120,21 @@ def test_format_source_detail_summary_exposes_monthly_pit_availability() -> None
     )
 
 
+def test_format_source_detail_summary_exposes_newer_monthly_candidate() -> None:
+    detail = {
+        "latest_period": "2026-06",
+        "latest_available_period": "2026-06",
+        "latest_available_date": "2026-07-15",
+        "candidate_latest_period": "2026-07",
+        "total_records": 246331,
+        "status": "candidate_available",
+    }
+
+    summary = format_source_detail_summary("monthly_revenue", detail)
+    assert "候選待套用期別：2026-07" in summary
+    assert "狀態：候選可用" in summary
+
+
 def test_format_source_detail_summary_discloses_read_mode_fallback() -> None:
     detail = {
         "latest_date": "2026-08-26",

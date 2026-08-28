@@ -33,6 +33,9 @@ from app_module.p0_source_control_center import (
 from app_module.update_source_status_projection import compose_source_status_projection
 from app_module.update_status_timeline import load_data_update_timeline
 from data_module.source_acceptance_decision_registry import parse_source_acceptance_decisions
+from data_module.monthly_revenue_snapshot_selection import (
+    select_latest_monthly_revenue_snapshot,
+)
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 from ui_qt.views.update.update_formatters import (
@@ -1972,14 +1975,10 @@ class UpdateView(QWidget):
         if config is None:
             return Path("")
         snapshot_dir = getattr(config, "output_root", Path("")) / "monthly_revenue_mops_snapshots"
-        candidates = [
-            path
-            for path in snapshot_dir.glob("mops_monthly_revenue_snapshot_*.csv")
-            if ".before_" not in path.name
-        ]
-        if not candidates:
+        selected = select_latest_monthly_revenue_snapshot(snapshot_dir)
+        if selected is None:
             return snapshot_dir
-        return max(candidates, key=lambda path: path.stat().st_mtime)
+        return selected
 
     def _default_monthly_revenue_availability_path(self) -> Path:
         config = getattr(self.update_service, "config", None)
