@@ -8,6 +8,8 @@ P0 表格中的「解析通過率」現在明確標示為 `accepted/observed` ro
 
 Data Update 的「本次手動更新」摘要已與排程時間軸分離：UI 觸發的快速／安全／單一來源更新會保留執行中、完成、失敗、錯誤或取消狀態，以及本輪資料區間、失敗步驟、日期計數與警告；排程時間軸仍只讀取明確 status artifact，不會用上一輪成功結果掩蓋本輪失敗，也不會把手動結果回填成排程 history。這是可觀測性修正，不改資料寫入或任何 readiness gate。
 
+更新失敗／背景例外收尾後，UpdateView 會再做一次唯讀狀態檢查，讓可能已提交的部分 CSV／SQLite 變更反映在卡片與來源摘要；這個重查不會重跑下載或寫入，也不會把 partial success 標成完整成功。
+
 這仍不是完整產品 closeout。真正尚未具備的不是同一種「補資料」問題，而是不同性質的外部 gate：P0 的具名 owner／license／PIT decision、Evidence 的真實週期與 review credit、Paper 的真實 fills／成本／execution gap、Formal/ML 的 3 個 owner-controlled inputs、正式 Runtime Registry transaction／rollback evidence、technical production backup／rollback＋canary，以及 scheduler 的自然 history 與 production governance。Broker 現在已完成一次受控真實 HTTP canary，但長期 rate-limit／Selenium fallback／production writer 仍未驗收。程式不能替這些事實自行推導或用 replay 填入。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
 technical production canary 的 guarded 入口與 readiness contract 已完成，預設只做唯讀預演；目前沒有執行任何正式 technical 寫入。要解除這一項 blocker，仍需 owner 在停用並行 writer 後明確核准一檔股票的 backup／rollback canary。

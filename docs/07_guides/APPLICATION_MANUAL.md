@@ -1104,6 +1104,8 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 
 時間軸旁另有「本次手動更新」摘要，專門記錄目前 UI 觸發的快速／安全／單一來源更新：執行中會顯示進度與資料區間，完成、失敗、錯誤或合作式取消會保留本輪訊息、失敗步驟、成功／失敗日期數與警告。它與排程時間軸分開，不會把上一輪排程成功結果當成本輪手動更新成功，也不會把手動結果回填成排程 history；若要確認實際 SQLite／CSV 狀態，仍應在工作完成後按「檢查數據狀態」。
 
+手動更新若以失敗或背景例外結束，畫面在顯示本輪錯誤後會再做一次唯讀狀態檢查；因此即使前面已安全提交部分 CSV／SQLite，也會把實際最新日期與筆數刷新出來。這個重查不會重跑下載、合併或寫入，也不會把部分成功改標成完整成功。
+
 同一頁的「P0 官方來源證據（候選／唯讀）」表格固定顯示 13 個來源及其治理／machine 狀態、實際 route、PIT／公告、coverage、license 與 owner／下游邊界。Fallback 欄位會區分：`是` 代表替代路徑真的被採用；`否（已嘗試但未採用）` 代表曾 probe 但因 `date_mismatch`、`official_no_data`、`network_error` 或其他 fail-closed 結果沒有採用；`否`／`未提供` 則表示沒有可觀測的 fallback 嘗試。日期不符會同時列出要求日與觀測日，傳輸／解析錯誤會在滑鼠提示中保留 error type、endpoint、HTTP／payload evidence；summary 另顯示 fallback 已嘗試、已採用與未採用計數。這些欄位只改善診斷，不授予 source acceptance，`downstream_eligibility` 永遠為 `none`。
 
 快速更新排程會在 `latest_status.json` 旁以 append-only 方式保存 `data-update-status-history.v1` JSONL；每次真實執行會記錄 `running` 與 terminal status 的 run／時間／步驟摘要。預設 history 路徑為 `OUTPUT_ROOT/scheduled/data_update_quick/history.jsonl`，也可用 runner 的 `--history-path` 或 UI 的 `DATA_UPDATE_HISTORY_ARTIFACT` 指定。這個功能不會回放既有 latest status、不會把檔案 mtime 當成完成時間；既有環境的 history 缺檔會顯示「缺漏」，等下一次真實排程自然產生，不得手動複製舊結果補足。
@@ -3188,6 +3190,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-27：補強資料更新頁顯示一致性：全域／各來源日期控件的「今日」統一採台灣市場日期；localized `不可用` 會顯示為異常而非待更新；全域狀態檢查失敗會清除六個核心與三個候選來源頁的舊 inline 摘要並保留共同錯誤原因，候選來源分頁也會顯示檢查結果，方便排錯且不誤讀舊數字。
 - 2026-08-28：資料更新狀態卡與來源詳情會將 `degraded`／`partial`／`action_required` 等狀態統一轉成中文；核心資料落後 daily reference 時，直接顯示新鮮度基準日與資料最新日，並保留來源錯誤訊息供排錯。
 - 2026-08-28：資料更新頁新增「本次手動更新」唯讀摘要，將 UI 觸發的執行中／完成／失敗／錯誤／取消與排程時間軸分開顯示；保留本輪資料區間、失敗步驟、日期計數與警告，避免失敗後只看到上一輪排程成功結果。
+- 2026-08-28：手動更新以失敗／背景例外結束後會自動做唯讀狀態重查，揭露可能已提交的部分 CSV／SQLite 變更；不重跑寫入、不把部分成功改標成完整成功。
 - 2026-08-28：補齊 Data Update 共用狀態投影，`date_mismatch`／`transport_error`／`registry_error`／磁碟空間不足／成本帳缺漏等診斷碼不再直接漏出英文；官方無資料維持「官方無資料」的可辨識狀態，不再在低階燈號中誤標成一般異常。
 - 2026-08-28：P0 Data Update／Research Console 的 coverage 欄位改名為「解析通過率」，明確標示 accepted／observed／blocked 分母；不再讓 parser 通過率被誤讀成官方市場 universe 完整覆蓋率。
 - 2026-08-28：Data Update 狀態卡補齊 `not_computable`、`pending_human_review`、`blocked`、`running` 等常見服務狀態的繁中投影，並讓「解析通過率」與既有期別／覆蓋提示一樣出現在卡片摘要；只改善可讀性，不改 readiness 或資料邊界。

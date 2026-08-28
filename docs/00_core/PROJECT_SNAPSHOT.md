@@ -29,6 +29,7 @@
 - 更新時間軸的步驟／歷史與 freshness／TPEX 摘要現在以「中文說明（machine token）」呈現，例如 `完成（passed）`；保留 token 供排錯，不放寬任何正式 gate。
 - 時間軸已與共用 formatter 對齊，`in_progress`、`schema_mismatch`、`blocked_provenance` 等合法狀態也會中文化；未知 token 仍原文顯示。
 - Data Update 全部資料頁另有「本次手動更新」唯讀摘要，將 UI 觸發的執行中／完成／失敗／錯誤／取消與排程時間軸分開投影；保留本輪資料區間、失敗步驟、日期計數與警告，避免失敗後只看到上一輪排程成功結果。
+- 手動更新以失敗／背景例外結束後會自動做一次唯讀狀態重查，揭露可能已安全提交的部分 CSV／SQLite 變更；不重跑寫入、不把部分成功改標成完整成功。
 - Paper Portfolio readiness／weekly 摘要現在也會以「中文說明（machine token）」顯示成本帳／週報狀態；不改變真實 fills、成本與 weekly evidence gate。
 
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
