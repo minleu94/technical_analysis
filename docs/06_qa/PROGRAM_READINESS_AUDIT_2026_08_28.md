@@ -35,7 +35,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 漲跌停鎖死來源已由不相符的 `MI_INDEX` 改為官方 `TWT84U`。本次 `TWT84U` 原始 1,377 列、鎖死事件 0 列；這表示該交易日沒有符合條件的事件，不是 schema 或 endpoint 失敗。
 
-本次 live audit 的主要 row count 為：除權息 271、減資／分割 2、停復牌 1、處置 4、分盤 4、全額交割 10、三大法人 18,307、信用交易 1,295、TDCC 68,578、TWSE 月營收 1,085、TPEx 月營收 890；MOPS 季報 availability artifact 通過驗證。所有 route 仍固定 `candidate_evidence_only=true`、`formal_eligible=false`、scheduler／production ingestion 關閉。
+2026-08-28 重新以受控外部網路完成 bounded live audit：13/13 來源均有 machine row，`1 verified / 10 degraded / 2 official_no_data`；raw rows=`72,202`、accepted rows=`70,825`。主要 row count 為：除權息 251、減資／分割 2、停復牌 1、處置 4、分盤 4、全額交割 10、漲跌停行情 1,377（鎖死事件 0）、三大法人 0、信用交易 0、TDCC 68,578、TWSE 月營收 1,085、TPEx 月營收 890；三大法人與信用交易的 0 列是官方當日無資料回覆，不是 network failure；MOPS 季報 availability artifact 通過驗證。所有 route 仍固定 `candidate_evidence_only=true`、`formal_eligible=false`、scheduler／production ingestion 關閉。
 
 所以 `contract_only` 的正確解讀是「Control Center 沒有載入 audit」，不能再解讀為「沒有資料」。載入本次 audit 後，真實治理狀態為 `12 blocked_provenance + 1 research_shadow`，人工 decision 為 `13 not_supplied`。
 
@@ -65,7 +65,8 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 - live probe／fallback：`scripts/update_phase3c_candidates.py`
 - P0 evidence audit：`scripts/run_p0_source_evidence_audit.py`
 - candidate audit：`scripts/run_p0_candidate_audit.py`
-- live audit：`C:\Users\archi\AppData\Local\Temp\p0-source-evidence-audit-20260827-multiroute.json`
+- live audit（2026-08-28 fresh capture）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_all_markets_mops_complete.json`（SHA-256=`a7e3b14465d1f2847140052e9de56874dae64e685719c21eb7f21d4e8290a40e`）
+- P0 owner packet（由 fresh capture 唯讀重排）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260828_live.md`
 - Control Center：`C:\Users\archi\AppData\Local\Temp\p0-source-control-center-20260827.json`
 - Evidence readiness：`C:\Users\archi\AppData\Local\Temp\pre-v2-readiness-20260828.json`
 - ML Formal readiness：`C:\Users\archi\AppData\Local\Temp\ml-formal-input-readiness-20260828.json`
