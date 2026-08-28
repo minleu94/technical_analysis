@@ -139,8 +139,12 @@ def inspect_scheduled_task_registration(
     action_mismatch_count = sum(
         item.get("action_matches_wrapper") is False for item in task_results
     )
+    action_unobserved_count = sum(
+        item.get("action_matches_wrapper") is None for item in task_results
+    )
     all_wrappers_present = wrapper_missing_count == 0
     all_actions_match = action_mismatch_count == 0
+    all_actions_observed = action_unobserved_count == 0
     return {
         "schema_version": SCHEMA_VERSION,
         "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -156,9 +160,14 @@ def inspect_scheduled_task_registration(
         "wrapper_missing_count": wrapper_missing_count,
         "all_wrappers_present": all_wrappers_present,
         "action_mismatch_count": action_mismatch_count,
+        "action_unobserved_count": action_unobserved_count,
+        "all_actions_observed": all_actions_observed,
         "all_actions_match": all_actions_match,
         "configuration_ready": (
-            missing_count == 0 and all_wrappers_present and all_actions_match
+            missing_count == 0
+            and all_wrappers_present
+            and all_actions_observed
+            and all_actions_match
         ),
         "tasks": task_results,
     }

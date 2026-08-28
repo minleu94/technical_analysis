@@ -717,6 +717,37 @@ def test_program_readiness_projects_scheduler_wrapper_and_action_diagnostics(tmp
     assert "scheduled_task_action_mismatch" in lane["blockers"]
 
 
+def test_program_readiness_projects_scheduler_action_unobserved_diagnostic(tmp_path: Path) -> None:
+    scheduler_path = tmp_path / "scheduler-status.json"
+    scheduler_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "scheduled-task-registration.v1",
+                "task_count": 13,
+                "available_count": 13,
+                "missing_or_unavailable_count": 0,
+                "all_available": True,
+                "all_wrappers_present": True,
+                "action_mismatch_count": 0,
+                "action_unobserved_count": 13,
+                "all_actions_observed": False,
+                "all_actions_match": True,
+                "tasks": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        scheduled_task_status_path=scheduler_path,
+    )
+    lane = report["workstreams"]["update_history"]
+
+    assert "scheduled_task_action_unobserved" in lane["blockers"]
+
+
 def test_program_readiness_projects_explicit_freshness_status(tmp_path: Path) -> None:
     freshness_path = tmp_path / "freshness" / "latest_status.json"
     freshness_path.parent.mkdir(parents=True, exist_ok=True)

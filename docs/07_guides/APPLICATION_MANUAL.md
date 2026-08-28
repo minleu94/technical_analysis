@@ -1055,7 +1055,8 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 ```
 
 輸出會列出 13 個預期 task 的 available／missing 計數、安全摘要，以及本地 wrapper
-manifest 是否存在、每個 task action 是否指向預期 `.cmd`。它不會註冊或修改 task；若要
+manifest 是否存在、每個 task action 是否指向預期 `.cmd`；若 task 可用但 `Task To Run`
+未出現，會另標示 action 尚未觀測，不能算 `configuration_ready`。它不會註冊或修改 task；若要
 指定其他 checkout，可加 `--repo-root <path>`。也可把該 JSON 以 unified readiness 的
 `--scheduled-task-status` 載入，讓 Update History lane 顯示
 `scheduled_tasks_missing_or_unavailable:<available>/<total>`、wrapper 缺漏或 action mismatch。

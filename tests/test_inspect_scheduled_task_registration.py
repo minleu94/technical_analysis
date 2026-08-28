@@ -8,31 +8,37 @@ from types import SimpleNamespace
 
 from scripts.inspect_scheduled_task_registration import (
     EXPECTED_TASKS,
+    TASK_WRAPPER_PATHS,
     inspect_scheduled_task_registration,
 )
 
 
 def test_scheduler_registration_probe_is_query_only_and_redacts_raw_output() -> None:
     calls = []
+    repo_root = Path(__file__).resolve().parents[1]
 
     def fake_run(command, **kwargs):
         calls.append((command, kwargs))
+        task_name = command[3]
+        wrapper = repo_root / TASK_WRAPPER_PATHS[task_name]
         return SimpleNamespace(
             returncode=0,
             stdout=(
-                "TaskName: \\baldr-data-update-quick-daily\n"
+                f"TaskName: \\{task_name}\n"
+                f"Task To Run: cmd.exe /c \"{wrapper}\"\n"
                 "Run As User: private-user\n"
                 "Last Result: 0\n"
             ),
             stderr="",
         )
 
-    report = inspect_scheduled_task_registration(runner=fake_run)
+    report = inspect_scheduled_task_registration(runner=fake_run, repo_root=repo_root)
 
     assert report["query_only"] is True
     assert report["side_effect_free"] is True
     assert report["all_available"] is True
     assert report["all_wrappers_present"] is True
+    assert report["all_actions_observed"] is True
     assert report["all_actions_match"] is True
     assert report["configuration_ready"] is True
     assert report["available_count"] == len(EXPECTED_TASKS)
@@ -85,8 +91,23 @@ def test_scheduler_registration_probe_detects_task_action_mismatch() -> None:
 
     assert report["all_available"] is True
     assert report["all_wrappers_present"] is True
+    assert report["all_actions_observed"] is True
     assert report["action_mismatch_count"] == len(EXPECTED_TASKS)
     assert report["all_actions_match"] is False
+    assert report["configuration_ready"] is False
+
+
+def test_scheduler_registration_probe_requires_observed_task_actions() -> None:
+    def fake_run(command, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="Last Result: 0\n", stderr="")
+
+    report = inspect_scheduled_task_registration(runner=fake_run)
+
+    assert report["all_available"] is True
+    assert report["action_mismatch_count"] == 0
+    assert report["action_unobserved_count"] == len(EXPECTED_TASKS)
+    assert report["all_actions_observed"] is False
+    assert report["all_actions_match"] is True
     assert report["configuration_ready"] is False
 
 

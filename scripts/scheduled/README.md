@@ -288,8 +288,10 @@ For a machine-readable, side-effect-free check, run
 expected task, it verifies that all 13 repository wrapper files exist and, when
 `schtasks /Query` exposes `Task To Run`, that the registered action contains the
 expected wrapper path. The report keeps these checks separate from
-`all_available`; `configuration_ready` is true only when task availability,
-local wrappers, and visible actions all pass. No task is created or changed.
+`all_available`; an available task without a visible action is marked
+`action_unobserved`, and `configuration_ready` is true only when task
+availability, local wrappers, observed actions, and action matching all pass.
+No task is created or changed.
 
 ## Unregister
 

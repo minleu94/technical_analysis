@@ -228,7 +228,7 @@ candidate 的 validator 與 merge preview：2026-07、1,851 rows、可用日 202
 
 ## Scheduler wrapper／action wiring 續測
 
-同一檢查器明確指定 repo root 後，13/13 本機 .cmd wrapper 均為 present，查詢可見的 Task To Run action 與預期 wrapper 路徑 mismatch=0；configuration_ready=false 僅因實際 task registration 仍為 available=0/13。artifact=C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json（SHA-256=CC726A1C30B206BCDAC71A022AE80C406D261D95A83CFB59FC237331240094CA）。這仍是 query-only 證據，不註冊、不修改 task；若未來 wrapper 遺失或 action 指錯，unified readiness 會分別保留 scheduled_task_wrapper_missing_or_unreadable／scheduled_task_action_mismatch blocker。
+同一檢查器明確指定 repo root 後，13/13 本機 .cmd wrapper 均為 present；目前 task 全部不可用，因此 Task To Run action 尚未觀測（action_unobserved=13），沒有 false mismatch。configuration_ready=false 的主因仍是實際 task registration available=0/13。artifact=C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json（SHA-256=4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7）。這仍是 query-only 證據，不註冊、不修改 task；若 task 恢復但無法觀測 action，unified readiness 會保留 scheduled_task_action_unobserved；若 wrapper 遺失或 action 指錯，則分別保留 scheduled_task_wrapper_missing_or_unreadable／scheduled_task_action_mismatch。
 
 ## 安全邊界
 

@@ -539,8 +539,19 @@ def _inspect_update_history_lane(
             )
         if scheduled_status.get("all_wrappers_present") is False:
             diagnostics.append("scheduled_task_wrapper_missing_or_unreadable")
-        if scheduled_status.get("all_actions_match") is False:
+        if (
+            scheduled_status.get("action_mismatch_count", 0) > 0
+            or (
+                "action_mismatch_count" not in scheduled_status
+                and scheduled_status.get("all_actions_match") is False
+            )
+        ):
             diagnostics.append("scheduled_task_action_mismatch")
+        if (
+            scheduled_status.get("all_actions_observed") is False
+            and scheduled_status.get("all_available") is True
+        ):
+            diagnostics.append("scheduled_task_action_unobserved")
     freshness_issue = False
     freshness_status_value = ""
     if freshness_status_path is not None and freshness_status is None:
