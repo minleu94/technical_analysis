@@ -65,6 +65,11 @@ def test_update_view_candidate_status_rendering(tmp_path):
     assert "CANDIDATE_AVAILABLE" in inst_text
     assert "2024-07-22" in inst_text
     assert "候選研究資料，不參與評分" in inst_text
+    # Candidate cards use the same canonical fields as the regular data cards;
+    # the visible labels must not remain ``--`` when the candidate DB has rows.
+    assert "2026-07-22" in view.institutional_status_text.date_label.text()
+    assert "1,200" in view.institutional_status_text.records_label.text()
+    assert "98.5%" in view.institutional_status_text.extra_label.text()
 
     credit_text = view.credit_status_text.toPlainText()
     assert "MISSING" in credit_text

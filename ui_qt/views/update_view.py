@@ -151,6 +151,8 @@ class StatusCard(QFrame):
                 or "已匯入期別" in line
                 or "目前可用期別" in line
                 or "待生效" in line
+                or "區間" in line
+                or "覆蓋率" in line
             ):
                 extra_info_lines.append(line.strip())
             elif "讀取模式" in line or "提醒" in line:
@@ -2923,8 +2925,9 @@ class UpdateView(QWidget):
         disclaimer = value.get("disclaimer") or "候選研究資料，不參與評分"
         if record_count > 0:
             return (
+                f"最新日期：{latest}\n"
+                f"總記錄數：{record_count:,}\n"
                 f"狀態：{status}\n"
-                f"總筆數：{record_count:,}\n"
                 f"區間：{earliest} ~ {latest}\n"
                 f"覆蓋率：{coverage}\n"
                 f"[{disclaimer}]"
