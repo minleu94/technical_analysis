@@ -653,6 +653,15 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
     assert report["workstreams"]["performance"]["details"]["artifacts"]["technical_worker"]["status"] == "measured"
     assert "technical_bounded_worker_acceptance_not_completed" not in report["workstreams"]["performance"]["blockers"]
     assert "broker_bounded_fetch_acceptance_not_completed" in report["workstreams"]["performance"]["blockers"]
+    assert [item["lane"] for item in report["execution_order"]] == [
+        "p0",
+        "evidence",
+        "paper",
+        "formal_ml",
+        "runtime",
+        "performance",
+        "update_history",
+    ]
 
 
 def test_program_readiness_accepts_real_staging_process_pool_worker_contract(

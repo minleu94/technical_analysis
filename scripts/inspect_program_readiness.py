@@ -685,8 +685,9 @@ def _execution_order(workstreams: Mapping[str, Mapping[str, Any]]) -> list[dict[
         (2, "evidence", "持續累積真實週期，並由 owner/reviewer 審核 weekly history；projection 不授予 Formal credit。"),
         (3, "paper", "補真實 fills／partial-fill／reject／override／Decimal cost／execution gap，再計算成本後 weekly。"),
         (4, "formal_ml", "由 owner 發布當前三項 formal inputs；禁止用 prospective 或歷史 shadow artifact 冒充。"),
-        (5, "performance", "已量測 full batch、isolated writer contention 與 real staging bounded worker；接著補 recovery／integration，再驗收 broker bounded fetch。"),
-        (6, "update_history", "等真實排程產生 history，執行 live refresh、retention 與狀態投影 QA。"),
+        (5, "runtime", "先確認 staging transaction 與正式 config／Registry ACL；staging 證據不能取代正式環境權限。"),
+        (6, "performance", "已量測 full batch、isolated writer contention 與 real staging bounded worker；接著補 recovery／integration，再驗收 broker bounded fetch。"),
+        (7, "update_history", "等真實排程產生 history，執行 live refresh、retention 與狀態投影 QA。"),
     )
     result: list[dict[str, Any]] = []
     for order, key, fallback in ordered:
