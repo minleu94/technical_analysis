@@ -1159,6 +1159,29 @@ staging 的 ephemeral 子目錄寫入逐股／合併 CSV 與 SQLite，結束後�
 writer 已改造或授權提高 worker 數；在 broker rate-limit、取消／重試與 bounded worker
 acceptance 通過前，技術指標仍維持單一 worker。
 
+若要把真正的 `TechnicalIndicatorCalculator` 放進受控 process pool 做 staging throughput
+驗收，可使用：
+
+```powershell
+New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_analysis_process_pool_stage -Force
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_process_pool.py `
+  --stock-data-file D:\Min\Python\Project\FA_Data\meta_data\stock_data_whole.csv `
+  --staging-root C:\Users\archi\AppData\Local\Temp\technical_analysis_process_pool_stage `
+  --protected-root D:\Min\Python\Project\FA_Data `
+  --protected-root D:\Min\Python\Project\FA_Data\output `
+  --confirm-process-pool-probe --stocks 0050 2330 --min-rows 30 `
+  --max-rows-per-stock 120 --workers 2 --max-in-flight 4 --max-retries 1 `
+  --transient-fail-stocks 0050 --output-json <TEMP_OUTPUT>
+```
+
+這個 probe 必須明確指定 bounded 股票範圍、staging root、protected root 與確認旗標；
+worker 只回傳計算結果，逐股／合併 CSV 由父程序寫入 ephemeral staging，SQLite connection
+不會進入子程序。輸出會列出 worker PID、in-flight 上限、retry、CSV serialization、
+cleanup、input hash 與 `production_worker_enabled=false`。`status=measured` 只代表真實
+calculator 的 staging process-pool 形狀通過；worker crash recovery、長時間取消、正式
+single-writer integration 與 broker HTTP rate-limit／retry 仍未完成，因此 production
+worker 數維持 1。
+
 若要驗證未來 technical compute-only worker 的 bounded queue 契約，可使用 synthetic probe：
 
 ```powershell
@@ -1170,8 +1193,8 @@ acceptance 通過前，技術指標仍維持單一 worker。
 它不讀取或寫入任何正式資料，只驗證 in-flight 上限、有限 retry、permanent failure 不寫入、
 duplicate idempotency、取消後停止新提交，以及 worker 不直接寫入而由主執行緒 single writer
 收口。`status=measured` 只代表 synthetic orchestration contract 通過；真實 indicator
-process-pool throughput、crash recovery、broker HTTP rate-limit／retry 仍需另外驗收，
-在此之前 production worker 數維持 1。
+process-pool throughput 已有獨立 staging probe，crash recovery、broker HTTP rate-limit／retry
+仍需另外驗收，在此之前 production worker 數維持 1。
 
 ### 4.4 技術指標
 

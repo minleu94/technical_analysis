@@ -124,6 +124,28 @@ New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_a
 
 artifact 暫存於 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_write_20260828.json`，SHA-256=`90EA5379C8D59E248B05C0F80C34CCD9617F04636D368ECAC392E6840005B1EF`。這證明 CSV／SQLite 寫入可以在隔離環境由單一 writer 完成，且 SQLite 在第二個 writer 進入時確實會以 lock 拒絕；它不代表 production writer 已改造，也不授權提高 worker 數。ephemeral CSV／SQLite 在 probe 結束後已清除，artifact 內的 staging 檔案路徑僅供當次追溯。
 
+### 2026-08-28 09:42 UTC real indicator process-pool staging probe（本輪新增）
+
+新增 `scripts\qa_technical_indicator_process_pool.py`，在明確確認與 protected-root
+護欄下，從同一份 raw CSV 選取 `0050`／`2330` 各最多 120 rows，使用真正的
+`TechnicalIndicatorCalculator` 交給 bounded `ProcessPoolExecutor(max_workers=2,
+max_in_flight=4)`；worker 只回傳 DataFrame，逐股與 aggregate CSV 由父程序寫入
+ephemeral staging。`0050` 注入一次 transient failure，驗證有限 retry；沒有 SQLite
+connection、正式 CSV 或正式 worker 被傳入子程序。
+
+實測結果：raw `5,226,219` rows／`486,228,553` bytes，兩個 worker PID 均被觀察到，
+`max_observed_in_flight=2`、retry=`1`、dispatch=`1,423.558 ms`、父程序逐股 CSV
+serialization=`22.495 ms`、aggregate CSV=`3.366 ms`、total=`13,233.054 ms`；
+2/2 stocks、240 calculated rows、5/5 checks 通過，staging cleanup 與 input hash
+均通過。artifact 暫存於
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_process_pool_20260828.json`，
+SHA-256=`C662A26E0937363547022FEB30ADAFD0185875AFBBDD7A3FD08AEF9323765FFF`。
+
+這是「真實 calculator＋bounded process pool＋parent single writer」的 staging 證據，
+不是 production 啟用證明；`production_worker_enabled=false`、`production_write_attempted=false`、
+`production_sqlite_write_attempted=false`。仍未涵蓋 worker crash recovery、長時間取消
+與正式 single-writer integration，也不能替代 broker HTTP rate-limit／retry acceptance。
+
 ### 2026-08-28 09:30 UTC bounded worker contract probe（本輪新增）
 
 新增 `scripts\qa_bounded_worker_acceptance.py`，以 deterministic synthetic tasks 驗證
@@ -145,9 +167,9 @@ cooperative cancellation 在 committed 3 筆後停止新提交，取消 3 個 pe
 `worker_write_attempts=0`，writer owner 都是主執行緒。artifact 暫存於
 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\bounded_worker_acceptance_20260828.json`，
 SHA-256=`107DC6DD7391A2AF20D070BC7CCC040BB00041499A1B77319AC788BCC0BCF9DC`。
-它只證明 technical worker 的 queue／cancel／retry／single-writer 介面可驗收，
-尚未證明真實 indicator process-pool throughput、crash recovery 或 broker HTTP
-rate-limit；因此 production worker 仍維持關閉。
+它只證明 technical worker 的 queue／cancel／retry／single-writer 介面可驗收；真實
+indicator process-pool throughput 已由上一節補上，crash recovery 或 broker HTTP
+rate-limit 仍未完成，因此 production worker 仍維持關閉。
 
 ## 現行寫入與平行化事實
 
@@ -157,24 +179,25 @@ rate-limit；因此 production worker 仍維持關閉。
 - Broker CSV mutation 現在由 `BrokerBranchWriteCoordinator` 統一包住，並以
   process-local single-writer lock 序列化 daily／merged CSV 寫入與 backup；這只
   建立安全邊界，沒有偷偷開啟 fetch concurrency。
-- Technical indicator batch 目前逐股計算、逐股保存，最後再整合 CSV；新的
-  `qa_technical_indicator_latency.py` 明確標示 `parallelism_enabled=false`、
-  `observed_worker_count=1` 與 `single_writer_required=true`，不會誤宣稱已完成
-  多核心版本。
+- Technical indicator production batch 目前仍逐股計算、逐股保存，最後再整合 CSV；
+  `qa_technical_indicator_latency.py` 與 full-batch probe 明確標示
+  `parallelism_enabled=false`、`observed_worker_count=1`。上一節的 process-pool
+  僅在 staging 驗證真實 calculator，並以 `staging_process_pool_enabled=true`、
+  parent single writer 證明可安全接入的形狀，不會誤宣稱 production 已切換多核心。
 - SQLite 仍遵循 single-writer；若未來要把計算放進 process pool，worker 只能回傳
   immutable result，SQLite／整合 CSV 必須由一個受控 writer commit，且要保留取消、
   backup、hash、duplicate 與 fail-closed 邊界。
 
 ## 下一個可實作切點（尚未啟用）
 
-1. 先把完整批次拆成 `read → calculate → write → aggregate → SQLite commit` 五段
-   timing，保留每段的 row count、error、cancel 與 file hash。
+1. 以 real process-pool staging probe 為基礎，補 worker crash recovery、長時間取消、
+   partial result discard 與正式 single-writer integration；保留每段 row count、error、
+   cancel 與 file hash，未通過前不開 production worker。
 2. Broker 只考慮 bounded HTTP fetch pool；每個 task 必須含 global rate-limit、retry
    budget、source/date identity，Selenium fallback 維持 serialized，結果交給上述
    single writer。
-3. Technical indicators 只在 CPU／memory 基線、CSV／SQLite writer 與 worker overhead 有證據時，才以
-   bounded process pool 計算；禁止把 pandas DataFrame 或 SQLite connection 共享到
-   writer 以外的 process。
+3. Technical indicators 維持 worker 只回傳 immutable result、CSV／SQLite 由單一
+   writer commit；禁止把 SQLite connection 共享到 writer 以外的 process。
 4. 以 synthetic staging／isolated output 做 throughput、取消、重試、重複與 crash
    recovery QA；未通過前不改 production worker 數，不碰正式 `DATA_ROOT`。
 

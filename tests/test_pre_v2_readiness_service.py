@@ -653,3 +653,43 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
     assert report["workstreams"]["performance"]["details"]["artifacts"]["technical_worker"]["status"] == "measured"
     assert "technical_bounded_worker_acceptance_not_completed" not in report["workstreams"]["performance"]["blockers"]
     assert "broker_bounded_fetch_acceptance_not_completed" in report["workstreams"]["performance"]["blockers"]
+
+
+def test_program_readiness_accepts_real_staging_process_pool_worker_contract(
+    tmp_path: Path,
+) -> None:
+    worker_path = tmp_path / "technical-process-pool.json"
+    worker_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "technical-indicator-process-pool.v1",
+                "status": "measured",
+                "read_only": False,
+                "write_attempted": True,
+                "staging_write_attempted": True,
+                "production_write_attempted": False,
+                "production_sqlite_write_attempted": False,
+                "staging_process_pool_enabled": True,
+                "production_worker_enabled": False,
+                "cleanup_succeeded": True,
+                "checks": {
+                    "process_pool_started": True,
+                    "bounded_in_flight": True,
+                    "parent_single_writer": True,
+                    "retry_budget_respected": True,
+                    "no_worker_sqlite_write": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        technical_worker_acceptance_path=worker_path,
+    )
+
+    blockers = report["workstreams"]["performance"]["blockers"]
+    assert "technical_bounded_worker_acceptance_invalid" not in blockers
+    assert "technical_bounded_worker_acceptance_not_completed" not in blockers

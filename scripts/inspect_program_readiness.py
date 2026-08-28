@@ -562,10 +562,14 @@ def _inspect_performance_lane(
             checks_passed = isinstance(checks, Mapping) and bool(checks) and all(
                 value is True for value in checks.values()
             )
+            worker_contract = (
+                payload.get("synthetic_parallelism_enabled") is True
+                or payload.get("staging_process_pool_enabled") is True
+            )
             if (
                 payload.get("status") != "measured"
                 or payload.get("production_worker_enabled") is not False
-                or payload.get("synthetic_parallelism_enabled") is not True
+                or not worker_contract
                 or not checks_passed
             ):
                 blockers.append("technical_bounded_worker_acceptance_invalid")
