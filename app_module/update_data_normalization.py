@@ -6,6 +6,29 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 
 
+_DATE_COLUMN_ALIASES = (
+    "日期",
+    "date",
+    "Date",
+    "trade_date",
+    "decision_date",
+)
+_STOCK_CODE_COLUMN_ALIASES = (
+    "證券代號",
+    "股票代號",
+    "stock_code",
+    "stock_id",
+    "code",
+    "ticker",
+)
+_STOCK_NAME_COLUMN_ALIASES = (
+    "證券名稱",
+    "股票名稱",
+    "stock_name",
+    "name",
+)
+
+
 def date_key(value: Any) -> str:
     import pandas as pd  # type: ignore[import-untyped]
 
@@ -93,17 +116,38 @@ def normalize_sqlite_dates(
     date_key_fn: Callable[[Any], str] = date_key,
     stock_code_key_fn: Callable[[Any], str] = stock_code_key,
 ) -> Any:
-    date_col = "日期" if "日期" in df.columns else ("日期" if "日期" in df.columns else None)
-    if date_col is None:
+    date_col = next(
+        (column for column in _DATE_COLUMN_ALIASES if column in df.columns),
+        None,
+    )
+    code_col = next(
+        (column for column in _STOCK_CODE_COLUMN_ALIASES if column in df.columns),
+        None,
+    )
+    name_col = next(
+        (column for column in _STOCK_NAME_COLUMN_ALIASES if column in df.columns),
+        None,
+    )
+    needs_copy = (
+        date_col is not None
+        or (code_col is not None and code_col != "證券代號")
+        or (name_col is not None and name_col != "證券名稱")
+    )
+    if not needs_copy:
         return df
+
     normalized = df.copy()
-    if date_col != "日期":
+    if date_col is not None and date_col != "日期" and "日期" not in normalized.columns:
         normalized = normalized.rename(columns={date_col: "日期"})
-    if "證券代號" in normalized.columns and "證券代號" not in normalized.columns:
-        normalized = normalized.rename(columns={"證券代號": "證券代號"})
-    if "證券名稱" in normalized.columns and "證券名稱" not in normalized.columns:
-        normalized = normalized.rename(columns={"證券名稱": "證券名稱"})
-    normalized["日期"] = normalized["日期"].map(date_key_fn)
+
+    if code_col is not None and code_col != "證券代號" and "證券代號" not in normalized.columns:
+        normalized = normalized.rename(columns={code_col: "證券代號"})
+
+    if name_col is not None and name_col != "證券名稱" and "證券名稱" not in normalized.columns:
+        normalized = normalized.rename(columns={name_col: "證券名稱"})
+
+    if "日期" in normalized.columns:
+        normalized["日期"] = normalized["日期"].map(date_key_fn)
     if "證券代號" in normalized.columns:
         normalized["證券代號"] = normalized["證券代號"].map(stock_code_key_fn)
     return normalized

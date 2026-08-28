@@ -394,13 +394,43 @@ def validate_data_status_logic(config, result: ValidationResult):
         
         # 執行 check_data_status
         status = update_service.check_data_status()
-        
+
+        core_sources = {
+            'daily_data',
+            'market_index',
+            'industry_index',
+            'broker_branch',
+            'technical_indicators',
+        }
+
         # 驗證數據狀態的合理性
         for key, data_info in status.items():
             if isinstance(data_info, dict):
                 latest_date = data_info.get('latest_date')
                 total_records = data_info.get('total_records', 0)
                 status_str = data_info.get('status', 'unknown')
+                normalized_status = str(status_str or '').strip().lower()
+
+                # 狀態檢查本身若回傳錯誤，必須讓 QA 失敗；不能因為
+                # total_records=0 仍是合法數字，就把缺表／連線錯誤算成通過。
+                if normalized_status.startswith((
+                    'error', 'failed', 'failure', 'exception',
+                )):
+                    result.add_fail(
+                        f'{key}_Status',
+                        f"資料狀態檢查回傳錯誤：{status_str}",
+                        evidence={'status': status_str, 'latest_date': latest_date},
+                        issue_type='data_quality',
+                    )
+                elif key in core_sources and normalized_status in {
+                    'missing', 'empty', 'unavailable',
+                }:
+                    result.add_fail(
+                        f'{key}_Availability',
+                        f"核心資料源不可用：{status_str}",
+                        evidence={'status': status_str, 'latest_date': latest_date},
+                        issue_type='data_quality',
+                    )
                 
                 # 檢查 latest_date 格式
                 if latest_date and latest_date != '未知':
@@ -437,6 +467,36 @@ def validate_data_status_logic(config, result: ValidationResult):
                     result.add_pass(f'{key}_TotalRecords', {
                         'total_records': total_records
                     })
+
+        # 核心資料源若落後每日股價，應被標示為 freshness 問題，而不是
+        # 只要表內有資料就算正常。這裡只比較可解析的交易日，避免干擾
+        # 月營收等不同粒度資料源。
+        daily_info = status.get('daily_data', {})
+        daily_latest = daily_info.get('latest_date') if isinstance(daily_info, dict) else None
+        if daily_latest:
+            try:
+                daily_dt = pd.to_datetime(str(daily_latest), errors='raise')
+            except (TypeError, ValueError):
+                daily_dt = None
+            if daily_dt is not None:
+                for key in core_sources - {'daily_data'}:
+                    data_info = status.get(key, {})
+                    if not isinstance(data_info, dict):
+                        continue
+                    latest = data_info.get('latest_date')
+                    if not latest:
+                        continue
+                    try:
+                        latest_dt = pd.to_datetime(str(latest), errors='raise')
+                    except (TypeError, ValueError):
+                        continue
+                    if latest_dt < daily_dt and not str(data_info.get('status', '')).lower().startswith('error'):
+                        result.add_fail(
+                            f'{key}_Freshness',
+                            f"{key} 最新日 {latest} 落後每日股價 {daily_latest}",
+                            evidence={'source_latest_date': latest, 'daily_latest_date': daily_latest},
+                            issue_type='data_quality',
+                        )
         
     except Exception as e:
         logger.error(f"數據狀態檢查邏輯驗證失敗: {e}")

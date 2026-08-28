@@ -95,6 +95,41 @@ def test_normalize_sqlite_dates_without_date_column_returns_original_frame():
     assert normalize_sqlite_dates(source) is source
 
 
+def test_normalize_sqlite_dates_maps_code_and_name_aliases_without_date_column():
+    source = pd.DataFrame({"stock_code": [50.0], "stock_name": ["元大台灣50"]})
+
+    normalized = normalize_sqlite_dates(source)
+
+    assert normalized.to_dict(orient="records") == [
+        {"證券代號": "0050", "證券名稱": "元大台灣50"}
+    ]
+    assert list(source.columns) == ["stock_code", "stock_name"]
+
+
+def test_normalize_sqlite_dates_maps_declared_english_aliases():
+    source = pd.DataFrame(
+        {
+            "date": ["2026-07-09"],
+            "stock_code": [50.0],
+            "stock_name": ["元大台灣50"],
+            "value": [1],
+        }
+    )
+
+    normalized = normalize_sqlite_dates(source)
+
+    assert list(normalized.columns) == ["日期", "證券代號", "證券名稱", "value"]
+    assert normalized.to_dict(orient="records") == [
+        {
+            "日期": "20260709",
+            "證券代號": "0050",
+            "證券名稱": "元大台灣50",
+            "value": 1,
+        }
+    ]
+    assert list(source.columns) == ["date", "stock_code", "stock_name", "value"]
+
+
 def test_update_service_wrappers_preserve_overridden_private_normalizers():
     service = UpdateService.__new__(UpdateService)
     service._date_key = lambda value: {"start": "20260703", "end": "20260706"}.get(

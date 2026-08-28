@@ -7,12 +7,13 @@ import subprocess
 import os
 import sys
 from pathlib import Path
-from typing import Dict ,Any ,Optional ,List
+from typing import Dict ,Any ,Optional ,List ,Callable
 from datetime import datetime ,timedelta
 
 import app_module.update_data_normalization as update_data_normalization
 from app_module.update_service_status_support import compose_sqlite_status_read_model
 from app_module.update_daily_output import parse_daily_update_output
+from app_module.sqlite_read_only import ReadOnlySQLiteManager
 from data_module.market_data_integrity import (
 is_valid_daily_price_frame ,
 is_weekend_date_key ,
@@ -25,6 +26,31 @@ from data_module.phase3c_backfill_runner import configured_candidate_db_path
 def _monthly_revenue_status_today() -> str:
     """回傳月營收可得性狀態使用的本機日期。"""
     return datetime.now().date().isoformat()
+
+
+def _emit_update_progress(
+    callback: Optional[Callable[[str, int], None]],
+    message: str,
+    percentage: int,
+) -> None:
+    """將下載觀測回傳給 UI；callback 失敗不得改變資料更新結果。"""
+    if callback is None:
+        return
+    try:
+        callback(message, max(0, min(100, int(percentage))))
+    except Exception:
+        # 進度是觀測邊界，不應因 UI／Qt callback 例外中止背景更新。
+        return
+
+
+def _is_cancel_requested(callback: Optional[Callable[[], bool]]) -> bool:
+    """安全讀取合作式取消旗標；取消觀測失敗不應破壞資料更新。"""
+    if callback is None:
+        return False
+    try:
+        return bool(callback())
+    except Exception:
+        return False
 
 
 class UpdateService :
@@ -154,11 +180,20 @@ class UpdateService :
     source :str ,
     start_date :Optional [str ]=None ,
     end_date :Optional [str ]=None ,
+    cancel_callback :Optional [Callable [[],bool ]]=None ,
     )->Dict [str ,Any ]:
         """將既有 CSV 更新結果同步到 SQLite，保留日常 CSV 輸出行為。"""
         import logging
 
         logger =logging .getLogger (__name__ )
+        if _is_cancel_requested(cancel_callback):
+            return {
+            'success':False ,
+            'cancelled':True ,
+            'message':f'{source} SQLite 同步已取消（尚未開始寫入）',
+            'source':source ,
+            'synced_records':0 ,
+            }
         if not getattr (self .config ,'use_sqlite',False ):
             return {
             'success':True ,
@@ -226,6 +261,16 @@ class UpdateService :
                 'success':True ,
                 'message':f'{source} 沒有可同步的 CSV 資料',
                 'source':source ,
+                'synced_records':0 ,
+                }
+
+            if _is_cancel_requested(cancel_callback):
+                return {
+                'success':False ,
+                'cancelled':True ,
+                'message':f'{source} SQLite 同步已取消（尚未開始寫入）',
+                'source':source ,
+                'table':table_name ,
                 'synced_records':0 ,
                 }
 
@@ -405,6 +450,8 @@ class UpdateService :
         sync_to_sqlite: bool = False,
         break_on_repeated_source_date: bool = True,
         twse_no_data_dates: Optional[list[str]] = None,
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """逐日更新 TPEX 官方收盤行情，會記錄實際回應日並可選擇同步到 SQLite。"""
         import logging
@@ -412,6 +459,23 @@ class UpdateService :
 
         logger =logging .getLogger (__name__ )
         try :
+            if _is_cancel_requested(cancel_callback):
+                return {
+                'success':False ,
+                'cancelled':True ,
+                'message':'TPEX 每日股價區間更新已取消（尚未開始）',
+                'requested_dates':[],
+                'updated_dates':[],
+                'fallback_dates':[],
+                'skipped_dates':[],
+                'failed_dates':[],
+                'warnings':[],
+                'tpex_rows':0 ,
+                'skipped_rows':0 ,
+                'diagnostic_count':0 ,
+                'source_dates':[],
+                'sync_summary':None ,
+                }
             date_keys =self ._iter_weekday_date_keys (start_date ,end_date )
             if not date_keys :
                 return {
@@ -428,6 +492,11 @@ class UpdateService :
                 }
 
             source =self ._create_tpex_daily_price_source ()
+            _emit_update_progress(
+                progress_callback,
+                f"TPEX API 準備下載 {len(date_keys)} 個工作日",
+                0,
+            )
             updated_dates :list [str ]=[]
             fallback_dates :list [str ]=[]
             skipped_dates :list [str ]=[]
@@ -437,7 +506,49 @@ class UpdateService :
             total_skipped_rows =0
             last_source_date :Optional [str ]=None
 
+            def cancelled_result(message: str) -> Dict[str, Any]:
+                return {
+                'success':False ,
+                'cancelled':True ,
+                'message':message ,
+                'requested_dates':date_keys ,
+                'updated_dates':sorted (set (updated_dates )),
+                'fallback_dates':sorted (set (fallback_dates )),
+                'skipped_dates':sorted (set (skipped_dates )),
+                'failed_dates':sorted (set (failed_dates )),
+                'warnings':[],
+                'tpex_rows':total_rows ,
+                'skipped_rows':total_skipped_rows ,
+                'diagnostic_count':0 ,
+                'source_dates':sorted (set (updated_dates )),
+                'sync_summary':None ,
+                }
+
+            def sleep_with_cancel(seconds: float) -> bool:
+                """以短間隔等待，讓 UI 取消可在日期邊界前被觀察。"""
+                if seconds <= 0:
+                    return _is_cancel_requested(cancel_callback)
+                if cancel_callback is None:
+                    time.sleep(seconds)
+                    return False
+                deadline = time.monotonic() + seconds
+                while True:
+                    if _is_cancel_requested(cancel_callback):
+                        return True
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return _is_cancel_requested(cancel_callback)
+                    time.sleep(min(0.1, remaining))
+
             for idx ,requested_date in enumerate (date_keys ):
+                if _is_cancel_requested(cancel_callback):
+                    return cancelled_result(f"TPEX 每日股價區間更新已取消（停止於 {requested_date} 前）")
+                current_percentage =((idx + 1 ) *100 )//len (date_keys )
+                _emit_update_progress(
+                    progress_callback,
+                    f"TPEX API 下載 {requested_date}（{idx + 1}/{len(date_keys)}）",
+                    current_percentage,
+                )
                 output_file =self .config .tpex_daily_price_dir /f'{requested_date}.csv'
                 if not force_refresh and output_file .exists ():
                     skipped_dates .append (requested_date )
@@ -445,6 +556,9 @@ class UpdateService :
 
                 result =source .update_for_date (requested_date )
                 effective_source_date =result .source_date or requested_date
+
+                if _is_cancel_requested(cancel_callback):
+                    return cancelled_result(f"TPEX 每日股價區間更新已取消（已完成 {requested_date}）")
 
                 if result.success:
                     updated_dates.append(effective_source_date)
@@ -468,6 +582,10 @@ class UpdateService :
                     fallback_dates .append (result .source_date )
                     if result .source_date not in source_date_seen :
                         fallback_result =source .update_for_date (result .source_date )
+                        if _is_cancel_requested(cancel_callback):
+                            return cancelled_result(
+                                f"TPEX 每日股價區間更新已取消（停止於 fallback {result.source_date}）"
+                            )
                         if fallback_result .success :
                             fallback_source_date =fallback_result .source_date or result .source_date
                             updated_dates .append (fallback_source_date )
@@ -504,19 +622,31 @@ class UpdateService :
                     last_source_date =effective_source_date
 
                 if delay_seconds >0 and idx <len (date_keys )-1 :
-                    time .sleep (delay_seconds )
+                    if sleep_with_cancel(delay_seconds):
+                        return cancelled_result("TPEX 每日股價區間更新已取消（等待下一日期前）")
 
             unique_updated_dates =sorted (set (updated_dates ))
             sync_summary =None
+            if _is_cancel_requested(cancel_callback):
+                return cancelled_result("TPEX 每日股價區間更新已取消（尚未同步 SQLite）")
             if sync_to_sqlite and unique_updated_dates :
                 sync_start =unique_updated_dates [0 ]
                 sync_end =unique_updated_dates [-1 ]
-                sync_result =self .sync_source_to_sqlite ("daily_price_files",sync_start ,sync_end )
+                sync_result =self .sync_source_to_sqlite (
+                    "daily_price_files",
+                    sync_start,
+                    sync_end,
+                    cancel_callback=cancel_callback,
+                )
                 sync_summary ={
                 'success':sync_result .get ('success',False ),
                 'synced_records':int (sync_result .get ('synced_records',0 )),
                 'message':sync_result .get ('message',''),
+                'source':sync_result .get ('source','daily_price_files'),
+                'table':sync_result .get ('table','daily_prices'),
                 }
+                if sync_result.get('cancelled'):
+                    return cancelled_result("TPEX 每日股價區間更新已取消（SQLite 同步前）")
 
             updated =len (unique_updated_dates )>0
             unique_failed_dates =sorted (set (failed_dates ))
@@ -526,6 +656,11 @@ class UpdateService :
             else []
             )
             has_any_local_data =updated or len (skipped_dates )>0
+            _emit_update_progress(
+                progress_callback,
+                "TPEX API 下載完成，正在整理日期結果",
+                100,
+            )
             return {
             'success':has_any_local_data and not unique_failed_dates ,
             'message':(
@@ -579,9 +714,10 @@ class UpdateService :
         df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
         if df .empty :
             return df
-        if require_date and '日期'not in df .columns and '日期'not in df .columns :
+        normalized =self ._normalize_sqlite_dates (df )
+        if require_date and '日期'not in normalized .columns :
             return pd .DataFrame ()
-        return self ._normalize_sqlite_dates (df )
+        return normalized
 
     def _load_daily_price_files_for_sqlite (
     self ,
@@ -617,6 +753,7 @@ class UpdateService :
                 df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
                 if df .empty :
                     continue
+                df =self ._normalize_sqlite_dates (df )
                 if not is_valid_daily_price_frame (df ):
                     import logging
                     logging .getLogger (__name__ ).warning (
@@ -629,7 +766,7 @@ class UpdateService :
                     "[UpdateService] daily-price session has no official TWSE evidence; skip file: %s",path
                     )
                     continue
-                if '日期'not in df .columns and '日期'not in df .columns :
+                if '日期'not in df .columns :
                     df .insert (0 ,'日期',date_key )
                 frames .append (df )
 
@@ -664,6 +801,7 @@ class UpdateService :
                     tpex_df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
                     if tpex_df .empty :
                         continue
+                    tpex_df =self ._normalize_sqlite_dates (tpex_df )
                     if date_col not in tpex_df .columns :
                         tpex_df .insert (0 ,date_col ,date_key )
                     frames .append (tpex_df )
@@ -1179,7 +1317,7 @@ class UpdateService :
         if df .empty :
             return True
         df =self ._normalize_sqlite_dates (df )
-        date_col ='日期'if '日期'in df .columns else ('日期'if '日期'in df .columns else None )
+        date_col ='日期'if '日期'in df .columns else None
         if date_col is None :
             raise ValueError (f"無法從 DataFrame 提取有效日期進行替換: table={table_name}")
         dates =sorted ({str (v )for v in df [date_col ].dropna ().tolist ()if str (v )})
@@ -1203,8 +1341,8 @@ class UpdateService :
         if df .empty :
             return True
         df =self ._normalize_sqlite_dates (df )
-        code_col ='證券代號'if '證券代號'in df .columns else ('證券代號'if '證券代號'in df .columns else None )
-        date_col ='日期'if '日期'in df .columns else ('日期'if '日期'in df .columns else None )
+        code_col ='證券代號'if '證券代號'in df .columns else None
+        date_col ='日期'if '日期'in df .columns else None
         if code_col and date_col :
             df =df .drop_duplicates (subset =[code_col ,date_col ],keep ='last')
 
@@ -1255,7 +1393,9 @@ class UpdateService :
     self ,
     start_date :str ,
     end_date :str ,
-    delay_seconds :float =4.0
+    delay_seconds :float =4.0 ,
+    progress_callback :Optional [Callable[[str ,int ],None ]]=None ,
+    cancel_callback :Optional [Callable[[],bool ]]=None
     )->Dict [str ,Any ]:
         """更新每日股票數據
 
@@ -1271,17 +1411,33 @@ class UpdateService :
                 'success': bool,
                 'message': str,
                 'updated_dates': list[str],
-                'failed_dates': list[str]
+            'failed_dates': list[str],
+            'progress_callback': optional callback receiving (message, percentage)
+            'cancelled': optional bool indicating a cooperative cancellation
             }
         """
         import subprocess
         import os
         import sys
         import logging
+        import re
         from datetime import datetime ,timedelta
         from data_module .data_loader import DataLoader
 
         logger =logging .getLogger (__name__ )
+
+        def cancelled_result(message: str) -> Dict [str ,Any ]:
+            _emit_update_progress(progress_callback, message, 100)
+            return {
+            'success':False ,
+            'cancelled':True ,
+            'message':message ,
+            'updated_dates':[] ,
+            'failed_dates':[] ,
+            }
+
+        if _is_cancel_requested(cancel_callback):
+            return cancelled_result("TWSE 每日股價更新已取消（尚未開始）")
 
         # ✅ 記錄輸入參數
         logger .info (
@@ -1304,11 +1460,14 @@ class UpdateService :
         try :
         # 先做本地缺漏檢查：若指定區間已完整且檔案皆已存在，直接回報完成，避免重複跑大量日期檢查
             missing_dates :list [str ]=[]
+            _emit_update_progress(progress_callback, "檢查 TWSE 每日股價缺漏", 0)
             loader =DataLoader (self .config )
             start_dt =datetime .strptime (start_date ,'%Y-%m-%d')
             end_dt =datetime .strptime (end_date ,'%Y-%m-%d')
             current_dt =start_dt
             while current_dt <=end_dt :
+                if _is_cancel_requested(cancel_callback):
+                    return cancelled_result("TWSE 每日股價更新已取消（檢查日期缺漏時）")
                 if current_dt .weekday ()<5 :
                     trade_date =current_dt .strftime ('%Y-%m-%d')
                     if not loader .get_daily_price_file (trade_date ).exists ():
@@ -1317,6 +1476,11 @@ class UpdateService :
 
             if not missing_dates :
                 logger .info ("[UpdateService] 目標區間每日股價檔案皆已存在，跳過 batch 更新")
+                _emit_update_progress(
+                    progress_callback,
+                    "TWSE 每日股價檔案皆已存在，無需 API 下載",
+                    100,
+                )
                 return {
                 'success':True ,
                 'message':'每日股價檔案已是最新，無需更新',
@@ -1331,30 +1495,90 @@ class UpdateService :
             import tempfile
             from pathlib import Path as _Path
 
-            with tempfile .NamedTemporaryFile (mode ='w+',delete =False ,suffix ='.log',encoding ='utf-8')as output_file :
-                output_path =output_file .name
-                result =subprocess .run (
-                [sys .executable ,str (script_path ),
-                '--start-date',start_date ,
-                '--end-date',end_date ,
-                '--delay-min',str (delay_seconds ),
-                '--delay-max',str (delay_seconds )],
-                stdout =output_file ,
-                stderr =subprocess .STDOUT ,
-                text =True ,
-                encoding ='utf-8'
+            command =[
+            sys .executable ,str (script_path ),
+            '--start-date',start_date ,
+            '--end-date',end_date ,
+            '--delay-min',str (delay_seconds ),
+            '--delay-max',str (delay_seconds )]
+            cancellation_requested =False
+            if progress_callback is None and cancel_callback is None:
+                # 無 UI callback 時保留既有 run() 路徑，讓外部 service double／CLI
+                # 可以繼續攔截 subprocess.run；有 callback 才啟用逐行進度。
+                with tempfile .NamedTemporaryFile (mode ='w+',delete =False ,suffix ='.log',encoding ='utf-8')as output_file :
+                    output_path =output_file .name
+                    result =subprocess .run (
+                    command ,
+                    stdout =output_file ,
+                    stderr =subprocess .STDOUT ,
+                    text =True ,
+                    encoding ='utf-8'
+                    )
+                output_path_obj =_Path (output_path )
+                try :
+                    output =output_path_obj .read_text (encoding ='utf-8',errors ='ignore')
+                except Exception :
+                    output =''
+                finally :
+                    output_path_obj .unlink (missing_ok =True )
+                return_code =result .returncode
+            else:
+                output_path_obj =None
+                output_lines :list [str ]=[]
+                try :
+                    with tempfile .NamedTemporaryFile (mode ='w+',delete =False ,suffix ='.log',encoding ='utf-8')as output_file :
+                        output_path =output_file .name
+                        output_path_obj =_Path (output_path )
+                        process =subprocess .Popen (
+                        command ,
+                        stdout =subprocess .PIPE ,
+                        stderr =subprocess .STDOUT ,
+                        text =True ,
+                        encoding ='utf-8',
+                        errors ='replace',
+                        bufsize =1 ,
+                        )
+                        if process .stdout is not None :
+                            for line in iter (process .stdout .readline ,''):
+                                output_file .write (line )
+                                output_file .flush ()
+                                output_lines .append (line )
+                                if _is_cancel_requested(cancel_callback):
+                                    # batch 腳本可能正在直接寫入 CSV；不強制終止子程序，
+                                    # 先完整收尾目前請求，再把結果明確標示為已取消。
+                                    cancellation_requested =True
+                                match =re .search (
+                                r'\[(\d+)/(\d+)\].*?(\d{4}-\d{2}-\d{2})',
+                                line ,
+                                )
+                                if match :
+                                    index =int (match .group (1))
+                                    total =int (match .group (2))
+                                    percentage =(index *100 )//total if total else 0
+                                    _emit_update_progress (
+                                    progress_callback ,
+                                    f"TWSE API 下載 {match .group (3)}（{index}/{total}）",
+                                    percentage ,
+                                    )
+                        return_code =process .wait ()
+                        output_file .flush ()
+                finally :
+                    if output_path_obj is not None :
+                        output_path_obj .unlink (missing_ok =True )
+                output =''.join (output_lines )
+
+            if cancellation_requested or _is_cancel_requested(cancel_callback):
+                return cancelled_result(
+                    "TWSE 每日股價更新已取消；目前 API 請求已安全收尾，請重新檢查資料狀態"
                 )
 
-            output_path_obj =_Path (output_path )
-            try :
-                output =output_path_obj .read_text (encoding ='utf-8',errors ='ignore')
-            except Exception :
-                output =''
-            finally :
-                output_path_obj .unlink (missing_ok =True )
-
-            if result .returncode ==0 :
+            if return_code ==0 :
                 parsed_result =parse_daily_update_output (output ,missing_dates )
+                _emit_update_progress (
+                    progress_callback ,
+                    "TWSE API 下載完成，正在解析日期結果",
+                    100,
+                )
                 if parsed_result ["success"]:
                     logger .info ("[UpdateService] 每日股價更新完成: %s",parsed_result ["message"])
                 else :
@@ -1362,6 +1586,7 @@ class UpdateService :
                 return parsed_result
 
             logger .error (f"[UpdateService] 更新失敗: {output}")
+            _emit_update_progress(progress_callback, "TWSE API 下載程序失敗", 100)
             return {
             'success':False ,
             'message':f'更新失敗：{output}',
@@ -1670,6 +1895,44 @@ class UpdateService :
     def _quote_sql_identifier (self ,identifier :str )->str :
         return '"'+str (identifier ).replace ('"','""')+'"'
 
+    def _sqlite_status_db_exists(self) -> bool:
+        """確認狀態讀取的 SQLite 已存在；不可為了查狀態建立空 DB。"""
+        db_file = getattr(self.config, "db_file", None)
+        if not db_file:
+            return False
+        return Path(str(db_file)).is_file()
+
+    def _sqlite_unavailable_status(self) -> Dict[str, Any]:
+        """回傳明確 unavailable payload，讓 UI／一鍵更新不會假裝成功。"""
+        db_file = getattr(self.config, "db_file", "")
+        return {
+            "latest_date": None,
+            "total_records": 0,
+            "status": "unavailable",
+            "message": f"SQLite 資料庫不存在：{db_file}",
+        }
+
+    def _sqlite_status_manager(self) -> ReadOnlySQLiteManager:
+        """建立狀態查詢專用的 query-only SQLite adapter。"""
+        return ReadOnlySQLiteManager(self.config.db_file)
+
+    @staticmethod
+    def _annotate_sqlite_read_mode(
+        payload: Dict[str, Any],
+        db: ReadOnlySQLiteManager,
+    ) -> Dict[str, Any]:
+        """揭露 Windows lock 下的 immutable snapshot fallback，避免假裝即時。"""
+        if db.last_read_mode != "immutable_fallback":
+            return payload
+        annotated = dict(payload)
+        warnings = list(annotated.get("warnings") or annotated.get("quality_warnings") or [])
+        warnings.append(
+            "SQLite 目前使用 immutable 唯讀快照；可能只反映最後已提交內容，請停止其他寫入後重查"
+        )
+        annotated["warnings"] = list(dict.fromkeys(str(item) for item in warnings if str(item).strip()))
+        annotated["read_mode"] = "immutable_fallback"
+        return annotated
+
     def _first_existing_column (self ,columns :Any ,candidates :list [str ])->Optional [str ]:
         column_set ={str (col )for col in columns }
         for candidate in candidates :
@@ -1679,9 +1942,10 @@ class UpdateService :
 
     def _status_from_sqlite (self ,table_name :str )->Dict [str ,Any ]:
         """從 SQLite 資料庫極速獲取指定資料表的狀態"""
+        if not self._sqlite_status_db_exists():
+            return self._sqlite_unavailable_status()
         try :
-            from data_module .db_manager import DBManager
-            db =DBManager (self .config )
+            db =self ._sqlite_status_manager ()
             columns =db .get_table_columns (table_name )
             date_column =self ._first_existing_column (
             columns ,
@@ -1706,12 +1970,14 @@ class UpdateService :
                     else :
                         max_date_str =max_d_str
 
-                return {
+                return self._annotate_sqlite_read_mode({
                 'latest_date':max_date_str ,
                 'total_records':cnt ,
                 'status':'ok'if cnt >0 else 'empty'
-                }
-            return {'latest_date':None ,'total_records':0 ,'status':'empty'}
+                }, db)
+            return self._annotate_sqlite_read_mode(
+                {'latest_date':None ,'total_records':0 ,'status':'empty'}, db
+            )
         except Exception as e :
             import logging
             logging .getLogger (__name__ ).warning (f"[UpdateService] 從 SQLite 獲取表 {table_name} 狀態失敗: {e}")
@@ -1719,10 +1985,10 @@ class UpdateService :
 
     def _monthly_revenue_status_from_sqlite (self )->Dict [str ,Any ]:
         """Read monthly revenue status from the fundamental SQLite table."""
+        if not self._sqlite_status_db_exists():
+            return self._sqlite_unavailable_status()
         try :
-            from data_module .db_manager import DBManager
-
-            db =DBManager (self .config )
+            db =self ._sqlite_status_manager ()
             today =_monthly_revenue_status_today ()
             df =db .execute_query (
             """
@@ -1753,7 +2019,7 @@ class UpdateService :
 
             row =df .iloc [0 ]
             count =int (row ['count']or 0 )
-            return {
+            return self._annotate_sqlite_read_mode({
             'latest_date':row ['max_as_of_date']if count else None ,
             'latest_period':row ['max_period']if count else None ,
             'earliest_date':row ['min_period']if count else None ,
@@ -1765,7 +2031,7 @@ class UpdateService :
             'next_available_date':row ['next_available_date']if count else None ,
             'pending_period_count':int (row ['pending_period_count']or 0 ),
             'status':'ok'if count >0 else 'empty',
-            }
+            }, db)
         except Exception as e :
             import logging
             logging .getLogger (__name__ ).warning (f"[UpdateService] 從 SQLite 取得月營收狀態失敗: {e}")
@@ -1773,9 +2039,10 @@ class UpdateService :
 
     def _broker_status_from_sqlite (self )->Dict [str ,Any ]:
         """從 SQLite 資料庫極速獲取券商分點的狀態"""
+        if not self._sqlite_status_db_exists():
+            return self._sqlite_unavailable_status()
         try :
-            from data_module .db_manager import DBManager
-            db =DBManager (self .config )
+            db =self ._sqlite_status_manager ()
 
             columns =db .get_table_columns ("broker_flows")
             has_observed_cols ="lots_observed"in columns and "amount_observed"in columns
@@ -1833,7 +2100,7 @@ class UpdateService :
                     d_str =str (d )
                     return f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}"if len (d_str )==8 else d_str
 
-                return {
+                return self._annotate_sqlite_read_mode({
                 'latest_date':fmt_d (max_d ),
                 'total_records':cnt ,
                 'broker_count':broker_cnt ,
@@ -1843,8 +2110,11 @@ class UpdateService :
                 'dual_count':dual_cnt ,
                 'date_range':{'start_date':fmt_d (min_d ),'end_date':fmt_d (max_d )},
                 'status':'ok'if cnt >0 else 'empty'
-                }
-            return {'latest_date':None ,'total_records':0 ,'broker_count':0 ,'date_count':0 ,'status':'empty'}
+                }, db)
+            return self._annotate_sqlite_read_mode(
+                {'latest_date':None ,'total_records':0 ,'broker_count':0 ,'date_count':0 ,'status':'empty'},
+                db,
+            )
         except Exception as e :
             import logging
             logging .getLogger (__name__ ).warning (f"[UpdateService] 從 SQLite 獲取券商分點狀態失敗: {e}")
@@ -1852,9 +2122,10 @@ class UpdateService :
 
     def _technical_status_from_sqlite (self )->Dict [str ,Any ]:
         """從 SQLite 資料庫極速獲取技術指標的狀態"""
+        if not self._sqlite_status_db_exists():
+            return self._sqlite_unavailable_status()
         try :
-            from data_module .db_manager import DBManager
-            db =DBManager (self .config )
+            db =self ._sqlite_status_manager ()
             columns =db .get_table_columns ("technical_indicators")
             date_column =self ._first_existing_column (columns ,['日期','日期','date','Date'])
             stock_column =self ._first_existing_column (
@@ -1898,14 +2169,16 @@ class UpdateService :
                     d_str =str (d )
                     return f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}"if len (d_str )==8 else d_str
 
-                return {
+                return self._annotate_sqlite_read_mode({
                 'latest_date':fmt_d (max_d ),
                 'total_records':cnt ,
                 'file_count':stock_cnt ,
                 'date_range':{'start_date':fmt_d (min_d ),'end_date':fmt_d (max_d )},
                 'status':'ok'if cnt >0 else 'empty'
-                }
-            return {'latest_date':None ,'total_records':0 ,'file_count':0 ,'status':'empty'}
+                }, db)
+            return self._annotate_sqlite_read_mode(
+                {'latest_date':None ,'total_records':0 ,'file_count':0 ,'status':'empty'}, db
+            )
         except Exception as e :
             import logging
             logging .getLogger (__name__ ).warning (f"[UpdateService] 從 SQLite 獲取技術指標狀態失敗: {e}")
@@ -1915,9 +2188,14 @@ class UpdateService :
         """Check whether the latest daily price date has matching technical coverage."""
         if not getattr (self .config ,'use_sqlite',False ):
             return {'success':False ,'status':'unavailable','message':'SQLite disabled'}
+        if not self._sqlite_status_db_exists():
+            return {
+                'success':False,
+                'status':'unavailable',
+                'message':f'SQLite 資料庫不存在：{getattr(self.config, "db_file", "")}',
+            }
         try :
-            from data_module .db_manager import DBManager
-            db =DBManager (self .config )
+            db =self ._sqlite_status_manager ()
             min_days =int (getattr (self .config ,'min_data_days',30 )or 30 )
             query ="""
                 WITH latest AS (
@@ -1956,17 +2234,17 @@ class UpdateService :
             and str (technical_latest )>=str (daily_latest )
             and covered_count >=eligible_count
             )
-            return {
-            'success':True ,
-            'status':'ok'if is_current else 'lagging',
+            return self._annotate_sqlite_read_mode({
+                'success':True ,
+                'status':'ok'if is_current else 'lagging',
             'is_current':is_current ,
             'daily_latest_date':daily_latest ,
             'technical_latest_date':technical_latest ,
             'daily_latest_rows':int (row ['daily_latest_rows']or 0 ),
             'eligible_stock_count':eligible_count ,
-            'covered_stock_count':covered_count ,
-            'missing_stock_count':max (eligible_count -covered_count ,0 ),
-            }
+                'covered_stock_count':covered_count ,
+                'missing_stock_count':max (eligible_count -covered_count ,0 ),
+            }, db)
         except Exception as e :
             import logging
             logging .getLogger (__name__ ).warning (f"[UpdateService] 技術指標最新日覆蓋檢查失敗: {e}")
@@ -1991,7 +2269,7 @@ class UpdateService :
                 'broker_branch':self ._broker_status_from_sqlite (),
                 'technical_indicators':self ._technical_status_from_sqlite (),
                 'monthly_revenue':self ._monthly_revenue_status_from_sqlite (),
-                })
+                }, apply_freshness=True)
                 logger .info ("[UpdateService] 成功從 SQLite 資料庫極速獲取數據狀態！")
                 return result
             except Exception as sql_err :
@@ -2181,7 +2459,7 @@ class UpdateService :
                 'broker_branch':self ._broker_status_from_sqlite (),
                 'technical_indicators':self ._technical_status_from_sqlite (),
                 'monthly_revenue':self ._monthly_revenue_status_from_sqlite (),
-                },is_overview =True )
+                },is_overview =True ,apply_freshness =True )
                 return overview
             except Exception as sql_err :
                 import logging
@@ -2237,6 +2515,14 @@ class UpdateService :
                     detail =self ._technical_status_from_sqlite ()
                 else :
                     detail =self ._monthly_revenue_status_from_sqlite ()
+                if normalized in {"market_index", "industry_index", "technical_indicators"}:
+                    # 單一詳情也必須以同一份 daily reference 判定落後，
+                    # 避免 overview 與下鑽頁出現 split-brain 狀態。
+                    reference = self ._status_from_sqlite ("daily_prices")
+                    detail = compose_sqlite_status_read_model(
+                        {"daily_data": reference, normalized: detail},
+                        apply_freshness=True,
+                    ).get(normalized, detail)
                 self ._update_data_status_manifest (normalized ,detail )
                 return detail
             except Exception as sql_err :
@@ -2565,20 +2851,28 @@ class UpdateService :
         except Exception :
             return summary
 
-    def merge_daily_data (self ,force_all :bool =False )->Dict [str ,Any ]:
+    def merge_daily_data (
+    self ,
+    force_all :bool =False ,
+    cancel_callback :Optional [Callable[[],bool ]]=None,
+    progress_callback :Optional [Callable[[str, int], None]]=None
+    )->Dict [str ,Any ]:
         """合併每日股票數據
 
         將 daily_price/ 目錄中的 CSV 文件合併到 stock_data_whole.csv
 
         Args:
             force_all: 是否強制重新合併所有數據（忽略現有數據）
+            cancel_callback: 合作式取消回調；在檔案／讀取批次／寫入批次邊界停止
+            progress_callback: 可選的 (訊息, 百分比) 回調；只報告安全操作進度
 
         Returns:
             dict: {
                 'success': bool,
                 'message': str,
                 'merged_files': int,
-                'total_records': int
+                'total_records': int,
+                'cancelled': optional bool indicating cooperative cancellation
             }
         """
         import pandas as pd
@@ -2589,11 +2883,22 @@ class UpdateService :
 
         logger =logging .getLogger (__name__ )
 
+        _emit_update_progress(progress_callback, "準備合併每日資料", 0)
+
         # ✅ 記錄輸入參數
         logger .info (
         f"[UpdateService] 開始合併每日股票數據: "
         f"force_all={force_all}"
         )
+
+        if _is_cancel_requested(cancel_callback):
+            return {
+            'success':False ,
+            'cancelled':True ,
+            'message':'每日資料合併已取消（尚未開始）',
+            'merged_files':0 ,
+            'total_records':0
+            }
 
         try :
         # 直接調用 merge 腳本的函數
@@ -2661,13 +2966,41 @@ class UpdateService :
                 merge_func =merge_module .merge_daily_data
                 sig =inspect .signature (merge_func )
                 params =list (sig .parameters .keys ())
+                merge_kwargs: dict[str, Any] ={'force_all':force_all}
+                if 'config'in params :
+                    merge_kwargs ['config']=self .config
+                if 'cancel_callback'in params and cancel_callback is not None:
+                    merge_kwargs ['cancel_callback']=cancel_callback
+                if (
+                    progress_callback is not None
+                    and (
+                        'progress_callback' in params
+                        or any(
+                            parameter.kind is inspect.Parameter.VAR_KEYWORD
+                            for parameter in sig.parameters.values()
+                        )
+                    )
+                ):
+                    merge_kwargs['progress_callback'] = progress_callback
 
                 if 'config'in params :
                     logger .debug (f"[UpdateService] 合併函數支持 config 參數，傳遞配置")
-                    merge_func (force_all =force_all ,config =self .config )
+                    merge_result =merge_func (**merge_kwargs )
                 else :
                     logger .debug (f"[UpdateService] 合併函數不支持 config 參數，只傳遞 force_all")
-                    merge_func (force_all =force_all )
+                    merge_result =merge_func (**merge_kwargs )
+
+                if isinstance (merge_result ,dict )and merge_result .get ('cancelled'):
+                    return merge_result
+
+                # 目前合併腳本已回傳原子提交後的統計；直接沿用可避免
+                # 再次完整掃描輸出檔，並讓取消旗標不必等待 line-count。
+                if (
+                    isinstance(merge_result, dict)
+                    and merge_result.get("success") is True
+                    and "total_records" in merge_result
+                ):
+                    return merge_result
 
                 logger .info (f"[UpdateService] 合併函數執行完成")
             except Exception as e :
@@ -2807,7 +3140,8 @@ class UpdateService :
     branch_system_keys :Optional [List [str ]]=None ,
     delay_seconds :float =0.5 ,
     force_all :bool =False ,
-    progress_callback =None
+    progress_callback =None ,
+    cancel_callback :Optional [Callable[[],bool ]]=None
     )->Dict [str ,Any ]:
         """更新券商分點資料
 
@@ -2841,7 +3175,8 @@ class UpdateService :
             branch_system_keys =branch_system_keys ,
             delay_seconds =delay_seconds ,
             force_all =force_all ,
-            progress_callback =progress_callback
+            progress_callback =progress_callback ,
+            cancel_callback =cancel_callback
             )
 
             logger .info (f"[UpdateService] 券商分點資料更新完成: success={result.get('success', False)}")
@@ -2868,13 +3203,17 @@ class UpdateService :
     def merge_broker_branch_data (
     self ,
     branch_system_keys :Optional [List [str ]]=None ,
-    force_all :bool =False
+    force_all :bool =False ,
+    cancel_callback :Optional [Callable[[],bool ]]=None,
+    progress_callback :Optional [Callable[[str, int], None]]=None
     )->Dict [str ,Any ]:
         """合併券商分點資料
 
         Args:
             branch_system_keys: 要合併的分點列表（None=全部）
             force_all: 是否強制重新合併
+            progress_callback: 可選的 (訊息, 百分比) 回調
+            cancel_callback: 合作式取消回調；在分點／檔案邊界停止
 
         Returns:
             dict: 合併結果
@@ -2893,7 +3232,9 @@ class UpdateService :
             service =BrokerBranchUpdateService (self .config )
             result =service .merge_broker_branch_data (
             branch_system_keys =branch_system_keys ,
-            force_all =force_all
+            force_all =force_all ,
+            progress_callback =progress_callback ,
+            cancel_callback =cancel_callback
             )
 
             logger .info (f"[UpdateService] 券商分點資料合併完成: success={result.get('success', False)}")
@@ -2990,6 +3331,7 @@ class UpdateService :
     force_all :bool =False ,
     start_date :Optional [str ]=None ,
     progress_callback =None ,
+    cancel_callback :Optional [Callable[[],bool ]]=None ,
     ignore_existing_files :bool =False ,
     incremental_lookback_days :int =120
     )->Dict [str ,Any ]:
@@ -3000,6 +3342,7 @@ class UpdateService :
             force_all: 是否強制更新所有數據（忽略日期檢查）
             start_date: 指定開始更新的日期，如為None則自動檢測
             progress_callback: 進度回調函數 (message: str, progress: int) -> None
+            cancel_callback: 合作式取消回調；只在安全邊界停止後續計算／寫入
             ignore_existing_files: 是否忽略現有指標文件，直接覆蓋（用於修復有問題的文件）
             incremental_lookback_days: 增量更新時往前回補的交易日數，避免技術指標缺少歷史序列
 
@@ -3029,6 +3372,21 @@ class UpdateService :
         f"[UpdateService] 開始計算技術指標: "
         f"target_stock={target_stock}, force_all={force_all}, start_date={start_date}"
         )
+
+        if _is_cancel_requested(cancel_callback):
+            return {
+            'success':False ,
+            'cancelled':True ,
+            'message':'技術指標計算已取消（尚未開始）',
+            'total_stocks':0 ,
+            'success_count':0 ,
+            'fail_count':0 ,
+            'insufficient_data_count':0 ,
+            'updated_stocks':[] ,
+            'failed_stocks':[] ,
+            'start_date':'',
+            'end_date':''
+            }
 
         if progress_callback :
             progress_callback ("初始化技術指標計算器...",5 )
@@ -3148,6 +3506,21 @@ class UpdateService :
             grouped =stock_data .groupby (stock_code_column )
             total_stocks =len (grouped )
 
+            if _is_cancel_requested(cancel_callback):
+                return {
+                'success':False ,
+                'cancelled':True ,
+                'message':'技術指標計算已取消（完成資料載入後）',
+                'total_stocks':total_stocks ,
+                'success_count':0 ,
+                'fail_count':0 ,
+                'insufficient_data_count':0 ,
+                'updated_stocks':[] ,
+                'failed_stocks':[] ,
+                'start_date':'',
+                'end_date':''
+                }
+
             if progress_callback :
                 progress_callback (f"開始處理 {total_stocks} 支股票的技術指標...",20 )
 
@@ -3169,6 +3542,15 @@ class UpdateService :
 
             # 處理每檔股票
             for idx ,(stock_id ,group_df )in enumerate (grouped ):
+                if _is_cancel_requested(cancel_callback):
+                    results ['start_date']=min_date if min_date !="9999-12-31"else "未知"
+                    results ['end_date']=max_date if max_date !="1900-01-01"else "未知"
+                    return {
+                    'success':False ,
+                    'cancelled':True ,
+                    'message':f'技術指標計算已取消（停止於 {stock_id} 前）',
+                    **results
+                    }
                 progress =20 +int ((idx /total_stocks )*70 )# 20% 到 90%
                 if progress_callback :
                     progress_callback (f"處理 {stock_id} ({idx+1}/{total_stocks})...",progress )
@@ -3247,6 +3629,15 @@ class UpdateService :
                     group_df =filtered_df
 
                     # 計算並保存指標
+                if _is_cancel_requested(cancel_callback):
+                    results ['start_date']=min_date if min_date !="9999-12-31"else "未知"
+                    results ['end_date']=max_date if max_date !="1900-01-01"else "未知"
+                    return {
+                    'success':False ,
+                    'cancelled':True ,
+                    'message':f'技術指標計算已取消（尚未處理 {stock_id}）',
+                    **results
+                    }
                 try :
                     result =calculator .calculate_and_store_indicators (
                     group_df ,
@@ -3264,14 +3655,41 @@ class UpdateService :
                         results ['fail_count']+=1
                         results ['failed_stocks'].append (stock_id )
                         logger .warning (f"處理股票 {stock_id} 失敗")
+                    if _is_cancel_requested(cancel_callback):
+                        results ['start_date']=min_date if min_date !="9999-12-31"else "未知"
+                        results ['end_date']=max_date if max_date !="1900-01-01"else "未知"
+                        return {
+                        'success':False ,
+                        'cancelled':True ,
+                        'message':f'技術指標計算已取消（已完成 {stock_id}）',
+                        **results
+                        }
                 except Exception as e :
                     logger .error (f"處理股票 {stock_id} 時發生錯誤: {str(e)}")
                     results ['fail_count']+=1
                     results ['failed_stocks'].append (stock_id )
 
+                    if _is_cancel_requested(cancel_callback):
+                        results ['start_date']=min_date if min_date !="9999-12-31"else "未知"
+                        results ['end_date']=max_date if max_date !="1900-01-01"else "未知"
+                        return {
+                        'success':False ,
+                        'cancelled':True ,
+                        'message':f'技術指標計算已取消（處理 {stock_id} 後）',
+                        **results
+                        }
+
                     # 更新結果日期範圍
             results ['start_date']=min_date if min_date !="9999-12-31"else "未知"
             results ['end_date']=max_date if max_date !="1900-01-01"else "未知"
+
+            if _is_cancel_requested(cancel_callback):
+                return {
+                'success':False ,
+                'cancelled':True ,
+                'message':'技術指標計算已取消（尚未合併輸出）',
+                **results
+                }
 
             # 合併並儲存所有結果
             if all_data :
@@ -3279,6 +3697,14 @@ class UpdateService :
                     progress_callback ("合併所有指標數據...",90 )
 
                 logger .info ("合併所有指標數據...")
+
+                if _is_cancel_requested(cancel_callback):
+                    return {
+                    'success':False ,
+                    'cancelled':True ,
+                    'message':'技術指標計算已取消（合併前）',
+                    **results
+                    }
 
                 # ✅ 數據驗證：檢查每個 DataFrame 的完整性
                 valid_data =[]
@@ -3337,6 +3763,14 @@ class UpdateService :
                 save_path =self .config .all_stocks_data_file
                 skip_csv_save =getattr (self .config ,'use_sqlite',False )and auto_incremental
 
+                if _is_cancel_requested(cancel_callback):
+                    return {
+                    'success':False ,
+                    'cancelled':True ,
+                    'message':'技術指標計算已取消（寫入整合輸出前）',
+                    **results
+                    }
+
                 if not skip_csv_save :
                 # 創建備份
                     if save_path .exists ():
@@ -3352,6 +3786,13 @@ class UpdateService :
 
                     # 🌟 如果啟用 SQLite，同步將指標寫入 SQLite technical_indicators 表中
                 if getattr (self .config ,'use_sqlite',False ):
+                    if _is_cancel_requested(cancel_callback):
+                        return {
+                        'success':False ,
+                        'cancelled':True ,
+                        'message':'技術指標計算已取消（尚未寫入 SQLite）',
+                        **results
+                        }
                     logger .info ("檢測到啟用 SQLite，開始同步寫入資料庫 technical_indicators 表...")
                     if progress_callback :
                         progress_callback ("正在將指標寫入 SQLite 資料庫...",95 )
@@ -3442,7 +3883,9 @@ class UpdateService :
     table_name :str ,
     target_path :Path ,
     start_date :Optional [str ]=None ,
-    end_date :Optional [str ]=None
+    end_date :Optional [str ]=None ,
+    cancel_callback :Optional [Callable[[],bool ]]=None,
+    progress_callback :Optional [Callable[[str, int], None]]=None
     )->Dict [str ,Any ]:
         """從 SQLite 匯出指定表和日期範圍的資料至 CSV
 
@@ -3451,63 +3894,203 @@ class UpdateService :
             target_path: 匯出的 CSV 檔案路徑
             start_date: 開始日期（YYYYMMDD 或 YYYY-MM-DD）
             end_date: 結束日期（YYYYMMDD 或 YYYY-MM-DD）
+            cancel_callback: 合作式取消回調；在查詢／寫檔安全邊界停止
+            progress_callback: 可選的 (訊息, 百分比) 回調；以查詢總筆數估算進度
         """
-        import pandas as pd
         import logging
-        logger =logging .getLogger (__name__ )
+        import os
+        import re
+        import tempfile
 
-        try :
-            from data_module .db_manager import DBManager
-            db =DBManager (self .config )
+        logger = logging.getLogger(__name__)
+        destination = Path(target_path)
 
-            # 構建 SQL 語句
-            query =f"SELECT * FROM {table_name}"
-            conditions =[]
-            params =[]
+        _emit_update_progress(progress_callback, f"準備匯出 {table_name}", 0)
 
-            if start_date :
-                s_date =self ._date_key (start_date )
-                if s_date :
-                    conditions .append ("日期 >= ?")
-                    params .append (s_date )
-            if end_date :
-                e_date =self ._date_key (end_date )
-                if e_date :
-                    conditions .append ("日期 <= ?")
-                    params .append (e_date )
-
-            if conditions :
-                query +=" WHERE "+" AND ".join (conditions )
-
-            query +=" ORDER BY 日期 ASC;"
-
-            logger .info (f"[UpdateService] 開始從 SQLite 匯出 {table_name} 到 {target_path}，查詢: {query}，參數: {params}")
-
-            # 執行查詢
-            df =db .execute_query (query ,tuple (params ))
-            if df .empty :
-                return {
-                'success':False ,
-                'message':'沒有符合條件的資料可供匯出'
-                }
-
-                # 還原日期格式為 YYYY-MM-DD 以便於人工檢查
-            if '日期'in df .columns :
-                df ['日期']=df ['日期'].apply (lambda x :f"{str(x)[:4]}-{str(x)[4:6]}-{str(x)[6:]}"if len (str (x ))==8 else str (x ))
-
-                # 寫入 CSV 檔案
-            target_path .parent .mkdir (parents =True ,exist_ok =True )
-            df .to_csv (target_path ,index =False ,encoding ='utf-8-sig')
-            logger .info (f"[UpdateService] 成功匯出 {len(df)} 筆資料至 {target_path}")
-
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name or ""):
             return {
-            'success':True ,
-            'message':f'成功匯出 {len(df):,} 筆資料至 {target_path.name}',
-            'total_records':len (df ),
-            'file_path':str (target_path )
+                "success": False,
+                "message": f"不允許匯出未知或不安全的 SQLite table：{table_name!r}",
             }
 
-        except Exception as e :
+        if _is_cancel_requested(cancel_callback):
+            return {
+            'success':False ,
+            'cancelled':True ,
+            'message':f'{table_name} 匯出已取消（尚未開始）'
+            }
+
+        try:
+            # 匯出屬於讀取既有資料後建立新檔，不能因查詢而建構可寫
+            # DBManager（那會初始化 schema／WAL）。
+            db = ReadOnlySQLiteManager(self.config.db_file)
+
+            query = f'SELECT * FROM "{table_name}"'
+            conditions: list[str] = []
+            params: list[Any] = []
+
+            if start_date:
+                s_date = self._date_key(start_date)
+                if s_date:
+                    conditions.append('"日期" >= ?')
+                    params.append(s_date)
+            if end_date:
+                e_date = self._date_key(end_date)
+                if e_date:
+                    conditions.append('"日期" <= ?')
+                    params.append(e_date)
+
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            query += ' ORDER BY "日期" ASC;'
+
+            logger.info(
+                "[UpdateService] 開始從 SQLite 匯出 %s 到 %s，查詢: %s，參數: %s",
+                table_name,
+                destination,
+                query,
+                params,
+            )
+
+            total_expected: int | None = None
+            try:
+                count_query = f'SELECT COUNT(*) AS "_total" FROM "{table_name}"'
+                if conditions:
+                    count_query += " WHERE " + " AND ".join(conditions)
+                count_df = db.execute_query(count_query, tuple(params))
+                if not count_df.empty:
+                    total_expected = max(0, int(count_df.iloc[0]["_total"]))
+            except Exception:
+                logger.debug("無法取得匯出總筆數，改用無總數進度", exc_info=True)
+            _emit_update_progress(
+                progress_callback,
+                f"開始讀取 {table_name}（預估 {total_expected:,} 筆）"
+                if total_expected is not None
+                else f"開始讀取 {table_name}（總筆數待讀取）",
+                5,
+            )
+
+            chunks = db.iter_query(query, tuple(params), chunksize=10_000)
+            total_records = 0
+            chunk_index = 0
+            temp_path: Path | None = None
+            temp_fd: int | None = None
+            temp_stream: Any = None
+            try:
+                for chunk in chunks:
+                    if _is_cancel_requested(cancel_callback):
+                        return {
+                            "success": False,
+                            "cancelled": True,
+                            "processed_records": total_records,
+                            "target_preserved": True,
+                            "message": f"{table_name} 匯出已取消（停在資料批次邊界，原目標檔保留）",
+                        }
+                    if chunk.empty:
+                        continue
+
+                    chunk_index += 1
+
+                    if "日期" in chunk.columns:
+                        chunk = chunk.copy()
+                        chunk["日期"] = chunk["日期"].apply(
+                            lambda value: (
+                                f"{str(value)[:4]}-{str(value)[4:6]}-{str(value)[6:]}"
+                                if len(str(value)) == 8
+                                else str(value)
+                            )
+                        )
+
+                    if temp_path is None:
+                        if _is_cancel_requested(cancel_callback):
+                            return {
+                                "success": False,
+                                "cancelled": True,
+                                "processed_records": total_records,
+                                "target_preserved": True,
+                                "message": f"{table_name} 匯出已取消（尚未建立暫存檔）",
+                            }
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        temp_fd, temp_name = tempfile.mkstemp(
+                            prefix=f".{destination.name}.",
+                            suffix=".part",
+                            dir=str(destination.parent),
+                        )
+                        temp_path = Path(temp_name)
+                        temp_stream = os.fdopen(
+                            temp_fd,
+                            "w",
+                            encoding="utf-8-sig",
+                            newline="",
+                        )
+                        temp_fd = None
+
+                    chunk.to_csv(
+                        temp_stream,
+                        index=False,
+                        header=total_records == 0,
+                    )
+                    total_records += len(chunk)
+                    temp_stream.flush()
+                    if total_expected and total_expected > 0:
+                        percentage = min(95, 10 + (total_records * 85 // total_expected))
+                    else:
+                        percentage = min(90, 10 + chunk_index * 5)
+                    _emit_update_progress(
+                        progress_callback,
+                        f"匯出 {table_name}：已處理 {total_records:,} 筆",
+                        percentage,
+                    )
+                    if _is_cancel_requested(cancel_callback):
+                        return {
+                            "success": False,
+                            "cancelled": True,
+                            "processed_records": total_records,
+                            "target_preserved": True,
+                            "message": f"{table_name} 匯出已取消（已完成一批，原目標檔保留）",
+                        }
+
+                if total_records == 0:
+                    return {
+                        "success": False,
+                        "message": "沒有符合條件的資料可供匯出",
+                        "read_mode": db.last_read_mode,
+                    }
+                if _is_cancel_requested(cancel_callback):
+                    return {
+                        "success": False,
+                        "cancelled": True,
+                        "processed_records": total_records,
+                        "target_preserved": True,
+                        "message": f"{table_name} 匯出已取消（尚未提交目標檔）",
+                    }
+
+                if temp_stream is not None:
+                    temp_stream.flush()
+                    temp_stream.close()
+                    temp_stream = None
+                if temp_path is None:
+                    raise RuntimeError("匯出未建立暫存檔")
+                os.replace(str(temp_path), str(destination))
+                temp_path = None
+                logger.info("[UpdateService] 成功匯出 %s 筆資料至 %s", total_records, destination)
+                _emit_update_progress(progress_callback, f"{table_name} 匯出完成", 100)
+                return {
+                    "success": True,
+                    "message": f"成功匯出 {total_records:,} 筆資料至 {destination.name}",
+                    "total_records": total_records,
+                    "file_path": str(destination),
+                    "read_mode": db.last_read_mode,
+                }
+            finally:
+                if temp_stream is not None:
+                    temp_stream.close()
+                if temp_fd is not None:
+                    os.close(temp_fd)
+                if temp_path is not None and temp_path.exists():
+                    temp_path.unlink()
+
+        except Exception as e:
             logger .exception (f"[UpdateService] 匯出 {table_name} 失敗")
             return {
             'success':False ,

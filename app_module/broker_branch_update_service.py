@@ -773,7 +773,8 @@ class BrokerBranchUpdateService:
         branch_system_keys: Optional[List[str]] = None,
         delay_seconds: float = 0.5,
         force_all: bool = False,
-        progress_callback: Optional[Callable[[str, int], None]] = None
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
         更新券商分點每日買賣資料
@@ -785,11 +786,34 @@ class BrokerBranchUpdateService:
             delay_seconds: 請求間隔（秒）
             force_all: 是否強制重新抓取（忽略已存在檔案）
             progress_callback: 進度回調函數 (message: str, progress: int) -> None
+            cancel_callback: 合作式取消回調；只在日期／檔案安全邊界停止
 
         Returns:
             更新結果字典
         """
+        def is_cancel_requested() -> bool:
+            if cancel_callback is None:
+                return False
+            try:
+                return bool(cancel_callback())
+            except Exception:
+                return False
+
         try:
+            if is_cancel_requested():
+                return {
+                    'success': False,
+                    'cancelled': True,
+                    'message': '券商分點更新已取消（尚未開始）',
+                    'updated_dates': [],
+                    'failed_dates': [],
+                    'skipped_dates': [],
+                    'non_trading_dates': [],
+                    'updated_branches': [],
+                    'failed_branches': [],
+                    'total_processed': 0,
+                    'total_records': 0,
+                }
             # 載入分點 registry
             all_branches = self._load_branch_registry(active_only=True, repair_registry=True)
 
@@ -839,16 +863,62 @@ class BrokerBranchUpdateService:
 
             dates, non_trading_dates = self._filter_trade_dates_for_broker_update(dates)
 
+            if is_cancel_requested():
+                return {
+                    'success': False,
+                    'cancelled': True,
+                    'message': '券商分點更新已取消（完成日期篩選後）',
+                    'updated_dates': [],
+                    'failed_dates': [],
+                    'skipped_dates': list(non_trading_dates),
+                    'non_trading_dates': list(non_trading_dates),
+                    'updated_branches': [],
+                    'failed_branches': [],
+                    'total_processed': 0,
+                    'total_records': 0,
+                }
+
             # 初始化結果統計
-            updated_dates = []
-            failed_dates = []
-            skipped_dates = []
-            updated_branches = []
-            failed_branches = []
+            updated_dates: list[str] = []
+            failed_dates: list[str] = []
+            skipped_dates: list[str] = []
+            updated_branches: list[str] = []
+            failed_branches: list[str] = []
             total_records = 0
 
             total_tasks = len(branches) * len(dates)
             completed_tasks = 0
+
+            def cancelled_result(message: str) -> Dict[str, Any]:
+                self._cleanup_driver()
+                return {
+                    'success': False,
+                    'cancelled': True,
+                    'message': message,
+                    'updated_dates': list(set(updated_dates)),
+                    'failed_dates': list(set(failed_dates)),
+                    'skipped_dates': list(set(skipped_dates + non_trading_dates)),
+                    'non_trading_dates': list(non_trading_dates),
+                    'updated_branches': list(updated_branches),
+                    'failed_branches': list(failed_branches),
+                    'total_processed': len(dates),
+                    'total_records': total_records,
+                }
+
+            def sleep_with_cancel(seconds: float) -> bool:
+                if seconds <= 0:
+                    return is_cancel_requested()
+                if cancel_callback is None:
+                    time.sleep(seconds)
+                    return False
+                deadline = time.monotonic() + seconds
+                while True:
+                    if is_cancel_requested():
+                        return True
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return is_cancel_requested()
+                    time.sleep(min(0.1, remaining))
 
             if not dates:
                 message = "券商分點更新完成：目標日期皆無交易日行情，已跳過 MoneyDJ 抓取"
@@ -869,6 +939,8 @@ class BrokerBranchUpdateService:
 
             # 對每個分點
             for branch_idx, branch_info in enumerate(branches):
+                if is_cancel_requested():
+                    return cancelled_result(f"券商分點更新已取消（停止於分點 {branch_info.get('branch_system_key', '')} 前）")
                 branch_key = branch_info['branch_system_key']
                 branch_name = branch_info['branch_display_name']
 
@@ -888,6 +960,8 @@ class BrokerBranchUpdateService:
 
                 # 對每個日期
                 for date_idx, date_str in enumerate(dates):
+                    if is_cancel_requested():
+                        return cancelled_result(f"券商分點更新已取消（停止於 {branch_key}/{date_str} 前）")
                     completed_tasks += 1
 
                     if progress_callback:
@@ -959,6 +1033,8 @@ class BrokerBranchUpdateService:
                     max_retries = 3
 
                     try:
+                        if is_cancel_requested():
+                            return cancelled_result(f"券商分點更新已取消（尚未抓取 {branch_key}/{date_str}）")
                         try:
                             lot_data = self._fetch_metric_records_http(
                                 branch_info,
@@ -995,12 +1071,18 @@ class BrokerBranchUpdateService:
                                     retries=max_retries,
                                 )
 
+                        if is_cancel_requested():
+                            return cancelled_result(f"券商分點更新已取消（已完成抓取 {branch_key}/{date_str}）")
+
                         if not lot_data or not amount_data:
                             raise ValueError("MoneyDJ E/B 雙指標資料不完整")
 
                         all_data = self._merge_metric_records(lot_data, amount_data)
                         if not all_data:
                             raise ValueError("MoneyDJ E/B 雙指標合併後無資料")
+
+                        if is_cancel_requested():
+                            return cancelled_result(f"券商分點更新已取消（尚未寫入 {branch_key}/{date_str}）")
 
                         # 保存到 CSV
                         df = pd.DataFrame(all_data)
@@ -1016,13 +1098,15 @@ class BrokerBranchUpdateService:
                         )
 
                         # 延遲
-                        time.sleep(delay_seconds)
+                        if sleep_with_cancel(delay_seconds):
+                            return cancelled_result(f"券商分點更新已取消（完成 {branch_key}/{date_str} 後）")
 
                     except Exception as e:
                         self.logger.error(f"處理 {branch_key}/{date_str} 時發生錯誤: {str(e)}")
                         failed_dates.append(date_str)
                         branch_success = False
-                        time.sleep(delay_seconds)
+                        if sleep_with_cancel(delay_seconds):
+                            return cancelled_result(f"券商分點更新已取消（{branch_key}/{date_str} 失敗後）")
 
                 # 記錄分點處理結果
                 if branch_success:
@@ -1076,7 +1160,8 @@ class BrokerBranchUpdateService:
         self,
         branch_system_keys: Optional[List[str]] = None,
         force_all: bool = False,
-        progress_callback: Optional[Callable[[str, int], None]] = None
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
         合併每日原始資料到整合元數據檔案
@@ -1085,11 +1170,32 @@ class BrokerBranchUpdateService:
             branch_system_keys: 要合併的分點列表（None=全部）
             force_all: 是否強制重新合併（忽略現有元數據）
             progress_callback: 進度回調函數
+            cancel_callback: 合作式取消回調；在分點／檔案邊界停止
 
         Returns:
             合併結果字典
         """
+        def is_cancel_requested() -> bool:
+            if cancel_callback is None:
+                return False
+            try:
+                return bool(cancel_callback())
+            except Exception:
+                return False
+
         try:
+            if is_cancel_requested():
+                return {
+                    'success': False,
+                    'cancelled': True,
+                    'message': '券商分點合併已取消（尚未開始）',
+                    'merged_branches': [],
+                    'merged_files': 0,
+                    'new_records': 0,
+                    'total_records': 0,
+                    'date_range': {'start_date': '', 'end_date': ''},
+                    'duplicate_records': 0,
+                }
             # 載入分點 registry
             all_branches = self._load_branch_registry(active_only=True, repair_registry=True)
 
@@ -1125,7 +1231,7 @@ class BrokerBranchUpdateService:
 
             self.logger.info(f"開始合併 {len(branches)} 個分點的資料")
 
-            merged_branches = []
+            merged_branches: list[str] = []
             merged_files = 0
             new_records = 0
             total_records = 0
@@ -1133,6 +1239,18 @@ class BrokerBranchUpdateService:
 
             # 對每個分點
             for branch_idx, branch_info in enumerate(branches):
+                if is_cancel_requested():
+                    return {
+                        'success': False,
+                        'cancelled': True,
+                        'message': f"券商分點合併已取消（停止於 {branch_info.get('branch_system_key', '')} 前）",
+                        'merged_branches': merged_branches,
+                        'merged_files': merged_files,
+                        'new_records': new_records,
+                        'total_records': total_records,
+                        'date_range': {'start_date': '', 'end_date': ''},
+                        'duplicate_records': 0,
+                    }
                 branch_key = branch_info['branch_system_key']
                 branch_name = branch_info['branch_display_name']
 
@@ -1176,6 +1294,18 @@ class BrokerBranchUpdateService:
                 new_data_list = []
 
                 for daily_file in daily_files:
+                    if is_cancel_requested():
+                        return {
+                            'success': False,
+                            'cancelled': True,
+                            'message': f"券商分點合併已取消（停止於 {branch_key}/{daily_file.name} 前）",
+                            'merged_branches': merged_branches,
+                            'merged_files': merged_files,
+                            'new_records': new_records,
+                            'total_records': total_records,
+                            'date_range': {'start_date': '', 'end_date': ''},
+                            'duplicate_records': 0,
+                        }
                     # 從檔名提取日期
                     date_str = daily_file.stem  # YYYY-MM-DD
 
@@ -1235,6 +1365,19 @@ class BrokerBranchUpdateService:
                     except Exception as e:
                         self.logger.warning(f"讀取每日檔案失敗: {branch_key}/{date_str}, {str(e)}")
                         continue
+
+                if is_cancel_requested():
+                    return {
+                        'success': False,
+                        'cancelled': True,
+                        'message': f"券商分點合併已取消（尚未寫入 {branch_key}）",
+                        'merged_branches': merged_branches,
+                        'merged_files': merged_files,
+                        'new_records': new_records,
+                        'total_records': total_records,
+                        'date_range': {'start_date': '', 'end_date': ''},
+                        'duplicate_records': 0,
+                    }
 
                 if not new_data_list:
                     self.logger.info(f"沒有新資料需要合併: {branch_key}")

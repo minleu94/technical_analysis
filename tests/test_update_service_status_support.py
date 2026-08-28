@@ -30,3 +30,19 @@ def test_compose_sqlite_status_read_model_marks_copied_overview_payloads():
     assert list(result) == list(statuses)
     assert all(payload["is_overview"] is True for payload in result.values())
     assert all("is_overview" not in payload for payload in statuses.values())
+
+
+def test_compose_sqlite_status_read_model_marks_date_lag_only_when_requested():
+    statuses = _statuses()
+    statuses["market_index"]["latest_date"] = "2026-07-09"
+
+    unchanged = compose_sqlite_status_read_model(statuses)
+    assert unchanged["market_index"]["status"] == "ok"
+
+    result = compose_sqlite_status_read_model(statuses, is_overview=True, apply_freshness=True)
+    assert result["daily_data"]["freshness_status"] == "reference"
+    assert result["market_index"]["freshness_status"] == "lagging"
+    assert result["market_index"]["freshness_reference_date"] == "2026-07-10"
+    assert result["market_index"]["status"] == "lagging"
+    # input mapping 必須維持唯讀／不被副作用修改。
+    assert statuses["market_index"]["status"] == "ok"

@@ -8,6 +8,9 @@ from ui_qt.views.update.update_formatters import (
 
 def test_format_status_token_preserves_known_unknown_and_missing_values() -> None:
     assert format_status_token("OK") == "正常"
+    assert format_status_token("current") == "正常"
+    assert format_status_token("success") == "正常"
+    assert format_status_token("normal") == "正常"
     assert format_status_token("warning") == "需注意"
     assert format_status_token(None) == "未知"
     assert format_status_token("custom") == "custom"
@@ -47,6 +50,44 @@ def test_format_source_detail_summary_handles_missing_broker_fields() -> None:
             "金額榜專屬：0",
         ]
     )
+
+
+def test_format_source_detail_summary_exposes_monthly_pit_availability() -> None:
+    detail = {
+        "latest_date": "2026-06-30",
+        "latest_period": "2026-06",
+        "latest_available_period": "2026-05",
+        "latest_available_date": "2026-06-17",
+        "next_available_date": "2026-07-15",
+        "pending_period_count": 1,
+        "total_records": 246331,
+        "status": "ok",
+    }
+
+    assert format_source_detail_summary("monthly_revenue", detail) == "\n".join(
+        [
+            "最新可用日：2026-06-17",
+            "已匯入期別：2026-06",
+            "目前可用期別：2026-05",
+            "待生效：1 個期別（2026-07-15 起可用）",
+            "SQLite 筆數：246,331",
+            "狀態：正常",
+        ]
+    )
+
+
+def test_format_source_detail_summary_discloses_read_mode_fallback() -> None:
+    detail = {
+        "latest_date": "2026-08-26",
+        "total_records": 10,
+        "status": "ok",
+        "read_mode": "immutable_fallback",
+        "warnings": ["可能只反映最後已提交內容"],
+    }
+
+    summary = format_source_detail_summary("daily", detail)
+    assert "讀取模式：immutable_fallback" in summary
+    assert "提醒：可能只反映最後已提交內容" in summary
 
 
 def test_tpex_warning_messages_deduplicates_and_sorts_failed_dates() -> None:

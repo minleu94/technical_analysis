@@ -1,7 +1,9 @@
 ﻿from types import SimpleNamespace
 import warnings
+import sqlite3
 
 import pandas as pd
+import pytest
 from pandas.errors import DtypeWarning
 
 from app_module.update_service import UpdateService
@@ -111,6 +113,118 @@ def test_update_daily_preserves_missing_date_when_batch_output_is_empty(tmp_path
     assert result["diagnostic_codes"] == ["batch_output_missing"]
 
 
+def test_update_daily_streams_date_progress_when_callback_is_supplied(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    config.log_dir.mkdir(parents=True, exist_ok=True)
+
+    class _Stdout:
+        def __init__(self):
+            self._lines = iter(
+                [
+                    "[1/2] 正在更新 2026-07-02 的數據...\n",
+                    "2026-07-02 更新成功：1 筆記錄\n",
+                    "[2/2] 正在更新 2026-07-03 的數據...\n",
+                    "2026-07-03 更新成功：1 筆記錄\n",
+                    "[UPDATE_SUMMARY] SUCCESS: 2 days, FAILED: 0 days\n",
+                ]
+            )
+
+        def readline(self):
+            return next(self._lines, "")
+
+    class _Process:
+        def __init__(self):
+            self.stdout = _Stdout()
+            self.returncode = 0
+
+        def wait(self):
+            return self.returncode
+
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _Process())
+    progress = []
+
+    result = UpdateService(config).update_daily(
+        "2026-07-02",
+        "2026-07-03",
+        delay_seconds=0,
+        progress_callback=lambda message, percentage: progress.append(
+            (message, percentage)
+        ),
+    )
+
+    assert result["success"] is True
+    assert result["updated_dates"] == ["2026-07-02", "2026-07-03"]
+    assert progress[0] == ("檢查 TWSE 每日股價缺漏", 0)
+    assert ("TWSE API 下載 2026-07-02（1/2）", 50) in progress
+    assert ("TWSE API 下載 2026-07-03（2/2）", 100) in progress
+    assert progress[-1] == ("TWSE API 下載完成，正在解析日期結果", 100)
+
+
+def test_update_daily_can_cancel_before_start_without_spawning_batch_process(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    config.log_dir.mkdir(parents=True, exist_ok=True)
+    spawned = []
+    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: spawned.append(True))
+
+    result = UpdateService(config).update_daily(
+        "2026-07-02",
+        "2026-07-02",
+        delay_seconds=0,
+        cancel_callback=lambda: True,
+    )
+
+    assert result["success"] is False
+    assert result["cancelled"] is True
+    assert spawned == []
+
+
+def test_update_daily_marks_cancel_after_current_streaming_request_is_drained(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    config.log_dir.mkdir(parents=True, exist_ok=True)
+    cancellation = {"requested": False}
+
+    class _Stdout:
+        def __init__(self):
+            self._lines = iter(
+                [
+                    "[1/2] 正在更新 2026-07-02 的數據...\n",
+                    "2026-07-02 更新成功：1 筆記錄\n",
+                    "[2/2] 正在更新 2026-07-03 的數據...\n",
+                    "2026-07-03 更新成功：1 筆記錄\n",
+                    "[UPDATE_SUMMARY] SUCCESS: 2 days, FAILED: 0 days\n",
+                ]
+            )
+
+        def readline(self):
+            return next(self._lines, "")
+
+    class _Process:
+        def __init__(self):
+            self.stdout = _Stdout()
+            self.returncode = 0
+
+        def wait(self):
+            return self.returncode
+
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: _Process())
+
+    def progress(message, _percentage):
+        if "2026-07-02" in message:
+            cancellation["requested"] = True
+
+    result = UpdateService(config).update_daily(
+        "2026-07-02",
+        "2026-07-03",
+        delay_seconds=0,
+        progress_callback=progress,
+        cancel_callback=lambda: cancellation["requested"],
+    )
+
+    assert result["success"] is False
+    assert result["cancelled"] is True
+    assert "安全收尾" in result["message"]
+
+
 def test_check_data_status_includes_broker_branch_and_technical_summary(tmp_path):
     config = _config(tmp_path)
     pd.DataFrame({
@@ -170,6 +284,46 @@ def test_check_data_status_includes_broker_branch_and_technical_summary(tmp_path
     assert status["technical_indicators"]["file_count"] == 1
 
 
+def test_sqlite_status_marks_date_aligned_sources_lagging_in_global_check(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe(
+        "daily_prices",
+        pd.DataFrame(
+            {
+                "日期": ["20260529"],
+                "證券代號": ["2330"],
+                "收盤價": [100.0],
+            }
+        ),
+        if_exists="append",
+    )
+    db.write_dataframe(
+        "market_indices",
+        pd.DataFrame({"日期": ["20260528"], "收盤價": [100.0]}),
+        if_exists="append",
+    )
+    db.write_dataframe(
+        "industry_indices",
+        pd.DataFrame({"日期": ["20260528"], "指數": [100.0]}),
+        if_exists="append",
+    )
+    db.write_dataframe(
+        "technical_indicators",
+        pd.DataFrame({"日期": ["20260528"], "證券代號": ["2330"], "RSI": [55.0]}),
+        if_exists="append",
+    )
+
+    status = UpdateService(config).check_data_status()
+
+    assert status["daily_data"]["freshness_status"] == "reference"
+    assert status["market_index"]["status"] == "lagging"
+    assert status["industry_index"]["status"] == "lagging"
+    assert status["technical_indicators"]["status"] == "lagging"
+
+
 def test_check_data_overview_uses_read_only_lightweight_broker_summary(tmp_path):
     config = _config(tmp_path)
     pd.DataFrame({
@@ -217,6 +371,49 @@ def test_check_data_overview_uses_sqlite_when_enabled(tmp_path):
     assert overview["daily_data"]["latest_date"] == "2026-05-29"
     assert overview["daily_data"]["total_records"] == 1
     assert overview["daily_data"]["is_overview"] is True
+
+
+def test_sqlite_status_reads_are_query_only_and_do_not_construct_db_manager(tmp_path, monkeypatch):
+    from app_module.sqlite_read_only import ReadOnlySQLiteManager
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe(
+        "daily_prices",
+        pd.DataFrame({"日期": ["20260529"], "證券代號": ["2330"], "收盤價": [100.0]}),
+        if_exists="append",
+    )
+
+    class ExplodingDBManager:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("status reads must not construct writable DBManager")
+
+    monkeypatch.setattr("data_module.db_manager.DBManager", ExplodingDBManager)
+
+    overview = UpdateService(config).check_data_overview()
+    assert overview["daily_data"]["latest_date"] == "2026-05-29"
+
+    read_only = ReadOnlySQLiteManager(config.db_file)
+    with read_only.connect() as conn:
+        assert conn.execute("PRAGMA query_only").fetchone()[0] == 1
+        with pytest.raises(sqlite3.OperationalError):
+            conn.execute("CREATE TABLE should_not_be_created (value TEXT)")
+
+    assert not (config.db_file.parent / "should_not_be_created").exists()
+
+
+def test_sqlite_status_missing_db_is_fail_soft_and_does_not_create_file(tmp_path):
+    config = _sqlite_config(tmp_path)
+    assert not config.db_file.exists()
+
+    overview = UpdateService(config).check_data_overview()
+
+    assert not config.db_file.exists()
+    assert overview["daily_data"]["status"] == "unavailable"
+    assert overview["daily_data"]["is_overview"] is True
+    assert "不存在" in overview["daily_data"]["message"]
+    assert overview["technical_indicators"]["status"] == "unavailable"
 
 
 def test_check_source_detail_uses_sqlite_when_enabled(tmp_path):
@@ -317,6 +514,28 @@ def test_sync_daily_price_files_to_sqlite_preserves_zero_padded_stock_codes(tmp_
     ]
 
 
+def test_sync_daily_price_files_normalizes_declared_alias_columns(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    pd.DataFrame({
+        "date": ["2026-06-24"],
+        "stock_code": [50.0],
+        "stock_name": ["元大台灣50"],
+        "收盤價": [107.15],
+    }).to_csv(config.daily_price_dir / "20260624.csv", index=False, encoding="utf-8-sig")
+
+    result = UpdateService(config).sync_source_to_sqlite("daily_price_files")
+
+    assert result["success"] is True
+    synced = DBManager(config).execute_query(
+        'SELECT "日期", "證券代號", "證券名稱", "收盤價" FROM daily_prices;'
+    )
+    assert synced.to_dict(orient="records") == [
+        {"日期": "20260624", "證券代號": "0050", "證券名稱": "元大台灣50", "收盤價": 107.15}
+    ]
+
+
 def test_sync_daily_price_files_skips_invalid_schema_and_weekend_without_evidence(tmp_path, monkeypatch):
     from data_module.db_manager import DBManager
 
@@ -406,6 +625,337 @@ def test_merge_daily_data_includes_tpex_daily_price_dir(tmp_path):
         "證券名稱": "耀勝",
         "收盤價": 42.5,
     } in merged[["日期", "證券代號", "證券名稱", "收盤價"]].to_dict(orient="records")
+
+
+def test_update_service_merge_daily_data_forwards_progress(tmp_path):
+    config = _config(tmp_path)
+    pd.DataFrame(
+        {
+            "證券代號": ["2330"],
+            "證券名稱": ["台積電"],
+            "收盤價": [900.0],
+        }
+    ).to_csv(
+        config.daily_price_dir / "20260618.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    progress: list[tuple[str, int]] = []
+
+    result = UpdateService(config).merge_daily_data(
+        force_all=True,
+        progress_callback=lambda message, percentage: progress.append((message, percentage)),
+    )
+
+    assert result["success"] is True
+    assert progress[0] == ("準備合併每日資料", 0)
+    assert progress[-1] == ("每日資料合併完成", 100)
+
+
+def test_export_table_to_csv_is_query_only_and_atomic(tmp_path, monkeypatch):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe(
+        "daily_prices",
+        pd.DataFrame(
+            {
+                "日期": ["20260529", "20260530"],
+                "證券代號": ["2330", "0050"],
+                "證券名稱": ["台積電", "元大台灣50"],
+                "收盤價": [900.0, 100.0],
+            }
+        ),
+        if_exists="append",
+    )
+    target = tmp_path / "exports" / "daily.csv"
+    target.parent.mkdir(parents=True)
+    target.write_text("sentinel\n", encoding="utf-8")
+
+    class ExplodingDBManager:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("CSV export must not construct writable DBManager")
+
+    monkeypatch.setattr("data_module.db_manager.DBManager", ExplodingDBManager)
+
+    result = UpdateService(config).export_table_to_csv(
+        "daily_prices",
+        target,
+        start_date="2026-05-29",
+        end_date="2026-05-29",
+    )
+
+    assert result["success"] is True
+    assert result["total_records"] == 1
+    assert result["read_mode"] == "normal"
+    exported = pd.read_csv(target, encoding="utf-8-sig", dtype={"證券代號": str})
+    assert exported[["日期", "證券代號"]].to_dict(orient="records") == [
+        {"日期": "2026-05-29", "證券代號": "2330"},
+    ]
+    assert not list(target.parent.glob(".daily.csv.*.part"))
+
+
+def test_export_table_to_csv_missing_db_does_not_initialize_sqlite(tmp_path):
+    config = _sqlite_config(tmp_path)
+    target = tmp_path / "exports" / "missing.csv"
+
+    result = UpdateService(config).export_table_to_csv("daily_prices", target)
+
+    assert result["success"] is False
+    assert "匯出失敗" in result["message"]
+    assert not config.db_file.exists()
+    assert not target.exists()
+
+
+def test_export_table_to_csv_cancellation_preserves_existing_target(tmp_path, monkeypatch):
+    config = _sqlite_config(tmp_path)
+    target = tmp_path / "exports" / "daily.csv"
+    target.parent.mkdir(parents=True)
+    target.write_text("old-content\n", encoding="utf-8")
+
+    chunks = [
+        pd.DataFrame({"日期": ["20260529"], "證券代號": ["2330"]}),
+        pd.DataFrame({"日期": ["20260530"], "證券代號": ["0050"]}),
+    ]
+
+    def fake_iter_query(*_args, **_kwargs):
+        yield from chunks
+
+    monkeypatch.setattr(
+        "app_module.update_service.ReadOnlySQLiteManager.iter_query",
+        fake_iter_query,
+    )
+    callback_calls = 0
+
+    def cancel_after_first_chunk():
+        nonlocal callback_calls
+        callback_calls += 1
+        return callback_calls >= 3
+
+    result = UpdateService(config).export_table_to_csv(
+        "daily_prices",
+        target,
+        cancel_callback=cancel_after_first_chunk,
+    )
+
+    assert result["success"] is False
+    assert result["cancelled"] is True
+    assert result["target_preserved"] is True
+    assert target.read_text(encoding="utf-8") == "old-content\n"
+    assert not list(target.parent.glob(".daily.csv.*.part"))
+
+
+def test_export_table_to_csv_reports_determinate_progress(tmp_path):
+    from data_module.db_manager import DBManager
+
+    config = _sqlite_config(tmp_path)
+    db = DBManager(config)
+    db.write_dataframe(
+        "daily_prices",
+        pd.DataFrame(
+            {
+                "日期": ["20260529", "20260530"],
+                "證券代號": ["2330", "0050"],
+                "證券名稱": ["台積電", "元大台灣50"],
+                "收盤價": [900.0, 100.0],
+            }
+        ),
+        if_exists="append",
+    )
+    progress: list[tuple[str, int]] = []
+
+    result = UpdateService(config).export_table_to_csv(
+        "daily_prices",
+        tmp_path / "exports" / "daily.csv",
+        progress_callback=lambda message, percentage: progress.append((message, percentage)),
+    )
+
+    assert result["success"] is True
+    assert progress[0][1] == 0
+    assert progress[-1][1] == 100
+    assert any("預估 2 筆" in message for message, _ in progress)
+    assert any("已處理 2 筆" in message for message, _ in progress)
+    assert [percentage for _, percentage in progress] == sorted(
+        percentage for _, percentage in progress
+    )
+
+
+def test_merge_daily_data_cancellation_preserves_existing_output(tmp_path):
+    from scripts.merge_daily_data import merge_daily_data
+
+    config = _config(tmp_path)
+    original = pd.DataFrame(
+        {
+            "日期": ["20260617"],
+            "證券代號": ["2330"],
+            "證券名稱": ["台積電"],
+            "收盤價": [900.0],
+        }
+    )
+    original.to_csv(config.stock_data_file, index=False, encoding="utf-8-sig")
+    pd.DataFrame(
+        {
+            "證券代號": ["3207"],
+            "證券名稱": ["耀勝"],
+            "收盤價": [42.5],
+        }
+    ).to_csv(
+        config.daily_price_dir / "20260618.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    before = config.stock_data_file.read_bytes()
+    callback_calls = 0
+
+    def cancel_during_output():
+        nonlocal callback_calls
+        callback_calls += 1
+        return callback_calls >= 6
+
+    result = merge_daily_data(
+        force_all=True,
+        config=config,
+        cancel_callback=cancel_during_output,
+    )
+
+    assert result["success"] is False
+    assert result["cancelled"] is True
+    assert config.stock_data_file.read_bytes() == before
+    assert not list(config.stock_data_file.parent.glob(".stock_data_whole.csv.*.part"))
+
+
+def test_merge_daily_data_cancellation_stops_inside_file_read_batch(tmp_path, monkeypatch):
+    import importlib
+
+    merge_module = importlib.import_module("scripts.merge_daily_data")
+    config = _config(tmp_path)
+    source_file = config.daily_price_dir / "20260618.csv"
+    source_file.write_text("stub\n", encoding="utf-8")
+
+    chunk_values = [
+        pd.DataFrame(
+            {
+                "證券代號": ["2330"],
+                "證券名稱": ["台積電"],
+                "收盤價": [900.0],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "證券代號": ["0050"],
+                "證券名稱": ["元大台灣50"],
+                "收盤價": [100.0],
+            }
+        ),
+    ]
+
+    class FakeReader:
+        def __init__(self):
+            self._iterator = iter(chunk_values)
+            self.closed = False
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return next(self._iterator)
+
+        def close(self):
+            self.closed = True
+
+    reader = FakeReader()
+
+    def fake_read_csv(_path, **kwargs):
+        assert kwargs["chunksize"] == 50_000
+        return reader
+
+    monkeypatch.setattr(merge_module.pd, "read_csv", fake_read_csv)
+    callback_calls = 0
+
+    def cancel_on_second_batch():
+        nonlocal callback_calls
+        callback_calls += 1
+        return callback_calls >= 6
+
+    result = merge_module.merge_daily_data(
+        force_all=True,
+        config=config,
+        cancel_callback=cancel_on_second_batch,
+    )
+
+    assert result["success"] is False
+    assert result["cancelled"] is True
+    assert "讀取批次" in result["message"]
+    assert reader.closed is True
+    assert not config.stock_data_file.exists()
+    assert not list(config.stock_data_file.parent.glob(".stock_data_whole.csv.*.part"))
+
+
+def test_merge_daily_data_reports_file_and_chunk_progress(tmp_path):
+    from scripts.merge_daily_data import merge_daily_data
+
+    config = _config(tmp_path)
+    for date_key, stock_code in (("20260618", "2330"), ("20260619", "0050")):
+        pd.DataFrame(
+            {
+                "證券代號": [stock_code],
+                "證券名稱": ["測試股票"],
+                "收盤價": [100.0],
+            }
+        ).to_csv(
+            config.daily_price_dir / f"{date_key}.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
+    progress: list[tuple[str, int]] = []
+
+    result = merge_daily_data(
+        force_all=True,
+        config=config,
+        progress_callback=lambda message, percentage: progress.append((message, percentage)),
+    )
+
+    assert result["success"] is True
+    assert progress[0][1] == 0
+    assert progress[-1][1] == 100
+    assert any("讀取每日檔案" in message for message, _ in progress)
+    assert any("寫入每日整合檔" in message for message, _ in progress)
+    assert [percentage for _, percentage in progress] == sorted(
+        percentage for _, percentage in progress
+    )
+
+
+def test_merge_daily_data_returns_structured_no_op_when_all_csv_are_already_merged(tmp_path):
+    from scripts.merge_daily_data import merge_daily_data
+
+    config = _config(tmp_path)
+    existing = pd.DataFrame(
+        {
+            "日期": ["20260618"],
+            "證券代號": ["2330"],
+            "證券名稱": ["測試股票"],
+            "收盤價": [100.0],
+        }
+    )
+    existing.to_csv(config.stock_data_file, index=False, encoding="utf-8-sig")
+    # Raw 檔日期不晚於整合檔，增量模式應明確回報 no-op，而不是 None。
+    existing.drop(columns=["日期"]).to_csv(
+        config.daily_price_dir / "20260618.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    result = merge_daily_data(force_all=False, config=config)
+
+    assert result["success"] is True
+    assert result["cancelled"] is False
+    assert result["no_op"] is True
+    assert result["merged_files"] == 0
+    assert result["total_records"] == 1
+    assert "沒有新資料需要合併" in result["message"]
+    assert result["latest_date"] == "20260618"
+    assert not (config.meta_data_dir / "backup").exists()
 
 
 
@@ -539,6 +1089,84 @@ def test_update_tpex_daily_price_range_fails_when_current_tpex_date_is_missing(t
     assert result["skipped_dates"] == ["20260703"]
     assert result["failed_dates"] == ["20260706"]
     assert result["warnings"] == ["TPEX 每日股價缺少日期：20260706"]
+
+
+def test_update_tpex_daily_price_range_streams_date_progress(tmp_path):
+    config = _sqlite_config(tmp_path)
+
+    class TpexSource:
+        def update_for_date(self, date):
+            return SimpleNamespace(
+                success=True,
+                message="ok",
+                row_count=1,
+                skipped_count=0,
+                diagnostic_count=0,
+                source_date=date,
+                output_file=config.tpex_daily_price_dir / f"{date.replace('-', '')}.csv",
+            )
+
+    service = UpdateService(config)
+    service._create_tpex_daily_price_source = lambda: TpexSource()
+    progress = []
+
+    result = service.update_tpex_daily_price_range(
+        "2026-07-02",
+        "2026-07-03",
+        delay_seconds=0,
+        force_refresh=True,
+        sync_to_sqlite=False,
+        break_on_repeated_source_date=False,
+        progress_callback=lambda message, percentage: progress.append(
+            (message, percentage)
+        ),
+    )
+
+    assert result["success"] is True
+    assert ("TPEX API 下載 20260702（1/2）", 50) in progress
+    assert ("TPEX API 下載 20260703（2/2）", 100) in progress
+    assert progress[-1] == ("TPEX API 下載完成，正在整理日期結果", 100)
+
+
+def test_update_tpex_daily_price_range_stops_at_date_boundary_when_cancelled(tmp_path):
+    config = _sqlite_config(tmp_path)
+    calls = []
+
+    class TpexSource:
+        def update_for_date(self, date):
+            calls.append(date)
+            return SimpleNamespace(
+                success=True,
+                message="ok",
+                row_count=1,
+                skipped_count=0,
+                diagnostic_count=0,
+                source_date=date,
+                output_file=config.tpex_daily_price_dir / f"{date.replace('-', '')}.csv",
+            )
+
+    service = UpdateService(config)
+    service._create_tpex_daily_price_source = lambda: TpexSource()
+    cancellation = {"requested": False}
+
+    def progress(message, _percentage):
+        if "20260702" in message:
+            cancellation["requested"] = True
+
+    result = service.update_tpex_daily_price_range(
+        "2026-07-02",
+        "2026-07-03",
+        delay_seconds=0,
+        force_refresh=True,
+        sync_to_sqlite=False,
+        break_on_repeated_source_date=False,
+        progress_callback=progress,
+        cancel_callback=lambda: cancellation["requested"],
+    )
+
+    assert result["success"] is False
+    assert result["cancelled"] is True
+    assert calls == ["20260702"]
 
 
 def test_sync_market_and_industry_csv_to_sqlite_replaces_tables(tmp_path):
