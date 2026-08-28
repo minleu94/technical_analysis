@@ -214,7 +214,7 @@ alpha=`0` 與 broker disabled 仍不變，後續仍需 owner 的 future activati
 
 三份輸入會以 file hash、logical manifest hash 與 dataset identity 傳遞到 Direct、OOC store、training 與 OOS replay input；OOS consumer 會再次驗證 ledger／Rule history custody，缺件或 tamper 只會 blocked。沒有合法三項來源時，`formal_oos_allowed=false`、`production_alpha_bp=0`、`broker_order_allowed=false` 維持不變；不可用 cash-only ledger、research artifact、current snapshot 或 heartbeat 代替。
 
-可用 `scripts\inspect_ml_formal_input_readiness.py --output-root <OUTPUT_ROOT> --training-as-of <TRAINING_AS_OF> --output <READINESS_JSON>` 做唯讀 readiness check。它會實際呼叫三個 production validator，記錄每項 input 的 `missing`／`invalid`／`ready`、file hash 與原因，並在報告與 CLI 摘要提供 `ready_input_ratio`（例如 `0/3`）；即使三項皆 ready，也只表示可以進入受控 Direct/OOC refresh，不會直接解除 formal OOS、alpha 或 broker gate。當前 scheduled report 位於 `OUTPUT_ROOT\scheduled\ml_formal_input_readiness\latest.json`。報告另會提供 `prospective_output_observation`，以固定深度列出同一 output root 下已觀察到的 `clock-*` staging／prospective marker；這只是解釋「為何看得到檔案卻仍是 0/3」的診斷，不會自動 discovery、替換 owner-controlled `BALDR_ML_FORMAL_*` path，也不會把 prospective bytes 當成正式 input。此 CLI 在解析參數前設定 UTF-8 stdout/stderr，Windows 預設 CP1252 主控台也能正常使用 `--help`；指定的 readiness output 仍是明確路徑的受控 artifact，不會寫正式資料庫。
+可用 `scripts\inspect_ml_formal_input_readiness.py --output-root <OUTPUT_ROOT> --training-as-of <TRAINING_AS_OF> --output <READINESS_JSON>` 做唯讀 readiness check。`TRAINING_AS_OF` 必須是含時區的 ISO 8601 時間（例如 `2026-08-28T00:00:00+08:00`，不可只給 `2026-08-28`），避免 cutoff 時區歧義。它會實際呼叫三個 production validator，記錄每項 input 的 `missing`／`invalid`／`ready`、file hash 與原因，並在報告與 CLI 摘要提供 `ready_input_ratio`（例如 `0/3`）；即使三項皆 ready，也只表示可以進入受控 Direct/OOC refresh，不會直接解除 formal OOS、alpha 或 broker gate。當前 scheduled report 位於 `OUTPUT_ROOT\scheduled\ml_formal_input_readiness\latest.json`。報告另會提供 `prospective_output_observation`，以固定深度列出同一 output root 下已觀察到的 `clock-*` staging／prospective marker；這只是解釋「為何看得到檔案卻仍是 0/3」的診斷，不會自動 discovery、替換 owner-controlled `BALDR_ML_FORMAL_*` path，也不會把 prospective bytes 當成正式 input。此 CLI 在解析參數前設定 UTF-8 stdout/stderr，Windows 預設 CP1252 主控台也能正常使用 `--help`；指定的 readiness output 仍是明確路徑的受控 artifact，不會寫正式資料庫。
 
 Readiness inspector 也會在每項結果標示 `expected_schema_version`。若明確 path 指向
 `prospective-formal-*`、`*-prospective-*`、`consumer_mode=prospective_formal_simulation` 或
@@ -1037,7 +1037,7 @@ history；不可用舊 latest status 回填。
 .\.venv\Scripts\python.exe scripts\inspect_program_readiness.py `
   --data-root <DATA_ROOT> `
   --output-root <OUTPUT_ROOT> `
-  --training-as-of <TRAINING_AS_OF> `
+  --training-as-of 2026-08-28T00:00:00+08:00 `
   --format markdown
 ```
 
