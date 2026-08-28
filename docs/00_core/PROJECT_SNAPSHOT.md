@@ -24,6 +24,7 @@
 - 以最新 host P0 live audit、host runtime／scheduler、Direct storage preflight 與既有 performance artifacts 重算的 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_host_runtime_scheduler_storage_v3_p0_live_20260828.json`（status=`action_required`；SHA-256=`B125B1C653F6F6AE1F63E3D21B3F5D78D9DBF2C574AE43B5BA6CA3EABC1D9068`）；`runtime=ready`、`update_history=ready`，P0 machine evidence 已變為 12/13 observed，但仍不解除 owner／license／publication／Formal／Paper gates。
 - 載入上述新 host P0 transport evidence 與 license capture 後的最新 unified readiness 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_post_commit_host_license_refresh_20260828.json`（status=`action_required`；SHA-256=`733E5C7E38549A1D6C6FB9B4946B7090DD9324C23079B4FE43F87002224935B7`）；`runtime=ready`、`update_history=ready`，其餘 blockers 仍逐 lane 保留，不以 2/3 license capture 代替 owner acceptance。
 - P0 Data Update／Research Console 的比例欄位已改名為「解析通過率」並標示 `accepted/observed`；這是 payload row-conservation 的品質訊號，不是官方市場 universe／日期 coverage。沒有獨立來源分母與 missingness evidence 時，UI 不會再用「覆蓋率」暗示完整來源。
+- P0 license projection 對同一來源多個官方條款 URL 的混合結果改以 `capture_partial` 顯示，並在 Data Update／Research Console 呈現「部分取得，仍需複核」；已取得的 hash 與失敗原因都保留，但不改變 `license_accepted=false`、owner review 或 `downstream_eligibility=none`。
 
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
 

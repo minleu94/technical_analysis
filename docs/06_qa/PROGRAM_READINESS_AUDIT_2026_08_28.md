@@ -132,6 +132,8 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 2026-08-27 另以官方 MOPS EZSearch 抓取 2026-08-20～2026-08-27 的 availability-only artifact，得到 426 個 events／426 個 projections。sii、otc 的 8 個 query 有正常回應；rotc、pub 的 8 個 query 是官方 `status=fail` 零列回覆，現在已與真正的 timeout／網路／解析錯誤分開計數。此 artifact 仍只在 TEMP development root，沒有寫入正式 availability mapping、SQLite 或 Formal input；P0 的季度來源仍須 owner／reviewer 的 license、coverage 與使用範圍決議。
 
+最新 host license artifact 中，部分來源同時掛有兩個官方條款 URL；若一個 URL 成功取得 bounded response metadata／hash、另一個 URL 回傳 HTTP 或 transport error，Control Center 現在投影為 `capture_partial`（本次 host refresh 為 9 列），而非把整列誤標成 `capture_http_error`。Data Update／Research Console 會同時顯示「部分取得，仍需複核」與 machine token，並保留已取得 hash 及失敗原因；這只修正 evidence 可見性，`license_accepted=false`、13 項 owner decision 與 `downstream_eligibility=none` 均不變。其餘 4 列為 `captured_candidate`，三個唯一 target 的實際 capture 仍是 2/3，TPEx 條款 endpoint 為 HTTP 520。
+
 ### Data Update 排程註冊觀察
 
 沙盒帳號 `codexsandboxoffline` 以 `cmd /c scripts\\scheduled\\query_baldr_scheduled_tasks.cmd` 做唯讀查詢時曾得到 `13 of 13 task(s) missing or unavailable`；這只代表該 token 無法呼叫 `schtasks.exe`，沒有刪除或修改任何 task。另一方面，2026-08-28 quick runner 已由既有程序完成真實 `running`／terminal history（run=`20260828-29472`）。實際 Windows host-context 重新 query 已確認 13/13 task `Enabled`／`Ready`、action wiring 全部相符，因此目前缺的是下一個自然週期的 freshness／history 與 owner governance，不是 scheduler registration；不應在這個 host 重複註冊。
