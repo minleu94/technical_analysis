@@ -96,9 +96,8 @@ class StableConservativeExecutor(StrategyExecutor):
         # 配置技術指標
         df = self.configurator.configure_technical_indicators(df, config.get('technical', {}))
         
-        # 識別圖形模式
-        pattern_types = config.get('patterns', {}).get('selected', [])
-        self.configurator.identify_patterns(df, pattern_types)
+        # 圖形模式由 ScoringEngine 的 rolling detector 統一識別，
+        # 避免重做未使用的全歷史掃描。
         
         # 計算分數
         regime = config.get('regime', None)

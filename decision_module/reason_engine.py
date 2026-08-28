@@ -248,11 +248,155 @@ class ReasonEngine:
     def _generate_pattern_reasons(self, row: pd.Series, config: Dict) -> List[Dict]:
         """生成圖形模式理由"""
         reasons: List[Dict] = []
-        pattern_types = config.get('patterns', {}).get('selected', [])
-        
-        # TODO: 整合 PatternAnalyzer 獲取實際的模式信息
-        # 目前先返回空列表，等待 PatternAnalyzer 整合
-        
+        pattern_types = [
+            str(pattern).strip()
+            for pattern in config.get('patterns', {}).get('selected', [])
+            if pattern is not None and str(pattern).strip()
+        ]
+        if not pattern_types:
+            return reasons
+
+        # PatternScore 的 rolling detector 會把「已確認且仍在衰減窗內」的
+        # 名稱投影到 PatternNames。ReasonEngine 只消費這個已物化的證據，
+        # 不在單列資料上重新呼叫 PatternAnalyzer，避免 Explain 階段偷看
+        # 未來資料或把尚未確認的 end_idx 誤說成成立。
+        raw_pattern_values = []
+        for column in (
+            'PatternNames',
+            'pattern_names',
+            'DetectedPatterns',
+            'detected_patterns',
+            'Pattern',
+            'pattern',
+            'PatternType',
+            'pattern_type',
+        ):
+            if column in row.index:
+                raw_pattern_values.append(row.get(column))
+
+        def _flatten(value) -> List[str]:
+            if value is None:
+                return []
+            if isinstance(value, dict):
+                candidate = value.get('pattern') or value.get('name') or value.get('type')
+                return _flatten(candidate)
+            if isinstance(value, (list, tuple, set)):
+                flattened: List[str] = []
+                for item in value:
+                    flattened.extend(_flatten(item))
+                return flattened
+            if isinstance(value, str):
+                # 允許 CSV／legacy payload 使用常見分隔符，但不拆開
+                # 中文型態名稱本身。
+                values = value.replace(';', '、').replace(',', '、').replace('|', '、').split('、')
+                return [item.strip() for item in values if item.strip()]
+            try:
+                if pd.isna(value):
+                    return []
+            except (TypeError, ValueError):
+                return []
+            return [str(value).strip()]
+
+        observed_names: List[str] = []
+        for raw_value in raw_pattern_values:
+            for name in _flatten(raw_value):
+                if name and name not in observed_names:
+                    observed_names.append(name)
+
+        # 只顯示本次策略選取的型態；未知名稱不會被靜默解讀成已知型態。
+        names = [name for name in pattern_types if name in observed_names]
+
+        pattern_score = None
+        if 'PatternScore' in row.index:
+            try:
+                value = row.get('PatternScore')
+                if value is not None and not pd.isna(value):
+                    pattern_score = float(value)
+            except (TypeError, ValueError):
+                pattern_score = None
+
+        age_days = None
+        for column in ('PatternAgeDays', 'pattern_age_days'):
+            if column in row.index:
+                try:
+                    value = row.get(column)
+                    if value is not None and not pd.isna(value):
+                        age_days = int(value)
+                        if age_days >= 0:
+                            break
+                except (TypeError, ValueError):
+                    age_days = None
+
+        direction_map = {
+            'W底': 'bullish',
+            '頭肩底': 'bullish',
+            '雙底': 'bullish',
+            '圓底': 'bullish',
+            'V形反轉': 'bullish',
+            '頭肩頂': 'bearish',
+            '雙頂': 'bearish',
+            '圓頂': 'bearish',
+        }
+
+        # Score 是整體型態分數；若同時有多個型態，將偏離度平均分配，
+        # 只作為排序提示，不宣稱它是單一 analyzer 的獨立貢獻。
+        per_pattern_contrib = (
+            (pattern_score - 50.0) / len(names)
+            if names and pattern_score is not None
+            else 0.0
+        )
+        if names:
+            for name in names:
+                direction = direction_map.get(name, 'neutral')
+                direction_label = {
+                    'bullish': '偏多',
+                    'bearish': '偏空',
+                    'neutral': '中性',
+                }[direction]
+                if age_days is not None:
+                    evidence = (
+                        f'{name}已於收盤確認（{direction_label}），距確認日 {age_days} 個交易日；'
+                        '目前仍在 20 個交易日衰減觀察窗內'
+                    )
+                else:
+                    evidence = (
+                        f'{name}已於可用收盤資料確認（{direction_label}）；'
+                        'Explain 僅使用確認當日以前資料'
+                    )
+                reasons.append({
+                    'tag': name,
+                    'evidence': evidence,
+                    'score_contrib': per_pattern_contrib,
+                })
+        else:
+            # 有方向欄位但沒有型態名稱時，只能顯示保守的 generic evidence；
+            # 絕不從 PatternScore 反推一個具體圖形。
+            signal = None
+            for column in (
+                'ConfirmedPatternSignal',
+                'Pattern_Signal',
+                'PatternSignal',
+                'pattern_signal',
+            ):
+                if column in row.index:
+                    try:
+                        value = row.get(column)
+                        if value is not None and not pd.isna(value):
+                            signal = int(value)
+                            break
+                    except (TypeError, ValueError):
+                        signal = None
+            if signal in (-1, 1):
+                side = '偏多' if signal > 0 else '偏空'
+                reasons.append({
+                    'tag': f'圖形訊號{side}',
+                    'evidence': (
+                        f'Pattern_Signal={signal}（{side}）；'
+                        '資料未提供已確認型態名稱，未推斷具體模式'
+                    ),
+                    'score_contrib': (pattern_score - 50.0) if pattern_score is not None else 0.0,
+                })
+
         return reasons
     
     def _generate_volume_reasons(self, row: pd.Series, config: Dict) -> List[Dict]:

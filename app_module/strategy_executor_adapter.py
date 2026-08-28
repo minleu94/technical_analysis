@@ -64,9 +64,8 @@ class SimpleStrategyExecutor:
         # 1. 配置技術指標
         df = self.configurator.configure_technical_indicators(df, config.get('technical', {}))
         
-        # 2. 識別圖形模式
-        pattern_types = config.get('patterns', {}).get('selected', [])
-        patterns_found = self.configurator.identify_patterns(df, pattern_types)
+        # 2. 圖形模式由 ScoringEngine 的 rolling detector 統一識別；
+        # 不在這裡重做未使用的全歷史掃描，並由同一路徑產出確認 evidence。
         
         # 3. 計算分數
         regime = config.get('regime', None)

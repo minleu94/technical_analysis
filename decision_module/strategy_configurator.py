@@ -305,8 +305,9 @@ class StrategyConfigurator:
                 )
             
             # 2. 識別圖形模式
-            pattern_types = config.get('patterns', {}).get('selected', [])
-            patterns_found = self.identify_patterns(df, pattern_types)
+            # PatternScore 會以 rolling history 自行識別並保存確認 evidence；
+            # 此處不再先對完整資料集做一次未使用的全歷史掃描，避免重複
+            # 計算，也避免把尚未確認的 end_idx 誤當成推薦理由。
             
             # 3. 使用統一打分模型計算總分（含 Regime Match Factor）
             regime = config.get('regime', None)

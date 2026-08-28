@@ -56,10 +56,54 @@ class ScoringEngine:
         indicator_score = self.calculate_indicator_score(df_result, config, regime=regime)
         pattern_score = self.calculate_pattern_score(df_result, config)
         volume_score = self.calculate_volume_score(df_result, config)
-        
+
         df_result['IndicatorScore'] = indicator_score
         df_result['PatternScore'] = pattern_score
         df_result['VolumeScore'] = volume_score
+
+        # PatternScore 的 rolling detector 同步提供已確認型態的唯讀摘要。
+        # 以 attrs 傳遞可選 metadata，保持舊版／測試替身只回傳 Series 時的
+        # 相容性；沒有 evidence 時不猜測型態、不把分數反推成不存在的圖形。
+        pattern_evidence = getattr(pattern_score, 'attrs', {}).get('pattern_evidence')
+        if isinstance(pattern_evidence, (list, tuple)) and len(pattern_evidence) == len(df_result):
+            pattern_names: List[str] = []
+            pattern_signals: List[int] = []
+            pattern_ages: List[Optional[int]] = []
+            for entries in pattern_evidence:
+                unique_names: List[str] = []
+                signal = 0
+                min_age: Optional[int] = None
+                if isinstance(entries, (list, tuple)):
+                    for entry in entries:
+                        if not isinstance(entry, dict):
+                            continue
+                        name = str(entry.get('pattern') or '').strip()
+                        if name and name not in unique_names:
+                            unique_names.append(name)
+                        direction = entry.get('direction')
+                        if direction == 'bullish':
+                            signal += 1
+                        elif direction == 'bearish':
+                            signal -= 1
+                        age = entry.get('age')
+                        if isinstance(age, int) and age >= 0:
+                            min_age = age if min_age is None else min(min_age, age)
+                pattern_names.append('、'.join(unique_names))
+                pattern_signals.append(1 if signal > 0 else -1 if signal < 0 else 0)
+                pattern_ages.append(min_age)
+
+            df_result['PatternNames'] = pd.Series(pattern_names, index=df_result.index, dtype='string')
+            confirmed_signal = pd.Series(pattern_signals, index=df_result.index, dtype='int8')
+            # Pattern_Signal 是既有 SignalCombiner 慣例名稱；若輸入已帶有
+            # 該欄位，保留原始 combined-signal 語意，另以明確名稱提供本
+            # rolling score 的確認方向，避免悄悄改寫既有下游資料。
+            if 'Pattern_Signal' in df_result.columns:
+                df_result['ConfirmedPatternSignal'] = confirmed_signal
+            else:
+                df_result['Pattern_Signal'] = confirmed_signal
+            if 'PatternSignal' not in df_result.columns:
+                df_result['PatternSignal'] = confirmed_signal
+            df_result['PatternAgeDays'] = pd.Series(pattern_ages, index=df_result.index, dtype='Int64')
         
         # 3. 處理 Regime 調整
         if regime:
@@ -698,6 +742,12 @@ class ScoringEngine:
         
         n_bars = len(df)
         deviations = np.zeros(n_bars, dtype=float)
+        # 與分數同步保存「已確認且仍在 20 日衰減窗內」的型態證據。
+        # 這個 evidence 只會在 confirm_idx 當日及其後建立，絕不把 end_idx
+        # 當成可交易／可解釋的確認日，避免 Explain 文案重新引入未來函數。
+        evidence_by_time: List[List[Dict[str, object]]] = [
+            [] for _ in range(n_bars)
+        ]
         
         # 滾動歷史識別：在每一個時間點 t，我們只使用截止到 t 的資料子集，徹底杜絕圖形識別本身使用未來資料
         for t in range(n_bars):
@@ -782,13 +832,53 @@ class ScoringEngine:
                         
                         # 如果確認點剛好是當前時間點 t，說明該圖形在今天確認成立
                         if confirm_idx == t:
+                            pattern_name = pattern_type
+                            direction = None
+                            start_idx = None
+                            if isinstance(pos, dict):
+                                # 以 requested pattern_type 作為顯示名稱；部分
+                                # 舊 analyzer（例如反轉頭肩）回傳的 raw pattern
+                                # 名稱可能仍是相反型態，不能直接拿來誤導使用者。
+                                direction = pos.get('direction')
+                                start_idx = pos.get('start_idx')
+                            canonical_direction = {
+                                'W底': 'bullish',
+                                '頭肩底': 'bullish',
+                                '雙底': 'bullish',
+                                '圓底': 'bullish',
+                                'V形反轉': 'bullish',
+                                '頭肩頂': 'bearish',
+                                '雙頂': 'bearish',
+                                '圓頂': 'bearish',
+                            }.get(pattern_type)
+                            if canonical_direction is not None:
+                                direction = canonical_direction
+                            elif direction not in {'bullish', 'bearish', 'neutral'}:
+                                direction = 'neutral'
+
                             for k in range(20):
                                 future_t = t + k
                                 if future_t < n_bars:
                                     factor = 1.0 - (k / 20.0)
                                     deviations[future_t] += dev_contrib * factor
+                                    evidence_by_time[future_t].append(
+                                        {
+                                            'pattern': pattern_name,
+                                            'direction': direction,
+                                            'start_idx': start_idx,
+                                            'end_idx': end_idx,
+                                            'confirm_idx': t,
+                                            'age': k,
+                                        }
+                                    )
                                 
-        return pd.Series(50.0 + deviations, index=df.index).clip(0, 100)
+        result = pd.Series(50.0 + deviations, index=df.index).clip(0, 100)
+        # Series.attrs 不會改變既有 score API；calculate_total_score 會把
+        # 這份只讀 metadata 投影成簡單欄位，供 ReasonEngine / UI 使用。
+        result.attrs['pattern_evidence'] = tuple(
+            tuple(dict(item) for item in entries) for entries in evidence_by_time
+        )
+        return result
     
     def calculate_volume_score(self, df: pd.DataFrame, config: Dict) -> pd.Series:
         """計算成交量分數（0-100）
@@ -852,15 +942,16 @@ class ScoringEngine:
         return score.clip(0, 100)
     
     def generate_reasons(self, df: pd.DataFrame, config: Dict) -> List[Dict]:
-        """生成推薦理由
-        
-        Returns:
-            List[Dict]: 每個理由包含 {tag, evidence, score_contrib}
+        """為資料框最後一筆已完成分數的資料生成推薦理由。
+
+        Recommendation flow 的 explain context 是決策日最後一列；這個
+        compatibility API 因此委派給共用 ``ReasonEngine``，而不在 scoring
+        layer 複製另一套規則。空資料仍回傳空列表，保留舊呼叫端契約。
         """
-        reasons_list: List[Dict] = []
-        
-        # 這裡需要根據實際的分數計算來生成理由
-        # TODO: 實現詳細的理由生成邏輯
-        
-        return reasons_list
+        if df.empty:
+            return []
+
+        from decision_module.reason_engine import ReasonEngine
+
+        return ReasonEngine().generate_reasons(df.iloc[-1], config)
 

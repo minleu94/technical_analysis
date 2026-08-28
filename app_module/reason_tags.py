@@ -44,6 +44,22 @@ class ReasonTagGenerator:
         '突破20日新高': 'breakout_20d_high',
         '突破60日新高': 'breakout_60d_high',
         '創新高': 'new_high',
+
+        # 圖形模式（只在 PatternScore 已確認的 evidence 存在時產生）
+        'W底': 'pattern_w_bottom',
+        '頭肩底': 'pattern_head_shoulders_bottom',
+        '雙底': 'pattern_double_bottom',
+        '圓底': 'pattern_rounding_bottom',
+        'V形反轉': 'pattern_v_reversal',
+        '頭肩頂': 'pattern_head_shoulders_top',
+        '雙頂': 'pattern_double_top',
+        '圓頂': 'pattern_rounding_top',
+        '三角形': 'pattern_triangle',
+        '旗形': 'pattern_flag',
+        '矩形': 'pattern_rectangle',
+        '楔形': 'pattern_wedge',
+        '圖形訊號偏多': 'pattern_signal_bullish',
+        '圖形訊號偏空': 'pattern_signal_bearish',
         
         # 產業相關
         '產業強勢': 'industry_strength',
