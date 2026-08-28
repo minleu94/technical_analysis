@@ -39,6 +39,7 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --technical-write-performance-baseline <TECHNICAL_WRITE_BASELINE_JSON> `
   --technical-worker-acceptance-baseline <TECHNICAL_WORKER_ACCEPTANCE_JSON> `
   --broker-performance-baseline <BROKER_BASELINE_JSON> `
+  --ml-direct-chain-status <ML_DIRECT_CHAIN_STATUS_JSON> `
   --runtime-write-probe <RUNTIME_WRITE_PROBE_JSON> `
   --format markdown
 ```
@@ -135,18 +136,18 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 `status=passed`、`run_id=20260828-29472`、`step_count=12`；同一目錄的
 `history.jsonl` 已有 `running` 與 `passed` 兩筆 record。重新執行唯讀
 `scripts\\qa_validate_update_tab.py` 得到 `23 passed / 0 failed / 4 skipped`。
-嘗試手動執行 `data_freshness_probe.py` 時，對正式
-`output\\scheduled\\data_freshness\\latest_status.json` 的寫入被
+沙盒帳號嘗試手動執行 `data_freshness_probe.py` 時，對正式
+`output\\scheduled\\data_freshness\\latest_status.json` 的寫入曾被
 `PermissionError` 拒絕；現在 probe 會以結構化 `status=failed`、
-`status_artifact_write_failed:PermissionError` 回報，不再留下未處理 traceback；正式 freshness
-檔仍停在 `2026-08-27`，這是正式 output ACL 問題，不是把核心 SQLite 判定成落後。另以明確 TEMP status／log path 完成一次
-read-only probe，結果為 `status=passed`、daily／technical latest=`2026-08-28`，
-status artifact SHA-256=`3A077E2D2775F02E4BE6A4016EA5DEB6A8B7B1B5E784303699CE64760BF6D66C`；
-它只證明資料與 probe 路徑可運作，不會替正式 freshness 檔或排程 history。程式端已補上
-`BALDR_FRESHNESS_STATUS_PATH`／`BALDR_FRESHNESS_LOG_PATH` 的受控覆寫；owner 可在
-修正 ACL 前先把 read-only 產物導到已核准可寫路徑，並在 UI 設定
-`DATA_FRESHNESS_STATUS_ARTIFACT` 讀取同一份明確檔案。這仍需要 owner 更新 Task
-Scheduler 執行環境，不能由 readiness inspector 自動套用。
+`status_artifact_write_failed:PermissionError` 回報，不再留下未處理 traceback。這個拒絕與
+`config.log`／Research Registry 的早期拒絕都已由 host-context existing-handle recheck 證明是
+沙盒 token 觀測限制；正式 freshness 檔目前仍停在 `2026-08-27`，尚待 host scheduler 下一個
+自然週期產生新的 freshness／history。另以明確 TEMP status／log path 完成一次 read-only probe，
+結果為 `status=passed`、daily／technical latest=`2026-08-28`，status artifact
+SHA-256=`3A077E2D2775F02E4BE6A4016EA5DEB6A8B7B1B5E784303699CE64760BF6D66C`；它只證明資料與
+probe 路徑可運作，不會替正式 freshness 檔或排程 history。程式端已補上
+`BALDR_FRESHNESS_STATUS_PATH`／`BALDR_FRESHNESS_LOG_PATH` 的受控覆寫；這些路徑與排程
+治理仍由 owner 管理，readiness inspector 不會自動套用。
 
 ### 2026-08-28 月營收更新缺口與候選補齊
 
@@ -230,7 +231,7 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - 最新全量回歸（availability merge／broker real HTTP canary 與 snapshot 選檔修正後）：`3683 passed / 1 skipped / 26 warnings`（`540.83s`；未指定 JUnit 輸出）；這只更新工程回歸證據，不會把 production scheduler、正式 ACL、owner decision 或資料 gate 誤標成 ready。
 - 新增 availability candidate merge workflow 後的月營收候選唯讀預演：既有 mapping=`1,832`、candidate=`1,851`、added=`1,851`、conflict=`0`、merged=`3,683`；正式 target／SQLite 均未寫入。新增真實 broker HTTP canary 後重算 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_broker_canary_20260828.json`（status=`action_required`；SHA-256=`F7B644EC597629E61D17431EF497C2E251F165DF4827DB1E5B0CF8178350FABB`），performance blocker 僅剩 `technical_production_single_writer_canary_not_completed`。
 - technical canary guarded entry 的唯讀 preview 後再次重算 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_technical_canary_preview_20260828.json`（status=`action_required`；SHA-256=`BEEFAA4E47E2C02D60CDB30CC334093E78B318EED684B681B317081541CAD825`）；所有既有 performance artifacts 與 preview 均可讀，performance blocker 精確保留 `technical_production_single_writer_canary_not_completed`，沒有把 preview 當正式 write proof。
-- continuation artifact 重新載入 P0／weekly sidecar／freshness／performance／staging runtime probe／scheduler query：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_continuation_v2_20260828.json`（status=`action_required`；SHA-256=`8A6BF41B89E1E53D7E5B99D33899CE9E7E716F9C7DC131AFEC89AF987CD63DE5`）。performance blocker 仍只有 `technical_production_single_writer_canary_not_completed`；runtime 仍為兩個正式 write-handle `PermissionError`，Update History 仍為 `scheduled_tasks_missing_or_unavailable:0/13`，沒有因 staging／preview 而誤升格。
+- continuation artifact 重新載入 P0／weekly sidecar／freshness／performance／staging runtime probe／scheduler query：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_continuation_v2_20260828.json`（status=`action_required`；SHA-256=`8A6BF41B89E1E53D7E5B99D33899CE9E7E716F9C7DC131AFEC89AF987CD63DE5`）。這份 artifact 保留早期沙盒觀察：runtime 兩個正式 write-handle `PermissionError`、Update History `scheduled_tasks_missing_or_unavailable:0/13`；不作目前 host 狀態依據。
 - P0 license／terms no-network preview：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence\preview_20260828.json`（3 個 allowlisted URL、`capture_executed=false`；SHA-256=`07C6DC0ECAC4E19AEEF523A5B649DBB4AE1A959F944954FC770A9B43CE0255D2`）；confirmed candidate capture 因目前 host `WinError 10013` 三個 target 均為 `transport_error`，未保存頁面全文、不改正式資料。
 - freshness probe／CMD／PowerShell wrapper post-change regression：`3665 passed / 1 skipped`；`run_daily_data_freshness_check.ps1` 與正式 Task Scheduler 使用的 `.cmd` 都已以正式資料唯讀＋TEMP status/log 實際執行 `status=passed`、daily／technical latest=`20260828`，並共用同一個 canonical probe。
 - HEAD final unified readiness（canonical freshness wrapper 修正後重新盤點）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_head_final.json`（status=`action_required`；SHA-256=`AEA56956A13AE25B271CFE56D59905180C3412743EA063FAC324A763C5A29039`）；七個 lane 的 blocker 維持原樣，表示 wrapper 修正只改善錯誤可觀測性，沒有越過任何治理／正式環境 gate。
@@ -240,7 +241,7 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - 2026-08-28 Formal input readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_formal_input_readiness_20260828.json`（`0/3`、`formal_oos_allowed=false`；SHA-256=`F9C896F2D2196F0BFAB18E9C9A06B2CE08618C5F83BC6E5EFCD4B8AA0F7AF960`）
 - Formal candidate inventory（明確指定正式 output、只讀 bounded manifest，無升格）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_formal_candidate_inventory_20260828\inventory.json`（511 parsed／1 invalid／truncated at 512；31 research-only、7 prospective-only、0 formal schema candidate；SHA-256=`700B5E61A1C537E23166E51A0C6F98F493F6D44B7145DC524C800267CD3BC7D8`）
 - ML Formal readiness（既有 baseline readout）：`C:\Users\archi\AppData\Local\Temp\ml-formal-input-readiness-20260828.json`
-- Runtime readiness：2026-08-28T06:32:33Z 以 `scripts/inspect_runtime_environment_readiness.py --format json` 在一般 host context 重跑；overall=`ready`、`write_probe=os.access_plus_existing_handle`、diagnostics=`[]`。同日 06:58:30Z 另在 OS TEMP 的明確 staging 目錄執行 `--confirm-write-probe`：`file_write_succeeded=true`、`sqlite_write_succeeded=true`、`registry_transaction_succeeded=true`、`cleanup_succeeded=true`；正式 Registry 仍未被寫入。續測（16:58:19Z）對正式路徑仍為 `overall=attention`，`config.log` 與 `research_runs.db` 的既有 write handle 均回 `PermissionError`；artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\runtime_environment_readiness_continuation_20260828.json`（SHA-256=`54BBE7528B622EF3B98183C92232A241874EBAB7563C5BF4D02ADB4537A32BC3`）。
+- Runtime readiness：早期沙盒 artifact `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\runtime_environment_readiness_continuation_20260828.json`（SHA-256=`54BBE7528B622EF3B98183C92232A241874EBAB7563C5BF4D02ADB4537A32BC3`）仍保留 `PermissionError` 觀察；目前以實際 host context 重跑的 artifact 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\runtime_environment_host_refresh_20260828.json`（SHA-256=`6105975CE708B799738553450694750488210D02782A3A2004F1F7D2C50227C2`），overall=`ready`、`write_probe=os.access_plus_existing_handle`、diagnostics=`[]`。另在 OS TEMP staging 執行 `--confirm-write-probe`：`file_write_succeeded=true`、`sqlite_write_succeeded=true`、`registry_transaction_succeeded=true`、`cleanup_succeeded=true`；正式 Registry 仍未被寫入。
 - QA Equal Weight preview：`D:\Min\Python\Project\FA_Data\output\qa\readiness_refresh_20260828\paper_equal_weight_preview.sqlite`
 - Paper Equal Weight output：`D:\Min\Python\Project\FA_Data\output\paper_portfolio\paper_equal_weight_benchmark.sqlite`（21 筆；research-only benchmark，不是成交帳）
 - Equal Weight workflow service：`app_module/paper_equal_weight_benchmark_builder.py`；Portfolio UI 入口為持倉管理 > Paper Portfolio >「預覽／建立 Equal Weight」
@@ -249,7 +250,7 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - Technical worker recovery／取消與 parent single-writer integration staging：`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_worker_recovery_20260828.json`（SHA-256=`983FDEB4C1829137857F49513463BA48579910BF5A3882B73260F096F0454A8D`）；real calculator 2/2 stock groups、crash=`BrokenProcessPool` 後 recovery 120 rows、queued cancellation 6 筆、parent 依序寫 240 rows CSV／SQLite、SQLite lock/retry 通過、all checks 通過；`production_single_writer_integration.status=staging_measured`、scope=`isolated_staging`，production worker 仍關閉
 - Technical production canary guarded entry：`scripts/qa_technical_indicator_production_canary.py`；預設只讀 production state，要求 owner token、無並行 writer acknowledgement 與 explicit confirm，確認後才會先建立 SQLite online backup／單股 CSV backup，再執行 bounded parent-only writer；驗證失敗會嘗試 rollback。2026-08-28 尚未執行 production canary，因此 readiness 仍保留 `technical_production_single_writer_canary_not_completed`。
 - 2026-08-28 已完成 production `2330` 的唯讀 canary preview；SQLite `quick_check=ok`、daily latest／technical latest 均為 `2026-08-28`，沒有建立 backup 或寫入 production。preview artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_production_canary_preview_20260828.json`（SHA-256=`EBCC4308C00DDF743B2AEF2546737ECA19019E87819EBFAD0DF0506AA7B7FB23`）；這不能解除正式 canary blocker。續測仍為 `confirmation_required`，再次確認 `production_write_attempted=false`、`writes_allowed=false`；artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_production_canary_preview_continuation_20260828.json`（SHA-256=`7A80085F52B7176212EAA5B9958F465431E01316BA7E84E7BDFD32A9065B248F`）。
-- Scheduler registration 續測：`scripts/inspect_scheduled_task_registration.py` 仍觀察到 `available=0/13`、`all_available=false`、`query_only=true`、`side_effect_free=true`；每個 task 均為 `missing_or_unavailable`，首筆錯誤為 `ERROR: The system cannot find the path specified.`，沒有建立或修改 task。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_continuation_20260828.json`（SHA-256=`EC768C8ADAEE6AF165054B233738AFC6964B9C4A776AC33F0EB6FC13D2971519`）。
+- Scheduler registration 續測：早期沙盒 artifact `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_continuation_20260828.json`（SHA-256=`EC768C8ADAEE6AF165054B233738AFC6964B9C4A776AC33F0EB6FC13D2971519`）仍保留 `available=0/13` 與 `ERROR: The system cannot find the path specified.` 的 token 觀察；它沒有建立或修改任何 task，不作目前 host 狀態依據。
 - Host-context Scheduler recheck：`available=13/13`、`configuration_ready=true`、`all_actions_observed=true`、`all_actions_match=true`；13 個 task 均為 `Enabled`／`Ready`，`Logon Mode=Interactive only`，最近 query 顯示 `baldr-ml-direct-chain-maintainer` 的 `Last Result=1`，其餘 task 為 `0`。這只證明註冊／action wiring 與互動式帳號下的執行觀測，不解除 `production_scheduler_allowed=false` 或 Formal／Evidence gate。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_host_20260828.json`（SHA-256=`14C1F4C59611231961F62105C4608AE3FDBA4A8BE2D48ABA3A5E70281E8C9845`）。
 - Direct/OOC 維護失敗的 host evidence：`latest_status.json` 的 `returncode=1` 對應 maintainer log 的 `OSError: [Errno 28] No space left on device`；當時 D 槽可用約 `6.11 GiB`，而現行 62-feature raw shard 估算的 Direct annual peak 約 `14.97 GiB`（尚未計 rollback／其他輸出）。`release_v4` 目前約 `594.21 GiB`，其中 `ml_pit_year_shards` 約 `334.29 GiB`、Direct numeric runs 約 `154.06 GiB`、OOC training runs 約 `99.84 GiB`。這是容量／保留策略 blocker，不是 SQLite source write 或 Formal input 成功；已新增 scheduled wrapper 的唯讀 20 GiB headroom preflight，低於門檻會 `blocked_insufficient_storage` 並停止本次啟動。
 - Host preflight 實測（2026-08-28 18:55 UTC）在正式 D 槽讀取 `free_bytes=6,564,593,664`、門檻 `21,474,836,480`，結果為 `blocked_insufficient_storage`；status 只寫入 TEMP，沒有啟動 Direct/OOC 或改寫正式 SQLite。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_direct_storage_preflight_host_20260828.json`，SHA-256=`1566E68C38B2947F22A88A29235D55E0C8998C4E685273A6DD47BD54786CD18E`。
@@ -257,9 +258,9 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 
 ## Scheduler wrapper／action wiring 續測
 
-同一檢查器明確指定 repo root 後，13/13 本機 .cmd wrapper 均為 present；目前 task 全部不可用，因此 Task To Run action 尚未觀測（action_unobserved=13），沒有 false mismatch。configuration_ready=false 的主因仍是實際 task registration available=0/13。artifact=C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json（SHA-256=4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7）。這仍是 query-only 證據，不註冊、不修改 task；若 task 恢復但無法觀測 action，unified readiness 會保留 scheduled_task_action_unobserved；若 wrapper 遺失或 action 指錯，則分別保留 scheduled_task_wrapper_missing_or_unreadable／scheduled_task_action_mismatch。
+早期沙盒 wrapper manifest `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json`（SHA-256=`4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7`）仍保留 13/13 wrapper present，但 task query 不可用的 token 觀察。實際 host-context recheck 已確認 13/13 task `Enabled`／`Ready`、`Task To Run` 全部觀測且 action 相符；這些 query-only 檢查沒有註冊或修改 task。
 
-- 重新載入上述 wrapper manifest 的 unified readiness artifact 為 C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_scheduler_wiring_20260828_v2.json（status=action_required；SHA-256=BE3E6BDE5E603BD1B2D3C67F8B1BC30C85335D6A87F5FA9D2628AD04FABAD32B）。runtime staging probe 使用正確的 transaction artifact 後只保留正式 config.log／Research Registry 的兩個 PermissionError；Update History 只保留 scheduled_tasks_missing_or_unavailable:0/13，未把 action_unobserved 誤算成 mismatch。
+- 目前 host-context unified readiness artifact 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_host_runtime_scheduler_20260828.json`（status=`action_required`；SHA-256=`7C3612120555FF28FFC9A45091E925B6E25D2DB2A310A53E1F50D9FB713EFF87`），Update History 已為 `ready`；整體仍因 P0／Evidence／Paper／Formal／performance governance 而未 closeout。另以新 `--ml-direct-chain-status` 載入 host preflight artifact 重算 performance projection：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_performance_storage_projection_20260828.json`（status=`action_required`；performance blocker=`direct_chain_storage_preflight_blocked`、`technical_production_single_writer_canary_not_completed`、`broker_real_http_canary_not_completed`；SHA-256=`6239DF7E126905DA6AC586171D1CB378396353F632DDA6F3CD2ECAB07F4DBAFF`）。
 
 ## 安全邊界
 

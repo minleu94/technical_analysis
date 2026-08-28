@@ -19,11 +19,12 @@
 
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
 
-- Scheduler wiring 唯讀續測已把 task 未註冊與 wrapper/action 形狀錯誤拆開：13/13 預期 repository .cmd wrapper 均存在；目前 task 全部不可用，Task To Run 尚未觀測（action_unobserved=13），沒有 false mismatch。現在 available=0/13，故 configuration_ready=false 的主因仍是 host 尚未完成 task registration。artifact=C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json，SHA-256=4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7。檢查器為 query-only，不會註冊或修改 task；unified readiness 會保留 action unobserved、wrapper missing／action mismatch 的獨立 blocker。
+- Scheduler wiring 的早期沙盒續測已把 task 未註冊與 wrapper/action 形狀錯誤拆開：13/13 預期 repository `.cmd` wrapper 均存在，但該 token 觀察到 `available=0/13`、Task To Run 未觀測（`action_unobserved=13`）。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json`，SHA-256=`4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7`；它是 query-only，不會註冊或修改 task，也不作目前 host 狀態依據。
 - 2026-08-28 18:45 UTC host-context Scheduler recheck 已確認 13/13 task `available`、wrapper present、action observed 且全部相符，`configuration_ready=true`；先前 `available=0/13` 是沙盒 token 無法呼叫 `schtasks.exe` 的觀測，不是目前 host 的註冊狀態。`baldr-ml-direct-chain-maintainer` 最近 `Last Result=1` 仍需單獨診斷；`Logon Mode=Interactive only` 與 `production_scheduler_allowed=false` 不變。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_host_20260828.json`，SHA-256=`14C1F4C59611231961F62105C4608AE3FDBA4A8BE2D48ABA3A5E70281E8C9845`。
 - Direct/OOC scheduler 的 `Last Result=1` 已由 host log 定位為 `OSError: [Errno 28] No space left on device`：D 槽剩餘約 `6.11 GiB`，現行 62-feature raw shard 的 Direct annual peak 保守估算約 `14.97 GiB`，`release_v4` 約 `594.21 GiB`。新增 `run_ml_direct_chain_maintenance.py` 唯讀 20 GiB filesystem headroom preflight；低於門檻只寫 `blocked_insufficient_storage`、不啟動 worker、不進 retry loop、不刪既有 run。這不解除 Formal input、promotion、scheduler governance 或 broker gate。
 - 2026-08-28 18:55 UTC host preflight 實測正式 D 槽 `free_bytes=6,564,593,664`（約 6.11 GiB）低於 `minimum_free_space_bytes=21,474,836,480`（20 GiB），安全回報 `blocked_insufficient_storage`；status 寫於 TEMP，未啟動 Direct/OOC、未改寫正式 SQLite。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_direct_storage_preflight_host_20260828.json`，SHA-256=`1566E68C38B2947F22A88A29235D55E0C8998C4E685273A6DD47BD54786CD18E`。
-- 使用該 manifest 重算的 unified readiness 為 C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_scheduler_wiring_20260828_v2.json（status=action_required；SHA-256=BE3E6BDE5E603BD1B2D3C67F8B1BC30C85335D6A87F5FA9D2628AD04FABAD32B）。runtime staging transaction 使用正確 artifact 後通過，正式 ACL 仍只留下兩個 PermissionError；Update History 仍是 task 0/13，沒有把未觀測 action 算成 mismatch。
+- 目前 host-context recheck 已確認 13/13 task `Enabled`／`Ready`、`Task To Run` 全部觀測且 action 相符；`Logon Mode=Interactive only` 與 `production_scheduler_allowed=false` 不變。以 host scheduler／runtime artifact 重算的 unified readiness 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_host_runtime_scheduler_20260828.json`（status=`action_required`；SHA-256=`7C3612120555FF28FFC9A45091E925B6E25D2DB2A310A53E1F50D9FB713EFF87`），Update History 已為 `ready`。
+- 新增 `--ml-direct-chain-status` 唯讀輸入後，readiness performance lane 也會投影 Direct/OOC 的容量阻塞，而不是只留在排程 status；以 host preflight artifact 重算的 projection 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_performance_storage_projection_20260828.json`（performance blocker=`direct_chain_storage_preflight_blocked`、`technical_production_single_writer_canary_not_completed`、`broker_real_http_canary_not_completed`；SHA-256=`6239DF7E126905DA6AC586171D1CB378396353F632DDA6F3CD2ECAB07F4DBAFF`）。
 
 ## 2026-08-28 Data Update detail read model（current engineering）
 
@@ -58,13 +59,13 @@
 - `UpdateView` 現在會把固定出口 `output/scheduled/data_update_quick/latest_status.json`、`output/scheduled/data_freshness/latest_status.json` 與 `meta_data/tpex_full_refresh_status.json` 投影成唯讀 `data-update-timeline.v1`；可見最後成功完成時間、run、目標資料日、每個步驟結果與 freshness 狀態，不再只看 SQLite 筆數猜測更新是否完成。
 - 時間軸只讀取明確路徑，檔案缺漏、格式錯誤、失敗、執行中、過期或未設定均分開顯示；不沿用上一輪步驟列，不掃描其他 `latest_status`，不啟動網路或寫入。預設可用環境變數 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT`、`TPEX_REFRESH_STATUS_ARTIFACT` 覆寫單一路徑。
 - 2026-08-28 由既有 quick runner 完成真實 run=`20260828-29472`、目標資料日=`2026-08-28`、12/12 步驟通過；每日／大盤／產業／券商／技術指標 SQLite 均已追上 `2026-08-28`。這是資料更新完成證據，不等於 Paper fills、P0 acceptance 或 Formal credit。
-- 同一 run 已在 `data-update-status-history.v1` JSONL 保存 `running` 與 terminal=`passed` 兩筆 record；歷史 producer／UI projection 不會回放舊 latest status。正式 `data_freshness/latest_status.json` 仍停在 `2026-08-27`，但隔離 TEMP 的唯讀 freshness probe 已觀察到 `status=passed`、SQLite daily／technical 最新日均為 `2026-08-28`；這份 probe 不覆寫正式 output，且 Windows Task Scheduler inspector 仍為 `0/13`，所以仍需 owner 修正註冊／權限後觀察 downstream live refresh。
+- 同一 run 已在 `data-update-status-history.v1` JSONL 保存 `running` 與 terminal=`passed` 兩筆 record；歷史 producer／UI projection 不會回放舊 latest status。正式 `data_freshness/latest_status.json` 仍停在 `2026-08-27`，但隔離 TEMP 的唯讀 freshness probe 已觀察到 `status=passed`、SQLite daily／technical 最新日均為 `2026-08-28`；這份 probe 不覆寫正式 output。host-context Scheduler inspector 已確認 13/13 task 註冊與 action wiring，下一步是等下一個自然週期觀察 freshness／history live refresh，而不是重複註冊 task。
 
 ## 2026-08-28 Data Update real refresh（current evidence）
 
 - `scripts/qa_validate_update_tab.py` 在 quick runner 完成後為 `23 passed / 0 failed / 4 skipped`；目前核心資料狀態為 daily `5,284,040`、market `3,071`、industry `210,775`、broker `973,609`、technical `5,228,274`，均為 `2026-08-28`。
 - technical step 實際處理 `2,153` 檔、成功 `1,960`、失敗 `0`；另有 `8` 檔資料不足，已列入 terminal diagnostics，不以缺資料假標成功。
-- 可見性缺口已縮小為 host／排程層：`data_freshness` status 仍需在可寫正式 output 重新產生，13 個 baldr task 仍未註冊；readiness 不再把這些問題誤判成核心市場資料不存在。
+- 可見性缺口已縮小為自然週期與治理層：正式 `data_freshness` status 尚未更新至最新 run，host scheduler 註冊與 action wiring 已確認；readiness 不再把這些問題誤判成核心市場資料不存在。
 
 ## 2026-08-28 P0 owner packet renderer（current engineering）
 

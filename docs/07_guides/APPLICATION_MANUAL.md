@@ -1136,7 +1136,11 @@ history；不可用舊 latest status 回填。
 
 需要載入已存在的證據時，再加上 `--p0-audit-json`、`--p0-license-evidence-json`、
 `--approved-weekly-history-projection`、`--technical-performance-baseline` 與
-`--broker-performance-baseline`。程式會固定顯示 P0、Evidence、Paper、Formal/ML、
+`--broker-performance-baseline`。若要把 Direct/OOC 維護的容量結果一起納入
+performance lane，另加 `--ml-direct-chain-status <ML_DIRECT_CHAIN_STATUS_JSON>`；
+當 status 是 `blocked_insufficient_storage` 時，報告會保留
+`direct_chain_storage_preflight_blocked`，只提示容量／保留策略，不啟動 worker。
+程式會固定顯示 P0、Evidence、Paper、Formal/ML、
 Runtime、Update history、Performance 七個 lane 以及依序下一步；未提供的 artifact
 會顯示 `waiting_for_external_input` 或 `action_required`，不會自行搜尋、回放、補歷史
 或改接 prospective path。若要把獨立的 `data_freshness/latest_status.json` 一起投影，
@@ -3152,6 +3156,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：月營收狀態卡新增明確 `MONTHLY_REVENUE_SNAPSHOT_CANDIDATE` 唯讀入口；同一期 snapshot 也會顯示抓取日，外部候選遺失／命名無效時保留缺漏與診斷，不再靜默退回另一份 snapshot。候選仍不會自動寫入正式 SQLite 或 availability mapping。
 - 2026-08-28：Direct/OOC scheduled wrapper 新增唯讀 filesystem headroom preflight；輸出所在磁碟低於預設 20 GiB 時只寫 `blocked_insufficient_storage` 與 `storage_preflight`，不啟動重建、不進 retry loop、不刪除既有 run，避免 `Errno 28 No space left on device` 反覆消耗容量。這不改 Formal／promotion／broker gate。
 - 2026-08-28：Runtime 排程 read model 新增 `ML Direct/OOC 維護` 安全工作；`blocked_insufficient_storage` 會以「需要注意」與明確容量 diagnostic 顯示，並保留 raw status／source path 供排錯。
+- 2026-08-28：整體 readiness 盤點新增 `--ml-direct-chain-status`；載入 Direct/OOC maintainer status 後，performance lane 會明確投影 `direct_chain_storage_preflight_blocked`／磁碟不足診斷與下一步，仍維持唯讀、不啟動 worker、不刪除歷史 run。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
