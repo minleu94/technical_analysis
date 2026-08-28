@@ -50,6 +50,35 @@ branch tracker warm p95=`11.284 ms`，各自 gate=`pass`。Probe 前後資料庫
 原始 JSON 證據留在 OS TEMP：`technical_latency_20260828.json`（SHA-256=`188D47C63D8EF16C4B14BC51B4D9198E25C8B15EC90DE38F55E8650C2B46A0B5`）與
 `broker_flow_latency_20260828.json`（SHA-256=`1EB08E31B5321B3AA5F60F5595ADF1CE56D9F3EDEACE21B0B1E2D315EE2E2807`）。
 
+### 2026-08-28 09:08 UTC full-batch read-only probe（本輪新增）
+
+新增 `scripts\qa_technical_indicator_full_batch.py`，以明確指定的 raw stock CSV
+執行記憶體內 `read → normalize/group → calculate → aggregate`；它保留 `0050` 等
+前導零代號，不呼叫單股 writer，不建立 backup、不寫 CSV／SQLite，且固定
+`parallelism_enabled=false`、`observed_worker_count=1`、`single_writer_required=true`。
+重現命令：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_full_batch.py `
+  --stock-data-file D:\Min\Python\Project\FA_Data\meta_data\stock_data_whole.csv `
+  --stocks 0050 2317 2330 2454 `
+  --min-rows 30 --max-rows-per-stock 120 --runs 1 `
+  --output-json <TEMP_OUTPUT>
+```
+
+本次只選 4 檔做受控計算，但完整掃過 raw CSV 的 `5,226,219` rows，量測結果為：
+
+| Stage | ms | rows／結果 |
+|---|---:|---|
+| CSV read | `8,301.849` | raw file `486,228,553` bytes |
+| normalize | `2,237.654` | normalized `5,226,219` rows |
+| group | `1,383.154` | `2,198` groups，選取 `4` |
+| calculate | `27.001` | `4/4` stocks、`480` rows |
+| aggregate | `0.372` | `480` rows、35 columns |
+| total | `11,950.456` | `write_attempted=false`、`sqlite_write_attempted=false` |
+
+artifact 暫存於 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_full_batch_20260828.json`，SHA-256=`5A95D9C97C92BBA22CFD9F7D7EC2510D55A15357BAD42AF719007E849469A76F`。這組結果證明全批次的主要成本目前在 raw CSV read／normalize／group，而不是 4 檔計算本身；它不是全市場計算承諾，也尚未量測 CSV serialization、backup 或 SQLite contention。
+
 這組數字只支持「目前 query／單股計算的 warm path 很快、冷啟有固定成本」；仍不足以
 批准全市場 worker 數或 broker 併發。下一步仍必須量測完整 `read → calculate → write →
 aggregate → SQLite commit` 五段與取消／retry／contention，再於 isolated staging 做 bounded

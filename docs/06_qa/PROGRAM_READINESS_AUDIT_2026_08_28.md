@@ -26,6 +26,7 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --approved-weekly-history-projection <APPROVED_WEEKLY_HISTORY_JSON> `
   --training-as-of <TRAINING_AS_OF> `
   --technical-performance-baseline <TECHNICAL_BASELINE_JSON> `
+  --technical-batch-performance-baseline <TECHNICAL_BATCH_BASELINE_JSON> `
   --broker-performance-baseline <BROKER_BASELINE_JSON> `
   --format markdown
 ```

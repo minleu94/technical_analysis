@@ -1120,6 +1120,23 @@ TWSE 補檔遇到平日休市（例如颱風停市）時，只有在至少一個
 更新已完成多核心化；完整規劃與 acceptance criteria 見
 `docs/06_qa/DATA_UPDATE_PERFORMANCE_BASELINE_2026_08_28.md`。
 
+若要量測 raw stock CSV 的全批次記憶體流程，可使用：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_full_batch.py `
+  --stock-data-file D:\Min\Python\Project\FA_Data\meta_data\stock_data_whole.csv `
+  --stocks 0050 2317 2330 2454 `
+  --min-rows 30 --max-rows-per-stock 120 --runs 1 `
+  --output-json <TEMP_OUTPUT>
+```
+
+此 probe 會完整讀取明確 CSV，再在記憶體中依股票分組、呼叫
+`calculate_all_indicators` 並 concat 結果；不呼叫 writer、不建立 backup、不寫
+CSV／SQLite，也不啟用 worker。`--max-rows-per-stock` 只限制本次計算的樣本，不能
+當成正式指標回補設定。輸出會分開列出 read／normalize／group／calculate／aggregate
+耗時、row count、失敗代號與 `write_attempted=false`；它仍不能證明 CSV serialization、
+backup 或 SQLite contention 已通過，後續需在 isolated staging 另做 write probe。
+
 ### 4.4 技術指標
 
 - 「增量更新」：只處理新資料，日常首選；若單股指標已到最新股價日期會直接跳過，只有落後時才回看 120 個交易日重算重疊區間。
