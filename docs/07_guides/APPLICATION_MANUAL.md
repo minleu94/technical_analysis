@@ -3186,6 +3186,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：整體 readiness 盤點新增 `--ml-direct-chain-status`；載入 Direct/OOC maintainer status 後，performance lane 會明確投影 `direct_chain_storage_preflight_blocked`／磁碟不足診斷與下一步，仍維持唯讀、不啟動 worker、不刪除歷史 run。
 - 2026-08-28：整體 readiness 盤點新增 `--runtime-readiness-json`；可載入明確 host-context `runtime-environment-readiness.v1` artifact，避免 sandbox token 的 `PermissionError` 覆蓋 host 狀態；schema 不符即 fail-closed，仍不寫正式 Registry。
 - 2026-08-28：新增 `scripts\inspect_research_registry_transaction.py` 與 `--runtime-registry-snapshot-probe`；以正式 Research Registry 的 read-only snapshot 在 TEMP clone 驗證 schema／quick_check／insert／rollback／source hash 不變，明確區分 clone proof 與正式 production writer／ACL 證據。
+- 2026-08-28：修正 Evidence Operations weekly review CLI 在 Windows CP1252 主控台輸出繁中 JSON 時的編碼錯誤，統一先設定 UTF-8 console；同輪補登錄新測試檔並同步 inventory，最新全量回歸為 `3747 passed / 1 skipped / 26 warnings`。
 - 2026-08-28：新增 `inspect_ml_storage_retention.py` 唯讀容量／retention inventory；可對明確 Direct/OOC 根目錄做 bounded metadata scan，列出完整／截斷狀態、manifest status 與 owner review 候選，固定不刪除、不搬移、不修改 lock／pointer。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。

@@ -17,6 +17,7 @@ from app_module.evidence_operations_history_repository import (
     EvidenceOperationsHistoryRepository,
 )
 from data_module.config import TWStockConfig
+from runtime.console_encoding import configure_utf8_console
 
 
 def parse_args() -> argparse.Namespace:
@@ -110,6 +111,7 @@ def _list_history(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    configure_utf8_console()
     args = parse_args()
     if args.list_history:
         return _list_history(args)
