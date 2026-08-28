@@ -78,6 +78,8 @@
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 
+- 測試 inventory 機器重算（2026-08-27）：新增 `tests/test_update_status_history.py` 後為 `638/638`、`3603 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `637/637`／`3596` 讀數屬補登錄前中間基準。
+
 - Data Update 狀態卡已改為 fail-closed 顯示：只有明確 `ok`／`success`／`current`／`normal` 才顯示綠色「最新」；`error`、`missing`、`empty`、`unavailable`、部分 payload 缺漏與整體狀態檢查失敗不再沿用舊數字或假綠。
 - Workbench 的 Pre-V2 readiness 現在會把 weekly history 的 projection 未設定／找不到與各 readiness item 的 blocker/diagnostic 帶到首頁 warnings；目前環境若設定通過驗證的 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH`，CLI／畫面會一致揭露 owner-approved weekly `3/3`（只供 UI／Pre-V2 顯示、不授予 formal credit），清除該變數時則明示只計算正式 DB legacy review history，不再只顯示模糊的「等待中」。
 - Research Console 的 P0 Control Center 現在也可透過明確 `P0_SOURCE_CONTROL_CENTER_DECISIONS` 唯讀載入 owner decision；外部 owner-review 封包只可投影為 deferred／rejected／disabled，不能由 UI 或 CLI 推導 accepted／limited、formal OOS 或 production eligibility。
