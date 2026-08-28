@@ -1159,6 +1159,20 @@ staging 的 ephemeral 子目錄寫入逐股／合併 CSV 與 SQLite，結束後�
 writer 已改造或授權提高 worker 數；在 broker rate-limit、取消／重試與 bounded worker
 acceptance 通過前，技術指標仍維持單一 worker。
 
+若要驗證未來 technical compute-only worker 的 bounded queue 契約，可使用 synthetic probe：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\qa_bounded_worker_acceptance.py `
+  --workers 2 --max-in-flight 4 --max-retries 1 --cancel-after 3 `
+  --output-json <TEMP_OUTPUT>
+```
+
+它不讀取或寫入任何正式資料，只驗證 in-flight 上限、有限 retry、permanent failure 不寫入、
+duplicate idempotency、取消後停止新提交，以及 worker 不直接寫入而由主執行緒 single writer
+收口。`status=measured` 只代表 synthetic orchestration contract 通過；真實 indicator
+process-pool throughput、crash recovery、broker HTTP rate-limit／retry 仍需另外驗收，
+在此之前 production worker 數維持 1。
+
 ### 4.4 技術指標
 
 - 「增量更新」：只處理新資料，日常首選；若單股指標已到最新股價日期會直接跳過，只有落後時才回看 120 個交易日重算重疊區間。

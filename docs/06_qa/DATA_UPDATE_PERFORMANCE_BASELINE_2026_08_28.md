@@ -124,6 +124,31 @@ New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_a
 
 artifact 暫存於 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_write_20260828.json`，SHA-256=`90EA5379C8D59E248B05C0F80C34CCD9617F04636D368ECAC392E6840005B1EF`。這證明 CSV／SQLite 寫入可以在隔離環境由單一 writer 完成，且 SQLite 在第二個 writer 進入時確實會以 lock 拒絕；它不代表 production writer 已改造，也不授權提高 worker 數。ephemeral CSV／SQLite 在 probe 結束後已清除，artifact 內的 staging 檔案路徑僅供當次追溯。
 
+### 2026-08-28 09:30 UTC bounded worker contract probe（本輪新增）
+
+新增 `scripts\qa_bounded_worker_acceptance.py`，以 deterministic synthetic tasks 驗證
+technical compute-only worker 應遵守的 bounded orchestration：`max_workers=2`、
+`max_in_flight=4`、transient failure 最多 1 次 retry、permanent failure 不寫入、
+重複 task 只提交一次 commit、取消後 pending work 會被取消，且 worker 不直接擁有
+writer。這是設計契約驗收，不是 production process pool，也不讀／寫正式資料。
+
+```powershell
+.\.venv\Scripts\python.exe scripts\qa_bounded_worker_acceptance.py `
+  --workers 2 --max-in-flight 4 --max-retries 1 --cancel-after 3 `
+  --output-json C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\bounded_worker_acceptance_20260828.json
+```
+
+結果為 `status=measured`，8/8 checks 通過：full completion 的 retry=`1`、
+permanent failure 未寫入、duplicate input `task-normal-3` 僅保留 1 次 commit；
+cooperative cancellation 在 committed 3 筆後停止新提交，取消 3 個 pending task、
+丟棄 2 個取消後才完成的結果；兩組的 `max_observed_in_flight=4`、
+`worker_write_attempts=0`，writer owner 都是主執行緒。artifact 暫存於
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\bounded_worker_acceptance_20260828.json`，
+SHA-256=`107DC6DD7391A2AF20D070BC7CCC040BB00041499A1B77319AC788BCC0BCF9DC`。
+它只證明 technical worker 的 queue／cancel／retry／single-writer 介面可驗收，
+尚未證明真實 indicator process-pool throughput、crash recovery 或 broker HTTP
+rate-limit；因此 production worker 仍維持關閉。
+
 ## 現行寫入與平行化事實
 
 - Broker ingestion 目前依 branch/date 順序抓取；lots 與 amount 依序請求。HTTP

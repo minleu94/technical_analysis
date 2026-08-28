@@ -28,6 +28,7 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --technical-performance-baseline <TECHNICAL_BASELINE_JSON> `
   --technical-batch-performance-baseline <TECHNICAL_BATCH_BASELINE_JSON> `
   --technical-write-performance-baseline <TECHNICAL_WRITE_BASELINE_JSON> `
+  --technical-worker-acceptance-baseline <TECHNICAL_WORKER_ACCEPTANCE_JSON> `
   --broker-performance-baseline <BROKER_BASELINE_JSON> `
   --format markdown
 ```
@@ -55,7 +56,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 | Paper Portfolio | 只有 snapshot、週報不可算 | 21 筆 Paper snapshot；正式 Paper output Equal Weight ledger 21 筆，benchmark reader=`ready`；UI／CLI 已有受控 preview→confirm 建置流程 | 真實 fill／partial-fill／reject／override、Decimal 成本、turnover、execution gap；Paper Trade Ledger 缺失 | 可以；benchmark 已建立，execution evidence 不可推造 |
 | Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但受控環境目前把三個 path 指向缺失且早於 `training_as_of=2026-08-28` 的 `clock-20260819`；readiness 已明示 stale-clock hint，並列出同 output root 下 6 個 `diagnostic_only` prospective clock/staging marker | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費；owner 必須發布當前 clock 並更新明確 path | 可以工程化累積；不得自動改接 `clock-20260828`、也不得拿 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | 一般 host context 對既有 `config.log`／Research Registry 的零位元 write-handle probe 通過，overall=`ready`；隔離 staging probe 已能以正式 Registry schema 完成 insert／讀回／rollback／清除 | 正式 Registry 本身仍未做實寫；production ACL／鎖定仍需 owner 在正式環境確認 | 可以；路徑 ACL 不是目前 blocker，schema transaction 能力已可在非正式 staging 驗證 |
-| 效能工程 | 尚未設計 | 既有 batch backtest、optimizer 與部分 TPEX refresh 已有受控平行化 | 券商來源 rate limit／retry／Selenium 邊界；技術指標 process pool＋SQLite/CSV single writer 設計 | 可以；先量測、再做 bounded worker 與 single-writer，不直接拉高 thread 數 |
+| 效能工程 | technical full-batch、isolated CSV／SQLite writer 與 synthetic bounded contract 已量測 | full-batch read／calculate／aggregate、CSV serialization、SQLite lock/retry 與 synthetic bounded queue／cancel／retry／single-writer checks 均有 artifact；production worker 仍為 1 | 券商來源 rate limit／retry／Selenium 邊界；真實 indicator process-pool throughput、crash recovery 與 production single-writer integration | 可以；先完成真實 staging throughput／crash recovery，再分開驗收 broker fetch，不能直接拉高 thread 數 |
 | Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；`data-update-timeline.v1` 明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness；runner／UI 已接 `data-update-status-history.v1` append-only 歷史；P0 fallback attempted／date mismatch／network error 已保留並以不同文字呈現 | 現有正式 latest status 尚未回填 history，需等下一次真實排程自然產生第一筆；live refresh／歷史 retention 尚未完成；仍需在正式環境走完全流程 live UI QA | 可以；先觀察真實排程 history，再依成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 做 live QA，不掃描目錄、不回放補歷史或繞過 candidate-only 邊界 |
 
 ## P0 多路徑取得結果
