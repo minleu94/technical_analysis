@@ -24,6 +24,9 @@ from data_module.monthly_revenue_availability_history import (
     load_official_rows_for_markets,
     load_pit_announcement_rows,
 )
+from data_module.monthly_revenue_snapshot_selection import (
+    select_latest_monthly_revenue_snapshot,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,22 +73,15 @@ def main(argv: list[str] | None = None) -> int:
 
     # 另外從最新的 MOPS 快照檔中讀取 raw periods，以支援新下載月份的可用日對照
     snapshot_dir = config.output_root / "monthly_revenue_mops_snapshots"
-    if snapshot_dir.exists():
-        import csv
-        candidates = [
-            path
-            for path in snapshot_dir.glob("mops_monthly_revenue_snapshot_*.csv")
-            if ".before_" not in path.name
-        ]
-        if candidates:
-            latest_snapshot = max(candidates, key=lambda p: p.stat().st_mtime)
-            with latest_snapshot.open("r", encoding="utf-8-sig", newline="") as handle:
-                reader = csv.DictReader(handle)
-                for row in reader:
-                    stock_code = (row.get("stock_code") or "").strip()
-                    period = (row.get("period") or "").strip()
-                    if stock_code and period:
-                        raw_periods.add((stock_code, period))
+    latest_snapshot = select_latest_monthly_revenue_snapshot(snapshot_dir)
+    if latest_snapshot is not None:
+        with latest_snapshot.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                stock_code = (row.get("stock_code") or "").strip()
+                period = (row.get("period") or "").strip()
+                if stock_code and period:
+                    raw_periods.add((stock_code, period))
     result = build_historical_monthly_revenue_availability(
         official_rows_by_market=official_rows_by_market,
         raw_periods=raw_periods,

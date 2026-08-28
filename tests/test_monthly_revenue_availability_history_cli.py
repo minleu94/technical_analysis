@@ -153,6 +153,60 @@ def test_history_cli_writes_mops_html_candidate(tmp_path, monkeypatch) -> None:
     assert validation.source_versions == ("mops-t05st10-ifrs-2026-06-16",)
 
 
+def test_history_cli_uses_newest_snapshot_period_not_file_mtime_or_size(
+    tmp_path, monkeypatch
+) -> None:
+    raw_dir = tmp_path / "financial_data"
+    raw_dir.mkdir()
+    source_dir = tmp_path / "official"
+    source_dir.mkdir()
+    (source_dir / "twse.json").write_text(
+        json.dumps(
+            [{"資料年月": "11507", "公司代號": "2330", "出表日期": "1150818"}],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    snapshot_dir = tmp_path / "output" / "monthly_revenue_mops_snapshots"
+    snapshot_dir.mkdir(parents=True)
+    old = snapshot_dir / "mops_monthly_revenue_snapshot_2014-04_2026-06_2026-07-14.csv"
+    new = snapshot_dir / "mops_monthly_revenue_snapshot_2026-07_2026-07_2026-08-28.csv"
+    old.write_text(
+        "market,period,stock_code\n" + "twse,2026-06,2330\n" * 20,
+        encoding="utf-8",
+    )
+    new.write_text("market,period,stock_code\ntwse,2026-07,2330\n", encoding="utf-8")
+    # 讓舊檔看起來像剛被改過、且比新檔大；選檔不能依 mtime／size。
+    old.touch()
+
+    monkeypatch.setenv("DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("OUTPUT_ROOT", str(tmp_path / "output"))
+    output = tmp_path / "candidate.csv"
+    exit_code = main(
+        [
+            "--start-period",
+            "2026-07",
+            "--end-period",
+            "2026-07",
+            "--markets",
+            "twse",
+            "--raw-dir",
+            str(raw_dir),
+            "--source-json-dir",
+            str(source_dir),
+            "--output",
+            str(output),
+            "--fetch-date",
+            "2026-08-28",
+        ]
+    )
+
+    assert exit_code == 0
+    validation = validate_monthly_revenue_availability_file(output)
+    assert validation.valid is True
+    assert validation.accepted_count == 1
+
+
 def test_history_cli_supports_mops_static_source(tmp_path, monkeypatch) -> None:
     raw_dir = tmp_path / "financial_data"
     raw_dir.mkdir()

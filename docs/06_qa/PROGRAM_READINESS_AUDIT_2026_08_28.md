@@ -135,7 +135,8 @@ SQLite 月營收目前仍停在 `2026-06`（246,331 rows、最新完整可用日
 原本更新頁的顯示問題：只有 SQLite 狀態時會顯示 `status=ok`，看不出較新的數值
 候選尚未套用。更新服務現在依 snapshot 期別選檔並揭露
 `candidate_latest_period`；若候選較新，UI 顯示「候選可用／候選待套用期別」，不再
-把抓取完成誤顯示成正式完成。正式 apply 仍需 owner 確認。
+把抓取完成誤顯示成正式完成。availability builder 也共用同一套期別／抓取日選檔規則，
+不會讓歷史大檔因 mtime／檔案大小遮蔽新月份。正式 apply 仍需 owner 確認。
 
 本輪 snapshot SHA-256=`D055DF5F6193961198655C5B46F5D6111D808430CBEFDC4DDB27F521EBABAD65`；
 availability candidate SHA-256=`9CAE017074FE08B5EE14761FDAB8458D738AFD63AF0ED73F4E5A72E8BF34D016`。
