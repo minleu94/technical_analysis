@@ -979,3 +979,70 @@ def test_program_readiness_records_actual_runtime_staging_probe(tmp_path: Path) 
     runtime = report["workstreams"]["runtime"]
     assert runtime["status"] == "partial"
     assert runtime["details"]["staging_write_probe"]["status"] == "passed"
+
+
+def test_program_readiness_accepts_measured_technical_production_canary(
+    tmp_path: Path,
+) -> None:
+    canary_path = tmp_path / "technical-production-canary.json"
+    canary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "technical-indicator-production-canary.v1",
+                "status": "measured",
+                "production_write_attempted": True,
+                "production_sqlite_write_attempted": True,
+                "single_writer_verified": True,
+                "parent_single_writer": True,
+                "worker_writes": False,
+                "sqlite_worker_writes": False,
+                "network_enabled": False,
+                "broker_enabled": False,
+                "selenium_invocations": 0,
+                "validation": {"ok": True},
+                "rollback": {"available": True, "succeeded": None},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        technical_production_canary_path=canary_path,
+    )
+
+    performance = report["workstreams"]["performance"]
+    assert performance["details"]["technical_canary_path"] == str(canary_path.resolve())
+    assert "technical_production_single_writer_canary_not_completed" not in performance[
+        "blockers"
+    ]
+    assert "technical_production_single_writer_canary_invalid" not in performance[
+        "blockers"
+    ]
+
+
+def test_program_readiness_rejects_invalid_technical_production_canary(
+    tmp_path: Path,
+) -> None:
+    canary_path = tmp_path / "technical-production-canary-invalid.json"
+    canary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "technical-indicator-production-canary.v1",
+                "status": "confirmation_required",
+                "production_write_attempted": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        technical_production_canary_path=canary_path,
+    )
+
+    assert "technical_production_single_writer_canary_invalid" in report["workstreams"][
+        "performance"
+    ]["blockers"]

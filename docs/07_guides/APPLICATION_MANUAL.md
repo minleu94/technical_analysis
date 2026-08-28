@@ -1312,6 +1312,28 @@ write flags。若加上 `--baseline-json`，只會讀既有離線 baseline 並�
 不改寫 baseline。一次成功不能代表來源授權、長期 rate-limit、Selenium recovery 或
 production writer 已通過；後續仍需 owner review，broker pool 維持關閉。
 
+若要驗證 technical process-pool 的正式 single-writer 邊界，只能對一檔股票執行受保護的 production canary：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_production_canary.py `
+  --data-root D:\Min\Python\Project\FA_Data `
+  --output-root D:\Min\Python\Project\FA_Data\output `
+  --protected-root D:\Min\Python\Project\FA_Data `
+  --protected-root D:\Min\Python\Project\FA_Data\output `
+  --stock-id 2330 --expected-latest-date 2026-08-28 `
+  --output-json C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_production_canary_20260828.json
+```
+
+上述預設為唯讀預演，不建立 backup、不呼叫 `UpdateService`，且會先確認 production SQLite
+完整性、指定股票日價與 expected latest date。只有 owner 明確提供
+`--owner-approval technical-single-writer-canary`、
+`--no-concurrent-writer-ack no-concurrent-writer` 及
+`--confirm-production-technical-canary`，並先停止其他資料寫入者，才會建立 SQLite online backup
+與單股 technical CSV backup，接著以 bounded process pool 重算一檔；worker 不寫檔，parent 才寫 CSV／SQLite。
+若 post-state 驗證失敗，工具會嘗試以 backup 回復並在 artifact 記錄 rollback 結果；canary 不下載行情、
+不啟動 broker／Selenium，也不會註冊 scheduler。`status=measured` 只代表這一次 owner-approved
+canary 的 backup／single-writer／post-state 驗收通過，不能直接把 scheduler worker 數提高。
+
 若要驗證未來 technical compute-only worker 的 bounded queue 契約，可使用 synthetic probe：
 
 ```powershell

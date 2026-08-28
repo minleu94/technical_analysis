@@ -70,6 +70,7 @@ def inspect_program_readiness(
     technical_batch_performance_path: str | Path | None = None,
     technical_write_performance_path: str | Path | None = None,
     technical_worker_acceptance_path: str | Path | None = None,
+    technical_production_canary_path: str | Path | None = None,
     broker_performance_path: str | Path | None = None,
     runtime_write_probe_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
@@ -146,6 +147,7 @@ def inspect_program_readiness(
             _optional_path(technical_batch_performance_path),
             _optional_path(technical_write_performance_path),
             _optional_path(technical_worker_acceptance_path),
+            _optional_path(technical_production_canary_path),
             _optional_path(broker_performance_path),
         ),
     }
@@ -172,6 +174,11 @@ def inspect_program_readiness(
             "freshness_status_path": (
                 str(_optional_path(freshness_status_path))
                 if freshness_status_path is not None
+                else None
+            ),
+            "technical_production_canary_path": (
+                str(_optional_path(technical_production_canary_path))
+                if technical_production_canary_path is not None
                 else None
             ),
         },
@@ -656,6 +663,7 @@ def _inspect_performance_lane(
     technical_batch_path: Path | None,
     technical_write_path: Path | None,
     technical_worker_path: Path | None,
+    technical_canary_path: Path | None,
     broker_path: Path | None,
 ) -> dict[str, Any]:
     artifacts: dict[str, Any] = {}
@@ -674,6 +682,7 @@ def _inspect_performance_lane(
         ("technical_batch", technical_batch_path),
         ("technical_write", technical_write_path),
         ("technical_worker", technical_worker_path),
+        ("technical_canary", technical_canary_path),
         ("broker", broker_path),
     ):
         if path is None:
@@ -694,6 +703,7 @@ def _inspect_performance_lane(
                 "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
                 "technical_write_path": str(technical_write_path) if technical_write_path else None,
                 "technical_worker_path": str(technical_worker_path) if technical_worker_path else None,
+                "technical_canary_path": str(technical_canary_path) if technical_canary_path else None,
                 "broker_path": str(broker_path) if broker_path else None,
                 "artifacts": artifacts,
             },
@@ -706,9 +716,9 @@ def _inspect_performance_lane(
             payload.get("write_attempted") is True
             and payload.get("staging_write_attempted") is not True
         )
-        if production_write_attempted or unscoped_write_attempted:
+        if label != "technical_canary" and (production_write_attempted or unscoped_write_attempted):
             blockers.append(f"{label}_performance_probe_wrote_data")
-        if payload.get("production_sqlite_write_attempted") is True:
+        if label != "technical_canary" and payload.get("production_sqlite_write_attempted") is True:
             blockers.append(f"{label}_performance_probe_wrote_production_sqlite")
         if label == "technical_write":
             if payload.get("staging_write_attempted") is not True:
@@ -760,12 +770,6 @@ def _inspect_performance_lane(
             and integration_payload.get("status") == "staging_measured"
         ):
             blockers.append("technical_production_single_writer_integration_not_completed")
-        else:
-            # The product code is now wired behind an explicit feature flag,
-            # but this artifact only exercised an isolated staging root. Keep
-            # the remaining gate precise: production backup/rollback and the
-            # owner-approved canary have not happened yet.
-            blockers.append("technical_production_single_writer_canary_not_completed")
     # No broker worker artifact is accepted as a proxy for technical worker proof.
     broker_payload = artifacts.get("broker")
     broker_contract_raw: object = (
@@ -793,21 +797,59 @@ def _inspect_performance_lane(
             blockers.append("broker_bounded_fetch_acceptance_invalid")
         if broker_payload.get("network_enabled") is not True:
             blockers.append("broker_real_http_canary_not_completed")
+    technical_canary_payload = artifacts.get("technical_canary")
+    if technical_canary_path is None and "technical_production_single_writer_canary_not_completed" not in blockers:
+        blockers.append("technical_production_single_writer_canary_not_completed")
+    elif technical_canary_path is not None and not _valid_technical_production_canary(technical_canary_payload):
+        if "technical_production_single_writer_canary_invalid" not in blockers:
+            blockers.append("technical_production_single_writer_canary_invalid")
     return _lane(
         "partial",
         blockers=tuple(blockers),
-        next_actions=("已具備 technical full-batch、real staging bounded worker、worker recovery／取消與 feature-flag wiring；接著由 owner 核准 backup／rollback 後做單次 production canary，再允許 broker canary。",),
+        next_actions=(
+            "technical bounded worker 的 production canary 尚未通過：先停止並行資料寫入，核准 backup／rollback 後只重算一檔；通過後再觀察正式排程。"
+            if not _valid_technical_production_canary(technical_canary_payload)
+            else "technical bounded worker 的 production canary 已通過；保留 parent-only writer 與 worker 上限，接著觀察正式排程與 rollback artifact。",
+        ),
         external_input_required=True,
         details={
             "technical_path": str(technical_path) if technical_path else None,
             "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
             "technical_write_path": str(technical_write_path) if technical_write_path else None,
             "technical_worker_path": str(technical_worker_path) if technical_worker_path else None,
+            "technical_canary_path": str(technical_canary_path) if technical_canary_path else None,
             "broker_path": str(broker_path) if broker_path else None,
             "artifacts": artifacts,
             "parallelism_enabled": False,
             "single_writer_required": True,
         },
+    )
+
+
+def _valid_technical_production_canary(payload: object) -> bool:
+    """Accept only a measured, owner-approved canary with rollback evidence."""
+
+    if not isinstance(payload, Mapping):
+        return False
+    rollback = payload.get("rollback")
+    validation = payload.get("validation")
+    return (
+        payload.get("schema_version") == "technical-indicator-production-canary.v1"
+        and payload.get("status") == "measured"
+        and payload.get("production_write_attempted") is True
+        and payload.get("production_sqlite_write_attempted") is True
+        and payload.get("single_writer_verified") is True
+        and payload.get("parent_single_writer") is True
+        and payload.get("worker_writes") is False
+        and payload.get("sqlite_worker_writes") is False
+        and payload.get("network_enabled") is False
+        and payload.get("broker_enabled") is False
+        and payload.get("selenium_invocations") == 0
+        and isinstance(validation, Mapping)
+        and validation.get("ok") is True
+        and isinstance(rollback, Mapping)
+        and rollback.get("available") is True
+        and rollback.get("succeeded") is not False
     )
 
 
@@ -949,6 +991,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--technical-batch-performance-baseline", type=Path)
     parser.add_argument("--technical-write-performance-baseline", type=Path)
     parser.add_argument("--technical-worker-acceptance-baseline", type=Path)
+    parser.add_argument("--technical-production-canary", type=Path)
     parser.add_argument("--broker-performance-baseline", type=Path)
     parser.add_argument("--runtime-write-probe", type=Path)
     parser.add_argument("--update-history-path", type=Path)
@@ -992,6 +1035,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         technical_batch_performance_path=args.technical_batch_performance_baseline,
         technical_write_performance_path=args.technical_write_performance_baseline,
         technical_worker_acceptance_path=args.technical_worker_acceptance_baseline,
+        technical_production_canary_path=args.technical_production_canary,
         broker_performance_path=args.broker_performance_baseline,
         runtime_write_probe_path=args.runtime_write_probe,
         update_history_path=args.update_history_path,
