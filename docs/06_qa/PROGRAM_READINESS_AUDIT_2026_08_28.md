@@ -23,7 +23,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 | Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但正式受控 manifest path 仍不存在 | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費 | 可以工程化累積；不得拿 2026-08-25 之後的 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | 一般 host context 對既有 `config.log`／Research Registry 的零位元 write-handle probe 通過，overall=`ready` | 尚未做 Registry SQLite transaction＋rollback 的實寫證明 | 可以；路徑 ACL 不是目前 blocker，若要 DB transaction probe 需另行受控執行 |
 | 效能工程 | 尚未設計 | 既有 batch backtest、optimizer 與部分 TPEX refresh 已有受控平行化 | 券商來源 rate limit／retry／Selenium 邊界；技術指標 process pool＋SQLite/CSV single writer 設計 | 可以；先量測、再做 bounded worker 與 single-writer，不直接拉高 thread 數 |
-| Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；明確 artifact 會顯示 actual route、fallback、PIT/公告、coverage、license、owner decision | 尚未自動抓取或掃描 audit；last successful capture 的時間序列仍需由後續 artifact／prospective clock 提供；缺失或格式錯誤時維持 `audit_unavailable`，不假裝成功 | 可以；接下來可做 live artifact refresh 與其時序證據，但不應繞過明確路徑與 candidate-only 邊界 |
+| Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；另新增 `data-update-timeline.v1`，明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness 狀態 | 目前只投影固定的 `latest_status` 出口，尚未建立 append-only capture history；缺失、格式錯誤、失敗、執行中與過期已分開顯示，不會以 DB mtime 或舊卡片冒充成功 | 可以；下一步可在受治理 artifact 到位後接續 live refresh／capture history，不應掃描目錄或繞過 candidate-only 邊界 |
 
 ## P0 多路徑取得結果
 

@@ -1,5 +1,12 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-28 Data Update live status timeline（current engineering）
+
+- `UpdateView` 現在會把固定出口 `output/scheduled/data_update_quick/latest_status.json`、`output/scheduled/data_freshness/latest_status.json` 與 `meta_data/tpex_full_refresh_status.json` 投影成唯讀 `data-update-timeline.v1`；可見最後成功完成時間、run、目標資料日、每個步驟結果與 freshness 狀態，不再只看 SQLite 筆數猜測更新是否完成。
+- 時間軸只讀取明確路徑，檔案缺漏、格式錯誤、失敗、執行中、過期或未設定均分開顯示；不沿用上一輪步驟列，不掃描其他 `latest_status`，不啟動網路或寫入。預設可用環境變數 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT`、`TPEX_REFRESH_STATUS_ARTIFACT` 覆寫單一路徑。
+- 目前正式環境讀到 `data_update_quick`=`passed`、run=`20260827-308`、目標資料日=`2026-08-27`、12/12 步驟通過；距目前約 17.8 小時，時間軸狀態為 `current`。這是最新一次排程結果，不等於 Paper fills、P0 acceptance 或 Formal credit。
+- 後續仍可補 append-only capture history／live refresh，但必須先有受治理的 history artifact；本 slice 不掃描目錄、不把檔案 mtime 冒充執行完成時間。
+
 ## 2026-08-28 Formal／ML prospective activation dry-run（current engineering）
 
 - 以實際 `clock:prospective:20260828:v1`、官方 TWSE／TPEX staging 與隔離 TEMP output 完成一次唯讀邊界驗證；PIT sector、Rule Champion、simulated Portfolio 三個 producer 均能產出各自的 prospective manifest，strict readiness 亦能產出。

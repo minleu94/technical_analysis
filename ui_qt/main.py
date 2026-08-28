@@ -283,6 +283,49 @@ class MainWindow(QMainWindow):
         configured_path = os.environ.get("P0_SOURCE_CONTROL_CENTER_DECISIONS")
         return Path(configured_path).expanduser().resolve() if configured_path else None
 
+    def _data_update_status_path(self) -> Path | None:
+        """資料更新時間軸只讀取明確 artifact；未設定時使用固定排程出口。"""
+        configured_path = os.environ.get("DATA_UPDATE_STATUS_ARTIFACT")
+        if configured_path:
+            return Path(configured_path).expanduser().resolve()
+        output_root = getattr(self.config, "output_root", None)
+        if output_root is None:
+            return None
+        return (
+            Path(output_root)
+            / "scheduled"
+            / "data_update_quick"
+            / "latest_status.json"
+        ).resolve()
+
+    def _data_freshness_status_path(self) -> Path | None:
+        """資料 freshness 時間軸出口；不搜尋其他 latest_status。"""
+        configured_path = os.environ.get("DATA_FRESHNESS_STATUS_ARTIFACT")
+        if configured_path:
+            return Path(configured_path).expanduser().resolve()
+        output_root = getattr(self.config, "output_root", None)
+        if output_root is None:
+            return None
+        return (
+            Path(output_root)
+            / "scheduled"
+            / "data_freshness"
+            / "latest_status.json"
+        ).resolve()
+
+    def _tpex_status_path(self) -> Path | None:
+        """TPEX 背景流程狀態出口；只使用固定 meta_data 檔案。"""
+        configured_path = os.environ.get("TPEX_REFRESH_STATUS_ARTIFACT")
+        if configured_path:
+            return Path(configured_path).expanduser().resolve()
+        meta_data_dir = getattr(self.config, "meta_data_dir", None)
+        if meta_data_dir is None:
+            data_root = getattr(self.config, "data_root", None)
+            if data_root is None:
+                return None
+            meta_data_dir = Path(data_root) / "meta_data"
+        return (Path(meta_data_dir) / "tpex_full_refresh_status.json").resolve()
+
     def _controlled_rehearsal_dashboard(self) -> EvidenceRehearsalDashboard | None:
         """Read an explicitly configured controlled report without opening any database."""
         configured_path = os.environ.get("EVIDENCE_REHEARSAL_REPORT")
@@ -380,6 +423,9 @@ class MainWindow(QMainWindow):
                 parent=self,
                 p0_source_audit_path=self._p0_source_audit_path(),
                 p0_source_decision_path=self._p0_source_decision_path(),
+                data_update_status_path=self._data_update_status_path(),
+                data_freshness_status_path=self._data_freshness_status_path(),
+                tpex_status_path=self._tpex_status_path(),
             )
             self.update_view = update_view
             print("[MainWindow] 數據更新視圖創建成功")

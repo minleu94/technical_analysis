@@ -31,6 +31,7 @@ from app_module.p0_source_control_center import (
     P0SourceControlCenterService,
 )
 from app_module.update_source_status_projection import compose_source_status_projection
+from app_module.update_status_timeline import load_data_update_timeline
 from data_module.source_acceptance_decision_registry import parse_source_acceptance_decisions
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
@@ -229,6 +230,9 @@ class UpdateView(QWidget):
         *,
         p0_source_audit_path: str | Path | None = None,
         p0_source_decision_path: str | Path | None = None,
+        data_update_status_path: str | Path | None = None,
+        data_freshness_status_path: str | Path | None = None,
+        tpex_status_path: str | Path | None = None,
     ):
         """初始化數據更新視圖
 
@@ -248,6 +252,35 @@ class UpdateView(QWidget):
             if p0_source_decision_path is not None
             else None
         )
+        output_root = getattr(self.update_service.config, "output_root", None)
+        meta_data_dir = getattr(
+            self.update_service.config,
+            "meta_data_dir",
+            Path(getattr(self.update_service.config, "data_root", ".")) / "meta_data",
+        )
+
+        def _status_path(value: str | Path | None, fallback: Path | None) -> Path | None:
+            if value is not None:
+                return Path(value).expanduser().resolve()
+            return fallback.expanduser().resolve() if fallback is not None else None
+
+        output_root_path = Path(output_root) if output_root is not None else None
+        self.data_update_status_path = _status_path(
+            data_update_status_path,
+            output_root_path / "scheduled" / "data_update_quick" / "latest_status.json"
+            if output_root_path is not None
+            else None,
+        )
+        self.data_freshness_status_path = _status_path(
+            data_freshness_status_path,
+            output_root_path / "scheduled" / "data_freshness" / "latest_status.json"
+            if output_root_path is not None
+            else None,
+        )
+        self.tpex_status_path = _status_path(
+            tpex_status_path,
+            Path(meta_data_dir) / "tpex_full_refresh_status.json",
+        )
         self._p0_control_center_service = P0SourceControlCenterService()
         self.setMinimumWidth(0)
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
@@ -259,11 +292,6 @@ class UpdateView(QWidget):
         self._worker_coordinator = WorkerCoordinator[TaskWorker]()
         self._active_workers = self._worker_coordinator.active_workers
         self._last_progress = 0
-        meta_data_dir = getattr(
-            self.update_service.config,
-            "meta_data_dir",
-            Path(getattr(self.update_service.config, "data_root", ".")) / "meta_data",
-        )
         self.tpex_refresh_state_file = Path(meta_data_dir) / "tpex_full_refresh_status.json"
         self._tpex_background_process: Optional[subprocess.Popen] = None
 
@@ -706,6 +734,50 @@ class UpdateView(QWidget):
             card.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self._reflow_grid(cards_layout, self._status_cards, columns=6)
         all_layout.addLayout(cards_layout)
+
+        # 更新流程時間軸：只投影明確指定的 latest_status artifact，避免卡片
+        # 有數字、卻看不出那是何時完成或是否仍是舊結果。
+        timeline_group = QGroupBox("資料更新時間軸（唯讀）")
+        timeline_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                margin-top: 10px;
+                font-weight: bold;
+                color: #94a3b8;
+            }
+        """)
+        timeline_layout = QVBoxLayout(timeline_group)
+        timeline_layout.setSpacing(8)
+        timeline_layout.setContentsMargins(12, 12, 12, 12)
+        self.data_update_timeline_summary_label = QLabel(
+            "尚未檢查資料更新時間軸；不會沿用上一輪結果。"
+        )
+        self.data_update_timeline_summary_label.setWordWrap(True)
+        self.data_update_timeline_summary_label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse
+        )
+        self.data_update_timeline_summary_label.setStyleSheet(
+            "color: #cbd5e1; font-size: 11px;"
+        )
+        timeline_layout.addWidget(self.data_update_timeline_summary_label)
+        self.data_update_timeline_table = QTableWidget(0, 3)
+        self.data_update_timeline_table.setHorizontalHeaderLabels(("步驟", "結果", "訊息"))
+        self.data_update_timeline_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.data_update_timeline_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.data_update_timeline_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.data_update_timeline_table.setAlternatingRowColors(True)
+        self.data_update_timeline_table.verticalHeader().setVisible(False)
+        self.data_update_timeline_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+        self.data_update_timeline_table.horizontalHeader().setStretchLastSection(True)
+        self.data_update_timeline_table.setMinimumHeight(72)
+        self.data_update_timeline_table.setToolTip(
+            "只顯示明確指定的更新 status artifact；缺失、失敗或過期不會被舊資料掩蓋。"
+        )
+        timeline_layout.addWidget(self.data_update_timeline_table)
+        all_layout.addWidget(timeline_group)
 
         # 候選與決策資料域群組
         candidate_group = QGroupBox("候選與決策資料域（治理檢視 / 尚未啟用）")
@@ -2158,6 +2230,7 @@ class UpdateView(QWidget):
                 res['credit_transaction'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
             if 'tdcc_shareholding' not in res:
                 res['tdcc_shareholding'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
+        res["data_update_timeline"] = self._get_data_update_timeline()
         p0_center, p0_error, p0_reference = self._load_p0_source_control_center()
         return compose_source_status_projection(
             res,
@@ -2165,6 +2238,144 @@ class UpdateView(QWidget):
             p0_load_error=p0_error,
             p0_reference=p0_reference,
         )
+
+    def _get_data_update_timeline(self) -> Dict[str, Any]:
+        """只讀取明確設定的更新狀態 artifact；讀取失敗時回傳可見的 fail-closed 結果。"""
+        try:
+            return load_data_update_timeline(
+                update_status_path=self.data_update_status_path,
+                freshness_status_path=self.data_freshness_status_path,
+                tpex_status_path=self.tpex_status_path,
+            )
+        except Exception as exc:
+            # 狀態面板不能因 artifact 異常而讓整個資料頁消失，也不能退回
+            # 上一次成功摘要；保留明確診斷供 UI／log 排錯。
+            return {
+                "schema_version": "data-update-timeline.v1",
+                "status": "invalid",
+                "source": "scheduled_data_update",
+                "last_success_at": None,
+                "last_attempt_at": None,
+                "age_seconds": None,
+                "steps": [],
+                "step_count": 0,
+                "failed_step_count": 0,
+                "diagnostics": [f"timeline_loader_error:{type(exc).__name__}:{exc}"],
+                "boundary": {
+                    "read_only": True,
+                    "writes_allowed": False,
+                    "network_allowed": False,
+                    "explicit_paths_only": True,
+                },
+            }
+
+    @staticmethod
+    def _format_timeline_age(value: Any) -> str:
+        try:
+            seconds = max(0, int(value))
+        except (TypeError, ValueError):
+            return "未知"
+        days, remainder = divmod(seconds, 24 * 60 * 60)
+        hours, remainder = divmod(remainder, 60 * 60)
+        minutes, _ = divmod(remainder, 60)
+        if days:
+            return f"{days} 天 {hours} 小時"
+        if hours:
+            return f"{hours} 小時 {minutes} 分"
+        return f"{minutes} 分鐘"
+
+    @staticmethod
+    def _timeline_status_text(value: Any) -> str:
+        return {
+            "current": "最新",
+            "partial": "部分可用",
+            "degraded": "freshness 異常",
+            "stale": "已過期",
+            "running": "執行中",
+            "failed": "失敗",
+            "missing": "缺漏",
+            "invalid": "格式異常",
+            "not_configured": "未設定",
+        }.get(str(value or "").strip().lower(), str(value or "未知"))
+
+    def _render_data_update_timeline(self, payload: Any) -> None:
+        """把更新時間軸及步驟結果投影到看板，並清除本輪沒有的舊列。"""
+        label = getattr(self, "data_update_timeline_summary_label", None)
+        table = getattr(self, "data_update_timeline_table", None)
+        if label is None or table is None:
+            return
+        value = payload if isinstance(payload, dict) else {}
+        status = str(value.get("status") or "not_configured")
+        status_text = self._timeline_status_text(status)
+        lines = [f"狀態：{status_text}（{status}）"]
+        last_success = str(value.get("last_success_at") or "").strip()
+        last_attempt = str(value.get("last_attempt_at") or "").strip()
+        if last_success:
+            lines.append(f"最後成功完成：{last_success}")
+        elif last_attempt:
+            lines.append(f"最後嘗試：{last_attempt}（本輪未取得成功完成證據）")
+        else:
+            lines.append("最後成功完成：未提供")
+        age = value.get("age_seconds")
+        if isinstance(age, int):
+            lines.append(f"距今：{self._format_timeline_age(age)}")
+        target_date = str(value.get("target_date") or "").strip()
+        if target_date:
+            lines.append(f"目標資料日：{target_date}")
+        run_id = str(value.get("run_id") or "").strip()
+        if run_id:
+            lines.append(f"Run：{run_id}")
+        freshness = value.get("artifacts", {}).get("freshness") if isinstance(value.get("artifacts"), dict) else None
+        if isinstance(freshness, dict):
+            freshness_status = str(freshness.get("status") or "").strip()
+            if freshness_status:
+                freshness_age = freshness.get("age_seconds")
+                freshness_suffix = (
+                    f"（距今 {self._format_timeline_age(freshness_age)}）"
+                    if isinstance(freshness_age, int)
+                    else ""
+                )
+                lines.append(f"Freshness 檢查：{freshness_status}{freshness_suffix}")
+        tpex = value.get("artifacts", {}).get("tpex") if isinstance(value.get("artifacts"), dict) else None
+        if isinstance(tpex, dict) and tpex.get("available"):
+            tpex_status = str(tpex.get("status") or "unknown")
+            tpex_at = str(tpex.get("completed_at") or "").strip()
+            tpex_suffix = f"（{tpex_at}）" if tpex_at else ""
+            lines.append(f"TPEX 背景：{tpex_status}{tpex_suffix}")
+        diagnostics = [str(item) for item in value.get("diagnostics", []) if str(item).strip()]
+        if diagnostics:
+            lines.append("診斷：" + "；".join(diagnostics[:3]))
+        lines.append("邊界：唯讀、明確路徑、不啟動網路或寫入")
+        label.setText("\n".join(lines))
+        color = {
+            "current": "#86efac",
+            "partial": "#fbbf24",
+            "degraded": "#fbbf24",
+            "stale": "#fbbf24",
+            "running": "#38bdf8",
+            "failed": "#fca5a5",
+            "missing": "#fca5a5",
+            "invalid": "#fca5a5",
+            "not_configured": "#94a3b8",
+        }.get(status, "#cbd5e1")
+        label.setStyleSheet(f"color: {color}; font-size: 11px;")
+
+        table.setRowCount(0)
+        steps = value.get("steps") if isinstance(value.get("steps"), list) else []
+        for raw_step in steps:
+            if not isinstance(raw_step, dict):
+                continue
+            row_index = table.rowCount()
+            table.insertRow(row_index)
+            cells = (
+                str(raw_step.get("name") or "未命名步驟"),
+                str(raw_step.get("status") or "unknown"),
+                str(raw_step.get("message") or ""),
+            )
+            for column_index, cell in enumerate(cells):
+                item = QTableWidgetItem(cell)
+                item.setToolTip(cell)
+                table.setItem(row_index, column_index, item)
 
     def _load_p0_source_control_center(
         self,
@@ -2643,6 +2854,7 @@ class UpdateView(QWidget):
             "tdcc_shareholding",
         ):
             self._render_source_detail_status(source, status)
+        self._render_data_update_timeline(status.get("data_update_timeline"))
         self._render_p0_source_control_status(status.get("p0_source_control"))
         self._log(f"數據狀態檢查完成")
 
@@ -2697,6 +2909,15 @@ class UpdateView(QWidget):
                 "rows": [],
                 "load_error": error_msg,
                 "reference": "本輪狀態檢查失敗",
+            }
+        )
+        self._render_data_update_timeline(
+            {
+                "status": "invalid",
+                "last_success_at": None,
+                "last_attempt_at": None,
+                "steps": [],
+                "diagnostics": [f"status_check_error:{error_msg}"],
             }
         )
         QMessageBox.critical(self, "錯誤", f"檢查數據狀態失敗：\n{error_msg}")
@@ -2924,6 +3145,9 @@ class UpdateView(QWidget):
                 updated_at=str(raw.get("updated_at", "") or ""),
                 level=level,
             )
+            # 背景任務狀態與總覽時間軸共用同一組明確 artifact；查詢後立即
+            # 重畫，避免使用者看到 TPEX 已完成、總覽卻仍停在舊摘要。
+            self._render_data_update_timeline(self._get_data_update_timeline())
 
             self._log("\n".join(lines))
             QMessageBox.information(self, "背景任務狀態", "\n".join(lines))

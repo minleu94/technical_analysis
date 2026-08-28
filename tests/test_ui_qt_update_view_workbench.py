@@ -271,6 +271,70 @@ def test_update_view_marks_missing_p0_artifact_as_unavailable(tmp_path):
     assert "P0 稽核 artifact 不存在" in view.p0_source_control_summary_label.text()
 
 
+def test_update_view_projects_explicit_data_update_timeline_and_steps(tmp_path):
+    update_path = tmp_path / "update-status.json"
+    freshness_path = tmp_path / "freshness-status.json"
+    update_path.write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "run_id": "run-20260828",
+                "started_at": "2026-08-28T08:30:00+08:00",
+                "completed_at": "2026-08-28T09:00:00+08:00",
+                "end_date": "2026-08-28",
+                "steps": [
+                    {"name": "下載", "status": "passed", "message": "完成"},
+                    {"name": "SQLite", "status": "passed", "message": "同步 10 筆"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    freshness_path.write_text(
+        json.dumps({"status": "passed", "checked_at": "2026-08-28T09:05:00+08:00"}),
+        encoding="utf-8",
+    )
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        data_update_status_path=update_path,
+        data_freshness_status_path=freshness_path,
+        tpex_status_path=tmp_path / "missing-tpex.json",
+    )
+
+    status = view._get_data_update_timeline()
+    view._render_data_update_timeline(status)
+
+    assert status["status"] == "current"
+    assert "最後成功完成：2026-08-28T09:00:00+08:00" in view.data_update_timeline_summary_label.text()
+    assert "目標資料日：2026-08-28" in view.data_update_timeline_summary_label.text()
+    assert "明確路徑" in view.data_update_timeline_summary_label.text()
+    assert view.data_update_timeline_table.rowCount() == 2
+    assert view.data_update_timeline_table.item(1, 0).text() == "SQLite"
+
+
+def test_update_view_timeline_clears_old_steps_when_artifact_is_missing(tmp_path):
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        data_update_status_path=tmp_path / "missing.json",
+    )
+    view._render_data_update_timeline(
+        {
+            "status": "current",
+            "last_success_at": "2026-08-28T09:00:00+08:00",
+            "steps": [{"name": "舊步驟", "status": "passed", "message": "舊結果"}],
+            "diagnostics": [],
+        }
+    )
+    assert view.data_update_timeline_table.rowCount() == 1
+
+    missing = view._get_data_update_timeline()
+    view._render_data_update_timeline(missing)
+
+    assert missing["status"] == "missing"
+    assert view.data_update_timeline_table.rowCount() == 0
+    assert "最後成功完成：未提供" in view.data_update_timeline_summary_label.text()
+
+
 def test_update_view_date_controls_use_taiwan_market_date(monkeypatch):
     monkeypatch.setattr(
         "ui_qt.views.update_view.taiwan_market_today",
