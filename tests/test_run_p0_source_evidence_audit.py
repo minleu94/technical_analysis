@@ -10,6 +10,7 @@ import tempfile
 import pytest
 
 from data_module.p0_source_contract_registry import P0_SOURCE_IDS
+from scripts.build_p0_intake_from_audit import build_candidate_intake
 from scripts.run_p0_source_evidence_audit import (
     GROUPED_OWNER_PACKET_KEYS,
     build_p0_source_evidence_audit,
@@ -368,6 +369,27 @@ def test_valid_mops_artifact_upgrades_to_verified() -> None:
     assert quarterly["machine_status"] == "verified"
     assert quarterly["pit_status"] == "pit_date_verified"
     assert quarterly["timestamp_kind"] == "official_document_upload_timestamp"
+    assert quarterly["raw_row_count"] == 1
+    assert quarterly["accepted_row_count"] == 1
+    assert quarterly["quarantine_row_count"] == 0
+    assert quarterly["blocked_row_count"] == 0
+
+    # The verified artifact must remain machine-visible when projected into the
+    # owner intake; it is still authority-deferred, but it is no longer an
+    # unexplained 0/0 denominator.
+    intake = build_candidate_intake(payload)
+    pit_dossier = next(
+        item for item in intake["dossiers"]
+        if item["source_id"] == "pit.quarterly_financials"
+    )
+    assert pit_dossier["coverage_numerator"] == 1
+    assert pit_dossier["coverage_denominator"] == 1
+    assert pit_dossier["row_conservation_counts"] == {
+        "raw": 1,
+        "accepted": 1,
+        "quarantine": 0,
+        "blocked": 0,
+    }
 
 
 def test_grouped_owner_decision_packet_has_at_most_5_groups() -> None:

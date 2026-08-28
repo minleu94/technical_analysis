@@ -32,6 +32,7 @@
 
 - `scripts/build_p0_intake_from_audit.py` 現在在不改變 `source-acceptance-dossier.v1` 的前提下，於 `p0-source-intake.v1` envelope 新增 `machine_evidence_by_source`；每個 canonical source 會保留 allowlist 內的實際 acquisition route、fallback lineage、schema／probe outcome、timestamp semantics、row counts 與 payload hash。
 - 這個投影會遞迴遮罩 secret-like 欄位，只能輸出到 OS TEMP，且不會把 machine evidence 當 owner／license／PIT 決議；既有 intake validator 仍維持 `deferred`、`downstream_eligibility=none`。它讓 13 組 owner packet 可直接沿用 live audit 的多路徑證據，縮短人工抄寫但不縮短治理 gate。
+- P0 source-evidence audit 的 MOPS verified-artifact 分支現在會把 validator 已核對的 raw／accepted／quarantine／blocked denominator 傳入 matrix；因此同一份 `mops-numeric-pit-candidate.v1` 進入 candidate intake 時會保留真實 `1/1`（或實際 artifact row count）coverage／row-conservation，而不是誤投影成 `0/0`。這只修正 machine evidence 可見性，owner／license／publication policy 仍未決、`accepted=0`、`downstream_eligibility=none`。
 
 ## 2026-08-28 Data Update fallback diagnostics projection（current engineering）
 

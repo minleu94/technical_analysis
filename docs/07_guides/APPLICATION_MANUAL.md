@@ -853,7 +853,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 
 `scripts/inspect_p0_intake_readiness.py` 是把外部 P0 治理資料交給程式檢查的第一個接入口。它只接受明確的 `p0-source-intake.v1` JSON，要求完整 13 個 `source-acceptance-dossier.v1`，逐列驗證欄位型別、source denominator、license／PIT／quality checklist 與安全旗標；不會建立 decision registry、不會寫正式資料，也不會自動接受來源。
 
-若已經有 `p0-source-evidence-audit.v1`，不必人工抄寫每個 machine row。可用下列唯讀轉接器建立一份 candidate intake；每列 dossier 只帶入 audit 的 raw／accepted／quarantine／blocked 計數、payload hash 與 machine status，另外在 intake envelope 的 `machine_evidence_by_source` 保留 allowlist 內的實際 route、fallback lineage、schema／probe outcome、timestamp semantics 與 acquisition route 清單。所有 source owner、license、publication、available-date、PIT、revision 與 reviewer 欄位仍標成 `unverified`／`requires_review`，所以結果一定維持 `deferred`：
+若已經有 `p0-source-evidence-audit.v1`，不必人工抄寫每個 machine row。可用下列唯讀轉接器建立一份 candidate intake；每列 dossier 只帶入 audit 的 raw／accepted／quarantine／blocked 計數、payload hash 與 machine status，另外在 intake envelope 的 `machine_evidence_by_source` 保留 allowlist 內的實際 route、fallback lineage、schema／probe outcome、timestamp semantics 與 acquisition route 清單。若 audit 內的 MOPS verified-artifact 分支已通過 validator，這些 row counts 會如實保留到 dossier，不會把有效 artifact 變成 `0/0`；所有 source owner、license、publication、available-date、PIT、revision 與 reviewer 欄位仍標成 `unverified`／`requires_review`，所以結果一定維持 `deferred`：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\build_p0_intake_from_audit.py `

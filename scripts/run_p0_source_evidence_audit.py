@@ -406,6 +406,15 @@ def build_p0_source_evidence_audit(
                     "availability": "artifact_verified",
                     "schema_status": "matched",
                     "payload_sha256": mops_rows[0]["source_hash"],
+                    # Keep the validated artifact's denominator visible to the
+                    # downstream candidate-intake builder.  The MOPS branch is
+                    # intentionally separate from live probe rows, so without
+                    # these explicit counts an already-validated artifact would
+                    # be projected as an unexplained 0/0 machine observation.
+                    "raw_row_count": len(mops_rows),
+                    "accepted_row_count": len(mops_rows),
+                    "quarantine_row_count": 0,
+                    "blocked_row_count": 0,
                     "remaining_blocker": "legal_and_license_acceptance_required",
                     "auto_verifiable": [
                         "schema_validation_passed",
