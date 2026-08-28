@@ -60,6 +60,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_qa_broker_bounded_fetch_acceptance.py": "governance-doc-tooling",
     "tests/test_qa_broker_real_http_canary.py": "governance-doc-tooling",
     "tests/test_qa_technical_indicator_production_canary.py": "governance-doc-tooling",
+    "tests/test_capture_p0_license_evidence.py": "governance-doc-tooling",
     "tests/test_qa_technical_indicator_process_pool.py": "governance-doc-tooling",
     "tests/test_qa_technical_indicator_worker_recovery.py": "governance-doc-tooling",
     "tests/test_inspect_scheduled_task_registration.py": "governance-doc-tooling",

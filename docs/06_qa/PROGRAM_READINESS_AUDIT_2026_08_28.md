@@ -8,6 +8,8 @@
 
 technical production canary 的 guarded 入口與 readiness contract 已完成，預設只做唯讀預演；目前沒有執行任何正式 technical 寫入。要解除這一項 blocker，仍需 owner 在停用並行 writer 後明確核准一檔股票的 backup／rollback canary。
 
+P0 license／terms 的候選證據入口也已完成：`scripts/capture_p0_license_evidence.py` 會從 27 條 route 收斂 3 個唯一 allowlisted 官方 URL，僅保留 bounded response metadata、SHA-256 與關鍵限制 flags，不保存頁面全文、不改 source acceptance。2026-08-28 已產生 no-network preview；同日嘗試受控 bounded GET 時，當前 Windows host 以 `WinError 10013` 拒絕 socket，因此三個 target 都被保留為 `transport_error`。這是本機 egress／權限證據，不是官方來源不存在；需在允許 HTTPS 的執行環境重跑，或由 Owner／Reviewer 提供可驗證的外部保存頁面 hash，才能進入 license review。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的
@@ -92,6 +94,13 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 所以 `contract_only` 的正確解讀是「Control Center 沒有載入 audit」，不能再解讀為「沒有資料」。載入本次 audit 後，真實治理狀態為 `12 blocked_provenance + 1 research_shadow`，人工 decision 為 `13 not_supplied`。
 
+### P0 條款候選證據擷取觀察
+
+`capture_p0_license_evidence.py` 的 no-network preview artifact 為
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence\preview_20260828.json`
+（`p0-license-evidence-capture.v1`、3 個 target、`license_accepted=false`）。確認後的候選擷取另保存
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence\capture_20260828.json`；本機三個 target 皆為 `transport_error / WinError 10013`，沒有保存頁面內容，也沒有寫正式資料。此 artifact 只能讓環境網路 blocker 可觀測，不能取代官方條款審閱或具名 owner／reviewer 決議。
+
 2026-08-27 另以官方 MOPS EZSearch 抓取 2026-08-20～2026-08-27 的 availability-only artifact，得到 426 個 events／426 個 projections。sii、otc 的 8 個 query 有正常回應；rotc、pub 的 8 個 query 是官方 `status=fail` 零列回覆，現在已與真正的 timeout／網路／解析錯誤分開計數。此 artifact 仍只在 TEMP development root，沒有寫入正式 availability mapping、SQLite 或 Formal input；P0 的季度來源仍須 owner／reviewer 的 license、coverage 與使用範圍決議。
 
 ### Data Update 排程註冊觀察
@@ -159,6 +168,7 @@ availability candidate SHA-256=`9CAE017074FE08B5EE14761FDAB8458D738AFD63AF0ED73F
 
 1. 將 live P0 audit、actual route、fallback reason、publication/PIT class 與 owner decision 投影接進 Data Update／Research Console，同時保留 candidate-only 安全邊界。（Data Update 的唯讀 projection、fallback 拒絕診斷與 append-only history producer 已完成；後續觀察真實排程並補 live refresh／retention。）
 2. 以 5 組 owner packet 完成 13 項 source 的 license/use-case/reviewer 決議；可先 `limited`，不必等待全部來源一次 accepted。
+   - 候選條款 machine evidence 已可用 `scripts\\capture_p0_license_evidence.py` 補抓；若目前 host 仍拒絕 HTTPS，先保存 `transport_error`，不要把失敗改寫成 `license_accepted`。
 3. 持續收集真實 weekly sidecar 並完成 owner review；目前已接入明確 sidecar 參數，不能用 pending 或 projection 直接取得 Formal credit。
 4. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程（已完成 CLI／UI 共用 preview→confirm 與不可覆寫 ledger）；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
 5. 保持 prospective publisher 與歷史 ML validator 的 schema 分離；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積，並用 readiness inspector 的 lane／schema 診斷避免把 shadow bytes 誤接到正式 consumer。
@@ -171,6 +181,7 @@ availability candidate SHA-256=`9CAE017074FE08B5EE14761FDAB8458D738AFD63AF0ED73F
 - 官方 parser：`data_module/p0_official_source_parsers.py`
 - live probe／fallback：`scripts/update_phase3c_candidates.py`
 - P0 evidence audit：`scripts/run_p0_source_evidence_audit.py`
+- P0 license／terms candidate capture：`scripts/capture_p0_license_evidence.py`（預覽與 2026-08-28 host egress `transport_error` artifact 均在 TEMP；不自動接受來源）
 - candidate audit：`scripts/run_p0_candidate_audit.py`
 - live audit（2026-08-28 fresh capture，含 TPEx fallback lineage）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_fallback_v2.json`（SHA-256=`94186ed0565f544a296427b423b01167e78ef15d2871e1c757bb8de9efe83d82`）
 - cross-date live audit（`decision_date=2026-08-27`，驗證 T86／MI_MARGN 有真實官方日資料）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_20260827.json`（SHA-256=`ABF95D392FFC05EA81BB03EB68D8ACBFFE50C9FEDBEEE09EA7641A5B94FEE57A`）
@@ -186,6 +197,7 @@ availability candidate SHA-256=`9CAE017074FE08B5EE14761FDAB8458D738AFD63AF0ED73F
 - 最新全量回歸（availability merge／broker real HTTP canary 與 snapshot 選檔修正後）：`3683 passed / 1 skipped / 26 warnings`（`540.83s`；未指定 JUnit 輸出）；這只更新工程回歸證據，不會把 production scheduler、正式 ACL、owner decision 或資料 gate 誤標成 ready。
 - 新增 availability candidate merge workflow 後的月營收候選唯讀預演：既有 mapping=`1,832`、candidate=`1,851`、added=`1,851`、conflict=`0`、merged=`3,683`；正式 target／SQLite 均未寫入。新增真實 broker HTTP canary 後重算 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_broker_canary_20260828.json`（status=`action_required`；SHA-256=`F7B644EC597629E61D17431EF497C2E251F165DF4827DB1E5B0CF8178350FABB`），performance blocker 僅剩 `technical_production_single_writer_canary_not_completed`。
 - technical canary guarded entry 的唯讀 preview 後再次重算 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_technical_canary_preview_20260828.json`（status=`action_required`；SHA-256=`BEEFAA4E47E2C02D60CDB30CC334093E78B318EED684B681B317081541CAD825`）；所有既有 performance artifacts 與 preview 均可讀，performance blocker 精確保留 `technical_production_single_writer_canary_not_completed`，沒有把 preview 當正式 write proof。
+- P0 license／terms no-network preview：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence\preview_20260828.json`（3 個 allowlisted URL、`capture_executed=false`；SHA-256=`07C6DC0ECAC4E19AEEF523A5B649DBB4AE1A959F944954FC770A9B43CE0255D2`）；confirmed candidate capture 因目前 host `WinError 10013` 三個 target 均為 `transport_error`，未保存頁面全文、不改正式資料。
 - freshness probe／CMD／PowerShell wrapper post-change regression：`3665 passed / 1 skipped`；`run_daily_data_freshness_check.ps1` 與正式 Task Scheduler 使用的 `.cmd` 都已以正式資料唯讀＋TEMP status/log 實際執行 `status=passed`、daily／technical latest=`20260828`，並共用同一個 canonical probe。
 - HEAD final unified readiness（canonical freshness wrapper 修正後重新盤點）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_head_final.json`（status=`action_required`；SHA-256=`AEA56956A13AE25B271CFE56D59905180C3412743EA063FAC324A763C5A29039`）；七個 lane 的 blocker 維持原樣，表示 wrapper 修正只改善錯誤可觀測性，沒有越過任何治理／正式環境 gate。
 - freshness probe ACL fail-soft regression：明確模擬 status／log `PermissionError` 時，probe 輸出結構化 `status=failed`、兩個 artifact write diagnostics 並回傳 exit code `1`；不再讓 scheduler 只看到未處理 traceback。

@@ -736,6 +736,29 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - 產出稽核草稿 handoff JSON 至 `%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1.json`；其 `status=audit_generated_not_validation_handoff`，不宣稱 pytest、mypy 或 Git 終態已通過。
 - 嚴格守護 `downstream_eligibility=none`、`human_decision=requires_human_acceptance`、`production_scheduler_allowed=false` 與 `formal_oos_allowed=false`；所有 formal clock zeros 維持 0。
 
+### P0 官方條款／授權候選證據擷取（只讀、候選）
+
+`scripts/capture_p0_license_evidence.py` 用來把「可取得的官方條款／OpenAPI 頁面」變成可交給 Owner／Reviewer 的候選證據，不會把 URL 存在 route registry 就當成已授權。它只從 `p0_source_acquisition_routes.py` 的 allowlist 取出 3 個唯一 URL（TWSE、TPEx、TDCC），保存 response status、HTTP header 摘要、內容 SHA-256 與有限關鍵詞 flags；不保存頁面全文，也不寫正式資料庫、source acceptance registry、Score、Advice、Portfolio 或排程。
+
+```powershell
+# 預覽：不發網路請求，只列出預計擷取的 3 個官方條款／OpenAPI URL
+.\.venv\Scripts\python.exe scripts\capture_p0_license_evidence.py `
+  --decision-date "2026-08-28" `
+  --output $env:TEMP\technical_analysis_p0_license_evidence\preview.json
+
+# 受控候選擷取：只有精確 token 才會做 bounded GET；仍不代表 license accepted
+.\.venv\Scripts\python.exe scripts\capture_p0_license_evidence.py `
+  --decision-date "2026-08-28" `
+  --confirm capture-p0-license-evidence `
+  --timeout-seconds 15 `
+  --max-bytes 65536 `
+  --output $env:TEMP\technical_analysis_p0_license_evidence\capture.json
+```
+
+- `--output` 必須位於 OS TEMP；工具拒絕 repository、`DATA_ROOT` 與正式 SQLite 路徑。
+- 預覽的 `capture_executed=false`、`confirmation_required=true`，不呼叫網路。確認後每個 URL 仍有 bytes／timeout 上限，失敗會保留 typed error，其他 URL 繼續診斷。
+- `license_accepted=false`、`source_acceptance_granted=false`、`downstream_eligibility=none` 固定不變。Owner／Reviewer 必須另外提供具名決議、使用範圍、quality／PIT／coverage、rate limit 與 rollback；本 artifact 不能單獨解除 `legal_and_license_acceptance_required`。
+
 若要把已保存的 audit 交給 Owner／License reviewer，可用下列唯讀 renderer；它只整理既有 13-source machine evidence 與 5 組 owner question，不重新抓資料、不寫 registry，也不會推導 `accepted`／`limited`：
 
 ```powershell
