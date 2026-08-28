@@ -41,6 +41,8 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 2026-08-28 重新以受控外部網路完成 bounded live audit：13/13 來源均有 machine row，`1 verified / 10 degraded / 2 official_no_data`；raw rows=`72,202`、accepted rows=`70,825`。主要 row count 為：除權息 251、減資／分割 2、停復牌 1、處置 4、分盤 4、全額交割 10、漲跌停行情 1,377（鎖死事件 0）、三大法人 0、信用交易 0、TDCC 68,578、TWSE 月營收 1,085、TPEx 月營收 890；三大法人與信用交易的 primary 0 列是官方當日無資料回覆，不是 network failure。新增的 fallback evidence 顯示：信用交易 TPEx OpenAPI 確實回 `2026-08-27`、但要求日為 `2026-08-28`，所以明確標成 `date_mismatch` 並拒絕；三大法人本次 fallback 遇到 response prematurely，明確標成 `network_error`，沒有把它誤算成資料。MOPS 季報 availability artifact 通過驗證。所有 route 仍固定 `candidate_evidence_only=true`、`formal_eligible=false`、scheduler／production ingestion 關閉。
 
+為釐清「官方當日無資料」是否只是日期語意，另於本輪以 `decision_date=2026-08-27` 完成第二次 bounded live cross-date capture：13/13 均有 machine row，raw=`91,824`、accepted=`90,447`；TWSE T86 實得 `18,307` 列、MI_MARGN 實得 `1,295` 列，表示兩個同語意官方主路徑在 8/27 有可取得資料。這份 capture 只作日期對照，不會回填 8/28、改寫正式資料或解除 PIT／license／owner blocker。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_20260827.json`（SHA-256=`ABF95D392FFC05EA81BB03EB68D8ACBFFE50C9FEDBEEE09EA7641A5B94FEE57A`）；owner packet=`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260827_live.md`（SHA-256=`30101531579324020A899CDECE3AD1EBE04812ABA78632050F4DB7F522DD65E7`）。
+
 所以 `contract_only` 的正確解讀是「Control Center 沒有載入 audit」，不能再解讀為「沒有資料」。載入本次 audit 後，真實治理狀態為 `12 blocked_provenance + 1 research_shadow`，人工 decision 為 `13 not_supplied`。
 
 2026-08-27 另以官方 MOPS EZSearch 抓取 2026-08-20～2026-08-27 的 availability-only artifact，得到 426 個 events／426 個 projections。sii、otc 的 8 個 query 有正常回應；rotc、pub 的 8 個 query 是官方 `status=fail` 零列回覆，現在已與真正的 timeout／網路／解析錯誤分開計數。此 artifact 仍只在 TEMP development root，沒有寫入正式 availability mapping、SQLite 或 Formal input；P0 的季度來源仍須 owner／reviewer 的 license、coverage 與使用範圍決議。
@@ -70,7 +72,9 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 - P0 evidence audit：`scripts/run_p0_source_evidence_audit.py`
 - candidate audit：`scripts/run_p0_candidate_audit.py`
 - live audit（2026-08-28 fresh capture，含 TPEx fallback lineage）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_fallback_v2.json`（SHA-256=`94186ed0565f544a296427b423b01167e78ef15d2871e1c757bb8de9efe83d82`）
+- cross-date live audit（`decision_date=2026-08-27`，驗證 T86／MI_MARGN 有真實官方日資料）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_20260827.json`（SHA-256=`ABF95D392FFC05EA81BB03EB68D8ACBFFE50C9FEDBEEE09EA7641A5B94FEE57A`）
 - P0 owner packet（由最新 fresh capture 唯讀重排）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260828_live_tpex_fallback.md`（SHA-256=`be6e164ead39fb2894e5a6f028ca275dcafa1f0f4926888fe2efb299c5ad7314`）
+- cross-date owner packet：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260827_live.md`（SHA-256=`30101531579324020A899CDECE3AD1EBE04812ABA78632050F4DB7F522DD65E7`）
 - Control Center：`C:\Users\archi\AppData\Local\Temp\p0-source-control-center-20260827.json`
 - Evidence readiness：`C:\Users\archi\AppData\Local\Temp\pre-v2-readiness-20260828.json`
 - ML Formal readiness：`C:\Users\archi\AppData\Local\Temp\ml-formal-input-readiness-20260828.json`
