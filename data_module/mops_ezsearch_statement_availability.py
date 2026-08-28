@@ -23,6 +23,13 @@ MOPS_STATEMENT_AVAILABILITY_SOURCE_VERSION = "mops-ezsearch-statement-publicatio
 MOPS_RESPONSE_ROW_LIMIT = 1000
 TAIPEI_TIMEZONE = timezone(timedelta(hours=8))
 
+# EZSearch uses ``status=fail`` for a valid response with no matching rows.
+# Keep that separate from transport/parser errors so a bounded capture does
+# not present an official empty result as an outage.
+_QUERY_SUCCESS_STATUS = "success"
+_QUERY_OFFICIAL_NO_DATA_STATUS = "fail"
+_QUERY_ERROR_STATUS = "error"
+
 MOPS_STATEMENT_ITEMS: dict[str, str] = {
     "F26": "balance_sheet",
     "F27": "income_statement",
@@ -155,12 +162,21 @@ def build_statement_availability_artifact(
             raise ValueError(f"unsupported MOPS statement item: {result.announcement_item}")
         if re.fullmatch(r"[0-9a-fA-F]{64}", result.response_sha256) is None:
             raise ValueError("MOPS query result response_sha256 must be a SHA-256 hex digest")
+        query_status = str(result.source_status).strip().lower()
+        if query_status not in {
+            _QUERY_SUCCESS_STATUS,
+            _QUERY_OFFICIAL_NO_DATA_STATUS,
+            _QUERY_ERROR_STATUS,
+        }:
+            raise ValueError(f"unsupported MOPS query source status: {result.source_status}")
+        if query_status == _QUERY_OFFICIAL_NO_DATA_STATUS and result.rows:
+            raise ValueError("MOPS official no-data query must not contain rows")
         query_manifest.append(
             {
                 "market": result.market,
                 "announcement_item": result.announcement_item,
                 "response_sha256": result.response_sha256,
-                "source_status": result.source_status,
+                "source_status": query_status,
                 "row_count": len(result.rows),
                 "error_code": result.error_code,
             }
@@ -224,10 +240,19 @@ def build_statement_availability_artifact(
             "invalid_event_count": 0,
             "query_count": len(query_manifest),
             "successful_query_count": sum(
-                1 for item in query_manifest if item["source_status"] == "success"
+                1
+                for item in query_manifest
+                if item["source_status"] == _QUERY_SUCCESS_STATUS
+            ),
+            "official_no_data_query_count": sum(
+                1
+                for item in query_manifest
+                if item["source_status"] == _QUERY_OFFICIAL_NO_DATA_STATUS
             ),
             "failed_query_count": sum(
-                1 for item in query_manifest if item["source_status"] != "success"
+                1
+                for item in query_manifest
+                if item["source_status"] == _QUERY_ERROR_STATUS
             ),
         },
         "rows": parsed_rows,

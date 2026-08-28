@@ -1569,6 +1569,8 @@ MOPS 公告時間 artifact 只證明 availability，不能自行衍生 ROE、毛
 
 `--output-root` 必須位於正式 `DATA_ROOT` 與 repo 之外；單次最多 31 天，任一 market/item 回傳達 1000 筆時會拒絕輸出，必須縮小日期區間。輸出包含完整 JSON artifact 與 `fundamental-statement-availability.csv` 候選 mapping；JSON 保留官方 `announcement_at`，CSV 因既有 consumer 只有 date grain，固定以公告次一曆日作 `available_date`，避免同日盤中 look-ahead。具官方 timestamp 的延後申報採實際公告日，不再套用 120 天推定窗口。此 CLI 不寫正式 availability mapping／SQLite、不執行每日更新或排程、不提供 Formal credit；要接到正式資料仍須另一個明確 apply 決議與備份流程。
 
+查詢品質摘要會把三種結果分開保存：`successful_query_count` 是有正常回應的查詢、`official_no_data_query_count` 是官方以 `status=fail` 回覆且沒有資料列、`failed_query_count` 才是 timeout／網路／解析錯誤。官方無資料不會被誤報成 outage，但仍會留在 `query_manifest`，供 owner 判斷市場範圍是否完整；若有真正錯誤，整體狀態為 `degraded`，不得以部分列數宣稱完整 coverage。輸入若把 `status=fail` 與資料列混用，builder 會 fail-closed。
+
 若目前只要建立「導入日後可用」的歷史 baseline candidate，可先產生候選檔：
 
 ```powershell

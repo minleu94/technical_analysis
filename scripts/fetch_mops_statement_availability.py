@@ -105,10 +105,14 @@ def main(argv: list[str] | None = None) -> int:
         "event_count": artifact["quality_summary"]["event_count"],
         "projection_count": artifact["quality_summary"]["projection_count"],
         "successful_query_count": artifact["quality_summary"]["successful_query_count"],
+        "official_no_data_query_count": artifact["quality_summary"][
+            "official_no_data_query_count"
+        ],
         "failed_query_count": artifact["quality_summary"]["failed_query_count"],
         "status": (
             "ready"
             if artifact["quality_summary"]["failed_query_count"] == 0
+            and artifact["quality_summary"]["successful_query_count"] > 0
             else "degraded"
             if artifact["quality_summary"]["successful_query_count"] > 0
             else "unavailable"

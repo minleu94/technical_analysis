@@ -7,6 +7,12 @@
 - 目前正式環境讀到 `data_update_quick`=`passed`、run=`20260827-308`、目標資料日=`2026-08-27`、12/12 步驟通過；距目前約 17.8 小時，時間軸狀態為 `current`。這是最新一次排程結果，不等於 Paper fills、P0 acceptance 或 Formal credit。
 - 後續仍可補 append-only capture history／live refresh，但必須先有受治理的 history artifact；本 slice 不掃描目錄、不把檔案 mtime 冒充執行完成時間。
 
+## 2026-08-28 MOPS availability query classification（current engineering）
+
+- MOPS EZSearch availability builder 現在把 `status=fail` 且零列的官方無資料回覆，與 timeout／網路／解析錯誤分開計數；artifact 會分別保存 `official_no_data_query_count` 與 `failed_query_count`，不再把合法空回覆顯示成 outage。
+- `status=fail` 若夾帶資料列、或出現未知 query status，會在 builder 直接 fail-closed。這只改善候選資料與 Data Update 的品質投影，不把無資料當成完整 coverage，也不改變 research-only、P0 owner decision、Formal 或 production 邊界。
+- 2026-08-27 以官方 MOPS EZSearch 抓取 2026-08-20～2026-08-27 的 bounded artifact：426 個 availability events／426 個 projections；sii、otc 查詢正常，rotc、pub 為官方無資料回覆，沒有把它們當網路錯誤。artifact 僅在 TEMP development root，尚未寫正式 mapping／SQLite。
+
 ## 2026-08-28 Formal／ML prospective activation dry-run（current engineering）
 
 - 以實際 `clock:prospective:20260828:v1`、官方 TWSE／TPEX staging 與隔離 TEMP output 完成一次唯讀邊界驗證；PIT sector、Rule Champion、simulated Portfolio 三個 producer 均能產出各自的 prospective manifest，strict readiness 亦能產出。

@@ -217,6 +217,56 @@ def test_artifact_counts_failed_queries_without_treating_them_as_empty_success()
     assert artifact["query_manifest"][1]["error_code"] == "network_timeout"
 
 
+def test_artifact_separates_official_no_data_queries_from_transport_failures() -> None:
+    artifact = build_statement_availability_artifact(
+        [
+            _result(_row()),
+            MOPSQueryResult(
+                market="otc",
+                announcement_item="F26",
+                rows=(),
+                response_sha256="b" * 64,
+                source_status="fail",
+            ),
+            MOPSQueryResult(
+                market="rotc",
+                announcement_item="F26",
+                rows=(),
+                response_sha256="c" * 64,
+                source_status="error",
+                error_code="network_timeout",
+            ),
+        ],
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 28),
+        captured_at="2026-07-28T12:00:00+08:00",
+    )
+
+    quality = artifact["quality_summary"]
+    assert quality["successful_query_count"] == 1
+    assert quality["official_no_data_query_count"] == 1
+    assert quality["failed_query_count"] == 1
+    assert artifact["query_manifest"][1]["source_status"] == "fail"
+
+
+def test_artifact_rejects_rows_on_official_no_data_query() -> None:
+    with pytest.raises(ValueError, match="official no-data query must not contain rows"):
+        build_statement_availability_artifact(
+            [
+                MOPSQueryResult(
+                    market="sii",
+                    announcement_item="F26",
+                    rows=(_row(),),
+                    response_sha256="a" * 64,
+                    source_status="fail",
+                )
+            ],
+            start_date=date(2026, 7, 27),
+            end_date=date(2026, 7, 28),
+            captured_at="2026-07-28T12:00:00+08:00",
+        )
+
+
 def test_fetch_cli_safe_query_converts_timeout_to_structured_failure() -> None:
     from scripts.fetch_mops_statement_availability import _safe_query
 
