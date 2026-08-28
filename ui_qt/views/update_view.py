@@ -231,6 +231,7 @@ class UpdateView(QWidget):
         p0_source_audit_path: str | Path | None = None,
         p0_source_decision_path: str | Path | None = None,
         data_update_status_path: str | Path | None = None,
+        data_update_history_path: str | Path | None = None,
         data_freshness_status_path: str | Path | None = None,
         tpex_status_path: str | Path | None = None,
     ):
@@ -268,6 +269,12 @@ class UpdateView(QWidget):
         self.data_update_status_path = _status_path(
             data_update_status_path,
             output_root_path / "scheduled" / "data_update_quick" / "latest_status.json"
+            if output_root_path is not None
+            else None,
+        )
+        self.data_update_history_path = _status_path(
+            data_update_history_path,
+            output_root_path / "scheduled" / "data_update_quick" / "history.jsonl"
             if output_root_path is not None
             else None,
         )
@@ -777,6 +784,27 @@ class UpdateView(QWidget):
             "只顯示明確指定的更新 status artifact；缺失、失敗或過期不會被舊資料掩蓋。"
         )
         timeline_layout.addWidget(self.data_update_timeline_table)
+        history_label = QLabel("最近執行歷史（append-only／唯讀）")
+        history_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        timeline_layout.addWidget(history_label)
+        self.data_update_timeline_history_table = QTableWidget(0, 4)
+        self.data_update_timeline_history_table.setHorizontalHeaderLabels(
+            ("時間", "結果", "Run", "資料區間")
+        )
+        self.data_update_timeline_history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.data_update_timeline_history_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.data_update_timeline_history_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.data_update_timeline_history_table.setAlternatingRowColors(True)
+        self.data_update_timeline_history_table.verticalHeader().setVisible(False)
+        self.data_update_timeline_history_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+        self.data_update_timeline_history_table.horizontalHeader().setStretchLastSection(True)
+        self.data_update_timeline_history_table.setMaximumHeight(180)
+        self.data_update_timeline_history_table.setToolTip(
+            "只讀取明確指定的 data-update-status-history.v1 JSONL；不會改寫或回填歷史。"
+        )
+        timeline_layout.addWidget(self.data_update_timeline_history_table)
         all_layout.addWidget(timeline_group)
 
         # 候選與決策資料域群組
@@ -2246,6 +2274,7 @@ class UpdateView(QWidget):
                 update_status_path=self.data_update_status_path,
                 freshness_status_path=self.data_freshness_status_path,
                 tpex_status_path=self.tpex_status_path,
+                history_path=self.data_update_history_path,
             )
         except Exception as exc:
             # 狀態面板不能因 artifact 異常而讓整個資料頁消失，也不能退回
@@ -2260,6 +2289,14 @@ class UpdateView(QWidget):
                 "steps": [],
                 "step_count": 0,
                 "failed_step_count": 0,
+                "history": {
+                    "status": "invalid",
+                    "configured": self.data_update_history_path is not None,
+                    "available": False,
+                    "records": [],
+                    "record_count": 0,
+                    "diagnostics": ["history:not_loaded"],
+                },
                 "diagnostics": [f"timeline_loader_error:{type(exc).__name__}:{exc}"],
                 "boundary": {
                     "read_only": True,
@@ -2294,6 +2331,7 @@ class UpdateView(QWidget):
             "running": "執行中",
             "failed": "失敗",
             "missing": "缺漏",
+            "empty": "尚未建立",
             "invalid": "格式異常",
             "not_configured": "未設定",
         }.get(str(value or "").strip().lower(), str(value or "未知"))
@@ -2342,6 +2380,14 @@ class UpdateView(QWidget):
             tpex_at = str(tpex.get("completed_at") or "").strip()
             tpex_suffix = f"（{tpex_at}）" if tpex_at else ""
             lines.append(f"TPEX 背景：{tpex_status}{tpex_suffix}")
+        history = value.get("history")
+        if isinstance(history, dict):
+            history_status = str(history.get("status") or "unknown").strip()
+            history_count = history.get("record_count")
+            if history_status == "current" and isinstance(history_count, int):
+                lines.append(f"執行歷史：{history_count} 筆 append-only")
+            elif history.get("configured"):
+                lines.append(f"執行歷史：{self._timeline_status_text(history_status)}")
         diagnostics = [str(item) for item in value.get("diagnostics", []) if str(item).strip()]
         if diagnostics:
             lines.append("診斷：" + "；".join(diagnostics[:3]))
@@ -2376,6 +2422,37 @@ class UpdateView(QWidget):
                 item = QTableWidgetItem(cell)
                 item.setToolTip(cell)
                 table.setItem(row_index, column_index, item)
+
+        history_table = getattr(self, "data_update_timeline_history_table", None)
+        if history_table is None:
+            return
+        history_table.setRowCount(0)
+        history = value.get("history") if isinstance(value.get("history"), dict) else {}
+        records = history.get("records") if isinstance(history.get("records"), list) else []
+        for raw_record in reversed(records[-32:]):
+            if not isinstance(raw_record, dict):
+                continue
+            row_index = history_table.rowCount()
+            history_table.insertRow(row_index)
+            completed_at = str(
+                raw_record.get("completed_at")
+                or raw_record.get("started_at")
+                or raw_record.get("captured_at")
+                or "未知"
+            )
+            start_date = str(raw_record.get("start_date") or "")
+            end_date = str(raw_record.get("end_date") or "")
+            period = f"{start_date} ~ {end_date}" if start_date or end_date else "未提供"
+            cells = (
+                completed_at,
+                str(raw_record.get("status") or "unknown"),
+                str(raw_record.get("run_id") or "未知"),
+                period,
+            )
+            for column_index, cell in enumerate(cells):
+                item = QTableWidgetItem(cell)
+                item.setToolTip(cell)
+                history_table.setItem(row_index, column_index, item)
 
     def _load_p0_source_control_center(
         self,

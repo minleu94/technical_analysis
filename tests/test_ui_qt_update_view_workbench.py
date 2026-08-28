@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QS
 import pandas as pd
 
 from ui_qt.views.update_view import StatusCard, UpdateView
+from app_module.update_status_history import append_update_status_history
 from data_module.p0_source_contract_registry import P0_SOURCE_IDS
 
 
@@ -333,6 +334,46 @@ def test_update_view_timeline_clears_old_steps_when_artifact_is_missing(tmp_path
     assert missing["status"] == "missing"
     assert view.data_update_timeline_table.rowCount() == 0
     assert "最後成功完成：未提供" in view.data_update_timeline_summary_label.text()
+
+
+def test_update_view_projects_append_only_data_update_history(tmp_path):
+    update_path = tmp_path / "update-status.json"
+    history_path = tmp_path / "history.jsonl"
+    update_payload = {
+        "status": "passed",
+        "run_id": "run-current",
+        "started_at": "2026-08-28T08:30:00+08:00",
+        "completed_at": "2026-08-28T09:00:00+08:00",
+        "start_date": "2026-08-17",
+        "end_date": "2026-08-28",
+        "steps": [],
+    }
+    update_path.write_text(json.dumps(update_payload), encoding="utf-8")
+    append_update_status_history(
+        history_path,
+        {**update_payload, "status": "failed", "run_id": "run-old"},
+        captured_at="2026-08-27T09:00:00+08:00",
+    )
+    append_update_status_history(
+        history_path,
+        update_payload,
+        captured_at="2026-08-28T09:00:01+08:00",
+    )
+
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        data_update_status_path=update_path,
+        data_update_history_path=history_path,
+    )
+    status = view._get_data_update_timeline()
+    view._render_data_update_timeline(status)
+
+    assert status["history"]["status"] == "current"
+    assert status["history"]["record_count"] == 2
+    assert "執行歷史：2 筆 append-only" in view.data_update_timeline_summary_label.text()
+    assert view.data_update_timeline_history_table.rowCount() == 2
+    assert view.data_update_timeline_history_table.item(0, 1).text() == "passed"
+    assert view.data_update_timeline_history_table.item(0, 2).text() == "run-current"
 
 
 def test_update_view_date_controls_use_taiwan_market_date(monkeypatch):

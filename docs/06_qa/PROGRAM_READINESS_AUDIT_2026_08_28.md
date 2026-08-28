@@ -23,7 +23,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 | Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但受控環境目前把三個 path 指向缺失且早於 `training_as_of=2026-08-28` 的 `clock-20260819`；readiness 已明示 stale-clock hint | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費；owner 必須發布當前 clock 並更新明確 path | 可以工程化累積；不得自動改接 `clock-20260828`、也不得拿 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | 一般 host context 對既有 `config.log`／Research Registry 的零位元 write-handle probe 通過，overall=`ready`；隔離 staging probe 已能以正式 Registry schema 完成 insert／讀回／rollback／清除 | 正式 Registry 本身仍未做實寫；production ACL／鎖定仍需 owner 在正式環境確認 | 可以；路徑 ACL 不是目前 blocker，schema transaction 能力已可在非正式 staging 驗證 |
 | 效能工程 | 尚未設計 | 既有 batch backtest、optimizer 與部分 TPEX refresh 已有受控平行化 | 券商來源 rate limit／retry／Selenium 邊界；技術指標 process pool＋SQLite/CSV single writer 設計 | 可以；先量測、再做 bounded worker 與 single-writer，不直接拉高 thread 數 |
-| Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；另新增 `data-update-timeline.v1`，明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness 狀態 | 目前只投影固定的 `latest_status` 出口，尚未建立 append-only capture history；缺失、格式錯誤、失敗、執行中與過期已分開顯示，不會以 DB mtime 或舊卡片冒充成功 | 可以；下一步可在受治理 artifact 到位後接續 live refresh／capture history，不應掃描目錄或繞過 candidate-only 邊界 |
+| Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；`data-update-timeline.v1` 明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness；runner／UI 已接 `data-update-status-history.v1` append-only 歷史 | 現有正式 latest status 尚未回填 history，需等下一次真實排程自然產生第一筆；live refresh／歷史 retention 尚未完成 | 可以；下一步觀察真實排程 history 並再做 live UI QA，不掃描目錄、不回放補歷史或繞過 candidate-only 邊界 |
 
 ## P0 多路徑取得結果
 
@@ -51,7 +51,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 ## 持續推進順序
 
-1. 將 live P0 audit、actual route、fallback reason、publication/PIT class 與 owner decision 投影接進 Data Update／Research Console，同時保留 candidate-only 安全邊界。（Data Update 的唯讀 projection 已完成；後續補 artifact refresh／capture history。）
+1. 將 live P0 audit、actual route、fallback reason、publication/PIT class 與 owner decision 投影接進 Data Update／Research Console，同時保留 candidate-only 安全邊界。（Data Update 的唯讀 projection 與 append-only history producer 已完成；後續觀察真實排程並補 live refresh／retention。）
 2. 以 5 組 owner packet 完成 13 項 source 的 license/use-case/reviewer 決議；可先 `limited`，不必等待全部來源一次 accepted。
 3. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程（已完成 CLI／UI 共用 preview→confirm 與不可覆寫 ledger）；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
 4. 保持 prospective publisher 與歷史 ML validator 的 schema 分離；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積，並用 readiness inspector 的 lane／schema 診斷避免把 shadow bytes 誤接到正式 consumer。

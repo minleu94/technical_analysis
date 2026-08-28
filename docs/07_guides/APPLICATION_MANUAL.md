@@ -976,9 +976,11 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 
 尚未按下檢查按鈕時，卡片內的提示文字不會被當成 `status` 欄位；燈號會維持灰色「未檢查」，不會誤顯示黃色「待更新」。
 
-全部資料頁的卡片下方另有「資料更新時間軸（唯讀）」：按「檢查數據狀態」後會讀取固定的 `OUTPUT_ROOT/scheduled/data_update_quick/latest_status.json`、`OUTPUT_ROOT/scheduled/data_freshness/latest_status.json` 與 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`，顯示最後成功完成時間、run、目標資料日、每個更新步驟、freshness 結果與診斷。時間軸狀態 `最新`、`部分可用`、`freshness 異常`、`已過期`、`執行中`、`失敗`、`缺漏`、`格式異常`、`未設定` 的判讀彼此不同；缺檔或讀取失敗會清掉本輪步驟列，不沿用上一輪成功結果。這個投影只讀檔，不掃描其他 `latest_status`、不發網路、不寫資料庫，也不把檔案修改時間當成成功完成時間。
+全部資料頁的卡片下方另有「資料更新時間軸（唯讀）」：按「檢查數據狀態」後會讀取固定的 `OUTPUT_ROOT/scheduled/data_update_quick/latest_status.json`、`OUTPUT_ROOT/scheduled/data_update_quick/history.jsonl`、`OUTPUT_ROOT/scheduled/data_freshness/latest_status.json` 與 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`，顯示最後成功完成時間、run、目標資料日、每個更新步驟、最近執行歷史、freshness 結果與診斷。時間軸狀態 `最新`、`部分可用`、`freshness 異常`、`已過期`、`執行中`、`失敗`、`缺漏`、`格式異常`、`未設定` 的判讀彼此不同；缺檔或讀取失敗會清掉本輪步驟列與歷史列，不沿用上一輪成功結果。這個投影只讀檔，不掃描其他 `latest_status`、不發網路、不寫資料庫，也不把檔案修改時間當成成功完成時間。
 
-若要在受控環境改用另一個已核准的 artifact，可設定 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT` 或 `TPEX_REFRESH_STATUS_ARTIFACT`；每個變數都必須是完整檔案路徑。未設定時使用上述固定出口，找不到時畫面會明示「缺漏／未設定」，不會自行搜尋相鄰目錄。
+快速更新排程會在 `latest_status.json` 旁以 append-only 方式保存 `data-update-status-history.v1` JSONL；每次真實執行會記錄 `running` 與 terminal status 的 run／時間／步驟摘要。預設 history 路徑為 `OUTPUT_ROOT/scheduled/data_update_quick/history.jsonl`，也可用 runner 的 `--history-path` 或 UI 的 `DATA_UPDATE_HISTORY_ARTIFACT` 指定。這個功能不會回放既有 latest status、不會把檔案 mtime 當成完成時間；既有環境的 history 缺檔會顯示「缺漏」，等下一次真實排程自然產生，不得手動複製舊結果補足。
+
+若要在受控環境改用另一個已核准的 artifact，可設定 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT` 或 `TPEX_REFRESH_STATUS_ARTIFACT`；每個變數都必須是完整檔案路徑。未設定時使用上述固定出口，找不到時畫面會明示「缺漏／未設定」，不會自行搜尋相鄰目錄。
 
 每日股價、大盤指數、產業指數、券商分點、技術指標、月營收，以及法人／信用／集保三個候選資料源分頁，都會在「檢查此資料源狀態」下方顯示同一份唯讀來源摘要；全域檢查完成後也會同步刷新這九份摘要。個別來源查詢失敗時只會將該來源標為異常，不會把其他來源卡片誤刷成錯誤。候選來源摘要仍屬 research-only，不代表正式評分或交易訊號。
 

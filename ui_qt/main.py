@@ -313,6 +313,21 @@ class MainWindow(QMainWindow):
             / "latest_status.json"
         ).resolve()
 
+    def _data_update_history_path(self) -> Path | None:
+        """資料更新 append-only history；只接受明確設定或固定排程出口。"""
+        configured_path = os.environ.get("DATA_UPDATE_HISTORY_ARTIFACT")
+        if configured_path:
+            return Path(configured_path).expanduser().resolve()
+        output_root = getattr(self.config, "output_root", None)
+        if output_root is None:
+            return None
+        return (
+            Path(output_root)
+            / "scheduled"
+            / "data_update_quick"
+            / "history.jsonl"
+        ).resolve()
+
     def _tpex_status_path(self) -> Path | None:
         """TPEX 背景流程狀態出口；只使用固定 meta_data 檔案。"""
         configured_path = os.environ.get("TPEX_REFRESH_STATUS_ARTIFACT")
@@ -424,6 +439,7 @@ class MainWindow(QMainWindow):
                 p0_source_audit_path=self._p0_source_audit_path(),
                 p0_source_decision_path=self._p0_source_decision_path(),
                 data_update_status_path=self._data_update_status_path(),
+                data_update_history_path=self._data_update_history_path(),
                 data_freshness_status_path=self._data_freshness_status_path(),
                 tpex_status_path=self._tpex_status_path(),
             )

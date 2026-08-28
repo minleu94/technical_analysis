@@ -315,8 +315,11 @@ Data freshness:
 
 The quick update publishes `status=running` with a run/process identity before its long-running steps begin, then records `started_at` and `completed_at` on the terminal status. Downstream freshness and ML evidence checks treat a running or stale update as not-ready, so a partially completed update cannot be consumed.
 
+The same runner appends bounded `data-update-status-history.v1` records to `history.jsonl` (or the explicit `--history-path`) for the running and terminal attempts. The history is append-only and idempotent by record hash; it does not backfill an existing `latest_status.json` and does not change any downstream readiness or write permission.
+
 ```text
 <OUTPUT_ROOT>/scheduled/data_update_quick/latest_status.json
+<OUTPUT_ROOT>/scheduled/data_update_quick/history.jsonl
 <OUTPUT_ROOT>/scheduled/data_update_quick/YYYYMMDD_data_update_quick.log
 <OUTPUT_ROOT>/scheduled/data_freshness/latest_status.json
 <OUTPUT_ROOT>/scheduled/data_freshness/YYYYMMDD_data_freshness.log

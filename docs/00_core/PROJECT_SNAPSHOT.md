@@ -3,9 +3,15 @@
 ## 2026-08-28 Data Update live status timeline（current engineering）
 
 - `UpdateView` 現在會把固定出口 `output/scheduled/data_update_quick/latest_status.json`、`output/scheduled/data_freshness/latest_status.json` 與 `meta_data/tpex_full_refresh_status.json` 投影成唯讀 `data-update-timeline.v1`；可見最後成功完成時間、run、目標資料日、每個步驟結果與 freshness 狀態，不再只看 SQLite 筆數猜測更新是否完成。
-- 時間軸只讀取明確路徑，檔案缺漏、格式錯誤、失敗、執行中、過期或未設定均分開顯示；不沿用上一輪步驟列，不掃描其他 `latest_status`，不啟動網路或寫入。預設可用環境變數 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT`、`TPEX_REFRESH_STATUS_ARTIFACT` 覆寫單一路徑。
+- 時間軸只讀取明確路徑，檔案缺漏、格式錯誤、失敗、執行中、過期或未設定均分開顯示；不沿用上一輪步驟列，不掃描其他 `latest_status`，不啟動網路或寫入。預設可用環境變數 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT`、`TPEX_REFRESH_STATUS_ARTIFACT` 覆寫單一路徑。
 - 目前正式環境讀到 `data_update_quick`=`passed`、run=`20260827-308`、目標資料日=`2026-08-27`、12/12 步驟通過；距目前約 17.8 小時，時間軸狀態為 `current`。這是最新一次排程結果，不等於 Paper fills、P0 acceptance 或 Formal credit。
-- 後續仍可補 append-only capture history／live refresh，但必須先有受治理的 history artifact；本 slice 不掃描目錄、不把檔案 mtime 冒充執行完成時間。
+- `run_daily_data_update_quick.py` 現在會在固定排程出口旁 append `data-update-status-history.v1` JSONL，保留每次 `running` 與 terminal attempt 的 run／時間／步驟摘要；相同 record hash 不重複追加。既有 latest status 不會被回放或補寫，正式環境要等下一次真實排程自然產生第一筆 history。
+
+## 2026-08-28 Data Update append-only status history（current engineering）
+
+- 新增 `app_module/update_status_history.py` 與排程 runner 的 `--history-path`；未指定時使用 `<STATUS_PATH_PARENT>/history.jsonl`，預設即為 `<OUTPUT_ROOT>/scheduled/data_update_quick/history.jsonl`。
+- UpdateView 時間軸新增最近執行歷史表，讀取明確 `DATA_UPDATE_HISTORY_ARTIFACT`（未設定時固定使用上述出口），與本輪 steps 分開顯示；缺檔／格式錯誤會明示，不會把 latest status 複製成歷史。
+- history 只保存排程 status payload 的 bounded 摘要與 payload hash，append-only／read-only projection 不改市場資料、SQLite、Evidence、Formal、scheduler 或 broker 權限。
 
 ## 2026-08-28 MOPS availability query classification（current engineering）
 

@@ -162,3 +162,11 @@ def test_quick_update_publishes_running_before_work_and_terminal_metadata(
     assert payload["run_id"].startswith("20260703-")
     assert payload["started_at"] < payload["completed_at"]
     assert payload["checked_at"] == payload["completed_at"]
+    history_path = status_path.parent / "history.jsonl"
+    history_records = [
+        json.loads(line)
+        for line in history_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert [record["status"] for record in history_records] == ["running", "passed"]
+    assert all(record["run_id"] == payload["run_id"] for record in history_records)

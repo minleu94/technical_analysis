@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from app_module.update_status_history import read_update_status_history
+
 
 UPDATE_STATUS_TIMELINE_SCHEMA = "data-update-timeline.v1"
 DEFAULT_STALE_AFTER_SECONDS = 7 * 24 * 60 * 60
@@ -147,13 +149,14 @@ def load_data_update_timeline(
     update_status_path: Path | None,
     freshness_status_path: Path | None = None,
     tpex_status_path: Path | None = None,
+    history_path: Path | None = None,
     now: datetime | None = None,
     stale_after_seconds: int = DEFAULT_STALE_AFTER_SECONDS,
 ) -> dict[str, Any]:
     """讀取明確指定的更新 artifact 並回傳 fail-closed 時間軸。
 
-    ``update_status_path`` 是主要來源；freshness/TPEX 路徑若未設定只會被標為
-    ``not_configured``，不會偷偷搜尋其他檔案。所有 elapsed 數值以整數秒表示。
+    ``update_status_path`` 是主要來源；freshness/TPEX/history 路徑若未設定只會
+    被標為 ``not_configured``，不會偷偷搜尋其他檔案。所有 elapsed 數值以整數秒表示。
     """
 
     reference_now = now or datetime.now().astimezone()
@@ -182,6 +185,8 @@ def load_data_update_timeline(
     update = artifacts["update"]
     freshness = artifacts["freshness"]
     tpex = artifacts["tpex"]
+    history = read_update_status_history(history_path)
+    diagnostics.extend(f"history:{item}" for item in history.get("diagnostics", []))
     update_status = _normalise_status(update.get("status"))
     update_age = update.get("age_seconds")
     has_future_timestamp = any(item == "update:timestamp_in_future" for item in diagnostics)
@@ -229,6 +234,7 @@ def load_data_update_timeline(
         "run_id": update.get("run_id"),
         "target_date": update.get("target_date"),
         "artifacts": artifacts,
+        "history": history,
         "steps": update.get("steps", []),
         "step_count": int(update.get("step_count") or 0),
         "failed_step_count": int(update.get("failed_step_count") or 0),

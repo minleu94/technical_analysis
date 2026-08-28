@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app_module.update_service import UpdateService
+from app_module.update_status_history import append_update_status_history
 from data_module.config import TWStockConfig
 from scripts.scheduled.scheduled_clock import scheduled_now
 
@@ -53,6 +54,21 @@ def _weekday_window(end_day: date, days: int) -> tuple[str, str]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def _append_history_safely(path: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    """保存 append-only history；history 寫入失敗不掩蓋主要更新結果。"""
+
+    try:
+        return append_update_status_history(path, payload)
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Unable to append data update history: %s", exc)
+        return {
+            "appended": False,
+            "duplicate": False,
+            "path": str(path),
+            "error": f"{type(exc).__name__}:{exc}",
+        }
 
 
 def _setup_logging(log_path: Path) -> None:
@@ -149,6 +165,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tpex-delay-seconds", type=float, default=0.5)
     parser.add_argument("--broker-delay-seconds", type=float, default=0.5)
     parser.add_argument("--status-path")
+    parser.add_argument(
+        "--history-path",
+        help="append-only JSONL history path; defaults beside --status-path",
+    )
     parser.add_argument("--log-path")
     return parser
 
@@ -161,6 +181,11 @@ def main(argv: list[str] | None = None) -> int:
     run_date = run_now.date()
     today_key = run_date.strftime("%Y%m%d")
     status_path = Path(args.status_path) if args.status_path else run_root / "latest_status.json"
+    history_path = (
+        Path(args.history_path)
+        if args.history_path
+        else status_path.parent / "history.jsonl"
+    )
     log_path = Path(args.log_path) if args.log_path else run_root / f"{today_key}_data_update_quick.log"
     _setup_logging(log_path)
 
@@ -180,28 +205,29 @@ def main(argv: list[str] | None = None) -> int:
     logging.info("Scheduled quick data update window: %s to %s", start_date, end_date)
 
     run_id = f"{today_key}-{os.getpid()}"
-    _write_json(
-        status_path,
-        {
-            "task": "baldr-data-update-quick-daily",
-            "status": "running",
-            "run_id": run_id,
-            "started_at": run_now.isoformat(timespec="seconds"),
-            "process_id": os.getpid(),
-            "data_root": str(config.data_root),
-            "output_root": str(config.output_root),
-            "start_date": start_date,
-            "end_date": end_date,
-            "log_path": str(log_path),
-            "steps": [],
-            "warnings": [],
-            "errors": [],
-            "writes_market_data_db": True,
-            "writes_evidence_db": False,
-            "auto_trading": False,
-            "auto_lifecycle_action": False,
-        },
-    )
+    running_payload = {
+        "task": "baldr-data-update-quick-daily",
+        "status": "running",
+        "run_id": run_id,
+        "started_at": run_now.isoformat(timespec="seconds"),
+        "process_id": os.getpid(),
+        "data_root": str(config.data_root),
+        "output_root": str(config.output_root),
+        "start_date": start_date,
+        "end_date": end_date,
+        "log_path": str(log_path),
+        "steps": [],
+        "warnings": [],
+        "errors": [],
+        "writes_market_data_db": True,
+        "writes_evidence_db": False,
+        "auto_trading": False,
+        "auto_lifecycle_action": False,
+        "history_path": str(history_path),
+    }
+    _write_json(status_path, running_payload)
+    running_payload["history"] = _append_history_safely(history_path, running_payload)
+    _write_json(status_path, running_payload)
 
     failed = _run_step(steps=steps, name="check_overview_before", action=service.check_data_overview)
     if failed is None:
@@ -314,7 +340,9 @@ def main(argv: list[str] | None = None) -> int:
         "writes_evidence_db": False,
         "auto_trading": False,
         "auto_lifecycle_action": False,
+        "history_path": str(history_path),
     }
+    payload["history"] = _append_history_safely(history_path, payload)
     _write_json(status_path, payload)
     logging.info("Scheduled quick data update finished with status=%s", final_status)
     return 1 if failed is not None else 0
