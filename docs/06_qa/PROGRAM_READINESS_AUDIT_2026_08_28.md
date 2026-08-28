@@ -25,6 +25,7 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --p0-audit-json <P0_AUDIT_JSON> `
   --approved-weekly-history-projection <APPROVED_WEEKLY_HISTORY_JSON> `
   --weekly-collection-sidecar <WEEKLY_COLLECTION_SIDECAR_DB> `
+  --freshness-status-path <FRESHNESS_STATUS_JSON> `
   --training-as-of <TRAINING_AS_OF> `
   --technical-performance-baseline <TECHNICAL_BASELINE_JSON> `
   --technical-batch-performance-baseline <TECHNICAL_BATCH_BASELINE_JSON> `
@@ -61,7 +62,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 | Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但受控環境目前把三個 path 指向缺失且早於 `training_as_of=2026-08-28` 的 `clock-20260819`；readiness 已明示 stale-clock hint，並列出同 output root 下 6 個 `diagnostic_only` prospective clock/staging marker | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費；owner 必須發布當前 clock 並更新明確 path | 可以工程化累積；不得自動改接 `clock-20260828`、也不得拿 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | `scripts/inspect_runtime_environment_readiness.py --confirm-write-probe` 已能在明確 TEMP staging 以正式 Registry schema 完成 insert／讀回／rollback／清除；統一 inspector 可用 `--runtime-write-probe` 載入這份 artifact。此 host 對正式 `config.log`／Research Registry 的 write-handle 仍可能回 PermissionError，會標成 production ACL 未驗證而不再混同 staging 能力 | 正式 Registry 本身仍未做實寫；production ACL／鎖定仍需 owner 在正式環境確認 | 可以；schema transaction 已在非正式 staging 驗證，正式路徑只差環境權限證據 |
 | 效能工程 | technical full-batch、isolated CSV／SQLite writer、real indicator process-pool staging、broker bounded fetch 離線 acceptance 與 synthetic contract 已量測 | full-batch read／calculate／aggregate、CSV serialization、SQLite lock/retry、real calculator process pool（bounded in-flight／retry／parent single writer）、worker process crash recovery／queued cancellation、broker parser／rate-limit／retry／duplicate／failure contract 與 synthetic queue／cancel checks 均有 artifact；technical batch 的 production feature flag／scheduler wiring 已接上但預設關閉，broker pool 仍關閉 | 真實 broker HTTP canary／來源 rate limit、Selenium driver 重建、technical production backup／rollback 與 owner-approved canary；staging recovery 不等同 production proof | 可以；先由 owner 核准 technical backup／rollback 後做單次 canary，再允許真實 broker canary，不能直接拉高 thread 數 |
-| Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；`data-update-timeline.v1` 明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness；runner／UI 已接 `data-update-status-history.v1` append-only 歷史；P0 fallback attempted／date mismatch／network error 已保留並以不同文字呈現；待更新卡片會顯示新鮮度基準日／資料最新日；2026-08-28 quick run=`20260828-29472` terminal=`passed`、12/12，Data Update QA=`23 passed / 0 failed / 4 skipped` | 核心 SQLite 已追上 `2026-08-28`，但 `data_freshness/latest_status.json` 仍是 `2026-08-27`；本機 freshness probe 對正式 output 寫入被 `PermissionError` 拒絕；`query_baldr_scheduled_tasks.cmd`／registration inspector 仍是 13/13 不可用，因此下一輪 freshness／evidence history 不能靠自然 scheduler 產生；仍需 owner 修正正式 output ACL、重新註冊 task，再做完整 live UI QA | 可以；資料更新本身已恢復，先由 owner 修正 output ACL 並重新註冊／確認 `baldr-data-update-quick-daily`（以及依序的 freshness／evidence tasks），再觀察 terminal history、freshness 與 downstream live refresh；不回放補歷史或繞過 candidate-only 邊界 |
+| Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；`data-update-timeline.v1` 明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness；runner／UI 已接 `data-update-status-history.v1` append-only 歷史；P0 fallback attempted／date mismatch／network error 已保留並以不同文字呈現；待更新卡片會顯示新鮮度基準日／資料最新日；2026-08-28 quick run=`20260828-29472` terminal=`passed`、12/12，Data Update QA=`23 passed / 0 failed / 4 skipped`；unified readiness 新增明確 `--freshness-status-path`，可分開投影 freshness 的 status／checked_at／warnings／errors | 核心 SQLite 已追上 `2026-08-28`，隔離 TEMP freshness probe 已觀察 `passed`，但正式 `data_freshness/latest_status.json` 仍是 `2026-08-27`；本機 probe 對正式 output 寫入被 `PermissionError` 拒絕；`query_baldr_scheduled_tasks.cmd`／registration inspector 仍是 13/13 不可用，因此下一輪 freshness／evidence history 不能靠自然 scheduler 產生；仍需 owner 修正正式 output ACL、重新註冊 task，再做完整 live UI QA | 可以；資料更新本身已恢復，先由 owner 修正 output ACL 並重新註冊／確認 `baldr-data-update-quick-daily`（以及依序的 freshness／evidence tasks），再觀察 terminal history、freshness 與 downstream live refresh；不回放補歷史或繞過 candidate-only 邊界 |
 
 ## P0 多路徑取得結果
 
@@ -104,8 +105,11 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 `scripts\\qa_validate_update_tab.py` 得到 `23 passed / 0 failed / 4 skipped`。
 嘗試手動執行 `data_freshness_probe.py` 時，對正式
 `output\\scheduled\\data_freshness\\latest_status.json` 的寫入被
-`PermissionError` 拒絕；因此 freshness 檔仍停在 `2026-08-27`，這是正式 output ACL
-問題，不是把核心 SQLite 判定成落後。程式端已補上
+`PermissionError` 拒絕；因此正式 freshness 檔仍停在 `2026-08-27`，這是正式 output ACL
+問題，不是把核心 SQLite 判定成落後。另以明確 TEMP status／log path 完成一次
+read-only probe，結果為 `status=passed`、daily／technical latest=`2026-08-28`，
+status artifact SHA-256=`3A077E2D2775F02E4BE6A4016EA5DEB6A8B7B1B5E784303699CE64760BF6D66C`；
+它只證明資料與 probe 路徑可運作，不會替正式 freshness 檔或排程 history。程式端已補上
 `BALDR_FRESHNESS_STATUS_PATH`／`BALDR_FRESHNESS_LOG_PATH` 的受控覆寫；owner 可在
 修正 ACL 前先把 read-only 產物導到已核准可寫路徑，並在 UI 設定
 `DATA_FRESHNESS_STATUS_ARTIFACT` 讀取同一份明確檔案。這仍需要 owner 更新 Task

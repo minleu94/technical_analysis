@@ -1046,8 +1046,12 @@ history；不可用舊 latest status 回填。
 `--broker-performance-baseline`。程式會固定顯示 P0、Evidence、Paper、Formal/ML、
 Runtime、Update history、Performance 七個 lane 以及依序下一步；未提供的 artifact
 會顯示 `waiting_for_external_input` 或 `action_required`，不會自行搜尋、回放、補歷史
-或改接 prospective path。`update_history` 另外檢查 history JSONL 是否超過 8 MiB、
-是否有重複 record、terminal run，以及 latest status 與 history 最新 run 是否一致。
+或改接 prospective path。若要把獨立的 `data_freshness/latest_status.json` 一起投影，
+可明確加入 `--freshness-status-path <FRESHNESS_STATUS_JSON>`；報告會分開列出
+freshness status、`checked_at`、warnings／errors 與 read-only 標誌，不會用 freshness
+結果掩蓋排程未註冊或 history 尚未累積。`update_history` 另外檢查 history JSONL
+是否超過 8 MiB、是否有重複 record、terminal run，以及 latest status 與 history
+最新 run 是否一致。
 
 此命令是 query-only readiness projection：不建立資料夾、不寫正式 SQLite、不發網路、
 不啟用 scheduler／broker；輸出 `partial` 也不代表 Formal credit、source acceptance、

@@ -2,7 +2,7 @@
 
 ## 2026-08-28 整體程式 readiness 聚合入口（current engineering）
 
-- 新增唯讀 `scripts/inspect_program_readiness.py`，將 P0、Evidence、Paper、Formal/ML、Runtime、Data Update history 與 performance 七個 lane 收斂到 `program-readiness.v1`；每個 lane 都保留實際 read model、blockers、外部輸入需求與下一步，並以 `execution_order` 對齊 [Program Readiness Audit](../06_qa/PROGRAM_READINESS_AUDIT_2026_08_28.md) 的推進順序；`--runtime-write-probe` 可載入明確 staging transaction artifact，避免把 staging 能力與正式 ACL 混成同一個診斷。
+- 新增唯讀 `scripts/inspect_program_readiness.py`，將 P0、Evidence、Paper、Formal/ML、Runtime、Data Update history 與 performance 七個 lane 收斂到 `program-readiness.v1`；每個 lane 都保留實際 read model、blockers、外部輸入需求與下一步，並以 `execution_order` 對齊 [Program Readiness Audit](../06_qa/PROGRAM_READINESS_AUDIT_2026_08_28.md) 的推進順序；`--runtime-write-probe` 可載入明確 staging transaction artifact，`--freshness-status-path` 可載入明確 freshness status，避免把 staging／freshness 觀測與正式 ACL、排程註冊混成同一個診斷。
 - 這個入口不建立 `TWStockConfig`，避免 readiness 檢查因 log／目錄初始化產生副作用；只讀取明確路徑，history 另檢查 JSONL schema、duplicate record、terminal run、latest status／history run identity 與 8 MiB bounded retention。
 - 報告固定揭露 `read_only=true`、`writes_allowed=false`、`formal_oos_allowed=false`、`production_scheduler_allowed=false`、`broker_order_allowed=false`。目前它將「可以工程化」與「必須等待 owner／真實時間／執行事實」分開，不會用 replay、prospective、snapshot 或舊 latest status 補造缺件。
 - focused regression 已加入既有 `tests/test_pre_v2_readiness_service.py`；本 slice 未寫正式資料、未發網路、未啟用 scheduler／broker。
@@ -23,7 +23,7 @@
 - `UpdateView` 現在會把固定出口 `output/scheduled/data_update_quick/latest_status.json`、`output/scheduled/data_freshness/latest_status.json` 與 `meta_data/tpex_full_refresh_status.json` 投影成唯讀 `data-update-timeline.v1`；可見最後成功完成時間、run、目標資料日、每個步驟結果與 freshness 狀態，不再只看 SQLite 筆數猜測更新是否完成。
 - 時間軸只讀取明確路徑，檔案缺漏、格式錯誤、失敗、執行中、過期或未設定均分開顯示；不沿用上一輪步驟列，不掃描其他 `latest_status`，不啟動網路或寫入。預設可用環境變數 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT`、`TPEX_REFRESH_STATUS_ARTIFACT` 覆寫單一路徑。
 - 2026-08-28 由既有 quick runner 完成真實 run=`20260828-29472`、目標資料日=`2026-08-28`、12/12 步驟通過；每日／大盤／產業／券商／技術指標 SQLite 均已追上 `2026-08-28`。這是資料更新完成證據，不等於 Paper fills、P0 acceptance 或 Formal credit。
-- 同一 run 已在 `data-update-status-history.v1` JSONL 保存 `running` 與 terminal=`passed` 兩筆 record；歷史 producer／UI projection 不會回放舊 latest status。`data_freshness/latest_status.json` 仍停在 `2026-08-27`，本機 freshness probe 對正式 output 的寫入受 ACL 拒絕，且 Windows Task Scheduler inspector 仍為 `0/13`，所以仍需 owner 修正註冊／權限後觀察 downstream live refresh。
+- 同一 run 已在 `data-update-status-history.v1` JSONL 保存 `running` 與 terminal=`passed` 兩筆 record；歷史 producer／UI projection 不會回放舊 latest status。正式 `data_freshness/latest_status.json` 仍停在 `2026-08-27`，但隔離 TEMP 的唯讀 freshness probe 已觀察到 `status=passed`、SQLite daily／technical 最新日均為 `2026-08-28`；這份 probe 不覆寫正式 output，且 Windows Task Scheduler inspector 仍為 `0/13`，所以仍需 owner 修正註冊／權限後觀察 downstream live refresh。
 
 ## 2026-08-28 Data Update real refresh（current evidence）
 
