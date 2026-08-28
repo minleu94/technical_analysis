@@ -489,6 +489,7 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 - 2026-08-27：Update 大型每日合併與 SQLite CSV 匯出改用 `ProgressTaskWorker` 與批次進度回報；合併回報檔案／讀取批次／整合檔 chunk，匯出先以 query-only count 建立預估筆數並回報已處理筆數。取消仍維持檔案／資料批次安全邊界，不改變原子提交與既有資料保留規則；合併新增單檔內讀取批次取消檢查，仍不做逐列中斷。
 - 2026-08-27：Update 增量合併在沒有新 CSV 時改回傳結構化 `no_op=true` 與既有筆數／最新日期，UI 明確顯示「資料已是最新」且不先建立備份，避免把 no-op 誤報成一般重新合併或產生不必要副作用。
 - 2026-08-28：Runtime staging write probe 改用正式 `ResearchRunRepository` schema，於非正式暫存 DB 驗證 insert／讀回／rollback／清理並輸出 `registry_transaction_succeeded`；仍禁止指向正式 `DATA_ROOT`／`OUTPUT_ROOT`，不授予 scheduler／formal credit，也不宣稱正式 Registry ACL 已通過。
+- 2026-08-28：Evidence scheduler readiness evaluator 新增 `evidence-production-scheduler-approval.v1` fail-closed gate；即使 source coverage 與 working-copy smoke 通過，仍需具名 owner、有效期限與 source／dry-run／backup／rollback／recovery checks 全部通過的 approval artifact，才可能回報 `operational_production`，避免 read-only readiness 自動放行 production write-mode。
 - 2026-08-28：Formal readiness 對缺失的 `formal_prospective/clock-YYYYMMDD` path 新增 configured clock／training cutoff stale hint；只改善 owner handoff 診斷，不掃描或自動改接其他 clock，也不把 prospective bytes 升格成正式 input。
 - 2026-08-27：Runtime formal path readiness 補上既有 logger／Research Registry 的不寫入 write-handle probe；`os.access` 與實際開啟權限不一致時，狀態固定降級為 `attention`，保留 formal ACL／鎖定 blocker。
 - 2026-08-27：Runtime／MainWindow 窄版 UX 補強：長路徑診斷與 status strip 不再貢獻過大的水平 minimum hint；主視窗明確保留 320px compact 下限，Runtime 小於 720px 改用垂直治理欄並提供內容捲動。此為 presentation／可觀測性改善，不解除任何 formal、scheduler 或資料權限 blocker。
