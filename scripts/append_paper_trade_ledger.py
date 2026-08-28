@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from decimal import Decimal, InvalidOperation
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -28,8 +29,12 @@ from app_module.paper_trade_ledger import (  # noqa: E402
 from runtime.console_encoding import configure_utf8_console  # noqa: E402
 
 
-def _load_fills(path: Path) -> tuple[PaperTradeFill, ...]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+def _load_fills(path: Path, *, source_hash: str | None = None) -> tuple[PaperTradeFill, ...]:
+    raw = path.read_bytes()
+    actual_source_hash = hashlib.sha256(raw).hexdigest()
+    if source_hash is not None and source_hash != actual_source_hash:
+        raise ValueError("paper trade JSON source changed while it was being read")
+    payload = json.loads(raw.decode("utf-8"))
     raw_fills: object
     if isinstance(payload, Mapping):
         raw_fills = payload.get("fills")
@@ -41,11 +46,16 @@ def _load_fills(path: Path) -> tuple[PaperTradeFill, ...]:
     for index, raw in enumerate(raw_fills, start=1):
         if not isinstance(raw, Mapping):
             raise ValueError(f"fill {index} must be an object")
-        fills.append(_fill_from_mapping(raw, index=index))
+        fills.append(_fill_from_mapping(raw, index=index, source_hash=actual_source_hash))
     return tuple(fills)
 
 
-def _fill_from_mapping(raw: Mapping[str, Any], *, index: int) -> PaperTradeFill:
+def _fill_from_mapping(
+    raw: Mapping[str, Any],
+    *,
+    index: int,
+    source_hash: str,
+) -> PaperTradeFill:
     def required_text(name: str) -> str:
         value = str(raw.get(name, "")).strip()
         if not value:
@@ -57,7 +67,7 @@ def _fill_from_mapping(raw: Mapping[str, Any], *, index: int) -> PaperTradeFill:
         if isinstance(value, bool):
             raise ValueError(f"fill {index}: {name} must be an integer")
         try:
-            return int(value)
+            return int(str(value).strip())
         except (TypeError, ValueError) as exc:
             raise ValueError(f"fill {index}: {name} must be an integer") from exc
 
@@ -82,7 +92,7 @@ def _fill_from_mapping(raw: Mapping[str, Any], *, index: int) -> PaperTradeFill:
         if isinstance(value, bool):
             raise ValueError(f"fill {index}: {name} must be an integer")
         try:
-            return int(value)
+            return int(str(value).strip())
         except (TypeError, ValueError) as exc:
             raise ValueError(f"fill {index}: {name} must be an integer") from exc
 
@@ -104,20 +114,26 @@ def _fill_from_mapping(raw: Mapping[str, Any], *, index: int) -> PaperTradeFill:
         turnover_bp=optional_int("turnover_bp"),
         execution_gap_bp=optional_int("execution_gap_bp"),
         status=required_text("status"),
-        source_event_id=required_text("source_event_id"),
+        source_event_id=f"paper_json:{source_hash[:16]}:{required_text('source_event_id')}",
         override_reason=(None if override_reason is None else str(override_reason)),
-        source_type=str(raw.get("source_type") or "paper_simulation"),
+        source_type=str(raw.get("source_type") or "paper_trade_json_import"),
         research_only=bool(raw.get("research_only", True)),
         broker_order_allowed=bool(raw.get("broker_order_allowed", False)),
         auto_rebalance_allowed=bool(raw.get("auto_rebalance_allowed", False)),
     )
 
 
-def _preview_payload(input_path: Path, fills: tuple[PaperTradeFill, ...]) -> dict[str, Any]:
+def _preview_payload(
+    input_path: Path,
+    fills: tuple[PaperTradeFill, ...],
+    *,
+    source_hash: str,
+) -> dict[str, Any]:
     statuses = Counter(item.status for item in fills)
     return {
         "schema_version": PAPER_TRADE_LEDGER_SCHEMA_VERSION,
         "input_path": str(input_path.resolve()),
+        "source_hash": f"sha256:{source_hash}",
         "fill_count": len(fills),
         "statuses": dict(sorted(statuses.items())),
         "total_cost": str(sum((item.total_cost for item in fills), Decimal("0")).quantize(Decimal("0.01"))),
@@ -135,18 +151,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--confirm-append-paper-ledger", action="store_true")
     args = parser.parse_args(argv)
 
+    source_hash: str | None = None
     try:
-        fills = _load_fills(args.input_json)
-        payload = _preview_payload(args.input_json, fills)
+        source_hash = hashlib.sha256(args.input_json.read_bytes()).hexdigest()
+        fills = _load_fills(args.input_json, source_hash=source_hash)
+        payload = _preview_payload(args.input_json, fills, source_hash=source_hash)
         payload["write_performed"] = False
         if args.confirm_append_paper_ledger:
+            current_source_hash = hashlib.sha256(args.input_json.read_bytes()).hexdigest()
+            if current_source_hash != source_hash:
+                raise ValueError("paper trade JSON source changed before append")
             PaperTradeLedgerRepository(args.ledger_db).append_many(fills)
             payload["write_performed"] = True
             payload["ledger_db"] = str(args.ledger_db.resolve())
         print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError) as exc:
-        print(json.dumps({"status": "rejected", "error": str(exc)}, ensure_ascii=False))
+        payload = {"status": "rejected", "error": str(exc)}
+        if source_hash is not None:
+            payload["input_path"] = str(args.input_json.resolve())
+            payload["source_hash"] = f"sha256:{source_hash}"
+        print(json.dumps(payload, ensure_ascii=False))
         return 2
 
 

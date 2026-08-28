@@ -2450,6 +2450,12 @@ Paper Trade Ledger 預設位置為 `<OUTPUT_ROOT>/paper_portfolio/paper_trade_le
 
 上述命令只驗證與預覽，不建立 ledger；確認事件與來源無誤後，才加上 `--confirm-append-paper-ledger`。CLI 仍只寫研究用 Paper Trade Ledger，不會改寫手動 Portfolio、正式市場 SQLite 或呼叫券商。
 
+JSON producer 會在預覽輸出 `source_hash`，並把 SHA-256 前 16 碼綁入每筆
+`source_event_id`（`paper_json:<hash-prefix>:<event-id>`）；確認 append 前會再次
+檢查輸入檔 hash，檔案在讀取期間變更就整批拒絕。若未提供 `source_type`，會固定標為
+`paper_trade_json_import`，方便 readiness／weekly evidence 判斷來源；這仍不代表該
+JSON 內的事件已由系統驗證為真實成交，owner 仍須提供可稽核的 paper execution 來源。
+
 若來源是 CSV，可使用與 UI 相同的完整 execution contract：
 
 ```powershell

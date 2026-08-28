@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -7,7 +8,12 @@ from app_module.paper_trade_ledger import PaperTradeLedgerRepository
 from scripts.append_paper_trade_ledger import main
 
 
-def _write_input(path: Path, *, execution_gap: object = 8) -> None:
+def _write_input(
+    path: Path,
+    *,
+    execution_gap: object = 8,
+    requested_quantity: object = 1000,
+) -> None:
     path.write_text(
         json.dumps(
             {
@@ -19,7 +25,7 @@ def _write_input(path: Path, *, execution_gap: object = 8) -> None:
                         "event_date": "2026-08-27",
                         "stock_code": "2330",
                         "side": "buy",
-                        "requested_quantity": 1000,
+                        "requested_quantity": requested_quantity,
                         "filled_quantity": 1000,
                         "reference_price": "100.00",
                         "fill_price": "100.08",
@@ -48,6 +54,8 @@ def test_cli_defaults_to_preview_without_creating_ledger(tmp_path: Path, capsys)
 
     assert payload["fill_count"] == 1
     assert payload["total_cost"] == "23.00"
+    expected_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    assert payload["source_hash"] == f"sha256:{expected_hash}"
     assert payload["write_performed"] is False
     assert not ledger.exists()
 
@@ -69,7 +77,11 @@ def test_cli_requires_explicit_confirmation_for_write(tmp_path: Path, capsys) ->
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["write_performed"] is True
-    assert len(PaperTradeLedgerRepository(ledger).list()) == 1
+    fills = PaperTradeLedgerRepository(ledger).list()
+    assert len(fills) == 1
+    expected_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    assert fills[0].source_event_id.startswith(f"paper_json:{expected_hash[:16]}:")
+    assert fills[0].source_type == "paper_trade_json_import"
 
 
 def test_cli_rejects_missing_execution_gap_without_writing(tmp_path: Path, capsys) -> None:
@@ -90,6 +102,27 @@ def test_cli_rejects_missing_execution_gap_without_writing(tmp_path: Path, capsy
 
     assert payload["status"] == "rejected"
     assert "execution_gap_bp" in payload["error"]
+    assert not ledger.exists()
+
+
+def test_cli_rejects_fractional_integer_fields_without_truncating(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "fills.json"
+    ledger = tmp_path / "paper_trade.sqlite"
+    _write_input(source, requested_quantity=1000.5)
+
+    assert main(
+        [
+            "--input-json",
+            str(source),
+            "--ledger-db",
+            str(ledger),
+            "--confirm-append-paper-ledger",
+        ]
+    ) == 2
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "rejected"
+    assert "requested_quantity" in payload["error"]
     assert not ledger.exists()
 
 
