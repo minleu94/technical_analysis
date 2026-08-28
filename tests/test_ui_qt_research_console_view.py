@@ -121,6 +121,7 @@ def test_missing_console_opens_and_shows_fail_closed_boundary() -> None:
     assert "P0 Data Source Control Center" in text
     assert "Downstream eligible：0" in text
     assert view.control_center_table.rowCount() == 13
+    assert view.control_center_table.horizontalHeaderItem(5).text() == "PIT / 解析通過率"
 
 
 def test_fixture_renders_pipeline_gates_sources_and_separate_broker_lane() -> None:

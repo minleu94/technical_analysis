@@ -893,7 +893,7 @@ class UpdateView(QWidget):
                 "實際路徑",
                 "Fallback",
                 "PIT／公告",
-                "Coverage／Rows",
+                "解析通過率／Rows",
                 "License",
                 "Owner／下游",
             )
@@ -2681,7 +2681,14 @@ class UpdateView(QWidget):
         observed = cls._p0_count_text(row.get("observed_rows"))
         accepted = cls._p0_count_text(row.get("accepted_rows"))
         blocked = cls._p0_count_text(row.get("blocked_rows"))
-        coverage_display = f"{coverage}\naccepted {accepted} / observed {observed}\nblocked {blocked}"
+        # 這裡的比例是 parser row-conservation 的 accepted/observed，
+        # 不是官方市場 universe 的完整覆蓋率；明確寫出分母，避免
+        # 「100%」被誤讀成來源已涵蓋所有證券／日期。
+        coverage_display = (
+            f"解析通過率 {coverage}（accepted/observed）\n"
+            f"accepted {accepted} / observed {observed}\n"
+            f"blocked {blocked}"
+        )
         license_display = str(row.get("license_status") or "未提供")
         license_urls = row.get("license_evidence_urls") or []
         if license_urls:

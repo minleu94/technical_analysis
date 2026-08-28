@@ -4,6 +4,8 @@
 
 程式可以持續推進，而且多個原先看起來像「功能沒做」的項目已被補成可觀測、可驗證的工程路徑：P0 已取得 `13/13` 候選來源矩陣與 27 條 acquisition route、Evidence projection 已能顯示 `3/3` 但仍待正式 credit、Paper Equal Weight benchmark 已建立、technical process-pool／recovery／single-writer staging 與 scheduler wiring 已完成、Data Update 也能顯示 fallback 與排程註冊狀態。
 
+P0 表格中的「解析通過率」現在明確標示為 `accepted/observed` row-conservation 比例；它不是官方證券 universe 或日期完整覆蓋率。若要宣稱 coverage，仍需來源提供可驗證的獨立分母／missingness evidence，不能由單次 payload 的 accepted rows 推導。
+
 這仍不是完整產品 closeout。真正尚未具備的不是同一種「補資料」問題，而是不同性質的外部 gate：P0 的具名 owner／license／PIT decision、Evidence 的真實週期與 review credit、Paper 的真實 fills／成本／execution gap、Formal/ML 的 3 個 owner-controlled inputs、正式 Runtime Registry transaction／rollback evidence、technical production backup／rollback＋canary，以及 scheduler 的自然 history 與 production governance。Broker 現在已完成一次受控真實 HTTP canary，但長期 rate-limit／Selenium fallback／production writer 仍未驗收。程式不能替這些事實自行推導或用 replay 填入。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
 technical production canary 的 guarded 入口與 readiness contract 已完成，預設只做唯讀預演；目前沒有執行任何正式 technical 寫入。要解除這一項 blocker，仍需 owner 在停用並行 writer 後明確核准一檔股票的 backup／rollback canary。

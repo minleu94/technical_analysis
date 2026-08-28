@@ -160,7 +160,7 @@ class ResearchConsoleView(QWidget):
                 "治理狀態",
                 "Machine / Audit",
                 "Actual route / Fallback",
-                "PIT / Coverage",
+                "PIT / 解析通過率",
                 "License",
                 "Decision / Eligibility",
                 "Blockers",
@@ -383,7 +383,18 @@ def _control_pit_coverage(row: Any) -> str:
         coverage = f"{coverage_bp // 100}.{coverage_bp % 100:02d}%"
     else:
         coverage = "Missing / Unknown"
-    return f"{pit} / {timestamp_kind} / {coverage}"
+    observed = getattr(row, "observed_rows", None)
+    accepted = getattr(row, "accepted_rows", None)
+    blocked = getattr(row, "blocked_rows", None)
+    row_counts = ""
+    if all(isinstance(value, int) and value >= 0 for value in (accepted, observed)):
+        row_counts = f" / accepted {accepted:,} / observed {observed:,}"
+        if isinstance(blocked, int) and blocked >= 0:
+            row_counts += f" / blocked {blocked:,}"
+    # This ratio only measures parser acceptance among observed rows. It is
+    # deliberately not labelled as market/universe coverage without an
+    # independent denominator supplied by the source owner.
+    return f"{pit} / {timestamp_kind} / parser {coverage}{row_counts}"
 
 
 def _control_license(row: Any) -> str:

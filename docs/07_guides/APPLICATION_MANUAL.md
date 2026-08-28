@@ -847,7 +847,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - 若要讓主 UI 顯示某份既有稽核 artifact，可在啟動前設定 `P0_SOURCE_CONTROL_CENTER_AUDIT=<絕對路徑>`；程式只讀取該明確路徑，不會掃描 `output`、QA 或正式資料目錄。artifact schema 不合法或邊界不符時，整個 Research Console 會 fail-closed 為 degraded。
 - 若要讓主 UI 同步顯示具名 owner decision，可設定 `P0_SOURCE_CONTROL_CENTER_DECISIONS=<絕對路徑>`。輸入可以是 canonical `source-acceptance-decision-revision.v1` 的單筆／清單，也可以是外部 `source-acceptance-owner-review-decision.v1`；後者只允許 `deferred`／`rejected`／`disabled` 正規化，`accepted`／`limited` 會 fail-closed，絕不從外部 attestation 或 evidence URL 推導授權。這個入口只接受 13 個 canonical P0 source ID；`fubon.marketdata` 是獨立的 research shadow provider，必須用 Fubon dossier／shadow inspector，不能硬映射進 P0 denominator。UI 只做 read-only projection，不會因載入 decision 而建立 registry 或改變 `downstream_eligibility=none`。
 - 若要讓主 UI 同步顯示條款候選證據，可設定 `P0_SOURCE_CONTROL_CENTER_LICENSE_EVIDENCE=<絕對路徑>` 指向 `p0-license-evidence-capture.v1`。Data Update 與 Research Console 會在每列 license 欄顯示 `captured_candidate`、`preview_not_captured` 或 `capture_transport_error` 等狀態，並保留 URL／hash／限制提示數；artifact schema、allowlist 或安全旗標不符時整體 fail-closed。這只改善「條款是否已觀測」的可見性，`license_status=requires_review`、`license_accepted=false` 與 `downstream_eligibility=none` 不會改變。
-- Data Update → 全部資料也會在執行「檢查數據狀態」時載入上述兩個明確路徑，顯示 13 列 `P0 官方來源證據` 表格。欄位包含實際 route、可用 route 清單、fallback 來源／原因、PIT／公告與 availability、coverage／accepted-observed-blocked rows、license、owner decision 與下游資格；表格是 candidate／shadow 的治理觀測，不是更新按鈕，也不會寫入 SQLite。未設定 artifact 會顯示 `contract_only`，路徑遺失或 schema／boundary 錯誤會顯示 `audit_unavailable` 與讀取原因，避免沿用上一輪或假綠。
+- Data Update → 全部資料也會在執行「檢查數據狀態」時載入上述兩個明確路徑，顯示 13 列 `P0 官方來源證據` 表格。欄位包含實際 route、可用 route 清單、fallback 來源／原因、PIT／公告與 availability、**解析通過率（accepted／observed）與 accepted／observed／blocked rows**、license、owner decision 與下游資格；這個比例只表示已觀測 payload 的 parser row-conservation，不代表官方市場 universe 或日期完整覆蓋率，沒有獨立分母時不可解讀成「來源 100% 完整」。表格是 candidate／shadow 的治理觀測，不是更新按鈕，也不會寫入 SQLite。未設定 artifact 會顯示 `contract_only`，路徑遺失或 schema／boundary 錯誤會顯示 `audit_unavailable` 與讀取原因，避免沿用上一輪或假綠。
 
 ### P0 Source Intake Validator（唯讀候選輸入）
 
@@ -3157,6 +3157,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-27：修正資料更新個別來源詳情查詢失敗時的錯誤顯示；現在只會將該來源標為異常，不再把其他來源狀態卡誤刷成錯誤。
 - 2026-08-27：補強資料更新頁顯示一致性：全域／各來源日期控件的「今日」統一採台灣市場日期；localized `不可用` 會顯示為異常而非待更新；全域狀態檢查失敗會清除六個核心與三個候選來源頁的舊 inline 摘要並保留共同錯誤原因，候選來源分頁也會顯示檢查結果，方便排錯且不誤讀舊數字。
 - 2026-08-28：資料更新狀態卡與來源詳情會將 `degraded`／`partial`／`action_required` 等狀態統一轉成中文；核心資料落後 daily reference 時，直接顯示新鮮度基準日與資料最新日，並保留來源錯誤訊息供排錯。
+- 2026-08-28：P0 Data Update／Research Console 的 coverage 欄位改名為「解析通過率」，明確標示 accepted／observed／blocked 分母；不再讓 parser 通過率被誤讀成官方市場 universe 完整覆蓋率。
 - 2026-08-28：月營收狀態卡新增明確 `MONTHLY_REVENUE_SNAPSHOT_CANDIDATE` 唯讀入口；同一期 snapshot 也會顯示抓取日，外部候選遺失／命名無效時保留缺漏與診斷，不再靜默退回另一份 snapshot。候選仍不會自動寫入正式 SQLite 或 availability mapping。
 - 2026-08-28：Direct/OOC scheduled wrapper 新增唯讀 filesystem headroom preflight；輸出所在磁碟低於預設 20 GiB 時只寫 `blocked_insufficient_storage` 與 `storage_preflight`，不啟動重建、不進 retry loop、不刪除既有 run，避免 `Errno 28 No space left on device` 反覆消耗容量。這不改 Formal／promotion／broker gate。
 - 2026-08-28：Runtime 排程 read model 新增 `ML Direct/OOC 維護` 安全工作；`blocked_insufficient_storage` 會以「需要注意」與明確容量 diagnostic 顯示，並保留 raw status／source path 供排錯。

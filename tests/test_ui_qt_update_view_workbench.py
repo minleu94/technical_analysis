@@ -407,6 +407,29 @@ def test_update_view_projects_explicit_data_update_timeline_and_steps(tmp_path):
     assert view.data_update_timeline_table.item(1, 0).text() == "SQLite"
 
 
+def test_update_view_labels_p0_ratio_as_parser_acceptance_not_universe_coverage():
+    view = make_view()
+
+    assert view.p0_source_control_table.horizontalHeaderItem(5).text() == "解析通過率／Rows"
+    display = view._format_p0_source_row(
+        {
+            "source_id": "institutional_flows",
+            "label": "三大法人",
+            "governance_status": "research_shadow",
+            "machine_status": "verified",
+            "acquisition_route_id": "twse.T86",
+            "pit_status": "official_publication_timestamp_missing",
+            "coverage_bp": 10000,
+            "accepted_rows": 10,
+            "observed_rows": 10,
+            "blocked_rows": 0,
+        }
+    )
+
+    assert "解析通過率 100.00%（accepted/observed）" in display[5]
+    assert "accepted 10 / observed 10" in display[5]
+
+
 def test_update_view_timeline_clears_old_steps_when_artifact_is_missing(tmp_path):
     view = _TestableUpdateView(
         FakeUpdateService(),
