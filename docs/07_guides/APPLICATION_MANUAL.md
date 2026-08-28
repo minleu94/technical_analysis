@@ -1022,6 +1022,8 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 
 若 `OUTPUT_ROOT/monthly_revenue_mops_snapshots` 中存在比 SQLite 已匯入期別更新的受控命名 snapshot，卡片會改顯示「候選可用」，並列出「候選待套用期別」。這只代表已取得新的數值候選，不代表公告日 availability mapping 或 SQLite 已完成；仍須先跑 availability validator 與 backfill dry-run，再由人工確認是否正式套用。snapshot 選擇依檔名的資料期別／抓取日，不依檔案大小，UpdateView 與兩個 availability builder 共用同一規則，避免歷史大檔遮蔽最新候選。
 
+若已有由 `build_monthly_revenue_availability_history.py` 或受控 PIT 匯入產生的公告日／可得日候選 CSV，可設定 `MONTHLY_REVENUE_AVAILABILITY_CANDIDATE=<絕對路徑>`。資料更新狀態檢查只會讀取這個明確檔案，先執行 validator，再對正式 mapping 做唯讀 merge preview；卡片會列出候選期別、筆數、可用日、可併入／已併入／衝突狀態，以及新增與衝突筆數。`ready_for_merge` 仍只是候選可併入，不會自動寫入正式 mapping 或 SQLite；正式套用仍須另行執行 availability merge 與月營收 backfill 的確認流程。未設定此變數時不會掃描 TEMP 或其他相鄰目錄，也不會把 snapshot 候選誤當成公告日證據。
+
 狀態意義：
 
 | 狀態 | 意義 |
@@ -1091,7 +1093,7 @@ freshness status、`checked_at`、warnings／errors 與 read-only 標誌，不�
 Paper 成本後週報或平行 worker 已完成。若要保存報告，才另以 `--output <REPORT_PATH>`
 指定明確的報告檔案。
 
-若要在受控環境改用另一個已核准的 artifact，可設定 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT` 或 `TPEX_REFRESH_STATUS_ARTIFACT`；每個變數都必須是完整檔案路徑。未設定時使用上述固定出口，找不到時畫面會明示「缺漏／未設定」，不會自行搜尋相鄰目錄。
+若要在受控環境改用另一個已核准的 artifact，可設定 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT`、`TPEX_REFRESH_STATUS_ARTIFACT` 或 `MONTHLY_REVENUE_AVAILABILITY_CANDIDATE`；每個變數都必須是完整檔案路徑。未設定時使用上述固定出口，找不到時畫面會明示「缺漏／未設定」，不會自行搜尋相鄰目錄。
 
 每日股價、大盤指數、產業指數、券商分點、技術指標、月營收，以及法人／信用／集保三個候選資料源分頁，都會在「檢查此資料源狀態」下方顯示同一份唯讀來源摘要；全域檢查完成後也會同步刷新這九份摘要。個別來源查詢失敗時只會將該來源標為異常，不會把其他來源卡片誤刷成錯誤。候選來源摘要仍屬 research-only，不代表正式評分或交易訊號。
 

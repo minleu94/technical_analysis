@@ -139,6 +139,7 @@
 
 - MOPS `2026-07` snapshot 取得 1,853 rows；與 TWSE／TPEx 官方 `出表日期` 公告資料交集為 1,851 rows（TWSE 991、TPEx 860；公告日 `2026-08-17`、保守可用日 `2026-08-18`），2 rows 因官方映射缺失而保留缺口。候選 validator 與正式 DB dry-run 均為 0 diagnostics、normalized 1,851；只寫入 TEMP，未改正式 mapping／SQLite。
 - UpdateService／UpdateView 現在會按資料期別與抓取日選最新 snapshot，而不是依檔案大小／修改時間猜測；若較新數值候選尚未套用，狀態改顯示 `candidate_available`／「候選待套用期別」，修正 SQLite 仍停在 2026-06 卻只顯示單純 `ok` 的可見性問題。正式 apply 仍需人工確認。
+- 資料更新狀態另外支援明確 `MONTHLY_REVENUE_AVAILABILITY_CANDIDATE` 路徑；唯讀 validator／merge preview 會投影公告日 mapping 候選的期別、可用日、筆數、新增／衝突與 `ready_for_merge`／`already_merged` 狀態。2026-08-28 TEMP 候選為 2026-07、1,851 rows、可用日 2026-08-18、新增 1,851、衝突 0；仍未合併正式 mapping 或回填 SQLite。
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 

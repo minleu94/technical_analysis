@@ -25,6 +25,9 @@ from data_module.monthly_revenue_snapshot_selection import (
     inspect_monthly_revenue_snapshot,
     select_latest_monthly_revenue_snapshot,
 )
+from data_module.monthly_revenue_availability_candidate import (
+    inspect_monthly_revenue_availability_candidate,
+)
 
 
 def _monthly_revenue_status_today() -> str:
@@ -60,7 +63,12 @@ def _is_cancel_requested(callback: Optional[Callable[[], bool]]) -> bool:
 class UpdateService :
     """數據更新服務類"""
 
-    def __init__ (self ,config ):
+    def __init__ (
+        self,
+        config,
+        *,
+        monthly_revenue_availability_candidate_path: Optional[str | Path] = None,
+    ):
         """初始化數據更新服務
 
         Args:
@@ -71,6 +79,16 @@ class UpdateService :
         self .scripts_dir =self .project_root /'scripts'
         self .status_manifest_file =self .config .meta_data_dir /'data_status_manifest.json'
         self .monthly_revenue_source_version ="mops-static-snapshot-monthly-revenue-2026-06-16"
+        configured_candidate = (
+            monthly_revenue_availability_candidate_path
+            if monthly_revenue_availability_candidate_path is not None
+            else os.environ.get("MONTHLY_REVENUE_AVAILABILITY_CANDIDATE")
+        )
+        self.monthly_revenue_availability_candidate_path = (
+            Path(configured_candidate).expanduser().resolve()
+            if configured_candidate
+            else None
+        )
 
     def dry_run_mops_monthly_revenue_backfill (
     self ,
@@ -2049,6 +2067,67 @@ class UpdateService :
                         payload['warnings'] = [
                             '已有較新的 MOPS 月營收數值候選；尚未完成 availability dry-run／正式套用'
                         ]
+            availability_candidate_path = self.monthly_revenue_availability_candidate_path
+            if availability_candidate_path is not None:
+                availability_candidate = inspect_monthly_revenue_availability_candidate(
+                    availability_candidate_path,
+                    target_file=self.config.monthly_revenue_availability_file,
+                )
+                payload.update(
+                    {
+                        'availability_candidate_file': str(availability_candidate.path),
+                        'availability_candidate_status': availability_candidate.status,
+                        'availability_candidate_row_count': availability_candidate.row_count,
+                        'availability_candidate_latest_period': availability_candidate.latest_period,
+                        'availability_candidate_latest_available_date': (
+                            availability_candidate.latest_available_date
+                        ),
+                        'availability_candidate_source_versions': list(
+                            availability_candidate.source_versions
+                        ),
+                        'availability_candidate_diagnostic_count': (
+                            availability_candidate.diagnostic_count
+                        ),
+                        'availability_candidate_added_count': availability_candidate.added_count,
+                        'availability_candidate_unchanged_count': (
+                            availability_candidate.unchanged_count
+                        ),
+                        'availability_candidate_conflict_count': (
+                            availability_candidate.conflict_count
+                        ),
+                    }
+                )
+                if availability_candidate.diagnostics:
+                    payload['availability_candidate_diagnostics'] = list(
+                        availability_candidate.diagnostics
+                    )
+                candidate_period = availability_candidate.latest_period
+                imported_period = str(payload.get('latest_period') or '')
+                if candidate_period and (
+                    not imported_period or candidate_period > imported_period
+                ):
+                    payload['status'] = 'candidate_available'
+                    raw_warnings = payload.get('warnings')
+                    warnings = list(raw_warnings) if isinstance(raw_warnings, list) else []
+                    if availability_candidate.status == 'ready_for_merge':
+                        warnings.append(
+                            '已有較新的公告日／可得日 mapping 候選；尚未合併到正式 mapping'
+                        )
+                    elif availability_candidate.status == 'conflict':
+                        warnings.append(
+                            '公告日／可得日 mapping 候選與正式 mapping 有衝突；未自動覆蓋'
+                        )
+                    elif availability_candidate.status == 'merge_blocked':
+                        warnings.append(
+                            '公告日／可得日 mapping 候選的 merge preview 受阻；未自動套用'
+                        )
+                    elif availability_candidate.status in {'invalid', 'error'}:
+                        warnings.append(
+                            '公告日／可得日 mapping 候選驗證未完成；未自動套用'
+                        )
+                    payload['warnings'] = list(
+                        dict.fromkeys(str(item) for item in warnings if str(item).strip())
+                    )
             return self._annotate_sqlite_read_mode(payload, db)
         except Exception as e :
             import logging

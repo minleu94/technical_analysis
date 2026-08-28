@@ -49,12 +49,58 @@ def format_status_token(status: Any) -> str:
         "stale": "待更新",
         "summary": "待更新",
         "candidate_available": "候選可用",
+        "ready_for_merge": "可併入候選",
+        "already_merged": "已併入",
+        "conflict": "有衝突",
+        "merge_blocked": "合併受阻",
+        "invalid": "候選無效",
         "unknown": "未知",
         "正常": "正常",
         "待更新": "待更新",
         "未檢查": "未檢查",
     }
     return mapping.get(normalized, raw_status or "未知")
+
+
+def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[str]:
+    """投影月營收數值 snapshot 與 availability mapping 候選的唯讀差異。"""
+
+    lines: list[str] = []
+    latest_period = str(detail.get("latest_period") or "").strip()
+    snapshot_period = str(detail.get("candidate_latest_period") or "").strip()
+    if snapshot_period and (
+        latest_period in {"", "未知", "無"} or snapshot_period > latest_period
+    ):
+        lines.append(f"候選待套用期別：{snapshot_period}")
+
+    mapping_period = str(
+        detail.get("availability_candidate_latest_period") or ""
+    ).strip()
+    mapping_status = str(
+        detail.get("availability_candidate_status") or ""
+    ).strip()
+    if mapping_period and mapping_status:
+        status = format_status_token(mapping_status)
+        row_count = _safe_nonnegative_int(
+            detail.get("availability_candidate_row_count")
+        )
+        available_date = str(
+            detail.get("availability_candidate_latest_available_date") or ""
+        ).strip()
+        suffix = f"{row_count:,} 筆"
+        if available_date:
+            suffix += f"；可用日至 {available_date}"
+        added = detail.get("availability_candidate_added_count")
+        conflicts = detail.get("availability_candidate_conflict_count")
+        if added is not None or conflicts is not None:
+            suffix += (
+                f"；新增 {_safe_nonnegative_int(added):,}"
+                f"／衝突 {_safe_nonnegative_int(conflicts):,}"
+            )
+        lines.append(
+            f"公告日 mapping 候選：{mapping_period}（{status}；{suffix}）"
+        )
+    return lines
 
 
 def format_freshness_gap(detail: Mapping[str, Any]) -> str:
@@ -84,12 +130,7 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
             f"已匯入期別：{latest_period}",
             f"目前可用期別：{latest_available_period}",
         ]
-        candidate_period = str(detail.get("candidate_latest_period") or "").strip()
-        if candidate_period and (
-            latest_period in {None, "", "未知"}
-            or candidate_period > str(latest_period)
-        ):
-            lines.append(f"候選待套用期別：{candidate_period}")
+        lines.extend(format_monthly_revenue_candidate_lines(detail))
         if pending_period_count and next_available_date:
             lines.append(
                 f"待生效：{pending_period_count} 個期別（{next_available_date} 起可用）"

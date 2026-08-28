@@ -135,6 +135,30 @@ def test_format_source_detail_summary_exposes_newer_monthly_candidate() -> None:
     assert "狀態：候選可用" in summary
 
 
+def test_format_source_detail_summary_exposes_availability_candidate_merge_preview() -> None:
+    summary = format_source_detail_summary(
+        "monthly_revenue",
+        {
+            "latest_period": "2026-06",
+            "latest_available_period": "2026-06",
+            "latest_available_date": "2026-07-15",
+            "availability_candidate_latest_period": "2026-07",
+            "availability_candidate_status": "ready_for_merge",
+            "availability_candidate_row_count": 1851,
+            "availability_candidate_latest_available_date": "2026-08-18",
+            "availability_candidate_added_count": 1851,
+            "availability_candidate_conflict_count": 0,
+            "total_records": 246331,
+            "status": "candidate_available",
+        },
+    )
+
+    assert "公告日 mapping 候選：2026-07" in summary
+    assert "可併入候選" in summary
+    assert "1,851 筆" in summary
+    assert "新增 1,851／衝突 0" in summary
+
+
 def test_format_source_detail_summary_discloses_read_mode_fallback() -> None:
     detail = {
         "latest_date": "2026-08-26",

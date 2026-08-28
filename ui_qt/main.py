@@ -215,7 +215,12 @@ class MainWindow(QMainWindow):
             self.screening_service = decision_services.screening_service
             self.regime_service = decision_services.regime_service
             self.recommendation_service = decision_services.recommendation_service
-            self.update_service = UpdateService(self.config)
+            self.update_service = UpdateService(
+                self.config,
+                monthly_revenue_availability_candidate_path=(
+                    self._monthly_revenue_availability_candidate_path()
+                ),
+            )
             self.backtest_service = BacktestService(self.config)
             self.broker_flow_service = BrokerFlowService(self.config)
             self.research_session_store = ResearchSessionStore()
@@ -286,6 +291,11 @@ class MainWindow(QMainWindow):
     def _p0_license_evidence_path(self) -> Path | None:
         """只接受顯式 P0 license candidate artifact；不掃描正式資料或 QA 目錄。"""
         configured_path = os.environ.get("P0_SOURCE_CONTROL_CENTER_LICENSE_EVIDENCE")
+        return Path(configured_path).expanduser().resolve() if configured_path else None
+
+    def _monthly_revenue_availability_candidate_path(self) -> Path | None:
+        """只接受顯式月營收 availability candidate；不掃描正式資料或暫存目錄。"""
+        configured_path = os.environ.get("MONTHLY_REVENUE_AVAILABILITY_CANDIDATE")
         return Path(configured_path).expanduser().resolve() if configured_path else None
 
     def _data_update_status_path(self) -> Path | None:

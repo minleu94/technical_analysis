@@ -40,6 +40,7 @@ from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 from ui_qt.views.update.update_formatters import (
     format_freshness_gap,
+    format_monthly_revenue_candidate_lines,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
@@ -3015,6 +3016,7 @@ class UpdateView(QWidget):
                 f"已匯入期別：{latest_period}",
                 f"目前可用期別：{latest_available_period}",
             ]
+            lines.extend(format_monthly_revenue_candidate_lines(value))
             if pending_period_count and next_available_date:
                 lines.append(
                     f"待生效：{pending_period_count} 個期別（{next_available_date} 起可用）"

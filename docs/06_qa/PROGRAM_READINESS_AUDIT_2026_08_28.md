@@ -154,6 +154,9 @@ SQLite 月營收目前仍停在 `2026-06`（246,331 rows、最新完整可用日
 
 本輪 snapshot SHA-256=`D055DF5F6193961198655C5B46F5D6111D808430CBEFDC4DDB27F521EBABAD65`；
 availability candidate SHA-256=`9CAE017074FE08B5EE14761FDAB8458D738AFD63AF0ED73F4E5A72E8BF34D016`。
+若在 UI／狀態查詢設定明確的 `MONTHLY_REVENUE_AVAILABILITY_CANDIDATE`，目前會再投影這份
+candidate 的 validator 與 merge preview：2026-07、1,851 rows、可用日 2026-08-18、
+新增 1,851、衝突 0、`ready_for_merge`；這只改善可見性，未改寫正式 mapping／SQLite。
 
 ## 為什麼有些東西不能直接補滿
 
