@@ -9,6 +9,7 @@ evidence；目前 `formal_oos_allowed=false`、production alpha=`0`、broker dis
 PFS-07 的 activation contract 已可用於受控 fixture preflight：
 
 - `scripts\publish_prospective_formal_clock.py --fixture-only` 可把 owner 已核准、仍在未來的 activation trading day 與官方 calendar evidence 寫成 planned clock manifest。呼叫端必須明確提供 clock／owner decision、cash seed、strategy／policy／universe／source identities、frozen candidate training cutoff、calibration／evaluation hashes 與 `--now`；命令不會自行選日期、查找或回填歷史、設定任何 `BALDR_ML_*` path、讀取 HMAC secret 或啟動 watcher。輸出 parent 必須先存在，manifest 採 canonical JSON create-only。
+- `scripts\plan_prospective_formal_clock.py` 是新的唯讀日期 preflight。它只接受呼叫端提供的 `official-trading-calendar-bundle.v1`（每個候選日同時含 TWSE／TPEX `is_trading_day`、官方 `source` 與 `sha256:` response hash），以帶時區的 `--now`、owner decision timestamp、至少一個準備日與 lookahead window 選出第一個尚未使用的共同交易日。輸出是 `candidate_ready` proposal，不是 clock manifest；不下載日曆、不採用 same-day override、不自動切換 `BALDR_ML_*` path、不寫正式資料。選不到合格日期時回 `blocked`，不猜日期。
 - `scripts\activate_prospective_formal_clock.py --fixture-only` 在 strict 模式只於三個 PFS-06 input 都 ready、candidate／calibration／evaluation identities 與 file hashes 都一致、owner activation timestamp 已發生、activation trading day 仍在未來時建立 create-only manifest。Owner handoff 可改用 `--fixture-only --controlled-environment`，由 shared Windows reader 取得三個 formal paths、非秘密 store identity 與 HMAC configured flag；此模式不讀／輸出 secret、不設定環境，缺件即 blocked。
 - `scripts\record_prospective_daily_capture.py --fixture-only` 只建立低 CPU daily capture 的 `started` record，固定 PIT publication → Rule snapshot → T-1 Portfolio transition → frozen inference → heartbeat 順序；`elapsed_day_credit=0`、`formal_credit=0`，不能隔日補寫。
 - `scripts\run_prospective_rule_only_decision.py` 只在實際台北 09:00–13:30 盤中，以 prospective clock owner acceptance、frozen universe 與 T-1 `daily_prices` 產生 TEMP owner-bound Rule source；它不寫 market DB、Recommendation、Portfolio、evidence ledger 或 broker，且 HMAC secret 只由受控 runtime 驗證，絕不輸出。
@@ -44,6 +45,42 @@ prospective-only 的三份輸入在 activation 前尚不存在是合法狀態；
 現在就要求 `non_cash_state_day_count>0`，會形成「沒有 activation 就不能有
 transition、沒有 transition 就不能 activation」的循環。因此可先用明確的 staging
 模式預約未來 clock：
+
+日期 preflight 先用獨立的官方日曆 bundle 選出候選日（只產生 proposal）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\plan_prospective_formal_clock.py `
+  --now <TAIPEI_NOW> `
+  --owner-decision-timestamp <OWNER_DECISION_TIMESTAMP> `
+  --calendar-evidence <OFFICIAL_TWSE_TPEX_CALENDAR_BUNDLE> `
+  --minimum-preparation-days 1 `
+  --lookahead-days 31 `
+  --existing-clock-id <ELAPSED_CLOCK_ID> `
+  --output <PLANNING_PROPOSAL_JSON>
+```
+
+Bundle 最小格式如下；`source_hash` 必須是保存過的官方 response bytes hash，不能填
+文件 hash、猜測值或只給單一市場：
+
+```json
+{
+  "schema_version": "official-trading-calendar-bundle.v1",
+  "days": [
+    {
+      "date": "YYYY-MM-DD",
+      "twse": {"is_trading_day": true, "source": "TWSE ...", "source_hash": "sha256:<64 lowercase hex>"},
+      "tpex": {"is_trading_day": true, "source": "TPEX ...", "source_hash": "sha256:<64 lowercase hex>"}
+    }
+  ]
+}
+```
+
+`candidate_ready` 只表示日期與日曆證據通過；仍須由 owner 審閱 proposal hash，接著
+再以 `publish_prospective_formal_clock.py --fixture-only` 建立新的 planned clock。若
+看到 `blocked`，應更新官方 bundle 或延長 lookahead；不得把已過 activation day 的
+clock 改日期、重跑 one-shot、用 replay／fixture 補日，或以 proposal 直接供 Formal
+consumer 使用。所有輸出固定 `formal_oos_allowed=false`、alpha=`0`、
+`promotion_eligible=false`、`broker_order_allowed=false`。
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_prospective_capture_readiness.py `

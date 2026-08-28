@@ -71,6 +71,13 @@ Codex 負責完成候選盤點、比較與首選提案。**Owner 只需在看到
 ## 6. 下一個長任務的完成順序
 
 1. 唯讀 preflight：確認舊 clock 已失效、目前台北時間、官方共同交易日、受控路徑、secret-store configured flag 與現有 Rule versions。
+   日期選擇已封裝為 `scripts/plan_prospective_formal_clock.py`：它只消費明確的
+   `official-trading-calendar-bundle.v1`，驗證 TWSE／TPEX 同日交易、owner decision 時間、
+   至少一個 calendar-day preparation window 與既有 clock date，並以 create-only JSON
+   產生 `candidate_ready` proposal。這個 proposal 不等於 clock manifest、formal input 或
+   owner acceptance；缺少官方 response hash、共同交易日或未來 window 時會回
+   `blocked`，不自行查網路、不猜日期、不選 same-day override，也不會重跑已消耗的
+   2026-08-28 one-shot。
 2. 產出 Rule Champion proposal：一個首選、必要時最多兩個替代方案；列出完整 identity、比較證據與 Look-ahead 自查。
 3. 建立官方 TWSE／TPEX sector source registry 與 prospective first-seen capture producer；先用 fixture／staging 驗證，再接受控路徑。
 4. 在 Owner 對具體 Rule Champion 做一次接受後，依本文件選日規則建立新 clock，凍結 Rule／policy／universe／source／model／calibration／evaluation identities。

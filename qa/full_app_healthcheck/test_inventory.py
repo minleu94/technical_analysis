@@ -393,6 +393,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_prospective_execution_plan.py": "governance-doc-tooling",
     "tests/test_prospective_formal_activation_once.py": "governance-doc-tooling",
     "tests/test_prospective_formal_clock.py": "governance-doc-tooling",
+    "tests/test_prospective_clock_planner.py": "governance-doc-tooling",
     "tests/test_prospective_formal_clock_activation.py": "governance-doc-tooling",
     "tests/test_prospective_frozen_oos_evidence.py": "governance-doc-tooling",
     "tests/test_prospective_official_pit_source.py": "governance-doc-tooling",
