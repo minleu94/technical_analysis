@@ -278,6 +278,16 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - OOC inventory 另辨識到 18 個 manifest `status=complete` 的 `allocation-ooc-*` run，合計約 `98,779,188,672` bytes；這只是 owner retention review 候選，工具固定輸出 `automatic_delete_allowed=false`。深度 artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_storage_retention_inventory_ooc_host_20260828_v3.json`，SHA-256=`5950784709288C7361F654ABB50BD3AC0B2851F0EFB52666CB4F93163814628D`。
 - Broker real HTTP canary：`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_real_http_canary_20260828.json`（SHA-256=`5532F53BDE0C86B4A8983B766DA46AF45D5DF53D893EAEE0F70797F22A48E83C`）；`1030_1030`／`2026-08-28`／`lots` 單一 GET 解析 100 rows，Selenium 未啟動，正式 writer／SQLite 均未寫入。這只證明當次來源可讀與 parser 可用，不代表長期 rate-limit、授權、Selenium fallback 或 production pool。
 
+## 2026-08-28 probe transport metadata hardening
+
+`scripts/update_phase3c_candidates.py` 現在會從每次 bounded response 保存固定 allowlist 的
+`Date`、`Last-Modified`、`ETag` 與 `Content-Type`，並同樣保留 fallback response 的對應欄位。
+這些只屬 transport evidence，會在 owner packet／timestamp semantics 中標成唯讀 header；
+它們不會被升格為 official publication timestamp，也不會改變 PIT、source acceptance、
+downstream eligibility 或 Formal gate。未取得 response 時欄位明確為 `null`，未知或敏感
+header 不會被複製。新增測試已驗證 allowlist 與 secret-like header 排除；本輪相關測試
+`37 passed`。
+
 ## Scheduler wrapper／action wiring 續測
 
 早期沙盒 wrapper manifest `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_wrapper_manifest_20260828.json`（SHA-256=`4C61D49AFF8B2517CD4B06E8EC25CE494A64CD01D406C1E4DF792EBF427D6AC7`）仍保留 13/13 wrapper present，但 task query 不可用的 token 觀察。實際 host-context recheck 已確認 13/13 task `Enabled`／`Ready`、`Task To Run` 全部觀測且 action 相符；這些 query-only 檢查沒有註冊或修改 task。

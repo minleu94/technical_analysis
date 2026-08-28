@@ -45,6 +45,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+# Keep only bounded, non-secret response metadata in candidate diagnostics.
+# HTTP headers are useful for an owner to reconcile transport behaviour, but
+# they are never publication/available-time evidence and must not be promoted
+# into a PIT timestamp by any downstream inspector.
+_HTTP_EVIDENCE_HEADERS: tuple[tuple[str, str], ...] = (
+    ("http_date", "Date"),
+    ("last_modified", "Last-Modified"),
+    ("etag", "ETag"),
+    ("content_type", "Content-Type"),
+)
+_MAX_HTTP_EVIDENCE_VALUE_LENGTH = 512
+
+
 OFFICIAL_PROBE_ROUTE_IDS: dict[str, str] = {
     "twse:T86": "twse.T86",
     "twse:MI_MARGN": "twse.MI_MARGN",
@@ -294,6 +307,7 @@ def run_bounded_official_probe(probe_date: date) -> dict:
             "payload_size_bytes": len(payload),
             "fetched_at": fetched_at.isoformat(),
         }
+        raw_evidence.update(_capture_http_evidence(response))
         official_no_data = _official_no_data_status(payload)
         fallback_result: OfficialParserResult | None = None
         if official_no_data is not None:
@@ -329,6 +343,10 @@ def run_bounded_official_probe(probe_date: date) -> dict:
                             "fallback_http_status": int(fallback_response.status_code),
                             "fallback_payload_sha256": sha256(fallback_payload).hexdigest(),
                             "fallback_payload_size_bytes": len(fallback_payload),
+                            **{
+                                f"fallback_{key}": value
+                                for key, value in _capture_http_evidence(fallback_response).items()
+                            },
                         }
                     )
                     fallback_no_data = _official_no_data_status(fallback_payload)
@@ -404,6 +422,7 @@ def run_bounded_official_probe(probe_date: date) -> dict:
                                 "payload_size_bytes": len(payload),
                                 "fetched_at": fetched_at.isoformat(),
                             }
+                            raw_evidence.update(_capture_http_evidence(response))
                             fallback_result = candidate_result
                 except Exception as fallback_exc:
                     fallback_failure_kind = (
@@ -528,6 +547,10 @@ def _network_failure_diagnostic(
         "payload_sha256": None,
         "payload_size_bytes": 0,
         "fetched_at": fetched_at.isoformat(),
+        "http_date": None,
+        "last_modified": None,
+        "etag": None,
+        "content_type": None,
         "schema_status": "unavailable",
         "timestamp_evidence": "unavailable",
         "raw_row_count": 0,
@@ -549,6 +572,47 @@ def _network_failure_diagnostic(
             }
         )
     return diagnostic
+
+
+def _capture_http_evidence(response: object) -> dict[str, str | None]:
+    """Return a small allowlisted response-header projection.
+
+    ``requests`` exposes a case-insensitive mapping, while tests and alternate
+    transports may provide a plain mapping.  Read both forms defensively and
+    bound each value so an unexpected header implementation cannot inflate a
+    candidate artifact.  The caller stores this only as transport evidence;
+    the P0 audit explicitly keeps HTTP headers outside PIT publication gates.
+    """
+
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return {key: None for key, _ in _HTTP_EVIDENCE_HEADERS}
+
+    def lookup(header_name: str) -> str | None:
+        value: object | None = None
+        try:
+            getter = getattr(headers, "get", None)
+            if callable(getter):
+                value = getter(header_name)
+        except (AttributeError, TypeError, ValueError):
+            value = None
+        if value is None:
+            try:
+                items = headers.items()
+            except (AttributeError, TypeError, ValueError):
+                items = ()
+            for key, candidate in items:
+                if str(key).casefold() == header_name.casefold():
+                    value = candidate
+                    break
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        return text[:_MAX_HTTP_EVIDENCE_VALUE_LENGTH]
+
+    return {key: lookup(header_name) for key, header_name in _HTTP_EVIDENCE_HEADERS}
 
 
 def _official_no_data_status(payload: bytes) -> str | None:

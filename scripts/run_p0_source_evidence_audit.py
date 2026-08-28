@@ -606,6 +606,13 @@ def build_p0_source_evidence_audit(
         for route_field in (
             "endpoint_id",
             "acquisition_route_id",
+            # These are bounded transport observations only.  The timestamp
+            # semantics builder deliberately marks them capture-time evidence
+            # and never promotes them to official publication time.
+            "http_date",
+            "last_modified",
+            "etag",
+            "content_type",
             "fallback_used",
             "fallback_from_endpoint_id",
             "fallback_from_acquisition_route_id",

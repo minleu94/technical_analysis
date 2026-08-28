@@ -99,8 +99,8 @@ def render_owner_decision_packet(payload: Mapping[str, Any]) -> str:
                 [
                     "**Machine route evidence（唯讀）**",
                     "",
-                    "| Source | Actual／candidate routes | Fallback | Probe／availability | PIT／timestamp | Rows raw／accepted／blocked | License URL(s) |",
-                    "|---|---|---|---|---|---:|---|",
+                    "| Source | Actual／candidate routes | Fallback | Probe／availability | PIT／timestamp | HTTP headers（唯讀） | Rows raw／accepted／blocked | License URL(s) |",
+                    "|---|---|---|---|---|---|---:|---|",
                 ]
             )
             for machine_item in machine_items:
@@ -128,6 +128,7 @@ def render_owner_decision_packet(payload: Mapping[str, Any]) -> str:
                     f"`{_markdown_cell(machine_item.get('availability', 'unknown'))}` | "
                     f"`{_markdown_cell(machine_item.get('pit_status', 'unknown'))}` / "
                     f"`{_markdown_cell(machine_item.get('timestamp_kind', 'unknown'))}` | "
+                    f"{_markdown_cell('<br>'.join(_machine_http_headers(machine_item)) or '未提供')} | "
                     f"`{_markdown_cell(rows)}` | "
                     f"{_markdown_cell('<br>'.join(_machine_license_urls(machine_item)) or '待補')} |"
                 )
@@ -256,6 +257,25 @@ def _machine_license_urls(machine_item: Mapping[str, Any]) -> list[str]:
             if url and url not in urls:
                 urls.append(url)
     return urls
+
+
+def _machine_http_headers(machine_item: Mapping[str, Any]) -> list[str]:
+    """Render bounded transport headers without treating them as PIT proof."""
+
+    labels = (
+        ("Date", "http_date"),
+        ("Last-Modified", "last_modified"),
+        ("ETag", "etag"),
+        ("Content-Type", "content_type"),
+    )
+    values: list[str] = []
+    for label, field_name in labels:
+        value = str(machine_item.get(field_name) or "").strip()
+        if value:
+            values.append(_markdown_cell(f"{label}={value}"))
+    if values:
+        return values
+    return ["headers_missing; never_publication"]
 
 
 def _require_non_production_output(path: Path) -> None:

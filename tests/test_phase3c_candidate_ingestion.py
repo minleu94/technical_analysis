@@ -247,6 +247,57 @@ def test_bounded_probe_reports_schema_timestamp_and_conservation_without_accepta
         }
 
 
+def test_bounded_probe_preserves_allowlisted_http_headers_as_transport_evidence():
+    """Headers are visible to the owner packet but never become PIT proof."""
+
+    fixture_root = Path(__file__).parent / "fixtures" / "p0_official_sources"
+
+    def response_for(filename: str, content_type: str = "application/json"):
+        response = MagicMock()
+        response.content = (fixture_root / filename).read_bytes()
+        response.headers = {
+            "Date": "Fri, 10 Jul 2026 10:00:00 GMT",
+            "Last-Modified": "Fri, 10 Jul 2026 09:59:00 GMT",
+            "ETag": '"fixture-etag"',
+            "Content-Type": content_type,
+            # A secret-like header must never be copied to the artifact.
+            "Authorization": "Bearer should-not-appear",
+        }
+        response.status_code = 200
+        return response
+
+    responses = [
+        response_for("twse_institutional.json"),
+        response_for("twse_credit.json"),
+        response_for("tdcc_shareholding.csv", "text/csv"),
+        response_for("twse_disposition.json"),
+        response_for("twse_disposition.json"),
+        response_for("twse_full_delivery.json"),
+        response_for("twse_halt_resume.json"),
+        response_for("twse_ex_dividend.json"),
+        response_for("twse_reduction.json"),
+        response_for("twse_monthly_revenue.json"),
+        response_for("tpex_monthly_revenue.json"),
+        response_for("twse_limit_lock.json"),
+    ]
+
+    with patch(
+        "scripts.update_phase3c_candidates.safe_request", side_effect=responses
+    ):
+        report = run_bounded_official_probe(date(2026, 7, 10))
+
+    institutional = next(
+        item
+        for item in report["sources"]
+        if item["source_id"] == "twse_institutional"
+    )
+    assert institutional["http_date"] == "Fri, 10 Jul 2026 10:00:00 GMT"
+    assert institutional["last_modified"] == "Fri, 10 Jul 2026 09:59:00 GMT"
+    assert institutional["etag"] == '"fixture-etag"'
+    assert institutional["content_type"] == "application/json"
+    assert "Authorization" not in json.dumps(institutional, ensure_ascii=False)
+
+
 def test_bounded_probe_uses_one_short_attempt_per_source() -> None:
     response = MagicMock()
     response.content = b'{"stat":"No data"}'
