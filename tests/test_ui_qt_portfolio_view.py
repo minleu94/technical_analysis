@@ -319,6 +319,7 @@ def test_paper_portfolio_readiness_tab_discloses_snapshot_and_missing_benchmark(
     assert "raw 累積 1 筆" in view.paper_readiness_summary_label.text()
     assert "TWD 1,000.00" in view.paper_readiness_summary_label.text()
     assert "Equal Weight：尚無" in view.paper_readiness_summary_label.text()
+    assert "成本帳：缺漏（missing）（0 筆）" in view.paper_readiness_summary_label.text()
     assert "equal_weight_benchmark_db_missing" in view.paper_readiness_detail_label.text()
     assert view.paper_snapshot_table.model().rowCount() == 1
 
@@ -432,7 +433,7 @@ def test_paper_fill_csv_import_requires_confirmation_and_only_writes_paper_ledge
     ledger_path = tmp_path / "paper_portfolio" / "paper_trade_ledger.sqlite"
     assert [fill.fill_id for fill in PaperTradeLedgerRepository(ledger_path).list()] == ["fill-1"]
     assert [trade.trade_id for trade in view.portfolio_service.trades] == ["t1", "t2"]
-    assert "成本帳：ready" in view.paper_readiness_summary_label.text()
+    assert "成本帳：可用（ready）（1 筆）" in view.paper_readiness_summary_label.text()
 
 
 def test_paper_fill_template_export_writes_headers_only_and_not_ledger(tmp_path, monkeypatch):

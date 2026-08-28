@@ -61,6 +61,27 @@ from app_module.trade_import_service import TradeImportService
 logger = logging.getLogger(__name__)
 
 
+def _paper_status_text(value: Any) -> str:
+    """Render Paper readiness tokens with a Chinese explanation and raw token."""
+
+    raw_status = str(value or "unknown").strip().lower() or "unknown"
+    labels = {
+        "ready": "可用",
+        "partial": "部分完成",
+        "degraded": "降級",
+        "not_configured": "尚未配置",
+        "not_computable": "尚不可計算",
+        "not_computable_cost_ledger_missing": "尚不可計算（成本帳缺漏）",
+        "not_computable_cost_ledger_incomplete": "尚不可計算（成本帳不完整）",
+        "not_computable_future_dated": "尚不可計算（日期超前）",
+        "not_computable_boundary_mismatch": "尚不可計算（期間邊界不符）",
+        "invalid": "格式異常",
+        "missing": "缺漏",
+        "unknown": "未知",
+    }
+    return f"{labels.get(raw_status, raw_status)}（{raw_status}）"
+
+
 class GradientCard(QFrame):
     """精美 HSL 漸層資訊展示卡片"""
 
@@ -868,13 +889,9 @@ class PortfolioView(QWidget):
             )
 
     def _render_paper_readiness(self, result) -> None:
-        status_labels = {
-            "ready": "可用",
-            "partial": "部分完成",
-            "degraded": "降級",
-            "not_configured": "尚未配置",
-        }
-        status_text = status_labels.get(str(result.status), str(result.status))
+        status_text = _paper_status_text(result.status)
+        cost_status_text = _paper_status_text(result.cost_ledger_status)
+        weekly_status_text = _paper_status_text(result.weekly_report_status)
         total_text = (
             f"TWD {result.latest_total_value:,.2f}"
             if result.latest_total_value is not None
@@ -892,17 +909,17 @@ class PortfolioView(QWidget):
             f"raw 累積 {result.snapshot_count} 筆｜持倉 {result.latest_position_count} 檔｜"
             f"總值 {total_text}｜現金 {cash_text}\n"
             f"Equal Weight：{benchmark_text}｜"
-            f"成本帳：{result.cost_ledger_status} ({result.cost_record_count} 筆)｜"
-            f"週報：{result.weekly_report_status}"
+            f"成本帳：{cost_status_text}（{result.cost_record_count} 筆）｜"
+            f"週報：{weekly_status_text}"
         )
         details = [
-            f"status：{result.latest_status}",
+            f"status：{_paper_status_text(result.latest_status)}",
             f"snapshot DB：{result.state_db_path}",
             f"daily status：{result.status_path}",
             f"benchmark DB：{result.benchmark_db_path or '未設定 PAPER_EQUAL_WEIGHT_BENCHMARK_PATH'}",
             f"cost ledger DB：{result.cost_ledger_db_path or '未設定 PAPER_TRADE_LEDGER_PATH'}",
             (
-                f"成本帳：{result.cost_ledger_status}｜"
+                f"成本帳：{cost_status_text}｜"
                 f"總成本 {result.cost_total_cost if result.cost_total_cost is not None else 'N/A'}｜"
                 f"full fill {result.filled_event_count}／partial fill {result.partial_fill_event_count}／"
                 f"reject {result.rejected_event_count}／override {result.override_event_count}"
@@ -954,14 +971,7 @@ class PortfolioView(QWidget):
             )
 
     def _render_paper_weekly_evidence(self, result) -> None:
-        status_labels = {
-            "ready": "可用",
-            "partial": "部分完成",
-            "degraded": "降級",
-            "not_configured": "尚未配置",
-            "not_computable": "尚不可計算",
-        }
-        status_text = status_labels.get(str(result.status), str(result.status))
+        status_text = _paper_status_text(result.status)
         if result.report is None:
             summary = (
                 f"最近週報｜狀態：{status_text}｜"
@@ -981,7 +991,7 @@ class PortfolioView(QWidget):
                 f"資料品質 {report.data_quality}"
             )
         details = [
-            f"週報 evidence：{result.weekly_report_status}",
+            f"週報 evidence：{_paper_status_text(result.weekly_report_status)}",
             f"snapshot DB：{result.state_db_path}",
             f"benchmark DB：{result.benchmark_db_path or '未設定'}",
             f"cost ledger DB：{result.cost_ledger_db_path or '未設定'}",
