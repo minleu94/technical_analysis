@@ -8,20 +8,23 @@ from PySide6.QtWidgets import (
     QPushButton, QGroupBox, QProgressBar,
     QTextEdit, QRadioButton, QButtonGroup,
     QDateEdit, QMessageBox, QFormLayout, QSpinBox, QLineEdit,
-    QListWidget, QStackedWidget, QFrame, QCalendarWidget
+    QListWidget, QStackedWidget, QFrame, QCalendarWidget, QGridLayout,
+    QScrollArea, QSizePolicy, QBoxLayout
 )
 from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 import json
 import os
 import subprocess
 import sys
+import inspect
 
 from ui_qt.workers.task_worker import TaskWorker, ProgressTaskWorker
 from app_module.update_service import UpdateService
+from app_module.paper_portfolio_time import taiwan_market_today
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 from ui_qt.views.update.update_formatters import (
@@ -33,6 +36,13 @@ from ui_qt.views.update.update_formatters import (
 from ui_qt.views.update.worker_coordinator import WorkerCoordinator
 from ui_qt.views.update.update_all_coordinator import run_update_all
 from ui_qt.views.update.source_update_coordinator import SourceUpdateRequest
+
+
+def _taiwan_market_qdate() -> QDate:
+    """將資料更新 UI 的「今日」統一對齊台灣市場日期。"""
+
+    today = taiwan_market_today()
+    return QDate(today.year, today.month, today.day)
 
 
 
@@ -109,7 +119,7 @@ class StatusCard(QFrame):
         latest_date = "未知"
         total_records = "--"
         status_str = "unknown"
-        extra_info = ""
+        extra_info_lines: list[str] = []
 
         lines = text.split('\n')
         for line in lines:
@@ -120,29 +130,58 @@ class StatusCard(QFrame):
                 latest_date = line.split("：")[-1].strip()
             elif "總記錄數" in line:
                 total_records = line.split("：")[-1].strip()
-            elif "狀態" in line:
-                status_str = line.split("：")[-1].strip()
-            elif "指標檔數" in line or "已匯入期別" in line:
-                extra_info = line.strip()
+            else:
+                # 只有真正的「狀態：…」欄位才可改變燈號；placeholder
+                # （例如「點擊『檢查數據狀態』…」）不應被誤判成待更新。
+                stripped_line = line.strip()
+                if stripped_line.startswith("狀態："):
+                    status_str = stripped_line.split("：", 1)[1].strip()
+                elif stripped_line.startswith("狀態:"):
+                    status_str = stripped_line.split(":", 1)[1].strip()
+            if (
+                "指標檔數" in line
+                or "已匯入期別" in line
+                or "目前可用期別" in line
+                or "待生效" in line
+            ):
+                extra_info_lines.append(line.strip())
+            elif "讀取模式" in line or "提醒" in line:
+                extra_info_lines.append(line.strip())
 
         self.date_label.setText(f"<span style='color:#94a3b8;'>{date_label}：</span><b style='color:#f8fafc;'>{latest_date}</b>")
         self.records_label.setText(f"<span style='color:#94a3b8;'>總記錄數：</span><b style='color:#f8fafc;'>{total_records}</b>")
 
-        if extra_info:
+        if extra_info_lines:
+            extra_info = "<br>".join(extra_info_lines)
             self.extra_label.setText(f"<span style='color:#94a3b8;'>{extra_info}</span>")
             self.extra_label.setVisible(True)
         else:
             self.extra_label.setVisible(False)
 
-        # 燈號判定
-        if "點擊" in text or "尚未檢查" in text:
-            self.indicator_label.setText("<span style='font-size:11px; color:#94a3b8;'>未檢查</span>")
-        elif "錯誤" in text or "失敗" in text or "異常" in text:
-            self.indicator_label.setText("<span style='font-size:11px; color:#ef4444;'>異常</span>")
-        elif status_str.lower() in {"ok", "success"} or "正常" in status_str or "最新" in text:
-            self.indicator_label.setText("<span style='font-size:11px; color:#22c55e;'>最新</span>")
+        # 燈號只依明確 status token 判定，不再因為描述文字含「最新」就亮綠燈。
+        self.indicator_label.setText(self._indicator_markup(status_str, text))
+
+    @staticmethod
+    def _indicator_markup(status: str, text: str = "") -> str:
+        """把服務狀態轉為可理解且不會假綠的燈號。"""
+        raw_status = str(status or "").strip().lower()
+        if not raw_status or raw_status in {"unknown", "未知", "未檢查"}:
+            label, color = "未檢查", "#94a3b8"
+        elif (
+            raw_status.startswith(("error", "failed", "failure", "exception"))
+            or raw_status.startswith(("missing", "empty", "unavailable", "缺漏", "不可用"))
+            or raw_status in {"異常"}
+            or any(marker in text for marker in ("錯誤", "失敗", "異常"))
+        ):
+            label, color = "異常", "#ef4444"
+        elif raw_status in {"ok", "success", "current", "normal", "正常"}:
+            if "immutable" in text.lower() or "唯讀快照" in text:
+                label, color = "待更新", "#eab308"
+            else:
+                label, color = "最新", "#22c55e"
         else:
-            self.indicator_label.setText("<span style='font-size:11px; color:#eab308;'>待更新</span>")
+            label, color = "待更新", "#eab308"
+        return f"<span style='font-size:11px; color:{color};'>{label}</span>"
 
     def toPlainText(self) -> str:
         """相容 QTextEdit.toPlainText"""
@@ -158,10 +197,11 @@ class StatusCard(QFrame):
 
     def clear(self):
         """清除卡片"""
+        self._raw_text = ""
         self.date_label.setText("最新日期：--")
         self.records_label.setText("總記錄數：--")
         self.extra_label.setVisible(False)
-        self.indicator_label.setText("未檢查")
+        self.indicator_label.setText("<span style='font-size:11px; color:#94a3b8;'>未檢查</span>")
 
 
 class UpdateView(QWidget):
@@ -176,12 +216,16 @@ class UpdateView(QWidget):
         """
         super().__init__(parent)
         self.update_service = update_service
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self._responsive_narrow: bool | None = None
         self._loaded_detail_sources: set[str] = set()
 
         # Worker
         self.worker: Optional[TaskWorker] = None
         self._worker_coordinator = WorkerCoordinator[TaskWorker]()
         self._active_workers = self._worker_coordinator.active_workers
+        self._last_progress = 0
         meta_data_dir = getattr(
             self.update_service.config,
             "meta_data_dir",
@@ -192,19 +236,259 @@ class UpdateView(QWidget):
 
         self._setup_ui()
 
-    def _start_worker(self, worker: TaskWorker) -> TaskWorker:
-        """Keep background tasks alive independently until they finish."""
-        self.worker = self._worker_coordinator.start(worker)
+    def _start_worker(self, worker: TaskWorker, *, operation_kind: str = "read") -> TaskWorker:
+        """保留背景 worker 生命週期，並阻擋寫入型工作彼此重疊。"""
+        self.worker = self._worker_coordinator.start(
+            worker,
+            kind=operation_kind,
+            exclusive=operation_kind == "write",
+        )
+        if operation_kind == "write":
+            self._set_cancel_control_visible(True)
+        # 先註冊清理 callback，再由呼叫端接上完成處理，讓完成回呼開始
+        # 下一個唯讀狀態檢查時，前一個寫入 worker 已從互斥集合釋放。
+        worker.finished.connect(
+            lambda _payload, current_worker=worker: self._release_worker(current_worker)
+        )
+        worker.error.connect(
+            lambda _message, current_worker=worker: self._release_worker(current_worker)
+        )
         if hasattr(worker, "cancelled"):
             worker.cancelled.connect(lambda current_worker=worker: self._release_worker(current_worker))
+            worker.cancelled.connect(lambda current_worker=worker: self._on_worker_cancelled(current_worker))
         return worker
 
     def _release_worker(self, worker: TaskWorker):
         self.worker = self._worker_coordinator.release(worker)
+        if not self._worker_coordinator.has_active("write"):
+            self._set_cancel_control_visible(False)
+
+    def _set_cancel_control_visible(self, visible: bool) -> None:
+        """控制目前寫入型 worker 的合作式取消按鈕。"""
+        button = getattr(self, "cancel_update_btn", None)
+        if button is None:
+            return
+        button.setVisible(visible)
+        button.setEnabled(visible)
+        if visible:
+            button.setText("取消目前工作")
+
+    def _request_current_worker_cancel(self) -> None:
+        """送出非阻塞取消請求，等待服務在安全邊界收尾。"""
+        workers = list(self._worker_coordinator.active_workers_for("write"))
+        requested = 0
+        for worker in workers:
+            cancel = getattr(worker, "cancel", None)
+            if not callable(cancel):
+                continue
+            try:
+                cancel(cooperative=True, wait=False)
+                requested += 1
+            except Exception as exc:
+                self._log(f"取消背景工作請求失敗：{exc}")
+
+        button = getattr(self, "cancel_update_btn", None)
+        if button is not None:
+            button.setEnabled(False)
+        message = (
+            "已送出合作式取消，等待目前日期／檔案操作安全收尾…"
+            if requested
+            else "目前背景工作沒有可用的合作式取消介面，仍會等待其安全完成。"
+        )
+        if hasattr(self, "progress_label"):
+            self.progress_label.setVisible(True)
+            self.progress_label.setText(message)
+        if hasattr(self, "log_text"):
+            self._log(message)
+
+    def _restore_write_controls_after_cancel(self) -> None:
+        """取消後恢復可操作按鈕，避免 UI 永久停在「處理中」。"""
+        defaults = {
+            "quick_update_all_btn": "快速更新 (跳過大型合併)",
+            "safe_update_all_btn": "安全更新 (完整 CSV + SQLite)",
+            "daily_update_btn": "手動下載此資料源",
+            "market_update_btn": "手動下載此資料源",
+            "industry_update_btn": "手動下載此資料源",
+            "broker_branch_update_btn": "手動下載此資料源",
+            "merge_btn": "合併每日股價",
+            "force_merge_btn": "強制重新合併所有每日股價",
+            "merge_broker_branch_btn": "合併券商分點",
+            "calculate_tech_btn": "計算技術指標",
+            "monthly_revenue_dry_run_btn": "先檢查，不寫入",
+            "monthly_revenue_apply_btn": "確認後寫入月營收",
+        }
+        for attr, label in defaults.items():
+            button = getattr(self, attr, None)
+            if button is None:
+                continue
+            button.setEnabled(True)
+            button.setText(label)
+
+    def _on_worker_cancelled(self, worker: TaskWorker) -> None:
+        """顯示合作式取消已收尾，並清理共用進度狀態。"""
+        self._release_worker(worker)
+        self._invalidate_detail_cache()
+        self._restore_write_controls_after_cancel()
+        sync_label = getattr(self, "sqlite_sync_status_label", None)
+        if sync_label is not None and "執行中" in sync_label.text():
+            self._set_sqlite_sync_status(
+                {
+                    "cancelled": True,
+                    "source": "目前工作",
+                    "message": "尚未完成 SQLite 同步",
+                }
+            )
+        if hasattr(self, "progress_bar"):
+            self.progress_bar.setVisible(False)
+        if hasattr(self, "progress_label"):
+            self.progress_label.setVisible(False)
+        if hasattr(self, "log_text"):
+            self._log("背景工作已取消；已完成的檔案／資料庫寫入保留，請重新檢查資料狀態。")
 
     def _attach_worker_cleanup(self, worker: TaskWorker):
+        """向後相容的清理掛接；_start_worker 已先註冊同等保護。"""
         worker.finished.connect(lambda _payload, current_worker=worker: self._release_worker(current_worker))
         worker.error.connect(lambda _message, current_worker=worker: self._release_worker(current_worker))
+
+    def _has_active_write_worker(self) -> bool:
+        return self._worker_coordinator.has_active("write")
+
+    def _reject_busy_write(self, operation_name: str) -> bool:
+        """拒絕重疊寫入／匯出工作；唯讀狀態查詢仍可並行。"""
+        if not self._has_active_write_worker() and not self.has_running_background_process():
+            return False
+        message = f"已有背景工作進行中，無法同時執行「{operation_name}」。請等待目前工作完成。"
+        if hasattr(self, "log_text"):
+            self._log(message)
+        if hasattr(self, "parent"):
+            QMessageBox.information(self, "背景工作進行中", message)
+        return True
+
+    def _reset_progress(self) -> None:
+        self._last_progress = 0
+
+    def _set_progress(self, message: str, percentage: int) -> int:
+        """更新共用進度列，保證單一工作生命週期內不倒退。"""
+        try:
+            requested = max(0, min(100, int(percentage)))
+        except (TypeError, ValueError):
+            requested = self._last_progress
+        displayed = max(self._last_progress, requested)
+        self._last_progress = displayed
+        if self.progress_bar.maximum() == 0:
+            self.progress_bar.setRange(0, 100)
+        self.progress_label.setText(message)
+        self.progress_bar.setValue(displayed)
+        return displayed
+
+    @staticmethod
+    def _safe_sync_record_count(value: Any) -> int:
+        """把同步筆數正規化為非負整數，避免 UI 因 malformed payload 中止。"""
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def _set_sqlite_sync_status(
+        self,
+        sync_result: Any,
+        *,
+        context: str = "",
+    ) -> str:
+        """在進度列下方投影最後一次 SQLite 同步結果。"""
+        label = getattr(self, "sqlite_sync_status_label", None)
+        payload = sync_result if isinstance(sync_result, dict) else {}
+        source = str(payload.get("source") or context or "資料來源").strip()
+        table = str(payload.get("table") or "").strip()
+        records = self._safe_sync_record_count(payload.get("synced_records"))
+        message = str(payload.get("message") or "").strip()
+        if payload.get("cancelled"):
+            state = "已取消"
+            color = "#92400e"
+            border = "#fbbf24"
+        elif payload.get("status") in {"running", "in_progress"}:
+            state = "執行中"
+            color = "#1d4ed8"
+            border = "#93c5fd"
+        elif payload.get("success") is True:
+            state = "完成"
+            color = "#166534"
+            border = "#86efac"
+        elif payload:
+            state = "失敗"
+            color = "#b91c1c"
+            border = "#fca5a5"
+        else:
+            state = "尚未執行"
+            color = "#475569"
+            border = "#cbd5e1"
+
+        details = [f"SQLite 同步：{state}"]
+        if source and state != "尚未執行":
+            details.append(f"來源 {source}")
+        if table:
+            details.append(f"table {table}")
+        if state == "完成":
+            details.append(f"{records:,} 筆")
+        if message:
+            details.append(message)
+        display = "｜".join(details)
+        if label is not None:
+            label.setText(display)
+            label.setStyleSheet(
+                "QLabel {"
+                " background-color: #f8fafc;"
+                f" color: {color};"
+                f" border: 1px solid {border};"
+                " border-radius: 6px;"
+                " padding: 6px 10px;"
+                " font-size: 11px;"
+                "}"
+            )
+        return display
+
+    def _collect_sqlite_sync_results(self, result: Any) -> list[dict[str, Any]]:
+        """從一鍵更新結果收集所有 SQLite 同步步驟，包含失敗步驟。"""
+        if not isinstance(result, dict):
+            return []
+        candidates: list[dict[str, Any]] = []
+        for item in result.get("completed_steps") or []:
+            if not isinstance(item, dict) or "同步" not in str(item.get("step", "")):
+                continue
+            payload = item.get("result")
+            if isinstance(payload, dict):
+                candidates.append(payload)
+        failed_step = str(result.get("failed_step") or "")
+        failed_payload = result.get("step_result")
+        if "同步" in failed_step and isinstance(failed_payload, dict):
+            candidates.append(failed_payload)
+        return candidates
+
+    def _set_sqlite_sync_status_from_update_all(self, result: Any) -> str:
+        """顯示一鍵更新的 SQLite 同步彙總，避免只看到下載完成。"""
+        payloads = self._collect_sqlite_sync_results(result)
+        if not payloads:
+            return self._set_sqlite_sync_status(None)
+        failed = sum(1 for payload in payloads if payload.get("success") is False)
+        records = sum(
+            self._safe_sync_record_count(payload.get("synced_records"))
+            for payload in payloads
+        )
+        state = "失敗" if failed else "完成"
+        summary = {
+            "success": failed == 0,
+            "source": f"{len(payloads)} 個同步步驟",
+            "table": "",
+            "synced_records": records,
+            "message": f"{state} {len(payloads) - failed}/{len(payloads)} 個步驟"
+            f"，共 {records:,} 筆" if failed == 0 else
+            f"{state} {failed}/{len(payloads)} 個步驟，共 {records:,} 筆",
+        }
+        return self._set_sqlite_sync_status(summary)
+
+    def _invalidate_detail_cache(self) -> None:
+        """寫入型工作完成後，強制下一次進入來源頁重新查詢。"""
+        self._loaded_detail_sources.clear()
 
     def has_running_background_process(self) -> bool:
         """TPEX 獨立程序未結束時，主視窗不得假裝可安全關閉。"""
@@ -222,8 +506,29 @@ class UpdateView(QWidget):
 
     def _setup_ui(self):
         """設置 UI"""
-        # 最外層主布局
-        main_layout = QVBoxLayout(self)
+        # 最外層主布局。Update 內容遠超過窄視窗高度，使用唯讀 scroll
+        # shell 保留完整來源頁與日誌，而不把主視窗鎖在所有子元件的尺寸提示。
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        self.content_scroll = QScrollArea(self)
+        self.content_scroll.setObjectName("updateContentScroll")
+        self.content_scroll.setFrameShape(QFrame.NoFrame)
+        self.content_scroll.setWidgetResizable(True)
+        self.content_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.content_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.content_scroll.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+
+        content_widget = QWidget()
+        content_widget.setObjectName("updateContentWidget")
+        content_widget.setMinimumWidth(0)
+        content_widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.content_widget = content_widget
+        outer_layout.addWidget(self.content_scroll)
+        self.content_scroll.setWidget(content_widget)
+
+        main_layout = QVBoxLayout(content_widget)
         main_layout.setSpacing(12)
         main_layout.setContentsMargins(15, 15, 15, 15)
 
@@ -249,7 +554,7 @@ class UpdateView(QWidget):
 
         # 2. 隱藏的全域日期變數（使底層一鍵更新/單項更新抓取 UI 輸入的邏輯直接生效）
         self.end_date = QDateEdit()
-        self.end_date.setDate(QDate.currentDate())
+        self.end_date.setDate(_taiwan_market_qdate())
         self._configure_date_edit(self.end_date)
         self.lookback_days = QSpinBox()
         self.lookback_days.setRange(1, 365)
@@ -258,10 +563,12 @@ class UpdateView(QWidget):
         # 3. 左右分欄的導覽區域
         workbench_layout = QHBoxLayout()
         workbench_layout.setSpacing(15)
+        self.workbench_layout = workbench_layout
 
         # 左側導覽列
         self.nav_list = QListWidget()
         self.nav_list.setFixedWidth(160)
+        self.nav_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.nav_list.setStyleSheet("""
             QListWidget {
                 border: 1px solid rgba(255, 255, 255, 0.08);
@@ -306,9 +613,14 @@ class UpdateView(QWidget):
 
         # 右側堆疊視窗
         self.content_stack = QStackedWidget()
+        self.content_stack.setMinimumWidth(0)
+        self.content_stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
 
         # 建立看板（全部資料）頁面
         all_page = QWidget()
+        all_page.setMinimumWidth(0)
+        all_page.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.all_page = all_page
         all_layout = QVBoxLayout(all_page)
         all_layout.setSpacing(15)
         all_layout.setContentsMargins(0, 0, 0, 0)
@@ -331,6 +643,8 @@ class UpdateView(QWidget):
         desc_label = QLabel("此處提供整個系統的資料狀態概覽。您可以點選下方一鍵安全更新來同步最新資料，或點選左側進行個別資料維護。")
         desc_label.setStyleSheet("color: #94a3b8; font-size: 12px;")
         desc_label.setWordWrap(True)
+        desc_label.setMinimumWidth(0)
+        desc_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         all_layout.addWidget(desc_label)
 
         # 數據狀態卡片網格（精美 StatusCard 呈現，取代原先 status_group 內多個 TextEdit）
@@ -343,14 +657,21 @@ class UpdateView(QWidget):
         self.monthly_revenue_status_text = StatusCard("月營收資料", "", self)
 
         # 卡片佈局
-        cards_layout = QHBoxLayout()
+        cards_layout = QGridLayout()
         cards_layout.setSpacing(10)
-        cards_layout.addWidget(self.daily_status_text)
-        cards_layout.addWidget(self.market_status_text)
-        cards_layout.addWidget(self.industry_status_text)
-        cards_layout.addWidget(self.broker_branch_status_text)
-        cards_layout.addWidget(self.technical_status_text)
-        cards_layout.addWidget(self.monthly_revenue_status_text)
+        self._cards_layout = cards_layout
+        self._status_cards = [
+            self.daily_status_text,
+            self.market_status_text,
+            self.industry_status_text,
+            self.broker_branch_status_text,
+            self.technical_status_text,
+            self.monthly_revenue_status_text,
+        ]
+        for card in self._status_cards:
+            card.setMinimumWidth(0)
+            card.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self._reflow_grid(cards_layout, self._status_cards, columns=6)
         all_layout.addLayout(cards_layout)
 
         # 候選與決策資料域群組
@@ -364,21 +685,29 @@ class UpdateView(QWidget):
                 color: #94a3b8;
             }
         """)
-        candidate_layout = QHBoxLayout(candidate_group)
+        candidate_layout = QGridLayout(candidate_group)
         candidate_layout.setSpacing(10)
         candidate_layout.setContentsMargins(12, 12, 12, 12)
+        self._candidate_layout = candidate_layout
 
         self.institutional_status_text = StatusCard("三大法人數據", "", self)
         self.credit_status_text = StatusCard("信用交易數據", "", self)
         self.tdcc_status_text = StatusCard("集保股權數據", "", self)
 
-        candidate_layout.addWidget(self.institutional_status_text)
-        candidate_layout.addWidget(self.credit_status_text)
-        candidate_layout.addWidget(self.tdcc_status_text)
+        self._candidate_cards = [
+            self.institutional_status_text,
+            self.credit_status_text,
+            self.tdcc_status_text,
+        ]
+        for card in self._candidate_cards:
+            card.setMinimumWidth(0)
+            card.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self._reflow_grid(candidate_layout, self._candidate_cards, columns=3)
         all_layout.addWidget(candidate_group)
 
         # 一鍵更新與輔助按鈕
         actions_layout = QHBoxLayout()
+        self._actions_layout = actions_layout
 
         self.quick_update_all_btn = QPushButton("快速更新 (跳過大型合併)")
         self.quick_update_all_btn.setMinimumHeight(45)
@@ -477,6 +806,14 @@ class UpdateView(QWidget):
         """)
         self.check_status_btn.clicked.connect(self._check_data_status)
 
+        self._action_buttons = [
+            self.quick_update_all_btn,
+            self.safe_update_all_btn,
+            self.check_status_btn,
+        ]
+        for button in self._action_buttons:
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
         actions_layout.addWidget(self.quick_update_all_btn, stretch=2)
         actions_layout.addWidget(self.safe_update_all_btn, stretch=2)
         actions_layout.addWidget(self.check_status_btn, stretch=1)
@@ -489,21 +826,34 @@ class UpdateView(QWidget):
         for key, label in self._nav_items[1:]:
             if key == "db_inspector":
                 config = getattr(self.update_service, "config", None)
-                if config is None:
+                if config is None or not getattr(config, "use_sqlite", False):
                     page = QWidget()
+                    page.setMinimumWidth(0)
+                    page.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
                     page_layout = QVBoxLayout(page)
-                    page_layout.addWidget(QLabel("SQLite 未啟用或測試環境中無 Config"))
+                    page_layout.addWidget(QLabel("SQLite 未啟用或測試環境中無可用 Config"))
                     self.content_stack.addWidget(page)
                     continue
 
                 from app_module.sqlite_inspector_service import SqliteInspectorService
                 from ui_qt.widgets.sqlite_inspector_widget import SqliteInspectorWidget
-                service = SqliteInspectorService(config)
-                page = SqliteInspectorWidget(service, self)
+                try:
+                    # Inspector 本身採唯讀連線；資料庫不存在或不可用時仍保留
+                    # 頁面，讓使用者看到 unavailable，而不是讓 MainWindow 啟動失敗。
+                    service = SqliteInspectorService(config)
+                    page = SqliteInspectorWidget(service, self)
+                except Exception as exc:
+                    page = QWidget()
+                    page.setMinimumWidth(0)
+                    page.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+                    page_layout = QVBoxLayout(page)
+                    page_layout.addWidget(QLabel(f"SQLite 檢視不可用：{exc}"))
                 self.content_stack.addWidget(page)
                 continue
 
             page = QWidget()
+            page.setMinimumWidth(0)
+            page.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
             page_layout = QVBoxLayout(page)
             page_layout.setContentsMargins(0, 0, 0, 0)
             page_layout.setSpacing(15)
@@ -554,6 +904,49 @@ class UpdateView(QWidget):
             }
         """)
         main_layout.addWidget(self.progress_bar)
+
+        self.cancel_update_btn = QPushButton("取消目前工作", self)
+        self.cancel_update_btn.setObjectName("cancel_update_btn")
+        self.cancel_update_btn.setVisible(False)
+        self.cancel_update_btn.setEnabled(False)
+        self.cancel_update_btn.setToolTip(
+            "送出合作式取消。系統會在目前 API 請求、日期或檔案寫入安全收尾後停止，"
+            "不會強制終止正在使用 SQLite／檔案資源的執行緒。"
+        )
+        self.cancel_update_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #fff7ed;
+                color: #9a3412;
+                border: 1px solid #fdba74;
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #ffedd5;
+            }
+            QPushButton:disabled {
+                background-color: #f8fafc;
+                color: #94a3b8;
+                border-color: #cbd5e1;
+            }
+        """)
+        self.cancel_update_btn.clicked.connect(self._request_current_worker_cancel)
+        main_layout.addWidget(self.cancel_update_btn)
+
+        self.sqlite_sync_status_label = QLabel("SQLite 同步：尚未執行", self)
+        self.sqlite_sync_status_label.setWordWrap(True)
+        self.sqlite_sync_status_label.setStyleSheet(
+            "QLabel {"
+            " background-color: #f8fafc;"
+            " color: #475569;"
+            " border: 1px solid #cbd5e1;"
+            " border-radius: 6px;"
+            " padding: 6px 10px;"
+            " font-size: 11px;"
+            "}"
+        )
+        main_layout.addWidget(self.sqlite_sync_status_label)
 
         # 日誌 Console
         log_group = QGroupBox("日誌主控台")
@@ -628,6 +1021,123 @@ class UpdateView(QWidget):
         self.tdcc_status_text.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
 
         self.nav_list.setCurrentRow(0)
+
+    @staticmethod
+    def _reflow_grid(
+        layout: QGridLayout,
+        widgets: list[QWidget],
+        *,
+        columns: int,
+    ) -> None:
+        """以固定欄數重排狀態卡，避免窄版六欄被壓成不可讀細條。"""
+
+        while layout.count():
+            layout.takeAt(0)
+        for column in range(8):
+            layout.setColumnStretch(column, 0)
+        for column in range(columns):
+            layout.setColumnStretch(column, 1)
+        for index, widget in enumerate(widgets):
+            layout.addWidget(widget, index // columns, index % columns)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        """窄版將 Update 導覽、卡片與操作按鈕改為可讀的單欄／雙欄。"""
+
+        super().resizeEvent(event)
+        if not hasattr(self, "workbench_layout"):
+            return
+
+        narrow = self.width() < 720
+        if self._responsive_narrow == narrow:
+            return
+        self._responsive_narrow = narrow
+
+        if narrow:
+            self.workbench_layout.setDirection(QBoxLayout.TopToBottom)
+            self.nav_list.setMinimumWidth(0)
+            self.nav_list.setMaximumWidth(16777215)
+            self.nav_list.setMaximumHeight(190)
+            self.nav_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self.content_stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            self._reflow_grid(self._cards_layout, self._status_cards, columns=2)
+            self._reflow_grid(self._candidate_layout, self._candidate_cards, columns=1)
+            self._actions_layout.setDirection(QBoxLayout.TopToBottom)
+        else:
+            self.workbench_layout.setDirection(QBoxLayout.LeftToRight)
+            self.nav_list.setFixedWidth(160)
+            self.nav_list.setMaximumHeight(16777215)
+            self.nav_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            self.content_stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+            self._reflow_grid(self._cards_layout, self._status_cards, columns=6)
+            self._reflow_grid(self._candidate_layout, self._candidate_cards, columns=3)
+            self._actions_layout.setDirection(QBoxLayout.LeftToRight)
+
+    @staticmethod
+    def _add_source_detail_status(layout: QVBoxLayout, key: str, parent: QWidget) -> None:
+        """在來源分頁放置可見的唯讀狀態摘要。"""
+        detail_status = QLabel("尚未檢查此資料源狀態", parent)
+        detail_status.setWordWrap(True)
+        detail_status.setStyleSheet("""
+            QLabel {
+                background-color: #f8fafc;
+                color: #334155;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                padding: 8px 10px;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+        """)
+        setattr(parent, f"{key}_detail_status_label", detail_status)
+        layout.addWidget(detail_status)
+
+    def _set_tpex_background_status_label(
+        self,
+        status: str,
+        *,
+        message: str = "",
+        updated_at: str = "",
+        level: str = "info",
+    ) -> None:
+        """更新 TPEX 背景任務的可見狀態，避免只寫日誌而讓頁面看起來沒有反應。"""
+        label = getattr(self, "tpex_background_status_label", None)
+        if label is None:
+            return
+
+        status_text = {
+            "running": "執行中",
+            "done": "完成",
+            "failed": "失敗",
+            "unknown": "未知",
+            "not_started": "尚未啟動",
+        }.get(status, status or "未知")
+        detail = f"｜最後更新：{updated_at}" if updated_at else ""
+        if message:
+            detail = f"{detail}｜{message}"
+        label.setText(f"TPEX 背景任務：{status_text}{detail}")
+
+        color = {
+            "info": "#334155",
+            "success": "#166534",
+            "warning": "#92400e",
+            "error": "#b91c1c",
+        }.get(level, "#334155")
+        border = {
+            "info": "#cbd5e1",
+            "success": "#86efac",
+            "warning": "#fbbf24",
+            "error": "#fca5a5",
+        }.get(level, "#cbd5e1")
+        label.setStyleSheet(
+            "QLabel {"
+            " background-color: #f8fafc;"
+            f" color: {color};"
+            f" border: 1px solid {border};"
+            " border-radius: 6px;"
+            " padding: 8px 10px;"
+            " font-size: 12px;"
+            "}"
+        )
 
     def _add_source_tab_content(self, layout: QVBoxLayout, key: str):
         """為個別資料源維護分頁建立專屬操作與手動配置界面"""
@@ -741,6 +1251,11 @@ class UpdateView(QWidget):
             button_layout.addWidget(check_btn)
             button_layout.addStretch()
             layout.addWidget(op_group)
+
+            # 候選資料源也要有自己的唯讀狀態摘要；只更新頂部卡片會讓
+            # 使用者進入分頁後無法判斷「檢查此資料源狀態」是否真的完成。
+            if key in {"institutional_flow", "credit_transaction", "tdcc_shareholding"}:
+                self._add_source_detail_status(layout, key, self)
 
             layout.addStretch()
             return
@@ -866,6 +1381,7 @@ class UpdateView(QWidget):
             button_layout.addWidget(self.monthly_revenue_apply_btn)
             button_layout.addStretch()
             layout.addWidget(op_group)
+            self._add_source_detail_status(layout, key, self)
             layout.addStretch()
             return
 
@@ -886,7 +1402,7 @@ class UpdateView(QWidget):
             date_layout.setSpacing(8)
 
             end_date_edit = QDateEdit()
-            end_date_edit.setDate(QDate.currentDate())
+            end_date_edit.setDate(_taiwan_market_qdate())
             self._configure_date_edit(end_date_edit)
             end_date_edit.setToolTip(
                 "【結束日期】\n"
@@ -1184,25 +1700,17 @@ class UpdateView(QWidget):
         button_layout.addStretch()
         layout.addWidget(op_group)
 
-        if key in {"daily", "broker_branch"}:
-            detail_status = QLabel("尚未檢查此資料源狀態")
-            detail_status.setWordWrap(True)
-            detail_status.setStyleSheet("""
-                QLabel {
-                    background-color: #f8fafc;
-                    color: #334155;
-                    border: 1px solid #cbd5e1;
-                    border-radius: 6px;
-                    padding: 8px 10px;
-                    font-size: 12px;
-                    line-height: 1.4;
-                }
-            """)
-            if key == "daily":
-                self.daily_detail_status_label = detail_status
-            else:
-                self.broker_branch_detail_status_label = detail_status
-            layout.addWidget(detail_status)
+        if key == "daily":
+            self.tpex_background_status_label = QLabel(
+                "TPEX 背景任務：尚未啟動｜尚未產生狀態檔",
+                self,
+            )
+            self.tpex_background_status_label.setWordWrap(True)
+            self._set_tpex_background_status_label("not_started", level="warning")
+            layout.addWidget(self.tpex_background_status_label)
+
+        if key in {"daily", "market", "industry", "broker_branch", "technical", "monthly_revenue"}:
+            self._add_source_detail_status(layout, key, self)
 
         if key == "daily":
             danger_group = QGroupBox("高風險操作區 (Danger Zone)")
@@ -1288,6 +1796,8 @@ class UpdateView(QWidget):
 
     def _execute_monthly_revenue_backfill(self, apply: bool = False):
         """Run MOPS monthly revenue dry-run or controlled SQLite apply."""
+        if self._reject_busy_write("月營收處理"):
+            return
         if apply:
             reply = QMessageBox.question(
                 self,
@@ -1305,6 +1815,7 @@ class UpdateView(QWidget):
         source_version = self.monthly_revenue_source_version_input.text().strip()
 
         self._set_monthly_revenue_buttons_enabled(False)
+        self._reset_progress()
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
         self.progress_label.setVisible(True)
@@ -1325,13 +1836,14 @@ class UpdateView(QWidget):
                 return self.update_service.apply_mops_monthly_revenue_backfill(**kwargs)
             return self.update_service.dry_run_mops_monthly_revenue_backfill(**kwargs)
 
-        worker = self._start_worker(TaskWorker(task))
+        worker = self._start_worker(TaskWorker(task), operation_kind="write")
         worker.finished.connect(lambda result, apply_mode=apply: self._on_monthly_revenue_finished(result, apply_mode))
         worker.error.connect(self._on_monthly_revenue_error)
         self._attach_worker_cleanup(worker)
         worker.start()
 
     def _on_monthly_revenue_finished(self, result: Dict[str, Any], apply: bool):
+        self._invalidate_detail_cache()
         self._set_monthly_revenue_buttons_enabled(True)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
@@ -1353,6 +1865,7 @@ class UpdateView(QWidget):
             QMessageBox.warning(self, "月營收處理失敗", message)
 
     def _on_monthly_revenue_error(self, error_msg: str):
+        self._invalidate_detail_cache()
         self._set_monthly_revenue_buttons_enabled(True)
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
@@ -1433,7 +1946,7 @@ class UpdateView(QWidget):
     def _set_shared_end_date_today(self, source_name: str):
         end_date_widget = getattr(self, f"{source_name}_end_date", None)
         if end_date_widget:
-            end_date_widget.setDate(QDate.currentDate())
+            end_date_widget.setDate(_taiwan_market_qdate())
             self._sync_dates(source_name)
 
     def _sync_dates(self, source_name: str):
@@ -1469,8 +1982,8 @@ class UpdateView(QWidget):
                     other_days.blockSignals(True)
                     other_days.setValue(target_days)
                     other_days.blockSignals(False)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._log(f"日期範圍同步失敗（{source_name}）：{exc}")
 
     def _dispatch_update(self, key: str):
         """代理各分頁的開始下載更新，並設定對應的 Radio 按鈕與日期"""
@@ -1589,7 +2102,11 @@ class UpdateView(QWidget):
 
         worker = self._start_worker(TaskWorker(check_task))
         worker.finished.connect(self._on_source_detail_checked)
-        worker.error.connect(self._on_status_error)
+        worker.error.connect(
+            lambda error_msg, current_source=source: self._on_source_detail_error(
+                current_source, error_msg
+            )
+        )
         self._attach_worker_cleanup(worker)
         worker.start()
 
@@ -1599,8 +2116,63 @@ class UpdateView(QWidget):
         status = payload.get("status", {})
         if source:
             self._loaded_detail_sources.add(source)
-        self._on_status_checked(status)
+        source_key = {
+            "daily": "daily_data",
+            "market": "market_index",
+            "industry": "industry_index",
+            "broker_branch": "broker_branch",
+            "technical": "technical_indicators",
+            "monthly_revenue": "monthly_revenue",
+            "institutional_flow": "institutional_flow",
+            "credit_transaction": "credit_transaction",
+            "tdcc_shareholding": "tdcc_shareholding",
+        }.get(str(source or ""))
+        if source_key:
+            detail = status.get(source_key)
+            if isinstance(detail, dict):
+                self._set_status_card(source_key, detail)
         self._render_source_detail_status(str(source or ""), status)
+
+    def _on_source_detail_error(self, source: str, error_msg: str) -> None:
+        """只呈現單一來源詳情錯誤，避免污染全域狀態卡。"""
+        self._loaded_detail_sources.discard(source)
+        source_key = {
+            "daily": "daily_data",
+            "market": "market_index",
+            "industry": "industry_index",
+            "broker_branch": "broker_branch",
+            "technical": "technical_indicators",
+            "monthly_revenue": "monthly_revenue",
+            "institutional_flow": "institutional_flow",
+            "credit_transaction": "credit_transaction",
+            "tdcc_shareholding": "tdcc_shareholding",
+        }.get(source)
+        detail = {
+            "latest_date": None,
+            "total_records": 0,
+            "status": f"error: {error_msg}",
+        }
+        if source_key:
+            self._set_status_card(source_key, detail)
+            self._render_source_detail_status(source, {source_key: detail})
+        source_label = {
+            "daily": "每日股價",
+            "market": "大盤指數",
+            "industry": "產業指數",
+            "broker_branch": "券商分點",
+            "technical": "技術指標",
+            "monthly_revenue": "月營收",
+            "institutional_flow": "三大法人",
+            "credit_transaction": "信用交易",
+            "tdcc_shareholding": "集保股權",
+            "scheduler_status": "排程狀態",
+        }.get(source, source or "資料來源")
+        self._log(f"{source_label}狀態檢查失敗：{error_msg}")
+        QMessageBox.warning(
+            self,
+            "資料來源檢查失敗",
+            f"{source_label}狀態檢查失敗：\n{error_msg}",
+        )
 
     def _format_status_token(self, status: Any) -> str:
         return format_status_token(status)
@@ -1611,148 +2183,209 @@ class UpdateView(QWidget):
     def _render_source_detail_status(self, source: str, status: Dict[str, Any]) -> None:
         source_to_key = {
             "daily": "daily_data",
+            "market": "market_index",
+            "industry": "industry_index",
             "broker_branch": "broker_branch",
-        }
-        source_to_label = {
-            "daily": getattr(self, "daily_detail_status_label", None),
-            "broker_branch": getattr(self, "broker_branch_detail_status_label", None),
+            "technical": "technical_indicators",
+            "monthly_revenue": "monthly_revenue",
+            "institutional_flow": "institutional_flow",
+            "credit_transaction": "credit_transaction",
+            "tdcc_shareholding": "tdcc_shareholding",
         }
         key = source_to_key.get(source)
-        label = source_to_label.get(source)
+        label = getattr(self, f"{source}_detail_status_label", None)
         if not key or label is None:
             return
-        detail = status.get(key) or {}
+        detail = status.get(key)
+        if not isinstance(detail, dict):
+            label.setText("尚未檢查此資料源狀態")
+            return
         label.setText(self._format_source_detail_summary(source, detail))
+
+    @staticmethod
+    def _format_candidate_status_card(value: Dict[str, Any]) -> str:
+        record_count = int(value.get("total_records") or 0)
+        earliest = value.get("earliest_date") or "無"
+        latest = value.get("latest_date") or "無"
+        coverage = value.get("coverage_pct") or "0.0%"
+        status = value.get("status") or "MISSING"
+        disclaimer = value.get("disclaimer") or "候選研究資料，不參與評分"
+        if record_count > 0:
+            return (
+                f"狀態：{status}\n"
+                f"總筆數：{record_count:,}\n"
+                f"區間：{earliest} ~ {latest}\n"
+                f"覆蓋率：{coverage}\n"
+                f"[{disclaimer}]"
+            )
+        return (
+            f"最新日期：{latest}\n"
+            f"總記錄數：{record_count:,}\n"
+            f"狀態：{status} / 尚未匯入\n"
+            f"[{disclaimer}]"
+        )
+
+    @staticmethod
+    def _format_status_card_text(key: str, value: Dict[str, Any]) -> str:
+        latest_date = value.get("latest_date", "未知")
+        total_records = int(value.get("total_records") or 0)
+        status = value.get("status", "unknown")
+        if key in {"institutional_flow", "credit_transaction", "tdcc_shareholding"}:
+            return UpdateView._format_candidate_status_card(value)
+        if key == "monthly_revenue":
+            latest_period = value.get("latest_period") or latest_date
+            latest_available_period = value.get("latest_available_period") or "尚無"
+            latest_available_date = value.get("latest_available_date") or "尚無"
+            next_available_date = value.get("next_available_date")
+            pending_period_count = int(value.get("pending_period_count") or 0)
+            lines = [
+                f"最新可用日：{latest_available_date}",
+                f"已匯入期別：{latest_period}",
+                f"目前可用期別：{latest_available_period}",
+            ]
+            if pending_period_count and next_available_date:
+                lines.append(
+                    f"待生效：{pending_period_count} 個期別（{next_available_date} 起可用）"
+                )
+            lines.extend([
+                f"總記錄數：{total_records:,}",
+                f"狀態：{status}",
+            ])
+            UpdateView._append_status_diagnostics(lines, value)
+            return "\n".join(lines)
+        if key == "broker_branch":
+            lines = [
+                f"最新日期：{latest_date}\n"
+                f"實際天數：{int(value.get('date_count') or 0):,} 天\n"
+                f"雙榜紀錄 (E&B)：{int(value.get('dual_count') or 0):,}\n"
+                f"張數榜專屬 (E-only)：{int(value.get('e_only_count') or 0):,}\n"
+                f"金額榜專屬 (B-only)：{int(value.get('b_only_count') or 0):,}\n"
+                f"總記錄數：{total_records:,}\n"
+                f"狀態：{status}"
+            ]
+            UpdateView._append_status_diagnostics(lines, value)
+            return "\n".join(lines)
+        lines = [
+            f"最新日期：{latest_date}",
+            f"總記錄數：{total_records:,}",
+            f"狀態：{status}",
+        ]
+        if key == "technical_indicators" and value.get("file_count") is not None:
+            lines.append(f"指標檔數：{int(value.get('file_count') or 0):,}")
+        UpdateView._append_status_diagnostics(lines, value)
+        return "\n".join(lines)
+
+    @staticmethod
+    def _append_status_diagnostics(lines: list[str], value: Dict[str, Any]) -> None:
+        read_mode = str(value.get("read_mode") or "").strip()
+        if read_mode:
+            lines.append(f"讀取模式：{read_mode}")
+        warnings = value.get("warnings") or value.get("quality_warnings") or []
+        for warning in list(warnings)[:2]:
+            if str(warning).strip():
+                lines.append(f"提醒：{warning}")
+
+    def _set_status_card(self, key: str, value: Dict[str, Any]) -> None:
+        card_map = {
+            "daily_data": "daily_status_text",
+            "market_index": "market_status_text",
+            "industry_index": "industry_status_text",
+            "broker_branch": "broker_branch_status_text",
+            "technical_indicators": "technical_status_text",
+            "monthly_revenue": "monthly_revenue_status_text",
+            "institutional_flow": "institutional_status_text",
+            "credit_transaction": "credit_status_text",
+            "tdcc_shareholding": "tdcc_status_text",
+        }
+        card = getattr(self, card_map.get(key, ""), None)
+        if card is not None:
+            card.setPlainText(self._format_status_card_text(key, value))
 
     def _on_status_checked(self, status: Dict[str, Any]):
         """數據狀態檢查完成"""
         self.check_status_btn.setEnabled(True)
         self.check_status_btn.setText("檢查數據狀態")
 
-        # 分別更新各資料區塊
-        daily_text = self.daily_status_text.toPlainText()
-        market_text = self.market_status_text.toPlainText()
-        industry_text = self.industry_status_text.toPlainText()
-        broker_branch_text = self.broker_branch_status_text.toPlainText()
-        technical_text = self.technical_status_text.toPlainText()
-        monthly_revenue_text = self.monthly_revenue_status_text.toPlainText()
-
-        for key, value in status.items():
-            latest_date = value.get('latest_date', '未知')
-            total_records = value.get('total_records', 0)
-            status_str = value.get('status', 'unknown')
-
-            if key == 'monthly_revenue':
-                latest_period = value.get('latest_period') or latest_date
-                latest_available_period = value.get('latest_available_period') or '尚無'
-                latest_available_date = value.get('latest_available_date') or '尚無'
-                next_available_date = value.get('next_available_date')
-                pending_period_count = int(value.get('pending_period_count') or 0)
-                lines = [
-                    f"最新可用日：{latest_available_date}",
-                    f"已匯入期別：{latest_period}",
-                    f"目前可用期別：{latest_available_period}",
-                ]
-                if pending_period_count and next_available_date:
-                    lines.append(
-                        f"待生效：{pending_period_count} 個期別（{next_available_date} 起可用）"
-                    )
-                lines.extend([
-                    f"總記錄數：{total_records:,}",
-                    f"狀態：{status_str}",
-                ])
-                monthly_revenue_text = "\n".join(lines)
-                continue
-
-            if key == 'broker_branch':
-                date_count = value.get('date_count', 0)
-                e_only = value.get('e_only_count', 0)
-                b_only = value.get('b_only_count', 0)
-                dual = value.get('dual_count', 0)
-                status_display = (
-                    f"最新日期：{latest_date}\n"
-                    f"實際天數：{date_count} 天\n"
-                    f"雙榜紀錄 (E&B)：{dual:,}\n"
-                    f"張數榜專屬 (E-only)：{e_only:,}\n"
-                    f"金額榜專屬 (B-only)：{b_only:,}\n"
-                    f"總記錄數：{total_records:,}\n"
-                    f"狀態：{status_str}"
-                )
+        card_map = {
+            "daily_data": "daily_status_text",
+            "market_index": "market_status_text",
+            "industry_index": "industry_status_text",
+            "broker_branch": "broker_branch_status_text",
+            "technical_indicators": "technical_status_text",
+            "monthly_revenue": "monthly_revenue_status_text",
+            "institutional_flow": "institutional_status_text",
+            "credit_transaction": "credit_status_text",
+            "tdcc_shareholding": "tdcc_status_text",
+        }
+        for key, attr in card_map.items():
+            value = status.get(key)
+            if isinstance(value, dict):
+                self._set_status_card(key, value)
             else:
-                status_display = f"最新日期：{latest_date}\n總記錄數：{total_records:,}\n狀態：{status_str}"
-
-            if key == 'daily_data':
-                daily_text = status_display
-            elif key == 'market_index':
-                market_text = status_display
-            elif key == 'industry_index':
-                industry_text = status_display
-            elif key == 'broker_branch':
-                broker_branch_text = status_display
-            elif key == 'technical_indicators':
-                file_count = value.get('file_count')
-                if file_count is not None:
-                    status_display += f"\n指標檔數：{file_count:,}"
-                technical_text = status_display
-            elif key == 'monthly_revenue':
-                monthly_revenue_text = status_display
-
-        # 如果沒有數據，顯示提示
-        if not daily_text:
-            daily_text = "尚未檢查"
-        if not market_text:
-            market_text = "尚未檢查"
-        if not industry_text:
-            industry_text = "尚未檢查"
-        if not broker_branch_text:
-            broker_branch_text = "尚未檢查"
-        if not technical_text:
-            technical_text = "尚未檢查"
-        if not monthly_revenue_text:
-            monthly_revenue_text = "尚未檢查"
-
-        self.daily_status_text.setPlainText(daily_text)
-        self.market_status_text.setPlainText(market_text)
-        self.industry_status_text.setPlainText(industry_text)
-        self.broker_branch_status_text.setPlainText(broker_branch_text)
-        self.technical_status_text.setPlainText(technical_text)
-        self.monthly_revenue_status_text.setPlainText(monthly_revenue_text)
-
-        # 更新決策與候選資料域卡片
-        def _fmt_cand_card(val: dict, name: str) -> str:
-            rec = val.get('total_records', 0)
-            st_d = val.get('earliest_date', '無')
-            end_d = val.get('latest_date', '無')
-            cov = val.get('coverage_pct', '0.0%')
-            st = val.get('status', 'MISSING')
-            disc = val.get('disclaimer', '候選研究資料，不參與評分')
-            if rec > 0:
-                return (
-                    f"狀態：{st}\n"
-                    f"總筆數：{rec:,}\n"
-                    f"區間：{st_d} ~ {end_d}\n"
-                    f"覆蓋率：{cov}\n"
-                    f"[{disc}]"
-                )
-            return (
-                f"最新日期：{end_d}\n"
-                f"總記錄數：{rec}\n"
-                f"狀態：{st} / 尚未匯入\n"
-                f"[{disc}]"
-            )
-
-        self.institutional_status_text.setPlainText(_fmt_cand_card(status.get('institutional_flow', {}), "三大法人"))
-        self.credit_status_text.setPlainText(_fmt_cand_card(status.get('credit_transaction', {}), "信用交易"))
-        self.tdcc_status_text.setPlainText(_fmt_cand_card(status.get('tdcc_shareholding', {}), "集保股權"))
-
-
-
+                # 部分 payload 不得沿用上一輪數字，否則會把舊資料誤當成目前狀態。
+                card = getattr(self, attr, None)
+                if card is not None:
+                    card.setPlainText("尚未檢查")
+        # 全域檢查也要刷新核心資料源頁面的 inline 摘要，避免卡片已是
+        # 新值、頁面內仍殘留上一輪數字的 split-brain 顯示。
+        for source in (
+            "daily",
+            "market",
+            "industry",
+            "broker_branch",
+            "technical",
+            "monthly_revenue",
+            "institutional_flow",
+            "credit_transaction",
+            "tdcc_shareholding",
+        ):
+            self._render_source_detail_status(source, status)
         self._log(f"數據狀態檢查完成")
 
     def _on_status_error(self, error_msg: str):
         """數據狀態檢查出錯"""
         self.check_status_btn.setEnabled(True)
         self.check_status_btn.setText("檢查數據狀態")
+        for attr in (
+            "daily_status_text",
+            "market_status_text",
+            "industry_status_text",
+            "broker_branch_status_text",
+            "technical_status_text",
+            "monthly_revenue_status_text",
+            "institutional_status_text",
+            "credit_status_text",
+            "tdcc_status_text",
+        ):
+            card = getattr(self, attr, None)
+            if card is not None:
+                card.setPlainText(f"狀態：error: {error_msg}")
+        error_detail = {
+            "latest_date": None,
+            "total_records": 0,
+            "status": f"error: {error_msg}",
+            # 讓各來源頁除了顯示異常外，也保留同一個可操作的失敗原因；
+            # 否則全域卡片有訊息、頁面內摘要卻只剩空值，仍不足以排錯。
+            "warnings": [error_msg],
+        }
+        source_to_key = {
+            "daily": "daily_data",
+            "market": "market_index",
+            "industry": "industry_index",
+            "broker_branch": "broker_branch",
+            "technical": "technical_indicators",
+            "monthly_revenue": "monthly_revenue",
+            "institutional_flow": "institutional_flow",
+            "credit_transaction": "credit_transaction",
+            "tdcc_shareholding": "tdcc_shareholding",
+        }
+        for source, source_key in source_to_key.items():
+            # 全域檢查失敗時，所有來源頁都必須同步清掉上一輪摘要；
+            # 否則卡片顯示 error、頁面內文卻仍顯示舊的成功數字。
+            self._render_source_detail_status(
+                source,
+                {source_key: dict(error_detail)},
+            )
         QMessageBox.critical(self, "錯誤", f"檢查數據狀態失敗：\n{error_msg}")
         self._log(f"錯誤：{error_msg}")
 
@@ -1785,22 +2418,50 @@ class UpdateView(QWidget):
             end_dt = end_dt - timedelta(days=1)
         return end_dt.strftime("%Y-%m-%d")
 
-    def _update_tpex_daily_prices(self, start_date: str, end_date: str, twse_no_data_dates: Optional[list[str]] = None) -> Dict[str, Any]:
+    def _update_tpex_daily_prices(
+        self,
+        start_date: str,
+        end_date: str,
+        twse_no_data_dates: Optional[list[str]] = None,
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
+    ) -> Dict[str, Any]:
         """更新 TPEX 日價；舊 service 測試替身可退回單日 API。"""
         update_range = getattr(self.update_service, "update_tpex_daily_price_range", None)
         if update_range is not None:
-            return update_range(
-                start_date,
-                end_date,
-                delay_seconds=1.0,
-                sync_to_sqlite=False,
-                force_refresh=False,
-                break_on_repeated_source_date=False,
-                twse_no_data_dates=twse_no_data_dates,
-            )
+            kwargs = {
+                "delay_seconds": 1.0,
+                "sync_to_sqlite": False,
+                "force_refresh": False,
+                "break_on_repeated_source_date": False,
+                "twse_no_data_dates": twse_no_data_dates,
+            }
+            if progress_callback is not None:
+                try:
+                    parameters = inspect.signature(update_range).parameters.values()
+                except (TypeError, ValueError):
+                    parameters = ()
+                if any(
+                    parameter.name == "progress_callback"
+                    or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                    for parameter in parameters
+                ):
+                    kwargs["progress_callback"] = progress_callback
+            if cancel_callback is not None:
+                try:
+                    parameters = inspect.signature(update_range).parameters.values()
+                except (TypeError, ValueError):
+                    parameters = ()
+                if any(
+                    parameter.name in {"cancel_callback", "cancellation_callback"}
+                    or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                    for parameter in parameters
+                ):
+                    kwargs["cancel_callback"] = cancel_callback
+            return update_range(start_date, end_date, **kwargs)
         return self.update_service.update_tpex_daily_price(end_date)
 
-    def _write_tpex_background_status(self, payload: Dict[str, Any]) -> None:
+    def _write_tpex_background_status(self, payload: Dict[str, Any]) -> bool:
         """寫入背景任務狀態 JSON，供狀態按鈕即時讀取。"""
         try:
             self.tpex_refresh_state_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1809,11 +2470,25 @@ class UpdateView(QWidget):
                 json.dumps(payload, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-        except Exception:
-            pass
+            status = str(payload.get("status", "unknown"))
+            level = "success" if status == "done" else "error" if status == "failed" else "info"
+            self._set_tpex_background_status_label(
+                status,
+                message=str(payload.get("message", "") or ""),
+                updated_at=str(payload.get("updated_at", "") or ""),
+                level=level,
+            )
+            return True
+        except Exception as exc:
+            error_msg = f"狀態檔寫入失敗：{exc}"
+            self._set_tpex_background_status_label("failed", message=error_msg, level="error")
+            self._log(f"TPEX 背景任務 {error_msg}；未能可靠保存進度。")
+            return False
 
     def _execute_background_tpex_refresh(self):
         """以獨立進程背景執行 TPEX + TWSE + 技術指標完整流程。"""
+        if self._reject_busy_write("TPEX 背景補齊"):
+            return
         if self._tpex_background_process is not None and self._tpex_background_process.poll() is None:
             QMessageBox.information(
                 self,
@@ -1839,7 +2514,15 @@ class UpdateView(QWidget):
             "end_date": end_date,
             "steps": {},
         }
-        self._write_tpex_background_status(initial_status)
+        if not self._write_tpex_background_status(initial_status):
+            self.tpex_background_btn.setEnabled(True)
+            self.tpex_background_btn.setText("背景補齊 TPEX + 技術指標")
+            QMessageBox.critical(
+                self,
+                "背景任務啟動失敗",
+                "無法建立 TPEX 背景任務狀態檔，為避免任務進度無法追蹤，本次未啟動背景程序。",
+            )
+            return
 
         env = os.environ.copy()
         env["DATA_ROOT"] = str(self.update_service.config.data_root)
@@ -1885,6 +2568,7 @@ class UpdateView(QWidget):
     def _show_tpex_background_status(self):
         """讀取並顯示背景任務 JSON 狀態。"""
         if not self.tpex_refresh_state_file.exists():
+            self._set_tpex_background_status_label("not_started", level="warning")
             QMessageBox.information(self, "背景任務狀態", "目前尚未啟動 TPEX 背景補齊任務。")
             return
 
@@ -1919,31 +2603,76 @@ class UpdateView(QWidget):
             if raw.get("status") == "failed":
                 lines.append(f"錯誤訊息：{raw.get('message', '-')}")
 
+            status = str(raw.get("status", "unknown"))
+            level = "success" if status == "done" else "error" if status == "failed" else "warning" if status == "unknown" else "info"
+            self._set_tpex_background_status_label(
+                status,
+                message=str(raw.get("message", "") or ""),
+                updated_at=str(raw.get("updated_at", "") or ""),
+                level=level,
+            )
+
             self._log("\n".join(lines))
             QMessageBox.information(self, "背景任務狀態", "\n".join(lines))
 
             if raw.get("status") in {"done", "failed"}:
+                self._invalidate_detail_cache()
                 self.tpex_background_btn.setEnabled(True)
                 self.tpex_background_btn.setText("背景補齊 TPEX + 技術指標")
         except Exception as exc:
+            self._set_tpex_background_status_label(
+                "failed",
+                message=f"讀取狀態失敗：{exc}",
+                level="error",
+            )
+            self._log(f"TPEX 背景任務狀態讀取失敗：{exc}")
             QMessageBox.critical(self, "背景任務狀態", f"讀取狀態失敗：{exc}")
-    def _run_update_all(self, mode="quick", progress_callback=None) -> Dict[str, Any]:
-        """?????????????? Qt coordinator?"""
+    def _run_update_all(
+        self,
+        mode="quick",
+        progress_callback=None,
+        cancellation_callback=None,
+    ) -> Dict[str, Any]:
         start_date, end_date = self._get_selected_date_range()
-        return run_update_all(
-            mode=mode,
-            start_date=start_date,
-            end_date=end_date,
-            update_service=self.update_service,
-            get_overview_status=self._get_overview_status,
-            update_tpex_daily_prices=self._update_tpex_daily_prices,
-            run_incremental_technical=self._run_incremental_technical_if_needed,
-            tpex_warning_messages=self._tpex_warning_messages,
-            progress_callback=progress_callback,
+        return self._run_update_all_request(
+            mode, start_date, end_date, progress_callback, cancellation_callback
         )
 
-    def _run_incremental_technical_if_needed(self, progress_callback=None) -> Dict[str, Any]:
+    def _run_update_all_request(
+        self,
+        mode: str,
+        start_date: str,
+        end_date: str,
+        progress_callback=None,
+        cancellation_callback=None,
+    ) -> Dict[str, Any]:
+        return run_update_all(
+            **{
+                "mode": mode,
+                "start_date": start_date,
+                "end_date": end_date,
+                "update_service": self.update_service,
+                "get_overview_status": self._get_overview_status,
+                "update_tpex_daily_prices": self._update_tpex_daily_prices,
+                "run_incremental_technical": self._run_incremental_technical_if_needed,
+                "tpex_warning_messages": self._tpex_warning_messages,
+                "progress_callback": progress_callback,
+                "cancellation_callback": cancellation_callback,
+            }
+        )
+
+    def _run_incremental_technical_if_needed(
+        self,
+        progress_callback=None,
+        cancellation_callback=None,
+    ) -> Dict[str, Any]:
         """Skip technical indicator calculation when the overview already shows it is current."""
+        if cancellation_callback is not None and cancellation_callback():
+            return {
+                "success": False,
+                "cancelled": True,
+                "message": "已取消：技術指標計算尚未開始",
+            }
         status = self._get_overview_status()
         daily_latest = self._parse_status_date(status.get("daily_data", {}).get("latest_date"))
         technical_latest = self._parse_status_date(status.get("technical_indicators", {}).get("latest_date"))
@@ -1980,13 +2709,27 @@ class UpdateView(QWidget):
                 "failed_stocks": [],
             }
 
-        return self.update_service.calculate_technical_indicators(
-            target_stock=None,
-            force_all=False,
-            start_date=None,
-            progress_callback=progress_callback,
-            incremental_lookback_days=120,
-        )
+        indicator_kwargs: dict[str, Any] = {
+            "target_stock": None,
+            "force_all": False,
+            "start_date": None,
+            "progress_callback": progress_callback,
+            "incremental_lookback_days": 120,
+        }
+        if cancellation_callback is not None:
+            try:
+                parameters = inspect.signature(
+                    self.update_service.calculate_technical_indicators
+                ).parameters.values()
+            except (TypeError, ValueError):
+                parameters = ()
+            if any(
+                parameter.name in {"cancel_callback", "cancellation_callback"}
+                or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters
+            ):
+                indicator_kwargs["cancel_callback"] = cancellation_callback
+        return self.update_service.calculate_technical_indicators(**indicator_kwargs)
 
     @staticmethod
     def _parse_status_date(value: Any) -> Optional[datetime]:
@@ -2006,11 +2749,19 @@ class UpdateView(QWidget):
     def _tpex_warning_messages(result: Dict[str, Any]) -> list[str]:
         return tpex_warning_messages(result)
 
-    def _run_safe_update_all(self, progress_callback=None) -> Dict[str, Any]:
+    def _run_safe_update_all(
+        self,
+        progress_callback=None,
+        cancellation_callback=None,
+    ) -> Dict[str, Any]:
         """執行保守的一鍵安全更新流程，供 UI worker 與測試共用，保持向後相容"""
         use_sqlite = getattr(self.update_service.config, "use_sqlite", False)
         mode = "quick" if use_sqlite else "safe"
-        return self._run_update_all(mode=mode, progress_callback=progress_callback)
+        return self._run_update_all(
+            mode=mode,
+            progress_callback=progress_callback,
+            cancellation_callback=cancellation_callback,
+        )
 
     def _execute_quick_update_all(self):
         """以背景工作執行快速更新所有數據"""
@@ -2022,6 +2773,8 @@ class UpdateView(QWidget):
 
     def _execute_update_all(self, mode="quick"):
         """以背景工作執行更新所有數據"""
+        if self._reject_busy_write("全部資料更新"):
+            return
         self._current_update_mode = mode
 
         self.quick_update_all_btn.setEnabled(False)
@@ -2035,6 +2788,7 @@ class UpdateView(QWidget):
         else:
             self.safe_update_all_btn.setText(btn_text)
 
+        self._reset_progress()
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -2043,7 +2797,10 @@ class UpdateView(QWidget):
         self.log_text.clear()
         self._log(f"開始{mode_name}所有數據")
 
-        worker = self._start_worker(ProgressTaskWorker(self._run_update_all, mode=mode))
+        worker = self._start_worker(
+            ProgressTaskWorker(self._run_update_all, mode=mode),
+            operation_kind="write",
+        )
         worker.progress.connect(self._on_update_all_progress)
         worker.finished.connect(self._on_update_all_finished)
         worker.error.connect(self._on_update_all_error)
@@ -2053,12 +2810,17 @@ class UpdateView(QWidget):
     def _on_update_all_progress(self, message: str, progress: int):
         """更新更新流程進度"""
         mode_name = "快速更新" if getattr(self, "_current_update_mode", "quick") == "quick" else "安全更新"
-        self.progress_label.setText(message)
-        self.progress_bar.setValue(progress)
-        self._log(f"[{mode_name} {progress}%] {message}")
+        displayed = self._set_progress(message, progress)
+        if "SQLite" in message:
+            self._set_sqlite_sync_status(
+                {"status": "running", "source": message, "message": "正在同步"}
+            )
+        self._log(f"[{mode_name} {displayed}%] {message}")
 
     def _on_update_all_finished(self, result: Dict[str, Any]):
         """更新流程完成"""
+        self._invalidate_detail_cache()
+        sqlite_summary = self._set_sqlite_sync_status_from_update_all(result)
         self.quick_update_all_btn.setEnabled(True)
         self.safe_update_all_btn.setEnabled(True)
         self.quick_update_all_btn.setText("快速更新 (跳過大型合併)")
@@ -2074,10 +2836,18 @@ class UpdateView(QWidget):
             if warnings:
                 warning_text = "\n".join(str(warning) for warning in warnings)
                 self._log(f"{message}；警告：{warning_text}")
-                QMessageBox.warning(self, f"{mode_name}完成但有警告", f"{message}\n\n警告：\n{warning_text}")
+                QMessageBox.warning(
+                    self,
+                    f"{mode_name}完成但有警告",
+                    f"{message}\n\n{sqlite_summary}\n\n警告：\n{warning_text}",
+                )
             else:
                 self._log(message)
-                QMessageBox.information(self, f"{mode_name}完成", message)
+                QMessageBox.information(
+                    self,
+                    f"{mode_name}完成",
+                    f"{message}\n\n{sqlite_summary}",
+                )
             self._check_data_status()
             return
 
@@ -2087,11 +2857,13 @@ class UpdateView(QWidget):
         display_message = message
         if warnings:
             display_message = f"{message}\n\n警告：\n" + "\n".join(str(warning) for warning in warnings)
+        display_message = f"{display_message}\n\n{sqlite_summary}"
         self._log(f"{mode_name}失敗：{failed_step} - {message}")
         QMessageBox.warning(self, f"{mode_name}未完成", f"{failed_step} 失敗：\n{display_message}")
 
     def _on_update_all_error(self, error_msg: str):
         """更新流程出錯"""
+        self._invalidate_detail_cache()
         self.quick_update_all_btn.setEnabled(True)
         self.safe_update_all_btn.setEnabled(True)
         self.quick_update_all_btn.setText("快速更新 (跳過大型合併)")
@@ -2109,6 +2881,8 @@ class UpdateView(QWidget):
 
     def _execute_update(self):
         """執行數據更新"""
+        if self._reject_busy_write("單一資料來源更新"):
+            return
         # 獲取更新類型
         update_type = None
         if self.daily_radio.isChecked():
@@ -2139,8 +2913,10 @@ class UpdateView(QWidget):
             current_update_btn.setText("更新中...")
 
         # 顯示進度條
+        self._reset_progress()
         self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)  # 不確定進度
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
         self.progress_label.setText(f"正在更新{self._get_update_type_name(update_type)}...")
 
@@ -2151,7 +2927,7 @@ class UpdateView(QWidget):
         self._log(f"說明：系統會在該範圍內查找缺失的日期並下載，合併時會合併所有數據")
 
         # 創建 Worker 任務
-        def update_task(progress_callback=None):
+        def update_task(progress_callback=None, cancel_callback=None):
             import logging
             logger = logging.getLogger(__name__)
             try:
@@ -2162,6 +2938,7 @@ class UpdateView(QWidget):
                     update_tpex_daily_prices=self._update_tpex_daily_prices,
                     tpex_warning_messages=self._tpex_warning_messages,
                     progress_callback=progress_callback,
+                    cancellation_callback=cancel_callback,
                 )
                 logger.info(f"[UpdateView] 更新任務完成: success={result.get('success', False)}")
                 return result
@@ -2172,7 +2949,10 @@ class UpdateView(QWidget):
                 # ✅ 不要 raise，讓 Worker 的異常處理機制處理
                 raise
 
-        worker = self._start_worker(ProgressTaskWorker(update_task))
+        worker = self._start_worker(
+            ProgressTaskWorker(update_task),
+            operation_kind="write",
+        )
         worker.progress.connect(self._on_update_progress)
         worker.finished.connect(self._on_update_finished)
         worker.error.connect(self._on_update_error)
@@ -2181,16 +2961,19 @@ class UpdateView(QWidget):
 
     def _on_update_progress(self, message: str, percentage: int):
         """更新進度回調"""
-        if self.progress_bar.maximum() == 0:
-            self.progress_bar.setRange(0, 100)
-        self.progress_label.setText(message)
-        self.progress_bar.setValue(percentage)
+        displayed = self._set_progress(message, percentage)
+        if "SQLite" in message:
+            self._set_sqlite_sync_status(
+                {"status": "running", "source": message, "message": "正在同步"}
+            )
         # 只在有實際進度變更時才記錄，避免日誌過多
-        if percentage % 10 == 0 or percentage == 100:
-            self._log(f"[進度 {percentage}%] {message}")
+        if displayed % 10 == 0 or displayed == 100:
+            self._log(f"[進度 {displayed}%] {message}")
 
     def _on_update_finished(self, result: Dict[str, Any]):
         """更新完成"""
+        self._invalidate_detail_cache()
+        sqlite_summary = self._set_sqlite_sync_status(result.get("sqlite_sync"))
         # 恢復按鈕
         active_type = getattr(self, "_active_update_type", "daily")
         current_update_btn = getattr(self, f"{active_type}_update_btn", None)
@@ -2220,6 +3003,7 @@ class UpdateView(QWidget):
             display_message = message
             if warnings:
                 display_message = f"{message}\n\n警告：\n" + "\n".join(warnings)
+            display_message = f"{display_message}\n\n{sqlite_summary}"
 
             QMessageBox.information(self, "更新完成", display_message)
 
@@ -2230,11 +3014,13 @@ class UpdateView(QWidget):
             warnings = result.get('warnings', [])
             if warnings:
                 message = f"{message}\n\n警告：\n" + "\n".join(str(warning) for warning in warnings)
+            message = f"{message}\n\n{sqlite_summary}"
             self._log(f"更新失敗：{message}")
             QMessageBox.warning(self, "更新未完整", message)
 
     def _on_update_error(self, error_msg: str):
         """更新出錯"""
+        self._invalidate_detail_cache()
         # 恢復按鈕
         active_type = getattr(self, "_active_update_type", "daily")
         current_update_btn = getattr(self, f"{active_type}_update_btn", None)
@@ -2256,6 +3042,8 @@ class UpdateView(QWidget):
 
     def _execute_merge(self):
         """執行數據合併（增量合併）"""
+        if self._reject_busy_write("合併每日資料"):
+            return
         # 確認對話框
         reply = QMessageBox.question(
             self,
@@ -2272,6 +3060,8 @@ class UpdateView(QWidget):
 
     def _execute_force_merge(self):
         """執行強制重新合併所有數據"""
+        if self._reject_busy_write("強制合併每日資料"):
+            return
         data_root = getattr(getattr(self, "config", None), "data_root", None) or "{DATA_ROOT}"
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Warning)
@@ -2294,6 +3084,8 @@ class UpdateView(QWidget):
 
     def _do_merge(self, force_all: bool = False):
         """執行合併操作（內部方法）"""
+        if self._reject_busy_write("強制合併每日資料" if force_all else "合併每日資料"):
+            return
         # 禁用按鈕
         if force_all:
             self.force_merge_btn.setEnabled(False)
@@ -2303,8 +3095,10 @@ class UpdateView(QWidget):
             self.merge_btn.setText("合併中...")
 
         # 顯示進度條
+        self._reset_progress()
         self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)  # 不確定進度
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
         if force_all:
             self.progress_label.setText("正在強制重新合併所有每日股票數據...")
@@ -2319,12 +3113,35 @@ class UpdateView(QWidget):
             self._log("開始合併每日股票數據（增量模式）")
 
         # 創建 Worker 任務
-        def merge_task():
+        def merge_task(progress_callback=None, cancel_callback=None):
             import logging
             logger = logging.getLogger(__name__)
             try:
                 logger.info(f"[UpdateView] 開始執行合併任務: force_all={force_all}")
-                result = self.update_service.merge_daily_data(force_all=force_all)
+                kwargs: dict[str, Any] = {"force_all": force_all}
+                if cancel_callback is not None:
+                    try:
+                        parameters = inspect.signature(self.update_service.merge_daily_data).parameters.values()
+                    except (TypeError, ValueError):
+                        parameters = ()
+                    if any(
+                        parameter.name in {"cancel_callback", "cancellation_callback"}
+                        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                        for parameter in parameters
+                    ):
+                        kwargs["cancel_callback"] = cancel_callback
+                if progress_callback is not None:
+                    try:
+                        parameters = inspect.signature(self.update_service.merge_daily_data).parameters.values()
+                    except (TypeError, ValueError):
+                        parameters = ()
+                    if any(
+                        parameter.name == "progress_callback"
+                        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                        for parameter in parameters
+                    ):
+                        kwargs["progress_callback"] = progress_callback
+                result = self.update_service.merge_daily_data(**kwargs)
                 logger.info(f"[UpdateView] 合併任務完成: success={result.get('success', False)}")
                 return result
             except Exception as e:
@@ -2334,14 +3151,23 @@ class UpdateView(QWidget):
                 # ✅ 不要 raise，讓 Worker 的異常處理機制處理
                 raise
 
-        worker = self._start_worker(TaskWorker(merge_task))
+        worker = self._start_worker(ProgressTaskWorker(merge_task), operation_kind="write")
+        if hasattr(worker, "progress"):
+            worker.progress.connect(self._on_merge_progress)
         worker.finished.connect(self._on_merge_finished)
         worker.error.connect(self._on_merge_error)
         self._attach_worker_cleanup(worker)
         worker.start()
 
+    def _on_merge_progress(self, message: str, progress: int):
+        """每日資料合併進度更新。"""
+
+        displayed = self._set_progress(message, progress)
+        self._log(f"[每日合併 {displayed}%] {message}")
+
     def _on_merge_finished(self, result: Dict[str, Any]):
         """合併完成"""
+        self._invalidate_detail_cache()
         # 恢復按鈕
         self.merge_btn.setEnabled(True)
         self.merge_btn.setText("合併每日數據")
@@ -2357,14 +3183,26 @@ class UpdateView(QWidget):
             message = result.get('message', '合併完成')
             total_records = result.get('total_records', 0)
             merged_files = result.get('merged_files', 0)
+            no_op = bool(result.get("no_op"))
 
-            self._log(f"合併完成：{message}")
+            self._log(f"{'無需合併' if no_op else '合併完成'}：{message}")
+            if no_op:
+                self._log("本次沒有新資料，未建立新的整合檔備份。")
             if total_records > 0:
                 self._log(f"總記錄數：{total_records:,}")
             if merged_files > 0:
                 self._log(f"合併文件數：{merged_files}")
 
-            QMessageBox.information(self, "合併完成", f"{message}\n總記錄數：{total_records:,}")
+            QMessageBox.information(
+                self,
+                "資料已是最新" if no_op else "合併完成",
+                (
+                    f"{message}\n總記錄數：{total_records:,}\n"
+                    "本次沒有新資料，未建立新的整合檔備份。"
+                    if no_op
+                    else f"{message}\n總記錄數：{total_records:,}"
+                ),
+            )
 
             # 自動刷新數據狀態
             self._check_data_status()
@@ -2375,6 +3213,7 @@ class UpdateView(QWidget):
 
     def _on_merge_error(self, error_msg: str):
         """合併出錯"""
+        self._invalidate_detail_cache()
         import logging
         logger = logging.getLogger(__name__)
 
@@ -2407,6 +3246,8 @@ class UpdateView(QWidget):
 
     def _execute_merge_broker_branch(self):
         """執行券商分點資料合併"""
+        if self._reject_busy_write("合併券商分點資料"):
+            return
         # 確認對話框
         reply = QMessageBox.question(
             self,
@@ -2424,8 +3265,10 @@ class UpdateView(QWidget):
         self.merge_broker_branch_btn.setText("合併中...")
 
         # 顯示進度條
+        self._reset_progress()
         self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)  # 不確定進度
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
         self.progress_label.setText("正在合併券商分點資料...")
 
@@ -2434,12 +3277,35 @@ class UpdateView(QWidget):
         self._log("開始合併券商分點資料（增量模式）")
 
         # 創建 Worker 任務
-        def merge_task():
+        def merge_task(progress_callback=None, cancel_callback=None):
             import logging
             logger = logging.getLogger(__name__)
             try:
                 logger.info(f"[UpdateView] 開始執行券商分點資料合併任務")
-                result = self.update_service.merge_broker_branch_data()
+                kwargs: dict[str, Any] = {}
+                if cancel_callback is not None:
+                    try:
+                        parameters = inspect.signature(self.update_service.merge_broker_branch_data).parameters.values()
+                    except (TypeError, ValueError):
+                        parameters = ()
+                    if any(
+                        parameter.name in {"cancel_callback", "cancellation_callback"}
+                        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                        for parameter in parameters
+                    ):
+                        kwargs["cancel_callback"] = cancel_callback
+                if progress_callback is not None:
+                    try:
+                        parameters = inspect.signature(self.update_service.merge_broker_branch_data).parameters.values()
+                    except (TypeError, ValueError):
+                        parameters = ()
+                    if any(
+                        parameter.name == "progress_callback"
+                        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                        for parameter in parameters
+                    ):
+                        kwargs["progress_callback"] = progress_callback
+                result = self.update_service.merge_broker_branch_data(**kwargs)
                 logger.info(f"[UpdateView] 券商分點資料合併任務完成: success={result.get('success', False)}")
                 return result
             except Exception as e:
@@ -2448,14 +3314,23 @@ class UpdateView(QWidget):
                 logger.error(f"[UpdateView] {error_msg}")
                 raise
 
-        worker = self._start_worker(TaskWorker(merge_task))
+        worker = self._start_worker(ProgressTaskWorker(merge_task), operation_kind="write")
+        if hasattr(worker, "progress"):
+            worker.progress.connect(self._on_merge_broker_branch_progress)
         worker.finished.connect(self._on_merge_broker_branch_finished)
         worker.error.connect(self._on_merge_broker_branch_error)
         self._attach_worker_cleanup(worker)
         worker.start()
 
+    def _on_merge_broker_branch_progress(self, message: str, progress: int):
+        """券商分點合併進度更新。"""
+
+        displayed = self._set_progress(message, progress)
+        self._log(f"[券商分點合併 {displayed}%] {message}")
+
     def _on_merge_broker_branch_finished(self, result: Dict[str, Any]):
         """券商分點資料合併完成"""
+        self._invalidate_detail_cache()
         # 恢復按鈕
         self.merge_broker_branch_btn.setEnabled(True)
         self.merge_broker_branch_btn.setText("合併券商分點資料")
@@ -2501,6 +3376,7 @@ class UpdateView(QWidget):
 
     def _on_merge_broker_branch_error(self, error_msg: str):
         """券商分點資料合併出錯"""
+        self._invalidate_detail_cache()
         # 恢復按鈕
         self.merge_broker_branch_btn.setEnabled(True)
         self.merge_broker_branch_btn.setText("合併券商分點資料")
@@ -2530,6 +3406,8 @@ class UpdateView(QWidget):
 
     def _execute_calculate_technical_indicators(self):
         """執行技術指標計算"""
+        if self._reject_busy_write("技術指標計算"):
+            return
         # 獲取計算模式
         force_all = self.tech_force_all_radio.isChecked()
 
@@ -2568,6 +3446,7 @@ class UpdateView(QWidget):
         self.calculate_tech_btn.setText("計算中...")
 
         # 顯示進度條
+        self._reset_progress()
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -2581,17 +3460,33 @@ class UpdateView(QWidget):
         self._log(f"開始計算技術指標（{mode_text}，{stock_text}）")
 
         # 創建 Worker 任務（使用 ProgressTaskWorker 支持進度回調）
-        def calculate_task(progress_callback=None):
+        def calculate_task(progress_callback=None, cancel_callback=None):
             """技術指標計算任務（支持進度回調）"""
             import logging
             logger = logging.getLogger(__name__)
             try:
                 logger.info(f"[UpdateView] 開始執行技術指標計算任務: target_stock={target_stock}, force_all={force_all}")
+                indicator_kwargs: dict[str, Any] = {
+                    "target_stock": target_stock,
+                    "force_all": force_all,
+                    "start_date": None,
+                    "progress_callback": progress_callback,
+                }
+                if cancel_callback is not None:
+                    try:
+                        parameters = inspect.signature(
+                            self.update_service.calculate_technical_indicators
+                        ).parameters.values()
+                    except (TypeError, ValueError):
+                        parameters = ()
+                    if any(
+                        parameter.name in {"cancel_callback", "cancellation_callback"}
+                        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                        for parameter in parameters
+                    ):
+                        indicator_kwargs["cancel_callback"] = cancel_callback
                 result = self.update_service.calculate_technical_indicators(
-                    target_stock=target_stock,
-                    force_all=force_all,
-                    start_date=None,
-                    progress_callback=progress_callback
+                    **indicator_kwargs
                 )
                 logger.info(f"[UpdateView] 技術指標計算任務完成: success={result.get('success', False)}")
                 return result
@@ -2601,7 +3496,10 @@ class UpdateView(QWidget):
                 logger.error(f"[UpdateView] {error_msg}")
                 raise
 
-        worker = self._start_worker(ProgressTaskWorker(calculate_task))
+        worker = self._start_worker(
+            ProgressTaskWorker(calculate_task),
+            operation_kind="write",
+        )
         worker.progress.connect(self._on_tech_progress)
         worker.finished.connect(self._on_tech_calculate_finished)
         worker.error.connect(self._on_tech_calculate_error)
@@ -2610,12 +3508,12 @@ class UpdateView(QWidget):
 
     def _on_tech_progress(self, message: str, progress: int):
         """技術指標計算進度更新"""
-        self.progress_label.setText(message)
-        self.progress_bar.setValue(progress)
-        self._log(f"[進度 {progress}%] {message}")
+        displayed = self._set_progress(message, progress)
+        self._log(f"[進度 {displayed}%] {message}")
 
     def _on_tech_calculate_finished(self, result: Dict[str, Any]):
         """技術指標計算完成"""
+        self._invalidate_detail_cache()
         # 恢復按鈕
         self.calculate_tech_btn.setEnabled(True)
         self.calculate_tech_btn.setText("計算技術指標")
@@ -2662,6 +3560,7 @@ class UpdateView(QWidget):
 
     def _on_tech_calculate_error(self, error_msg: str):
         """技術指標計算出錯"""
+        self._invalidate_detail_cache()
         # 恢復按鈕
         self.calculate_tech_btn.setEnabled(True)
         self.calculate_tech_btn.setText("計算技術指標")
@@ -2686,6 +3585,8 @@ class UpdateView(QWidget):
 
     def _execute_export_csv(self, source: str):
         """執行 CSV 匯出邏輯（支援範圍選擇與非同步處理）"""
+        if self._reject_busy_write("CSV 匯出"):
+            return
         table_mapping = {
             "daily": "daily_prices",
             "market": "market_indices",
@@ -2749,21 +3650,48 @@ class UpdateView(QWidget):
         target_path = Path(file_path_str)
 
         # 3. 啟動背景 Worker 執行匯出
+        self._reset_progress()
         self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0) # 跑馬燈模式
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
         self.progress_label.setText(f"正在匯出 {table_name} 資料至 CSV...")
         self._log(f"開始匯出 {table_name} 資料至 {target_path}")
 
-        def export_task():
-            return self.update_service.export_table_to_csv(
-                table_name=table_name,
-                target_path=target_path,
-                start_date=s_date,
-                end_date=e_date
-            )
+        def export_task(progress_callback=None, cancel_callback=None):
+            kwargs: dict[str, Any] = {
+                "table_name": table_name,
+                "target_path": target_path,
+                "start_date": s_date,
+                "end_date": e_date,
+            }
+            if cancel_callback is not None:
+                try:
+                    parameters = inspect.signature(self.update_service.export_table_to_csv).parameters.values()
+                except (TypeError, ValueError):
+                    parameters = ()
+                if any(
+                    parameter.name in {"cancel_callback", "cancellation_callback"}
+                    or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                    for parameter in parameters
+                ):
+                    kwargs["cancel_callback"] = cancel_callback
+            if progress_callback is not None:
+                try:
+                    parameters = inspect.signature(self.update_service.export_table_to_csv).parameters.values()
+                except (TypeError, ValueError):
+                    parameters = ()
+                if any(
+                    parameter.name == "progress_callback"
+                    or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                    for parameter in parameters
+                ):
+                    kwargs["progress_callback"] = progress_callback
+            return self.update_service.export_table_to_csv(**kwargs)
 
-        worker = self._start_worker(TaskWorker(export_task))
+        worker = self._start_worker(ProgressTaskWorker(export_task), operation_kind="write")
+        if hasattr(worker, "progress"):
+            worker.progress.connect(self._on_export_progress)
 
         def on_export_finished(result: Dict[str, Any]):
             self.progress_bar.setVisible(False)
@@ -2787,6 +3715,12 @@ class UpdateView(QWidget):
         worker.error.connect(on_export_error)
         self._attach_worker_cleanup(worker)
         worker.start()
+
+    def _on_export_progress(self, message: str, progress: int):
+        """CSV 匯出進度更新。"""
+
+        displayed = self._set_progress(message, progress)
+        self._log(f"[CSV 匯出 {displayed}%] {message}")
 
     def closeEvent(self, event):
         """關閉事件"""

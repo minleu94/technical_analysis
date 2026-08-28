@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from app_module.research_console_dtos import ResearchConsoleDTO
 from app_module.research_console_source_service import ResearchConsoleSourceService
+from app_module.p0_source_control_center import P0SourceControlCenterDTO
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.theme_widgets import SectionPanel
 
@@ -36,6 +37,14 @@ _STATUS_COLORS = {
     "research_only_degraded": "#f59e0b",
     "missing": "#ef4444",
     "unknown": "#ef4444",
+    "contract_only": "#a78bfa",
+    "blocked_provenance": "#ef4444",
+    "deferred": "#f59e0b",
+    "disabled": "#ef4444",
+    "limited": "#f59e0b",
+    "accepted": "#22c55e",
+    "not_supplied": "#94a3b8",
+    "not_observed": "#94a3b8",
 }
 
 
@@ -138,6 +147,17 @@ class ResearchConsoleView(QWidget):
         gates_panel.layout.addWidget(self.gate_table)
         gates_panel.layout.addWidget(self.broker_lane_label)
         gates_panel.layout.addWidget(self.source_table)
+        control_panel = SectionPanel("P0 Data Source Control Center")
+        self.control_center_summary_label = QLabel()
+        self.control_center_summary_label.setWordWrap(True)
+        self.control_center_summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.control_center_summary_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+        self.control_center_table = _table(
+            ("來源", "Family", "治理狀態", "Machine / Audit", "Rows", "Decision / Eligibility", "Blockers")
+        )
+        control_panel.layout.addWidget(self.control_center_summary_label)
+        control_panel.layout.addWidget(self.control_center_table)
+        gates_panel.layout.addWidget(control_panel)
         gates_panel.layout.addWidget(QLabel("Artifact Inspector"))
         gates_panel.layout.addWidget(self.artifact_table)
         layout.addWidget(gates_panel)
@@ -204,6 +224,47 @@ class ResearchConsoleView(QWidget):
             ),
             status_column=2,
         )
+        control_center = console.source_control_center
+        if control_center is None:
+            self.control_center_summary_label.setText(
+                "P0 Source Control Center：Not Available；未提供 13 項來源治理投影。"
+            )
+            self.control_center_table.setRowCount(0)
+        else:
+            self.control_center_summary_label.setText(
+                "狀態：{status}｜P0：{count}｜Research shadow：{shadow}｜"
+                "Blocked provenance：{blocked}｜Accepted / Limited：{accepted} / {limited}｜"
+                "Downstream eligible：{eligible}\n"
+                "唯讀邊界：writes=false、formal_oos=false、scheduler=false、auto_accept=false\n"
+                "Global blockers：{blockers}".format(
+                    status=_display(
+                        _control_center_status(control_center)
+                    ),
+                    count=control_center.p0_source_count,
+                    shadow=control_center.research_shadow_count,
+                    blocked=control_center.blocked_count,
+                    accepted=control_center.accepted_count,
+                    limited=control_center.limited_count,
+                    eligible=control_center.downstream_eligible_count,
+                    blockers=_join(control_center.global_blockers),
+                )
+            )
+            _set_rows(
+                self.control_center_table,
+                (
+                    (
+                        row.source_id,
+                        row.family,
+                        row.governance_status,
+                        f"{row.machine_status} / {row.audit_status}",
+                        _optional_number(row.observed_rows),
+                        f"{row.decision_status} / {row.downstream_eligibility}",
+                        _join(row.blockers),
+                    )
+                    for row in control_center.rows
+                ),
+                status_column=2,
+            )
         _set_rows(
             self.artifact_table,
             ((row.artifact_type, row.artifact_id, row.status, row.citation) for row in console.artifacts),
@@ -212,7 +273,13 @@ class ResearchConsoleView(QWidget):
 
     def visible_text(self) -> str:
         values = [label.text() for label in self.findChildren(QLabel)]
-        for table in (self.pipeline_table, self.gate_table, self.source_table, self.artifact_table):
+        for table in (
+            self.pipeline_table,
+            self.gate_table,
+            self.source_table,
+            self.control_center_table,
+            self.artifact_table,
+        ):
             for row in range(table.rowCount()):
                 for column in range(table.columnCount()):
                     item = table.item(row, column)
@@ -269,3 +336,17 @@ def _counts(rows: int | None, eligible: int | None, features: int | None) -> str
 
 def _optional_number(value: int | None) -> str:
     return f"{value:,}" if value is not None else "Missing / Unknown"
+
+
+def _control_center_status(control_center: P0SourceControlCenterDTO) -> str:
+    if control_center.blocked_count:
+        return "blocked"
+    if control_center.contract_only_count:
+        return "contract_only"
+    if control_center.research_shadow_count:
+        return "research_shadow"
+    if control_center.limited_count:
+        return "limited"
+    if control_center.accepted_count:
+        return "accepted"
+    return "unknown"

@@ -69,4 +69,5 @@ def test_flow_diagnostics_markdown_renderer():
     assert "Recommended Commands" in markdown
     assert "pytest tests/test_ui_qt_smart_money_flow_view.py" in markdown
     assert "UX Gaps" in markdown
-    assert "TWSE/TPEX real API fetch progress bar indication" in markdown
+    assert "Large merge/export cancellation" in markdown
+    assert "Confirm dialog on SQLite daily prices sync" not in markdown

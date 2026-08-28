@@ -101,6 +101,28 @@ class WeakIndustriesView(QWidget):
         self.industries_table.setSortingEnabled(True)
         self.industries_table.horizontalHeader().setStretchLastSection(True)
         main_layout.addWidget(self.industries_table)
+
+        self.status_label = QLabel("尚未載入")
+        self.status_label.setWordWrap(True)
+        self._set_status_label(self.status_label, "尚未載入", level="info")
+        main_layout.addWidget(self.status_label)
+
+    @staticmethod
+    def _set_status_label(label: QLabel, text: str, *, level: str) -> None:
+        colors = {
+            "info": "#94a3b8",
+            "success": "#86efac",
+            "warning": "#facc15",
+            "error": "#fca5a5",
+        }
+        label.setStyleSheet(
+            f"color: {colors.get(level, colors['info'])}; padding: 2px 0;"
+        )
+        label.setText(text)
+
+    @staticmethod
+    def _empty_frame() -> pd.DataFrame:
+        return pd.DataFrame(columns=["排名", "指數名稱", "收盤指數", "跌幅%"])
     
     def _on_period_changed(self, period: str):
         """時間範圍改變"""
@@ -124,6 +146,11 @@ class WeakIndustriesView(QWidget):
         df = self._cached_data[period]
         if df is not None:
             self._update_table_with_data(df)
+            self._set_status_label(
+                self.status_label,
+                f"已載入快取：{len(df)} 筆",
+                level="success" if len(df) else "warning",
+            )
     
     def _update_table_with_data(self, df: pd.DataFrame):
         """更新表格顯示（內部方法，用於顯示數據）"""
@@ -136,7 +163,10 @@ class WeakIndustriesView(QWidget):
             df = df.rename(columns={'漲幅%': '跌幅%'})
             # 取絕對值，確保顯示為正數跌幅（因為弱勢產業的漲幅%是負數）
             if '跌幅%' in df.columns:
-                df['跌幅%'] = df['跌幅%'].abs()
+                # CSV／舊服務可能回傳字串；這裡是純顯示邊界，無法轉換者保留 NaN。
+                df['跌幅%'] = pd.to_numeric(
+                    df['跌幅%'], errors='coerce'
+                ).abs()
         
         # 確保欄位順序正確
         expected_columns = ['排名', '指數名稱', '收盤指數', '跌幅%']
@@ -157,6 +187,7 @@ class WeakIndustriesView(QWidget):
         Args:
             use_cache: 是否使用緩存（True=有緩存就不重新計算，False=強制重新計算）
         """
+        self._set_status_label(self.status_label, "載入中…", level="info")
         try:
             # 獲取當前選擇的時間範圍
             period = 'day' if self.period_btn_day.isChecked() else 'week'
@@ -169,13 +200,8 @@ class WeakIndustriesView(QWidget):
             # 調用服務（重新計算）
             df = self.screening_service.get_weak_industries(period=period, top_n=50)
             
-            # 檢查返回的 DataFrame
-            if df is None or len(df) == 0:
-                df = pd.DataFrame(columns=['排名', '指數名稱', '收盤指數', '漲幅%'])
-                df.loc[0] = ['-', '沒有找到弱勢產業數據', 0, 0]
-                # 重命名為跌幅%以保持一致性
-                if '漲幅%' in df.columns:
-                    df = df.rename(columns={'漲幅%': '跌幅%'})
+            if not isinstance(df, pd.DataFrame):
+                raise TypeError("弱勢產業服務未回傳 DataFrame")
             
             # 保存到緩存
             self._cached_data[period] = df.copy()
@@ -186,22 +212,40 @@ class WeakIndustriesView(QWidget):
             # 更新按鈕狀態
             self.refresh_btn.setVisible(True)
             self.load_btn.setVisible(False)
+            self._set_status_label(
+                self.status_label,
+                f"已更新：{len(df)} 筆",
+                level="success" if len(df) else "warning",
+            )
             
         except Exception as e:
             import traceback
             error_msg = f"刷新弱勢產業失敗：\n{str(e)}\n\n{traceback.format_exc()}"
             QMessageBox.critical(self, "錯誤", error_msg)
-            df = pd.DataFrame(columns=['排名', '指數名稱', '收盤指數', '跌幅%'])
-            self.industries_model = PandasTableModel(df, red_positive_columns={'跌幅%'})
+            self.industries_model = PandasTableModel(
+                self._empty_frame(), red_positive_columns={'跌幅%'}
+            )
             self.industries_table.setModel(self.industries_model)
+            self.refresh_btn.setVisible(False)
+            self.load_btn.setVisible(True)
+            self._set_status_label(
+                self.status_label,
+                f"載入失敗：{str(e).splitlines()[0] or type(e).__name__}",
+                level="error",
+            )
     
     def _show_empty_state(self):
         """顯示空狀態（提示用戶載入數據）"""
-        df = pd.DataFrame(columns=['排名', '指數名稱', '收盤指數', '跌幅%'])
-        df.loc[0] = ['-', '請點擊「載入數據」按鈕開始計算', 0, 0]
-        self.industries_model = PandasTableModel(df, red_positive_columns={'跌幅%'})
+        self.industries_model = PandasTableModel(
+            self._empty_frame(), red_positive_columns={'跌幅%'}
+        )
         self.industries_table.setModel(self.industries_model)
         self.industries_table.resizeColumnsToContents()
+        self._set_status_label(
+            self.status_label,
+            "尚未載入：請點擊「載入數據」按鈕開始計算",
+            level="info",
+        )
     
     def load_data_if_needed(self):
         """如果需要，載入數據（當 tab 被點擊時調用）"""

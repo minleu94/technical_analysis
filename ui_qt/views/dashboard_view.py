@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+from typing import Optional
 import pandas as pd
 
 from ui_qt.models.pandas_table_model import PandasTableModel
@@ -85,9 +86,9 @@ class DashboardView(QWidget):
         control_layout.addStretch()
         
         # 刷新按鈕
-        refresh_btn = QPushButton("刷新")
-        refresh_btn.clicked.connect(self._refresh_stocks)
-        control_layout.addWidget(refresh_btn)
+        self.stocks_refresh_btn = QPushButton("刷新")
+        self.stocks_refresh_btn.clicked.connect(self._refresh_stocks)
+        control_layout.addWidget(self.stocks_refresh_btn)
         
         layout.addLayout(control_layout)
         
@@ -98,6 +99,11 @@ class DashboardView(QWidget):
         self.stocks_table.setSortingEnabled(True)
         self.stocks_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.stocks_table)
+
+        self.stocks_status_label = QLabel("尚未載入")
+        self.stocks_status_label.setWordWrap(True)
+        self._set_status_label(self.stocks_status_label, "尚未載入", level="info")
+        layout.addWidget(self.stocks_status_label)
         
         return panel
     
@@ -145,9 +151,9 @@ class DashboardView(QWidget):
         control_layout.addStretch()
         
         # 刷新按鈕
-        refresh_btn = QPushButton("刷新")
-        refresh_btn.clicked.connect(self._refresh_industries)
-        control_layout.addWidget(refresh_btn)
+        self.industries_refresh_btn = QPushButton("刷新")
+        self.industries_refresh_btn.clicked.connect(self._refresh_industries)
+        control_layout.addWidget(self.industries_refresh_btn)
         
         layout.addLayout(control_layout)
         
@@ -158,6 +164,11 @@ class DashboardView(QWidget):
         self.industries_table.setSortingEnabled(True)
         self.industries_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.industries_table)
+
+        self.industries_status_label = QLabel("尚未載入")
+        self.industries_status_label.setWordWrap(True)
+        self._set_status_label(self.industries_status_label, "尚未載入", level="info")
+        layout.addWidget(self.industries_status_label)
         
         return panel
     
@@ -165,9 +176,46 @@ class DashboardView(QWidget):
         """載入初始數據"""
         self._refresh_stocks()
         self._refresh_industries()
+
+    @staticmethod
+    def _set_status_label(label: QLabel, text: str, *, level: str) -> None:
+        """以可見狀態列呈現刷新結果，不把錯誤只留在 stdout。"""
+        colors = {
+            "info": "#94a3b8",
+            "success": "#86efac",
+            "warning": "#facc15",
+            "error": "#fca5a5",
+        }
+        color = colors.get(level, colors["info"])
+        label.setStyleSheet(f"color: {color}; padding: 2px 0;")
+        label.setText(text)
+
+    @staticmethod
+    def _empty_stocks_frame() -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "排名",
+                "證券代號",
+                "證券名稱",
+                "收盤價",
+                "漲幅%",
+                "評分",
+                "推薦理由",
+            ]
+        )
+
+    @staticmethod
+    def _empty_industries_frame() -> pd.DataFrame:
+        return pd.DataFrame(columns=["排名", "指數名稱", "收盤指數", "漲幅%"])
+
+    @staticmethod
+    def _first_error_line(error: Exception) -> str:
+        message = str(error).strip()
+        return message.splitlines()[0] if message else error.__class__.__name__
     
     def _refresh_stocks(self):
         """刷新強勢股數據"""
+        self._set_status_label(self.stocks_status_label, "載入中…", level="info")
         try:
             # 獲取當前選擇的時間範圍
             period = 'day' if self.stocks_period_btn_day.isChecked() else 'week'
@@ -176,44 +224,77 @@ class DashboardView(QWidget):
             result = self.screening_service.get_strong_stocks(period=period, top_n=20)
             
             # 處理新的返回格式（元組：DataFrame, universe_count）
+            universe_count = None
             if isinstance(result, tuple):
+                if len(result) != 2:
+                    raise TypeError("強勢個股服務回傳格式不是 (DataFrame, universe_count)")
                 df, universe_count = result
             else:
                 # 向後兼容：如果返回的是舊格式（只有 DataFrame）
                 df = result
+
+            if not isinstance(df, pd.DataFrame):
+                raise TypeError("強勢個股服務未回傳 DataFrame")
             
             if len(df) == 0:
                 # 顯示空表格
-                df = pd.DataFrame(columns=['排名', '證券代號', '證券名稱', '收盤價', '漲幅%', '評分', '推薦理由'])
+                df = self._empty_stocks_frame()
             
             # 更新模型
             self.strong_stocks_model = PandasTableModel(df)
             self.stocks_table.setModel(self.strong_stocks_model)
+            count_text = f"已更新：{len(df)} 筆"
+            if universe_count is not None:
+                count_text += f"；掃描範圍 {universe_count} 檔"
+            self._set_status_label(self.stocks_status_label, count_text, level="success")
             
         except Exception as e:
-            # TODO: 顯示錯誤提示
-            print(f"刷新強勢股失敗: {e}")
+            # 清除舊模型，避免錯誤時畫面繼續顯示過期排名。
+            self.strong_stocks_model = PandasTableModel(self._empty_stocks_frame())
+            self.stocks_table.setModel(self.strong_stocks_model)
+            self._set_status_label(
+                self.stocks_status_label,
+                f"載入失敗：{self._first_error_line(e)}",
+                level="error",
+            )
     
     def _refresh_industries(self):
         """刷新強勢產業數據"""
+        self._set_status_label(self.industries_status_label, "載入中…", level="info")
         try:
             # 獲取當前選擇的時間範圍
             period = 'day' if self.industries_period_btn_day.isChecked() else 'week'
             
             # 調用服務
             df = self.screening_service.get_strong_industries(period=period, top_n=20)
+
+            if not isinstance(df, pd.DataFrame):
+                raise TypeError("強勢產業服務未回傳 DataFrame")
             
             if len(df) == 0:
                 # 顯示空表格
-                df = pd.DataFrame(columns=['排名', '指數名稱', '收盤指數', '漲幅%'])
+                df = self._empty_industries_frame()
             
             # 更新模型
             self.strong_industries_model = PandasTableModel(df)
             self.industries_table.setModel(self.strong_industries_model)
+            self._set_status_label(
+                self.industries_status_label,
+                f"已更新：{len(df)} 筆",
+                level="success",
+            )
             
         except Exception as e:
-            # TODO: 顯示錯誤提示
-            print(f"刷新強勢產業失敗: {e}")
+            # 清除舊模型，避免錯誤時畫面繼續顯示過期排名。
+            self.strong_industries_model = PandasTableModel(
+                self._empty_industries_frame()
+            )
+            self.industries_table.setModel(self.strong_industries_model)
+            self._set_status_label(
+                self.industries_status_label,
+                f"載入失敗：{self._first_error_line(e)}",
+                level="error",
+            )
     
     def _detect_regime(self):
         """檢測市場狀態"""

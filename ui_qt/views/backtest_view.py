@@ -126,6 +126,7 @@ class BacktestView(QWidget):
         self.config = config
         self.batch_backtest_service = batch_backtest_service
         self.watchlist_service = watchlist_service
+        self.research_run_service_error: str | None = None
 
         # 初始化新服務
         if config:
@@ -133,7 +134,20 @@ class BacktestView(QWidget):
             self.universe_service = UniverseService(config)
             self.run_repository = BacktestRunRepository(config)
             self.portfolio_run_repository = RecommendationPortfolioRunRepository(config)
-            self.research_run_service = ResearchRunService(config)
+            # Research Run Registry 是回測結果的可選持久化層。正式資料根目錄
+            # 可能被以唯讀方式掛載；此時回測計算與唯讀證據頁仍可使用，
+            # 不應因 registry schema DDL 失敗而讓整個 MainWindow 無法啟動。
+            try:
+                self.research_run_service = ResearchRunService(config)
+            except Exception as exc:  # noqa: BLE001 - optional persistence boundary
+                self.research_run_service = None
+                self.research_run_service_error = (
+                    f"{type(exc).__name__}: {str(exc).splitlines()[0]}"
+                )
+                logger.warning(
+                    "Research Run Registry unavailable; backtest UI will remain read-only: %s",
+                    self.research_run_service_error,
+                )
             self.chart_data_service = ChartDataService(self.run_repository)
             # 如果沒有傳入 batch_backtest_service，則創建一個
             if not self.batch_backtest_service:
@@ -999,7 +1013,14 @@ class BacktestView(QWidget):
             else:
                 # 如果沒有 registry service，禁用按鈕並顯示提示
                 save_btn.setEnabled(False)
-                save_btn.setToolTip("需要完成回測且 ResearchRunService 可用後才能保存結果。")
+                registry_error = getattr(self, "research_run_service_error", None)
+                if registry_error:
+                    save_btn.setToolTip(
+                        "Research Run Registry 目前不可用，回測仍可執行但不會保存研究 run。"
+                        f"原因：{registry_error}"
+                    )
+                else:
+                    save_btn.setToolTip("需要完成回測且 ResearchRunService 可用後才能保存結果。")
                 if not self.research_run_service:
                     logger.warning("[BacktestView] 警告: research_run_service 未初始化，無法保存結果")
                 if not self.current_report:

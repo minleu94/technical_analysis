@@ -35,9 +35,8 @@ def test_get_all_ux_gaps():
 def test_get_ux_gaps_for_feature():
     """驗證 get_ux_gaps_for_feature() 篩選特定 feature_id 正確"""
     update_gaps = get_ux_gaps_for_feature("update_view")
-    assert len(update_gaps) > 0
-    for gap in update_gaps:
-        assert gap.feature_id == "update_view"
+    assert len(update_gaps) == 1
+    assert update_gaps[0].title.startswith("Large merge/export cancellation")
 
     none_gaps = get_ux_gaps_for_feature("non_existent_feature")
     assert len(none_gaps) == 0
@@ -56,12 +55,11 @@ def test_get_ux_gaps_for_flow():
 
 def test_render_ux_gap_mapping_markdown():
     """驗證 render_ux_gap_mapping_markdown() 產出格式正確"""
-    gaps = get_ux_gaps_for_flow("data_market_loop")
+    gaps = get_ux_gaps_for_feature("update_view")
     markdown = render_ux_gap_mapping_markdown(gaps)
 
-    assert "data_market_loop" in markdown
-    assert "TWSE/TPEX real API fetch progress bar indication" in markdown
-    assert "Implement explicit progress bar widget for Twstock daily fetch." in markdown
+    assert "Large merge/export cancellation" in markdown
+    assert "Confirm dialog on SQLite daily prices sync" not in markdown
 
     empty_markdown = render_ux_gap_mapping_markdown([])
     assert empty_markdown == "- (None)"
@@ -124,5 +122,4 @@ def test_flow_diagnostics_markdown_includes_ux_gaps():
     markdown = render_flow_diagnostics_markdown(generate_flow_diagnostics())
 
     assert "#### UX Gaps" in markdown
-    assert "`[unclear_copy]` TWSE/TPEX real API fetch progress bar indication" in markdown
-    assert "Recommended Next Step: Implement explicit progress bar widget" in markdown
+    assert "Confirm dialog on SQLite daily prices sync" not in markdown

@@ -117,8 +117,41 @@ class StrongStocksView(QWidget):
         self.stocks_table.horizontalHeader().setStretchLastSection(True)  # 最後一列（推薦理由）自動拉伸
         self.stocks_table.setWordWrap(True)  # 允許推薦理由換行
         main_layout.addWidget(self.stocks_table)
+
+        self.status_label = QLabel("尚未載入")
+        self.status_label.setWordWrap(True)
+        self._set_status_label(self.status_label, "尚未載入", level="info")
+        main_layout.addWidget(self.status_label)
         
         # 注意：選擇事件將在設置模型後連接（在 _refresh_stocks 中）
+
+    @staticmethod
+    def _set_status_label(label: QLabel, text: str, *, level: str) -> None:
+        colors = {
+            "info": "#94a3b8",
+            "success": "#86efac",
+            "warning": "#facc15",
+            "error": "#fca5a5",
+        }
+        label.setStyleSheet(
+            f"color: {colors.get(level, colors['info'])}; padding: 2px 0;"
+        )
+        label.setText(text)
+
+    @staticmethod
+    def _empty_frame() -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "排名",
+                "證券代號",
+                "證券名稱",
+                "收盤價",
+                "漲幅%",
+                "成交量變化率%",
+                "評分",
+                "推薦理由",
+            ]
+        )
     
     def _on_period_changed(self, period: str):
         """時間範圍改變"""
@@ -144,6 +177,11 @@ class StrongStocksView(QWidget):
         df = self._cached_data[period]
         if df is not None:
             self._update_table_with_data(df)
+            self._set_status_label(
+                self.status_label,
+                f"已載入快取：{len(df)} 筆",
+                level="success" if len(df) else "warning",
+            )
     
     def _update_table_with_data(self, df: pd.DataFrame):
         """更新表格顯示（內部方法，用於顯示數據）"""
@@ -185,6 +223,7 @@ class StrongStocksView(QWidget):
         Args:
             use_cache: 是否使用緩存（True=有緩存就不重新計算，False=強制重新計算）
         """
+        self._set_status_label(self.status_label, "載入中…", level="info")
         try:
             # 獲取當前選擇的時間範圍
             period = 'day' if self.period_btn_day.isChecked() else 'week'
@@ -199,6 +238,8 @@ class StrongStocksView(QWidget):
             
             # 處理新的返回格式（元組：DataFrame, universe_count）
             if isinstance(result, tuple):
+                if len(result) != 2:
+                    raise TypeError("強勢個股服務回傳格式不是 (DataFrame, universe_count)")
                 df, universe_count = result
             else:
                 # 向後兼容：如果返回的是舊格式（只有 DataFrame）
@@ -211,15 +252,9 @@ class StrongStocksView(QWidget):
             else:
                 self.universe_label.setText("Universe: -")
             
-            # 檢查返回的 DataFrame
-            if df is None:
-                # 服務返回 None，可能是錯誤
-                df = pd.DataFrame(columns=['排名', '證券代號', '證券名稱', '收盤價', '漲幅%', '成交量變化率%', '評分', '推薦理由'])
-                df.loc[0] = ['-', '-', '服務返回空值，請檢查數據和日誌', 0, 0, 0, 0, '請確認技術指標數據是否已計算']
-            elif len(df) == 0:
-                # 返回空 DataFrame，沒有符合條件的股票
-                df = pd.DataFrame(columns=['排名', '證券代號', '證券名稱', '收盤價', '漲幅%', '成交量變化率%', '評分', '推薦理由'])
-                df.loc[0] = ['-', '-', '沒有找到符合條件的強勢股', 0, 0, 0, 0, '請確認篩選條件或數據是否正確']
+            # 檢查返回的 DataFrame；None 或其他型別不能當成空結果。
+            if not isinstance(df, pd.DataFrame):
+                raise TypeError("強勢個股服務未回傳 DataFrame")
             
             # 確保欄位順序正確（匹配實際返回的欄位）
             # 根據 stock_screener.py，返回的欄位是：
@@ -249,15 +284,31 @@ class StrongStocksView(QWidget):
             self.load_btn.setVisible(False)
             if self.watchlist_service:
                 self.add_to_watchlist_btn.setVisible(True)
+            self._set_status_label(
+                self.status_label,
+                (
+                    f"已更新：{len(df)} 筆"
+                    + (f"；掃描範圍 {universe_count} 檔" if universe_count > 0 else "")
+                ),
+                level="success" if len(df) else "warning",
+            )
             
         except Exception as e:
             import traceback
             error_msg = f"刷新強勢股失敗：\n{str(e)}\n\n{traceback.format_exc()}"
             QMessageBox.critical(self, "錯誤", error_msg)
-            # 顯示空表格（不保存到緩存）
-            df = pd.DataFrame(columns=['排名', '證券代號', '證券名稱', '收盤價', '漲幅%', '評分', '推薦理由'])
-            self.stocks_model = PandasTableModel(df)
+            # 清除舊模型（不保存到緩存），避免錯誤時顯示過期排名。
+            self.stocks_model = PandasTableModel(self._empty_frame())
             self.stocks_table.setModel(self.stocks_model)
+            self.refresh_btn.setVisible(False)
+            self.load_btn.setVisible(True)
+            if self.watchlist_service:
+                self.add_to_watchlist_btn.setVisible(False)
+            self._set_status_label(
+                self.status_label,
+                f"載入失敗：{str(e).splitlines()[0] or type(e).__name__}",
+                level="error",
+            )
     
     def _on_selection_changed(self):
         """表格選擇改變"""
@@ -266,11 +317,14 @@ class StrongStocksView(QWidget):
     
     def _show_empty_state(self):
         """顯示空狀態（提示用戶載入數據）"""
-        df = pd.DataFrame(columns=['排名', '證券代號', '證券名稱', '收盤價', '漲幅%', '評分', '推薦理由'])
-        df.loc[0] = ['-', '-', '請點擊「載入數據」按鈕開始計算', 0, 0, 0, '']
-        self.stocks_model = PandasTableModel(df)
+        self.stocks_model = PandasTableModel(self._empty_frame())
         self.stocks_table.setModel(self.stocks_model)
         self.stocks_table.resizeColumnsToContents()
+        self._set_status_label(
+            self.status_label,
+            "尚未載入：請點擊「載入數據」按鈕開始計算",
+            level="info",
+        )
     
     def _add_selected_to_watchlist(self):
         """將選中的股票加入觀察清單"""

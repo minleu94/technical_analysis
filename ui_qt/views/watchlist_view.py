@@ -79,11 +79,10 @@ class WatchlistView(QWidget):
             logger.error(f"[WatchlistView] 詳細堆疊追蹤:\n{traceback.format_exc()}")
             # 顯示空表格，不阻止程式啟動
             try:
-                df = pd.DataFrame(columns=['證券代號', '證券名稱', '加入時間', '來源', '備註'])
-                df.loc[0] = ['-', '-', '-', '-', '載入失敗，請檢查數據文件']
-                self.stocks_model = PandasTableModel(df)
+                self.stocks_model = PandasTableModel(self._empty_frame())
                 self.stocks_table.setModel(self.stocks_model)
                 self.stats_label.setText("共 0 檔股票（載入失敗）")
+                self._set_status_label("載入失敗，請檢查數據文件", level="error")
                 logger.error("[WatchlistView] 已顯示錯誤提示")
             except Exception as e2:
                 logger.error(f"[WatchlistView] 顯示錯誤提示時也失敗: {e2}")
@@ -144,6 +143,8 @@ class WatchlistView(QWidget):
         # 統計信息（放在表格下方）
         self.stats_label = QLabel("共 0 檔股票")
         work_area_layout.addWidget(self.stats_label)
+        self.status_label = self.stats_label
+        self._set_status_label("尚未載入", level="info")
         
         main_splitter.addWidget(work_area_widget)
         
@@ -258,10 +259,29 @@ class WatchlistView(QWidget):
         main_splitter.setSizes([700, 300])
         
         main_layout.addWidget(main_splitter)
-    
+
+    @staticmethod
+    def _empty_frame() -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=["證券代號", "證券名稱", "加入時間", "來源", "備註"]
+        )
+
+    def _set_status_label(self, text: str, *, level: str) -> None:
+        colors = {
+            "info": "#94a3b8",
+            "success": "#86efac",
+            "warning": "#facc15",
+            "error": "#fca5a5",
+        }
+        self.status_label.setStyleSheet(
+            f"color: {colors.get(level, colors['info'])}; padding: 2px 0;"
+        )
+        self.status_label.setText(text)
+
     def _load_watchlist(self):
         """載入觀察清單"""
         logger.info("[WatchlistView._load_watchlist] 開始載入...")
+        self._set_status_label("載入中…", level="info")
         try:
             logger.info("[WatchlistView._load_watchlist] 調用 watchlist_service.get_stocks()...")
             stocks = self.watchlist_service.get_stocks()
@@ -270,8 +290,7 @@ class WatchlistView(QWidget):
             if not stocks:
                 # 顯示空表格
                 logger.info("[WatchlistView._load_watchlist] 候選池為空，顯示空表格")
-                df = pd.DataFrame(columns=['證券代號', '證券名稱', '加入時間', '來源', '備註'])
-                df.loc[0] = ['-', '-', '-', '-', '候選池為空']
+                df = self._empty_frame()
             else:
                 # 轉換為 DataFrame
                 logger.info("[WatchlistView._load_watchlist] 轉換為 DataFrame...")
@@ -326,7 +345,12 @@ class WatchlistView(QWidget):
                 # 不拋出異常，繼續執行
             
             # 更新統計
-            self.stats_label.setText(f"共 {len(stocks)} 檔股票")
+            if stocks:
+                self.stats_label.setText(f"共 {len(stocks)} 檔股票")
+                self._set_status_label(f"已更新：{len(stocks)} 筆", level="success")
+            else:
+                self.stats_label.setText("共 0 檔股票（目前沒有候選）")
+                self._set_status_label("已更新：0 筆；目前沒有候選", level="warning")
             self._update_research_lab_button_state(len(stocks))
             logger.info("[WatchlistView._load_watchlist] 載入完成")
             
@@ -345,11 +369,13 @@ class WatchlistView(QWidget):
             
             # 顯示空表格，避免界面崩潰
             try:
-                df = pd.DataFrame(columns=['證券代號', '證券名稱', '加入時間', '來源', '備註'])
-                df.loc[0] = ['-', '-', '-', '-', '載入失敗，請檢查數據文件']
-                self.stocks_model = PandasTableModel(df)
+                self.stocks_model = PandasTableModel(self._empty_frame())
                 self.stocks_table.setModel(self.stocks_model)
                 self.stats_label.setText("共 0 檔股票（載入失敗）")
+                self._set_status_label(
+                    f"載入失敗：{str(e).splitlines()[0] or type(e).__name__}",
+                    level="error",
+                )
                 self._update_research_lab_button_state(0)
                 logger.error("[WatchlistView._load_watchlist] 已顯示錯誤提示")
             except Exception as e2:

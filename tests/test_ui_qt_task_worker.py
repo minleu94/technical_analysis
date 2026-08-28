@@ -97,6 +97,36 @@ def test_pre_cancelled_worker_emits_cancelled_without_running_task(worker_class)
     assert cancelled_calls == ["cancelled"]
 
 
+def test_progress_worker_injects_thread_safe_cancel_callback_only_when_supported():
+    observed: list[bool] = []
+    finished_calls: list[object] = []
+
+    def task(progress_callback=None, cancel_callback=None):
+        assert progress_callback is not None
+        assert cancel_callback is not None
+        observed.append(cancel_callback())
+        return "done"
+
+    worker = ProgressTaskWorker(task)
+    worker.finished.connect(finished_calls.append)
+    worker.run()
+
+    assert observed == [False]
+    assert finished_calls == ["done"]
+
+    worker.cancel()
+    assert worker.is_cancel_requested() is True
+
+
+def test_task_worker_does_not_inject_cancel_callback_into_legacy_callable():
+    calls: list[str] = []
+    worker = TaskWorker(lambda: calls.append("ran"))
+
+    worker.run()
+
+    assert calls == ["ran"]
+
+
 def test_shutdown_request_is_nonblocking_and_never_terminates():
     class _RunningWorker(_InspectableTaskWorker):
         def isRunning(self):

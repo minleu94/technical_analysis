@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -8,7 +9,7 @@ from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget, QMessageBox, QDateEdit, QTextEdit
 import pandas as pd
 
-from ui_qt.views.update_view import UpdateView
+from ui_qt.views.update_view import StatusCard, UpdateView
 
 
 
@@ -193,6 +194,67 @@ def make_view():
     return _TestableUpdateView(FakeUpdateService())
 
 
+def test_update_view_date_controls_use_taiwan_market_date(monkeypatch):
+    monkeypatch.setattr(
+        "ui_qt.views.update_view.taiwan_market_today",
+        lambda: date(2026, 8, 28),
+    )
+
+    view = make_view()
+
+    expected = QDate(2026, 8, 28)
+    assert view.end_date.date() == expected
+    for key in ("daily", "market", "industry", "broker_branch"):
+        assert getattr(view, f"{key}_end_date").date() == expected
+
+    view.daily_end_date.setDate(QDate(2026, 1, 1))
+    view._set_shared_end_date_today("daily")
+    assert view.daily_end_date.date() == expected
+    assert view.end_date.date() == expected
+
+
+def test_update_view_shows_structured_sqlite_sync_result():
+    view = make_view()
+
+    rendered = view._set_sqlite_sync_status(
+        {
+            "success": True,
+            "source": "daily_price_files",
+            "table": "daily_prices",
+            "synced_records": 1234,
+            "message": "daily_price_files 已同步 SQLite",
+        }
+    )
+
+    assert "SQLite 同步：完成" in rendered
+    assert "來源 daily_price_files" in view.sqlite_sync_status_label.text()
+    assert "table daily_prices" in view.sqlite_sync_status_label.text()
+    assert "1,234 筆" in view.sqlite_sync_status_label.text()
+
+
+def test_update_view_cancel_control_requests_cooperative_write_shutdown():
+    view = make_view()
+    worker = DeferredTaskWorker(lambda: None)
+    worker.cancel_calls = []
+
+    def cancel(*, cooperative=True, wait=False):
+        worker.cancel_calls.append((cooperative, wait))
+
+    worker.cancel = cancel
+    view._start_worker(worker, operation_kind="write")
+
+    assert view.cancel_update_btn.isHidden() is False
+    view._request_current_worker_cancel()
+    assert worker.cancel_calls == [(True, False)]
+    assert view.cancel_update_btn.isEnabled() is False
+
+    worker._running = False
+    worker.cancelled.emit()
+
+    assert view.cancel_update_btn.isHidden() is True
+    assert view._worker_coordinator.has_active("write") is False
+
+
 def test_source_detail_check_renders_daily_status_inside_source_page():
     view = make_view()
 
@@ -288,6 +350,65 @@ def test_force_merge_confirmation_runs_merge_only_after_explicit_confirm(monkeyp
     assert calls == [True]
 
 
+def test_daily_merge_ui_surfaces_progress_callback(monkeypatch):
+    from ui_qt.views import update_view
+
+    class ProgressMergeService(FakeUpdateService):
+        def merge_daily_data(self, force_all=False, progress_callback=None, cancel_callback=None):
+            self.calls.append(("merge_daily_data", force_all))
+            if progress_callback is not None:
+                progress_callback("寫入每日整合檔", 42)
+            return {"success": True, "message": "merge daily ok", "total_records": 2}
+
+    class ProgressSynchronousTaskWorker(SynchronousTaskWorker):
+        def start(self):
+            self.started.emit()
+            result = self.task_function(
+                progress_callback=lambda message, percentage: self.progress.emit(message, percentage),
+                cancel_callback=lambda: False,
+            )
+            self.finished.emit(result)
+
+    monkeypatch.setattr(update_view, "ProgressTaskWorker", ProgressSynchronousTaskWorker)
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.Ok)
+
+    service = ProgressMergeService()
+    view = make_view_with_service(service)
+    view._do_merge(force_all=False)
+
+    assert ("merge_daily_data", False) in service.calls
+    assert "[每日合併 42%] 寫入每日整合檔" in view.log_text.toPlainText()
+    assert view.progress_bar.maximum() == 100
+
+
+def test_daily_merge_ui_distinguishes_no_op_from_completed_merge(monkeypatch):
+    service = FakeUpdateService()
+    view = make_view_with_service(service)
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "information",
+        lambda _parent, title, message: captured.update(title=title, message=message),
+    )
+
+    view._on_merge_finished(
+        {
+            "success": True,
+            "no_op": True,
+            "message": "沒有新資料需要合併；目前整合檔已是最新（最新日期：20260618）",
+            "total_records": 1,
+            "merged_files": 0,
+        }
+    )
+
+    assert captured["title"] == "資料已是最新"
+    assert "沒有新資料需要合併" in captured["message"]
+    assert "未建立新的整合檔備份" in captured["message"]
+    assert "無需合併" in view.log_text.toPlainText()
+    assert "未建立新的整合檔備份" in view.log_text.toPlainText()
+
+
 class StaleTechnicalUpdateService(FakeUpdateService):
     def check_data_overview(self):
         self.calls.append(("check_data_overview",))
@@ -339,6 +460,35 @@ def test_update_view_uses_workbench_navigation():
     assert view.nav_list.currentRow() == 0
 
 
+def test_update_view_reflows_for_narrow_viewport_without_changing_navigation():
+    view = make_view()
+    view.show()
+    view.resize(390, 844)
+    app().processEvents()
+
+    assert view.workbench_layout.direction().name == "TopToBottom"
+    assert view.nav_list.width() >= view.content_stack.width() - 2
+    assert view.nav_list.maximumHeight() == 190
+    assert view._actions_layout.direction().name == "TopToBottom"
+    assert view._cards_layout.getItemPosition(0)[:2] == (0, 0)
+    assert view._cards_layout.getItemPosition(1)[:2] == (0, 1)
+    assert view._cards_layout.getItemPosition(2)[:2] == (1, 0)
+    assert view._candidate_layout.getItemPosition(0)[:2] == (0, 0)
+    assert view._candidate_layout.getItemPosition(1)[:2] == (1, 0)
+    assert view.content_scroll.verticalScrollBar().maximum() > 0
+
+    view.resize(900, 844)
+    app().processEvents()
+
+    assert view.workbench_layout.direction().name == "LeftToRight"
+    assert view.nav_list.width() == 160
+    assert view.nav_list.maximumHeight() > 190
+    assert view._actions_layout.direction().name == "LeftToRight"
+    assert view._cards_layout.getItemPosition(0)[:2] == (0, 0)
+    assert view._cards_layout.getItemPosition(5)[:2] == (0, 5)
+    assert view._candidate_layout.getItemPosition(2)[:2] == (0, 2)
+
+
 def test_tdcc_governance_page_exposes_latest_snapshot_candidate_command():
     view = make_view()
 
@@ -386,7 +536,244 @@ def test_all_data_view_has_monthly_revenue_status_card():
     assert "最新可用日：" in view.monthly_revenue_status_text.date_label.text()
     assert "2026-06-17" in view.monthly_revenue_status_text.date_label.text()
     assert "2026-06" in view.monthly_revenue_status_text.extra_label.text()
+    assert "目前可用期別：2026-05" in view.monthly_revenue_status_text.extra_label.text()
+    assert "待生效：1 個期別（2026-07-15 起可用）" in view.monthly_revenue_status_text.extra_label.text()
     assert "最新" in view.monthly_revenue_status_text.indicator_label.text()
+
+
+def test_status_card_does_not_turn_green_for_latest_text_when_status_is_error():
+    app()
+    card = StatusCard("測試")
+
+    card.setPlainText("最新可用日：2026-06-17\n狀態：error: no such table")
+
+    assert "異常" in card.indicator_label.text()
+    assert "#ef4444" in card.indicator_label.text()
+    assert "#22c55e" not in card.indicator_label.text()
+
+
+def test_status_card_marks_localized_unavailable_as_abnormal():
+    app()
+    card = StatusCard("測試")
+
+    card.setPlainText("最新日期：未知\n狀態：不可用")
+
+    assert "異常" in card.indicator_label.text()
+    assert "#ef4444" in card.indicator_label.text()
+    assert "待更新" not in card.indicator_label.text()
+
+
+def test_global_status_error_clears_every_source_detail(monkeypatch):
+    view = make_view()
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+
+    sources = ("daily", "market", "industry", "broker_branch", "technical", "monthly_revenue")
+    for source in sources:
+        getattr(view, f"{source}_detail_status_label").setText("上一輪成功資料")
+
+    view._on_status_error("SQLite 不可用")
+
+    for source in sources:
+        label_text = getattr(view, f"{source}_detail_status_label").text()
+        assert "異常" in label_text
+        assert "SQLite 不可用" in label_text
+        assert "上一輪成功資料" not in label_text
+
+
+def test_status_card_surfaces_immutable_snapshot_as_needs_confirmation():
+    app()
+    card = StatusCard("測試")
+
+    card.setPlainText(
+        "最新日期：2026-08-26\n"
+        "總記錄數：10\n"
+        "狀態：ok\n"
+        "讀取模式：immutable_fallback\n"
+        "提醒：可能只反映最後已提交內容"
+    )
+
+    assert "待更新" in card.indicator_label.text()
+    assert "#eab308" in card.indicator_label.text()
+    assert "immutable_fallback" in card.extra_label.text()
+    assert "可能只反映" in card.extra_label.text()
+
+
+def test_status_card_placeholder_remains_unchecked_not_needs_update():
+    app()
+    card = StatusCard("測試")
+
+    card.setPlainText("點擊「檢查數據狀態」以查看數據狀態")
+
+    assert "未檢查" in card.indicator_label.text()
+    assert "#94a3b8" in card.indicator_label.text()
+    assert "待更新" not in card.indicator_label.text()
+
+
+def test_update_view_progress_never_moves_backwards():
+    view = make_view()
+
+    view._reset_progress()
+    view._on_update_progress("外層流程", 88)
+    view._on_update_progress("子流程回報", 5)
+
+    assert view.progress_bar.value() == 88
+    assert view._last_progress == 88
+
+
+def test_partial_status_payload_clears_stale_cards_instead_of_reusing_old_values():
+    view = make_view()
+
+    view._on_status_checked({
+        "daily_data": {
+            "latest_date": "2026-06-22",
+            "total_records": 123,
+            "status": "ok",
+        }
+    })
+
+    assert "2026-06-22" in view.daily_status_text.toPlainText()
+    assert "尚未檢查" in view.market_status_text.toPlainText()
+    assert "#94a3b8" in view.market_status_text.indicator_label.text()
+    assert view.market_detail_status_label.text() == "尚未檢查此資料源狀態"
+
+
+def test_global_status_refresh_updates_inline_source_summaries_too():
+    view = make_view()
+
+    view._on_status_checked({
+        "daily_data": {
+            "latest_date": "2026-06-22",
+            "total_records": 123,
+            "status": "ok",
+        },
+        "broker_branch": {
+            "latest_date": "2026-06-21",
+            "total_records": 456,
+            "date_count": 2,
+            "status": "ok",
+        },
+    })
+
+    assert "2026-06-22" in view.daily_detail_status_label.text()
+    assert "2026-06-21" in view.broker_branch_detail_status_label.text()
+
+
+def test_global_status_refresh_updates_all_core_source_inline_summaries():
+    view = make_view()
+
+    view._on_status_checked({
+        "daily_data": {"latest_date": "2026-06-22", "total_records": 123, "status": "ok"},
+        "market_index": {"latest_date": "2026-06-22", "total_records": 456, "status": "ok"},
+        "industry_index": {"latest_date": "2026-06-21", "total_records": 789, "status": "lagging"},
+        "broker_branch": {"latest_date": "2026-06-22", "total_records": 12, "status": "ok"},
+        "technical_indicators": {
+            "latest_date": "2026-06-22",
+            "total_records": 345,
+            "file_count": 6,
+            "status": "ok",
+        },
+        "monthly_revenue": {
+            "latest_date": "2026-06-30",
+            "latest_period": "2026-06",
+            "latest_available_period": "2026-05",
+            "latest_available_date": "2026-06-17",
+            "next_available_date": "2026-07-15",
+            "pending_period_count": 1,
+            "total_records": 246331,
+            "status": "ok",
+        },
+    })
+
+    assert "最新日期：2026-06-22" in view.market_detail_status_label.text()
+    assert "狀態：待更新" in view.industry_detail_status_label.text()
+    assert "指標檔數：6" in view.technical_detail_status_label.text()
+    assert "目前可用期別：2026-05" in view.monthly_revenue_detail_status_label.text()
+    assert "待生效：1 個期別（2026-07-15 起可用）" in view.monthly_revenue_detail_status_label.text()
+
+
+def test_candidate_source_pages_render_global_status_inline():
+    view = make_view()
+
+    assert hasattr(view, "institutional_flow_detail_status_label")
+    assert hasattr(view, "credit_transaction_detail_status_label")
+    assert hasattr(view, "tdcc_shareholding_detail_status_label")
+
+    view._on_status_checked({
+        "institutional_flow": {
+            "latest_date": "2026-06-22",
+            "total_records": 321,
+            "status": "candidate_available",
+            "disclaimer": "候選研究資料，不參與評分",
+        },
+        "credit_transaction": {
+            "latest_date": "2026-06-21",
+            "total_records": 123,
+            "status": "MISSING",
+        },
+        "tdcc_shareholding": {
+            "latest_date": "2026-06-20",
+            "total_records": 45,
+            "status": "unavailable",
+        },
+    })
+
+    assert "最新日期：2026-06-22" in view.institutional_flow_detail_status_label.text()
+    assert "狀態：候選可用" in view.institutional_flow_detail_status_label.text()
+    assert "狀態：缺漏" in view.credit_transaction_detail_status_label.text()
+    assert "狀態：不可用" in view.tdcc_shareholding_detail_status_label.text()
+
+
+def test_global_status_error_clears_candidate_source_inline_summaries(monkeypatch):
+    view = make_view()
+    view._on_status_checked({
+        "institutional_flow": {
+            "latest_date": "2026-06-22",
+            "total_records": 321,
+            "status": "candidate_available",
+        },
+        "credit_transaction": {
+            "latest_date": "2026-06-21",
+            "total_records": 123,
+            "status": "candidate_available",
+        },
+        "tdcc_shareholding": {
+            "latest_date": "2026-06-20",
+            "total_records": 45,
+            "status": "candidate_available",
+        },
+    })
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view._on_status_error("candidate status timeout")
+
+    for source in ("institutional_flow", "credit_transaction", "tdcc_shareholding"):
+        label = getattr(view, f"{source}_detail_status_label")
+        assert "狀態：異常" in label.text()
+        assert "candidate status timeout" in label.text()
+
+
+def test_source_detail_error_only_marks_the_requested_source(monkeypatch):
+    view = make_view()
+    view._on_status_checked({
+        "daily_data": {
+            "latest_date": "2026-06-22",
+            "total_records": 123,
+            "status": "ok",
+        },
+        "market_index": {
+            "latest_date": "2026-06-22",
+            "total_records": 456,
+            "status": "ok",
+        },
+    })
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view._on_source_detail_error("market", "network timeout")
+
+    assert "2026-06-22" in view.daily_status_text.toPlainText()
+    assert "最新" in view.daily_status_text.indicator_label.text()
+    assert "error: network timeout" in view.market_status_text.toPlainText()
+    assert "異常" in view.market_status_text.indicator_label.text()
 
 
 def test_selected_date_range_uses_recent_ten_business_days_for_auto_updates():
@@ -692,6 +1079,32 @@ def test_background_tpex_refresh_does_not_force_technical_all(monkeypatch):
     assert "--technical-force-all" not in captured["cmd"]
 
 
+def test_background_tpex_status_is_visible_and_write_failure_is_fail_closed(monkeypatch, tmp_path):
+    from ui_qt.views import update_view
+
+    view = make_view()
+    view.tpex_refresh_state_file = tmp_path / "state.json"
+    view._write_tpex_background_status({"status": "running", "message": "fetching"})
+
+    assert "執行中" in view.tpex_background_status_label.text()
+    assert "fetching" in view.tpex_background_status_label.text()
+
+    started = {"value": False}
+
+    def fake_popen(*args, **kwargs):
+        started["value"] = True
+        raise AssertionError("狀態檔失敗時不應啟動背景程序")
+
+    monkeypatch.setattr(update_view.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(view, "_write_tpex_background_status", lambda payload: False)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view._execute_background_tpex_refresh()
+
+    assert started["value"] is False
+    assert view.tpex_background_btn.isEnabled()
+
+
 def test_monthly_revenue_tab_runs_mops_dry_run(monkeypatch):
     from ui_qt.views import update_view
 
@@ -901,7 +1314,7 @@ def test_update_view_detail_refresh_does_not_cancel_running_merge(monkeypatch):
     from ui_qt.views import update_view
 
     DeferredTaskWorker.instances = []
-    monkeypatch.setattr(update_view, "TaskWorker", DeferredTaskWorker)
+    monkeypatch.setattr(update_view, "ProgressTaskWorker", DeferredTaskWorker)
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
 
     view = make_view()
@@ -912,6 +1325,29 @@ def test_update_view_detail_refresh_does_not_cancel_running_merge(monkeypatch):
 
     assert merge_worker.isRunning()
     assert len(view._active_workers) == 2
+
+
+def test_update_view_rejects_second_write_while_merge_is_running(monkeypatch):
+    from ui_qt.views import update_view
+
+    DeferredTaskWorker.instances = []
+    monkeypatch.setattr(update_view, "ProgressTaskWorker", DeferredTaskWorker)
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view = make_view()
+    view._execute_merge()
+    first_worker = DeferredTaskWorker.instances[-1]
+
+    view._execute_merge()
+
+    assert len(DeferredTaskWorker.instances) == 1
+    assert first_worker.isRunning()
+    assert view._worker_coordinator.has_active("write") is True
+
+    first_worker._running = False
+    first_worker.finished.emit({"success": True, "message": "merge ok"})
+    assert view._worker_coordinator.has_active("write") is False
 
 
 def test_sqlite_inspector_rapid_requests_keep_running_workers_alive(monkeypatch):

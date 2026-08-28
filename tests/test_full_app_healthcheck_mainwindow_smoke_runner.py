@@ -79,6 +79,7 @@ class FakeMainWindow:
     def __init__(self):
         self.tab_widget = FakeTabWidget(EXPECTED_MAINWINDOW_TAB_LABELS)
         self.resize_calls: list[tuple[int, int]] = []
+        self.grabbed_tab_indices: list[int] = []
         self.closed = False
         self.shown = False
         self._width = 1400
@@ -102,6 +103,7 @@ class FakeMainWindow:
         return FakeSize(self._width, self._height)
 
     def grab(self):
+        self.grabbed_tab_indices.append(self.tab_widget.current_index)
         return FakePixmap()
 
 
@@ -150,6 +152,7 @@ def test_run_mainwindow_smoke_switches_tabs_captures_screenshots_and_resizes(tmp
     assert evidence["screenshots"]
     for screenshot in evidence["screenshots"]:
         assert Path(screenshot["path"]).exists()
+    assert window.grabbed_tab_indices[0] == 0
 
 
 def test_run_mainwindow_smoke_records_constrained_resize_status(tmp_path):

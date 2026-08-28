@@ -330,6 +330,41 @@ def test_workbench_source_service_reads_real_read_only_sources(tmp_path: Path) -
     assert not any(item["write_intent"] for item in payload["action_items"])
 
 
+def test_workbench_source_service_excludes_future_snapshot_from_default_current_view(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = _config(tmp_path)
+    record_path = tmp_path / "multi-day.md"
+    _seed_ready_sources(config, record_path)
+    DecisionDeskSnapshotRepository(config, db_path=config.db_file).save_snapshot(
+        build_stored_decision_desk_snapshot(_decision_snapshot(), decision_date="2026-07-08")
+    )
+    monkeypatch.setattr(
+        "app_module.workbench_source_service.taiwan_market_today",
+        lambda: date(2026, 7, 7),
+    )
+    monkeypatch.setattr(
+        "app_module.pre_v2_readiness_service.taiwan_market_today",
+        lambda: date(2026, 7, 7),
+    )
+
+    payload = WorkbenchSourceService(config, evidence_db_path=config.db_file).inspect(
+        multi_day_record_path=record_path,
+    ).to_dict()
+    status_items = {item["item_id"]: item for item in payload["status_strip"]}
+
+    assert status_items["decision_snapshot"]["value"] == "2026-07-06"
+    assert any(
+        "decision_desk_snapshot_future_date:2026-07-08:today=2026-07-07" in warning
+        for warning in payload["warnings"]
+    )
+    assert any(
+        item["item_id"] == "readiness_source_gaps" and item["severity"] == "warning"
+        for item in payload["review_items"]
+    )
+
+
 def test_workbench_source_service_missing_db_does_not_create_file(tmp_path: Path) -> None:
     config = _config(tmp_path)
     missing_db = tmp_path / "missing" / "evidence.db"

@@ -76,8 +76,9 @@ def test_safety_guardrails_reject_unauthorized_categories():
         assert get_reject_reason(path) is not None
 
 
-def test_direct_bridge_only_allows_the_six_ui_tests():
+def test_direct_bridge_only_allows_declared_ui_tests():
     allowed_ui_tests = {
+        "tests/test_ui_qt_dashboard_view.py",
         "tests/test_ui_qt_decision_desk_view.py",
         "tests/test_ui_qt_market_regime_view.py",
         "tests/test_ui_qt_portfolio_view.py",
@@ -103,6 +104,7 @@ def test_direct_bridge_only_allows_the_six_ui_tests():
 
 def test_inventory_exposes_bridge_candidate_and_reject_sets():
     assert get_direct_bridge_files() == {
+        "tests/test_ui_qt_dashboard_view.py",
         "tests/test_ui_qt_decision_desk_view.py",
         "tests/test_ui_qt_market_regime_view.py",
         "tests/test_ui_qt_portfolio_view.py",

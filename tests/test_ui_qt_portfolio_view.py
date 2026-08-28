@@ -1,14 +1,22 @@
 import os
 import sys
 from dataclasses import dataclass, field
+from decimal import Decimal
+import json
 from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
 
 from app_module.dtos.portfolio_dtos import PortfolioDTO, PositionDTO, TradeDTO
+from app_module.paper_portfolio_snapshot_repository import (
+    PaperPortfolioPositionSnapshot,
+    PaperPortfolioSnapshot,
+    PaperPortfolioSnapshotRepository,
+)
+from app_module.paper_trade_ledger import PaperTradeLedgerRepository
 from ui_qt.views.portfolio_view import AddTradeDialog, PortfolioView
 
 
@@ -217,6 +225,174 @@ def test_portfolio_active_summary_lists_position_count_and_top_symbols(tmp_path)
 
     assert "活躍持倉：2 檔" in view.active_positions_summary_label.text()
     assert "2330 台積電" in view.active_positions_summary_label.text()
+    assert view.card_net_val.title_label.text() == "持倉市值（未含現金）"
+    assert view.card_net_val.value_label.text() == "TWD 261,000.00"
+    assert "已標記市值 2/2 檔" in view.active_positions_summary_label.text()
+
+
+def test_portfolio_stress_lab_is_visible_and_research_only(tmp_path):
+    view = make_portfolio_view(tmp_path)
+
+    view.stress_scenario_combo.setCurrentIndex(
+        view.stress_scenario_combo.findData("concentration_event")
+    )
+    view.btn_run_stress.click()
+
+    assert "最大持倉事件" in view.stress_summary_label.text()
+    assert "可計算" in view.stress_summary_label.text()
+    assert "研究用途" in view.stress_detail_label.text()
+    assert view.stress_positions_table.model().rowCount() == 2
+    assert view._stress_result.research_only is True
+    assert view._stress_result.investment_effectiveness_claim is False
+
+
+def test_portfolio_stress_history_is_read_only_when_not_configured(tmp_path):
+    view = make_portfolio_view(tmp_path)
+
+    view.refresh_all()
+
+    assert "Stress 歷史" in view.stress_history_summary_label.text()
+    assert "stress_history_not_configured" in view.stress_history_summary_label.text()
+    assert view.stress_history_table.model().rowCount() == 1
+    assert not (tmp_path / "portfolio").exists()
+
+
+def test_portfolio_stress_history_requires_confirmation_and_renders_saved_row(tmp_path, monkeypatch):
+    view = make_portfolio_view(tmp_path)
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: None)
+
+    view.btn_save_stress_history.click()
+
+    assert view.stress_history_db_path.exists()
+    assert view.stress_history_table.model().rowCount() == 1
+    assert "狀態：可用" in view.stress_history_summary_label.text()
+    assert "writes_allowed=false" in view.stress_history_summary_label.text()
+
+
+def test_paper_portfolio_readiness_tab_discloses_snapshot_and_missing_benchmark(tmp_path):
+    state_db = tmp_path / "paper_portfolio" / "paper_portfolio.sqlite"
+    status_path = tmp_path / "scheduled" / "paper_portfolio_daily" / "latest_status.json"
+    snapshot = PaperPortfolioSnapshot(
+        snapshot_id="paper-main-20260821",
+        portfolio_id="paper-main",
+        decision_date="2026-08-21",
+        source_result_id="rec-1",
+        cash=Decimal("100.00"),
+        total_value=Decimal("1000.00"),
+        positions=(
+            PaperPortfolioPositionSnapshot(
+                stock_code="2330",
+                quantity=1,
+                mark_price=Decimal("900.00"),
+                market_value=Decimal("900.00"),
+                weight_bp=9000,
+            ),
+        ),
+    )
+    PaperPortfolioSnapshotRepository(state_db).append(snapshot)
+    status_path.parent.mkdir(parents=True)
+    status_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "paper-portfolio-daily-status.v1",
+                "status": "passed",
+                "snapshot_id": snapshot.snapshot_id,
+                "decision_date": snapshot.decision_date,
+                "cash": "100.00",
+                "total_value": "1000.00",
+                "state_db": str(state_db.resolve()),
+                "writes_market_db": False,
+                "auto_rebalance_allowed": False,
+                "changes_advice": False,
+                "broker_execution": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    view = make_portfolio_view(tmp_path)
+    view.refresh_all()
+
+    assert "最新可採用 snapshot：2026-08-21" in view.paper_readiness_summary_label.text()
+    assert "raw 累積 1 筆" in view.paper_readiness_summary_label.text()
+    assert "TWD 1,000.00" in view.paper_readiness_summary_label.text()
+    assert "Equal Weight：尚無" in view.paper_readiness_summary_label.text()
+    assert "equal_weight_benchmark_path_not_configured" in view.paper_readiness_detail_label.text()
+    assert view.paper_snapshot_table.model().rowCount() == 1
+
+
+def test_paper_portfolio_tab_discloses_weekly_evidence_gap_without_writing(tmp_path):
+    view = make_portfolio_view(tmp_path)
+
+    view.refresh_all()
+
+    assert "最近週報" in view.paper_weekly_report_label.text()
+    assert "paper_snapshot_db_missing" in view.paper_weekly_report_label.text()
+    assert not (tmp_path / "paper_portfolio").exists()
+
+
+def test_paper_fill_csv_import_requires_confirmation_and_only_writes_paper_ledger(
+    tmp_path,
+    monkeypatch,
+):
+    view = make_portfolio_view(tmp_path)
+    csv_path = tmp_path / "paper_fills.csv"
+    csv_path.write_text(
+        "fill_id,order_id,portfolio_id,event_date,stock_code,side,requested_quantity,"
+        "filled_quantity,reference_price,fill_price,commission,tax,slippage_cost,"
+        "turnover_bp,execution_gap_bp,status,source_event_id,override_reason\n"
+        "fill-1,order-1,paper-main,2026-08-27,2330,buy,1000,1000,100.00,100.08,"
+        "15.00,0.00,8.00,120,8,filled,broker-1,\n",
+        encoding="utf-8-sig",
+    )
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(csv_path), "CSV"))
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: None)
+
+    view.btn_import_paper_fills.click()
+
+    ledger_path = tmp_path / "paper_portfolio" / "paper_trade_ledger.sqlite"
+    assert [fill.fill_id for fill in PaperTradeLedgerRepository(ledger_path).list()] == ["fill-1"]
+    assert [trade.trade_id for trade in view.portfolio_service.trades] == ["t1", "t2"]
+    assert "成本帳：ready" in view.paper_readiness_summary_label.text()
+
+
+def test_paper_fill_template_export_writes_headers_only_and_not_ledger(tmp_path, monkeypatch):
+    view = make_portfolio_view(tmp_path)
+    template = tmp_path / "paper_fills_template.csv"
+    messages: list[str] = []
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args: (str(template), "CSV"))
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: messages.append(str(_args[2])))
+
+    view.btn_export_paper_template.click()
+
+    assert template.read_text(encoding="utf-8-sig").startswith(
+        "fill_id,order_id,portfolio_id,event_date"
+    )
+    assert not (tmp_path / "paper_portfolio" / "paper_trade_ledger.sqlite").exists()
+    assert any("空白欄位範本" in message for message in messages)
+
+
+def test_portfolio_trade_csv_import_requires_confirmation_and_passes_source_trace(tmp_path, monkeypatch):
+    view = make_portfolio_view(tmp_path)
+    csv_path = tmp_path / "broker.csv"
+    csv_path.write_text(
+        "stock_code,side,quantity,price,trade_date\n"
+        "2330,buy,1000,100,2026-08-20\n",
+        encoding="utf-8-sig",
+    )
+    imported = []
+    view.portfolio_service.record_trades = lambda trades: imported.extend(trades) or trades
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(csv_path), "CSV"))
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: None)
+
+    view.btn_import_trades.click()
+
+    assert len(imported) == 1
+    assert imported[0].source_type == "broker_csv"
+    assert imported[0].source_snapshot_hash.startswith("sha256:")
 
 
 def test_trade_history_filter_label_and_clear_button(tmp_path):

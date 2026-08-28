@@ -5,6 +5,8 @@
 
 from PySide6.QtCore import QThread, Signal
 from typing import Callable, Any, Dict, Optional
+import inspect
+import threading
 import traceback
 from weakref import WeakSet
 from app_module.exceptions import BacktestCancelledError
@@ -16,6 +18,36 @@ _MANAGED_TASK_WORKERS: WeakSet[QThread] = WeakSet()
 # emitted from ``run()`` before the native thread has necessarily returned;
 # views must not be able to drop the last Python reference in that window.
 _LIVE_TASK_WORKERS: set[QThread] = set()
+
+
+def _supports_cancel_callback(task_function: Callable[..., Any]) -> str | None:
+    """回傳任務支援的取消 callback 參數名；舊任務不會被強塞新參數。"""
+    try:
+        parameters = inspect.signature(task_function).parameters.values()
+    except (TypeError, ValueError):
+        return None
+    names = {parameter.name for parameter in parameters}
+    if "cancel_callback" in names:
+        return "cancel_callback"
+    if "cancellation_callback" in names:
+        return "cancellation_callback"
+    if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        return "cancel_callback"
+    return None
+
+
+def _invoke_task_with_optional_cancel(
+    task_function: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    callback: Callable[[], bool],
+) -> Any:
+    """只對明確支援的任務注入合作式取消 callback。"""
+    call_kwargs = dict(kwargs)
+    callback_name = _supports_cancel_callback(task_function)
+    if callback_name is not None and callback_name not in call_kwargs:
+        call_kwargs[callback_name] = callback
+    return task_function(*args, **call_kwargs)
 
 
 class _ManagedTaskThread(QThread):
@@ -123,6 +155,11 @@ class TaskWorker(_ManagedTaskThread):
         self.args = args
         self.kwargs = kwargs
         self._is_cancelled = False
+        self._cancel_event = threading.Event()
+
+    def is_cancel_requested(self) -> bool:
+        """以 thread-safe event 查詢合作式取消請求。"""
+        return self._cancel_event.is_set() or self._is_cancelled
 
     def run(self):
         """執行任務（在背景線程中運行）"""
@@ -130,15 +167,20 @@ class TaskWorker(_ManagedTaskThread):
             self.started.emit()
 
             # ✅ 檢查是否已取消
-            if self._is_cancelled:
+            if self.is_cancel_requested():
                 self.cancelled.emit()
                 return
 
             # 執行任務函數
-            result = self.task_function(*self.args, **self.kwargs)
+            result = _invoke_task_with_optional_cancel(
+                self.task_function,
+                self.args,
+                self.kwargs,
+                self.is_cancel_requested,
+            )
 
             # ✅ 再次檢查是否已取消（任務執行期間可能被取消）
-            if self._is_cancelled:
+            if self.is_cancel_requested():
                 self.cancelled.emit()
             else:
                 self.finished.emit(result)
@@ -147,7 +189,7 @@ class TaskWorker(_ManagedTaskThread):
             self.cancelled.emit()
         except Exception as e:
             # ✅ 確保錯誤信號被發送，除非線程被取消
-            if not self._is_cancelled:
+            if not self.is_cancel_requested():
                 error_msg = f"{str(e)}\n{traceback.format_exc()}"
                 self.error.emit(error_msg)
             else:
@@ -162,6 +204,7 @@ class TaskWorker(_ManagedTaskThread):
             wait: 是否在呼叫取消後同步等待執行緒結束。預設為 false，避免
                 關閉 UI 時在主執行緒無期限阻塞。
         """
+        self._cancel_event.set()
         self._is_cancelled = True
         if wait:
             self.wait()
@@ -205,10 +248,15 @@ class ProgressTaskWorker(_ManagedTaskThread):
         self.args = args
         self.kwargs = kwargs
         self._is_cancelled = False
+        self._cancel_event = threading.Event()
+
+    def is_cancel_requested(self) -> bool:
+        """以 thread-safe event 查詢合作式取消請求。"""
+        return self._cancel_event.is_set() or self._is_cancelled
 
     def _progress_callback(self, message: str, percentage: int):
         """進度回調函數"""
-        if not self._is_cancelled:
+        if not self.is_cancel_requested():
             self.progress.emit(message, percentage)
 
     def run(self):
@@ -217,7 +265,7 @@ class ProgressTaskWorker(_ManagedTaskThread):
             self.started.emit()
 
             # ✅ 檢查是否已取消
-            if self._is_cancelled:
+            if self.is_cancel_requested():
                 self.cancelled.emit()
                 return
 
@@ -225,9 +273,14 @@ class ProgressTaskWorker(_ManagedTaskThread):
             kwargs_with_progress = {**self.kwargs, 'progress_callback': self._progress_callback}
 
             # 執行任務函數
-            result = self.task_function(*self.args, **kwargs_with_progress)
+            result = _invoke_task_with_optional_cancel(
+                self.task_function,
+                self.args,
+                kwargs_with_progress,
+                self.is_cancel_requested,
+            )
 
-            if self._is_cancelled:
+            if self.is_cancel_requested():
                 self.cancelled.emit()
             else:
                 self.finished.emit(result)
@@ -235,7 +288,7 @@ class ProgressTaskWorker(_ManagedTaskThread):
         except BacktestCancelledError:
             self.cancelled.emit()
         except Exception as e:
-            if not self._is_cancelled:
+            if not self.is_cancel_requested():
                 error_msg = f"{str(e)}\n{traceback.format_exc()}"
                 self.error.emit(error_msg)
             else:
@@ -250,6 +303,7 @@ class ProgressTaskWorker(_ManagedTaskThread):
             wait: 是否在呼叫取消後同步等待執行緒結束。預設為 false，避免
                 關閉 UI 時在主執行緒無期限阻塞。
         """
+        self._cancel_event.set()
         self._is_cancelled = True
         if wait:
             self.wait()

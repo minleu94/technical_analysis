@@ -108,5 +108,6 @@ def test_coverage_burndown_markdown_renderer():
     # 確保特有的 feature 被包含在 Markdown 中
     assert "update_view" in md
     assert "decision_desk" in md
-    assert "TWSE/TPEX real API fetch progress bar indication" in md
+    assert "Large merge/export cancellation" in md
+    assert "Confirm dialog on SQLite daily prices sync" not in md
     assert "decision desk dashboard service validation" in md

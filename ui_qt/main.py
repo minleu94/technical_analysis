@@ -131,6 +131,9 @@ from app_module.decision_service_composition import build_decision_service_compo
 
 # Runtime Observatory Imports
 from app_module.runtime_services.runtime_controller import RuntimeController
+from app_module.runtime_services.environment_readiness_service import (
+    EnvironmentReadinessService,
+)
 from ui_qt.bridges.runtime_event_bridge import QtRuntimeBridge
 from ui_qt.views.runtime_view import RuntimeView
 from PySide6.QtCore import QTimer
@@ -148,6 +151,13 @@ def apply_app_theme(app: QApplication) -> None:
 
 class MainWindow(QMainWindow):
     """主窗口"""
+
+    # Keep a usable compact viewport while allowing the responsive navigation
+    # and workspace pages to shrink below their desktop size hints.  The
+    # previous implicit QMainWindow minimum could be inherited from whichever
+    # page was active (Runtime was about 480--800 px wide), so a narrow-window
+    # smoke probe was constrained before the navigation-collapse logic ran.
+    RESPONSIVE_MIN_WIDTH = 320
 
     _DecisionDeskMarketRegimeProvider = DecisionDeskMarketRegimeProvider
 
@@ -236,6 +246,7 @@ class MainWindow(QMainWindow):
 
             # 設置 UI
             self._setup_ui()
+            self.setMinimumWidth(self.RESPONSIVE_MIN_WIDTH)
         except Exception as e:
             logger.error(f"初始化主窗口失敗: {e}")
             import traceback
@@ -260,6 +271,16 @@ class MainWindow(QMainWindow):
     def _research_console_projection_path(self) -> Path | None:
         """只接受顯式 sanitized projection；不掃描 development 或正式資料目錄。"""
         configured_path = os.environ.get("RESEARCH_CONSOLE_PROJECTION")
+        return Path(configured_path).expanduser().resolve() if configured_path else None
+
+    def _p0_source_audit_path(self) -> Path | None:
+        """只接受顯式 P0 audit artifact；不掃描正式資料或 QA 目錄。"""
+        configured_path = os.environ.get("P0_SOURCE_CONTROL_CENTER_AUDIT")
+        return Path(configured_path).expanduser().resolve() if configured_path else None
+
+    def _p0_source_decision_path(self) -> Path | None:
+        """只接受顯式 P0 owner decision artifact；不掃描正式資料或 QA 目錄。"""
+        configured_path = os.environ.get("P0_SOURCE_CONTROL_CENTER_DECISIONS")
         return Path(configured_path).expanduser().resolve() if configured_path else None
 
     def _controlled_rehearsal_dashboard(self) -> EvidenceRehearsalDashboard | None:
@@ -473,7 +494,9 @@ class MainWindow(QMainWindow):
             try:
                 self.workbench_source_service = WorkbenchSourceService(self.config)
                 self.research_console_source_service = ResearchConsoleSourceService(
-                    projection_path=self._research_console_projection_path()
+                    projection_path=self._research_console_projection_path(),
+                    p0_audit_path=self._p0_source_audit_path(),
+                    p0_decision_path=self._p0_source_decision_path(),
                 )
                 workbench_view = UnifiedDecisionWorkbenchView(
                     source_service=self.workbench_source_service,
@@ -596,9 +619,14 @@ class MainWindow(QMainWindow):
                     dependencies={
                         "RuntimeController": RuntimeController,
                         "QtRuntimeBridge": QtRuntimeBridge,
-                        "RuntimeView": RuntimeView,
+                    "RuntimeView": RuntimeView,
+                        "EnvironmentReadinessService": EnvironmentReadinessService,
                         "QTimer": QTimer,
                     },
+                    environment_roots=(
+                        Path(self.config.data_root),
+                        Path(self.config.output_root),
+                    ),
                 )
                 self.runtime_controller = runtime_composition.controller
                 self.runtime_bridge = runtime_composition.bridge

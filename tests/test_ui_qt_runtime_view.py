@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from app_module.dtos.runtime_dtos import (
     GovernanceSeverity,
@@ -14,6 +14,8 @@ from app_module.dtos.runtime_dtos import (
     RuntimeStateSnapshotDTO,
     ScheduledOperationStatusDTO,
     ScheduledOperationsSnapshotDTO,
+    EnvironmentPathReadinessDTO,
+    EnvironmentReadinessSnapshotDTO,
 )
 from ui_qt.views.runtime_view import MAX_RENDERED_RUNTIME_EVENTS, RuntimeView
 
@@ -81,6 +83,37 @@ def test_runtime_scope_note_is_compact_and_content_starts_near_top():
     assert view.scope_label.maximumHeight() <= 48
     assert hasattr(view, "main_splitter")
     assert view.main_splitter.minimumHeight() >= 360
+
+
+def test_runtime_view_yields_horizontal_size_hints_for_narrow_workspaces():
+    app()
+    view = RuntimeView()
+
+    assert view.minimumWidth() == 0
+    assert view.sizePolicy().horizontalPolicy() == QSizePolicy.Ignored
+    assert view.environment_group.sizePolicy().horizontalPolicy() == QSizePolicy.Ignored
+    assert view.operations_group.sizePolicy().horizontalPolicy() == QSizePolicy.Ignored
+    assert view.main_splitter.minimumWidth() == 0
+    assert view.main_splitter.sizePolicy().horizontalPolicy() == QSizePolicy.Ignored
+    assert view.main_splitter.widget(0).sizePolicy().horizontalPolicy() == QSizePolicy.Ignored
+    assert view.main_splitter.widget(1).sizePolicy().horizontalPolicy() == QSizePolicy.Ignored
+
+
+def test_runtime_view_switches_governance_panels_to_vertical_narrow_layout():
+    app()
+    view = RuntimeView()
+    view.show()
+    view.resize(390, 844)
+    app().processEvents()
+
+    assert view.main_splitter.orientation().name == "Vertical"
+    assert view.content_scroll.verticalScrollBarPolicy().name == "ScrollBarAsNeeded"
+    assert view.content_scroll.horizontalScrollBarPolicy().name == "ScrollBarAlwaysOff"
+
+    view.resize(900, 844)
+    app().processEvents()
+
+    assert view.main_splitter.orientation().name == "Horizontal"
 
 
 def test_runtime_state_snapshot_renders_chinese_idle_text():
@@ -162,6 +195,54 @@ def test_runtime_view_renders_operation_status_without_claiming_scheduler_state(
     assert "每日資料更新｜正常｜passed" in view.operations_list.item(0).text()
     assert "ML Shadow Co-pilot｜安全邊界中｜passed_rule_only" in view.operations_list.item(1).text()
     assert "timestamp_source: checked_at" in view.operations_list.item(0).toolTip()
+
+
+def test_runtime_view_renders_environment_write_boundary_without_claiming_probe_success():
+    app()
+    view = RuntimeView()
+    dto = EnvironmentReadinessSnapshotDTO(
+        overall_state="attention",
+        observed_at=datetime(2026, 8, 27, 1, 0, tzinfo=timezone.utc),
+        data_root="C:/formal/data",
+        output_root="C:/formal/output",
+        log_root="C:/formal/data/logs",
+        research_registry="C:/formal/output/research_runs/research_runs.db",
+        paths=(
+            EnvironmentPathReadinessDTO(
+                key="data_root",
+                label="DATA_ROOT",
+                path="C:/formal/data",
+                kind="directory",
+                exists=True,
+                parent_exists=True,
+                readable=True,
+                writable=False,
+                requires_write=False,
+                status="ready",
+            ),
+            EnvironmentPathReadinessDTO(
+                key="output_root",
+                label="OUTPUT_ROOT",
+                path="C:/formal/output",
+                kind="directory",
+                exists=True,
+                parent_exists=True,
+                readable=True,
+                writable=False,
+                requires_write=True,
+                status="attention",
+                diagnostic="output_root_not_writable",
+            ),
+        ),
+        diagnostics=("output_root_not_writable",),
+    )
+
+    view.on_environment_readiness_updated(dto)
+
+    assert "需要處理" in view.environment_summary_label.text()
+    assert "os.access hint" in view.environment_detail_label.text()
+    assert "OUTPUT_ROOT｜需要處理｜讀 是｜寫 否" in view.environment_list.item(1).text()
+    assert "output_root_not_writable" in view.environment_list.item(1).toolTip()
 
 
 def test_runtime_view_does_not_render_historical_governance_event_as_current_halt():

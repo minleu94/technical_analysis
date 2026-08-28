@@ -90,6 +90,22 @@ class BacktestConfigPanel(QWidget):
         config_layout.addWidget(mode_group)
         self.research_lab_mode_combo.currentIndexChanged.connect(self._on_research_lab_mode_changed)
 
+        registry_error = getattr(self.parent_view, "research_run_service_error", None)
+        if registry_error:
+            self.research_registry_status_label = QLabel(
+                "研究 Registry 儲存目前不可用；回測與唯讀證據仍可使用，"
+                f"但保存／歷史比較暫停。原因：{registry_error}"
+            )
+            self.research_registry_status_label.setWordWrap(True)
+            self.research_registry_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            self.research_registry_status_label.setStyleSheet(
+                "color: #92400e; background: #fffbeb; border: 1px solid #fbbf24; "
+                "border-radius: 6px; padding: 6px;"
+            )
+            config_layout.addWidget(self.research_registry_status_label)
+        else:
+            self.research_registry_status_label = None
+
         # ========== 策略預設區塊 ==========
         if self.parent_view.preset_service:
             self.strategy_preset_group = QGroupBox("策略來源 / 預設")

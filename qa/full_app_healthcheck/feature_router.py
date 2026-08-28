@@ -30,7 +30,7 @@ FEATURE_ROUTES: dict[str, FeatureRoute] = {
         full_supported=True,
         data_audit_policy="conditional",
         data_audit_triggers=("Compare SQLite schema with daily price CSV integration",),
-        known_gaps=("TWSE/TPEX real API fetch progress bar indication", "Long task thread-safe cancellation", "Confirm dialog on SQLite daily prices sync"),
+        known_gaps=("Large merge/export cancellation observes the current safe operation boundary",),
         safety_notes="Do not invoke actual backfill/migration write actions in quick mode.",
     ),
     "decision_desk": FeatureRoute(

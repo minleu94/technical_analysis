@@ -6,6 +6,7 @@
 import logging
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import pandas as pd
 from uuid import uuid4
@@ -15,7 +16,7 @@ from PySide6.QtWidgets import (
     QTableView, QMessageBox, QDialog, QDialogButtonBox, QLineEdit,
     QTextEdit, QListWidget, QListWidgetItem, QHeaderView, QMenu,
     QAbstractItemView, QGroupBox, QSplitter, QComboBox, QDateEdit,
-    QDoubleSpinBox, QFormLayout, QTabWidget, QFrame
+    QDoubleSpinBox, QSpinBox, QFormLayout, QTabWidget, QFrame, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal, QSize, QDate
 from PySide6.QtGui import QFont, QColor, QPalette, QBrush
@@ -36,6 +37,23 @@ from ui_qt.widgets.table_style import apply_financial_table_style
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.portfolio_chip_service import PortfolioChipService
 from app_module.portfolio_feedback_service import PortfolioFeedbackService
+from app_module.portfolio_stress_lab_service import (
+    PortfolioStressLabService,
+)
+from app_module.portfolio_stress_history import (
+    DEFAULT_STRESS_HISTORY_FILENAME,
+    PortfolioStressHistoryReadService,
+    PortfolioStressHistoryRecord,
+    PortfolioStressHistoryRepository,
+)
+from app_module.paper_portfolio_readiness_service import (
+    PaperPortfolioReadinessService,
+)
+from app_module.paper_portfolio_weekly_evidence_service import (
+    PaperPortfolioWeeklyEvidenceService,
+)
+from app_module.paper_trade_import_service import PaperTradeImportService
+from app_module.trade_import_service import TradeImportService
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +342,25 @@ class PortfolioView(QWidget):
         self.condition_monitor = condition_monitor or PortfolioConditionMonitor()
         self.strategy_version_service = StrategyVersionService(self.portfolio_service.config)
         self.portfolio_feedback_service = PortfolioFeedbackService()
+        self.stress_lab_service = PortfolioStressLabService()
+        self.stress_history_db_path = (
+            self.portfolio_service.config.output_root
+            / "portfolio"
+            / DEFAULT_STRESS_HISTORY_FILENAME
+        )
+        self.stress_history_read_service = PortfolioStressHistoryReadService(
+            self.stress_history_db_path,
+        )
+        self.paper_readiness_service = PaperPortfolioReadinessService(
+            output_root=self.portfolio_service.config.output_root,
+        )
+        self.paper_weekly_evidence_service = PaperPortfolioWeeklyEvidenceService(
+            output_root=self.portfolio_service.config.output_root,
+            benchmark_db_path=self.paper_readiness_service.benchmark_db_path,
+            cost_ledger_db_path=self.paper_readiness_service.cost_ledger_db_path,
+        )
+        self.paper_trade_import_service = PaperTradeImportService()
+        self.trade_import_service = TradeImportService()
         self.chip_service = PortfolioChipService(
             self.portfolio_service.config,
             broker_flow_service,
@@ -363,7 +400,7 @@ class PortfolioView(QWidget):
         dashboard_layout.setSpacing(10)
 
         self.card_net_val = GradientCard(
-            "資產估計淨值 (NAV)", "TWD 0",
+            "持倉市值（未含現金）", "N/A",
             "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a365d, stop:1 #2a4365)"
         )
         self.card_invested = GradientCard(
@@ -432,6 +469,12 @@ class PortfolioView(QWidget):
         self.btn_record_trade.setProperty("variant", "primary")
         self.btn_record_trade.clicked.connect(self._show_record_trade_dialog)
         btn_layout.addWidget(self.btn_record_trade)
+
+        self.btn_import_trades = QPushButton("匯入交易 CSV")
+        self.btn_import_trades.setProperty("variant", "secondary")
+        self.btn_import_trades.setToolTip("先唯讀預覽與驗證；二次確認後才會寫入交易紀錄。")
+        self.btn_import_trades.clicked.connect(self._show_import_trades_dialog)
+        btn_layout.addWidget(self.btn_import_trades)
 
         self.btn_add_journal = QPushButton("新增日記")
         self.btn_add_journal.clicked.connect(self._show_add_journal_dialog)
@@ -515,7 +558,137 @@ class PortfolioView(QWidget):
 
         right_widget.addTab(journal_tab, "覆盤日誌")
 
-        # Right Tab 3: 策略與價格監控 (Strategy & Price Monitor)
+        # Right Tab 3: Paper Portfolio / Equal Weight（唯讀狀態）
+        paper_tab = QWidget()
+        paper_layout = QVBoxLayout(paper_tab)
+        paper_layout.setContentsMargins(10, 10, 10, 10)
+        paper_layout.setSpacing(10)
+
+        paper_intro = QLabel(
+            "這裡顯示排程 Paper Portfolio 的已保存 snapshot 與 Equal Weight 狀態。\n"
+            "只讀既有 status／ledger，不建立資料庫、不補值，也不代表實盤績效。"
+        )
+        paper_intro.setWordWrap(True)
+        paper_intro.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+        paper_layout.addWidget(paper_intro)
+
+        paper_controls = QHBoxLayout()
+        self.btn_refresh_paper = QPushButton("重新讀取 Paper 狀態")
+        self.btn_refresh_paper.setProperty("variant", "secondary")
+        self.btn_refresh_paper.setToolTip("只讀 status JSON 與既有 append-only ledger，不會寫入資料。")
+        self.btn_refresh_paper.clicked.connect(self._load_paper_readiness)
+        paper_controls.addWidget(self.btn_refresh_paper)
+        self.btn_import_paper_fills = QPushButton("匯入 Paper 成交 CSV")
+        self.btn_import_paper_fills.setProperty("variant", "secondary")
+        self.btn_import_paper_fills.setToolTip(
+            "要求完整 paper fill、成本、turnover 與 execution gap；確認後只寫入 Paper Trade Ledger。"
+        )
+        self.btn_import_paper_fills.clicked.connect(self._show_import_paper_fills_dialog)
+        paper_controls.addWidget(self.btn_import_paper_fills)
+        self.btn_export_paper_template = QPushButton("匯出成交範本")
+        self.btn_export_paper_template.setProperty("variant", "secondary")
+        self.btn_export_paper_template.setToolTip(
+            "只建立空白 Paper fills CSV 欄位範本，不建立 ledger、不填入示例成交。"
+        )
+        self.btn_export_paper_template.clicked.connect(self._export_paper_fills_template)
+        paper_controls.addWidget(self.btn_export_paper_template)
+        self.paper_weekly_expected_days = QSpinBox()
+        self.paper_weekly_expected_days.setRange(1, 31)
+        self.paper_weekly_expected_days.setValue(5)
+        self.paper_weekly_expected_days.setSuffix(" 個交易日")
+        self.paper_weekly_expected_days.setToolTip("只用來標示 expected trading days；不足時週報會顯示 degraded。")
+        paper_controls.addWidget(self.paper_weekly_expected_days)
+        self.btn_refresh_paper_weekly = QPushButton("計算最近週報")
+        self.btn_refresh_paper_weekly.setProperty("variant", "secondary")
+        self.btn_refresh_paper_weekly.setToolTip("只讀最近 snapshot 邊界、benchmark 與成本帳，不會寫入資料。")
+        self.btn_refresh_paper_weekly.clicked.connect(self._load_paper_weekly_evidence)
+        paper_controls.addWidget(self.btn_refresh_paper_weekly)
+        paper_controls.addStretch()
+        paper_layout.addLayout(paper_controls)
+
+        self.paper_readiness_summary_label = QLabel("尚未讀取 Paper Portfolio 狀態。")
+        self.paper_readiness_summary_label.setWordWrap(True)
+        self.paper_readiness_summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        paper_layout.addWidget(self.paper_readiness_summary_label)
+        self.paper_readiness_detail_label = QLabel("")
+        self.paper_readiness_detail_label.setWordWrap(True)
+        self.paper_readiness_detail_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        paper_layout.addWidget(self.paper_readiness_detail_label)
+
+        self.paper_weekly_report_label = QLabel("尚未計算 Paper Portfolio 週報。")
+        self.paper_weekly_report_label.setWordWrap(True)
+        self.paper_weekly_report_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        paper_layout.addWidget(self.paper_weekly_report_label)
+
+        self.paper_snapshot_table = QTableView()
+        apply_financial_table_style(self.paper_snapshot_table)
+        self.paper_snapshot_table.setSelectionBehavior(QTableView.SelectRows)
+        self.paper_snapshot_table.horizontalHeader().setStretchLastSection(True)
+        paper_layout.addWidget(self.paper_snapshot_table, 1)
+        right_widget.addTab(paper_tab, "Paper Portfolio")
+
+        # Right Tab 4: 情境與壓力測試（唯讀研究投影）
+        stress_tab = QWidget()
+        stress_layout = QVBoxLayout(stress_tab)
+        stress_layout.setContentsMargins(10, 10, 10, 10)
+        stress_layout.setSpacing(10)
+
+        stress_intro = QLabel(
+            "只對目前持倉套用明確的靜態情境；缺最新價格時不補值、不外推。\n"
+            "結果是研究用敏感度分析，不是預測、績效證據或交易指令。"
+        )
+        stress_intro.setWordWrap(True)
+        stress_intro.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
+        stress_layout.addWidget(stress_intro)
+
+        stress_controls = QHBoxLayout()
+        self.stress_scenario_combo = QComboBox()
+        for scenario in self.stress_lab_service.list_scenarios():
+            self.stress_scenario_combo.addItem(scenario.label, scenario.scenario_id)
+        self.stress_scenario_combo.setToolTip("情境為靜態壓力假設，不代表市場預測。")
+        stress_controls.addWidget(self.stress_scenario_combo, 1)
+        self.btn_run_stress = QPushButton("執行情境")
+        self.btn_run_stress.setProperty("variant", "secondary")
+        self.btn_run_stress.clicked.connect(self._load_stress_lab)
+        stress_controls.addWidget(self.btn_run_stress)
+        self.btn_save_stress_history = QPushButton("保存研究快照")
+        self.btn_save_stress_history.setProperty("variant", "secondary")
+        self.btn_save_stress_history.setToolTip(
+            "只在確認後保存目前 Stress Lab 結果；這是研究歷史，不是正式績效或交易證據。"
+        )
+        self.btn_save_stress_history.clicked.connect(self._save_stress_history)
+        stress_controls.addWidget(self.btn_save_stress_history)
+        stress_layout.addLayout(stress_controls)
+
+        self.stress_summary_label = QLabel("尚未執行情境。")
+        self.stress_summary_label.setWordWrap(True)
+        self.stress_summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        stress_layout.addWidget(self.stress_summary_label)
+        self.stress_detail_label = QLabel("")
+        self.stress_detail_label.setWordWrap(True)
+        self.stress_detail_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        stress_layout.addWidget(self.stress_detail_label)
+
+        self.stress_positions_table = QTableView()
+        apply_financial_table_style(self.stress_positions_table)
+        self.stress_positions_table.setSelectionBehavior(QTableView.SelectRows)
+        self.stress_positions_table.horizontalHeader().setStretchLastSection(True)
+        stress_layout.addWidget(self.stress_positions_table, 1)
+
+        self.stress_history_summary_label = QLabel("Stress 歷史尚未讀取。")
+        self.stress_history_summary_label.setWordWrap(True)
+        self.stress_history_summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        stress_layout.addWidget(self.stress_history_summary_label)
+
+        self.stress_history_table = QTableView()
+        apply_financial_table_style(self.stress_history_table)
+        self.stress_history_table.setSelectionBehavior(QTableView.SelectRows)
+        self.stress_history_table.horizontalHeader().setStretchLastSection(True)
+        self.stress_history_table.setMaximumHeight(190)
+        stress_layout.addWidget(self.stress_history_table)
+        right_widget.addTab(stress_tab, "情境壓力")
+
+        # Right Tab 5: 策略與價格監控 (Strategy & Price Monitor)
         monitor_tab = QWidget()
         monitor_layout = QVBoxLayout(monitor_tab)
         monitor_layout.setContentsMargins(10, 10, 10, 10)
@@ -562,7 +735,7 @@ class PortfolioView(QWidget):
 
         right_widget.addTab(monitor_tab, "策略與價格監控")
 
-        # Right Tab 4: 生命週期回顧 (Lifecycle Review)
+        # Right Tab 6: 生命週期回顧 (Lifecycle Review)
         lifecycle_tab = QWidget()
         lifecycle_layout = QVBoxLayout(lifecycle_tab)
         lifecycle_layout.setContentsMargins(10, 10, 10, 10)
@@ -602,7 +775,7 @@ class PortfolioView(QWidget):
         lifecycle_layout.addStretch()
         right_widget.addTab(lifecycle_tab, "生命週期回顧")
 
-        # Right Tab 4: 籌碼監控 (Chip Monitor)
+        # Right Tab 7: 籌碼監控 (Chip Monitor)
         chip_tab = QWidget()
         chip_layout = QVBoxLayout(chip_tab)
         chip_layout.setContentsMargins(10, 10, 10, 10)
@@ -662,7 +835,486 @@ class PortfolioView(QWidget):
         self._load_positions_table()
         self._load_trades_history()
         self._load_journal_entries()
+        self._load_paper_readiness()
+        self._load_paper_weekly_evidence()
+        self._load_stress_lab()
+        self._load_stress_history()
         self._update_monitoring_tab()
+
+    def _load_paper_readiness(self):
+        """只讀顯示 Paper Portfolio／Equal Weight 的實際累積狀態。"""
+        try:
+            result = self.paper_readiness_service.inspect()
+            self._paper_readiness = result
+            self._render_paper_readiness(result)
+        except Exception as exc:
+            logger.error("Failed to load paper portfolio readiness: %s", exc)
+            self._paper_readiness = None
+            self.paper_readiness_summary_label.setText("Paper Portfolio 狀態讀取失敗；未修改任何資料。")
+            self.paper_readiness_detail_label.setText(f"診斷：{exc}")
+            self.paper_snapshot_table.setModel(
+                PandasTableModel(pd.DataFrame(columns=["日期", "證券代號", "狀態"]))
+            )
+
+    def _render_paper_readiness(self, result) -> None:
+        status_labels = {
+            "ready": "可用",
+            "partial": "部分完成",
+            "degraded": "降級",
+            "not_configured": "尚未配置",
+        }
+        status_text = status_labels.get(str(result.status), str(result.status))
+        total_text = (
+            f"TWD {result.latest_total_value:,.2f}"
+            if result.latest_total_value is not None
+            else "N/A"
+        )
+        cash_text = f"TWD {result.latest_cash:,.2f}" if result.latest_cash is not None else "N/A"
+        benchmark_text = (
+            f"{result.benchmark_observation_count} 筆"
+            if result.benchmark_observation_count
+            else "尚無"
+        )
+        self.paper_readiness_summary_label.setText(
+            f"Paper Portfolio｜狀態：{status_text}\n"
+            f"最新可採用 snapshot：{result.latest_snapshot_date or 'N/A'}｜"
+            f"raw 累積 {result.snapshot_count} 筆｜持倉 {result.latest_position_count} 檔｜"
+            f"總值 {total_text}｜現金 {cash_text}\n"
+            f"Equal Weight：{benchmark_text}｜"
+            f"成本帳：{result.cost_ledger_status} ({result.cost_record_count} 筆)｜"
+            f"週報：{result.weekly_report_status}"
+        )
+        details = [
+            f"status：{result.latest_status}",
+            f"snapshot DB：{result.state_db_path}",
+            f"daily status：{result.status_path}",
+            f"benchmark DB：{result.benchmark_db_path or '未設定 PAPER_EQUAL_WEIGHT_BENCHMARK_PATH'}",
+            f"cost ledger DB：{result.cost_ledger_db_path or '未設定 PAPER_TRADE_LEDGER_PATH'}",
+            (
+                f"成本帳：{result.cost_ledger_status}｜"
+                f"總成本 {result.cost_total_cost if result.cost_total_cost is not None else 'N/A'}｜"
+                f"full fill {result.filled_event_count}／partial fill {result.partial_fill_event_count}／"
+                f"reject {result.rejected_event_count}／override {result.override_event_count}"
+            ),
+            (
+                f"欄位缺口：execution gap {result.missing_execution_gap_count} 筆、"
+                f"turnover {result.missing_turnover_count} 筆"
+            ),
+            "研究用途；read_only=true、writes_allowed=false、broker_execution=false、auto_rebalance_allowed=false。",
+        ]
+        details.extend(f"阻擋：{item}" for item in result.blockers)
+        details.extend(f"警告：{item}" for item in result.warnings)
+        self.paper_readiness_detail_label.setText("\n".join(details))
+
+        rows = [
+            {
+                "日期": result.latest_snapshot_date or "N/A",
+                "證券代號": item.stock_code,
+                "股數": item.quantity,
+                "標記價格": str(item.mark_price),
+                "市值": str(item.market_value),
+                "權重(bp)": item.weight_bp,
+            }
+            for item in result.latest_positions
+        ]
+        if not rows:
+            rows = [{"日期": result.latest_snapshot_date or "N/A", "證券代號": "N/A", "狀態": "沒有可顯示的 snapshot 持倉"}]
+        columns = ["日期", "證券代號", "股數", "標記價格", "市值", "權重(bp)"]
+        if not result.latest_positions:
+            columns = ["日期", "證券代號", "狀態"]
+        self.paper_snapshot_table.setModel(PandasTableModel(pd.DataFrame(rows, columns=columns)))
+        self.paper_snapshot_table.resizeColumnsToContents()
+
+    def _load_paper_weekly_evidence(self) -> None:
+        """只讀重建最近 Paper 週報；沒有完整 evidence 時明確顯示原因。"""
+        try:
+            expected_days = int(self.paper_weekly_expected_days.value())
+            result = self.paper_weekly_evidence_service.build_latest(
+                expected_trading_days=expected_days,
+            )
+            self._paper_weekly_evidence = result
+            self._render_paper_weekly_evidence(result)
+        except Exception as exc:
+            logger.error("Failed to load paper portfolio weekly evidence: %s", exc)
+            self._paper_weekly_evidence = None
+            self.paper_weekly_report_label.setText(
+                f"Paper 週報讀取失敗；未修改任何資料。診斷：{exc}"
+            )
+
+    def _render_paper_weekly_evidence(self, result) -> None:
+        status_labels = {
+            "ready": "可用",
+            "partial": "部分完成",
+            "degraded": "降級",
+            "not_configured": "尚未配置",
+            "not_computable": "尚不可計算",
+        }
+        status_text = status_labels.get(str(result.status), str(result.status))
+        if result.report is None:
+            summary = (
+                f"最近週報｜狀態：{status_text}｜"
+                f"區間 {result.period_start or 'N/A'} → {result.period_end or 'N/A'}｜"
+                f"snapshot {result.snapshot_count} 筆／benchmark {result.benchmark_observation_count} 筆／"
+                f"成本列 {result.cost_record_count} 筆"
+            )
+        else:
+            report = result.report
+            summary = (
+                f"最近週報｜狀態：{status_text}｜"
+                f"區間 {report.period_start} → {report.period_end}｜"
+                f"觀測 {report.observed_trading_days}/{result.expected_trading_days} 交易日\n"
+                f"毛報酬 {report.gross_return_bp} bp｜淨報酬 {report.net_return_bp} bp｜"
+                f"Equal Weight {report.benchmark_return_bp} bp｜超額 {report.net_excess_return_bp} bp｜"
+                f"成本 TWD {report.total_cost}｜換手 {report.turnover_bp} bp｜"
+                f"資料品質 {report.data_quality}"
+            )
+        details = [
+            f"週報 evidence：{result.weekly_report_status}",
+            f"snapshot DB：{result.state_db_path}",
+            f"benchmark DB：{result.benchmark_db_path or '未設定'}",
+            f"cost ledger DB：{result.cost_ledger_db_path or '未設定'}",
+            "研究用途；research_only=true、investment_effectiveness_claim=false、"
+            "read_only=true、writes_allowed=false、broker_execution=false、auto_rebalance_allowed=false。",
+        ]
+        details.extend(f"阻擋：{item}" for item in result.blockers)
+        details.extend(f"警告：{item}" for item in result.warnings)
+        if result.report is not None:
+            details.extend(f"報告警告：{item}" for item in result.report.warnings)
+        if result.diagnostics:
+            details.extend(f"診斷：{item}" for item in result.diagnostics)
+        self.paper_weekly_report_label.setText(summary + "\n" + "\n".join(details))
+
+    def _load_stress_lab(self):
+        """以目前持倉做唯讀情境投影；不寫入任何資料或交易紀錄。"""
+        try:
+            scenario_id = self.stress_scenario_combo.currentData() or "fast_drop"
+            positions = self.portfolio_service.list_positions()
+            result = self.stress_lab_service.evaluate_positions(
+                positions,
+                scenario_id=str(scenario_id),
+            )
+            self._stress_result = result
+            self._render_stress_lab(result)
+        except Exception as exc:
+            logger.error("Failed to load portfolio stress lab: %s", exc)
+            self._stress_result = None
+            self.stress_summary_label.setText("情境壓力測試載入失敗；未修改持倉。")
+            self.stress_detail_label.setText(f"診斷：{exc}")
+            self.stress_positions_table.setModel(
+                PandasTableModel(pd.DataFrame(columns=["證券代號", "狀態"]))
+            )
+
+    def _render_stress_lab(self, result) -> None:
+        status_labels = {
+            "ready": "可計算",
+            "partial": "部分可計算",
+            "not_computable": "不可計算",
+        }
+        status_text = status_labels.get(str(result.status), str(result.status))
+        if result.base_market_value is None:
+            value_text = "基準市值：N/A"
+        else:
+            value_text = (
+                f"基準市值：TWD {result.base_market_value:,.2f}｜"
+                f"壓力後：TWD {result.stressed_market_value:,.2f}｜"
+                f"變動：TWD {result.value_delta:+,.2f}"
+            )
+        self.stress_summary_label.setText(
+            f"{result.scenario.label}｜狀態：{status_text}｜"
+            f"已標記 {result.priced_position_count}/{result.total_position_count} 檔\n"
+            f"{value_text}"
+        )
+        diagnostics = [
+            *(f"阻擋：{item}" for item in result.blockers),
+            *(f"警告：{item}" for item in result.warnings),
+        ]
+        if result.missing_price_codes:
+            diagnostics.append(
+                f"缺最新價：{', '.join(result.missing_price_codes)}；只計算已標記持倉。"
+            )
+        diagnostics.append("研究用途；情境不是預測，不代表投資有效性或可交易性。")
+        self.stress_detail_label.setText("\n".join(diagnostics))
+
+        rows = [
+            {
+                "證券代號": item.stock_code,
+                "證券名稱": item.stock_name,
+                "基準市值": str(item.base_value),
+                "衝擊(bp)": item.shock_bp,
+                "壓力後市值": str(item.stressed_value),
+                "變動": str(item.value_delta),
+                "狀態": item.status,
+            }
+            for item in result.positions
+        ]
+        columns = ["證券代號", "證券名稱", "基準市值", "衝擊(bp)", "壓力後市值", "變動", "狀態"]
+        self.stress_positions_table.setModel(PandasTableModel(pd.DataFrame(rows, columns=columns)))
+        self.stress_positions_table.resizeColumnsToContents()
+
+    def _load_stress_history(self) -> None:
+        """只讀顯示已保存的 Stress Lab 研究快照；缺資料庫時不初始化。"""
+        try:
+            result = self.stress_history_read_service.inspect()
+            self._stress_history_result = result
+            self._render_stress_history(result)
+        except Exception as exc:
+            logger.error("Failed to load portfolio stress history: %s", exc)
+            self._stress_history_result = None
+            self.stress_history_summary_label.setText(
+                f"Stress 歷史讀取失敗；未修改任何資料。診斷：{exc}"
+            )
+            self.stress_history_table.setModel(
+                PandasTableModel(pd.DataFrame(columns=["執行時間", "情境", "狀態"]))
+            )
+
+    def _render_stress_history(self, result) -> None:
+        status_labels = {
+            "ready": "可用",
+            "partial": "部分完成",
+            "degraded": "降級",
+            "not_configured": "尚未配置",
+        }
+        status_text = status_labels.get(str(result.status), str(result.status))
+        self.stress_history_summary_label.setText(
+            f"Stress 歷史｜狀態：{status_text}｜保存 {len(result.records)} 筆｜"
+            f"資料庫：{result.db_path}\n"
+            "研究用途；research_only=true、investment_effectiveness_claim=false、"
+            "read_only=true、writes_allowed=false。"
+            + ("\n" + "\n".join(f"阻擋：{item}" for item in result.blockers) if result.blockers else "")
+            + ("\n" + "\n".join(f"警告：{item}" for item in result.warnings) if result.warnings else "")
+        )
+        rows = [
+            {
+                "執行時間": item.run_at,
+                "基準日": item.as_of_date or "N/A",
+                "情境": item.scenario_label,
+                "狀態": item.status,
+                "已標記": f"{item.priced_position_count}/{item.total_position_count}",
+                "基準市值": str(item.base_market_value) if item.base_market_value is not None else "N/A",
+                "壓力後市值": (
+                    str(item.stressed_market_value)
+                    if item.stressed_market_value is not None
+                    else "N/A"
+                ),
+                "變動": str(item.value_delta) if item.value_delta is not None else "N/A",
+                "payload hash": item.payload_hash[:12],
+            }
+            for item in result.records
+        ]
+        if not rows:
+            rows = [{"執行時間": "N/A", "基準日": "N/A", "情境": "N/A", "狀態": result.status}]
+            columns = ["執行時間", "基準日", "情境", "狀態"]
+        else:
+            columns = [
+                "執行時間",
+                "基準日",
+                "情境",
+                "狀態",
+                "已標記",
+                "基準市值",
+                "壓力後市值",
+                "變動",
+                "payload hash",
+            ]
+        self.stress_history_table.setModel(PandasTableModel(pd.DataFrame(rows, columns=columns)))
+        self.stress_history_table.resizeColumnsToContents()
+
+    def _save_stress_history(self) -> None:
+        """二次確認後保存目前 Stress 結果；保存不會改變持倉或交易。"""
+        result = getattr(self, "_stress_result", None)
+        if result is None:
+            QMessageBox.information(self, "尚無 Stress 結果", "請先執行情境，才可以保存研究快照。")
+            return
+        answer = QMessageBox.question(
+            self,
+            "確認保存 Stress 研究快照",
+            "這會新增一筆 append-only 研究歷史。它不是正式績效、交易證據或交易指令；是否繼續？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            record = PortfolioStressHistoryRecord.from_payload(result.to_dict())
+            PortfolioStressHistoryRepository(self.stress_history_db_path).append(record)
+            self._load_stress_history()
+            QMessageBox.information(
+                self,
+                "Stress 研究快照已保存",
+                f"已保存 {record.record_id}\n資料庫：{self.stress_history_db_path}",
+            )
+        except Exception as exc:
+            logger.error("Failed to save portfolio stress history: %s", exc)
+            QMessageBox.warning(self, "Stress 研究快照未保存", str(exc))
+
+    def _show_import_paper_fills_dialog(self) -> None:
+        """預覽並在二次確認後匯入完整 Paper fill CSV；不修改正式 Portfolio。"""
+        source_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "選擇 Paper 成交 CSV",
+            "",
+            "CSV files (*.csv);;All files (*)",
+        )
+        if not source_path:
+            return
+        try:
+            preview = self.paper_trade_import_service.preview_csv(source_path)
+        except Exception as exc:
+            logger.error("Paper trade CSV preview failed: %s", exc)
+            QMessageBox.warning(self, "Paper 成交匯入無法預覽", str(exc))
+            return
+
+        if not preview.ready_to_import:
+            error_text = "; ".join(
+                f"第 {row.row_number} 列：{', '.join(row.errors)}"
+                for row in preview.invalid_rows[:5]
+            ) or "沒有可匯入的 Paper fill 列。"
+            QMessageBox.warning(
+                self,
+                "Paper 成交匯入被阻擋",
+                f"預覽 {len(preview.rows)} 列，沒有全部通過 Paper fill 驗證。\n{error_text}",
+            )
+            return
+
+        try:
+            fills = self.paper_trade_import_service.build_fills(preview)
+            total_cost = sum((fill.total_cost for fill in fills), Decimal("0.00"))
+        except Exception as exc:
+            logger.error("Paper trade CSV validation failed: %s", exc)
+            QMessageBox.warning(self, "Paper 成交匯入被阻擋", str(exc))
+            return
+
+        ledger_path = self.paper_readiness_service.cost_ledger_db_path
+        summary = (
+            f"來源：{Path(source_path).name}\n"
+            f"SHA-256：{preview.source_hash}\n"
+            f"可匯入：{len(fills)} 筆｜總成本：TWD {total_cost}\n"
+            f"目標 Ledger：{ledger_path}\n\n"
+            "按『是』後只會 append Paper Trade Ledger；不會修改手動 Portfolio、Paper snapshot 或下單。"
+        )
+        if QMessageBox.question(
+            self,
+            "確認匯入 Paper 成交",
+            summary,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        ) != QMessageBox.Yes:
+            return
+        try:
+            imported = self.paper_trade_import_service.commit(
+                preview,
+                ledger_path,
+                confirm=True,
+            )
+        except Exception as exc:
+            logger.error("Paper trade CSV commit failed: %s", exc)
+            QMessageBox.warning(self, "Paper 成交匯入失敗", str(exc))
+            return
+        self._load_paper_readiness()
+        self._load_paper_weekly_evidence()
+        QMessageBox.information(
+            self,
+            "Paper 成交匯入完成",
+            f"已匯入 {len(imported)} 筆 Paper fill；正式 Portfolio 未修改。",
+        )
+
+    def _export_paper_fills_template(self) -> None:
+        """建立空白 Paper fills CSV 範本；不寫入任何 ledger 或正式資料。"""
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "匯出 Paper 成交 CSV 範本",
+            "paper_fills_template.csv",
+            "CSV files (*.csv);;All files (*)",
+        )
+        if not output_path:
+            return
+        try:
+            path = self.paper_trade_import_service.write_template(output_path)
+        except FileExistsError:
+            QMessageBox.warning(
+                self,
+                "Paper 成交範本未覆寫",
+                "目標檔案已存在；為避免覆蓋你已填寫的資料，請另存新檔。",
+            )
+            return
+        except (OSError, ValueError) as exc:
+            logger.error("Paper trade CSV template export failed: %s", exc)
+            QMessageBox.warning(self, "Paper 成交範本匯出失敗", str(exc))
+            return
+        QMessageBox.information(
+            self,
+            "Paper 成交範本已建立",
+            f"已建立空白欄位範本：\n{path}\n\n請填入真實成交後，再使用『匯入 Paper 成交 CSV』預覽與確認。",
+        )
+
+    def _show_import_trades_dialog(self) -> None:
+        """預覽並在二次確認後匯入 Broker CSV；取消或失敗不寫入。"""
+        source_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "選擇交易 CSV",
+            "",
+            "CSV files (*.csv);;All files (*)",
+        )
+        if not source_path:
+            return
+        try:
+            existing_ids = tuple(
+                str(trade.trade_id) for trade in self.portfolio_service.list_trades()
+            )
+            preview = self.trade_import_service.preview_csv(
+                source_path,
+                existing_trade_ids=existing_ids,
+            )
+        except Exception as exc:
+            logger.error("Trade CSV preview failed: %s", exc)
+            QMessageBox.warning(self, "交易匯入無法預覽", str(exc))
+            return
+
+        error_text = "; ".join(
+            f"第 {row.row_number} 列：{', '.join(row.errors)}"
+            for row in preview.invalid_rows[:5]
+        )
+        if not preview.ready_to_import:
+            detail = error_text or "沒有可匯入的交易列。"
+            QMessageBox.warning(
+                self,
+                "交易匯入被阻擋",
+                f"預覽 {len(preview.rows)} 列，沒有全部通過驗證。\n{detail}",
+            )
+            return
+
+        summary = (
+            f"來源：{Path(source_path).name}\n"
+            f"SHA-256：{preview.source_hash}\n"
+            f"可匯入：{len(preview.valid_rows)} 列\n\n"
+            "按『是』後才會寫入既有 Portfolio 交易紀錄；"
+            "這不是券商下單。"
+        )
+        if QMessageBox.question(
+            self,
+            "確認匯入交易",
+            summary,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        ) != QMessageBox.Yes:
+            return
+        try:
+            imported = self.trade_import_service.commit(
+                preview,
+                self.portfolio_service,
+                confirm=True,
+            )
+        except Exception as exc:
+            logger.error("Trade CSV commit failed: %s", exc)
+            QMessageBox.warning(self, "交易匯入失敗", str(exc))
+            return
+        self.refresh_all()
+        self.portfolioUpdated.emit()
+        QMessageBox.information(
+            self,
+            "交易匯入完成",
+            f"已匯入 {len(imported)} 筆交易；持倉已重新驗證。",
+        )
 
     def _load_portfolio_summary(self):
         """讀取持倉摘要，並更新頂部卡片"""
@@ -671,30 +1323,74 @@ class PortfolioView(QWidget):
             active_count = portfolio.active_positions
             total_invested = portfolio.total_invested_amount
             realized_pnl = portfolio.total_realized_pnl
+            active_positions = [
+                position
+                for position in getattr(portfolio, "positions", [])
+                if position.is_holding
+            ]
 
-            # 用投入與已實現估算簡易 Net Asset Value (MVP 版本)
-            nav = total_invested + realized_pnl
+            # 現金帳與資產負債尚未進入 Phase 4.1 MVP，不能把投入金額加上已實現損益冒充 NAV。
+            # 這裡只顯示有可用最新價格的持倉市值；缺價格時明確保留 N/A。
+            marked_value = Decimal("0")
+            priced_count = 0
+            unpriced_codes: list[str] = []
+            price_dates: set[str] = set()
+            for position in active_positions:
+                raw_price = getattr(position, "current_price", None)
+                try:
+                    quantity = Decimal(str(position.quantity))
+                    price = Decimal(str(raw_price)) if raw_price is not None else Decimal("NaN")
+                except Exception:
+                    price = Decimal("NaN")
+                    quantity = Decimal("0")
+                if not price.is_finite() or price <= 0 or not quantity.is_finite() or quantity < 0:
+                    unpriced_codes.append(str(position.stock_code))
+                    continue
+                marked_value += quantity * price
+                priced_count += 1
+                source_summary = getattr(position, "source_summary", {}) or {}
+                price_date = source_summary.get("current_price_date")
+                if isinstance(price_date, str) and price_date:
+                    price_dates.add(price_date)
 
-            self.card_net_val.update_value(f"TWD {nav:,.2f}")
+            if priced_count:
+                marked_value = marked_value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                self.card_net_val.update_value(f"TWD {marked_value:,.2f}")
+            else:
+                self.card_net_val.update_value("N/A（缺最新價格）")
             self.card_invested.update_value(f"TWD {total_invested:,.2f}")
 
             # P&L 色彩區分
             pnl_text = f"TWD {realized_pnl:+,.2f}"
             self.card_pnl.update_value(pnl_text)
             if realized_pnl > 0:
-                self.card_pnl.card_pnl_style = "color: #48bb78;"  # 綠色
+                self.card_pnl.value_label.setStyleSheet("color: #48bb78;")
             elif realized_pnl < 0:
-                self.card_pnl.card_pnl_style = "color: #f56565;"  # 紅色
+                self.card_pnl.value_label.setStyleSheet("color: #f56565;")
+            else:
+                self.card_pnl.value_label.setStyleSheet(
+                    f"color: {MIDNIGHT_ANALYST.text_primary};"
+                )
 
             self.card_positions.update_value(f"{active_count} 檔")
-            active_positions = [position for position in getattr(portfolio, "positions", []) if position.is_holding]
             top_symbols = "、".join(
                 f"{position.stock_code} {position.stock_name}" for position in active_positions[:5]
             )
             suffix = f"｜{top_symbols}" if top_symbols else ""
             if len(active_positions) > 5:
                 suffix += f" 等 {len(active_positions)} 檔"
-            self.active_positions_summary_label.setText(f"活躍持倉：{active_count} 檔{suffix}")
+            pricing_summary = ""
+            if active_positions:
+                pricing_summary = f"｜已標記市值 {priced_count}/{len(active_positions)} 檔"
+                if unpriced_codes:
+                    pricing_summary += f"｜缺最新價：{', '.join(unpriced_codes[:3])}"
+                if len(unpriced_codes) > 3:
+                    pricing_summary += f" 等 {len(unpriced_codes)} 檔"
+                if price_dates:
+                    pricing_summary += f"｜價格截至 {', '.join(sorted(price_dates))}"
+            self.active_positions_summary_label.setText(
+                f"活躍持倉：{active_count} 檔{suffix}{pricing_summary}"
+            )
         except Exception as e:
             logger.error("Failed to load portfolio summary: %s", e)
 

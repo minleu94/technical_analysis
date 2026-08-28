@@ -55,6 +55,15 @@ def run_mainwindow_smoke_in_subprocess(
     env = os.environ.copy()
     env.setdefault("QT_QPA_PLATFORM", "offscreen")
     env["PYTHONIOENCODING"] = "utf-8"
+    # MainWindow 會建立數個 metadata repository；若沿用呼叫端的
+    # production DATA_ROOT / OUTPUT_ROOT，受控或唯讀環境可能在啟動時
+    # 嘗試對正式 SQLite 做 schema DDL，讓 smoke 在 UI 尚未呈現前就中止。
+    # UI smoke 的目的只是驗證啟動、導覽與取消高風險對話框，因此固定
+    # 使用 output-dir 下的隔離根目錄，禁止碰觸正式資料與輸出。
+    isolated_root = output_dir / "_isolated_app"
+    env["DATA_ROOT"] = str(isolated_root / "data")
+    env["OUTPUT_ROOT"] = str(isolated_root / "output")
+    env["PROFILE"] = "prod"
     completed = subprocess.run(
         command,
         cwd=str(project_root),
@@ -90,13 +99,20 @@ def run_mainwindow_smoke(
     try:
         window.show()
         _process_events(app)
-        evidence = collect_mainwindow_smoke_evidence(window, switch_tabs=options.switch_tabs)
+        # 先收集初始 shell，再截 startup；切換工作區屬於後續操作，確保
+        # startup.png 代表實際啟動畫面。
+        evidence = collect_mainwindow_smoke_evidence(window, switch_tabs=False)
         if evidence["missing_tabs"]:
             raise AssertionError(f"MainWindow missing tabs: {evidence['missing_tabs']}")
 
         screenshots: list[dict[str, Any]] = []
         if options.capture_screenshots:
             screenshots.append(_capture_screenshot(window, options.output_dir, "startup"))
+
+        switched_tabs: list[str] = []
+        if options.switch_tabs:
+            switched_evidence = collect_mainwindow_smoke_evidence(window, switch_tabs=True)
+            switched_tabs = switched_evidence["switched_tabs"]
 
         resize_evidence: list[dict[str, Any]] = []
         for viewport_spec in options.resize_viewports:
@@ -137,7 +153,7 @@ def run_mainwindow_smoke(
             window_title=evidence["window_title"],
             tab_labels=evidence["tab_labels"],
             missing_tabs=evidence["missing_tabs"],
-            switched_tabs=evidence["switched_tabs"],
+            switched_tabs=switched_tabs,
             screenshots=screenshots,
             resize_evidence=resize_evidence,
             dialog_cancel_evidence=dialog_cancel_evidence,

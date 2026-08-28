@@ -443,6 +443,7 @@ def test_composer_surfaces_waiting_for_time_as_evidence_gate_not_success() -> No
 
     assert evidence["weekly_history"].status == STATUS_WAITING_FOR_TIME
     assert "不能用單次 smoke 取代" in " ".join(dashboard.warnings)
+    assert "weekly_history:insufficient_weekly_history_records" in " ".join(dashboard.warnings)
 
 
 def test_composer_handles_missing_decision_snapshot_without_fabricating_ui_state() -> None:

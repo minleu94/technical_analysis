@@ -445,10 +445,21 @@ class SqliteInspectorWidget(QWidget):
 
         tables = self.inspector_service.get_tables()
         self.table_selector.clear()
+        service_error = getattr(self.inspector_service, "last_error", None)
+        if service_error:
+            self.summary_label.setText(f"資料庫狀態：SQLite 不可用（{service_error}）")
+            self.load_btn.setEnabled(False)
+            return
         if tables:
             self.table_selector.addItems(tables)
             self.load_btn.setEnabled(True)
-            self.summary_label.setText(f"資料庫狀態：連線成功，共偵測到 {len(tables)} 個資料表")
+            read_mode = getattr(getattr(self.inspector_service, "db_manager", None), "last_read_mode", "normal")
+            if read_mode == "immutable_fallback":
+                self.summary_label.setText(
+                    f"資料庫狀態：連線成功（immutable 唯讀快照，可能非即時），共偵測到 {len(tables)} 個資料表"
+                )
+            else:
+                self.summary_label.setText(f"資料庫狀態：連線成功，共偵測到 {len(tables)} 個資料表")
         else:
             self.summary_label.setText("資料庫狀態：連線成功，但未找到任何資料表")
             self.load_btn.setEnabled(False)

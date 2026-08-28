@@ -392,6 +392,32 @@ def test_recommendation_replay_group_has_stable_width(qt_app, tmp_path):
     assert view.config_panel.portfolio_history_combo.minimumWidth() >= 240
 
 
+def test_backtest_view_degrades_when_research_registry_is_unavailable(
+    qt_app, tmp_path, monkeypatch
+):
+    config = TWStockConfig(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+    )
+
+    def fail_registry(_config):
+        raise RuntimeError("attempt to write a readonly database")
+
+    monkeypatch.setattr(
+        "ui_qt.views.backtest_view.ResearchRunService",
+        fail_registry,
+    )
+
+    view = BacktestView(backtest_service=MagicMock(), config=config)
+
+    assert view.research_run_service is None
+    assert "readonly database" in (view.research_run_service_error or "")
+    assert view.config_panel.research_registry_status_label is not None
+    assert "保存／歷史比較暫停" in view.config_panel.research_registry_status_label.text()
+    assert view.config_panel.save_result_btn is not None
+    assert not view.config_panel.save_result_btn.isEnabled()
+
+
 def test_portfolio_promotion_success_message_points_to_follow_up_entrypoint(qt_app):
     view = BacktestView(backtest_service=MagicMock(), config=None)
 
@@ -603,6 +629,16 @@ def test_watchlist_view_batch_backtest_button_state(qt_app):
 
     assert view.send_to_research_lab_btn.isEnabled() is False
     assert "候選池目前沒有股票" in view.send_to_research_lab_btn.toolTip()
+    assert view.stocks_model is not None
+    assert view.stocks_model.rowCount() == 0
+    assert "目前沒有候選" in view.status_label.text()
+
+    mock_watchlist_service.get_stocks.side_effect = RuntimeError("watchlist unavailable")
+    with patch("ui_qt.views.watchlist_view.QMessageBox.critical"):
+        view._load_watchlist()
+    assert view.stocks_model is not None
+    assert view.stocks_model.rowCount() == 0
+    assert view.status_label.text().startswith("載入失敗：")
 
 
 def test_watchlist_view_manual_add_resolves_stock_name_and_rejects_unknown(qt_app):

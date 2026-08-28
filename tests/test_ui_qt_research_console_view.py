@@ -118,6 +118,9 @@ def test_missing_console_opens_and_shows_fail_closed_boundary() -> None:
     assert "Production ML: Disabled" in text
     assert "Missing" in text
     assert "EV1" in text and "EV5" in text
+    assert "P0 Data Source Control Center" in text
+    assert "Downstream eligible：0" in text
+    assert view.control_center_table.rowCount() == 13
 
 
 def test_fixture_renders_pipeline_gates_sources_and_separate_broker_lane() -> None:

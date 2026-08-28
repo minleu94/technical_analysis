@@ -37,24 +37,19 @@ class KnownUXGap:
 
 KNOWN_UX_GAPS: tuple[KnownUXGap, ...] = (
     KnownUXGap(
-        gap_id="ux_gap_update_view_progress_bar",
-        category="unclear_copy",
-        title="TWSE/TPEX real API fetch progress bar indication",
-        feature_id="update_view",
-        flow_id="data_market_loop",
-        likely_owner="execution",
-        evidence_sources=("tests/test_update_service_status.py",),
-        recommended_next_step="Implement explicit progress bar widget for Twstock daily fetch.",
-    ),
-    KnownUXGap(
-        gap_id="ux_gap_update_view_confirm_dialog",
+        gap_id="ux_gap_update_view_cancel_boundary_copy",
         category="unclear_next_step",
-        title="Confirm dialog on SQLite daily prices sync",
+        title="Large merge/export cancellation observes the current safe operation boundary",
         feature_id="update_view",
         flow_id="daily_decision_loop",
         likely_owner="execution",
-        evidence_sources=("tests/test_update_service_status.py",),
-        recommended_next_step="Add visual confirmation dialog when SQLite sync completes.",
+        evidence_sources=(
+            "tests/test_ui_qt_task_worker.py",
+            "tests/test_ui_qt_update_view_workbench.py",
+        ),
+        recommended_next_step=(
+            "Thread cancellation callbacks through large merge/export loops and show the active safe boundary."
+        ),
     ),
     KnownUXGap(
         gap_id="ux_gap_decision_desk_why_not_readability",

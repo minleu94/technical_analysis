@@ -97,6 +97,7 @@ def test_flow_model_report_and_markdown_renderer():
     assert "research_validation_loop" in markdown
     assert "portfolio_review_loop" in markdown
     assert "daily_decision_loop" in markdown
-    assert "TWSE/TPEX real API fetch progress bar indication" in markdown
+    assert "Large merge/export cancellation" in markdown
+    assert "Confirm dialog on SQLite daily prices sync" not in markdown
     assert "Recommendation / portfolio handoff route is not a first-class feature route yet." in markdown
     assert "data update and cache status evidence" in markdown
