@@ -142,7 +142,7 @@ Scheduler 執行環境，不能由 readiness inspector 自動套用。
 - candidate audit：`scripts/run_p0_candidate_audit.py`
 - live audit（2026-08-28 fresh capture，含 TPEx fallback lineage）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_fallback_v2.json`（SHA-256=`94186ed0565f544a296427b423b01167e78ef15d2871e1c757bb8de9efe83d82`）
 - cross-date live audit（`decision_date=2026-08-27`，驗證 T86／MI_MARGN 有真實官方日資料）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_20260827.json`（SHA-256=`ABF95D392FFC05EA81BB03EB68D8ACBFFE50C9FEDBEEE09EA7641A5B94FEE57A`）
-- P0 owner packet（由最新 fresh capture 唯讀重排）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260828_live_tpex_fallback.md`（SHA-256=`be6e164ead39fb2894e5a6f028ca275dcafa1f0f4926888fe2efb299c5ad7314`）
+- P0 owner packet（由最新 fresh capture 唯讀重排，含 actual／candidate route、fallback、PIT／timestamp 與 license URL 線索）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260828_live_tpex_fallback_current.md`（SHA-256=`6A4CA81DD2E4C6B69784FCC06316399B878AEC727D4E131865A47778A12FDD41`）
 - cross-date owner packet：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_decision_packet_20260827_live.md`（SHA-256=`30101531579324020A899CDECE3AD1EBE04812ABA78632050F4DB7F522DD65E7`）
 - Control Center：`C:\Users\archi\AppData\Local\Temp\p0-source-control-center-20260827.json`
 - Evidence readiness（既有 projection readout）：`C:\Users\archi\AppData\Local\Temp\pre-v2-readiness-20260828.json`

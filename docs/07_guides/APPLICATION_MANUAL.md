@@ -740,7 +740,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
   --output $env:TEMP\technical_analysis_p0_audit\p0_owner_decision_packet.md
 ```
 
-輸入必須是既有 `p0-source-evidence-audit.v1` artifact；輸出路徑不得位於正式 `DATA_ROOT`。packet 中的人工欄位（具名 Owner／reviewer、license／quality／PIT evidence、用途與 rollback）仍須由實際權責人填寫，完成前下游資格固定為 `none`。
+輸入必須是既有 `p0-source-evidence-audit.v1` artifact；輸出路徑不得位於正式 `DATA_ROOT`。packet 會在每個群組列出 actual／candidate route、fallback 是否嘗試、probe／availability、PIT／timestamp、raw／accepted／blocked 計數與 license URL 線索；這些仍是 machine evidence，不是授權或 acceptance。人工欄位（具名 Owner／reviewer、license／quality／PIT evidence、用途與 rollback）仍須由實際權責人填寫，完成前下游資格固定為 `none`。
 
 ### Gate 3 P0 Data Source Control Center（唯讀）
 

@@ -33,7 +33,7 @@
 
 ## 2026-08-28 P0 owner packet renderer（current engineering）
 
-- 新增唯讀 `scripts/render_p0_owner_decision_packet.py`，可將既有 `p0-source-evidence-audit.v1` artifact 整理成 5 組 Owner／License reviewer packet。它只重排 machine evidence、route／timestamp blocker 與 owner question，不重新抓資料、不建立 registry、不推導 `accepted`／`limited`。
+- 新增唯讀 `scripts/render_p0_owner_decision_packet.py`，可將既有 `p0-source-evidence-audit.v1` artifact 整理成 5 組 Owner／License reviewer packet；每組現在會列出 actual／candidate route、fallback、probe／availability、PIT／timestamp、row conservation 與 license URL 線索。它只重排 machine evidence、route／timestamp blocker 與 owner question，不重新抓資料、不建立 registry、不推導 `accepted`／`limited`。
 - Renderer 嚴格驗證 `formal_oos_allowed=false`、`production_allowed=false`、`scheduler_allowed=false`、`downstream_eligibility=none`，輸出只能落在正式 `DATA_ROOT` 外；人工填寫的具名 owner／reviewer、license／quality／PIT evidence 與 rollback 仍是外部輸入。
 
 ## 2026-08-28 Data Update append-only status history（current engineering）
