@@ -68,7 +68,8 @@ token 重新探測正式 logger／Registry 時，把已核實的 host 狀態覆�
 
 新增的 `scripts/inspect_research_registry_transaction.py` 可在不寫正式 Registry 的前提下，
 以正式 DB 的 read-only snapshot clone 驗證現有 schema、`quick_check`、insert／讀回／
-rollback 與 row count 不變；2026-08-28 host 實測通過，正式 DB SHA-256 前後一致。
+rollback 與 row count 不變；2026-08-28 host 實測 98 rows、schema v2 通過，正式 DB SHA-256
+前後一致。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\research_registry_snapshot_transaction_host_20260828.json`，SHA-256=`E141D201497709ECE846BCD3CC1F86B5596F6514AE464413D204F973A17B4308`。
 這是 clone proof，不是正式 ACL／production write proof。
 
 本輪已用 `clock:prospective:20260828:v1` 的實際官方 staging 在隔離 TEMP output
@@ -240,6 +241,7 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - Evidence readiness（既有 projection readout）：`C:\Users\archi\AppData\Local\Temp\pre-v2-readiness-20260828.json`
 - V2.2 current weekly collection（正式 SQLite `mode=ro`、`2026-08-24..2026-08-28`、`pending_human_review`，不計 Gate credit）：sidecar `C:\Users\archi\AppData\Local\Temp\technical_analysis_evidence_20260828\scheduled\v2_2_weekly_collection\evidence_scheduler.db`（SHA-256=`B5331161E4E96C6FC4AED055B3B4BEC6F566E8699C2C96CF6C2A15254AA3F666`）；report `C:\Users\archi\AppData\Local\Temp\technical_analysis_evidence_20260828\scheduled\v2_2_weekly_collection\v2_2_weekly_collection_20260828.json`（SHA-256=`86DAE1280B09B26435A0BE745C7362A16BE41045C27DB4A21D119AB2E2D56A88`）
 - 2026-08-28 最終 unified readiness（載入 live P0、approved projection、pending sidecar、Paper／Formal／Runtime／performance artifacts）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_final.json`（status=`action_required`；SHA-256=`BFCF66C300EABA7A5FF4384BE3C5BF0104BCDC861CBD8FCD693C45604F7038E3`）
+- 2026-08-28 載入正式 Registry clone proof 後的最新 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_host_runtime_scheduler_storage_v4_registry_clone_20260828.json`（status=`action_required`；SHA-256=`4E719109ACAD5784021A6E2AAE534B51E33CBA95B06D9D88E2780724C8353B51`）；`runtime=ready`、clone transaction blocker 清除，但正式 production writer 仍未被宣稱。
 - quick runner 完成後重新產生的 unified readiness（run=`20260828-29472`、已載入 scheduler registration artifact）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_post_patch.json`（status=`action_required`；SHA-256=`210FF09EB321BC4DFAA6C12FACC29CC3E8D15D4A962CC08B8EE399C73AE63931`）；Update History blocker 已精確投影為 `scheduled_tasks_missing_or_unavailable:0/13`，下一步是 owner 重新註冊 task，不是回填 history。
 - 最新 unified readiness（同一組輸入另載入明確 TEMP freshness status）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_final_with_freshness_projection.json`（status=`action_required`；SHA-256=`80AF60C103E12948E935791E16009622F5898566AD7F067092C8A10B874727E9`）；freshness projection=`passed`、daily／technical latest=`2026-08-28`，Update History 剩餘 blocker 僅 `scheduled_tasks_missing_or_unavailable:0/13`，不再把 freshness 觀測與 scheduler registration 混在一起。
 - post-QA unified readiness（完成 `3664 passed / 1 skipped` 全回歸、Data Update QA 與 targeted mypy／py_compile 後重算）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_final_postqa.json`（status=`action_required`；SHA-256=`750CEEC7DD65ADE1A826B8A1427DA08332BFF4C65F4A07C38A47F1446C7C92A0`）；七個 lane 的 blocker 與前一份一致，freshness 仍為 `passed`，沒有把測試通過誤宣稱為 production gate 通過。
