@@ -73,6 +73,7 @@ def inspect_program_readiness(
     technical_worker_acceptance_path: str | Path | None = None,
     technical_production_canary_path: str | Path | None = None,
     broker_performance_path: str | Path | None = None,
+    ml_direct_chain_status_path: str | Path | None = None,
     runtime_write_probe_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
@@ -151,6 +152,7 @@ def inspect_program_readiness(
             _optional_path(technical_worker_acceptance_path),
             _optional_path(technical_production_canary_path),
             _optional_path(broker_performance_path),
+            _optional_path(ml_direct_chain_status_path),
         ),
     }
     report: dict[str, Any] = {
@@ -181,6 +183,11 @@ def inspect_program_readiness(
             "technical_production_canary_path": (
                 str(_optional_path(technical_production_canary_path))
                 if technical_production_canary_path is not None
+                else None
+            ),
+            "ml_direct_chain_status_path": (
+                str(_optional_path(ml_direct_chain_status_path))
+                if ml_direct_chain_status_path is not None
                 else None
             ),
             "p0_license_evidence_path": (
@@ -697,9 +704,30 @@ def _inspect_performance_lane(
     technical_worker_path: Path | None,
     technical_canary_path: Path | None,
     broker_path: Path | None,
+    ml_direct_chain_path: Path | None,
 ) -> dict[str, Any]:
     artifacts: dict[str, Any] = {}
     blockers: list[str] = []
+    if ml_direct_chain_path is not None:
+        try:
+            raw_direct_chain = _read_json_mapping(ml_direct_chain_path)
+            artifacts["ml_direct_chain"] = raw_direct_chain
+            if raw_direct_chain.get("schema_version") != "ml-direct-chain-maintenance-status.v1":
+                blockers.append("ml_direct_chain_status_invalid")
+            elif raw_direct_chain.get("status") == "blocked_insufficient_storage":
+                blockers.append("direct_chain_storage_preflight_blocked")
+            elif raw_direct_chain.get("status") == "failed" and (
+                raw_direct_chain.get("error_type") == "OSError"
+                or "No space left on device" in str(raw_direct_chain.get("error", ""))
+            ):
+                blockers.append("direct_chain_storage_failure_observed")
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+            blockers.append("ml_direct_chain_status_invalid")
+            artifacts["ml_direct_chain"] = {
+                "path": str(ml_direct_chain_path),
+                "error_type": type(error).__name__,
+                "error": str(error),
+            }
     if (
         technical_path is None
         and technical_batch_path is None
@@ -725,11 +753,32 @@ def _inspect_performance_lane(
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
             blockers.append(f"{label}_performance_baseline_invalid")
             artifacts[label] = {"path": str(path), "error_type": type(error).__name__, "error": str(error)}
-    if not any(isinstance(value, Mapping) for value in artifacts.values()):
+    baseline_labels = (
+        "technical",
+        "technical_batch",
+        "technical_write",
+        "technical_worker",
+        "technical_canary",
+        "broker",
+    )
+    if not any(isinstance(artifacts.get(label), Mapping) for label in baseline_labels):
+        next_actions = [
+            "先提供 read-only latency baseline，再做 full-batch CPU／CSV write／SQLite contention measurement；在此之前不要啟用 worker。"
+        ]
+        if "direct_chain_storage_preflight_blocked" in blockers:
+            next_actions.insert(
+                0,
+                "先處理 Direct/OOC 輸出磁碟容量與保留策略；20 GiB headroom preflight 未通過前不啟動 worker，也不刪除既有 immutable run。",
+            )
+        elif "direct_chain_storage_failure_observed" in blockers:
+            next_actions.insert(
+                0,
+                "Direct/OOC 最近一次維護已觀察到磁碟不足；先補容量／保留策略，再重跑唯讀 preflight，不直接重試或清理歷史 run。",
+            )
         return _lane(
             "waiting_for_external_input",
             blockers=tuple(blockers),
-            next_actions=("先提供 read-only latency baseline，再做 full-batch CPU／CSV write／SQLite contention measurement；在此之前不要啟用 worker。",),
+            next_actions=tuple(next_actions),
             details={
                 "technical_path": str(technical_path) if technical_path else None,
                 "technical_batch_path": str(technical_batch_path) if technical_batch_path else None,
@@ -737,6 +786,7 @@ def _inspect_performance_lane(
                 "technical_worker_path": str(technical_worker_path) if technical_worker_path else None,
                 "technical_canary_path": str(technical_canary_path) if technical_canary_path else None,
                 "broker_path": str(broker_path) if broker_path else None,
+                "ml_direct_chain_path": str(ml_direct_chain_path) if ml_direct_chain_path else None,
                 "artifacts": artifacts,
             },
         )
@@ -836,14 +886,27 @@ def _inspect_performance_lane(
     )
     if canary_blocker is not None:
         blockers.append(canary_blocker)
+    next_actions = [
+        (
+            "technical bounded worker 的 production canary 尚未通過：先停止並行資料寫入，核准 backup／rollback 後只重算一檔；通過後再觀察正式排程。"
+            if not _valid_technical_production_canary(technical_canary_payload)
+            else "technical bounded worker 的 production canary 已通過；保留 parent-only writer 與 worker 上限，接著觀察正式排程與 rollback artifact。"
+        )
+    ]
+    if "direct_chain_storage_preflight_blocked" in blockers:
+        next_actions.insert(
+            0,
+            "先處理 Direct/OOC 輸出磁碟容量與保留策略；20 GiB headroom preflight 未通過前不啟動 worker，也不刪除既有 immutable run。",
+        )
+    elif "direct_chain_storage_failure_observed" in blockers:
+        next_actions.insert(
+            0,
+            "Direct/OOC 最近一次維護已觀察到磁碟不足；先補容量／保留策略，再重跑唯讀 preflight，不直接重試或清理歷史 run。",
+        )
     return _lane(
         "partial",
         blockers=tuple(blockers),
-        next_actions=(
-            "technical bounded worker 的 production canary 尚未通過：先停止並行資料寫入，核准 backup／rollback 後只重算一檔；通過後再觀察正式排程。"
-            if not _valid_technical_production_canary(technical_canary_payload)
-            else "technical bounded worker 的 production canary 已通過；保留 parent-only writer 與 worker 上限，接著觀察正式排程與 rollback artifact。",
-        ),
+        next_actions=tuple(next_actions),
         external_input_required=True,
         details={
             "technical_path": str(technical_path) if technical_path else None,
@@ -852,6 +915,7 @@ def _inspect_performance_lane(
             "technical_worker_path": str(technical_worker_path) if technical_worker_path else None,
             "technical_canary_path": str(technical_canary_path) if technical_canary_path else None,
             "broker_path": str(broker_path) if broker_path else None,
+            "ml_direct_chain_path": str(ml_direct_chain_path) if ml_direct_chain_path else None,
             "artifacts": artifacts,
             "parallelism_enabled": False,
             "single_writer_required": True,
@@ -1043,6 +1107,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--technical-worker-acceptance-baseline", type=Path)
     parser.add_argument("--technical-production-canary", type=Path)
     parser.add_argument("--broker-performance-baseline", type=Path)
+    parser.add_argument(
+        "--ml-direct-chain-status",
+        type=Path,
+        help="唯讀 Direct/OOC maintainer status；只投影容量／維護阻塞，不啟動 worker",
+    )
     parser.add_argument("--runtime-write-probe", type=Path)
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
@@ -1088,6 +1157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         technical_worker_acceptance_path=args.technical_worker_acceptance_baseline,
         technical_production_canary_path=args.technical_production_canary,
         broker_performance_path=args.broker_performance_baseline,
+        ml_direct_chain_status_path=args.ml_direct_chain_status,
         runtime_write_probe_path=args.runtime_write_probe,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,

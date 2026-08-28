@@ -1146,3 +1146,59 @@ def test_program_readiness_rejects_invalid_technical_production_canary(
     assert "technical_production_single_writer_canary_invalid" in report["workstreams"][
         "performance"
     ]["blockers"]
+
+
+def test_program_readiness_projects_direct_chain_storage_preflight_blocker(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "ml-direct-chain-status.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "ml-direct-chain-maintenance-status.v1",
+                "status": "blocked_insufficient_storage",
+                "formal_oos_allowed": False,
+                "production_alpha_bp": 0,
+                "broker_order_allowed": False,
+                "writes_source_database": False,
+                "storage_preflight": {
+                    "free_bytes": 6_000,
+                    "minimum_free_space_bytes": 20_000,
+                    "within_minimum_free_space": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        ml_direct_chain_status_path=status_path,
+    )
+
+    performance = report["workstreams"]["performance"]
+    assert performance["status"] == "waiting_for_external_input"
+    assert "direct_chain_storage_preflight_blocked" in performance["blockers"]
+    assert performance["details"]["artifacts"]["ml_direct_chain"]["status"] == (
+        "blocked_insufficient_storage"
+    )
+    assert "容量與保留策略" in performance["next_actions"][0]
+
+
+def test_program_readiness_rejects_invalid_direct_chain_status(tmp_path: Path) -> None:
+    status_path = tmp_path / "ml-direct-chain-status-invalid.json"
+    status_path.write_text(
+        json.dumps({"schema_version": "wrong", "status": "ready"}),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        ml_direct_chain_status_path=status_path,
+    )
+
+    assert "ml_direct_chain_status_invalid" in report["workstreams"][
+        "performance"
+    ]["blockers"]
