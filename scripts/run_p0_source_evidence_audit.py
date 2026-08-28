@@ -23,6 +23,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from data_module.p0_source_contract_registry import P0_SOURCE_IDS
+from data_module.p0_source_acquisition_routes import (
+    build_p0_acquisition_route_registry,
+)
 from scripts.run_p0_candidate_audit import (
     LIVE_PROBE_SOURCE_MAP,
     _probe_report_sha256,
@@ -63,8 +66,8 @@ GROUPED_OWNER_PACKET_DEFINITIONS: dict[str, dict[str, Any]] = {
             "microstructure.full_delivery",
             "microstructure.limit_lock",
         ],
-        "provider": "TWSE 臺灣證券交易所 (TWTAWU / 處置公告 / TWT85U / MI_INDEX)",
-        "owner_question": "是否核准將來自 TWSE (TWTAWU/處置公告/TWT85U/MI_INDEX) 的停復牌、處置、分盤撮合、全額交割與漲跌停標示作為交易限制與成交可行性 preflight 備選源？（條款限制：僅供內部研究使用，不可對外再散布）",
+        "provider": "TWSE 臺灣證券交易所 (TWTAWU / 處置公告 / TWT85U / TWT84U)",
+        "owner_question": "是否核准將來自 TWSE (TWTAWU/處置公告/TWT85U/TWT84U) 的停復牌、處置、分盤撮合、全額交割與漲跌停鎖死觀測作為交易限制與成交可行性 preflight 備選源？（條款限制：僅供內部研究使用，不可對外再散布）",
     },
     "twse_flows_credit": {
         "group_id": "twse_flows_credit",
@@ -105,7 +108,7 @@ SOURCE_PROVIDER_INFO: dict[str, tuple[str, str, str]] = {
     "microstructure.disposition_stock": ("TWSE", "announcement:punish", "bounded_live_probe"),
     "microstructure.periodic_call_auction": ("TWSE", "announcement:punish", "bounded_live_probe"),
     "microstructure.full_delivery": ("TWSE", "exchangeReport:TWT85U", "bounded_live_probe"),
-    "microstructure.limit_lock": ("TWSE", "exchangeReport:MI_INDEX", "bounded_live_probe"),
+    "microstructure.limit_lock": ("TWSE", "exchangeReport:TWT84U", "bounded_live_probe"),
     "institutional_flows": ("TWSE", "fund:T86", "bounded_live_probe"),
     "credit_transactions": ("TWSE", "exchangeReport:MI_MARGN", "bounded_live_probe"),
     "tdcc_shareholding": ("TDCC", "opendata:1-5", "bounded_live_probe"),
@@ -380,6 +383,7 @@ def build_p0_source_evidence_audit(
         live_executed = False
 
     probe_items = _validate_probe_report(report, decision_date)
+    acquisition_routes = build_p0_acquisition_route_registry()
     fubon_items = _validate_fubon_projection(fubon_projection) if fubon_projection is not None else {}
     mops_rows = _validate_mops_quarterly_artifact(mops_quarterly_artifact) if mops_quarterly_artifact is not None else []
 
@@ -432,6 +436,10 @@ def build_p0_source_evidence_audit(
                     "auto_verifiable": ["adapter_contract_implemented"],
                     "non_auto_verifiable": ["mops_candidate_artifact_supply"],
                 }
+            item["acquisition_routes"] = [
+                route.to_dict()
+                for route in acquisition_routes.for_source(source_id)
+            ]
             matrix.append(item)
             continue
 
@@ -456,6 +464,10 @@ def build_p0_source_evidence_audit(
                 "auto_verifiable": ["adapter_contract_implemented"],
                 "non_auto_verifiable": ["network_probe_execution", "legal_license_review"],
             }
+            item["acquisition_routes"] = [
+                route.to_dict()
+                for route in acquisition_routes.for_source(source_id)
+            ]
             matrix.append(item)
             continue
 
@@ -463,18 +475,31 @@ def build_p0_source_evidence_audit(
         raw_timestamp_evidence = str(probe.get("timestamp_evidence", "unavailable"))
         schema_status = str(probe.get("schema_status", "mismatch"))
         network_status = str(probe.get("network_status", "reachable"))
+        probe_outcome = str(probe.get("probe_outcome", "unknown"))
 
         if network_status == "failed":
             availability = "probe_failed"
+        elif probe_outcome == "official_no_data" or schema_status == "no_data":
+            availability = "official_no_data"
         else:
             availability = "network_probed"
 
-        if schema_status == "matched" and raw_timestamp_evidence == "official_publication_timestamp" and network_status != "failed":
+        if network_status == "failed":
+            machine_status = "missing"
+            pit_status = "unavailable"
+            timestamp_kind = "unavailable"
+            remaining_blocker = "network_probe_failed"
+        elif probe_outcome == "official_no_data" or schema_status == "no_data":
+            machine_status = "missing"
+            pit_status = "unavailable"
+            timestamp_kind = "unavailable"
+            remaining_blocker = "official_no_data_for_requested_date"
+        elif schema_status == "matched" and raw_timestamp_evidence == "official_publication_timestamp":
             machine_status = "verified"
             pit_status = "pit_date_verified"
             timestamp_kind = "official_publication_timestamp"
             remaining_blocker = "legal_and_license_acceptance_required"
-        elif schema_status == "matched" and network_status != "failed":
+        elif schema_status == "matched":
             machine_status = "degraded"
             pit_status = "official_publication_timestamp_missing"
             timestamp_kind = "first_observed_only"
@@ -484,6 +509,27 @@ def build_p0_source_evidence_audit(
             pit_status = "unavailable"
             timestamp_kind = "unavailable"
             remaining_blocker = "schema_mismatch_or_probe_failed"
+
+        if schema_status == "matched" and network_status != "failed":
+            auto_verifiable = [
+                "schema_validation_passed",
+                "row_conservation_verified",
+                "isolation_guaranteed",
+                "payload_hash_verified",
+            ]
+            non_auto_verifiable = [
+                "legal_license_review",
+                "owner_written_acceptance",
+            ]
+        else:
+            auto_verifiable = ["adapter_contract_implemented"]
+            if network_status != "failed" and probe.get("payload_sha256"):
+                auto_verifiable.append("payload_hash_verified")
+            non_auto_verifiable = [
+                "completed_publication_probe_or_schema_repair",
+                "legal_license_review",
+                "owner_written_acceptance",
+            ]
 
         item = {
             "source_id": source_id,
@@ -496,24 +542,21 @@ def build_p0_source_evidence_audit(
             "timestamp_kind": timestamp_kind,
             "availability": availability,
             "schema_status": schema_status,
+            "probe_outcome": probe_outcome,
             "payload_sha256": probe.get("payload_sha256"),
             "raw_row_count": counts["raw_row_count"],
             "accepted_row_count": counts["accepted_row_count"],
             "quarantine_row_count": counts["quarantine_row_count"],
             "blocked_row_count": counts["blocked_row_count"],
             "remaining_blocker": remaining_blocker,
-            "auto_verifiable": [
-                "schema_validation_passed",
-                "row_conservation_verified",
-                "isolation_guaranteed",
-                "payload_hash_verified",
-            ],
-            "non_auto_verifiable": [
-                "legal_license_review",
-                "owner_written_acceptance",
-            ],
+            "auto_verifiable": auto_verifiable,
+            "non_auto_verifiable": non_auto_verifiable,
         }
-        if source_id in MICROSTRUCTURE_SOURCE_IDS:
+        if (
+            source_id in MICROSTRUCTURE_SOURCE_IDS
+            and schema_status == "matched"
+            and network_status != "failed"
+        ):
             policy = MICROSTRUCTURE_TIMESTAMP_POLICIES[source_id]
             timestamp_semantics = _build_microstructure_timestamp_semantics(
                 source_id,
@@ -551,6 +594,18 @@ def build_p0_source_evidence_audit(
             item["timestamp_semantics"] = timestamp_semantics
         if "request_parameters" in probe:
             item["request_parameters"] = probe["request_parameters"]
+        for route_field in (
+            "endpoint_id",
+            "acquisition_route_id",
+            "fallback_used",
+            "fallback_from_endpoint_id",
+            "fallback_from_acquisition_route_id",
+        ):
+            if route_field in probe:
+                item[route_field] = probe[route_field]
+        item["acquisition_routes"] = [
+            route.to_dict() for route in acquisition_routes.for_source(source_id)
+        ]
         matrix.append(item)
 
     # Aggregate matrix into 5 grouped owner decision questions
@@ -613,6 +668,7 @@ def build_p0_source_evidence_audit(
         "live_probe_executed": live_executed,
         "machine_evidence_matrix": matrix,
         "grouped_owner_decision_packet": grouped_packet,
+        "acquisition_route_summary": acquisition_routes.to_dict(),
         "machine_vs_owner_blocker_summary": {
             "total_sources": len(matrix),
             "machine_verified_sources": verified_sources,

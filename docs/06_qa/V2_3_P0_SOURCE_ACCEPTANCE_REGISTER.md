@@ -192,3 +192,14 @@ Project Owner 已聲明下列意圖適用於 13 項 P0 來源：可作內部研�
 - **不因本決議改變的事實**：13 個 source row 的 `human_decision` 仍為 `requires_human_acceptance`，`downstream_eligibility=none`；license、quality、PIT、coverage、rollback、具名 reviewer 與 append-only applying `limited`／`accepted` revision 均必須各自具備可引用證據。Owner plan approval 不會替代這些來源事實，也不會把現有 candidate 升格為 source acceptance。
 - **安全與 Formal clock**：`formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0`、Rule-only formal path；不新增 observed snapshot、elapsed day、outcome、matured denominator、formal credit 或 holdout consumption，亦不授權正式 DB、Score、Recommendation、Portfolio、Exit、scheduler、broker、training、promotion、unblind 或 blend。
 - **可引用 TEMP decision artifact**：`C:\\Temp\\technical_analysis_development_output\\governance\\OwnerDevelopmentPlanActivation_20260805_r1.json`；若需撤回，只能 append superseding disabled decision，既有 artifact 與本節不得改寫或刪除。
+
+## 14. 2026-08-28 P0 多路徑 live evidence refresh（append-only）
+
+- **稽核性質**：本節記錄新的 machine evidence，不改寫第 5、6、9 節的歷史觀測，也不建立 source acceptance decision。執行入口為 `scripts/run_p0_source_evidence_audit.py --live --confirm-live-readonly`，並提供既有 MOPS statement-availability artifact。
+- **來源取得能力**：新增 `p0-source-acquisition-routes.v1`；13 個 P0 source 共 27 條受治理候選 route，每個來源至少有 2 條。TDCC OpenAPI `1-5`、MOPS 上市／上櫃月營收 CSV 已接成 live fallback；所有 alternate route 仍是 candidate evidence，不代表授權或正式 ingestion。
+- **漲跌停修正**：`microstructure.limit_lock` live probe 已由 `MI_INDEX` 改為 TWSE `TWT84U`。2026-08-27 response 有 1,377 筆正常行情列、符合鎖死條件 0 筆；狀態應解讀為官方當日無事件，不是 parser、schema 或 endpoint 失敗。第 9 節的 `MI_INDEX` 敘述只保留為當時歷史紀錄，不再代表 current probe。
+- **machine 結果**：13 項來源=`1 verified / 12 degraded / 0 missing`。主要原始／接受列數依序為：除權息 271、減資／分割 2、停復牌 1、處置 4、分盤 4、全額交割 10、三大法人 18,307、信用交易 1,295、TDCC 68,578、TWSE 月營收 1,085、TPEx 月營收 890；MOPS 季報 availability artifact 通過 lineage 驗證。
+- **Control Center 解讀**：載入上述完整 audit 後，`contract_only=0`、`blocked_provenance=12`、`research_shadow=1`，machine=`12 degraded / 1 verified`。未載入 audit 時顯示的 13 列 `contract_only` 只代表 projection 缺失，不能再用來判定資料不存在。
+- **仍未解除的決議**：13 項 source decision 均為 `not_supplied`，`accepted=0`、`limited=0`、`downstream_eligible=0`。仍須補 publication／decision-time provenance、具名 owner/reviewer、license/use-case、quality／coverage 與 rollback evidence；程式不得代替人工或來源方作出授權事實。
+- **安全邊界**：`candidate_evidence_only=true`、`formal_eligible=false`、`production_ingestion_allowed=false`、`scheduler_allowed=false`。本次沒有寫正式 DB、沒有把 machine verified 自動升格、沒有增加 Formal clock 或 ML credit。
+- **完整盤點**：[Program Readiness Audit 2026-08-28](PROGRAM_READINESS_AUDIT_2026_08_28.md)。

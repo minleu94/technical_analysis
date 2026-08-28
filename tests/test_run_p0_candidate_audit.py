@@ -145,6 +145,40 @@ def test_probe_report_hash_is_stable_across_source_order() -> None:
     assert first["lineage"]["probe_report_sha256"] == second["lineage"]["probe_report_sha256"]
 
 
+def test_candidate_audit_keeps_official_no_data_separate_from_schema_drift() -> None:
+    report = _probe_report()
+    report["sources"][0] = {
+        "source_id": "twse_institutional",
+        "network_status": "reachable",
+        "probe_outcome": "official_no_data",
+        "availability_status": "official_no_data",
+        "official_status": "很抱歉，沒有符合條件的資料!",
+        "schema_status": "no_data",
+        "timestamp_evidence": "unavailable",
+        "raw_row_count": 0,
+        "accepted_row_count": 0,
+        "duplicate_row_count": 0,
+        "quarantine_row_count": 0,
+        "blocked_row_count": 0,
+        "payload_sha256": "1" * 64,
+    }
+
+    payload = build_p0_candidate_audit(
+        date(2026, 7, 16), probe_report=report
+    )
+    row = next(
+        item
+        for item in payload["items"]
+        if item["source_id"] == "institutional_flows"
+    )
+
+    assert row["audit_status"] == "official_no_data"
+    assert row["machine_status"] == "missing"
+    assert row["evidence_status"] == "official_no_data_for_requested_date"
+    assert row["pit_status"] == "unavailable"
+    assert row["remaining_blocker_category"] == "official_no_data_for_requested_date"
+
+
 def test_mops_quarterly_artifact_is_a_research_only_candidate() -> None:
     artifact = {
         "source_id": "mops.statement.publication", "source_version": "mops-v1", "captured_at": "2026-07-19T18:22:14-07:00",
@@ -206,6 +240,70 @@ def test_mops_ezsearch_availability_artifact_closes_missing_artifact_only() -> N
     assert pit["payload_sha256"]
     assert pit["blockers"] == ["research_only_not_source_accepted"]
     assert payload["formal_oos_allowed"] is False
+
+
+def test_mops_ezsearch_legacy_v1_artifact_is_revalidated_in_memory() -> None:
+    artifact = build_statement_availability_artifact(
+        (
+            MOPSQueryResult(
+                market="sii",
+                announcement_item="F26",
+                rows=(
+                    {
+                        "CDATE": "115/07/27",
+                        "CTIME": "14:43:02",
+                        "TYPEK": "上市",
+                        "COMPANY_ID": "2330",
+                        "COMPANY_NAME": "台積電",
+                        "CODE_NAME": "半導體業",
+                        "AN_CODE": "F26",
+                        "AN_NAME": "資產負債表",
+                        "SUBJECT": "115年第2季資產負債表",
+                        "HYPERLINK": (
+                            "https://mopsov.twse.com.tw/mops/web/"
+                            "ajax_t164sb03?co_id=2330"
+                        ),
+                    },
+                ),
+                response_sha256="a" * 64,
+                source_status="success",
+            ),
+        ),
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 27),
+        captured_at="2026-07-27T15:00:00+08:00",
+    )
+    for row in artifact["rows"]:
+        row.pop("source_hash")
+    legacy_fields = {
+        "stock_code",
+        "statement_type",
+        "period",
+        "as_of_date",
+        "announced_date",
+        "available_date",
+        "source",
+        "source_version",
+    }
+    artifact["availability_projection"] = [
+        {key: value for key, value in row.items() if key in legacy_fields}
+        for row in artifact["availability_projection"]
+    ]
+
+    payload = build_p0_candidate_audit(
+        date(2026, 7, 27),
+        probe_report={**_probe_report(), "probe_date": "2026-07-27"},
+        mops_quarterly_artifact=artifact,
+    )
+
+    pit = next(
+        item
+        for item in payload["items"]
+        if item["source_id"] == "pit.quarterly_financials"
+    )
+    assert pit["audit_status"] == "observed_candidate"
+    assert pit["row_count"] == 1
+    assert pit["payload_sha256"]
 
 
 def test_fubon_projection_is_exposed_only_as_degraded_research_supplement() -> None:

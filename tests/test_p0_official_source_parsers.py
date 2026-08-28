@@ -137,6 +137,36 @@ def test_tdcc_period_end_is_not_promoted_to_publication_time() -> None:
     assert "official_publication_timestamp_missing" in row["warnings"]
 
 
+def test_tdcc_parser_accepts_official_openapi_json_and_bom_key() -> None:
+    payload = [
+        {
+            "\ufeff資料日期": "20260710",
+            "證券代號": "2330",
+            "持股分級": "15",
+            "人數": "100",
+            "股數": "600000",
+            "占集保庫存數比例%": "60.00",
+        }
+    ]
+    envelope = RawFetchEnvelope(
+        source_id="tdcc_shareholding",
+        source_version="tdcc-openapi-1-5.v1",
+        endpoint_id="tdcc:openapi:1-5",
+        request_parameters={},
+        fetched_at=FETCHED_AT,
+        http_status=200,
+        http_headers={"Content-Type": "application/json"},
+        payload=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+    )
+
+    result = parse_tdcc_shareholding(envelope)
+
+    assert result.raw_row_count == 1
+    assert result.accepted_row_count == 1
+    assert result.accepted[0].to_dict()["observation_date"] == "2026-07-10"
+    assert result.accepted[0].to_dict()["quantities"]["holding_ratio_bp"] == 6000
+
+
 def test_twse_disposition_parser_preserves_announcement_and_effective_period() -> None:
     result = parse_twse_disposition(
         _envelope(
@@ -214,6 +244,28 @@ def test_monthly_revenue_open_data_preserves_report_date_without_claiming_time()
     assert row["quantities"]["monthly_revenue"] == 13382706
     assert row["publication_at"] is None
     assert row["quality"] == "degraded"
+
+
+def test_monthly_revenue_parser_accepts_official_mops_csv_fallback() -> None:
+    envelope = RawFetchEnvelope(
+        source_id="twse_monthly_revenue",
+        source_version="mopsfin-t187ap05_L-csv.v1",
+        endpoint_id="mopsfin:csv:t187ap05_L",
+        request_parameters={},
+        fetched_at=FETCHED_AT,
+        http_status=200,
+        http_headers={"Content-Type": "text/csv"},
+        payload=(
+            "\ufeff出表日期,資料年月,公司代號,公司名稱,營業收入-當月營收\n"
+            "1150717,11506,1101,台泥,13382706\n"
+        ).encode("utf-8"),
+    )
+
+    result = parse_monthly_revenue_open_data(envelope)
+
+    assert result.raw_row_count == 1
+    assert result.accepted_row_count == 1
+    assert result.accepted[0].to_dict()["quantities"]["monthly_revenue"] == 13382706
 
 
 def test_twse_ex_dividend_parser_keeps_event_date_without_inferred_publication() -> None:
@@ -399,6 +451,25 @@ def test_twse_limit_lock_parser_does_not_treat_regular_price_change_as_lock() ->
     result = parse_twse_limit_lock(envelope)
     assert result.accepted_row_count == 0
     assert result.blocked_row_count == 1
+
+
+def test_twse_limit_lock_parser_supports_live_twt84u_schema() -> None:
+    result = parse_twse_limit_lock(
+        _envelope(
+            "twse_limit_lock_twt84u.json",
+            source_id="microstructure.limit_lock",
+            source_version="twse-TWT84U.v1",
+        )
+    )
+
+    assert result.raw_row_count == 4
+    assert result.accepted_row_count == 2
+    assert result.blocked_row_count == 2
+    assert result.quarantine_row_count == 0
+    rows = {row.symbol: row.to_dict() for row in result.accepted}
+    assert rows["1111"]["quantities"] == {"limit_up_locked": 1}
+    assert rows["2222"]["quantities"] == {"limit_down_locked": 1}
+    assert rows["1111"]["metadata"]["limit_price_source"] == "twse.TWT84U"
 
 
 def test_mops_quarterly_financials_parser_accepts_consolidated_uncorrected_artifact() -> None:

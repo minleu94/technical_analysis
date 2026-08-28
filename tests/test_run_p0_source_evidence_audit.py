@@ -468,6 +468,88 @@ def test_fault_isolation_one_source_failure_does_not_mask_others() -> None:
     assert credit["availability"] == "network_probed"
 
 
+def test_official_no_data_is_not_reported_as_schema_drift() -> None:
+    report = _sample_probe_report()
+    report["sources"][0] = {
+        "source_id": "twse_institutional",
+        "network_status": "reachable",
+        "probe_outcome": "official_no_data",
+        "availability_status": "official_no_data",
+        "official_status": "很抱歉，沒有符合條件的資料!",
+        "schema_status": "no_data",
+        "timestamp_evidence": "unavailable",
+        "raw_row_count": 0,
+        "accepted_row_count": 0,
+        "duplicate_row_count": 0,
+        "quarantine_row_count": 0,
+        "blocked_row_count": 0,
+        "payload_sha256": "1" * 64,
+    }
+
+    payload = build_p0_source_evidence_audit(
+        date(2026, 7, 26), probe_report=report
+    )
+    row = next(
+        item
+        for item in payload["machine_evidence_matrix"]
+        if item["source_id"] == "institutional_flows"
+    )
+
+    assert row["machine_status"] == "missing"
+    assert row["availability"] == "official_no_data"
+    assert row["schema_status"] == "no_data"
+    assert row["remaining_blocker"] == "official_no_data_for_requested_date"
+    assert "schema_validation_passed" not in row["auto_verifiable"]
+
+
+def test_evidence_audit_exposes_multiple_acquisition_routes() -> None:
+    payload = build_p0_source_evidence_audit(
+        date(2026, 7, 26), probe_report=_sample_probe_report()
+    )
+
+    summary = payload["acquisition_route_summary"]
+    assert summary["p0_source_count"] == 13
+    assert summary["sources_with_multiple_routes"] == 13
+    limit_lock = next(
+        item
+        for item in payload["machine_evidence_matrix"]
+        if item["source_id"] == "microstructure.limit_lock"
+    )
+    assert {route["route_id"] for route in limit_lock["acquisition_routes"]} == {
+        "twse.TWT84U",
+        "tpex.tpex_ceil_non_trading",
+    }
+
+
+def test_evidence_audit_preserves_actual_fallback_route_lineage() -> None:
+    report = _sample_probe_report()
+    tdcc_probe = next(
+        item for item in report["sources"] if item["source_id"] == "tdcc_shareholding"
+    )
+    tdcc_probe.update(
+        {
+            "endpoint_id": "tdcc:openapi:1-5",
+            "acquisition_route_id": "tdcc.openapi_1-5",
+            "fallback_used": True,
+            "fallback_from_endpoint_id": "tdcc:1-5",
+            "fallback_from_acquisition_route_id": "tdcc.legacy_1-5_csv",
+        }
+    )
+
+    payload = build_p0_source_evidence_audit(
+        date(2026, 7, 26), probe_report=report
+    )
+
+    row = next(
+        item
+        for item in payload["machine_evidence_matrix"]
+        if item["source_id"] == "tdcc_shareholding"
+    )
+    assert row["acquisition_route_id"] == "tdcc.openapi_1-5"
+    assert row["fallback_used"] is True
+    assert row["fallback_from_acquisition_route_id"] == "tdcc.legacy_1-5_csv"
+
+
 def test_handoff_export_and_safety_flags() -> None:
     payload = build_p0_source_evidence_audit(
         date(2026, 7, 26),

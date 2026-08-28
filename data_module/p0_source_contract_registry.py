@@ -24,6 +24,12 @@ P0_SOURCE_IDS = (
 
 P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION = "p0-candidate-source-alignment.v1"
 _P0_CANDIDATE_SOURCE_ALIGNMENTS = {
+    # Phase 3C adapters use provider-facing identities.  Keep those names
+    # explicit so a candidate observation can be traced to the canonical P0
+    # governance contract without silently rewriting a decision.
+    "twse_institutional": "institutional_flows",
+    "twse_credit": "credit_transactions",
+    "tdcc_shareholding": "tdcc_shareholding",
     "mops.statement.publication": "pit.quarterly_financials",
 }
 

@@ -121,11 +121,41 @@ def _json_payload(envelope: RawFetchEnvelope) -> Mapping[str, Any]:
     return decoded
 
 
+def _normalized_mapping(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize BOM-prefixed official CSV/JSON keys without changing values."""
+
+    return {str(key).lstrip("\ufeff").strip(): value for key, value in row.items()}
+
+
+def _json_or_csv_rows(payload: bytes, *, source_name: str) -> tuple[dict[str, Any], ...]:
+    """Read equivalent official JSON-array and CSV distributions fail-closed."""
+
+    text = payload.decode("utf-8-sig")
+    stripped = text.lstrip()
+    if stripped.startswith("["):
+        decoded = json.loads(text)
+        if not isinstance(decoded, list):
+            raise ValueError(f"schema drift: {source_name} JSON root must be a list")
+        rows: list[dict[str, Any]] = []
+        for item in decoded:
+            if not isinstance(item, Mapping):
+                rows.append({"_unparseable_row": item})
+            else:
+                rows.append(_normalized_mapping(item))
+        return tuple(rows)
+    if stripped.startswith("{"):
+        raise ValueError(f"schema drift: {source_name} JSON root must be a list")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise ValueError(f"schema drift: {source_name} CSV header missing")
+    return tuple(_normalized_mapping(dict(row)) for row in reader)
+
+
 def parse_monthly_revenue_open_data(envelope: RawFetchEnvelope) -> OfficialParserResult:
-    """Parse current official revenue open data; report date is not an intraday publication time."""
-    rows = json.loads(envelope.payload.decode("utf-8-sig"))
-    if not isinstance(rows, list):
-        raise ValueError("schema drift: monthly revenue root must be a list")
+    """Parse official revenue JSON or CSV; report date is not publication time."""
+
+    rows = _json_or_csv_rows(envelope.payload, source_name="monthly revenue")
     required = {"出表日期", "資料年月", "公司代號", "營業收入-當月營收"}
     accepted: list[NormalizedP0Observation] = []
     quarantine: list[QuarantineRecord] = []
@@ -326,8 +356,9 @@ def parse_twse_credit(envelope: RawFetchEnvelope) -> OfficialParserResult:
 
 
 def parse_tdcc_shareholding(envelope: RawFetchEnvelope) -> OfficialParserResult:
-    text = envelope.payload.decode("utf-8-sig")
-    rows = tuple(dict(row) for row in csv.DictReader(io.StringIO(text)))
+    """Parse TDCC 1-5 from either the legacy CSV or official OpenAPI JSON."""
+
+    rows = _json_or_csv_rows(envelope.payload, source_name="TDCC 1-5")
     accepted: list[NormalizedP0Observation] = []
     quarantine: list[QuarantineRecord] = []
     for row in rows:
@@ -630,14 +661,37 @@ def parse_twse_reduction(envelope: RawFetchEnvelope) -> OfficialParserResult:
 
 
 def parse_twse_limit_lock(envelope: RawFetchEnvelope) -> OfficialParserResult:
-    """Parse TWSE limit-lock (price limit reach) observations."""
+    """Parse TWSE limit-lock observations from the official TWT84U report.
+
+    The live TWSE ``MI_INDEX`` response does not expose the synthetic
+    ``漲跌停標示`` column used by the original engineering fixture.  The
+    official ``TWT84U`` report does expose the daily upper/lower limit,
+    closing price, and final bid/ask quotes.  A lock is therefore recorded
+    only when the close equals the applicable limit *and* the opposite quote
+    is absent.  Merely closing at the limit is not promoted to a lock.
+
+    The legacy marker schema remains readable so previously captured
+    candidate fixtures stay reproducible.
+    """
     payload = _json_payload(envelope)
     fields, raw_rows = payload.get("fields"), payload.get("data")
     if not isinstance(fields, list) or not isinstance(raw_rows, list):
         raise ValueError("schema drift: limit_lock fields/data missing")
-    required = {"證券代號", "收盤價", "漲跌停標示"}
-    if not required.issubset({str(field) for field in fields}):
+    field_names = {str(field) for field in fields}
+    legacy_required = {"證券代號", "收盤價", "漲跌停標示"}
+    twt84u_required = {
+        "證券代號",
+        "漲停價",
+        "跌停價",
+        "收盤價",
+        "買進揭示價",
+        "賣出揭示價",
+    }
+    if not legacy_required.issubset(field_names) and not twt84u_required.issubset(
+        field_names
+    ):
         raise ValueError("schema drift: limit_lock required fields missing")
+    uses_twt84u = twt84u_required.issubset(field_names)
     observation_date = _parse_yyyymmdd(payload.get("date")) if payload.get("date") else _request_date(envelope)
     publication_at = _parse_timestamp(payload.get("publicationTime"))
     accepted: list[NormalizedP0Observation] = []
@@ -651,10 +705,31 @@ def parse_twse_limit_lock(envelope: RawFetchEnvelope) -> OfficialParserResult:
             symbol = str(row["證券代號"]).strip()
             if not symbol:
                 raise ValueError("missing symbol")
-            marker = str(row["漲跌停標示"]).strip()
+            if uses_twt84u:
+                close_price = _optional_price(row["收盤價"])
+                limit_up_price = _optional_price(row["漲停價"])
+                limit_down_price = _optional_price(row["跌停價"])
+                if (
+                    close_price is None
+                    or limit_up_price is None
+                    or limit_down_price is None
+                ):
+                    blocked_row_count += 1
+                    continue
+                best_bid = str(row["買進揭示價"]).replace(",", "").strip()
+                best_ask = str(row["賣出揭示價"]).replace(",", "").strip()
+                no_quote = {"", "--", "-", "0", "0.0", "0.00"}
+                if close_price == limit_up_price and best_ask in no_quote:
+                    marker = "漲停鎖死"
+                elif close_price == limit_down_price and best_bid in no_quote:
+                    marker = "跌停鎖死"
+                else:
+                    blocked_row_count += 1
+                    continue
+            else:
+                marker = str(row["漲跌停標示"]).strip()
             if marker not in {"漲停鎖死", "跌停鎖死"}:
-                # 一般上漲／下跌不是鎖死事件；保留 row conservation，且絕不
-                # 將整個 MI_INDEX universe 錯標成 limit-lock。
+                # 一般上漲／下跌不是鎖死事件；保留 row conservation。
                 blocked_row_count += 1
                 continue
             quantity_name = "limit_up_locked" if marker == "漲停鎖死" else "limit_down_locked"
@@ -673,6 +748,9 @@ def parse_twse_limit_lock(envelope: RawFetchEnvelope) -> OfficialParserResult:
                         "event_type": "microstructure_limit_lock",
                         "limit_lock_marker": marker,
                         "close_price": str(row["收盤價"]).strip(),
+                        "limit_price_source": (
+                            "twse.TWT84U" if uses_twt84u else "legacy_explicit_marker"
+                        ),
                     },
                 )
             )
@@ -684,6 +762,19 @@ def parse_twse_limit_lock(envelope: RawFetchEnvelope) -> OfficialParserResult:
         raw_row_count=len(raw_rows),
         blocked_row_count=blocked_row_count,
     )
+
+
+def _optional_price(value: object) -> Decimal | None:
+    text = str(value).replace(",", "").strip()
+    if text in {"", "--", "-"}:
+        return None
+    try:
+        parsed = Decimal(text)
+    except InvalidOperation as exc:
+        raise ValueError("malformed price") from exc
+    if not parsed.is_finite() or parsed <= 0:
+        return None
+    return parsed
 
 
 def parse_mops_quarterly_financials(envelope: RawFetchEnvelope) -> OfficialParserResult:

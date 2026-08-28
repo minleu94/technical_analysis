@@ -264,7 +264,7 @@ def test_bounded_probe_uses_one_short_attempt_per_source() -> None:
         assert call.kwargs["max_attempts"] == 1
 
 
-def test_bounded_probe_preserves_raw_http_evidence_when_parser_detects_schema_drift():
+def test_bounded_probe_preserves_raw_http_evidence_for_official_no_data():
     fixture_root = Path(__file__).parent / "fixtures" / "p0_official_sources"
     drifted = MagicMock()
     drifted.content = b'{"stat":"No data"}'
@@ -294,5 +294,55 @@ def test_bounded_probe_preserves_raw_http_evidence_when_parser_detects_schema_dr
     assert institutional["http_status"] == 200
     assert institutional["payload_size_bytes"] == len(drifted.content)
     assert len(institutional["payload_sha256"]) == 64
-    assert institutional["schema_status"] == "mismatch"
-    assert institutional["error_type"] == "ValueError"
+    assert institutional["probe_outcome"] == "official_no_data"
+    assert institutional["schema_status"] == "no_data"
+    assert institutional["official_status"] == "No data"
+
+
+def test_bounded_probe_uses_tdcc_openapi_after_legacy_csv_network_failure():
+    fixture_root = Path(__file__).parent / "fixtures" / "p0_official_sources"
+
+    def response_for(filename: str, content_type: str = "application/json"):
+        response = MagicMock()
+        response.content = (fixture_root / filename).read_bytes()
+        response.headers = {"Content-Type": content_type}
+        response.status_code = 200
+        return response
+
+    tdcc_openapi = MagicMock()
+    tdcc_openapi.content = (
+        b'[{"\\ufeff\\u8cc7\\u6599\\u65e5\\u671f":"20260710",'
+        b'"\\u8b49\\u5238\\u4ee3\\u865f":"2330",'
+        b'"\\u6301\\u80a1\\u5206\\u7d1a":"15",'
+        b'"\\u4eba\\u6578":"100","\\u80a1\\u6578":"600000",'
+        b'"\\u5360\\u96c6\\u4fdd\\u5eab\\u5b58\\u6578\\u6bd4\\u4f8b%":"60.00"}]'
+    )
+    tdcc_openapi.headers = {"Content-Type": "application/json"}
+    tdcc_openapi.status_code = 200
+    no_data = MagicMock()
+    no_data.content = b'{"stat":"No data"}'
+    no_data.headers = {"Content-Type": "application/json"}
+    no_data.status_code = 200
+    responses = [
+        response_for("twse_institutional.json"),
+        response_for("twse_credit.json"),
+        TimeoutError("legacy TDCC timeout"),
+        tdcc_openapi,
+        *([no_data] * 9),
+    ]
+
+    with patch(
+        "scripts.update_phase3c_candidates.safe_request", side_effect=responses
+    ) as request:
+        report = run_bounded_official_probe(date(2026, 7, 10))
+
+    tdcc = next(
+        item for item in report["sources"] if item["source_id"] == "tdcc_shareholding"
+    )
+    assert request.call_count == 13
+    assert tdcc["network_status"] == "reachable"
+    assert tdcc["schema_status"] == "matched"
+    assert tdcc["fallback_used"] is True
+    assert tdcc["fallback_from_acquisition_route_id"] == "tdcc.legacy_1-5_csv"
+    assert tdcc["acquisition_route_id"] == "tdcc.openapi_1-5"
+    assert tdcc["accepted_row_count"] == 1

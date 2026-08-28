@@ -46,7 +46,7 @@ MINIMUM_OWNER_QUESTIONS: dict[str, str] = {
     "microstructure.disposition_stock": "是否核准將來自 TWSE 公告的處置股資料作為交易限制 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
     "microstructure.periodic_call_auction": "是否核准將來自 TWSE 處置公告分盤撮合措施作為交易限制 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
     "microstructure.full_delivery": "是否核准將來自 TWSE TWT85U 的變更交易全額交割資料作為交易限制 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
-    "microstructure.limit_lock": "是否核准將來自 TWSE MI_INDEX 的漲跌停鎖死標示作為成交可行性 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
+    "microstructure.limit_lock": "是否核准將來自 TWSE TWT84U 的漲跌停價與最後揭示買賣價所驗證之鎖死觀測，作為成交可行性 preflight 備選源？（條款限制：僅供內部使用，不可對外再散布）",
     "institutional_flows": "是否核准將來自 TWSE T86 的三大法人買賣超資料作為內部量化研究與歷史回測備選源？（條款限制：僅供內部使用，不可對外再散布）",
     "credit_transactions": "是否核准將來自 TWSE MI_MARGN 的信用交易（融資融券）金額與餘額資料作為內部量化研究與歷史回測備選源？（條款限制：僅供內部使用，不可對外再散布）",
     "tdcc_shareholding": "是否核准將來自 TDCC 1-5 開放資料的集保持股分散級距資料作為內部量化研究與歷史回測備選源？（條款限制：僅供內部使用，不可對外再散布）",
@@ -162,25 +162,108 @@ def build_p0_candidate_audit(
             continue
         counts = _validated_probe_counts(probe)
         timestamp_evidence = str(probe.get("timestamp_evidence", "unavailable"))
+        network_status = str(probe.get("network_status", "reachable"))
+        schema_status = str(probe.get("schema_status", "mismatch"))
+        probe_outcome = str(probe.get("probe_outcome", "unknown"))
+        if network_status == "failed":
+            audit_status = "probe_failed"
+            machine_status = "missing"
+            evidence_status = "network_probe_failed"
+            quality_status = "missing"
+            remaining_blocker = "network_probe_failed"
+            blockers = [remaining_blocker]
+        elif probe_outcome == "official_no_data" or schema_status == "no_data":
+            audit_status = "official_no_data"
+            machine_status = "missing"
+            evidence_status = "official_no_data_for_requested_date"
+            quality_status = "missing"
+            remaining_blocker = "official_no_data_for_requested_date"
+            blockers = [remaining_blocker]
+        elif schema_status != "matched":
+            audit_status = "schema_blocked"
+            machine_status = "missing"
+            evidence_status = "official_schema_mismatch"
+            quality_status = "missing"
+            remaining_blocker = "official_schema_mismatch"
+            blockers = [remaining_blocker]
+        else:
+            audit_status = "observed_candidate"
+            machine_status = (
+                "verified"
+                if timestamp_evidence == "official_publication_timestamp"
+                else "degraded"
+            )
+            evidence_status = "official_endpoint_probed"
+            quality_status = (
+                "verified"
+                if timestamp_evidence == "official_publication_timestamp"
+                else "degraded"
+            )
+            remaining_blocker = "legal_and_license_acceptance_required"
+            blockers = (
+                ["official_publication_timestamp_missing"]
+                if timestamp_evidence == "first_observed_only"
+                else []
+            )
+        observed = schema_status == "matched" and network_status != "failed"
         item = {
             "source_id": source_id,
-            "audit_status": "observed_candidate" if probe.get("schema_status") == "matched" else "schema_blocked",
-            "machine_status": "verified" if (probe.get("schema_status") == "matched" and timestamp_evidence == "official_publication_timestamp") else "degraded",
+            "audit_status": audit_status,
+            "machine_status": machine_status,
             "adapter_status": "candidate_adapter_ready",
-            "pit_status": "pit_date_verified" if timestamp_evidence == "official_publication_timestamp" else "official_publication_timestamp_missing",
-            "evidence_status": "official_endpoint_probed",
-            "quality_status": "verified" if timestamp_evidence == "official_publication_timestamp" else "degraded",
+            "pit_status": (
+                "pit_date_verified"
+                if timestamp_evidence == "official_publication_timestamp"
+                else (
+                    "official_publication_timestamp_missing"
+                    if observed
+                    else "unavailable"
+                )
+            ),
+            "evidence_status": evidence_status,
+            "quality_status": quality_status,
             "row_count": counts["raw_row_count"],
             "accepted_row_count": counts["accepted_row_count"],
             "timestamp_evidence": timestamp_evidence,
+            "probe_outcome": probe_outcome,
             "payload_sha256": probe.get("payload_sha256"),
-            "remaining_blocker_category": "legal_and_license_acceptance_required",
+            "remaining_blocker_category": remaining_blocker,
             "owner_action_required": True,
             "minimum_owner_question": MINIMUM_OWNER_QUESTIONS.get(source_id, ""),
-            "safe_automated_work": ["schema_validation_passed", "row_conservation_verified", "isolation_guaranteed", "payload_hash_verified", "tdd_test_passed"],
-            "non_automated_work": ["legal_license_review", "owner_written_acceptance", "formal_promotion_to_production"],
-            "blockers": (["official_publication_timestamp_missing"] if timestamp_evidence == "first_observed_only" else []),
+            "safe_automated_work": (
+                [
+                    "schema_validation_passed",
+                    "row_conservation_verified",
+                    "isolation_guaranteed",
+                    "payload_hash_verified",
+                    "tdd_test_passed",
+                ]
+                if observed
+                else ["adapter_contract_implemented"]
+            ),
+            "non_automated_work": (
+                [
+                    "legal_license_review",
+                    "owner_written_acceptance",
+                    "formal_promotion_to_production",
+                ]
+                if observed
+                else [
+                    "completed_publication_probe_or_schema_repair",
+                    "legal_license_review",
+                ]
+            ),
+            "blockers": blockers,
         }
+        for route_field in (
+            "endpoint_id",
+            "acquisition_route_id",
+            "fallback_used",
+            "fallback_from_endpoint_id",
+            "fallback_from_acquisition_route_id",
+        ):
+            if route_field in probe:
+                item[route_field] = probe[route_field]
         _attach_fubon_research_supplement(item, fubon_items.get(source_id))
         items.append(item)
 
@@ -269,19 +352,47 @@ def _validate_mops_ezsearch_availability_artifact(
         raise ValueError("MOPS EZSearch availability event count mismatch")
     if quality.get("projection_count") != len(projections):
         raise ValueError("MOPS EZSearch availability projection count mismatch")
-    for key in (
+    for quality_key in (
         "duplicate_event_count",
         "future_event_count",
         "invalid_event_count",
     ):
-        if quality.get(key) != 0:
-            raise ValueError(f"MOPS EZSearch availability {key} must be zero")
+        if quality.get(quality_key) != 0:
+            raise ValueError(
+                f"MOPS EZSearch availability {quality_key} must be zero"
+            )
+    manifest = payload.get("query_manifest")
+    if not isinstance(manifest, list) or not manifest:
+        raise ValueError("MOPS EZSearch availability query manifest is required")
+    manifest_hashes: dict[tuple[str, str], str] = {}
+    for raw_manifest_item in manifest:
+        if not isinstance(raw_manifest_item, Mapping):
+            raise ValueError("MOPS EZSearch availability manifest item must be an object")
+        market = str(raw_manifest_item.get("market", "")).strip()
+        announcement_item = str(
+            raw_manifest_item.get("announcement_item", "")
+        ).strip()
+        response_sha256 = str(
+            raw_manifest_item.get("response_sha256", "")
+        ).strip()
+        if (
+            not market
+            or not announcement_item
+            or len(response_sha256) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in response_sha256)
+        ):
+            raise ValueError("MOPS EZSearch availability manifest lineage is invalid")
+        route_key = (market, announcement_item)
+        if route_key in manifest_hashes:
+            raise ValueError("MOPS EZSearch availability manifest route is duplicated")
+        manifest_hashes[route_key] = f"sha256:{response_sha256.lower()}"
     normalized_rows: list[Mapping[str, Any]] = []
     for raw_row in rows:
         if not isinstance(raw_row, Mapping):
             raise ValueError("MOPS EZSearch availability row must be an object")
         required = {
             "stock_code",
+            "market",
             "statement_type",
             "period",
             "period_end",
@@ -309,8 +420,24 @@ def _validate_mops_ezsearch_availability_artifact(
         ).hexdigest()
         if raw_row.get("event_hash") != expected_event_hash:
             raise ValueError("MOPS EZSearch availability event hash mismatch")
-        normalized_rows.append(raw_row)
-    if build_availability_projection(normalized_rows) != projections:
+        lineage_key = (
+            str(raw_row["market"]).strip(),
+            str(raw_row["announcement_item"]).strip(),
+        )
+        expected_source_hash = manifest_hashes.get(lineage_key)
+        if expected_source_hash is None:
+            raise ValueError("MOPS EZSearch availability row has no manifest lineage")
+        row_source_hash = raw_row.get("source_hash")
+        if row_source_hash is not None and row_source_hash != expected_source_hash:
+            raise ValueError("MOPS EZSearch availability source hash mismatch")
+        normalized_rows.append(
+            {**dict(raw_row), "source_hash": expected_source_hash}
+        )
+    expected_projections = build_availability_projection(normalized_rows)
+    if projections != expected_projections and not _matches_legacy_mops_projection(
+        projections,
+        expected_projections,
+    ):
         raise ValueError("MOPS EZSearch availability projection mismatch")
     source_hash = sha256(
         json.dumps(
@@ -328,6 +455,50 @@ def _validate_mops_ezsearch_availability_artifact(
         }
         for row in projections
     ]
+
+
+def _matches_legacy_mops_projection(
+    projections: Sequence[Any],
+    expected_projections: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Accept the pre-formal-availability.v2 projection after full revalidation."""
+
+    legacy_fields = {
+        "stock_code",
+        "statement_type",
+        "period",
+        "as_of_date",
+        "announced_date",
+        "available_date",
+        "source",
+        "source_version",
+    }
+    if len(projections) != len(expected_projections):
+        return False
+    expected_by_key = {
+        (
+            str(item["stock_code"]),
+            str(item["statement_type"]),
+            str(item["period"]),
+        ): item
+        for item in expected_projections
+    }
+    for raw_projection in projections:
+        if not isinstance(raw_projection, Mapping):
+            return False
+        if set(raw_projection) != legacy_fields:
+            return False
+        key = (
+            str(raw_projection["stock_code"]),
+            str(raw_projection["statement_type"]),
+            str(raw_projection["period"]),
+        )
+        expected = expected_by_key.get(key)
+        if expected is None:
+            return False
+        if any(raw_projection[field] != expected[field] for field in legacy_fields):
+            return False
+    return True
 
 
 def _attach_fubon_research_supplement(

@@ -65,6 +65,20 @@ def test_mops_candidate_identity_maps_only_to_quarterly_financials_contract() ->
     assert aligned.blockers == ()
 
 
+def test_phase3c_provider_identities_map_explicitly_to_canonical_p0_contracts() -> None:
+    expected = {
+        "twse_institutional": "institutional_flows",
+        "twse_credit": "credit_transactions",
+        "tdcc_shareholding": "tdcc_shareholding",
+    }
+
+    for candidate_source_id, governed_source_id in expected.items():
+        aligned = map_candidate_source_id(candidate_source_id)
+        assert aligned.source_id == governed_source_id
+        assert aligned.mapping_version == P0_CANDIDATE_SOURCE_ALIGNMENT_VERSION
+        assert aligned.blockers == ()
+
+
 def test_unknown_candidate_identity_fails_closed() -> None:
     alignment = map_candidate_source_id("mops.unreviewed.numeric_source")
 

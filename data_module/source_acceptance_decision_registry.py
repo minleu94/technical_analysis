@@ -8,7 +8,20 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import sqlite3
+from collections.abc import Mapping, Sequence
 from typing import Any
+
+
+DECISION_REVISION_SCHEMA_VERSION = "source-acceptance-decision-revision.v1"
+OWNER_REVIEW_DECISION_SCHEMA_VERSION = "source-acceptance-owner-review-decision.v1"
+_DECISION_COLLECTION_FIELDS = (
+    "allowed_use_cases",
+    "blockers",
+    "license_evidence_ids",
+    "quality_evidence_ids",
+    "pit_evidence_ids",
+)
+_NON_APPLYING_STATUSES = frozenset({"deferred", "rejected", "disabled"})
 
 
 @dataclass(frozen=True)
@@ -34,7 +47,7 @@ class SourceAcceptanceDecisionRevision:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "schema_version": "source-acceptance-decision-revision.v1",
+            "schema_version": DECISION_REVISION_SCHEMA_VERSION,
             "source_id": self.source_id,
             "decision_revision_id": self.decision_revision_id,
             "parent_revision_id": self.parent_revision_id,
@@ -51,13 +64,110 @@ class SourceAcceptanceDecisionRevision:
         }
 
 
+def parse_source_acceptance_decision_revision(
+    payload: Mapping[str, Any],
+    *,
+    allow_owner_review_deferred: bool = True,
+) -> SourceAcceptanceDecisionRevision:
+    """Decode one decision artifact without opening or mutating a registry.
+
+    The internal revision schema is the canonical registry format.  An external
+    owner-review package may be read only when it explicitly remains
+    ``deferred``/``rejected``/``disabled``; its richer evidence and attestation
+    fields are intentionally not inferred into registry evidence IDs.  Applying
+    ``accepted``/``limited`` decisions therefore still requires the canonical
+    revision schema and the intake/evidence binding checks in the append CLI.
+    """
+
+    if not isinstance(payload, Mapping):
+        raise TypeError("decision JSON must be an object")
+    raw = dict(payload)
+    schema_version = raw.pop("schema_version", DECISION_REVISION_SCHEMA_VERSION)
+    if schema_version == OWNER_REVIEW_DECISION_SCHEMA_VERSION:
+        if not allow_owner_review_deferred:
+            raise ValueError(
+                f"unsupported decision schema: {OWNER_REVIEW_DECISION_SCHEMA_VERSION}"
+            )
+        status = raw.get("status")
+        if status not in _NON_APPLYING_STATUSES:
+            raise ValueError(
+                "owner-review decision schema may only be imported as deferred, rejected, or disabled"
+            )
+        active_blockers = _string_sequence(raw.get("active_blockers", ()), "active_blockers")
+        explicit_blockers = _string_sequence(raw.get("blockers", ()), "blockers")
+        blockers = tuple(dict.fromkeys((*explicit_blockers, *active_blockers)))
+        decided_at = raw.get("decided_at") or raw.get("decision_timestamp")
+        raw = {
+            "source_id": raw.get("source_id"),
+            "decision_revision_id": raw.get("decision_revision_id"),
+            "parent_revision_id": raw.get("parent_revision_id"),
+            "status": status,
+            "allowed_use_cases": (),
+            "blockers": blockers,
+            "license_evidence_ids": (),
+            "quality_evidence_ids": (),
+            "pit_evidence_ids": (),
+            "owner_role": raw.get("owner_role"),
+            "reviewer_role": raw.get("reviewer_role"),
+            "decided_at": decided_at,
+            "rollback_reference": raw.get("rollback_reference"),
+        }
+    elif schema_version != DECISION_REVISION_SCHEMA_VERSION:
+        raise ValueError(f"unsupported decision schema: {schema_version}")
+    else:
+        for key in _DECISION_COLLECTION_FIELDS:
+            raw[key] = _string_sequence(raw.get(key, ()), key)
+
+    try:
+        revision = SourceAcceptanceDecisionRevision(**raw)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"invalid source acceptance decision: {error}") from error
+    validate_source_acceptance_decision_revision(revision)
+    return revision
+
+
+def parse_source_acceptance_decisions(
+    payload: Any,
+    *,
+    allow_owner_review_deferred: bool = True,
+) -> tuple[SourceAcceptanceDecisionRevision, ...]:
+    """Decode a list, wrapped list, or single decision artifact read-only."""
+
+    if isinstance(payload, Mapping) and "decisions" in payload:
+        raw_items = payload.get("decisions")
+    elif isinstance(payload, Mapping) and "decision" in payload:
+        raw_items = (payload.get("decision"),)
+    elif isinstance(payload, Mapping) and "source_id" in payload:
+        raw_items = (payload,)
+    else:
+        raw_items = payload
+    if isinstance(raw_items, (str, bytes)) or not isinstance(raw_items, Sequence):
+        raise ValueError("decision JSON must be a list or an object with decisions")
+    return tuple(
+        parse_source_acceptance_decision_revision(
+            item,
+            allow_owner_review_deferred=allow_owner_review_deferred,
+        )
+        for item in raw_items
+    )
+
+
+def _string_sequence(value: Any, field_name: str) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise TypeError(f"decision field {field_name} must be an array of strings")
+    values = tuple(value)
+    if any(not isinstance(item, str) for item in values):
+        raise TypeError(f"decision field {field_name} must be an array of strings")
+    return values
+
+
 class SourceAcceptanceDecisionRegistry:
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
         self._initialize()
 
     def append(self, revision: SourceAcceptanceDecisionRevision) -> SourceAcceptanceDecisionRevision:
-        _validate_revision(revision)
+        validate_source_acceptance_decision_revision(revision)
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT payload FROM source_acceptance_decisions WHERE content_hash = ?",
@@ -174,20 +284,64 @@ class SourceAcceptanceDecisionRegistry:
         return current.decision_revision_id
 
 
-def _validate_revision(revision: SourceAcceptanceDecisionRevision) -> None:
+def validate_source_acceptance_decision_revision(
+    revision: SourceAcceptanceDecisionRevision,
+) -> None:
+    """Validate one decision revision without opening or mutating the registry.
+
+    This validator is intentionally usable by read-only projections.  Keeping the
+    evidence and prohibited-use-case rules in one place prevents a UI/CLI from
+    presenting a malformed ``accepted`` or ``limited`` payload as a valid
+    governance decision.
+    """
+
+    if not isinstance(revision, SourceAcceptanceDecisionRevision):
+        raise TypeError("revision must be a SourceAcceptanceDecisionRevision")
     non_applying_statuses = {"deferred", "rejected", "disabled"}
     applying_statuses = {"limited", "accepted"}
     if revision.status not in non_applying_statuses | applying_statuses:
         raise ValueError("unsupported source acceptance decision status")
-    if not revision.source_id or not revision.decision_revision_id:
+    if (
+        not isinstance(revision.source_id, str)
+        or not revision.source_id.strip()
+        or not isinstance(revision.decision_revision_id, str)
+        or not revision.decision_revision_id.strip()
+    ):
         raise ValueError("source_id and decision_revision_id are required")
-    if not revision.owner_role or not revision.reviewer_role:
+    if (
+        not isinstance(revision.owner_role, str)
+        or not revision.owner_role.strip()
+        or not isinstance(revision.reviewer_role, str)
+        or not revision.reviewer_role.strip()
+    ):
         raise ValueError("owner_role and reviewer_role are required")
-    if not revision.rollback_reference:
+    if not isinstance(revision.rollback_reference, str) or not revision.rollback_reference.strip():
         raise ValueError("rollback_reference is required")
-    decided_at = datetime.fromisoformat(revision.decided_at.replace("Z", "+00:00"))
+    if not isinstance(revision.decided_at, str) or not revision.decided_at.strip():
+        raise ValueError("decided_at must be an ISO timestamp")
+    try:
+        decided_at = datetime.fromisoformat(revision.decided_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError) as error:
+        raise ValueError("decided_at must be an ISO timestamp") from error
     if decided_at.tzinfo is None:
         raise ValueError("decided_at must include a timezone")
+
+    for field_name in (
+        "allowed_use_cases",
+        "blockers",
+        "license_evidence_ids",
+        "quality_evidence_ids",
+        "pit_evidence_ids",
+    ):
+        values = getattr(revision, field_name)
+        if isinstance(values, (str, bytes)):
+            raise TypeError(f"{field_name} must be a collection of strings")
+        try:
+            materialized = tuple(values)
+        except TypeError as error:
+            raise TypeError(f"{field_name} must be a collection of strings") from error
+        if any(not isinstance(value, str) or not value.strip() for value in materialized):
+            raise ValueError(f"{field_name} must contain non-empty strings")
 
     if revision.status in non_applying_statuses:
         if revision.allowed_use_cases:
@@ -221,6 +375,10 @@ def _validate_revision(revision: SourceAcceptanceDecisionRevision) -> None:
         raise ValueError(
             "source acceptance registry cannot authorize formal or production use cases"
         )
+
+
+# Kept as a private compatibility alias for older in-module callers.
+_validate_revision = validate_source_acceptance_decision_revision
 
 
 def _from_payload(payload: str) -> SourceAcceptanceDecisionRevision:

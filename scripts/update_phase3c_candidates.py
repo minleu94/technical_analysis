@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
@@ -40,6 +41,48 @@ from data_module.phase3c_backfill_runner import (
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+OFFICIAL_PROBE_ROUTE_IDS: dict[str, str] = {
+    "twse:T86": "twse.T86",
+    "twse:MI_MARGN": "twse.MI_MARGN",
+    "tdcc:1-5": "tdcc.legacy_1-5_csv",
+    "twse:announcement:punish": "twse.announcement.punish",
+    "twse:exchangeReport:TWT85U": "twse.TWT85U",
+    "twse:exchangeReport:TWTAWU": "twse.TWTAWU",
+    "twse:exchangeReport:TWT49U": "twse.TWT49U",
+    "twse:exchangeReport:TWTAUU": "twse.TWTAUU",
+    "twse:opendata:t187ap05_L": "twse.openapi.t187ap05_L",
+    "tpex:openapi:mopsfin_t187ap05_O": "tpex.openapi.mopsfin_t187ap05_O",
+    "twse:exchangeReport:TWT84U": "twse.TWT84U",
+}
+
+
+OFFICIAL_PROBE_FALLBACKS: dict[
+    str, tuple[str, str, str, str, dict[str, str]]
+] = {
+    "tdcc_shareholding": (
+        "tdcc-openapi-1-5.v1",
+        "tdcc:openapi:1-5",
+        "tdcc.openapi_1-5",
+        "https://openapi.tdcc.com.tw/v1/opendata/1-5",
+        {},
+    ),
+    "twse_monthly_revenue": (
+        "mopsfin-t187ap05_L-csv.v1",
+        "mopsfin:csv:t187ap05_L",
+        "mopsfin.csv.t187ap05_L",
+        "https://mopsfin.twse.com.tw/opendata/t187ap05_L.csv",
+        {},
+    ),
+    "tpex_monthly_revenue": (
+        "mopsfin-t187ap05_O-csv.v1",
+        "mopsfin:csv:t187ap05_O",
+        "mopsfin.csv.t187ap05_O",
+        "https://mopsfin.twse.com.tw/opendata/t187ap05_O.csv",
+        {},
+    ),
+}
 
 
 def run_bounded_official_probe(probe_date: date) -> dict:
@@ -131,11 +174,15 @@ def run_bounded_official_probe(probe_date: date) -> dict:
         ),
         ("twse_monthly_revenue", "twse-t187ap05_L.v1", "twse:opendata:t187ap05_L", "https://openapi.twse.com.tw/v1/opendata/t187ap05_L", {}, parse_monthly_revenue_open_data),
         ("tpex_monthly_revenue", "tpex-mopsfin_t187ap05_O.v1", "tpex:openapi:mopsfin_t187ap05_O", "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O", {}, parse_monthly_revenue_open_data),
-        ("twse_limit_lock", "twse-MI_INDEX.v1", "twse:exchangeReport:MI_INDEX", "https://www.twse.com.tw/exchangeReport/MI_INDEX", {"response": "json", "date": date_ce, "type": "ALLBUT0999"}, parse_twse_limit_lock),
+        ("twse_limit_lock", "twse-TWT84U.v1", "twse:exchangeReport:TWT84U", "https://www.twse.com.tw/exchangeReport/TWT84U", {"response": "json", "date": date_ce, "selectType": "ALLBUT0999"}, parse_twse_limit_lock),
     )
     diagnostics: list[dict] = []
     for source_id, source_version, endpoint_id, url, params, parser in probe_requests:
         fetched_at = datetime.now(timezone.utc)
+        primary_endpoint_id = endpoint_id
+        primary_route_id = OFFICIAL_PROBE_ROUTE_IDS[endpoint_id]
+        acquisition_route_id = primary_route_id
+        fallback_evidence: dict[str, object] = {"fallback_used": False}
         try:
             response = safe_request(
                 url,
@@ -144,29 +191,55 @@ def run_bounded_official_probe(probe_date: date) -> dict:
                 max_attempts=1,
             )
             payload = bytes(response.content)
-        except Exception as exc:
-            diagnostics.append(
-                {
-                    "source_id": source_id,
-                    "endpoint_id": endpoint_id,
-                    "network_status": "failed",
-                    "http_status": None,
-                    "payload_sha256": None,
-                    "payload_size_bytes": 0,
-                    "fetched_at": fetched_at.isoformat(),
-                    "schema_status": "unavailable",
-                    "timestamp_evidence": "unavailable",
-                    "raw_row_count": 0,
-                    "accepted_row_count": 0,
-                    "duplicate_row_count": 0,
-                    "quarantine_row_count": 0,
-                    "blocked_row_count": 0,
-                    "quarantine_reasons": [],
-                    "error_type": type(exc).__name__,
-                    "error": str(exc),
+        except Exception as primary_exc:
+            fallback = OFFICIAL_PROBE_FALLBACKS.get(source_id)
+            if fallback is None:
+                diagnostics.append(
+                    _network_failure_diagnostic(
+                        source_id=source_id,
+                        endpoint_id=endpoint_id,
+                        acquisition_route_id=acquisition_route_id,
+                        fetched_at=fetched_at,
+                        primary_exc=primary_exc,
+                    )
+                )
+                continue
+            (
+                source_version,
+                endpoint_id,
+                acquisition_route_id,
+                url,
+                params,
+            ) = fallback
+            try:
+                response = safe_request(
+                    url,
+                    params or None,
+                    timeout_seconds=8,
+                    max_attempts=1,
+                )
+                payload = bytes(response.content)
+                fallback_evidence = {
+                    "fallback_used": True,
+                    "fallback_from_endpoint_id": primary_endpoint_id,
+                    "fallback_from_acquisition_route_id": primary_route_id,
+                    "primary_error_type": type(primary_exc).__name__,
+                    "primary_error": str(primary_exc),
                 }
-            )
-            continue
+            except Exception as fallback_exc:
+                diagnostics.append(
+                    _network_failure_diagnostic(
+                        source_id=source_id,
+                        endpoint_id=endpoint_id,
+                        acquisition_route_id=acquisition_route_id,
+                        fetched_at=fetched_at,
+                        primary_exc=primary_exc,
+                        fallback_exc=fallback_exc,
+                        fallback_from_endpoint_id=primary_endpoint_id,
+                        fallback_from_acquisition_route_id=primary_route_id,
+                    )
+                )
+                continue
 
         envelope = RawFetchEnvelope(
             source_id=source_id,
@@ -181,12 +254,33 @@ def run_bounded_official_probe(probe_date: date) -> dict:
         raw_evidence = {
             "source_id": source_id,
             "endpoint_id": endpoint_id,
+            "acquisition_route_id": acquisition_route_id,
+            **fallback_evidence,
             "network_status": "reachable",
             "http_status": int(response.status_code),
             "payload_sha256": sha256(payload).hexdigest(),
             "payload_size_bytes": len(payload),
             "fetched_at": fetched_at.isoformat(),
         }
+        official_no_data = _official_no_data_status(payload)
+        if official_no_data is not None:
+            diagnostics.append(
+                {
+                    **raw_evidence,
+                    "probe_outcome": "official_no_data",
+                    "availability_status": "official_no_data",
+                    "official_status": official_no_data,
+                    "schema_status": "no_data",
+                    "timestamp_evidence": "unavailable",
+                    "raw_row_count": 0,
+                    "accepted_row_count": 0,
+                    "duplicate_row_count": 0,
+                    "quarantine_row_count": 0,
+                    "blocked_row_count": 0,
+                    "quarantine_reasons": [],
+                }
+            )
+            continue
         try:
             result = parser(envelope)
             evidence_kinds = {
@@ -200,6 +294,8 @@ def run_bounded_official_probe(probe_date: date) -> dict:
             diagnostics.append(
                 {
                     **raw_evidence,
+                    "probe_outcome": "observed",
+                    "availability_status": "observed",
                     "schema_status": "matched",
                     "timestamp_evidence": timestamp_evidence,
                     "raw_row_count": result.raw_row_count,
@@ -216,6 +312,8 @@ def run_bounded_official_probe(probe_date: date) -> dict:
             diagnostics.append(
                 {
                     **raw_evidence,
+                    "probe_outcome": "schema_mismatch",
+                    "availability_status": "schema_mismatch",
                     "schema_status": "mismatch",
                     "timestamp_evidence": "unavailable",
                     "raw_row_count": 0,
@@ -238,6 +336,76 @@ def run_bounded_official_probe(probe_date: date) -> dict:
         "production_scheduler_allowed": False,
         "human_decision": "requires_human_acceptance",
     }
+
+
+def _network_failure_diagnostic(
+    *,
+    source_id: str,
+    endpoint_id: str,
+    acquisition_route_id: str,
+    fetched_at: datetime,
+    primary_exc: Exception,
+    fallback_exc: Exception | None = None,
+    fallback_from_endpoint_id: str | None = None,
+    fallback_from_acquisition_route_id: str | None = None,
+) -> dict:
+    error = fallback_exc or primary_exc
+    diagnostic = {
+        "source_id": source_id,
+        "endpoint_id": endpoint_id,
+        "acquisition_route_id": acquisition_route_id,
+        "fallback_used": fallback_exc is not None,
+        "network_status": "failed",
+        "probe_outcome": "network_error",
+        "availability_status": "network_error",
+        "http_status": None,
+        "payload_sha256": None,
+        "payload_size_bytes": 0,
+        "fetched_at": fetched_at.isoformat(),
+        "schema_status": "unavailable",
+        "timestamp_evidence": "unavailable",
+        "raw_row_count": 0,
+        "accepted_row_count": 0,
+        "duplicate_row_count": 0,
+        "quarantine_row_count": 0,
+        "blocked_row_count": 0,
+        "quarantine_reasons": [],
+        "error_type": type(error).__name__,
+        "error": str(error),
+    }
+    if fallback_exc is not None:
+        diagnostic.update(
+            {
+                "fallback_from_endpoint_id": fallback_from_endpoint_id,
+                "fallback_from_acquisition_route_id": fallback_from_acquisition_route_id,
+                "primary_error_type": type(primary_exc).__name__,
+                "primary_error": str(primary_exc),
+            }
+        )
+    return diagnostic
+
+
+def _official_no_data_status(payload: bytes) -> str | None:
+    """Classify a valid official no-data reply without calling it schema drift."""
+
+    try:
+        decoded = json.loads(payload.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    status = decoded.get("stat")
+    if not isinstance(status, str) or not status.strip():
+        return None
+    normalized = status.strip()
+    if normalized.casefold() in {"ok", "success"}:
+        return None
+    has_rows = isinstance(decoded.get("data"), list) or isinstance(
+        decoded.get("tables"), list
+    )
+    if has_rows:
+        return None
+    return normalized
 
 
 def update_phase3c_candidates(
