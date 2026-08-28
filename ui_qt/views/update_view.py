@@ -2795,6 +2795,61 @@ class UpdateView(QWidget):
                     f"Freshness 檢查：{self._timeline_status_text(freshness_status)}"
                     f"（{freshness_status}）{freshness_suffix}"
                 )
+            daily_latest = str(
+                freshness.get("daily_prices_latest_date")
+                or freshness.get("daily_price_latest_date_key")
+                or ""
+            ).strip()
+            technical_latest = str(
+                freshness.get("technical_indicators_latest_date") or ""
+            ).strip()
+            if daily_latest or technical_latest:
+                lines.append(
+                    "Freshness 最新日："
+                    f"日價={daily_latest or '未提供'}；"
+                    f"技術指標={technical_latest or '未提供'}"
+                )
+            quick_status = str(
+                freshness.get("data_update_quick_status") or ""
+            ).strip()
+            if quick_status:
+                quick_line = (
+                    f"Freshness 對應快速更新：{self._timeline_status_text(quick_status)}"
+                    f"（{quick_status}）"
+                )
+                quick_checked = str(
+                    freshness.get("data_update_quick_checked_date") or ""
+                ).strip()
+                quick_expected = str(
+                    freshness.get("data_update_quick_expected_date") or ""
+                ).strip()
+                if quick_checked or quick_expected:
+                    quick_line += (
+                        f"；檢查日={quick_checked or '未提供'}"
+                        f"；預期日={quick_expected or '未提供'}"
+                    )
+                lines.append(quick_line)
+            file_checks = []
+            if "twse_daily_price_file_exists_for_latest_date" in freshness:
+                file_checks.append(
+                    "TWSE 日檔="
+                    + (
+                        "存在"
+                        if freshness["twse_daily_price_file_exists_for_latest_date"]
+                        else "缺漏"
+                    )
+                )
+            if "tpex_daily_price_file_exists_for_latest_date" in freshness:
+                file_checks.append(
+                    "TPEx 日檔="
+                    + (
+                        "存在"
+                        if freshness["tpex_daily_price_file_exists_for_latest_date"]
+                        else "缺漏"
+                    )
+                )
+            if file_checks:
+                lines.append("Freshness 原始日檔：" + "；".join(file_checks))
         tpex = value.get("artifacts", {}).get("tpex") if isinstance(value.get("artifacts"), dict) else None
         if isinstance(tpex, dict) and tpex.get("available"):
             tpex_status = str(tpex.get("status") or "unknown")

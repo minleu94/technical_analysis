@@ -479,7 +479,21 @@ def test_update_view_projects_explicit_data_update_timeline_and_steps(tmp_path):
         encoding="utf-8",
     )
     freshness_path.write_text(
-        json.dumps({"status": "passed", "checked_at": "2026-08-28T09:05:00+08:00"}),
+        json.dumps(
+            {
+                "status": "passed",
+                "checked_at": "2026-08-28T09:05:00+08:00",
+                "checks": {
+                    "daily_prices_latest_date": "20260828",
+                    "technical_indicators_latest_date": "20260828",
+                    "data_update_quick_status": "passed",
+                    "data_update_quick_checked_date": "2026-08-28",
+                    "data_update_quick_expected_date": "2026-08-28",
+                    "twse_daily_price_file_exists_for_latest_date": True,
+                    "tpex_daily_price_file_exists_for_latest_date": True,
+                },
+            }
+        ),
         encoding="utf-8",
     )
     view = _TestableUpdateView(
@@ -497,6 +511,9 @@ def test_update_view_projects_explicit_data_update_timeline_and_steps(tmp_path):
     assert "目標資料日：2026-08-28" in view.data_update_timeline_summary_label.text()
     assert "明確路徑" in view.data_update_timeline_summary_label.text()
     assert "Freshness 檢查：完成（passed）" in view.data_update_timeline_summary_label.text()
+    assert "Freshness 最新日：日價=20260828；技術指標=20260828" in view.data_update_timeline_summary_label.text()
+    assert "Freshness 對應快速更新：完成（passed）" in view.data_update_timeline_summary_label.text()
+    assert "Freshness 原始日檔：TWSE 日檔=存在；TPEx 日檔=存在" in view.data_update_timeline_summary_label.text()
     assert view.data_update_timeline_table.rowCount() == 2
     assert view.data_update_timeline_table.item(1, 0).text() == "SQLite"
     assert view.data_update_timeline_table.item(1, 1).text() == "完成（passed）"

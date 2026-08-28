@@ -28,6 +28,14 @@ def _normalise_status(value: Any) -> str:
     return str(value or "unknown").strip().lower() or "unknown"
 
 
+def _bounded_text(value: Any, *, max_length: int = 128) -> str:
+    """Keep status projections readable even when an artifact field is malformed."""
+
+    if value is None:
+        return ""
+    return str(value).strip()[:max_length]
+
+
 def _local_timezone() -> tzinfo:
     return datetime.now().astimezone().tzinfo or timezone.utc
 
@@ -141,6 +149,34 @@ def _artifact_projection(
     else:
         projected["warnings"] = list(payload.get("warnings") or [])[:8]
         projected["errors"] = list(payload.get("errors") or [])[:8]
+        if label == "freshness":
+            checks = payload.get("checks")
+            if isinstance(checks, Mapping):
+                for key in (
+                    "daily_prices_latest_date",
+                    "daily_price_latest_date_key",
+                    "technical_indicators_latest_date",
+                    "data_update_quick_status",
+                    "data_update_quick_checked_date",
+                    "data_update_quick_expected_date",
+                ):
+                    value = checks.get(key)
+                    if value is not None:
+                        projected[key] = _bounded_text(value)
+                for key in (
+                    "daily_prices_age_days",
+                    "technical_indicators_age_days",
+                ):
+                    value = checks.get(key)
+                    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                        projected[key] = value
+                for key in (
+                    "twse_daily_price_file_exists_for_latest_date",
+                    "tpex_daily_price_file_exists_for_latest_date",
+                ):
+                    value = checks.get(key)
+                    if isinstance(value, bool):
+                        projected[key] = value
     return projected, diagnostics
 
 
