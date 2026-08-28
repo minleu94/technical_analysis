@@ -1429,13 +1429,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.summary_value_labels["warning"].setText(f"{warning_count} 則")
         self.summary_detail_labels["warning"].setText("降級、缺口與 replay 限制需人工檢查")
 
-        self.summary_blocks["waiting"].setToolTip(
-            "【等待真實時間】\n"
-            "系統當前正處於 waiting_for_time 階段（等待市場真實時間流逝與數據累積）。\n"
-            "此時 Paper Portfolio 正處於第 1 週的資料累積中（Week 1）。\n"
-            "在未滿 1 週之前，持倉損益與大戶籌碼追蹤尚不足以形成穩健的證據，\n"
-            "請耐心等待真實交易日數據陸續更新與回填。"
-        )
+        self.summary_blocks["waiting"].setToolTip(_phase0_waiting_tooltip(dashboard))
         self._apply_summary_block_style("review", "info" if review_count else "ready")
         self._apply_summary_block_style("action", "warning" if action_count else "ready")
         self._apply_summary_block_style("waiting", "warning" if waiting_count else "ready")
@@ -1761,9 +1755,18 @@ def _humanize_replay_diagnostic(token: str) -> str:
 def _format_phase0_gate_text(dashboard: WorkbenchDashboardDTO) -> str:
     weekly = _ratio_for_item(dashboard, "weekly_history") or "尚未就緒"
     dry_run = _ratio_for_item(dashboard, "multi_day_dry_run") or "尚未就緒"
+    evidence_gate = next(
+        (item for item in dashboard.status_strip if item.item_id == "evidence_gate"),
+        None,
+    )
+    credit_text = (
+        "formal evidence credit 已授權"
+        if evidence_gate is not None and "formal_credit_authorized=true" in (evidence_gate.summary or "")
+        else "formal evidence credit 尚未授權"
+    )
     return (
         f"Phase 0 每週歷史 {weekly} 與多日 dry-run {dry_run} 仍是真實時間 gate；"
-        "replay 不可取代。"
+        f"replay 不可取代；{credit_text}。"
     )
 
 
@@ -1771,6 +1774,26 @@ def _format_phase0_ratio_text(dashboard: WorkbenchDashboardDTO) -> str:
     weekly = _ratio_for_item(dashboard, "weekly_history") or "尚未就緒"
     dry_run = _ratio_for_item(dashboard, "multi_day_dry_run") or "尚未就緒"
     return f"weekly history {weekly}｜multi-day dry-run {dry_run}"
+
+
+def _phase0_waiting_tooltip(dashboard: WorkbenchDashboardDTO) -> str:
+    waiting_count = sum(
+        1 for item in dashboard.daily_checklist if str(item.status) == "waiting_for_time"
+    )
+    ratio_text = _format_phase0_ratio_text(dashboard)
+    if waiting_count:
+        return (
+            "【等待真實時間】\n"
+            f"目前有 {waiting_count} 項仍在等待真實市場時間與資料累積。\n"
+            f"{ratio_text}\n"
+            "不可用 fixture、手動改表或 replay 補齊；請依實際交易日讓排程／人工覆盤自然累積。"
+        )
+    return (
+        "【時間 gate 已有觀測】\n"
+        f"{ratio_text}\n"
+        "這只表示目前的 readiness／具名核准觀測已達門檻；仍須查看 evidence gate 摘要，"
+        "formal credit 與 production scheduler 不會因 3/3 自動開啟。"
+    )
 
 
 def _ratio_for_item(dashboard: WorkbenchDashboardDTO, item_id: str) -> str | None:

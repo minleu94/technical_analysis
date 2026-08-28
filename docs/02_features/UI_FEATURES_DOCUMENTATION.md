@@ -132,7 +132,7 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 
 - 不重算 scoring、recommendation、portfolio、backtest 或 lifecycle。
 - 不產生買賣建議、不下單、不套用 lifecycle action。
-- Phase 0 weekly history 目前為 `0/3 waiting_for_time`，只能繼續真實時間累積；multi-day dry-run 已為 `3/3 ready`。兩者皆不能用 fixture、手動改表或 replay 取代，且 `3/3 ready` 不構成 production scheduler approval。
+- Phase 0 weekly history 目前由具名 owner-approved projection 顯示 `3/3 ready`，但 `formal_credit_authorized=false`；multi-day dry-run 亦為 `3/3 ready`。畫面仍需明確揭露這只是 read-only readiness，不構成 Formal evidence credit 或 production scheduler approval；pending sidecar 週期仍須 owner/reviewer 審核，兩者皆不能用 fixture、手動改表或 replay 取代。
 
 ### Gate 1 Advice（決策工作台）
 

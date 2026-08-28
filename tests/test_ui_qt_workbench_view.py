@@ -420,6 +420,11 @@ def test_unified_workbench_view_renders_read_only_mvp_shell_and_replay_limits() 
     view.portfolio_button.click()
     assert clicked == ["daily", "evidence", "portfolio"]
 
+    waiting_tooltip = view.summary_blocks["waiting"].toolTip()
+    assert "目前有 2 項仍在等待" in waiting_tooltip
+    assert "第 1 週" not in waiting_tooltip
+    assert "不可用 fixture" in waiting_tooltip
+
     boundary_text = view.evidence_boundary_card.value_label.text()
     coverage_text = view.evidence_coverage_card.value_label.text()
     data_quality_text = boundary_text + "\n" + coverage_text

@@ -110,6 +110,7 @@ class WorkbenchReadOnlyComposer:
                 label="證據門檻",
                 value=readiness_report.overall_status,
                 status=_status_to_severity(readiness_report.overall_status),
+                summary=_evidence_gate_status_summary(readiness_report),
             ),
             WorkbenchStatusItem(
                 item_id="scheduler",
@@ -795,6 +796,23 @@ def _readiness_summary(observed_count: int | None, required_count: int | None) -
     if required_count is None:
         return f"已觀測 {observed_count or 0} 筆。"
     return f"{observed_count or 0}/{required_count} records observed."
+
+
+def _evidence_gate_status_summary(readiness_report: PreV2ReadinessReport) -> str:
+    weekly = _find_readiness_item(readiness_report, "weekly_history")
+    weekly_text = (
+        _readiness_summary(weekly.observed_count, weekly.required_count)
+        if weekly is not None
+        else "weekly history readiness item missing"
+    )
+    if readiness_report.formal_credit_authorized:
+        credit_text = "formal_credit_authorized=true"
+    else:
+        credit_text = (
+            "formal_credit_authorized=false；目前只代表 read-only readiness，"
+            "不授予 Formal evidence credit 或 production scheduler"
+        )
+    return f"{weekly_text}；{credit_text}。"
 
 
 def _status_to_severity(status: str) -> str:

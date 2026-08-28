@@ -440,8 +440,10 @@ def test_composer_surfaces_waiting_for_time_as_evidence_gate_not_success() -> No
     )
 
     evidence = {item.item_id: item for item in dashboard.evidence_summary}
+    status_strip = {item.item_id: item for item in dashboard.status_strip}
 
     assert evidence["weekly_history"].status == STATUS_WAITING_FOR_TIME
+    assert "formal_credit_authorized=false" in (status_strip["evidence_gate"].summary or "")
     assert "不能用單次 smoke 取代" in " ".join(dashboard.warnings)
     assert "weekly_history:insufficient_weekly_history_records" in " ".join(dashboard.warnings)
 
