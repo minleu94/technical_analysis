@@ -819,7 +819,8 @@ def test_program_readiness_accepts_real_staging_process_pool_worker_contract(
     assert "technical_bounded_worker_acceptance_not_completed" not in blockers
     assert "technical_worker_crash_recovery_not_completed" not in blockers
     assert "technical_worker_cancel_acceptance_not_completed" not in blockers
-    assert "technical_production_single_writer_integration_not_completed" in blockers
+    assert "technical_production_single_writer_canary_not_completed" in blockers
+    assert "technical_production_single_writer_integration_not_completed" not in blockers
 
 
 def test_program_readiness_accepts_bounded_broker_fetch_contract(tmp_path: Path) -> None:

@@ -649,10 +649,6 @@ def _inspect_performance_lane(
         for recovery_key, blocker in (
             ("crash_recovery", "technical_worker_crash_recovery_not_completed"),
             ("cancellation", "technical_worker_cancel_acceptance_not_completed"),
-            (
-                "production_single_writer_integration",
-                "technical_production_single_writer_integration_not_completed",
-            ),
         ):
             recovery_payload = technical_worker_payload.get(recovery_key)
             if not (
@@ -660,6 +656,20 @@ def _inspect_performance_lane(
                 and recovery_payload.get("status") == "measured"
             ):
                 blockers.append(blocker)
+        integration_payload = technical_worker_payload.get(
+            "production_single_writer_integration"
+        )
+        if not (
+            isinstance(integration_payload, Mapping)
+            and integration_payload.get("status") == "staging_measured"
+        ):
+            blockers.append("technical_production_single_writer_integration_not_completed")
+        else:
+            # The product code is now wired behind an explicit feature flag,
+            # but this artifact only exercised an isolated staging root. Keep
+            # the remaining gate precise: production backup/rollback and the
+            # owner-approved canary have not happened yet.
+            blockers.append("technical_production_single_writer_canary_not_completed")
     # No broker worker artifact is accepted as a proxy for technical worker proof.
     broker_payload = artifacts.get("broker")
     broker_contract_raw: object = (
@@ -690,7 +700,7 @@ def _inspect_performance_lane(
     return _lane(
         "partial",
         blockers=tuple(blockers),
-        next_actions=("已具備 technical full-batch、real staging bounded worker 與 worker recovery／取消 acceptance；接著完成 production single-writer integration，再由 owner 允許 broker canary。",),
+        next_actions=("已具備 technical full-batch、real staging bounded worker、worker recovery／取消與 feature-flag wiring；接著由 owner 核准 backup／rollback 後做單次 production canary，再允許 broker canary。",),
         external_input_required=True,
         details={
             "technical_path": str(technical_path) if technical_path else None,
@@ -712,7 +722,7 @@ def _execution_order(workstreams: Mapping[str, Mapping[str, Any]]) -> list[dict[
         (3, "paper", "補真實 fills／partial-fill／reject／override／Decimal cost／execution gap，再計算成本後 weekly。"),
         (4, "formal_ml", "由 owner 發布當前三項 formal inputs；禁止用 prospective 或歷史 shadow artifact 冒充。"),
         (5, "runtime", "先確認 staging transaction 與正式 config／Registry ACL；staging 證據不能取代正式環境權限。"),
-        (6, "performance", "已量測 full batch、isolated writer contention 與 real staging bounded worker recovery／取消；接著完成 production single-writer integration，再驗收 broker canary。"),
+        (6, "performance", "已量測 full batch、isolated writer contention、real staging worker recovery／取消與 feature-flag wiring；接著由 owner 核准 backup／rollback 後做單次 production canary，再驗收 broker canary。"),
         (7, "update_history", "等真實排程產生 history，執行 live refresh、retention 與狀態投影 QA。"),
     )
     result: list[dict[str, Any]] = []
