@@ -13,6 +13,7 @@ from app_module.evidence_event_dtos import (
     EvidenceOutcomeStatus,
 )
 from app_module.evidence_event_repository import EvidenceEventRepository
+from app_module.update_status_history import append_update_status_history
 from app_module.pre_v2_readiness_service import (
     PreV2ReadinessService,
     STATUS_ACTION_REQUIRED,
@@ -21,6 +22,10 @@ from app_module.pre_v2_readiness_service import (
     render_pre_v2_readiness_markdown,
 )
 from data_module.config import TWStockConfig
+from scripts.inspect_program_readiness import (
+    inspect_program_readiness,
+    render_markdown,
+)
 
 
 def _config(tmp_path: Path) -> TWStockConfig:
@@ -493,3 +498,95 @@ def test_pre_v2_readiness_does_not_use_future_scheduled_status_for_source_gap_cl
 
     assert source_gaps.status == STATUS_ACTION_REQUIRED
     assert "decision_desk_snapshot_missing" in source_gaps.blocking_reasons
+
+
+def test_program_readiness_aggregates_lanes_without_creating_missing_roots(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    output_root = tmp_path / "output"
+
+    report = inspect_program_readiness(
+        data_root=data_root,
+        output_root=output_root,
+        training_as_of=None,
+    )
+
+    assert report["schema_version"] == "program-readiness.v1"
+    assert report["status"] == "action_required"
+    assert set(report["workstreams"]) == {
+        "p0",
+        "evidence",
+        "paper",
+        "formal_ml",
+        "runtime",
+        "update_history",
+        "performance",
+    }
+    assert report["boundary"]["writes_allowed"] is False
+    assert report["boundary"]["formal_oos_allowed"] is False
+    assert report["safety"]["side_effect_free"] is True
+    assert not data_root.exists()
+    assert not output_root.exists()
+
+
+def test_program_readiness_marks_update_history_identity_mismatch(tmp_path: Path) -> None:
+    history_path = tmp_path / "output" / "scheduled" / "data_update_quick" / "history.jsonl"
+    payload = {
+        "run_id": "run-1",
+        "status": "running",
+        "started_at": "2026-08-28T01:00:00+08:00",
+        "steps": [{"name": "TWSE daily", "status": "passed", "message": "ok"}],
+    }
+    append_update_status_history(history_path, payload, captured_at="2026-08-28T01:00:01+08:00")
+    payload["status"] = "passed"
+    payload["completed_at"] = "2026-08-28T01:02:00+08:00"
+    append_update_status_history(history_path, payload, captured_at="2026-08-28T01:02:01+08:00")
+    latest_status_path = history_path.with_name("latest_status.json")
+    latest_status_path.write_text(
+        json.dumps({"run_id": "run-2", "status": "passed"}),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        update_history_path=history_path,
+        update_status_path=latest_status_path,
+    )
+    lane = report["workstreams"]["update_history"]
+
+    assert lane["status"] == "action_required"
+    assert "latest_status_run_not_equal_to_history_latest_run" in lane["blockers"]
+    assert lane["details"]["terminal_record_count"] == 1
+    assert lane["details"]["unique_run_count"] == 1
+
+
+def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_path: Path) -> None:
+    technical_path = tmp_path / "technical.json"
+    technical_path.write_text(
+        json.dumps(
+            {
+                "status": "measured",
+                "read_only": True,
+                "write_attempted": False,
+                "parallelism_enabled": False,
+                "observed_worker_count": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+    broker_path = tmp_path / "broker.json"
+    broker_path.write_text(json.dumps({"status": "measured"}), encoding="utf-8")
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        technical_performance_path=technical_path,
+        broker_performance_path=broker_path,
+    )
+    rendered = render_markdown(report)
+
+    assert "# Program Readiness" in rendered
+    assert "## 依序推進" in rendered
+    assert "`performance`" in rendered
+    assert "bounded worker" in rendered
+    assert report["workstreams"]["performance"]["status"] == "partial"
